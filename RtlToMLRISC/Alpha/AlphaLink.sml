@@ -15,7 +15,6 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
   (* -- MLRISC structures -------------------------------------------------- *)
 
   structure Constant = AlphaMLRISCConstant
-  structure Pseudo   = AlphaMLRISCPseudo
   structure Region   = AlphaMLRISCRegion
 
   structure IntSet = DenseIntSet(structure IntMap = IntBinaryMap
@@ -29,6 +28,8 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 
   structure StackFrame =
     AlphaStackFrame(structure MLRISCConstant = Constant)
+
+  structure Pseudo = AlphaMLRISCPseudo(structure IntSet = IntSet)
 
   structure Instr = Alpha32Instr(structure Const  = Constant
 				 structure Region = Region)
@@ -81,7 +82,7 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 			 structure FloatConvention   = Float
 			 structure FlowGraph	     = FlowGraph
 			 structure IntegerConvention = Integer
-			 structure MLRISCRegion      = Region
+			 structure MLRISCRegion	     = Region
 			 structure RegisterSpillMap  = RegisterSpillMap
 			 functor RegisterAllocation  = RegAlloc.FloatRa)
 
@@ -100,14 +101,14 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
   structure MLTreeComp = Alpha32(structure Flowgen	 = FlowGraphGen
 				 structure Alpha32MLTree = MLTree
 				 structure Alpha32Instr	 = Instr
-				 structure PseudoInstrs  = PseudoInstr)
+				 structure PseudoInstrs	 = PseudoInstr)
 
   (* -- emitter structures ------------------------------------------------- *)
 
   structure CallConventionBasis =
     CallConventionBasis(structure Cells		    = Alpha32Cells
 			structure IntegerConvention = Integer
-			structure MLRISCRegion      = Region
+			structure MLRISCRegion	    = Region
 			structure MLTreeExtra	    = MLTreeExtra
 			structure StackFrame	    = StackFrame)
 
@@ -157,7 +158,7 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 		  structure IntSet		= IntSet
 		  structure MLRISCConstant	= Constant
 		  structure MLRISCPseudo	= Pseudo
-		  structure MLRISCRegion        = Region
+		  structure MLRISCRegion	= Region
 		  structure MLTreeComp		= MLTreeComp
 		  structure MLTreeExtra		= MLTreeExtra
 		  structure RegisterMap		= RegisterMap
@@ -183,7 +184,10 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 	  asmfile
 	end
 
-  fun link(srcfile, labels) = 
+  fun wrapper string command = Stats.timer(string,command)
+  val comp = wrapper "toasm" comp
+
+  fun link(srcfile, labels) =
 	let
 	  val asmfile = srcfile^asm_suffix
 	  val stream  = TextIO.openAppend asmfile
