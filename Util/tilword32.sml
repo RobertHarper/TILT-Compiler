@@ -188,7 +188,7 @@ struct
 	  val chars = map help pos
       in implode chars
       end
-  fun toDecimalString str = raise Util.UNIMP
+  fun toDecimalString w = Word32.toString w
 
 (*
   val uwordToString = fn (x:word) => Word32.toString x
