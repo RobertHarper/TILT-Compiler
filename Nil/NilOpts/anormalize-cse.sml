@@ -959,7 +959,7 @@ struct
 	     val _ = clearTable env
 	     
 	     val baseDFn = (fn D => 
-			( foldr ( fn (entry, D) => 
+			( foldl ( fn (entry, D) => 
 			    case entry of 
 				ImportValue (l, v, c) => insert_con (D, v, c)
 			      | ImportType (l , v, k) => insert_kind (D, v, k))

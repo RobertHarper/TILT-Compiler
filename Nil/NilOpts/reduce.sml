@@ -339,7 +339,10 @@ struct
 		      | (App_e ( openness, efunc, clist, elist, eflist)) =>
 			    ( case efunc of 
 				  Var_e v => insapp v 
-				| _ => scan_exp efunc ; app scan_con clist; app scan_exp elist)
+				| _ => scan_exp efunc ; 
+				      app scan_con clist; 
+				      app scan_exp elist;
+				      app scan_exp eflist)
 		      | (Raise_e (e, c)) => (scan_exp e; scan_con c)
 		      | (Handle_e (e, function)) =>
 			    (scan_exp e; scan_function fset function)

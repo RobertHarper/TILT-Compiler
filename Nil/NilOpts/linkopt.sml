@@ -20,7 +20,7 @@ functor DoOpts (structure Normalize : NORMALIZE
 		     = NilUtil.Nil = Linearize.Nil
 
 		sharing Nil.Prim = NilPrimUtil.Prim
-                sharing type Nil.kind = Normalize.kind
+                sharing type Nil.kind = Normalize.kind = NilSubst.kind
 		sharing type Nil.con = NilSubst.con = NilPrimUtil.con = Normalize.con 
 		sharing type Nil.exp = NilSubst.exp = NilPrimUtil.exp 
 	        sharing type NilContext.context = NilStatic.context = Normalize.context

@@ -116,7 +116,7 @@ struct
 
     fun hash_prim p =
 	case p of
-	    soft_vtrap (tt)  => 0 +   (hash_tt tt)
+	    soft_vtrap tt => 0 +   (hash_tt tt)
 	  | soft_ztrap tt => 1*skip + (hash_tt tt) 
 	  | hard_vtrap tt => 2*skip + (hash_tt tt)
 	  | hard_ztrap tt => 3*skip + (hash_tt tt)
@@ -128,6 +128,8 @@ struct
 	  | int2float => 7*skip
 	  | int2uint (sz1, sz2) => 8*skip + hash_intsize sz1*sskip + hash_intsize sz2
 	  | uint2int (sz1, sz2) => 9*skip + hash_intsize sz1*sskip + hash_intsize sz2
+	  | int2int (sz1, sz2) => 62*skip + hash_intsize sz1*sskip + hash_intsize sz2
+	  | uint2uint (sz1, sz2) => 63*skip + hash_intsize sz1*sskip + hash_intsize sz2
 	  | uinta2uinta (sz1, sz2) => 60 *skip + hash_intsize sz1*sskip + hash_intsize sz2
 	  | uintv2uintv (sz1 , sz2) => 61 *skip + hash_intsize sz1*sskip + hash_intsize sz2
 
@@ -176,13 +178,16 @@ struct
 	  | not_int sz => 48 *skip + hash_intsize sz
 	  | and_int sz => 49*skip + hash_intsize sz
 	  | or_int sz => 50*skip + hash_intsize sz
+	  | xor_int sz => 64*skip + hash_intsize sz
 	  | lshift_int sz => 51*skip + hash_intsize sz
 	  | rshift_int sz => 52 *skip + hash_intsize sz    
 	  | rshift_uint sz => 53 *skip + hash_intsize sz   
 		
 	  (* array and vector ops - bool = true indicates writeable *)
 	  | array2vector table => 54 *skip + hash_table table
+	  | vector2array table => 76 *skip + hash_table table
 	  | create_table t => 55*skip + hash_table t
+	  | create_empty_table t => 65*skip + hash_table t
 	  | sub t => 56*skip + hash_table t
 	  | update t => 57*skip + hash_table t
 	  | length_table t => 58*skip + hash_table t

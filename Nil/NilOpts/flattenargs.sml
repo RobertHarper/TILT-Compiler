@@ -8,6 +8,7 @@ functor FlattenArgs (structure Nil : NIL
 		       
 		     sharing Ppnil.Nil = Nil = Squish.Nil
 		     sharing type Nil.con = Subst.con
+		     sharing type Nil.kind = Subst.kind
 			 ) : PASS = 
 struct
     structure Nil = Nil
@@ -74,18 +75,24 @@ struct
 		    val newvklist = Listops.zip args kinds 
 		    val cons = map Var_c args
 		    val _ = HashTable.insert flattenedc (fnVar, (newFnVar, labels, recordKind,  kinds))
-			
+		    val con_record = Crecord_c (Listops.zip labels cons)
 		    val newbody = 
 			Let_c (Sequential, 
-			       [ Con_cb ( recordArg, recordKind,
-					 Crecord_c (Listops.zip labels cons))],
+			       [Con_cb (recordArg, recordKind, con_record)],
 			       body)
-		    val newFn = (newFnVar, newvklist, xcon env newbody, kind)
+		    local
+			val subst = Subst.fromList[(recordArg, con_record)]
+		    in  val newKind = Subst.substConInKind subst kind
+		    end
+		    val newFn = (newFnVar, newvklist, xcon env newbody, newKind)
 
 		    (* Now a new version of fnVar which calls NewFnVar *)
 		    val args = map (fn _ => (Name.fresh_var())) labels
 		    val call = Name.fresh_var()
 		    val newRecordArg = Name.fresh_var()
+		    local val subst' = Subst.fromList[(recordArg, Var_c newRecordArg)]
+		    in    val newKind' = Subst.substConInKind subst' kind
+		    end
 		    val newbnds = Listops.map3
 			(fn (v, k, l) =>
 			 Con_cb (v, k, (Proj_c( Var_c newRecordArg, l)))) 
@@ -94,8 +101,8 @@ struct
 		    val func = 
 			(fnVar, [(newRecordArg, recordKind)], 
 			 Let_c (Sequential, newbnds @
-				[ Con_cb (call, kind, App_c ((Var_c newFnVar), map Var_c args))],
-				Var_c call), kind)
+				[ Con_cb (call, newKind', App_c ((Var_c newFnVar), map Var_c args))],
+				Var_c call), newKind')
 		in [Open_cb newFn, Open_cb func]
 		end
 	    else 
