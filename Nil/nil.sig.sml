@@ -93,6 +93,8 @@ sig
     | project_sum                (* slow; given a special sum type, return carried value *)
     | project_sum_record of w32  (* fast; given a special sum type of record type, 
 				          return the specified field *)
+    | box_float of Prim.floatsize   (* boxing floating-points *)
+    | unbox_float of Prim.floatsize (* unboxing floating-points *)
     | roll | unroll              (* coerce to/from recursive type *) 
     | make_exntag                (* generate new exn tag *)
     | inj_exn                    (* takes tag + value and give exn *)
