@@ -3,16 +3,27 @@ struct
 
     val error = fn x => Util.error "target.sml" x
 
-    fun defaultTarget () : Platform.objtype =
-	(case Platform.cputype()
-	   of Platform.SUPPORTED objtype => objtype
-	    | Platform.UNSUPPORTED => Platform.SPARC)
+    val target : Platform.objtype ref =
+	ref Platform.SPARC	(* temporary *)
 
-    val target : Platform.objtype ref = ref (defaultTarget ())
-
-    fun setTarget (objtype : Platform.objtype) : unit =	target := objtype
+    fun setTarget (objtype : Platform.objtype) : unit =
+	let val _= target := objtype
+	    val _ =
+		(case objtype of
+		    Platform.TALx86 => CompilerControl.LilDefaults()
+		|   _ => CompilerControl.RtlDefaults())
+	in  ()
+	end
 
     fun getTarget () : Platform.objtype = !target
+
+    val _ =
+	let val default =
+		(case (Platform.cputype()) of
+		    Platform.SUPPORTED objtype => objtype
+		|   Platform.UNSUPPORTED => Platform.SPARC)
+	in  setTarget default
+	end
 
     (*
 	Target string depends on a few flags which lead to binary
