@@ -98,7 +98,7 @@ static void stop_copy(Proc_t *proc)
 
   /* Write list can be ignored */
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
-  discard_writelist(proc);
+  process_writelist(proc,NULL,NULL);
 
   /* The "first" processor is in charge of the globals. */
   if (isFirst) {
@@ -195,7 +195,7 @@ int GCTry_SemiPara(Proc_t *proc, Thread_t *th)
   int roundSize = RoundUp(th->requestInfo,minOffRequest);
 
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
-  discard_writelist(proc);
+  process_writelist(proc,NULL,NULL);
   if (th->requestInfo > 0) {
     GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
     if (proc->allocStart) {

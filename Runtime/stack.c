@@ -640,12 +640,8 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
    it is not known whether is it of a pointer type (due to abstraction).
    Global variables of type float should not be considered.
 */
-
-static Stack_t *potentialGlobal;     /* All global variable's location start here during initialization */
-static Stack_t *potentialGlobalTemp; /* Temporary stack */
-static Stack_t promotedGlobal;       /* Each potential global is examined to see if it has been initialized.
-					If so, the global variable's address is placed in promotedGlobal.
-					Otherwise, it remains in potentialGlobal. */
+static Stack_t promotedGlobal;       /* An initialized global is put in this stack after being trapped by
+					a write-barrier. */
 static Stack_t tenuredGlobal;        /* Accumulates the contents of promotedGlobal
 					across all previous calls to minor_global_promote */
 
@@ -658,75 +654,50 @@ void global_root_init(void)
     mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
     numGlobals += stop - start;
   }
-  potentialGlobal = createStack(numGlobals);
-  potentialGlobalTemp = createStack(numGlobals);
   allocStack(&promotedGlobal, numGlobals);
   allocStack(&tenuredGlobal, numGlobals);
-  for (mi=0; mi<module_count; mi++) {
-    mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
-    mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
-    for ( ; start < stop; start++) {
-      mem_t global = (mem_t) (*start);
-      pushStack(potentialGlobal, global);
-    }
-  }
 }
 
-void do_global_work(Proc_t *proc, int workToDo)
+void add_global_root(Proc_t *proc, mem_t global)
 {
-  mem_t global;
-
-  assert(isEmptyStack(potentialGlobalTemp));
-  proc->segUsage.globalsProcessed += lengthStack(potentialGlobal);
-  while (global = (mem_t) popStack(potentialGlobal)) {
-    tag_t tag = global[-1];
-    if (IS_SKIP_TAG(tag))  /* Not yet initialized */
-      pushStack(potentialGlobalTemp, global);
-    else {
-      proc->segUsage.globalsProcessed++;
-      if (tag == TAG_REC_INT) 
-	;
-      else if (tag == TAG_REC_TRACE) {
-	ptr_t globalVal = (ptr_t) *global;
-	if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
-	  pushStack(&promotedGlobal, global);
-      }
-      else if (tag == MIRROR_GLOBAL_PTR_TAG) {
-	ptr_t globalVal = (ptr_t) global[primaryGlobalOffset / sizeof(val_t)];
-	assert(global[replicaGlobalOffset / sizeof(val_t)] == uninit_val);
-	if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
-	  pushStack(&promotedGlobal, global);
-	else
-	  DupGlobal(global);
-      }
-      else {
-	printf("do_global_work: Bad tag: %d\n", tag);
-	assert(0);
-      }
-    }
+  tag_t tag = global[-1];
+  if (tag == TAG_REC_INT) 
+    assert(0);
+  else if (tag == TAG_REC_TRACE) {
+    ptr_t globalVal = (ptr_t) *global;
+    if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
+      pushStack(&promotedGlobal, global);
   }
-  typed_swap(Stack_t *, potentialGlobal, potentialGlobalTemp);
+  else if (tag == MIRROR_GLOBAL_PTR_TAG) {
+    ptr_t globalVal = (ptr_t) global[primaryGlobalOffset / sizeof(val_t)];
+    assert(global[replicaGlobalOffset / sizeof(val_t)] == uninit_val);
+    if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
+      pushStack(&promotedGlobal, global);
+    else
+      DupGlobal(global);
+  }
+  else 
+    assert(0);
+  proc->segUsage.globalsProcessed++;
 }
 
 void minor_global_scan(Proc_t *proc)
 {  
-  do_global_work(proc,MAXINT);
   copyStack(&promotedGlobal, proc->globalLocs);
 }
 
 /* Transfers items from promotedGlobal to tenuredGlobal */
 void minor_global_promote(Proc_t *proc)
 {
-  proc->segUsage.globalsProcessed += lengthStack(&promotedGlobal);
+  proc->segUsage.globalsProcessed += lengthStack(&promotedGlobal) / 10;
   transferStack(&promotedGlobal, &tenuredGlobal);
 }
 
 void major_global_scan(Proc_t *proc)
 {
-  do_global_work(proc,MAXINT);
   minor_global_promote(proc);
   assert(isEmptyStack(&promotedGlobal));
-  proc->segUsage.globalsProcessed += lengthStack(&tenuredGlobal);
+  proc->segUsage.globalsProcessed += lengthStack(&tenuredGlobal) / 10;
   copyStack(&tenuredGlobal, proc->globalLocs);
 }
 

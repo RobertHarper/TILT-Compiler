@@ -260,7 +260,8 @@ struct
 	      | STOREMUTATE (ea,mutType) => plain ["storemutate", ea2s ea, ",", (case mutType of
 										     INT_MUTATE => "intMutate"
 										   | FLOAT_MUTATE => "floatMutate"
-										   | PTR_MUTATE => "ptrMutate")]
+										   | PTR_MUTATE => "ptrMutate"
+										   | GLOBAL_INIT => "globalInit")]
               | NEEDALLOC sv       => plain ["needalloc ",sv2s sv]
               | NEEDMUTATE n       => plain ["needmutate ",Int.toString n]
 

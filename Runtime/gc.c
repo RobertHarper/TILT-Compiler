@@ -57,20 +57,21 @@ double MinRatio = 0.0, MaxRatio = 0.0;
 int MinRatioSize = 0,  MaxRatioSize = 0;
 int minOffRequest, minOnRequest;  /* Mutator handed multiples of this amount of space for parallel and concurrent collectors */
 int threadFetchSize = 1;
-int globalLocFetchSize = 50;
-int rootLocFetchSize = 50;
+int globalLocFetchSize = 1000;
+int rootLocFetchSize = 1000;
 int objFetchSize = 100;
 int segFetchSize = 2;             
-/* Copy does not actually copy fields - work is per-byte */
+/* Work is per-byte and so each field can be up to 4.0 */
 double objCopyWeight = 2.5;      /* Corresponds to tag */
 double objScanWeight = 1.5;
-double fieldCopyWeight = 1.0;    /* Corresponds to fields */
-double fieldScanWeight = 3.0;
-double globalWeight = 1.0;
+double fieldCopyWeight = 1.0;    /* Corresponds to fields - Each field is copied or scanend but not both. */
+double fieldScanWeight = 2.0;
+double ptrFieldScanWeight = 4.0;
+double globalWeight = 6.0;
 double stackSlotWeight = 10.0;
 double pageWeight = 100.0;
 int arraySegmentSize = 0;         /* Either zero for off or must be greater than the compiler's maxByteRequest - notion of large array */
-int localWorkSize = 8192;
+int localWorkSize = 4096;
 
 double minorCollectionRate = 2.0;   /* Ratio of minor coll rate to alloc rate */
 double majorCollectionRate = 2.0;   /* Ratio of major coll rate to alloc rate */

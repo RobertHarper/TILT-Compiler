@@ -155,7 +155,7 @@ void GCStop_GenPara(Proc_t *proc)
     while (!(asynchCheckBarrier(&numRootProc, NumProc, &numWaitProc)))
       ;
     if (GCType == Minor)
-      minor_global_scan(proc);
+      ;
     else {
       int toSpaceSize = Heap_GetMaximumSize(toSpace);
       int maxLive = (sizeof (val_t)) * (fromSpace->cursor - fromSpace->bottom) +
@@ -167,7 +167,6 @@ void GCStop_GenPara(Proc_t *proc)
       }    
       else
 	Heap_Resize(toSpace, maxLive, 1);
-      major_global_scan(proc);
       gc_large_startCollect();
     }
     asynchReachBarrier(&numRootProc);            /* First processor is counted twice */
@@ -180,10 +179,16 @@ void GCStop_GenPara(Proc_t *proc)
     proc->gcSegment1 = MajorWork;
 
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
-  if (GCType == Minor) 
-    add_writelist_to_rootlist(proc, nursery, fromSpace);
-  else
-    discard_writelist(proc);
+  if (GCType == Minor) {
+    process_writelist(proc, nursery, fromSpace);
+    if (isFirst)
+      minor_global_scan(proc);
+  }
+  else {
+    process_writelist(proc, NULL, NULL);
+    if (isFirst)
+      major_global_scan(proc);
+  }
 
   if (GCType == Minor) {
     if (IsNullCopyRange(&proc->minorRange))   /* First minor GC (after a major GC) */
@@ -258,8 +263,11 @@ void GCStop_GenPara(Proc_t *proc)
   assert(isEmptyStack(&proc->minorObjStack));
   assert(isEmptyStack(&proc->majorObjStack));
 
-
-  if (GCType == Major) {                          /* Carry over minor ranges across minor GCs */
+  if (GCType == Minor) {
+    /* Carry over minor ranges across minor GCs to avoid internal fragmentation */
+    PadCopyRange(&proc->minorRange);
+  }
+  else if (GCType == Major) {                              
     ClearCopyRange(&proc->minorRange);
     ClearCopyRange(&proc->majorRange);
   }
@@ -274,7 +282,7 @@ void GCStop_GenPara(Proc_t *proc)
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
     double liveRatio = 0.0;
-    if (GCType == Minor)
+    if (GCType == Minor) 
       paranoid_check_all(nursery, fromSpace, fromSpace, NULL, largeSpace);
     else
       paranoid_check_all(nursery, fromSpace, toSpace, NULL, largeSpace);

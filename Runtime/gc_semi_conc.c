@@ -241,6 +241,7 @@ static void CollectorOn(Proc_t *proc)
     ResetJob();
     asynchReachBarrier(&numWaitOnProc);
   }
+
   while (!asynchCheckBarrier(&numWaitOnProc,  NumProc + 1, &numDoneOnProc))
     ;
   procChangeState(proc, GCStack);
@@ -254,7 +255,6 @@ static void CollectorOn(Proc_t *proc)
   procChangeState(proc, GC);
 
   proc->numRoot += lengthStack(proc->rootLocs) + lengthStack(proc->globalLocs);
-
   /* Note the omission of popSharedStack since we used resetSharedStack */
   pushSharedStack(workStack,&proc->threads,proc->globalLocs,proc->rootLocs,&proc->majorObjStack,&proc->majorSegmentStack);
   assert(isEmptyStack(&proc->majorObjStack));
@@ -283,14 +283,11 @@ void flipRootLoc(ploc_t root)
 static void CollectorOff(Proc_t *proc)
 {
   extern int stkSize;
-  extern double s1, s2, s3, s4;
-  double t1, t2, t3, t4;
   Thread_t *curThread = NULL;
   int isFirst;
   int rootCount = 0;
   ploc_t rootLoc, globalLoc;
 
-  t1 = segmentTime(proc);
   if (diag)
     printf("Proc %d: entered CollectorOff\n", proc->procid);
   assert(isEmptyStack(&proc->majorObjStack));
@@ -317,9 +314,8 @@ static void CollectorOff(Proc_t *proc)
   while (!asynchCheckBarrier(&numWaitOffProc, NumProc+1, &numDoneOffProc))
     ;
 
-  assert(isEmptyStack(proc->rootLocs));
-
   /* Replace all roots (global, local registers, local stack) with replica */
+  assert(isEmptyStack(proc->rootLocs));
   procChangeState(proc, GCGlobal);
   if (isFirst) 
     minor_global_scan(proc);                /* Minor scan since the tenured roots are already flipped */
@@ -333,12 +329,10 @@ static void CollectorOff(Proc_t *proc)
     complete_root_scan(proc, curThread);
   procChangeState(proc, GC);
 
-  t2 = segmentTime(proc);
   proc->numRoot += lengthStack(proc->rootLocs) + lengthStack(proc->globalLocs);
   /* Flip stack slots */
   while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
     flipRootLoc(rootLoc);
-  t3 = segmentTime(proc);
 
   synchBarrier(&numFlipOffProc, NumProc, &numWaitOffProc);
 
@@ -373,13 +367,6 @@ static void CollectorOff(Proc_t *proc)
   synchBarrier(&numDoneOffProc, NumProc, &numFlipOffProc);
   flushStore();
 
-  t4 = segmentTime(proc);
-  /*
-  printf("\ncomplete_root_scan: %3.2f + %3.2f + %3.2f = %3.2f ms    size = %d\n", 
-	 s2-s1, s3-s2, s4-s3, s4-s1, stkSize);
-  printf("CollectorOff %5d: %3.2f + %3.2f + %3.2f + %3.2f = %3.2f ms\n", 
-	 proc->segmentNumber, t1, t2-t1, t3-t2, t4-t3, t4);
-	 */
 }
 
 void GCRelease_SemiConc(Proc_t *proc)
@@ -396,29 +383,28 @@ void GCRelease_SemiConc(Proc_t *proc)
   proc->writelistCursor = proc->writelistStart;  /* write list reused once processed */
   proc->minorUsage.bytesAllocated += alloc;
 
-  if (!gcOn) 
-    return;
-
-  if (diag)
-    printf("Proc %d: Scanning/Replicating %d to %d\n",proc->procid,allocCurrent,allocStop);
-  while (allocCurrent + 1 <= allocStop) { /* There may be no data for empty array */
-    int objSize;
-    ptr_t obj = allocCurrent;  /* Eventually becomes start of object */
-    tag_t tag = *obj;
-    if (IS_SKIP_TAG(tag)) {
-      allocCurrent += GET_SKIPWORD(tag);
-      continue;
+  if (gcOn) {
+    if (diag)
+      printf("Proc %d: Scanning/Replicating %d to %d\n",proc->procid,allocCurrent,allocStop);
+    while (allocCurrent + 1 <= allocStop) { /* There may be no data for empty array */
+      int objSize;
+      ptr_t obj = allocCurrent;  /* Eventually becomes start of object */
+      tag_t tag = *obj;
+      if (IS_SKIP_TAG(tag)) {
+	allocCurrent += GET_SKIPWORD(tag);
+	continue;
+      }
+      while (tag == SEGPROCEED_TAG || tag == SEGSTALL_TAG)
+	tag = *(++obj); /* Skip past segment tags */
+      obj++;            /* Skip past object tag */
+      objSize = splitAlloc_primaryStack(proc,obj,&proc->majorObjStack,&proc->majorRange,fromSpace);
+      if (objSize == 0) {
+	mem_t dummy = NULL;
+	objSize = objectLength(obj, &dummy);
+	assert(dummy == allocCurrent);
+      }
+      allocCurrent += objSize / sizeof(val_t);
     }
-    while (tag == SEGPROCEED_TAG || tag == SEGSTALL_TAG)
-      tag = *(++obj); /* Skip past segment tags */
-    obj++;            /* Skip past object tag */
-    objSize = splitAlloc_primaryStack(proc,obj,&proc->majorObjStack,&proc->majorRange,fromSpace);
-    if (objSize == 0) {
-      mem_t dummy = NULL;
-      objSize = objectLength(obj, &dummy);
-      assert(dummy == allocCurrent);
-    }
-    allocCurrent += objSize / sizeof(val_t);
   }
 
   if (diag)
@@ -432,6 +418,12 @@ void GCRelease_SemiConc(Proc_t *proc)
     int byteLen;  /* Length of data portion of array */
     tag_t tag;
 
+    if (IsGlobalData(primary)) {
+      add_global_root(proc,primary);
+      continue;
+    }
+    if (!gcOn)
+      continue;
     if (!inHeap(primary, fromSpace))
       continue;
     splitAlloc1_copyCopySync_primaryStack(proc,primary,&proc->majorObjStack,&proc->majorRange,fromSpace);
@@ -537,6 +529,7 @@ static void do_work(Proc_t *proc, int workToDo, int local)
 	     (globalLoc = (ploc_t) popStack(proc->globalLocs)) != NULL) {
 	ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
 	locSplitAlloc1_copyCopySync_primaryStack(proc,replicaLoc,&proc->majorObjStack,&proc->majorRange,fromSpace); 
+	proc->segUsage.globalsProcessed++;
       }
       while (updateWorkDone(proc) < workToDo) {
 	int start, end;
@@ -601,7 +594,6 @@ int GCTry_SemiConc(Proc_t *proc, Thread_t *th)
     case GCPendingOn:
       if (GCStatus == GCOff &&
 	  GCTry_SemiConcHelp(proc,roundOffSize)) {      /* Off, PendingOn; same */
-	do_global_work(proc, workToDo);
 	satisfied = 1;
 	break;
       }
@@ -610,7 +602,6 @@ int GCTry_SemiConc(Proc_t *proc, Thread_t *th)
       proc->gcSegment2 = FlipOn;
       CollectorOn(proc);                                /* Off, PendingOn; On, PendingOff */
       assert(GCStatus == GCOn || GCStatus == GCPendingOff);
-      do_work(proc, workToDo, 0);                       /* On, PendingOff; same */
       if ((th == NULL) ||
 	  ((th != NULL) && GCStatus == GCOn &&
 	   GCTry_SemiConcHelp(proc,roundOnSize))) {     /* On, PendingOff; same */
@@ -639,14 +630,16 @@ int GCTry_SemiConc(Proc_t *proc, Thread_t *th)
        proc->gcSegment2 = FlipOff;
        do_work(proc,                                     /* PendingOff; same */ 
 	       sizeof(val_t) * Heap_GetSize(fromSpace),  /* Actually bounded by allocation of all procs since GCOff triggered. */
-	       1);                                       
+	       1);              
        CollectorOff(proc);                               /* PendingOff; Off, PendingOn */
+
        assert(GCStatus == GCOff || GCStatus == GCPendingOn);
        break;
     default: 
       assert(0);
     }
   }
+
   return 1;
 }
 
@@ -672,7 +665,6 @@ void GCPoll_SemiConc(Proc_t *proc)
 
 void GCInit_SemiConc()
 {
-  printf("temporary stuff in collector\n");
   init_int(&MaxHeap, 128 * 1024);
   init_int(&MinHeap, 256);
   if (MinHeap > MaxHeap)
@@ -683,8 +675,8 @@ void GCInit_SemiConc()
   init_int(&MaxRatioSize, 50 * 1024);
   fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  workStack = SharedStack_Alloc(100, 16 * 1024, 1024, 32 * 1024, 4 * 1024);
-  arraySegmentSize = 4 * 1024;
+  workStack = SharedStack_Alloc(100, 16 * 1024, 4 * 1024, 64 * 1024, 4 * 1024);
+  arraySegmentSize = 2 * 1024;
   mirrorGlobal = 1;
 }
 

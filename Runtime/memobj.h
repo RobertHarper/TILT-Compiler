@@ -128,10 +128,15 @@ int Heap_TouchPage(Heap_t *h, mem_t addr) /* Returns 1 if fresh */
 {
   int offset = sizeof(val_t) * (addr - h->bottom);
   int page = DivideDown(offset, pagesize);
-  int fresh = h->freshPages[page];
-  h->freshPages[page] = 0;
-  return fresh;
+  int word = page >> 5;
+  int bit = page & 31;
+  int mask = 1 << bit;
+  int info = h->freshPages[word];
+  assert(sizeof(int) == 4);
+  h->freshPages[word] = info | mask;
+  return !(mask & info);
 }
+
 void Heap_Resize(Heap_t *, long newSize, int reset);  /* Resizes the heap, making mprotect calls if paranoid;
 							 the cursor is set to bottom if reset is true;
 							 if the heap is being shrunk, then reset must be true */

@@ -84,7 +84,7 @@ sig
 
   datatype calltype = ML_NORMAL | ML_TAIL of regi | C_NORMAL
 
-  datatype mutateType = INT_MUTATE | FLOAT_MUTATE | PTR_MUTATE
+  datatype mutateType = INT_MUTATE | FLOAT_MUTATE | PTR_MUTATE | GLOBAL_INIT
 
   datatype instr = 
       LI     of TilWord32.word * regi

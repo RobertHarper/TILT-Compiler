@@ -539,14 +539,14 @@ static void do_work(Proc_t *proc, int workToDo, int local)
 	     ((globalLoc = (ploc_t) popStack(proc->globalLocs)) != NULL)) {
 	ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
 	locSplitAlloc1_copyCopySync_primaryStack(proc,replicaLoc,objStack,copyRange,srcRange);
-	proc->segUsage.fieldsScanned++;
+	proc->segUsage.globalsProcessed++;
       }
     else       
       while (!recentWorkDone(proc, localWorkSize) && 
 	     ((globalLoc = (ploc_t) popStack(proc->globalLocs)) != NULL)) {
 	ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
 	locSplitAlloc1L_copyCopySync_primaryStack(proc,replicaLoc,objStack,copyRange,srcRange,largeSpace);
-	proc->segUsage.fieldsScanned++;
+	proc->segUsage.globalsProcessed++;
       }
     /* Do the large objects - don't need to optimize loop */
     while (updateWorkDone(proc) < workToDo && !isEmptyStack(segmentStack)) {
@@ -578,7 +578,6 @@ static void do_work(Proc_t *proc, int workToDo, int local)
       while (!recentWorkDone(proc, localWorkSize) &&
 	     ((gray = popStack(objStack)) != NULL))
 	transferScanObj_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(proc,gray,objStack,segmentStack,copyRange,srcRange,largeSpace);
-
     /* Put work back on shared stack */
     if (!local) {
       int sharedWorkDone = pushSharedStack(workStack, &proc->threads, proc->globalLocs, proc->rootLocs, objStack, segmentStack);
@@ -594,6 +593,7 @@ static void do_work(Proc_t *proc, int workToDo, int local)
     }
     done |= (updateWorkDone(proc) >= workToDo);
   }
+
 
   assert(isEmptyStack(objStack));
   assert(isEmptyStack(segmentStack));
@@ -674,8 +674,11 @@ void GCRelease_GenConc(Proc_t *proc)
     int doubleWordDisp = byteDisp / (sizeof(double));
     int byteLen;  /* Length of data portion of array */
 
-    if (IsGlobalData(mutatorPrimary) ||
-	inHeap(mutatorPrimary, largeSpace))
+    if (IsGlobalData(mutatorPrimary)) {
+      add_global_root(proc,mutatorPrimary);
+      continue;
+    }
+    if (inHeap(mutatorPrimary, largeSpace))
       continue;
 
     if (!isGCOn) {                                /* Record back-pointers when GC is off for roots of next GC */
@@ -860,7 +863,6 @@ int GCTry_GenConc(Proc_t *proc, Thread_t *th)
     case GCPendingOn:
       if (th == NULL ||                                /* Don't allocate/return if not really a thread */
 	  GCTry_GenConcHelp(proc,roundOffSize)) {
-	do_global_work(proc, minorWorkToDo);
 	if (!satisfied)
 	  satisfied = 1;
 	break;
@@ -870,8 +872,6 @@ int GCTry_GenConc(Proc_t *proc, Thread_t *th)
       proc->gcSegment2 = FlipOn;
       CollectorOn(proc);                                 /* Off, PendingOn; On, PendingOff */
       assert(GCStatus == GCOn || GCStatus == GCPendingOff);
-      if (GCType == Minor)                               /* Don't do work since we just finished a minor GC if starting a major GC */
-        do_work(proc, minorWorkToDo, 0);
       if ((th == NULL) ||                                /* Idle processor done some work */
           (th != NULL && GCStatus == GCOn &&             /* Don't allocate/return if not really a thread */
            GCTry_GenConcHelp(proc,roundOnSize))) {       /* On, PendingOff; same */
@@ -954,8 +954,8 @@ void GCInit_GenConc()
   Heap_Resize(toSpace, reducedTenuredSize, 0);
 
   gc_large_init();
-  workStack = SharedStack_Alloc(100, 16 * 1024, 2048, 64 * 1024, 4 * 1024);
-  arraySegmentSize = 4 * 1024;
+  workStack = SharedStack_Alloc(100, 16 * 1024, 2 * 1024, 64 * 1024, 4 * 1024);
+  arraySegmentSize = 2 * 1024;
   mirrorGlobal = 1;
   mirrorArray = 1;
 }

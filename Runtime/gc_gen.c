@@ -129,13 +129,13 @@ void GCStop_Gen(Proc_t *proc)
 
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   procChangeState(proc, GCGlobal);
-  if (GCType == Minor) {            /* Roots from globals and back pointers */
+  if (GCType == Minor) {            
+    process_writelist(proc, nursery, fromSpace); /* Get globals and backpointers */
     minor_global_scan(proc);
-    add_writelist_to_rootlist(proc, nursery, fromSpace);
   }
   else {
+    process_writelist(proc, NULL, NULL);  /* Get globals; Backpointers can be ignored on major GC */
     major_global_scan(proc);
-    discard_writelist(proc);      /* Write list can be ignored on major GC */
   }
 
   procChangeState(proc, GC);

@@ -153,6 +153,13 @@ void ReleaseJob(Proc_t *proc)
     assert(0);
   }
 
+  if (threadDiag)
+    printf("Proc %d: Releasing thread %d.   Request = %d.\n"
+	   "         Allocated %d to %d.    Writlist %d to %d.\n",
+	   proc->procid,th->tid,th->requestInfo, 
+	   proc_allocCursor, th->saveregs[ALLOCPTR],
+	   proc_writelistCursor, th->writelistAlloc);
+  
   /* Update processor's version of allocation range and write list and process */
   proc->allocCursor = (mem_t) th->saveregs[ALLOCPTR];
   proc->writelistCursor = th->writelistAlloc;
@@ -179,10 +186,6 @@ void ReleaseJob(Proc_t *proc)
   assert(th->status >= 1);               /* Thread was mapped and running so could not be ready or done */
   FetchAndAdd(&(th->status),-1);         /* Release after flush; note that FA always goes to mem */
 
-  if (threadDiag)
-    printf("Proc %d: Released thread %d (status = %d) with request = %d.  Used %d to %d and %d to %d.\n",
-	   proc->procid,th->tid,th->status,th->requestInfo, proc_allocCursor,proc->allocCursor,
-	   proc_writelistCursor, proc->writelistCursor);
 }
 
 
@@ -317,6 +320,7 @@ void resetUsage(Usage_t *u)
   u->bytesAllocated = 0;
   u->fieldsCopied = 0;
   u->fieldsScanned = 0;
+  u->ptrFieldsScanned = 0;
   u->objsCopied = 0;
   u->objsScanned = 0;
   u->pagesTouched = 0 ;
@@ -332,6 +336,7 @@ long updateWorkDone(Proc_t *proc)
   Usage_t *u = &proc->segUsage;
   u->workDone = (long) (u->fieldsCopied * fieldCopyWeight + 
 			u->fieldsScanned * fieldScanWeight +
+			u->ptrFieldsScanned * ptrFieldScanWeight +
 			u->objsCopied * objCopyWeight + 
 			u->objsScanned * objScanWeight +
 			u->pagesTouched * pageWeight +
@@ -345,6 +350,7 @@ static void attributeUsage(Usage_t *from, Usage_t *to)
   to->bytesAllocated += from->bytesAllocated;
   to->fieldsCopied += from->fieldsCopied;
   to->fieldsScanned += from->fieldsScanned;
+  to->ptrFieldsScanned += from->ptrFieldsScanned;
   to->objsCopied += from->objsCopied;
   to->objsScanned += from->objsScanned;
   to->pagesTouched += from->pagesTouched;

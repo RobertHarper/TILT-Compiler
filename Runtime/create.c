@@ -151,37 +151,41 @@ ptr_t alloc_record(val_t *fields, int* masks, int count)
   return alloc_small_record(fields, masks[0], count); 
 }
 
-ptr_t alloc_string(int strlen, char *str)
-
+ptr_t alloc_string_help(int strLen)
 {
-  int offset = 0;
-  int wordlen = (strlen + 3) / 4;
   ptr_t res;
-  int tag = WORD_ARRAY_TYPE | (strlen << ARRLEN_OFFSET);
+  int wordLen = (strLen + 3) / 4;
+  int byteLen = 4 * wordLen;
+  int i, segments = (arraySegmentSize == 0 || byteLen <= arraySegmentSize) ? 0 : DivideUp(byteLen, arraySegmentSize);
+  int totalByteLen = byteLen + 4 + 4 * segments;
+  int tag = WORD_ARRAY_TYPE | (strLen << ARRLEN_OFFSET);
 
-  mem_t alloc = alloc_space(4 * (wordlen + 1));
-  res = alloc + 1;
+  mem_t alloc = alloc_space(totalByteLen);
+  res = alloc + 1 + segments;
+  for (i=0; i<segments; i++)
+    res[-(2+i)] = SEGPROCEED_TAG;
   res[-1] = tag;
-  memcpy((char *)res,str,strlen);
 
+  return res;
+}
+
+
+ptr_t alloc_string(int strlen, char *str)
+{
+  mem_t res = alloc_string_help(strlen);
+  memcpy((char *)res,str,strlen);
   return res;
 }
 
 
 ptr_t alloc_uninit_string(int strlen, char **raw)
 {
-  int offset = 0;
-  int wordlen = (strlen + 3) / 4;
-  ptr_t res;
-  int tag = WORD_ARRAY_TYPE | (strlen << ARRLEN_OFFSET);
-  mem_t alloc = alloc_space(4 * (wordlen + 1));
-  res = alloc + 1;
-  res[-1] = tag;
+  mem_t res = alloc_string_help(strlen);
   *raw = (char *)res;
   return res;
 }
 
-/* Shorten a string and fill the space it used to occupy with SKIP_TYPE */
+/* Shorten a string and fill the excess space (tag and data) with SKIP_TYPE */
 void adjust_stringlen(ptr_t str, int newByteLen)
 {
   int i;
@@ -190,11 +194,15 @@ void adjust_stringlen(ptr_t str, int newByteLen)
   int oldByteLen = GET_ANY_ARRAY_LEN(oldTag);
   int oldWordLen = (oldByteLen + 3) / 4;
   int newWordLen = (newByteLen + 3) / 4;
+  int oldSegments = (arraySegmentSize == 0 || oldByteLen <= arraySegmentSize) ? 0 : DivideUp(oldByteLen, arraySegmentSize);
+  int newSegments = (arraySegmentSize == 0 || newByteLen <= arraySegmentSize) ? 0 : DivideUp(newByteLen, arraySegmentSize);
 
   assert(GET_TYPE(oldTag) == WORD_ARRAY_TYPE);
   assert(newByteLen <= oldByteLen);
   if (newWordLen == oldWordLen)
     return;
+  for (i=newSegments; i<oldSegments; i++)
+    str[-(2+i)] = MAKE_SKIP(1);
   str[-1] = newTag;
   str[newWordLen] = MAKE_SKIP(oldWordLen - newWordLen);
 }

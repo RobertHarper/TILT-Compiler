@@ -60,7 +60,7 @@ int GCTry_Semi(Proc_t *proc, Thread_t *th)
     fromSpace->cursor = fromSpace->top;
   }
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
-  discard_writelist(proc);
+  process_writelist(proc,NULL,NULL);
   if (th->requestInfo > 0) {
     int bytesAvailable = sizeof(val_t) * (proc->allocLimit - proc->allocCursor);
     return (th->requestInfo <= bytesAvailable);
@@ -96,7 +96,7 @@ void GCStop_Semi(Proc_t *proc)
 
   /* Write list can be ignored */
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
-  discard_writelist(proc);
+  process_writelist(proc, NULL, NULL); /* Get globals; discard backpointers */
 
   /* Compute the roots from the stack and register set */
   assert(isEmptyStack(proc->rootLocs));

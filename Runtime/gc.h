@@ -126,6 +126,7 @@ extern double objCopyWeight;
 extern double objScanWeight;
 extern double fieldCopyWeight;  
 extern double fieldScanWeight;
+extern double ptrFieldScanWeight;
 extern double pageWeight;
 extern double globalWeight;
 extern double stackSlotWeight;

@@ -407,8 +407,8 @@ int showTimeList(double min)
   if (cursor == 0 || times[cursor-1] < min)
     return 0;
   for (i=0; i<cursor; i++) {
-    printf("%2d - %5d  %4.2lf ms   ", which[i], data[i], times[i]);
-    if ((i % 6) == 5)
+    printf("%2d - %5d  %4.2lf ms     ", which[i], data[i], times[i]);
+    if ((i % 5) == 4)
       printf("\n");
   }
   printf("\n\n");

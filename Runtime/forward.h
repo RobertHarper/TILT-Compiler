@@ -440,8 +440,7 @@ void locAlloc2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loc
 
 
 /* ------------------- Writelist Routines ---------------------- */
-void discard_writelist(Proc_t *proc);
-void add_writelist_to_rootlist(Proc_t *proc, Heap_t *from, Heap_t *to);
+void process_writelist(Proc_t *proc, Heap_t *from, Heap_t *to);
 
 /* ------------------- Scanning Routines ---------------------- */
 

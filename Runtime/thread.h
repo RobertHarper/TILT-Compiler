@@ -69,6 +69,7 @@ typedef struct Usage__t
   long bytesAllocated;
   long fieldsCopied;
   long fieldsScanned;
+  long ptrFieldsScanned;
   long objsCopied;
   long objsScanned;
   long pagesTouched;

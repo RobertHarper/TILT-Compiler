@@ -131,20 +131,24 @@ void PadCopyRange(CopyRange_t *copyRange)
 
 
 
-
-
-/* Returns object length including tag word in bytes */
-unsigned long objectLength(ptr_t obj, mem_t *start)
+INLINE(getTag)
+tag_t getTag(ptr_t obj)
 {
-  int type;
   tag_t tag = (tag_t) obj[-1];
 
   while (TAG_IS_FORWARD(tag)) {
     ptr_t replica = (ptr_t) tag;
-    assert(replica != obj);
-    tag = (tag_t) obj[-1];
+    fastAssert(replica != obj);
+    tag = (tag_t) replica[-1];
   }
-  type = GET_TYPE(tag);
+  return tag;
+}
+
+/* Returns object length including tag word in bytes */
+unsigned long objectLength(ptr_t obj, mem_t *start)
+{
+  tag_t tag = getTag(obj);
+  int type = GET_TYPE(tag);
 
   switch (type) {
     case RECORD_TYPE: {
@@ -377,29 +381,36 @@ int splitAlloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 /* -------------- Exported functions --------------------- */
 /* ------------------------------------------------------- */
 
-void discard_writelist(Proc_t *proc)
-{
-  proc->writelistCursor = proc->writelistStart;
-}
-
-/* Add the locations of all pointer arrays modified with back pointers */
-void add_writelist_to_rootlist(Proc_t *proc, Heap_t *from, Heap_t *to)
+/* (1) Add global roots.
+   (2) If from and to are not NULL, add the locations of all pointer arrays containing back pointers 
+*/
+void process_writelist(Proc_t *proc, Heap_t *from, Heap_t *to)
 {
   ploc_t curLoc = proc->writelistStart;
   ploc_t end = proc->writelistCursor;
   while (curLoc < end) {
+    /* Each writelist entry has 3 values */
     ptr_t obj = (ptr_t) (*(curLoc++)), data;
     int byteOffset = (int) (*(curLoc++));  
-    ptr_t prevPtrVal = (ptr_t) (*(curLoc++));  /* We ignore this value for non-concurrent collectors */
-    tag_t tag = (tag_t) obj[-1];
+    ptr_t possPrevPtrVal = (ptr_t) (*(curLoc++));  /* We ignore this value for non-concurrent collectors */
+    tag_t tag = getTag(obj);
     int type = GET_TYPE(tag);
     ploc_t field;
+
+    if (IsGlobalData(obj)) {
+      add_global_root(proc,obj);
+      continue;
+    }
+    if (from == NULL)
+      continue;
     if (type == WORD_ARRAY_TYPE || type == QUAD_ARRAY_TYPE)
       continue;
     else if (type == PTR_ARRAY_TYPE || type == MIRROR_PTR_ARRAY_TYPE)
       ;
-    else
+    else {
+      printf("XXX obj = %d   tag = %d   type = %d\n", obj, tag, type);
       assert(0);
+    }
     field  = (ploc_t) (obj + byteOffset / sizeof(val_t));
     data = *field;
     if (NotInRange(data,&to->range)) {
@@ -438,7 +449,7 @@ mem_t scanTag_locCopy1_noSpaceCheck(Proc_t *proc, mem_t start, CopyRange_t *copy
     int i, fieldLen = GET_ANY_ARRAY_LEN(tag) >> 2;
     for (i=0; i<fieldLen; i++) 
       locCopy1_noSpaceCheck(proc,(ploc_t)gray + i,copyRange,from);
-    proc->segUsage.fieldsScanned += fieldLen;
+    proc->segUsage.ptrFieldsScanned += fieldLen;
     return gray + fieldLen;
   }
   else if (type == MIRROR_PTR_ARRAY_TYPE) {
@@ -447,7 +458,7 @@ mem_t scanTag_locCopy1_noSpaceCheck(Proc_t *proc, mem_t start, CopyRange_t *copy
       locCopy1_noSpaceCheck(proc,(ploc_t)gray + 2 * i + (primaryArrayOffset/sizeof(val_t)), copyRange, from);
       gray[2 * i + (replicaArrayOffset/sizeof(val_t))] = gray[2 * i + (primaryArrayOffset/sizeof(val_t))];
     }
-    proc->segUsage.fieldsScanned += 2 * fieldLen;
+    proc->segUsage.ptrFieldsScanned += 2 * fieldLen;
     return gray + 2 * fieldLen;
   }
   else if (IS_SKIP_TAG(tag))
@@ -485,7 +496,7 @@ mem_t scanTag_locCopy2L_noSpaceCheck(Proc_t *proc, mem_t start, CopyRange_t *cop
     int i, fieldLen = GET_ANY_ARRAY_LEN(tag) >> 2;
     for (i=0; i<fieldLen; i++)
       locCopy2L_noSpaceCheck(proc,(ploc_t)gray + i,copyRange,from,from2,large);
-    proc->segUsage.fieldsScanned += fieldLen;
+    proc->segUsage.ptrFieldsScanned += fieldLen;
     return gray + fieldLen;
   }
   else if (type == MIRROR_PTR_ARRAY_TYPE) {
@@ -494,7 +505,7 @@ mem_t scanTag_locCopy2L_noSpaceCheck(Proc_t *proc, mem_t start, CopyRange_t *cop
       locCopy2L_noSpaceCheck(proc,(ploc_t)gray + 2*i + (primaryArrayOffset/sizeof(val_t)), copyRange,from,from2,large);
       gray[2 * i + (replicaArrayOffset/sizeof(val_t))] = gray[2 * i + (primaryArrayOffset/sizeof(val_t))];
     }
-    proc->segUsage.fieldsScanned += fieldLen;
+    proc->segUsage.ptrFieldsScanned += fieldLen;
     return gray + fieldLen;
   }
   else if (IS_SKIP_TAG(tag))
@@ -578,10 +589,12 @@ void genericScan(Proc_t *proc,
     if (type == RECORD_TYPE) {                      /* Records are the most common case - no copy-write sync needed */
       unsigned int mask = GET_RECMASK(tag);
       int fieldlen = GET_RECLEN(tag);
+      int ptrFields = 0;
       for (i=0; i<fieldlen; i++, mask >>= 1) {
 	if (transfer == Transfer)
 	  replicaGray[i] = primaryGray[i];
 	if (mask & 1) {
+	  ptrFields++;
 	  /* Since no copy-write sync is required, objects that point to themselves won't cause looping */
 	  switch (locAllocCopy) {
 	  case LocAlloc:
@@ -622,7 +635,8 @@ void genericScan(Proc_t *proc,
 	  } /* swtich locAllocCopy */
 	}
       }
-      proc->segUsage.fieldsScanned += fieldlen;
+      proc->segUsage.fieldsScanned += fieldlen - ptrFields;
+      proc->segUsage.ptrFieldsScanned += ptrFields;
       return;
     } 
     else if (TYPE_IS_ARRAY(type)) {
@@ -662,13 +676,15 @@ void genericScan(Proc_t *proc,
 	if (transfer == Transfer) {
 	  memcpy((char *) &(replicaGray[firstField]), (const char *) &(primaryGray[firstField]), sizeof(val_t) * (lastField - firstField)); 
 	}
+	proc->segUsage.fieldsScanned += lastField - firstField;
       }
       else if (type == PTR_ARRAY_TYPE || type == MIRROR_PTR_ARRAY_TYPE) {
 	int isPtrArray = type == PTR_ARRAY_TYPE;
 	int primaryOffset = isPtrArray ? 0 : primaryArrayOffset;
 	int replicaOffset = isPtrArray ? 0 : replicaArrayOffset;
 	if (!isPtrArray) {
-	  assert((firstField % 2 == 0) && (lastField % 2 == 0));
+	  assert(firstField % 2 == 0);
+	  assert(lastField % 2 == 0);
 	}
 	for (i=firstField; i<lastField; i += (isPtrArray ? 1 : 2)) {
 	  ploc_t primaryField = (ploc_t) &primaryGray[i + primaryOffset / sizeof(val_t)];
@@ -731,12 +747,12 @@ void genericScan(Proc_t *proc,
 	  if ((transfer == Transfer) && (!isPtrArray)) 
 	    replicaGray[i + primaryOffset / sizeof(val_t)] = (val_t) (*replicaField);
 	} /* for */
+	proc->segUsage.ptrFieldsScanned += lastField - firstField;
       }  /* PTR_ARRAY or MIRROR_PTR_ARRAY */
       else 
 	assert(0);
       if (doCopyWrite) 
 	primaryGray[syncIndex] = large ? SEGPROCEED_TAG : (val_t) replicaGray;
-      proc->segUsage.fieldsScanned += lastField - firstField;
       if (lastField - firstField > 32) 
 	updateWorkDone(proc);
       return;

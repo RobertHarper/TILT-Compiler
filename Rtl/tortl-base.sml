@@ -777,15 +777,6 @@ struct
 	  else instr::[(LOAD32I(REA(addr,0),global))]
       end
 
-  fun initPtrGlobal (label, global) = 
-      let val addr = alloc_regi NOTRACE_LABEL
-	  val offset = alloc_regi NOTRACE_INT
-	  val instr = LADDR(LEA(label,0),addr)
-      in  if (!mirrorGlobal)
-	      then instr::[(MIRROR_GLOBAL_OFFSET offset),
-			   (STORE32I(RREA(addr,offset),global))]
-	  else instr::[(LOAD32I(REA(addr,0),global))]
-      end
 
   fun repPathIsPointer repPath = 
       let fun loop (r,[]) = let 
@@ -1018,9 +1009,23 @@ struct
 	val skip3 = Rtltags.skip 3
 	val quadArrayTag = mk_quad_array_tag 0w8
 	val uninit = INT32 uninitVal
+
+	fun initPtrGlobal (state,label, global) = 
+	    let val addr = alloc_regi NOTRACE_LABEL
+		val offset = alloc_regi NOTRACE_INT
+		val state = needmutate(state,1)
+		val instr1 = LADDR(LEA(label,0),addr)
+		val (instr2,ea) =  if (!mirrorGlobal)
+				       then ([MIRROR_GLOBAL_OFFSET offset], RREA(addr,offset))
+				   else ([], REA(addr,0))
+		val instr3 = [STOREMUTATE(ea, PTR_MUTATE),
+			      STORE32I(ea, global)]
+	    in  (state, instr1 :: (instr2 @ instr3))
+	    end
+
     in
 
-      fun allocate_global (label,labels,rtl_rep,lv) = 
+      fun allocate_global(state,label,labels,rtl_rep,lv) = 
 	let 
 	  val _ = incGlobal()
 	  val _ = add_data(COMMENT "Global")
@@ -1031,17 +1036,19 @@ struct
 	       app (fn l => add_data(DLABEL l)) (label::labels);
 	       app add_data data);
 
-	  val _ = 
+	  val state = 
 	      (case lv of
 		   LOCATION (REGISTER (_, F fr)) => (oddlong_align();
 						     staticPortion(quadArrayTag, [FLOAT "0.0"]);
-						     add_instr (STORE64F(LEA(label,0), fr)))
+						     add_instr (STORE64F(LEA(label,0), fr));
+						     state)
 		 (* Is this case possible? XXXX *)
 		 | LOCATION (GLOBAL (l, NOTRACE_REAL)) => let val fr = alloc_regf()
 							  in  oddlong_align();
 							      staticPortion(quadArrayTag, [FLOAT "0.0"]);
 							      add_instr (LOAD64F(LEA(l,0), fr));
-							      add_instr (STORE64F(LEA(label,0), fr))
+							      add_instr (STORE64F(LEA(label,0), fr));
+							      state
 							  end
 		 | LOCATION loc =>
 		       let val tag = alloc_regi NOTRACE_INT
@@ -1054,65 +1061,79 @@ struct
 			      | NOTRACE_LABEL => error "global label"
 			      | NOTRACE_REAL => error "global real"
 			      | TRACE => let val _ = add_static_record (label, 0, 1)
-					 in  if (!mirrorGlobal)
-						 then (staticPortion(skip3, [uninit, uninit]);
-						       add_instr(LI(Rtltags.mirrorGlobalTag, tag));
-						       add_instr (STORE32I(LEA(label,~4), tag));
-						       app add_instr (initPtrGlobal(label, ir)))
-					     else (staticPortion(skip2, [uninit]);
-						   add_instr(LI(recPtrTag, tag));
-						   add_instr (STORE32I(LEA(label,~4), tag));
-						   add_instr (STORE32I(LEA(label,0), ir)))
+					     val _ = if (!mirrorGlobal)
+							 then (staticPortion(skip3, [uninit, uninit]);
+							       add_instr(LI(Rtltags.mirrorGlobalTag, tag)))
+						     else (staticPortion(skip2, [uninit]);
+							   add_instr(LI(recPtrTag, tag)))
+					     val _ = add_instr (STORE32I(LEA(label,~4), tag))
+					     val (state,instrs) = initPtrGlobal(state,label, ir)
+					     val _ = app add_instr instrs
+					 in  state
 					 end
 			      | COMPUTE rep => 
 					     let val _ = add_static_record (label, 0, 1)  (* Might be *)
 						 val isPtr = repPathIsPointer rep
 					     in  if (!mirrorGlobal)
-						     then (staticPortion(skip3, [uninit, uninit]);
-							   ifthenelse(isPtr,
-								      [LI(Rtltags.mirrorGlobalTag, tag),
-								       STORE32I(LEA(label,~4), tag)] @
-								      initPtrGlobal(label,ir),
-								      [LI(recIntTag, tag),
-								       STORE32I(LEA(label,~4), tag),
-								       STORE32I(LEA(label,0), ir),
-								       LI(skip1, tag),
-								       STORE32I(LEA(label,4), tag)]))
-						 else (staticPortion(skip2, [uninit]);
-						       ifthenelse(isPtr,
-								  [LI(recPtrTag, tag)],
-								  [LI(recIntTag, tag)]);
-						       add_instr(STORE32I(LEA(label,~4), tag));
-						       add_instr(STORE32I(LEA(label,0), ir)))
+						     then 
+							 let val _ = staticPortion(skip3, [uninit, uninit])
+							     val (state,instrs) = initPtrGlobal(state,label,ir)
+							 in  ifthenelse(isPtr,
+									[LI(Rtltags.mirrorGlobalTag, tag),
+									 STORE32I(LEA(label,~4), tag)] @
+									instrs,
+									[LI(recIntTag, tag),
+									 STORE32I(LEA(label,~4), tag),
+									 LI(skip1, tag),
+									 STORE32I(LEA(label,4), tag),
+									 STORE32I(LEA(label,0), ir)]);
+							     state
+							 end
+						 else 
+						     let val _ = staticPortion(skip2, [uninit])
+							 val (state,instrs) = initPtrGlobal(state,label,ir)
+							 val _ = ifthenelse(isPtr,
+									    [LI(recPtrTag, tag),
+									     STORE32I(LEA(label,~4), tag)] @
+									    instrs,
+									    [LI(recIntTag, tag),
+									     STORE32I(LEA(label,~4), tag),
+									     STORE32I(LEA(label,0), ir)])
+						     in  state
+						     end
 					     end
 			      | _ => (staticPortion(skip2, [uninit]);
-				      add_instr (STORE32I(LEA(label,0), ir))))
+				      add_instr (STORE32I(LEA(label,0), ir));
+				      state))
 		       end
 		 | VALUE (REAL l) => let val fr = alloc_regf()
 				     in  oddlong_align();
 					 staticPortion(quadArrayTag, [FLOAT "0.0"]);
 					 add_instr (LOAD64F(LEA(l,0), fr));
-					 add_instr (STORE64F(LEA(label,0), fr))
+					 add_instr (STORE64F(LEA(label,0), fr));
+					 state
 				     end
 		 | VALUE (VOID _) => (print "Warning: alloc_global got a VOID\n";
-				      staticPortion(recIntTag, [INT32 0w0]))
-		 | VALUE (INT w32) => staticPortion(recIntTag, [INT32 w32])
-		 | VALUE (CODE l) => staticPortion(recIntTag, [DATA l])
+				      staticPortion(recIntTag, [INT32 0w0]);
+				      state)
+		 | VALUE (INT w32) => (staticPortion(recIntTag, [INT32 w32]); state)
+		 | VALUE (CODE l) => (staticPortion(recIntTag, [DATA l]); state)
 		 (* Although the following values are not from the heap, 
-		    they still have a trace-able type and so must be mirrored. *)
+		    they still have a trace-able type and so must be mirrored
+		    but does not need to go through a write-barrier *)
 		 | VALUE v =>
 		     let val datum = (case v of
 					  TAG w32 => INT32 w32
 					| RECORD (l, _) => DATA l
 					| LABEL l => DATA l
 					| _ => error "impossible control flow")
-		     in  add_static_record (label, 0, 1);
-			 if (!mirrorGlobal)
-			     then staticPortion(mirrorGlobalTag, [datum, uninit])
-			 else (staticPortion(recPtrTag, [datum]))
+		     in  if (!mirrorGlobal)
+			     then staticPortion(mirrorGlobalTag, [datum, datum])
+			 else (staticPortion(recPtrTag, [datum]));
+			 state
 		     end)
-      in  ()
-      end
+	in  state
+	end
     end (* local *)
 
   fun help_global (add_obj, (state,v, obj, term, obj2)) : state =
@@ -1129,9 +1150,9 @@ struct
 		 LOCATION (REGISTER _) => true
 	       | _ => false)
 		 
-	val _ = if (exported orelse isReg)
-		    then (allocate_global(label,labels,rep,term))
-		else ()
+	val state = if (exported orelse isReg)
+			then (allocate_global(state,label,labels,rep,term))
+		    else state
 
 	val term = 
 	    (case term of
@@ -1164,10 +1185,10 @@ struct
 		 SOME(LOCATION(REGISTER _)) => true
 	       | _ => false)
 
-	val _ = (case (termOpt, exported orelse is_reg) of
-		     (SOME term, true) => (allocate_global(label,labels,TRACE,term))
-		   | _ => ())
-
+	val state = (case (termOpt, exported orelse is_reg) of
+			 (SOME term, true) => (allocate_global(state,label,labels,TRACE,term))
+		       | _ => state)
+	    
 	val termOpt = 
 	    (case termOpt of
 		 SOME(LOCATION (REGISTER _)) => SOME(LOCATION(GLOBAL(label,TRACE)))
