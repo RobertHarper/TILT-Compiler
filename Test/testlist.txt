@@ -5,3 +5,6 @@
 m0001	Raise uncaught exception.
 m0002	Raise uncaught exception.
 m0003	Type variable syntax.
+m0004	Deep loop, unused handler.
+m0005	Verifies that signature constraints change status.
+
