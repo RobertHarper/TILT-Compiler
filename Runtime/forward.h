@@ -11,31 +11,24 @@
 #include "memobj.h"
 #include "thread.h"
 
-
-
-void SetRange(range_t *range, mem_t low, mem_t high);
-
-/* static inline InRange(mem_t addr, range_t *range)  */
-#ifdef alpha_osf
-static        int InRange(mem_t addr, range_t *range)
-#pragma inline InRange
-#else
-static inline int InRange(mem_t addr, range_t *range)
-#endif
+/* This is essentially an object clumsily expressed in C */
+struct CopyRange__t;
+typedef void discharge_t(struct CopyRange__t *);
+typedef void expand_t(struct CopyRange__t *, int size);
+typedef struct CopyRange__t
 {
-  return ((unsigned int)addr - (unsigned int)range->low <= range->diff);
-}
+  mem_t start;
+  mem_t cursor;
+  mem_t stop;
+  Heap_t *heap;
+  expand_t *expand;
+  discharge_t *discharge; 
+} CopyRange_t;
 
-#ifdef alpha_osf
-static        int NotInRange(mem_t addr, range_t *range) 
-#pragma inline NotInRange
-#else
-static inline int NotInRange(mem_t addr, range_t *range) 
-#endif
-{
-  return ((unsigned int)addr - (unsigned int)range->low > range->diff);
-}
+void dischargeWithPad(CopyRange_t *copyRange);           /* Leftover area is padded with PadHeapArea */
+void expandWithPad(CopyRange_t *copyRange, int size);    /* Leftover area is padded with PadHeapArea */
 
+void SetCopyRange(CopyRange_t *copyRange, Heap_t *heap, expand_t *expand, discharge_t *discharge);
 
 unsigned long objectLength(ptr_t obj);
 
@@ -83,7 +76,7 @@ mem_t forward(ploc_t vpp, mem_t alloc);
        copied coarsely, all at once, even if the object is large.
    (4) Returns the number of bytes copied.
 */
-int copy_coarseParallel(ptr_t obj, mem_t *alloc, mem_t *limit, Heap_t *toheap);  
+int copy_coarseParallel(ptr_t obj, CopyRange_t *copyRange);
 
 
 /* forward_coarseParallel - don't call this directly
@@ -91,7 +84,7 @@ int copy_coarseParallel(ptr_t obj, mem_t *alloc, mem_t *limit, Heap_t *toheap);
        Instead, a location containing the object is taken as input.
        Further, the location will be updated with the copy.
 */
-int forward_coarseParallel(ploc_t vpp, mem_t *alloc, mem_t *limit, Heap_t *toheap);  
+int forward_coarseParallel(ploc_t vpp, CopyRange_t *copyRange);
 
 
 /* forward1
@@ -138,16 +131,15 @@ static inline mem_t forward2(ploc_t vpp, mem_t alloc,
    (2) If the object was actually forwarded, the (newly-made) 
        forwarded object is inserted into the system thread's stack. */
 #ifdef alpha_osf
-static        int forward1_coarseParallel_stack(ploc_t vpp, mem_t *alloc, mem_t *limit, Heap_t *toheap,
+static        int forward1_coarseParallel_stack(ploc_t vpp, CopyRange_t *copyRange, range_t *from, SysThread_t *sysThread)
 #pragma inline forward1_coarseParallel_stack
 #else
-static inline int forward1_coarseParallel_stack(ploc_t vpp, mem_t *alloc, mem_t *limit, Heap_t *toheap,
+static inline int forward1_coarseParallel_stack(ploc_t vpp, CopyRange_t *copyRange, range_t *from, SysThread_t *sysThread)
 #endif
-						 range_t *from, SysThread_t *sysThread)
 { 
   ptr_t p = *vpp;							
   if ((val_t) p - (val_t)from->low < from->diff) {
-    int bytesCopied = forward_coarseParallel(vpp,alloc,limit,toheap);
+    int bytesCopied = forward_coarseParallel(vpp,copyRange);
     if (bytesCopied) {
       sysThread->LocalStack[sysThread->LocalCursor++] = (loc_t)(*vpp);
       assert(sysThread->LocalCursor < (sizeof(sysThread->LocalStack) / sizeof (ptr_t)));
@@ -166,12 +158,12 @@ static inline int forward1_coarseParallel_stack(ploc_t vpp, mem_t *alloc, mem_t 
        to the queue containing large object roots 
 */
 #ifdef alpha_osf
-static         int forward2_coarseParallel_stack(ploc_t vpp, mem_t *alloc, mem_t *limit, Heap_t *toheap,
+static         int forward2_coarseParallel_stack(ploc_t vpp, CopyRange_t *copyRange,
 						range_t *from, range_t *from2, range_t *large, 
 						SysThread_t *sysThread)
 #pragma inline forward2_coarseParallel_stack
 #else
-static inline int forward2_coarseParallel_stack(ploc_t vpp, mem_t *alloc, mem_t *limit, Heap_t *toheap,
+static inline int forward2_coarseParallel_stack(ploc_t vpp, CopyRange_t *copyRange,
 						range_t *from, range_t *from2, range_t *large, 
 						SysThread_t *sysThread)
 #endif
@@ -179,7 +171,7 @@ static inline int forward2_coarseParallel_stack(ploc_t vpp, mem_t *alloc, mem_t 
   ptr_t p = *vpp;							 	    
   if (((val_t) p - (val_t)from->low < from->diff) ||
       ((val_t)  p - (val_t)from2->low < from2->diff)) {
-    int bytesCopied = forward_coarseParallel(vpp,alloc,limit,toheap);
+    int bytesCopied = forward_coarseParallel(vpp,copyRange);
     if (bytesCopied) {
       sysThread->LocalStack[sysThread->LocalCursor++] = (loc_t)(*vpp);
       assert(sysThread->LocalCursor < (sizeof(sysThread->LocalStack) / sizeof (ptr_t)));
@@ -198,14 +190,14 @@ static inline int forward2_coarseParallel_stack(ploc_t vpp, mem_t *alloc, mem_t 
    (2) If the object was actually forwarded, the (newly-made) 
        forwarded object is inserted into the system thread's stack. */
 #ifdef alpha_osf
-static        int forward1_concurrent_stack(ptr_t p, mem_t *alloc, mem_t *limit, Heap_t *toheap, range_t *from, SysThread_t *sysThread)
+static        int forward1_concurrent_stack(ptr_t p, CopyRange_t *copyRange, range_t *from, SysThread_t *sysThread)
 #pragma inline forward1_concurrent_stack
 #else
-static inline int forward1_concurrent_stack(ptr_t p, mem_t *alloc, mem_t *limit, Heap_t *toheap, range_t *from, SysThread_t *sysThread)
+static inline int forward1_concurrent_stack(ptr_t p, CopyRange_t *copyRange, range_t *from, SysThread_t *sysThread)
 #endif
 { 
   if ((val_t) p - (val_t)from->low < from->diff) {
-    int bytesCopied = copy_coarseParallel(p,alloc,limit,toheap);
+    int bytesCopied = copy_coarseParallel(p,copyRange);
     if (bytesCopied) {
       sysThread->LocalStack[sysThread->LocalCursor++] = (loc_t)(p[-1]);
       assert(sysThread->LocalCursor < (sizeof(sysThread->LocalStack) / sizeof (ptr_t)));
@@ -233,8 +225,7 @@ mem_t forward2_root_lists(Queue_t *root_lists, mem_t alloc,
    (3) The updated allocation pointer is returned. 
 */
 void discard_writelist(SysThread_t *sysThread);
-void forward1_writelist_coarseParallel_stack(mem_t *alloc, mem_t *limit,
-					     Heap_t *toheap, range_t *from, range_t *to, SysThread_t *sysThread);
+void forward1_writelist_coarseParallel_stack(CopyRange_t *copyRange, range_t *from, range_t *to, SysThread_t *sysThread);
 
 mem_t forward1_writelist(SysThread_t *sysThread, mem_t alloc,
 			 range_t *from, range_t *to);
@@ -272,9 +263,9 @@ mem_t scan2_region(mem_t start_scan, mem_t alloc, mem_t stop,
    (2) The allocation/limit pointers and stack may be updated.
    (3) Returns the size of the object
 */
-int scan1_object_coarseParallel_stack(ptr_t gray_obj, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap,
+int scan1_object_coarseParallel_stack(ptr_t gray_obj, CopyRange_t *copyRange,
 				      range_t *from_range, range_t *to_range, SysThread_t *sysThread);
-int scan2_object_coarseParallel_stack(ptr_t gray_obj, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap,
+int scan2_object_coarseParallel_stack(ptr_t gray_obj, CopyRange_t *copyRange,
 				      range_t *from_range, range_t *from2_range,
 				      range_t *to_range, SysThread_t *sysThread);
 

@@ -115,7 +115,7 @@ static void CollectorOff(SysThread_t *sysThread)
 
   isFirst = (asynchReachBarrier(&numOff)) == 0;
   if (isFirst) {
-    assert(isEmptyGlobalStack());
+    assert(isEmptyGlobalStack(workStack));
     ResetJob();
     asynchReachBarrier(&numOff);
   }
@@ -198,7 +198,7 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
   mem_t allocStop = sysThread->allocCursor;
   ploc_t writelistCurrent = sysThread->writelistStart;
   ploc_t writelistStop = sysThread->writelistCursor;
-  mem_t to_alloc = 0, to_limit = 0;
+  CopyRange_t copyRange;
   int bytesCopied = 0;
 
   sysThread->allocStart = sysThread->allocCursor;  /* allocation area is NOT reused */  
@@ -218,6 +218,7 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
 
   /* Get local ranges ready for use */
   assert(sysThread->LocalCursor == 0);
+  SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
 
   if (diag)
     printf("Proc %d: Scanning/Replicating %d to %d\n",sysThread->stid,allocCurrent,allocStop);
@@ -229,7 +230,7 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
       allocCurrent += GET_SKIP(tag);
       continue;
     }
-    bytesCopied = forward1_concurrent_stack(obj,&to_alloc,&to_limit,toSpace,&fromSpace->range,sysThread);
+    bytesCopied = forward1_concurrent_stack(obj,&copyRange,&fromSpace->range,sysThread);
     objSize = (bytesCopied) ? bytesCopied : objectLength((ptr_t)obj[-1]);
     allocCurrent += objSize / sizeof(val_t);
   }
@@ -241,14 +242,14 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
     tag_t tag;
     int wordDisp = (int) *writelistCurrent++;
 
-    forward1_concurrent_stack(primary,&to_alloc,&to_limit,toSpace,&fromSpace->range,sysThread);
+    forward1_concurrent_stack(primary,&copyRange,&fromSpace->range,sysThread);
     replica = (ptr_t) primary[-1];
     tag = replica[-1];
 
     switch (GET_TYPE(tag)) {
     case PARRAY_TAG: {
       ptr_t primaryField = (ptr_t) primary[wordDisp], replicaField;
-      forward1_concurrent_stack(primaryField,&to_alloc,&to_limit,toSpace,&fromSpace->range,sysThread);
+      forward1_concurrent_stack(primaryField,&copyRange,&fromSpace->range,sysThread);
       replicaField = (ptr_t) primaryField[-1];
       replica[wordDisp] = (val_t) replicaField;  /* update replica with replicated object */
       break;
@@ -268,13 +269,13 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
     }
   }
 
-  SynchStart();
-  SynchMid();
-  moveToGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor));
-  SynchEnd();
+  SynchStart(workStack);
+  SynchMid(workStack);
+  moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
+  SynchEnd(workStack);
   
   /* XXX wastage of space */
-  PadHeapArea(to_alloc, to_limit);
+  copyRange.discharge(&copyRange);
   flushStore();
 }
 
@@ -283,27 +284,30 @@ static void do_work(SysThread_t *sysThread, int bytesToCopy)
 {
   int i;
   mem_t to_cursor;         /* Designated thread records this initially */
-  mem_t to_alloc = 0;
+  CopyRange_t copyRange;
   mem_t to_limit = 0;
   int bytesCopied = 0;
   int lastAndEmpty = 0;
 
   assert(sysThread->LocalCursor == 0); 
+  SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
 
-  while (!(isEmptyGlobalStack()) && bytesCopied < bytesToCopy) {
+  while (!(isEmptyGlobalStack(workStack)) && bytesCopied < bytesToCopy) {
     int i;
-    SynchStart();
-    fetchFromGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor), fetchSize);
+    SynchStart(workStack);
+    fetchFromGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor), fetchSize);
     for (i=0; i < localWorkSize && sysThread->LocalCursor > 0; i++) {
       loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
-      int bytesScanned = scan1_object_coarseParallel_stack(grayCell,&to_alloc,&to_limit,toSpace,&fromSpace->range,&toSpace->range,sysThread);
+      int bytesScanned = scan1_object_coarseParallel_stack(grayCell,&copyRange,&fromSpace->range,&toSpace->range,sysThread);
       bytesCopied += bytesScanned;
     }
-    SynchMid();
-    moveToGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor));
-    lastAndEmpty = SynchEnd();
+    SynchMid(workStack);
+    moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
+    lastAndEmpty = SynchEnd(workStack);
   }
-  PadHeapArea(to_alloc, to_limit);
+
+  /* XXX wastage of space */
+  copyRange.discharge(&copyRange);
 
   if (lastAndEmpty)
     CollectorOff(sysThread);
@@ -342,9 +346,8 @@ static long numOn3 = 0;
 static void CollectorOn(SysThread_t *sysThread)
 {
   Thread_t *curThread = NULL;
-  int isFirst;
-  mem_t to_alloc = 0, to_limit = 0;
-  int rootCount = 0;
+  int isFirst, rootCount = 0;
+  CopyRange_t copyRange;
 
   if (diag)
     printf("Proc %d: CollectorOn\n", sysThread->stid); 
@@ -363,6 +366,7 @@ static void CollectorOn(SysThread_t *sysThread)
   /* Check local stack empty; reset root lists */
   assert(sysThread->LocalCursor == 0);
   QueueClear(sysThread->root_lists);
+  SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
 
   req_size = 0;
   ResetJob();
@@ -399,20 +403,21 @@ static void CollectorOn(SysThread_t *sysThread)
     for (i=0; i<len; i++) {
       ploc_t root = (ploc_t) QueueAccess(roots,i);
       ptr_t obj = *root;
-      forward1_concurrent_stack(obj,&to_alloc,&to_limit,toSpace,&fromSpace->range,sysThread);
+      forward1_concurrent_stack(obj,&copyRange,&fromSpace->range,sysThread);
       if (verbose)
 	printf("GC %d: collector on %d root = %d   primary = %d, replica = %d\n",NumGC,++rootCount,root,obj,obj[-1]);
     }
   }
 
-  PadHeapArea(to_alloc, to_limit);
+  /* XXX wastage of space */
+  copyRange.discharge(&copyRange);
 
   /* Move to global stack */
-  SynchStart();
-  SynchMid();
-  moveToGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor));
-  sysThread->LocalCursor = 0;
-  SynchEnd();
+  SynchStart(workStack);
+  SynchMid(workStack);
+  moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
+  SynchEnd(workStack);
+  assert(sysThread->LocalCursor == 0);
   GCStatus = GCOn;
   synchBarrier(&numOn3, NumSysThread, &numOn2);
   flushStore();
@@ -458,9 +463,8 @@ int GCTry_SemiConc(SysThread_t *sysThread, Thread_t *th)
     assert(0);
     break;
   case GCPendingOff:
-    do_work(sysThread,sizeof(val_t) * 
-	    (fromSpace->top - fromSpace->bottom));    /* this is bounded by the size of objects allocated 
-						       by all processors since CollectorOff is triggered */
+    /* this is actually bounded by the size of objects allocated by all processors since CollectorOff is triggered */
+    do_work(sysThread,sizeof(val_t) * Heap_GetSize(fromSpace));
     if (GCStatus == GCPendingOff)                                  /* do_work may trigger CollectorOff */
       CollectorOff(sysThread);
     return GCTry_SemiConc(sysThread, th);
@@ -499,6 +503,7 @@ void gc_init_SemiConc()
   init_int(&MaxRatioSize, 50 * 1024);
   fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  workStack = SharedStack_Alloc();
 }
 
 void gc_finish_SemiConc()

@@ -37,6 +37,7 @@ enum GCType GCType = Minor;
 
 Heap_t *fromSpace = NULL, *toSpace = NULL;
 Heap_t *nursery = NULL, *tenuredFrom = NULL, *tenuredTo = NULL;
+SharedStack_t *workStack = NULL, *majorWorkStack1 = NULL, *majorWorkStack2 = NULL;
 
 int NumGC = 0;
 int NumMajorGC = 0;
@@ -125,6 +126,9 @@ void gc_init(void)
     break;
   case SemispaceConcurrent:
     gc_init_SemiConc();
+    break;
+  case GenerationalConcurrent:
+    gc_init_GenConc();
     break;
   default: 
     assert(0);
@@ -299,11 +303,12 @@ ptr_t alloc_bigintarray(int byteLen, int value, int ptag)
 {  
   switch (collector_type) 
     {
-    case Semispace:    { return alloc_bigintarray_Semi(byteLen,value,ptag); }
-    case Generational: { return alloc_bigintarray_Gen (byteLen,value,ptag); }
-    case SemispaceParallel:     { return alloc_bigintarray_SemiPara(byteLen,value,ptag); }
-    case GenerationalParallel:  { return alloc_bigintarray_GenPara(byteLen,value,ptag); }
-    case SemispaceConcurrent: assert(0);
+    case Semispace:              { return alloc_bigintarray_Semi(byteLen,value,ptag); }
+    case Generational:           { return alloc_bigintarray_Gen (byteLen,value,ptag); }
+    case SemispaceParallel:      { return alloc_bigintarray_SemiPara(byteLen,value,ptag); }
+    case GenerationalParallel:   { return alloc_bigintarray_GenPara(byteLen,value,ptag); }
+    case SemispaceConcurrent:    { return alloc_bigintarray_SemiConc(byteLen,value,ptag); }
+    case GenerationalConcurrent: { return alloc_bigintarray_GenConc(byteLen,value,ptag); }
     default: assert(0);
     }
 }
@@ -312,11 +317,12 @@ ptr_t alloc_bigptrarray(int wordlen, ptr_t value, int ptag)
 {  
   switch (collector_type) 
     {
-    case Semispace:    { return alloc_bigptrarray_Semi(wordlen,value,ptag); }
-    case Generational: { return alloc_bigptrarray_Gen (wordlen,value,ptag); }
-    case SemispaceParallel:    { return alloc_bigptrarray_SemiPara(wordlen,value,ptag); }
-    case GenerationalParallel: { return alloc_bigptrarray_GenPara(wordlen,value,ptag); }
-    case SemispaceConcurrent: assert(0);
+    case Semispace:              { return alloc_bigptrarray_Semi(wordlen,value,ptag); }
+    case Generational:           { return alloc_bigptrarray_Gen (wordlen,value,ptag); }
+    case SemispaceParallel:      { return alloc_bigptrarray_SemiPara(wordlen,value,ptag); }
+    case GenerationalParallel:   { return alloc_bigptrarray_GenPara(wordlen,value,ptag); }
+    case SemispaceConcurrent:    { return alloc_bigptrarray_SemiConc(wordlen,value,ptag); }
+    case GenerationalConcurrent: { return alloc_bigptrarray_GenConc(wordlen,value,ptag); }
     default: assert(0);
     }
 }
@@ -324,11 +330,12 @@ ptr_t alloc_bigptrarray(int wordlen, ptr_t value, int ptag)
 ptr_t alloc_bigfloatarray(int loglen, double value, int ptag)
 {  
   switch (collector_type) {
-    case Semispace:    { return alloc_bigfloatarray_Semi(loglen,value,ptag); }
-    case Generational: { return alloc_bigfloatarray_Gen (loglen,value,ptag); }
-    case SemispaceParallel:     { return alloc_bigfloatarray_SemiPara(loglen,value,ptag); }
-    case GenerationalParallel:     { return alloc_bigfloatarray_GenPara(loglen,value,ptag); }
-    case SemispaceConcurrent: assert(0);
+    case Semispace:               { return alloc_bigfloatarray_Semi(loglen,value,ptag); }
+    case Generational:            { return alloc_bigfloatarray_Gen (loglen,value,ptag); }
+    case SemispaceParallel:       { return alloc_bigfloatarray_SemiPara(loglen,value,ptag); }
+    case GenerationalParallel:    { return alloc_bigfloatarray_GenPara(loglen,value,ptag); }
+    case SemispaceConcurrent:     { return alloc_bigfloatarray_SemiConc(loglen,value,ptag); }
+    case GenerationalConcurrent:  { return alloc_bigfloatarray_GenConc(loglen,value,ptag); }
     default: assert(0);
   }
 }
@@ -336,11 +343,12 @@ ptr_t alloc_bigfloatarray(int loglen, double value, int ptag)
 void gc_poll(SysThread_t *sth)
 {
   switch (collector_type) {
-    case Semispace:            return;
-    case Generational:         return;
-    case SemispaceParallel:    gc_poll_SemiPara(sth); return;
-    case GenerationalParallel: gc_poll_GenPara(sth); return;
-    case SemispaceConcurrent: gc_poll_SemiConc(sth); return;
+    case Semispace:               return;
+    case Generational:            return;
+    case SemispaceParallel:       gc_poll_SemiPara(sth); return;
+    case GenerationalParallel:    gc_poll_GenPara(sth); return;
+    case SemispaceConcurrent:     gc_poll_SemiConc(sth); return;
+    case GenerationalConcurrent:  gc_poll_GenConc(sth); return;
     default: assert(0);
   }
   return;
@@ -396,6 +404,10 @@ int GCFromScheduler(SysThread_t *sth, Thread_t *th)
       if (GCTry_SemiConc(sth,th))
 	return 2;
       break;
+    case GenerationalConcurrent:
+      if (GCTry_GenConc(sth,th))
+	return 2;
+      break;
     default: 
       assert(0);
   }
@@ -424,6 +436,8 @@ int GCFromScheduler(SysThread_t *sth, Thread_t *th)
       break;
     case SemispaceConcurrent:
       assert(0);
+    case GenerationalConcurrent:
+      assert(0);
     default: 
       assert(0);
   }
@@ -440,6 +454,7 @@ void GCRelease(SysThread_t *sth)
     case SemispaceParallel:    return;
     case GenerationalParallel: return;
     case SemispaceConcurrent:  GCRelease_SemiConc(sth); return;
+    case GenerationalConcurrent:  GCRelease_GenConc(sth); return;
     default: assert(0);
   }
 }
@@ -482,6 +497,7 @@ void gc_finish()
     case SemispaceParallel: { gc_finish_SemiPara(); break; }
     case GenerationalParallel: { gc_finish_GenPara(); break; }
     case SemispaceConcurrent: { gc_finish_SemiConc(); break; }
+    case GenerationalConcurrent: { gc_finish_GenConc(); break; }
     default: assert(0);
     }
 }

@@ -51,6 +51,29 @@ struct range__t
 
 typedef struct range__t range_t;
 
+void SetRange(range_t *range, mem_t low, mem_t high);
+
+/* static inline InRange(mem_t addr, range_t *range)  */
+#ifdef alpha_osf
+static        int InRange(mem_t addr, range_t *range)
+#pragma inline InRange
+#else
+static inline int InRange(mem_t addr, range_t *range)
+#endif
+{
+  return ((unsigned int)addr - (unsigned int)range->low <= range->diff);
+}
+
+#ifdef alpha_osf
+static        int NotInRange(mem_t addr, range_t *range) 
+#pragma inline NotInRange
+#else
+static inline int NotInRange(mem_t addr, range_t *range) 
+#endif
+{
+  return ((unsigned int)addr - (unsigned int)range->low > range->diff);
+}
+
 struct Heap__t
 {
   int id;                  /* The ID for the heap object. */

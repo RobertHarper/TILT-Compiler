@@ -149,7 +149,7 @@ static long synch5 = 0;   /* waiting for large area flush, heap resize, space fl
 void GCStop_GenPara(SysThread_t *sysThread)
 {
   int isFirst = 0;                    /* Am I the first processor? */
-  mem_t to_alloc = 0, to_limit = 0;   /* Processor-specific allocation pointers */
+  CopyRange_t copyRange;              /* Processor-specific allocation pointers */
   mem_t to_cursor_first = NULL;       /* Used only by "first" thread */
   unsigned int allocated = 0;
   unsigned int copied = 0;
@@ -228,6 +228,11 @@ void GCStop_GenPara(SysThread_t *sysThread)
   while (!(asynchCheckBarrier(&synch2, NumSysThread + 1, &synch1)))
     ;
 
+  if (GCType == Minor)
+    SetCopyRange(&copyRange, tenuredFrom, expandWithPad, dischargeWithPad);
+  else
+    SetCopyRange(&copyRange, tenuredTo, expandWithPad, dischargeWithPad);
+
   /* Now forward all the roots which initializes the local work stacks */
   while (!QueueIsEmpty(sysThread->root_lists)) {
     /* Cannot dequeue from roots since this may be a global */
@@ -236,23 +241,21 @@ void GCStop_GenPara(SysThread_t *sysThread)
     for (i=0; i<len; i++) {
       ploc_t root = (ploc_t) QueueAccess(roots,i);
       if (GCType == Minor) 
-	forward1_coarseParallel_stack(root,&to_alloc,&to_limit,tenuredFrom,&nursery->range,sysThread);
+	forward1_coarseParallel_stack(root,&copyRange,&nursery->range,sysThread);
       else
-	forward2_coarseParallel_stack(root,&to_alloc,&to_limit,tenuredTo,&nursery->range,
-			      &tenuredFrom->range,&large->range,sysThread);
+	forward2_coarseParallel_stack(root,&copyRange,&nursery->range,&tenuredFrom->range,&large->range,sysThread);
     }
     if (GCType == Minor) 
-      forward1_writelist_coarseParallel_stack(&to_alloc, &to_limit,
-					      tenuredFrom, &nursery->range, &tenuredFrom->range, sysThread);
+      forward1_writelist_coarseParallel_stack(&copyRange, &nursery->range, &tenuredFrom->range, sysThread);
     else
       discard_writelist(sysThread);
   }
 
   /* Move everything from local stack to global stack to balance work */
-  SynchStart();
-  SynchMid();
-  moveToGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor));
-  SynchEnd();
+  SynchStart(workStack);
+  SynchMid(workStack);
+  moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
+  SynchEnd(workStack);
 
 
   /* Get work from global stack; operate on local stack; put work back on global stack 
@@ -263,29 +266,27 @@ void GCStop_GenPara(SysThread_t *sysThread)
   if (diag)
     printf("Proc %d: Entering global state\n",sysThread->stid);
   while (!(asynchCheckBarrier(&synch3, NumSysThread, &synch2))) {
-    if (!(isEmptyGlobalStack())) {
+    if (!(isEmptyGlobalStack(workStack))) {
       int i, numToFetch = 10;
-      SynchStart();
-      fetchFromGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor), numToFetch);
+      SynchStart(workStack);
+      fetchFromGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor), numToFetch);
       /* Work on up to 10 items */
       for (i=0; i < 10 && sysThread->LocalCursor > 0; i++) {
 	loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
 	if (GCType == Minor)
-	  scan1_object_coarseParallel_stack(grayCell,&to_alloc,&to_limit,tenuredFrom,
-				    &nursery->range,&tenuredTo->range,sysThread);
+	  scan1_object_coarseParallel_stack(grayCell,&copyRange,&nursery->range,&tenuredTo->range,sysThread);
 	else 
-	  scan2_object_coarseParallel_stack(grayCell,&to_alloc,&to_limit,tenuredTo,
-					    &nursery->range,&tenuredFrom->range,&tenuredTo->range,sysThread);
+	  scan2_object_coarseParallel_stack(grayCell,&copyRange,&nursery->range,&tenuredFrom->range,&tenuredTo->range,sysThread);
       }
-      SynchMid();
-      moveToGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor));
-      SynchEnd();
+      SynchMid(workStack);
+      moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
+      SynchEnd(workStack);
     }
   }
   if (GCType != Minor)
     gc_large_addRoots(sysThread->largeRoots);
 
-  PadHeapArea(to_alloc, to_limit);
+  copyRange.discharge(&copyRange);
 
   /* Wait for all active threads to reach this point so all forwarding is complete */
   if (diag)
@@ -369,8 +370,8 @@ void gc_init_GenPara()
   tenuredFrom = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   tenuredTo = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
   gc_large_init(1);
+  workStack = SharedStack_Alloc();
 }
-
 
 void gc_finish_GenPara()
 {

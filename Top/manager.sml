@@ -431,10 +431,19 @@ struct
 	end
     val readPartialContextRaw = Stats.timer("ReadingContext",readPartialContextRaw)
 
-    fun writePartialContextRaw (file,ctxt) = 
+    fun writePartialContextRaw (file,pctxt) = 
 	let val os = BinIO.openOut file
-	    val _ = LinkIl.IlContextEq.blastOutPartialContext os ctxt
+	    val _ = LinkIl.IlContextEq.blastOutPartialContext os pctxt
 	    val _ = BinIO.closeOut os
+	    val shortfile = file ^ ".unself"
+	    val shortpctxt = IlContext.UnselfifyPartialContext pctxt
+	    val os = BinIO.openOut shortfile
+	    val _ = LinkIl.IlContextEq.blastOutPartialContext os shortpctxt
+	    val _ = BinIO.closeOut os
+	    val _ = (print "Selfified context:\n"; 
+		     Ppil.pp_pcontext pctxt;
+		     print "\n\n\nUnselfified context:\n"; 
+		     Ppil.pp_pcontext shortpctxt)
 	in  () 
 	end
     val writePartialContextRaw = Stats.timer("WritingContext",writePartialContextRaw)
@@ -475,11 +484,13 @@ struct
 	in  context
 	end
 
+
     fun elab_constrained(unit,ctxt,sourcefile,fp,dec,fp2,specs,uiFile,least_new_time) =
 	(case LinkIl.elab_dec_constrained(ctxt, fp, dec, fp2,specs) of
 	     SOME (il_module as (ctxt, partial_ctxt, binds)) =>
-		 let val _ = (Help.chat ("  [writing " ^ uiFile);
-			      Cache.write (uiFile, partial_ctxt);
+		 let val partial_ctxt_export = IlContext.removeNonExport partial_ctxt
+		     val _ = (Help.chat ("  [writing " ^ uiFile);
+			      Cache.write (uiFile, partial_ctxt_export);
 			      Help.chat "]\n")
 		     val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module 
 		     val il_module = (reduced_ctxt, partial_ctxt, binds)
@@ -490,8 +501,9 @@ struct
     fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
 	case LinkIl.elab_dec(pre_ctxt, fp, dec) of
 	    SOME (il_module as (ctxt, partial_ctxt, binds)) =>
-		let val _ = (Help.chat ("  [writing " ^ uiFile);
-			     Cache.write (uiFile, partial_ctxt);
+		let val partial_ctxt_export = IlContext.removeNonExport partial_ctxt
+		    val _ = (Help.chat ("  [writing " ^ uiFile);
+			     Cache.write (uiFile, partial_ctxt_export);
 			     Help.chat "]\n")
 		     val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module 
 		     val il_module = (reduced_ctxt, partial_ctxt, binds)

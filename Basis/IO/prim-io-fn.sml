@@ -235,9 +235,12 @@ functor PrimIOFn (
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:50:46  pscheng
-# added basis
+# Revision 1.2  2000/01/20  13:31:53  pscheng
+# *** empty log message ***
 # 
+# Revision 1.1  1998/03/09  19:50:46  pscheng
+# added basis
+#
  * Revision 1.2  1997/02/26  21:00:25  george
  *    Defined a new top level Option structure. All 'a option related
  *    functions have been moved out of General.

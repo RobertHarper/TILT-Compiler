@@ -92,9 +92,9 @@ static void stop_copy(SysThread_t *sysThread)
   int i;
   int isFirst = 0;
   mem_t to_alloc_start;         /* Designated thread records this initially */
-  mem_t to_alloc = 0, to_limit = 0;
   Thread_t *curThread = NULL;
   static long req_size;            /* These are shared across processors. */
+  CopyRange_t copyRange;
   
   /* start timer */
   start_timer(&(sysThread->gctime));
@@ -118,9 +118,10 @@ static void stop_copy(SysThread_t *sysThread)
     printf("Proc %d: mutators stopped; proceeding to collection\n", sysThread->stid);
 
 
-  /* All threads get local ranges ready for use */
-  sysThread->LocalCursor = 0;
+  /* All threads get local structures ready */
+  assert(sysThread->LocalCursor == 0);
   QueueClear(sysThread->root_lists);
+  SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
 
   /* Write list can be ignored */
   discard_writelist(sysThread);
@@ -148,15 +149,15 @@ static void stop_copy(SysThread_t *sysThread)
     int i, len = QueueLength(roots);  
     for (i=0; i<len; i++) {
       ploc_t root = (ploc_t) QueueAccess(roots,i);
-      forward1_coarseParallel_stack(root,&to_alloc,&to_limit,toSpace,&fromSpace->range,sysThread);
+      forward1_coarseParallel_stack(root,&copyRange,&fromSpace->range,sysThread);
     }
   }
 
   /* Move everything from local stack to global stack to balance work */
-  SynchStart();
-  SynchMid();
-  moveToGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor));
-  SynchEnd();
+  SynchStart(workStack);
+  SynchMid(workStack);
+  moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
+  SynchEnd(workStack);
   
 
   /* Reaching this barrier indicates all work is now shared.  
@@ -167,22 +168,22 @@ static void stop_copy(SysThread_t *sysThread)
   if (diag)
     printf("Proc %d: Entering global state\n",sysThread->stid);
   while (!(asynchCheckBarrier(&numGlobalThread, NumSysThread, &numWaitThread))) {
-    if (!(isEmptyGlobalStack())) {
+    if (!(isEmptyGlobalStack(workStack))) {
       int i, numToFetch = 10;
-      SynchStart();
-      fetchFromGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor), numToFetch);
+      SynchStart(workStack);
+      fetchFromGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor), numToFetch);
       /* Work on up to 10 items */
       for (i=0; i < 10 && sysThread->LocalCursor > 0; i++) {
 	loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
-	scan1_object_coarseParallel_stack(grayCell,&to_alloc,&to_limit,toSpace,&fromSpace->range,&toSpace->range,sysThread);
+	scan1_object_coarseParallel_stack(grayCell,&copyRange,&fromSpace->range,&toSpace->range,sysThread);
       }
-      SynchMid();
-      moveToGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor));
-      SynchEnd();
+      SynchMid(workStack);
+      moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
+      SynchEnd(workStack);
     }
   }
 
-  PadHeapArea(to_alloc, to_limit);
+  copyRange.discharge(&copyRange);
 
   /* Wait for all active threads to reach this point so all forwarding is complete */
   if (diag)
@@ -287,6 +288,7 @@ void gc_init_SemiPara()
   init_int(&MaxRatioSize, 50 * 1024);
   fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  workStack = SharedStack_Alloc();
 }
 
 

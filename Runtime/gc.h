@@ -2,23 +2,25 @@
 #include "thread.h"
 #include "bitmap.h"
 #include "create.h"
+#include "gc_para.h"
 extern int NumGC;
 extern int pagesize;
 
 /* State the mutator/collector is in.
    The *Pending* states are used to interrupt all processors for the parallel and concurrent collectors.
    The Major type is used for generational collectors.
-   The BeginMajor type is used for the generational, concurrent collector.
+   The BeginMajor and EndMajor types are used for the generational, concurrent collector.
 */
 enum GCStatus { GCOff, GCPendingOn, GCOn, GCPendingOff };
-enum GCType { Minor, Major, BeginMajor };  
+enum GCType { Minor, Major, BeginMajor, EndMajor };  
 
 extern enum GCStatus GCStatus;
 extern enum GCType GCType;
 
-/* Heaps used by various collectors.  */
-Heap_t *fromSpace, *toSpace;
-Heap_t *nursery, *tenuredFrom, *tenuredTo;
+/* Heaps and work stacks used by various collectors.  */
+extern Heap_t *fromSpace, *toSpace;
+extern Heap_t *nursery, *tenuredFrom, *tenuredTo;
+extern SharedStack_t *workStack, *majorWorkStack1, *majorWorkStack2;
 
 /* GCFromML has a non-standard calling convention */
 void GCFromC(Thread_t *, int RequestSizeBytes, int isMajor);
@@ -31,17 +33,20 @@ void gc_init_Gen(void);
 void gc_init_SemiPara(void);
 void gc_init_GenPara(void);
 void gc_init_SemiConc(void);
+void gc_init_GenConc(void);
 void gc_finish_Semi(void);
 void gc_finish_Gen(void);
 void gc_finish_SemiPara(void);
 void gc_finish_GenPara(void);
 void gc_finish_SemiConc(void);
+void gc_finish_GenConc(void);
 
 /* Idle (unmapped) processors call the poll function periodically in case there is GC work. */
 void gc_poll(SysThread_t *);              /* May return immediately or do some work */
 void gc_poll_SemiPara(SysThread_t *);
 void gc_poll_GenPara(SysThread_t *);
 void gc_poll_SemiConc(SysThread_t *);
+void gc_poll_GenConc(SysThread_t *);
 
 /* Actual collection routines */
 
@@ -55,15 +60,18 @@ int GCTry_Gen(SysThread_t *, Thread_t *);
 int GCTry_SemiPara(SysThread_t *, Thread_t *);
 int GCTry_GenPara(SysThread_t *, Thread_t *);
 int GCTry_SemiConc(SysThread_t *, Thread_t *);
+int GCTry_GenConc(SysThread_t *, Thread_t *);
 
 /* Perform a stop-and-copy collection */
 void GCStop_Semi(SysThread_t *);
 void GCStop_Gen(SysThread_t *);
 void GCStop_SemiPara(SysThread_t *);
 void GCStop_GenPara(SysThread_t *);
+/* Concurrent collectors do not have a Stop version */
 
 /* Must be called each time a thread is released */
 void GCRelease_SemiConc(SysThread_t *sysThread);
+void GCRelease_GenConc(SysThread_t *sysThread);
 
 
 int returnFromGCFromC(Thread_t *);
@@ -76,16 +84,23 @@ ptr_t alloc_bigintarray_Semi(int byteLen, int value, int tag);
 ptr_t alloc_bigintarray_Gen (int byteLen, int value, int tag);
 ptr_t alloc_bigintarray_SemiPara(int byteLen, int value, int tag);
 ptr_t alloc_bigintarray_GenPara(int byteLen, int value, int tag);
+ptr_t alloc_bigintarray_SemiConc(int byteLen, int value, int tag);
+ptr_t alloc_bigintarray_GenConc(int byteLen, int value, int tag);
+
 
 ptr_t alloc_bigptrarray_Semi(int logLen, ptr_t value, int tag);
 ptr_t alloc_bigptrarray_Gen (int logLen, ptr_t value, int tag);
 ptr_t alloc_bigptrarray_SemiPara(int logLen, ptr_t value, int tag);
 ptr_t alloc_bigptrarray_GenPara(int logLen, ptr_t value, int tag);
+ptr_t alloc_bigptrarray_SemiConc(int logLen, ptr_t value, int tag);
+ptr_t alloc_bigptrarray_GenConc(int logLen, ptr_t value, int tag);
 
 ptr_t alloc_bigfloatarray_Semi(int logLen, double value, int tag);
 ptr_t alloc_bigfloatarray_Gen (int logLen, double value, int tag);
 ptr_t alloc_bigfloatarray_SemiPara(int logLen, double value, int tag);
 ptr_t alloc_bigfloatarray_GenPara(int logLen, double value, int tag);
+ptr_t alloc_bigfloatarray_SemiConc(int logLen, double value, int tag);
+ptr_t alloc_bigfloatarray_GenConc(int logLen, double value, int tag);
 
 
 extern double MinRatio, MaxRatio;

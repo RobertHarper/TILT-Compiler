@@ -601,7 +601,8 @@ structure Datatype
 			     val carrying_labs = List.mapPartial mapper sdecs
 			 in  (all_labs,carrying_labs,[(SBND(dt_lab,bnd),SDEC(dt_lab,dec))])
 			 end
-		   | _ => error "unbound datatype - constr labs")
+		   | _ => (Ppil.pp_pathlist Ppil.pp_label' dt_labs; print "\n"; 
+			   error "unbound datatype - constr labs"))
 
 
 	    val constr_ssum_strings = 

@@ -23,6 +23,22 @@ structure Signature :> SIGNATURE =
     fun debugdo t = if (!debug) then (t(); ()) else ()
     type labels = label list
 
+
+
+ local
+     val Cpolyinst = ref (NONE : (Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list) option)
+ in
+     fun installHelpers{polyinst} = 
+	 ((case !Cpolyinst of 
+	      NONE => ()
+	    | SOME _ => (print "WARNING: installHelpers called more than once.\n";
+			 print "         Possibly because CM.make does not have the semantics of a fresh make\n"));
+	   Cpolyinst := SOME polyinst)
+     fun polyinst arg = let val SOME polyinst = !Cpolyinst
+			in  polyinst arg
+			end
+ end
+
     (* ----------------- Misc Helper Functions ----------------------- *)
     fun is_eta_expand vsig ([],[]) = true
       | is_eta_expand vsig ((SBND(l1,bnd))::sbnds, (SDEC(l2,dec))::sdecs) = 
@@ -50,7 +66,8 @@ structure Signature :> SIGNATURE =
 		       (NONE, [SDEC(it_lab,DEC_EXP(v,c,eopt,i))]),PARTIAL)
 
     fun deep_reduce_signat path ctxt signat =
-	(case reduce_signat ctxt signat of
+	let val signat' = reduce_signat ctxt signat 
+	in  (case signat' of
 	     SIGNAT_STRUCTURE (popt, sdecs) =>
 		 let fun folder(SDEC(l,DEC_MOD(v,b,s)),ctxt) = 
 		     let val this_path = join_path_labels(path,[l])
@@ -64,7 +81,7 @@ structure Signature :> SIGNATURE =
 		 in  SIGNAT_STRUCTURE (popt, sdecs)
 		 end
 	   | s => s)
-
+	end
 
     (* ---------------- helpers ---------------- *)
 
@@ -442,8 +459,7 @@ structure Signature :> SIGNATURE =
 	in  (case find_sig labs1 (SIGNAT_STRUCTURE(NONE,sdecs)) of
 		 SOME (sig1 as SIGNAT_VAR _) =>
 		     (case (IlStatic.Sig_IsSub(context,sig2,sig1), mod2path m2) of
-			  (true, SOME p2) =>
-			      xsig_sharing_rewrite_structure(context,sdecs,[labs1],SOME(SIGNAT_OF p2))
+			  (true, SOME p2) => xsig_sharing_rewrite_structure(context,sdecs,[labs1],SOME(SIGNAT_OF p2))
 			| _ => xsig_where_structure_slow(context,sdecs,labs1,m2,sig2))
 	       | _ => xsig_where_structure_slow(context,sdecs,labs1,m2,sig2))
 	end
@@ -547,10 +563,7 @@ structure Signature :> SIGNATURE =
 	      in  Sig_IsEqual(ctxt'',s1,s2)
 	      end)
 	      then 
-		  let val _ = print "STRUCTURE_SHARING_FAST succeeded\n"
-		      val sdecs = xsig_sharing_rewrite_structure(ctxt,sdecs,[lpath1,lpath2], NONE)
-		  in  sdecs
-		  end
+		  xsig_sharing_rewrite_structure(ctxt,sdecs,[lpath1,lpath2], NONE)
 	  else 
 	      (print "xsig_sharing_structure_fast calling slow version\n";
 	       xsig_sharing_structure_slow(ctxt, sdecs, lpath1, lpath2))
@@ -605,7 +618,6 @@ structure Signature :> SIGNATURE =
     (* --------------------------------------------------------- 
       ------------------ COERCION COMPILATION-------------------
       --------------------------------------------------------- *)
-    type polyinst = context * sdec list -> sbnds * sdecs * con list
 
     (* the variables of sdecs_change is alpha-varied to match variables of
        corresponding components of sdecs_name *)
@@ -633,7 +645,7 @@ structure Signature :> SIGNATURE =
 	end
 
        (* ---- coercion of a poly component to a mono/poly specification --- *)
-       fun polyval_case (ctxt : context, subst : subst, polyinst)
+       fun polyval_case (ctxt : context, subst : subst)
 	   {name : var, (* use this name for the final binding *)
 	    path : path, (* this path is to the actual polymorphic component *)
 	    varsig_spec : (var * signat) option, (* spec might me monomorphic *)
@@ -670,12 +682,10 @@ structure Signature :> SIGNATURE =
 		   (case varsig_spec of
 			NONE => ctxt
 		      | SOME(_,sig_spec) => 
-			    let val _ = if (!debug)
-					    then (print "adding var_actual = "; pp_var var_actual;
-						  print "\n"; pp_signat
-						  (SelfifySig ctxt (PATH (var_actual,[]), 
-								    sig_spec)))
-					else ()
+			    let  (* (print "adding var_actual = "; pp_var var_actual;
+				  print "\n"; pp_signat
+				  (SelfifySig ctxt (PATH (var_actual,[]), 
+				  sig_spec))) *)
 			    in add_context_mod'(ctxt,var_actual,
 						SelfifySig ctxt (PATH (var_actual,[]), 
 								 sig_spec))
@@ -691,7 +701,7 @@ structure Signature :> SIGNATURE =
 	       in
 		   val con_actual_tyvar = con_subst(con_actual,subst)
 	       end
-	       val _ = if (!debug)
+	       (* val _ = if (!debug)
 			   then (print "con_actual_tyvar = "; 
 				 pp_con con_actual_tyvar; print "\n";
 				 print "spec_con = "; pp_con con_spec; print "\n";
@@ -699,7 +709,7 @@ structure Signature :> SIGNATURE =
 				      NONE => print "no varsig_spec"
 				    | SOME(v,s) => (print "varsig_spec = "; pp_var v;
 						    print "\n"; pp_signat s; print "\n")))
-		       else ()
+		       else () *)
 
 	   val res = 
 	       if (sub_con(ctxt',con_actual_tyvar,con_spec))
@@ -752,13 +762,14 @@ structure Signature :> SIGNATURE =
 	         the final module and signature.
               The current list of labels indicating our current position.
 	          This list allows us to look up components in the 
-		    sig_actual and sig_target to type-check. *)
+		    sig_actual and sig_target to type-check. 
+    *)
 
-    and xcoerce (polyinst : polyinst,
-		 context : context,
+    and xcoerce (context : context,
 		 path_actual : path,
 		 sig_actual : signat,
 		 sig_target : signat) : (bool * Il.mod * Il.signat) = 
+
 
 	let val sig_actual = reduce_signat context sig_actual
 	    val sig_target = deep_reduce_signat path_actual context sig_target
@@ -769,15 +780,13 @@ structure Signature :> SIGNATURE =
 		     val _ = if (a1 = a2) then () 
 			     else raise (FAILURE "arrow mismatch in xcoerce")
 		     val p2 = PATH(v2,[])
-		     val (_,m3body,_) = xcoerce(polyinst,
-						add_context_mod'(context,v2,
+		     val (_,m3body,_) = xcoerce(add_context_mod'(context,v2,
 								 SelfifySig context (p2, s2)),
 						p2,s2,s1)
 		     val m4_arg = MOD_APP(path2mod path_actual, m3body)
 		     val m4var = fresh_named_var "var_actual_xcoerce"
 		     val p4 = PATH(m4var,[])
-		     val (_,m4body,_) = xcoerce(polyinst,
-						add_context_mod'(context,m4var,
+		     val (_,m4body,_) = xcoerce(add_context_mod'(context,m4var,
 								       SelfifySig context (p4,s1')),
 						p4,s1',s2')
 		     val m4body = mod_subst(m4body,subst_add_modvar(empty_subst,m4var,m4_arg))
@@ -789,16 +798,19 @@ structure Signature :> SIGNATURE =
 		 end
 	   | (SIGNAT_STRUCTURE(_,sdecs_actual),
 	      SIGNAT_STRUCTURE (_,sdecs_target)) =>
-		 xcoerce_structure (polyinst, context, path_actual, sdecs_actual, sdecs_target)
+		 xcoerce_structure (context, path_actual, sdecs_actual, sdecs_target)
 	   | (SIGNAT_FUNCTOR _, _) => (error_region_with "cannot coerce a functor to a structure\n";
 				       (true, MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[])))
 	   | (_, SIGNAT_FUNCTOR _) => (error_region_with "cannot coerce a structure to a functor\n";
 				      (true, MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[])))
-	   | _ => error "xcoerce should get reduced sig")
+	   | _ => (print "xcoerce got either non-reduced sig_actual:\n";
+		   pp_signat sig_actual; print "\n";
+		   print "or xcoerce got non-reduced sig_target:\n";
+		   pp_signat sig_target; print "\n";
+		   error "xcoerce should get reduced sig"))
 	end
 
-   and xcoerce_structure (polyinst : polyinst,
-			  ctxt : context,
+   and xcoerce_structure (ctxt : context,
 			  path_actual : path,
 			  sdecs_actual : sdec list,
 			  sdecs_target : sdec list) : (bool * Il.mod * Il.signat) = 
@@ -847,8 +859,11 @@ structure Signature :> SIGNATURE =
 				    val exp = (case (inline,eopt') of
 						   (true, SOME e) => e
 						 | _ => path2exp(join_path_labels(path_actual,lbls)))
+				    val con_actual_reduced = con_normalize(ctxt, con_actual)
+				    val con_actual_smaller = if (con_size con_actual) < (con_size con_actual_reduced)
+								 then con_actual else con_actual_reduced
 				    val bnd = BND_EXP(v,exp)
-				    val dec = DEC_EXP(v,con_actual,eopt',inline)
+				    val dec = DEC_EXP(v,con_actual_smaller,eopt',inline)
 				in  SOME(bnd,dec,subst)
 				end 
 			else 
@@ -879,7 +894,7 @@ structure Signature :> SIGNATURE =
 				   val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 				   val path = join_path_labels(path_actual,lbls)
 				   val (coerced,result) = 
-				       polyval_case (ctxt, subst, polyinst)
+				       polyval_case (ctxt, subst)
 				         {name = v, path = path,
 					  varsig_spec = NONE, con_spec = con_spec,
 					  inline = inline, var_actual = var_actual,
@@ -908,7 +923,7 @@ structure Signature :> SIGNATURE =
 				 SOME (v2,SIGNAT_STRUCTURE(NONE, sdecs2),con_actual,_,inline_actual)) =>
 				let val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 				    val (coerced,result) = 
-					polyval_case (ctxt,subst,polyinst)
+					polyval_case (ctxt,subst)
 					{name = v, path = join_path_labels(path_actual,lbls),
 					 varsig_spec = SOME(v1,s1), con_spec = con_spec,
 					 inline = inline_actual, var_actual = v2,
@@ -920,7 +935,7 @@ structure Signature :> SIGNATURE =
 			       | (NONE, NONE) => 
 				let val mod_path = join_path_labels(path_actual,lbls)
 				    val (coerced,mbody,sig_ret) = 
-					xcoerce(polyinst,ctxt,mod_path,sig_actual,sig_spec)
+					xcoerce(ctxt,mod_path,sig_actual,sig_spec)
 				    val _ = coerce(coerced,"inner module")
 				    val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 				    val bnd = BND_MOD(v,b,mbody)
@@ -946,10 +961,10 @@ structure Signature :> SIGNATURE =
 
 	       (* ------- coercion of a type component to a type spec ---- *)
 	       | (DEC_CON (v_spec, k_spec, copt_spec, _),
-	          SOME(lbls,PHRASE_CLASS_CON (con_actual,k_actual,_,inline))) => 
+	          SOME(lbls,PHRASE_CLASS_CON (con_actual,k_actual,con_opt,inline))) => 
 			let val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 			    val bnd = BND_CON(v,con_actual)
-			    val dec = DEC_CON(v,k_actual,SOME con_actual,inline)
+			    val dec = DEC_CON(v,k_actual,con_opt,inline)
 			    val con_path = join_path_labels(path_actual, lbls)
 			    val subst = subst_add_convar(subst, v_spec, path2con con_path)
 			    val res = SOME(bnd,dec,subst)
@@ -1031,34 +1046,37 @@ structure Signature :> SIGNATURE =
 
     (* ---------- The exported signature coercion routines ------------ *)
 
-    fun xcoerce_seal (polyinst : polyinst,
-		      context : context,
+    fun xcoerce_seal (context : context,
 		      mod_actual : mod,
 		      sig_actual : signat,
-		      sig_target : signat) : mod =
-	    let val var_actual = fresh_named_var "origSeal"
+		      sig_target : signat) : mod * signat =
+	    let val _ = (print "xcoerce_seal sig_target = "; pp_signat sig_target; print "\n")
+		val var_actual = fresh_named_var "origSeal"
 		val path_actual = PATH(var_actual,[])
 		val sig_actual_self = SelfifySig context (path_actual, sig_actual)
 		val context = add_context_mod'(context,var_actual,sig_actual_self)
-		val (_,mod_coerced,_) = xcoerce(polyinst, context, 
-						path_actual, sig_actual, sig_target)
-	    in  MOD_LET(var_actual, mod_actual, MOD_SEAL(mod_coerced, sig_target))
+		val (_,mod_coerced, sig_coerced) = xcoerce(context, 
+							   path_actual, sig_actual, sig_target)
+	    in  (MOD_LET(var_actual, mod_actual, MOD_SEAL(mod_coerced, sig_target)), sig_coerced)
 	    end
 
-    fun xcoerce_functor (polyinst : polyinst,
-			 context : context,
+    fun xcoerce_functor (context : context,
 			 path_actual : path,
 			 sig_actual : signat,
 			 sig_target : signat) : mod * signat =
 	    let val (_,mod_coerced, sig_coerced) =
-		    xcoerce(polyinst, context, path_actual, sig_actual, sig_target)
+		    xcoerce(context, path_actual, sig_actual, sig_target)
 	    in  (mod_coerced, sig_coerced)
 	    end
 
     fun sig_describe_size s = 
-	let fun describe d m s = (print (Int.toString d); print ": "; 
-				  pp_mod m; print " has size "; print (Int.toString (sig_size s)); 
-				  print "\n")
+	let fun describe d m s = let val sz = sig_size s
+				 in  if (sz > 2)
+				     then (print (Int.toString d); print ": "; 
+					   pp_mod m; print " has size "; print (Int.toString sz);
+					   print "\n")
+				     else ()
+				 end
 	    fun help d m (SDEC(l,DEC_MOD(_,_,s))) = loop d (MOD_PROJECT (m,l)) s
 	      | help d _ _ = ()
 	    and loop d m (s as (SIGNAT_STRUCTURE (_,sdecs))) = 
@@ -1070,33 +1088,51 @@ structure Signature :> SIGNATURE =
 
     val track_coerce = Stats.ff("IlstaticTrackCoerce")
 
-    (* ctxt has var_actual in it *)
+    fun generateModFromSig (ctxt, baseModule : mod, signat : signat, typeOnly : bool) =
+	let fun generateSdec m (sdec as (SDEC(l,dec))) = 
+		(case (dec, typeOnly) of
+		     (DEC_MOD(v,b,s), _) =>
+			 (case generateSig (MOD_PROJECT(m, l)) s of
+			      NONE => NONE
+			    | SOME (m,s) => SOME(SBND(l,BND_MOD(v,b,m)),
+						 SDEC(l,DEC_MOD(v,b,s))))
+		   | (DEC_EXP _, true) => NONE
+		   | (DEC_EXP (v,c,eopt,b), false) => 
+			      SOME(SBND(l, BND_EXP(v,MODULE_PROJECT(m,l))),
+				   SDEC(l, DEC_EXP(v,c,eopt,b)))
+		   | (DEC_CON (v,_,_,_), _) => SOME (SBND(l, BND_CON(v,CON_MODULE_PROJECT(m,l))), sdec))
+	    and generateSig m s = 
+		(case (s, typeOnly) of
+		     (SIGNAT_STRUCTURE(popt, sdecs), _) =>
+			 let val (sbnds,sdecs) = Listops.unzip(List.mapPartial (generateSdec m) sdecs)
+			 in  SOME(MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE(NONE,sdecs))
+			 end
+		   | (SIGNAT_FUNCTOR _, true) => NONE  (* these can be polymorphic values *)
+		   | (SIGNAT_FUNCTOR _, _) => SOME(m, s)
+		   | _ => generateSig m (IlContext.reduce_signat ctxt s))
+	in  generateSig baseModule signat
+	end
+
     fun structureGC(ctxt : context,
 		    var_actual : var,
-		    mod_client : mod,
-		    sig_client : signat) = 
+ 		    mod_client : mod,
+ 		    sig_client : signat,
+		    used) = 
 	let 
 	    val pp_labs = pp_pathlist pp_label'
 	    fun pp_labsList labsList = app (fn labs => (pp_labs labs; print "   ")) labsList
+
 (*
 	    val _ = (print "XXXstructureGCXXX\n";
 		     print "  var_actual = "; pp_var var_actual; print "\n";
-		     print "  var_actual's sig = ";
-		     pp_signat (case Context_Lookup_Path(ctxt, PATH (var_actual,[])) of
-				    SOME(_,PHRASE_CLASS_MOD(_,_,s)) => s
-				  | _ => error "could not find var_actual's sig in ctxt");
-		     print "\n";
-		     print "  mod = "; pp_mod mod_client; print "\n";
-		     print "  sig = "; pp_signat sig_client; print "\n")
+		     print "  mod_client = "; pp_mod mod_client; print "\n";
+		     print "  sig_client = "; pp_signat sig_client; print "\n";
+		     print "  initial used = "; Name.PathSet.app (fn p => (pp_path (PATH p); print "\n")) used;
+		     print "\n")
 *)
-	    val used = findPathsInMod mod_client
-	    val used = Name.PathSet.union(used, findPathsInSig sig_client)
-	    val filter = Name.PathSet.filter (fn (v,labs) => eq_var(v,var_actual))
-	    val strip = Name.PathSet.foldl 
-		        (fn ((v,labs),acc) => if eq_var(v,var_actual) 
-						  then labs::acc else acc) [] 
-	    val used = filter used
+	    val ctxt = add_context_mod'(ctxt, var_actual, SelfifySig ctxt (PATH(var_actual,[]), sig_client))
 	    fun getChildren path = 
+		Name.PathSet.filter (fn (v,_) => eq_var(v,var_actual))
 		(case Context_Lookup_Path_Open(ctxt, PATH path) of
 		     SOME (_,PHRASE_CLASS_MOD(_,_,s)) => findPathsInSig s
 		   | SOME (_,PHRASE_CLASS_EXP(_,c,_,_)) => findPathsInCon c
@@ -1116,123 +1152,183 @@ structure Signature :> SIGNATURE =
 				     Name.PathSet.member(black,p))
 				     then gray
 				 else Name.PathSet.add(gray, p)
-			     val children = filter(getChildren first)
+			     val children = getChildren first
 			     val gray = Name.PathSet.foldl folder gray children
 			     val gray = Name.PathSet.delete(gray,first)
 			     val black = Name.PathSet.add(black,first)
 			 in  reachable black gray
 			 end)
 	    val used = reachable Name.PathSet.empty used
-	    val used = strip used
-
-
-	    fun extract labs : sbnd * sdec = 
-		let val l = List.last labs
-		    val v = fresh_named_var (Name.label2string l)
-		    val p = PATH(var_actual, labs)
-		    val (bnd,dec) = 
-			(case Context_Lookup_Path_Open(ctxt, p) of
-			     SOME (_, PHRASE_CLASS_MOD(_,b,s)) => 
-				 (BND_MOD(v,b,path2mod p), DEC_MOD(v,b,s))
-			   | SOME (_, PHRASE_CLASS_EXP(_,c,eopt,b)) => 
-				 (BND_EXP(v,path2exp p), DEC_EXP(v,c,eopt,b))
-			   | SOME (_, PHRASE_CLASS_CON (_, k, copt, b)) => 
-				 (BND_CON(v,path2con p), DEC_CON(v,k,copt,b))
-			   | _ => (print "extract failed on path "; pp_path p;
-				   print "\n"; error "extract failed to find path"))
-		in  (SBND(l, bnd), SDEC(l, dec))
-		end
-	    fun split prefix acc [] : (sbnd * sdec) list = 
-		let val origSdecs = 
-		    (case Context_Lookup_Path_Open(ctxt, PATH(var_actual, prefix)) of
-			 SOME (_, PHRASE_CLASS_MOD(_,b,s)) =>
-			     (case reduce_signat ctxt s of
-				  SIGNAT_STRUCTURE(_,sdecs) => sdecs
-				| _ => error "split could not reduce signat to structure sig")
-		       | _ => error "split could not find prefix to reorder")
-		    fun find (SDEC(l,_)) = 
-			let fun loop[] = NONE
-			      | loop ((this as (SBND(l',_),_))::rest) = 
-			        if eq_label(l,l') then SOME this else loop rest
-			in  loop acc
+	    (* Verify all paths start with var_actual and maintain necessary structures by adding all prefixes *)
+	    fun folder ((v,labs),set) = 
+		let fun loop ([],set) = set
+		      | loop (revLabs,set) = 
+		        let val labs = rev revLabs
+			in  if (Name.PathSet.member(set,(var_actual,labs)))
+				then set
+			    else loop(tl revLabs, Name.PathSet.add(set,(var_actual,labs)))
 			end
-		in  List.mapPartial find origSdecs
+		in  if eq_var(v,var_actual) 
+			then () else error "bad path found";
+		    loop (rev labs, set)
 		end
-	      | split prefix acc (all as ((firstLab::_)::rest)) = 
-		let fun pred [] = error "split given empty labs"
-		      | pred (l1::_) = eq_label(firstLab,l1)
-		    val (match,mismatch) = List.partition pred all
-		    val matchTail = map tl match
-		    val newPrefix = prefix @ [firstLab]
-		    val this = 
-			if (Listops.orfold null matchTail)
-			    then extract newPrefix
-			else 
-			    let val (sbnds,sdecs) = Listops.unzip(split newPrefix [] matchTail)
-				val v = fresh_named_var (Name.label2string firstLab)
-			    in  (SBND(firstLab, BND_MOD (v, false, MOD_STRUCTURE sbnds)),
-				 SDEC(firstLab, DEC_MOD (v, false, SIGNAT_STRUCTURE (NONE,sdecs))))
-			    end
-		in  split prefix (this::acc) mismatch
+	    val used = Name.PathSet.foldl folder Name.PathSet.empty used
+(*	    val _ = (print "  final used = "; Name.PathSet.app (fn p => (pp_path (PATH p); print "\n")) used; print "\n") *)
+
+	    fun filterModSig currentPrefix (m,s) = 
+		let val MOD_STRUCTURE sbnds = m
+		    val SIGNAT_STRUCTURE(popt, sdecs) = s
+		    val (sbnds,sdecs) = Listops.unzip(List.mapPartial (filterSbndSdec currentPrefix) 
+						   (Listops.zip sbnds sdecs))
+		in  (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE(popt, sdecs))
 		end
-	    val (sbnds,sdecs) = Listops.unzip(split [] [] used)
-	    val module = MOD_STRUCTURE sbnds
-	    val path_actual = PATH(var_actual, [])
-	    val signat = SIGNAT_STRUCTURE (SOME path_actual, sdecs)
-	    val signat = IlStatic.UnselfifySig ctxt (path_actual, signat)
+	    and filterSbndSdec currentPrefix (sbnd as SBND(lb,bnd),sdec as SDEC(ld,dec)) = 
+		let val _ = if (eq_label(lb,ld)) then () else error "filterSbndSdec: labels not the same"
+		    val currentPrefix = currentPrefix @ [lb]
+		in  if Name.PathSet.member(used,(var_actual,currentPrefix))
+			then (case (bnd,dec) of
+				  (BND_MOD(vb,bb,m), DEC_MOD(vd,bd,s)) =>
+				      let val(m,s) = filterModSig currentPrefix (m,s)
+				      in  SOME(SBND(lb,BND_MOD(vb,bb,m)),SDEC(ld,DEC_MOD(vd,bd,s)))
+				      end
+				| _ => SOME(sbnd,sdec))
+		    else NONE
+		end
+	    
+	    val (module, signat) = filterModSig [] (mod_client, sig_client)
+
 (*
-	    val _ = (print "  used = "; help used; print "\n")
-	    val _ = (print "  sbnds = "; pp_sbnds sbnds; print "\n";
-		     print "  sdecs = "; pp_sdecs sdecs; print "\n";
+	    val _ = (print "XXXXstructureGCXXXX\n";
 		     print "  module = "; pp_mod module; print "\n";
 		     print "  signat = "; pp_signat signat; print "\n")
 *)
+
 	in  (module, signat)
 	end
 
-    fun xcoerce_transparent (polyinst : polyinst,
-			     context : context,
+    (* We are given a module modActual (not a module variable), its signature sigActual, and a desired signature sigTarget 
+       against which we wish to coerce transparently.  That is, we must add/drop components and change polymorphism
+       as necessary so that exactly the right number and shape of terms, type and structures are visible.
+       However, we are/must leak type information through even if the ascribing signature does not give it.
+
+       Here is one possible implementation which turns out to have a performance problem.
+       (1) Compute modCoerced and sigCoerced which has the components of sigTarget
+           (with type information exposed) in terms of varActual.  Return modActual and sigActual
+	   if no coercion was actually necessary.
+       (2) Assuming sigTarget has type labels taus and term labels exps with corresponding types, return 
+
+           {labelHidden :> varCoerced =
+	       MOD_LET varActual = modActual
+	       IN      coercedMod
+	       END,
+	    tau1 = varCoerced.tau1
+	    exp1 = varCoerced.exp1
+	    ...
+           }
+	       
+	   {labelHidden :> varCoerced : sigCoerced,
+	    tau1 = varCoerced.tau1
+	    exp1 : varCoerced.tau1
+	    ...
+	   }
+	   
+       (3) Unfortunately, the resulting signatures now has two copies of all necessary type
+           AND term components.  Some duplication of type components is necessary due to
+	   the transparency semantics but redundant term components are not and can well 
+	   almost double the size of the signature.
+
+       Here is an alternative solution.
+       (1) As before, compute modCoerced and sigCoerced which has the components of sigTarget
+           (with type information exposed) in terms of varActual.  Return modActual and sigCoerced
+	   if no coercion was actually necessary.
+       (2) Compute modThin and sigThin which contains all the type and type-containing module
+           components of modActual and sigActual.  Remove references to varActual in sigThin but not modThin.
+	   Note that creating these from modCoerced and sigCoerced fails to capture all necessary type components.
+       (3) Assuming sigTarget has type labels taus and term labels exps with corresponding types, return 
+
+	   MOD_LET varActual = modActual
+                   varCoerced = coercedMod
+	   IN      {labelHidden :> varThin = modThin,
+	            tau1 = varCoerced.tau1,
+		    exp1 = varCoerced.exp2,
+		    ...
+		    }
+	       
+	   {labelHidden :> varThin : sigThin,
+	    tau1 = varThin.tau1,
+	    exp1 : varThin.tau1,
+	    ...
+	   }
+       (4) Comparing against the previous solution, the returned module (code) is bigger.
+           This size increase will be taken care of by NIL optimizations which eliminate the
+	   redundant copies.  What is important is that the returned HIL signature is smaller.
+	   In particular, sigThin, unlike sigCoerced, contains no term components.
+    *)
+
+    fun xcoerce_transparent (context : context,
 			     mod_actual : mod,
 			     sig_actual : signat,
 			     sig_target : signat) : Il.mod * Il.signat =
 	let 
+	    (* Compute modCoerced and sigCoerced *)
 	    val _ = if (!track_coerce)
-			then (print "turning showing on\n";
-			      Stats.bool("IlstaticShowing") := true)
+			then Stats.bool("IlstaticShowing") := true
 		    else ()
-
-	    (* first extract all necessary components with necessary coercions *)
 	    val var_actual = fresh_named_var "origModule"
 	    val path_actual = PATH(var_actual,[])
 	    val sig_actual_self = SelfifySig context (path_actual, sig_actual)
 	    val context = add_context_mod'(context,var_actual,sig_actual_self)
-	    val (coerced,coerced_mod,coerced_sig) = xcoerce(polyinst, context, 
+	    val (coerced,mod_coerced,sig_coerced) = xcoerce(context, 
 							    path_actual, sig_actual,sig_target)
-
+	    val _ = if (!debug)
+			then (print "coerced to mod_coerced = \n"; pp_mod mod_coerced; print "\n";
+			      print "coerced to sig_coerced = \n"; pp_signat sig_coerced; print "\n")
+		    else ()
 	    val _ = if (!track_coerce)
-			then (print "turning showing off\n";
-			      Stats.bool("IlstaticShowing") := false)
+			then Stats.bool("IlstaticShowing") := false
 		    else ()
-	    val _ = if (!diag)
-			then (print "XXX hidden component\n"; 
-			      sig_describe_size sig_actual; print "\n";
-			      print "XXX coerced component\n"; 
-			      sig_describe_size coerced_sig; print "\n")
-		    else ()
+
 	in
 	    if (coerced)
-	      then let val var_thin = fresh_named_var "thinModule"
-		       val (mod_thin, sig_thin) = 
-			   structureGC(context, var_actual, coerced_mod, coerced_sig)
-		       val mod_thin = MOD_LET(var_actual,mod_actual, mod_thin)
-		       val subst = subst_add_modvar(empty_subst, var_actual,MOD_VAR var_thin)
-		       val MOD_STRUCTURE coerced_sbnds = mod_subst(coerced_mod, subst)
-		       val SIGNAT_STRUCTURE (_,coerced_sdecs) = sig_subst(coerced_sig, subst)
-		       val hidden_lbl = internal_label "hiddenModule"
-		       val sbnd = SBND(hidden_lbl, BND_MOD(var_thin, false, mod_thin))
-		       val sdec = SDEC(hidden_lbl, DEC_MOD(var_thin, false, sig_thin))
-		       val mod_result = MOD_STRUCTURE(sbnd :: coerced_sbnds)
-		       val sig_result = SIGNAT_STRUCTURE(NONE, sdec :: coerced_sdecs)
+	      then let val hidden_lbl = internal_label "hiddenThinModule"
+		       val var_coerced = fresh_named_var "coercedModule"
+		       val var_thin = fresh_named_var "thinModule"
+		       val SOME(mod_thick, sig_thick) = generateModFromSig(context, MOD_VAR var_actual, sig_coerced, false)
+		       val context_var_actual = add_context_mod'(context, var_actual, sig_actual_self)
+		       val mod_sig_thin_option = generateModFromSig(context_var_actual, MOD_VAR var_actual, sig_actual_self, true)
+		       val substActualToCoerced = subst_add_modvar(empty_subst, var_actual, MOD_VAR var_coerced)
+		       val substActualToThin = subst_add_modvar(empty_subst, var_actual, MOD_VAR var_thin)
+		       val MOD_STRUCTURE copy_sbnds = mod_subst(mod_thick, substActualToCoerced)
+		       val sig_copy = sig_subst(sig_thick, substActualToThin)
+		       val SIGNAT_STRUCTURE (_,copy_sdecs) = sig_copy
+		       val (hidden_sbnd, hidden_sdec) = 
+			   (case mod_sig_thin_option of
+				NONE => ([],[])
+			      | SOME (mod_thin, sig_thin) => 
+				    let 
+				        (* Simply unselfifying with respect to var_actual does not work *)
+					val sig_thin = sig_subst(sig_thin, substActualToThin)
+					val used = Name.PathSet.filter (fn (v,_) => eq_var(v,var_thin)) (findPathsInSig sig_copy)
+					val (mod_thin, sig_thin) = structureGC(context, var_thin, mod_thin, sig_thin, used)
+					val sig_thin = UnselfifySig context (PATH(var_thin,[]), sig_thin)
+				    in  ([SBND(hidden_lbl, BND_MOD(var_thin, false, mod_thin))],
+					 [SDEC(hidden_lbl, DEC_MOD(var_thin, false, sig_thin))])
+				    end)
+		       val mod_result = MOD_LET(var_actual,mod_actual, 
+						MOD_LET(var_coerced, mod_coerced,
+							MOD_STRUCTURE(hidden_sbnd @ copy_sbnds)))
+		       val sig_result = SIGNAT_STRUCTURE(NONE, hidden_sdec @ copy_sdecs)
+		       val _ = if (!debug)
+				   then (print "mod_result = \n"; pp_mod mod_result; print "\n";
+					 print "sig_result = \n"; pp_signat sig_result; print "\n")
+			       else ()
+		       val _ = case (!diag, hidden_sdec) of
+			   (true, [SDEC(_,DEC_MOD(_, _, sig_thin))]) => 
+			       (print "XXX hidden component\n"; 
+				sig_describe_size sig_thin; print "\n";
+				print "XXX remaining component\n"; 
+				sig_describe_size (SIGNAT_STRUCTURE(NONE, copy_sdecs)); print "\n")
+			 | _ => ()
 		   in  (mod_result, sig_result)
 		   end
 	    else  (mod_actual, sig_actual)

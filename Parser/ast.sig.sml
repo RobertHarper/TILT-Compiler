@@ -146,7 +146,7 @@ sig
   (* DECLARATIONS (let and structure) *)
   and dec = ValDec of vb list * tyvar list ref		(* values *)
 	  | ValrecDec of rvb list * tyvar list ref	(* recursive values *)
-          | PvalDec of vb list * tyvar list ref		(* parallel bindingds *)
+          | PvalDec of vb list * tyvar list ref		(* parallel bindingds of values; actually creates threads *)
 	  | FunDec of fb list * tyvar list ref		(* recurs functions *)
 	  | TypeDec of tb list				(* type dec *)
 	  | DatatypeDec of {datatycs: db list, withtycs: tb list}
@@ -158,8 +158,8 @@ sig
 	  | AbsDec of strb list				(* abstract struct *)
 	  | FctDec of fctb list				(* functor *)
 	  | SigDec of sigb list				(* signature *)
-	  | FsigDec of fsigb list				(* funsig *)
-	  | LocalDec of dec * dec				(* local dec *)
+	  | FsigDec of fsigb list			(* funsig *)
+	  | LocalDec of dec * dec			(* local dec *)
 	  | SeqDec of dec list				(* sequence of dec *)
 	  | OpenDec of path list			(* open structures *)
 	  | OvldDec of symbol * ty * exp list	(* overloading (internal) *)
@@ -235,6 +235,9 @@ end (* signature AST *)
 
 (*
  * $Log$
+# Revision 1.5  2000/01/20  13:32:25  pscheng
+# *** empty log message ***
+# 
 # Revision 1.4  99/05/12  15:27:40  pscheng
 # *** empty log message ***
 # 

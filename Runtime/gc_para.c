@@ -7,73 +7,76 @@
 #include "gc.h"
 #include "gc_para.h"
 
-static ptr_t SharedStack[4096];     /* stack contains gray objects */
-static long SharedCursor = 0;
-static long Gate = 0, Turn1 = 0, Turn2 = 0;
 
-
-
-void SynchStart(void)
+SharedStack_t *SharedStack_Alloc()
 {
-  while (Gate) 
-   flushStore();  /* Without this, updates of Gate from other processors are not visible here */
-  FetchAndAdd(&Turn1, 1);
-  while (Gate) {
-    FetchAndAdd(&Turn1, -1);
-    while (Gate)
-      flushStore();
-    FetchAndAdd(&Turn1, 1);
-  }
-  flushStore();   /* Without this, the change to Turn1 is not visible */
+  SharedStack_t *ss = (SharedStack_t *) malloc(sizeof(SharedStack_t));
+  ss->cursor = 0;
+  ss->Gate = ss->Turn1 = ss->Turn2 = 0;
+  return ss;
 }
 
-void SynchMid(void)
+void SynchStart(SharedStack_t *ss)
 {
-  Gate = 1;
-  flushStore(); /* for updating Gate */
-  FetchAndAdd(&Turn2, 1);
-  FetchAndAdd(&Turn1, -1);
-  while (Turn1 > 0) 
+  while (ss->Gate) 
+   flushStore();  /* Without this, updates of ss->Gate from other processors are not visible here */
+  FetchAndAdd(&ss->Turn1, 1);
+  while (ss->Gate) {
+    FetchAndAdd(&ss->Turn1, -1);
+    while (ss->Gate)
+      flushStore();
+    FetchAndAdd(&ss->Turn1, 1);
+  }
+  flushStore();   /* Without this, the change to ss->Turn1 is not visible */
+}
+
+void SynchMid(SharedStack_t *ss)
+{
+  ss->Gate = 1;
+  flushStore(); /* for updating ss->Gate */
+  FetchAndAdd(&ss->Turn2, 1);
+  FetchAndAdd(&ss->Turn1, -1);
+  while (ss->Turn1 > 0) 
     flushStore();
 }
 
-int isEmptyGlobalStack()
+int isEmptyGlobalStack(SharedStack_t *ss)
 {
-  return (SharedCursor == 0);
+  return (ss->cursor == 0);
 }
 
 /* Returns 1 if gate was closed and global stack empty; i.e. global stack can not become non-empty */
-int SynchEnd(void)
+int SynchEnd(SharedStack_t *ss)
 {
-  int i = FetchAndAdd(&Turn2, -1);
+  int i = FetchAndAdd(&ss->Turn2, -1);
   if (i==1) {
-    Gate = 0;
-    flushStore(); /* for updating Gate */
-    return isEmptyGlobalStack();
+    ss->Gate = 0;
+    flushStore(); /* for updating ss->Gate */
+    return isEmptyGlobalStack(ss);
   }
   return 0;
 }
 
-void moveToGlobalStack(ptr_t *localStack, int *localCursorPtr)
+void moveToGlobalStack(SharedStack_t *ss, ptr_t *localStack, int *localCursorPtr)
 {
   int i;
-  int oldSharedCursor = FetchAndAdd(&SharedCursor,*localCursorPtr);
+  int oldCursor = FetchAndAdd(&ss->cursor,*localCursorPtr);
   for (i=0; i<*localCursorPtr; i++) 
-    SharedStack[oldSharedCursor+i] = localStack[i];
+    ss->stack[oldCursor+i] = localStack[i];
   *localCursorPtr = 0;
 }
 
-void fetchFromGlobalStack(ptr_t *localStack, int *localCursorPtr, int numToFetch)
+void fetchFromGlobalStack(SharedStack_t *ss, ptr_t *localStack, int *localCursorPtr, int numToFetch)
 {
   int i, localCursor = *localCursorPtr;
-  int oldSharedCursor = FetchAndAdd(&SharedCursor,-numToFetch);
+  int oldCursor = FetchAndAdd(&ss->cursor,-numToFetch);
   /* Handle overreach */
-  if (oldSharedCursor < numToFetch) {  
-    numToFetch = oldSharedCursor;
-    SharedCursor = 0;
+  if (oldCursor < numToFetch) {  
+    numToFetch = oldCursor;
+    ss->cursor = 0;
   }
   for (i=0; i<numToFetch; i++)
-    localStack[localCursor++] = SharedStack[oldSharedCursor - (i + 1)];
+    localStack[localCursor++] = ss->stack[oldCursor - (i + 1)];
   *localCursorPtr = localCursor;
 }
 

@@ -38,13 +38,17 @@ full_sys_name = $(shell sys)
 sys_name=${${full_sys_name}_sys_name}
 chip_name=${${full_sys_name}_chip_name}
 
-objdir=obj_${sys_name}
 ASM=${sys_name}_asm
-MAIN=main_nothread.o
-# mllib.o used to be a core object file
-COREFILES_OBJ=${objdir}/posix.o ${objdir}/gcstat.o  ${objdir}/gc_semi.o ${objdir}/gc_gen.o ${objdir}/gc_large.o ${objdir}/gc_para.o ${objdir}/gc_semi_para.o ${objdir}/gc_gen_para.o ${objdir}/gc_semi_conc.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o  ${objdir}/gc_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/forward.o
-COREFILES_HPROF_OBJ=$(COREFILES_OBJ:.o=.hprof.o)
+MAIN=main_nothread
+ROOT_OBJ=posix gcstat  forward gc_semi gc_gen gc_large gc_para gc_semi_para gc_gen_para gc_semi_conc gc_gen_conc gc create ${MAIN} show service global hash queue stats stack bitmap platform memobj thread exn signal  gc_${ASM} stack_${ASM} service_${ASM} 
+objdir=obj_${sys_name}
+COREFILES_OBJ=${patsubst %,${objdir}/%.o,${ROOT_OBJ}}
+COREFILES_HPROF_OBJ=${patsubst %,${objdir}/%.hprof.o,${ROOT_OBJ}}
 
+show:
+	echo ${COREFILES_OBJ}
+	echo
+	echo ${COREFILES_HPROF_OBJ}
 
 out=ml.out
 target=foo.sml.${ASM}.s
@@ -142,102 +146,102 @@ endif
 ${objdir}/firstdata.o: firstdata.c
 	${CC} -o $@ ${CFLAGS} firstdata.c
 
-${objdir}/posix.o: posix.c general.h tag.h thread.h stack.h queue.h memobj.h stats.h create.h posix.h
+${objdir}/posix.o: general.h posix.c posix.h
 	${CC} -o $@ ${CFLAGS} posix.c
 
-${objdir}/global.o: global.c tag.h global.h memobj.h thread.h stack.h queue.h stats.h create.h general.h
+${objdir}/global.o: global.h general.h global.c general.h
 	${CC} -o $@ ${CFLAGS} global.c
 
-${objdir}/stack.o: stack.c tag.h queue.h stack.h thread.h memobj.h stats.h hash.h general.h client.h forward.h global.h
+${objdir}/stack.o: stack.c queue.h general.h
 	${CC} -o $@ ${CFLAGS} stack.c
 
-${objdir}/stack_${ASM}.o: stack_${ASM}.s thread.h general.h
+${objdir}/stack_${ASM}.o: stack_${ASM}.s  general.h
 	as -o $@ ${ASFLAGS} stack_${ASM}.s
 
-${objdir}/queue.o: queue.c general.h queue.h
+${objdir}/queue.o: queue.c queue.h
 	${CC} -o $@ ${CFLAGS} queue.c
 
-${objdir}/hash.o: hash.c general.h hash.h
+${objdir}/hash.o: hash.c hash.h
 	${CC} -o $@ ${CFLAGS} hash.c
 
-${objdir}/thread.o: thread.c general.h tag.h thread.h stack.h queue.h memobj.h stats.h til-signal.h gc.h bitmap.h create.h
+${objdir}/thread.o: thread.c memobj.h tag.h general.h thread.h
 	${CC} -o $@ ${CFLAGS} thread.c
 
-${objdir}/signal.o: signal.c general.h memobj.h tag.h thread.h stack.h queue.h stats.h exn.h til-signal.h
+${objdir}/signal.o: signal.c tag.h
 	${CC} -o $@ ${CFLAGS} signal.c
 
-${objdir}/forward.o: forward.c general.h tag.h queue.h gc.h memobj.h thread.h stack.h stats.h bitmap.h create.h show.h global.h gcstat.h forward.h
+${objdir}/forward.o: forward.c tag.h general.h platform.h forward.h thread.h
 	${CC} -o $@ ${CFLAGS} forward.c
 
-${objdir}/gc_semi.o: gc_semi.c general.h stack.h tag.h queue.h thread.h memobj.h stats.h forward.h gc.h bitmap.h create.h global.h gcstat.h show.h
+${objdir}/gc_semi.o: gc_semi.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_semi.c
 
-${objdir}/gc_gen.o: gc_gen.c general.h tag.h queue.h forward.h memobj.h thread.h stack.h stats.h gc.h bitmap.h create.h gc_large.h global.h gcstat.h platform.h client.h show.h
+${objdir}/gc_gen.o: gc_gen.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_gen.c
 
-${objdir}/gc_large.o: gc_large.c general.h tag.h queue.h forward.h memobj.h thread.h stack.h stats.h gc.h bitmap.h create.h global.h gcstat.h platform.h client.h show.h
+${objdir}/gc_large.o: gc_large.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_large.c
 
-${objdir}/gc_para.o: gc_para.c general.h tag.h queue.h gc.h memobj.h thread.h stack.h stats.h bitmap.h create.h gc_para.h
+${objdir}/gc_para.o: gc_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_para.c
 
-${objdir}/gc_semi_para.o: gc_semi_para.c general.h tag.h queue.h forward.h memobj.h thread.h stack.h stats.h gc.h bitmap.h create.h gc_para.h global.h gcstat.h show.h
+${objdir}/gc_semi_para.o: gc_semi_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_semi_para.c
 
-${objdir}/gc_gen_para.o: gc_gen_para.c general.h tag.h queue.h forward.h memobj.h thread.h stack.h stats.h gc.h bitmap.h create.h gc_para.h global.h gcstat.h platform.h client.h show.h gc_large.h
+${objdir}/gc_gen_para.o: gc_gen_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_gen_para.c
 
-${objdir}/gc_semi_conc.o: gc_semi_conc.c general.h tag.h queue.h forward.h memobj.h thread.h stack.h stats.h gc.h bitmap.h create.h gc_para.h global.h gcstat.h show.h
+${objdir}/gc_semi_conc.o: gc_semi_conc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_semi_conc.c
 
-#${objdir}/gc_gen_conc.o: gc_semi_conc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
-#	${CC} -o $@ ${CFLAGS} gc_gen_conc.c
+${objdir}/gc_gen_conc.o: gc_gen_conc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
+	${CC} -o $@ ${CFLAGS} gc_gen_conc.c
 
-${objdir}/gc.o: gc.c general.h tag.h queue.h forward.h memobj.h thread.h stack.h stats.h gc.h bitmap.h create.h global.h gcstat.h show.h
+${objdir}/gc.o: gc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc.c
 
-${objdir}/gcstat.o: gcstat.c queue.h hash.h tag.h general.h gc.h memobj.h thread.h stack.h stats.h bitmap.h create.h global.h gcstat.h show.h
+${objdir}/gcstat.o: gcstat.c tag.h general.h
 	${CC} -o $@ ${CFLAGS} gcstat.c
 
-${objdir}/gc_${ASM}.o: gc_${ASM}.s  general.h thread.h
+${objdir}/gc_${ASM}.o: gc_${ASM}.s  general.h
 	as -o $@ ${ASFLAGS} gc_${ASM}.s
 
-${objdir}/service.o: service.c tag.h
+${objdir}/service.o: service.c tag.h  general.h
 	${CC} -o $@ ${CFLAGS} service.c
 
-${objdir}/service_${ASM}.o: service_${ASM}.s  general.h thread.h
+${objdir}/service_${ASM}.o: service_${ASM}.s  general.h
 	as -o $@ ${ASFLAGS} service_${ASM}.s
 
-${objdir}/exn.o: exn.c general.h tag.h create.h til-signal.h global.h thread.h stack.h queue.h memobj.h stats.h exn.h
+${objdir}/exn.o: exn.c tag.h general.h
 	${CC} -o $@ ${CFLAGS} exn.c
 
-${objdir}/create.o: create.c general.h tag.h thread.h stack.h queue.h memobj.h stats.h global.h create.h gc.h bitmap.h
+${objdir}/create.o: create.c tag.h  general.h
 	${CC} -o $@ ${CFLAGS} create.c
 
-${objdir}/bitmap.o: bitmap.c bitmap.h
+${objdir}/bitmap.o: bitmap.c tag.h
 	${CC} -o $@ ${CFLAGS} bitmap.c
 
-${objdir}/main_nothread.o: main.c general.h queue.h tag.h memobj.h exn.h platform.h gc.h thread.h stack.h stats.h bitmap.h create.h til-signal.h global.h client.h
+${objdir}/main_nothread.o: main.c tag.h general.h platform.h thread.h
 	${CC} -o $@ ${CFLAGS} main.c -DTHREADED_VERSION=0
 
 
-${objdir}/main_thread.o: main.c general.h queue.h tag.h memobj.h exn.h platform.h gc.h thread.h stack.h stats.h bitmap.h create.h til-signal.h global.h client.h
+${objdir}/main_thread.o: main.c tag.h  general.h platform.h thread.h
 	${CC} -o $@ ${CFLAGS} main.c -DTHREADED_VERSION=1
 
 
-${objdir}/show.o: show.c general.h tag.h memobj.h show.h bitmap.h global.h
+${objdir}/show.o: show.c tag.h  general.h
 	${CC} -o $@ ${CFLAGS} show.c
 
-${objdir}/stats.o: stats.c general.h tag.h memobj.h stats.h gcstat.h gc.h thread.h stack.h queue.h bitmap.h create.h
+${objdir}/stats.o: stats.c stats.h general.h
 	${CC} -o $@ ${CFLAGS} stats.c
 
-${objdir}/memobj.o: memobj.c tag.h memobj.h bitmap.h general.h til-signal.h
+${objdir}/memobj.o: memobj.c tag.h general.h
 	${CC} -o $@ ${CFLAGS} memobj.c
 
 ${objdir}/mllib_${ASM}.o: mllib_${ASM}.s  general.h
 	as -o $@ ${ASFLAGS} mllib_${ASM}.s
 
-${objdir}/mllib.o: mllib.c general.h tag.h create.h mllib.h
+${objdir}/mllib.o: mllib.c tag.h
 	${CC} -o $@ ${CFLAGS} mllib.c
 
 ${objdir}/platform.o: platform.c platform.h
@@ -245,72 +249,72 @@ ${objdir}/platform.o: platform.c platform.h
 
 
 # ---------------------------- Core hprof Code ----------------------------
-${objdir}/global.hprof.o: global.c tag.h global.h memobj.h thread.h stack.h queue.h stats.h create.h general.h
+${objdir}/global.hprof.o: global.c global.h general.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE global.c
 
-${objdir}/stack.hprof.o: stack.c tag.h queue.h stack.h thread.h memobj.h stats.h hash.h general.h client.h forward.h global.h
+${objdir}/stack.hprof.o: stack.c queue.h general.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE stack.c
 
-${objdir}/stack_${ASM}.hprof.o: stack_${ASM}.s thread.h general.h
+${objdir}/stack_${ASM}.hprof.o: stack_${ASM}.s  general.h
 	as -o $@ ${ASFLAGS} stack_${ASM}.s
 
-${objdir}/queue.hprof.o: queue.c general.h queue.h
+${objdir}/queue.hprof.o: queue.c queue.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE queue.c
 
-${objdir}/hash.hprof.o: hash.c general.h hash.h
+${objdir}/hash.hprof.o: hash.c hash.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE hash.c
 
-${objdir}/thread.hprof.o: thread.c general.h tag.h thread.h stack.h queue.h memobj.h stats.h til-signal.h gc.h bitmap.h create.h
+${objdir}/thread.hprof.o: thread.c memobj.h tag.h general.h thread.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE thread.c
 
-${objdir}/signal.hprof.o: signal.c general.h memobj.h tag.h thread.h stack.h queue.h stats.h exn.h til-signal.h
+${objdir}/signal.hprof.o: signal.c tag.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE signal.c
 
-${objdir}/gc.hprof.o: gc.c general.h tag.h queue.h forward.h memobj.h thread.h stack.h stats.h gc.h bitmap.h create.h global.h gcstat.h show.h
+${objdir}/gc.hprof.o: gc.c tag.h general.h platform.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE gc.c
 
-${objdir}/gcstat.hprof.o: gcstat.c queue.h hash.h tag.h general.h gc.h memobj.h thread.h stack.h stats.h bitmap.h create.h global.h gcstat.h show.h
+${objdir}/gcstat.hprof.o: gcstat.c tag.h general.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE gcstat.c
 
-${objdir}/gc_${ASM}.hprof.o: gc_${ASM}.s  general.h thread.h
+${objdir}/gc_${ASM}.hprof.o: gc_${ASM}.s  general.h
 	as -o $@ ${ASFLAGS} gc_${ASM}.s
 
-${objdir}/service.hprof.o: service.c tag.h
+${objdir}/service.hprof.o: service.c tag.h  general.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE service.c
 
-${objdir}/service_${ASM}.hprof.o: service_${ASM}.s  general.h thread.h
+${objdir}/service_${ASM}.hprof.o: service_${ASM}.s  general.h
 	as -o $@ ${ASFLAGS} service_${ASM}.s
 
-${objdir}/exn.hprof.o: exn.c general.h tag.h create.h til-signal.h global.h thread.h stack.h queue.h memobj.h stats.h exn.h
+${objdir}/exn.hprof.o: exn.c tag.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE exn.c
 
-${objdir}/create.hprof.o: create.c general.h tag.h thread.h stack.h queue.h memobj.h stats.h global.h create.h gc.h bitmap.h
+${objdir}/create.hprof.o: create.c tag.h  general.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE create.c
 
-${objdir}/bitmap.hprof.o: bitmap.c bitmap.h
+${objdir}/bitmap.hprof.o: bitmap.c tag.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE bitmap.c
 
-${objdir}/main_nothread.hprof.o: main.c general.h queue.h tag.h memobj.h exn.h platform.h gc.h thread.h stack.h stats.h bitmap.h create.h til-signal.h global.h client.h
+${objdir}/main_nothread.hprof.o: main.c tag.h general.h platform.h thread.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE main.c -DTHREADED_VERSION=0
 
 
-${objdir}/main_thread.hprof.o: main.c general.h queue.h tag.h memobj.h exn.h platform.h gc.h thread.h stack.h stats.h bitmap.h create.h til-signal.h global.h client.h
+${objdir}/main_thread.hprof.o: main.c tag.h  general.h platform.h thread.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE main.c -DTHREADED_VERSION=1
 
 
-${objdir}/show.hprof..o: show.c general.h tag.h memobj.h show.h bitmap.h global.h
+${objdir}/show.hprof.o: show.c tag.h  general.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE show.c
 
-${objdir}/stats.hprof.o: stats.c general.h tag.h memobj.h stats.h gcstat.h gc.h thread.h stack.h queue.h bitmap.h create.h
+${objdir}/stats.hprof.o: stats.c stats.h general.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE stats.c
 
-${objdir}/memobj.hprof.o: memobj.c tag.h memobj.h bitmap.h general.h til-signal.h
+${objdir}/memobj.hprof.o: memobj.c tag.h general.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE memobj.c
 
 ${objdir}/mllib_${ASM}.hprof.o: mllib_${ASM}.s  general.h
 	as -o $@ ${ASFLAGS} mllib_${ASM}.s
 
-${objdir}/mllib.hprof.o: mllib.c general.h tag.h create.h mllib.h
+${objdir}/mllib.hprof.o: mllib.c tag.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE mllib.c
 
 ${objdir}/platform.hprof.o: platform.c platform.h

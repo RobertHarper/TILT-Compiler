@@ -5,7 +5,7 @@
  *
  *)
 
-structure Int32 : INTEGER =
+structure Int32 :> INTEGER where type int = int =
   struct
 (*
     structure I32 = InlineT.Int32
@@ -110,9 +110,12 @@ structure SysInt = Int32
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:52:36  pscheng
-# added basis
+# Revision 1.2  2000/01/20  13:31:54  pscheng
+# *** empty log message ***
 # 
+# Revision 1.1  1998/03/09  19:52:36  pscheng
+# added basis
+#
  * Revision 1.2  1997/02/11  15:15:43  george
  * got rid of structure rebinding, since inlining is now preserved
  *

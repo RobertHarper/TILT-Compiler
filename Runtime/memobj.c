@@ -284,6 +284,13 @@ void Heap_Check(Heap_t *h)
   assert(h->top <= h->physicalTop);
 }
 
+void SetRange(range_t *range, mem_t low, mem_t high)
+{
+  range->low = low;
+  range->high = high;
+  range->diff = (high - low) * (sizeof (val_t));
+}
+
 Heap_t* Heap_Alloc(int MinSize, int MaxSize)
 {
   static int heap_count = 0;
@@ -298,8 +305,7 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   res->cursor = res->bottom;
   res->top    = res->bottom + MinSize / (sizeof (val_t));
   res->physicalTop = res->bottom + maxsize_pageround / (sizeof (val_t));
-  res->range.low = res->bottom;
-  res->range.high = res->physicalTop;
+  SetRange(&(res->range), res->bottom, res->physicalTop);
   res->valid  = 1;
 
   assert(res->bottom != (mem_t) -1);

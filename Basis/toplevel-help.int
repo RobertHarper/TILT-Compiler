@@ -20,4 +20,4 @@ val string_gt : string * string -> bool
 val string_ge : string * string -> bool
 
 val textio_print : string -> unit
-
+val real_trunc : real -> int

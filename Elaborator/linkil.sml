@@ -7,6 +7,7 @@ structure LinkIl :> LINKIL  =
 	val _ = Pat.installHelpers {typecompile = Toil.typecompile,
 				    expcompile = Toil.expcompile,
 				    polyinst = Toil.polyinst}
+	val _ = Signature.installHelpers {polyinst = Toil.polyinst}
 	structure Ppprim = Ppprim
 	structure Ppil = Ppil
 	structure IlContext = IlContext
@@ -30,10 +31,9 @@ structure LinkIl :> LINKIL  =
 
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 
-	fun SelfifySdec ctxt (SDEC(l,dec)) = SDEC(l,SelfifyDec ctxt dec)
 	fun local_add_context_entries (acc_ctxt,entries) = 
 	    let fun folder (CONTEXT_SDEC sdec,acc_ctxt) = 
-		    let val sdec = SelfifySdec acc_ctxt sdec
+		    let val sdec = IlContext.SelfifySdec acc_ctxt sdec
 		    in  IlContext.add_context_sdec(acc_ctxt,sdec)
 		    end
 		  | folder (ce,acc_ctxt) = 
@@ -181,47 +181,48 @@ structure LinkIl :> LINKIL  =
 	  end
 
 
-	local
-	    open Ast
-	    fun seqDec [d] = d
-	      | seqDec decs = SeqDec decs
-	    fun valspec2dec (sym,ty) = 
-		let val pat = ConstraintPat{pattern = VarPat [sym], 
-					    constraint = ty}
-		    val dec = ValDec([Vb{pat = pat,
-						exp = VarExp [sym]}],
-					    ref [])
-		    val _ = TVClose.closeDec dec
-		in  dec
-		end
-	    fun strspec2dec coerce (sym,SOME sigexp,path_opt) = 
-		let val copysym = Symbol.strSymbol("copy_" ^ (Symbol.name sym))
-		in  if coerce
-		    then StrDec[Strb{name = copysym,
-				     def = VarStr [sym],
-				     constraint = Opaque sigexp}]
-		    else StrDec[Strb{name = sym,
-				     def = VarStr [copysym],
-				     constraint = NoSig}]
-		end
-	      | strspec2dec _ _ = error "strspec2dec no constraining signature"
-	in  val seqDec = seqDec
-	    fun spec2dec coerce (MarkSpec(spec,r)) = spec2dec coerce spec
-	      | spec2dec coerce (StrSpec ls) = SOME(seqDec(map (strspec2dec coerce) ls))
-	      | spec2dec true (ValSpec ls) = SOME(seqDec(map valspec2dec ls))
-	      | spec2dec false (ValSpec ls) = NONE
-	      | spec2dec _ (TycSpec (ls,_)) = error "elab_dec_constrained: type spec not implemented"
-	      | spec2dec _ _ = error "elab_dec_constrained: unhandled spec"
-	end
+        (* Interface files are tricky to compile because the signature expressions
+	   in the interface files are not compiled in the same context as in the context.
+	   (1) The source file is compiled in codeContext yielding codeSbnds and codeSdecs.
+	   (2) The interface file is compiled one spec at a time, maintaining
+	       an interfaceContext and list of sbnds/sdecs, as follows:
 
+	       structure X : SIG
 
+	       SIG is compiled in interfaceContext, yielding the HIL signature sigTarget.
+	       Then, "X" is compiled and  opaquely coerced to sigTarget in codeContext, generating
+	       the HIL structure modX and actual HIL signature sigActual (which leaks type information).
+	       The interfaceContext is then enriched with "X : sigActual" (not sigTarget).
+	       Note that we may access structures being bound by the interface.  For this reason,
+	       we must keep a "leaky" interfaceContext.
 
-	fun elab_dec_constrained (ctxt1, fp, dec, fp2, specs : Ast.spec list) = 
-	    let val coerce_dec = List.mapPartial (spec2dec true) specs
-		val export_dec = List.mapPartial (spec2dec false) specs
-		val new_dec = seqDec([dec] @ coerce_dec @ export_dec)
-	    in  elab_dec(ctxt1,fp,new_dec)
-	    end
+	   (3) As we process the interface specs, We keep a list of interSbnds and interSdecs 
+	       which is constructed with sigTarget (not sigActual).  The final result is obtained
+	       by shadowing all top-level labels of codeSbnds/codeSdecs and appending it
+	       with interSbnds and interSdecs
+	*)
+
+	fun elab_dec_constrained (base_ctxt, fp, dec, fp2, specs : Ast.spec list) = 
+	  let val _ = if (!show_hilcontext)
+			  then (print "\nCONTEXT:\n"; Ppil.pp_context base_ctxt) 
+		      else ()
+	  in  case Toil.xdecspec(base_ctxt,fp,dec,fp2,specs) of
+	      SOME sbnd_ctxtent_list => 
+		    let val sbnds = List.mapPartial #1 sbnd_ctxtent_list
+			val ctxtents = map #2 sbnd_ctxtent_list
+			val new_ctxt = local_add_context_entries (base_ctxt,ctxtents) 
+			val _ = if (!show_hil)
+				    then  (print "SBNDS:\n"; Ppil.pp_sbnds sbnds;
+					   print "\nENTRIES:\n"; 
+					   (app (fn e => (Ppil.pp_context_entry e; 
+							  print "\n")) ctxtents);
+					   print "\n")
+				else ()
+			val partial_ctxt = IlContext.sub_context(new_ctxt, base_ctxt)
+		    in  SOME(base_ctxt,partial_ctxt,sbnd_ctxtent_list)
+		    end
+	      | NONE => NONE
+	  end
 
     end (* struct *)
 

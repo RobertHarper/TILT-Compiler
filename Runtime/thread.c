@@ -653,7 +653,8 @@ Thread_t *SpawnRest(ptr_t thunk)
 
   if (collector_type != SemispaceParallel &&
       collector_type != GenerationalParallel &&
-      collector_type != SemispaceConcurrent) {
+      collector_type != SemispaceConcurrent &&
+      collector_type != GenerationalConcurrent) {
     printf("!!! Spawn called in a sequential collector\n");
     assert(0);
   }

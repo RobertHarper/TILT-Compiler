@@ -1334,6 +1334,19 @@ struct
 	  else (map (fn (v,c) => (lookup v, substcon c)) vclist)
       end
 
+  (* Loses Parallel information *)
+  fun flattenCbnds cbnds = 
+      let fun loop [] acc = rev acc
+	    | loop (cbnd::rest) acc = 
+	  loop rest (case cbnd of
+			 Con_cb(v,Let_c(sort, cbnds, c)) => 
+			     let val cbnds = flattenCbnds cbnds
+				 val cbnd = Con_cb(v,c)
+			     in  cbnd :: ((rev cbnds) @ acc)
+			     end
+		       | _ => cbnd::acc)
+      in  loop cbnds []
+      end
 
    (* makeLetC.
          Creates a constructor-level sequential let given bindings and

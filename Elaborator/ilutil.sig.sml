@@ -175,6 +175,7 @@ signature ILUTIL =
     val findPathsInCon : con    -> Name.PathSet.set
 
     (* ----------- Functions that compute object sizes ----------- *)
+    val con_size : con -> int
     val mod_size : mod -> int
     val bnd_size : bnd -> int
     val sig_size : signat -> int

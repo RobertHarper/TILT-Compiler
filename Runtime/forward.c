@@ -26,13 +26,6 @@
 
 
 
-void SetRange(range_t *range, mem_t low, mem_t high)
-{
-  range->low = low;
-  range->high = high;
-  range->diff = (high - low) * (sizeof (val_t));
-}
-
 /* ------------------ Forwarding Routines ------------------ */
 
 int getNontagNonglobalPointerLocations(ptr_t obj, Queue_t *locs)
@@ -262,17 +255,42 @@ mem_t forward(ploc_t vpp, mem_t alloc_ptr)
   assert(0);
 }
 
+void dischargeWithPad(CopyRange_t *copyRange)
+{
+  /* Include unused space in copy count */
+  gcstat_normal(0, (val_t) copyRange->stop - (val_t) copyRange->start, 0);
+  PadHeapArea(copyRange->cursor, copyRange->stop);
+  copyRange->start = copyRange->cursor = copyRange->stop = 0;
+}
 
-int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap)
+void expandWithPad(CopyRange_t *copyRange, int size)
+{
+  int roundSize = RoundUp(size, pagesize);
+  /* Include unused space in copy count */
+  gcstat_normal(0, (val_t) copyRange->stop - (val_t) copyRange->start, 0);
+  PadHeapArea(copyRange->cursor, copyRange->stop);
+  GetHeapArea(copyRange->heap, roundSize, &copyRange->start, &copyRange->stop);
+  copyRange->cursor = copyRange->start;
+}
+
+void SetCopyRange(CopyRange_t *copyRange, Heap_t *heap, expand_t *expand, discharge_t *discharge)
+{
+  copyRange->start = copyRange->cursor = copyRange->stop = 0;
+  copyRange->heap = heap;
+  copyRange->expand = expand;
+  copyRange->discharge = discharge;
+}
+
+int copy_coarseParallel(ptr_t white, CopyRange_t *copyRange)
 {
                                    /* white - old object must be in from space */
   ptr_t obj;                       /* forwarded object */
   tag_t tag;                       /* original tag */
-  mem_t alloc = *alloc_ptr;
-  mem_t limit = *limit_ptr;
+  mem_t alloc = copyRange->cursor;
+  mem_t limit = copyRange->stop;
 
-  assert(white < toheap->bottom ||
-	 white >= toheap->top);     /* white object cannot be in to space */
+  assert(white < copyRange->start ||
+	 white >= copyRange->stop);     /* white object cannot be in to space */
   tag = white[-1];
 
  /* If the objects has not been forwarded, atomically try commiting to be the copier.
@@ -339,15 +357,14 @@ int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t 
     case TAG_REC_TRACE:
       {
 	if (alloc+2 >= limit) {
-	  PadHeapArea(alloc, limit);
-	  GetHeapArea(toheap,pagesize,alloc_ptr,limit_ptr);
-	  alloc = *alloc_ptr;
-	  limit = *limit_ptr;
+	  (*copyRange->expand)(copyRange, 8);
+	  alloc = copyRange->cursor;
+	  limit = copyRange->stop;
 	  assert(alloc + 2 < limit);
 	}
 	obj = alloc + 1;
 	alloc += 2;
-	*alloc_ptr = alloc;
+	copyRange->cursor = alloc;
 	obj[-1] = tag;
 	obj[0] = white[0];
 	flushStore();
@@ -360,15 +377,14 @@ int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t 
     case TAG_REC_TRACETRACE:
       {
 	if (alloc+3 >= limit) {
-	  PadHeapArea(alloc, limit);
-	  GetHeapArea(toheap,pagesize,alloc_ptr,limit_ptr);
-	  alloc = *alloc_ptr;
-	  limit = *limit_ptr;
+	  (*copyRange->expand)(copyRange, 12);
+	  alloc = copyRange->cursor;
+	  limit = copyRange->stop;
 	  assert(alloc + 3 < limit);
 	}
 	obj = alloc + 1;
 	alloc += 3;
-	*alloc_ptr = alloc;
+	copyRange->cursor = alloc;
 	obj[-1] = tag;
 	obj[0] = white[0];
 	obj[1] = white[1];
@@ -395,10 +411,9 @@ int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t 
 	if (alloc + (2+wordlen) >= limit) {
 	  int requestBytes = 4 * (2 + wordlen);
 	  int request = (requestBytes + pagesize - 1) / pagesize * pagesize;
-	  PadHeapArea(alloc, limit);
-	  GetHeapArea(toheap,request,alloc_ptr,limit_ptr);
-	  alloc = *alloc_ptr;
-	  limit = *limit_ptr;
+	  (*copyRange->expand)(copyRange, request);
+	  alloc = copyRange->cursor;
+	  limit = copyRange->stop;
 	  assert (alloc + (2+wordlen) <= limit);
 	}
 
@@ -412,7 +427,7 @@ int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t 
 	}
 	obj = alloc + 1;
 	alloc += (1 + wordlen);
-	*alloc_ptr = alloc;
+	copyRange->cursor = alloc;
 	obj[-1] = tag;	
 	bcopy((const char *)white, (char *)obj, 4*wordlen);
 	flushStore();
@@ -432,15 +447,14 @@ int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t 
 	}
 
 	if (alloc+1+numfields >= limit) {
-	  PadHeapArea(alloc, limit);
-	  GetHeapArea(toheap,pagesize,alloc_ptr,limit_ptr);
-	  alloc = *alloc_ptr;
-	  limit = *limit_ptr;
+	  (*copyRange->expand)(copyRange, 4 * (1 + numfields));
+	  alloc = copyRange->cursor;
+	  limit = copyRange->stop;
 	  assert (alloc+1+numfields < limit);
 	}
 	obj = alloc + 1;
 	alloc += 1+numfields;
-	*alloc_ptr = alloc;
+	copyRange->cursor = alloc;
 	bcopy((char *)(white),(char *)(obj),4*(numfields));
 	obj[-1] = tag;
 	flushStore();
@@ -461,10 +475,10 @@ int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t 
   assert(0);
 }
 
-int forward_coarseParallel(ploc_t vpp, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap)
+int forward_coarseParallel(ploc_t vpp, CopyRange_t *copyRange)
 {
   ptr_t obj = *vpp;
-  int bytesCopied = copy_coarseParallel(obj, alloc_ptr, limit_ptr, toheap);
+  int bytesCopied = copy_coarseParallel(obj, copyRange);
   *vpp = (loc_t) obj[-1];
   return bytesCopied;
 }
@@ -547,8 +561,7 @@ mem_t forward1_writelist(SysThread_t *sysThread, mem_t alloc,
 }
 
 /* We consider back pointers */
-void forward1_writelist_coarseParallel_stack(mem_t *alloc, mem_t *limit,
-					      Heap_t *toheap, range_t *from, range_t *to, SysThread_t *sysThread)
+void forward1_writelist_coarseParallel_stack(CopyRange_t *copyRange, range_t *from, range_t *to, SysThread_t *sysThread)
 {
   ploc_t curLoc = sysThread->writelistStart;
   ploc_t end = sysThread->writelistCursor;
@@ -563,7 +576,7 @@ void forward1_writelist_coarseParallel_stack(mem_t *alloc, mem_t *limit,
     field = (ploc_t) (obj + byteOffset / sizeof(val_t));
     data = *field;
     if (NotInRange(data,to))
-      forward1_coarseParallel_stack(field,alloc,limit,toheap,from,sysThread);
+      forward1_coarseParallel_stack(field,copyRange,from,sysThread);
   }
   sysThread->writelistCursor = sysThread->writelistStart;
 }
@@ -891,7 +904,7 @@ mem_t scan1_region(mem_t start_scan, mem_t alloc, mem_t stop,
   return alloc;
 }
   
-int scan1_object_coarseParallel_stack(ptr_t gray,  mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap,
+int scan1_object_coarseParallel_stack(ptr_t gray,  CopyRange_t *copyRange,
 				      range_t *from_range,  range_t *to_range, SysThread_t *sysThread)
 {
   int bytesScanned = 0;
@@ -911,7 +924,7 @@ int scan1_object_coarseParallel_stack(ptr_t gray,  mem_t *alloc_ptr, mem_t *limi
 	unsigned mask = GET_RECMASK(tag);
 	for (; cursor<end; cursor++, mask >>= 1) {
 	  if (mask & 1)
-	    forward1_coarseParallel_stack((ploc_t)cursor,alloc_ptr,limit_ptr,toheap,from_range,sysThread);
+	    forward1_coarseParallel_stack((ploc_t)cursor,copyRange,from_range,sysThread);
 	}
 	if (mask != 0) {
 	  printf("scan_object_minor_stack: bad tag %d\n", tag);
@@ -930,7 +943,7 @@ int scan1_object_coarseParallel_stack(ptr_t gray,  mem_t *alloc_ptr, mem_t *limi
 	int byteLen = GET_ARRLEN(tag);
 	unsigned int len = byteLen / 4, i;
 	for (i=0; i<len; i++) 
-	  forward1_coarseParallel_stack((ploc_t)gray+i,alloc_ptr,limit_ptr,toheap,from_range,sysThread);
+	  forward1_coarseParallel_stack((ploc_t)gray+i,copyRange,from_range,sysThread);
 	return 4 + byteLen;
       }
     case SKIP_TAG:
@@ -942,9 +955,9 @@ int scan1_object_coarseParallel_stack(ptr_t gray,  mem_t *alloc_ptr, mem_t *limi
 }
 
 
-int scan2_object_coarseParallel_stack(ptr_t gray,  mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap,
-			       range_t *from_range,  range_t *from2_range,
-			       range_t *large_range, SysThread_t *sysThread)
+int scan2_object_coarseParallel_stack(ptr_t gray,  CopyRange_t *copyRange,
+				      range_t *from_range,  range_t *from2_range,
+				      range_t *large_range, SysThread_t *sysThread)
 {
   tag_t tag = gray[-1];
   unsigned int type= GET_TYPE(tag);
@@ -961,7 +974,7 @@ int scan2_object_coarseParallel_stack(ptr_t gray,  mem_t *alloc_ptr, mem_t *limi
 	unsigned mask = GET_RECMASK(tag);
 	for (; cursor<end; cursor++, mask >>= 1) {
 	  if (mask & 1)
-	    forward2_coarseParallel_stack((ploc_t)cursor,alloc_ptr,limit_ptr,toheap,
+	    forward2_coarseParallel_stack((ploc_t)cursor,copyRange,
 					  from_range,from2_range,large_range,sysThread);
 	}
 	if (mask != 0) {
@@ -981,7 +994,7 @@ int scan2_object_coarseParallel_stack(ptr_t gray,  mem_t *alloc_ptr, mem_t *limi
 	int byteLen = GET_ARRLEN(tag);
 	unsigned int len = byteLen / 4, i;
 	for (i=0; i<len; i++) 
-	  forward2_coarseParallel_stack((ploc_t)gray+i,alloc_ptr,limit_ptr,toheap,
+	  forward2_coarseParallel_stack((ploc_t)gray+i,copyRange,
 					from_range,from2_range,large_range,sysThread);
 	return 4 + byteLen;
       }

@@ -940,8 +940,8 @@ struct
 	    end
 
   and con_reduce state (constructor : con) : progress * con_subst * con  = 
-    (case constructor 
-       of (Prim_c (Vararg_c (openness,effect),[argc,resc])) => 
+    (case constructor of
+	 (Prim_c (Vararg_c (openness,effect),[argc,resc])) => 
 	 let 
 	   val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
 	   val no_flatten = AllArrow_c{openness=openness,effect=effect,isDependent=false,
@@ -973,18 +973,17 @@ struct
 		 | NONE => (IRREDUCIBLE, subst, constructor))
 	 end
 
-        | (Let_c (sort,((cbnd as Open_cb (var,formals,body))::rest),con)) =>
-	 con_reduce_letfun state (sort,Open_cb,var,formals,body,rest,con)
-
-        | (Let_c (sort,((cbnd as Code_cb (var,formals,body))::rest),con)) =>
-	 con_reduce_letfun state (sort,Code_cb,var,formals,body,rest,con)
-
-	| (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
-	    let val (D,subst) = state
-		val subst = addr (subst,var,con)
-	    in  (PROGRESS,subst,Let_c(sort,rest,body))
-	    end
-	| (Let_c (sort,[],body)) => (PROGRESS,#2 state,body)
+	| Let_c (sort,[],body) => (PROGRESS,#2 state,body)
+        | Let_c (sort,cbnds,letbody) =>
+	 let val cbnd::rest = NilUtil.flattenCbnds cbnds
+	 in  (case cbnd of
+		  Open_cb (var,formals,funbody) => con_reduce_letfun state (sort,Open_cb,var,formals,funbody,rest,letbody)
+		| Code_cb (var,formals,funbody) => con_reduce_letfun state (sort,Code_cb,var,formals,funbody,rest,letbody)
+		| Con_cb(var,con) => let val (D,subst) = state
+					 val subst = addr (subst,var,con)
+				     in  (PROGRESS,subst,Let_c(sort,rest,letbody))
+				     end)
+	 end
 	| (Closure_c (c1,c2)) => 
 	    let val (progress,subst,c1) = con_reduce state c1 
 	    in  (progress,subst,Closure_c(c1,c2))
@@ -1024,8 +1023,20 @@ struct
 				      | _ => substConInCon subst c)
 			      end
     and reduce_until (D,pred,con) = 
-        let fun loop n (subst,c) = 
-            let val _ = if (n>1000) then error "reduce_until exceeded 1000 reductions" else ()
+        let fun loop n (subst,c : con) = 
+            let val _ = if (n=warnDepth) 
+			    then (print "Warning: reduce_until exceeded "; 
+				  print (Int.toString warnDepth); print "iterations\n")
+			else ()
+		val _ = if (n = maxDepth)
+			    then (print "Warning: reduce_until exceeded "; 
+				  print (Int.toString maxDepth); print "iterations.  Showing 10 iterations.\n")
+			else ()
+		val _ = if (n >= maxDepth)
+			    then (print "Error: reduce_until iteration #";
+				  print "#"; print (Int.toString n); print ": "; Ppnil.pp_con c; print "\n")
+			else ()
+		val _ = if (n >= maxDepth + 10) then error "reduce_until too many iterations" else ()
 	    in  case (pred c) of
                 SOME info => REDUCED(valOf(pred (substConInCon subst c)))
 	      | NONE => let val (progress,subst,c) = con_reduce(D,subst) c

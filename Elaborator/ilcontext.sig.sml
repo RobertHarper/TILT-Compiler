@@ -55,5 +55,19 @@ signature ILCONTEXT =
     val Context_Lookup_Var   : context * var   -> (label * phrase_class) option
     val Context_Lookup_Path  : context * path  -> (label * phrase_class) option
     val Context_Ordering     : context -> path list
-	
+
+    (* ---- Selfification needed before inserting into contexts ----- *)
+    val SelfifySig : Il.context -> Il.path * Il.signat -> Il.signat
+    val UnselfifySig : Il.context ->  Il.path * Il.signat -> Il.signat
+    val SelfifyDec : Il.context -> Il.dec -> Il.dec
+    val SelfifySdec : Il.context -> Il.sdec -> Il.sdec
+    val SelfifySdecs : Il.context -> Il.path * Il.sdecs -> Il.sdecs
+    val SelfifyEntry : Il.context -> Il.context_entry -> Il.context_entry
+    val reduce_signat : Il.context -> Il.signat -> Il.signat
+
+    val removeNonExport : Il.partial_context -> Il.partial_context
+
+    (* --- temporary testing function --- *)	
+    val UnselfifyPartialContext : Il.partial_context -> Il.partial_context
+
   end

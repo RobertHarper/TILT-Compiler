@@ -1046,6 +1046,7 @@ struct
 	    case (kind,kind') of
 		 (KIND_TUPLE i, KIND_TUPLE i') => i=i'
 	       | (KIND_ARROW p, KIND_ARROW p') => p=p'
+	       | (KIND, KIND) => true
 	       | _ => false
  
 	and eq_tyvar(vm,tv,tv') =

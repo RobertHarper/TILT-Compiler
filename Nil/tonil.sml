@@ -2370,7 +2370,7 @@ end (* local defining splitting context *)
 			let
 			    val (l_c,l_r) = make_cr_labels l
 			    val ((v_c, v_r),context) = newSplitVar (v, context)
-			    val il_sig = IlStatic.UnselfifySig IlContext.empty_context (PATH(v,[]), il_sig)
+			    val il_sig = IlContext.UnselfifySig IlContext.empty_context (PATH(v,[]), il_sig)
 			    val (knd, type_r) = xsig context (Var_c v_c, il_sig)
 				
 			    val context = update_NILctx_insert_kind(context, v_c, knd)
@@ -2411,7 +2411,7 @@ end (* local defining splitting context *)
 		(IlContext.add_context_entries(ctxt,
 		      [case ce of
 			   Il.CONTEXT_SDEC(Il.SDEC(l,dec)) => 
-			       Il.CONTEXT_SDEC(Il.SDEC(l,IlStatic.SelfifyDec ctxt dec))
+			       Il.CONTEXT_SDEC(Il.SDEC(l,IlContext.SelfifyDec ctxt dec))
 			 | _ => ce]),
 		 sbnds)
 	    val (HILctx,rev_sbnd_sdecs) = foldl folder (HILctx,[]) sbnd_entries
@@ -2485,15 +2485,17 @@ end (* local defining splitting context *)
 		   end
 	    val imports = if (!killDeadImport) then #1 (filter_imports imports) else imports
 
+	    val _ = msg "  Imports are computed\n" 
+
+
 	    (* create the exports *)
 	    fun folder ((Il.SDEC(l,dec)),exports) = 
-		    (case (not (IlUtil.is_nonexport l), dec) of
+		    (case (not (IlUtil.is_nonexport l) andalso
+			   not (IlUtil.is_dt l), dec) of
 			 (false,_) => exports
 		       | (true,Il.DEC_EXP (v,_,_,_)) => 
-			     let
-				 val v' = rename_var (v, final_context)
-			     in
-				 (ExportValue(l,v')::exports)
+			     let val v' = rename_var (v, final_context)
+			     in  (ExportValue(l,v')::exports)
 			     end
 		       | (true,Il.DEC_CON (v,_,_,_)) =>
 			     let 

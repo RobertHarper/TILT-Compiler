@@ -697,7 +697,8 @@ fun pp_alias UNKNOWN = print "unknown"
 	      | Typecase_c _ => error "typecase not handled"
 	      | Annotate_c (a,c) => Annotate_c(a,do_con state c)
 	      | Let_c(letsort,cbnds,c) => 
-			let (* we must put a wrapper in order to perform the filter *)
+			let val cbnds = flattenCbnds cbnds
+			    (* we must put a wrapper in order to perform the filter *)
 			    val state = retain_state state
 			    val (cbnds,state) = foldl_acc do_cbnd state cbnds
 			    val c = do_con state c

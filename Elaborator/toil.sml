@@ -1,4 +1,4 @@
-(*$import Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat InfixParse Datatype Equal Error Signature TOIL *)
+(*$import Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat InfixParse Datatype Equal Error Signature TVClose TOIL *)
 
 (* todo : LetExp and CaseExp: valuability coputation too conservative
           optimize coercion functors to recognize when it is entirely unndeeded 
@@ -234,14 +234,16 @@ structure Toil
            outputs : a list of (optional) bindings and context-entries
      *)
      and packagedecs (xobj : context * 'a -> (sbnd option * context_entry) list)
-         context (objs : 'a list) : (sbnd option * context_entry) list = 
+         (context, sequential) (objs : 'a list) : (sbnd option * context_entry) list = 
          let 
              fun loop context [] = []
                | loop context [obj] = xobj(context,obj)
                | loop context (obj::rest) =
                  let 
                      val sbnd_ctxt_list = xobj(context,obj)
-                     val (_,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list)
+                     val context' = if sequential
+					then #2(add_context_sbnd_ctxts(context,sbnd_ctxt_list))
+				    else context
                      val sbnd_ctxt_restlist = loop context' rest
                  in sbnd_ctxt_list @ sbnd_ctxt_restlist
                  end
@@ -1425,7 +1427,7 @@ val _ = print "plet0\n"
 		val con = con_normalize(context,con)
 	    in  [(NONE, CONTEXT_SDEC(SDEC(lab,DEC_EXP(var,con,NONE,false))))]
 	    end
-	| Ast.SeqDec decs => packagedecs (xdec islocal) context decs
+	| Ast.SeqDec decs => packagedecs (xdec islocal) (context, true) decs
 	| Ast.OpenDec pathlist => 
 	      let fun help (i,path) = 
 		  (case (Context_Lookup_Labels(context,map symbol_label path)) of
@@ -2111,7 +2113,7 @@ val _ = print "plet0\n"
 						 val _ = pop_region()
 					     in res
 					     end)
-	 in  packagedecs help context (map fctb_strip fctbs)
+	 in  packagedecs help (context,true) (map fctb_strip fctbs)
 	 end
 
     (* --------------------------------------------------------- 
@@ -2126,8 +2128,8 @@ val _ = print "plet0\n"
 	     val (_,context) = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	 in  if (Sig_IsSub(context, sig_actual, sig_target))
 		 then (sbnd_ce_list,module, sig_target)
-	     else let val mod_result = Signature.xcoerce_seal(polyinst,context,
-							      module,sig_actual,sig_target)
+	     else let val (mod_result, _) = Signature.xcoerce_seal(context,
+								   module,sig_actual,sig_target)
 		  in  (sbnd_ce_list, mod_result, sig_target)
 		  end
 	 end
@@ -2137,7 +2139,7 @@ val _ = print "plet0\n"
 	    val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	    val sig' = xsigexp(context,sigexp)
 	    val (mod_result,sig_result) =
-		Signature.xcoerce_transparent (polyinst,context',module,signat,sig')
+		Signature.xcoerce_transparent (context',module,signat,sig')
 	in  (sbnd_ce_list, mod_result, sig_result)
 	end
 
@@ -2175,7 +2177,7 @@ val _ = print "plet0\n"
 			      val coerced_var = fresh_named_var ("coerced_" ^ varName)
 
 			      val (modc_body,sig1') = 
-				  Signature.xcoerce_functor(polyinst,context,argpath,signat,sig1)
+				  Signature.xcoerce_functor(context,argpath,signat,sig1)
 			      val sealed = MOD_SEAL(modc_body,sig1')
 			      val coerced_sbnd_ce = 
 				  (SOME(SBND(coerced_lbl,BND_MOD(coerced_var,false,sealed))),
@@ -2263,6 +2265,54 @@ val _ = print "plet0\n"
 	end
 
 
+    fun xdecspec (base_ctxt, decresult, specs) = 
+	let open Ast
+	    val codeSbndsCtxtents = decresult
+	    val (_,interfaceCtxt) = add_context_sbnd_ctxts (base_ctxt, codeSbndsCtxtents)
+	    fun valSpecFolder ((sym,ty), (acc,interCtxt)) = 
+		let val pat = ConstraintPat{pattern = VarPat [sym], 
+					    constraint = ty}
+		    val dec = ValDec([Vb{pat = pat,
+					 exp = VarExp [sym]}],
+				     ref [])
+		    val _ = TVClose.closeDec dec
+		    val decResult = xdec false (interCtxt, dec)
+		    val (_,interCtxt) = add_context_sbnd_ctxts(interCtxt, decResult)
+		in  (decResult::acc, interCtxt)
+		end
+	    fun strSpecFolder ((sym, SOME sigExp, pathOpt), (acc,interCtxt)) = 
+		let val sigTarget = xsigexp(interCtxt, sigExp)
+		    val (_, modOriginal, sigOriginal) = xstrexp(interCtxt, VarStr [sym], NoSig)
+		    val (modCoerced, sigActual) = Signature.xcoerce_seal(interCtxt,
+									 modOriginal, sigOriginal, sigTarget)
+		    val lab = Name.symbol_label sym
+		    val varCoerced = Name.fresh_named_var ("coerced" ^ (Symbol.name sym))
+		    val sbnd = SBND(lab, BND_MOD(varCoerced, false, modCoerced))
+		    val ctxtEnt = CONTEXT_SDEC(SDEC(lab, DEC_MOD(varCoerced, false, sigTarget)))
+		    val interCtxtEnt = CONTEXT_SDEC(SDEC(lab, DEC_MOD(varCoerced, false, sigActual)))
+		    val (_,interCtxt) = add_context_sbnd_ctxts(interCtxt, [(SOME sbnd, interCtxtEnt)])
+		in  ([(SOME sbnd, ctxtEnt)]::acc, interCtxt)
+		end
+	      | strSpecFolder _ = error "elab_dec_constrained: StrSpec without signature"
+	    fun folder (spec, acc) = 
+		(case spec of
+		     MarkSpec(spec,r) => folder(spec,acc)
+		   | StrSpec ls => foldl strSpecFolder acc ls
+		   | ValSpec ls => foldl valSpecFolder acc ls
+		   | TycSpec _ => error "elab_dec_constrainted: type spec not implemented"
+		   | _ => error "elab_dec_constrained: unhandled spec type")
+	    val (interSbndCtxtentListList : decresult list, _) = foldl folder ([],interfaceCtxt) specs
+	    val interSbndCtxtents = Listops.flatten (rev interSbndCtxtentListList)
+	    fun shadowSbndOpt NONE = NONE
+	      | shadowSbndOpt (SOME(SBND(l,sbnd))) = SOME(SBND(to_nonexport l, sbnd))
+	    fun shadowCtxtent(CONTEXT_SDEC(SDEC(l,sdec))) = CONTEXT_SDEC(SDEC(to_nonexport l, sdec))
+	      | shadowCtxtent(CONTEXT_SIGNAT(l,v,s)) = CONTEXT_SIGNAT(to_nonexport l,v,s)
+	      | shadowCtxtent(CONTEXT_FIXITY(l,f)) = CONTEXT_FIXITY(to_nonexport l,f)
+	      | shadowCtxtent(CONTEXT_OVEREXP(l,celist)) = CONTEXT_OVEREXP(to_nonexport l,celist)
+	    fun shadowSbndCtxtent(sbnd,ctxtent) = (shadowSbndOpt sbnd, shadowCtxtent ctxtent)
+	    val sbndCtxtents = (map shadowSbndCtxtent codeSbndsCtxtents) @ interSbndCtxtents
+	in  sbndCtxtents
+	end
 
     (* ------------ Exported interface to resolve overloading ------------ *)
     fun overload_wrap fp xobj arg = 
@@ -2355,6 +2405,10 @@ val _ = print "plet0\n"
     val typecompile = xty
 
     val xdec = fn (ctxt,fp,dec) => overload_wrap fp (xdec false) (ctxt,dec)
+    val xdecspec = fn (ctxt,fp,dec,fp2,spec) => 
+	(case xdec (ctxt,fp,dec) of
+	     NONE => NONE
+	   | SOME decresult => overload_wrap fp2 xdecspec (ctxt,decresult,spec))
     val xexp = fn (ctxt,fp,exp) => overload_wrap fp xexp (ctxt,exp)
     val xstrexp = fn (ctxt,fp,strexp,sigc) => overload_wrap fp xstrexp (ctxt,strexp,sigc)
     val xspec = fn (ctxt,fp,specs) => overload_wrap fp xspec (ctxt,specs)

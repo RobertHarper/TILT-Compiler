@@ -43,6 +43,7 @@ signature NILUTIL =
     val convert_sum_to_special : Nil.con * TilWord32.word -> Nil.con
     val allprim_uses_carg : Nil.allprim -> bool
 
+    val flattenCbnds : Nil.conbnd list -> Nil.conbnd list
     val makeLetC : Nil.conbnd list -> Nil.con -> Nil.con
     val makeLetE : Nil.letsort -> Nil.bnd list -> Nil.exp -> Nil.exp
     val makeAppE : Nil.exp -> Nil.con list -> Nil.exp list -> Nil.exp list -> Nil.exp

@@ -863,6 +863,7 @@ structure IlUtil
 			       end
 
       in
+	  val con_size = wrap f_con
 	  val mod_size = wrap f_mod
 	  val bnd_size = wrap f_bnd
 	  val sig_size = wrap f_signat
@@ -891,7 +892,7 @@ structure IlUtil
     val open_str = "+O"
     val nonexport_str = "-X"
     val eq_str = "+E"
-    val dt_str = "+O-X+D"
+    val dt_str = "+O+D"
     val cluster_str = "+C"
 
     fun is_questionable lab =  isSome(substring (questionable_str,label2name lab))

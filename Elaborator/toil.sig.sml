@@ -12,6 +12,7 @@ signature TOIL =
 
     val xexp    : Il.context * filepos * Ast.exp -> (Il.exp * Il.con * bool) option
     val xdec    : Il.context * filepos * Ast.dec -> decresult option
+    val xdecspec: Il.context * filepos * Ast.dec * filepos * Ast.spec list -> decresult option
     val xstrexp : Il.context * filepos * Ast.strexp
 	                     * Ast.sigexp Ast.sigConst -> (decresult * Il.mod * Il.signat) option
     val xspec   : Il.context * filepos * Ast.spec list -> (Il.sdec list) option

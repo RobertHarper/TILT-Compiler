@@ -52,7 +52,7 @@ structure Basis
 			   context := (add_context_entries(!context,[ce])))
 	  fun add_sbnd(sbnd,sdec) = 
 	      (entries := ((SOME sbnd, CONTEXT_SDEC sdec) :: (!entries));
-	       context := add_context_sdec(!context, IlStatic.SelfifySdec (!context) sdec))
+	       context := add_context_sdec(!context, IlContext.SelfifySdec (!context) sdec))
 
 	  fun mk_var_lab str = symbol_label(Symbol.varSymbol str)
 	  fun mk_tyc_lab str = symbol_label(Symbol.tycSymbol str)
@@ -84,7 +84,7 @@ structure Basis
 								KIND,
 								NONE, false))])
 		  val inner_ctxt = add_context_dec(empty_context,
-						   IlStatic.SelfifyDec empty_context
+						   IlContext.SelfifyDec empty_context
 						   (DEC_MOD(argvar,false,argsig)))
 		  val instcon = CON_MODULE_PROJECT(MOD_VAR argvar,l)
 		  val exp = c2exp instcon

@@ -64,13 +64,7 @@ signature ILSTATIC =
     val Sdecs_Lookup_Open : Il.context -> Il.mod * Il.sdecs * Il.label list -> 
 	                            (Il.label list * Il.phrase_class) option
 
-    (* ---- Selfification needed before inserting into contexts ----- *)
-    val SelfifySig : Il.context -> Il.path * Il.signat -> Il.signat
-    val UnselfifySig : Il.context ->  Il.path * Il.signat -> Il.signat
-    val SelfifyDec : Il.context -> Il.dec -> Il.dec
-    val SelfifySdec : Il.context -> Il.sdec -> Il.sdec
-    val SelfifyEntry : Il.context -> Il.context_entry -> Il.context_entry
-    val reduce_signat : Il.context -> Il.signat -> Il.signat
+
     val supertype : Il.con -> Il.con  (* compute supertype by removing total arrows and special sum types *)
 
   end

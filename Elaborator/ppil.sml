@@ -566,6 +566,8 @@ struct
 		 pp_list path_doer (rev ordering) ("","","", true)]
 	end
 
+    fun pp_pcontext' ((ctxt, free) : Il.partial_context) = pp_context' ctxt
+
 
     val pp_var = help' pp_var
     val pp_label  = help' pp_label
@@ -577,6 +579,7 @@ struct
     val pp_exp = help' (pp_exp [])
     val pp_context_entry = help' pp_context_entry'
     val pp_context = help' pp_context'
+    val pp_pcontext = help' pp_pcontext'
     val pp_signat = help' (pp_signat [])
     fun pp_list doer data = help' (pp_list' doer data)
     fun pp_commalist pobj objlist = pp_list pobj objlist ("(",", ",")",false)
