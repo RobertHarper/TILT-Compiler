@@ -439,12 +439,15 @@ structure Real =
 				  else scistr(digits,e)
 			      end
 	    in  if r < zero 
-		    then String.concat("~",mkstr(~r,0))
+		    then if (float_eq(r*2.0,r)) then "~INF" else (String.concat("~",mkstr(~r,0)))
 		else if r > zero 
-			 then mkstr(r,0)
-		     else "0.0"
+			 then if (float_eq(r*2.0,r)) then "INF" else mkstr(r,0)
+		     else if (float_eq(r,zero))
+			      then "0.0"
+			  else "NAN"
 	    end (* makestring_real *)
 	fun eq(x,y) = float_eq(x,y)
+	fun ==(x,y) = float_eq(x,y)
     end
 
 

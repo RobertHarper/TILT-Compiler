@@ -787,10 +787,10 @@ struct
 
 
     fun mk_named_float_data (r : string, label : label) =
-	(add_data(ALIGN (ODDLONG));
+	(add_data(ALIGN ODDLONG);
 	 add_data(INT32 (realarraytag (i2w 1)));
-	 add_data(DLABEL (label));
-	 add_data(FLOAT (r)))
+	 add_data(DLABEL label);
+	 add_data(FLOAT r))
 	
     fun mk_float_data (r : string) : label =
 	let val label = fresh_data_label "floatdata"
@@ -928,7 +928,8 @@ struct
 			      | COMPUTE _ => true
 			      | _ => false)
 	  val _ = (case lv of
-		       VALUE (REAL _) => add_data(ALIGN (QUAD))
+		       LOCATION (REGISTER (_, F _)) => add_data(ALIGN QUAD)
+		     | VALUE (REAL _) => add_data(ALIGN QUAD)
 		     | _ => ())
 	  val _ = app (fn l => add_data(DLABEL l)) labels
 	  val _ = add_data(DLABEL (label));

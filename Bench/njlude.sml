@@ -52,3 +52,22 @@ val atan = Real.Math.atan
 val sqrt = Real.Math.sqrt
 
 structure Real = struct open Real fun eq(x,y) = Real.==(x,y) end
+
+type 'a array2 = {rows : int, columns : int, data : 'a array}
+	    
+fun array2(rows : int, columns : int, e : 'a) : 'a array2 = 
+    if rows<0 orelse columns<0 then raise Size
+    else {rows=rows, columns=columns,
+	  data=array(rows * columns,e)}
+	     
+fun sub2 ({rows,columns,data} : 'a array2, s :int, t:int) : 'a =
+    if (s >= 0 andalso s < rows andalso t >= 0 andalso t < columns)
+	    then sub(data,s * columns + t)
+	else raise Subscript
+	
+fun update2 ({rows,columns,data} : 'a array2, s : int, t:int, e) : unit =
+    if (s >= 0 andalso s < rows andalso t >= 0 andalso t < columns)
+	    then update(data,s * columns + t, e)
+	else raise Subscript
+
+fun length2 ({rows,columns,data} : 'a array2) : int * int = (rows,columns)

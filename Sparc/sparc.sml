@@ -3,8 +3,11 @@
 structure  Sparc :> SPARC =
 struct
 
+
+
     val exclude_intregs = []
     val error = fn s => Util.error "sparc.sml" s
+    val threadScratch_disp : int = 4 * 32 + 8 * 32 + 4 + 8 + 8 + 4
 
 structure Machine = 
   struct
@@ -30,12 +33,13 @@ structure Machine =
     val Rheap   = R 4   (* non-volatile *)
     val Rth     = R 2   (* non-volatile *)
 
-    val Fat     = F 31  (* volatile *)
-    val Fat2    = F 30  (* volatile *)
+
+    val Fat     = F 62  (* volatile *)
+    val Fat2    = F 60   (* volatile *)
 
 
     fun isPhysical (R i) = i<32
-      | isPhysical (F i) = i<32
+      | isPhysical (F i) = i<64
 
   datatype storei_instruction = ST | STUB | STD
   datatype storef_instruction = STF | STDF
@@ -79,8 +83,8 @@ structure Machine =
 	BASE     of base_instruction
       | SPECIFIC of specific_instruction
 
-    fun in_imm_range i = (i >= 0) andalso (i <= 255)
-    fun in_ea_disp_range i = (i >= ~32768) andalso (i <= 32767)
+    fun in_imm_range i = (i >= ~4096) andalso (i <= 4095)
+    fun in_ea_disp_range i = (i >= ~4096) andalso (i <= 4095)
 
     structure W = TilWord32
     val i2w = W.fromInt
@@ -90,7 +94,7 @@ structure Machine =
     fun msReg (R 14) = "%sp"
       | msReg (R 30) = "%fp"
       | msReg (R n) = "%r" ^ (ms n)
-      | msReg (F n) = "%f" ^ (ms (2 * n))
+      | msReg (F n) = "%f" ^ (ms n)
 	
     val makeAsmLabel =
 	let 
@@ -219,15 +223,6 @@ structure Machine =
     | rtl_to_ascii (SAVE_CS _) = "SAVE_CS"
 
 
-
-  fun msStackLocation (CALLER_FRAME_ARG i) = "CallerFrameArg["^(ms i)^"]"
-    | msStackLocation (THIS_FRAME_ARG i) = "ThisFrameArg["^(ms i)^"]"
-    | msStackLocation (SPILLED_INT i) = "Spill-I["^(ms i)^"]"
-    | msStackLocation (SPILLED_FP i) = "Spill-F["^(ms i)^"]"
-    | msStackLocation (ACTUAL4 i) = "4@" ^ (ms i)
-    | msStackLocation (ACTUAL8 i) = "8@" ^ (ms i)
-    | msStackLocation (RETADD_POS) = "RETADD_POS"
-
   val comma  	    	       = ", "
   val tab                      = "\t"
   val newline                  = "\n"
@@ -304,10 +299,18 @@ structure Machine =
 				else (tab ^ "retl"))
 				^ "\n\tnop"
     | msInstr_base (RTL instr) =  (tab ^ (rtl_to_ascii instr))
-    | msInstr_base (MOVI (Rsrc,Rdest)) =
-                                ("\tmov\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
-    | msInstr_base (MOVF (Rsrc,Rdest)) =
-                                ("\tfmov\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
+    | msInstr_base (MOVE (Rsrc,Rdest)) =
+      (case (Rsrc,Rdest) of
+	  (R _, R _) => ("\tmov\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
+	| (F m, F n) => ("\tfmovd\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
+(*			 "\tfmovs\t" ^ (msReg (F (m+1))) ^ comma ^ (msReg (F (n+1)))) *)
+	| (R n, F _) => ("\tst\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, threadScratch_disp)) ^ "\n" ^
+			 "\tst\t" ^ (msReg (R (n+1))) ^ comma ^ (msDisp(Rth, threadScratch_disp + 4)) ^ "\n" ^
+			 "\tldd\t" ^ (msDisp(Rth, threadScratch_disp)) ^ comma ^ (msReg Rdest))
+	| (F _, R n) => ("\tstd\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, threadScratch_disp)) ^ "\n" ^
+	                 "\tld\t" ^ (msDisp(Rth, threadScratch_disp)) ^ comma ^ (msReg Rdest) ^ "\n" ^
+			 "\tld\t" ^ (msDisp(Rth, threadScratch_disp+ 4)) ^ comma ^ (msReg (R (n+1)))))
+			 
     | msInstr_base (PUSH (Rsrc, sloc)) = 
                                 ("\tPUSH\t" ^ (msReg Rsrc) ^ comma ^ (msStackLocation sloc))
     | msInstr_base (POP (Rdest, sloc)) = 
@@ -330,7 +333,6 @@ structure Machine =
     ((msInstr instr) ^ (if (cmt <> "") then ("\t! " ^ cmt) else "") ^ "\n")
 
   fun wms arg = "0x" ^ (W.toHexString arg)
-
 
 
 
@@ -424,16 +426,17 @@ structure Machine =
    local
        val nums = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,
 		   20,21,22,23,24,25,26,27,28,29,30,31]
+       val lower = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
    in
      val num_iregs = 32
      val num_fregs = 32
-       val int_regs = (map ireg nums)
-       val fp_regs  = (map freg nums)
-       val physical_regs = listunion(int_regs, fp_regs)
+     val int_regs = (map ireg nums)
+     val fp_regs  = (map (fn n => F(2 * n)) nums)
+     val physical_regs = listunion(int_regs, fp_regs)
    end
 
 
-    fun defUse (SPECIFIC(STOREI (_, Rsrc, _, Raddr)))   = ([], [Rsrc, Raddr])
+   fun defUse (SPECIFIC(STOREI (_, Rsrc, _, Raddr)))   = ([], [Rsrc, Raddr])
       | defUse (SPECIFIC(LOADI (_, Rdest, _, Raddr)))   = ([Rdest], [Raddr])
       | defUse (SPECIFIC(STOREF (_, Rsrc, _, Raddr)))   = ([], [Raddr,Rsrc])
       | defUse (SPECIFIC(LOADF (_, Rdest, _, Raddr)))   = ([Rdest], [Raddr])
@@ -444,8 +447,8 @@ structure Machine =
       | defUse (BASE(BSR (_, SOME sra, {regs_modified,regs_destroyed,args}))) = (sra::regs_destroyed, args)
       | defUse (SPECIFIC(INTOP (opcode, Rsrc1, REGop Rsrc2, Rdest))) = ([Rdest], [Rsrc1, Rsrc2])
       | defUse (SPECIFIC(INTOP (opcode, Rsrc1, IMMop _, Rdest))) = ([Rdest], [Rsrc1])
-      | defUse (SPECIFIC(FPOP (opcode, Fsrc1, Fsrc2, Fdest))) = ([Fdest],[Fsrc1,Fsrc2])
-      | defUse (SPECIFIC(FPMOVE (opcode, Fsrc, Fdest))) = ([Fdest],[Fsrc])
+      | defUse (SPECIFIC(FPOP (opcode, Fsrc1, Fsrc2, Fdest))) = ([Fdest], [Fsrc1, Fsrc2])
+      | defUse (SPECIFIC(FPMOVE (opcode, Fsrc, Fdest))) = ([Fdest], [Fsrc])
       | defUse (BASE (Core.JSR (false, Raddr, _, _)))       = ([], [Raddr])
       | defUse (BASE (Core.JSR (true, Raddr, _, _)))       = ([Rra], [Raddr])
       | defUse (BASE (Core.RET (false, _)))              = ([], [Rra])
@@ -461,8 +464,7 @@ structure Machine =
 				 args, results, ...})))  = (results, reg :: args)
       | defUse (BASE (RTL (RETURN{results})))      = ([], Rra :: results)
       | defUse (BASE (RTL _))                      = ([], [])
-      | defUse (BASE(MOVI (Rsrc,Rdest)))           = ([Rdest],[Rsrc])
-      | defUse (BASE(MOVF (Rsrc,Rdest)))           = ([Rdest],[Rsrc])
+      | defUse (BASE(MOVE (Rsrc,Rdest)))           = ([Rdest],[Rsrc])
       | defUse (BASE(PUSH (Rsrc, _)))              = ([], [Rsrc, Rsp])
       | defUse (BASE(POP (Rdest, _)))              = ([Rdest], [Rsp])
       | defUse (BASE(PUSH_RET (_)))                = ([], [Rra, Rsp])
@@ -519,8 +521,7 @@ structure Machine =
 	 | xspec (CMP (Rsrc1, op2 as (IMMop _))) = CMP(fs Rsrc1, op2)
 	 | xspec (CMP (Rsrc1, REGop Rsrc2)) = CMP(fs Rsrc1, REGop(fs Rsrc2))
 	 | xspec (FCMPD (Rsrc1, Rsrc2)) = FCMPD(fs Rsrc1, fs Rsrc2)
-       fun xbase (MOVI(src,dest)) = MOVI(fs src, fd dest)
-         | xbase (MOVF(src,dest)) = MOVF(fs src, fd dest)
+       fun xbase (MOVE(src,dest)) = MOVE(fs src, fd dest)
          | xbase (PUSH(src,sloc)) = PUSH(fs src, sloc)
          | xbase (POP(dest,sloc)) = POP(fd dest, sloc)
          | xbase (PUSH_RET arg) = PUSH_RET(arg)
@@ -554,6 +555,7 @@ structure Machine =
           (R _, ACTUAL8 offset) => SPECIFIC(STOREI(STD,  src, offset, Rsp))
         | (R _, ACTUAL4 offset) => SPECIFIC(STOREI(ST,   src, offset, Rsp))
 	| (F _, ACTUAL8 offset) => SPECIFIC(STOREF(STDF, src, offset, Rsp))
+	| (F _, ACTUAL4 offset) => SPECIFIC(STOREF(STF,  src, offset, Rsp))
 	| _ => error "push"
 
    fun pop (dst,actual_location) = 
@@ -561,6 +563,7 @@ structure Machine =
           (R _,ACTUAL8 offset) => SPECIFIC(LOADI(LDD,  dst, offset, Rsp))
         | (R _,ACTUAL4 offset) => SPECIFIC(LOADI(LD,   dst, offset, Rsp))
 	| (F _,ACTUAL8 offset) => SPECIFIC(LOADF(LDDF, dst, offset, Rsp))
+	| (F _,ACTUAL4 offset) => SPECIFIC(LOADF(LDF,  dst, offset, Rsp))
 	| _ => error "pop"
 
 

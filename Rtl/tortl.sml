@@ -553,7 +553,7 @@ struct
 		      val hlreg = alloc_regi NOTRACE_CODE
 		      val bl = fresh_code_label "exn_after"
 
-		      val (fpbase,state) = (* --- save the floating point values, if any *)
+		      val (fpbase,bstate) = (* --- save the floating point values, if any *)
 			  (case local_fregs of
 			       [] => (NONE,state)
 			     | _ => let val vv = map (fn freg => LOCATION(REGISTER(false,F freg))) local_fregs
@@ -567,12 +567,12 @@ struct
 					 ([hlreg, stackptr,exnptr] @ local_iregs))
 		      val reps = (NOTRACE_CODE :: NOTRACE_LABEL :: TRACE :: local_int_reps)
 		      val _ = add_instr(LADDR(hl,0,hlreg))
-		      val (_,state) = make_record(state,SOME exnptr,reps, int_vallocs)
+		      val (_,bstate) = make_record(bstate,SOME exnptr,reps, int_vallocs)
 			  
 
                       (* --- compute the body; restore the exnpointer; branch to after handler *)
 		      (* NOTID and not context because we have to remove the exnrecord *)
-		      val (reg,state) = xexp'(state,name,exp,trace,NOTID)
+		      val (reg,bstate) = xexp'(bstate,name,exp,trace,NOTID)
 		      val _ = (add_instr(LOAD32I(EA(exnptr,8),exnptr));
 			       add_instr(BR bl));
 
@@ -633,7 +633,7 @@ struct
 				 | (F hreg,F reg) => add_instr(FMV(hreg,reg))
 				 | _ => error "hreg/ireg mismatch in handler")
 		      val _ = add_instr(ILABEL bl)
-		      val state = join_states[state,hstate]
+		      val state = join_states[state,bstate,hstate]
 
 		  in 
 		      (LOCATION(REGISTER (false,reg)), state)

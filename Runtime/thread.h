@@ -11,6 +11,7 @@
 #define snapshot_disp  longsize*32+8*32+longsize
 #define sysThread_disp longsize*32+8*32+longsize+ptrsize
 #define notinml_disp   longsize*32+8*32+longsize+ptrsize+ptrsize
+#define scratch_disp   longsize*32+8*32+longsize+ptrsize+ptrsize+intsize
 
 #ifndef _inside_stack_h
 #ifndef _asm_
@@ -42,6 +43,7 @@ struct Thread__t
   StackSnapshot_t    *snapshots;       /* Used by stack.c and stack_asm.s */
   struct SysThread__t *sysThread;      /* of type SysThread_t * - relied on by service_alpha_osf.s  */
   int                notInML;          /* set to true whenever mutator calls a normal external function */
+  double             scratch;
   int                last_snapshot;    /* Index of last used snapshot */
   StackChain_t       *stackchain;      /* Stack */
   Queue_t            *retadd_queue;

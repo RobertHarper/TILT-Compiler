@@ -117,8 +117,7 @@ functor Flatten( structure PrimUtil : PRIMUTIL
 		   Let_e (Sequential, 
 			  [Exp_b (recordArg, 
 				  TraceUnknown,
-				  Prim_e (NilPrimOp (record labels), 
-					  [], exps))],
+				  Prim_e (NilPrimOp (record labels), [], exps))],
 			  body)
 		   
 		 (* We'll on the body later *)

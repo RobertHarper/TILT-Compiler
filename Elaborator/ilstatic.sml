@@ -1218,10 +1218,13 @@ structure IlStatic
 				  SOME([l],PHRASE_CLASS_MOD(MOD_PROJECT(m,l),b,s)))
 		else 
 		    (case (doOpen andalso is_open l, d) of
-			 (true, (DEC_MOD(_,_,SIGNAT_STRUCTURE (_,sdecs)))) =>
-				 (case (loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
-				      SOME (lbls',pc) => SOME(l::lbls',pc)
-				    | NONE => loop m lbl rest)
+			 (true, (DEC_MOD(_,_,s))) =>
+			     (case (reduce_signat ctxt s) of
+				  SIGNAT_STRUCTURE (_,sdecs) =>
+				      (case (loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
+					   SOME (lbls',pc) => SOME(l::lbls',pc)
+					 | NONE => loop m lbl rest)
+				| _ => loop m lbl rest)
 		       | _ => loop m lbl rest)
 
 	in

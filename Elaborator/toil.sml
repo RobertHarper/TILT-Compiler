@@ -211,7 +211,13 @@ structure Toil
 	  sbnd_ctxt : (sbnd option * context_entry) list) : sbnd list * context = 
 	 let 
 	     val sbnds = List.mapPartial #1 sbnd_ctxt
-	     fun folder((_,CONTEXT_SDEC sdec),ctxt) = 
+	     fun folder((_,CONTEXT_SDEC (sdec as (SDEC(l,DEC_MOD(v,b,s))))),ctxt) = 
+		 if (is_open l)
+		     then let val s = reduce_signat ctxt s
+			  in  add_context_sdec(ctxt,SelfifySdec ctxt (SDEC(l,DEC_MOD(v,b,s))))
+			  end
+		 else add_context_sdec(ctxt,SelfifySdec ctxt sdec)
+	       | folder((_,CONTEXT_SDEC sdec),ctxt) = 
 		 add_context_sdec(ctxt,SelfifySdec ctxt sdec)
 	       | folder((_,ce),ctxt) = add_context_entries(ctxt,[ce])
 	     val ctxt = foldl folder context sbnd_ctxt
@@ -785,6 +791,7 @@ val _ = print "plet0\n"
 			     (error_region(); print " application is ill-typed.\n";
 			      print "  Function domain: "; pp_con param_con;
 			      print "\n  Argument type: "; pp_con con2;
+			      print "\n  Expanded function domain: "; pp_con (con_normalize(context,param_con));
 			      print "\n  Expanded argument type: "; pp_con (con_normalize(context,con2));
 			      print "\n";
 			      dummy_exp'(context,"bad_application"))
@@ -1380,12 +1387,14 @@ val _ = print "plet0\n"
 				            "openlbl" path
                                val l = to_open(fresh_internal_label str)
 			       val v = fresh_named_var "openvar"
-			       (* the context wants a SINGAT_STRUCTURE for opens *)
-			       val s = reduce_signat context s
+			       val s = (case mod2path m of
+					    NONE => s
+					  | SOME p => SIGNAT_OF p)
 			   in  SOME(SOME (SBND(l,BND_MOD(v,false,m))), 
 				    CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))
 			   end
-		     | _ => (error_region(); print "unbound structure: ???\n";
+		     | _ => (error_region(); print "unbound structure: ";
+			     AstHelp.pp_path path; print "\n";
 			     NONE))
 	      in List.mapPartial (fn x => x) (mapcount help pathlist)
 	      end
@@ -1968,9 +1977,9 @@ val _ = print "plet0\n"
 		    val sdecs = map #2 sbnd_sdecs
 		in  ADDITIONAL sdecs
 		end
-	   | (Ast.ShareTycSpec paths) => ALL_NEW(Signature.xsig_sharing_type
+	   | (Ast.ShareTycSpec paths) => ALL_NEW(Signature.xsig_sharing_types
 						 (context,prev_sdecs,mapmap symbol_label paths))
-	   | (Ast.ShareStrSpec paths) => ALL_NEW(Signature.xsig_sharing_structure
+	   | (Ast.ShareStrSpec paths) => ALL_NEW(Signature.xsig_sharing_structures
 						 (context,prev_sdecs,mapmap symbol_label paths))
 	   | (Ast.FixSpec _) => parse_error "fixity specs not supported"
 	   | (Ast.MarkSpec (s,r)) => let val _ = push_region r

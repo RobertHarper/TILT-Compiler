@@ -65,39 +65,41 @@ struct
       If waste is true, use the C convention that coresponding 
 		integer and floating-point registers are never both used. *)
 
-  fun assignRegsAmong waste actuals (stk_start, iFormals, fFormals) =
+  fun assignRegsAmong (waste,useI) actuals (iFormals, fFormals) =
     let fun folder (r, (iRegs, fRegs, pos)) =
 	(case (r, iRegs, fRegs) of
-	   (R _, ir :: irest, [])          => (IN_REG ir, (irest, [], pos + 4))
+	   (R _, ir :: irest, [])          => (IN_REG ir, (irest, [], pos))
 	 | (R _, ir :: irest, 
-		 fall as (_ :: frest))     => (IN_REG ir, (irest, if waste then frest else fall, pos + 4))
-         | (R _, [], [])                   => (ON_STACK (ACTUAL4 pos), ([], [], pos + 4))
-	 | (R _, [], fall as (_ :: frest)) => (ON_STACK (ACTUAL4 pos), 
-						([], if waste then frest else fall, pos + 4))
-	 | (F _, [], fr :: frest)         => (IN_REG fr, ([], frest, pos + 8))
+		 fall as (_ :: frest))     => (IN_REG ir, (irest, if waste then frest else fall, pos))
+         | (R _, [], [])                   => (ON_STACK (THIS_FRAME_ARG4 pos), ([], [], pos + 1))
+	 | (R _, [], fall as (_ :: frest)) => (ON_STACK (THIS_FRAME_ARG4 pos), 
+						([], if waste then frest else fall, pos + 1))
+	 | (F _, [], fr :: frest)         => (IN_REG fr, ([], frest, pos))
 	 | (F _, iall as (_ :: irest), fr :: frest) => (IN_REG fr, 
-							(if waste then irest else iall, frest, pos + 8))
-	 | (F _, [], [])                  => (ON_STACK (ACTUAL8 pos), ([], [], pos + 8))
-	 | (F _, iall as [_], [])         => (ON_STACK (ACTUAL8 pos), 
-							(if waste then [] else iall, [], pos + 8))
-	 | (F _, iall as (_::_::irest), [])  => (ON_STACK (ACTUAL8 pos), 
-							(if waste then irest else iall, [], pos + 8)))
-    in  #1(Listops.foldl_acc folder (iFormals,fFormals,stk_start) actuals)
+							(if waste then irest else iall, frest, pos))
+	 | (F _, [], [])                  => (ON_STACK (THIS_FRAME_ARG8 pos), ([], [], pos + 2))
+	 | (F _, iall as [_], [])         => (ON_STACK (THIS_FRAME_ARG8 pos), 
+							(if waste then [] else iall, [], pos + 2))
+	 | (F _, iall as (ir::_::irest), [])  => 
+	       if useI
+		   then (IN_REG ir, (irest, [], pos))
+	       else (ON_STACK (THIS_FRAME_ARG8 pos), (if waste then irest else iall, [], pos + 2)))
+    in  #1(Listops.foldl_acc folder (iFormals,fFormals,0) actuals)
     end
 
   fun std_c def (FORMALS {args,results}) =
      let
-	 val actual_args    = assignRegsAmong true args (16 * 4, C_int_args, C_fp_args)
-         val actual_results = assignRegsAmong true results (16 * 4, C_int_res, C_fp_res)
+	 val actual_args    = assignRegsAmong (true,true) args (C_int_args, [])
+         val actual_results = assignRegsAmong (true,false) results (C_int_res, C_fp_res)
      in ACTUALS{args=actual_args,
 		results=actual_results}
      end
 
   fun unknown_ml def (FORMALS {args,results}) =
-     let val stackloc = if def then CALLER_FRAME_ARG      
-	                else THIS_FRAME_ARG
+     let val stackloc = if def then CALLER_FRAME_ARG4
+	                else THIS_FRAME_ARG4
 	 val actual_args = unknownArgPositions stackloc args 
-	 val actual_results = assignRegsAmong false results (16 * 4, indirect_int_res, indirect_fp_res)
+	 val actual_results = assignRegsAmong (false,false) results (indirect_int_res, indirect_fp_res)
       in ACTUALS{args=actual_args,
 		 results=actual_results}
       end

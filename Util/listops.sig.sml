@@ -55,7 +55,7 @@ signature LISTOPS =
     val count1 : int -> int list
     val copy : int * 'a -> 'a list
     val member : ''a * ''a list -> bool
-    val member_eq : ('a * 'a -> bool) * 'a * 'a list -> bool
+    val member_eq : ('a * 'b -> bool) * 'a * 'b list -> bool
     val assoc : (''a * (''a * 'b) list) -> 'b option
     val assoc_eq : (('a * 'a -> bool) * 'a * ('a * 'b) list) -> 'b option
     val list_diff  : ''a list * ''a list -> ''a list

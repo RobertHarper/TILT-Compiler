@@ -1,4 +1,4 @@
-(*$import PPRTL DECALPHA MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM Util *)
+(*$import Pprtl DecAlpha MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM Util *)
 
 (* Translation from Rtl to DecAlpha pseudoregister-assembly. 
    Assumptions:
@@ -312,7 +312,7 @@ struct
 		       translateIReg rtl_Raddr)))
 
      | translate (Rtl.MV (rtl_Rsrc, rtl_Rdest)) =
-          emit (BASE(MOVI (translateIReg rtl_Rsrc, translateIReg rtl_Rdest)))
+          emit (BASE(MOVE (translateIReg rtl_Rsrc, translateIReg rtl_Rdest)))
 
      | translate (Rtl.CMV (cmp, rtl_Rsrc1, op2, rtl_Rdest)) =
        let 
@@ -334,7 +334,7 @@ struct
 	 val Fsrc = translateFReg rtl_Fsrc
 	 val Fdest = translateFReg rtl_Fdest
        in
-	 emit (BASE (MOVF (Fsrc,Fdest)))
+	 emit (BASE (MOVE (Fsrc,Fdest)))
        end
 
      | translate (Rtl.ADD (rtl_Rsrc1, op2, rtl_Rdest)) =
@@ -959,7 +959,7 @@ struct
 				    Rtl.LADDR(writelist_end,0,end_addr),
 				    Rtl.LOAD32I(Rtl.EA(end_addr,0),end_val),
 				    Rtl.BCNDI(Rtl.LT, cursor_val, Rtl.REG end_val, afterLabel, true)];
-		     emit (BASE (MOVI (Rheap, Rat)));
+		     emit (BASE (MOVE (Rheap, Rat)));
 		     emit (BASE (GC_CALLSITE afterLabel));
 		     emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("gc_raw"), NONE,
 				      {regs_modified=[Rat], regs_destroyed=[Rat],

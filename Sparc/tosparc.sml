@@ -105,7 +105,8 @@ struct
 	R (Name.var2int v))
      | translateIReg (Rtl.SREGI s) = translateSReg s
      
-   fun translateFReg (Rtl.REGF (v, _)) = F (Name.var2int v)
+   fun translateFReg (Rtl.REGF (v, _)) = F (2 * (Name.var2int v))
+
 
    fun translateReg (Rtl.I ir) = translateIReg ir
      | translateReg (Rtl.F fr) = translateFReg fr
@@ -315,7 +316,7 @@ struct
 		       translateIReg rtl_Raddr)))
 
      | translate (Rtl.MV (rtl_Rsrc, rtl_Rdest)) =
-          emit (BASE(MOVI (translateIReg rtl_Rsrc, translateIReg rtl_Rdest)))
+          emit (BASE(MOVE (translateIReg rtl_Rsrc, translateIReg rtl_Rdest)))
 
      | translate (Rtl.CMV (rtl_cmp, rtl_Rsrc1, op2, rtl_Rdest)) =
        let 
@@ -336,7 +337,7 @@ struct
 	 val Fsrc = translateFReg rtl_Fsrc
 	 val Fdest = translateFReg rtl_Fdest
        in
-	 emit (BASE (MOVF (Fsrc,Fdest)))
+	 emit (BASE (MOVE (Fsrc,Fdest)))
        end
 
      | translate (Rtl.ADD (rtl_Rsrc1, op2, rtl_Rdest)) =
@@ -667,7 +668,7 @@ struct
        in
 	   emit (BASE (LADDR (Rat, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
 	   emit (SPECIFIC (STOREI (ST, Rsrc, 0, Rat)));
-	   emit (SPECIFIC (LOADF  (LDF, Fdest, 0, Rat)));
+	   emit (SPECIFIC (LOADF  (LDF, Fat, 0, Rat)));
 	   emit (SPECIFIC (FPMOVE (FITOD, Fat, Fdest)))
        end
 
@@ -728,11 +729,6 @@ struct
 			 | Rtl.LABEL' l => DIRECT(l, NONE))
        in
 
-(* XXX subtraction redundant now because of reserverd 16 words in frame?
-	   (case call_type of
-		Rtl.C_NORMAL => emit(SPECIFIC(INTOP(ADD,Rsp, IMMop 256, Rsp)))
-	      | _ => ());
-*)
 	   (case (call_type, length args <= length indirect_int_args) of
 		(Rtl.ML_TAIL _, false) =>
 		    (emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
@@ -751,11 +747,6 @@ struct
 					 argregs  = NONE,
 					 resregs  = NONE,
 					 destroys = NONE}))))
-(* XXX subtraction redundant now because of reserverd 16 words in frame?
-	   (case call_type of
-		Rtl.C_NORMAL => emit(SPECIFIC(INTOP(ADD,Rsp, IMMop 256, Rsp)))
-	      | _ => ())
-*)
        end
 
 
@@ -838,7 +829,7 @@ struct
 				    Rtl.LADDR(writelist_end,0,end_addr),
 				    Rtl.LOAD32I(Rtl.EA(end_addr,0),end_val),
 				    Rtl.BCNDI(Rtl.LT, cursor_val, Rtl.REG end_val, afterLabel, true)];
-		     emit (BASE (MOVI (Rheap, Rat)));
+		     emit (BASE (MOVE (Rheap, Rat)));
 		     emit (BASE (GC_CALLSITE afterLabel));
 		     emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("gc_raw"), NONE,
 				      {regs_modified=[Rat], regs_destroyed=[Rat],

@@ -23,7 +23,7 @@ struct
   val debug = Stats.ff("SparcTrackstorage")
   fun inc x = x := (!x + 1)
 
-  val error = fn s => Util.error "alpha/trackstorage.sml" s
+  val error = fn s => Util.error "Alpha/trackstorage.sml" s
 
   datatype summary = SUMMARY of 
                     {registers_used    : Machine.register list,
@@ -77,12 +77,14 @@ struct
     | Return Address |
     | stored here    |
     |----------------|
-    | Additional     |
-    | args, if any   |
+    | Additional or  |
+    | non-int args   |
+    |----------------|
+    | hidden param   | <--- we don't use this
     |----------------|
     | 6 words which  | 
     | callee may     | 
-    | store reg args |
+    | store int args |
     |----------------|
     | 16 words to    | 
     | save "in" and  |                 
@@ -101,12 +103,6 @@ struct
       end
     structure IntSet = BinarySetFn(Intkey)
 
-
-  fun noteStackArg (INFO{stackmap,...}) (reg, arg_num) =
-        (case (Regmap.find(! stackmap, reg)) of
-	   NONE => stackmap := Regmap.insert(! stackmap, reg, 
-					     CALLER_FRAME_ARG arg_num)
-         | SOME _ => error "noteStackArg:  Redefining register")
 
   fun stackOffset (INFO{callee_saves, stackmap, num_fps_spilled,
 			num_permanent_resident, num_ints_spilled, ...}) (neighbors,reg) =
@@ -168,8 +164,10 @@ struct
       val num_ints_saved = length saved_int_regs
       val num_fps_saved = length saved_fp_regs
 
-      val args_offset = 4 * 16
-      val ra_offset = args_offset + 4 * (6 + !num_args)
+      val save_offset = 4 * 16
+      val hidden_offset = save_offset + 4 * 6
+      val extra_args_offset = hidden_offset + 4
+      val ra_offset = extra_args_offset + 4 * (!num_args)
       val callee_save_int_offset = ra_offset + 4
       val callee_save_fp_offset  = callee_save_int_offset + 4 * num_ints_saved
       val callee_save_slots = 
@@ -183,11 +181,13 @@ struct
       val stackframe_size = stackAlign(spilled_fp_offset +
 				       8 * (! num_fps_spilled + 1))
 
-      fun fixStackOffset (THIS_FRAME_ARG i) = ACTUAL4 (4 * i)
+      fun fixStackOffset (THIS_FRAME_ARG4 i) = ACTUAL4 (extra_args_offset + 4 * i)
+	| fixStackOffset (THIS_FRAME_ARG8 i) = ACTUAL8 (extra_args_offset + 4 * i)
+	| fixStackOffset (CALLER_FRAME_ARG4 i) = ACTUAL4(stackframe_size + extra_args_offset + 4 * i)
+	| fixStackOffset (CALLER_FRAME_ARG8 i) = ACTUAL8(stackframe_size + extra_args_offset + 4 * i)
+	| fixStackOffset FRAME_TEMP = ACTUAL4(hidden_offset)
 	| fixStackOffset (SPILLED_INT i) = ACTUAL4(spilled_int_offset + 4*i)
 	| fixStackOffset (SPILLED_FP i) = ACTUAL8(spilled_fp_offset + 8*i)
-	| fixStackOffset (CALLER_FRAME_ARG i) = ACTUAL4(stackframe_size + 
-							4 * i)
 	| fixStackOffset (RETADD_POS) = ACTUAL4 ra_offset
         | fixStackOffset x = x
 

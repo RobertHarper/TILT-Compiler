@@ -113,7 +113,7 @@ structure Listops :> LISTOPS =
 			  end
     fun member (elem,[]) = false
       | member (elem,a::rest) = (elem = a) orelse member(elem,rest)
-    fun member_eq (eq,elem:'a,[]:'a list) = false
+    fun member_eq (eq,elem:'a,[]:'b list) = false
       | member_eq (eq,elem,a::rest) = eq(elem,a) orelse member_eq(eq,elem,rest)
     fun assoc (aa,[]) = NONE
       | assoc (aa,(a,b)::rest) = if (a = aa) then SOME b else assoc(aa,rest)

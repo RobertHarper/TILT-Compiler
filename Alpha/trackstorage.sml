@@ -1,4 +1,5 @@
-(*$import DECALPHA PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE BinarySetFn Util *)
+(*$import DecAlpha PRINTUTILS MACHINEUTILS TRACKSTORAGE BinarySetFn Util *)
+
 functor AlphaTrackstorage(structure Printutils : PRINTUTILS 
 			      where type Machine.specific_instruction = Decalpha.specific_instruction
 			      where type Machine.instruction = Decalpha.Machine.instruction
@@ -95,12 +96,6 @@ struct
     structure IntSet = BinarySetFn(Intkey)
 
 
-  fun noteStackArg (INFO{stackmap,...}) (reg, arg_num) =
-        (case (Regmap.find(! stackmap, reg)) of
-	   NONE => stackmap := Regmap.insert(! stackmap, reg, 
-					     CALLER_FRAME_ARG arg_num)
-         | SOME _ => error "noteStackArg:  Redefining register")
-
   fun stackOffset (INFO{callee_saves, stackmap, num_fps_spilled,
 			num_permanent_resident, num_ints_spilled, ...}) (neighbors,reg) =
       (case (Regmap.find (! stackmap, reg)) of
@@ -192,11 +187,13 @@ struct
       val stackframe_size = stackAlign(spilled_fp_offset +
 				       8 * (! num_fps_spilled + 1))
 
-      fun fixStackOffset (THIS_FRAME_ARG i) = ACTUAL8 (8 * i)
+      fun fixStackOffset (THIS_FRAME_ARG4 i) = error "THIS_FRAME_ARG4 occurred"
+	| fixStackOffset (THIS_FRAME_ARG8 i) = ACTUAL8 (8 * i)
 	| fixStackOffset (SPILLED_INT i) = ACTUAL4(spilled_int_offset + 4*i)
 	| fixStackOffset (SPILLED_FP i) = ACTUAL8(spilled_fp_offset + 8*i)
-	| fixStackOffset (CALLER_FRAME_ARG i) = ACTUAL8(stackframe_size + 
-							8 * i)
+	| fixStackOffset FRAME_TEMP = error "FRAME_TEMP occurred"
+	| fixStackOffset (CALLER_FRAME_ARG4 i) = error "CALLER_FRAME_ARG4 occurred"
+	| fixStackOffset (CALLER_FRAME_ARG8 i) = ACTUAL8(stackframe_size + 4 * i)
 	| fixStackOffset (RETADD_POS) = ACTUAL8 ra_offset
         | fixStackOffset x = x
 

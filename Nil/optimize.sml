@@ -1192,8 +1192,7 @@ fun pp_alias UNKNOWN = print "unknown"
 					     | App_e(openness,Var_e v,clist,elist,eflist) => 
 						   (case (lookup_alias(state,v)) of
 							ETAe (depth,uncurry,args) => 
-							    (print "found ETAe in etabnd\n";
-							     if (depth > 1) 
+							    (if (depth > 1) 
 								then
 								    let val new_info = (depth-1,uncurry,
 											args @ [(clist,elist,eflist)])

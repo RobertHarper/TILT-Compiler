@@ -26,7 +26,7 @@ struct
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
 
-    (* --------------------- EXTENDERS ---------------------------------------- *)
+    (* --------------- BASICS ------------------------------- *)
     type var_seq_map = (label * phrase_class) VarMap.map * var list
     fun var_seq_insert ((m,s),v,value) = (VarMap.insert(m,v,value),v::s)
     val empty_context = CONTEXT{fixityList = [],
@@ -34,12 +34,46 @@ struct
 				pathMap = PathMap.empty,
 				ordering = []}
 
+    (* ---------------- LOOKUP RULES --------------------------- 
+     The lookup rules can return item from different grammatical classes
+     so we need some additional datatypes to package up the results 
+     --------------------------------------------------------- *)
 
+    type phrase_class_p = path * phrase_class
+
+
+    fun Context_Fixity (CONTEXT {fixityList,...}) = fixityList
+    fun Context_Ordering (CONTEXT {ordering,...}) = rev ordering
+    fun Context_Lookup  (CONTEXT {labelMap, ...}, lab) = Name.LabelMap.find(labelMap, lab)
+    fun Context_Lookup_Path (CONTEXT {pathMap, ...}, PATH path) = Name.PathMap.find(pathMap, path)
+    fun Context_Lookup' (CONTEXT {pathMap, ...}, v) = Name.PathMap.find(pathMap, (v,[]))
+
+
+    (* --------------------- EXTENDERS ---------------------------------------- *)
     fun add_context_fixity(CONTEXT {fixityList, labelMap, pathMap, ordering}, f) = 
 	CONTEXT({fixityList = f @ fixityList,
 		 labelMap = labelMap,
 		 pathMap = pathMap,
 		 ordering = ordering})
+
+    fun reduce_signat ctxt (SIGNAT_VAR v) = 
+	(case (Context_Lookup'(ctxt,v)) of
+	     SOME(_,PHRASE_CLASS_SIG(v,s)) => s
+	   | _ => error "reduce_signat found unbound sigvar")
+      | reduce_signat ctxt (SIGNAT_OF (PATH(v,labs))) = 
+	  let val s = (case Context_Lookup'(ctxt,v) of
+			   SOME(_,PHRASE_CLASS_MOD(_,_,s)) => s
+			 | SOME _ => error ("SIGNAT_OF(" ^ (Name.var2string v) ^ ",...) unbound"))
+	      fun find l [] = error "cannot find label in SIGNAT_OF"
+		| find l ((SDEC(l',DEC_MOD(_,_,s)))::rest) = s
+		| find l (_::rest) = find l rest
+	      fun project (l, s) = 
+		  (case (reduce_signat ctxt s) of
+		       SIGNAT_STRUCTURE(SOME _, sdecs) => find l sdecs
+		     | SIGNAT_STRUCTURE _ => error "unselfified signatture in context"
+		     | _ => error "ill-formed SIGNAT_OF")
+	  in  foldl project s labs
+	  end
 
     fun add_sdec(ctxt, pathopt, sdec as (SDEC(l,dec))) = 
 	let fun mk_path v = (case pathopt of
@@ -70,16 +104,17 @@ struct
 	  | DEC_MOD (v,_,(SIGNAT_STRUCTURE(NONE,_))) => 
 	    (print "adding non-selfified signature to context: "; pp_sdec sdec; print "\n";
 	     error "adding non-selfified signature to context")
-	  | DEC_MOD(v,_,s as SIGNAT_STRUCTURE(SOME p, sdecs)) => 
-		  let val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, false,s)))
-		  in  if (is_open l)
-			  then foldl (sdec_help (v,l)) ctxt sdecs
-		      else ctxt
-		  end
 	  | DEC_MOD(v,b,s) =>
-		  let val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, b, s)))
-		  in  if (is_open l)
-			  then error "add_context_sdec got DEC_MOD with open label but not a SIGNAT_STRUCTURE"
+		  let val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, b,s)))
+		  in  if (is_open l) 
+			  then let val sdecs = 
+			      (case s of
+				   SIGNAT_STRUCTURE(SOME p, sdecs) => sdecs
+				 | _ => (case (reduce_signat ctxt s) of
+					     SIGNAT_STRUCTURE(SOME p, sdecs) => sdecs
+					   | _ => error "open label - not self, struct sig"))
+			       in  foldl (sdec_help (v,l)) ctxt sdecs
+			       end
 		      else ctxt
 		  end
 	end
@@ -138,19 +173,6 @@ struct
 	
 
 
-    (* ---------------- LOOKUP RULES --------------------------- 
-     The lookup rules can return item from different grammatical classes
-     so we need some additional datatypes to package up the results 
-     --------------------------------------------------------- *)
-
-    type phrase_class_p = path * phrase_class
-
-
-    fun Context_Fixity (CONTEXT {fixityList,...}) = fixityList
-    fun Context_Ordering (CONTEXT {ordering,...}) = rev ordering
-    fun Context_Lookup  (CONTEXT {labelMap, ...}, lab) = Name.LabelMap.find(labelMap, lab)
-    fun Context_Lookup_Path (CONTEXT {pathMap, ...}, PATH path) = Name.PathMap.find(pathMap, path)
-    fun Context_Lookup' (CONTEXT {pathMap, ...}, v) = Name.PathMap.find(pathMap, (v,[]))
 
     (* faster when first context is larger than second *)
     fun plus (ctxt1 as CONTEXT{fixityList = fl1, labelMap = lm1, pathMap = pm1, ordering = ord1},

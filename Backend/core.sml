@@ -12,14 +12,16 @@ struct
     datatype operand = REGop of register
 	               | IMMop of int
 
-    datatype stacklocation =
-	  CALLER_FRAME_ARG of int
-	| THIS_FRAME_ARG of int
-	| SPILLED_INT of int
-	| SPILLED_FP of int
-	| ACTUAL4 of int
-	| ACTUAL8 of int
-	| RETADD_POS
+    datatype stacklocation = CALLER_FRAME_ARG4 of int  (* int indicates word count *)
+	                   | CALLER_FRAME_ARG8 of int
+                           | THIS_FRAME_ARG4 of int
+                           | THIS_FRAME_ARG8 of int
+		           | FRAME_TEMP
+                           | SPILLED_INT of int        
+                           | SPILLED_FP of int
+                           | RETADD_POS
+                           | ACTUAL4 of int            (* int indicates actual offset - mult of 4 *)
+                           | ACTUAL8 of int
       
    (* Where a given pseudoregister is physically located *)
    datatype assign = IN_REG of register
@@ -74,13 +76,16 @@ struct
   fun msReg (R n) = "$" ^ (ms n)
     | msReg (F n) = "$f" ^ (ms n)
 
-  fun msStackLocation (CALLER_FRAME_ARG i) = "CallerFrameArg["^(ms i)^"]"
-    | msStackLocation (THIS_FRAME_ARG i) = "ThisFrameArg["^(ms i)^"]"
+  fun msStackLocation (CALLER_FRAME_ARG4 i) = "CallerFrameArg4["^(ms i)^"]"
+    | msStackLocation (CALLER_FRAME_ARG8 i) = "CallerFrameArg8["^(ms i)^"]"
+    | msStackLocation (THIS_FRAME_ARG4 i) = "ThisFrameArg4["^(ms i)^"]"
+    | msStackLocation (THIS_FRAME_ARG8 i) = "ThisFrameArg8["^(ms i)^"]"
+    | msStackLocation (FRAME_TEMP) = "FrameTemp"
     | msStackLocation (SPILLED_INT i) = "Spill-I["^(ms i)^"]"
     | msStackLocation (SPILLED_FP i) = "Spill-F["^(ms i)^"]"
+    | msStackLocation (RETADD_POS) = "RETADD_POS"
     | msStackLocation (ACTUAL4 i) = "4@" ^ (ms i)
     | msStackLocation (ACTUAL8 i) = "8@" ^ (ms i)
-    | msStackLocation (RETADD_POS) = "RETADD_POS"
 
   fun msAssign (IN_REG r) = msReg r
     | msAssign (ON_STACK sl) = msStackLocation sl
@@ -225,8 +230,7 @@ struct
     | SAVE_CS of label
 
    datatype base_instruction = 
-      MOVI     of register * register
-    | MOVF     of register * register
+      MOVE     of register * register
     | PUSH     of register * stacklocation
     | POP      of register * stacklocation
     | PUSH_RET of stacklocation option

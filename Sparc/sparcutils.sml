@@ -21,16 +21,16 @@ struct
    val min_ireg = ireg 0
    val min_freg = freg 0
    val max_ireg = ireg 31
-   val max_freg = freg 31
+   val max_freg = freg 62
    fun nextReg (reg as (R _)) = 
           if (eqRegs reg max_ireg) then min_ireg else (ireg(regNum reg +1))
      | nextReg (reg as (F _)) =
-          if (eqRegs reg max_freg) then min_freg else (freg(regNum reg +1))
+          if (eqRegs reg max_freg) then min_freg else (freg(regNum reg +2))
 
    fun prevReg (reg as (R _)) = 
           if (eqRegs reg min_ireg) then max_ireg else (ireg(regNum reg -1))
      | prevReg (reg as (F _)) =
-          if (eqRegs reg min_freg) then max_freg else (freg(regNum reg -1))
+          if (eqRegs reg min_freg) then max_freg else (freg(regNum reg -2))
 
    fun listToSet lst = Regset.addList(Regset.empty, lst)
    fun setToList set = Regset.listItems set
@@ -72,18 +72,20 @@ struct
      [ireg 8,  ireg 9,  ireg 10, ireg 11, ireg 12, ireg 13,
       ireg 16, ireg 17, ireg 18, ireg 19, ireg 20, ireg 21, ireg 22, ireg 23, 
       ireg 24, ireg 25, ireg 26, ireg 27, ireg 28, ireg 29,
-      freg 0,  freg 1,  freg 2,  freg 3,  freg 4, freg 5, freg 6,
-      freg 7,  freg 8,  freg 9,
-      freg 10, freg 11, freg 12, freg 13, freg 14, freg 15,
-      freg 16, freg 17, freg 18, freg 19, freg 20, freg 21,
-      freg 22, freg 23, freg 24, freg 25, freg 26, freg 27,
-      freg 28, freg 29, freg 30, freg 31]
+
+      freg 0,  freg 2,  freg 4,  freg 6, freg 8,
+      freg 10, freg 12, freg 14, freg 16, freg 18,
+      freg 20, freg 22, freg 24, freg 26, freg 28,
+      freg 30, freg 32, freg 34, freg 36, freg 38,
+      freg 40, freg 42, freg 44, freg 46, freg 48,
+      freg 50, freg 52, freg 54, freg 56, freg 58,
+      freg 60, freg 62]
 
    val save_across_C = listintersect([Rheap,Rhlimit,Rexnptr],
 				     C_caller_saved_regs)
 
    val C_int_args = map ireg [8, 9, 10, 11, 12, 13]
-   val C_fp_args  = map freg []
+   val C_fp_args  = C_int_args  (* The SPARC passes float args in the int regs *)
    val C_ra_reg   = Rra
    val C_int_res  = [ireg 8]
    val C_fp_res   = [freg 0]
@@ -92,12 +94,12 @@ struct
 (*       val num_indirect_int_args = 14 *)
 (*       val num_indirect_fp_args = 21 *)
        val num_indirect_int_args = 32
-       val num_indirect_fp_args = 32
+       val num_indirect_fp_args = 64
    in
        val indirect_int_args = 
 	   listdiff(Regset.listItems (regsBelow (ireg (num_indirect_int_args - 1))), special_iregs)
        val indirect_fp_args  = 
-	   Regset.listItems (regsBelow (freg (num_indirect_fp_args - 1)))
+	   Regset.listItems (regsBelow (freg (num_indirect_fp_args - 2)))
    end
 
    val indirect_ra_reg   = Rra

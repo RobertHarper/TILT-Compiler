@@ -1,4 +1,5 @@
-(*$import DECALPHA MACHINEUTILS TilWord64 DIVMULT Util *)
+(*$import DecAlpha DecAlphaUtils Util TilWord64 DIVMULT *)
+
 structure Divmult
   :> DIVMULT where DA = Decalpha = 
   struct

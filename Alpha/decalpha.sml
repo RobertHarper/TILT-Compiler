@@ -275,15 +275,6 @@ structure Machine =
     | rtl_to_ascii (SAVE_CS _) = "SAVE_CS"
 
 
-
-  fun msStackLocation (CALLER_FRAME_ARG i) = "CallerFrameArg["^(ms i)^"]"
-    | msStackLocation (THIS_FRAME_ARG i) = "ThisFrameArg["^(ms i)^"]"
-    | msStackLocation (SPILLED_INT i) = "Spill-I["^(ms i)^"]"
-    | msStackLocation (SPILLED_FP i) = "Spill-F["^(ms i)^"]"
-    | msStackLocation (ACTUAL4 i) = "4@" ^ (ms i)
-    | msStackLocation (ACTUAL8 i) = "8@" ^ (ms i)
-    | msStackLocation (RETADD_POS) = "RETADD_POS"
-
   val comma  	    	       = ", "
   val tab                      = "\t"
   val newline                  = "\n"
@@ -357,11 +348,8 @@ structure Machine =
 				 ^ comma ^ (msDisp(Rra,0)) ^
 				 comma ^ (ms hint))
     | msInstr_base (RTL instr) =  (tab ^ (rtl_to_ascii instr))
-    | msInstr_base (MOVI (Rsrc,Rdest)) =
+    | msInstr_base (MOVE (Rsrc,Rdest)) =
                                 ("\tmov\t" ^ (msReg Rsrc) ^ comma ^
-				 msReg Rdest)
-    | msInstr_base (MOVF (Rsrc,Rdest)) =
-                                ("\tfmov\t" ^ (msReg Rsrc) ^ comma ^
 				 msReg Rdest)
     | msInstr_base (PUSH (Rsrc, sloc)) = 
                                 ("\tPUSH\t" ^ (msReg Rsrc) ^ comma ^
@@ -566,8 +554,7 @@ structure Machine =
 				 args, results, ...})))  = (results, real_Rpv :: reg :: args)
       | defUse (BASE (RTL (RETURN{results})))      = ([], Rra :: results)
       | defUse (BASE (RTL _))                      = ([], [])
-      | defUse (BASE(MOVI (Rsrc,Rdest)))           = ([Rdest],[Rsrc])
-      | defUse (BASE(MOVF (Rsrc,Rdest)))           = ([Rdest],[Rsrc])
+      | defUse (BASE(MOVE (Rsrc,Rdest)))           = ([Rdest],[Rsrc])
       | defUse (BASE(PUSH (Rsrc, _)))              = ([], [Rsrc, Rsp])
       | defUse (BASE(POP (Rdest, _)))              = ([Rdest], [Rsp])
       | defUse (BASE(PUSH_RET (_)))                = ([], [Rra, Rsp])
@@ -613,8 +600,7 @@ structure Machine =
          | xspec (FPCONV(oper, Fsrc, Fdest)) = FPCONV(oper, fs Fsrc,fd Fdest)
 	 | xspec TRAPB = TRAPB
 	 | xspec (IALIGN ia) = IALIGN ia
-       fun xbase (MOVI(src,dest)) = MOVI(fs src, fd dest)
-         | xbase (MOVF(src,dest)) = MOVF(fs src, fd dest)
+       fun xbase (MOVE(src,dest)) = MOVE(fs src, fd dest)
          | xbase (PUSH(src,sloc)) = PUSH(fs src, sloc)
          | xbase (POP(dest,sloc)) = POP(fd dest, sloc)
          | xbase (PUSH_RET arg) = PUSH_RET(arg)

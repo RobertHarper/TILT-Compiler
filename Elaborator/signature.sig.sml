@@ -17,8 +17,8 @@ sig
 
     val xsig_where_type : context * sdec list * label list * con * kind -> sdec list
     val xsig_where_structure : context * sdec list * label list * mod * signat -> sdec list
-    val xsig_sharing_type : context *  sdec list * labels list -> sdec list
-    val xsig_sharing_structure : context *  sdec list * labels list -> sdec list
+    val xsig_sharing_types : context *  sdec list * labels list -> sdec list
+    val xsig_sharing_structures : context *  sdec list * labels list -> sdec list
 
     (* xcoerce_seal : ... * mod_actual * sig_actual * sig_target -> mod_result
 

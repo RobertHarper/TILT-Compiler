@@ -61,7 +61,10 @@ long GetIReg(struct ucontext *uctxt, int i)
 	return (gwins->wbuf[gwins->wbcnt].rw_local[i-16]);
       else 
 	return (gwins->wbuf[gwins->wbcnt].rw_in[i-24]);
-    else assert(0);
+    else {
+      printf ("GetIReg i = %d  gwins = %d\n",i,gwins);
+      assert(0);
+    }
   }
   assert(0);
 }
@@ -311,12 +314,15 @@ void fpe_handler(int signum,
 #ifdef alpha_osf
 		 siginfo_t *siginfo, 
 #endif
+#ifdef solaris
+		 siginfo_t *siginfo, 
+#endif
 #ifdef rs_aix
 		 int always_zero,
 #endif
 		 struct ucontext *uctxt)
 {
-#ifdef alpha_osf
+
   int signo = siginfo->si_signo;
   int errno = siginfo->si_errno;
   int code = siginfo->si_code;
@@ -342,7 +348,6 @@ void fpe_handler(int signum,
     case FPE_FLTOVF:
       gprintf("%d %d ",errno,code);
       gprintf("Float overflow: or could be integer overflow\n");
-return;
       raise_exception(uctxt,overflow_exn);
       break;
     case FPE_FLTUND:
@@ -368,9 +373,9 @@ return;
       break;
     }
   exit(-1);
-#else
+  /*
       printf("Unknown FPE signal in non-alpha not implemented\n");
-#endif
+      */
 }
 
 

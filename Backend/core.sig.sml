@@ -10,13 +10,16 @@ signature CORE =
     datatype register = R of int
                       | F of int
 	
-    datatype stacklocation = CALLER_FRAME_ARG of int
-                           | THIS_FRAME_ARG of int
-                           | SPILLED_INT of int
+    datatype stacklocation = CALLER_FRAME_ARG4 of int  (* int indicates word count *)
+	                   | CALLER_FRAME_ARG8 of int
+                           | THIS_FRAME_ARG4 of int
+                           | THIS_FRAME_ARG8 of int
+                           | FRAME_TEMP                (* should use SPILL *)
+                           | SPILLED_INT of int        
                            | SPILLED_FP of int
-                           | ACTUAL4 of int
-                           | ACTUAL8 of int
                            | RETADD_POS
+                           | ACTUAL4 of int            (* int indicates actual offset - mult of 4 *)
+                           | ACTUAL8 of int
       
     (* Where a given pseudoregister is physically located *)
     datatype assign = IN_REG of register
@@ -57,8 +60,7 @@ signature CORE =
 
 
     datatype base_instruction = 
-      MOVI    of register * register
-    | MOVF    of register * register
+      MOVE    of register * register
     | PUSH    of register * stacklocation
     | POP     of register * stacklocation
     | PUSH_RET of stacklocation option  (* may not be fully realized during register allocation *)

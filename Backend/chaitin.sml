@@ -105,31 +105,19 @@ struct
      | sieve_regs (_ :: t) = sieve_regs t
      | sieve_regs nil = nil
 
-   fun mvregs (src : register, dest : register) =
-       case (src,dest)
-       of (R _,R _) => BASE(MOVI (src,dest))
-        | (F _,F _) => BASE(MOVF (src,dest))
-        | _ => error "mvregs: type of regs doesn't match"
+   fun mv (src : assign,dest : assign) : instruction list =
+     case (src,dest) of
+	 (IN_REG r, IN_REG r') => [BASE(MOVE (r,r'))]
+       | (IN_REG r, ON_STACK s) => [BASE(PUSH(r,s))]
+       | (ON_STACK s, IN_REG r') => [BASE(POP(r',s))]
+       | (ON_STACK s, ON_STACK s') => (error "Warning! mv: mem-to-mem transfer")
+       | _ => error "m: not a valid argument source or dest"
 
    fun mv2reg (loc : assign,dest : register) : instruction =
-     case loc
-     of IN_REG r => mvregs(r,dest)
-      | ON_STACK s => BASE(POP(dest,s))
-      | _ => error "mv2reg: not a valid argument source"
-
-   fun mv (src : assign,dest : assign) : instruction list =
-     case src
-     of IN_REG r => 
-	   (case dest 
-	    of IN_REG r' => [mvregs(r,r')]
-	     | ON_STACK s => [BASE(PUSH(r,s))]
-	     | _ => error "mv 1")
-      | ON_STACK s => 
-	   (case dest
-	    of IN_REG r' => [BASE(POP(r',s))]
-	     | ON_STACK s' => (print "Warning! mv: mem-to-mem transfer"; [])
-	     | _ => error "mv 2")
-      | _ => error "m: not a valid argument source"
+     case loc of
+	 IN_REG r => BASE(MOVE (r,dest))
+       | ON_STACK s => BASE(POP(dest,s))
+       | _ => error "mv2reg: not a valid argument source"
 
    (* given two lists of sources and destination, make
       alist of moves *)
@@ -386,8 +374,10 @@ struct
 	   val max_C_args = ref 0
 	   val regs_destroyed = ref Regset.empty
 	   val regs_modified = ref Regset.empty
-	   fun check_arg (ON_STACK (THIS_FRAME_ARG i)) =
+	   fun check_arg (ON_STACK (THIS_FRAME_ARG4 i)) =
 	              max_on_stack := Int.max (!max_on_stack,i+1)
+	     | check_arg (ON_STACK (THIS_FRAME_ARG8 i)) =
+	              max_on_stack := Int.max (!max_on_stack,i+2)
 	     | check_arg _ = ()
 	   fun expand_call (call as CALL{calltype,args,func,results,
 					  destroys,...}) : instruction list =
@@ -415,7 +405,7 @@ struct
 (* new code *)              | DIRECT (ML_EXTERN_LABEL label, _) => 
 				  if hasRpv then [BASE(LADDR(Rpv_virt,ML_EXTERN_LABEL label))] 
 				  else []
-			    | INDIRECT reg => [mvregs(reg,Rpv_virt)]
+			    | INDIRECT reg => [BASE(MOVE(reg,Rpv_virt))]
 (*			    | _ => error "replace_calls: pv move") *)
 				)
 			      @ (BASE(RTL(CALL{calltype=calltype,
@@ -744,7 +734,7 @@ struct
 					      (case Regmap.find(srcmap,Raddr) of
 						   SOME r => r
 						 | NONE => error "can't translate JMP"))
-			  val mov_instr = BASE(MOVI(jump_reg, Rpv_virt))
+			  val mov_instr = BASE(MOVE(jump_reg, Rpv_virt))
 			  val jump_instr = BASE(JSR(false,jump_reg,1,rtllabs))
 		      in  mov_instr :: fixup_code @ [jump_instr]
 		      end
@@ -836,39 +826,24 @@ struct
 			      BASE(RET(false, 1))]
 		       in  res
 		       end
-		       | BASE(RTL HANDLER_ENTRY) => []
-		       | BASE(RTL (SAVE_CS _)) => []
-		       | BASE(GC_CALLSITE llabel) => (add_info{label=llabel,live=live}; [])
-		       | BASE(MOVI (src,dest)) =>
-		           let val dest' = getreg_posdead dest
-			       val src' = getreg src
-			   in
-			       case (src',dest') of
-				   (IN_REG r,IN_REG r') => 
-				       if !delete_moves andalso eqRegs r r' 
-					   then []
-				       else [BASE(MOVI(r,r'))]
-				 | (ON_STACK l,IN_REG r') => [pop(r',l)]
-				 | (IN_REG r,ON_STACK l') => [push(r,l')]
-				 | (ON_STACK l,ON_STACK l') =>
-					   [pop(Rat,l),push(Rat,l')]
-				 | _ => error "allocateInstr: MOVI"
-			   end
-		 | BASE(MOVF (src,dest)) =>
-		    let val dest' = getreg_posdead dest
-		        val src' = getreg src
-		    in
-		      case (src', dest') of
-		        (IN_REG r,IN_REG r') =>
-			     if !delete_moves andalso eqRegs r r' 
-			     then []
-			     else [BASE(MOVF(r,r'))]
-		      | (ON_STACK l,IN_REG r') => [pop(r',l)]
-		      | (IN_REG r,ON_STACK l') => [push(r,l')]
-		      | (ON_STACK l,ON_STACK l') =>
-			       [pop(Fat,l),push(Fat,l')]
-		      | _ => error "allocateInstr: MOVF"
-		    end
+		  | BASE(RTL HANDLER_ENTRY) => []
+		  | BASE(RTL (SAVE_CS _)) => []
+		  | BASE(GC_CALLSITE llabel) => (add_info{label=llabel,live=live}; [])
+		  | BASE(MOVE (src,dest)) =>
+		       let val dest' = getreg_posdead dest
+			   val src' = getreg src
+		       in
+			   case (src',dest') of
+			       (IN_REG r,IN_REG r') => 
+				   if !delete_moves andalso eqRegs r r' 
+				       then []
+				   else [BASE(MOVE(r,r'))]
+			     | (ON_STACK l,IN_REG r') => [pop(r',l)]
+			     | (IN_REG r,ON_STACK l') => [push(r,l')]
+			     | (ON_STACK l,ON_STACK l') =>
+				       [pop(Rat,l),push(Rat,l')]
+			     | _ => error "allocateInstr: MOVE"
+		       end
                  | _ =>
 			let val (def,use) = defUse instr
 			    val {precode, srcmap, dstmap, postcode} = putInRegs use def
@@ -1080,9 +1055,8 @@ struct
 		     | (true,false) => addBias dest (src,1)
 		     | (false,true) => addBias src (dest,1)
 		     | (false,false) => addPossibleBias (src,dest,1)
-	        in case stripAnnot i
-		  of BASE(MOVI (src,dest)) => domv(src,dest)
-		   | BASE(MOVF (src,dest)) => domv(src,dest)
+	        in case stripAnnot i of
+		     BASE(MOVE (src,dest)) => domv(src,dest)
 		   | _ => ()
 	        end
 	      fun processBlock (BLOCK{instrs,...}) =
@@ -1153,8 +1127,7 @@ struct
 						   callee_saved,
 						   blocklabels,
 						   args, res} : procsig,
-		       stack_resident : stacklocation
-		                        Regmap.map,
+		       stack_resident : stacklocation Regmap.map,
 		       tracemap     : (register option * Tracetable.trace) Regmap.map}) = 
 
      let
@@ -1163,12 +1136,14 @@ struct
        (* map arguments on stack to proper location *)
 
        val arg_ra_pos = 
-	   case orig_args
-	   of NONE => NONE
-	    | (SOME l) =>
-	        SOME(map (fn (ON_STACK (THIS_FRAME_ARG i)) =>
-	                          ON_STACK(CALLER_FRAME_ARG i)
-	                      | a => a) l)
+	   case orig_args of
+	       NONE => NONE
+	     | SOME l => 
+		   let fun mapper (ON_STACK (THIS_FRAME_ARG4 i)) = ON_STACK(CALLER_FRAME_ARG4 i)
+			 | mapper (ON_STACK (THIS_FRAME_ARG8 i)) = ON_STACK(CALLER_FRAME_ARG8 i)
+			 | mapper otherLoc = otherLoc
+		   in  SOME(map mapper l)
+		   end
 
       val _ = if !debug then
 	           (emitString commentHeader;

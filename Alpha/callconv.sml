@@ -1,4 +1,4 @@
-(*$import DECALPHA MACHINEUTILS CALLCONV Util *)
+(*$import DecAlpha DecAlphaUtils Util CALLCONV  *)
 
 structure DecalphaCallconv
     :> CALLCONV where Machine = Decalpha.Machine =
@@ -88,8 +88,8 @@ struct
      end
 
   fun unknown_ml def (FORMALS {args,results}) =
-     let val stackloc = if def then CALLER_FRAME_ARG      
-	                else THIS_FRAME_ARG
+     let val stackloc = if def then CALLER_FRAME_ARG8
+	                else THIS_FRAME_ARG8
 	 val actual_args = unknownArgPositions stackloc args 
 	 val actual_results = 	map IN_REG (assignRegsAmong results 
 					    indirect_int_res indirect_fp_res)

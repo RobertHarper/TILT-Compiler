@@ -1,4 +1,4 @@
-(*$import Pprtl GRAPH PRINTUTILS RECURSION Util *)
+(*$import Pprtl GRAPH PRINTUTILS RECURSION Util Labelgraph *)
 
 functor Recursion(structure Printutils : PRINTUTILS)
     :> RECURSION =
