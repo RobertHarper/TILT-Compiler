@@ -35,3 +35,5 @@ val vsub1 = String.sub
 type instream = TextIO.instream
 
 val notb = fn (x : int) => ~x - 1
+val atan = Real.Math.atan
+val sqrt = Real.Math.sqrt
