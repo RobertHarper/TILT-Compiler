@@ -587,7 +587,25 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val name_proj_r = Var_e var_proj_r
 
 	   local
-	       val type_mod_r' = Nilstatic.con_reduce(NILctx_of context, type_mod_r)
+	       val Var_c var_mod_c = name_mod_c
+	       val labels_r = (case type_mod_r of
+				   Prim_c(Record_c labels,_) => labels
+				 | _ => [])
+	       fun mapper ((l,v),_) = if (Listops.member_eq(Name.eq_label,l,labels_r))
+					  then NONE else SOME(v,Proj_c(name_mod_c,l))
+	       val table = 
+		   (case (strip_singleton knd_mod_c) of
+			Record_k lvk_seq => List.mapPartial mapper (Util.sequence2list lvk_seq)
+		      | _ => [])
+	       fun subst v = Listops.assoc_eq(Name.eq_var,v,table)
+(*
+	       val _ = (print "knd_mod_c is "; Ppnil.pp_kind knd_mod_c; print "\n")
+	       val _ = (print "type_mod_r before is "; Ppnil.pp_con type_mod_r; print "\n")
+*)
+	       val type_mod_r = Nilutil.substConInCon subst type_mod_r
+(*	       val _ = (print "type_mod_r after is "; Ppnil.pp_con type_mod_r; print "\n") *)
+(*	       val type_mod_r' = Nilstatic.con_reduce(NILctx_of context, type_mod_r) *)
+	       val type_mod_r' = type_mod_r
 	   in
 
 	       val con_proj_c = selectFromCon(name_mod_c, lbls)
@@ -725,6 +743,12 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		record_r_exp_items} = 
 		xsbnds context (!elaborator_specific_optimizations, true, sbnds)
 
+	   fun mapper (Il.SBND(l,Il.BND_CON(v,_))) = SOME(v,Proj_c(Var_c var_str_c,l))
+	     | mapper (Il.SBND(l,Il.BND_MOD(v,_))) = SOME(v,Proj_c(Var_c var_str_c,l))
+	     | mapper _ = NONE
+	   val table = List.mapPartial mapper sbnds
+	   fun subst v = Listops.assoc_eq(Name.eq_var,v,table)
+	   val record_r_field_types = map (Nilutil.substConInCon subst) record_r_field_types
 	   val (record_r_labels,record_r_field_types,record_r_exp_items) = 
 	       let 
 		   val temp = (ListMergeSort.sort gt_label_triple
@@ -965,6 +989,15 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
      | xsbnds' context (do_optimize, _, Il.SBND(lbl, Il.BND_CON(var, il_con)) :: rest) =
        let
+	   val (var,rest) = (case Nilcontext.find_kind(NILctx_of context, var) of
+				NONE => (var,rest)
+			      | SOME _ => let val v = Name.derived_var var
+					      val table = [(var, Il.CON_VAR v)]
+				 	      val Il.MOD_STRUCTURE rest' = 
+							Ilutil.mod_subst_convar(Il.MOD_STRUCTURE rest,table)
+					  in (v,rest')
+					  end)
+
 	   val (con, knd) = xcon context il_con
 
            val context' = 
@@ -1041,27 +1074,29 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
                val (internal_vars, functions) = myunzip (Util.set2list set)
 	       val inner_vars = map (fn v => Name.fresh_named_var((Name.var2name v) ^ "_inner")) external_vars_r
 
-               fun subst v =
+               fun subst self v =
 		   let fun loop (nil,nil,nil) = NONE
 			 | loop (v'::vs, n::ns, iv::ivs) = 
-			   if (Name.eq_var (v,v')) then 
-(*			       SOME (App_e(Open, Var_e n, 
-					   [Var_c poly_var_c], 
-					   if (is_con_arg_unit andalso !optimize_empty_structure)
-					       then []
-					   else [Var_e poly_var_r], 
-					   [])) *)
-			       SOME (Var_e iv)
-			   else
-			       loop (vs,ns,ivs)
-		   in
-		       loop (internal_vars, external_vars_r, inner_vars)
+		       if (Name.eq_var (v,v')) then 
+			   (if (Name.eq_var(v,self))
+				then SOME (Var_e iv)
+			    else
+				SOME (App_e(Open, Var_e n, 
+					    [Var_c poly_var_c], 
+					    if (is_con_arg_unit andalso !optimize_empty_structure)
+						then []
+					    else [Var_e poly_var_r], 
+						[])))
+		       else
+			   loop (vs,ns,ivs)
+		   in loop (internal_vars, external_vars_r, inner_vars)
 		   end
 
-               fun reviseFunction (external_var_r, inner_var,
+               fun reviseFunction (internal_var,
+				   external_var_r, inner_var,
 				   Function(effect,recursive,[],
 					    [(arg_var,arg_con)],[],body,body_con)) =
-		   let val body' = Nilutil.substExpInExp subst body
+		   let val body' = Nilutil.substExpInExp (subst internal_var) body
 		   in  (external_var_r,
 		       Function(Total, Leaf, 
 				[(poly_var_c, knd_arg)],
@@ -1100,7 +1135,8 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
                val cbnd_knds = map (fn _ => nullfunction_k) external_vars_c
 
-               val ebnd_entries = Listops.map3 reviseFunction (external_vars_r, inner_vars, functions)
+               val ebnd_entries = (Listops.map4 reviseFunction 
+				   (internal_vars, external_vars_r, inner_vars, functions))
 
                val ebnd_types = map (fn (_,Function(_,_,carg,vclist,w,_,body_type)) =>
 				     AllArrow_c(Open,Total,carg,map #2 vclist,

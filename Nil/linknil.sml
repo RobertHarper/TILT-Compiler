@@ -168,6 +168,7 @@ struct
 		 cu_bnds = bnds, vmap = total_varmap} = 
 		Tonil.xcompunit ctxt import_varmap sbnds
 
+
             (* create the imports with classifiers by using the NIL context 
 	      returned by the phase splitter *)
 	    fun folder ((ImpExp,v,l),imps) = 
@@ -207,7 +208,9 @@ struct
 			in  folder((ImpExp,rvar,rl),folder((ImpType,cvar,cl),imps))
 			end
 		else imps
+	    val _ = print "---about to compute imports\n"
 	    val imports : import_entry list = rev (foldl folder [] import_temp)
+	    val _ = print "---adone with compute imports\n"
 
 	    (* create the export map by looking at the original sbnds;
 	      labels that are "exportable" must be exported
@@ -329,18 +332,23 @@ struct
 				 val (vc,vr) = (case VarMap.find(total_varmap,v) of
 						    SOME vrc => vrc
 						  | NONE => error "total_varmap missing bindings")
+				 val _ = (print "v = "; PpNil.pp_var v; print "\n";
+					  print "vc = "; PpNil.pp_var vc; print "\n";
+					  print "vr = "; PpNil.pp_var vr; print "\n")
 				 val rpath = make_rpath vr
-				 val cpath = make_rpath vc
+				 val cpath = make_cpath vc
 				 val exports = 
 				     if is_export
 					 then
 					     let 
-(*						 val _ = print "exporting module\n" *)
+						 val _ = print "exporting module\n" 
 						 val er = path2exp rpath
+				 val _ = (print "er = "; PpNil.pp_exp er; print "\n")
 						 val (_,cr) = nilstatic_exp_valid(nil_final_context,er)
+						 val _ = print "exporting module: type-checked exp\n" 
 						 val cc = path2con cpath
 						 val (_,kc) = NilStatic.con_valid(nil_final_context,cc)
-(*						 val _ = print "done exporting module\n" *)
+						 val _ = print "done exporting module\n" 
 					     in (ExportValue(lr,er,cr)::
 						 ExportType(lc,cc,kc)::
 						 exports)
@@ -362,7 +370,9 @@ struct
 			     in  exports
 			     end)
 		end
+	    val _ = print "---about to compute exports\n"
 	   val exports : export_entry list = rev(foldl (folder NONE) [] sdecs)
+	   val _ = print "---done with compute exports\n"
 
 	    val nilmod = MODULE{bnds = bnds, 
 				imports = imports,
