@@ -42,7 +42,8 @@ typedef struct ArraySpec__t {
 
 typedef enum Align__t {NoWordAlign, OddWordAlign, EvenWordAlign} Align_t;
 
-INLINE(AlignMemoryPointer)
+#pragma INLINEP(AlignMemoryPointer)
+static INLINE
 mem_t AlignMemoryPointer(mem_t alloc, Align_t align)
 {
   int curEven;
@@ -55,7 +56,8 @@ mem_t AlignMemoryPointer(mem_t alloc, Align_t align)
   return alloc;
 }
 
-INLINE(UnusedProcAlloc)
+#pragma INLINEP(UnusedProcAlloc)
+static INLINE
 int UnusedProcAlloc(Proc_t *proc)
 {
   return sizeof(val_t) * (proc->allocLimit - proc->allocCursor);
@@ -89,11 +91,9 @@ void GCInit_SemiPara(void);
 void GCInit_GenPara(void);
 void GCInit_SemiConc(void);
 void GCInit_GenConc(void);
-void GCInit_SemiExplicit(void);
 
 /* Idle (unmapped) processors call the poll function periodically in case there is GC work. */
 void GCPoll(Proc_t *);              /* May return immediately or do some work */
-void GCPoll_SemiExplicit(Proc_t *);
 void GCPoll_SemiPara(Proc_t *);
 void GCPoll_GenPara(Proc_t *);
 void GCPoll_SemiConc(Proc_t *);
@@ -107,7 +107,6 @@ void GCReleaseThread(Proc_t *proc);          /* Called by scheduler when a threa
 
 /* The collector functions */
 void GC_Semi(Proc_t *, Thread_t *);
-void GC_SemiExplicit(Proc_t *, Thread_t *);
 void GC_SemiPara(Proc_t *, Thread_t *);
 void GC_SemiConc(Proc_t *, Thread_t *);
 void GC_Gen(Proc_t *, Thread_t *);
@@ -122,7 +121,6 @@ void GCRelease_SemiPara(Proc_t *proc);
 void GCRelease_GenPara(Proc_t *proc);
 void GCRelease_SemiConc(Proc_t *proc);
 void GCRelease_GenConc(Proc_t *proc);
-void GCRelease_SemiExplicit(Proc_t *proc);
 
 int returnToML(Thread_t *, mem_t linkValue);
 int returnFromGCFromC(Thread_t *);
@@ -136,7 +134,6 @@ ptr_t AllocBigArray_SemiPara(Proc_t *, Thread_t *, ArraySpec_t *);
 ptr_t AllocBigArray_GenPara(Proc_t *, Thread_t *, ArraySpec_t *);
 ptr_t AllocBigArray_SemiConc(Proc_t *, Thread_t *, ArraySpec_t *);
 ptr_t AllocBigArray_GenConc(Proc_t *, Thread_t *, ArraySpec_t *);
-ptr_t AllocBigArray_SemiExplicit(Proc_t *, Thread_t *, ArraySpec_t *);
 
 extern double MinRatio, MaxRatio;
 extern int MinRatioSize, MaxRatioSize;

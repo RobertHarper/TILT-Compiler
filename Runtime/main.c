@@ -185,7 +185,7 @@ struct option_entry table[] =
    1, "hybridOrder", &hybridOrder, "Use a set of gray regions",
    1, "forceSpaceCheck", &doSpaceCheck, "Perform space check on allocating space for copying",
    1, "grayAsReplica", &grayAsReplica, "In concurrent collectors, store gray set as replica (with backptrs)",
-#ifdef solaris
+#ifdef sparc
    1, "perfType", &perfType, "Type of performance counters",
 #endif
 

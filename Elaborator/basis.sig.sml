@@ -1,4 +1,4 @@
 signature BASIS =
 sig
-    val tiltprim : Il.context -> Il.sbnds * Il.sdecs
+    val tiltprim : unit -> Il.sbnds * Il.sdecs
 end

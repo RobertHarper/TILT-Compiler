@@ -1,16 +1,34 @@
 structure Slave :> SLAVE =
 struct
     val error = fn s => Util.error "slave.sml" s
-    val TimeEachFile = Stats.ff "TimeEachFile"
+    val Standalone = ref true
     val SlaveDiag = Stats.ff "SlaveDiag"
     fun msg str = if (!SlaveDiag) then print str else ()
 
-    type state = Comm.identity * Comm.in_channel * Comm.out_channel
+    type comm =
+	{from:Comm.channel,
+	 to:Comm.channel,
+	 in_channel:Comm.in_channel,
+	 out_channel:Comm.out_channel}
 
-    fun wait (s : state) : unit -> unit =
-	let val (identity,_,_) = s
+    fun start_comm () : comm =
+	let val identity = Comm.slave ()
 	    val from = Comm.fromMaster identity
 	    val to = Comm.toMaster identity
+	    val in_channel = Comm.openIn from
+	    val out_channel = Comm.openOut to
+	in  {from=from, to=to, in_channel=in_channel,
+	     out_channel=out_channel}
+	end
+
+    fun send ({out_channel, ...} : comm, msg : Comm.message) : unit =
+	Comm.send msg out_channel
+
+    fun receive ({in_channel, ...} : comm) : Comm.message option =
+	Comm.receive in_channel
+
+    fun wait (comm:comm) : unit -> unit =
+	let val {from,to,...} = comm
 	    val timer : Time.time option ref = ref NONE
 	    val delay = Time.fromSeconds 10
 	    fun startTimer () : unit = timer := SOME (Time.+(Time.now(),delay))
@@ -25,10 +43,15 @@ struct
 		    if Comm.hasMsg to then
 			let val _ =
 				if timeout() then
-				    (msg "[waiting for work]\n";
-				     stopTimer())
+				    let val _ =
+					    if !Standalone then
+						msg "[waiting for work]\n"
+					    else ()
+				    in  stopTimer()
+				    end
 				else ()
-			    val _ = Platform.sleep 1.0
+			    val delay = if !Standalone then 1.0 else 0.1
+			    val _ = Platform.sleep delay
 			in  loop()
 			end
 		    else ()
@@ -40,68 +63,73 @@ struct
 	fact, we skip the acknowledgement if the expected compilation
 	time is small to avoid communication traffic.
     *)
-    fun compile (state : state, job : Comm.job, plan : Update.plan) : unit =
-	let val _ = Name.reset_varmap()
-	    val out_channel = #3 state
-	    val start = Time.now()
-	    val finish = Update.compile plan
-	    val diff = Time.-(Time.now(), start)
-	    val slow = Time.toReal diff > 0.5
-	    val _ = if slow andalso Update.ackInterface plan then
-			Comm.send (Comm.ACK_INTERFACE job) out_channel
+    fun compile (comm:comm, stats:Stats.stats,
+		 desc:IntSyn.desc, job:Name.label) : Stats.stats =
+	let val start = Time.now()
+	    fun ack_interface () : unit =
+		let val diff = Time.-(Time.now(), start)
+		    val slow = Time.toReal diff > 0.5
+		in  if slow then send(comm, Comm.ACK_INTERFACE job)
 		    else ()
-	    val plan' = finish()
-	    val _ = if (!TimeEachFile)
-			then (Stats.print_timers();
-			      Stats.clear_stats())
-		    else ()
-	    val _ = Comm.send (Comm.ACK_DONE (job, plan')) out_channel
-	in  ()
-	end
+		end
+	    val (desc,pdec) = Compiler.get_inputs (desc, job)
+	    val finished = Compiler.compile (desc,pdec,ack_interface)
+	    val new = Stats.get()
+	    val delta = Stats.sub(new,stats)
+	    val msg =
+		if finished then Comm.ACK_FINISHED (job,delta)
+		else Comm.ACK_UNFINISHED (job,delta)
+	    val _ = send (comm,msg)
+	in  new
+	end handle (e as UtilError.Reject {msg}) =>
+	    let val _ = if !Standalone then ExnHandler.print e else ()
+		val _ = send (comm, Comm.ACK_REJECT (job,msg))
+	    in  stats
+	    end
 
-    fun setup () : state =
-	let val identity = Comm.slave ()
-	    val _ = Update.flushAll()
-	    val in_channel = Comm.openIn (Comm.fromMaster identity)
-	    val out_channel = Comm.openOut (Comm.toMaster identity)
-	in  (identity, in_channel, out_channel)
-	end
+    type state = (IntSyn.desc * Stats.stats) option
 
-    fun step (state as (identity, in_channel, out_channel) : state) : unit =
-	(case Comm.receive in_channel of
-	     NONE => if (Comm.hasMsg (Comm.toMaster identity))
-			 then ()
-		     else Comm.send Comm.READY out_channel
-	   | SOME Comm.READY => error "Slave got a ready message"
-	   | SOME (Comm.ACK_INTERFACE _) => error "Slave got an ack_interface message"
-	   | SOME (Comm.ACK_DONE _) => error "Slave got an ack_done message"
-	   | SOME (Comm.ACK_ERROR _) => error "Slave got an ack_error message"
-	   | SOME (Comm.FLUSH_ALL (platform, flags)) =>
-			 (Update.flushAll();
-			  Target.setTargetPlatform platform;
-			  Comm.doFlags flags)
-	   | SOME (Comm.FLUSH ((_,id),plan)) => Update.flush plan
-	   | SOME (Comm.REQUEST (job, plan)) =>
-		   compile (state,job,plan) handle e =>
-		   (ExnHandler.print e;
-		    if !ExnHandler.Interactive then raise e
-		    else
-			(Comm.send (Comm.ACK_ERROR (job, ExnHandler.errorMsg e)) out_channel;
-			 Comm.send Comm.READY out_channel)))
+    fun process (comm:comm, state:state, msg:Comm.message) : state =
+	((case msg
+	   of Comm.INIT (objtype, stats, desc) =>
+		(Fs.flush();
+		 Target.setTarget objtype;
+		 Stats.set stats;
+		 SOME (desc,stats))
+	    | Comm.COMPILE job =>
+		(case state
+		   of NONE => error "slave got COMPILE before INIT"
+		    | SOME (desc, stats) =>
+			let val stats = compile (comm, stats, desc, job)
+			in  SOME (desc, stats)
+			end)
+	    | _ => error "slave got unexpected message")
+	 handle e =>
+	    let val _ = if !Standalone then ExnHandler.print e else ()
+		val _ = if !ExnHandler.Interactive then raise e else ()
+		val _ = send (comm, Comm.BOMB (ExnHandler.errorMsg e))
+	    in  state
+	    end)
 
-    fun complete ((identity, in_channel, out_channel) : state) : unit =
-	(Comm.closeIn in_channel;
-	 Comm.closeOut out_channel)
+    fun step (comm:comm, state:state) : state =
+	(case receive comm
+	   of NONE =>
+		let val _ =
+			if Comm.hasMsg (#to comm) then ()
+			else send (comm, Comm.READY)
+		in  state
+		end
+	   | SOME msg => process(comm,state,msg))
 
-    fun slave () = {setup = fn () => setup (),
-		    step = fn state => (step state; state),
-		    complete = complete}
-
-    fun run () : 'a =
-	let val state = setup()
-	    val wait = wait state
-	    fun loop () = (step state; wait(); loop())
-	in  loop()
+    fun slave () : 'a =
+	let val comm : comm = start_comm()
+	    val wait : unit -> unit = wait comm
+	    fun loop state =
+		let val state = step (comm,state)
+		    val _ = wait()
+		in  loop state
+		end
+	in  loop NONE
 	end
 
 end

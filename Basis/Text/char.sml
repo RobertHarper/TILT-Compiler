@@ -38,18 +38,18 @@ structure Char :> CHAR where type char = char
     val maxChar	: char	= itoc maxOrd
 
     fun chr (i : int) : char = if 0 <= i andalso i <= maxOrd then itoc i
-			       else raise General.Chr
+			       else raise Chr
     val ord = ord
 
     fun pred (c : char) : char = let
 	  val c' = (ctoi c - 1)
 	  in
-	    if (c' < 0) then raise General.Chr else (itoc c')
+	    if (c' < 0) then raise Chr else (itoc c')
 	  end
     fun succ (c : char) : char = let
 	  val c' = (ctoi c + 1)
 	  in
-	    if (maxOrd < c') then raise General.Chr else (itoc c')
+	    if (maxOrd < c') then raise Chr else (itoc c')
 	  end
 
 

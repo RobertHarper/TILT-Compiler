@@ -1,0 +1,9 @@
+structure PreWord :
+sig
+	type word = word
+end
+
+structure PreLargeWord :
+sig
+	type word = word
+end

@@ -1,2 +1,1 @@
-source unit Test = "real7.sml" {Real Bool}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "real7.sml" {Real Bool}

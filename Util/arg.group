@@ -1,4 +1,5 @@
-source unit ARG = "arg.sig.sml" {}
-source interface ARG = "arg.int" {ARG}
-source unit Arg : ARG = "arg.sml" {ARG String Substring}
-make library $libdir ^ "/arg"
+interface ARG = "arg.sig.sml" {}
+unit ARG : ARG = "arg.sig.sml" {}
+
+interface Arg = "arg.int" {ARG}
+unit Arg : Arg = "arg.sml" {ARG String Substring}

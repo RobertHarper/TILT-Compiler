@@ -1,7 +1,0 @@
-functor GroupLrValsFun(structure Token : TOKEN) :
-Group_LRVALS
-	where type ParserData.pos = ExtSyn.pos
-	where type ParserData.arg = unit
-	where type ParserData.result = ExtSyn.groupfile
-	where ParserData.LrTable = Token.LrTable
-	where type ('a,'b) ParserData.Token.token = ('a,'b) Token.token

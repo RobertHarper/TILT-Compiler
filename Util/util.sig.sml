@@ -1,17 +1,5 @@
 (*Non IL specific utility routines *)
 
-(* A set with an ordering maintained by a list *)
-signature ORDERED_SET =
-sig
-    type item
-    type set
-    val empty : set
-    val member : item * set -> bool
-    val cons : item * set -> set
-    val append : set * set -> set
-    val toList : set -> item list (* respects ordering of cons and append calls *)
-end
-
 signature UTIL =
 sig
 
@@ -19,6 +7,8 @@ sig
 
     (* takes filename and then error msg *)
     val error : string -> string -> 'a
+
+    val reject : string -> 'a
 
     val spaces : int -> string     (* return a string of given length of spaces *)
     val printl : string -> unit    (* print newline after string *)
@@ -33,13 +23,6 @@ sig
     val split_opt : ('a * 'b) option -> 'a option * 'b option
 
     val substring : string * string -> int option (* (look for) pattern * (in) target -> present *)
-(*
-    (* Conversion: strings to/from int/word/char *)
-    val IntStr2word : string -> Word32.word
-    val WordStr2word : string -> Word32.word
-    val IntStr2word64 : string -> Word64.word64
-    val WordStr2word64 : string -> Word64.word64
-*)
     val CharStr2char : string -> char
 
     (* oneshot is a ref that can be set only once *)
@@ -58,22 +41,39 @@ sig
 
     val memoize : (unit -> 'a) -> (unit -> 'a)
 
-    (* system command *)
-    (* If we're running on UNIX, execute command via OS.Process.system.
-     * Otherwise put the command in a file called worklist and wait for
-     * the file to disappear.  Presumably there is a process on a non-UNIX
-     * system monitoring this file and executing commands placed there.
-     *)
-    val system : string -> bool
+    val run : string list -> unit
+    val outputOf : string list -> string
+
+    (*
+	(background f) evaulates f() in a child process,
+	returning a function isdone such that:
+
+	isdone() = false if child is still running.
+		 = true  if child finished successfully
+		   (because f termianted or called exit(0)).
+		 raises an exception if the child is killed or
+		 if f raises an exception or calls exit(nonzero).
+    *)
+    val background : (unit -> 'a) -> unit -> bool
+
+    (*
+	(background' f) evaluates f() in a child process for
+	side effects.  Returns a function that kills the process
+	running f.
+    *)
+    val background' : (unit -> 'a) -> unit -> unit
+
+    val min      : real vector -> real	(* raises Domain if |v| = 0 *)
+    val max      : real vector -> real	(* raises Domain if |v| = 0 *)
+    val mean     : real vector -> real	(* raises Domain if |v| = 0 *)
+    val variance : real vector -> real	(* raises Domain if |v| <= 1 *)
+    val stddev   : real vector -> real	(* raises Domain if |v| <= 1 *)
+    val absdev   : real vector -> real	(* raises Domain if |v| = 0 *)
 
     structure StringMap : ORD_MAP
 	where type Key.ord_key = string
 
     structure StringSet : ORD_SET
 	where type Key.ord_key = string
-
-    (* A set with an ordering maintained by a list *)
-    structure StringOrderedSet : ORDERED_SET
-	where type item = string
 
 end

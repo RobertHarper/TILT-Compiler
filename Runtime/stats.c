@@ -13,7 +13,7 @@
 #include <sys/time.h>
 #include <sys/timeb.h>
 #include <sys/resource.h>
-#if (defined alpha_osf)
+#if (defined alpha)
 int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the Alpha */
 #endif
 #ifdef sparc
@@ -370,7 +370,8 @@ void reset_windowQuotient(WindowQuotient_t *wq, int fineness)
 */
 
 
-INLINE(add_windowQuotient_addHelp)
+#pragma INLINEP(add_windowQuotient_addHelp)
+static INLINE
 void add_windowQuotient_addHelp(WindowQuotient_t *wq, int i)
 {
   /*  assert (wq->onSum[i] >= 0);

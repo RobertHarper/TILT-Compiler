@@ -84,16 +84,16 @@ structure Array :> ARRAY where type 'a array = 'a array
 	    case (base, optLen)
 	     of (0, NONE) => if (0 < len) then newVec len else vector0
 	      | (_, SOME 0) => if ((base < 0) orelse (len < base))
-		  then raise General.Subscript
+		  then raise Subscript
 		  else vector0
 	      | (_, NONE) => if ((base < 0) orelse (len < base))
-		    then raise General.Subscript
+		    then raise Subscript
 		  else if (len = base)
 		    then vector0
 		    else newVec (len - base)
 	      | (_, SOME n) =>
 		  if ((base < 0) orelse (n < 0) orelse (len < (base+n)))
-		    then raise General.Subscript
+		    then raise Subscript
 		    else newVec n
 	    (* end case *)
 	  end

@@ -62,11 +62,8 @@ sig
     (* ----------- miscellaneous ----------------------------  *)
 
     (*
-	Reachable identifies the top-level bindings in context that
-	contribute to the definition of the given variables.
-	Gc_context eliminates any top-level bindings in context that
-	do not contribute to the definition of the given vars.
+	Eliminate any top-level bindings in context that do not
+	contribute to the definition of the given vars.
     *)
-    val reachable : context * Name.VarSet.set -> Name.VarSet.set
     val gc_context : context * Name.VarSet.set -> context
 end

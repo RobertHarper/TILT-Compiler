@@ -74,7 +74,7 @@ mem_t my_mmap(int size, int prot)
   static int fd = -1;
   int flags;
   mem_t mapped;
-#ifdef solaris
+#ifdef sparc
   {
     if (fd == -1)
       if ((fd = open("/dev/zero", O_RDWR)) == -1) {
@@ -86,7 +86,7 @@ mem_t my_mmap(int size, int prot)
 #else
   flags = MAP_ANONYMOUS;
 #endif
-#ifdef solaris
+#ifdef sparc
   // We'd like to use on-demand allocation if the OS supports it.  Currently,
   // MAP_NORESERVE is not POSIX, so on the Alpha we will still use up a lot of
   // swap space, but we hope that by the time we get to other OSs, they
@@ -606,7 +606,7 @@ void memobj_init(void)
   init_int(&MaxHeapByte, 0.40 * max_bytes);
   assert(MinHeapByte <= MaxHeapByte);
 
-#ifdef solaris
+#ifdef sparc
   assert(TILT_PAGESIZE == sysconf(_SC_PAGESIZE));
 #else
   assert(TILT_PAGESIZE == sysconf(_SC_PAGE_SIZE));

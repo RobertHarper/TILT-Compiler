@@ -1,5 +1,5 @@
 structure TextPrimIO : PRIM_IO
-	where type array = word8array
+	where type array = TiltPrim.word8array
 	where type vector = string
 	where type elem =  char
 	where type pos = int

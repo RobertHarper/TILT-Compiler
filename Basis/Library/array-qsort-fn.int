@@ -1,1 +1,3 @@
-functor ArrayQSortFn (A : MONO_ARRAY) : MONO_ARRAY_SORT where A = A
+functor ArrayQSortFn (A : MONO_ARRAY)
+    : MONO_ARRAY_SORT
+	where A = A

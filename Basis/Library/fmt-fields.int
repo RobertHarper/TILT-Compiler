@@ -1,0 +1,63 @@
+structure FmtFields :
+sig
+
+  (* precompiled format specifiers *)
+    datatype sign
+      = DfltSign	(* default: put a sign on negative numbers *)
+      | AlwaysSign	(* "+"      always has sign (+ or -) *)
+      | BlankSign	(* " "      put a blank in the sign field for positive numbers *)
+    datatype neg_sign
+      = MinusSign	(* default: use "-" for negative numbers *)
+      | TildeSign	(* "~"      use "~" for negative numbers *)
+    type field_flags = {
+	sign : sign,
+	neg_char : neg_sign,
+	zero_pad : bool,
+	base : bool,
+	ljust : bool,
+	large : bool
+      }
+
+    datatype field_wid = NoPad | Wid of int
+
+    datatype real_format
+      = F_Format		(* "%f" *)
+      | E_Format of bool	(* "%e" or "%E" *)
+      | G_Format of bool	(* "%g" or "%G" *)
+
+    datatype field_type
+      = OctalField
+      | IntField
+      | HexField
+      | CapHexField
+      | CharField
+      | BoolField
+      | StrField
+      | RealField of {prec : int, format : real_format}
+
+    datatype fmt_spec
+      = Raw of substring
+      | CharSet of char -> bool
+      | Field of (field_flags * field_wid * field_type)
+
+    datatype fmt_item
+      = ATOM of Atom.atom
+      | LINT of LargeInt.int
+      | INT of Int.int
+      | LWORD of LargeWord.word
+      | WORD of Word.word
+      | WORD8 of Word8.word
+      | BOOL of bool
+      | CHR of char
+      | STR of string
+      | REAL of Real.real
+      | LREAL of LargeReal.real
+      | LEFT of (int * fmt_item)	(* left justify in field of given width *)
+      | RIGHT of (int * fmt_item)	(* right justify in field of given width *)
+
+    exception BadFormat			(* bad format string *)
+
+    val scanFieldSpec : substring -> (fmt_spec * substring)
+    val scanField     : substring -> (fmt_spec * substring)
+
+end

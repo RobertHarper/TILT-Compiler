@@ -1,0 +1,8 @@
+structure CleanUp :
+sig
+
+    include CLEAN_UP
+
+    val clean : when -> unit
+
+end

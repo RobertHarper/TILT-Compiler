@@ -60,8 +60,6 @@ structure Typeof_Elim :> TYPEOF_ELIM =
 	in NilContext.insert_con (D,v,c)
 	end
 
-      fun label_binder ((D,i,t) : state,l : Nil.label,v : Nil.var) = (NilContext.insert_label (D,l,v),i,t)
-
       fun none f = fn ((D,i,t) : state,v : Nil.var ,item : 'item) => ((f (D,v,item),i,t), NONE)
 
       val all_handlers =
@@ -76,8 +74,7 @@ structure Typeof_Elim :> TYPEOF_ELIM =
 		 exp_var_bind   = none NilContext.insert_con,
 		 exp_var_define = none exp_definer,
 		 sum_var_bind   = none sum_binder,
-		 exn_var_bind   = none exn_binder,
-		 labelled_var   = label_binder
+		 exn_var_bind   = none exn_binder
 		 }
 
       val {rewrite_con,rewrite_exp,rewrite_kind,rewrite_mod,...} = rewriters all_handlers

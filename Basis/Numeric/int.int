@@ -1,1 +1,2 @@
-structure Int : INTEGER where type int = int
+structure Int : INTEGER
+	where type int = int

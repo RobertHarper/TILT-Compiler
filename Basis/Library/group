@@ -3,214 +3,253 @@
 	Based on SML/NJ 110.0.7.
 	Portions have not be strenuously tested under TILT.
 *)
-source unit LIB_BASE = "lib-base-sig.sml" {}
-source interface LibBase = "lib-base.int" {LIB_BASE}
-source unit LibBase : LibBase = "lib-base.sml" {
+interface LIB_BASE = "lib-base-sig.sml" {}
+unit LIB_BASE : LIB_BASE = "lib-base-sig.sml" {}
+interface LibBase = "lib-base.int" {LIB_BASE}
+unit LibBase : LibBase = "lib-base.sml" {
 	LIB_BASE Int General
 }
-source unit ORD_KEY = "ord-key-sig.sml" {}
-source unit ORD_MAP = "ord-map-sig.sml" {ORD_KEY}
-source unit ORD_SET = "ord-set-sig.sml" {ORD_KEY}
-source unit ARRAY2 = "array2-sig.sml" {Array}
-source interface Array2 = "array2.int" {ARRAY2}
-source unit Array2 : Array2 = "array2.sml" {ARRAY2 Array}
-source interface HashString = "hash-string.int" {}
-source unit HashString : HashString = "hash-string.sml" {CharVector Char Word}
-source unit ATOM = "atom-sig.sml" {}
-source interface Atom = "atom.int" {ATOM}
-source unit Atom : Atom = "atom.sml" {ATOM Word Array HashString Substring}
-source unit MONO_ARRAY_SORT = "mono-array-sort-sig.sml" {MONO_ARRAY}
-source unit ARRAY_SORT = "array-sort-sig.sml" {}
-source interface ArrayQSortFn = "array-qsort-fn.int" {
+interface ORD_KEY = "ord-key-sig.sml" {}
+unit ORD_KEY : ORD_KEY = "ord-key-sig.sml" {}
+interface ORD_MAP = "ord-map-sig.sml" {ORD_KEY}
+unit ORD_MAP : ORD_MAP = "ord-map-sig.sml" {ORD_KEY}
+interface ORD_SET = "ord-set-sig.sml" {ORD_KEY}
+unit ORD_SET : ORD_SET = "ord-set-sig.sml" {ORD_KEY}
+interface ARRAY2 = "array2-sig.sml" {Array}
+unit ARRAY2 : ARRAY2 = "array2-sig.sml" {Array}
+interface Array2 = "array2.int" {ARRAY2}
+unit Array2 : Array2 = "array2.sml" {ARRAY2 Array}
+interface HashString = "hash-string.int" {}
+unit HashString : HashString = "hash-string.sml" {CharVector Char Word}
+interface ATOM = "atom-sig.sml" {}
+unit ATOM : ATOM = "atom-sig.sml" {}
+interface Atom = "atom.int" {ATOM}
+unit Atom : Atom = "atom.sml" {ATOM Word Array HashString Substring}
+interface MONO_ARRAY_SORT = "mono-array-sort-sig.sml" {MONO_ARRAY}
+unit MONO_ARRAY_SORT : MONO_ARRAY_SORT = "mono-array-sort-sig.sml" {MONO_ARRAY}
+interface ARRAY_SORT = "array-sort-sig.sml" {}
+unit ARRAY_SORT : ARRAY_SORT = "array-sort-sig.sml" {}
+interface ArrayQSortFn = "array-qsort-fn.int" {
 	MONO_ARRAY MONO_ARRAY_SORT
 }
-source unit ArrayQSortFn : ArrayQSortFn = "array-qsort-fn.sml" {
+unit ArrayQSortFn : ArrayQSortFn = "array-qsort-fn.sml" {
 	MONO_ARRAY MONO_ARRAY_SORT Int
 }
-source interface ArrayQSort = "array-qsort.int" {ARRAY_SORT}
-source unit ArrayQSort : ArrayQSort = "array-qsort.sml" {ARRAY_SORT Word Array}
-source interface BinaryMapFn = "binary-map-fn.int" {ORD_KEY ORD_MAP}
-source unit BinaryMapFn : BinaryMapFn = "binary-map-fn.sml" {
+interface ArrayQSort = "array-qsort.int" {ARRAY_SORT}
+unit ArrayQSort : ArrayQSort = "array-qsort.sml" {ARRAY_SORT Word Array}
+interface BinaryMapFn = "binary-map-fn.int" {ORD_KEY ORD_MAP}
+unit BinaryMapFn : BinaryMapFn = "binary-map-fn.sml" {
 	ORD_KEY ORD_MAP LibBase
 }
-source interface BinarySetFn = "binary-set-fn.int" {ORD_KEY ORD_SET}
-source unit BinarySetFn : BinarySetFn = "binary-set-fn.sml" {
+interface BinarySetFn = "binary-set-fn.int" {ORD_KEY ORD_SET}
+unit BinarySetFn : BinarySetFn = "binary-set-fn.sml" {
 	ORD_KEY ORD_SET LibBase List
 }
-source interface AtomBinaryMap = "atom-binary-map.int" {ORD_MAP Atom}
-source unit AtomBinaryMap : AtomBinaryMap = "atom-binary-map.sml" {
+interface AtomBinaryMap = "atom-binary-map.int" {ORD_MAP Atom}
+unit AtomBinaryMap : AtomBinaryMap = "atom-binary-map.sml" {
 	BinaryMapFn Atom
 }
-source interface AtomBinarySet = "atom-binary-set.int" {ORD_SET Atom}
-source unit AtomBinarySet : AtomBinarySet = "atom-binary-set.sml" {
+interface AtomBinarySet = "atom-binary-set.int" {ORD_SET Atom}
+unit AtomBinarySet : AtomBinarySet = "atom-binary-set.sml" {
 	BinarySetFn Atom
 }
-source unit HASH_KEY = "hash-key-sig.sml" {}
-source unit MONO_HASH_TABLE = "mono-hash-table-sig.sml" {HASH_KEY}
-source unit MONO_HASH2_TABLE = "mono-hash2-table-sig.sml" {HASH_KEY}
-source unit HASH_TABLE = "hash-table-sig.sml" {}
-source unit HashTableRep = "hash-table-rep.sml" {Word Array}
-source interface HashTableFn = "hash-table-fn.int" {HASH_KEY MONO_HASH_TABLE}
-source unit HashTableFn : HashTableFn = "hash-table-fn.sml" {
+interface HASH_KEY = "hash-key-sig.sml" {}
+unit HASH_KEY : HASH_KEY = "hash-key-sig.sml" {}
+interface MONO_HASH_TABLE = "mono-hash-table-sig.sml" {HASH_KEY}
+unit MONO_HASH_TABLE : MONO_HASH_TABLE = "mono-hash-table-sig.sml" {HASH_KEY}
+interface MONO_HASH2_TABLE = "mono-hash2-table-sig.sml" {HASH_KEY}
+unit MONO_HASH2_TABLE : MONO_HASH2_TABLE = "mono-hash2-table-sig.sml" {HASH_KEY}
+interface HASH_TABLE = "hash-table-sig.sml" {}
+unit HASH_TABLE : HASH_TABLE = "hash-table-sig.sml" {}
+interface HashTableRep = "hash-table-rep.int" {}
+unit HashTableRep : HashTableRep = "hash-table-rep.sml" {Word Array}
+interface HashTableFn = "hash-table-fn.int" {HASH_KEY MONO_HASH_TABLE}
+unit HashTableFn : HashTableFn = "hash-table-fn.sml" {
 	Word HASH_KEY MONO_HASH_TABLE Array HashTableRep
 }
-source interface HashTable = "hash-table.int" {HASH_TABLE}
-source unit HashTable : HashTable = "hash-table.sml" {
+interface HashTable = "hash-table.int" {HASH_TABLE}
+unit HashTable : HashTable = "hash-table.sml" {
 	Array HASH_TABLE Word HashTableRep
 }
-source interface Hash2TableFn = "hash2-table-fn.int" {
+interface Hash2TableFn = "hash2-table-fn.int" {
 	HASH_KEY MONO_HASH2_TABLE
 }
-source unit Hash2TableFn : Hash2TableFn = "hash2-table-fn.sml" {
+unit Hash2TableFn : Hash2TableFn = "hash2-table-fn.sml" {
 	HASH_KEY MONO_HASH2_TABLE HashTableRep Word Array
 }
-source interface AtomTable = "atom-table.int" {MONO_HASH_TABLE Atom}
-source unit AtomTable : AtomTable = "atom-table.sml" {HashTableFn Atom}
-source interface BSearchFn = "bsearch-fn.int" {MONO_ARRAY}
-source unit BSearchFn : BSearchFn = "bsearch-fn.sml" {MONO_ARRAY}
-source unit CHAR_MAP = "char-map-sig.sml" {}
-source interface CharMap = "char-map.int" {CHAR_MAP}
-source unit CharMap : CharMap = "char-map.sml" {
+interface AtomTable = "atom-table.int" {MONO_HASH_TABLE Atom}
+unit AtomTable : AtomTable = "atom-table.sml" {HashTableFn Atom}
+interface BSearchFn = "bsearch-fn.int" {MONO_ARRAY}
+unit BSearchFn : BSearchFn = "bsearch-fn.sml" {MONO_ARRAY}
+interface CHAR_MAP = "char-map-sig.sml" {}
+unit CHAR_MAP : CHAR_MAP = "char-map-sig.sml" {}
+interface CharMap = "char-map.int" {CHAR_MAP}
+unit CharMap : CharMap = "char-map.sml" {
 	CHAR_MAP Vector Array Char String
 }
-source unit FIFO = "fifo-sig.sml" {}
-source interface Fifo = "fifo.int" {FIFO}
-source unit Fifo : Fifo = "fifo.sml" {FIFO List}
-source unit FmtFields = "fmt-fields.sml" {
+interface FIFO = "fifo-sig.sml" {}
+unit FIFO : FIFO = "fifo-sig.sml" {}
+interface Fifo = "fifo.int" {FIFO}
+unit Fifo : Fifo = "fifo.sml" {FIFO List}
+interface FmtFields = "fmt-fields.int" {
+	Atom LargeInt Int LargeWord Word Word8 Real LargeReal
+}
+unit FmtFields : FmtFields = "fmt-fields.sml" {
 	Atom LargeInt Int LargeWord Word Word8 Real LargeReal
 	Substring StringCvt Char
 }
-source unit FORMAT = "format-sig.sml" {
+interface FORMAT = "format-sig.sml" {
 	Atom Int LargeInt LargeReal LargeWord Real Word Word8
 }
-source unit LibRealFormat = "real-format.sml" {StringCvt String Int}
-source interface Format = "format.int" {FORMAT}
-source unit Format : Format = "format.sml" {
+unit FORMAT : FORMAT = "format-sig.sml" {
+	Atom Int LargeInt LargeReal LargeWord Real Word Word8
+}
+interface LibRealFormat = "real-format.int" {StringCvt String Int}
+unit LibRealFormat : LibRealFormat = "real-format.sml" {StringCvt String Int}
+interface Format = "format.int" {FORMAT}
+unit Format : Format = "format.sml" {
 	Substring StringCvt LargeInt LargeWord String CharVector Char
 	Int Atom LibRealFormat FmtFields FORMAT
 }
-source interface IntBinaryMap = "int-binary-map.int" {ORD_MAP}
-source unit IntBinaryMap : IntBinaryMap = "int-binary-map.sml" {
+interface IntBinaryMap = "int-binary-map.int" {ORD_MAP}
+unit IntBinaryMap : IntBinaryMap = "int-binary-map.sml" {
 	ORD_MAP LibBase Int
 }
-source interface IntBinarySet = "int-binary-set.int" {ORD_SET}
-source unit IntBinarySet : IntBinarySet = "int-binary-set.sml" {
+interface IntBinarySet = "int-binary-set.int" {ORD_SET}
+unit IntBinarySet : IntBinarySet = "int-binary-set.sml" {
 	ORD_SET LibBase List Int
 }
-source interface IntListMap = "int-list-map.int" {ORD_MAP}
-source unit IntListMap : IntListMap = "int-list-map.sml" {
+interface IntListMap = "int-list-map.int" {ORD_MAP}
+unit IntListMap : IntListMap = "int-list-map.sml" {
 	ORD_MAP LibBase List Int
 }
-source interface IntListSet = "int-list-set.int" {ORD_SET}
-source unit IntListSet : IntListSet = "int-list-set.sml" {
+interface IntListSet = "int-list-set.int" {ORD_SET}
+unit IntListSet : IntListSet = "int-list-set.sml" {
 	ORD_KEY ORD_SET Int List LibBase
 }
-source unit ITERATE = "iterate-sig.sml" {}
-source interface Iterate = "iterate.int" {ITERATE}
-source unit Iterate : Iterate = "iterate.sml" {ITERATE LibBase}
-source unit KeywordFn = "keyword-fn.sml" {Atom AtomTable List}
-source unit LIST_FORMAT = "list-format-sig.sml" {StringCvt}
-source interface ListFormat = "list-format.int" {LIST_FORMAT}
-source unit ListFormat : ListFormat = "list-format.sml" {
+interface ITERATE = "iterate-sig.sml" {}
+unit ITERATE : ITERATE = "iterate-sig.sml" {}
+interface Iterate = "iterate.int" {ITERATE}
+unit Iterate : Iterate = "iterate.sml" {ITERATE LibBase}
+interface KeywordFn = "keyword-fn.int" {Atom AtomTable List}
+unit KeywordFn : KeywordFn = "keyword-fn.sml" {Atom AtomTable List}
+interface LIST_FORMAT = "list-format-sig.sml" {StringCvt}
+unit LIST_FORMAT : LIST_FORMAT = "list-format-sig.sml" {StringCvt}
+interface ListFormat = "list-format.int" {LIST_FORMAT}
+unit ListFormat : ListFormat = "list-format.sml" {
 	LIST_FORMAT StringCvt String
 }
-source interface ListMapFn = "list-map-fn.int" {ORD_KEY ORD_MAP}
-source unit ListMapFn : ListMapFn = "list-map-fn.sml" {
+interface ListMapFn = "list-map-fn.int" {ORD_KEY ORD_MAP}
+unit ListMapFn : ListMapFn = "list-map-fn.sml" {
 	ORD_KEY ORD_MAP LibBase List
 }
-source unit LIST_SORT = "listsort-sig.sml" {}
-source interface ListMergeSort = "list-mergesort.int" {LIST_SORT}
-source unit ListMergeSort : ListMergeSort = "list-mergesort.sml" {
+interface LIST_SORT = "listsort-sig.sml" {}
+unit LIST_SORT : LIST_SORT = "listsort-sig.sml" {}
+interface ListMergeSort = "list-mergesort.int" {LIST_SORT}
+unit ListMergeSort : ListMergeSort = "list-mergesort.sml" {
 	LIST_SORT LibBase
 }
-source interface ListSetFn = "list-set-fn.int" {ORD_KEY ORD_SET}
-source unit ListSetFn : ListSetFn = "list-set-fn.sml" {
+interface ListSetFn = "list-set-fn.int" {ORD_KEY ORD_SET}
+unit ListSetFn : ListSetFn = "list-set-fn.sml" {
 	ORD_KEY ORD_SET List LibBase
 }
-source unit LIST_XPROD = "list-xprod-sig.sml" {}
-source interface ListXProd = "list-xprod.int" {LIST_XPROD}
-source unit ListXProd : ListXProd = "list-xprod.sml" {LIST_XPROD}
-source interface MonoArrayFn = "mono-array-fn.int" {MONO_ARRAY}
-source unit MonoArrayFn : MonoArrayFn = "mono-array-fn.sml" {
+interface LIST_XPROD = "list-xprod-sig.sml" {}
+unit LIST_XPROD : LIST_XPROD = "list-xprod-sig.sml" {}
+interface ListXProd = "list-xprod.int" {LIST_XPROD}
+unit ListXProd : ListXProd = "list-xprod.sml" {LIST_XPROD}
+interface MonoArrayFn = "mono-array-fn.int" {MONO_ARRAY}
+unit MonoArrayFn : MonoArrayFn = "mono-array-fn.sml" {
 	MONO_ARRAY Array Vector
 }
-source unit MONO_DYNAMIC_ARRAY = "mono-dynamic-array-sig.sml" {}
-source unit PARSER_COMB = "parser-comb-sig.sml" {StringCvt}
-source interface ParserComb = "parser-comb.int" {PARSER_COMB}
-source unit ParserComb : ParserComb = "parser-comb.sml" {
+interface MONO_DYNAMIC_ARRAY = "mono-dynamic-array-sig.sml" {}
+unit MONO_DYNAMIC_ARRAY : MONO_DYNAMIC_ARRAY = "mono-dynamic-array-sig.sml" {}
+interface PARSER_COMB = "parser-comb-sig.sml" {StringCvt}
+unit PARSER_COMB : PARSER_COMB = "parser-comb-sig.sml" {StringCvt}
+interface ParserComb = "parser-comb.int" {PARSER_COMB}
+unit ParserComb : ParserComb = "parser-comb.sml" {
 	PARSER_COMB StringCvt Substring
 }
-source unit RAND = "rand-sig.sml" {}
-source interface Rand = "rand.int" {RAND}
-source unit Rand : Rand = "rand.sml" {RAND LibBase}
-source unit RANDOM = "random-sig.sml" {}
-source interface Random = "random.int" {RANDOM}
-source unit Random = "random.sml" {
+interface RAND = "rand-sig.sml" {}
+unit RAND : RAND = "rand-sig.sml" {}
+interface Rand = "rand.int" {RAND}
+unit Rand : Rand = "rand.sml" {RAND LibBase}
+interface RANDOM = "random-sig.sml" {}
+unit RANDOM : RANDOM = "random-sig.sml" {}
+interface Random = "random.int" {RANDOM}
+unit Random : Random = "random.sml" {
 	Byte RANDOM Array Int Word8 LargeWord
 	Word32 Word8Array Word8Vector LibBase Pack32Big
 }
-source unit UREF = "uref-sig.sml" {}
-source interface UREF = "uref.int" {UREF}
-source unit URef : UREF = "uref.sml" {UREF}
-source unit SCAN = "scan-sig.sml" {
+interface UREF = "uref-sig.sml" {}
+unit UREF : UREF = "uref-sig.sml" {}
+interface URef = "uref.int" {UREF}
+unit URef : URef = "uref.sml" {UREF}
+interface SCAN = "scan-sig.sml" {
 	StringCvt Atom Int LargeInt LargeReal LargeWord Real Word
 	Word8
 }
-source interface Scan = "scan.int" {SCAN}
-source unit Scan : Scan = "scan.sml" {
+unit SCAN : SCAN = "scan-sig.sml" {
+	StringCvt Atom Int LargeInt LargeReal LargeWord Real Word
+	Word8
+}
+interface Scan = "scan.int" {SCAN}
+unit Scan : Scan = "scan.sml" {
 	SCAN Substring StringCvt Word8Array Char LargeInt Int Bool
 	LargeReal FmtFields
 }
-source interface SimpleURef = "simple-uref.int" {UREF}
-source unit SimpleURef : SimpleURef = "simple-uref.sml" {UREF}
-source unit SPLAY_TREE = "splaytree-sig.sml" {}
-source interface SplayTree = "splaytree.int" {SPLAY_TREE}
-source unit SplayTree : SplayTree = "splaytree.sml" {SPLAY_TREE}
-source interface SplayMapFn = "splay-map-fn.int" {ORD_KEY ORD_MAP}
-source unit SplayMapFn : SplayMapFn = "splay-map-fn.sml" {
+interface SimpleURef = "simple-uref.int" {UREF}
+unit SimpleURef : SimpleURef = "simple-uref.sml" {UREF}
+interface SPLAY_TREE = "splaytree-sig.sml" {}
+unit SPLAY_TREE : SPLAY_TREE = "splaytree-sig.sml" {}
+interface SplayTree = "splaytree.int" {SPLAY_TREE}
+unit SplayTree : SplayTree = "splaytree.sml" {SPLAY_TREE}
+interface SplayMapFn = "splay-map-fn.int" {ORD_KEY ORD_MAP}
+unit SplayMapFn : SplayMapFn = "splay-map-fn.sml" {
 	ORD_KEY ORD_MAP SplayTree LibBase
 }
-source interface SplaySetFn = "spay-set-fn.int" {ORD_KEY ORD_SET}
-source unit SplaySetFn : SplaySetFn = "splay-set-fn.sml" {
+interface SplaySetFn = "spay-set-fn.int" {ORD_KEY ORD_SET}
+unit SplaySetFn : SplaySetFn = "splay-set-fn.sml" {
 	ORD_KEY ORD_SET List SplayTree LibBase
 }
 (*
-	source unit TimeLimit = "time-limit.sml" {
+	unit TimeLimit = "time-limit.sml" {
 		(* needs SMLofNJ.IntervalTimer and SMLofNJ.Cont *)
 	}
 *)
-source unit QUEUE = "queue-sig.sml" {}
-source interface Queue = "queue.int" {QUEUE}
-source unit Queue : Queue = "queue.sml" {QUEUE Fifo}
-source unit IO_UTIL = "io-util-sig.sml" {}
-source interface IOUtil = "io-util.int" {IO_UTIL TextIO}
-source unit IOUtil : IOUtil = "io-util.sml" {IO_UTIL TextIO}
-source interface DynamicArrayFn = "dynamic-array-fn.int" {
+interface QUEUE = "queue-sig.sml" {}
+unit QUEUE : QUEUE = "queue-sig.sml" {}
+interface Queue = "queue.int" {QUEUE}
+unit Queue : Queue = "queue.sml" {QUEUE Fifo}
+interface IO_UTIL = "io-util-sig.sml" {}
+unit IO_UTIL : IO_UTIL = "io-util-sig.sml" {}
+interface IOUtil = "io-util.int" {IO_UTIL TextIO}
+unit IOUtil : IOUtil = "io-util.sml" {IO_UTIL TextIO}
+interface DynamicArrayFn = "dynamic-array-fn.int" {
 	MONO_ARRAY MONO_DYNAMIC_ARRAY
 }
-source unit DynamicArrayFn : DynamicArrayFn = "dynamic-array-fn.sml" {
+unit DynamicArrayFn : DynamicArrayFn = "dynamic-array-fn.sml" {
 	MONO_ARRAY MONO_DYNAMIC_ARRAY General Int
 }
 (*
 	BitArrayAll is apparantly buggy and I do not have the time
 	right now to investigate.
 
-	source unit BIT_ARRAY = "bit-array-sig.sml" {MONO_ARRAY}
-	source unit BIT_VECTOR = "bit-vector-sig.sml" {MONO_VECTOR}
-	source interface BitArrayAll = "bit-array-all.int" {BIT_ARRAY BIT_VECTOR}
-	source unit BitArrayAll : BitArrayAll = "bit-array-all.sml" {
+	unit BIT_ARRAY = "bit-array-sig.sml" {MONO_ARRAY}
+	unit BIT_VECTOR = "bit-vector-sig.sml" {MONO_VECTOR}
+	interface BitArrayAll = "bit-array-all.int" {BIT_ARRAY BIT_VECTOR}
+	unit BitArrayAll : BitArrayAll = "bit-array-all.sml" {
 		BIT_ARRAY BIT_VECTOR Word8Array Word8Vector Word8
 		LibBase Byte Word List
 	}
-	source interface BitArray = "bit-array.int" {BIT_ARRAY}
-	source unit BitArray : BitArray = "bit-array.sml" {BitArrayAll}
-	source interface BitVector = "bit-vector.int" {BIT_VECTOR}
-	source unit BitVector : BitVector = "bit-vector.sml" {BitArrayAll}
+	interface BitArray = "bit-array.int" {BIT_ARRAY}
+	unit BitArray : BitArray = "bit-array.sml" {BitArrayAll}
+	interface BitVector = "bit-vector.int" {BIT_VECTOR}
+	unit BitVector : BitVector = "bit-vector.sml" {BitArrayAll}
 *)
-source unit INT_INF = "int-inf-sig.sml" {Int INTEGER}
-source interface IntInf = "int-inf.int" {INT_INF}
-source unit IntInf : IntInf = "int-inf.sml" { 
+interface INT_INF = "int-inf-sig.sml" {Int INTEGER}
+unit INT_INF : INT_INF = "int-inf-sig.sml" {Int INTEGER}
+interface IntInf = "int-inf.int" {INT_INF}
+unit IntInf : IntInf = "int-inf.sml" { 
 	StringCvt Word32 Int32 Int String Word INT_INF Char LargeInt
 	Vector List CharVector
 }
-make library $libdir ^ "/smlnj-lib"

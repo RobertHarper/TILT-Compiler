@@ -1,6 +1,5 @@
 signature STATS =
-   sig
-
+sig
 
      val reset_stats : unit -> unit
 
@@ -42,5 +41,19 @@ signature STATS =
 
      val fetch_counter : string -> int
 
-   end
+     (*
+	For master-slave communication.
+     *)
+     type stats
+     type delta
+     val get : unit -> stats
+     val set : stats -> unit
+     val sub : stats * stats -> delta
+     val add : stats * delta -> stats
 
+     val blastOutStats : Blaster.outstream -> stats -> unit
+     val blastInStats : Blaster.instream -> stats
+
+     val blastOutDelta : Blaster.outstream -> delta -> unit
+     val blastInDelta : Blaster.instream -> delta
+end

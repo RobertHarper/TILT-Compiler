@@ -128,14 +128,14 @@ structure OS_FileSys :> OS_FILE_SYS =
 
     fun compare (FID{dev=d1, ino=i1}, FID{dev=d2, ino=i2}) =
 	  if (SysWord.<(d1, d2))
-	    then General.LESS
+	    then LESS
 	  else if (SysWord.>(d1, d2))
-	    then General.GREATER
+	    then GREATER
 	  else if (SysWord.<(i1, i2))
-	    then General.LESS
+	    then LESS
 	  else if (SysWord.>(i1, i2))
-	    then General.GREATER
-	    else General.EQUAL
+	    then GREATER
+	    else EQUAL
 
   end;
 

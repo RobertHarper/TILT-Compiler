@@ -21,10 +21,18 @@ structure IlUtil :> ILUTIL =
     local
 	val Clooklabs : (context * label list -> (path * phrase_class) option) ref =
 	    ref (fn _ => error "Context_Lookup_Labels not installed")
+	val Ctiltprim : (unit -> bool) ref =
+	    ref (fn () => error "compiling_tiltprim not installed")
     in
-	fun installHelpers {Context_Lookup_Labels : context * label list -> (path * phrase_class) option} : unit =
-	    Clooklabs := Context_Lookup_Labels
+	fun installHelpers {Context_Lookup_Labels : context * label list -> (path * phrase_class) option,
+			    compiling_tiltprim : bool ref} : unit =
+	    let val _  = Clooklabs := Context_Lookup_Labels
+		fun tiltprim () = !compiling_tiltprim
+		val _ = Ctiltprim := tiltprim
+	    in ()
+	    end
 	fun Context_Lookup_Labels arg = !Clooklabs arg
+	fun compiling_tiltprim () : bool = !Ctiltprim ()
     end
 
     (* -------------------------------------------------------- *)
@@ -162,6 +170,11 @@ structure IlUtil :> ILUTIL =
 		Note the phase-splitter requires that we inline
 		datatype constructors.
 	*)
+	val TiltPrim = Name.unit_label "TiltPrim"
+
+	fun bool_labs (lab : label) : labels =
+	    if compiling_tiltprim() then lab :: nil
+	    else TiltPrim :: lab :: nil
 
 	fun lookup_con (labs : labels) (ctxt : context) : con =
 	    (case Context_Lookup_Labels (ctxt, labs)
@@ -191,18 +204,16 @@ structure IlUtil :> ILUTIL =
 	       of SOME (_, PHRASE_CLASS_EXP (e,_,_,_)) => e
 		| NONE => errorMsg (ctxt,"unbound exception",labs))
 
-	val Firstlude = Name.to_unit(Name.internal_label "Firstlude")
 	val bool_sum = Name.internal_label "bool_sum"
-	val bool_out = Name.to_coercion (Name.internal_label "bool_out")
-	val bool_in  = Name.to_coercion (Name.internal_label "bool_in")
+	val lab_bool_out = Name.to_coercion (Name.internal_label "bool_out")
+	val lab_bool_in  = Name.to_coercion (Name.internal_label "bool_in")
 
-	val VectorEq = Name.to_unit(Name.internal_label "VectorEq")
-	val TiltVectorEq = Name.symbol_label(Symbol.strSymbol "TiltVectorEq")
+	val TiltVectorEq = Name.unit_label "TiltVectorEq"
+	val TiltVectorEq' = Name.symbol_label(Symbol.strSymbol "TiltVectorEq")
 	val vector_eq = Name.symbol_label(Symbol.varSymbol "vector_eq")
 	val word8vector_eq = Name.symbol_label(Symbol.varSymbol "word8vector_eq")
 
-	val Prelude = Name.to_unit(Name.internal_label "Prelude")
-	val string_eq = Name.to_eq(Name.symbol_label(Symbol.tycSymbol "string"))
+	val TiltPrelude = Name.unit_label "TiltPrelude"
 	val match = Name.symbol_label(Symbol.varSymbol "Match")
 	val bind = Name.symbol_label(Symbol.varSymbol "Bind")
 	val mk = Name.internal_label "mk"
@@ -211,19 +222,18 @@ structure IlUtil :> ILUTIL =
 	val lab_true = Name.symbol_label (Symbol.varSymbol "true")
 	val lab_false = Name.symbol_label (Symbol.varSymbol "false")
 
-	val con_bool : context -> con = lookup_con [Firstlude,lab_bool]
-	val con_bool_sum : context -> con = lookup_con [Firstlude,bool_sum]
-	val true_exp : context -> exp = lookup_exp [Firstlude,lab_true]
-	val false_exp : context -> exp = lookup_exp [Firstlude,lab_false]
-	val bool_out : context -> exp = lookup_exp [Firstlude,bool_out]
-	val bool_in  : context -> exp = lookup_exp [Firstlude,bool_in]
+	fun con_bool ctx : con = lookup_con (bool_labs lab_bool) ctx
+	fun con_bool_sum ctx : con = lookup_con (bool_labs bool_sum) ctx
+	fun true_exp ctx : exp = lookup_exp (bool_labs lab_true) ctx
+	fun false_exp ctx : exp = lookup_exp (bool_labs lab_false) ctx
+	fun bool_out ctx : exp = lookup_exp (bool_labs lab_bool_out) ctx
+	fun bool_in ctx : exp = lookup_exp (bool_labs lab_bool_in) ctx
 	val vector_eq : context -> mod * signat =
-	  lookup_poly [VectorEq,TiltVectorEq,vector_eq]
+	    lookup_poly [TiltVectorEq,TiltVectorEq',vector_eq]
 	val word8vector_eq : context -> exp * con =
-	  lookup_expcon [VectorEq,TiltVectorEq,word8vector_eq]
-	val string_eq : context -> exp = lookup_exp [Prelude,string_eq]
-	val bind_exn : context -> exp = lookup_exn [Prelude,bind,mk]
-	val match_exn : context -> exp = lookup_exn [Prelude,match,mk]
+	  lookup_expcon [TiltVectorEq,TiltVectorEq',word8vector_eq]
+	val bind_exn : context -> exp = lookup_exn [TiltPrelude,bind,mk]
+	val match_exn : context -> exp = lookup_exn [TiltPrelude,match,mk]
     end
 
 
@@ -709,6 +719,7 @@ structure IlUtil :> ILUTIL =
 	   fun dec_handle handlers = f_dec' (all_handlers handlers)
 	   fun decresult_handle handlers = f_decresult (all_handlers handlers)
 	   fun sdecs_handle handlers = f_sdecs (all_handlers handlers)
+	   fun entries_handle handlers = f_entries (all_handlers handlers)
        end
 
 

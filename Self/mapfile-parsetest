@@ -1,6 +1,0 @@
-include group "mapfile-parse"
-
-source unit parsetest = "parsetest.sml" {
-	TextIO LinkParse Stats
-}
-make executable "parsetest." ^ $target ^ ".exe" {parsetest}

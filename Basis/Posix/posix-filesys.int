@@ -1,0 +1,4 @@
+structure POSIX_FileSys : POSIX_FILE_SYS
+	where type uid = PrePosix.uid
+	where type gid = PrePosix.gid
+	where type open_mode = PrePosix.open_mode

@@ -1,2 +1,1 @@
-source unit Test = "real.maxFinite.sml" {Real}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "real.maxFinite.sml" {Real}

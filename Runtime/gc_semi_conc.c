@@ -149,7 +149,8 @@
 
 
 /* -------------- Helper Function - should be moved??? XXXXXXXXXXXX --------------- */
-INLINE(flipRootLoc)
+#pragma INLINEP(flipRootLoc)
+static INLINE
 void flipRootLoc(ploc_t root)
 {
   ptr_t primary = *root;

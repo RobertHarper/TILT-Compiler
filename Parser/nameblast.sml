@@ -82,6 +82,11 @@ structure NameBlast :> NAMEBLAST =
 	in  foldl folder TagMap.empty ls
 	end
 
+    fun blastOutLabelset os set =
+	blastOutList blastOutLabel os (LabelSet.listItems set)
+
+    fun blastInLabelset is =
+	LabelSet.addList (LabelSet.empty, blastInList blastInLabel is)
 
 end
 

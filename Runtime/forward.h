@@ -1,4 +1,4 @@
-/* Unfortunately, the DEC cc compiler will not inline functions
+/* Unfortunately, the DEC cc compiler will not INLINE functions
    that use 32-bit pointers.  On the other hand, gcc
    on the Alpha does not support 32-bit pointers at all.
 */
@@ -33,7 +33,8 @@ void  ReturnCopyRange(CopyRange_t *copyRange);         /* Return remainder of co
 void AddGrayCopyRange(CopyRange_t *copyRange);
 
 /* When align and noCheck are statically known, the compiler can greatly simplify the function body */
-INLINE(allocFromCopyRange)
+#pragma INLINEP(allocFromCopyRange)
+static INLINE
 mem_t allocFromCopyRange(Proc_t *proc, int request, Align_t align, int noCheck) /* request is a multiple of 4 */
 {
   mem_t region;
@@ -140,14 +141,16 @@ ptr_t copy_noSpaceCheck_copyCopySync_replicaSet(Proc_t *, ptr_t obj);
 */
 
 
-INLINE(copy1_noSpaceCheck)
+#pragma INLINEP(copy1_noSpaceCheck)
+static INLINE
 void copy1_noSpaceCheck(Proc_t *proc, ptr_t obj, Heap_t *from)
 {
   if (InRange((mem_t) obj, &from->range))
     copy_noSpaceCheck(proc,obj);
 }
 
-INLINE(locCopy1_noSpaceCheck)
+#pragma INLINEP(locCopy1_noSpaceCheck)
+static INLINE
 void locCopy1_noSpaceCheck(Proc_t *proc, ploc_t loc, Heap_t *from)
 {
   ptr_t obj = *loc;
@@ -156,7 +159,8 @@ void locCopy1_noSpaceCheck(Proc_t *proc, ploc_t loc, Heap_t *from)
   }
 }
 
-INLINE(locCopy1)
+#pragma INLINEP(locCopy1)
+static INLINE
 void locCopy1(Proc_t *proc, ploc_t loc, Heap_t *from)
 {
   ptr_t obj = *loc;
@@ -165,7 +169,8 @@ void locCopy1(Proc_t *proc, ploc_t loc, Heap_t *from)
   }
 }
 
-INLINE(locCopy2L_noSpaceCheck)
+#pragma INLINEP(locCopy2L_noSpaceCheck)
+static INLINE
 void locCopy2L_noSpaceCheck(Proc_t *proc, ploc_t loc,
 			    Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -178,7 +183,8 @@ void locCopy2L_noSpaceCheck(Proc_t *proc, ploc_t loc,
     gc_large_addRoot(obj);
 }
 
-INLINE(copy2L_noSpaceCheck)
+#pragma INLINEP(copy2L_noSpaceCheck)
+static INLINE
 void copy2L_noSpaceCheck(Proc_t *proc, ptr_t obj, 
 			 Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -190,35 +196,40 @@ void copy2L_noSpaceCheck(Proc_t *proc, ptr_t obj,
     gc_large_addRoot(obj);
 }
 
-INLINE(copy1_copyCopySync_replicaSet)
+#pragma INLINEP(copy1_copyCopySync_replicaSet)
+static INLINE
 void copy1_copyCopySync_replicaSet(Proc_t *proc, ptr_t obj, Heap_t *from)
 { 
   if (InRange((mem_t) obj, &from->range))
     copy_copyCopySync_replicaSet(proc,obj);
 }
 
-INLINE(alloc1_copyCopySync_primarySet)
+#pragma INLINEP(alloc1_copyCopySync_primarySet)
+static INLINE
 void alloc1_copyCopySync_primarySet(Proc_t *proc, ptr_t obj, Heap_t *from)
 { 
   if (InRange((mem_t) obj, &from->range))
     alloc_copyCopySync_primarySet(proc,obj);
 }
 
-INLINE(alloc1_copyCopySync)
+#pragma INLINEP(alloc1_copyCopySync)
+static INLINE
 void alloc1_copyCopySync(Proc_t *proc, ptr_t obj, Heap_t *from)
 { 
   if (InRange((mem_t) obj, &from->range))
     alloc_copyCopySync(proc,obj);
 }
 
-INLINE(alloc1_copyCopySync_replicaSet)
+#pragma INLINEP(alloc1_copyCopySync_replicaSet)
+static INLINE
 void alloc1_copyCopySync_replicaSet(Proc_t *proc, ptr_t obj, Heap_t *from)
 { 
   if (InRange((mem_t) obj, &from->range))
     alloc_copyCopySync_replicaSet(proc,obj);
 }
 
-INLINE(alloc1L_copyCopySync_primarySet)
+#pragma INLINEP(alloc1L_copyCopySync_primarySet)
+static INLINE
 void alloc1L_copyCopySync_primarySet(Proc_t *proc, ptr_t obj, Heap_t *from, Heap_t *large)
 { 
   if (InRange((mem_t) obj, &from->range))
@@ -227,7 +238,8 @@ void alloc1L_copyCopySync_primarySet(Proc_t *proc, ptr_t obj, Heap_t *from, Heap
     gc_large_addRoot(obj);
 }
 
-INLINE(locAlloc1_copyCopySync_primarySet)
+#pragma INLINEP(locAlloc1_copyCopySync_primarySet)
+static INLINE
 void locAlloc1_copyCopySync_primarySet(Proc_t *proc, ploc_t loc, Heap_t *from)
 { 
   ptr_t white = *loc;							
@@ -237,7 +249,8 @@ void locAlloc1_copyCopySync_primarySet(Proc_t *proc, ploc_t loc, Heap_t *from)
 }
 
 
-INLINE(locAlloc1_copyCopySync)
+#pragma INLINEP(locAlloc1_copyCopySync)
+static INLINE
 void locAlloc1_copyCopySync(Proc_t *proc, ploc_t loc, Heap_t *from)
 { 
   ptr_t white = *loc;							
@@ -246,7 +259,8 @@ void locAlloc1_copyCopySync(Proc_t *proc, ploc_t loc, Heap_t *from)
   }
 }
 
-INLINE(locAlloc1_copyCopySync_replicaSet)
+#pragma INLINEP(locAlloc1_copyCopySync_replicaSet)
+static INLINE
 void locAlloc1_copyCopySync_replicaSet(Proc_t *proc, ploc_t loc, Heap_t *from)
 { 
   ptr_t white = *loc;							
@@ -255,7 +269,8 @@ void locAlloc1_copyCopySync_replicaSet(Proc_t *proc, ploc_t loc, Heap_t *from)
   }
 }
 
-INLINE(locAlloc1L_copyCopySync_primarySet)
+#pragma INLINEP(locAlloc1L_copyCopySync_primarySet)
+static INLINE
 void locAlloc1L_copyCopySync_primarySet(Proc_t *proc, ploc_t loc, Heap_t *from, Heap_t *large)
 { 
   ptr_t white = *loc;							
@@ -266,7 +281,8 @@ void locAlloc1L_copyCopySync_primarySet(Proc_t *proc, ploc_t loc, Heap_t *from, 
     gc_large_addRoot(white);
 }
 
-INLINE(locCopy1_copyCopySync)
+#pragma INLINEP(locCopy1_copyCopySync)
+static INLINE
 void locCopy1_copyCopySync(Proc_t *proc, ploc_t loc, Heap_t *from)
 { 
   ptr_t white = *loc;				
@@ -275,7 +291,8 @@ void locCopy1_copyCopySync(Proc_t *proc, ploc_t loc, Heap_t *from)
   }
 }
 
-INLINE(locCopy1_copyCopySync_replicaSet)
+#pragma INLINEP(locCopy1_copyCopySync_replicaSet)
+static INLINE
 void locCopy1_copyCopySync_replicaSet(Proc_t *proc, ploc_t loc, Heap_t *from)
 { 
   ptr_t white = *loc;				
@@ -284,7 +301,8 @@ void locCopy1_copyCopySync_replicaSet(Proc_t *proc, ploc_t loc, Heap_t *from)
   }
 }
 
-INLINE(locCopy1_replicaSet)
+#pragma INLINEP(locCopy1_replicaSet)
+static INLINE
 void locCopy1_replicaSet(Proc_t *proc, ploc_t loc, Heap_t *from)
 { 
   ptr_t white = *loc;				
@@ -293,7 +311,8 @@ void locCopy1_replicaSet(Proc_t *proc, ploc_t loc, Heap_t *from)
   }
 }
 
-INLINE(locCopy1_noSpaceCheck_copyCopySync_replicaSet)
+#pragma INLINEP(locCopy1_noSpaceCheck_copyCopySync_replicaSet)
+static INLINE
 void locCopy1_noSpaceCheck_copyCopySync_replicaSet(Proc_t *proc, ploc_t loc, Heap_t *from)
 { 
   ptr_t white = *loc;						
@@ -302,7 +321,8 @@ void locCopy1_noSpaceCheck_copyCopySync_replicaSet(Proc_t *proc, ploc_t loc, Hea
   }
 }
 
-INLINE(locCopy1_noSpaceCheck_replicaSet)
+#pragma INLINEP(locCopy1_noSpaceCheck_replicaSet)
+static INLINE
 void locCopy1_noSpaceCheck_replicaSet(Proc_t *proc, ploc_t loc, Heap_t *from)
 { 
   ptr_t white = *loc;				
@@ -312,7 +332,8 @@ void locCopy1_noSpaceCheck_replicaSet(Proc_t *proc, ploc_t loc, Heap_t *from)
 }
 
 
-INLINE(locCopy1_noSpaceCheck_copyCopySync)
+#pragma INLINEP(locCopy1_noSpaceCheck_copyCopySync)
+static INLINE
 void locCopy1_noSpaceCheck_copyCopySync(Proc_t *proc, ploc_t loc, Heap_t *from)
 { 
   ptr_t white = *loc;
@@ -321,14 +342,16 @@ void locCopy1_noSpaceCheck_copyCopySync(Proc_t *proc, ploc_t loc, Heap_t *from)
   }
 }
 
-INLINE(copy1_copyCopySync_primarySet)
+#pragma INLINEP(copy1_copyCopySync_primarySet)
+static INLINE
 void copy1_copyCopySync_primarySet(Proc_t *proc, ptr_t white, Heap_t *from)
 { 
   if (InRange((mem_t) white, &from->range)) 
     copy_copyCopySync_primarySet(proc,white);
 }
 
-INLINE(locCopy1_copyCopySync_primarySet)
+#pragma INLINEP(locCopy1_copyCopySync_primarySet)
+static INLINE
 void locCopy1_copyCopySync_primarySet(Proc_t *proc, ploc_t loc, Heap_t *from)
 { 
   ptr_t white = *loc;							
@@ -337,7 +360,8 @@ void locCopy1_copyCopySync_primarySet(Proc_t *proc, ploc_t loc, Heap_t *from)
   }
 }
 
-INLINE(locCopy1L_copyCopySync_primarySet)
+#pragma INLINEP(locCopy1L_copyCopySync_primarySet)
+static INLINE
 void locCopy1L_copyCopySync_primarySet(Proc_t *proc, ploc_t loc, Heap_t *from, Heap_t *large)
 { 
   ptr_t white = *loc;
@@ -348,7 +372,8 @@ void locCopy1L_copyCopySync_primarySet(Proc_t *proc, ploc_t loc, Heap_t *from, H
     gc_large_addRoot(white);
 }
 
-INLINE(locCopy2L_copyCopySync_replicaSet)
+#pragma INLINEP(locCopy2L_copyCopySync_replicaSet)
+static INLINE
 void locCopy2L_copyCopySync_replicaSet(Proc_t *proc, ploc_t loc, 
 				       Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -361,7 +386,8 @@ void locCopy2L_copyCopySync_replicaSet(Proc_t *proc, ploc_t loc,
     gc_large_addRoot(white);
 }
 
-INLINE(copy2L_copyCopySync_primarySet)
+#pragma INLINEP(copy2L_copyCopySync_primarySet)
+static INLINE
 void copy2L_copyCopySync_primarySet(Proc_t *proc, ptr_t white, 
 				      Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -372,7 +398,8 @@ void copy2L_copyCopySync_primarySet(Proc_t *proc, ptr_t white,
     gc_large_addRoot(white);
 }
 
-INLINE(locCopy2L_copyCopySync_primarySet)
+#pragma INLINEP(locCopy2L_copyCopySync_primarySet)
+static INLINE
 void locCopy2L_copyCopySync_primarySet(Proc_t *proc, ploc_t loc, 
 					 Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -386,7 +413,8 @@ void locCopy2L_copyCopySync_primarySet(Proc_t *proc, ploc_t loc,
 }
 
 
-INLINE(locCopy2L_copyCopySync_replicaSet)
+#pragma INLINEP(locCopy2L_copyCopySync_replicaSet)
+static INLINE
 void locCopy2L_copyCopySync_replica(Proc_t *proc, ploc_t loc,
 				    Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -399,7 +427,8 @@ void locCopy2L_copyCopySync_replica(Proc_t *proc, ploc_t loc,
     gc_large_addRoot(white);
 }
 
-INLINE(locAlloc2L_copyCopySync_primarySet)
+#pragma INLINEP(locAlloc2L_copyCopySync_primarySet)
+static INLINE
 void locAlloc2L_copyCopySync_primarySet(Proc_t *proc, ploc_t loc,
 					  Heap_t *from, Heap_t *from2, Heap_t *large)
 { 

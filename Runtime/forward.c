@@ -12,7 +12,7 @@
 #include "memobj.h"
 #include "thread.h"
 #include "show.h"
-#ifdef alpha_osf
+#ifdef alpha
 #include <c_asm.h>
 #endif
 
@@ -192,12 +192,13 @@ unsigned long objectLength(ptr_t obj, mem_t *start)
 
 /* ----------- Functions relating to copying an object or allocating space for a copy ------------------- */
 
-INLINE(acquireOwnership)
+#pragma INLINEP(acquireOwnership)
+static INLINE
 tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag)
      /* Tag is the the tag value when the caller checked.  It may have changed */
 {
 
-#ifdef alpha_osf
+#ifdef alpha
   int done = 0;
   while (!done) {
     /*    asm("ldl_l %0,-4(%1)" : "=i" (tag) : "i" (white)); */
@@ -259,7 +260,8 @@ tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag)
    (1) Check proc->bytesCopied to see if actually copied 
    (2) Check proc->needScan (in addition to bytesCopied) for non-zero to see if copied object might have pointer field
 */
-INLINE(genericAlloc)
+#pragma INLINEP(genericAlloc)
+static INLINE
 ptr_t genericAlloc(Proc_t *proc, ptr_t white, int doCopy, 
 		   int doCopyCopy, int skipSpaceCheck, StackType_t stackType)
 {

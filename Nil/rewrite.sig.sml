@@ -19,8 +19,7 @@ signature NILREWRITE =
 		  kindhandler  : ('state,Nil.kind) termhandler,
 		  tracehandler : ('state,Nil.niltrace) termhandler,
 		  con_var_bind : 'state binder,
-		  exp_var_bind : 'state binder,
-		  labelled_var : 'state * Nil.label * Nil.var -> 'state
+		  exp_var_bind : 'state binder
 		  }
 
     val rewriters : 'state handler -> {
@@ -36,8 +35,6 @@ signature NILREWRITE =
 
     val null_binder         : 'state binder
 
-    val null_label_binder   : 'state * Nil.label * Nil.var -> 'state
-
     val default_handler     : 'state handler
 
     val set_kindhandler     : 'state handler -> ('state, Nil.kind) termhandler -> 'state handler
@@ -48,5 +45,4 @@ signature NILREWRITE =
 
     val set_exp_binder      : 'state handler -> 'state binder  -> 'state handler
 
-    val set_label_binder    : 'state handler -> ('state * Nil.label * Nil.var -> 'state) -> 'state handler
   end

@@ -1,2 +1,1 @@
-source unit RedBlackSetFn = "redblack-set-fn.sml" {}
-make executable "Test." ^ $target ^ ".exe" {RedBlackSetFn}
+unit RedBlackSetFn = "redblack-set-fn.sml" {}

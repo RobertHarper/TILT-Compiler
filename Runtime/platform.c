@@ -84,7 +84,7 @@ void GetPlatform(PlatformType *platform)
 
 static PlatformType platform;
 
-#ifdef alpha_osf
+#ifdef alpha
 int GetBcacheSize(void) { return platform.bcacheSize; }
 int GetIcacheSize(void) { return platform.icacheSize; }
 int GetDcacheSize(void) { return platform.dcacheSize; }
@@ -107,13 +107,7 @@ int GetPhysicalPages(void) {
 }
 #endif
 
-#ifdef rs_aix
-int GetBcacheSize(void) { return 256 * 1024; }
-int GetIcacheSize(void) { return 8 * 1024; }
-int GetDcacheSize(void) { return 8 * 1024; }
-#endif
-
-#ifdef solaris
+#ifdef sparc
 int GetBcacheSize(void) { return 512 * 1024; }
 int GetIcacheSize(void) { return 8 * 1024; }
 int GetDcacheSize(void) { return 8 * 1024; }
@@ -319,7 +313,7 @@ void showPerfMon(Proc_t *proc, int which) {}
 
 void platform_init(void)
 {
-#ifdef alpha_osf
+#ifdef alpha
   GetPlatform(&platform); 
 #endif
 }

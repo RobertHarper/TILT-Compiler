@@ -128,12 +128,9 @@ structure NilContextPre
    type c_entry = con delay   (* Make it a delay to allow on demand synthesis.  Speeds up *)
 			      (* later compiler phases. *)
 
-   type v_entry = var
-
    type context =
      {kindmap : k_entry map,    (* Kinds*)
       conmap  : c_entry map,    (* Constructors *)
-      varmap  : v_entry L.map,  (* Labelled vars *)
       counter : int}            (* Index of next variable to be inserted *)
 
 
@@ -155,12 +152,6 @@ structure NilContextPre
 	   Ppnil.pp_kind kind;
 	   print "\n")
 
-     fun print_var_entry (label,var:v_entry) =
-	 (print (Name.label2string label);
-	  print " = ";
-	  print (Name.var2string var);
-	  print "\n")
-
      fun lt ((_,{index=a,...}:k_entry),(_,{index=b,...}:k_entry)) = a < b
 
    in
@@ -172,14 +163,9 @@ structure NilContextPre
 	(print "\n Expression variables and constructors are :\n";
 	 V.appi print_con conmap)
 
-     fun print_labelled_vars ({varmap,...}:context) =
-	 (print "\n Labelled variables are :\n";
-	  L.appi print_var_entry varmap)
-
      fun print_context (context:context) =
 	 (print_kinds context;
-	  print_cons context;
-	  print_labelled_vars context)
+	  print_cons context)
    end
 
 
@@ -225,7 +211,7 @@ structure NilContextPre
    (* Empty context
     *)
    fun empty () : context =
-     {kindmap = V.empty, conmap = V.empty, counter = 0, varmap = L.empty}
+     {kindmap = V.empty, conmap = V.empty, counter = 0}
 
 
    (* Is a given variable already bound?
@@ -235,7 +221,7 @@ structure NilContextPre
 
    (*****Term level functions. ******)
 
-   fun insert_con (ctx as {conmap,kindmap,varmap,counter}:context,var,con:con) :context=
+   fun insert_con (ctx as {conmap,kindmap,counter}:context,var,con:con) :context=
      let
        val _ =
 	 if !debug then
@@ -245,7 +231,6 @@ structure NilContextPre
      in
        {conmap = Vinsert (conmap, var, c_entry),
 	kindmap = kindmap,
-	varmap = varmap,
 	counter = counter}
      end
 
@@ -328,7 +313,7 @@ structure NilContextPre
 
    (* Insert a kind which is known to be standard.
     *)
-   fun insert_stdkind (context as {conmap,kindmap,varmap,counter}: context,var,std_kind) =
+   fun insert_stdkind (context as {conmap,kindmap,counter}: context,var,std_kind) =
      let
        val entry = {eqn = ref NONE,
 		    kind = std_kind,
@@ -338,13 +323,12 @@ structure NilContextPre
      in
        {conmap = conmap,
 	counter = counter+1,
-	varmap = varmap,
 	kindmap = Vinsert (kindmap, var, entry)}
      end
 
    (* Insert a standard kind, with an equation
     *)
-   fun insert_stdkind_equation (context as {conmap,kindmap,varmap,counter}: context,var,con,std_kind) =
+   fun insert_stdkind_equation (context as {conmap,kindmap,counter}: context,var,con,std_kind) =
      let
        val entry = {eqn = ref (SOME con),
 		    kind = std_kind,
@@ -354,7 +338,6 @@ structure NilContextPre
      in
        {conmap = conmap,
 	counter = counter+1,
-	varmap = varmap,
 	kindmap = Vinsert (kindmap, var, entry)}
      end
 
@@ -549,7 +532,7 @@ structure NilContextPre
 	      )
      in res
      end
-   and insert_kind (context as {conmap,kindmap,varmap,counter}:context,var,kind) =
+   and insert_kind (context as {conmap,kindmap,counter}:context,var,kind) =
      let
        val _ =
 	   if !debug then
@@ -573,12 +556,11 @@ structure NilContextPre
        in
 	 {conmap = conmap,
 	  counter = counter+1,
-	  varmap = varmap,
 	  kindmap = Vinsert (kindmap, var, entry)}
        end
 
 
-  fun insert_kind_equation (context as {conmap,kindmap,varmap,counter}:context,var,con,kind) =
+  fun insert_kind_equation (context as {conmap,kindmap,counter}:context,var,con,kind) =
      let
        val _ =
 	 if !debug then
@@ -603,7 +585,6 @@ structure NilContextPre
 		    max_kind = max_kind,
 		    index = counter}
      in {conmap = conmap,
-	 varmap = varmap,
 	 counter = counter+1,
 	 kindmap = Vinsert (kindmap, var, entry)}
      end
@@ -615,7 +596,7 @@ structure NilContextPre
     foldl (fn ((v,k),C) => insert_kind (C,v,k)) C vklist
 
 
-   fun insert_exp_pre (typeof : context*exp -> con) (ctx as {conmap,kindmap,varmap,counter}:context,var,exp:exp) :context =
+   fun insert_exp_pre (typeof : context*exp -> con) (ctx as {conmap,kindmap,counter}:context,var,exp:exp) :context =
      let
        val _ =
 	 if !debug then
@@ -626,7 +607,6 @@ structure NilContextPre
      in
        {conmap = Vinsert (conmap, var, c_entry),
 	kindmap = kindmap,
-	varmap = varmap,
 	counter = counter}
      end
 
@@ -648,7 +628,7 @@ structure NilContextPre
 
    fun insert_cbnd_list (ctxt:context,cbnds:conbnd list) :context = foldl (fn (cb,ctxt) => insert_cbnd (ctxt,cb)) ctxt cbnds
 
-   fun insert_bnd_pre (typeof : context*exp -> con) (ctxt as {conmap,kindmap,varmap,counter}:context,bnd:bnd) :context =
+   fun insert_bnd_pre (typeof : context*exp -> con) (ctxt as {conmap,kindmap,counter}:context,bnd:bnd) :context =
      (case bnd of
 	Exp_b(v,_,e) => insert_exp_pre typeof (ctxt,v,e)
       | Con_b(p,cbnd) => insert_cbnd (ctxt,cbnd)
@@ -776,44 +756,6 @@ structure NilContextPre
 
     val find_kind_equation = subtimer("Ctx:find_kind_equation",find_kind_equation)
 
-   (*****Labelled variable context functions. ******)
-
-    (* Insert a label into a context.  If the label is already bound,
-     * raises an exception.
-     *)
-    fun insert_label (context as {kindmap,conmap,counter,varmap}:context,label,var) : context =
-      let
-	val _ =
-	  if !debug then
-	    assert (locate "insert_label")
-	    [
-	     (bound_con (context,var) orelse bound_exp (context,var),
-	      fn () => (print (Name.var2string var);
-			print " Variable not found in context"))
-	     ]
-	  else ()
-	val _ =
-	    if !debug then
-		print (" insert_label "^Name.label2string label^" -> "^Name.var2string var^"\n")
-	    else ()
-
-	val entry = var
-      in {kindmap = kindmap,
-	  conmap = conmap,
-	  counter = counter,
-	  varmap = Linsert (varmap,label,var)}
-      end
-
-    fun find_labelled_var (D as {varmap,...}:context,label) =
-	(case Lfind (varmap,label)
-	   of SOME var => var
-	    | NONE =>
-	       (if (!debug) then
-		    (print ("label " ^ Name.label2string label ^ " not bound\n");
-		     print_labelled_vars D)
-		else ();
-		raise Unbound))
-
     (* is_well_formed (kind_valid,con_valid,subkind) D
      * Check whether or not a given context is well-formed.
      *)
@@ -826,7 +768,7 @@ structure NilContextPre
 	val entries =ListMergeSort.sort compare entries
 	val error : string -> bool = error (locate "is_well_formed")
 
-	fun folder ((var,entry as {eqn,kind,std_kind,max_kind,index}),D as {kindmap,conmap,varmap,counter}) =
+	fun folder ((var,entry as {eqn,kind,std_kind,max_kind,index}),D as {kindmap,conmap,counter}) =
 	  let
 	    val kind = kind_valid (D,kind)
 	    val _ =
@@ -850,12 +792,11 @@ structure NilContextPre
 	    val D =
 	      {kindmap = Vinsert (kindmap,var,entry),
 	       conmap = conmap,
-	       varmap = varmap,
 	       counter = counter+1}
 	  in D
 	  end
 	val _ = List.foldl folder (empty()) entries
-	(* XXX: Does not check conmap or varmap. *)
+	(* XXX: Does not check conmap. *)
       in true
       end
 

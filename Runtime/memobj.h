@@ -10,9 +10,9 @@
 #include <pthread.h>
 #include <ucontext.h>
 
-#if (defined solaris)
+#if (defined sparc)
 #define TILT_PAGESIZE 8192
-#elif (defined alpha_osf)
+#elif (defined alpha)
 #define TILT_PAGESIZE 8192
 #endif
 
@@ -92,14 +92,16 @@ typedef struct range__t range_t;
 
 void SetRange(range_t *range, mem_t low, mem_t high);
 
-/* static inline InRange(mem_t addr, range_t *range)  */
-INLINE(InRange)
+/* static INLINE InRange(mem_t addr, range_t *range)  */
+#pragma INLINEP(InRange)
+static INLINE
 int InRange(mem_t addr, range_t *range)
 {
   return ((unsigned int)addr - (unsigned int)range->low <= range->diff);
 }
 
-INLINE(NotInRange)
+#pragma INLINEP(NotInRange)
+static INLINE
 int NotInRange(mem_t addr, range_t *range) 
 {
   return ((unsigned int)addr - (unsigned int)range->low > range->diff);
@@ -122,7 +124,8 @@ typedef struct Heap__t
   Bitmap_t *bitmap;            /* Stores starts of objects for debugging */
 } Heap_t;
 
-INLINE(inHeap)
+#pragma INLINEP(inHeap)
+static INLINE
 int inHeap(vptr_t v, Heap_t *heap)
 {
   return (((val_t) v - (val_t) heap->bottom) < heap->size);
@@ -135,7 +138,8 @@ void Heap_Check(Heap_t*);
 void Heap_Reset(Heap_t *);
 struct Proc__t;
 int Heap_ResetFreshPages(struct Proc__t *, Heap_t *);
-INLINE(Heap_TouchPage)
+#pragma INLINEP(Heap_TouchPage)
+static INLINE
 int Heap_TouchPage(Heap_t *h, mem_t addr) /* Returns 1 if fresh */
 {
   int offset = sizeof(val_t) * (addr - h->bottom);
@@ -165,7 +169,8 @@ int Heap_GetAvail(Heap_t *res);                       /* Space unused under curr
 int Heap_GetUsed(Heap_t *res);                        /* Space used or allocated to processor */
 void PadHeapArea(mem_t bottom, mem_t top);
 
-INLINE(GetHeapArea)
+#pragma INLINEP(GetHeapArea)
+static INLINE
 void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *top)
 {
   mem_t region = (mem_t) FetchAndAdd((long *)(&heap->cursor), size); 

@@ -1,2 +1,1 @@
-source unit Test = "print-self.sml" {String}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "print-self.sml" {String}

@@ -141,7 +141,7 @@ structure RealFormat : sig
 		    else doZeros (negate e, prec, 2, [#".", #"0"])
 		end
 	  in
-	    if lt(prec, 0) then raise General.Size else ();
+	    if lt(prec, 0) then raise Size else ();
 	    if (r < 0.0)
 	      then {sign = "~", mantissa = rtoa(decompose(~r, 0, pf))}
 	    else if (r > 0.0)
@@ -165,7 +165,7 @@ structure RealFormat : sig
 		      doFrac(List.tl digits, prec, [#".", mkDigit(List.hd digits)]), e)
 		end
 	  in
-	    if lt(prec, 0) then raise General.Size else ();
+	    if lt(prec, 0) then raise Size else ();
 	    if (r < 0.0)
 	      then rtoa ("~", decompose(~r, 0, pf))
 	    else if (r > 0.0)
@@ -207,7 +207,7 @@ structure RealFormat : sig
 		      end
 		end
 	  in
-	    if lt(prec, 1) then raise General.Size else ();
+	    if lt(prec, 1) then raise Size else ();
 	    if (r < 0.0)
 	      then rtoa("~", decompose(~r, 0, pf))
 	    else if (r > 0.0)

@@ -1,4 +1,3 @@
-source unit Test = "word8.sml" {
+unit Test = "word8.sml" {
 	Word8 Int Word List StringCvt
 }
-make executable "Test." ^ $target ^ ".exe" {Test}

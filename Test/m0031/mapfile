@@ -1,2 +1,1 @@
-source unit Test = "list.sml" {Int List}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "list.sml" {Int List}

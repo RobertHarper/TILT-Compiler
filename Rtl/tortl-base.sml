@@ -302,10 +302,6 @@ struct
 	      case k of
 		  Single_k c => NilContext.insert_con(env1, v, c)
 		| _ => env1
-	  val env1 =
-	      case l of
-		  NONE => env1
-		| SOME l => NilContext.insert_label(env1, l, v)
 	  val env2 = VarMap.insert(env2, v, ref NONE)
 	  val newenv = (env1, env2)
 	  val newstate = {is_top=is_top,env=newenv,

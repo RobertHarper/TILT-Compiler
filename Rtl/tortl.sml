@@ -2151,9 +2151,6 @@ struct
 
      fun entryTables (unitnames : string list) : Rtl.module =
 	 let
-	   val _ = (print "Linking with units ";
-		    print (Listops.concatWith ", " unitnames);
-		    print "\n")
 	     val entries : entry list = map mkentry unitnames
 	     val Rtl.MODULE{procs,data=linkData,
 			    entry,global,parms} = linkUnit entries

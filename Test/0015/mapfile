@@ -1,14 +1,19 @@
 (*
+	*BAD TEST*
+
+	This test does not depend on the semantics of ML but on the
+	behavior of the manager.  The manager has changed so that it
+	is no longer possible to compare two HS signatures by creating
+	two interfaces and ascribing them to the same unit.
+
 	IlStatic.Sig_IsEqual used to bomb rather than return false
 	when comparing functor signatures.  This test compares
 	interfaces I1 and I2.  Since they are unequal, the proper
 	result is Reject.
 *)
 
-source interface I1 = "I1.int" {}
-import unit A : I1
+interface I1 = "I1.int" {}
+unit A : I1
 
-source interface I2 = "I2.int" {}
+interface I2 = "I2.int" {}
 import unit A : I2
-
-make executable "test." ^ $target ^ ".exe" {A}

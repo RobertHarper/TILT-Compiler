@@ -1,2 +1,1 @@
-source unit Test = "fft.sml" {Math}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "fft.sml" {Math}

@@ -1,0 +1,20 @@
+signature PRE_POSIX =
+sig
+
+    eqtype uid
+    val uidToWord : uid -> SysWord.word
+    val wordToUid : SysWord.word -> uid
+
+    eqtype gid
+    val gidToWord : gid -> SysWord.word
+    val wordToGid : SysWord.word -> gid
+
+    datatype open_mode = O_RDONLY | O_WRONLY | O_RDWR
+    val omodeFromWord : SysWord.word -> open_mode
+    val omodeToWord : open_mode -> SysWord.word
+
+    val sysconf : string -> SysWord.word
+
+end
+
+structure PrePosix : PRE_POSIX

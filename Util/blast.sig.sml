@@ -44,6 +44,10 @@ sig
     val blastInBool : instream -> bool
     val blastOutString : outstream -> string -> unit
     val blastInString : instream -> string
+    val blastOutReal : outstream -> real -> unit
+    val blastInReal : instream -> real
+    val blastOutTime : outstream -> Time.time -> unit
+    val blastInTime : instream -> Time.time
     val blastOutPair : 'a blastout -> 'b blastout -> outstream -> ('a * 'b) -> unit
     val blastInPair : 'a blastin -> 'b blastin -> instream -> ('a * 'b)
     val blastOutTriple : 'a blastout -> 'b blastout -> 'c blastout -> outstream -> ('a * 'b * 'c) -> unit

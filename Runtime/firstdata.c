@@ -1,4 +1,4 @@
-/* Used only for solaris */
+/* Used only for sparc */
 
 void dummyFirstFunction(void)
 {

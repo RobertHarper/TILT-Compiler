@@ -1,10 +1,7 @@
-source unit OVERLOAD = "overload.sig.sml" {
+unit OVERLOAD = "overload.sig.sml" {
 	Int Word Word8 Real Char String
 }
-source unit OvldDefaults = "overload-defaults.sml" {}
-source unit Overload = "overload.sml" {
+unit OvldDefaults = "overload-defaults.sml" {}
+unit Overload = "overload.sml" {
 	Int Word Word8 Real Char String OVERLOAD OvldDefaults
 }
-make executable "Overload." ^ $target ^ ".exe" {Overload}
-source unit Test = "test.sml" {}
-make executable "Test." ^ $target ^ ".exe" {Test}

@@ -1,142 +1,376 @@
-functor FileCache(type name
-		  type internal
-		  val filename : name -> string
-		  val reader : name -> internal
-		  val writer : string * internal -> unit) :>
-    FILECACHE where type internal = internal and type name = name =
+(*
+	The implementation is divided into a structure Store that
+	applies the limits and maintains LRU information and a functor
+	FileCache that uses Store and handles IO.
+*)
+structure Store :>
+sig
+
+    type file = string
+    type crc = Crc.crc
+    type size = int
+
+    datatype 'a entry =
+	CRC of crc * size
+      | DATUM of 'a * size
+      | BOTH of crc * 'a * size
+
+    val file_size : 'a entry -> int
+    val datum_size : 'a entry -> int
+
+    type 'a store
+
+    val mkstore :
+	{max_file_size : size,
+	 data_high : size, data_low : size,
+	 entries_high : int, entries_low : int}  -> 'a store
+
+    val lookup : 'a store * file -> 'a entry option
+    val remove : 'a store * file -> unit
+    val insert : 'a store * file * 'a entry -> unit
+
+end =
 struct
 
-  type name = name
-  type internal = internal
-  val cache = 2  (* Number of ticks before an unused entry is discarded *)
-  val error = fn s => Util.error "filecache.sml" s
-  datatype stat = ABSENT
-                | PRESENT of int * Time.time                            (* file size + mod time *)
-                | CRC     of int * Time.time * Crc.crc                  (* + CRC *)
-                | CACHED  of int * Time.time * Crc.crc * int * internal (* + ticks + cached result *)
+    val error = fn s => Util.error "filecache.sml" s
 
-  val stats = ref (Util.StringMap.empty : stat Util.StringMap.map)
+    val Vacated = Stats.int "FileCache: data bytes vacated"
+    val Demoted = Stats.int "FileCache: data bytes demoted"
+    val DataEvicted = Stats.int "FileCache: data bytes evicted"
+    val CRCEvicted = Stats.int "FileCache: CRC bytes evicted"
 
-  fun set (file : string, stat : stat) : unit =
-      stats := (Util.StringMap.insert(!stats,file,stat))
-  fun get (file : string) : stat =
-      (case Util.StringMap.find(!stats,file) of
-	   NONE => let val stat = ABSENT
-		       val _ = set (file, stat)
-		   in  stat
-		   end
-	 | SOME stat => stat)
+    val FileCacheDebug = Stats.ff"FileCacheDebug"
+    fun debugdo t = if (!FileCacheDebug) then (t();()) else ()
 
-  (* On AFS it is a lot faster to do access() on a non-existent
-   * file than to manipulate it and handle errors.
-   *)
-  fun access (file : string, how : OS.FileSys.access_mode) : bool =
-      (OS.FileSys.access(file,[]) andalso
-       OS.FileSys.access(file,[how])) handle _ => false
+    structure HashKey :> HASH_KEY where type hash_key = string =
+    struct
+	type hash_key = string
+	val hashVal : hash_key -> word = HashString.hashString
+	val sameKey : hash_key * hash_key -> bool = (op=)
+    end
 
-  (* This is the underlying uncached function *)
-  fun modTimeSize_raw (file : string) : (int * Time.time) option =
-      if access (file, OS.FileSys.A_READ) then
-	   let val size = OS.FileSys.fileSize file
-	       val time = OS.FileSys.modTime file
-	   in   SOME (size,time)
-	   end handle _ => NONE
-      else NONE
+    structure H :> MONO_HASH_TABLE where Key = HashKey =
+	HashTableFn(HashKey)
 
-  fun flushAll () : unit = (stats := Util.StringMap.empty)
-  fun flushSome (files : string list) : unit =
-      let fun remove file = (stats := #1 (Util.StringMap.remove(!stats, file))
-			     handle _ => ())
-      in  app remove files
-      end
+    type file = string
+    type crc = Crc.crc
+    type time = int
+    type size = int
 
-  fun remove (file : string) : unit =
-      let val _ = flushSome [file]
-	  val _ = (if OS.FileSys.access(file,[])
-		   then OS.FileSys.remove file
-		   else ()) handle _ => ()
-      in ()
-      end
+    datatype 'a entry =
+	CRC of crc * size
+      | DATUM of 'a * size
+      | BOTH of crc * 'a * size
 
-  fun modTimeSize_cached (file : string) : (int * Time.time) option =
-      (case get file of
-	   ABSENT => (case modTimeSize_raw file of
-			  NONE => NONE
-			| SOME st => (set(file, PRESENT st); SOME st))
-	 | PRESENT (s,t) => SOME (s,t)
-	 | CRC (s,t, _) => SOME (s,t)
-	 | CACHED (s, t, _, _, _) => SOME (s,t))
+    type 'a entries = (file * (time * 'a entry)) list
 
-  val exists : string -> bool = isSome o modTimeSize_cached
+    type 'a store =
+	{table : (time * 'a entry) H.hash_table,
+	 size : size ref,
+	 timer : time ref,
+	 max_file_size : size,
+	 data_high : size, data_low : size,
+	 entries_high : int, entries_low : int}
 
-  fun modTime file = (case modTimeSize_cached file of
-			 NONE => error ("modTime on non-existent file " ^ file)
-		       | SOME (s,t) => t)
-  fun size file = (case modTimeSize_cached file of
-		       NONE => error ("size on non-existent file " ^ file)
-		     | SOME (s,t) => s)
+    fun time (e : (time * 'a entry)) : time = #1 e
 
-  (* ----- Compute the latest mod time of a list of existing files --------- *)
-    fun lastModTime [] = (NONE, Time.zeroTime)
-      | lastModTime (f::fs) =
-	let
-	    val recur_result as (_,fstime) = lastModTime fs
-	    val ftime = modTime f
-	in  if (Time.>=(ftime, fstime)) then (SOME f, ftime) else recur_result
+    fun file_size (e : 'a entry) : int =
+	(case e
+	   of CRC (_,size) => size
+	    | DATUM (_,size) => size
+	    | BOTH (_,_,size) => size)
+
+    fun datum_size (e : 'a entry) : int =
+	(case e
+	   of CRC _ => 0
+	    | _ => file_size e)
+
+    exception Hash
+
+    fun mkstore {max_file_size : size,
+		 data_high : size, data_low : size,
+		 entries_high : int, entries_low : int} : 'a store =
+	{table=H.mkTable (128,Hash),
+	 size=ref 0,
+	 timer=ref 0,
+	 max_file_size=max_file_size, data_high=data_high,
+	 data_low=data_low, entries_high=entries_high,
+	 entries_low=entries_low}
+
+    fun inc (r : int ref, i : int) = r := !r + i
+    fun dec (r : int ref, i : int) = inc(r, ~i)
+
+    fun note (what:string, file:file) : unit =
+	debugdo (fn () => print (what ^ " " ^ file ^ "\n"))
+
+    (*
+	List store entries, oldest first.
+    *)
+    fun entries (store:'a store) : 'a entries =
+	let val {table,...} = store
+	    val entries : 'a entries = H.listItemsi table
+	    fun newer ((_,a), (_,b)) = time a > time b
+	in  ListMergeSort.sort newer entries
 	end
 
-  fun tick() : unit =
-      let fun mapper (CACHED (s, t, crc, tick, r)) = if (tick <= 1) then PRESENT (s,t)
-						     else CACHED(s, t, crc, tick-1, r)
-	    | mapper entry = entry
-      in  stats := (Util.StringMap.map mapper (!stats))
-      end
+    fun now (store:'a store) : time =
+	let val {timer,...} = store
+	    val t = !timer
+	    val _ = inc(timer,1)
+	in  t
+	end
 
-  fun read (name : name) : internal =
-      let val file = filename name
-      in  (case (get file)
-	     of CACHED (s, t, crc, tick, internal) =>
-		 let val stat = CACHED(s, t, crc, cache, internal)
-		     val _ = set (file, stat)
-		 in  internal
-		 end
-	      | _ =>
-		 (case modTimeSize_cached file
-		    of NONE => error ("reading non-existent file " ^ file)
-		     | SOME (s,t) =>
+    (*
+	Simple lookup.
+    *)
+    fun look (store:'a store, file:file) : 'a entry option =
+	(case H.find (#table store) file
+	   of NONE => NONE
+	    | SOME (_,e) => SOME e)
+
+    fun lookup (store:'a store, file:file) : 'a entry option =
+	let val {table,...} = store
+	in  (case H.find table file
+	       of NONE => NONE
+		| SOME (_,e) =>
+		    let val _ = H.insert table (file, (now store,e))
+		    in	SOME e
+		    end)
+	end
+
+    (*
+	Remove and maintain invariants.
+    *)
+    fun remove (store:'a store, file:file) : unit =
+	(case look(store,file)
+	   of NONE => ()
+	    | SOME entry =>
+		let val {table,size,...} = store
+		    val _ = H.remove table file
+		    val _ = dec(size,datum_size entry)
+		in  ()
+		end)
+
+    (*
+	Eviction is involuntary removal.
+    *)
+    fun evict (store:'a store, file:file, entry:'a entry) : unit =
+	let val _ = note ("evicting",file)
+	    val (datasize,crcsize) =
+		(case entry
+		   of CRC (_,size) => (0,size)
+		    | DATUM (_,size) => (size,0)
+		    | BOTH (_,_,size) => (size,size))
+	    val _ = inc(CRCEvicted,crcsize)
+	    val _ = inc(DataEvicted,datasize)
+	    val _ = remove(store,file)
+	in  ()
+	end
+
+    (*
+	Vacate data from the store until the store size is at or below
+	limit.
+    *)
+    fun vacate (store:'a store, limit:int) : unit =
+	let val {size,table,...} = store
+	    fun vacate_entry (file:file, (time:time,entry:'a entry)) : unit =
+		(case entry
+		   of CRC _ => ()
+		    | DATUM _ => evict (store,file,entry)
+		    | BOTH (c,_,s) =>
+			let val _ = note ("vacating",file)
+			    val entry = CRC(c,s)
+			    val _ = H.insert table (file,(time,entry))
+			    val _ = inc(Vacated,s)
+			    val _ = dec(size,s)
+			in  ()
+			end)
+	    fun loop entries =
+		if !size > limit then
+		    (case entries
+		       of nil => error "zero entries, nonzero size"
+			| e :: es => (vacate_entry e; loop es))
+		else ()
+	    val entries = entries store
+	in  loop entries
+	end
+
+    (*
+	How many entries do we drop to accomodate file?
+    *)
+    fun avail (store:'a store, file:file) : int =
+	(case look(store,file)
+	   of NONE =>
+		let val n = H.numItems (#table store) + 1
+		    val h = #entries_high store
+		    val l = #entries_low store
+		in  if n > h then n - l else 0
+		end
+	    | SOME _ => 0)
+
+    (*
+	Insert and maintain invariants.
+    *)
+    fun insert (store:'a store, file:file, entry:'a entry) : unit =
+	if datum_size entry > #max_file_size store then
+	    let val _ = note ("demoting",file)
+		val _ =
+		    (case entry
+		       of CRC _ => error "datum_size > 0 in CRC"
+			| DATUM _ => remove(store,file)
+			| BOTH (crc,_,s) => insert(store,file,CRC(crc,s)))
+		val _ = inc (Demoted,datum_size entry)
+	    in  ()
+	    end
+	else
+	    let val n = avail(store,file)
+		val _ =
+		    if n > 0 then
+			let val entries = entries store
+			    val entries = List.take (entries, n)
+			in  app (fn (f,(_,e)) => evict(store,f,e)) entries
+			end
+		    else ()
+		val delta =
+		    (case look(store,file)
+		       of NONE => datum_size entry
+			| SOME old => datum_size entry - datum_size old)
+		val {table,size,data_high,data_low,...} = store
+		val _ =
+		    if !size + delta > data_high then
+			vacate (store, Int.max(0,data_low - delta))
+		    else ()
+		val _ = H.insert table (file,(now store,entry))
+		val _ = inc(size,delta)
+	    in  ()
+	    end
+
+end
+
+functor FileCache (Arg : FILECACHE_ARG)
+    :> FILECACHE
+	where type name = Arg.name
+	where type internal = Arg.internal =
+struct
+
+    val error = fn s => Util.error "filecache.sml" s
+
+    val CRC = Stats.int "FileCache: bytes CRCed"
+    val CacheCRC = Stats.int "FileCache: bytes CRCed from cache"
+    val Read = Stats.int "FileCache: bytes read"
+    val CacheRead = Stats.int "FileCache: bytes read from cache"
+    val Write = Stats.int "FileCache: bytes written"
+
+    type file = string
+    type crc = Crc.crc
+    type name = Arg.name
+    type internal = Arg.internal
+
+    type entry = internal Store.entry
+
+    fun mkstore () : internal Store.store =
+	Store.mkstore
+	    {max_file_size = Arg.max_file_size,
+	     data_high = Arg.data_high,
+	     data_low = Arg.data_low,
+	     entries_low = Arg.entries_low,
+	     entries_high = Arg.entries_high}
+
+    val store : internal Store.store ref = ref (mkstore())
+
+    fun file_access (file:file) : bool =
+	OS.FileSys.access(file,nil) handle _ => false
+
+    fun file_size (file:file) : int =
+	OS.FileSys.fileSize file
+
+    fun inc (r : int ref, i : int) = r := !r + i
+    fun dec (r : int ref, i : int) = inc(r, ~i)
+
+    fun flush_all () : unit = store := mkstore()
+
+    fun flush_some (files : file list) : unit =
+	app (fn file => Store.remove (!store, file)) files
+
+    fun exists (file:file) : bool =
+	(case Store.lookup (!store,file)
+	   of NONE => file_access file
+	    | SOME _ => true)
+
+    fun uncached_crc (file:string, crc:crc, size:int, entry:entry) : crc =
+	let val _ = inc(CRC,size)
+	    val _ = Store.insert (!store,file,entry)
+	in  crc
+	end
+
+    fun cached_crc (crc:crc,size:int) : crc =
+	let val _ = inc(CRC,size)
+	    val _ = inc(CacheCRC,size)
+	in  crc
+	end
+
+    fun crc (file:file) : crc =
+	(case Store.lookup (!store,file)
+	   of NONE =>
+		let val size = file_size file
+		    val crc = Crc.crc_of_file file
+		    val e = Store.CRC(crc,size)
+		in  uncached_crc(file,crc,size,e)
+		end
+	    | SOME e =>
+		(case e
+		   of Store.CRC (crc,size) => cached_crc (crc,size)
+		    | Store.DATUM (datum,size) =>
 			let val crc = Crc.crc_of_file file
-			    val internal = reader name
-			    val stat = (if cache>0 then
-					  CACHED(s, t, crc, cache, internal)
-					else CRC (s, t, crc))
-		    	    val _ = set(file, stat)
-			in  internal
-			end))
-      end
+			    val e = Store.BOTH (crc,datum,size)
+			in  uncached_crc(file,crc,size,e)
+			end
+		    | Store.BOTH (crc,_,size) => cached_crc(crc,size)))
 
-  fun crc (file : string) : Crc.crc =
-      (ignore (modTimeSize_cached file);
-       case (get file) of
-	   ABSENT => error ("crc of absent file " ^ file)
-	 | CACHED (_, _, crc, _, _) => crc
-	 | CRC (_, _, crc) => crc
-	 | PRESENT (s, t)  => let val crc = Crc.crc_of_file file
-				  val stat = CRC (s, t, crc)
-				  val _ = set(file, stat)
-			      in  crc
-			      end)
+    fun remove (file:file) : unit =
+	if exists file
+	then (Store.remove (!store,file);
+	      OS.FileSys.remove file handle _ => ())
+	else ()
 
-  fun write (file : string, i : internal) : unit =
-      let val _ = writer(file,i)
-	  val crc = Crc.crc_of_file file
-	  val (s,t) = (case modTimeSize_raw file
-			 of SOME r => r
-			  | NONE => error ("can't stat written file " ^ file))
-	  val stat = if (cache>0)
-			 then CACHED(s, t, crc, cache, i)
-		     else CRC (s, t, crc)
-	  val _ = set(file, stat)
-      in  ()
-      end
+    fun uncached_read (file:file, i:internal, size:int, entry:entry) : internal =
+	let val _ = inc(Read,size)
+	    val _ = Store.insert (!store,file,entry)
+	in  i
+	end
+
+    fun cached_read (i:internal, size:int) : internal =
+	let val _ = inc(Read,size)
+	    val _ = inc(CacheRead,size)
+	in  i
+	end
+
+    fun read (name:name) : internal =
+	let val file = Arg.filename name
+	in  (case Store.lookup (!store,file)
+	       of NONE =>
+		    let val size = file_size file
+			val i = Arg.reader name
+			val e = Store.DATUM(i,size)
+		    in	uncached_read(file,i,size,e)
+		    end
+		| SOME e =>
+		    (case e
+		       of Store.CRC (crc,size) =>
+			    let val i = Arg.reader name
+				val e = Store.BOTH (crc,i,size)
+			    in	uncached_read(file,i,size,e)
+			    end
+			| Store.DATUM (datum,size) => cached_read (datum,size)
+			| Store.BOTH (_,datum,size) => cached_read (datum,size)))
+	end
+
+    fun write (file:file, i:internal) : unit =
+	let val _ = Arg.writer (file,i)
+	    val size = file_size file
+	    val _ = inc(Write,size)
+	    val _ = Store.insert (!store, file, Store.DATUM (i,size))
+	in  ()
+	end
 
 end

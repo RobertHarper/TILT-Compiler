@@ -19,15 +19,13 @@ infix  0 before
 
 (* types *)
 (* unit, int, word, real, char -- primitive *)
-(* eqtype string -- provided later *)
+(* eqtype string -- primitive *)
 (* type substring -- provided by TopLevel *)
 (* exn, 'a array, 'a vector, 'a ref -- primitive *)
-(* datatype bool = false | true -- Firstlude *)
+(* datatype bool = false | true -- primitive *)
 datatype 'a option = NONE | SOME of 'a
 datatype order = LESS | EQUAL | GREATER
 datatype 'a list = nil | :: of 'a * 'a list
-
-type string = word8vector
 
 (* exceptions *)
 exception Bind
@@ -42,14 +40,15 @@ exception Span
 exception Subscript
 
 (* values *)
-(* In TILTPRIM
-fun f o g = fn x => f(g x)
-fun a before b = a
-fun ignore _ = ()
-*)
-(* Should be in TILTprim *)
-fun not true = false
-  | not false = true
+(* o, before, ignore -- primitive *)
+fun exnName (exn:exn) : string = Ccall(exnNameRuntime,exn)
+fun exnMessage (exn:exn) : string= Ccall(exnMessageRuntime,exn)
+
+fun getOpt (SOME x, _) = x | getOpt (NONE, y) = y
+fun isSome (SOME _) = true | isSome NONE = false
+fun valOf (SOME x) = x | valOf NONE = raise Option
+
+fun not true = false | not false = true
 
 fun rev l =
     let fun revappend([],x) = x

@@ -60,7 +60,7 @@ umask 022
 # Also establish
 #	MAN_PAGE_FILTER		name of a filter command
 #	SMLNJ			full path to SML/NJ driver
-#	LIBDIR			full path to TILT_LIBDIR
+#	LIBDIR			full path to TILTROOT
 
 switch ($0) {
 case *makeRelease

@@ -1,0 +1,63 @@
+(* see http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
+
+(* The interface provided by TopLevel should not be assumed by users
+   of the basis library.
+
+   Users who want the standard top-level environment should import
+   Prelude and TopLevel.
+*)
+
+(* overloads - complement's Prelude *)
+overload div : 'a as PreInt.idiv and TiltPrim.bdiv and TiltPrim.udiv
+overload mod : 'a as PreInt.imod and TiltPrim.bmod and TiltPrim.umod
+overload abs : 'a as PreInt.iabs and TiltPrim.fabs
+overload <  : 'a as String.<
+overload >  : 'a as String.>
+overload <= : 'a as String.<=
+overload >= : 'a as String.>=
+
+exception Div
+exception Overflow
+
+(* types *)
+type substring = PreString.substring
+
+(* values *)
+(* !, := primitive, ref -- primitive *)
+(* before, ignore, o -- primitive *)
+(* exnName, exnMessage, getOpt, isSome, valOf -- Prelude *)
+(* not -- Prelude *)
+
+(* real -- primitive *)
+val trunc : real -> int
+val floor : real -> int
+val ceil : real -> int
+val round : real -> int
+
+(* ord -- primitive *)
+val chr : int -> char
+
+val size : string -> int
+val str : char -> string
+val concat : string list -> string
+val implode : char list -> string
+val explode : string -> char list
+val substring : string * int * int -> string
+val ^ : string * string -> string
+
+val null : 'a list -> bool
+val hd : 'a list -> 'a
+val tl : 'a list -> 'a list
+val length : 'a list -> int
+(* rev -- Prelude *)
+val @ : 'a list * 'a list -> 'a list
+val app : ('a -> unit) -> 'a list -> unit
+val map : ('a -> 'b) -> 'a list -> 'b list
+val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
+val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
+
+val print : string -> unit
+
+val vector : 'a list -> 'a vector
+
+val use : string -> unit

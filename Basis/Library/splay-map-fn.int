@@ -1,1 +1,3 @@
-functor SplayMapFn (K : ORD_KEY) : ORD_MAP where Key = K
+functor SplayMapFn (K : ORD_KEY)
+    : ORD_MAP
+	where Key = K

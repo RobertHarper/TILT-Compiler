@@ -23,8 +23,8 @@ structure General :> GENERAL where type unit = unit
     exception Span = Span
     exception Subscript = Subscript
 
-    fun exnName exn = Ccall(exnNameRuntime,exn)
-    fun exnMessage exn = Ccall(exnMessageRuntime,exn)
+    val exnName = exnName
+    val exnMessage = exnMessage
 
     datatype order = datatype order
 

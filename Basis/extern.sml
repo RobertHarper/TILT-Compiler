@@ -1,12 +1,12 @@
 type statrep = (int * word * word * word * word * word *
 		word * int * int * int * int)
-type flock_rep = int * int * Position.int * Position.int * int
+type flock_rep = int * int * int * int * int
 type tm = (int * int * int * int * int * int * int * int * int)
 type termio_rep = (word *       	(* iflags *)
 		   word *       	(* oflags *)
 		   word *       	(* cflags *)
 		   word *       	(* lflags *)
-		   Word8Vector.vector *	(* cc *)
+		   TiltPrim.word8vector *	(* cc *)
 		   word *		(* inspeed *)
 		   word			(* outspeed *)
 		   )
@@ -26,9 +26,9 @@ extern posix_io_pipe : (unit, (int * int)) -->
 extern posix_io_dup : (int, int) -->
 extern posix_io_dup2 : (int, int, unit) -->
 extern posix_io_close : (int, unit) -->
-extern posix_io_read : (int, int, Word8Vector.vector ) -->
-extern posix_io_readbuf : (int, Word8Array.array, int, int, int) -->
-extern posix_io_writebuf : (int, Word8Array.array, int, int, int) -->
+extern posix_io_read : (int, int, TiltPrim.word8vector ) -->
+extern posix_io_readbuf : (int, TiltPrim.word8array, int, int, int) -->
+extern posix_io_writebuf : (int, TiltPrim.word8array, int, int, int) -->
 extern posix_io_fcntl_d : (int, int, int) -->
 extern posix_io_fcntl_gfd: (int, word) -->
 extern posix_io_fcntl_sfd : (int, word, unit) -->
@@ -37,8 +37,8 @@ extern posix_io_fcntl_sfl : (int, word, unit) -->
 (* due to a deficiency in the phase-splitter, externs cannot use types
    defined within the same unit *)
 extern posix_io_fcntl_l : (int, int,
-			   int * int * Position.int * Position.int * int (* = flock_rep *),
-			   int * int * Position.int * Position.int * int (* = flock_rep *) ) -->
+			   int * int * int * int * int (* = flock_rep *),
+			   int * int * int * int * int (* = flock_rep *) ) -->
 extern posix_io_lseek : (int, int, int, int) -->
 extern posix_io_fsync : (int, unit) -->
 extern posix_procenv_getpid : (unit, int) -->
@@ -57,9 +57,9 @@ extern posix_procenv_setpgid : (int, int, unit) -->
 extern posix_procenv_uname : (unit, (string * string) list) -->
 
 extern posix_tty_num : (string, int) -->
-extern posix_tty_tcgetattr : (int, (word * word * word * word * Word8Vector.vector * word * word)
+extern posix_tty_tcgetattr : (int, (word * word * word * word * TiltPrim.word8vector * word * word)
 			           (* = termio_rep *) ) -->
-extern posix_tty_tcsetattr : (int, int, (word * word * word * word * Word8Vector.vector * word * word)
+extern posix_tty_tcsetattr : (int, int, (word * word * word * word * TiltPrim.word8vector * word * word)
 			                (* = termio_rep *) , unit) -->
 extern posix_tty_tcsendbreak : (int, int, unit) -->
 extern posix_tty_tcdrain : (int, unit) -->
@@ -90,7 +90,7 @@ extern posix_process_exec : (string, string list, unit) -->
 extern posix_process_exece : (string, string list, string list, unit) -->
 extern posix_process_execp : (string, string list, unit) -->
 extern posix_process_waitpid : (int, word, (int * int * int)) -->
-extern posix_process_exit : (Word8.word, unit) -->
+extern posix_process_exit : (TiltPrim.uint8, unit) -->
 extern posix_process_kill : (int, int, unit) -->
 extern posix_process_alarm : (int, int) -->
 extern posix_process_pause : (unit, unit) -->

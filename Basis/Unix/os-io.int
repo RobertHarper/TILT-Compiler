@@ -1,0 +1,4 @@
+structure OS_IO : OS_IO
+	where type iodesc = PreOS.IO.iodesc
+	where type poll_desc = PreOS.IO.poll_desc
+	where type poll_info = PreOS.IO.poll_info

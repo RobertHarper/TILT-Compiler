@@ -1,11 +1,9 @@
-source unit PARSER_DATA = "bug.parser-data.sig" {}
+unit PARSER_DATA = "bug.parser-data.sig" {}
 
-source interface MLLrVals = "bug.int" {PARSER_DATA}
-import unit MLLrVals : MLLrVals
+interface MLLrVals = "bug.int" {PARSER_DATA}
+unit MLLrVals : MLLrVals = "ParserData.sml" {}
 
-source interface BugJoin = "bug.join.int" {PARSER_DATA}
-import unit BugJoin : BugJoin
+interface BugJoin = "bug.join.int" {PARSER_DATA}
+unit BugJoin : BugJoin = "join.sml" {PARSER_DATA}
 
-source unit FrontEnd = "bug.frontend.sml" {MLLrVals BugJoin}
-
-make executable "test." ^ $target ^ ".exe" {FrontEnd}
+unit FrontEnd = "bug.frontend.sml" {MLLrVals BugJoin}

@@ -1,3 +1,2 @@
-source unit Bug1 = "bug1.sml" {}
-source unit Bug2 = "bug2.sml" {Bug1}
-make executable "Test." ^ $target ^ ".exe" {Bug2}
+unit Bug1 = "bug1.sml" {}
+unit Bug2 = "bug2.sml" {Bug1}

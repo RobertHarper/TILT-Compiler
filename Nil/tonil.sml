@@ -619,17 +619,6 @@ in (* local *)
        foldl (fn ((v,k),ctxt) => update_NILctx_insert_kind (ctxt,v,k))
              ctxt vklist
 
-     fun update_NILctx_insert_label(CONTEXT{NILctx,HILctx,sigmap,vmap,rmap,
-					    used,memoized_mpath,alias,
-					    polyfuns},
-				    l, v) =
-       let val NILctx' = NilContext.insert_label(NILctx,l,v)
-       in  CONTEXT{NILctx=NILctx', HILctx=HILctx,
-		   sigmap=sigmap, vmap=vmap, rmap=rmap, used = used,
-		   memoized_mpath=memoized_mpath, alias=alias,
-		   polyfuns=polyfuns}
-       end
-
      fun add_modvar_alias(CONTEXT{NILctx,HILctx,sigmap,vmap,rmap,used,
 				 memoized_mpath,alias,polyfuns},var,path) =
        let val alias' = N.VarMap.insert(alias,var,path)
@@ -963,8 +952,8 @@ end (* local defining splitting context *)
 
       If required_names = SOME(var, var_r, var_c) then additionally we have
 
-        (4) name_c = Var_c var_c
-        (5) name_r = Var_e var_r
+        (6) name_c = Var_c var_c
+        (7) name_r = Var_e var_r
     *)
 
 
@@ -1457,11 +1446,10 @@ end (* local defining splitting context *)
        let
            (* XXX is final_context =context ok, or should it be thrown away? *)
 
-           (* We need to throw away most of the context returned by
-              keep the context resulting from xsbnds. The mpath
-              memoization contains variables now out of scope, but we
-              want to keep the nilCTX part because it contains
-              declarations for the cbnd_cat bindings.
+           (* We need to throw away most of the context returned by xsbnds.
+	      The mpath memoization and HILctx contains variables now out of
+	      scope, but we want to keep the nilCTX part because it
+	      contains declarations for the cbnd_cat bindings.
             *)
 
 	   val {final_context,
@@ -4340,9 +4328,6 @@ end (* local defining splitting context *)
 		val (context,ivtbs,type_r) = flatten_type_to_bnds(context,(Name.var2name v)^"_t",type_r)
 		  
 		val context = insert_con(context, v_r, type_r)
-
-		val context = update_NILctx_insert_label(context,l_c, v_c)
-		val context = update_NILctx_insert_label(context,l_r, v_r)
 		  
 		  
 		val iv = ImportValue(l_r,v_r,TraceUnknown,type_r)
@@ -4364,7 +4349,6 @@ end (* local defining splitting context *)
 		val (context,ibnds,con) = flatten_type_to_bnds(context,(Name.var2name var)^"_type",con)
 		val (var, context) = insert_rename_var(var, context)
 		val context = update_NILctx_insert_con(context, var, con)
-		val context = update_NILctx_insert_label(context,l, var)
 	      in
 		((ImportValue(l,var,TraceUnknown,con))::ibnds@imports,bnds,context)
 	      end
@@ -4378,7 +4362,6 @@ end (* local defining splitting context *)
 		     
 		val (var, context) = insert_rename_var(var, context)
 		val context = update_NILctx_insert_kind(context, var, knd)
-		val context = update_NILctx_insert_label(context,l, var)
 	      in
 		((ImportType(l,var,knd))::imports,bnds,context)
 	      end)

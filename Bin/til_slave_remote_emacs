@@ -47,10 +47,10 @@ esac
 
 tiltdir=`cd "$argdir/../.."; pwd`
 
-# Provide a reasonable default for TILT_LIBDIR.
+# Provide a reasonable default for TILTROOT.
 
-: ${TILT_LIBDIR:="$tiltdir"}
-export TILT_LIBDIR
+: ${TILTROOT:="$tiltdir"}
+export TILTROOT
 
 # The userid for kinit.  At CMU, this will already be set, so we don't
 # care that `whoami` isn't the right thing for all systypes.
@@ -108,8 +108,8 @@ cmd='	PATH="'"$PATH"'"
 
 	# Required if user has modified
 
-	TILT_LIBDIR="'"$TILT_LIBDIR"'"
-	export TILT_LIBDIR
+	TILTROOT="'"$TILTROOT"'"
+	export TILTROOT
 
 	# Required at CMU, harmless elsewhere.
 	
@@ -117,7 +117,7 @@ cmd='	PATH="'"$PATH"'"
 	export SML_VERSION
 
 	cat << "END_EMACS" > '$elisp'
-(defvar tilt-executable (concat (getenv "TILT_LIBDIR") "/Bin/tilt-nj"))
+(defvar tilt-executable (concat (getenv "TILTROOT") "/Bin/tilt-nj"))
 (defvar tilt-slave-args "-vs")
 
 (require '\''comint)

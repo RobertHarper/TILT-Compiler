@@ -1,1 +1,2 @@
-structure AtomTable : MONO_HASH_TABLE where type Key.hash_key = Atom.atom
+structure AtomTable : MONO_HASH_TABLE
+	where type Key.hash_key = Atom.atom

@@ -643,7 +643,8 @@ struct
 	   | StringLit str =>
 		 let fun mapper c = SCON(uint(W8,TilWord64.fromInt (ord c)))
 		     val str = SCON(intvector (W8, Array.fromList(map mapper (explode str))))
-		 in  APP(U.string_eq context, U.exp_tuple[VAR v, str])
+		     val (string_eq,_) = U.word8vector_eq context
+		 in  APP(string_eq, U.exp_tuple[VAR v, str])
 		 end
 	   | CharLit cstr =>
 		 let val char = Util.CharStr2char cstr
@@ -1470,7 +1471,14 @@ struct
 
       in {arglist = args,
 	  body = (e,c) }
-      end handle Abort => {arglist = nil,
-			   body = Error.dummy_exp (context, "fun_pat")}
+      end handle Abort =>
+	  let (* Toil requires a nonempty arglist. *)
+	      val dummy = "fun_pat"
+	      val argv = Name.fresh_named_var dummy
+	      val argc = Error.dummy_type (context,dummy)
+	      val body = Error.dummy_exp (context,dummy)
+	  in  {arglist = [(argv,argc)],
+	       body = body}
+	  end
 
   end

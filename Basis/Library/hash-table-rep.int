@@ -1,0 +1,41 @@
+structure HashTableRep :
+sig
+
+    datatype ('a, 'b) bucket
+      = NIL
+      | B of (word * 'a * 'b * ('a, 'b) bucket)
+
+    type ('a, 'b) table = ('a, 'b) bucket array
+
+    val alloc : int -> ('a, 'b) table
+	(* allocate a table of at least the given size *)
+
+    val growTable : (('a, 'b) table * int) -> ('a, 'b) table
+	(* grow a table to the specified size *)
+
+    val growTableIfNeeded : (('a, 'b) table ref * int) -> bool
+	(* conditionally grow a table; the second argument is the number
+	 * of items currently in the table.
+	 *)
+
+    val listItems  : (('a, 'b) table * int ref) -> 'b list
+    val listItemsi : (('a, 'b) table * int ref) -> ('a * 'b) list
+
+
+    val appi : ('a * 'b -> 'c) -> ('a, 'b) table -> unit
+    val app : ('a -> 'b) -> ('c, 'a) table -> unit
+
+    val mapi : ('a * 'b -> 'c) -> ('a, 'b) table -> ('a, 'c) table
+    val map : ('a -> 'b) -> ('c, 'a) table -> ('c, 'b) table
+
+    val foldi : ('a * 'b * 'c -> 'c) -> 'c -> ('a, 'b) table -> 'c
+    val fold : ('a * 'b -> 'b) -> 'b -> ('c, 'a) table -> 'b
+
+    val filteri : ('a * 'b -> bool) -> ('a, 'b) table -> unit
+    val filter : ('a -> bool) -> ('b,'a) table -> unit
+
+    val copy : ('a, 'b) table -> ('a, 'b) table
+
+    val bucketSizes : ('a, 'b) table -> int list
+
+end

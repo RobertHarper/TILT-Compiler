@@ -1,2 +1,1 @@
-source unit Test = "constraint.sml" {Int}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "constraint.sml" {Int}

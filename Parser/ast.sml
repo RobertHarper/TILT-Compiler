@@ -32,8 +32,16 @@ datatype 'a sigConst
 
   datatype top
     = ImplTop of dec		(* top level implementation file *)
-    | InterTop of spec list	(* top level interface file *)
+    | InterTop of topspec	(* top level interface file *)
     | MarkTop of top * region   (* mark a top level file *)
+
+and topspec
+  = TopSpec of spec list
+  | SigSpec of sigb list
+  | OvldSpec of symbol * ty * exp list
+  | FixSpec of {fixity: fixity, ops: symbol list}
+  | ExternSpec of symbol * ty
+  | SeqSpec of topspec list
 
 and exp
   = VarExp of path		(* variable *)

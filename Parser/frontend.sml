@@ -103,7 +103,9 @@ fun parse (start, cleanup) (source as {sourceStream,errConsumer,interactive,
                             MLP.parse(lookahead,!lexer',parseerror,err)
 			  val _ = addLines(linesRead())
                           val _ = lexer' := lexer''
-			  val Ast.MarkTop(top, _) = result
+			  fun strip (Ast.MarkTop (top, _)) = strip top
+			    | strip top = top
+			  val top = strip result
 		      in if !anyErrors then ERROR
 			 else cleanup top
                       end

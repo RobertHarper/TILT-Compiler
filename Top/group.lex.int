@@ -1,6 +1,0 @@
-functor GroupLexFun (structure Tokens : Group_TOKENS) :
-ARG_LEXER
-	where type UserDeclarations.svalue = Tokens.svalue
-	where type UserDeclarations.pos = ExtSyn.pos
-	where type ('a,'b) UserDeclarations.token = ('a,'b) Tokens.token
-	where type UserDeclarations.arg = ExtSyn.lexarg

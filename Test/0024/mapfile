@@ -1,5 +1,4 @@
-source unit SIGS = "bug.sig" {}
-source interface F = "bug.int" {SIGS}
-source unit F : F = "bug.sml" {SIGS}
+unit SIGS = "bug.sig" {}
+interface F = "bug.int" {SIGS}
+unit F : F = "bug.sml" {SIGS}
 
-make executable "Test." ^ $target ^ ".exe" {F}

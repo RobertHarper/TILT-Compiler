@@ -72,6 +72,11 @@ fun makeSEQdec (SeqDec a, SeqDec b) = SeqDec(a@b)
   | makeSEQdec (a, SeqDec b) = SeqDec(a::b)
   | makeSEQdec (a,b) = SeqDec[a,b]
 
+(* sequence of interface components *)
+fun makeSEQtopspec (SeqSpec a, SeqSpec b) = SeqSpec(a@b)
+  | makeSEQtopspec (SeqSpec a, b) = SeqSpec(a@[b])
+  | makeSEQtopspec (a, SeqSpec b) = SeqSpec(a::b)
+  | makeSEQtopspec (a,b) = SeqSpec[a,b]
 
 fun QuoteExp s = AppExp{function=VarExp quoteDcon,argument=StringExp s}
 fun AntiquoteExp e = AppExp{function=VarExp antiquoteDcon,argument= e}

@@ -95,7 +95,18 @@ structure Name :> NAME =
       | namespace2int Symbol.FIXspace = 8
     val maxnamespace = 8
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
-
+    fun namespace (l:label) : Symbol.namespace option =
+	(case namespaceint l
+	   of 0 => SOME Symbol.VALspace
+	    | 1 => SOME Symbol.SIGspace
+	    | 2 => SOME Symbol.STRspace
+	    | 3 => SOME Symbol.FSIGspace
+	    | 4 => SOME Symbol.FCTspace
+	    | 5 => SOME Symbol.TYCspace
+	    | 6 => SOME Symbol.LABspace
+	    | 7 => SOME Symbol.TYVspace
+	    | 8 => SOME Symbol.FIXspace
+	    | _ => NONE)	(* internal *)
 
     (* For a non-internal label, take the namespace int and return the hash
      *)
@@ -158,6 +169,11 @@ structure Name :> NAME =
 
     fun label2name ((_,str) : label) = str
 
+    fun label2namespace (l:label) : string =
+	(case namespace l
+	   of SOME space => Symbol.nameSpaceToString space
+	    | NONE => "internal")
+
     fun label2var l = fresh_named_var(label2name l)
 
     fun label2string ((num,str) : label) =
@@ -190,9 +206,10 @@ structure Name :> NAME =
 	(* Internal labels follow special conventions *)
 	(* Some internal labels are opened for lookup *)
 	(* Some internal labels are non-exported *)
-	(* Unit, eq, and coercion labels are identifiable as such *)
 
 	val unit_str	  = "+U"
+	val interface_str = "+I"
+	val env_str	  = "+V"
 	val open_str      = "+O"
 	val dt_str        = "+O+D"
 	val cluster_str   = "+C"
@@ -219,14 +236,17 @@ structure Name :> NAME =
 	    end
     in
 	val to_unit	 = to_meta_lab unit_str
+	val to_interface = to_meta_lab interface_str
+	val to_env	 = to_meta_lab env_str
 	val to_open      = to_meta_lab open_str
 	val to_dt        = to_meta_lab dt_str
 	val to_cluster   = to_meta_lab cluster_str
 	val to_eq        = to_meta_lab eq_str
 	val to_coercion  = to_meta_lab coercion_str
 
-
 	val is_unit	 = is_meta_lab unit_str
+	val is_interface = is_meta_lab interface_str
+	val is_env	 = is_meta_lab env_str
 	val is_open      = is_meta_lab open_str
 	val is_dt        = is_meta_lab dt_str
 	val is_cluster   = is_meta_lab cluster_str
@@ -245,8 +265,21 @@ structure Name :> NAME =
 		val (attributes, name) = split str
 	    in  name
 	    end
-    end
 
+	val unit_label = to_unit o internal_label
+	val interface_label = to_interface o internal_label
+	val env_label = to_env o internal_label
+
+	fun label2longname (l:label) : string =
+	    (case namespace l
+	       of SOME space =>
+		    concat[Symbol.nameSpaceToString space, " ", label2name l]
+		| NONE =>
+		    if is_unit l then "unit " ^ (label2name' l)
+		    else if is_interface l then "interface " ^ (label2name' l)
+		    else if is_env l then "environment variable " ^ (label2name' l)
+		    else label2string l)
+    end
 
     local 
       fun escape c = 
@@ -394,14 +427,14 @@ structure Name :> NAME =
     local
 	fun keep_unit (name : string, set : LabelSet.set) : LabelSet.set =
 	    let
-		val import = to_unit(internal_label name)
+		val import = unit_label name
 		val (c,r) = make_cr_labels import
 	    in
 		LabelSet.addList (set, [import, c, r])
 	    end
 
 	val keepers = LabelSet.empty
-	val keepers = foldl keep_unit keepers ["Firstlude"]
+	val keepers = foldl keep_unit keepers ["TiltPrim"]
 
 	fun showKeepers () : unit =
 	    (print "keepers = ";

@@ -489,9 +489,6 @@ struct
 	  fun add_exp(state as STATE{equation,...},v,e) =
 	      updateContext(state,NilContext.insert_exp(equation,v,e))
 
-	  fun add_label(state as STATE{equation,...},l,v) =
-	      updateContext(state,NilContext.insert_label(equation,l,v))
-
 
 	  fun add_curry_processed(STATE{avail,equation,mapping,curry_processed,current,params},v) =
 	       STATE{equation=equation,
@@ -2184,7 +2181,7 @@ struct
 	    val inner_state = enter_var (state,v) 
 	    val tr = do_niltrace inner_state tr
 	    val c = do_con inner_state c
-	    val state = add_label(add_con(state,v,c),l,v)
+	    val state = add_con(state,v,c)
 	    val _ = if not (!kill_imports) orelse Name.keep_import l then use_var(state,v) else ()
 	  in (ImportValue(l,v,tr,c),state)
 	  end
@@ -2193,7 +2190,7 @@ struct
 	    val state = add_var (state,v) 
 	    val inner_state = enter_var (state,v) 
 	    val k = do_kind inner_state k
-	    val state = add_label(add_kind(state,v,k),l,v)
+	    val state = add_kind(state,v,k)
 	    val _ = if not (!kill_imports) orelse Name.keep_import l then use_var(state,v) else ()
 	  in (ImportType(l,v,k),state)
 	  end

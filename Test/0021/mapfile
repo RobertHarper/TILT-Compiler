@@ -14,10 +14,9 @@
 	when type_of fails to find the runtime variable corresponding to
 	_2364.
 *)
-source unit ORD_KEY = "bug-key.sml" {}
-source unit ORD_MAP = "bug-map.sml" {ORD_KEY}
-source interface BinaryMapFn = "bug.int" {ORD_KEY ORD_MAP}
-source unit BinaryMapFn : BinaryMapFn = "map.sml" {ORD_KEY}
-source unit IlTable = "bug-table.sml" {BinaryMapFn}
-source unit IlBlast = "bug.sml" {IlTable}
-make executable "test." ^ $target ^ ".exe" {IlBlast}
+unit ORD_KEY = "bug-key.sml" {}
+unit ORD_MAP = "bug-map.sml" {ORD_KEY}
+interface BinaryMapFn = "bug.int" {ORD_KEY ORD_MAP}
+unit BinaryMapFn : BinaryMapFn = "map.sml" {ORD_KEY}
+unit IlTable = "bug-table.sml" {BinaryMapFn}
+unit IlBlast = "bug.sml" {IlTable}

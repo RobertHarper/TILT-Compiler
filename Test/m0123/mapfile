@@ -1,2 +1,1 @@
-source unit Test = "tststrcmp.sml" {}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "tststrcmp.sml" {}

@@ -9,12 +9,9 @@ structure Option :> OPTION where type 'a option = 'a option =
     datatype option = datatype option
     exception Option = Option
 
-    fun getOpt (SOME x, y) = x
-      | getOpt (NONE, y) = y
-    fun isSome (SOME _) = true
-      | isSome NONE = false
-    fun valOf (SOME x) = x
-      | valOf _ = raise Option
+    val getOpt = getOpt
+    val isSome = isSome
+    val valOf = valOf
 
     fun filter pred x = if (pred x) then SOME x else NONE
     fun join (SOME opt) = opt

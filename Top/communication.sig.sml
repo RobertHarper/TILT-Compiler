@@ -1,15 +1,5 @@
 (*
-	Provides an abstraction for communication between master and
-	slave processes.
-
-	Slaves send READY to ask for a job, ACK_INTERFACE when a
-	unit's interface is up to date but the job is still
-	proceeding, ACK_DONE when a job is complete, and ACK_ERROR
-	when an error occurrs.
-
-	The master sends FLUSH_ALL to initialize; REQUEST to start a
-	job; and FLUSH to indicate that another slave is going to
-	modify some files.
+	Communication between master and slave processes.
 *)
 signature COMMUNICATION =
 sig
@@ -34,19 +24,17 @@ sig
     val closeIn : in_channel -> unit
     val closeOut : out_channel -> unit
 
-    type job = int * string
-    type plan = Update.plan
-    type flags = (string * bool) list
-    type platform = Target.platform
+    type label = Name.label
 
     datatype message =
 	READY
-      | ACK_INTERFACE of job
-      | ACK_DONE of job * plan
-      | ACK_ERROR of job * string
-      | FLUSH_ALL of platform * flags
-      | FLUSH of job * plan
-      | REQUEST of job * plan
+      | ACK_INTERFACE of label
+      | ACK_FINISHED of label * Stats.delta
+      | ACK_UNFINISHED of label * Stats.delta
+      | ACK_REJECT of label * string
+      | BOMB of string
+      | INIT of Platform.objtype * Stats.stats * IntSyn.desc
+      | COMPILE of label
 
     (* Debugging support *)
     val blastInMessages : Blaster.instream -> message list
@@ -61,6 +49,4 @@ sig
     val hasMsg : channel -> bool
     val findSlaves : unit -> identity list
 
-    val getFlags : unit -> flags
-    val doFlags : flags -> unit
 end

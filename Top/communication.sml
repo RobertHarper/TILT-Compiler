@@ -1,6 +1,5 @@
 (*
-	Many of the access() calls exist to speed things up
-	on AFS.
+	Many of the access() calls exist to speed things up on AFS.
 *)
 structure Comm :> COMMUNICATION =
 struct
@@ -14,6 +13,7 @@ struct
     fun msg str = if (!CommDiag) then print str else ()
 
     val error = fn s => Util.error "communication.sml" s
+    val reject = Util.reject
 
     fun say (s : string) : unit =
 	if !Blaster.BlastDebug then (print s; print "\n") else ()
@@ -23,34 +23,22 @@ struct
 	if Q.isEmpty q then ()
 	else (ignore (Q.dequeue q); empty_queue q)
 
-
-    type job = int * string
-    type plan = Update.plan
-    type flags = (string * bool) list
-    type platform = Target.platform
+    type label = Name.label
 
     datatype message =
 	READY
-      | ACK_INTERFACE of job
-      | ACK_DONE of job * plan
-      | ACK_ERROR of job * string
-      | FLUSH_ALL of platform * flags
-      | FLUSH of job * plan
-      | REQUEST of job * plan
+      | ACK_INTERFACE of label
+      | ACK_FINISHED of label * Stats.delta
+      | ACK_UNFINISHED of label * Stats.delta
+      | ACK_REJECT of label * string
+      | BOMB of string
+      | INIT of Platform.objtype * Stats.stats * IntSyn.desc
+      | COMPILE of label
 
-    fun blastOutJob (os : B.outstream) (job : job) : unit =
-	(say "blastOutJob";
-	 B.blastOutPair B.blastOutInt B.blastOutString os job)
-    fun blastInJob (is : B.instream) : job =
-	(say "blastInJob";
-	 B.blastInPair B.blastInInt B.blastInString is)
-
-    fun blastOutFlags (os : B.outstream) (flags : flags) : unit =
-	(say "blastOutFlags";
-	 B.blastOutList (B.blastOutPair B.blastOutString B.blastOutBool) os flags)
-    fun blastInFlags (is : B.instream) : flags =
-	(say "blastInFlags";
-	 B.blastInList (B.blastInPair B.blastInString B.blastInBool) is)
+    val blastOutJob = NameBlast.blastOutLabel
+    val blastInJob = NameBlast.blastInLabel
+    val blastOutDelta = Stats.blastOutDelta
+    val blastInDelta = Stats.blastInDelta
 
     fun blastOutMessage (os : B.outstream) (m : message) : unit =
 	(say "blastOutMessage";
@@ -58,31 +46,37 @@ struct
 	    of READY => B.blastOutInt os 0
 	     | ACK_INTERFACE job =>
 		(B.blastOutInt os 1; blastOutJob os job)
-	     | ACK_DONE (job,plan) =>
+	     | ACK_FINISHED (job,delta) =>
 		(B.blastOutInt os 2; blastOutJob os job;
-		 Update.blastOutPlan os plan)
-	     | ACK_ERROR (job,msg) =>
+		 blastOutDelta os delta)
+	     | ACK_UNFINISHED (job,delta) =>
 		(B.blastOutInt os 3; blastOutJob os job;
+		 blastOutDelta os delta)
+	     | ACK_REJECT (job,msg) =>
+		(B.blastOutInt os 4; blastOutJob os job;
 		 B.blastOutString os msg)
-	     | FLUSH_ALL (platform,flags) =>
-		(B.blastOutInt os 4; Target.blastOutPlatform os platform;
-		 blastOutFlags os flags)
-	     | FLUSH (job, plan) =>
-		(B.blastOutInt os 5; blastOutJob os job;
-		 Update.blastOutPlan os plan)
-	     | REQUEST (job,plan) =>
-		(B.blastOutInt os 6; blastOutJob os job;
-		 Update.blastOutPlan os plan)))
+	     | BOMB msg =>
+		(B.blastOutInt os 5; B.blastOutString os msg)
+	     | INIT (objtype, stats, desc) =>
+		(B.blastOutInt os 6;
+		 Platform.blastOutObjtype os objtype;
+		 Stats.blastOutStats os stats;
+		 IntSyn.blastOutDesc os desc)
+	     | COMPILE job =>
+		(B.blastOutInt os 7; blastOutJob os job)))
+
     fun blastInMessage (is : B.instream) : message =
 	(say "blastInMessage";
 	 (case B.blastInInt is
 	    of 0 => READY
 	     | 1 => ACK_INTERFACE (blastInJob is)
-	     | 2 => ACK_DONE (blastInJob is, Update.blastInPlan is)
-	     | 3 => ACK_ERROR (blastInJob is, B.blastInString is)
-	     | 4 => FLUSH_ALL (Target.blastInPlatform is, blastInFlags is)
-	     | 5 => FLUSH (blastInJob is, Update.blastInPlan is)
-	     | 6 => REQUEST (blastInJob is, Update.blastInPlan is)
+	     | 2 => ACK_FINISHED (blastInJob is, blastInDelta is)
+	     | 3 => ACK_UNFINISHED (blastInJob is, blastInDelta is)
+	     | 4 => ACK_REJECT (blastInJob is, B.blastInString is)
+	     | 5 => BOMB (B.blastInString is)
+	     | 6 => INIT (Platform.blastInObjtype is,
+			  Stats.blastInStats is, IntSyn.blastInDesc is)
+	     | 7 => COMPILE (blastInJob is)
 	     | _ => error "bad message"))
 
     val (blastOutMessages,blastInMessages') =
@@ -100,13 +94,10 @@ struct
     fun blastInMessages (is : B.instream) : message list =
 	(readMessages (is,nil)
 	 handle B.BadMagicNumber =>
-	     raise Compiler.Reject "master and slave are incompatible")
+	     reject "master and slave are incompatible")
 
-    val Com = F.String ","
-
-    fun pp_job ((n,s) : job) : F.format =
-	F.Hbox [F.String "(", F.String (Int.toString n), Com,
-		F.String (String.toString s), F.String ")"]
+    fun pp_job (l : label) : F.format =
+	F.String (Name.label2string l)
 
     val Eq = F.String "="
     fun pp_flag (name : string, value : bool) : F.format =
@@ -118,50 +109,30 @@ struct
 	    | ACK_INTERFACE job =>
 		F.HOVbox [F.String "ACK_INTERFACE", F.Break,
 			  F.String "job = ", pp_job job]
-	    | ACK_DONE (job, plan) =>
-		F.HOVbox [F.String "ACK_DONE", F.Break,
-			  F.String "job = ", pp_job job, Com, F.Break,
-			  F.String "plan = ", Update.pp_plan plan]
-	    | ACK_ERROR (job, msg) =>
-		F.HOVbox [F.String "ACK_DONE", F.Break,
-			  F.String "job = ", pp_job job, Com, F.Break,
+	    | ACK_FINISHED (job,_) =>
+		F.HOVbox [F.String "ACK_FINISHED", F.Break,
+			  F.String "job = ", pp_job job]
+	    | ACK_UNFINISHED (job,_) =>
+		F.HOVbox [F.String "ACK_UNFINISHED", F.Break,
+			  F.String "job = ", pp_job job]
+	    | ACK_REJECT (job, msg) =>
+		F.HOVbox [F.String "ACK_REJECT", F.Break,
+			  F.String "job = ", pp_job job, F.Break,
 			  F.String "msg = ", F.String msg]
-	    | FLUSH_ALL (platform, flags) =>
+	    | BOMB msg =>
+		F.HOVbox [F.String "BOMB", F.Break,
+			  F.String "msg = ", F.String msg]
+	    | INIT (objtype, _, desc) =>
 		F.HOVbox [F.String "FLUSH_ALL", F.Break,
-			  F.String "platform = ",
-			  F.String (Target.platformName platform), Com, F.Break,
-			  F.String "flags = ", F.pp_list pp_flag flags]
-	    | FLUSH (job, plan) =>
-		F.HOVbox [F.String "FLUSH", F.Break,
-			  F.String "job = ", pp_job job, Com, F.Break,
-			  F.String "plan = ", Update.pp_plan plan]
-	    | REQUEST (job, plan) =>
-		F.HOVbox [F.String "REQUEST", F.Break,
-			  F.String "job = ", pp_job job, Com, F.Break,
-			  F.String "plan = ", Update.pp_plan plan])
+			  F.String "objtype = ",
+			  F.String (Platform.toString objtype), F.Break,
+			  F.String "desc = ", IntSyn.pp_desc desc]
+	    | COMPILE job =>
+		F.HOVbox [F.String "COMPILE", F.Break,
+			  F.String "job = ", pp_job job])
 
     val pp_messages : message list -> F.format =
 	F.pp_list pp_message
-
-    val flagsForSlave : (string * bool ref) list =
-	(map (fn (name, ref_cell, _) => (name, ref_cell))
-	 Target.importantFlags) @
-	[("DebugAsm", Tools.DebugAsm),
-	 ("ShowTools", Tools.ShowTools),
-	 ("Typecheck", Linknil.typecheck)]
-
-    fun getFlags () : flags =
-	let
-	    (* Also verifies that names correspond to correct flags.  *)
-	    fun getFlag (flag_name, flag_ref) =
-		if Stats.bool flag_name = flag_ref then (flag_name, !flag_ref)
-		else error ("the flag name " ^ flag_name ^ " doesn't map to the expected flag ref")
-	in
-	    map getFlag flagsForSlave
-	end
-
-    val doFlags : flags -> unit =
-	app (fn (name,value) => Stats.bool name := value)
 
     fun zeroFile (file : string) : unit = BinIO.closeOut (BinIO.openOut file)
 
@@ -218,7 +189,7 @@ struct
 
     type identity = string
     val master : identity = "master"
-    val slave : unit -> identity = Paths.identity
+    val slave : unit -> identity = Fs.identity
     fun compare (id : identity, id' : identity) : order =
 	String.compare (id, id')
     fun name (id : identity) : string = id
@@ -283,7 +254,10 @@ struct
 	    | _ => NONE)
 
     fun channelToName (arg : file_type * channel) : string =
-	OS.Path.joinDirFile {dir=Dirs.commDir(), file=channelToName' arg}
+	let val commdir = IntSyn.F.commdir()
+	    val file = channelToName' arg
+	in  OS.Path.joinDirFile {dir=commdir, file=file}
+	end
 
     type in_channel = channel * message Q.queue	(* channel and buffered messages from peer *)
     type out_channel = channel * message Q.queue	(* channel and pending output *)
@@ -397,15 +371,9 @@ struct
 	end
 
     (* send : message -> out_channel -> unit *)
-    fun send message =
-	let val autoFlush = (case message
-			       of FLUSH _ => false
-				| _ => true)
-	in
-	    fn (arg as (channel, queue)) =>
-	    (Q.enqueue (queue, message);
-	     if autoFlush then emptyBuffer arg else ())
-	end
+    fun send message (channel,queue) : unit =
+	(Q.enqueue (queue, message);
+	 emptyBuffer (channel,queue))
 
     (* closeOut : out_channel -> unit *)
     fun closeOut (arg as (channel, queue)) =
@@ -417,7 +385,7 @@ struct
 
     (* destroyAllChannels : unit -> unit *)
     fun destroyAllChannels () =
-	let val commDir = Dirs.commDir()
+	let val commDir = IntSyn.F.commdir()
 	    fun removeName name = removeFile (OS.Path.joinDirFile{dir=commDir, file=name})
 	    val names = map nameToChannel' (scanDir commDir)
 	    (* Clean up junk *)
@@ -443,7 +411,8 @@ struct
 
     (* findChannels : (channel -> bool) -> channel list *)
     fun findChannels pred =
-	let val files = scanDir(Dirs.commDir())
+	let val commDir = IntSyn.F.commdir()
+	    val files = scanDir commDir
 	    val channels = List.mapPartial nameToChannel files
 	in  List.filter (fn ch => pred ch) channels
 	end

@@ -1,0 +1,4 @@
+structure POSIX_IO : POSIX_IO
+	where type open_mode = PrePosix.open_mode
+	where type file_desc = POSIX_FileSys.file_desc
+	where type O.flags = POSIX_FileSys.O.flags

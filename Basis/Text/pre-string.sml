@@ -56,7 +56,7 @@ structure PreString =
 	val unsafeSub = unsafe_sub
 	val unsafeUpdate = unsafe_update
 	val unsafeUpdate32 = unsafe_update32
-	fun unsafeCreate (sz : int) : word8array = unsafe_array(int32touint32 sz,#"\000")
+	fun unsafeCreate (sz : int) : TiltPrim.word8array = unsafe_array(int32touint32 sz,#"\000")
 	val maxOrd = 255
     in
 

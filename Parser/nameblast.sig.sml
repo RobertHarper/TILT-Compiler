@@ -30,5 +30,7 @@ signature NAMEBLAST =
     val blastOutTagmap   : Blaster.outstream -> 'a Blaster.blastout -> 'a Name.TagMap.map -> unit
     val blastInTagmap    : Blaster.instream -> 'a Blaster.blastin -> 'a Name.TagMap.map
 
+    val blastOutLabelset : Blaster.outstream -> Name.LabelSet.set -> unit
+    val blastInLabelset  : Blaster.instream -> Name.LabelSet.set
 
   end

@@ -11,7 +11,6 @@ sig
 (*    structure IntInf : INTEGER  --  sharing with LargeInt *)
 
 (*    structure Word16 : WORD *)
-    structure Word31 : WORD
     structure Word32 : WORD
 
 (*    structure Real32 : REAL' *)
@@ -24,7 +23,6 @@ sig
 (*    structure Int32Vector : MONO_VECTOR *)
 (*    structure WordVector : MONO_VECTOR *)
 (*    structure Word16Vector : MONO_VECTOR *)
-(*    structure Word31Vector : MONO_VECTOR *)
 (*    structure Word32Vector : MONO_VECTOR *)
 (*    structure RealVector : MONO_VECTOR *)
 (*    structure Real32Vector : MONO_VECTOR *)
@@ -53,7 +51,6 @@ sig
 (*    structure WordArray2 : MONO_ARRAY2 *)
 (*    structure Word8Array2 : MONO_ARRAY2 *)
 (*    structure Word16Array2 : MONO_ARRAY2 *)
-(*    structure Word31Array2 : MONO_ARRAY2 *)
 (*    structure Word32Array2 : MONO_ARRAY2 *)
 (*    structure RealArray2 : MONO_ARRAY2 *)
 (*    structure Real32Array2 : MONO_ARRAY2 *)
@@ -70,8 +67,6 @@ sig
 (*    structure Pack8Little : PACK_WORD *)
 (*    structure Pack16Big : PACK_WORD *)
 (*    structure Pack16Little : PACK_WORD *)
-(*    structure Pack31Big : PACK_WORD *)
-(*    structure Pack31Little : PACK_WORD *)
     structure Pack32Big : PACK_WORD
 (*    structure Pack32Little : PACK_WORD *)
 

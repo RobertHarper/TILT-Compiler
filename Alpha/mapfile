@@ -1,37 +1,37 @@
-import group $libdir ^ "/smlnj-lib/group"
-include group "../Util/mapfile-util"
-include group "../Parser/mapfile-parse"
-include group "../Rtl/mapfile-rtl"
-include group "../Backend/mapfile"
+include $libdir ^ "/smlnj-lib/desc"
+include "../Util/mapfile-util"
+include "../Parser/mapfile-parse"
+include "../Rtl/mapfile-rtl"
+include "../Backend/mapfile"
 
-source unit DECALPHA = "decalpha.sig.sml" {Core Rtl MACHINE}
-source unit DecAlpha = "decalpha.sml" {
+unit DECALPHA = "decalpha.sig.sml" {Core Rtl MACHINE}
+unit DecAlpha = "decalpha.sml" {
 	TilWord32 Name Int Core RTL DECALPHA String Rtl Util Char
 	List Stats
 }
-source unit DecAlphaUtils = "decalphautils.sml" {
+unit DecAlphaUtils = "decalphautils.sml" {
 	Core MACHINEUTILS DecAlpha Int Util
 }
-source unit CallConv = "callconv.sml" {
+unit CallConv = "callconv.sml" {
 	Core DecAlpha DecAlphaUtils Util CALLCONV
 }
-source unit DIVMULT = "divmult.sig.sml" {DECALPHA Word32}
-source unit DivMult = "divmult.sml" {
+unit DIVMULT = "divmult.sig.sml" {DECALPHA Word32}
+unit DivMult = "divmult.sml" {
 	Core TilWord32 DecAlpha DecAlphaUtils Util TilWord64 DIVMULT
 }
-source interface ToAlpha = "toalpha.int" {
+interface ToAlpha = "toalpha.int" {
 	MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM DecAlpha
 }
-source unit ToAlpha : ToAlpha = "toalpha.sml" {
+unit ToAlpha : ToAlpha = "toalpha.sml" {
 	TilWord32 Core Name Rtl Int Array Pprtl DecAlpha MACHINEUTILS
 	TRACETABLE BBLOCK DIVMULT TOASM Util
 }
-source unit TrackStorage = "trackstorage.sml" {
+unit TrackStorage = "trackstorage.sml" {
 	Core Int ORD_KEY DecAlpha PRINTUTILS MACHINEUTILS TRACKSTORAGE
 	SplaySetFn Util
 }
-source interface Linkalpha = "linkalpha.int" {LINKASM}
-source unit Linkalpha : Linkalpha = "linkalpha.sml" {
+interface Linkalpha = "linkalpha.int" {LINKASM}
+unit Linkalpha : Linkalpha = "linkalpha.sml" {
 	Util Rtl Stats LINKASM Linkrtl DecAlpha DecAlphaUtils
 	IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils
 	TrackStorage Color Chaitin RtlToAsm Recursion Tortl

@@ -8,6 +8,7 @@ signature ASTUTIL =
 
     (* BUILDS VARIOUS CONSTRUCTIONS *)
     val makeSEQdec : Ast.dec * Ast.dec -> Ast.dec
+    val makeSEQtopspec : Ast.topspec * Ast.topspec -> Ast.topspec
 
     val layered : Ast.pat * Ast.pat * ErrorMsg.complainer -> Ast.pat
 

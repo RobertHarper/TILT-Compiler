@@ -83,21 +83,10 @@ signature NILCONTEXTPRE =
      *)
     val kind_of            : context * con -> kind
 
-    (* Insert a label into a context.  If the label is already bound,
-     * raises an exception.
-     *)
-    (* As of now, these are cruft, since I changed the elaborator
-     * to resolve all uses of user level bool in terms of
-     * an internal bool. -leaf*)
-    val insert_label : context * label * var -> context
-
-    val find_labelled_var : context * label -> var
-
     (* Print functions*)
     val print_context : context -> unit
     val print_kinds : context -> unit
     val print_cons : context -> unit
-    val print_labelled_vars : context -> unit
 
     (* is_well_formed (kind_valid,con_valid,subkind) D
      * Check whether or not a given context is well-formed.

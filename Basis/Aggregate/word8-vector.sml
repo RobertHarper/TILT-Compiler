@@ -28,18 +28,18 @@ structure Word8Vector :> MONO_VECTOR where type elem = char
     val uplus = TiltPrim.uplus
 
     type elem = char
-    type vector = word8vector
+    type vector = TiltPrim.word8vector
 
     val maxLen = PreVector8.maxLen
 
-    fun checkLen n = if maxLen < n then raise General.Size else ()
+    fun checkLen n = if maxLen < n then raise Size else ()
     val vector0 : vector = empty_vector
 
     val fromList' = PreVector8.vectorFromList'
     val fromList = PreVector8.vectorFromList
 
     fun tabulate (0, _) = vector0
-      | tabulate (n, f) : word8vector =
+      | tabulate (n, f) : TiltPrim.word8vector =
       let 
 	val _ = if (n < 0) orelse (maxLen < n) then raise Size else ()
 	val n = int32touint32 n
@@ -80,16 +80,16 @@ structure Word8Vector :> MONO_VECTOR where type elem = char
 	case (base, optLen)
 	  of (0, NONE) => if (0 < len) then newVec len else vector0
 	   | (_, SOME 0) => if ((base < 0) orelse (len < base))
-			      then raise General.Subscript
+			      then raise Subscript
 			    else vector0
 	   | (_, NONE) => if ((base < 0) orelse (len < base))
-			    then raise General.Subscript
+			    then raise Subscript
 	   else if (len = base)
 		  then vector0
 		else newVec (len - base)
 	   | (_, SOME n) =>
 		  if ((base < 0) orelse (n < 0) orelse (len < (base+n)))
-		    then raise General.Subscript
+		    then raise Subscript
 		  else newVec n
       (* end case *)
       end

@@ -2,7 +2,8 @@
 signature ILUTIL =
   sig
 
-    val installHelpers : {Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option
+    val installHelpers : {Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option,
+			  compiling_tiltprim : bool ref
 			  } -> unit
 
     val debug : bool ref
@@ -74,7 +75,6 @@ signature ILUTIL =
 
     val true_exp : context -> exp
     val false_exp : context -> exp
-    val string_eq : context -> exp
     val vector_eq : context -> mod * signat
     val word8vector_eq : context -> exp * con
 
@@ -214,6 +214,7 @@ signature ILUTIL =
     val dec_handle : handler -> dec -> dec
     val decresult_handle : handler -> Il.decresult -> Il.decresult
     val sdecs_handle : handler -> Il.sdecs -> Il.sdecs
+    val entries_handle : handler -> Il.entries -> Il.entries
 
       (*
         con_subst_conapps : substitute each application

@@ -1,2 +1,1 @@
-source unit Test = "functor.sml" {}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "functor.sml" {}

@@ -1,6 +1,6 @@
 #!/usr/local/bin/rc
 bindir=`{dirname $0}
 top=`{cd $bindir/..; pwd}
-TILT_LIBDIR=$top
+TILTROOT=$top
 . $top/Test/platform
 exec $top/Bin/$objtype/tilt $*

@@ -1,2 +1,1 @@
-source unit Test = "unary.sml" {}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "unary.sml" {}

@@ -1,146 +1,145 @@
-import group $libdir ^ "/smlnj-lib/group"
-include group "../Util/mapfile-util"
-include group "../Nil/mapfile-nil"
-include group "../Parser/mapfile-parse"
-include group "../Elaborator/mapfile-elaborate"
+include $libdir ^ "/smlnj-lib/desc"
+include "../Util/mapfile-util"
+include "../Nil/mapfile-nil"
+include "../Parser/mapfile-parse"
+include "../Elaborator/mapfile-elaborate"
 
-source unit LIL = "lil.sig.sml" { Word32 TilWord32 Name Prim Word ORD_MAP ORD_SET }
-source unit Lil = "lil.sml" { LIL ORD_KEY HASH_KEY Word32 TilWord32 
+unit LIL = "lil.sig.sml" { Word32 TilWord32 Name Prim Word ORD_MAP ORD_SET }
+unit Lil = "lil.sml" { LIL ORD_KEY HASH_KEY Word32 TilWord32 
 	Name Prim Word Name Nil 
 	HashTableFn SplayMapFn SplaySetFn List Array }
 
-source unit LILREWRITE = "rewrite.sig.sml" { Lil }
-source unit LilRewrite = "rewrite.sml" { LILREWRITE Lil Util Option Listops Prim Array List }
+unit LILREWRITE = "rewrite.sig.sml" { Lil }
+unit LilRewrite = "rewrite.sml" { LILREWRITE Lil Util Option Listops Prim Array List }
 
-source unit LILFREES = "frees.sig.sml" { Lil Name }
-source unit LilFrees = "frees.sml" { LILFREES 
+unit LILFREES = "frees.sig.sml" { Lil Name }
+unit LilFrees = "frees.sml" { LILFREES 
 	Lil Name LilRewrite 
 }
 
 
-source unit LILUTIL = "lilutil.sig.sml" { Lil Prim Name }
-source unit LilUtil = "lilutil.sml" { LILUTIL 
+unit LILUTIL = "lilutil.sig.sml" { Lil Prim Name }
+unit LilUtil = "lilutil.sml" { LILUTIL 
 	Lil Prim  Name GraphUtil Util Listops TilWord32 Array
 	List LilFrees
 }
 
-source unit LILRENAME = "lilrename.sig.sml" { Lil Name }
-source unit LilRename = "lilrename.sml" { LILRENAME Lil LilRewrite Option Name Util Name Stats HashTable }
+unit LILRENAME = "lilrename.sig.sml" { Lil Name }
+unit LilRename = "lilrename.sml" { LILRENAME Lil LilRewrite Option Name Util Name Stats HashTable }
 
-source unit LILSUBST = "lilsubst.sig.sml" {Lil SUBST}
-source unit LilSubst = "lilsubst.sml" { LILSUBST Lil Subst Option Name Stats LilRewrite LilRename Listops Util TilWord32 }
+unit LILSUBST = "lilsubst.sig.sml" {Lil SUBST}
+unit LilSubst = "lilsubst.sml" { LILSUBST Lil Subst Option Name Stats LilRewrite LilRename Listops Util TilWord32 }
 
-source unit REDUCE = "reduce.sig.sml" { Lil }
-source unit Reduce = "reduce.sml"     { REDUCE 
+unit REDUCE = "reduce.sig.sml" { Lil }
+unit Reduce = "reduce.sml"     { REDUCE 
 	Lil LilSubst LilUtil Listops TilWord32 Util
 }
 
-source unit DECONSTRUCT = "deconstruct.sig.sml" { Lil }
-source interface Deconstruct = "deconstruct.int" { DECONSTRUCT }
-source unit Deconstruct : Deconstruct = "deconstruct.sml" { DECONSTRUCT
+unit DECONSTRUCT = "deconstruct.sig.sml" { Lil }
+interface Deconstruct = "deconstruct.int" { DECONSTRUCT }
+unit Deconstruct : Deconstruct = "deconstruct.sml" { DECONSTRUCT
 	Lil Util Option LilSubst Stats TilWord32 LilUtil Listops Reduce 
 	List Name
 }
 
-source unit PPLIL = "pp.sig.sml" { Lil Formatter Name }
-source unit PpLil = "pp.sml" { PPLIL
+unit PPLIL = "pp.sig.sml" { Lil Formatter Name }
+unit PpLil = "pp.sml" { PPLIL
 	Lil Util Deconstruct Formatter Name Prim Ppprim Stats TilWord32 TextIO
 	Char TilWord64
 }
 
-source unit PEXP = "pexp.sig.sml" { Lil }
-source unit Pexp = "pexp.sml" { PEXP
+unit PEXP = "pexp.sig.sml" { Lil }
+unit Pexp = "pexp.sml" { PEXP
 	Lil List Stats PpLil Name
 }
 
-source unit LILDEFS = "lildefs.sig.sml" { Lil Pexp }
-source unit LilDefs = "lildefs.sml" { LILDEFS 
+unit LILDEFS = "lildefs.sig.sml" { Lil Pexp }
+unit LilDefs = "lildefs.sml" { LILDEFS 
 	Lil Util Pexp Reduce Deconstruct Listops LilSubst LilUtil Name List 
 	TilWord32 Prim PpLil
 }
 
-source unit TRANSLATIONDEFS = "translationdefs.sig.sml" { Lil Pexp Prim }
-source unit TranslationDefs = "translationdefs.sml" { TRANSLATIONDEFS
+unit TRANSLATIONDEFS = "translationdefs.sig.sml" { Lil Pexp Prim }
+unit TranslationDefs = "translationdefs.sml" { TRANSLATIONDEFS
 	Lil LilDefs Util Pexp Prim LilUtil Deconstruct Reduce Listops LilRename
 	Stats Name List
 }
 
-source unit LILCONTEXT = "lilcontext.sig.sml" { Lil LilSubst }
-source unit LilContext = "lilcontext.sml" { LILCONTEXT 
+unit LILCONTEXT = "lilcontext.sig.sml" { Lil LilSubst }
+unit LilContext = "lilcontext.sml" { LILCONTEXT 
 	Lil Util Name LilSubst LilDefs LilUtil Deconstruct Prim Listops 
 	IntBinaryMap Option List
 }
 
-source unit LilPrimUtilParam = "lilprimutilparam.sml" { PRIMUTILPARAM 
+unit LilPrimUtilParam = "lilprimutilparam.sml" { PRIMUTILPARAM 
 	Lil LilContext LilDefs LilUtil TranslationDefs Deconstruct Prim
 }
-source unit LilPrimUtil = "lilprimutil.sml" { PrimUtil LilPrimUtilParam }
+unit LilPrimUtil = "lilprimutil.sml" { PrimUtil LilPrimUtilParam }
 
-source unit SYNTHESIS = "synthesis.sig.sml" { Lil LilContext Pexp LilSubst }
-source unit Synthesis = "synthesis.sml" { SYNTHESIS
+unit SYNTHESIS = "synthesis.sig.sml" { Lil LilContext Pexp LilSubst }
+unit Synthesis = "synthesis.sml" { SYNTHESIS
 	Lil LilDefs LilContext LilSubst Listops LilPrimUtil Deconstruct Util
 	LilUtil Prim Reduce PpLil Pexp
 }
 
-source unit LILTYPE_EQUIV = "type_equiv.sig.sml" { Lil }
-source unit LilType_Equiv = "type_equiv.sml" { LILTYPE_EQUIV
+unit LILTYPE_EQUIV = "type_equiv.sig.sml" { Lil }
+unit LilType_Equiv = "type_equiv.sml" { LILTYPE_EQUIV
 	Lil LilContext LilDefs Listops LilSubst Reduce Name Stats PpLil TilWord32 
 }
 
-source unit LILTYPECHECK = "typecheck.sig.sml" { Lil LilContext }
-source unit LilTypecheck = "typecheck.sml" { LILTYPECHECK
+unit LILTYPECHECK = "typecheck.sig.sml" { Lil LilContext }
+unit LilTypecheck = "typecheck.sml" { LILTYPECHECK
 	LilContext Lil Util Name Stats Prim Listops LilSubst LilDefs 
 	LilUtil Deconstruct LilType_Equiv Synthesis Reduce LilPrimUtil LilRename
 	List PpLil TilWord32 UtilError Array
 }
 
-source unit NILTOLIL = "niltolil.sig.sml" { Nil Lil }
-source unit NilToLil = "niltolil.sml" { NILTOLIL 
+unit NILTOLIL = "niltolil.sig.sml" { Nil Lil }
+unit NilToLil = "niltolil.sml" { NILTOLIL 
 	Lil LilDefs TranslationDefs Name Util Listops TilWord32 Stats List Array ListPair
 	LilSubst LilUtil LilRename Synthesis Pexp PpLil
 	Nil NilDefs NilSubst NilUtil NilContext Normalize SingletonElim 
 	NilPrimUtilParam Ppnil NilPrimUtil Prim TraceInfo
 }
 
-source unit CLOSURE_STATE = "closure_state.sig.sml" { Lil Name }
-source unit Closure_State = "closure_state.sml" { CLOSURE_STATE
+unit CLOSURE_STATE = "closure_state.sig.sml" { Lil Name }
+unit Closure_State = "closure_state.sml" { CLOSURE_STATE
 	Lil Name Stats Util PpLil Listops
 }
-source unit CLOSURE_ANALYZE = "closure_analyze.sig.sml" { Lil Closure_State Name }
-source unit Closure_Analyze = "closure_analyze.sml" { CLOSURE_ANALYZE 
+unit CLOSURE_ANALYZE = "closure_analyze.sig.sml" { Lil Closure_State Name }
+unit Closure_Analyze = "closure_analyze.sml" { CLOSURE_ANALYZE 
 	Lil Frees Closure_State Name Listops LilDefs LilContext LilSubst Synthesis Reduce
 	Deconstruct Util Stats Option Prim List PpLil Array Int
 }
 
-source unit LILCLOSE = "toclosure.sig.sml" { Lil }
-source unit LilClose = "toclosure.sml" { LILCLOSE
+unit LILCLOSE = "toclosure.sig.sml" { Lil }
+unit LilClose = "toclosure.sml" { LILCLOSE
 	Lil Frees Closure_Analyze Closure_State LilRename PpLil Pexp Prim
 	Listops LilDefs LilContext LilSubst Synthesis Deconstruct LilUtil
 	Util Stats Name Option List Array
 }
 
-source unit SELFCHECK = "selfcheck.sig.sml" { }
-source unit SelfCheck = "selfcheck.sml" { SELFCHECK
+unit SELFCHECK = "selfcheck.sig.sml" { }
+unit SelfCheck = "selfcheck.sml" { SELFCHECK
 	Lil LilDefs TranslationDefs LilTypecheck LilContext  LilUtil Deconstruct Pexp 
 	Listops Util Name LilRename List UtilError
 }
 
-source unit OPTABLE = "optable.sig.sml" { Lil ORD_KEY ORD_MAP }
-source unit OpTable = "optable.sml" { OPTABLE
+unit OPTABLE = "optable.sig.sml" { Lil ORD_KEY ORD_MAP }
+unit OpTable = "optable.sml" { OPTABLE
 	Lil Prim TilWord64 Name
 	Util Int Word32 String BinaryMapFn Array
 }
 
-source unit LILOPTIMIZE = "optimize.sig.sml" { Lil }
-source unit LilOptimize = "optimize.sml" { LILOPTIMIZE
+unit LILOPTIMIZE = "optimize.sig.sml" { Lil }
+unit LilOptimize = "optimize.sml" { LILOPTIMIZE
 	Lil Prim Name OpTable LilUtil LilDefs LilContext LilType_Equiv 
 	Reduce Synthesis Deconstruct PpLil LilSubst LilPrimUtil Pexp
 	Util Listops Stats Int List Array Option TilWord64 String
 }
 
-source unit LINKLIL = "linklil.sig.sml" { Nil Lil PPLIL }
-source unit Linklil = "linklil.sml" { LINKLIL
+unit LINKLIL = "linklil.sig.sml" { Nil Lil PPLIL }
+unit Linklil = "linklil.sml" { LINKLIL
 	Nil Lil PpLil Stats SelfCheck LilSubst List Int Word 
 	NilToLil LilClose Array Util Timestamp LilTypecheck LilOptimize
 }
-

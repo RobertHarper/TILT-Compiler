@@ -241,8 +241,6 @@ struct
 	    STATE{ctxt=NilContext.insert_equation(ctxt,v,c), count=count}
 	fun add_con(STATE{ctxt,count},v,c) =
 	    STATE{ctxt=NilContext.insert_con(ctxt,v,c), count=count}
-	fun add_label(STATE{ctxt,count},l,v) =
-	    STATE{ctxt=NilContext.insert_label(ctxt,l,v), count=count}
 	fun get_count(STATE{count,...}) = count
 	fun type_of(STATE{ctxt,...},e) = Normalize.type_of(ctxt,e)
 
@@ -725,9 +723,9 @@ struct
 	  end
 
 	fun do_import(ImportValue(l,v,tr,c),state) = (ImportValue(l,v,tr,do_con state c),
-						      add_label(add_con(state,v,c),l,v))
+						      add_con(state,v,c))
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k),
-						   add_label(add_kind(state,v,k),l,v))
+						   add_kind(state,v,k))
 	  | do_import(ImportBnd (phase, cb),state) =
 	    let
 		val (cb, state) = do_cbnd (cb, state)

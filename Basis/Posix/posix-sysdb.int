@@ -1,0 +1,3 @@
+structure POSIX_Sys_DB : POSIX_SYS_DB
+	where type uid = PrePosix.uid
+	where type gid = PrePosix.gid

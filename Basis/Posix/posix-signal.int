@@ -1,0 +1,1 @@
+structure POSIX_Signal : POSIX_SIGNAL

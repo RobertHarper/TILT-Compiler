@@ -20,10 +20,10 @@
 #include <poll.h>
 #include <sys/utsname.h>
 #include <sys/resource.h>
-#if (defined alpha_osf)
+#if (defined alpha)
 #include <float.h>
 int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the Alpha */
-#elif (defined solaris)
+#elif (defined sparc)
 #include <ieeefp.h>
 #endif
 #include <fcntl.h>
@@ -261,7 +261,7 @@ double ln(double arg)
 
 int getRoundingMode(unit ignored)
 {
-#ifdef alpha_osf
+#ifdef alpha
   unsigned int mode = read_rnd();
   switch (mode) {
     case FP_RND_RZ: return 1;
@@ -270,7 +270,7 @@ int getRoundingMode(unit ignored)
     case FP_RND_RM: return 3;
   }
   runtime_error_fmt("read_rnd retrurned unrecognized mode %d", mode);
-#elif (defined solaris)
+#elif (defined sparc)
   fp_rnd mode = fpgetround();
   switch (mode) {
     case FP_RZ: return 1;
@@ -285,7 +285,7 @@ int getRoundingMode(unit ignored)
 
 ptr_t setRoundingMode(int ml_mode)
 {
-#if (defined alpha_osf)
+#if (defined alpha)
   int mode = 0;
   switch (ml_mode) {
     case 1: mode = FP_RND_RZ; break;
@@ -296,7 +296,7 @@ ptr_t setRoundingMode(int ml_mode)
       runtime_error_fmt("setRoundingMode given unknown ML rounding mode %d", ml_mode);
     }
   write_rnd(mode);
-#elif (defined solaris)
+#elif (defined sparc)
   fp_rnd mode = 0;
   switch (ml_mode) {
     case 1: mode = FP_RZ; break;
@@ -315,12 +315,12 @@ ptr_t setRoundingMode(int ml_mode)
 int real_logb(double arg)
 {
   int biasedExp = 0;
-#ifdef alpha_osf
+#ifdef alpha
   unsigned long temp;
   assert(sizeof(unsigned long) ==  sizeof(double));
   *((double *)(&temp)) = arg;
   biasedExp = (int)(temp >> 52);
-#elif (defined solaris)
+#elif (defined sparc)
   int temp[2];
   assert((2 * (sizeof(unsigned int))) == sizeof(double));
   *((double *)temp) = arg;

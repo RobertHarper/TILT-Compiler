@@ -1,24 +1,14 @@
 signature MASTER =
 sig
     val MasterDiag : bool ref
-    val Checkpoint : bool ref
-    val CheckpointVerbose : bool ref	(* Checkpoints include a break-down of units by status. *)
-    val ShowEnable : bool ref		(* Chat when units become enabled for compilation. *)
-    val ShowFinalReport : bool ref
-    val ShowUptodate : bool ref
+    val MasterVerbose : bool ref
+    val MasterVVerbose : bool ref
 
-    type state
-    datatype result = PROCESSING of Time.time * state  (* All slaves utilized *)
-                    | IDLE of Time.time * state * int  (* Num slaves idle and there are waiting jobs *)
-	            | COMPLETE of Time.time
+    type targets = Name.label list
 
-    (* Compile units in mapfile, generating object files and
-     * executable targets if we're running native. *)
-    val once : string -> {setup : unit -> state,
-			  step : state -> result,
-			  complete : unit -> unit}
-    val run : string -> unit
-    val clean : string -> unit
-    val purge : string -> unit
-    val purgeAll : string -> unit
+    val make : string * targets -> unit
+    val make_exe : string * string * targets -> unit	(* project, exe *)
+    val make_lib : string * string * targets -> unit	(* project, lib *)
+    val purge : string * targets -> unit
+    val purgeAll : string * targets -> unit
 end

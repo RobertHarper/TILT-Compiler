@@ -186,7 +186,7 @@ struct
 		end
 	in  loop(0,size s)
 	end
-	
+
     (* Make fd like tmpfd and close tmpfd. *)
     fun redirect (fd : IO.file_desc, tmpfd : IO.file_desc) : unit =
 	(IO.dup2 {old=tmpfd, new=fd};
@@ -237,7 +237,7 @@ struct
     fun run_for_effect (program : string list) : unit =
 	(case run_program program
 	   of Exit (0, _) => ()
-	    | _ => fail ((foldr (op ^) "" program) ^ " failed"))
+	    | _ => fail ((foldr (fn (s,acc) => s ^ " " ^ acc) "" program) ^ " failed"))
 	     
     datatype result =
 	Bomb				(* TILT bombed *)
@@ -290,12 +290,12 @@ struct
 		  binary : string} : status =
 	let
 	    val cleanup = if clean
-			      then fn () => app run_for_effect [[tilt,"-cc",mapfile],["/bin/rm", "-f","core",corefile]]
+			      then fn () => app run_for_effect [[tilt,"-pp",mapfile],["/bin/rm", "-f","core",corefile,binary]]
 			  else fn () => ()
 	    val _ = cleanup()
 	    val expected = read_result resultfile
 	    val actual =
-		(case run_program [tilt,"-fTypecheck","-fIlcontextChecks",mapfile]
+		(case run_program [tilt,"-fTypecheck","-fIlcontextChecks","-o",binary,mapfile]
 		   of Exit (0, _) => Raw (run_program [binary])
 		    | Exit (10, _) => Reject
 		    | Exit _ => Bomb

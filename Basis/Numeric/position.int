@@ -1,1 +1,2 @@
-structure Position : INTEGER where type int = int
+structure Position : INTEGER
+	where type int = int

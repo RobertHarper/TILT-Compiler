@@ -249,7 +249,7 @@ structure Toil
 	   else loop c
 	end
 
-     fun sbnd_ctxt_list2modsig (sbnd_ctxt_list : (sbnd option * context_entry) list)
+     fun sbnd_ctxt_list2modsig (sbnd_ctxt_list : decresult)
 	 : (mod * signat) =
 	 let fun loop (acc1,acc2) arg =
 	     (case arg of
@@ -264,7 +264,7 @@ structure Toil
 
      and add_context_sbnd_ctxts
 	 (context : context,
-	  sbnd_ctxt : (sbnd option * context_entry) list) : sbnd list * context =
+	  sbnd_ctxt : decresult) : sbnd list * context =
 	 let
 	     val sbnds = List.mapPartial #1 sbnd_ctxt
 	     val ces = map #2 sbnd_ctxt
@@ -281,8 +281,8 @@ structure Toil
                      a list of objects
            outputs : a list of (optional) bindings and context-entries
      *)
-     and packagedecs (xobj : context * 'a -> (sbnd option * context_entry) list)
-         (context, sequential) (objs : 'a list) : (sbnd option * context_entry) list =
+     and packagedecs (xobj : context * 'a -> decresult)
+         (context, sequential) (objs : 'a list) : decresult =
          let
              fun loop context [] = []
                | loop context [obj] = xobj(context,obj)
@@ -1019,7 +1019,7 @@ structure Toil
 	 in  top_sbnd_entry :: sbnds_entries
 	 end
 
-     and xdec islocal (context : context, d : Ast.dec) : (sbnd option * context_entry) list =
+     and xdec islocal (context : context, d : Ast.dec) : decresult =
        (case d of
           (* --- The tricky thing about this value declarations is figuring
 	     --- out what type variables need to be generalized.  There are two
@@ -1244,7 +1244,10 @@ structure Toil
 						  (symbol_label s, (rest, exp))
 					    | (Ast.AppPat{constr = Ast.VarPat[s], argument}::rest) =>
 						  (symbol_label s, (argument::rest,exp))
-					    | _ => error "illegal pattern for function declaraion"))
+					    | _ =>
+						(error_region();
+						 print "illegal pattern for function declaration\n";
+						 reject "illegal pattern")))
 				val _ =
 				    (case nameopt of
 					 NONE => ()
@@ -1650,7 +1653,7 @@ structure Toil
     (* ---------------------------------------------------------
       ------------------ TYPE DEFINITIONS ---------------------
       --------------------------------------------------------- *)
-    and xtybind (context : context, tblist : Ast.tb list) : (sbnd option * context_entry) list =
+    and xtybind (context : context, tblist : Ast.tb list) : decresult =
        let
 	 fun doer tb =
 	   let
@@ -1976,9 +1979,9 @@ structure Toil
     (* ---------------------------------------------------------
       ------------------ FUNCTOR BINDINDS ---------------------
       --------------------------------------------------------- *)
-     and xfctbind (context : context, fctbs : Ast.fctb list) : (sbnd option * context_entry) list =
+     and xfctbind (context : context, fctbs : Ast.fctb list) : decresult =
 	 let
-	     fun help (context,(name,def)) : (sbnd option * context_entry) list =
+	     fun help (context,(name,def)) : decresult =
 		 (case def of
 		      (Ast.VarFct (path,Ast.NoSig)) =>
 			  (case (Context_Lookup_Labels(context,map symbol_label path)) of
@@ -2183,7 +2186,7 @@ structure Toil
       ------------------ STRUCTURE BINDINGS --------------------
       --------------------------------------------------------- *)
      and xstrbinds (islocal : bool) (context : context, strbs : Ast.strb list)
-	 : (sbnd option * context_entry) list =
+	 : decresult =
        let val strbs = map strb_strip strbs
 	   fun help (n,(strexp,constraint)) =
 	       let val v = fresh_named_var "strbindvar"
@@ -2213,6 +2216,38 @@ structure Toil
 	end
 
     and xeq (ctxt : context, argcon : con) : (exp * con) option = xeq' (ctxt, NONE, argcon)
+
+    fun xdec_as_topspec (context : context, dec : Ast.dec) : entries =
+	let val decresult = xdec false (context, dec)
+	    val (sbndopts, entries) = Listops.unzip decresult
+	    val _ = if List.exists isSome sbndopts then
+			error "interface contains an sbnd"
+		     else ()
+	in  entries
+	end
+
+    fun xtopspec (ctxt : context, topspec : Ast.topspec) : entries =
+	(case topspec
+	   of Ast.TopSpec specs =>
+		let val sdecs = xspec (ctxt, specs)
+		    val entries = map CONTEXT_SDEC sdecs
+		in  entries
+		end
+	    | Ast.SigSpec x => xdec_as_topspec (ctxt, Ast.SigDec x)
+	    | Ast.OvldSpec x => xdec_as_topspec (ctxt, Ast.OvldDec x)
+	    | Ast.FixSpec x => xdec_as_topspec (ctxt, Ast.FixDec x)
+	    | Ast.ExternSpec x => xdec_as_topspec (ctxt, Ast.ExternDec x)
+	    | Ast.SeqSpec topspecs =>
+		let fun folder (topspec : Ast.topspec,
+				ctxt : context) : entries * context =
+			let val entries = xtopspec (ctxt,topspec)
+			    val ctxt = add_context_entries (ctxt,entries)
+			in  (entries,ctxt)
+			end
+		    val (entries_list,_) = foldl_acc folder ctxt topspecs
+		    val entries = List.concat entries_list
+		in  entries
+		end)
 
     (*
 	Exported functions set up Error state, resolve overloading and
@@ -2285,7 +2320,6 @@ structure Toil
       in result
       end
 
-
     val expcompile = xexp
     val typecompile = xty
 
@@ -2294,8 +2328,8 @@ structure Toil
 	(TVClose.closeDec dec;
 	 overload_wrap ctxt fp (xdec false) IlUtil.decresult_handle (ctxt,dec))
 
-    val xspecs : Il.context * filepos * Ast.spec list -> Il.sdecs option =
-	fn (ctxt,fp,specs) => overload_wrap ctxt fp xspec IlUtil.sdecs_handle (ctxt,specs)
+    val xtopspec : Il.context * filepos * Ast.topspec -> Il.entries option =
+	fn (ctxt,fp,topspec) => overload_wrap ctxt fp xtopspec IlUtil.entries_handle (ctxt,topspec)
 
     val seal : Il.context * filepos * Il.mod * Il.signat * Il.signat -> Il.mod option =
 	fn (ctxt,fp,ma,sa,st) =>

@@ -1,7 +1,5 @@
 structure PreInt =
     struct
-	type int = int
-
 	fun imod(a : int, b : int) =
 	    let val temp = TiltPrim.irem(a,b)
 	    in if ((b>0 andalso temp>=0) orelse

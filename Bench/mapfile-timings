@@ -1,64 +1,63 @@
-import group $libdir ^ "/smlnj-lib/group"
-import group $libdir ^ "/arg/group"
+include $libdir ^ "/smlnj-lib/desc"
+include $libdir ^ "/arg/desc"
 
-source unit RUN = "run.sig.sml" {}
+unit RUN = "run.sig.sml" {}
 
-source unit life = "life.sml" {RUN}
+unit life = "life.sml" {RUN}
 
-source unit leroy = "leroy.sml" {List Int RUN}
+unit leroy = "leroy.sml" {List Int RUN}
 
-source unit fft = "fft.sml" {
+unit fft = "fft.sml" {
 	Int Math Real Array RUN
 }
 
-source unit boyer = "boyer.sml" {Int RUN}
+unit boyer = "boyer.sml" {Int RUN}
 
-source unit simple = "simple.sml" {
+unit simple = "simple.sml" {
 	Array Array2 Int Real64 Math64 List PreReal RUN
 }
 
-source unit tyan = "tyan.sml" {
+unit tyan = "tyan.sml" {
 	List Array Int TextIO RUN
 }
 
-source unit msort = "msort.sml" { RUN }
+unit msort = "msort.sml" { RUN }
 
-source unit pia = "pia.sml" {
+unit pia = "pia.sml" {
 	Real Math TextIO String RUN
 }
 
-source unit lexgen = "lexgen.sml" {
+unit lexgen = "lexgen.sml" {
 	Int String TextIO Array List RUN
 }
 
-source unit frank = "frank.sml" {Int TextIO RUN}
+unit frank = "frank.sml" {Int TextIO RUN}
 
-source unit Arithmetic = "arithmetic.sml" {Int Real RUN}
+unit Arithmetic = "arithmetic.sml" {Int Real RUN}
 
-source unit BarnesHut = "barnes-hut.sml" {
+unit BarnesHut = "barnes-hut.sml" {
 	Int List Math64 Real String RUN
 }
 
-source interface PQueensInt = "pqueens.int" {RUN}
+interface PQueensInt = "pqueens.int" {RUN}
 
-source unit PQueens : PQueensInt = "pqueens.sml" {
+unit PQueens : PQueensInt = "pqueens.sml" {
 	Int Array CharVector RUN
 }
 
-source unit Quicksort = "quicksort.sml" {Array RUN}
+unit Quicksort = "quicksort.sml" {Array RUN}
 
-source unit Quicksort2 = "quicksort2.sml" {Array RUN}
+unit Quicksort2 = "quicksort2.sml" {Array RUN}
 
-source unit Isort = "sort.sml" {Int RUN}
+unit Isort = "sort.sml" {Int RUN}
 
-source unit Takc = "takc.sml" {Int RUN}
+unit Takc = "takc.sml" {Int RUN}
 
-source unit Taku = "taku.sml" {Int RUN}
+unit Taku = "taku.sml" {Int RUN}
 
-source unit btimes = "btimes.sml" {
+unit btimes = "btimes.sml" {
 	Time Timer List String life leroy fft boyer simple tyan msort pia
 	frank lexgen ListPair Real Arithmetic BarnesHut PQueens Quicksort
 	Quicksort2 Isort Takc Taku Arg TextIO CommandLine Int OS RUN
 }
-make executable "btimes." ^ $target ^ ".exe" {btimes}
 

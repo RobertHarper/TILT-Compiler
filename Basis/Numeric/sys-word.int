@@ -1,1 +1,2 @@
-structure SysWord : WORD where type word = word
+structure SysWord : WORD
+	where type word = word

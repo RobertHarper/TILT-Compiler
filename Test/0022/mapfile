@@ -2,9 +2,8 @@
 	The bug is that the elaborator generated bad code for unit Bug
 	and caused the phase splitter to bomb.  See readme.
 *)
-source unit S = "S.sig" {}
-source unit T = "T.sig" {S}
-source interface F = "F.int" {S T}
-source unit F : F = "F.sml" {S}
-source unit Bug = "T.sml" {T F}
-make executable "test." ^ $target ^ ".exe" {Bug}
+unit S = "S.sig" {}
+unit T = "T.sig" {S}
+interface F = "F.int" {S T}
+unit F : F = "F.sml" {S}
+unit Bug = "T.sml" {T F}

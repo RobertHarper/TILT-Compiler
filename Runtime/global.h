@@ -10,21 +10,24 @@ extern mem_t textstart, textend;
 
 void global_init(void);
 
-INLINE(IsText)
+#pragma INLINEP(IsText)
+static INLINE
 int IsText(vptr_t addr)
 {
   return (textstart <= addr && addr <= textend);
 }
 
 
-INLINE(IsGlobalData)
+#pragma INLINEP(IsGlobalData)
+static INLINE
 int IsGlobalData(vptr_t addr)
 {
   return (datastart <= addr && addr <= dataend);
 	  /* ||	  (RuntimeGlobalData_Start <= addr && addr <= RuntimeGlobalData_End) */
 }
 
-INLINE(IsTagData)
+#pragma INLINEP(IsTagData)
+static INLINE
 int IsTagData(ptr_t addr)
 {
   unsigned long a = (unsigned long)addr;

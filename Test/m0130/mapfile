@@ -1,2 +1,1 @@
-source unit Test = "where.sml" {}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "where.sml" {}

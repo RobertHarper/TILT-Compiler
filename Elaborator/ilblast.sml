@@ -1,8 +1,9 @@
-structure IlBlast
-    :> sig
-	   val blastOutPinterface : Blaster.outstream -> Il.pinterface -> unit
-	   val blastInPinterface : Blaster.instream -> Il.pinterface
-       end =
+structure IlBlast :>
+sig
+   val blastOutPinterface : Blaster.outstream -> Il.pinterface -> unit
+   val blastInPinterface : Blaster.instream -> Il.pinterface
+   val blastInPinterfaceParms : Blaster.instream -> Il.parms
+end =
 struct
     open Il
 
@@ -888,7 +889,15 @@ struct
 	     entries = blastInList blastInEntry}
 
     val blastOutPinterface = exportOut blastOutPinterface
-    val blastInPinterface = fn (is : Blaster.instream) => exportIn blastInPinterface is ()
+    val blastInPinterface =
+	fn (is : Blaster.instream) => exportIn blastInPinterface is ()
+
+    val magic = "pinterface $Revision$"
     val (blastOutPinterface, blastInPinterface) =
-	Blaster.magic (blastOutPinterface, blastInPinterface, "pinterface $Revision$")
+	Blaster.magic (blastOutPinterface, blastInPinterface, magic)
+
+    val (_,blastInPinterfaceParms) =
+	Blaster.magic (fn _ => error "blastOutPinterfaceParms",
+		       fn is => exportIn blastInParms is (),
+		       magic)
 end

@@ -4,7 +4,7 @@
 */
 
 
-#if defined(alpha_osf) && !defined(_XOPEN_SOURCE_EXTENDED)
+#if defined(alpha) && !defined(_XOPEN_SOURCE_EXTENDED)
 #define _XOPEN_SOURCE_EXTENDED
 #endif
 

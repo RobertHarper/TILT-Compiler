@@ -1,1 +1,2 @@
-structure List : LIST where type 'a list = 'a list
+structure List : LIST
+	where type 'a list = 'a list

@@ -47,7 +47,8 @@ extern long GCTableSize;
 extern long SMLGlobalSize;
 extern long TotalStackDepth, MaxStackDepth, TotalStackSize, TotalNewStackDepth;
 
-INLINE(DupGlobal)
+#pragma INLINEP(DupGlobal)
+static INLINE
 ploc_t DupGlobal(vptr_t global)
 {
   ploc_t primaryLoc = (ploc_t) &global[primaryGlobalOffset / sizeof(val_t)];

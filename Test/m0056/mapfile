@@ -1,4 +1,3 @@
-source unit Test = "check_arrays.sml" {
+unit Test = "check_arrays.sml" {
 	Int Word8 Word8Array CharArray Array
 }
-make executable "Test." ^ $target ^ ".exe" {Test}

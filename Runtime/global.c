@@ -4,20 +4,13 @@
 #include "memobj.h"
 #include "thread.h"
 #include "create.h"
-#ifdef alpha_osf
-#include "interface_osf.h"
-#endif
-#ifdef rs_aix
-#include "interface_aix.h"
+#ifdef alpha
+#include "interface_alpha.h"
 #endif
 
 #include "general.h"
 #include "stack.h"
 
-#ifdef rs_aix
-#define _fdata _data
-#define _ftext _text
-#endif
 /* these next two are defined by the linker */
 extern unsigned long _edata;
 extern unsigned long _fdata;
@@ -39,7 +32,7 @@ mem_t RuntimeGlobalData_Start;
 mem_t RuntimeGlobalData_Cur;
 mem_t RuntimeGlobalData_End;
 
-#ifdef solaris
+#ifdef sparc
 extern unsigned long firstdata;
 extern unsigned long firsttext;
 #endif
@@ -55,14 +48,14 @@ void global_init(void)
   RuntimeGlobalData_Cur = RuntimeGlobalData_Start;
   RuntimeGlobalData_End = RuntimeGlobalData_Start + RuntimeGlobalDataSize;
 
-#ifdef alpha_osf
+#ifdef alpha
   datastart = (mem_t) &_fdata;
   dataend   = (mem_t) &_edata;  
   textstart = (mem_t) &_ftext;
   textend   = (mem_t) &_etext;
 #endif
 
-#ifdef solaris
+#ifdef sparc
   datastart = (mem_t) firstdata;
   dataend   = (mem_t) &_edata;
   textstart = (mem_t) firsttext;

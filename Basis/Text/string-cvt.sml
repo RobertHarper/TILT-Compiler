@@ -37,7 +37,7 @@ structure StringCvt :> STRING_CVT =
 	    in
 	      fill i
 	    end
-      fun cpyStr (src : string, srcLen, dst : word8array, start) = let
+      fun cpyStr (src : string, srcLen, dst : TiltPrim.word8array, start) = let
 	    fun cpy (i, j) = if (i < srcLen)
 		  then (unsafe_update8(dst, int32touint32 j, unsafe_vsub8(src, int32touint32 i));
 			cpy (i+1, j+1))

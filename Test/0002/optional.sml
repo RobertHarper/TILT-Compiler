@@ -4,7 +4,6 @@
 structure Optional :> OPTIONAL =
 struct
     structure Int32 = Int32
-    structure Word31 = Word31
     structure Word32 = Word32
     structure Real64 = Real64
     structure Pack32Big = Pack32Big

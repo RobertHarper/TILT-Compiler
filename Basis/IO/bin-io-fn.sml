@@ -13,7 +13,7 @@ functor BinIOFn (structure OSPrimIO : OS_PRIM_IO
                 and type StreamIO.reader = BinPrimIO.reader
 		and type StreamIO.writer = BinPrimIO.writer
 		and type StreamIO.elem = char
-		and type StreamIO.vector = word8vector =
+		and type StreamIO.vector = TiltPrim.word8vector =
 struct
 
     structure PIO = OSPrimIO.PrimIO

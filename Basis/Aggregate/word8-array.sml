@@ -5,7 +5,7 @@
  *)
 
 structure Word8Array :> MONO_ARRAY where type elem = char
-				     and type array = word8array
+				     and type array = TiltPrim.word8array
 				     and type Vector.vector = string
 				     and type Vector.elem = char =
   struct
@@ -33,7 +33,7 @@ structure Word8Array :> MONO_ARRAY where type elem = char
     val ulte = TiltPrim.ulte
 
     type elem = char
-    type array = word8array
+    type array = TiltPrim.word8array
     structure Vector = Word8Vector
 
     val maxLen = PreVector8.maxLen
@@ -44,10 +44,10 @@ structure Word8Array :> MONO_ARRAY where type elem = char
     fun array (0, _) = array0
       | array (n, init) =
 	if (maxLen < n)
-	    then raise General.Size
+	    then raise Size
 	else unsafe_array(int32touint32 n, init)
 
-    fun checkLen n = if maxLen < n then raise General.Size else ()
+    fun checkLen n = if maxLen < n then raise Size else ()
     fun rev ([], l) = l
       | rev (x::r, l) = rev (r, x::l)
     fun fromList'(n,l) =
@@ -109,16 +109,16 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 	    case (base, optLen)
 	     of (0, NONE) => if (0 < len) then newVec len else vector0
 	      | (_, SOME 0) => if ((base < 0) orelse (len < base))
-		  then raise General.Subscript
+		  then raise Subscript
 		  else vector0
 	      | (_, NONE) => if ((base < 0) orelse (len < base))
-		    then raise General.Subscript
+		    then raise Subscript
 		  else if (len = base)
 		    then vector0
 		    else newVec (len - base)
 	      | (_, SOME n) =>
 		  if ((base < 0) orelse (n < 0) orelse (len < (base+n)))
-		    then raise General.Subscript
+		    then raise Subscript
 		    else newVec n
 	    (* end case *)
 	  end

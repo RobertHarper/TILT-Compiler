@@ -49,7 +49,8 @@ void stub_error(void)
   DIE("stub_error: should be a dead ra");
 }
 
-INLINE(LookupStackBot)
+#pragma INLINEP(LookupStackBot)
+static INLINE
 bot LookupStackBot(CallinfoCursor_t *cursor, int pos)
 {
   unsigned int v = ((int*)(cursor->callinfo->__rawdata))[pos >> 4];
@@ -57,13 +58,15 @@ bot LookupStackBot(CallinfoCursor_t *cursor, int pos)
   return (v >> (2 * whichbot)) & 3;
 }
 
-INLINE(LookupSpecialByte)
+#pragma INLINEP(LookupSpecialByte)
+static INLINE
 int LookupSpecialByte(CallinfoCursor_t *cursor)
 {
   return cursor->byteData[cursor->byteOffset++];
 }
 
-INLINE(LookupSpecialWordPair)
+#pragma INLINEP(LookupSpecialWordPair)
+static INLINE
 void LookupSpecialWordPair(CallinfoCursor_t *cursor, int *a, int *b)
 {
   *a = cursor->wordData[cursor->wordOffset++];
@@ -72,7 +75,8 @@ void LookupSpecialWordPair(CallinfoCursor_t *cursor, int *a, int *b)
 	      (int *) cursor->callinfo + cursor->entrySize);
 }
 
-INLINE(LookupSpecialWord)
+#pragma INLINEP(LookupSpecialWord)
+static INLINE
 void LookupSpecialWord(CallinfoCursor_t *cursor, int *a)
 {
   *a = cursor->wordData[cursor->wordOffset++];
@@ -131,13 +135,14 @@ void stack_init(void)
 }
 
 
-INLINE(LookupCallinfo)
+#pragma INLINEP(LookupCallinfo)
+static INLINE
 Callinfo_t *LookupCallinfo(Proc_t *proc, val_t retAdd)
 {
   struct HashEntry *e;
-#if defined(alpha_osf)
+#if defined(alpha)
   val_t key = retAdd;
-#elif defined(solaris)
+#elif defined(sparc)
   val_t key = retAdd + 8;  /* We add 2 words because 
 			      (1) the link value is the address of the calling instruction
 			      (2) there is a delay slot. */
@@ -158,7 +163,8 @@ Callinfo_t *LookupCallinfo(Proc_t *proc, val_t retAdd)
 
 
 /* If client is uptrace, then only some fields are initlialized */
-INLINE(getCursor)
+#pragma INLINEP(getCursor)
+static INLINE
 CallinfoCursor_t *getCursor(Proc_t *proc, Callinfo_t *callinfo)
 {
   CallinfoCursor_t *cursor = &proc->lastCallinfoCursor;
@@ -219,7 +225,8 @@ int CacheCursor(CallinfoCursor_t *cursor)
 }
 
 
-INLINE(PathProjectStep)
+#pragma INLINEP(PathProjectStep)
+static INLINE
 ptr_t PathProjectStep(ptr_t base, int indices, int* stop)
 {
   int index;
@@ -240,7 +247,8 @@ ptr_t PathProjectStep(ptr_t base, int indices, int* stop)
   return base;
 }
 
-INLINE(PathProject)
+#pragma INLINEP(PathProject)
+static INLINE
 ptr_t PathProject(CallinfoCursor_t* cursor, ptr_t base, int indices)
 {
   int stop = 0;
@@ -280,7 +288,8 @@ int should_trace_special(CallinfoCursor_t *cursor, mem_t cur_sp, int regstate,
 }
 
 
-INLINE(should_trace)
+#pragma INLINEP(should_trace)
+static INLINE
 int should_trace(unsigned long trace, 
 		 CallinfoCursor_t *cursor, mem_t cur_sp, int regstate,
 		 val_t *data_add, int i)

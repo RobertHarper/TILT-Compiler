@@ -10,6 +10,6 @@ sig
 
     val parse_impl : Ast.dec parser
 
-    val parse_inter : Ast.spec list parser
+    val parse_inter : Ast.topspec parser
 
 end (* signature FRONT_END *)

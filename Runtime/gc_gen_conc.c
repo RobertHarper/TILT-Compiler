@@ -145,7 +145,8 @@
 
 int multiPhase = 1;  /* Allow the collector to flip on, work, flip off in same segment */
 
-INLINE(flipRootLoc)
+#pragma INLINEP(flipRootLoc)
+static INLINE
 void flipRootLoc(int curGCType, ploc_t root)
 {
   ptr_t primary = *root;

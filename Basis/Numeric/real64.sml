@@ -3,7 +3,7 @@
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
  *
  *)
-(*X*)
+
 structure Real64 :> REAL where type real = real
 			   and type Math.real = real =
   struct
@@ -100,13 +100,13 @@ structure Real64 :> REAL where type real = real
 
 	fun wrap f (r : real) : int =
 	    if r == 0.0 then 0
-	    else if isNan r then raise General.Domain
+	    else if isNan r then raise Domain
 		 else if isNormal r then f r
-		      else raise General.Overflow
+		      else raise Overflow
     in
 	val floor = wrap (fn r =>
 			  if r < minInt orelse r >= maxInt'
-			      then raise General.Overflow
+			      then raise Overflow
 			  else
 			      let val a = TiltPrim.float2int r
 			      in  if (TiltPrim.int2float a) <= r then a
@@ -114,11 +114,11 @@ structure Real64 :> REAL where type real = real
 			      end)
 	val trunc = wrap (fn r =>
 			  if r <= minInt' orelse r >= maxInt'
-			      then raise General.Overflow
+			      then raise Overflow
 			  else TiltPrim.float2int r)
 	val ceil = wrap (fn r =>
 			 if r <= minInt' orelse r > maxInt
-			     then raise General.Overflow
+			     then raise Overflow
 			 else
 			     let val a = TiltPrim.float2int r
 			     in  if (TiltPrim.int2float a) >= r then a
@@ -149,7 +149,7 @@ structure Real64 :> REAL where type real = real
     fun fromLarge _ x = x
 
     fun sign x = if (x < 0.0) then ~1 else if (x > 0.0) then 1
-                  else if isNan x then raise General.Domain else 0
+                  else if isNan x then raise Domain else 0
     fun signBit x = (* Bug: negative zero not handled properly *)
 	real_scalb(x, negate(real_logb x)) < 0.0
 
@@ -158,8 +158,8 @@ structure Real64 :> REAL where type real = real
     fun copySign(x,y) = (* may not work if x is Nan *)
            if sameSign(x,y) then x else ~x
 
-    fun compare(x,y) = if x<y then General.LESS else if x>y then General.GREATER
-                       else if x == y then General.EQUAL
+    fun compare(x,y) = if x<y then LESS else if x>y then GREATER
+                       else if x == y then EQUAL
 			    else raise IEEEReal.Unordered
 
     fun compareReal(x,y) =
@@ -282,8 +282,8 @@ structure Real64 :> REAL where type real = real
     fun rem(x,y) = y * #frac(split(x/y))
 
     fun checkFloat x = if x>negInf andalso x<posInf then x
-                       else if isNan x then raise General.Div
-			 else raise General.Overflow
+                       else if isNan x then raise Div
+			 else raise Overflow
 
 (** NOTE logb and scalb are also defined in math64.sml; do we need both??? **)
     fun logb x = (case real_logb x

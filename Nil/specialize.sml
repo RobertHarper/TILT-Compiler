@@ -879,10 +879,10 @@ struct
 	       in ()
 	       end)
 
-	fun scan_import(ImportValue(l,v,tr,c),ctxt) =
-	       insert_label(insert_con(ctxt,v,c),l,v)
-	  | scan_import(ImportType(l,v,k),ctxt)  =
-	       insert_label(insert_kind(ctxt,v,k),l,v)
+	fun scan_import(ImportValue(_,v,_,c),ctxt) =
+	       insert_con(ctxt,v,c)
+	  | scan_import(ImportType(_,v,k),ctxt)  =
+	       insert_kind(ctxt,v,k)
 	  | scan_import(ImportBnd (_, cb),ctxt) =
 	       insert_cbnd(ctxt,cb)
 

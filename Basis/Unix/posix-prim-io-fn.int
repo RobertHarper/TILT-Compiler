@@ -1,0 +1,11 @@
+functor PosixPrimIO(structure PrimIO : PRIM_IO
+			where type vector = Word8Vector.vector
+			  and type array = Word8Array.array
+			  and type elem = char
+			  and type pos = Position.int) :
+sig
+	include OS_PRIM_IO
+		where PrimIO = PrimIO
+		where type file_desc = Posix.FileSys.file_desc
+	val bufferSzB : int
+end

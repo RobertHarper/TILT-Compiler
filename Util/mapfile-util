@@ -1,91 +1,94 @@
-import group $libdir ^ "/smlnj-lib/group"
+include $libdir ^ "/smlnj-lib/desc"
 
-source unit EQUIV = "equiv.sig.sml" {}
-source unit Equiv = "equiv.sml" {EQUIV ORD_MAP URef}
+unit EQUIV = "equiv.sig.sml" {}
+unit Equiv = "equiv.sml" {EQUIV ORD_MAP URef}
 
-source unit UTIL_ERROR = "util-error.sig.sml" {}
-source unit UtilError = "util-error.sml" {UTIL_ERROR TextIO}
+unit UTIL_ERROR = "util-error.sig.sml" {}
+unit UtilError = "util-error.sml" {UTIL_ERROR TextIO}
 
-source unit PLATFORM = "platform.sig.sml" {Word32}
-source unit Platform = "platform.sml" {
-	PLATFORM List Real Int Time Word32 UtilError String OS Posix
+unit UTIL = "util.sig.sml" {ORD_MAP ORD_SET}
+unit Util = "util.sml" {
+	Array String UtilError UTIL OS TextIO SplayMapFn
+	SplaySetFn ORD_MAP ORD_SET Posix Word8 Int SysWord
+	Option Byte Word8Vector Vector Real Math
 }
 
-source unit UTIL = "util.sig.sml" {ORD_MAP ORD_SET}
-source unit Util = "util.sml" {
-	Array String UtilError Platform UTIL OS TextIO SplayMapFn
-	SplaySetFn ORD_MAP ORD_SET
-}
-
-source unit LISTOPS = "listops.sig.sml" {}
-source unit Listops = "listops.sml" {
+unit LISTOPS = "listops.sig.sml" {}
+unit Listops = "listops.sml" {
 	LISTOPS List Util ListPair Substring String StringCvt Int
 }
 
-source unit SEQUENCE = "sequence.sig.sml" {}
-source unit Sequence = "sequence.sml" {
+unit SEQUENCE = "sequence.sig.sml" {}
+unit Sequence = "sequence.sml" {
 	Util SEQUENCE Listops List
 }
 
-source unit STATS = "stats.sig.sml" {}
-source interface Stats = "stats.int" {STATS}
-source unit Stats : Stats = "stats.sml" {
-	List Int Real Bool String StringCvt Time Util STATS Timer Listops
-	Date ListMergeSort
-}
-
-source unit COMPILERCONTROL = "compiler_control.sig.sml" {}
-source unit CompilerControl = "compiler_control.sml" {
-	Stats COMPILERCONTROL
-}
-
-source unit Timestamp = "timestamp.sml" {
-	Stats Time Timer Real Int
-}
-
-source unit TILWORD = "tilword.sig.sml" {Word32}
-source unit TilWord32 = "tilword32-native.sml" {
+unit TILWORD = "tilword.sig.sml" {Word32}
+unit TilWord32 = "tilword32-native.sml" {
 	TILWORD Word32 Util Char Listops String
 }
-source interface TilWord64 = "tilword64.int" {TILWORD TilWord32}
-source unit TilWord64 : TilWord64 = "tilword64.sml" {
+interface TilWord64 = "tilword64.int" {TILWORD TilWord32}
+unit TilWord64 : TilWord64 = "tilword64.sml" {
 	TILWORD TilWord32 Util Char String
 }
 
-source unit FORMATTER = "formatter.sig.sml" {TextIO}
-source unit Formatter = "formatter.sml" {
+unit BLASTER = "blast.sig.sml" {Word8 Word32 TilWord64 Time}
+interface BLASTER = "blast.int" {BLASTER}
+unit Blaster : BLASTER = "blast.sml" {
+	BLASTER BinIO Util TilWord64 Word8Vector Word8 Word32 Int String
+	IntListMap Option HashTableFn HashString Byte Real64 LargeReal
+	IEEEReal Time Real
+}
+
+unit STATS = "stats.sig.sml" {Blaster}
+interface Stats = "stats.int" {STATS}
+unit Stats : Stats = "stats.sml" {
+	List Int Real Bool String StringCvt Time Util STATS Timer Listops
+	Date ListMergeSort Blaster
+}
+
+unit COMPILERCONTROL = "compiler_control.sig.sml" {}
+unit CompilerControl = "compiler_control.sml" {
+	Stats COMPILERCONTROL
+}
+
+unit Timestamp = "timestamp.sml" {
+	Stats Time Timer Real Int
+}
+
+unit FORMATTER = "formatter.sig.sml" {TextIO}
+unit Formatter = "formatter.sml" {
 	Util Int TextIO FORMATTER Listops Stats
 }
 
-source unit BINIOUTIL = "bin_io_util.sig.sml" {BinIO}
-source unit BinIoUtil = "bin_io_util.sml" {
+unit BINIOUTIL = "bin_io_util.sig.sml" {BinIO}
+unit BinIoUtil = "bin_io_util.sml" {
 	Word8 Word8Vector BINIOUTIL BinIO Char
 }
 
-source unit BLASTER = "blast.sig.sml" {Word8 Word32 TilWord64}
-source interface BLASTER = "blast.int" {BLASTER}
-source unit Blaster : BLASTER = "blast.sml" {
-	BLASTER BinIO Util TilWord64 Word8Vector Word8 Word32 Int String
-	IntListMap Option HashTableFn HashString Stats Byte
+unit PLATFORM = "platform.sig.sml" {Word32 Blaster}
+unit Platform = "platform.sml" {
+	PLATFORM List Real Int Time Word32 UtilError String OS Posix
+	Blaster
 }
 
-source unit CRC = "crc.sig.sml" {Blaster Formatter}
-source unit Crc = "crc-native.sml" {
+unit CRC = "crc.sig.sml" {Blaster Formatter}
+unit Crc = "crc-native.sml" {
 	Word8 String Byte Option Word32 Array Vector Word8Vector
 	CharVector CRC Char Blaster BinIO CharArray BinIoUtil Blaster Util
 	Formatter
 }
 
-source unit GRAPH = "graph.sig.sml" {}
-source interface GRAPH = "graph.int" {GRAPH HASH_KEY}
-source unit Graph : GRAPH = "graph.sml" {
+unit GRAPH = "graph.sig.sml" {}
+interface GRAPH = "graph.int" {GRAPH HASH_KEY}
+unit Graph : GRAPH = "graph.sml" {
 	GRAPH HASH_KEY HashTableFn Int List Listops Array Stats
 }
 
-source unit GRAPHUTIL = "graphutil.sig.sml" {}
-source unit GraphUtil = "graphutil.sml" {
+unit GRAPHUTIL = "graphutil.sig.sml" {}
+unit GraphUtil = "graphutil.sml" {
 	GRAPHUTIL Array List
 }
-source unit Specific = "specific-til.sml" {}
+unit Specific = "specific-til.sml" {}
 
-source unit Trace = "trace.sml" {Int Time List}
+unit Trace = "trace.sml" {Int Time List}

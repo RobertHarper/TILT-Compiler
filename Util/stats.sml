@@ -1,5 +1,8 @@
 structure Stats :> STATS =
-   struct
+struct
+
+       structure StringMap = Util.StringMap
+       structure B = Blaster
 
        val error = fn s => Util.error "stats.sml" s
        type time = Time.time
@@ -12,17 +15,9 @@ structure Stats :> STATS =
        type int_entry = int ref
        type bool_entry = bool ref
        datatype entry = TIME_ENTRY of time_entry
-                      | COUNTER_ENTRY of counter_entry
+		      | COUNTER_ENTRY of counter_entry
 		      | INT_ENTRY of int_entry
 		      | BOOL_ENTRY of bool_entry
-(*
-       structure StringKey : ORD_KEY = struct
-					type ord_key = string
-					val compare = String.compare
-				       end
-       structure StringMap : ORD_MAP = LocalSplayMapFn(StringKey)
-       val entries : (entry StringMap.map) ref = ref StringMap.empty
-*)
 	val entries : (string * entry) list ref = ref []
 
        fun clear_stats() =
@@ -42,7 +37,7 @@ structure Stats :> STATS =
 	 in  List.app reset (!entries)
 	 end
 
-       fun reset_stats() = (entries := [])  (* StringMap.empty) *)
+       fun reset_stats() = (entries := [])
 
        fun fetch_entry name =
 	 Listops.assoc_eq((op =): string * string -> bool,name, !entries)
@@ -114,8 +109,7 @@ structure Stats :> STATS =
 
       val int = find_int_entry
       fun bool str = find_bool_entry
-	(fn() => (print ("trying to get an uninitialized bool " ^ str);
-		  error ("trying to get an uninitialized bool " ^ str))) str
+	             (fn() => error ("trying to get an uninitialized bool " ^ str)) str
       val tt = find_bool_entry (fn() => BOOL_ENTRY(ref true))
       val ff = find_bool_entry (fn() => BOOL_ENTRY(ref false))
 
@@ -154,9 +148,9 @@ structure Stats :> STATS =
 	      val r = f arg
 	      val cpu =  Timer.checkCPUTimer cpu_timer
 	      val real =  Timer.checkRealTimer real_timer
-	      val _ = active := false
 	      val new_entry = update_entry entry cpu real
 	      val _ = entry_ref := new_entry
+	      val _ = active := false
 	    in r
 	    end
 	end
@@ -366,7 +360,6 @@ structure Stats :> STATS =
 	     print "Global counters\n";
 	     print "-------------------------------------------\n";
 	     app pritem (rev(!entries));
-(* (StringMap.listItemsi(!entries)); *)
 	     print "-------------------------------------------\n"
 	 end
 
@@ -433,4 +426,186 @@ structure Stats :> STATS =
 	  print "\n\n"
 	end
 
-   end
+    type time_snap =
+	{count:int, max:real, last:real,
+	 sum:{gc:time, sys:time, usr:time, real:time}}
+    type counter_snap = int
+    type int_snap = int
+    type bool_snap = bool
+    datatype snap =
+	TIME_SNAP of time_snap
+      | COUNTER_SNAP of counter_snap
+      | INT_SNAP of int_snap
+      | BOOL_SNAP of bool_snap
+
+    fun get' (entry:entry) : snap =
+	(case entry
+	   of TIME_ENTRY (ref {active=ref true,...}) => error "getting active timer"
+	    | TIME_ENTRY (ref {count,max,last,sum,...}) =>
+		TIME_SNAP {count=count, max=max, last=last, sum=sum}
+	    | COUNTER_ENTRY (ref n) => COUNTER_SNAP n
+	    | INT_ENTRY (ref n) => INT_SNAP n
+	    | BOOL_ENTRY (ref b) => BOOL_SNAP b)
+
+    fun set' (entry:entry, snap:snap) : unit =
+	(case (entry, snap)
+	   of (TIME_ENTRY r, TIME_SNAP b) =>
+		let val {top_timer,active,...} = !r
+		    val _ = if !active then error "setting active timer" else ()
+		    val {count,max,last,sum} = b
+		    val ent =
+			{count=count, max=max, last=last,
+			 top_timer=top_timer, active=active, sum=sum}
+		in  r := ent
+		end
+	    | (COUNTER_ENTRY r, COUNTER_SNAP b) => r := b
+	    | (INT_ENTRY r, INT_SNAP b) => r := b
+	    | (BOOL_ENTRY r, BOOL_SNAP b) => r := b
+	    | _ => error "entry mismatch in set'")
+
+fun sub_time what (new,old) =
+	if Time.<(new,old) then
+	    error ("sub_time " ^ Time.toString new ^ " - " ^ Time.toString old ^ "\n")
+	else Time.-(new,old)
+
+    fun sub' (snap:snap, snap':snap) : snap option =
+	(case (snap,snap')
+	   of (TIME_SNAP a, TIME_SNAP b) =>
+		let val {count, max, last, sum={gc,sys,usr,real}} = a
+		    val {count=count', max=max', last=last',
+			 sum={gc=gc', sys=sys', usr=usr', real=real'}} = b
+		    val changed =
+			count <> count' orelse
+			Real.!= (max,max') orelse
+			Real.!= (last,last') orelse
+			gc <> gc' orelse
+			sys <> sys' orelse
+			usr <> usr' orelse
+			real <> real'
+		in  if changed then
+			let val count = count - count'
+			    val gc = sub_time "gc" (gc,gc')
+			    val sys = sub_time "sys" (sys,sys')
+			    val usr = sub_time "usr" (usr,usr')
+			    val real = sub_time "real" (real,real')
+			    val sum = {gc=gc, sys=sys, usr=usr, real=real}
+			    val ent = {count=count, max=max, last=last, sum=sum}
+			in  SOME (TIME_SNAP ent)
+			end
+		    else NONE
+		end
+	    | (COUNTER_SNAP n, COUNTER_SNAP n') =>
+		if n <> n' then SOME (COUNTER_SNAP (n-n')) else NONE
+	    | (INT_SNAP n, INT_SNAP n') =>
+		if n <> n' then SOME (INT_SNAP n) else NONE
+	    | (BOOL_SNAP b, BOOL_SNAP b') =>
+		if b <> b' then SOME (BOOL_SNAP b) else NONE
+	    | _ => error "entry mismatch in subtract")
+
+    fun add' (snap:snap, snap':snap) : snap =
+	(case (snap, snap')
+	   of (TIME_SNAP a, TIME_SNAP b) =>
+		let val {count,max,sum={gc,sys,usr,real},...} = a
+		    val {count=count', max=max', last=last',
+			 sum={gc=gc', sys=sys', usr=usr', real=real'}} = b
+		    val count = count+count'
+		    val max = Real.max (max,max')
+		    val gc = Time.+(gc,gc')
+		    val sys = Time.+(sys,sys')
+		    val usr = Time.+(usr,usr')
+		    val real = Time.+(real,real')
+		    val ent =
+			{count=count, max=max, last=last',
+			 sum={gc=gc, sys=sys, usr=usr, real=real}}
+		in  TIME_SNAP ent
+		end
+	    | (COUNTER_SNAP a, COUNTER_SNAP b) => COUNTER_SNAP(a+b)
+	    | (INT_SNAP _, INT_SNAP _) => snap'
+	    | (BOOL_SNAP _, BOOL_SNAP _) => snap'
+	    | _ => error "entry mismatch in add")
+
+    type stats = snap StringMap.map
+    type delta = stats
+
+    fun from_list (stats : (string * snap) list) : stats =
+	let fun folder ((n,s),m) = StringMap.insert (m,n,s)
+	in  foldl folder StringMap.empty stats
+	end
+
+    fun get () : stats =
+	let val stats = map (fn (n,e) => (n,get' e)) (!entries)
+	in  from_list stats
+	end
+
+    fun set (stats:stats) : unit =
+	let fun apper (n,e) =
+		(case StringMap.find (stats,n)
+		   of SOME s => set'(e,s)
+		    | NONE => ())
+	in  app apper (!entries)
+	end
+
+    fun sub (a:stats, b:stats) : delta =
+	let fun mapper (n,s) : snap option =
+		(case StringMap.find (b,n)
+		   of SOME s' => sub' (s,s')
+		    | NONE => NONE)
+	in  StringMap.mapPartiali mapper a
+	end
+
+    fun add (stats:stats, delta:delta) : stats =
+	let fun mapper (n,s) : snap =
+		(case StringMap.find (delta,n)
+		   of SOME s' => add'(s,s')
+		    | NONE => s)
+	in  StringMap.mapi mapper stats
+	end
+
+    fun blastOutSnap (os:B.outstream) (s:snap) : unit =
+	(case s
+	   of TIME_SNAP {count,max,last,sum={gc,sys,usr,real}} =>
+		(B.blastOutInt os 0; B.blastOutInt os count;
+		 B.blastOutReal os max; B.blastOutReal os last;
+		 B.blastOutTime os gc; B.blastOutTime os sys;
+		 B.blastOutTime os usr; B.blastOutTime os real)
+	    | COUNTER_SNAP n => (B.blastOutInt os 1; B.blastOutInt os n)
+	    | INT_SNAP n => (B.blastOutInt os 2; B.blastOutInt os n)
+	    | BOOL_SNAP b => (B.blastOutInt os 3; B.blastOutBool os b))
+    fun blastInSnap (is:B.instream) : snap =
+	(case B.blastInInt is
+	   of 0 =>
+		let val count = B.blastInInt is
+		    val max = B.blastInReal is
+		    val last = B.blastInReal is
+		    val gc = B.blastInTime is
+		    val sys = B.blastInTime is
+		    val usr = B.blastInTime is
+		    val real = B.blastInTime is
+		    val ent =
+			{count=count,max=max,last=last,
+			 sum={gc=gc,sys=sys,usr=usr,real=real}}
+		in  TIME_SNAP ent
+		end
+	    | 1 => COUNTER_SNAP (B.blastInInt is)
+	    | 2 => INT_SNAP (B.blastInInt is)
+	    | 3 => BOOL_SNAP (B.blastInBool is)
+	    | _ => error "bad snap")
+
+    fun blastOutStats (os:B.outstream) (s:stats) : unit =
+	let val entries = StringMap.listItemsi s
+	    val blastout = B.blastOutPair B.blastOutString blastOutSnap
+	in  B.blastOutList blastout os entries
+	end
+    fun blastInStats (is:B.instream) : stats =
+	let val blastin = B.blastInPair B.blastInString blastInSnap
+	    val entries = B.blastInList blastin is
+	in  from_list entries
+	end
+
+    val (blastOutDelta, blastInDelta) =
+	B.magic (blastOutStats, blastInStats, "delta $Revision$")
+
+    val (blastOutStats, blastInStats) =
+	B.magic (blastOutStats, blastInStats, "stats $Revision$")
+
+end

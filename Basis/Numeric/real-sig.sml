@@ -13,8 +13,8 @@ signature REAL =
     structure Math : MATH
       (* sharing type real = Math.real -- holds for TILT structures but non-standard *)
 
-    val radix     : PreInt.int
-    val precision : PreInt.int
+    val radix     : TiltPrim.int32
+    val precision : TiltPrim.int32
 	(* the number of digits (each 0..radix-1) in mantissa *)
 
     val maxFinite    : real   (* maximum finite number *)
@@ -80,15 +80,15 @@ signature REAL =
     val realCeil  : real -> real
     val realTrunc : real -> real
 
-    val floor : real -> PreInt.int
-    val ceil  : real -> PreInt.int
-    val trunc : real -> PreInt.int
-    val round : real -> PreInt.int
+    val floor : real -> TiltPrim.int32
+    val ceil  : real -> TiltPrim.int32
+    val trunc : real -> TiltPrim.int32
+    val round : real -> TiltPrim.int32
 
     val toInt : IEEEReal.rounding_mode -> real -> int
     val toLargeInt : IEEEReal.rounding_mode -> real -> PreLargeInt.int
 
-    val fromInt  : PreInt.int -> real
+    val fromInt  : TiltPrim.int32 -> real
     val fromLargeInt  : PreLargeInt.int -> real
 
     val toLarge : real -> PreLargeReal.real

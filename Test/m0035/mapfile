@@ -1,2 +1,1 @@
-source unit Test = "lambda-list-ref.sml" {}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "lambda-list-ref.sml" {}

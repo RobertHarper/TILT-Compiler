@@ -1,6 +1,6 @@
-include group "../Self/mapfile-lib"
-source unit Help = "help.sml" {}
-source unit lexgen = "lexgen.sml" {
+include "../Self/mapfile-lib"
+unit Help = "help.sml" {}
+unit lexgen = "lexgen.sml" {
 	Int String TextIO Array List
 }
 %life		life		
@@ -24,4 +24,3 @@ source unit lexgen = "lexgen.sml" {
 
 
 
-make executable "lexgen." ^ $target ^ ".exe" {lexgen}

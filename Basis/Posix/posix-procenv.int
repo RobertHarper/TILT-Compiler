@@ -1,0 +1,5 @@
+structure POSIX_ProcEnv : POSIX_PROC_ENV
+	where type pid = POSIX_Process.pid
+	where type file_desc = POSIX_FileSys.file_desc
+	where type uid = PrePosix.uid
+	where type gid = PrePosix.gid

@@ -1,1 +1,2 @@
-structure Math64 : MATH where type real = real
+structure Math64 : MATH
+	where type real = real

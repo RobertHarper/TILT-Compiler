@@ -25,15 +25,15 @@ struct
 
     val readers : reader list =
 	[Ppil.pp_pinterface' o IlBlast.blastInPinterface,
+	 IntSyn.pp_info o IntSyn.blastInInfo,
+	 IntSyn.pp_parm o IntSyn.blastInParm,
 	 Comm.pp_messages o Comm.blastInMessages,
-	 Info.pp_info o Info.blastInInfo,
-	 UnitEnvironment.pp_ue o UnitEnvironment.blastInUe,
 	 default_reader]
 
     fun try_reader (path : string, reader : reader) : bool =
-	let val is = Blaster.openIn path
-	    val contents = (SOME (reader is) handle BadMagicNumber => NONE)
-	    val _ = Blaster.closeIn is
+	let val is = B.openIn path
+	    val contents = (SOME (reader is) handle B.BadMagicNumber => NONE)
+	    val _ = B.closeIn is
 	in  (case contents
 	       of SOME contents =>
 		    let val fmt =

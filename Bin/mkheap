@@ -1,0 +1,11 @@
+#!/bin/sh
+# For use with SML/NJ 110.0.3 and 110.0.7.
+case $# in
+2)
+	echo 'SMLofNJ.Internals.GC.messages false; CM.make(); SMLofNJ.exportFn ("'"$1"'", '"$2"');'
+	;;
+*)
+	echo 2>&1 'usage: '"$0"' heapbase main | sml-nj'
+	exit 1
+	;;
+esac

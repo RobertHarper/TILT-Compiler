@@ -578,11 +578,6 @@ struct
 *)
 	    ) (*before print "/con_normalize\n"*))
 
-  fun insert_label ((D,subst),l,v) =
-      let val D = NilContext.insert_label (D,l,v)
-      in  (D,subst)
-      end
-
   fun kind_normalize D = kind_normalize' (D,empty())
   fun con_normalize D = con_normalize' (D,empty())
 

@@ -14,10 +14,10 @@ signature INTEGER =
     val toLarge   : int -> PreLargeInt.int
     val fromLarge : PreLargeInt.int -> int
 
-    val toInt     : int -> PreInt.int
-    val fromInt   : PreInt.int -> int
+    val toInt     : int -> TiltPrim.int32
+    val fromInt   : TiltPrim.int32 -> int
 
-    val precision : PreInt.int option
+    val precision : TiltPrim.int32 option
     val minInt : int option
     val maxInt : int option
 
@@ -40,7 +40,7 @@ signature INTEGER =
     val min : int * int -> int
     val max : int * int -> int
 
-    val sign     : int -> PreInt.int
+    val sign     : int -> TiltPrim.int32
     val sameSign : int * int -> bool
 
     val fmt  : StringCvt.radix -> int -> string

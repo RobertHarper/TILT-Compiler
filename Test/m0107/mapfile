@@ -1,4 +1,3 @@
-source unit Test = "binio.sml" {
+unit Test = "binio.sml" {
 	Int List Word8 Word8Vector BinIO OS
 }
-make executable "Test." ^ $target ^ ".exe" {Test}

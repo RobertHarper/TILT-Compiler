@@ -514,7 +514,6 @@ struct
 		       ctxt, module) =
 	let
 	    val ctxt = NilContext.insert_kind(ctxt, v, k)
-	    val ctxt = NilContext.insert_label(ctxt, l, v)
 
 	    val (bnds', exports', pset, ctxt, is') =
 		reify_mod' (is, ctxt, module)
@@ -535,7 +534,6 @@ struct
       | reify_mod' (ImportValue (l, v, nt, c) :: is, ctxt, module) =
 	let
 	    val ctxt = NilContext.insert_con(ctxt, v, c)
-	    val ctxt = NilContext.insert_label(ctxt, l, v)
 
 	    val (bnds, exports, pset, ctxt, is) = 
 	      reify_mod' (is, ctxt, module)

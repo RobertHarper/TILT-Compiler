@@ -3,11 +3,11 @@
 
 
 #ifndef _ASM
-#ifdef solaris
+#ifdef sparc
 #include <sys/ioccom.h>
 #endif
 /*
-  #ifdef alpha_osf
+  #ifdef alpha
   #include <sys/ioctl.h>
   #endif
 */

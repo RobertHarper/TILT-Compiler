@@ -691,13 +691,13 @@ void GCFromMutator(Thread_t *curThread)
   DIE("scheduler returned");
 }
 
-#if defined(solaris)
+#if defined(sparc)
 int calleeSaveMask = 0;
-#elif defined(alpha_osf)
+#elif defined(alpha)
 int calleeSaveMask = 0;
 #endif
 
-#ifdef solaris
+#ifdef sparc
 static val_t mkra(void* f) /* code address -> return address */
 {
   val_t pc = (val_t)f;

@@ -1,3 +1,2 @@
-source unit Export = "export.sml" {}
-source unit Test = "test.sml" {Export}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Export = "export.sml" {}
+unit Test = "test.sml" {Export}

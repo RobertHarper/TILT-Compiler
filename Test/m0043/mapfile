@@ -1,2 +1,1 @@
-source unit Test = "array6.sml" {Array List Vector}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "array6.sml" {Array List Vector}

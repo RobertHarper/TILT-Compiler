@@ -19,9 +19,9 @@ struct
 			    ErrorMsg.defaultConsumer()))
       end
 
-  fun parse (name, parser, cleanup) (what, filename) =
+  fun parse (parser, cleanup) (what, filename) =
       let
-	  val _ = msg ("===== Parsing " ^ name ^ ": " ^ what ^ " =====\n")
+	  val _ = msg ("===== Parsing " ^ what ^ " =====\n")
 	  val (instream,src) = make_source filename
 	  val fp = Source.filepos src
 	  val fp = (fn pos => (fp pos handle _ => (filename,0,1)))
@@ -44,13 +44,9 @@ struct
       in  dec
       end
 
-  val parse_impl = parse ("unit",
-			  FrontEnd.parse_impl,
-			  cleanup_impl)
-  val parse_inter = parse ("interface",
-			   FrontEnd.parse_inter,
-			   fn specs => specs)
+  val parse_topdec = parse (FrontEnd.parse_impl, cleanup_impl)
+  val parse_topspec = parse (FrontEnd.parse_inter, fn specs => specs)
 
-  val parse_impl = Stats.timer("Parsing", parse_impl)
-  val parse_inter = Stats.timer("Parsing", parse_inter)
-end;
+  val parse_topdec = Stats.timer("Parsing", parse_topdec)
+  val parse_topspec = Stats.timer("Parsing", parse_topspec)
+end

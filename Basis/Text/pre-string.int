@@ -1,0 +1,16 @@
+structure PreString :
+sig
+    datatype substring = SS of (string * int * int)
+    val chars : string vector
+    val unsafeSubstring : string * word * word -> string
+    val size : string -> int
+    val concat2 : string * string -> string
+    val revConcat : int * string list -> string
+    val translate : (char -> string) * string * word * word -> string
+    val implode : int * char list -> string
+    val revImplode : int * char list -> string
+    val isPrefix : string * string * word * word -> bool
+    val collate : (char * char -> order) -> string * word * int * string * word * int -> order
+    val cmp : string * word * int * string * word * int -> order
+    val getNChars : ('a -> (char * 'a) option) -> 'a * int -> (char list * 'a) option
+end

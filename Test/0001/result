@@ -45,9 +45,6 @@ testing Int32.abs overflow...ok
 testing Word8.div div...ok
 testing Word8.mod div...ok
 testing Word8.fromString overflow...ok
-testing Word31.div div...ok
-testing Word31.mod div...ok
-testing Word31.fromString overflow...ok
 testing Word32.toLargeInt overflow...ok
 testing Word32.toInt overflow...ok
 testing Word32.div div...ok

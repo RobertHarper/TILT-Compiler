@@ -16,32 +16,32 @@
 
 
 # build the runtime
-if (cd Runtime; gmake runtime) ; then echo "Compiled runtime" ; else echo "Runtime didn't compile" ; exit 1 ; fi
+if make runtime ; then echo "Compiled runtime" ; else echo "Runtime didn't compile" ; exit 1 ; fi
 
 # gmake heap doesn't return an exit status correctly, so remove tilt-nj and then check whether it exists
 
-case `uname -s` in
-    SunOS) platform=sparc-solaris;;
-    OSF1)  platform=alpha32-dunix ;;
-    *)	  echo >[2=1] 'can not run TILT binaries on this platform'; exit 1 ;;
+case `./Bin/cputype` in
+    sparc) platform=sparc-solaris;;
+    alpha)  platform=alpha32-dunix ;;
+    *) echo 1>&2 'can not run TILT binaries on this platform'; exit 1 ;;
 esac
 
 rm -f ./Heaps/tilt.$platform
 
 # build NJ tilt.  
-gmake tilt_heap
+make tilt_heap
 
 # Did gmake heap succeed?
 if [ -f ./Heaps/tilt.$platform ] ; then echo "Compiled tilt-nj" ; else echo "TILT didn't compile" ; exit 1 ; fi
 
 # build the basis
-if ./Bin/tilt-nj -b mapfile-basis; then echo "Compiled basis" ; else echo "Basis didn't compile" ; exit 1 ; fi
+if make basis; then echo "Compiled basis" ; else echo "Basis didn't compile" ; exit 1 ; fi
 
-# build SML/NJ lib
-if ./Bin/tilt-nj mapfile-lib ; then echo "Compiled libraries" ; else echo "libraries didn't compile" ; exit 1 ; fi
+# build libraries
+if make smlnj-lib ml-yacc-lib arg ; then echo "Compiled libraries" ; else echo "libraries didn't compile" ; exit 1 ; fi
 
 # build the test harness
-if ./Bin/tilt-nj Test/mapfile ; then echo "Compiled test harness" ; else echo "Harness didn't compile" ; exit 1; fi
+if make runtest ; then echo "Compiled test harness" ; else echo "Harness didn't compile" ; exit 1; fi
 
 if test -f ./Bin/til_slave; then :; else ln -s ./Bin/til_slave_local_xterm ./Bin/til_slave; fi
 
@@ -49,9 +49,10 @@ if [ $# -lt 1 ] ; then arg=nj ; else arg=$1 ; fi
 
 if [ $# -eq 2 ] ; then outfile=$2 ; else outfile=`pwd`/RegressionResults.`date +%m.%d.%y.%T`.txt ; fi
 
-echo "Regression results will be written to $outfile"
+echo "Regression results will be copied to $outfile"
 
-echo "TILT regression results from `date`" >> $outfile ;
+(
+echo "TILT regression results from `date`";
 
 if [ $arg = all -o $arg = nj ] ; then  
 
@@ -60,24 +61,24 @@ if [ $arg = all -o $arg = nj ] ; then
     echo "
 ************************************************************
 NJ compiled TILT results
-************************************************************" >> $outfile ;
+************************************************************";
 
-    # Run in a subshell to avoid having to canonicalize $outfile
-    (cd ./Test ; ./runall -nf) >> $outfile  2>&1 ;
+    (cd ./Test ; ./runall -nf);
 fi
-
+) 2>&1 | tee -a $outfile
+(
 if [ $arg = all -o $arg = tilt ] ; then  
 
    # build TILT
-    if ./Bin/tilt-nj mapfile-all ; then echo "TILT compiled TILT" ; else echo "TILT failed to compile TILT" ; exit 1; fi ;
+    if make tilt ; then echo "TILT compiled TILT" ; else echo "TILT failed to compile TILT" ; exit 1; fi ;
 
     # Run the native regression tests
     echo "Running tilt tests....." ;
     echo "
 ************************************************************
 TILT compiled TILT results
-************************************************************" >> $outfile;
+************************************************************" ;
 
-    # Run in a subshell to avoid having to canonicalize $outfile
-    (cd ./Test ; ./runall -f) >> $outfile  2>&1 ;
+    (cd ./Test ; ./runall -f) ;
 fi
+) 2>&1 | tee -a $outfile

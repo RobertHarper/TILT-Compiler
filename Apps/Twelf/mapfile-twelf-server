@@ -1,11 +1,10 @@
-include group "mapfile-twelf"
+include "mapfile-twelf"
 
-source unit SIGINT = "src/server/sigint.sig.sml" {}
-source unit SigINT = "src/server/sigint-tilt.sml" {SIGINT}
-source unit Server = "src/server/server.sml" {
+unit SIGINT = "src/server/sigint.sig.sml" {}
+unit SigINT = "src/server/sigint-tilt.sml" {SIGINT}
+unit Server = "src/server/server.sml" {
 	OS TextIO String Char Int Bool TimersStructs SIGINT LEXER TWELF
 	FrontendStructs TimingStructs SigINT
 }
 %SERVER	src/server/server.sml
-source unit TwelfServer = "src/server/server-tilt.sml" {Server}
-make executable "TwelfServer." ^ $target ^ ".exe" {TwelfServer}
+unit TwelfServer = "src/server/server-tilt.sml" {Server}

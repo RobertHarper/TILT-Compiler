@@ -1,2 +1,1 @@
-source unit Bug = "bug.sml" {Array}
-make executable "test." ^ $target ^ ".exe" {Bug}
+unit Bug = "bug.sml" {Array}

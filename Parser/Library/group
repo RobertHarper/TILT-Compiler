@@ -1,32 +1,48 @@
-source unit STREAM = "stream.sig.sml" {}
-source unit LR_TABLE = "lr-table.sig.sml" {}
-source unit TOKEN = "token.sig.sml" {LR_TABLE}
-source unit LR_PARSER = "lr-parser.sig.sml" {STREAM LR_TABLE TOKEN}
-source unit LEXER = "lexer.sig.sml" {}
-source unit ARG_LEXER = "arg-lexer.sig.sml" {}
-source unit PARSER_DATA = "parser-data.sig.sml" {LR_TABLE TOKEN}
-source unit PARSER = "parser.sig.sml" {STREAM TOKEN}
-source unit ARG_PARSER = "arg-parser.sig.sml" {STREAM TOKEN}
+interface STREAM = "stream.sig.sml" {}
+unit STREAM : STREAM = "stream.sig.sml" {}
 
-source interface JOIN = "join.int" {LR_PARSER LEXER PARSER_DATA PARSER}
-source unit Join : JOIN = "join.sml" {LR_PARSER LEXER PARSER_DATA PARSER}
+interface LR_TABLE = "lr-table.sig.sml" {}
+unit LR_TABLE : LR_TABLE = "lr-table.sig.sml" {}
 
-source interface JOIN_WITH_ARG = "joinwitharg.int" {
+interface TOKEN = "token.sig.sml" {LR_TABLE}
+unit TOKEN : TOKEN = "token.sig.sml" {LR_TABLE}
+
+interface LR_PARSER = "lr-parser.sig.sml" {STREAM LR_TABLE TOKEN}
+unit LR_PARSER : LR_PARSER = "lr-parser.sig.sml" {STREAM LR_TABLE TOKEN}
+
+interface LEXER = "lexer.sig.sml" {}
+unit LEXER : LEXER = "lexer.sig.sml" {}
+
+interface ARG_LEXER = "arg-lexer.sig.sml" {}
+unit ARG_LEXER : ARG_LEXER = "arg-lexer.sig.sml" {}
+
+interface PARSER_DATA = "parser-data.sig.sml" {LR_TABLE TOKEN}
+unit PARSER_DATA : PARSER_DATA = "parser-data.sig.sml" {LR_TABLE TOKEN}
+
+interface PARSER = "parser.sig.sml" {STREAM TOKEN}
+unit PARSER : PARSER = "parser.sig.sml" {STREAM TOKEN}
+
+interface ARG_PARSER = "arg-parser.sig.sml" {STREAM TOKEN}
+unit ARG_PARSER : ARG_PARSER = "arg-parser.sig.sml" {STREAM TOKEN}
+
+interface Join = "join.int" {LR_PARSER LEXER PARSER_DATA PARSER}
+unit Join : Join = "join.sml" {LR_PARSER LEXER PARSER_DATA PARSER}
+
+interface JoinWithArg = "joinwitharg.int" {
 	LR_PARSER ARG_LEXER PARSER_DATA ARG_PARSER
 }
-source unit JoinWithArg : JOIN_WITH_ARG = "joinwitharg.sml" {
+unit JoinWithArg : JoinWithArg = "joinwitharg.sml" {
 	LR_PARSER ARG_LEXER PARSER_DATA ARG_PARSER
 }
 
-source interface LR_TABLE = "lrtable.int" {LR_TABLE}
-source unit LrTable : LR_TABLE = "lrtable.sml" {LR_TABLE Array List}
+interface LrTable = "lrtable.int" {LR_TABLE}
+unit LrTable : LrTable = "lrtable.sml" {LR_TABLE Array List}
 
-source interface STREAM = "stream.int" {STREAM}
-source unit Stream : STREAM = "stream.sml" {STREAM}
+interface Stream = "stream.int" {STREAM}
+unit Stream : Stream = "stream.sml" {STREAM}
 
-source interface LR_PARSER = "parser.int" {LR_PARSER}
-source unit LrParser = "parser2.sml" {
+interface LrParser = "parser.int" {LR_PARSER}
+unit LrParser : LrParser = "parser2.sml" {
 	STREAM LR_TABLE TOKEN LR_PARSER List Stream LrTable TextIO Int
 }
 
-make library $libdir ^ "/ml-yacc-lib"

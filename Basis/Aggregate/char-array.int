@@ -1,5 +1,5 @@
 structure CharArray : MONO_ARRAY
 	where type elem = char
-	where type array = word8array
+	where type array = TiltPrim.word8array
 	where type Vector.vector = string
 	where type Vector.elem = char

@@ -1,0 +1,2 @@
+structure POSIX_Process : POSIX_PROCESS
+	where type signal = POSIX_Signal.signal

@@ -1,1 +1,2 @@
-structure Unix : UNIX where type signal = Posix.Signal.signal
+structure Unix : UNIX
+	where type signal = Posix.Signal.signal

@@ -1,0 +1,174 @@
+(* Parser for project description files. *)
+structure E = ExtSyn
+
+type label = Name.label
+
+fun var_label (x:string) : label = Name.symbol_label(Symbol.varSymbol x)
+val env_label= Name.env_label
+val unit_label = Name.unit_label
+val interface_label = Name.interface_label
+%%
+%name Project
+%pos Pos.pos
+%pure
+
+%term
+	EOF | DOLLAR | CARAT | LPAREN | RPAREN | LBRACE |
+	RBRACE | EQ | SEQ | BEQ | LT | LE | GT | GE | COLON |
+	ENV | IF | THEN | ELSE | NOT | ANDALSO | ORELSE |
+	DEFINED | UNIT | INTERFACE | COMPILED | PRIMITIVE |
+	VAL | INCLUDE | LOCAL | IF' | ELIF | ELSE' | ENDIF | ERROR |
+	ID of string | STRING of string | INT of int | BOOL of bool
+%keyword
+	ENV IF THEN ELSE NOT ANDALSO ORELSE DEFINED UNIT INTERFACE
+	COMPILED PRIMITIVE VAL INCLUDE LOCAL IF' ELIF ELSE' ENDIF ERROR
+
+%value	ID	("bogus_id")
+%value	STRING	("bogus_string")
+%value	INT	(~1)
+%value	BOOL	(false)
+
+%change
+	-> THEN |
+	-> ELSE |
+	-> ELSE ID |
+	-> LPAREN |
+	-> LBRACE RBRACE
+
+%eop EOF
+%noshift EOF
+%left ELSE
+%left ORELSE
+%left ANDALSO
+%left EQ SEQ BEQ LT LE GT GE
+%left CARAT
+
+%nonterm
+    aexp of E.exp
+  | dexp of E.exp
+  | exp of E.exp
+  | units of label list
+  | opened of E.opened
+  | opopt of E.opopt
+  | asc of E.asc
+  | ascopt of E.ascopt
+  | ie of E.ie
+  | ue of E.ue
+  | cc of E.ents
+  | ent of E.ent
+  | ents of E.ents
+  | start of E.ents
+
+%start start
+%%
+aexp	: DOLLAR ID
+		(E.EXP_MARK(IDleft,E.EXP_VAR (var_label ID)))
+	| ENV ID
+		(E.EXP_MARK(IDleft,E.EXP_ENV (env_label ID)))
+	| STRING
+		(E.EXP_STR STRING)
+	| INT
+		(E.EXP_INT INT)
+	| BOOL
+		(E.EXP_BOOL BOOL)
+	| LPAREN exp RPAREN
+		(exp)
+dexp	: UNIT ID
+		(E.EXP_DEF (unit_label ID))
+	| INTERFACE ID
+		(E.EXP_DEF (interface_label ID))
+	| DOLLAR ID
+		(E.EXP_DEF (var_label ID))
+	| ENV ID
+		(E.EXP_DEF (env_label ID))
+	| LPAREN dexp RPAREN
+		(dexp)
+exp	: aexp
+		(aexp)
+	| exp CARAT exp
+		(E.EXP_MARK(CARATleft,E.EXP_CAT(exp1,exp2)))
+	| IF exp THEN exp ELSE exp
+		(E.EXP_MARK(IFleft,E.EXP_IF(exp1,exp2,exp3)))
+	| NOT aexp
+		(E.EXP_MARK(NOTleft,E.EXP_NOT aexp))
+	| exp ANDALSO exp
+		(E.EXP_MARK(ANDALSOleft,E.EXP_AND(exp1,exp2)))
+	| exp ORELSE exp
+		(E.EXP_MARK(ORELSEleft,E.EXP_OR(exp1,exp2)))
+	| exp SEQ exp
+		(E.EXP_MARK(SEQleft,E.EXP_SEQ(exp1,exp2)))
+	| exp BEQ exp
+		(E.EXP_MARK(BEQleft,E.EXP_BEQ(exp1,exp2)))
+	| exp EQ exp
+		(E.EXP_MARK(EQleft,E.EXP_IEQ(exp1,exp2)))
+	| exp LT exp
+		(E.EXP_MARK(LTleft,E.EXP_ILT(exp1,exp2)))
+	| exp LE exp
+		(E.EXP_MARK(LEleft,E.EXP_ILE(exp1,exp2)))
+	| exp GT exp
+		(E.EXP_MARK(GTleft,E.EXP_IGT(exp1,exp2)))
+	| exp GE exp
+		(E.EXP_MARK(GEleft,E.EXP_IGE(exp1,exp2)))
+	| DEFINED dexp
+		(dexp)
+units	:	(nil)
+	| ID units
+		((unit_label ID) :: units)
+opened	: LBRACE units RBRACE
+		(units)
+opopt	:	(NONE)
+	| opened
+		(SOME opened)
+asc	: COLON ID
+		(interface_label ID)
+ascopt	:	(NONE)
+	| asc	(SOME asc)
+ie	: exp opopt
+		(E.SRCI(exp,opopt))
+	| PRIMITIVE
+		(E.PRIMI)
+	| COMPILED exp opened
+		(E.PRECOMPI(exp,opened))
+	| COMPILED
+		(E.COMPI)
+ue	: exp opopt ascopt
+		(E.SRCU(exp,opopt,ascopt))
+	| PRIMITIVE asc
+		(E.PRIMU asc)
+	| COMPILED exp opened asc
+		(E.PRECOMPU(exp,opened,asc))
+	| COMPILED asc
+		(E.COMPU asc)
+cc	:	(nil)
+	| ELSE' ents
+		(ents)
+	| ELIF exp ents cc
+		([E.MARK(ELIFleft,E.IF(exp,ents,cc))])
+ent	: INTERFACE ID EQ ie
+		(E.INTERFACE(interface_label ID,ie))
+	| UNIT ID COLON ID
+		(E.SC(unit_label ID, interface_label ID))
+	| UNIT ID EQ ue
+		(E.UNIT(unit_label ID, ue))
+	| UNIT ID asc EQ exp opopt
+		(E.UNIT(unit_label ID, E.SRCU(exp,opopt,SOME asc)))
+	| UNIT ID asc EQ PRIMITIVE
+		(E.UNIT(unit_label ID, E.PRIMU asc))
+	| UNIT ID asc EQ COMPILED exp opened
+		(E.UNIT(unit_label ID, E.PRECOMPU(exp,opened,asc)))
+	| UNIT ID asc EQ COMPILED
+		(E.UNIT(unit_label ID, E.COMPU asc))
+	| VAL ID EQ exp
+		(E.VAL(var_label ID,exp))
+	| INCLUDE exp
+		(E.INCLUDE exp)
+	| LOCAL exp
+		(E.LOCAL exp)
+	| IF' exp ents cc ENDIF
+		(E.MARK(IF'left,E.IF(exp,ents,cc)))
+	| ERROR exp
+		(E.MARK(ERRORleft,E.ERROR exp))
+ents	:	(nil)
+	| ent ents
+		(E.MARK(entleft,ent) :: ents)
+start	: ents	(ents)

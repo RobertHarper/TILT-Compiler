@@ -2,10 +2,10 @@ structure PreVector8 :
     sig
 	val maxLen : int
 	val checkLen : int -> unit
-	val arrayFromList' : int * char list -> word8array (* known length *)
-	val arrayFromList : char list -> word8array
-	val vectorFromList' : int * char list -> word8vector (* known length *)
-	val vectorFromList : char list -> word8vector
+	val arrayFromList' : int * char list -> TiltPrim.word8array (* known length *)
+	val arrayFromList : char list -> TiltPrim.word8array
+	val vectorFromList' : int * char list -> TiltPrim.word8vector (* known length *)
+	val vectorFromList : char list -> TiltPrim.word8vector
     end =
 struct
 

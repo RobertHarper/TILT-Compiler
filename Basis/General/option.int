@@ -1,1 +1,2 @@
-structure Option : OPTION where type 'a option = 'a option
+structure Option : OPTION
+	where type 'a option = 'a option

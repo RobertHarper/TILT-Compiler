@@ -1,1 +1,2 @@
-structure Word : WORD where type word = word
+structure Word : WORD
+	where type word = word

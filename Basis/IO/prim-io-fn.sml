@@ -60,7 +60,7 @@ struct
 	ioDesc     : PreOS.IO.iodesc option
       }
 
-    fun blockingOperation (f, block) x = (block (); Option.valOf (f x))
+    fun blockingOperation (f, block) x = (block (); valOf (f x))
 
     fun nonblockingOperation (read, canInput) x =
 	  if (canInput()) then SOME(read x) else NONE
@@ -185,9 +185,9 @@ struct
 		 of {writeVec=SOME f, ...} => SOME f
 		  | {writeArr=SOME f, ...} => SOME(writeaToWritev f)
 		  | {writeVecNB=SOME f, block=SOME b, ...} =>
-		      SOME(fn i => (b(); Option.valOf(f i)))
+		      SOME(fn i => (b(); valOf(f i)))
 		  | {writeArrNB=SOME f, block=SOME b, ...} =>
-		      SOME(fn x => (b(); writeaToWritev (Option.valOf o f) x))
+		      SOME(fn x => (b(); writeaToWritev (valOf o f) x))
 		  | _ => NONE
 		(* end case *))
 	  val writeArr' = (case wr

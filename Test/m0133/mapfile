@@ -1,2 +1,1 @@
-source unit Test = "kitloop2.sml" {}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "kitloop2.sml" {}

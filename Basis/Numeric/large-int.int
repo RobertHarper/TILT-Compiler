@@ -1,1 +1,2 @@
-structure LargeInt : INTEGER where type int = int
+structure LargeInt : INTEGER
+	where type int = int

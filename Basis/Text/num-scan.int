@@ -1,0 +1,11 @@
+structure NumScan :
+sig
+
+    val scanWord : StringCvt.radix
+	  -> (char, 'a) StringCvt.reader -> (PreLargeWord.word, 'a) StringCvt.reader
+    val scanInt  : StringCvt.radix
+	  -> (char, 'a) StringCvt.reader -> (PreLargeInt.int, 'a) StringCvt.reader
+    val scanReal : (char, 'a) StringCvt.reader -> (PreLargeReal.real, 'a) StringCvt.reader
+	(** should be to LargeReal.real **)
+
+end

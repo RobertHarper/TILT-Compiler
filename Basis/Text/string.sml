@@ -26,18 +26,6 @@ structure String :> STRING where type string = string
 
     val uplus = TiltPrim.uplus
 
-(*
-    val op + = InlineT.DfltInt.+
-    val op - = InlineT.DfltInt.-
-    val op < = InlineT.DfltInt.<
-    val op <= = InlineT.DfltInt.<=
-    val op > = InlineT.DfltInt.>
-    val op >= = InlineT.DfltInt.>=
-    val op = = InlineT.=
-    val unsafeSub = InlineT.CharVector.sub
-    val unsafeUpdate = InlineT.CharVector.update
-*)
-
     type string = string
     structure Char = Char
 
@@ -50,7 +38,7 @@ structure String :> STRING where type string = string
 
 
   (* allocate an uninitialized string of given length *)
-    fun create sz : word8array = if (sz>0)
+    fun create sz : TiltPrim.word8array = if (sz>0)
 				   then unsafe_array8(i2w sz,#"\000")
 				 else raise Size
 
@@ -69,14 +57,14 @@ structure String :> STRING where type string = string
 
     fun substring (s, i, n) =
 	  if ((i < 0) orelse (n < 0) orelse (size s < i+n))
-	    then raise General.Subscript
+	    then raise Subscript
 	    else PreString.unsafeSubstring (s, i2w i, i2w n)
 
     fun extract (v : string, base, optLen) = let
 	  val len = size v
 	  val base' = i2w base
 	  fun newVec n = let
-		val newV : word8array = create n
+		val newV : TiltPrim.word8array = create n
 		val n = i2w n
 		fun fill (i : word) = if ult(i,n)
 		      then let val temp : word = uplus(base',i)
@@ -92,20 +80,20 @@ structure String :> STRING where type string = string
 	    case (base, optLen)
 	     of (0, NONE) => v
 	      | (_, SOME 0) => if ((base < 0) orelse (len < base))
-		    then raise General.Subscript
+		    then raise Subscript
 		    else ""
 	      | (_, NONE) => if ((base < 0) orelse (len < base))
-		      then raise General.Subscript
+		      then raise Subscript
 		    else if (base = len)
 		      then ""
 		      else newVec (len - base)
 	      | (_, SOME 1) =>
 		  if ((base < 0) orelse (len < base+1))
-		    then raise General.Subscript
+		    then raise Subscript
 		    else str(unsafe_vsub8(v, i2w base))
 	      | (_, SOME n) =>
 		  if ((base < 0) orelse (n < 0) orelse (len < (base+n)))
-		    then raise General.Subscript
+		    then raise Subscript
 		    else newVec n
 	    (* end case *)
 	  end

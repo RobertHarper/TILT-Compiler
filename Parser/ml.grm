@@ -107,8 +107,8 @@ val quotedBogusString = "'BOGUS"
        | ops of symbol list
        | spec_s of  spec list
        | spec of  spec list
-       | spec'_s of  spec list
-       | spec' of  spec list
+       | topspec_s of  topspec
+       | topspec of  topspec
        | idents of spec list
        | strspec of  (symbol * sigexp * path option) list
        | fctspec of  (symbol * fsigexp) list
@@ -532,11 +532,17 @@ fsig	: fparamList COLON sign
 fctspec	: fctspec AND fctspec	(fctspec1 @ fctspec2)
 	| ident fsig		([(fctSymbol ident, fsig)])
 
-spec'	: spec			(spec)
-	| FUNCTOR fctspec	([FctSpec fctspec])
-spec'_s	: 			([])
-	| spec' spec'_s		(spec' @ spec'_s)
-	| SEMICOLON spec'_s	(spec'_s)
+topspec	: spec			(TopSpec spec)
+	| FUNCTOR fctspec	(TopSpec [FctSpec fctspec])
+	| SIGNATURE sigb	(SigSpec sigb)
+	| OVERLOAD ident COLON ty AS exp_pa
+				(OvldSpec (varSymbol ident,ty,exp_pa))
+	| fixity ops		(FixSpec{fixity=fixity, ops=ops})
+	| EXTERN ID COLON ty 	(ExternSpec(varSymbol ID,ty))
+
+topspec_s	: 		(SeqSpec[])
+	| topspec topspec_s	(makeSEQtopspec (topspec,topspec_s))
+	| SEMICOLON topspec_s	(topspec_s)
 
 idents	: ident			([IncludeSpec(VarSig(FastSymbol.sigSymbol ident))])
 	| ident idents		(IncludeSpec(VarSig(FastSymbol.sigSymbol ident))
@@ -650,4 +656,4 @@ fctb	: ident fparamList sigconstraint_op EQUALOP str
 	| fctb AND fctb		(fctb1 @ fctb2)
 
 top : IMPL sdecs   (marktop(ImplTop(sdecs), sdecsleft, sdecsright))
-    | INTER spec'_s (marktop(InterTop(spec'_s), spec'_sleft, spec'_sright))
+    | INTER topspec_s (marktop(InterTop(topspec_s), topspec_sleft, topspec_sright))

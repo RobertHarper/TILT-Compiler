@@ -1,62 +1,36 @@
 (*
-	The primary purpose of structure Update is to bring up to date
-	all target files associated with an interface or unit.  Update
-	assumes that all import interfaces, as well as any
-	constraining interface, are up to date.  Out of date targets
-	are either recompiled or, when the user sets flags that
-	prevent compilation, deleted.
+	Update plans compilation and implements cut-off recompilation.
+	There are two reasons update will decide to compile/assemble a
+	unit or interface.  First, if a unit or interface has changed
+	since the last compilation, then it needs to be recompiled.  A
+	unit or interface changes when its source code is changed, its
+	list of opened units is changed, a supporting unit's interface
+	is changed, or there was no previous compilation.  The info
+	files written by the compiler are used to decide this
+	question.  Second, if a unit or interface has not changed but
+	some of its targets (asm, obj, etc files) do not exist, then
+	those targets need to be created.  In this case, it is safe
+	for the manager to use the unit's pinterface (if it exists)
+	because it will not change during recompilation.  This
+	situation can arise, for example, if the user changes Compiler
+	flags like UptoElaborate between compilations.
 
-	Compilation needs up to three stages.  The first application
-	of Compile.compile elaborates to bring the interface up to
-	date.  The second application compiles as far as possible,
-	returning a non-empty plan when cross-assembly is needed but
-	not possible.  The third stage is the master performing any
-	unfinished assembly and cleanup.
+	Note that out of date targets are deleted if the user has set
+	flags that prevent compilation.
 *)
 signature UPDATE =
 sig
 
     val UpdateDiag : bool ref
     val ShowPlan : bool ref
-    val ShowStale : bool ref
+    val ShowStatus : bool ref
+    val Cutoff : bool ref
 
-    val UptoElaborate : bool ref
-    val UptoAsm : bool ref
-    val KeepAsm : bool ref
-    val CompressAsm : bool ref		(* Compress kept assembler. *)
+    datatype plan =
+	EMPTY
+      | COMPILE
+      | GENERATE		(* compile, but pinterface up to date *)
+      | ASSEMBLE
 
-    type context = (string * Paths.iface) list
-    type imports = Compiler.imports
-    type ue = UnitEnvironment.ue
-    type equiv = Crc.crc * Crc.crc -> bool	(* interface CRC equivalence *)
-    datatype pack =
-	PACKU of Paths.compunit * ExtSyn.id list
-      | PACKI of Paths.iface * ExtSyn.id list
-      | PACKV of ExtSyn.id * ExtSyn.exp
-
-    type plan
-
-    val empty_plan : plan
-
-    val isEmpty : plan -> bool	(* compiling has no effect *)
-    val isReady : plan -> bool	(* dependents can be compiled in parallel *)
-    val sendToSlave : plan -> bool
-    val ackInterface : plan -> bool
-
-    val blastOutPlan : Blaster.outstream -> plan -> unit
-    val blastInPlan : Blaster.instream -> plan
-    val pp_plan : plan -> Formatter.format
-
-    val plan_compi : equiv * ue * Paths.iface -> plan
-    val plan_compu : equiv * ue * Paths.compunit -> plan
-    val plan_srci : equiv * context * imports * Paths.iface -> plan
-    val plan_compile : equiv * context * imports * Paths.compunit -> plan
-    val plan_checku : equiv * context * Paths.compunit * Paths.iface -> plan
-    val plan_link : equiv * Paths.compunit  list * Paths.exe -> plan
-    val plan_pack : equiv * pack list * Paths.lib -> plan
-
-    val compile : plan -> unit -> plan
-    val flush : plan -> unit
-    val flushAll : unit -> unit
-
+    val plan : IntSyn.desc * IntSyn.pdec -> plan
 end

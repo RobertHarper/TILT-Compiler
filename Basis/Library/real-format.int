@@ -1,0 +1,14 @@
+structure RealFormat :
+sig
+
+  (* Low-level real to string conversion routines. For F and E format, the precision
+   * specifies the number of fractional digits with 0's appended if necessary.
+   * For G format, precision specifies the number of significant digits, but
+   * trailing 0's in the fractional part are dropped.
+   *)
+    val realFFormat : (real * int) -> {sign : bool, mantissa : string}
+    val realEFormat : (real * int) -> {sign : bool, mantissa : string, exp : int}
+    val realGFormat : (real * int)
+	  -> {sign : bool, whole : string, frac : string, exp : int option}
+
+end

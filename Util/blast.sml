@@ -2,7 +2,7 @@ structure Blaster :> BLASTER =
 struct
 
     val error = fn s => Util.error "blast.sml" s
-    val BlastDebug = Stats.ff "BlastDebug"
+    val BlastDebug = ref false
     exception BadMagicNumber
 
     structure B = BinIO
@@ -183,6 +183,33 @@ struct
 		    s
 		end
 	end
+
+    (*
+	It would be nice if TILT and SML/NJ implemented
+	PackReal64{Big,Little}.
+    *)
+    fun blastOutReal64 (os : outstream) (r : Real64.real) : unit =
+	blastOutString os (Real64.toString r)
+
+    fun blastInReal64 (is : instream) : Real64.real =
+	(case Real64.fromString (blastInString is)
+	   of NONE => error "blastInReal64"
+	    | SOME r => r)
+
+    fun blastOutLargeReal (os : outstream) (r : LargeReal.real) : unit =
+	blastOutReal64 os (Real64.fromLarge IEEEReal.TO_NEGINF r)
+    fun blastInLargeReal (is : instream) : LargeReal.real =
+	Real64.toLarge (blastInReal64 is)
+
+    fun blastOutReal (os : outstream) (r : real) : unit =
+	blastOutLargeReal os (Real.toLarge r)
+    fun blastInReal (is : instream) : real =
+	Real.fromLarge IEEEReal.TO_NEGINF (blastInLargeReal is)
+
+    fun blastOutTime (os : outstream) (t : Time.time) : unit =
+	blastOutLargeReal os (Time.toReal t)
+    fun blastInTime (is : instream) : Time.time =
+	Time.fromReal (blastInLargeReal is)
 
     fun blastOutPair (a : 'a blastout)
 		     (b : 'b blastout) : ('a * 'b) blastout =

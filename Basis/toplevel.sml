@@ -24,14 +24,8 @@ type substring = PreString.substring
 
 (* values *)
 (* !, := primitive, ref -- primitive *)
-(* before, ignore, o -- Prelude *)
-val exnName = General.exnName
-val exnMessage = General.exnMessage
-
-val getOpt = Option.getOpt
-val isSome = Option.isSome
-val valOf = Option.valOf
-
+(* before, ignore, o -- primitive *)
+(* exnName, exnMessage, getOpt, isSome, valOf -- Prelude *)
 (* not -- Prelude *)
 
 (* real -- primitive *)

@@ -29,8 +29,8 @@
 0011	pass	Patterns with out of scope constructors.
 0012	pass	Pattern compiler's Match and Bind exceptions.
 0013	pass	Separate compilation and fixity declarations.
-0014	pass	Comparing functor signatures.
-0015	pass	Comparing functor signatures.
+0014	skip	Comparing functor signatures.
+0015	skip	Comparing functor signatures.
 0016	pass	Comparing functor signatures.
 0017	pass	Bug in coercion compiler's handling of equality functions.
 0018	pass	Bug in coercion of poly to mono value in precense of unmatched specs.
@@ -252,9 +252,9 @@ n53	pass	type inference with type constructors
 n54	pass	type inference
 n55	fail	value restriction
 n56	fail	duplicate id pattern
-n57	pass	duplicate label in record
+n57	fail	duplicate label in record
 n58	pass	duplicate label in record pattern
-n59	pass	duplicate label in record type
+n59	fail	duplicate label in record type
 n60	fail	duplicate id in "and" binding
 n61	fail	duplicate id in "and" type binding
 n62	fail	duplicate id in "and" type binding

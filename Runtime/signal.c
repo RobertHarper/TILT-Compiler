@@ -14,22 +14,19 @@
 
 #include <signal.h>
 
-#ifdef alpha_osf
+#ifdef alpha
 #include <siginfo.h>
 #include <machine/fpu.h>
 #endif
-#ifdef solaris
+#ifdef sparc
 #include <siginfo.h>
-#endif
-#ifdef rs_aix
-#include <fptrap.h> 
 #endif
 
 extern int my_sigaction(int signal, const struct sigaction* action, struct sigaction* o_action);
 
 #define WRITE
 
-#ifdef alpha_osf
+#ifdef alpha
 mem_t GetPc(ucontext_t *uctxt)          { return (mem_t) (uctxt->uc_mcontext.sc_pc); }
 mem_t GetSp(ucontext_t *uctxt)          { return (mem_t) (uctxt->uc_mcontext.sc_sp); }
 unsigned long GetIReg(ucontext_t *uctxt, int i) { return (uctxt->uc_mcontext.sc_regs[i]); }
@@ -41,15 +38,7 @@ mem_t GetBadAddr(ucontext_t *uctxt,
 #endif
 
 
-#ifdef rs_aix
-scp is sigcontext obtained from uctxt
-mem_t GetPc(ucontext_t *uctxt)    { return (mem_t) ((scp)->sc_jmpbuf.jmp_context.iar); }
-mem_t GetSp(ucontext_t *uctxt)    { return (mem_t) ((scp)->sc_jmpbuf.jmp_context.gpr[1]); }
-unsigned long *GetIRegs(ucontext_t *uctxt) { return &((scp)->sc_jmpbuf.jmp_context.gpr[0]); }
-mem_t GetBadAddr(ucontext_t *uctxt, int dummy) { return (mem_t)((scp)->sc_jmpbuf.jmp_context.o_vaddr); }
-#endif
-
-#ifdef solaris
+#ifdef sparc
 unsigned long GetIReg(ucontext_t *uctxt, int i)    
 { 
   if (i == 0)
@@ -104,7 +93,7 @@ void GetIRegs(ucontext_t *uctxt, unsigned long *dest)
     dest[i] = GetIReg(uctxt,i);
 }
 
-#ifdef alpha_osf
+#ifdef alpha
 void float_exn_on(void)
 {
   /*
@@ -116,20 +105,14 @@ void float_exn_on(void)
 */
 }
 #endif
-#ifdef rs_aix
-void float_exn_on(void)
-{
-  fp_enable_all();
-}
-#endif
-#ifdef solaris
+#ifdef sparc
 void float_exn_on(void)
 {
   printf("need to implemented float_exn_on for SPARC");
 }
 #endif
 
-#ifdef alpha_osf
+#ifdef alpha
 void buserror_on(void)
 {
   int buf[2], error;
@@ -220,26 +203,15 @@ void signaltest(void)
 */
 
 void memfault_handler(int signum, 
-#if (defined alpha_osf) || (defined solaris)
 		      siginfo_t *siginfo, 
-#elif (defined rs_aix)
-		      int always_zero,
-#endif
 		      ucontext_t *uctxt)
 {
   Proc_t *proc = getProc();
-#if (defined alpha_osf) || (defined solaris)
   int code = siginfo->si_code;
-#elif (defined rs_aix)
-  siginfo_t *siginfo = NULL;
-  int code = 0;
-#endif
   mem_t badaddr = GetBadAddr(uctxt,siginfo);
   mem_t badpc = GetPc(uctxt);
 
-#if (defined alpha_osf) || (defined solaris)
   assert(signum == (siginfo->si_signo));
-#endif
 
   printf("Proc %d:  Memory error at 0x%x with PC = 0x%x\n",proc->procid, badaddr, badpc);
   switch (signum)
@@ -251,7 +223,6 @@ void memfault_handler(int signum,
       }
     case SIGSEGV:
       {
-#if (defined alpha_osf) || (defined solaris)
       switch (code)
 	{ 
 	case SEGV_MAPERR:
@@ -267,18 +238,11 @@ void memfault_handler(int signum,
 	  printf("UNKNOWN      ");
 	  break;
 	}
-#elif (defined rs_aix)
-      if (StackError(uctxt,badaddr))
-	printf("Stackrelink/overflow not implemented\n");
-#else
-      printf("AIX NOT DONE\n");
-#endif
       break;
       }
     case SIGBUS:  /* BUS ERROR */
       {
 	printf("Bus Error\n");
-#if (defined alpha_osf || defined solaris)
 	switch (code)
 	  {
 	  case BUS_ADRALN:
@@ -293,11 +257,6 @@ void memfault_handler(int signum,
 	    printf("UNKNOWN\n");
 	  break;
 	  }
-#elif (defined rs_aix)
-	printf("AIX NOT DONE\n");
-#else
-	printf("UNKNOWN PLATFORM\n");
-#endif
 	break;
       }
     }
@@ -317,11 +276,7 @@ void memfault_handler(int signum,
 typedef void (*sa_sigaction_t)(int, siginfo_t*, void*);
 struct sigaction old_fpe_action;
 void fpe_handler(int signum, 
-#if (defined alpha_osf || defined solaris)
 		 siginfo_t *siginfo, 
-#elif (defined rs_aix)
-		 int always_zero,
-#endif
 		 ucontext_t *uctxt)
 {
 
@@ -389,12 +344,7 @@ void install_signal_handlers(int isMain)
   struct sigaction newact, oldact;
 
   sigfillset(&newact.sa_mask);
-#if (defined alpha_osf) || (defined solaris)
   newact.sa_flags = SA_SIGINFO /* | SA_NODEFER -- conflicts with sa_mask */;
-#endif
-#ifdef rs_aix
-  newact.sa_flags = 0;
-#endif
 
   if (!isMain) {
     newact.sa_sigaction = (sa_sigaction_t) fpe_handler;

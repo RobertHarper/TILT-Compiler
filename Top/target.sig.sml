@@ -1,21 +1,15 @@
 signature TARGET =
 sig
 
-    val littleEndian : bool ref	(* Is target little endian? *)
+    val setTarget : Platform.objtype -> unit
+    val getTarget : unit -> Platform.objtype
 
-    datatype platform = TIL_ALPHA | TIL_SPARC | TIL_TALx86
-
-    val blastOutPlatform : Blaster.outstream -> platform -> unit
-    val blastInPlatform : Blaster.instream -> platform
-
-    val setTargetPlatform : platform -> unit	(* also sets endian-ness *)
-    val getTargetPlatform : unit -> platform
-
-    val platformName : platform -> string
-    val platformFromName : string -> platform option
-
-    val importantFlags : (string * bool ref * bool) list
-    val platformString : unit -> string	(* depends on importantFlags *)
+    (*
+	targetString is not the same as Platform.toString o getTarget;
+	the former accounts for certain flags that lead to
+	incompatible binaries.
+    *)
+    val targetString : unit -> string
 
     val native : unit -> bool
 

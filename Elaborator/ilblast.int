@@ -1,4 +1,5 @@
 structure IlBlast : sig
 	val blastOutPinterface : Blaster.outstream -> Il.pinterface -> unit
 	val blastInPinterface : Blaster.instream -> Il.pinterface
+	val blastInPinterfaceParms : Blaster.instream -> Il.parms
 end

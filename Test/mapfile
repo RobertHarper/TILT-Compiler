@@ -1,5 +1,4 @@
-import group $libdir ^ "/arg/group"
-source unit Runtest = "runtest.sml" {
+include $libdir ^ "/arg/desc"
+unit Runtest = "runtest.sml" {
 	Posix TextIO CharVector Byte Word8 OS List CommandLine Arg
 }
-make executable "../Bin/" ^ $target ^ "/runtest" {Runtest}

@@ -1,16 +1,40 @@
 structure Platform :> PLATFORM =
-
 struct
 
-    val error = fn s => UtilError.error "platform.sml" s
-    datatype platform = DUNIX | SOLARIS | LINUX | GENERIC
+    structure B = Blaster
 
-    fun platformName (p : platform) : string =
-	(case p
-	   of DUNIX   => "alpha"
-	    | SOLARIS => "sparc"
-	    | LINUX   => "linux"
-	    | GENERIC => "generic")
+    val error = fn s => UtilError.error "platform.sml" s
+
+    datatype objtype = SPARC | ALPHA | TALx86
+
+    fun littleEndian SPARC = false
+      | littleEndian ALPHA = true
+      | littleEndian TALx86 = true
+
+    fun toString SPARC = "sparc"
+      | toString ALPHA = "alpha"
+      | toString TALx86 = "talx86"
+
+    fun fromString "sparc" = SOME SPARC
+      | fromString "alpha" = SOME ALPHA
+      | fromString "talx86" = SOME TALx86
+      | fromString _ = NONE
+
+    fun blastOutObjtype (os : B.outstream) (ot : objtype) : unit =
+	(case ot
+	   of ALPHA => B.blastOutInt os 0
+	    | SPARC => B.blastOutInt os 1
+	    | TALx86 => B.blastOutInt os 2)
+    fun blastInObjtype (is : B.instream) : objtype =
+	(case B.blastInInt is
+	   of 0 => ALPHA
+	    | 1 => SPARC
+	    | 2 => TALx86
+	    | _ => error "bad objtype")
+    val (blastOutObjtype,blastInObjtype) =
+	B.magic (blastOutObjtype,blastInObjtype,"objtype $Revision$")
+
+    datatype cputype = UNSUPPORTED | SUPPORTED of objtype
 
     fun get (name : string) : string =
 	let fun match (n,_) = n = name
@@ -20,16 +44,31 @@ struct
 	       | SOME (_,value) => value
 	end
 
-    (* platform : unit -> platform. *)
-    fun platform () : platform =
+    fun cputype () : cputype =
 	(case get "sysname"
-	   of "SunOS" => SOLARIS
-	    | "OSF1" => DUNIX
-	    | "Linux" => LINUX
-	    | _ => GENERIC)
+	   of "SunOS" => SUPPORTED SPARC
+	    | "OSF1" => SUPPORTED ALPHA
+(*	    | "Linux" => SUPPORTED TALx86 *)
+	    | _ => UNSUPPORTED)
 
-    (* hostname : unit -> string *)
-    fun hostname () = get "nodename"
+    fun cputypeToString (ct : cputype) : string =
+	(case ct
+	   of UNSUPPORTED => "unsupported"
+	    | SUPPORTED objtype => toString objtype)
+
+    fun blastOutCputype (os : B.outstream) (ct : cputype) : unit =
+	(case ct
+	   of SUPPORTED objtype => (B.blastOutInt os 0; blastOutObjtype os objtype)
+	    | UNSUPPORTED => B.blastOutInt os 1)
+    fun blastInCputype (is : B.instream) : cputype =
+	(case B.blastInInt is
+	   of 0 => SUPPORTED (blastInObjtype is)
+	    | 1 => UNSUPPORTED
+	    | _ => error "bad cputype")
+    val (blastOutCputype,blastInCputype) =
+	B.magic (blastOutCputype,blastInCputype,"cputype $Revision$")
+
+    fun hostname () : string = get "nodename"
 
     (*
 	This is lame.
@@ -46,12 +85,12 @@ struct
           since it seems to round down to the nearest second.
 	OS.IO.poll (as a way to sleep) works on the Sun but not the Alpha.
     *)
-    fun sleep duration =
-	(case platform() of
-	     DUNIX   => spinMilliDUNIX (1 + Real.floor(duration * 1000.0))
-	   | SOLARIS => (OS.IO.poll([], SOME (Time.fromReal duration)); ())
-	   | LINUX   => (OS.IO.poll([], SOME (Time.fromReal duration)); ())
-	   | GENERIC => (OS.IO.poll([], SOME (Time.fromReal duration)); ()))
+    fun sleep (duration : real) : unit =
+	(case cputype()
+	   of SUPPORTED ALPHA =>
+		spinMilliDUNIX (1 + Real.floor(duration * 1000.0))
+	    | _ =>
+		(OS.IO.poll([], SOME (Time.fromReal duration)); ()))
 
     fun pid() =
 	Posix.Process.pidToWord(Posix.ProcEnv.getpid())

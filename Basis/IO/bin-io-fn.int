@@ -1,0 +1,8 @@
+functor BinIOFn (structure OSPrimIO : OS_PRIM_IO
+		     where PrimIO = BinPrimIO)
+    : BIN_IO
+	where type StreamIO.pos = BinPrimIO.pos
+	where type StreamIO.reader = BinPrimIO.reader
+	where type StreamIO.writer = BinPrimIO.writer
+	where type StreamIO.elem = char
+	where type StreamIO.vector = TiltPrim.word8vector

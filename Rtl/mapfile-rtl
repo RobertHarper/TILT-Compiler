@@ -1,45 +1,45 @@
-import group $libdir ^ "/smlnj-lib/group"
-include group "../Util/mapfile-util"
-include group "../Parser/mapfile-parse"
-include group "../Elaborator/mapfile-elaborate"
-include group "../Nil/mapfile-nil"
+include $libdir ^ "/smlnj-lib/desc"
+include "../Util/mapfile-util"
+include "../Parser/mapfile-parse"
+include "../Elaborator/mapfile-elaborate"
+include "../Nil/mapfile-nil"
 
-source unit RTL = "rtl.sig.sml" {Name TilWord32}
-source unit Rtl = "rtl.sml" {
+unit RTL = "rtl.sig.sml" {Name TilWord32}
+unit Rtl = "rtl.sml" {
 	RTL TilWord32 Name Util String HashString Word
 }
 
-source unit RTLTAGS = "tags.sig.sml" {Rtl TilWord32}
-source unit Rtltags = "tags.sml" {
+unit RTLTAGS = "tags.sig.sml" {Rtl TilWord32}
+unit Rtltags = "tags.sml" {
 	Word32 TilWord32 Stats Rtl RTLTAGS Util
 }
 
-source unit PPRTL = "pprtl.sig.sml" {
+unit PPRTL = "pprtl.sig.sml" {
 	Formatter Rtl Rtltags
 }
-source unit Pprtl = "pprtl.sml" {
+unit Pprtl = "pprtl.sml" {
 	Name Array TilWord32 Int PPRTL Rtl Rtltags Formatter TextIO
 }
 
-source unit TORTLBASE = "tortl-base.sig.sml" {
+unit TORTLBASE = "tortl-base.sig.sml" {
 	Name Rtl Nil TilWord32
 }
-source interface TortlBase = "tortl-base.int" {TORTLBASE}
-source unit TortlBase : TortlBase = "tortl-base.sml" {
+interface TortlBase = "tortl-base.int" {TORTLBASE}
+unit TortlBase : TortlBase = "tortl-base.sml" {
 	Util Real Sequence Array TraceInfo Name TilWord32 TilWord64
 	Int Rtl Pprtl Rtltags Nil NilContext NilUtil Ppnil Normalize
 	TORTLBASE Listops Stats Bool List NilStatic
 }
 
-source unit TORTLRECORD = "tortl-record.sig.sml" {Rtl Nil TortlBase}
-source unit TortlRecord = "tortl-record.sml" {
+unit TORTLRECORD = "tortl-record.sig.sml" {Rtl Nil TortlBase}
+unit TortlRecord = "tortl-record.sml" {
 	Util Listops Int List Rtl Rtltags TortlBase TORTLRECORD Stats
 }
 
-source unit TORTLSUM = "tortl-sum.sig.sml" {
+unit TORTLSUM = "tortl-sum.sig.sml" {
 	Nil TilWord32 Rtl TortlBase Name
 }
-source unit TortlSum = "tortl-sum.sml" {
+unit TortlSum = "tortl-sum.sml" {
 	Util Name List Int Prim TilWord32 TORTLSUM Rtl TortlBase
 	TortlRecord Rtltags Nil NilUtil Ppnil Stats
 }
@@ -47,29 +47,29 @@ source unit TortlSum = "tortl-sum.sml" {
 	TORTLVARARG tortl-vararg.sig
 	TortlVararg tortl-vararg
 *)
-source unit TORTLARRAY = "tortl-array.sig.sml" {
+unit TORTLARRAY = "tortl-array.sig.sml" {
 	Nil Rtl Prim TortlBase Name
 }
-source interface TortlArray = "tortl-array.int" {TORTLARRAY}
-source unit TortlArray : TortlArray = "tortl-array.sml" {
+interface TortlArray = "tortl-array.int" {TORTLARRAY}
+unit TortlArray : TortlArray = "tortl-array.sml" {
 	TORTLARRAY TilWord32 Util Prim Name TraceInfo String Int Rtl
 	Pprtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats
 }
 
-source unit TORTL = "tortl.sig.sml" {Rtl Nil}
-source interface Tortl = "tortl.int" {TORTL}
-source unit Tortl : Tortl = "tortl.sml" {
+unit TORTL = "tortl.sig.sml" {Rtl Nil}
+interface Tortl = "tortl.int" {TORTL}
+unit Tortl : Tortl = "tortl.sml" {
 	Util Listops Name TilWord32 TilWord64 Int Sequence Prim List
 	Array TraceInfo Symbol Vararg Rtl Pprtl TortlRecord TortlSum
 	TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps
 	TORTL Optimize String NilDefs
 }
 
-source unit LINKRTL = "linkrtl.sig.sml" {
+unit LINKRTL = "linkrtl.sig.sml" {
 	TORTL PPRTL Rtl Nil
 }
-source interface Linkrtl = "linkrtl.int" {LINKRTL}
-source unit Linkrtl : Linkrtl = "linkrtl.sml" {
+interface Linkrtl = "linkrtl.int" {LINKRTL}
+unit Linkrtl : Linkrtl = "linkrtl.sml" {
 	Stats Nil LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32
 	Rtl Rtltags Pprtl TortlArray
 }

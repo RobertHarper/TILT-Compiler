@@ -7,7 +7,7 @@
    refs) are destructively modified:
 
    1) Close all val declarations in a bottom-up sweep, using TempTyv's
-      rather then Tyv's to distinguish the added bindingd from any
+      rather then Tyv's to distinguish the added binding from any
       specified in the source.  Later these bindings may turn out to
       be unnecessary and be removed.
 

@@ -10,7 +10,11 @@ struct
 
     val ShowTools = Stats.ff "ShowTools"
     val DebugAsm = Stats.tt "DebugAsm"
+    val DebugRuntime = Stats.ff "DebugRuntime"
     val Profile = Stats.ff "Profile"
+
+    fun release () : string =
+	if !DebugRuntime then "dbg" else "opt"
 
     type config = {assembler : string list,
 		   linker : string list,
@@ -18,14 +22,16 @@ struct
 		   ldpost : string list}
 
     fun runtimeFile (path : string) : string =
-	OS.Path.joinDirFile{dir=Dirs.runtimeDir(), file=path}
+	let val runtimedir = IntSyn.F.runtimedir()
+	in  OS.Path.joinDirFile{dir=runtimedir, file=path}
+	end
 
     (* chop : string -> string *)
     fun chop "" = ""
       | chop s = String.extract (s, 0, SOME (size s - 1))
 
     (* gccFile : string -> string *)
-    fun gccFile file = chop (Popen.outputOf ("gcc --print-file-name=" ^ file))
+    fun gccFile file = chop (Util.outputOf ["gcc","--print-file-name="^file])
 
     val sparcConfig : unit -> config =
 	Util.memoize(fn () =>
@@ -50,10 +56,10 @@ struct
 		     in
 			 {assembler = ["/usr/ccs/bin/as", "-xarch=v8plus"],
 			  linker    = ["/usr/ccs/bin/ld"],
-			  ldpre     = [runtimeFile "obj_solaris/firstdata.o", crt1, gccFile "crti.o",
+			  ldpre     = [runtimeFile "sparc/"^release()^"/firstdata.o", crt1, gccFile "crti.o",
 				       "/usr/ccs/lib/values-Xa.o", gccFile "crtbegin.o"],
 			  ldpost    = (["-L/afs/cs/project/fox/member/pscheng/ml96/SparcPerfMon/lib",
-					runtimeFile "runtime.solaris.a", "-lperfmon", "-lpthread","-lposix4", "-lgen",
+					runtimeFile "runtime-sparc-"^release()^".a", "-lperfmon", "-lpthread","-lposix4", "-lgen",
 					libm, libc, gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"] @
 				       libdl)}
 		     end)
@@ -70,7 +76,7 @@ struct
 			 {assembler = ["/usr/bin/as"] @ debug,
 			  linker    = ["/usr/bin/ld", "-call_shared", "-D", "a000000", "-T", "8000000"] @ debug,
 			  ldpre     = crt,
-			  ldpost    = [runtimeFile "runtime.alpha_osf.a", "-lpthread", "-lmach", "-lexc", "-lm",
+			  ldpost    = [runtimeFile "runtime-alpha-"^release()^".a", "-lpthread", "-lmach", "-lexc", "-lm",
 				       "-lc", "-lrt"]}
 		     end)
 
@@ -78,20 +84,12 @@ struct
 
     (* targetConfig : unit -> config *)
     fun targetConfig () =
-	(case Target.getTargetPlatform()
-	   of Target.TIL_ALPHA  => alphaConfig()
-	    | Target.TIL_SPARC  => sparcConfig()
-	    | Target.TIL_TALx86 => talx86Config())
+	(case Target.getTarget()
+	   of Platform.ALPHA => alphaConfig()
+	    | Platform.SPARC => sparcConfig()
+	    | Platform.TALx86 => talx86Config())
 
-    (* run' : string list -> unit *)
-    fun run' nil = ()
-      | run' cmd =
-	let val command = concat (Listops.join " " cmd)
-	    val _ = if (!ShowTools) then (print "  "; print command; print "\n") else ()
-	in
-	    if Util.system command then ()
-	    else error (hd cmd ^ " failed")
-	end
+    val run' : string list -> unit = Util.run
 
     (* run : string list list -> unit *)
     val run = run' o List.concat
@@ -100,10 +98,8 @@ struct
 	let val _ = msg "  Assembling\n"
 	    val _ = Target.checkNative()
 	    val {assembler, ...} = targetConfig()
-	    val tmp = Paths.tmpFile objFile
-	    val _ = (OS.FileSys.remove objFile) handle _ => ()
-	in  (run [assembler, ["-o", tmp, asmFile]];
-	     OS.FileSys.rename {old=tmp, new=objFile})
+	    fun writer tmp = run [assembler,["-o", tmp, asmFile]]
+	in  Fs.write' writer objFile
 	end
 
     (*
@@ -119,16 +115,14 @@ struct
 
     fun compress {src : string, dest : string} : unit =
 	let val _ = msg "  Compressing\n"
-	    val tmp = Paths.tmpFile dest
-	in  (run' ["gzip","-cq9","<" ^ src,">" ^ tmp];
-	     OS.FileSys.rename {old=tmp, new=dest})
+	    fun writer tmp = run' ["gzip","-cq9","<" ^ src,">" ^ tmp]
+	in  Fs.write' writer dest
 	end
 
     fun uncompress {src : string, dest : string} : unit =
 	let val _ = msg "  Uncompressing\n"
-	    val tmp = Paths.tmpFile dest
-	in  (run' ["gunzip","-cq","<" ^ src,">" ^ tmp];
-	     OS.FileSys.rename {old=tmp, new=dest})
+	    fun writer tmp = run' ["gunzip","-cq","<" ^ src,">" ^ tmp]
+	in  Fs.write' writer dest
 	end
 
 end

@@ -1,14 +1,21 @@
 #ifndef _general_h
 #define _general_h
 
-#ifdef alpha_osf
-#include "interface_osf.h"
+#ifdef alpha
+#define INLINEP(f) inline f
+#define INLINE /* empty */
 #endif
-#ifdef rs_aix
-#include "interface_aix.h"
+
+#ifdef sparc
+#define INLINEP(f) /* empty */
+#define INLINE inline
 #endif
-#ifdef solaris
-#include "interface_solaris.h"
+
+#ifdef alpha
+#include "interface_alpha.h"
+#endif
+#ifdef sparc
+#include "interface_sparc.h"
 #endif
 
 #undef GCTABLE_HASENTRYID

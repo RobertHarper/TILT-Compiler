@@ -38,32 +38,37 @@ void     SetNormalizeExpand(volatile Set_t *s, int addSize);
 void     SetCopy(Set_t *from, Set_t *to);       /* Copies the contents of from into to without changing from */
 void     SetTransfer(Set_t *from, Set_t *to);   /* Transfers the contents of from into to, leaving from empty */
 
-INLINE(SetLength)
+#pragma INLINEP(SetLength)
+static INLINE
 long SetLength(Set_t *s)
 {
   return s->last - s->first;
 }
 
-INLINE(SetFullSize)
+#pragma INLINEP(SetFullSize)
+static INLINE
 long SetFullSize(Set_t *s)
 {
   return s->size;
 }
 
-INLINE(SetReset)
+#pragma INLINEP(SetReset)
+static INLINE
 void SetReset(Set_t *s)
 {
   s->first = s->data;
   s->last = s->data;
 }
 
-INLINE(SetIsEmpty)
+#pragma INLINEP(SetIsEmpty)
+static INLINE
 int SetIsEmpty(Set_t *s)
 {
   return (s->first == s->last);
 }
 
-INLINE(SetPush)
+#pragma INLINEP(SetPush)
+static INLINE
 void SetPush(volatile Set_t *set, ptr_t item)
 {
   fastAssert(item != NULL); 
@@ -72,7 +77,8 @@ void SetPush(volatile Set_t *set, ptr_t item)
   *(set->last++) = item;
 }
 
-INLINE(SetPush2)
+#pragma INLINEP(SetPush2)
+static INLINE
 void SetPush2(Set_t *set, ptr_t item1, ptr_t item2)
 {
   fastAssert(item1 != NULL); 
@@ -83,7 +89,8 @@ void SetPush2(Set_t *set, ptr_t item1, ptr_t item2)
   *(set->last++) = item2;
 }
 
-INLINE(SetPush3)
+#pragma INLINEP(SetPush3)
+static INLINE
 void SetPush3(Set_t *set, ptr_t item1, ptr_t item2, ptr_t item3)
 {
   fastAssert(item1 != NULL); 
@@ -97,7 +104,8 @@ void SetPush3(Set_t *set, ptr_t item1, ptr_t item2, ptr_t item3)
 }
 
 /* Dequeue and SetPop* return NULL if the set is empty */
-INLINE(SetDequeue)
+#pragma INLINEP(SetDequeue)
+static INLINE
 ptr_t SetDequeue(Set_t *s)
 {
   if (s->first == s->last)
@@ -105,7 +113,8 @@ ptr_t SetDequeue(Set_t *s)
   return *(s->first++);
 }
 
-INLINE(SetPop)
+#pragma INLINEP(SetPop)
+static INLINE
 ptr_t SetPop(Set_t *set)
 {
   /*  fastAssert(set->first == set->data); */
@@ -114,7 +123,8 @@ ptr_t SetPop(Set_t *set)
   return *(--set->last);
 }
 
-INLINE(SetPop2)
+#pragma INLINEP(SetPop2)
+static INLINE
 ptr_t SetPop2(Set_t *set, ptr_t *item2Ref)
 {
   fastAssert(set->first == set->data);
@@ -125,7 +135,8 @@ ptr_t SetPop2(Set_t *set, ptr_t *item2Ref)
   return NULL;
 }
 
-INLINE(SetPop3)
+#pragma INLINEP(SetPop3)
+static INLINE
 ptr_t SetPop3(Set_t *set, ptr_t *item2Ref, ptr_t *item3Ref)
 {
   fastAssert(set->first == set->data);

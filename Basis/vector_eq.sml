@@ -15,7 +15,7 @@ struct
 	in  TiltPrim.ueq (lx, ly) andalso vector_eq_loop 0w0
 	end
 
-    fun word8vector_eq (x : word8vector, y : word8vector) : bool =
+    fun word8vector_eq (x : TiltPrim.word8vector, y : TiltPrim.word8vector) : bool =
 	let 
 	  val lx = TiltPrim.vector_length8 x
 	  val ly = TiltPrim.vector_length8 y

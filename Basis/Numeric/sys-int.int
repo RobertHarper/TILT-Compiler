@@ -1,0 +1,2 @@
+structure SysInt : INTEGER
+	where type int = int

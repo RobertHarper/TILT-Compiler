@@ -1,0 +1,10 @@
+functor PrimIOFn (structure A : MONO_ARRAY
+		      sharing type A.elem = A.Vector.elem
+		  val someElem : A.elem
+		  eqtype pos
+		  val compare : (pos * pos) -> order)
+    : PRIM_IO
+	where type array = A.array
+	where type vector = A.Vector.vector
+	where type elem = A.elem
+	where type pos = pos

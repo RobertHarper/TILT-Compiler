@@ -419,18 +419,6 @@ struct
 	fun stripArrow (ENV{context,...}, c) =
 	    Normalize.strip_arrow_norm context c
 
-	(* insertLabel : env * label * var -> env *)
-	fun insertLabel (ENV{currentlevel,context,econtext,levelmap,lastfnlevel}, l, v) =
-	    let
-		val context' = NilContext.insert_label (context, l, v)
-	    in
-		ENV{context = context',
-		    econtext = econtext,
-		    currentlevel = currentlevel,
-		    levelmap = levelmap,
-		    lastfnlevel = lastfnlevel}
-	    end
-
 	(* insertKind : env * var * con -> env *)
 	fun insertKind (ENV{currentlevel,context,econtext,levelmap,lastfnlevel}, v, k) =
 	    let
@@ -1764,7 +1752,6 @@ struct
 		val ibnds = map ImportBnd bnds
 
 		val env = insertKind(env, v, oldk)
-		val env = insertLabel(env, l, v)
 		val env = bindLevel(env, v, toplevel)
 	      in
 		  split(rest, env, ImportType(l,v,k):: (List.revAppend (ibnds, imps)))

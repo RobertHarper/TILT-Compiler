@@ -8,7 +8,7 @@
 
 /* value_t is to be used for the type of a pointer */
 #ifndef _asm_
-#ifdef alpha_osf
+#ifdef alpha
 #pragma pointer_size save
 #pragma pointer_size 32
 #endif
@@ -36,7 +36,7 @@ typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 				 There is not necessarily a object at the location. */
 typedef volatile unsigned int *vmem_t;
 
-#ifdef alpha_osf
+#ifdef alpha
 #pragma pointer_size restore
 #endif
 #endif
@@ -94,7 +94,8 @@ typedef volatile unsigned int *vmem_t;
 #define TAG_REC_INTTRACE   (RECORD_TYPE | (2 << RECLEN_OFFSET) | (2 << RECMASK_OFFSET))
 #define TAG_REC_TRACETRACE (RECORD_TYPE | (2 << RECLEN_OFFSET) | (3 << RECMASK_OFFSET))
 
-INLINE(getTag)
+#pragma INLINEP(getTag)
+static INLINE
 tag_t getTag(vptr_t obj)
 {
   tag_t tag = (tag_t) obj[-1];

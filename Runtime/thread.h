@@ -1,11 +1,11 @@
-#ifdef alpha_osf
+#ifdef alpha
 #define intSz        4
 #define longSz       8
 #define CptrSz       8
 #define MLptrSz      4
 #define doubleSz     8
 #endif
-#ifdef solaris
+#ifdef sparc
 #define intSz        4
 #define longSz       4
 #define CptrSz       4
@@ -25,9 +25,9 @@
 #define stackLimit_disp     longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz+MLptrSz
 #define stackTop_disp	    longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz+MLptrSz+intSz
 
-#if    defined(solaris)
+#if    defined(sparc)
 #define snapshot_size       16
-#elif  defined(alpha_osf)
+#elif  defined(alpha)
 #define snapshot_size       20
 #endif
 #define NoRequest 0
@@ -155,7 +155,7 @@ typedef struct Thread__t
   /* ---- These fields are accessed by assembly code ---- */
   volatile unsigned long      saveregs[32];     /* Register set; compiler relied on this being first */
   volatile double             fregs[32];        /* Register set; compiler relied on this being second */
-  volatile struct Proc__t     *proc;            /* of type Proc_t * - relied on by service_alpha_osf.s  */
+  volatile struct Proc__t     *proc;            /* of type Proc_t * - relied on by service_alpha.s  */
   volatile long               notInML;          /* set to true whenever mutator calls a normal external function */
   volatile double             scratch;
   volatile long               request;          /* Why were we stoppped and how do we resume? */
@@ -336,14 +336,16 @@ extern int localWorkSize;
 
 void updateWorkDone(Proc_t *proc);     /* Updates workDone as a weighted average of other fields */
 
-INLINE(updateGetWorkDone)
+#pragma INLINEP(updateGetWorkDone)
+static INLINE
 int updateGetWorkDone(Proc_t *proc)     /* Updates workDone as a weighted average of other fields */
 {
   updateWorkDone(proc);
   return proc->segUsage.workDone;
 }
 
-INLINE(addMaxWork)
+#pragma INLINEP(addMaxWork)
+static INLINE
 void addMaxWork(Proc_t *proc, int additionalWork)
 {
   if (additionalWork <= 0)
@@ -353,7 +355,8 @@ void addMaxWork(Proc_t *proc, int additionalWork)
     proc->segUsage.maxWork = MAXINT;
 }
 
-INLINE(reachMaxWork)                   /* Calls update and then check against maxWork */
+#pragma INLINEP(reachMaxWork)                   /* Calls update and then check against maxWork */
+static INLINE
 int  reachMaxWork(Proc_t *proc)
 {
   updateWorkDone(proc);
@@ -361,7 +364,8 @@ int  reachMaxWork(Proc_t *proc)
   return proc->segUsage.workDone >= proc->segUsage.maxWork;
 }    
 
-INLINE(updateReachCheckWork)                 /* Calls update and check against check */
+#pragma INLINEP(updateReachCheckWork)                 /* Calls update and check against check */
+static INLINE
 int updateReachCheckWork(Proc_t *proc)
 {
   int workDone;
@@ -374,7 +378,8 @@ int updateReachCheckWork(Proc_t *proc)
   return 0;
 }
 
-INLINE(reachCheckWork)                 /* Periodically calls update and check against check */
+#pragma INLINEP(reachCheckWork)                 /* Periodically calls update and check against check */
+static INLINE
 int reachCheckWork(Proc_t *proc)
 {
   int workDone;

@@ -1,4 +1,3 @@
-(* The order of declarations matters; see ../Runtime/exn.c. *)
 exception Div
 exception Overflow
 structure TiltExn =

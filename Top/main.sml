@@ -1,41 +1,110 @@
 structure Main :> MAIN =
 struct
 
-    fun reject s = raise Compiler.Reject s
+    structure M = Manager
+
+    val reject = Util.reject
 
     fun usage () : 'a =
-	let val msg = concat
-		["usage: tilt [-bmpv] [-a arch] [-fr flag] groupfile ...\n\
-		 \       tilt [-v] -s [[num/]host ...]\n\
-		 \       tilt [-bv] [-a arch] -c groupfile ...\n"]
+	let val msg =
+		"usage: tilt project\n\
+		\       tilt -o exe project\n\
+		\       tilt -l lib project\n\
+		\       tilt -p project\n\
+		\       tilt -s [[num/]host ...]\n\
+		\general options:\n\
+		\       -v       increase diagnostics level\n\
+		\       -f F     set flag F to true\n\
+		\       -r F     set F to false\n\
+		\compiler options:\n\
+		\       -m       master only\n\
+		\       -c U     operate on unit U\n\
+		\       -C I     operate on interface I\n\
+		\       -t T     compile for target T (sparc, alpha, talx86)\n"
 	in  TextIO.output (TextIO.stdErr, msg);
 	    OS.Process.exit (OS.Process.failure)
 	end
 
-    fun setdiaglevel (boot : bool, level : int) : unit =
-	let val diaglevel = if boot then Boot.DiagLevel else Manager.DiagLevel
-	in  diaglevel := level
+    datatype action =
+	MAKE
+      | MAKE_EXE of string
+      | MAKE_LIB of string
+      | PURGE
+      | PURGE_ALL
+      | RUN_SLAVES
+
+    type options =
+	{action : action,
+	 master : bool,
+	 targets : M.targets}
+
+    fun check (options : options) : unit =
+	let val {action,master,targets} = options
+
+	    fun check_purge () : unit =
+		if master then usage() else ()
+
+	    fun check_slave () : unit =
+		if master orelse not (null targets) then usage() else ()
+
+	in  (case action
+	       of MAKE => ()
+		| MAKE_EXE _ => ()
+		| MAKE_LIB _ => ()
+		| PURGE => check_purge()
+		| PURGE_ALL => check_purge()
+		| RUN_SLAVES => check_slave())
 	end
 
-    fun setarch (arch : Target.platform option) : unit =
-	(case arch
-	   of NONE => ()
-	    | SOME p => Target.setTargetPlatform p)
+    fun set_action (options : options, newaction : action) : options =
+	let val {action,master,targets} = options
+	in  (case action
+	       of MAKE => {action=newaction,master=master,targets=targets}
+		| _ => usage())
+	end
 
-    fun make (boot : bool, master : bool, stats : bool, verbose : int,
-	      arch : Target.platform option, flags : (bool ref * bool) list,
-	      groupfiles : string list) : unit =
-	let val _ = setdiaglevel (boot, verbose)
-	    val _ = setarch arch
-	    val _ = app (fn (r,v) => r := v) flags
-	    val f : string -> unit =
-		(case (boot,master)
-		   of (false,false) => Manager.make
-		    | (true,false) => Boot.make
-		    | (false,true) => Manager.master
-		    | (true,true) => Boot.master)
-	    val f = if stats then (fn s => (f s; Stats.print_stats())) else f
-	in  app f groupfiles
+    fun set_purge_action (options : options) : options =
+	let val {action,master,targets} = options
+	    val newaction =
+		(case action
+		   of MAKE => PURGE
+		    | PURGE => PURGE_ALL
+		    | PURGE_ALL => PURGE_ALL
+		    | _ => usage())
+	in  {action=newaction,master=master,targets=targets}
+	end
+
+    fun process_arg (arg : options Arg.argument) : options =
+	let val {acc=options, argc, eargf, ...} = arg
+	    val {action,master,targets} = options
+	in
+	    (case argc
+	       of #"o" => set_action (options, MAKE_EXE (eargf usage))
+		| #"l" => set_action (options, MAKE_LIB (eargf usage))
+		| #"p" => set_purge_action options
+		| #"s" => set_action (options, RUN_SLAVES)
+		| #"v" =>
+		    (M.DiagLevel := !M.DiagLevel + 1;
+		     options)
+		| #"f" => (Stats.bool (eargf usage) := true; options)
+		| #"r" => (Stats.bool (eargf usage) := false; options)
+		| #"m" => {action=action,master=true,targets=targets}
+		| #"c" =>
+		    let val target = M.unit (eargf usage)
+			val targets = target :: targets
+		    in  {action=action,master=master,targets=targets}
+		    end
+		| #"C" =>
+		    let val target = M.interface (eargf usage)
+			val targets = target :: targets
+		    in  {action=action,master=master,targets=targets}
+		    end
+		| #"t" =>
+		    (case Platform.fromString (eargf usage)
+		       of SOME objtype => Target.setTarget objtype
+			| NONE => usage();
+		     options)
+		| _ => usage())
 	end
 
     fun slaveSpec (arg : string) : int * string =
@@ -53,141 +122,37 @@ struct
 		| _ => error())
 	end
 
-    fun slave (verbose : int, args : string list) : unit =
-	let val _ = Manager.DiagLevel := verbose
-	in  (case args
-	       of nil => Manager.slave()
-		| _ => Manager.slaves (map slaveSpec args))
-	end
-
-    fun purge (boot : bool, verbose : int, arch : Target.platform option,
-	       purgeall : bool, groupfiles : string list) : unit =
-	let val _ = setdiaglevel (boot, verbose)
-	    val _ = setarch arch
-	    val f : string -> unit =
-		(case (boot,purgeall)
-		   of (false,false) => Manager.purge
-		    | (true,false) => Boot.purge
-		    | (false,true) => Manager.purgeAll
-		    | (true,true) => Boot.purgeAll)
-	in  app f groupfiles
-	end
-
-    datatype options =
-	MAKE of {boot:bool ref,
-		 master:bool ref,
-		 stats:bool ref,
-		 verbose:int ref,
-		 arch:Target.platform option ref,
-		 flags:(bool ref * bool) list ref}
-      | SLAVE of {verbose : int ref}
-      | PURGE of {boot:bool ref,
-		  verbose:int ref,
-		  arch:Target.platform option ref,
-		  purgeall:bool ref}
-
-    fun run (opts : options, args : string list) : unit =
-	(case opts
-	   of MAKE {boot,master,stats,verbose,arch,flags} =>
-		make (!boot,!master,!stats,!verbose,!arch,!flags,args)
-	    | SLAVE {verbose} => slave (!verbose,args)
-	    | PURGE {boot,verbose,arch,purgeall} =>
-		purge (!boot,!verbose,!arch,!purgeall,args))
-
-    fun bootstrap (opts : options) : unit =
-	(case opts
-	   of MAKE {boot,...} => boot
-	    | SLAVE _ => usage()
-	    | PURGE {boot,...} => boot) := true
-
-    fun master (opts : options) : unit =
-	(case opts
-	   of MAKE {master,...} => master
-	    | _ => usage()) := true
-
-    fun printstats (opts : options) : unit =
-	(case opts
-	   of MAKE {stats,...} => stats
-	    | _ => usage()) := true
-
-    fun verbose (opts : options) : unit =
-	let val counter =
-		(case opts
-		   of MAKE {verbose,...} => verbose
-		    | SLAVE {verbose,...} => verbose
-		    | PURGE {verbose,...} => verbose)
-	    val n = !counter + 1
-	    val _ = counter := n
-	    val _ =
-		if n = 1 then
-		    print (concat ["TILT version ", Version.version, "\n\
-				   \(Using basis from ", Dirs.libDir(), ")\n"])
-		else ()
-	in  ()
-	end
-
-    fun setarch (opts : options, arch : string) : unit =
-	let val r =
-		(case opts
-		   of MAKE {arch,...} => arch
-		    | SLAVE _ => usage()
-		    | PURGE {arch,...} => arch)
-	    val p =
-		(case Target.platformFromName arch
-		   of SOME p => p
-		    | NONE => reject ("invalid architecture: "  ^ arch))
-	in  r := SOME p
-	end
-
-    fun setflag (opts : options, flag : string, value : bool) : unit =
-	(case opts
-	   of MAKE {flags,...} =>
-		let val flag = (Stats.bool flag
-				handle _ => reject ("invalid flag: " ^ flag))
-		in  flags := (flag,value) :: !flags
-		end
-	    | _ => usage())
-
-    fun slave_mode (opts : options) : options =
-	(case opts
-	   of MAKE {boot=ref false, master=ref false, stats=ref false,
-		    verbose=ref n, arch=ref NONE, flags=ref nil} =>
-		SLAVE {verbose=ref n}
-	    | _ => usage())
-
-    fun purge_mode (opts : options) : options =
-	(case opts
-	   of MAKE {boot=ref b, master=ref false, stats=ref false,
-		    verbose=ref n, arch=ref a, flags=ref nil} =>
-		PURGE {boot=ref b, verbose=ref n, arch=ref a, purgeall=ref false}
-	    | PURGE {purgeall,...} => (purgeall := true; opts)
-	    | _ => usage())
-
-    fun option (r : options ref) (arg : Arg.arg) : unit =
-	let val opts = !r
-	    val {argc, eargf, ...} = arg
+    fun run (args : string list, options : options) : unit =
+	let val _ = check options
+	    val {action,master,targets} = options
+	    fun project () : string =
+		(case args
+		   of [filename] => filename
+		    | _ => usage())
+	    fun compile (without_slave : 'a -> unit,
+			 with_slave : 'a -> unit) : 'a -> unit =
+		if master then without_slave else with_slave
 	in
-	    (case argc
-	       of #"b" => bootstrap opts
-		| #"m" => master opts
-		| #"p" => printstats opts
-		| #"v" => verbose opts
-		| #"a" => setarch (opts, eargf usage)
-		| #"f" => setflag (opts,eargf usage,true)
-		| #"r" => setflag (opts,eargf usage,false)
-		| #"s" => r := slave_mode opts
-		| #"c" => r := purge_mode opts
-		| _ => usage())
+	    (case action
+	       of MAKE => compile (M.make',M.make) (project(), targets)
+		| MAKE_EXE exe =>
+		    compile (M.make_exe',M.make_exe) (project(), exe, targets)
+		| MAKE_LIB lib =>
+		    compile (M.make_lib',M.make_lib) (project(), lib, targets)
+		| PURGE => M.purge (project(), targets)
+		| PURGE_ALL => M.purgeAll (project(), targets)
+		| RUN_SLAVES =>
+		    (case args
+		       of [] => M.slave()
+			| slaves => M.slaves (map slaveSpec slaves)))
 	end
 
     fun main (_ : string, args : string list) : OS.Process.status =
 	let val _ = ExnHandler.Interactive := false
-	    val opts : options =
-		MAKE {boot=ref false,master=ref false,stats=ref false,
-		      verbose=ref 0,arch=ref NONE,flags=ref nil}
-	    val r = ref opts
-	    val args = Arg.args (option r) args
-	in  run (!r, args);
+	    val options : options =
+		{action=MAKE, master=false, targets=nil}
+	    val (args,options) = Arg.arguments process_arg (args,options)
+	in  run (args,options);
 	    OS.Process.success
 	end handle e => ExnHandler.printAndExit e
 

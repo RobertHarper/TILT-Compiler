@@ -1,56 +1,38 @@
-include group "mapfile-lib"
+include "mapfile-lib"
 
-source unit arithmetic = "arithmetic.sml" {Int Real}
-make executable "arithmetic." ^ $target ^ ".exe" {arithmetic}
-source unit life = "life.sml" {}
-source unit leroy = "leroy.sml" {List Int}
-make executable "leroy." ^ $target ^ ".exe" {leroy}
-source unit matmult = "matmult.sml" {Int Array Array2}
-make executable "matmult." ^ $target ^ ".exe" {matmult}
-source unit quicksort = "quicksort.sml" {Array}
-make executable "quicksort." ^ $target ^ ".exe" {quicksort}
-source unit quicksort2 = "quicksort2.sml" {Array}
-make executable "quicksort2." ^ $target ^ ".exe" {quicksort2}
-source unit takc = "takc.sml" {Int}
-make executable "takc." ^ $target ^ ".exe" {takc}
-source unit taku = "taku.sml" {Int}
-make executable "taku." ^ $target ^ ".exe" {taku}
-source unit sort = "sort.sml" {Int}
-make executable "sort." ^ $target ^ ".exe" {sort}
-source unit fft = "fft.sml" {
+unit arithmetic = "arithmetic.sml" {Int Real}
+unit life = "life.sml" {}
+unit leroy = "leroy.sml" {List Int}
+unit matmult = "matmult.sml" {Int Array Array2}
+unit quicksort = "quicksort.sml" {Array}
+unit quicksort2 = "quicksort2.sml" {Array}
+unit takc = "takc.sml" {Int}
+unit taku = "taku.sml" {Int}
+unit sort = "sort.sml" {Int}
+unit fft = "fft.sml" {
 	Int Math Real Array
 }
-make executable "fft." ^ $target ^ ".exe" {fft}
-source unit boyer = "boyer.sml" {Int}
-make executable "boyer." ^ $target ^ ".exe" {boyer}
-source unit simple = "simple.sml" {
+unit boyer = "boyer.sml" {Int}
+unit simple = "simple.sml" {
 	Array Array2 Int Real64 Math64 List PreReal
 }
-make executable "simple." ^ $target ^ ".exe" {simple}
-source unit pqueens = "pqueens.sml" {
+unit pqueens = "pqueens.sml" {
 	Int Array CharVector
 }
-make executable "pqueens." ^ $target ^ ".exe" {pqueens}
 %iii 		iii		TARGET
-source unit tyan = "tyan.sml" {
+unit tyan = "tyan.sml" {
 	List Array Int TextIO
 }
-make executable "tyan." ^ $target ^ ".exe" {tyan}
-source unit msort = "msort.sml" {}
-make executable "msort." ^ $target ^ ".exe" {msort}
-source unit pia = "pia.sml" {
+unit msort = "msort.sml" {}
+unit pia = "pia.sml" {
 	Real Math TextIO String
 }
-make executable "pia." ^ $target ^ ".exe" {pia}
-source unit lexgen = "lexgen.sml" {
+unit lexgen = "lexgen.sml" {
 	Int String TextIO Array List
 }
-make executable "lexgen." ^ $target ^ ".exe" {lexgen}
-source unit frank = "frank.sml" {Int TextIO}
-make executable "frank." ^ $target ^ ".exe" {frank}
-source unit bench_times = "bench_times.sml" {
+unit frank = "frank.sml" {Int TextIO}
+unit bench_times = "bench_times.sml" {
 	Time Timer List String life leroy fft boyer simple tyan msort pia
 	frank lexgen ListPair Real Arithmetic BarnesHut PQueens Quicksort
 	Quicksort2 Isort Takc Taku Getopt TextIO CommandLine Int OS
 }
-make executable "bench_times." ^ $target ^ ".exe" {bench_times}

@@ -1,94 +1,51 @@
 (* Interface to the compiler. *)
 (*
-	The compiler has side effects on the file system.
-	Parameterized interface files and unit environment files are
-	read and written through FileCache.  Unit and interface source
-	files are read directly from the file system.  Assembler files
-	are written directly to the file system.
+	Gc_desc discards project declarations that are not relevant
+	to the named units and interfaces.
+
+	Get_inputs discards project declarations that are not relevant to
+	elaborating the named unit or interface.
+
+	Info computes an Info.info value for the project description.
+	This is used for cut-off recompilation.
+
+	Compile builds pdec against desc, assuming all the pinterfaces
+	in desc are up to date.  Compile returns true if compilation
+	is done and false if further assembly (on a native slave) is
+	required.
+
+	Assemble creates an object file from an up to date assembler
+	file; it is used to finish compilation jobs.
+
+	Link and pack build executables and libraries.
 *)
 signature COMPILER =
 sig
 
+    type label = Name.label
+    type desc = IntSyn.desc
+    type pdec = IntSyn.pdec
+
     val CompilerDebug : bool ref
     val CompilerDiag : bool ref
+    val CompilerVerbose : bool ref
 
-    exception Reject of string		(* User code is bad. *)
+    val UptoElaborate : bool ref
+    val UptoAsm : bool ref
+    val KeepAsm : bool ref
+    val CompressAsm : bool ref
+    val PackUnitSource : bool ref
 
-    structure FileCache :
-    sig
-	include FILECACHE
+    val gc_desc : desc * label list -> desc
 
-	val read_old_ue : string -> UnitEnvironment.ue option
-	val read_ue : string -> UnitEnvironment.ue
-	val write_ue : string * UnitEnvironment.ue -> unit
+    val get_inputs : desc * label -> desc * pdec
 
-	val read_old_info : string -> Info.info option
-	val read_info : string -> Info.info
-	val write_info : string * Info.info -> unit
-    end
+    val info : desc * pdec -> IntSyn.info
 
-    (*
-	Invariant: If f : iface, then f names an up-to-date
-	parameterized interface file.
-    *)
-    type file = string
-    type iface = file
-    type unitname = string
-    type imports = unitname list
-    (*
-	Invariant: If L : precontext, then
-	1. No two units have the same name.
-	2. L is ordered so that each interface's parameters precede it.
-    *)
-    type precontext = (unitname * iface) list
+    val compile : desc * pdec * (unit -> unit) -> bool
+    val assemble : pdec -> unit
 
-    type il_module
-    type nil_module
-    type rtl_module
-
-    val eq : unitname * precontext * iface * iface -> bool
-
-    (*
-	Unit elaboration returns true when a new compiled interface is
-	written.  This occurs if the old parameterized interface file
-	had a bad magic number or was not equivalent to the new
-	interface.
-    *)
-
-    val elaborate_srci : {precontext : precontext,
-			  imports : imports,
-			  ifacename : string,
-			  source : file,
-			  ifaceTarget : file,
-			  ueTarget : file} -> unit
-
-    val elaborate_primu : {precontext : precontext,
-			   imports : imports,
-			   unitname : unitname,
-			   ifaceTarget : file,
-			   ueTarget : file} -> il_module * bool
-
-    val elaborate_srcu : {precontext : precontext,
-			  imports : imports,
-			  unitname : unitname,
-			  source : file,
-			  ifaceTarget : file,
-			  ueTarget : file} -> il_module * bool
-
-    val elaborate_srcu' : {precontext : precontext,
-			   imports : imports,
-			   unitname : unitname,
-			   source : file,
-			   interface : iface} -> il_module
-
-    val il_to_nil : unitname * il_module -> nil_module
-    val nil_to_rtl : unitname * nil_module -> rtl_module
-    val rtl_to_asm : {precontext : precontext,
-		      asmTarget : file,
-		      ueTarget : file,
-		      rtl_module : rtl_module} -> unit
-
-    (* Create initialization code for the given units. *)
-    val link : {asmTarget : file, unitnames : unitname list} -> unit
+    val link : IntSyn.desc * IntSyn.F.link -> unit
+    val pack : desc * string -> unit	(* library directory *)
 
 end

@@ -497,7 +497,6 @@ struct
 	val insert_con = NilContext.insert_con
 	val insert_cbnd = NilContext.insert_cbnd
 	val insert_kind = NilContext.insert_kind
-	val insert_label = NilContext.insert_label
 
 	val float64 = NilDefs.ftype64
 
@@ -1772,13 +1771,11 @@ struct
 	       let val c = c_rewrite initial_state c
 		   val tr = trace_rewrite initial_state tr
 		   val D = insert_con(D, v, c)
-		   val D = insert_label(D, l, v)
 	       in  ([ImportValue(l,v,tr,c)], D)
 	       end
 	     | import_folder (ImportType(l,v,k), D) =
 	       let val k = k_rewrite initial_state k
 		   val D = insert_kind(D, v, k)
-		   val D = insert_label(D, l, v)
 	       in  ([ImportType(l,v,k)], D)
 	       end
 	     | import_folder (ImportBnd (phase, cb), D) =

@@ -1,2 +1,1 @@
-source unit Test = "time3.sml" {Time}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "time3.sml" {Time}

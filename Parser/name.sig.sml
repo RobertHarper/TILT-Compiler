@@ -36,6 +36,9 @@ signature NAME =
     (* injective *)
     val tag2int : tag -> int
     val internal_label  : string -> label
+    val unit_label	: string -> label	(* compilation unit *)
+    val interface_label	: string -> label	(* compilation unit interface *)
+    val env_label	: string -> label	(* environment variable *)
     val symbol_label    : Symbol.symbol -> label
 
     (* useful printing routine *)
@@ -43,6 +46,7 @@ signature NAME =
     val var2name     : var   -> string  (* v_23 -> "v" *)
     val var2string   : var   -> string  (* v_23 -> "v_23" *)
     val label2name   : label -> string
+    val label2longname : label -> string	(* unit U, etc *)
 
     val join_labels  : label list -> label (* l1, l2 -> l1__l2 *)
     val split_label  : label -> label list (* l1__l2 -> l1, l2 *)
@@ -64,7 +68,6 @@ signature NAME =
        We collect the label-mangling functions here to simplify the
        interface and definition of keep_import.
     *)
-    val to_unit	     : label -> label	(* compilation unit main module *)
     val to_open      : label -> label	(* module that is open for lookup *)
     val to_dt        : label -> label	(* module that implements a datatype *)
     val to_cluster   : label -> label	(* cluster of mutually recursive functions *)
@@ -72,6 +75,8 @@ signature NAME =
     val to_coercion  : label -> label	(* coercion function *)
 
     val is_unit	     : label -> bool
+    val is_interface : label -> bool
+    val is_env       : label -> bool
     val is_open      : label -> bool
     val is_dt        : label -> bool
     val is_cluster   : label -> bool

@@ -1,1 +1,3 @@
-functor BinarySetFn (K : ORD_KEY) : ORD_SET where Key = K
+functor BinarySetFn (K : ORD_KEY)
+    : ORD_SET
+	where Key = K

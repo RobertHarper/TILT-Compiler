@@ -48,11 +48,11 @@ structure Substring :> SUBSTRING where type substring = PreString.substring
     fun substring (s, i, n) =
 	  if ((0 <= i) andalso (0 <= n) andalso (i+n <= String.size s))
 	    then PreString.SS(s, i, n)
-	    else raise General.Subscript
+	    else raise Subscript
 
     fun extract (s, i, NONE) = if ((0 <= i) andalso (i <= String.size s))
 				   then PreString.SS(s, i, String.size s - i)
-			       else raise General.Subscript
+			       else raise Subscript
       | extract (s, i, SOME n) = substring (s, i, n)
 
     fun all s = PreString.SS(s, 0, String.size s)
@@ -75,7 +75,7 @@ structure Substring :> SUBSTRING where type substring = PreString.substring
 
     fun sub (PreString.SS(s, i, n), j) =
 	  if (j >= n)
-	    then raise General.Subscript
+	    then raise Subscript
 	    else unsafe_vsub8(s, i2w(i+j))
     fun size (PreString.SS(_, _, n)) = n
     fun slice (PreString.SS(s, i, n), j, SOME m) =
@@ -169,7 +169,7 @@ structure Substring :> SUBSTRING where type substring = PreString.substring
     fun span (PreString.SS(s1, i1, n1), PreString.SS(s2, i2, n2)) =
 	  if ((s1 = s2) andalso (i1 < i2+n2))
 	    then PreString.SS(s1, i1, (i2+n2)-i1)
-	    else raise General.Span
+	    else raise Span
 
     fun translate tr (PreString.SS(s, i, n)) =
 	  PreString.translate (tr, s, i2w i, i2w n)

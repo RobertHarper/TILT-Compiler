@@ -9,11 +9,6 @@ structure Int32 :> INTEGER where type int = int =
     val quot = TiltPrim.iquot
     val andb = TiltPrim.andb
     val xorb = TiltPrim.xorb
-(*
-    structure I32 = InlineT.Int32
-
-    type int = int32
-*)
     type int = int
 
     val precision = SOME 32
@@ -21,19 +16,6 @@ structure Int32 :> INTEGER where type int = int =
     val minIntVal : int = ~2147483648
     val minInt : int option = SOME minIntVal
     val maxInt : int option = SOME 2147483647
-(*
-    val op *    : int * int -> int  = I32.*
-    val op quot : int * int -> int  = I32.quot
-    val op +    : int * int -> int  = I32.+
-    val op -    : int * int -> int  = I32.-
-    val ~       : int -> int = I32.~
-    val op <    : int * int -> bool = I32.<
-    val op <=   : int * int -> bool = I32.<=
-    val op >    : int * int -> bool = I32.>
-    val op >=   : int * int -> bool = I32.>=
-    val op =    : int * int -> bool = I32.=
-    val op <>   : int * int -> bool = I32.<>
-*)
 
     val op *    : int * int -> int  = *
     val op quot : int * int -> int  = quot
@@ -87,9 +69,9 @@ structure Int32 :> INTEGER where type int = int =
 
 
     fun compare (i:int, j:int) =
-	  if (<(i, j)) then General.LESS
-	  else if (>(i, j)) then General.GREATER
-	  else General.EQUAL
+	  if (<(i, j)) then LESS
+	  else if (>(i, j)) then GREATER
+	  else EQUAL
 
     val scan = NumScan.scanInt
     val fmt = NumFormat.fmtInt
@@ -102,10 +84,10 @@ structure Int32 :> INTEGER where type int = int =
     val toLarge : int -> LargeInt.int = toLarge
     val fromLarge : LargeInt.int -> int = fromLarge
 *)
-    fun toInt (x : int) : PreInt.int = x
-    fun fromInt (x : PreInt.int) : int = x
+    fun toInt (x : int) : TiltPrim.int32 = x
+    fun fromInt (x : TiltPrim.int32) : int = x
     fun toLarge (x : int) : PreLargeInt.int = x
-    fun fromLarge (x : PreInt.int) : int = x
+    fun fromLarge (x : TiltPrim.int32) : int = x
 
   end
 

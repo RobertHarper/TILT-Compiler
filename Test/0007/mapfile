@@ -1,2 +1,1 @@
-source unit Test = "test.sml" {Word8Vector}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "test.sml" {Word8Vector}

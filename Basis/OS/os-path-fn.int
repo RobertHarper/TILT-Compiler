@@ -1,0 +1,24 @@
+functor OS_PathFn (OSPathBase : sig
+
+    exception Path
+    exception InvalidArc
+
+    datatype arc_kind = Null | Parent | Current | Arc of string
+    val classify : string -> arc_kind
+    val parentArc : string
+    val currentArc : string
+    val validVolume : (bool * PreString.substring) -> bool
+    val splitVolPath : string -> (bool * PreString.substring * PreString.substring)
+	(* Split a string into the volume part and arcs part and note whether it
+	 * is absolute.
+	 * Note: it is guaranteed that this is never called with "".
+	 *)
+    val joinVolPath : (bool * string * string) -> string
+	(* join a volume and path; raise Path on invalid volumes *)
+    val arcSepChar : char
+	(* the character used to separate arcs (e.g., #"/" on UNIX) *)
+
+    val toUnixPath  : string -> string
+    val fromUnixPath : string -> string
+
+  end) : OS_PATH

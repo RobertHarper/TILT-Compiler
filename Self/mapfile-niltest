@@ -1,7 +1,0 @@
-include group "mapfile-nil"
-
-source unit niltest = "niltest.sml" {
-	TextIO LinkParse Tyvar Prim Il Ppprim Ppil IlContext LinkIl
-	Linknil
-}
-make executable "niltest." ^ $target ^ ".exe" {niltest}

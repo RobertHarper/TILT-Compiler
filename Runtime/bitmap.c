@@ -6,11 +6,11 @@
 
 #undef DEBUG
 
-#ifdef solaris
+#ifdef sparc
 #define log_size_long 5
 #define mask_long 31
 #endif
-#ifdef alpha_osf
+#ifdef alpha
 #define log_size_long 6
 #define mask_long 63
 #endif

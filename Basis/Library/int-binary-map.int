@@ -1,1 +1,2 @@
-structure IntBinaryMap : ORD_MAP where type Key.ord_key = int
+structure IntBinaryMap : ORD_MAP
+	where type Key.ord_key = int

@@ -1,7 +1,11 @@
-(* Everything provided here is inlined.  Most primitives are in
-   structure TiltPrim.  We provide some top-level inlined values and
-   types which either can't be expressed in Basis/Prelude.sml or are
-   included here for efficiency.  *)
+(*
+	Everything provided here is inlined.  Most primitives are in
+	structure TiltPrim.  We provide some top-level inlined values
+	and types which either can't be expressed in Basis/Prelude.sml
+	or are included here for efficiency.  NB the basis library
+	specification requires that we do not pollute the toplevel
+	with nonstandard values or types.
+*)
 
 (* Warning: We currently check expression equality of inlined expressions during 
  * interface equality.  Expression alpha-equality is only partially implemented in
@@ -10,6 +14,9 @@
  * will always be judged stale, requiring recompilation of everything every time.
  * -leaf
  *)
+
+(*
+*)
 
 signature BIND =
 sig
@@ -155,8 +162,32 @@ structure Basis :> BASIS =
 	in  (sbnd,sdec)
 	end
 
-    fun tiltprim context : Il.sbnds * Il.sdecs =
+    fun tiltprim () : Il.sbnds * Il.sdecs =
       let
+	  val bindings = ref Bind.empty
+	  fun wrap binder x = bindings := binder (x, !bindings)
+	  val add_top = wrap Bind.add_sbnd_top
+	  val add     = wrap Bind.add_sbnd
+
+	  (* ----------------- add bool -------------- *)
+
+	  local
+		val datatycs = [Ast.Db {tyc = Symbol.tycSymbol "bool",
+					tyvars = [],
+					rhs = Ast.Constrs [(Symbol.varSymbol "false", NONE),
+							   (Symbol.varSymbol "true", NONE)]}]
+		val bool_sbnds_sdecs = 
+		    Datatype.compile {context = empty_context,
+				      typecompile = Toil.typecompile,
+				      datatycs = datatycs,
+				      eq_compile = Toil.xeq',
+				      is_transparent = false}
+		val (_,sdecs) = Listops.unzip bool_sbnds_sdecs
+	  in
+		val _ = app add_top bool_sbnds_sdecs
+		val context = add_context_sdecs (empty_context,sdecs)
+	  end     
+
 	  val exp_entry = exp_entry context
 	  val mono_entry = mono_entry context
 	  val poly_entry = poly_entry context
@@ -165,10 +196,6 @@ structure Basis :> BASIS =
 	  val type_entry = type_entry context
 	  val bool_entry = bool_entry context
 	  val ilbool_entry = ilbool_entry context
-	  val bindings = ref Bind.empty
-	  fun wrap binder x = bindings := binder (x, !bindings)
-	  val add_top = wrap Bind.add_sbnd_top
-	  val add     = wrap Bind.add_sbnd
 
 	 (* -------------- add the base types ------------------------- *)
 	  local
@@ -192,8 +219,7 @@ structure Basis :> BASIS =
 				  ("vector",let val v = fresh_var()
 					    in CON_FUN([v],CON_VECTOR (CON_VAR v))
 					    end),
-				  ("word8array",CON_INTARRAY Prim.W8),
-				  ("word8vector",CON_INTVECTOR Prim.W8)
+				   ("string",CON_INTVECTOR Prim.W8)
 				  ]
 	      val basetype_list = [("float64", float64),
 				   ("int32", int32),
@@ -221,10 +247,7 @@ structure Basis :> BASIS =
 	  (* ----------------- add base monomorphic values -------------- *)
 	  local
 	    val topvalue_list =  [
-				  ("empty_array8",PRIM(create_empty_table (IntArray Prim.W8),[],[])),
-				  ("empty_vector8",PRIM(create_empty_table (IntVector Prim.W8),[],[]))
 				  ]
-
 	    val basevalue_list =  [
 				   ("empty_array8",PRIM(create_empty_table (IntArray Prim.W8),[],[])),
 				   ("empty_vector8",PRIM(create_empty_table (IntVector Prim.W8),[],[]))

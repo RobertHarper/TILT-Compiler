@@ -1,4 +1,3 @@
-source unit Test = "stringcvt.sml" {
+unit Test = "stringcvt.sml" {
 	Int Bool Char StringCvt List TextIO OS
 }
-make executable "Test." ^ $target ^ ".exe" {Test}

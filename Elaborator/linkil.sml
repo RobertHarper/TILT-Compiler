@@ -1,6 +1,8 @@
 structure LinkIl :> LINKIL  =
 struct
 
+    val compiling_tiltprim = ref false
+
     (* Resolve mutual dependencies by installing functions here. *)
     val _ = IlStatic.installHelpers {eq_compile = Toil.xeq}
     val _ = IlContext.installHelpers {eq_con = IlStatic.eq_con}
@@ -9,7 +11,8 @@ struct
 				expcompile = Toil.expcompile,
 				polyinst = Toil.polyinst}
     val _ = Signature.installHelpers {polyinst = Toil.polyinst}
-    val _ = IlUtil.installHelpers {Context_Lookup_Labels = IlStatic.Context_Lookup_Labels}
+    val _ = IlUtil.installHelpers {Context_Lookup_Labels = IlStatic.Context_Lookup_Labels,
+				   compiling_tiltprim = compiling_tiltprim}
     val _ = IlPrimUtilParam.installHelpers {con_bool = IlUtil.con_bool,
 					    true_exp = IlUtil.true_exp,
 					    false_exp = IlUtil.false_exp}
@@ -32,10 +35,10 @@ struct
     fun debugdo (f : unit -> 'a) : unit =
 	if !LinkIlDebug then (f(); ()) else ()
 
-    exception Fail of string
+    exception Fail	(* local *)
     fun fail (s : string) : 'a =
 	if !LinkIlDebug then error s
-	else raise Fail s
+	else raise Fail
 
     structure F = Formatter
     structure U = IlUtil
@@ -114,8 +117,7 @@ struct
 
     type pinterface = Il.pinterface
 
-    val blastOutPinterface = IlBlast.blastOutPinterface
-    val blastInPinterface = IlBlast.blastInPinterface
+    type precontext = (label * pinterface) list
 
     fun unitname (p : parm) : label =
 	(case p
@@ -123,33 +125,19 @@ struct
 	    | PARM_SIG (l,_) => l
 	    | PARM_EXT (l,_) => l)
 
-    fun parameters (i : pinterface) : LabelSet.set =
+    fun parameters' (parms : Il.parms) : LabelSet.set =
 	let fun folder (p, acc) = LabelSet.add(acc, unitname p)
-	in  VarMap.foldl folder LabelSet.empty (#parms i)
+	in  VarMap.foldl folder LabelSet.empty parms
 	end
 
-    fun slice (ctxt : context, parms : LabelSet.set) : LabelSet.set =
-	let val (ilctxt,im) = ctxt
-	    fun addvar (l:label, s:VarSet.set) : VarSet.set =
-		(case LabelMap.find (im,l)
-		   of NONE => error "parameter not in context"
-		    | SOME {main=(v,_),...} => VarSet.add(s,v))
-	    val roots = LabelSet.foldl addvar VarSet.empty parms
-	    val reachable = C.reachable (ilctxt, roots)
-	    fun isReachable' (v : var) : bool = VarSet.member (reachable, v)
-	    val exists : ('a -> bool) -> 'a LabelMap.map -> bool =
-		fn f => fn lm => List.exists f (LabelMap.listItems lm)
-	    fun isReachable (i : interface) : bool =
-		let val {main=(main,_),signats,other={externs,...},...} = i
-		in  isReachable' main orelse
-		    exists (isReachable' o #1) signats orelse
-		    exists (isReachable' o #1) externs
-		end
-	    fun addunit (l : label, i : interface,
-			 s : LabelSet.set) : LabelSet.set =
-		if isReachable i then LabelSet.add (s,l) else s
-	in  LabelMap.foldli addunit LabelSet.empty im
-	end
+    val blastOutPinterface = IlBlast.blastOutPinterface
+    val blastInPinterface = IlBlast.blastInPinterface
+    val blastInPinterfaceParm : Blaster.instream -> LabelSet.set =
+	parameters' o IlBlast.blastInPinterfaceParms
+
+    val parameters : pinterface -> LabelSet.set =
+	parameters' o (#parms)
+
     val empty : context = (C.empty_context, LabelMap.empty)
 
     (* Compare to open_interface. *)
@@ -164,20 +152,6 @@ struct
 	    val ilctxt = LabelMap.foldli add_extern ilctxt externs
 	    val im = LabelMap.insert (im,l,i)
 	in  (ilctxt,im)
-	end
-
-    fun interface_free (i : interface) : VarSet.set =
-	let val {main=(mainvar,mainsig),signats,other,...} = i
-	    val {fixity,ovlds,externs} = other
-	    fun add_sig ((_,s), fv) = VarSet.union (fv, U.sig_free s)
-	    fun add_ovld ((_,ov), fv) = VarSet.union (fv, U.ovld_free ov)
-	    fun add_extern ((_,c), fv) = VarSet.union (fv, U.con_free c)
-	    val fv = U.sig_free mainsig
-	    val fv = LabelMap.foldl add_sig fv signats
-	    val fv = foldl add_ovld fv ovlds
-	    val fv = LabelMap.foldl add_extern fv externs
-	    val fv = VarSet.difference (fv,VarSet.singleton mainvar)
-	in  fv
 	end
 
     fun add_parms (unitlab : label, i : interface, parms : parms) : parms =
@@ -343,7 +317,7 @@ struct
 		   | CONTEXT_OVEREXP x =>
 		      classify (rest,main,signats,externs,fixity,x::ovlds)))
 
-    fun instantiate (ctxt : context, i : pinterface) : interface option =
+    fun instantiate (ctxt : context, i : pinterface) : interface =
 	let val _ = debugdo
 		    (fn () =>
 		     (print "---- LinkIl.instantiate called\n";
@@ -353,8 +327,17 @@ struct
 	    val (mainvar,mainsig,entries) = factor_entries (entries,subst)
 	    val i = classify (entries, (mainvar,mainsig), LabelMap.empty,
 			      LabelMap.empty, nil, nil)
-	in  SOME i
-	end handle Fail _ => NONE
+	in  i
+	end
+
+    fun make_context (precontext:precontext) : context =
+	let fun add ((U:label,pi:pinterface), ctx:context) : context =
+		let val i = instantiate (ctx,pi)
+		in  add_unit (ctx,U,i)
+		end
+	    val ctx = foldl add empty precontext
+	in  ctx
+	end
 
     fun wrap (what : string) (f : 'a -> bool) (x : 'a) : bool =
 	(f x orelse
@@ -412,7 +395,7 @@ struct
 	 eq_externs (ilctxt, #externs a, #externs b))
     val eq_other = wrap "eq_other" eq_other
 
-    fun eq (ctxt : context, i1 : interface, i2 : interface) : bool =
+    fun eq' (ctxt : context, i1 : interface, i2 : interface) : bool =
 	let val _ = debugdo
 		    (fn () =>
 		     (print "---- LinkIl.eq called\n";
@@ -429,64 +412,35 @@ struct
 		eq_other(ilctxt,other1,other2)
 	    end
 	end
-    val eq = wrap "eq" eq
+    val eq' = wrap "eq" eq'
 
-    fun seal (ctxt : context, source : string, m : module,
-	      i : interface) : module option =
-	let val _ = debugdo
-		    (fn () =>
-		     (print "---- LinkIl.seal called\n";
-		      print "m = "; Ppil.pp_module m; print "\n";
-		      print "i = "; pp_interface i; print "\n"))
-	    val (_, sbnd, sdec) = m
-	    val {main=(v,sig_target),...} = i
-	    val (mainlab,mod_actual,sig_actual) =
-		(case (sbnd,sdec)
-		   of (SBND (_,BND_MOD(_,_,m)),
-		       SDEC (l,DEC_MOD(_,_,s))) => (l,m,s)
-		    | _ => error "seal given malformed module")
-	    val ilctxt = #1 ctxt
-	    val _ = msg "  Sealing\n"
-	    val fp : filepos = fn _ => (source,0,0)
-	in  Option.map
-	    (fn m =>
-	     let val sbnd = SBND(mainlab,BND_MOD(v,false,m))
-		 val sdec = SDEC(mainlab,DEC_MOD(v,false,sig_target))
-		 val module = (ilctxt,sbnd,sdec)
-		 val _ =
-		     if !ShowHIL then
-			 (print "\nsealed module:\n"; Ppil.pp_module module;
-			  print "\n\n")
-		     else ()
-	     in  module
-	     end)
-	    (Toil.seal (ilctxt, fp, mod_actual, sig_actual, sig_target))
-	end
+    fun eq (precontext, pi1:pinterface, pi2:pinterface) : bool =
+	let val ctx = make_context precontext
+	    val i1 = instantiate (ctx,pi1)
+	    val i2 = instantiate (ctx,pi2)
+	in  eq'(ctx,i1,i2)
+	end handle Fail => false
 
-    fun unitlabel (unit : string) : label =
-	Name.to_unit(Name.internal_label unit)
-
-    type imports = labels
+    type opened = labels
 
     (*
-	We open the interfaces of direct imports in preparation for
-	elaboration.  The idea is to elaborate in context "local open
-	imports in [-] end".  To open an interface, we open its main
-	structure; we add its signatures and externs to the context,
-	this time with their labels; and we add its fixity and
-	overload information to the context.  Compare to add_unit.
+	We open the interfaces of the "opened" units in preparation
+	for elaboration.  The idea is to elaborate in context "local
+	open opened in [-] end".  To open an interface, we open its
+	main structure; we add its signatures and externs to the
+	context, this time with their labels; and we add its fixity
+	and overload information to the context.  Compare to add_unit.
 
 	We deviate from HS: Rather than preceding the elaboration
-	result with an sbnd/sdec to handle the locally opened imports,
+	result with an sbnd/sdec to handle the locally opened units,
 	we apply a substitution to the elaboration result.  This has
-	three benefits.  First, the same mechanism handles a unit's
+	two benefits.  First, the same mechanism handles a unit's
 	signature definitions as well as its sdecs.  Second, unit
-	interfaces are not polluted with open labels.  Third, we can
-	continue to handle TiltPrim without object code.
+	interfaces are not polluted with open labels.
     *)
 
     fun open_main (mainvar : var, (ilctxt,subst)) : Il.context * U.subst =
-	let val open_lab = Name.to_open (Name.fresh_internal_label "import")
+	let val open_lab = Name.to_open (Name.fresh_internal_label "opened")
 	    val v = Name.fresh_var()
 	    val s = SIGNAT_OF (PATH (mainvar,nil))
 	    val ilctxt = C.add_context_mod (ilctxt, open_lab, v, s)
@@ -543,9 +497,9 @@ struct
 	in  acc
 	end
 
-    fun open_imports (ctxt : context, imports) : Il.context * U.subst =
-	let val _ = msg "  Opening imports\n"
-	    val interfaces = map (lookup ctxt) imports
+    fun open_units (ctxt : context, opened) : Il.context * U.subst =
+	let val _ = msg "  Opening units\n"
+	    val interfaces = map (lookup ctxt) opened
 	    val r = foldl open_interface (#1 ctxt, U.empty_subst) interfaces
 	    val _ = if (!ShowContext)
 			then (print "\nIL context:\n";
@@ -553,81 +507,140 @@ struct
 			      print "\n\n")
 		    else ()
 	in  r
-	end handle Fail s => error s
-
-    fun wrap_sdecsopt (ctxt : context, imports,
-		       f : Il.context -> sdecs option) : pinterface option =
-	let val (localctxt,subst) = open_imports (ctxt, imports)
-	    val _ = msg "  Elaborating\n"
-	in  Option.map
-	    (fn sdecs =>
-	     let val sdecs = U.sdecs_subst (sdecs, subst)
-		 val entries = map CONTEXT_SDEC sdecs
-		 val pinterface = parameterize (ctxt, entries)
-		 val _ =
-		     if !ShowInterface then
-			 (print "\ninterface:\n"; Ppil.pp_pinterface pinterface;
-			  print "\n\n")
-		     else ()
-	     in  pinterface
-	     end)
-	    (f localctxt)
 	end
 
-    fun wrap_decresultopt (ctxt : context, mainlab : label, imports,
-			   f : Il.context -> decresult option)
-	: (module * pinterface) option =
-	let val (localctxt,subst) = open_imports (ctxt, imports)
-	    val _ = msg "  Elaborating\n"
-	in  Option.map
-	    (fn decresult =>
-	     let val decresult = U.decresult_subst (decresult, subst)
-		 val entries = map #2 decresult
-		 val pinterface = parameterize (ctxt, entries)
-		 val (sbnd,sdec) = factor_decresult (mainlab,decresult)
-		 val module = (#1 ctxt, sbnd, sdec)
-		 val _ =
-		     if !ShowInterface then
-			 (print "\ninterface:\n"; Ppil.pp_pinterface pinterface;
-			  print "\n\n")
-		     else ()
-		 val _ =
-		     if !ShowHIL then
-			 (print "\nmodule:\n"; Ppil.pp_module module;
-			  print "\n\n")
-		     else ()
-	     in  (module, pinterface)
-	     end)
-	    (f localctxt)
+    fun show_interface (pi : pinterface) : unit =
+	if !ShowInterface then
+	    (print "\ninterface:\n"; Ppil.pp_pinterface pi;
+	     print "\n\n")
+	else ()
+
+    fun show_module (m : Il.module) : unit =
+	if !ShowHIL then
+	    (print "\nmodule:\n"; Ppil.pp_module m;
+	     print "\n\n")
+	else ()
+
+    fun xtopspec x =
+	(case Toil.xtopspec x
+	   of SOME e => e
+	    | NONE => fail "interface does not elaborate")
+
+    fun xtopdec x =
+	(case Toil.xdec x
+	   of SOME d => d
+	    | NONE => fail "unit does not elaborate")
+
+    fun seal x =
+	(case Toil.seal x
+	   of SOME m => m
+	    | NONE => fail "unit does not match ascribed interface")
+
+    (*
+	If start_elab(precontext,opened) = (ilctx,(ctx,subst)), then
+	ctx is the context corresponding to precontext, ilctx has
+	additional entries corresponding to opened, and subst can be
+	used to eliminate references to the opened entries.
+    *)
+    type fixup = context * U.subst
+    val empty_fixup : fixup = (empty,U.empty_subst)
+
+    fun start_elab (precontext:precontext, opened:opened) : Il.context * fixup =
+	let val ctx = make_context precontext
+	    val (ilctx, subst) = open_units (ctx, opened)
+	in  (ilctx,(ctx,subst))
 	end
 
-    fun decresult (sbnds, sdecs) : decresult =
-	Listops.zip (map SOME sbnds) (map CONTEXT_SDEC sdecs)
+    fun finish_interface ((ctx,subst):fixup, entries) : pinterface =
+	let val entries = U.entries_subst(entries,subst)
+	    val pi = parameterize (ctx,entries)
+	    val _ = show_interface pi
+	in  pi
+	end
 
-    fun wrap_decresult (ctxt : context, mainlab : label, imports,
-			f : Il.context -> sbnds * sdecs) : module * pinterface =
-	valOf (wrap_decresultopt (ctxt, mainlab, imports, SOME o decresult o f))
+    fun finish_inferred ((ctx,subst):fixup, U:label,
+			 decresult) : module * pinterface =
+	let val decresult = U.decresult_subst (decresult,subst)
+	    val entries = map #2 decresult
+	    val pi = parameterize (ctx,entries)
+	    val (sbnd,sdec) = factor_decresult (U,decresult)
+	    val m = (#1 ctx,sbnd,sdec)
+	    val _ = show_interface pi
+	    val _ = show_module m
+	in  (m,pi)
+	end
 
-    fun tiltprim (ctxt : context, mainlab : label,
-		  imports) : module * pinterface =
-	wrap_decresult (ctxt, mainlab, imports, Basis.tiltprim)
+    fun finish_sealed ((ctx,subst):fixup, fp:filepos, U:label,
+			 pinterface, decresult) : module =
+	let val decresult = U.decresult_subst (decresult,subst)
+	    val (sbnd,sdec) = factor_decresult (U,decresult)
+	    val i = instantiate (ctx,pinterface)
+	    val {main=(v,sig_target),...} = i
+	    val (mainlab,mod_actual,sig_actual) =
+		(case (sbnd,sdec)
+		   of (SBND (_,BND_MOD(_,_,m)),
+		       SDEC (l,DEC_MOD(_,_,s))) => (l,m,s)
+		    | _ => error "factor_decresult returned malformed module")
+	    val ilctxt = #1 ctx
+	    val _ = msg "  Sealing\n"
+	    (*
+		We may have to build a new filepos fn () => (file,0,0)
+		here to get error reporting right.
+	    *)
+	    val m = seal (ilctxt, fp, mod_actual, sig_actual, sig_target)
+	    val sbnd = SBND(mainlab,BND_MOD(v,false,m))
+	    val sdec = SDEC(mainlab,DEC_MOD(v,false,sig_target))
+	    val module = (ilctxt,sbnd,sdec)
+	    val _ = show_module module
+	in  module
+	end
 
-    fun elab_dec (ctxt : context, mainlab : label, imports, filepos,
-		  dec : Ast.dec) : (module * pinterface) option =
-	wrap_decresultopt (ctxt, mainlab, imports,
-			   fn ilctxt =>
-			   Toil.xdec (ilctxt, filepos, dec))
+    fun elab_topspec (precontext, opened, filepos,
+		      topspec : Ast.topspec) : pinterface option =
+	let val (ilctx,fixup) = start_elab (precontext,opened)
+	    val entries = xtopspec (ilctx,filepos,topspec)
+	    val pi = finish_interface (fixup,entries)
+	in  SOME pi
+	end handle Fail => NONE
 
-    fun elab_specs (ctxt : context, imports, filepos,
-		    specs : Ast.spec list) : pinterface option =
-	wrap_sdecsopt (ctxt, imports,
-		       fn ilctxt =>
-		       Toil.xspecs (ilctxt, filepos, specs))
+    fun elab_primspec () : pinterface =
+	let val (_,sdecs) = Basis.tiltprim ()
+	    val entries = map CONTEXT_SDEC sdecs
+	    val pi = finish_interface (empty_fixup,entries)
+	in  pi
+	end
 
-    val add_unit    = Stats.timer("Elaboration:add_unit",add_unit)
-    val instantiate = Stats.timer("Elaboration:instantiate",instantiate)
-    val eq          = Stats.timer("Elaboration:eq",eq)
-    val seal        = Stats.timer("Elaboration:seal",seal)
-    val elab_dec    = Stats.timer("Elaboration:elab_dec",elab_dec)
-    val elab_specs  = Stats.timer("Elaboration:elab_specs",elab_specs)
+    fun elab_topdec (precontext, U:label, opened, filepos,
+		     topdec : Ast.dec) : (module * pinterface) option =
+	let val (ilctx,fixup) = start_elab (precontext,opened)
+	    val decresult = xtopdec (ilctx,filepos,topdec)
+	    val mpi = finish_inferred (fixup,U,decresult)
+	in  SOME mpi
+	end handle Fail => NONE
+
+    fun elab_sealed_topdec (precontext, U:label, opened,
+			    filepos, topdec : Ast.dec,
+			    pi:pinterface) : module option =
+	let val (ilctx,fixup) = start_elab (precontext,opened)
+	    val decresult = xtopdec (ilctx,filepos,topdec)
+	    val m = finish_sealed (fixup,filepos,U,pi,decresult)
+	in  SOME m
+	end handle Fail => NONE
+
+    fun elab_primdec (U:label, pi:pinterface) : module option =
+	let val (sbnds,sdecs) = Basis.tiltprim ()
+	    val decresult =
+		Listops.zip (map SOME sbnds) (map CONTEXT_SDEC sdecs)
+	    val fp = Error.nofilepos
+	    val m = finish_sealed (empty_fixup,fp,U,pi,decresult)
+	in  SOME m
+	end handle Fail => NONE
+
+    val eq = Stats.timer("Elaboration:eq",eq)
+    val elab_topspec = Stats.timer("Elaboration:elab_topspec",elab_topspec)
+    val elab_primspec = Stats.timer("Elaboration:elab_primspec",elab_primspec)
+    val elab_topdec = Stats.timer("Elaboration:elab_topdec",elab_topdec)
+    val elab_sealed_topdec = Stats.timer("Elaboration:elab_sealed_topdec",elab_sealed_topdec)
+    val elab_primdec = Stats.timer("Elaboration:elab_primdec",elab_primdec)
+
 end

@@ -1,270 +1,270 @@
-import group $libdir ^ "/smlnj-lib/group"
-include group "../Util/mapfile-util"
-include group "../Parser/mapfile-parse"
-include group "../Elaborator/mapfile-elaborate"
+include $libdir ^ "/smlnj-lib/desc"
+include "../Util/mapfile-util"
+include "../Parser/mapfile-parse"
+include "../Elaborator/mapfile-elaborate"
 
-source unit ANNOTATION = "annote.sig.sml" {Name}
-source unit Annotation = "annote.sml" {Name ANNOTATION}
+unit ANNOTATION = "annote.sig.sml" {Name}
+unit Annotation = "annote.sml" {Name ANNOTATION}
 
-source unit TRACEINFO = "traceinfo.sig.sml" {Name}
-source unit TraceInfo = "traceinfo.sml" {Name TRACEINFO}
+unit TRACEINFO = "traceinfo.sig.sml" {Name}
+unit TraceInfo = "traceinfo.sml" {Name TRACEINFO}
 
-source unit NIL = "nil.sig.sml" {
+unit NIL = "nil.sig.sml" {
 	Word32 TilWord32 Name Prim Annotation Sequence TraceInfo
 }
-source unit Nil = "nil.sml" {
+unit Nil = "nil.sml" {
 	Word32 TilWord32 Name Annotation TraceInfo Prim NIL Sequence
 	Util Listops
 }
 
-source unit PPNIL = "ppnil.sig.sml" {
+unit PPNIL = "ppnil.sig.sml" {
 	Name Nil Formatter
 }
-source interface Ppnil = "ppnil.int" {PPNIL}
-source unit Ppnil : Ppnil = "ppnil.sml" {
+interface Ppnil = "ppnil.int" {PPNIL}
+unit Ppnil : Ppnil = "ppnil.sml" {
 	Sequence Annotation Listops TilWord32 Int TextIO Util Name Prim
 	Word32 TraceInfo Nil Ppprim Formatter PPNIL
 }
-source interface PpnilHtml = "ppnil-html.int" {PPNIL}
-source unit PpnilHtml : PpnilHtml = "ppnil-html.sml" {
+interface PpnilHtml = "ppnil-html.int" {PPNIL}
+unit PpnilHtml : PpnilHtml = "ppnil-html.sml" {
 	Word32 TextIO Listops TilWord32 TraceInfo Sequence Stats Util
 	Name Prim Nil Ppprim Formatter String PPNIL Int
 }
 
-source unit NILERROR = "nilerror.sig.sml" {Nil}
-source unit NilError = "nilerror.sml" {
+unit NILERROR = "nilerror.sig.sml" {Nil}
+unit NilError = "nilerror.sml" {
 	List Util Ppnil NILERROR
 }
 
 
-source unit NILREWRITE = "rewrite.sig.sml" {Nil}
-source interface NilRewrite = "rewrite.int" {NILREWRITE}
-source unit NilRewrite : NilRewrite = "rewrite.sml" {
+unit NILREWRITE = "rewrite.sig.sml" {Nil}
+interface NilRewrite = "rewrite.int" {NILREWRITE}
+unit NilRewrite : NilRewrite = "rewrite.sml" {
 	Name List Sequence Prim Array TraceInfo Listops Util Nil
 	NILREWRITE
 }
 (* TypedNilRewrite typed_rewrite.sml *)
 
-source unit MEASURE = "measure.sig.sml" {Nil}
-source interface Measure = "measure.int" {MEASURE}
-source unit Measure : Measure = "measure.sml" {
+unit MEASURE = "measure.sig.sml" {Nil}
+interface Measure = "measure.int" {MEASURE}
+unit Measure : Measure = "measure.sml" {
 	List Nil MEASURE NilRewrite Stats Option Int
 }
 
-source unit ALPHA = "alpha_context.sig.sml" {Nil Name}
-source unit Alpha = "alpha_context.sml" {
+unit ALPHA = "alpha_context.sig.sml" {Nil Name}
+unit Alpha = "alpha_context.sml" {
 	Name Nil Listops ALPHA Option ListPair
 }
 
-source unit NILRENAME = "nilrename.sig.sml" {Name Nil Alpha}
-source unit NilRename = "nilrename.sml" {
+unit NILRENAME = "nilrename.sig.sml" {Name Nil Alpha}
+unit NilRename = "nilrename.sml" {
 	Sequence HashTable Alpha Ppnil Util Name Nil NILRENAME Stats
 	NilError NilRewrite Option
 }
 
-source unit SUBST = "subst.sig.sml" {Name}
-source unit Subst = "subst.sml" {
+unit SUBST = "subst.sig.sml" {Name}
+unit Subst = "subst.sml" {
 	Listops Util Name List SUBST TextIO
 }
 
-source unit NILSUBST = "nilsubst.sig.sml" {Nil SUBST}
-source unit NilSubst = "nilsubst.sml" {
+unit NILSUBST = "nilsubst.sig.sml" {Nil SUBST}
+unit NilSubst = "nilsubst.sml" {
 	Listops Util Name Nil List Ppnil NILSUBST Stats NilError
 	NilRewrite NilRename Option Subst
 }
 
-source unit NILDEFS = "nildefs.sig.sml" {Nil}
-source unit NilDefs = "nildefs.sml" {
+unit NILDEFS = "nildefs.sig.sml" {Nil}
+unit NilDefs = "nildefs.sml" {
 	NILDEFS Nil TilWord32 TilWord64 IlUtil Listops Prim Name
 	TraceInfo Sequence
 }
 
-source unit FREES = "frees.sig.sml" {Nil Name}
-source unit Frees = "frees.sml" {FREES Nil Name NilRewrite}
-
-source unit NILUTIL = "nilutil.sig.sml" {
-	Name TilWord32 Sequence Prim Nil NilSubst Alpha 
+unit NILUTIL = "nilutil.sig.sml" {
+	Name TilWord32 Sequence Prim Nil NilSubst Alpha
 }
-source interface NilUtil = "nilutil.int" {NILUTIL}
-source unit NilUtil : NilUtil = "nilutil.sml" {
+unit FREES = "frees.sig.sml" {Nil Name}
+unit Frees = "frees.sml" {FREES Nil Name NilRewrite}
+
+interface NilUtil = "nilutil.int" {NILUTIL}
+unit NilUtil : NilUtil = "nilutil.sml" {
 	Name Util TilWord32 TilWord64 Sequence Prim Array PRIMUTIL Listops
 	Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option
 	ListPair List TraceInfo Stats Int NilDefs NilRename GraphUtil Frees
 	CompilerControl
 }
 
-source unit TRAIL = "trail.sig.sml" {Nil}
-source unit Trail = "trail.sml" {
+unit TRAIL = "trail.sig.sml" {Nil}
+unit Trail = "trail.sml" {
 	Sequence ListPair SplaySetFn Util Name Int Word32 Prim Nil
 	NilUtil Alpha TRAIL
 }
 
-source unit NILCONTEXTPRE = "nilcontextpre.sig.sml" {Nil}
-source interface NilContextPre = "nilcontextpre.int" {NILCONTEXTPRE}
-source unit NilContextPre : NilContextPre = "nilcontextpre.sml" {
+unit NILCONTEXTPRE = "nilcontextpre.sig.sml" {Nil}
+interface NilContextPre = "nilcontextpre.int" {NILCONTEXTPRE}
+unit NilContextPre : NilContextPre = "nilcontextpre.sml" {
 	Name Listops Util NilError List ListPair Sequence Prim Nil Stats
 	Option Ppnil NilSubst NilUtil ListMergeSort NILCONTEXTPRE
 }
 
-source unit NilPrimUtilParam = "nilprimutilparam.sml" {
+unit NilPrimUtilParam = "nilprimutilparam.sml" {
 	Sequence Name Symbol Listops NIL PRIMUTILPARAM Prim Int Nil
 	IlUtil NilContextPre TilWord32 TraceInfo Stats CompilerControl
 }
-source unit NilPrimUtil = "nilprimutil.sml" {
+unit NilPrimUtil = "nilprimutil.sml" {
 	PrimUtil NilPrimUtilParam
 }
 
-source unit NORMALIZE = "normalize.sig.sml" {
+unit NORMALIZE = "normalize.sig.sml" {
 	TilWord32 Alpha Nil NilContextPre NilSubst
 }
-source interface Normalize = "normalize.int" {NORMALIZE}
-source unit Normalize : Normalize = "normalize.sml" {
+interface Normalize = "normalize.int" {NORMALIZE}
+unit Normalize : Normalize = "normalize.sml" {
 	Name List Sequence Listops Int Util NilError NilRename Stats Prim
 	Array TilWord32 Alpha Nil Ppnil NilUtil NilContextPre NilSubst
 	NORMALIZE NilPrimUtil NilDefs CompilerControl
 }
 
-source unit NILCONTEXT = "nilcontext.sig.sml" {Nil NILCONTEXTPRE}
-source unit NilContext = "nilcontext.sml" {
+unit NILCONTEXT = "nilcontext.sig.sml" {Nil NILCONTEXTPRE}
+unit NilContext = "nilcontext.sml" {
 	NILCONTEXT NilContextPre Normalize
 }
 
-source unit BOUNDCHECK = "bound_check.sig.sml" {Nil NilContext}
-source interface BoundCheck = "bound_check.int" {BOUNDCHECK}
-source unit BoundCheck : BoundCheck = "bound_check.sml" {
+unit BOUNDCHECK = "bound_check.sig.sml" {Nil NilContext}
+interface BoundCheck = "bound_check.int" {BOUNDCHECK}
+unit BoundCheck : BoundCheck = "bound_check.sml" {
 	Util Name Nil NilContext NilRewrite BOUNDCHECK
 }
 
-source unit TRACEOPS = "traceops.sig.sml" {
+unit TRACEOPS = "traceops.sig.sml" {
 	TraceInfo Nil NilContext Name
 }
-source unit TraceOps = "traceops.sml" {
+unit TraceOps = "traceops.sml" {
 	TraceInfo Nil NilContext Util Normalize TRACEOPS Name List Stats
 	NilUtil NilDefs
 }
 
-source unit NILSTATIC = "nilstatic.sig.sml" {Nil}
-source interface NilStatic = "nilstatic.int" {NILSTATIC NilContext}
-source unit NilStatic : NilStatic = "nilstatic.sml" {
+unit NILSTATIC = "nilstatic.sig.sml" {Nil}
+interface NilStatic = "nilstatic.int" {NILSTATIC NilContext}
+unit NilStatic : NilStatic = "nilstatic.sml" {
 	Prim NilRename Name Listops Sequence List Array Option Int
 	TilWord32 Word32 Bool Util NILSTATIC Nil Ppnil NilContext NilError
 	NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha
 	Trail BoundCheck NilPrimUtil NilPrimUtilParam NilDefs ListPair
 }
 
-source unit EXPTABLE = "NilOpts/exptable.sig.sml" {ORD_MAP Nil}
-source unit ExpTable = "NilOpts/exptable.sml" {
+unit EXPTABLE = "NilOpts/exptable.sig.sml" {ORD_MAP Nil}
+unit ExpTable = "NilOpts/exptable.sml" {
 	Array Word32 Name Sequence Listops Nil Prim Util TilWord64
 	EXPTABLE String BinaryMapFn Ppnil Int TraceInfo
 }
 
-source unit LINEARIZE = "linearize.sig.sml" {Nil}
-source interface Linearize = "linearize.int" {LINEARIZE}
-source unit Linearize : Linearize = "linearize.sml" {
+unit LINEARIZE = "linearize.sig.sml" {Nil}
+interface Linearize = "linearize.int" {LINEARIZE}
+unit Linearize : Linearize = "linearize.sml" {
 	Util Stats Nil Int Prim Array String Name Listops Sequence
 	LINEARIZE NilUtil Ppnil Normalize NilDefs List ExpTable
 }
 
-source unit REIFY = "reify.sig.sml" {Nil}
-source unit Reify = "reify.sml" {
+unit REIFY = "reify.sig.sml" {Nil}
+unit Reify = "reify.sml" {
 	Stats NilRename Normalize List Nil NilContext NilUtil Util
 	Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs
 	ListPair NilSubst Prim NilStatic CompilerControl
 }
 
-source unit TOCLOSURE = "toclosure.sig.sml" {Nil}
-source interface ToClosure = "toclosure.int" {TOCLOSURE}
-source unit ToClosure : ToClosure = "toclosure.sml" {
+unit TOCLOSURE = "toclosure.sig.sml" {Nil}
+interface ToClosure = "toclosure.int" {TOCLOSURE}
+unit ToClosure : ToClosure = "toclosure.sml" {
 	Util Name Nil Prim TraceInfo Sequence List Array Int TilWord32
 	NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool
 	NilDefs NilRename NilContext NilStatic
 }
 
-source unit VARARG = "vararg.sig.sml" {Nil NilContext}
-source interface Vararg = "vararg.int" {VARARG}
-source unit Vararg : Vararg = "vararg.sml" {
+unit VARARG = "vararg.sig.sml" {Nil NilContext}
+interface Vararg = "vararg.int" {VARARG}
+unit Vararg : Vararg = "vararg.sml" {
 	Name Util Listops Sequence List TraceInfo Int TilWord32 NilRename
 	VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify
 	Stats TraceOps Linearize NilDefs ListPair Prim Alpha NilStatic
 }
 
-source unit OPTIMIZE = "optimize.sig.sml" {Nil}
-source interface Optimize = "optimize.int" {OPTIMIZE}
-source unit Optimize : Optimize = "optimize.sml" {
+unit OPTIMIZE = "optimize.sig.sml" {Nil}
+interface Optimize = "optimize.int" {OPTIMIZE}
+unit Optimize : Optimize = "optimize.sml" {
 	Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64
 	TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize
 	OPTIMIZE Stats ExpTable TraceOps NilPrimUtil NilRename NilDefs
 	ListPair NilStatic Vararg NilSubst CompilerControl
 }
 
-source unit SPECIALIZE = "specialize.sig.sml" {Nil}
-source unit Specialize = "specialize.sml" {
+unit SPECIALIZE = "specialize.sig.sml" {Nil}
+unit Specialize = "specialize.sml" {
 	Util Listops Name Int Normalize List Prim Sequence Nil NilUtil
 	Ppnil LibBase SPECIALIZE NilContext NilDefs NilStatic ListPair
 	Stats
 }
 
-source unit TONIL = "tonil.sig.sml" {Il Nil}
-source interface ToNil = "tonil.int" {TONIL}
-source unit ToNil : ToNil = "tonil.sml" {
+unit TONIL = "tonil.sig.sml" {Il Nil}
+interface ToNil = "tonil.int" {TONIL}
+unit ToNil : ToNil = "tonil.sml" {
 	Name Listops Util Sequence List Prim Tyvar Int Word32 Array
 	TilWord64 TilWord32 Il Nil Ppil IlUtil IlContext IlStatic NilUtil
 	NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL
 	Option NilPrimUtil NilDefs ListPair NilRename CompilerControl
 }
 
-source unit PASS = "pass.sig.sml" {Nil}
+unit PASS = "pass.sig.sml" {Nil}
 
-source unit NILREDUCE = "reduce.sig.sml" {Nil}
-source unit NilReduce = "reduce.sml" {
+unit NILREDUCE = "reduce.sig.sml" {Nil}
+unit NilReduce = "reduce.sml" {
 	Nil NilUtil Ppnil PrimUtil NilSubst NILREDUCE
 }
 
-source unit Flatten = "flatten.sml" {
+unit Flatten = "flatten.sml" {
 	Nil NilUtil Ppnil PrimUtil NilSubst NilReduce PASS PRIMUTIL
 }
 
-source unit HOIST = "hoist.sig.sml" {Nil}
-source interface Hoist = "hoist.int" {HOIST}
-source unit Hoist : Hoist = "hoist.sml" {
+unit HOIST = "hoist.sig.sml" {Nil}
+interface Hoist = "hoist.int" {HOIST}
+unit Hoist : Hoist = "hoist.sml" {
 	Ppnil List Sequence Listops Int ORD_KEY SplayMapFn HOIST Nil
 	NilUtil ListPair Stats Name Util TraceInfo NilDefs NilRename
 	NilContext Normalize NilStatic
 }
 
-source unit ANALYZE = "analyze.sig.sml" {Nil Name}
-source unit Analyze = "analyze.sml" {
+unit ANALYZE = "analyze.sig.sml" {Nil Name}
+unit Analyze = "analyze.sml" {
 	Util Stats Sequence Array Prim Ppnil Int Nil Listops Name NilUtil
 	NilSubst ANALYZE NilDefs
 }
 
-source unit INLINE = "inline.sig.sml" {Nil}
-source unit Inline = "inline.sml" {
+unit INLINE = "inline.sig.sml" {Nil}
+unit Inline = "inline.sml" {
 	List NilRename TraceInfo Sequence Int Util Nil Listops Name
 	NilUtil NilSubst INLINE Analyze Bool Ppnil Stats
 }
 
-source unit Reorder = "reorder.sml" {
+unit Reorder = "reorder.sml" {
 	Nil NilUtil Stats Name Util Sequence TraceOps Listops Ppnil
 	NilDefs
 }
 
-source unit COERCEELIM = "coerce-elim.sig.sml" {Nil}
-source unit CoerceElim = "coerce-elim.sml" {
+unit COERCEELIM = "coerce-elim.sig.sml" {Nil}
+unit CoerceElim = "coerce-elim.sml" {
 	Nil NilRewrite Stats COERCEELIM Ppnil NilStatic NilRename List
 	Int Name Sequence NilRename
 }
 
-source unit SINGLETONELIM = "singleton-elim.sig.sml" {Nil NilContext}
-source unit SingletonElim = "singleton-elim.sml" {
+unit SINGLETONELIM = "singleton-elim.sig.sml" {Nil NilContext}
+unit SingletonElim = "singleton-elim.sml" {
 	Nil NilUtil NilContext Normalize SINGLETONELIM Name Util Listops NilSubst Option Prim Array NilDefs NilRename List
 }
 
-source unit LINKNIL = "linknil.sig.sml" {
+unit LINKNIL = "linknil.sig.sml" {
 	Il Nil NILUTIL NILCONTEXT PPNIL NORMALIZE TONIL VARARG
 }
-source interface Linknil = "linknil.int" {LINKNIL}
-source unit Linknil : Linknil = "linknil.sml" {
+interface Linknil = "linknil.int" {LINKNIL}
+unit Linknil : Linknil = "linknil.sml" {
 	Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil
 	ToNil Optimize Specialize Normalize Linearize ToClosure LINKNIL
 	Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic

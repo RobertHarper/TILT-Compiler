@@ -1,2 +1,1 @@
-source unit Test = "msort.sml" {}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "msort.sml" {}

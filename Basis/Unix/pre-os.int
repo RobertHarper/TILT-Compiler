@@ -1,0 +1,20 @@
+structure PreOS :
+  sig
+    eqtype syserror
+
+    exception SysErr of string * int option
+
+    structure Process :
+      sig
+	type status = int
+      end
+
+    structure IO :
+      sig
+	datatype iodesc = IODesc of int
+	type poll_flags = {rd : bool, wr : bool, pri : bool}
+	datatype poll_desc = PollDesc of (iodesc * poll_flags)
+	datatype poll_info = PollInfo of (iodesc * poll_flags)
+      end
+
+  end where type syserror = int

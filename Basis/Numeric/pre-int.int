@@ -1,0 +1,11 @@
+structure PreInt :
+sig
+	val imod : int * int -> int
+	val idiv : int * int -> int
+	val iabs : int -> int
+end
+
+structure PreLargeInt :
+sig
+	type int = int
+end

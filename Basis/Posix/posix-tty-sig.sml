@@ -93,7 +93,7 @@ signature POSIX_TTY =
 
 
     eqtype speed
-    val compareSpeed : speed * speed -> General.order
+    val compareSpeed : speed * speed -> order
     val speedToWord : speed -> SysWord.word
     val wordToSpeed : SysWord.word -> speed
     val b0     : speed

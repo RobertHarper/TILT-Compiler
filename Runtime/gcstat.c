@@ -15,11 +15,8 @@
 #include "gcstat.h"
 #include "show.h"
 
-#ifdef alpha_osf
-#include "interface_osf.h"
-#endif
-#ifdef rs_aix
-#include "interface_aix.h"
+#ifdef alpha
+#include "interface_alpha.h"
 #endif
 
 

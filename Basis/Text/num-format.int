@@ -1,0 +1,5 @@
+structure NumFormat :
+sig
+    val fmtWord : StringCvt.radix -> word -> string
+    val fmtInt  : StringCvt.radix -> int -> string
+end

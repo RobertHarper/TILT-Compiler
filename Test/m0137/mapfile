@@ -1,2 +1,1 @@
-source unit Test = "kittmergesort.sml" {}
-make executable "Test." ^ $target ^ ".exe" {Test}
+unit Test = "kittmergesort.sml" {}

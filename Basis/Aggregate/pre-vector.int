@@ -1,0 +1,9 @@
+structure PreVector :
+sig
+	val maxLen : int
+	val checkLen : int -> unit
+	val arrayFromList' : int * 'a list -> 'a array (* known length *)
+	val arrayFromList : 'a list -> 'a array
+	val vectorFromList' : int * 'a list -> 'a vector (* known length *)
+	val vectorFromList : 'a list -> 'a vector
+end

@@ -1,6 +1,6 @@
-#if (defined alpha_osf)
+#if (defined alpha)
 #include <float.h>
-#elif (defined solaris)
+#elif (defined sparc)
 #include <ieeefp.h>
 #endif
 #include "errno.h"
@@ -18,7 +18,7 @@
 #include <sys/procset.h>
 #include <sys/processor.h>
 #include <unistd.h>
-#ifdef solaris
+#ifdef sparc
 #include <thread.h>
 #endif
 #include <pthread.h>
@@ -30,9 +30,9 @@ int NumThread     = 150;
 int NumProc       = 1;
 int RotateProc = 0;
 int threadDiag = 0;
-#if defined(solaris)
+#if defined(sparc)
 int accountingLevel = 1;
-#elif defined(alpha_osf)
+#elif defined(alpha)
 int accountingLevel = 0;
 #endif
 extern int usageCount;
@@ -983,9 +983,9 @@ static void work(Proc_t *proc)
   /* Wait for next user thread and remove from queue. Map processor. */
   while (th == NULL) {
     if (NumReadyJob() == 0)
-#if   defined(alpha_osf)
+#if   defined(alpha)
       sched_yield();
-#elif defined(solaris)
+#elif defined(sparc)
       thr_yield();
 #else
 #error "fix work() for your OS/processor"
@@ -1001,7 +1001,7 @@ static void work(Proc_t *proc)
       FetchAndAdd(&NumActiveProc, -1);
       if (diag)
 	printf("Processor exiting\n");
-#ifdef alpha_osf
+#ifdef alpha
       /* The Alpha-OSF does not like pthread_exit.  It complains with:
 %DECthreads bugcheck (version V3.15-413), terminating execution.
 % Reason:  Termination exception reached last chance handler in normal thread.
@@ -1023,8 +1023,8 @@ Abort
   switch (th->request) {
 
     case YieldRequest: {
-#ifdef solaris
-      th->saveregs[16] = (unsigned long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
+#ifdef sparc
+      th->saveregs[16] = (unsigned long) th;  /* load_regs_forC on sparc expects thread pointer in %l0 */
 #endif	
       mapThread(proc,th);
       procChangeState(proc, Mutator, 27);
@@ -1094,7 +1094,7 @@ static void* proc_go(void* untypedProc)
      contention for the first active processor (so does @rotateProc,
      but this is automatic).  */
   if (NumProc > 1) {
-#ifdef solaris
+#ifdef sparc
     int status = processor_bind(P_LWPID, P_MYID, proc->processor, NULL);
     if (status != 0)
       printf("processor_bind on %d failed with %d\n", proc->processor, status);
@@ -1124,7 +1124,7 @@ void thread_go(ptr_t thunk)
   int i, status;
   pthread_t discard;
 
-#ifdef solaris
+#ifdef sparc
   int curproc = -1, active = 0;
   int activeProcs[64];
   processor_info_t infop;
@@ -1147,14 +1147,14 @@ void thread_go(ptr_t thunk)
   AddJob(mainThread);
 
   /* Create system threads that run off the user thread queue */
-#ifdef solaris
+#ifdef sparc
   if (curActive >= active)
     curActive = 0;
 #endif
   for (i=0; i<NumProc; i++) {
     pthread_attr_t attr;
     struct sched_param schedParam;
-#ifdef solaris
+#ifdef sparc
     Procs[i].processor = activeProcs[curActive++];
     if (curActive >= active)
       curActive = 0;
@@ -1181,7 +1181,7 @@ void thread_go(ptr_t thunk)
 	     Procs[i].procid, Procs[i].processor, Procs[i].pthread);
   }
 
-#ifdef solaris
+#ifdef sparc
   if (threadDiag) {
     printf("Using processors ");
     for (i=0; i<NumProc; i++) 
@@ -1200,9 +1200,9 @@ void thread_go(ptr_t thunk)
   
   /* Wait until all the processors have stopped */
   while (NumActiveProc > 0) {
-#if   defined(alpha_osf)
+#if   defined(alpha)
       sched_yield();
-#elif defined(solaris)
+#elif defined(sparc)
       thr_yield();
 #else
 #error "update for your OS/processor"

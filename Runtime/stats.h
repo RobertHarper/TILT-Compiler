@@ -3,7 +3,7 @@
 #ifndef _stats_h
 #define _stats_h
 
-#ifdef alpha_osf
+#ifdef alpha
 #include <sys/sysmisc.h>	/* for struct timespec */
 #endif
 #include <sys/time.h>

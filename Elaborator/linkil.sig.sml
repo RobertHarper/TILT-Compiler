@@ -10,38 +10,28 @@ sig
     val ShowInterface : bool ref
     val ShowContext : bool ref
     val LinkIlDebug : bool ref
+    val compiling_tiltprim : bool ref
 
-    type context
-    type interface
     type pinterface
+    type precontext = (label * pinterface) list
+    type opened = label list
 
     val blastOutPinterface : Blaster.outstream -> pinterface -> unit
     val blastInPinterface  : Blaster.instream -> pinterface
+    val blastInPinterfaceParm : Blaster.instream -> Name.LabelSet.set
 
     val parameters : pinterface -> Name.LabelSet.set
-    val slice : context * Name.LabelSet.set -> Name.LabelSet.set
 
-    val empty : context
-    val add_unit : context * label * interface -> context
+    val eq : precontext * pinterface * pinterface -> bool
 
-    val instantiate  : context * pinterface -> interface option
-
-    (*
-	For eq and seal, both objects must have been created or
-	instantiated in a prefix of the given context.
-    *)
-    val eq   : context * interface * interface -> bool
-    val seal : context * string * module * interface -> module option (* source *)
-
-    val unitlabel : string -> label
-    type imports = Il.labels
-
-    val tiltprim : context * label * imports -> module * pinterface
-
-    val elab_dec : context * label * imports * filepos * Ast.dec
-	-> (module * pinterface) option
-
-    val elab_specs : context * imports * filepos * Ast.spec list
+    val elab_topspec : precontext * opened * filepos * Ast.topspec
 	-> pinterface option
+    val elab_primspec : unit -> pinterface
+    val elab_topdec : precontext * label * opened * filepos * Ast.dec
+	-> (module * pinterface) option
+    val elab_sealed_topdec :
+	precontext * label * opened * filepos * Ast.dec * pinterface
+	-> module option
+    val elab_primdec : label * pinterface -> module option
 
 end

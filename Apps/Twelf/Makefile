@@ -6,10 +6,15 @@
 # ---------------------------------------------------------------
 
 # What is SML/NJ called?
-sml = /afs/cs/project/fox/member/swasey/ml96/Apps/Twelf/bin/sml110
+sml = SML_VERSION=110 sml
+
+# What is TILT called?
+tilt = ../../Bin/tilt-nj
+
+target=`uname -p`
 
 # Twelf root directory
-twelfdir = /afs/cs/project/fox/member/swasey/ml96/Apps/Twelf
+twelfdir = .
 
 # ---------------------------------------------------------------
 # Do not edit the following lines
@@ -17,11 +22,14 @@ twelfdir = /afs/cs/project/fox/member/swasey/ml96/Apps/Twelf
 
 version = "1.2"
 
-default : twelf-server twelf-emacs
+default : twelf-server
 
-all : twelf-server twelf-sml twelf-emacs
+all : twelf-server
 
-twelf-server: ; 
+twelf-server:
+	$(tilt) -vv -c TwelfServer -o bin/twelf-server-$(target) mapfile-twelf-server
+
+old-twelf-server: ; 
 	@echo "*************************************************"
 	@echo "Twelf $(version): Server"
 	@echo "*************************************************"	 
@@ -31,7 +39,7 @@ twelf-server: ;
 	> bin/twelf-server ;
 	chmod a+x bin/twelf-server ;
 
-twelf-sml: ; 
+old-twelf-sml: ; 
 	@echo "*************************************************"
 	@echo "Twelf $(version): SML"
 	@echo "*************************************************"	 
@@ -41,7 +49,7 @@ twelf-sml: ;
 	> bin/twelf-sml ;
 	chmod a+x bin/twelf-sml ;
 
-twelf-emacs: ; 
+old-twelf-emacs: ; 
 	@echo "*************************************************"
 	@echo "Twelf $(version): Emacs"
 	@echo "*************************************************"	 
@@ -58,3 +66,4 @@ twelf-emacs: ;
 
 clean: ;
 	rm -rf $(twelfdir)/src/*/CM ;
+	rm -rf $(twelfdir)/src/*/TM ;

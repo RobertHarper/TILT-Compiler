@@ -1,55 +1,78 @@
 (*
-	The master maintains three DAGs, called the compilation graph,
-	the unit graph, and the interface graph.  The master could get
-	by with a single graph, of course, but it is hoped that a
-	clear separation makes the code easier to follow.
+	The master starts by reading a project description and
+	throwing out interfaces and units that are not relevant to the
+	user's command line.
 
-	The compilation graph has an initial node, a node for every
-	entry in the group, an arrow initial -> b for every executable
-	and library b in the group, and an arrow a -> b when neither a
-	nor b is initial and b must be up to date before a can be
-	compiled.  The compilation graph determines what units,
-	interfaces, libraries, and executables need to be brought up
-	to date and in what order.  Compilation stops when every node
-	reachable from the initial node is up to date.  In contrast to
-	the unit and interface graphs, the compilation graph may have
-	several nodes for each compilation unit because of
-	Group.CHECKU.
+	The master maintains a DAG that has a node for every
+	(relevant) entry in the project description, and an arrow a ->
+	b when a occurs free in b.  Every node has a mutable status;
+	the possible status values are:
 
-	The unit graph has a node for every unit and an arrow a -> b
-	when the implementation of a depends on b.  This dependency
-	information comes from the group, not from examining compiler
-	output so that side effects are not lost.  The unit graph is
-	used to link executables and to pack implemented units into
-	libraries.
+		WAITING: some prerequisite nodes do not have up to
+			 date pinterface files
+		READY: waiting for analysis
+		PENDING: waiting for compilation.  A pending node may
+			 have an up to date pinterface file; PENDING
+			 values carry a boolean.
+		WORKING: compilation in progress and pinterface file
+			 is out of date.
+		PROCEEDING: compilation in progress and pinterface
+			    file is up to date.
+		PENDING': waiting for assembly.  pinterface and asm
+			  files are up-to-date.
+		WORKING': assembly in progress
+		DONE: up to date
 
-	The interface graph has a node for every unit and an arrow a
-	-> b when the interface of a depends on b.  This dependency
-	information comes from examining compiler output, not the
-	group so it is not cluttered with implementation dependencies.
-	The interface graph is used to build elaboration contexts and
-	to pack imported units into libraries.
+	The status transition graphs are status.dot (for units) and
+	status-iface.dot (for interfaces).  Status values carry times
+	so that we can measure:
 
-	Other state maintained by the master includes an equivalence
-	relation on compiled interface CRCs, group file order
-	information, and a list of slaves that have announced
-	themselves.
+		total time:  time to go from READY to DONE
+		slave time:  time spent in WORKING and PROCEEDING
+		master time: time spent in WORKING'
+
+	NB a node C transitions from WAITING to READY when every node
+	reachable from C has an up to date pinterface file.  One might
+	suppose that if every neighbor of C has an up to date
+	pinterface file, then every node reachable from C does.  This
+	is false.  Consider the project description
+
+		interface I = "I.int" { }
+		unit A = "A.sml" { }
+		unit B : I = "B.sml" { A }
+		unit C = "C.sml" { B }
+
+	The neighbors of C are {B}.  The nodes reachable from C are
+	{I, A, B}.  I may be compiled before A so that B may have an
+	up to date pinterface file before A.  Thus, it is possible for
+	every neighbor of C to have an up to date pinterface file
+	while there exists a node reachable from C that does not.
+
+	The master maintains worklists that classify nodes according
+	to their status, track available and working slaves, and track
+	local assembly jobs.  Bug: The master does not notice when a
+	slave is "lost" and will not terminate while waiting for a
+	response from such a slave.
+
+XXX:
+	Check that every source file named by the project description exists.
 *)
-functor Master (val basis :
-		    {group : unit -> string,
-		     fixup : ExtSyn.groupfile -> ExtSyn.groupfile} option)
-    :> MASTER =
+structure Master :> MASTER =
 struct
-    structure E = ExtSyn
-    structure Ue = UnitEnvironment
-    structure FileCache = Compiler.FileCache
-    structure VarMap = Name.VarMap
-    structure StringSet = Util.StringSet
-    structure StringMap = Util.StringMap
-    structure VarSet = Name.VarSet
+    structure I = IntSyn
+    structure Set = Name.LabelSet
+    type label = Name.label
 
     val MasterDiag = Stats.ff("MasterDiag")
     fun msg str = if (!MasterDiag) then print str else ()
+
+    val MasterVerbose = Stats.ff("MasterVerbose")
+    fun verbose str = if (!MasterVerbose) then print str else ()
+
+    val MasterVVerbose = Stats.ff("MasterVVerbose")
+    fun vverbose str = if (!MasterVVerbose) then print str else ()
+
+    val CheckpointVerbose = Stats.tt("CheckpointVerbose")
 
     fun print_strings (skip : int) (ss : string list) : unit =
 	let val spaces = "    "
@@ -64,35 +87,28 @@ struct
 	in  ignore(foldl f skip ss)
 	end
 
-    val Checkpoint = Stats.ff "Checkpoint"
-    val CheckpointVerbose = Stats.ff "CheckpointVerbose"
-    val ShowEnable = Stats.ff "ShowEnable"
-    val ShowUptodate = Stats.ff "ShowUptodate"
-    val ShowFinalReport = Stats.ff "ShowFinalReport"
-
     val error = fn s => Util.error "master.sml" s
-    val reject = fn s => raise (Compiler.Reject s)
+    val reject = Util.reject
 
-    (*
-	WAITING: prerequisites not up to date
-	READY: waiting for planning
-	PENDING: out of date, waiting for compilation
-	WORKING: out of date, slave working
-	PROCEEDING: interface up to date, slave working
-	PENDING': asm up to date, waiting for assembly
-	WORKING': assembling
-	DONE: up to date
+    type targets = label list
 
-	The status transition graphs are status.dot (for units),
-	status-iface.dot (for interfaces), and status-cmd.dot (for
-	commands).  We measure the following times:
+    fun is_source_iexp (iexp:I.iexp) : bool =
+	(case iexp
+	   of I.SRCI _ => true
+	    | I.PRIMI _ => true
+	    | _ => false)
+    fun is_source_uexp (uexp:I.uexp) : bool =
+	(case uexp
+	   of I.PRECOMPU _ => false
+	    | I.COMPU _ => false
+	    | _ => true)
+    fun is_source_pdec (pdec:I.pdec) : bool =
+	(case pdec
+	   of I.IDEC (_,iexp,_) => is_source_iexp iexp
+	    | I.SCDEC _ => false
+	    | I.UDEC (_,uexp,_) => is_source_uexp uexp)
 
-	total time:  time to go from READY to DONE
-	slave time:  time spent in WORKING and PROCEEDING
-	master time: time spent in WORKING'
-     *)
     type time = Time.time
-    type plan = Update.plan
     type readytime = time
     type workingtime = time * time	(* ready, working *)
     type slavetime = time * time	(* ready, slave *)
@@ -102,400 +118,313 @@ struct
     datatype status =
 	WAITING
       | READY of readytime
-      | PENDING of readytime * plan
-      | WORKING of workingtime * plan
-      | PROCEEDING of workingtime * plan
-      | PENDING' of slavetime * plan
-      | WORKING' of workingtime' * plan
+      | PENDING of readytime * bool	(* pinterface up to date? *)
+      | WORKING of workingtime
+      | PROCEEDING of workingtime
+      | PENDING' of slavetime
+      | WORKING' of workingtime'
       | DONE of totaltime
 
-    type iface = Paths.iface
-    type compunit = Paths.compunit
-    type var = Name.var
-
-    datatype iface_node =
-	SRCI of Paths.iface * Update.imports
-      | COMPI of Paths.iface
-
-    fun iface_paths (iface : iface_node) : Paths.iface =
-	(case iface
-	   of SRCI (p,_) => p
-	    | COMPI p => p)
-
-    fun iface_id (n : iface_node) : string =
-	(case n
-	   of SRCI (p,_) => "source interface " ^ Paths.ifaceName p
-	    | COMPI p => "compiled interface " ^ Paths.ifaceName p)
-
-    datatype unit_node =
-	SRCU of Paths.compunit * var option * Update.imports
-      | COMPU of Paths.compunit * var
-      | PRIMU of Paths.compunit * Update.imports
-      | IMPORTU of Paths.compunit * var
-      | CHECKU of var * Paths.compunit * Paths.iface
-
-    fun unit_paths (unit : unit_node) : Paths.compunit =
-	(case unit
-	   of SRCU (p,_,_) => p
-	    | COMPU (p,_) => p
-	    | PRIMU (p,_) => p
-	    | IMPORTU (p,_) => p
-	    | CHECKU (_,p,_) => p)
-
-    fun unit_id (n : unit_node) : string =
-	(case n
-	   of SRCU (p,_,_) => "source unit " ^ Paths.unitName p
-	    | COMPU (p,_) => "compiled unit " ^ Paths.unitName p
-	    | PRIMU (p,_) => "primitive unit " ^ Paths.unitName p
-	    | IMPORTU (p,_) => "imported unit " ^ Paths.unitName p
-	    | CHECKU (_,p,_) => "checked unit " ^ Paths.unitName p)
-
-    datatype node =
-	UNIT of unit_node
-      | IFACE of iface_node
-      | LINK of Paths.exe
-      | PACK of
-	{lib:Paths.lib,
-	 imports:VarSet.set,
-	 units:VarSet.set,
-	 ifaces:VarSet.set,
-	 values: (E.id * E.exp) list}
-      | INITIAL
-
-    fun node_id (n : node) : string =
-	(case n
-	   of UNIT n' => unit_id n'
-	    | IFACE n' => iface_id n'
-	    | LINK p => "executable " ^ Paths.exeFile p
-	    | PACK {lib,...} => "library " ^ Paths.libDir lib
-	    | INITIAL => "end of compilation")
+    fun statusName WAITING = "waiting"
+      | statusName (READY _) = "ready"
+      | statusName (PENDING (_,pinterface)) =
+	    "pending(" ^ Bool.toString pinterface ^ ")"
+      | statusName (WORKING _) = "working"
+      | statusName (PROCEEDING _) = "proceeding"
+      | statusName (WORKING' _) = "working'"
+      | statusName (PENDING' _) = "pending'"
+      | statusName (DONE _) = "done"
 
     local
-	structure Equiv :> EQUIV where type elem = Crc.crc =
+	structure Key =
 	struct
-	    structure StringEquiv = Equiv(StringMap)
-	    type elem = Crc.crc
-	    type equiv = StringEquiv.equiv
-	    val empty = StringEquiv.empty
-	    fun insert (e,a,b) =
-		let val a = Crc.toString a
-		    val b = Crc.toString b
-		in  StringEquiv.insert (e, a, b)
-		end
-	    fun equiv e =
-		let val eq = StringEquiv.equiv e
-		in  fn (a,b) => eq (Crc.toString a, Crc.toString b)
-		end
+	    type hash_key = Name.label
+	    val hashVal = HashString.hashString o Name.label2string
+	    val sameKey = Name.eq_label
 	end
-
-	structure VarKey =
-	struct
-	    type hash_key = Name.var
-	    val hashVal = Word.fromInt
-	    val sameKey = (op= : var * var -> bool)
-	end
-	structure VarNode = Node(structure Key = VarKey
-				 val toString = Name.var2string)
-	structure Graph = Graph(VarNode)
-	structure Agraph = LabelGraph(SpeedUpGraph(Graph))
+	structure Node = Node(structure Key = Key
+			      val toString = Name.label2string)
+	structure Graph = LabelGraph(SpeedUpGraph(Graph(Node)))
 
 	type attr = {status : status ref,
-		     node : node}
+		     pdec : I.pdec}
 
-	type cgraph = attr Agraph.graph
-	type ugraph = Graph.graph
-	type igraph = Graph.graph
+	type graph = attr Graph.graph
 
-	datatype order =
-	    REV of var list	(* backwards *)
-	  | BOTH of var list * var list	(* backwards, forwards *)
+	val dummy : label = Name.internal_label "dummy"
 
-	val dummy : var = Name.fresh_var()
-	val equiv : Equiv.equiv ref = ref (Equiv.empty)
-	val cgraph : cgraph ref = ref (Agraph.empty dummy)
-	val ugraph : ugraph ref = ref (Graph.empty dummy)
-	val igraph : igraph ref = ref (Graph.empty dummy)
-	val order : order ref = ref (REV nil)
-	val pos_ref : (var -> Group.pos) option ref = ref NONE
+	val graph : graph ref = ref (Graph.empty dummy)
+	val desc : I.desc ref = ref nil
 
-	(* These ! at each invocation. *)
-	fun cwrap (f : cgraph -> 'a -> 'b) : 'a -> 'b = fn x => f (!cgraph) x
-	fun uwrap (f : ugraph -> 'a -> 'b) : 'a -> 'b = fn x => f (!ugraph) x
-	fun iwrap (f : igraph -> 'a -> 'b) : 'a -> 'b = fn x => f (!igraph) x
+	fun wrap (f : graph -> 'a -> 'b) : 'a -> 'b = fn x => f (!graph) x
 
-	val lookup_node : var -> attr = cwrap Agraph.attribute
+	val lookup : label -> attr = wrap Graph.attribute
 
-	fun unit_var (v : var) : var option =
-	    let val {node,...} = lookup_node v
-	    in  (case node
-		   of UNIT (CHECKU (U,_,_)) => unit_var U
-		    | UNIT _ => SOME v
-		    | _ => NONE)
+	fun get_targets (desc:I.desc, targets:targets) : targets =
+	    let val labels = map I.P.label desc
+		val bound = Set.addList(Set.empty,labels)
+		fun notbound t = not(Set.member(bound,t))
+	    in  (case List.find notbound targets
+		   of NONE => if null targets then labels else targets
+		    | SOME bad =>
+			reject (Name.label2longname bad ^
+				" not defined in project"))
 	    end
+
+    fun check_file (desc:I.desc, file:string) : unit =
+	let fun bad (why:string) : 'a =
+		reject(concat[file, " conflicts with ",why])
+	    val file = OS.Path.mkCanonical file
+	    fun checkarc (arc:string) : unit =
+		(case arc
+		   of "TM" => bad "TILT's private files"
+		    | _ => ())
+	    val {arcs,...} = OS.Path.fromString file
+	    val _ = app checkarc arcs
+	    fun checksrc (l:label, src:string, pos:Pos.pos) : unit =
+		if src = file then
+		    bad (Name.label2longname l ^ " (" ^
+			 Pos.tostring pos ^ ")")
+		else ()
+	    fun check (pdec:I.pdec) : unit =
+		(case pdec
+		   of I.IDEC (I,iexp,pos) =>
+			(case I.P.I.src' iexp
+			   of SOME src => checksrc(I,src,pos)
+			    | NONE => ())
+		    | I.SCDEC _ => ()
+		    | I.UDEC (U,uexp,pos) =>
+			(case I.P.U.src' uexp
+			   of SOME src => checksrc(U,src,pos)
+			    | NONE => ()))
+	    val _ = app check desc
+	in  ()
+	end
 
     in
-	fun reset_graph() : unit =
-	    (equiv := Equiv.empty;
-	     cgraph := Agraph.empty dummy;
-	     ugraph := Graph.empty dummy;
-	     igraph := Graph.empty dummy;
-	     order := REV nil;
-	     pos_ref := NONE)
-
-	fun add_eq (crc : Crc.crc, crc' : Crc.crc) : unit =
-	    equiv := Equiv.insert (!equiv, crc, crc')
-
-	fun eq (crcs : Crc.crc * Crc.crc) : bool =
-	    Equiv.equiv (!equiv) crcs
-
-	fun sort (nodes : var list) : var list =
-	    let val set = VarSet.addList(VarSet.empty, nodes)
-		val order =
-		    (case !order
-		       of REV vars => rev vars
-			| BOTH (_,vars) => vars)
-	    in  List.filter (fn v => VarSet.member (set,v)) order
-	    end
-
-	fun add_node (v : var, node : node) : unit =
-	    let val revOrder =
-		    (case !order
-		       of REV vars => vars
-			| BOTH (vars,_) => vars)
-		val _ = order := REV(v :: revOrder)
+	fun set_desc (descfile:string, targets:targets,
+		      linking:bool, files:string list) : unit =
+	    let val d = Project.empty {linking=linking}
+		val d = Project.add_include(d,descfile)
+		val d = Project.finish d
+		val _ = app (fn f => check_file(d,f)) files
+		val numEntries = length d
+		val TiltExn = Name.unit_label "TiltExn"
+		val targets = get_targets(d,targets)
+		val targets =
+		    if linking then TiltExn :: targets
+		    else targets
+		val d = Compiler.gc_desc(d,targets)
+		val numTargets = length d
+		val g = Graph.empty dummy
+		val ready = READY(Time.now())
+		fun add_pdec (pdec : I.pdec) : unit =
+		    let val l = I.P.label pdec
+			val f = I.free_pdec pdec
+			val status =
+			    if Set.isEmpty f then ready else WAITING
+			val attr = {status=ref status, pdec=pdec}
+			val _ = Graph.insert_node g (l,attr)
+			fun addedge (l' : label) : unit =
+			    Graph.insert_edge g (l,l')
+			val _ = Set.app addedge f
+		    in  ()
+		    end
+		val _ = app add_pdec d
+		val numNodes = Graph.nodecount g
+		val numEdges = Graph.edgecount g
+		val i2s = Int.toString
 		val _ =
-		    (case node
-		       of UNIT (CHECKU _) => ()
-			| UNIT _ =>
-			    (Graph.insert_node (!ugraph) v;
-			     Graph.insert_node (!igraph) v)
-			| _ => ())
-		val attr = {status=ref WAITING, node=node}
-		val _ = Agraph.insert_node (!cgraph) (v,attr)
-	    in  ()
+		    verbose (concat["Project has ",i2s numEntries,
+				    " entries (", i2s numTargets,
+				    " relevant).\n\
+				    \Dependency graph has ",
+				    i2s numNodes, " nodes and ",
+				    i2s numEdges, " edges.\n"])
+	    in  graph := g;
+		desc := d
 	    end
 
-	fun add_edge (src : var) (dest : var) : unit =
-	    (Agraph.insert_edge (!cgraph) (src,dest);
-	     (case (unit_var src, unit_var dest)
-		of (SOME src', SOME dest') =>
-		    Graph.insert_edge (!ugraph) (src',dest')
-		 | _ => ()))
+	fun sort (nodes : label list) : label list =
+	    let val set = Set.addList(Set.empty, nodes)
+		val order = map I.P.label (!desc)
+	    in  List.filter (fn l => Set.member (set,l)) order
+	    end
 
-	fun add_interface_edge (src : var) (dest : var) : unit =
-	    Graph.insert_edge (!igraph) (src,dest)
+	fun get_nodes () : label list =
+	    Graph.nodes (!graph)
 
-	fun has_interface_edges (src : var) : bool =
-	    not (null (Graph.edges (!igraph) src))
+	val get_pdec : label -> I.pdec = #pdec o lookup
 
-	val get_node : var -> node = #node o lookup_node
+	fun get_status (node : label) : status =
+	    !(#status(lookup node))
 
-	fun get_status (node : var) : status = !(#status(lookup_node node))
+	fun set_status (node : label, s : status) : unit =
+	    (#status(lookup node)) := s
 
-	fun set_status (node : var, s : status) : unit =
-	    (#status(lookup_node node)) := s
+	val get_dependents : label -> label list = wrap Graph.edgesRev
 
-	val get_dependents : var -> var list = cwrap Agraph.edgesRev
+	val get_prerequisites : label -> label list = wrap Graph.edges
 
-	val get_prerequisites : var -> var list = cwrap Agraph.edges
+	val get_reachable : label -> label list =
+	    (wrap Graph.reachable) o get_prerequisites
 
-	val units_only : var list -> var list =
-	    List.mapPartial unit_var
-
-	fun get_units () : var list =
-	    Graph.nodes (!ugraph)
-
-	val get_unit_edges : var -> var list =
-	    uwrap Graph.edges
-
-	val get_interface_edges : var -> var list =
-	    iwrap Graph.edges
-
-	val get_reachable : var list -> var list =
-	    cwrap Agraph.reachable
-
-	val get_unit_reachable : var list -> var list =
-	    uwrap Graph.reachable
-
-	val get_interface_reachable : var list -> var list =
-	    iwrap Graph.reachable
-
-	fun graphSize () : int * int =
-	    (Agraph.nodecount (!cgraph), Agraph.edgecount (!cgraph))
-
-	fun set_pos (f : var -> Group.pos) : unit = pos_ref := SOME f
-
-	fun get_pos (node : var) : Group.pos = valOf (!pos_ref) node
+	fun get_desc () : I.desc = !desc
 
     end
 
-    fun has_ascribed_iface (iface : var) (v : var) : bool =
-	(case get_node v
-	   of UNIT unit_node =>
-		(case unit_node
-		   of SRCU (_,SOME i,_) => i = iface
-		    | COMPU (_,i) => i = iface
-		    | IMPORTU (_,i) => i = iface
+    fun badStatus (node : label, status : status, what : string) =
+	error (Name.label2longname node ^ " was " ^
+	       statusName status ^ "; " ^ what)
+
+    fun getReadyTime (node : label) : time =
+	(case get_status node
+	   of READY t => t
+	    | PENDING (t, _) => t
+	    | WORKING t => #1 t
+	    | PROCEEDING t => #1 t
+	    | PENDING' t => #1 t
+	    | WORKING' t => #1 t
+	    | status => badStatus (node, status, "getting ready time"))
+
+    fun getWorkingTime (node : label) : time =
+	(case get_status node
+	   of WORKING t => #2 t
+	    | PROCEEDING t => #2 t
+	    | status => badStatus (node, status, "getting working time"))
+
+    fun getWorking'Time (node : label) : time =
+	(case get_status node
+	   of WORKING' t => #3 t
+	    | status => badStatus (node, status, "getting working' time"))
+
+    fun getTotalTimes (node : label) : totaltime =
+	(case get_status node
+	   of DONE t => t
+	    | status => badStatus (node, status, "getting total times"))
+
+    fun getSlaveTime (node : label) : time =
+	(case get_status node
+	   of PENDING' t => #2 t
+	    | WORKING' t => #2 t
+	    | DONE t => #2 t
+	    | status => badStatus (node, status, "getting slave time"))
+
+    val getMasterTime : label -> time = #3 o getTotalTimes
+
+    fun markReady (node : label) : unit =
+	(case get_status node
+	   of WAITING => set_status (node, READY (Time.now()))
+	    | READY _ => ()
+	    | status => badStatus (node, status, "making ready"))
+
+    (*
+	For every a -> b, mark a READY if for every node c reachable
+	from a, c has an up to date interface.
+    *)
+    fun enable (chatty : bool, b : label) : unit =
+	let
+	    fun hasInterface' (c' : label) : bool =
+		(case get_status c'
+		   of WAITING => false
+		    | READY _ => false
+		    | PENDING (_,pinterface) => pinterface
+		    | WORKING _ => false
+		    | PROCEEDING _ => true
+		    | PENDING' _ => true
+		    | WORKING' _ => true
+		    | DONE _ => true)
+	    fun interface (c : label) : label =
+		(case get_pdec c
+		   of I.IDEC _ => c
+		    | I.SCDEC (_,I,_) => I
+		    | I.UDEC (_,uexp,_) =>
+			(case I.P.U.asc' uexp
+			   of SOME I => I
+			    | NONE => c))
+	    val hasInterface : label -> bool =
+		hasInterface' o interface
+	    fun now_ready (a : label) : bool =
+		(case get_status a
+		   of WAITING =>
+			let val reachable = get_reachable a
+			in  Listops.andfold hasInterface reachable
+			end
 		    | _ => false)
-	    | _ => false)
-
-    fun ascribed_iface (v : var) : var =
-	(case get_node v
-	   of UNIT unit_node =>
-		(case unit_node
-		   of SRCU (_,SOME i,_) => i
-		    | COMPU (_,i) => i
-		    | IMPORTU (_,i) => i
-		    | CHECKU (u,_,_) => ascribed_iface u
-		    | _ => error "ascribed_iface saw unit with inferred iface")
-	    | _ => error "ascribed_iface saw non-unit")
-
-    fun get_iface_paths' (iface : var) : Paths.iface option =
-	(case get_node iface
-	   of IFACE iface_node => SOME (iface_paths iface_node)
-	    | _ => NONE)
-
-    fun get_iface_paths (iface : var) : Paths.iface =
-	(case get_node iface
-	   of IFACE iface_node => iface_paths iface_node
-	    | _ => error "get_iface_paths given non-interface")
-
-    fun get_unit_paths (unit : var) : Paths.compunit =
-	(case get_node unit
-	   of UNIT unit_node => unit_paths unit_node
-	    | _ => error "get_unit_paths given non-unit")
-
-    val get_id : var -> string = node_id o get_node
-
-    val nofixup : E.groupfile -> E.groupfile =
-	fn g => g
-
-    fun read_group (groupfile : string) : Group.group =
-	let val _ = Update.flushAll()
-	    (* Eg: cputype=linux, objtype=sparc, target=sparc-8 *)
-	    val cputype = Platform.platformName (Platform.platform ())
-	    val objtype = Target.platformName (Target.getTargetPlatform ())
-	    val target = Target.platformString()
-	    val littleEndian = !Target.littleEndian
-	    val libdir = Dirs.libDir() ^ "/Lib"
-	    val g = Group.empty_group'
-	    val g = Group.add_string_value (g, "cputype", cputype)
-	    val g = Group.add_string_value (g, "objtype", objtype)
-	    val g = Group.add_string_value (g, "target", target)
-	    val g = Group.add_bool_value (g, "littleEndian", littleEndian)
-	    val g = Group.add_int_value (g, "majorVersion", Version.majorVersion)
-	    val g = Group.add_int_value (g, "minorVersion", Version.minorVersion)
-	    val g = Group.add_string_value (g, "version", Version.version)
-	    val g = Group.add_string_value (g, "libdir", libdir)
-	    val (g,fixup) =
-		(case basis
-		   of NONE => (g,nofixup)
-		    | SOME {group,fixup} =>
-			(Group.read (g,group(),nofixup),fixup))
-	    val g = Group.read (g, groupfile, fixup)
-	    val group = Group.get_group g
-	    val _ = msg ("Group has " ^
-			 Int.toString (Group.size group) ^
-			 " entries.\n")
-	in  group
+	    val enabled = List.filter now_ready (get_dependents b)
+	    val _ = app markReady enabled
+	in  if chatty andalso (!MasterDiag) andalso not (null enabled)
+	    then
+		(print "  enabled: ";
+		 print_strings 10 (map Name.label2longname enabled);
+		 print "\n")
+	    else ()
 	end
 
-    val make_imports : var list -> Update.imports =
-	map (Paths.unitName o get_unit_paths)
-
-    fun graphInfo (entry : Group.entry) : node * var list =
-	(case entry
-	   of Group.IFACE iface =>
-		(case iface
-		   of Group.SRCI (id,group,file,imports) =>
-			let val p = Paths.srci {id=id, group=group, file=file}
-			    val i = make_imports imports
-			in  (IFACE (SRCI (p,i)), imports)
-			end
-		    | Group.COMPI (id,iface,ue,parms) =>
-			(IFACE (COMPI (Paths.compi {id=id, file=iface,
-						    uefile=ue})),
-			 VarSet.listItems parms))
-	    | Group.UNIT unit =>
-		(case unit
-		   of Group.SRCU (id,group,src,imports,iface) =>
-			let val p' = Option.map get_iface_paths iface
-			    val p = Paths.srcu {id=id,group=group,file=src,
-						iface=p'}
-			    val i = make_imports imports
-			    val edges = (case iface
-					   of NONE => imports
-					    | SOME I => I :: imports)
-			in  (UNIT (SRCU (p,iface,i)), edges)
-			end
-		    | Group.COMPU (id,obj,ue,parms,iface) =>
-			let val p' = get_iface_paths iface
-			    val p = Paths.compu {id=id,file=obj,
-						 uefile=ue,iface=p'}
-			in  (UNIT (COMPU (p,iface)),
-			     iface :: (VarSet.listItems parms))
-			end
-		    | Group.PRIMU (id,group,imports) =>
-			let val p = Paths.primu {id=id, group=group}
-			    val i = make_imports imports
-			in  (UNIT (PRIMU (p,i)), imports)
-			end
-		    | Group.IMPORTU (id,iface) =>
-			let val p' = get_iface_paths iface
-			    val p = Paths.importu {id=id, iface=p'}
-			in  (UNIT (IMPORTU (p,iface)), [iface])
-			end
-		    | Group.CHECKU {U,I} =>
-			let val pU = get_unit_paths U
-			    val pI = get_iface_paths I
-			in  (UNIT (CHECKU (U,pU,pI)), [U,I])
-			end)
-	    | Group.CMD cmd =>
-		(case cmd
-		   of Group.LINK (group,exe,targets) =>
-			(LINK (Paths.exe {group=group, exe=exe}),
-			 get_reachable (VarSet.listItems targets))
-		    | Group.PACK {lib, imports, units, ifaces, values} =>
-			let val lib = Paths.lib {dir=lib}
-			    val pack = PACK {lib=lib, imports=imports,
-					     units=units, ifaces=ifaces,
-					     values=values}
-			    val exports = VarSet.union(units,ifaces)
-			    val exports = VarSet.listItems exports
-			    val edges = get_reachable exports
-			in  (pack,edges)
-			end))
-
-    fun read_graph (groupfile : string) : var =
-	let val group = read_group groupfile
-	    val {entries, pos} = Group.list_entries group
-	    val _ = reset_graph()
-	    val _ = set_pos pos
-	    val init = Name.fresh_var()
-	    val _ = add_node(init,INITIAL)
-	    fun add_edges (v : var, edges : var list) : unit =
-		if null edges then set_status (v,READY (Time.now()))
-		else app (add_edge v) edges
-	    val initial : var -> unit = add_edge init
-	    fun cmd_entry (e : Group.entry) : bool =
-		(case e of Group.CMD _ => true | _ => false)
-	    fun add_entry (v : var, entry : Group.entry) : unit =
-		let val (node,edges) = graphInfo entry
-		    val _ = add_node (v,node)
-		    val _ = if cmd_entry entry then initial v else ()
-		    val _ = add_edges(v,edges)
+    fun markPending (node : label, pinterface : bool) : unit =
+	(case get_status node
+	   of READY t =>
+		let val _ = set_status (node, PENDING (t, pinterface))
+		    val _ = if pinterface then enable(true,node) else ()
 		in  ()
 		end
-	    val _ = app add_entry entries
-	    val (numNodes, numEdges) = graphSize()
-	    val _ = msg ("Dependency graph has " ^
-			 Int.toString (numNodes) ^ " nodes and " ^
-			 Int.toString (numEdges) ^ " edges.\n")
-	in  init
+	    | status => badStatus (node, status, "making pending"))
+
+    fun markWorking (node : label) : unit =
+	(case get_status node
+	   of PENDING (t, false) =>
+		set_status (node, WORKING (t, Time.now()))
+	    | status => badStatus (node, status, "making working"))
+
+    fun markProceeding (node : label) : unit =
+	let val wt =
+		(case get_status node
+		   of PENDING (t,true) => (t,Time.now())
+		    | WORKING wt => wt
+		    | status => badStatus (node, status, "making proceeding"))
+	    val _ = set_status (node, PROCEEDING wt)
+	    val _ = enable(true,node)
+	in  ()
+	end
+
+    fun markPending' (node : label) : unit =
+	let fun newT (t,t') = (t, Time.-(Time.now(), t'))
+	    val status =
+		(case get_status node
+		   of READY t => PENDING' (t, Time.zeroTime)
+		    | WORKING t  => PENDING' (newT t)
+		    | PROCEEDING t => PENDING' (newT t)
+		    | status => badStatus (node, status, "making pending'"))
+	    val _ = set_status (node, status)
+	    val _ = enable(true,node)
+	in  ()
+	end
+
+    fun markWorking' (node : label) : unit =
+	(case get_status node
+	   of PENDING' (t, t') =>
+		set_status (node, WORKING' (t, t', Time.now()))
+	    | status => badStatus (node, status, "making working'"))
+
+    fun markDone (node : label) : unit =
+	let
+	    val now = Time.now()
+	    fun since t = Time.- (now, t)
+	    val z = Time.zeroTime
+	    val times as (totalTime, slaveTime, masterTime) =
+		case get_status node
+		  of READY t => (since t, z, z)
+		   | WORKING (t,t') => (since t, since t', z)
+		   | PROCEEDING (t, t') => (since t, since t', z)
+		   | WORKING' (t, t', t'') => (since t, t', since t'')
+		   | status => badStatus (node, status, "making done")
+	    val _ = set_status (node, DONE times)
+	    val _ = enable(false,node)
+	in  ()
 	end
 
     local
-	val workingLocal : (Comm.job * (unit -> bool)) list ref =
+	val workingLocal : (label * (unit -> bool)) list ref =
 	    ref nil
 	val idleTimes : time list ref =
 	    ref nil
@@ -582,10 +511,13 @@ struct
 
 	fun findNewSlaves () : unit =
 	    let
-		val platform = Target.getTargetPlatform()
-		val flags = Comm.getFlags()
-		val flushAll = Comm.FLUSH_ALL (platform, flags)
-
+		fun init() : Comm.message =
+		    let val objtype = Target.getTarget()
+			val stats = Stats.get()
+			val desc = get_desc()
+		    in  Comm.INIT(objtype,stats,desc)
+		    end
+		val init = Util.memoize init
 		exception Stop
 		fun addSlave slave =
 		    let val _ = if slave_known slave then raise Stop
@@ -594,9 +526,9 @@ struct
 			val in_channel = if not (Comm.hasMsg channel) then raise Stop
 					 else Comm.openIn channel
 			val name = Comm.name slave
-			val _ = msg ("Noticed slave " ^ name ^ "\n")
+			val _ = msg ("[found slave " ^ name ^ "]\n")
 			val out_channel = Comm.openOut (Comm.reverse channel)
-			val _ = Comm.send flushAll out_channel
+			val _ = Comm.send (init()) out_channel
 		    in
 			add_slave (slave, {status = ref (IDLE_SLAVE (Time.now())),
 					   in_channel = in_channel,
@@ -612,64 +544,71 @@ struct
 	    in  ()
 	    end
 	(* Find ready slaves. *)
-	fun pollForSlaves (do_ack_interface : string * Comm.job -> unit,
-			   do_ack_done : string * Comm.job * Update.plan -> unit,
-			   do_ack_local : Comm.job -> unit) : int * int =
+	fun waitForSlaves () : int * int =
 	    let
 		val maxWorkingLocal = 2
 		val newWorkingLocal = List.filter (fn (job, done) =>
-						   if done() then (do_ack_local job; false)
+						   if done() then (markDone job; false)
 						   else true) (!workingLocal)
 		val _ = workingLocal := newWorkingLocal
 		val _ = findNewSlaves()
 		val slaves = list_slaves()
 		val (workingSlaves, _) = partition_slaves slaves
+		fun update (slave:Comm.identity, delta:Stats.delta) : unit =
+		    let val stats = Stats.get()
+			val stats = Stats.add(stats,delta)
+			val _ = Stats.set stats
+			val _ = markSlaveIdle slave
+		    in  ()
+		    end
+		
 		val _ =
 		    app (fn slave =>
 			 case Comm.receive (get_in_channel slave)
 			   of NONE => ()
 			    | SOME Comm.READY => ()
-			    | SOME (Comm.ACK_INTERFACE job) => do_ack_interface (Comm.name slave, job)
-			    | SOME (Comm.ACK_DONE (job, plan)) =>
-			       (do_ack_done (Comm.name slave, job, plan);
-				markSlaveIdle slave)
-			    | SOME (Comm.ACK_ERROR (job,msg)) =>
+			    | SOME (Comm.ACK_INTERFACE job) =>
+				markProceeding job
+			    | SOME (Comm.ACK_FINISHED (job, delta)) =>
+			       (markDone job;
+				update(slave,delta))
+			    | SOME (Comm.ACK_UNFINISHED (job, delta)) =>
+			       (markPending' job;
+				update(slave,delta))
+			    | SOME (Comm.ACK_REJECT (job,msg)) =>
 			       (print ("slave " ^ Comm.name slave ^
-				       " signalled an error during job " ^
-				       (#2 job) ^ "\n");
+				       " found an error in " ^
+				       Name.label2longname job ^ "\n");
 				reject msg)
-			    | SOME (Comm.FLUSH_ALL _) => error ("slave " ^ (Comm.name slave) ^ " sent flushAll")
-			    | SOME (Comm.FLUSH _) => error ("slave " ^ (Comm.name slave) ^ " sent flush")
-			    | SOME (Comm.REQUEST _) => error ("slave " ^ (Comm.name slave) ^ " sent request"))
+			    | SOME (Comm.BOMB msg) =>
+				Util.error ("slave " ^ Comm.name slave)
+					   msg
+			    | SOME _ => error ("slave " ^ (Comm.name slave) ^ " sent a bad message"))
 		    workingSlaves
 		val (_, idleSlaves) = partition_slaves slaves
+		val _ = if null idleSlaves then
+		            let val delay = if length slaves > 1 then 1.0 else 0.1
+			    in  Platform.sleep delay
+			    end
+			else ()
 	    in  (length idleSlaves, maxWorkingLocal - length (!workingLocal))
 	    end
 	(* Should only be used when we are below our limit on local processes. *)
-	fun useLocal (job : Comm.job, f : unit -> unit) : unit =
-	    let val newLocal = (job, Background.background f)
+	fun useLocal (job : label, f : unit -> unit) : unit =
+	    let val newLocal = (job, Util.background f)
 		val _ = workingLocal := (newLocal :: (!workingLocal))
 	    in  ()
 	    end
 	(* Works only if there are slaves available *)
 	fun useSlave (showSlave : string -> unit,
-		      forMySlave : Comm.message,
-		      forOtherSlaves : Comm.message option) : unit =
+		      msg:Comm.message) : unit =
 	    let val slaves = list_slaves ()
 		val (workingSlaves, idleSlaves) = partition_slaves slaves
 		val (mySlave, idleSlaves') = if null idleSlaves then error ("useSlave when all slaves working")
 					     else (hd idleSlaves, tl idleSlaves)
 		val _ = (showSlave (Comm.name mySlave);
 			 markSlaveWorking mySlave;
-			 Comm.send forMySlave (get_out_channel mySlave))
-		val _ = case forOtherSlaves
-			  of NONE => ()
-			   | SOME msg =>
-			      let val sendMsg = Comm.send msg
-				  val sendTo = sendMsg o get_out_channel
-				  val otherSlaves = workingSlaves @ idleSlaves'
-			      in  app sendTo otherSlaves
-			      end
+			 Comm.send msg (get_out_channel mySlave))
 	    in  ()
 	    end
 	fun closeSlaves () : unit =
@@ -695,491 +634,19 @@ struct
 	fun slaveTimes() : time list * time list = (!workingTimes, !idleTimes)
     end
 
-    fun statusName WAITING = "waiting"
-      | statusName (READY _) = "ready"
-      | statusName (PENDING _) = "pending"
-      | statusName (WORKING _) = "working"
-      | statusName (PROCEEDING _) = "proceeding"
-      | statusName (WORKING' _) = "working'"
-      | statusName (PENDING' _) = "pending'"
-      | statusName (DONE _) = "done"
-
-    fun badStatus (node : var, status : status, what : string) =
-	error (get_id node ^ " was " ^
-	       statusName status ^ "; " ^ what)
-
-    fun getReadyTime (node : var) : time =
-	(case get_status node
-	   of READY t => t
-	    | PENDING (t, _) => t
-	    | WORKING (t, _) => #1 t
-	    | PROCEEDING (t, _) => #1 t
-	    | PENDING' (t, _) => #1 t
-	    | WORKING' (t, _) => #1 t
-	    | status => badStatus (node, status, "getting ready time"))
-
-    fun getWorkingTime (node : var) : time =
-	(case get_status node
-	   of WORKING (t, _) => #2 t
-	    | PROCEEDING (t, _) => #2 t
-	    | status => badStatus (node, status, "getting working time"))
-
-    fun getWorking'Time (node : var) : time =
-	(case get_status node
-	   of WORKING' (t, _) => #3 t
-	    | status => badStatus (node, status, "getting working' time"))
-
-    fun getTotalTimes (node : var) : totaltime =
-	(case get_status node
-	   of DONE t => t
-	    | status => badStatus (node, status, "getting total times"))
-
-    fun getSlaveTime (node : var) : time =
-	(case get_status node
-	   of PENDING' (t, _) => #2 t
-	    | WORKING' (t, _) => #2 t
-	    | DONE t => #2 t
-	    | status => badStatus (node, status, "getting slave time"))
-
-    val getMasterTime : var -> time = #3 o getTotalTimes
-
-    fun getPlan (node : var) : Update.plan =
-	(case get_status node
-	   of PENDING (_, plan) => plan
-	    | WORKING (_, plan) => plan
-	    | PROCEEDING (_, plan) => plan
-	    | PENDING' (_, plan) => plan
-	    | WORKING' (_, plan) => plan
-	    | status => badStatus (node, status, "getting plan"))
-
-    fun markReady (node : var) : unit =
-	(case get_status node
-	   of WAITING => set_status (node, READY (Time.now()))
-	    | READY _ => ()
-	    | status => badStatus (node, status, "making ready"))
-
-    fun markPending (node : var, plan : Update.plan) : unit =
-	(case get_status node
-	   of READY t => set_status (node, PENDING (t, plan))
-	    | status => badStatus (node, status, "making pending"))
-
-    fun markWorking (node : var) : unit =
-	(case get_status node
-	   of PENDING (t, plan) =>
-		set_status (node, WORKING ((t, Time.now()), plan))
-	    | status => badStatus (node, status, "making working"))
-
-    fun markWorking' (node : var) : unit =
-	(case get_status node
-	   of PENDING' ((t, t'), plan) =>
-		set_status (node, WORKING' ((t, t', Time.now()), plan))
-	    | status => badStatus (node, status, "making working'"))
-
-    (*
-	We only need to add edges for the compiled interface's
-	parameters.  We go beyond this because (a) reading
-	parameterized interfaces is a lot slower than reading unit
-	environments and (b) the master does not use FileCache.tick so
-	whatever gets read into the cache stays there.
-    *)
-    fun interface_ready (node : var) : unit =
-	let fun edges (iface : Paths.iface) : var list =
-		let val possible : var list = get_units()
-		    val ifaceue = Paths.ifaceUeFile iface
-		    val ue = FileCache.read_ue ifaceue
-		    fun inUe (v:var) : bool =
-			let val U = get_unit_paths v
-			    val name = Paths.unitName U
-			in  isSome (Ue.find (ue,name))
-			end
-		    val arrows : var list = List.filter inUe possible
-		in  arrows
-		end
-	    fun add_edges (iface : Paths.iface, units : var list) : unit =
-		let val edges : unit -> var list =
-			Util.memoize (fn () => edges iface)
-		    fun add (u : var) : unit =
-			if has_interface_edges u then ()
-			else app (add_interface_edge u) (edges())
-		in  app add units
-		end
-	in  (case get_node node
-	       of IFACE iface_node =>
-		    let val iface = iface_paths iface_node
-			val dependent = get_dependents node
-			val units =
-			    List.filter (has_ascribed_iface node) dependent
-		    in	add_edges (iface,units)
-		    end
-		| UNIT (CHECKU _) => ()
-		| UNIT unit_node =>
-		    let val iface = Paths.unitIface (unit_paths unit_node)
-		    in  add_edges (iface,[node])
-		    end
-		| _ => ())
-	end
-
-    (*
-	Find every ready node a such that a -> b.  An interface or
-	unit node a is ready if for every node c with a -> c, c has an
-	up to date interface.  A LINK, PACK, or INITIAL node a is
-	ready if for every node c with a -> c, c is done.
-    *)
-    fun enable (b : var) : unit =
-	let val _ = interface_ready b
-	    fun hasInterface' (c : var) : bool =
-	        (case get_status c
-		   of PENDING (_, p) => Update.isReady p
-		    | WORKING (_, p) => Update.isReady p
-		    | PROCEEDING _ => true
-		    | PENDING' _ => true
-		    | WORKING' _ => true
-		    | DONE _ => true
-		    | _ => false)
-	    fun interfaceVar (c : var) : var =
-		(case get_node c
-		   of UNIT (SRCU (_,SOME I,_)) => I
-		    | _ => c)
-	    val hasInterface : var -> bool = hasInterface' o interfaceVar
-	    fun isDone (c : var) : bool =
-		(case get_status c
-		   of DONE _ => true
-		    | _ => false)
-	    fun isReady (a : var) : bool =
-		let val prereqs = get_prerequisites a
-		    val predicate =
-			(case get_node a
-			   of LINK _ => isDone
-			    | PACK _ => isDone
-			    | INITIAL => isDone
-			    | _ => hasInterface)
-		in  Listops.andfold predicate prereqs
-		end
-	    fun enableReady (a : var) : bool =
-		(case get_status a
-		   of WAITING =>
-			isReady a andalso (markReady a; true)
-		    | _ => false)
-	    val enabled = List.filter enableReady (get_dependents b)
-	in  if (!ShowEnable andalso (not (null enabled)))
-	    then
-		(print (get_id b ^ " enabled: ");
-		 print_strings 20 (map get_id enabled);
-		 print "\n")
-	    else ()
-	end
-
-    fun markPending' (node : var, plan : Update.plan) : unit =
-	let fun newT (t,t') = (t, Time.-(Time.now(), t'))
-	    val status =
-		(case get_status node
-		   of READY t =>PENDING' ((t, Time.zeroTime), plan)
-		    | WORKING (t, _) => PENDING' (newT t, plan)
-		    | PROCEEDING (t, _) => PENDING' (newT t, plan)
-		    | status => badStatus (node, status, "making pending'"))
-	    val _ = set_status (node, status)
-	    val _ = if Update.isReady plan then
-			enable node
-		    else ()
-	in  ()
-	end
-
-    fun markProceeding (node : var) : unit =
-	let val _ = case get_status node
-		      of WORKING arg => set_status (node, PROCEEDING arg)
-		       | status => badStatus (node, status, "making proceeding")
-	    val _ = enable node
-	in  ()
-	end
-
-    fun markDone (node : var) : unit =
-	let
-	    val now = Time.now()
-	    fun since t = Time.- (now, t)
-	    val z = Time.zeroTime
-	    val (times as (totalTime, slaveTime, masterTime)) =
-		case get_status node
-		  of READY t => (since t, z, z)
-		   | WORKING ((t,t'), _) => (since t, since t', z)
-		   | PROCEEDING ((t, t'), _) => (since t, since t', z)
-		   | WORKING' ((t, t', t''), _) => (since t, t', since t'')
-		   | status => badStatus (node, status, "making done")
-	    val _ = set_status (node, DONE times)
-	    val _ = (case get_node node
-		       of UNIT (CHECKU (_,U,I)) =>
-			    let val I = Paths.ifaceFile I
-				val U = Paths.ifaceFile (Paths.unitIface U)
-			    in  add_eq(FileCache.crc I, FileCache.crc U)
-			    end
-			| _ => ())
-	    val _ = enable node
-	in  ()
-	end
-
-    fun get_context' (exclude : VarSet.set, v : var) : Update.context =
-	let val prereqs = units_only(get_prerequisites v)
-	    val reachable = get_interface_reachable prereqs
-	    val reachable = sort reachable
-	    fun mapper (v : var) : (string * Paths.iface) option =
-		if VarSet.member (exclude,v) then NONE
-		else
-		    let val U = get_unit_paths v
-			val name = Paths.unitName U
-			val iface = Paths.unitIface U
-		    in	SOME (name,iface)
-		    end
-	in  List.mapPartial mapper reachable
-	end
-
-    fun get_context (v : var) : Update.context = get_context' (VarSet.empty,v)
-
-    (*
-	N.B.  COMPU and COMPI nodes have arrows to every unit named in
-	their unit environment files.
-    *)
-    fun get_ue (v : var) : Ue.ue =
-	let val prereqs = units_only(get_prerequisites v)
-	    fun folder (u:var, ue:Ue.ue) : Ue.ue =
-		let val U = get_unit_paths u
-		    val name = Paths.unitName U
-		    val iface = Paths.ifaceFile (Paths.unitIface U)
-		    val crc = FileCache.crc iface
-		in  Ue.insert(ue,name,crc)
-		end
-	in  foldl folder Ue.empty prereqs
-	end
-
-    (*
-	We need fresh interface names when the group uses the same
-	name multiple times and when packing inferred interfaces.  In
-	the first case, we want to shadow interface names in group
-	file order.  In the second case, we want to ensure that
-	inferred interface names never shadow names that were in the
-	group.
-    *)
-    fun make_gensym (reserved : StringSet.set) : string -> string =
-	let val used = ref reserved
-	    fun find (set : StringSet.set, base : string, n : int) : string =
-		let val suffix = if n = 0 then "" else Int.toString n
-		    val s = base ^ suffix
-		in  if StringSet.member (set, s) then find (set, base, n+1)
-		    else s
-		end
-	    fun gensym (base : string) : string =
-		let val set = !used
-		    val name = find (set, base, 0)
-		in  used := StringSet.add (set, name);
-		    name
-		end
-	in  gensym
-	end
-
-    type renaming =
-	{shadow : string VarMap.map,
-	 gensym : string -> string}
-
-    fun iface_renaming (nodes : var list) : renaming =
-	let type acc = string VarMap.map * var StringMap.map * StringSet.set
-	    fun folder (v : var, acc as (change, bound, used) : acc) : acc =
-		(case get_node v
-		   of IFACE iface_node =>
-			let val iface = iface_paths iface_node
-			    val name = Paths.ifaceName iface
-			    val change =
-				(case StringMap.find (bound, name)
-				   of SOME v' => VarMap.insert (change, v', name)
-				    | NONE => change)
-			    val bound = StringMap.insert (bound, name, v)
-			    val used = StringSet.add (used, name)
-			in  (change, bound, used)
-			end
-		    | _ => acc)
-	    val acc = (VarMap.empty, StringMap.empty, StringSet.empty)
-	    val (change, bound, used) = foldl folder acc nodes
-	    val gensym = make_gensym used
-	    fun folder (v : var, name : string,
-			shadow : string VarMap.map) : string VarMap.map =
-		VarMap.insert (shadow, v, gensym name)
-	    val shadow = VarMap.foldli folder VarMap.empty change
-	in  {shadow=shadow, gensym=gensym}
-	end
-
-    fun named_iface (renaming : renaming) : var -> Paths.iface =
-	let val {shadow, ...} = renaming
-	    fun get_iface v =
-		let val iface = get_iface_paths v
-		    val name =
-			(case VarMap.find (shadow,v)
-			   of SOME name => name
-			    | NONE => Paths.ifaceName iface)
-		    val file = Paths.ifaceFile iface
-		    val uefile = Paths.ifaceUeFile iface
-		in  Paths.compi {id=name, file=file, uefile=uefile}
-		end
-	in  get_iface
-	end
-
-    fun inferred_iface (renaming : renaming) : Paths.compunit -> Paths.iface =
-	let val {gensym, ...} = renaming
-	    fun make_iface unit =
-		let val iface = Paths.unitIface unit
-		    val name = gensym (Paths.unitName unit)
-		    val file = Paths.ifaceFile iface
-		    val uefile = Paths.ifaceUeFile iface
-		in  Paths.compi {id=name, file=file, uefile=uefile}
-		end
-	in  make_iface
-	end
-
-    type packparms =
-	{importOnly : var -> bool,
-	 named_iface : var -> Paths.iface,
-	 inferred_iface : Paths.compunit -> Paths.iface}
-
-    type packinfo = Update.pack list VarMap.map
-
-    fun packed (info : packinfo, v : var) : bool =
-	isSome (VarMap.find (info,v))
-
-    fun pack_unit (parms : packparms) (v : var, info : packinfo) : packinfo =
-	if packed(info,v) then info
-	else
-	    let val U = get_unit_paths v
-		val I = Paths.unitIface U
-		val import =
-		    Paths.isImportUnit U orelse
-		    #importOnly parms v
-		val get_edges =
-		    if import then get_interface_edges else get_unit_edges
-		val info = pack_units parms (get_edges v,info)
-		val inferred = Paths.isUnitIface I
-		val info = if inferred then info
-			   else pack_iface parms (ascribed_iface v, info)
-		val I' = if inferred then #inferred_iface parms U else I
-		val name = Paths.unitName U
-		val U' =
-		    if import
-		    then Paths.importu {id=name, iface=I'}
-		    else Paths.compu {id=name, file=Paths.objFile U,
-				      uefile=Paths.ueFile U, iface=I'}
-		val packlist = [Update.PACKU (U',nil)]
-		val packlist =
-		    if inferred
-		    then (Update.PACKI(I',nil)) :: packlist
-		    else packlist
-		in  VarMap.insert (info,v,packlist)
-		end
-
-    and pack_units (parms : packparms)
-		   (vs : var list, info : packinfo) : packinfo =
-	foldl (pack_unit parms) info vs
-
-    and pack_iface (parms : packparms) (v : var, info : packinfo) : packinfo =
-	if packed(info,v) then info
-	else
-	    let val prereqs = units_only(get_prerequisites v)
-		val info = pack_units parms (prereqs,info)
-		val iface = #named_iface parms v
-		val pack = Update.PACKI (iface,nil)
-	    in	VarMap.insert(info,v,[pack])
-	    end
-
-    fun plan (node : var) : Update.plan =
-	(case get_node node
-	   of IFACE (SRCI (iface,imports)) =>
-		let val context = get_context node
-		in  Update.plan_srci (eq,context,imports,iface)
-		end
-	    | IFACE (COMPI iface) => Update.plan_compi (eq,get_ue node,iface)
-	    | UNIT (SRCU (unit,_,imports)) =>
-		let val context = get_context node
-		in  Update.plan_compile (eq,context,imports,unit)
-		end
-	    | UNIT (COMPU (unit,_)) => Update.plan_compu (eq,get_ue node,unit)
-	    | UNIT (PRIMU (unit,imports)) =>
-		let val context = get_context node
-		in  Update.plan_compile (eq,context,imports,unit)
-		end
-	    | UNIT (IMPORTU (unit,_)) => Update.empty_plan
-	    | UNIT (CHECKU (U,unit,iface)) =>
-		let val exclude = VarSet.singleton U
-		    val context = get_context' (exclude, node)
-		in  Update.plan_checku (eq,context,unit,iface)
-		end
-	    | LINK exe =>
-		let val prereqs = units_only(get_prerequisites node)
-		    val reachable = get_unit_reachable prereqs
-		    val reachable = sort reachable (* fix order of effects *)
-		    val units = map get_unit_paths reachable
-		    val (imports,units) = List.partition Paths.isImportUnit units
-		in  if null imports then Update.plan_link (eq,units,exe)
-		    else
-			(print ("Warning: can not link " ^
-				Paths.exeFile exe ^
-				" because of unimplemented unit(s): ");
-			 print_strings 70 (map Paths.unitName imports);
-			 print "\n";
-			 Update.empty_plan)
-		end
-	    | PACK {lib,imports,units,ifaces,values} =>
-		let val importOnly =
-			if !Update.UptoElaborate orelse !Update.UptoAsm then
-			    fn v => true
-			else
-			    fn v => VarSet.member (imports, v)
-		    val renaming = iface_renaming (get_prerequisites node)
-		    val named_iface = named_iface renaming
-		    val inferred_iface = inferred_iface renaming
-		    val parms = {importOnly=importOnly, named_iface=named_iface,
-				 inferred_iface=inferred_iface}
-		    val units = units_only (VarSet.listItems units)
-		    val ifaces = VarSet.listItems ifaces
-		    val info : packinfo = VarMap.empty
-		    val info = foldl (pack_iface parms) info ifaces
-		    val info = pack_units parms (units,info)
-		    val packlist : var list =
-			map #1 (VarMap.listItemsi info)
-		    val packlist = sort packlist (* fix order of effects *)
-		    val packlist : Update.pack list list =
-			map (fn v => valOf (VarMap.find (info,v))) packlist
-		    val packlist = List.concat packlist
-		in  Update.plan_pack (eq,packlist,lib)
-		end
-	    | INITIAL => error "plan saw initial")
-
-    fun analyzeReady (node : var) : unit =
-	let val plan = plan node
-	    val _ =
-		(case (Update.isEmpty plan, Update.sendToSlave plan)
-		   of (true, _) => markDone node
-		    | (false, true) => markPending (node, plan)
-		    | (false, false) => markPending' (node, plan))
-	    val _ = if Update.isReady plan then
-			enable node
-		    else ()
-	in  ()
-	end
-
     (*
 	(waiting, pending, working, proceeding, pending', working')
 	Units that are ready and done are not included.  Waiting,
 	pending, and pending' are kept sorted so that analysis and
-	compilation happens in an order determined by the group.
+	compilation happens in an order determined by the project.
     *)
-    type state = var list * var list * var list * var list * var list * var list
-    datatype result = PROCESSING of time * state  (* All slaves utilized *)
-                    | IDLE of time * state * int  (* Num slaves idle and there are waiting jobs *)
-	            | COMPLETE of time
+    type state = label list * label list * label list * label list * label list * label list
     fun stateSize ((a,b,c,d,e,f) : state) = ((length a) + (length b) + (length c) + (length d) +
 					     (length e) + (length f))
 
-    fun resultToTime (PROCESSING (t,_)) = t
-      | resultToTime (IDLE (t,_,_)) = t
-      | resultToTime (COMPLETE t) = t
-
     fun stateDone(([],[],[],[],[],[]) : state) = true
       | stateDone _ = false
-    fun partition (nodes : var list) =
+    fun partition (nodes : label list) =
 	let
 	    fun folder (node,(wa,r,pe,wo,pr,pe',wo',d)) =
 		(case (get_status node) of
@@ -1194,7 +661,19 @@ struct
 	    val result = foldr folder ([],[],[],[],[],[],[],[]) nodes
 	in  result
 	end
-    fun getReady (waiting : var list) : var list * var list * var list =
+
+    fun analyzeReady (node : label) : unit =
+	let val desc = get_desc ()
+	    val inputs = Compiler.get_inputs (desc, node)
+	    val status = Update.plan inputs
+	in  (case status
+	       of Update.EMPTY => markDone node
+		| Update.COMPILE => markPending (node, false)
+		| Update.GENERATE => markPending (node, true)
+		| Update.ASSEMBLE => markPending' node)
+	end
+
+    fun getReady (waiting : label list) : label list * label list * label list =
 	let
 	    fun loop (waiting, pending, pending', done)  =
 		let
@@ -1209,14 +688,24 @@ struct
 		    else loop (waiting, pending, pending', done) (* some more may have become ready now *)
 		end
 	    val (waiting, pending, pending', done) = loop (waiting, [], [], [])
-	    val done = List.filter (fn v =>
-				    (case get_node v
-				       of IFACE (COMPI _) => false
-					| UNIT (COMPU _) => false
-					| _ => true)) done
-	    val _ = if !ShowUptodate andalso not (null done) then
+	    (* Do not chat about stuff that is obviously done. *)
+	    fun neededCompilation (node:label) : bool =
+		(case get_pdec node
+		   of I.IDEC (_,iexp,_) =>
+			(case iexp
+			   of I.PRECOMPI _ => false
+			    | I.COMPI _ => false
+			    | _ => true)
+		    | I.SCDEC _ => false
+		    | I.UDEC (_,uexp,_) =>
+			(case uexp
+			   of I.PRECOMPU _ => false
+			    | I.COMPU _ => false
+			    | _ => true))
+	    val done = List.filter neededCompilation done
+	    val _ = if !MasterDiag andalso not (null done) then
 			(print "Already up-to-date: ";
-			 print_strings 20 (map get_id done);
+			 print_strings 20 (map Name.label2longname done);
 			 print "\n")
 		    else ()
 	in  (waiting, pending, pending')
@@ -1225,41 +714,28 @@ struct
 	let val ([], [], [], [], [], [], working', _) = partition working'
 	    val ([], [], [], [], [], pending', newWorking', []) = partition pending'
 	    val ([], [], [], [], proceeding, newPending'1, [], _) = partition proceeding
-	    val ([], [], [], working, newProceeding, newPending'2, [], _) = partition working
-	    val ([], [], pending, newWorking, [], [], [], []) = partition pending
+	    val ([], [], [], working, newProceeding1, newPending'2, [], _) = partition working
+	    val ([], [], pending, newWorking, newProceeding2, [], [], []) = partition pending
 	    val (waiting, newPending, newPending'3) = getReady waiting
 	    val working' = working' @ newWorking'
 	    val pending' = List.concat [pending', newPending'1, newPending'2, newPending'3]
-	    val proceeding = proceeding @ newProceeding
+	    val proceeding = List.concat [proceeding, newProceeding1, newProceeding2]
 	    val working = working @ newWorking
 	    val pending = pending @ newPending
 	in  (waiting, sort pending, working, proceeding, sort pending', working')
 	end
-    fun waitForSlaves () : int * int =
-	let
-	    fun ack_inter (name : string, (node,id) : Comm.job) : unit =
-		markProceeding node
-	    fun ack_done (name : string, (node,id) : Comm.job,
-			  plan : Update.plan) : unit =
-		if Update.isEmpty plan then
-		    markDone node
-		else
-		    markPending' (node, plan)
-	    fun ack_local ((node,id) : Comm.job) : unit =
-		markDone node
-	in  pollForSlaves (ack_inter, ack_done, ack_local)
-	end
-    fun finalReport (nodes : var list) : unit =
-	let
+
+    fun finalReport () : unit =
+	let val nodes = get_nodes()
 	    fun toString r = Real.toString (Real.realFloor (r * 100.0) / 100.0)
 	    val _ = print "------- Times to compile files -------\n"
 	    fun stats nil = "unavailable"
 	      | stats (L : real list) =
 		let val v = Vector.fromList L
-		in  String.concat ["min ", toString (VectorStats.min v),
-				   " max ", toString (VectorStats.max v),
-				   " mean ", toString (VectorStats.mean v),
-				   " absdev ", toString (VectorStats.absdev v),
+		in  String.concat ["min ", toString (Util.min v),
+				   " max ", toString (Util.max v),
+				   " mean ", toString (Util.mean v),
+				   " absdev ", toString (Util.absdev v),
 				   " (n=" ^ Int.toString (Vector.length v) ^ ")"]
 		end
 	    fun mapper node =
@@ -1268,7 +744,8 @@ struct
 		    val idle = Time.- (total, total')
 		    val total' = Time.toReal total'
 		    val idle = Time.toReal idle
-		in  if total' > 0.0 then SOME (get_id node, idle, total')
+		in  if total' > 0.0
+		    then SOME (Name.label2name' node, idle, total')
 		    else NONE
 		end
 	    val unsorted = List.mapPartial mapper nodes
@@ -1305,21 +782,14 @@ struct
 
     fun useLocals (localsLeft : int, state : state) : int =
 	let
-	    fun useOne (node : var) =
-		let val plan = getPlan node
-		    val _ = markWorking' node
-		    val _ = Update.flush plan
-		    fun go () =
-			if Update.isEmpty (Update.compile plan ())
-			then ()
-			else error "assembly failed"
-		    val job = (node, get_id node)
-		in  useLocal (job, go)
+	    fun useOne (node : label) =
+		let val _ = markWorking' node
+		    val pdec = get_pdec node
+		in  useLocal (node, fn () => Compiler.assemble pdec)
 		end
 	    fun useSome (0, _) = 0
 	      | useSome (n, nil) = n
-	      | useSome (n, unit :: rest) = (useOne unit;
-					     useSome (n-1, rest))
+	      | useSome (n, unit :: rest) = (useOne unit; useSome (n-1, rest))
 	    val (_, _, _, _, pending', _) = state
 	in  useSome (localsLeft, pending')
 	end
@@ -1328,42 +798,20 @@ struct
 	let
 	    fun useOne node =
 		let fun showSlave (name : string) : unit =
-			msg ("Sending " ^ get_id node ^ " to " ^ name ^ ".\n")
-		    val plan = getPlan node
-		    val _ = markWorking node
-		    val _ = Update.flush plan
-		    val job = (node, get_id node)
-		in  useSlave (showSlave,
-			      Comm.REQUEST (job, plan),
-			      SOME (Comm.FLUSH (job,plan)))
+			vverbose ("[sending " ^ Name.label2longname node ^
+				  " to " ^ name ^ "]\n")
+		    val _ =
+			(case get_status node
+			   of PENDING (_,false) => markWorking node
+			    | PENDING (_,true) => markProceeding node
+			    | status => badStatus (node, status, "compiling"))
+		in  useSlave (showSlave,Comm.COMPILE node)
 		end
 	    fun useSome (0, _) = 0
 	      | useSome (n, nil) = n
-	      | useSome (n, unit :: rest) = (useOne unit;
-					     useSome (n-1, rest))
+	      | useSome (n, unit :: rest) = (useOne unit; useSome (n-1, rest))
 	    val (_, pending, _, _, _, _) = state
 	in  useSome (slavesLeft, pending)
-	end
-    (* Result always contain clean states, we are always invoked on a
-     * clean state, and we always call useLocals and useSlaves on
-     * clean states.  ("clean" means each unit's state matches the
-     * waitlist it occupies.)  *)
-    fun step (state : state) : result =
-	let val (slavesLeft, localsLeft) = waitForSlaves()
-	    val state = newState state
-	    val localsLeft = useLocals (localsLeft, state)
-	    val state = newState state
-	    val slavesLeft = useSlaves (slavesLeft, state)
-	    val state = newState state
-	    val (waiting, _, _, _, _, _) = state
-	in
-	    if stateDone state then
-		COMPLETE (Time.now())
-	    else
-		if slavesLeft > 0 then
-		    IDLE (Time.now(), state, slavesLeft)
-		else
-		    PROCESSING (Time.now(), state)
 	end
 
     local
@@ -1376,7 +824,7 @@ struct
 				    then let
 					     val temp = (Date.fromTimeLocal cur)
 					     val res = Date.toString temp
-					 in  res
+					 in  res ^ "   "
 					 end
 				else ""
 		val diff = Time.-(cur, (case !start of
@@ -1384,9 +832,8 @@ struct
 					  | SOME t => t))
 		val diff = Time.toReal diff
 		val diff = (Real.realFloor(diff * 100.0)) / 100.0
-		val padding = Util.spaces (30 - size str)
-		val msg = (str ^ padding ^ ": " ^ curString ^ "   " ^
-			   (Real.toString diff) ^ " sec\n")
+		val msg = concat ["[", str, ": ", curString,
+				  Real.toString diff, " sec]\n"]
 	    in	msgs := msg :: (!msgs);
 		print msg
 	    end
@@ -1413,19 +860,19 @@ struct
 			    val pending' = length pending'
 			    val working' = length working'
 			in
-			    String.concat ["CheckPoint (", Int.toString left, " files left = ",
-					   Int.toString waiting, " waiting + ",
+			    String.concat [Int.toString waiting, " waiting + ",
 					   Int.toString pending, " pending + ",
 					   Int.toString working, " working + ",
 					   Int.toString proceeding, " proceeding + ",
 					   Int.toString pending', " pending' + ",
-					   Int.toString working', " working')"]
+					   Int.toString working', " working' = ",
+					   Int.toString left, " files left"]
 			end
-		    else String.concat ["CheckPoint (", Int.toString left, " files left)"]
+		    else (Int.toString left ^ " files left")
 	    in	showTime (false, msg)
 	    end
 	fun wrap (f : 'a -> unit) (x : 'a) : unit =
-	    if !Checkpoint then f x else ()
+	    if !MasterDiag then f x else ()
     in
 	val showTime = wrap showTime
 	val startTime = wrap startTime
@@ -1433,126 +880,158 @@ struct
 	val checkpoint = wrap checkpoint
     end
 
-    fun once (groupfile : string) : {setup : unit -> state,
-				     step : state -> result,
-				     complete : unit -> unit} =
+    fun compile_loop (state : state, lastCpTime : Time.time) : unit =
+	let val (slavesLeft, localsLeft) = waitForSlaves()
+	    val state = newState state
+	    val localsLeft = useLocals (localsLeft, state)
+	    val state = newState state
+	    val slavesLeft = useSlaves (slavesLeft, state)
+	    val state = newState state
+	    val time = Time.now()
+	    val diff = Time.toReal(Time.-(time,lastCpTime))
+	    val lastCpTime =
+		if diff > 30.0 then
+		    (checkpoint state; time)
+		else lastCpTime
+	in
+	    if stateDone state then ()
+	    else compile_loop (state,lastCpTime)
+	end
+
+    fun compile () : unit =
 	let val _ = if not (Target.native()) then
-			(print "Warning: target prevents full compile\n";
-			 Update.UptoAsm := true)
+			(print "Warning: can not compile to binary on this system\n";
+			 Compiler.UptoAsm := true)
 		    else ()
 	    val _ = resetSlaves()
-	    val initial = read_graph groupfile
-	    val targets = get_reachable (get_prerequisites initial)
-	    val targets = sort targets	(* make master more deterministic *)
-	    val _ = startTime ("Started compiling files")
-	    val initialState : state = (targets, [], [], [], [], [])
-	in  {setup = fn _ => initialState,
-	     step = step,
-	     complete = (fn _ =>
-			 let val _ = showTime (true,"Finished compiling files")
-			     val _ = closeSlaves()
-			     val _ = if !ShowFinalReport
-					 then finalReport targets
-				     else ()
-			     val _ = reshowTimes()
-			 in  ()
-			 end)}
-	end
-    fun run (mapfile : string) : unit =
-	let val {setup,step,complete} = once mapfile
-	    fun loop (lastCpTime : Time.time, last : result option,
-		      state : state) : unit =
-	      let val cur = step state
-		  val thisTime = resultToTime cur
-		  val diff = Time.toReal(Time.-(thisTime,lastCpTime))
-		  val lastCpTime =
-			if (diff > 30.0) then
-			    (checkpoint state; thisTime)
-			else lastCpTime
-	      in
-		(case cur of
-		    COMPLETE _ => complete()
-		  | PROCESSING (t,state) =>
-			let val _ = (case last of
-					 NONE => ()
-				       | SOME (PROCESSING _) => ()
-				       | _ => msg "All slaves working.\n")
-			in  Platform.sleep 2.0;
-			    loop (lastCpTime,SOME cur,state)
-			end
-		  | IDLE(t, state as (waiting, pending, working, proceeding, pending', working'), n) =>
-			let val _ = (case last of
-					 NONE => ()
-				       | SOME (IDLE _) => ()
-				       | _ => msg (Int.toString n ^
-						   " idle slaves.\n"))
-			in  Platform.sleep 1.0;
-			    loop (lastCpTime,SOME cur,state)
-			end)
-	      end
-	in loop (Time.now(), NONE, setup())
-	end
-
-    type targets = (Paths.iface -> string) list *
-		   (Paths.compunit -> string) list *
-		   (Paths.exe -> string) list
-
-    val empty : targets = (nil, nil, nil)
-
-    fun append (t : targets, t' : targets) : targets =
-	let val (i,s,e) = t
-	    val (i',s',e') = t'
-	in  (i@i', s@s', e@e')
-	end
-
-    val concat : targets list -> targets =
-	foldl append empty
-
-    (*
-	XXX: Purge should leave libraries alone.  This works out now
-	if pack makes binary-only libraries.
-    *)
-    fun purge_help (what : string, targets : targets)
-		   (groupfile : string) : unit =
-	let val (ifacePaths,unitPaths,exePaths) = targets
-	    val initial = read_graph groupfile
-	    val _ = if !Update.UpdateDiag then
-			print ("Purging " ^ groupfile ^ " (" ^ what ^ ").\n")
+	    val _ = startTime ("started compiling")
+	    val nodes = get_nodes ()
+	    val nodes = sort nodes	(* make compiler deterministic *)
+	    val state : state = (nodes, [], [], [], [], [])
+	    val _ = compile_loop (state, Time.now())
+	    val _ = showTime (true,"finished compiling")
+	    val _ = closeSlaves()
+	    val _ = if !MasterVVerbose
+		    then (finalReport ();
+			  reshowTimes())
 		    else ()
-	    val nodes = get_reachable(get_prerequisites initial)
-	    fun remove (paths : ('a -> string) list) (x : 'a) : unit =
-		app (fn f => FileCache.remove (f x)) paths
-	    fun remove_node (v : var) : unit =
-		(case get_node v
-		   of IFACE (SRCI (p,_)) => remove ifacePaths p
-		    | IFACE (COMPI _) => ()
-		    | UNIT (SRCU (p,_,_)) => remove unitPaths p
-		    | UNIT (PRIMU (p,_)) => remove unitPaths p
-		    | UNIT _ => ()
-		    | LINK p => remove exePaths p
-		    | PACK _ => ()
-		    | INITIAL => error "remove_node saw initial")
-	in  app remove_node nodes
+	in  ()
 	end
 
-    val meta : targets =
-	([Paths.ifaceInfoFile], [Paths.infoFile], nil)
-    val iface : targets =
-	let val i = [Paths.ifaceFile,Paths.ifaceUeFile]
-	    val u = map (fn p => p o Paths.unitIface) i
-	in  (i, u, nil)
+    fun make (project : string, targets : targets) : unit =
+	let val _ = set_desc(project,targets,false,nil)
+	    val _ = compile ()
+	in  ()
 	end
-    val asm : targets =
-	(nil, [Paths.asmFile, Paths.asmzFile],
-	 [Paths.exeAsmFile, Paths.exeAsmzFile])
-    val obj : targets =
-	(nil, [Paths.objFile,Paths.ueFile], [Paths.exeObjFile])
-    val exe : targets = (nil, nil, [Paths.exeFile])
 
-    val clean : string -> unit = purge_help ("object files", obj)
-    val purge : string -> unit = purge_help ("binaries", concat [asm,obj,exe])
-    val purgeAll : string -> unit =
-	purge_help ("binaries and interfaces",
-		    concat [meta,iface,asm,obj,exe])
+    fun check_dir (file:string) : unit =
+	let val dir = OS.Path.dir file
+	in  if dir = "" orelse Fs.exists dir then ()
+	    else reject (dir ^ ": does not exist")
+	end
 
+    fun make_exe (project : string, exe : string,
+		  targets : targets) : unit =
+	let val _ = check_dir exe
+	    val _ = set_desc(project,targets,true,[exe])
+	    val desc = get_desc()
+	    fun mapper (pdec : I.pdec) : label option =
+		(case pdec
+		   of I.SCDEC (U,_,_) => SOME U
+		    | _ => NONE)
+	    val sc = List.mapPartial mapper desc
+	    val link = I.F.link (project,exe)
+	in  if null sc then
+		(compile();
+		 Compiler.link(desc,link))
+	    else
+		(print ("can not link " ^ exe ^
+			" because of unimplemented units: ");
+		 print_strings 70 (map Name.label2name' sc);
+		 print "\n";
+		 reject "unable to link")
+	end
+
+    fun make_lib (project : string, lib : string,
+		  targets : targets) : unit =
+	let val _ = check_dir lib
+	    val _ = set_desc(project,targets,false,[lib])
+	    val desc = get_desc()
+	    fun mapper (pdec:I.pdec) : label option =
+		(case pdec
+		   of I.UDEC (U,I.SRCU _,_) => SOME U
+		    | _ => NONE)
+	    val inferred = List.mapPartial mapper desc
+	in
+	    if null inferred then
+		(compile();
+		 Compiler.pack(desc,lib))
+	    else
+		(print ("can not pack " ^ lib ^
+			" because of units without interfaces: ");
+		 print_strings 70 (map Name.label2name' inferred);
+		 print "\n";
+		 reject "unable to pack")
+	end
+
+    local
+	type droppings =
+	    (I.iexp -> string option) list *
+	    (I.uexp -> string option) list
+
+	val empty : droppings = (nil, nil)
+
+	fun append (a : droppings, b : droppings) : droppings =
+	    let val (ia,ua) = a
+		val (ib,ub) = b
+	    in	(ia@ib, ua@ub)
+	    end
+
+	val concat : droppings list -> droppings =
+	    foldl append empty
+
+	fun purge_help (what : string, droppings : droppings)
+		       (project : string, targets : targets) : unit =
+	    let val _ = set_desc(project,targets,false,nil)
+		val desc = get_desc()
+		val (iFiles,uFiles) = droppings
+		val _ = if !Compiler.CompilerDiag then
+			    print ("Purging " ^ what ^ ".\n")
+			else ()
+		fun rm (fs:('a -> string option) list) (x:'a) : unit =
+		    let val files = List.mapPartial (fn f => f x) fs
+		    in  app Fs.remove files
+		    end
+		val rmi = rm iFiles
+		val rmu = rm uFiles
+		fun remove (pdec:I.pdec) : unit =
+		    if is_source_pdec pdec then
+			(case pdec
+			   of I.IDEC (_,iexp,_) => rmi iexp
+			    | I.UDEC (_,uexp,_) => rmu uexp
+			    | _ => error "source SCDEC")
+		    else ()
+	    in	app remove desc
+	    end
+
+	val meta : droppings =
+	    ([I.P.I.info'],
+	     [I.P.U.info'])
+	val iface : droppings =
+	    ([SOME o I.P.I.pinterface],
+	     [I.P.U.pinterface'])
+	val obj : droppings =
+	    (nil,
+	     [SOME o I.P.U.obj,
+	      I.P.U.asm',
+	      I.P.U.asmz',
+	      SOME o I.P.U.parm])
+    in
+	val purge : string * targets -> unit =
+	    purge_help ("binaries", obj)
+
+	val purgeAll : string * targets -> unit =
+	    purge_help ("binaries and interfaces",
+			concat [meta,iface,obj])
+    end
 end
