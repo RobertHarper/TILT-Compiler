@@ -118,10 +118,14 @@ mutual dependencies.
 
 **** File Dependencies
 
-Currently, a unit's implementation and external interface are stored
-in separate files. For each file, those units necessary to elaborate
-that file are specified. When both files are present, they are
-elaborated together in a context built up from both sets of units.
+To write down a compilation unit, we happen to use two files---a file
+for the source and a file for the external interface.
+
+To support separate compilation, we have to elaborate each of these
+files in isolation so we need a notion of a file's dependencies. A file's
+dependencies are those units the file directly depends on.
+
+A unit's dependencies, then, is the union of its file dependencies.
 
 The dependencies specified for a unit's external interface file and
 it's implementation file may be different. For example,
