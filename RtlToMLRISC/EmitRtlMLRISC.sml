@@ -38,12 +38,14 @@ functor EmitRtlMLRISC(
 		       FloatAllocation.id =
 		       FloatConvention.id =
 		       IntegerAllocation.id =
-		       IntegerLiveness.id =
-		       MLRISCPseudo.id =
 		       RegisterMap.id =
 		       RegisterSpillMap.id =
 		       RegisterTraceMap.id =
 		       SpillReload.id
+	      and type IntSet.set =
+		       IntegerLiveness.idSet =
+		       MLRISCPseudo.idSet =
+		       RegisterTraceMap.idSet
 	      and type MLRISCConstant.const =
 		       CallConventionBasis.offset =
 		       FloatAllocation.offset =
@@ -187,7 +189,7 @@ functor EmitRtlMLRISC(
    * Emit a list of mltree values.
    * mltrees -> the mltree values to emit
    *)
-  val emitMLTree = app MLTreeComp.mltreeComp  
+  val emitMLTree = Stats.timer("MLRISC", app MLTreeComp.mltreeComp)
 
   (* -- global state structures -------------------------------------------- *)
 
@@ -457,7 +459,7 @@ functor EmitRtlMLRISC(
 			SOME _ => loaded
 		      | NONE   => (Machine.R(physical id), trace id)::loaded
 	      in
-		foldr traceLoaded1 []
+		IntSet.foldr traceLoaded1 []
 	      end
 
 	(*
@@ -474,7 +476,7 @@ functor EmitRtlMLRISC(
 		| NONE =>
 		    spilled
 	in
-	  val traceSpilled = foldr traceSpilled1 []
+	  val traceSpilled = IntSet.foldr traceSpilled1 []
 	end
       end
     in
@@ -545,11 +547,9 @@ functor EmitRtlMLRISC(
 	    end
 
       (*
-       * Return the polymorphic spill predicate for a given list of
-       * register ids.
-       * ids -> the register ids to return the polymorphic spill predicate of
-       * <- a function that returns true if a given id must be spilled for
-       *    polymorphic values
+       * Return the polymorphic spill set for a given set of register ids.
+       * ids -> the register ids to return the polymorphic spill set of
+       * <- the ids that must be spilled for polymorphic values
        *)
       val polySpills = RegisterTraceMap.polySpills traceMap
 
@@ -1252,8 +1252,8 @@ functor EmitRtlMLRISC(
 	    code(Comparison.translateFloat(compare, left, right), label)
     end
 
-    fun CALL(procedure, arguments, results, (integers, _)) =
-	  call integers (procedure, arguments, results)
+    fun CALL(procedure, arguments, results, _) =
+	  call IntSet.empty (procedure, arguments, results)
 
     fun externalCALL operand =
 	  let
@@ -1338,7 +1338,8 @@ functor EmitRtlMLRISC(
 	       MLTree.BCC(MLTree.LE, compare, skipLabel),
 	       MLTree.MV(IntegerConvention.heapLimit, size)
 	     ]]@
-	    callRaw [] (externalExp "gc_raw")@ (* need liveness ??? *)
+	    callRaw IntSet.empty (externalExp "gc_raw")@
+	      (* need liveness ??? *)
 	    [MLTree.DEFINELABEL skipLabel]
 	  end
 
@@ -1348,7 +1349,8 @@ functor EmitRtlMLRISC(
 	       MLTree.MV(IntegerConvention.temporary1, size),
 	       moveValue
 	     ]]@
-	    callRaw [] (externalExp alloc_raw)@ (* need liveness ??? *)
+	    callRaw IntSet.empty (externalExp alloc_raw)@
+	      (* need liveness ??? *)
 	    [MLTree.CODE[
 	       MLTree.MV(dest, MLTree.REG IntegerConvention.temporary1)
 	     ]]
@@ -1674,8 +1676,8 @@ functor EmitRtlMLRISC(
 
     (*
      * Transform a list of Rtl instructions into a list of instructions where
-     * one-argument branches have been replaced by two-argument branches,
-     * where possible.
+     * compare/one-argument branch sequences have been replaced by
+     * two-argument branches, where possible.
      * instructions -> the instructions to transform
      * <- the transformed instructions
      *)
@@ -1861,6 +1863,9 @@ functor EmitRtlMLRISC(
 	      else
 		instructions'
 	    end
+
+      val transformBranch =
+	    Stats.timer("RtlToMLRISC.transformBranch", transformBranch)
     end
 
     (*
@@ -1885,7 +1890,7 @@ functor EmitRtlMLRISC(
        * filtering physical registers seems arbitrary--what are the properties
        * of live registers that should not be traced across call sites? ???
        *)
-      val keepPseudo = List.filter (fn id => id>=Cells.firstPseudoReg)
+      val keepPseudo = IntSet.filter (fn id => id>=Cells.firstPseudoReg)
 
       fun updateLive live (liveRef, _) =
 	    liveRef := keepPseudo live
@@ -1906,24 +1911,27 @@ functor EmitRtlMLRISC(
 	    in
 	      ListPair.app (updateBlock updateLive) (blocks, liveness)
 	    end
+
+      val updateCallSites =
+	    Stats.timer("RtlToMLRISC.updateCallSites", updateCallSites)
     end
 
     (*
-     * Return the pseudo-registers that are live across the call sites of
-     * a given procedure.
-     * procedure -> the procedure to return the call site live
+     * Return the polymorphic pseudo-registers that are live across the call
+     * sites of a given procedure.
+     * procedure -> the procedure to return the call site polymorphic
      *		    pseudo-registers of
-     * <- a list of the pseudo-registers that are live across any call site
-     *	  of procedure
+     * <- a set of the polymorphic pseudo-registers that are live across any
+     *	  call site of procedure
      *)
     local
-      fun callSiteLiveTree(MLTree.PSEUDO_OP(
+      fun callSitePolyTree(MLTree.PSEUDO_OP(
 			     MLRISCPseudo.CallSite(ref live, _)), set) =
-	    IntSet.addList(set, live)
-	| callSiteLiveTree(_, set) =
+	    IntSet.union(set, Register.polySpills live)
+	| callSitePolyTree(_, set) =
 	    set
     in
-      val callSiteLive = IntSet.listItems o foldr callSiteLiveTree IntSet.empty
+      val callSitePoly = foldr callSitePolyTree IntSet.empty
     end
 
     (*
@@ -1955,6 +1963,8 @@ functor EmitRtlMLRISC(
 				  (floatSpill, floatReload))
 	  end
 
+    val spillReload = Stats.timer("RtlToMLRISC.spillReload", spillReload)
+
     (*
      * Assign a given pseudo-register id a given callee trace value.
      * id     -> the id of the pseudo-register to assign
@@ -1964,16 +1974,11 @@ functor EmitRtlMLRISC(
 	  Register.assign(target, TraceTable.TRACE_CALLEE(Machine.R source))
 
     (*
-     * Return a membership predicate for a given list of integers.
-     * list -> the list to return the predicate for
-     * <- the membership predicate for list
+     * Return a membership predicate for a given set of integers.
+     * set -> the set to return the predicate for
+     * <- the membership predicate for set
      *)
-    fun memberInt list =
-	  let
-	    val set = IntSet.addList(IntSet.empty, list)
-	  in
-	    fn n => IntSet.member(set, n)
-	  end
+    fun memberSet set n = IntSet.member(set, n)
 
     fun translate(Rtl.PROC{name	   = label,
 			   args	   = arguments,
@@ -1990,7 +1995,8 @@ functor EmitRtlMLRISC(
 	    val _ = Procedure.open_()
 
 	    (*
-	     * replace return instructions with branches to return code.
+	     * replace return instructions with branches to return code and
+	     * replace compare/branch sequences with branches
 	     *)
 	    val return	       = Rtl.fresh_code_label()
 	    val instructions'  = transformReturn return instructions
@@ -2052,7 +2058,7 @@ functor EmitRtlMLRISC(
 	     * determine which polymorphic value descriptors are used by call
 	     * sites
 	     *)
-	    val polySpills = Register.polySpills (callSiteLive procedure)
+	    val polySpills = callSitePoly procedure
 
 	    (*
 	     * spill all the callee-save registers if the procedure contains
@@ -2060,15 +2066,10 @@ functor EmitRtlMLRISC(
 	     *)
 	    val spills =
 		  if hasHandler instructions'' then
-		    let
-		      val integerSpills = memberInt(map #1 integerSave)
-		      val floatSpills	= memberInt(map #1 floatSave)
-		    in
-		      (fn id => integerSpills id orelse polySpills id,
-		       floatSpills)
-		    end
+		    (memberSet(IntSet.addList(polySpills, map #1 integerSave)),
+		     memberSet(IntSet.addList(IntSet.empty, map #1 floatSave)))
 		  else
-		    (polySpills, fn _ => false)
+		    (memberSet polySpills, fn _ => false)
 	  in
 	    (*
 	     * spill the required set of pseudo-registers in the procedure
