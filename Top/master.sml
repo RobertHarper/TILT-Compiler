@@ -17,6 +17,7 @@ structure Master :> MASTER =
 struct
     val error = fn s => Util.error "master.sml" s
 
+    val checkPointVerbose = Stats.tt "CheckPointVerbose"
     val showEnable = Stats.ff "ShowEnable"
 	
     structure S = Update
@@ -863,10 +864,29 @@ struct
 					 PROCESSING _ => ()
 				       | _ => chat "  [All processors working!]\n")
 			    val _ = if (diff > 30.0)
-					then 
+					then
 					    let val left = stateSize state
+						val msg =
+						    if (!checkPointVerbose) then
+							let val (waiting, pending, working, proceeding, pending', working') = state
+							    val waiting = length waiting
+							    val pending = length pending
+							    val working = length working
+							    val proceeding = length proceeding
+							    val pending' = length pending'
+							    val working' = length working'
+							in
+							    String.concat ["CheckPoint (", Int.toString left, " files left = ",
+									   Int.toString waiting, " waiting + ",
+									   Int.toString pending, " pending + ",
+									   Int.toString working, " working + ",
+									   Int.toString proceeding, " proceeding + ",
+									   Int.toString pending', " pending' + ",
+									   Int.toString working', " working')"]
+							end
+						    else String.concat ["CheckPoint (", Int.toString left, " files left)"]
 					    in  (makeGraph'(mapfile,NONE); 
-						 Help.showTime (false, "CheckPoint (" ^ (Int.toString left) ^ " files left)");
+						 Help.showTime (false, msg);
 						 lastGraphTime := (Time.now()))
 					    end
 				    else ()

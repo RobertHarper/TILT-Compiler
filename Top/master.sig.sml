@@ -3,6 +3,7 @@
 
 signature MASTER = 
 sig
+    val checkPointVerbose : bool ref	(* Checkpoints include a break-down of units by status. *)
     val showEnable : bool ref		(* Chat when units become enabled for compilation. *)
 	
     type state
