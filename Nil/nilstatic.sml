@@ -1986,9 +1986,7 @@ struct
 	     
 	   val _ = 
 	     (same_openness (openness,openness')) orelse
-	     (print "Expression was :\n";
-	      Ppnil.pp_exp exp; print "\n";
-	      error (locate "exp_valid") "Error in application - different openness" handle e => raise e)
+	      (e_error(D,exp,"Error in application - different openness"))
 
 	   val kinds = map (curry2 con_valid D) cons
 

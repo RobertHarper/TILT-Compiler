@@ -808,7 +808,8 @@ fun pp_alias UNKNOWN = print "unknown"
 							end
 					end
 				  val bnds = Listops.flatten(map3 mapper (vars,labs,cons))
-				  val e = do_inject state (k,clist,[Prim_e(NilPrimOp(record labs),[], map Var_e vars)])
+				  val e = do_prim state (NilPrimOp(inject_record k),clist,
+							 [Prim_e(NilPrimOp(record labs),[], map Var_e vars)])
 			      in  do_exp state (Let_e (Sequential,bnds,e))
 			      end
 			| (true, _) => do_prim state (NilPrimOp (inject_nonrecord k),clist,elist)
@@ -893,7 +894,7 @@ fun pp_alias UNKNOWN = print "unknown"
 				  in  Const_e(Prim.vector(do_con state c, a))
 				  end
 			    | Prim.refcell _ => exp
-			    | Prim.tag _ => exp)
+			    | Prim.tag (t,c) => Const_e(Prim.tag(t,do_con state c)))
 		| Prim_e(p,clist,elist) => do_prim state (p,clist,elist)
 		| Switch_e sw => do_switch state sw
 		| Let_e (letsort,bnds,e) => 

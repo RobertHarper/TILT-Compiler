@@ -1252,7 +1252,7 @@ structure Reduce
 			       Prim.vector (con, arr)
 			     end
 			    | Prim.refcell (ref r) => error "Refs shouldn't show up ever"
-			    | Prim.tag (t,con) => error "Tags shouldn't show up ever"
+			    | Prim.tag (t,con) => Prim.tag(t,xcon fset con)
 			    | _ => c)
 
 		    | Raise_e (exp, con) => Raise_e (xexp fset exp, xcon fset con)

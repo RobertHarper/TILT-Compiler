@@ -146,7 +146,9 @@ struct
 	     (cbnds @ bnds,Prim.vector (con,arr))
 	   end
 	  | Prim.refcell r => error "Ref cells shouldn't ever show up"
-	  | Prim.tag (t,con) => error "Tags shouldn't ever show up"
+	  | Prim.tag (t,con) => let val (cbnds,con) = lcon lift state con
+				    val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
+				in (cbnds,Prim.tag (t,con)) end
 	  | _ => ([],value))
 
    and lswitch lift state switch = 
