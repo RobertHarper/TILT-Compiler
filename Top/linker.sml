@@ -1,4 +1,4 @@
-(*$import LINKER Compiler Util Crc Listops OS Name Linkalpha *)
+(*$import LINKER Compiler Util Crc Listops OS Name Linkalpha Linksparc *)
 structure Linker :> LINKER =
   struct
 

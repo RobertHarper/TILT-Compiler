@@ -1,4 +1,4 @@
-(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha OS Stats *)
+(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha Linksparc OS Stats *)
 structure Til : COMPILER =
   struct
 
