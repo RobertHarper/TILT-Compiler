@@ -142,20 +142,22 @@ structure IlStatic
 	    val _ = debugdo (fn () =>
 			     (print "find_tyvars_flexes con = ";
 			      pp_con con; print "\n"))
-	    fun reset (tv,c) = (debugdo (fn () =>
-					 (print "find_tyvars_flexes: path compression resetting ";
-					  print (tyvar2string tv); print " to "; pp_con c; print "\n"));
-				tyvar_reset(tv,c))
-	    (* opt is not in acc *)
-	    fun compress tv acc opt =
-		(case tyvar_deref tv
-		   of NONE => (case opt
-				 of NONE => false
-				  | SOME c => (app (fn tv => reset(tv, c)) acc;
-					       false))
-		    | SOME (c as CON_TYVAR tv2) => compress tv2 (tv::acc) (SOME c)
-		    | SOME c => (app (fn tv => reset(tv, c)) acc;
-				 true))
+	    fun reset c tv = (debugdo (fn () =>
+				       (print "find_tyvars_flexes: path compression resetting ";
+					print (tyvar2string tv); print " to "; pp_con c; print "\n"));
+			      tyvar_reset(tv,c))
+	    fun compress tv =
+		let
+		    fun scan (tv, tvs, copt) =
+			(case tyvar_deref tv
+			   of NONE => (tvs, copt)
+			    | SOME (c as CON_TYVAR tv2) => scan (tv2, tv :: tvs, SOME c)
+			    | somec => (tvs, somec))
+		in
+		    case scan (tv, nil, NONE)
+		      of (tvs, SOME c) => app (reset c) tvs
+		       | _ => ()
+		end
 	    fun selfSig (SIGNAT_SELF (_, _, signat)) = signat
 	      | selfSig _ = error "find_tyvars_flexes: expected SIGNAT_SELF"
 	    fun funArgSdecs (SIGNAT_FUNCTOR (_, SIGNAT_STRUCTURE sdecs, _, _)) = sdecs
@@ -200,7 +202,8 @@ structure IlStatic
 			(case c of
 			     CON_TYVAR tyvar =>
 				 let val seen = member_eq(eq_tyvar,tyvar,map #2 (!tyvars))
-				     val set =  compress tyvar [] NONE
+				     val set = isSome (tyvar_deref tyvar)
+				     val _ = compress tyvar
 				     val _ = if (seen orelse set)
 						 then ()
 					     else (tyvars := (in_array_ref,tyvar) :: (!tyvars))

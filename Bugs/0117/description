@@ -1,6 +1,6 @@
 Number: 0117
 Title:       option failure
-Keywords:    equality
+Keywords:    elaborator,unification,equality
 Submitter:   rwh
 Date:        08/16/02
 Version:     CVS
@@ -13,7 +13,31 @@ Comments:
          [tom7] This is NOT the same bug as 0112, et al., though it fails in the
          same place. Before that, there's never a "unset toplevel tyvar -- setting
 	 to unit" message.
-Fix:         
+
+	More on the exception:
+		  [Elaborating vector.sml non-constrained]
+
+		uncaught exception Option
+		  raised at: boot/option.sml:17.25-17.31	[ie, valOf]
+		             Elaborator/equal.sml:122.7
+		             Elaborator/equal.sml:531.27
+		             Elaborator/toil.sml:408.22
+		             Elaborator/equal.sml:122.7
+		             Elaborator/equal.sml:531.27
+		             Top/slave.sml:82.17
+		-
+
+	Find_tyvars_flexes was sometimes returning tyvars that had
+	already been set.  This code tickled that bug and resulted in
+	a tyvar being marked for equality (with an empty eq_hole)
+	after it was unified.  This violates an invariant of the
+	unification routines.
+
+Fix:
+
+	find_tyvars_flexes was corrected and the path compression
+	code was made less mysterious.
+
 Test: m0048, vector.sml
-Owner: 
-Status: open
+Owner: swasey
+Status: closed

@@ -67,7 +67,7 @@ m0044	pass	arrays
 m0045	fail	[Bug #0113] asterisk parsing
 m0046	fail	[Bug #0114] case analysis
 m0047	pass	withtype
-m0048	fail	[Bug #0117] vectors
+m0048	pass	vectors
 m0049	pass	vectors
 m0050	pass	vectors
 m0051	pass	vectors

@@ -110,7 +110,7 @@
 0113 [open]	parsing problem
 0114 [open]	overloading constants
 0115 [closed]	withtype scoping wrong
-0117 [open]	option failure
+0117 [closed]	option failure
 0118 [open]	syntax discrepancies
 0119 [open]	discrepancies on byte/char tests
 0120 [closed]	zero-sized word8array
