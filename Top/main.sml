@@ -3,7 +3,7 @@
 structure Main : MAIN =
 struct
 
-    val usage = "usage: tilt [-?vsbB] [-t platform] [-fr flag] [-cCmM mapfile] [-S [num/]host]"
+    val usage = "usage: tilt [-?vpsbB] [-t platform] [-fr flag] [-cCmM mapfile] [-S [num/]host]"
     val version = "TILT version 0.1 (alpha8)\n"
 
     datatype cmd =
@@ -20,6 +20,7 @@ struct
       | BootMaster			(* -B *)
       | PrintUsage			(* -? *)
       | PrintVersion			(* -v *)
+      | PrintStats			(* -p *)
 
     (* isSlaves, isSlave : cmd -> bool *)
     fun isSlaves (Slaves _) = true
@@ -44,6 +45,7 @@ struct
 				 print "(Using basis from ";
 				 print (Dirs.getLibDir (Dirs.getDirs ()));
 				 print ")\n")
+      | runCmd (PrintStats) = Stats.print_stats()
 
     (* run : cmd list -> unit.
      * As a hack, we launch any remote slaves first since they operate in the
@@ -95,7 +97,8 @@ struct
 			   Getopt.Noarg (#"b", Boot),
 			   Getopt.Noarg (#"B", BootMaster),
 			   Getopt.Noarg (#"?", PrintUsage),
-			   Getopt.Noarg (#"v", PrintVersion)]
+			   Getopt.Noarg (#"v", PrintVersion),
+			   Getopt.Noarg (#"p", PrintStats)]
 	in
 	    case Getopt.getopt (options, args)
 	      of Getopt.Error msg => raise ArgErr (msg ^ "\n" ^ usage)
