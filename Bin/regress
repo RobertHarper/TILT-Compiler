@@ -1,0 +1,68 @@
+#!/bin/sh
+
+# Simple script to automate running the regression tests.
+# This script (or the equivalent) should be run before 
+# checking in any significant changes.
+#
+# Usage (from ml96): ./Bin/regress [all | tilt | nj] [outfile]
+#
+# One of [all | tilt | nj] must be specified if an outfile is 
+# specified.  If no outfile is specified, then the output will
+# be placed in a file called RegressionResults.`date`.txt.
+#
+# If given no arguments, just runs the NJ compiled TILT.
+# Otherwise, runs either the NJ compiled TILT, or the TILT
+# compiled TILT, or both, on the entire regression suite.
+
+
+# build the runtime
+if (cd Runtime; gmake runtime) ; then echo "Compiled runtime" ; else echo "Runtime didn't compile" ; exit 1 ; fi
+
+# build NJ tilt
+if gmake heap ; then echo "Compiled tilt-nj" ; else echo "TILT didn't compile" ; exit 1 ; fi
+
+# build the basis
+if ./Test/tilt-nj -b ; then echo "Compiled basis" ; else echo "Basis didn't compile" ; exit 1 ; fi
+
+# build the test harness
+if (cd Test ; ./tilt-nj -m mapfile) ; then echo "Compiled test harness" ; else echo "Harness didn't compile" ; exit 1; fi
+
+# is this actually used right now?
+ln -s ./Bin/til_slave_local_xterm ./Bin/til_slave
+
+if [ $# -lt 1 ] ; then arg=nj ; else arg=$1 ; fi
+
+if [ $# -eq 2 ] ; then outfile=$2 ; else outfile=`pwd`/RegressionResults.`date +%m.%d.%y.%T`.txt ; fi
+
+echo "Regression results will be written to $outfile"
+
+echo "TILT regression results from `date`" >> $outfile ;
+
+if [ $arg = all -o $arg = nj ] ; then  
+
+    # Run the nj compiled tests
+    echo "Running tilt-nj tests....."
+    echo "
+************************************************************
+NJ compiled TILT results
+************************************************************" >> $outfile ;
+
+    # Run in a subshell to avoid having to canonicalize $outfile
+    (cd ./Test ; ./runall -nf) >> $outfile  2>&1 ;
+fi
+
+if [ $arg = all -o $arg = tilt ] ; then  
+
+   # build TILT
+    if ./Test/tilt-nj -m mapfile-all ; then echo "TILT compiled TILT" ; else echo "TILT failed to compile TILT" ; exit 1; fi ;
+
+    # Run the native regression tests
+    echo "Running tilt tests....." ;
+    echo "
+************************************************************
+TILT compiled TILT results
+************************************************************" >> $outfile;
+
+    # Run in a subshell to avoid having to canonicalize $outfile
+    (cd ./Test ; ./runall -f) >> $outfile  2>&1 ;
+fi
