@@ -1,4 +1,4 @@
-(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline Flatten Reduce PpnilHtml *)
+(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline Flatten Reduce PpnilHtml Measure *)
 
 
 structure Linknil :> LINKNIL  =
@@ -45,12 +45,13 @@ structure Linknil :> LINKNIL  =
     val do_typecheck_after_opt = Stats.ff("TypecheckAfterOpt")
     val do_typecheck_after_opt2 = Stats.ff("TypecheckAfterOpt2")
     val do_typecheck_after_cc = Stats.ff("TypecheckAfterCC")
-
+    val do_measure = Stats.ff("NilMeasure")
     val typecheck_after_phasesplit = (do_typecheck_after_phasesplit, ref false, "Nil_typecheck_post_phasesplit")
     val typecheck_before_opt = (do_typecheck_before_opt, ref false, "Nil_typecheck_pre-opt")
     val typecheck_after_opt = (do_typecheck_after_opt, ref false, "Nil_typecheck_post-opt")
     val typecheck_after_opt2 = (do_typecheck_after_opt2, ref false,"Nil_typecheck_post-opt2")
     val typecheck_after_cc = (do_typecheck_after_cc, ref false, "Nil_typecheck_postcc")
+    val measure = (do_measure,ref false,"Nil_measure")
     val phasesplit = (show_phasesplit, "Phase-split")
     val rename1 = (do_rename, show_renamed, "Renaming1")
     val reduce1 = (do_reduce, show_reduce, "Reduce")
@@ -72,9 +73,6 @@ structure Linknil :> LINKNIL  =
 
     val debug = Stats.ff "nil_debug"
     val profile = Stats.ff "nil_profile"
-    val short_circuit = Stats.tt "subst_short_circuit"
-    val hash = Stats.ff "subst_use_hash"
-    val bnds_made_precise = Stats.tt "bnds_made_precise"
     val closure_print_free = Stats.ff "closure_print_free"
 
     structure Ppnil = Ppnil
@@ -185,20 +183,28 @@ structure Linknil :> LINKNIL  =
 
 
  	    val nilmod = transform typecheck_after_opt (typecheck,nilmod)
+
 	    val nilmod = transform specialize (Specialize.optimize, nilmod)
 	    val nilmod = transform hoist (Hoist.optimize, nilmod)
+(* 	    val nilmod = transform (ref true,ref false,"Before Optimize2") (typecheck, nilmod)*)
 	    val nilmod = transform optimize2
 				   (Optimize.optimize {lift_array = false,
 						      dead = true, projection = true, 
 						      cse = !do_cse, uncurry = !do_uncurry},
 				   nilmod) 
 
+(* 	    val nilmod = transform (ref true,ref false,"Before Reduce2") (typecheck, nilmod)*)
 	    val nilmod = transform reduce2 (Reduce.doModule, nilmod)
+
+(* 	    val nilmod = transform (ref true,ref false,"Before Inline") (typecheck, nilmod)*)
 	    val nilmod = transform inline2 (inline_domod, nilmod)
+
+(* 	    val nilmod = transform (ref true,ref false,"Before Reify") (typecheck, nilmod)*)
             val nilmod = transform reify2 (Reify.reify_mod, nilmod)
 
  	    val nilmod = transform typecheck_after_opt2 (typecheck, nilmod)
 	    val nilmod = transform cc (ToClosure.close_mod, nilmod)
+ 	    val nilmod = transform measure (Measure.measureMod, nilmod)
  	    val nilmod = transform typecheck_after_cc (typecheck, nilmod)
 
 	in  nilmod

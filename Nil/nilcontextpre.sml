@@ -10,9 +10,13 @@ structure NilContextPre
 
 
    (* IMPORTS *)
-   val subtimer = Stats.subtimer
-
-   val substConInKind = fn s => subtimer("Ctx:substConInKind",NilSubst.substConInKind s)
+   val profile = Stats.ff "nil_profile"
+   val local_profile = Stats.ff "nilcontext_profile"
+     
+   val timer = Stats.subtimer
+   val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
+     
+   val substConInKind = NilSubst.substConInKind
    val substConInCon = fn s => subtimer("Ctx:substConInCon",NilSubst.substConInCon s)
    val add = NilSubst.C.sim_add
    val addr = NilSubst.C.addr
@@ -55,7 +59,7 @@ structure NilContextPre
    val strip_var = NilUtil.strip_var
    val generate_tuple_label = NilUtil.generate_tuple_label
    val selfify = subtimer("Ctx:selfify",NilUtil.selfify)
-
+   val project_from_kind_nondep = NilUtil.project_from_kind_nondep
 
 
    (*END OF IMPORTS     *)
@@ -101,6 +105,7 @@ structure NilContextPre
    type k_entry = {eqn: con option,
 		   kind : kind,
 		   std_kind : kind delay,
+		   max_kind : kind delay,
 		   index : int}
      
    type c_entry = {con : con delay,
@@ -145,7 +150,7 @@ structure NilContextPre
 	else
 	  print "\n")
        
-     fun print_entry (var,{eqn,kind,std_kind,index}:k_entry) =
+     fun print_entry (var,{eqn,kind,std_kind,max_kind,index}:k_entry) =
        (print (Name.var2string var);
 	(case eqn
 	   of SOME c => (print " = ";
@@ -250,6 +255,11 @@ structure NilContextPre
 	   SOME {std_kind,...} => thaw std_kind
 	 | NONE => raise Unbound)
 
+   fun find_max_kind (context as {kindmap,...}:context,var) = 
+     (case (V.find (kindmap, var)) of
+	   SOME {max_kind,...} => thaw max_kind
+	 | NONE => raise Unbound)
+
    fun find_kind (context as {kindmap,...}:context,var) = 
      (case (V.find (kindmap, var)) of
 	   SOME {kind,...} => kind
@@ -259,12 +269,12 @@ structure NilContextPre
    fun kind_standardize(D : context, kind : kind) : kind = 
      let 
        
-       fun insert_std_kind (context as {conmap,kindmap,counter}: context,var,kind,std_kind) = 
+       fun insert_std_kind (context as {conmap,kindmap,counter}: context,var,std_kind) = 
 	 let
 	   val entry = {eqn = NONE,
-			kind = kind,
-(*			std_kind = immediate std_kind, *)
-			std_kind = delay std_kind,
+			kind = std_kind,
+			std_kind = immediate std_kind, 
+			max_kind = delay (fn () => selfify (Var_c var,std_kind)),
 			index = counter}
 	 in
 	   {conmap = conmap, 
@@ -274,7 +284,7 @@ structure NilContextPre
       
       val res = 
 	(case kind of
-	   Type_k => Type_k
+	   Type_k => kind
 	 | SingleType_k con => kind
 	 | Single_k con => kind_of(D,con)
 	 | Record_k elts => 
@@ -282,7 +292,7 @@ structure NilContextPre
 	       fun folder (((label,var),kind),D) = 
 		 let
 		   val std_kind = kind_standardize(D,kind)
-		   val D = insert_std_kind(D,var,kind,fn() => selfify(Var_c var,std_kind))
+		   val D = insert_std_kind(D,var,std_kind)
 		 in
 		   (((label,var),std_kind),D)
 		 end
@@ -295,7 +305,7 @@ structure NilContextPre
 	       fun folder ((var,kind),D) = 
 		 let
 		   val std_kind = kind_standardize(D,kind)
-		   val D = insert_std_kind(D,var,kind,fn() => selfify (Var_c var,std_kind))
+		   val D = insert_std_kind(D,var,std_kind)
 		 in
 		   ((var,std_kind),D)
 		 end
@@ -323,7 +333,7 @@ structure NilContextPre
 		    let 
 		      fun mapper (i,(v,c)) = 
 			let val label = generate_tuple_label(i+1)
-			in((label,derived_var v),SingleType_k(Proj_c(constructor,label)))
+			in((label,Name.derived_var' v),SingleType_k(Proj_c(constructor,label)))
 			end
 		      val entries = Sequence.mapcount mapper defs
 		    in  Record_k(entries)
@@ -338,7 +348,7 @@ structure NilContextPre
 
 	     | (v as (Var_c var)) => 
 	      let
-		val kind = (find_std_kind (D,var)
+		val kind = (find_max_kind (D,var)
 			    handle Unbound =>
 			      (print_context D;
 			       error  (locate "kind_of") ("variable "^(var2string var)^" not in context")))
@@ -403,7 +413,7 @@ structure NilContextPre
 			  end)
 		end
 	      val (subst,kind) = loop (bnds,(D,empty_subst()))
-	      val kind = substConInKind subst kind
+	      val kind =  subtimer("Ctx:substConInKind1",substConInKind subst) kind
 	      in
 		kind
 	      end
@@ -424,21 +434,11 @@ structure NilContextPre
 	    | (Crecord_c entries) => 
 	      let
 		val k_entries = 
-		  map (fn (l,c) => ((l,fresh_named_var "crec_kind_of"),kind_of(D,c))) entries
+		  map (fn (l,c) => ((l,Name.fresh_named_var' "crec_kind_of"),kind_of(D,c))) entries
 	      in Record_k (Sequence.fromList k_entries)
 	      end
 	    
-	    | (Proj_c (rvals,label)) => 
-	      (case kind_of(D,rvals)
-		 of Record_k lvk_seq => (*NilUtil.project_from_kind (lvk_seq,rvals,label) Claim is that this is non-dependent*)
-		   (case Sequence.find (fn (l,_) => (Name.eq_label(label,l))) lvk_seq
-		      of SOME k => k
-		       | NONE => error  (locate "kind_of") "Field not in record kind")
-		  | other => 
-		   (print "Non-record kind returned from kind_of in projection:\n";
-		    Ppnil.pp_kind other; print "\n";
-		    error  (locate "kind_of") "Non-record kind returned from kind_of in projection"))
-		 
+	    | (Proj_c (rvals,label)) => project_from_kind_nondep(kind_of(D,rvals),label)		 
 	    | (App_c (cfun,actuals)) => 
 	      (case kind_of (D,cfun) of
 		 (Arrow_k (_,formals,body_kind)) => 
@@ -446,7 +446,7 @@ structure NilContextPre
 		     fun folder ((v,k),c,subst) = add subst (v,c)
 		     val subst = foldl2 folder (empty_subst()) (formals,actuals)
 		   in  
-		     substConInKind subst body_kind
+		     subtimer("Ctx:substConInKind2",substConInKind subst) body_kind
 		   end
 	       | cfun_kind => (print "Invalid kind for constructor application\n";
 			       Ppnil.pp_kind cfun_kind; print "\n";
@@ -471,10 +471,12 @@ structure NilContextPre
 			   lprintl "Kind contains variables not found in context"))
 	    ]
 	 else (); 
-       fun thunk() = selfify(Var_c var,subtimer ("Ctx:kind_standardize",kind_standardize) (context,kind))
+       val std_kind = delay (fn () => kind_standardize (context,kind))
+       val max_kind = delay (fn () => selfify (Var_c var,thaw std_kind))
        val entry = {eqn = NONE,
 		    kind = kind,
-		    std_kind = delay thunk,
+		    std_kind = std_kind,
+		    max_kind = max_kind,
 		    index = counter}
      in
        {conmap = conmap, 
@@ -498,10 +500,13 @@ structure NilContextPre
 			   print "Kind contains variables not found in context"))
 	    ]
 	 else ();
-       fun thunk() = subtimer("Ctx:kind_standardize",kind_standardize)(context,Single_k(con))
+       val std_kind = delay (fn () => kind_of (context,con))
+       val max_kind = delay (fn () => selfify (Var_c var,thaw std_kind))
+
        val entry = {eqn = SOME con,
 		    kind = kind,
-		    std_kind = delay thunk,
+		    std_kind = std_kind,
+		    max_kind = max_kind,
 		    index = counter}
      in
        {conmap = conmap, 
@@ -523,10 +528,13 @@ structure NilContextPre
 		   ]
 	 else ();
        val kind = Single_k (con)
-       fun sthunk() = subtimer("Ctx:kind_standardize",kind_standardize) (context,kind)
+       val std_kind = delay (fn () => kind_of (context,con))
+       val max_kind = delay (fn () => selfify (Var_c var,thaw std_kind))
+
        val entry = {eqn = SOME con,
 		    kind = kind,
-		    std_kind = delay sthunk,
+		    std_kind = std_kind,
+		    max_kind = max_kind,
 		    index = counter}
      in
        {conmap = conmap, 
@@ -634,6 +642,7 @@ structure NilContextPre
 		    of CON c1 => CON(Closure_c(c1,c2))
 		     | KIND (k,subst) => closure_kind(k,c2,subst)
 		end
+	    | (Annotate_c (_,c)) => traverse c
 	    | _ => ((* print "traverse given non-path = \n";
 		     Ppnil.pp_con c; print "\n"; *)
 		    raise Opaque))
@@ -650,7 +659,7 @@ structure NilContextPre
 		       Ppnil.pp_con con; print "\n"; raise e)
      end
 
-  val find_kind_equation = Stats.subtimer("Ctx:find_kind_equation",find_kind_equation)
+  val find_kind_equation = subtimer("Ctx:find_kind_equation",find_kind_equation)
 
    fun is_well_formed (kind_valid : context * kind -> unit,
 		       con_valid : context * con -> kind,
@@ -661,7 +670,7 @@ structure NilContextPre
        val entries =ListMergeSort.sort compare entries
        val error : string -> bool = error (locate "is_well_formed") 
 	 
-       fun folder ((var,entry as {eqn,kind,std_kind,index}),D as {kindmap,conmap,counter}) = 
+       fun folder ((var,entry as {eqn,kind,std_kind,max_kind,index}),D as {kindmap,conmap,counter}) = 
 	 let
 	   val _ = 
 	     (

@@ -1,4 +1,4 @@
-(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil NilHNF TraceOps *)
+(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
   
@@ -22,7 +22,10 @@ struct
   val stack_trace = Stats.ff "nilstatic_show_stack"
   val local_debug = Stats.ff "nilstatic_debug"
   val assertions  = Stats.ff "nilstatic_assertions"
+  val profile = Stats.ff "nil_profile"
+  val local_profile = Stats.ff "nilstatic_profile"
   val debug = Stats.ff "nil_debug"
+
   val show_calls = Stats.ff "nil_show_calls"
   val show_context = Stats.ff "nil_show_context"
   val short_circuit = Stats.tt "nilstatic_shortcircuit"
@@ -30,7 +33,6 @@ struct
   val type_equiv_count = Stats.counter "Type Equiv Calls"
   val alpha_equiv_checks = Stats.counter "Alpha Equiv Checks"
   val alpha_equiv_success = Stats.counter "Alpha Equiv Checks Succeeded"
-  val kind_of_calls = Stats.counter "Kind of Calls"
   val kind_standardize_calls = Stats.counter "Kind Standardize Calls"
 
   val locate = NilError.locate "NilStatic"
@@ -137,34 +139,33 @@ struct
   (* Local rebindings from imported structures *)
 
   val timer = Stats.subtimer
-  val subtimer = Stats.subtimer
+  val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
   (*From Normalize*)
 
-  val expandMuType = Normalize.expandMuType
-  val projectRecordType = Normalize.projectRecordType
-  val projectSumType = Normalize.projectSumType
+  val expandMuType = subtimer("Tchk:expandMuType",Normalize.expandMuType)
+  val projectRecordType = subtimer("Tchk:projectRecordType",Normalize.projectRecordType)
+  val projectSumType = subtimer("Tchk:projectSumType",Normalize.projectSumType)
   val type_of = Normalize.type_of
+  fun con_head_normalize args = #2( Normalize.reduce_hnf args)
+
+(*  val con_head_normalize = NilHNF.reduce_hnf*)
+
+  val time_con_head_normalize = fn s => subtimer("Tchk:CHNF:"^s,con_head_normalize)
+  val con_head_normalize = time_con_head_normalize "Rest"
+
 
   (*From NilContext*)
   type context = NilContext.context
   val empty = NilContext.empty
-  val insert_con = subtimer ("Tchk:insert_con",NilContext.insert_con)
-  val insert_con_list = subtimer ("Tchk:insert_con_list",NilContext.insert_con_list)
-  val find_con = subtimer ("Tchk:find_con",NilContext.find_con)
+  val insert_con = NilContext.insert_con
+  val insert_con_list = NilContext.insert_con_list
+  val find_con = NilContext.find_con
   val find_std_con = subtimer ("Tchk:find_std_con",NilContext.find_std_con)
   val insert_kind = subtimer ("Tchk:insert_kind",NilContext.insert_kind)
   val insert_kind_equation = subtimer ("Tchk:insert_kind_equation",NilContext.insert_kind_equation)
-  val insert_kind_list =subtimer ("Tchk:insert_kind_list", NilContext.insert_kind_list)
-  val find_kind = subtimer ("Tchk:find_std_kind",NilContext.find_std_kind)             (*NOTE RENAMING!*)
+  val insert_kind_list = NilContext.insert_kind_list
+  val find_max_kind = subtimer ("Tchk:find_max_kind",NilContext.find_max_kind)           
   val kind_standardize = subtimer ("Tchk:kind_standardize",NilContext.kind_standardize)
-  val kind_standardize = fn args => (kind_standardize_calls();
-				     kind_standardize args)
-  val kind_of = subtimer ("Tchk:kind_of",NilContext.kind_of)
-  val kind_of = fn args => (kind_of_calls();
-(*			    print ("Kind of called with argument:\n");
-			    Ppnil.pp_con (#2 args);
-			    print "\nReturned\n";*)
-			    kind_of args)
 
   val exp_error_context   = NilContext.exp_error_context
   val con_error_context   = NilContext.con_error_context
@@ -202,9 +203,9 @@ struct
   val same_effect = NilUtil.same_effect
   val primequiv = NilUtil.primequiv
   val sub_phase = NilUtil.sub_phase
-  val project_from_kind = subtimer ("Tchk:project_from_kind",NilUtil.project_from_kind)
+  val project_from_kind_nondep = NilUtil.project_from_kind_nondep
   val selfify = subtimer ("Tchk:selfify",NilUtil.selfify)
-  val alpha_equiv_con = subtimer ("Tchk:alpha_equiv", NilUtil.alpha_equiv_con)
+  val alpha_equiv_con = subtimer ("Tchk:alpha_equiv",NilUtil.alpha_equiv_con)
   val alpha_equiv_con = (fn args => (alpha_equiv_checks();
 				     (alpha_equiv_con args) andalso (alpha_equiv_success();true)))
     (*
@@ -242,9 +243,11 @@ struct
   val eq_label = Name.eq_label
   val var2string = Name.var2string
   val label2string = Name.label2string
-  val fresh_named_var = Name.fresh_named_var
+  val fresh_named_var  = Name.fresh_named_var
+  val fresh_named_var' = Name.fresh_named_var;
   fun fresh_var () = fresh_named_var "nilstatic"
-  val derived_var = Name.derived_var
+  val derived_var  = Name.derived_var
+  val derived_var' = Name.derived_var'
 
   (*From Listops*)
   val count1 = Listops.count1
@@ -372,12 +375,8 @@ struct
        )
 
   val find_con = find_con
-  val find_kind = find_kind
 
-  val con_head_normalize = NilHNF.reduce_hnf
 
-  val time_con_head_normalize = fn s => subtimer("Tchk:CHNF:"^s,con_head_normalize)
-  val con_head_normalize = time_con_head_normalize "Rest"
 
   (*PRE: kind is standard
    *)
@@ -602,7 +601,7 @@ struct
 		 let 
 		   fun mapper (i,(v,c)) = 
 		     let val label = generate_tuple_label(i+1)
-		     in((label,derived_var v),SingleType_k(Proj_c(constructor,label)))
+		     in((label,derived_var' v),SingleType_k(Proj_c(constructor,label)))
 		     end
 		   val entries = Sequence.mapcount mapper defs
 		 in  Record_k(entries)
@@ -640,7 +639,7 @@ struct
 	     end
 	    | (v as (Var_c var)) => 
 	      let
-		val kind = (find_kind (D,var)
+		val kind = (find_max_kind (D,var)
 			    handle Unbound =>
 			      (print_all ["UNBOUND VARIABLE = ",var2string var,
 					  " CONTEXT IS \n"];
@@ -648,7 +647,6 @@ struct
 			       error  (locate "con_valid") ("variable "^(var2string var)^" not in context")))
 	      in
 		kind
-(*		selfify(v,kind) (*XXX SHould already be selfified?*)*)
 	      end
 	    | (Let_c (Parallel,cbnds,con)) => error' "Parallel bindings not supported yet"
 	    | (Let_c (Sequential,cbnds,con)) =>
@@ -700,11 +698,12 @@ struct
 			   then print "con_valid done processing Crecord_c\n}"
 		       else () 
 	       val k_entries = 
-		 map2 (fn (l,k) => ((l,fresh_named_var "con_valid_record"),k)) (labels,kinds)
+		 map2 (fn (l,k) => ((l,fresh_named_var' "con_valid_record"),k)) (labels,kinds)
 	     in Record_k (Sequence.fromList k_entries)
 	     end
 	    | (Proj_c (rvals,label)) => 
 	     let
+	       (*This will never be dependent*)
 	       val record_kind = con_valid (D,rvals)
 		 
 	       val entry_kinds = 
@@ -724,7 +723,7 @@ struct
 			      pp_list pp_label' labs ("",", ","",false);
 			      c_error(D,constructor,"Ill-formed projection"))
 	     in
-	       project_from_kind (entry_kinds,rvals,label)
+	       project_from_kind_nondep (record_kind,label)
 	     end
 	    | (App_c (cfun_orig,actuals)) => 
 	     let
@@ -971,12 +970,11 @@ struct
 	( (if !show_calls then
 	     (print "\nEntering con_head_normalize, arg is:\n";
 	      Ppnil.pp_con (#2 args)) else ());
-	  let val res = time_con_head_normalize "Equiv" args
+	  let val res = #2 (Normalize.reduce_hnf args) (*time_con_head_normalize "Equiv" args*)
 	  in 
 	    ( if !show_calls then (print "\nReturning with\n";Ppnil.pp_con res;print "\n") else ();
 	      res ) 
 	  end)
-      val con_reduce = subtimer ("Equiv:con_reduce",NilHNF.con_reduce)
 
       val _ = push_eqcon(c1,c2,D)
         val res = 
@@ -989,7 +987,9 @@ struct
 	      (case con_structural_equiv(D,c1,c2,sk) of
 		 NONE => false
 	       | SOME Type_k => true
-	       | SOME _ => error' "con_structural_equiv returned bad kind")
+	       | SOME (SingleType_k _) => true
+	       | SOME k => (Ppnil.pp_kind k;
+			    error' "con_structural_equiv returned bad kind"))
 	    end
 
 	| SingleType_k c => true
@@ -1036,7 +1036,8 @@ struct
 	  let 
 	    val k1 = subtimer("Tchk:Equiv:substConInKind",substConInKind rename) k1
 	    val k2 = subtimer("Tchk:Equiv:substConInKind",substConInKind rename) k2
-	    val match = match andalso subtimer("Tchk:Equiv:kind_equiv",kind_equiv)(D,k1,k2)
+	                              (*Negligible time*)
+	    val match = match andalso kind_equiv (D,k1,k2)
 
 	    val vnew = Name.derived_var v1
 
@@ -1174,17 +1175,10 @@ struct
 	      | (Let_c _, _) => error' "Let_c given to con_structural_equiv: not WHNF"
 
 	      | (Proj_c (c1,l1), Proj_c(c2,l2)) => 
-		(case (eq_label(l1,l2),con_structural_equiv(D,c1,c2,false)) of
-		   (true,SOME(Record_k lvk_seq)) =>
-		     let   
-			 fun loop _ [] = error' "con_structural_equiv: field not present"
-			   | loop subst (((l,v),k)::rest) = 
-			     if (eq_label(l,l1))
-				 then SOME(subtimer("Tchk:Equiv:substConInKind",Subst.substConInKind subst) k)
-			     else loop (Subst.C.sim_add subst (v,Proj_c(c1,l))) rest
-		     in  loop (Subst.C.empty()) (Sequence.toList lvk_seq)
-		     end
-		 | _ => NONE)
+		(case (eq_label(l1,l2),con_structural_equiv(D,c1,c2,false)) 
+		   of (true,SOME(kind as Record_k lvk_seq)) => 
+		     SOME(project_from_kind_nondep(kind,l1))
+		    | _ => NONE)
 	      | (App_c (f1,clist1), App_c (f2,clist2)) =>
 		 (case con_structural_equiv(D,f1,f2,false) of
 		    SOME(Arrow_k(openness,vklist,k)) =>
@@ -1204,7 +1198,7 @@ struct
 		      end
 		  | _ => NONE)
 	      | (Var_c v, Var_c v') => if (eq_var(v,v')) 
-					   then SOME(NilContext.find_kind(D,v))
+					   then SOME(subtimer("Tchk:Equiv:find_std_kind",NilContext.find_std_kind)(D,v))
 				       else NONE
 	      | (Annotate_c _, _) => error' "Annotate_c not WHNF"
 	      | (Typecase_c _, _) => error' "Typecase_c not handled"
@@ -1690,7 +1684,7 @@ struct
       let
 	  val free_vars = TraceOps.get_free_vars nt
 	  fun checker v = 
-	      (ignore (find_kind (D,v))
+	      (ignore (NilContext.find_kind (D,v)) (*Don't bother with standard kind if ignoring*)
 	       handle Unbound =>
 		   (NilContext.print_context D;
 		    error  (locate "niltrace_valid") 
@@ -1706,9 +1700,8 @@ struct
       val (D,subst) = state
       val con_valid = subtimer ("Tchk:Bnd:con_valid",con_valid)
       val cbnd_valid = subtimer ("Tchk:Bnd:cbnd_valid",cbnd_valid)
-      val substConInCon = fn subst => subtimer("Tchk:Bnd:substConInCon",substConInCon subst)
-      val add = fn subst => subtimer("Tchk:Subst.add in bnd_valid",Subst.C.sim_add subst)
-      val addr = subtimer("Tchk:Subst.addr in bnd_valid",Subst.C.addr)
+      (*Cheap*)
+      val addr = Subst.C.addr
 
       fun function_valid openness D (var,Function {effect,recursive,isDependent,
 						   tFormals,eFormals,fFormals,

@@ -3,16 +3,24 @@
 structure NilSubst :> NILSUBST = 
   struct
     open Nil
-
+      
     val isSome = Option.isSome
     val debug = Stats.ff "nil_debug"
+
     val profile = Stats.ff "nil_profile"
-    val rename = Stats.ff "subst_rename"
-      
+    val subst_profile = Stats.ff "subst_profile"
+    val subtimer = fn args => fn args2 => if !profile orelse !subst_profile then Stats.subtimer args args2 else #2 args args2
+     
     val (subst_counter,
 	 subst_total_size) = 
       (Stats.counter "subst_counter",
        Stats.int "subst_total_size")
+
+    val trimmed = Stats.counter "subst_trimmed"
+    val ignored = Stats.counter "subst_is_empty"
+    val non_empty = Stats.counter "subst_non_empty"
+
+    val repeated_subst = Stats.counter "repeated_subst"
 
     val foldl_acc = Listops.foldl_acc
     val map_second = Listops.map_second
@@ -30,9 +38,6 @@ structure NilSubst :> NILSUBST =
 
     fun error' s = error "" s
 
-    val timer = Stats.subtimer
-    val subtimer = Stats.subtimer
-
     structure VarMap = Name.VarMap
     structure VarSet = Name.VarSet
 
@@ -42,9 +47,12 @@ structure NilSubst :> NILSUBST =
       (*Possibly uncomputed data.*)
       datatype 'a thunk = FROZEN of (unit -> 'a) | THAWED of 'a
       type 'a delay = 'a thunk ref
+      val eager = Stats.ff "subst_eager"
     in
       type 'a delay = 'a delay
-      fun delay thunk = ref(FROZEN thunk)
+      fun delay thunk = ref(if (!eager)
+			      then THAWED (thunk())
+			    else FROZEN thunk)
       fun immediate value = ref (THAWED value)
       fun thaw (ref (THAWED v)) = v
 	| thaw (r as ref(FROZEN t)) = let val v = t()
@@ -66,31 +74,33 @@ structure NilSubst :> NILSUBST =
       type state = {esubst : exp delay map,
 		    csubst : con delay map}
 
-      val substitute = fn args => subtimer ("Subst:substitute",VarMap.find) args
+      val substitute = VarMap.find
 
-      val add = fn args => subtimer ("Subst:add",VarMap.insert) args
+      val add = VarMap.insert
+
+      fun annotate c = Annotate_c (SUBST_RESULT,c)
 
       fun is_empty s = (VarMap.numItems s) = 0
       fun empty () = VarMap.empty
 
       fun exp_var_xxx (state : state as {esubst,csubst},var,any) = 
-	if !rename  then
+(*	if !rename  then
 	  let val var' = Name.derived_var var
 	  in ({csubst = csubst,
 	       esubst = add (esubst,var, immediate (Var_e var'))},
 	      SOME var')
 	  end
-	else (state,NONE)
+	else*) (state,NONE)
 
 
       fun con_var_xxx (state : state as {esubst,csubst},var,any) = 
-	if !rename  then
+(*	if !rename  then
 	  let val var' = Name.derived_var var
 	  in ({esubst = esubst,
 	       csubst = add (csubst,var, immediate (Var_c var'))},
 	      SOME var')
 	  end
-	else (state,NONE)
+	else*) (state,NONE)
 
       fun conhandler (state : state as {csubst,...},con : con) =
 	(case con
@@ -98,8 +108,9 @@ structure NilSubst :> NILSUBST =
 	     (case substitute (csubst,var)
 		of SOME con_delay => 
 		  (subst_counter(); 
-		   CHANGE_NORECURSE (state,thaw con_delay))
+		   CHANGE_NORECURSE (state,annotate(thaw con_delay)))
 		 | _ => NORECURSE)
+	    | (Annotate_c (SUBST_RESULT,_)) => (repeated_subst();NOCHANGE)
 	    | _ => NOCHANGE)
 	   
       fun exphandler (state : state as {esubst,...},exp : exp) =
@@ -146,33 +157,35 @@ structure NilSubst :> NILSUBST =
 
       fun substExpInXXX substituter esubst item =
 	if (is_empty esubst) then 
-	  item 
+	  (ignored();item)
 	else
-	  substituter (empty_state (esubst, empty())) item
+	  (non_empty();substituter (empty_state (esubst, empty())) item)
 
       fun substConInXXX substituter csubst item =
 	if (is_empty csubst) then 
-	  item 
+	  (ignored();item)
 	else
-	  substituter (empty_state (empty(), csubst)) item
+	  (non_empty();substituter (empty_state (empty(), csubst)) item)
 
+      fun wrap substXXXInCon = fn s => fn c => annotate(substXXXInCon s c)
     in
 
-      val substConInCon   = substConInXXX substExpConInCon'
-      val substExpInExp   = substExpInXXX substExpConInExp'
-      val substExpInCon   = substExpInXXX substExpConInCon'
-      val substConInExp   = substConInXXX substExpConInExp'
-      val substConInKind  = substConInXXX substExpConInKind'
-      val substExpInKind  = substExpInXXX substExpConInKind'
-      val substConInTrace = substConInXXX substExpConInTrace'
+      val substConInCon   = fn s => subtimer("Subst:substConInCon",wrap (substConInXXX substExpConInCon') s)
+      val substExpInExp   = fn s => subtimer("Subst:substExpInExp",substExpInXXX substExpConInExp' s)
+      val substExpInCon   = fn s => subtimer("Subst:substExpInCon",wrap (substExpInXXX substExpConInCon') s)
+      val substConInExp   = fn s => subtimer("Subst:substConInExp",substConInXXX substExpConInExp' s)
+      val substConInKind  = fn s => subtimer("Subst:substConInKind",substConInXXX substExpConInKind' s)
+      val substExpInKind  = fn s => subtimer("Subst:substExpInKind",substExpInXXX substExpConInKind' s)
+      val substConInTrace = fn s => subtimer("Subst:substConInTrace",substConInXXX substExpConInTrace' s) 
 
       fun substConInCBnd csubst bnd = 
 	let
 	  val bnd = 
 	    if is_empty csubst then
-	      bnd
+	      (ignored();bnd)
 	    else
-	      (case substExpConInCBnd' (empty_state (empty(), csubst)) bnd
+	      (non_empty();
+	       case substExpConInCBnd' (empty_state (empty(), csubst)) bnd
 		 of ([bnd],state) => bnd
 		  | _ => error "substConInCBnd" "Substitution should not change number of bnds")
 	in
@@ -183,121 +196,27 @@ structure NilSubst :> NILSUBST =
 	let
 	  val bnd = 
 	    if is_empty csubst then
-	      bnd
+	      (ignored();bnd)
 	    else
-	      (case substExpConInBnd' (empty_state (empty(), csubst)) bnd
+	      (non_empty();
+	       case substExpConInBnd' (empty_state (empty(), csubst)) bnd
 		 of ([bnd],state) => bnd
 		  | _ => error "substConInBnd" "Substitution should not change number of bnds")
 	in
 	  bnd
 	end
+      val substConInBnd = fn s => subtimer("Subst:substExpConInBnd",substConInBnd s)
+      val substConInCBnd = fn s => subtimer("Subst:substExpConInCbnd",substConInCBnd s)
 
-      val substExpConInExp  = substExpConInXXX(substExpConInExp')
-      val substExpConInCon  = substExpConInXXX(substExpConInCon')
-      val substExpConInKind = substExpConInXXX(substExpConInKind')
+      val substExpConInExp  = fn s => subtimer("Subst:substExpConInExp",substExpConInXXX(substExpConInExp') s)
+      val substExpConInCon  = fn s => subtimer("Subst:substExpConInCon",wrap (substExpConInXXX(substExpConInCon')) s) 
+      val substExpConInKind = fn s => subtimer("Subst:substExpConInKind",substExpConInXXX(substExpConInKind') s) 
 
     end  
-(*
-    (*Substitutions for single variables*)
-    local
-      open NilRewrite
-
-      val renameConWRT = fn preds => subtimer("Subst:renameConWRT",NilRename.renameConWRT preds)
-      val renameExpWRT = fn preds => subtimer("Subst:renameExpWRT",NilRename.renameExpWRT preds)
-
-      type 'item state = {var : var,
-			  item : 'item,
-			  cbound : VarSet.set,
-			  ebound : VarSet.set}
-
-      val member = VarSet.member
-      val add = VarSet.add
-      exception Rebound of var
-
-      fun exp_var_xxx (state : 'item state as {ebound,cbound,var,item},target,any) = 
-	(if member (ebound,target) 
-	   then raise Rebound target
-	 else ({ebound = add (ebound,target),cbound = cbound,var = var,item = item},NONE))
-
-
-      fun con_var_xxx (state : 'item state as {ebound,cbound,var,item},target,any) = 
-	(if member (cbound,var) 
-	   then raise Rebound var
-	 else ({cbound = add (cbound,target),ebound = ebound,var = var,item = item},NONE))
-
-      val member = fn set => fn item => member (set,item)
-
-      fun varconhandler (state as {var,item,cbound,ebound},con : con) =
-	(case con
-	   of Var_c target => 
-	     if Name.eq_var (var,target) 
-	       then CHANGE_NORECURSE (state,renameConWRT (member ebound,member cbound) item) 
-	     else NORECURSE
-	    | _ => NOCHANGE)
-	   
-      fun varexphandler (state as {var,item,cbound,ebound},exp : exp) =
-	(case exp
-	   of Var_e target => 
-	     if Name.eq_var (var,target) 
-	       then CHANGE_NORECURSE (state,renameExpWRT (member ebound,member cbound) item) 
-	     else NORECURSE
-	    | _ => NOCHANGE)
-	   
-      val var_con_handler = 
-	let 
-	  val h = set_conhandler default_handler varconhandler
-	  val h = set_con_binder h con_var_xxx
-	  val h = set_con_definer h con_var_xxx
-	  val h = set_exp_binder h exp_var_xxx
-	  val h = set_exp_definer h exp_var_xxx
-	in h
-	end
-
-      val var_exp_handler = 
-	let 
-	  val h = set_exphandler default_handler varexphandler
-	  val h = set_con_binder h con_var_xxx
-	  val h = set_con_definer h con_var_xxx
-	  val h = set_exp_binder h exp_var_xxx
-	  val h = set_exp_definer h exp_var_xxx
-	in h
-	end
-
-      val {rewrite_exp = varConExpSubst',
-	   rewrite_con = varConConSubst',
-	   rewrite_kind = varConKindSubst',...} = rewriters var_con_handler
-	
-      val {rewrite_exp = varExpExpSubst',
-	   rewrite_con = varExpConSubst',
-	   rewrite_kind = varExpKindSubst',...} = rewriters var_exp_handler
-	
-      val pp_kind = Ppnil.pp_kind
-      val pp_con = Ppnil.pp_con
-      val pp_exp = Ppnil.pp_exp
-
-      fun empty_state (var,item) = {var = var,item = item, cbound = VarSet.empty, ebound = VarSet.empty}
-
-      fun varXXXYYYSubst (name,XXXprint,YYYprint,substitute) var Xitem Yitem =
-	let
-	  val item = substitute (empty_state (var,Xitem)) Yitem
-	in
-	  item
-	end
-
-    in
-      val varConExpSubst  = varXXXYYYSubst ("varConExpSubst",pp_con,pp_exp,varConExpSubst')
-      val varConConSubst  = varXXXYYYSubst ("varConConSubst",pp_con,pp_con,varConConSubst')
-      val varConKindSubst = varXXXYYYSubst ("varConKindSubst",pp_con,pp_kind,varConKindSubst')
-
-      val varExpExpSubst  = varXXXYYYSubst ("varExpExpSubst",pp_exp,pp_exp,varExpExpSubst')
-      val varExpConSubst  = varXXXYYYSubst ("varExpConSubst",pp_exp,pp_con,varExpConSubst')
-      val varExpKindSubst = varXXXYYYSubst ("varExpKindSubst",pp_exp,pp_kind,varExpKindSubst')
-    end
-*)
 
     local 
-      fun renameCon (con :con) : con delay = delay (fn () => if !rename then NilRename.renameCon con else con)
-      fun renameExp (exp :exp) : exp delay = delay (fn () => if !rename then NilRename.renameExp exp else exp)
+      fun renameCon (con :con) : con delay = delay (fn () => NilRename.renameCon con)
+      fun renameExp (exp :exp) : exp delay = delay (fn () => NilRename.renameExp exp)
     in
       fun varConExpSubst var con exp = substConInExp (VarMap.insert (VarMap.empty,var,renameCon con)) exp
       fun varConConSubst var con con2 = substConInCon (VarMap.insert (VarMap.empty,var,renameCon con)) con2
@@ -325,7 +244,8 @@ structure NilSubst :> NILSUBST =
       type item = item
       type item_subst = item_subst
 
-      val renameItem = fn item => if !rename then renameItem item else item
+      val used_var = Name.used_var
+
       fun rename (item :item) : item delay = delay (fn () => renameItem item)
 
       fun empty () : item_subst = VarMap.empty
@@ -334,19 +254,23 @@ structure NilSubst :> NILSUBST =
 	
       fun toList (subst : item_subst) = map_second thaw (VarMap.listItemsi subst)
 	
-      fun sim_add subst (var,value) : item_subst = VarMap.insert (subst,var,rename value)
+      fun sim_add subst (var,value) : item_subst = if used_var var then VarMap.insert (subst,var,rename value) else (trimmed();subst)
       
       fun addl (var,item,subst) = 
-	let
-	  val item_delay = rename item
-	  val map_subst = VarMap.insert (empty(),var,item_delay)
-	  fun domap i = delay (fn () => substItemInItem map_subst (thaw i))
-	in
-	  VarMap.insert (VarMap.map domap subst,var,item_delay)
-	end
+	if used_var var then 
+	  let
+	    val item_delay = rename item
+	    val map_subst = VarMap.insert (empty(),var,item_delay)
+	    fun domap i = delay (fn () => substItemInItem map_subst (thaw i))
+	  in
+	    VarMap.insert (VarMap.map domap subst,var,item_delay)
+	  end
+	else (trimmed();subst)
       
       fun addr  (subst,var,item) = 
-	VarMap.insert (subst,var,delay (fn () => substItemInItem subst (renameItem item)))
+	if used_var var then
+	  VarMap.insert (subst,var,delay (fn () => substItemInItem subst (renameItem item)))
+	else (trimmed();subst)
 
       fun is_empty subst = (VarMap.numItems subst) = 0
 	

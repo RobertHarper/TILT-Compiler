@@ -6,4 +6,5 @@ structure Annotation : ANNOTATION =
       datatype 'a annotation = 
 	FREE_VARS of {con_vars:VarSet.set ,exp_vars:VarSet.set} 
       | TYPECHECKED of 'a
+      | SUBST_RESULT
     end

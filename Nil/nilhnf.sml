@@ -11,9 +11,10 @@ structure NilHNF :> NILHNF =
     type con_subst = NilSubst.con_subst
 
     val show_calls = Stats.ff("NilHNF_show_calls")
+    val profile = Stats.tt "nil_profile"
 
     val timer = Stats.subtimer
-    val subtimer = Stats.subtimer
+    val subtimer = fn args => fn args2 => if !profile then Stats.subtimer args args2 else #2 args args2
 
     val find_kind_equation = subtimer ("HNF:find_kind_equation",NilContext.find_kind_equation)
 
@@ -22,17 +23,18 @@ structure NilHNF :> NILHNF =
     val lprintl = Util.lprintl
 
     val substConInCon = fn subst => subtimer ("HNF:substConInCon",NilSubst.substConInCon subst)
-    val addr = subtimer ("HNF:addr",NilSubst.C.addr)
-    val sim_add = fn subst => subtimer ("HNF:sim_add",NilSubst.C.sim_add subst)
-    val substitute = fn subst => subtimer ("HNF:substitute",NilSubst.C.substitute subst)
+    val addr = NilSubst.C.addr
+    val sim_add = NilSubst.C.sim_add
+    val substitute = NilSubst.C.substitute
     val empty = NilSubst.C.empty
-    val fromList = subtimer ("HNF:fromList",NilSubst.C.simFromList)
-    val merge = subtimer ("HNF:merge",NilSubst.C.merge)
+    val fromList = NilSubst.C.simFromList
+    val merge = NilSubst.C.merge
 
-    val zip = fn l1 => subtimer ("HNF:zip",Listops.zip l1)
-    val unzip = fn l => subtimer ("HNF:unzip",Listops.unzip) l
+    val zip = Listops.zip
+    val unzip = Listops.unzip
 
     val strip_var = NilUtil.strip_var
+    val strip_annotate = NilUtil.strip_annotate
     val strip_crecord = NilUtil.strip_crecord
     val is_mu_c = NilUtil.is_mu_c
 
@@ -44,7 +46,7 @@ structure NilHNF :> NILHNF =
     val locate = NilError.locate "NilHNF"
     val perr_c = NilError.perr_c
       
-    val find = fn f => subtimer ("HNF:List.find",List.find f)
+    val find = List.find
 
     fun error s s' = Util.error s s'
 
@@ -55,7 +57,37 @@ structure NilHNF :> NILHNF =
       | is_path (Annotate_c (_,c)) = is_path c
       | is_path _ = false
 
-    val is_path = subtimer ("HNF:is_path",is_path)
+
+    local      
+      exception NOT_A_LAMBDA
+
+      fun strip (Open_cb (var,formals,body)) = (var,formals,body)
+	| strip (Code_cb (var,formals,body)) = (var,formals,body)
+	| strip _ = raise NOT_A_LAMBDA
+
+      fun get_lambda (lambda,name) = 
+	let
+	  val (var,formals,body) = strip lambda
+	in
+	  (case strip_annotate name
+	     of Var_c var' => 	  
+	       if eq_var (var,var') then
+		 (formals,body)
+	       else raise NOT_A_LAMBDA
+	      | _ => raise NOT_A_LAMBDA)
+	end
+
+      fun lambda_or_closure (Let_c (_,[lambda],name)) = (get_lambda (lambda,name),NONE)
+	| lambda_or_closure (Closure_c(code,env)) = 
+	let val (lam,_) = lambda_or_closure code
+	in  (lam,SOME env)
+	end
+	| lambda_or_closure (Annotate_c(_,con)) = lambda_or_closure (con)
+	| lambda_or_closure _ = raise NOT_A_LAMBDA
+
+    in
+      fun open_lambda cfun = (SOME (lambda_or_closure cfun)) handle NOT_A_LAMBDA => NONE
+    end
 
     local
       datatype entry =  CON of string * con * NilContext.context * con_subst
@@ -130,12 +162,13 @@ structure NilHNF :> NILHNF =
 	     if is_mu_c con then  (substConInCon subst constructor,true) (*Watch out for annotations!*)
 	     else
 	       let
-		 (*Empty the substitution first, so that you don't substitute
+(*		 (*Empty the substitution first, so that you don't substitute
 		  * into the large thing*)
 		 val ((con,path),state) = 
 		   (case con_reduce (D,empty()) con
 		      of (con,true) => (con_reduce state con,(D,empty()))
-		       | other => (other,state))
+		       | other => (other,state))*)
+		 val (con,path) = con_reduce state con
 	       in
 		 if path orelse (is_mu_c con) then
 		   (Proj_c(con,label),true)
@@ -143,7 +176,7 @@ structure NilHNF :> NILHNF =
 		   (case strip_crecord con
 		      of SOME entries =>
 			(case (find (fn ((l,_)) => eq_label (l,label)) entries )
-			   of SOME (_,con) => con_reduce state con  
+			   of SOME (_,con) => con_reduce (D,empty()) con  
 			    | NONE => (error (locate "con_reduce") "Field not in record"))
 		       | NONE => (perr_c con;
 				  error (locate "con_reduce") "Not a path, but not a record!"))
@@ -152,7 +185,7 @@ structure NilHNF :> NILHNF =
 	     let
 
 
-	       (*Empty the substitution first, so that you don't substitute
+(*	       (*Empty the substitution first, so that you don't substitute
 		* into the large thing*)
 	       val ((cfun,path),subst2) = 
 		 (case con_reduce (D,empty()) cfun
@@ -160,7 +193,8 @@ structure NilHNF :> NILHNF =
 		      (con_reduce state con,
 		       empty())
 		     | other => (other,subst))
-
+*)
+	       val (cfun,path) = con_reduce state cfun
 
 	       val actuals = map (#1 o (con_reduce state)) actuals
 
@@ -176,35 +210,23 @@ structure NilHNF :> NILHNF =
 		    
 		     (*Note actuals = actuals @ [env] may be true
 		      *)
-		     fun reduce actuals (formals,body) = 
+		     fun reduce actuals (formals:(var * kind) list,body:con) = 
 		       let
 			 val (vars,_) = unzip formals
 			 val subst3 = fromList (zip vars actuals)
-		       in con_reduce (D,merge (subst2,subst3)) body
+		       in con_reduce (D,subst3) body
 		       end
 		   
 
 		   in
-		     (case cfun 
-			of Let_c (_,[Open_cb (var,formals,body)],Var_c v) =>
-			  if eq_var(var,v)
-			    then reduce actuals (formals,body)
-			  else error (locate "con_reduce") "redex not in HNF"
-			 | Let_c (_,[Code_cb (var,formals,body)],Var_c v) =>
-			  if eq_var(var,v)
-			    then reduce actuals (formals,body) 
-			  else error (locate "con_reduce") "redex not in HNF"
-			 | Let_c (_,[Code_cb (var,formals,body)],Closure_c(Var_c v,env)) =>
-			  if eq_var(var,v)
-			    then reduce (actuals @ [#1(con_reduce (D,subst2) env)]) (formals,body)
-			  else error (locate "con_reduce") "redex not in HNF"
-			 | Closure_c(Let_c (_,[Code_cb (var,formals,body)],Var_c v), env) =>
-			  if eq_var(var,v)
-			    then reduce (actuals @ [#1(con_reduce (D,subst2) env)]) (formals,body)
-			  else error (locate "con_reduce") "redex not in HNF"
-			 | _ => (perr_c cfun;
-				 error (locate "con_reduce") "redex not in HNF"))
-		 end
+		     (case open_lambda cfun
+			of SOME(args,SOME env) =>
+			  reduce (actuals @ [#1(con_reduce (D,subst) env)]) args
+			 | SOME(args,NONE)     => 
+			  reduce actuals args
+			 | NONE => (perr_c cfun;
+				    error (locate "con_reduce") "redex not in HNF"))
+		   end
 	     in  res
 	     end
 	   | (Typecase_c {arg,arms,default,kind}) => error (locate "con_reduce") "typecase not done yet"
@@ -258,9 +280,9 @@ structure NilHNF :> NILHNF =
 	if path then
 	  (case find_kind_equation(D,con)
 	     of SOME con => (subtimer ("HNF:Reduce level "^(Int.toString (++depth)),reduce_hnf) (D,con)) before (ignore (--depth))
-	      | NONE => con)
+	      | NONE => strip_annotate con)
 	else
-	  con
+	  strip_annotate con
       end
 
 (*    val con_reduce = wrap2 "con_reduce" con_reduce*)

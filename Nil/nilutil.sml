@@ -1,4 +1,4 @@
-(*$import Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam TraceInfo Stats *)
+(*$import Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam TraceInfo Stats NilRewrite *)
 
 structure NilPrimUtil :> PRIMUTIL where type con = Nil.con
                                  where type exp = Nil.exp = PrimUtil(structure PrimUtilParam = NilPrimUtilParam)
@@ -12,10 +12,14 @@ struct
   val debug = ref false
   fun error s = Util.error "nilutil.sml" s
 
-  val timer = Stats.timer 
-  val subtimer = Stats.subtimer
+  val profile = Stats.ff "nil_profile"
+  val local_profile = Stats.ff "nilutil_profile"
+     
+  val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
+     
+  fun fresh_var()  = Name.fresh_named_var "nilutil"
+  fun fresh_var'() = Name.fresh_named_var' "nilutil"
 
-  fun fresh_var() = Name.fresh_named_var "nilutil"
   val unzip = ListPair.unzip
   val zip = ListPair.zip
   val foldl_acc = Listops.foldl_acc
@@ -49,7 +53,7 @@ struct
       let val lc_list = Listops.mapcount (fn (i,c) => (generate_tuple_label(i+1),c)) clist
       in  Crecord_c lc_list
       end
-  fun kind_tuple klist = let fun doer(i,k) = ((generate_tuple_label(i+1),fresh_var()),k)
+  fun kind_tuple klist = let fun doer(i,k) = ((generate_tuple_label(i+1),fresh_var'()),k)
 			     val lvk_list = Listops.mapcount doer klist
 			 in  Record_k(Sequence.fromList lvk_list)
 			 end
@@ -227,6 +231,59 @@ struct
     val is_float_c = Option.isSome o strip_float
     val is_mu_c = strip_annotate is_mu_c'
     val is_closed_value = is_closed_value
+    val strip_annotate = strip_annotate (fn x => x)
+  end
+
+  local
+    open NilRewrite
+      
+    type state = {depth:int,bound:int}
+
+    fun conhandler (state : state as {depth,bound},con : con) =
+      let
+	val con = strip_annotate con
+      in
+	if depth < bound then
+	  CHANGE_RECURSE({depth = depth + 1,bound = bound},con)
+	else
+	  CHANGE_NORECURSE(state,con)
+      end
+	   
+    fun resthandler (state : state as {depth,bound},item : 'item) = 
+      if depth < bound then
+	CHANGE_RECURSE({depth = depth + 1,bound = bound},item)
+      else 
+	NORECURSE
+
+    fun bndhandler (state : state as {depth,bound},item : 'item) = 
+      if depth < bound then
+	NOCHANGE   (*Don't increment for each bnd - want to view Lets as flat*)
+      else 
+	NORECURSE
+
+    fun null_binder (state,_,_) = (state,NONE)
+
+    val all_handlers = 
+      HANDLER {
+	       conhandler     = conhandler,
+	       bndhandler     = bndhandler,
+	       cbndhandler    = bndhandler,
+	       exphandler     = resthandler,
+	       kindhandler    = resthandler,
+	       tracehandler   = resthandler,
+	       con_var_bind   = null_binder,
+	       con_var_define = null_binder,
+	       exp_var_bind   = null_binder,
+	       exp_var_define = null_binder
+	       }
+    val {rewrite_con  = strip_con,
+	 ...} = rewriters all_handlers
+      
+  in
+    fun strip_to_depth n c = strip_con {depth = 1,bound = n} c
+    val strip_one   = strip_to_depth 1
+    val strip_two   = strip_to_depth 2
+    val strip_three = strip_to_depth 3
   end
 
   fun get_arrow_return con = 
@@ -242,26 +299,19 @@ struct
 
   val fresh_named_var = Name.fresh_named_var
 
-  local
-    val substConInKind = fn subst => subtimer ("Selfify:substConInKind",NilSubst.substConInKind subst)
-    val empty = NilSubst.C.empty
-    val add = NilSubst.C.sim_add
-  in
   fun selfify (con,kind) =
     (case kind of
           Type_k => SingleType_k con
-	| SingleType_k _ => SingleType_k(con) (*kind*)
-	| Single_k _ => Single_k con (*kind*)
+	| SingleType_k _ => SingleType_k(con) 
+	| Single_k _ => Single_k con 
 	| Record_k entries => 
 	    let
-(*	      val subst = ref (empty())*)
 	      fun mapper ((l,v),k) = 
 		let
 		  val proj = Proj_c (con,l)
-		  val kres = selfify (proj,(*substConInKind (!subst)*) k)
+		  val kres = selfify (proj,k)
 		in
-		  ((*subst := add (!subst) (v,proj);*)
-		   ((l,v),kres))
+		  ((l,v),kres)
 		end
 	    in
 	      Record_k (Sequence.map mapper entries)
@@ -273,17 +323,6 @@ struct
 	 in
 	   Arrow_k (openness,args,selfify(App_c (con,actuals),return))
 	 end)
-end
-
-(*
-  val selfify = fn (arg as (c,k)) =>
-      let val _ = (print "Selfifying with "; Ppnil.pp_con c; print " the following\n";
-		   Ppnil.pp_kind k; print "\n")
-	  val k = selfify arg
-	  val _ = (print "Selfified to "; Ppnil.pp_kind k; print "\n")
-      in  k
-      end
-*)
 
   val selfify = subtimer ("Selfify",selfify)
 
@@ -1399,6 +1438,16 @@ end
       in  loop (NilSubst.C.empty(),lvk_list)
       end
 
+    fun project_from_kind_nondep (rkind,label) = 
+      case rkind
+	of Record_k lvk_seq => 
+	  (case Sequence.find (fn (l,_) => (Name.eq_label(label,l))) lvk_seq
+	     of SOME k => k
+	      | NONE => error "project_from_kind_nondep: Field not in record kind")
+	 | other => 
+	     (Ppnil.pp_kind other; print "\n";
+	      error  "project_from_kind_nondep: Trying to project from non-record kind ")
+	     
     fun convert_sum_to_special 
           (Prim_c(Sum_c {tagcount,totalcount,known},carriers), w) =
        Prim_c(Sum_c {tagcount=tagcount, totalcount=totalcount, 

@@ -325,6 +325,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			 in  loop c rest
 			 end
 		    | loop (Var_c v) labs = lookup_cproj(state,v,labs)
+		    | loop (Annotate_c (_,c)) labs = loop c labs
 		    | loop _ _ = NONE
 	      in  (case lookup_alias(state,v) of
 		       OPTIONALc c => loop c labs
@@ -659,30 +660,32 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	and do_cbnd(cbnd : conbnd, state : state) : conbnd * state = 
 	   (case cbnd of
-		Con_cb(v,Let_c(_,[Open_cb(v',vklist,c)],Var_c v'')) => 
-		    if (Name.eq_var(v',v''))
-			then do_cbnd(Open_cb(v,vklist,c), state)
-		    else do_cbnd(Con_cb(v,Var_c v''),state)
-	      |	Con_cb(v,c) => 
-		    let val state = add_var(state,v)
-			val state' = enter_var(state,v)
-			val c = do_con state' c
-			val c =
-			    (case find_availC(state,c) of
-				 NONE => c
-			       | SOME v' => let val _ = use_var(state',v')
-					    in  Var_c v'
-					    end)
-			val alias = (case c of
-					 Var_c _ => MUSTc c
-				       | _ => OPTIONALc c)
-			val state = (case c of
+		Con_cb(v,c) =>
+		  (case NilUtil.strip_two c  (*One for outer Let, one for body*)
+		     of Let_c(_,[Open_cb(v',vklist,c)],Var_c v'') => 
+		       if (Name.eq_var(v',v''))
+			 then do_cbnd(Open_cb(v,vklist,c), state)
+		       else do_cbnd(Con_cb(v,Var_c v''),state)
+		      |	_ => 
+			 let val state = add_var(state,v)
+			   val state' = enter_var(state,v)
+			   val c = do_con state' c
+			   val c =
+			     (case find_availC(state,c) of
+				NONE => c
+			      | SOME v' => let val _ = use_var(state',v')
+					   in  Var_c v'
+					   end)
+			   val alias = (case NilUtil.strip_annotate c of
+					  Var_c _ => MUSTc c
+					| _ => OPTIONALc c)
+			   val state = (case NilUtil.strip_annotate c of
 					 Var_c _ => state
 				       | _ => add_availC(state, c, v))
-			val state = add_kind(state,v,Single_k c)
-			val state = add_alias(state,v,alias)
-		    in  (Con_cb(v,c), state)
-		    end
+			   val state = add_kind(state,v,Single_k c)
+			   val state = add_alias(state,v,alias)
+			 in  (Con_cb(v,c), state)
+			 end)
 	      | Open_cb(v,vklist,c) => let val state = add_var(state,v)
 					   val state' = enter_var(state,v)
 					   val state = add_kind(state,v,

@@ -112,6 +112,18 @@ signature NILUTIL =
     val strip_proj : Nil.con -> (Nil.con*Nil.label) option
     val strip_prim : Nil.con -> (Nil.primcon*Nil.con list) option
     val strip_app : Nil.con -> (Nil.con*Nil.con list) option
+    val strip_annotate : Nil.con -> Nil.con
+
+    (*strip_to_depth n c, n>=1
+     * Strip off all annotations so that c can be pattern matched to depth n
+     * Always goes at least one deep.
+     *)
+    val strip_to_depth : int -> Nil.con -> Nil.con
+
+    (*Common depths*)
+    val strip_one   : Nil.con -> Nil.con
+    val strip_two   : Nil.con -> Nil.con
+    val strip_three : Nil.con -> Nil.con  
 
     val alpha_mu : (Nil.var -> bool) -> (Nil.var * Nil.con) list -> (Nil.var * Nil.con) list
     val is_exn_con : Nil.con -> bool
@@ -126,5 +138,5 @@ signature NILUTIL =
 
     (*Get the kind of a projection*)
     val project_from_kind : ((Nil.label * Nil.var), Nil.kind) Nil.sequence * Nil.con * Nil.label -> Nil.kind
-
+    val project_from_kind_nondep : Nil.kind * Nil.label -> Nil.kind
   end

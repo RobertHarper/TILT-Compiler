@@ -734,6 +734,7 @@ structure NilRewrite :> NILREWRITE =
 
 	    fun loop (Var_c v) labs = TraceKnown (TraceInfo.Compute (v,labs))
 	      | loop (Proj_c (c,l)) labs = loop c (l::labs)
+	      | loop (Annotate_c (_,c)) labs = loop c labs
 	      | loop _ _ = error "Non path returned from rewriting trace info"
 
 	    fun do_trace (state,trace) =
@@ -860,6 +861,23 @@ structure NilRewrite :> NILREWRITE =
 		 exp_var_bind   = null_binder,
 		 con_var_define = null_binder,
 		 exp_var_define = null_binder
+		 }
+
+      fun set_kindhandler (HANDLER {bndhandler,cbndhandler,
+				   conhandler,exphandler,kindhandler,tracehandler,
+				   con_var_bind,exp_var_bind,
+				   con_var_define,exp_var_define }) new_kindhandler = 
+	HANDLER {
+		 bndhandler     = bndhandler,
+		 cbndhandler    = cbndhandler,
+		 conhandler     = conhandler,
+		 exphandler     = exphandler,
+		 kindhandler    = new_kindhandler,
+		 tracehandler   = tracehandler,
+		 con_var_bind   = con_var_bind,
+		 exp_var_bind   = exp_var_bind,
+		 con_var_define = con_var_define,
+		 exp_var_define = exp_var_define
 		 }
 
       fun set_conhandler (HANDLER {bndhandler,cbndhandler,

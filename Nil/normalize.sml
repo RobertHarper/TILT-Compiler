@@ -6,13 +6,18 @@ struct
 
   val number_flatten = Stats.int("number_flatten")
 
+  val profile = Stats.ff "nil_profile"
+  val local_profile = Stats.ff "normalize_profile"
+  val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
+    
   open Nil 
   open Prim
 
   type con_subst = NilSubst.con_subst
-  val substConInKind= NilSubst.substConInKind
-  val substConInExp = NilSubst.substConInExp
-  val substConInCon = NilSubst.substConInCon
+  val substConInKind= fn s => subtimer("Norm:substConInKind",NilSubst.substConInKind s)
+  val substConInExp = fn s => subtimer("Norm:substConInExp",NilSubst.substConInExp s)
+  val substConInCon = fn s => subtimer("Norm:substConInCon",NilSubst.substConInCon s)
+  val substExpInCon = fn s => subtimer("Norm:substExpInCon",NilSubst.substExpInCon s)
   val empty = NilSubst.C.empty
   val add = NilSubst.C.sim_add
   val addr = NilSubst.C.addr
@@ -21,6 +26,7 @@ struct
   val printConSubst = NilSubst.C.print
 
   val map_annotate = NilUtil.map_annotate
+  val strip_annotate = NilUtil.strip_annotate
   val is_var_c = NilUtil.is_var_c
   val strip_var = NilUtil.strip_var
   val strip_crecord = NilUtil.strip_crecord
@@ -65,7 +71,6 @@ struct
   type context = NilContext.context
   val find_kind = NilContext.find_kind   
   val kind_of = NilContext.kind_of
-  val kind_standardize = NilContext.kind_standardize
   val find_con = NilContext.find_con
   val insert_con = NilContext.insert_con
 
@@ -217,7 +222,7 @@ struct
 
   fun beta_conrecord proj = #2(beta_conrecord' proj)
 
-  val beta_conrecord = Stats.subtimer("Norm:beta_conrecord",beta_conrecord)
+  val beta_conrecord = subtimer("Norm:beta_conrecord",beta_conrecord)
 
   fun eta_confun lambda = 
     let
@@ -275,40 +280,58 @@ struct
   and beta_confun once D app = #2(beta_confun' once D app)
 
   and beta_confun' once D (app as (App_c (con,actuals))) =
-    let
-	  fun reduce actuals (formals,body) = 
-	       (true,
-		let
-		 val (vars,_) = unzip formals
-		 val subst = fromList (zip vars actuals)
-	       in if once
-		      then substConInCon subst body
-		  else (con_normalize' (D,subst) body)
-	       end)
-	  fun beta_confun'' actuals confun = 
-	      (case confun of
-		   Let_c (_,[Open_cb (var,formals,body)],Var_c v) =>
-		     if eq_var(var,v)
-			 then reduce actuals (formals,body) 
-		     else (false,app)
-		 | Let_c (_,[Code_cb (var,formals,body)],Var_c v) =>
-		     if eq_var(var,v)
-			 then reduce actuals (formals,body)
-		     else (false,app)
-	         | Let_c (_,[Code_cb (var,formals,body)],Closure_c(Var_c v,env)) =>
-		   if eq_var(var,v)
-		       then reduce (actuals @ [env]) (formals,body)
-		   else (false,app)
-		 | Closure_c(Let_c (_,[Code_cb (var,formals,body)],Var_c v), env) =>
-		       if eq_var(var,v)
-			   then reduce (actuals @ [env]) (formals,body)
-		       else (false,app)
-		 | _ => (false,app))
-	in  beta_confun'' actuals con
+    let  
+
+      exception NOT_A_LAMBDA
+
+      fun strip (Open_cb (var,formals,body)) = (var,formals,body)
+	| strip (Code_cb (var,formals,body)) = (var,formals,body)
+	| strip _ = raise NOT_A_LAMBDA
+
+      fun get_lambda (lambda,name) = 
+	let
+	  val (var,formals,body) = strip lambda
+	in
+	  (case strip_annotate name
+	     of Var_c var' => 	  
+	       if eq_var (var,var') then
+		 (formals,body)
+	       else raise NOT_A_LAMBDA
+	      | _ => raise NOT_A_LAMBDA)
 	end
-      | beta_confun' _ _ con =
-	(Ppnil.pp_con con;
-	 (error "beta_confun called on non-application" handle e => raise e))
+      
+      fun lambda_or_closure (Let_c (_,[lambda],name)) = (get_lambda (lambda,name),NONE)
+	| lambda_or_closure (Closure_c(code,env)) = 
+	let val (args,_) = lambda_or_closure code
+	in  (args,SOME env) end
+	| lambda_or_closure (Annotate_c(_,con)) = lambda_or_closure (con)
+	| lambda_or_closure _ = raise NOT_A_LAMBDA
+
+
+      fun open_lambda cfun = (SOME (lambda_or_closure cfun)) handle NOT_A_LAMBDA => NONE
+	
+      fun reduce actuals (formals,body) = 
+	(true,
+	 let
+	   val (vars,_) = unzip formals
+	   val subst = fromList (zip vars actuals)
+	 in if once
+	      then substConInCon subst body
+	    else (con_normalize' (D,subst) body)
+	 end) 
+	
+	
+    in
+      (case open_lambda con
+	 of SOME(args,SOME env) =>
+	       reduce (actuals @ [env]) args
+	  | SOME(args,NONE)     => 
+	       reduce actuals args
+	  | NONE => (false,app))
+    end
+    | beta_confun' _ _ con =
+    (Ppnil.pp_con con;
+     (error "beta_confun called on non-application" handle e => raise e))
 
 
   and insert_kind (D,var,kind) = NilContext.insert_kind (D,var,kind)
@@ -940,9 +963,6 @@ struct
 		       in  if progress
 			       then (PROGRESS,subst,con)
 			   else (IRREDUCIBLE,subst,con)
-		       (*case (NilContext.find_kind_equation(D,con)) of
-			NONE => (IRREDUCIBLE,subst,con)
-		 | SOME c => (PROGRESS,subst,c)*)
 		       end)
 	| (App_c (cfun,actuals)) => 
 	       (case con_reduce state cfun of
@@ -953,9 +973,6 @@ struct
 			in  if progress
 				then (PROGRESS,subst,con)
 			    else (IRREDUCIBLE,subst,con)
-			      (*case (NilContext.find_kind_equation(D,con)) of
-				NONE => (IRREDUCIBLE,subst,con)
-			      | SOME c => (PROGRESS,subst,c)*)
 			end)
 	| (Typecase_c {arg,arms,default,kind}) => error "typecase not done yet"
 	| (Annotate_c (annot,con)) => con_reduce state con)
@@ -1003,11 +1020,11 @@ struct
 	        val (progress,subst,c) = con_reduce(D,subst) c  
 	    in  case progress of
 			 PROGRESS => loop (n+1) (subst,c) 
-		       | HNF => (true, substConInCon subst c)
+		       | HNF => (true, strip_annotate(substConInCon subst c))
 		       | IRREDUCIBLE => 
 			   (case NilContext.find_kind_equation(D,c)
 			      of SOME c => loop (n+1) (subst,c)
-			       | NONE => (false, substConInCon subst c))
+			       | NONE => (false, strip_annotate(substConInCon subst c)))
 	    end
         in  loop 0 (empty(),con)
         end
@@ -1025,7 +1042,7 @@ struct
 	     )
 
     and removeDependence vclist c = 
-	let fun loop subst [] = NilSubst.substExpInCon subst c
+	let fun loop subst [] = substExpInCon subst c
 	      | loop subst ((v,c)::rest) = 
 	           let val e = Raise_e(NilUtil.match_exn,c)
 		   in  loop (NilSubst.E.addr (subst,v,e)) rest
@@ -1287,7 +1304,7 @@ struct
 			      error "Ill Typed expression - not an arrow"))
 
 	      val subst = fromList (zip (#1 (unzip tformals)) cons)
-	      val con = NilSubst.substConInCon subst body
+	      val con = substConInCon subst body
 		  
 	    in  removeDependence 
 		  (map (fn (SOME v,c) => (v,substConInCon subst c)
@@ -1299,6 +1316,8 @@ struct
 	   | Handle_e {result_type,...} => result_type
 	    )
      end
+
+  val type_of = fn args => strip_annotate (type_of args)
 
   val kind_normalize = wrap2 "kind_normalize" kind_normalize
   val con_normalize = wrap2 "con_normalize"  con_normalize

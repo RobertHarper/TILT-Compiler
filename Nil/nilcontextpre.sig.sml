@@ -50,6 +50,10 @@ signature NILCONTEXTPRE =
      *)
     val find_std_kind      : context * var -> kind
 
+    (* Return the standard, selfified kind of the variable
+     *)
+    val find_max_kind      : context * var -> kind
+
     val kind_standardize : context * kind -> kind
 
     (* Return the most precise standard kind for the constructor

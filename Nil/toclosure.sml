@@ -1325,7 +1325,7 @@ struct
 	  | Let_c (letsort,cbnds,c) => 
 		let val cbnds' = List.concat(map (cbnd_rewrite state) cbnds)
 		    val c = c_rewrite c
-		in  (case (c,cbnds') of
+		in  (case (strip_annotate c,cbnds') of
 			 (_,[]) => c
 		       | (Var_c v, [Con_cb(v',c')]) => if (eq_var(v,v'))
 							     then c'

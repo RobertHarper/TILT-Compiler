@@ -39,6 +39,9 @@ subst.sml
 nilrename.sml
 nilrename.sig.sml
 
+measure.sig.sml
+measure.sml
+
 nilutil.sig.sml
 nilutil.sml
 nilerror.sig.sml
