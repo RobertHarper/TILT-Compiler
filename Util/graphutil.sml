@@ -15,7 +15,6 @@ struct
 
   open Array
 
-(* next 2 lines inserted by Perry to work with SML/NJ 109 *)
   fun fold f l b = List.foldr f b l
   val app = List.app
 
