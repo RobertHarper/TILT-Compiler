@@ -39,22 +39,6 @@ structure Til : COMPILER =
 		  else error "assemble. System command as failed")
 	    end
 
-	fun compile (ctxt: context, unitName: string, 
-		     sbnd_entries: (sbnd option * context_entry) list , ctxt': context) : unit =
-	    let val sdecs = LinkIl.IlContext.context_to_sdecs ctxt'
-		val nilmod = Linknil.il_to_nil (unitName, (ctxt, sbnd_entries))
-		val rtlmod = Linkrtl.nil_to_rtl (nilmod,unitName)
-		val rtl_to_alpha = Linkalpha.rtl_to_alpha
-(*
-		val rtl_to_alpha = if (!use_mlrisc) 
-				       then AlphaLink.rtl_to_alpha else Linkalpha.rtl_to_alpha
-*)
-		val _ = rtl_to_alpha(unitName, rtlmod)    (* creates unitName.s file with main label
-								     * `unitName_doit' *)
-		val _ = assemble(unitName ^ ".s", unitName ^ ".o")
-	    in ()
-	    end
-
     (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds into an
      * object file `unitName.o'. ctxt is the context in which the sbnds
      * were produced, and ctxt' contains the new bindings. unitName is
@@ -62,11 +46,39 @@ structure Til : COMPILER =
      * generating unique identifiers. Also, `unitName.o' must contain a
      * label for `initialization' with name `unitName_doit'. 
      *)
- 
-	fun pcompile (ctxt: context, unitName: string, 
+	exception Stop
+	val uptoElaborate = Stats.ff("UptoElaborate")
+	val uptoPhasesplit = Stats.ff("UptoPhasesplit")
+	val uptoNil = Stats.ff("UptoNil")
+	val uptoRtl = Stats.ff("UptoRtl")
+	val uptoAlpha = Stats.ff("UptoAlpha")
+	fun compile (ctxt: context, unitName: string, 
 		     sbnd_entries: (sbnd option * context_entry) list , ctxt': context) : unit =
-	    let val sdecs = LinkIl.IlContext.context_to_sdecs ctxt'
-		val nilmod = Linknil.phasesplit(ctxt, sbnd_entries)
+	    let val sFile = unitName ^ ".s"
+		val oFile = unitName ^ ".o"
+		val _ = if (!uptoElaborate) then raise Stop else ()
+		val sdecs = LinkIl.IlContext.context_to_sdecs ctxt'
+		val nilmod = if !uptoPhasesplit 
+				 then Linknil.phasesplit(ctxt, sbnd_entries)
+			     else Linknil.il_to_nil (unitName, (ctxt, sbnd_entries))
+		val _ = if (!uptoPhasesplit orelse !uptoNil) then raise Stop else ()
+		val rtlmod = Linkrtl.nil_to_rtl (nilmod,unitName)
+		val _ = if (!uptoRtl) then raise Stop else ()
+		val rtl_to_alpha = Linkalpha.rtl_to_alpha
+(*
+		val rtl_to_alpha = if (!use_mlrisc) 
+				       then AlphaLink.rtl_to_alpha else Linkalpha.rtl_to_alpha
+*)
+		val _ = rtl_to_alpha(unitName, rtlmod)    (* creates unitName.s file with main label
+								     * `unitName_doit' *)
+		val _ = assemble(sFile, oFile)
 	    in ()
 	    end
+	handle Stop => (let val os = TextIO.openOut (unitName ^ ".o")
+                              val _ = TextIO.output(os,"Dummy .o file\n")
+			in  TextIO.closeOut os
+			end)
+
+
+ 
     end

@@ -11,6 +11,10 @@ signature COMPILER =
 
    val debug_asm : bool ref (* use the -g flag in call to assembler *)
    val keep_asm : bool ref  (* don't erase the asm *)
+   val uptoElaborate : bool ref
+   val uptoNil : bool ref
+   val uptoRtl : bool ref
+
    val compile : context * string * (sbnd option * context_entry) list * context -> unit
 
    (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds into an
@@ -20,8 +24,5 @@ signature COMPILER =
     * generating unique identifiers. Also, `unitName.o' must contain a
     * label for `initialization' with name `unitName_doit'. 
     *)
-
-   (* up to phase-split; does not generate a file *)
-   val pcompile : context * string * (sbnd option * context_entry) list * context -> unit
 
  end

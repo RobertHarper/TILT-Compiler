@@ -13,8 +13,6 @@ functor Manager (structure Parser: LINK_PARSE
 struct
 
 
-  val up_to_phasesplit = ref false
-  val up_to_elaborate = ref false
   val stat_each_file = ref false
   val cache_context = ref 5
   val stop_early_compiling_sml_to_ui = ref false
@@ -613,40 +611,22 @@ struct
 		  else ()
 *)
 
-	  val _ = if (!up_to_elaborate orelse (not make_uo))
-		      then ()
-		  else if (!up_to_phasesplit)
-		      then
-			  (chat ("  [Just phase-splitting " ^ srcBase ^ " and making dummy .uo]\n");
-			   Compiler.pcompile(ctxt, srcBase, sbnds, ctxt'))  (* does not generate oFile *)
-		  else 
-		      let val _ = (chat ("  [Compiling into " ^ oFile ^ " ...");
-				   Compiler.compile(ctxt, srcBase, sbnds, ctxt');  (* generates oFile *)
-				   chat "]\n")
-			  val crc = Linker.Crc.crc_of_file uiFile
-			  val exports = [(srcBase, crc)]
-			  val _ = chat ("  [Creating " ^ uoFile ^ " ...")
-		      in   Linker.mk_uo {imports = import_uis,
-					 exports = exports,
-					 base_result = srcBase}
-		      end
-	  val _ = if (make_uo andalso
-                      (!up_to_elaborate orelse !up_to_phasesplit))
-		      then (* create dummy .uo file or update time if it exists *)
-			  let val os = TextIO.openOut uoFile
-			      val _ = TextIO.output(os,"Dummy .uo file\n")
-			  in  TextIO.closeOut os
-			  end
-		  else ()
+	  val _ = (chat ("  [Compiling into " ^ oFile ^ " ...");
+		   Compiler.compile(ctxt, srcBase, sbnds, ctxt');  (* generates oFile *)
+		   chat "]\n")
+	  val crc = Linker.Crc.crc_of_file uiFile
+	  val exports = [(srcBase, crc)]
+	  val _ = chat ("  [Creating " ^ uoFile ^ " ...")
+	  val _ = Linker.mk_uo {imports = import_uis,
+				exports = exports,
+				base_result = srcBase}
+
+
           val _ = (forget_stat uoFile; forget_stat uiFile)
 	  val _ = chat "]\n"
-	  val _ = if (!up_to_elaborate orelse !up_to_phasesplit
-                      orelse (not make_uo)) then
-                     ()
-                  else
-                     (OS.Process.system ("size " ^ oFile); ())
+	  val _ = OS.Process.system ("size " ^ oFile)
 	  val _ = if (!stat_each_file)
-		      then Stats.print_stats()
+		      then Stats.print_timers()
 		  else ()
       in  ()
       end
