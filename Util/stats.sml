@@ -6,9 +6,11 @@ structure Stats :> STATS =
        type time_entry = (int * {gc : time, sys: time, usr: time})  ref
        type counter_entry = int ref
        type int_entry = int ref
+       type bool_entry = bool ref
        datatype entry = TIME_ENTRY of time_entry
                       | COUNTER_ENTRY of counter_entry
 		      | INT_ENTRY of int_entry
+		      | BOOL_ENTRY of bool_entry
 (*
        structure StringKey : ORD_KEY = struct
 					type ord_key = string
@@ -50,12 +52,19 @@ structure Stats :> STATS =
 	let fun maker () = INT_ENTRY(ref 0)
         in  case (find_entry maker s) of
 		INT_ENTRY res => res
-	      | _ => error "find_time_entry: did not find a COUNTER_ENTRY"
+	      | _ => error "find_time_entry: did not find a INT_ENTRY"
+        end
+      fun find_bool_entry s = 
+	let fun maker () = BOOL_ENTRY(ref true)
+        in  case (find_entry maker s) of
+		BOOL_ENTRY res => res
+	      | _ => error "find_time_entry: did not find a BOOL_ENTRY"
         end
       fun counter str = let val intref = find_counter_entry str
                         in fn() => (intref := (1 + (!intref)))
 			end
       val int = find_int_entry
+      val bool = find_bool_entry
 
       fun timer (str,f) arg =
 	   let val timer = Timer.startCPUTimer()
@@ -135,7 +144,21 @@ structure Stats :> STATS =
 	    print "Global integer statistics\n";
 	     print "-------------------------------------------\n";
 	     app pritem (rev(!entries));
-(* (StringMap.listItemsi(!entries)); *)
+	     print "-------------------------------------------\n"
+	 end
+
+      fun print_bools() =
+        let
+	       fun pritem (name,BOOL_ENTRY(ref flag)) =
+		       (fprint (!max_name_size) name;
+		        print " : ";
+		        print (Bool.toString flag);
+			print "\n")
+	         | pritem _ = ()
+	in
+	     print "Global flags\n";
+	     print "-------------------------------------------\n";
+	     app pritem (rev(!entries));
 	     print "-------------------------------------------\n"
 	 end
 
@@ -143,6 +166,8 @@ structure Stats :> STATS =
 			   print_counters(); 	
 			   print "\n\n";
 			   print_ints(); 	
+			   print "\n\n";
+			   print_bools(); 	
 			   print "\n\n";
 			   print_timers(); 
 			   print "\n\n")

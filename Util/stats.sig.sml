@@ -6,6 +6,7 @@ signature STATS =
 
      val timer : string * ('a -> 'b) -> ('a -> 'b)
      val counter : string -> (unit -> unit)
-     val int     : string -> (int ref)
+     val int     : string -> int ref
+     val bool    : string -> bool ref
    end
 
