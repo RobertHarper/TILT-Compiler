@@ -79,6 +79,7 @@ structure Name :> NAME =
 
 
     fun var2int    ((i,s) : var) = i
+    fun var2name   ((i,s) : var) = s
     fun var2string ((i,s) : var) = (s ^ "_" ^ (Int.toString i))
     fun label2string (num,str,flag) =
       let

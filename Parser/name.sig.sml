@@ -37,8 +37,9 @@ signature NAME =
     val openlabel       : label -> label
 
     (* useful printing routine *)
-    val var2int      : var   -> int
-    val var2string   : var   -> string
+    val var2int      : var   -> int     (* v_23 -> 23 *)
+    val var2name     : var   -> string  (* v_23 -> "v" *)
+    val var2string   : var   -> string  (* v_23 -> "v_23" *)
     val label2string : label -> string
     val tag2string   : tag  -> string
 
