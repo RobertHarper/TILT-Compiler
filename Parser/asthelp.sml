@@ -313,7 +313,7 @@ structure AstHelp : ASTHELP =
 	    val _ = f_ty (fn s => s, [],
 			  do_tyvar, [],
 			  fn v => Ast.VarExp v,[]) ty
-	in map tyvar_strip (!tyvars)
+	in map tyvar_strip (rev (!tyvars))
 	end
 
       fun free_tyvar_exp(e : Ast.exp, is_bound) : symbol list = 
