@@ -28,7 +28,8 @@ structure Name : NAME =
       | eq_label (GBAR l1, GBAR l2)     = l1 = l2
       | eq_label _ = false
     fun eq_tag   (GTAG n1, GTAG n2)     = n1 = n2
-      
+    fun compare_var (GVAR(a,_),GVAR(b,_)) = Int.compare(a,b)
+
     fun make_counter() = 
       let
 	val counter = ref 0

@@ -13,6 +13,7 @@ signature NAME =
     val eq_label : (label * label) -> bool
     val eq_var   : (var * var) -> bool
     val eq_tag   : (tag * tag) -> bool
+    val compare_var : (var * var) -> order
 
     (* generative *)
     val fresh_named_var : string -> var
