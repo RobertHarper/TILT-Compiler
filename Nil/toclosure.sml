@@ -1001,18 +1001,21 @@ struct
 	       let val cbnds = map (fn (_,v',_,l) => Con_b(Runtime, (Con_cb(v',
 								Proj_c(Var_c cenv_var, l))))) vkl_free
 		   val cenv = Crecord_c(map (fn (v,_,_,l) => (l,c_rewrite state (Var_c v))) vkl_free)
-		   val subst = foldl (fn ((v,_,_,l),s) => NilSubst.C.sim_add s (v,Proj_c(Var_c cenv_var, l)))
+		   val subst = foldl (fn ((v,_,_,l),s) => 
+				       NilSubst.C.sim_add s (v,Proj_c(Var_c cenv_var, l)))
 				(NilSubst.C.empty()) vkl_free
 	       in  (subst, cbnds, cenv)
 	       end
 
 
- 	   val vklist = tFormals
-	   val vclist = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c_rewrite state c)) eFormals 
+	   fun vk_mapper (v,k) = (v, k_rewrite state k)
+ 	   val vklist_cl = map vk_mapper tFormals
+	   val vclist_cl = map (fn (v,_,c) => 
+				(if isDependent then SOME v else NONE, c_rewrite state c)) eFormals 
 	   val codebody_tipe = c_rewrite state body_type
 	   val closure_tipe = AllArrow_c{openness=Closure, effect=effect, isDependent=isDependent,
-					 tFormals=vklist,
-					 eFormals=vclist,
+					 tFormals=vklist_cl,
+					 eFormals=vclist_cl,
 					 fFormals=TilWord32.fromInt(length fFormals),
 					 body_type=codebody_tipe}
 	   val codebody_tipe = NilSubst.substConInCon internal_subst codebody_tipe
@@ -1040,44 +1043,46 @@ struct
 								else (tr,t)
 					   in  (venv, [bnd], tr, t)
 					   end
-	      | _ => let  val venv_vars = map #2 pc_free
-			  val labels = map #4 pc_free
-			  val venv_bnds = map (fn (v,v',tr,_,t) => 
-						let val e = e_rewrite state (Var_e v)
-						    val (e,tr) = if (is_float tr) 
-									then (box e, trace_pointer)
-								else (e, trace_rewrite state tr)
-						in  Exp_b(v',tr,e)
-						end) pc_free
-			  val venv = makeLetE Sequential venv_bnds 
-					(Prim_e(NilPrimOp(record labels),[], map Var_e venv_vars))
-			  val code_bnds = map (fn (_,v,tr,l,t) => 
-						let val e = Prim_e(NilPrimOp(select l), [],
-									  [Var_e venv_var])
-						    val (e,tr) = if (is_float tr)
-									then (unbox e, trace_float)
-								else (e, trace_rewrite inner_state tr)
-						in   Exp_b(v,tr,e)
-						end) pc_free
-			  val labs = map #4 pc_free
-			  val types = map (fn (_,_,tr,_,t) => if (is_float tr) then boxfloat_type else t) pc_free
-			  val venv_type = Prim_c(Record_c (labs,NONE), types)
+	      | _ => let  val labels = map #4 pc_free
+			  fun mapper (v,v',tr,l,t) =
+			      let val env_e = e_rewrite state (Var_e v)
+				  val code_e = Prim_e(NilPrimOp(select l), [],
+						 [Var_e venv_var])
+				  val (env_e,env_tr,env_t,code_e,code_tr) = 
+				      if (is_float tr) 
+					  then (box env_e, trace_pointer, boxfloat_type,
+						unbox code_e, trace_float)
+				      else (env_e, trace_rewrite state tr, t,
+					    code_e, trace_rewrite inner_state tr)
+				  val code_bnd = Exp_b(v',code_tr,code_e)
+			      in  (case env_e of 
+				       Var_e _ => (env_e, NONE, env_t, code_bnd)
+				     | _ => let val v'' = derived_var v
+					    in  (Var_e v'', SOME(Exp_b(v'',env_tr,env_e)), env_t, code_bnd)
+					    end)
+			      end
+			  val fields_bndopts_types_codebnds = map mapper pc_free
+			  val fields = map #1 fields_bndopts_types_codebnds
+			  val bnds = List.mapPartial #2 fields_bndopts_types_codebnds
+			  val types = map #3 fields_bndopts_types_codebnds
+			  val code_bnds = map #4 fields_bndopts_types_codebnds
+			  val venv = makeLetE Sequential bnds 
+			      (Prim_e(NilPrimOp(record labels),[], fields))
+			  val venv_type = Prim_c(Record_c (labels,NONE), types)
 		     in  (venv, code_bnds, TraceKnown TraceInfo.Trace, venv_type)
 		     end)
 
 
-	   fun vc_mapper (v,tr,c) = 
-	       let val tr' = trace_rewrite state (NilSubst.substConInTrace internal_subst tr)
-		   val _ = (print "trace: "; Ppnil.pp_trace tr; print "  -->  ";
-			    Ppnil.pp_trace tr'; print "\n")
-	       in  (v, trace_rewrite state (NilSubst.substConInTrace internal_subst tr),
-		    c_rewrite state (NilSubst.substConInCon internal_subst c))
+	   fun vtrc_mapper (v,tr,c) = 
+	       let val c =  c_rewrite state (NilSubst.substConInCon internal_subst c)
+		   val tr = trace_rewrite state (NilSubst.substConInTrace internal_subst tr)
+	       in  (v, tr, c)
 	       end
-	   val vklist_code = tFormals @ [(cenv_var,Single_k cenv)]
-	   val vclist_code = map vc_mapper (eFormals @ [(venv_var,venv_tr,venv_type)])
+	   val vklist_code = vklist_cl @ [(cenv_var,Single_k cenv)]
+	   val vtrclist_code = map vtrc_mapper (eFormals @ [(venv_var,venv_tr,venv_type)])
 	   val code_fun = Function{effect=effect,recursive=recursive,isDependent=isDependent,
 				   tFormals=vklist_code,
-				   eFormals=vclist_code,
+				   eFormals=vtrclist_code,
 				   fFormals=fFormals,
 				   body = makeLetE Sequential (code_cbnds @ code_bnds) code_body, 
 				   body_type=codebody_tipe}

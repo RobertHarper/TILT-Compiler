@@ -966,7 +966,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		    fun do_arm(n,tr,body) = 
 			let val ssumtype = make_ssum n
 			    val tr = do_niltrace state tr
-			    val (_,state) = do_vclist state[(bound,ssumtype)]
+			    val (_,state) = do_vclist state [(bound,ssumtype)]
 			in  (n,tr,do_exp state body)
 			end
 		    
@@ -1116,13 +1116,15 @@ fun pp_alias UNKNOWN = print "unknown"
 			 let val c = type_of(state,e)
 			     val sv_con = find_con(state,sv)
 			     val (tagcount,k,clist) = Normalize_reduceToSumtype(get_env state,sv_con)
-			     val k = (case k 
-					of SOME k => k
-					 | NONE => (Ppnil.pp_exp e;
-						    print "\nvariable ";Ppnil.pp_var sv;print " has type\n";
-						    Ppnil.pp_con sv_con;
-						    error "\nType is not a special sum\n"))
-			     val fieldcon = List.nth(clist, TilWord32.toInt(TilWord32.uminus(k,tagcount)))
+			     val known = (case k of
+					  SOME k => k
+					| NONE => (print "Expression: "; Ppnil.pp_exp e;
+						   print "\nVariable "; Ppnil.pp_var sv;
+						   print " has non-special-sum type:\n";
+						   Ppnil.pp_con sv_con; print "\n\n";
+						   error "Type is not a special sum\n"))
+			     val fieldcon = List.nth(clist, TilWord32.toInt
+						            (TilWord32.uminus(known,tagcount)))
 			 in  case Normalize_reduce_hnf(get_env state, fieldcon) of
 			       (_,Prim_c (Record_c (labs,_), rcons)) => 
 				 let val vars = map (fn l => Name.fresh_named_var
@@ -1135,7 +1137,7 @@ fun pp_alias UNKNOWN = print "unknown"
 							  let val v' = Name.fresh_named_var "reify"
 							  in  ([Con_b(Runtime,Con_cb (v', t))], TraceCompute v')
 							  end)
-					     val np = project_sum_record(k, l)
+					     val np = project_sum_record(known, l)
 					 in  bnds @ [Exp_b(v,tinfo,Prim_e(NilPrimOp np,[sumcon],[Var_e sv]))]
 					 end
 				     val bnds = Listops.map3 mapper (vars, labs, rcons)
@@ -1145,7 +1147,7 @@ fun pp_alias UNKNOWN = print "unknown"
 				 end
 			     (* not a record for sure *)
 			     | (true, _) => SOME[Exp_b(v,niltrace,
-						       Prim_e(NilPrimOp (project_sum_nonrecord k),
+						       Prim_e(NilPrimOp (project_sum_nonrecord known),
 							      [sumcon],[Var_e sv]))]
 			     | (_,c) => ((* print "project_sum irreducible...";
 					 Ppnil.pp_con c; print "\n"; *)

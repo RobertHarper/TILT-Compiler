@@ -1189,12 +1189,18 @@ struct
      end
 
    and type_of_prim (D,prim,cons,exps) = 
-       (case prim of
+        let
+	   fun specialize_sumtype (known,sumcon) = 
+	       let val (_,sumcon_hnf) = reduce_hnf(D,sumcon)
+	       in  NilUtil.convert_sum_to_special(sumcon_hnf,known)
+	       end
+	in
+	 (case prim of
 	    record labs => Prim_c(Record_c (labs,NONE), map (fn e => type_of(D,e)) exps)
 	  | select lab => projectRecordType(D,type_of(D,hd exps),lab)
-	  | inject s => hd cons
-	  | inject_record s => hd cons
-	  | inject_nonrecord s => hd cons
+	  | inject s => specialize_sumtype(s,hd cons)
+	  | inject_record s => specialize_sumtype(s,hd cons)
+	  | inject_nonrecord s => specialize_sumtype(s,hd cons)
 	  | project_sum s => projectSumType(D,hd cons, s)
 	  | project_sum_nonrecord s => projectSumType(D,hd cons, s)
 	  | project_sum_record (s,lab) => let val summandType = projectSumType(D,hd cons, s)
@@ -1216,6 +1222,7 @@ struct
 			      tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,body_type=resc}
 	       end
 	  | peq => error "peq not done")
+	end
 
    and type_of (D : context,exp : exp) : con = 
      let val _ = if (!debug)
