@@ -13,14 +13,16 @@ structure Linknil :> LINKNIL  =
     val typecheck = Stats.ff "Typecheck"   (* typecheck after each pass *)
     val wtypecheck = Stats.ff "WTypecheck" (* same, using wizard *)
 
+    val typeof_elim = fn nilmod => Typeof_Elim.mod_elim (NilContext.empty()) nilmod
+
     fun makeEntry (enable, str) = ((if enable then Stats.tt else Stats.ff) ("do" ^ str),
 				   Stats.ff("show" ^ str),
 				   Stats.ff("check" ^ str),
 				   Stats.ff("wcheck" ^ str),
 				   str)
     val phasesplit  = makeEntry (true, "Phasesplit")
-(*    val typeofelim1 = makeEntry (true, "TypeofElim1")
-    val typeofelim2 = makeEntry (true, "TypeofElim2"*)
+    val typeofelim1 = makeEntry (true, "TypeofElim1")
+    val typeofelim2 = makeEntry (true, "TypeofElim2")
     val cc          = makeEntry (true, "ClosureConv")
     val optimize1   = makeEntry (true, "Optimize1")
     val optimize2   = makeEntry (true, "Optimize2")
@@ -38,9 +40,6 @@ structure Linknil :> LINKNIL  =
 (*  val flatten     = makeEntry (false, "Flatten") *)
     val coerce_elim = makeEntry (false, "CoerceElim")
 
-    val measure_after_phaseplit = makeEntry (true, "MeasureAfterPhasesplit")
-(*    val measure_after_opts      = makeEntry (false, "MeasureAfterOpts")*)
-    val measure_after_cc        = makeEntry (true, "MeasureAfterCC")
 (*  val reorder     = makeEntry (false, "Reorder") *)
 
     val error = fn s => Util.error "linknil.sml" s
@@ -120,27 +119,6 @@ structure Linknil :> LINKNIL  =
       | transform filename (tr as (ref true,_,_,_,_)) arg =
 	pass filename tr arg
 
-    val typeof_count1 = ("PS",Stats.int "PostPS_Size", Stats.int "PostPS_Diff",Stats.int "PS_Max%_Increase")
-    val typeof_count2 = ("CC",Stats.int "PostCC_Size", Stats.int "PostCC_Diff",Stats.int "CC_Max%_Increase")
-
-
-    fun do_measure (pass,size,diff,max) filename nilmod = 
-      let
-
-	val meas   = Measure.mod_size {cstring = Measure.cstring,count = ["Typeof_c"], count_in = []} 
-	val pre    = meas nilmod
-	val nilmod = Typeof_Elim.mod_elim (NilContext.empty ()) nilmod
-	val post   = meas nilmod
-	val incr   = if pre > 0 then Real.round(100.0 * (Real.fromInt (post - pre) / Real.fromInt pre)) else 0
-      in 
-	size := !size + pre;
-	diff := !diff + (post - pre);
-	if incr > !max then 
-	  (print ("\nNew "^pass^" Max: "^(Int.toString incr)^"% increase in file "^filename^"\n");
-	   max := incr)
-	else ();
-	nilmod
-      end
 					    
     exception Stop of Nil.module
 
@@ -159,7 +137,7 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = pass phasesplit (Tonil.phasesplit, (ctxt,sbnd_entries))
 
-	    val nilmod = transform measure_after_phaseplit (do_measure typeof_count1 filename, nilmod)
+	    val nilmod = transform typeofelim1 (typeof_elim, nilmod)
 
 	    val nilmod = transform coerce_elim (CoerceElim.transform, nilmod)
 
@@ -212,7 +190,7 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = transform cc (ToClosure.close_mod, nilmod)
 
-	    val nilmod = transform measure_after_cc (do_measure typeof_count2 filename,nilmod)
+	    val nilmod = transform typeofelim2 (typeof_elim,nilmod)
 
 (*	    val nilmod = transform reorder (Reorder.optimize, nilmod) *)
 

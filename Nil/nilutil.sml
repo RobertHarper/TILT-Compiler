@@ -743,24 +743,24 @@ struct
       end
 
     and f_niltrace (state : state) (nt : Nil.niltrace) : Nil.niltrace =
-	(case nt of
-	     TraceCompute v => 
-		 (case (f_con state (Var_c v)) of
-		      Var_c v' => TraceCompute v'
-		    | _ => TraceUnknown)
-           | TraceKnown tinfo =>
-		 (case tinfo of
-		      TraceInfo.Compute(v,ls) =>
-			  let
-			      val con = f_con state (makeProjC (Var_c v) ls)
-			  in
-			      case (stripProjC con) of
-				  (Var_c v', ls') => 
-				      TraceKnown (TraceInfo.Compute(v',ls'))
-				| _ => TraceUnknown
-			  end
-		    | _ => nt)
-	   | _ => nt)
+      let val state = constr_state state
+      in
+	case nt of
+	  TraceCompute v => 
+	    (case (f_con state (Var_c v)) of
+	       Var_c v' => TraceCompute v'
+	     | _ => TraceUnknown)
+	| TraceKnown (TraceInfo.Compute(v,ls)) =>
+	       let
+		 val con = f_con state (makeProjC (Var_c v) ls)
+	       in
+		 case (stripProjC con) of
+		   (Var_c v', ls') => 
+		     TraceKnown (TraceInfo.Compute(v',ls'))
+		 | _ => TraceUnknown
+	       end
+	| _ => nt
+      end
 
   and f_bnd (state : state) (bnd : bnd) : bnd list * state = 
       let val (STATE{bound,handlers={bndhandler,exphandler,...},...}) = state
@@ -1402,6 +1402,12 @@ struct
       in  loop cbnds []
       end
 
+    fun small_con con =
+	case con of 
+	    Var_c _ => true
+	  | Prim_c (primcon, clist) => length clist = 0 
+	  | _ => false
+
    (* makeLetC.
          Creates a constructor-level sequential let given bindings and
          a body.  Optimizes the let when the bindings or the body are
@@ -1412,20 +1418,19 @@ struct
          LET_C cvar' = con IN cvar       ==>  cvar  [where cvar != cvar']
          LET_C cbnds, cvar = con IN cvar ==>  makeLetC cbnds con
          LET_C cbnds IN (LET_C cbnds' IN con) ==> makeLetC (cbnds@cbnds') con
-         LET_C cvar = con IN cvar.l      ==>  con.l
     *) 
    fun makeLetC nil body = body
      | makeLetC [conbnd as Con_cb(var,con)] (cv as Var_c var') =
-       if (Name.eq_var(var,var')) then con else cv
-     | makeLetC [conbnd as Con_cb(var,con)] (cv as Proj_c(Var_c var',l)) =
-       if (Name.eq_var(var,var')) then Proj_c(con,l) else cv
+       if (Name.eq_var(var,var')) then 
+	 if small_con con then con else Let_c (Sequential,[conbnd],cv)
+       else cv
      | makeLetC cbnds (cv as Var_c var') =
        (case (List.rev cbnds) of
 	    Con_cb(var,con)::rest => 
-		if (Name.eq_var(var,var')) then
-		    makeLetC (rev rest) con
-		else
-		    Let_c (Sequential, cbnds, cv)
+	      if (Name.eq_var(var,var')) andalso small_con con then
+		makeLetC (rev rest) con 
+	      else
+		Let_c (Sequential, cbnds, cv)
 	  | _ => Let_c (Sequential, cbnds, cv))
      | makeLetC cbnds (Let_c(Sequential, cbnds', body)) =
           makeLetC (cbnds @ cbnds') body

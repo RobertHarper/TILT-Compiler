@@ -569,8 +569,14 @@ fun pp_alias UNKNOWN = print "unknown"
 	    end
 	  | flattenBnds (bnd::rest) = bnd :: (flattenBnds rest)
 	    
-	fun cbnd_used' state cbnd = get_varuse(state, #1(extractCbnd cbnd))
-	fun cbnd_used state cbnd = is_used_var(state, #1(extractCbnd cbnd))
+	fun cbnd_var cb = 
+	  (case cb
+	     of  Con_cb(v,c)   => v
+	      | Open_cb(v,_,_) => v
+	      | Code_cb(v,_,_) => v)
+
+	fun cbnd_used' state cbnd = get_varuse(state, cbnd_var cbnd)
+	fun cbnd_used state cbnd = is_used_var(state, cbnd_var cbnd)
 
 	fun bnd_used state bnd = 
 	    (case bnd of
@@ -715,9 +721,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			    val (cbnds,state) = foldl_acc do_cbnd state cbnds
 			    val c = do_con state c
 			    val cbnds = List.filter (cbnd_used state) cbnds
-		        in  case cbnds of
-			    [] => c
-			  | _ => Let_c(letsort,cbnds,c)
+		        in  NilUtil.makeLetC cbnds c
 			end)
 
 	and do_cbnd(cbnd : conbnd, state : state) : conbnd * state = 
@@ -728,7 +732,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		       Let_c(_,[Open_cb(v',vklist,c)],Var_c v'') => 
 		       if (Name.eq_var(v',v''))
 			 then do_cbnd(Open_cb(v,vklist,c), state)
-		       else do_cbnd(Con_cb(v,Var_c v''),state)
+		       else do_cbnd(Con_cb(v,Var_c v''),state)  (* Lambda is dead code *)
 		      |	_ => 
 			 let val state = add_var(state,v)
 			   val state' = enter_var(state,v)
@@ -790,9 +794,9 @@ fun pp_alias UNKNOWN = print "unknown"
 		     val return_con = #8(List.last wraps)
 		     val (bnds,tinfo) = 
 			 (case get_trace (temp_state, return_con) of
-			      SOME tinfo => ([],TraceUnknown)
+			      SOME tinfo => ([],TraceKnown tinfo)
 			    | NONE =>
-				  let val v' = Name.fresh_named_var "reify"
+				  let val v' = Name.fresh_named_var "opt_reify"
 				  in  ([Con_b(Runtime,Con_cb (v', return_con))], TraceCompute v')
 				  end)
 		     val bnd = Exp_b(v,tinfo,call)
@@ -1194,14 +1198,26 @@ fun pp_alias UNKNOWN = print "unknown"
 		end
 
 	and do_niltrace state niltrace = 
-	    (case niltrace of
-		 TraceCompute v => (use_var(state,v); niltrace)
-	       | TraceKnown (TraceInfo.Compute(path as (v,_))) => 
-			(case find_availC(state,path2con path) of
-				NONE =>	(use_var(state,v); niltrace)
-			      | SOME v => (use_var(state,v); TraceKnown(TraceInfo.Compute(v,[]))))
-	       | _ => niltrace)
-
+	  let
+	    fun compute path = 
+	      let val c = path2con path
+	      in
+		case find_availC(state,c)
+		  of SOME v => (use_var(state,v); TraceKnown(TraceInfo.Compute(v,[])))
+		   | NONE => 
+		    let val c = do_con state c
+		    in
+		      case get_trace (state,c)
+			of SOME tr => TraceKnown tr
+			 | NONE => TraceUnknown
+		    end
+	      end
+	  in
+	    case niltrace of
+	      TraceCompute v => compute (v,[])
+	    | TraceKnown (TraceInfo.Compute path) => compute path
+	    | _ => niltrace
+	  end
 	and do_bnds(bnds : bnd list, state : state) : bnd list * state = 
 	    let val bnds = flattenBnds bnds
 		val (newbnds_list,state) = foldl_acc do_bnd state bnds

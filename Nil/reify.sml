@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops *)
+(*$import Prelude TopLevel Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops Ppnil *)
 
 structure Reify :> REIFY =
 struct
@@ -61,19 +61,25 @@ struct
 	if (TraceOps.valid_trace (ctxt,nt)) then
 	    (nt, [], pset_add_pset (pset, TraceOps.get_free_vars nt))
 	else
-	    (case TraceOps.get_trace (ctxt, con) of
-		 SOME tinfo => 
-		     (TraceKnown tinfo, [], 
-		      pset_add_pset (pset, TraceOps.get_free_vars' tinfo))
-	       | NONE =>
-		     let 
-			 val v' = Name.fresh_named_var "reify"
-			 val con = NilRename.renameCon con
-			 val pset' = reify_con_rt(con,pset)
-		     in
-			 (TraceCompute v',
-			  [Con_b(Runtime,Con_cb (v', con))], pset')
-		     end)
+	    (if !debug then 
+	       (print "\nInvalid trace found!";
+		Ppnil.pp_trace nt;
+		print "\n")
+	     else ()
+	       ;
+	     case TraceOps.get_trace (ctxt, con) of
+	       SOME tinfo => 
+		 (TraceKnown tinfo, [], 
+		  pset_add_pset (pset, TraceOps.get_free_vars' tinfo))
+	     | NONE =>
+		 let 
+		   val v' = Name.fresh_named_var "reify"
+		   val con = NilRename.renameCon con
+		   val pset' = reify_con_rt(con,pset)
+		 in
+		   (TraceCompute v',
+		    [Con_b(Runtime,Con_cb (v', con))], pset')
+		 end)
 
     fun reify_exp ctxt (e as Var_e v, pset) = (e, pset)
       | reify_exp ctxt (e as Const_e _, pset) = (e, pset)

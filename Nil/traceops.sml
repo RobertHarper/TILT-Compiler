@@ -1,4 +1,4 @@
-(*$import Prelude TraceInfo Nil NilContext Util Normalize TRACEOPS Name List *)
+(*$import Prelude TraceInfo Nil NilContext Util Normalize TRACEOPS Name List Stats *)
 
 structure TraceOps :> TRACEOPS = 
 struct
@@ -115,11 +115,11 @@ struct
       (* XXX Unsound approximation ! *)
       (* but calling con_valid is too heavyweight; it
          would print an error message *)
-	  ((NilContext.find_con (ctxt, v); true)
+	  ((NilContext.find_kind (ctxt, v); true)
 	   handle NilContext.Unbound => false)
     | valid_trace (ctxt, TraceKnown _) = true
     | valid_trace (ctxt, TraceCompute v) =
-	  ((NilContext.find_con (ctxt, v); true)
+	  ((NilContext.find_kind (ctxt, v); true)
 	   handle NilContext.Unbound => false)
     | valid_trace (_, TraceUnknown) = false
 
