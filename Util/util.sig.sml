@@ -42,7 +42,25 @@ sig
     val apply : ('a -> 'b) * 'a -> unit -> 'b
     val memoize : (unit -> 'a) -> unit -> 'a
 
-    val run : string list -> unit
+    (*
+	Run command.  If stdin is SOME file, then command's standard input
+	is connected to file; otherwise, it is connected to /dev/null.  If
+	stdout is SOME file, then command's standard output is connected
+	to file; otherwise, it is intermixed with the parent's output.  If
+	wait is true, then run will wait for the command to terminate and
+	raise an exception if command terminates abnormally (no such exn
+	is raised when wait is false).
+    *)
+    val run :
+	{command:string list,
+	 stdin:string option,
+	 stdout:string option,
+	 wait:bool} -> unit
+
+    (*
+	Run command and return its output as a string.  Raises an
+	exception if the command terminates abnormally.
+    *)
     val outputOf : string list -> string
 
     (*
@@ -50,17 +68,17 @@ sig
 	returning a function isdone such that:
 
 	isdone() = false if child is still running.
-		 = true  if child finished successfully
-		   (because f termianted or called exit(0)).
-		 raises an exception if the child is killed or
-		 if f raises an exception or calls exit(nonzero).
+		 = true  if child terminates normally
+		   (because f terminated or called exit 0).
+		 raises an exception if the child terminates abnormally.
     *)
     val background : (unit -> 'a) -> unit -> bool
 
     (*
-	(background' f) evaluates f() in a child process for
-	side effects.  Returns a function that kills the process
-	running f.
+	(background' f) evaluates f() in a child process, returning a
+	function kill that kills the process if it is still running and
+	raises an exception if the child terminated abnormally before kill
+	was called.
     *)
     val background' : (unit -> 'a) -> unit -> unit
 
