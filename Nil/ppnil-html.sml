@@ -131,6 +131,7 @@ structure PpnilHtml :> PPNIL =
     and pp_con arg_con : format = 
       (case arg_con of
 	   Var_c v => pp_var v
+         | Prim_c(Record_c ([],NONE),[]) => HOVbox[String "UNIT"]
          | Prim_c (Record_c (labs,NONE), conlist) => 
               pp_list pp_labcon (Listops.zip labs conlist) ("{",",","}", false)
          | Prim_c (Record_c (labs,SOME vars), conlist) =>
