@@ -133,3 +133,4 @@
 0137 [open]	syntax of special constants
 0138 [open]	date failure
 0139 [open]	filesys discrepancies
+0140 [open]	discrepancies on string tests
