@@ -23,13 +23,13 @@
 #define ZERO         0
 #define EXNARG       15
 #define EXNARG_REG    %r15
-#define LINK         15 
-#define LINK_REG      %r15 
+#define RA	     15 
+#define RA_REG       %r15
 #define SP           14
 #define SP_REG        %r14
 #define EXNARG_DISP      (longsize * EXNARG)
 #define SP_DISP          (longsize * SP)
-#define LINK_DISP        (longsize * LINK)
+#define RA_DISP          (longsize * RA)
 #define ASMTMP_DISP      (longsize * ASMTMP)
 #define ASMTMP2_DISP     (longsize * ASMTMP2)
 #define ALLOCSIZE    ASMTMP

@@ -127,13 +127,13 @@ start_client:
 	ld	[%r1+16], %r4				! restore r4 which is not restored by load_regs
 	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
 	st	%g0, [THREADPTR_REG + notinml_disp]     ! entering ML
-	ld	[ASMTMP_REG + 0], LINK_REG		! fetch code pointer
+	ld	[ASMTMP_REG + 0], RA_REG		! fetch code pointer
 	ld	[ASMTMP_REG + 4], %o0			! fetch type env
 	ld	[ASMTMP_REG + 8], %o1			! fetch term env
         sethi   %hi(global_exnrec),EXNPTR_REG
 	or      EXNPTR_REG,%lo(global_exnrec),EXNPTR_REG  ! install global handler
 	st	%sp, [EXNPTR_REG + 4]			! initialize stack pointer of global handler
-	jmpl	LINK_REG, %o7				! jump to thunk
+	jmpl	RA_REG, %o7				! jump to thunk
 	nop
 	mov	1, ASMTMP_REG
 	st	ASMTMP_REG, [THREADPTR_REG + notinml_disp]	! returning from ML
@@ -176,14 +176,14 @@ Yield:
 	.proc	07
 	.align	4
 Spawn:
-	st	LINK_REG, [THREADPTR_REG + LINK_DISP]    ! note that this is return address of Spawn
+	st	RA_REG, [THREADPTR_REG + RA_DISP]    ! note that this is return address of Spawn
 	ld	[THREADPTR_REG + proc_disp],ASMTMP_REG   ! get system thread pointer into temp
 	ld	[ASMTMP_REG], SP_REG			 ! run on system thread stack
 	call	SpawnRest
 	nop
 	mov	RESULT_REG, THREADPTR_REG		 ! returning to ML
 	ld	[THREADPTR_REG + SP_DISP], SP_REG	 ! back to user thread stack
-	ld	[THREADPTR_REG + LINK_DISP], LINK_REG	
+	ld	[THREADPTR_REG + RA_DISP], RA_REG	
 	mov	THREADPTR_REG, %l0			 ! load_regs_MLtoC expects thread pointer in l0
 	retl
 	nop
@@ -263,7 +263,7 @@ raise_exception_raw:
 OverflowFromML:
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
-	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]	
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
@@ -287,7 +287,7 @@ OverflowFromML:
 DivFromML:
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
-	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]	
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
