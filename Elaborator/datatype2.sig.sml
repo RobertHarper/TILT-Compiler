@@ -18,6 +18,10 @@ signature DATATYPE =
 		   is_transparent : bool} ->
 	                        (Il.sbnd * Il.sdec) list
 
+    (* The output of this should be precisely 
+       Fst_Sdecs of the output of the regular compile function above.
+       It is useful in the first pass of elaboration for rds's. *)
+    val compile_static : Il.context * Ast.db list -> Il.sdec list
 
     (* The datatype module/signature returned will be such that:
         when given a context, a mod/sig lookup method, and a path,

@@ -66,4 +66,9 @@ sig
 	contribute to the definition of the given vars.
     *)
     val gc_context : context * Name.VarSet.set -> context
+
+    (* The boolean parameter should be supplied as true iff we want the resulting
+       signature to be non-dependent, which is usually the case. *)
+    val selfify : bool -> context * mod * signat -> signat
+
 end

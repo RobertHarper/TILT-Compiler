@@ -16,6 +16,8 @@ structure Datatype
     val error_sig = fn signat => fn s => error_sig "datatype.sml" signat s
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
+    val reject = fn s => (Error.error_region(); reject s)
+
     fun geq_string (s1,s2) =
 	(case (String.compare(s1,s2)) of
 	     GREATER => true
@@ -106,18 +108,14 @@ structure Datatype
 					  in  (Name.to_dt (symbol_label s),
 					       fresh_named_var str)
 					  end) type_syms
+(*
 	val constr_sumarg_strings = map (fn s => (Symbol.name s) ^ "_sumarg") type_syms
 	val constr_sumarg_vars = map fresh_named_var constr_sumarg_strings
 	val constr_sumarg_labs = map internal_label constr_sumarg_strings
+*)
 	val constr_sum_strings = map (fn s => (Symbol.name s) ^ "_sum") type_syms
 	val constr_sum_vars = map fresh_named_var constr_sum_strings
-	val constr_sum_labs = map internal_label constr_sum_strings
-	val constr_ssum_strings =
-	    let fun mapper type_sym (n,_) = ((Symbol.name type_sym) ^ "_sum" ^ (Int.toString n))
-	    in  map2 (fn (type_sym, (_,tys)) => mapcount (mapper type_sym) tys) (type_syms, std_list)
-	    end
-	val constr_ssum_vars = mapmap fresh_named_var constr_ssum_strings
-	val constr_ssum_labs = mapmap internal_label constr_ssum_strings
+	val constr_sum_labs = map (to_sum o internal_label) constr_sum_strings
 	val constr_tys : Ast.ty option list list = map (fn (_,def) => map #2 def) std_list
         val constr_syms = map (fn (_,def) => map #1 def) std_list
 	val constr_labs = mapmap symbol_label constr_syms
@@ -192,6 +190,38 @@ structure Datatype
 	end
 
         (* ------------ now create the sum arg and sum types which use type and tyvar *)
+
+	local
+	    fun conopts_split (nca,ca) ([] : 'a option list) = (nca,rev ca)
+	      | conopts_split (nca,ca) (NONE::rest) = conopts_split (nca+1,ca) rest
+	      | conopts_split (nca,ca) ((SOME c)::rest) = conopts_split (nca,c::ca) rest
+	    val conopts_split = fn arg => conopts_split (0,[]) arg
+	    fun mapper (conopts,conopts_vdt,names) =
+		let val (nca,ca) = conopts_split conopts
+		    val (_,ca_vdt) = conopts_split conopts_vdt
+		    val sumarg =
+			(case ca of
+			     [ca1] => ca1
+			   | _ => CON_TUPLE_INJECT ca)
+		    val sumarg_vdt = (case ca_vdt of
+					  [ca_vdt1] => ca_vdt1
+					| _ => CON_TUPLE_INJECT ca_vdt)
+		in (CON_SUM{names=names,
+			    noncarriers=nca,
+			    carrier=sumarg_vdt,
+			    special=NONE},
+		    CON_SUM{names=names,
+			    noncarriers=nca,
+			    carrier=sumarg,
+			    special=NONE})
+		end
+	in
+	    val conopts_split = conopts_split
+	    val (constr_fullsum_vdt,constr_sum) =
+		unzip (map3 mapper (constr_tyvar_type,constr_vdt,constr_labs))
+	end
+
+(*
 	local
 	    fun conopts_split (nca,ca) ([] : 'a option list) = (nca,rev ca)
 	      | conopts_split (nca,ca) (NONE::rest) = conopts_split (nca+1,ca) rest
@@ -226,7 +256,7 @@ structure Datatype
 		unzip4 (map4 mapper (constr_tyvar_type,constr_vdt,
 				     constr_sumarg_vars,constr_labs))
 	end
-
+*)
         (* ---------- now create the top datatype tuple using var_poly ------ *)
 	val top_type_tyvar =
 	    CON_MU(CON_FUN(vardt_list,con_tuple_inject constr_fullsum_vdt))
@@ -513,6 +543,7 @@ structure Datatype
 		in  [(SBND(top_eq_lab, bnd), SDEC(top_eq_lab, dec))]
 		end)
 
+(*
 	fun mapper(constr_sumarg_lab_i,
 		   constr_sumarg_var_i,
 		   constr_sumarg_i,
@@ -529,6 +560,7 @@ structure Datatype
 
 	val constr_sumarg_sbnd_sdecs = map4 mapper
 	    (constr_sumarg_labs, constr_sumarg_vars, constr_sumarg, constr_sumarg_kind)
+*)
 
 	fun mapper(constr_sum_lab_i, constr_sum_var_i, constr_rf_sum_i) =
 	    let val (c,k) = if is_monomorphic
@@ -555,7 +587,7 @@ structure Datatype
 
 	val (public_sbnds, public_sdecs) =
 	    unzip (type_sbnd_sdecs
-		   @ constr_sumarg_sbnd_sdecs
+(*		   @ constr_sumarg_sbnd_sdecs *)
 		   @ constr_sum_sbnd_sdecs
 		   @ in_coercion_sbnd_sdecs
 		   @ out_coercion_sbnd_sdecs
@@ -741,7 +773,9 @@ structure Datatype
   end
 
     fun compile' (context, typecompile,
-		  datatycs : Ast.db list, eq_compile, is_transparent : bool) : (sbnd * sdec) list =
+		  datatycs : Ast.db list, 
+		  eq_compile, 
+		  is_transparent : bool) : (sbnd * sdec) list =
       let
         (* ---- call the main routine for each sorted list of datatypes
 	   and retain the accumulated context *)
@@ -775,22 +809,61 @@ structure Datatype
 	    | SOME sym_tyvar_def_listlist => loop context [] sym_tyvar_def_listlist
       end
 
+    fun compile_static' (context,datatycs) : sdec list =
+      let
+	  fun doit std_list =
+	    let
+		fun geq_std((s1,_,_),(s2,_,_)) = geq_sym(s1,s2)
+		val std_list = ListMergeSort.sort geq_std std_list
+		val num_tyvars = (case std_list of nil => error "compile_static'"
+	                           | ((_, tyvars, _) :: _) => length tyvars)
+		val kind = if num_tyvars = 0 then KIND
+			   else KIND_ARROW(num_tyvars,KIND)
+		val type_syms = map #1 std_list
+		val type_labs = map symbol_label type_syms
+		val type_vars = map (fn s => fresh_named_var (Symbol.name s)) type_syms
+		val sdecs = map2 (fn (l,v) => SDEC(l,DEC_CON(v,kind,NONE,false))) (type_labs,type_vars)
+
+		val top_type_string = foldl (fn (s,acc) => acc ^ "_" ^ (Symbol.name s)) "" type_syms
+		val datatypes_var = fresh_named_var top_type_string
+		val top_type_lab = internal_label top_type_string
+		val datatypes_lab = to_open top_type_lab
+		val top_sdec = SDEC(datatypes_lab,DEC_MOD(datatypes_var,false,SIGNAT_STRUCTURE(sdecs)))
+	    in
+		top_sdec
+	    end
+      in
+	  case splitScc (context,datatycs)
+	    of NONE => []
+	     | SOME sym_tyvar_def_listlist => map doit sym_tyvar_def_listlist
+      end
+
+
     fun copy_datatype(context,path,tyc) =
 	let val old_type_sym = List.last path
 	    val type_sym = tyc
 	    val type_lab = symbol_label tyc
 	    val type_var = gen_var_from_symbol tyc
 	    val type_string = (Symbol.name type_sym)
+
+            (* This is not necessary, but just to mimic the open labels given to normal
+               datatype modules. *)
+	    val top_string = "_" ^ type_string
+	    val top_var = fresh_named_var top_string
+	    val top_lab = to_open(internal_label top_string)
+
 	    val constr_sum_string = type_string ^ "_sum"
 	    val constr_sum_var = fresh_named_var constr_sum_string
-	    val constr_sum_lab = internal_label constr_sum_string
+	    val constr_sum_lab = to_sum(internal_label constr_sum_string)
 	    val old_constr_sum_string = (Symbol.name old_type_sym) ^ "_sum"
-	    val old_constr_sum_lab = internal_label old_constr_sum_string
+	    val old_constr_sum_lab = to_sum(internal_label old_constr_sum_string)
+(*
 	    val constr_sumarg_string = (Symbol.name type_sym) ^ "_sumarg"
 	    val constr_sumarg_var = fresh_named_var constr_sumarg_string
 	    val constr_sumarg_lab = internal_label constr_sumarg_string
 	    val old_constr_sumarg_string = (Symbol.name old_type_sym) ^ "_sumarg"
 	    val old_constr_sumarg_lab = internal_label old_constr_sumarg_string
+*)
 	    val in_coercion_string = (Symbol.name type_sym) ^ "_in"
 	    val in_coercion_var = fresh_named_var in_coercion_string
 	    val in_coercion_lab = to_coercion (internal_label in_coercion_string)
@@ -817,7 +890,9 @@ structure Datatype
 	    val eq_labs = change_path to_eq
 	    val dt_labs = change_path to_dt
 	    val constr_sum_labs = change_path (fn _ => old_constr_sum_lab)
+(*
 	    val constr_sumarg_labs = change_path (fn _ => old_constr_sumarg_lab)
+*)
 	    val in_coercion_labs = change_path (fn _ => old_in_coercion_lab)
 	    val out_coercion_labs = change_path (fn _ => old_out_coercion_lab)
 
@@ -845,7 +920,7 @@ structure Datatype
 				     fun fail msg = (debugdo(fn () =>
 							     (Ppil.pp_pathlist Ppil.pp_label' labs;
 							      print ": "; print msg;  print "\n"));
-						     error msg)
+						     reject msg)
 				     val var = (case dec
 						  of DEC_EXP(v,_,_,_) => v
 						   | DEC_CON(v,_,_,_) => v
@@ -872,18 +947,18 @@ structure Datatype
 		   | _ => (debugdo(fn () =>
 				   (Ppil.pp_pathlist Ppil.pp_label' dt_labs; print ": ";
 				    print "unbound datatype - constr labs"));
-			   error "unbound datatype - constr labs"))
+			   reject "unbound datatype - constr labs"))
 
 	    fun copy_type str (lookup_labs, lab, var) =
 		case (Context_Lookup_Labels(context,lookup_labs)) of
-		     SOME(_,PHRASE_CLASS_CON (c,k,_,i)) =>
+		     SOME(p,PHRASE_CLASS_CON (c,k,_,i)) =>
 			 let
 			     val bnd = BND_CON(var,c)
 			     val dec = DEC_CON(var,k,SOME c,i)
-			 in  (SBND(lab,bnd),SDEC(lab,dec))
+			 in  (p,(SBND(lab,bnd),SDEC(lab,dec)))
 			 end
 		   | _ => (print "lookup_labs: "; app Ppil.pp_label lookup_labs; print "\n";
-			   error ("unbound datatype - copy type " ^ str))
+			   reject ("unbound datatype - copy type " ^ str))
 
 	    fun copy_coercion str (lookup_labs, lab, var) =
 		case (Context_Lookup_Labels(context,lookup_labs)) of
@@ -895,27 +970,89 @@ structure Datatype
 			    (SBND(lab,bnd),SDEC(lab,dec))
 			end
 		  | _ => (print "lookup_labs: "; app Ppil.pp_label lookup_labs; print "\n";
-			   error ("unbound datatype - copy coercion " ^ str))
+			   reject ("unbound datatype - copy coercion " ^ str))
 
-	    val type_sbndsdec = copy_type "type" (type_labs,type_lab,type_var)
-	    val constr_sum_sbndsdec = copy_type "constr_sum"
+	    val (p1,type_sbndsdec) = copy_type "type" (type_labs,type_lab,type_var)
+	    val (p2,constr_sum_sbndsdec) = copy_type "constr_sum"
 		(constr_sum_labs,constr_sum_lab,constr_sum_var)
+
+
+            (* Disregard the following comment. *)
+
+            (* Unfortunately, this sanity check doesn't work when one or both of the paths
+	       is just a variable.  Fixing the sanity check is not obvious.
+	       So, for the moment, we allow invalid declarations like
+
+                   datatype t = A
+                   type t = int
+                   datatype u = datatype t
+
+               and the result will be that u = int, but the rest of u's datatype components
+	       are defined in terms of the shadowed datatype t.
+            *)
+
+            (* This is just to check that the datatype being copied has not been shadowed
+               by a subsequent type declaration, in which case the datatype and the sum type
+               would have to differ in their paths. *)
+
+            fun sanity_check (PATH(v1,labs1 as (_::_)),PATH(v2,labs2 as (_::_))) = 
+		eq_path(PATH(v1,butlast labs1),PATH(v2,butlast labs2))
+	      | sanity_check _ = false
+
+	    val _ = sanity_check(p1,p2) orelse
+		    reject "Datatype replication failed: datatype being replicated was shadowed"
+
+
+(*
 	    val constr_sumarg_sbndsdec = copy_type "constr_sumarg"
 		(constr_sumarg_labs,constr_sumarg_lab,constr_sumarg_var)
+*)
 	    val in_coercion_sbndsdec = copy_coercion "in_coercion"
 		(in_coercion_labs,in_coercion_lab,in_coercion_var)
 	    val out_coercion_sbndsdec = copy_coercion "out_coercion"
 		(out_coercion_labs,out_coercion_lab,out_coercion_var)
 
-	in [type_sbndsdec]
-	    @ [constr_sumarg_sbndsdec,constr_sum_sbndsdec]
-	    @ [in_coercion_sbndsdec,out_coercion_sbndsdec]
-	    @ eq_sbndsdec @ constr_sbndsdec
+	    val sbndsdecs = [type_sbndsdec]
+		          @ [(* constr_sumarg_sbndsdec, *) constr_sum_sbndsdec]
+		          @ [in_coercion_sbndsdec,out_coercion_sbndsdec]
+	                  @ eq_sbndsdec @ constr_sbndsdec
+
+	    val (sbnds,sdecs) = unzip sbndsdecs
+	    val top_sbnd = SBND(top_lab,BND_MOD(top_var,false,MOD_STRUCTURE sbnds))
+	    val top_sdec = SDEC(top_lab,DEC_MOD(top_var,false,SIGNAT_STRUCTURE sdecs))
+
+	in
+	    [(top_sbnd,top_sdec)]
 	end
 
+    fun copy_datatype_static (context,path,tyc) : sdec list = 
+	let
+	    val type_lab = symbol_label tyc
+	    val type_var = gen_var_from_symbol tyc
+	    val type_labs = map symbol_label path
+	    val type_string = (Symbol.name tyc)
+
+            (* This naming convention is not necessary, 
+	       but just to mimic the open labels given by copy_datatype, which in turn
+	       mimics the open labels given to normal datatype modules. *)
+	    val top_string = "_" ^ type_string
+	    val top_var = fresh_named_var top_string
+	    val top_lab = to_open(internal_label top_string)
+
+	    val sdec = (case Context_Lookup_Labels(context,type_labs) of
+                          SOME(_,PHRASE_CLASS_CON (c,k,_,i)) =>
+			      SDEC(top_lab,DEC_MOD(top_var,false,
+                                 SIGNAT_STRUCTURE[SDEC(type_lab,DEC_CON(type_var,k,SOME c,i))]))
+    		        | _ => (print "lookup_labs: "; app Ppil.pp_label type_labs; print "\n";
+			        reject ("unbound datatype")))
+	in 
+	    [sdec]
+	end
 
     fun compile {context, typecompile,
-		 datatycs : Ast.db list, eq_compile, is_transparent : bool} : (sbnd * sdec) list =
+		 datatycs : Ast.db list, 
+		 eq_compile, 
+		 is_transparent : bool} : (sbnd * sdec) list =
 	let
 	    fun calldriver() = compile'(context,typecompile,datatycs,eq_compile,is_transparent)
 	in
@@ -928,6 +1065,17 @@ structure Datatype
 		    end
 	      | _ => calldriver()
 	end
+
+    fun compile_static (context,datatycs) : sdec list = 
+	(case datatycs of
+	     [db] =>
+		 let val (tyc,tyv,rhs) = AstHelp.db_strip db
+		 in  (case rhs of
+			  Ast.Repl path => copy_datatype_static(context,path,tyc)
+			| _ => compile_static'(context,datatycs))
+		 end
+	   | _ => compile_static'(context,datatycs))
+	   
 
 
     (* ----- is the phrase-class for a non value-carrying constructor *)
@@ -1132,7 +1280,11 @@ structure Datatype
 	      | (SOME(_,PHRASE_CLASS_MOD(_,true,s,_)),SOME(sbnds,_,_)) =>
 		    (case s of
 			 SIGNAT_FUNCTOR(v,argsig,SIGNAT_STRUCTURE [SDEC(_,DEC_EXP(_,_,SOME e,_))],_) =>
-			     exp_subst(e,subst_add_modvar(empty_subst, v, MOD_STRUCTURE sbnds))
+			     let fun folder (SBND(l,BND_CON(_,c)),s) = subst_add_conpath(s,PATH(v,[l]),c)
+				   | folder _ = error "bad polymorphic instantiation of expose function"
+				 val subst = foldl folder empty_subst sbnds
+			     in  exp_subst(e,subst)
+			     end
 		       | _ => error "cannot construct exposeExp - weird signature")
 	      | _ => (Ppil.pp_path expose_path;
 			 error "cannot construct exposeExp - could not find path"))

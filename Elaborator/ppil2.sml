@@ -448,6 +448,8 @@ struct
       (case signat of
 	 SIGNAT_VAR v => pp_var v
        | SIGNAT_STRUCTURE sdecs => pp_sdecs seen sdecs
+       | SIGNAT_RDS (v,sdecs) => HOVbox[String "RDS_SIG(", pp_var v, String ", ", 
+					pp_sdecs seen sdecs, String ")"]
        | SIGNAT_FUNCTOR (v,s1,s2,a) => HOVbox0 1 8 1
 	                                        [String "SIGF(",
 						 pp_var v,

@@ -579,7 +579,8 @@ functorarrow :
 
 sign	: ident			(MarkSig(VarSig (sigSymbol ident),
 				         (identleft,identright)))
-	| SIG spec_s END	(MarkSig(BaseSig(spec_s),(spec_sleft,spec_sright)))
+	| SIG spec_s END	(MarkSig(BaseSig(spec_s),(SIGleft,ENDright)))
+        | SIG REC spec_s END    (MarkSig(RdsSig(spec_s),(SIGleft,ENDright)))
         | sign WHERE whspec     (MarkSig(AugSig(sign,whspec),(signleft,whspecright)))
         | LPAREN fparam RPAREN functorarrow sign 
                                 (MarkSig(FunSig(fparam,sign,functorarrow),(LPARENleft,signright)))
@@ -631,6 +632,8 @@ strdec	: STRUCTURE strb	(StrDec strb)
 	| LOCAL strdecs IN strdecs END (LocalDec(markdec(strdecs1,
 				     strdecs1left,strdecs1right),
   			       markdec(strdecs2,strdecs2left,strdecs2right)))
+        | FUNCTOR fctb          (StrDec fctb)
+        | FUNCTOR strb          (StrDec strb)
 	| ldec			(markdec(ldec,ldecleft,ldecright))
 
 sdec	: STRUCTURE strb	(StrDec strb)

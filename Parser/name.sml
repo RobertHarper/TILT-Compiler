@@ -215,6 +215,7 @@ structure Name :> NAME =
 	val cluster_str   = "+C"
 	val eq_str        = "+E"
 	val coercion_str  = "+N"
+        val sum_str       = "+S"
 
 	fun to_meta_lab meta_str lab =
 	    let val str = label2name lab
@@ -243,6 +244,7 @@ structure Name :> NAME =
 	val to_cluster   = to_meta_lab cluster_str
 	val to_eq        = to_meta_lab eq_str
 	val to_coercion  = to_meta_lab coercion_str
+        val to_sum       = to_meta_lab sum_str
 
 	val is_unit	 = is_meta_lab unit_str
 	val is_interface = is_meta_lab interface_str
@@ -252,6 +254,7 @@ structure Name :> NAME =
 	val is_cluster   = is_meta_lab cluster_str
 	val is_eq        = is_meta_lab eq_str
 	val is_coercion  = is_meta_lab coercion_str
+	val is_sum       = is_meta_lab sum_str
 
 	fun prependToInternalLabel (prefix, lab) =
 	    let val str = label2name lab
@@ -383,6 +386,11 @@ structure Name :> NAME =
 	end
       else (internal_label(label2string l ^ "_c"),
 	    internal_label(label2string l ^ "_r"))
+
+    fun make_csr_labels l =
+	(internal_label(label2string l ^ "_c"),
+	 internal_label(label2string l ^ "_s"),
+	 internal_label(label2string l ^ "_r"))
 
     fun mk_var_hash_table (size,notfound_exn) =
 	let

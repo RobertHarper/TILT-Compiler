@@ -1990,7 +1990,15 @@ structure Toil :> TOIL =
 		      let val ctxt' = add_context_sdecs(orig_ctxt,sdecs')
 		      in loop ctxt' sdecs' specrest
 		      end)
-       in loop orig_ctxt [] specs
+
+           val sdecs = loop orig_ctxt [] specs
+
+       in
+	   if no_dups compare_label (map (fn (SDEC(lab,_)) => lab) sdecs)
+	   then sdecs
+	   else (error_region();
+		 print "Cannot specify two components with the same name in a signature\n";
+		 [])
        end
 
 

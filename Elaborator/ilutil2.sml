@@ -39,6 +39,14 @@ structure IlUtil :> ILUTIL =
 	fun eq_con arg = !Ceq_con arg
     end
 
+    val nonvalue_str = "+NonValue+"
+
+    fun fresh_named_nonvalue_var s = fresh_named_var (nonvalue_str ^ s)
+
+    fun fresh_nonvalue_var () = fresh_named_var nonvalue_str
+
+    fun is_nonvalue_var v = String.isPrefix nonvalue_str (var2name v)
+
     (* -------------------------------------------------------- *)
     (* ------------ Path manipulation functions ------------ *)
     fun join_path_labels (PATH (v,ls), l) = PATH(v,ls @ l)
@@ -85,7 +93,7 @@ structure IlUtil :> ILUTIL =
 		  CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
       | eq_cpath _ = false
 
-    fun is_elimform m = eq_mpath(m,m)
+    fun is_mpath m = eq_mpath(m,m)
 
     (* -------------------------------------------------------- *)
     (* --------------------- Misc helper functions ------------ *)
@@ -218,7 +226,7 @@ structure IlUtil :> ILUTIL =
 	       of SOME (_, PHRASE_CLASS_EXP (e,_,_,_)) => e
 		| NONE => errorMsg (ctxt,"unbound exception",labs))
 
-	val bool_sum = Name.internal_label "bool_sum"
+	val bool_sum = Name.to_sum(Name.internal_label "bool_sum")
 	val lab_bool_out = Name.to_coercion (Name.internal_label "bool_out")
 	val lab_bool_in  = Name.to_coercion (Name.internal_label "bool_in")
 
@@ -615,6 +623,7 @@ structure IlUtil :> ILUTIL =
 	     | NONE =>
 	(case s of
 	     SIGNAT_VAR v => s
+	   | SIGNAT_RDS (v,sdecs) => SIGNAT_RDS(v, f_sdecs (add_modvar(state,v)) sdecs)
 	   | SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE (f_sdecs state sdecs)
 	   | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1,
 							  f_signat (add_modvar(state,v)) s2, a)))

@@ -370,6 +370,9 @@ structure AstHelp : ASTHELP =
       | pp_tyvar (TempTyv _) = error "should not see this after parsing"
       | pp_tyvar (MarkTyv (tv,_)) = pp_tyvar tv
     fun pp_path p = pp_list pp_sym p ("",".","",false)
+    fun pp_typath (TypathHead sym) = pp_sym sym
+      | pp_typath (TypathProj (tp,sym)) = HOVbox0 0 0 0 [pp_typath tp, String ".", pp_sym sym]
+      | pp_typath (TypathApp (tp1,tp2)) = HOVbox0 0 0 0 [pp_typath tp1, String "(", pp_typath tp2, String ")"]
     fun pp_ty ty =
 	  (case ty of
 	     VarTy tyvar => pp_tyvar tyvar
@@ -379,7 +382,7 @@ structure AstHelp : ASTHELP =
 				       [t] => pp_ty t
 				     | _ => pp_list pp_ty tys ("[",", ","]",false))])
 	   | RecordTy symty_list => (pp_list (fn (sym,ty) => (pp_sym sym; String " = "; pp_ty ty))
-				     symty_list ("(",", ",")",false))
+				     symty_list ("{",", ","}",false))
 	   | TupleTy tys => pp_list pp_ty tys ("(",", ",")",false)
 	   | MarkTy (t,r) => pp_ty t)
 
@@ -443,6 +446,7 @@ structure AstHelp : ASTHELP =
     val pp_tyvar'  = help' pp_tyvar
     val pp_sym'    = help' pp_sym
     val pp_path'   = help' pp_path
+    val pp_typath' = help' pp_typath
     val pp_ty'     = help' pp_ty
     val pp_pat'    = help' pp_pat
     val pp_exp'    = help' pp_exp
@@ -451,6 +455,7 @@ structure AstHelp : ASTHELP =
     val pp_tyvar = help pp_tyvar
     val pp_sym   = help pp_sym
     val pp_path  = help pp_path
+    val pp_typath = help pp_typath
     val pp_ty    = help pp_ty
     val pp_pat   = help pp_pat
     val pp_exp   = help pp_exp

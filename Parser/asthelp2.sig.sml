@@ -6,6 +6,7 @@ signature ASTHELP =
     val pp_tyvar' : Ast.tyvar -> Formatter.format
     val pp_sym'   : Symbol.symbol -> Formatter.format
     val pp_path'  : Ast.path -> Formatter.format
+    val pp_typath': Ast.typath -> Formatter.format
     val pp_ty'    : Ast.ty -> Formatter.format
     val pp_pat'   : Ast.pat -> Formatter.format
     val pp_exp'   : Ast.exp -> Formatter.format
@@ -15,6 +16,7 @@ signature ASTHELP =
     val pp_tyvar : Ast.tyvar -> unit
     val pp_sym   : Symbol.symbol -> unit
     val pp_path  : Ast.path -> unit
+    val pp_typath: Ast.typath -> unit
     val pp_ty    : Ast.ty -> unit
     val pp_pat   : Ast.pat -> unit
     val pp_exp   : Ast.exp -> unit

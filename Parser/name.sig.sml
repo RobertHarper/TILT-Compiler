@@ -74,6 +74,7 @@ signature NAME =
     val to_cluster   : label -> label	(* cluster of mutually recursive functions *)
     val to_eq        : label -> label	(* equality function *)
     val to_coercion  : label -> label	(* coercion function *)
+    val to_sum       : label -> label   (* sum type in datatype modules *)
 
     val is_unit	     : label -> bool
     val is_interface : label -> bool
@@ -84,11 +85,14 @@ signature NAME =
     val is_eq        : label -> bool
     val is_coercion  : label -> bool
     val is_flat      : label -> bool 
+    val is_sum       : label -> bool
 
     val prependToInternalLabel : string * label -> label   (* Keeps characteristics *)
     val label2name' : label -> string	(* Discards characteristics *)
 
-    val make_cr_labels  : label -> label * label (* for use after phase splitting *)
+    val make_cr_labels   : label -> label * label (* for use after phase splitting *)
+    (* This version also makes a label corresponding to the sum component... *)
+    val make_csr_labels  : label -> label * label * label (* for use after phase splitting *)
 
     val internal_match_tag : tag
 

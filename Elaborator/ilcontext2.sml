@@ -58,17 +58,26 @@ struct
 	end
 
     (* 
-       Selfify does not check for variable capture, 
+       selfify does not check for variable capture, 
        i.e. that the free variables of m do not intersect the bound variables of s.
        I think this is OK, given the assumption that all bound variables are distinct,
        but it should be confirmed. -Derek
     *)
-    fun selfify (ctxt : context, m : mod, s : signat) : signat =
+
+    (* The no_depend option is true for all normal uses of selfify, i.e. to get the
+       principal signatures of variables.  It is only supplied as false when called
+       from Rds_IsSub.  When no_depend is false, we do not perform any substitutions
+       for local references to type components within the signature, but merely
+       "transparentiate" the opaque types.  See the note in the Rds_IsSub function
+       in ilstatic.sml.  -Derek *)
+    fun selfify (no_depend : bool) (ctxt : context, m : mod, s : signat) : signat =
 	  let 
 
 	      fun selfify_sig (m : mod) (s : signat) : signat = (
                  case s
                    of SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE(selfify_sdecs m sdecs)
+                    | SIGNAT_RDS (v,sdecs) => 
+                        SIGNAT_STRUCTURE(selfify_sdecs m (sdecs_subst(sdecs,subst_modvar(v,m))))
 		    | SIGNAT_VAR v =>
 		       (case Context_Lookup_Var_Raw(ctxt,v)
 			  of SOME(_,PHRASE_CLASS_SIG(_,s')) => selfify_sig m s'
@@ -84,7 +93,7 @@ struct
 		  #1(foldl_acc (selfify_sdec m) empty_subst sdecs)
 
 	      and selfify_sdec (m : mod) (sdec, subst) : sdec * subst =
-		let val sdec as SDEC(l,dec) = sdec_subst(sdec,subst)
+		let val sdec as SDEC(l,dec) = if no_depend then sdec_subst(sdec,subst) else sdec
 		    val (dec,subst) = 
 			      case dec
                                 of DEC_EXP(v,_,_,_) => 
@@ -109,7 +118,7 @@ struct
         fn () => error "noTransform is a dummy function and should never be called"
 
     fun transform (ctxt : context, m : mod, s : signat) : unit -> signat =
-	Util.memoize (fn () => selfify (ctxt,m,s))
+	Util.memoize (fn () => selfify true (ctxt,m,s))
 
     (* ----------- context extenders ----------------------------  *)
     val empty_context = CONTEXT{varMap = VarMap.empty,

@@ -121,7 +121,8 @@ structure Linknil :> LINKNIL  =
 		      print "\n")
 		    else ()
 	    val _ = if !checkphase orelse !typecheck then
-		      Stats.timer(phasename^"_Typecheck",NilStatic.module_valid) (NilContext.empty (), nilmod)
+		      (print "Typechecking...\n";
+		       Stats.timer(phasename^"_Typecheck",NilStatic.module_valid) (NilContext.empty (), nilmod))
 		    else ()
 (*	    val _ = 
 	      let

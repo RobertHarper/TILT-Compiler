@@ -1638,18 +1638,30 @@ structure Toil :> TOIL =
                          SOME (_,PHRASE_CLASS_MOD(m,_,s,_)) => (m,s)
 		       | _ => raise Unbound)
 		   | xmodpath (Ast.TypathProj (mp,sym)) =
-                     (case xmodpath mp of (m,SIGNAT_STRUCTURE sdecs) =>
-                         (case Sdecs_Lookup context (m,sdecs,[symbol_label sym]) of
+                     let val (m,s) = xmodpath mp
+		     in
+                         (case Sig_Lookup(m,s,[symbol_label sym]) of
 			      SOME (_,PHRASE_CLASS_MOD(m',_,s',_)) => (m',s')
 			    | _ => raise Unbound)
-		        | _  => raise Unbound)
+		     end
 		   | xmodpath (Ast.TypathApp (mp1,mp2)) =
 	             (case (xmodpath mp1) of (f,SIGNAT_FUNCTOR(v,s1,s2,APPLICATIVE)) =>
 			  let val (argmod,argsig) = xmodpath mp2
-			      val _ = Sig_IsSub(context,argsig,s1) orelse raise Unbound
+
+                              (* These two checks ensure that Fst(argsig) is really a subkind of
+			         Fst(s1) after phase-splitting.  The first check is necessary because
+				 the Fst_Sig operation throws away generative functor components.
+				 By an invariant of the elaborator, it's already known that argsig is 
+				 free of generative signatures, so there is no need to check that. *)
+
+			      val _ = not(contains_generative_signature(context,argsig))
+				      orelse raise Unbound
+			      val _ = Sig_IsSub(context,Fst_Sig(context,argsig),
+						Fst_Sig(context,s1)) orelse raise Unbound
+
 			      val s = sig_subst(s2,subst_modvar(v,argmod))
 			      val m = MOD_APP(f,argmod)
-			  in (case PeelModSig context (m,s) of
+			  in (case PeelModSig(m,s) of
 				  (_,PHRASE_CLASS_MOD(m,_,s,_)) => (m,s)
 				| _ => raise Unbound)
 			  end
@@ -1670,19 +1682,22 @@ structure Toil :> TOIL =
 				    end)
 			  else raise Unbound)
 		   | xtypath (Ast.TypathProj (mp,sym)) =
-		     (case xmodpath mp of (m,SIGNAT_STRUCTURE sdecs) =>
-                         (case Sdecs_Lookup context (m,sdecs,[symbol_label sym]) of
+		     let val (m,s) = xmodpath mp
+		     in
+                         (case Sig_Lookup(m,s,[symbol_label sym]) of
 			      SOME (_,PHRASE_CLASS_CON(c,k,copt,inline)) =>
                                 ((case (copt,inline) of (SOME c',true) => c' | _ => c), k)
 			    | _ => raise Unbound)
-		        | _  => raise Unbound)
+		     end
 		   | xtypath _ = parse_error "Type path is neither TypathHead nor TypathProj"
 
 		 val (con,k) = xtypath typath 
 		     handle Unbound =>
 			       (weird_case := true;
 				error_region();
-				print "ill-formed type constructor\n";
+				print "Ill-formed type constructor: ";
+				pp_typath typath;
+				print "\n";
 (*				pp_pathlist AstHelp.pp_sym' syms; print "\n"; *)
 				(Error.dummy_type(context,"unbound_conty"),KIND))
 
@@ -1743,30 +1758,33 @@ structure Toil :> TOIL =
        let
 	   fun loop [] = []
 	     | loop ((sym,tyvars : Ast.tyvar list, tyopt)::rest) =
+	       let
+		   val type_label = symbol_label sym
+		   val type_var = gen_var_from_symbol sym
+		   val kind =
+		       (case tyvars of
+			    [] => KIND
+			  | _ => KIND_ARROW(length tyvars,KIND))
+		   fun doty ty =
+		       if is_eq then error "eqtypedesc with definition" else
+		       let
+			   val vars = map (fn _ => fresh_var()) tyvars
+			   val tyvars_bar = map (fn s => symbol_label (tyvar_strip s)) tyvars
+			   val context' = (foldl (fn ((v,tv),c) =>
+						  add_context_con(c,tv,v,KIND,NONE))
+					   context (zip vars tyvars_bar))
+			   val con' = xty(context',ty)
+		       in  (case tyvars of
+				[] => con'
+			      | _ => (CON_FUN(vars,con')))
+		       end
+                   val conopt = mapopt doty tyopt
+		   val type_sdec = SDEC(type_label, DEC_CON(type_var,kind,conopt,false))
+	       in  
+		   if not(is_eq) then type_sdec :: (loop rest) else
 		   let
-		       val type_label = symbol_label sym
-		       val type_var = gen_var_from_symbol sym
 		       val eq_label = to_eq type_label
 		       val eq_var = fresh_named_var (label2string eq_label)
-		       val kind =
-			   (case tyvars of
-				[] => KIND
-			      | _ => KIND_ARROW(length tyvars,KIND))
-		       fun doty ty =
-			   if is_eq then error "eqtypedesc with definition" else
-			   let
-			       val vars = map (fn _ => fresh_var()) tyvars
-			       val tyvars_bar = map (fn s => symbol_label (tyvar_strip s)) tyvars
-			       val context' = (foldl (fn ((v,tv),c) =>
-						      add_context_con(c,tv,v,KIND,NONE))
-					       context (zip vars tyvars_bar))
-			       val con' = xty(context',ty)
-			   in  (case tyvars of
-				    [] => con'
-				  | _ => (CON_FUN(vars,con')))
-			   end
-		       val conopt = mapopt doty tyopt
-		       val type_sdec = SDEC(type_label, DEC_CON(type_var,kind,conopt,false))
 		       val eq_dec =
 			   (case tyvars of
 				[] => DEC_EXP(eq_var,con_eqfun context (CON_VAR type_var),NONE,false)
@@ -1794,19 +1812,27 @@ structure Toil :> TOIL =
 				end)
 
 		       val eq_sdec = SDEC(eq_label, eq_dec)
-		   in if (is_eq) then type_sdec :: eq_sdec:: (loop rest)
-		      else type_sdec :: (loop rest)
+		   in 
+		       type_sdec :: eq_sdec:: (loop rest)
 		   end
+	       end
        in loop sym_tyvar_tyopt_list
        end
 
     (* ---------------------------------------------------------
       ------------ Signature bindings and expressions ----------
       --------------------------------------------------------- *)
-     and xsigexp(context,sigexp) : signat =
+
+     and xsigexp (context,sigexp) : signat = xsigexp' false (context,sigexp)
+
+     and xsigexp' (just_static : bool) (context,sigexp) : signat =
+       let val xsigexp = xsigexp' just_static
+	   val xspec = xspec' just_static
+       in
        (case sigexp of
 	  Ast.VarSig s => (case (IlStatic.Context_Lookup_Labels(context,[symbol_label s])) of
-			       SOME(_,PHRASE_CLASS_SIG (v,s)) => SIGNAT_VAR v
+			       SOME(_,PHRASE_CLASS_SIG (v,_)) => 
+				   if just_static then Fst_Sig(context,SIGNAT_VAR v) else SIGNAT_VAR v
 			     | _ => (error_region();
 				     print "unbound signature: ";
 				     AstHelp.pp_sym s;
@@ -1825,10 +1851,13 @@ structure Toil :> TOIL =
 		  val s2_is_struct = (case reduce_signat context s2 of
 					  SIGNAT_STRUCTURE _ => true
 					| _ => false)
-		  val sdecs_opt =
+		  val (context,makesig,sdecs_opt) =
 		      (case reduce_signat context s of
-			   SIGNAT_STRUCTURE sdecs => SOME sdecs
-			 | _ => NONE)
+			   SIGNAT_STRUCTURE sdecs => (context,SIGNAT_STRUCTURE, SOME sdecs)
+			 | s' as SIGNAT_RDS (v,sdecs) => (add_context_mod'(context,v,Fst_Sig(context,s')),
+							  fn sdecs => SIGNAT_RDS(v,sdecs),
+							  SOME sdecs)
+			 | _ => (context,SIGNAT_STRUCTURE, NONE))
 	      in  case (s2_is_struct,sdecs_opt) of
 		  (false, _) => (error_region();
 				 print "rhs of where-structure is a non-structure\n";
@@ -1837,16 +1866,25 @@ structure Toil :> TOIL =
 			       print "can't where a non-structure signature\n";
 			       s)
 		| (_, SOME sdecs) =>
-			   SIGNAT_STRUCTURE(Signature.xsig_where_structure
-					    (context,sdecs,map symbol_label syms1,m2,s2))
+			   makesig(Signature.xsig_where_structure
+				   (context,sdecs,map symbol_label syms1,m2,s2))
 	      end
 	| Ast.AugSig (s, ((Ast.WhType(syms, tyvars, ty))::rest)) =>
 	      let val s = xsigexp(context,Ast.AugSig(s,rest))
 		  val mjunk = fresh_named_var "mjunk"
+		  val (context,makesig,sdecs_opt) =
+		      (case reduce_signat context s of
+			   SIGNAT_STRUCTURE sdecs => (context,SIGNAT_STRUCTURE, SOME sdecs)
+			 | s' as SIGNAT_RDS (v,sdecs) => (add_context_mod'(context,v,Fst_Sig(context,s')),
+							  fn sdecs => SIGNAT_RDS(v,sdecs),
+							  SOME sdecs)
+			 | _ => (context,SIGNAT_STRUCTURE, NONE))
 		  val ctxt' = add_context_mod'(context,mjunk,s)
-	      in  (case reduce_signat context s of
-		       SIGNAT_STRUCTURE sdecs =>
-			   (case (Sdecs_Lookup ctxt' (MOD_VAR mjunk,sdecs,map symbol_label syms)) of
+	      in  (case sdecs_opt of 
+		       SOME sdecs =>
+			   (case (Sig_Lookup(MOD_VAR mjunk,
+					     GetModSig(ctxt',MOD_VAR mjunk),
+					     map symbol_label syms)) of
 				SOME(labels,PHRASE_CLASS_CON(_,k,_,_)) =>
 				    let val sym_vars = map (fn tv =>
 							    let val sym = AstHelp.tyvar_strip tv
@@ -1861,12 +1899,12 @@ structure Toil :> TOIL =
 					val c = (case sym_vars of
 						     [] => c
 						   | _ => CON_FUN(map #2 sym_vars, c))
-				    in SIGNAT_STRUCTURE (Signature.xsig_where_type(context,sdecs,labels,c,k))
+				    in makesig(Signature.xsig_where_type(context,sdecs,labels,c,k))
 				   end
 			      | _ => (error_region();
 				      print "Can't where type a non-type component\n";
 				      s))
-		     | _ => (error_region();
+		     | NONE => (error_region();
 				print "Can't where type a non-structure signature\n";
 				s))
 	      end
@@ -1886,7 +1924,45 @@ structure Toil :> TOIL =
 	  in 
 	      SIGNAT_FUNCTOR(v,sig1,sig2,arrow)
 	  end
+        | Ast.RdsSig speclist =>
+	  if just_static then xsigexp(context, Ast.BaseSig speclist) else
+	  let 
+	      val recvar = fresh_named_var "var_rds"
+	      val reclab = to_open(var2label recvar)
+	      val fstsdecs = xspec' true (context,speclist)
+	      val fstsig = SIGNAT_STRUCTURE fstsdecs
+	      val context' = add_context_mod(context,reclab,recvar,fstsig)
+	      val sdecs = xspec' false (context',speclist)
+
+	      val fstsdecs' = Fst_Sdecs(context',sdecs)
+
+              (* The bad case here arises only if you have an rds like
+
+                 sig rec ... type t = u ... type u end,
+
+                 where u is already defined in the context
+                 (and so the first pass of elaborating the rds goes through fine),
+		 but on the second pass u is taken mean the one specified
+		 later on inside the rds. *)
+
+	      val _ = if Name.VarSet.member(sdecs_free(fstsdecs'),recvar)
+			  then reject "Ill-formed rds: contains static-on-static dependency"
+		      else ()
+
+              (* sanity check, could be removed eventually, note that it
+	         is done in the original context since the static part of
+                 sdecs should not refer to recvar *)
+
+	      val _ = if Sdecs_IsEqual(context,fstsdecs,fstsdecs') 
+		         orelse get_error() = Error
+	              then ()
+		      else elab_error "RdsSig case of xsigexp producing ill-formed rds"
+
+	  in
+	      SIGNAT_RDS(recvar, sdecs @ [ident_sdec])
+	  end
      )
+     end
 
      and xsigb(context,Ast.MarkSigb(sigb,r)) : context_entry =
 	 let val _ = push_region r
@@ -1904,13 +1980,17 @@ structure Toil :> TOIL =
     (* ---------------------------------------------------------
       ------------------ SIGNATURE SPECIFICATIONS --------------
       --------------------------------------------------------- *)
-     and xspec(orig_ctxt, specs : Ast.spec list) : sdecs =
+
+     and xspec (orig_ctxt, specs : Ast.spec list) : sdecs = xspec' false (orig_ctxt,specs)
+
+     and xspec' (just_static : bool) (orig_ctxt, specs : Ast.spec list) : sdecs =
        let
+	 val xsigexp = xsigexp' just_static
 	 datatype sdecs_tag = ADDITIONAL of sdecs | ALL_NEW of sdecs
-	 exception BadIdentifier
 	 fun xspec1 context prev_sdecs spec : sdecs_tag =
 	     case spec of
 		 (Ast.ValSpec vtlist) => (* Rules 257 - 258 *)
+	       if just_static then ADDITIONAL [] else
 	       let
 		 fun doer (sym,ty) = 
           	  if ok_to_bind(context,sym) then
@@ -1954,11 +2034,26 @@ structure Toil :> TOIL =
 	       end
 	   | (Ast.StrSpec (sym_sigexp_path_list)) =>
 	       let
-		   fun doer(sym,sigexp, _) =
+		   fun doer (sym,sigexp, NONE) =
 		       let val s = xsigexp(context,sigexp)
-		       in SDEC(symbol_label sym,DEC_MOD(fresh_var(),false,s))
+			   val produce_nothing = just_static andalso
+			         (case s of SIGNAT_FUNCTOR (_,_,_,GENERATIVE) => true | _ => false)
+		       in  if produce_nothing then NONE
+			   else SOME(SDEC(symbol_label sym,DEC_MOD(fresh_var(),false,s)))
 		       end
-	       in ADDITIONAL(map doer sym_sigexp_path_list)
+		     | doer (sym,sigexp, SOME path) =
+                       (* 
+			  This case is just treating the spec
+                            structure A : SIG = Path
+                          as syntactic sugar for
+                            include (sig structure A : SIG end where A = Path)
+		       *)
+		       let val s = xsigexp(context,Ast.AugSig(Ast.BaseSig[Ast.StrSpec[(sym,sigexp,NONE)]],
+							      [Ast.WhStruct([sym],path)]))
+		       in (case s of SIGNAT_STRUCTURE [sdec,_] => SOME(sdec)
+		           | _ => elab_error "Error in Ast.StrSpec case of xspec")
+		       end
+	       in ADDITIONAL(List.mapPartial doer sym_sigexp_path_list)
 	       end
 	   | (Ast.IncludeSpec sigexp) =>
 	       (case (reduce_signat context (xsigexp(context,sigexp))) of
@@ -1967,16 +2062,12 @@ structure Toil :> TOIL =
 			print "May not 'include' non-structure signature\n";
 			ADDITIONAL []))
 	   | (Ast.FctSpec sym_fsigexp_list) =>
-		  let
-		    fun doer (funid,fsig) =
-		      let
-			val var = fresh_var()
-		      in SDEC(symbol_label funid, DEC_MOD(var,false,xsigexp(context,fsig)))
-		      end
-		  in ADDITIONAL(map doer sym_fsigexp_list)
-		  end
-	   | (Ast.TycSpec (typdesc_list,is_eq)) => ADDITIONAL(xtypedesc(context,typdesc_list,is_eq))
+		 xspec1 context prev_sdecs 
+	           (Ast.StrSpec(map (fn (sym,sigexp) => (sym,sigexp,NONE)) sym_fsigexp_list))
+	   | (Ast.TycSpec (typdesc_list,is_eq)) => 
+		 ADDITIONAL(xtypedesc(context,typdesc_list, is_eq andalso not just_static))
 	   | (Ast.ExceSpec exlist) => (* Rules 260 - 261 *)
+	         if just_static then ADDITIONAL [] else
 		 let fun doer (sym,tyopt) =
                    if ok_to_bind(context,sym) then
 			let 
@@ -1999,15 +2090,43 @@ structure Toil :> TOIL =
 			 NONE)
 		 in ADDITIONAL(List.mapPartial doer exlist)
 		 end
+          
+           (* For datatype specs: What we would like to do in principle is to take the sdecs
+	      out of the open-labeled module sdecs in which they come packaged from xdatatype,
+	      so that we may enable the invariant that signatures never have any open-labeled
+	      sdecs in them (aside from inner datatype modules).  In order to do this, we would
+	      need to do some substitutions, since the sdecs that come out of xdatatype have
+	      (hierarchical, of course) dependencies on one another.  Instead, we just leave them
+              in their open-labeled shells, and we make signature matching aware of how to match
+              against datatype sdecs. -Derek *)
+
 	   | (Ast.DataSpec {datatycs, withtycs = []}) =>
-	        let val sbnd_sdecs = xdatatype(context,datatycs)
-		    val sdecs = map #2 sbnd_sdecs
-		in
+		if just_static
+		    then ADDITIONAL(Datatype.compile_static(context,datatycs))
+		else
+	            let val sbnd_sdecs = xdatatype (context,datatycs)
+			val sdecs = map #2 sbnd_sdecs
+		    in  ADDITIONAL sdecs
+		    end
+		
+(*
+   Some broken code for the DataSpec case:
+
+                 let fun strip (sdec as SDEC(_,DEC_MOD(_,_,SIGNAT_STRUCTURE sdecs'))) = sdecs'
+		      | strip _ = elab_error "DataSpec case"
+		 in  ADDITIONAL(map_concat strip sdecs)
+                 end
+*)
+(*
+   
 		    (case sdecs of
 			[SDEC(lab,DEC_MOD(_,_,SIGNAT_STRUCTURE sdecs'))] =>
 			    if is_open lab then ADDITIONAL sdecs' else ADDITIONAL sdecs
 		      | _ => ADDITIONAL sdecs)
-		end
+*)
+
+           (* Actually, withtype specs are supported, but InfixParse.parse_datbind macro-expands 
+	      them out prior to this point. *)
 	   | (Ast.DataSpec {datatycs, withtycs}) => parse_error "withtype specs not supported"
 	   | (Ast.ShareTycSpec paths) => ALL_NEW(Signature.xsig_sharing_types
 						 (orig_ctxt,prev_sdecs,mapmap symbol_label paths))
@@ -2018,6 +2137,7 @@ structure Toil :> TOIL =
 					 val _ = pop_region ()
 				     in res
 				     end
+
          fun loop ctxt prev_sdecs [] = prev_sdecs
            | loop ctxt prev_sdecs ((Ast.DataSpec{datatycs,withtycs=wt as (_::_)})::specrest) =
 		let val (dt,wt) = (case InfixParse.parse_datbind(datatycs,wt) of
@@ -2042,7 +2162,15 @@ structure Toil :> TOIL =
 		      let val ctxt' = add_context_sdecs(orig_ctxt,sdecs')
 		      in loop ctxt' sdecs' specrest
 		      end)
-       in loop orig_ctxt [] specs
+
+           val sdecs = loop orig_ctxt [] specs
+
+       in
+	   if no_dups compare_label (map (fn (SDEC(lab,_)) => lab) sdecs)
+	   then sdecs
+	   else (error_region();
+		 print "Cannot specify two components with the same name in a signature\n";
+		 [])
        end
 
 

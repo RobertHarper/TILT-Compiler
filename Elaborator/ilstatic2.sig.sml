@@ -44,6 +44,15 @@ signature ILSTATIC =
     val Sig_Valid   : Il.context * Il.signat -> bool
 *)
 
+    (* 
+       These functions extract "static part" of sigs/sdecs, i.e. just the type components,
+       excluding inner datatype modules, the sum types in datatype modules,
+       and generative functor components.  Fst_Sig and Fst_Sdecs are idempotent.
+    *)
+    val Fst_Sig : Il.context * Il.signat -> Il.signat
+    val Fst_Sdecs : Il.context * Il.sdecs -> Il.sdecs
+    val Fst_Sdec : Il.context * Il.sdec -> Il.sdec option
+
     (* --------- signature/sdec equivalence and subtyping -------- *)
     val Sdecs_IsSub   : Il.context * Il.sdecs * Il.sdecs -> bool
     val Sdecs_IsEqual : Il.context * Il.sdecs * Il.sdecs -> bool
@@ -71,8 +80,15 @@ signature ILSTATIC =
     (* ----- These look inside starred structures --------- *)
     val Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option
     val Context_Lookup_Path : Il.context * Il.path -> (Il.path * Il.phrase_class) option
-    val Sdecs_Lookup : Il.context -> Il.mod * Il.sdecs * Il.label list ->
-	                            (Il.label list * Il.phrase_class) option
-    val PeelModSig : Il.context -> Il.mod * Il.signat -> Il.label list * Il.phrase_class
+
+    (* 
+       These functions assume that the signat/sdecs input is in selfified form, that is
+       non-dependent and with no signature variables, except inside generative functor signatures.
+    *)
+    val Sig_Lookup : Il.mod * Il.signat * Il.label list ->
+	                 (Il.label list * Il.phrase_class) option
+    val Sdecs_Lookup : Il.mod * Il.sdecs * Il.label list ->
+	                 (Il.label list * Il.phrase_class) option
+    val PeelModSig : Il.mod * Il.signat -> Il.label list * Il.phrase_class
 
   end

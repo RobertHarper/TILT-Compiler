@@ -26,7 +26,6 @@ fun show b =
 
 fun show_hil b = (LoadVars.show_hil := b;LinkIl.ShowHIL := b)
 
-
 fun typecheck b = (LoadVars.typecheck := b;
 		   Stats.bool "Typecheck" := b)
 

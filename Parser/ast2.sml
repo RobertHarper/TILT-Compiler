@@ -125,6 +125,8 @@ and sigexp = VarSig of symbol			(* signature variable *)
 	   | BaseSig of spec list		(* defined signature *)
 	   | MarkSig of sigexp * region	(* mark *)
            | FunSig of (symbol option * sigexp) * sigexp * functorarrow (* functor signature *)
+           | RdsSig of spec list              (* recursively dependent signature *)
+
 
 (* SPECIFICATION FOR SIGNATURE DEFINITIONS *)
 and spec = StrSpec of (symbol * sigexp * path option) list

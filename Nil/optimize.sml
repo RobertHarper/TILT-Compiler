@@ -1274,8 +1274,18 @@ struct
 		   of (_,Prim_c (Vector_c,_)) => Prim_c(Vector_c, map (do_con state) clist)
 		    | (_,con) => do_con state con)
 	    | Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
+(*
 	    | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
 					 (fn (v,c) => (v,do_con state c)) vc_seq)
+*)
+	    | Mu_c(recur,vc_seq) => 
+		   let fun folder ((v,c),s) = add_kind(s,v,Type_k)
+		       val state = Sequence.foldl folder state vc_seq
+		       fun mapper (v,c) = (v, do_con state c)
+		       val vc_seq' = Sequence.map mapper vc_seq
+		   in
+		       Mu_c(recur,vc_seq')
+		   end
 	    | ExternArrow_c(clist,c) =>
 		   ExternArrow_c(map (do_con state) clist, do_con state c)
 	    | AllArrow_c{openness,effect,tFormals,eFormals,fFormals,body_type} =>

@@ -1337,6 +1337,23 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   handle e => (print "Problem with analyzing vk_list\n";raise e))
     in D
     end
+  and con_analyze_vk_list2subst (D,cons : con list,
+				 vks : (var * kind) list) =
+    let
+      (*Since we do not know if the cons are well-formed,
+       * we must substitute instead of just using the context.
+       * Otherwise, we might accidentally capture an unbound
+       * variable in one of the cons. -leaf *)
+      fun folder (c,(v,k),subst) =
+	let val k = substConInKind subst k
+	    val _ = con_analyze(D,c,k)
+	    val subst = Subst.C.sim_add subst (v,c)
+	in subst
+	end
+      val subst = (foldl2 folder (Subst.C.empty()) (cons,vks)
+		   handle e => (print "Problem with analyzing vk_list in con_analyze_vk_list2subst\n";raise e))
+    in subst
+    end
   (* This version renames the parameter variables to avoid shadowing *)
   and con_analyze_vk_list' (D,cons : con list,
 			   vks : (var * kind) list) =
@@ -1580,12 +1597,18 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		      pp_kind cfun_kind; print "\n";
 		      (c_error(D,constructor,"Invalid kind for constructor application" ))
 		      )
+  	     val subst = con_analyze_vk_list2subst(D,actuals,formals)
+
+(*
+             This was broken, because it didn't account for dependencies between the
+             argument kinds (-Derek) :
 
 	     val (formal_vars,formal_kinds) = unzip formals
 	     val _ = app2 (fn (c,k) => con_analyze(D,c,k)) (actuals,formal_kinds)
-
 	     fun folder (v,c,subst) = NilSubst.C.sim_add subst (v,c)
 	     val subst = Listops.foldl2 folder (NilSubst.C.empty()) (formal_vars,actuals)
+*)
+
 	   in
 	     substConInKind subst body_kind
 	   end

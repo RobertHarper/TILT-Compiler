@@ -31,6 +31,10 @@ signature ILUTIL =
     val fresh_con : context -> con
     val fresh_named_con : context * string -> con
 
+    val fresh_named_nonvalue_var : string -> var
+    val fresh_nonvalue_var : unit -> var
+    val is_nonvalue_var : var -> bool
+
     (* coercions: paths to/from exp/mods/cons *)
     val join_path_labels : path * label list -> path
     val path2mod : path -> mod
@@ -43,7 +47,7 @@ signature ILUTIL =
     val eq_mpath : mod * mod -> bool
     val eq_cpath : con * con -> bool
     val eq_epath : exp * exp -> bool
-    val is_elimform : mod -> bool
+    val is_mpath : mod -> bool
 
     (* error functions *)
     val error_exp : string -> exp -> string -> 'a

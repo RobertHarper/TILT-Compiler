@@ -1958,6 +1958,10 @@ struct
 		   parms : Name.LabelSet.set) : Rtl.module =
          let
 	     val trueGlobals = computeGlobals(imports, bnds, exports)
+	     val _ = if (!debug) then 
+		 (print "GLOBAL VARIABLES:\n";
+		  Name.VarSet.app (fn v => (Ppnil.pp_var v; print "\n")) trueGlobals)
+		     else ()
 
 	     (* Create named exports for setting global state *)
 	     local

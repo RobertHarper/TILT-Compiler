@@ -39,6 +39,8 @@ structure IlStatic
        in  (case signat' of
 	      SIGNAT_STRUCTURE sdecs =>
 		 SIGNAT_STRUCTURE(map (deep_reduce_sdec ctxt) sdecs)
+            | SIGNAT_RDS (v,sdecs) =>
+		 SIGNAT_RDS(v, map (deep_reduce_sdec ctxt) sdecs)
             | SIGNAT_FUNCTOR(v,s1,s2,arrow) =>
 		 SIGNAT_FUNCTOR(v, deep_reduce_signat ctxt s1,
 				deep_reduce_signat ctxt s2, arrow)
@@ -81,7 +83,7 @@ structure IlStatic
       | _ => false)
    and Module_IsSyntacticValue module =
       (case module of
-         MOD_VAR _ => true
+         MOD_VAR v => not(is_nonvalue_var v)
        | MOD_STRUCTURE sbnds => foldr (fn (a,b) => a andalso b) true
 	                        (map (fn SBND(l,b) => Bnd_IsSyntacticValue b) sbnds)
        | MOD_LET (v,m1,m2) => (Module_IsSyntacticValue m1) andalso (Module_IsSyntacticValue m2)
@@ -177,7 +179,7 @@ structure IlStatic
 	    fun geteqmodsig (CON_MODULE_PROJECT (m,l)) =
 		let val (_,s,_) = GetModSig (m,ctxt)
 		in
-		    (case ProjectModSig (ctxt,m,s,to_eq l)
+		    (case ProjectModSig (m,s,to_eq l)
 		       of SOME (PHRASE_CLASS_MOD(_,_,signat,_)) => SOME signat
 			| SOME _ => error ("find_tyvars_flexes: eq label not bound to structure")
 			| NONE => NONE)
@@ -624,8 +626,11 @@ structure IlStatic
 
    and eq_mod (ctxt,mod1,mod2,signat) : bool = (
        case reduce_signat ctxt signat of
-              SIGNAT_STRUCTURE sdecs =>
+              SIGNAT_STRUCTURE _ =>
                 eq_con(ctxt, CON_MODULE_PROJECT(mod1,ident_lab),
+		       CON_MODULE_PROJECT(mod2,ident_lab))
+            | SIGNAT_RDS _ =>
+		eq_con(ctxt, CON_MODULE_PROJECT(mod1,ident_lab),
 		       CON_MODULE_PROJECT(mod2,ident_lab))
 	    | SIGNAT_FUNCTOR (v,s_arg,s_res,APPLICATIVE) => 
                 let val ctxt' = add_context_mod'(ctxt,v,s_arg)
@@ -650,7 +655,7 @@ structure IlStatic
              let val (b,sOpt) = self(ctxt,m1,m2)
 		 val b = b andalso eq_label(l1,l2)
 		 val sreturn = if b andalso return_sig 
-			       then case ProjectModSig(ctxt,m1,valOf(sOpt),l1) of
+			       then case ProjectModSig(m1,valOf(sOpt),l1) of
                                         SOME(PHRASE_CLASS_MOD(_,_,s,_)) => SOME s
 				      | _ => error "path_eq_mod': modpath ill-typed"
 			       else NONE
@@ -738,8 +743,7 @@ structure IlStatic
    and Module_IsValuable m ctxt =
      (Module_IsSyntacticValue m) orelse
      (case m of
-       MOD_VAR v => true
-     | MOD_STRUCTURE sbnds => Sbnds_IsValuable sbnds ctxt
+       MOD_STRUCTURE sbnds => Sbnds_IsValuable sbnds ctxt
      | MOD_LET (v,m1,m2) => let val (va1,s1,_) = GetModSig(m1,ctxt)
 			    in va1 andalso
 				(Module_IsValuable m2 (add_context_mod'(ctxt,v,s1)))
@@ -849,7 +853,7 @@ structure IlStatic
 	   let val (_,signat,pure) = GetModSig (m,ctxt)
 	   in
               if pure then
-	       (case ProjectModSig (ctxt,m,signat,l)
+	       (case ProjectModSig (m,signat,l)
 		  of NONE => (debugdo (fn () =>
 				       (print "no such label = ";
 					pp_label l; print " in sig \n";
@@ -1277,10 +1281,10 @@ structure IlStatic
 	   end
      | (MODULE_PROJECT(m,l)) =>
 	   let val (va,signat,pure) = GetModSig(m,ctxt)
-	       val c = (case ProjectModSig (ctxt,m,signat,l)
+	       val c = (case ProjectModSig (m,signat,l)
 			  of (SOME (PHRASE_CLASS_EXP(_,c,_,_))) => c
 			   | _ => error "MODULE_PROJECT lookup failed")
-	   in  if pure andalso is_elimform m then (va,c)
+	   in  if pure andalso is_mpath m then (va,c)
 	       else error "GetExpCon: attempted to project from impure module"
 	   end
 
@@ -1323,6 +1327,9 @@ structure IlStatic
 
    (* ------------ Return a module's signature    -------------- *)
 
+   (* The first bool is true only if module is valuable,
+      the second bool is true only if module is statically pure.
+   *)
    and GetModSig(module, ctxt : context) : bool * signat * bool =
      let fun msg() = (print "GetModSig called with module = \n";
 			 pp_mod module; print "\n")
@@ -1337,7 +1344,7 @@ structure IlStatic
      (case module of
        (MOD_VAR v) =>
 	   (case Context_Lookup_Var(ctxt,v) of
-		SOME(_,PHRASE_CLASS_MOD(_,_,s,_)) => SOME (true,s,true)
+		SOME(_,PHRASE_CLASS_MOD(_,_,s,_)) => SOME (not(is_nonvalue_var v),s,true)
 	      | SOME _ => error ("MOD_VAR " ^ (Name.var2string v) ^ " bound to a non-module")
 	      | NONE => NONE)
      | MOD_STRUCTURE (sbnds) =>
@@ -1383,6 +1390,7 @@ structure IlStatic
 				  error "MOD_APP argument and parameter signature mismatch")
 *)
 	     | SIGNAT_STRUCTURE _ => error "Can't apply a structure"
+	     | SIGNAT_RDS _ => error "Can't apply a structure"
 	     | _ => error "signat_var is not reduced"
 	   end
      | MOD_LET (v,m1,m2) =>
@@ -1400,7 +1408,7 @@ structure IlStatic
 	      of NONE => NONE
 	       | SOME (_,_,false) => error "trying to obtain signature of impure projection"
 	       | SOME (va,signat,true) =>
-		   (case ProjectModSig (ctxt,m,signat,l)
+		   (case ProjectModSig (m,signat,l)
 		      of SOME (PHRASE_CLASS_MOD(_,_,s,_)) => SOME (va,s,true)
 		       | _ => NONE))
      | MOD_SEAL (m,s) => 
@@ -1583,7 +1591,7 @@ structure IlStatic
 		(let
 		   val (_,s,_) = GetModSig(m,ctxt)
 		   val cOpt : con option =
-			(case ProjectModSig (ctxt,m,s,l)
+			(case ProjectModSig (m,s,l)
 			   of SOME(PHRASE_CLASS_CON(_,_,cOpt,_)) => cOpt
 			    | _ => (print "Module projection can't be normalized because label ";
 				    pp_label l;
@@ -1598,6 +1606,7 @@ structure IlStatic
 		 end))
        end
 
+(*
      and Kind_Valid (KIND) = true
        | Kind_Valid (KIND_TUPLE n)     = n >= 0
        | Kind_Valid (KIND_ARROW (m,kres)) = (m >= 0) andalso Kind_Valid(kres)
@@ -1637,6 +1646,40 @@ structure IlStatic
 	 (Sig_Valid(ctxt,s_arg) andalso
 	  Sig_Valid(add_context_mod'(ctxt,v,s_arg),s_res))
        | Sig_Valid (ctxt : context, SIGNAT_VAR v) = Sig_Valid(ctxt,reduce_sigvar(ctxt,v))
+*)
+
+     (* fstable_label checks whether a component of a structure labeled with lab
+        should be included in Fst_Sig of a signature.  This is used merely to weed out
+        inner datatype modules and also "sum" types in datatypes modules. *)
+     and fstable_label lab = 
+	 not(is_sum lab) andalso not(is_dt lab)
+
+     and Fst_Sig (ctxt : context, s : signat) : signat =
+         (case reduce_signat ctxt s of 
+	      SIGNAT_STRUCTURE sdecs =>
+		  SIGNAT_STRUCTURE(Fst_Sdecs(ctxt,sdecs))
+	    | SIGNAT_RDS(v,sdecs) => 
+		  SIGNAT_STRUCTURE(Fst_Sdecs(ctxt,sdecs))
+	    | SIGNAT_FUNCTOR(v,s1,s2,APPLICATIVE) => 
+		  SIGNAT_FUNCTOR(v,Fst_Sig(ctxt,s1),Fst_Sig(ctxt,s2),APPLICATIVE)
+	    | _ => SIGNAT_STRUCTURE []
+         )
+
+     and Fst_Sdecs (ctxt : context, sdecs : sdecs) : sdecs =
+         List.mapPartial (fn sdec => Fst_Sdec(ctxt,sdec)) sdecs
+
+     and Fst_Sdec (ctxt : context, SDEC(lab,dec)) : sdec option =
+         (case dec of
+	      DEC_CON _ =>
+		  if fstable_label lab then SOME(SDEC(lab,dec)) else NONE
+	    | DEC_MOD(v,false,s) =>
+		  if fstable_label lab then
+		    (case Fst_Sig(ctxt,s) of
+		        SIGNAT_STRUCTURE [] => NONE
+		      | s' => SOME(SDEC(lab,DEC_MOD(v,false,s'))))
+		  else NONE
+	    | _ => NONE
+         )
 
      and Dec_IsSub (ctxt,d1,d2) = Dec_IsSub' true (ctxt,d1,d2)
      and Dec_IsEqual (ctxt,d1,d2) = Dec_IsSub' false (ctxt,d1,d2)
@@ -1831,6 +1874,8 @@ structure IlStatic
 				       if b2 then () else print "result sig mismatch\n" ))
 		 in  b1 andalso b2
 		 end)
+	      | (s1 as SIGNAT_RDS _, s2) => Rds_IsSub isSub (ctxt,s1,s2)
+	      | (s1, s2 as SIGNAT_RDS _) => Rds_IsSub isSub (ctxt,s1,s2)
 	      | _ => (print "Warning: ill-formed call to Sig_IsSub'\n";
 		      debugdo (fn () =>
 			       (print " with sig1 = \n";
@@ -1838,14 +1883,39 @@ structure IlStatic
 				pp_signat sig2; print "\n"));
 		      false))
 
+     and Rds_IsSub isSub (ctxt, sig1, sig2) = 
+         let 
+	     val v = fresh_var()
+	     fun chvar (SIGNAT_RDS(v',sdecs)) = 
+		 SIGNAT_STRUCTURE(sdecs_subst(sdecs,subst_modvar(v',MOD_VAR v)))
+	       | chvar s = s
+	     val sig1 = chvar sig1
+	     val sig2 = chvar sig2
+	     val fstsig1 = Fst_Sig(ctxt,sig1)
+	     val fstsig2 = Fst_Sig(ctxt,sig2)
+	 in  
+	     Sig_IsSub' isSub (ctxt,fstsig1,fstsig2) andalso
+             let 
+		 val ctxt = add_context_mod'(ctxt,v,fstsig1)
+		 val selfsig1 = selfify false (ctxt,MOD_VAR v,sig1)
+		 val selfsig2 = selfify false (ctxt,MOD_VAR v,sig2)
+	     in  
+		 Sig_IsSub' isSub (ctxt,selfsig1,selfsig2)
+	     end
+	 end
+
+    (* All of the lookup routines below appear to assume that the input sigs/sdecs are in
+       selfified form.  This is convenient as it allows us to ignore rds's and not worry
+       about dependencies on bound variables, as there won't be any. 
+    *)
+
     (* Peel_Mod peels off any leading existentials, rds's or compsig's.
        Returns the corresponding labels, and the peeled module and its signature.
     *)
-    and PeelModSig ctxt (pc as PHRASE_CLASS_MOD(m : mod, poly, s : signat, _)) : (labels * phrase_class) =
+    and PeelModSig (pc as PHRASE_CLASS_MOD(m : mod, poly, s : signat, _)) : (labels * phrase_class) =
       let 
           fun peel (m,s,acc_labels) : labels * mod * signat =
-            let val s = reduce_signat ctxt s in
-              case is_existential_sig s of
+             (case is_existential_sig s of
                 SOME(_,_,visible_sig) =>
                   peel(MOD_PROJECT(m,visible_lab),
 		       visible_sig,
@@ -1853,22 +1923,22 @@ structure IlStatic
 	      | NONE =>
                   (* XXX Implement other cases for rds's and compsig's here. -Derek *)
                   (rev acc_labels,m,s)
-            end
+             )
           val (labs,m,s) = peel(m,s,[])
       in
 	  if null labs then ([],pc)
 	  else (labs,PHRASE_CLASS_MOD(m,poly,s,fn () => s))
       end
-      | PeelModSig _ pc = ([],pc)
+      | PeelModSig pc = ([],pc)
 
-    and Sig_Lookup_Label (x as (doOpen : bool, ctxt : context, lbl : label)) (m : mod, s : signat)
+    and Sig_Lookup_Label (x as (doOpen : bool, lbl : label)) (m : mod, s : signat)
         : (labels * phrase_class) option =
-        (case reduce_signat ctxt s of
+        (case s of
             SIGNAT_STRUCTURE sdecs => Sdecs_Lookup_Label x (m,sdecs)
             (* XXX Implement other cases for rds's and compsig's here. -Derek *)
 	  | _ => NONE)
 
-    and Sdecs_Lookup_Label (x as (doOpen : bool, ctxt : context, lbl : label)) (m : mod, sdecs)
+    and Sdecs_Lookup_Label (x as (doOpen : bool, lbl : label)) (m : mod, sdecs)
 	: (labels * phrase_class) option =
 	let
 	    fun find [] = NONE
@@ -1896,42 +1966,42 @@ structure IlStatic
 	    find (rev sdecs)
 	end
 
-    and Sig_Lookup_Labels (doOpen : bool, ctxt : context, labs : labels) (m : mod, s : signat)
+    and Sig_Lookup_Labels (doOpen : bool, labs : labels) (m : mod, s : signat)
 	: (labels * phrase_class) option =
 	(case labs
 	   of [] => NONE
-	    | [lbl] => (case Sig_Lookup_Label (doOpen,ctxt,lbl) (m,s) of
+	    | [lbl] => (case Sig_Lookup_Label (doOpen,lbl) (m,s) of
 	                   (res as SOME (labs1,pc)) =>
 			     if doOpen then
-			       let val (labs2,pc) = PeelModSig ctxt pc
+			       let val (labs2,pc) = PeelModSig pc
 			       in SOME(labs1 @ labs2, pc)
 			       end
 			     else res
 			 | NONE => NONE)
 	    | (lbl :: lbls) =>
-	       (case Sig_Lookup_Label (doOpen,ctxt,lbl) (m,s)
+	       (case Sig_Lookup_Label (doOpen,lbl) (m,s)
 		  of SOME(labs1,PHRASE_CLASS_MOD (m',_,s',_)) =>
-		      (case Sig_Lookup_Labels (doOpen,ctxt,lbls) (m',s') of
+		      (case Sig_Lookup_Labels (doOpen,lbls) (m',s') of
 			   SOME(labs2,pc) => SOME(labs1 @ labs2, pc)
 			 | NONE => NONE)
 		   | _ => NONE))
 
-    and ProjectModSig (ctxt, m, s : signat, l) : phrase_class option =
-        Option.map #2 (Sig_Lookup_Labels (false,ctxt,[l]) (m,s))
+    and ProjectModSig (m, s : signat, l) : phrase_class option =
+        Option.map #2 (Sig_Lookup_Labels (false,[l]) (m,s))
 
-    and Sig_Lookup ctxt (m : mod, s : signat, labs : labels) : (labels * phrase_class) option =
-        Sig_Lookup_Labels (true,ctxt,labs) (m,s)
+    and Sig_Lookup (m : mod, s : signat, labs : labels) : (labels * phrase_class) option =
+        Sig_Lookup_Labels (true,labs) (m,s)
 
-    and Sdecs_Lookup ctxt (m, sdecs, labs) : (labels * phrase_class) option = 
-	Sig_Lookup ctxt (m, SIGNAT_STRUCTURE sdecs, labs)
+    and Sdecs_Lookup (m, sdecs, labs) : (labels * phrase_class) option = 
+	Sig_Lookup (m, SIGNAT_STRUCTURE sdecs, labs)
 
     and Context_Lookup_Path (ctxt, p as PATH (v,labs)) : (path * phrase_class) option =
 	(case (Context_Lookup_Var (ctxt,v),labs) of
             (* v is a module *)
 	      (SOME (_,pc as PHRASE_CLASS_MOD (_,_,signat,_)),_) =>
                  Option.map (fn (labs',pc') => (PATH(v,labs'),pc'))
-		   (if null labs then SOME(PeelModSig ctxt pc)
-		    else Sig_Lookup ctxt (MOD_VAR v, signat, labs))
+		   (if null labs then SOME(PeelModSig pc)
+		    else Sig_Lookup (MOD_VAR v, signat, labs))
             (* v is not a module, which is fine so long as there is no attempt to project from it *)
 	    | (SOME (_,pc),nil) => SOME(p,pc)
 	    | _ => NONE)
@@ -1960,6 +2030,6 @@ structure IlStatic
     val Bnds_IsValuable = fn (d,bs) => Bnds_IsValuable bs d
     val Sbnds_IsValuable = fn (d,ss) => Sbnds_IsValuable ss d
 
-    val PeelModSig = fn ctxt => fn (m,s) => PeelModSig ctxt (PHRASE_CLASS_MOD(m,false,s,fn () => s))
+    val PeelModSig = fn (m,s) => PeelModSig (PHRASE_CLASS_MOD(m,false,s,fn () => s))
 
   end

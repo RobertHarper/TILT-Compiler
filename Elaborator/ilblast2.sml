@@ -806,6 +806,7 @@ struct
 		 (tab "    blastOutSig\n";
 		  case s of
 		 SIGNAT_STRUCTURE sdecs => (blastOutInt 0; blastOutSdecs sdecs)
+	       | SIGNAT_RDS (v,sdecs) => (blastOutInt 1; blastOutVar v; blastOutSdecs sdecs)
 	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutInt 2; blastOutVar v;
 						      blastOutSig s1; blastOutSig s2; blastOutArrow arrow)
 	       | SIGNAT_VAR v => (blastOutInt 5; blastOutVar v)
@@ -813,6 +814,7 @@ struct
 	and blastInSig () =
 	    (case (blastInInt()) of
 		 0 => SIGNAT_STRUCTURE (blastInSdecs ())
+	       | 1 => SIGNAT_RDS (blastInVar (), blastInSdecs ())
 	       | 2 => SIGNAT_FUNCTOR(blastInVar (), blastInSig (), blastInSig (), blastInArrow ())
 	       | 5 => SIGNAT_VAR(blastInVar ())
 	       | _ => error "bad blastInSig")

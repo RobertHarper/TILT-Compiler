@@ -559,10 +559,10 @@ struct
     end
 
   and f_vklist state vklist =
-    let	val tstate = type_state state
+    let	(* val state = type_state state *)
 	fun fold_one ((var,knd),state) =
 	    let
-		val knd' = f_kind tstate knd
+		val knd' = f_kind state knd
 		val state' = add_convar (state, var)
 	    in
 		((var,knd'),state')

@@ -238,6 +238,8 @@ structure Signature :> SIGNATURE =
 				     SIGNAT_STRUCTURE sdecs =>
 					 (SDEC(l,DEC_MOD(v,b,SIGNAT_STRUCTURE
 							 (domod restl sdecs))))::rest
+				   | SIGNAT_RDS (v,sdecs) => 
+					 (SDEC(l,DEC_MOD(v,b,SIGNAT_RDS(v,(domod restl sdecs)))))::rest
 				   | s => (error_region();
 					   print "signature not reduced to structure signature";
 					   pp_signat s;
@@ -316,17 +318,24 @@ structure Signature :> SIGNATURE =
 				   in  DEC_CON(v,k,copt,i)
 				   end
 			     | (_, DEC_MOD(v,b,s)) =>
-				  (case (reduce_signat ctxt s) of
-				       SIGNAT_STRUCTURE sdecs =>
+				   let val (makesig,sdecs_opt) =
+				         (case (reduce_signat ctxt s) of
+				            SIGNAT_STRUCTURE sdecs => (SIGNAT_STRUCTURE,SOME sdecs)
+					  | SIGNAT_RDS (v,sdecs) => (fn sdecs => SIGNAT_RDS(v,sdecs),
+								     SOME sdecs)
+					  | _ => (SIGNAT_STRUCTURE,NONE))
+				   in
+				     (case sdecs_opt of
+					 SOME sdecs =>
 					   let val is_first =
 					       (case this_typeslots of
 						    [this] => andfold (fn x => not (isSome (!x))) (find_representative this)
 						  | _ => false)
 					       val sdecs' = traverse(cur_path',this_typeslots) sdecs
-					   in  DEC_MOD(v,b,if is_first then s
-							   else SIGNAT_STRUCTURE sdecs')
+					   in  DEC_MOD(v,b,if is_first then s else makesig sdecs')
 					   end
-				     | _ => dec)
+				       | NONE => dec)
+				   end
 			     | _ => dec)
 		  in (SDEC(l,dec')) :: (traverse (cur_path,typeslots) rest)
 		  end
@@ -403,7 +412,7 @@ structure Signature :> SIGNATURE =
 			   let fun use (c:con) : sdecs =
 				   xsig_where_type(context,sdecs,labs',c,k)
 			   in
-			       (case (Sdecs_Lookup context (m2,sdecs2,plabs)) of
+			       (case (Sdecs_Lookup(m2,sdecs2,plabs)) of
 				    SOME(_,PHRASE_CLASS_CON(_,_,SOME c,true)) => use c
 				  | SOME(_,PHRASE_CLASS_CON(c,_,_,_)) => use c
 				  | _ => (error_region();
@@ -462,8 +471,9 @@ structure Signature :> SIGNATURE =
 	    let
 	      val c  = path2con(join_path_labels(path1,labs))
 	      val c' = path2con(join_path_labels(path2,labs))
-	      val res = (Name.is_label_internal(List.last labs))
-		orelse eq_con(ctxt'',c,c')
+	      val lab = List.last labs
+	      val res = (Name.is_label_internal lab andalso not(eq_label(lab,ident_lab)))
+		  orelse eq_con(ctxt'',c,c')
 	      in
 		if res then ()
 		else
@@ -488,6 +498,7 @@ structure Signature :> SIGNATURE =
 	app check slabs;
 	sdecsAbstractEqual
       end
+  handle SharingError => sdecs
 
   and xsig_sharing_structures(ctxt,sdecs,[])  = sdecs
     | xsig_sharing_structures(ctxt,sdecs,[_]) = sdecs
@@ -513,8 +524,9 @@ structure Signature :> SIGNATURE =
 		  else ()
 	  val mjunk = fresh_named_var "mjunk_sharing_type"
 	  val ctxt = add_context_mod'(ctxt,mjunk,SIGNAT_STRUCTURE sdecs)
+	  val SIGNAT_STRUCTURE self_sdecs_junk = GetModSig(ctxt,MOD_VAR mjunk)
 	  fun path2label (lpath : labels) : typeslot =
-	      (case (Sdecs_Lookup ctxt (MOD_VAR mjunk,sdecs,lpath)) of
+	      (case (Sdecs_Lookup(MOD_VAR mjunk,self_sdecs_junk,lpath)) of
 		   SOME(labs,_) => follow_labels (NONE,sdecs,ctxt) labs
 		 | NONE => (error_region();
 			    print "sharing type given non-existent path ";
@@ -557,6 +569,7 @@ structure Signature :> SIGNATURE =
 
     (* the variables of sdecs_change is alpha-varied to match variables of
        corresponding components of sdecs_name *)
+(*
     fun sdecs_rename(sdecs_change, sdecs_name) =
 	let
 	    fun folder (sdec_change as (SDEC(l,dec_change)),subst) =
@@ -579,7 +592,7 @@ structure Signature :> SIGNATURE =
 	    val SIGNAT_STRUCTURE sdecs_result = sig_subst(sig_temp,subst)
 	in  sdecs_result
 	end
-
+*)
 	(* Coercion of a monoval to match a monoval spec. *)
 	fun coerce_monoval (ctxt:context,
 			    spec : var * con * exp option * bool,
@@ -605,7 +618,7 @@ structure Signature :> SIGNATURE =
 				    then con_actual else con_actual_reduced
 				val bnd = BND_EXP(v_spec,exp)
 				(* Derek: Why do we put in the inlining info of the "from" component? *)
-				(* NB dec is only used by transparant ascription. *)
+				(* NB dec is only used by transparent ascription. *)
 				val dec = DEC_EXP(v_spec,con_actual_smaller,eopt',inline)
 			    in  SOME(bnd,dec)
 			    end
@@ -791,13 +804,15 @@ structure Signature :> SIGNATURE =
 		     val (coerced_funarg,v3,m3,context') = 
 			 if Sig_IsSub(context',s2,s1) 
 			     then let val m = MOD_VAR v2 
-				  in (false,v2,m,context') end 
+				  in (false,v2,m,context') 
+				  end 
 			 else case a2 of 
 			     GENERATIVE => 
 				  let val (_,m3,s3) = xcoerce(context',p2,s2,s1) 
 				      val v3 = fresh_named_var "var_funarg_coerced"
 				      val context' = add_context_mod'(context',v3,s3)
-				  in (true,v3,m3,context') end
+				  in (true,v3,m3,context') 
+				  end
 			   | APPLICATIVE =>
 		                 (error_region_with "when coercing an applicative functor to an applicative signature,\n";
 				  tab_region_with "argument signature of target must be a HIL subsignature of actual argument signature\n";
@@ -807,19 +822,55 @@ structure Signature :> SIGNATURE =
 		     val v1' = fresh_named_var "var_funresult_actual"
 		     val p1' = PATH(v1',[])
 		     val m1' = MOD_APP(path2mod path_actual, MOD_VAR v3)
+(*
 		     val principal_s1' = GetModSig(context',m1')
 		     val context'' = add_context_mod'(context',v1',principal_s1')
 		     val (_,m2',s4) = xcoerce(context'',p1',principal_s1',s2')
+*)
+		     val context'' = add_context_mod'(context',v1',s1')
+		     val self_signat_p1' = GetModSig(context'',MOD_VAR v1')
+		     val (_,m2',s4) = xcoerce(context'',p1',self_signat_p1',s2')
 		     val s2' = case a2 of APPLICATIVE => sig_subst(s4,subst_modvar(v1',m1')) | _ => s2'
 		     val body = MOD_LET(v1',m1',MOD_SEAL(m2',s2'))
 		     val body = if coerced_funarg then MOD_LET(v3,m3,body) else body
-		 in (true,
-		     MOD_FUNCTOR(a2,v2,s2,body,s2'),
-		     SIGNAT_FUNCTOR(v2,s2,s2',a2))
+		 in 
+		     (true,
+		      MOD_FUNCTOR(a2,v2,s2,body,s2'),
+		      SIGNAT_FUNCTOR(v2,s2,s2',a2))
 		 end
+
 	   | (SIGNAT_STRUCTURE sdecs_actual,
 	      SIGNAT_STRUCTURE sdecs_target) =>
 		 xcoerce_structure (context, path_actual, sdecs_actual, sdecs_target)
+
+	   | (SIGNAT_STRUCTURE sdecs_actual,
+              SIGNAT_RDS (rec_var, sdecs_target)) => 
+                 let
+		     val fst_sdecs_target = Fst_Sdecs(context,sdecs_target)
+		     val fst_sdecs_actual = Fst_Sdecs(context,sdecs_actual)
+		     val (_,_,fst_sig_coerced) = 
+			   xcoerce_structure(context,path_actual,fst_sdecs_actual,fst_sdecs_target)
+		     val context' = add_context_mod'(context,rec_var,fst_sig_coerced)
+		     val (coerced,mod_coerced,sig_coerced) =
+			   xcoerce_structure(context',path_actual,sdecs_actual,sdecs_target)
+
+		     (* Sanity checks, can be removed eventually *)
+
+		     val _ = if (Name.VarSet.member(sig_free(sig_coerced),rec_var)
+			         orelse Name.VarSet.member(mod_free(mod_coerced),rec_var))
+			        andalso get_error() <> Error 
+			     then elab_error "rds case of xcoerce is broken"
+			     else ()
+
+		     val _ = (Sig_IsEqual(context,fst_sig_coerced,Fst_Sig(context,sig_coerced))
+			      orelse get_error() = Error)
+			      orelse elab_error "rds case of xcoerce is broken"
+
+		 in
+		     if coerced then (true,mod_coerced,sig_coerced)
+		     else (false,path2mod path_actual,sig_actual)
+		 end
+
 	   | (SIGNAT_FUNCTOR _, _) => (error_region_with "cannot coerce a functor to a structure\n";
 				       (true, MOD_STRUCTURE [], SIGNAT_STRUCTURE []))
 	   | (_, SIGNAT_FUNCTOR _) => (error_region_with "cannot coerce a structure to a functor\n";
@@ -846,20 +897,21 @@ structure Signature :> SIGNATURE =
 (*	  val sdecs_target = sdecs_rename(sdecs_target, sdecs_actual) *)
 	  
 	  val self = path2mod path_actual
-	  val sig_actual_self = GetModSig (ctxt,self)
-	  val SIGNAT_STRUCTURE sdecs_actual_self = reduce_signat ctxt sig_actual_self
+	  val sig_actual_self = SIGNAT_STRUCTURE sdecs_actual
+(*	  val sig_actual_self = GetModSig (ctxt,self) *)
+(*	  val SIGNAT_STRUCTURE sdecs_actual_self = sig_actual_self *)
 	  val _ = debugdo (fn () =>
 			   (print "\n\n-------xcoerce_structure------\n";
 			    print "path_actual = "; pp_path path_actual; print "\n";
 			    print "sdecs_actual = \n"; pp_sdecs sdecs_actual; print "\n";
-			    print "sdecs_actual_self = \n"; pp_sdecs sdecs_actual_self; print "\n";
+(*			    print "sdecs_actual_self = \n"; pp_sdecs sdecs_actual_self; print "\n"; *)
 			    print "sdecs_target = \n"; pp_sdecs sdecs_target; print "\n"))
 	  val _ = if (Listops.eq_list (fn (SDEC(l1,_),SDEC(l2,_)) => eq_label(l1,l2),
 				       sdecs_actual, sdecs_target))
 		      then ()
 		  else coerce (true,"length/order mismatch")
 
-	  fun actual_self_lookup lbl = Sdecs_Lookup ctxt (self, sdecs_actual_self, [lbl])
+	  fun actual_self_lookup lbl = Sig_Lookup(self, sig_actual_self, [lbl])
 
         val xcoerce_error = ref false
 
@@ -871,6 +923,16 @@ structure Signature :> SIGNATURE =
 	     NONE)
 
 	fun doit ctxt (lab,spec_dec) : (bnd * dec) option =
+            if is_open lab andalso not(is_dt lab) then 
+		(case spec_dec of DEC_MOD (v_spec,b,sig_spec) =>
+		     let val (_,m,s) = xcoerce(ctxt,path_actual,sig_actual_self,sig_spec)
+			 val _ = coerce(true,"open inner module")
+			 val bnd = BND_MOD(v_spec,b,m)
+			 val dec = DEC_MOD(v_spec,b,s)
+		     in SOME(bnd,dec)
+		     end
+	           | _ => elab_error "open label on non-module spec")
+	    else
 	    (case (Name.is_eq lab, spec_dec, actual_self_lookup lab) of
 
 		(* --------- coercion of an equality function spec to an equality function ---- *)
