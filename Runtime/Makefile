@@ -24,6 +24,11 @@ test:
 	echo ${DEBUG}
 	echo ${DEBUG2}
 
+.PHONY: tags
+tags:
+	etags '--regex=/INLINE(\(.*\))/\1/' *.[chs]
+	ctags '--regex=/INLINE(\(.*\))/\1/' *.[chs]
+
 # ------------------------------ General macros ------------------------
 alpha_osf20_sys_name = alpha_osf
 alpha_osf32_sys_name = alpha_osf
