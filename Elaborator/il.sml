@@ -42,7 +42,7 @@ functor Il(structure Prim : PRIM
                  | RAISE   of con * exp
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
-                 | EXN_INJECT of exp * exp (* tag and value *)
+                 | EXN_INJECT of string * exp * exp (* tag and value *)
                  | ROLL    of con * exp
                  | UNROLL  of con * exp
                  | INJ     of {noncarriers : int,

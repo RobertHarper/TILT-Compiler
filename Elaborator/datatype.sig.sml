@@ -11,7 +11,6 @@ signature DATATYPE =
     val compile : {context : IlContext.context,
 		   typecompile : IlContext.context * Ast.ty -> IlContext.Il.con,
 		   datatycs : Ast.db list,
-		   withtycs : Ast.tb list,
 		   eq_compile : IlContext.context * IlContext.con -> IlContext.exp option} -> 
 	                        (IlContext.Il.sbnd * IlContext.Il.sdec) list
 

@@ -107,7 +107,7 @@ sig
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
     | roll | unroll              (* coerce to/from recursive type *) 
     | make_exntag                (* generate new exn tag *)
-    | inj_exn                    (* takes tag + value and give exn *)
+    | inj_exn of string          (* takes tag + value and give exn *)
     | make_vararg of openness * effect  (* given a function in onearg calling conv, convert to vararg *)
     | make_onearg of openness * effect  (* given a function in vararg calling conv, convert to onearg *)
     | peq                        (* polymorphic equality: unused since HIL compiles away equality *)

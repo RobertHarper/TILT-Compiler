@@ -36,7 +36,7 @@ functor IlEval(structure Il : IL
 	   | (SCON (array _)) => true  (* XXX not really *)
 	   | (SCON _ | PRIM _ | ILPRIM _ | ETAPRIM _ | ETAILPRIM _ | FIX _) => true
 	   | (RECORD rbnds) => andfold (fn (l,bnd) => exp_isval bnd) rbnds
-	   | EXN_INJECT (t,e) => exp_isval e
+	   | EXN_INJECT (_,t,e) => exp_isval e
 	   | ROLL (c,e) => (con_isval c) andalso (exp_isval e)
 	   | UNROLL (c,e) => (con_isval c) andalso (exp_isval e)
 	   | INJ {carriers,special,inject,noncarriers} => 
@@ -368,7 +368,7 @@ functor IlEval(structure Il : IL
 				     in eval_exp env' (LET(bnds,body))
 				     end
 	   | NEW_STAMP c => SCON(tag(fresh_tag(),eval_con env c))
-	   | EXN_INJECT (e1,e2) => EXN_INJECT(eval_exp env e1, eval_exp env e2)
+	   | EXN_INJECT (s,e1,e2) => EXN_INJECT(s,eval_exp env e1, eval_exp env e2)
 	   | ROLL(c,e) => ROLL(eval_con env c, eval_exp env e)
 	   | UNROLL(c,e) => let val c' = eval_con env c
 				val e' = eval_exp env e
@@ -399,7 +399,7 @@ functor IlEval(structure Il : IL
 	          | v => error_exp v "CASE got a non-sum value arguments")
 	   | EXN_CASE {arg,arms,default,tipe} =>
 		    (case (eval_exp env arg) of
-			 (ep as (EXN_INJECT(SCON(tag(t,c)),value))) => 
+			 (ep as (EXN_INJECT(_,SCON(tag(t,c)),value))) => 
 			     let fun loop [] = (case default of
 						    NONE => raise (exn_packet ep)
 						  | SOME e => eval_exp env (APP(e,[ep])))

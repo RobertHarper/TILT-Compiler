@@ -245,6 +245,52 @@ functor InfixParse(structure Il : IL
       in res
       end
 
-
-
+    (* takes a destructured Asy.DatatypeDec and expand out the withtypes *)
+    open Ast
+    fun parse_datbind (datatycs: db list, withtycs: tb list) =
+	let
+	    fun get_dbname (Db {tyc,...}) = tyc
+	      | get_dbname (MarkDb (db,_)) = get_dbname db
+	    fun get_tbname (Tb {tyc,def,tyvars}) = (tyc,(def,tyvars))
+	      | get_tbname (MarkTb (tb,_)) = get_tbname tb
+	    val db_names = map get_dbname datatycs
+	    val with_table = map get_tbname withtycs
+	    val names = db_names @ (map #1 with_table)
+	    fun loop (a::rest) seen = if (Listops.member_eq(Symbol.eq, a, seen))
+					  then error "datbind/withbind binding duplicate variables"
+				      else loop rest seen
+	      | loop [] _ = ()
+	    val _ = loop names []
+	    fun subst_ty (handler : Ast.ty -> Ast.ty option) ty = 
+		(case (handler ty, ty) of
+		     (SOME res, _) => res
+		   | (_,VarTy _) => ty
+		   | (_,ConTy (syms, tys)) => ConTy(syms, map (subst_ty handler) tys)
+		   | (_,RecordTy sym_tys) => RecordTy(map (fn (s,ty) => (s,subst_ty handler ty)) sym_tys)
+		   | (_,TupleTy tys) => TupleTy (map (subst_ty handler) tys)
+		   | (_,MarkTy (ty,r)) => MarkTy(subst_ty handler ty, r))
+	    fun eq_tv (Tyv s1, Tyv s2) = Symbol.eq(s1,s2)
+	      | eq_tv (TempTyv s1, TempTyv s2) = Symbol.eq(s1,s2)
+	      | eq_tv (MarkTyv(tv1,_), tv2) = eq_tv(tv1,tv2)
+	      | eq_tv (tv1,MarkTyv(tv2,_)) = eq_tv(tv1,tv2)
+	      | eq_tv _ = false
+	    fun varty_handler table (VarTy tv) = Listops.assoc_eq(eq_tv, tv, table)
+	      | varty_handler _ _ = NONE
+	    fun conty_handler (ConTy ([sym], tys)) = 
+		(case (Listops.assoc_eq(Symbol.eq, sym, with_table)) of
+		     NONE => NONE
+		   | SOME (def,tyvars) => 
+			 let val table = Listops.zip tyvars tys
+			     val def' = subst_ty (varty_handler table) def
+			     val def'' = subst_ty conty_handler def' 
+			 in SOME def''
+			 end)
+	      | conty_handler _ = NONE
+	    fun subst_def (s,NONE) = (s,NONE)
+	      | subst_def (s,SOME ty) = (s, SOME (subst_ty conty_handler ty))
+	    fun subst (Db {tyc, tyvars, def}) = Db{tyc = tyc, tyvars = tyvars, def = map subst_def def}
+	      | subst (MarkDb(db,r)) = MarkDb(subst db, r)
+	    val datatycs' = map subst datatycs
+	in  (datatycs', withtycs)
+	end
   end;

@@ -78,6 +78,7 @@ val debug = ref false
    and var_val = VINT of TW32.word
                | VREAL of string
                | VRECORD of label * var list
+               | VVOID of rep
    type var_rep = var_loc * var_val option * con
    type convar_rep = var_loc * kind
    datatype loc_or_val = VAR_LOC of var_loc
@@ -157,27 +158,31 @@ val debug = ref false
   fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
 
 
-  fun varmap_insert' str ({varmap,env,convarmap} : varstate) (v,c) = 
+  fun varmap_insert' str ({varmap,env,convarmap} : varstate) (v,c) : varstate = 
       let val _ = if (!debug)
 		      then (print "varmap adding to "; print str; print " v = "; Ppnil.pp_var v; print "\n")
 		  else ()
-	  val varmap = 
-	      case (VarMap.find(varmap,v)) of
-		  NONE => VarMap.insert(varmap,v,c)
-		| SOME _ => error ("hash table " ^ str ^ " already contains entry " 
-				   ^ (Name.var2string v))
+	  val _ = case (VarMap.find(varmap,v)) of
+		  NONE => ()
+		| SOME _ => if (!debug)
+				then print ("hash table " ^ str ^ " already contains entry "
+					    ^ (Name.var2string v))
+			    else ()
+	  val varmap = VarMap.insert(varmap,v,c)
       in  {env=env,varmap=varmap,convarmap=convarmap}
       end
   
-  fun convarmap_insert' str ({convarmap,varmap,env}:varstate) (v,k) = 
+  fun convarmap_insert' str ({convarmap,varmap,env}:varstate) (v,k) : varstate = 
       let val _ = if (!debug)
 		      then (print "convar adding to "; print str; print " v = "; Ppnil.pp_var v; print "\n")
 		  else ()
-	  val convarmap = 
-		case (VarMap.find(convarmap,v)) of
-		    NONE => VarMap.insert(convarmap,v,k)
-		  | SOME _ => error ("hash table " ^ str ^ " already contains entry " 
-				     ^ (Name.var2string v))
+	  val _ = (case (VarMap.find(convarmap,v)) of
+		       NONE => ()
+		     | SOME _ => if (!debug)
+				     then print ("hash table " ^ str ^ " already contains entry " 
+						 ^ (Name.var2string v))
+				 else ())
+	  val convarmap = VarMap.insert(convarmap,v,k)
       in  {env=env,varmap=varmap,convarmap=convarmap}
       end
   
@@ -697,7 +702,8 @@ val debug = ref false
 				  NONE => alloc_regi rep
 				| SOME d => d)
       in case value of
-	  VINT i => let val r = pickdest NOTRACE_INT
+	  VVOID rep => pickdest rep
+	| VINT i => let val r = pickdest NOTRACE_INT
 			in  add_instr (LI(i,r));
 			    r
 			end
@@ -751,18 +757,19 @@ val debug = ref false
 
     fun load_freg_val (rep : var_val, poss_dest : regf option) : regf =
       let 
-	  fun pickdest ()  = (case poss_dest of
-				  NONE => alloc_regf()
-				| SOME d => d)
+	  fun doit r  = let val label = mk_float_data r
+			    val addr = alloc_regi LABEL
+			    val r = (case poss_dest of
+					 NONE => alloc_regf()
+				       | SOME d => d)
+			in  add_instr(LADDR(label,0,addr));
+			    add_instr(LOADQF(EA(addr,0),r));
+			    r
+			end
       in case rep of
 	  (VINT i) => error "load_freg: got VINT"
-	| (VREAL r) => let val label = mk_float_data r
-			  val addr = alloc_regi LABEL
-			  val r = pickdest()
-		      in  add_instr(LADDR(label,0,addr));
-			  add_instr(LOADQF(EA(addr,0),r));
-			  r
-		      end
+	| (VVOID rep) => alloc_regf()
+	| (VREAL fstr) => doit fstr
 	| (VRECORD _) => error "load_freg: got VRECORD"
       end
 
@@ -874,6 +881,7 @@ val debug = ref false
 				  | F r => (add_data(FLOAT "0.0");
 					    add_instr(STOREQF(EA(addr,0),r))))
 			   end
+	  | VAR_VAL (VVOID _) => error "alloc_global got void"
 	  | VAR_VAL (VINT w32) => add_data(INT32 w32)
 	  | VAR_VAL (VREAL s) => add_data(FLOAT s)
 	  | VAR_VAL (VRECORD (l,_)) => add_data(DATA l);
@@ -1320,11 +1328,12 @@ val debug = ref false
 				    (I ir,_) => ir
 				  | (F _,_) => error "exception cannot translate to an freg")
 		      val newpc = alloc_regi LABEL
+		      val rep = con2rep state con
 		  in  add_instr(LOAD32I(EA(exnptr,0),newpc));
 		      add_instr(MV (ir,exnarg));
 		      add_instr RESTORE_CS;
 		      add_instr (JMP(newpc,nil));
-		      (VAR_VAL(VINT 0w0), con)   (* <---  0 is a safe value for any type *)
+		      (VAR_VAL(VVOID rep), con)
 		  end
             (* --- We rely on the runtime to unwind the stack so we don't need to save the
 	           free variables of the continuation of this expression. *)
@@ -1529,7 +1538,11 @@ val debug = ref false
 		      fun scan(lab,[]) =
 			  (add_instr(ILABEL lab);
 			   case default of
-			       NONE => no_match()
+			       NONE => 
+				   let val con = (case !rescon of
+						  SOME c => c | NONE => error "no arms")
+				   in  mv(xexp'(state,fresh_var(),Raise_e(arg,con),SOME con,context))
+				   end
 			     | SOME e => mv(xexp'(state,fresh_var(),e,arg_c,context)))
 			| scan(lab,(armtag,Function(_,_,_,[(v,c)],_,body,con))::rest) = 
 			  let 
@@ -2018,16 +2031,19 @@ val debug = ref false
 				      in  (VAR_LOC(VREGISTER (I desti)), c')
 				      end
 			     | _ => error "bad make_exntag")
-	 | inj_exn => (case (clist,elist) of
-			   (_,[e1,e2]) => let val desti = alloc_regi NOTRACE_INT
-						val (vl1,_) = xexp(state,fresh_var(),e1,NONE,NOTID)
-						val (vl2,_) = xexp(state,fresh_var(),e2,NONE,NOTID)
-						val vallocs = [vl1,vl2]
-						val reps = map valloc2rep vallocs
-					    in  (VAR_LOC(VREGISTER (I (make_record(NONE,reps,vallocs)))),
-						 Prim_c(Exn_c,[]))
-					    end
-			 | _ => error "bad inj_exn")
+	 | inj_exn name => (case (clist,elist) of
+				(_,[e1,e2]) => let val desti = alloc_regi NOTRACE_INT
+						   val (vl1,_) = xexp(state,fresh_var(),e1,NONE,NOTID)
+						   val (vl2,_) = xexp(state,fresh_var(),e2,NONE,NOTID)
+						   fun char2val c = Const_e(Prim.uint(Prim.W8, TilWord64.fromInt (ord c)))
+						   val name_array = Array.fromList (map char2val (explode name))
+						   val (vl3,_) = xconst state (Prim.vector(char_con,name_array))
+						   val vallocs = [vl1,vl2,vl3]
+						   val reps = map valloc2rep vallocs
+					       in  (VAR_LOC(VREGISTER (I (make_record(NONE,reps,vallocs)))),
+						    Prim_c(Exn_c,[]))
+					       end
+			      | _ => error "bad inj_exn")
 	 | make_vararg _ => raise XXX     
 	 | make_onearg _ => raise XXX     
 	 | peq => error "peq not done")

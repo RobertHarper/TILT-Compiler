@@ -37,7 +37,7 @@ functor NilEvaluate (structure Nil : NIL
       (* ----------- predicates to check if a expression is a value --------------- *)
       fun nilprim_isval(np,clist,elist) = 
 	  (case np of
-	       ((record _) | (inject _) | (box_float _) | roll | inj_exn) =>
+	       ((record _) | (inject _) | (box_float _) | roll | (inj_exn _)) =>
 		   Listops.andfold exp_isval elist
 	     | ((make_vararg _) | (make_onearg _) | 
 		(select _) | (inject_record _) | (project_sum _) | 
@@ -271,7 +271,7 @@ functor NilEvaluate (structure Nil : NIL
 		| make_exntag => (case clist of
 				      [c] => Const_e(Prim.tag(Name.fresh_tag(),c))
 				    | _ => error "make_exntag given bad constr arguments")
-		| inj_exn => default
+		| inj_exn _ => default
 		| make_vararg (openness,effcet) => raise Util.UNIMP
 		| make_onearg (openness,effect) => raise Util.UNIMP
 		| peq => error "polyequality primitive not supported by NIL interpreter")
@@ -349,7 +349,7 @@ functor NilEvaluate (structure Nil : NIL
 		     | _ => error "ill-typed sum switch")
 	      fun exnmatch () arg texp = 
 		  (case (arg,expEval env texp) of
-		       (VALUE(Prim_e(NilPrimOp(inj_exn),clist,[Const_e(Prim.tag(t',_)),carrier])),
+		       (VALUE(Prim_e(NilPrimOp(inj_exn _),clist,[Const_e(Prim.tag(t',_)),carrier])),
 			     VALUE(Const_e(Prim.tag(t,_)))) =>
 		       if (Name.eq_tag(t,t'))
 			   then SOME([],[VALUE carrier])

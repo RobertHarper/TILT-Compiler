@@ -933,7 +933,8 @@ functor Pat(structure Il : IL
 	val args = [CASE_VAR (argvar,argc)]
 	val arms : arm list = map (fn (pat,body) => ([parse_pat(patarg,pat)],[], SOME body)) cases
 	val res_con = fresh_con context
-	val def = SOME (Il.RAISE(res_con,matchexn_exp),res_con)
+(*	val def = SOME (Il.RAISE(res_con,matchexn_exp),res_con) *)
+	val def = NONE
 	val (e,c,_) = compile (patarg,args,arms,def)
       in (e,c)
       end

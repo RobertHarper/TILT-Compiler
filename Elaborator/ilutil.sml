@@ -72,9 +72,9 @@ functor IlUtil(structure Ppil : PPIL
     val fail_exp = SCON(tag(fail_tag,con_unit))
     val bind_exp = SCON(tag(bind_tag,con_unit))
     val match_exp = SCON(tag(match_tag,con_unit))
-    val failexn_exp = EXN_INJECT(fail_exp,unit_exp)
-    val bindexn_exp = EXN_INJECT(bind_exp,unit_exp)
-    val matchexn_exp = EXN_INJECT(match_exp,unit_exp)
+    val failexn_exp = EXN_INJECT("fail",fail_exp,unit_exp)
+    val bindexn_exp = EXN_INJECT("bind",bind_exp,unit_exp)
+    val matchexn_exp = EXN_INJECT("match",match_exp,unit_exp)
     fun con_tuple conlist = CON_RECORD(mapcount (fn (i,c) => 
 						 (generate_tuple_label (i+1),c)) conlist)
     fun con_record symconlist = let fun help(s,c) = (symbol_label s,c)
@@ -276,7 +276,7 @@ functor IlUtil(structure Ppil : PPIL
 				    f_exp state' e)
 			     end
 	   | NEW_STAMP con => NEW_STAMP(f_con state con)
-	   | EXN_INJECT (e1,e2) => EXN_INJECT(self e1, self e2)
+	   | EXN_INJECT (s,e1,e2) => EXN_INJECT(s,self e1, self e2)
 	   | ROLL (c,e) => ROLL(f_con state c, self e)
 	   | UNROLL (c,e) => UNROLL(f_con state c, self e)
 	   | INJ {carriers,noncarriers,special,inject} => INJ{noncarriers=noncarriers,
@@ -1152,7 +1152,7 @@ functor IlUtil(structure Ppil : PPIL
 	   | ((PRIM _) | (ILPRIM _)) => false
 	   | (RECORD le_list) => List.all (fn (_,e) => is_inline_exp e) le_list
 	   | ((SUM_TAIL (_,e)) | (ROLL(_,e)) | (UNROLL(_,e)))  => is_inline_exp e
-	   | ((HANDLE (e1,e2)) | (EXN_INJECT(e1,e2))) => (is_inline_exp e1) andalso (is_inline_exp e2)
+	   | ((HANDLE (e1,e2)) | (EXN_INJECT(_,e1,e2))) => (is_inline_exp e1) andalso (is_inline_exp e2)
 	   | (RAISE (_,e)) => is_inline_exp e
 	   | (LET (bnds,e)) => (List.all is_inline_bnd bnds) andalso (is_inline_exp e)
 	   | (NEW_STAMP _) => false

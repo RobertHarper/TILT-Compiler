@@ -22,5 +22,6 @@ signature INFIXPARSE =
     val parse_exp : Il.fixity_table * Ast.exp -> Ast.exp
     val parse_pat : Il.fixity_table * (Ast.symbol list -> bool) 
                                     * Ast.pat list -> Ast.pat list
+    val parse_datbind : Ast.db list * Ast.tb list -> Ast.db list * Ast.tb list
 
   end

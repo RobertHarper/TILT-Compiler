@@ -183,7 +183,7 @@ functor Toil(structure Il : IL
      (* ----------------- Helper Functions ----------------------- *)
     fun dummy_exp (context,str) =
 	let val c = fresh_named_con(context,str)
-	    val e = RAISE(c,EXN_INJECT(NEW_STAMP con_unit,RECORD[]))
+	    val e = RAISE(c,EXN_INJECT("elab_fail",NEW_STAMP con_unit,RECORD[]))
 	in (e,c,true)
 	end
 
@@ -496,7 +496,8 @@ functor Toil(structure Il : IL
 	     let val (sorted, sym_expr_list) = 
 		 (case exp of
 		      Ast.TupleExp exps => 
-			  (true,mapcount (fn(n,a) => (generate_tuple_symbol (n+1),a)) exps)
+			  (length exps < 10,
+			   mapcount (fn(n,a) => (generate_tuple_symbol (n+1),a)) exps)
 		    | Ast.RecordExp sym_exps => (false,sym_exps)
 		    | _ => pat_error "must have a TupleExp or RecordExp here")
 		 fun doer((sym,expr),(acc,va_acc)) = 
@@ -860,11 +861,10 @@ functor Toil(structure Il : IL
        end
 
 
-   and xdatatype (context,datatycs,withtycs) : (sbnd * sdec) list =
+   and xdatatype (context,datatycs) : (sbnd * sdec) list =
        let val sbnd_sdecs = Datatype.compile{context=context,
 					     typecompile=xty,
 					     datatycs=datatycs,
-					     withtycs=withtycs,
 					     eq_compile=xeqopt}
 	   (* we want to eventually expose all the types;
 	    we want to inline all the structures now though *)
@@ -1304,9 +1304,15 @@ functor Toil(structure Il : IL
 	      in List.mapPartial (fn x => x) (mapcount help pathlist)
 	      end
 	| Ast.TypeDec tblist => xtybind(context,tblist) 
-	| Ast.DatatypeDec {datatycs,withtycs} => 
-	      let val sbnd_sdecs = xdatatype(context,datatycs,withtycs)
+	| Ast.DatatypeDec {datatycs,withtycs=[]} => 
+	      let val sbnd_sdecs = xdatatype(context,datatycs)
 	      in  map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdecs 
+	      end
+	| Ast.DatatypeDec {datatycs,withtycs} => 
+	      let val (dt,wt) = InfixParse.parse_datbind(datatycs,withtycs)
+		  val dec = Ast.SeqDec[Ast.DatatypeDec{datatycs=dt,withtycs=[]},
+				       Ast.TypeDec wt]
+	      in  xdec(context,dec)
 	      end
 	| Ast.StrDec strblist => xstrbinds(context,strblist) 
  	| Ast.FctDec fctblist => xfctbind(context,fctblist) 
@@ -1320,6 +1326,7 @@ functor Toil(structure Il : IL
 	      end
 	| Ast.ExceptionDec [Ast.EbGen {exn,etype}] =>
 		let 
+		  val exn_str = Symbol.symbolToString exn
 		  val id_bar = symbol_label exn
 		  val var = fresh_named_var "exn_stamp"
 		  val mkvar = fresh_named_var "mk"
@@ -1330,9 +1337,9 @@ functor Toil(structure Il : IL
 			     | SOME ty => xty(context,ty))
 		  val (mk_exp,mk_con) = 
 		      (case etype of
-			   NONE => (EXN_INJECT(VAR var,unit_exp), CON_ANY)
+			   NONE => (EXN_INJECT(exn_str,VAR var,unit_exp), CON_ANY)
 			 | SOME ty => (#1 (make_total_lambda(v,con,CON_ANY,
-							     EXN_INJECT(VAR var,VAR v))),
+							     EXN_INJECT(exn_str, VAR var,VAR v))),
 				       CON_ARROW([con], CON_ANY, false, oneshot_init TOTAL)))
 		  val inner_mod = MOD_STRUCTURE[SBND(stamp_lab, BND_EXP(var,NEW_STAMP con)),
 						SBND(mk_lab, BND_EXP(mkvar,mk_exp))]
@@ -1714,8 +1721,8 @@ functor Toil(structure Il : IL
 			end
 		      in ADDITIONAL(map doer exlist)
 		      end
-	   | (Ast.DataSpec {datatycs, withtycs}) =>
-	        let val sbnd_sdecs = xdatatype(context,datatycs,withtycs)
+	   | (Ast.DataSpec {datatycs, withtycs = []}) =>
+	        let val sbnd_sdecs = xdatatype(context,datatycs)
 		    val sdecs = map #2 sbnd_sdecs
 		in  ADDITIONAL sdecs
 		end
@@ -1728,6 +1735,15 @@ functor Toil(structure Il : IL
 				     in res
 				     end
          fun loop ctxt prev_sdecs [] = prev_sdecs
+           | loop ctxt prev_sdecs ((Ast.DataSpec{datatycs,withtycs=wt as (_::_)})::specrest) =
+		let val (dt,wt) = InfixParse.parse_datbind(datatycs,wt)
+		    val dspec = Ast.DataSpec{datatycs=dt,withtycs=[]}
+		    fun strip tb = let val (s,tvs,ty) = AstHelp.tb_strip tb
+				   in  (s,tvs,SOME ty) 
+				   end
+		    val wspec = Ast.TycSpec (map strip wt,false)
+		in  loop ctxt prev_sdecs (dspec::wspec::specrest)
+		end
            | loop ctxt prev_sdecs (spec::specrest) =
 	     (case (xspec1 ctxt prev_sdecs spec) of
 		  ADDITIONAL sdecs' =>

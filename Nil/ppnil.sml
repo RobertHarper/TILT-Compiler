@@ -250,7 +250,7 @@ functor Ppnil(structure ArgNil : NIL
 		  | roll => "roll"
 		  | unroll  => "unroll"
 		  | make_exntag => "make_exntag"
-		  | inj_exn => "inj_exn"
+		  | inj_exn s => "inj_exn[" ^ s ^ "]"
 		  | peq => "peq"
 		  | make_vararg (openness,effect) => "make_vararg" 
 		  | make_onearg (openness,effect) => "make_onearg"

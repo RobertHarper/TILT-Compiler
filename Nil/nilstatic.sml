@@ -1221,7 +1221,7 @@ struct
 	 in
 	   (exp,con,kind)
 	 end
-	| (inj_exn,[],[exp1,exp2]) => 
+	| (inj_exn name,[],[exp1,exp2]) => 
 	 let
 	   val (exp1,con1,kind1) = exp_valid (D,exp1)
 	   val (exp2,con2,kind2) = exp_valid (D,exp2)
@@ -1230,7 +1230,7 @@ struct
 	     of SOME con => 
 	       if alpha_equiv_con (con1,con) then
 		 let
-		   val exp = (inj_exn,[],[exp1,exp2])
+		   val exp = (inj_exn name,[],[exp1,exp2])
 		   val con = Prim_c (Exn_c,[])
 		   val kind = singletonize (SOME Runtime,Word_k Runtime,con)
 		 in

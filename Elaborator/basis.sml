@@ -407,9 +407,7 @@ functor Basis(structure Il : IL
 		val list_sbnd_sdecs = Datatype.compile {context = !result,
 							typecompile = typecompile,
 							datatycs = listdb : Ast.db list,
-							withtycs = [] : Ast.tb list,
 							eq_compile = Toil.xeq}
-		    
 		    
 		val (list_sbnds,list_sdecs) = (map #1 list_sbnd_sdecs,
 					       map #2 list_sbnd_sdecs)
@@ -428,7 +426,6 @@ functor Basis(structure Il : IL
 		val bool_sbnd_sdecs = Datatype.compile {context = !result,
 							typecompile = typecompile,
 							datatycs = booldb : Ast.db list,
-							withtycs = [] : Ast.tb list,
 							eq_compile = Toil.xeq}
 		val (bool_sbnds,bool_sdecs) = (map #1 bool_sbnd_sdecs,
 					       map #2 bool_sbnd_sdecs)

@@ -37,7 +37,7 @@ signature ILLEAK =
                  | RAISE   of con * exp       (* annotate with the type of the raised expression *)
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
-                 | EXN_INJECT of exp * exp (* tag and value *)
+                 | EXN_INJECT of string * exp * exp (* tag and value *)
                  | ROLL    of con * exp
                  | UNROLL  of con * exp
                  | INJ     of {noncarriers : int,

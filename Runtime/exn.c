@@ -67,15 +67,25 @@ void raise_exception(struct sigcontext *scp, exn exn_arg)
 
 void toplevel_exnhandler(long *saveregs)
 {
-  char *msg = "user-defined";
+  char buf[100];
+  char *msg;
   value_t exn_arg = (saveregs[EXNARG_REG]);
   value_t first = get_record(exn_arg,0);
 
   if (first == *(value_t *)Divide_exncon)
-    msg = "Divide by zero";
-  if (first == *(value_t *)Overflow_exncon)
-    msg = "Overflow";
-
+    { msg = "Divide by zero"; }
+  else if (first == *(value_t *)Overflow_exncon)
+    { msg = "Overflow"; }
+  else
+    {
+      value_t name = get_record(exn_arg,2);
+      unsigned int tag = ((int *)name)[-1];
+      int len = tag >> POSSLEN_SHIFT;
+      bcopy((char *)name,buf,len);
+      buf[len] = 0;
+      msg = buf;
+    }
+  
   printf("Runtime uncaught exception: %s\n",msg);
   thread_finish(saveregs);
 }

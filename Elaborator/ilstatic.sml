@@ -663,7 +663,7 @@ exception XXX
 				     | SOME e => Exp_IsValuable(ctxt,e))
      | NEW_STAMP _ => true
      | SUM_TAIL (_,e) => Exp_IsValuable(ctxt,e)
-     | EXN_INJECT(e1,e2) => (Exp_IsValuable(ctxt,e1)) andalso (Exp_IsValuable(ctxt,e2))
+     | EXN_INJECT(_,e1,e2) => (Exp_IsValuable(ctxt,e1)) andalso (Exp_IsValuable(ctxt,e2))
      | _ => false)
 
    (* Rules 140 - 143 *)
@@ -931,7 +931,7 @@ exception XXX
 	   end
      | (NEW_STAMP con) => ((GetConKind(con,ctxt); (true,CON_TAG con))
 			   handle _ => error "NEW_STAMP: type is ill-formed")
-     | (EXN_INJECT (e1,e2)) => 
+     | (EXN_INJECT (_,e1,e2)) => 
 	   let 
 	       val (va1,c1) = GetExpCon(e1,ctxt)
 	       val (va2,c2) = GetExpCon(e2,ctxt)

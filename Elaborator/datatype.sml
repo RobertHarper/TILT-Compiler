@@ -25,7 +25,6 @@ functor Datatype(structure Il : IL
     fun driver (xty : Il.context * Ast.ty -> Il.con,
 		context : context, 
 		std_list : (Symbol.symbol * Ast.tyvar list * (Symbol.symbol * Ast.ty option) list) list,
-		withtycs : Ast.tb list,
 		eqcomp : Il.context * Il.con -> Il.exp option) : (sbnd * sdec) list = 
       let 
 	  fun geq_sym((s1,_),(s2,_)) = 
@@ -38,9 +37,6 @@ functor Datatype(structure Il : IL
 	    | sort_std' (ncs,cs) ((c as (_,SOME _))::rest) = sort_std' (ncs,c::cs) rest
 	fun sort_std (s,tvs,st_list) = (s,tvs,sort_std' ([],[]) st_list)
 	val std_list = map sort_std std_list
-	val _ = (case withtycs of 
-		   [] => ()
-		 | _ => error "xdatbind does not handle withtypes yet")
 	(* --------- create labels and variables; compute indices --------------- *)
 	val is_eq = ref true  (* speculate it is an eq-permitting datatype *)
 	val p = length std_list
@@ -330,7 +326,7 @@ functor Datatype(structure Il : IL
       The datatype compiler for compiling a single datatype statement.
       ------------------------------------------------------------------ *)
     fun compile {context, typecompile,
-		 datatycs : Ast.db list, withtycs : Ast.tb list, eq_compile} : (sbnd * sdec) list =
+		 datatycs : Ast.db list, eq_compile} : (sbnd * sdec) list =
       let 
 	(* ---- Find the strongly-connected components of datatypes. *)
 	local
@@ -358,7 +354,7 @@ functor Datatype(structure Il : IL
         (* ---- call the main routine for each list of datatypes retaining the accumulated context *)
 	fun loop context acc [] = rev acc
 	  | loop context acc (std_list::rest) = 
-	    let val sbnd_sdecs = driver(typecompile,context,std_list,withtycs, eq_compile)
+	    let val sbnd_sdecs = driver(typecompile,context,std_list, eq_compile)
 (*
 		val syms : Symbol.symbol list = map #1 std_list
 		val piecename = String.concat(map Symbol.name syms)

@@ -339,7 +339,8 @@ functor Ppil(structure Il : IL
 				  Break,
 				  String "END"]
        | NEW_STAMP con => pp_region "NEW_STAMP(" ")" [pp_con seen con]
-       | EXN_INJECT (e1,e2) => pp_region "EXN_INJECT(" ")" [pp_exp seen e1, String ",", pp_exp seen e2]
+       | EXN_INJECT (s,e1,e2) => pp_region "EXN_INJECT(" ")" [String s, String ",",
+							      pp_exp seen e1, String ",", pp_exp seen e2]
        | ROLL (con,e) => pp_region "ROLL(" ")"
 			  [pp_con seen con, pp_exp seen e]
        | UNROLL (con,e) => pp_region "UNROLL(" ")"
