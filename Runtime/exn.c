@@ -22,8 +22,8 @@ extern void raise_exception_raw(Thread_t *th, ptr_t exn_arg);
 extern int stringlen(ptr_t string);
 extern ptr_t cstring2mlstring_alloc(const char *);
 
-extern val_t Div_r_INT, Overflow_r_INT;   /* Must use & to get global's address */
-extern ptr_t TiltExn_STR_r_INT;
+extern val_t Div_r_INT, Overflow_r_INT;   /* Access these like */
+extern val_t TiltExn_STR_r_INT;		  /* val = GetGlobal(&label) */
 
 ptr_t getOverflowExn(void)
 {
@@ -69,7 +69,7 @@ static ptr_t mkExn(ptr_t exnname, int exnstamp, val_t exnarg, int argPointer)
 
 static int getTiltExnStamp(int i)
 {
-  ptr_t str = GET_PTR(TiltExn_STR_r_INT, i);
+  ptr_t str = GET_PTR((ptr_t) GetGlobal(&TiltExn_STR_r_INT), i);
   int stamp = GET_INT(str, DEC_STAMP);
   return stamp;
 }
