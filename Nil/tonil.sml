@@ -1062,7 +1062,7 @@ end (* local defining splitting context *)
 				 Il.MOD_FUNCTOR
 				 (arrow,poly_var, il_arg_signat, 
 				  Il.MOD_STRUCTURE
-				  [Il.SBND(_,
+				  [Il.SBND(them_lbl,
 					   Il.BND_EXP
 					   (_, il_exp as Il.FIX(is_recur, _, fbnds)))],
 				  il_body_signat)))
@@ -1071,6 +1071,7 @@ end (* local defining splitting context *)
        if ((!elaborator_specific_optimizations)
 	   andalso (Name.is_label_internal lbl) 
            andalso (not (Name.eq_label (lbl, IlUtil.expose_lab)))
+	   andalso (Name.eq_label (them_lbl, IlUtil.them_lab))
 	   andalso (not (IlUtil.is_eq lbl))
            ) then
 				  
