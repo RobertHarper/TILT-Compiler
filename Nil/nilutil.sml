@@ -225,4 +225,14 @@ struct
 	in
 	    doSubstCon state
 	end
+
+    fun substConInKind conmap =
+        let
+	    val state = STATE{boundcvars = emptyCollection,
+			      boundevars = emptyCollection,
+			      conmap = conmap,
+			      expmap = fn _ => NONE}
+	in
+	    doSubstKind state
+	end
 end
