@@ -122,6 +122,9 @@ start_client_retadd_val:					! used by stack.c
 	nop
 	mov	1, ASMTMP_REG
 	st	ASMTMP_REG, [THREADPTR_REG + notinml_disp]
+	st	%r1, [THREADPTR_REG+MLsaveregs_disp+4]		! r1 saved manually
+	st	%r4, [THREADPTR_REG+MLsaveregs_disp+16]		! r4 saved manually
+								! r15 not saved - unneeded
 	add	THREADPTR_REG, MLsaveregs_disp, %r1
 	call	save_regs					! need to save register set to get 
 								!   alloction pointer into thread state

@@ -131,7 +131,7 @@ void ReleaseJob(SysThread_t *sth)
   }
 
   if (diag)
-    printf("Proc %d: unmapping with %d (< %d)\n",sth->stid,sth->alloc,th->saveregs[ALLOCLIMIT]);
+    printf("Proc %d: unmapping with %d (<= %d)\n",sth->stid,sth->alloc,sth->limit);
   th->saveregs[ALLOCPTR] = 0;
   th->saveregs[ALLOCLIMIT] = 0;
   sth->userThread = NULL;
@@ -179,13 +179,17 @@ void DeleteJob(SysThread_t *sth)
 /* --------------------- Helpers ---------------------- */
 void check(char *str, SysThread_t *sth)
 {
-  int i;
+  int i, j;
   for (i=0; i<NumThread; i++) {
-    value_t t = Threads[i].oneThunk;
-    if (t != 0 && t < 1000000) {
-      printf("Proc %d: check at %s failed: Threads[%d].oneThunk = %d mapped to sysThread %d\n",
-	     sth->stid,str,i,t,Threads[i].sysThread);
-      assert(0);
+    if (Threads[i].status < 0)
+      continue;
+    for (j=Threads[i].nextThunk; j<Threads[i].numThunk; j++) {
+      value_t t = Threads[i].thunks[j];
+      if (t != 0 && *((value_t *)t) > 1000000) {
+	printf("Proc %d: check at %s failed: Threads[%d].oneThunk = %d mapped to sysThread %d\n",
+	       sth->stid,str,i,*((value_t *)t),Threads[i].sysThread);
+	assert(0);
+      }
     }
   }
 }
@@ -557,15 +561,21 @@ void thread_go(value_t *thunks, int numThunk)
 
 
 /* ------------------ Mutator interface ----------------- */
+int showIntList(value_t v)
+{
+  printf("%d: %d %d\n",v, ((value_t*) v)[0], ((value_t*) v)[1]);
+  return 256; /* ML unit */
+}
+
 int showInt(value_t v)
 {
-  /*  printf("%d",v); */
+    printf("%d",v); 
   return 256; /* ML unit */
 }
 
 int showIntRef(value_t v)
 {
-  /*  printf("%d",v); */
+  printf("%d",v); 
   return 256; /* ML unit */
 }
 

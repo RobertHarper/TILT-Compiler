@@ -1,4 +1,5 @@
 (*$import Prelude *)
+
 (*  Compute the 100th Fibonacci number.
     Compute an approximation (2000th iterate)
        using the arc-tangent expansion. (McLauren series)
@@ -18,9 +19,12 @@ fun computePi steps =
     in  4.0 * loop (steps,0.0,1.0)
     end
 
+
 val x = fib 10
+val _ = print "This should be 89: "
 val _ = print (Int.toString x)
 val _ = print "\n"
 val y = computePi 10000
+val _ = print "This should be an approximation of pi: "
 val _ = print (Real.toString y)
 val _ = print "\n"
