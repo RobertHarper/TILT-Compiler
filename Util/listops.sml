@@ -275,25 +275,27 @@ structure Listops :> LISTOPS =
        LIST of 'a list
      | CONS of 'a * 'a catlist
      | APPEND of 'a catlist list
+     | SNOC of 'a catlist * 'a
+     | SINGLETON of 'a
+     | NIL
 
    fun flattenCatlist ps = 
        let
-	   fun flatten' (ps as LIST lst, accum) = lst :: accum
-	     | flatten' (CONS (x, ps), accum) = 
-	       let
-		   val accum' = flatten' (ps, accum)
-	       in
-		   [x] :: accum'
-	       end
-	     | flatten' (APPEND nil, accum) = accum
-	     | flatten' (APPEND (ps::pss), accum) = 
+	   fun flatten' (ps as LIST lst, accum) = lst @ accum
+             | flatten' (APPEND (ps::pss), accum) = 
 	       let
 		   val accum' = flatten' (APPEND pss, accum)
 	       in
 		   flatten' (ps,accum')
 	       end
+	     | flatten' (APPEND nil, accum) = accum
+	     | flatten' (CONS (x, ps), accum) = x :: flatten' (ps, accum)
+	     | flatten' (SNOC (ps, x), accum) = flatten' (ps, x :: accum)
+             | flatten' (NIL, accum) = accum
+             | flatten' (SINGLETON x, accum) = x :: accum
+
        in
-	   List.concat (flatten' (ps, nil))
+	   flatten' (ps, nil)
        end
 
    fun join s [] = []

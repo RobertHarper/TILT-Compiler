@@ -104,6 +104,9 @@ signature LISTOPS =
        LIST of 'a list
      | CONS of 'a * 'a catlist
      | APPEND of 'a catlist list
+     | SNOC of 'a catlist * 'a
+     | SINGLETON of 'a
+     | NIL
 
    val flattenCatlist : 'a catlist -> 'a list
 
