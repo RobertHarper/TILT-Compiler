@@ -1,7 +1,9 @@
 (*
-    An attribute/datum pair is called an entry.  The cache maintains
-    a list of entries for each name.  The size of an entry is the size
-    of its datum.
+    The cache maintains a list of attribute/datum pairs for each
+    abstract name.  An attribute value pair is called an entry.	 The
+    size of an entry is the size of its datum.	The cache eviction
+    policy is to discard the least recently used entries when the
+    cache is full.
 
     If the size of a datum exceeds datum_high, then it is not kept
     in the cache.
@@ -16,30 +18,34 @@
 
     The parameters in CACHEARG must satisfy:
 
-        0 <= data_low, datum_high <= data_high
-        0 <= entries_low <= entries_high
+	0 <= data_low, datum_high <= data_high
+	0 <= entries_low <= entries_high
 
     The cache maintains the invariants:
 
-        for every entry, 0 < size(entry) <= datum_high
-        total data size <= data_high
-        #entries <= entries_high
+	for every entry, 0 < size(entry) <= datum_high
+	total data size <= data_high
+	#entries <= entries_high
+
+    The CACHEARG parameters are refs so that they can be set at the
+    command line.  The cache assumes that their values are fixed
+    before the cache is used.
 *)
 
 signature CACHEARG =
 sig
     structure Name :
     sig
-        type t
-        val hash : t -> word
-        val eq : t * t -> bool
-        val tostring : t -> string  (* for debugging *)
+	type t
+	val hash : t -> word
+	val eq : t * t -> bool
+	val tostring : t -> string  (* for debugging *)
     end
 
     structure Attr :
     sig
-        type t
-        val eq : t * t -> bool
+	type t
+	val eq : t * t -> bool
     end
 
     type size = int
@@ -48,11 +54,11 @@ sig
     val get : Name.t * Attr.t -> datum * size
     val put : Name.t * Attr.t * datum -> size
 
-    val datum_high : int
-    val data_high : int
-    val data_low : int
-    val entries_high : int
-    val entries_low : int
+    val datum_high : int ref
+    val data_high : int ref
+    val data_low : int ref
+    val entries_high : int ref
+    val entries_low : int ref
 end
 
 signature CACHE =
