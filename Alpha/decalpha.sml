@@ -29,7 +29,8 @@ functor Decalpha (val exclude_intregs : int list
 
     (* return address/exnarg never live at the
        same time *)
-    val Rpv     = SOME(R 27)
+    val Rpv'    = R 27
+    val Rpv     = SOME Rpv'
     val Rra     = R 26   
     val Rexnarg = R 26  (* it's okay for exnarg and ra to be the same
 			      since exnarg is active only when about to raise
@@ -554,7 +555,10 @@ functor Decalpha (val exclude_intregs : int list
    fun listintersect ([],b) = []
      | listintersect (a::rest,b) = if (member(a,b)) then a::listdiff(rest,b) else (listdiff(rest,b))
    fun listunion (a,b) = a @ b
-
+   fun listunique [] = []
+     | listunique (a::b) = let val b = listunique b
+			   in  if member(a,b) then b else a::b
+			   end
    local
        val nums = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,
 		   20,21,22,23,24,25,26,27,28,29,30,31]
@@ -786,8 +790,8 @@ functor Decalpha (val exclude_intregs : int list
         | _ => error "allocateBlock: pop"
 
 
-   val special_iregs = [Rzero, Rgp, Rat, Rsp, Rheap, Rhlimit, Rat2, Rexnptr, Rexnarg]
-   val special_fregs = [Fat, Fat2, Fzero]
+   val special_iregs = listunique[Rzero, Rgp, Rat, Rsp, Rheap, Rhlimit, Rat2, Rexnptr, Rexnarg, Rpv', Rra]
+   val special_fregs = listunique[Fat, Fat2, Fzero]
 
    val general_iregs = listdiff(listdiff(int_regs,special_iregs),
 				(map ireg exclude_intregs))
