@@ -10,9 +10,10 @@ struct
 	end
     fun parse s = (Parsing.parse Parse.prog (Parsing.transform
 																						 Tokens.token (Pos.markstream 
-																													 (Stostream.stostream s))))
+																													 (Stostream.stostream 
+																														(s^"\001")))))
 
     fun tokenize s = (Stream.toList (Parsing.transform Tokens.token
-																		 (Pos.markstream (Stostream.stostream s))))
+																		 (Pos.markstream (Stostream.stostream (s^"\001")))))
 
 end

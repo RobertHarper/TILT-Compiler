@@ -56,7 +56,7 @@ struct
 	    binder,
 	    literal ]
       
-  val prog = repeat ($exp)
+  val prog = repeat ($exp) << atok EOF
 						
 end
 

@@ -6,6 +6,7 @@ sig
     | RSquare
     | RCurly
     | LCurly
+		| EOF
 
   datatype token =
       Wordtok of string

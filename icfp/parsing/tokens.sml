@@ -36,6 +36,7 @@ struct
     | RSquare
     | RCurly
     | LCurly
+		| EOF
 
   datatype token =
       Wordtok of string
@@ -95,7 +96,7 @@ struct
        (literal #"\\" >> literal #"\\") ||
        (literal #"\\" && literal #"n" return #"\n"))
 		 
-  val floatmag = ((repeat  (satisfy Char.isDigit)) <<
+  val floatmag = ((repeat1  (satisfy Char.isDigit)) <<
 		  (literal #".")) &&
       (repeat1 (satisfy Char.isDigit)) &&
       (opt (alt [literal #"e", literal #"E"] >> 
@@ -173,7 +174,8 @@ val insidechars = (repeat (satisfy (fn x => x <> quotc))) wth implode
   val tok = alt [ literal #"[" return LSquare,
 		  literal #"]" return RSquare,
 		  literal #"{" return LCurly,
-		  literal #"}" return RCurly ]
+		  literal #"}" return RCurly,
+			literal #"\001" return EOF ]
 
   val token = space >> (!! (
 			    float wth Floattok ||
