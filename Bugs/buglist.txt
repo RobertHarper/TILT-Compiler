@@ -155,8 +155,8 @@
 0159 [open]	Phase splitter bombing on datatype replication.
 0160 [open]	Ugly hack: add_context_label
 0161 [open]	should not allow whitespace in long.identifier
-0162 [open]	Queue.delete is broken.
+0162 [closed]	Queue.delete is broken.
 0163 [closed]	Pattern compiler causing elaborator to bomb.
 0164 [closed]	Garbage collector skipping global roots.
-0165 [open]	Elaborator shadowing variables.
-0166 [open]	Elaborator adding classifiers with unbound, free variables to context.
+0165 [closed]	Elaborator shadowing variables.
+0166 [closed]	Elaborator adding classifiers with unbound, free variables to context.

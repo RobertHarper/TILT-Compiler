@@ -53,7 +53,17 @@ Transcript:
 	slave cuff.link.10981 signalled an error during job source unit RedBlackSetFn
 	tilt: internal error: ilcontext.sml: unbound variable detected
 Comments:    
-Fix:         
+Fix:
+
+	The signature patching code---in particular, traverse in
+	Signature.xsig_sharing_rewrite_structure---was not adding
+	"uninteresting" sdecs to the context as it progressed.  In the preceeding
+	output, the sdec
+
+		item_TYC > item_5940 : TYPE
+
+	was not added to context before the foldl sdec.
+
 Test: bug166
 Owner: swasey
-Status: open
+Status: closed

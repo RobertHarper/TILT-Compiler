@@ -17,7 +17,7 @@ Code:
 	sig
 		structure Posix : POSIX
 		structure PosixSysDB : POSIX_SYS_DB
-			sharing Posix.SysDB = Posix.SysDB
+			sharing Posix.SysDB = PosixSysDB
 	end
 Transcript:
 	; tilt-nj -m mapfile
@@ -26,10 +26,10 @@ Transcript:
 	tilt: internal error: ilcontext.sml: variable shadowing
 Comments:
 
-	I think the problem is in how ../../Elaborator/signature.sml
-	handles the sharing specification.
+	Toil was calling Signature.xsig_sharing_structures in the wrong
+	context.
 
 Fix:
 Test: bug165
 Owner: swasey
-Status: open
+Status: closed

@@ -14,23 +14,8 @@ Problem:
 Code:        
 Transcript:  
 Comments:    
-	I think the intended Fifo.delete is (untested code):
-
-    fun delete (Q{front, rear}, pred) = let
-	  fun doFront [] = {front = doRear(rev rear), rear = []}
-	    | doFront (x::r) =
-		let val {front,rear} = doFront r
-		    val front = if pred x then front else x :: front
-		in  {front,rear}
-		end
-	  and doRear [] = []
-	    | doRear (x::r) = if (pred x) then r else x :: (doRear r)
-	  in
-	    Q(doFront front)
-	  end
 Fix:
-	We should test the code above, use it, and send it along
-	to whoever maintains the SML/NJ library.
+	doRear was also broken.
 Test: 
 Owner: swasey
-Status: open
+Status: closed
