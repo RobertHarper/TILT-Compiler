@@ -1,6 +1,6 @@
 Number: 0139
 Title:       filesys discrepancies
-Keywords:    filesys
+Keywords:    Posix,Runtime,filesys
 Submitter:   rwh
 Date:        08/18/02
 Version:     CVS
@@ -9,8 +9,11 @@ Severity:    major
 Problem:     discrepancies on FileSys tests
 Code:        
 Transcript:  
-Comments:    
+Comments:
+	Our Posix basis structure was raising the wrong exn
+	LibFail instead of SysErr in some cases and the
+	runtime was not raising any exception in some cases.
 Fix:         
 Test: m0109
-Owner: 
-Status: open
+Owner: swasey
+Status: closed
