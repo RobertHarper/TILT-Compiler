@@ -11,6 +11,14 @@ Code:
 Transcript:  
 Comments:    
 Fix:         
+
+	The problem was that our Subscript implementation was raising
+	Overflow rather than Subscript in a few places.  Fixed.
+
+	If the runtime used to die with an assertion failure, then that
+	has been fixed.  The runtime now exits gracefully with "Uncaught
+	exception overflow".
+
 Test: m0115
-Owner: 
-Status: open
+Owner: swasey
+Status: closed

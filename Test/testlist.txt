@@ -170,7 +170,7 @@ m0111	pass	signatures
 m0112	fail	strings
 m0113	pass	strings
 m0114	fail	string conversion
-m0115	fail	substring overflow
+m0115	pass	substring overflow
 m0116	pass	take
 m0117	pass	matrices
 m0118	fail	basic dynamic tests of primitives

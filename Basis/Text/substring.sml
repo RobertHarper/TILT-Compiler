@@ -44,9 +44,12 @@ structure Substring :> SUBSTRING where type substring = PreString.substring
 
     fun string (PreString.SS(s,st,sz)) = PreString.unsafeSubstring(s,i2w st,i2w sz)
 
+    infix 6 ++
+	fun op++ (i:int, j:int) : int =
+		(i+j) handle Overflow => raise Subscript
 
     fun substring (s, i, n) =
-	  if ((0 <= i) andalso (0 <= n) andalso (i+n <= String.size s))
+	  if ((0 <= i) andalso (0 <= n) andalso (i++n <= String.size s))
 	    then PreString.SS(s, i, n)
 	    else raise Subscript
 
@@ -79,7 +82,7 @@ structure Substring :> SUBSTRING where type substring = PreString.substring
 	    else unsafe_vsub8(s, i2w(i+j))
     fun size (PreString.SS(_, _, n)) = n
     fun slice (PreString.SS(s, i, n), j, SOME m) =
-	  if ((0 <= j) andalso (0 <= m) andalso (j+m <= n))
+	  if ((0 <= j) andalso (0 <= m) andalso (j++m <= n))
 	    then PreString.SS(s, i+j, m)
 	    else raise Subscript
       | slice (PreString.SS(s, i, n), j, NONE) =

@@ -135,7 +135,7 @@
 0139 [closed]	filesys discrepancies
 0140 [open]	discrepancies on string tests
 0141 [open]	stringcvt discrepancies
-0142 [open]	uncaught exception leads to assertion failure in runtime
+0142 [closed]	uncaught exception leads to assertion failure in runtime
 0143 [open]	parsing problem with test file
 0144 [closed]	redefinition problem in as
 0145 [open]	discrepancies with time results
