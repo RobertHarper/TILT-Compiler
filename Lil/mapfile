@@ -6,7 +6,7 @@ include "../Elaborator/mapfile-elaborate"
 
 unit LIL = "lil.sig.sml" { Word32 TilWord32 Name Prim Word ORD_MAP ORD_SET }
 unit Lil = "lil.sml" { LIL ORD_KEY HASH_KEY Word32 TilWord32 
-	Name Prim Word Name Nil 
+	Stats Name Prim Word Name Nil 
 	HashTableFn SplayMapFn SplaySetFn List Array }
 
 unit LILREWRITE = "rewrite.sig.sml" { Lil }
@@ -20,7 +20,7 @@ unit LilFrees = "frees.sml" { LILFREES
 
 unit LILUTIL = "lilutil.sig.sml" { Lil Prim Name }
 unit LilUtil = "lilutil.sml" { LILUTIL 
-	Lil Prim  Name GraphUtil Util Listops TilWord32 Array
+	Lil Prim  Name GraphUtil Util Listops TilWord32 TilWord64 Array
 	List LilFrees
 }
 

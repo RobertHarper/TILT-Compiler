@@ -2,7 +2,7 @@ include "../Util/mapfile-util"
 include "../Lil/mapfile"
 include "../Parser/mapfile-parse"
 
-unit TAL = "tal.sml" { Lil Util } 
+unit TAL = "tal.sml" { Lil Util Name TilWord32 Int List } 
 
 unit PPTAL = "pptal.sig.sml" { TAL Formatter }	
 unit Pptal = "pptal.sml" { TAL Formatter }	
@@ -46,13 +46,13 @@ unit LILTOTALCON = "liltotalcon.sig.sml" { TAL Lil LilToTalEnv }
 unit LilToTalCon = "liltotalcon.sig.sml" { 
 	TAL Lil LilToTalEnv TalTranslationDefs TalAbbrev
 	Lil LilContext LilSubst LilDefs LilUtil Deconstruct 
-	ListOps	Stats Util
+	Listops	Stats Util
 	}
 
 unit LILTOTALEXP = "liltotalexp.sig.sml" { TAL Lil }
 unit LilToTalExp = "liltotalexp.sml" {
-	TAL LilToTalCon TalTranslationDefs LilToTalState LilToTalExp TalAbbrev
-	Lil LilTypeEquiv LilDefs LilUtil Deconstruct 
+	TAL LILTOTALEXP LilToTalCon TalTranslationDefs LilToTalState TalAbbrev
+	Lil LilType_Equiv LilDefs LilUtil Deconstruct 
 	Stats Util
 	}
 
