@@ -40,9 +40,10 @@ struct
   fun msg str = if (!debug) then print str else ()
 
   (* Module-level declarations *)
-  open Util Listops Name
-  open Nil NilUtil
-  open Rtl Rtltags Pprtl TortlBase TortlRecord
+  open Nil Rtl TortlBase
+
+  val fresh_var = Name.fresh_var
+  val fresh_named_var = Name.fresh_named_var
 
 
     val show_cbnd = Stats.ff("show_cbnd")
@@ -110,7 +111,7 @@ struct
       (case bnd of
 	      Con_b (phase,cbnd) => xcbnd state (phase,cbnd)
 	    | Exp_b (v,t,e) => 
-		  let val _ = (msg "working on exp_b "; msg (var2string v); msg "\n")
+		  let val _ = (msg "working on exp_b "; msg (Name.var2string v); msg "\n")
 		      val (term,state) = xexp(state,v,e,t,NOTID)
 		      val term = 
 			  if (is_global v)
@@ -159,7 +160,7 @@ struct
 
 			      val (exp_lv,state) = 
 				if backpatch then
-				  (VALUE(TAG uninitVal),state)
+				  (VALUE(TAG Rtltags.uninitVal),state)
 				else
 				  xexp(state,fresh_named_var "venv",venv, Nil.TraceUnknown,NOTID)
 
@@ -167,20 +168,20 @@ struct
 
 			      val (lv,state) = 
 				if backpatch then
-				  make_record_mutable(state,vls)
+				  TortlRecord.make_record_mutable(state,vls)
 				else if toplevel then
-				  make_record_const(state,vls,SOME(LOCAL_DATA(Name.var2string v)))
-				else make_record(state,vls)
+				  TortlRecord.make_record_const(state,vls,SOME(LOCAL_DATA(Name.var2string v)))
+				else TortlRecord.make_record(state,vls)
 
 			      val ir = load_ireg_term(lv,NONE)
 			      val s' = if toplevel then state else add_reg (state,v,tipe,I ir)
 			  in  (ir,s')
 			  end
-		      val (clregsi,rec_state) = foldl_acc loadcl state var_vcelist
+		      val (clregsi,rec_state) = Listops.foldl_acc loadcl state var_vcelist
 		      fun dowrite (clregi, (_,{code,cenv,venv,tipe}),s) = 
 			  let val (I ir,s) = xexp'(s,fresh_named_var "venv", venv, 
 						     Nil.TraceUnknown, NOTID)
-			      val _ = if (maxRecordLength < 4)
+			      val _ = if (Rtltags.maxRecordLength < 4)
 					  then error "the INIT in dowrite of making a closure is wrong\n"
 				      else ()
 			      (* This write is an INIT because the entire closure is allocated all at once 
@@ -189,7 +190,7 @@ struct
 			  end
 
 		      val _ = if backpatch
-				  then (foldl2 dowrite rec_state (clregsi, var_vcelist); ())
+				  then (Listops.foldl2 dowrite rec_state (clregsi, var_vcelist); ())
 			      else ()
 		      val _ = add_instr(ICOMMENT ("done allocating " ^ 
 						  (Int.toString (length var_vcelist)) ^ " closures"))
@@ -267,7 +268,7 @@ struct
 				  end
 	      | (array _)  => error "array/vector/refcell constants not implemented"
 	      | refcell _ => error "array/vector/refcell constants not implemented"
-	      | (tag(t,c)) => let val i = TW32.fromInt (tag2int t)
+	      | (tag(t,c)) => let val i = TW32.fromInt (Name.tag2int t)
 			      in  (VALUE(INT i), state)
 			      end)
       end
@@ -286,7 +287,7 @@ struct
 
   and xexp_list (state,elist) : term list * state = 
       let fun folder(e,state) = xexp(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
-      in  foldl_acc folder state elist
+      in  Listops.foldl_acc folder state elist
       end
 
   and xexp (state   : state,     (* state of bound variables *)
@@ -340,7 +341,7 @@ struct
 		  in
 		      (case (last_bnd,body) of
 			   (Exp_b(v,nt,e),Var_e v') => 
-			       if (eq_var(v,v'))
+			       if (Name.eq_var(v,v'))
 				   then xexp(state,name,e,nt,context)
 			       else xexp(xbnd state last_bnd,fresh_var(),body,trace,context)
 			 | _ => xexp(xbnd state last_bnd,fresh_var(),body,trace,context))
@@ -405,9 +406,9 @@ struct
 			  fun efolder(e,state) = xexp'(state,fresh_named_var "call_e", 
 						       e, Nil.TraceUnknown, NOTID)
 		      in
-			  val (cregsi,state) = foldl_acc cfolder state clist
-			  val (eregs, state) = foldl_acc efolder state elist
-			  val (efregs, state) = foldl_acc efolder state eflist
+			  val (cregsi,state) = Listops.foldl_acc cfolder state clist
+			  val (eregs, state) = Listops.foldl_acc efolder state elist
+			  val (efregs, state) = Listops.foldl_acc efolder state eflist
 		      end
 
 		      val _ = add_instr (ICOMMENT ("making " ^ call_type))
@@ -528,7 +529,7 @@ struct
 			  (* Drop the exception variables - include only locations *)
 			  val eTerms = List.mapPartial 
 			                    (fn v => 
-					     if (eq_var(v,exnvar)) then NONE else
+					     if (Name.eq_var(v,exnvar)) then NONE else
 					     (case (getrep state v) of
 							 (_, SOME v) => NONE
 						       | (SOME l, _) => SOME(LOCATION l)
@@ -565,7 +566,7 @@ struct
 			       NONE => freeIterms 
 			     | SOME farrayTerm => freeIterms @ 
 				   [LOCATION(REGISTER (false, I farrayTerm))])
-		      val (freeRecTerm,bstate) = make_record(bstate, freeTerms)
+		      val (freeRecTerm,bstate) = TortlRecord.make_record(bstate, freeTerms)
 
 		      (* --- create and install exn record --- *)
 		      val hlreg = alloc_regi NOTRACE_CODE
@@ -577,7 +578,7 @@ struct
 		      val exnptrTerm = LOCATION(REGISTER (false, I (SREGI EXNSTACK)))
 		      (* The ordering of fields in the exnrecord is used by the translation
 		         of Raise_e and the global_exnrec of service_*.s *)
-		      val (exnRecTerm,bstate) = make_record(bstate, [handlerTerm, stackptrTerm, 
+		      val (exnRecTerm,bstate) = TortlRecord.make_record(bstate, [handlerTerm, stackptrTerm, 
 								     freeRecTerm, exnptrTerm])
 		      val freeRec = load_ireg_term(exnRecTerm,NONE)
 		      val _ = add_instr(MV(freeRec, SREGI EXNSTACK))
@@ -871,8 +872,8 @@ struct
 		      val total = TW32.uplus(tagcount, i2w(length cons))
 		      val exhaustive = 
 			  let val handled = map (fn (w,_,_) => (w2i w)) arms
-			      fun mem i = member(i,handled)
-			  in  List.all mem (count (w2i total))
+			      fun mem i = Listops.member(i,handled)
+			  in  List.all mem (Listops.count (w2i total))
 			  end
 		      val tag = alloc_regi(NOTRACE_INT)
 		      fun scan(newstates,lab,[]) = 
@@ -952,13 +953,13 @@ struct
 			  error s)
       in
       (case nilprim of 
-	   Nil.record [] => (empty_record,state)
+	   Nil.record [] => (TortlRecord.empty_record,state)
 	 | Nil.record labels => 
 	       let val _ = incRecord()
 		   fun folder(e,state) = xexp(state,fresh_var(), e, Nil.TraceUnknown, NOTID)
-		   val (terms,state) = foldl_acc folder state elist
+		   val (terms,state) = Listops.foldl_acc folder state elist
 		   val tagword::terms = terms
-	       in  make_record_with_tag(state,tagword,terms)
+	       in  TortlRecord.make_record_with_tag(state,tagword,terms)
 	       end
          | partialRecord _ => error "partialRecord not implemented"
 	 | select label => 
@@ -986,7 +987,7 @@ struct
 	 | inject_known known => 
 		let val _ = incSumInject()
 		  fun folder(e,state) = xexp(state,fresh_var(), e, Nil.TraceUnknown, NOTID)
-		  val (terms,state) = foldl_acc folder state elist
+		  val (terms,state) = Listops.foldl_acc folder state elist
 		in  TortlSum.xinject_sum_static ((state,known,hd clist),terms,trace)
 		end
 	 | inject known => 
@@ -1067,7 +1068,7 @@ struct
 		       val name_array = Array.fromList (map char2val (explode name))
 		       val (vl3,state) = xconst(state, Prim.vector(char_con,name_array))
 		       val terms = [vl1,vl2,vl3]
-		   in  make_record(state,terms)
+		   in  TortlRecord.make_record(state,terms)
 		   end
 	 | make_vararg oe => 
 		   let val _ = incVararg()
@@ -1083,7 +1084,7 @@ struct
 		       val e = App_e(Closure,Var_e localOnearg, [c1,c2], [e], [])
 		   in  xexp(state,fresh_var(),e,Nil.TraceKnown TraceInfo.Trace,NOTID)
 		   end
-	 | mk_record_gctag => (record_tag_from_reps (map (niltrace2rep state) trlist),state)
+	 | mk_record_gctag => (TortlRecord.record_tag_from_reps (map (niltrace2rep state) trlist),state)
 
 	 | mk_sum_known_gctag =>
 	   let val [ksumcon] = clist
@@ -1237,7 +1238,7 @@ struct
 		     | (OtherVector false, [c]) => dynamic c
 		     | _ => error' "table primitive did not have right type args")
 	      end
-	  val unit_result = (empty_record, state)
+	  val unit_result = (TortlRecord.empty_record, state)
       in (case prim of
 	      soft_vtrap tt => (add_instr(SOFT_VBARRIER(xtt tt)); unit_result)
 	    | soft_ztrap tt => (add_instr(SOFT_ZBARRIER(xtt tt)); unit_result)
@@ -1455,11 +1456,11 @@ struct
 		       let val (const',t,s) = xcon'(s,fresh_named_var "xcon_sum",c)
 		       in (t,(const andalso const', s))
 		       end
-		  val (postTerms,(const,state)) = foldl_acc folder (true,state) cons
+		  val (postTerms,(const,state)) = Listops.foldl_acc folder (true,state) cons
 		  val terms = preTerms @ postTerms
 		  val (res,state) = if const 
-				       then make_record_const(state, terms, NONE)
-				   else make_record(state,terms)
+				       then TortlRecord.make_record_const(state, terms, NONE)
+				   else TortlRecord.make_record(state,terms)
 	      in (const, res, state)
 	      end
 	  fun mktag i = (VALUE (INT (TW32.fromInt i)))
@@ -1497,8 +1498,8 @@ struct
 		       else let val terms = Listops.map0count (fn _ => lv) num_mu
 				val (result,state) = 
 				    if const (* all mus are base-case/degenerate now *)
-					then make_record_const(state,terms,NONE)
-				    else make_record_const(state,terms,NONE)
+					then TortlRecord.make_record_const(state,terms,NONE)
+				    else TortlRecord.make_record_const(state,terms,NONE)
 			    in  (const,result,state)
 			    end
 		   end
@@ -1572,18 +1573,18 @@ struct
 		   end
 	     | Crecord_c lclist => 
 		   let fun folder ((l,c),(const,state)) = 
-			   let val v = fresh_named_var (label2string l)
+			   let val v = fresh_named_var (Name.label2string l)
 			       val (const',term,state) = xcon'(state,v,c)
 			   in (term, (const andalso const', state))
 			   end
-		       val (terms,(const,state)) = foldl_acc folder (true,state) lclist
+		       val (terms,(const,state)) = Listops.foldl_acc folder (true,state) lclist
 		       val (result,state) = 
 			   (case (!do_single_crecord,terms) of
 				(true,[term]) => (term, state)
 			      | _ =>
 				    if const 
-					then make_record_const(state,terms,NONE)
-				    else make_record(state,terms))
+					then TortlRecord.make_record_const(state,terms,NONE)
+				    else TortlRecord.make_record(state,terms))
 		   in  (const,result,state)
 		   end
 	     | Proj_c (c, l) => 
@@ -1609,7 +1610,7 @@ struct
 	     | Closure_c (c1,c2) => 
 		   let 
 		       fun kinder [(_,Arrow_k(_,vklist : (var * kind) list, k)),_] = 
-			   let val vklist' = butlast vklist
+			   let val vklist' = Listops.butlast vklist
 			   in  Arrow_k(Closure,vklist',k)
 			   end
 			 | kinder _ = error "bad Closure_c"
@@ -1623,7 +1624,7 @@ struct
 		       val (const_fun,lv,state) = xcon'(state,fresh_named_var "closure",c)
 		       val clregi = load_ireg_term(lv,NONE)
 		       val (cregsi,(const_arg,state)) = 
-			   foldl_acc  (fn (c,(const,state)) => 
+			   Listops.foldl_acc  (fn (c,(const,state)) => 
 				   let val (const',vl,state) = xcon'(state,fresh_named_var "clos_arg",c)
 				   in  (load_ireg_term(vl,NONE),(const andalso const', state))
 				   end) (true,state) clist
@@ -1674,7 +1675,7 @@ struct
 			    val s' = add_conterm (s,v,k,SOME(LOCATION(REGISTER (false,I r))))
 			in  (r,s')
                         end
-	      val (cargs,state) = foldl_acc folder state vklist
+	      val (cargs,state) = Listops.foldl_acc folder state vklist
 	      val args = map I cargs
 	      val return = alloc_regi NOTRACE_CODE
 	      val _ = set_args(args, return)
@@ -1700,17 +1701,17 @@ struct
 		      val s' = add_conterm (s,v,k,SOME(LOCATION(REGISTER (false,I r))))
 		  in  (r,s')
 		  end
-	      val (cargs,state) = foldl_acc folder state vklist
+	      val (cargs,state) = Listops.foldl_acc folder state vklist
               fun folder ((v,tr,c),s) = let val ir = alloc_named_regi v (niltrace2rep s tr)
 					 val s' = add_reg (s,v,c,I ir)
 			             in  (ir, s')
                                      end
-	      val (eiargs,state) = foldl_acc folder state vclist
+	      val (eiargs,state) = Listops.foldl_acc folder state vclist
               fun folder (v,s) = let val fr = alloc_named_regf v
 					       val s' = add_reg (s,v,Prim_c(Float_c Prim.F64,[]), F fr)
 					   in  (fr,s')
                                            end
-              val (efargs,state) = foldl_acc folder state vflist
+              val (efargs,state) = Listops.foldl_acc folder state vflist
 
 	      val args = (map I cargs) @ (map I eiargs) @ (map F efargs)
 	      val return = alloc_regi NOTRACE_CODE
@@ -1785,6 +1786,7 @@ struct
 		   (true, SOME r) => r := true
 		 | _ => ())
 	  val ptrTrace = TraceKnown TraceInfo.Trace
+	  val NOCHANGE = NilUtil.NOCHANGE
 	  fun expHandler({level, ...}:NilUtil.bound, Var_e v) = (useVar(level,v); NOCHANGE)
 	    | expHandler _ = NOCHANGE
 	  fun conHandler({level, isConstr=true,...}:NilUtil.bound, Var_c v) = (useVar(level,v); NOCHANGE)
@@ -1952,7 +1954,7 @@ struct
 		 val c = AllArrow_c {openness = Closure, effect = Partial, isDependent = false,
 				     tFormals = [], eFormals = [], fFormals = 0w0,
 				     body_type = Prim_c(Record_c ([], NONE),[])}
-		 val str = label2string lab
+		 val str = Name.label2string lab
 		 fun tabulator i = Const_e(Prim.int (Prim.W8, TilWord64.fromInt(ord (String.sub(str,i)))))
 		 val strVal = Const_e (Prim.vector(Prim_c(Int_c Prim.W8,[]),
 						   Array.tabulate(size str, tabulator)))
@@ -1962,7 +1964,7 @@ struct
 		   (* Nil.Exp_b(v2, nt, ExternApp_e(Var_e registerVar,[strVal])), *)
 		   Nil.Exp_b(v3, nt, App_e(Closure, Var_e v1, [], [], []))])
 	     end
-	     val (moduleImports,moduleBndLists) = unzip (map makeImportBnd moduleLabels)
+	     val (moduleImports,moduleBndLists) = Listops.unzip (map makeImportBnd moduleLabels)
 	     val moduleBnds = Listops.flatten moduleBndLists
 	     val nilmod = Nil.MODULE{bnds = aggregate_bnds @ vararg_onearg_bnds @ moduleBnds,
 				     imports = registerImport :: moduleImports,
