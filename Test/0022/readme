@@ -1,0 +1,89 @@
+The IL interface of units S and T are what you expect.  The IL
+interface of interface F uses SIGNAT_OF to express the sharing between
+Arg and the result's S component:
+
+    1	*            ---- Parameters ----
+    2	*               _746 -> +US_INT.S_SIG
+    3	*               ---- Context Entries ----
+    4	*               CONTEXT_SDEC: F_FCT > _747 :
+    5	**                               SIGF(_747, _746 -> [S_STR > _748 : SIGS_OF(_747)])
+    6	*
+
+Unit Bug does not pass the phase splitter.  The IL module is:
+
+    1	          SBND: +UBug_INT > _2395 =
+    2	**                 STR[S_STR > strbindvar_2383 = STR[s_TYC > s_2384 = INT32,
+    3	***                                                  +Es_INT > _2389 = eqI32[]],
+    4	**                     T_STR > strbindvar_2390 =
+    5	***                       MOD_LET origModule_2392 = MOD_LET coerced_S_2391 =
+    6	***       +1   STR[s_TYC > s_2384 = CON_PATH(strbindvar_2383.s_TYC)]
+    7	***                                                 IN  MAPP(MPROJ(_2374,F_FCT),
+    8	***                                                          coerced_S_2391)
+    9	***                                                 END
+   10	***                       IN  MOD_LET coercedModule_2393 = STR[
+   11	****      +1   S_STR > _2373 =
+   12	****      +1      STR[s_TYC > s_2384 = CON_PATH(origModule_2392.S_STR. s_TYC)]]
+   13	***                           IN  STR[hiddenThinModule_INT > thinModule_2394 =
+   14	****                                     STR[S_STR > _2373 =
+   15	*****                                           STR[s_TYC > s_2384 =
+   16	******                                                 CON_PATH(origModule_2392.S_STR.
+   17	******                                                                          s_TYC),
+   18	*****                                               +Es_INT > _2389 =
+   19	******                                                 MPROJ(origModule_2392,S_STR).+Es_INT]],
+   20	***                                   S_STR > _2373 =
+   21	****                                     STR[s_TYC > s_2384 =
+   22	*****                                           CON_PATH(coercedModule_2393.S_STR. s_TYC)]]
+   23	***                           END
+   24	***                       END]
+   25	*         SDEC: +UBug_INT > _2395 :
+   26	**                 [S_STR > strbindvar_2383 :
+   27	***                    [s_TYC > s_2384 : TYPE = INT32,
+   28	***                     +Es_INT > _2389 :
+   29	****                       ({INT32 *
+   30	****                         INT32} -> CON_PATH(_1043.+O_bool_INT. bool_TYC))],
+   31	**                  T_STR > strbindvar_2390 :
+   32	***                    [hiddenThinModule_INT > thinModule_2394 :
+   33	****                       [S_STR > _2373 :
+   34	*****                          [s_TYC > s_2384 : TYPE = INT32,
+   35	*****                           +Es_INT > _2389 :
+   36	******                             ({INT32 *
+   37	******                               INT32} -> CON_PATH(_1043.+O_bool_INT. bool_TYC))]],
+   38	***                     S_STR > _2373 :
+   39	****                       [s_TYC > s_2384 : TYPE = CON_PATH(thinModule_2394.S_STR. s_TYC)]]]
+
+There are two coercions in Bug: Structure S is coerced to the functor
+argument signature (lines 5-9) and the structure F(S) is coerced to
+signature T (lines 10-23).
+
+The module origModule_2392 has no +Es component; its signature is
+
+	SIGOF(coerced_S_2391) == [s_TYC = coerced_S_2391.s_TYC] ==
+	== [s_TYC = strbindvar_2383.s_TYC] == [s_TYC = INT32]
+
+Thus, the projection in lines 18-19
+
+	+Es_INT > _2389 = MPROJ(origModule_2392,S_STR).+Es_INT
+
+is illegal.
+
+The problem is the interaction between the SIGNAT_OF in interface F
+and the implementation of Toil.xstrexp.  Toil.xstrexp calculates the
+IL signature of F(S) by substituting the variable from elaborating S
+(call it s) for the functor argument variable (call it arg) in the
+functor result signature.  Thus, F(S) has IL signature
+
+	{s/arg}[S_STR : SIGNAT_OF(arg)] = [S_STR : SIGNAT_OF(s)] ==
+	== [S_STR : [s_TYC : TYPE = INT32,
+		     +Es_INT : INT32 * INT32 -> bool]]
+
+This signature leaks the equality function +Es_INT.  The second call
+to the coercion compiler sees this leaky signature which leads to the
+illegal projection.
+
+One fix is to eliminate the SIGNAT_OF in F's interface.  This comes
+from an optimization in our implementation of where structure
+signature patching.
+
+Another fix is eliminate any SIGNAT_OF(arg,...) in the functor result
+signature prior to performing the substitution.  This was implemented
+to keep F's interface small.

@@ -1,0 +1,21 @@
+Take a look at bug.sig and bug.int.
+
+The elaborator rejected the interface
+
+	functor F (Arg : S1) : S2
+		where B.C = Arg
+
+but accepted the interface
+
+	functor F (Arg : S1) : S2
+		where type B.C.t = Arg.t
+
+The problem was in the helper constrain in
+Signature.xsig_where_structure_slow.  It followed the labels labs
+(B.C.t) to find labels labs' (A.t) which it assumed had the form
+B.C.plabs' where plabs' is non-empty.  This assumption is false and
+led to a spurious "where's rhs structure missing components" error
+when constrain tried to lookup plabs'.
+
+The fix was to use the argument plabs (t) in place of plabs'.  This
+led to a problem with datatype labels; see ../Test/0025.

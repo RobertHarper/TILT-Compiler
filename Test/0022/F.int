@@ -1,0 +1,1 @@
+functor F (Arg : S) : T where S = Arg

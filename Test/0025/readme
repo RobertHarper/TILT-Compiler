@@ -1,0 +1,27 @@
+The phase splitter erases datatype modules which are modules whose
+labels satisfy Name.is_dt (see the comments describing
+elaborator_specific_optimizations in ../../Nil/tonil.sml).
+
+The functor result signture in bug.sml is
+
+	S2 where B = Arg.B
+
+The function Signature.xsig_where_structure_slow handled this by
+calling xsig_where_type with arguments
+
+	lpath = B_STR. A_STR. a_TYC
+	con = CON_PATH(funct_arg_2408.Arg_STR. B_STR. A_STR. +O+Da_INT. a_INT)
+	kind = TYPE
+
+so the result signature used the datatype module +O+Da_INT, upsetting
+the phase splitter.  (The error message was "tonil.sml: Use of
+datatype label detected".)
+
+The simplest fix was to change xsig_where_structure_slow to honor the
+"always inline" flag as it looks up labels in preparation for calling
+xsig_where_type.  The elaborator sets this flag for types in dataytpe
+modules that the phase splitter will erase.
+
+With this change, the con argument to xsig_where_type is
+CON_PATH(funct_arg_2408.Arg_STR.  B_STR.  A_STR.  a_TYC); this is
+equivalent to the preceeding but does not use the datatype module.

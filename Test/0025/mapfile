@@ -1,0 +1,2 @@
+source unit Bug = "bug.sml" {}
+make executable "test." ^ $target ^ ".exe" {Bug}

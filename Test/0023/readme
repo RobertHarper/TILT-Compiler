@@ -1,0 +1,27 @@
+TILT should reject this project unit FrontEnd does not elaborate.
+TILT used to bomb in the coercion compiler while elaborating FrontEnd.
+
+The functor JoinWithArg argument signature is
+
+	[pos > pos1 : TYPE,
+	 ParserData :
+		[pos > pos2 : TYPE = pos1,
+		 Actions : [actions : pos2]]]
+
+The actual structure supplied to JoinWithArg has signature
+
+	[ParserData :
+		[pos > argpos1 : TYPE,
+		 Actions : [actions : argpos1]],
+	 pos > argpos2 : TYPE = int]
+
+Coercion proceeds (in Signature.xcoerce_structure) by changing the
+bound variables in the target signature to match those in the actual
+signature and then trying to coerce each target label, in turn.  After
+coercion of ParserData.pos fails (as it should), TILT printed an error
+message and continued to ParserData.Actions.actions to look for other
+errors.  At this point, the elaborator bombed because the variable
+pos2/argpos1 was not bound.  The problem was that
+Signature.xcoerce_structure only extended the context after a
+successful coercion.  The fix was to extend the context with the
+target sdec after a failed coercion.

@@ -1,0 +1,11 @@
+functor BinaryMapFn (K : ORD_KEY) : ORD_MAP where type Key.ord_key = K.ord_key
+(*
+I/BinaryMapFn/iface:
+*            ---- Parameters ----
+*               _746 -> +UORD_KEY_INT.ORD_KEY_SIG
+*               ---- Context Entries ----
+*               CONTEXT_SDEC: BinaryMapFn_FCT > _747 : 
+**                               SIGF(_747, _746 -> [Key_STR > _748 : SIGS_OF(_747), 
+**                                                   map_TYC > _749 : KIND(1 -> TYPE)])
+*               
+*)

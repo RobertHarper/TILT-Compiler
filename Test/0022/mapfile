@@ -1,0 +1,12 @@
+(*
+	The manager should reject this mapfile because of the
+	unimplemented unit.  The bug is that the elaborator generated
+	bad code for unit Bug and caused the phase splitter to bomb.
+	See readme.
+*)
+source unit S = "S.sig" {}
+source unit T = "T.sig" {S}
+source interface F = "F.int" {S T}
+import unit F : F
+source unit Bug = "T.sml" {T F}
+make executable "test." ^ $target ^ ".exe" {Bug}

@@ -1,0 +1,26 @@
+(*
+	While phase splitting IlBlast, the compiler was bombing
+	because of a SIGNAT_OF(v,labs) where v is a local variable.
+
+	The phase splitter is failing on the signature
+
+	          [ConKey_STR > _2364 : 
+	**            [ord_key_TYC > _2365 : TYPE = INT32, 
+	**             +Eord_key_INT > _2366 : ({INT32 *
+	***                                      INT32} -> CON_PATH(_1044.+O_bool_INT. bool_TYC))], 
+	*          Conmap_STR > _2367 : [Key_STR > _2368 : SIGS_OF(_2364), 
+	**                               map_TYC > _2369 : KIND(1 -> TYPE)]]
+
+	when type_of fails to find the runtime variable corresponding to
+	_2364.
+
+	The expected result of this test is Reject because the manager
+	will refuse to link due to the unimplemented unit.
+*)
+source unit ORD_KEY = "bug-key.sml" {}
+source unit ORD_MAP = "bug-map.sml" {ORD_KEY}
+source interface BinaryMapFn = "bug.int" {ORD_KEY ORD_MAP}
+import unit BinaryMapFn : BinaryMapFn
+source unit IlTable = "bug-table.sml" {BinaryMapFn}
+source unit IlBlast = "bug.sml" {IlTable}
+make executable "test." ^ $target ^ ".exe" {IlBlast}
