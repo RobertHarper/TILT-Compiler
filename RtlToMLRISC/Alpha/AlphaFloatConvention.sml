@@ -3,14 +3,22 @@
  * AlphaFloatConvention.sml
  * ========================================================================= *)
 
-structure AlphaFloatConvention
-	    :> FLOAT_CONVENTION
-		 where type id = int
-	    = struct
+functor AlphaFloatConvention(
+	  structure MLTreeExtra: MLTREE_EXTRA
+	) :> FLOAT_CONVENTION
+	       where type id   = int
+		 and type fexp = MLTreeExtra.MLTree.fexp
+	  = struct
+
+  (* -- structures --------------------------------------------------------- *)
+
+  structure MLTree = MLTreeExtra.MLTree
 
   (* -- types -------------------------------------------------------------- *)
 
   type id = int
+
+  type fexp = MLTree.fexp
 
   (* -- values ------------------------------------------------------------- *)
 
@@ -29,6 +37,10 @@ structure AlphaFloatConvention
   val define	= results@callerSaves1@arguments@callerSaves2
   val use	= arguments
   val escape	= results@calleeSaves
+
+  (* -- functions ---------------------------------------------------------- *)
+
+  val expression = MLTree.FREG
 
 end
 

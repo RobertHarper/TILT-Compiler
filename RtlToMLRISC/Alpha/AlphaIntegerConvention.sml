@@ -3,14 +3,22 @@
  * AlphaIntegerConvention.sml
  * ========================================================================= *)
 
-structure AlphaIntegerConvention
-	    :> INTEGER_CONVENTION
-		 where type id = int
-	    = struct
+functor AlphaIntegerConvention(
+	  structure MLTreeExtra: MLTREE_EXTRA
+	) :> INTEGER_CONVENTION
+	       where type id   = int
+		 and type rexp = MLTreeExtra.MLTree.rexp
+	  = struct
+
+  (* -- structures --------------------------------------------------------- *)
+
+  structure MLTree = MLTreeExtra.MLTree
 
   (* -- types -------------------------------------------------------------- *)
 
   type id = int
+
+  type rexp = MLTree.rexp
 
   (* -- values ------------------------------------------------------------- *)
 
@@ -38,6 +46,10 @@ structure AlphaIntegerConvention
   val define	= results@callerSaves1@arguments@callerSaves2@[callPointer]
   val use	= arguments@[callPointer]
   val escape	= results@calleeSaves
+
+  (* -- functions ---------------------------------------------------------- *)
+
+  val expression = MLTree.REG
 
 end
 
