@@ -52,6 +52,10 @@ structure NilPrimUtilParam
 	    in Prim_c(Record_c (labs,NONE),clist)
 	    end
 
+	(* We may only apply ROLL to values (hence the LET).  To help
+	   maintain the invariant that bound variables are unique, we
+	   require that no two applications of bool2exp use the same
+	   bound variable name. *)
 	fun bool_help w =
 	    let val var = Name.fresh_var()
 	    in  Let_e(Sequential,
@@ -59,11 +63,7 @@ structure NilPrimUtilParam
 			      Prim_e(NilPrimOp (inject_known w), [con_sumbool], []))],
 		      Prim_e(NilPrimOp roll, [con_bool], [Var_e var]))
 	    end
-
-	val false_exp = bool_help 0w0
-	val true_exp = bool_help 0w1
-
-	fun bool2exp false = false_exp
-	  | bool2exp true = true_exp
+	fun bool2exp false = bool_help 0w0
+	  | bool2exp true = bool_help 0w1
 
     end
