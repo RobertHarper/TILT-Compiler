@@ -1,0 +1,7 @@
+#include ../Elaborator/mapfile-elaborate
+
+// ------------- Lil directory -------------------
+
+
+LIL            lil.sig
+Lil            lil

@@ -1,0 +1,12 @@
+Group 
+is
+
+../smlnj-lib.cm         	(* ------ SML/NJ library ------ *)
+../Util/util.cm             	(* ------ Our own utilities --- *)
+../Parser/parser.cm   		(* ------ Parsing, name utils 	*)
+../Elaborator/elaborator.cm	(* ------ Elaborator Stuff ---- *)
+
+(* ------ Nil stuff ------ *)
+
+lil.sml
+lil.sig.sml
