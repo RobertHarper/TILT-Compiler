@@ -14,6 +14,8 @@ Problem:
 		that refers to a misaligned (odd-numbered) destination
 		register causes an illegal_instruction exception.''
 Code:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	See array.sml.s
 Transcript:
 	/usr/ccs/bin/as: "/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/TM/sparc/array.sml.s", line 4520: warning: not even-numbered register

@@ -19,6 +19,8 @@ Transcript:
 	  Rewriting imports, bindings, exports
 	Proc 0: Thread 0 (0): Uncaught exception Subscript
 Comments:
+	[Note: The files referenced here are available in CVS prior to 1/6/04.]
+
 	We have no way of tracking who raised an exception. [new bug 16]
 
 	This exception originates in FrontEnd_unit.
@@ -60,7 +62,8 @@ Comments:
 	directives taken from tilt/[ab]/Parser/ml.grm.alpha.s.gz.  A
 	is the version created by the SML/NJ hosted TILT and B is that
 	created by Top.  Re-compiling just the string, under either
-	compiler, creates .ascii directives identical to whats in A.s.
+	compiler, creates .ascii directives identical to whats in A.s
+	(see test/[AB]/test.alpha.s).
 
 	Plan
 	     . Verify that recompiling the unit with tiltb

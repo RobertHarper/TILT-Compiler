@@ -7,11 +7,44 @@ Version:     CVS
 System:	     any
 Severity:    major
 Problem:
-	Elaboration of bug.sml fails to terminate.
+	Elaboration of the following code fails to terminate.
+		signature NWIZ =
+		sig
+		
+		  type exp_
+		      
+		  datatype CCconditionCode =
+		      CCExp  of exp_
+		    | CCAnd  of CCconditionCode * CCconditionCode
+		    | CCOr   of CCconditionCode * CCconditionCode
+		    | CCNot  of CCconditionCode 
+		end
+		
+		structure EverythingWiz : NWIZ =
+		struct
+		    
+		  datatype Sswitch =
+		      SIfthenelse of {arg : CCconditionCode,             
+		                      thenArm : exp_,
+		                      elseArm : exp_}
+		  and Eexp =
+		      EVar
+		    | ESwitch of Sswitch
+		      
+		  and CCconditionCode =
+		      CCExp  of exp_
+		    | CCAnd  of CCconditionCode * CCconditionCode
+		    | CCOr   of CCconditionCode * CCconditionCode
+		    | CCNot  of CCconditionCode
+		      
+		  withtype exp_ = Eexp
+		end
 	This comes up with Tom's wizard.
 Code:
 Transcript:
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	Constructor equivalence was not terminating.
 	The code to compare two CON_MU's was not doing
 	its bookkeeping properly.

@@ -16,6 +16,8 @@ Code:
 Transcript:
 	tilt: info.sml: Sparc/TM/any/sparc.sig.sml.info:172 malformed record
 Comments:
+	[Supporting files available in CVS prior to 1/6/04.]
+
 	At the end of the file, TextIO.inputLine is returning garbage,
 	not the empty string.
 

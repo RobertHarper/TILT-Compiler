@@ -11,6 +11,8 @@ Problem:
 	while Reifying MLLrValsFun.
 Code:
 Transcript:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	A compilation log is in ./log
 	A list of mmaps is in ./mmaps
 	A list of stacklet mmaps is in ./mmaps-stk

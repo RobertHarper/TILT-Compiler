@@ -52,6 +52,8 @@ Transcript:
 	  [writing src/table/TM/any/redblack.sml.illabel local_IntRedBlackTree_Named_Structure1_INT not found in c'
 	tilt: NOT_EQUAL
 Comments:
+	[Supporting files are in CVS prior to 1/6/04.]
+
 	Back to the twelf source:
 		The code is redblack.sml.
 		The first il file is original.ildump.

@@ -27,6 +27,8 @@ Transcript:
 	  [Elaborating bug.sml non-constrained]
 	... Hangs ...
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	The problem was in the pattern match compiler.
 	Exn_case, unlike constructor_case, wasn't explicity checking
 	for ill-formed columns like

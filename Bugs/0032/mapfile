@@ -1,5 +1,0 @@
-#include mapfile-basis
-
-OVERLOAD	overload.sig
-OvldDefaults	overload-defaults
-Overload	overload

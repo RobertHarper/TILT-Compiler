@@ -220,6 +220,8 @@ Transcript:
 	Error while calling module_valid
 	tilt: Ill-formed projection
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	I think the problem is introduced by the case xstrexp(_, Ast.AppStr _, _) in toil.sml.
 	The substitution
 		val sig_result = sig_subst(sig2,subst_add_modvar(empty_subst,var1,argmod))

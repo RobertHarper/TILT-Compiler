@@ -16,6 +16,8 @@ Transcript:
 	  bug.sml:19.1-53.4 Error: no equality at type: CON_PATH(var_poly_9184.'a_TYV)
 	  tilt: compiler.sml: File bug.sml failed to elaborate.
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	Polymorphic equality is implemented using IL modules.  The IL signature for ``eqtype ('a,
 	'b) t'' looks something like:
 

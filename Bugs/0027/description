@@ -18,6 +18,8 @@ Code:
 	See mapfile.
 Transcript:
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	tilt -fshowPhasesplit -fshowOptimize1 -fdoTypecheckBetweenOpts mapfile
 
 	The optimizer (Nil/optimize.sml) is evaluating the comparison

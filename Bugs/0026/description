@@ -27,6 +27,8 @@ Transcript:
 	===== Starting Phasesplit: Prebug                        =====
 	tilt: ilstatic.sml: Normalize: CON_VAR pair_1210 not bound
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	This bug only affects the basis library since users should
 	not use overload declarations.  In that context, an easy workaround
 	is to put the local declaratiosn into a (visible) structure.

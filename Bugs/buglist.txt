@@ -30,7 +30,7 @@
 0034 [closed]	Stack chain corruption.
 0035 [closed]	Runtime error (Proc_t data getting trashed) on sparc.
 0036 [closed]	Incorret code generation on the alpha.
-0037 [open]	High overhead on alpha.
+0037 [closed]	High overhead on alpha.
 0038 [closed]	Nontermination in elaborator.
 0039 [open]	Real numbers are broken.
 0040 [closed]	Datatype replication doesn't work behind opaque ascription.
