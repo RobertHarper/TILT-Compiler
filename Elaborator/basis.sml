@@ -196,8 +196,8 @@ functor Basis(structure Il : IL
 	   mono_entry "input" input
 	   ]
 
-	fun tag_help str tag con = CONTEXT_SDEC(SDEC(fresh_internal_label str,
-						     DEC_EXCEPTION(tag,con)))
+	fun tag_help str t con = CONTEXT_SDEC(SDEC(fresh_internal_label str,
+						     DEC_EXCEPTION(t,con)))
 
 	val tag_entries = [tag_help "fail" fail_tag con_unit,
 			   tag_help "bind" bind_tag con_unit,

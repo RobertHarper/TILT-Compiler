@@ -25,7 +25,8 @@ struct
 	   | (float (fs,_)) => con_float fs
 	   | (array (c,_)) => con_array c
 	   | (vector (c,_)) => con_vector c
-	   | (refcell (ref e)) => con_ref (exp_typer e))
+	   | (refcell (ref e)) => con_ref (exp_typer e)
+	   | (tag (_,c)) => con_tag c)
 
   fun get_type prim cons =
      let 

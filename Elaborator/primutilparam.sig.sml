@@ -17,6 +17,7 @@ signature PRIMUTILPARAM =
 	val con_array : con -> con
 	val con_ref : con -> con
 	val con_vector : con -> con
+	val con_tag : con -> con
 	val unit_value : exp
 	val exp2value : exp -> (con,exp) value option
 	val value2exp : (con,exp) value -> exp

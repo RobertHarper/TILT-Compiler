@@ -34,9 +34,9 @@ functor IlEval(structure Il : IL
 	     | SEAL _) => false
            | (SCON (vector _)) => true (* XXX not really *)
 	   | (SCON (array _)) => true  (* XXX not really *)
-	   | (SCON _ | PRIM _ | FIX _ | TAG _) => true
+	   | (SCON _ | PRIM _ | FIX _) => true
 	   | (RECORD rbnds) => andfold (fn (l,bnd) => exp_isval bnd) rbnds
-	   | EXN_INJECT (tag,e) => exp_isval e
+	   | EXN_INJECT (t,e) => exp_isval e
 	   | ROLL (c,e) => (con_isval c) andalso (exp_isval e)
 	   | UNROLL (c,e) => (con_isval c) andalso (exp_isval e)
 	   | INJ (cons,i,e) => (andfold con_isval cons) andalso (exp_isval e))
@@ -92,7 +92,6 @@ functor IlEval(structure Il : IL
 			   raise NOTFOUND "lookup")
 	      | loop ((cur as (BND_EXP(v,_) | BND_CON(v,_) | BND_MOD(v,_)))::rest) = 
 	             if (eq_var(v,tv)) then cur else loop rest 
-	      | loop (_::rest) = loop rest
 	in loop bnds
 	end
 
@@ -301,7 +300,7 @@ functor IlEval(structure Il : IL
 	     (OVEREXP (_,_,oe)) => (case oneshot_deref oe of
 					NONE => error "uninst overloaded exp"
 				      | SOME e => eval_exp env e)
-	   | (SCON _ | PRIM _ | TAG _ ) => exp
+	   | (SCON _ | PRIM _) => exp
 	   | (FIX (a,fbnds,v)) => let fun help (FBND(v1,v2,c1,c2,e)) = 
 		                             FBND(v1,v2,
 						  reduce_con env c1,
@@ -348,7 +347,7 @@ functor IlEval(structure Il : IL
 	   | LET (bnd::bnds,body) => let val env' = env_bndextend(env,eval_bnd env bnd)
 				     in eval_exp env' (LET(bnds,body))
 				     end
-	   | NEW_STAMP c => TAG(fresh_tag(),eval_con env c)
+	   | NEW_STAMP c => SCON(tag(fresh_tag(),eval_con env c))
 	   | EXN_INJECT (e1,e2) => EXN_INJECT(eval_exp env e1, eval_exp env e2)
 	   | ROLL(c,e) => ROLL(eval_con env c, eval_exp env e)
 	   | UNROLL(c,e) => let val c' = eval_con env c
@@ -375,13 +374,13 @@ functor IlEval(structure Il : IL
 	          | v => error_exp v "CASE got a non-sum value arguments")
 	   | EXN_CASE (arg,arms,eopt) => 
 		    (case (eval_exp env arg) of
-			 (ep as (EXN_INJECT(tag as (TAG(t,c)),value))) => 
+			 (ep as (EXN_INJECT(SCON(tag(t,c)),value))) => 
 			     let fun loop [] = (case eopt of
 						    NONE => raise (exn_packet ep)
 						  | SOME e => eval_exp env (APP(e,ep)))
 				   | loop ((e1,_,e2)::rest) = 
 				 case (eval_exp env e1) of
-				     (tag' as (TAG(t',c'))) => if (eq_tag(t,t'))
+				     (tag' as (SCON(tag(t',c')))) => if (eq_tag(t,t'))
 								then eval_exp env (APP(e2,value))
 							    else loop rest
 				   | _ => error "EXN_CASE arms not labelled with tags"
@@ -401,8 +400,7 @@ functor IlEval(structure Il : IL
 	(case bnd of
 	     BND_EXP(v,e) => BND_EXP(v,eval_exp env e)
 	   | BND_MOD(v,m) => BND_MOD(v,eval_mod env m)
-	   | BND_CON(v,c) => BND_CON(v,eval_con env c)
-	   | _ => bnd)
+	   | BND_CON(v,c) => BND_CON(v,eval_con env c))
 
     and reduce_bnd (env : env) (bnd : bnd) : bnd = 
 	(case bnd of
@@ -432,8 +430,7 @@ functor IlEval(structure Il : IL
     and reduce_sig (env : env) (signat : signat) : signat = 
 	(case signat of
 	     SIGNAT_STRUCTURE sdec => SIGNAT_STRUCTURE sdec
-	   | SIGNAT_FUNCTOR (v,s1,s2,arrow) => signat
-	   | _ => signat)
+	   | SIGNAT_FUNCTOR (v,s1,s2,arrow) => signat)
 
     and eval_mod' (env : env) (module : mod) : mod = 
 	(case module of
@@ -448,8 +445,7 @@ functor IlEval(structure Il : IL
 				 SBND(l,case subst_var(b,[bnd']) of
 				      BND_EXP(v,e) => BND_EXP(v,reduce_exp env e)
 				    | BND_CON(v,c) => BND_CON(v,reduce_con env c)
-				    | BND_MOD(v,m) => BND_MOD(v,reduce_mod env m)
-				    | b => b)
+				    | BND_MOD(v,m) => BND_MOD(v,reduce_mod env m))
 			     val rest' = map help rest
 			 in (SBND(l,bnd'))::(loop env' rest')
 			 end

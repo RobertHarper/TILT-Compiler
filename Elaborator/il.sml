@@ -44,7 +44,6 @@ functor Il(structure Prim : PRIM
                  | ROLL    of con * exp
                  | UNROLL  of con * exp
                  | INJ     of con list * int * exp
-                 | TAG     of tag * con
                  (* case over sum types of exp with arms and defaults*)
                  | CASE    of con list * exp * (exp option) list * exp option
                  | EXN_CASE of exp * (exp * con * exp) list * exp option

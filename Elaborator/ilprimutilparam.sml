@@ -21,6 +21,7 @@ functor IlPrimUtilParam(structure IlUtil : ILUTIL)
 	val con_ref = CON_REF
 	val con_vector = CON_VECTOR
 	val unit_value = unit_exp
+	val con_tag = CON_TAG
 
 	fun exp2value (SCON v) = SOME v
 	  | exp2value _ = NONE

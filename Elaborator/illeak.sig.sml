@@ -38,7 +38,6 @@ signature ILLEAK =
                  | EXN_INJECT of exp * exp (* tag and value *)
                  | ROLL    of con * exp
                  | UNROLL  of con * exp
-                 | TAG     of tag * con       (* used only for evaluation: the result of a NEW_STAMP *)
                  | INJ     of con list * int * exp
                  (* case over sum types of exp with arms and defaults*)
                  | CASE    of con list * exp * (exp option) list * exp option 

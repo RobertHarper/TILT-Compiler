@@ -240,7 +240,6 @@ functor IlStatic(structure Il : IL
 	                (map (fn (l,e) => Exp_IsSyntacticValue e) rbnds)
       | FIX _ => true
       | INJ (_,_,e) => Exp_IsSyntacticValue e
-      | TAG(_,c) => true
       | _ => false)
    and Module_IsSyntacticValue module = 
       (case module of
@@ -899,11 +898,6 @@ functor IlStatic(structure Il : IL
 		 then (va,CON_SUM(NONE,clist))
 	     else (error "INJ: injection field out of range")
 	  end
-     | (TAG (n,con)) => let val nCon = Normalize(Context_Exn_Lookup(ctxt,n),ctxt)
-			in  if (eq_con_from_get_exp8(nCon,con,ctxt))
-				then (true, CON_TAG con)
-			    else error "TAG: decorated name con and exp con mismatch"
-		      end
      | (EXN_CASE (arg,arms,eopt)) =>
 	   let 
 	       val (_,argcon) = GetExpCon(arg,ctxt)

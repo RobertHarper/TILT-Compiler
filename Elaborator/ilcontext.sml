@@ -63,6 +63,7 @@ functor IlContext(structure Il : ILLEAK)
 		fun Ctxt_Bound (CONTEXT_INLINE (_,v,_)) = SOME(BOUND_VAR v)
 		  | Ctxt_Bound (CONTEXT_SDEC(SDEC(_,d))) = Dec_Bound d
 		  | Ctxt_Bound (CONTEXT_SIGNAT(_,v,_)) = SOME(BOUND_VAR v)
+		  | Ctxt_Bound (CONTEXT_FIXITY _) = NONE
 	    in
 		fun Decs_Bound x = List.mapPartial Dec_Bound x
 		fun Context_Bound (CONTEXT entries) = List.mapPartial Ctxt_Bound entries
@@ -247,23 +248,22 @@ functor IlContext(structure Il : ILLEAK)
 		    (case b of
 			 (BND_EXP (_,e)) => if (eq_label(l,lbl)) 
 						then (PHRASE_EXP e,[l]) else self r
-		   | (BND_CON (_,c)) => if (eq_label(l,lbl)) 
-					    then let val c' = c (* XXX *)
-						 in (PHRASE_CON c',[l]) 
-						 end
-					else self r
-		   | (BND_MOD (_,m)) => (if (eq_label(l,lbl)) 
-					     then (PHRASE_MOD m,[l]) 
-					 else if (is_label_open l)
-						  then 
-						      (case m of 
-							   MOD_STRUCTURE sbnds =>
-							       (let val (phrase,lbls') = self sbnds
-								in (phrase,l::lbls')
-								end handle (NOTFOUND _) => self r)
-							 | _ => self r)
-					      else self r)
-		   | _ => self r)
+		       | (BND_CON (_,c)) => if (eq_label(l,lbl)) 
+						then let val c' = c (* XXX *)
+						     in (PHRASE_CON c',[l]) 
+						     end
+					    else self r
+		       | (BND_MOD (_,m)) => (if (eq_label(l,lbl)) 
+						 then (PHRASE_MOD m,[l]) 
+					     else if (is_label_open l)
+						      then 
+							  (case m of 
+							       MOD_STRUCTURE sbnds =>
+								   (let val (phrase,lbls') = self sbnds
+								    in (phrase,l::lbls')
+								    end handle (NOTFOUND _) => self r)
+							     | _ => self r)
+					      else self r))
 		end
 	in
 	    (case labs of

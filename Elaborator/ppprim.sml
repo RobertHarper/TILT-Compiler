@@ -166,7 +166,7 @@ functor Ppprim(structure Prim : PRIM)
 *)
 
 
-
+    fun pp_tag n = String(Name.tag2string n)
     fun pp_value pp_exp pp_con scon =
 	let 
 	    fun doint ((W64 | W32 | W16 | W8),w) = TilWord64.toDecimalString w
@@ -177,6 +177,8 @@ functor Ppprim(structure Prim : PRIM)
 	  | array (c,a) => String "ArrayValue"
 	  | vector (c,a) => String "VectorValue"
 	  | refcell r => String "RefCellValue"
+	  | tag (name,c) => HOVbox[String "tag(",pp_tag name, String ", ", 
+				   pp_con c, String ")"]
 	end
 
     fun wrapper pp out obj = 

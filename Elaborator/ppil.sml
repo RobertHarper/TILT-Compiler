@@ -36,7 +36,7 @@ functor Ppil(structure Il : IL
 
     fun pp_var v = String(var2string v)
     fun pp_label l = String(label2string l)
-    fun pp_tag n = String(tag2string n)
+    fun pp_tag (t : tag) = String(tag2string t)
 
 
     fun pp_fixity fixity = 
@@ -270,8 +270,8 @@ functor Ppil(structure Il : IL
 	       | (DEC_CON(v,k,SOME c)) => dolv l v [pp_kind k, String "=", pp_con seen c]
 	       | (DEC_CON(v,k,NONE)) => dolv l v [pp_kind k]
 	       | (DEC_MOD(v,s)) => dolv l v [pp_signat seen s]
-	       | (DEC_EXCEPTION (tag,c)) => HOVbox[String "EXCEPTION: ", pp_tag tag, String " = ",
-						   pp_con seen c])
+	       | (DEC_EXCEPTION (t,c)) => HOVbox[String "EXCEPTION: ", pp_tag t, String " = ",
+						 pp_con seen c])
 	  | helper (CONTEXT_SIGNAT(l,v,s)) = dolv l v [String " OMEGA = ",pp_signat seen s]
       in pp_list helper entries ("CONTEXT(", ", ", ")", true)
       end
@@ -341,7 +341,7 @@ functor Ppil(structure Il : IL
        | INJ  (conlist, i, e) => pp_region "INJ(" ")"
 			  [pp_list (pp_con seen) conlist ("[",", ","]",false), 
 			   String ("," ^ (Int.toString i) ^ ","), pp_exp seen e]
-       | TAG (name,c) => pp_region "TAG(" ")" [pp_tag name, pp_con seen c]
+(*       | TAG (name,c) => pp_region "TAG(" ")" [pp_tag name, pp_con seen c] *)
        | CASE (cs,earg,elist,edef) => pp_region "CASE(" ")"
 			  ((pp_con seen (CON_SUM (NONE,cs))) :: (String ",") :: Break ::
 			   (pp_exp seen earg) :: (String ",") :: Break ::

@@ -12,6 +12,7 @@ functor Prim()
 			       | array   of 'con * 'exp Array.array 
 			       | vector  of 'con * 'exp Array.array
 			       | refcell of 'exp ref
+			       | tag     of Name.tag * 'con
 
     datatype traptype = int_tt | real_tt | both_tt
 

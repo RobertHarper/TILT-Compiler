@@ -54,9 +54,9 @@ functor IlUtil(structure Ppil : PPIL
     val bind_tag = fresh_named_tag "bind"
     val match_tag = fresh_named_tag "match"
     val con_unit = CON_RECORD[]
-    val fail_exp = TAG(fail_tag,con_unit)
-    val bind_exp = TAG(bind_tag,con_unit)
-    val match_exp = TAG(match_tag,con_unit)
+    val fail_exp = SCON(tag(fail_tag,con_unit))
+    val bind_exp = SCON(tag(bind_tag,con_unit))
+    val match_exp = SCON(tag(match_tag,con_unit))
     val failexn_exp = EXN_INJECT(fail_exp,unit_exp)
     val bindexn_exp = EXN_INJECT(bind_exp,unit_exp)
     val matchexn_exp = EXN_INJECT(match_exp,unit_exp)
@@ -187,7 +187,6 @@ functor IlUtil(structure Ppil : PPIL
 				   | loop ((BND_EXP(v,_))::rest) h = loop rest (add_var(h,v))
 				   | loop ((BND_CON(v,_))::rest) h = loop rest (add_convar(h,v))
 				   | loop ((BND_MOD(v,_))::rest) h = loop rest (add_modvar(h,v))
-				   | loop (_::rest) h = loop rest h
 				 val state' = loop bnds state
 			     in LET(map (f_bnd state) bnds, 
 				    f_exp state' e)
@@ -197,7 +196,6 @@ functor IlUtil(structure Ppil : PPIL
 	   | ROLL (c,e) => ROLL(f_con state c, self e)
 	   | UNROLL (c,e) => UNROLL(f_con state c, self e)
 	   | INJ (c,i,e) => INJ(map (f_con state) c, i, self e)
-	   | TAG (n,c) => TAG (n, f_con state c)
 	   | CASE(c,earg,elist,edef) => let fun help NONE = NONE
 					      | help (SOME e) = SOME(self e)
 					in CASE(map (f_con state) c, 
@@ -833,7 +831,6 @@ functor IlUtil(structure Ppil : PPIL
 		| loop ((BND_EXP(v,e))::rest) ee cc mm = loop rest ((v,e)::ee) cc mm
 		| loop ((BND_CON(v,c))::rest) ee cc mm = loop rest ee ((v,c)::cc) mm
 		| loop ((BND_MOD(v,m))::rest) ee cc mm = loop rest ee cc ((v,m)::mm)
-		| loop (_::rest) ee cc mm = loop rest ee cc mm
 	      val (etable,ctable,mtable) = loop bnds [] [] [] 
 	      fun con_handler (CON_VAR var,bound) = if (member_eq(eq_var,var,bound))
 							then NONE else assoc_eq(eq_var,var,ctable)
@@ -961,7 +958,6 @@ functor IlUtil(structure Ppil : PPIL
 							     | NONE => raise FAIL))
 				 in sbnd::(loop rest')
 				 end
-			   | _ => sbnd :: (loop rest)
 		 in
 		     SOME (MOD_STRUCTURE(loop sbnds))
 		     handle FAIL => NONE
