@@ -272,3 +272,10 @@ m0127	non-generalized type variables
 m0128	unix paths
 m0129	where-and
 m0130	where
+m0131	list checks
+m0132	fib 35
+m0133	deep recursion
+m0134	quicksort
+m0135	reynolds 2
+m0136	reynolds 3
+m0137	merge sort
