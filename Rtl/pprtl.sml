@@ -71,9 +71,7 @@ struct
        let fun loop [] = ""
 	   | loop (i::rest) = "." ^ (Int.toString i) ^ (loop rest)
        in  case p of
-	   Var_p v => regi2s v
-	 | Projvar_p (v,indices) => regi2s v^(loop indices)
-	 | Label_p l => label2s l
+	   Projvar_p (v,indices) => regi2s v^(loop indices)
 	 | Projlabel_p (l,indices) => label2s l^(loop indices)
 	 | Notneeded_p => "Notneed"
        end

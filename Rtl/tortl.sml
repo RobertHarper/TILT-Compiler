@@ -111,13 +111,7 @@ val debug_bound = ref false
    
   fun xbnd state (bnd : bnd) : state =
       (case bnd of
-	      Con_b (v,c) => 
-		  let val (_,lv,k,state) = xcon'(state,v,c,NONE)
-		  in  (case (istoplevel(),lv) of
-			   (true, _)      => add_conglobal (state,v,k,SOME c, lv)
-			 | (_,VAR_LOC vl) => add_convar    (state,v,k,SOME c, SOME vl,NONE)
-			 | (_,VAR_VAL vv) => add_convar    (state,v,k,SOME c, NONE,SOME vv))
-		  end
+	      Con_b (_,cbnd) => xconbnd state cbnd
 	    | Exp_b (v,c,e) => 
 		  let val (loc_or_val,_,state) = xexp(state,v,e,SOME c,NOTID)
 		  in  (case (istoplevel(),loc_or_val) of
@@ -125,15 +119,15 @@ val debug_bound = ref false
 			 | (false, VAR_LOC vl) => add_var    (state,v,c,SOME vl,NONE)
 			 | (false, VAR_VAL vv) => add_var    (state,v,c,NONE, SOME vv))
 		  end
-	    | Fixopen_b (var_fun_set : (var,function) Nil.set) => error "no open functions permitted"
-	    | Fixcode_b (var_fun_set : (var,function) Nil.set) => 
+	    | Fixopen_b var_fun_seq => error "no open functions permitted"
+	    | Fixcode_b var_fun_seq =>
 		  let 
 		      fun folder ((v,f as Function(effect,recur,vklist,vclist,vflist,b,c)),s) =
 			  let val funcon = AllArrow_c(Code,effect,vklist,map #2 vclist,
 						      TW32.fromInt (length vflist),c)
 			  in  add_code (s, v, funcon, LOCAL_LABEL (LOCAL_CODE v))
 			  end
-		      val var_fun_list = (sequence2list var_fun_set)
+		      val var_fun_list = (Sequence.toList var_fun_seq)
 		      val state = foldl folder state var_fun_list
 		      val s' = promote_maps (istoplevel()) state
 		      val _ = app (fn (v,f) => addWork (FunWork(s',v,f))) var_fun_list
@@ -141,7 +135,7 @@ val debug_bound = ref false
 		  end
 	    | Fixclosure_b (is_recur,var_varconexpset) => 
 		  let 
-		      val var_vcelist = sequence2list var_varconexpset
+		      val var_vcelist = Sequence.toList var_varconexpset
 		      val _ = add_instr(ICOMMENT ("allocating " ^ 
 						  (Int.toString (length var_vcelist)) ^ " closures"))
 		      fun loadcl ((v,{code,cenv,venv,tipe}),state) = 
@@ -179,15 +173,16 @@ val debug_bound = ref false
   and xconbnd state (cbnd : conbnd) : state = 
       (case cbnd of
 	   Con_cb (v,c) => let val (_,lv,k,state) = xcon'(state,v,c,NONE)
-			     in  case lv of
-				 VAR_LOC vl => add_convar (state,v,k,SOME c,SOME vl,NONE)
-			       | VAR_VAL vv => add_convar (state,v,k,SOME c,NONE,SOME vv)
-			     end
+			   in  case (istoplevel(),lv) of
+			       (true,_) => add_conglobal "0" (state,v,k,SOME k,SOME c, lv)
+			     | (_,VAR_LOC vl) => add_convar "3" (state,v,k,SOME k, SOME c,SOME vl,NONE)
+			     | (_,VAR_VAL vv) => add_convar "4" (state,v,k,SOME k, SOME c,NONE,SOME vv)
+			   end
 	 | Code_cb (conwork as (name,vklist,c,k)) => 
 			     let val funkind = Arrow_k(Code,vklist,k)
 				 val funcon = Let_c(Sequential,[cbnd],Var_c name)
 				 val l = LOCAL_LABEL(LOCAL_CODE name)
-				 val state = add_concode (state,name,funkind,SOME funcon,l)
+				 val state = add_concode "5" (state,name,funkind,NONE, SOME funcon,l)
 				 val s' = promote_maps (istoplevel()) state
 			     in  (addWork (ConFunWork(s',name,vklist,c,k)); state)
 			     end
@@ -242,6 +237,17 @@ val debug_bound = ref false
 			  val d = TW32.lshift(d,24)
 		      in  add_data(INT32 (TW32.orb(TW32.orb(a,b),TW32.orb(c,d))))
 		      end
+		  fun general_packager [(VAR_VAL vv,_)] = 
+		        (case vv of
+			     (VINT w) => add_data(INT32 w)
+			   | (VREAL l) => add_data(DATA l)
+			   | VRECORD (l,_) => add_data(DATA l)
+			   | (VVOID _) => error "got a vvoid in xvector"
+			   | (VLABEL l) => add_data(DATA l)
+			   | (VCODE l) => add_data(DATA l))
+		    | general_packager [_] = error "did not receive a var_val"
+		    | general_packager _ = error "did not receive 1 value"
+		      
 		  val c = (case c of
 			       Prim_c _ => c
 			     | _ => #2(simplify_type state c))
@@ -249,9 +255,7 @@ val debug_bound = ref false
 			       Prim_c(Int_c Prim.W8, []) => layout 4 char_packager
 			     | Prim_c(Int_c Prim.W32, []) => layout 1 word_packager
 			     | Prim_c(BoxFloat_c Prim.F64, []) => layout 1 boxfloat_packager
-			     | _ => (print "xvector not done on type = \n";
-				     Ppnil.pp_con c; print "\n";
-				     error "xvector not fully done"))
+			     | _ => layout 1 general_packager)
 	      in  (VAR_VAL(VLABEL label), Prim_c(Vector_c, [c]), state)
 	      end
       in
@@ -335,8 +339,8 @@ val debug_bound = ref false
 		  let fun folder (bnd,s) = xbnd s bnd
 		      val state = foldl folder state bnds
 		      val (lv,c,state) = xexp(state,fresh_var(),body,copt,context)
-		      val cbnds = List.mapPartial (fn (Con_b vkc) => SOME(Con_cb vkc)
-		    | _ => NONE) bnds
+		      val cbnds = List.mapPartial (fn (Con_b (_,cb)) => SOME cb
+		                                    | _ => NONE) bnds
 		      val c' = Let_c(Sequential,cbnds,c)
 		  in  (lv,c',state)
 		  end
@@ -572,6 +576,7 @@ val debug_bound = ref false
 
 		      (* --- now the code for handler --- *)
 		      val _ = add_instr(ILABEL hl)
+		      val _ = add_instr(HANDLER_ENTRY)
 
 		      (* --- restore the int registers - stack-pointer FIRST --- *)
 		      val _ = let 
@@ -2457,8 +2462,8 @@ val debug_bound = ref false
 	    kopt : kind option (* Caller may know kind of con being translated *)
 	    ) : bool * loc_or_val * kind * state = 
       let 
-	  fun mk_ptr  i = (true, VAR_VAL (VINT (TW32.fromInt i)), Word_k Runtime, state)
-	  fun mk_ptr' i = (true, VAR_VAL (VINT (TW32.fromInt i)), Type_k Runtime, state)
+	  fun mk_ptr  i = (true, VAR_VAL (VINT (TW32.fromInt i)), Type_k, state)
+	  fun mk_ptr' i = (true, VAR_VAL (VINT (TW32.fromInt i)), Type_k, state)
 	  fun mk_sum_help (state,kinderopt,indices,cons) = 
 	      let val indices' = map (fn i => VAR_VAL(VINT (TW32.fromInt i))) indices
 	          fun folder (c,(const,s)) =
@@ -2469,7 +2474,7 @@ val debug_bound = ref false
 		  val cons' = map #1 con_kinds
 		  val reps = (map (fn _ => NOTRACE_INT) indices') @ (map (fn _ => TRACE) cons')
 		  val kind = (case kinderopt of
-				  NONE => Word_k Runtime
+				  NONE => Type_k
 				| SOME kinder => kinder con_kinds)
 		  val (lv,state) = if const 
 				       then make_record_const(state,NONE,reps, indices' @ cons')
@@ -2506,7 +2511,7 @@ val debug_bound = ref false
 	     | Prim_c _ => error "ill-formed primitive type"
 	     | Mu_c (is_recur,vcset) => 
 		   let val (const,lv,k,state) = mk_sum_help(state,NONE,[8],[])
-		       val num_mu = length (Util.sequence2list vcset)
+		       val num_mu = Sequence.length vcset
 		   in  if (num_mu = 1) then (const,lv,k,state)
 		       else let val kind = kind_tuple(Listops.map0count (fn _ => k) num_mu)
 				val reps = Listops.map0count (fn _ => TRACE) num_mu
@@ -2534,7 +2539,8 @@ val debug_bound = ref false
 				   let val clregs = map (fn lv => load_ireg_locval(lv,NONE)) lvs
 				       fun folder (((v,_),clreg),s) = 
 						add_convar s (v,SOME(VREGISTER (false,I clreg)),
-							    NONE,Word_k Runtime,NONE)
+							    NONE,Word_k Runtime, 
+							    SOME(Word_k Runtime),NONE)
 				       val recstate = foldl folder state (zip vclist clregs)
 				       fun do_write ((clreg,(v,c)),s) = 
 					   let val (r,_,s) = xcon(s,v,c, NONE)
@@ -2562,15 +2568,21 @@ val debug_bound = ref false
 	     | AllArrow_c (ExternCode,_,_,clist,numfloat,c) => 
 (*		   mk_sum_help(NONE,[11,TW32.toInt numfloat],c::clist) *)
 		   mk_sum_help(state,NONE,[11],[])
-	     | Var_c v => (case (getconvarrep state v) of
-			       (_,SOME vv, k) => (true, VAR_VAL vv,k,state)
-			     | (SOME vl,_, k) => 
-				   let val const = (case vl of
+	     | Var_c v => 
+		   let val (vl,vv,k) = 
+		       (case (getconvarrep state v) of
+			    (_,SOME vv, k) => (true, VAR_VAL vv,k)
+			  | (SOME vl,_, k) => 
+				let val const = (case vl of
 							VGLOBAL _ => true
 						      | VREGISTER (const,_) => const)
-				   in  (const, VAR_LOC vl,k,state)
-				   end
-			     | (NONE,NONE,_) => error "no info on convar")
+				in  (const, VAR_LOC vl,k)
+				end
+			  | (NONE,NONE,_) => error "no info on convar")
+(* XXX should  precompute shape-only kind *)
+(*		       val k = make_shape state k *)
+		   in  (vl,vv,k,state)
+		   end
 	     | Let_c (letsort, cbnds, c) => 
 		   let fun folder (cbnd,s) = xconbnd s cbnd
 		       val s' = foldl folder state cbnds
@@ -2584,7 +2596,7 @@ val debug_bound = ref false
 			   end
 		       val (lvregikind,(const,state)) = foldl_list folder (true,state) (zip vars lclist)
 		       val lvkList = map (fn (l,v,(_,k)) => ((l,v),k)) lvregikind
-		       val kind = Record_k(list2sequence lvkList)
+		       val kind = Record_k(Sequence.fromList lvkList)
 		       val lvs = map (fn (_,_,(lv,_)) => lv) lvregikind
 		       val reps = map (fn _ => TRACE) lvs
 		       val (lv,state) = (case (!do_single_crecord,lclist) of
@@ -2597,22 +2609,24 @@ val debug_bound = ref false
 	     | Proj_c (c, l) => 
 		   let val (const,lv,k,state) = xcon'(state,fresh_named_var "proj_c",
 								   c,NONE)
-		       val k as Record_k lvk_seq = NilUtil.kill_singleton k
+
+		       val lvk_seq = (case k of 
+					  Record_k lvk_seq => lvk_seq
+					| _ => error "proj_c got non-record kind")
 		       fun default() = 
 			   let fun loop [] _ = error "ill-formed projection"
 				 | loop (((l',_),k)::vrest) n = if (eq_label(l,l')) 
 							    then (n,k) else loop vrest (n+1)
-		       (* fieldk may have dependencies *)			
-			       val (which,fieldk) = 
-				   (case k of
-					Record_k lvk_seq => loop (sequence2list lvk_seq) 0
-				      | _ => error "bad kind to proj_c from")
+		       (* fieldk won't have have dependencies *)			
+			       val (which,fieldk) = loop (Sequence.toList lvk_seq) 0
 			       val dest = alloc_regi TRACE
 			       val ir = load_ireg_locval(lv,NONE)
+			       val _ = add_instr(ICOMMENT ("Proj_c at label " ^ 
+							   (Name.label2string l)))
 			       val _ = add_instr(LOAD32I(EA(ir,4 * which),dest))
 			   in (const,VAR_LOC(VREGISTER (const,I dest)), fieldk, state)
 			   end
-		   in  (case (!do_single_crecord,Util.sequence2list lvk_seq) of
+		   in  (case (!do_single_crecord,Sequence.toList lvk_seq) of
 			    (true,[(_,k)]) => (const,lv,k,state)
 			  | _ => default())
 		   end
@@ -2629,11 +2643,10 @@ val debug_bound = ref false
 	     | App_c (c,clist) => (* pass in env argument first *)
 		   let val (const_fun,lv,k,state) = xcon'(state,fresh_named_var "closure",c,NONE)
 		       val clregi = load_ireg_locval(lv,NONE)
-		       val resk = (case (kopt,NilUtil.strip_singleton k) of
+		       val resk = (case (kopt,k) of
 				       (SOME k, _) => k
-				     | (_,Arrow_k(_,_,resk)) => resk (* getshape?? *)
-				     | _ => (Ppnil.pp_kind k; print "\n";
-					     error "bad kind to App_c"))
+				     | (_,Arrow_k(_,_,resk)) => resk
+				     | _ => error "bad kind to App_c")
 		       val (cregsi,(const_arg,state)) = 
 			   foldl_list  (fn (c,(const,state)) => 
 				   let val (const',vl,_,state) = xcon'(state,fresh_named_var "clos_arg",c,NONE)
@@ -2673,7 +2686,7 @@ val debug_bound = ref false
 		      else ()
               fun folder ((v,k),s) = 
 			let val r = alloc_named_regi v TRACE
-			    val s' = add_convar (s,v,k,NONE,SOME(VREGISTER (false,I r)),NONE)
+			    val s' = add_convar "6" (s,v,k,NONE,NONE,SOME(VREGISTER (false,I r)),NONE)
 			in  (r,s')
                         end
 	      val (cargs,state) = foldl_list folder state vklist
@@ -2710,7 +2723,7 @@ val debug_bound = ref false
 		      else ()
               fun folder ((v,k),s) = 
 		  let val r = alloc_named_regi v TRACE
-		      val s' = add_convar (s,v,k,NONE,SOME(VREGISTER (false,I r)),NONE)
+		      val s' = add_convar "7" (s,v,k,NONE,NONE,SOME(VREGISTER (false,I r)),NONE)
 		  in  (r,s')
 		  end
 	      val (cargs,state) = foldl_list folder state vklist
@@ -2810,7 +2823,7 @@ val debug_bound = ref false
 		    | ehandle _ = NOCHANGE
 		  fun chandle (_,Var_c v) = add v
 		    | chandle _ = NOCHANGE
-		  fun bndhandle (_,Fixcode_b s) = (numfuns := (!numfuns) + (length (sequence2list s)); 
+		  fun bndhandle (_,Fixcode_b s) = (numfuns := (!numfuns) + (Sequence.length s);
 						   NOCHANGE)
 		    | bndhandle _ = NOCHANGE
 		  fun cbndhandle (_,Code_cb _) = (numconfuns := (!numconfuns) + 1; NOCHANGE)
@@ -2825,12 +2838,11 @@ val debug_bound = ref false
 	  
 	  val outer = 
 	      let 
-		  fun bndhandle (_,Con_b(v,_)) = (addtop v; addglobal v; NOCHANGE)
+		  fun bndhandle (_,Con_b(_,cb)) = NOCHANGE
 		    | bndhandle (_,Exp_b(v,_,_)) = (addtop v; NOCHANGE)
 		    | bndhandle (_,Fixopen_b _) = error "encountered fixopen"
-		    | bndhandle (_,bnd as (Fixcode_b vfset)) = 
+		    | bndhandle (_,bnd as (Fixcode_b vfseq)) = 
 		      let val _ = numfuns := (!numfuns) + 1
-			  val vflist = set2list vfset
 			  fun dofun (Function (_,_,vklist,vclist,_,e,c)) = 
 			      let
 				  val _ = map (fn (_,k) => kind_rewrite inner k) vklist
@@ -2839,25 +2851,24 @@ val debug_bound = ref false
 				  val _ = con_rewrite inner c
 			      in  ()
 			      end
-			  val _ = app (fn (v,f) => dofun f) vflist
+			  val _ = Sequence.app (fn (v,f) => dofun f) vfseq
 		      in  CHANGE_NORECURSE [bnd]
 		      end
-		    | bndhandle (_,bnd as (Fixclosure_b(_,vclset))) = 
-		      let val vcllist = set2list vclset
-			  fun docl {code,cenv,venv,tipe} = 
+		    | bndhandle (_,bnd as (Fixclosure_b(_,vclseq))) = 
+		      let fun docl {code,cenv,venv,tipe} = 
 			      let
 				  val _ = exp_rewrite inner venv
 				  val _ = con_rewrite inner cenv
 			      (* don't need to do tipe *)
 			      in  ()
 			      end
-			  val _ = app (fn (v,cl) => (addtop v; docl cl)) vcllist
+			  val _ = Sequence.app (fn (v,cl) => (addtop v; docl cl)) vclseq
 		      in  CHANGE_NORECURSE [bnd]
 		      end
 		  
-		  fun chandle (_,Mu_c(_,vcseq)) = (map (fn (v,_) => 
+		  fun chandle (_,Mu_c(_,vcseq)) = (Sequence.app (fn (v,_) => 
 							  (addtop v; addglobal v))
-						     (sequence2list vcseq);
+						     vcseq;
 						     NOCHANGE)
 		    | chandle _ = NOCHANGE
 		  fun cbhandle (_,Con_cb (v,_)) = (addtop v; addglobal v; NOCHANGE)
@@ -2941,14 +2952,14 @@ val debug_bound = ref false
 	     local fun mapper (_,ExportValue(l,Var_e v,_)) = NONE
 		     | mapper (_,ExportType(l,Var_c v,_)) = NONE
 		     | mapper ((v,_),ExportValue(l,e,c)) = SOME(Exp_b(v,c,e))
-		     | mapper ((v,_),ExportType(l,c,k)) = SOME(Con_b(v,c))
+		     | mapper ((v,_),ExportType(l,c,k)) = SOME(Con_b(Runtime,Con_cb(v,c)))
 		   val local_bnds = 
 		       let val c = Name.fresh_named_var "subscript_type"
 			   val array = Name.fresh_named_var "subscript_array"
 			   val index = Name.fresh_named_var "subscript_index"
 			   val body = Prim_e(PrimOp(Prim.sub Prim.WordArray), [Var_c c], 
 					     [Var_e array, Var_e index])
-			   val sub_fun = Function(Partial,Leaf,[(c,Word_k Runtime)],
+			   val sub_fun = Function(Partial,Leaf,[(c,Type_k)],
 						  [(array,Prim_c(Array_c,[Var_c c])),
 						   (index,Prim_c(Int_c Prim.W32 ,[]))], [],
 						  body, Var_c c)
@@ -2958,7 +2969,7 @@ val debug_bound = ref false
 			   val item = Name.fresh_named_var "update_item"
 			   val body = Prim_e(PrimOp(Prim.update Prim.WordArray), [Var_c c], 
 					     [Var_e array, Var_e index, Var_e item])
-			   val update_fun = Function(Partial,Leaf,[(c,Word_k Runtime)],
+			   val update_fun = Function(Partial,Leaf,[(c,Type_k)],
 						  [(array,Prim_c(Array_c,[Var_c c])),
 						   (index,Prim_c(Int_c Prim.W32 ,[])),
 						   (item,Var_c c)], [],
@@ -2968,13 +2979,13 @@ val debug_bound = ref false
 			   val item = Name.fresh_named_var "array_item"
 			   val body = Prim_e(PrimOp(Prim.create_table Prim.WordArray), [Var_c c], 
 					     [Var_e size, Var_e item])
-			   val array_fun = Function(Partial,Leaf,[(c,Word_k Runtime)],
+			   val array_fun = Function(Partial,Leaf,[(c,Type_k)],
 						  [(size,Prim_c(Int_c Prim.W32 ,[])),
 						   (item,Var_c c)], [],
 						  body, Prim_c(Array_c,[Var_c c]))
-		       in  [Fixcode_b (Util.list2sequence [(local_sub,sub_fun)]),
-			    Fixcode_b (Util.list2sequence [(local_update,update_fun)]),
-			    Fixcode_b (Util.list2sequence [(local_array,array_fun)])]
+		       in  [Fixcode_b (Sequence.fromList [(local_sub,sub_fun)]),
+			    Fixcode_b (Sequence.fromList [(local_update,update_fun)]),
+			    Fixcode_b (Sequence.fromList [(local_array,array_fun)])]
 		       end
 		   val export_bnds = List.mapPartial mapper named_exports
 	     in  val exp = Let_e(Sequential,local_bnds,
@@ -3002,16 +3013,20 @@ val debug_bound = ref false
 		 (* hack, the imports are not making a distinction between labels
 		    as values (as in the first case) or labels as positions where the value is located *)
 		 let val mllab = ML_EXTERN_LABEL(Name.label2string l)
-		 in  (case c of
-			  AllArrow_c(ExternCode,_,_,_,_,_) => add_var (s,v,c,NONE,SOME(VCODE mllab))
-			| _ => add_var (s,v,c,SOME(VGLOBAL(mllab,con2rep s c)),NONE))
+		     val result = 
+			 (case c of
+			      AllArrow_c(ExternCode,_,_,_,_,_) => add_var (s,v,c,NONE,SOME(VCODE mllab))
+			    | _ => add_var (s,v,c,SOME(VGLOBAL(mllab,con2rep s c)),NONE))
+		 in  result
 		 end
 	       | folder (ImportType(l,v,k),s) = 
-		 add_convar (s,v,k,NONE,SOME(VGLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE)),
-			     NONE)
+		 let val vl = (VGLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
+		     val result = add_convar "8" (s,v,k,NONE,NONE, SOME vl, NONE)
+		 in  result
+		 end
 	     val state = foldl folder (make_state()) imports
 	     val PROC{external_name,name,return,args,results,code,known,save,vars} =
-		 dofun_top (state,mainName,Function(Partial,Nonleaf,[],[],[],exp,con))
+		 dofun_top (state,mainName,Function(Partial,Arbitrary,[],[],[],exp,con))
 	     val p' = PROC{external_name=external_name,
 			   name=name,
 			   return=return,

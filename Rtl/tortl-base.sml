@@ -49,6 +49,16 @@ val debug_bound = ref false
     structure TW64 = TilWord64
 
 
+   fun memoize thunk = 
+       let val result = ref NONE
+       in  fn() =>
+	   (case !result of
+		NONE => let val res = thunk()
+			    val _ = result := SOME res
+			in  res
+			    end
+	      | SOME res => res)
+       end
 
 
    (* ------------------ Overall Data Structures ------------------------------ *)
@@ -79,11 +89,12 @@ val debug_bound = ref false
                | VCODE of label          (* I have the value of this code label *)
 
    type var_rep = var_loc option * var_val option * con
+   type convar_rep' = var_loc option * var_val option * (unit -> kind)
    type convar_rep = var_loc option * var_val option * kind
    datatype loc_or_val = VAR_LOC of var_loc
                        | VAR_VAL of var_val
    type varmap = var_rep VarMap.map
-   type convarmap = convar_rep VarMap.map
+   type convarmap = convar_rep' VarMap.map
    val unitval = VINT 0w256
    val unit_vvc = (VAR_VAL unitval, Prim_c(Record_c[],[]))
 
@@ -151,12 +162,11 @@ val debug_bound = ref false
 
   (* ---- Looking up and adding new variables --------------- *)
 
-  fun top_rep (v,rep) =
-      (case rep of
- 	   (SOME(VGLOBAL _),_,_) => true 
-	 | (_, SOME _, _) => true
+  fun top_rep (vl : var_loc option, vv : var_val option) =
+      (case (vl,vv) of
+ 	   (SOME(VGLOBAL _),_) => true 
+	 | (_, SOME _) => true
 	 | _ => false)
-
 (*	 | _ => (VarSet.member(!globals,v))) *)
 
   fun varmap_insert' ({varmap,env,convarmap,gcstate} : state) (v,vr : var_rep) : state = 
@@ -172,13 +182,13 @@ val debug_bound = ref false
       in  {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
-  fun varmap_insert state arg =
-      (if (top_rep arg)
+  fun varmap_insert state (arg as (_,(vl,vv,_))) =
+      (if (top_rep(vl,vv))
 	   then global_state := varmap_insert' (!global_state) arg
        else ();
 	varmap_insert' state arg)
 
-  fun convarmap_insert' ({convarmap,varmap,env,gcstate}:state) (v,cvr : convar_rep) : state = 
+  fun convarmap_insert' str ({convarmap,varmap,env,gcstate}:state) (v,(vl,vv,k,kopt,copt)) : state = 
       let val _ = if (!debug_bound)
 		      then (print "convar adding to v = "; Ppnil.pp_var v; print "\n")
 		  else ()
@@ -186,79 +196,48 @@ val debug_bound = ref false
 		       NONE => ()
 		     | SOME _ => error ("convarmap already contains "
 						 ^ (Name.var2string v)))
-	  val convarmap = VarMap.insert(convarmap,v,cvr)
+	  fun kind() = 
+	      (case (kopt,copt) of
+		   (SOME k,_) => k
+		 | (_, SOME c) => Stats.subtimer("tortl_get_shape0"^str,NilStatic.get_shape env) c
+		 | _ => (case k of (* this would not be needed if the context took shape kinds into account *)
+			     Singleton_k(Var_c v) => 
+				 (case VarMap.find (convarmap,v) of
+				      NONE => error ("convarrep_insert: variable "^(var2string v)^" bad kind")
+				    | SOME (vl,vv,k) => k())
+			   | _ => Stats.subtimer("tortl_make_shape0"^str,NilStatic.make_shape env) k))
+	  val convarmap = VarMap.insert(convarmap,v,(vl,vv,memoize kind))
       in  {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
   fun insert_kind(ctxt,v,k,copt : con option) = 
-      let fun default() = 
-	  let val _ = if (!debug)
-			  then (print "inserting kind with unreduced k = \n";
-				Ppnil.pp_kind k; print "\n")
-		      else ()
-	  in  Stats.subtimer("tortl_insert_kind_plain",
-			  NilContext.insert_kind)(ctxt,v,k) 
-	  end
-	  fun equation c =
- 	   let val _ = if (!debug)
-			   then (print "inserting equation with c = \n";
-				 Ppnil.pp_con c; print "\n")
-		       else ()
-	   in  Stats.subtimer("tortl_insert_kind_equation",
-			   NilContext.insert_kind_equation)(ctxt,v,c,k)
-	   end
-      in
 	  (case (k,copt) of
-	       (Singleton_k(_,_,c'),SOME c) => 
-		   (
-(*
-		    print "insert_kind: c' = ";
-		    Ppnil.pp_con c'; print "\n c = \n";
-		    Ppnil.pp_con c'; print "\n";
-*)
-		    equation c)
-	     | (_,SOME c) => equation c
-	     | (Singleton_k(_,_,c),_) => equation c
-	     | _ => default())
+	       (_,SOME c) => NilContext.insert_kind_equation(ctxt,v,c,k)
+	     | (Singleton_k c,_) => NilContext.insert_kind_equation(ctxt,v,c,k)
+	     | _ => NilContext.insert_kind(ctxt,v,k))
 	       handle e => (print "Error in tortl_insert_kind\n"; raise e)
-      end
 
 
-val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
-
-  fun env_insert' istop ({env,varmap,convarmap,gcstate} : state) (v,k,copt) : state = 
+  fun env_insert' ({env,varmap,convarmap,gcstate} : state) (v,k,copt) : state = 
       let val _ = if (!debug_bound)
 		      then (print "env adding v = ";
-			    Ppnil.pp_var v; print "   istop = ";
-			    print (Bool.toString istop); print "\n")
+			    Ppnil.pp_var v; print "\n")
 		  else ()
 	  val newenv = insert_kind(env,v,k,copt)
 	  val newstate = {env=newenv,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
-(*
-	      (* should not call insert_kind again: doing normalization work twice *)
-	  val _ = if istop
-		      then let val {env,varmap,convarmap,gcstate} = !global_state
-			       val env = insert_kind(env,v,k,copt)
-			       val new_globalstate = {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
-			   in  global_state := new_globalstate
-			   end
-		  else ()
-	  val _ = if (!debug_bound)
-		      then (print "env done adding to v = ";
-			    Ppnil.pp_var v; print "   istop = ";
-			    print (Bool.toString istop); print "\n")
-		  else ()
-*)
       in  newstate
       end
 
-  fun convarmap_insert state (arg as (v,(_,_,k))) copt =
-      let val state = convarmap_insert' state arg
-	  val istop = top_rep arg
-	  val _ = if istop
-		      then global_state := convarmap_insert' (!global_state) arg
+  fun convarmap_insert str state (arg as (v,(vl,vv,k,kshape_opt,copt))) =
+      let val state = convarmap_insert' str state arg
+	  val state = env_insert' state (v,k,copt)
+	  val _ = if top_rep (vl,vv)
+		      then let val gs = convarmap_insert' str (!global_state) arg
+			       val gs = env_insert' gs (v,k,copt)
+			   in  global_state := gs
+			   end
 		  else ()
-      in  env_insert' istop state (v,k,copt)
+      in  state
       end
 
   
@@ -266,17 +245,24 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
   fun add_reg (s,v,con,reg)         =  add_var (s,v,con,SOME(VREGISTER(false,reg)), NONE)
   fun add_code (s,v,con,l)          =  add_var (s,v,con,NONE, SOME(VCODE l))
 
-  (* adding constructor-level variables and functions *)
-  fun add_convar (s,v,kind,copt,vlopt,vvopt) = 
-      convarmap_insert s (v,(vlopt, vvopt, kind)) copt
-  fun add_concode (s,v,kind,copt,l) = 
-      convarmap_insert s (v,(NONE, SOME(VCODE l),kind)) copt
 
-  fun getconvarrep' ({convarmap=lm,...} : state) v : convar_rep option = VarMap.find (lm,v) 
+
+  (* adding constructor-level variables and functions *)
+  fun add_convar str (s,v,kind,kshape_opt,copt,vlopt,vvopt) = 
+      let val result = convarmap_insert str s (v,(vlopt, vvopt, kind, kshape_opt,copt))
+      in  result
+      end
+  fun add_concode str (s,v,kind,kshape_opt,copt,l) = 
+      convarmap_insert str s (v,(NONE, SOME(VCODE l),kind, kshape_opt,copt))
+
    fun getconvarrep ({convarmap=lm,...} : state) v : convar_rep = 
        (case VarMap.find (lm,v) of
 	   NONE => error ("getconvarrep: variable "^(var2string v)^" not found")
-	 | SOME convar_rep => convar_rep)
+	 | SOME (vl,vv,k) => (vl,vv,k()))
+   fun getconvarrep' ({convarmap=lm,...} : state) v : convar_rep option = 
+       (case VarMap.find (lm,v) of
+	   NONE => NONE
+	 | SOME (vl,vv,k) => SOME(vl,vv,k()))
 
   fun getrep ({varmap=lm,...} : state) v = 
       (case VarMap.find(lm,v) of
@@ -352,24 +338,26 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 
     fun simplify_type_help' env c : bool * con = 
 	let fun help(is_recur,v,vc_seq) = 
-	    let val env' = insert_kind(env,v,Word_k Runtime,NONE)
+	    let val env' = insert_kind(env,v,Type_k,NONE)
 	    in  simplify_type_help' env' (NilUtil.muExpand(is_recur,vc_seq,v))
 	    end
 	in
 	    (case simplify_type_help env c of
 		 (_, Mu_c (is_recur,vc_seq)) => 
-		     (case (sequence2list vc_seq) of
+		     (case (Sequence.toList vc_seq) of
 			  [(v,c)] => help (is_recur,v, vc_seq)
 			| _ => error "simplify_type given non-single Mu_c")
 	       | (_, Proj_c(Mu_c (is_recur,vc_seq),l)) => 
 			  let fun loop n [] = error "bad Proj_c(Mu_c,...)"
 				| loop n ((v,_)::rest) = if (eq_label(NilUtil.generate_tuple_label n,l))
 							     then v else loop (n+1) rest
-			  in  help(is_recur,loop 1 (sequence2list vc_seq), vc_seq)
+			  in  help(is_recur,loop 1 (Sequence.toList vc_seq), vc_seq)
 			  end
 	       | (hnf,c) => (hnf,c))
 	end
 
+    fun get_shape ({env,...} : state) c = NilStatic.get_shape env c
+    fun make_shape ({env,...} : state) k = NilStatic.make_shape env k
     fun simplify_type ({env,...} : state) c : bool * con = 
 	simplify_type_help env c
     fun simplify_type' ({env,...} : state) c : bool * con = 
@@ -439,9 +427,9 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 	 | AllArrow_c(ExternCode,_,_,_,_,_) => SOME NOTRACE_CODE
 	 | Var_c v => 
 	       (case (getconvarrep' state v) of
-		    (* these cases are wrong *)
-		    SOME(_,SOME(VRECORD (l,_)),_) => SOME(COMPUTE(Label_p l))
-		  | SOME(_,SOME(VLABEL l),_) => SOME(COMPUTE(Label_p l))
+
+		    SOME(_,SOME(VRECORD (l,_)),_) => SOME(COMPUTE(Projlabel_p (l,[])))
+		  | SOME(_,SOME(VLABEL l),_) => SOME(COMPUTE(Projlabel_p (l,[])))
 		  | SOME(_,SOME(VVOID _),_) => error "constructor is void"
 		  | SOME(_,SOME(VREAL _),_) => error "constructor represented as  a float"
 		  | SOME(_,SOME(VCODE _),_) => error "constructor function cannot be a type"
@@ -451,7 +439,7 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 		  | SOME(_,SOME(VINT _),_) => SOME TRACE
 
 
-		  | SOME(SOME(VREGISTER (_,I r)),_,_) => SOME(COMPUTE(Var_p r))
+		  | SOME(SOME(VREGISTER (_,I r)),_,_) => SOME(COMPUTE(Projvar_p (r,[])))
 		  | SOME(SOME(VREGISTER (_,F _)),_,_) => error "constructor in float reg"
 		  | SOME(SOME(VGLOBAL (l,_)),_,_) => SOME(COMPUTE(Projlabel_p(l,[0])))
 		  | SOME(NONE,NONE,_) => error "no information on this convar!!"
@@ -468,14 +456,17 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 		       let fun extract acc [] = error "bad Proj_c"
 			     | extract acc (((l,_),fc)::rest) = 
 			       if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
-			   val fields_list = (sequence2list fields_seq)
+			   val fields_list = (Sequence.toList fields_seq)
 			   val (con,index) = extract 0 fields_list 
 			   val acc = if (!do_single_crecord andalso length fields_list = 1)
 					 then acc
 				     else (index::acc) 
 		       in  loop acc con rest
 		       end
-		     | loop acc (Singleton_k(_,k,c)) labs = loop acc k labs
+		     | loop acc (Singleton_k c) labs = 
+		       let val k = Stats.subtimer("tortl_get_shape0",NilStatic.get_shape (#env state)) c
+		       in  loop acc k labs
+		       end
 		     | loop acc _ labs = error "expect record kind"
 		   fun indices wrap kind = let val temp = loop [] kind labels
 					   in  if (length temp > 3)
@@ -486,15 +477,13 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 		     | SOME(_,SOME(VREAL _),_) => error "expect constr record: got real"
 		     | SOME(_,SOME(VRECORD _),_) => error "expect constr record: got term record"
 		     | SOME(_,SOME(VVOID _),_) => error "expect constr record: got void"
-		     | SOME(_,SOME(VLABEL l),kind) => indices(fn [] => COMPUTE(Label_p l)
-							       | x => COMPUTE(Projlabel_p(l,x))) kind
+		     | SOME(_,SOME(VLABEL l),kind) => indices(fn inds => COMPUTE(Projlabel_p(l,inds))) kind
 		     | SOME(_,SOME(VCODE _),_) => error "expect constr record: got code"
 		     | SOME(SOME(VREGISTER (_,I ir)),_,kind) => 
-			   indices (fn [] => COMPUTE(Var_p ir)
-			             | x => COMPUTE(Projvar_p(ir,x))) kind
+			   indices (fn inds => COMPUTE(Projvar_p(ir,inds))) kind
 		     | SOME(SOME(VREGISTER (_,F _)),_,_) => error "constructor in float reg"
 		     | SOME(SOME(VGLOBAL (l,_)),_,kind) => indices 
-			   (fn x => COMPUTE(Projlabel_p(l,0::x))) kind
+			   (fn inds => COMPUTE(Projlabel_p(l,0::inds))) kind
 		     | SOME(NONE,NONE,_) => error "no info on convar"
 		     | NONE => NONE) 
 	       end handle e => NONE)
@@ -1113,9 +1102,10 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	state'
     end
 
-  fun add_conglobal (state : state,
+  fun add_conglobal str (state : state,
 		     v : var,
 		     kind : kind,
+		     kshape_opt : kind option,
 		     copt : con option,
 		     lv : loc_or_val) : state = 
     let 
@@ -1135,7 +1125,8 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	     | (_, NONE) => (SOME(named_local_data_label v),NONE)
 	     | (VAR_VAL vv, SOME _) => (label_opt, SOME vv)
 	     | (_, SOME _) => (label_opt, NONE))
-      val state' = add_convar (state,v,kind,copt,
+      val state' = add_convar str (state,v,kind,kshape_opt,
+			       copt,
 			       case label_opt of
 				   NONE => NONE
 				 | SOME label => 
@@ -1351,7 +1342,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 				   let val fieldl = alloc_local_data_label "var_loc"
 				       val addr = alloc_regi LABEL
 				   in  (add_data(DLABEL fieldl);
-					add_data(INT32 0w0);
+					add_data(INT32 0w49);
 					add_instr(LADDR(fieldl,0,addr));
 					add_instr(STORE32I(EA(addr,0),r)))
 				   end
@@ -1363,29 +1354,18 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	fun do_dynamic (r,{bitpos,path}) =
 	    let val tipe = 
 		case path of
-		    Var_p regi => regi
-		  | Projvar_p (regi,indices) =>
+		    Projvar_p (regi,indices) =>
 			let val tipe = alloc_regi TRACE
-			    fun loop src [] = ()
-			      | loop src (i::rest) = (add_instr(LOAD32I(EA(src,4*i),tipe)); loop tipe rest)
-			in  loop regi indices; tipe
-			end
-		  | Label_p label =>
-			let val addr = alloc_regi LABEL
-			    val tipe = alloc_regi TRACE
-			in add_instr(LADDR(label,0,addr));
-			    add_instr(LOAD32I(EA(addr,0),tipe));
+			    fun project i = add_instr(LOAD32I(EA(tipe,4*i),tipe))
+			in  add_instr (MV(regi,tipe));
+			    app project indices; 
 			    tipe
 			end
-		  | Projlabel_p(label,indices) =>
-			let val addr = alloc_regi LABEL
-			    val addr' = alloc_regi LABEL
-			    val tipe = alloc_regi TRACE
-			    fun loop src [] = ()
-			      | loop src (i::rest) = (add_instr(LOAD32I(EA(src,4*i),tipe)); loop tipe rest)
-			in  add_instr(LADDR(label,0,addr));
-			    add_instr(LOAD32I(EA(addr,0),addr'));
-			    loop addr' indices;
+		  | Projlabel_p(label,indices) => (* NOT global; is label *)
+			let val tipe = alloc_regi TRACE
+			    fun project i = add_instr(LOAD32I(EA(tipe,4*i),tipe))
+			in  add_instr(LADDR(label,0,tipe));
+			    app project indices;
 			    tipe
 			end
 		  | Notneeded_p => error "record: Notneeded_p hit"

@@ -2,7 +2,6 @@
 
 signature LINKRTL = 
 sig
-    structure Nil : NIL
     structure Tortl : TORTL
     structure Rtl : RTL
     structure Pprtl : PPRTL
@@ -14,9 +13,8 @@ sig
     val compiles : string list -> Rtl.module list
     val test : string -> Rtl.module
     val tests : string list -> Rtl.module list
-    val nil_to_rtl : Nil.module * string -> Rtl.module
-                                  (* unit name *)
+    val nil_to_rtl : Linknil.Nil.module * string -> Rtl.module
+
 end
 
-where Nil = Linknil.Nil
 

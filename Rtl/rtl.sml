@@ -21,9 +21,8 @@ struct
                 | SREGI of sregi
   and regf = REGF of var * rep
 
-  and rep_path = 
-       Var_p of regi | Projvar_p of (regi * int list)
-     | Label_p of label | Projlabel_p of (label * int list) | Notneeded_p
+  and rep_path = Projvar_p of (regi * int list)
+               | Projlabel_p of (label * int list) | Notneeded_p
 
   and rep = TRACE
           | UNSET         (* a locative address that is not yet set; needs to be set once *)
