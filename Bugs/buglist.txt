@@ -86,3 +86,4 @@
 0086 [open]     Matching against an external interface file is broken.
 0087 [closed]   Possible "conservative" bug in Analyze avoiding desired optimizations
 0088 [open]	Tests that fail.
+0089 [open]	Printing from runtime.
