@@ -884,7 +884,8 @@ structure Toil :> TOIL =
 			 eq_compile=xeq',
 			 is_transparent=false}
 
-     and xfundec islocal (context : context, dec_list, tyvar_stamp, sdecs1, var_poly, open_lbl) =
+     and xfundec islocal (context : context, dec_list : ((label * var) list * con * con *
+			  (Ast.pat list * Ast.exp) list) list, tyvar_stamp, sdecs1, var_poly, open_lbl) =
 	 let
 	     (* We must discover all the variables to generalize over.
 	      For the user-level variables, we must also compile in a context
@@ -893,37 +894,57 @@ structure Toil :> TOIL =
 	      At some future point when the syntax includes explicit scoping,
 	      we must include those too *)
 
-	     val fun_ids = map #1 dec_list
-	     val fun_vars = map #2 dec_list
+	     val fun_ids : (label * var) list list = map #1 dec_list
+
+	     (* --- context with type variables --- *)
+	     val context' = add_context_mod(context,open_lbl,var_poly,
+					    SIGNAT_STRUCTURE sdecs1)
 
 	     (* --- create the context with all the fun_ids typed --- *)
 	     val context_fun_ids =
-		 let fun help ((l,v,c,_,_),ctxt) = add_context_exp(ctxt,l,v,c)
-		 in  foldl help context dec_list
+		 let fun help ((ids,c,_,_),ctxt) =
+			let fun add ((l,v), ctxt) = add_context_exp(ctxt,l,v,c)
+			in  foldl add ctxt ids
+			end
+		 in  foldl help context' dec_list
 		 end
 
-	     val context'' = add_context_mod(context_fun_ids,open_lbl,var_poly,
-					     SIGNAT_STRUCTURE sdecs1)
+	     (* substitution to eliminate all but a representative variable for each function *)
+	     fun rep (ids:(label * var) list) : label * var * (label * var) list =
+		(case ids of
+		    (l,v)::ids => (l,v,ids)
+		|   nil => error "xfundec called with an empty id list")
+	     val subst_fun_vars =
+		let fun help ((ids,_,_,_),subst) =
+			let val (_,v,ids) = rep ids
+			    val exp = VAR v
+			    fun add ((l,v),subst) = subst_add_expvar(subst,v,exp)
+			in  foldl add subst ids
+			end
+		in  foldl help empty_subst dec_list
+		end
 
 	     val fbnd_con_list =
-		 (map (fn (_,var',fun_con,body_con,matches) =>
-			let val {body = (bodye,bodyc), arglist} =
-			         funCompile {context = context'',
+		 (map (fn (ids,fun_con,body_con,matches) =>
+			let val (_,var',_) = rep ids
+			    val {body = (bodye,bodyc), arglist} =
+			         funCompile {context = context_fun_ids,
 					     rules = matches}
+			    val bodye = exp_subst(bodye,subst_fun_vars)
 
 			    fun con_folder ((_,c),acc) = CON_ARROW([c],acc,false,oneshot_init PARTIAL)
 			    val func = foldr con_folder bodyc arglist
-			    val _ = if eq_con(context'',body_con,bodyc)
+			    val _ = if eq_con(context',body_con,bodyc)
 					then ()
 				    else (error_region();
 					  print "function constraint does not match body type\n";
 					  print "Actual type: "; pp_con bodyc; print "\n";
 					  print "Constraint type: "; pp_con body_con; print "\n";
 					  print "Actual reduced type: ";
-					  pp_con (con_normalize(context'',bodyc)); print "\n";
+					  pp_con (con_normalize(context',bodyc)); print "\n";
 					  print "Constraint reduced type: ";
-					  pp_con (con_normalize(context'',body_con)); print "\n")
-			    val _ = if eq_con(context'',fun_con,func)
+					  pp_con (con_normalize(context',body_con)); print "\n")
+			    val _ = if eq_con(context',fun_con,func)
 					then ()
 				    else (error_region();
 					  print "function constraint does not match function type\n";
@@ -939,12 +960,10 @@ structure Toil :> TOIL =
 			end)
 		 dec_list)
 
-
 	     val fbnds = map #1 fbnd_con_list
 	     val fbnd_cons : con list = map #2 fbnd_con_list
-	     (* User symbols cannot have a bang and alphanumeric characters *)
-	     val top_name = foldl (fn (l,s) => (Name.label2name' l) ^ "_" ^ s) "" fun_ids
-	     val top_label = to_cluster (internal_label top_name)
+
+	     val top_label = to_cluster (internal_label "cluster")
 	     val top_var = fresh_named_var "cluster"
 
 	     (* Note: the phase-splitter will emit much better code if functions
@@ -953,13 +972,28 @@ structure Toil :> TOIL =
 	      * don't change this without changing the corresponding cases in
 	      * tonil.  -leaf
 	      *)
-	     val top_exp_con = (FIX(true,PARTIAL,fbnds),
-				case fbnd_cons of
-				    [c] => c
-				  | _ => con_tuple fbnd_cons)
+	     (*
+		We arrange the sbnds and sdecs from
+
+			val rec f as g = e1
+			and h = e2
+
+		to look like the user had typed
+
+			val rec f = [f/g]e1
+			and h = [f/g]e2
+			val g = f
+
+		So that the phase splitter sees what it expects wrt f and h.
+	     *)
+	     val top_exp = FIX(true,PARTIAL,fbnds)
+	     val (top_con,trivial_bundle) =
+		(case fbnd_cons of
+		    [c] => (c,true)
+		|   _ => (con_tuple fbnd_cons, false))
+	     val top_exp_con = (top_exp,top_con)
 
 	     local
-		 val (top_exp,top_con) = top_exp_con
 		 val tyvar_lbls'_useeq =
 		     rebind_free_type_var(length sdecs1,
 					  tyvar_stamp,top_con,
@@ -971,53 +1005,73 @@ structure Toil :> TOIL =
 		 val sdecs = sdecs1 @ sdecs2
 		 val sdecs = reduce_typearg_sdecs (top_exp, (var_poly,[]), sdecs)
 	     end
+	     val monomorphic = null sdecs
 
-
-	     val temp_exp = (case sdecs of
-				 [] => VAR top_var
-			       | _ => let val s = MOD_APP(MOD_VAR top_var,
-							  MOD_VAR var_poly)
-				      in MODULE_PROJECT(s,them_lab)
-				      end)
+	     val temp_exp =
+		if monomorphic then VAR top_var
+		else
+		    let val s = MOD_APP(MOD_VAR top_var,MOD_VAR var_poly)
+		    in  MODULE_PROJECT(s,them_lab)
+		    end
 
 	     val exp_con_list =
-		 case fbnd_cons of
-		     [c] => [(temp_exp,c)]
-		   | _ => mapcount (fn (i,c) => (RECORD_PROJECT(temp_exp,
-								generate_tuple_label (i+1),
-								#2 top_exp_con), c))
-			 fbnd_cons
+		if trivial_bundle then [(temp_exp,top_con)]
+		else
+		    let fun mapper (i,c) =
+			    let val lab = generate_tuple_label (i+1)
+				val e = RECORD_PROJECT(temp_exp,lab,top_con)
+			    in  (e,c)
+			    end
+		    in  mapcount mapper fbnd_cons
+		    end
 
+	     val modsig_helper :
+			label * (label * var) list * exp * con ->
+			(sbnd * sdec) * (sbnd * sdec) list =
+		if monomorphic then
+		    fn (_,ids,exp,con) =>
+			let val (l,v,ids) = rep ids
+			    val first =
+				(SBND(l,BND_EXP(v,exp)),
+				 SDEC(l,DEC_EXP(v,con,NONE,false)))
+			    fun other (l',v') =
+				(SBND(l',BND_EXP(v',VAR v)),
+				 SDEC(l',DEC_EXP(v',con,NONE,false)))
+			in  (first,map other ids)
+			end
+		else
+		    fn (inner_lab,ids,exp,con) =>
+			let val (l,v,ids) = rep ids
+			    val inner = Name.fresh_named_var ((Name.var2name v) ^ "_inner")
+			    val sig_poly = SIGNAT_STRUCTURE sdecs
+			    val sbnd = SBND(inner_lab, BND_EXP(inner,exp))
+			    val sdec = SDEC(inner_lab, DEC_EXP(inner,con,NONE,false))
+			    val inner_sig = SIGNAT_STRUCTURE [sdec]
+			    val functor_mod = MOD_FUNCTOR(TOTAL,var_poly,sig_poly,
+							  MOD_STRUCTURE[sbnd],inner_sig)
+			    val functor_sig =
+				SIGNAT_FUNCTOR(var_poly,sig_poly,inner_sig,TOTAL)
+			    val first =
+				(SBND(l,BND_MOD(v,true,functor_mod)),
+				 SDEC(l,DEC_MOD(v,true,functor_sig)))
+			    fun other (l',v') =
+				(SBND(l',BND_MOD(v',true,MOD_VAR v)),
+				 SDEC(l',DEC_MOD(v',true,functor_sig)))
+			in  (first,map other ids)
+			end
 
-	     fun modsig_helper inner_lab (name,id,(exp,con)) =
-		 let val inner = Name.fresh_named_var ((Name.var2name name) ^ "_inner")
-		     fun poly_case () =
-			 let
-			     val sig_poly = SIGNAT_STRUCTURE sdecs
-			     val sbnd = SBND(inner_lab, BND_EXP(inner,exp))
-			     val sdec = SDEC(inner_lab, DEC_EXP(inner,con,NONE,false))
-			     val inner_sig = SIGNAT_STRUCTURE [sdec]
-			     val functor_mod = MOD_FUNCTOR(TOTAL,var_poly,sig_poly,
-							   MOD_STRUCTURE[sbnd],inner_sig)
-			     val functor_sig =
-				 SIGNAT_FUNCTOR(var_poly,sig_poly,
-						inner_sig,TOTAL)
-			 in  (SBND(id,BND_MOD(name,true,functor_mod)),
-			      SDEC(id,DEC_MOD(name,true,functor_sig)))
-			 end
-		 in
-		     (case sdecs of
-			  [] => (SBND(id,BND_EXP(name,exp)),
-				 SDEC(id,DEC_EXP(name,con,NONE,false)))
-			| _ => poly_case())
-		 end
-
-	     val (top_sbnd,top_sdec) = modsig_helper them_lab (top_var,top_label,top_exp_con)
-	     val top_sbnd_entry = (SOME top_sbnd, CONTEXT_SDEC top_sdec)
-	     val sbnds_sdecs = map3 (modsig_helper it_lab) (fun_vars,fun_ids,exp_con_list)
+	     val (top_sbnd_sdec,_) = modsig_helper (them_lab,[(top_label,top_var)],top_exp,top_con)
+	     fun folder (ids,(exp,con),(acc_rep,acc_other)) =
+		let val (rep,other) = modsig_helper (it_lab,ids,exp,con)
+		in  (rep::acc_rep, other::acc_other)
+		end
+	     val (rep,other) = foldl2 folder (nil,nil) (fun_ids,exp_con_list)
+	     val rep_sbnds_sdecs = rev rep
+	     val other_sbnds_sdecs = List.concat(rev other)
+	     val sbnds_sdecs = top_sbnd_sdec :: (rep_sbnds_sdecs @ other_sbnds_sdecs)
 	     val sbnds_entries = (map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec))
 				  sbnds_sdecs)
-	 in  top_sbnd_entry :: sbnds_entries
+	 in  sbnds_entries
 	 end
 
      and xdec islocal (context : context, d : Ast.dec) : decresult =
@@ -1037,15 +1091,15 @@ structure Toil :> TOIL =
              ---     type variables in a prepass rather than repeatedly scan the expression for them.
              --- (2) Unresolved meta-variables(unless constrained) are also eligible for type generalization.
              ---     If a meta-variable is to be generalized, it is resolved to a type variables which is
-             ---     then generalized.  Unresolved meta-variables can either appear in the type of the
+             ---     then generalized.  Unresolved meta-variables can appear in the type of the
              ---     expression being bound.  These must be generalized.  Meta-variables that are generated
              ---     and appear in the translated expression but not the translated type may be generalized
-             ---     or not.  If it is not generalized however, it MUST be resolved at some point to some
+             ---     or not.  If they are not generalized however, they MUST be resolved at some point to some
              ---     well-formed type.
              --- (3) Note that until pattern matching is done, metavariables that seem to be generalizable
-             ---     may not be yet. *)
-	  Ast.ValDec ([],_) => []
-	| Ast.ValDec (vblist,ref tyvars) => (* non-recursive bindings *)
+             ---     may not be. *)
+	  Ast.ValDec ([],[],_) => []
+	| Ast.ValDec (vblist,[],ref tyvars) =>
 	    let
 		local
 		  val pe_list = map vb_strip vblist
@@ -1153,7 +1207,7 @@ structure Toil :> TOIL =
 	       else refutable_case()
 	    end
         (* recursive value dec: i.e. functions *)
-	| Ast.ValrecDec (rvblist,ref tyvars) =>
+	| Ast.ValDec ([],rvblist,ref tyvars) =>
 	    let val tyvar_stamp = new_stamp()
 		val tyvars = map tyvar_strip tyvars
 		local fun help tyvar =
@@ -1171,38 +1225,64 @@ structure Toil :> TOIL =
 		val open_lbl = to_open(internal_label "!opened")
 		val context' = add_context_mod(context,open_lbl,var_poly,SIGNAT_STRUCTURE sdecs1)
 
-		fun rvb_help {var:Ast.symbol, fixity: (Ast.symbol * 'a) option,
-			      exp:Ast.exp, resultty: Ast.ty option} =
+		fun rvb_help (pat:Ast.pat, exp:Ast.exp) =
 		let
-		    val body_con = fresh_named_con (context',"body_con")
-		    val fun_con = (case resultty of
-				       NONE => fresh_named_con (context',"fun_con")
-				     | SOME ty => xty(context',ty))
-		    fun help (Ast.Rule{pat,exp}) =
+		    fun check_constraint (what:string, con:con, constraint:Ast.ty) : unit =
+			let val con' = xty(context',constraint)
+			in  if eq_con(context',con,con') then ()
+			    else (error_region();
+				  print ("val rec " ^ what ^ " has conflicting constraints\n");
+				  print "Constraint type: "; pp_con con; print "\n";
+				  print "Conflicting type: "; pp_con con'; print "\n";
+				  print "Reduced constraint type: ";
+				  pp_con (con_normalize(context',con)); print "\n";
+				  print "Reduced conflicting type: ";
+				  pp_con (con_normalize(context',con')); print "\n")
+			end
+		    val fun_con = fresh_named_con(context',"fun_con")
+		    fun getvars (pat:Ast.pat) : Ast.symbol list =
 			(case pat of
-			     Ast.ConstraintPat{constraint=ty,pattern} =>
-				 let val given_res_con = xty(context',ty)
-				 in  if (eq_con(context',given_res_con,body_con))
-					 then ()
-				     else (error_region();
-					   print "fn matches have conflicting constraints,";
-					   print " using the first one\n");
-					 (parse_pats context' [pattern],exp)
-				 end
-			   | _ => (parse_pats context' [pat],exp))
+			    Ast.VarPat[s] => [s]
+			|   Ast.ConstraintPat {pattern,constraint} =>
+				(check_constraint("rhs", fun_con, constraint);
+				 getvars pattern)
+			|   Ast.LayeredPat {varPat,expPat} =>
+				getvars varPat @ getvars expPat
+			|   _ =>
+				(error_region();
+				 print "illegal pattern in val rec\n";
+				 nil))
+		    val vars = getvars (parse_pat context' pat)
+		    val body_con = fresh_named_con (context',"body_con")
+		    fun help (Ast.Rule{pat,exp}) : Ast.pat list * Ast.exp =
+			let val parsed_pat =
+				(case (parse_pat context' pat) of
+				    Ast.ConstraintPat{pattern,constraint} =>
+					(check_constraint("match", body_con, constraint);
+					 pattern)
+				|   pat => pat)
+			in  ([parsed_pat],exp)
+			end
 		    val matches =
 			(case exp of
 			     Ast.FnExp rules => map help rules
-			   | _ => parse_error "val rec requires an fn expression")
-		    val fun_lab = symbol_label var
-		    val fun_var = fresh_named_var (label2string fun_lab)
-		in  (fun_lab, fun_var, fun_con, body_con, matches)
+			   | _ => parse_error "val rec requires a fn expression")
+		    val ids = map (fn s =>
+				   let val l = symbol_label s
+				       val v = fresh_named_var(label2string l)
+				   in  (l,v)
+				   end) vars
+		in  (ids, fun_con, body_con, matches)
 		end
-		val dec_list : (label * var * con * con *
+		val dec_list : ((label * var) list * con * con *
 				(Ast.pat list * Ast.exp) list) list =
-		    map (rvb_help o rvb_strip) rvblist
+		    map (rvb_help o vb_strip) rvblist
 	    in  xfundec islocal (context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
 	    end
+
+	| Ast.ValDec (vblist,rvblist,tyvars) =>
+	    (xdec islocal (context, Ast.ValDec(vblist,[],tyvars)) @
+	     xdec islocal (context, Ast.ValDec([],rvblist,tyvars)))
 
 	| Ast.FunDec (fblist,ref tyvars) =>
 	    let val tyvar_stamp = new_stamp()
@@ -1261,9 +1341,9 @@ structure Toil :> TOIL =
 			    end
 			val (matches, SOME id) = foldl_acc help NONE clause_list
 			val fun_var = fresh_named_var (label2string id)
-		    in (id, fun_var, fun_con, body_con, matches)
+		    in ([(id,fun_var)], fun_con, body_con, matches)
 		    end
-		val dec_list : (label * var * con * con *
+		val dec_list : ((label * var) list * con * con *
 				(Ast.pat list * Ast.exp) list) list =
 		    map (fb_help o fb_strip) fblist
 	    in  xfundec islocal	(context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
