@@ -171,7 +171,7 @@ struct
   fun unpull_convar (D as {kindmap,...}:context,var) = 
     (case (V.find (kindmap, var))
        of SOME(c,k) => inject_kind(D,var,Var_c var,k)
-	| NONE => error "unpull_convar variable not found")
+	| NONE => error ("unpull_convar: variable " ^ (Name.var2string var) ^ " not found"))
 
 
   fun insert_kind normalizer (D as {kindmap,...}:context,var,kind) = 

@@ -450,7 +450,7 @@ val _ = (print "Nil final context is:\n";
 	    val _ = showmod (debug,!show_size) "Closure-conversion" (filename, nilmod)
 
 	    val nilmod = (Stats.timer("Linearization2",Linearize.linearize_mod)) nilmod
-	    val _ = showmod (debug,!show_size) "Renaming2" (filename, nilmod)
+	    val _ = showmod (debug orelse !show_before_rtl,!show_size) "Renaming2" (filename, nilmod)
 
  	    val nilmod' = 
 	      if (!typecheck_after_cc) then
@@ -458,8 +458,8 @@ val _ = (print "Nil final context is:\n";
 	      else
 		nilmod
 	    val _ = 
-	      if (!typecheck_after_cc orelse !show_before_rtl) then 
-		  showmod (!show_before_rtl orelse debug,!show_size) "Post-cc Typecheck" (filename, nilmod')
+	      if (!typecheck_after_cc) then 
+		  showmod (debug,!show_size) "Post-cc Typecheck" (filename, nilmod')
 	      else ()
 	in  nilmod
 	end

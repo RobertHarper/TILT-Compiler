@@ -156,18 +156,18 @@ struct
 	   fun mapset f s = list2set(map f (set2list s))
 
        in  (case arg_bnd of
-		Con_b (v,k,c) => let val (state,v) = add_var(state,v)
+		Con_b (v,k,c) => let val (state',v) = add_var(state,v)
 				     val (cbnds,c) = lcon state c
 				     val (cbnds_k,k) = lkind state k
 				     val cbnd = Con_cb(v,k,c)
-				     val state = pop_var state
+				     val state = pop_var state'
 				 in  (state, map NilUtil.cbnd2bnd (cbnds @ cbnds_k @ [cbnd]))
 				 end
-	      | Exp_b (v,c,e) => let val (state,v) = add_var(state,v)
+	      | Exp_b (v,c,e) => let val (state',v) = add_var(state,v)
 				     val (bnds,e) = lexp state e
 				     val (bnds_c,c) = lcon2 state c
 				     val bnd = Exp_b(v,c,e)
-				     val state = pop_var state
+				     val state = pop_var state'
 				 in  (state, bnds @ bnds_c @ [bnd])
 				 end
 	      | Fixopen_b vf_set => vf_help Fixopen_b vf_set
@@ -328,10 +328,10 @@ struct
 	   in  (state', cbnds_vk @ cbnds_c @ cbnds_k @ [cbnd])
 	   end
        in (case arg_cbnd of
-	       Con_cb (v,k,c) => let val (state,v) = add_var(state,v)
+	       Con_cb (v,k,c) => let val (state',v) = add_var(state,v)
 				     val (cbnd_k,k) = lkind state k
 				     val (cbnd_c,c) = lcon state c
-				     val state = pop_var state
+				     val state = pop_var state'
 				 in  (state, cbnd_k @ cbnd_c @ [Con_cb(v,k,c)])
 				 end
 	     | Open_cb arg => lconfun Open_cb arg
