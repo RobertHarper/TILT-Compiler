@@ -21,6 +21,10 @@ functor OS_PathFn (OSPathBase : sig
     val currentArc : string
     val validVolume : (bool * Substring.substring) -> bool
     val splitVolPath : string -> (bool * Substring.substring * Substring.substring)
+	(* Split a string into the volume part and arcs part and note whether it
+	 * is absolute.
+	 * Note: it is guaranteed that this is never called with "".
+	 *)
     val joinVolPath : (bool * string * string) -> string
 	(* join a volume and path; raise Path on invalid volumes *)
     val arcSepChar : char
@@ -47,7 +51,8 @@ functor OS_PathFn (OSPathBase : sig
 
     fun validVolume {isAbs, vol} = P.validVolume(isAbs, SS.all vol)
 
-    fun fromString p = let
+    fun fromString "" = {isAbs = false, vol = "", arcs = []}
+      | fromString p = let
 	  val fields = SS.fields (fn c => (c = P.arcSepChar))
 	  val (isAbs, vol, rest) = P.splitVolPath p
 	  in
@@ -78,7 +83,8 @@ functor OS_PathFn (OSPathBase : sig
 	    | getParent' (a :: al) = a :: getParent' al
 	  in
 	    case (fromString p)
-	     of {isAbs=true, vol, arcs} =>
+	     of {isAbs=true, vol, arcs=[""]} => p
+	      | {isAbs=true, vol, arcs} =>
 		  toString{isAbs = true, vol = vol, arcs = getParent' arcs}
 	      | {isAbs=false, vol, arcs} => (case (getParent' arcs)
 		   of [] => toString{isAbs=false, vol=vol, arcs=[currentArc]}
@@ -123,6 +129,7 @@ functor OS_PathFn (OSPathBase : sig
 	    {base = joinDirFile{dir=dir, file=file}, ext = ext}
 	  end
     fun joinBaseExt {base, ext=NONE} = base
+      | joinBaseExt {base, ext=SOME ""} = base
       | joinBaseExt {base, ext=SOME ext} = let
 	  val {dir, file} = splitDirFile base
 	  in
@@ -228,6 +235,9 @@ functor OS_PathFn (OSPathBase : sig
 
 (*
  * $Log$
+# Revision 1.2  2000/08/22  17:22:05  swasey
+# Brought up to date with SML/NJ basis
+# 
 # Revision 1.1  98/03/09  19:53:05  pscheng
 # added basis
 # 
