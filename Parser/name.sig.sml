@@ -29,6 +29,7 @@ signature NAME =
     val fresh_open_internal_label : string -> label      
 
     (* injective *)
+    val tag2int : tag -> int
     val internal_label  : string -> label
     val symbol_label    : Symbol.symbol -> label   
     val open_internal_label : string -> label      
@@ -42,6 +43,9 @@ signature NAME =
 
     (* Hash tables *)
     val mk_var_hash_table : (int * exn) -> (var, 'val) HashTable.hash_table
+
+    structure VarSet : ORD_SET
+    sharing type VarSet.Key.ord_key = var
 
     structure VarMap : ORD_MAP
     sharing type VarMap.Key.ord_key = var

@@ -1,6 +1,8 @@
 Library 
 signature NAME
+signature SYMBOL
 structure Name
+structure Symbol
 
 is
 

@@ -84,7 +84,7 @@ structure Name :> NAME =
 	fun help s = if flag then "*" ^ s else s
         val is_internal = internal_hash str = num
         val is_generative = Char.isDigit(String.sub(str,0))
-        val space = 0 (* namespaceint(num,str) *)
+        val space = namespaceint(num,str) 
       in (case (is_internal,is_generative) of
 	    (true,false) => help (str ^ "_INT")
 	  | (true,true) => help (str ^ "_INT_GEN")
@@ -94,7 +94,7 @@ structure Name :> NAME =
       end
     fun loc2string (GLOC i) = ("LOC_" ^ (Int.toString i))
     fun tag2string (GTAG (i,s)) = ("NAME_" ^ s ^ "_" ^ (Int.toString i))
-
+    fun tag2int (GTAG (i,s)) = i
 
     fun mk_var_hash_table (size,notfound_exn) = 
 	let
@@ -135,6 +135,7 @@ structure Name :> NAME =
 					 type ord_key = tag
 					 val compare = compare_tag
 				     end
+      structure VarSet = SplaySetFn(VarKey) 
       structure VarMap = LocalSplayMapFn(VarKey) 
       structure LabelMap = LocalSplayMapFn(LabelKey) 
       structure TagMap = LocalSplayMapFn(TagKey) 
