@@ -1,0 +1,449 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 4  Term Reconstruction</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_3.html">previous</A>, <A HREF="twelf_5.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC14" HREF="twelf_toc.html#TOC14">4  Term Reconstruction</A></H1>
+
+<P>
+<A NAME="IDX40"></A>
+<A NAME="IDX41"></A>
+
+</P>
+<P>
+Representations of deductions in LF typically contain a lot of redundant
+information.  In order to make LF practical, Twelf gives the user the
+opportunity to omit redundant information in declarations and
+reconstructs it from context.  Unlike for functional languages, this
+requires recovering objects as well as types, so we refer to this phase
+as term reconstruction.
+
+</P>
+<P>
+There are criteria which guarantee that the term reconstruction problem
+is decidable, but unfortunately these criteria are either very
+complicated or still force much redundant information to be supplied.
+Therefore, the Twelf implementation employs a reconstruction algorithm
+which always terminates and gives one of three answers:
+
+</P>
+
+<OL>
+<LI>yes, and here is the most general reconstruction;
+
+<LI>no, and here is the problem; or
+
+<LI>maybe.
+
+</OL>
+
+<P>
+The last characterizes the situations where there is insufficient
+information to guarantee a most general solution to the term reconstruction
+problem.  Because of the decidable nature of type-checking in LF, the user
+can always annotate the term further until it falls into one of the
+definitive categories.
+
+</P>
+
+<UL>
+<LI><A HREF="twelf_4.html#SEC15">Implicit Quantifiers</A>: Free variables in declarations
+<LI><A HREF="twelf_4.html#SEC16">Implicit Arguments</A>: Omitted arguments to constants
+<LI><A HREF="twelf_4.html#SEC17">Strict Occurrences</A>: A sufficient condition for principal types
+<LI><A HREF="twelf_4.html#SEC18">Strict Definitions</A>: Reconstruction on definitions
+<LI><A HREF="twelf_4.html#SEC19">Type Ascription</A>: Disambiguating terms
+<LI><A HREF="twelf_4.html#SEC20">Error Messages</A>: When things go wrong
+</UL>
+
+
+
+<H2><A NAME="SEC15" HREF="twelf_toc.html#TOC15">4.1  Implicit Quantifiers</A></H2>
+
+<P>
+<A NAME="IDX42"></A>
+<A NAME="IDX43"></A>
+
+</P>
+<P>
+The model of term reconstruction employed by Twelf is
+straightforward, although it employs a relatively complex algorithm.
+The basic principle is a duality between quantifiers omitted in a
+constant declaration and implicit arguments where the constant is used.
+Recall some definitions in the signature defining natural deductions
+(see section <A HREF="twelf_3.html#SEC13">3.6  Sample Signature</A>).
+
+</P>
+
+<PRE>
+o : type.
+and : o -&#62; o -&#62; o.   %infix right 10 and
+nd : o -&#62; type.
+andi : nd A -&#62; nd B -&#62; nd (A and B).
+</PRE>
+
+<P>
+The last declaration contains <CODE>A</CODE> and <CODE>B</CODE> as free variables.
+Type reconstruction infers most general types for the free variables in
+a constant declaration and adds implicit quantifiers.  In the example
+above, <CODE>A</CODE> and <CODE>B</CODE> must both be of type <CODE>o</CODE>.  The
+internal form of the constant thus has one of the following two forms.
+
+</P>
+
+<PRE>
+andi : {A:o} {B:o} nd A -&#62; nd B -&#62; nd (A and B).
+andi : {B:o} {A:o} nd A -&#62; nd B -&#62; nd (A and B).
+</PRE>
+
+<P>
+These forms are printed during type reconstruction, so the user can
+examine if the result of reconstruction matches his expectations.
+
+</P>
+
+
+<H2><A NAME="SEC16" HREF="twelf_toc.html#TOC16">4.2  Implicit Arguments</A></H2>
+
+<P>
+<A NAME="IDX44"></A>
+<A NAME="IDX45"></A>
+
+</P>
+<P>
+The quantifiers on <CODE>A</CODE> and <CODE>B</CODE> in the declaration
+
+</P>
+
+<PRE>
+andi : nd A -&#62; nd B -&#62; nd (A and B).
+</PRE>
+
+<P>
+were implicit.  The corresponding arguments to <CODE>andi</CODE> are also
+implicit.  In fact, since the order of the reconstructed quantifiers is
+arbitrary, we cannot know in which order to supply the arguments, so
+they must always be omitted.  Thus a constant with <EM>n</EM> implicit
+quantifiers is supplied with <EM>n</EM> implicit arguments whereever it is
+seen.  These implicit arguments are existential variables whose value
+may be determined from context by unification.
+
+</P>
+<P>
+For example, using also
+
+</P>
+
+<PRE>
+true : o.
+truei: nd (true).
+</PRE>
+
+<P>
+we have
+
+</P>
+
+<PRE>
+(andi truei truei) : nd (true and true).
+</PRE>
+
+<P>
+During parsing, the expression <CODE>(andi truei truei)</CODE> is interpreted
+as
+
+</P>
+
+<PRE>
+(andi _ _ truei truei)
+</PRE>
+
+<P>
+where the two underscores stand for the implicit <CODE>A</CODE> and <CODE>B</CODE>
+arguments to <CODE>andi</CODE>.  They are replaced by existential variables whose
+value will be determined during type reconstruction.  We call them
+<CODE>A1</CODE> and <CODE>A2</CODE> and reason as follows.
+
+</P>
+
+<PRE>
+|- andi : {A:o} {B:o} nd A -&#62; nd B -&#62; nd (A and B)
+|- andi A1 : {B:o} nd A1 -&#62; nd B -&#62; nd (A1 and B)
+|- andi A1 A2 : nd A1 -&#62; nd A2 -&#62; nd (A1 and A2)
+</PRE>
+
+<P>
+At this point, we need a to infer the type of the application
+<CODE>(andi A1 A2) truei</CODE>.  This equates the actual type of the argument
+with the expected type of the argument.
+
+</P>
+
+<PRE>
+|- andi A1 A2 : nd A1 -&#62; nd A2 -&#62; nd (A1 and A2)
+|- truei : nd true
+------------------------------------------------
+|- andi A1 A2 truei : nd A2 -&#62; nd (A1 and A2)
+   where nd true = nd A1
+</PRE>
+
+<P>
+The equation can be solved by instantiating <CODE>A1</CODE> to <CODE>true</CODE> and
+we continue:
+
+</P>
+
+<PRE>
+|- andi true A2 truei : nd A2 -&#62; nd (true and A2)
+|- truei : nd true
+------------------------------------------------
+|- andi true A2 truei truei : nd (true and A2)
+   where nd true = nd A2
+|- andi true true truei truei : nd (true and true)
+</PRE>
+
+<P>
+The last line is the expected result.  In this way, term reconstruction
+can always be reduced to solving equations such that every solution to
+the set of equations leads to a valid typing and vice versa.
+
+</P>
+
+
+<H2><A NAME="SEC17" HREF="twelf_toc.html#TOC17">4.3  Strict Occurrences</A></H2>
+
+<P>
+<A NAME="IDX46"></A>
+<A NAME="IDX47"></A>
+<A NAME="IDX48"></A>
+<A NAME="IDX49"></A>
+
+</P>
+<P>
+Both for type reconstruction and the operational semantics, Twelf must
+solve equations between objects and types.  Unfortunately, it is
+undecidable if a set of equations in the LF type theory has a solution.
+Worse yet, even if it has solutions, it may not have a most general
+solution.  Therefore, Twelf postpones difficult equations as constraints
+and solves only those within the pattern fragment (see <CITE>Miller
+1991, Journal of Logic and Compuation</CITE> and <CITE>Pfenning 1991, Logical
+Frameworks</CITE>).  In this fragment, principal solutions always exist and
+can be computed efficiently.  If constraints remain after term
+reconstruction, the constant declaration is rejected as ambiguous which
+indicates that the user must supply more type information.  We
+illustrate this phenomenon and a typical solution in our natural
+deduction example.
+
+</P>
+<P>
+A central concept useful for understanding the finer details of type
+reconstruction is the notion of a <EM>strict occurrence</EM> of a free
+variable.  We call a position in a term <EM>rigid</EM> if it is not in the
+argument of a free variable.  We then call an occurrence of a free
+variable <EM>strict</EM> if the occurrence is in a rigid position and all
+its arguments (possibly none) are distinct bound variables.
+
+</P>
+<P>
+If all free variable occurrences in all declarations in a signature are
+strict, then term reconstruction will always either fail or succeed with
+a principal solution, provided no further terms are omitted (that is,
+replaced by an underscore).
+
+</P>
+<P>
+If a free variable in a declaration of a constant <CODE>c</CODE> has no strict
+occurrence at all, then its type can almost never be inferred and most uses of
+<CODE>c</CODE> will lead to a constraint.
+
+</P>
+<P>
+If a free variable has strict and non-strict occurrences then in most
+cases term reconstruction will provide a definitive answer, but there is
+no guarantee.  Mostly this is because most general answers simply do not
+exist, but sometimes because the algorithm generates, but cannot solve
+constraints with unique solutions.
+
+</P>
+<P>
+We use some advanced examples from the natural deduction signature to
+illustrate these concepts and ideas.  In the declarations
+
+</P>
+
+<PRE>
+foralli : ({x:i} nd (A x)) -&#62; nd (forall A).
+foralle : nd (forall A) -&#62; {T:i} nd (A T).
+</PRE>
+
+<P>
+all free variables have a strict occurrence.  However, if we had
+decided to leave <CODE>T</CODE> as an implicit argument,
+
+</P>
+
+<PRE>
+foralle : nd (forall A) -&#62; nd (A T).
+</PRE>
+
+<P>
+then <CODE>T</CODE> has no strict occurrence.  While this declaration is
+accepted as unambiguous (with <CODE>A:i -&#62; o</CODE> and <CODE>T:i</CODE>), any
+future use of <CODE>foralle</CODE> most likely leads to constraints on
+<CODE>T</CODE> which cannot be solved.
+
+</P>
+
+
+<H2><A NAME="SEC18" HREF="twelf_toc.html#TOC18">4.4  Strict Definitions</A></H2>
+
+<P>
+<A NAME="IDX50"></A>
+<A NAME="IDX51"></A>
+
+</P>
+<P>
+Definitions are currently restricted so that each argument to the
+defined constant, may it be implicit or explicit, must have at least one
+strict occurrence in the right-hand side.  For example, the definition
+of <CODE>not</CODE> in the signature for natural deduction (see section <A HREF="twelf_3.html#SEC13">3.6  Sample Signature</A>)
+
+</P>
+
+<PRE>
+not : o -&#62; o = [A:o] A imp false.
+</PRE>
+
+<P>
+is strict since the only argument <CODE>A</CODE> has a strict occurrence in
+<CODE>A imp false</CODE>.  On the other hand, the definition
+
+</P>
+
+<PRE>
+noti : ({p:o} nd A -&#62; nd p) -&#62; nd (not A)
+     = [D] impi ([u:nd A] D false u).
+</PRE>
+
+<P>
+which gives a possible derived introduction rule for negation is not
+strict: the argument <CODE>D</CODE> has only one occurrence, and this occurrence
+is not strict since the argument <CODE>false</CODE> is not a variable bound in
+the body, but a constant.
+
+</P>
+<P>
+However, the definitions
+
+<PRE>
+noti : (nd A -&#62; nd false) -&#62; nd (not A)
+     = [D:nd A -&#62; nd false] impi D.
+note : nd (not A) -&#62; nd A -&#62; nd false
+     = [D:nd (not A)] [E:nd A] impe D E.
+</PRE>
+
+<P>
+are both strict since arguments <CODE>D</CODE> and <CODE>E</CODE> both have strict
+occurrences.  Type-checking these definitions requires that the definition
+of <CODE>not A</CODE> is expanded to <CODE>A imp false</CODE>.
+
+</P>
+<P>
+Note that free variables in the type and the right-hand side of a
+definition are shared.  In the above example, <CODE>A</CODE> occurs both in
+the types and the right hand side and it should be thought of as the
+same <CODE>A</CODE>.  With the implicit quantifiers and abstractions restored,
+the definitions above have the following form.
+
+</P>
+
+<PRE>
+noti : {A:o} (nd A -&#62; nd false) -&#62; nd (not A)
+   = [A:o] [D:nd A -&#62; nd false] impi D.
+note : {A:o} nd (not A) -&#62; nd A -&#62; nd false
+   = [A:o] [D:nd (not A)] [E:nd A] impe D E.
+</PRE>
+
+
+
+<H2><A NAME="SEC19" HREF="twelf_toc.html#TOC19">4.5  Type Ascription</A></H2>
+
+<P>
+<A NAME="IDX52"></A>
+<A NAME="IDX53"></A>
+
+</P>
+<P>
+In some circumstances it is useful to directly ascribe a type in order
+to disambiguate declarations.  For example, the term <CODE>ori1 truei</CODE>
+has principal type <CODE>nd (true or B)</CODE> for a free variable <CODE>B</CODE>.
+If we want to constrain this to a derivation of <CODE>nd (true or false)</CODE>
+we can write <CODE>ori1 truei : nd (true or false)</CODE>.
+
+</P>
+<P>
+Explicit type ascription sometimes helps when the source of a type error
+is particularly hard to discern: we can ascribe an expected type to a
+subterm, thus verifying our intuition about constituent terms in a
+declaration.
+
+</P>
+
+
+<H2><A NAME="SEC20" HREF="twelf_toc.html#TOC20">4.6  Error Messages</A></H2>
+
+<P>
+<A NAME="IDX54"></A>
+
+</P>
+<P>
+When term reconstruction fails, Twelf issues an error message with the
+location of the declaration in which the problem occurred and the
+disagreement encountered.  A typical message is
+
+</P>
+
+<PRE>
+examples/nd/nd.elf:37.35-37.41 Error: Type mismatch
+Expected: o
+Found:    (i -&#62; o) -&#62; o
+Expression clash
+</PRE>
+
+<P>
+which points to an error in the file <TT>`examples/nd/nd.elf'</TT>, line 37,
+characters 35 through 41 where an argument to a function was expected to
+have type <CODE>o</CODE>, but was found to have type <CODE>(i -&#62; o) -&#62; o</CODE>.
+
+</P>
+<P>
+If constraints remain, the error location is the whole declaration
+with the message
+
+</P>
+
+<PRE>
+<VAR>filename</VAR>:<VAR>location</VAR> Error: Typing ambiguous -- unresolved constraints
+</PRE>
+
+<P>
+The <VAR>filename</VAR> and <VAR>location</VAR> information can be used by Emacs
+(see section <A HREF="twelf_11.html#SEC53">11  Emacs Interface</A>) to jump to the specified location in the given
+file for editing of the incorrect declaration for the constant <CODE>c</CODE>.
+The <VAR>location</VAR> has the form
+<CODE><VAR>line1</VAR>.<VAR>column1</VAR>-<VAR>line2</VAR>.<VAR>column2</VAR></CODE> and represent
+Twelf's best guess as to the source of the error.  Due to the
+propagation of non-trivial constraints the source of a type
+reconstruction failure can sometimes not be pinpointed very precisely.
+
+</P>
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_3.html">previous</A>, <A HREF="twelf_5.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

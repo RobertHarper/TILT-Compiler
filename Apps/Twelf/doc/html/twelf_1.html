@@ -1,0 +1,232 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 1  Introduction</TITLE>
+</HEAD>
+<BODY>
+Go to the first, previous, <A HREF="twelf_2.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC1" HREF="twelf_toc.html#TOC1">1  Introduction</A></H1>
+
+<P>
+<A NAME="IDX1"></A>
+<A NAME="IDX2"></A>
+<A NAME="IDX3"></A>
+<A NAME="IDX4"></A>
+<A NAME="IDX5"></A>
+
+</P>
+<P>
+Twelf is the current version of a succession of implementations of
+the logical framework LF.  Previous systems include Elf (which
+provided type reconstruction and the operational semantics reimplemented
+in Twelf) and MLF (which implemented module-level constructs loosely
+based on the signatures and functors of ML still missing from Twelf).
+
+</P>
+<P>
+Twelf should be understood as research software. This means comments,
+suggestions, and bug reports are extremely welcome, but there are no
+guarantees regarding response times.  The same remark applies to these
+notes which constitute the only documentation on the present Twelf
+implementation.
+
+</P>
+<P>
+For current information including download instructions, publications,
+and mailing list, see the Twelf home page at
+<TT>http://www.cs.cmu.edu/~twelf/</TT>.  This User's Guide is published as
+
+<PRE>
+ Frank Pfenning and Carsten Schuermann
+ <EM>Twelf User's Guide</EM>
+ Technical Report CMU-CS-98-173, Department of Computer Science, 
+ Carnegie Mellon University, November 1998.
+</PRE>
+
+<UL>
+ <LI> <A HREF="http://www.cs.cmu.edu/~twelf/">Twelf Home Page</A> </LI>
+</UL>
+
+<P>
+Below we state the typographic conventions in this manual.
+
+</P>
+<DL COMPACT>
+
+<DT><CODE>code</CODE>
+<DD>
+  for Twelf or ML code
+<DT><SAMP>`samp'</SAMP>
+<DD>
+  for characters and small code fragments
+<DT><VAR>metavar</VAR>
+<DD>
+  for placeholders in code
+<DT><KBD>keyboard</KBD>
+<DD>
+  for input in verbatim examples
+<DT><KBD>key</KBD>
+<DD>
+  for keystrokes
+<DT><EM>math</EM>
+<DD>
+  for mathematical expressions
+<DT><EM>emph</EM>
+<DD>
+  for emphasized phrases
+</DL>
+
+<P>
+File names for examples given in this guide are relative to the main
+directory of the Twelf installation.  For example
+<TT>`examples/guide/nd.elf'</TT> may be found in
+<BR><TT>`/usr/local/twelf/examples/guide/nd.elf'</TT> if Twelf was installed
+into the <TT>`/usr/local/'</TT> directory.
+
+</P>
+
+<UL>
+<LI><A HREF="twelf_1.html#SEC2">New Features</A>: Differences from Elf 1.5
+<LI><A HREF="twelf_1.html#SEC3">Quick Start</A>: Sample interaction with Twelf
+</UL>
+
+
+
+<H2><A NAME="SEC2" HREF="twelf_toc.html#TOC2">1.1  New Features</A></H2>
+
+<P>
+While the underlying type theory has not changed, the Twelf
+implementation differs from older Elf implementation in a few ways.
+Mostly, these are simplifications and improvements.  The main feature
+which has not yet been ported is the Elf server interface to Emacs.
+Also, while the type checker is more efficient now, the operational
+semantics does not yet incorporate some of the optimizations of the
+older Elf implementations and is therefore slower.
+
+</P>
+<DL COMPACT>
+
+<DT>Syntax (see section <A HREF="twelf_3.html#SEC7">3  Syntax</A>)
+<DD>
+  The quote <SAMP>`''</SAMP> character is no longer a special character in the
+lexer, and <SAMP>`='</SAMP> (equality) is now a reserved identifier.  The syntax
+of <CODE>%name</CODE> declarations has changed by allowing only one preferred
+name to be specified.  Also, <CODE>%name</CODE>, <CODE>%infix</CODE>, <CODE>%prefix</CODE>
+and <CODE>%postfix</CODE> declarations must be terminated by a period <SAMP>`.'</SAMP>
+which previously was optional.  Further, single lines comments now must
+start with <SAMP>`%<VAR>whitespace</VAR>'</SAMP> or <SAMP>`%%'</SAMP> in order to avoid
+misspelled keywords of the form <SAMP>`%<VAR>keyword</VAR>'</SAMP> to be ignored.
+
+<DT>Type theory
+<DD>
+  Elf 1.5 had two experimental features which are not available in
+Twelf: polymorphism and the classification of <EM>type</EM> as a type.
+
+<DT>Definitions (see section <A HREF="twelf_3.html#SEC10">3.3  Definitions</A>)
+<DD>
+  Twelf offers definitions which were not available in Elf.
+
+<DT>Searching for definitions (see section <A HREF="twelf_5.html#SEC23">5.2  Solve Declaration</A>)
+<DD>
+  Elf had a special top-level query form <CODE>sigma [x:A] B</CODE> which
+searched for a solution <CODE>M : A</CODE> and then solved the result of
+subsituting <CODE>M</CODE> for <CODE>x</CODE> in <CODE>B</CODE>.  In Twelf this
+mechanism has been replaced by a declaration <CODE>%solve c : A</CODE> which
+searches for a solution <CODE>M : A</CODE> and then defines <CODE>c = M : A</CODE>,
+where the remaining free variables are implicitly universally
+quantified.
+
+<DT>Query declarations (see section <A HREF="twelf_5.html#SEC22">5.1  Query Declaration</A>)
+<DD>
+  Twelf allows queries in ordinary Elf files as <SAMP>`%query'</SAMP>
+declarations.  Queries are specified with an expected number of
+solutions, and the number of solutions to search for, which can be used
+to test implementations.
+
+<DT>Operational semantics (see section <A HREF="twelf_5.html#SEC26">5.5  Operational Semantics</A>)
+<DD>
+  Twelf eliminates the distinction between static and dynamic
+signatures.  Instead, dependent function types <CODE>{x:A} B</CODE>
+where <CODE>x</CODE> occurs in the normal form of <CODE>B</CODE> are treated
+statically, while non-dependent function type <CODE>A -&#62; B</CODE> or
+<CODE>B &#60;- A</CODE> or <CODE>{x:A} B</CODE> where <CODE>x</CODE> does not occur
+in <CODE>B</CODE> are treated dynamically.
+
+<DT>Modes (see section <A HREF="twelf_6.html#SEC28">6  Modes</A>)
+<DD>
+  Twelf offers a mode checker which was only partially supported in Elf.
+
+<DT>Termination (see section <A HREF="twelf_7.html#SEC32">7  Termination</A>)
+<DD>
+  Twelf offers a termination checker which can verify that certain
+programs represent decision procedures.
+
+<DT>Theorem prover (see section <A HREF="twelf_8.html#SEC38">8  Theorem Prover</A>)
+<DD>
+  Although very limited at present, an experimental prover for theorems
+and meta-theorems (that is, properties of signatures) is now available.
+It does not yet support lemmas or meta-hypothetical reasoning, which
+are currently under development.
+
+<DT>Emacs interface (see section <A HREF="twelf_11.html#SEC53">11  Emacs Interface</A>)
+<DD>
+  The Elf mode has remained basically unchanged, but the Elf server
+interface has not yet been ported.
+</DL>
+
+
+
+<H2><A NAME="SEC3" HREF="twelf_toc.html#TOC3">1.2  Quick Start</A></H2>
+
+<P>
+Assuming you are running on a Unix system with SML of New Jersey already
+installed (see section <A HREF="twelf_12.html#SEC67">12  Installation</A>) you can build Twelf as follows.  Here
+<SAMP>`%'</SAMP> is assumed to be the shell prompt.  You may need to edit the
+file <TT>`Makefile'</TT> to give the proper location for <CODE>sml-cm</CODE>.
+
+</P>
+
+<PRE>
+% <KBD>gunzip twelf-1-2.tar.gz</KBD>
+% <KBD>tar -xf twelf-1-2.tar</KBD>
+% <KBD>cd twelf</KBD>
+% <KBD>make</KBD>
+% <KBD>bin/twelf-server</KBD>
+Twelf 1.2, Aug 27 1998
+%% OK %%
+</PRE>
+
+<P>
+You can now load the examples used in this guide and pose an example
+query as shown below.  The prompt from the Twelf top-level is <SAMP>`?-'</SAMP>.
+To drop from the Twelf top-level to the ML top-level, type <KBD>C-c</KBD>
+(<KBD>CTRL</KBD> <KBD>c</KBD>).  To exit the Twelf server you may issue the
+<CODE>quit</CODE> command or type <KBD>C-d</KBD> (<KBD>CTRL</KBD> <KBD>c</KBD>).
+
+</P>
+
+<PRE>
+<KBD>Config.read examples/guide/sources.cfg</KBD>
+<KBD>Config.load</KBD>
+<KBD>top</KBD>
+?- <KBD>of (lam [x] x) T.</KBD>
+Solving...
+T = arrow T1 T1.
+More? <KBD>y</KBD>
+No more solutions
+?- <KBD>C-c</KBD>
+interrupt
+%% OK %%
+<KBD>quit</KBD>
+%
+</PRE>
+
+<P><HR><P>
+Go to the first, previous, <A HREF="twelf_2.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

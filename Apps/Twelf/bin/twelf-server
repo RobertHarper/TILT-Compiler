@@ -1,0 +1,3 @@
+#!/bin/csh
+/afs/cs/project/fox/member/swasey/ml96/Apps/Twelf/bin/sml110 @SMLload=/afs/cs/project/fox/member/swasey/ml96/Apps/Twelf/bin/.heap/twelf-server \
+     @SMLdebug=/dev/null

@@ -1,0 +1,1359 @@
+This is Info file twelf.info, produced by Makeinfo version 1.67 from
+the input file twelf.texi.
+
+
+File: twelf.info,  Node: Short Mode Declaration,  Next: Full Mode Declaration,  Prev: Modes,  Up: Modes
+
+Short Mode Declaration
+======================
+
+   There are two forms of mode declarations: a short and a full form.
+The short form is an abbreviation which is expanded into the full form
+when it is unambiguous.
+
+     mode ::= +       % input
+            | *       % unrestricted
+            | -       % output
+     
+     mid ::= mode id  % named mode identifier, one token
+     
+     smdecl ::= id          % type family a
+              | smdecl mid  % argument mode
+
+   Mode declarations for a predicate `a' must come before any clauses
+defining `a'.  Note that the mode followed with the identifier must be
+one token, such as `+L' and not `+ L'.  The short form is most
+convenient in typical situations.  For example, we can declare that the
+`append' program (*note Sample Trace::.) takes the first two arguments
+as input and produces the the third as output.
+
+     append  : list -> list -> list -> type.
+     %mode append +L +K -M.
+
+   If we wanted to use `append' to split a list into two sublists, we
+would instead declare
+
+     append : list -> list -> list -> type.
+     %mode append -L -K +M.
+
+where the clauses `appNil' and `appCons' remain unchanged.
+
+   In the lambda-calculus type checker (*note Sample Program::.), the
+type must be an unrestricted argument.
+
+     of : exp -> tp -> type.
+     %mode of +E *T.
+
+   If we declare it as an input argument, `%mode of +E +T', we obtain
+an error pointing to the first occurrence of `T2' in the clause
+`tp_app' reproduced below.
+
+     examples/nd/lam.elf:27.20-27.22 Error:
+     Occurrence of variable T2 in input (+) argument not necessarily ground
+     
+     tp_app : of (app E1 E2) T1
+               <- of E1 (arrow T2 T1)
+               <- of E2 T2.
+
+   If we declare it as an output argument, `%mode of +E -T', we obtain
+an error pointing to the second occurrence of `T1' in the clause
+`tp_lam' reproduced below.
+
+     examples/nd/lam.elf:25.8-25.10 Error:
+     Occurrence of variable T1 in output (-) argument not necessarily ground
+     
+     tp_lam : of (lam E) (arrow T1 T2)
+               <- ({x:exp}
+                     of x T1 -> of (E x) T2).
+
+   In general, for a mode declaration in short form the arguments are
+specified exactly as they would look in the program.  This means one
+cannot specify the modes of implicit arguments which are filled in by
+term reconstruction.  These modes are reconstructed as follows: each
+implicit argument which appears in the type of an input argument is
+considered input `+', those among the remaining which appear in an
+output argument are considered output `-', the rest are unrestricted.
+The mode declaration is echoed in full form, so the user can verify the
+correctness of the modes assigned to implicit arguments.  If the
+inferred full mode declaration is incorrect, or if one wants to be
+explicit about modes, one should use full mode declarations (*note Full
+Mode Declaration::.).
+
+
+File: twelf.info,  Node: Full Mode Declaration,  Next: Mode Checking,  Prev: Short Mode Declaration,  Up: Modes
+
+Full Mode Declaration
+=====================
+
+   To specify modes for implicit arguments one must use the full form of
+mode declaration.  A `mode' can be one of `+', `*', or `-' (*note Short
+Mode Declaration::.).
+
+     fmdecl ::= mode {id : term} fmdecl
+              | mode {id} fmdecl
+              | term
+
+   The term following the mode prefix in a full mode declaration must
+always have the form `a x1 ... xn' where x1 through xn are variables
+declared in the mode prefix.  As an example, we give an alternative
+specification of the `append' predicate.
+
+     append : list -> list -> list -> type.
+     %mode +{L:list} +{K:list} -{M:list} append L K M.
+
+
+File: twelf.info,  Node: Mode Checking,  Prev: Full Mode Declaration,  Up: Modes
+
+Mode Checking
+=============
+
+   Mode checking for input, output, and unrestricted arguments examines
+each clause as it is encountered.  The algorithm performs a kind of
+abstract interpretation of the clause, keeping track of a list of the
+existential variables for which it knows that they will be ground.
+
+  1. We assume each existential variable with a strict occurrence
+     (*note Strict Occurrences::.) in an input argument to the clause
+     head to be ground.
+
+  2. We traverse the subgoals in evaluation order (*note Operational
+     Semantics::.).  For each subgoal we first verify that all input
+     arguments will be ground, using the information about the
+     existential variables collected so far.  If this check succeeds we
+     add all variables which have a strict occurrence in an output
+     argument of the subgoal to the list of variables with known ground
+     instantiations.
+
+  3. After the last subgoal has been examined, we verify that the
+     output arguments in the clause head are now also ground.
+
+   Arguments whose mode is unrestricted are ignored: they do no need to
+be checked, and they do not contribute any information about the
+instantiations of existential variables.
+
+
+File: twelf.info,  Node: Termination,  Next: Theorem Prover,  Prev: Modes,  Up: Top
+
+Termination
+***********
+
+   Besides checking types and modes, Twelf can also verify if a given
+type family, when interpreted as a logic program, always terminates on
+well-moded goals.  In many cases this means that the program implements
+a decision procedure.  Of course, in general termination is undecidable,
+so we only check a simple sufficient condition.
+
+   Checking termination presupposes that the program is well-typed and
+guarantees termination only when the arguments involved in the
+termination order are ground.  This will always be true for well-moded
+goals, since mode and termination declarations must be consistent.
+
+   Termination is different from checking types and modes in that it is
+not checked incrementally as the signature is read.  Instead,
+termination of a predicate is a global property of the program once it
+has been read.  Thus termination declarations came after the predicate
+has been fully defined; further extensions of the predicate are not
+checked and may invalidate termination.
+
+   The termination checker is rather rudimentary in that it only allows
+lexicographic and simultaneous extensions of the subterm ordering.
+Moreover, it does not take into account if a result returned by a
+predicate is smaller than an input argument.  Nonetheless, for the style
+of programs written in Twelf, the termination of many decision
+procedures can be verified.
+
+* Menu:
+
+* Termination Declaration::     Checking termination
+* Subterm Ordering::            Higher-order subterms
+* Lexicographic Orders::        Termination by nested induction
+* Simultaneous Orders::         Termination by simultaneous induction
+* Mutual Recursion::            Termination of mutually recursive predicates
+
+
+File: twelf.info,  Node: Termination Declaration,  Next: Subterm Ordering,  Prev: Termination,  Up: Termination
+
+Termination Declaration
+=======================
+
+   The termination orders we construct are lexicographic or simultaneous
+extensions of the subterm ordering explained in *Note Subterm
+Ordering::.  The termination declaration associates the termination
+order with argument positions of predicates via call patterns.
+
+   The case of mutually recursive predicates is particularly complex
+and requires mutual call patterns and mutual arguments.  Their syntax
+is given below; they are explained in *Note Mutual Recursion::.
+
+     args ::=
+            | id args       % named argument
+            | _ args        % anonymous argument
+     
+     callpat ::= id args    % a x1 ... xn
+     
+     callpats ::=
+                | (callpat) callpats
+                            % mutual call patterns
+     
+     ids ::=
+           | id ids         % argument name
+     
+     marg ::= id            % single argument
+            | ( ids )       % mutual arguments
+     
+     orders ::=
+              | order orders % component order
+     
+     order ::= marg         % subterm order
+             | { orders }   % lexicographic order
+             | [ orders ]   % simultaneous order
+     
+     tdecl ::= order callpats    % termination declaration
+     
+     decl ::= ...
+            | %terminates tdecl. % termination declaration
+
+   All identifiers in the order specification of a termination
+declaration must be upper case, must occur in the call patterns, and no
+variable may be repeated.  Furthermore, all arguments participating in
+the termination order must occur in the call patterns in input
+positions.
+
+   The most frequent form of termination declaration is
+
+     %terminates Xi (a X1 ... Xn).
+
+which expresses that predicate `a' terminates because recursive calls
+decrease the input argument `Xi' according to the subterm ordering
+(*note Subterm Ordering::.).
+
+   As an example, we consider a proof that simple type inference (*note
+Sample Program::.) terminates.  Recall the relevant program fragment
+(see `examples/guide/lam.elf').
+
+     of : exp -> tp -> type.                 %name of P.
+     %mode of +E *T.
+     
+     tp_lam : of (lam E) (arrow T1 T2)       % |- lam x. E : T1 => T2
+               <- ({x:exp}                   % if  x:T1 |- E : T2.
+                     of x T1 -> of (E x) T2).
+     
+     tp_app : of (app E1 E2) T1              % |- E1 E2 : T1
+               <- of E1 (arrow T2 T1)        % if  |- E1 : T2 => T1
+               <- of E2 T2.                  % and |- E2 : T2.
+
+   The typability of an expression is always reduced to the typability
+of its subexpressions.  Therefore any call to the `of' predicate with a
+ground expression should terminate.  In general, termination can only
+be checked for input arguments, and all calls must be well-moded (*note
+Mode Checking::.).  Twelf verifies termination with the declaration
+
+     %terminates E (of E T).
+
+   Here, `E' specifies the decreasing argument, namely the first
+argument of the typing judgment as expressed in the call pattern `(of E
+T)'.
+
+   A corresponding attempt to show that evaluation always terminates,
+
+     %terminates E (eval E V).
+
+fails for the clause `ev_app' with the message
+
+     examples/guide/lam.elf:1053-1068 Error:
+     Termination violation:
+     (E1' V2) < (app E1 E2)
+
+indicating that in a recursive call the term `E1' V2' could not be
+shown to be smaller than `app E1 E2'.  In our example, of course,
+evaluation need not terminate for precisely this reason.
+
+
+File: twelf.info,  Node: Subterm Ordering,  Next: Lexicographic Orders,  Prev: Termination Declaration,  Up: Termination
+
+Subterm Ordering
+================
+
+   On first-order terms, that is, terms not containing
+lambda-abstraction, the subterm ordering is familiar: M < N if M is a
+strict subterm of N, that is, M is a subterm N and M is different from
+N.
+
+   On higher-order terms, the relation is slightly more complicated
+because we must allow the substitution of parameters for bound
+variables without destroying the subterm relation.  Consider, for
+example, the case of the typing rule
+
+     of : exp -> tp -> type.                 %name of P.
+     %mode of +E *T.
+     
+     tp_lam : of (lam E) (arrow T1 T2)       % |- lam x. E : T1 => T2
+               <- ({x:exp}                   % if  x:T1 |- E : T2.
+                     of x T1 -> of (E x) T2).
+
+from the signature for type inference (*note Sample Program::.) in the
+file `example/guide/lam.elf'.  We must recognize that
+
+     (E x) < (lam E)
+
+according to the subterm ordering.  This is because `E' stands for a
+term `[y:exp] E'' and so `E x' has the same structure as `E'' except
+that `y' (a bound variable) has been replaced by `x' (a parameter).
+This kind of pattern arises frequently in Twelf programs.
+
+   On the other hand, the restriction to parameter arguments of
+functions is critical.  For example, the lax rule
+
+     tp_applam : of (app (lam E1) E2) T2
+                  <- of (E1 E2) T2.
+
+which applies `E1' to `E2' which is not a parameter, is indeed not
+terminating.  This can be seen from the query
+
+     ?- of (app (lam [x:exp] app x x) (lam [y:exp] app y y)) T.
+
+   The restriction of the arguments to parameters can be lifted when the
+type of the argument is not mutually recursive with the result type of
+the function.  For example, the signature for natural deduction (*note
+Sample Signature::., contains no constructor which allows propositions
+to occur inside individual terms.  Therefore
+
+     (A T) < (forall A)
+
+where `A : i -> o' and `T : i' is an arbitrary term (not just a
+parameter).  Intuitively, this is correct because the number of
+quantifiers and logical connectives is smaller on the left, since `T'
+cannot contain such quantifiers or connectives.
+
+   This kind of precise analysis is important, for example, in the proof
+of cut elimination or the termination of polymorphic type
+reconstruction.
+
+
+File: twelf.info,  Node: Lexicographic Orders,  Next: Simultaneous Orders,  Prev: Subterm Ordering,  Up: Termination
+
+Lexicographic Orders
+====================
+
+   Lexicographic orders are specified as
+
+     {O1 ... ON}
+
+   Using vi and wi for corresponding argument structures whose order is
+already defined, we compare them lexicographically as follows:
+
+{v1 ... vn} < {w1 ... wn}, if
+    v1 < w1, or
+    v1 = w1 and v2 < w2, or
+    ...
+    v1 = w1, v2 = w2, ..., and vn < wn.
+   A lexicographic order is needed, for example, to show termination of
+Ackermann's function, defined in `examples/arith/arith.elf' with the
+termination declaration in
+`examples/arith/arith.thm'.
+
+
+File: twelf.info,  Node: Simultaneous Orders,  Next: Mutual Recursion,  Prev: Lexicographic Orders,  Up: Termination
+
+Simultaneous Orders
+===================
+
+   Simultaneous orders require that one of its elements decreases while
+all others remain the same.  This is strictly weaker than a
+lexicographic ordering built from the same components.  Technically
+speaking it is therefore is redundant for termination checking, since
+the corresponding lexicographic ordering could be used instead.
+However, for inductive theorem proving it is quite useful, since the
+search space for simultaneous induction is much smaller than for
+lexicographic induction.
+
+   Simultaneous orders are specified as
+
+     [O1 ... ON]
+
+   Using vi and wi for corresponding argument structures whose order is
+already defined, we compare them simultaneously as follows:
+
+[v1 ... vn] < [w1 ... wn], if
+    v1 < w1, v2 <= w2, ..., and vn <= wn, or
+    v1 <= w1, v2 < w2, ..., and vn <= wn, or
+    ...
+    v1 <= w1, v2 <= w2, ..., and vn < wn.
+   A combination of simultaneous and lexicographic order is used, for
+example, in the admissibility of cut found in
+`examples/cut-elim/int.thm', where either the cut formula A gets
+smaller, or if A stays the same, either the derivation of the left or
+right premise get smaller while the other stays the same.
+
+
+File: twelf.info,  Node: Mutual Recursion,  Prev: Simultaneous Orders,  Up: Termination
+
+Mutual Recursion
+================
+
+   Mutually recursive predicates present a challenge to termination
+checking, since decreasing arguments might appear in different
+positions.  Moreover, mutually recursive predicates `a' and `a'' might
+be prioritized so that when `a' calls `a'' all termination arguments
+remain the same, but when `a'' calls `a' the arguments are smaller
+according to the termination order.
+
+   To handle the association of related argument in mutually recursive
+predicates, so-called *mutual arguments* can be specified in a
+termination order.  They are given as
+
+     (X1 ... Xn)
+
+   The priority between predicates is indicated by the order of the
+call patterns.  If we analyze call patterns
+
+     (a1 args1)
+     (a2 args2)
+     ...
+     (an argsn)
+
+then `ai' may call `aj' for i < j with equal termination arguments, but
+calls of `ai' from `aj' must decrease the termination order.
+
+   Mutual arguments are used, for example, in the proofs of soundness
+(file
+`examples/lp-horn/uni-sound.thm') and completeness (file
+`examples/lp-horn/uni-complete.thm') of uniform derivations for Horn
+logic.
+
+
+File: twelf.info,  Node: Theorem Prover,  Next: ML Interface,  Prev: Termination,  Up: Top
+
+Theorem Prover
+**************
+
+*Disclaimer:* The theorem proving component of Twelf is in an even more
+experimental stage and currently under active development.  There are
+two main restrictions which limit its utility: (1) it only support
+reasoning about closed objects, and (2) it cannot apply lemmas
+automatically.
+
+   Nonetheless, it can prove a number of interesting examples
+automatically which illustrate our approach the meta-theorem proving
+which is described in `Schuermann and Pfenning 1998, CADE'.  These
+examples include type preservation for Mini-ML, one direction of
+compiler correctness for different abstract machines, soundness and
+completeness for logic programming interpreters, and the deduction
+theorem for Hilbert's formulation of propositional logic.  These and
+other examples can be found in the example directories of the Twelf
+distribution (*note Examples::.).
+
+   A *theorem* in Twelf is, properly speaking, a meta-theorem: it
+expresses a property of objects constructed over a fixed LF signature.
+Theorems are stated in the meta-logic M2 whose quantifiers range over LF
+objects.  In the simplest case, we may just be asserting the existence
+of an LF object of a given type.  This only requires direct search for a
+proof term, using methods inspired by logic programming.  More
+generally, we may claim and prove forall/exists statements which allow
+us to express meta-theorems which require structural induction, such as
+type preservation under evaluation in a simple functional language
+(*note Sample Program::.).
+
+* Menu:
+
+* Theorem Declaration::         Declaring and proving theorems
+* Sample Theorems::             Two examples
+* Proof Steps::                 Basic operations of the prover
+* Search Strategies::           How Twelf searches
+* Proof Realizations::          Using automatically constructed proofs
+
+
+File: twelf.info,  Node: Theorem Declaration,  Next: Sample Theorems,  Prev: Theorem Prover,  Up: Theorem Prover
+
+Theorem Declaration
+===================
+
+   There are two forms of declarations related to the proving of
+theorems and meta-theorems.  The first, `%theorem', states a theorem as
+a meta-formula (`mform') in the meta-logic M2 defined below.  The
+second, `%prove', gives a resource bound, a theorem, and an induction
+ordering and asks Twelf to search for a proof.
+
+   Note that a well-typed `%theorem' declaration always succeeds, while
+the `%prove' declaration only succeeds if Twelf can find a proof.
+
+     dec ::= {id:term}         % x:A
+           | {id}              % x
+     
+     decs ::= dec
+            | dec decs
+     
+     mform ::= forall* decs mform % implicit universal
+             | forall decs mform  % universal
+             | exists decs mform  % existential
+             | true               % truth
+     
+     thdecl ::= id : mform        % theorem name a, spec
+     
+     pdecl ::= nat order callpats % bound, induction order, theorems
+     
+     decl ::= ...
+            | %theorem thdecl.  % theorem declaration
+            | %prove pdecl.     % prove declaration
+
+   The prover only accepts quantifier alternations of the form `forall*
+DECS forall DECS exists DECS true'.  Note that the implicit quantifiers
+(which will be suppressed when printing the proof terms) must all be
+collected in front.
+
+   The syntax and meaning of `order' and `callpats' are explained in
+*Note Termination::, since they are also critical notions in the
+simpler termination checker.
+
+
+File: twelf.info,  Node: Sample Theorems,  Next: Proof Steps,  Prev: Theorem Declaration,  Up: Theorem Prover
+
+Sample Theorems
+===============
+
+   As a first example, we use the theorem prover to establish a simple
+theorem in first-order logic (namely that A implies A for any
+proposition A), using the signature for natural deduction (*note Sample
+Signature::.).
+
+     %theorem
+     trivI : exists {D:{A:o} nd (A imp A)}
+             true.
+     
+     %prove 2 {} (trivI D).
+
+   The empty termination ordering `{}' instructs Twelf not to use
+induction to prove the theorem.  The declarations above succeed, and
+with the default setting of `3' for `Twelf.chatter' we see
+
+     %theorem trivI : ({A:o} nd (A imp A)) -> type.
+     %prove 2 {} (trivI D).
+     %mode -{D:{A:o} nd (A imp A)} trivI D.
+     % ------------------
+     /trivI/:  trivI ([A:o] impi ([D1:nd A] D1)).
+     % ------------------
+
+   The line starting with `%theorem' shows the way the theorem will be
+realized as a logic program predicate, the line starting with `/trivI/'
+gives the implementation, which, in this case, consists of just one
+line.
+
+   The second example is the type preservation theorem for evaluation in
+the lambda-calculus.  This is a continuation of the example in Section
+*Note Sample Program:: in the file `examples/guide/lam.elf'.  Type
+preservation states that if and expression `E' has type `T' and `E'
+evaluates to `V', the `V' also has type `T'.  This is expressed as the
+following `%theorem' declaration.
+
+     %theorem
+     tps : forall* {E:exp} {V:exp} {T:tp}
+            forall {D:eval E V} {P:of E T}
+            exists {Q:of V T}
+            true.
+
+   The proof proceeds by structural induction on `D', the evaluation
+from `E' to `V'.  Therefore we can search for the proof with the
+following declaration (where the size bound of `5' on proof term size
+is somewhat arbitrary).
+
+     %prove 5 D (tps D P Q).
+
+   Twelf finds and displays the proof easily.  The resulting program is
+installed in the global signature and can then be used to apply type
+preservation (*note Proof Realizations::.).
+
+
+File: twelf.info,  Node: Proof Steps,  Next: Search Strategies,  Prev: Sample Theorems,  Up: Theorem Prover
+
+Proof Steps
+===========
+
+   We expect the proof search component of Twelf to undergo major
+changes in the near future, so we only briefly review the current state.
+
+   Proving proceeds using three main kinds of steps:
+
+Filling
+     Using iterative deepening, Twelf searches directly for objects to
+     fill the existential quantifiers, given all the constants in the
+     signature and the universally quantified variables in the theorem.
+     The number of constructors in the answer substitution for each
+     existential quantifier is bounded by the size which is given as
+     part of the `%prove' declaration, thus guaranteeing termination
+     (in principle).
+
+Recursion
+     Based on the termination ordering, Twelf appeals to the induction
+     hypothesis on smaller arguments.  If there are several ways to use
+     the induction hypothesis, Twelf non-deterministically picks one
+     which has not yet been used.  Since there may be infinitely many
+     different ways to apply the induction hypothesis, the parameter
+     `Twelf.Prover.maxRecurse' bounds the number of recursion steps in
+     each case of the proof.
+
+Splitting
+     Based on the types of the universally quantified variables, Twelf
+     distinguishes all possible cases by considering all constructors in
+     the signatures.  It nevers splits a variable which appears as an
+     index in an input argument, and if there are several possibilities
+     it picks the one with fewest resulting cases.  Splitting can go on
+     indefinitely, so the paramater `Twelf.Prover.maxSplit' bounds the
+     number of times a variable may be split.
+
+
+File: twelf.info,  Node: Search Strategies,  Next: Proof Realizations,  Prev: Proof Steps,  Up: Theorem Prover
+
+Search Strategies
+=================
+
+   The basic proof steps of filling, recursion, and splitting are
+sequentialized in a simple strategy which never backtracks.  First we
+attempt to fill all existential variables simultaneously.  If that fails
+we recurse by trying to find new ways to appeal to the induction
+hypothesis.  If this is not possible, we pick a variable to distinguish
+cases and then prove each subgoal in turn.  If none of the steps are
+possible we fail.
+
+   This behavior can be changed with the parameter
+`Twelf.Prover.strategy' which defaults to `Twelf.Prover.FRS' (which
+means Filling-Recursion-Splitting).  When set to `Twelf.Prover.RFS'
+Twelf will first try recursion, then filling, followed by splitting.
+This is often faster, but fails in some cases where the default
+strategy succeeds.
+
+
+File: twelf.info,  Node: Proof Realizations,  Prev: Search Strategies,  Up: Theorem Prover
+
+Proof Realizations
+==================
+
+   Proofs of meta-theorems are realized as logic programs.  Such a logic
+program is a relational representation of the constructive proof and can
+be executed to generate witness terms for the existentials from given
+instances of the universal quantifiers.  As an example, we consider
+once more type preservation (*note Sample Theorems::.).
+
+   After the declarations,
+
+     %theorem
+     tps : forall* {E:exp} {V:exp} {T:tp}
+            forall {D:eval E V} {P:of E T}
+            exists {Q:of V T}
+            true.
+     
+     %prove 5 D (tps D P Q).
+
+Twelf answers
+
+     /tps/tp_lam/ev_lam/:
+        tps ev_lam (tp_lam ([x:exp] [P2:of x T1] P1 x P2))
+           (tp_lam ([x:exp] [P3:of x T1] P1 x P3)).
+     
+     /tps/tp_app/ev_app/tp_lam/:
+        tps (ev_app D1 D2 D3) (tp_app P1 P2) P6
+           <- tps D3 P2 (tp_lam ([x:exp] [P4:of x T2] P3 x P4))
+           <- tps D2 P1 P5
+           <- tps D1 (P3 E5 P5) P6.
+
+which is the proof of type preservation expressed as a logic program
+with two clauses: one for evaluation of a lambda-abstraction, and one
+for application.  Using the `%solve' declaration (*note Solve
+Declaration::.) we can, for example, evaluate and type-check the
+identity applied to itself and then use type preservation to obtain a
+typing derivation for the resulting value.
+
+     e0 = (app (lam [x] x) (lam [y] y)).
+     %solve p0 : of e0 T.
+     %solve d0 : eval e0 V.
+     %solve tps0 : tps d0 p0 Q.
+
+   Recall that `%solve c : V' executes the query `V' and defines the
+constant `c' to abbreviate the resulting proof term.
+
+
+File: twelf.info,  Node: ML Interface,  Next: Twelf Server,  Prev: Theorem Prover,  Up: Top
+
+ML Interface
+************
+
+   The Twelf implementation defines a number of ML functions embedded in
+structures which can be called to load files, execute queries, and set
+environment parameters such as the verbosity level of the interaction.
+These functions and parameters are available in the `Twelf' structure.
+If you open the `Twelf' structure with
+
+     open Twelf
+
+after compiling and loading Twelf, you do not have to type the `Twelf.'
+to the functions shown below.
+
+   Previous implementations of Elf offered a stand-alone command
+interpreter but this has not yet been ported.  To exit Twelf and ML
+call `Twelf.OS.exit ();'.
+
+* Menu:
+
+* Configurations::              Managing groups of Twelf files
+* Loading Files::               Loading individual files
+* Environment Parameters::      Controlling appearance and verbosity of Twelf
+* Timing Statistics::           Obtaining information on running times
+* Twelf Signature::             ML signature of main Twelf structure
+
+
+File: twelf.info,  Node: Configurations,  Next: Loading Files,  Prev: ML Interface,  Up: ML Interface
+
+Configurations
+==============
+
+   Groups of Twelf files are managed in *configurations*.  A
+configuration is defined by a file, by convention called `sources.cfg',
+which resides in the same directory as the Twelf source files.  The
+configuration file must contain at most one Twelf source file per line,
+and the files must be listed in dependency order.  A configuration
+CONFIG can then be defined from the file by the ML declaration
+
+     val CONFIG = Twelf.Config.read "sources.cfg";
+
+   By convention, the filenames end in the extensions
+`.elf'
+     for constant declarations and definitions or mixed files,
+
+`.quy'
+     for files which contain query declarations,
+
+`.thm'
+     for files which contain `%theorem' and `%proof' declarations.
+
+   File names may not contain whitespace.  They are interpreted
+relative to the current working directory of ML, but resolved into
+absolute path names when the configuration file is read.  To change the
+current working directory call
+
+     Twelf.OS.getDir ();               (* get working directory *)
+     Twelf.OS.chDir "DIRECTORY"; (* change working directory *)
+
+   As an example, we show how the Mini-ML configuration is defined and
+loaded, assuming your current working directory is the root directory of
+Twelf.
+
+     val mini_ml = Twelf.Config.read "examples/mini-ml/sources.cfg";
+     Twelf.Config.load mini_ml;
+
+   Note that the identifier bound to the configuration (`mini_ml' in
+this example), must be a legal ML identifier, usually consisting only of
+alphanumeric characters and underscores.  The call to
+`Twelf.Config.load' returns either `Twelf.OK' or `Twelf.ABORT'.  It
+reads each file in turn, starting from an empty signature, printing the
+results of type reconstruction and search based on the value of the
+`Twelf.chatter' variable (*note Environment Parameters::.).  If another
+configuration or file has previously been read, all the declarations
+will first be deleted so that `Twelf.Config.load' always starts from
+the same state.
+
+   Loading a configuration will stop at the first error encountered,
+issue an appropriate message and return `Twelf.ABORT'.  If there is an
+unexpected internal error (which indicates a bug in the Twelf
+implementation), it raises an uncaught exception instead and returns to
+the ML top-level.
+
+   To explore the behavior of programs interactively, you may call the
+Twelf top-level with
+
+     Twelf.top ();
+
+which is explained in *Note Interactive Queries::.
+
+
+File: twelf.info,  Node: Loading Files,  Next: Environment Parameters,  Prev: Configurations,  Up: ML Interface
+
+Loading Files
+=============
+
+   Twelf also allows direct management of the signature by loading
+individual files.  This is generally not recommended because successive
+declarations simply accumulate in the global signature which may lead to
+unexpected behavior.  The relevant function calls are
+
+     Twelf.reset ();
+     Twelf.loadFile "FILE";
+
+where `Twelf.reset ()' resets the current global signature to be empty
+and `Twelf.readFile "FILE"' loads the given FILE whose name is
+interpreted relative to the current working directory.
+
+   *Caution:* Reading a file twice will not replace the declarations of
+the first pass by the second, but simply add them to the current
+signature.  If names are reused, old declarations will be shadowed, but
+they are still in the global signature and might be used in the search
+for a solution to a query or in theorem proving, leading to unexpected
+behavior.  When in doubt, use configurations (*note Configurations::.)
+or call `Twelf.reset ()'.
+
+
+File: twelf.info,  Node: Environment Parameters,  Next: Timing Statistics,  Prev: Loading Files,  Up: ML Interface
+
+Environment Parameters
+======================
+
+   Various flags and parameters can be used to modify the behavior of
+Twelf and the messages it issues.  They are given below with the
+assignment of the default value.
+
+`Twelf.chatter := 3;'
+     Controls the detail of the information which is printed when
+     signatures are read.
+    `0'
+          Nothing.
+
+    `1'
+          Just file names.
+
+    `2'
+          File names and number of query solutions.
+
+    `3'
+          Each declarations after type reconstruction.
+
+    `4'
+          Debug information.
+
+    `5'
+          More debug information.
+
+`Twelf.doubleCheck := false;'
+     If `true', each declaration is checked again for type correctness
+     after type reconstruction.  This is expensive and useful only for
+     your peace of mind, since type checking is significantly simpler
+     than type reconstruction.
+
+`Twelf.Print.implicit := false;'
+     If `true', implicit arguments (normally elided) are printed.
+     Sometimes this is useful to track particularly baffling errors.
+
+`Twelf.Print.depth := NONE;'
+     If `SOME(d)' then terms deeper than level `d' are printed as `%%'.
+
+`Twelf.Print.length := NONE;'
+     If `SOME(l)' then argument lists longer than `l' are truncated
+     with `...'.
+
+`Twelf.Print.indent := 3;'
+     Controls the amount of indentation for printing nested terms.
+
+`Twelf.Print.width := 80;'
+     The value used to decide when to break lines during printing of
+     terms.
+
+`Twelf.Prover.strategy := Twelf.Prover.FRS;'
+     Determines the strategy, where `F'=Filling, `R'=Recursion, and
+     `S'=Splitting.  Can also be `Twelf.Prover.RFS'.
+
+`Twelf.Prover.maxSplit := 2;'
+     The maximal number of generations of a variable introduced by
+     splitting.  Setting is to `0' will prohibit proof by cases.
+
+`Twelf.Prover.maxRecurse := 10;'
+     The maximal number of appeals to the induction hypothesis in any
+     case during a proof.
+
+
+File: twelf.info,  Node: Timing Statistics,  Next: Twelf Signature,  Prev: Environment Parameters,  Up: ML Interface
+
+Timing Statistics
+=================
+
+   Twelf has a few utilities to collect run-time statistics which are
+useful mainly for the developers.  They are collected in the structure
+`Timers'.  Timing information is cumulative in an ML session.
+
+`Twelf.Timers.show ();'
+     Show the value of timers and reset them to zero.
+
+`Twelf.Timers.reset ();'
+     Simply reset all timers to zero.
+
+`Twelf.Timers.check ();'
+     Display the value of timers, but do not reset them.
+
+*Caution:* Normally, the various times are exclusive, except that the
+runtime includes the garbage collection time which is shown separately.
+However, there is a problem the time for printing the answer
+substitution to a query is charged both to `Printing' and `Solving'.
+
+
+File: twelf.info,  Node: Twelf Signature,  Prev: Timing Statistics,  Up: ML Interface
+
+Twelf Signature
+===============
+
+   For reference, here is the ML signature `TWELF' of the `Twelf'
+structure which defines most functions and flags relevant to loading
+and executing Twelf programs.
+
+     signature TWELF =
+     sig
+       structure Print :
+       sig
+         val implicit : bool ref           (* false, print implicit args *)
+         val depth : int option ref        (* NONE, limit print depth *)
+         val length : int option ref       (* NONE, limit argument length *)
+         val indent : int ref              (* 3, indentation of subterms *)
+         val width : int ref               (* 80, line width *)
+       end
+     
+       structure Timers :
+       sig
+         val show : unit -> unit           (* show and reset timers *)
+         val reset : unit -> unit          (* reset timers *)
+         val check : unit -> unit          (* display, but not no reset *)
+       end
+     
+       structure OS :
+       sig
+         val chDir : string -> unit        (* change working directory *)
+         val getDir : unit -> string       (* get working directory *)
+         val exit : unit -> unit           (* exit Twelf and ML *)
+       end
+     
+       structure Prover :
+       sig
+         datatype Strategy = RFS | FRS     (* F=Fill, R=Recurse, S=Split *)
+         val strategy : Strategy ref       (* FRS, strategy used for %prove *)
+         val maxSplit : int ref            (* 2, bound on splitting  *)
+         val maxRecurse : int ref          (* 10, bound on recursion *)
+       end
+     
+       val chatter : int ref               (* 3, chatter level *)
+       val doubleCheck : bool ref          (* false, check after reconstruction *)
+     
+       datatype Status = OK | ABORT        (* return status *)
+     
+       val reset : unit -> unit            (* reset global signature *)
+       val loadFile : string -> Status     (* load file *)
+       val readDecl : unit -> Status       (* read declaration interactively *)
+       val decl : string -> Status         (* print declaration of constant *)
+     
+       val top : unit -> unit              (* top-level for interactive queries *)
+     
+       structure Config :
+       sig
+         type config                       (* configuration *)
+         val read : string -> config       (* read config file *)
+         val load : config -> Status       (* reset and load configuration *)
+         val define : string list -> config (* explicitly define configuration *)
+       end
+     
+       val version : string                (* Twelf version *)
+     end;  (* signature TWELF *)
+
+
+File: twelf.info,  Node: Twelf Server,  Next: Emacs Interface,  Prev: ML Interface,  Up: Top
+
+Twelf Server
+************
+
+   The Twelf server is a stand-alone command interpreter which provides
+the functionality of the `Twelf' structure in ML (*note ML
+Interface::.), but allows no ML definitions.  It is significantly
+smaller than Standard ML and is the recommended way to interact with
+Twelf except for developers.  Its behavior regarding configurations is
+slightly different in that the server maintains a current configuration,
+rather than allowing the binding of names to configurations.
+Configuration are defined with the `Config.read' command which takes a
+configuration filename as argument.
+
+   In Emacs, the Twelf server typically runs in a process buffer called
+`*twelf-server*'.  The user can select this buffer and directly type
+commands to the Twelf server.  This style of interaction is inherited
+from the comint package for Emacs, but typically one works through
+advanced commands in Twelf mode (*note Twelf Mode::.).
+
+   The Twelf server prompts with `%% OK %%' or `%% ABORT %%' depending
+on the success of failure of the previous operation.  It accepts
+commands and their arguments on one line, except that additional Twelf
+declarations which may be required are read separately, following the
+command line.  Reading declarations can be forcibly terminated with the
+end-of-file token `%.'.
+
+* Menu:
+
+* Server Types::                Server command argument types
+* Server Commands::             List of Twelf server commands
+
+
+File: twelf.info,  Node: Server Types,  Next: Server Commands,  Prev: Twelf Server,  Up: Twelf Server
+
+Server Types
+============
+
+   The server commands employ arguments of the following types.
+
+`file'
+     The name of a file, relative to the current working directory.
+
+`id'
+     A Twelf identifier
+
+`strategy'
+     Either `FRS' or `RFS' (*note Search Strategies::.)
+
+`bool'
+     Either `true' or `false'
+
+`nat'
+     A natural number (starting at `0')
+
+`limit'
+     Either `*' (to indicate no limit) or a natural number
+
+
+File: twelf.info,  Node: Server Commands,  Prev: Server Types,  Up: Twelf Server
+
+Server Commands
+===============
+
+   The Twelf server recognized the following commands.
+
+`set PARAMETER VALUE'
+     Set PARAMETER to VALUE, where PARAMETER is on of the following
+     (explained in *Note Environment Parameters::).
+
+    `chatter NAT'
+    `doubleCheck BOOL'
+    `Print.implicit BOOL'
+    `Print.depth LIMIT'
+    `Print.length LIMIT'
+    `Print.indent NAT'
+    `Print.width NAT'
+    `Prover.strategy STRATEGY'
+    `Prover.maxSplit NAT'
+    `Prover.maxRecurse NAT'
+`get PARAMETER'
+     Print the current value of PARAMETER (see table above).
+
+`Timers.show'
+     Print and reset timers.
+
+`Timers.reset'
+     Reset timers.
+
+`Timers.check'
+     Print, but do not reset timrs.
+
+`OS.chDir FILE'
+     Change working directory to FILE.
+
+`OS.getDir'
+     Print current working directory.
+
+`OS.exit'
+     Exit Twelf server.
+
+`quit'
+     Quit Twelf server (same as exit).
+
+`Config.read FILE'
+     Read current configuration from FILE.
+
+`Config.load'
+     Load current configuration
+
+`reset'
+     Reset global signature.
+
+`loadFile FILE'
+     Load Twelf file FILE.
+
+`decl ID'
+     Show constant declaration for ID.
+
+`top'
+     Enter interactive query loop (*note Interactive Queries::.)
+
+
+File: twelf.info,  Node: Emacs Interface,  Next: Installation,  Prev: Twelf Server,  Up: Top
+
+Emacs Interface
+***************
+
+   The Twelf mode for Emacs provides some functions and utilities for
+editing Twelf source and for interacting with an inferior Twelf server
+process which can load configurations, files, and individual
+declarations and track the source location of errors.  It also provides
+an interface to the tags package which allows simple editing of groups
+of files, constant name completion, and locating of constant
+declarations within the files of a configuration.
+
+   Note that in order to use the Emacs interface you need to include the
+line
+
+     (load "DIRECTORY/emacs/twelf-init.el")
+
+   in your `.emacs' file, where DIRECTORY is the Twelf root directory.
+
+* Menu:
+
+* Twelf Mode::                  Major mode for editing Twelf sources
+* Editing Commands::            Automatic indentation
+* Type Checking Commands::      Checking declarations, files, configurations
+* Error Tracking::              Jumping to error locations
+* Server State::                Changing server parameters
+* Info File::
+* Tags Files::                  Tagging Twelf sources
+* Twelf Timers::                Obtaining runtime statistics from server
+* Twelf-SML Mode::              Running Twelf under SML in Emacs
+* Emacs Variables::             Customizing Twelf mode
+* Syntax Highlighting::         Using multiple fonts for Twelf code
+* Emacs Initialization::        For the .emacs file
+* Command Summary::             Summary of Twelf mode commands
+
+
+File: twelf.info,  Node: Twelf Mode,  Next: Editing Commands,  Prev: Emacs Interface,  Up: Emacs Interface
+
+Twelf Mode
+==========
+
+   The Twelf mode in Emacs provides support for editing and indentation,
+syntax highlighting (including colors) (*note Syntax Highlighting::.),
+and communication commands for interacting with a Twelf server running
+as an inferior process to Emacs.  It defines a menu which is added to
+the menu bar, usually at the top of each Emacs frame.
+
+   Many commands apply to the current declaration, which is the
+declaration in which we find the Emacs cursor (not the cursor of the
+window system).  If the cursor is between declarations, the declaration
+after point is considered current.  From the point of view of Emacs,
+single declarations never include consecutive blank lines, which
+provides some insulation against missing closing delimiters.
+
+   Normally, Twelf mode is entered automatically when a Twelf source
+file is edited (*note Emacs Initialization::.), but it can also be
+switched on or off directly with `M-x twelf-mode'.
+
+`M-x twelf-mode'
+     Toggle Twelf mode, the major mode for editing Twelf code.
+
+
+File: twelf.info,  Node: Editing Commands,  Next: Type Checking Commands,  Prev: Twelf Mode,  Up: Emacs Interface
+
+Editing Commands
+================
+
+   The editing commands in Twelf mode partially analyse the structure
+of the text at the cursor position as Twelf code and try to indent
+accordingly.  This is not always perfect.
+
+`<TAB>'
+`M-x twelf-indent-line'
+     Indent current line as Twelf code.  This recognizes comments,
+     matching delimiters, and standard infix operators.
+
+`<DEL>'
+`M-x backward-delete-char-untabify'
+     Delete character backward, changing tabs into spaces.
+
+`M-C-q'
+`M-x twelf-indent-decl'
+     Indent each line of the current declaration.
+
+`M-x twelf-indent-region'
+     Indent each line of the region as Twelf code.
+
+
+File: twelf.info,  Node: Type Checking Commands,  Next: Error Tracking,  Prev: Editing Commands,  Up: Emacs Interface
+
+Type Checking Commands
+======================
+
+   The Twelf mode provides simple commands which cause the server to
+load or reload the current configuration, the file edited in the current
+buffer, or just the declaration at point.  Each of these command can be
+preceded by a prefix argument (for example, `C-u C-c C-c') which will
+select the Twelf server buffer after completion of the command.  The
+Twelf server buffer can also be forced to be shown with the `C-c C-u'
+Emacs command.
+
+`C-c C-c'
+`M-x twelf-save-check-config'
+     Save its modified buffers and then check the current Twelf
+     configuration.   With prefix argument also displays Twelf server
+     buffer.   If necessary, this will start up an Twelf server process.
+
+`C-c C-s'
+`M-x twelf-save-check-file'
+     Save buffer and then check it by giving a command to the Twelf
+     server.   In Twelf Config minor mode, it reconfigures the server.
+     With prefix argument also displays Twelf server buffer.
+
+`C-c C-d'
+`M-x twelf-check-declaration'
+     Send the current declaration to the Twelf server process for
+     checking.   With prefix argument also displays Twelf server buffer.
+
+`C-c c'
+`M-x twelf-type-const'
+     Display the type of the constant before point.   Note that the
+     type of the constant will be `absolute' rather than the  type of
+     the particular instance of the constant.
+
+`C-c C-u'
+`M-x twelf-server-display'
+     Display Twelf server buffer, moving to the end of output.   With
+     prefix argument also selects the Twelf server buffer.
+
+
+File: twelf.info,  Node: Error Tracking,  Next: Server State,  Prev: Type Checking Commands,  Up: Emacs Interface
+
+Error Tracking
+==============
+
+   Error messages by the Twelf server are flagged with the filename and
+an educated guess as to the source of the error (*note Error
+Messages::.).  These can be interpreted by Emacs to jump directly to
+the suspected site.
+
+   Sometimes, the server buffer and the the server itself believe to
+have different working directories.  In that case, error tracking may
+not be able to find the file, and an explicit call to `OS.chDir' or
+`M-x cd' in the server buffer may be required.
+
+`C-c `'
+`M-x twelf-next-error'
+     Find the next error by parsing the Twelf server or Twelf-SML
+     buffer.   Move the error message on the top line of the window;
+     put the cursor at the beginning of the error source. If the  error
+     message specifies a range, the mark is placed at the end.
+
+`C-c ='
+`M-x twelf-goto-error'
+     Go to the error reported on the current line or below.   Also
+     updates the error cursor to the current line.
+
+
+File: twelf.info,  Node: Server State,  Next: Info File,  Prev: Error Tracking,  Up: Emacs Interface
+
+Server State
+============
+
+   The server state consists of the current configuration and a number
+of parameters described in *Note Twelf Server::.  The current
+configuration is often set implicitly, with the `C-c C-c' command in a
+configuration buffer, but it can also be set explicitly.
+
+`C-c <'
+`M-x twelf-set'
+     Sets the Twelf parameter PARM to VALUE.   When called
+     interactively, prompts for parameter and value, supporting
+     completion.
+
+`C-c >'
+`M-x twelf-get'
+     Prints the value of the Twelf parameter PARM.   When called
+     interactively, promts for parameter, supporting completion.
+
+`C-c C-i'
+`M-x twelf-server-interrupt'
+     Interrupt the Twelf server process.
+
+`M-x twelf-server'
+     Start an Twelf server process in a buffer named *twelf-server*.
+     Any previously existing process is deleted after confirmation.
+     Optional argument PROGRAM defaults to the value of the variable
+     twelf-server-program.   This locally re-binds
+     `twelf-server-timeout' to 15 secs.
+
+`M-x twelf-server-configure'
+     Initializes the Twelf server configuration from CONFIG-FILE.   A
+     configuration file is a list of relative file names in  dependency
+     order.  Lines starting with % are treated as comments.   Starts a
+     Twelf servers if necessary.
+
+`M-x twelf-reset'
+     Reset the global signature of Twelf maintained by the server.
+
+`M-x twelf-server-quit'
+     Kill the Twelf server process.
+
+`M-x twelf-server-restart'
+     Restarts server and re-initializes configuration.   This is
+     primarily useful during debugging of the Twelf server code or  if
+     the Twelf server is hopelessly wedged.
+
+`M-x twelf-server-send-command'
+     Restarts server and re-initializes configuration.   This is
+     primarily useful during debugging of the Twelf server code or  if
+     the Twelf server is hopelessly wedged.
+
+
+File: twelf.info,  Node: Info File,  Next: Tags Files,  Prev: Server State,  Up: Emacs Interface
+
+Info File
+=========
+
+   The content of this file in Info format can be visited directly and
+does not need to be tied into the Info tree.  See the documentation for
+the Emacs info package for more info
+
+`C-c C-h'
+`M-x twelf-info'
+     Visit the Twelf User's Guide in info format in Emacs.   With a
+     prefix argument it prompts for the info file name, which  defaults
+     to the value of the `twelf-info-file' variable.
+
+
+File: twelf.info,  Node: Tags Files,  Next: Twelf Timers,  Prev: Info File,  Up: Emacs Interface
+
+Tags Files
+==========
+
+   Tags files provide a convenient way to group files, such as Twelf
+configurations.  See the documentation for the Emacs etags package for
+more information.
+
+`M-x twelf-tag'
+     Create tags file for current configuration.   If the current
+     configuration is sources.cfg, the tags file is TAGS.   If current
+     configuration is named FILE.cfg, tags file will be named FILE.tag
+     Errors are displayed in the Twelf server buffer.
+
+`M-.'
+`M-x find-tag TAG'
+     Selects the buffer that the tag is contained in and puts point at
+     its definition.
+
+`C-x 4 .'
+`M-x find-tag-other-window TAG'
+     Selects the buffer that TAG is contained in in another window and
+     puts point at its definition.
+
+`C-c q'
+`M-x tags-query-replace FROM TO'
+     Query-replace-regexp FROM with TO through all files listed in tags
+     table.
+
+`C-c s'
+`M-x tags-search REGEXP'
+     Search through all files listed in tags table for match for REGEXP.
+
+`M-,'
+`M-x tags-loop-continue'
+     Continue last C-c s or C-c q command.
+
+
+File: twelf.info,  Node: Twelf Timers,  Next: Twelf-SML Mode,  Prev: Tags Files,  Up: Emacs Interface
+
+Twelf Timers
+============
+
+   The following commands obtain the runtime statistics of the the
+Twelf server.
+
+`M-x twelf-timers-reset'
+     Reset the Twelf timers.
+
+`M-x twelf-timers-show'
+     Show and reset the Twelf timers.
+
+`M-x twelf-timers-check'
+     Show the Twelf timers without resetting them.
+

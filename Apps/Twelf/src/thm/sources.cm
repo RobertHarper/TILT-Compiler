@@ -1,0 +1,13 @@
+Group is
+  ../lambda/sources.cm
+  ../formatter/sources.cm
+  ../modes/sources.cm
+  ../order/sources.cm
+  ../paths/sources.cm
+  thmsyn.sig.sml
+  thmsyn.fun.sml
+  thmprint.sig.sml
+  thmprint.fun.sml
+  thm.sig.sml	 
+  thm.fun.sml
+  thm.sml

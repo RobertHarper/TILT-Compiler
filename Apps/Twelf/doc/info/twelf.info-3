@@ -1,0 +1,601 @@
+This is Info file twelf.info, produced by Makeinfo version 1.67 from
+the input file twelf.texi.
+
+
+File: twelf.info,  Node: Twelf-SML Mode,  Next: Emacs Variables,  Prev: Twelf Timers,  Up: Emacs Interface
+
+Twelf-SML Mode
+==============
+
+   There is some support for interacting with Twelf, even when it is
+run within ML, rather than as a stand-alone server.  You can start an
+SML in which you intend to run Twelf with `M-x twelf-sml'; the buffer
+will then be in Twelf-SML mode.
+
+   If you intend to send command to a buffer running Twelf in SML
+(rather than the Twelf server), you can switch to a minor mode
+2Twelf-SML with `M-x twelf-to-twelf-sml'.
+
+`M-x twelf-sml'
+     Run an inferior Twelf-SML process in a buffer *twelf-sml*.   If
+     there is a process already running in *twelf-sml*, just  switch to
+     that buffer.  With argument, allows you to change the program
+     which defaults to the value of twelf-sml-program.  Runs the hooks
+     from  twelf-sml-mode-hook (after the comint-mode-hook is run).
+
+`M-x twelf-to-twelf-sml-mode'
+     Toggles minor mode for sending queries to Twelf-SML instead of
+     Twelf server.
+
+`C-c C-e'
+`M-x twelf-sml-send-query'
+     Send the current declaration to the inferior Twelf-SML process as
+     a query.   Prefix argument means switch-to-twelf-sml afterwards.
+
+`C-c C-r'
+`M-x twelf-sml-send-region'
+     Send the current region to the inferior Twelf-SML process.
+     Prefix argument means switch-to-twelf-sml afterwards.
+
+`C-c <RETURN>'
+`M-x twelf-sml-send-newline'
+     Send a newline to the inferior Twelf-SML process.   If a prefix
+     argument is given, switches to Twelf-SML buffer afterwards.
+
+`C-c ;'
+`M-x twelf-sml-send-semicolon'
+     Send a semi-colon to the inferior Twelf-SML process.   If a prefix
+     argument is given, switched to Twelf-SML buffer afterwards.
+
+`C-c d'
+`M-x twelf-sml-cd DIR'
+     Make DIR become the Twelf-SML process' buffer's default directory
+     and  furthermore issue an appropriate command to the inferior
+     Twelf-SML process.
+
+`M-x twelf-sml-quit'
+     Kill the Twelf-SML process.
+
+
+File: twelf.info,  Node: Emacs Variables,  Next: Syntax Highlighting,  Prev: Twelf-SML Mode,  Up: Emacs Interface
+
+Emacs Variables
+===============
+
+   A number of Emacs variables can be changed to customize the behavior
+of Twelf mode.  The list below is not complete; please refer to the
+Emacs Lisp sources in `emacs/twelf.el' for additional information.
+
+`twelf-indent'
+     Indent for Twelf expressions.
+
+`twelf-server-program'
+     Default Twelf server program.
+
+`twelf-info-file'
+     Default Twelf info file.
+
+`twelf-mode-hook'
+     List of hook functions to run when switching to Twelf mode.
+
+`twelf-server-mode-hook'
+     List of hook functions to run when switching to Twelf Server mode.
+
+`twelf-sml-program'
+     Default Twelf-SML program.
+
+`twelf-sml-mode-hook'
+     List of hook functions for Twelf-SML mode.
+
+
+File: twelf.info,  Node: Syntax Highlighting,  Next: Emacs Initialization,  Prev: Emacs Variables,  Up: Emacs Interface
+
+Syntax Highlighting
+===================
+
+   Twelf also provides syntax highlighting, which helps make Elf code
+more readable.  This highlighting can use different colors and faces.
+Unfortunately, the necessary libraries are at present not standardized
+between XEmacs and FSF Emacs, which means that highlighting support is
+less general and less portable than the plain Twelf mode.
+
+   At present, highlighting has not been extensively tested in various
+versions of Emacs, but the font-lock mode provided in
+`emacs/twelf-font.el' seems to work at least in XEmacs version 19.16
+and FSF Emacs version 19.34.  The alternative highlight mode provided
+in `emacs/twelf-hilit' appears to work in FSF Emacs 19.34.
+
+   Unlike other font-lock modes, Twelf's fontification is not
+`electric' in that it does not fontify as one types.  One has to
+explicitly issue a command to fontify the current Twelf declaration or
+current buffer, since single-line highlighting is too error-prone and
+multi-line immediate highlighting is not well supported in current
+versions of font lock mode.
+
+`C-c C-l'
+`M-x twelf-font-fontify-decl'
+     Fontifies the current Twelf declaration.
+
+`C-c l'
+`M-x twelf-font-fontify-buffer'
+     Fontitifies the current buffer as Twelf code
+
+`M-x twelf-font-unfontify'
+     Removes fontification from current buffer.
+
+
+File: twelf.info,  Node: Emacs Initialization,  Next: Command Summary,  Prev: Syntax Highlighting,  Up: Emacs Interface
+
+Emacs Initialization
+====================
+
+   If Twelf has been properly installed, you can use the Twelf's Emacs
+interface with the default settings simply by adding the line
+
+     (load "DIRECTORY/emacs/twelf-init.el")
+
+   to your `.emacs' file, where DIRECTORY is the Twelf root directory.
+In order to customize the behavior, you might copy the file
+`emacs/twelf-init.el' or its contents and change it as appropriate.
+
+
+File: twelf.info,  Node: Command Summary,  Prev: Emacs Initialization,  Up: Emacs Interface
+
+Command Summary
+===============
+
+     --- Editing Commands ---
+     TAB          twelf-indent-line
+     DEL          backward-delete-char-untabify
+     M-C-q        twelf-indent-decl
+     
+     --- Type Checking ---
+     C-c C-c      twelf-save-check-config
+     C-c C-s      twelf-save-check-file
+     C-c C-d      twelf-check-declaration
+     C-c c        twelf-type-const
+     C-c C-u      twelf-server-display
+     
+     --- Error Tracking ---
+     C-c `        twelf-next-error
+     C-c =        twelf-goto-error
+     
+     --- Syntax Highlighting ---
+     C-c C-l      twelf-font-fontify-decl
+     C-c l        twelf-font-fontify-buffer
+     
+     --- Server State ---
+     C-c <        twelf-set
+     C-c >        twelf-get
+     C-c C-i      twelf-server-interrupt
+     M-x twelf-server
+     M-x twelf-server-configure
+     M-x twelf-server-quit
+     M-x twelf-server-restart
+     M-x twelf-server-send-command
+     
+     --- Info ---
+     C-c C-h      twelf-info
+     
+     --- Timers ---
+     M-x twelf-timers-reset
+     M-x twelf-timers-show
+     M-x twelf-timers-check
+     
+     --- Tags (standard Emacs etags package) ---
+     M-x twelf-tag
+     M-.          find-tag (standard binding)
+     C-x 4 .      find-tag-other-window (standard binding)
+     C-c q        tags-query-replace (Twelf mode binding)
+     C-c s        tags-search (Twelf mode binding)
+     M-,          tags-loop-continue (standard binding)
+                  visit-tags-table, list-tags, tags-apropos
+     
+     --- Communication with inferior Twelf-SML process (not Twelf Server) ---
+     M-x twelf-sml
+     C-c C-e      twelf-sml-send-query
+     C-c C-r      twelf-sml-send-region
+     C-c RET      twelf-sml-send-newline
+     C-c ;        twelf-sml-send-semicolon
+     C-c d        twelf-sml-cd
+     M-x twelf-sml-quit
+     
+     --- Variables ---
+     twelf-indent
+
+
+File: twelf.info,  Node: Installation,  Next: Examples,  Prev: Emacs Interface,  Up: Top
+
+Installation
+************
+
+   At present, Twelf has been tested in SML of New Jersey (version 110
+or higher) and MLWorks, both of which implement Standard ML (revised
+1997) and the Standard ML Basis Library.  The instructions below apply
+to a Unix system.  For instructions for other architectures or updates
+please check the file `INSTALL' at the Twelf home page and in the Twelf
+root directory after unpacking the distribution.
+
+   On a Unix system you unpack the sources with
+
+     gunzip twelf-1-2.tar.gz
+     tar -xf twelf-1-2.tar
+     cd twelf
+     make
+
+   This builds the Twelf server (*note Twelf Server::.) for your current
+architecture and makes it accessible as `bin/twelf-server'.  It also
+installs the Twelf Emacs interface (*note Emacs Interface::.), but you
+must add a line
+
+     (load "DIRECTORY/emacs/twelf-init.el")
+
+   to your `.emacs' file, where DIRECTORY is the root directory into
+which you installed Twelf.  Note that the Twelf installation cannot be
+moved after it has been compiled with `make', since absolute pathnames
+are built into the executable scripts.
+
+   Note that the Twelf server presently only works with Standard ML of
+New Jersey, since interrupt handling is implementation specific.
+
+   If you would like to use Twelf as a structure in SML, you can then
+call
+
+     make twelf-sml
+
+   which creates `bin/twelf-sml' for the Twelf-SML mode (*note
+Twelf-SML Mode::.).  Calling `make clean' will remove temporary files
+created by the SML compiler, but not the executable file.
+
+SML of New Jersey (free, version 110 or higher)
+     See http://cm.bell-labs.com/cm/cs/what/smlnj/index.html
+
+MLWorks (commercial)
+     See http://www.harlequin.com/products/ads/ml/ml.html
+
+     In MLWorks, you can presently only directly load the Twelf sources,
+     using the file `load.sml'.
+
+          mlworks-basis  start MLWorks with basis library in Twelf root directory
+          use "load.sml";  compile and load Twelf
+
+
+File: twelf.info,  Node: Examples,  Next: Index,  Prev: Installation,  Up: Top
+
+Examples
+********
+
+   We give here only a brief reference to the examples in the
+`examples/' subdirectory of the distribution.  Each example comes in a
+separate subdirectory whose name is listed below.
+
+`arith'
+     Associativity and commutative of unary addition.
+
+`ccc'
+     Cartesian-closed categories (currently incomplete).
+
+`church-rosser'
+     The Church-Rosser theorem for untyped lambda-calculus.
+
+`compile'
+     Various compilers starting from Mini-ML.
+
+`cut-elim'
+     Cut elimination for intuitionistic and classical logic.
+
+`fol'
+     Simple theorems in first-order logic.
+
+`guide'
+     Examples from Users' Guide.
+
+`lp'
+     Logic programming, uniform derivations.
+
+`lp-horn'
+     Horn fragment of logic programming.
+
+`mini-ml'
+     Mini-ML, type preservation and related theorems.
+
+`polylam'
+     Polymorphic lambda-calculus.
+
+`prop-calc'
+     Natural deduction and Hilbert propositional calculus
+
+`units'
+     Mini-ML extended with units (currently incomplete).
+
+   In each directory or subdirectory you can find a file `sources.cfg'
+which defines the standard configuration, usually just the basic theory.
+The `test.cfg' which also defines an extended configuration with some
+test queries and theorems.  Most examples also have a `README' file
+with a brief explanation and pointer to the literature.
+
+
+File: twelf.info,  Node: Index,  Prev: Examples,  Up: Top
+
+Index
+*****
+
+* Menu:
+
+* %infix:                                Operator Declaration.
+* %mode <1>:                             Full Mode Declaration.
+* %mode:                                 Short Mode Declaration.
+* %name:                                 Name Preferences.
+* %postfix:                              Operator Declaration.
+* %prefix:                               Operator Declaration.
+* %prove:                                Theorem Declaration.
+* %query:                                Query Declaration.
+* %solve:                                Solve Declaration.
+* %terminates:                           Termination Declaration.
+* %theorem:                              Theorem Declaration.
+* add-hook:                              Emacs Initialization.
+* ambiguity:                             Type Ascription.
+* arguments, implicit:                   Implicit Arguments.
+* arguments, mutual:                     Mutual Recursion.
+* arithmetic:                            Examples.
+* assumptions:                           Operational Semantics.
+* auto-mode-alist:                       Emacs Initialization.
+* autoload:                              Emacs Initialization.
+* backquote, before variables:           Identifiers.
+* bool:                                  Server Types.
+* bound variables:                       Constructor Declaration.
+* call patterns:                         Termination Declaration.
+* Cartesian-closed categories:           Examples.
+* case, upper and lower:                 Identifiers.
+* characters, reserved:                  Reserved Characters.
+* Church-Rosser theorem:                 Examples.
+* clause selection:                      Operational Semantics.
+* colors:                                Syntax Highlighting.
+* commands, Emacs:                       Command Summary.
+* commands, server:                      Server Commands.
+* Config.load:                           Server Commands.
+* Config.read:                           Server Commands.
+* Configurations:                        Configurations.
+* current declaration:                   Twelf Mode.
+* cut elimination:                       Examples.
+* decl:                                  Server Commands.
+* declaration:                           Grammar.
+* declaration, currnt:                   Twelf Mode.
+* declarations:                          Grammar.
+* declarations, mode:                    Short Mode Declaration.
+* declarations, name preference:         Name Preferences.
+* declarations, operator:                Operator Declaration.
+* declarations, termination:             Termination Declaration.
+* declarations, theorem:                 Theorem Declaration.
+* definitions:                           Definitions.
+* definitions, strict:                   Strict Definitions.
+* display, of server buffer:             Type Checking Commands.
+* documentation:                         Info File.
+* editing:                               Editing Commands.
+* Emacs variables:                       Emacs Variables.
+* environment parameters:                Environment Parameters.
+* error messages:                        Error Messages.
+* error tracking:                        Error Tracking.
+* examples, from user's guide:           Examples.
+* executing proofs:                      Proof Realizations.
+* existential quantifier:                Theorem Declaration.
+* faces:                                 Syntax Highlighting.
+* file:                                  Server Types.
+* file names:                            Introduction.
+* files, configuration:                  Configurations.
+* files, loading:                        Loading Files.
+* filling:                               Proof Steps.
+* first-order logic:                     Examples.
+* free variables:                        Constructor Declaration.
+* get:                                   Server Commands.
+* Hilbert calculus:                      Examples.
+* Horn logic, theory:                    Examples.
+* id:                                    Server Types.
+* identifiers, reserved:                 Identifiers.
+* implicit arguments:                    Implicit Arguments.
+* implicit quantifiers:                  Implicit Quantifiers.
+* indentation:                           Editing Commands.
+* info file:                             Info File.
+* initializing Twelf mode:               Emacs Initialization.
+* input mode:                            Modes.
+* installation:                          Installation.
+* interrupt:                             Server State.
+* kinds:                                 Syntax.
+* lambda calculus example:               Sample Program.
+* lambda-calculus, polymorphic:          Examples.
+* lambda-calculus, untyped:              Examples.
+* left:                                  Operator Declaration.
+* LF:                                    Introduction.
+* limit:                                 Server Types.
+* load-path:                             Emacs Initialization.
+* loadFile:                              Server Commands.
+* loading files:                         Loading Files.
+* local assumptions:                     Operational Semantics.
+* local parameters:                      Operational Semantics.
+* logic programming:                     Logic Programming.
+* logic programming, theory:             Examples.
+* logical framework:                     Introduction.
+* M-x backward-delete-char-untabify:     Editing Commands.
+* M-x find-tag:                          Tags Files.
+* M-x find-tag-other-window:             Tags Files.
+* M-x tags-loop-continue:                Tags Files.
+* M-x tags-query-replace:                Tags Files.
+* M-x tags-search:                       Tags Files.
+* M-x twelf-check-declaration:           Type Checking Commands.
+* M-x twelf-font-fontify-buffer:         Syntax Highlighting.
+* M-x twelf-font-fontify-decl:           Syntax Highlighting.
+* M-x twelf-font-unfontify:              Syntax Highlighting.
+* M-x twelf-get:                         Server State.
+* M-x twelf-goto-error:                  Error Tracking.
+* M-x twelf-indent-decl:                 Editing Commands.
+* M-x twelf-indent-line:                 Editing Commands.
+* M-x twelf-indent-region:               Editing Commands.
+* M-x twelf-info:                        Info File.
+* M-x twelf-mode:                        Twelf Mode.
+* M-x twelf-next-error:                  Error Tracking.
+* M-x twelf-reset:                       Server State.
+* M-x twelf-save-check-config:           Type Checking Commands.
+* M-x twelf-save-check-file:             Type Checking Commands.
+* M-x twelf-server:                      Server State.
+* M-x twelf-server-configure:            Server State.
+* M-x twelf-server-display:              Type Checking Commands.
+* M-x twelf-server-interrupt:            Server State.
+* M-x twelf-server-quit:                 Server State.
+* M-x twelf-server-restart:              Server State.
+* M-x twelf-server-send-command:         Server State.
+* M-x twelf-set:                         Server State.
+* M-x twelf-sml:                         Twelf-SML Mode.
+* M-x twelf-sml-cd:                      Twelf-SML Mode.
+* M-x twelf-sml-quit:                    Twelf-SML Mode.
+* M-x twelf-sml-send-newline:            Twelf-SML Mode.
+* M-x twelf-sml-send-query:              Twelf-SML Mode.
+* M-x twelf-sml-send-region:             Twelf-SML Mode.
+* M-x twelf-sml-send-semicolon:          Twelf-SML Mode.
+* M-x twelf-tag:                         Tags Files.
+* M-x twelf-timers-check:                Twelf Timers.
+* M-x twelf-timers-reset:                Twelf Timers.
+* M-x twelf-timers-show:                 Twelf Timers.
+* M-x twelf-to-twelf-sml-mode:           Twelf-SML Mode.
+* M-x twelf-type-const:                  Type Checking Commands.
+* meta-logic:                            Theorem Prover.
+* Mini-ML, compilation:                  Examples.
+* Mini-ML, theory:                       Examples.
+* Mini-ML, with units:                   Examples.
+* ML implementations:                    Installation.
+* ML interface:                          ML Interface.
+* MLWorks:                               Installation.
+* mode checking:                         Mode Checking.
+* mode declaration, full form:           Full Mode Declaration.
+* mode declarations, short form:         Short Mode Declaration.
+* modes:                                 Modes.
+* mutual arguments:                      Mutual Recursion.
+* mutual recursion:                      Mutual Recursion.
+* name preferences:                      Name Preferences.
+* nat:                                   Server Types.
+* natural deduction:                     Sample Signature.
+* none:                                  Operator Declaration.
+* objects:                               Syntax.
+* occurrences, rigid:                    Strict Occurrences.
+* occurrences, strict:                   Strict Occurrences.
+* open:                                  ML Interface.
+* operational semantics:                 Operational Semantics.
+* operator declarations:                 Operator Declaration.
+* order:                                 Termination Declaration.
+* order, lexicographic:                  Lexicographic Orders.
+* order, simultaneous:                   Simultaneous Orders.
+* order, subterm:                        Subterm Ordering.
+* OS.chDir:                              Server Commands.
+* OS.exit:                               Server Commands.
+* OS.getDir:                             Server Commands.
+* output mode:                           Modes.
+* parameters:                            Operational Semantics.
+* parameters, environment:               Environment Parameters.
+* precedence:                            Operator Declaration.
+* proof realizations:                    Proof Realizations.
+* quantifier, existential:               Theorem Declaration.
+* quantifier, universal:                 Theorem Declaration.
+* quantifiers, implicit:                 Implicit Quantifiers.
+* queries:                               Query Declaration.
+* queries, interactive:                  Interactive Queries.
+* quit:                                  Server Commands.
+* recursion:                             Proof Steps.
+* reserved characters:                   Reserved Characters.
+* reserved identifiers:                  Identifiers.
+* reset:                                 Server Commands.
+* right:                                 Operator Declaration.
+* rigid occurrences:                     Strict Occurrences.
+* running time:                          Timing Statistics.
+* search strategy:                       Search Strategies.
+* semantics, operational:                Operational Semantics.
+* server:                                Twelf Server.
+* server buffer:                         Type Checking Commands.
+* server commands:                       Server Commands.
+* server parameters, setting:            Server State.
+* server state:                          Server State.
+* server timers:                         Twelf Timers.
+* server types:                          Server Types.
+* set:                                   Server Commands.
+* setting server parameters:             Server State.
+* signature:                             Grammar.
+* signature TWELF:                       Twelf Signature.
+* solving queries:                       Solve Declaration.
+* splitting:                             Proof Steps.
+* Standard ML of New Jersey:             Installation.
+* statistics:                            Timing Statistics.
+* strategy:                              Server Types.
+* strict definitions:                    Strict Definitions.
+* strict occurrences:                    Strict Occurrences.
+* structure Twelf:                       Twelf Signature.
+* subgoal selection:                     Operational Semantics.
+* subterm order:                         Subterm Ordering.
+* syntax highlighting:                   Syntax Highlighting.
+* tagging configurations:                Tags Files.
+* tags file:                             Tags Files.
+* term:                                  Grammar.
+* term reconstruction:                   Term Reconstruction.
+* termination checking:                  Termination.
+* termination declarations:              Termination Declaration.
+* termination order:                     Termination Declaration.
+* theorem declarations:                  Theorem Declaration.
+* theorem prover:                        Theorem Prover.
+* Timers.check:                          Server Commands.
+* Timers.reset:                          Server Commands.
+* Timers.show:                           Server Commands.
+* timing statistics:                     Timing Statistics.
+* top:                                   Server Commands.
+* top-level, query:                      Interactive Queries.
+* tracking errors:                       Error Tracking.
+* Twelf home page:                       Introduction.
+* Twelf mode in Emacs:                   Twelf Mode.
+* Twelf server:                          Twelf Server.
+* twelf-indent:                          Emacs Variables.
+* twelf-info-file:                       Emacs Variables.
+* twelf-mode-hook:                       Emacs Variables.
+* twelf-server-mode-hook:                Emacs Variables.
+* twelf-server-program:                  Emacs Variables.
+* Twelf-SML mode:                        Twelf-SML Mode.
+* twelf-sml-mode-hook:                   Emacs Variables.
+* twelf-sml-program:                     Emacs Variables.
+* Twelf.ABORT:                           Configurations.
+* Twelf.chatter:                         Environment Parameters.
+* Twelf.Config.load:                     Configurations.
+* Twelf.Config.read:                     Configurations.
+* Twelf.doubleCheck:                     Environment Parameters.
+* Twelf.loadFile:                        Loading Files.
+* Twelf.OK:                              Configurations.
+* Twelf.OS.chDir:                        Configurations.
+* Twelf.OS.getDir:                       Configurations.
+* Twelf.Print.depth:                     Environment Parameters.
+* Twelf.Print.implicit:                  Environment Parameters.
+* Twelf.Print.indent:                    Environment Parameters.
+* Twelf.Print.length:                    Environment Parameters.
+* Twelf.Print.width:                     Environment Parameters.
+* Twelf.Prover.FRS:                      Search Strategies.
+* Twelf.Prover.maxRecurse <1>:           Environment Parameters.
+* Twelf.Prover.maxRecurse:               Proof Steps.
+* Twelf.Prover.maxSplit <1>:             Environment Parameters.
+* Twelf.Prover.maxSplit:                 Proof Steps.
+* Twelf.Prover.RFS:                      Search Strategies.
+* Twelf.Prover.strategy <1>:             Environment Parameters.
+* Twelf.Prover.strategy:                 Search Strategies.
+* Twelf.reset:                           Loading Files.
+* Twelf.Timers.check:                    Timing Statistics.
+* Twelf.Timers.reset:                    Timing Statistics.
+* Twelf.Timers.show:                     Timing Statistics.
+* type ascription:                       Type Ascription.
+* type checking, from Emacs:             Type Checking Commands.
+* type families:                         Syntax.
+* type inference example:                Sample Program.
+* type reconstruction:                   Term Reconstruction.
+* types:                                 Syntax.
+* types, server:                         Server Types.
+* typographical conventions:             Introduction.
+* unification:                           Operational Semantics.
+* universal quantifier:                  Theorem Declaration.
+* variable naming:                       Name Preferences.
+* variable scope:                        Constructor Declaration.
+* variables, bound:                      Constructor Declaration.
+* variables, Emacs:                      Emacs Variables.
+* variables, free:                       Constructor Declaration.
+
+

@@ -1,0 +1,757 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 11  Emacs Interface</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_10.html">previous</A>, <A HREF="twelf_12.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC53" HREF="twelf_toc.html#TOC53">11  Emacs Interface</A></H1>
+
+<P>
+The Twelf mode for Emacs provides some functions and utilities for
+editing Twelf source and for interacting with an inferior Twelf server
+process which can load configurations, files, and individual
+declarations and track the source location of errors.  It also provides
+an interface to the tags package which allows simple editing of groups
+of files, constant name completion, and locating of constant
+declarations within the files of a configuration.
+
+</P>
+<P>
+Note that in order to use the Emacs interface you need to include the
+line
+
+</P>
+
+<PRE>
+(load "<VAR>directory</VAR>/emacs/twelf-init.el")
+</PRE>
+
+<P>
+in your <TT>`.emacs'</TT> file, where <VAR>directory</VAR> is the Twelf root
+directory.
+
+</P>
+
+<UL>
+<LI><A HREF="twelf_11.html#SEC54">Twelf Mode</A>: Major mode for editing Twelf sources
+<LI><A HREF="twelf_11.html#SEC55">Editing Commands</A>: Automatic indentation
+<LI><A HREF="twelf_11.html#SEC56">Type Checking Commands</A>: Checking declarations, files, configurations
+<LI><A HREF="twelf_11.html#SEC57">Error Tracking</A>: Jumping to error locations
+<LI><A HREF="twelf_11.html#SEC58">Server State</A>: Changing server parameters
+<LI><A HREF="twelf_11.html#SEC59">Info File</A>
+<LI><A HREF="twelf_11.html#SEC60">Tags Files</A>: Tagging Twelf sources
+<LI><A HREF="twelf_11.html#SEC61">Twelf Timers</A>: Obtaining runtime statistics from server
+<LI><A HREF="twelf_11.html#SEC62">Twelf-SML Mode</A>: Running Twelf under SML in Emacs
+<LI><A HREF="twelf_11.html#SEC63">Emacs Variables</A>: Customizing Twelf mode
+<LI><A HREF="twelf_11.html#SEC64">Syntax Highlighting</A>: Using multiple fonts for Twelf code
+<LI><A HREF="twelf_11.html#SEC65">Emacs Initialization</A>: For the .emacs file
+<LI><A HREF="twelf_11.html#SEC66">Command Summary</A>: Summary of Twelf mode commands
+</UL>
+
+
+
+<H2><A NAME="SEC54" HREF="twelf_toc.html#TOC54">11.1  Twelf Mode</A></H2>
+
+<P>
+<A NAME="IDX178"></A>
+<A NAME="IDX179"></A>
+<A NAME="IDX180"></A>
+
+</P>
+<P>
+The Twelf mode in Emacs provides support for editing and indentation,
+syntax highlighting (including colors) (see section <A HREF="twelf_11.html#SEC64">11.11  Syntax Highlighting</A>),
+and communication commands for interacting with a Twelf server running
+as an inferior process to Emacs.  It defines a menu which is added to
+the menu bar, usually at the top of each Emacs frame.
+
+</P>
+<P>
+Many commands apply to the current declaration, which is the declaration
+in which we find the Emacs cursor (not the cursor of the window system).
+If the cursor is between declarations, the declaration after point is
+considered current.  From the point of view of Emacs, single
+declarations never include consecutive blank lines, which provides some
+insulation against missing closing delimiters.
+
+</P>
+<P>
+Normally, Twelf mode is entered automatically when a Twelf source file
+is edited (see section <A HREF="twelf_11.html#SEC65">11.12  Emacs Initialization</A>), but it can also be switched on or
+off directly with <KBD>M-x twelf-mode</KBD>.
+
+</P>
+<DL COMPACT>
+
+<DT><KBD>M-x twelf-mode</KBD>
+<DD>
+<A NAME="IDX181"></A>
+ Toggle Twelf mode, the major mode for editing Twelf code.
+</DL>
+
+
+
+<H2><A NAME="SEC55" HREF="twelf_toc.html#TOC55">11.2  Editing Commands</A></H2>
+
+<P>
+The editing commands in Twelf mode partially analyse the structure
+of the text at the cursor position as Twelf code and try to indent
+accordingly.  This is not always perfect.
+
+</P>
+<P>
+<A NAME="IDX182"></A>
+<A NAME="IDX183"></A>
+
+</P>
+<DL COMPACT>
+
+<DT><KBD><KBD>TAB</KBD></KBD>
+<DD>
+<DT><KBD>M-x twelf-indent-line</KBD>
+<DD>
+<A NAME="IDX184"></A>
+  Indent current line as Twelf code.
+This recognizes comments, matching delimiters, and standard infix operators.
+
+<DT><KBD><KBD>DEL</KBD></KBD>
+<DD>
+<DT><KBD>M-x backward-delete-char-untabify</KBD>
+<DD>
+<A NAME="IDX185"></A>
+ Delete character backward, changing tabs into spaces.
+
+<DT><KBD>M-C-q</KBD>
+<DD>
+<DT><KBD>M-x twelf-indent-decl</KBD>
+<DD>
+<A NAME="IDX186"></A>
+ Indent each line of the current declaration.
+
+<DT><KBD>M-x twelf-indent-region</KBD>
+<DD>
+<A NAME="IDX187"></A>
+ Indent each line of the region as Twelf code.
+</DL>
+
+
+
+<H2><A NAME="SEC56" HREF="twelf_toc.html#TOC56">11.3  Type Checking Commands</A></H2>
+
+<P>
+<A NAME="IDX188"></A>
+<A NAME="IDX189"></A>
+<A NAME="IDX190"></A>
+
+</P>
+<P>
+The Twelf mode provides simple commands which cause the server to load
+or reload the current configuration, the file edited in the current
+buffer, or just the declaration at point.  Each of these command can be
+preceded by a prefix argument (for example, <KBD>C-u C-c C-c</KBD>) which
+will select the Twelf server buffer after completion of the command.
+The Twelf server buffer can also be forced to be shown with the <KBD>C-c
+C-u</KBD> Emacs command.
+
+</P>
+<DL COMPACT>
+
+<DT><KBD>C-c C-c</KBD>
+<DD>
+<DT><KBD>M-x twelf-save-check-config</KBD>
+<DD>
+<A NAME="IDX191"></A>
+ Save its modified buffers and then check the current Twelf configuration.
+ With prefix argument also displays Twelf server buffer.
+ If necessary, this will start up an Twelf server process.
+
+<DT><KBD>C-c C-s</KBD>
+<DD>
+<DT><KBD>M-x twelf-save-check-file</KBD>
+<DD>
+<A NAME="IDX192"></A>
+ Save buffer and then check it by giving a command to the Twelf server.
+ In Twelf Config minor mode, it reconfigures the server.
+ With prefix argument also displays Twelf server buffer.
+
+<DT><KBD>C-c C-d</KBD>
+<DD>
+<DT><KBD>M-x twelf-check-declaration</KBD>
+<DD>
+<A NAME="IDX193"></A>
+ Send the current declaration to the Twelf server process for checking.
+ With prefix argument also displays Twelf server buffer.
+
+<DT><KBD>C-c c</KBD>
+<DD>
+<DT><KBD>M-x twelf-type-const</KBD>
+<DD>
+<A NAME="IDX194"></A>
+ Display the type of the constant before point.
+ Note that the type of the constant will be `absolute' rather than the
+ type of the particular instance of the constant.
+
+<DT><KBD>C-c C-u</KBD>
+<DD>
+<DT><KBD>M-x twelf-server-display</KBD>
+<DD>
+<A NAME="IDX195"></A>
+ Display Twelf server buffer, moving to the end of output.
+ With prefix argument also selects the Twelf server buffer.
+</DL>
+
+
+
+<H2><A NAME="SEC57" HREF="twelf_toc.html#TOC57">11.4  Error Tracking</A></H2>
+
+<P>
+<A NAME="IDX196"></A>
+<A NAME="IDX197"></A>
+
+</P>
+<P>
+Error messages by the Twelf server are flagged with the filename and an
+educated guess as to the source of the error (see section <A HREF="twelf_4.html#SEC20">4.6  Error Messages</A>).
+These can be interpreted by Emacs to jump directly to the suspected
+site.
+
+</P>
+<P>
+Sometimes, the server buffer and the the server itself believe to have
+different working directories.  In that case, error tracking may not be
+able to find the file, and an explicit call to <CODE>OS.chDir</CODE>
+or <CODE>M-x cd</CODE> in the server buffer may be required.
+
+</P>
+<DL COMPACT>
+
+<DT><KBD>C-c `</KBD>
+<DD>
+<DT><KBD>M-x twelf-next-error</KBD>
+<DD>
+<A NAME="IDX198"></A>
+ Find the next error by parsing the Twelf server or Twelf-SML buffer.
+ Move the error message on the top line of the window;
+ put the cursor at the beginning of the error source. If the
+ error message specifies a range, the mark is placed at the end.
+
+<DT><KBD>C-c =</KBD>
+<DD>
+<DT><KBD>M-x twelf-goto-error</KBD>
+<DD>
+<A NAME="IDX199"></A>
+ Go to the error reported on the current line or below.
+ Also updates the error cursor to the current line.
+</DL>
+
+
+
+<H2><A NAME="SEC58" HREF="twelf_toc.html#TOC58">11.5  Server State</A></H2>
+
+<P>
+<A NAME="IDX200"></A>
+<A NAME="IDX201"></A>
+<A NAME="IDX202"></A>
+<A NAME="IDX203"></A>
+
+</P>
+<P>
+The server state consists of the current configuration and a number of
+parameters described in section <A HREF="twelf_10.html#SEC50">10  Twelf Server</A>.  The current configuration
+is often set implicitly, with the <KBD>C-c C-c</KBD> command in a
+configuration buffer, but it can also be set explicitly.
+
+</P>
+<DL COMPACT>
+
+<DT><KBD>C-c &#60;</KBD>
+<DD>
+<DT><KBD>M-x twelf-set</KBD>
+<DD>
+<A NAME="IDX204"></A>
+ Sets the Twelf parameter PARM to VALUE.
+ When called interactively, prompts for parameter and value, supporting
+ completion.
+
+<DT><KBD>C-c &#62;</KBD>
+<DD>
+<DT><KBD>M-x twelf-get</KBD>
+<DD>
+<A NAME="IDX205"></A>
+ Prints the value of the Twelf parameter PARM.
+ When called interactively, promts for parameter, supporting completion.
+
+<DT><KBD>C-c C-i</KBD>
+<DD>
+<DT><KBD>M-x twelf-server-interrupt</KBD>
+<DD>
+<A NAME="IDX206"></A>
+ Interrupt the Twelf server process.
+
+<DT><KBD>M-x twelf-server</KBD>
+<DD>
+<A NAME="IDX207"></A>
+ Start an Twelf server process in a buffer named *twelf-server*.
+ Any previously existing process is deleted after confirmation.
+ Optional argument PROGRAM defaults to the value of the variable
+ twelf-server-program.
+ This locally re-binds `twelf-server-timeout' to 15 secs.
+
+<DT><KBD>M-x twelf-server-configure</KBD>
+<DD>
+<A NAME="IDX208"></A>
+ Initializes the Twelf server configuration from CONFIG-FILE.
+ A configuration file is a list of relative file names in
+ dependency order.  Lines starting with % are treated as comments.
+ Starts a Twelf servers if necessary.
+
+<DT><KBD>M-x twelf-reset</KBD>
+<DD>
+<A NAME="IDX209"></A>
+ Reset the global signature of Twelf maintained by the server.
+
+<DT><KBD>M-x twelf-server-quit</KBD>
+<DD>
+<A NAME="IDX210"></A>
+ Kill the Twelf server process.
+
+<DT><KBD>M-x twelf-server-restart</KBD>
+<DD>
+<A NAME="IDX211"></A>
+ Restarts server and re-initializes configuration.
+ This is primarily useful during debugging of the Twelf server code or
+ if the Twelf server is hopelessly wedged.
+
+<DT><KBD>M-x twelf-server-send-command</KBD>
+<DD>
+<A NAME="IDX212"></A>
+ Restarts server and re-initializes configuration.
+ This is primarily useful during debugging of the Twelf server code or
+ if the Twelf server is hopelessly wedged.
+</DL>
+
+
+
+<H2><A NAME="SEC59" HREF="twelf_toc.html#TOC59">11.6  Info File</A></H2>
+
+<P>
+The content of this file in Info format can be visited directly
+and does not need to be tied into the Info tree.
+See the documentation for the Emacs info package for
+more info
+
+</P>
+<P>
+<A NAME="IDX213"></A>
+<A NAME="IDX214"></A>
+
+</P>
+<DL COMPACT>
+
+<DT><KBD>C-c C-h</KBD>
+<DD>
+<DT><KBD>M-x twelf-info</KBD>
+<DD>
+<A NAME="IDX215"></A>
+ Visit the Twelf User's Guide in info format in Emacs.
+ With a prefix argument it prompts for the info file name, which
+ defaults to the value of the <CODE>twelf-info-file</CODE> variable.
+</DL>
+
+
+
+<H2><A NAME="SEC60" HREF="twelf_toc.html#TOC60">11.7  Tags Files</A></H2>
+
+<P>
+Tags files provide a convenient way to group files, such as
+Twelf configurations.  See the documentation for the Emacs etags
+package for more information.
+
+</P>
+<P>
+<A NAME="IDX216"></A>
+<A NAME="IDX217"></A>
+
+</P>
+<DL COMPACT>
+
+<DT><KBD>M-x twelf-tag</KBD>
+<DD>
+<A NAME="IDX218"></A>
+ Create tags file for current configuration.
+ If the current configuration is sources.cfg, the tags file is TAGS.
+ If current configuration is named FILE.cfg, tags file will be named FILE.tag
+ Errors are displayed in the Twelf server buffer.
+
+<DT><KBD>M-.</KBD>
+<DD>
+<DT><KBD>M-x find-tag TAG</KBD>
+<DD>
+<A NAME="IDX219"></A>
+ Selects the buffer that the tag is contained in and puts point at
+ its definition.
+
+<DT><KBD>C-x 4 .</KBD>
+<DD>
+<DT><KBD>M-x find-tag-other-window TAG</KBD>
+<DD>
+<A NAME="IDX220"></A>
+ Selects the buffer that TAG is contained in in another window
+and puts point at its definition.
+
+<DT><KBD>C-c q</KBD>
+<DD>
+<DT><KBD>M-x tags-query-replace FROM TO</KBD>
+<DD>
+<A NAME="IDX221"></A>
+ Query-replace-regexp FROM with TO through all files listed in tags table.
+
+<DT><KBD>C-c s</KBD>
+<DD>
+<DT><KBD>M-x tags-search REGEXP</KBD>
+<DD>
+<A NAME="IDX222"></A>
+ Search through all files listed in tags table for match for REGEXP.
+
+<DT><KBD>M-,</KBD>
+<DD>
+<DT><KBD>M-x tags-loop-continue</KBD>
+<DD>
+<A NAME="IDX223"></A>
+ Continue last C-c s or C-c q command.
+</DL>
+
+
+
+<H2><A NAME="SEC61" HREF="twelf_toc.html#TOC61">11.8  Twelf Timers</A></H2>
+
+<P>
+The following commands obtain the runtime statistics of the
+the Twelf server.
+
+</P>
+<P>
+<A NAME="IDX224"></A>
+
+</P>
+<DL COMPACT>
+
+<DT><KBD>M-x twelf-timers-reset</KBD>
+<DD>
+<A NAME="IDX225"></A>
+ Reset the Twelf timers.
+
+<DT><KBD>M-x twelf-timers-show</KBD>
+<DD>
+<A NAME="IDX226"></A>
+ Show and reset the Twelf timers.
+
+<DT><KBD>M-x twelf-timers-check</KBD>
+<DD>
+<A NAME="IDX227"></A>
+ Show the Twelf timers without resetting them.
+
+</DL>
+
+
+
+<H2><A NAME="SEC62" HREF="twelf_toc.html#TOC62">11.9  Twelf-SML Mode</A></H2>
+
+<P>
+<A NAME="IDX228"></A>
+
+</P>
+<P>
+There is some support for interacting with Twelf, even when it is
+run within ML, rather than as a stand-alone server.  You can start
+an SML in which you intend to run Twelf with <CODE>M-x twelf-sml</CODE>;
+the buffer will then be in Twelf-SML mode.
+
+</P>
+<P>
+If you intend to send command to a buffer running Twelf in SML (rather
+than the Twelf server), you can switch to a minor mode 2Twelf-SML with
+<CODE>M-x twelf-to-twelf-sml</CODE>.
+
+</P>
+<DL COMPACT>
+
+<DT><KBD>M-x twelf-sml</KBD>
+<DD>
+<A NAME="IDX229"></A>
+ Run an inferior Twelf-SML process in a buffer *twelf-sml*.
+ If there is a process already running in *twelf-sml*, just
+ switch to that buffer.  With argument, allows you to change the program
+ which defaults to the value of twelf-sml-program.  Runs the hooks from
+ twelf-sml-mode-hook (after the comint-mode-hook is run).
+
+<DT><KBD>M-x twelf-to-twelf-sml-mode</KBD>
+<DD>
+<A NAME="IDX230"></A>
+ Toggles minor mode for sending queries to Twelf-SML instead of Twelf server.
+
+<DT><KBD>C-c C-e</KBD>
+<DD>
+<DT><KBD>M-x twelf-sml-send-query</KBD>
+<DD>
+<A NAME="IDX231"></A>
+ Send the current declaration to the inferior Twelf-SML process as a query.
+ Prefix argument means switch-to-twelf-sml afterwards.
+
+<DT><KBD>C-c C-r</KBD>
+<DD>
+<DT><KBD>M-x twelf-sml-send-region</KBD>
+<DD>
+<A NAME="IDX232"></A>
+ Send the current region to the inferior Twelf-SML process.
+ Prefix argument means switch-to-twelf-sml afterwards.
+
+<DT><KBD>C-c <KBD>RETURN</KBD></KBD>
+<DD>
+<DT><KBD>M-x twelf-sml-send-newline</KBD>
+<DD>
+<A NAME="IDX233"></A>
+ Send a newline to the inferior Twelf-SML process.
+ If a prefix argument is given, switches to Twelf-SML buffer afterwards.
+
+<DT><KBD>C-c ;</KBD>
+<DD>
+<DT><KBD>M-x twelf-sml-send-semicolon</KBD>
+<DD>
+<A NAME="IDX234"></A>
+ Send a semi-colon to the inferior Twelf-SML process.
+ If a prefix argument is given, switched to Twelf-SML buffer afterwards.
+
+<DT><KBD>C-c d</KBD>
+<DD>
+<DT><KBD>M-x twelf-sml-cd DIR</KBD>
+<DD>
+<A NAME="IDX235"></A>
+ Make DIR become the Twelf-SML process' buffer's default directory and
+ furthermore issue an appropriate command to the inferior Twelf-SML process.
+
+<DT><KBD>M-x twelf-sml-quit</KBD>
+<DD>
+<A NAME="IDX236"></A>
+ Kill the Twelf-SML process.
+</DL>
+
+
+
+<H2><A NAME="SEC63" HREF="twelf_toc.html#TOC63">11.10  Emacs Variables</A></H2>
+
+<P>
+<A NAME="IDX237"></A>
+<A NAME="IDX238"></A>
+
+</P>
+<P>
+A number of Emacs variables can be changed to customize the behavior of
+Twelf mode.  The list below is not complete; please refer to the Emacs
+Lisp sources in <CODE>emacs/twelf.el</CODE> for additional information.
+
+</P>
+<DL COMPACT>
+
+<DT><CODE>twelf-indent</CODE>
+<DD>
+<A NAME="IDX239"></A>
+ Indent for Twelf expressions.
+
+<DT><CODE>twelf-server-program</CODE>
+<DD>
+<A NAME="IDX240"></A>
+ Default Twelf server program.
+
+<DT><CODE>twelf-info-file</CODE>
+<DD>
+<A NAME="IDX241"></A>
+ Default Twelf info file.
+
+<DT><CODE>twelf-mode-hook</CODE>
+<DD>
+<A NAME="IDX242"></A>
+ List of hook functions to run when switching to Twelf mode.
+
+<DT><CODE>twelf-server-mode-hook</CODE>
+<DD>
+<A NAME="IDX243"></A>
+ List of hook functions to run when switching to Twelf Server mode.
+
+<DT><CODE>twelf-sml-program</CODE>
+<DD>
+<A NAME="IDX244"></A>
+ Default Twelf-SML program.
+
+<DT><CODE>twelf-sml-mode-hook</CODE>
+<DD>
+<A NAME="IDX245"></A>
+ List of hook functions for Twelf-SML mode.
+</DL>
+
+
+
+<H2><A NAME="SEC64" HREF="twelf_toc.html#TOC64">11.11  Syntax Highlighting</A></H2>
+
+<P>
+<A NAME="IDX246"></A>
+<A NAME="IDX247"></A>
+<A NAME="IDX248"></A>
+
+</P>
+<P>
+Twelf also provides syntax highlighting, which helps make Elf code more
+readable.  This highlighting can use different colors and faces.
+Unfortunately, the necessary libraries are at present not standardized
+between XEmacs and FSF Emacs, which means that highlighting support is
+less general and less portable than the plain Twelf mode.
+
+</P>
+<P>
+At present, highlighting has not been extensively tested in various
+versions of Emacs, but the font-lock mode provided in
+<TT>`emacs/twelf-font.el'</TT> seems to work at least in XEmacs version
+19.16 and FSF Emacs version 19.34.  The alternative highlight mode
+provided in <TT>`emacs/twelf-hilit'</TT> appears to work in FSF Emacs 19.34.
+
+</P>
+<P>
+Unlike other font-lock modes, Twelf's fontification is not `electric' in
+that it does not fontify as one types.  One has to explicitly issue a
+command to fontify the current Twelf declaration or current buffer,
+since single-line highlighting is too error-prone and multi-line
+immediate highlighting is not well supported in current versions of font
+lock mode.
+
+</P>
+<DL COMPACT>
+
+<DT><KBD>C-c C-l</KBD>
+<DD>
+<DT><KBD>M-x twelf-font-fontify-decl</KBD>
+<DD>
+<A NAME="IDX249"></A>
+ Fontifies the current Twelf declaration.
+
+<DT><KBD>C-c l</KBD>
+<DD>
+<DT><KBD>M-x twelf-font-fontify-buffer</KBD>
+<DD>
+<A NAME="IDX250"></A>
+ Fontitifies the current buffer as Twelf code
+
+<DT><KBD>M-x twelf-font-unfontify</KBD>
+<DD>
+<A NAME="IDX251"></A>
+ Removes fontification from current buffer.
+</DL>
+
+
+
+<H2><A NAME="SEC65" HREF="twelf_toc.html#TOC65">11.12  Emacs Initialization</A></H2>
+
+<P>
+<A NAME="IDX252"></A>
+<A NAME="IDX253"></A>
+<A NAME="IDX254"></A>
+<A NAME="IDX255"></A>
+<A NAME="IDX256"></A>
+
+</P>
+<P>
+If Twelf has been properly installed, you can use the Twelf's Emacs
+interface with the default settings simply by adding the line
+
+</P>
+
+<PRE>
+(load "<VAR>directory</VAR>/emacs/twelf-init.el")
+</PRE>
+
+<P>
+to your <TT>`.emacs'</TT> file, where <VAR>directory</VAR> is the Twelf root
+directory.  In order to customize the behavior, you might copy
+the file <TT>`emacs/twelf-init.el'</TT> or its contents and change
+it as appropriate.
+
+</P>
+
+
+<H2><A NAME="SEC66" HREF="twelf_toc.html#TOC66">11.13  Command Summary</A></H2>
+
+<P>
+<A NAME="IDX257"></A>
+
+</P>
+
+<PRE>
+--- Editing Commands ---
+TAB          twelf-indent-line
+DEL          backward-delete-char-untabify
+M-C-q        twelf-indent-decl
+
+--- Type Checking ---
+C-c C-c      twelf-save-check-config
+C-c C-s      twelf-save-check-file
+C-c C-d      twelf-check-declaration
+C-c c        twelf-type-const
+C-c C-u      twelf-server-display
+
+--- Error Tracking ---
+C-c `        twelf-next-error
+C-c =        twelf-goto-error
+
+--- Syntax Highlighting ---
+C-c C-l      twelf-font-fontify-decl
+C-c l        twelf-font-fontify-buffer
+
+--- Server State ---
+C-c &#60;        twelf-set
+C-c &#62;        twelf-get
+C-c C-i      twelf-server-interrupt
+M-x twelf-server
+M-x twelf-server-configure
+M-x twelf-server-quit
+M-x twelf-server-restart
+M-x twelf-server-send-command
+
+--- Info ---
+C-c C-h      twelf-info
+
+--- Timers ---
+M-x twelf-timers-reset
+M-x twelf-timers-show
+M-x twelf-timers-check
+
+--- Tags (standard Emacs etags package) ---
+M-x twelf-tag
+M-.          find-tag (standard binding)
+C-x 4 .      find-tag-other-window (standard binding)
+C-c q        tags-query-replace (Twelf mode binding)
+C-c s        tags-search (Twelf mode binding)
+M-,          tags-loop-continue (standard binding)
+             visit-tags-table, list-tags, tags-apropos
+
+--- Communication with inferior Twelf-SML process (not Twelf Server) ---
+M-x twelf-sml
+C-c C-e      twelf-sml-send-query
+C-c C-r      twelf-sml-send-region
+C-c RET      twelf-sml-send-newline
+C-c ;        twelf-sml-send-semicolon
+C-c d        twelf-sml-cd
+M-x twelf-sml-quit
+
+--- Variables ---
+twelf-indent
+</PRE>
+
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_10.html">previous</A>, <A HREF="twelf_12.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

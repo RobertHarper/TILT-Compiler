@@ -1,0 +1,12 @@
+Changes for compiling with TILT:
+
+Renamed files to end in .sml.
+
+Added (*$import *) directives.
+
+Renamed SS to SS_ in patterns of tptrace.fun.sml and tprecon.fun.sml
+to avoid conflict with TILT's bogus toplevel constructor SS.
+
+Eliminated all type abbreviations in signatures.  I thought I was
+working around a bug in TILT's signature sharing or ascription code,
+but I'm not positive this change matters.

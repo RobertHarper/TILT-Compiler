@@ -1,0 +1,212 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 10  Twelf Server</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_9.html">previous</A>, <A HREF="twelf_11.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC50" HREF="twelf_toc.html#TOC50">10  Twelf Server</A></H1>
+
+<P>
+<A NAME="IDX151"></A>
+<A NAME="IDX152"></A>
+
+</P>
+<P>
+The Twelf server is a stand-alone command interpreter which provides the
+functionality of the <CODE>Twelf</CODE> structure in ML (see section <A HREF="twelf_9.html#SEC44">9  ML Interface</A>), but allows no ML definitions.  It is significantly smaller
+than Standard ML and is the recommended way to interact with Twelf
+except for developers.  Its behavior regarding configurations is
+slightly different in that the server maintains a current configuration,
+rather than allowing the binding of names to configurations.
+Configuration are defined with the <CODE>Config.read</CODE> command which
+takes a configuration filename as argument.
+
+</P>
+<P>
+In Emacs, the Twelf server typically runs in a process buffer
+called <CODE>*twelf-server*</CODE>.  The user can select this buffer
+and directly type commands to the Twelf server.  This style
+of interaction is inherited from the comint package for Emacs,
+but typically one works through advanced commands in Twelf
+mode (see section <A HREF="twelf_11.html#SEC54">11.1  Twelf Mode</A>).
+
+</P>
+<P>
+The Twelf server prompts with <CODE>%% OK %%</CODE> or <CODE>%% ABORT %%</CODE>
+depending on the success of failure of the previous operation.  It
+accepts commands and their arguments on one line, except that additional
+Twelf declarations which may be required are read separately, following
+the command line.  Reading declarations can be forcibly terminated
+with the end-of-file token <SAMP>`%.'</SAMP>.
+
+</P>
+
+<UL>
+<LI><A HREF="twelf_10.html#SEC51">Server Types</A>: Server command argument types
+<LI><A HREF="twelf_10.html#SEC52">Server Commands</A>: List of Twelf server commands
+</UL>
+
+
+
+<H2><A NAME="SEC51" HREF="twelf_toc.html#TOC51">10.1  Server Types</A></H2>
+
+<P>
+<A NAME="IDX153"></A>
+<A NAME="IDX154"></A>
+
+</P>
+<P>
+The server commands employ arguments of the following types.
+
+</P>
+<DL COMPACT>
+
+<DT><CODE>file</CODE>
+<DD>
+<A NAME="IDX155"></A>
+ The name of a file, relative to the current working directory.
+
+<DT><CODE>id</CODE>
+<DD>
+<A NAME="IDX156"></A>
+ A Twelf identifier
+
+<DT><CODE>strategy</CODE>
+<DD>
+<A NAME="IDX157"></A>
+ Either <CODE>FRS</CODE> or <CODE>RFS</CODE> (see section <A HREF="twelf_8.html#SEC42">8.4  Search Strategies</A>)
+
+<DT><CODE>bool</CODE>
+<DD>
+<A NAME="IDX158"></A>
+ Either <CODE>true</CODE> or <CODE>false</CODE>
+
+<DT><CODE>nat</CODE>
+<DD>
+<A NAME="IDX159"></A>
+ A natural number (starting at <CODE>0</CODE>)
+
+<DT><CODE>limit</CODE>
+<DD>
+<A NAME="IDX160"></A>
+ Either <CODE>*</CODE> (to indicate no limit) or a natural number
+</DL>
+
+
+
+<H2><A NAME="SEC52" HREF="twelf_toc.html#TOC52">10.2  Server Commands</A></H2>
+
+<P>
+<A NAME="IDX161"></A>
+<A NAME="IDX162"></A>
+
+</P>
+<P>
+The Twelf server recognized the following commands.
+
+</P>
+<DL COMPACT>
+
+<DT><CODE>set <VAR>parameter</VAR> <VAR>value</VAR></CODE>
+<DD>
+<A NAME="IDX163"></A>
+ Set <VAR>parameter</VAR> to <VAR>value</VAR>, where <VAR>parameter</VAR> is
+on of the following (explained in section <A HREF="twelf_9.html#SEC47">9.3  Environment Parameters</A>).
+
+<DL COMPACT>
+
+<DT><CODE>chatter <VAR>nat</VAR></CODE>
+<DD>
+<DT><CODE>doubleCheck <VAR>bool</VAR></CODE>
+<DD>
+<DT><CODE>Print.implicit <VAR>bool</VAR></CODE>
+<DD>
+<DT><CODE>Print.depth <VAR>limit</VAR></CODE>
+<DD>
+<DT><CODE>Print.length <VAR>limit</VAR></CODE>
+<DD>
+<DT><CODE>Print.indent <VAR>nat</VAR></CODE>
+<DD>
+<DT><CODE>Print.width <VAR>nat</VAR></CODE>
+<DD>
+<DT><CODE>Prover.strategy <VAR>strategy</VAR></CODE>
+<DD>
+<DT><CODE>Prover.maxSplit <VAR>nat</VAR></CODE>
+<DD>
+<DT><CODE>Prover.maxRecurse <VAR>nat</VAR></CODE>
+<DD>
+</DL>
+
+<DT><CODE>get <VAR>parameter</VAR></CODE>
+<DD>
+<A NAME="IDX164"></A>
+ Print the current value of <VAR>parameter</VAR> (see table above).
+
+<DT><CODE>Timers.show</CODE>
+<DD>
+<A NAME="IDX165"></A>
+ Print and reset timers.
+<DT><CODE>Timers.reset</CODE>
+<DD>
+<A NAME="IDX166"></A>
+ Reset timers.
+<DT><CODE>Timers.check</CODE>
+<DD>
+<A NAME="IDX167"></A>
+ Print, but do not reset timrs.
+
+<DT><CODE>OS.chDir <VAR>file</VAR></CODE>
+<DD>
+<A NAME="IDX168"></A>
+ Change working directory to <VAR>file</VAR>.
+<DT><CODE>OS.getDir</CODE>
+<DD>
+<A NAME="IDX169"></A>
+ Print current working directory.
+<DT><CODE>OS.exit</CODE>
+<DD>
+<A NAME="IDX170"></A>
+ Exit Twelf server.
+<DT><CODE>quit</CODE>
+<DD>
+<A NAME="IDX171"></A>
+ Quit Twelf server (same as exit).
+
+<DT><CODE>Config.read <VAR>file</VAR></CODE>
+<DD>
+<A NAME="IDX172"></A>
+ Read current configuration from <VAR>file</VAR>.
+<DT><CODE>Config.load</CODE>
+<DD>
+<A NAME="IDX173"></A>
+ Load current configuration
+
+<DT><CODE>reset</CODE>
+<DD>
+<A NAME="IDX174"></A>
+ Reset global signature.
+<DT><CODE>loadFile <VAR>file</VAR></CODE>
+<DD>
+<A NAME="IDX175"></A>
+ Load Twelf file <VAR>file</VAR>.
+<DT><CODE>decl <VAR>id</VAR></CODE>
+<DD>
+<A NAME="IDX176"></A>
+ Show constant declaration for <VAR>id</VAR>.
+
+<DT><CODE>top</CODE>
+<DD>
+<A NAME="IDX177"></A>
+ Enter interactive query loop (see section <A HREF="twelf_5.html#SEC24">5.3  Interactive Queries</A>)
+</DL>
+
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_9.html">previous</A>, <A HREF="twelf_11.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

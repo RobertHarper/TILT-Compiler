@@ -1,0 +1,1282 @@
+This is Info file twelf.info, produced by Makeinfo version 1.67 from
+the input file twelf.texi.
+
+
+File: twelf.info,  Node: Top,  Next: Introduction,  Prev: (dir),  Up: (dir)
+
+   This document describes the Twelf User's Guide, Version 1.2, Last
+updated August 27, 1998.
+
+* Menu:
+
+* Introduction::                Getting started
+* Lexical Conventions::         Reserved characters and identifiers
+* Syntax::                      Grammar of signatures
+* Term Reconstruction::         Checking and inferring types
+* Logic Programming::           How to interpret signatures as programs
+* Modes::                       Input/output behavior of relations
+* Termination::                 Verifying termination of programs
+* Theorem Prover::              Proving theorems and meta-theorems
+* ML Interface::                Running Twelf from ML
+* Twelf Server::                A stand-alone Twelf command interpreter
+* Emacs Interface::             Editing Twelf files
+* Installation::
+* Examples::                    Guide to standard examples
+* Index::                       Index to this guide
+
+
+File: twelf.info,  Node: Introduction,  Next: Lexical Conventions,  Prev: Top,  Up: Top
+
+Introduction
+************
+
+   Twelf is the current version of a succession of implementations of
+the logical framework LF.  Previous systems include Elf (which provided
+type reconstruction and the operational semantics reimplemented in
+Twelf) and MLF (which implemented module-level constructs loosely based
+on the signatures and functors of ML still missing from Twelf).
+
+   Twelf should be understood as research software. This means comments,
+suggestions, and bug reports are extremely welcome, but there are no
+guarantees regarding response times.  The same remark applies to these
+notes which constitute the only documentation on the present Twelf
+implementation.
+
+   For current information including download instructions,
+publications, and mailing list, see the Twelf home page at
+http://www.cs.cmu.edu/~twelf/.  This User's Guide is published as
+      Frank Pfenning and Carsten Schuermann
+      *Twelf User's Guide*
+      Technical Report CMU-CS-98-173, Department of Computer Science,
+      Carnegie Mellon University, November 1998.
+
+   Below we state the typographic conventions in this manual.
+
+`code'
+     for Twelf or ML code
+
+`samp'
+     for characters and small code fragments
+
+METAVAR
+     for placeholders in code
+
+`keyboard'
+     for input in verbatim examples
+
+<key>
+     for keystrokes
+
+math
+     for mathematical expressions
+
+*emph*
+     for emphasized phrases
+
+   File names for examples given in this guide are relative to the main
+directory of the Twelf installation.  For example
+`examples/guide/nd.elf' may be found in
+`/usr/local/twelf/examples/guide/nd.elf' if Twelf was installed into
+the `/usr/local/' directory.
+
+* Menu:
+
+* New Features::                Differences from Elf 1.5
+* Quick Start::                 Sample interaction with Twelf
+
+
+File: twelf.info,  Node: New Features,  Next: Quick Start,  Prev: Introduction,  Up: Introduction
+
+New Features
+============
+
+   While the underlying type theory has not changed, the Twelf
+implementation differs from older Elf implementation in a few ways.
+Mostly, these are simplifications and improvements.  The main feature
+which has not yet been ported is the Elf server interface to Emacs.
+Also, while the type checker is more efficient now, the operational
+semantics does not yet incorporate some of the optimizations of the
+older Elf implementations and is therefore slower.
+
+Syntax (*note Syntax::.)
+     The quote `'' character is no longer a special character in the
+     lexer, and `=' (equality) is now a reserved identifier.  The syntax
+     of `%name' declarations has changed by allowing only one preferred
+     name to be specified.  Also, `%name', `%infix', `%prefix' and
+     `%postfix' declarations must be terminated by a period `.' which
+     previously was optional.  Further, single lines comments now must
+     start with `%WHITESPACE' or `%%' in order to avoid misspelled
+     keywords of the form `%KEYWORD' to be ignored.
+
+Type theory
+     Elf 1.5 had two experimental features which are not available in
+     Twelf: polymorphism and the classification of type as a type.
+
+Definitions (*note Definitions::.)
+     Twelf offers definitions which were not available in Elf.
+
+Searching for definitions (*note Solve Declaration::.)
+     Elf had a special top-level query form `sigma [x:A] B' which
+     searched for a solution `M : A' and then solved the result of
+     subsituting `M' for `x' in `B'.  In Twelf this mechanism has been
+     replaced by a declaration `%solve c : A' which searches for a
+     solution `M : A' and then defines `c = M : A', where the remaining
+     free variables are implicitly universally quantified.
+
+Query declarations (*note Query Declaration::.)
+     Twelf allows queries in ordinary Elf files as `%query'
+     declarations.  Queries are specified with an expected number of
+     solutions, and the number of solutions to search for, which can be
+     used to test implementations.
+
+Operational semantics (*note Operational Semantics::.)
+     Twelf eliminates the distinction between static and dynamic
+     signatures.  Instead, dependent function types `{x:A} B' where `x'
+     occurs in the normal form of `B' are treated statically, while
+     non-dependent function type `A -> B' or `B <- A' or `{x:A} B'
+     where `x' does not occur in `B' are treated dynamically.
+
+Modes (*note Modes::.)
+     Twelf offers a mode checker which was only partially supported in
+     Elf.
+
+Termination (*note Termination::.)
+     Twelf offers a termination checker which can verify that certain
+     programs represent decision procedures.
+
+Theorem prover (*note Theorem Prover::.)
+     Although very limited at present, an experimental prover for
+     theorems and meta-theorems (that is, properties of signatures) is
+     now available.  It does not yet support lemmas or
+     meta-hypothetical reasoning, which are currently under development.
+
+Emacs interface (*note Emacs Interface::.)
+     The Elf mode has remained basically unchanged, but the Elf server
+     interface has not yet been ported.
+
+
+File: twelf.info,  Node: Quick Start,  Prev: New Features,  Up: Introduction
+
+Quick Start
+===========
+
+   Assuming you are running on a Unix system with SML of New Jersey
+already installed (*note Installation::.) you can build Twelf as
+follows.  Here `%' is assumed to be the shell prompt.  You may need to
+edit the file `Makefile' to give the proper location for `sml-cm'.
+
+     % gunzip twelf-1-2.tar.gz
+     % tar -xf twelf-1-2.tar
+     % cd twelf
+     % make
+     % bin/twelf-server
+     Twelf 1.2, Aug 27 1998
+     %% OK %%
+
+   You can now load the examples used in this guide and pose an example
+query as shown below.  The prompt from the Twelf top-level is `?-'.  To
+drop from the Twelf top-level to the ML top-level, type `C-c' (<CTRL>
+`c').  To exit the Twelf server you may issue the `quit' command or
+type `C-d' (<CTRL> `c').
+
+     Config.read examples/guide/sources.cfg
+     Config.load
+     top
+     ?- of (lam [x] x) T.
+     Solving...
+     T = arrow T1 T1.
+     More? y
+     No more solutions
+     ?- C-c
+     interrupt
+     %% OK %%
+     quit
+     %
+
+
+File: twelf.info,  Node: Lexical Conventions,  Next: Syntax,  Prev: Introduction,  Up: Top
+
+Lexical Conventions
+*******************
+
+   Lexical analysis of Twelf has purposely been kept simple, with few
+reserved characters and identifiers.  As a result one may need to use
+more whitespace to separate identifiers than in other languages.  For
+example, `A->B' or `A+B' are single identifiers, while `A -> B' and `A
++ B' both consist of 3 identifiers.
+
+   During parsing, identifiers are resolved as reserved identifiers,
+constants, bound variables, or free variables, following the usual rules
+of static scoping in lambda-calculi.
+
+* Menu:
+
+* Reserved Characters::         Characters separating identifiers
+* Identifiers::                 Interpretation of identifiers
+
+
+File: twelf.info,  Node: Reserved Characters,  Next: Identifiers,  Prev: Lexical Conventions,  Up: Lexical Conventions
+
+Reserved Characters
+===================
+
+   The following table lists the reserved characters in Twelf.
+
+`:'
+     colon, constant declaration or ascription
+
+`.'
+     period, terminates declarations
+
+`(' `)'
+     parentheses, for grouping terms
+
+`[' `]'
+     brackets, for lambda abstraction
+
+`{' `}'
+     braces, for quantification (dependent function types)
+
+WHITESPACE
+     separates identifiers; one of space, newline, tab, carriage return,
+        vertical tab or formfeed
+
+`%'
+     introduces comments or special keyword declarations
+
+    `%WHITESPACE' `%%'
+          comment terminated by the end of the line, may contain any
+          characters
+
+    `%{' `}%'
+          delimited comment, nested `%{' and `}%' must match
+
+    `%KEYWORD'
+          various declarations
+
+    `%.'
+          end of input stream
+
+`"'
+     doublequote, disallowed
+
+other printing characters
+     identifier constituents
+
+
+File: twelf.info,  Node: Identifiers,  Prev: Reserved Characters,  Up: Lexical Conventions
+
+Identifiers
+===========
+
+   All printing characters that are not reserved can be included in
+identifiers, which are separated by whitespace or reserved characters.
+In particular, `A->B' is an identifier, whereas `A -> B' stands for the
+type of functions from `A' to `B'.
+
+   An uppercase identifier is one which begins with an underscore `_' or
+a letter in the range `A' through `Z'.  A lowercase identifier begins
+with any other character except a reserved one.  Numbers also count as
+lowercase identifiers and are not interpreted specially.  Free
+variables in a declaration must be uppercase, bound variables and
+constants may be either uppercase or lowercase identifiers.
+
+   There are also four reserved identifiers with a predefined meaning
+which cannot be changed.  Keep in mind that these can be constituents
+of other identifers which are not interpreted specially.
+
+`->'
+     function type
+
+`<-'
+     reverse function type
+
+`_'
+     hole, to be filled by term reconstruction
+
+`='
+     definition
+
+`type'
+     the kind type
+
+   Constants have static scope, which means that they can be shadowed by
+subsequent declarations.  A shadowed identifier (which can no longer be
+referred to in input) is printed as `%ID%'.  The printer for terms
+renames bound variables so they do not shadow constants.
+
+   Free uppercase identifiers in declarations represent schematic
+variables.  In order to distinguish them from other kinds of variables
+and constants they are printed as `'ID' (backquote, followed by the
+identifer name) in error messages.
+
+
+File: twelf.info,  Node: Syntax,  Next: Term Reconstruction,  Prev: Lexical Conventions,  Up: Top
+
+Syntax
+******
+
+   In LF, deductive systems are represented by signatures consisting of
+constant declarations.  Twelf implements declarations in a
+straightforward way and generalizes signatures by also allowing
+definitions, which are semantically transparent.  Twelf currently does
+not have module-level constructs so that, for example, signatures
+cannot be named.  Instead, multiple signatures can be manipulated in the
+programming environment using configurations (*note Configurations::.).
+
+   The LF type theory which underlies LF is stratified into three
+levels: objects M and N, types A and B, and kinds K.  Twelf does not
+syntactically distinguish these levels and simply uses one syntactic
+category of term.  Similarly, object-level constants c and type-level
+constants a as well as variables share one name space of identifiers.
+
+   In explanations and examples we will use letters following the
+mathematical conventions above to clarify the roles of various terms.
+We also use U and V to stand for arbitrary terms.
+
+* Menu:
+
+* Grammar::                     The grammar of Twelf
+* Constructor Declaration::     Introducing types and object constructors
+* Definitions::                 Defining abbreviations
+* Operator Declaration::        Infix, prefix and postfix operators
+* Name Preferences::            Assigning names to anonymous variables
+* Sample Signature::            Example of First-Order Logic
+
+
+File: twelf.info,  Node: Grammar,  Next: Constructor Declaration,  Prev: Syntax,  Up: Syntax
+
+Grammar
+=======
+
+   The grammar below defines the non-terminals `sig', `decl', `term'
+and uses the terminal `id' which stands for identifers (*note
+Identifiers::.).  The comments show the meaning in LF.  There are
+various special declarations `%KEYWORD' such as `%infix' or `%theorem'
+which are omitted here and detailed in the appropriate sections.
+
+     sig  ::=                    % Empty signature
+            | decl sig           % Constant declaration
+     
+     decl ::= id : term.         % a : K  or  c : A
+            | id : term = term.  % d : A = M
+            | id = term.         % d = M
+            | _ : term = term.   % anonymous definition, for type-checking
+            | _ = term.          % anonymous definition, for type-checking
+            | %infix ixdecl.     % operator declaration
+            | %prefix pxdecl.    % operator declaration
+            | %postfix pxdecl.   % operator declaration
+            | %name id id.       % name preference declaration
+            | %query qdecl.      % query declaration
+            | %solve id : term.  % solve declaration
+            | %mode mdecl.       % mode declaration
+            | %terminates tdecl. % termination declaration
+            | %theorem thdecl.   % theorem declaration
+            | %prove pdecl.      % prove declaration
+     
+     term ::= type               % type
+            | id                 % variable x or constant a or c
+            | term -> term       % A -> B
+            | term <- term       % A <- B, same as B -> A
+            | {id : term} term   % Pi x:A. K  or  Pi x:A. B
+            | [id : term] term   % lambda x:A. B  or  lambda x:A. M
+            | term term          % A M  or  M N
+            | term : term        % explicit type ascription
+            | _                  % hole, to be filled by term reconstruction
+            | {id} term          % same as `{id:_}' term
+            | [id] term          % same as `[id:_]' term
+
+   The constructs `{x:U} V' and `[x:U] V' bind the identifier `x' in
+`V', which may shadow other constants or bound variables.  As usual in
+type theory, `U -> V' is treated as an abbreviation for `{x:U} V' where
+`x' does not appear in `V'.  However, there is a subtlety in that the
+latter allows an implicit argument (*note Implicit Arguments::.) to
+depend on `x' while the former does not.
+
+   In the order of precedence, we disambiguate the syntax as follows:
+
+  1. Juxtaposition (application) is left associative and has highest
+     precedence.
+
+  2. User declared infix, prefix, or postfix operators (see below).
+
+  3. `->' is right and `<-' left associative with equal precedence.
+
+  4. `:'  is left associative.
+
+  5. `{}' and `[]' are weak prefix operators.
+
+   For example, the following are parsed identically:
+
+        d : a <- b <- {x} c x -> p x.
+        d : ({x} c x -> p x) -> b -> a.
+        d : ((a <- b) <- ({x:_} ((c x) -> (p x)))).
+
+
+File: twelf.info,  Node: Constructor Declaration,  Next: Definitions,  Prev: Grammar,  Up: Syntax
+
+Constructor Declaration
+=======================
+
+   New type families or object constructors can be introduced with
+
+     condec ::= id : term.    % a : K or c : A
+
+   Here `a' stands for a type family and `K' for its kind, whereas `c'
+is an objects constructor and `A' its type.  Identifiers are resolved
+as follows:
+
+  1. Any identifier `x' may be bound by the innermost enclosing binder
+     for `x' of the form `{x:A}' or `[x:A]'.
+
+  2. Any identifer which is not explicitly bound may be a declared or
+     defined constant.
+
+  3. Any uppercase identifier, that is, identifier starting with `_'
+     (underscore) or an upper case letter, may be a free variable.
+     Free variables are interpreted universally and their type is
+     inferred from their occurrences (*note Term Reconstruction::.).
+
+  4. Any other undeclared identifier is flagged as an error.
+
+
+File: twelf.info,  Node: Definitions,  Next: Operator Declaration,  Prev: Constructor Declaration,  Up: Syntax
+
+Definitions
+===========
+
+   Twelf supports notational definitions, currently employing a
+restriction to allow a simple and efficient internal treatment.
+Semantically, definitions are completely transparent, that is, both for
+type checking and the operational semantics definitions may be expanded.
+
+     defn ::= id : term = term.   % d : A = M
+            | id = term.          % d = M
+
+where the second is equivalent to `id : _ = term'.  Definitions can
+only be made on the level of objects, not at the level of type families
+because the interaction of such definitions with logic programming
+search has not been fully investigated.
+
+   In order to avoid always expanding definitions, Twelf currently only
+permits strict definitions (*note Strict Definitions::.).  A definition
+of a constant `c' is strict if all arguments to `c' (implicit or
+explicit) have at least one strict occurrence (*note Strict
+Occurrences::.) in the right-hand side of the definition, and the
+right-hand side contains at least one constant.  In practice, most
+notational definitions are strict.  For some examples, see *Note Sample
+Signature:: and *Note Strict Definitions::.
+
+   The power of definitions in Twelf, however, is severely limited by
+the lack of recursion.  It should only be thought of as notational
+definition, not as a computational mechanism.  Complex operations need
+to be defined as logic programs, taking advantage of the operational
+semantics assigned to signatures (*note Logic Programming::.).
+
+
+File: twelf.info,  Node: Operator Declaration,  Next: Name Preferences,  Prev: Definitions,  Up: Syntax
+
+Operator Declaration
+====================
+
+   The user may declare constants to be infix, prefix, or postfix
+operators.  Operator precedence properties are associated with
+constants, which must therefore already have been declared with a type
+or kind and a possible definition.  It is illegal to shadow an infix,
+prefix, or postfix operator with a bound variable.  We use `nat' for
+the terminal natural numbers.
+
+     assoc ::= none   % not associative
+             | left   % left associative
+             | right  % right associative
+     
+     prec ::= nat     % 0 <= prec < 10000
+     
+     ixdecl ::= assoc prec id
+     
+     pxdecl ::= prec id
+     
+     decl ::= ...
+            | %infix ixdecl.
+            | %prefix pxdecl.
+            | %postfix pxdecl.
+
+   During parsing, ambiguous successive operators of identical
+precedence such as `a <- b -> c' are flagged as errors.  Note that it
+is not possible to declare an operator with equal or higher precedence
+than juxtaposition or equal or lower precedence than `->' and `<-'.
+
+
+File: twelf.info,  Node: Name Preferences,  Next: Sample Signature,  Prev: Operator Declaration,  Up: Syntax
+
+Name Preferences
+================
+
+   During printing, Twelf frequently has to assign names to anonymous
+variables.  In order to improve readability, the user can declare a name
+preference for anonymous variables based on their type.  Thus name
+preferences are declared for type family constants.  Note that name
+preferences are not used to disambiguate the types of identifiers during
+parsing.
+
+     decl ::= ...
+            | %name id id.
+
+   Following our same conventions, a name preference declaration has the
+form `%name A ID', that is, the first identifier must be a type family
+already declared and the second is the name preference for variables of
+type A.  The second identifier must be uppercase, that is, start with a
+letter from `A' through `Z' or an underscore `_'.  Anonymous variables
+will then be named `ID1', `ID2', etc.
+
+
+File: twelf.info,  Node: Sample Signature,  Prev: Name Preferences,  Up: Syntax
+
+Sample Signature
+================
+
+   Below is a signature for intuitionistic first-order logic over an
+unspecified domain of individuals and atomic propositions.  It
+illustrates constant declarations and definitions and the use of
+operator precedence and name preference declarations.  It may be found
+in the file `examples/guide/nd.elf'.
+
+     %%% Individuals
+     i : type.                   %name i T
+     
+     %%% Propositions
+     o : type.                   %name o A
+     
+     imp    : o -> o -> o.       %infix right 10 imp
+     and    : o -> o -> o.       %infix right 11 and
+     true   : o.
+     or     : o -> o -> o.       %infix right 11 or
+     false  : o.
+     forall : (i -> o) -> o.
+     exists : (i -> o) -> o.
+     
+     not : o -> o = [A:o] A imp false.
+     
+     %%% Natural Deductions
+     
+     nd : o -> type.             %name nd D
+     
+     impi    : (nd A -> nd B) -> nd (A imp B).
+     impe    : nd (A imp B) -> nd A -> nd B.
+     andi    : nd A -> nd B -> nd (A and B).
+     ande1   : nd (A and B) -> nd A.
+     ande2   : nd (A and B) -> nd B.
+     truei   : nd (true).
+     % no truee
+     ori1    : nd A -> nd (A or B).
+     ori2    : nd B -> nd (A or B).
+     ore     : nd (A or B) -> (nd A -> nd C) -> (nd B -> nd C) -> nd C.
+     % no falsei
+     falsee  : nd false -> nd C.
+     foralli : ({x:i} nd (A x)) -> nd (forall A).
+     foralle : nd (forall A) -> {T:i} nd (A T).
+     existsi : {T:i} nd (A T) -> nd (exists A).
+     existse : nd (exists A) -> ({x:i} nd (A x) -> nd C) -> nd C.
+     
+     noti : (nd A -> nd false) -> nd (not A)
+          = [D:nd A -> nd false] impi D.
+     note : nd (not A) -> nd A -> nd false
+          = [D:nd (not A)] [E:nd A] impe D E.
+
+
+File: twelf.info,  Node: Term Reconstruction,  Next: Logic Programming,  Prev: Syntax,  Up: Top
+
+Term Reconstruction
+*******************
+
+   Representations of deductions in LF typically contain a lot of
+redundant information.  In order to make LF practical, Twelf gives the
+user the opportunity to omit redundant information in declarations and
+reconstructs it from context.  Unlike for functional languages, this
+requires recovering objects as well as types, so we refer to this phase
+as term reconstruction.
+
+   There are criteria which guarantee that the term reconstruction
+problem is decidable, but unfortunately these criteria are either very
+complicated or still force much redundant information to be supplied.
+Therefore, the Twelf implementation employs a reconstruction algorithm
+which always terminates and gives one of three answers:
+
+  1. yes, and here is the most general reconstruction;
+
+  2. no, and here is the problem; or
+
+  3. maybe.
+
+   The last characterizes the situations where there is insufficient
+information to guarantee a most general solution to the term
+reconstruction problem.  Because of the decidable nature of
+type-checking in LF, the user can always annotate the term further
+until it falls into one of the definitive categories.
+
+* Menu:
+
+* Implicit Quantifiers::        Free variables in declarations
+* Implicit Arguments::          Omitted arguments to constants
+* Strict Occurrences::          A sufficient condition for principal types
+* Strict Definitions::          Reconstruction on definitions
+* Type Ascription::             Disambiguating terms
+* Error Messages::              When things go wrong
+
+
+File: twelf.info,  Node: Implicit Quantifiers,  Next: Implicit Arguments,  Prev: Term Reconstruction,  Up: Term Reconstruction
+
+Implicit Quantifiers
+====================
+
+   The model of term reconstruction employed by Twelf is
+straightforward, although it employs a relatively complex algorithm.
+The basic principle is a duality between quantifiers omitted in a
+constant declaration and implicit arguments where the constant is used.
+Recall some definitions in the signature defining natural deductions
+(*note Sample Signature::.).
+
+     o : type.
+     and : o -> o -> o.   %infix right 10 and
+     nd : o -> type.
+     andi : nd A -> nd B -> nd (A and B).
+
+   The last declaration contains `A' and `B' as free variables.  Type
+reconstruction infers most general types for the free variables in a
+constant declaration and adds implicit quantifiers.  In the example
+above, `A' and `B' must both be of type `o'.  The internal form of the
+constant thus has one of the following two forms.
+
+     andi : {A:o} {B:o} nd A -> nd B -> nd (A and B).
+     andi : {B:o} {A:o} nd A -> nd B -> nd (A and B).
+
+   These forms are printed during type reconstruction, so the user can
+examine if the result of reconstruction matches his expectations.
+
+
+File: twelf.info,  Node: Implicit Arguments,  Next: Strict Occurrences,  Prev: Implicit Quantifiers,  Up: Term Reconstruction
+
+Implicit Arguments
+==================
+
+   The quantifiers on `A' and `B' in the declaration
+
+     andi : nd A -> nd B -> nd (A and B).
+
+were implicit.  The corresponding arguments to `andi' are also
+implicit.  In fact, since the order of the reconstructed quantifiers is
+arbitrary, we cannot know in which order to supply the arguments, so
+they must always be omitted.  Thus a constant with n implicit
+quantifiers is supplied with n implicit arguments whereever it is seen.
+These implicit arguments are existential variables whose value may be
+determined from context by unification.
+
+   For example, using also
+
+     true : o.
+     truei: nd (true).
+
+we have
+
+     (andi truei truei) : nd (true and true).
+
+   During parsing, the expression `(andi truei truei)' is interpreted as
+
+     (andi _ _ truei truei)
+
+where the two underscores stand for the implicit `A' and `B' arguments
+to `andi'.  They are replaced by existential variables whose value will
+be determined during type reconstruction.  We call them `A1' and `A2'
+and reason as follows.
+
+     |- andi : {A:o} {B:o} nd A -> nd B -> nd (A and B)
+     |- andi A1 : {B:o} nd A1 -> nd B -> nd (A1 and B)
+     |- andi A1 A2 : nd A1 -> nd A2 -> nd (A1 and A2)
+
+   At this point, we need a to infer the type of the application `(andi
+A1 A2) truei'.  This equates the actual type of the argument with the
+expected type of the argument.
+
+     |- andi A1 A2 : nd A1 -> nd A2 -> nd (A1 and A2)
+     |- truei : nd true
+     ------------------------------------------------
+     |- andi A1 A2 truei : nd A2 -> nd (A1 and A2)
+        where nd true = nd A1
+
+   The equation can be solved by instantiating `A1' to `true' and we
+continue:
+
+     |- andi true A2 truei : nd A2 -> nd (true and A2)
+     |- truei : nd true
+     ------------------------------------------------
+     |- andi true A2 truei truei : nd (true and A2)
+        where nd true = nd A2
+     |- andi true true truei truei : nd (true and true)
+
+   The last line is the expected result.  In this way, term
+reconstruction can always be reduced to solving equations such that
+every solution to the set of equations leads to a valid typing and vice
+versa.
+
+
+File: twelf.info,  Node: Strict Occurrences,  Next: Strict Definitions,  Prev: Implicit Arguments,  Up: Term Reconstruction
+
+Strict Occurrences
+==================
+
+   Both for type reconstruction and the operational semantics, Twelf
+must solve equations between objects and types.  Unfortunately, it is
+undecidable if a set of equations in the LF type theory has a solution.
+Worse yet, even if it has solutions, it may not have a most general
+solution.  Therefore, Twelf postpones difficult equations as constraints
+and solves only those within the pattern fragment (see `Miller 1991,
+Journal of Logic and Compuation' and `Pfenning 1991, Logical
+Frameworks').  In this fragment, principal solutions always exist and
+can be computed efficiently.  If constraints remain after term
+reconstruction, the constant declaration is rejected as ambiguous which
+indicates that the user must supply more type information.  We
+illustrate this phenomenon and a typical solution in our natural
+deduction example.
+
+   A central concept useful for understanding the finer details of type
+reconstruction is the notion of a *strict occurrence* of a free
+variable.  We call a position in a term *rigid* if it is not in the
+argument of a free variable.  We then call an occurrence of a free
+variable *strict* if the occurrence is in a rigid position and all its
+arguments (possibly none) are distinct bound variables.
+
+   If all free variable occurrences in all declarations in a signature
+are strict, then term reconstruction will always either fail or succeed
+with a principal solution, provided no further terms are omitted (that
+is, replaced by an underscore).
+
+   If a free variable in a declaration of a constant `c' has no strict
+occurrence at all, then its type can almost never be inferred and most
+uses of `c' will lead to a constraint.
+
+   If a free variable has strict and non-strict occurrences then in most
+cases term reconstruction will provide a definitive answer, but there is
+no guarantee.  Mostly this is because most general answers simply do not
+exist, but sometimes because the algorithm generates, but cannot solve
+constraints with unique solutions.
+
+   We use some advanced examples from the natural deduction signature to
+illustrate these concepts and ideas.  In the declarations
+
+     foralli : ({x:i} nd (A x)) -> nd (forall A).
+     foralle : nd (forall A) -> {T:i} nd (A T).
+
+all free variables have a strict occurrence.  However, if we had
+decided to leave `T' as an implicit argument,
+
+     foralle : nd (forall A) -> nd (A T).
+
+then `T' has no strict occurrence.  While this declaration is accepted
+as unambiguous (with `A:i -> o' and `T:i'), any future use of `foralle'
+most likely leads to constraints on `T' which cannot be solved.
+
+
+File: twelf.info,  Node: Strict Definitions,  Next: Type Ascription,  Prev: Strict Occurrences,  Up: Term Reconstruction
+
+Strict Definitions
+==================
+
+   Definitions are currently restricted so that each argument to the
+defined constant, may it be implicit or explicit, must have at least one
+strict occurrence in the right-hand side.  For example, the definition
+of `not' in the signature for natural deduction (*note Sample
+Signature::.)
+
+     not : o -> o = [A:o] A imp false.
+
+is strict since the only argument `A' has a strict occurrence in `A imp
+false'.  On the other hand, the definition
+
+     noti : ({p:o} nd A -> nd p) -> nd (not A)
+          = [D] impi ([u:nd A] D false u).
+
+which gives a possible derived introduction rule for negation is not
+strict: the argument `D' has only one occurrence, and this occurrence
+is not strict since the argument `false' is not a variable bound in the
+body, but a constant.
+
+   However, the definitions
+     noti : (nd A -> nd false) -> nd (not A)
+          = [D:nd A -> nd false] impi D.
+     note : nd (not A) -> nd A -> nd false
+          = [D:nd (not A)] [E:nd A] impe D E.
+
+are both strict since arguments `D' and `E' both have strict
+occurrences.  Type-checking these definitions requires that the
+definition of `not A' is expanded to `A imp false'.
+
+   Note that free variables in the type and the right-hand side of a
+definition are shared.  In the above example, `A' occurs both in the
+types and the right hand side and it should be thought of as the same
+`A'.  With the implicit quantifiers and abstractions restored, the
+definitions above have the following form.
+
+     noti : {A:o} (nd A -> nd false) -> nd (not A)
+        = [A:o] [D:nd A -> nd false] impi D.
+     note : {A:o} nd (not A) -> nd A -> nd false
+        = [A:o] [D:nd (not A)] [E:nd A] impe D E.
+
+
+File: twelf.info,  Node: Type Ascription,  Next: Error Messages,  Prev: Strict Definitions,  Up: Term Reconstruction
+
+Type Ascription
+===============
+
+   In some circumstances it is useful to directly ascribe a type in
+order to disambiguate declarations.  For example, the term `ori1 truei'
+has principal type `nd (true or B)' for a free variable `B'.  If we
+want to constrain this to a derivation of `nd (true or false)' we can
+write `ori1 truei : nd (true or false)'.
+
+   Explicit type ascription sometimes helps when the source of a type
+error is particularly hard to discern: we can ascribe an expected type
+to a subterm, thus verifying our intuition about constituent terms in a
+declaration.
+
+
+File: twelf.info,  Node: Error Messages,  Prev: Type Ascription,  Up: Term Reconstruction
+
+Error Messages
+==============
+
+   When term reconstruction fails, Twelf issues an error message with
+the location of the declaration in which the problem occurred and the
+disagreement encountered.  A typical message is
+
+     examples/nd/nd.elf:37.35-37.41 Error: Type mismatch
+     Expected: o
+     Found:    (i -> o) -> o
+     Expression clash
+
+which points to an error in the file `examples/nd/nd.elf', line 37,
+characters 35 through 41 where an argument to a function was expected to
+have type `o', but was found to have type `(i -> o) -> o'.
+
+   If constraints remain, the error location is the whole declaration
+with the message
+
+     FILENAME:LOCATION Error: Typing ambiguous -- unresolved constraints
+
+   The FILENAME and LOCATION information can be used by Emacs (*note
+Emacs Interface::.) to jump to the specified location in the given file
+for editing of the incorrect declaration for the constant `c'.  The
+LOCATION has the form `LINE1.COLUMN1-LINE2.COLUMN2' and represent
+Twelf's best guess as to the source of the error.  Due to the
+propagation of non-trivial constraints the source of a type
+reconstruction failure can sometimes not be pinpointed very precisely.
+
+
+File: twelf.info,  Node: Logic Programming,  Next: Modes,  Prev: Term Reconstruction,  Up: Top
+
+Logic Programming
+*****************
+
+   Twelf gives an operational interpretation to signatures under the
+computation-as-proof-search paradigm.  The fundamental idea is to fix a
+simple search strategy and then search for a derivation of a query
+according to this strategy.  The result may be a substitution for the
+free variables in a query and a derivation, or explicit failure.  It is
+also possible that the computation does not terminate.
+
+   A query can be posed in three different ways: as a `%query'
+declaration, as a `%solve' declaration, or interactively, using a
+top-level invoked from ML with `Twelf.top' which prompts with `?-'
+(*note Interactive Queries::.).
+
+     query ::= id : term   % X : A, X a free variable
+             | term        % A
+     
+     bound ::= nat         % number of solutions
+             | *           % unbounded number
+     
+     qdecl ::= bound bound query % expected solutions, try limit, query
+     
+     decl ::= ...
+            | %query qdecl.      % execute query
+            | %solve id : term.  % solve and name proof term
+
+   In all of these cases, the free variables in a query are interpreted
+existentially, which is in contrast to constant declarations where free
+variables are interpreted universally.  In particular, free variables
+might be instantiated during type reconstruction and during execution of
+the query.
+
+* Menu:
+
+* Query Declaration::           Checking expected numbers of solutions
+* Solve Declaration::           Naming proof terms found by search
+* Interactive Queries::         Twelf's interactive top-level
+* Sample Trace::                An example how search works
+* Operational Semantics::       How queries are executed in some detail
+* Sample Program::              Type inference for a lambda-calculus
+
+
+File: twelf.info,  Node: Query Declaration,  Next: Solve Declaration,  Prev: Logic Programming,  Up: Logic Programming
+
+Query Declaration
+=================
+
+   The query form
+
+     %query EXPECTED TRY A.
+
+will try to solve the query `A' and verify that it gives the EXPECTED
+number of solutions, but it will never try to find more than indicated
+by TRY.  It succeeds and prints a message, whose precise form depends
+on the value of `Twelf.chatter' if `A' has the expected number of
+solutions; otherwise it either fails with an error message or does not
+terminate.  `%query' has no other effect on the state of Twelf.  Here
+are some examples.
+
+     %query 1 * A.      % check that `A' has exactly one solution
+     %query 1 1 A.      % check that `A' has at least one solution
+     %query * 3 A.      % `A' has infinitely many solutions, check 3
+     %query * * A.      % fails if `A' has finitely many solutions
+     %query 1 0 A.      % skip this query
+
+
+File: twelf.info,  Node: Solve Declaration,  Next: Interactive Queries,  Prev: Query Declaration,  Up: Logic Programming
+
+Solve Declaration
+=================
+
+   The query form
+
+     %solve c : A.
+
+will search for the first solution `M' of `A' and then define
+
+     c : A = M.
+
+   If there are any free variables remaining in `M' or `A' after
+search, they will be implicitly quantified in the new definition.  This
+form of definition is particularly useful to compute and name inputs to
+future queries.  An example of this feature from the file
+`examples/nd/lam.elf' can be found in *Note Proof Realizations::.
+
+
+File: twelf.info,  Node: Interactive Queries,  Next: Sample Trace,  Prev: Solve Declaration,  Up: Logic Programming
+
+Interactive Queries
+===================
+
+   An interactive top-level can be invoked using the SML expression
+`Twelf.top ();'.  The top-level prompts with `?- ' and awaits the input
+of a query, terminated by a period `.' and a <RET>.
+
+   After the query has been parsed, Twelf reconstructs implicit type
+information, issuing a warning if constraints remain.  The result is
+executed as a query.  At any point during the processing of a query the
+user may interrupt with `C-c' (that is, <CTRL> and `c') to drop back
+into ML's interactive top-level.
+
+   When Twelf has found a solution, it prints the *answer substitution*
+for all free variables in the query, including the proof term variable
+if one was given.  It also notes if there are remaining equational
+constraints, but currently does not print them.
+
+   The top-level then waits for input, which is interpreted as follows
+
+`y', `Y', or `;'
+     backtrack and search for another solution
+
+`q' or `Q'
+     quit Twelf's top-level and return to ML
+
+`n', `N', or anything else
+     return to prompt for another query
+
+
+File: twelf.info,  Node: Sample Trace,  Next: Operational Semantics,  Prev: Interactive Queries,  Up: Logic Programming
+
+Sample Trace
+============
+
+   As an example we consider lists of propositions and some simple
+operations on them, as they might be used when programming a theorem
+prover.
+
+     list : type.
+     nil  : list.
+     cons : o -> list -> list.
+
+   First, we want to write a program to append two lists to obtain
+their concatenation.  This is expressed as a relation between the three
+lists, which in turn is implemented as a type family
+
+     append  : list -> list -> list -> type.
+     
+     appNil  : append nil K K.
+     appCons : append (cons X L) K (cons X M)
+                <- append L K M.
+
+   Here, we use the synonym `A <- B' for `B -> A' to improve
+readability.  We say *`A' if `B'*.
+
+   The first sample query concatenates the singleton lists containing
+`true' and `false'.  We proceed as if we had loaded the appropriate
+files and started a top-level with `Twelf.top ();'.
+
+     ?- append (cons true nil) (cons false nil) L.
+
+   Here, `L' is a free existential variable.  We search for an object
+`M : append (cons true nil) (cons false nil) L', even though this
+object will not be shown in this form or query.  Each constant
+declaration in the signature is tried in turn, unifying the head with
+the goal above.  In this manner, we obtain the following sequence of
+goals and actions.  Note that the intermediate forms and comments are
+not printed when this is run.  They are added here to illustrate the
+behavior.
+
+     % original goal after parsing and type reconstruction
+     ?- append (cons true nil) (cons false nil) L.
+     [try appNil:
+          append nil K1 K1
+        = append (cons true nil) (cons false nil) L
+      unification fails with constant clash: nil <> cons
+     ]
+     [try appCons:
+          append (cons X1 L1) K2 (cons X1 M1)
+        = append (cons true nil) (cons false nil) L
+      unification succeeds with
+      X1 = true, L1 = nil, K2 = cons false nil, L = cons true M1
+     ]
+     % subgoal
+     ?- append nil (cons false nil) M1.
+     [try appNil:
+          append nil K3 K3
+        = append nil (cons false nil) M1
+      unification and subgoal succeeds with
+      K3 = cons false nil, M1 = cons false nil
+     ]
+
+   At this point the overall goal succeeds and we read off the answer
+substitution for the only free variable in the query, namely `L'.  It
+was first determined to be `cons true M1' and then `M1' was
+instantiated to `cons false nil', leading to the instantiation
+
+     L = cons true (cons false nil).
+
+   If instead we pose the query
+
+     ?- X : append (cons true nil) (cons false nil) L.
+
+we also obtain the proof term
+
+     L = cons true (cons false nil);
+     X = appCons appNil.
+
+   As another example we consider a query with several solutions which
+are enumerated when we ask for further results.  This time we do not
+trace the steps of the execution, but show the interaction verbatim.
+
+     ?- append L K (cons true (cons false nil)).
+     Solving...
+     K = cons true (cons false nil);
+     L = nil.
+     More? y
+     K = cons false nil;
+     L = cons true nil.
+     More? y
+     K = nil;
+     L = cons true (cons false nil).
+     More? y
+     No more solutions
+
+
+File: twelf.info,  Node: Operational Semantics,  Next: Sample Program,  Prev: Sample Trace,  Up: Logic Programming
+
+Operational Semantics
+=====================
+
+   The operational semantics of Twelf is a form of typed constraint
+logic programming.  We will use standard terminology from this area.  A
+type family which is used in a program or goal is called a *predicate*.
+A constant declaration in a signature which is available during search
+is called a *clause*.  A clause typically has the form `c : a M1 ... Mm
+<- A1 <- ... <- An', where `a M1 ... Mm' is the *head of the clause*
+and `A1' through `An' are the *subgoals*.  A clause is used to reduce a
+goal to subgoals by a process called *backchaining*.  Backchaining
+unifies the head of the clause with the current goal to generate
+*subgoals*.  Next, we *select* one of the subgoals as a current goal
+and continue the search process.  Actually, instead of unification
+(which is undecidable in LF), Twelf employs *constraint simplification*
+and carries along equational constraints in a normal form.
+
+   A hypothesis which is introduced during search is a *local
+assumption*; a parameter is a *local parameter*.  Parameters act like
+constants in unification, except that their occurrences might be
+restricted due to *parameter dependency*.
+
+   Without going into a formal description, here are the central ideas
+of the operational semantics.
+
+Clause selection.
+     The clauses are tried in the following order: from most recent to
+     least recent local assumption, then from first to last clause in
+     the global signature.
+
+Subgoal selection.
+     Subgoals are solved from the inside out.  For example, when a
+     clause `c : A <- B <- C.'  is applied to solve the goal `?- A.'
+     then the first subgoal is `B' and the second subgoal `C'.  Truly
+     dependent variables will only be subject to unification and never
+     give rise to a subgoal.  For example `c : {X:b} a X <- a c' is a
+     clause with head `a X', subgoal `a c', and existential variable
+     `X'.
+
+Unification.
+     An atomic goal is unified with the clause head using higher-order
+     pattern unification.  All equations outside this fragment are
+     postponed and carried along as constraints.
+
+Local assumptions.
+     A goal of the form `?- A -> B.' introduces a local assumption `A'
+     and then solves `B' under this assumption.  To solve atomic goals,
+     local assumptions are tried before global clauses, using the most
+     recently made assumption first.  Note that this is different from
+     Prolog `assert' in that `A' is available only for solving `B'.
+
+Local parameters.
+     Parameters are introduced into proof search by goals of the form
+     `?- {x:A} B.' which generates a *new* parameter `a' and then
+     solves the result of substituting `a' for `x' in `B'.  Parameters
+     are also called *universal variables* since they are not subject
+     to instantiation during unification.  Local parameters will never
+     be used as local assumptions during search.
+
+
+File: twelf.info,  Node: Sample Program,  Prev: Operational Semantics,  Up: Logic Programming
+
+Sample Program
+==============
+
+   As an example, we consider simple type inference for the pure
+lambda-calculus.  An extension of this example to Mini-ML is given in
+the course notes `Pfenning 1992, Computation and Deduction'.  The code
+below can be found in the file `examples/guide/lam.elf'.
+
+     % Simple types
+     tp : type.                              %name tp T.
+     
+     arrow : tp -> tp -> tp.                 % T1 => T2
+     
+     % Expressions
+     exp : type.                             %name exp E.
+     
+     lam   : (exp -> exp) -> exp.            % lam x. E
+     app   : exp -> exp -> exp.              % (E1 E2)
+     
+     % Type inference
+     % |- E : T  (expression E has type T)
+     
+     of : exp -> tp -> type.                 %name of P.
+     
+     tp_lam : of (lam E) (arrow T1 T2)       % |- lam x. E : T1 => T2
+               <- ({x:exp}                   % if  x:T1 |- E : T2.
+                     of x T1 -> of (E x) T2).
+     
+     tp_app : of (app E1 E2) T1              % |- E1 E2 : T1
+               <- of E1 (arrow T2 T1)        % if  |- E1 : T2 => T1
+               <- of E2 T2.                  % and |- E2 : T2.
+
+   Again, we have used the notation `A <- B' to emphasize the
+interpretation of constant declarations as clauses.  We now trace the
+query which infers the most general type of the identity function,
+represented as `lam [x:exp] x'.  We indicate the scope of hypotheses
+which are introduced during search by indentation.
+
+     % original query, `T' free
+     ?- of (lam [x:exp] x) T.
+     % use `tp_lam' with `E = ([x:exp] x)' and `T = arrow T1 T2'
+     % subgoal
+     ?- {x:exp} of x T1 -> of x T2.
+     % introduce parameter `e'
+     ?- of e T1 -> of e T2.
+     % introduce hypothesis labelled `p'
+     p:of e T1
+      ?- of e T2.
+      % succeed by hypothesis `p' with `T1 = T2'
+
+   At this point the query succeeds and prints the answer substitution.
+
+     T = arrow T1 T1.
+     More? y
+     No more solutions
+
+   We requested more solution by typing `y', but there are no further
+possibilities.  The free variable `T1' in the answer substitution means
+that every instance of `arrow T1 T1' provides a solution to the
+original query.  In other words, `lam [x:exp] x' has type `arrow T1 T1'
+for all types `T1'.
+
+   As a second example we verify that self-application is not
+well-typed in the simply-typed lambda-calculus.
+
+     ?- of (lam [x:exp] app x x) T.
+     % use `tp_lam' with `T = arrow T1 T2'
+     % subgoal
+     ?- {x:exp} of x T1 -> of (app x x) T2.
+     % introduce parameter `e'
+     ?- of e T1 -> of (app e e) T2.
+     % introduce hypothesis `p:of a T1'
+     p:of e T1
+      ?- of (app e e) T2.
+      % use `tp_app'
+      % first subgoal
+      ?- of e (arrow T3 T2).
+      % succeed by hypothesis `p' with `T1 = arrow T3 T2'
+      % second subgoal
+      ?- of e T3.
+      % fail, since `T3 = arrow T3 T2' has no solution
+
+   At the point where the second subgoals fails we backtrack.  However,
+all other alternatives fail immediately, since the clause head does not
+unify with the goal and the overall query fails.
+
+
+File: twelf.info,  Node: Modes,  Next: Termination,  Prev: Logic Programming,  Up: Top
+
+Modes
+*****
+
+   In most cases, the correctness of the algorithmic interpretation of a
+signature as a logic program depends on a restriction to queries of a
+certain form.  Often, this is a restriction of some arguments to
+*inputs* which must be given as *ground* objects, that is, objects not
+containing any existential variables.  In return, one often obtains
+*outputs* which will also be ground.  In the logic programming
+terminology, the information about which arguments to a predicate
+should be considered input and output is called *mode information*.
+
+   Twelf supports a simple system of modes.  It checks explicit mode
+declarations by the programmer against the signature and signals errors
+if the prescribed information flow is violated.  Currently, queries are
+not checked against the mode declaration.
+
+   Mode checking is useful to uncover certain types of errors which
+elude the type-checker.  It can also be used to generate more efficient
+code, although the compiler currently does not take advantage of mode
+information.
+
+   There are two forms of mode declarations: a short form which is
+adequate and appropriate most of the time, and a long form which is
+sometimes necessary to ascribe the right modes to implicit arguments
+
+     mdecl ::= smdecl    % short mode declaration
+             | fmdecl    % full mode declaration
+     
+     decl ::= ...
+            | %mode mdecl.
+
+* Menu:
+
+* Short Mode Declaration::      Common form for modes
+* Full Mode Declaration::       Fully explicit modes
+* Mode Checking::               Checking mode correctness
+

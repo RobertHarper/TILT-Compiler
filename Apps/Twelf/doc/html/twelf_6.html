@@ -1,0 +1,264 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 6  Modes</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_5.html">previous</A>, <A HREF="twelf_7.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC28" HREF="twelf_toc.html#TOC28">6  Modes</A></H1>
+
+<P>
+<A NAME="IDX73"></A>
+<A NAME="IDX74"></A>
+<A NAME="IDX75"></A>
+
+</P>
+<P>
+In most cases, the correctness of the algorithmic interpretation of a
+signature as a logic program depends on a restriction to queries of a
+certain form.  Often, this is a restriction of some arguments to
+<EM>inputs</EM> which must be given as <EM>ground</EM> objects, that is,
+objects not containing any existential variables.  In return, one often
+obtains <EM>outputs</EM> which will also be ground.  In the logic
+programming terminology, the information about which arguments to a
+predicate should be considered input and output is
+called <EM>mode information</EM>.
+
+</P>
+<P>
+Twelf supports a simple system of modes.  It checks explicit mode
+declarations by the programmer against the signature and signals errors
+if the prescribed information flow is violated.  Currently, queries are
+not checked against the mode declaration.
+
+</P>
+<P>
+Mode checking is useful to uncover certain types of errors which
+elude the type-checker.  It can also be used to generate more efficient
+code, although the compiler currently does not take advantage
+of mode information.
+
+</P>
+<P>
+There are two forms of mode declarations: a short form which is adequate
+and appropriate most of the time, and a long form which is sometimes
+necessary to ascribe the right modes to implicit arguments
+
+</P>
+
+<PRE>
+mdecl ::= smdecl    % short mode declaration
+        | fmdecl    % full mode declaration
+
+decl ::= ...
+       | %mode mdecl.
+</PRE>
+
+
+<UL>
+<LI><A HREF="twelf_6.html#SEC29">Short Mode Declaration</A>: Common form for modes
+<LI><A HREF="twelf_6.html#SEC30">Full Mode Declaration</A>: Fully explicit modes
+<LI><A HREF="twelf_6.html#SEC31">Mode Checking</A>: Checking mode correctness
+</UL>
+
+
+
+<H2><A NAME="SEC29" HREF="twelf_toc.html#TOC29">6.1  Short Mode Declaration</A></H2>
+
+<P>
+<A NAME="IDX76"></A>
+<A NAME="IDX77"></A>
+<A NAME="IDX78"></A>
+
+</P>
+<P>
+There are two forms of mode declarations: a short and a full form.
+The short form is an abbreviation which is expanded into the full
+form when it is unambiguous.
+
+</P>
+
+<PRE>
+mode ::= +       % input
+       | *       % unrestricted
+       | -       % output
+
+mid ::= mode id  % named mode identifier, one token
+
+smdecl ::= id          % type family <EM>a</EM>
+         | smdecl mid  % argument mode
+</PRE>
+
+<P>
+Mode declarations for a predicate <CODE>a</CODE> must come before any clauses
+defining <CODE>a</CODE>.  Note that the mode followed with the identifier must
+be one token, such as <SAMP>`+L'</SAMP> and not <SAMP>`+ L'</SAMP>.  The short form is
+most convenient in typical situations.  For example, we can declare that
+the <CODE>append</CODE> program (see section <A HREF="twelf_5.html#SEC25">5.4  Sample Trace</A>) takes the first two
+arguments as input and produces the the third as output.
+
+</P>
+
+<PRE>
+append  : list -&#62; list -&#62; list -&#62; type.
+%mode append +L +K -M.
+</PRE>
+
+<P>
+If we wanted to use <CODE>append</CODE> to split a list into two
+sublists, we would instead declare
+
+</P>
+
+<PRE>
+append : list -&#62; list -&#62; list -&#62; type.
+%mode append -L -K +M.
+</PRE>
+
+<P>
+where the clauses <CODE>appNil</CODE> and <CODE>appCons</CODE> remain
+unchanged.
+
+</P>
+<P>
+In the lambda-calculus type checker (see section <A HREF="twelf_5.html#SEC27">5.6  Sample Program</A>), the type
+must be an unrestricted argument.
+
+</P>
+
+<PRE>
+of : exp -&#62; tp -&#62; type.
+%mode of +E *T.
+</PRE>
+
+<P>
+If we declare it as an input argument, <CODE>%mode of +E +T</CODE>,
+we obtain an error pointing to the first occurrence of <CODE>T2</CODE>
+in the clause <CODE>tp_app</CODE> reproduced below.
+
+</P>
+
+<PRE>
+examples/nd/lam.elf:27.20-27.22 Error: 
+Occurrence of variable T2 in input (+) argument not necessarily ground
+
+tp_app : of (app E1 E2) T1
+          &#60;- of E1 (arrow T2 T1)
+          &#60;- of E2 T2.
+</PRE>
+
+<P>
+If we declare it as an output argument, <CODE>%mode of +E -T</CODE>,
+we obtain an error pointing to the second occurrence of <CODE>T1</CODE>
+in the clause <CODE>tp_lam</CODE> reproduced below.
+
+</P>
+
+<PRE>
+examples/nd/lam.elf:25.8-25.10 Error: 
+Occurrence of variable T1 in output (-) argument not necessarily ground
+
+tp_lam : of (lam E) (arrow T1 T2)
+          &#60;- ({x:exp}
+                of x T1 -&#62; of (E x) T2).
+</PRE>
+
+<P>
+In general, for a mode declaration in short form the arguments are
+specified exactly as they would look in the program.  This means one
+cannot specify the modes of implicit arguments which are filled in by
+term reconstruction.  These modes are reconstructed as follows: each
+implicit argument which appears in the type of an input argument is
+considered input <SAMP>`+'</SAMP>, those among the remaining which appear in an
+output argument are considered output <SAMP>`-'</SAMP>, the rest are
+unrestricted.  The mode declaration is echoed in full form, so the user
+can verify the correctness of the modes assigned to implicit arguments.
+If the inferred full mode declaration is incorrect, or if one wants to
+be explicit about modes, one should use full mode declarations
+(see section <A HREF="twelf_6.html#SEC30">6.2  Full Mode Declaration</A>).
+
+</P>
+
+
+<H2><A NAME="SEC30" HREF="twelf_toc.html#TOC30">6.2  Full Mode Declaration</A></H2>
+
+<P>
+<A NAME="IDX79"></A>
+<A NAME="IDX80"></A>
+
+</P>
+<P>
+To specify modes for implicit arguments one must use the full form of
+mode declaration.  A <CODE>mode</CODE> can be one of <SAMP>`+'</SAMP>,
+<SAMP>`*'</SAMP>, or <SAMP>`-'</SAMP> (see section <A HREF="twelf_6.html#SEC29">6.1  Short Mode Declaration</A>).
+
+</P>
+
+<PRE>
+fmdecl ::= mode {id : term} fmdecl
+         | mode {id} fmdecl
+         | term
+</PRE>
+
+<P>
+The term following the mode prefix in a full mode declaration must
+always have the form <CODE><EM>a</EM> <EM>x1</EM> ... <EM>xn</EM></CODE> where
+<EM>x1</EM> through <EM>xn</EM> are variables declared in the mode prefix.
+As an example, we give an alternative specification of the <CODE>append</CODE>
+predicate.
+
+</P>
+
+<PRE>
+append : list -&#62; list -&#62; list -&#62; type.
+%mode +{L:list} +{K:list} -{M:list} append L K M.
+</PRE>
+
+
+
+<H2><A NAME="SEC31" HREF="twelf_toc.html#TOC31">6.3  Mode Checking</A></H2>
+
+<P>
+<A NAME="IDX81"></A>
+
+</P>
+<P>
+Mode checking for input, output, and unrestricted arguments examines
+each clause as it is encountered.  The algorithm performs a kind of
+abstract interpretation of the clause, keeping track of a list of the
+existential variables for which it knows that they will be ground.
+
+</P>
+
+<OL>
+<LI>We assume each existential variable with a strict occurrence
+
+(see section <A HREF="twelf_4.html#SEC17">4.3  Strict Occurrences</A>) in an input argument to the clause head to
+be ground.
+
+<LI>We traverse the subgoals in evaluation order (see section <A HREF="twelf_5.html#SEC26">5.5  Operational Semantics</A>).  For each subgoal we first verify that all input arguments
+will be ground, using the information about the existential variables
+collected so far.  If this check succeeds we add all variables which
+have a strict occurrence in an output argument of the subgoal to the
+list of variables with known ground instantiations.
+
+<LI>After the last subgoal has been examined, we verify that the
+
+output arguments in the clause head are now also ground.
+</OL>
+
+<P>
+Arguments whose mode is unrestricted are ignored: they do no need to be
+checked, and they do not contribute any information about the
+instantiations of existential variables.
+
+</P>
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_5.html">previous</A>, <A HREF="twelf_7.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

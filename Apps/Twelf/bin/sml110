@@ -1,0 +1,4 @@
+#!/bin/sh
+SML_VERSION=110
+export SML_VERSION
+exec /usr/local/bin/sml ${1+"$@"}

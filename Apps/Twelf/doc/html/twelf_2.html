@@ -1,0 +1,176 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 2  Lexical Conventions</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_1.html">previous</A>, <A HREF="twelf_3.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC4" HREF="twelf_toc.html#TOC4">2  Lexical Conventions</A></H1>
+
+<P>
+Lexical analysis of Twelf has purposely been kept simple, with few
+reserved characters and identifiers.  As a result one may need to use
+more whitespace to separate identifiers than in other languages.  For
+example, <SAMP>`A-&#62;B'</SAMP> or <SAMP>`A+B'</SAMP> are single identifiers, while <SAMP>`A
+-&#62; B'</SAMP> and <SAMP>`A + B'</SAMP> both consist of 3 identifiers.
+
+</P>
+<P>
+During parsing, identifiers are resolved as reserved identifiers,
+constants, bound variables, or free variables, following the usual rules
+of static scoping in lambda-calculi.
+
+</P>
+
+<UL>
+<LI><A HREF="twelf_2.html#SEC5">Reserved Characters</A>: Characters separating identifiers
+<LI><A HREF="twelf_2.html#SEC6">Identifiers</A>: Interpretation of identifiers
+</UL>
+
+
+
+<H2><A NAME="SEC5" HREF="twelf_toc.html#TOC5">2.1  Reserved Characters</A></H2>
+
+<P>
+<A NAME="IDX6"></A>
+<A NAME="IDX7"></A>
+
+</P>
+<P>
+The following table lists the reserved characters in Twelf.
+
+</P>
+<DL COMPACT>
+
+<DT><SAMP>`:'</SAMP>
+<DD>
+    colon, constant declaration or ascription
+
+<DT><SAMP>`.'</SAMP>
+<DD>
+    period, terminates declarations
+
+<DT><SAMP>`('</SAMP> <SAMP>`)'</SAMP>
+<DD>
+    parentheses, for grouping terms
+
+<DT><SAMP>`['</SAMP> <SAMP>`]'</SAMP>
+<DD>
+    brackets, for lambda abstraction
+
+<DT><SAMP>`{'</SAMP> <SAMP>`}'</SAMP>
+<DD>
+    braces, for quantification (dependent function types)
+
+<DT><VAR>whitespace</VAR>
+<DD>
+    separates identifiers; one of space, newline, tab, carriage return,
+    vertical tab or formfeed
+
+<DT><SAMP>`%'</SAMP>
+<DD>
+    introduces comments or special keyword declarations
+
+<DL COMPACT>
+
+<DT><SAMP>`%<VAR>whitespace</VAR>'</SAMP> <SAMP>`%%'</SAMP>
+<DD>
+      comment terminated by the end of the line, may contain any characters
+
+<DT><SAMP>`%{'</SAMP> <SAMP>`}%'</SAMP>
+<DD>
+      delimited comment, nested <SAMP>`%{'</SAMP> and <SAMP>`}%'</SAMP> must match
+
+<DT><SAMP>`%<VAR>keyword</VAR>'</SAMP>
+<DD>
+      various declarations
+
+<DT><SAMP>`%.'</SAMP>
+<DD>
+      end of input stream
+</DL>
+
+<DT><SAMP>`"'</SAMP>
+<DD>
+    doublequote, disallowed
+
+<DT>other printing characters
+<DD>
+    identifier constituents
+</DL>
+
+
+
+<H2><A NAME="SEC6" HREF="twelf_toc.html#TOC6">2.2  Identifiers</A></H2>
+
+<P>
+<A NAME="IDX8"></A>
+<A NAME="IDX9"></A>
+<A NAME="IDX10"></A>
+<A NAME="IDX11"></A>
+
+</P>
+<P>
+All printing characters that are not reserved can be included in
+identifiers, which are separated by whitespace or reserved characters.
+In particular, <CODE>A-&#62;B</CODE> is an identifier, whereas <CODE>A -&#62; B</CODE>
+stands for the type of functions from <CODE>A</CODE> to <CODE>B</CODE>.
+
+</P>
+<P>
+An uppercase identifier is one which begins with an underscore <SAMP>`_'</SAMP> or
+a letter in the range <SAMP>`A'</SAMP> through <SAMP>`Z'</SAMP>.  A lowercase identifier
+begins with any other character except a reserved one.  Numbers also
+count as lowercase identifiers and are not interpreted specially.  Free
+variables in a declaration must be uppercase, bound variables and
+constants may be either uppercase or lowercase identifiers.
+
+</P>
+<P>
+There are also four reserved identifiers with a predefined meaning which
+cannot be changed.  Keep in mind that these can be constituents of other
+identifers which are not interpreted specially.
+
+</P>
+<DL COMPACT>
+
+<DT><SAMP>`-&#62;'</SAMP>
+<DD>
+          function type
+<DT><SAMP>`&#60;-'</SAMP>
+<DD>
+          reverse function type
+<DT><SAMP>`_'</SAMP>
+<DD>
+          hole, to be filled by term reconstruction
+<DT><SAMP>`='</SAMP>
+<DD>
+          definition
+<DT><SAMP>`type'</SAMP>
+<DD>
+          the kind <EM>type</EM>
+</DL>
+
+<P>
+Constants have static scope, which means that they can be shadowed by
+subsequent declarations.  A shadowed identifier (which can no longer be
+referred to in input) is printed as <CODE>%<VAR>id</VAR>%</CODE>.  The printer for
+terms renames bound variables so they do not shadow constants.
+
+</P>
+<P>
+Free uppercase identifiers in declarations represent schematic
+variables.  In order to distinguish them from other kinds of variables
+and constants they are printed as <SAMP>`'<VAR>id</VAR>'</SAMP> (backquote, followed
+by the identifer name) in error messages.
+
+</P>
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_1.html">previous</A>, <A HREF="twelf_3.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

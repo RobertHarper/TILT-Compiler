@@ -1,0 +1,5 @@
+Group is
+  ../lambda/sources.cm
+  subordinate.sig.sml
+  subordinate.fun.sml
+  subordinate.sml

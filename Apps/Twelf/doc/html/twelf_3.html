@@ -1,0 +1,399 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 3  Syntax</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_2.html">previous</A>, <A HREF="twelf_4.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC7" HREF="twelf_toc.html#TOC7">3  Syntax</A></H1>
+
+<P>
+<A NAME="IDX12"></A>
+<A NAME="IDX13"></A>
+<A NAME="IDX14"></A>
+<A NAME="IDX15"></A>
+
+</P>
+<P>
+In LF, deductive systems are represented by signatures consisting of
+constant declarations.  Twelf implements declarations in a
+straightforward way and generalizes signatures by also allowing
+definitions, which are semantically transparent.  Twelf currently
+does not have module-level constructs so that, for example, signatures
+cannot be named.  Instead, multiple signatures can be manipulated in the
+programming environment using configurations (see section <A HREF="twelf_9.html#SEC45">9.1  Configurations</A>).
+
+</P>
+<P>
+The LF type theory which underlies LF is stratified into three levels:
+objects <EM>M</EM> and <EM>N</EM>, types <EM>A</EM> and <EM>B</EM>, and kinds
+<EM>K</EM>.  Twelf does not syntactically distinguish these levels and
+simply uses one syntactic category of term.  Similarly, object-level
+constants <EM>c</EM> and type-level constants <EM>a</EM> as well as
+variables share one name space of identifiers.
+
+</P>
+<P>
+In explanations and examples we will use letters following the
+mathematical conventions above to clarify the roles of various terms.
+We also use <EM>U</EM> and <EM>V</EM> to stand for arbitrary terms.
+
+</P>
+
+<UL>
+<LI><A HREF="twelf_3.html#SEC8">Grammar</A>: The grammar of Twelf
+<LI><A HREF="twelf_3.html#SEC9">Constructor Declaration</A>: Introducing types and object constructors
+<LI><A HREF="twelf_3.html#SEC10">Definitions</A>: Defining abbreviations
+<LI><A HREF="twelf_3.html#SEC11">Operator Declaration</A>: Infix, prefix and postfix operators
+<LI><A HREF="twelf_3.html#SEC12">Name Preferences</A>: Assigning names to anonymous variables
+<LI><A HREF="twelf_3.html#SEC13">Sample Signature</A>: Example of First-Order Logic
+</UL>
+
+
+
+<H2><A NAME="SEC8" HREF="twelf_toc.html#TOC8">3.1  Grammar</A></H2>
+
+<P>
+<A NAME="IDX16"></A>
+
+</P>
+<P>
+The grammar below defines the non-terminals <CODE>sig</CODE>, <CODE>decl</CODE>,
+<CODE>term</CODE> and uses the terminal <CODE>id</CODE> which stands for identifers
+(see section <A HREF="twelf_2.html#SEC6">2.2  Identifiers</A>).  The comments show the meaning in LF.  There are
+various special declarations <CODE>%<VAR>keyword</VAR></CODE> such as <CODE>%infix</CODE>
+or <CODE>%theorem</CODE> which are omitted here and detailed in the
+appropriate sections.
+
+</P>
+<P>
+<A NAME="IDX17"></A>
+<A NAME="IDX18"></A>
+<A NAME="IDX19"></A>
+
+</P>
+
+
+<PRE>
+sig  ::=                    % Empty signature
+       | decl sig           % Constant declaration
+
+decl ::= id : term.         % <EM>a : K</EM>  or  <EM>c : A</EM>
+       | id : term = term.  % <EM>d : A = M</EM>
+       | id = term.         % <EM>d = M</EM>
+       | _ : term = term.   % anonymous definition, for type-checking
+       | _ = term.          % anonymous definition, for type-checking
+       | %infix ixdecl.     % operator declaration
+       | %prefix pxdecl.    % operator declaration
+       | %postfix pxdecl.   % operator declaration
+       | %name id id.       % name preference declaration
+       | %query qdecl.      % query declaration
+       | %solve id : term.  % solve declaration
+       | %mode mdecl.       % mode declaration
+       | %terminates tdecl. % termination declaration
+       | %theorem thdecl.   % theorem declaration
+       | %prove pdecl.      % prove declaration
+
+term ::= type               % <EM>type</EM>
+       | id                 % variable <EM>x</EM> or constant <EM>a</EM> or <EM>c</EM>
+       | term -&#62; term       % <EM>A</EM> <TT>-&#62;</TT> <EM>B</EM>
+       | term &#60;- term       % <EM>A</EM> <TT>&#60;-</TT> <EM>B</EM>, same as <EM>B</EM> <TT>-&#62;</TT> <EM>A</EM>
+       | {id : term} term   % <EM>Pi x:A. K</EM>  or  <EM>Pi x:A. B</EM>
+       | [id : term] term   % <EM>lambda x:A. B</EM>  or  <EM>lambda x:A. M</EM>
+       | term term          % <EM>A M</EM>  or  <EM>M N</EM>
+       | term : term        % explicit type ascription
+       | _                  % hole, to be filled by term reconstruction
+       | {id} term          % same as <CODE>{id:_}</CODE> term
+       | [id] term          % same as <CODE>[id:_]</CODE> term
+</PRE>
+
+<P>
+The constructs <CODE>{x:U} V</CODE> and <CODE>[x:U] V</CODE> bind the identifier
+<CODE>x</CODE> in <CODE>V</CODE>, which may shadow other constants or bound
+variables.  As usual in type theory, <CODE>U -&#62; V</CODE> is treated as an
+abbreviation for <CODE>{x:U} V</CODE> where <CODE>x</CODE> does not appear
+in <CODE>V</CODE>.  However, there is a subtlety in that the latter allows
+an implicit argument (see section <A HREF="twelf_4.html#SEC16">4.2  Implicit Arguments</A>) to depend on
+<CODE>x</CODE> while the former does not.
+
+</P>
+<P>
+In the order of precedence, we disambiguate the syntax as follows:
+
+</P>
+
+<OL>
+<LI>Juxtaposition (application) is left associative and has highest precedence.
+
+<LI>User declared infix, prefix, or postfix operators (see below).
+
+<LI><SAMP>`-&#62;'</SAMP> is right and <SAMP>`&#60;-'</SAMP> left associative with equal precedence.
+
+<LI><SAMP>`:'</SAMP>  is left associative.
+
+<LI><SAMP>`{}'</SAMP> and <SAMP>`[]'</SAMP> are weak prefix operators.
+
+</OL>
+
+<P>
+For example, the following are parsed identically:
+
+</P>
+
+<PRE>
+   d : a &#60;- b &#60;- {x} c x -&#62; p x.
+   d : ({x} c x -&#62; p x) -&#62; b -&#62; a.
+   d : ((a &#60;- b) &#60;- ({x:_} ((c x) -&#62; (p x)))).
+</PRE>
+
+
+
+<H2><A NAME="SEC9" HREF="twelf_toc.html#TOC9">3.2  Constructor Declaration</A></H2>
+
+<P>
+<A NAME="IDX20"></A>
+<A NAME="IDX21"></A>
+<A NAME="IDX22"></A>
+<A NAME="IDX23"></A>
+<A NAME="IDX24"></A>
+
+</P>
+<P>
+New type families or object constructors can be introduced with
+
+</P>
+
+<PRE>
+condec ::= id : term.    % <EM>a : K</EM> or <EM>c : A</EM>
+</PRE>
+
+<P>
+Here <CODE>a</CODE> stands for a type family and <CODE>K</CODE> for its kind,
+whereas <CODE>c</CODE> is an objects constructor and <CODE>A</CODE> its type.
+Identifiers are resolved as follows:
+
+</P>
+
+<OL>
+<LI>Any identifier <CODE>x</CODE> may be bound by the innermost enclosing binder
+
+for <CODE>x</CODE> of the form <CODE>{x:A}</CODE> or <CODE>[x:A]</CODE>.
+
+<LI>Any identifer which is not explicitly bound may be a declared or
+
+defined constant.
+
+<LI>Any uppercase identifier, that is, identifier
+
+starting with <SAMP>`_'</SAMP> (underscore) or an upper case letter, may be
+a free variable.  Free variables are interpreted universally and their
+type is inferred from their occurrences (see section <A HREF="twelf_4.html#SEC14">4  Term Reconstruction</A>).
+
+<LI>Any other undeclared identifier is flagged as an error.
+
+</OL>
+
+
+
+<H2><A NAME="SEC10" HREF="twelf_toc.html#TOC10">3.3  Definitions</A></H2>
+
+<P>
+<A NAME="IDX25"></A>
+
+</P>
+<P>
+Twelf supports notational definitions, currently employing a restriction
+to allow a simple and efficient internal treatment.  Semantically,
+definitions are completely transparent, that is, both for type checking
+and the operational semantics definitions may be expanded.
+
+</P>
+
+<PRE>
+defn ::= id : term = term.   % <EM>d : A = M</EM>
+       | id = term.          % <EM>d = M</EM>
+</PRE>
+
+<P>
+where the second is equivalent to <CODE>id : _ = term</CODE>.  Definitions
+can only be made on the level of objects, not at the level of type
+families because the interaction of such definitions with logic
+programming search has not been fully investigated.
+
+</P>
+<P>
+In order to avoid always expanding definitions, Twelf currently only
+permits strict definitions (see section <A HREF="twelf_4.html#SEC18">4.4  Strict Definitions</A>).  A definition
+of a constant <CODE>c</CODE> is strict if all arguments to <CODE>c</CODE> (implicit
+or explicit) have at least one strict occurrence (see section <A HREF="twelf_4.html#SEC17">4.3  Strict Occurrences</A>) in the right-hand side of the definition, and the
+right-hand side contains at least one constant.  In practice, most
+notational definitions are strict.  For some examples, see section <A HREF="twelf_3.html#SEC13">3.6  Sample Signature</A> and section <A HREF="twelf_4.html#SEC18">4.4  Strict Definitions</A>.
+
+</P>
+<P>
+The power of definitions in Twelf, however, is severely limited by the
+lack of recursion.  It should only be thought of as notational
+definition, not as a computational mechanism.  Complex operations need
+to be defined as logic programs, taking advantage of the operational
+semantics assigned to signatures (see section <A HREF="twelf_5.html#SEC21">5  Logic Programming</A>).
+
+</P>
+
+
+<H2><A NAME="SEC11" HREF="twelf_toc.html#TOC11">3.4  Operator Declaration</A></H2>
+
+<P>
+<A NAME="IDX26"></A>
+<A NAME="IDX27"></A>
+<A NAME="IDX28"></A>
+
+</P>
+<P>
+<A NAME="IDX29"></A>
+<A NAME="IDX30"></A>
+<A NAME="IDX31"></A>
+<A NAME="IDX32"></A>
+<A NAME="IDX33"></A>
+<A NAME="IDX34"></A>
+
+</P>
+<P>
+The user may declare constants to be infix, prefix, or postfix
+operators.  Operator precedence properties are associated with
+constants, which must therefore already have been declared with a type
+or kind and a possible definition.  It is illegal to shadow an infix,
+prefix, or postfix operator with a bound variable.  We use
+<CODE>nat</CODE> for the terminal natural numbers.
+
+</P>
+
+<PRE>
+assoc ::= none   % not associative
+        | left   % left associative
+        | right  % right associative
+
+prec ::= nat     % 0 <TT>&#60;=</TT> <TT>prec</TT> <TT>&#60;</TT> 10000
+
+ixdecl ::= assoc prec id
+
+pxdecl ::= prec id
+
+decl ::= ...
+       | %infix ixdecl.
+       | %prefix pxdecl.
+       | %postfix pxdecl.
+</PRE>
+
+<P>
+During parsing, ambiguous successive operators of identical precedence
+such as <CODE>a &#60;- b -&#62; c</CODE> are flagged as errors.  Note that it is not
+possible to declare an operator with equal or higher precedence than
+juxtaposition or equal or lower precedence than <SAMP>`-&#62;'</SAMP> and <SAMP>`&#60;-'</SAMP>.
+
+</P>
+
+
+<H2><A NAME="SEC12" HREF="twelf_toc.html#TOC12">3.5  Name Preferences</A></H2>
+
+<P>
+<A NAME="IDX35"></A>
+<A NAME="IDX36"></A>
+<A NAME="IDX37"></A>
+<A NAME="IDX38"></A>
+
+</P>
+<P>
+During printing, Twelf frequently has to assign names to anonymous
+variables.  In order to improve readability, the user can declare a name
+preference for anonymous variables based on their type.  Thus name
+preferences are declared for type family constants.  Note that name
+preferences are not used to disambiguate the types of identifiers during
+parsing.
+
+</P>
+
+<PRE>
+decl ::= ...
+       | %name id id.
+</PRE>
+
+<P>
+Following our same conventions, a name preference declaration has the
+form <CODE>%name <VAR>a</VAR> <VAR>id</VAR></CODE>, that is, the first identifier must
+be a type family already declared and the second is the name preference
+for variables of type <VAR>a</VAR>.  The second identifier must be uppercase,
+that is, start with a letter from <SAMP>`A'</SAMP> through <SAMP>`Z'</SAMP> or an
+underscore <SAMP>`_'</SAMP>.  Anonymous variables will then be named
+<CODE><VAR>id</VAR><EM>1</EM></CODE>, <CODE><VAR>id</VAR><EM>2</EM></CODE>, etc.
+
+</P>
+
+
+<H2><A NAME="SEC13" HREF="twelf_toc.html#TOC13">3.6  Sample Signature</A></H2>
+
+<P>
+<A NAME="IDX39"></A>
+
+</P>
+<P>
+Below is a signature for intuitionistic first-order logic over an
+unspecified domain of individuals and atomic propositions.  It
+illustrates constant declarations and definitions and the use of
+operator precedence and name preference declarations.  It may be found
+in the file <TT>`examples/guide/nd.elf'</TT>.
+
+</P>
+
+<PRE>
+%%% Individuals
+i : type.                   %name i T
+
+%%% Propositions
+o : type.                   %name o A
+
+imp    : o -&#62; o -&#62; o.       %infix right 10 imp
+and    : o -&#62; o -&#62; o.       %infix right 11 and
+true   : o.
+or     : o -&#62; o -&#62; o.       %infix right 11 or
+false  : o.
+forall : (i -&#62; o) -&#62; o.
+exists : (i -&#62; o) -&#62; o.
+
+not : o -&#62; o = [A:o] A imp false.
+
+%%% Natural Deductions
+
+nd : o -&#62; type.             %name nd D
+
+impi    : (nd A -&#62; nd B) -&#62; nd (A imp B).
+impe    : nd (A imp B) -&#62; nd A -&#62; nd B.
+andi    : nd A -&#62; nd B -&#62; nd (A and B).
+ande1   : nd (A and B) -&#62; nd A.
+ande2   : nd (A and B) -&#62; nd B.
+truei   : nd (true).
+% no truee
+ori1    : nd A -&#62; nd (A or B).
+ori2    : nd B -&#62; nd (A or B).
+ore     : nd (A or B) -&#62; (nd A -&#62; nd C) -&#62; (nd B -&#62; nd C) -&#62; nd C.
+% no falsei
+falsee  : nd false -&#62; nd C.
+foralli : ({x:i} nd (A x)) -&#62; nd (forall A).
+foralle : nd (forall A) -&#62; {T:i} nd (A T).
+existsi : {T:i} nd (A T) -&#62; nd (exists A).
+existse : nd (exists A) -&#62; ({x:i} nd (A x) -&#62; nd C) -&#62; nd C.
+
+noti : (nd A -&#62; nd false) -&#62; nd (not A)
+     = [D:nd A -&#62; nd false] impi D.
+note : nd (not A) -&#62; nd A -&#62; nd false
+     = [D:nd (not A)] [E:nd A] impe D E.
+</PRE>
+
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_2.html">previous</A>, <A HREF="twelf_4.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

@@ -1,0 +1,15 @@
+Group is
+  ../lambda/sources.cm
+  ../print/sources.cm
+  ../names/sources.cm	
+  ../paths/sources.cm
+  ../index/sources.cm
+  modesyn.sig.sml
+  modesyn.fun.sml
+  modedec.sig.sml
+  modedec.fun.sml
+  modecheck.sig.sml
+  modecheck.fun.sml 
+  modeprint.sig.sml
+  modeprint.fun.sml
+  modes.sml

@@ -1,0 +1,117 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 12  Installation</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_11.html">previous</A>, <A HREF="twelf_13.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC67" HREF="twelf_toc.html#TOC67">12  Installation</A></H1>
+
+<P>
+<A NAME="IDX258"></A>
+<A NAME="IDX259"></A>
+<A NAME="IDX260"></A>
+<A NAME="IDX261"></A>
+
+</P>
+<P>
+At present, Twelf has been tested in SML of New Jersey (version 110 or
+higher) and MLWorks, both of which implement Standard ML (revised 1997)
+and the Standard ML Basis Library.  The instructions below apply to
+a Unix system.  For instructions for other architectures or updates
+please check the file <TT>`INSTALL'</TT> at the Twelf home page and in
+the Twelf root directory after unpacking the distribution.
+
+</P>
+<P>
+On a Unix system you unpack the sources with
+
+</P>
+
+<PRE>
+gunzip twelf-1-2.tar.gz
+tar -xf twelf-1-2.tar
+cd twelf
+make
+</PRE>
+
+<P>
+This builds the Twelf server (see section <A HREF="twelf_10.html#SEC50">10  Twelf Server</A>) for your current
+architecture and makes it accessible as <TT>`bin/twelf-server'</TT>.  It
+also installs the Twelf Emacs interface (see section <A HREF="twelf_11.html#SEC53">11  Emacs Interface</A>), but
+you must add a line
+
+</P>
+
+<PRE>
+(load "<VAR>directory</VAR>/emacs/twelf-init.el")
+</PRE>
+
+<P>
+to your <TT>`.emacs'</TT> file, where <VAR>directory</VAR> is the root directory
+into which you installed Twelf.  Note that the Twelf installation cannot
+be moved after it has been compiled with <CODE>make</CODE>, since absolute
+pathnames are built into the executable scripts.
+
+</P>
+<P>
+Note that the Twelf server presently only works with Standard ML of New
+Jersey, since interrupt handling is implementation specific.
+
+</P>
+<P>
+If you would like to use Twelf as a structure in SML, you can then call
+
+</P>
+
+<PRE>
+make twelf-sml
+</PRE>
+
+<P>
+which creates <TT>`bin/twelf-sml'</TT> for the Twelf-SML mode
+(see section <A HREF="twelf_11.html#SEC62">11.9  Twelf-SML Mode</A>).  Calling <CODE>make clean</CODE> will remove
+temporary files created by the SML compiler, but not the
+executable file.
+
+</P>
+<DL COMPACT>
+
+<DT>SML of New Jersey (free, version 110 or higher)
+<DD>
+ See <TT>http://cm.bell-labs.com/cm/cs/what/smlnj/index.html</TT>
+
+<UL>
+ <LI> <A HREF="http://cm.bell-labs.com/cm/cs/what/smlnj/index.html">SML
+of New Jersey Home Page</A> </LI>
+</UL>
+
+<DT>MLWorks (commercial)
+<DD>
+ See <TT>http://www.harlequin.com/products/ads/ml/ml.html</TT>
+
+<UL>
+ <LI> <A HREF="http://www.harlequin.com/products/ads/ml/ml.html">MLWorks
+Home Page</A> </LI>
+</UL>
+
+In MLWorks, you can presently only directly load the Twelf sources,
+using the file <TT>`load.sml'</TT>.
+
+
+<PRE>
+mlworks-basis  start MLWorks with basis library in Twelf root directory
+use "load.sml";  compile and load Twelf
+</PRE>
+
+</DL>
+
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_11.html">previous</A>, <A HREF="twelf_13.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

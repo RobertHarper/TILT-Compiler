@@ -1,0 +1,63 @@
+Group is
+  ../lambda/sources.cm
+  ../global/sources.cm
+  ../table/sources.cm
+  ../formatter/sources.cm
+  ../print/sources.cm
+  ../subordinate/sources.cm
+  ../modes/sources.cm
+  ../typecheck/sources.cm
+  ../order/sources.cm
+  ../opsem/sources.cm
+  ../heuristic/sources.cm
+  ../timing/sources.cm
+  ../m2/sources.cm    (* just for integetrating the new prover into
+			 Twelf *)
+  funsyn.sig.sml
+  funsyn.fun.sml
+  funnames.sig.sml    (* moves eventually to Names *)
+  funnames.fun.sml
+  funtypecheck.sig.sml 
+  funtypecheck.fun.sml
+  funprint.sig.sml
+  funprint.fun.sml
+  weaken.sig.sml      (* moves eventually to the core of Twelf *)
+  weaken.fun.sml      (* " *)
+  funweaken.sig.sml
+  funweaken.fun.sml
+  relfun.sig.sml  
+  relfun.fun.sml 
+  interpret.sig.sml
+  meta.sml 
+
+  (* Prover Version 1.3 *)
+  abstract.sig.sml
+  abstract.fun.sml
+  init.sig.sml
+  init.fun.sml
+  filling.sig.sml
+  filling.fun.sml
+  global.sig.sml 
+  global.fun.sml
+  data.sig.sml
+  data.fun.sml
+  mpi.sig.sml
+  mpi.fun.sml
+  recursion.sig.sml
+  recursion.fun.sml
+  search.sig.sml
+  search.fun.sml 
+  uniquesearch.sig.sml
+  uniquesearch.fun.sml
+  splitting.sig.sml
+  splitting.fun.sml
+  inference.sig.sml
+  inference.fun.sml
+  statesyn.sig.sml
+  statesyn.fun.sml
+  strategy.sig.sml
+  strategy.fun.sml 
+  print.sig.sml
+  print.fun.sml
+(*  prover.sig.sml *)
+  prover.fun.sml

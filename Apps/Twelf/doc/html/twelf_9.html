@@ -1,0 +1,416 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 9  ML Interface</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_8.html">previous</A>, <A HREF="twelf_10.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC44" HREF="twelf_toc.html#TOC44">9  ML Interface</A></H1>
+
+<P>
+<A NAME="IDX117"></A>
+<A NAME="IDX118"></A>
+
+</P>
+<P>
+The Twelf implementation defines a number of ML functions embedded in
+structures which can be called to load files, execute queries, and set
+environment parameters such as the verbosity level of the interaction.
+These functions and parameters are available in the <CODE>Twelf</CODE>
+structure.  If you open the <CODE>Twelf</CODE> structure with
+
+</P>
+
+<PRE>
+open Twelf
+</PRE>
+
+<P>
+after compiling and loading Twelf, you do not have to type the
+<SAMP>`Twelf.'</SAMP> to the functions shown below.
+
+</P>
+<P>
+Previous implementations of Elf offered a stand-alone command
+interpreter but this has not yet been ported.  To exit Twelf and
+ML call <CODE>Twelf.OS.exit ();</CODE>.
+
+</P>
+
+<UL>
+<LI><A HREF="twelf_9.html#SEC45">Configurations</A>: Managing groups of Twelf files
+<LI><A HREF="twelf_9.html#SEC46">Loading Files</A>: Loading individual files
+<LI><A HREF="twelf_9.html#SEC47">Environment Parameters</A>: Controlling appearance and verbosity of Twelf
+<LI><A HREF="twelf_9.html#SEC48">Timing Statistics</A>: Obtaining information on running times
+<LI><A HREF="twelf_9.html#SEC49">Twelf Signature</A>: ML signature of main Twelf structure
+</UL>
+
+
+
+<H2><A NAME="SEC45" HREF="twelf_toc.html#TOC45">9.1  Configurations</A></H2>
+
+<P>
+<A NAME="IDX119"></A>
+<A NAME="IDX120"></A>
+<A NAME="IDX121"></A>
+<A NAME="IDX122"></A>
+<A NAME="IDX123"></A>
+<A NAME="IDX124"></A>
+<A NAME="IDX125"></A>
+<A NAME="IDX126"></A>
+
+</P>
+<P>
+Groups of Twelf files are managed in <EM>configurations</EM>.  A
+configuration is defined by a file, by convention called
+<TT>`sources.cfg'</TT>, which resides in the same directory as the Twelf
+source files.  The configuration file must contain at most one
+Twelf source file per line, and the files must be listed in
+dependency order.  A configuration <VAR>config</VAR> can then be
+defined from the file by the ML declaration
+
+</P>
+
+<PRE>
+val <VAR>config</VAR> = Twelf.Config.read "sources.cfg";
+</PRE>
+
+<P>
+By convention, the filenames end in the extensions
+<DL COMPACT>
+
+<DT><SAMP>`.elf'</SAMP>
+<DD>
+ for constant declarations and definitions or mixed files,
+<DT><SAMP>`.quy'</SAMP>
+<DD>
+ for files which contain query declarations,
+<DT><SAMP>`.thm'</SAMP>
+<DD>
+ for files which contain <CODE>%theorem</CODE> and <CODE>%proof</CODE> declarations.
+</DL>
+
+<P>
+File names may not contain whitespace.  They are interpreted relative to
+the current working directory of ML, but resolved into absolute path
+names when the configuration file is read.  To change the current
+working directory call
+
+</P>
+
+<PRE>
+Twelf.OS.getDir ();               (* get working directory *)
+Twelf.OS.chDir "<VAR>directory</VAR>"; (* change working directory *)
+</PRE>
+
+<P>
+As an example, we show how the Mini-ML configuration is defined and
+loaded, assuming your current working directory is the root directory of
+Twelf.
+
+</P>
+
+<PRE>
+val mini_ml = Twelf.Config.read "examples/mini-ml/sources.cfg";
+Twelf.Config.load mini_ml;
+</PRE>
+
+<P>
+Note that the identifier bound to the configuration (<CODE>mini_ml</CODE> in
+this example), must be a legal ML identifier, usually consisting only of
+alphanumeric characters and underscores.  The call to
+<CODE>Twelf.Config.load</CODE> returns either <CODE>Twelf.OK</CODE> or
+<CODE>Twelf.ABORT</CODE>.  It reads each file in turn, starting from an empty
+signature, printing the results of type reconstruction and search based
+on the value of the <CODE>Twelf.chatter</CODE> variable (see section <A HREF="twelf_9.html#SEC47">9.3  Environment Parameters</A>).  If another configuration or file has previously been
+read, all the declarations will first be deleted so that
+<CODE>Twelf.Config.load</CODE> always starts from the same state.
+
+</P>
+<P>
+Loading a configuration will stop at the first error encountered, issue
+an appropriate message and return <CODE>Twelf.ABORT</CODE>.  If there is an
+unexpected internal error (which indicates a bug in the Twelf
+implementation), it raises an uncaught exception instead and returns
+to the ML top-level.
+
+</P>
+<P>
+To explore the behavior of programs interactively, you may call the
+Twelf top-level with
+
+</P>
+
+<PRE>
+Twelf.top ();
+</PRE>
+
+<P>
+which is explained in section <A HREF="twelf_5.html#SEC24">5.3  Interactive Queries</A>.
+
+</P>
+
+
+
+<H2><A NAME="SEC46" HREF="twelf_toc.html#TOC46">9.2  Loading Files</A></H2>
+
+<P>
+<A NAME="IDX127"></A>
+<A NAME="IDX128"></A>
+<A NAME="IDX129"></A>
+<A NAME="IDX130"></A>
+
+</P>
+<P>
+Twelf also allows direct management of the signature by loading
+individual files.  This is generally not recommended because successive
+declarations simply accumulate in the global signature which may lead to
+unexpected behavior.  The relevant function calls are
+
+</P>
+
+<PRE>
+Twelf.reset ();
+Twelf.loadFile "<VAR>file</VAR>";
+</PRE>
+
+<P>
+where <CODE>Twelf.reset ()</CODE> resets the current global signature to
+be empty and <CODE>Twelf.readFile "<VAR>file</VAR>"</CODE> loads the given
+<VAR>file</VAR> whose name is interpreted relative to the current working
+directory.
+
+</P>
+<P>
+<STRONG>Caution:</STRONG> Reading a file twice will not replace the declarations
+of the first pass by the second, but simply add them to the current
+signature.  If names are reused, old declarations will be shadowed, but
+they are still in the global signature and might be used in the search
+for a solution to a query or in theorem proving, leading to unexpected
+behavior.  When in doubt, use configurations (see section <A HREF="twelf_9.html#SEC45">9.1  Configurations</A>) or
+call <CODE>Twelf.reset ()</CODE>.
+
+</P>
+
+
+<H2><A NAME="SEC47" HREF="twelf_toc.html#TOC47">9.3  Environment Parameters</A></H2>
+
+<P>
+<A NAME="IDX131"></A>
+<A NAME="IDX132"></A>
+
+</P>
+<P>
+Various flags and parameters can be used to modify the behavior of Twelf
+and the messages it issues.  They are given below with the assignment
+of the default value.
+
+</P>
+<DL COMPACT>
+
+<DT><CODE>Twelf.chatter := 3;</CODE>
+<DD>
+<A NAME="IDX133"></A>
+  Controls the detail of the information which is printed when signatures
+are read.
+<DL COMPACT>
+
+<DT><CODE>0</CODE>
+<DD>
+ Nothing.
+<DT><CODE>1</CODE>
+<DD>
+ Just file names.
+<DT><CODE>2</CODE>
+<DD>
+ File names and number of query solutions.
+<DT><CODE>3</CODE>
+<DD>
+ Each declarations after type reconstruction.
+<DT><CODE>4</CODE>
+<DD>
+ Debug information.
+<DT><CODE>5</CODE>
+<DD>
+ More debug information.
+</DL>
+
+<DT><CODE>Twelf.doubleCheck := false;</CODE>
+<DD>
+<A NAME="IDX134"></A>
+ If <CODE>true</CODE>, each declaration is checked again for type correctness
+after type reconstruction.  This is expensive and useful only for your
+peace of mind, since type checking is significantly simpler than
+type reconstruction.
+
+<DT><CODE>Twelf.Print.implicit := false;</CODE>
+<DD>
+<A NAME="IDX135"></A>
+ If <CODE>true</CODE>, implicit arguments (normally elided) are printed.
+Sometimes this is useful to track particularly baffling errors.
+
+<DT><CODE>Twelf.Print.depth := NONE;</CODE>
+<DD>
+<A NAME="IDX136"></A>
+ If <CODE>SOME(d)</CODE> then terms deeper than level <CODE>d</CODE> are printed
+as <SAMP>`%%'</SAMP>.
+
+<DT><CODE>Twelf.Print.length := NONE;</CODE>
+<DD>
+<A NAME="IDX137"></A>
+ If <CODE>SOME(l)</CODE> then argument lists longer than <CODE>l</CODE> are truncated
+with <SAMP>`...'</SAMP>.
+
+<DT><CODE>Twelf.Print.indent := 3;</CODE>
+<DD>
+<A NAME="IDX138"></A>
+ Controls the amount of indentation for printing nested terms.
+
+<DT><CODE>Twelf.Print.width := 80;</CODE>
+<DD>
+<A NAME="IDX139"></A>
+ The value used to decide when to break lines during printing of terms.
+
+<DT><CODE>Twelf.Prover.strategy := Twelf.Prover.FRS;</CODE>
+<DD>
+<A NAME="IDX140"></A>
+ Determines the strategy, where <CODE>F</CODE>=Filling, <CODE>R</CODE>=Recursion, and
+<CODE>S</CODE>=Splitting.  Can also be <CODE>Twelf.Prover.RFS</CODE>.
+
+<DT><CODE>Twelf.Prover.maxSplit := 2;</CODE>
+<DD>
+<A NAME="IDX141"></A>
+ The maximal number of generations of a variable introduced
+by splitting.  Setting is to <CODE>0</CODE> will prohibit proof by cases.
+
+<DT><CODE>Twelf.Prover.maxRecurse := 10;</CODE>
+<DD>
+<A NAME="IDX142"></A>
+ The maximal number of appeals to the induction hypothesis in any
+case during a proof.
+</DL>
+
+
+
+<H2><A NAME="SEC48" HREF="twelf_toc.html#TOC48">9.4  Timing Statistics</A></H2>
+
+<P>
+<A NAME="IDX143"></A>
+<A NAME="IDX144"></A>
+<A NAME="IDX145"></A>
+
+</P>
+<P>
+Twelf has a few utilities to collect run-time statistics which are
+useful mainly for the developers.  They are collected in the
+structure <CODE>Timers</CODE>.  Timing information is cumulative
+in an ML session.
+
+</P>
+<DL COMPACT>
+
+<DT><CODE>Twelf.Timers.show ();</CODE>
+<DD>
+<A NAME="IDX146"></A>
+ Show the value of timers and reset them to zero.
+<DT><CODE>Twelf.Timers.reset ();</CODE>
+<DD>
+<A NAME="IDX147"></A>
+ Simply reset all timers to zero.
+<DT><CODE>Twelf.Timers.check ();</CODE>
+<DD>
+<A NAME="IDX148"></A>
+ Display the value of timers, but do not reset them.
+</DL>
+
+<P>
+<STRONG>Caution:</STRONG> Normally, the various times are exclusive, except that
+the runtime includes the garbage collection time which is shown
+separately.  However, there is a problem the time for printing the
+answer substitution to a query is charged both to <CODE>Printing</CODE> and
+<CODE>Solving</CODE>.
+
+</P>
+
+
+<H2><A NAME="SEC49" HREF="twelf_toc.html#TOC49">9.5  Twelf Signature</A></H2>
+
+<P>
+<A NAME="IDX149"></A>
+<A NAME="IDX150"></A>
+
+</P>
+<P>
+For reference, here is the ML signature <CODE>TWELF</CODE> of the <CODE>Twelf</CODE>
+structure which defines most functions and flags relevant to loading
+and executing Twelf programs.
+
+</P>
+
+<PRE>
+signature TWELF =
+sig
+  structure Print :
+  sig
+    val implicit : bool ref           (* false, print implicit args *)
+    val depth : int option ref        (* NONE, limit print depth *)
+    val length : int option ref       (* NONE, limit argument length *)
+    val indent : int ref              (* 3, indentation of subterms *)
+    val width : int ref               (* 80, line width *)
+  end
+
+  structure Timers :
+  sig
+    val show : unit -&#62; unit           (* show and reset timers *)
+    val reset : unit -&#62; unit          (* reset timers *)
+    val check : unit -&#62; unit          (* display, but not no reset *)
+  end
+
+  structure OS :
+  sig
+    val chDir : string -&#62; unit        (* change working directory *)
+    val getDir : unit -&#62; string       (* get working directory *)
+    val exit : unit -&#62; unit           (* exit Twelf and ML *)
+  end
+
+  structure Prover :
+  sig
+    datatype Strategy = RFS | FRS     (* F=Fill, R=Recurse, S=Split *)
+    val strategy : Strategy ref       (* FRS, strategy used for %prove *)
+    val maxSplit : int ref            (* 2, bound on splitting  *)
+    val maxRecurse : int ref          (* 10, bound on recursion *)
+  end
+
+  val chatter : int ref               (* 3, chatter level *)
+  val doubleCheck : bool ref          (* false, check after reconstruction *)
+
+  datatype Status = OK | ABORT        (* return status *)
+
+  val reset : unit -&#62; unit            (* reset global signature *)
+  val loadFile : string -&#62; Status     (* load file *)
+  val readDecl : unit -&#62; Status       (* read declaration interactively *)
+  val decl : string -&#62; Status         (* print declaration of constant *)
+
+  val top : unit -&#62; unit              (* top-level for interactive queries *)
+
+  structure Config :
+  sig
+    type config                       (* configuration *)
+    val read : string -&#62; config       (* read config file *)
+    val load : config -&#62; Status       (* reset and load configuration *)
+    val define : string list -&#62; config (* explicitly define configuration *)
+  end
+
+  val version : string                (* Twelf version *)
+end;  (* signature TWELF *)
+</PRE>
+
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_8.html">previous</A>, <A HREF="twelf_10.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

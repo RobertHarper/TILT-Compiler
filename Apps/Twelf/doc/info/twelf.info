@@ -1,0 +1,83 @@
+This is Info file twelf.info, produced by Makeinfo version 1.67 from
+the input file twelf.texi.
+
+
+Indirect:
+twelf.info-1: 97
+twelf.info-2: 49174
+twelf.info-3: 99067
+
+Tag Table:
+(Indirect)
+Node: Top97
+Node: Introduction1090
+Node: New Features2957
+Node: Quick Start6209
+Node: Lexical Conventions7278
+Node: Reserved Characters8049
+Node: Identifiers9078
+Node: Syntax10715
+Node: Grammar12233
+Node: Constructor Declaration15229
+Node: Definitions16194
+Node: Operator Declaration17804
+Node: Name Preferences18949
+Node: Sample Signature19901
+Node: Term Reconstruction21692
+Node: Implicit Quantifiers23340
+Node: Implicit Arguments24577
+Node: Strict Occurrences26868
+Node: Strict Definitions29617
+Node: Type Ascription31448
+Node: Error Messages32148
+Node: Logic Programming33419
+Node: Query Declaration35298
+Node: Solve Declaration36255
+Node: Interactive Queries36869
+Node: Sample Trace38056
+Node: Operational Semantics41308
+Node: Sample Program44332
+Node: Modes47515
+Node: Short Mode Declaration49174
+Node: Full Mode Declaration52178
+Node: Mode Checking52950
+Node: Termination54244
+Node: Termination Declaration56047
+Node: Subterm Ordering59631
+Node: Lexicographic Orders62030
+Node: Simultaneous Orders62708
+Node: Mutual Recursion64035
+Node: Theorem Prover65242
+Node: Theorem Declaration67183
+Node: Sample Theorems68783
+Node: Proof Steps70879
+Node: Search Strategies72606
+Node: Proof Realizations73531
+Node: ML Interface75214
+Node: Configurations76290
+Node: Loading Files78849
+Node: Environment Parameters79949
+Node: Timing Statistics81992
+Node: Twelf Signature82852
+Node: Twelf Server85517
+Node: Server Types87061
+Node: Server Commands87585
+Node: Emacs Interface88859
+Node: Twelf Mode90413
+Node: Editing Commands91556
+Node: Type Checking Commands92309
+Node: Error Tracking93966
+Node: Server State95044
+Node: Info File96999
+Node: Tags Files97522
+Node: Twelf Timers98658
+Node: Twelf-SML Mode99067
+Node: Emacs Variables101050
+Node: Syntax Highlighting101873
+Node: Emacs Initialization103320
+Node: Command Summary103865
+Node: Installation105813
+Node: Examples107847
+Node: Index109247
+
+End Tag Table

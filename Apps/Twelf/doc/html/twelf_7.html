@@ -1,0 +1,467 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 7  Termination</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_6.html">previous</A>, <A HREF="twelf_8.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC32" HREF="twelf_toc.html#TOC32">7  Termination</A></H1>
+
+<P>
+<A NAME="IDX82"></A>
+
+</P>
+<P>
+Besides checking types and modes, Twelf can also verify if a given type
+family, when interpreted as a logic program, always terminates on
+well-moded goals.  In many cases this means that the program implements
+a decision procedure.  Of course, in general termination is undecidable,
+so we only check a simple sufficient condition.
+
+</P>
+<P>
+Checking termination presupposes that the program is well-typed and
+guarantees termination only when the arguments involved in the
+termination order are ground.  This will always be true for well-moded
+goals, since mode and termination declarations must be consistent.
+
+</P>
+<P>
+Termination is different from checking types and modes in that it is not
+checked incrementally as the signature is read.  Instead, termination of
+a predicate is a global property of the program once it has been read.
+Thus termination declarations came after the predicate has been fully
+defined; further extensions of the predicate are not checked and may
+invalidate termination.
+
+</P>
+<P>
+The termination checker is rather rudimentary in that it only allows
+lexicographic and simultaneous extensions of the subterm ordering.
+Moreover, it does not take into account if a result returned by a
+predicate is smaller than an input argument.  Nonetheless, for the style
+of programs written in Twelf, the termination of many decision
+procedures can be verified.
+
+</P>
+
+<UL>
+<LI><A HREF="twelf_7.html#SEC33">Termination Declaration</A>: Checking termination
+<LI><A HREF="twelf_7.html#SEC34">Subterm Ordering</A>: Higher-order subterms
+<LI><A HREF="twelf_7.html#SEC35">Lexicographic Orders</A>: Termination by nested induction
+<LI><A HREF="twelf_7.html#SEC36">Simultaneous Orders</A>: Termination by simultaneous induction
+<LI><A HREF="twelf_7.html#SEC37">Mutual Recursion</A>: Termination of mutually recursive predicates
+</UL>
+
+
+
+<H2><A NAME="SEC33" HREF="twelf_toc.html#TOC33">7.1  Termination Declaration</A></H2>
+
+<P>
+<A NAME="IDX83"></A>
+<A NAME="IDX84"></A>
+<A NAME="IDX85"></A>
+<A NAME="IDX86"></A>
+<A NAME="IDX87"></A>
+<A NAME="IDX88"></A>
+
+</P>
+<P>
+The termination orders we construct are lexicographic or simultaneous
+extensions of the subterm ordering explained in section <A HREF="twelf_7.html#SEC34">7.2  Subterm Ordering</A>.
+The termination declaration associates the termination order with
+argument positions of predicates via call patterns.
+
+</P>
+<P>
+The case of mutually recursive predicates is particularly complex
+and requires mutual call patterns and mutual arguments.
+Their syntax is given below; they are explained in section <A HREF="twelf_7.html#SEC37">7.5  Mutual Recursion</A>.
+
+</P>
+
+<PRE>
+args ::=
+       | id args       % named argument
+       | _ args        % anonymous argument
+
+callpat ::= id args    % <EM>a</EM> <EM>x1</EM> ... <EM>xn</EM>
+
+callpats ::= 
+           | (callpat) callpats
+                       % mutual call patterns
+
+ids ::=
+      | id ids         % argument name
+
+marg ::= id            % single argument
+       | ( ids )       % mutual arguments
+
+orders ::=
+         | order orders % component order
+
+order ::= marg         % subterm order
+        | { orders }   % lexicographic order
+        | [ orders ]   % simultaneous order
+
+tdecl ::= order callpats    % termination declaration
+
+decl ::= ...
+       | %terminates tdecl. % termination declaration
+</PRE>
+
+<P>
+All identifiers in the order specification of a termination declaration
+must be upper case, must occur in the call patterns, and no variable may
+be repeated.  Furthermore, all arguments participating in the
+termination order must occur in the call patterns in input positions.
+
+</P>
+<P>
+The most frequent form of termination declaration is
+
+</P>
+
+<PRE>
+%terminates Xi (a X1 ... Xn).
+</PRE>
+
+<P>
+which expresses that predicate <CODE>a</CODE> terminates because recursive
+calls decrease the input argument <CODE>Xi</CODE> according to the subterm
+ordering (see section <A HREF="twelf_7.html#SEC34">7.2  Subterm Ordering</A>).
+
+</P>
+<P>
+As an example, we consider a proof that simple type inference
+(see section <A HREF="twelf_5.html#SEC27">5.6  Sample Program</A>) terminates.  Recall the relevant program
+fragment (see <TT>`examples/guide/lam.elf'</TT>).
+
+</P>
+
+<PRE>
+of : exp -&#62; tp -&#62; type.                 %name of P.
+%mode of +E *T.
+
+tp_lam : of (lam E) (arrow T1 T2)       % |- lam x. E : T1 =&#62; T2
+          &#60;- ({x:exp}                   % if  x:T1 |- E : T2.
+                of x T1 -&#62; of (E x) T2).
+
+tp_app : of (app E1 E2) T1              % |- E1 E2 : T1
+          &#60;- of E1 (arrow T2 T1)        % if  |- E1 : T2 =&#62; T1
+          &#60;- of E2 T2.                  % and |- E2 : T2.
+</PRE>
+
+<P>
+The typability of an expression is always reduced to the typability of
+its subexpressions.  Therefore any call to the <CODE>of</CODE> predicate with
+a ground expression should terminate.  In general, termination can only
+be checked for input arguments, and all calls must be well-moded
+(see section <A HREF="twelf_6.html#SEC31">6.3  Mode Checking</A>).  Twelf verifies termination with the
+declaration
+
+</P>
+
+<PRE>
+%terminates E (of E T).
+</PRE>
+
+<P>
+Here, <CODE>E</CODE> specifies the decreasing argument, namely the first
+argument of the typing judgment as expressed in the call pattern
+<CODE>(of E T)</CODE>.
+
+</P>
+<P>
+A corresponding attempt to show that evaluation always terminates,
+
+</P>
+
+<PRE>
+%terminates E (eval E V).
+</PRE>
+
+<P>
+fails for the clause <CODE>ev_app</CODE> with the message
+
+</P>
+
+<PRE>
+examples/guide/lam.elf:1053-1068 Error:
+Termination violation:
+(E1' V2) &#60; (app E1 E2)
+</PRE>
+
+<P>
+indicating that in a recursive call the term <CODE>E1' V2</CODE> could not be
+shown to be smaller than <CODE>app E1 E2</CODE>.  In our example, of course,
+evaluation need not terminate for precisely this reason.
+
+</P>
+
+
+<H2><A NAME="SEC34" HREF="twelf_toc.html#TOC34">7.2  Subterm Ordering</A></H2>
+
+<P>
+<A NAME="IDX89"></A>
+<A NAME="IDX90"></A>
+
+</P>
+<P>
+On first-order terms, that is, terms not containing lambda-abstraction,
+the subterm ordering is familiar: <EM>M &#60; N</EM> if <EM>M</EM> is a strict
+subterm of <EM>N</EM>, that is, <EM>M</EM> is a subterm <EM>N</EM> and
+<EM>M</EM> is different from <EM>N</EM>.
+
+</P>
+<P>
+On higher-order terms, the relation is slightly more complicated because
+we must allow the substitution of parameters for bound variables without
+destroying the subterm relation.  Consider, for example, the case of the
+typing rule
+
+</P>
+
+<PRE>
+of : exp -&#62; tp -&#62; type.                 %name of P.
+%mode of +E *T.
+
+tp_lam : of (lam E) (arrow T1 T2)       % |- lam x. E : T1 =&#62; T2
+          &#60;- ({x:exp}                   % if  x:T1 |- E : T2.
+                of x T1 -&#62; of (E x) T2).
+</PRE>
+
+<P>
+from the signature for type inference (see section <A HREF="twelf_5.html#SEC27">5.6  Sample Program</A>) in the
+file <TT>`example/guide/lam.elf'</TT>.  We must recognize that
+
+</P>
+
+<PRE>
+(E x) &#60; (lam E)
+</PRE>
+
+<P>
+according to the subterm ordering.  This is because <CODE>E</CODE> stands for
+a term <CODE>[y:exp] E'</CODE> and so <CODE>E x</CODE> has the same structure as
+<CODE>E'</CODE> except that <CODE>y</CODE> (a bound variable) has been replaced by
+<CODE>x</CODE> (a parameter).  This kind of pattern arises frequently in
+Twelf programs.
+
+</P>
+<P>
+On the other hand, the restriction to parameter arguments of functions
+is critical.  For example, the lax rule
+
+</P>
+
+<PRE>
+tp_applam : of (app (lam E1) E2) T2
+             &#60;- of (E1 E2) T2.
+</PRE>
+
+<P>
+which applies <CODE>E1</CODE> to <CODE>E2</CODE> which is not a parameter, is indeed
+not terminating.  This can be seen from the query
+
+</P>
+
+<PRE>
+?- of (app (lam [x:exp] app x x) (lam [y:exp] app y y)) T.
+</PRE>
+
+<P>
+The restriction of the arguments to parameters can be lifted when the
+type of the argument is not mutually recursive with the result type of
+the function.  For example, the signature for natural deduction
+(see section <A HREF="twelf_3.html#SEC13">3.6  Sample Signature</A>, contains no constructor which allows
+propositions to occur inside individual terms.  Therefore
+
+</P>
+
+<PRE>
+(A T) &#60; (forall A)
+</PRE>
+
+<P>
+where <CODE>A : i -&#62; o</CODE> and <CODE>T : i</CODE> is an arbitrary term (not just
+a parameter).  Intuitively, this is correct because the number of
+quantifiers and logical connectives is smaller on the left, since
+<CODE>T</CODE> cannot contain such quantifiers or connectives.
+
+</P>
+<P>
+This kind of precise analysis is important, for example, in the proof
+of cut elimination or the termination of polymorphic type
+reconstruction.
+
+</P>
+
+
+<H2><A NAME="SEC35" HREF="twelf_toc.html#TOC35">7.3  Lexicographic Orders</A></H2>
+
+<P>
+<A NAME="IDX91"></A>
+
+</P>
+<P>
+Lexicographic orders are specified as
+
+</P>
+
+<PRE>
+{<VAR>O1</VAR> ... <VAR>On</VAR>}
+</PRE>
+
+<P>
+Using <EM>vi</EM> and <EM>wi</EM> for corresponding argument structures
+whose order is already defined, we compare them lexicographically as
+follows:
+
+</P>
+<DL COMPACT>
+
+<DT><EM>{v1</EM> ... <EM>vn}</EM> <EM>&#60;</EM> <EM>{w1</EM> ... <EM>wn}</EM>, if
+<DD>
+<DL COMPACT>
+
+<DT><EM>v1 &#60; w1</EM>, or
+<DD>
+<DT><EM>v1 = w1</EM> and <EM>v2 &#60; w2</EM>, or
+<DD>
+<DT>...
+<DD>
+<DT><EM>v1 = w1</EM>, <EM>v2 = w2</EM>, ..., and <EM>vn &#60; wn</EM>.
+<DD>
+</DL>
+</DL>
+
+<P>
+A lexicographic order is needed, for example, to show termination of
+Ackermann's function, defined in <TT>`examples/arith/arith.elf'</TT> with
+the termination declaration in <BR><TT>`examples/arith/arith.thm'</TT>.
+
+</P>
+
+
+<H2><A NAME="SEC36" HREF="twelf_toc.html#TOC36">7.4  Simultaneous Orders</A></H2>
+
+<P>
+<A NAME="IDX92"></A>
+
+</P>
+<P>
+Simultaneous orders require that one of its elements decreases while all
+others remain the same.  This is strictly weaker than a lexicographic
+ordering built from the same components.  Technically speaking it is
+therefore is redundant for termination checking, since the corresponding
+lexicographic ordering could be used instead.  However, for inductive
+theorem proving it is quite useful, since the search space for
+simultaneous induction is much smaller than for lexicographic induction.
+
+</P>
+<P>
+Simultaneous orders are specified as
+
+</P>
+
+<PRE>
+[<VAR>O1</VAR> ... <VAR>On</VAR>]
+</PRE>
+
+<P>
+Using <EM>vi</EM> and <EM>wi</EM> for corresponding argument structures
+whose order is already defined, we compare them simultaneously as
+follows:
+
+</P>
+<DL COMPACT>
+
+<DT><EM>[v1</EM> ... <EM>vn]</EM> <EM>&#60;</EM> <EM>[w1</EM> ... <EM>wn]</EM>, if
+<DD>
+<DL COMPACT>
+
+<DT><EM>v1 &#60; w1</EM>, <EM>v2 &#60;= w2</EM>, ..., and <EM>vn &#60;= wn</EM>, or
+<DD>
+<DT><EM>v1 &#60;= w1</EM>, <EM>v2 &#60; w2</EM>, ..., and <EM>vn &#60;= wn</EM>, or
+<DD>
+<DT>...
+<DD>
+<DT><EM>v1 &#60;= w1</EM>, <EM>v2 &#60;= w2</EM>, ..., and <EM>vn &#60; wn</EM>.
+<DD>
+</DL>
+</DL>
+
+<P>
+A combination of simultaneous and lexicographic order is used, for
+example, in the admissibility of cut found in
+<TT>`examples/cut-elim/int.thm'</TT>, where either the cut formula <EM>A</EM>
+gets smaller, or if <EM>A</EM> stays the same, either the derivation of
+the left or right premise get smaller while the other stays the same.
+
+</P>
+
+
+<H2><A NAME="SEC37" HREF="twelf_toc.html#TOC37">7.5  Mutual Recursion</A></H2>
+
+<P>
+<A NAME="IDX93"></A>
+<A NAME="IDX94"></A>
+<A NAME="IDX95"></A>
+
+</P>
+<P>
+Mutually recursive predicates present a challenge to termination
+checking, since decreasing arguments might appear in different
+positions.  Moreover, mutually recursive predicates <CODE>a</CODE> and
+<CODE>a'</CODE> might be prioritized so that when <CODE>a</CODE> calls <CODE>a'</CODE> all
+termination arguments remain the same, but when <CODE>a'</CODE> calls <CODE>a</CODE>
+the arguments are smaller according to the termination order.
+
+</P>
+<P>
+To handle the association of related argument in mutually recursive
+predicates, so-called <EM>mutual arguments</EM> can be specified
+in a termination order.  They are given as
+
+</P>
+
+<PRE>
+(X1 ... Xn)
+</PRE>
+
+<P>
+The priority between predicates is indicated by the order of the
+call patterns.  If we analyze call patterns
+
+</P>
+
+<PRE>
+(a1 args1)
+(a2 args2)
+...
+(an argsn)
+</PRE>
+
+<P>
+then <CODE>ai</CODE> may call <CODE>aj</CODE> for <EM>i &#60; j</EM> with equal
+termination arguments, but calls of <CODE>ai</CODE> from <CODE>aj</CODE>
+must decrease the termination order.
+
+</P>
+<P>
+Mutual arguments are used, for example, in the proofs of soundness (file
+<BR><TT>`examples/lp-horn/uni-sound.thm'</TT>) and completeness (file
+<BR><TT>`examples/lp-horn/uni-complete.thm'</TT>) of uniform derivations for
+Horn logic.
+
+</P>
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_6.html">previous</A>, <A HREF="twelf_8.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

@@ -1,0 +1,362 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 8  Theorem Prover</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_7.html">previous</A>, <A HREF="twelf_9.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC38" HREF="twelf_toc.html#TOC38">8  Theorem Prover</A></H1>
+
+<P>
+<A NAME="IDX96"></A>
+<A NAME="IDX97"></A>
+
+</P>
+<P>
+<STRONG>Disclaimer:</STRONG> The theorem proving component of Twelf is in an
+even more experimental stage and currently under active development.
+There are two main restrictions which limit its utility:
+(1) it only support reasoning about closed objects, and (2)
+it cannot apply lemmas automatically.
+
+</P>
+<P>
+Nonetheless, it can prove a number of interesting examples automatically
+which illustrate our approach the meta-theorem proving which is
+described in <CITE>Schuermann and Pfenning 1998, CADE</CITE>.  These examples
+include type preservation for Mini-ML, one direction of compiler
+correctness for different abstract machines, soundness and completeness
+for logic programming interpreters, and the deduction theorem for
+Hilbert's formulation of propositional logic.  These and other examples
+can be found in the example directories of the Twelf distribution
+(see section <A HREF="twelf_13.html#SEC68">13  Examples</A>).
+
+</P>
+<P>
+A <EM>theorem</EM> in Twelf is, properly speaking, a meta-theorem: it
+expresses a property of objects constructed over a fixed LF signature.
+Theorems are stated in the meta-logic M2 whose quantifiers range over LF
+objects.  In the simplest case, we may just be asserting the existence
+of an LF object of a given type.  This only requires direct search for a
+proof term, using methods inspired by logic programming.  More
+generally, we may claim and prove forall/exists statements which allow
+us to express meta-theorems which require structural induction, such as
+type preservation under evaluation in a simple functional language
+(see section <A HREF="twelf_5.html#SEC27">5.6  Sample Program</A>).
+
+</P>
+
+<UL>
+<LI><A HREF="twelf_8.html#SEC39">Theorem Declaration</A>: Declaring and proving theorems
+<LI><A HREF="twelf_8.html#SEC40">Sample Theorems</A>: Two examples
+<LI><A HREF="twelf_8.html#SEC41">Proof Steps</A>: Basic operations of the prover
+<LI><A HREF="twelf_8.html#SEC42">Search Strategies</A>: How Twelf searches
+<LI><A HREF="twelf_8.html#SEC43">Proof Realizations</A>: Using automatically constructed proofs 
+</UL>
+
+
+
+<H2><A NAME="SEC39" HREF="twelf_toc.html#TOC39">8.1  Theorem Declaration</A></H2>
+
+<P>
+<A NAME="IDX98"></A>
+<A NAME="IDX99"></A>
+<A NAME="IDX100"></A>
+<A NAME="IDX101"></A>
+<A NAME="IDX102"></A>
+<A NAME="IDX103"></A>
+<A NAME="IDX104"></A>
+<A NAME="IDX105"></A>
+
+</P>
+<P>
+There are two forms of declarations related to the proving of theorems
+and meta-theorems.  The first, <CODE>%theorem</CODE>, states a theorem as a
+meta-formula (<CODE>mform</CODE>) in the meta-logic M2 defined below.  The
+second, <CODE>%prove</CODE>, gives a resource bound, a theorem, and an
+induction ordering and asks Twelf to search for a proof.
+
+</P>
+<P>
+Note that a well-typed <CODE>%theorem</CODE> declaration always succeeds,
+while the <CODE>%prove</CODE> declaration only succeeds if Twelf can find a
+proof.
+
+</P>
+
+<PRE>
+dec ::= {id:term}         % <EM>x:A</EM>
+      | {id}              % <EM>x</EM>
+
+decs ::= dec
+       | dec decs
+
+mform ::= forall* decs mform % implicit universal
+        | forall decs mform  % universal
+        | exists decs mform  % existential
+        | true               % truth
+
+thdecl ::= id : mform        % theorem name <EM>a</EM>, spec
+
+pdecl ::= nat order callpats % bound, induction order, theorems
+
+decl ::= ...
+       | %theorem thdecl.  % theorem declaration
+       | %prove pdecl.     % prove declaration
+</PRE>
+
+<P>
+The prover only accepts quantifier alternations of the form
+<CODE>forall* <VAR>decs</VAR> forall <VAR>decs</VAR> exists <VAR>decs</VAR> true</CODE>.
+Note that the implicit quantifiers (which will be suppressed when
+printing the proof terms) must all be collected in front.
+
+</P>
+<P>
+The syntax and meaning of <CODE>order</CODE> and <CODE>callpats</CODE> are explained
+in section <A HREF="twelf_7.html#SEC32">7  Termination</A>, since they are also critical notions in the
+simpler termination checker.
+
+</P>
+
+
+<H2><A NAME="SEC40" HREF="twelf_toc.html#TOC40">8.2  Sample Theorems</A></H2>
+
+<P>
+As a first example, we use the theorem prover to establish a simple
+theorem in first-order logic (namely that <EM>A</EM> implies <EM>A</EM> for
+any proposition <EM>A</EM>), using the signature for natural deduction
+(see section <A HREF="twelf_3.html#SEC13">3.6  Sample Signature</A>).
+
+</P>
+
+<PRE>
+%theorem
+trivI : exists {D:{A:o} nd (A imp A)}
+        true.
+
+%prove 2 {} (trivI D).
+</PRE>
+
+<P>
+The empty termination ordering <CODE>{}</CODE> instructs Twelf not to use
+induction to prove the theorem.  The declarations above succeed, and
+with the default setting of <CODE>3</CODE> for <CODE>Twelf.chatter</CODE> we see
+
+</P>
+
+<PRE>
+%theorem trivI : ({A:o} nd (A imp A)) -&#62; type.
+%prove 2 {} (trivI D).
+%mode -{D:{A:o} nd (A imp A)} trivI D.
+% ------------------
+/trivI/:  trivI ([A:o] impi ([D1:nd A] D1)).
+% ------------------
+</PRE>
+
+<P>
+The line starting with <CODE>%theorem</CODE> shows the way the theorem will be
+realized as a logic program predicate, the line starting with
+<CODE>/trivI/</CODE> gives the implementation, which, in this case, consists
+of just one line.
+
+</P>
+<P>
+The second example is the type preservation theorem for evaluation in
+the lambda-calculus.  This is a continuation of the example in Section
+section <A HREF="twelf_5.html#SEC27">5.6  Sample Program</A> in the file <TT>`examples/guide/lam.elf'</TT>.
+Type preservation states that if and expression <CODE>E</CODE> has type
+<CODE>T</CODE> and <CODE>E</CODE> evaluates to <CODE>V</CODE>, the <CODE>V</CODE> also has
+type <CODE>T</CODE>.  This is expressed as the following <CODE>%theorem</CODE>
+declaration.
+
+</P>
+
+<PRE>
+%theorem
+tps : forall* {E:exp} {V:exp} {T:tp}
+       forall {D:eval E V} {P:of E T}
+       exists {Q:of V T}
+       true.
+</PRE>
+
+<P>
+The proof proceeds by structural induction on <CODE>D</CODE>, the evaluation
+from <CODE>E</CODE> to <CODE>V</CODE>.  Therefore we can search for the proof with
+the following declaration (where the size bound of <CODE>5</CODE> on proof
+term size is somewhat arbitrary).
+
+</P>
+
+<PRE>
+%prove 5 D (tps D P Q).
+</PRE>
+
+<P>
+Twelf finds and displays the proof easily.  The resulting program is
+installed in the global signature and can then be used to apply type
+preservation (see section <A HREF="twelf_8.html#SEC43">8.5  Proof Realizations</A>).
+
+</P>
+
+
+<H2><A NAME="SEC41" HREF="twelf_toc.html#TOC41">8.3  Proof Steps</A></H2>
+
+<P>
+<A NAME="IDX106"></A>
+<A NAME="IDX107"></A>
+<A NAME="IDX108"></A>
+<A NAME="IDX109"></A>
+<A NAME="IDX110"></A>
+
+</P>
+<P>
+We expect the proof search component of Twelf to undergo major changes
+in the near future, so we only briefly review the current state.
+
+</P>
+<P>
+Proving proceeds using three main kinds of steps:
+
+</P>
+<DL COMPACT>
+
+<DT>Filling
+<DD>
+ Using iterative deepening, Twelf searches directly for objects to fill
+the existential quantifiers, given all the constants in the signature
+and the universally quantified variables in the theorem.  The number of
+constructors in the answer substitution for each existential quantifier
+is bounded by the size which is given as part of the <CODE>%prove</CODE>
+declaration, thus guaranteeing termination (in principle).
+
+<DT>Recursion
+<DD>
+ Based on the termination ordering, Twelf appeals to the induction
+hypothesis on smaller arguments.  If there are several ways to use the
+induction hypothesis, Twelf non-deterministically picks one which has
+not yet been used.  Since there may be infinitely many different ways to
+apply the induction hypothesis, the parameter
+<CODE>Twelf.Prover.maxRecurse</CODE> bounds the number of recursion steps in
+each case of the proof.
+
+<DT>Splitting
+<DD>
+ Based on the types of the universally quantified variables, Twelf
+distinguishes all possible cases by considering all constructors in
+the signatures.  It nevers splits a variable which appears as an
+index in an input argument, and if there are several possibilities
+it picks the one with fewest resulting cases.  Splitting can go on
+indefinitely, so the paramater <CODE>Twelf.Prover.maxSplit</CODE> bounds
+the number of times a variable may be split.
+</DL>
+
+
+
+<H2><A NAME="SEC42" HREF="twelf_toc.html#TOC42">8.4  Search Strategies</A></H2>
+
+<P>
+<A NAME="IDX111"></A>
+<A NAME="IDX112"></A>
+<A NAME="IDX113"></A>
+<A NAME="IDX114"></A>
+
+</P>
+<P>
+The basic proof steps of filling, recursion, and splitting are
+sequentialized in a simple strategy which never backtracks.  First we
+attempt to fill all existential variables simultaneously.  If that fails
+we recurse by trying to find new ways to appeal to the induction
+hypothesis.  If this is not possible, we pick a variable to distinguish
+cases and then prove each subgoal in turn.  If none of the steps
+are possible we fail.
+
+</P>
+<P>
+This behavior can be changed with the parameter
+<CODE>Twelf.Prover.strategy</CODE> which defaults to <CODE>Twelf.Prover.FRS</CODE>
+(which means Filling-Recursion-Splitting).  When set to
+<CODE>Twelf.Prover.RFS</CODE> Twelf will first try recursion, then filling,
+followed by splitting.  This is often faster, but fails in some cases
+where the default strategy succeeds.
+
+</P>
+
+
+<H2><A NAME="SEC43" HREF="twelf_toc.html#TOC43">8.5  Proof Realizations</A></H2>
+
+<P>
+<A NAME="IDX115"></A>
+<A NAME="IDX116"></A>
+
+</P>
+<P>
+Proofs of meta-theorems are realized as logic programs.  Such a logic
+program is a relational representation of the constructive proof and can
+be executed to generate witness terms for the existentials from given
+instances of the universal quantifiers.  As an example, we consider
+once more type preservation (see section <A HREF="twelf_8.html#SEC40">8.2  Sample Theorems</A>).
+
+</P>
+<P>
+After the declarations,
+
+</P>
+
+<PRE>
+%theorem
+tps : forall* {E:exp} {V:exp} {T:tp}
+       forall {D:eval E V} {P:of E T}
+       exists {Q:of V T}
+       true.
+
+%prove 5 D (tps D P Q).
+</PRE>
+
+<P>
+Twelf answers
+
+</P>
+
+<PRE>
+/tps/tp_lam/ev_lam/: 
+   tps ev_lam (tp_lam ([x:exp] [P2:of x T1] P1 x P2))
+      (tp_lam ([x:exp] [P3:of x T1] P1 x P3)).
+
+/tps/tp_app/ev_app/tp_lam/: 
+   tps (ev_app D1 D2 D3) (tp_app P1 P2) P6
+      &#60;- tps D3 P2 (tp_lam ([x:exp] [P4:of x T2] P3 x P4))
+      &#60;- tps D2 P1 P5
+      &#60;- tps D1 (P3 E5 P5) P6.
+</PRE>
+
+<P>
+which is the proof of type preservation expressed as a logic program
+with two clauses: one for evaluation of a lambda-abstraction, and one
+for application.  Using the <CODE>%solve</CODE> declaration (see section <A HREF="twelf_5.html#SEC23">5.2  Solve Declaration</A>) we can, for example, evaluate and type-check the identity
+applied to itself and then use type preservation to obtain a typing
+derivation for the resulting value.
+
+</P>
+
+<PRE>
+e0 = (app (lam [x] x) (lam [y] y)).
+%solve p0 : of e0 T.
+%solve d0 : eval e0 V.
+%solve tps0 : tps d0 p0 Q.
+</PRE>
+
+<P>
+Recall that <CODE>%solve c : V</CODE> executes the query <CODE>V</CODE> and defines
+the constant <CODE>c</CODE> to abbreviate the resulting proof term.
+
+</P>
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_7.html">previous</A>, <A HREF="twelf_9.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

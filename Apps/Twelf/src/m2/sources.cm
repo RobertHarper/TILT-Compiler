@@ -1,0 +1,52 @@
+Group is
+  ../timing/sources.cm
+  ../stream/sources.cm
+  ../global/sources.cm
+  ../lambda/sources.cm
+  ../names/sources.cm
+  ../modes/sources.cm 
+  ../paths/sources.cm
+  ../print/sources.cm
+  ../typecheck/sources.cm
+  ../terminate/sources.cm
+  ../index/sources.cm
+  ../thm/sources.cm
+  ../order/sources.cm
+  ../opsem/sources.cm
+  ../table/sources.cm
+  ../timing/sources.cm
+  meta-global.sig.sml
+  meta-global.sml
+  skolem.sig.sml
+  skolem.fun.sml
+  metasyn.sig.sml
+  metasyn.fun.sml
+  meta-abstract.sig.sml
+  meta-abstract.fun.sml
+  meta-print.sig.sml
+  meta-print.fun.sml 
+  init.sig.sml
+  init.fun.sml
+  search.sig.sml
+  search.fun.sml
+  lemma.sig.sml
+  lemma.fun.sml
+  splitting.sig.sml
+  splitting.fun.sml
+  filling.sig.sml
+  filling.fun.sml
+  qed.sig.sml
+  qed.fun.sml
+  recursion.sig.sml
+  recursion.fun.sml
+  strategy.sig.sml
+  strategy.fun.sml	
+  prover.sig.sml
+  prover.fun.sml
+  mpi.sig.sml
+  mpi.fun.sml
+  m2.sml
+
+
+
+

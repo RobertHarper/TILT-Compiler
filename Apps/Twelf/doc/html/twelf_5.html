@@ -1,0 +1,537 @@
+<HTML>
+<HEAD>
+<!-- This HTML file has been created by texi2html 1.52
+     from twelf.texi on 18 November 1998 -->
+
+<TITLE>Twelf User's Guide  - 5  Logic Programming</TITLE>
+</HEAD>
+<BODY>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_4.html">previous</A>, <A HREF="twelf_6.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+<P><HR><P>
+
+
+<H1><A NAME="SEC21" HREF="twelf_toc.html#TOC21">5  Logic Programming</A></H1>
+
+<P>
+<A NAME="IDX55"></A>
+
+</P>
+<P>
+Twelf gives an operational interpretation to signatures under the
+computation-as-proof-search paradigm.  The fundamental idea is to fix a
+simple search strategy and then search for a derivation of a query
+according to this strategy.  The result may be a substitution for the
+free variables in a query and a derivation, or explicit failure.  It is
+also possible that the computation does not terminate.
+
+</P>
+<P>
+A query can be posed in three different ways: as a <CODE>%query</CODE>
+declaration, as a <CODE>%solve</CODE> declaration, or interactively, using a
+top-level invoked from ML with <CODE>Twelf.top</CODE> which prompts with
+<SAMP>`?-'</SAMP> (see section <A HREF="twelf_5.html#SEC24">5.3  Interactive Queries</A>).
+
+</P>
+
+<PRE>
+query ::= id : term   % <EM>X : A</EM>, <EM>X</EM> a free variable
+        | term        % <EM>A</EM>
+
+bound ::= nat         % number of solutions
+        | *           % unbounded number
+
+qdecl ::= bound bound query % expected solutions, try limit, query
+
+decl ::= ...
+       | %query qdecl.      % execute query
+       | %solve id : term.  % solve and name proof term
+</PRE>
+
+<P>
+In all of these cases, the free variables in a query are interpreted
+existentially, which is in contrast to constant declarations where free
+variables are interpreted universally.  In particular, free variables
+might be instantiated during type reconstruction and during execution of
+the query.
+
+</P>
+
+<UL>
+<LI><A HREF="twelf_5.html#SEC22">Query Declaration</A>: Checking expected numbers of solutions
+<LI><A HREF="twelf_5.html#SEC23">Solve Declaration</A>: Naming proof terms found by search
+<LI><A HREF="twelf_5.html#SEC24">Interactive Queries</A>: Twelf's interactive top-level
+<LI><A HREF="twelf_5.html#SEC25">Sample Trace</A>: An example how search works
+<LI><A HREF="twelf_5.html#SEC26">Operational Semantics</A>: How queries are executed in some detail
+<LI><A HREF="twelf_5.html#SEC27">Sample Program</A>: Type inference for a lambda-calculus
+</UL>
+
+
+
+<H2><A NAME="SEC22" HREF="twelf_toc.html#TOC22">5.1  Query Declaration</A></H2>
+
+<P>
+<A NAME="IDX56"></A>
+<A NAME="IDX57"></A>
+
+</P>
+<P>
+The query form
+
+</P>
+
+<PRE>
+%query <VAR>expected</VAR> <VAR>try</VAR> A.
+</PRE>
+
+<P>
+will try to solve the query <CODE>A</CODE> and verify that it gives the
+<VAR>expected</VAR> number of solutions, but it will never try to find more
+than indicated by <VAR>try</VAR>.  It succeeds and prints a message, whose
+precise form depends on the value of <CODE>Twelf.chatter</CODE> if <CODE>A</CODE>
+has the expected number of solutions; otherwise it either fails with an
+error message or does not terminate.  <SAMP>`%query'</SAMP> has no other effect
+on the state of Twelf.  Here are some examples.
+
+</P>
+
+<PRE>
+%query 1 * A.      % check that <CODE>A</CODE> has exactly one solution
+%query 1 1 A.      % check that <CODE>A</CODE> has at least one solution
+%query * 3 A.      % <CODE>A</CODE> has infinitely many solutions, check 3
+%query * * A.      % fails if <CODE>A</CODE> has finitely many solutions
+%query 1 0 A.      % skip this query
+</PRE>
+
+
+
+<H2><A NAME="SEC23" HREF="twelf_toc.html#TOC23">5.2  Solve Declaration</A></H2>
+
+<P>
+<A NAME="IDX58"></A>
+<A NAME="IDX59"></A>
+
+</P>
+<P>
+The query form
+
+</P>
+
+<PRE>
+%solve c : A.
+</PRE>
+
+<P>
+will search for the first solution <CODE>M</CODE> of <CODE>A</CODE> and then define
+
+</P>
+
+<PRE>
+c : A = M.
+</PRE>
+
+<P>
+If there are any free variables remaining in <CODE>M</CODE> or <CODE>A</CODE> after
+search, they will be implicitly quantified in the new definition.  This
+form of definition is particularly useful to compute and name inputs to
+future queries.  An example of this feature from the file
+<TT>`examples/nd/lam.elf'</TT> can be found in section <A HREF="twelf_8.html#SEC43">8.5  Proof Realizations</A>.
+
+</P>
+
+
+<H2><A NAME="SEC24" HREF="twelf_toc.html#TOC24">5.3  Interactive Queries</A></H2>
+
+<P>
+<A NAME="IDX60"></A>
+<A NAME="IDX61"></A>
+
+</P>
+<P>
+An interactive top-level can be invoked using the SML expression
+<CODE>Twelf.top ();</CODE>.  The top-level prompts with <SAMP>`?- '</SAMP> and
+awaits the input of a query, terminated by a period <SAMP>`.'</SAMP> and
+a <KBD>RET</KBD>.
+
+</P>
+<P>
+After the query has been parsed, Twelf reconstructs implicit type
+information, issuing a warning if constraints remain.  The result is
+executed as a query.  At any point during the processing of a
+query the user may interrupt with <KBD>C-c</KBD> (that is, <KBD>CTRL</KBD> and
+<KBD>c</KBD>) to drop back into ML's interactive top-level.
+
+</P>
+<P>
+When Twelf has found a solution, it prints the <EM>answer
+substitution</EM> for all free variables in the query, including the proof
+term variable if one was given.  It also notes if there are remaining
+equational constraints, but currently does not print them.
+
+</P>
+<P>
+The top-level then waits for input, which is interpreted as
+follows
+
+</P>
+<DL COMPACT>
+
+<DT><KBD>y</KBD>, <KBD>Y</KBD>, or <KBD>;</KBD>
+<DD>
+      backtrack and search for another solution
+
+<DT><KBD>q</KBD> or <KBD>Q</KBD>
+<DD>
+      quit Twelf's top-level and return to ML
+
+<DT><KBD>n</KBD>, <KBD>N</KBD>, or anything else
+<DD>
+      return to prompt for another query
+</DL>
+
+
+
+<H2><A NAME="SEC25" HREF="twelf_toc.html#TOC25">5.4  Sample Trace</A></H2>
+
+<P>
+As an example we consider lists of propositions and some simple
+operations on them, as they might be used when programming a theorem
+prover.
+
+</P>
+
+<PRE>
+list : type.
+nil  : list.
+cons : o -&#62; list -&#62; list.
+</PRE>
+
+<P>
+First, we want to write a program to append two lists to obtain
+their concatenation.  This is expressed as a relation between
+the three lists, which in turn is implemented as a type family
+
+</P>
+
+<PRE>
+append  : list -&#62; list -&#62; list -&#62; type.
+
+appNil  : append nil K K.
+appCons : append (cons X L) K (cons X M)
+           &#60;- append L K M.
+</PRE>
+
+<P>
+Here, we use the synonym <CODE>A &#60;- B</CODE> for <CODE>B -&#62; A</CODE> to improve
+readability.  We say <EM><CODE>A</CODE> if <CODE>B</CODE></EM>.
+
+</P>
+<P>
+The first sample query concatenates the singleton lists containing
+<CODE>true</CODE> and <CODE>false</CODE>.  We proceed as if we had loaded the appropriate
+files and started a top-level with <CODE>Twelf.top ();</CODE>.
+
+</P>
+
+<PRE>
+?- append (cons true nil) (cons false nil) L.
+</PRE>
+
+<P>
+Here, <CODE>L</CODE> is a free existential variable.  We search for an object
+<CODE>M : append (cons true nil) (cons false nil) L</CODE>, even though
+this object will not be shown in this form or query.  Each
+constant declaration in the signature is tried in turn, unifying
+the head with the goal above.  In this manner, we obtain the
+following sequence of goals and actions.  Note that the intermediate
+forms and comments are not printed when this is run.  They are added
+here to illustrate the behavior.
+
+</P>
+
+<PRE>
+% original goal after parsing and type reconstruction
+?- append (cons true nil) (cons false nil) L.
+[try appNil:
+     append nil K1 K1
+   = append (cons true nil) (cons false nil) L
+ unification fails with constant clash: nil &#60;&#62; cons
+]
+[try appCons:
+     append (cons X1 L1) K2 (cons X1 M1)
+   = append (cons true nil) (cons false nil) L
+ unification succeeds with
+ X1 = true, L1 = nil, K2 = cons false nil, L = cons true M1
+]
+% subgoal
+?- append nil (cons false nil) M1.
+[try appNil:
+     append nil K3 K3
+   = append nil (cons false nil) M1
+ unification and subgoal succeeds with
+ K3 = cons false nil, M1 = cons false nil
+]
+</PRE>
+
+<P>
+At this point the overall goal succeeds and we read off the
+answer substitution for the only free variable in the query,
+namely <CODE>L</CODE>.  It was first determined to be <CODE>cons true M1</CODE>
+and then <CODE>M1</CODE> was instantiated to <CODE>cons false nil</CODE>,
+leading to the instantiation
+
+</P>
+
+<PRE>
+L = cons true (cons false nil).
+</PRE>
+
+<P>
+If instead we pose the query
+
+</P>
+
+<PRE>
+?- X : append (cons true nil) (cons false nil) L.
+</PRE>
+
+<P>
+we also obtain the proof term
+
+</P>
+
+<PRE>
+L = cons true (cons false nil);
+X = appCons appNil.
+</PRE>
+
+<P>
+As another example we consider a query with several solutions which are
+enumerated when we ask for further results.  This time we do not trace
+the steps of the execution, but show the interaction verbatim.
+
+</P>
+
+<PRE>
+?- append L K (cons true (cons false nil)).
+Solving...
+K = cons true (cons false nil);
+L = nil.
+More? <KBD>y</KBD>
+K = cons false nil;
+L = cons true nil.
+More? <KBD>y</KBD>
+K = nil;
+L = cons true (cons false nil).
+More? <KBD>y</KBD>
+No more solutions
+</PRE>
+
+
+
+<H2><A NAME="SEC26" HREF="twelf_toc.html#TOC26">5.5  Operational Semantics</A></H2>
+
+<P>
+<A NAME="IDX62"></A>
+<A NAME="IDX63"></A>
+<A NAME="IDX64"></A>
+<A NAME="IDX65"></A>
+<A NAME="IDX66"></A>
+<A NAME="IDX67"></A>
+<A NAME="IDX68"></A>
+<A NAME="IDX69"></A>
+<A NAME="IDX70"></A>
+
+</P>
+<P>
+The operational semantics of Twelf is a form of typed constraint logic
+programming.  We will use standard terminology from this area.  A type
+family which is used in a program or goal is called a <EM>predicate</EM>.
+A constant declaration in a signature which is available during search
+is called a <EM>clause</EM>.  A clause typically has the form <CODE>c : a
+M1 ... Mm &#60;- A1 &#60;- ... &#60;- An</CODE>, where <CODE>a M1 ... Mm</CODE> is
+the <EM>head of the clause</EM> and <CODE>A1</CODE> through <CODE>An</CODE> are the
+<EM>subgoals</EM>.  A clause is used to reduce a goal to subgoals by a
+process called <EM>backchaining</EM>.  Backchaining unifies the head of
+the clause with the current goal to generate <EM>subgoals</EM>.  Next, we
+<EM>select</EM> one of the subgoals as a current goal and continue the
+search process.  Actually, instead of unification (which is undecidable
+in LF), Twelf employs <EM>constraint simplification</EM> and carries along
+equational constraints in a normal form.
+
+</P>
+<P>
+A hypothesis which is introduced during search is a <EM>local
+assumption</EM>; a parameter is a <EM>local parameter</EM>.  Parameters act
+like constants in unification, except that their occurrences might be
+restricted due to <EM>parameter dependency</EM>.
+
+</P>
+<P>
+Without going into a formal description, here are the central ideas of
+the operational semantics.
+
+</P>
+<DL COMPACT>
+
+<DT>Clause selection.
+<DD>
+ The clauses are tried in the following order: from most recent to least
+recent local assumption, then from first to last clause in the global
+signature.
+
+<DT>Subgoal selection.
+<DD>
+ Subgoals are solved from the inside out.  For example, when a clause
+<CODE>c : A &#60;- B &#60;- C.</CODE>  is applied to solve the goal <CODE>?- A.</CODE> then the
+first subgoal is <CODE>B</CODE> and the second subgoal <CODE>C</CODE>.  Truly
+dependent variables will only be subject to unification and never
+give rise to a subgoal.  For example <CODE>c : {X:b} a X &#60;- a c</CODE> is
+a clause with head <CODE>a X</CODE>, subgoal <CODE>a c</CODE>, and existential variable
+<CODE>X</CODE>.
+
+<DT>Unification.
+<DD>
+ An atomic goal is unified with the clause head using higher-order
+pattern unification.  All equations outside this fragment are postponed
+and carried along as constraints.
+
+<DT>Local assumptions.
+<DD>
+ A goal of the form <CODE>?- A -&#62; B.</CODE> introduces a local assumption <CODE>A</CODE>
+and then solves <CODE>B</CODE> under this assumption.  To solve atomic goals,
+local assumptions are tried before global clauses, using the most
+recently made assumption first.  Note that this is different from
+Prolog <CODE>assert</CODE> in that <CODE>A</CODE> is available only for solving
+<CODE>B</CODE>.
+
+<DT>Local parameters.
+<DD>
+ Parameters are introduced into proof search by goals of the form
+<CODE>?- {x:A} B.</CODE> which generates a <EM>new</EM> parameter <CODE>a</CODE> and
+then solves the result of substituting <CODE>a</CODE> for <CODE>x</CODE> in
+<CODE>B</CODE>.  Parameters are also called <EM>universal variables</EM> since
+they are not subject to instantiation during unification.  Local
+parameters will never be used as local assumptions during search.
+</DL>
+
+
+
+<H2><A NAME="SEC27" HREF="twelf_toc.html#TOC27">5.6  Sample Program</A></H2>
+
+<P>
+<A NAME="IDX71"></A>
+<A NAME="IDX72"></A>
+
+</P>
+<P>
+As an example, we consider simple type inference for the pure
+lambda-calculus.  An extension of this example to Mini-ML is given in
+the course notes <CITE>Pfenning 1992, Computation and Deduction</CITE>.  The
+code below can be found in the file <TT>`examples/guide/lam.elf'</TT>.
+
+</P>
+
+<PRE>
+% Simple types
+tp : type.                              %name tp T.
+
+arrow : tp -&#62; tp -&#62; tp.                 % T1 =&#62; T2
+
+% Expressions
+exp : type.                             %name exp E.
+
+lam   : (exp -&#62; exp) -&#62; exp.            % lam x. E
+app   : exp -&#62; exp -&#62; exp.              % (E1 E2)
+
+% Type inference 
+% |- E : T  (expression E has type T)
+
+of : exp -&#62; tp -&#62; type.                 %name of P.
+
+tp_lam : of (lam E) (arrow T1 T2)       % |- lam x. E : T1 =&#62; T2
+          &#60;- ({x:exp}                   % if  x:T1 |- E : T2.
+                of x T1 -&#62; of (E x) T2).
+
+tp_app : of (app E1 E2) T1              % |- E1 E2 : T1
+          &#60;- of E1 (arrow T2 T1)        % if  |- E1 : T2 =&#62; T1
+          &#60;- of E2 T2.                  % and |- E2 : T2.
+</PRE>
+
+<P>
+Again, we have used the notation <CODE>A &#60;- B</CODE> to emphasize
+the interpretation of constant declarations as clauses.  We now
+trace the query which infers the most general type of the identity
+function, represented as <CODE>lam [x:exp] x</CODE>.  We indicate the scope
+of hypotheses which are introduced during search by indentation.
+
+</P>
+
+<PRE>
+% original query, <CODE>T</CODE> free
+?- of (lam [x:exp] x) T.
+% use <CODE>tp_lam</CODE> with <CODE>E = ([x:exp] x)</CODE> and <CODE>T = arrow T1 T2</CODE>
+% subgoal
+?- {x:exp} of x T1 -&#62; of x T2.
+% introduce parameter <CODE>e</CODE>
+?- of e T1 -&#62; of e T2.
+% introduce hypothesis labelled <CODE>p</CODE>
+p:of e T1
+ ?- of e T2.
+ % succeed by hypothesis <CODE>p</CODE> with <CODE>T1 = T2</CODE>
+</PRE>
+
+<P>
+At this point the query succeeds and prints the answer substitution.
+
+</P>
+
+<PRE>
+T = arrow T1 T1.
+More? <KBD>y</KBD>
+No more solutions
+</PRE>
+
+<P>
+We requested more solution by typing <KBD>y</KBD>, but there are no further
+possibilities.  The free variable <CODE>T1</CODE> in the answer substitution
+means that every instance of <CODE>arrow T1 T1</CODE> provides a solution to
+the original query.  In other words, <CODE>lam [x:exp] x</CODE> has type
+<CODE>arrow T1 T1</CODE> for all types <CODE>T1</CODE>.
+
+</P>
+<P>
+As a second example we verify that self-application is not well-typed in
+the simply-typed lambda-calculus.
+
+</P>
+
+<PRE>
+?- of (lam [x:exp] app x x) T.
+% use <CODE>tp_lam</CODE> with <CODE>T = arrow T1 T2</CODE>
+% subgoal
+?- {x:exp} of x T1 -&#62; of (app x x) T2.
+% introduce parameter <CODE>e</CODE>
+?- of e T1 -&#62; of (app e e) T2.
+% introduce hypothesis <CODE>p:of a T1</CODE>
+p:of e T1
+ ?- of (app e e) T2.
+ % use <CODE>tp_app</CODE>
+ % first subgoal
+ ?- of e (arrow T3 T2).
+ % succeed by hypothesis <CODE>p</CODE> with <CODE>T1 = arrow T3 T2</CODE>
+ % second subgoal
+ ?- of e T3.
+ % fail, since <CODE>T3 = arrow T3 T2</CODE> has no solution
+</PRE>
+
+<P>
+At the point where the second subgoals fails we backtrack.  However, all
+other alternatives fail immediately, since the clause head does not
+unify with the goal and the overall query fails.
+
+</P>
+
+<P><HR><P>
+Go to the <A HREF="twelf_1.html">first</A>, <A HREF="twelf_4.html">previous</A>, <A HREF="twelf_6.html">next</A>, <A HREF="twelf_14.html">last</A> section, <A HREF="twelf_toc.html">table of contents</A>.
+</BODY>
+</HTML>

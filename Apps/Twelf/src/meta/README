@@ -1,0 +1,250 @@
+README file for meta directory
+------------------------------
+
+funsyn        implements the functional calculus
+funtypecheck  implements a type checker for this calculus
+relfun        implements a converter from relational formulation
+		of primitive recursive functions as LF signature
+		to this functional calculus.
+
+
+Regression test
+---------------
+
+relfun and funtypecheck are regression tested using the
+command
+
+	use "TEST/meta.sml";
+
+from the  Twelf-SML top level. 
+
+
+
+
+TODO list for relfun.com
+------------------------
+
+DONE -cs  1) lemmas 
+DONE -cs  2) parameter cases
+DONE -cs  3) mutual recursion
+4) label store
+
+
+
+
+TODO list of meta theorem prover
+--------------------------------
+
+Running examples:
+
+use "TEST-CP/a.sml";    (* 2nd order copy *)
+use "TEST-CP/b.sml";    (* 3rd order copy *)
+use "TEST-CP/c.sml";    (* 4th order copy *)
+use "TEST-DED/a.sml";   (* abstraction theorem *)
+use "TEST-DED/b.sml";   (* Natural deduction -> Hilbert *)
+
+Open issues: 
+DONE -cs  In recursion, when we look for the subterm of a functional
+	assumptions, we apply it to EVars, and continue search.
+	Currently we reject any induction hypothesis where any
+	of these EVars is open.
+     Improvement: univerally abstract over these EVars 
+     (see error mesage : 	
+	 * Ignored recursive call: Argument not instantiated during unification)
+
+-cs Splitting Residual lemmas
+-cs gneration of proof terms
+-cs Also use definitions in search
+
+
+
+Problems: Leftover constraints in TEST-CR/a.sml when proving m-subst
+General: Expressiveness of meta logic not powerfull enough.
+	 You cannot express properties about dependency:
+	   
+	  Example : Assume  M u ==> M' u
+	 	    also Assume M doesn't dependent on u
+		    then we want to conclude that M' cannot depend on u either
+
+		    This is a property of the definition of ==> and must
+		    be proven explicitly. 
+
+		    It's not expressible as Pi2 formula, maybe if we had equality.
+
+
+
+
+INVARIANT:
+  1) Proof requires only the introduction of at most ONE context block
+  2) All constant declarations in the signature do not have spurious variable
+	occurrences   (* otherwise we cannot abstract in splitting
+  		         by traversing only one substitution *)
+
+Code Walk (Invariants, Mutual recursion)
+DONE -cs Anchor into Twelf
+
+DONE -cs Unify induction hypothesis result/residual lemmas to one construct.
+DONE -cs Keep residual lemmas explicit
+
+Make ctxblock adequate for formulas (left to right, instead  right to left)
+
+Parameter Cases
+  inductive cases:
+
+    DONE -cs    Pruning in substitution. 
+    
+    DONE -cs    Add parameter introduction in the case that parameter and functional object
+	do not live on the same level
+    DONE -cs Add functionality for SOME clauses
+    Removed -cs Assumption, all EVars for SOME are replaced by something closed 
+    	(* not a sensible assumption. Must be generalized *)
+	
+  base cases
+    DONE -cs RECURSION: calculating twice induction hypothesis does not remove duplicates, check!!!
+    
+    DONE -cs TODO: expand' must construct G0 which is passed into abstracFinal to call abstraction.
+
+    Implementation plan for abstract/splitting
+
+	DONE -cs abstract : remove FVARs
+	DONE -cs abstract : update collectSub
+	DONE -cs abstract : threat d through collect
+	DONE -cs abstract : add depth to EV
+	DONE -cs abstract : add BV
+
+	DONE -cs splitting: calculate G0
+	DONE splitting: correct calls to   abstract
+	
+
+
+	DONE -cs TODO: Second parameter splitting to the right of a parameter block not yet detected.
+	DONE -cs TODO: Collect all parameter in paramCases, not just the local ones.
+   
+	DONE - cs
+	   BUG:  A context which contains already a parameter
+	    block must be prepared the	
+	      right way.   G1, l: G, G2
+
+	      must yield two substitutions:
+
+		. |- t : G1
+	     
+	      and 
+		
+	        G1 |- s : G2
+
+	      otherwise abstraction doesn't work.
+	
+	DONE - cs   BUG Tag information and actual declaration can get out of sync.
+
+	Experimentation report
+
+	DONE -cs - Cut Elimination works except in the essentatial case: 
+ 	             Suspect that a induction hypothesis is missing  
+		     (I guess that "open issues" from above is repsonsible for that)
+
+	DONE -cs Church Rosser  interactive proof works. But
+	  DONE -cs 
+		Reason: Formula information in tag was not maintained correctly
+ 		TODO splitting the first rewrite derivations yields a bad bad error
+	
+	DONE -cs : 3rd order copy
+	DONE -cs : 4th order copy
+	
+	DONE -cs : BUG: first split then say auto, Typecheck is raised why?
+
+	DONE -cs : BUG: Church Rosser: first case, filling, leaves open EVars in proof term
+
+	DONE -cs : BUG: Filling in Kolmogroff example, leftover EVars
+
+	
+
+DONE -cs Unify lemmas and assumptions tags: Assumption 
+	<a2> X:eval E V
+   could be reprsented as
+	<l2: [[X:eval E V]]> X:eval E V
+   this makes the code more uniform, especially in splitting. 
+  
+
+
+
+
+
+DONE -cs {
+Filling: Do not use iterative deepening, just use Twelf.maxFill.
+Not a good idea:
+
+For the version of Cut-Elimination including conjunction, disjunction, false, and true we only obtain
+with iterative deepening
+
+val it = OK : Twelf.Status
+- Timers.show ();
+Parsing       : Real =   0.035, Run =   0.030 (  0.030 usr,  0.000 gc)
+Reconstruction: Real =   0.006, Run =   0.000 (  0.000 usr,  0.000 gc)
+Abstraction   : Real =   0.002, Run =   0.000 (  0.000 usr,  0.000 gc)
+Checking      : Real =   0.000, Run =   0.000 (  0.000 usr,  0.000 gc)
+Modes         : Real =   0.001, Run =   0.000 (  0.000 usr,  0.000 gc)
+Subordination : Real =   0.002, Run =   0.000 (  0.000 usr,  0.000 gc)
+Termination   : Real =   0.000, Run =   0.000 (  0.000 usr,  0.000 gc)
+Printing      : Real =   0.011, Run =   0.020 (  0.020 usr,  0.000 gc)
+Compiling     : Real =   0.001, Run =   0.000 (  0.000 usr,  0.000 gc)
+Solving       : Real =   0.000, Run =   0.000 (  0.000 usr,  0.000 gc)
+Filling       : Real = 541.856, Run = 490.110 (478.390 usr,  0.610 gc)
+Splitting     : Real =   3.947, Run =   3.640 (  3.510 usr,  1.330 gc)
+Recursion     : Real =   0.007, Run =   0.000 (  0.000 usr,  0.000 gc)
+Total         : Real = 545.869, Run = 493.800 (481.950 usr,  1.940 gc)
+Remember that the success continuation counts into Solving!
+val it = () : unit
+- 
+
+and without iterative deepening
+
+%skolem ce#1 : {C:o} conc* C -> conc C.
+[Closing file cs-examples/cut-elim/int-elim.elf]
+val it = OK : Twelf.Status
+- Timers.show ();
+Parsing       : Real =   0.050, Run =   0.030 (  0.030 usr,  0.000 gc)
+Reconstruction: Real =   0.016, Run =   0.000 (  0.000 usr,  0.000 gc)
+Abstraction   : Real =   0.004, Run =   0.000 (  0.000 usr,  0.000 gc)
+Checking      : Real =   0.004, Run =   0.000 (  0.000 usr,  0.000 gc)
+Modes         : Real =   0.001, Run =   0.000 (  0.000 usr,  0.000 gc)
+Subordination : Real =   0.004, Run =   0.000 (  0.000 usr,  0.000 gc)
+Termination   : Real =   0.000, Run =   0.000 (  0.000 usr,  0.000 gc)
+Printing      : Real =   0.019, Run =   0.020 (  0.020 usr,  0.000 gc)
+Compiling     : Real =   0.002, Run =   0.000 (  0.000 usr,  0.000 gc)
+Solving       : Real =   0.000, Run =   0.000 (  0.000 usr,  0.000 gc)
+Filling       : Real = 1726.499, Run = 1519.090 (1482.160 usr,  0.660 gc)
+Splitting     : Real =   4.960, Run =   4.530 (  4.390 usr,  1.400 gc)
+Recursion     : Real =   0.010, Run =   0.000 (  0.000 usr,  0.000 gc)
+Total         : Real = 1731.567, Run = 1523.670 (1486.600 usr,  2.060 gc)
+Remember that the success continuation counts into Solving!
+
+}
+
+
+
+
+Thu Apr 22 14:01:44 EDT 1999
+
+Fixed -cs  Bug: Duplicate recognition fails even in the simplest version of the
+	      copy example
+
+
+Running time improvement:
+ - Timers.show ();
+Parsing       : Real =   0.013, Run =   0.020 (  0.020 usr,  0.000 gc)
+Reconstruction: Real =   0.006, Run =   0.010 (  0.010 usr,  0.000 gc)
+Abstraction   : Real =   0.002, Run =   0.000 (  0.000 usr,  0.000 gc)
+Checking      : Real =   0.003, Run =   0.010 (  0.010 usr,  0.000 gc)
+Modes         : Real =   0.001, Run =   0.000 (  0.000 usr,  0.000 gc)
+Subordination : Real =   0.003, Run =   0.000 (  0.000 usr,  0.000 gc)
+Termination   : Real =   0.000, Run =   0.000 (  0.000 usr,  0.000 gc)
+Printing      : Real =   0.011, Run =   0.010 (  0.010 usr,  0.000 gc)
+Compiling     : Real =   0.001, Run =   0.000 (  0.000 usr,  0.000 gc)
+Solving       : Real =   0.000, Run =   0.000 (  0.000 usr,  0.000 gc)
+Filling       : Real = 303.474, Run = 302.750 (302.420 usr,  0.490 gc)
+Splitting     : Real =   4.399, Run =   4.400 (  4.320 usr,  1.730 gc)
+Recursion     : Real =   0.008, Run =   0.020 (  0.020 usr,  0.000 gc)
+Total         : Real = 307.921, Run = 307.220 (306.810 usr,  2.220 gc)
+Remember that the success continuation counts into Solving!
+val it = () : unit
