@@ -155,3 +155,4 @@
 0174 [open]	Layout of GC tables is imperfect.
 0175 [open]	TILT does not include the latest SML/NJ library.
 0176 [open]	TILT can not compile with -fnil_debug.
+0177 [open]	nonexhaustive match warning is overly pessimistic
