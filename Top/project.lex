@@ -118,7 +118,6 @@ qtext = (\032 | \033 | [\035-\091] | [\093-\126])+;
 <INITIAL>val	=> (T.VAL (curpos()));
 <INITIAL>include
 		=> (T.INCLUDE (curpos()));
-<INITIAL>local	=> (T.LOCAL (curpos()));
 <INITIAL>#if	=> (T.IF' (curpos()));
 <INITIAL>#elif	=> (T.ELIF (curpos()));
 <INITIAL>#else	=> (T.ELSE' (curpos()));

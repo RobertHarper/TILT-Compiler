@@ -6,8 +6,8 @@ from
 	http://www.smlnj.org/
 
 The architectures and operating systems supported by TILT are listed
-in the manual page (Doc/tilt.1 and Doc/tilt.txt).  Take a look at the
-comments and commands in Makefile and Runtime/Makefile and then try
+in the manual page (Doc/tilt.txt).  Take a look at the comments and
+commands in Makefile and Runtime/Makefile and then try
 
 	make
 

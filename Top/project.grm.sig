@@ -11,7 +11,6 @@ val ENDIF:  'a * 'a -> (svalue,'a) token
 val ELSE':  'a * 'a -> (svalue,'a) token
 val ELIF:  'a * 'a -> (svalue,'a) token
 val IF':  'a * 'a -> (svalue,'a) token
-val LOCAL:  'a * 'a -> (svalue,'a) token
 val INCLUDE:  'a * 'a -> (svalue,'a) token
 val VAL:  'a * 'a -> (svalue,'a) token
 val PRIMITIVE:  'a * 'a -> (svalue,'a) token

@@ -120,8 +120,7 @@ struct
 	 files:file_entry StringMap.map,
 	 vars:Set.set,
 	 pos:Pos.pos,
-	 visible:Set.set,
-	 ck:bool}
+	 visible:Set.set}
 
     fun predefined_vars {linking:bool} : entry Map.map =
 	let fun add_var (ty:ty,inj:'a -> value)
@@ -161,14 +160,14 @@ struct
 		Map.foldli (fn (x,_,vs) => Set.add(vs,x)) Set.empty entries
 	in
 	    {desc_=nil, entries=entries, files=StringMap.empty, vars=vars,
-	     pos=Pos.nopos, visible=Set.empty, ck=false}
+	     pos=Pos.nopos, visible=Set.empty}
 	end
 
     (*
 	Add an entry to desc.
     *)
     fun insert (desc:desc, l:label, e:entry) : desc =
-	let val {desc_,entries,files,vars,pos,visible,ck} = desc
+	let val {desc_,entries,files,vars,pos,visible} = desc
 	    val desc_ =
 		(case e of
 		    PDEC pdec => pdec::desc_
@@ -176,53 +175,47 @@ struct
 	    val entries = Map.insert (entries,l,e)
 	    val visible = Set.add(visible,l)
 	in  {desc_=desc_,entries=entries,files=files,vars=vars,
-	     pos=pos,visible=visible,ck=ck}
+	     pos=pos,visible=visible}
 	end
 
     (*
 	Reveal any labels that are not already visible.
     *)
     fun reveal (desc:desc, labels:label list) : desc =
-	let val {desc_,entries,files,vars,pos,visible,ck} = desc
+	let val {desc_,entries,files,vars,pos,visible} = desc
 	    fun add (l:label) : bool = not(Set.member(visible,l))
 	    val add = List.filter add labels
 	in  if null add then desc
 	    else
 		let val visible = Set.addList(visible,add)
 		in  {desc_=desc_,entries=entries,files=files,vars=vars,
-		     pos=pos,visible=visible,ck=ck}
+		     pos=pos,visible=visible}
 		end
 	end
 
     fun update_pos (desc:desc, pos:pos) : desc =
-	let val {desc_,entries,files,vars,visible,ck,...} = desc
+	let val {desc_,entries,files,vars,visible,...} = desc
 	in  {desc_=desc_,entries=entries,files=files,vars=vars,
-	     pos=pos,visible=visible,ck=ck}
-	end
-
-    fun update_checking (desc:desc, ck:bool) : desc =
-	let val {desc_,entries,files,vars,pos,visible,...} = desc
-	in  {desc_=desc_,entries=entries,files=files,vars=vars,
-	     pos=pos,visible=visible,ck=ck}
+	     pos=pos,visible=visible}
 	end
 
     fun start_file (desc:desc, file:file) : desc =
-	let val {desc_,entries,files,vars,pos,ck,...} = desc
+	let val {desc_,entries,files,vars,pos,...} = desc
 	    val files = StringMap.insert(files,file,ELABORATING pos)
 	    val pos = Pos.pos' file
 	    val visible = vars
 	in  {desc_=desc_,entries=entries,files=files,vars=vars,
-	     pos=pos,visible=visible,ck=ck}
+	     pos=pos,visible=visible}
 	end
 
     fun finish_file (desc:desc, file:file, desc':desc) : desc =
-	let val {pos,visible,ck,...} = desc
+	let val {pos,visible,...} = desc
 	    val {desc_,entries,files,vars,visible=visible',...} = desc'
 	    val new = Set.difference(visible',vars)
 	    val files = StringMap.insert(files,file,ELABORATED new)
 	    val visible = Set.union (visible,new)
 	in  {desc_=desc_,entries=entries,files=files,vars=vars,
-	     pos=pos,visible=visible,ck=ck}
+	     pos=pos,visible=visible}
 	end
 
     (*
@@ -254,14 +247,9 @@ struct
 	    SOME (VDEC r) => r
 	|   _ => fail (#pos desc) (undefined x))
 
-    fun known_env (X:label) : string =
+    fun lookup_env (desc:desc, X:label) : string =
 	(case (OS.Process.getEnv (Name.label2name X)) of
 	    SOME s => s
-	|   NONE => error (undefined X))
-
-    fun check_env (desc:desc, X:label) : unit =
-	(case (OS.Process.getEnv (Name.label2name X)) of
-	    SOME _ => ()
 	|   NONE => fail (#pos desc) (undefined X))
 
     fun known_interface (desc:desc, I:label) : I.idec =
@@ -410,7 +398,6 @@ struct
 		|   SC (U,I,true) => (p"unit "; pid U; p" :: "; pid I)
 		|   VAL (x,e) => (p"val "; pid x; p" = "; pexp e)
 		|   INCLUDE file => (p"include "; pexp file)
-		|   LOCAL file => (p"local "; pexp file)
 		|   IF (e1,ents1,ents2) =>
 			(p"#if "; pexp e1; p"\n"; pents ents1;
 			 p"#else\n"; pents ents2;
@@ -501,7 +488,7 @@ struct
 
 	fun add_basis (ents : E.ents) : E.ents =
 	    let val ents = fix_ents ents
-	    in	(E.LOCAL (E.EXP_STR (I.F.basisdesc()))) :: ents
+	    in	(E.INCLUDE (E.EXP_STR (I.F.basisdesc()))) :: ents
 	    end
 
 	fun parse (pos : pos, file : file) : E.ents =
@@ -552,7 +539,7 @@ struct
 	in
 	    (case e of
 		E.EXP_VAR x => #1(unknown_value (desc,x))
-	    |	E.EXP_ENV X => (check_env (desc,X); STRING)
+	    |	E.EXP_ENV _ => STRING
 	    |	E.EXP_STR _ => STRING
 	    |	E.EXP_CAT (e1,e2) => stringop (e1,e2,STRING)
 	    |	E.EXP_INT _ => INT
@@ -613,7 +600,7 @@ struct
 	in
 	    (case e of
 		E.EXP_VAR x => #2(known_value (desc,x))
-	    |	E.EXP_ENV X => SVAL(known_env X)
+	    |	E.EXP_ENV X => SVAL(lookup_env (desc,X))
 	    |	E.EXP_STR s => SVAL s
 	    |	E.EXP_CAT (e1,e2) => stringop (e1,e2,op^)
 	    |	E.EXP_INT i => IVAL i
@@ -904,23 +891,17 @@ struct
 		    in	insert(desc,x,VDEC (ty,v,pos))
 		    end
 	    |	E.INCLUDE file => add_include (desc,xfile(desc,file))
-	    |	E.LOCAL file => add_include (desc,xfile(desc,file)) (* XXX *)
 	    |	E.IF (c,ents1,ents2) =>
 		    (case (tyof (desc,c)) of
 			BOOL =>
-			    let val (used,unused) =
-				    if getb(ev(desc,c))
-				    then (ents1,ents2)
-				    else (ents2,ents1)
-				val _ = check_ents(desc,unused)
-			    in	xents(desc,used)
+			    let val ents =
+				    if getb(ev(desc,c)) then ents1 else ents2
+			    in	xents(desc,ents)
 			    end
 		    |	_ => fail pos "expected boolean")
 	    |	E.ERROR msg =>
 		    (case (tyof (desc,msg)) of
-			STRING =>
-			    if #ck desc then desc
-			    else fail pos (gets(ev(desc,msg)))
+			STRING => fail pos (gets(ev(desc,msg)))
 		    |	_ => fail pos "expected string")
 	    |	E.MARK(pos,ent) => xent(update_pos(desc,pos), ent))
 	end
@@ -929,11 +910,6 @@ struct
 	(case ents of
 	    nil => desc
 	|   ent::ents => xents(xent(desc,ent), ents))
-
-    and check_ents (desc:desc, ents:E.ents) : unit =
-	let val desc = update_checking(desc,true)
-	in  ignore(xents(desc, ents))
-	end
 
     and add_include (desc:desc, file:file) : desc =
 	(case (lookup_file (desc,file)) of

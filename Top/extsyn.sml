@@ -116,7 +116,6 @@ struct
     |	UNIT of label * ue		(* unit U = ue *)
     |	VAL of label * exp		(* val x = exp *)
     |	INCLUDE of exp			(* include file *)
-    |	LOCAL of exp			(* local file *)
     |	IF of exp * ents * ents		(* #if e entries
 					   [#elif e' entries' ...]
 					   [#else entries''] #endif *)

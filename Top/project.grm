@@ -17,11 +17,11 @@ val interface_label = Name.interface_label
 	RBRACE | EQ | SEQ | BEQ | LT | LE | GT | GE | COLON | COLONCOLON |
 	ENV | IF | THEN | ELSE | NOT | ANDALSO | ORELSE |
 	DEFINED | UNIT | INTERFACE | COMPILED | PRIMITIVE |
-	VAL | INCLUDE | LOCAL | IF' | ELIF | ELSE' | ENDIF | ERROR |
+	VAL | INCLUDE | IF' | ELIF | ELSE' | ENDIF | ERROR |
 	ID of string | STRING of string | INT of int | BOOL of bool
 %keyword
 	ENV IF THEN ELSE NOT ANDALSO ORELSE DEFINED UNIT INTERFACE
-	COMPILED PRIMITIVE VAL INCLUDE LOCAL IF' ELIF ELSE' ENDIF ERROR
+	COMPILED PRIMITIVE VAL INCLUDE IF' ELIF ELSE' ENDIF ERROR
 
 %value	ID	("bogus_id")
 %value	STRING	("bogus_string")
@@ -44,8 +44,8 @@ val interface_label = Name.interface_label
 %left CARAT
 
 %nonterm
-    aexp of E.exp
-  | dexp of E.exp
+    dexp of E.label
+  | aexp of E.exp
   | exp of E.exp
   | unit_list of E.units
   | units of E.units
@@ -61,6 +61,14 @@ val interface_label = Name.interface_label
 
 %start start
 %%
+dexp	: UNIT ID
+		(unit_label ID)
+	| INTERFACE ID
+		(interface_label ID)
+	| DOLLAR ID
+		(var_label ID)
+	| ENV ID
+		(env_label ID)
 aexp	: DOLLAR ID
 		(E.EXP_MARK(IDleft,E.EXP_VAR (var_label ID)))
 	| ENV ID
@@ -73,16 +81,6 @@ aexp	: DOLLAR ID
 		(E.EXP_BOOL BOOL)
 	| LPAREN exp RPAREN
 		(exp)
-dexp	: UNIT ID
-		(E.EXP_DEF (unit_label ID))
-	| INTERFACE ID
-		(E.EXP_DEF (interface_label ID))
-	| DOLLAR ID
-		(E.EXP_DEF (var_label ID))
-	| ENV ID
-		(E.EXP_DEF (env_label ID))
-	| LPAREN dexp RPAREN
-		(dexp)
 exp	: aexp
 		(aexp)
 	| exp CARAT exp
@@ -110,7 +108,9 @@ exp	: aexp
 	| exp GE exp
 		(E.EXP_MARK(GEleft,E.EXP_IGE(exp1,exp2)))
 	| DEFINED dexp
-		(dexp)
+		(E.EXP_DEF dexp)
+	| DEFINED LPAREN dexp RPAREN
+		(E.EXP_DEF dexp)
 unit_list	:	(nil)
 	| ID unit_list
 		((unit_label ID) :: unit_list)
@@ -164,8 +164,6 @@ ent	: INTERFACE ID EQ ie
 		(E.VAL(var_label ID,exp))
 	| INCLUDE exp
 		(E.INCLUDE exp)
-	| LOCAL exp
-		(E.LOCAL exp)
 	| IF' exp ents cc ENDIF
 		(E.MARK(IF'left,E.IF(exp,ents,cc)))
 	| ERROR exp

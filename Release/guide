@@ -1,8 +1,7 @@
 Files to check:
 
 	../README
-	../Doc/tilt.1
-	../Doc/tilt.txt	# nroff -man ../Doc/tilt.1 > ../Doc/tilt.txt
+	../Doc/guide	# reformat manual pages
 	patterns
 
 Carve out a release by serving a file system based on my CVS working
