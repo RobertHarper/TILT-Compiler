@@ -309,41 +309,6 @@ then changes to the definition of type t in unit A will not (due to
 the opaque signature ascription) change the internal interface of unit
 B and so will not cause dependents of unit B to be recompiled.
 
-*** Two Timestamps
-
-To properly implement condition (2), TILT must keep track of two
-timestamps for each unit A:
-
-	lastWritten(A) = time when A's internal interface was written
-	lastChecked(A) = time when A was compiled
-
-To implement (2) given a unit A and a parent unit B, TILT checks
-whether lastWritten(B) <= lastChecked(A).
-
-*** Problem with One Timestamp
-
-The compiler would do too much work if condition (2) were implemented
-using only the lastWritten timestamp.
-
-To see why, consider the situation with three units named A, B, and C
-where C depends on B, B depends on A, and there are no other
-dependencies. Assume that initially everything is up-to-date. We have
-lastWritten(A) < lastWritten(B) < lastWritten(C). Now assume unit A is
-modified so as to change A's internal interface but not B's and that
-the compiler is told to bring everything up to date. Since A was
-modified, it must be recompiled. A has a new internal interface that
-must be written. We now have lastWritten(A) > lastWritten(B), so B
-must be recompiled. B's internal interface is unchanged. We can either
-discard or write the new copy. In either case, the compiler will do
-too much work.
-
-Case 1: If we discard the new copy, we will not have changed the state
-that lastWritten(A) > lastWritten(B). When next the compiler is told
-to bring everything up to date, it will needlessly recompile unit B.
-
-Case 2: If we write the new copy, we will have lastWritten(B) >
-lastWritten(C). The compiler will needlessly recompile unit C.
-
 ** Noticing Change
 
 TILT considers a unit to have changed when (a) its source code is
