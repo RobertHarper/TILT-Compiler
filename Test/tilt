@@ -1,0 +1,6 @@
+#!/usr/local/bin/rc
+testdir=`{dirname $0}
+top=`{cd $testdir/..; pwd}
+TILT_LIBDIR=$top
+. $testdir/platform
+exec $top/Top/Top.$platform.exe $*

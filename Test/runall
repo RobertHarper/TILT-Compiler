@@ -1,0 +1,5 @@
+#!/usr/local/bin/rc
+cd `{dirname $0}
+top=`{cd ..; pwd}
+. platform
+exec ./Runtest.$platform.exe $* `{awk '{print $1}' testlist.txt}

@@ -1,0 +1,9 @@
+switch(`{uname -s}){
+case SunOS
+	platform=sparc
+case OSF1
+	platform=alpha
+case *
+	echo >[2=1] 'can not run TILT binaries on this platform'
+	exit 1	# ie, Bomb
+}

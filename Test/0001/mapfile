@@ -1,0 +1,11 @@
+ARITH		arith.sig
+ArithHelp	arith-help
+PrimArith	prim-arith
+IntArith	int-arith
+WordArith	word-arith
+RealArith	real-arith
+OrdArith	ord-arith
+FlooredArith	floored-arith
+Arith		arith
+
+Test		main

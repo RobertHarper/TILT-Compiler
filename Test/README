@@ -1,29 +1,34 @@
-File Layout and Syntax
-----------------------
+TILT's Test directory contains a regression test harness and a suite
+of regression tests for the TILT compiler.  See the comment in
+runtest.sml for a high-level description of the test harness.  This
+file documents the file layout and syntax of individual tests.
 
 We put each test in its own numbered subdirectory of ml96/Test.
 
 The file testlist.txt lists each test by number and provies a brief
-description.
+description.  Each line in the file describes one test.
 
-Each test directory should have at least the following files:
+Each test directory has at least the following files:
 
 	mapfile
 	result
 
-Loosely speaking, these are the test code and expected test result.
+Loosely speaking, these are the test code and expected test result,
+respectively.
 
 The result file is a text file.  The first line must be one of the strings
 
 	Bomb Reject Exit Suicide
 
-In the case of Exit, subsequent lines contain the standard output expected
-from the test code.  (The test code's standard error is ignored.)
+In the case of Exit, subsequent lines contain the output (stdout and
+stderr) expected from the test code.  (The test code's exit status is
+ignored.  See harness.sml for more information.)
 
 The mapfile is a TILT manager mapfile.  The harness will use TILT to build
 it.  If the expected result is not Reject, then the mapfile must define
 a target unit named Test.  The unit name is important because the harness
 has to find the generated executable (eg, ml96/Test/n/Test.sparc.exe).
 
-A typical test directory will also contain ML source files (referenced
-by the mapfile) and any documentation you want to add.
+Each test directory should also contain ML source files (referenced by
+the mapfile) and documentation, but there are as yet no conventions
+governing these.

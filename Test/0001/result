@@ -1,0 +1,79 @@
+Exit
+TiltPrim tests
+testing ineg overflow...ok
+testing imult overflow...ok
+testing iquot overflow...ok
+testing iquot div...ok
+testing irem div...ok
+testing iplus overflow...ok
+testing iminus overflow...ok
+testing Int.div rounding ...ok
+testing Int.mod rounding ...ok
+testing Int.quot rounding ...ok
+testing Int.rem rounding ...ok
+testing Real.realFloor rounding ...ok
+testing Real.realFloor rounding ...ok
+testing Real.realCeil rounding ...ok
+testing Real.realCeil rounding ...ok
+testing Real.realTrunc rounding ...ok
+testing Real.realTrunc rounding ...ok
+testing Real.realTrunc rounding ...ok
+testing Real.realTrunc rounding ...ok
+testing Real.floor rounding ...ok
+testing Real.floor rounding ...ok
+testing Real.floor rounding ...ok
+testing Real.floor rounding ...ok
+testing Real.ceil rounding ...ok
+testing Real.ceil rounding ...ok
+testing Real.ceil rounding ...ok
+testing Real.ceil rounding ...ok
+testing Real.trunc rounding ...ok
+testing Real.trunc rounding ...ok
+testing Real.trunc rounding ...ok
+testing Real.trunc rounding ...ok
+testing Int32.~ overflow...ok
+testing Int32.* overflow...ok
+testing Int32.div overflow...ok
+testing Int32.div div...ok
+testing Int32.mod div...ok
+testing Int32.quot overflow...ok
+testing Int32.quot div...ok
+testing Int32.rem div...ok
+testing Int32.+ overflow...ok
+testing Int32.- overflow...ok
+testing Int32.abs overflow...ok
+testing Word8.div div...ok
+testing Word8.mod div...ok
+testing Word8.fromString overflow...ok
+testing Word31.div div...ok
+testing Word31.mod div...ok
+testing Word31.fromString overflow...ok
+testing Word32.toLargeInt overflow...ok
+testing Word32.toInt overflow...ok
+testing Word32.div div...ok
+testing Word32.mod div...ok
+testing Word32.fromString overflow...ok
+testing Real.sign domain...ok
+testing Real.compare unordered...ok
+testing Real.checkFloat overflow...ok
+testing Real.checkFloat div...ok
+testing Real.floor overflow...ok
+testing Real.floor overflow...ok
+testing Real.floor overflow...ok
+testing Real.floor domain...ok
+testing Real.ceil overflow...ok
+testing Real.ceil overflow...ok
+testing Real.ceil overflow...ok
+testing Real.ceil domain...ok
+testing Real.trunc overflow...ok
+testing Real.trunc overflow...ok
+testing Real.trunc overflow...ok
+testing Real.trunc domain...ok
+testing Real.round overflow...ok
+testing Real.round overflow...ok
+testing Real.round overflow...ok
+testing Real.round domain...ok
+testing Char.chr chr...ok
+testing Char.chr chr...ok
+testing Char.succ chr...ok
+testing Char.pred chr...ok
