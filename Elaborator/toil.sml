@@ -1,7 +1,7 @@
 (*$import Util Listops Name Tyvar Prim Ast Symbol String TilWord64 Array Int List Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat InfixParse Datatype Equal Error Signature TVClose TOIL *)
 
 (* todo : LetExp and CaseExp: valuability computation too conservative
-          optimize coercion functors to recognize when it is entirely unndeeded 
+          optimize coercion functors to recognize when they are entirely unnecessary
           optimize coercion functions of polymorphic values to be identity by normalizing type argument positions
 *)
 
@@ -23,9 +23,6 @@ structure Toil
     val debug = Stats.ff("ToilDebug")
 
     fun debugdo t = if (!debug) then (t(); ()) else ()
-    fun debugdo' t = (t(); ())
-    fun nada() = ()
-
 
     type tyvar = (context,con,exp) Tyvar.tyvar
     type ocon = (context,con,exp) Tyvar.ocon

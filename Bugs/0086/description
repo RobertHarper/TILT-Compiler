@@ -1,0 +1,36 @@
+Number: 0086
+Title:       Matching against an external interface file is broken.
+Submitter:   Derek Dreyer <dreyer@cs.cmu.edu>
+Date:        8/14/2002
+Version:     CVS
+System:	     all
+Severity:    major
+Problem:
+
+The function LinkIl.elab_dec_constrained, which matches an
+implementation against specs from external interface file appears to
+be implemented incorrectly.  There is a confusing comment explaining
+how it works, but it is very clear that it does some form of
+transparent signature matching.  Dave and I agree that this is wrong.
+Matching against an external interface file should be opaque.
+
+In order to do transparent signature matching, elab_dec_constrained
+calls Toil.xdecspec, which in turn calls Signature.xcoerce_seal and
+uses the "leaky" transparent signature "sig_coerced" returned by xcoerce_seal.
+I don't know why xcoerce_seal returns any transparent signature at all,
+but sig_coerced is not necessarily well-formed in the ambient context.
+In particular, it may refer to the locally-bound variable var_actual.
+So xcoerce_seal should not be used to do transparent signature
+ascription (I believe).
+
+Fix:
+
+Dave and I agree that both problems should be easily solvable by
+making the process of matching against interface files just use
+opaque signature ascription.  This should eliminate the need for
+xdecspec as well.  Perry may have had reasons for this that we don't
+understand, though.
+
+Test: *
+Owner: *
+Status: open

@@ -43,12 +43,32 @@ signature ILCONTEXT =
 
     (* Subtract the second context from the first one.  *)
     val sub_context  : Il.context * Il.context -> Il.partial_context  
-    (* Returns alpha-varied partial contexts if alpha-varying was needed. *)
+
+    (* Return alpha-varied partial contexts if alpha-varying was needed, i.e. if:
+       1) The unresolved variables of the partial context need to be renamed to fit the
+          corresponding variables of the resolving context.
+       2) The bound variables of the partial context conflict with the bound
+          variables of the resolving context and thus need to be renamed.
+
+       If any alpha-varying is required, an alpha-varied version of the partial context is
+       returned along with the combined context.  Otherwise, NONE is.
+     *)
     val plus_context : Il.context * Il.partial_context -> Il.partial_context option * Il.context
+
     (* GC the given context by using the partial context, bindings, and "kept imports" as roots *)
     val gc_context : Il.module -> Il.context
 
-    (* Support for hiding top-level labels. *)
+    (* Support for hiding top-level labels.  You can think of a label_info as just a list of
+       labels.  When elaborating a module, we want to make sure that it is only allowed to refer
+       to components of its direct (declared) imports, not its indirect imports (the imports of
+       its direct imports).  To do so, prior to elaboration of the module, the Manager runs
+       get_labels on all its indirect imports and obscures those labels in the context using 
+       obscure_labels.  After elaboration, the correct labels are reinstated in the context (and
+       possibly the sdecs) of the module using unobscure_labels.
+
+       In the implementation, label_info is actually a mapping from "real" labels to unforgeable
+       dummy labels.  Obscure_labels applies the mapping, unobscure_labels applies the inverse mapping.
+     *)
     type label_info
     val empty_label_info : label_info
     val get_labels : Il.partial_context * label_info -> label_info
@@ -70,6 +90,15 @@ signature ILCONTEXT =
     val SelfifySdec : Il.context -> Il.sdec -> Il.sdec
     val SelfifySdecs : Il.context -> Il.path * Il.sdecs -> Il.sdecs
     val SelfifyEntry : Il.context -> Il.context_entry -> Il.context_entry
+
+    (* reduce_signat recursively reduces an arbitrary signature to its "meat" by
+       1) expanding signature variables to their definitions
+       2) projecting out the selfified component of a SIGNAT_SELF
+       3) looking up the signature of X in SIGNAT_OF(X)
+
+       Note: IlStatic employs a different locally-defined version of reduce_signat,
+       which DOES NOT reduce SIGNAT_SELF's.
+     *)
     val reduce_signat : Il.context -> Il.signat -> Il.signat
 
     val removeNonExport : Il.partial_context -> Il.partial_context

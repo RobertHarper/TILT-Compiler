@@ -174,6 +174,8 @@ structure LinkIl :> LINKIL  =
 	      | NONE => NONE
 	  end
 
+        (* Derek: This comment does not make sense!  Matching an external interface should
+	   be opaque.  Furthermore, it uses Toil.xdecspec, which is broken. *)
 
         (* Interface files are tricky to compile because the signature expressions
 	   in the interface files are not compiled in the same context as in the context.

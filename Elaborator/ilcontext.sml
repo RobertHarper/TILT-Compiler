@@ -53,7 +53,7 @@ struct
      so we need some additional datatypes to package up the results 
      --------------------------------------------------------- *)
 
-    type phrase_class_p = path * phrase_class
+(*    type phrase_class_p = path * phrase_class *)
 
 
     fun Context_Fixity (CONTEXT {fixityMap,...}) = fixityMap
@@ -72,11 +72,17 @@ struct
 		 pathMap = pathMap,
 		 ordering = ordering})
 
+    (* expands out the definition of a signature variable *)
     fun reduce_sigvar ctxt v =
 	(case (Context_Lookup_Var(ctxt,v)) of
 	     SOME(_,PHRASE_CLASS_SIG(v,s)) => s
 	   | _ => error "reduce_sigvar found unbound sigvar")
 
+    (* reduce_signat recursively reduces an arbitrary signature to its "meat" by
+       1) expanding signature variables to their definitions
+       2) projecting out the selfified component of a SIGNAT_SELF
+       3) looking up the signature of X in SIGNAT_OF(X)
+     *)
     fun reduce_signat ctxt (SIGNAT_VAR v) = reduce_signat ctxt (reduce_sigvar ctxt v)
       | reduce_signat ctxt (SIGNAT_SELF (p, unself, self)) = reduce_signat ctxt self
       | reduce_signat ctxt (SIGNAT_OF (PATH(v,labs))) = 
@@ -95,6 +101,9 @@ struct
 	  end
       | reduce_signat ctxt s = s
 
+    (* prepare for the possible shadowing of a label by changing occurrences of it in the
+       current context to a dummy label
+     *)
     fun shadow (overloadMap, labelMap, pathMap, lab) = 
 	let val overloadMap = 
 	    (case (LabelMap.find(overloadMap,lab)) of
@@ -104,6 +113,7 @@ struct
 		   NONE => (overloadMap, labelMap, pathMap)
 		 | SOME (PATH p,_) => 
 		       let val newlab = fresh_internal_label(label2name' lab)
+			   (* Derek: Why do we look p up in pathMap instead of just using the phrase class from labelMap? *)
 		       in  (case PathMap.find(pathMap,p) of
 				NONE => error "inconsistent context"
 			      | SOME (_, pc) => 
@@ -114,8 +124,13 @@ struct
 				    end)
 		       end)
 	end
-	     
-    fun add_sdec(ctxt, pathopt, sdec as (SDEC(l,dec))) = 
+
+    (* add_sdec is the basic context extension routine.
+       In addition to extending the context, it adds an entry in the labelMap
+       (and a corresponding one in the pathMap) for every (sub-)component of the sdec
+       visible by open lookup.
+     *)
+    fun add_sdec'(ctxt, pathopt, sdec as (SDEC(l,dec))) = 
 	let fun mk_path v = (case pathopt of
 				 NONE => PATH(v,[])
 			       | SOME p => join_path_labels(p,[l]))
@@ -135,7 +150,7 @@ struct
 			   pathMap = pathMap,
 			   ordering = ordering}
 		end
-	    fun sdec_help (v,l) (sdec,ctxt) = add_sdec(ctxt,SOME(mk_path v),sdec)
+	    fun sdec_help v (sdec,ctxt) = add_sdec'(ctxt,SOME(mk_path v),sdec)
 	in case dec of
 	    DEC_EXP(v,c,eopt,inline) => help(ctxt, v, path2exp, 
 					     fn obj => PHRASE_CLASS_EXP(obj, c, eopt, inline))
@@ -153,13 +168,13 @@ struct
 			  then let val sdecs = (case (reduce_signat ctxt s) of
 						    SIGNAT_STRUCTURE sdecs => sdecs
 						  | _ => error "open label - not struct sig")
-			       in  foldl (sdec_help (v,l)) ctxt sdecs
+			       in  foldl (sdec_help v) ctxt sdecs
 			       end
 		      else ctxt
 		  end
 	end
 
-
+    fun add_sdec(ctxt, sdec) = add_sdec'(ctxt,NONE,sdec)
 
     fun add_context_sig(CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering},
 			l, v, signat) = 
@@ -190,15 +205,15 @@ struct
     fun add_context_entry(ctxt, entry) = 
 	(case entry of
 	     CONTEXT_FIXITY (l,f) => add_context_fixity(ctxt,l,f)
-	   | CONTEXT_SDEC sdec => add_sdec(ctxt,NONE,sdec)
+	   | CONTEXT_SDEC sdec => add_sdec(ctxt,sdec)
 	   | CONTEXT_SIGNAT (l,v,s) => add_context_sig(ctxt,l,v,s)
 	   | CONTEXT_OVEREXP(l,ovld) => add_context_overexp(ctxt,l,ovld))
 
     fun add_context_entry'(entry,ctxt) = add_context_entry(ctxt,entry)
     fun add_context_entries (ctxt, entries) = foldl add_context_entry' ctxt entries
-    fun add_context_sdec(ctxt,sdec) = add_sdec(ctxt,NONE,sdec)
+    fun add_context_sdec(ctxt,sdec) = add_sdec(ctxt,sdec)
 
-    fun add_context_sdec'(sdec,ctxt) = add_sdec(ctxt,NONE,sdec)
+    fun add_context_sdec'(sdec,ctxt) = add_sdec(ctxt,sdec)
     fun add_context_sdecs (ctxt, sdecs) = foldl add_context_sdec' ctxt sdecs
 
     fun anon_label () = fresh_internal_label "anon"
@@ -217,8 +232,9 @@ struct
     fun add_context_con'(c, v, kind, conopt) = add_context_con(c,anon_label(), v, kind, conopt)
     fun add_context_sig'(c, v, signat) = add_context_sig(c,anon_label(), v, signat)
 	
-
-
+    (* pcSubst straightforwardly performs a substitution on a phrase class.
+       Shouldn't this function be in IlUtil?
+     *)
     fun pcSubst(pc,subst) = 
 	(case pc of
 	     PHRASE_CLASS_EXP(e,con,eopt,inline) => 
@@ -277,7 +293,7 @@ struct
 		    val pm = Name.PathMap.insert(pm,p,(lab,pc))
 		in (lm, pm, (PATH p)::ord)
 		end
-            (* ---- Using the current unresolved of the partial conetxt and the context,
+            (* ---- Using the current unresolved of the partial context and the context,
 	       ---- compute the substitution of the unresolved variables on the partial context
 	       ---- to match the corresponding variables of the context and 
 	       ---- generate a new unresolved list. *)
@@ -370,23 +386,25 @@ struct
 	    val fixityMap = LabelMap.unionWithi
 		            (fn (l, _, _) => error ("fixityMap not disjoint at " ^ (label2name l)))
 			    (fm1,fm2)
+	    (* is_open_internal_path checks if a path consists of a sequence of open labels ending with
+               an internal label *)
 	    fun is_open_internal_path (_,PATH(v,[])) = false
 	      | is_open_internal_path (pathmap,PATH(v,labs)) = 
 		(case labs of
 		     [lab] => (case PathMap.find(pathmap,(v,[])) of
-				   NONE => (print "!!!Could not find "; pp_var v; print ": probably bug with SplayMapFn.unionWithi\n"; 
-					    false)
+				   NONE => (print "Could not find "; pp_var v; print "\n"; error "is_open_internal_path failed")
 				 | SOME (l,_) => is_open l andalso is_label_internal lab)
 		   | _ => let val len = length labs
 			  in is_open (List.nth(labs, len - 2)) andalso is_label_internal (List.nth(labs, len - 1))
 			  end)
+            (* Combine the labelMaps from both contexts.
+               For any labels in the domain of both labelMaps, check that at least one corresponds to an
+               open_internal_path.  Why is this the right thing?
+             *)
 	    val labelMap = LabelMap.unionWithi 
 		            (fn (l,(p1,pc1),second as (p2,pc2)) => 
 			     if (is_open_internal_path(pm1,p1) orelse
-				 is_open_internal_path(pm2,p2) orelse
-				 is_open_internal_path(pm1,p2) orelse   (* last two are needed only if there's a bug in 
-									   SplayMapFn.unionWithi *)
-				 is_open_internal_path(pm2,p1))
+				 is_open_internal_path(pm2,p2))
 				 then second
 			     else (print "p1 = "; pp_path p1; print " :\n";
 				   pp_phrase_class pc1; print "\n\n";
@@ -641,8 +659,17 @@ struct
 	end
 
 
-   (* --- remove references to internal variables from signature with given module ---- *)
    local
+       (* The state running through a (un-)selfification consists of
+          1) selfify, which is true if we are selfifying and false if we are unselfifying,
+          2) ctxt, which is only used in selfification and accumulates the selfified decs for
+             only the module components of the signature being selfified.  The only uses of the 
+	     context are in expanding references to signature variables and, more interestingly,
+             in expanding SIGNAT_OF's.  Only the module components need to be accumulated in
+             the context, because expanding SIGNAT_OF only needs to lookup module variables.
+          3) subst, which keeps a running substitution of selfified paths for local variables
+             in selfification, or the inverse substitution for unselfification.
+        *)
        type state = {selfify : bool,
 		     ctxt : context,
 		     subst : subst}
@@ -675,6 +702,11 @@ struct
 				       then subst_add_modvar(subst, v, path2mod p)
 				   else subst_add_modpath(subst, p, MOD_VAR v))}
 
+       (* The popt parameter of sdec_folder (and the self parameter of TransformSig)
+          stand for the optional selfification path.  If there is one, we use it and
+          keep tacking labels on the end of it when we recurse into a structure.  If
+          there isn't one, we just carry out the substitution built so far.
+        *)
        fun sdec_folder popt (sdec as (SDEC(l,dec)), state as {selfify,subst,...} : state) =
 	   let val popt = mapopt (fn p => join_path_labels(p,[l])) popt
 	   val res = (case dec of
@@ -684,12 +716,15 @@ struct
 					    NONE => NONE
 					  | SOME e => SOME(exp_subst(e,subst)))
 			    val dec = DEC_EXP(v,c,eopt,inline)
+                            (* The only local expression variables that may appear in inlined expressions
+                               are coercions...presumably.  Do we know this? *)
 			    val state = if is_coercion l then add_exp(state,v,popt) else state
 			in  (SDEC(l,dec), state)
 			end
 		  | DEC_CON(v,k,copt,inline) => 
 		     let 
 			 val copt = 
+                             (* Derek: What the hell does this comment mean? *)
 			     (case copt of  (*  if we do this, Unselfify is hard to write. *)
 				  NONE => (case popt of
 					       NONE => NONE
@@ -709,6 +744,8 @@ struct
 		  | DEC_MOD(v,b,s) => 
 		     let val s' = TransformSig state (popt,s)
 			 val dec = DEC_MOD(v,b,s')
+                         (* It is important to use the selfified signature s' instead of s, to ensure
+                            that only selfified signatures get added to the context. *)
 			 val state = add_mod(state,v,s',popt)
 		     in (SDEC(l,dec), state)
 		     end)
@@ -755,6 +792,7 @@ struct
 				    let val s1 = if (isempty_state state) then s1 else TransformSig state (NONE,s1)
 					val s2 = if (isempty_state state) then s2 else TransformSig state (NONE,s2)
 					val s = SIGNAT_FUNCTOR(v,s1,s2,a)
+                                        (* Derek: Why bother selfifying a generative functor? *)
 					val res = (case (selfify,self) of
 					     (true, SOME self) => SIGNAT_SELF(self, NONE, s)
 					   | _ => s)
@@ -784,6 +822,8 @@ struct
 		          print " and ctxt =\n"; pp_context ctxt; print "\n\n"));
 		raise exn)
 
+       (* We don't need to selfify DEC_CON's because if you do "type s = t",
+          s will be transparently specified to equal t even if t is an abstract type. *)
        fun SelfifyDec ctxt (DEC_MOD (v,b,s)) = DEC_MOD(v,b,SelfifySig ctxt (PATH(v,[]),s))
 	 | SelfifyDec ctxt dec = dec
        fun SelfifySdec ctxt (SDEC (l,dec)) = SDEC(l,SelfifyDec ctxt dec)
@@ -802,6 +842,7 @@ struct
 		PHRASE_CLASS_MOD (m, b, s) => PHRASE_CLASS_MOD(m, b, UnselfifySig ctxt (PATH p, s))
 	     | _ => pc)
 	   fun unselfifyPathmapEntry (p,(l, pc)) = (l, unselfifyPC (p, pc))
+           (* Derek: Why do we only unselfify in the pathMap and not in the labelMap? *)
 	   val pathMap = Name.PathMap.mapi unselfifyPathmapEntry pathMap
        in  CONTEXT{pathMap = pathMap,
 		   overloadMap = overloadMap,

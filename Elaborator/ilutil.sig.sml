@@ -46,10 +46,10 @@ signature ILUTIL =
     val eq_epath : exp * exp -> bool
 
     (* error functions *)
-    val error_exp : string -> Il.exp -> string -> 'a
-    val error_con : string -> Il.con -> string -> 'a
-    val error_mod : string -> Il.mod -> string -> 'a
-    val error_sig : string -> Il.signat -> string -> 'a
+    val error_exp : string -> exp -> string -> 'a
+    val error_con : string -> con -> string -> 'a
+    val error_mod : string -> mod -> string -> 'a
+    val error_sig : string -> signat -> string -> 'a
 
     (* derived forms *)
     val make_lambda : var * con * con * exp -> (exp * con)        (* PARTIAL *)
@@ -70,7 +70,7 @@ signature ILUTIL =
     val con_bool : context -> con
     val con_eqfun : context -> con -> con
     val con_tuple : con list -> con                 (* the type of tuple values *)
-    val con_tuple_inject : Il.con list -> Il.con    (* makes a tuple of types   *)
+    val con_tuple_inject : con list -> con          (* makes a tuple of types   *)
     val con_record : (Symbol.symbol * con) list -> con
     val exp_tuple : exp list -> exp
     val generate_tuple_label  : int -> label
