@@ -571,6 +571,8 @@ structure Datatype
 	    val eq_lab = to_eq type_lab 
 	    val eq_var = fresh_named_var "eqfun"
 	    val dt_lab = to_dt type_lab
+	    val inner_type_lab = internal_label (Symbol.name tyc)
+	    val old_inner_type_lab = internal_label (Symbol.name old_type_sym)
 	    val dt_var = fresh_named_var "dt"
 	    fun change_path [] _ = error "empty path"
 	      | change_path [l] base = [base l]
@@ -595,42 +597,43 @@ structure Datatype
 			 in  [(SBND(eq_lab,bnd),SDEC(eq_lab,dec))]
 			 end
 		   | _ => [])
-	    val (all_constr_labs,carrying_constr_labs,constr_sbndsdec) = 
+	    val constr_sbndsdec = 
 		(case (Context_Lookup_Labels(context,dt_labs)) of
 		     SOME(_,PHRASE_CLASS_MOD (m,b,SIGNAT_SELF(_,_,s))) => 
-			 let val bnd = BND_MOD(dt_var,b,m)
-			     val dec = DEC_MOD(dt_var,b,s)
-			     val SIGNAT_STRUCTURE (_::_::sdecs) = s
-			     (* need to keep only labs of value-carrying constructors *)
-			     fun mapper (SDEC(l,dec)) = 
-				 let fun is_arrow (CON_ARROW _) = SOME l
-				       | is_arrow _ = NONE
-				 in  case dec of
-				     DEC_EXP(_,c,_,_) => is_arrow c
-				   | DEC_MOD (_,true,SIGNAT_FUNCTOR(_,_,
-						  SIGNAT_STRUCTURE([SDEC(_,DEC_EXP(_,c,_,_))]),_)) => is_arrow c
-				   | _ => NONE
+			 let
+			     fun mapper (SDEC(old_lab,dec)) =
+				 let
+				     val labs = dt_labs @ [old_lab]
+				     fun fail msg = (debugdo(fn () =>
+							     (Ppil.pp_pathlist Ppil.pp_label' labs;
+							      print ": "; print msg;  print "\n"));
+						     error msg)
+				     val var = (case dec
+						  of DEC_EXP(v,_,_,_) => v
+						   | DEC_CON(v,_,_,_) => v
+						   | _ => fail "datatype - expected EXP or CON")
+				     val bnd = (case Context_Lookup_Labels(context,labs)
+						  of SOME (_, PHRASE_CLASS_EXP (e,c,eo,i)) => BND_EXP(var,e)
+						   | SOME (_, PHRASE_CLASS_CON (c,k,co,i)) => BND_CON(var,c)
+						   | _ => fail "datatype - undefined component")
+				     val lab = if eq_label (old_lab, old_inner_type_lab)
+						   then inner_type_lab
+					       else old_lab
+				 in  (SBND(lab,bnd), SDEC(lab,dec))
 				 end
-			     val all_labs = map (fn (SDEC(l,_)) => l) sdecs
-			     val carrying_labs = List.mapPartial mapper sdecs
-			 in  (all_labs,carrying_labs,[(SBND(dt_lab,bnd),SDEC(dt_lab,dec))])
+			     val SIGNAT_STRUCTURE sdecs = s
+			     val sbndsdec = map mapper sdecs
+			     val (sbnds,sdecs) = Listops.unzip sbndsdec
+			     val m' = MOD_STRUCTURE sbnds
+			     val s' = SIGNAT_STRUCTURE sdecs
+			     val bnd = BND_MOD(dt_var,b,m')
+			     val dec = DEC_MOD(dt_var,b,s')
+			 in  [(SBND(dt_lab,bnd),SDEC(dt_lab,dec))]
 			 end
-		   | _ => (Ppil.pp_pathlist Ppil.pp_label' dt_labs; print "\n"; 
+		   | _ => (debugdo(fn () =>
+				   (Ppil.pp_pathlist Ppil.pp_label' dt_labs; print ": ";
+				    print "unbound datatype - constr labs"));
 			   error "unbound datatype - constr labs"))
-
-
-	    val constr_ssum_strings = 
-		let fun mapper (n,_) = ((Symbol.name type_sym) ^ "_sum" ^ (Int.toString n))
-		in  mapcount mapper all_constr_labs
-		end
-	    val constr_ssum_var = map fresh_named_var constr_ssum_strings
-	    val constr_ssum_lab = map internal_label constr_ssum_strings
-	    val oldconstr_ssum_strings = 
-		let fun mapper (n,_) = ((Symbol.name old_type_sym) ^ "_sum" ^ (Int.toString n))
-		in  mapcount mapper all_constr_labs
-		end
-	    val oldconstr_ssum_labs = map internal_label oldconstr_ssum_strings
-	    val constr_ssum_labs = map change_path (map (fn l => fn _ => l) oldconstr_ssum_labs)
 
 	    fun copy_type str (lookup_labs, lab, var) =
 		case (Context_Lookup_Labels(context,lookup_labs)) of
@@ -641,37 +644,16 @@ structure Datatype
 			 in  (SBND(lab,bnd),SDEC(lab,dec))
 			 end
 		   | _ => (print "lookup_labs: "; app Ppil.pp_label lookup_labs; print "\n";
-			   error ("unbound datatype - copy type" ^ str))
+			   error ("unbound datatype - copy type " ^ str))
 
-(*
-	    val constr_con_strings = map (fn con_sym =>
-				         ((Symbol.name type_sym) ^ "_" ^ 
-					   (Name.label2name con_sym))) carrying_constr_labs
-	    val old_constr_con_strings = map (fn con_sym =>
-				         ((Symbol.name old_type_sym) ^ "_" ^ 
-					   (Name.label2name con_sym))) carrying_constr_labs
-
-	    val constr_con_vars = map fresh_named_var constr_con_strings
-	    val constr_con_labs = map internal_label constr_con_strings
-	    val old_constr_con_labs = map internal_label old_constr_con_strings
-	    val constr_con_lookup_labs = map (fn l => change_path (fn _ => l)) old_constr_con_labs
-	    val constr_con_sbnd_sdecs = map3 (copy_type "constr_con") 
-		(constr_con_lookup_labs,constr_con_labs,constr_con_vars)
-*)
 	    val type_sbndsdec = copy_type "type" (type_labs,type_lab,type_var)
 	    val constr_sum_sbndsdec = copy_type "constr_sum" 
 		(constr_sum_labs,constr_sum_lab,constr_sum_var)
 	    val constr_sumarg_sbndsdec = copy_type "constr_sumarg" 
 		(constr_sumarg_labs,constr_sumarg_lab,constr_sumarg_var)
-(*
-	    val constr_ssum_sbndsdecs = map3 (copy_type "constr_ssum") 
-		(constr_ssum_labs,constr_ssum_lab,constr_ssum_var)
-*)
 	in [type_sbndsdec] 
-(* @ constr_con_sbnd_sdecs *)
 	    @ [constr_sumarg_sbndsdec,constr_sum_sbndsdec]
-(*  @ constr_ssum_sbndsdecs *)
-	      @ eq_sbndsdec @ constr_sbndsdec
+	    @ eq_sbndsdec @ constr_sbndsdec
 	end
     
 
