@@ -320,12 +320,13 @@ structure Toil
                             | SOME r =>
                                   (r := (!r) - 1;
                                    if (!r = 0)
-                                       then (SOME sbnd, ce) :: (uniquify rest)
+                                       then sbnd_ctxt :: (uniquify rest)
                                    else if (!r < 0)
                                             then elab_error "maxmap count inconsistency"
                                         else (* rename case *)
-                                            let val qualifier = "hidden" ^ (Int.toString (!r)) ^ "_"
-						val l' = prependToInternalLabel(qualifier, l)
+                                            let val s = Name.label2name l
+						val l' = Name.fresh_internal_label s
+						val l' = Name.to_nonexport l'
                                             in (SOME (SBND(l',bnd)), 
                                                 CONTEXT_SDEC(SDEC(l',dec)))
                                                 :: (uniquify rest)
@@ -1157,7 +1158,7 @@ structure Toil
 		val context' = add_context_mod(context,lbl_poly,var_poly,
 					       SelfifySig context (PATH (var_poly,[]),
 								   SIGNAT_STRUCTURE temp_sdecs))
-		val lbl = internal_label "!bindarg"
+		val lbl = to_nonexport(internal_label "!bindarg")
 		val v = fresh_named_var "bindarg"
 		val (e,con,va) = xexp(context',expr)
 		val sbnd_sdec = (SBND(lbl,BND_EXP(v,e)),SDEC(lbl,DEC_EXP(v,con,NONE,false)))
@@ -1640,53 +1641,6 @@ structure Toil
 		    | getDecFromSbndCtxt _ = NONE
 		  val localVars = map getVarFromDec (List.mapPartial getDecFromSbndCtxt sbnd_ctxt_list1)
 		  val localVars = Name.VarSet.addList(Name.VarSet.empty,localVars)
-(*
-		  fun con_reduce' ctxt c = 
-		      if Name.VarSet.isEmpty(Name.VarSet.intersection(localVars, con_free c))
-			  then SOME c
-		      else (case con_reduce_once(ctxt,c) of
-				NONE => NONE
-			      | SOME c => con_reduce' ctxt c)
-		  fun con_reduce ctxt c = 
-		      let val _ = (print "con_reduce started with: "; pp_con c; print "\n")
-			  val cOpt = con_reduce' ctxt c 
-			  val c = (case cOpt of
-				       NONE => c
-				     | SOME c => c)
-			  val _ = (print "con_reduce ended with: "; pp_con c; print "\n")
-		      in  c
-		      end
-		  fun sig_reduce ctxt (SIGNAT_STRUCTURE sdecs) = 
-		      let fun folder (SDEC(l,dec),ctxt) = 
-			  case dec of
-			      DEC_EXP(v,c,eOpt,b) => (SDEC(l,DEC_EXP(v, con_reduce ctxt c, eOpt, b)), ctxt)
-			    | DEC_CON(_,_,NONE,b) => (SDEC(l,dec),ctxt)
-			    | DEC_CON(v,k,SOME c,b) => let val c = con_reduce ctxt c
-						       in  (SDEC(l,DEC_CON(v, k, SOME c, b)),
-							    add_context_con'(ctxt,v,k,SOME c))
-						       end
-			    | DEC_MOD(v,b,s) => let val sdec = SDEC(l,DEC_MOD(v,b,sig_reduce ctxt s))
-						in  (sdec, add_context_sdec(ctxt,SelfifySdec ctxt sdec))
-						end
-			  val (sdecs,_) = foldl_acc folder ctxt sdecs
-		      in  SIGNAT_STRUCTURE sdecs
-		      end
-		    | sig_reduce ctxt (SIGNAT_FUNCTOR (v, s1, s2, a)) = 
-		      let val s1 = sig_reduce ctxt s1
-			  val ctxt = add_context_mod'(ctxt,v,SelfifySig ctxt (PATH(v,[]),s1))
-			  val s2 = sig_reduce ctxt s2
-		      in  SIGNAT_FUNCTOR(v, s1, s2, a)
-		      end
-		    | sig_reduce ctxt s = s
-		  fun reduceSbndCtxt ctxt (sbndOpt,CONTEXT_SDEC(SDEC(l, dec))) = 
-		      (sbndOpt,CONTEXT_SDEC(SDEC(l,
-		        (case dec of
-			     DEC_EXP(v,c,eOpt,b) => DEC_EXP(v, con_reduce ctxt c, eOpt, b)
-			   | DEC_CON(_,_,NONE,_) => dec
-			   | DEC_CON(v,k,SOME c,b) => DEC_CON(v,k,SOME(con_reduce ctxt c),b)
-			   | DEC_MOD(v,b,s) => DEC_MOD(v,b,sig_reduce ctxt s)))))
-		    | reduceSbndCtxt _ sbndCtxtEntry = sbndCtxtEntry
-*)
 		  fun reduceSbndCtxt (sbndOpt, CONTEXT_SDEC(SDEC(l,dec))) = 
 		      (sbndOpt,CONTEXT_SDEC(SDEC(l,
 		        (case dec of
@@ -2329,7 +2283,6 @@ structure Toil
 				       SOME p => p
 				     | _ => elab_error "xstrexp: functor argument became non-variable")
 			      val varName = Symbol.name var
-			      val coerced_lbl = internal_label ("!coerced_" ^ varName)
 			      val coerced_var = fresh_named_var ("coerced_" ^ varName)
 			      val (mod_coerced,sig_coerced) = Signature.xcoerce_functor(context,argpath,signat,sig1)
 			      val mod_sealed = MOD_SEAL(mod_coerced,sig_coerced)

@@ -1400,7 +1400,7 @@ struct
            c = #2 bindTuple
 	   *)
 	local
-	    val tupleLabel = N.internal_label "bindTuple"
+	    val tupleLabel = N.to_nonexport(N.internal_label "bindTuple")
 	    val tupleVar = N.fresh_named_var "bindTuple"
 	in  val (tupleSbndSdec,base) =
 	         (case binde of
