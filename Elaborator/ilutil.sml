@@ -517,8 +517,10 @@ functor IlUtil(structure Ppil : PPIL
 				mod_handler = default_mod_handler,
 				sig_handler = default_sig_handler})
 	  val _ = f_con handlers argcon
-	  val res = map (fn tv => (tv, internal_label (tyvar2string tv),
-				   tyvar_is_use_equal tv)) (!free_tyvar)
+	  val res = mapcount (fn (n,tv) => (tv, 
+					    internal_label ("tv" ^ (Int.toString n)),
+(*				   internal_label (tyvar2string tv), can't be generative *)
+					    tyvar_is_use_equal tv)) (!free_tyvar)
 	  val _ = (map (fn (tv,lbl,useeq) => 
 			 let val proj = CON_MODULE_PROJECT(MOD_VAR targetv, lbl)
 			 in tyvar_set(tv,proj)

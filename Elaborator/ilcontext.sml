@@ -2,8 +2,6 @@ functor IlContext(structure Il : ILLEAK)
     : ILCONTEXT = 
 struct
 
-exception XXX
-
 	structure Il = Il
 	type context = Il.context
 	type exp = Il.exp

@@ -11,7 +11,6 @@ functor IlStatic(structure Il : IL
   : ILSTATIC  =
   struct
 
-exception XXX
 
     open Util Listops
     structure Il = Il
@@ -1499,12 +1498,17 @@ exception XXX
 			  end)
 
 
-     (* Rule 33 - 34 *)
-     and Kind_Valid (KIND_TUPLE n)     = n >= 0
-       | Kind_Valid (KIND_ARROW (m,n)) = (m >= 0) andalso (n >= 0)
-       | Kind_Valid (KIND_INLINE (k,c)) = Kind_Valid k  (* XXX need to check c *)
+     and Kind_Valid (KIND_TUPLE n,_)     = n >= 0
+       | Kind_Valid (KIND_ARROW (m,n),_) = (m >= 0) andalso (n >= 0)
+       | Kind_Valid (KIND_INLINE (k,c),ctxt) = let val k' = GetConKind(c,ctxt)
+						   fun eq_kind (KIND_TUPLE n1, KIND_TUPLE n2) = n1 = n2
+						     | eq_kind (KIND_ARROW(m1,n1), KIND_ARROW(m2,n2)) = 
+						       ((m1 = m2) andalso (n1 = n2))
+						     | eq_kind _ = false
+					       in  Kind_Valid(k,ctxt) andalso eq_kind(k,k')
+					       end
 
-     and Context_Valid ctxt = raise UNIMP
+     and Context_Valid ctxt = raise Util.UNIMP
 
      and Decs_Valid (ctxt,[]) = true
        | Decs_Valid (ctxt,a::rest) = Dec_Valid(ctxt,a) andalso 
@@ -1516,7 +1520,7 @@ exception XXX
        in  (case dec of
 	      DEC_EXP(v,c) => (var_notin v) andalso (GetConKind(c,ctxt) = (KIND_TUPLE 1))
 	    | DEC_MOD(v,s) => (var_notin v) andalso (Sig_Valid(ctxt,s))
-	    | DEC_CON (v,k,NONE) => (var_notin v) andalso (Kind_Valid k)
+	    | DEC_CON (v,k,NONE) => (var_notin v) andalso (Kind_Valid(k,ctxt))
 	    | DEC_EXCEPTION(name,CON_TAG c) => ((name_notin name) andalso 
 						(GetConKind(c,ctxt) = (KIND_TUPLE 1)))
 	    | _ => false)
