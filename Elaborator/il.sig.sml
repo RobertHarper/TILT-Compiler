@@ -31,6 +31,9 @@ signature IL =
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
                  | EXN_INJECT of string * exp * exp (* tag expression and value *)
+                 | COERCE of exp * con list * exp        (* Coercion value, type arguments, term *)
+                 | FOLD   of var list * con * con                 (* Fold coercion   : unrolled type, rolled type (hopefully names) *)
+                 | UNFOLD of var list * con * con                 (* Unfold coercion : rolled type, unrolled type (hopefully names) *)
                  | ROLL    of con * exp
                  | UNROLL  of con * con * exp    (* the recursive and non-recursive type *)
                  | INJ     of {sumtype : con,    (* non-special sum tyoe *)
@@ -78,6 +81,7 @@ signature IL =
 					 noncarriers : int,
 					 carrier : con,
 					 special : int option}
+                 | CON_COERCION of var list * con * con
                  | CON_TUPLE_INJECT  of con list
                  | CON_TUPLE_PROJECT of int * con 
                  | CON_MODULE_PROJECT of mod * label

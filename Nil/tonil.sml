@@ -1618,6 +1618,22 @@ end (* local defining splitting context *)
        in
 	   con
        end
+     | xcon' context (Il.CON_COERCION (vars,il_from_con,il_to_con)) =
+       let
+	 val (vars', context) = insert_rename_vars(vars, context)
+	 val tformals = map (fn v => (v,Type_k)) vars'
+	 val context = update_NILctx_insert_kind_list(context,tformals)
+	 val from_con = xcon context il_from_con
+	 val to_con = xcon context il_to_con
+	 val arrow = AllArrow_c {openness    = Open,
+				 effect      = Total,
+				 isDependent = false,
+				 tFormals    = tformals,
+				 eFormals    = [(NONE,from_con)],
+				 fFormals    = 0w0,
+				 body_type   = to_con}
+       in arrow
+       end
 
      | xcon' context (il_con as (Il.CON_TUPLE_INJECT il_cons)) = 
        let
@@ -1921,6 +1937,67 @@ end (* local defining splitting context *)
 	   val exp = xexp context il_exp
        in
            Prim_e (NilPrimOp (inj_exn s), [], [tag, exp])
+       end
+
+     | xexp' context (Il.COERCE(il_coercion,il_cons,il_exp)) = 
+       let
+	 val coercion = xexp context il_coercion
+	 val cons = map (xcon context) il_cons
+	 val exp = xexp context il_exp
+       in App_e(Open,coercion,cons,[exp],[])
+       end
+
+     | xexp' context (Il.FOLD (vars, il_expanded_con, il_mu_con)) = 
+       let
+
+	   val (vars',context) = insert_rename_vars(vars, context)
+
+	   val tformals = map (fn v => (v,Type_k)) vars'
+
+	   val context = update_NILctx_insert_kind_list(context,tformals)
+
+	   val expanded_con = xcon context il_expanded_con
+	   val mu_con = xcon context il_mu_con
+
+	   val fun_name = Name.fresh_named_var "fold"
+	   val arg_name = Name.fresh_named_var "fold_arg"
+	   val body = Prim_e(NilPrimOp roll, [mu_con], [Var_e arg_name])
+	   val lambda = Function {effect = Total,
+				  recursive = Leaf,
+				  isDependent = false,
+				  tFormals = tformals,
+				  eFormals = [(arg_name,TraceUnknown,expanded_con)],
+				  fFormals = [],
+				  body = body,
+				  body_type = mu_con}
+	   val exp = Let_e (Sequential,[Fixopen_b (Sequence.fromList [(fun_name,lambda)])],Var_e fun_name)
+       in exp
+       end
+  | xexp' context (Il.UNFOLD (vars, il_mu_con, il_expanded_con)) = 
+       let
+
+	   val (vars',context) = insert_rename_vars(vars, context)
+
+	   val tformals = map (fn v => (v,Type_k)) vars'
+
+	   val context = update_NILctx_insert_kind_list(context,tformals)
+
+	   val expanded_con = xcon context il_expanded_con
+	   val mu_con = xcon context il_mu_con
+
+	   val fun_name = Name.fresh_named_var "unfold"
+	   val arg_name = Name.fresh_named_var "unfold_arg"
+	   val body = Prim_e(NilPrimOp unroll, [mu_con], [Var_e arg_name])
+	   val lambda = Function {effect = Total,
+				  recursive = Leaf,
+				  isDependent = false,
+				  tFormals = tformals,
+				  eFormals = [(arg_name,TraceUnknown,mu_con)],
+				  fFormals = [],
+				  body = body,
+				  body_type = expanded_con}
+	   val exp = Let_e (Sequential,[Fixopen_b (Sequence.fromList [(fun_name,lambda)])],Var_e fun_name)
+       in exp
        end
 
      | xexp' context (Il.ROLL (il_con, il_exp)) = 
