@@ -54,7 +54,7 @@ static mem_t alloc_space(int bytesNeeded)
     newAlloc = alloc + wordsNeeded;
     assert(newAlloc <= limit);  
     RuntimeGlobalData_Cur = newAlloc;
-    printf("Warning: alloc_space called with no thread mapped\n");
+    fprintf(stderr,"Warning: alloc_space called with no thread mapped\n");
     return alloc;
 
   }
@@ -100,15 +100,15 @@ val_t get_record(ptr_t rec, int which)
   int len = GET_RECLEN(tag);
 
   if (GET_TYPE(tag) != RECORD_TYPE) {
-    printf("BUG: calling get_field on non-record. tag = %d\n",tag);
+    fprintf(stderr,"BUG: calling get_field on non-record. tag = %d\n",tag);
     exit(-1);
   }
 
   if (which < len)
     return rec[which];
   else {
-    printf("BUG in get_record: record %d has %d fields.  No field %d.\n",
-	   rec,len,which);
+    fprintf(stderr,"BUG in get_record: record %d has %d fields.  No field %d.\n",
+	    rec,len,which);
     assert(0);
   }
 }

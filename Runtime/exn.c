@@ -182,7 +182,7 @@ void toplevel_exnhandler(Thread_t *th)
   ptr_t msg = exnMessageRuntime(exn);
   int msg_len = stringlen(msg);
 
-  printf("Proc %d: Thread %d (%d): Uncaught exception %.*s\n",
-	 getProc()->procid, th->tid, th->id, msg_len, (char*)msg);
+  fprintf(stderr,"Proc %d: Thread %d (%d): Uncaught exception %.*s\n",
+	  getProc()->procid, th->tid, th->id, msg_len, (char*)msg);
   Finish();
 }

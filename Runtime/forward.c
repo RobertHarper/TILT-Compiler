@@ -98,8 +98,8 @@ mem_t AllocFromCopyRangeSlow(Proc_t *proc, int request, Align_t align)
     mem_t start, cursor, stop;
     GetHeapArea(copyRange->heap, alignedRequest, &start, &cursor, &stop);
     if (start == NULL) {
-      printf("Error: AllocFromCopyRangeSlow failed to allocate %d bytes from heap\n", alignedRequest);
-      printf("       GC = %d    GCStatus = %d    GCtype = %d\n", NumGC, GCStatus, GCType);
+      fprintf(stderr,"Error: AllocFromCopyRangeSlow failed to allocate %d bytes from heap\n", alignedRequest);
+      fprintf(stderr,"       GC = %d    GCStatus = %d    GCtype = %d\n", NumGC, GCStatus, GCType);
       assert(0);
     }
     cursor = AlignMemoryPointer(cursor,align);
@@ -189,10 +189,10 @@ unsigned long objectLength(ptr_t obj, mem_t *start)
     case FORWARD1_TYPE:
     case FORWARD2_TYPE: {
       mem_t tagstart = (mem_t) (obj - 1);
-      printf("bad tag %d at %d\n",tag,tagstart);
+      fprintf(stderr,"bad tag %d at %d\n",tag,tagstart);
       memdump("",tagstart-10,30,tagstart);
-      printf("\n\n\n");
-      printf("NumGC is %d\n",NumGC);
+      fprintf(stderr,"\n\n\n");
+      fprintf(stderr,"NumGC is %d\n",NumGC);
       assert(0);
     }
   } /* case */
@@ -258,8 +258,8 @@ tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag)
     else if (TAG_IS_FORWARD(localStall))
       tag = localStall;
     else {
-      printf("Proc %d: forward.c: Odd tag of %d from white obj %d with original tag = %d -----------\n", 
-	     proc->procid, localStall, white, tag);
+      fprintf(stderr,"Proc %d: forward.c: Odd tag of %d from white obj %d with original tag = %d -----------\n", 
+	      proc->procid, localStall, white, tag);
       assert(0);
     }
   }
