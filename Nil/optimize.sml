@@ -1115,7 +1115,13 @@ fun pp_alias UNKNOWN = print "unknown"
 		     | Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv]) =>
 			 let val c = type_of(state,e)
 			     val sv_con = find_con(state,sv)
-			     val (tagcount,SOME k,clist) = Normalize_reduceToSumtype(get_env state,sv_con)
+			     val (tagcount,k,clist) = Normalize_reduceToSumtype(get_env state,sv_con)
+			     val k = (case k 
+					of SOME k => k
+					 | NONE => (Ppnil.pp_exp e;
+						    print "\nvariable ";Ppnil.pp_var sv;print " has type\n";
+						    Ppnil.pp_con sv_con;
+						    error "\nType is not a special sum\n"))
 			     val fieldcon = List.nth(clist, TilWord32.toInt(TilWord32.uminus(k,tagcount)))
 			 in  case Normalize_reduce_hnf(get_env state, fieldcon) of
 			       (_,Prim_c (Record_c (labs,_), rcons)) => 
