@@ -96,3 +96,4 @@
 0096 [open]	Does not parse type variables properly.
 0097 [open]	does not parse type variables properly
 0098 [open]	does not parse type variables properly
+0099 [open]	exceptions as values
