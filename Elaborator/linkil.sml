@@ -12,7 +12,7 @@ structure LinkIl :> LINKIL  =
 				    expcompile = Toil.expcompile,
 				    polyinst = Toil.polyinst}
 	val _ = Signature.installHelpers {polyinst = Toil.polyinst}
-	val _ = IlUtil.installHelpers {lookup = IlContext.Context_Lookup_Label}
+	val _ = IlUtil.installHelpers {lookup = fn (ctxt,l) => IlStatic.Context_Lookup_Labels (ctxt,[l])}
 	val _ = IlPrimUtilParam.installHelpers {con_bool = IlUtil.con_bool,
 						true_exp = IlUtil.true_exp,
 						false_exp = IlUtil.false_exp}
@@ -36,16 +36,6 @@ structure LinkIl :> LINKIL  =
 
 	open Il IlUtil Ppil IlStatic Formatter
 	val error = fn s => Util.error "linkil.sml" s
-
-	fun local_add_context_entries (acc_ctxt,entries) = 
-	    let fun folder (CONTEXT_SDEC sdec,acc_ctxt) = 
-		    let val sdec = IlContext.SelfifySdec acc_ctxt sdec
-		    in  IlContext.add_context_sdec(acc_ctxt,sdec)
-		    end
-		  | folder (ce,acc_ctxt) = 
-		        IlContext.add_context_entries(acc_ctxt,[ce])
-	    in  foldl folder acc_ctxt entries
-	    end
 
 	(* Given a context GAMMA and a filename, returns then translation of
 	   the file using GAMMA as the translation context.  The augmented
@@ -147,7 +137,7 @@ structure LinkIl :> LINKIL  =
 	    case xspec(unitName, base_ctxt, fp, specs) of
 		SOME sdecs => 
 		    let val ctxts = map CONTEXT_SDEC sdecs
-			val new_ctxt = local_add_context_entries (base_ctxt,ctxts) 
+			val new_ctxt = IlContext.add_context_entries (base_ctxt,ctxts) 
 			val partial_ctxt = IlContext.sub_context(new_ctxt,base_ctxt)
 		    in  SOME partial_ctxt
 		    end
@@ -161,7 +151,7 @@ structure LinkIl :> LINKIL  =
 	      SOME sbnd_ctxtent_list => 
 		    let val sbnds = List.mapPartial #1 sbnd_ctxtent_list
 			val ctxtents = map #2 sbnd_ctxtent_list
-			val new_ctxt = local_add_context_entries (base_ctxt,ctxtents) 
+			val new_ctxt = IlContext.add_context_entries (base_ctxt,ctxtents) 
 			val _ = if (!show_hil)
 				    then  (print "SBNDS:\n"; Ppil.pp_sbnds sbnds;
 					   print "\nENTRIES:\n"; 
@@ -207,7 +197,7 @@ structure LinkIl :> LINKIL  =
 	      SOME sbnd_ctxtent_list => 
 		    let val sbnds = List.mapPartial #1 sbnd_ctxtent_list
 			val ctxtents = map #2 sbnd_ctxtent_list
-			val new_ctxt = local_add_context_entries (base_ctxt,ctxtents) 
+			val new_ctxt = IlContext.add_context_entries (base_ctxt,ctxtents) 
 			val _ = if (!show_hil)
 				    then  (print "SBNDS:\n"; Ppil.pp_sbnds sbnds;
 					   print "\nENTRIES:\n"; 
