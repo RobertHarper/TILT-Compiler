@@ -94,6 +94,7 @@ functor Basis(structure Il : IL
 
 	local
 	    val basetype_list = [("float", CON_FLOAT F64),
+				 ("real", CON_FLOAT F64),
 				 ("int", CON_INT W32), 
 				 ("uint", CON_UINT W32),
 				 ("char", CON_UINT W8), 
