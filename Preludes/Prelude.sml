@@ -487,7 +487,7 @@ extern real_logb : (float, int) -->
 extern real_scalb : (float * int, float) -->
 extern sqrt : (float, float) -->
 extern exp : (float, float) -->
-extern ln : (float, float) -->
+extern log : (float, float) -->
 extern log10 : (float, float) -->
 extern sin : (float, float) -->
 extern cos : (float, float) -->
@@ -502,4 +502,4 @@ extern setRoundingMode : (int, int) -->
 extern getRoundingMode : (int, int) -->
 extern ml_timeofday : (unit, (int * int)) -->
 
-val log = ln 
+val ln = log
