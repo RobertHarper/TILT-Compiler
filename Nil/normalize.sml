@@ -181,7 +181,11 @@ struct
 				      print "\n\n")
 			     | show (MODULE(m,(context,s))) =
 				     (print "module_normalize called with module =\n";
-				      Ppnil.pp_module m;
+				      Ppnil.pp_module 
+                                        {module = m,
+                                         header = "",
+                                         name = "",
+                                         pass = ""};
 				      print "\nand context"; NilContext.print_context context;
 				      print "\n and subst";  NilSubst.printConSubst s;
 				      print "\n\n")

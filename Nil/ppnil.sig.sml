@@ -32,6 +32,9 @@ signature PPNIL =
     val pp_label   : Name.label -> unit
     val pp_list    : ('a -> Formatter.format) -> 'a list -> 
                                   (string * string * string * bool) -> unit
-    val pp_module   : Nil.module -> unit
+    val pp_module   : {module: Nil.module,
+                       name: string,
+                       pass: string,
+                       header: string} -> unit
 
   end

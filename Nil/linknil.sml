@@ -125,10 +125,14 @@ structure Linknil (* :> LINKNIL  *) =
 		    else ()
 	    val _ = if !showphase
 			then
-                          if !show_html then
-                             PpnilHtml.pp_module nilmod
-                          else
-                             (Ppnil.pp_module nilmod; print "\n")
+                          (if !show_html then
+                             PpnilHtml.pp_module 
+                           else
+                             Ppnil.pp_module)   
+                          {module = nilmod,
+                           header = phasename,
+                           name = filename,
+                           pass = phasename}
 		    else ()
 	in  nilmod
 	end
@@ -173,7 +177,7 @@ structure Linknil (* :> LINKNIL  *) =
 				 filename, nilmod)
 
  	    val nilmod = check (typecheck_before_opt,show_typecheck,
-				    "Nil typechecking - pre opt",
+				    "Nil_typecheck_pre-opt",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
 
@@ -238,25 +242,6 @@ structure Linknil (* :> LINKNIL  *) =
 				    dead = true, projection = true, 
 				    cse = !do_cse, uncurry = !do_uncurry},
 				 filename, nilmod) 
-
-(*
-	    val nilmod = transform(do_cse, show_cse,
-				 "CSE", 
-				 Anormalize.doModule true,
-				 filename, nilmod)
-*)
-
-
-
-(*
-	    val nilmod = if (!do_opt) 
-			    then (Stats.timer("Nil Optimization", 
-					      DoOpts.do_opts debug)) nilmod else nilmod
-	    val _ = if (!do_opt)
-			then transform (!show_opt orelse debug,!show_size) 
-			    "Optimization" (filename,nilmod)
-		    else ()
-*)
 
 
 

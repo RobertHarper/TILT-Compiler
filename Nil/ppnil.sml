@@ -491,6 +491,10 @@ structure Ppnil	:> PPNIL =
     val pp_conbnd = help' pp_conbnd
     val pp_bnds = help' pp_bnds
     val pp_exp = help' pp_exp
-    val pp_module = help' pp_module
+    val pp_module = 
+         fn {module, name:string, pass:string, header:string} =>
+            (print "PASS: "; print pass; print "\n";
+             print header; print "\n\n";
+             help' pp_module module)
 
   end

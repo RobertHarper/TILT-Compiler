@@ -102,7 +102,11 @@ struct
 				      print "\n\n")
 			     | show (MODULE(m,context)) =
 				     (print "module_valid called with module =\n";
-				      Ppnil.pp_module m;
+				      Ppnil.pp_module 
+                                        {module = m,
+                                         header = "",
+                                         name = "",
+                                         pass = ""};
 				      print "\nand context"; NilContext.print_context context;
 				      print "\n\n")
 		       in  app show (rev st)
@@ -2048,7 +2052,11 @@ struct
 	    else module
 	  val _ = if (!show_calls)
 		    then (print "module_valid called with module =\n";
-			  Ppnil.pp_module module;
+                          Ppnil.pp_module 
+                                        {module = module,
+                                         header = "",
+                                         name = "",
+                                         pass = ""};
 			  if !show_context then (print "\nand context"; NilContext.print_context D) else ();
 			  print "\n\n")
 		  else ()

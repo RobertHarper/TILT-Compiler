@@ -493,9 +493,11 @@ structure PpnilHtml :> PPNIL =
     val pp_conbnd = help' pp_conbnd
     val pp_bnds = help' pp_bnds
     val pp_exp = help' pp_exp
-    fun pp_module obj = 
-        let val st = TextIO.openOut "module.html"
-        in (wrapper pp_module' st obj; 
+    fun pp_module {module, name:string, pass:string, header:string} = 
+        let val st = TextIO.openOut (name ^ "." ^ pass ^ ".html")
+        in (TextIO.output(st, header);
+            TextIO.output(st, "\n\n");
+            wrapper pp_module' st module; 
             TextIO.closeOut st;
             ())
         end
