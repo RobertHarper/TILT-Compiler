@@ -12,8 +12,8 @@ signature TRACETABLE =
 		       | TRACE_STACK      of Machine.stacklocation
 		        (* stack pos, rec pos *)
 		       | TRACE_STACK_REC  of Machine.stacklocation * int list
-		       | TRACE_GLOBAL     of Machine.Rtl.label
-		       | TRACE_GLOBAL_REC of Machine.Rtl.label * int list
+		       | TRACE_GLOBAL     of Machine.label
+		       | TRACE_GLOBAL_REC of Machine.label * int list
 
 		       (* trace status should never be needed.  A bug 
 			  if it is.*)
@@ -31,21 +31,21 @@ signature TRACETABLE =
     val ShowDebug        : bool ref
     val ShowDiag         : bool ref
     val TagEntry         : bool ref
-    val MakeTableHeader  : string            -> Machine.Rtl.data list
-    val MakeTable        : callinfo list     -> Machine.Rtl.data list
-    val MakeTableTrailer : string            -> Machine.Rtl.data list
+    val MakeTableHeader  : string            -> Machine.data list
+    val MakeTable        : callinfo list     -> Machine.data list
+    val MakeTableTrailer : string            -> Machine.data list
 
     (* MakeGlobalTable: given list of traceable global variables,
        construct table.   A ``global variable'' is a memory location containing
        a traceable value.*)
 
-    val MakeGlobalTable  : string * (Machine.Rtl.label * trace) list -> Machine.Rtl.data list
+    val MakeGlobalTable  : string * (Machine.label * trace) list -> Machine.data list
 
     (* MakeGlobalTable: given a list of addresses of mutable statically-allocated
        objects, construct table.   These objects are statically-allocated arrays 
        and record which could be side-effected.*)
 
-    val MakeMutableTable : string * Machine.Rtl.label list -> Machine.Rtl.data list
+    val MakeMutableTable : string * Machine.label list -> Machine.data list
 
     val trace2string : trace -> string
   end;

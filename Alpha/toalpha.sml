@@ -7,10 +7,10 @@ functor Toalpha(val do_tailcalls : bool ref
                 structure ArgTracetable : TRACETABLE 
                 structure Bblock : BBLOCK
                 structure DM : DIVMULT
-		sharing Decalpha.Rtl = Pprtl.Rtl 
-(* should not be needed *)	    = ArgTracetable.Machine.Rtl = Bblock.Machine.Rtl 
-		sharing Machineutils.Machine = ArgTracetable.Machine = Bblock.Machine = DM.DA = Decalpha)
-  :> TOASM where Machine = Decalpha
+(*		sharing Decalpha.Rtl = Pprtl.Rtl  *)
+(*		sharing Machineutils.Machine.Rtl = ArgTracetable.Machine.Rtl = Bblock.Machine.Rtl = DM.DA.Machine.Rtl = Decalpha.Machine.Rtl = Pprtl.Rtl *)
+		sharing Machineutils.Machine = ArgTracetable.Machine = Bblock.Machine = DM.DA.Machine = Decalpha.Machine)
+  :> TOASM where Machine = Decalpha.Machine
            where Rtl = Pprtl.Rtl
 	   where Bblock = Bblock
 	   where Tracetable = ArgTracetable
@@ -28,7 +28,7 @@ struct
        
 
    open Decalpha Machineutils Bblock
-
+   open Machine
 
    val error = fn s => Util.error "alpha/trackstorage.sml" s
 
@@ -57,18 +57,34 @@ struct
 		 end)
    end
 
+
+   (* Translate RTL local label into a DECALPHA local label *)
+   fun translateLocalLabel (Rtl.LOCAL_CODE v) = LOCAL_CODE v
+     | translateLocalLabel (Rtl.LOCAL_DATA v) = LOCAL_DATA v
+   fun untranslateLocalLabel (LOCAL_CODE v) = Rtl.LOCAL_CODE v
+     | untranslateLocalLabel (LOCAL_DATA v) = Rtl.LOCAL_DATA v
+(*
+   fun translateLocalLabel loclabel = loclabel
+   fun translateCodeLabel loclabel = loclabel
+*)
+   val translateCodeLabel = translateLocalLabel
+   fun translateLabel (Rtl.LOCAL_LABEL ll) = I (translateLocalLabel ll)
+     | translateLabel (Rtl.ML_EXTERN_LABEL label) = MLE label
+     | translateLabel (Rtl.C_EXTERN_LABEL label) = CE (label,NONE)
+
+
+
    fun translateRep rep =
        case rep
        of Rtl.TRACE => Tracetable.TRACE_YES
         | Rtl.LOCATIVE => Tracetable.TRACE_IMPOSSIBLE
         | Rtl.COMPUTE path =>
 	      (case path of
-		 Rtl.Var_p (Rtl.REGI(v,_)) => Tracetable.TRACE_STACK(add_stack (R (Name.var2int v)))
+	         Rtl.Projvar_p (Rtl.REGI(v,_),[]) => Tracetable.TRACE_STACK(add_stack (R (Name.var2int v)))
 	       | Rtl.Projvar_p (Rtl.REGI(v,_),i) => Tracetable.TRACE_STACK_REC(add_stack(R (Name.var2int v)),i)
-	       | Rtl.Var_p (Rtl.SREGI _) => error "SREG should not be polymorphic"
-	       | Rtl.Projvar_p (Rtl.SREGI _, i) => error "SREG should not be polymorphic"
-	       | Rtl.Label_p l => Tracetable.TRACE_GLOBAL l
-	       | Rtl.Projlabel_p (l,i) => Tracetable.TRACE_GLOBAL_REC (l,i)
+	       | Rtl.Projvar_p (Rtl.SREGI _, i) => error "SREG should not contain type"
+	       | Rtl.Projlabel_p (l,[]) => Tracetable.TRACE_GLOBAL (translateLabel l)
+	       | Rtl.Projlabel_p (l,i) => Tracetable.TRACE_GLOBAL_REC (translateLabel l,i)
 	       | Rtl.Notneeded_p => Tracetable.TRACE_IMPOSSIBLE)
 	| Rtl.UNSET => Tracetable.TRACE_UNSET
 	| Rtl.NOTRACE_INT => Tracetable.TRACE_NO
@@ -107,14 +123,9 @@ struct
 	 else
 	   error ("immediate out of range: " ^ (Int.toString src2))
 
-   (* Translate RTL local label into a DECALPHA local label *)
-   fun translateLocalLabel loclabel = loclabel
-   fun translateCodeLabel loclabel = loclabel
-   fun untranslateLocalLabel loclabel = loclabel
 
-   fun translateLabel (Rtl.LOCAL_LABEL ll) = I (translateLocalLabel ll)
-     | translateLabel (Rtl.ML_EXTERN_LABEL label) = MLE label
-     | translateLabel (Rtl.C_EXTERN_LABEL label) = CE (label,NONE)
+
+
 
    (*****************************************
     * MAIN TRANSLATION STARTS HERE ROUTINES *
@@ -938,7 +949,7 @@ struct
 (*	 emit (BASE (MOVI (Raddr,Rpv)));
 	 emit (BASE (JSR (false, Raddr, 1, loclabels)))
 *)
-	   emit (BASE (RTL (JMP (Raddr, rtllabels))))
+	   emit (BASE (RTL (JMP (Raddr, map translateLocalLabel rtllabels))))
        end
 
      | translate (Rtl.CALL {extern_call,
@@ -1090,7 +1101,7 @@ struct
 	 emit (SPECIFIC (STOREF (STT, Fsrc, disp, Raddr)))
        end
 
-     | translate (Rtl.ICOMMENT str) = emit (BASE(COMMENT str))
+     | translate (Rtl.ICOMMENT str) = emit (BASE(ICOMMENT str))
 
      | translate (Rtl.NEEDMUTATE r) =
 	 let 

@@ -1,9 +1,9 @@
-(*$import MACHINE GRAPH HashTableFn Graph *)
+(*$import MACHINE GRAPH HashTableFn Graph MACHINE *)
 (* For procedure-level callgraph *)
 
 functor Labelgraph (structure Machine : MACHINE) : DIRECTEDGRAPH =
 struct
-    open Machine.Rtl
+    open Machine
      structure HashKey =
        struct
          type hash_key = Machine.loclabel

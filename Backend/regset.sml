@@ -1,9 +1,8 @@
-(*$import ORD_SET BinarySetFn *)
+(*$import ORD_SET BinarySetFn MACHINE *)
 (* Sets of registers/pseudoregisters *)
 
-functor Regset (structure Machine : 
-		    sig datatype register = R of int | F of int end) 
-  : ORD_SET =
+functor Regset (structure Machine : sig datatype register = R of int | F of int end)
+  :> ORD_SET where type Key.ord_key = Machine.register =
 struct
   local 
     structure Regkey : ORD_KEY = 

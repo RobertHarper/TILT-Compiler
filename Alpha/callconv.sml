@@ -1,22 +1,28 @@
 (*$import DECALPHA MACHINEUTILS CALLCONV *)
 functor DecalphaCallconv(structure Decalpha : DECALPHA
 			 structure Machineutils : MACHINEUTILS 	
-			 (* where Machine = Decalpha  this break 109.30 so we must use sharing *)
-			 sharing Machineutils.Machine = Decalpha)
-    :> CALLCONV where Machine = Decalpha =
+	 (* where Machine = Decalpha  this break 109.30 so we must use sharing *)
+			 sharing Machineutils.Machine = Decalpha.Machine
+(*			 sharing Machineutils.Machine.Rtl = Decalpha.Machine.Rtl  *)
+			     )
+
+    :> CALLCONV where Machine = Decalpha.Machine =
 struct
 
   structure Machine = Machineutils.Machine
   structure Machineutils = Machineutils
   
-  open Machineutils Machine Decalpha
+  open Machineutils 
+  open Decalpha
+  open Machine
+
   datatype actuals = 
-	ACTUALS of {args : Machine.assign list,
-	            results : Machine.assign list}
+	ACTUALS of {args : assign list,
+	            results : assign list}
 
   datatype formals = 
-	FORMALS of {args : Machine.register list,
-		    results : Machine.register list}
+	FORMALS of {args : register list,
+		    results : register list}
 
   val error = fn s => Util.error "callconv.sml" s
 

@@ -11,7 +11,7 @@ sig
 
    val emitString : string -> unit
    val emitInstr  : string -> Machine.instruction -> unit
-   val emitData   : Machine.Rtl.data -> unit
+   val emitData   : Machine.data -> unit
 
    val print_reg  : Machine.register -> unit
    val print_pos  : Machine.assign -> unit
@@ -33,15 +33,15 @@ sig
 			    Bblock.bblock Machine.Labelmap.map -> 
 			    Machine.loclabel list -> unit
 
-   val dumpProc : Machine.loclabel * Machine.Rtl.label option *
+   val dumpProc : Machine.loclabel * Machine.label option *
                  Machine.procsig *
                  Bblock.bblock Machine.Labelmap.map * 
 	         Machine.loclabel list *
 		 bool -> unit
    val dumpCodeLabel : Machine.label list -> unit
-   val dumpData : Machine.Rtl.data Array.array -> unit
+   val dumpData : Machine.data Array.array -> unit
 
-   val dumpDatalist : Machine.Rtl.data list -> unit
+   val dumpDatalist : Machine.data list -> unit
 
 
 end

@@ -1,17 +1,13 @@
-(*$import MACHINEUTILS DECALPHA *)
-functor Decalphautils(structure Decalpha: DECALPHA 
-		      structure Labelmap : ORD_MAP where type Key.ord_key = Decalpha.loclabel
-		      structure Regmap : ORD_MAP where type Key.ord_key = Decalpha.register
-                      structure Regset : ORD_SET where type Key.ord_key = Decalpha.register)
-    (* : MACHINEUTILS *) =
+(*$import MACHINEUTILS DECALPHA Int32 *)
+functor Decalphautils(structure Decalpha: DECALPHA)
+    :> MACHINEUTILS where Machine = Decalpha.Machine =
 struct
 
-   structure Labelmap = Labelmap
-   structure Regmap = Regmap
-   structure Regset  = Regset
+
    structure Machine = Decalpha 
 
    open Decalpha
+   open Machine
 
    val error = fn s => Util.error "decalphautils.sml" s
 
@@ -138,14 +134,16 @@ struct
     end
   fun msRegSet s = msRegList (setToList s)
 
+(*
   fun translateLocalLabel loclabel = loclabel
   fun translateCodeLabel loclabel = loclabel
   fun translateLabel (Rtl.LOCAL_LABEL ll) = I (translateLocalLabel ll)
     | translateLabel (Rtl.ML_EXTERN_LABEL label) = MLE label
     | translateLabel (Rtl.C_EXTERN_LABEL label) = CE (label,NONE)
+*)
 
   val programHeader = ["\t.set noat\n"]
-  fun procedureHeader rtl_label = [" \t.align 4\n", "\t.ent " ^ (msLabel (translateLabel rtl_label)) ^ "\n"]
+  fun procedureHeader label = [" \t.align 4\n", "\t.ent " ^ (msLabel (label)) ^ "\n"]
   fun procedureTrailer s = ["\t.end " ^ s ^ "\n"]
   val textStart = ["\t.text\n"]
   val dataStart = ["\t.data\n"]

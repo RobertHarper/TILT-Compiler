@@ -1,4 +1,4 @@
-(*$import MACHINEUTILS TRACETABLE *)
+(*$import MACHINEUTILS TRACETABLE Int32 *)
 
 (* This is how the compiler tells the runtime about how to determine all roots
    from the registers and from the stack.  The runtime, at GC, will walk the 
@@ -52,7 +52,6 @@ functor Tracetable(val little_endian    : bool
     structure MU = MU
     open MU
     open MU.Machine
-    open Rtl
 
     datatype calllabel = CALLLABEL of MU.Machine.loclabel
     datatype trace     = TRACE_YES 
@@ -64,8 +63,8 @@ functor Tracetable(val little_endian    : bool
 		       | TRACE_STACK      of MU.Machine.stacklocation
       (* stack pos, rec pos *)
 		       | TRACE_STACK_REC  of MU.Machine.stacklocation * int list
-		       | TRACE_GLOBAL     of Rtl.label
-		       | TRACE_GLOBAL_REC of Rtl.label * int list
+		       | TRACE_GLOBAL     of label
+		       | TRACE_GLOBAL_REC of label * int list
 
       (* trace status should never be needed.  A bug if it is.*)
 		       | TRACE_IMPOSSIBLE  
@@ -148,7 +147,7 @@ functor Tracetable(val little_endian    : bool
     local
 	type byte = int
 	val bytes = ref ([] : byte list);
-	val words = ref ([] : Rtl.data list);
+	val words = ref ([] : data list);
     in
       (* yes, they are stored backwards *)
 	fun addbyte(b) = if (b > 255 orelse b < 0)
@@ -160,7 +159,7 @@ functor Tracetable(val little_endian    : bool
 	fun getbytes() = let val x = (map INT32 (bytelist2wordlist(rev(!bytes))))
 			 in case x of 
 			     [] => []
-			   | _ => (Rtl.COMMENT "bytedata")::x
+			   | _ => (COMMENT "bytedata")::x
 			 end
 	fun clearbytes() = bytes := []
 	fun addword_int(q) = words := ((INT32 q) :: (!words))
@@ -168,7 +167,7 @@ functor Tracetable(val little_endian    : bool
 	fun getwords() = let val x = rev(!words)
 			 in case x of
 			     [] => []
-			   | _ => (Rtl.COMMENT "worddata")::x
+			   | _ => (COMMENT "worddata")::x
 			 end
 	fun clearwords() = words := []
     end
@@ -376,7 +375,7 @@ functor Tracetable(val little_endian    : bool
 		val regtracewords = (bitlist2wordlist regtracebits_a) @
 				     (bitlist2wordlist regtracebits_b)
 	    end
-	    val labeldata       = DATA (LOCAL_LABEL lab)
+	    val labeldata       = DATA (I lab)
 	    val (bytedata,octa_ra_offset_word) =
 	      if ((retaddpos >= 0) andalso
 		  ((retaddpos mod 8) = 0))
@@ -395,7 +394,7 @@ functor Tracetable(val little_endian    : bool
 	    val specdata = bytedata @ (getwords())
 	    val calldata = 
 		(map INT32 regtracewords) @ 
-		[Rtl.COMMENT "stacktrace"] @
+		[COMMENT "stacktrace"] @
 		(map INT32 stacktracewords) @ 
 		specdata
 	    fun datalength arg = 
@@ -403,7 +402,7 @@ functor Tracetable(val little_endian    : bool
 		    (map 
 		     (fn (INT32 _) => 1 
 		   | (DATA _) => 1
-		   | (Rtl.COMMENT _) => 0
+		   | (COMMENT _) => 0
 		   | _ => error "datalength") arg)
 
 	    val framesizeword =  (i2w (framesize div 4))
@@ -429,15 +428,15 @@ functor Tracetable(val little_endian    : bool
 	    val templist = sizedata :: calldata
 	in
 	    if (!TagEntry) then
-		((Rtl.COMMENT "-------- label,id,sizes,reg")::
+		((COMMENT "-------- label,id,sizes,reg")::
 		 labeldata :: (INT32 (i2w (makeintid()))) :: templist)
 	    else
-		((Rtl.COMMENT "-------- label,sizes,reg")::
+		((COMMENT "-------- label,sizes,reg")::
 		 labeldata :: templist)
 	end
     
     fun MakeTableHeader name = 
-	[Rtl.COMMENT "gcinfo",DLABEL(ML_EXTERN_LABEL (name^"_GCTABLE_BEGIN_VAL"))]
+	[COMMENT "gcinfo",DLABEL(MLE (name^"_GCTABLE_BEGIN_VAL"))]
     fun MakeTable (calllist) = foldr (op @) nil (map do_callinfo calllist) 
     fun MakeTableTrailer name = 
 	(if !ShowDebug
@@ -453,8 +452,8 @@ functor Tracetable(val little_endian    : bool
 		   print ("  Count_global_rec: " ^ (Int.toString (!Count_global_rec)) ^ "\n");
 		   print "\n")
 	 else ();
-	 [Rtl.COMMENT "endgcinfo with filler for alignment",
-	  DLABEL(ML_EXTERN_LABEL (name^"_GCTABLE_END_VAL")),
+	 [COMMENT "endgcinfo with filler for alignment",
+	  DLABEL(MLE (name^"_GCTABLE_END_VAL")),
 	  INT32 wzero])
 
 
@@ -466,32 +465,32 @@ functor Tracetable(val little_endian    : bool
 		  val _ = clearwords()
 		  val botword = botlist2wordlist [tr2bot trace]
 		  fun comfilter [] = []
-		    | comfilter ((Rtl.COMMENT _)::rest) = comfilter rest
+		    | comfilter ((COMMENT _)::rest) = comfilter rest
 		    | comfilter (a::rest) = a::(comfilter rest)
 		  val specdata = 
 		      case (comfilter (getbytes() @ getwords())) of
-			  [] => [Rtl.COMMENT "filler",INT32 (i2w 0),INT32(i2w 0)]
-			| [a] => [Rtl.COMMENT "bytestuff",a,
-				  Rtl.COMMENT "filler",INT32(i2w 0)]
-			| [a,b] => [Rtl.COMMENT "wordstuff",a,b]
+			  [] => [COMMENT "filler",INT32 (i2w 0),INT32(i2w 0)]
+			| [a] => [COMMENT "bytestuff",a,
+				  COMMENT "filler",INT32(i2w 0)]
+			| [a,b] => [COMMENT "wordstuff",a,b]
 			| _ => error "global table entry wrong"
-	      in (Rtl.COMMENT "-----global label and bot----") ::
+	      in (COMMENT "-----global label and bot----") ::
 		  (DATA lab) :: (map INT32 botword) @ specdata
 	      end
       in
-	[DLABEL(ML_EXTERN_LABEL (name^"_GLOBAL_TABLE_BEGIN_VAL"))]
+	[DLABEL(MLE (name^"_GLOBAL_TABLE_BEGIN_VAL"))]
 	@ (foldr (op @) nil (map do_lab_trace arg))
-	@ [Rtl.COMMENT "filler for alignment of global_table",
-	   DLABEL(ML_EXTERN_LABEL (name^"_GLOBAL_TABLE_END_VAL")),
+	@ [COMMENT "filler for alignment of global_table",
+	   DLABEL(MLE (name^"_GLOBAL_TABLE_END_VAL")),
 	   INT32 wzero]
       end
 
 
     fun MakeMutableTable (name,arg) = 
-	[DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_BEGIN_VAL"))]
+	[DLABEL(MLE (name^"_MUTABLE_TABLE_BEGIN_VAL"))]
 	@ (map (fn (lab) => DATA(lab)) arg)
-	@ [Rtl.COMMENT "filler for alignment for mutable_table",
-	   DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_END_VAL")),
+	@ [COMMENT "filler for alignment for mutable_table",
+	   DLABEL(MLE (name^"_MUTABLE_TABLE_END_VAL")),
 	   INT32 wzero]
 
   end

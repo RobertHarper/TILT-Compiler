@@ -1,4 +1,4 @@
-(*$import PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM *)
+(*$import PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM Int32 *)
 functor Rtltoasm (val commentHeader : string
 		  structure Machineutils : MACHINEUTILS
 		  structure Callconv : CALLCONV
@@ -25,11 +25,11 @@ functor Rtltoasm (val commentHeader : string
 		    = Procalloc.Tracetable 
 		    = Toasm.Tracetable 
 
-		  sharing Recursion.Rtl = Printutils.Machine.Rtl = Toasm.Rtl)
+		  sharing Recursion.Rtl = Toasm.Rtl)
 		     :> RTLTOASM  where Rtl = Recursion.Rtl =
 struct
 
-   structure Rtl = Printutils.Machine.Rtl
+   structure Rtl = Recursion.Rtl
 
    open Callconv Printutils Machineutils Rtl
    open Machine
@@ -46,6 +46,31 @@ struct
    fun filter p [] = []
      | filter p (x::xs) = if (p x) then x :: (filter p xs) else filter p xs
 
+   fun xlocal_label (Rtl.LOCAL_DATA v) = LOCAL_DATA v
+     | xlocal_label (Rtl.LOCAL_CODE v) = LOCAL_CODE v
+
+   fun xlabel (Rtl.ML_EXTERN_LABEL s) = MLE s
+     | xlabel (Rtl.C_EXTERN_LABEL s) = CE(s,NONE)
+     | xlabel (Rtl.LOCAL_LABEL ll) = I(xlocal_label ll)
+
+   fun xalign Rtl.LONG = LONG
+     | xalign Rtl.ODDLONG = ODDLONG
+     | xalign Rtl.QUAD = QUAD
+     | xalign Rtl.OCTA = OCTA
+     | xalign Rtl.ODDOCTA = ODDOCTA
+
+   fun xdata (Rtl.COMMENT arg) = COMMENT arg
+     | xdata (Rtl.STRING arg) = STRING arg
+     | xdata (Rtl.INT32 arg) = INT32 arg
+     | xdata (Rtl.INT_FLOATSIZE arg) = INT_FLOATSIZE arg
+     | xdata (Rtl.FLOAT arg) = FLOAT arg
+     | xdata (Rtl.DATA arg) = DATA (xlabel arg)
+     | xdata (Rtl.ARRAYI arg) = ARRAYI arg
+     | xdata (Rtl.ARRAYF arg) = ARRAYF arg
+     | xdata (Rtl.ARRAYP (i,Rtl.PTR arg)) = ARRAYP(i,PTR (xlabel arg))
+     | xdata (Rtl.ARRAYP (i,Rtl.TAG arg)) = ARRAYP(i,TAG arg)
+     | xdata (Rtl.ALIGN arg) = ALIGN (xalign arg)
+     | xdata (Rtl.DLABEL arg) = DLABEL (xlabel arg)
 
 (* ----------------------------------------------------------------- *)
 
@@ -55,7 +80,7 @@ struct
      let
       
        local 
-	   val table = map (fn PROC{name,external_name,...} => (name,external_name)) procs
+	   val table = map (fn PROC{name,external_name,...} => (xlocal_label name,Util.mapopt xlabel external_name)) procs
        in  fun name2external name = 
 	   (case (Listops.assoc_eq(fn(x,y) => eqLLabs x y,name,table)) of
 		NONE => error "bad name"
@@ -419,7 +444,7 @@ struct
        emitString (sml_global^":\n");
 
        dumpCodeLabel code_labels;
-       dumpDatalist data;
+       dumpDatalist (map xdata data);
        app emitString dataStart;
        emitString ("\n"^end_sml_global^":   ");
        emitString commentHeader;
@@ -427,11 +452,11 @@ struct
        emitString ("\t.long 0\n\n");
        dumpDatalist (Tracetable.MakeGlobalTable 
 		          (main', 
-			   map (fn (v, rep) => (v,Toasm.translateRep rep))
+			   map (fn (l, rep) => (xlabel l,Toasm.translateRep rep))
 			        mutable_variables));
 
        dumpDatalist (Tracetable.MakeMutableTable (main', 
-						  mutable_objects));
+						  map xlabel mutable_objects));
 
        ()
      end (* allocateProg *)
@@ -445,8 +470,8 @@ struct
 		 val temps = map (fn s => s ^ suffix) nl'
 		 val _ = app (fn s => emitString(extern_decl s)) temps
 	       in
-		 DLABEL (ML_EXTERN_LABEL name) ::
-		 map (fn s => DATA(ML_EXTERN_LABEL s)) temps
+		 DLABEL (MLE name) ::
+		 map (fn s => DATA(MLE s)) temps
 	       end
 	     val gc_table_begin =    mktable("GCTABLE_BEGIN_VAL","_GCTABLE_BEGIN_VAL")
 	     val gc_table_end =	     mktable("GCTABLE_END_VAL","_GCTABLE_END_VAL")
@@ -459,7 +484,7 @@ struct
 	     val codetable_begin =   mktable("CODE_BEGIN_VAL","_CODE_BEGIN_VAL")
 	     val codetable_end =     mktable("CODE_END_VAL","_CODE_END_VAL")
              val entrytable =        mktable("client_entry","")
-	     val count = [DLABEL (ML_EXTERN_LABEL "module_count"),
+	     val count = [DLABEL (MLE "module_count"),
 			  INT32 (TilWord32.fromInt count)]
          in  
 	    dumpDatalist count;

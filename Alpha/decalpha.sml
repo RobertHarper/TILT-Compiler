@@ -1,26 +1,63 @@
 (*$import RTL DECALPHA Labelmap Regmap Regset String *)
 functor Decalpha (val exclude_intregs : int list
-		  structure Rtl : RTL) :> DECALPHA where Rtl = Rtl =
+		  structure Rtl : RTL) :> DECALPHA  =
+
+struct
+      
+ val error = fn s => Util.error "decalpha.sml" s
+
+ structure Temp = 
   struct
     structure Rtl = Rtl
-    type data = Rtl.data
 
-    val error = fn s => Util.error "decalpha.sml" s
-    datatype register = R of int
-                      | F of int
-    type loclabel = Rtl.local_label
-    datatype label    = I of loclabel  (* must be same as in DECALPHA *)
-                      | MLE of string
-                      | CE of string * register option
+    datatype register = R of int | F of int
+
+    datatype loclabel = LOCAL_DATA of Name.var | LOCAL_CODE of Name.var
+
+    datatype align    = LONG (* 4 bytes *)
+                      | QUAD (* 8 bytes *)
+                      | ODDLONG (* align at 8 byte boundary +4 *)
+                      | OCTA    (* 16 bytes *)
+                      | ODDOCTA (* 16 bytes bound + 12 *)
+
+    datatype label  = I of loclabel  (* must be same as in DECALPHA *)
+		    | MLE of string
+		    | CE of string * register option
+
+    datatype labelortag = PTR of label | TAG of TilWord32.word
+
+  datatype data = 
+      COMMENT of string
+    | STRING of (string)
+    | INT32 of  (TilWord32.word)
+    | INT_FLOATSIZE of (TilWord32.word)
+    | FLOAT of  (string)
+    | DATA of   (label)
+    | ARRAYI of (int * TilWord32.word)  (* array of i words inited to word32 *)
+    | ARRAYF of (int * string)     (* array of i words initialized to fp value in string *)
+    | ARRAYP of (int * labelortag)  (* array of i words initialized to label or small int *)
+    | ALIGN of  (align)
+    | DLABEL of (label)
 
 
-    datatype operand =
-      REGop of register
-    | IMMop of int
 
-    datatype align = LONG (* 4 bytes *)
-                   | QUAD (* 8 bytes *)
-                   | OCTA (* 16 bytes *)
+
+
+      datatype operand = REGop of register
+	               | IMMop of int
+
+
+
+      datatype stacklocation =
+	  CALLER_FRAME_ARG of int
+	| THIS_FRAME_ARG of int
+	| SPILLED_INT of int
+	| SPILLED_FP of int
+	| ACTUAL4 of int
+	| ACTUAL8 of int
+	| RETADD_POS
+
+
 
     val Rzero   = R 31
     val Rsp     = R 30
@@ -114,16 +151,6 @@ functor Decalpha (val exclude_intregs : int list
     | HANDLER_ENTRY
     | SAVE_CS of loclabel
 
-    datatype stacklocation =
-      CALLER_FRAME_ARG of int
-    | THIS_FRAME_ARG of int
-    | SPILLED_INT of int
-    | SPILLED_FP of int
-    | ACTUAL4 of int
-    | ACTUAL8 of int
-    | RETADD_POS
-
-
     datatype decalpha_specific_instruction =
       IALIGN of align
     | STOREI of storei_instruction * register * int * register
@@ -154,7 +181,7 @@ functor Decalpha (val exclude_intregs : int list
     | RET      of bool * int
     | GC_CALLSITE of loclabel
     | ILABEL of loclabel
-    | COMMENT of string
+    | ICOMMENT of string
     | LADDR of register * label         (* dest, offset, label *)
 
   datatype instruction = 
@@ -205,8 +232,8 @@ functor Decalpha (val exclude_intregs : int list
       loop o explode
     end
 
-  fun msLoclabel (Rtl.LOCAL_CODE v) = "LC" ^ (makeAsmLabel (Name.var2string v))
-    | msLoclabel (Rtl.LOCAL_DATA v) = "LD" ^ (makeAsmLabel (Name.var2string v))
+  fun msLoclabel (LOCAL_CODE v) = "LC" ^ (makeAsmLabel (Name.var2string v))
+    | msLoclabel (LOCAL_DATA v) = "LD" ^ (makeAsmLabel (Name.var2string v))
   fun msLabel (I label)         = msLoclabel label
     | msLabel (MLE label)        = (makeAsmLabel label)
     | msLabel (CE (label,_))     = (makeAsmLabel label)
@@ -294,10 +321,10 @@ functor Decalpha (val exclude_intregs : int list
     | fp_to_ascii CMPTEQ   = "cmpteq"
     | fp_to_ascii CMPTLE   = "cmptle"
     | fp_to_ascii CMPTLT   = "cmptlt"
-    | fp_to_ascii ADDT     = "addt"
-    | fp_to_ascii SUBT     = "subt"
-    | fp_to_ascii MULT     = "mult"
-    | fp_to_ascii DIVT     = "divt"
+    | fp_to_ascii ADDT     = "addtsu"
+    | fp_to_ascii SUBT     = "subtsu"
+    | fp_to_ascii MULT     = "multsu"
+    | fp_to_ascii DIVT     = "divtsu"
     | fp_to_ascii FCMOVEQ  = "fcmoveq"
     | fp_to_ascii FCMOVNE  = "fcmovne"
     | fp_to_ascii FCMOVLT  = "fcmovlt"
@@ -359,10 +386,11 @@ functor Decalpha (val exclude_intregs : int list
 
   fun msInstr' (IALIGN x) =
          let val i = 
-	        case x
-		of LONG => 2
+	        case x of
+		   LONG => 2
 		 | QUAD => 3
 		 | OCTA => 4
+		 | ODDOCTA => error "ODDOCTA not handled"
 	 in tab^".align "^Int.toString i
          end
     | msInstr' (STOREI (instr, Rsrc, disp, Raddr)) =
@@ -388,24 +416,26 @@ functor Decalpha (val exclude_intregs : int list
 				 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^ 
 				 comma ^ (msReg Rdest))
     | msInstr' (FPOP(instr, Rsrc1, Rsrc2, Rdest)) =
-                                (tab ^ (fp_to_ascii instr)^ tab ^
+(* this is terrible to have traps everywhere... *)
+                                ((tab ^ (fp_to_ascii instr)^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msReg Rsrc2) ^ 
 				 comma ^ (msReg Rdest))
+				 ^ "\n\ttrapb")
     | msInstr' (FPCONV(instr, Rsrc, Rdest)) =
                                 (tab ^ (fpconv_to_ascii instr) ^ tab ^
 				 (msReg Rsrc) ^ comma ^ (msReg Rdest))
     | msInstr' (TRAPB) =        "\ttrapb"
 
 
-  fun msInstr_base (BSR (label, NONE, _)) = (tab ^ "bsr" ^ tab ^
+  fun msInstr_base (BSR (label, NONE, _)) = (tab ^ "jsr" ^ tab ^
 				           (msReg Rra) ^ comma ^ (msLabel label))
-    | msInstr_base (BSR (label, SOME sra, _)) = (tab ^ "bsr" ^ tab ^
+    | msInstr_base (BSR (label, SOME sra, _)) = (tab ^ "jsr" ^ tab ^
 					     (msReg sra) ^ comma ^ (msLabel label))
     | msInstr_base (TAILCALL label) = ("\tTAILCALL\t" ^ (msLabel label))
     | msInstr_base (BR label) = (tab ^ "br" ^ tab ^
 				           (msReg Rzero) ^ comma ^ (msLabel label))
     | msInstr_base (ILABEL loclabel) = (msLoclabel loclabel) ^ ":"
-    | msInstr_base (COMMENT str) = (tab ^ "# " ^ str)
+    | msInstr_base (ICOMMENT str) = (tab ^ "# " ^ str)
     | msInstr_base (JSR(link, Raddr, hint, _)) =
                                 (tab ^ "jsr" ^ tab 
 				 ^ (if link then (msReg Rra) else (msReg Rzero))
@@ -450,7 +480,8 @@ functor Decalpha (val exclude_intregs : int list
   fun wms arg = "0x" ^ (W.toHexString arg)
 
 
-  val msRtlLocalLabel = msLoclabel
+  fun msRtlLocalLabel (Rtl.LOCAL_CODE v) = "LC" ^ (makeAsmLabel (Name.var2string v))
+    | msRtlLocalLabel (Rtl.LOCAL_DATA v) = "LD" ^ (makeAsmLabel (Name.var2string v))
   fun msRtlLabel (Rtl.LOCAL_LABEL ll) = msRtlLocalLabel  ll
     | msRtlLabel (Rtl.ML_EXTERN_LABEL s) = msLabel (MLE s)
     | msRtlLabel (Rtl.C_EXTERN_LABEL s) = msLabel (CE (s,NONE))
@@ -498,38 +529,38 @@ functor Decalpha (val exclude_intregs : int list
     end
 
   fun single s = [(1, "\t" ^ s ^ "\n")]
-  fun msData (Rtl.COMMENT com) =  single ("\t# " ^ com)
-    | msData (Rtl.STRING (s)) = single
+  fun msData (COMMENT com) =  single ("\t# " ^ com)
+    | msData (STRING (s)) = single
         (if (s = "") then
 	  "# .ascii \"\" (zero length string)"
 	else
 	  (".ascii \"" ^ (fixupString s) ^ "\""))
-    | msData (Rtl.INT32 (w))  = single (".long " ^ (wms w))
-    | msData (Rtl.INT_FLOATSIZE (w)) = single (".quad " ^ (wms w))
-    | msData (Rtl.FLOAT (f))  = single (".t_floating " ^ (fixupFloat f))
-    | msData (Rtl.DATA (label)) = single (".long " ^ (msRtlLabel label))
-    | msData (Rtl.ARRAYI (count, w)) = single (".long " ^ (wms w) ^ " : " ^ (Int.toString count))
-    | msData (Rtl.ARRAYF (count, f)) = single (".t_floating " ^ (fixupFloat f) ^ 
+    | msData (INT32 (w))  = single (".long " ^ (wms w))
+    | msData (INT_FLOATSIZE (w)) = single (".quad " ^ (wms w))
+    | msData (FLOAT (f))  = single (".t_floating " ^ (fixupFloat f))
+    | msData (DATA (label)) = single (".long " ^ (msLabel label))
+    | msData (ARRAYI (count, w)) = single (".long " ^ (wms w) ^ " : " ^ (Int.toString count))
+    | msData (ARRAYF (count, f)) = single (".t_floating " ^ (fixupFloat f) ^ 
 					       " : " ^ (Int.toString count))
-    | msData (Rtl.ARRAYP (count, Rtl.PTR label)) = single (".long " ^ (msRtlLabel label) ^
+    | msData (ARRAYP (count, PTR label)) = single (".long " ^ (msLabel label) ^
 							   (" : ") ^ (Int.toString count))
-    | msData (Rtl.ARRAYP (count, Rtl.TAG w)) = single (".long " ^ (wms w) ^ " : " ^ 
-						       (Int.toString count))
-    | msData (Rtl.ALIGN (Rtl.LONG)) = single (".align 2")
-    | msData (Rtl.ALIGN (Rtl.QUAD)) = single (".align 3")
-    | msData (Rtl.ALIGN (Rtl.ODDLONG)) = [(1, "\t.align 3\t\t# ODDLONG\n"),
+    | msData (ARRAYP (count, TAG w)) = single (".long " ^ (wms w) ^ " : " ^ 
+		       (Int.toString count))
+    | msData (ALIGN (LONG)) = single (".align 2")
+    | msData (ALIGN (QUAD)) = single (".align 3")
+    | msData (ALIGN (ODDLONG)) = [(1, "\t.align 3\t\t# ODDLONG\n"),
 					  (1,"\t.long 0\n")]
-    | msData (Rtl.ALIGN (Rtl.OCTA)) = single (".align 4\n")
-    | msData (Rtl.ALIGN (Rtl.ODDOCTA)) = [(1, "\t.align 4\t\t# ODDOCTA\n"),
+    | msData (ALIGN (OCTA)) = single (".align 4\n")
+    | msData (ALIGN (ODDOCTA)) = [(1, "\t.align 4\t\t# ODDOCTA\n"),
 					  (1,"\t.quad 0\n\t.long 0\n")]
-    | msData (Rtl.DLABEL (label))   = 
+    | msData (DLABEL (label))   = 
 	   [(1,case label of
-		 Rtl.LOCAL_LABEL _ => ((msRtlLabel label) ^ ":\n")
-	       | _ => ("\t.globl " ^ (msRtlLabel label) ^ "\n" ^
-		       (msRtlLabel label) ^ ":\n"))]
+		 I _ => ((msLabel label) ^ ":\n")
+	       | _ => ("\t.globl " ^ (msLabel label) ^ "\n" ^
+		       (msLabel label) ^ ":\n"))]
 
-   fun freshCodeLabel () = Rtl.LOCAL_CODE (Name.fresh_var())
-   fun freshDataLabel () = Rtl.LOCAL_DATA (Name.fresh_var())
+   fun freshCodeLabel () = LOCAL_CODE (Name.fresh_var())
+   fun freshDataLabel () = LOCAL_DATA (Name.fresh_var())
    fun freshIreg  () = let val v = Name.fresh_var() in R (Name.var2int v) end
    fun freshFreg  () = let val v = Name.fresh_var() in F (Name.var2int v) end
 
@@ -641,7 +672,7 @@ functor Decalpha (val exclude_intregs : int list
       | defUse (BASE(GC_CALLSITE _))               = ([], [])
       | defUse (SPECIFIC (IALIGN _))               = ([], [])
       | defUse (BASE(ILABEL _))                    = ([], [])
-      | defUse (BASE(COMMENT _))                   = ([], [])
+      | defUse (BASE(ICOMMENT _))                   = ([], [])
 
 
     (* SOME (fallthrough possible, other local labels this instr jumps to)
@@ -664,8 +695,8 @@ functor Decalpha (val exclude_intregs : int list
       | cFlow (BASE(TAILCALL label))         = SOME (false, [])
       | cFlow _ = NONE
 
-   fun eqLLabs (Rtl.LOCAL_CODE v) (Rtl.LOCAL_CODE v') = Name.eq_var(v,v')
-     | eqLLabs (Rtl.LOCAL_DATA v) (Rtl.LOCAL_DATA v') = Name.eq_var(v,v')
+   fun eqLLabs (LOCAL_CODE v) (LOCAL_CODE v') = Name.eq_var(v,v')
+     | eqLLabs (LOCAL_DATA v) (LOCAL_DATA v') = Name.eq_var(v,v')
      | eqLLabs _ _ = false
    fun eqLabs (I l) (I l') = eqLLabs l l'
      | eqLabs (MLE s) (MLE s') = (s = s')
@@ -702,7 +733,7 @@ functor Decalpha (val exclude_intregs : int list
          | xbase (RET(link,hint)) = RET(link,hint)
          | xbase (GC_CALLSITE l) = GC_CALLSITE l
          | xbase (ILABEL l) = ILABEL l
-	 | xbase (COMMENT l) = COMMENT l
+	 | xbase (ICOMMENT l) = ICOMMENT l
 	 | xbase (LADDR (Rdst, label)) = LADDR(fd Rdst,label)
       in 
 	case i of
@@ -801,17 +832,13 @@ functor Decalpha (val exclude_intregs : int list
    val special_regs  = listunion(special_iregs, special_fregs) 
    val general_regs  = listdiff(physical_regs, special_regs)
 
-(*
-   structure Labelkey : ORD_KEY = 
-       struct
-	   type ord_key = loclabel
-	   fun compare (LOCAL_CODE v1, LOCAL_CODE v2) = Int.compare(Name.var2int v1, Name.var2int v2)
-	     | compare (LOCAL_DATA v1, LOCAL_DATA v2) = Int.compare(Name.var2int v1, Name.var2int v2)
-	     | compare (LOCAL_CODE _, LOCAL_DATA _) = LESS
-	     | compare (LOCAL_DATA _, LOCAL_CODE _) = LESS
-	  end
-*)
-    structure Labelmap = Labelmap(structure Machine = struct structure Rtl = Rtl end)
-    structure Regmap = Regmap(structure Machine = struct datatype register = datatype register end)
-    structure Regset = Regset(structure Machine = struct datatype register = datatype register end)
+   structure Labelmap = Labelmap(structure Machine = struct datatype loclabel = datatype loclabel end)
+   structure Regmap = Regmap(structure Machine = struct datatype register = datatype register end)
+   structure Regset = Regset(structure Machine = struct datatype register = datatype register end)
+
+ end
+ 
+ open Temp
+ structure Machine = Temp
+
 end

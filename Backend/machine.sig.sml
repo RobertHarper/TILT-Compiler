@@ -1,16 +1,37 @@
-(*$import RTL *)
+(*$import Name TilWord32 *)
 signature MACHINE =
   sig
-    structure Rtl : RTL
+
     datatype register = R of int
                       | F of int
-    type loclabel = Rtl.local_label
+
+    datatype loclabel = LOCAL_DATA of Name.var
+	              | LOCAL_CODE of Name.var
+
     datatype label    = I of loclabel  
                       | MLE of string                  (* a label emitted from direct assembly *)
                       | CE of string * register option (* a label emitted from C compiler *)
+
     datatype align    = LONG (* 4 bytes *)
                       | QUAD (* 8 bytes *)
-                      | OCTA (* 16 bytes *)
+                      | ODDLONG (* align at 8 byte boundary +4 *)
+                      | OCTA    (* 16 bytes *)
+                      | ODDOCTA (* 16 bytes bound + 12 *)
+
+  datatype labelortag = PTR of label | TAG of TilWord32.word
+
+  datatype data = 
+      COMMENT of string
+    | STRING of (string)
+    | INT32 of  (TilWord32.word)
+    | INT_FLOATSIZE of (TilWord32.word)
+    | FLOAT of  (string)
+    | DATA of   (label)
+    | ARRAYI of (int * TilWord32.word)  (* array of i words inited to word32 *)
+    | ARRAYF of (int * string)     (* array of i words initialized to fp value in string *)
+    | ARRAYP of (int * labelortag)  (* array of i words initialized to label or small int *)
+    | ALIGN of  (align)
+    | DLABEL of (label)
 
    structure Labelmap : ORD_MAP where type Key.ord_key = loclabel
    structure Regmap   : ORD_MAP where type Key.ord_key = register
@@ -85,7 +106,7 @@ signature MACHINE =
     | RET     of bool * int (* link, hint *)
     | GC_CALLSITE of loclabel
     | ILABEL  of loclabel
-    | COMMENT of string
+    | ICOMMENT of string
     | LADDR of register * label         (* dest, label *)
 
 
@@ -96,7 +117,7 @@ signature MACHINE =
     val msReg           : register -> string
     val msLabel         : label -> string
     val msLoclabel      : loclabel -> string
-    val msData          : Rtl.data -> (int * string) list
+    val msData          : data -> (int * string) list
     val msInstruction   : string -> instruction -> string
     val msStackLocation : stacklocation -> string
 

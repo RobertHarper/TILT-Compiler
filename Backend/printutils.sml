@@ -163,7 +163,7 @@ struct
 
 
    fun dumpCodeLabel cls = 
-       let open Rtl
+       let open Machine
 	   fun eq_loc_label(LOCAL_DATA v1, LOCAL_DATA v2) = Name.eq_var(v1,v2)
 	     | eq_loc_label(LOCAL_CODE v1, LOCAL_CODE v2) = Name.eq_var(v1,v2)
 	     | eq_loc_label _ = false
@@ -179,7 +179,7 @@ struct
        app (emitString o CodeLabelDecl) ucls
      end
 
-   fun dumpProc (name, external_name : Rtl.label option,
+   fun dumpProc (name, external_name : label option,
 		 psig as PROCSIG{args, res, regs_destroyed, regs_modified,
 				 arg_ra_pos, res_ra_pos, ...}, 
 		 
@@ -188,7 +188,7 @@ struct
 		 debug) =
      (app emitString textStart; 
       app emitString (procedureHeader (case external_name of
-					   NONE => Rtl.LOCAL_LABEL name
+					   NONE => I name
 					 | SOME label => label));
       emitString commentHeader;
 
@@ -219,7 +219,7 @@ struct
 						 | _ => error "missing block")
 	        in  case (rev (!instrs)) of
 		      first_instr::_ => (case (stripAnnot first_instr) of
-					BASE(ILABEL (Rtl.LOCAL_CODE v)) =>  
+					BASE(ILABEL (LOCAL_CODE v)) =>  
 					emitString (".globl " ^ (Name.var2string v) ^ "\n")
 				      | _ => ())
 		    | _ => ()

@@ -748,7 +748,7 @@ struct
 			      (Regmap.insert(localmap, dst, this_temp))
 			  end
 		      | _ => error "putInRegs: allocDests")
-			handle DEAD => (emitInstr "" (BASE (COMMENT ("allocdest: dead reg" ^
+			handle DEAD => (emitInstr "" (BASE (ICOMMENT ("allocdest: dead reg" ^
    					   (msReg dst))));
                                         (allocDests temps_left rest postcode localmap)))
 
@@ -986,7 +986,7 @@ struct
 		     val tmp = allocateInstr instr next_label
 		 in  tmp @ (instructionLoop rest)
 		 end) 
-		   handle DEAD => (emitInstr "" (BASE (COMMENT ("dead instr" ^
+		   handle DEAD => (emitInstr "" (BASE (ICOMMENT ("dead instr" ^
 								(msInstruction "" (stripAnnot instr)))));
 				   (instructionLoop rest))
 			| GETREGBUG => (print "GETREGBUG in ";
@@ -1029,7 +1029,7 @@ struct
 	       . list of call sites
         *)
 
-       fun getCallInfo (name as (Rtl.LOCAL_CODE v)) summary mapping tracemap 
+       fun getCallInfo (name as (LOCAL_CODE v)) summary mapping tracemap 
 				(l : callsite_info list)=
 	let 
 	     val rawname = Name.var2string v
@@ -1228,7 +1228,7 @@ struct
 		
    fun allocateProc1 (blah as
 		      {getSignature : loclabel -> procsig,
-		       external_name : Rtl.label option,
+		       external_name : label option,
 		       name         : loclabel,
 		      block_map    : bblock Labelmap.map,
 		      procsig = procsig as PROCSIG{arg_ra_pos=orig_args,
@@ -1323,7 +1323,7 @@ struct
 
 
    fun allocateProc2 ({getSignature : loclabel -> procsig,
-		       external_name : Rtl.label option,
+		       external_name : label option,
 		       name         : loclabel,
 		       block_map    : bblock Labelmap.map,
 		       procsig as PROCSIG{arg_ra_pos=orig_args,

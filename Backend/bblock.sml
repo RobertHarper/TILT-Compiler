@@ -1,4 +1,4 @@
-(*$import MACHINEUTILS BBLOCK *)
+(*$import MACHINEUTILS BBLOCK Int32 *)
 functor Bblock(structure Machineutils : MACHINEUTILS) 
     :> BBLOCK where Machine = Machineutils.Machine =
 struct

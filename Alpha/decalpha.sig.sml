@@ -2,7 +2,10 @@
 signature DECALPHA =
 sig
 
-  include MACHINE
+  structure Machine : MACHINE
+  type register = Machine.register
+  type loclabel = Machine.loclabel
+  type align = Machine.align
 
   val Rzero   : register   (* Integer zero *)
   val Rgp     : register   (* Alpha's $gp, pointer to global offset table *)
@@ -52,6 +55,6 @@ sig
   | TRAPB			      (* Trap barrier *)
 
 
-  sharing type decalpha_specific_instruction = specific_instruction
+  sharing type decalpha_specific_instruction = Machine.specific_instruction
 
 end

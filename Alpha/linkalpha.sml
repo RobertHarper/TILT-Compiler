@@ -10,43 +10,47 @@ struct
 
   structure Decalpha = Decalpha(val exclude_intregs = [] : int list
 				structure Rtl = Rtl)
+  structure Machine = Decalpha.Machine
 
-  structure Regset     = Regset    (structure Machine = Decalpha)
-  structure Regmap     = Regmap    (structure Machine = Decalpha)
-  structure Labelgraph = Labelgraph(structure Machine = Decalpha)
-  structure Labelmap   = Labelmap  (structure Machine = Decalpha)
+(*
+  structure Regset     = Regset    (structure Machine = Machine)
+  structure Regmap     = Regmap    (structure Machine = Machine)
+  structure Labelgraph = Labelgraph(structure Machine = Machine)
+  structure Labelmap   = Labelmap  (structure Machine = Machine)
+*)
 
   structure Decalphautils = Decalphautils(structure Decalpha = Decalpha
+(*
 					  structure Labelmap = Labelmap
 					  structure Regmap = Regmap
-					  structure Regset = Regset)
+					  structure Regset = Regset
+*)
+					      )
 
-  structure Callconv   = DecalphaCallconv (structure Machineutils = Decalphautils
-					   structure Decalpha = Decalpha)
+  structure Callconv   = DecalphaCallconv (structure Decalpha = Decalpha
+					   structure Machineutils = Decalphautils)
 
-  structure Ifgraph   = Ifgraph    (structure Machine = Decalpha
- 				    structure Machineutils = Decalphautils)
+
+  structure Ifgraph   = Ifgraph    (structure Machine = Machine)
 
 
   structure Bblock = Bblock(structure Machineutils = Decalphautils)
 
   structure Tracetable = Tracetable(val little_endian = true
-				    structure MU = Decalphautils
-				    structure R = Rtl)
+				    structure MU = Decalphautils)
 
 
-  structure Divmult = Divmult(structure MU = Decalphautils
-			      structure Decalpha = Decalpha)
+  structure Divmult = Divmult(structure Decalpha = Decalpha
+			      structure MU = Decalphautils)
 
-  structure Toalpha = Toalpha(structure Bblock = Bblock
+  structure Toalpha = Toalpha(val do_tailcalls = do_tailcalls
 			      structure Decalpha = Decalpha
-			      structure DM = Divmult
-			      structure Machineutils = Decalphautils
-			      structure Rtl = Rtl
 			      structure Pprtl = Pprtl
+			      structure Machineutils = Decalphautils
 			      structure ArgTracetable = Tracetable
-			      structure DM = Divmult
-			      val do_tailcalls = do_tailcalls)
+			      structure Bblock = Bblock
+			      structure DM = Divmult)
+			      
 
   structure Printutils = Printutils(val commentHeader = " #"
 				    structure Bblock = Bblock
@@ -57,41 +61,38 @@ struct
   structure Graph = Vargraph()
 
   structure Recursion = Recursion(structure Pprtl = Pprtl
-				  structure Printutils = Printutils
-				  structure Graph = Graph)
+				  structure Graph = Graph
+				  structure Printutils = Printutils)
+
  
 
-  structure Trackstorage = AlphaTrackstorage(val commentHeader = " #"
-					     structure Regmap = Regmap
-					     structure Regset = Regset
-					     structure Decalpha = Decalpha
-					     structure Machineutils = Decalphautils
-					     structure Printutils = Printutils)
+  structure Trackstorage = AlphaTrackstorage(structure Decalpha = Decalpha
+					     structure Printutils = Printutils					     
+					     structure Machineutils = Decalphautils)
 
 
-
-  structure Color1 = Color1(structure Ifgraph = Ifgraph
+  structure Color1 = Color1(structure Machine = Machine
+			    structure Ifgraph = Ifgraph
 			    structure Trackstorage = Trackstorage
-			    structure Machine = Decalpha
 			    structure MU = Decalphautils
 			    structure Printutils = Printutils)
 
   structure Chaitin = Chaitin(val commentHeader = " #"
-			      structure Bblock = Bblock
-			      structure Callconv = Callconv
-			      structure Color = Color1
-			      structure Decalpha = Decalpha
 			      structure Machineutils = Decalphautils
+			      structure Callconv = Callconv
+			      structure Bblock = Bblock
+			      structure Trackstorage = Trackstorage			      
 			      structure Printutils = Printutils
-			      structure Tracetable = Tracetable
-			      structure Trackstorage = Trackstorage
-			      structure Ifgraph = Ifgraph)
+			      structure Ifgraph = Ifgraph
+			      structure Color = Color1
+			      structure Tracetable = Tracetable)
+
 
   structure Rtltoalpha = Rtltoasm(val commentHeader = " #"
 				  structure Machineutils = Decalphautils
 				  structure Callconv = Callconv
-				  structure Procalloc = Chaitin
 				  structure Printutils = Printutils
+				  structure Procalloc = Chaitin
 				  structure Recursion = Recursion
 				  structure Toasm = Toalpha)
 

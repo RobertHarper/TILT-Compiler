@@ -9,7 +9,7 @@ sig
    val msgs : bool ref
 
    val allocateProc : {getSignature  : Machine.loclabel -> Machine.procsig,
-		       external_name : Machine.Rtl.label option,
+		       external_name : Machine.label option,
 		       name          : Machine.loclabel,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
 		       tracemap      : Tracetable.trace Machine.Regmap.map,
@@ -19,11 +19,11 @@ sig
                       -> (Machine.procsig * 
 			  Bblock.bblock Machine.Labelmap.map *
 			  Machine.loclabel list *
-			  Machine.Rtl.data list)
+			  Machine.data list)
 
 
    val allocateProc1 : {getSignature  : Machine.loclabel -> Machine.procsig,
-		       external_name : Machine.Rtl.label option,
+		       external_name : Machine.label option,
 		       name          : Machine.loclabel,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
 		       tracemap      : Tracetable.trace Machine.Regmap.map,
@@ -32,7 +32,7 @@ sig
 		       procsig       : Machine.procsig} 
                       -> 
                        ({getSignature  : Machine.loclabel -> Machine.procsig,
-		       external_name : Machine.Rtl.label option,
+		       external_name : Machine.label option,
 		       name          : Machine.loclabel,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
 		       tracemap      : Tracetable.trace Machine.Regmap.map,
@@ -45,7 +45,7 @@ sig
    val allocateProc2 : 
                      ({getSignature  : Machine.loclabel -> Machine.procsig,
 		       name          : Machine.loclabel,
-		       external_name : Machine.Rtl.label option,
+		       external_name : Machine.label option,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
 		       tracemap      : Tracetable.trace Machine.Regmap.map,
 		       stack_resident : Machine.stacklocation 
@@ -56,7 +56,7 @@ sig
                       -> (Machine.procsig * 
 			  Bblock.bblock Machine.Labelmap.map *
 			  Machine.loclabel list *
-			  Machine.Rtl.data list)
+			  Machine.data list)
 end
 
 

@@ -1,4 +1,4 @@
-(*$REGMAP: DICT ORD_KEY *)
+(*$import DICT ORD_KEY *)
 
 signature REGMAP = DICT
 (*

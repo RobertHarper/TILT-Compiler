@@ -15,11 +15,12 @@ functor Divmult(structure Decalpha : DECALPHA
 			     where type Machine.instruction = Decalpha.instruction
 			     where type Machine.assign = Decalpha.assign
 			     where type Machine.procsig = Decalpha.procsig *)
-		    sharing MU.Machine = Decalpha
+		    sharing MU.Machine = Decalpha.Machine
 			     ) 
   :> DIVMULT where DA = Decalpha = 
   struct
     open Decalpha
+    open Machine
     structure MU = MU
     structure DA = Decalpha
       
@@ -170,7 +171,7 @@ functor Divmult(structure Decalpha : DECALPHA
 	    [INTOP(SLL,reg, IMMop (logceil n), dest_reg)]
 	else
 	  let
-	    val temp1 = DA.freshIreg()
+	    val temp1 = freshIreg()
 	  in 
 	    if (iseven32(n))
 	      then
@@ -197,7 +198,7 @@ functor Divmult(structure Decalpha : DECALPHA
 	error "quadodd__mult_convert called with float reg" 
       | quadodd_mult_convert (reg as (R _),n,dest_reg) = 
 	let
-	  val temp1 = DA.freshIreg();
+	  val temp1 = freshIreg();
 	  fun factorseq f =
 	    if (TilWord32.umod(n,f) = 0w0)
 	      then
@@ -213,7 +214,7 @@ functor Divmult(structure Decalpha : DECALPHA
 				    then a else bb)
 	  fun ExtendedBinaryMethod() = 
 	    let 
-	      val temp = DA.freshIreg();
+	      val temp = freshIreg();
 	      val addseq = SOME(quad_mult_convert'(reg,TilWord32.uminus(n,0w1),dest_reg)
 				@ [INTOP(ADDQ,dest_reg,REGop reg,dest_reg)])
 	      val subseq = SOME(quad_mult_convert'(reg,TilWord32.uplus(n,0w1),dest_reg) 
@@ -295,9 +296,9 @@ functor Divmult(structure Decalpha : DECALPHA
 	      then [INTOP(SRL,reg,IMMop l,dest_reg)]
 	    else 
 	      let
-		val t1 = DA.freshIreg()
-		val t2 = DA.freshIreg()
-		val t3 = DA.freshIreg()
+		val t1 = freshIreg()
+		val t2 = freshIreg()
+		val t3 = freshIreg()
 	      in
 		if (TilWord64.ugte(m,binpow64(N)))
 		  then 
@@ -325,7 +326,7 @@ functor Divmult(structure Decalpha : DECALPHA
 	      end
 	  val instrs = map SPECIFIC instrs
 	in
-	  (app (fn i => print (DA.msInstruction "" i)) instrs);
+	  (app (fn i => print (msInstruction "" i)) instrs);
 	  instrs
 	end
       
@@ -352,11 +353,11 @@ functor Divmult(structure Decalpha : DECALPHA
 		    val lowhalfmask = TilWord64.uminus(binpow64(16),one64)
 		    val lowm64  = TilWord64.andb(m,lowhalfmask)
 		    val highm64 = TilWord64.andb(TilWord64.rshiftl(m,16),lowhalfmask)
-		    val t1 = DA.freshIreg()
-		    val t2 = DA.freshIreg()
-		    val t3 = DA.freshIreg()
-		    val t4 = DA.freshIreg()
-		    val t5 = DA.freshIreg()
+		    val t1 = freshIreg()
+		    val t2 = freshIreg()
+		    val t3 = freshIreg()
+		    val t4 = freshIreg()
+		    val t5 = freshIreg()
 		    val neginstr = 
 		      if (TilWord32.andb(d,binpow32(31)) = 0w0)
 			then nil
