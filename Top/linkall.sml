@@ -1,6 +1,8 @@
 signature LINKALL = 
 sig
+    val compile_prelude : bool * string -> string (* use_cache * input filename -> asm filename *)
     val compile : string -> string (* input filename -> executable filename *)
+    val compile' : string list -> string (* input filename -> executable filename *)
     val test : string -> string (* input filename -> executable filename *)
 end
 
@@ -12,129 +14,127 @@ struct
 
     datatype platform = ALPHA | PPC
     val cur_platform = ref ALPHA
-    fun specific_comp_file arg = 
+    fun specific_link_file arg = 
 	(case (!cur_platform) of
-	     ALPHA => Linkalpha.compile arg
+	     ALPHA => Linkalpha.link arg
 	   | PPC => error "no PPC") (* Linkppc.comp_file arg *)
-(*
-    fun specific_reparse_prelude arg = 
+    fun specific_comp_file debug arg = 
 	(case (!cur_platform) of
-	     ALPHA => Linkalpha.reparse_prelude arg
-	   | PPC => error "no PPC") (* Linkppc.reparse_prelude arg *)
-*)
-	  
-	exception Transcript
-	local
-	    open Posix.IO
-	    open Posix.FileSys
-	    val curout = ref (NONE : file_desc option)
-	in
-	    fun fileon(s) = 
-		let 
-		    val _ = curout := SOME(dup stdout)
-		    val _ = close stdout
-		    val _ = createf (s,O_RDWR,O.trunc,S.flags[S.irusr,S.iwusr])
-		in ()
-		end
-	    fun fileoff() = 
-		let 
-		    val _ = close stdout
-		    val _ = dup (case !curout of
-				     NONE => raise Transcript
-				   | SOME x => x)
-		    val _ = curout := NONE
-		in
-		    ()
-		end
+	     ALPHA => (if debug then Linkalpha.test else Linkalpha.compile) arg
+	   | PPC => error "no PPC") (* Linkppc.comp_file arg *)
+    val cached_prelude = ref (NONE : (string * Linkrtl.Rtl.local_label) option)
+    fun specific_reparse_prelude arg = 
+	let val (prelude_file,prelude_label) = 
+	    (case (!cur_platform) of
+		 ALPHA => Linkalpha.compile_prelude arg
+	       | PPC => error "no PPC") (* Linkppc.reparse_prelude arg *)
+	    val _ = cached_prelude := SOME(prelude_file,prelude_label)
+	in  prelude_file
 	end
-(*    
-	fun test_rtl(progs) = 
+	  
+    exception Transcript
+    local
+	open Posix.IO
+	open Posix.FileSys
+	val curout = ref (NONE : file_desc option)
+    in
+	fun fileon(s) = 
 	    let 
-		fun test (ss) = 
-		    let 
-			val outname = ss ^ ".rtlout"
-			val outstream = TextIO.openOut outname;
-			val _ = Linkrtl.I.outstream := SOME outstream
-		    in
-			(Linkrtl.comp_file ss
-			 handle e => (print "Uncaught exception while running "; 
-				      print ss;
-				      print "\n";
-				      raise e));
-			Linkrtl.I.outstream := NONE;
-			TextIO.closeOut outstream
-		    end
-	    in
-		app test progs
+		val _ = curout := SOME(dup stdout)
+		val _ = close stdout
+		val _ = createf (s,O_RDWR,O.trunc,S.flags[S.irusr,S.iwusr])
+	    in ()
 	    end
-*)	
-	val atom = ref false
-	val runtime_dir = ref (OS.FileSys.getDir() ^ "/Runtime")
-	    
-	local
+	fun fileoff() = 
+	    let 
+		val _ = close stdout
+		val _ = dup (case !curout of
+				 NONE => raise Transcript
+			       | SOME x => x)
+		val _ = curout := NONE
+	    in
+		()
+	    end
+    end
+
+    val atom = ref false
+    val runtime_dir = ref (OS.FileSys.getDir() ^ "/Runtime")
+	
+	
+    fun link (outname,asm_files,opt) =
+	let 
 	    fun getflags () =
 		if !atom then "LDFLAGS='-r -N' CFLAGS='-O -Wl,-r, -nonshared'"
 		else ""
-	in
-	    fun link (infile,asm_files,opt) =
-		let 
-		    val outname = infile ^ ".exe"
-(*
-		    val _ = (print "Done creating assemblies:";
-			     app (fn f => (print f; print " ")) asm_files; 
+	    (*
+             val _ = (print "Done creating assemblies:";
+	     app (fn f => (print f; print " ")) asm_files; 
 			     print "\n")
-*)
-		    val current_dir = OS.FileSys.getDir()
-		    val _ = ((OS.FileSys.chDir (!runtime_dir)) handle exn => 
-			     (print "bad Runtime directory.\n"; raise exn))
-		    val targetfile = hd(rev asm_files)
-		    val preludefiles = rev(tl(rev asm_files))
-		    val target = " target="^current_dir^"/"^targetfile
-		    val out = " out="^current_dir^"/"^outname
-		    val makecom = ("gmake " ^ getflags() ^ target ^ " " ^ opt ^
-				   (if false  (* (!Linkrtl.Tortl.HeapProfile) *)
-				      then "hprof=1"
-				    else "")
-				      ^ out)
-                    val _ = if (!debug)
-				then print ("Executing: " ^ makecom ^ "\n")
-			    else ()
-		    val _ = (Stats.timer("Linking",OS.Process.system)) makecom
-		    val _ = OS.FileSys.chDir current_dir;
-		    val _ = print "Linking complete\n"
-		    val _ = if (!debug)
-				then print ("Done creating final executable: " ^ outname ^ "\n")
-			    else ()
-		in
-		    outname
-		end
-	    
+		*)
+	    val current_dir = OS.FileSys.getDir()
+	    val _ = ((OS.FileSys.chDir (!runtime_dir)) handle exn => 
+		     (print "bad Runtime directory.\n"; raise exn))
+	    val asm_files = map (fn s => (current_dir^"/"^s)) asm_files
+	    fun folder (str,acc) = acc ^ " " ^ str
+	    val target = foldl folder " target='" (asm_files @ ["'"])
+	    val out = " out="^current_dir^"/"^outname
+	    val makecom = ("gmake " ^ getflags() ^ target ^ " " ^ opt ^
+			   (if false  (* (!Linkrtl.Tortl.HeapProfile) *)
+				then "hprof=1"
+			    else "")
+				^ out)
+	    val _ = print ("Executing: " ^ makecom ^ "\n")
+	    val _ = (Stats.timer("Linking",OS.Process.system)) makecom
+	    val _ = OS.FileSys.chDir current_dir;
+	    val _ = print "Linking complete\n"
+	    val _ = if (!debug)
+			then print ("Done creating final executable: " ^ outname ^ "\n")
+		    else ()
+	in
+	    outname
+	end (* link *)
+
+    fun wrapper string command = Stats.timer(string,command)
+    val link          = wrapper "linking" link
 
     
-      (* compilation of an entire file *)
-    
-      fun comp_file infile = link(infile,specific_comp_file infile,"");
-      fun comp_file_opt (infile,opt) = link(infile,specific_comp_file infile,opt);
-      fun assemble_file infile = specific_comp_file infile
 
-      fun wrapper string command = Stats.timer(string,command)
+    fun assemble_file (debug,infile) = specific_comp_file debug infile
+    val assemble_file = wrapper "toasm" assemble_file
 
+    fun compile_help _ [] = error "compile given no files"
+      | compile_help debug src_files =
+	let val last_srcfile = List.last src_files
+	    val outname = last_srcfile ^ ".exe"
+	    val asm_labels = map (fn f => assemble_file (debug,f)) src_files
+	    val (asm_files,local_labels) = 
+		(case (!cached_prelude) of
+		     SOME (filename,label) => (filename::(map #1 asm_labels),
+					       label::(map #2 asm_labels))
+		   | _ => error "link failed: no prelude")
+	    val _ = (print "---- there are "; print (Int.toString (length local_labels));
+		     print " local_labels\n")
+	    val _ = specific_link_file(last_srcfile,local_labels) 
+	    val _ = link(outname,asm_files,"")
+	in  outname
+	end
 
-      val link          = wrapper "linking" link
-      val comp_file     = wrapper "total" comp_file
-      val comp_file_opt = wrapper "total" comp_file_opt
-      val assemble_file = wrapper "toasm" assemble_file
+    fun compile filename = compile_help false [filename]
+    fun test filename = compile_help true [filename]
+    fun compile' filenames = compile_help false filenames
+    fun compile_prelude arg = specific_reparse_prelude arg
+	
 
-      fun compile' debug filename = let val _ = Stats.reset_stats()
-					val res = comp_file filename
-					val _ = Stats.print_stats()
-				    in  res
-				    end
-      val test = compile' true
-      val compile = compile' false
+    fun reset_wrapper f arg = let val _ = Stats.reset_stats()
+				  val res = f arg
+				  val _ = Stats.print_stats()
+			      in  res
+			      end
 
-(*      val reparse_prelude = specific_reparse_prelude *)
-    end
+    val compile_prelude = reset_wrapper compile_prelude
+    val compile = reset_wrapper compile
+    val compile' = reset_wrapper compile'
+    val test = reset_wrapper test
 
 
     fun nj_process(infile,outfile) =
@@ -176,7 +176,7 @@ struct
 	  let 
 	    val _ = print ("About to start TIL compiling " 
 			   ^ ss ^ "\n");
-	    val outname = comp_file ss
+	    val outname = compile ss
 	    val _ = print ("Done compiling with output: " 
 			   ^ outname ^ "\n");
 	    val alphaout = ss ^ ".alphaout"
