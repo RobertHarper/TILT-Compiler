@@ -267,7 +267,7 @@ m0105	pass	semicolon parsing
 m0106	pass	sharing
 m0107	pass	binary io
 m0108	fail	[Bug #0138] date and time
-m0109	fail	[Bug #0139] file system
+m0109	pass	file system
 m0111	pass	signatures
 m0112	fail	strings
 m0113	pass	strings
