@@ -819,7 +819,7 @@ struct
 		 let fun tfold(t,f) = t_find_fv (state,f) t
 		     fun cfold(c,f) = c_find_fv (state,f) c
 		     fun efold(e,f) = e_find_fv (state,f) e
-		     val frees = if (Normalize.prim_uses_carg p)
+		     val frees = if (Normalize.allprim_uses_carg p)
 				     then foldl cfold frees clist
 				 else foldl tfold frees clist
 		     val frees = foldl efold frees elist

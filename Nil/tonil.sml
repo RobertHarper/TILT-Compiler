@@ -1882,16 +1882,17 @@ end (* local defining splitting context *)
 	   val args = map (xexp context) il_args
 	   val zero = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 0))
 	   val one = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 1))
+	   val t = (Prim.OtherArray false)
        in  case ilprim of
-	     Prim.mk_ref => Prim_e(PrimOp(Prim.create_table Prim.WordArray),
+	     Prim.mk_ref => Prim_e(PrimOp(Prim.create_table t),
 				   cons, one::args)
-	   | Prim.deref => Prim_e(PrimOp(Prim.sub Prim.WordArray),
+	   | Prim.deref => Prim_e(PrimOp(Prim.sub t),
 				  cons, args @ [zero])
-	   | Prim.setref => Prim_e(PrimOp(Prim.update Prim.WordArray),
+	   | Prim.setref => Prim_e(PrimOp(Prim.update t),
 				  cons, case args of
 				          [a,b] => [a,zero,b]
 					| _ => error "bad set_ref")
-	   | Prim.eq_ref => Prim_e(PrimOp(Prim.equal_table Prim.WordArray),
+	   | Prim.eq_ref => Prim_e(PrimOp(Prim.equal_table t),
 				   cons, args)
 	   | _ => Prim_e (PrimOp (xilprim ilprim), cons, args)
        end

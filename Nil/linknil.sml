@@ -155,7 +155,8 @@ structure Linknil (* :> LINKNIL  *) =
 	    val nilmod = transform(do_one_optimize, show_one_optimize,
 				 "Optimize1", 
 				 Optimize.optimize
-				   {dead = true, projection = true, 
+				   {lift_array = true,
+				    dead = true, projection = true, 
 				    cse = false, uncurry = true},
 				 filename, nilmod)
 
@@ -184,7 +185,8 @@ structure Linknil (* :> LINKNIL  *) =
 	    val nilmod = transform(do_two_optimize, show_two_optimize,
 				 "Optimize2", 
 				 Optimize.optimize
-				   {dead = true, projection = true, 
+				   {lift_array = false,
+				    dead = true, projection = true, 
 				    cse = !do_cse, uncurry = false},
 				 filename, nilmod)
 

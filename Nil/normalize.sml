@@ -1329,7 +1329,23 @@ val show_context = ref false
 	   | inject _ => true
 	   | _ => true)
 
-  fun prim_uses_carg (NilPrimOp np) = nilprim_uses_carg np
-    | prim_uses_carg (PrimOp _) = true
+  fun aggregate_uses_carg (Prim.OtherArray false) = true
+    | aggregate_uses_carg (Prim.OtherVector false) = true
+    | aggregate_uses_carg _ = false
+
+  fun prim_uses_carg p =
+	(case p of
+	     array2vector t => aggregate_uses_carg t
+	   | vector2array t => aggregate_uses_carg t
+	   |  create_table t => aggregate_uses_carg t
+	   |  create_empty_table t => aggregate_uses_carg t
+	   |  sub t => aggregate_uses_carg t
+	   |  update t => aggregate_uses_carg t
+	   |  length_table t => aggregate_uses_carg t
+	   |  equal_table t => aggregate_uses_carg t
+	   | _ => true)
+
+  fun allprim_uses_carg (NilPrimOp np) = nilprim_uses_carg np
+    | allprim_uses_carg (PrimOp p) = prim_uses_carg p
 
 end

@@ -17,16 +17,65 @@ struct
 	val do_diag = ref false
 	fun diag s = if !do_diag then print s else()
 
+	val do_lift_array = ref true
 	val do_dead = ref true
 	val do_proj = ref true
 	val do_uncurry = ref true
 	val do_cse = ref true
 
+	val local_sub = Name.fresh_named_var "local_subscript"
+	val local_update = Name.fresh_named_var "local_update"
+	val local_array = Name.fresh_named_var "local_array"
+	val local_len = Name.fresh_named_var "local_len"
+
+	val local_bnds = 
+	    let val c = Name.fresh_named_var "len_type"
+		val array = Name.fresh_named_var "len_array"
+		val body = Prim_e(PrimOp(Prim.length_table (Prim.OtherArray false)), [Var_c c], 
+				  [Var_e array])
+		val len_fun = Function(Partial,Leaf,[(c,Type_k)],false,
+				       [(array,Prim_c(Array_c,[Var_c c]))], [],
+				       body, Prim_c(Int_c Prim.W32, []))
+		val c = Name.fresh_named_var "subscript_type"
+		val array = Name.fresh_named_var "subscript_array"
+		val index = Name.fresh_named_var "subscript_index"
+		val body = Prim_e(PrimOp(Prim.sub (Prim.OtherArray false)), [Var_c c], 
+				  [Var_e array, Var_e index])
+		val sub_fun = Function(Partial,Leaf,[(c,Type_k)],false,
+				       [(array,Prim_c(Array_c,[Var_c c])),
+					(index,Prim_c(Int_c Prim.W32 ,[]))], [],
+				       body, Var_c c)
+		val c = Name.fresh_named_var "update_type"
+		val array = Name.fresh_named_var "update_array"
+		val index = Name.fresh_named_var "update_index"
+		val item = Name.fresh_named_var "update_item"
+		val body = Prim_e(PrimOp(Prim.update (Prim.OtherArray false)), [Var_c c], 
+				  [Var_e array, Var_e index, Var_e item])
+		val update_fun = Function(Partial,Leaf,[(c,Type_k)],false,
+					  [(array,Prim_c(Array_c,[Var_c c])),
+					   (index,Prim_c(Int_c Prim.W32 ,[])),
+					   (item,Var_c c)], [],
+					  body, Var_c c)
+		val c = Name.fresh_named_var "array_type"
+		val size = Name.fresh_named_var "array_size"
+		val item = Name.fresh_named_var "array_item"
+		val body = Prim_e(PrimOp(Prim.create_table (Prim.OtherArray false)), [Var_c c], 
+				  [Var_e size, Var_e item])
+		val array_fun = Function(Partial,Leaf,[(c,Type_k)],false,
+					 [(size,Prim_c(Int_c Prim.W32 ,[])),
+					  (item,Var_c c)], [],
+					 body, Prim_c(Array_c,[Var_c c]))
+	    in  [Fixopen_b (Sequence.fromList [(local_sub,sub_fun)]),
+		 Fixopen_b (Sequence.fromList [(local_len,len_fun)]),
+		 Fixopen_b (Sequence.fromList [(local_update,update_fun)]),
+		 Fixopen_b (Sequence.fromList [(local_array,array_fun)])]
+	    end
+		
 	(* A transformation state is threaded through the optimizer maintaining:
-	        (1) whether we are currently in a type (as opposed to constructor)
+		(1) whether we are currently in a type (as opposed to constructor)
 		(2) a typing context including term and type variables
 		(3) an indicator of what binding we are currently in so that
-		       uses of variables can be attributed to this binding
+		     uses of variables can be attributed to this binding
 		(4) a mapping from variables to an entry which states
 		    (a) whether a variable has been 
 			(i) definitely used (as constructor or type)
@@ -180,9 +229,10 @@ struct
 	  fun find_availE(STATE{avail,...},e) = 
 	      if (!do_cse) then ExpTable.Expmap.find(#1 avail,e) else NONE
 	  fun add_availE(state as STATE{intype,mapping,current,equation,avail},e,v) = 
-	      if (!do_cse andalso (case e of
-				       Prim_e(NilPrimOp (unbox_float _), _, _) => false
-				     | _ => true))
+	      if (!do_cse andalso (not (NilUtil.effect e))
+		  andalso (case e of
+			       Prim_e(NilPrimOp (unbox_float _), _, _) => false
+			     | _ => true))
 		  then STATE{intype=intype,mapping=mapping,current=current,
 			     equation=equation,
 			     avail=(ExpTable.Expmap.insert(#1 avail,e,v),
@@ -511,42 +561,87 @@ struct
 	    in  result
 	    end 
 *)
-	and do_prim (state : state) (prim, clist, elist) = 
-	    let val self = do_prim state
-	    in
-		(case (prim,elist) of
-		     (NilPrimOp(select l),[e as Var_e v]) => 
-			 (case (lookup_proj(state,v,[l])) of
-			      NONE => Prim_e(prim,[], [do_exp state e])
-			    | SOME e => do_exp state e)
-		   | (NilPrimOp (inject k),[]) => 
-			      self (NilPrimOp (inject_nonrecord k),clist,[])
-		   | (NilPrimOp (inject k),[Prim_e(NilPrimOp(record _),_,elist)]) =>
-			      self (NilPrimOp (inject_record k),clist,elist)
-		   | (NilPrimOp (inject k),[Var_e v]) => 
-			(case lookup_alias(state,v) of
-			   OPTIONALe (e as (Prim_e(NilPrimOp(record _),_,_))) =>
-			       self (prim,clist,[e])
-			 | MUSTe e => self (prim,clist,[e])
-			 | _ => 
-			    (case (Normalize.reduce_hnf(get_env state, find_con(state,v))) of
-				 (_, Prim_c(Record_c (labs,vlist),cons)) => 
-				     let val fields = map (fn l =>
-							   Prim_e(NilPrimOp(select l),[],
-								  [Var_e v]))
-					 labs
-					 val r = Prim_e(NilPrimOp(record labs),[],fields)
-				     in  self (prim,clist,[r])
-				     end
-			       | (true, _) => self (NilPrimOp (inject_nonrecord k),clist,elist)
-			       | _ => Prim_e(prim,map (do_con state) clist, 
-					     map (do_exp state) elist)))
-	       | _ => 
-			Prim_e(prim,map ((if Normalize.prim_uses_carg prim 
-					      then do_con else do_type)
-				      state) clist, 
-			       map (do_exp state) elist))
+
+	and do_aggregate (state : state) funname_opt (constr,t,clist,elist)  = 
+	    let open Prim
+		fun helper is_array c = 
+		(case (is_array,Normalize.reduce_hnf(get_env state, c)) of
+		     (true,(_, Prim_c(Int_c is, _))) => (IntArray is,[]) 
+		   | (false,(_, Prim_c(Int_c is, _))) => (IntVector is,[]) 
+		   | (true,(_, Prim_c(Float_c is, _))) => (FloatArray is,[]) 
+		   | (false,(_, Prim_c(Float_c is, _))) => (FloatVector is,[]) 
+		   | (true, (hnf, _)) => (OtherArray hnf,[c]) 
+		   | (false, (hnf, _)) => (OtherVector hnf,[c]))
+		val (t,clist) = 
+		    (case t of
+			 OtherArray _ => helper true (hd clist)
+		       | OtherVector _ => helper true (hd clist)
+		       | _ => (t,clist))
+		val is_unknown = (case t of
+				      OtherArray false => true
+				    | OtherVector false => true
+				    | _ => false)
+		val clist = map (do_con state) clist
+		val elist = map (do_exp state) elist
+	    in  (case (funname_opt,is_unknown andalso !do_lift_array) of
+		     (SOME funname, true) => 
+			  App_e(Open, do_exp state (Var_e funname), clist, elist, [])
+		   | _ => Prim_e(PrimOp(constr t), clist, elist))
 	    end
+		 
+	and do_inject (state : state) (k, clist, elist) = 
+	    let fun default() = Prim_e(NilPrimOp (inject k),
+				       map (do_con state) clist, 
+				       map (do_exp state) elist)
+		val elist = 
+		    (case elist of
+			 [Var_e v] => 
+			     (case lookup_alias(state,v) of
+				  OPTIONALe (e as (Prim_e(NilPrimOp(record _),_,_))) => [e]
+				| MUSTe e => [e]
+				| _ => elist)
+		       | _ => elist)
+	    in  
+	     (case elist of
+		 [] => do_prim state (NilPrimOp(inject_nonrecord k),clist,[])
+	       | [Prim_e(NilPrimOp(record _),_,elist)] =>
+		     do_prim state (NilPrimOp(inject_record k),clist,elist)
+	       | [Var_e v] => 
+		     (case (Normalize.reduce_hnf(get_env state, find_con(state,v))) of
+			  (_, Prim_c(Record_c (labs,vlist),cons)) => 
+			      let val fields = map (fn l =>
+						    Prim_e(NilPrimOp(select l),[],
+							   [Var_e v]))
+				  labs
+				  val r = Prim_e(NilPrimOp(record labs),[],fields)
+			      in  do_inject state (k,clist,[r])
+			      end
+			| (true, _) => do_prim state (NilPrimOp (inject_nonrecord k),clist,elist)
+			| _ => default())
+	       | _ => default())
+	    end
+
+
+	and do_prim (state : state) (prim, clist, elist) = 
+	 let open Prim
+	 in  (case (prim,elist) of
+		 (NilPrimOp(select l),[e as Var_e v]) => 
+		     (case (lookup_proj(state,v,[l])) of
+			  NONE => Prim_e(prim,[], [do_exp state e])
+			| SOME e => do_exp state e)
+	       | (NilPrimOp (inject k),_) => do_inject state (k, clist, elist)
+	       | (PrimOp(create_table t), _) => do_aggregate state (SOME local_array) (create_table,t,clist,elist)
+	       | (PrimOp(create_empty_table t), _) => do_aggregate state NONE
+			                                  (create_empty_table,t,clist,elist)
+	       | (PrimOp(sub t), _) => do_aggregate state (SOME local_sub) (sub,t,clist,elist)
+	       | (PrimOp(update t), _) => do_aggregate state (SOME local_update) (update,t,clist,elist)
+	       | (PrimOp(length_table t), _) => do_aggregate state (SOME local_len) (length_table,t,clist,elist)
+	       | _ => Prim_e(prim,map ((if Normalize.allprim_uses_carg prim 
+					    then do_con else do_type)
+				       state) clist, 
+			     map (do_exp state) elist))
+	 end
+
 
 	and do_exp (state : state) (exp : exp) : exp = 
 	   ((* print "do_exp doing "; Ppnil.pp_exp exp; print "\n";  *)
@@ -847,16 +942,25 @@ struct
 	fun do_export(ExportValue(l,e),state) = (ExportValue(l,do_exp state e), state)
 	  | do_export(ExportType(l,c),state)  = (ExportType(l,do_con state c), state)
 
-	fun optimize {dead, projection, uncurry, cse} 
+	fun optimize {lift_array, dead, projection, uncurry, cse} 
 	              (MODULE{imports, exports, bnds}) =
-	  let val _ = do_dead := dead
+	  let 
+	      val _ = do_dead := dead
 	      val _ = do_proj := projection
 	      val _ = do_uncurry := uncurry
 	      val _ = do_cse := cse
 	      val _ = reset_debug()
 	      val state = new_state()
 	      val (imports,state) = foldl_acc do_import state imports
+
+	      val _ = do_lift_array := false
+	      val (local_bnds,state) = if lift_array
+					   then do_bnds(local_bnds,state)
+				       else ([],state)
+	      val _ = do_lift_array := lift_array
 	      val (bnds,state) = do_bnds(bnds,state)
+	      val bnds = local_bnds @ bnds
+
 	      (* we "retain" the state so that no exports are optimized away *)
 	      val state = retain_state state
 	      val (exports,state) = foldl_acc do_export state exports
