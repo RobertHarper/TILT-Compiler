@@ -1,0 +1,118 @@
+\newcommand{\sectionrule}[2]{\subsection*{{\bf#1}\hfill\fbox{$#2$}}}
+\newcommand{\infrule}[2]{
+  \begin{equation}
+    \frac{\begin{array}{c}
+              #1
+          \end{array}}
+         {\begin{array}{c}
+              #2
+          \end{array}}
+  \end{equation}}
+
+\newcommand{\expression}{e}
+\newcommand{\evalue}{e^v}
+\newcommand{\evar}{x}
+\newcommand{\econstant}{c}
+\newcommand{\eselect}[2]{#1.#2}
+\newcommand{\eapply}[2]{#1\,#2}
+\newcommand{\efunction}[3]{\lambda{#1}{:}{#2}.{#3}}
+\newcommand{\eif}[3]{\mathsf{if}\,#1\,\mathsf{then}\,#2\,\mathsf{else}\,#3}
+\newcommand{\eseal}[2]{#1{:}#2}
+\newcommand{\erecord}[1]{\{#1\}}
+
+\newcommand{\cvar}{\alpha}
+\newcommand{\constructor}{c}
+\newcommand{\basetype}{b}
+\newcommand{\cselect}[2]{#1.#2}
+\newcommand{\carrow}[3]{({#1}{:}{#2}){\rightharpoonup}#3}
+\newcommand{\carrowt}[3]{({#1}{:}{#2}){\to}#3}
+\newcommand{\cnondeparrow}[2]{#1{\rightharpoonup}#2}
+\newcommand{\cnondeparrowt}[2]{#1{\to}#2}
+\newcommand{\cfunction}[4]{\lambda(#1{:}#2){:}#3.#4}
+\newcommand{\capply}[2]{#1\,#2}
+\newcommand{\crbnd}[4]{#1{\triangleright}#2{=}#3{:}#4}
+\newcommand{\cndrbnd}[4]{#1{=}#3{:}#4}
+\newcommand{\crecord}[1]{\{#1\}}
+\newcommand{\ctype}{\tau}
+
+\newcommand{\kind}{\kappa}
+\newcommand{\ktype}{T}
+\newcommand{\karrow}[2]{#1{\Rightarrow}#2}
+\newcommand{\kpi}[3]{\Pi#1{:}#2.#3}
+\newcommand{\ksingleton}[2]{S(#1,#2)}
+\newcommand{\krecord}[1]{\{{#1}\}}
+\newcommand{\krbnd}[3]{#1{\triangleright}#2{:}#3}
+\newcommand{\kndrbnd}[3]{#1{:}#3}
+
+\newcommand{\mvar}{s}
+\newcommand{\mstructure}[1]{[#1]}
+\newcommand{\module}{M}
+\newcommand{\mvalue}{M^v}
+\newcommand{\mselect}[2]{#1.#2}
+\newcommand{\mcast}[2]{#1{:>}#2}
+\newcommand{\mapply}[2]{#1\,#2}
+\newcommand{\mfunction}[3]{\lambda{#1}{:}{#2}.{#3}}
+\newcommand{\mbindexpression}[2]{#1{=}#2}
+\newcommand{\mbindconstructor}[2]{#1{=}#2}
+\newcommand{\mbindmodule}[2]{#1{=}#2}
+
+\newcommand{\signature}{\Sigma}
+\newcommand{\ssig}{\mathsf{Sig}}
+\newcommand{\sstructure}[1]{[#1]}
+\newcommand{\sfunction}[3]{({#1}{:}{#2}){\rightharpoonup}#3}
+\newcommand{\sfunctiont}[3]{({#1}{:}{#2}){\to}#3}
+\newcommand{\sfunctionmaybet}[3]{({#1}{:}{#2}){\buildrel{\textstyle\to}\over\rightharpoonup} #3}
+\newcommand{\snondepfunction}[2]{#1{\rightharpoonup}#2}
+\newcommand{\snondepfunctiont}[2]{#1{\to}#2}
+\newcommand{\sbindexpression}[2]{#1{:}#2}
+\newcommand{\sbindconstructor}[2]{#1{:}#2}
+\newcommand{\sbindmodule}[2]{#1{:}#2}
+
+\newcommand{\field}[2]{#1{\triangleright}#2}
+\newcommand{\mgenericbinding}{B}
+\newcommand{\sgenericbinding}{D}
+\newcommand{\mgenericbindings}[1]{B#1_1,\ldots,B#1_n}
+\newcommand{\sgenericbindings}[1]{D#1_1,\ldots,D#1_n}
+\newcommand{\fieldlabel}{l}
+
+\newcommand{\context}{\Gamma}
+\newcommand{\extendcontext}[2]{#1,#2}
+\newcommand{\emptycontext}{\bullet}
+\newcommand{\contextcontainsexpression}[3]
+             {#1=\extendcontext{#1'}{\cbindexpression{#2}{#3}}{,}{#1''}}
+\newcommand{\contextcontainsconstructor}[3]
+             {#1=\extendcontext{#1'}{\cbindconstructor{#2}{#3}}{,}{#1''}}
+\newcommand{\emptysequence}{\bullet}
+
+
+\newcommand{\BV}[1]{\mbox{BV}(#1)}
+\newcommand{\FV}[1]{\mbox{FV}(#1)}
+\newcommand{\substitute}[2]{[{#1}{\mapsto}{#2}]}
+
+\newcommand{\ok}[2]{#1\vdash #2\mbox{ ok}}
+\newcommand{\validcontext}[1]{{#1}\vdash\mbox{ok}}
+\newcommand{\validexpression}[3]{#1\vdash #2 : #3}
+\newcommand{\validmodule}[3]{#1\vdash #2 : #3}
+\newcommand{\validconstructor}[3]{#1\vdash #2 : #3}
+\newcommand{\validtype}[2]{#1\vdash #2\mbox{\ type}}
+\newcommand{\validkind}[2]{#1\vdash #2\mbox{\ ok}}
+\newcommand{\validsignature}[3]{\mbox{$#1\vdash #2 : #3$}}
+\newcommand{\validmbinding}[3]{#1\vdash #2 : #3}
+\newcommand{\validmbindings}[3]{#1\vdash #2 : #3}
+\newcommand{\equivconstructor}[4]{#1\vdash #2 \equiv #3 : #4}
+\newcommand{\equivkind}[3]{#1\vdash #2 \equiv #3}
+\newcommand{\equivtype}[3]{#1\vdash #2 \equiv #3\mbox{\ type}}
+\newcommand{\equivsignature}[4]{#1\vdash #2 \equiv #3 : #4}
+\newcommand{\equivsbinding}[3]{#1\vdash #2 \equiv #3}
+\newcommand{\equivsbindings}[3]{#1\vdash #2 \equiv #3}
+\newcommand{\subconstructor}[4]{\mbox{$#1\vdash #2 \preceq #3 : #4$}}
+\newcommand{\subkind}[3]{\mbox{$#1\vdash #2 \preceq #3$}}
+\newcommand{\subsignature}[4]{#1\vdash #2 \preceq #3 : #4}
+\newcommand{\subsbinding}[3]{\mbox{$#1\vdash #2 \preceq #3$}}
+\newcommand{\subsbindings}[3]{\mbox{$#1\vdash #2 \preceq #3$}}
+
+
+\newcommand{\super}[2]{\ {}^{#1\in #2}}
+\newcommand{\superlt}[2]{\ {}^{#1 < #2}}
+\newcommand{\superle}[2]{\ {}^{#1 \le #2}}
+\newcommand{\stepsto}{\leadsto}

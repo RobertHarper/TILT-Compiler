@@ -1,0 +1,1329 @@
+\documentclass[12pt,twoside,fleqn]{article}
+\usepackage{code}
+\usepackage{latexsym}
+\usepackage{fullpage}
+\include{lambda}
+\title{MIL Reference Guide (Working Draft)}
+\author{Chris Stone}
+\date{\today}
+
+\begin{document}
+\maketitle
+\raggedbottom
+
+\newcommand{\translate}[1]{\langle{#1}\rangle}
+\newcommand{\describe}[7]{
+  \subsubsection{#1}
+  \begin{tabular}{p{0.8truein}p{5truein}}
+  Description&#2\\
+  Greek&$#3$\\
+  Datatype&\textcd{#4}\\
+  PP&\textcd{#5}\\
+  Note&#6\\
+  Rules&#7\\
+\end{tabular}}
+  
+
+\newcommand{\irule}[2]
+{  \[
+    \frac{\begin{array}{c}
+              #1
+          \end{array}}
+         {\begin{array}{c}
+              #2
+          \end{array}}
+  \]}
+\newcommand{\allarrowmil}[6]{\forall(#1).(#2;#3)\to^{#4,#5}#6}
+
+\section{Kinds ($\kind$)} 
+
+\subsection{Overview}
+
+\subsubsection{Structural Rules}
+
+\irule
+  {\validkind{\context}{\kind}}
+  {\equivkind{\context}{\kind}{\kind}}
+
+\irule
+  {\equivkind{\context}{\kind'}{\kind}}
+  {\equivkind{\context}{\kind}{\kind'}}
+
+\irule
+  {\equivkind{\context}{\kind}{\kind'}\qquad
+   \equivkind{\context}{\kind'}{\kind''}}
+  {\equivkind{\context}{\kind}{\kind''}}
+
+
+\irule
+  {\equivkind{\context}{\kind}{\kind'}}
+  {\subkind{\context}{\kind}{\kind}}
+
+\irule
+  {\subkind{\context}{\kind}{\kind'}\qquad
+   \subkind{\context}{\kind'}{\kind''}}
+  {\subkind{\context}{\kind}{\kind''}}
+
+
+\subsection{Detailed Descriptions}
+
+\describe{Type kind}
+  {Kind of constructors which are the types of values}
+  {\ktype}
+  {Type\_k($\translate{\mathit{phase}}$)}
+  {TYPE\_C \mbox{or} TYPE\_R}
+  {}
+  {\[\frac
+      {\validcontext{\context}}
+      {\validkind{\context}{\ktype}}\qquad
+   \]}
+
+\describe{Singleton kind}
+  {Kind of constructors equivalent to a given constructor}
+  {\ksingleton{\ktype}{\constructor}}
+  {Singleton\_k($\translate{\mathit{phase}}$,$\translate{\ktype}$,$\translate{\constructor}$)}
+  {SINGLE\_KC($\translate{\ktype}$,$\translate{\constructor}$) \mbox{\ or \ }
+   SINGLE\_KR($\translate{\ktype}$,$\translate{\constructor}$)}
+  {For concision, the compiler's code actually allows singletons at
+   all kinds.  (These are definable in terms of singletons at kinds
+   $\ktype$.)}
+  {\[
+     \frac
+       {\validconstructor{\context}{\constructor}{\ktype}}
+       {\validkind{\context}{\ksingleton{\ktype}{\constructor}}}
+   \]
+   \[
+   \frac
+    {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
+    {\equivkind{\context}{\ksingleton{\ktype}{\constructor}}
+       {\ksingleton{\ktype}{\constructor'}}}
+   \]
+   \[
+   \frac
+    {\validkind{\context}{\ksingleton{\ktype}{\constructor}}}
+    {\subkind{\context}{\ksingleton{\ktype}{\constructor}}{\ktype}}
+   \qquad
+   \frac
+    {\validconstructor{\context}{\constructor}
+          {\ksingleton{\ktype}{\constructor'}}}
+    {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
+   \qquad
+   \frac
+    {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
+    {\validconstructor{\context}{\constructor}
+          {\ksingleton{\ktype}{\constructor'}}}
+   \]}
+
+\describe{Record Kind}
+  {Kinds classifying records \textit{of} constructors (as
+   distinguished from the type of a record value, which would have kind 
+   $\ktype$).}
+  {\krecord{\fieldlabel_i{\triangleright}\cvar_i{:}\kappa_i
+            \super{i}{1..n}}}
+  {Record\_k [(($\translate{\fieldlabel_i}$,$\translate{\cvar_i}$),$\translate{\kappa_i}$)$\super{i}{1..n}$]}
+  {REC\_K\{$\translate{\fieldlabel_i}$>$\translate{\cvar_i}$:$\translate{\kappa_i}$
+           $\super{i}{1..n}$\}} 
+  {The kinds of the fields can have dependencies.  So for example,
+   \[\krecord{\fieldlabel_1{\triangleright}{\alpha}{:}{\ktype},
+              \fieldlabel_2{\triangleright}{\beta}{:}
+                  {\ksingleton{\ktype}{\alpha}}}\]
+   is the kind classifying a record containing two constructors
+   of kind $\ktype$ where the second is constrained to be equivalent
+   to the first.}
+  {
+    \irule
+    {\validcontext{\context}\quad
+       \validkind{\context,\sbindconstructor{\cvar_i}{\kind_i}\superlt{i}{n}}
+                 {\kind_n}}
+    {\validkind{\context}
+       {\krecord{\krbnd{\fieldlabel_i}{\cvar_i}{\kind_i}\super{i}{1..n}}}}
+    \irule
+     {\forall j\in1..n:\quad
+        \equivkind{\context,\sbindconstructor{\cvar_i}{\kind_i}
+                  \superlt{i}{j}}
+                 {\kind_j}{\kind'_j}}
+     {\equivkind{\context}
+        {\krecord{\krbnd{\fieldlabel_i}{\cvar_i}{\kind_i}\super{i}{1..n}}}
+        {\krecord{\krbnd{\fieldlabel_i}{\cvar_i}{\kind'_i}\super{i}{1..n}}}}
+    \irule
+     {\forall j\in1..n:\quad
+        \subkind{\context,\sbindconstructor{\cvar_i}{\kind_i}
+                  \superlt{i}{j}}
+                 {\kind_j}{\kind'_j}}
+     {\subkind{\context}
+        {\krecord{\krbnd{\fieldlabel_i}{\cvar_i}{\kind_i}\super{i}{1..n}}}
+        {\krecord{\krbnd{\fieldlabel_i}{\cvar_i}{\kind'_i}\super{i}{1..n}}}}
+   }
+
+\newcommand{\kpimil}[3]{\Pi^{#1}(#2).#3}
+
+\describe{Function Kind}
+   {Kinds classifying functions mapping constructors \textit{to}
+    constructors (as distinguished from the type of a term-level function,
+    which would be classified by kind $\ktype$.)}
+   {\kpimil{a}{\cvar_i{:}\kind_i\super{i}{1..n}}{\kind}\quad
+    \mbox{\ where\ } a\in\{\mathcd{open},\mathcd{code},\mathcd{closure}\}}
+   {Arrow\_k ($\translate{c}$, 
+        [($\translate{\cvar_i}$,$\translate{\kind_i}$)$\super{i}{1..n}$],
+        $\translate{\kind}$)}
+   {Arrow\_k($\translate{c}$;$\translate{\cvar_i}$:$\translate{\kind_i}$$\super{i}{1..n}$;
+             $\translate{\kind}$)}
+   {Note that these are dependent function kinds.}
+   {\irule
+    {\validkind{\context}{\kind}\qquad
+      \validkind{\context,\sbindconstructor{\cvar_i}{\kind_i}
+                 \super{i}{1..n}}{\kind}}
+     {\validkind{\context}{\kpimil{a}{\cvar_i{:}\kind_i\super{i}{1..n}}
+                             {\kind}}}
+    \irule
+      {\forall j\in 1..n:\quad
+         \equivkind{\context,\cvar_i{:}\kind_i\superlt{i}{j}}
+                    {\kind_j}{\kind'_j}\\
+         \equivkind{\context,\cvar_i{:}\kind_i\super{i}{1..n}}
+                 {\kind}{\kind'}}
+      {\equivkind{\context}
+         {\kpimil{a}{\cvar_i{:}\kind_i\super{i}{1..n}}{\kind}}
+         {\kpimil{a}{\cvar_i{:}\kind'_i\super{i}{1..n}}{\kind'}}}
+    \irule
+      {\forall j\in 1..n:\quad
+         \subkind{\context,\cvar_i{:}\kind'_i\superlt{i}{j}}
+                    {\kind'_j}{\kind_j}\\
+         \subkind{\context,\cvar_i{:}\kind'_i\super{i}{1..n}}
+                 {\kind}{\kind'}}
+      {\subkind{\context}
+         {\kpimil{a}{\cvar_i{:}\kind_i\super{i}{1..n}}{\kind}}
+         {\kpimil{a}{\cvar_i{:}\kind'_i\super{i}{1..n}}{\kind'}}}
+   }
+
+\section{Constructors}
+
+\subsection{Overview}
+
+\subsubsection{Structural Rules}
+
+\irule
+  {\validconstructor{\context}{\constructor}{\kind}}
+  {\equivconstructor{\context}{\constructor}{\constructor}{\kind}}
+
+\irule
+  {\equivconstructor{\context}{\constructor'}{\constructor}{\kind}}
+  {\equivconstructor{\context}{\constructor}{\constructor'}{\kind}}
+
+\irule
+  {\equivconstructor{\context}{\constructor}{\constructor'}{\kind}\qquad
+   \equivconstructor{\context}{\constructor'}{\constructor''}{\kind}}
+  {\equivconstructor{\context}{\constructor}{\constructor''}{\kind}}
+
+\subsection{Detailed Descriptions}
+
+\describe{Integer}
+  {Type of integers}
+  {\mathsf{Int}_b\quad\mbox{\ where\ } b\in\{8,16,32\}}
+  {Prim\_c(Int\_c $\translate{b}$, [])}
+  {INT8, INT16, \textrm{or} INT32}
+  {The datatype contains $\mathsf{Int}_{64}$, but this is not yet
+   implemented.}
+  {\irule
+    {\validcontext{\context}\qquad b\in\{8,16,32\}}
+     {\validconstructor{\context}{\mathsf{Int}_b}{\ktype}}}
+
+\describe{Boxed Floating-Point}
+  {Type of boxed floating-point values}
+  {\mathsf{BoxFloat}_b\quad\mbox{\ where\ } b\in\{32,64\}}
+  {Prim\_c(BoxFloat\_c $\translate{b}$, [])}
+  {BOXFLOAT32, \mbox{or} BOXFLOAT64}
+  {}
+  {\irule
+    {\validcontext{\context}}
+     {\validconstructor{\context}{\mathsf{BoxFloat}_b}{\ktype}}}
+
+\newcommand{\cexn}{\mathsf{Exn}}
+\describe{Exception type}
+  {Type of exception values}
+  {\cexn}
+  {Prim\_c(Exn\_c, [])}
+  {EXN}
+  {Corresponds to the Standard~ML type \textcd{exn}}
+  {\irule
+    {\validcontext{\context}}
+    {\validconstructor{\context}{\cexn}{\ktype}}}
+
+\newcommand{\cexntag}[1]{\mathsf{ExnTag}[#1]}
+\describe{Exception Tag}
+  {Type of exception tag values}
+  {\cexntag{\constructor}}
+  {Prim\_c(Exntag\_c, [$\translate{\constructor}$])}
+  {EXNTAG($\translate{\constructor}$)}
+  {These are the internal tags used to distinguish exception packets.
+   Each tag comes with the type of values it can be used to tag.
+   (Such tagged values then have type $\mathsf{Exn}$).  New tags
+   are generated at run-time when new SML \textcd{exception} constructors
+   are created.}
+  {\[\frac
+    {\validconstructor{\context}{\constructor}{\ktype}}
+    {\validconstructor{\context}{\mathsf{ExnTag}[\constructor]}{\ktype}}
+   \qquad
+   \frac
+    {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
+    {\equivconstructor{\context}{\mathsf{ExnTag}[\constructor]}
+         {\mathsf{ExnTag}[\constructor']}
+         {\ktype}}
+  \]}   
+
+\describe{Array}
+  {Type of array values}
+  {\mathsf{Array}[\constructor]}
+  {Prim\_c(Array\_c, [$\translate{\constructor}$])}
+  {ARRAY($\translate{\constructor}$)}
+  {An array of boxed floats is represented specially; there is also
+   a special primitive to efficiently retrieve a floating point value
+   from such an array.}
+  {\[\frac
+    {\validconstructor{\context}{\constructor}{\ktype}}
+    {\validconstructor{\context}{\mathsf{Array}[\constructor]}{\ktype}}
+   \qquad
+   \frac
+    {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
+    {\equivconstructor{\context}{\mathsf{Array}[\constructor]}
+         {\mathsf{Array}[\constructor']}
+         {\ktype}}
+  \]}   
+
+
+\describe{Vector}
+  {Type of vector values}
+  {\mathsf{Vector}[\constructor]}
+  {Prim\_c(Vector\_c, [$\translate{\constructor}$])}
+  {VECTOR($\translate{\constructor}$)}
+  {Vectors are immutable arrays.  Vectors of characters are strings.}\par
+  {\[\frac
+    {\validconstructor{\context}{\constructor}{\ktype}}
+    {\validconstructor{\context}{\mathsf{Vector}[\constructor]}{\ktype}}
+   \qquad
+   \frac
+    {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
+    {\equivconstructor{\context}{\mathsf{Vector}[\constructor]}
+         {\mathsf{Vector}[\constructor']}
+         {\ktype}}
+  \]}
+
+\describe{References}
+  {Type of reference values}
+  {\mathsf{Ref}[\constructor]}
+  {Prim\_c(Ref\_c, [$\translate{\constructor}$])}
+  {REF($\translate{\constructor}$)}
+  {}
+  {\[\frac
+    {\validconstructor{\context}{\constructor}{\ktype}}
+    {\validconstructor{\context}{\mathsf{Ref}[\constructor]}{\ktype}}
+   \qquad
+   \frac
+    {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
+    {\equivconstructor{\context}{\mathsf{Ref}[\constructor']}
+         {\mathsf{Ref}[\constructor]}
+         {\ktype}}
+  \]}
+
+\newcommand{\csummil}[2]{\Sigma[#1;#2]}
+\describe{Disjoint Sums}
+  {Type of disjoint sum values}
+  {\csummil{n}{\constructor_i\super{i}{1..m}}\quad
+    \mbox{\ where\ }n,m\ge 0}
+  {Prim\_c(Sum\_c\{tagcount=$\translate{n}$, totalcount=$\translate{n{+}m}$,
+                   known=NONE\}, [$\translate{\constructor_i}\super{i}{1..m}$])}
+  {SUM($\translate{n}$)($\translate{\constructor_i}\super{i}{1..m}$)}
+  {The layout for elements of a sum type depends on the number of
+  non-value-carrying components.  If we simply identified these with
+  components of type $\mathsf{Unit}$, the possible layout of a type
+  such as $\mathcd{'a option}$ could not be determined statically
+  ($\mathcd{unit option = unit+unit}$, $\mathcd{int option =
+  unit+int}$).  To avoid run-time type tests to determine layout, we
+  statically fix a number $n$ of non-value-carrying components, which
+  statically determines the layout.  This means that values of types
+  such as $\mathcd{unit option}$ will be represented less compactly
+  than is possible, but this isn't very important.}
+  {\irule
+    {n,m\ge 0\\
+     \forall i\in1..m:\quad
+       \validconstructor{\context}{\constructor_i}{\ktype}}
+    {\validconstructor{\context}{\csummil{n}{\constructor_i\super{i}{1..m}}}
+         {\ktype}}
+   \irule
+    {n,m\ge 0\\
+     \forall i\in1..m:\quad
+     \equivconstructor{\context}{\constructor_i}{\constructor'_i}{\ktype}}
+    {\equivconstructor{\context}{\csummil{n}{\constructor_i\super{i}{1..m}}}
+         {\csummil{n}{\constructor'_i\super{i}{1..m}}}
+         {\ktype}}
+  }
+
+\newcommand{\cspsummil}[3]{\Sigma_{#1}[#2;#3]}
+\describe{Exposed Disjoint Sums}
+  {Type of disjoint sum values whose tag is statically known.}
+  {\cspsummil{j}{n}{\constructor_i\super{i}{1..m}}\quad
+    \mbox{\ where\ }1\le j \le n+m}
+  {Prim\_c(Sum\_c\{tagcount=$\translate{n}$, totalcount=$\translate{n{+}m}$,
+                   known=SOME~$\translate{j}$\}, 
+    [$\translate{\constructor_i}\super{i}{1..m}$])}
+  {SUM\_$\translate{j}$($\translate{n}$)($\translate{\constructor_i}\super{i}{1..m}$)}
+  {}
+  {\irule
+    {j\in1..n{+}m\\
+     \forall i\in1..m:\quad
+       \validconstructor{\context}{\constructor_i}{\ktype}}
+    {\validconstructor{\context}{\cspsummil{j}{n}
+         {\constructor_i\super{i}{1..m}}}
+         {\ktype}}
+   \irule
+    {j\in1..n{+}m\\
+     \forall i\in1..m:\quad
+     \equivconstructor{\context}{\constructor_i}{\constructor'_i}{\ktype}}
+    {\equivconstructor{\context}
+         {\cspsummil{j}{n}{\constructor_i\super{i}{1..m}}}
+         {\cspsummil{j}{n}{\constructor'_i\super{i}{1..m}}}
+         {\ktype}}
+  }
+
+\describe{Record}
+  {Type of record values}
+  {\{\fieldlabel_i{:}\constructor_i\super{i}{1..n}\}\quad
+    \mbox{\ where\ }n\ge 0,\ \fieldlabel_i\mbox{\ distinct and sorted}}
+  {Prim\_c(Record\_c [$\translate{\fieldlabel_i}\super{i}{1..n}$], 
+            [$\translate{\constructor_i}\super{i}{1..n}$])}
+  {RECORD[$\translate{\fieldlabel_i}\super{i}{1..n}$]($\translate{\constructor_i}\super{i}{1..n}$) 
+     \textrm{or} UNIT \textrm{if $n=0$}}
+  {}
+  {\irule
+    {\validcontext{\context}\qquad
+     \forall i\in1..n:\ 
+       \validconstructor{\context}{\constructor_i}{\ktype}}
+    {\validconstructor{\context}
+       {\crecord{{\fieldlabel_i}{:}{\constructor_i}\super{i}{1..n}}}
+       {\ktype}}
+    \irule
+     {\validcontext{\context}\qquad
+      \forall i\in1..n:\ 
+        \equivconstructor{\context}{\constructor_i}{\constructor'_i}{\ktype}}
+     {\equivconstructor{\context}
+        {\crecord{{\fieldlabel_i}{:}{\constructor_i}\super{i}{1..n}}}
+        {\crecord{{\fieldlabel_i}{:}{\constructor'_i}\super{i}{1..n}}}
+        {\ktype}}}
+
+\describe{Vararg}
+  {Type constructor used in classifying \textcd{make\_vararg}
+   and \textcd{make\_onearg}}
+  {\mathsf{Vararg}^{a,e}[\constructor,\constructor']
+     \mbox{\ where\ }  a\in\{\mathcd{open},\mathcd{code},\mathcd{closure}\},
+     e\in\{\mathcd{partial},\mathcd{total}\}}
+  {Prim\_c(Vararg\_c($\translate{a}$,$\translate{e}$),
+    [$\translate{\constructor}$,$\translate{\constructor'}$])}
+  {RECORD$\translate{a}\translate{e}
+      (\translate{\constructor},\translate{\constructor'})$}
+  {Vararg is not implemented in TILT (yet).  The pretty
+   printer is screwed up for this case.}
+  {\irule
+    {
+    \validconstructor{\context}{\constructor}{\ktype}\qquad
+    \validconstructor{\context}{\constructor'}{\ktype}}
+    {\validconstructor{\context}
+       {\mathsf{Vararg}^{a,e}[\constructor,\constructor']}{\ktype}}
+   \qquad
+   \irule
+    {
+    \equivconstructor{\context}{\constructor_1}{\constructor'_1}{\ktype}\qquad
+    \equivconstructor{\context}{\constructor_2}{\constructor'_2}{\ktype}}
+    {\equivconstructor{\context}
+       {\mathsf{Vararg}^{a,e}[\constructor_1,\constructor_2]}
+       {\mathsf{Vararg}^{a,e}[\constructor'_1,\constructor'_2]}
+         {\ktype}}
+   \irule
+    {
+     \equivconstructor{\context}{\constructor}
+        {\crecord{\fieldlabel_i{:}\constructor_i\super{i}{1..n}}}{\ktype}
+         \qquad n\in0..6
+    }
+    {\equivconstructor{\context}
+       {\mathsf{Vararg}^{a,e}[\constructor,\constructor']}
+       {\allarrowmil{}
+          {\constructor_i\super{i}{1..n}}
+          {0}{a}{e}{\constructor}}
+         {\ktype}}
+  }
+
+\describe{Recursion}
+  {Recursive Types}
+  {\mu(\cvar_i{=}\constructor_i\super{i}{1..n})\quad
+     \mbox{\ where\ } n\ge 0}
+  {Mu\_c(true, Seq[$(\cvar_i,\constructor_i)\super{i}{1..n}$])}
+  {MU\_C($\translate{\cvar_i} = \translate{\constructor_i}\super{i}{1..n}$) \mbox{or} 
+   MU\_C\_NR($\translate{\cvar_i} = \translate{\constructor_i}\super{i}{1..n}$)}
+  {``Tuples'' of (mutually) recursively defined types; however the
+   1-tuple case just returns the type.
+   The boolean flag can be set to false in the datatype if the components
+   are not really recursive.}
+  {\[\frac{
+       \validconstructor{\context,\cvar{:}\ktype}
+            {\constructor}{\ktype}}
+    {\validconstructor{\context}
+            {\mu(\cvar{=}\constructor)}
+            {\ktype}}
+   \qquad
+   \frac{n>1\qquad
+       \forall j\in1..n:\
+       \validconstructor{\context,\cvar_i{:}\ktype\super{i}{1..n}}
+            {\constructor_j}{\ktype}}
+    {\validconstructor{\context}
+            {\mu(\cvar_i{=}\constructor_i\super{i}{1..n})}
+            {\krecord{i{\triangleright}\cvar_i{:}\ktype\super{i}{1..n}}}}
+   \]
+   \[\frac{
+       \equivconstructor{\context,\cvar{:}\ktype}
+            {\constructor}{\constructor'}{\ktype}}
+    {\equivconstructor{\context}
+            {\mu(\cvar{=}\constructor)}
+            {\mu(\cvar{=}\constructor')}
+            {\ktype}}
+   \]
+   \[
+   \frac{n>1\qquad
+       \forall j\in1..n:\
+       \equivconstructor{\context,\cvar_i{:}\ktype\super{i}{1..n}}
+            {\constructor_j}{\constructor'_j}{\ktype}}
+    {\equivconstructor{\context}
+            {\mu(\cvar_i{=}\constructor_i\super{i}{1..n})}
+            {\mu(\cvar_i{=}\constructor'_i\super{i}{1..n})}
+            {\krecord{i{\triangleright}\cvar_i{:}\ktype\super{i}{1..n}}}}
+   \]
+  }
+
+\describe{Function}
+  {Type of a term-level monomorphic function}
+  {\allarrowmil{}
+          {\constructor_i\super{i}{1..m}}
+          {k}{a}{e}{\constructor} \mbox{\ where\ }
+       a\in\{\mathcd{open},\mathcd{code},\mathcd{closure}\} \mbox{\ and\ }
+       e\in\{\mathcd{partial},\mathcd{total}\}}
+  {AllArrow\_c($\translate{a}$,$\translate{e}$,%
+               [],%
+               [$\translate{\constructor_i}\super{i}{1..m}$], $\translate{k}$,%
+               $\translate{\constructor}$)}
+  {AllArrow($\translate{a}$; $\translate{e}$;
+               ();
+               $\translate{\constructor_i}\super{i}{1..m}$; 
+               $\translate{k}$;
+               $\translate{\constructor}$)}
+  {The integer $k$ specifies the number of arguments to be passed (unboxed)
+   in floating-point registers.  (There are only constructors representing
+   monomorphic function types; there are, however, types for polymorphic
+   functions.)}
+  {\irule
+    {m,k\ge 0\\
+     \forall j\in1..m:\quad
+       \validconstructor{\context}
+          {\constructor_j}{\ktype}\\
+     \validconstructor{\context}
+          {\constructor}{\ktype}}
+    {\validconstructor{\context}
+       {\allarrowmil{}
+          {\constructor_i\super{i}{1..m}}
+          {k}{a}{e}{\constructor}}
+       {\ktype}}
+   \irule
+    {m,k\ge 0\\
+     \forall j\in1..m:\quad
+       \equivconstructor{\context}
+          {\constructor_j}{\constructor'_j}{\ktype}\\
+     \equivconstructor{\context}
+          {\constructor}{\constructor'}{\ktype}}
+    {\equivconstructor{\context}
+       {\allarrowmil{}
+          {\constructor_i\super{i}{1..m}}
+          {k}{a}{e}{\constructor}}
+       {\allarrowmil{}
+          {\constructor'_i\super{i}{1..m}}
+          {k}{a}{e}{\constructor'}}
+       {\ktype}}
+  }
+
+\describe{Type Variable}
+  {Constructor variable}
+  {\cvar}
+  {Var\_c($\translate{\cvar}$)}
+  {$\translate{\cvar}$}
+  {}
+  {\irule
+    {\validcontext{\context}\qquad
+     \context = \context',\cvar{:}\kind,\context''}
+    {\validconstructor{\context}{\cvar}{\kind}}}
+
+\newcommand{\cletmil}[3]{\mathsf{let}^{#1}\,#2\,\mathsf{in}\,#3\,\mathsf{end}}
+\newcommand{\cbnd}{\mathit{cbnd}}
+\describe{Let}
+  {Constructor-level let-binding}
+  {\cletmil{p}{\cbnd_i\super{i}{1..n}}{\constructor}\quad
+     \mbox{\ where\ } p\in\{\mathcd{Parallel},\mathcd{Sequential}\}}
+  {Let\_c ($\translate{p}$, [$\translate{\cbnd_i}\super{i}{1..n}$], $\translate{\constructor}$)}
+  {LET $\translate{\cbnd_i}\super{i}{1..n}$ IN 
+       $\translate{\constructor}$ END \mbox{or}
+   LETP $\translate{\cbnd_i}\super{i}{1..n}$ IN $\translate{\constructor}$ END}
+  {The choices for constructor bindings are:
+   \[\begin{array}{rl}
+       \cbnd ::= &\cvar = \constructor : \kind\\
+         |&\cvar = \lambda^{\mathcd{Open}}(\cvar_i{:}\kind_i\super{i}{1..m})
+                     {:}\kind.\constructor\\
+         |&\cvar = \lambda^{\mathcd{Code}}(\cvar_i{:}\kind_i\super{i}{1..m})
+                     {:}\kind.\constructor\\
+     \end{array}
+   \]
+   which are represented in the datatype respectively as:
+   \[
+   \begin{array}{l}
+      \mathcd{Con\_cb ($\translate{\cvar}$,$\translate{\kind}$,$\translate{\constructor}$)}\\
+      \mathcd{Open\_cb ($\translate{\cvar}$,
+                        [$(\translate{\cvar_i},\translate{\kind_i})\super{i}{1..m}$],
+                        $\translate{\constructor}$,$\translate{\kind}$)}\\
+      \mathcd{Code\_cb ($\translate{\cvar}$,
+                        [$(\translate{\cvar_i},\translate{\kind_i})\super{i}{1..m}$],
+                        $\translate{\constructor}$,$\translate{\kind}$)}\\
+   \end{array}
+   \]
+  Notice that this serves as the intro form for constructor-level
+  functions; all such functions are hence named.  The formal rules are 
+  messy and omitted for now.}
+  {}
+
+\describe{Constructor Record}
+ {Record of constructors (as distinguished from the type of a
+  term-level record)}
+ {\crecord{\fieldlabel_i{=}\constructor_i\super{i}{1..n}}}
+ {Crecord\_c [$(\translate{\fieldlabel_i},\translate{\constructor_i})\super{i}{1..n}$]}
+ {CREC\_C\{$\translate{\fieldlabel_i}$=$\translate{\constructor_i}\super{i}{1..n}$\}}
+ {The order in which fields occur is significant in testing
+  equivalence.}
+ {\irule
+  {\forall j\in1..n:\quad\cases{
+     \cvar_j\not\in\BV{\context}\cr
+     \validconstructor{\context}{\constructor_j}
+         {[\cvar_i{\mapsto}\constructor_i\superlt{i}{j}]\kind_j}}}
+  {\validconstructor{\context}
+       {\crecord{{\fieldlabel_i}{=}{\constructor_i}
+                 \super{i}{1..n}}}
+       {\krecord{{\fieldlabel_i}{\triangleright}{\cvar_i}{:}{\kind_i}
+                 \super{i}{1..n}}}}
+ \irule
+  {\forall j\in1..n:\quad\cases{
+     \cvar_j\not\in\BV{\context}\cr
+     \equivconstructor{\context}{\constructor_j}{\constructor'_i}
+         {[\cvar_i{\mapsto}\constructor_i\superlt{i}{j}]\kind_j}}}
+  {\equivconstructor{\context}
+       {\crecord{{\fieldlabel_i}{=}{\constructor_i}
+                 \super{i}{1..n}}}
+       {\crecord{{\fieldlabel_i}{=}{\constructor'_i}
+                 \super{i}{1..n}}}
+       {\krecord{{\fieldlabel_i}{\triangleright}{\cvar_i}{:}{\kind_i}
+                 \super{i}{1..n}}}}}
+
+\describe{Projection}
+  {Projection from a record of constructors}
+  {\cselect{\constructor}{\fieldlabel}}
+  {Proj\_c($\translate{\constructor}$,$\translate{\fieldlabel}$)}
+  {PROJ\_C($\translate{\constructor}$,$\translate{\fieldlabel}$)}
+  {}
+  {\irule
+    {\validconstructor{\context}{\constructor}
+        {\krecord{\krbnd{\fieldlabel_i}{\cvar_i}{\kind_i}
+                  \super{i}{1..n}}}}
+    {\validconstructor{\context}{\cselect{\constructor}{\fieldlabel_j}}
+      {[\cvar_i{\mapsto}{\cselect{\constructor}{\fieldlabel_i}}
+        \superlt{i}{j}]
+       \kind_j}}
+   \irule
+    {\equivconstructor{\context}{\constructor}{\constructor'}
+        {\krecord{\krbnd{\fieldlabel_i}{\cvar_i}{\kind_i}
+                  \super{i}{1..n}}}}
+    {\equivconstructor{\context}
+      {\cselect{\constructor}{\fieldlabel_j}}
+      {\cselect{\constructor'}{\fieldlabel_j}}
+      {[\cvar_i{\mapsto}{\cselect{\constructor}{\fieldlabel_i}}
+        \superlt{i}{j}]
+       \kind_j}}
+   \irule
+    {\validconstructor{\context}
+          {\crecord{{\fieldlabel_i}{=}{\constructor_i}
+                 \super{i}{1..n}}}
+          {\krecord{\krbnd{\fieldlabel_i}{\cvar_i}{\kind_i}
+                 \super{i}{1..n}}}
+     \qquad j\in1..n}
+    {\equivconstructor{\context}
+       {\cselect
+          {\crecord{{\fieldlabel_i}{=}{\constructor_i}
+                 \super{i}{1..n}}}{\fieldlabel_j}}
+       {[\cvar_i{\mapsto}{\constructor_i}\superlt{i}{j}]{\constructor_j}}
+       {[\cvar_i{\mapsto}{\constructor_i}\superlt{i}{j}]{\kind_j}}}}
+   
+\describe{Closure}
+  {Closure for a constructor-level function (as distinguished
+   from the type of a term-level closure)}
+  {\mathsf{Closure}[\constructor_1,\constructor_2]}
+  {Closure\_c ($\translate{\constructor_1}$,$\translate{\constructor_2}$)}
+  {CLOSURE\_C($\translate{\constructor_1}$,$\translate{\constructor_2}$)}
+  {}
+  {\irule
+     {\validconstructor{\context}{\constructor}
+          {\kpimil{\mathcd{code}}{\cvar_i{:}\kind_i\super{i}{1..n}}{\kind}}\\
+      \validconstructor{\context}{\constructor_1}{\kind_1}}
+     {\validconstructor{\context}
+          {\mathsf{Closure}[\constructor,\constructor_1]}
+         {\kpimil{\mathcd{closure}}
+              {\cvar_i{:}\substitute{\cvar_1}{\constructor_1}\kind_i
+                \super{i}{2..n}}{\substitute{\cvar_1}{\constructor_1}\kind}}}
+   \irule
+     {\equivconstructor{\context}{\constructor}{\constructor'}
+         {\kpimil{\mathcd{closure}}{\cvar_i{:}\kind_i\super{i}{1..n}}{\kind}}\\
+      \equivconstructor{\context}{\constructor_1}{\constructor'_1}{\kind_1}}
+     {\equivconstructor{\context}
+         {\mathsf{Closure}[\constructor,\constructor_1]}
+         {\mathsf{Closure}[\constructor',\constructor'_1]}
+         {\kpimil{\mathcd{closure}}
+              {\cvar_i{:}\substitute{\cvar_1}{\constructor_1}\kind_i
+                \super{i}{2..n}}{\substitute{\cvar_1}{\constructor_1}\kind}}}}
+
+\newcommand{\capplymil}[2]{#1\,(#2)}
+\describe{Application}
+  {Application of a constructor-level function}
+  {\capplymil{\constructor}{\constructor_i\super{i}{1..n}}}
+  {App\_c ($\translate{\constructor}$, [$\translate{\constructor_i}\super{i}{1..n}$])}
+  {APP\_C ($\translate{\constructor}$, [$\translate{\constructor_i}\super{i}{1..n}$])}
+  {Also need to write beta and eta rules.}
+  {\irule
+    {\validconstructor{\context}{\constructor}
+           {\kpimil{a}{\cvar_i{:}\kind_i\super{i}{1..n}}{\kind}}\\
+      a\in\{\mathcd{open},\mathcd{code},\mathcd{closure}\}\\
+     \forall j\in1..n:\quad
+        \validconstructor{\context}{\constructor_j}
+           {[\cvar_i{\mapsto}\constructor_i\superlt{i}{j}]\kind_i}}
+    {\validconstructor{\context}
+        {\capplymil{\constructor}{\constructor_i\super{i}{1..n}}}
+        {[\cvar_i{\mapsto}\constructor_i\super{i}{1..n}]\kind}}
+  \irule
+    {\equivconstructor{\context}{\constructor}{\constructor'}
+           {\kpimil{a}{\cvar_i{:}\kind_i\super{i}{1..n}}{\kind}}\\
+      a\in\{\mathcd{open},\mathcd{code},\mathcd{closure}\}\\
+     \forall j\in1..n:\quad
+        \equivconstructor{\context}{\constructor_j}{\constructor'_j}
+           {[\cvar_i{\mapsto}\constructor_i\superlt{i}{j}]\kind_i}}
+    {\equivconstructor{\context}
+        {\capplymil{\constructor}{\constructor_i\super{i}{1..n}}}
+        {\capplymil{\constructor'}{\constructor'_i\super{i}{1..n}}}
+        {[\cvar_i{\mapsto}\constructor_i\super{i}{1..n}]\kind}}
+   }
+
+
+
+\section{Types}
+
+\subsection{Overview}
+
+\subsubsection{Structural Rules}
+
+\irule
+  {\validtype{\context}{\kind}}
+  {\equivtype{\context}{\kind}{\kind}}
+
+\irule
+  {\equivtype{\context}{\kind'}{\kind}}
+  {\equivtype{\context}{\kind}{\kind'}}
+
+\irule
+  {\equivtype{\context}{\kind}{\kind'}\qquad
+   \equivtype{\context}{\kind'}{\kind''}}
+  {\equivtype{\context}{\kind}{\kind''}}
+
+\subsection{Detailed Descriptions}
+
+\describe{Constructors}
+  {Every constructor of kind $\ktype$ corresponds to a type.}
+  {\constructor}
+  {\textrm{(see above)}}
+  {\textrm{(see above)}}
+  {}
+  {\irule
+    {\validconstructor{\context}{\constructor}{\ktype}}
+    {\validtype{\context}{\constructor}}
+   \irule
+    {\equivconstructor{\context}{\constructor_1}{\constructor_2}{\ktype}}
+    {\equivtype{\context}{\constructor_1}{\constructor_2}}}
+
+\describe{Unboxed Floating-Point}
+  {Type of unboxed floating-point values}
+  {\mathsf{Float}_b\quad\mbox{\ where\ } b\in\{32,64\}}
+  {Prim\_c(Float\_c $\translate{b}$, [])}
+  {FLOAT32, \mbox{or} FLOAT64}
+  {}
+  {\irule
+    {\validcontext{\context}}
+     {\validtype{\context}{\mathsf{Float}_b}}}
+
+\describe{Function}
+  {Type of a term-level (possibly polymorphic) function}
+  {\allarrowmil{\cvar_i{:}\kind_i\super{i}{1..n}}
+          {\ctype_i\super{i}{1..m}}
+          {k}{a}{e}{\ctype} \mbox{\ where\ }
+       a\in\{\mathcd{open},\mathcd{code},\mathcd{closure},%
+             \mathcd{extern}\} \mbox{\ and\ }
+       e\in\{\mathcd{partial},\mathcd{total}\}}
+  {AllArrow\_c($\translate{a}$,$\translate{e}$,%
+               [$(\translate{\cvar_i},\translate{\kind_i})\super{i}{1..n}$],%
+               [$\translate{\ctype_i}\super{i}{1..m}$], $\translate{k}$,%
+               $\translate{\ctype}$)}
+  {AllArrow($\translate{a}$; $\translate{e}$;
+               $(\translate{\cvar_i}$ :: $\translate{\kind_i}\super{i}{1..n})$;
+               $\translate{\ctype_i}\super{i}{1..m}$; 
+               $\translate{k}$;
+               $\translate{\ctype}$)}
+  {The integer $k$ specifies the number of arguments to be passed (unboxed)
+   in floating-point registers. }
+  {\irule
+    {m,n,k\ge 0\\
+     \forall j\in1..n:\quad
+       \validkind{\context,\cvar_i{:}\kind_i\superlt{i}{j}}{\kind_i}\\
+     \forall j\in1..m:\quad
+       \validconstructor{\context,\cvar_i{:}\kind_i\super{i}{1..n}}
+          {\ctype_j}{\ktype}\\
+     \validconstructor{\context,\cvar_i{:}\kind_i\super{i}{1..n}}
+          {\ctype}{\ktype}}
+    {\validtype{\context}
+       {\allarrowmil{\cvar_i{:}\kind_i\super{i}{1..n}}
+          {\ctype_i\super{i}{1..m}}
+          {k}{a}{e}{\ctype}}}
+   \irule
+    {m,n,k\ge 0\\
+     \forall j\in1..n:\quad
+       \equivkind{\context,\cvar_i{:}\kind_i\superlt{i}{j}}
+          {\kind_i}{\kind'_i}\\
+     \forall j\in1..m:\quad
+       \equivtype{\context,\cvar_i{:}\kind_i\super{i}{1..n}}
+          {\ctype_j}{\ctype'_j}{\ktype}\\
+     \equivtype{\context,\cvar_i{:}\kind_i\super{i}{1..n}}
+          {\ctype}{\ctype'}{\ktype}}
+    {\equivtype{\context}
+       {\allarrowmil{\cvar_i{:}\kind_i\super{i}{1..n}}
+          {\constructor_i\super{i}{1..m}}
+          {k}{a}{e}{\constructor}}
+       {\allarrowmil{\cvar_i{:}\kind'_i\super{i}{1..n}}
+          {\constructor'_i\super{i}{1..m}}
+          {k}{a}{e}{\constructor'}}}
+  }
+
+
+\section{Terms}
+
+\subsection{Overview}
+
+\subsection{Detailed Descriptions}
+
+\describe{Variable}
+  {Term-level variable}
+  {\evar}
+  {Var\_e $\translate{\evar}$}
+  {$\translate{\evar}$}
+  {}
+  {\irule
+    {\validcontext{\context}\qquad
+     \context = \context',\evar{:}\ctype,\context''}
+    {\validexpression{\context}{\evar}{\ctype}}}
+
+\describe{Constant}
+  {Term-level constants}
+  {n_b, u_b, f_b,
+   \mathsf{vector}[\constructor][\expression_i\super{i}{1..n}],
+   \mathsf{array}[\constructor][\expression_i\super{i}{1..n}]}
+  {Const\_e(int($\translate{b}$,$\translate{n}$)),\
+   Const\_e(uint($\translate{b}$,$\translate{u}$)),\
+   Const\_e(float($\translate{b}$,$\translate{f}$)),\
+   Const\_e(vector($\translate{\constructor}$,[$\translate{\expression_i}\super{i}{1..n}$])),\ 
+   Const\_e(array($\translate{\constructor}$,[$\translate{\expression_i}\super{i}{1..n}$]))}
+  {$\translate{n}$, $\translate{u}$, $\translate{s}$, EmptyVectorValue 
+   \mbox{or}\ VectorValue \mbox{or}\ "\ldots", ArrayValue}
+  {The constructors annotating vectors and arrays are there for the
+   length zero case, where they cannot be inferred.  In HIL there are
+   different types for signed and unsigned integers; at the MIL level,
+   the types are merged but there are signed and unsigned primitive
+   operations.  }
+  {\[
+   \frac{\validcontext{\context}}
+        {\validexpression{\context}{n_b}{\mathsf{Int}_b}}
+   \qquad
+   \frac{\validcontext{\context}}
+        {\validexpression{\context}{u_b}{\mathsf{Int}_b}}
+   \qquad
+   \frac{\validcontext{\context}}
+        {\validexpression{\context}{f_b}{\mathsf{Float}_b}}
+   \]
+   \[
+   \frac{\validconstructor{\context}{\constructor}{\ktype}\qquad
+         \forall i\in1..n:\quad
+             \validexpression{\context}{\expression_i}{\constructor}}
+        {\validexpression{\context}
+            {\mathsf{vector}[\constructor][\expression_i\super{i}{1..n}]}
+            {\mathsf{Vector}[\constructor]}}
+   \]
+   \[
+   \frac{\validconstructor{\context}{\constructor}{\ktype}\qquad
+         \forall i\in1..n:\quad
+             \validexpression{\context}{\expression_i}{\constructor}}
+        {\validexpression{\context}
+            {\mathsf{array}[\constructor][\expression_i\super{i}{1..n}]}
+            {\mathsf{Array}[\constructor]}}
+   \]
+  }
+
+\describe{Record}
+  {Term-level record}
+  {\erecord{\fieldlabel_i{=}\expression_i\super{i}{1..n}}}
+  {Prim\_e(NilPrimOp(record [$\translate{\fieldlabel_i}\super{i}{1..n}$]),%
+            [$\translate{\constructor_i}\super{i}{1..n}$],%
+            [$\translate{\expression_i}\super{i}{1..n}$])}
+  {record[$\translate{\constructor_i}\super{i}{1..n}$]%
+         ($\translate{\expression_i}\super{i}{1..n}$)}
+  {The \textcd{elide\_prim} flag omits the constructors from
+   pretty-printing output.}
+ {\irule
+  {\forall i\in1..n:\quad
+     \validexpression{\context}{\expression_i}{\constructor_i}}
+  {\validconstructor{\context}
+       {\crecord{{\fieldlabel_i}{=}{\expression_i}
+                 \super{i}{1..n}}}
+       {\crecord{{\fieldlabel_i}{:}{\constructor_i}
+                 \super{i}{1..n}}}}}
+
+\describe{Selection}
+  {Selection from a term-level record}
+  {\eselect{\expression}{\fieldlabel}}
+  {Prim\_e(NilPrimOp(select $\translate{\fieldlabel_j}$,%
+                      [$\translate{\constructor}$],%
+                      [$\translate{\expression}$]))}
+  {select[$\translate{\fieldlabel_j}$]([$\translate{\constructor}$],%
+                      [$\translate{\expression}$])}
+  {The \textcd{elide\_prim} flag omits constructor from
+   pretty-printing output.  The constructor $\constructor$ may be omitted,
+   which helps avoid a blow-up in program size.}
+ {\irule
+  {\equivconstructor{\context}{\constructor}
+       {\crecord{\fieldlabel_i{:}\constructor_i\super{i}{1..n}}}{\ktype}\qquad
+     j\in1..n\qquad
+   \validexpression{\context}{\expression}{\constructor}}
+  {\validconstructor{\context}
+       {\eselect{\expression}{\fieldlabel_j}}
+       {\constructor_j}}}
+
+\newcommand{\einj}[2]{\mathsf{inj}^{#1}\,#2}
+\newcommand{\einjrec}[2]{\mathsf{inj\_rec}^{#1}(#2)}
+\describe{Sum Tagging}
+  {Injection into a sum type}
+  {\einj{\constructor}{}\mathrm{\ and\ }
+   \einj{\constructor}{\expression} \mathrm{\ and\ }
+   \einjrec{\constructor}{\expression_i\super{i}{1..n}}}
+  {Prim\_e(NilPrimOp(inject, [], [$\translate{\expression}$])) \textrm{\ and\ }
+   Prim\_e(NilPrimOp(inject\_record, [], [$\translate{\expression_i}\super{i}{1..n}$]))}
+  {inject[$\translate{\constructor}$]($\translate{\expression}$) 
+   \textrm{\ and\ }
+   inject\_rec[$\translate{\constructor}$]%
+       ($\translate{\expression_i}\super{i}{1..n}$)}
+  {}
+  {\irule
+    {\equivconstructor{\context}{\constructor}
+       {\cspsummil{j}{k}{\constructor_i\super{i}{0..n-1}}}{\ktype}
+         \qquad j\in 0..(k-1)}
+    {\validexpression{\context}{\einj{\constructor}{}}
+       {\csummil{k}{\constructor_i\super{i}{0..n-1}}}}
+   \irule
+    {\equivconstructor{\context}{\constructor}
+       {\cspsummil{j}{k}{\constructor_i\super{i}{0..n-1}}}{\ktype}
+         \qquad j\in k..(n+k-1)\\
+     \validexpression{\context}{\expression}{\constructor_j}}
+    {\validexpression{\context}{\einj{\constructor}{\expression}}
+       {\csummil{k}{\constructor_i\super{i}{0..n-1}}}}
+   \irule
+    {\equivconstructor{\context}{\constructor}
+       {\cspsummil{j}{k}{\constructor_i\super{i}{0..n-1}}}{\ktype}
+          \qquad j\in k..(n+k-1)\\
+     \equivconstructor{\context}{\constructor_{j-k}}
+         {\crecord{\fieldlabel_i{:}\constructor'_i\super{i}{1..m}}}{\ktype}\\
+     \forall i\in1..m:\quad
+        \validexpression{\context}{\expression_i}{\constructor'_i}}
+    {\validexpression{\context}{\einjrec{\constructor}
+         {\expression_i\super{i}{1..m}}}
+       {\csummil{k}{\constructor_i\super{i}{0..n-1}}}}}
+
+\newcommand{\eproj}[2]{\mathsf{proj}^{#1}\,#2}
+\newcommand{\eprojrec}[3]{\mathsf{proj\_rec}^{#1}_#2\,#3}
+\describe{Sum Untagging}
+  {Projection from an exposed sum type}
+  {\eproj{\constructor}{\expression} \mbox{\ and\ }
+   \eprojrec{\constructor}{j}{\expression}}
+  {Prim\_e(NilPrimOp(project\_sum, [], [$\translate{\expression}$])) 
+    \textrm{\ and\ }
+   Prim\_e(NilPrimOp(project\_sum\_record $\translate{j}$, [], 
+            [$\translate{\expression}$]))}
+  {project\_sum[$\translate{\constructor}$]($\translate{\expression}$) 
+     \textrm{\ and\ }
+   project\_sum\_rec[$\translate{j}$][$\translate{\constructor}$]%
+           ($\translate{\expression_i}\super{i}{1..n}$)}
+  {}
+  {\irule
+    {\equivconstructor{\context}{\constructor}
+       {\cspsummil{j}{k}{\constructor_i\super{i}{0..n-1}}}{\ktype}
+         \qquad j\in k..(n+k-1)\\
+     \validexpression{\context}{\expression}{\constructor}}
+    {\validexpression{\context}{\eproj{\constructor}{\expression}}
+         {\constructor_{j-k}}}
+   \irule
+    {\equivconstructor{\context}{\constructor}
+       {\cspsummil{j}{k}{\constructor_i\super{i}{0..n-1}}}{\ktype}
+          \qquad j\in k..(n+k-1)\\
+     \equivconstructor{\context}{\constructor_{j-k}}
+         {\crecord{\fieldlabel_i{:}\constructor'_i\super{i}{1..m}}}{\ktype}\\
+     \validexpression{\context}{\expression}{\constructor}\qquad
+      p\in1..m}
+    {\validexpression{\context}{\eprojrec{\constructor}{p}
+         {\expression}}
+         {\constructor'_p}}}
+  
+\describe{Case analysis on Sums}     
+ {Case construct for sums}
+ {\mathsf{case}^{\ctype}\,\expression\,\mathsf{of}\,
+    i\to\expression_i\super{i}{0..k-1},
+    i\to(\evar)\expression_i\super{i}{k..k+n-1}}
+ {Switch\_e(Sumsw\_e(\{sum\_type=$\translate{\constructor}$, 
+                     arg=$\translate{\expression}$,
+                     result\_type=$\translate{\ctype}$, 
+                     bound=$\translate{\evar}$,
+                     arms=[($\translate{i}$, $\translate{\expression_i}$)$\super{i}{0..k+n-1}$],
+                     default=NONE\}))}
+ {SWITCH\_SUM $\translate{\constructor}$ $\translate{\expression}$
+            $\translate{i}$/\\()()(){:}$\translate{\constructor'}$=%
+         $\translate{\expression_i}\super{i}{1..n}$
+            $\translate{i}$/\\()($\translate{\evar}{:}\translate{\constructor_i}$)(){:}%
+              $\translate{\constructor'}$=$\translate{\expression_i}$%
+         $\super{i}{k+1..n+k-1}$
+         NODEFAULT}
+ {}
+ {\irule
+   {\validexpression{\context}{\expression}{\constructor}\\
+    \equivconstructor{\context}{\constructor}
+      {\csummil{k}{\constructor_i\super{i}{k+1..n+k-1}}}{\ktype}\\
+    \forall i\in1..k:\quad 
+       \validexpression{\context}{\expression_i}{\constructor'}\\
+    \forall i\in k{+}1..n{+}k{-}1:\quad
+       \constructor_i := \cspsummil{i}
+           {k}{\constructor_i\super{i}{k+1..n+k-1}}\\
+    \forall i\in k{+}1..n{+}k{-}1:\quad
+       \validexpression{\context,\evar{:}\constructor_i}
+            {\expression_i}{\constructor'}}
+   {\validexpression{\context}
+    {\mathsf{case}^{\constructor}\,\expression\,\mathsf{of}\,
+      i\to\expression_i\super{i}{1..k},
+      i\to(\evar)\expression_i\super{i}{k+1..n+k-1}}
+    {\constructor'}}
+ }
+ 
+
+\describe{Boxing and Unboxing}
+ {Boxing and unboxing of floating-point values}
+ {\mathsf{Box}_b\,\expression\mbox{\ and\ }\mathsf{Unbox}_b\,\expression
+   \mbox{\ where\ }  b\in\{32,64\}}
+ {Prim\_e(NilPrimOp(box\_float $\translate{b}$,[],[$\translate{\expression}$]))
+   \textrm{\ and\ }
+  Prim\_e(NilPrimOp(unbox\_float $\translate{b}$,[],[$\translate{\expression}$]))}
+ {box\_float\_$\translate{b}$[]($\translate{\expression}$)
+   \textrm{\ and\ }
+  unbox\_float\_$\translate{b}$[]($\translate{\expression}$)}
+ {}
+ {\irule
+    {\validexpression{\context}{\expression}{\mathsf{Float}_b}
+     \qquad b\in\{32,64\}}
+    {\validexpression{\context}{\mathsf{Box}_b\,\expression}
+      {\mathsf{BoxFloat}_b}}
+  \irule
+    {\validexpression{\context}{\expression}{\mathsf{BoxFloat}_b}
+     \qquad b\in\{32,64\}}
+    {\validexpression{\context}{\mathsf{Unbox}_b\,\expression}
+      {\mathsf{Float}_b}}}
+
+\newcommand{\eroll}[2]{\mathsf{roll}_{#1}\,#2}
+\newcommand{\eunroll}[1]{\mathsf{unroll}\,#1}
+\describe{Rolling and Unrolling}
+ {Coercions to and from a recursive type}
+ {\eroll{\constructor}{\expression}\mbox{\ and\ }
+  \eunroll{\expression}}
+ {Prim\_e(NilPrimOp(roll,[$\translate{\constructor}$],[$\translate{\expression}$])) \textrm{\ and\ }
+  Prim\_e(NilPrimOp(unroll,[],[$\translate{\expression}$]))}
+ {roll[$\translate{\constructor}$]($\translate{\expression}$)
+   \textrm{\ and\ }
+  unroll[]($\translate{\expression}$)}
+ {As of 2/10, $\mathcd{unroll}$ still takes the recursive type
+  as an argument, like $\mathcd{roll}$.  This is unnecessary and
+  we're planning to drop it.}
+ {For the $n=1$ case:
+  \irule
+   {\equivconstructor{\context}{\constructor}
+       {\mu(\cvar{=}\constructor')}{\ktype}\qquad
+    \validexpression{\context}{\expression}
+         {\substitute{\cvar}{\constructor}\constructor'}}
+   {\validexpression{\context}{\eroll{\constructor}{\expression}}
+       {\constructor}}
+  \irule
+   {\validexpression{\context}{\expression}{\mu(\cvar{=}\constructor)}}
+   {\validexpression{\context}{\eunroll{\expression}}
+       {\substitute{\cvar}{\mu(\cvar{=}\constructor)}\constructor}}
+ }
+
+\newcommand{\enewtag}[1]{\mathsf{new\_tag}[#1]}
+\describe{Exception Tags}
+ {Creating a new exception tag}
+ {\enewtag{\constructor}}
+ {Prim\_e(NilPrimOp(make\_exntag,[$\translate{\constructor}$],[]))}
+ {make\_exntag[$\translate{\constructor}$]()}
+ {}
+ {\irule
+   {\validconstructor{\context}{\constructor}{\ktype}}
+   {\validexpression{\context}{\enewtag{\constructor}}
+        {\mathsf{ExnTag}[\constructor]}}}
+
+
+\newcommand{\etag}[2]{\mathsf{tag}\,(#1,#2)}
+\describe{Exceptions}
+ {Creating an exception value}
+ {\etag{\expression_1}{\expression_2}}
+ {Prim\_e(NilPrimOp(inj\_exn "$\ldots$",[],[$\translate{\expression_1}$,
+    $\translate{\expression_2}$]))}
+ {inj\_exn["$\ldots$"]($\translate{\expression_1}$,$\translate{\expression_2}$)}
+ {The string is used for debugging purposes.}
+ {\irule
+   {\validexpression{\context}{\expression_1}{\mathsf{ExnTag}[\constructor]}
+      \qquad
+    \validexpression{\context}{\expression_2}{\constructor}}
+   {\validexpression{\context}{\etag{\expression_1}{\expression_2}}
+        {\mathsf{Exn}}}}
+
+
+\describe{Case analysis on Exceptions}
+ {Case construct for exceptions}
+ {\mathsf{exncase}_\ctype\,\expression\,\mathsf{of}\,
+    \expression_i\to(\evar)\expression'_i\super{i}{1..n},
+    \mathsf{default} \to \expression'}
+ {Switch\_e(Exncase\_e(\{arg=$\translate{\expression}$,
+                         result\_type=$\translate{\ctype}$,
+                         bound=$\translate{\evar}$,
+                         arms=[($\translate{\expression_i}$,$\translate{\expression'_i}$)%
+                                 $\super{i}{1..n}$],
+                         default=SOME $\translate{\expression'}$\})\})}
+ {SWITCH\_EXN $\translate{\expression}$
+            $\translate{\expression_i}$/\\()%
+              ($\translate{\evar}{:}\translate{\constructor_i}$)(){:}%
+              $\translate{\constructor'}$=$\translate{\expression_i}$%
+         $\super{i}{1..n}$
+         DEFAULT=$\translate{\expression'}$}
+ {}
+ {\irule
+   {\validexpression{\context}{\expression}{\cexn}\\
+    \forall i\in 1..n:\quad\cases{
+       \validexpression{\context}{\expression_i}
+           {\cexntag{\constructor'_i}}\cr
+       \validexpression{\context,\evar{:}\constructor'_i}
+            {\expression_i}{\constructor'}}}
+   {\validexpression{\context}
+    {(\mathsf{exncase}\,\expression\,\mathsf{of}\,
+     \expression_i\to(\evar)\expression'_i\super{i}{1..n},
+      \mathsf{default} \to \expression')}
+    {\constructor'}}
+ } 
+
+
+\newcommand{\eapplymil}[4]{{#1}[#2](#3;#4)}
+\describe{Application}
+ {Application of a term-level function}
+ {\eapplymil{\expression}{\constructor_i\super{i}{1..n}}
+         {\expression_i\super{i}{1..m}}{\expression'_i\super{i}{1..p}}}
+ {App\_e ($\translate{a}$, 
+             $\translate{\expression}$, 
+        [$\translate{\constructor_i}\super{i}{1..n}$],
+        [$\translate{\expression_i}\super{i}{1..m}$],
+        [$\translate{\expression'_i}\super{i}{1..p}$])}
+ {App\_$\translate{a}$($\translate{\expression}$;$\translate{\constructor_i}\super{i}{1..n}$;%
+       $\translate{\expression_i}\super{i}{1..m}$;$\translate{\expression'_i}\super{i}{1..p}$)}
+ {}
+ {\irule
+   {\validexpression{\context}{\expression}
+       {\allarrowmil{\cvar_i{:}\kind_i\super{i}{1..n}}
+          {\ctype'_i\super{i}{1..m}}
+          {p}{a}{e}{\constructor}}\\
+    \forall j\in1..n:\quad
+        \validconstructor{\context}{\constructor_j}
+          {[\cvar_i{\mapsto}\constructor_i\superlt{i}{j}]\kind_j}\\
+    \forall j\in1..m:\quad
+        \validexpression{\context}{\expression_j}
+          {[\cvar_i{\mapsto}\constructor_i\superlt{i}{j}]\ctype'_j}\\
+    \forall j\in1..p:\quad
+        \validexpression{\context}{\expression'_j}{\mathsf{Float}_{64}}}
+   {\validexpression{\context}
+      {\eapply{\expression}{\constructor_i\super{i}{1..n}}
+         {\expression_i\super{i}{1..m}}{\expression'_i\super{i}{1..p}}}
+      {[\cvar_i{\mapsto}\constructor_i\super{i}{1..n}]\kind}}
+ }
+
+
+\newcommand{\eletmil}[3]{\mathsf{let}^{#1}\,#2\,\mathsf{in}\,#3\,\mathsf{end}}
+\newcommand{\ebnd}{\mathit{ebnd}}
+\describe{Let}
+  {Term-level let-binding}
+  {\eletmil{p}{\ebnd_i\super{i}{1..n}}{\expression}\quad
+     \mbox{\ where\ } p\in\{\mathcd{Parallel},\mathcd{Sequential}\}}
+  {Let\_e ($\translate{p}$, [$\translate{\ebnd_i}\super{i}{1..n}$], 
+           $\translate{\expression}$)}
+  {LET $\translate{\ebnd_i}\super{i}{1..n}$ IN 
+       $\translate{\expression}$ END \mbox{or}
+   LETP $\translate{\ebnd_i}\super{i}{1..n}$ IN $\translate{\expression}$ END}
+  {The choices for constructor bindings are:
+   \[\begin{array}{rl}
+       \cbnd ::= &\cvar = \constructor\\
+         |&\evar = \expression : \ctype\\
+         |&\{\evar_j = \Lambda(\cvar_{ji}{:}\kind_{ji}\super{i}{1..m_j})%
+             \lambda(\evar'_{ji}{:}\ctype'_{ji}\super{i}{1..n_j};
+                     \evar''_{ji}\super{i}{1..k_j})^{\mathcd{open},e_j}
+                     {:}\ctype_j.\expression_j\super{j}{1..p}\}\\
+         |&\{\evar_j = \Lambda(\cvar_{ji}{:}\kind_{ji}\super{i}{1..m_j})%
+             \lambda(\evar'_{ji}{:}\ctype'_{ji}\super{i}{1..n_j};
+                     \evar''_{ji}\super{i}{1..k_j})^{\mathcd{code},e_j}
+                     {:}\ctype_j.\expression_j\super{j}{1..p}\}\\
+         |&\{\evar_j = \mathsf{closure}%
+                (\evar'_j,\constructor'_j,\expression_j:\constructor_j)
+                \super{j}{1..p}\}\\
+     \end{array}
+   \]
+   which are represented in the datatype respectively as:
+   \[
+   \begin{array}{l}
+      \mathcd{Con\_b ($\translate{\cvar}$,$\translate{\kind}$,$\translate{\constructor}$)}\\
+      \mathcd{Exp\_b ($\translate{\cvar}$,$\translate{\constructor}$,$\translate{\expression}$)}\\
+      \mathcd{Fixopen\_b 
+                 (Set[($\translate{\cvar_j}$, Function(Open, $\translate{e_j}$,
+                        [$(\translate{\cvar_{ji}},\translate{\kind_i})\super{i}{1..m}$],}\\
+      \mathcd{\qquad
+                        [$(\translate{\evar'_{ji}},\translate{\ctype'{ji}})\super{i}{1..n}$],
+                        [$\translate{\evar''_{ji}}\super{i}{1..k_j}$], 
+                        $\translate{\expression_j}$,$\translate{\ctype_j}$))
+                     $\super{j}{1..p}$])}\\
+      \mathcd{Fixcode\_b 
+                 (Set[($\translate{\cvar_j}$, Function(Code, $\translate{e_j}$,
+                        [$(\translate{\cvar_{ji}},\translate{\kind_i})\super{i}{1..m}$],}\\
+      \mathcd{\qquad
+                        [$(\translate{\evar'_{ji}},\translate{\ctype'_{ji}})\super{i}{1..n}$],
+                        [$\translate{\evar''_{ji}}\super{i}{1..k_j}$], 
+                        $\translate{\expression_j}$,$\translate{\ctype_j}$))
+                     $\super{j}{1..p}$])}\\
+      \mathcd{Fixclosure\_b (true,
+                 (Set[($\translate{\evar_j}$, 
+                         \{code=$\translate{\evar'_j}$,
+                           cenv=$\translate{\constructor'_j}$,}\\
+      \mathcd{\qquad
+                           venv=$\translate{\expression_j}$,
+                           tipe=$\translate{\constructor_j}$\})
+                        $\super{j}{1..p}$]))}
+   \end{array}
+   \]}
+ {Notice that this serves as the intro form for term-level functions
+  before and after closure conversion.  The formal rules are 
+  messy and omitted for now.}
+  {}
+
+\newcommand{\eraise}[2]{\mathsf{raise}^{#1}\,#2}
+\newcommand{\ehandle}[4]{\mathsf{handle}^{#1}\,#2\,\mathsf{with}\,#3\to#4}
+\describe{Raise and Handle}
+ {Raising and handling of exceptions}
+ {\eraise{\ctype}{\expression}\mbox{\ and\ }
+  \ehandle{\ctype}{\expression_1}{\evar}{\expression_2}}
+ {Raise\_e ($\translate{\expression}$,$\translate{\ctype}$) \mbox{\ and\ }
+  Handle\_e ($\translate{\expression_1}$, 
+             $\translate{\evar}$,
+             $\translate{\expression_2}$,$\translate{\ctype}$))}
+ {RAISE($\translate{\expression}$,$\translate{\ctype}$) \mbox{\ and\ }
+  HANDLE $\translate{\expression_1}$ : $\translate{\ctype}$ WITH
+  $\translate{\evar}$~:~EXN~. $\translate{\expression_2}$}
+ {To aid type reconstruction, raise is tagged with the type of the entire 
+  raise expression.  Handle is tagged too, but there's no good reason for
+  this}
+ {\irule
+    {\validtype{\context}{\ctype}\qquad
+     \validexpression{\context}{\expression}{\mathsf{Exn}}}
+    {\validexpression{\context}{\eraise{\constructor}{\expression}}
+       {\ctype}}
+  \irule
+    {\validexpression{\context}{\expression_1}{\ctype}\qquad
+     \validexpression{\context,\evar{:}\mathsf{Exn}}{\expression_2}
+          {\ctype}}
+    {\validexpression{\context}
+          {\ehandle{\ctype}{\expression_1}{\evar}{\expression_2}}
+          {\ctype}}}
+
+\newcommand{\evararg}[5]{\mathsf{vararg}^{#1,#2}[#3,#4](#5)}
+\newcommand{\eonearg}[5]{\mathsf{onearg}^{#1,#2}[#3,#4](#5)}
+
+\describe{Argument flattening}
+ {Converting between calling conventions}
+ {\evararg{a}{e}{\constructor}{\constructor'}{\expression}\mbox{\ and\ }
+  \eonearg{a}{e}{\constructor}{\constructor'}{\expression}, \mbox{\ where\ }
+     {a\in\{\mathcd{open},\mathcd{code},\mathcd{closure}\}},
+     e\in\{\mathcd{partial},\mathcd{total}\}}
+ {Prim\_e(NilPrimOp(make\_vararg($\translate{a}$,$\translate{e}$),
+              [$\translate{\constructor}$,$\translate{\constructor'}$],
+              [$\translate{\expression}$])) \textrm{\ and\ }
+  Prim\_e(NilPrimOp(make\_onearg($\translate{a}$,$\translate{e}$),
+              [$\translate{\constructor}$,$\translate{\constructor'}$],
+              [$\translate{\expression}$]))}
+ {}
+ {Currently unimplemented}
+ {\irule
+    {\validexpression{\context}{\expression}
+          {\allarrowmil{}{\constructor}
+             {0}{a}{e}{\constructor'}}}
+    {\validexpression{\context}{\evararg{a}{e}{\constructor}{\constructor'}
+           {\expression}}
+           {\mathsf{Vararg}^{a,e}[\constructor,\constructor']}}
+   \irule
+    {\validexpression{\context}{\expression}
+          {\mathsf{Vararg}^{a,e}[\constructor,\constructor']}}
+    {\validexpression{\context}{\eonearg{a}{e}{\constructor}{\constructor'}
+           {\expression}}
+          {\allarrowmil{}{\constructor}{0}{a}{e}{\constructor'}}}}
+           
+
+\describe{typecase}
+  {Term-level typecase}
+  {\mathsf{typecase}_{\ctype}\,\constructor\,\mathsf{of}\,
+    \mathsf{BoxFloat}_{64}\to\expression_1, \mathsf{default}\to\expression_2}
+%  {typecase\_e \{result_type = $\translate{\ctype}$,
+%                 arg=$\translate{\constructor}$,
+%                arms=[(Prim\_c(Float\_c $\translate{64}$, []),
+%                       [],$\translate{\constructor_1}$)],
+%                default=$\translate{\constructor_2}$,
+%                kind=$\kind$\}}
+   {}
+%  {TYPECASE\_C ($\translate{\constructor}$, $\translate{\kind}$,
+%                FLOAT64 => FUN\_C()$\translate{\constructor_1}$,
+%                DEFAULT: $\translate{\mathit{arm}}$)}
+   {}
+  {Not implemented yet.  The intended implementation is more
+   general that that shown here.}
+  {\irule
+    {\validconstructor{\context}{\constructor}{\ktype}\qquad
+     \validexpression{\context}{\expression_1}{\ctype}\qquad
+     \validconstructor{\context}{\expression_2}{\ctype}}
+    {\validexpression{\context}
+      {\mathsf{typecase}_{\ctype}\,\constructor\,\mathsf{of}\,
+         \mathsf{BoxFloat}_{64}\to\expression_1, 
+         \mathsf{default}\to\expression_2}
+     {\ctype}}}
+
+\end{document}
