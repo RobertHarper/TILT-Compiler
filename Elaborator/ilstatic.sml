@@ -149,28 +149,28 @@ functor IlStatic(structure Il : IL
    (* ---------------------------------------------------------------
       oneshot arrow unifier: note that unset does NOT unify with unset
      ---------------------------------------------------------------- *)
-   fun eq_comp (comp1,comp2) = (case (oneshot_deref comp1,oneshot_deref comp2) of
-				  (SOME x, SOME y) => x = y
-				| (SOME x, NONE) => (oneshot_set(comp2,x); true)
-				| (NONE, SOME x) => (oneshot_set(comp1,x); true)
-				| (NONE, NONE) => ((eq_oneshot(comp1,comp2)) orelse
-						   (oneshot_set(comp1,PARTIAL); 
-						    oneshot_set(comp2,PARTIAL); true)))
-   fun comp_unify arg = if (eq_comp arg) then () else error "comp_unify failed"
+   fun eq_comp (comp1,comp2,is_sub) = (case (oneshot_deref comp1,oneshot_deref comp2) of
+					   (SOME x, SOME y) => (x = y) orelse (is_sub andalso x = TOTAL)
+					 | (SOME x, NONE) => (oneshot_set(comp2,x); true)
+					 | (NONE, SOME x) => (oneshot_set(comp1,x); true)
+					 | (NONE, NONE) => ((eq_oneshot(comp1,comp2)) orelse
+							    (oneshot_set(comp1,PARTIAL); 
+							     oneshot_set(comp2,PARTIAL); true)))
+   fun comp_unify (a1,a2) = if (eq_comp(a1,a2,false)) then () else error "comp_unify failed"
 
 
    (* ------------------------------------------------------------ 
-      type equality:
-	  First, normalize argument types:
-         (1) a module projection whose type is known to the known type
-         (2) beta-reducing constructor function application
-	  (3) overloaded type expression to the carried type
-        Then, performs structural equality except when a type variable.
-	  When a type variable is encountered, the unifier routine
+      type (sub)-equality:
+	 First, normalize argument types:
+           (1) a module projection whose type is known to the known type
+           (2) beta-reducing constructor function application
+	   (3) overloaded type expression to the carried type
+         Then, performs structural equality except when a type variable.
+	 When a type variable is encountered, the unifier routine
 	     is called with the type variable and the given type.
 	     The unifier may be side-effecting or not.
     -------------------------------------------------------------- *)
-   fun unify_maker fetch set (constrained,tyvar,c,decs) = 
+   fun unify_maker fetch set (constrained,tyvar,c,decs,is_sub) = 
      let 
        val self = unify_maker fetch set
        val origv = tyvar_getvar tyvar
@@ -179,10 +179,10 @@ functor IlStatic(structure Il : IL
 		      CON_TYVAR tv =>
 			eq_var(tyvar_getvar tv,origv) orelse
 			(case (fetch tv) of
-			   SOME c' => self(constrained,tyvar,c',decs)
+			   SOME c' => self(constrained,tyvar,c',decs,is_sub)
 			 | NONE => (set(constrained,tyvar,c); true))
 		    | _ => (not (con_occurs(c,origv))) andalso (set(constrained,tyvar,c); true))
-	 | (SOME c') => meta_eq_con self constrained (c',c,decs))
+	 | (SOME c') => meta_eq_con self constrained (c',c,decs,is_sub))
      end
 
    and hard_unifier arg =
@@ -222,17 +222,18 @@ functor IlStatic(structure Il : IL
        fun soft_unify arg = unify_maker soft_fetch soft_set arg
      in (soft_unify,table,constr_con,useeq_con)
      end
-   and eq_con (con1,con2,decs) = meta_eq_con hard_unifier false (con1,con2,decs)
+   and eq_con (con1,con2,decs) = meta_eq_con hard_unifier false (con1,con2,decs,false)
+   and sub_con (con1,con2,decs) = meta_eq_con hard_unifier false (con1,con2,decs,true)
    and soft_eq_con (con1,con2,decs) = 
      let val (soft_unify,table,constr_con,useeq_con) = soft_unifier()
-     in  if (meta_eq_con soft_unify false (con1,con2,decs))
+     in  if (meta_eq_con soft_unify false (con1,con2,decs,false))
 	   then (app tyvar_set (!table); 
 		 app (fn c => con_constrain c) (!constr_con);
 		 app (fn c => con_useeq c) (!useeq_con);
 		 true)
 	 else false
      end
-   and meta_eq_con unifier constrained (con1,con2,decs) = 
+   and meta_eq_con unifier constrained (con1,con2,decs,is_sub) = 
      let 
        fun normalize c : (bool * con) = HeadNormalize(c,decs)
 (*	 (case c of
@@ -293,12 +294,12 @@ functor IlStatic(structure Il : IL
 	 (case (con1,con2) of
 	    (CON_TYVAR tv1, CON_TYVAR tv2) => 
 		(eq_var(tyvar_getvar tv1, tyvar_getvar tv2) 
-		 orelse (unifier(constrained,tv1,con2,decs)))
-	  | (CON_TYVAR tv1, _) => unifier(constrained,tv1,con2,decs)
-	  | (_, CON_TYVAR tv2) => unifier(constrained,tv2,con1,decs)
+		 orelse (unifier(constrained,tv1,con2,decs,is_sub)))
+	  | (CON_TYVAR tv1, _) => unifier(constrained,tv1,con2,decs,is_sub)
+	  | (_, CON_TYVAR tv2) => unifier(constrained,tv2,con1,decs,is_sub)
 	  | (CON_VAR v1, CON_VAR v2) => eq_var(v1,v2)
-	  | (CON_APP(c1_a,c1_r), CON_APP(c2_a,c2_r)) => self(c1_a,c2_a,decs) 
-	                                                andalso self(c1_r,c2_r,decs)
+	  | (CON_APP(c1_a,c1_r), CON_APP(c2_a,c2_r)) => self(c1_a,c2_a,decs,is_sub) 
+	                                                andalso self(c1_r,c2_r,decs,is_sub)
 	  | (CON_MODULE_PROJECT (m1,l1), CON_MODULE_PROJECT (m2,l2)) => 
 		let fun eq_modval (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
 		      | eq_modval (MOD_PROJECT (m,l), 
@@ -310,22 +311,22 @@ functor IlStatic(structure Il : IL
 	  | ((CON_INT is1, CON_INT is2) | (CON_UINT is1, CON_UINT is2)) => is1 = is2
 	  | (CON_FLOAT fs1, CON_FLOAT fs2) => fs1 = fs2
 	  | (CON_ANY, CON_ANY) => true
-	  | (CON_ARRAY c1, CON_ARRAY c2) => self(c1,c2,decs)
-	  | (CON_VECTOR c1, CON_VECTOR c2) => self(c1,c2,decs)
-	  | (CON_REF c1, CON_REF c2) => self(c1,c2,decs)
-	  | (CON_TAG c1, CON_TAG c2) => self(c1,c2,decs)
+	  | (CON_ARRAY c1, CON_ARRAY c2) => self(c1,c2,decs,is_sub)
+	  | (CON_VECTOR c1, CON_VECTOR c2) => self(c1,c2,decs,is_sub)
+	  | (CON_REF c1, CON_REF c2) => self(c1,c2,decs,is_sub)
+	  | (CON_TAG c1, CON_TAG c2) => self(c1,c2,decs,is_sub)
 	  | (CON_ARROW (c1_a,c1_r,comp1), CON_ARROW(c2_a,c2_r,comp2)) => 
-		(self (c1_a,c2_a,decs)
-		 andalso self(c1_r,c2_r,decs)
-		 andalso eq_comp(comp1,comp2))
-	  | (CON_MUPROJECT (i1,c1), CON_MUPROJECT(i2,c2)) => (i1=i2) andalso (self(c1,c2,decs))
+		(eq_comp(comp1,comp2,is_sub)
+		 andalso self (c2_a,c1_a,decs,is_sub)
+		 andalso self(c1_r,c2_r,decs,is_sub))
+	  | (CON_MUPROJECT (i1,c1), CON_MUPROJECT(i2,c2)) => (i1=i2) andalso (self(c1,c2,decs,is_sub))
 	  | (CON_RECORD rdecs1, CON_RECORD rdecs2) => 
 		let val list1 = map (fn (RDEC x) => x) rdecs1
 		    val list1_sorted = sort_labelpair list1
 		    val list2 = map (fn (RDEC x) => x) rdecs2
 		    val list2_sorted = sort_labelpair list2
 		    fun help ((l1,c1),(l2,c2)) = eq_label(l1,l2) 
-			andalso self(c1,c2,decs)
+			andalso self(c1,c2,decs,is_sub)
 		in
 		    eq_list(help,list1,list2)
 		end
@@ -334,15 +335,15 @@ functor IlStatic(structure Il : IL
 		let val decs' = foldl (fn (v,acc) => ((DEC_CON(v,KIND_TUPLE 1, NONE))::acc)) decs vs1
 		    val table = map2 (fn (v1,v2) => (v2,CON_VAR v1)) (vs1,vs2)
 		    val c2' = con_subst_convar(c2,table)
-		in self(c1,c2',decs')
+		in self(c1,c2',decs',is_sub)
 		end
 	  | (CON_SUM (i1,cs1), CON_SUM (i2,cs2)) => 
 		(i1=i2) andalso
-		eq_list (fn (a,b) => self(a,b,decs), cs1, cs2)
+		eq_list (fn (a,b) => self(a,b,decs,is_sub), cs1, cs2)
 	  | (CON_TUPLE_INJECT cs1, CON_TUPLE_INJECT cs2) => 
-		eq_list (fn (a,b) => self(a,b,decs), cs1, cs2)
+		eq_list (fn (a,b) => self(a,b,decs,is_sub), cs1, cs2)
 	  | (CON_TUPLE_PROJECT (i1, c1), CON_TUPLE_PROJECT(i2,c2)) => 
-		(i1 =i2) andalso (self(c1,c2,decs))
+		(i1 =i2) andalso (self(c1,c2,decs,is_sub))
 	  | _ => false)
        val _ = debugdo (fn () => print (if res then "unified\n" else "NOT unified\n"))
      in res
@@ -372,7 +373,7 @@ functor IlStatic(structure Il : IL
 	       SIGNAT_DATATYPE (_,_,sdecs2)) = eq_sdecs(decs,sdecs1,sdecs2)
      | eq_sig (decs,SIGNAT_FUNCTOR (v1,s1_arg,s1_res,comp1), 
 	       SIGNAT_FUNCTOR (v2,s2_arg,s2_res,comp2)) = 
-       (eq_comp(comp1,comp2) andalso (eq_var(v1,v2)) andalso (eq_sig(decs,s1_arg,s2_arg)))
+       (eq_comp(comp1,comp2,false) andalso (eq_var(v1,v2)) andalso (eq_sig(decs,s1_arg,s2_arg)))
        andalso let val decs' = add_dec_mod(decs,(v1,s1_arg))
 	       in  eq_sig (decs',s1_res,s2_res)
 	       end
@@ -387,7 +388,7 @@ functor IlStatic(structure Il : IL
       | APP(e1,e2) => let val e1_con = GetExpCon(e1,decs)
 			  val e1_con_istotal = 
 			      (case e1_con of
-				   CON_ARROW(_,_,comp) => eq_comp(comp,oneshot_init TOTAL)
+				   CON_ARROW(_,_,comp) => eq_comp(comp,oneshot_init TOTAL,false)
 				 | _ => false)
 		      in e1_con_istotal andalso (Exp_IsValuable e1 decs) 
 			  andalso (Exp_IsValuable e2 decs)
@@ -434,7 +435,7 @@ functor IlStatic(structure Il : IL
      | MOD_PROJECT (m,l) => true
      | MOD_APP (m1,m2) => (case (GetModSig(m1,decs)) of
 			     SIGNAT_FUNCTOR(_,_,_,comp) =>
-			       eq_comp(oneshot_init TOTAL,comp) andalso
+			       eq_comp(oneshot_init TOTAL,comp,false) andalso
 			       (Module_IsValuable m1 decs) andalso (Module_IsValuable m2 decs)
 			   | _ => false)
      | _ => false)
@@ -446,7 +447,8 @@ functor IlStatic(structure Il : IL
    and GetConKind (arg : con, decs) : kind = 
      let val con = arg (* Normalize(arg,decs) *)
      in case con of
-       (CON_TYVAR tv) => (DecKindLookup(tyvar_getvar tv,decs) : kind)
+       (CON_TYVAR tv) => KIND_TUPLE 1 
+     (* (DecKindLookup(tyvar_getvar tv,decs) : kind) *)
      | (CON_VAR v) => (DecKindLookup(v,decs) : kind)
      | (CON_OVAR ocon) => raise UNIMP
      | (CON_INT _) => KIND_TUPLE 1
@@ -507,7 +509,7 @@ functor IlStatic(structure Il : IL
 			    val con2 = GetExpCon(e2,decs)
 			in  (case con1 of
 			       CON_ARROW (arg_con,res_con,discard_complete) => 
-				 if eq_con(arg_con,con2,decs) then res_con
+				 if sub_con(arg_con,con2,decs) then res_con
 				 else error "Type mismatch in expression application"
 			     | _ => error "Type of first expression in application is not an arrow")
 			end
@@ -1022,11 +1024,34 @@ functor IlStatic(structure Il : IL
 	 end
 
      (* Rules 99 - 100 *)
-     and Sdecs_IsSub (decs,[],[]) = true
-       | Sdecs_IsSub (decs,SDEC(l1,dec1)::rest1,SDEC(l2,dec2)::rest2) = 
-	 (eq_label(l1,l2) andalso Dec_IsSub(decs,dec1,dec2)
-	  andalso Sdecs_IsSub(add_dec_dec(decs,dec1), rest1, rest2))
-       | Sdecs_IsSub _ = false
+     and Sdecs_IsSub (decs,sdecs1,sdecs2) =
+	 let 
+	     fun help subster (v1,v2,sdecs) =
+		 (case (subster(SIGNAT_STRUCTURE sdecs,[(v1,v2)])) of
+		      SIGNAT_STRUCTURE sdecs' => sdecs'
+		    | _ => error "Sdecs_IsSub subst failed")
+	     fun match_var [] [] = []
+	       | match_var (SDEC(l1,dec1)::rest1) (SDEC(l2,dec2)::rest2) = 
+		 (case (dec1,dec2) of
+		      (DEC_MOD(v1,s1),DEC_MOD(v2,s2)) =>
+			  SDEC(l2,(DEC_MOD(v1,s2)))::
+			  (match_var rest1 (help sig_subst_modvar (v1,MOD_VAR v2,rest2)))
+		    | (DEC_EXP(v1,c1),DEC_EXP(v2,c2)) =>
+			  SDEC(l2,(DEC_EXP(v1,c2)))
+			  ::(match_var rest1 (help sig_subst_expvar (v1,VAR v2,rest2)))
+		    | (DEC_CON(v1,k1,c1),DEC_CON(v2,k2,c2)) =>
+			  SDEC(l2,(DEC_CON(v1,k2,c2)))
+			  ::(match_var rest1 (help sig_subst_convar (v1,CON_VAR v2,rest2)))
+		    | _ => SDEC(l2,dec2)::(match_var rest1 rest2))
+	     val sdecs2' = match_var sdecs1 sdecs2
+	     fun loop decs [] [] = true
+	       | loop decs (SDEC(l1,dec1)::rest1) (SDEC(l2,dec2)::rest2) = 
+		 (eq_label(l1,l2) andalso Dec_IsSub(decs,dec1,dec2)
+		  andalso  Sdecs_IsSub(add_dec_dec(decs,dec1),rest1, rest2))
+	       | loop decs _ _ = false
+	 in loop decs sdecs1 sdecs2'
+	 end
+
      (* Rules 109 - 112 *)
      and Sig_IsSub' (decs, SIGNAT_STRUCTURE sdecs1, SIGNAT_STRUCTURE sdecs2) = 
 	 Sdecs_IsSub(decs,sdecs1,sdecs2)
@@ -1034,10 +1059,12 @@ functor IlStatic(structure Il : IL
 		     SIGNAT_DATATYPE(dt2,tb2,sdecs2)) = Sdecs_IsSub(decs,sdecs1,sdecs2)
        | Sig_IsSub' (decs, SIGNAT_FUNCTOR(v1,s1_arg,s1_res,comp1), 
 		     SIGNAT_FUNCTOR(v2,s2_arg,s2_res,comp2)) = 
-	 ((eq_comp(comp1,comp2) orelse (oneshot_deref comp1) = (SOME TOTAL)) andalso 
-	  eq_var(v1,v2) andalso 
+	 ((eq_comp(comp1,comp2,true)) andalso 
 	  Sig_IsSub(decs,s2_arg,s1_arg) andalso 
-	  Sig_IsSub(add_dec_mod(decs,(v1,s2_arg)), s1_res, s2_res))
+	  let val s1_res' = if (eq_var(v1,v2)) then s1_res
+			    else sig_subst_modvar(s1_res,[(v1,MOD_VAR v2)])
+	  in Sig_IsSub(add_dec_mod(decs,(v2,s2_arg)), s1_res', s2_res)
+	  end)
        | Sig_IsSub' _ = false
      and Sig_IsSub (decs,s1,s2) = 
 	 let val _ = debugdo (fn () => (print "Sig_issub with s1 = \n";
@@ -1075,6 +1102,8 @@ functor IlStatic(structure Il : IL
 	con_unify(context2decs context, msg, arg1, arg2, thunk)
     val eq_con = fn (d,c1,c2) => eq_con(c1,c2,d)
     val eq_con' = fn (context,c1,c2) => eq_con(context2decs context,c1,c2)
+    val sub_con = fn (d,c1,c2) => sub_con(c1,c2,d)
+    val sub_con' = fn (context,c1,c2) => sub_con(context2decs context,c1,c2)
     val soft_eq_con = fn (d,c1,c2) => soft_eq_con(c1,c2,d)
     val soft_eq_con' = fn (context,c1,c2) => soft_eq_con(context2decs context,c1,c2)
 

@@ -104,7 +104,11 @@ signature ILUTIL =
        mod_subst_expvar : takes a module and substitutes 
                           for each expression variable in the list
        mod_subst_convar : ...
-       mod_subst_modvar : ... *)
+       mod_subst_modvar : ... 
+       sig_subst_expvar : takes a signature and substitutes 
+                          for each expression variable in the list
+       sig_subst_convar : ...
+       sig_subst_modvar : ... *)
 
     val exp_subst_expvar : (exp * (var * exp) list) -> exp
     val exp_subst_convar : (exp * (var * con) list) -> exp
@@ -115,6 +119,9 @@ signature ILUTIL =
     val mod_subst_expvar : (mod * (var * exp) list) -> mod
     val mod_subst_convar : (mod * (var * con) list) -> mod
     val mod_subst_modvar : (mod * (var * mod) list) -> mod
+    val sig_subst_expvar : (signat * (var * exp) list) -> signat
+    val sig_subst_convar : (signat * (var * con) list) -> signat
+    val sig_subst_modvar : (signat * (var * mod) list) -> signat
 
     (* mod_free_expvar : given a module, return all free expression variables  *)
     val mod_free_expvar : mod -> var list

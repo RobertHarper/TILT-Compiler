@@ -52,12 +52,30 @@ functor Toil(structure Il : IL
       (3) the fresh types *)
      fun poly_inst (decs,sdecs) = 
        let
-	 fun help (SDEC(l,DEC_CON(v,k,NONE))) = let val c = fresh_con() 
-						   in (SBND(l,BND_CON(v,c)),
-						       SDEC(l,DEC_CON(v,k,SOME c)),
-						       c)
-						   end
-	   | help _ = error "poly_inst received strange sdec"
+	   fun help (SDEC(l,DEC_CON(v,k,NONE))) = 
+	       let val c = fresh_con() 
+	       in (SBND(l,BND_CON(v,c)),
+		   SDEC(l,DEC_CON(v,k,SOME c)),
+		   c)
+	       end
+	     | help (SDEC(l,DEC_MOD(vs,SIGNAT_STRUCTURE([SDEC(l1,DEC_CON(v1,k1,NONE)),
+							 SDEC(l2,DEC_EXP(v2,c2))])))) = 
+	       let val tyvar = fresh_tyvar "eq_tyvar"
+		   val _ = tyvar_use_equal tyvar
+		   val con = CON_TYVAR tyvar
+		   val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
+		   val exp_os = oneshot()
+		   val _ = add_eq_entry(decs,con,exp_os)
+		   val e2 = OVEREXP(eq_con,true,exp_os)
+	       in (SBND(l,BND_MOD(vs,MOD_STRUCTURE([SBND(l1,BND_CON(v1,con)),
+						    SBND(l2,BND_EXP(v2,e2))]))),
+		   SDEC(l,DEC_MOD(vs,SIGNAT_STRUCTURE([SDEC(l1,DEC_CON(v1,k1,SOME con)),
+						       SDEC(l2,DEC_EXP(v2,c2))]))),
+		   con)
+	       end
+	   | help sdec = (print "poly_inst got strange sdec:\n";
+			  pp_sdec sdec;
+			  error "poly_inst received strange sdec")
 	 val temp = map help sdecs
        in (map #1 temp, map #2 temp, map #3 temp)
        end
@@ -84,11 +102,11 @@ val decs1 = ref ([] : Il.dec list)
 	  (SIGNAT_FUNCTOR(v,SIGNAT_STRUCTURE arg_sdecs, 
 			  SIGNAT_STRUCTURE [SDEC(_,DEC_EXP(resv,resc))],_)) =>
 	  let 
-	      val _ = (print "polyfun_inst' got module of:\n";
-		       Ppil.pp_mod module;
-		       print "\n\n  amd signmature of:\n";
-		       Ppil.pp_signat s;
-		       print "\n\n")
+	      val _ = debugdo (fn () => (print "polyfun_inst' got module of:\n";
+					 Ppil.pp_mod module;
+					 print "\n\n  and signmature of:\n";
+					 Ppil.pp_signat s;
+					 print "\n\n"))
 	    local 
 	      fun help (SDEC(l,dec)) =
 		let 
@@ -96,7 +114,8 @@ val decs1 = ref ([] : Il.dec list)
 				     val tv = fresh_tyvar "tv"
 				     val c = CON_TYVAR tv
 				 in (tv,(SBND(l,BND_CON(v,c)),
-					 SDEC(l,DEC_CON(v,KIND_TUPLE 1, SOME c)),
+					 SDEC(l,DEC_CON(v,KIND_TUPLE 1, SOME c)), 
+(*					 SDEC(l,DEC_CON(v,KIND_TUPLE 1, NONE)), *)
 					 DEC_CON(tyvar_getvar tv,KIND_TUPLE 1,NONE)))
 				 end
 		in
@@ -128,33 +147,27 @@ val decs1 = ref ([] : Il.dec list)
 	      val signat_poly = SIGNAT_STRUCTURE signat_poly_sdecs
 	      val decs = (map #3 temp) @ decs
 	    end
-	    val _ = (print "resc is:  "; pp_con resc; print "\n")
-	    val _ = (print "var is:  "; pp_var v; print "\n")
-	    val _ = (print "signat_poly is:\n"; pp_signat signat_poly; print "\n")
 	    val new_rescon : con = remove_modvar_type(resc,v,signat_poly_sdecs)
 
 
 	    val signat_temp = SIGNAT_STRUCTURE[SDEC
 					       (it_lab,
 						DEC_EXP(resv,new_rescon))]
-	    val _ = (print "\n*********\ndone make_non_dependent_type with signat_temp:\n";
-		     pp_signat signat_temp; print "\n\n")
+	    val _ = debugdo (fn () => (print "\n*********\ndone make_non_dependent_type with signat_temp:\n";
+				       pp_signat signat_temp; print "\n\n"))
 	    val signat'= SIGNAT_FUNCTOR(v,signat_poly,signat_temp,oneshot_init PARTIAL)
+(* XXX this check causes a tyvar to be unified with something not in its scope!!!
 	    val _ = if (Sig_IsSub(decs,s,signat')) then ()
 		    else (print "s is\n";
 			  pp_signat s; print "\nsignat' is \n";
 			  pp_signat signat'; print "\n";
 			  s1 := s; s2 := signat'; decs1 := decs;
 			  error "Failed rule 24 Sig_IsSub")
-	    val _ = if (Module_IsValuable(decs, mod_poly)) then ()
-		    else (print "mod_poly not valuable:\n";
-			  pp_mod mod_poly;
-			  print "\n";
-			  error "Failed rule 24 valuability")
+*)
 	    val exp = MODULE_PROJECT(MOD_APP(module,mod_poly), it_lab)
-	    val _ = (print "polyfun_inst returning exp :\n";
-		     pp_exp exp; print "\n\n  and rescon:\n";
-		     pp_con new_rescon; print "\n\n")
+	    val _ = debugdo (fn () => (print "polyfun_inst returning exp :\n";
+				       pp_exp exp; print "\n\n  and rescon:\n";
+				       pp_con new_rescon; print "\n\n"))
 	  in (exp,new_rescon)
 	  end
        |  _ =>  (print "polyfun_inst received s of\n";
@@ -197,8 +210,7 @@ val decs1 = ref ([] : Il.dec list)
      (* make inlineable by substituting all variables.  
       However, substituing an expression is not legal except in certain cases *)
      fun make_inline_module (context,m) : mod option = 
-	 (print "MAKE_INLINE_MODULE CALLED\n";
-	  case m of
+	 (case m of
 	     MOD_STRUCTURE sbnds => 
 		 let 
 		     exception FAIL
@@ -482,8 +494,8 @@ else ();
 							  arg = (VAR v,CON_ANY)}
 			   val handler = make_lambda(v,CON_ANY,#2 handler_body,#1 handler_body)
 			   val _ = con_unify'(context,"handle",
-					      ("handle body type",rescon),
-					      ("handler type", #2 handler), nada)
+					      ("body type",rescon),
+					      ("handler body type", #2 handler_body), nada)
 		       in (HANDLE(exp',#1 handler),rescon)
 		       end
        | Ast.RaiseExp e => let val (exp,con) = xexp(context,e)
@@ -1124,9 +1136,7 @@ else ();
 			 (case strexpbool_list of
 			    [] => error "AppStr with []"
 			  | [(strexp,_)] => 
-				(print "looking up: "; pp_list pp_label' (map symbol2label path) ("",".","",false); 
-				 print "\n";
-			       case (Context_Lookup(context,map symbol2label path)) of
+				(case (Context_Lookup(context,map symbol2label path)) of
 				 PHRASE_CLASS_MOD(m,s) => 
 				   (case s of
 				      (SIGNAT_FUNCTOR(var1,sig1,sig2,_)) => 
@@ -1183,7 +1193,6 @@ else ();
 	      val sig' = xsigexp(context,sigexp)
 	      val (mod',signat'') = xcoerce(context2decs context,signat,sig')
 	    in 
-		print "sigexp case encountered\n";
 	      (MOD_APP(mod',module),sig')
 	    end)
 
@@ -1312,18 +1321,18 @@ else ();
 	Sdecs_Lookup(decs,(path2mod path,sdecs),labels)
       | Signat_Lookup _ = error "Signat_Lookup called with a non-structure sig"
 
-    and xcoerce (decs : decs,
+    and xcoerce (orig_decs : decs,
 		 signat0 : signat,
 		 signat : signat) : Il.mod * Il.signat = 
       let 
-	  val _ =  (print "trying to xcoerce with signat0 = \n";
-		    pp_signat signat0; print "\nand signat = \n";
-		    pp_signat signat; print "\nand decs = \n";
-		    pp_decs decs; print "\n")
+	  val _ =  debugdo (fn () => (print "trying to xcoerce with signat0 = \n";
+				      pp_signat signat0; print "\nand signat = \n";
+				      pp_signat signat; print "\nand decs = \n";
+				      pp_decs orig_decs; print "\n"))
 	val v0 = fresh_var()
-	val decs = (DEC_MOD(v0,signat0))::decs
+	val orig_decs = (DEC_MOD(v0,signat0))::orig_decs
 (* Rules 249 and 250 *)
-	fun polyval_case (lbl,v,con : con,varsig_option) = 
+	fun polyval_case decs (lbl,v,con : con,varsig_option) = 
 	     (case (Signat_Lookup(decs,(SIMPLE_PATH v0,signat0),[lbl])) of
 		(lbls,CLASS_MOD s) => 
 		  let val (lbls,s) = (case s of
@@ -1338,17 +1347,18 @@ else ();
 			let 
 			    val itsig = SIGNAT_STRUCTURE[SDEC(it_lab,DEC_EXP(fresh_var(),con))]
 			    val mtemp = MOD_APP(path2mod path,MOD_VAR var_poly)
-			    val (bnd,dec,sig_poly') = 
-			      (case varsig_option of
-				 NONE => (BND_EXP(v,MODULE_PROJECT(mtemp,it_lab)),
-					  DEC_EXP(v,con),
-					  SIGNAT_STRUCTURE(#2(poly_inst(decs,sig_poly_sdecs))))
-			       | SOME (v1,s1) => (BND_MOD(v,MOD_FUNCTOR(v1,s1,mtemp)),
-						  DEC_MOD(v,SIGNAT_FUNCTOR(v1,s1,itsig,oneshot())),
-						  SIGNAT_STRUCTURE
-						  (#2(poly_inst(DEC_MOD(v1,s1)::decs,sig_poly_sdecs)))))
+			    val (bnd,dec,almost_sig_poly') = 
+				(case varsig_option of
+				     NONE => (BND_EXP(v,MODULE_PROJECT(mtemp,it_lab)),
+					      DEC_EXP(v,con),
+					      poly_inst(decs,sig_poly_sdecs))
+				   | SOME (v1,s1) => (BND_MOD(v,MOD_FUNCTOR(v1,s1,mtemp)),
+						      DEC_MOD(v,SIGNAT_FUNCTOR(v1,s1,itsig,oneshot())),
+						      poly_inst(DEC_MOD(v1,s1)::decs,sig_poly_sdecs)))
+			    val sig_poly' = SIGNAT_STRUCTURE(#2 almost_sig_poly')
+			    val decs' = dec::decs
 			    val s'' = SIGNAT_FUNCTOR(fresh_var(),sig_poly',itsig,oneshot())
-			    val _ = if (Sig_IsSub(dec::decs,s,s''))
+			    val _ = if (Sig_IsSub(decs',s,s''))
 				      then ()
 				    else (print "varsig_option is:\n";
 					  (case varsig_option of
@@ -1359,6 +1369,8 @@ else ();
 					  pp_signat s;
 					  print "s'' is: \n";
 					  pp_signat s'';
+					  print "decs' is: \n";
+					  pp_decs decs';
 					  error "cannot coerce : 1")
 			in (bnd,dec)
 			end
@@ -1366,7 +1378,7 @@ else ();
 		  end
 	      | _ => error "cannot coerce : 3")
 		    
-	fun doit (lbl,dec) : (bnd * dec) = 
+	fun doit decs (lbl,dec) : (bnd * dec) = 
 	  (case dec of
 	     DEC_EXP(v,c) =>
 	       (case (Signat_Lookup(decs,(SIMPLE_PATH v0,signat0),[lbl])) of
@@ -1375,10 +1387,10 @@ else ();
 						       ("actual type",con),nada);
 					     (BND_EXP(v,path2exp(COMPOUND_PATH(v0,lbls))),
 					      DEC_EXP(v,con)))
-		| (lbls,CLASS_MOD s) => polyval_case(lbl,v,c,NONE)  (* rule 250 *)
+		| (lbls,CLASS_MOD s) => polyval_case decs (lbl,v,c,NONE)  (* rule 250 *)
 		| _ => error "cannot coerce : 4")
 	    | DEC_MOD(v,SIGNAT_FUNCTOR(v1,s1,                        (* rule 248 *)
-			      SIGNAT_STRUCTURE[SDEC(_,DEC_EXP(_,c))],_)) => polyval_case(lbl,v,c,SOME(v1,s1))
+			      SIGNAT_STRUCTURE[SDEC(_,DEC_EXP(_,c))],_)) => polyval_case decs (lbl,v,c,SOME(v1,s1))
 	    | DEC_MOD(v,s) => (* rule 254 *)
 	     (case (Signat_Lookup(decs,(SIMPLE_PATH v0,signat0),[lbl])) of
 		(lbls,CLASS_MOD s1) => let val (m,s'') = xcoerce(decs,s1,signat)
@@ -1403,7 +1415,7 @@ else ();
 	    | _ => error "cannot coerce : 7")
 		  
 	fun loop decs [] : (sbnds * sdecs) = ([],[])
-	  | loop decs ((SDEC(l,dec))::rest) = let val (bnd,dec) = doit (l,dec)
+	  | loop decs ((SDEC(l,dec))::rest) = let val (bnd,dec) = doit decs (l,dec)
 						  val (sbnds,sdecs) = loop (dec::decs) rest
 					      in ((SBND(l,bnd))::sbnds, 
 						  (SDEC(l,dec))::sdecs)
@@ -1412,15 +1424,16 @@ else ();
 		       (SIGNAT_FUNCTOR(v1,s1,s1',a1), SIGNAT_FUNCTOR(v2,s2,s2',a2)) =>
 			 let 
 			   val _ = comp_unify(a1,a2)
-			   val (m3,s3) = xcoerce(decs,s2,s1)
-			   val (m4,s4) = xcoerce(decs,s1',s2')
+			   val (m3,s3) = xcoerce(orig_decs,s2,s1)
+			   val (m4,s4) = xcoerce(orig_decs,s1',s2')
 			   val modexp = MOD_APP(m4,MOD_APP(MOD_VAR v0, MOD_APP(m3, MOD_VAR v2)))
-			   val decs' = (DEC_MOD(v0,signat0))::(DEC_MOD(v2,s2))::decs
+			   val decs' = (DEC_MOD(v2,s2))::orig_decs
 			   val s = GetModSig(decs',modexp)
 			 in (MOD_FUNCTOR(v2,s2,modexp),
 			     SIGNAT_FUNCTOR(v2,s2,s,a1))
 			 end
-		     | (_,SIGNAT_STRUCTURE sdecs) => let val (sbnds,sdecs) = loop decs sdecs
+		     | (_,SIGNAT_STRUCTURE sdecs) => let 
+							 val (sbnds,sdecs) = loop orig_decs sdecs
 						     in (MOD_STRUCTURE sbnds,
 							 SIGNAT_STRUCTURE sdecs)
 						     end
@@ -1573,10 +1586,10 @@ else ();
 			     in oneshot_set(exp_oneshot,rexp)
 			     end)
 	fun eq_help (decs,con,exp_oneshot) = 
-	  let val _ = (print "eq_help: con = "; pp_con con; print "\n")
+	  let
 	    val eq_exp = xeq(decs,con)
 	    val _ = oneshot_set(exp_oneshot,eq_exp)
-	  in print "eq_help success\n"
+	  in ()
 	  end
         val _ = app overload_help overload_table 
 	val _ = app eq_help eq_table 

@@ -418,7 +418,7 @@ functor Ppil(structure Il : IL
     and pp_sdec seen (SDEC(label,dec)) = let val (f,fs) = pp_dec' seen dec
 					 in Depth(HOVbox((Hbox[pp_label label,
 							      String " > ",
-							       f, String " = "])::
+							       f, String " : "])::
 							 (Break0 0 3) :: fs))
 					 end
     and pp_sbnd seen (SBND(label,bnd)) = let val (f,fs) = pp_bnd' seen bnd

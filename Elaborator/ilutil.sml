@@ -425,11 +425,9 @@ functor IlUtil(structure Ppil : PPIL
 	let 
 	  val bound_convar = Context_Get_BoundConvars(context)
 	  val free_tyvar = ref ([] : con Tyvar.tyvar list)
-	  fun tyvar_handler tv = (print "tyvar_handler";
-				  (case (tyvar_deref tv) of
-					    SOME _ => (print "SOME case\n"; ())
-					  | NONE => (print "NONE case\n";
-						     if (not (member_eq(eq_tyvar,tv,!free_tyvar))
+	  fun tyvar_handler tv = ((case (tyvar_deref tv) of
+					    SOME _ => ()
+					  | NONE => (if (not (member_eq(eq_tyvar,tv,!free_tyvar))
 							 andalso not (tyvar_isconstrained tv))
 						       then free_tyvar := (tv::(!free_tyvar))
 						     else ()));
@@ -453,11 +451,6 @@ functor IlUtil(structure Ppil : PPIL
 			 in tyvar_set(tv,proj)
 			 end)
 		   (!free_tyvar,res))
-	  val _ = (print "rebind_free_type_var called on con:\n    ";
-		   pp_con argcon;
-		   print "\nand returning:\n    "; 
-		   map (fn (l,b : bool) => (pp_label l; print ", "; print (Bool.toString b); print ";  ")) res; 
-		   print "\n")
 	in res
 	end
 
@@ -635,6 +628,7 @@ functor IlUtil(structure Ppil : PPIL
 	  fun exp_subst_var(arg,table) = f_exp (handlers table) arg
 	  fun con_subst_expvar(arg,table) = f_con (handlers table) arg
 	  fun mod_subst_expvar(arg,table) = f_mod (handlers table) arg
+	  fun sig_subst_expvar(arg,table) = f_signat (handlers table) arg
       end
 
 
@@ -655,6 +649,7 @@ functor IlUtil(structure Ppil : PPIL
 	  fun exp_subst_convar(arg,table) = f_exp (handlers table) arg
 	  fun con_subst_convar(arg,table) = f_con (handlers table) arg
 	  fun mod_subst_convar(arg,table) = f_mod (handlers table) arg
+	  fun sig_subst_convar(arg,table) = f_signat (handlers table) arg
       end
 
       local
@@ -674,6 +669,7 @@ functor IlUtil(structure Ppil : PPIL
 	  fun exp_subst_modvar(arg,table) = f_exp (handlers table) arg
 	  fun con_subst_modvar(arg,table) = f_con (handlers table) arg
 	  fun mod_subst_modvar(arg,table) = f_mod (handlers table) arg
+	  fun sig_subst_modvar(arg,table) = f_signat (handlers table) arg
       end
 
       fun con_subst_conapps (argcon, con_app_handler : (con * con -> con option)) : con = 
@@ -832,8 +828,7 @@ functor IlUtil(structure Ppil : PPIL
 
 
      fun make_inline_module (context,m) : mod option = 
-	 (print "MAKE_INLINE_MODULE CALLED\n";
-	  case m of
+	 (case m of
 	     MOD_STRUCTURE sbnds => 
 		 let 
 		     exception FAIL

@@ -71,14 +71,9 @@ functor Datatype(structure Il : IL
 	    end
 	    | conapper _ = NONE
 	in val cons' = mapmap (fn con => con_subst_conapps(con,conapper)) cons
-	   val _ = print "\ncons:\n";
-	   val _ = mapmap (fn c => (Ppil.pp_con c; print "\n")) cons
-	   val _ = print "\ncons':\n";
-	   val _ = mapmap (fn c => (Ppil.pp_con c; print "\n")) cons'
 	end 
 	val con_sum = map (fn x => CON_SUM(NONE,x)) cons'
 	val con_all = CON_FUN(vardt_list,con_tuple_inject(con_sum))
-	val _ = (print "\ncon_all is: "; Ppil.pp_con con_all; print "\n")
 	local 
 	  val con = if (is_monomorphic) 
 		      then CON_VAR(var_all)
@@ -94,8 +89,7 @@ functor Datatype(structure Il : IL
 			 (varpoly_list, tv_list))
 	val vardt_subst = (zip vardt_list con_dt) 
 	val cons'' = mapmap (fn con => con_subst_var(con,vardt_subst @ varpoly_subst)) cons'
-	val _ = print "\ncons'':\n";
-	val _ = mapmap (fn c => (Ppil.pp_con c; print "\n")) cons'
+
 	  
 	(* ---- compute the constructors, destructors, and cases ------------- *)
 	val exp_con_mk = 

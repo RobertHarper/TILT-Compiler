@@ -57,6 +57,11 @@ signature PRIM =
       | mod_int of intsize
       | quot_int of intsize
       | rem_int of intsize
+      | plus_uint of intsize
+      | minus_uint of intsize
+      | mul_uint of intsize
+      | div_uint of intsize
+      | mod_uint of intsize
       | less_int of intsize           (* there is difference between signed *)
       | greater_int of intsize        (*   and unsigned comparisons *)
       | lesseq_int of intsize
@@ -91,12 +96,7 @@ signature PRIM =
     datatype ilprim = 
       (* unsigned int operations: separated for type reasons; they are identical to
          the signed version when viewed at the bit-pattern level *)
-        plus_uint of intsize
-      | minus_uint of intsize
-      | mul_uint of intsize
-      | div_uint of intsize
-      | mod_uint of intsize
-      | eq_uint of intsize
+        eq_uint of intsize
       | neq_uint of intsize
       | not_uint of intsize
       | and_uint of intsize
