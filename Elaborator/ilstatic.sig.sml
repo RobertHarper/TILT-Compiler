@@ -1,4 +1,4 @@
-(*$import Prelude Util Il *)
+(*$import Util Il *)
 (* Static Semantics of the IL. *)
 signature ILSTATIC = 
   sig
@@ -8,6 +8,8 @@ signature ILSTATIC =
 
     val installHelpers : {eq_compile : Il.context * Il.con -> (Il.exp * Il.con) option}
 	                 -> unit
+
+    val reduce_signat : Il.context -> Il.signat -> Il.signat
 
     (* ------------ functions that manipulate constructors -------------------- 
        eq_onearrow: returns true if the arrows are equal: will set the oneshot if needed
@@ -56,15 +58,12 @@ signature ILSTATIC =
     val Bnds_IsValuable   : Il.context * Il.bnds  -> bool
     val Sbnds_IsValuable  : Il.context * Il.sbnds -> bool
 
-   (* ----- Useful structure-related helper functions ------- *)	    
-   (* ----- Sdecs_Lookup' looks inside starred structure --------- *)
+    (* ----- Useful structure-related helper functions ------- *)	    
+    (* ----- These look inside starred structures --------- *)
     val Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option
-    val Context_Lookup_Path_Open : Il.context * Il.path -> (Il.path * Il.phrase_class) option
-    val Sdecs_Lookup  : Il.context -> Il.mod * Il.sdecs * Il.label list -> 
+    val Context_Lookup_Path : Il.context * Il.path -> (Il.path * Il.phrase_class) option
+    val Sdecs_Lookup : Il.context -> Il.mod * Il.sdecs * Il.label list -> 
 	                            (Il.label list * Il.phrase_class) option
-    val Sdecs_Lookup_Open : Il.context -> Il.mod * Il.sdecs * Il.label list -> 
-	                            (Il.label list * Il.phrase_class) option
-
 
     val supertype : Il.con -> Il.con  (* compute supertype by removing total arrows and special sum types *)
 
