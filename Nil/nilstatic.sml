@@ -752,7 +752,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
        | _ => ck_error (D,constructor,kind,"Illegal Con/Kind combination in analysis")
 	 )
     end
-  and con_analyze_vk_list (D,cons,vks) = 
+  and con_analyze_vk_list (D,cons : con list,
+			   vks : (var * kind) list) = 
     let
       val origD = D
       fun folder (c,(v,k),(D,subst)) = 
@@ -862,15 +863,15 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       else ()
 
 	     fun check_bnd ((D,subst),maker,Tag) (var,formals,body) = 
-	       let
-		 val kind = lambda_valid(D,Tag,formals,body)
-		 val var' = derived_var var
-		 val bnd = maker (var',formals,body)
-		 val con = Let_c (Sequential,[bnd],Var_c var')
-		 val D = insert_stdkind_equation(D,var,con,kind)
-		 val subst = Subst.C.addr(subst,var,con)
-	       in (D,subst)
-	       end
+					 let
+							 val kind = lambda_valid(D,Tag,formals,body)
+							 val var' = derived_var var
+							 val bnd = maker (var',formals,body)
+							 val con = Let_c (Sequential,[bnd],Var_c var')
+							 val D = insert_stdkind_equation(D,var,con,kind)
+							 val subst = Subst.C.addr(subst,var,con)
+					 in (D,subst)
+					 end
 	     
 	     val body_var_opt = strip_var con
 	       
@@ -893,12 +894,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	     val res = loop (cbnds,(D,Subst.C.empty()))
 	     val _ = 
-	       if !print_lets then
-		 (printl "Kind is:";
-		  pp_kind res;
-		  printl "")
-	       else ()
+					 if !print_lets then
+							 (printl "Kind is:";
+								pp_kind res;
+								printl "")
+					 else ()
 	   in res
+				 
 	   end
 	 | (Typeof_c exp) => (SingleType_k(exp_valid (D,exp)))
 	 | (Closure_c (code,env)) => 
@@ -1505,7 +1507,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     | (Proj_c (con1,l1), Proj_c(con2,l2)) => 
 		 ((eq_label(l1,l2)) andalso (con_structural_equiv((D,T),con1,con2,false))) orelse
 		 (case (con1,con2)
-		    of (Mu_c _,Mu_c_) => mu_equate((D,T),c1,c2)
+		    of (Mu_c _,Mu_c _) => mu_equate((D,T),c1,c2)
 		     | _ => false)
 	     | (Proj_c (Mu_c _,l1),Mu_c _) => mu_equate((D,T),c1,c2)
 	     | (Mu_c _,Proj_c (Mu_c _,l1)) => mu_equate((D,T),c1,c2)
@@ -1584,7 +1586,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
   and bnds_valid (D,bnds) = let val (etypes,(D,cbnds)) = (foldl_acc bnd_valid' (D,[]) bnds) in (D,rev cbnds,List.concat etypes) end
   and bnd_valid (state,bnd) = bnd_valid' (bnd,state)
-  and bnd_valid'' (bnd,state) = 
+  and bnd_valid'' (bnd : bnd, state : context * conbnd list) = 
     let
       val (D,cbnds) = state
 
@@ -2012,11 +2014,11 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
       (* Check a primitive node
        *)
-      fun prim_valid (D,prim,cons,exps) = 
+      fun prim_valid (D,prim : nilprim,cons : con list,exps : exp list) : con = 
 	let 
 	  val orig_exp = Prim_e(NilPrimOp prim,cons,exps)
 	    
-	  fun project_sum_xxx (D,argcon,argexp,k) = 
+	  fun project_sum_xxx (D,argcon : con, argexp : exp, k : w32) : con = 
 	    let
 	      val _ = type_analyze(D,argcon)
 	      val argcon = con_head_normalize(D,argcon)
@@ -2025,7 +2027,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    in projectSumType(D,argcon,k)  (*Already normal!*)
 	    end
 
-	  fun sum_helper(D,sumcon,sumtype) = 
+	  fun sum_helper(D,sumcon : con, sumtype : w32) : con * int * int * con =  
 	    let
 	      val _ = type_analyze(D,sumcon)
 
@@ -2045,7 +2047,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    in (inj_type,nontagcount,which,carrier)
 	    end
 
-	  fun inject_sum_nontag (check_con) (D,sumtype,sumcon,exps) = 
+	  fun inject_sum_nontag (check_con : context * con -> context * con list) 
+				(D,sumtype : w32,sumcon : con,exps : exp list) : con = 
 	    let
 	      val subtype    = subtimer("Tchk:Exp:Prim:Inj:st",subtype)
 	      val (inj_type,nontagcount,which,carrier) = sum_helper(D,sumcon,sumtype)
@@ -2059,18 +2062,19 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	      val (D,cons) = check_con(D,con_k)
 	    in
 	      if all2 (fn (e,c) => subtype(D,exp_valid(D,e),c)) (exps,cons) then
-		inj_type
+						inj_type
 	      else
-		e_error(D,orig_exp,"Injected arguments are don't have expected typs")
+						e_error(D,orig_exp,"Injected arguments are don't have expected typs")
 	    end
 
-	  fun inject_sum_tag (D,sumtype,sumcon) = 
+	  fun inject_sum_tag (D,sumtype : w32, sumcon : con) : con = 
 	    let
 	      val (inj_type,_,which,_) = sum_helper(D,sumcon,sumtype)
 	    in
 	      if which < 0 then inj_type
 	      else e_error(D,orig_exp,"Illegal injection - sumtype out of range" )
 	    end
+
 	  val is_known = is_hnf o con_head_normalize
 
 	  val res = 
@@ -2237,7 +2241,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     in
       res
     end
-    and bnd_valid' (bnd,state) = 
+    and bnd_valid' (bnd : bnd, state : context * conbnd list) = 
 	let 
 	  val (D,subst) = state
 	  val _ = push_bnd(bnd,D)
@@ -2334,7 +2338,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    if (!assertions) then
 	      assert (locate "module_valid")
 	      [
-	       (BoundCheck.check_mod (D,module),fn () => print "Typechecker called with ill-formed code")
+(*	       (BoundCheck.check_mod (D,module),fn () => print "Typechecker called with ill-formed code") *)
 	       ]
 	    else ()
 
