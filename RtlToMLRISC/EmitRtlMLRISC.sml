@@ -160,7 +160,7 @@ functor EmitRtlMLRISC(
        * info -> the additional call information
        *)
       fun addCallInfo info =
-	    (* let
+	    (* ??? let
 	      val {calllabel = TraceTable.CALLLABEL label,
 		   framesize,
 		   retaddpos,
@@ -177,7 +177,7 @@ functor EmitRtlMLRISC(
 		     print(Int.toString offset^"(sp)=>"^
 			   TraceTable.trace2string trace^" ")) stacktrace;
 	      print "\n";
-	    end ??? *)
+	    end *)
 	    infosRef := TraceTable.CALLINFO info:: !infosRef
 
       (*
@@ -353,10 +353,10 @@ functor EmitRtlMLRISC(
 	    RegisterTraceMap.lookup lookupGeneral traceMap register
 
       local
-	val spill          = Machine.ACTUAL4 o MLRISCConstant.valueOf o
+	val spill	   = Machine.ACTUAL4 o MLRISCConstant.valueOf o
 			     RegisterSpillMap.lookupReload spillMap
-	val trace          = RegisterTraceMap.trace spill traceMap
-	val testReload     = RegisterSpillMap.testReload spillMap
+	val trace	   = RegisterTraceMap.trace spill traceMap
+	val testReload	   = RegisterSpillMap.testReload spillMap
 	val testSpillState = RegisterMap.test spillStateMap
       in
 	(*
@@ -451,6 +451,9 @@ functor EmitRtlMLRISC(
 	      fun physical id = Array.sub(!(hd maps), id)
 	    in
 	      fn live =>
+		(* ??? print(Label.nameOf(LocalLabel.translate label)^": ");
+		 app (fn id => print(Int.toString id^" ")) live;
+		 print "\n"; *)
 		Module.addCallInfo{
 		  calllabel  = TraceTable.CALLLABEL label,
 		  framesize  = MLRISCConstant.valueOf frameSize,
@@ -463,13 +466,13 @@ functor EmitRtlMLRISC(
       (*
        * Append spill statements after moves to polymorphic value descriptor
        * pseudo-registers in a given list of mltree values.
-       * ids     -> the pseudo-registers that are live across call sites
+       * ids	 -> the pseudo-registers that are live across call sites
        * mltrees -> the mltree values to transform
        * <- mltrees with appended spills
        *)
       local
 	val lookupSpill = RegisterSpillMap.lookupSpill spillMap
-	val polySpills  = RegisterTraceMap.polySpills traceMap
+	val polySpills	= RegisterTraceMap.polySpills traceMap
 
 	fun spill id = CallConventionBasis.storeStack (lookupSpill id) id
 
@@ -504,7 +507,8 @@ functor EmitRtlMLRISC(
        * Reset the target-based mappings of the integer register translation.
        *)
       fun resetTarget() = (RegisterTraceMap.resetTarget traceMap;
-			   RegisterSpillMap.reset spillMap)
+			   RegisterSpillMap.reset spillMap;
+			   RegisterMap.reset spillStateMap)
     end
 
   end
