@@ -587,6 +587,13 @@ structure Reduce
 	    in
 	      case bnd of
 		(Con_b (phase, conbnd) ) => scan_conbnd fset conbnd
+                (* CS: In the xexp phase, we're going to do this transformation,
+                         so take this into account when scanning.
+                       Assumes the unique-naming invariant holds. *)
+                (* XXX wrong if the Sequential/Parallel distinction is ever used! *)
+              | (Exp_b (v, nt, Let_e(_,bndlist, body))) => 
+			(app (scan_bnd fset) bndlist; 
+                         scan_bnd fset (Exp_b(v, nt, body)))
 	      | (Exp_b (v, nt, exp)) => 
 		    ( declare false v; 
 		     scan_exp fset exp)
@@ -848,6 +855,13 @@ structure Reduce
 		      let val conbnd = xconbnd fset conbnd
 			val (bnds, body) = xbnds fset rest body
 		      in (Con_b(phase, conbnd)::bnds, body) end 
+
+                  (* ------unnesting lets------- *)
+                  (* CS: this is the rewriting that I promised to do during
+                         the scan phase.  Assumes the unique-naming invariant holds *)
+                  (* XXX: this does not work if we use the Sequential/Parallel distinction! *)
+              	  | (Exp_b (v, nt, Let_e(_,bndlist, inner_body))) => 
+                       xbnds fset (bndlist @ ((Exp_b(v,nt,inner_body))::rest)) body
              
 		  (* --------------------- Term bindings ------------------------ *)
 
