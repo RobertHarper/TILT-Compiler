@@ -18,7 +18,7 @@ fun computePi steps =
     end
 
 val x = fib 10
-val _ = print (Integer.toString x)
+val _ = print (Int.toString x)
 val _ = print "\n"
 val y = computePi 10000
 val _ = print (Real.toString y)

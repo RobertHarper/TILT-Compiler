@@ -13,7 +13,7 @@ local
     fun sort nil = nil
       | sort (a::ar) = insert a (sort ar);
 
-    fun printlist (a::ar) = (print (Integer.toString a);
+    fun printlist (a::ar) = (print (Int.toString a);
 			     print ",";
 			     printlist ar)
       | printlist [] = ()

@@ -12,12 +12,16 @@ fun input_line des = TextIO.inputLine des
 fun input arg = TextIO.inputN arg
 fun open_in filename = TextIO.openIn filename
 fun close_in des = TextIO.closeIn des
+fun open_out filename = TextIO.openOut filename
+fun close_out des = TextIO.closeOut des
 fun flush_out des = TextIO.flushOut des
 fun end_of_stream des = TextIO.endOfStream des
 
 structure Integer = Int
 fun int32touint32 (x : int) = x
 fun uint32toint32 (x : int) = x
+val uint8toint32 = ord
+val int32touint8 = chr
 fun max(x : int,y) = if (x>y) then x else y
 infix && || >> <<
 fun op >>(x,y) = Word32.toInt(Word32.>>(Word32.fromInt x,Word.fromInt y))
@@ -27,3 +31,5 @@ fun op ||(x,y) = Word32.toInt(Word32.orb(Word32.fromInt x,Word32.fromInt y))
 val op mod = (op mod) : int * int -> int
 val op div = (op div) : int * int -> int
 fun inc x = x := (!x + 1)
+val vsub1 = String.sub
+type instream = TextIO.instream

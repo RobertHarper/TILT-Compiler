@@ -124,7 +124,7 @@ fun assoc a =
 (* 4- Les sorties *)
 
 val print_string = print
-val print_num = print o Integer.toString
+val print_num = print o Int.toString
 fun print_newline () = print "\n";
 fun message s = (print s; print "\n");
 

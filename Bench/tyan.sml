@@ -3,7 +3,7 @@ fun fold f l acc = foldr f acc l
 fun revfold f l acc = foldl f acc l
 
 
-val makestring_int = Integer.toString
+val makestring_int = Int.toString
 (* val andb = fn(x,y) => uint32toint32((int32touint32 x) && (int32touint32 y)) *)
 val andb = fn(x,y) => uint32toint32((int32touint32 x) && (int32touint32 y))
 val orb = fn(x,y) => uint32toint32((int32touint32 x) || (int32touint32 y))

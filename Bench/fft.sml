@@ -27,7 +27,7 @@ fun for(start,stop,f) =
     end
 
 val print_string : string -> unit = print
-val print_int : int -> unit = print_string o Integer.toString
+val print_int : int -> unit = print_string o Int.toString
 val print_newline : unit -> unit = fn _ => print_string "\n"
 
 fun dump pxr pxi = 

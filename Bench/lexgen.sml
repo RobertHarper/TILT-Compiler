@@ -1,21 +1,15 @@
-fun ordof(s : string, i : int) = ord(vsub1(s,i))
-val makestring_int = Integer.toString
+
+val makestring_int = Int.toString
+fun fold f l a = foldr f a l
+fun ordof(s : string, i : int) = ord(String.sub(s,i))
+fun char2string c = implode[c]
+
 
 local
+    fun char_leq(a : char, b : char) = (ord a) <= (ord b)
+    fun char_geq(a : char, b : char) = (ord a) >= (ord b)
+    fun char_gt(a : char, b : char) = (ord a) > (ord b)
 
-    fun char_leq(a : char, b : char) = let val a' = uint8toint32 a
-					   val b' = uint8toint32 a
-				       in  a' <= b'
-				       end
-    fun char_geq(a : char, b : char) = let val a' = uint8toint32 a
-					   val b' = uint8toint32 a
-				       in  a' >= b'
-				       end
-    fun char_gt(a : char, b : char) = let val a' = uint8toint32 a
-					   val b' = uint8toint32 a
-				       in  a' > b'
-				       end
-	
   fun string_leq (a : string, b: string) : bool = 
       let val sa = size a
 	  val sb = size b
@@ -151,16 +145,28 @@ end (* local ... nonfix > *)
 
 (* Union: merge two sorted lists of integers *)
 
-fun union(a,b) = let val rec merge = fn
-	  (nil,nil,z) => z
-	| (nil,el::more,z) => merge(nil,more,el::z)
-	| (el::more,nil,z) => merge(more,nil,el::z)
-	| (x::morex,y::morey,z) => if (x:int)=(y:int)
-		then merge(morex,morey,x::z)
-		else if x>y then merge(morex,y::morey,x::z)
-		else merge(x::morex,morey,y::z)
-	in merge(rev a,rev b,nil)
-end
+(*
+   fun check nil = print "\n"
+     | check (a::b) = (print (Int.toString a); print ", "; check b)
+*)
+fun union str (a,b) = 
+    let 
+(*
+	val _ = (print "entered union from "; print str; print "\n")
+	val _ = check a
+	val _ = print "      union: checked a\n"
+	val _ = check b
+	val _ = print "      union: checked b\n"
+*)
+	fun merge(nil,nil,z) = z
+	  | merge (nil,el::more,z) = merge(nil,more,el::z)
+	  | merge (el::more,nil,z) = merge(more,nil,el::z)
+	  | merge (x::morex,y::morey,z) = if (x:int)=(y:int)
+					      then merge(morex,morey,x::z)
+					  else if x>y then merge(morex,y::morey,x::z)
+					       else merge(x::morex,morey,y::z)
+    in merge(rev a,rev b,nil)
+    end
 
 (* Nullable: compute if a important expression parse tree node is nullable *)
 
@@ -179,8 +185,8 @@ and firstpos = fn
 	  EPS => nil
 	| CLASS(_,i) => [i]
 	| CLOSURE(n) => firstpos(n)
-	| ALT(n1,n2) => union(firstpos(n1),firstpos(n2))
-	| CAT(n1,n2) => if nullable(n1) then union(firstpos(n1),firstpos(n2))
+	| ALT(n1,n2) => union "ALT" (firstpos(n1),firstpos(n2))
+	| CAT(n1,n2) => if nullable(n1) then union "CAT" (firstpos(n1),firstpos(n2))
 		else firstpos(n1)
 	| TRAIL(i) => [i]
 	| END(i) => [i]
@@ -191,8 +197,8 @@ and lastpos = fn
 	  EPS => nil
 	| CLASS(_,i) => [i]
 	| CLOSURE(n) => lastpos(n)
-	| ALT(n1,n2) => union(lastpos(n1),lastpos(n2))
-	| CAT(n1,n2) => if nullable(n2) then union(lastpos(n1),lastpos(n2))
+	| ALT(n1,n2) => union "ALT2" (lastpos(n1),lastpos(n2))
+	| CAT(n1,n2) => if nullable(n2) then union "CAT2" (lastpos(n1),lastpos(n2))
 		else lastpos(n2)
 	| TRAIL(i) => [i]
 	| END(i) => [i]
@@ -249,7 +255,7 @@ datatype ibuf =
 			 if (size (!b))=0
 			    then raise eof
 			    else getch a)
-		   else (let val ch = vsub1(!b,!p)
+		   else (let val ch = String.sub(!b,!p)
 			 in (if ch = #"\n"
 				 then LineNum := !LineNum + 1
 				 else ();
@@ -257,7 +263,7 @@ datatype ibuf =
 			     ch)
 			 end)
 	fun ungetch(BUF(s,{b,p})) = (
-	   if vsub1(!b,!p) = #"\n"
+	   if String.sub(!b,!p) = #"\n"
 	      then LineNum := !LineNum - 1
 	      else ();
 	   p := !p - 1)
@@ -277,96 +283,101 @@ val LexState = ref 0;
 val NextTok = ref BOF;
 val inquote = ref false;
 
-
 fun AdvanceTok () : unit =
 
-    let fun isletter(x:char) = (char_geq(x,#"a") andalso char_leq(x,#"z") 
-				  orelse char_geq(x,#"A") 
-				  andalso char_leq(x,#"Z"))
-	fun isdigit(x:char) = char_geq(x,#"0") andalso char_leq(x,#"9");
-	(* check for valid (non-leading) identifier character (added by JHR) *)
-	fun isidentchr c = ((isletter c) orelse (isdigit c) orelse (c = #"_") orelse (c = #"'"))
-	fun atoi(s:string) : int =
-	    let val rec num = fn
-		(x::y,n) => if isdigit(x) then num(y,10*n+ord(x)-(ord #"0")) else n
-	      | (_,n) => n
-	    in num(explode(s),0)
-	    end;
-	val nextch = fn () => getch(!LexBuf) 
-	    
-	val rec skipws = 
-	    fn () => case nextch() of
-	    #" " => skipws()
-	  | #"\t" => skipws() 
-	  | #"\n" => skipws()
-	  | x => x
+let fun isletter(x:char) = char_geq(x,#"a") andalso char_leq(x,#"z") 
+                             orelse char_geq(x,#"A") 
+			     andalso char_leq(x,#"Z");
+fun isdigit(x:char) = char_geq(x,#"0") andalso char_leq(x,#"9");
+(* check for valid (non-leading) identifier character (added by JHR) *)
+fun isidentchr c = (
+      (isletter c) orelse (isdigit c) orelse (c = #"_") orelse (c = #"'"))
+fun atoi(chars : char list) : int =
+	let val rec num = fn
+	(x::y,n) => if isdigit(x) then num(y,10*n+ord(x)-(ord #"0")) else n
+	| (_,n) => n
+in num(chars,0)
+end;
+
+
+val nextch = fn () => getch(!LexBuf) 
+
+
+val rec skipws = fn () => case nextch() of
+		  #" " => skipws()
+		| #"\t" => skipws() 
+		| #"\n" => skipws()
+		| x => x
 		
 	
-	val rec escaped = fn () => case nextch() of
-	    #"b" => #"\008"
-	  | #"n" => #"\n"
-	  | #"t" => #"\t"
-	  | #"h" => #"\128"
-	  | x =>
-		let fun f(n,c,t) =
+val rec escaped = fn () => case nextch() of
+		  #"b" => #"\008"
+		| #"n" => #"\n"
+		| #"t" => #"\t"
+		| #"h" => #"\128"
+		| x =>
+		  let fun f(n,c,t) =
 		    if c=3 then
 			if n>=  (!CharSetSize) then 
-			    pr_err("illegal ascii escape '"^t^"'")
+			    pr_err("illegal ascii escape '"^(implode (rev t))^"'")
 			else chr n
 		    else let val ch=nextch()
 			 in if isdigit ch then
-			     f(n*10+(ord ch)-(ord #"0"),c+1,t^(Char.toString ch))
-		  	    else pr_err("illegal ascii escape '"^t^"'")
+			     f(n*10+(ord ch)-(ord #"0"),c+1,ch::t)
+		  	    else pr_err("illegal ascii escape '"^(implode (rev t))^"'")
 			 end
-		in if isdigit x then
-		    f((ord x)-ord(#"0"),1,(Char.toString x))
-		   else x
-		end
-	    
+		   in if isdigit x then
+			f((ord x)-(ord #"0"),1,[x])
+		      else x
+		   end
+	
+
 	val onechar = fn x => let val c = array1(!CharSetSize,false) in
-	    update1(c,ord(x),true); CHARS(c)
-			      end
-			  
-    in case !LexState of 0 => let val makeTok = fn () =>
-	case skipws() of
-	    (* Lex % operators *)
-	    #"%" => (case nextch() of 
-			#"%" => LEXMARK
-		      | a => let fun f s =
-			    let val a = nextch()
-			    in if isletter a then f(a::s)
-			       else (ungetch(!LexBuf);
-				     implode(rev s))
-			    end
-				 val command = f [a]
-			     in if command = "reject" then REJECT
-				else if command = "count" then COUNT
-				else if command = "full" then FULLCHARSET
-				else if command = "s" then LEXSTATES
-				else if command = "S" then LEXSTATES
-				else if command = "structure" then STRUCT
-				else if command = "header" then HEADER
-				else if command = "arg" then ARG
-				else pr_err "unknown % operator "
-			     end
-			 )
+		update1(c,ord(x),true); CHARS(c)
+		end
+		
+	in case !LexState of 0 => let val makeTok = fn () =>
+		case skipws() of
+			(* Lex % operators *)
+		  #"%" => (case nextch() of 
+		  	  #"%" => LEXMARK
+			| a => let fun f s =
+				    let val a = nextch()
+				    in if isletter a then f(a::s)
+					else (ungetch(!LexBuf);
+					      implode(rev s))
+				    end
+				val command = f [a]
+				in if command = "reject" then REJECT
+				   else if command = "count" then COUNT
+				   else if command = "full" then FULLCHARSET
+				   else if command = "s" then LEXSTATES
+				   else if command = "S" then LEXSTATES
+				   else if command = "structure" then STRUCT
+				   else if command = "header" then HEADER
+				   else if command = "arg" then ARG
+			           else pr_err "unknown % operator "
+			        end
+			     )
 			(* semicolon (for end of LEXSTATES) *)
 		| #";" => SEMI
 			(* anything else *)
-		| ch => if isletter(ch) then
-			 let fun getID matched =
-			     let val x = nextch()
+		| ch => 
+			 if isletter ch then
+			    let fun getID matched =
+				let val x = nextch()
 (**** fix by JHR
 			     in if isletter(x) orelse isdigit(x) orelse
                                    x = "_" orelse x = "'"
 ****)
-			     in if (isidentchr x)
-				 then getID (x::matched)
-				 else (ungetch(!LexBuf); implode(rev matched))
-			     end
-			in ID(getID [ch])
-			end
-		      else (pr_err ("bad character: " ^ (Char.toString ch)))
+				in if (isidentchr x)
+				       then getID (x::matched)
+				   else (ungetch(!LexBuf); implode(rev matched))
+				end
+			    in ID(getID [ch])
+			    end
+			   else (pr_err ("bad character: " ^ (char2string ch)))
+			
 	in NextTok := makeTok()
 	end
 	| 1 => let val rec makeTok = fn () =>
@@ -374,7 +385,7 @@ fun AdvanceTok () : unit =
 			(* inside quoted string *)
 		  #"\\" => onechar(escaped())
 		| #"\"" (* " *) => (inquote := false; makeTok())
-		| x => onechar(x)
+		| x => onechar x
 		else case skipws() of
 			(* single character operators *)
 		  #"?" => QMARK
@@ -391,71 +402,76 @@ fun AdvanceTok () : unit =
 				update1(c,10,false); CHARS(c)
 			end
 			(* assign and arrow *)
-		| #"=" => let val c = nextch() in
-			if c = #">" then ARROW else (ungetch(!LexBuf); ASSIGN)
-		end
+		| #"=" => let val c = nextch() 
+			  in  if c= #">" then ARROW else (ungetch(!LexBuf); ASSIGN)
+			  end
 			(* character set *)
-		| #"[" => let val rec classch = fn () => let val x = skipws()
-				in if x = #"\\" then escaped() else x
-				end;
-			val first = classch();
-			val flag = (first<> #"^");
-			val c = array1(!CharSetSize,not flag);
-			val add = fn x => if x = #"\255" then ()
-				else update1(c,ord(x),flag)
-			val range = fn (x,y) =>
-				if char_gt(x,y) then (pr_err "bad char. range")
-				else let val i = ref(ord(x)) and j = ord(y)
-				in while !i<=j do (add(chr(!i)); i := !i + 1)
-				end
-(* pscheng added #\255 so that we can use characters and not strings *)
-			val rec getClass = fn (last) => case classch() of
+		| #"[" => 
+			  let 
+			      val nullchar = #"\000"
+			      val rec classch = fn () => let val x = skipws()
+							 in if x= #"\\" then escaped() else x
+							 end;
+			      val first = classch();
+			      val flag = (first<> #"^");
+			      val c = array1(!CharSetSize,not flag);
+			      val add = fn x => if x=nullchar then ()
+						else update1(c,ord(x),flag)
+			      val range = fn (x,y) =>
+				  if char_gt(x,y) then (pr_err "bad char. range")
+				  else let val i = ref(ord(x)) and j = ord(y)
+				       in while !i<=j do (add(chr(!i)); i := !i + 1)
+				       end
+			      val rec getClass = fn (last) => case classch() of
 				  #"]" => (add(last); c)
-				| #"-" => if last <> #"\255" then 
-				let val x = classch() in
-				  	if x= #"]" then (add(last);add(#"-"); c)
-					else (range(last,x);getClass(#"\255"))
-				end
-				else getClass(#"-")
-				| x => (add(last); getClass(x))
-		in CHARS(getClass(if first= #"^" then #"\255" else first))
-		end
+				| #"-" => if last<>nullchar then 
+				  let val x = classch() in
+				      if x = #"]" then (add(last);add(#"-"); c)
+				      else (range(last,x);getClass(nullchar))
+				  end
+					  else getClass(#"-")
+				| x => (add(last); getClass x)
+			  in CHARS(getClass(if first = #"^" then nullchar else first))
+			  end
 			(* Start States specification *)
-		| #"<" => let val rec get_state = fn (prev,matched) =>
-			case nextch() of
-			  #">" => matched::prev
-			| #"," => get_state(matched::prev,"")
-			| x => if isletter(x) then get_state(prev,matched^(Char.toString x))
-				else (pr_err "bad start state list")
-		in STATE(get_state(nil,""))
-		end
+		| #"<" => 
+			  let val rec get_state = fn (prev,matched) =>
+			      case nextch() of
+				  #">" => (implode (rev matched))::prev
+				| #"," => get_state((implode (rev matched))::prev,[])
+				| x => if isletter(x) then get_state(prev,x::matched)
+				       else (pr_err "bad start state list")
+			  in STATE(get_state(nil,[]))
+			  end
 			(* {id} or repititions *)
-		| #"{" => let val ch = nextch() in if isletter(ch) then
-			let val rec getID = fn (matched) =>
-			case nextch() of
-			  #"}" => matched
-(**** fix by JHR
-			| x => if isletter(x) orelse isdigit(x) then
-****)
-			| x => if (isidentchr x) then
-				getID(matched^(Char.toString x))
-				else (pr_err "invalid char. class name")
-			in ID(getID(Char.toString ch))
-			end
-			else if isdigit(ch) then
-			 let val rec get_r = fn
-				(matched,r1) => case nextch() of
-				  #"}" => let val n = atoi(matched) in
-					if r1 = ~1 then (n,n) else (r1,n)
-					end
-				| #"," => if r1 = ~1 then get_r("",atoi(matched))
-				       else (pr_err "invalid repetitions spec.")
-				| x => if isdigit(x) then get_r(matched^(Char.toString x),r1)
-			       else (pr_err "invalid char in repetitions spec")
-			 in REPS(get_r(Char.toString ch,~1))
-			 end
-			else (pr_err "bad repetitions spec")
-		end
+		| #"{" => let val ch = nextch() 
+			  in if isletter(ch) 
+				 then let val rec getID = fn (matched) =>
+				     case nextch() of
+					 #"}" => (implode (rev matched))
+				       | x => if (isidentchr x) 
+						  then getID(x::matched)
+					      else (pr_err "invalid char. class name")
+				      in ID(getID([ch]))
+				      end
+			     else 
+				 if isdigit(ch) 
+				 then
+				     let val rec get_r = fn
+					 (matched,r1) => case nextch() of
+					     #"}" => 
+					     let val n = atoi(rev matched)
+					     in if r1 = ~1 then (n,n) else (r1,n)
+					     end
+					   | #"," => 
+					     if r1 = ~1 then get_r([],atoi(rev matched))
+					     else (pr_err "invalid repetitions spec.")
+					   | x => if isdigit x then get_r(x::matched,r1)
+						  else (pr_err "invalid char in repetitions spec")
+				     in REPS(get_r([ch],~1))
+				     end
+				 else (pr_err "bad repetitions spec")
+			  end
 			(* Lex % operators *)
 		| #"%" => if nextch() = #"%" then LEXMARK else 
 			    (ungetch(!LexBuf); onechar (#"%"))
@@ -464,26 +480,24 @@ fun AdvanceTok () : unit =
 			(* start quoted string *)
 		| #"\"" (* " *) => (inquote := true; makeTok())
 			(* anything else *)
-		| ch => onechar(ch)
+		| ch => onechar ch
 	in NextTok := makeTok()
 	end
 	| 2 => NextTok :=
-	     (case skipws() of
-		 #"(" => let fun GetAct (lpct,x) =
-			   case getch(!LexBuf) of
-				    #"(" => GetAct (lpct+1,#"("::x)
+	     (case skipws()
+		 of #"(" => let fun GetAct (lpct,x) =
+			   case getch(!LexBuf)
+				 of #"(" => GetAct (lpct+1,#"("::x)
 				  | #")" => if lpct = 0 then (implode (rev x))
 					 	      else GetAct(lpct-1,#")"::x)
 				  | y => GetAct(lpct,y::x)
 			in ACTION (GetAct (0,nil))
 			end
 		 | #";" => SEMI
-		 | c => (pr_err ("invalid character "^(Char.toString c))))
+		 | c => (pr_err ("invalid character "^(char2string c))))
 	| _ => raise lex_error
 end
 handle eof => NextTok := EOF ;
-
-
 
 fun GetTok (_:unit) : token = 
 	let val t = !NextTok in AdvanceTok(); t
@@ -565,10 +579,10 @@ val StateNum = ref 0;
 fun GetStates () : int list =
 
    let fun add nil sl = sl
-  	  | add (x::y) sl = add y (union ([lookup (!StateTab)(x)],sl))
+  	  | add (x::y) sl = add y (union "add" ([lookup (!StateTab)(x)],sl))
 
 	fun addall i sl = 
-	    if i <= !StateNum then addall (i+2) (union ([i],sl))
+	    if i <= !StateNum then addall (i+2) (union "addall" ([i],sl))
 	    else sl
 
 	fun incall (x::y) = (x+1)::incall y
@@ -608,8 +622,8 @@ fun parse() : (string * (int list * exp) list * ((string,string) dictionary)) =
 	let val Accept = ref (create string_leq) : (string,string) dictionary ref
 	val rec ParseRtns = fn l => case getch(!LexBuf) of
 		  #"%" => let val c = getch(!LexBuf) in
-		    	   if c = #"%" then (implode (rev l))
-			   else ParseRtns(c :: #"%" :: l)
+		    	   if c= #"%" then (implode (rev l))
+			   else ParseRtns(c:: #"%"::l)
 			end
 		| c => ParseRtns(c::l)
 	val rec ParseDefs = fn () =>
@@ -711,19 +725,19 @@ fun maketable (fins:(int * (int list)) list,
        val count = ref 0
        val _ = (if length(trans)<256 then CharFormat := true
 		 else CharFormat := false;
-		     if length(tcpairs)> 0 then 
-			 (UsesTrailingContext := true;
-			  say "\ndatatype yyfinstate = N of int | \
+		 if length(tcpairs)> 0 then 
+		    (UsesTrailingContext := true;
+    		     say "\ndatatype yyfinstate = N of int | \
 			   \ T of int | D of int\n")
-		     else (UsesTrailingContext := false;
+		 else (UsesTrailingContext := false;
 		  	say "\ndatatype yyfinstate = N of int");
 		 say "\ntype statedata = {fin : yyfinstate list, trans: ";
 		 case !CharFormat of
 		       true => say "string}"
 		     | false => say "int array}";
 	         say "\n(* transition & final state table *)\nval tab = let\n")
-       val newfins =
-	   let fun IsEndLeaf t =
+	val newfins =
+	  let fun IsEndLeaf t =
 	     let fun f ((l,e)::r) = if (e=t) then true else f r
 		   | f nil = false in f tcpairs end
 
@@ -742,7 +756,7 @@ fun maketable (fins:(int * (int list)) list,
 		 if (x <= a) then x::(a::b)
 		 else a::(insert x b)
 		 | insert x nil = [x]
-	   in foldr (fn (x,r) => insert x r) nil s 
+	   in fold (fn (x,r) => insert x r) s nil
 	   end
 	 fun conv a = if (IsEndLeaf a) then (D a) else (N a)
 	 fun merge (a::a',b::b') =
@@ -752,7 +766,7 @@ fun maketable (fins:(int * (int list)) list,
 	   | merge (nil,b::b') = (T b)::(merge (b',nil))
 	   | merge (nil,nil) = nil
 
-	  in map (fn (x,l) =>
+	in map (fn (x,l) =>
 	  rev (merge (l,
 		sort_leaves (map (fn x => GetEndLeaf x) (GetTrConLeaves x)))))
 		    fins
@@ -836,13 +850,14 @@ fun makeaccept ends =
     end
 			
 fun leafdata(e:(int list * exp) list) =
-	let val fp = array1(!LeafNum + 1,nil)
+	let 
+	    val fp = array1(!LeafNum + 1,nil)
 	val leaf = array1(!LeafNum + 1,EPS)
 	val tcpairs = ref nil
 	val trailmark = ref ~1;
 	val rec add = fn
 		  (nil,x) => ()
-		| (hd::tl,x) => (update1(fp,hd,union(fp sub1 hd,x));
+		| (hd::tl,x) => (update1(fp,hd,union "leafdata-add" (fp sub1 hd,x));
 			add(tl,x))
 	val rec moredata = fn
 		  CLOSURE(e1) =>
@@ -869,6 +884,15 @@ let val StateTab = ref (create(string_leq)) : (string,int) dictionary ref
     val transtab = ref (create(op <=)) : (int,int list) dictionary ref
     val tctab = ref (create(op <=)) : (int,(int list)) dictionary ref
     val (fp, leaf, tcpairs) = leafdata(rules);
+(* 
+fun check_fp n = if (n < 0) 
+		     then ()
+		 else (check (fp sub1 n); 
+		       print "checked fp sub ";
+		       print (Int.toString n); print "\n";
+		       check_fp (n-1))
+val _ = check_fp ((length1 fp) - 1)
+*)
 
 fun visit (state,statenum) =
 	let val transitions = gettrans(state) in
@@ -924,7 +948,13 @@ and gettrans (state) =
 	       | cktrans (hd::tl) r =
 		  case (leaf sub1 hd) of
 	           CLASS(i,_)=>
-			(if (i sub1 c) then cktrans tl (union(r,fp sub1 hd))
+			(if (i sub1 c) then 
+			     (
+(*
+			      print "gettrans with hd = ";
+			      print (Int.toString hd); print "\n";
+*)
+			      cktrans tl (union "gettrans" (r,fp sub1 hd)))
 		         else cktrans tl r handle Subscript => 
 						cktrans tl r
 			)
@@ -949,7 +979,7 @@ and startstates() =
 	and fix = fn
 		  (nil,_) => ()
 		| (s::tl,firsts) => (update1(startarray,s,
-			union(firsts,startarray sub1 s));
+			union "startstates" (firsts,startarray sub1 s));
 			fix(tl,firsts))
 	in makess(rules);listofarray(startarray, !StateNum + 1)
 	end
@@ -985,94 +1015,94 @@ val skel_mid2 =
 
 fun lexGen(xinfile) =
     let val outfile = xinfile ^ ".sml"
-      fun PrintLexer (ends) =
-    let val sayln = fn x => (say x; say "\n")
-     in case !ArgCode 
-	 of NONE => (sayln "fun lex () : Internal.result =";
-		     sayln "let fun continue() = lex() in")
-	  | SOME s => (say "fun lex "; say "(yyarg as ("; say s; sayln ")) =";
-		       sayln "let fun continue() : Internal.result = ");
-	 say "  let fun scan (s,AcceptingLeaves : Internal.yyfinstate";
-	 sayln " list list,l,i0) =";
-	 if !UsesTrailingContext
-	     then say "\tlet fun action (i,nil,rs)"
-	     else say "\tlet fun action (i,nil)";
-	 sayln " = raise LexError";
-	 if !UsesTrailingContext
-	     then sayln "\t| action (i,nil::l,rs) = action(i-1,l,rs)"
-	     else sayln "\t| action (i,nil::l) = action (i-1,l)";
-	 if !UsesTrailingContext
-	     then sayln "\t| action (i,(node::acts)::l,rs) ="
-	     else sayln "\t| action (i,(node::acts)::l) =";
-	 sayln "\t\tcase node of";
-	 sayln "\t\t    Internal.N yyk => ";
-	 sayln "\t\t\t(let val yytext = substring(!yyb,i0,i-i0)\n\
-	       \\t\t\t     val yypos = i0+ !yygone";
-	 if !CountNewLines 
-	    then (sayln "\t\t\tval _ = yylineno :=";
-	  	  sayln "(fold (fn (x,r) => if x =\"\\n\" then r+1 else r)";
-		  sayln "(explode yytext) (!yylineno))")
-	    else ();
-	 sayln "\t\t\topen UserDeclarations Internal.StartStates";
-	 sayln " in (yybufpos := i; case yyk of ";
-	 sayln "";
-	 sayln "\t\t\t(* Application actions *)\n";
-	 makeaccept(ends);
-	 say "\n\t\t) end ";
-	 if !HaveReject
-	    then (say "handle Reject => action(i,acts::l";
-		  if !UsesTrailingContext
-		    then say ",rs)" 
-		    else say ")")
-	    else ();
-	  say ")\n\n";
-	 if (!UsesTrailingContext) then say skel_mid2 else ();
-	 sayln "\tval {fin,trans} = Internal.tab sub s";
-	 sayln "\tval NewAcceptingLeaves = fin::AcceptingLeaves";
-	 sayln "\tin if l = !yybl then";
-	 sayln "\t     if trans = #trans(Internal.tab sub 0)";
-	 sayln "\t       then action(l,NewAcceptingLeaves) else";
-	 sayln "\t    let val newchars= if !yydone then \"\" else yyinput 1024";
-	 sayln "\t    in if (size newchars)=0";
-	 sayln "\t\t  then (yydone := true;";
-	 say "\t\t        if (l=i0) then UserDeclarations.eof ";
-	 sayln (case !ArgCode of NONE => "()" | SOME _ => "yyarg");
-	 say   "\t\t                  else action(l,NewAcceptingLeaves";
-	 if !UsesTrailingContext then
-	    sayln ",nil))" else sayln "))";
-	 sayln "\t\t  else (if i0=l then yyb := newchars";
-	 sayln "\t\t     else yyb := substring(!yyb,i0,l-i0)^newchars;";
-	 sayln "\t\t     yygone := !yygone+i0;";
-	 sayln "\t\t     yybl := size (!yyb);";
-	 sayln "\t\t     scan (s,AcceptingLeaves,l-i0,0))";
-	 sayln "\t    end";
-	 sayln "\t  else let val NewChar = ordof(!yyb,l)";
-	   say "\t\tval NewState = ";
-	   case (!CharFormat,!CharSetSize)
-	    of (true,129) => sayln "if NewChar<128 then ordof(trans,NewChar) else ordof(trans,128)"
-	     | (true,256) => sayln "ordof(trans,NewChar)"
-	     | (false,129) => sayln "if NewChar<128 then trans sub NewChar else trans sub 128"
-	     | (false,256) => sayln "trans sub NewChar"
-	     | _ => raise error;   (* dtarditi: complete match *)
+	fun PrintLexer (ends) =
+	    let val sayln = fn x => (say x; say "\n")
+	    in case !ArgCode 
+		of NONE => (sayln "fun lex () : Internal.result =";
+			    sayln "let fun continue() = lex() in")
+	      | SOME s => (say "fun lex "; say "(yyarg as ("; say s; sayln ")) =";
+			   sayln "let fun continue() : Internal.result = ");
+		    say "  let fun scan (s,AcceptingLeaves : Internal.yyfinstate";
+		    sayln " list list,l,i0) =";
+		    if !UsesTrailingContext
+			then say "\tlet fun action (i,nil,rs)"
+		    else say "\tlet fun action (i,nil)";
+			sayln " = raise LexError";
+			if !UsesTrailingContext
+			    then sayln "\t| action (i,nil::l,rs) = action(i-1,l,rs)"
+			else sayln "\t| action (i,nil::l) = action (i-1,l)";
+			    if !UsesTrailingContext
+				then sayln "\t| action (i,(node::acts)::l,rs) ="
+			    else sayln "\t| action (i,(node::acts)::l) =";
+				sayln "\t\tcase node of";
+				sayln "\t\t    Internal.N yyk => ";
+				    sayln "\t\t\t(let val yytext = substring(!yyb,i0,i-i0)\n\
+				     \\t\t\t     val yypos = i0+ !yygone";
+				    if !CountNewLines 
+					then (sayln "\t\t\tval _ = yylineno :=";
+					      sayln "(fold (fn (x,r) => if x =\"\\n\" then r+1 else r)";
+					      sayln "(explode yytext) (!yylineno))")
+				    else ();
+					sayln "\t\t\topen UserDeclarations Internal.StartStates";
+					sayln " in (yybufpos := i; case yyk of ";
+					sayln "";
+					sayln "\t\t\t(* Application actions *)\n";
+					makeaccept(ends);
+					say "\n\t\t) end ";
+					if !HaveReject
+					    then (say "handle Reject => action(i,acts::l";
+						  if !UsesTrailingContext
+						      then say ",rs)" 
+						  else say ")")
+					else ();
+					    say ")\n\n";
+	  if (!UsesTrailingContext) then say skel_mid2 else ();
+	      sayln "\tval {fin,trans} = Internal.tab sub s";
+	      sayln "\tval NewAcceptingLeaves = fin::AcceptingLeaves";
+	      sayln "\tin if l = !yybl then";
+	      sayln "\t     if trans = #trans(Internal.tab sub 0)";
+	      sayln "\t       then action(l,NewAcceptingLeaves) else";
+	      sayln "\t    let val newchars= if !yydone then \"\" else yyinput 1024";
+	      sayln "\t    in if (size newchars)=0";
+	      sayln "\t\t  then (yydone := true;";
+	      say "\t\t        if (l=i0) then UserDeclarations.eof ";
+	      sayln (case !ArgCode of NONE => "()" | SOME _ => "yyarg");
+		  say   "\t\t                  else action(l,NewAcceptingLeaves";
+		  if !UsesTrailingContext then
+		      sayln ",nil))" else sayln "))";
+		      sayln "\t\t  else (if i0=l then yyb := newchars";
+		      sayln "\t\t     else yyb := substring(!yyb,i0,l-i0)^newchars;";
+		      sayln "\t\t     yygone := !yygone+i0;";
+		      sayln "\t\t     yybl := size (!yyb);";
+		      sayln "\t\t     scan (s,AcceptingLeaves,l-i0,0))";
+		      sayln "\t    end";
+		      sayln "\t  else let val NewChar = ordof(!yyb,l)";
+		      say "\t\tval NewState = ";
+		      case (!CharFormat,!CharSetSize)
+			  of (true,129) => sayln "if NewChar<128 then ordof(trans,NewChar) else ordof(trans,128)"
+			| (true,256) => sayln "ordof(trans,NewChar)"
+			| (false,129) => sayln "if NewChar<128 then trans sub NewChar else trans sub 128"
+			| (false,256) => sayln "trans sub NewChar"
+			| _ => raise error;   (* dtarditi: complete match *)
 	 say "\t\tin if NewState=0 then action(l,NewAcceptingLeaves";
 	 if !UsesTrailingContext then sayln ",nil)" else sayln ")";
-	 sayln "\t\telse scan(NewState,NewAcceptingLeaves,l+1,i0)";
-	 sayln "\tend";
-	 sayln "\tend";
-	 if !UsesPrevNewLine then () else sayln "(*";
-	 sayln "\tval start= if substring(!yyb,!yybufpos-1,1)=\"\\n\"";
-	 sayln "then !yybegin+1 else !yybegin";
-	 if !UsesPrevNewLine then () else sayln "*)";
-	 say "\tin scan(";
-	 if !UsesPrevNewLine then say "start" 
-	 else say "!yybegin (* start *)";
-	 sayln ",nil,!yybufpos,!yybufpos)";
-	 sayln "    end";
-	 sayln (case !ArgCode of NONE => "end" | SOME _ => "in continue end");
-	 sayln "  in lex";
-	 sayln "  end";
-	 sayln "end"
-	end
+	     sayln "\t\telse scan(NewState,NewAcceptingLeaves,l+1,i0)";
+	     sayln "\tend";
+	     sayln "\tend";
+	     if !UsesPrevNewLine then () else sayln "(*";
+		 sayln "\tval start= if substring(!yyb,!yybufpos-1,1)=\"\\n\"";
+		 sayln "then !yybegin+1 else !yybegin";
+		 if !UsesPrevNewLine then () else sayln "*)";
+		     say "\tin scan(";
+		     if !UsesPrevNewLine then say "start" 
+		     else say "!yybegin (* start *)";
+			 sayln ",nil,!yybufpos,!yybufpos)";
+			 sayln "    end";
+			 sayln (case !ArgCode of NONE => "end" | SOME _ => "in continue end");
+			     sayln "  in lex";
+			     sayln "  end";
+			     sayln "end"
+	    end
 
     in (UsesPrevNewLine := false;
 	ResetFlags();
@@ -1129,8 +1159,7 @@ fun lexGen(xinfile) =
 	   close_out(!LexOut)
 	 end)
     end
-fun doit() = (lexGen "ml.lex")
-
+fun doit() = (lexGen "../Bench/ml.lex")
 in
  val _ = doit() 
 end

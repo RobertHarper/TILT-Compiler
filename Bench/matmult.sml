@@ -32,7 +32,7 @@ val dim = 100
            fun f(i) =
 	        if i<ar then
 		    let fun g(j) =
-			if j<ac then (print(Integer.toString(sub2(A,i,j)));
+			if j<ac then (print(Int.toString(sub2(A,i,j)));
 				      print " "; g(j+1))
 			else (print "\n"; f(i+1))
 		    in g 0

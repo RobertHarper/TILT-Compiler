@@ -1,5 +1,5 @@
 local
-    val makestring_int = Integer.toString
+    val makestring_int = Int.toString
 
         datatype 'a option = SOME of 'a | NONE
 
