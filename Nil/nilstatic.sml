@@ -1639,7 +1639,7 @@ struct
 	| Prim_e (PrimOp prim,cons,exps) =>   
 	    let 
 	      val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
-	      val app_con = PrimUtil.get_type prim cons
+	      val app_con = PrimUtil.get_type' prim cons
 	      val (app_con,kind) = con_valid (D,app_con)
 	      val exps_and_cons = (map (curry2 exp_valid D) exps)
 	      val (exps,exp_cons) = unzip exps_and_cons

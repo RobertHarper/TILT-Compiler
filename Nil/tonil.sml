@@ -1593,9 +1593,9 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val cons = map (#1 o (xcon context)) il_cons
 	   val (args, _, valuables) = myunzip3 (map (xexp context) il_args)
            val (effect,con) = 
-	     case strip_arrow (Nilprimutil.get_type prim cons)
+	     case strip_arrow (Nilprimutil.get_type' prim cons)
 	       of SOME (_,effect,_,_,_,con) => (effect,con)
-		| _ => (perr_c (Nilprimutil.get_type prim cons);
+		| _ => (perr_c (Nilprimutil.get_type' prim cons);
 			error "Expected arrow constructor")
            val valuable = (effect = Total) andalso (Listops.andfold (fn x => x) valuables)
 
@@ -1637,9 +1637,9 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val cons = map (#1 o (xcon context)) il_cons
 	   val (args, _, valuables) = myunzip3 (map (xexp context) il_args)
            val (effect,con) = 
-	     case strip_arrow (Nilprimutil.get_iltype ilprim cons)
+	     case strip_arrow (Nilprimutil.get_iltype' ilprim cons)
 	       of SOME (_,effect,_,_,_,con) => (effect,con)
-		| _ => (perr_c (Nilprimutil.get_iltype ilprim cons);
+		| _ => (perr_c (Nilprimutil.get_iltype' ilprim cons);
 			error "Expected arrow constructor")
            val valuable = (effect = Total) andalso (Listops.andfold (fn x => x) valuables)
        in
@@ -1835,10 +1835,6 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val con' = (case con of
 			   Mu_c (vc_seq,v) => Nilutil.muExpand(vc_seq,v)
 			 | _ => error "type of unroll is not a mu type")
-	   val _ = (print "tonil: unroll with con = ";
-		    Ppnil.pp_con con; print "\n";
-		    print "               and con' = ";
-		    Ppnil.pp_con con'; print "\n\n")
        in
 	   (Prim_e(NilPrimOp unroll, [con], [exp]), con', valuable)
        end

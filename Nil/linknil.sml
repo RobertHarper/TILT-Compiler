@@ -8,6 +8,7 @@ sig
 
     val compile_prelude : bool * string -> Nil.module
     val compile : string -> Nil.module
+    val compiles : string list -> Nil.module list
     val test : string -> Nil.module
 
 end
@@ -450,14 +451,17 @@ struct
 	in  nilmod
 	end
 
-    fun test filename = 
-	let val (ctxt,sbnds,sdecs) = valOf (LinkIl.test filename)
-	in  compile' true (ctxt,sbnds,sdecs)
+    fun meta_compiles debug filenames = 
+	let val mods = valOf (LinkIl.compiles filenames)
+	in  map (compile' debug) mods
 	end
-    fun compile filename = 
-	let val (ctxt,sbnds,sdecs) = valOf (LinkIl.compile filename)
-	in  compile' false (ctxt,sbnds,sdecs)
-	end
+
+    fun compiles filenames = meta_compiles false filenames
+    fun compile filename = hd(meta_compiles false [filename])
+    fun tests filenames = meta_compiles true filenames
+    fun test filename = hd(meta_compiles true [filename])
+
+
     val cached_prelude = ref (NONE : Nil.module option)
     fun compile_prelude (use_cache,filename) = 
 	case (use_cache, !cached_prelude) of
