@@ -4,14 +4,15 @@ signature NILUTIL =
   sig
 
     (* if flag is true, will look inside kinds *)
-    (* if two lists are returned, they are the term and type vars respectively *)
-    val freeExpConVarInExp : bool * Nil.exp -> Nil.var list * Nil.var list
+    val freeExpConVarInExp  : bool * Nil.exp  -> Nil.var list * Nil.var list (* free term and type level vars *)
+    val freeExpConVarInCon  : bool * Nil.con  -> Nil.var list * Nil.var list (* free term and type level vars *)
+    val freeExpConVarInKind : bool * Nil.kind -> Nil.var list * Nil.var list (* free term and type level vars *)
     val freeExpConVarInBnd : bool * Nil.bnd -> Nil.var list * Nil.var list
-    
-    val freeConVarInCon    : bool * Nil.con -> Nil.var list (* free type level vars  only *)
-    val freeConVarInKind   : Nil.kind -> Nil.var list (* free type level vars in kind*)
-    val freeVarInKind      : Nil.kind -> Nil.var list
-    val freeVarInCon       : Nil.con -> Nil.var list
+
+    val freeConVarInCon     : bool * Nil.con  -> Nil.var list (* free type level vars *)
+    val freeConVarInKind    : Nil.kind -> Nil.var list (* free type level vars in kind*)
+    val freeVarInKind       : Nil.kind -> Nil.var list
+    val freeVarInCon        : Nil.con -> Nil.var list
     val freeVarInCbnd      : Nil.conbnd -> Nil.var list
 
     val muExpand : bool * (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con

@@ -9,7 +9,10 @@ Nil/nil.cm               (* ------ Nil stuff ------ *)
 Rtl/rtl.cm
 Backend/backend.cm
 Alpha/alpha.cm
-(* RtlToMLRISC/RtlToMLRISC.cm *)
-(* RtlToMLRISC/Alpha/Alpha.cm *)
+
+(*MLRISC/MLRISC.cm*)
+(*RtlToMLRISC/Alpha/Alpha.cm *)
+(*RtlToMLRISC/Sparc/Sparc.cm *)
+
 Top/top.cm
 

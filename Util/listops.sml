@@ -288,4 +288,7 @@ structure Listops :> LISTOPS =
 	   List.concat (flatten' (ps, nil))
        end
 
+   fun join s [] = []
+     | join s [a] = [a]
+     | join s (a::aa) = a::s::(join s aa)
   end

@@ -253,8 +253,8 @@ structure Linker :> LINKER =
 					   ("main_" ^ un ^ "_doit")) unitnames
 		   val _ = (case !Til.platform of
 				Til.TIL_ALPHA => Linkalpha.link
-			      | Til.MLRISC_ALPHA => AlphaLink.link 
-			      | Til.MLRISC_SPARC => SparcLink.link)
+(*			      | Til.MLRISC_ALPHA => AlphaLink.link 
+			      | Til.MLRISC_SPARC => SparcLink.link*))
 
 		       (link_s, local_labels)
 		   val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)

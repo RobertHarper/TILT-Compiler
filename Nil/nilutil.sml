@@ -915,6 +915,18 @@ end
 	    (!evars_ref, !cvars_ref)
 	end
 
+    fun freeExpConVarInCon(look_in_kind,c) = 
+	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
+	in  f_con handler c;
+	    (!evars_ref, !cvars_ref)
+	end
+
+    fun freeExpConVarInKind(look_in_kind,k) = 
+	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
+	in  f_kind handler k;
+	    (!evars_ref, !cvars_ref)
+	end
+
     fun freeExpConVarInBnd (look_in_kind, eb) =
 	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
 	in

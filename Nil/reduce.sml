@@ -494,7 +494,21 @@ structure Reduce
 	    in 
 		case exp of
 		    (Var_e v) => insesc v 
-		  | (Const_e v) => ()
+		  | (Const_e v) => 
+		      (case v
+			 of Prim.array (con, arr) =>
+			   (
+			    scan_con con;
+			    Array.app scan_exp arr
+			    )
+			  | Prim.vector (con, arr) => 
+			   (
+			    scan_con con;
+			    Array.app scan_exp arr
+			    )
+			  | Prim.refcell (ref r) => scan_exp r
+			  | Prim.tag (t,con) => scan_con con
+			  | _ => ())
 		  | (Let_e (_, bndlist , body)) => 
 			( app scan_bnd bndlist; scan_exp body )
 		  | (Prim_e ( allp, clist, elist)) =>
@@ -1227,7 +1241,20 @@ structure Reduce
 		    |  ExternApp_e (exp, expl) =>
 			   ExternApp_e (xexp fset exp, map (xexp fset) expl)
 		    | Var_e v => s(v)
-		    | Const_e c => exp
+		    | Const_e c => 			
+			   Const_e (case c
+			   of Prim.array (con, arr) => error "Arrays shouldn't show up ever"
+			    | Prim.vector (con, arr) => 
+			     let
+			       val con = xcon fset con
+			       val arr = Array.tabulate (Array.length arr,fn i => xexp fset (Array.sub(arr,i)))
+			     in
+			       Prim.vector (con, arr)
+			     end
+			    | Prim.refcell (ref r) => error "Refs shouldn't show up ever"
+			    | Prim.tag (t,con) => error "Tags shouldn't show up ever"
+			    | _ => c)
+
 		    | Raise_e (exp, con) => Raise_e (xexp fset exp, xcon fset con)
 		    | Handle_e (exp,v,exp2) => 
 			  Handle_e (xexp fset exp,v, xexp fset exp2)

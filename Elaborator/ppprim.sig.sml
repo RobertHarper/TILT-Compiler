@@ -4,7 +4,7 @@ signature PPPRIM =
   sig
 
     val elide : bool ref  (* if true, elides some type arguments and uses infix *)
-
+    val elide_value : bool ref (* default true: Hide contents of vector values *)
     (* these don't do actual output *)
     val pp_prim'    : Prim.prim -> Formatter.format
     val pp_ilprim'  : Prim.ilprim -> Formatter.format

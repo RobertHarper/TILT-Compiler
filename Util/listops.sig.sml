@@ -106,5 +106,7 @@ signature LISTOPS =
 
    val flattenCatlist : 'a catlist -> 'a list
 
-
+   (*Intersperse the elements of the list with a separator
+    *)
+   val join : 'a -> 'a list -> 'a list
   end

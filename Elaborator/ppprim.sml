@@ -7,6 +7,7 @@ structure Ppprim :> PPPRIM =
 
     val error = fn s => error "ppprim.sml" s
     val elide = Stats.ff("HilElide")
+    val elide_value = Stats.tt("ElideValues")
 
     fun pp_is_real W8 = String "8"
       | pp_is_real W16 = String "16"
@@ -204,7 +205,17 @@ structure Ppprim :> PPPRIM =
 					 | _ => error "bad vector value: corrupt string")
 				  in  String(implode(#"\"" :: (Array.foldr folder [#"\""] a)))
 				  end
-			       | _ => String "VectorValue")
+			       | _ => 
+				  if !elide_value then 
+				    String "VectorValue"
+				  else
+				    let
+				      val fmts = (Array.foldr (fn (e,s) => (pp_exp e)::s) [] a)
+				      val fmts = Listops.join (String ",") fmts
+				      val fmts = (String "#[")::fmts@[String "]"]
+				    in
+				      HOVbox0 1 2 1 fmts
+				    end)
 		else String "EmptyVectorValue"
 	  | refcell r => String "RefCellValue"
 	  | tag (name,c) => HOVbox[String "tag(",pp_tag name, String ", ", 

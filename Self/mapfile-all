@@ -379,7 +379,7 @@ MLLrValsFun Parser/ml.grm
 
 Join Parser/join
 FRONTEND Parser/frontend.sig
-FrontEnd Parser/frontend
+FrontEnd Parser/frontend.short
 
 # Parser/ppast
 # Parser/tokentable

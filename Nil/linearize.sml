@@ -129,7 +129,46 @@ struct
           | Const_e (Prim.uint _) => true
 	  | _ => false
 
-   fun lswitch lift state switch = 
+    fun lvalue lift state value = 
+      (case value 
+	 of Prim.array (con, arr) =>
+	   let
+	     val (cbnds, con) = lcon lift state con
+	     val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
+	     val bnds = ref []
+	     fun modifier exp = 
+	       let val (bnds',exp) = lexp lift state exp
+	       in (bnds := !bnds @ bnds';exp)
+	       end
+	     val _ = Array.modify modifier arr
+	   in
+	     (cbnds @ !bnds,Prim.array (con,arr))
+	   end
+	  | Prim.vector (con, arr) => 
+	   let
+	     val (cbnds, con) = lcon lift state con
+	     val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
+	     val bnds = ref []
+	     fun modifier exp = 
+	       let val (bnds',exp) = lexp lift state exp
+	       in (bnds := !bnds @ bnds';exp)
+	       end
+	     val _ = Array.modify modifier arr
+	   in
+	     (cbnds @ !bnds,Prim.vector (con,arr))
+	   end
+	  | Prim.refcell r => 
+	   let val (bnds,rval) = lexp lift state (!r)
+	   in (r:=rval;(bnds,Prim.refcell r))
+	   end
+	  | Prim.tag (t,con) => 
+	   let val (cbnds,con) = lcon lift state con
+	     val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
+	   in (cbnds,Prim.tag (t,con))
+	   end
+	  | _ => ([],value))
+
+   and lswitch lift state switch = 
      (case switch of
 	  Intsw_e {size,arg,arms,default,result_type} =>
 	      let val arg = lexp_lift' state arg
@@ -260,7 +299,12 @@ struct
 	in  case arg_exp of
 	    Var_e v => (num_var := !num_var + 1; 
 			([],Var_e(find_var(state,v))))
-	  | Const_e _ => ([],arg_exp)
+	  | Const_e value => 
+	      let
+		val (bnds,value) = lvalue lift state value
+	      in
+		(bnds,Const_e value)
+	      end
 	  | Let_e (sort,bnds,e) => 
 		let fun folder (bnd,s) = lbnd s bnd
 		    val (bnds,state) = foldl_acc folder state bnds

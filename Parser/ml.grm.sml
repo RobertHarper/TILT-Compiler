@@ -6,45 +6,47 @@ functor MLLrValsFun(structure Token : TOKEN)
    end
  = 
 struct
-structure ParserData=
-struct
-structure Header = 
-struct
-(* ml.grm
- *
- * Copyright 1989,1992 by AT&T Bell Laboratories
- *)
+  structure ParserData=
+    struct
+      structure Header = 
+	struct
+	  (* ml.grm
+	   *
+	   * Copyright 1989,1992 by AT&T Bell Laboratories
+	   *)
+	  
+	  open Ast ErrorMsg Symbol FastSymbol AstUtil Fixity 
+	    
+	  type raw_symbol = FastSymbol.raw_symbol
+	    
+	  fun markexp (e as MarkExp _, _, _) = e
+	    | markexp(e,a,b) = MarkExp(e,(a,b))
+	  (*fun markdec((d as MarkDec _, e), _,_) = (d,e)
+	| markdec((d,e),a,b) = (MarkDec(d,(a,b)),e)
+	   *)
+	  fun markdec(d as MarkDec _, _,_) = d
+	    | markdec(d,a,b) = MarkDec(d,(a,b))
+	    
+	  fun marktop(t as MarkTop _, _,_) = t
+	    | marktop(t,a,b) = MarkTop(t,(a,b))
+	    
+	  val asteriskHash = StrgHash.hashString "*"
+	  val asteriskString = "*"
+	  val equalHash = StrgHash.hashString "="
+	  val equalString = "="
+	  val bogusHash = StrgHash.hashString "BOGUS"
+	  val bogusString = "BOGUS"
+	  val quotedBogusHash = StrgHash.hashString "'BOGUS"
+	  val quotedBogusString = "'BOGUS"
+	  val quotedBogusHash = StrgHash.hashString "'BOGUS"
+	  val quotedBogusString = "'BOGUS"
+	    
+	    
+	end
 
-open Ast ErrorMsg Symbol FastSymbol AstUtil Fixity 
+      structure LrTable = Token.LrTable
+      structure Token = Token
 
-type raw_symbol = FastSymbol.raw_symbol
-
-fun markexp (e as MarkExp _, _, _) = e
-  | markexp(e,a,b) = MarkExp(e,(a,b))
-(*fun markdec((d as MarkDec _, e), _,_) = (d,e)
-  | markdec((d,e),a,b) = (MarkDec(d,(a,b)),e)
-*)
-fun markdec(d as MarkDec _, _,_) = d
-  | markdec(d,a,b) = MarkDec(d,(a,b))
-
-fun marktop(t as MarkTop _, _,_) = t
-  | marktop(t,a,b) = MarkTop(t,(a,b))
-
-  val asteriskHash = StrgHash.hashString "*"
-  val asteriskString = "*"
-  val equalHash = StrgHash.hashString "="
-  val equalString = "="
-  val bogusHash = StrgHash.hashString "BOGUS"
-  val bogusString = "BOGUS"
-  val quotedBogusHash = StrgHash.hashString "'BOGUS"
-  val quotedBogusString = "'BOGUS"
-  val quotedBogusHash = StrgHash.hashString "'BOGUS"
-  val quotedBogusString = "'BOGUS"
-
-  
-end
-structure LrTable = Token.LrTable
-structure Token = Token
 local open LrTable in 
 val table=let val actionRows =
 "\
@@ -3545,7 +3547,9 @@ val extract = fn a => (fn MlyValue.top x => x
 | _ => let exception ParseInternal
 	in raise ParseInternal end) a ()
 end
+
 end
+
 structure Tokens : ML_TOKENS =
 struct
 type svalue = ParserData.svalue

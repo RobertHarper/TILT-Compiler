@@ -407,6 +407,9 @@ structure NumScan : sig
 
 (*
  * $Log$
+# Revision 1.2  99/03/03  19:32:54  leaf
+# *** empty log message ***
+# 
 # Revision 1.1  98/03/09  19:53:54  pscheng
 # added basis
 # 

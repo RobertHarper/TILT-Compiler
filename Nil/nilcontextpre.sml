@@ -32,6 +32,8 @@ structure NilContextPre
    val split = Listops.split
    val map_second = Listops.map_second
    val foldl_acc = Listops.foldl_acc
+   val foldl2 = Listops.foldl2
+   val foldl3 = Listops.foldl3
 
    val curry2 = Util.curry2
    val printl = Util.printl
@@ -406,7 +408,10 @@ structure NilContextPre
 	    
 	    | (Proj_c (rvals,label)) => 
 	      (case kind_of(D,rvals)
-		 of Record_k lvk_seq => NilUtil.project_from_kind (lvk_seq,rvals,label)
+		 of Record_k lvk_seq => (*NilUtil.project_from_kind (lvk_seq,rvals,label) Claim is that this is non-dependent*)
+		   (case Sequence.find (fn (l,_) => (Name.eq_label(label,l))) lvk_seq
+		      of SOME k => k
+		       | NONE => error  (locate "kind_of") "Field not in record kind")
 		  | other => 
 		   (print "Non-record kind returned from kind_of in projection:\n";
 		    Ppnil.pp_kind other; print "\n";
@@ -417,7 +422,7 @@ structure NilContextPre
 		 (Arrow_k (_,formals,body_kind)) => 
 		   let 
 		     fun folder ((v,k),c,subst) = add subst (v,c)
-		     val subst = Listops.foldl2 folder (empty_subst()) (formals,actuals)
+		     val subst = foldl2 folder (empty_subst()) (formals,actuals)
 		   in  
 		     substConInKind subst body_kind
 		   end
@@ -547,7 +552,7 @@ structure NilContextPre
 	     let 
 	       fun folder ((v,k),c,subst) = add subst (v,c)
 	     in  
-	       KIND (k, Listops.foldl2 folder subst (vklist,clist))
+	       KIND (k, foldl2 folder subst (vklist,clist))
 	     end
 	    | Single_k c => CON(substConInCon subst (App_c(c,clist)))
 	    | _ => error (locate "app_kind") "bad kind to app_kind")
@@ -576,7 +581,10 @@ structure NilContextPre
 		  (case eqn
 		     of SOME c => CON c
 		      | NONE => 
-		       KIND (kind, empty_subst()))
+		       (case kind 
+			  of Single_k c => CON c
+			   | SingleType_k c => CON c
+			   | _ =>  KIND (kind, empty_subst())))
 		 | NONE => (print "Variable not found in context!\n";
 			    raise Unbound))
 	    | (Proj_c (c,l)) => 
@@ -667,4 +675,66 @@ structure NilContextPre
      in
        true
      end
+
+   fun generate_error_context (orig,context,[]) = context
+     | generate_error_context (orig,context,fvlist) = 
+     let
+
+       fun k_get ({kindmap,...}:context,v) = 
+	 (case V.find (kindmap,v)
+	    of NONE => raise Unbound
+	     | SOME {eqn,kind,...} => (eqn,kind))
+
+       fun k_insert (v,k,SOME c,D) = insert_kind_equation (D,v,c,k) 
+	 | k_insert (v,k,NONE,D)   = insert_kind (D,v,k)
+
+       val (ev_list,cv_list) = Listops.unzip fvlist
+       val free_cvs = List.concat cv_list
+       val free_evs = List.concat ev_list
+
+       (*Get the equations opts and kinds, and then filter out the non-equations *)
+       val (eqn_opts,kinds) = Listops.unzip (map (fn v => k_get(orig,v)) free_cvs)
+       val eqns = List.mapPartial (fn x => x) eqn_opts
+
+       (*Get the types*)
+       val types = map (fn v => find_con(orig,v)) free_evs
+
+       (*Get the context that covers the kinds, equations, and types*)
+       val context = generate_kind_error_context' (orig,context,kinds)
+       val context = generate_con_error_context' (orig,context,eqns)
+       val context = generate_con_error_context' (orig,context,types)
+
+       (*Insert the equations, kinds, and types*)
+       val context = foldl3 k_insert context (free_cvs,kinds,eqn_opts)
+       val context = foldl2 (fn (v,c,D) => insert_con (D,v,c)) context (free_evs,types)
+     in
+       context
+     end
+   and generate_con_error_context' (orig,context,cons) = 
+     let
+       val fvlist = map (fn c => NilUtil.freeExpConVarInCon (true,c)) cons
+     in
+       generate_error_context (orig,context,fvlist)
+     end
+   and generate_kind_error_context' (orig,context,kinds) = 
+     let
+       val fvlist = map (fn c => NilUtil.freeExpConVarInKind (true,c)) kinds
+     in
+       generate_error_context (orig,context,fvlist)
+     end
+   and generate_exp_error_context' (orig,context,exps) = 
+     let
+       val fvlist = map (fn c => NilUtil.freeExpConVarInExp (true,c)) exps
+     in
+       generate_error_context (orig,context,fvlist)
+     end
+
+   fun exps_error_context (orig,exps)   = generate_exp_error_context'  (orig,empty(),exps)
+   fun cons_error_context (orig,cons)   = generate_con_error_context'  (orig,empty(),cons)
+   fun kinds_error_context (orig,kinds) = generate_kind_error_context' (orig,empty(),kinds)
+
+   fun exp_error_context (orig,exp)   = generate_exp_error_context'  (orig,empty(),[exp])
+   fun con_error_context (orig,con)   = generate_con_error_context'  (orig,empty(),[con])
+   fun kind_error_context (orig,kind) = generate_kind_error_context' (orig,empty(),[kind])
  end
+

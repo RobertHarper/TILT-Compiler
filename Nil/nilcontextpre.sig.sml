@@ -19,13 +19,6 @@ signature NILCONTEXTPRE =
 
     val insert_con_list : context * (var * con) list -> context
 
-    (*NOTE: Use of bind_kind over insert_kind is strongly recommended.
-     * Due to the dependencies in the context, and the fact that
-     * entering code removes elements from the context, relying
-     * variable overwriting to handle shadowing correctly is probably
-     * not sound.  
-     *)
-
     (* insert_kind (context,var,kind) => context'
       * - inserts the previously unbound variable "var" into the context
       * with kind selfify(Var_c var,kind)
@@ -43,11 +36,6 @@ signature NILCONTEXTPRE =
 
 
 
-    (*find_kind_project returns the kind, and the most precise constructor
-     * that can be created based on the transparent information in the
-     * kind.  Note that in the case of transparency, SOME ... will be returned.
-     * A NONE denotes the path is at least partially opaque.
-     *)
     val find_kind          : context * var -> kind
 
     val find_kind_equation : context * con -> con option
@@ -78,4 +66,12 @@ signature NILCONTEXTPRE =
     val isRenamedExp : context -> Nil.exp -> bool
     val isRenamedCon : context -> Nil.con -> bool
     val isRenamedKind : context -> Nil.kind -> bool
+
+    val exp_error_context  : context * exp  -> context
+    val con_error_context  : context * con  -> context
+    val kind_error_context : context * kind -> context
+
+    val exps_error_context  : context * exp list  -> context
+    val cons_error_context  : context * con list  -> context
+    val kinds_error_context : context * kind list -> context
   end 

@@ -777,6 +777,7 @@ structure NilRewrite :> NILREWRITE =
 	    val (bndslist,state) = foldl_acc folder state bnds
 	    val _ = changed := (!flag orelse !changed)
 	  in
+	    val state = state
 	    val bnds = if !flag then List.concat bndslist else bnds
 	  end
 	  val exports = map_f export_helper changed state exports
