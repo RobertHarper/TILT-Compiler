@@ -63,6 +63,9 @@ signature NILUTIL =
     val alpha_sub_kind' : (alpha_context*alpha_context) -> Nil.kind * Nil.kind -> bool
     val alpha_sub_kind : Nil.kind * Nil.kind -> bool
 
+    val alpha_normalize_exp : Nil.exp -> Nil.exp
+    val alpha_normalize_exp' : (alpha_context * alpha_context) -> Nil.exp -> Nil.exp
+
     val alpha_normalize_con : Nil.con -> Nil.con
     val alpha_normalize_con' : alpha_context -> Nil.con -> Nil.con
 

@@ -111,6 +111,7 @@ struct
     val eq_len3 = Listops.eq_len3
     val map_second = Listops.map_second
     val foldl_acc = Listops.foldl_acc
+    val map2 = ListPair.map
     val map3 = Listops.map3
     val app2 = Listops.app2
     val app3 = Listops.app3
@@ -451,18 +452,32 @@ struct
 	   | NONE => NONE)
     | do_beta_record (other,label) = NONE
 	  
-  fun fold_kinds (D,kinds,cont) = 
+  fun foldl_acc2 ffun init list = 
+      let 
+	fun loop (state,[]) = ([],state)
+	  | loop (state,fst::rest) =
+	  let
+	    val (fst',state') = ffun (fst,state)
+	    val (rest',state'') = loop (state',rest)
+	  in
+	    (fst'::rest',state'')
+	  end
+      in
+	loop (init,list)
+      end
+    
+  fun fold_kinds (D,kinds) = 
     let
-      fun step ((var,kind),(D,kmap),k) = 
-	let
-	  val kind = kindSubstReduce (D,kmap,kind)
-	in
-	  c_insert_kind (D,var,kind,fn D => k (D,(var,kind)::kmap))
-	end
+	fun loop (D,[],kmap) = (D,rev kmap)
+	  | loop (D,(var,kind)::rest,kmap) =
+	  let
+	    val kind' = kindSubstReduce (D,kmap,kind)
+	  in
+	    loop (insert_kind (D,var,kind'),rest,(var,kind')::kmap)
+	  end
     in
-      c_foldl cont step (D,[]) kinds
-    end  
-
+      loop (D,kinds,[])
+    end
   and kind_valid (D,kind) = 
       let val _ = push_kind(kind,D)
 	  val _ = if (!debug)
@@ -476,7 +491,7 @@ struct
       in  res
       end
 
-  and kind_valid' (D,kind) = 
+  and kind_valid' (D : context, kind : kind) : kind = 
     (case kind 
        of Type_k p => (Type_k p)
 	| Word_k p => (Word_k p)
@@ -497,28 +512,18 @@ struct
 	   val elt_list = ListMergeSort.sort entry_sort (sequence2list elts)
 	   val vars_and_kinds = map (fn ((l,v),k) => (v,k)) elt_list
 
-	   fun base (D,rev_kmap) = 
-	     let
-	       val entries = 
-		 ListPair.map (fn (((l,_),_),(v,k)) => ((l,v),k)) 
-		 (elt_list,rev rev_kmap)
-	     in  (Record_k (list2sequence entries))
-	     end
-	 in
-	   fold_kinds (D,vars_and_kinds,base)
+	   val (D',vars_and_kinds') = fold_kinds (D,vars_and_kinds)
+	   val entries = 
+	     map2 (fn (((l,_),_),(v,k)) => ((l,v),k)) (elt_list,vars_and_kinds')
+	 in  (Record_k (list2sequence entries))
 	 end
 	| Arrow_k (openness, formals, return) => 
 	 let
-	   fun base (D,rev_kmap) = 
-	     let
-	       val return' = kindSubstReduce (D,rev_kmap,return)
-	     in
-	       (Arrow_k (openness, rev rev_kmap,return'))
-	     end
+	   val (D',formals') = fold_kinds (D,formals)
+	   val return' = kindSubstReduce (D,formals',return)
 	 in
-	   fold_kinds (D,formals,base)
+	   (Arrow_k (openness, formals',return'))
 	 end)
-
 
   and con_valid (D : context, constructor : con) : con * kind = 
       let val _ = push_con(constructor,D)
@@ -576,13 +581,11 @@ struct
 		    error "Vararg has non-word component"))
     end
   and con_valid' (D : context, constructor : con) : con * kind = 
-     (case constructor 
+    (case constructor 
        of (Prim_c (pcon,args)) =>
 	 let
-
 	   val (pcon',kind,args',kinds) = pcon_valid (D,pcon,args)
 	   val con = (Prim_c (pcon',args'))
-
 	 in
 	     (con,singletonize (SOME Runtime,kind,con))
 	 end
@@ -591,7 +594,6 @@ struct
 	   (* Assumes that set implementation guarantees entries are 
 	    * all distinct - i.e., no duplicates
 	    *)
-
          local 
 	     val temp = sequence2list defs
 	     fun make_entry (v,_) = (case find_kind(D,var) of
@@ -1058,34 +1060,34 @@ struct
 	| array (con,arr) => 
 	 let
 	   val (con',kind) = con_valid (D,con)
-	   fun check (i,exp) = 
+	   fun check exp = 
 	     let
 	       val (exp',con',kind) = exp_valid (D,exp)
 	     in
 	       if alpha_equiv_con (con,con') then
-		 Array.update (arr,i,exp')
+		 exp'
 	       else
 		 error "Array contains expression of incorrect type"
 	     end
 	 in
-	   Array.appi check (arr,0,NONE);
+	   Array.modify check arr;
 	   (array (con',arr),Prim_c (Array_c,[con']),Word_k Runtime)
 	 end
 	| vector (con,vec) => 
 	 let
 	   val (con',kind) = con_valid (D,con)
-	   fun check i = 
+	   fun check exp = 
 	     let
-	       val (exp',con',kind) = exp_valid (D,Array.sub (vec,i))
+	       val (exp',con',kind) = exp_valid (D,exp)
 	     in
 	       if alpha_equiv_con (con,con') then
 		 exp'
 	       else
 		 error "Vector contains expression of incorrect type"
 	     end
-	   val vec' = Array.tabulate (Array.length vec,check) 
 	 in
-	   (vector (con',vec'),Prim_c (Vector_c,[con']),Word_k Runtime)
+	   Array.modify check vec;
+	   (vector (con',vec),Prim_c (Vector_c,[con']),Word_k Runtime)
 	 end
 	| refcell expref =>
 	 let
@@ -1644,10 +1646,10 @@ struct
 	     let
 	       val def_list = set2list defs
 	       val (vars,functions) = unzip def_list
-	       val openness = 
+	       val (openness,constructor) = 
 		 (case bnd 
-		    of Fixopen_b _ => Open
-		     | _ => Code)
+		    of Fixopen_b _ => (Open,Fixopen_b)
+		     | _ => (Code,Fixcode_b))
 	       val (declared_c,declared_k) = 
 		 (unzip (map (curry3 get_function_type D openness) functions))
 	       val D' = insert_con_list (D,zip (vars,declared_c))
@@ -1656,7 +1658,7 @@ struct
 	       val defs' = list2set (zip (vars,functions'))
 	     in
 	       if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch") (declared_c,found_c) then
-		 (D',Fixopen_b defs')
+		 (D',constructor defs')
 	       else
 		 error "Declared type for function binding doesn't match found type"
 	     end

@@ -13,8 +13,10 @@ functor NilUtilFn(structure ArgNil : NIL
 struct
 
   structure Nil = ArgNil
-  open Nil Util
+  open Nil Util 
 
+  val unzip = ListPair.unzip
+  val zip = ListPair.zip
 
   fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
   fun generate_tuple_label (i : int) = Name.symbol_label(generate_tuple_symbol i)
@@ -570,8 +572,8 @@ struct
 	     kindhandler = default_kind_handler})
 
     fun free_handler() =
-	let val free_evars = ref []
-	    val free_cvars = ref []
+	let val free_evars : (var list ref) = ref []
+	    val free_cvars : (var list ref) = ref []
 	    fun exp_handler ({boundevars,boundcvars},Var_e v) = 
 		(if (not (collMember(boundevars,v)) andalso not (member_eq(eq_var,v,!free_evars)))
 		     then free_evars := v :: (!free_evars)
@@ -976,7 +978,7 @@ struct
 	   in
 	     Annotate_c (annot, con')
 	   end)
-    and alpha_normalize_kind' (context:alpha_context) (kind:kind) =
+    and alpha_normalize_kind' (context:alpha_context) (kind:kind) : kind =
       (case kind of
 	 Type_k _ => kind
        | Word_k _ => kind
@@ -1019,9 +1021,222 @@ struct
 	     Arrow_k (openness,args', result')
 	   end)
 
-    fun alpha_normalize_con con = alpha_normalize_con' (empty_context()) con
+    fun alpha_normalize_exp' 
+      (contexts as (e_context : alpha_context, c_context : alpha_context))
+      (exp : exp) : exp = 
+      (case exp
+	 of Var_e var => Var_e (substitute (e_context,var))
+	  | Const_e value => 
+	   Const_e (alpha_normalize_value' contexts value)
+	  | Let_e (letsort,bnds,exp) => 
+	   let
+	     val (bnds',contexts') = 
+	       alpha_normalize_bnds' contexts bnds
+	     val exp' = alpha_normalize_exp' contexts' exp
+	   in
+	     (Let_e (letsort,bnds',exp'))
+	   end
+	  | Prim_e (allprim,cons,exps) => 
+	   let
+	     val cons' = map (alpha_normalize_con' c_context) cons
+	     val exps' = map (alpha_normalize_exp' contexts) exps
+	   in
+	     (Prim_e (allprim,cons',exps'))
+	   end
+	  | Switch_e switch => Switch_e (alpha_normalize_switch' contexts switch)
+	  | App_e (openness,exp,cons,exps,floats) =>
+	   let
+	     val exp' = alpha_normalize_exp' contexts exp
+	     val cons' = map (alpha_normalize_con' c_context) cons
+	     val exps' = map (alpha_normalize_exp' contexts) exps
+	     val floats' = map (alpha_normalize_exp' contexts) floats
+	   in
+	     App_e (openness,exp',cons',exps',floats')
+	   end
+	  | Raise_e (exp,con) =>
+	   let 
+	     val con' = alpha_normalize_con' c_context con
+	     val exp' = alpha_normalize_exp' contexts exp
+	   in
+	     Raise_e (exp',con')
+	   end
+	  | Handle_e (exp,function) =>
+	   let
+	     val exp' = alpha_normalize_exp' contexts exp
+	     val function' = alpha_normalize_function' contexts function
+	   in
+	     Handle_e (exp',function')
+	   end)
+    and alpha_normalize_value' 
+      (contexts as (e_context : alpha_context, c_context : alpha_context)) value = 
+      (case value
+	 of ((Prim.int _) | (Prim.uint _) |(Prim.float _)) => value
+	  | Prim.array (con,arr) => 
+	   let
+	     val con' = alpha_normalize_con' c_context con
+	   in
+	     Array.modify (alpha_normalize_exp' contexts) arr;
+	     Prim.array (con',arr)
+	   end
+	| Prim.vector (con,vec) => 
+	   let
+	     val con' = alpha_normalize_con' c_context con
+	   in
+	     Array.modify (alpha_normalize_exp' contexts) vec;
+	     Prim.vector (con',vec)
+	   end
+	| Prim.refcell expref =>
+	 let
+	   val exp' = alpha_normalize_exp' contexts (!expref)
+	 in
+	   expref := exp';
+	   Prim.refcell expref
+	 end
+	| Prim.tag (atag,con) => 
+	 let
+	   val con' = alpha_normalize_con' c_context con
+	 in
+	   Prim.tag (atag,con')
+	 end)
+    and alpha_normalize_bnds' contexts bnds =
+      foldl_acc alpha_normalize_bnd' contexts bnds
+    and alpha_normalize_bnd' (bnd,(e_context,c_context)) = 
+      (case bnd 
+	 of Con_b (var, kind, con) =>
+	   let
+	     val kind' = alpha_normalize_kind' c_context kind
+	     val con' = alpha_normalize_con' c_context con
+	     val (c_context',var') = alpha_bind (c_context,var)
+	     val bnd' = (Con_b (var',kind',con'))
+	   in
+	     (bnd',(e_context,c_context'))
+	   end
+	  | Exp_b (var, con, exp) =>
+	   let
+	     val con' = alpha_normalize_con' c_context con
+	     val exp' = alpha_normalize_exp' (e_context,c_context) exp
+	     val (e_context',var') = alpha_bind (e_context,var)
+	     val bnd' = (Exp_b (var',con',exp'))
+	   in
+	     (bnd',(e_context',c_context))
+	   end
+	  | ((Fixopen_b defs) | (Fixcode_b defs)) =>
+	     let
+	       val (vars,functions) = unzip (set2list defs)
+	       val (e_context',vars') = alpha_bind_list (e_context,vars)
+	       val functions' = 
+		 map (alpha_normalize_function' (e_context',c_context)) functions
+	       val defs' = list2set (zip (vars',functions'))
+	       val bnd' = 
+		 (case bnd 
+		    of Fixopen_b _ => (Fixopen_b defs')
+		     | _ => (Fixcode_b defs'))
+	     in
+	       (bnd',(e_context',c_context))
+	     end
+	 | Fixclosure_b defs => 
+	     let
+	       val (vars,closures) = unzip (set2list defs)
+	       val (e_context',vars') = alpha_bind_list (e_context,vars)
+	       val closures' = map (alpha_normalize_closure' (e_context',c_context)) closures
+	       val defs' = list2set (zip (vars',closures'))
+	       val bnd' = Fixclosure_b defs
+	     in
+	       (bnd',(e_context',c_context))
+	     end)
+    and alpha_normalize_switch'
+      (contexts as (e_context : alpha_context, c_context : alpha_context)) switch = 
+      (case switch
+	 of Intsw_e {info=intsize,arg,arms,default} =>
+	   let
+	     val arg' = alpha_normalize_exp' contexts arg
+	     val arms' = map_second (alpha_normalize_function' contexts) arms
+	     val default' = alpha_normalize_exp_opt' contexts default
+	   in
+	     Intsw_e {info=intsize,arg=arg',
+		      arms=arms',default=default'}
+	   end
+	  | Sumsw_e {info=(tagcount,decl_cons),arg,arms,default} => 
+	   let
+	     val arg' = alpha_normalize_exp' contexts arg
+	     val arms' = map_second (alpha_normalize_function' contexts) arms
+	     val decl_cons' = map (alpha_normalize_con' c_context) decl_cons
+	     val default' = alpha_normalize_exp_opt' contexts default
+	   in
+	     Sumsw_e {info=(tagcount,decl_cons'),arg=arg',
+		      arms=arms',default=default'}
+	   end
+	  | Exncase_e {info,arg,arms,default} =>
+	   let
+	     val arg' = alpha_normalize_exp' contexts arg
+	     fun mapper (exp,function) = 
+	       let
+		 val exp' = alpha_normalize_exp' contexts exp
+		 val function' = alpha_normalize_function' contexts function
+	       in
+		 (exp',function')
+	       end
+	     val arms' = map mapper arms
+	     val default' = alpha_normalize_exp_opt' contexts default
+	   in
+	     Exncase_e {info=(),arg=arg',
+			arms=arms',default=default'}
+	   end
+	  | Typecase_e {info,arg,arms,default} =>
+	   let
+	     val arg' = alpha_normalize_con' c_context arg
+	     val arms' = map_second (alpha_normalize_function' contexts) arms
+	     val default' = alpha_normalize_exp_opt' contexts default
+	   in
+	     Typecase_e {info=(),arg=arg',
+			 arms=arms',default=default'}
+	   end)
+    and alpha_normalize_function'
+      (contexts as (e_context : alpha_context, c_context : alpha_context)) 
+      (Function (effect,recursive,tformals,formals,fformals,body,return)) = 
+      let
+	fun folder f ((var,elt),context) = 
+	  let
+	    val elt' = f context elt
+	    val (context',var') = alpha_bind (context,var)
+	  in
+	    ((var',elt'),context')
+	  end
+	val (tformals',c_context') = 
+	  foldl_acc (folder alpha_normalize_kind') c_context tformals
+	val (formals',e_context') = 
+	  foldl_acc (folder alpha_normalize_con') e_context formals
+	val (e_context'',fformals') = alpha_bind_list (e_context,fformals)
+	val body' = alpha_normalize_exp' (e_context',c_context') body
+	val return' = alpha_normalize_con' c_context' return
+      in
+	Function (effect,recursive,tformals',formals',fformals',body',return')
+      end
+    and alpha_normalize_closure'
+      (contexts as (e_context : alpha_context, c_context : alpha_context)) 
+      {code:var, cenv:con, venv:exp, tipe:con} = 
+      let
+	val code' = substitute (e_context,code)
+	val cenv' = alpha_normalize_con' c_context cenv
+	val venv' = alpha_normalize_exp' (c_context,e_context) venv
+	val tipe' = alpha_normalize_con' c_context tipe
+      in
+	{code=code',cenv=cenv',venv=venv',tipe=tipe'}
+      end
 
-    fun alpha_normalize_kind kind = alpha_normalize_kind' (empty_context()) kind
+    and alpha_normalize_exp_opt' contexts opt = 
+      mapopt (alpha_normalize_exp' contexts) opt
+
+
+
+    val alpha_normalize_con = 
+	 alpha_normalize_con' (empty_context()) 
+
+    val alpha_normalize_kind = 
+	 alpha_normalize_kind' (empty_context()) 
+
+    val alpha_normalize_exp = 
+	 alpha_normalize_exp' (empty_context(),empty_context())
 
     fun get_phase kind = 
       (case kind 
