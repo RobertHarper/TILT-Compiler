@@ -819,7 +819,7 @@ struct
 	| (Exn_c,Exn_c) => true
 	| (Array_c,Array_c) => true
 	| (Vector_c,Vector_c) => true
-	| (Ref_c,Ref_c) => true
+	| (Ref_c,Ref_c) => error "ref_c should be removed"
 	| (Exntag_c,Exntag_c) => true
 	 | (Sum_c {known=k1,tagcount=t1,totalcount=to1},
 	    Sum_c {known=k2,tagcount=t2,totalcount=to2}) => (Util.eq_opt (op =,k1,k2)
@@ -1202,5 +1202,10 @@ struct
 	  else loop (NilSubst.add subst (v,Proj_c(con,l)),rest)
       in  loop (NilSubst.empty(),lvk_list)
       end
+
+    fun convert_sum_to_special 
+          (Prim_c(Sum_c {tagcount,totalcount,known},carriers), w) =
+       Prim_c(Sum_c {tagcount=tagcount, totalcount=totalcount, 
+                     known = SOME w}, carriers)
 
 end

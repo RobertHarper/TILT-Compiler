@@ -60,6 +60,7 @@ signature NILSTATIC =
     val con_subst : con_subst * Nil.con -> Nil.con
 *)
 
+(*
     val con_reduce : context * Nil.con -> Nil.con
     (* con_reduce (context,con) => con'
       * PRE: context is well formed
@@ -67,6 +68,7 @@ signature NILSTATIC =
       * not check for well-kindedness.  This is currently just an
       * alias to Normalize.con_normalize
       *)
+*)
 
 (*
     val kind_reduce : context * Nil.kind -> Nil.kind

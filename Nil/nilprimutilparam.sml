@@ -19,7 +19,7 @@ structure NilPrimUtilParam
 	fun con_uint is = Prim_c(Int_c is,[])
 	fun con_float fs = Prim_c(Float_c fs,[])
 	fun con_array c = Prim_c(Array_c,[c])
-	fun con_ref c = Prim_c(Ref_c,[c])
+	fun con_ref c = Prim_c(Array_c,[c])
 	fun con_vector c = Prim_c(Vector_c,[c])
 	fun con_tag c = Prim_c(Exntag_c,[c])
 	val con_bool = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]])

@@ -17,7 +17,7 @@ struct
      | Exn_c => SOME TI.Trace
      | Array_c => SOME TI.Trace
      | Vector_c => SOME TI.Trace
-     | Ref_c => SOME TI.Trace
+     | Ref_c => error "ref_c disappearing soon"
      | Exntag_c => SOME TI.Notrace_Int
      | Record_c _ => SOME TI.Trace
      | Sum_c _ => SOME TI.Trace

@@ -1,3 +1,4 @@
+(*$import Nil NILREWRITE *)
 structure NilRewrite :> NILREWRITE = 
   struct
     open Nil

@@ -122,7 +122,7 @@ structure Ppnil	:> PPNIL =
     and pp_con arg_con : format = 
       (case arg_con of
 	   Var_c v => pp_var v
-         | Prim_c(Record_c ([],_),_) => HOVbox[String "UNIT"]
+         | Prim_c(Record_c ([],NONE),[]) => HOVbox[String "UNIT"]
          | Prim_c (primcon, nil) => HOVbox[pp_primcon primcon]
 	 | Prim_c (primcon, conlist) => HOVbox[pp_primcon primcon,
 					       pp_list' pp_con conlist]
@@ -203,17 +203,21 @@ structure Ppnil	:> PPNIL =
       | pp_primcon (BoxFloat_c fs) = Hbox[String "BOXFLOAT", pp_fs' fs]
       | pp_primcon Array_c = String "ARRAY"
       | pp_primcon Vector_c = String "VECTOR"
-      | pp_primcon Ref_c = String "REF"
+      | pp_primcon Ref_c = error "no ref_c soon!!"
       | pp_primcon Exn_c = String "EXN"
       | pp_primcon Exntag_c = String "EXNTAG"
       | pp_primcon (Record_c (labs,NONE)) = HOVbox[String "RECORD[", Break,
 						   pp_list pp_label labs ("",",","", false),
 						   String "]"]
-      | pp_primcon (Record_c (labs,SOME vars)) = HOVbox[String "DEP_RECORD[", Break,
-							pp_list (HOVbox o pp_labvar)
-							(Listops.zip labs vars)
-							("",",","", false),
-							String "]"]
+      | pp_primcon (Record_c (labs,SOME vars)) = 
+	HOVbox[String "DEP_RECORD[", Break,
+	       if (length labs = length vars)
+		   then pp_list (HOVbox o pp_labvar) (Listops.zip labs vars)
+		       ("",",","", false)
+	       else HOVbox[pp_list pp_label labs ("",",","", false),
+			   String " :LENGTH_MISMATCH: ",
+			   pp_list pp_var vars ("",",","", false)],
+	       String "]"]
       | pp_primcon (Sum_c {known = opt,tagcount,totalcount}) = 
 	String ("SUM" ^ (case opt of NONE => "" | SOME i => "_" ^ (TilWord32.toDecimalString i)) ^
 		"(" ^ (TilWord32.toDecimalString tagcount) ^ ","
@@ -230,9 +234,15 @@ structure Ppnil	:> PPNIL =
 	       (pp_list' (fn (v,k) => Hbox[pp_var v,String " :: ", pp_kind k]) vklist),
 	       String "; ", Break0 0 5,
 	       (case vlistopt of
-		   SOME vars => (pp_list' (fn (v,c) => Hbox[pp_var v,String " :: ", pp_con c]) 
+		   SOME vars => 
+		       if (length vars = length clist)
+			   then (pp_list' (fn (v,c) => Hbox[pp_var v,String " :: ", 
+							    pp_con c]) 
 				 (Listops.zip vars clist))
-		   | NONE => (pp_list' pp_con clist)),
+		       else HOVbox[pp_list pp_var vars ("",",","", false),
+				   String " :LENGTH_MISMATCH: ",
+				   pp_list pp_con clist ("",",","", false)]
+		  | NONE => (pp_list' pp_con clist)),
 	       String "; ", String (TilWord32.toDecimalString numfloats),
 	       String "; ", Break0 0 5,
 	       pp_con con]]
@@ -271,7 +281,12 @@ structure Ppnil	:> PPNIL =
 		 in
 		     HOVbox
 		     [String "record", 
-		      pp_list pp_rbnd (Listops.zip labels exps) ("(",",",")",false)]
+		      if (length labels = length exps)
+			   then pp_list pp_rbnd (Listops.zip labels exps) 
+			       ("(",",",")",false)
+		       else HOVbox[pp_list pp_label labels ("",",","", false),
+				   String " :LENGTH_MISMATCH: ",
+				   pp_list pp_exp exps ("",",","", false)]]
 		 end
 	   | Prim_e (prim,cons,exps) => 
 		 let val p = (case prim of

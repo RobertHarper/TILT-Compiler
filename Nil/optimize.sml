@@ -27,47 +27,77 @@ struct
 	val local_update = Name.fresh_named_var "local_update"
 	val local_array = Name.fresh_named_var "local_array"
 	val local_len = Name.fresh_named_var "local_len"
+	val local_vsub = Name.fresh_named_var "local_vsubscript"
+	val local_vector = Name.fresh_named_var "local_vector"
+	val local_vlen = Name.fresh_named_var "local_vlen"
 
 	val local_bnds = 
-	    let val c = Name.fresh_named_var "len_type"
-		val array = Name.fresh_named_var "len_array"
-		val body = Prim_e(PrimOp(Prim.length_table (Prim.OtherArray false)), [Var_c c], 
-				  [Var_e array])
-		val len_fun = Function(Partial,Leaf,[(c,Type_k)],false,
-				       [(array,Prim_c(Array_c,[Var_c c]))], [],
-				       body, Prim_c(Int_c Prim.W32, []))
-		val c = Name.fresh_named_var "subscript_type"
-		val array = Name.fresh_named_var "subscript_array"
-		val index = Name.fresh_named_var "subscript_index"
-		val body = Prim_e(PrimOp(Prim.sub (Prim.OtherArray false)), [Var_c c], 
-				  [Var_e array, Var_e index])
-		val sub_fun = Function(Partial,Leaf,[(c,Type_k)],false,
-				       [(array,Prim_c(Array_c,[Var_c c])),
+	    let fun make_length (aggregate,constr) = 
+		let val c = Name.fresh_named_var "len_type"
+		    val agg = Name.fresh_named_var "len_agg"
+		    val body = Prim_e(PrimOp(Prim.length_table 
+					     (aggregate false)), [Var_c c], 
+				      [Var_e agg])
+		    val len_fun = Function(Partial,Leaf,[(c,Type_k)],false,
+					   [(agg,Prim_c(constr,[Var_c c]))], [],
+					   body, Prim_c(Int_c Prim.W32, []))
+		in  len_fun
+		end
+		val len_fun = make_length(Prim.OtherArray, Array_c)
+		val vlen_fun = make_length(Prim.OtherVector, Vector_c)
+
+		fun make_sub (aggregate,constr) = 
+		let val c = Name.fresh_named_var "subscript_type"
+		    val agg = Name.fresh_named_var "subscript_agg"
+		    val index = Name.fresh_named_var "subscript_index"
+		    val body = Prim_e(PrimOp(Prim.sub (aggregate false)), 
+				      [Var_c c], 
+				      [Var_e agg, Var_e index])
+		    val sub_fun = Function(Partial,Leaf,[(c,Type_k)],false,
+				       [(agg,Prim_c(constr,[Var_c c])),
 					(index,Prim_c(Int_c Prim.W32 ,[]))], [],
-				       body, Var_c c)
-		val c = Name.fresh_named_var "update_type"
-		val array = Name.fresh_named_var "update_array"
-		val index = Name.fresh_named_var "update_index"
-		val item = Name.fresh_named_var "update_item"
-		val body = Prim_e(PrimOp(Prim.update (Prim.OtherArray false)), [Var_c c], 
-				  [Var_e array, Var_e index, Var_e item])
-		val update_fun = Function(Partial,Leaf,[(c,Type_k)],false,
-					  [(array,Prim_c(Array_c,[Var_c c])),
-					   (index,Prim_c(Int_c Prim.W32 ,[])),
-					   (item,Var_c c)], [],
-					  body, Var_c c)
-		val c = Name.fresh_named_var "array_type"
-		val size = Name.fresh_named_var "array_size"
-		val item = Name.fresh_named_var "array_item"
-		val body = Prim_e(PrimOp(Prim.create_table (Prim.OtherArray false)), [Var_c c], 
-				  [Var_e size, Var_e item])
-		val array_fun = Function(Partial,Leaf,[(c,Type_k)],false,
-					 [(size,Prim_c(Int_c Prim.W32 ,[])),
-					  (item,Var_c c)], [],
-					 body, Prim_c(Array_c,[Var_c c]))
+					   body, Var_c c)
+		in  sub_fun
+		end
+		val sub_fun = make_sub(Prim.OtherArray, Array_c)
+		val vsub_fun = make_sub(Prim.OtherVector, Vector_c)
+
+		local
+		    val c = Name.fresh_named_var "update_type"
+		    val array = Name.fresh_named_var "update_array"
+		    val index = Name.fresh_named_var "update_index"
+		    val item = Name.fresh_named_var "update_item"
+		    val body = Prim_e(PrimOp(Prim.update (Prim.OtherArray false)), 
+				      [Var_c c], 
+				      [Var_e array, Var_e index, Var_e item])
+		in  val update_fun = Function(Partial,Leaf,[(c,Type_k)],false,
+					      [(array,Prim_c(Array_c,[Var_c c])),
+					       (index,Prim_c(Int_c Prim.W32 ,[])),
+					       (item,Var_c c)], [],
+					      body, unit_con)
+		end
+
+		fun make_aggregate (aggregate,constr) = 
+		    let val c = Name.fresh_named_var "agg_type"
+			val size = Name.fresh_named_var "agg_size"
+			val item = Name.fresh_named_var "agg_item"
+			val body = Prim_e(PrimOp(Prim.create_table 
+					 (aggregate false)), [Var_c c], 
+					  [Var_e size, Var_e item])
+		    in  Function(Partial,Leaf,[(c,Type_k)],false,
+				 [(size,Prim_c(Int_c Prim.W32 ,[])),
+				  (item,Var_c c)], [],
+				 body, Prim_c(constr,[Var_c c]))
+		    end
+		val array_fun = make_aggregate(Prim.OtherArray, Array_c)
+		val vector_fun = make_aggregate(Prim.OtherVector, Vector_c)
+
 	    in  [Fixopen_b (Sequence.fromList [(local_sub,sub_fun)]),
+		 Fixopen_b (Sequence.fromList [(local_vsub,vsub_fun)]),
 		 Fixopen_b (Sequence.fromList [(local_len,len_fun)]),
+		 Fixopen_b (Sequence.fromList [(local_vlen,vlen_fun)]),
 		 Fixopen_b (Sequence.fromList [(local_update,update_fun)]),
+		 Fixopen_b (Sequence.fromList [(local_vector,vector_fun)]),
 		 Fixopen_b (Sequence.fromList [(local_array,array_fun)])]
 	    end
 		
@@ -660,7 +690,7 @@ struct
 	    end 
 *)
 
-	and do_aggregate (state : state) funname_opt (constr,t,clist,elist)  = 
+	and do_aggregate (state : state) funnames_opt (constr,t,clist,elist)  = 
 	    let open Prim
 		fun helper is_array c = 
 		(case (is_array,Normalize.reduce_hnf(get_env state, c)) of
@@ -673,17 +703,20 @@ struct
 		val (t,clist) = 
 		    (case t of
 			 OtherArray _ => helper true (hd clist)
-		       | OtherVector _ => helper true (hd clist)
+		       | OtherVector _ => helper false (hd clist)
 		       | _ => (t,clist))
-		val is_unknown = (case t of
-				      OtherArray false => true
-				    | OtherVector false => true
-				    | _ => false)
+		val array_flavor = (case t of
+					OtherArray false => SOME true
+				      | OtherVector false => SOME false
+				      | _ => NONE)
 		val clist = map (do_con state) clist
 		val elist = map (do_exp state) elist
-	    in  (case (funname_opt,is_unknown andalso !do_lift_array) of
-		     (SOME funname, true) => 
-			  App_e(Open, do_exp state (Var_e funname), clist, elist, [])
+	    in  (case (funnames_opt,array_flavor, !do_lift_array) of
+		     (SOME (aname,vname), SOME is_array, true) => 
+			  App_e(Open, 
+				do_exp state 
+				(Var_e (if is_array then aname else vname)), 
+				clist, elist, [])
 		   | _ => Prim_e(PrimOp(constr t), clist, elist))
 	    end
 		 
@@ -728,12 +761,12 @@ struct
 			  NONE => Prim_e(prim,[], [do_exp state e])
 			| SOME e => do_exp state e)
 	       | (NilPrimOp (inject k),_) => do_inject state (k, clist, elist)
-	       | (PrimOp(create_table t), _) => do_aggregate state (SOME local_array) (create_table,t,clist,elist)
+	       | (PrimOp(create_table t), _) => do_aggregate state (SOME (local_array,local_vector)) (create_table,t,clist,elist)
 	       | (PrimOp(create_empty_table t), _) => do_aggregate state NONE
 			                                  (create_empty_table,t,clist,elist)
-	       | (PrimOp(sub t), _) => do_aggregate state (SOME local_sub) (sub,t,clist,elist)
-	       | (PrimOp(update t), _) => do_aggregate state (SOME local_update) (update,t,clist,elist)
-	       | (PrimOp(length_table t), _) => do_aggregate state (SOME local_len) (length_table,t,clist,elist)
+	       | (PrimOp(sub t), _) => do_aggregate state (SOME (local_sub,local_vsub)) (sub,t,clist,elist)
+	       | (PrimOp(update t), _) => do_aggregate state (SOME (local_update,local_update)) (update,t,clist,elist)
+	       | (PrimOp(length_table t), _) => do_aggregate state (SOME (local_len,local_vlen)) (length_table,t,clist,elist)
 	       | _ => Prim_e(prim,map ((if Normalize.allprim_uses_carg prim 
 					    then do_con else do_type)
 				       state) clist, 

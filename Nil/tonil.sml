@@ -382,18 +382,23 @@ in
 	   then ()
        else used := Name.VarSet.add(!used,v)
 		
+   (* XXX rename should be replaced with systematic
+    on-the-fly "on the way down" renaming and 
+    not after the fact *)
    fun NilContext_find_kind(ctxt as CONTEXT{NILctx,used,...},v) = 
-       let val _ = NilContext_use_var(ctxt,v)
-       in (SOME (NilContext.find_kind(NILctx,v))
-	   handle NilContext.Unbound => NONE)
-       end
+       (let val _ = NilContext_use_var(ctxt,v)
+	    val k = NilContext.find_kind(NILctx,v)
+	in  SOME (NilSubst.renameCVarsKind k)
+	end
+	handle NilContext.Unbound => NONE)
 			    
 		
    fun NilContext_find_shape(ctxt as CONTEXT{NILctx,used,...},v) = 
-       let val _ = NilContext_use_var(ctxt,v)
-       in (SOME (NilContext.find_shape(NILctx,v))
-	   handle NilContext.Unbound => NONE)
+       (let val _ = NilContext_use_var(ctxt,v)
+	    val k = NilContext.find_shape(NILctx,v)
+       in   SOME (NilSubst.renameCVarsKind k)
        end
+       handle NilContext.Unbound => NONE)
 
    fun reduce_to_sum(CONTEXT{NILctx,...},c) = Normalize.reduceToSumtype(NILctx,c)
    fun NilContext_con_hnf(CONTEXT{NILctx,...},c) = #2(Normalize.reduce_hnf(NILctx,c))
@@ -937,13 +942,6 @@ end (* local defining splitting context *)
 
            val cbnds_body = flattenCatlist cbnd_body_cat
            val ebnds_body = flattenCatlist ebnd_body_cat
-
-	   val cbnds_body_subst = 
-	       let fun folder (cbnd,s) = let val (v,c) = NilUtil.extractCbnd cbnd
-					 in  addToConSubst s (v, substConInCon s c)
-					 end
-	       in  foldl folder (NilSubst.empty()) cbnds_body
-	       end
 
 	   val con_res' = NilUtil.makeLetC cbnds_body con_res
 
@@ -1552,7 +1550,7 @@ end (* local defining splitting context *)
      | xcon' context (Il.CON_REF il_con) = 
        let
 	   val (con', _) = xcon context il_con
-	   val con = Prim_c (Ref_c, [con'])
+	   val con = Prim_c (Array_c, [con'])
 	   val knd = Type_k
        in
 	   (con, knd)
@@ -1568,11 +1566,11 @@ end (* local defining splitting context *)
 
      | xcon' context (Il.CON_ARROW (il_cons1, il_con2, closed, arr)) =
        let
-	   val cons1 = map (#1 o (xcon context)) il_cons1
-           val con2 = #1(xcon context il_con2)
-           val con2 = (case (closed,il_con2) of
-			   (true,Il.CON_FLOAT Prim.F64) => Prim_c (Float_c Prim.F64, [])
-			 | _ => #1(xcon context il_con2))
+           fun translate il_con = (case (closed,il_con) of
+				       (true,Il.CON_FLOAT Prim.F64) => Prim_c (Float_c Prim.F64, [])
+				     | _ => #1(xcon context il_con))
+	   val cons1 = map translate il_cons1
+           val con2 = translate il_con2
 	   val eff = xeffect (derefOneshot arr)
 	   val con = if closed
 			 then ExternArrow_c(cons1, con2)
@@ -2386,6 +2384,13 @@ end (* local defining splitting context *)
 			(let val (c,k_context) = xcon context il_con
 			 in  (Singleton_k c, k_context, Singleton_k c)
 			 end))
+
+	   (* XXX rename should be replaced with systematic
+	    on-the-fly "on the way down" renaming and 
+	    not after the fact *)
+	   val knd_context = NilSubst.renameCVarsKind knd_context
+	   val knd_shape = NilSubst.renameCVarsKind knd_shape
+	   val knd_use = NilSubst.renameCVarsKind knd_use
 
 	   val context' = update_NILctx_insert_kind(context, var, knd_context, 
 						    SOME knd_shape)

@@ -7,10 +7,7 @@ struct
     val debug = Stats.ff("ReifyDebug")
     fun error s = Util.error "reify.sml" s 
 
-    fun convert_sum_to_special 
-          (Prim_c(Sum_c {tagcount,totalcount,known},carriers), w) =
-       Prim_c(Sum_c {tagcount=tagcount, totalcount=totalcount, 
-                     known = SOME w}, carriers)
+
 
     datatype letbody = BODY_EXP of Nil.exp
                      | BODY_EXPORTS of Nil.export_entry list
@@ -281,7 +278,7 @@ struct
       | reify_sum_arms ctxt ((w,e)::arms, v, c, pset) = 
           let
              val (arms', pset) = reify_sum_arms ctxt (arms, v, c, pset)
-             val t = convert_sum_to_special(c, w)
+             val t = NilUtil.convert_sum_to_special(c, w)
              val ctxt = NilContext.insert_con(ctxt, v, t)
              val (e', pset) = reify_exp ctxt (e, pset)
           in

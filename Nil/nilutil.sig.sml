@@ -26,6 +26,7 @@ signature NILUTIL =
     val int_con : Nil.con   (* 32-bit ints *)
     val char_con : Nil.con  (* 8-bit ints *)
     val function_type : Nil.openness -> Nil.function -> Nil.con
+    val convert_sum_to_special : Nil.con * TilWord32.word -> Nil.con
 
     val makeLetC : Nil.conbnd list -> Nil.con -> Nil.con
     val makeLetE : Nil.letsort -> Nil.bnd list -> Nil.exp -> Nil.exp

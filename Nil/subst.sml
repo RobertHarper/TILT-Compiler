@@ -1,10 +1,11 @@
-(*$import Ppnil NILSUBST Stats *)
+(*$import Ppnil NILSUBST Stats NilError NilRewrite Option *)
 
 structure NilSubst :> NILSUBST 
   = 
   struct
     open Nil
 
+    val isSome = Option.isSome
     val debug = Stats.ff "nil_debug"
     val profile = Stats.ff "nil_profile"
       

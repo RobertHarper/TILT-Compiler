@@ -817,19 +817,20 @@ struct
            | Annotate_c (_,c) => false)
 
     fun expandMuType(D:context, mu_con:con) =
-	let fun extract (defs,which) =
+	let fun extract mu_tuple_con (defs,which) =
 	    let val defs = Sequence.toList defs
 		fun mapper (n,(v,_)) = 
 		    if (length defs = 1) 
 			then (v,mu_con)
-		    else (v,Proj_c(mu_con,NilUtil.generate_tuple_label(n+1)))
+		    else (v,Proj_c(mu_tuple_con,NilUtil.generate_tuple_label(n+1)))
 		val subst = NilSubst.fromList(Listops.mapcount mapper defs)
 		val (_,c) = List.nth(defs,which-1)
 	    in  NilSubst.substConInCon subst c
 	    end
 	in  (case #2(reduce_hnf(D,mu_con)) of
-		 Mu_c (_,defs) => extract(defs,1)
-	       | Proj_c(Mu_c (_,defs), l) => extract(defs,lab2int l (Sequence.length defs))
+		 mu_tuple as (Mu_c (_,defs)) => extract mu_tuple (defs,1)
+	       | Proj_c(mu_tuple as (Mu_c (_,defs)), l) => extract mu_tuple 
+		                                           (defs, lab2int l (Sequence.length defs))
 	       | c => (print "expandMuType reduced to non-mu type";
 		       Ppnil.pp_con c;
 		       error "expandMuType reduced to non-mu type"))
@@ -1074,7 +1075,7 @@ struct
 	 | float (floatsize,string) => Prim_c (Float_c floatsize,[])
 	 | array (con,arr) => Prim_c (Array_c,[con])
 	 | vector (con,vec) => Prim_c (Vector_c,[con])
-	 | refcell expref => Prim_c (Ref_c,[type_of(D,!expref)])
+	 | refcell expref => Prim_c (Array_c,[type_of(D,!expref)])
 	 | tag (atag,con) => Prim_c (Exntag_c,[con]))
 
    and type_of_fbnd (D,openness,constructor,defs) = 

@@ -1,4 +1,4 @@
-(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist Reify *)
+(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist Reify NilStatic *)
 
 structure Linknil (* :> LINKNIL  *) =
   struct
@@ -151,6 +151,11 @@ structure Linknil (* :> LINKNIL  *) =
 				 "Renaming1",Linearize.linearize_mod,
 				 filename, nilmod)
 
+ 	    val nilmod = check (typecheck_before_opt,show_typecheck,
+				    "Nil typechecking - pre opt",
+				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
+				    filename, nilmod)
+
 	    val nilmod = transform(do_one_optimize, show_one_optimize,
 				 "Optimize1", 
 				 Optimize.optimize
@@ -202,10 +207,6 @@ structure Linknil (* :> LINKNIL  *) =
 *)
 
 
- 	    val nilmod = check (typecheck_before_opt,show_typecheck,
-				    "Nil typechecking - pre opt",
-				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
-				    filename, nilmod)
 
 (*
 	    val nilmod = if (!do_opt) 
