@@ -77,7 +77,7 @@ structure Stats :> STATS =
 
       val int = find_int_entry
       fun bool str = find_bool_entry 
-	             (fn() => error ("trying to get an uninitialized bool" ^ str)) str
+	             (fn() => error ("trying to get an uninitialized bool " ^ str)) str
       val tt = find_bool_entry (fn() => BOOL_ENTRY(ref true))
       val ff = find_bool_entry (fn() => BOOL_ENTRY(ref false))
 

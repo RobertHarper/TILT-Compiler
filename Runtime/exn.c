@@ -1,5 +1,5 @@
 /* Assumes exceptions look a certain way in the creation of the divide and overflow exception */
-
+#include "general.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
@@ -9,19 +9,13 @@
 */
 #include <sys/sysinfo.h>
 #include <sys/proc.h>
-#include <assert.h>
+#include <string.h>
 #include "tag.h"
 #include "exn.h"
 #include "create.h"
-
-#ifdef alpha_osf
-#include "interface_osf.h"
-#endif
-#ifdef rs_aix
-#include "interface_aix.h"
-#endif
-
-#include "general.h"
+#include "til-signal.h"
+#include "global.h"
+#include "thread.h"
 
 exn divide_exn;
 exn overflow_exn;
@@ -46,7 +40,7 @@ void exn_init()
 void raise_exception(struct sigcontext *scp, exn exn_arg)
 {
   long *the_iregs = (long *) GetIRegs(scp);
-  value_t *exn_ptr = (value_t *)(the_iregs[EXNPTR_REG]);
+  value_t exn_ptr = (value_t)(the_iregs[EXNPTR_REG]);
   value_t code = get_record(exn_ptr,0);
 
 #ifdef DEBUG
@@ -89,5 +83,5 @@ void toplevel_exnhandler(long *saveregs)
     }
   
   printf("Runtime uncaught exception: %s\n",msg);
-  thread_finish(saveregs);
+  Finish();
 }

@@ -48,7 +48,7 @@ fun marktop(t as MarkTop _, _,_) = t
     | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE 
     | RBRACKET | RPAREN | ORELSE | ANDALSO | FUNSIG | VECTORSTART | BEGINQ 
     | ENDQ of string | OBJL of string | AQID of FastSymbol.raw_symbol
-    | DOLLAR | EXTERN | CCALL
+    | DOLLAR | EXTERN | CCALL | PLET
 
 %nonterm ident of FastSymbol.raw_symbol
        | id of FastSymbol.raw_symbol
@@ -167,7 +167,7 @@ fun marktop(t as MarkTop _, _,_) = t
   OPEN OVERLOAD  RAISE  REC  SHARING  SIG  SIGNATURE  STRUCT
   STRUCTURE THEN TYPE VAL WHILE WHERE WITH WITHTYPE
   ORELSE ANDALSO 
-  DOLLAR CCALL EXTERN
+  DOLLAR CCALL EXTERN PLET
 
 %change -> VAL | -> THEN | -> ELSE | -> LPAREN | -> SEMICOLON | 
         DARROW -> EQUALOP | EQUALOP -> DARROW | AND -> ANDALSO | COLON -> OF |
@@ -312,6 +312,11 @@ app_exp	: aexp	        ([{item=markexp(aexp,aexpleft,aexpright),
 							     ldecsright),
 						 expr=SeqExp exp_ps},
 					  LETleft,ENDright))
+	| PLET ldecs IN exp_ps END	
+				(markexp (PletExp{dec=markdec(ldecs,ldecsleft,
+								     ldecsright),
+						 expr=SeqExp exp_ps},
+					  PLETleft,ENDright))
         | AQID                  (VarExp([varSymbol AQID]))
         | quote                 (ListExp quote)
 
@@ -696,9 +701,12 @@ top: sdecs              (marktop(ImplTop([], sdecs), sdecsleft, sdecsright))
 
 (*
  * $Log$
-# Revision 1.6  97/10/21  21:00:27  pscheng
-# got rid of int inf
+# Revision 1.7  99/01/18  20:18:24  pscheng
+# *** empty log message ***
 # 
+# Revision 1.6  1997/10/21  21:00:27  pscheng
+# got rid of int inf
+#
 # Revision 1.5  1997/09/03  20:10:21  pscheng
 # added extern and ccall syntax
 #

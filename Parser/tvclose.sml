@@ -75,6 +75,8 @@ struct
 	TVSet.union (pass1_exp expr :: map pass1_rule rules)
     | pass1_exp (LetExp {dec, expr}) =
 	TVSet.merge (pass1_dec dec, pass1_exp expr)
+    | pass1_exp (PletExp {dec, expr}) =
+	TVSet.merge (pass1_dec dec, pass1_exp expr)
     | pass1_exp (SeqExp exprs) = TVSet.union (map pass1_exp exprs)
     | pass1_exp (IntExp literal) = []
     | pass1_exp (WordExp literal) = []
@@ -240,6 +242,8 @@ struct
     | pass2_exp env (CaseExp {expr, rules}) =
 	(pass2_exp env expr; app (pass2_rule env) rules)
     | pass2_exp env (LetExp {dec, expr}) =
+	(pass2_dec env dec; pass2_exp env expr)
+    | pass2_exp env (PletExp {dec, expr}) =
 	(pass2_dec env dec; pass2_exp env expr)
     | pass2_exp env (SeqExp exprs) = app (pass2_exp env) exprs
     | pass2_exp env (IntExp literal) = ()

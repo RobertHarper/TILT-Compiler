@@ -1,3 +1,4 @@
+#define _asm_
 #include "general.h"
 	.text	
 	.align	4

@@ -132,9 +132,7 @@ structure Toil
 
      (* ----------------- overload_resolver ----------------------- *)
     fun overload_help warn (region,ocon) =
-	let val helpers = {hard = fn (c1,c2) => eq_con(empty_context,c1,c2),
-			   soft = fn (c1,c2) => soft_eq_con(empty_context,c1,c2)}
-	    val _ = push_region region
+	let val _ = push_region region
 	val res =  (
 (*
 	    print "overload_help: internal type is: ";
@@ -575,12 +573,13 @@ structure Toil
 			  let 
 			      fun mk_constraint (c,res) (tyvar, is_hard) = 
 				  let val c' = CON_TYVAR tyvar
-				      val match = if is_hard 
-						      then eq_con(context,c,CON_TYVAR tyvar)
-						  else soft_eq_con(context,c,CON_TYVAR tyvar)
+				      val match = (if is_hard then eq_con else soft_eq_con)(context,c,c')
 				      val res = if match
 						    then Tyvar.MATCH res
-						else Tyvar.FAIL
+						else ((* print "overexp : match failed ";
+						      pp_con c; print "   ???   "; pp_con c';
+						      print "\n"; *)
+						      Tyvar.FAIL)
 				  in res
 				  end
 			      val constraints = Listops.mapcount (fn (n,(con,_)) => mk_constraint (con,n)) constraint_result
@@ -677,6 +676,86 @@ structure Toil
 		 val (e,c,va) = xexp(context',expr)
 		 val bnds = map (fn (SBND(_,bnd)) => bnd) sbnds
 	     in  (LET(bnds,e),c,false) 
+	     end
+       (*  We compile plet's away as follows:
+
+	plet val a = e1
+	     val b = e2
+        in   e3
+	end
+
+	---> extra primitives needed: Spawn and Yield
+             We assume there are no user interrups; otherwise we must make sure the SetWaitState and Spawns
+	     are atomic
+
+	let val ra = ref NONE
+            val rb = ref NONE
+            fun ta() = ra := SOME e1 
+            fun tb() = rb := SOME e2
+            val _ = Ccall(Spawn ta)
+            val _ = Ccall(Spawn,tb)
+            val _ = Ccall(Yield,())
+            val SOME a = !ra
+            val SOME b = !rb
+        in  e3
+        end
+
+	*)
+       | Ast.PletExp {dec,expr} => 
+	     let fun traverse (Ast.ValDec (vblist,_)) = 
+		     let fun dovb (Ast.Vb{pat,exp}) = (pat,exp)
+			   | dovb (Ast.MarkVb(vb,_)) = dovb vb
+		     in  map dovb vblist
+		     end
+		   | traverse (Ast.MarkDec(dec,_)) = traverse dec
+		   | traverse (Ast.SeqDec decs) = flatten(map traverse decs)
+		   | traverse _ = error "bad declaration type in plet"
+
+		 (* helpers *)
+		 fun intexp n = Ast.IntExp(TilWord64.fromInt n)
+		 fun call(f,args) = Ast.CcallExp(f,args)
+		 fun callbind(sym,f,args) = Ast.ValDec([Ast.Vb{pat=Ast.VarPat[sym],exp=call(f,args)}],ref[])
+		 fun app(f,arg) = Ast.AppExp{function=f,argument=arg}
+		 fun appbind(sym,f,arg) = Ast.ValDec([Ast.Vb{pat=Ast.VarPat[sym],exp=app(f,arg)}],ref[])
+		 fun sym str = Symbol.varSymbol str
+		 fun var sym = Ast.VarExp[sym]
+		 fun varsym str = var(sym str)
+		 val tuple = Ast.TupleExp
+		 val empty = tuple[]
+		 val ref_expr = varsym "ref"
+		 val deref_expr = varsym "!"
+		 val set_expr = varsym ":="
+
+		 (* symbols and expressions *)
+val _ = print "plet0\n"
+		 val pats_exps = traverse dec
+		 val count = length pats_exps
+		 val fresh_str = Int.toString(var2int(fresh_var()))
+		 val refs = map0count (fn n => sym ("r" ^ fresh_str ^ "*" ^ (Int.toString n))) count
+		 val thunks = map0count (fn n => sym ("t" ^ fresh_str ^ "*" ^ (Int.toString n))) count
+		 val discard = sym "_"
+
+		 (* decs *)
+		 val ref_decs = map (fn refsym => appbind(refsym,ref_expr,varsym "NONE")) refs
+		 fun thunker (thunk,ref_sym,(_,exp)) = 
+		     let val body = app(set_expr,tuple[var ref_sym, app(varsym "SOME",exp)])
+		     in  Ast.FunDec([Ast.Fb[Ast.Clause{pats=[{item=Ast.VarPat[thunk],fixity=NONE,region=(0,0)},
+							     {item=Ast.TuplePat[],fixity=NONE,region=(0,0)}],
+						       resultty=NONE,exp=body}]],
+				     ref [])
+		     end
+		 val thunk_decs = map3 thunker (thunks,refs,pats_exps)
+		 val spawn_decs = map (fn sym => callbind(discard,varsym "Spawn",
+							 [var sym])) thunks
+		 val yield_dec = callbind(discard,varsym "Yield",[empty])
+		 val result_decs = 
+		     map2 (fn ((pat,_),slot) => 
+			   Ast.ValDec([Ast.Vb{pat=Ast.AppPat{constr=Ast.VarPat[Symbol.varSymbol "SOME"],
+							     argument=pat},
+					      exp=app(deref_expr,var slot)}],ref [])) (pats_exps,refs)
+		 val decs = ref_decs @ thunk_decs @ spawn_decs @ [yield_dec] @ result_decs
+		 val expr = Ast.LetExp {dec=Ast.SeqDec decs,expr=expr}
+	     in  xexp(context,expr)
 	     end
        | Ast.FlatAppExp _ => (case InfixParse.parse_exp(fixity context, exp) of
 				  SOME exp' => xexp(context,exp')

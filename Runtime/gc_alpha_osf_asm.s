@@ -2,9 +2,10 @@
  # the general and floating point register set and that the thread pointer register
  # is unmodified by call to gc_raw	 
 		
+#define _asm_
 #include "general.h"
-#define s 	stq	$0, (THREADPTR_SYMREG) \
-	stq	$1, 8(THREADPTR_SYMREG) 
+#include "thread.h"
+			
 		
 	.text	
 	.align	4
@@ -15,8 +16,9 @@
 	.globl	context_restore
 	.globl	old_alloc
 	.globl	cur_alloc_ptr
+	.globl	save_regs
+	.globl	load_regs
 	
-		
  # ----------------- save_regs---------------------------------
  # saves entire register set except for the return address register
  # does not use a stack frame or change any registers
@@ -181,18 +183,20 @@ load_regs:
 	.prologue 0
 gc_raw:
 .set noat
-	stq	$26, 208(THREADPTR_SYMREG)	# note that this is return address of gc_raw
+	stq	$26, 8*26(THREADPTR_SYMREG)	# note that this is return address of gc_raw
 	bsr	save_regs
-.set at
 	br	$gp, gc_raw_getgp
 gc_raw_getgp:	
-	ldgp	$gp, 0($gp)			# compute correct gp for self	
-	lda	$16, ($31)			# indicate that this is not a major GC
-	jsr	$26, gc_handler			# no need to restore $gp after this call
+	ldgp	$gp, 0($gp)			# compute correct gp for self
+	ldl	$at, sysThread_disp(THREADPTR_SYMREG) # get system thread pointer
+	ldl	$sp, ($at)		        # run on system thread stack
+	mov	THREADPTR_SYMREG, $16		# pass user thread pointer as arg
+.set at
+	jsr	$26, gc				# no need to restore $gp after this call
 	ldgp	$gp, 0($26)			# compute correct gp for self	
 .set noat
-	bsr	load_regs
-	ldq	$26, 208(THREADPTR_SYMREG)	# note that this is return address of gc_raw
+	bsr	load_regs                       # THREADPTR_SYMREG is a callee-save register
+	ldq	$26, 8*26(THREADPTR_SYMREG)	# note that this is return address of gc_raw
 	ret	$31, ($26), 1	
 .set at			
 	.end	gc_raw
@@ -259,8 +263,8 @@ old_alloc_ok:
 	# it suffices to make sure that there is less space in the nursery than
 	# in the old alloc area
 	subl	$27, ALLOCLIMIT_SYMREG, $27   # $27 contains space left in old_alloc area
-	lda	$0, fromheap
-	ldl	$0, 0($0)		 # $0 is fromheap
+	lda	$0, nursery
+	ldl	$0, 0($0)		 # $0 is nursery
 	ldl	ALLOCLIMIT_SYMREG, 8($0)      # at this point ALLOCLIMIT_SYMREG is restored to heaplimit
 	subl	ALLOCLIMIT_SYMREG, $11, $at	 # $at has less space between limit and at
 	cmple   $at, $27, $at

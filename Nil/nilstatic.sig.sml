@@ -4,7 +4,7 @@ signature NILSTATIC =
 
     type context 
 
-(*    val exp_valid : context * Nil.exp -> Nil.con*)
+    val exp_valid : context * Nil.exp -> Nil.con
     (* exp_valid (Gamma,exp) => con
       * PRE: The context is well formed.
       *      The domain of Gamma and the bound variables of exp are disjoint.
@@ -18,7 +18,7 @@ signature NILSTATIC =
       *)
 
 
-(*    val con_valid : context * Nil.con -> Nil.kind*)
+    val con_valid : context * Nil.con -> Nil.kind
     (* con_valid (Gamma,con) => kind
       * PRE: The context is well formed.
       *      The domain of Gamma and the bound variables of con are disjoint.
@@ -32,7 +32,7 @@ signature NILSTATIC =
       *)
 
 
-(*    val kind_valid : context * Nil.kind -> unit*)
+    val kind_valid : context * Nil.kind -> unit
     (* con_valid (Gamma,kind) => ()
       * PRE: The context is well formed.
       *      The domain of Gamma and the bound variables of kind are disjoint.
@@ -45,11 +45,11 @@ signature NILSTATIC =
 
     val module_valid : context * Nil.module -> unit
 
-(*    val con_equiv : context * Nil.con * Nil.con * Nil.kind -> bool*)
+    val con_equiv : context * Nil.con * Nil.con * Nil.kind -> bool
 
-(*    val kind_equiv : context * Nil.kind * Nil.kind -> bool*)
+    val kind_equiv : context * Nil.kind * Nil.kind -> bool
 
-(*    val sub_kind : context * Nil.kind * Nil.kind -> bool*)
+    val sub_kind : context * Nil.kind * Nil.kind -> bool
     (* sub_kind(context,kind1,kind2) => v
       * PRE : context, kind1, kind2 are well formed
       * POST: returns true if kind1 is equivalent to kind2

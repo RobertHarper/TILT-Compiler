@@ -93,6 +93,7 @@ structure AstHelp : ASTHELP =
 	 | (Ast.CaseExp {expr,rules}) => Ast.CaseExp{expr=self expr,rules=map (f_rule state) rules}
 	 | (Ast.HandleExp {expr,rules}) => Ast.HandleExp{expr=self expr,rules=map (f_rule state) rules}
 	 | (Ast.LetExp {dec,expr}) => Ast.LetExp{dec=f_dec state dec, expr=self expr}
+	 | (Ast.PletExp {dec,expr}) => Ast.PletExp{dec=f_dec state dec, expr=self expr}
 	 | (Ast.RecordExp symexp_list) => Ast.RecordExp(map (fn (s,e) => (s,self e)) symexp_list)
 	 | (Ast.ConstraintExp {expr,constraint}) => Ast.ConstraintExp{expr=self expr,
 								     constraint=f_ty state constraint}
@@ -404,7 +405,10 @@ structure AstHelp : ASTHELP =
        | Ast.RecordPat _ => String "RecordPatUNIMPED"
        | Ast.ListPat _ => String "ListPatUNIMPED"
        | Ast.TuplePat pats => pp_list pp_pat pats ("(",", ",")",false)
-       | Ast.FlatAppPat _ => String "FlatAppPatUNIMPED"
+       | Ast.FlatAppPat patfixes => 
+	     let val pats = map #item patfixes
+	     in  pp_list pp_pat pats ("",", ","",false)
+	     end
        | Ast.AppPat {constr,argument} => pp_region "(" ")" [pp_pat constr, String " ", pp_pat argument]
        | Ast.ConstraintPat {pattern,constraint} => 
 	     pp_region "(" ")" [pp_pat pattern, String ":", pp_ty constraint]

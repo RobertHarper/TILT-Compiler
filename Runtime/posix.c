@@ -1,13 +1,15 @@
-#include "tag.h"
-#include "thread.h"
-#include "create.h"
-#include "posix.h"
+#include <string.h>
+#include "general.h"
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <math.h>
 #include <sys/wait.h>
 #include <stdio.h>
 
+#include "tag.h"
+#include "thread.h"
+#include "create.h"
+#include "posix.h"
 
 
 #define PAIR(t,t1,t2,tlong,tstruct) struct tstruct { t1 first; t2 second; }; \

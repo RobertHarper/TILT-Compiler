@@ -57,29 +57,6 @@ struct
 	end
 
     val compile' = Stats.timer("Translation to RTL",compile')
-
-    fun metacompiles debug filenames = 
-	let val nilmodules : Nil.module list = 
-	    if debug then Linknil.tests filenames else Linknil.compiles filenames 
-	    val filenames_with_nilmodules = Listops.zip filenames nilmodules
-		handle _ => error "metacompiles"
-	in  map (fn (name,nmod) => compile'(debug,name,nmod)) filenames_with_nilmodules
-	end
-
-    fun compiles filenames = metacompiles false filenames
-    fun compile filename = hd(metacompiles false [filename])
-    fun tests filenames = metacompiles true filenames
-    fun test filename = hd(metacompiles true [filename])
-    fun nil_to_rtl (nilmod : Nil.module, unitname: string) : Rtl.module = compile'(false,unitname,nilmod)
-
-    val cached_prelude = ref (NONE : Rtl.module option)
-    fun compile_prelude (use_cache,filename) = 
-	case (use_cache, !cached_prelude) of
-		(true, SOME m) => m
-	      | _ => let val nilmod = Linknil.compile_prelude(use_cache,filename)
-			 val m = compile' (false,filename,nilmod)
-			 val _ = cached_prelude := SOME m
-		     in  m
-		     end
+    fun nil_to_rtl (unitname : string, nilmod : Nil.module) : Rtl.module = compile'(false,unitname,nilmod)
 
 end

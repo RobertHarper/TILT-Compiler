@@ -41,7 +41,7 @@ chip_name=${${full_sys_name}_chip_name}
 objdir=obj_${sys_name}
 ASM=${sys_name}_asm
 MAIN=main_nothread.o
-COREFILES_OBJ=${objdir}/posix.o ${objdir}/gcstat.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/mllib.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/gc_${ASM}.o ${objdir}/mllib_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o 
+COREFILES_OBJ=${objdir}/posix.o ${objdir}/gcstat.o ${objdir}/forward.o ${objdir}/gc_semi.o ${objdir}/gc_gen.o ${objdir}/gc_para.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/mllib.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/gc_${ASM}.o ${objdir}/mllib_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o 
 COREFILES_HPROF_OBJ=$(COREFILES_OBJ:.o=.hprof.o)
 
 preludes=
@@ -73,7 +73,9 @@ endif
 endif
 
 # --------------------------- C and asm flags ---------------------------
-CFLAGS=-c -g -D${sys_name}
+#CC=gcc -D__C_ASM_H -DGCC
+CC=cc
+CFLAGS=-warnprotos -D__STDC__ -c -g -D${sys_name}
 #CFLAGS=-c -O2 -D${sys_name}
 
 alpha_osf_asflags=-O1 -g
@@ -169,7 +171,19 @@ ${objdir}/thread.o: thread.c memobj.h tag.h general.h thread.h
 ${objdir}/signal.o: signal.c tag.h
 	${CC} -o $@ ${CFLAGS} signal.c
 
-${objdir}/gc.o: gc.c tag.h general.h platform.h
+${objdir}/forward.o: forward.c tag.h general.h platform.h forward.h thread.h
+	${CC} -o $@ ${CFLAGS} forward.c
+
+${objdir}/gc_semi.o: gc_semi.c tag.h general.h platform.h forward.h gc.h stack.h
+	${CC} -o $@ ${CFLAGS} gc_semi.c
+
+${objdir}/gc_gen.o: gc_gen.c tag.h general.h platform.h forward.h gc.h stack.h
+	${CC} -o $@ ${CFLAGS} gc_gen.c
+
+${objdir}/gc_para.o: gc_para.c tag.h general.h platform.h forward.h gc.h stack.h
+	${CC} -o $@ ${CFLAGS} gc_para.c
+
+${objdir}/gc.o: gc.c tag.h general.h platform.h forward.h gc.h stack.h
 	${CC} -o $@ ${CFLAGS} gc.c
 
 ${objdir}/gcstat.o: gcstat.c tag.h general.h

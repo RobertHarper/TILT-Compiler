@@ -1,7 +1,7 @@
-#include "tag.h"
 #include "general.h"
+#include <string.h>
+#include "tag.h"
 #include "thread.h"
-#include <assert.h>
 #include "global.h"
 
 value_t* oddword_align(value_t *ptr)

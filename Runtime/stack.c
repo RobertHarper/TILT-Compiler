@@ -1,6 +1,7 @@
 #include "tag.h"
 #include "queue.h"
 #include "stack.h"
+#include "thread.h"
 #include "hash.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -8,47 +9,27 @@
 #include <values.h>
 #include "general.h"
 #include "stats.h"
-
-#ifdef DEBUG
 #include "memobj.h"
-extern HeapObj_t *fromheap, *toheap;
-#endif
-
+#include "client.h"
 
 int GCTableEntryIDFlag = 0;  /* let the user code set it if it thinks it's on */
+long save_rate = 70;
+long use_stack_gen = 0;
 
 
-extern long SHOW_GCDEBUG;
-extern int GCTABLE_BEGIN_VAL;
-extern int GCTABLE_END_VAL;
-extern int CODE_BEGIN_VAL;
-extern int CODE_END_VAL;
-extern int SML_GLOBALS_BEGIN_VAL;
-extern int SML_GLOBALS_END_VAL;
-extern int MUTABLE_TABLE_BEGIN_VAL;
-extern int MUTABLE_TABLE_END_VAL;
-/*
-extern int GLOBAL_TABLE_BEGIN_VAL;
-extern int GLOBAL_TABLE_END_VAL;
-*/
+static value_t *GCTABLE_BEGIN_ADDR = &GCTABLE_BEGIN_VAL;
+static value_t *GCTABLE_END_ADDR = &GCTABLE_END_VAL;
+static value_t *CODE_BEGIN_ADDR = &CODE_BEGIN_VAL;
+static value_t *CODE_END_ADDR = &CODE_END_VAL;
+static value_t *SML_GLOBALS_BEGIN_ADDR = &SML_GLOBALS_BEGIN_VAL;
+static value_t *SML_GLOBALS_END_ADDR = &SML_GLOBALS_END_VAL;
+static value_t *MUTABLE_TABLE_BEGIN_ADDR = &MUTABLE_TABLE_BEGIN_VAL;
+static value_t *MUTABLE_TABLE_END_ADDR = &MUTABLE_TABLE_END_VAL;
 
-static int *GCTABLE_BEGIN_ADDR = &GCTABLE_BEGIN_VAL;
-static int *GCTABLE_END_ADDR = &GCTABLE_END_VAL;
-static int *CODE_BEGIN_ADDR = &CODE_BEGIN_VAL;
-static int *CODE_END_ADDR = &CODE_END_VAL;
-static int *SML_GLOBALS_BEGIN_ADDR = &SML_GLOBALS_BEGIN_VAL;
-static int *SML_GLOBALS_END_ADDR = &SML_GLOBALS_END_VAL;
-
-static int *MUTABLE_TABLE_BEGIN_ADDR = &MUTABLE_TABLE_BEGIN_VAL;
-static int *MUTABLE_TABLE_END_ADDR = &MUTABLE_TABLE_END_VAL;
-/*
-static int *GLOBAL_TABLE_BEGIN_ADDR = &GLOBAL_TABLE_BEGIN_VAL;
-static int *GLOBAL_TABLE_END_ADDR = &GLOBAL_TABLE_END_VAL;
-*/
-unsigned long MaxStackDepth = 0;
-unsigned long TotalStackDepth = 0;
-unsigned long TotalNewStackDepth = 0;
-unsigned long TotalStackSize  = 0;
+long MaxStackDepth = 0;
+long TotalStackDepth = 0;
+long TotalNewStackDepth = 0;
+long TotalStackSize  = 0;
 
 extern value_t start_client_retadd_val;
 Queue_t *ScanQueue = 0;
@@ -87,7 +68,6 @@ typedef unsigned int bot;
 
 
 typedef void (voidfun_t)();
-#define NUM_STACK_STUB 200
 #define stub_decl(m,n) \
 m##n##0, m##n##1, m##n##2, m##n##3, m##n##4, m##n##5, m##n##6, m##n##7, m##n##8, m##n##9
 
@@ -111,26 +91,7 @@ voidfun_t stub_decl(stack_stub_,16);
 voidfun_t stub_decl(stack_stub_,17);
 voidfun_t stub_decl(stack_stub_,18);
 voidfun_t stub_decl(stack_stub_,19);
-voidfun_t stub_decl(exn_stub_,00);
-voidfun_t stub_decl(exn_stub_,01);
-voidfun_t stub_decl(exn_stub_,02);
-voidfun_t stub_decl(exn_stub_,03);
-voidfun_t stub_decl(exn_stub_,04);
-voidfun_t stub_decl(exn_stub_,05);
-voidfun_t stub_decl(exn_stub_,06);
-voidfun_t stub_decl(exn_stub_,07);
-voidfun_t stub_decl(exn_stub_,08);
-voidfun_t stub_decl(exn_stub_,09);
-voidfun_t stub_decl(exn_stub_,10);
-voidfun_t stub_decl(exn_stub_,11);
-voidfun_t stub_decl(exn_stub_,12);
-voidfun_t stub_decl(exn_stub_,13);
-voidfun_t stub_decl(exn_stub_,14);
-voidfun_t stub_decl(exn_stub_,15);
-voidfun_t stub_decl(exn_stub_,16);
-voidfun_t stub_decl(exn_stub_,17);
-voidfun_t stub_decl(exn_stub_,18);
-voidfun_t stub_decl(exn_stub_,19);
+
 
 
 void *stack_stubs[NUM_STACK_STUB] = { 
@@ -146,43 +107,15 @@ void *stack_stubs[NUM_STACK_STUB] = {
   stub_decl(stack_stub_,18),  stub_decl(stack_stub_,19)
 };
 
-void *exn_stubs[NUM_STACK_STUB] = { 
-  stub_decl(exn_stub_,00),  stub_decl(exn_stub_,01),
-  stub_decl(exn_stub_,02),  stub_decl(exn_stub_,03),
-  stub_decl(exn_stub_,04),  stub_decl(exn_stub_,05),
-  stub_decl(exn_stub_,06),  stub_decl(exn_stub_,07),
-  stub_decl(exn_stub_,08),  stub_decl(exn_stub_,09),
-  stub_decl(exn_stub_,10),  stub_decl(exn_stub_,11),
-  stub_decl(exn_stub_,12),  stub_decl(exn_stub_,13),
-  stub_decl(exn_stub_,14),  stub_decl(exn_stub_,15),
-  stub_decl(exn_stub_,16),  stub_decl(exn_stub_,17),
-  stub_decl(exn_stub_,18),  stub_decl(exn_stub_,19)
-};
 
 extern value_t global_exnrec;
 
-/* the size of this structure affect the code in stack_asm.s */
-struct StackSnapshot
-{
-  value_t saved_ra;
-  value_t saved_sp;
-  unsigned int saved_regstate;
-  Queue_t *roots;
-};
 
-typedef struct StackSnapshot StackSnapshot_t;
-static StackSnapshot_t snapshots[NUM_STACK_STUB];
-value_t *snapshots_saved_ra_add[NUM_STACK_STUB];
-value_t exn_codeptr_table[NUM_STACK_STUB];
-
-#ifdef DEBUG
 void stub_error()
 {
   printf("stub_error: should be a dead ra");
   assert(0);
 }
-#endif
-
 
 
 #ifdef DEBUG
@@ -236,7 +169,7 @@ void LookupSpecialWordPair(Callinfo_t *callinfo, int pos, int *a, int *b)
     }
 }
 
-extern int module_count;
+
 
 HashTable_t *CallinfoHashTable = NULL;
 long GCTableSize = 0;
@@ -355,16 +288,6 @@ void stack_init()
   e.data = (void *)&ml_lookahead_gcentry;
   HashTableInsert(CallinfoHashTable,&e);
 
-  for (i=0; i<NUM_STACK_STUB; i++)
-    {
-      snapshots[i].roots = NULL;
-#ifdef DEBUG
-      snapshots[i].saved_ra = (value_t) stub_error;
-#else
-      snapshots[i].saved_ra = 0;
-#endif
-      snapshots_saved_ra_add[i] = &(snapshots[i].saved_ra);
-    }
 }
 
 
@@ -467,10 +390,8 @@ int findretadd(value_t *sp_ptr, value_t *cur_retadd_ptr, value_t top,
 
 void show_stack(value_t sp, value_t cur_retadd, value_t top)
 {
-  static Queue_t *retadd_queue = 0;
   int i;
-  if (retadd_queue == 0)
-    retadd_queue = QueueCreate(0,200);
+  Queue_t *retadd_queue = QueueCreate(0,200);
   (void) findretadd(&sp,&cur_retadd,top,retadd_queue,MAXINT);
   for (i=0; i<QueueLength(retadd_queue); i++)
     if (SHOW_GCDEBUG) printf("%d: %d\n",i,QueueAccess(retadd_queue,i));
@@ -539,6 +460,8 @@ int should_trace_big(unsigned long trace,
 #ifdef DEBUG
 	  printf("\n\nENCOUNTERED UNSET @ data_add = %d\n\n",data_add);
 #endif
+	  if (collector_type == Parallel)
+	    assert(0);
 	  Enqueue(ScanQueue,(void *)data_add);
 	}
       else if (IS_SPECIAL_GLOBAL(special_type))
@@ -591,7 +514,7 @@ int should_trace_big(unsigned long trace,
 which is pointed to by bot_sp at the moment.  Note that
 bot_sp points to the top of this frame.  Thus, when we are
 done, bot_sp will point to the bottom of the last processed frame.  */
-value_t trace_stack_step(unsigned long *saveregs,
+value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
 			 value_t *bot_sp, Queue_t *retadd_queue,
 			 value_t top,
 			 Queue_t *roots, unsigned int *regstate_ptr, 
@@ -682,12 +605,13 @@ value_t trace_stack_step(unsigned long *saveregs,
 #endif
 		{
 		  /* better to recompute stack_pos as this case is relatively infrequent */
-		  int cur_stackpos = cur_sp + (((mi << 2) + (3 - mj)) << 2);
+		  value_t *slot = (value_t *)(cur_sp + (((mi << 2) + (3 - mj)) << 2));
 #ifdef STACK_DEBUG
-		  printf("Enqueueing stackpos %d: cur_sp=%d\n",
-			 cur_stackpos,cur_sp);
+		  printf("Enqueueing stack slot %d: cur_sp=%d\n",
+			 slot,cur_sp);
 #endif
-		  Enqueue(roots,(void *)cur_stackpos);
+		  if (*slot > 256)
+		    Enqueue(roots,(void *)slot);
 		}
 
 	      /*	      printf("------\n"); */
@@ -747,21 +671,16 @@ value_t trace_stack_step(unsigned long *saveregs,
     return res;
 }
 
-unsigned int trace_stack_normal(unsigned long *saveregs,
+unsigned int trace_stack_normal(Thread_t *th, unsigned long *saveregs,
 				value_t bot_sp, value_t cur_retadd, value_t top,
 				Queue_t *root_lists)
 {
-  
-  static Queue_t *retadd_queue = 0;
-  static Queue_t *roots = 0;
+  Queue_t *retadd_queue = th->retadd_queue;
+  Queue_t *roots = th->snapshots[0].roots;
   value_t cur_sp;
   unsigned int regstate = 0;
   int not_done = 1;
 
-  if (retadd_queue == 0)
-    retadd_queue = QueueCreate(0,2000);
-  if (roots == 0)
-    roots = QueueCreate(0,200);
   
   { 
     value_t oldbot_sp = bot_sp;
@@ -782,7 +701,7 @@ unsigned int trace_stack_normal(unsigned long *saveregs,
 
   while (not_done)
     {
-      not_done = trace_stack_step(saveregs,&bot_sp, retadd_queue, top,
+      not_done = trace_stack_step(th, saveregs,&bot_sp, retadd_queue, top,
 				  roots, &regstate, MAXINT);
     }
   Enqueue(root_lists,roots);
@@ -791,106 +710,49 @@ unsigned int trace_stack_normal(unsigned long *saveregs,
 
 
 
-long save_rate = 70;
-long use_stack_gen = 0;
 
-value_t exnstub_maxsp = 0;
-
-void stubify_exnrecord(value_t _exnptr, int cur_snapshot)
-{
-  value_t max_sp = 0;
-  value_t *exnptr = (value_t *)_exnptr;
-
-  while (exnptr != &global_exnrec && cur_snapshot>=0)
-    {
-      value_t code = exnptr[0];
-      value_t sp = exnptr[1];
-#ifdef DEBUG
-      if (code == global_exnrec) /* redundant check */
-	break;
-#endif
-      if (code == (value_t)exn_stubs[cur_snapshot]) /* reached old stubified exn */
-	break;
-      if (sp >= snapshots[cur_snapshot].saved_sp)
-	{
-	  exn_codeptr_table[cur_snapshot] = code;
-	  exnptr[0] = (value_t)exn_stubs[cur_snapshot];
-	  cur_snapshot--;
-	}
-      exnptr = (value_t *)(exnptr[2]);
-    }
-
-  exnstub_maxsp = 0;
-}
-
-
-
-value_t walk_exnrecord(value_t _exnptr)
-{
-  value_t max_sp = 0;
-  value_t *exnptr = (value_t *)_exnptr;
-
-  while (exnptr != &global_exnrec)
-    {
-      value_t code = exnptr[0];
-      value_t sp = exnptr[1];
-      if (code == global_exnrec) /* redundant check */
-	break;
-      if (code == 0 && max_sp < sp)
-	max_sp = sp;
-      exnptr = (value_t *)(exnptr[2]);
-    }
-  return max_sp;
-}
 
 /* lastexptr is the value of exnptr after the last garbage collection */
-unsigned int trace_stack_gen(unsigned long *saveregs,
+unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 			     value_t bot_sp, value_t cur_retadd, value_t top,
 			     Queue_t *root_lists, value_t last_exnptr, value_t this_exnptr)
 {
-  static int last_snapshot = -1;
-  static Queue_t *retadd_queue = 0;
+  Queue_t *retadd_queue = th->retadd_queue;
   value_t cur_sp;
-  value_t max_sp = 0; 
+  value_t max_sp = th->maxSP;
   unsigned int regstate = 0;
   int i, j, not_done = 1;
 
   TotalStackSize += top - bot_sp;
-    
-  /*  max_sp = walk_exnrecord(last_exnptr); */
-  max_sp = exnstub_maxsp;
-
-  if (retadd_queue == 0)
-    retadd_queue = QueueCreate(0,2000);
 
   {
     int temp = -1;
-    while (((temp+1) <= last_snapshot) &&
-	   (snapshots[temp+1].saved_ra != 0) &&
+    while (((temp+1) <= th->last_snapshot) &&
+	   (th->snapshots[temp+1].saved_ra != 0) &&
 #ifdef DEBUG
 	   ((temp+1) < NUM_STACK_STUB) &&
-	   (snapshots[temp+1].saved_ra != (value_t)stub_error) &&
+	   (th->snapshots[temp+1].saved_ra != (value_t)stub_error) &&
 #endif
-	   (snapshots[temp+1].saved_sp > max_sp))
+	   (th->snapshots[temp+1].saved_sp > max_sp))
       temp++;
-    last_snapshot = temp;
+    th->last_snapshot = temp;
   }
 
 
 #ifdef DEBUG  
-  printf("last_snapshot=%d,  top=%d  max_sp = %d\n",last_snapshot,top,max_sp);
+  printf("th->last_snapshot=%d,  top=%d  max_sp = %d\n",th->last_snapshot,top,max_sp);
 #endif
 
 
-  if (last_snapshot >= 0)
+  if (th->last_snapshot >= 0)
     {
-      for (i=0; i<=last_snapshot; i++)
+      for (i=0; i<=th->last_snapshot; i++)
 	{
-	  Queue_t *r = snapshots[i].roots;
+	  Queue_t *r = th->snapshots[i].roots;
 	  Enqueue(root_lists,r);
 	}
-      regstate = snapshots[last_snapshot].saved_regstate;
-      top = snapshots[last_snapshot].saved_sp;
+      regstate = th->snapshots[th->last_snapshot].saved_regstate;
+      top = th->snapshots[th->last_snapshot].saved_sp;
     }
 
 
@@ -901,7 +763,7 @@ unsigned int trace_stack_gen(unsigned long *saveregs,
 
   assert(top > bot_sp);
   { 
-    int predone = save_rate * (last_snapshot+1);
+    int predone = save_rate * (th->last_snapshot+1);
     int retadd_qlen, curstack_depth;
 
     (void) findretadd(&bot_sp,&cur_retadd,top,retadd_queue,MAXINT);
@@ -920,14 +782,14 @@ unsigned int trace_stack_gen(unsigned long *saveregs,
   while (not_done)
     {
       unsigned int inner_save_rate = save_rate;
-      Queue_t *r = snapshots[last_snapshot+1].roots;
-      if (last_snapshot + 2 >= NUM_STACK_STUB)
+      Queue_t *r = th->snapshots[th->last_snapshot+1].roots;
+      if (th->last_snapshot + 2 >= NUM_STACK_STUB)
 	inner_save_rate = MAXINT;
       if (r == NULL)
 	r = QueueCreate(0,50);
 
       QueueClear(r);
-      not_done = trace_stack_step(saveregs, &bot_sp, retadd_queue, top,
+      not_done = trace_stack_step(th, saveregs, &bot_sp, retadd_queue, top,
 				  r, &regstate, inner_save_rate);
       Enqueue(root_lists,r);
 
@@ -941,45 +803,44 @@ unsigned int trace_stack_gen(unsigned long *saveregs,
 	    octa_offset = LookupSpecialByte(callinfo,0);
 	  next_ra_add += octa_offset << 3;
 
-	  last_snapshot++; 
-	  snapshots[last_snapshot].roots = r;
-	  snapshots[last_snapshot].saved_regstate = regstate;
-	  snapshots[last_snapshot].saved_sp = bot_sp;
-	  snapshots[last_snapshot].saved_ra = *((value_t *)next_ra_add);
+	  th->last_snapshot++; 
+	  th->snapshots[th->last_snapshot].roots = r;
+	  th->snapshots[th->last_snapshot].saved_regstate = regstate;
+	  th->snapshots[th->last_snapshot].saved_sp = bot_sp;
+	  th->snapshots[th->last_snapshot].saved_ra = *((value_t *)next_ra_add);
 #ifdef DEBUG
-	  printf("snapshots = %d, snapshots[last_snapshot]=%d"
+	  printf("snapshots = %d, snapshots[th->last_snapshot]=%d"
 		 "s[c]->saved_ra=%d, s[c]->saved_sp=%d\n",
-		 snapshots,snapshots[last_snapshot],
-		 snapshots[last_snapshot].saved_ra,
-		 snapshots[last_snapshot].saved_sp);
+		 snapshots,snapshots[th->last_snapshot],
+		 snapshots[th->last_snapshot].saved_ra,
+		 snapshots[th->last_snapshot].saved_sp);
 	  printf("saving(%d/%d): sp,ra %d,%d regstate=%d\n",
-		 last_snapshot,*((value_t *)not_done),
+		 th->last_snapshot,*((value_t *)not_done),
 		 bot_sp,*((value_t *)next_ra_add),regstate);
 #endif
-	  *((value_t *)next_ra_add) = GetStackStub(last_snapshot);
+	  *((value_t *)next_ra_add) = GetStackStub(th->last_snapshot);
 	}
 
     }
 
 
-  stubify_exnrecord(this_exnptr, last_snapshot);
-
 #ifdef DEBUG
-  printf("stack_trace_gen: last_snapshot=%d\n",last_snapshot);
+  printf("stack_trace_gen: th->last_snapshot=%d\n",th->last_snapshot);
 #endif
 
   return regstate;
 }
 
 
-unsigned int trace_stack(unsigned long *saveregs,
-			 value_t bot_sp, value_t cur_retadd, value_t top,
-			 Queue_t *root_lists)
+unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
+			 value_t top, Queue_t *root_lists)
 {
   unsigned int regstate = 0;
   static value_t last_exnptr = 0; 
   value_t this_exnptr = saveregs[EXNPTR_REG];
   extern value_t global_exnrec;
+  long sp = saveregs[SP_REG];
+  long retadd = saveregs[RA_REG];
 
   if (!last_exnptr)
     last_exnptr = (value_t)(&global_exnrec);
@@ -987,10 +848,10 @@ unsigned int trace_stack(unsigned long *saveregs,
   QueueClear(ScanQueue);
   
   if (use_stack_gen)
-    regstate = trace_stack_gen( saveregs, bot_sp,  cur_retadd, top, 
+    regstate = trace_stack_gen( th, saveregs, sp,  retadd, top, 
 				root_lists, last_exnptr, this_exnptr);
   else
-    regstate = trace_stack_normal( saveregs, bot_sp,  cur_retadd, top, root_lists);
+    regstate = trace_stack_normal( th, saveregs, sp,  retadd, top, root_lists);
 
   last_exnptr = this_exnptr;
 
@@ -1021,3 +882,167 @@ unsigned int trace_stack(unsigned long *saveregs,
 
   return regstate;
 }
+
+
+
+void debug_after_rootscan(unsigned long *saveregs, int regmask, 
+			  Queue_t *root_lists, Heap_t *fromheap)
+{
+#ifdef DEBUG
+  int allocptr = saveregs[ALLOCPTR_REG];
+    if (SHOW_GCDEBUG && NumGC > LEAST_GC_TO_CHECK)
+      {
+	long i,j;
+	printf("\n--------------- ROOT INFORMATION ---------------\n");
+	for (i=0; i<32; i++)
+	  if (regmask & (1 << i))
+	    printf("LIVE REGISTER VALUE %d: %d\n",i,saveregs[i]);
+	
+	for (j=0; j<QueueLength(root_lists); j++)
+	  {
+	    Queue_t *roots = QueueAccess(root_lists,j);
+	    for (i=0; i<QueueLength(roots); i++)
+	      printf("ROOT #%d: %d(%d)\n",
+		     i,QueueAccess(roots,i),*((int *)QueueAccess(roots,i)));
+	  }
+      }
+    if (SHOW_HEAPS)
+      {
+	if (SHOW_HEAPS)
+	  memdump("From Heap Before collection:", (int *)fromheap->bottom,100,0);
+	show_heap("ORIG FROM",fromheap->bottom,allocptr,fromheap->top); 
+	memdump("OLD_FROMHEAP",(int *)old_fromheap->bottom,
+		((value_t)old_alloc_ptr - (value_t)old_fromheap->bottom)/4,0);
+	show_heap("OLD_FROMHEAP",old_fromheap->bottom,old_alloc_ptr,
+		  old_fromheap->top); 
+      }
+    else
+      {
+	check_heap("ORIG FROM",fromheap->bottom,allocptr,fromheap->top); 
+	check_heap("OLD_FROMHEAP",old_fromheap->bottom,old_alloc_ptr,
+		   old_fromheap->top); 
+      }
+#endif
+}
+
+void local_root_scan(Thread_t *th)
+{
+  Queue_t *root_lists = th->root_lists;
+  Queue_t *reg_roots = th->reg_roots;
+  unsigned long *saveregs = (unsigned long *)(th->saveregs);
+  unsigned long i;
+  
+  start_timer(&th->stacktime);
+  QueueClear(root_lists);
+  QueueClear(reg_roots);
+  
+  if (saveregs[ALLOCLIMIT_REG] == StopHeapLimit) {  /* thread has not started */
+    if (th->num_add == 0)
+      Enqueue(reg_roots,&(th->start_address));
+    else 
+      for (i=0; i<th->num_add; i++)
+	Enqueue(reg_roots,&(((value_t *)th->start_address)[i]));
+  }
+  else {
+    long sp = saveregs[SP_REG];
+    Stack_t *stack = GetStack(sp);
+    int regmask = trace_stack(th, saveregs, stack->top, root_lists);
+    regmask |= 1 << EXNPTR_REG;
+    for (i=0; i<32; i++)
+      if ((regmask & (1 << i)) && (saveregs[i] > 256))
+	Enqueue(reg_roots,(int *)(&(saveregs[i])));
+  }
+  Enqueue(root_lists,reg_roots);
+
+#ifdef DEBUG
+  debug_after_rootscan(saveregs,regmask,root_lists);
+#endif
+  stop_timer(&th->stacktime);
+
+}
+
+void global_root_scan(Queue_t *global_roots, Queue_t *promoted_global_roots)
+{
+  static Queue_t *uninit_global_roots;
+  static Queue_t *temp;
+  static int first_time = 1;
+  unsigned long i,mi, stack_top, len;
+
+  if (first_time)
+    { 
+      uninit_global_roots = QueueCreate(0,100); 
+      temp = QueueCreate(0,100); 
+      for (mi=0; mi<module_count; mi++) {
+	value_t *start = (value_t *)((&MUTABLE_TABLE_BEGIN_VAL)[mi]);
+	value_t *stop = (value_t *)((&MUTABLE_TABLE_END_VAL)[mi]);
+	for ( ; start < stop; start += 4) {
+	  Enqueue(uninit_global_roots,start); 
+	}
+      }
+    }
+
+  QueueClear(promoted_global_roots);
+  QueueClear(temp);
+  len = QueueLength(uninit_global_roots);
+  for (i=0; i<len; i++)
+    {
+      value_t *e = QueueAccess(uninit_global_roots,i);
+      value_t table_entry = ((value_t *)e)[0];
+      int     trace       = ((value_t *)e)[1];
+      value_t data = *((value_t *)table_entry);
+      int should_trace = 0;
+      int resolved = (data != 258);
+
+      if (!resolved)
+	{ Enqueue(temp,e); }
+      else if (IS_TRACE_YES(trace))
+	should_trace = 1;
+      else if (IS_TRACE_NO(trace))
+	;
+      else if (IS_TRACE_CALLEE(trace))
+	{ printf("cannot have trace_callee for globals\n"); exit(-1); }
+      else if (IS_TRACE_SPECIAL(trace))
+	{ 
+	  int special_type = ((value_t *)e)[2];
+	  int special_data = ((value_t *)e)[3];
+	  int res;
+	  
+	  if (IS_SPECIAL_STACK(special_type))
+	    { printf("cannot have trace_special_stack for globals\n"); exit(-1); }
+	  else if (IS_SPECIAL_UNSET(special_type))
+	    { printf("cannot have trace_special_unset for globals\n"); exit(-1); }
+	  else if (IS_SPECIAL_STACK_REC(special_type))
+	    { printf("cannot have trace_special_stackrec for globals\n"); exit(-1); }
+	  else if (IS_SPECIAL_GLOBAL(special_type))
+	    res = *((int *)special_data);
+	  else if (IS_SPECIAL_GLOBAL_REC(special_type))
+	    {
+	      int rec_pos = GET_SPECIAL_STACK_GLOBAL_POS(special_type);
+	      int rec_pos2 = GET_SPECIAL_STACK_GLOBAL_POS2(special_type);
+	      int rec_pos3 = GET_SPECIAL_STACK_GLOBAL_POS3(special_type);
+	      int rec_pos4 = GET_SPECIAL_STACK_GLOBAL_POS4(special_type);
+	      res = ((int *)(((int *)special_data)))[rec_pos];
+	      if (rec_pos2 > 0)
+		res = ((int *)res)[rec_pos2-1];
+	      if (rec_pos3 > 0)
+		res = ((int *)res)[rec_pos3-1];
+	      if (rec_pos4 > 0)
+		res = ((int *)res)[rec_pos4-1];
+	    }
+	  else
+	    { printf("impossible trace_special wordpair entry: %d %d\n",
+		     special_type,special_data);
+	    exit(-1);
+	    }
+	  should_trace = (res >= 3);
+	} /* TRACE_SPECIAL */ 
+
+      Enqueue(global_roots,(void *)table_entry); /* this is accumulated */
+      Enqueue(promoted_global_roots,(void *)table_entry); /* this is reset each time */
+    }
+
+
+  typed_swap(Queue_t *, uninit_global_roots,temp);
+
+}
+

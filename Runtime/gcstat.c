@@ -29,11 +29,9 @@ extern Object_Profile_t allocated_object_profile;
 extern Object_Profile_t collected_object_profile;
 #endif
 
-extern HeapObj_t *fromheap;
-extern int module_count;
+
 extern int NumGC;
-extern int SML_GLOBALS_BEGIN_VAL;
-extern int SML_GLOBALS_END_VAL;
+
 
 
 long TotalBytesAllocated = 0;
@@ -103,7 +101,8 @@ void show_gcstats(Object_Profile_t *alloc, Object_Profile_t *collect)
 
 
 
-void gc_sanity_stackreg_check(unsigned long *saveregs, int *stackbot, int *stacktop)
+void gc_sanity_stackreg_check(unsigned long *saveregs, Heap_t *fromspace,
+			      int *stackbot, int *stacktop)
 {
   int mi, i;
   int *wordptr;
@@ -117,9 +116,9 @@ void gc_sanity_stackreg_check(unsigned long *saveregs, int *stackbot, int *stack
       if (i == ALLOCPTR_REG ||
 	  i == ALLOCLIMIT_REG)
 	continue;
-      if (data >= fromheap->bottom && data < fromheap->top)
+      if (data >= fromspace->bottom && data < fromspace->top)
 	{
-	    printf("WARNING: reg %d has fromheap value %d"
+	    printf("WARNING: reg %d has fromspace value %d"
 		   " -- now resetting to %d\n",i,data,debug_reg_val);
 	  saveregs[i] = debug_reg_val; 
 	  debug_reg_val += 16;
@@ -131,9 +130,9 @@ void gc_sanity_stackreg_check(unsigned long *saveregs, int *stackbot, int *stack
       static value_t debug_stack_val = 10000;
       value_t *data_add =  (value_t *)wordptr;
       value_t data = *data_add;
-      if (data >= fromheap->bottom && data < fromheap->top)
+      if (data >= fromspace->bottom && data < fromspace->top)
 	{
-	    printf("WARNING: stack loc %d has fromheap value %d;"
+	    printf("WARNING: stack loc %d has fromspace value %d;"
 		   "resetting to %d\n",
 		   data_add,data,debug_stack_val);
 	  *data_add = debug_stack_val; 
@@ -160,33 +159,12 @@ void gcstat_normal(unsigned allocsize,
 
 
 
-void gcstat_finish(unsigned long allocptr)
+void gcstat_finish(unsigned long allocsize)
 {
-  extern long generational_flag;
-  extern HeapObj_t *old_fromheap;
-  long allocsize = allocptr - fromheap->alloc_start;
-printf("TotalBytesAllocated 4: %ld\n",TotalBytesAllocated);
+/*  printf("TotalBytesAllocated 4: %ld\n",TotalBytesAllocated); */
   TotalBytesAllocated += allocsize;
-printf("TotalBytesAllocated 4: %ld\n",TotalBytesAllocated);
+/*  printf("TotalBytesAllocated 4: %ld\n",TotalBytesAllocated); */
   TotalBytesCollected += TotalGenBytesCollected;
-#ifdef HEAPPROFILE
-  gcstat_heapprofile_beforecollect((value_t *)fromheap->alloc_start,
-				   (value_t *)allocptr);
-  gcstat_heapprofile_aftercollect((value_t *)fromheap->bottom,
-				   (value_t *)allocptr);
-  if (generational_flag && old_fromheap)
-    {
-      printf("gcstat_heapprofile_aftercollect: old_fromheap->bottom = %d\n",
-	     old_fromheap->bottom);
-      printf("gcstat_heapprofile_aftercollect: old_fromheap->alloc_start = %d\n",
-	     old_fromheap->alloc_start);
-      gcstat_heapprofile_aftercollect((value_t *)old_fromheap->bottom,
-				      (value_t *)old_fromheap->alloc_start);
-    }
-  gcstat_show_heapprofile("full",0.0,0.0);
-  printf("\n\n\n\n");
-  gcstat_show_heapprofile("short",1.0,1.0);
-#endif
 }
 
 #ifdef HEAPPROFILE
@@ -336,7 +314,7 @@ void gcstat_heapprofile_beforecollect(value_t *bot, value_t *top)
     if (GET_TYPE(tag) == FORWARD_TAG)
       {
 	printf("\n\nproftag,tag is %d/%d  at  %d\n", proftag,tag,cur);
-	printf("heapprofile: no forward tags should be in fromheap\n");
+	printf("heapprofile: no forward tags should be in from space\n");
 	assert(0);
       }
     size = objlength(cur,&temp);

@@ -46,6 +46,12 @@ signature INTEGER_CONVENTION = sig
    *)
   val stackPointer: id
 
+
+  (*
+   * The address of the thread-specific structure.
+   *)
+  val threadPointer: id
+
   (*
    * The address of the next heap value to be allocated and the end of the
    * heap.

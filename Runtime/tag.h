@@ -5,7 +5,9 @@
 #define _tag_h
 
 /* value_t is to be used for the type of a pointer */
+#ifndef _asm_
 typedef unsigned int value_t;
+#endif
 
 #define RECORD_TAG      0x0
 #define RECORD_SUB_TAG  0x1

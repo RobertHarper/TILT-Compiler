@@ -428,6 +428,7 @@ functor EmitRtlMLRISC(
 	| lookupSpecial Rtl.EXNPTR    = IntegerConvention.exceptionPointer
 	| lookupSpecial Rtl.EXNARG    = IntegerConvention.exceptionArgument
 	| lookupSpecial Rtl.STACKPTR  = IntegerConvention.stackPointer
+	| lookupSpecial Rtl.THREADPTR  = IntegerConvention.threadPointer
 
       fun lookupGeneral register =
 	    RegisterTraceMap.lookup lookupGeneral traceMap register
@@ -1242,19 +1243,21 @@ functor EmitRtlMLRISC(
 	    val cur_alloc_limit	  = externalExp "cur_alloc_limit"
 	    val heapPointer	  = IntegerConvention.heapPointer
 	    val heapLimit	  = IntegerConvention.heapLimit
+	    val thread  	  = IntegerConvention.threadPointer
+	    val alloc_num = heapPointer
+	    val limit_num = heapLimit
+	    val thread = Rtl.SREGI(Rtl.THREADPTR)
+	    val pointer = ea(Rtl.EA(thread,8 * alloc_num))
+	    val limit = ea(Rtl.EA(thread,8 * limit_num))
 	  in
 	    [MLTree.CODE[
-	       MLTree.STORE32(cur_alloc_pointer, MLTree.REG heapPointer,
-			      memory),
-	       MLTree.STORE32(cur_alloc_limit, MLTree.REG heapLimit,
-			      memory)
+	       MLTree.STORE32(pointer, MLTree.REG heapPointer, memory),
+	       MLTree.STORE32(limit, MLTree.REG heapLimit, memory)
 	     ]]@
 	    CALL operand@
 	    [MLTree.CODE[
-	       MLTree.MV(heapPointer,
-			 MLTree.LOAD32(cur_alloc_pointer, memory)),
-	       MLTree.MV(heapLimit,
-			 MLTree.LOAD32(cur_alloc_limit, memory))
+	       MLTree.MV(heapPointer, MLTree.LOAD32(pointer, memory)),
+	       MLTree.MV(heapLimit, MLTree.LOAD32(limit, memory))
 	     ]]
 	  end
 
@@ -1280,18 +1283,32 @@ functor EmitRtlMLRISC(
     fun STOREQF(address, src) =
 	  [MLTree.CODE[MLTree.STORED(address, src, memory)]]
 
-    fun NEEDMUTATE dest =
+    fun MUTATE (address, src : MLTree.rexp, isptr_option) =
 	  let
 	    val writelist_cursor = externalExp "writelist_cursor"
 	    val heapLimit	 = IntegerConvention.heapLimit
-	  in
-	    [MLTree.CODE[
-	       MLTree.MV(heapLimit, MLTree.SUB(MLTree.REG heapLimit,
-					       MLTree.LI 8, MLTree.LR)),
-	       MLTree.MV(dest, MLTree.LOAD32(writelist_cursor, memory)),
-	       MLTree.STORE32(writelist_cursor,
-			      MLTree.ADD(MLTree.REG dest, MLTree.LI 4), memory)
-	     ]]
+	    val temp     = Cells.newReg()
+	    val logwrite = [MLTree.MV(heapLimit, MLTree.SUB(MLTree.REG heapLimit,
+							    MLTree.LI 8, MLTree.LR)),
+			    MLTree.MV(temp, MLTree.LOAD32(writelist_cursor, memory)),
+			    MLTree.STORE32(MLTree.REG temp, address, memory),
+			    MLTree.STORE32(writelist_cursor,
+					   MLTree.ADD(MLTree.REG temp, MLTree.LI 4), memory)]
+	  in case isptr_option of
+	      NONE => 
+		  [MLTree.CODE(logwrite @ [MLTree.STORE32(address, src, memory)])]
+	    | SOME isptr => 
+		  let val afterLabel = newLabel()
+		      val compare = MLTree.CMP(MLTree.EQ,
+					       isptr,
+					       MLTree.REG IntegerConvention.zero,
+					       MLTree.LR)
+		  in
+		      [MLTree.CODE[MLTree.BCC(MLTree.EQ, compare, afterLabel)],
+		       MLTree.CODE logwrite,
+		       MLTree.DEFINELABEL afterLabel,
+		       MLTree.CODE[MLTree.STORE32(address, src, memory)]]
+		  end
 	      (* alpha-specific sizes? ??? *)
 	  end
 
@@ -1510,10 +1527,14 @@ functor EmitRtlMLRISC(
 	      RegisterSet.translate save)
       | translateInstruction(Rtl.RETURN src) =
 	  RETURN(srcReg src)
-(*
-      | translateInstruction(Rtl.NEEDMUTATE dest) =
-	  NEEDMUTATE(destReg dest)
-*)
+
+      | translateInstruction(Rtl.INIT(address, src, _)) =
+	  STORE32I(ea address, srcReg src)
+      | translateInstruction(Rtl.MUTATE(address, src, NONE)) = 
+	  MUTATE(ea address, srcReg src, NONE)
+      | translateInstruction(Rtl.MUTATE(address, src, SOME src2)) = 
+	  MUTATE(ea address, srcReg src, SOME(srcReg src2))
+
       | translateInstruction(Rtl.NEEDGC src) =
 	  NEEDGC(value src)
       | translateInstruction(Rtl.FLOAT_ALLOC(length, initial, dest, _)) =

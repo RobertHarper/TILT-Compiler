@@ -3,7 +3,7 @@
 #ifndef _exn_h
 #define _exn_h
 
-void exn_init();
+void exn_init(void);
 typedef value_t exn;
 extern exn divide_exn;
 extern exn overflow_exn;

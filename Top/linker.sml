@@ -235,7 +235,7 @@ structure Linker :> LINKER =
 		   val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)
 		   val _ = if success then ()
 			   else error "mk_exe - as failed"
-		   val command = (ld_path ^ " -D 40000000 -T 20000000 -o " ^ 
+		   val command = (ld_path ^ " -D a000000 -T 8000000 -o " ^ 
 				  exe_result ^ " " ^ startup_lib ^ " " ^ o_temp ^ " " ^ link_o ^ " " ^ ld_libs)
 		   val _ = (print "Running: "; print command; print "\n")
 		   val success = Util.system command

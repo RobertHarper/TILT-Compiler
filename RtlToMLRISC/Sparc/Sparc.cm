@@ -1,0 +1,34 @@
+
+(* =========================================================================
+ * Sparc.cm
+ * ========================================================================= *)
+
+group
+
+structure SparcLink
+
+is
+
+../../Sparc/Sparc.cm
+../../smlnj-lib.cm
+
+../RtlToMLRISC.cm
+../MLRISC.cm
+
+SparcCallConventionBasis.sml
+SparcEmitRtlMLRISC.sml
+SparcFloatAllocation.sml
+SparcFloatConvention.sml
+SparcIntegerAllocation.sml
+SparcIntegerConvention.sml
+SparcLink.sml
+SparcMLRISCConstant.sml
+SparcMLRISCPseudo.sml
+SparcMLRISCRegion.sml
+SparcMLTree.sml
+SparcMLTreeComp.sml
+SparcPseudoInstr.sml
+SparcRegisterSpillMap.sml
+SparcStandardFrame.sml
+SparcStandardConvention.sml
+

@@ -1,10 +1,10 @@
 #include <stdlib.h>
-
 #define _STDIO_UNLOCK_CHAR_IO
-
 #include <stdio.h>
 #include <errno.h>
-#include <assert.h>
+#include "general.h"
+#include <string.h>
+
 #include "tag.h"
 #include "create.h"
 #include "mllib.h"
@@ -61,16 +61,15 @@ int ml_output(value_t _des, value_t mlstring)
   unsigned int tag = ((int *)mlstring)[-1];
   int bytelen = tag >> ARRLEN_OFFSET;
 
-  char *t;
-
 #ifdef DEBUG
   if (_des <= 2)
     {
       printf("tag = %d, byte length=%d first char=%d *%s*\n",tag, bytelen,str[0],str);    
     }
 #endif
-  for (t= str + bytelen; str < t; str++)
-    putc(*str,F);
+
+  fwrite(str,1,bytelen,F);
+
   return 0;
 }
 

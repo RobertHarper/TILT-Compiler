@@ -1,9 +1,7 @@
 signature LINKALL = 
 sig
-    val compile_prelude : bool * string -> string (* use_cache * input filename -> asm filename *)
     val compile : string -> string (* input filename -> executable filename *)
     val compiles : string list -> string (* input filename -> executable filename *)
-    val test : string -> string (* input filename -> executable filename *)
 end
 
 structure Linkall : LINKALL = 
@@ -19,27 +17,22 @@ struct
 	     ALPHA => Linkalpha.link arg
 	   | ALPHA_MLRISC => AlphaLink.link arg
 	   | PPC => error "no PPC") (* Linkppc.comp_file arg *)
-    fun specific_comp_files (debug,args) = 
-	(case (args,!cur_platform) of
-	     ([arg],ALPHA) => [(if debug then Linkalpha.test else Linkalpha.compile) arg]
-	   | (_,ALPHA) => (if debug then error "no test" else Linkalpha.compiles) args
-	   | ([arg],ALPHA_MLRISC) => [(if debug then AlphaLink.test else AlphaLink.compile) arg]
-	   | (_,ALPHA_MLRISC) => (if debug then error "no test" else AlphaLink.compiles) args
-	   | (_,PPC) => error "no PPC") (* Linkppc.comp_file arg *)
-    val cached_prelude = ref (NONE : (string * Rtl.label) option)
-    fun specific_reparse_prelude arg = 
-	let val (littleEndian,compile_prelude) = 
+    fun specific_comp_file file =
+	let 
+	    val (_,fp,_,dec) = LinkParse.parse_impl file
+	    val il_mod = (case LinkIl.elab_dec(LinkIl.plus_context[], fp, dec) of
+			      NONE => error (file ^ " failed to elaborate")
+			    | SOME il_mod => il_mod)
+	    val nil_mod = Linknil.il_to_nil (file,il_mod)
+	    val rtl_mod = Linkrtl.nil_to_rtl (file,nil_mod)
+	in
 	    (case (!cur_platform) of
-		 ALPHA => (true,Linkalpha.compile_prelude)
-	       | ALPHA_MLRISC => (true,AlphaLink.compile_prelude)
-	       | PPC => (false,error "no PPC"))
-		 (* Linkppc.reparse_prelude arg *)
-	    val _ = (Stats.bool "littleEndian") := littleEndian
-            val (prelude_file,prelude_label) = compile_prelude arg
-	    val _ = cached_prelude := SOME(prelude_file,prelude_label)
-	in  prelude_file
+		 ALPHA => Linkalpha.rtl_to_asm (file, rtl_mod)
+	       | ALPHA_MLRISC => AlphaLink.rtl_to_asm (file, rtl_mod)
+	       | PPC => error "no PPC")
 	end
-	  
+    val specific_comp_files = map specific_comp_file 	  
+
     exception Transcript
     local
         structure T = TextIO
@@ -101,30 +94,22 @@ struct
     fun wrapper string command = Stats.timer(string,command)
     val link          = wrapper "linking" link
 
-    
 
-    fun compile_help _ [] = error "compile given no files"
-      | compile_help debug src_files =
+    fun compiles [] = error "compile given no files"
+      | compiles src_files =
 	let val last_srcfile = List.last src_files
 	    val outname = last_srcfile ^ ".exe"
-	    val asm_labels = specific_comp_files (debug,src_files)
-	    val (asm_files,local_labels) = 
-		(case (!cached_prelude) of
-		     SOME (filename,label) => (filename::(map #1 asm_labels),
-					       label::(map #2 asm_labels))
-		   | _ => error "link failed: no prelude")
-	    val _ = (print "---- there are "; print (Int.toString (length local_labels));
+	    val asm_labels = specific_comp_files src_files
+	    val (files, labels) = Listops.unzip asm_labels
+	    val last_file = List.last files
+	    val _ = (print "---- there are "; print (Int.toString (length labels));
 		     print " local_labels\n")
-	    val _ = specific_link_file(last_srcfile,local_labels) 
-	    val _ = link(outname,asm_files,"")
+	    val _ = specific_link_file(last_file,labels) 
+	    val _ = link(outname,files,"")
 	in  outname
 	end
 
-    fun test filename = compile_help true [filename]
-    fun compile filename = compile_help false [filename]
-    fun compiles filenames = compile_help false filenames
-    fun compile_prelude arg = specific_reparse_prelude arg
-	
+    fun compile filename = compiles [filename]
 
     fun reset_wrapper f arg = let val _ = Stats.clear_stats()
 				  val res = f arg
@@ -132,10 +117,8 @@ struct
 			      in  res
 			      end
 
-    val compile_prelude = reset_wrapper compile_prelude
     val compile = reset_wrapper compile
     val compiles = reset_wrapper compiles
-    val test = reset_wrapper test
 
 
     fun nj_process(infile,outfile) =

@@ -5,72 +5,11 @@
 #include "general.h"
 #include "memobj.h"
 
-#ifdef rs_aix
-#define _fdata _data
-#define _ftext _text
-#endif
 
-extern HeapObj_t *floatheap, *fromheap, *toheap;
-extern HeapObj_t *old_fromheap, *old_toheap;
-extern int SML_GLOBALS_BEGIN_VAL;
-extern int SML_GLOBALS_END_VAL;
-extern int module_count;
-extern unsigned long _etext, _ftext;
-extern value_t datastart, dataend;
-extern unsigned long global_exnrec;
-extern StackObj_t      Stacks[NumStackObj];
-extern value_t NumGC;
-
-#define LEAST_GC_TO_CHECK 0
-
-#ifdef DEBUG
-void ptr_check(value_t v)
+int ptr_check(value_t unused)
 {
-  int mi, i;
-  if (v < 20000)
-    /*  if (v < 256) */
-    return;
-  if (old_fromheap && v > old_fromheap->bottom && v <= old_fromheap->top)
-    return;
-  if (fromheap && v > fromheap->bottom && v <= fromheap->top)
-    return;
-  if (toheap && v > toheap->bottom && v <= toheap->top)
-    return;
-  if (floatheap && v > floatheap->bottom && v <= floatheap->top)
-    return;
-  for (mi=0; mi<module_count; mi++)
-    if (v >=(value_t)(*((&SML_GLOBALS_BEGIN_VAL)+mi)) &&
-	v <=(value_t)(*((&SML_GLOBALS_END_VAL)+mi)))
-      return;
-  if (v == (value_t)(&global_exnrec))
-    return;
-  if (v >= datastart && v <= dataend)
-    {
-      printf("WARNING: ptr_check found other global address = %d\n",v);
-      return;
-    }
-  if (v >= (value_t)&_ftext && v <= (value_t)&_etext)
-    {
-      printf("ERROR: ptr_check found code address = %d\n",v);
-      return;
-    }
-  for (i=0; i<NumStackObj; i++)
-    if (v >= Stacks[i].bottom && v <= Stacks[i].top)
-    {
-      printf("WARNING: ptr_check found stack address = %d\n",v);
-      return;
-    }
-  printf("ptr_check failed on value %d\n",v);
-  for (mi=0; mi<module_count; mi++)
-    printf("%d %d %d\n",mi,
-	   (value_t)(*((&SML_GLOBALS_BEGIN_VAL)+mi)),
-	   (value_t)(*((&SML_GLOBALS_END_VAL)+mi)));
   assert(0);
 }
-#else
-void ptr_check(value_t v)
-{}
-#endif
 
 value_t show_obj(value_t s, int checkonly)
 {

@@ -26,6 +26,7 @@ struct
     | fv_exp env (CaseExp {expr, rules}) =
 	union ((fv_exp env expr) :: (map (fv_rule env) rules))
     | fv_exp env (LetExp {dec, expr}) = union [fv_dec env dec, fv_exp env expr]
+    | fv_exp env (PletExp {dec, expr}) = union [fv_dec env dec, fv_exp env expr]
     | fv_exp env (SeqExp exprs) = []
     | fv_exp env (IntExp literal) = []
     | fv_exp env (WordExp literal) = []

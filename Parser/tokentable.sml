@@ -25,7 +25,7 @@ val tokenList =
   [("*"		, fn yypos => Tokens.ASTERISK(yypos,yypos+1)),
    ("|"		, fn yypos => Tokens.BAR(yypos,yypos+1)),
    (":"		, fn yypos => Tokens.COLON(yypos,yypos+1)),
-   (":>"	, fn yypos => Tokens.COLONGT(yypos,yypos+1)),
+   (":>"	, fn yypos => Tokens.COLONGT(yypos,yypos+2)),
    ("="		, fn yypos => Tokens.EQUALOP(yypos,yypos+1)),
    ("#"		, fn yypos => Tokens.HASH(yypos,yypos+1)),
    ("and"	, fn yypos => Tokens.AND(yypos,yypos+3)),
@@ -75,7 +75,8 @@ val tokenList =
    ("orelse"	, fn yypos => Tokens.ORELSE(yypos,yypos+6)),
    ("andalso"	, fn yypos => Tokens.ANDALSO(yypos,yypos+7)),
    ("extern"    , fn yypos => Tokens.EXTERN(yypos,yypos+6)),
-   ("Ccall"     , fn yypos => Tokens.CCALL(yypos,yypos+5))
+   ("Ccall"     , fn yypos => Tokens.CCALL(yypos,yypos+5)),
+   ("plet"     , fn yypos => Tokens.PLET(yypos,yypos+4))
 ]
 
 (* hash table obtained from the previous list *)
@@ -110,9 +111,12 @@ end
 
 (*
  * $Log$
-# Revision 1.4  98/02/15  22:44:08  pscheng
-# bootstrapping changes
+# Revision 1.5  99/01/18  20:18:46  pscheng
+# *** empty log message ***
 # 
+# Revision 1.4  1998/02/15  22:44:08  pscheng
+# bootstrapping changes
+#
 # Revision 1.3  1998/01/21  20:40:52  pscheng
 # moved the .sig files to .sig.sml file
 #

@@ -1,6 +1,9 @@
 #ifndef _stack_h
 #define _stack_h
 
+#include "tag.h"
+#include "queue.h"
+
 #define TRACE_NO              0
 #define TRACE_YES             1
 #define TRACE_CALLEE          2
@@ -28,12 +31,33 @@
 #define GET_SPECIAL_STACK_GLOBAL_POS4(type) GET_SPECIAL_STACK_REC_POS4(type) 
 
 
+/* the size and layout of this structure affects the code in stack_asm.s */
+struct StackSnapshot
+{
+  value_t saved_ra;            /* Real return address for this stub */
+  value_t saved_sp;            /* Stack pointer position where stub was inserted */
+  unsigned int saved_regstate; /* Register state (mask) at this point */
+  Queue_t *roots;              /* Roots between this stub and the one above it */
+};
+
+typedef struct StackSnapshot StackSnapshot_t;
+
+#define NUM_STACK_STUB 200
+#define _inside_stack_h
+#include "thread.h"
+
 void show_stack(value_t sp, value_t cur_retadd, value_t top);
-unsigned int trace_stack(unsigned long *saveregs,
-			 value_t sp, value_t cur_retadd, value_t top, Queue_t *roots);
 
-void stack_init();
-long StackError(long badadd, long sp);
+void stack_init(void);
+void global_root_scan(Queue_t *global_roots, Queue_t *promoted_global_roots);
+void local_root_scan(Thread_t *);
+void stub_error(void);
 
+extern long GlobalTableSize;
+extern long MutableTableSize;
+extern long CodeSize;
+extern long GCTableSize;
+extern long SMLGlobalSize;
+extern long TotalStackDepth, MaxStackDepth, TotalStackSize, TotalNewStackDepth;
 #endif
 

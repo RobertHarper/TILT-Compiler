@@ -4,10 +4,11 @@
 #define _memobj_h
 
 #include "tag.h"
+#include <pthread.h>
 
-struct StackChainObj__t;
+struct StackChain__t;
 
-struct StackObj__t
+struct Stack__t
 {
   int id;
   int valid;
@@ -17,28 +18,30 @@ struct StackObj__t
   value_t rawbottom;
   value_t used_bottom;
   long safety;
-  struct StackChainObj__t *parent;
+  struct StackChain__t *parent;
 };
 
-typedef struct StackObj__t StackObj_t;
+typedef struct Stack__t Stack_t;
 
-void StackInitialize();
-StackObj_t* StackObj_Alloc();
-StackObj_t* GetStack(value_t);
-
-struct StackChainObj__t
+struct StackChain__t
 {
   int size;
   int count;
-  StackObj_t **stacks;
+  Stack_t **stacks;
 };
 
-typedef struct StackChainObj__t StackChainObj_t;
-StackChainObj_t* StackChainObj_Alloc();
-void memobj_init();
-int InStackChain(StackChainObj_t*, value_t);
+typedef struct StackChain__t StackChain_t;
 
-struct HeapObj__t
+Stack_t* Stack_Alloc(StackChain_t *);
+Stack_t* GetStack(value_t);
+int StackError(struct sigcontext *, long);
+
+
+StackChain_t* StackChain_Alloc(void);
+void memobj_init(void);
+int InStackChain(StackChain_t*, value_t);
+
+struct Heap__t
 {
   int id;
   int valid;
@@ -48,19 +51,22 @@ struct HeapObj__t
   value_t rawbottom;
   value_t alloc_start;
   long safety;
+  pthread_mutex_t *lock;
 };
 
-typedef struct HeapObj__t HeapObj_t;
+typedef struct Heap__t Heap_t;
 
-void HeapInitialize();
-HeapObj_t* HeapObj_Alloc(int MinSize, int MaxSize);
-HeapObj_t* GetHeap();
-void HeapObj_Protect(HeapObj_t*);
-void HeapObj_Unprotect(HeapObj_t*);
-void HeapObj_Resize(HeapObj_t *res, long newsize);
-int HeapObj_Getsize(HeapObj_t *res);
+Heap_t* Heap_Alloc(int MinSize, int MaxSize);
+Heap_t* GetHeap();
+void Heap_Protect(Heap_t*);
+void Heap_Unprotect(Heap_t*);
+void Heap_Resize(Heap_t *res, long newsize);
+int Heap_Getsize(Heap_t *res);
+void GetHeapArea(Heap_t *heap, int size, value_t **bottom, value_t **top);
 
-extern value_t LowHeapLimit;
+extern value_t StartHeapLimit; /* When we don't have a real initial heap limit, use this one */
+extern value_t StopHeapLimit;  /* When heap limit is being used to interrupt a thread, use this one */
+extern int pagesize;
 
 #endif
 

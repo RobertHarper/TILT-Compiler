@@ -1,5 +1,6 @@
 (*$import TortlVararg Rtl Pprtl TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL *)
 
+(* Relies on the layout structure pointed to by the thread pointer - check thread.h *)
 (* empty records translate to 256; no allocation *)
 (* to do: strive for VLABEL not VGLOBAL *)
 (* xtagsum_dynamic record case is fragile *)
@@ -39,7 +40,10 @@ struct
   open Nil NilUtil
   open Rtl Rtltags Pprtl TortlBase
 
-    val do_vararg = Stats.bool("do_vararg") (* initialized elsewhere *)
+  val maxsp_disp = 8 * 32 + 8 * 32
+  val notinml_disp = 8 * 32 + 8 * 32 + 8 + 8 + 8
+
+
     val show_cbnd = Stats.ff("show_cbnd")
 
     val exncounter_label = ML_EXTERN_LABEL "exncounter"
@@ -377,6 +381,8 @@ struct
 	    | Switch_e sw => xswitch(state,name,sw,traceinfo_opt,context)
 	    | ExternApp_e (f, elist) => (* assume the environment is passed in first *)
 		  let 
+		      val tmp1 = alloc_regi NOTRACE_INT
+		      val tmp2 = alloc_regi NOTRACE_INT
 		      val _ = add_instr (ICOMMENT ("making external call"))
 		      fun cfolder (c,state) =
 			  let val (res,_,state) = xcon(state,fresh_named_var "call_carg", 
@@ -418,6 +424,8 @@ struct
 		      val results = (case dest of
 					 F fr => ([],[fr])
 				       | I ir => ([ir],[]))	      
+		      val _ = add_instr(LI(0w1,tmp1))
+		      val _ = add_instr(STORE32I(EA(SREGI THREADPTR,notinml_disp),tmp1))
 		      val _ = add_instr(CALL{extern_call = true,
 					     func=fun_reglabel,
 					     return= NONE,
@@ -425,7 +433,8 @@ struct
 					     results=results,
 					     tailcall = false,
 					     save=SAVE(getLocals())})
-
+		      val _ = add_instr(LI(0w0,tmp2))
+		      val _ = add_instr(STORE32I(EA(SREGI THREADPTR,notinml_disp),tmp2))
 		      val result = (VAR_LOC(VREGISTER (false,dest)), rescon,
 				    new_gcstate state)
 		      val _ = add_instr (ICOMMENT ("done making external call"))
@@ -674,10 +683,17 @@ struct
 			      end
 			  
 		      (* --- now that stack-pointer is restored, 
+		         ---    we can update maxsp of the thread
 		         ---    we can move the exn arg 
 		         ---    we can call new_gcstate 
 		         ---    note that since the exnarg and ra register are the same
 		                  the exn arg must be moved before the gc_check *)
+		      val tmp1 = alloc_regi(NOTRACE_INT)
+		      val tmp2 = alloc_regi(NOTRACE_INT)
+		      val _ = add_instr(LOAD32I(EA(SREGI THREADPTR,maxsp_disp),tmp1))
+		      val _ = add_instr(CMPUI(GT,SREGI STACKPTR,REG tmp1,tmp2))
+		      val _ = add_instr(CMV(NE,tmp2,REG(SREGI STACKPTR), tmp1))
+		      val _ = add_instr(STORE32I(EA(SREGI THREADPTR,maxsp_disp),tmp1))
 		      val xr = alloc_named_regi exnvar TRACE
 		      val _ = add_instr(MV(exnarg,xr))
 		      val hstate = new_gcstate state

@@ -4,9 +4,10 @@
 #ifndef _platform_h
 #define _platform_h
 
-int GetBcacheSize(); /* secondary cache size */
-int GetIcacheSize(); /* primary icache size */
-int GetDcacheSize(); /* primary dcache size */
+void platform_init(void);
+int GetBcacheSize(void); /* secondary cache size */
+int GetIcacheSize(void); /* primary icache size */
+int GetDcacheSize(void); /* primary dcache size */
 
 
 #endif 

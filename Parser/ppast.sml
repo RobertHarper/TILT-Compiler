@@ -245,6 +245,14 @@ and ppExp ppstrm =
 	       add_break ppstrm (1,0);
 	       ppsay "end";
 	       end_block ppstrm)
+	  | ppExp'(PletExp{dec,expr},_,d) =
+	      (begin_block ppstrm CONSISTENT 0;
+	       ppsay "plet "; ppDec ppstrm (dec,d-1);
+	       add_break ppstrm (1,0);
+	       ppsay " in "; ppExp'(expr,true,d-1);
+	       add_break ppstrm (1,0);
+	       ppsay "end";
+	       end_block ppstrm)
 	  | ppExp'(SeqExp [exp],fl,d) = ppExp'(exp,fl,d-1)
 	  | ppExp'(SeqExp exps,noparens,d) =
 	      ppClosedSequence ppstrm
@@ -934,11 +942,14 @@ end (* structure Ast *)
 
 (*
  * $Log$
-# Revision 1.1  98/02/01  01:28:12  pscheng
+# Revision 1.2  99/01/18  20:18:41  pscheng
+# *** empty log message ***
+# 
+# Revision 1.1  1998/02/01  01:28:12  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places
 #   Split up files into signature and code
-# 
+#
  * Revision 1.1.1.1  1997/01/14  01:38:43  george
  *   Version 109.24
  *

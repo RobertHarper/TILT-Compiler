@@ -45,6 +45,7 @@ and exp
   | CaseExp of{expr:exp,rules:rule list}
 				(* case expression *)
   | LetExp of {dec:dec,expr:exp} (* let expression *)
+  | PletExp of {dec:dec,expr:exp} (* parallel let expression *)
   | SeqExp of exp list		(* sequence of expressions *)
   | IntExp of literal		(* integer *)
   | WordExp of literal		(* word literal *)
@@ -236,9 +237,12 @@ end (* structure Ast *)
 
 (*
  * $Log$
-# Revision 1.7  98/02/15  22:43:12  pscheng
-# bootstrapping changes
+# Revision 1.8  99/01/18  20:18:22  pscheng
+# *** empty log message ***
 # 
+# Revision 1.7  1998/02/15  22:43:12  pscheng
+# bootstrapping changes
+#
 # Revision 1.6  1998/01/21  20:40:05  pscheng
 # moved the .sig files to .sig.sml file
 #

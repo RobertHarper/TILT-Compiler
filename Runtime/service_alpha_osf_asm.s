@@ -1,7 +1,9 @@
- # start_client makes assumption about how to invoke closures
+ # start_client makes assumption about how to invoke closures and thread pointer structure
 	
+#define _asm_
 #include "general.h"
-	
+#include "thread.h"
+		
 	.text	
 	.align	4
  	.globl	start_client
@@ -11,7 +13,48 @@
 	.globl	raise_exception_raw
 	.globl	Overflow_exncon
 	.globl	Divide_exncon
+	.globl  FetchAndAdd
+	.globl  TestAndSet
+	.globl  Yield
+	
+ # ----------------------------------------------------------------------------	
+ # FetchAndAdd takes the address of the variable to be incremented and the increment
+ # Returns the pre-incremented value
+ # ----------------------------------------------------------------------------
+        .ent FetchAndAdd
+FetchAndAdd:	
+.set noat
+	ldl_l	$at, ($16)
+	addq	$at, $17, $18
+	stl_c	$18, ($16)
+	beq	$18, FetchAndAdd	# might need to retry
+	mov	$at, $0
+        ret     $31, ($26), 1	
+.set at
+        .end FetchAndAdd
 
+ # ----------------------------------------------------------------------------	
+ # TestAndSet takes the address of the variable to be test-and-set
+ # If the value was 0, it is set to 1.  Returns 1.
+ # If the value was 1, it is unchanged.  Returns 0.
+ # If the value is not 0 or 1, then the result is unpredictable.
+ # If the reservation fails, value is unchaged. Returns 0.
+ # ----------------------------------------------------------------------------
+        .ent TestAndSet
+TestAndSet:	
+.set noat
+	ldl_l	$at, ($16)
+	bne	$at, AlreadySet	# test
+	lda	$0, 1($31)
+	stl_c	$0, ($16)	# try to set
+        ret     $31, ($26), 1		
+AlreadySet:
+	stl_c	$at, ($16)	# cancel reservation
+	mov	$31, $0
+        ret     $31, ($26), 1	
+.set at
+        .end TestAndSet
+			
  # ----------------------------------------------------------------------------	
  # one might call getrpcc twice and take the different between the two results
  # to obtain the cycles used; remember to subtract 5 from the result
@@ -31,28 +74,22 @@ GetRpcc:
 
 	
  # ------------------------ start_client  -------------------------------------
- # first C arg = new stack
- # second C arg = alloc ptr val
- # third C arg = alloc limit val
- # fourth C arg = client_entry (array of starting addresss)
- # fifth C arg = number of starting address in array client_entry
- # sixth C arg = current thread pointer
+ # first C arg = current thread pointer
+ # second C arg = client_entry (array of starting addresss)
+ # third C arg = number of starting address in array client_entry
  # ----------------------------------------------------------------------------
 	.ent	start_client 
- # gets 5 arguments:	new stack, alloc ptr val, alloc limit val, client_entry(start_adds), num_add
 start_client:
  	ldgp	$gp, 0($27)	# get self gp
-	lda	$sp, -320($sp)	# allocate frame
-	stq	$26, 0($sp)	# save return address
-	stq	$16, 8($sp)	# save first 5 args
-	stq	$17, 16($sp)
-	stq	$18, 24($sp)
-	stq	$19, 32($sp)
-	stq	$20, 40($sp)
-	mov	$21,THREADPTR_SYMREG        # move arg 6 into thread pointer register
-	ldq	ALLOCPTR_SYMREG, 16($sp)    # initialize heap ptr   outside loop
-	ldq	ALLOCLIMIT_SYMREG, 24($sp)  # initizlize heap limit outside loop
-	stq	$31, 48($sp)	# initialize current thunk to run to 0
+	mov	$16,THREADPTR_SYMREG                                 # initialize thread ptr outside loop
+			        # $17 = client_entry current
+	s4addq	$18, $17, $19   # client_entry end
+	ldq	ALLOCPTR_SYMREG, ALLOCPTR_DISP(THREADPTR_SYMREG)     # initialize heap ptr outside loop
+	ldq	ALLOCLIMIT_SYMREG, ALLOCLIMIT_DISP(THREADPTR_SYMREG) # initizlize heap limit outside loop
+	ldq	$sp, SP_DISP(THREADPTR_SYMREG) # fetch stack argument
+ 	lda	$sp, -32($sp)	# switch to new stack and allocate a little space
+ 	stq	$17, 0($sp)	# save current thunk
+ 	stq	$19, 8($sp)	# save limit thunk
 thunk_loop:
  # nuke regs for debugging
 	lda	$0,  1200($31)
@@ -64,63 +101,34 @@ thunk_loop:
 	lda	$6,  1206($31)
 	lda	$7,  1207($31)
 	lda	$8,  1208($31)
-	ldq	$27, 32($sp)	# fetch start_client array address
-	ldq	$19, 48($sp)	# fetch current thunk counter
-	s4addq	$19, $27, $27	# compute array item address
-	ldl	$27, ($27)	# fetch current thunk address
-	ldl	$1, 8($27)	# fetch term env
-	ldl	$0, 4($27)	# fetch type env
-	ldl	$27, ($27)	# fetch code pointer
- # save self stack and switch to passed in stack, install global handler
-	ldq	$16, 8($sp)	# fetch stack argument
- 	stq	$sp, -8($16)	# save own stack pointer on new stack
- 	lda	$sp, -8($16)	# set SP to new stack, below where old SP was saved
-	lda	$9, global_exnrec
-	stl	$31, NOTINML
-	jsr	$26,  ($27)
+	stl	$31, notinml_disp(THREADPTR_SYMREG)
+.set noat
+ 	ldq	$17, 0($sp)	# fetch current thunk
+	ldl	$at, ($17)	# fetch current thunk address
+	ldl	$27, ($at)	# fetch code pointer
+	ldl	$0, 4($at)	# fetch type env
+	ldl	$2, 8($at)	# fetch term env
+	lda	EXNPTR_SYMREG, global_exnrec # install global handler
+	jsr	$26,  ($27)	# jump to thunk
 start_client_retadd_val:	
 	br	$26, dummy
 dummy:	ldgp	$gp, 0($26)
  # returned from client
- 	ldq	$sp, 0($sp)	 # switch back to own stack
-	ldq	$16, 40($sp)
-	ldq	$17, 48($sp)
-	addq	$17, 1, $17
-	stq	$17, 48($sp)
-	cmplt	$17, $16, $18
-	bne	$18, thunk_loop
- # we are done, let's save some regs for end diagnosis
-	stq	$0, 64($sp)
-	stq	$1, 72($sp)
-	stq	$2, 80($sp)
-	stq	$3, 88($sp)
-	stq	$4, 96($sp)
-	stq	$5, 104($sp)
-	stq	$6, 112($sp)
-	stq	$7, 120($sp)
-	stq	$8, 128($sp)
-	stq	$9, 136($sp)
-	stq	$10, 144($sp)
-	stq	$11, 152($sp)
-	stq	$12, 160($sp)
-	stq	$13, 168($sp)
-	stq	$14, 176($sp)
-	stq	$15, 184($sp)
-	stq	$16, 192($sp)
-	stq	$17, 200($sp)
-	stq	$18, 208($sp)
-	stq	$19, 216($sp)
-	stq	$20, 224($sp)
-	stq	$21, 232($sp)
-	stq	$22, 240($sp)
-	stq	$23, 248($sp)
-	stq	$24, 256($sp)
-	stq	$25, 264($sp)
-	stq	$26, 272($sp)
-	stq	$27, 280($sp)
- # call thread_finish
-	lda	$16, 64($sp)
-	jsr	thread_finish
+	ldq	$17, 0($sp)     # fetch current thunk
+	addq	$17, 4, $17	# update current thunk
+ 	stq	$17, 0($sp)	# save current thunk	
+	ldq	$19, 8($sp)	# fetch thunk limit
+	cmplt	$17, $19, $at
+	bne	$at, thunk_loop
+	lda	$at, 1($31)
+	stl	$at, notinml_disp(THREADPTR_SYMREG)
+	bsr	save_regs	# need to save register set to get alloction pointer into thread state
+	ldl	$at, sysThread_disp(THREADPTR_SYMREG) # get system thread pointer
+	ldl	$sp, ($at)		        # run on system thread stack	
+	br	$gp, start_client_getgp
+start_client_getgp:	
+	ldgp	$gp, 0($gp)			# compute correct gp for self	
+	jsr	Finish
 	lda	$16, $$errormsg
 	jsr	printf
 	jsr	abort
@@ -128,6 +136,35 @@ dummy:	ldgp	$gp, 0($26)
 	lda	$sp, 320($sp)
 	ret	$31, ($26), 1
 	.end	start_client
+.set at
+	
+ # ---------------------------
+ # Yield
+ # ---------------------------	
+	.ent	Yield
+	.frame $sp, 0, $26
+	.prologue 0
+Yield:
+.set noat
+	stq	$26, 208(THREADPTR_SYMREG)	# note that this is return address of Yield
+	bsr	save_regs
+	br	$gp, Yield_getgp
+Yield_getgp:	
+	ldgp	$gp, 0($gp)			# compute correct gp for self	
+	ldl	$at, sysThread_disp(THREADPTR_SYMREG) # get system thread pointer
+	ldl	$sp, ($at)		        # run on system thread stack
+	jsr	$26, YieldRest			# no need to restore $gp after this call
+	ldgp	$gp, 0($26)			# compute correct gp for self	
+	bsr	load_regs			# THREADPTR_SYMREG is a callee-save register
+	ldq	$26, 208(THREADPTR_SYMREG)	# note that this is return address of Yield
+	ret	$31, ($26), 1	
+.set at			
+	.end	Yield
+
+
+
+
+
 
  # ------------------------------------------------------------
  # global_exnhandler when all else fails
@@ -249,7 +286,7 @@ global_exnrec:
 
 	.align 4
 $$errormsg:
-	.ascii "Thread_finish returned!!!\n\000"
+	.ascii "Thread Finish returned!!!\n\000"
 
 	.align 4
 $$global_exnmsg:

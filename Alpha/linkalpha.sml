@@ -1,7 +1,7 @@
-(*$import LINKALPHA Linkrtl DecAlpha Regset Regmap Labelgraph Labelmap DecAlphaUtils IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils VarGraph TrackStorage Color Chaitin RtlToAsm ToAlpha Recursion *)
+(*$import LINK Linkrtl DecAlpha Regset Regmap Labelgraph Labelmap DecAlphaUtils IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils VarGraph TrackStorage Color Chaitin RtlToAsm ToAlpha Recursion *)
 
 
-structure Linkalpha :> LINKALPHA =
+structure Linkalpha :> LINKASM =
 struct
   val error = fn s => Util.error "linkalpha.sml" s
   open Linkrtl
@@ -168,7 +168,7 @@ struct
     let val _ = Printutils.openOutput asm_file
 	val _ = Rtltoalpha.allocateModule rtlmod
 	val _ = Printutils.closeOutput()
-	val _ = print "Generation of assembly files complete\n"
+	val _ = print "Generation of TIL-Alpha assembly files complete\n"
     in asm_file
     end
 
@@ -192,35 +192,9 @@ struct
     in ()
     end
 
-  fun compiles filenames = 
-      let val rtlmods = Linkrtl.compiles filenames
-	  fun doit (filename,rtlmod) = let val Rtl.MODULE{main,...} = rtlmod
-				       in  (comp(filename ^ asm_suffix(),rtlmod),main)
-				       end
-      in  Listops.map2 doit (filenames,rtlmods)
-      end
-  fun compile filename = hd(compiles [filename])
-
-  fun rtl_to_alpha (filename, rtlmod) : string * Rtl.label =
+  fun rtl_to_asm (filename, rtlmod) : string * Rtl.label =
       let val Rtl.MODULE{main,...} = rtlmod
       in (comp(filename ^ ".s",rtlmod), main)
       end
-
-  fun test filename = 
-      let val rtlmod = Linkrtl.test filename
-	  val Rtl.MODULE{main,...} = rtlmod
-      in  (comp(filename ^ asm_suffix(),rtlmod),main)
-      end
-
-  val cached_prelude = ref (NONE : (string * Rtl.label) option)
-  fun compile_prelude (use_cache,filename) = 
-      case (use_cache, !cached_prelude) of
-	  (true, SOME mlabel) => mlabel
-	| _ => let val rtlmod = Linkrtl.compile_prelude(use_cache,filename)
-		   val Rtl.MODULE{main=label,...} = rtlmod
-		   val mlabel = (comp(filename ^ asm_suffix(),rtlmod),label)
-		   val _ = cached_prelude := SOME mlabel
-	       in  mlabel
-	       end
 
 end

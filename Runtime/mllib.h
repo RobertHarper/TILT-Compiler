@@ -1,7 +1,7 @@
 #ifndef _mllib_h
 #define _mllib_h
 
-void mllib_init();
+void mllib_init(void);
 int ml_output(value_t _des, value_t mlstring);
 value_t ml_lookahead(value_t des);
 int ml_open_in(value_t mlstring);

@@ -17,7 +17,7 @@ structure Linknil (* :> LINKNIL  *) =
     val do_hoist = Stats.tt("doHoist")
     val do_reify = Stats.tt("doReify")
     val do_cse = Stats.tt("doCSE")
-    val do_uncurry = Stats.tt("doUncurry")
+    val do_uncurry = Stats.ff("doUncurry")
     val do_reduce = Stats.tt("doReduce")
     val do_flatten = Stats.tt("doFlatten")
     val do_inline = Stats.tt ("doInline")
@@ -155,32 +155,36 @@ structure Linknil (* :> LINKNIL  *) =
 		 filename, (ctxt,sbnd_entries))
 	end
 
-    fun compile' debug (filename,(ctxt,sbnd_entries)) =
+    fun phasesplit' debug (filename,(ctxt,sbnd_entries)) = 
 	let
-	    open Nil LinkIl.IlContext Name
-	    val D = NilContext.empty()
-
 	    val _ = if (!show_hil)
 			then 
 			    let val sbnds = List.mapPartial #1 sbnd_entries
 			    in  LinkIl.Ppil.pp_sbnds sbnds
 			    end
 		    else ()
-
 	    val nilmod = pass(show_phasesplit,
 			       "Phase-split", Tonil.phasesplit,
 			       filename, (ctxt,sbnd_entries))
+	in  nilmod
+	end
+    val phasesplit = phasesplit' false
+
+    fun compile' debug (filename,(ctxt,sbnd_entries)) =
+	let
+	    open Nil LinkIl.IlContext Name
+	    val D = NilContext.empty()
+
+	    val nilmod = phasesplit' debug (filename,(ctxt,sbnd_entries))
 
 	    val nilmod = transform(ref true, show_renamed,
 				 "Renaming1",Linearize.linearize_mod,
 				 filename, nilmod)
 
-
  	    val nilmod = check (typecheck_before_opt,show_typecheck,
 				    "Nil_typecheck_pre-opt",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
-
 
 	    val nilmod = transform(do_reduce, show_reduce,
 				   "Reduce", Reduce.doModule, 
@@ -229,24 +233,6 @@ structure Linknil (* :> LINKNIL  *) =
 				 "Hoist", 
 				 Hoist.optimize,
 				 filename, nilmod)
-
-(****
-
-
-	    val nilmod = transform(do_reduce, show_reduce,
-				   "Reduce", Reduce.doModule, 
-				   filename, nilmod)
-
-	    val nilmod = transform(do_flatten, show_flatten,
-				   "Flatten", Flatten.doModule, 
-				   filename, nilmod)
-
-	    val nilmod = transform(do_inline, show_inline,
-				   "Inline", 
-				   inline_domod, filename, nilmod)
-
-
-****)
 
             val nilmod = transform(do_reify, show_reify,
                                    "Reification",
@@ -301,40 +287,10 @@ structure Linknil (* :> LINKNIL  *) =
 	in  nilmod
 	end
 
-    fun linkil_tests [] = NONE
-      | linkil_tests [one] = SOME [valOf (LinkIl.test one)]
-      | linkil_tests _ = error "linkil_tests only defined for one file"
 
-    fun meta_compiles debug filenames = 
-	let val mods = valOf ((if debug then linkil_tests else LinkIl.compiles) filenames)
-	in  map (compile' debug) (Listops.zip filenames mods)
-	end
+    val il_to_nil = compile' false
 
-    fun meta_pcompiles debug filenames = 
-	let val mods = valOf ((if debug then linkil_tests else LinkIl.compiles) filenames)
-	in  map (pcompile' (debug,!show_size)) (Listops.zip filenames mods)
-	end
 
-    fun pcompile filename = hd(meta_pcompiles false [filename])
-    fun pcompiles filenames = hd(meta_pcompiles false filenames)
-    fun ptest filename = hd(meta_pcompiles true [filename])
-
-    fun compiles filenames = meta_compiles false filenames
-    fun compile filename = hd(meta_compiles false [filename])
-    fun tests filenames = meta_compiles true filenames
-    fun test filename = hd(meta_compiles true [filename])
-    fun il_to_nil ilmod = compile' false ilmod
-
-    val cached_prelude = ref (NONE : Nil.module option)
-    fun compile_prelude (use_cache,filename) = 
-	case (use_cache, !cached_prelude) of
-		(true, SOME m) => m
-	      | _ => let val (ctxt,sbnd_entries) =
-				LinkIl.compile_prelude(use_cache,filename)
-			 val m = compile' false (filename,(ctxt,sbnd_entries))
-			 val _ = cached_prelude := SOME m
-		     in  m
-		     end
 end
 
 

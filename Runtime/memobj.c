@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include "general.h"
+#include "til-signal.h"
 
 #undef SHOW_MMAP
 
@@ -47,24 +48,25 @@ void wordset(void *start, unsigned long v, size_t sz)
     *cur = v;
 }
 
-StackObj_t      Stacks[NumStackObj];
-static StackChainObj_t StackChains[NumStackChainObj];
-static HeapObj_t Heaps[NumHeapObj];
+static Stack_t *Stacks;
+static StackChain_t *StackChains;
+static Heap_t  *Heaps;
 
-value_t LowHeapLimit = 0;
+value_t StopHeapLimit = 1;  /* A user thread heap limit used to indicates that it has been interrupted */
+value_t StartHeapLimit = 2; /* A user thread heap limit used to indicates that it has not been given space */
 
-long StackSize = 2048; /* mesaure in Kb */
+long StackSize = 512; /* mesaure in Kb */
 static const int megabyte  = 1024 * 1024;
 static const int kilobyte  = 1024;
 #ifdef alpha_osf
-static const int stackstart =  4 * 1024 * 1024;
-static const int heapstart  = 16 * 1024 * 1024;
+static const int stackstart = 256 * 1024 * 1024;
+static const int heapstart  = 512 * 1024 * 1024;
 #endif
 #ifdef rs_aix
 static const int stackstart = 768 * 1024 * 1024;
 static const int heapstart  = 780 * 1024 * 1024;
 #endif
-static int pagesize = 0;
+int pagesize = 0;
 static int chunksize = 32768;
 static Bitmap_t *bmp = NULL;
 #ifdef SEMANTIC_GARBAGE
@@ -73,28 +75,31 @@ static const int Heapbitmap_bits = 1536;
 static const int Heapbitmap_bits = 3072;
 #endif
 
-void StackInitialize()
+void StackInitialize(void)
 {
   int i;
-  for (i=0; i<NumStackObj; i++)
+  Stacks = (Stack_t *)malloc(sizeof(Stack_t) * NumStack);
+  StackChains = (StackChain_t *)malloc(sizeof(StackChain_t) * NumStackChain);
+  for (i=0; i<NumStack; i++)
     {
-      Stacks[i].id = i;
-      Stacks[i].valid = 0;
-      Stacks[i].top = 0;
-      Stacks[i].bottom = 0;
-      Stacks[i].rawtop = 0;
-      Stacks[i].rawbottom = 0;
+      Stack_t *stack = &(Stacks[i]);
+      stack->id = i;
+      stack->valid = 0;
+      stack->top = 0;
+      stack->bottom = 0;
+      stack->rawtop = 0;
+      stack->rawbottom = 0;
     }
 }
 
 
 
-StackObj_t* GetStack(value_t add)
+Stack_t* GetStack(value_t add)
 {
   int i;
-  for (i=0; i<NumStackObj; i++)
+  for (i=0; i<NumStack; i++)
     {
-      StackObj_t *s = &Stacks[i];
+      Stack_t *s = &Stacks[i];
       if (s->valid && 
 	  s->id == i &&
 	  s->rawbottom <= add &&
@@ -104,7 +109,7 @@ StackObj_t* GetStack(value_t add)
   return NULL;
 }
 
-int InStackChain(StackChainObj_t *sc, value_t addr) 
+int InStackChain(StackChain_t *sc, value_t addr) 
 {
   int i;
   for (i=0; i<sc->count; i++) {
@@ -118,26 +123,28 @@ int InStackChain(StackChainObj_t *sc, value_t addr)
   return 0;
 }
 
-StackChainObj_t* StackChainObj_Alloc()
+StackChain_t* StackChain_Alloc()
 {
   static int count = 0;
-  StackChainObj_t *res = &(StackChains[count++]);
-  StackObj_t* stack = StackObj_Alloc(res);
+  StackChain_t *res = &(StackChains[count++]);
+  Stack_t* stack = Stack_Alloc(res);
+  assert(count <= NumStackChain);
 
   res->count = 1;
   res->size = 4;
-  res->stacks = (StackObj_t **) malloc(sizeof(StackObj_t *) * res->size);
+  res->stacks = (Stack_t **) malloc(sizeof(Stack_t *) * res->size);
   res->stacks[0] = stack;
   return res;
 }
 
-StackObj_t* StackObj_Alloc(StackChainObj_t *parent)
+Stack_t* Stack_Alloc(StackChain_t *parent)
 {
   int i;
   static int count = -1;
-  StackObj_t *res = &(Stacks[++count]);
+  Stack_t *res = &(Stacks[++count]);
   int size = StackSize * kilobyte;
   int start = stackstart + (count * size);
+  assert(count < NumStack);
 
   res->safety = 2 * pagesize;
   res->parent = parent;
@@ -169,29 +176,48 @@ StackObj_t* StackObj_Alloc(StackChainObj_t *parent)
 
 
 
-
-
-
-
-void HeapInitialize()
+void HeapInitialize(void)
 {
   int i;
-  for (i=0; i<NumHeapObj; i++)
+  Heaps = (Heap_t *)malloc(sizeof(Heap_t) * NumHeap);
+  for (i=0; i<NumHeap; i++)
     {
-      Heaps[i].id = i;
-      Heaps[i].valid = 0;
-      Heaps[i].top = 0;
-      Heaps[i].bottom = 0;
-      Heaps[i].alloc_start = 0;
-      Heaps[i].rawtop = 0;
-      Heaps[i].rawbottom = 0;
+      Heap_t *heap = &(Heaps[i]);
+      heap->id = i;
+      heap->valid = 0;
+      heap->top = 0;
+      heap->bottom = 0;
+      heap->alloc_start = 0;
+      heap->rawtop = 0;
+      heap->rawbottom = 0;
+      heap->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
+      pthread_mutex_init(heap->lock,NULL);
     }
 }
 
-HeapObj_t* GetHeap(value_t add)
+
+
+void GetHeapArea(Heap_t *heap, int size, value_t **bottom, value_t **top)
+{
+  value_t start, end;
+  pthread_mutex_lock(heap->lock);
+  start = heap->alloc_start;
+  end = start + size;
+  if (end > heap->top) {
+    start = 0;
+    end = 0;
+  }
+  else
+    heap->alloc_start = end;
+  pthread_mutex_unlock(heap->lock);
+  *bottom = (value_t *)start;
+  *top = (value_t *)end;
+}
+
+Heap_t* GetHeap(value_t add)
 {
   int i;
-  for (i=0; i<NumHeapObj; i++)
+  for (i=0; i<NumHeap; i++)
     if (Heaps[i].valid && Heaps[i].id==i &&
 	Heaps[i].bottom <= add &&
 	Heaps[i].top    >= add)
@@ -202,11 +228,11 @@ HeapObj_t* GetHeap(value_t add)
 /* we will manage heaps by a bitmap starting from 32meg up to 128M
    which gives us 96M to play with; the bitmap will measure in 32k chunks
    so there will be 3072 bits in the bitmap */
-HeapObj_t* HeapObj_Alloc(int MinSize, int MaxSize)
+Heap_t* Heap_Alloc(int MinSize, int MaxSize)
 {
   static int heap_count = 0;
 
-  HeapObj_t *res = &(Heaps[heap_count]);
+  Heap_t *res = &(Heaps[heap_count]);
 
   int safety   = 2 * pagesize;
   int fullsize = MaxSize + 2 * safety + pagesize;
@@ -216,7 +242,7 @@ HeapObj_t* HeapObj_Alloc(int MinSize, int MaxSize)
   int chunkstart = AllocBitmapRange(bmp,fullsize_chunkround / chunksize);
   int start = (chunkstart * chunksize) + heapstart;
   assert(chunkstart >= 0);
-  assert (heap_count < NumHeapObj);
+  assert (heap_count < NumHeap);
   assert(MaxSize >= MinSize);
 
   res->safety = safety;
@@ -259,7 +285,7 @@ HeapObj_t* HeapObj_Alloc(int MinSize, int MaxSize)
 }
 
 
-void HeapObj_Protect(HeapObj_t* res)
+void Heap_Protect(Heap_t* res)
 {
   long size = res->rawtop - res->rawbottom;
   long roundsize = (size + pagesize - 1) / pagesize * pagesize;
@@ -271,7 +297,7 @@ void HeapObj_Protect(HeapObj_t* res)
 
 }
 
-void HeapObj_Unprotect(HeapObj_t *res)
+void Heap_Unprotect(Heap_t *res)
 {
   long size = res->top - res->bottom;
   long roundsize = (size + pagesize - 1) / pagesize * pagesize;
@@ -281,30 +307,30 @@ void HeapObj_Unprotect(HeapObj_t *res)
 
 }
 
-int HeapObj_Getsize(HeapObj_t *res)
+int Heap_Getsize(Heap_t *res)
 {
   int top = res->rawtop - res->safety;
   return top - res->bottom;
 }
 
-void HeapObj_Resize(HeapObj_t *res, long newsize)
+void Heap_Resize(Heap_t *res, long newsize)
 {
   res->top = res->bottom + newsize;
   if (res->top > res->rawtop - res->safety)
     {
       printf("res->bottom, res->rawtop, res->top, newsize  %d %d %d %d\n",
 	     res->bottom, res->rawtop, res->top, newsize);
-      fprintf(stderr,"FATAL ERROR in heapobj_resize\n");
+      fprintf(stderr,"FATAL ERROR in Heap_resize\n");
       exit(-1);
     }
 }
 
-int StackError(long badadd, long sp)
+int StackError(struct sigcontext *scp, long badadd)
 {
-  StackObj_t *faultstack = 0;
-  StackChainObj_t *faultchain = 0;
+  Stack_t *faultstack = 0;
+  StackChain_t *faultchain = 0;
   int i;
-
+  long sp = (long)GetSp(scp);
 
   printf("\n------------------StackError---------------------\n");
   printf("sp, badreference:  %d   %d\n",sp,badadd);
@@ -322,9 +348,9 @@ int StackError(long badadd, long sp)
 	printf("Underflow occurred - relinking\n\n");
 	if (i == (faultchain->count - 1))
 	  {
-	    StackObj_t *newstack = 0;
+	    Stack_t *newstack = 0;
 	    faultstack->used_bottom = sp;
-	    newstack = StackObj_Alloc(faultchain);
+	    newstack = Stack_Alloc(faultchain);
 	    faultchain->stacks[faultchain->count++] = newstack;
 	    return newstack->top;
 	  }

@@ -1,4 +1,4 @@
-(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha OS Stats *)
+(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha AlphaLink OS Stats *)
 structure Til : COMPILER =
     struct
 
@@ -50,18 +50,18 @@ structure Til : COMPILER =
 		val oFile = unitName ^ ".o"
 		val _ = if (!uptoElaborate) then raise Stop else ()
 		val sdecs = LinkIl.IlContext.context_to_sdecs ctxt'
-		val nilmod = if !uptoPhasesplit 
-				 then Linknil.phasesplit(ctxt, sbnd_entries)
-			     else Linknil.il_to_nil (unitName, (ctxt, sbnd_entries))
+		val nilmod = (if !uptoPhasesplit 
+				 then Linknil.phasesplit
+			     else Linknil.il_to_nil) (unitName, (ctxt, sbnd_entries))
 		val _ = if (!uptoPhasesplit orelse !uptoNil) then raise Stop else ()
-		val rtlmod = Linkrtl.nil_to_rtl (nilmod,unitName)
+		val rtlmod = Linkrtl.nil_to_rtl (unitName,nilmod)
 		val _ = if (!uptoRtl) then raise Stop else ()
-		val rtl_to_alpha = Linkalpha.rtl_to_alpha
-(*
-		val rtl_to_alpha = if (!use_mlrisc) 
-				       then AlphaLink.rtl_to_alpha else Linkalpha.rtl_to_alpha
-*)
-		val _ = rtl_to_alpha(unitName, rtlmod)    (* creates unitName.s file with main label
+		val rtl_to_entrance = if (!use_mlrisc) 
+					  then (print "*** CALLING MLRISC\n";
+						AlphaLink.rtl_to_asm)
+				      else (print "*** CALLING TIL\n";
+					    Linkalpha.rtl_to_asm)
+		val _ = rtl_to_entrance(unitName, rtlmod)    (* creates unitName.s file with main label
 								     * `unitName_doit' *)
 		val _ = if (!uptoAsm) then raise Stop else ()
 		val _ = assemble(sFile, oFile)

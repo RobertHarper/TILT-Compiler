@@ -29,9 +29,10 @@ value_t OverflowExn = 0;
 value_t datastart, dataend;
 double FPTOFROMINT;
 
+/* Little allocation area for data allocated by the runtime. */
 static value_t RuntimeGlobalData_Start;
-static value_t RuntimeGlobalData_Cur;
-static value_t RuntimeGlobalData_End;
+value_t RuntimeGlobalData_Cur;
+value_t RuntimeGlobalData_End;
 
 int IsCompileGlobalData(value_t addr)
 {
@@ -63,6 +64,8 @@ void global_init()
 {
   value_t fields[3];
   int masks[1];
+  int RuntimeGlobalDataSize = 1024;
+  char *RuntimeGlobalData = (char *) malloc(sizeof(char) * RuntimeGlobalDataSize);
 
   RuntimeGlobalData_Start = (value_t) RuntimeGlobalData;
   RuntimeGlobalData_Cur = (value_t) RuntimeGlobalData;

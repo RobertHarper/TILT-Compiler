@@ -596,7 +596,9 @@ RTLTOASM Backend/rtltoasm.sig
 RtlToAsm Backend/rtltoasm
 
 VarGraph Backend/vargraph
-#
+
+LINKASM Backend/link.sig
+
 ##################### Alpha directory #################
 DECALPHA      Alpha/decalpha.sig
 DecAlpha      Alpha/decalpha
@@ -606,7 +608,6 @@ DIVMULT       Alpha/divmult.sig
 DivMult       Alpha/divmult
 ToAlpha       Alpha/toalpha
 TrackStorage  Alpha/trackstorage
-LINKALPHA     Alpha/linkalpha.sig
 Linkalpha     Alpha/linkalpha
 #
 ##################### Top directory #################

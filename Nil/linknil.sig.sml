@@ -11,13 +11,9 @@ sig
     structure ToClosure : TOCLOSURE
     sharing type NilContext.context = Normalize.context (* = NilStatic.context  *)
 
-    val phasesplit : Il.module -> Nil.module
-    val compile_prelude : bool * string -> Nil.module
-    val compile : string -> Nil.module
-    val compiles : string list -> Nil.module list
-    val test : string -> Nil.module
-    val il_to_nil : string * Il.module -> Nil.module
-    val tests :  string list -> Nil.module list
+    (* --- The compilation is split apart for testing just the phase-splitter --- *)
+    val phasesplit : string * Il.module -> Nil.module
+    val il_to_nil  : string * Il.module -> Nil.module
 
     val do_opt : bool ref
     val do_one_optimize : bool ref

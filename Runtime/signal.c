@@ -1,6 +1,15 @@
+#include "general.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
+#include <sys/sysinfo.h>
+#include <sys/proc.h>
+
+#include "memobj.h"
+#include "thread.h"
+#include "exn.h"
+#include "til-signal.h"
+#include "thread.h"
 
 #ifdef alpha_osf
 #include <siginfo.h>
@@ -9,14 +18,6 @@
 #ifdef rs_aix
 #include <fptrap.h> 
 #endif
-#include <sys/sysinfo.h>
-#include <sys/proc.h>
-#include "memobj.h"
-#include "thread.h"
-#include "exn.h"
-#include "general.h"
-#include <assert.h>
-#include "til-signal.h"
 
 #define WRITE
 #undef gprintf
@@ -149,6 +150,7 @@ void memfault_handler(int signum,
 #endif
 		      struct sigcontext *scp)
 {
+  SysThread_t *sth = getSysThread();
   int badaddr = 0;
 #ifdef alpha_osf
   int signo = siginfo->si_signo;
@@ -166,20 +168,20 @@ void memfault_handler(int signum,
     {
     case SIGILL:
       {
-	printf("illegal instruction at address %d",badaddr);
+	printf("SysThread %d: illegal instruction at address %d",sth->stid,badaddr);
 	exit(-1);
       }
     case SIGSEGV:
       {
-      printf("SEGV  ");
 #ifdef alpha_osf
       switch (code)
 	{ 
 	case SEGV_MAPERR:
-	  printf("SEGV_MAPERR  address not mapped to object  \n");
+	  printf("SysThread %d: SEGV_MAPERR  address %d not mapped\n",sth->stid,badaddr);
 	  break;
 	case SEGV_ACCERR:
-	  printf("SEGV_ACCERR  invalid permissions for mapped object - Possible stackerror\n");
+	  printf("SysThread %d: SEGV_ACCERR  invalid permissions for address %d\n",
+		 sth->stid,badaddr);
 	  if (StackError(scp,badaddr))
 	    printf("Stackrelink/overflow not implemented\n");
 	  break;
@@ -199,7 +201,7 @@ void memfault_handler(int signum,
 	switch (code)
 	  {
 	  case BUS_ADRALN:
-	    printf("   BUS_ADRALN      invalid address alignment\n");
+	    printf("SysThread %d:  BUS_ADRALN invalid address alignment\n",sth->stid);
 	    break;
 	  case BUS_ADRERR:
 	    printf("BUS_ADRERR      non-existent physical address\n");
@@ -231,11 +233,8 @@ void memfault_handler(int signum,
   }
 #endif
   {
-    HeapObj_t *heap = NULL;
-    StackObj_t *stack = NULL;
-    
-    heap = GetHeap(badaddr);
-    stack = GetStack(badaddr);
+    Heap_t *heap = GetHeap(badaddr);
+    Stack_t *stack = GetStack(badaddr);
     if (heap != NULL)
       printf("   addr part of a heap obj\n");
     if (stack != NULL)
@@ -329,7 +328,7 @@ void alarm_handler(int signum,
   if (siginfo != 0)
     printf("siginfo for alarm_handler is not nil\n");
 #endif
-  thread_scheduler(scp);
+  Interrupt(scp);
 }
 
 extern int ThreadedVersion;

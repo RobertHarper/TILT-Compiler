@@ -1,6 +1,6 @@
+#include "general.h"
 #include "hash.h"
-#include <stdlib.h>
-#include <assert.h>
+
 
 /* XXX is not dynamic */
 

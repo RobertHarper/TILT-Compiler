@@ -1,6 +1,6 @@
+#include "general.h"
 #include "queue.h"
-#include <stdlib.h>
-#include <assert.h>
+
 
 Queue_t *QueueCreate(int safe, long size)
 {
@@ -45,13 +45,13 @@ int QueueIsEmpty(Queue_t *q)
   return (q->len == 0);
 }
 
-static void enter(Queue_t *q) 
+static void QueueEnter(Queue_t *q) 
 {
   if (q->lock)
     pthread_mutex_lock(q->lock);
 }
 
-static void exit(Queue_t *q) 
+static void QueueExit(Queue_t *q) 
 {
   if (q->lock) {
     pthread_mutex_unlock(q->lock);
@@ -65,7 +65,7 @@ static void exit(Queue_t *q)
 void *Dequeue(Queue_t *q)
 {
   void *res = NULL;
-  enter(q);
+  QueueEnter(q);
   if (q->len == 0)
     return res;
   res = q->table[q->start];
@@ -73,7 +73,7 @@ void *Dequeue(Queue_t *q)
   if (q->start >= q->size)
     q->start -= q->size;
   q->len--;
-  exit(q);
+  QueueExit(q);
   return res;
 }
 
@@ -81,7 +81,7 @@ void *QueuePop(Queue_t *q)
 {
   int pos;
   void *res = NULL;
-  enter(q);
+  QueueEnter(q);
   pos = (q->end - 1 + q->size);
   if (pos >= q->size)
     pos -= q->size;
@@ -90,7 +90,7 @@ void *QueuePop(Queue_t *q)
   res = q->table[pos];
   q->end = pos;
   q->len--;
-  exit(q);
+  QueueExit(q);
   return res;
 }
 
@@ -98,13 +98,13 @@ void *QueuePopPeek(Queue_t *q)
 {
   void *res = NULL;
   int pos;
-  enter(q);
+  QueueEnter(q);
   pos = (q->end - 1 + q->size);
   if (pos >= q->size)
     pos -= q->size;
   if (!QueueIsEmpty(q))
     res = q->table[pos];
-  exit(q);
+  QueueExit(q);
   return res;
 }
 
@@ -112,7 +112,7 @@ void Enqueue(Queue_t *q, void *data)
 {
   /* if table is full, we dynamically resize the queue */
   int qend, qsize, qlen;
-  enter(q);
+  QueueEnter(q);
   qend = q->end;
   qsize = q->size;
   qlen = q->len;
@@ -141,7 +141,7 @@ void Enqueue(Queue_t *q, void *data)
     qend -= qsize;
   q->end = qend;
   q->len = qlen + 1;
-  exit(q);
+  QueueExit(q);
 }
 
 
@@ -154,50 +154,50 @@ void *QueueAccess(Queue_t *q, long _pos)
 {
   long pos;
   void *res;
-  enter(q);
+  QueueEnter(q);
   pos = _pos + q->start;
 #ifdef DEBUG
   if (_pos >= q->len)
     {
       printf("QueueAccess bad\n");
-      exit(-1);
+      QueueExit(-1);
     }
 #endif
   if (pos >= q->size)
     pos -= q->size;
   res = q->table[pos];
-  exit(q);
+  QueueExit(q);
   return res;
 }
 
 void QueueSet(Queue_t *q, long _pos, void *data)
 {
   long pos;
-  enter(q);
+  QueueEnter(q);
   pos = _pos + q->start;
 #ifdef DEBUG
   if (_pos >= q->len)
     {
       printf("QueueSet bad\n");
-      exit(-1);
+      QueueExit(-1);
     }
 #endif
   if (pos >= q->size)
     pos -= q->size;
   q->table[pos] = data;
-  exit(q);
+  QueueExit(q);
 }
 
 void QueueClear(Queue_t *q)
 {
-  enter(q);
+  QueueEnter(q);
 #ifdef DEBUG
   memset(q->table,13579,q->size * sizeof(q->table[0]));
 #endif
   q->start = 0;
   q->end = 0;
   q->len = 0;
-  exit(q);
+  QueueExit(q);
 }
 
 void QueueWaitEmpty(Queue_t *q) 

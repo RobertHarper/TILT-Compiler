@@ -1,32 +1,30 @@
-#include "tag.h"
-#include "memobj.h"
-#include "thread.h"
+#include "general.h"
 #include <sys/resource.h>
 #include <sys/user.h>
-#include <assert.h>
+#include <string.h>
+
+#include "queue.h"
+#include "tag.h"
+#include "memobj.h"
 #include "exn.h"
 #include "general.h"
-#include <string.h>
 #include "platform.h"
+#include "gc.h"
+#include "thread.h" 
+#include "til-signal.h"
+#include "stats.h"
+#include "global.h"
+#include "mllib.h"
+#include "client.h"
 
 int ThreadedVersion = THREADED_VERSION;
+long LEAST_GC_TO_CHECK = -1;
 
-
-
-extern int   client_entry;
-extern int module_count;
-extern long SHOW_GCSTATS;
-extern long SHOW_GCFORWARD;
-extern long SHOW_GCDEBUG;
-extern long SHOW_GCERROR;
-extern long SHOW_HEAPS;
-extern long MinHeap, MaxHeap;
-extern double TargetRatio;
-extern long StackSize;
-extern long generational_flag;
-extern long YoungHeapByte;
-extern long save_rate;
-extern long use_stack_gen;
+int NumHeap       = 20;
+int NumStack      = 100;
+int NumStackChain = 100;
+int NumThread     = 100;
+int NumSysThread  = 3;
 
 int process_string(char *var, char *item, char *option)
 {
@@ -58,6 +56,12 @@ int process_long(long *var, char *item, char *option)
   return 1;
 }
 
+int process_int(int *var, char *item, char *option)
+{
+  long temp = *var;
+  process_long(&temp,item,option);
+  *var = (int) temp;
+}
 
 int process_double(double *var, char *item, char *option)
 {
@@ -91,10 +95,22 @@ void process_option(int argc, char **argv)
 	}
       if (process_string(buf,"GC_METHOD",option))
 	{
-	  if (!strcmp(buf,"semi"))
-	    generational_flag = 0;
-	  continue;
+	  if (!strcmp(buf,"semi")) {
+	    collector_type = Semispace;
+	    continue;
+	  }
+	  if (!strcmp(buf,"gen")) {
+	    collector_type = Generational;
+	    continue;
+	  }
+	  if (!strcmp(buf,"para")) {
+	    collector_type = Parallel;
+	    continue;
+	  }
 	}
+      if (process_long(&paranoid,"paranoid",option))  continue;
+      if (process_long(&diag,"diag",option))  continue;
+      if (process_int(&NumSysThread,"NumSysThread",option))  continue;
       if (process_long(&SHOW_GCSTATS,"SHOW_GCSTATS",option))  continue;
       if (process_long(&SHOW_GCDEBUG,"SHOW_GCDEBUG",option))  continue;
       if (process_long(&SHOW_GCFORWARD,"SHOW_GCFORWARD",option))  continue;
@@ -148,13 +164,8 @@ int main(int argc, char **argv)
   exn_init();
   gc_init();
 
-  th = thread_create((value_t)(&client_entry),module_count);
-  thread_insert(th);
-  thread_go();
-  /*
-  assert(FALSE);
-  return -1;
-  */
+  thread_go((value_t)(&client_entry),module_count);
+  stats_finish();
 }
 
 

@@ -17,16 +17,18 @@
 #define EXNARG_REG       26
 #define RA_REG           26
 #define SP_REG           30
+#define SP_DISP          (8 * SP_REG)
 #define RA_DISP          (8 * RA_REG)
 #define ALLOCSIZE_REG    ASMTMP_REG
 
 #define EXNPTR_REG        15
+#define EXNPTR_SYMREG        $15
 #define ALLOCLIMIT_REG    14
 #define ALLOCPTR_REG      13
 #define ALLOCLIMIT_SYMREG $14
 #define ALLOCPTR_SYMREG   $13
 #define ALLOCLIMIT_DISP   (8 * ALLOCLIMIT_REG)
-#define ALLOCPTR_DISP     (8 * ALLOCLIMIT_REG)
+#define ALLOCPTR_DISP     (8 * ALLOCPTR_REG)
 #define THREADPTR_REG     12
 #define THREADPTR_SYMREG  $12
 
