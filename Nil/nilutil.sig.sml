@@ -1,4 +1,4 @@
-(*$import Nil *)
+(*$import Nil NilSubst *)
 
 signature NILUTIL =
   sig
@@ -136,7 +136,8 @@ signature NILUTIL =
     val is_unit_c : Nil.con -> bool
 
     val singletonize : (Nil.kind * Nil.con) -> Nil.kind
-    val selfify : (Nil.con * Nil.kind) -> Nil.kind
+    val selfify  : (Nil.con * Nil.kind) -> Nil.kind
+    val selfify' : (Nil.con * Nil.kind * NilSubst.con_subst) -> Nil.kind
 
     val get_arrow_return : Nil.con -> Nil.con option
 

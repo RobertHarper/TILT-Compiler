@@ -9,6 +9,8 @@ signature ALPHA =
 
     val renamed : alpha_context * var -> bool 
 
+    val is_empty : alpha_context -> bool
+
     val bound : alpha_context * var -> bool 
 
     val substitute : alpha_context * var -> var

@@ -21,6 +21,8 @@ structure Alpha
 	 of NONE => false
 	  | SOME var' => not (eq_var (var,var')))
 
+    fun is_empty a = (VarMap.numItems a) = 0
+
     val bound : alpha_context * var -> bool = Option.isSome o VarMap.find
 
     fun substitute (bindings,var) = (Option.getOpt (VarMap.find (bindings,var),var))

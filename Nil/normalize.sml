@@ -521,7 +521,7 @@ struct
 	     (case (substitute subst var) of
 		   SOME c => c
 		 | NONE =>
-	           (case NilContext.find_kind_equation(D,Var_c var) of
+	           (case NilContext.find_kind_equation  (D,Var_c var) of
 			SOME c => con_normalize' state c
 		      | NONE => Var_c var))
 	 in con
@@ -1050,10 +1050,10 @@ struct
 	| (Annotate_c (annot,con)) => con_reduce state con)
 
 
-
+    and find_kind_equation (D,c) = NilContext.find_kind_equation (D,c)
     and reduce_once (D,con) = let val (progress,subst,c) = con_reduce(D,empty()) con
 			      in  (case progress 
-				     of IRREDUCIBLE => (case NilContext.find_kind_equation (D,c) 
+				     of IRREDUCIBLE => (case find_kind_equation (D,c) 
 							  of SOME c => substConInCon subst c
 							   | NONE => substConInCon subst c)
 				      | _ => substConInCon subst c)
@@ -1070,7 +1070,7 @@ struct
 		                    SOME _ => REDUCED(valOf(pred (substConInCon subst c)))
 				  | NONE => UNREDUCED (substConInCon subst c))
 			      | IRREDUCIBLE => 
-				  (case NilContext.find_kind_equation(D,c) 
+				  (case find_kind_equation(D,c) 
 				     of SOME c => loop (n+1) (subst,c)
 				      | NONE => UNREDUCED (substConInCon subst c))
 			end
@@ -1094,12 +1094,28 @@ struct
 			 PROGRESS => loop (n+1) (subst,c) 
 		       | HNF => (true, strip_annotate(substConInCon subst c))
 		       | IRREDUCIBLE => 
-			   (case NilContext.find_kind_equation(D,c)
+			   (case find_kind_equation(D,c)
 			      of SOME c => loop (n+1) (subst,c)
 			       | NONE => (false, strip_annotate(substConInCon subst c)))
 	    end
         in  loop 0 (empty(),con)
         end
+    and reduce_hnf' (D,con,subst) = 
+      let 
+	fun loop (subst,c) = 
+	  let 
+	    val (progress,subst,c) = con_reduce(D,subst) c  
+	  in  case progress of
+	    PROGRESS => loop (subst,c) 
+	  | HNF => (subst,c)
+	  | IRREDUCIBLE => 
+	      (case find_kind_equation(D,c) of
+		 SOME c => loop (subst,c)
+	       | NONE => (subst,c))
+	  end
+      in  loop (subst,con)
+      end
+      
 
     and reduce(D,con) = con_normalize D con
 

@@ -298,32 +298,37 @@ struct
 
   val fresh_named_var = Name.fresh_named_var
 
-  fun selfify (con,kind) =
+  fun selfify'(con,kind,subst) = 
     (case kind of
-          Type_k => SingleType_k con
-	| SingleType_k _ => SingleType_k(con) 
-	| Single_k _ => Single_k con 
-	| Record_k entries => 
-	    let
-	      fun mapper ((l,v),k) = 
-		let
-		  val proj = Proj_c (con,l)
-		  val kres = selfify (proj,k)
-		in
-		  ((l,v),kres)
-		end
-	    in
-	      Record_k (Sequence.map mapper entries)
-	    end
-	| Arrow_k (openness,args,return) => 
+       Type_k => SingleType_k con
+     | SingleType_k _ => SingleType_k(con) 
+     | Single_k _ => Single_k con 
+     | Record_k entries => 
+	 let
+	   fun folder (((l,v),k),subst) = 
+	     let
+	       val proj = Proj_c (con,l)
+	       val kres = selfify' (proj,k,subst)
+	       val subst = NilSubst.C.sim_add subst (v,proj)
+	     in
+	       (((l,v),kres),subst)
+	     end
+	   val (entries,subst) = Sequence.foldl_acc folder subst entries
+	 in Record_k entries
+	 end
+     | Arrow_k (openness,args,return) => 
 	 let
 	   val (formal_vars,_) = ListPair.unzip args
+	   val args = Listops.map_second (NilSubst.substConInKind subst) args
 	   val actuals = List.map Var_c formal_vars
 	 in
-	   Arrow_k (openness,args,selfify(App_c (con,actuals),return))
+	   Arrow_k (openness,args,selfify'(App_c (con,actuals),return,subst))
 	 end)
+       
+  fun selfify (con,kind) = selfify'(con,kind,NilSubst.C.empty())
 
-  val selfify = subtimer ("Selfify",selfify)
+  val selfify = subtimer ("NilUtil:selfify",selfify)
+  val selfify' = subtimer ("NilUtil:selfify'",selfify')
 
   fun singletonize (kind as SingleType_k(_),con) = kind
     | singletonize (kind as Single_k(_),con) = kind

@@ -40,7 +40,11 @@ signature NILCONTEXTPRE =
     val insert_equation : context * var * con -> context
     val insert_kind_list : context* (var * kind) list -> context
 
+    val insert_stdkind : context * var * kind -> context
+    val insert_stdkind_equation : context * var * con * kind -> context
 
+    val bound_con : context * var -> bool
+    val bound_exp : context * var -> bool
 
     val find_kind          : context * var -> kind
 
@@ -66,7 +70,7 @@ signature NILCONTEXTPRE =
     val print_cons : context -> unit
 
     val is_well_formed : 
-      (context * Nil.kind -> unit) 
+      (context * Nil.kind -> Nil.kind) 
       * (context * Nil.con -> Nil.kind)
       * (context * Nil.kind * Nil.kind -> bool) -> context -> bool
 

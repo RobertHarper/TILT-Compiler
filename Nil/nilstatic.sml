@@ -1,4 +1,4 @@
-(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace *)
+(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
   
@@ -16,6 +16,8 @@ struct
   val fbnd_trace = Trace.newtrace "Top Level Fbnd"
   val norm_trace = Trace.newtrace "Top Level CHNF"
   val measure_trace = Trace.newtrace "Top Level Measure"
+
+  val equiv_trace = Trace.newtrace "Equiv"
 
   val show_top = Stats.ff "nilstatic_show_top"
 
@@ -46,6 +48,9 @@ struct
   val exp_profile      = Stats.ff "nilstatic_exp_profile"
   val bnd_profile      = Stats.ff "nilstatic_bnd_profile"
 
+  val equiv_one = Stats.ff "nilstatic_equiv_one"
+  val equiv_two = Stats.ff "nilstatic_equiv_two"
+
   val equiv_total_profile = Stats.ff "nilstatic_equiv_total_profile"
   val equiv_profile       = Stats.ff "nilstatic_equiv_profile"
   val con_valid_prof      = Stats.ff "nilstatic_con_valid_profile"
@@ -60,9 +65,7 @@ struct
   val type_equiv_count = Stats.counter "Type Equiv Calls"
   val alpha_equiv_success = Stats.counter "Alpha Equiv Checks Succeeded"
   val kind_standardize_calls = Stats.counter "Kind Standardize Calls"
-  val early_stop    = Stats.counter "Equiv:early stops"
-  val partial_check = Stats.counter "Equiv:partial equiv checks"
-  val stop_early    = Stats.tt      "Equiv:stop_early"
+  val insert_count = Stats.counter "Variables inserted"
 
   val locate = NilError.locate "NilStatic"
   val assert = NilError.assert
@@ -109,37 +112,42 @@ struct
     fun push_subkind(k1,k2,context) = push(SUBKIND(k1,k2,context))
     fun push_bnd(b,context) = push(BND(b,context))
     fun push_mod(m,context) = push(MODULE(m,context))
-    fun pop() = (depth := !depth - 1;
-		 stack := (tl (!stack)))
+    fun pop() = ((depth := !depth - 1;
+		  stack := (tl (!stack))) handle Empty => error (locate "pop") "Pop from empty stack")
     fun show_stack() = let val st = !stack
 			   val _ = clear_stack()
 			   fun show (EXP(e,context)) = 
 				     (print "exp_valid called with expression =\n";
 				      pp_exp e;
-				      print "\nand context"; NilContext.print_context context;
+				      print "\nand minimal context"; 
+				      NilContext.print_context (NilContext.exp_error_context (context,e));
 				      print "\n\n")
 			     | show (CON(c,context)) =
 				     (print "con_valid called with constructor =\n";
 				      pp_con c;
-				      print "\nand context"; NilContext.print_context context;
+				      print "\nand minimal context"; 
+				      NilContext.print_context (NilContext.con_error_context (context,c));
 				      print "\n\n")
 			     | show (EQCON(c1,c2,context)) =
 				     (print "con_equiv called with constructor =\n";
 				      pp_con c1; print "\nand\n";
 				      pp_con c2;
-				      print "\nand context"; NilContext.print_context context;
+				      print "\nand minimal context"; 
+				      NilContext.print_context (NilContext.cons_error_context (context,[c1,c2]));
 				      print "\n\n")
 			     | show (KIND(k,context)) =
 				     (print "kind_valid called with kind =\n";
 				      pp_kind k;
-				      print "\nand context"; NilContext.print_context context;
+				      print "\nand context"; 
+				      NilContext.print_context (NilContext.kind_error_context (context,k));
 				      print "\n\n")
 			     | show (SUBKIND(k1,k2,context)) =
 				     (print "sub_kind called with kind1 =\n";
 				      pp_kind k1;
 				      print "\n                 and kind2 =\n";
 				      pp_kind k2;
-				      print "\nand context"; NilContext.print_context context;
+				      print "\nand context"; 
+				      NilContext.print_context (NilContext.kinds_error_context (context,[k1,k2]));
 				      print "\n\n")
 			     | show (BND(b,context)) =
 				     (print "bnd_valid called with bound =\n";
@@ -169,8 +177,9 @@ struct
 
   val timer = Stats.subtimer'
   val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer' args args2 else #2 args args2
-  val flagtimer = fn (flag,name,f) => fn args => if !profile orelse !local_profile orelse !flag 
-						      then Stats.subtimer' (name,f) args  else f args
+  val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profile orelse !flag 
+						    then Stats.subtimer' (name,f) args  else f args)
+						  handle e => (print "Error in ";print name;print "\n";raise e))
 
 
   (*From Normalize*)
@@ -179,6 +188,8 @@ struct
   val projectRecordType = flagtimer (import_profile,"Tchk:projectRecordType",Normalize.projectRecordType)
   val projectSumType = flagtimer (import_profile,"Tchk:projectSumType",Normalize.projectSumType)
   val removeDependence = flagtimer (import_profile,"Tchk:removeDependence",Normalize.removeDependence)
+
+  val reduce_hnf' = flagtimer (import_profile,"Tchk:reduce_hnf'",Normalize.reduce_hnf')
 
   fun con_head_normalize args = #2( Normalize.reduce_hnf args)
   val is_hnf = Normalize.is_hnf
@@ -199,8 +210,22 @@ struct
   val insert_kind_equation = flagtimer (import_profile,"Tchk:insert_kind_equation",NilContext.insert_kind_equation)
   val insert_equation = flagtimer (import_profile,"Tchk:insert_equation",NilContext.insert_equation)
   val insert_kind_list = flagtimer (import_profile,"Tchk:insert_kind_list",NilContext.insert_kind_list)
+  val insert_stdkind = flagtimer (import_profile,"Tchk:insert_stdkind",NilContext.insert_stdkind)
+  val insert_stdkind_equation = flagtimer (import_profile,"Tchk:insert_stdkind_equation",NilContext.insert_stdkind_equation)
+
   val find_max_kind = flagtimer (import_profile,"Tchk:find_max_kind",NilContext.find_max_kind)           
   val kind_standardize = flagtimer (import_profile,"Tchk:kind_standardize",NilContext.kind_standardize)
+  val kind_of = flagtimer (import_profile,"Tchk:kind_of",NilContext.kind_of)
+
+  fun insert_wrap insert_item args = (insert_count();insert_item args)
+  val insert_con  = insert_wrap insert_con
+  val insert_kind = insert_wrap insert_kind
+  val insert_kind_equation = insert_wrap insert_kind_equation
+  val insert_equation      = insert_wrap insert_equation
+
+  fun count_list vxlist = List.app (fn _ => ignore(insert_count())) vxlist
+  val insert_con_list  = fn (D,vclist) => (count_list vclist;insert_con_list (D,vclist))
+  val insert_kind_list = fn (D,vklist) => (count_list vklist;insert_kind_list (D,vklist))
 
   val exp_error_context   = NilContext.exp_error_context
   val con_error_context   = NilContext.con_error_context
@@ -407,6 +432,18 @@ struct
      raise (Util.BUG explanation)
        )
 
+  fun ck_error (D,con,kind,explanation) = 
+    (
+     print_all ["\n","TYPE ERROR: Problem with constructor and kind:\n\t",
+		explanation,"\n","Con is:\n"];
+     Ppnil.pp_con con;
+     print "\nKind is \n";
+     Ppnil.pp_kind kind;
+     lprintl "\nWITH MINIMAL CONTEXT AS";
+     print_context (con_error_context (D,con));
+     raise (Util.BUG explanation)
+    )
+
   val find_con = find_con
 
 
@@ -461,6 +498,82 @@ struct
     | sub_effect (sk,Total,Partial) = sk
     | sub_effect (sk,_,_) = false
 
+  fun kind_type_tuple 1   = Type_k
+    | kind_type_tuple len = NilUtil.kind_tuple(Listops.map0count (fn _ => Type_k) len)
+
+  local
+    open NilRewrite
+      
+    type state = {alpha_e : Alpha.alpha_context,
+		  alpha_c : Alpha.alpha_context}
+      
+    fun con_var_xxx (state as {alpha_e,alpha_c} : state,var,any) = 
+      if Alpha.bound (alpha_c,var) then ({alpha_e = alpha_e,alpha_c = Alpha.unbind (alpha_c,var)},NONE)
+      else (state,NONE)
+	
+    fun conhandler (state as {alpha_e,alpha_c} : state,con : con) =
+      if (Alpha.is_empty alpha_c) andalso (Alpha.is_empty alpha_e)  then NORECURSE
+      else
+	(case con
+	   of Var_c var => 
+	     (if Alpha.renamed (alpha_c,var) then
+		CHANGE_NORECURSE(state,Var_c (Alpha.substitute(alpha_c,var)))
+	      else
+		NORECURSE)
+	    | _ => NOCHANGE)
+	    
+    fun exp_var_xxx (state as {alpha_e,alpha_c} : state,var,any) = 
+      if Alpha.bound (alpha_e,var) then ({alpha_c = alpha_c,alpha_e = Alpha.unbind (alpha_e,var)},NONE)
+      else (state,NONE)
+	
+    fun exphandler (state as {alpha_e,alpha_c} : state,exp : exp) =
+      if (Alpha.is_empty alpha_e) andalso (Alpha.is_empty alpha_c)  then NORECURSE
+      else
+	(case exp
+	   of Var_e var => 
+	     (if Alpha.renamed (alpha_e,var) then
+		CHANGE_NORECURSE(state,Var_e (Alpha.substitute(alpha_e,var)))
+	      else
+		NORECURSE)
+	    | _ => NOCHANGE)
+	   
+    val all_handlers = 
+      let
+	val h = set_conhandler default_handler conhandler
+	val h = set_exphandler h exphandler
+	val h = set_con_binder h con_var_xxx
+	val h = set_con_definer h con_var_xxx
+	val h = set_exp_binder h exp_var_xxx
+	val h = set_exp_definer h exp_var_xxx
+      in
+	h
+      end
+    
+    val {rewrite_exp,
+	 rewrite_con,
+	 rewrite_kind,...} = rewriters all_handlers
+      
+    fun rewriteItem_e rewriter alpha item = 
+      if Alpha.is_empty alpha then item
+      else rewriter {alpha_e = alpha,alpha_c = Alpha.empty_context()} item
+	
+    fun rewriteItem_c rewriter alpha item = 
+      if Alpha.is_empty alpha then item
+      else rewriter {alpha_c = alpha,alpha_e = Alpha.empty_context()} item
+	
+    fun rewriteItem rewriter (alpha_e,alpha_c) item = 
+      if (Alpha.is_empty alpha_e) andalso (Alpha.is_empty alpha_c) then item
+      else rewriter {alpha_c = alpha_c,alpha_e = alpha_e} item
+  in
+    val alphaCRenameExp  = rewriteItem_c rewrite_exp
+    val alphaCRenameCon  = rewriteItem_c rewrite_con
+    val alphaCRenameKind = rewriteItem_c rewrite_kind
+    val alphaECRenameCon  = rewriteItem rewrite_con 
+    val alphaECRenameKind = rewriteItem rewrite_kind
+
+      
+  end
+
   fun assertWellFormed context = 
     let
       val debug' = !debug
@@ -491,49 +604,251 @@ struct
 	   ]
 	else ()
 
-      val _ = kind_valid'(D,kind)
+      val kind = kind_valid'(D,kind)
       val _ = if (!show_calls)
 		then (printl "kind_valid returned")
 	      else ()
 
       val _ = pop()
-    in  ()
+    in  kind
     end
 
-  and kind_valid' (D : context, kind : kind) : unit = 
+  and kind_valid' (D : context, kind : kind) : kind = 
     (case kind of
-       Type_k => ()
-     | SingleType_k con => con_analyze(D,con,Type_k)
-     | Single_k con => ignore(con_valid(D,con))
+       Type_k => kind
+     | SingleType_k con => (con_analyze(D,con,Type_k);kind)
+     | Single_k con => con_valid(D,con)
      | Record_k elts => 
 	 let
 	   fun folder (((l,v),k),D) = 
-	     (kind_valid (D,k);
-	      insert_kind (D,v,k))
-	   val _ = Sequence.foldl folder D elts
+	     let val kstd = kind_valid (D,k)
+	     in (((l,v),kstd),insert_stdkind (D,v,kstd))
+	     end
+	   val (elts,_) = Sequence.foldl_acc folder D elts
 	   fun compare (((l1,_),_),((l2,_),_)) = Name.compare_label (l1,l2)
 	   val _ = 
 	     (no_dups compare elts) orelse
 	     (k_error (D,kind,"Labels in record kind not distinct"))
-	 in ()
+	 in Record_k elts
 	 end
      | Arrow_k (openness, formals, return) => 
-	 let 
-	   fun folder ((v,k),D) = 
-	     (kind_valid (D,k);
-	      insert_kind (D,v,k))
-	   val D = foldl folder D formals
-	 in  
-	   kind_valid (D,return)
+	 let val (formals,D) = vklist_valid (D,formals)
+	 in  Arrow_k(openness,formals,kind_valid (D,return))
 	 end)
-
-  and con_analyze(D,con,kind) =
-    let
-      val kind' = con_valid(D,con)
-    in
-      if sub_kind(D,kind',kind) then ()
-      else c_error(D,con,"Con cannot be given kind")
+  and vklist_valid (D,vklist) = 
+    let 
+      fun folder ((v,k),D) = 
+	let val kstd = kind_valid (D,k)
+	in ((v,kstd),insert_stdkind (D,v,kstd))
+	end
+    in foldl_acc folder D vklist
     end
+
+  and pcon_analyze (D,pcon,args) = 
+    let
+      val type_analyze = curry2 type_analyze
+    in
+      (case pcon of
+	 (Record_c (labels,SOME vars)) =>
+	   let
+	     fun folder (v,c,D) = (type_analyze D c;insert_con (D,v,c))
+	     val D = foldl2 folder D (vars,args)
+	   in if labels_distinct labels then ()
+	      else (c_error(D,Prim_c(pcon,args),"DepRecord contains duplicate field labels"))
+	   end
+       | (Record_c (labels,NONE)) => 
+	   let val _ = app (type_analyze D) args
+	   in if labels_distinct labels then ()
+	      else (error (locate "pcon_valid") "Record contains duplicate field labels")
+	   end
+       | (Sum_c {known,totalcount,tagcount}) => 
+	   let
+	     val carriers = TilWord32.uminus(totalcount,tagcount)
+	     val k = kind_type_tuple (TilWord32.toInt carriers)
+	     val _ = 
+	       (case args
+		  of [con] => con_analyze(D,con,k)
+		   | _ => error (locate "pcon_valid") "Wrong number of args to Sum_c")
+	     val _ = 
+	       (case known 
+		  of SOME i => 
+		    (Word32.<=(Word32.fromInt 0,i) andalso 
+		     Word32.<(i,totalcount)) orelse
+		    (perr_c (Prim_c (pcon,args));
+		     error (locate "pcon_valid") "Illegal index to sum constructor")
+		   | NONE => true)
+	   in ()
+	   end
+       | (Vararg_c _) =>  app (type_analyze D) args
+       | _ => ())
+    end
+  and con_analyze (D : context, constructor : con,kind : kind) : unit = 
+    let val type_analyze = curry2 type_analyze
+    in
+      (case (constructor,kind) of
+	 (constructor,SingleType_k c) => 
+	 let val _ = type_analyze D constructor
+	     val _ = type_equiv(D,constructor,c,false)
+	 in ()
+	 end
+       | (_,Single_k c) => ck_error (D,constructor,kind,"Non standard kind given to con_analyze")
+       | (Prim_c (pcon,args),  Type_k) =>  pcon_analyze(D,pcon,args)
+       | (Mu_c (is_recur,defs),Type_k) =>
+	 (case Sequence.toList defs
+	    of [(v,c)] => type_analyze (if is_recur then insert_stdkind (D,v,Type_k) else D) c
+	     | _ => c_error(D,constructor,"Mu::Type has wrong number of arms"))
+       | (Mu_c (is_recur,defs),Record_k lvk_seq) =>
+	 let 
+	   val D = if is_recur 
+		     then let fun folder((v,_),D) = insert_stdkind (D,v,Type_k)
+			  in  Sequence.foldl folder D defs end
+		   else D
+	 in Sequence.app ((type_analyze D) o #2) defs
+	 end
+       | (AllArrow_c {openness,effect,isDependent,
+		      tFormals,eFormals,fFormals,body_type},Type_k) =>
+	 let
+	   val (tFormals,D) = vklist_valid (D,tFormals)
+
+	   fun folder ((vopt,c),D) = (type_analyze D c;
+				      case vopt of 
+					NONE => D
+				      | SOME v => insert_con (D,v,c))
+	   
+	   val D = foldl folder D eFormals
+	   val _ = type_analyze  D body_type
+	 in ()
+	 end
+       | (ExternArrow_c (args,body),Type_k) => 
+	 let
+	   val _ = map (type_analyze D) args
+	   val _ = type_analyze D body
+	 in ()
+	 end
+       | (v as (Var_c var),kind) => 
+	 let
+	   val _ = sub_kind(D,find_max_kind (D,var),kind)
+	     handle Unbound =>
+	       (print_all ["UNBOUND VARIABLE = ",var2string var,
+			   " CONTEXT IS \n"];
+		NilContext.print_context D;
+		error  (locate "con_valid") ("variable "^(var2string var)^" not in context"))
+	 in ()
+	 end
+       | (Let_c (Parallel,cbnds,con),_) => error' "Parallel bindings not supported yet"
+       | (Let_c (Sequential,cbnds,con),kind) =>
+	   let
+	     fun check_bnd (D,maker,Tag) (var,formals,body) = 
+	       let
+		 val kind = lambda_valid(D,Tag,formals,body)
+		 val var' = derived_var var
+		 val bnd = maker (var',formals,body)
+		 val con = Let_c (Sequential,[bnd],Var_c var')
+		 val D = insert_stdkind_equation(D,var,con,kind)
+	       in D
+	       end
+	     
+	     val body_var_opt = strip_var con
+	       
+	     fun loop ([],D) = con_analyze(D,con,kind)
+	       | loop (bnd::rest,D) =
+	       (case bnd
+		  of Open_cb (args as (var,formals,body)) =>
+		    if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
+		      ignore(sub_kind(D,lambda_valid(D,Open,formals,body),kind))
+		    else loop(rest,check_bnd (D,Open_cb,Open) args)
+
+		   | Code_cb (args as (var,formals,body)) => 
+		      if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
+			ignore(sub_kind(D,lambda_valid(D,Code,formals,body),kind))
+		      else loop(rest,check_bnd (D,Code_cb,Code) args)
+		   | Con_cb (var,con) => loop(rest,insert_stdkind_equation(D,var,con,con_valid(D,con))))
+
+	   in loop (cbnds,D)
+	   end
+       | (Typeof_c exp,Type_k) => ignore(exp_valid(D,exp))
+       | (Closure_c (code,env),kind1 as Arrow_k(Closure,_,_)) => 
+	 let
+	   val code_kind =  con_valid (D,code)
+	   (*Or could synthesize on the environment*)
+	   val (vklist,body_kind) = 
+	     case code_kind of
+	       Arrow_k (Code ,vklist,body_kind) => (vklist,body_kind)
+	     | _ => (c_error(D,constructor,"Invalid closure: code component does not have code kind"))
+		 
+	   val (first,(v,klast)) = split vklist
+	   val kind2 = Arrow_k(Closure,first,body_kind)
+	   val _ = sub_kind(D,kind2,kind1)
+	   val _ = (con_analyze(D,env,klast)) handle e => k_error(D,klast,"Illegal kind in Closure2?")
+	 in ()
+	 end
+       | (Crecord_c entries,Record_k lvkseq) => 
+	 let
+	   val (labels,cons) = unzip entries
+	   val (labels',vks) = unzip ((Sequence.maptolist (fn ((l,v),k) => (l,(v,k)))) lvkseq)
+	   val _ = con_analyze_vk_list (D,cons,vks)
+	 in
+	   if Listops.eq_list (eq_label,labels,labels') then () 
+	   else c_error(D,constructor,"Illegal labels")
+	 end
+       | (Proj_c (rvals,label),kind1) => 
+	 let
+	   (*This will never be dependent*)
+	   val record_kind = con_valid (D,rvals)
+	     
+	   val kind2 = project_from_kind_nondep (record_kind,label)
+	 in if sub_kind(D,kind2,kind1) then ()
+	    else k_error(D,kind1, "Trying to analyze projection at wrong kind")
+	 end
+       | (App_c (cfun_orig,actuals),kind1) => 
+	 let
+	   val cfun_kind = con_valid (D,cfun_orig)
+	     
+	   val (formals,body_kind) = 
+	     case cfun_kind of
+	       (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
+	     | _ => 
+		 (
+		  print "Invalid kind for constructor application\n";
+		  pp_kind cfun_kind; print "\n";
+		  (c_error(D,constructor,"Invalid kind for constructor application" ))
+		  )
+		 
+	   val D = con_analyze_vk_list(D,actuals,formals)
+	 in if sub_kind(D,body_kind,kind1) then ()
+	    else k_error(D,kind1, "Analyzed kind and return kind from app don't match")
+	 end
+       | (Typecase_c {arg,arms,default,kind=given_kind},kind) => 
+	 let
+	   val given_kind = kind_valid (D,given_kind)
+	   val origD = D
+	   fun doarm (pcon,args,body) = 
+	     let
+	       fun folder ((v,k),D) =
+		 let val k = kind_valid (origD,k)
+		 in
+		   (Var_c v,insert_stdkind(D,v,k))
+		 end
+	       val (argcons,D) = foldl_acc folder D args
+	       val _ = pcon_analyze (D,pcon,argcons)
+	       val _ = con_analyze(D,body,given_kind)
+	     in ()
+	     end
+	   val _ = app doarm arms
+	   val _ = type_analyze D arg
+	   val _ = con_analyze (D,default,given_kind)
+	 in if sub_kind(D,given_kind,kind) then () else k_error(D,kind,"Return type for typecase doesn't match")
+	 end
+       | (Annotate_c (annot,con),kind) => con_analyze(D,con,kind)
+       | _ => ck_error (D,constructor,kind,"Illegal Con/Kind combination in analysis")
+	 )
+    end
+  and con_analyze_vk_list (D,cons,vks) = 
+    let
+      fun folder (c,(v,k),D) = (con_analyze(D,c,k);insert_kind(D,v,k))
+    in foldl2 folder D (cons,vks)
+    end
+  and type_analyze(D,c) = con_analyze(D,c,Type_k)
   and con_valid (D : context, constructor : con) : kind = 
     let 
       val _ = push_con(constructor,D)
@@ -571,340 +886,207 @@ struct
   
   and con_valid' (D : context, constructor : con) : kind = 
     let
-      fun pcon_valid (D,pcon,args) = 
-	let      
-	  val _ = 
-	    (case pcon of
-	       (Record_c (labels,SOME vars)) =>
-		 let
-		   fun folder (v,c,(kinds,D)) = ((con_valid (D,c))::kinds,insert_con (D,v,c))
-		   val (kinds,D) = foldl2 folder ([],D) (vars,args)
-		   val _ = 
-		     (if labels_distinct labels then
-			(c_all is_type b_perr_k kinds) orelse
-			(c_error(D,constructor,"DepRecord contains field of non-word kind"))
-		      else
-			(c_error(D,constructor,"DepRecord contains duplicate field labels")))
-		 in ()
-		 end
-	     | (Record_c (labels,NONE)) => 
-		 let
-		   val kinds = map (curry2 con_valid D) args
-		   val _ = 
-		     (if labels_distinct labels then
-			(c_all is_type b_perr_k kinds) orelse
-			(error (locate "pcon_valid") "Record contains field of non-word kind")
-		      else
-			(error (locate "pcon_valid") "Record contains duplicate field labels"))
-		 in () 
-		 end
-	     | (Sum_c {known,totalcount,tagcount}) => 
-		 let
-		   val kinds = map (curry2 con_valid D) args
-		   val kinds = 
-		     (case kinds
-			of [rkind] =>
-			  (case rkind
-			     of Record_k entries => Sequence.maptolist (fn (_,k) => k) entries
-			      | other => [other])
-			 | _ => error (locate "pcon_valid") "Wrong number of args to Sum_c")
-			
-		   val _ = 
-		     (
-		      ((length kinds) = (Word32.toInt (totalcount - tagcount))) orelse
-		      (error (locate "pcon_valid") "Sum_c counts disagree with args");
-		      
-		      (List.all is_type kinds) orelse
-		      (error (locate "pcon_valid") "Sum contains non-word component" );
-		      
-		      (case known 
-			 of SOME i => 
-			   (Word32.<=(Word32.fromInt 0,i) andalso 
-			    Word32.<(i,totalcount)) orelse
-			   (perr_c (Prim_c (pcon,args));
-			    error (locate "pcon_valid") "Illegal index to sum constructor")
-			  | NONE => true)
-			 )
-		     
-		 in ()
-		 end
-	     | (Vararg_c _) => 
-		 let 
-		   val kinds = map (curry2 con_valid D) args
-		   val _ = 
-		     (c_all is_type b_perr_k kinds) orelse
-		     (error (locate "pcon_valid") "Vararg has non-word component" )
-		 in ()
-		 end
-	     | _ => ())
-	in ()
-	end
-      
       val kind = 
 	(case constructor of
-	   (Prim_c (pcon,args)) => ((flagtimer (con_valid_prof,"Tchk:pcon_valid",pcon_valid) (D,pcon,args);
+	   (Prim_c (pcon,args)) => ((flagtimer (con_valid_prof,"Tchk:pcon_valid",pcon_analyze) (D,pcon,args);
 				     SingleType_k(constructor))
 				    handle e => c_error(D,constructor,"Prim con invalid"))
+	 | (AllArrow_c _) => 
+	   let val _ = type_analyze (D,constructor)
+	   in SingleType_k(constructor)
+	   end
+	 | ExternArrow_c _ => 
+	   let val _ = type_analyze (D,constructor)
+	   in SingleType_k(constructor)
+	   end
+	   
 	 | (Mu_c (is_recur,defs)) =>
-	     let
-	       val D =
-		 if is_recur then
-		   let fun folder((v,_),D) = insert_kind (D,v,Type_k)
-		   in  Sequence.foldl folder D defs
-		   end
-		 else D
-		   
-	       val kinds = map (fn (_,c) => con_valid(D,c)) (Sequence.toList defs)
-		 
-	       val _ = 
-		 (c_all is_type b_perr_k kinds) orelse
-		 (c_error(D,constructor,"Invalid kind for recursive constructor" ))
-		 
-	       val len = Sequence.length defs
-	     in  
-	       if len = 1
-		 then SingleType_k(constructor)
-	       else 
-		 let 
-		   fun mapper (i,(v,c)) = 
-		     let val label = generate_tuple_label(i+1)
-		     in((label,derived_var v),SingleType_k(Proj_c(constructor,label)))
-		     end
-		   val entries = Sequence.mapcount mapper defs
-		 in  Record_k(entries)
+	   let
+	     val D =
+	       if is_recur then
+		 let fun folder((v,_),D) = insert_stdkind (D,v,Type_k)
+		 in  Sequence.foldl folder D defs
 		 end
-	     end
-	    | (AllArrow_c {openness,effect,isDependent,tFormals,
-			   eFormals,fFormals,body_type}) =>
-	     let
-	       fun folder ((v,k),D) = 
-		 (kind_valid (D,k);
-		  insert_kind (D,v,k))
-	       val D = foldl folder D tFormals
-	       fun folder ((vopt,c),D) = 
-		   (con_valid (D,c),
-		    case vopt of 
-			NONE => D
-		      | SOME v => insert_con (D,v,c))
-	       val (eFormal_kinds,D) = foldl_acc folder D eFormals
-	       val body_kind = con_valid (D,body_type)
-	       val _ = 
-		 ((c_all is_type b_perr_k eFormal_kinds) andalso (is_type body_kind)) orelse
-		 (c_error(D,constructor,"Invalid arrow constructor"))
-	     in
-	       SingleType_k(constructor)
-	     end
-	    | ExternArrow_c (args,body) => 
-	     let
-	       val kinds = map (curry2 con_valid D) args
-	       val kind = con_valid (D,body)
-	       val _ = 
-		 ((c_all is_type b_perr_k kinds) andalso (is_type kind)) orelse
-		 (c_error(D,constructor,"Invalid extern arrow constructor"))
-	     in
-	       SingleType_k(constructor)
-	     end
-	    | (v as (Var_c var)) => 
-	      let
-		val kind = (find_max_kind (D,var)
-			    handle Unbound =>
-			      (print_all ["UNBOUND VARIABLE = ",var2string var,
-					  " CONTEXT IS \n"];
-			       NilContext.print_context D;
-			       error  (locate "con_valid") ("variable "^(var2string var)^" not in context")))
-	      in
-		kind
-	      end
-	    | (Let_c (Parallel,cbnds,con)) => error' "Parallel bindings not supported yet"
-	    | (Let_c (Sequential,cbnds,con)) =>
-	      let  
-		val D = foldl cbnd_valid D cbnds
-		val kind = con_valid(D,con)
-	      in kind   (*Since kind is principal, don't need to substitute?*)
-	      end
-	    | (Typeof_c exp) => (SingleType_k(exp_valid (D,exp)))
-	    | (Closure_c (code,env)) => 
-	     let
-	       val env_kind = con_valid (D,env)
-	       val code_kind =  con_valid (D,code)
-	       val (vklist,body_kind) = 
-		 case code_kind of
-		   Arrow_k (Code ,vklist,body_kind) => (vklist,body_kind)
-(*		 | Arrow_k (ExternCode,vklist,body_kind) =>  (vklist,body_kind)*)
-		 | _ => (c_error(D,constructor,"Invalid closure: code component does not have code kind"))
-	       val (first,(v,klast)) = split vklist
-	       val _ = 
-		 (sub_kind (D,env_kind,klast)) orelse
-		 (print "Invalid kind for closure environment:";
-		  print " env_kind < klast failed\n";
-		  print "env_kind is "; pp_kind env_kind; print "\n";
-		  print "klast is "; pp_kind klast; print "\n";
-		  print "code_kind is "; pp_kind code_kind; print "\n";
-		  (c_error(D,constructor,"Invalid kind for closure environment" )))
-	       val body_kind = varConKindSubst v env body_kind
-	     in
-	       Arrow_k(Closure,first,body_kind)
-	     end
-	    | (Crecord_c entries) => 
-	     let
-	       val _ = if (!trace)
-			 then print "{con_valid processing Crecord_c\n"
-		       else ()
-	       val (labels,cons) = unzip entries
-	       val kinds = map (curry2 con_valid D) cons
-	       val _ =  
-		 (labels_distinct labels) orelse
-		 (Ppnil.pp_list Ppnil.pp_label' labels 
-		  ("labels are: ",",",";",true);
-                  Listops.no_dups (fn (x,y) => let val _ = (print "comparing: "; pp_label x; print " and "; pp_label y; print " : ")
-                                                   val result = Name.compare_label (x,y)
-                                                   val _ = if result = EQUAL then print "TRUE\n" else print "FALSE\n"
-                                               in result end) labels;
-		  (c_error(D,constructor,"Labels in record of constructors not distinct" )))
-	       val _ = if (!trace)
-			   then print "con_valid done processing Crecord_c\n}"
-		       else () 
-	       val k_entries = 
-		 map2 (fn (l,k) => ((l,fresh_named_var "con_valid_record"),k)) (labels,kinds)
-	     in Record_k (Sequence.fromList k_entries)
-	     end
-	    | (Proj_c (rvals,label)) => 
-	     let
-	       (*This will never be dependent*)
-	       val record_kind = con_valid (D,rvals)
+	       else D
 		 
-	       val entry_kinds = 
-		 (case record_kind of
-		    Record_k kinds => kinds
-		  | other => 
-		      (c_error(D,constructor,"Projection from constructor of non-record kind")))
-		val labs = map (#1 o #1) (Sequence.toList entry_kinds)
+	     val _ = app (fn (_,c) => type_analyze (D,c)) (Sequence.toList defs)
+	   in  
+	     if (Sequence.length defs) = 1
+	       then SingleType_k(constructor)
+	     else 
+	       let 
+		 fun mapper (i,(v,c)) = 
+		   let val label = generate_tuple_label(i+1)
+		   in((label,derived_var v),SingleType_k(Proj_c(constructor,label)))
+		   end
+		 val entries = Sequence.mapcount mapper defs
+	       in  Record_k(entries)
+	       end
+	   end
+	 | (v as (Var_c var)) => 
+	   let
+	     val kind = (find_max_kind (D,var)
+			 handle Unbound =>
+			   (print_all ["UNBOUND VARIABLE = ",var2string var,
+				       " CONTEXT IS \n"];
+			    NilContext.print_context D;
+			    error  (locate "con_valid") ("variable "^(var2string var)^" not in context")))
+	   in
+	     kind
+	   end
+	 | (Let_c (Parallel,cbnds,con)) => error' "Parallel bindings not supported yet"
+	 | (Let_c (Sequential,cbnds,con)) =>
+	   let
+		
+	     fun check_bnd ((D,subst),maker,Tag) (var,formals,body) = 
+	       let
+		 val kind = lambda_valid(D,Tag,formals,body)
+		 val var' = derived_var var
+		 val bnd = maker (var',formals,body)
+		 val con = Let_c (Sequential,[bnd],Var_c var')
+		 val D = insert_stdkind_equation(D,var,con,kind)
+		 val subst = Subst.C.addr(subst,var,con)
+	       in (D,subst)
+	       end
+	     
+	     val body_var_opt = strip_var con
+	       
+	     fun loop ([],(D,subst)) = substConInKind subst (con_valid(D,con))
+	       | loop (bnd::rest,state as (D,subst)) =
+	       (case bnd
+		  of Open_cb (args as (var,formals,body)) =>
+		    if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
+		      substConInKind subst (lambda_valid(D,Open,formals,body))
+		    else loop(rest,check_bnd (state,Open_cb,Open) args)
+		   | Code_cb (args as (var,formals,body)) => 
+		    if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
+		      substConInKind subst (lambda_valid(D,Code,formals,body))
+		    else loop(rest,check_bnd (state,Code_cb,Code) args)
+		   | Con_cb (var,con) => 
+		      let val D = insert_stdkind_equation(D,var,con,con_valid(D,con))
+			  val subst = Subst.C.addr (subst,var,con)
+		      in loop(rest,(D,subst))
+		      end)
 
-		val _ = if (member_eq(eq_label,label,labs))
-			  then () 
-			else (print "attempted to project label ";
-			      pp_label label;
-			      print " from \n";
-			      pp_con rvals;
-			      print "\n which has labels";
-			      pp_list pp_label' labs ("",", ","",false);
-			      c_error(D,constructor,"Ill-formed projection"))
-	     in
-	       project_from_kind_nondep (record_kind,label)
-	     end
-	    | (App_c (cfun_orig,actuals)) => 
-	     let
-
-	       val cfun_kind = con_valid (D,cfun_orig)
-
-	       val (formals,body_kind) = 
-		 case cfun_kind of
-		   (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
-		 | _ => 
-		     (
-		      print "Invalid kind for constructor application\n";
+	   in loop (cbnds,(D,empty_subst()))
+	   end
+	 | (Typeof_c exp) => (SingleType_k(exp_valid (D,exp)))
+	 | (Closure_c (code,env)) => 
+	   let
+	     val code_kind =  con_valid (D,code)
+	     val (vklist,body_kind) = 
+	       case code_kind of
+		 Arrow_k (Code ,vklist,body_kind) => (vklist,body_kind)
+	       | _ => (c_error(D,constructor,"Invalid closure: code component does not have code kind"))
+	     val (first,(v,klast)) = split vklist
+	     val _ = (con_analyze (D,env,klast)) handle e => k_error(D,klast,"Illegal kind in Closure?")
+	     val body_kind = varConKindSubst v env body_kind
+	   in Arrow_k(Closure,first,body_kind)
+	   end
+	 | (Crecord_c entries) => 
+	   let
+	     val _ = if (!trace)
+		       then print "{con_valid processing Crecord_c\n"
+		     else ()
+	     val (labels,cons) = unzip entries
+	     val kinds = map (curry2 con_valid D) cons
+	     val _ =  
+	       (labels_distinct labels) orelse
+	       (Ppnil.pp_list Ppnil.pp_label' labels 
+		("labels are: ",",",";",true);
+		Listops.no_dups (fn (x,y) => let val _ = (print "comparing: "; pp_label x; print " and "; pp_label y; print " : ")
+						 val result = Name.compare_label (x,y)
+						 val _ = if result = EQUAL then print "TRUE\n" else print "FALSE\n"
+					     in result end) labels;
+		(c_error(D,constructor,"Labels in record of constructors not distinct" )))
+	     val _ = if (!trace)
+		       then print "con_valid done processing Crecord_c\n}"
+		     else () 
+	     val k_entries = 
+	       map2 (fn (l,k) => ((l,fresh_named_var "con_valid_record"),k)) (labels,kinds)
+	   in Record_k (Sequence.fromList k_entries)
+	   end
+	 | (Proj_c (rvals,label)) => 
+	   let
+	     (*This will never be dependent*)
+	     val record_kind = con_valid (D,rvals)
+	       
+	     val entry_kinds = 
+	       (case record_kind of
+		  Record_k kinds => kinds
+		| other => 
+		    (c_error(D,constructor,"Projection from constructor of non-record kind")))
+	     val labs = map (#1 o #1) (Sequence.toList entry_kinds)
+	       
+	     val _ = if (member_eq(eq_label,label,labs))
+		       then () 
+		     else (print "attempted to project label ";
+			   pp_label label;
+			   print " from \n";
+			   pp_con rvals;
+			   print "\n which has labels";
+			   pp_list pp_label' labs ("",", ","",false);
+			   c_error(D,constructor,"Ill-formed projection"))
+	   in
+	     project_from_kind_nondep (record_kind,label)
+	   end
+	 | (App_c (cfun_orig,actuals)) => 
+	   let
+	     
+	     val cfun_kind = con_valid (D,cfun_orig)
+	       
+	     val (formals,body_kind) = 
+	       case cfun_kind of
+		 (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
+	       | _ => 
+		   (
+		    print "Invalid kind for constructor application\n";
 		      pp_kind cfun_kind; print "\n";
 		      (c_error(D,constructor,"Invalid kind for constructor application" ))
 		      )
 
-	       val actual_kinds = map (curry2 con_valid D) actuals
-	       val (formal_vars,formal_kinds) = unzip formals
-	       val _ = 
-		 (c_all2 (fn (k1,k2) => sub_kind (D,k1,k2))
-		  (o_perr_k_k "Constructor function applied to wrong number of arguments") 
-		  (actual_kinds,formal_kinds))
-		 orelse
-		 (c_error(D,constructor,"Constructor function app failed: argument not subkind of expected kind"))
+	     val (formal_vars,formal_kinds) = unzip formals		   
+	     val _ = app2 (fn (c,k) => con_analyze(D,c,k)) (actuals,formal_kinds)
 
-	       fun folder (v,c,subst) = NilSubst.C.sim_add subst (v,c)
-	       val subst = Listops.foldl2 folder (NilSubst.C.empty()) (formal_vars,actuals)
-	     in  
-	       substConInKind subst body_kind
-	     end
-	    | (Typecase_c {arg,arms,default,kind=given_kind}) => 
-	     let
-	       val _ = kind_valid (D,given_kind)
-	       val origD = D
-	       fun doarm (pcon,args,body) = 
-		 let
-		   fun folder ((v,k),D) =
-		     let
-		       val _ = kind_valid (origD,k)
-		     in
-		       (Var_c v,insert_kind(D,v,k))
-		     end
-		   val (argcons,D) = foldl_acc folder D args
-		   val pkind = pcon_valid (D,pcon,argcons)
-		   val body_kind = con_valid(D,body)
-		   val _ = 
-		     (sub_kind (D,body_kind,given_kind)) orelse
-		     (perr_k_k (given_kind,body_kind);
-		      (c_error(D,constructor,"Illegal kind in typecase")))
-		 in ()
-		 end
-	       val _ = app doarm arms
-	       val arg_kind = con_valid (D,arg)
-	       val def_kind = con_valid (D,default)
-	       val _ = 
-		 ((sub_kind (D,def_kind,given_kind)) andalso (is_type arg_kind)) orelse
-		 (c_error(D,constructor,"Error in type case"))
-	     in
-	       given_kind
-	     end
-	    | (Annotate_c (annot,con)) => con_valid (D,con)
-	     )
+	     fun folder (v,c,subst) = NilSubst.C.sim_add subst (v,c)
+	     val subst = Listops.foldl2 folder (NilSubst.C.empty()) (formal_vars,actuals)
+	   in  
+	     substConInKind subst body_kind
+	   end
+	 | (Typecase_c {arg,arms,default,kind=given_kind}) => 
+	   let
+	     val given_kind = kind_valid (D,given_kind)
+	     val origD = D
+	     fun doarm (pcon,args,body) = 
+	       let
+		 fun folder ((v,k),D) =
+		   let val k = kind_valid (origD,k)
+		   in
+		     (Var_c v,insert_kind(D,v,k))
+		   end
+		 val (argcons,D) = foldl_acc folder D args
+		 val _ = pcon_analyze (D,pcon,argcons)
+		 val _ = con_analyze(D,body,given_kind)
+	       in ()
+	       end
+	     val _ = (app doarm arms;
+		      type_analyze (D,arg);
+		      con_analyze (D,default,given_kind))
+	   in
+	     given_kind
+	   end
+	 | (Annotate_c (annot,con)) => con_valid (D,con)
+	   )
     in
       kind
     end
-  and cbnd_valid (cbnd,D) =
-    let
+  and lambda_valid (D,Tag,formals,body) = 
+    let 
+      val (formals,D) = vklist_valid (D,formals)
+      val body_kind = con_valid(D,body)
+    in Arrow_k(Tag,formals,body_kind)
+    end		  
 
-      fun con_valid_letfun' (D : context, var, formals,body) : unit = 
-	let
-	  fun folder ((v,k),D) = (kind_valid (D,k);insert_kind(D,v,k))
-	  val D = foldl folder D formals
-	  val _ = con_valid (D,body)
-	in ()
-	end
-      
-      fun bnd_checker maker (var,formals,body) =
-	let
-	    val _ = if (!trace)
-			then (print "{Processing Open_cb/Code_cb with var = ";
-			      pp_var var; print "\n")
-		    else ()
-	  val _ = con_valid_letfun'(D,var,formals,body)
-	  val var' = derived_var var
-	  val bnd = maker (var',formals,body)
-	  val con = Let_c (Sequential,[bnd],Var_c var')
-	  val D = insert_equation(D,var,con)
-	    val _ = if (!trace)
-			then (print "Done processing Open_cb/Code_cb with var = ";
-			      pp_var var; print "}\n")
-		    else ()
-	in
-	  D
-	end
-      
-    in
-      (case cbnd
-	 of Open_cb args => bnd_checker Open_cb args
-	  | Code_cb args => bnd_checker Code_cb args
-	  | Con_cb(var,con) =>
-	   let
-	     val _ = if (!trace)
-			 then (print "{Processing Con_cb with var = ";
-			       pp_var var; print "\n")
-		     else ()
-	     val kind = con_valid (D,con)
-	     val D = insert_kind_equation(D,var,con,kind)
-	     val _ = if (!trace)
-			 then (print "Done processing Con_cb with var = ";
-			       pp_var var; print "}\n")
-		     else ()
-	   in D
-	   end)
-    end
   (*PRE: kind1 and kind2 not necessarily normalized *)
   and sub_kind arg = subeq_kind false arg
   and kind_equiv arg = subeq_kind true arg
@@ -994,581 +1176,479 @@ struct
     end
 
   and subtype   (D,c1,c2)    = type_equiv (D,c1,c2,true)
-  and type_equiv (D,c1,c2,sk) = flagtimer (equiv_total_profile,"Tchk:equiv_total",con_equiv) (D,c1,c2,Type_k,sk)
+  and type_equiv (D,c1,c2,sk) = con_equiv (D,c1,c2,Type_k,sk)
+
 
   (* Given a well-formed context D and well-formed constructors c1 and c2 of kind k,
-     return whether they are equivalent at well-formed kind k. *)
+   return whether they are equivalent at well-formed kind k. *)
   (* note: wrapper function at end of file redefines con_equiv! *)
-(*  and con_equiv (args as (D,c1,c2,k,sk)) : bool = 
-    (!short_circuit andalso (alpha_equiv_con(c1,c2))) orelse
-    ( if !show_calls then 
-	(
-         print "\nCon equiv called with arg1 = \n";
-	 Ppnil.pp_con c1;
-	 print "\n arg2 = \n";
-	 Ppnil.pp_con c2;
-	 print "\nkind =\n";
-	 Ppnil.pp_kind k
-	 ) else ();
-      let val res = con_equiv' (D,c1,(Subst.E.empty(),Subst.C.empty()),c2,(Subst.E.empty(),Subst.C.empty()),k,sk)
-      in (
-	  if !show_calls then print "\nCon Equiv Done\n" else ();
-	  res
-	  ) 
-      end)
-
-    
-  and con_equiv' (D,c1,subst1 as (esubst1,csubst1),c2,subst2 as (esubst2,csubst2),k,sk) : bool = 
+  and con_equiv (args) : bool = 
+    flagtimer (equiv_total_profile,"Tchk:equiv_total", con_equiv_wrapper) args
+  and con_equiv_wrapper args = 
     let
 
-      val con_head_normalize = 
-	fn args => 
-	( (if !show_calls then
-	     (print "\nEntering con_head_normalize, arg is:\n";
-	      Ppnil.pp_con (#2 args)) else ());
-	  let val res = time_con_head_normalize "Equiv" args
-	  in 
-	    ( if !show_calls then (print "\nReturning with\n";Ppnil.pp_con res;print "\n") else ();
-	      res ) 
-	  end)
+      val alpha_equiv_con  = flagtimer(equiv_profile,"Tchk:Equiv:alpha_equiv",alpha_equiv_con)
+      val alphaCRenameKind = fn rename => flagtimer(equiv_profile,"Tchk:Equiv:alphaCRenameKind",alphaCRenameKind rename)
+      val alphaECRenameCin = fn rename => flagtimer(equiv_profile,"Tchk:Equiv:alphaECRenameCon",alphaECRenameCon rename)
+      val alphaCRenameCon  = fn rename => flagtimer(equiv_profile,"Tchk:Equiv:alphaCRenameCon",alphaCRenameCon rename)
+      val kind_of = flagtimer(equiv_profile,"Tchk:Equiv:kind_of",kind_of)
 
-      val _ = push_eqcon(c1,c2,D)
-        val res = 
-        case k of
-	  Type_k => 
+      fun bind_kind_eqn(state as (D,alpha),var,con,kind) = 
+	let
+	  val con  = alphaCRenameCon alpha con
+	  val kind = alphaCRenameKind alpha kind
+	in
+	  if NilContext.bound_con (D,var) then
 	    let
-	      fun to_hnf (D,con,subst) = 
-		let 
-		  fun loop (subst,c) = 
-		    let 
-		      val (progress,subst,c) = Normalize.con_reduce(D,subst) c  
-		    in  case progress of
-		      Normalize.PROGRESS => loop (subst,c) 
-		    | Normalize.HNF => (subst,c)
-		    | Normalize.IRREDUCIBLE =>             (*May be renamings here.  Perhaps should separate?*)
-			(case NilContext.find_kind_equation(D,c) of
-			   SOME c => loop (subst,c)
-			 | NONE => (subst,c))
-		    end
-		in  loop (subst,con)
-		end
-	      val (csubst1,c1) = to_hnf(D,c1,csubst1)
-	      val (csubst2,c2) = to_hnf(D,c2,csubst2)
-	    in (case con_structural_equiv(D,c1,(esubst1,csubst1),c2,(esubst2,csubst2),sk) of
-		  NONE => (Ppnil.pp_con c1; print "\n"; print "Not equal to \n";
-			   Ppnil.pp_con c2; print "\n";
-			   false)
-		| SOME Type_k => true
-		| SOME (SingleType_k _) => true
-		| SOME k => (Ppnil.pp_kind k;
-			     error' "con_structural_equiv returned bad kind"))
-	      handle e => 
-		(print "Failed!\n";
-		 Subst.C.print csubst1;print "\n";
-		 Subst.E.print esubst1;print "\n";
-		 Ppnil.pp_con c1; print "\n"; 
-		 Subst.C.print csubst2;print "\n";
-		 Subst.E.print esubst2;print "\n";
-		 Ppnil.pp_con c2; print "\n";
-		 raise e)
+	      val vnew = Name.derived_var var
+	      val D = insert_kind_equation(D,vnew,con,kind)
+	      val alpha = Alpha.rename(alpha,var,vnew)
+	    in (D,alpha)
 	    end
+	  else (insert_kind_equation(D,var,con,kind),alpha)
+	end
 
-	| SingleType_k c => true
-	| Single_k c => true
-	| Record_k lvk_seq => 
-	   let 
-	     fun folder (((l,v),k),(D,equal)) =
-	       let 
-		 val equal = equal andalso con_equiv'(D,Proj_c(c1,l),subst1,Proj_c(c2,l),subst2,k,sk)
-		 val D = insert_kind(D,v,k)  (*This doesn't need to be precise*)
-	       in  (D,equal)
-	       end
-	     val (D,equal) = Sequence.foldl folder (D,true) lvk_seq
-	   in  equal
-	   end
-	| Arrow_k (openness,vklist,k) => 
-	   let val D = insert_kind_list(D,vklist)
-	       val args = map (Var_c o #1) vklist
-	       val c1 = App_c(c1,args)
-	       val c2 = App_c(c2,args)
-	   in  con_equiv'(D,c1,subst1,c2,subst2,k,sk) 
-	   end
-	val _ = pop()
-	val _ = if res then ()
-	    else (print "con_equiv' returning false\n";
-		  print "subkinding = "; print (Bool.toString sk); print "\n";
-		  print "c1 = "; Ppnil.pp_con c1; print "\n";
-		  print "c2 = "; Ppnil.pp_con c2; print "\n";
-		  print "k = "; Ppnil.pp_kind k; print "\n";
-(*		  print "min context for c1,c2 = "; 
-		  NilContext.print_context (Nilcontext.cons_error_context (D,[c1,c2])); print "\n";*)
-		  print "\n")
-    in  res
-    end
-  and vklist_equiv (D, vklist1, subst1 as (esubst1,csubst1), 
-		       vklist2, subst2 as (esubst2,csubst2)) =
-      let 
-	fun folder((v1,k1),(v2,k2),(D,csubst1,csubst2,match)) = 
-	  let 
-	    val k1 = subtimer("Tchk:Equiv:substExpConInKind",substExpConInKind (esubst1,csubst1)) k1
-	    val k2 = subtimer("Tchk:Equiv:substExpConInKind",substExpConInKind (esubst2,csubst2)) k2
+      fun bind_eqn(state as (D,alpha),var,con) = 
+	let val con = alphaCRenameCon alpha con
+	in
+	  if NilContext.bound_con (D,var) then
+	    let
+	      val vnew = Name.derived_var var
+	      val D = insert_equation(D,vnew,con)
+	      val alpha = Alpha.rename(alpha,var,vnew)
+	    in (D,alpha)
+	    end
+	  else (insert_equation(D,var,con),alpha)
+	end
 
-	    val match = match andalso kind_equiv (D,k1,k2)
+      fun con_equiv (args as (D,c1,c2,k,sk)) : bool = 
+	let
+(*	  val _ = Trace.enter equiv_trace*)
 
-	    val vnew = Name.derived_var v1
+	  val res = 
+	    (!short_circuit andalso (alpha_equiv_con(c1,c2))) orelse
+	    (con_equiv' args)
 
-	    val csubst1 = Subst.C.sim_add csubst1 (v1,Var_c vnew)
-	    val csubst2 = Subst.C.sim_add csubst2 (v2,Var_c vnew)
-	    val D = insert_kind(D,vnew,k1)
-	  in  (D,csubst1,csubst2,match)
-	  end
-      in  
-	if (length vklist1 = length vklist2)
-	  then Listops.foldl2 folder (D,csubst1,csubst2,true) (vklist1, vklist2)
-	else (D, csubst1,csubst2, false)
-      end
-    
-  and vlistopt_clist_equiv (D, vclist1, subst1 as (esubst1,csubst1), 
-			       vclist2, subst2 as (esubst2,csubst2), sk) =
-      let 
-	fun folder((vopt1, c1), (vopt2, c2), (D, esubst1,esubst2, match)) = 
-	  let 
-
-	    val c1 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon (esubst1,csubst1)) c1
-	    val c2 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon (esubst2,csubst2)) c2
-
-	    val match = match andalso con_equiv(D,c1,c2,Type_k,sk)
-	      
-	    val (esubst1,esubst2,D) = 
-	      (case (vopt1,vopt2) of
-		 (NONE,NONE) => (esubst1,esubst2,D)
-	       | (SOME v1,NONE) => let val vnew = Name.derived_var v1 
-				   in (Subst.E.sim_add esubst1 (v1,Var_e vnew),esubst2,NilContext.insert_con(D,vnew,c1)) end
-	       | (NONE,SOME v2) => let val vnew = Name.derived_var v2
-				   in (esubst1,Subst.E.sim_add esubst2 (v2,Var_e vnew),NilContext.insert_con(D,vnew,c2)) end
-	       | (SOME v1,SOME v2) => let val vnew = Name.derived_var v1
-					  val esubst1 = Subst.E.sim_add esubst1 (v1,Var_e vnew)
-					  val esubst2 = Subst.E.sim_add esubst2 (v2,Var_e vnew)
-				      in (esubst1,esubst2,NilContext.insert_con(D,vnew,c1)) end)
-	  in  (D,esubst1,esubst2,match)
-	  end
-      in  if (length vclist1 = length vclist2)
-	    then 
-	      let val (D, esubst1,esubst2, match) = foldl2 folder (D,esubst1,esubst2,true) (vclist1,vclist2)
-	      in  (D, esubst1,esubst2, match)
-	      end
-	  else (D, esubst1,esubst2, false)
-      end
-
-  and con_structural_equiv (D,c1,subst1 as (esubst1,csubst1),c2,subst2 as (esubst2,csubst2),sk) : kind option =
-   let fun base true = SOME Type_k
-	 | base false = NONE
-       fun kind_type_tuple 1 = Type_k
-	 | kind_type_tuple len = NilUtil.kind_tuple(Listops.map0count (fn _ => Type_k) len)
-       val res =   
-	(case (c1,c2) of
-	   (Prim_c(Record_c (labs1,vlistopt1),clist1), 
-	    Prim_c(Record_c (labs2,vlistopt2),clist2)) =>
-	   base (Listops.eq_list(eq_label,labs1,labs2) andalso
-		 let fun combine(vlistopt,clist) =
-		   (case vlistopt of
-		      NONE => map (fn c => (NONE, c)) clist
-		    | SOME vars => map2 (fn (v,c) => (SOME v, c)) (vars,clist))
-		     val vclist1 = combine(vlistopt1, clist1)
-		     val vclist2 = combine(vlistopt2, clist2)
-		 in  #4(vlistopt_clist_equiv(D,vclist1,subst1,vclist2,subst2,sk))
-		 end)
-	 | (Prim_c(pcon1 as Sum_c{tagcount=tagcount1,totalcount=totalcount1,
-				  known=known1}, clist1), 
-	    Prim_c(pcon2 as Sum_c{tagcount=tagcount2,totalcount=totalcount2,
-				  known=known2}, clist2)) =>
-	   let val carriers = TilWord32.uminus(totalcount1,tagcount1)
-	       val k = kind_type_tuple (TilWord32.toInt carriers)
-	       val res1 = ((tagcount1 = tagcount2) andalso
-			   (totalcount1 = totalcount2) andalso
-			   (case (known1,known2,sk) of
-			      (NONE,NONE,_) => true
-			    | (SOME w1, SOME w2,_) => (w1=w2)
-			    | (SOME w1, NONE, true) => true
-			    | _ => false))
-	   in  base(res1 andalso 
-		    Listops.eq_list(fn (c1,c2) => con_equiv'(D,c1,subst1,c2,subst2,k,sk),clist1,clist2))
-	   end
-	 | (Prim_c(pcon1,clist1), Prim_c(pcon2,clist2)) => 
-	   let
-	     val sk' = sk andalso (NilUtil.covariant_prim pcon1)
-	   in
-	     base(NilUtil.primequiv(pcon1,pcon2) andalso 
-		  Listops.eq_list(fn (c1,c2) => con_equiv'(D,c1,subst1,c2,subst2,Type_k,sk'),
-				  clist1,clist2))
-	   end
-	 | (Mu_c(ir1,defs1), Mu_c(ir2,defs2)) => 
-	   let 
-	     val vc1 = Sequence.toList defs1
-	     val vc2 = Sequence.toList defs2
-	     fun folder ((v1,_),(v2,_),(D,csubst1,csubst2)) = 
-	       let
-		 val vnew = Name.derived_var v1
-		 val D = NilContext.insert_kind(D,vnew,Type_k)
-		 val csubst1 = Subst.C.sim_add csubst1 (v1,Var_c vnew)
-		 val csubst2 = Subst.C.sim_add csubst2 (v2,Var_c vnew)
-	       in  (D,csubst1,csubst2)
-	       end
-	     val (D,csubst1,csubst2) = foldl2 folder (D,csubst1,csubst2) (vc1,vc2)
-	     fun pred ((_,c1),(_,c2)) = 
-	       con_equiv'(D,c1,(esubst1,csubst1),c2,(esubst2,csubst2), Type_k, false) (* no subtyping *)
-	   in  if ((ir1 = ir2) andalso Listops.eq_list(pred,vc1,vc2))
-		 then SOME(kind_type_tuple (length vc1))
-	       else NONE
-	   end
-         | (AllArrow_c {openness=o1,effect=eff1,isDependent=i1,
-			tFormals=t1,eFormals=e1,fFormals=f1,body_type=b1},
-	    AllArrow_c {openness=o2,effect=eff2,isDependent=i2,
-			tFormals=t2,eFormals=e2,fFormals=f2,body_type=b2}) =>
-	   base(o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso f1 = f2 andalso 
-		let val (D,csubst1,csubst2,match) = vklist_equiv(D,t1,subst1,t2,subst2)
-		in  match andalso
-		  let val (D,esubst1,esubst2,match) =  vlistopt_clist_equiv(D,e2,(esubst2,csubst2),e1,(esubst1,csubst1),sk)
-		  in  match andalso
-		    con_equiv'(D,b1,(esubst1,csubst1),b2,(esubst2,csubst2),Type_k, sk)
-		  end
-		end)
-
-	 | (ExternArrow_c (clist1,c1), ExternArrow_c (clist2,c2)) => 
-	   let fun mapper c = (NONE, c)
-	       val (D,esubst1,esubst2,match) = vlistopt_clist_equiv(D,map mapper clist1,subst1,
-								      map mapper clist2,subst2,
-								      false)
-	   in  base(con_equiv'(D,c1,(esubst1,csubst1),c2,(esubst2,csubst2),Type_k,false))
-	   end
-	 
-	 | (Crecord_c lclist, _) => 
-	   error' "Crecord given to con_structural_equiv: not WHNF"
-	   
-	 | (Let_c _, _) => error' "Let_c given to con_structural_equiv: not WHNF"
-	   
-	 | (Proj_c (c1,l1), Proj_c(c2,l2)) => 
-	   (case (eq_label(l1,l2),con_structural_equiv(D,c1,subst1,c2,subst2,false)) 
-	      of (true,SOME(kind as Record_k lvk_seq)) => 
-		SOME(project_from_kind_nondep(kind,l1))
-	       | _ => NONE)
-	 | (App_c (f1,clist1), App_c (f2,clist2)) =>
-	   (case con_structural_equiv(D,f1,subst1,f2,subst2,false) of
-	      SOME(Arrow_k(openness,vklist,k)) =>
-		let     
-		  fun folder ((v,k),c1,c2, (subst,equal)) =
-		    if equal then 
-		      let val equal = con_equiv'(D,c1,subst1,c2,subst2,k,false)
-			  val subst = Subst.C.sim_add subst (v,substExpConInCon subst1 c1)
-		      in  (subst,equal)
-		      end
-		    else (subst,equal)
-		  val (subst,equal) =    
-		    Listops.foldl3 folder (Subst.C.empty(),true) (vklist,clist1,clist2)
-		in if equal then SOME(subtimer("Tchk:Equiv:substConInKind",NilSubst.substConInKind subst) k)
-		   else NONE
-		end
-	    | _ => NONE)
-	 | (Var_c v, Var_c v') =>  (*If we get here, the substitution has been carried out!*)
-	      if (eq_var(v,v')) 
-		then SOME(subtimer("Tchk:Equiv:find_std_kind",NilContext.find_std_kind)(D,v))
-	      else NONE
-	 | (Annotate_c (_,c1), c2) => con_structural_equiv(D,c1,subst1,c2,subst2,sk)
-	 | (c1,Annotate_c (_,c2))  => con_structural_equiv(D,c1,subst1,c2,subst2,sk)
-	 | (Typecase_c _, _) => error' "Typecase_c not handled"
-	 | _ => NONE)
-   in res
-   end 
-*)
-  and con_equiv (args as (D,c1,c2,k,sk)) : bool = 
-    (!short_circuit andalso (alpha_equiv_con(c1,c2))) orelse
-    ( if !show_calls then 
-	(
-         print "\nCon equiv called with arg1 = \n";
-	 Ppnil.pp_con c1;
-	 print "\n arg2 = \n";
-	 Ppnil.pp_con c2;
-	 print "\nkind =\n";
-	 Ppnil.pp_kind k
-	 ) else ();
-      let val res = subtimer("Tchk:con_equiv'",con_equiv') (D,c1,c2,k,sk)
-      in (
-	  if !show_calls then print "\nCon Equiv Done\n" else ();
+(*	  val _ = Trace.exit equiv_trace*)
+	in
 	  res
-	  ) 
-      end)
+	end
 
-    
-  and con_equiv' (D,c1,c2,k,sk) : bool = 
-    let
+      and con_equiv' (D,c1,c2,k,sk) = 
+	let
 
-      val con_head_normalize = 
-	fn args => 
-	( (if !show_calls then
-	     (print "\nEntering con_head_normalize, arg is:\n";
-	      Ppnil.pp_con (#2 args)) else ());
-	  let val res = flagtimer (equiv_profile,"Tchk:Equiv:HNF",con_head_normalize) args
-	  in 
-	    ( if !show_calls then (print "\nReturning with\n";Ppnil.pp_con res;print "\n") else ();
-	      res ) 
-	  end)
-
-      val _ = push_eqcon(c1,c2,D)
-        val res = 
-        case k of
-	  Type_k => 
+	  fun con_reduce_letfun (state,sort,coder,var,formals,body,rest,con) = 
 	    let
-	      val c1 = con_head_normalize(D,c1)
-              val c2 = con_head_normalize(D,c2)
-	    in (case con_structural_equiv(D,c1,c2,sk) of
-		  NONE => (Ppnil.pp_con c1; print "\n"; print "Not equal to \n";
-			   Ppnil.pp_con c2; print "\n";
-			   false)
-		| SOME Type_k => true
-		| SOME (SingleType_k _) => true
-		| SOME k => (Ppnil.pp_kind k;
-			     error' "con_structural_equiv returned bad kind"))
-	      handle e => 
-		(print "Failed!\n";
-		 Ppnil.pp_con c1; print "\n"; 
-		 Ppnil.pp_con c2; print "\n";
-		 raise e)
+	      val lambda = (Let_c (sort,[coder (var,formals,body)],Var_c var))
+	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
+		 then (state,lambda,false)
+	       else
+		 con_reduce(bind_eqn(state,var,lambda),Let_c(sort,rest,con))
+	    end
+	  
+	  and con_reduce (state : (context * Alpha.alpha_context),constructor : con) : ((context * Alpha.alpha_context) * con * bool)  = 
+	    (case constructor of
+	       (Prim_c _)            => (state,constructor,false)
+	     | (Mu_c _)              => (state,constructor,false)
+	     | (AllArrow_c _)        => (state,constructor,false)
+	     | (ExternArrow_c _)     => (state,constructor,false)
+	     | (Crecord_c _)         => (state,constructor,false)
+	     | (Proj_c (Mu_c _,lab)) => (state,constructor,false)
+	     | (Var_c var)           => (state,constructor,true)
+
+	     | (Let_c (sort,((cbnd as Open_cb (var,formals,body))::rest),con)) =>
+		 con_reduce_letfun (state,sort,Open_cb,var,formals,body,rest,con)
+
+	     | (Let_c (sort,((cbnd as Code_cb (var,formals,body))::rest),con)) =>
+		 con_reduce_letfun (state,sort,Code_cb,var,formals,body,rest,con)
+
+	     | (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body))             =>
+		 con_reduce(bind_eqn(state,var,con),Let_c(sort,rest,body))
+
+	     | (Let_c (sort,[],body)) => con_reduce(state,body)
+
+	     | (Closure_c (c1,c2)) => 
+		 let val (state,c1,path) = con_reduce (state,c1)
+		 in  (state,Closure_c(c1,c2),path)
+		 end
+
+	     | Typeof_c e => 
+		 let val (D,alpha) = state
+		 in con_reduce((D,Alpha.empty_context()),Normalize.type_of(D,alphaCRenameExp alpha e))
+		 end
+	     | (Proj_c (c,lab)) => 
+		 (case con_reduce (state,c) of
+		    (state,constructor,true)  => (state,Proj_c(constructor,lab),true)
+		  | (state,constructor,false) => 
+		      let val field = 
+			(case strip_crecord constructor
+			   of SOME entries =>
+			     (case (List.find (fn ((l,_)) => eq_label (l,lab))
+				    entries )
+				of SOME (l,c) => c
+				 | NONE => error (locate "con_reduce") "Field not in record")
+			    | NONE => error (locate "con_reduce") "Proj from non-record")
+		      in con_reduce(state,field)
+		      end)
+	     | (App_c (cfun,actuals)) => 
+		    (case con_reduce (state,cfun) of
+		       (state,constructor,true)  => (state,App_c(constructor,actuals),true)
+		     | (state,constructor,false) => 
+			 let
+			   exception NOT_A_LAMBDA
+			   
+			   fun strip (Open_cb (var,formals,body)) = (var,formals,body)
+			     | strip (Code_cb (var,formals,body)) = (var,formals,body)
+			     | strip _ = raise NOT_A_LAMBDA
+			     
+			   fun get_lambda (lambda,name) = 
+			     let
+			       val (var,formals,body) = strip lambda
+			     in
+			       (case strip_annotate name
+				  of Var_c var' => 	  
+				    if eq_var (var,var') then
+				      (formals,body)
+				    else raise NOT_A_LAMBDA
+				   | _ => raise NOT_A_LAMBDA)
+			     end
+			   
+			   fun lambda_or_closure (Let_c (_,[lambda],name)) = (get_lambda (lambda,name),NONE)
+			     | lambda_or_closure (Closure_c(code,env)) = 
+			     let val (args,_) = lambda_or_closure code
+			     in  (args,SOME env) end
+			     | lambda_or_closure (Annotate_c(_,con)) = lambda_or_closure (con)
+			     | lambda_or_closure _ = raise NOT_A_LAMBDA
+			       
+			       
+			   fun open_lambda cfun = (SOME (lambda_or_closure cfun)) handle NOT_A_LAMBDA => NONE
+			     
+			   fun folder ((var,k),actual,state) = bind_kind_eqn(state,var,actual,k)
+			 in
+			   (case open_lambda constructor
+			      of SOME((formals,body),SOME env) =>
+				con_reduce(foldl2 folder state (formals,actuals@[env]),body)
+			       | SOME((formals,body),NONE)     => 
+				con_reduce(foldl2 folder state (formals,actuals),body)
+			       | NONE => (perr_c constructor;
+					  error (locate "con_reduce") "redex not in HNF"))
+			 end)
+
+	     | (Typecase_c {arg,arms,default,kind}) => error (locate "con_reduce") "typecase not done yet"
+	     | (Annotate_c (annot,con)) => con_reduce (state,con))
+	  and reduce_hnf(D,constructor) =
+	    let
+	      val ((D,alpha),con,path) = con_reduce ((D,Alpha.empty_context()),constructor)
+	      val con = alphaCRenameCon alpha con
+	    in
+	      if path then
+		(case NilContext.find_kind_equation (D,con)
+		   of SOME con => reduce_hnf (D,con)
+		    | NONE => (D,strip_annotate con))
+	      else
+		(D,strip_annotate con)
 	    end
 
-	| SingleType_k c => true
-	| Single_k c => true
-	| Record_k lvk_seq => 
-	   let 
-	     val c1 = con_head_normalize(D,c1)
-	     val c2 = con_head_normalize(D,c2)
-	     fun folder (((l,v),k),(D,equal)) =
-	       let 
-		 val equal = equal andalso con_equiv'(D,Proj_c(c1,l),Proj_c(c2,l),k,sk)
-		 val D = insert_kind_equation(D,v,Proj_c(c1,l),k)  
-	       in  (D,equal)
-	       end
-	   in
-	     (case (c1,c2) of
-		(Mu_c _,Mu_c _) => 
-		  (case con_structural_equiv(D,c1,c2,sk) of
-		     NONE => false
+	  val reduce_hnf = flagtimer(equiv_profile,"Tchk:Equiv:reduce_hnf",reduce_hnf)
+
+	  val _ = push_eqcon(c1,c2,D)
+	  val res = 
+	    case k of
+	      Type_k => 
+		let
+		  val (D,c1) = reduce_hnf(D,c1)
+		  val (D,c2) = reduce_hnf(D,c2)
+		in 
+		  (!short_circuit andalso (alpha_equiv_con(c1,c2))) orelse
+(*		  (case*)( con_structural_equiv(D,c1,c2,sk))(* of
+		     NONE => (Ppnil.pp_con c1; print "\n"; print "Not equal to \n";
+			      Ppnil.pp_con c2; print "\n";
+			      false)
 		   | SOME Type_k => true
 		   | SOME (SingleType_k _) => true
 		   | SOME k => (Ppnil.pp_kind k;
 				error' "con_structural_equiv returned bad kind"))
-	      | _ => #2 (Sequence.foldl folder (D,true) lvk_seq))
-	   end
-	| Arrow_k (openness,vklist,k) => 
-	   let val D = insert_kind_list(D,vklist)
-	       val args = map (Var_c o #1) vklist
-	       val c1 = App_c(c1,args)
-	       val c2 = App_c(c2,args)
-	   in  con_equiv'(D,c1,c2,k,sk) 
-	   end
-	val _ = pop()
-	val _ = if res then ()
-	    else (print "con_equiv' returning false\n";
-		  print "subkinding = "; print (Bool.toString sk); print "\n";
-		  print "c1 = "; Ppnil.pp_con c1; print "\n";
-		  print "c2 = "; Ppnil.pp_con c2; print "\n";
-		  print "k = "; Ppnil.pp_kind k; print "\n";
-(*		  print "min context for c1,c2 = "; 
-		  NilContext.print_context (Nilcontext.cons_error_context (D,[c1,c2])); print "\n";*)
-		  print "\n")
-    in  res
-    end
-  (* The substitution returned maps variables in the second list to the first. *)
-  and vklist_equiv (D, vklist1, vklist2) : context * con_subst * bool =
-      let 
-	fun folder((v1,k1),(v2,k2),(D,rename,match)) = 
-	  let 
-	    val k1 = subtimer("Tchk:Equiv:substConInKind",substConInKind rename) k1
-	    val k2 = subtimer("Tchk:Equiv:substConInKind",substConInKind rename) k2
-	                              (*Negligible time*)
-	    val match = match andalso kind_equiv (D,k1,k2)
-
-	    val vnew = Name.derived_var v1
-
-	    val rename = Subst.C.sim_add rename (v1,Var_c vnew)
-	    val rename = if (eq_var(v1,v2)) then rename
-			 else Subst.C.sim_add rename (v2,Var_c vnew)
-	    val D = insert_kind(D,vnew,k1)
-	  in  (D,rename,match)
-	  end
-      in  
-	if (length vklist1 = length vklist2)
-	  then Listops.foldl2 folder (D,empty_subst(),true) (vklist1, vklist2)
-	else (D, empty_subst(), false)
-      end
-    
-  and vlistopt_clist_equiv (D, cRename, vclist1, vclist2,sk) : context * (exp_subst * con_subst) * bool =
-      let fun folder((vopt1, c1), (vopt2, c2), (D, eRename, match)) = 
-	      let val c1 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon (eRename,cRename)) c1
-		  val c2 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon (eRename,cRename)) c2
-		  val match = match andalso con_equiv(D,c1,c2,Type_k,sk)
-
-		  val (eRename,D) = 
-		    (case (vopt1,vopt2) of
-		       (NONE,NONE) => (eRename,D)
-		     | (SOME v1,NONE) => let val vnew = Name.derived_var v1 
-					 in (Subst.E.sim_add eRename (v1,Var_e vnew),NilContext.insert_con(D,vnew,c1)) end
-		     | (NONE,SOME v2) => let val vnew = Name.derived_var v2
-					 in (Subst.E.sim_add eRename (v2,Var_e vnew),NilContext.insert_con(D,vnew,c2)) end
-		     | (SOME v1,SOME v2) => let val vnew = Name.derived_var v1
-						val eRename = Subst.E.sim_add eRename (v1,Var_e vnew)
-						val eRename = Subst.E.sim_add eRename (v2,Var_e vnew)
-					    in (eRename,NilContext.insert_con(D,vnew,c1)) end)
-	      in  (D,eRename,match)
-	      end
-      in  if (length vclist1 = length vclist2)
-	      then 
-		  let val (D, eRename, match) = foldl2 folder (D,Subst.E.empty(),true) (vclist1,vclist2)
-		  in  (D, (eRename, cRename), match)
-		  end
-	  else (D, (Subst.E.empty(), cRename), false)
-      end
-
-  and con_structural_equiv (D,c1,c2,sk) : kind option =
-   let fun base true = SOME Type_k
-	 | base false = NONE
-       fun kind_type_tuple 1 = Type_k
-	 | kind_type_tuple len = NilUtil.kind_tuple(Listops.map0count (fn _ => Type_k) len)
-       val res =   
-	(case (c1,c2) of
-	     (Prim_c(Record_c (labs1,vlistopt1),clist1), 
-	      (Prim_c(Record_c (labs2,vlistopt2),clist2))) =>
-	     base (Listops.eq_list(eq_label,labs1,labs2) andalso
-		   let fun combine(vlistopt,clist) =
-		           (case vlistopt of
-				NONE => map (fn c => (NONE, c)) clist1
-			      | SOME vars => map2 (fn (v,c) => (SOME v, c)) (vars,clist))
-		       val vclist1 = combine(vlistopt1, clist1)
-		       val vclist2 = combine(vlistopt2, clist2)
-		   in  #3(vlistopt_clist_equiv(D,empty_subst(),vclist1,vclist2,sk))
-		   end)
-	    | (Prim_c(pcon1 as Sum_c{tagcount=tagcount1,totalcount=totalcount1,
-				     known=known1}, clist1), 
-	       Prim_c(pcon2 as Sum_c{tagcount=tagcount2,totalcount=totalcount2,
-				     known=known2}, clist2)) =>
-	     let val carriers = TilWord32.uminus(totalcount1,tagcount1)
-		 val k = kind_type_tuple (TilWord32.toInt carriers)
-		 val res1 = (tagcount1 = tagcount2) andalso
-		           (totalcount1 = totalcount2) andalso
-			   (case (known1,known2,sk) of
-				(NONE,NONE,_) => true
-			      | (SOME w1, SOME w2,_) => (w1=w2)
-			      | (SOME w1, NONE, true) => true
-			      | _ => false)
-	     in  base(res1 andalso 
-		      Listops.eq_list(fn (c1,c2) => con_equiv(D,c1,c2,k,sk),
-				      clist1,clist2))
-	     end
-	    | (Prim_c(pcon1,clist1), Prim_c(pcon2,clist2)) => 
-	     let
-		 val sk' = sk andalso (NilUtil.covariant_prim pcon1)
-	     in
-		 base(NilUtil.primequiv(pcon1,pcon2) andalso 
-		      Listops.eq_list(fn (c1,c2) => con_equiv(D,c1,c2,Type_k,sk'),
-				      clist1,clist2))
-	     end
-	    | (Mu_c(ir1,defs1), Mu_c(ir2,defs2)) => 
-	     let 
-	       fun do_mu () = 
-		 let 
-		   
-		   val vc1 = Sequence.toList defs1
-		   val vc2 = Sequence.toList defs2
-		   fun build (D,rename) ((v1,_)::rest1,(v2,_)::rest2) = 
-		     let
-		       val vnew = Name.derived_var v1
-		       val D = NilContext.insert_kind(D,vnew,Type_k)
-		       val rename = Subst.C.sim_add rename (v1,Var_c vnew)
-		       val rename = Subst.C.sim_add rename (v2,Var_c vnew)
-		     in  build (D,rename) (rest1,rest2)
-		     end
-		     | build acc _ = acc
-		   val (D,rename) = build (D,Subst.C.empty()) (vc1,vc2)
-		   fun pred ((_,c1),(_,c2)) = 
-		   let val c1 = subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon rename) c1
-		     val c2 = subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon rename) c2
-		   in con_equiv(D,c1,c2, Type_k, false) (* no subtyping *) end
-		 in  if ((ir1 = ir2) andalso Listops.eq_list(pred,vc1,vc2))
-		       then SOME(kind_type_tuple (length vc1))
-		     else NONE
-		 end
-	     in
-	       subtimer ("Equiv:Mu",do_mu) ()
-	     end
-	  | (AllArrow_c {openness=o1,effect=eff1,isDependent=i1,
-			 tFormals=t1,eFormals=e1,fFormals=f1,body_type=b1},
-	     AllArrow_c {openness=o2,effect=eff2,isDependent=i2,
-			 tFormals=t2,eFormals=e2,fFormals=f2,body_type=b2}) =>
-		base(o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso f1 = f2 andalso 
-		     let val (D,cRename,match) = vklist_equiv(D,t1,t2)
-		     in  match andalso
-			 let val (D,rename,match) = 
-			   vlistopt_clist_equiv(D,cRename,e2,e1,sk)
-			     val b1 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon rename) b1
-			     val b2 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon rename) b2
-			 in  match andalso
-			   type_equiv(D,b1,b2, sk)
-			 end
-		     end)
-
-	      | (ExternArrow_c (clist1,c1), ExternArrow_c (clist2,c2)) => 
-		let fun mapper c = (NONE, c)
-		    val (D,_,match) = vlistopt_clist_equiv(D,Subst.C.empty(),
-							   map mapper clist1,
-							   map mapper clist2,
-							   false)
-		in  base(type_equiv(D,c1,c2,false))
+		     handle e => 
+		       (print "Failed!\n";
+			Ppnil.pp_con c1; print "\n"; 
+			Ppnil.pp_con c2; print "\n";
+			raise e)*)
 		end
+	      
+	    | SingleType_k c => true
+	    | Single_k c => true
+	    | Record_k lvk_seq => 
+		let 
+		  val (D,c1) = reduce_hnf(D,c1)
+		  val (D,c2) = reduce_hnf(D,c2)
+		  fun folder (((l,v),k),(state as (D,alpha),equal)) =
+		    let 
+		      val k = alphaCRenameKind alpha k
+		      val equal = equal andalso con_equiv'(D,Proj_c(c1,l),Proj_c(c2,l),k,sk)
+		      val state = bind_kind_eqn(state,v,Proj_c(c1,l),k)  
+		    in  (state,equal)
+		    end
+		in
+		  
+		  (!short_circuit andalso (alpha_equiv_con(c1,c2))) orelse
+		  (case (c1,c2) of
+		     (Mu_c _,Mu_c _) => 
+		       ((*case*) con_structural_equiv(D,c1,c2,sk) (*of
+			  NONE => false
+			| SOME Type_k => true
+			| SOME (SingleType_k _) => true
+			| SOME k => (Ppnil.pp_kind k;
+				     error' "con_structural_equiv returned bad kind")*))
+		   | _ => #2 (Sequence.foldl folder ((D,Alpha.empty_context()),true) lvk_seq))
+		end
+	    | Arrow_k (openness,vklist,k) => 
+		let val D = insert_kind_list(D,vklist)
+		  val args = map (Var_c o #1) vklist
+		  val c1 = App_c(c1,args)
+		  val c2 = App_c(c2,args)
+		in  con_equiv'(D,c1,c2,k,sk) 
+		end
+	  val _ = pop()
+	  val _ = if res then ()
+		  else (print "con_equiv' returning false\n";
+			print "subkinding = "; print (Bool.toString sk); print "\n";
+			print "c1 = "; Ppnil.pp_con c1; print "\n";
+			print "c2 = "; Ppnil.pp_con c2; print "\n";
+			print "k = "; Ppnil.pp_kind k; print "\n";
+			(*		  print "min context for c1,c2 = "; 
+			 NilContext.print_context (Nilcontext.cons_error_context (D,[c1,c2])); print "\n";*)
+			print "\n")
+	in  res
+	end
+      (* The substitution returned maps variables in the second list to the first. *)
+      and vklist_equiv (D, vklist1, vklist2) : context * Alpha.alpha_context * bool =
+	let 
+	  fun folder((v1,k1),(v2,k2),(D,rename,match)) = 
+	    let 
+	      val k1 = alphaCRenameKind rename k1
+	      val k2 = alphaCRenameKind rename k2
 
-	      | (Crecord_c lclist, _) => 
-		error' "Crecord given to con_structural_equiv: not WHNF"
+	      val match = match andalso kind_equiv (D,k1,k2)
+	      val (D,rename) = 
+		if NilContext.bound_con (D,v1) then
+		  let
+		    val vnew = Name.derived_var v1
+		    val D = insert_kind(D,vnew,k1)
+		    val rename = Alpha.rename(rename,v1,vnew)
+		    val rename = Alpha.rename(rename,v2,vnew)
+		  in (D,rename)
+		  end
+		else (insert_kind(D,v1,k1),Alpha.rename(rename,v2,v1))
+	    in  (D,rename,match)
+	    end
+	in  
+	  if (length vklist1 = length vklist2)
+	    then Listops.foldl2 folder (D,Alpha.empty_context(),true) (vklist1, vklist2)
+	  else (D, Alpha.empty_context(), false)
+	end
+      
+      and vlistopt_clist_equiv (D, cRename, vclist1, vclist2,sk) : context * (Alpha.alpha_context * Alpha.alpha_context) * bool =
+	let 
+	  fun folder((vopt1, c1), (vopt2, c2), (D, eRename, cRename, match)) = 
+	    let 
+	      val c1 = alphaECRenameCon (eRename,cRename) c1
+	      val c2 = alphaECRenameCon (eRename,cRename) c2
+	      val match = match andalso con_equiv(D,c1,c2,Type_k,sk)
+		
+	      fun bind(D,eRename,v,c) = 
+		if NilContext.bound_exp (D,v) then 
+		  let val vnew = Name.derived_var v
+		  in (Alpha.rename (eRename,v,vnew),insert_con(D,vnew,c)) end
+		else (eRename,insert_con(D,v,c))
 
-	      | (Let_c _, _) => error' "Let_c given to con_structural_equiv: not WHNF"
+	      val (eRename,D) = 
+		(case (vopt1,vopt2) of
+		   (NONE,NONE) => (eRename,D)
+		 | (SOME v1,NONE) => bind(D,eRename,v1,c1)
+		 | (NONE,SOME v2) => bind(D,eRename,v2,c2)
+		 | (SOME v1,SOME v2) => 
+		   if NilContext.bound_exp (D,v1) then
+		     if NilContext.bound_exp (D,v2) then
+		       let val vnew = Name.derived_var v1
+			   val eRename = Alpha.rename (eRename,v1,vnew)
+			   val eRename = Alpha.rename (eRename,v2,vnew)
+		       in (eRename,insert_con(D,vnew,c1)) end
+		     else bind(D,Alpha.rename (eRename,v1,v2),v2,c2)
+		   else (if eq_var(v1,v2) then eRename else Alpha.rename (eRename,v2,v1),
+			 insert_con(D,v1,c1)))
 
-	      | (Proj_c (c1,l1), Proj_c(c2,l2)) => 
-		(case (eq_label(l1,l2),con_structural_equiv(D,c1,c2,false)) 
-		   of (true,SOME(kind as Record_k lvk_seq)) => 
-		     SOME(project_from_kind_nondep(kind,l1))
-		    | _ => NONE)
-	      | (App_c (f1,clist1), App_c (f2,clist2)) =>
-		 (case con_structural_equiv(D,f1,f2,false) of
-		    SOME(Arrow_k(openness,vklist,k)) =>
-		      let     
-			fun folder ((v,k),c1,c2, (D,subst,equal)) =
-			  if equal then 
-			      let val equal = con_equiv(D,c1,c2,k,false)
-				  val D = insert_kind_equation(D,v,c1,k)
-				  val subst = Subst.C.sim_add subst (v,c1)
-			      in  (D,subst,equal)
-			      end
-			  else (D,subst,equal)
-			val (D,subst,equal) = Listops.foldl3 folder (D,Subst.C.empty(),true) 
-			  (vklist,clist1,clist2)
-		      in if equal then SOME(subtimer("Tchk:Equiv:substConInKind",NilSubst.substConInKind subst) k) 
-			 else NONE
-		      end
-		  | _ => NONE)
-	      | (Var_c v, Var_c v') => if (eq_var(v,v')) 
-					   then SOME(subtimer("Tchk:Equiv:find_max_kind",NilContext.find_max_kind)(D,v))
-				       else NONE
-	      | (Annotate_c _, _) => error' "Annotate_c not WHNF"
-	      | (Typecase_c _, _) => error' "Typecase_c not handled"
-	      | _ => NONE)
+	    in  (D,eRename,cRename,match)
+	    end
+	in  if (length vclist1 = length vclist2)
+	      then 
+		let val (D, eRename, cRename, match) = foldl2 folder (D,Alpha.empty_context(),cRename,true) (vclist1,vclist2)
+		in  (D, (eRename, cRename), match)
+		end
+	    else (D, (Alpha.empty_context(), cRename), false)
+	end
 
-(*       val _ = (case res of
-		  NONE => (print "con_structural_equiv returning NONE\n";
-			   print "c1 = "; Ppnil.pp_con c1; print "\n";
-			   print "c2 = "; Ppnil.pp_con c2; print "\n";
-			   printl "WITH MINIMAL CONTEXT AS";
-			   print_context (cons_error_context (D,[c1,c2]));
-			   print "\n")
-		| _ => ())*)
-   in res
-   end 
+      and con_structural_equiv (D,c1,c2,sk) : bool (*kind option *)=
+	let fun base true = true(*SOME Type_k*)
+	      | base false = false(*NONE*)
+	    val res =   
+	      (case (c1,c2) of
+		 (Prim_c(Record_c (labs1,vlistopt1),clist1), 
+		  (Prim_c(Record_c (labs2,vlistopt2),clist2))) =>
+		 base (Listops.eq_list(eq_label,labs1,labs2) andalso
+		       let fun combine(vlistopt,clist) =
+			 (case vlistopt of
+			    NONE => map (fn c => (NONE, c)) clist1
+			  | SOME vars => map2 (fn (v,c) => (SOME v, c)) (vars,clist))
+			   val vclist1 = combine(vlistopt1, clist1)
+			   val vclist2 = combine(vlistopt2, clist2)
+		       in  #3(vlistopt_clist_equiv(D,Alpha.empty_context(),vclist1,vclist2,sk))
+		       end)
+	       | (Prim_c(pcon1 as Sum_c{tagcount=tagcount1,totalcount=totalcount1,
+					known=known1}, clist1), 
+		  Prim_c(pcon2 as Sum_c{tagcount=tagcount2,totalcount=totalcount2,
+					known=known2}, clist2)) =>
+		 let val carriers = TilWord32.uminus(totalcount1,tagcount1)
+		   val k = kind_type_tuple (TilWord32.toInt carriers)
+		   val res1 = (tagcount1 = tagcount2) andalso
+		     (totalcount1 = totalcount2) andalso
+		     (case (known1,known2,sk) of
+			(NONE,NONE,_) => true
+		      | (SOME w1, SOME w2,_) => (w1=w2)
+		      | (SOME w1, NONE, true) => true
+		      | _ => false)
+		 in  base(res1 andalso 
+			  Listops.eq_list(fn (c1,c2) => con_equiv(D,c1,c2,k,sk),
+					  clist1,clist2))
+		 end
+				      | (Prim_c(pcon1,clist1), Prim_c(pcon2,clist2)) => 
+		 let
+		   val sk' = sk andalso (NilUtil.covariant_prim pcon1)
+		 in
+		   base(NilUtil.primequiv(pcon1,pcon2) andalso 
+			Listops.eq_list(fn (c1,c2) => con_equiv(D,c1,c2,Type_k,sk'),
+					clist1,clist2))
+		 end
+				      | (Mu_c(ir1,defs1), Mu_c(ir2,defs2)) => 
+		 let 
+		   fun do_mu () = 
+		     let 
+		       
+		       val vc1 = Sequence.toList defs1
+		       val vc2 = Sequence.toList defs2
+
+		       (*XXX Can be smarter!!*)
+		       fun build (D,rename) ((v1,_)::rest1,(v2,_)::rest2) = 
+			 let
+			   val vnew = Name.derived_var v1
+			   val D = insert_kind(D,vnew,Type_k)
+			   val rename = Alpha.rename (rename,v1,vnew)
+			   val rename = Alpha.rename (rename,v2,vnew)
+			 in  build (D,rename) (rest1,rest2)
+			 end
+			 | build acc _ = acc
+		       val (D,rename) = build (D,Alpha.empty_context()) (vc1,vc2)
+		       fun pred ((_,c1),(_,c2)) = 
+			 let val c1 = alphaCRenameCon rename c1
+			     val c2 = alphaCRenameCon rename c2
+			 in con_equiv(D,c1,c2, Type_k, false) (* no subtyping *) end
+		     in  (*if*) ((ir1 = ir2) andalso Listops.eq_list(pred,vc1,vc2))
+(*			   then SOME(kind_type_tuple (length vc1))
+			 else NONE*)
+		     end
+		 in
+		   subtimer ("Equiv:Mu",do_mu) ()
+		 end
+	     | (AllArrow_c {openness=o1,effect=eff1,isDependent=i1,
+			    tFormals=t1,eFormals=e1,fFormals=f1,body_type=b1},
+		 AllArrow_c {openness=o2,effect=eff2,isDependent=i2,
+			     tFormals=t2,eFormals=e2,fFormals=f2,body_type=b2}) =>
+		 base(o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso f1 = f2 andalso 
+		      let val (D,cRename,match) = vklist_equiv(D,t1,t2)
+		      in  match andalso
+			let val (D,rename,match) = 
+			  vlistopt_clist_equiv(D,cRename,e2,e1,sk)
+			    val b1 = alphaECRenameCon rename b1
+			    val b2 = alphaECRenameCon rename b2
+			in  match andalso
+			  type_equiv(D,b1,b2, sk)
+			end
+		      end)
+
+	     | (ExternArrow_c (clist1,c1), ExternArrow_c (clist2,c2)) => 
+		 let fun mapper c = (NONE, c)
+		   val (D,_,match) = vlistopt_clist_equiv(D,Alpha.empty_context(),
+							  map mapper clist1,
+							  map mapper clist2,
+							  false)
+		 in  base(type_equiv(D,c1,c2,false))
+		 end
+
+	     | (Crecord_c lclist, _) => 
+		 error' "Crecord given to con_structural_equiv: not WHNF"
+		 
+	     | (Let_c _, _) => error' "Let_c given to con_structural_equiv: not WHNF"
+		 
+	     | (Proj_c (c1,l1), Proj_c(c2,l2)) => (eq_label(l1,l2)) andalso (con_structural_equiv(D,c1,c2,false))
+(*		 (case (eq_label(l1,l2),con_structural_equiv(D,c1,c2,false)) 
+		    of (true,SOME(kind as Record_k lvk_seq)) => 
+		      SOME(project_from_kind_nondep(kind,l1))
+		     | _ => NONE)*)
+	     | (App_c (f1,clist1), App_c (f2,clist2)) =>
+		    if con_structural_equiv(D,f1,f2,false) then
+		      (case kind_of (D,f1) of
+			 Arrow_k(openness,vklist,k) =>
+			   let     
+			     fun folder ((v,k),c1,c2, (state as (D,alpha),equal)) =
+			       if equal then 
+				 let 
+				   val k = alphaCRenameKind alpha k
+				   val equal = con_equiv(D,c1,c2,k,false)
+				   val D = bind_kind_eqn(state,v,c1,k)
+				 in  (state,equal)
+				 end
+			       else (state,equal)
+			     val (_,equal) = foldl3 folder ((D,Alpha.empty_context()),true) (vklist,clist1,clist2)
+			   in equal
+			   end
+		       | _ => false)
+		    else false
+(*		    (case con_structural_equiv(D,f1,f2,false) of
+		       SOME(Arrow_k(openness,vklist,k)) =>
+			 let     
+			   fun folder ((v,k),c1,c2, (D,subst,equal)) =
+			     if equal then 
+			       let val equal = con_equiv(D,c1,c2,k,false)
+				 val D = insert_kind_equation(D,v,c1,k)
+				 val subst = Subst.C.sim_add subst (v,c1)
+			       in  (D,subst,equal)
+			       end
+			     else (D,subst,equal)
+			   val (D,subst,equal) = Listops.foldl3 folder (D,Subst.C.empty(),true) 
+			     (vklist,clist1,clist2)
+			 in if equal then SOME(flagtimer(equiv_profile,"Tchk:Equiv:substConInKind",substConInKind subst) k) 
+			    else NONE
+			 end
+		     | _ => NONE)*)
+	     | (Var_c v, Var_c v') => (*if *)(eq_var(v,v')) 
+(*					then SOME(flagtimer(equiv_profile,"Tchk:Equiv:find_max_kind",find_max_kind)(D,v))
+				      else NONE*)
+	     | (Annotate_c _, _) => error' "Annotate_c not WHNF"
+	     | (Typecase_c _, _) => error' "Typecase_c not handled"
+	     | _ => false(*NONE*))
+		 
+	    val _ = if res then () 
+		    else
+		      (print "con_structural_equiv returning false\n";
+		       print "c1 = "; Ppnil.pp_con c1; print "\n";
+		       print "c2 = "; Ppnil.pp_con c2; print "\n";
+		       printl "WITH MINIMAL CONTEXT AS";
+		       print_context (cons_error_context (D,[c1,c2]));
+		       print "\n")
+	in res
+	end 
+      val res = con_equiv args
+    in res
+    end
 
 (* Term level type checking.  *)
 
@@ -1589,11 +1669,7 @@ struct
   and bnd_valid (state,bnd) = bnd_valid' (bnd,state)
   and bnd_valid'' (bnd,state) = 
     let
-      val top_level = !top_bnds
-
-      val (D,subst) = state
-
-      val subtimer = fn fargs => if !profile orelse !bnd_profile then Stats.subtimer' fargs else #2 fargs
+      val (D,cbnds) = state
 
       (*PRE: The decorations have already been checked, D contains the bindings.
        * Should maybe take two contexts - one for recursive,m one not?
@@ -1602,150 +1678,73 @@ struct
 						   tFormals,eFormals,fFormals,
 						   body,body_type}) =
 	let
-
-	  val exp_valid      = subtimer("Tchk:Bnd:fnc:exp_valid",exp_valid)
-	  val kind_valid     = subtimer("Tchk:Bnd:fnc:kind_valid",kind_valid)
-	  val subtype        = subtimer("Tchk:Bnd:fnc:subtype",subtype)
-	  val top_level = !top_fnc
-	  val _ = if top_level then (Trace.enter fv_trace;top_fnc := false) else ()
-	  val _ = if (!trace)
-			then (print "{Processing function_valid with var = ";
-			      pp_var var; print "\n")
-		    else ()
-
 	  val D' = insert_kind_list (D,tFormals)
 	  val D = foldl (fn ((v,nt,c),D) => (niltrace_valid(D,nt);insert_con(D,v,c))) D' eFormals
 	  val D = foldl (fn (v,D) => insert_con (D,v,Prim_c (Float_c F64,[]))) D fFormals
-
-	  val _ = if (!trace)
-			then (print "}{Processing body in function_valid with var = ";
-			      pp_var var; print "\n")
-		    else ()
-
-	  val _ = if top_level then ignore(Trace.enter expv_trace) else ()
-	  val body_c = exp_valid (D,body)
-	  val _ = if top_level then ignore(Trace.exit expv_trace) else ()
-	  val D = if isDependent then D else D'
-
-	  val _ = if (!trace)
-			then (print "}{Processing body type against given type in function_valid with var = ";
-			      pp_var var; print "\n")
-		    else ()
-	  val _ = 
-	    if top_level then
-	      let
-		val synth_size = Measure.con_size body_c
-		val dec_size   = Measure.con_size body_type
-		val body_size   = Measure.exp_size body		  
-
-		val _ = (print "Synthesized type :";print (Int.toString synth_size);print "\n";
-			 print "Decorated type   :";print (Int.toString dec_size);print "\n";
-			 print "Expression size  :";print (Int.toString body_size);print "\n")
-		   
-	      in () end
-	    else ()
-
-	  val _ = if top_level then (ignore(Trace.enter fnc_trace)) else ()
-	  val _ = 
-	    (subtype (D,body_c,body_type)) orelse
-	    (perr_e_c_c (body,body_type,body_c);
-	     (error (locate "function_valid") "Return expression has wrong type" handle e => raise e))   
-	  val _ = if top_level then (ignore(Trace.exit fnc_trace)) else () 
-
-(*	  val time = Time.toReal (Trace.exit fnc_trace)
-	  val size1 = (Measure.con_size body_c) 
-	  val size2 = Measure.con_size body_type
-	  val size = size1 + size2
-	  val _ = 
-	    (print ("Time is                      : "^(Real.toString time)^"\n");
-	     print ("Size of synthesized type is  : "^(Int.toString size1)^"\n");
-	     print ("Size of decorated type is    : "^(Int.toString size2)^"\n");
-	     print "Synthesized type is \n";if size > 20000 then print "too big\n" else Ppnil.pp_con body_c;
-	     print "\nDecorated   type is \n";Ppnil.pp_con body_type;
-	     if size > !size_max then (print ("New max is "^(Int.toString size)^"\n");size_max := size) else ();
-	     print ("Rate is                      : "^(Real.toString((Real.fromInt size)/time))^" nodes/sec\n")
-	     )
-*)
-	  val _ = if top_level then (Trace.exit fv_trace;top_fnc := true) else ()
-	  val _ = if (!trace)
-			then (print "Done processing function_valid with var = ";
-			      pp_var var; print "}\n")
-		    else ()
 	in
-	  ()
+	  exp_analyze(D,body,body_type)
 	end
+
 
       fun fbnd_valid (openness,defs) = 
 	let
-	  val function_type  = fn p => subtimer("Tchk:Bnd:fbnd:function_type",function_type p)
-	  val con_valid      = subtimer("Tchk:Bnd:fbnd:con_valid",con_valid)
-	  val insert_con     = subtimer("Tchk:Bnd:fbnd:insert_con",insert_con)
-	  val function_valid = fn p => fn D => subtimer("Tchk:Bnd:fbnd:function_valid",function_valid p D)
-	  val type_equiv     = subtimer("Tchk:Bnd:fbnd:type_equiv",type_equiv)
-	  val top_level = !top_fbnd
-
-	  val _ = if top_level then (Trace.enter fbnd_trace;top_fbnd := false) else ()
-
 	  val origD = D
-	  val _ = if (!trace)
-			then (print "{Processing fbnd_valid \n")
-		    else ()
-		      
 	  val bnd_types = Sequence.map_second (function_type openness) defs
 	    
 	  (*Checks that the decorations are well-formed*)
-	  val _ = Sequence.map_second (curry2 con_valid D) bnd_types
+	  val _ = Sequence.map_second (curry2 type_analyze D) bnd_types
 	  val D = Sequence.foldl (fn ((v,c),D) => insert_con(D,v,c)) D bnd_types
-	  val _ = if (!trace)
-		      then (print "Processing fbnd_valid done with making context}\n")
-		    else ()
 	  val _ = Sequence.app (function_valid openness D) defs
-	  val _ = if top_level then (Trace.exit fbnd_trace;top_fbnd := false) else ()
 	in (D,Sequence.toList bnd_types)
 	end
 
+      (*tipe is already checked*)
       fun do_closure D ({code,cenv,venv,tipe}) = 
 	let
-	  val ckind = con_valid (D,cenv)
-	  val vcon = exp_valid (D,venv)
+
 	  val (code_type) = 
 	    (find_std_con (D,code)
 	     handle NilContext.Unbound =>
 	       (printl ("Code pointer "^(var2string code));
 		print " not defined in context";
 		(error (locate "bnd_valid") "Invalid closure" handle e => raise e)))
-	  val {openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} =
+
+	  val (effect,isDependent,tFormals,eFormals,fFormals,body_type) =
 	    (case strip_arrow code_type of
-	       SOME blob => blob
+	       SOME {openness = Code,effect,isDependent,tFormals,eFormals,fFormals,body_type} => 
+		 (effect,isDependent,tFormals,eFormals,fFormals,body_type)
+	     | SOME _ => 		     
+		 (perr_e_c (Var_e code,code_type);
+		  (error (locate "bnd_valid") "Code pointer in closure of illegal type" handle e => raise e))
 	     | NONE => (perr_e_c (Var_e code,code_type);
 			(error (locate "bnd_valid") "Code pointer in closure of illegal type" handle e => raise e)))
-	  val _ = (case openness of
-		     Code => ()
-		   | _ => (perr_e_c (Var_e code,code_type);
-			   (error (locate "bnd_valid") "Code pointer in closure of illegal type" handle e => raise e)))
 
 	  val (tformals,(last_tv,last_k)) = split tFormals
+
+
+	  val _ = (con_analyze (D,cenv,kind_standardize(D,last_k))) handle e => k_error(D,last_k,"Illegal kind in Closure3?")
+
 	  val tformals = map (fn (tv,k) => (tv,varConKindSubst last_tv cenv k)) tformals
 	  val eformals = map (fn (vopt,c) => (vopt, varConConSubst last_tv cenv c)) eFormals
+
 	  val (eformals,last_vc) = split eformals
 	    
-	  val D = foldl (fn ((v,k),D) => insert_kind(D,v,k)) D tformals
+	  val D = foldl (fn ((v,k),D) => insert_stdkind(D,v,k)) D tformals
+
 	  fun folder ((vopt,c),D) =
 	    (case vopt of
 	       NONE => D
 	     | SOME v => insert_con(D,v,c))
+
 	  val D' = foldl folder D eformals
+
 	  val body_type = varConConSubst last_tv cenv body_type
+
 	  val body_type = (case last_vc of
 			     (NONE,_) => body_type
 			   | (SOME v,_) => varExpConSubst v venv body_type)
-	    
-	  val _ = 
-	    (sub_kind (D,Single_k(cenv),last_k) andalso 
-	     type_equiv (D',vcon, #2 last_vc, true)) orelse
-	    (perr_k_k (last_k,ckind);
-	     perr_c_c (#2 last_vc,vcon);
-	     (error (locate "bnd_valid") "Mismatch in closure" handle e => raise e))
+
+	  val _ = exp_analyze (D,venv,#2 last_vc)
 	    
 	  val closure_type = AllArrow_c {openness=Closure, effect=effect, 
 					 isDependent=isDependent,
@@ -1754,7 +1753,6 @@ struct
 					 fFormals = fFormals,
 					 body_type=body_type}
 	    
-	  val _ = con_valid(D,tipe)
 	  val _ = 
 	    (type_equiv (D,closure_type,tipe,false)) orelse
 	    (perr_c_c (tipe,closure_type);
@@ -1763,67 +1761,55 @@ struct
 	     (error (locate "bnd_valid") "Type error in closure" handle e => raise e))
 	in ()
 	end
-      
-      val con_valid      = subtimer ("Tchk:Bnd:con_valid",con_valid)
-      val cbnd_valid     = subtimer ("Tchk:Bnd:cbnd_valid",cbnd_valid)
-      val fbnd_valid     = subtimer ("Tchk:Bnd:fbnd_valid",fbnd_valid)
-      val function_valid = subtimer ("Tchk:Bnd:function_valid",function_valid)
-      val do_closure     = subtimer ("Tchk:Bnd:do_closure",do_closure)
-
-      val _ = if top_level then (Trace.enter bnd_trace;top_bnds := false) else ()
 
       val res = 
 	(case bnd 
 	   of Con_b (phase, cbnd) => 
 	     let
-	       val D = cbnd_valid (cbnd,D)
-	       val subst = cbnd::subst
-	     in  ([],(D,subst))
+	       val con = fn var => Let_c(Sequential,[cbnd],Var_c var)
+	       val D = (case cbnd of 
+			  Open_cb (args as (var,formals,body)) => 
+			    insert_stdkind_equation(D,var,con var,lambda_valid(D,Open,formals,body))
+			| Code_cb (args as (var,formals,body)) => 
+			    insert_stdkind_equation(D,var,con var,lambda_valid(D,Code,formals,body))
+			| Con_cb  (var,con) => insert_stdkind_equation(D,var,con,con_valid(D,con)))
+
+	       val cbnds = cbnd::cbnds
+	     in  ([],(D,cbnds))
 	     end
 	    | Exp_b (var,nt,exp) =>
 	     let
-
-	       val _ = if (!trace)
-			 then (print "{Processing Exp_b with var = ";
-			       pp_var var; print "\n")
-		       else ()
 	       val _ = niltrace_valid (D,nt)
 	       val bnd_con = exp_valid (D,exp)
 	       val D = insert_con (D,var,bnd_con)
-	       val _ = if (!trace)
-			 then (print "Done processing Exp_b with var = ";
-			       pp_var var; print "}\n")
-		       else ()
 	     in
-	       ([(var,bnd_con)],(D,subst))
+	       ([(var,bnd_con)],(D,cbnds))
 	     end
-	    | (Fixopen_b defs) => let val (D,etypes) = fbnd_valid(Open,defs) in (etypes,(D,subst)) end
-	    | (Fixcode_b defs) => let val (D,etypes) = fbnd_valid(Code,defs) in (etypes,(D,subst)) end
+	    | (Fixopen_b defs) => let val (D,etypes) = fbnd_valid(Open,defs) in (etypes,(D,cbnds)) end
+	    | (Fixcode_b defs) => let val (D,etypes) = fbnd_valid(Code,defs) in (etypes,(D,cbnds)) end
 	    | Fixclosure_b (is_recur,defs) => 
 	     let
 	       val origD = D
 	       val (vars,closures) = unzip (Sequence.toList defs)
 	       val tipes = map (fn cl => #tipe cl) closures
-	       val _ = map (curry2 con_valid D) tipes
+	       val _ = app (curry2 type_analyze D) tipes
 	       val bnd_types = zip vars tipes
 	       val D = insert_con_list (D,bnd_types)
 	       val _ = if is_recur 
 			 then app (do_closure D) closures
 		       else app (do_closure origD) closures
 	     in
-	       (bnd_types,(D,subst))
+	       (bnd_types,(D,cbnds))
 	     end)
-      val _ = if top_level then (Trace.exit bnd_trace;top_bnds := true) else ()
     in res
     end
-
   and exp_analyze(D : context, exp : exp, con : con) : unit = 
     let
       val con' = exp_valid(D,exp)
     in
        ignore (subtimer("exp_analyze:st",type_equiv)(D,con',con,true) orelse 
 	       (perr_c_c (con,con');
-		e_error(D,exp,"Expression cannot be given type")))
+		e_error(D,exp,"Expression cannot be given required type")))
     end
   and exp_valid (D : context, exp : exp) : con = 
       let 
@@ -1859,47 +1845,17 @@ struct
     let
       val subtimer = fn args => if !profile orelse !exp_profile then Stats.subtimer' args else #2 args
 
-      (*Helper for functions*)
-      fun do_formals (item_valid,sub_item,insert_item) (D,formals,actuals) = 
-	let
-	  fun do_item ((bind,formal_type),actual,D) = 
-	    let
-	      val actual_type = item_valid (D,actual)
-	    in
-	      if sub_item (D,actual_type,formal_type) then
-		insert_item(D,bind,actual,actual_type)
-	      else
-		e_error(D,exp,"ExpValid:Formal/Actual parameter mismatch")
-	    end
-	in
-	  (foldl2 do_item D (formals,actuals)) handle e => (print "Formal/Actual length mismatch?\n";raise e)
-	end
-
-      fun insert_con_opt (D,SOME v,_,con) = insert_con (D,v,con)
-	| insert_con_opt (D,_,_,_) = D
-
       (*Do an application node. *)
       fun do_app (openness,app,cons,texps,fexps) =
 	let           
 	  val subtype    = subtimer("Tchk:Exp:App:st",subtype)
-
 	  val con = exp_valid (D,app)
 	    
-	  val {openness=openness', tFormals, eFormals, fFormals, body_type, isDependent, ...} = 
-	    let
-	      val con' = con_head_normalize(D,con)
-		
-	      (* We rename the bound variables in the function type because they may 
-	       * be added to the context below. If this is a recursive function call, 
-	       * they may already be in the context
-	       *)
-	      val con'' = NilRename.renameCon con'
-	    in
-	      case strip_arrow con'' of
-		SOME c => c
-	      | NONE => (perr_e_c (app,con); error (locate "exp_valid") "Application of non-arrow expression" )
-	    end
-	  
+	  val {openness = openness', tFormals, eFormals, fFormals, body_type, isDependent,...} = 
+	    (case strip_arrow (con_head_normalize(D,con)) of
+	       SOME c => c
+	     | NONE => (perr_e_c (app,con); error (locate "exp_valid") "Application of non-arrow expression" ))
+
 	  val _ = 
 	    if same_openness (openness,openness') then
 	      (case (openness,app) of
@@ -1907,10 +1863,7 @@ struct
 	       | (Code,_) => e_error(D,exp,"code applied to non-variable")
 	       | _ => ())
 	    else e_error(D,exp,"Error in application - different openness")
-
-	  val D = do_formals (con_valid,sub_kind,insert_kind_equation) (D,tFormals,cons)
-	  val D = do_formals (exp_valid,subtype,insert_con_opt)       (D,eFormals,texps)
-
+	      
 	  val _ = 
 	    let
 	      fun do_float (i,[]) = if i <> 0 then e_error(D,exp,"Wrong number of float parameters") else ()
@@ -1921,17 +1874,53 @@ struct
 		  e_error(D,exp,"Expected float for float parameter")
 	    in do_float (Word32.toInt fFormals,fexps)
 	    end
-	  
-	  (*Or constructor level let*)
-	  val subst = Subst.C.simFromList (zip (#1 (unzip tFormals)) cons)
-	  val body_type = Subst.substConInCon subst body_type
-	in
-	  if isDependent then 
-	    removeDependence  (map (fn (SOME v,c) => (v,substConInCon subst c)
-	                             | (NONE, c) => (fresh_var(), c)) eFormals)
-	    body_type
-	  else
-	    body_type
+	      
+	  local
+	    fun bind_kind(D,cRename,rev_bnds,var,actual,kind) = 
+	      if NilContext.bound_con (D,var) then
+		let
+		  val vnew = Name.derived_var var
+		  val D = insert_kind_equation(D,vnew,actual,kind)
+		  val cRename = Alpha.rename(cRename,var,vnew)
+		in (D,cRename,(Con_cb(vnew,actual))::rev_bnds)
+		end
+	      else (insert_kind_equation(D,var,actual,kind),cRename,(Con_cb(var,actual))::rev_bnds)
+	      
+	    fun do_one ((var,kind),actual,(D,rename,cbnds)) = 
+	      let
+		val kind = alphaCRenameKind rename kind
+		val kind = kind_standardize(D,kind)
+		val _ = con_analyze(D,actual,kind)
+	      in bind_kind (D,rename,cbnds,var,actual,kind)
+	      end
+	  in	      
+	    val (D,rename,rev_bnds) = 
+	      (foldl2 do_one (D,Alpha.empty_context(),[]) (tFormals,cons))
+	      handle e => (print "Possible Formal/Actual length mismatch?\n";raise e)
+	    val cbnds = rev rev_bnds
+	  end
+
+	  local
+	    (*Expression variables aren't inter-dependent?*)
+
+	    fun do_one ((var_opt,con),exp) = 
+		let
+		  val con = alphaCRenameCon rename con 
+		  val _ = exp_analyze(D,exp,con)
+		in (case var_opt of SOME var => SOME (var,con) | NONE => NONE)
+		end
+	  in
+	    val types = List.mapPartial do_one (zip eFormals texps)
+	  end
+
+
+	  val body_type = alphaCRenameCon rename body_type
+	  val body_type = 
+	    if isDependent then 
+	      removeDependence types body_type
+	    else
+	      body_type
+	in Let_c(Sequential,cbnds,body_type)
 	end
       
       (*Type check and subtype a list of expressions against a list of types
@@ -1957,7 +1946,7 @@ struct
 	 | vector (con,vec) =>  
 	     let
 	       val subtype    = subtimer("Tchk:Exp:Val:st",subtype)
-	       val kind = con_valid (D,con)
+	       val _ = type_analyze (D,con)
 	       fun check exp = 
 		 let
 		   val con' = exp_valid (D,exp)
@@ -1967,10 +1956,10 @@ struct
 		 in()
 		 end
 	     in
-	       (Array.app check vec;
+	       (Array.app (fn e => exp_analyze(D,e,con)) vec;
 		Prim_c (Vector_c,[con]))
 	     end
-	 | tag (atag,con) => (ignore (con_valid (D,con));Prim_c (Exntag_c,[con]))
+	 | tag (atag,con) => (type_analyze (D,con);Prim_c (Exntag_c,[con]))
 	 | array (con,arr) => e_error(D,Const_e value,"Array's shouldn't happen")
 	 | refcell expref => e_error(D,Const_e value,"Ref's shouldn't happen"))
 
@@ -1982,8 +1971,7 @@ struct
 	    val subtype    = subtimer("Tchk:Exp:Swt:default:st",subtype)
 	  in
 	  fun do_default (D,NONE,[],result_type) = e_error(D,Switch_e switch,"Case must be non-empty")
-	    | do_default (D,SOME e,_,result_type) = if (subtype (D,exp_valid(D,e),result_type)) then ()
-					else (e_error(D,Switch_e switch,"Type of default doesn't match expected type"))
+	    | do_default (D,SOME e,_,result_type) = exp_analyze(D,e,result_type)
 	    | do_default _ = ()
 	  end
 
@@ -2008,7 +1996,7 @@ struct
 	      val argcon = exp_valid(D,arg)
 		
 	      val _ = 
-		(con_valid(D,result_type);
+		(type_analyze(D,result_type);
 		 
 		 (check_arg(D,argcon)) orelse
 		 (e_error(D,Switch_e switch,"Switch argument does not match found type"));
@@ -2025,7 +2013,7 @@ struct
 	    (case switch
 	       of Sumsw_e {arg,sumtype,bound,arms,default,result_type} => 
 		 let
-		   val _ = con_valid(D,sumtype)
+		   val _ = type_analyze(D,sumtype)
 		   val sumtype = con_head_normalize(D,sumtype)
 		   fun mk_sum (D,field) = convert_sum_to_special (sumtype,field)
 		   fun check_arg (D,c) = subtimer("Tchk:Exp:Swt:Arg:st",subtype)(D,c,sumtype)
@@ -2049,13 +2037,12 @@ struct
 		   val result_type' = con_head_normalize(D,result_type)
 		   val _ = 
 		     (
-		      con_valid (D,result_type);
+		      type_analyze (D,result_type);
 		      
 		      if same_intsize (size,strip_int(D,argcon)) then ()
 		      else e_error(D,Switch_e switch, "Integer size mismatch in int switch");
 			
-		      if all (fn exp => subtimer("Tchk:Exp:Intsw:st",subtype) (D,exp_valid(D,exp),result_type')) armexps then ()
-		      else e_error(D,Switch_e switch,"Branch arm types don't match");
+		      app (fn exp => subtimer("Tchk:Exp:Intsw:ea",exp_analyze) (D,exp,result_type')) armexps;
 			  
 		      do_default (D,default,arms,result_type')
 		      )
@@ -2075,20 +2062,16 @@ struct
 	    
 	  fun project_sum_xxx (D,argcon,argexp,k) = 
 	    let
-	      val subtype    = subtimer("Tchk:Exp:Prim:Proj:st",subtype)
-	      val _ = con_valid(D,argcon)
+	      val _ = type_analyze(D,argcon)
 	      val argcon = con_head_normalize(D,argcon)
 	      val argcon' = convert_sum_to_special(argcon,k)
-	      val argcon'' = exp_valid (D,argexp)
-	      val _ = 
-		(subtype(D,argcon'',argcon')) orelse   (*Already normal (#2)*)
-		(e_error(D,orig_exp,"Type mismatch in project_sum"))
+	      val _ = exp_analyze (D,argexp,argcon')
 	    in projectSumType(D,argcon,k)  (*Already normal!*)
 	    end
 
 	  fun sum_helper(D,sumcon,sumtype) = 
 	    let
-	      val _ = con_analyze(D,sumcon,Type_k)
+	      val _ = type_analyze(D,sumcon)
 
 	      val sumcon_hnf = con_head_normalize(D,sumcon)
 
@@ -2183,21 +2166,21 @@ struct
 	       else e_error(D,orig_exp,"Mismatched float size in unbox float")
 
 	    | (roll,[argcon],[exp]) => 
-		let val _ = con_valid (D,argcon)
+		let val _ = type_analyze (D,argcon)
 		  val subtype    = subtimer("Tchk:Exp:Prim:Roll:st",subtype)
 		in if subtype(D,exp_valid (D,exp),expandMuType(D,argcon) ) then argcon
 		   else e_error(D,orig_exp,"Error in roll")
 		end
 
 	    | (unroll,[con],[exp]) =>
-		let val _ = con_valid (D,con)
+		let val _ = type_analyze (D,con)
 		  val subtype    = subtimer("Tchk:Exp:Prim:Unroll:st",subtype)
 		in if subtype(D,exp_valid (D,exp),con) then expandMuType (D,con)
 		   else e_error(D,orig_exp,"Error in unroll")
 		end
 
 	    | (make_exntag,[argcon],[]) => 
-		let val _ = con_analyze (D,argcon,Type_k)
+		let val _ = type_analyze(D,argcon)
 		in Prim_c (Exntag_c,[argcon])
 		end
 
@@ -2246,13 +2229,10 @@ struct
 	 | Prim_e (NilPrimOp prim,cons,exps) => prim_valid (D,prim,cons,exps)
 	 | Prim_e (PrimOp prim,cons,exps) =>   
 	     let 
-	       val kinds = map (curry2 con_valid D) cons
+	       val _ = app (curry2 type_analyze D) cons
 	       val (total,arg_types,return_type) = NilPrimUtil.get_type prim cons
-	       val _ = con_valid(D,return_type)
-	       val _ = app (ignore o (curry2 con_valid D)) arg_types
 	       val _ = do_args (D,arg_types,exps)
-	     in
-	       return_type
+	     in  return_type
 	     end
 	 | Switch_e switch => switch_valid (D,switch)
 	 | App_e args => do_app args
@@ -2266,34 +2246,25 @@ struct
 		     | NONE => e_error(D,exp,"Extern application of non extern arrow value"))
 
 	       val _ = do_args (D,formals,args)
-	     in
-	       return
+	     in return
 	     end
 	   
 	 | Raise_e (exp,con) => 
 	     let
-	       val _ = con_valid (D,con)
+	       val _ = type_analyze (D,con)
 	       val exn_con = exp_valid (D,exp)
 	       val _ = 
 		 (is_exn_con (con_head_normalize (D,exn_con))) orelse
 		 (e_error(D,exp,"Non exception raised - Ill formed expression") handle e => raise e)
-	     in
-	       con
+	     in con
 	     end
 	 | Handle_e {body,bound,handler,result_type} => 
 	     let
-	       val body_con = exp_valid(D,body)
+	       val _ = exp_analyze(D,body,result_type)
 	       val D = insert_con(D,bound,Prim_c(Exn_c,[]))
-	       val handler_con = exp_valid(D,handler)
-	       val _ = con_valid (D,result_type)
-	     in
-	       if subtype(D,body_con,result_type) then
-		 if subtype(D,handler_con,result_type) then
-		   result_type
-		 else
-		   e_error(D,exp,"Handler has wrong type")
-	       else
-		 e_error(D,exp,"Handled expression has wrong type")
+	       val _ = exp_analyze(D,handler,result_type)
+	       val _ = type_analyze (D,result_type)
+	     in result_type
 	     end
 	   )
     in
@@ -2309,7 +2280,7 @@ struct
 			  if !show_context then (print "\nand context"; NilContext.print_context D) else ();
 			  print "\n\n")
 		  else ()
-	  val res = (bnd_valid''(bnd,state)
+	  val res = ((bnd_valid''(bnd,state))
 		     handle e => (if !stack_trace then show_stack() else (); raise e))
 	  val _ = if (!show_calls)
 		    then (printl "bnd_valid returned")
@@ -2333,7 +2304,7 @@ struct
 			then (print "{Processing ImportValue with var = ";
 			      pp_var var; print "\n")
 		    else ()
-	  val kind = con_valid(D,con)
+	  val _ = type_analyze(D,con)
 	  val D = insert_con(D,var,con)
 	    val _ = if (!trace)
 			then (print "Done processing ImportValue with var = ";
@@ -2348,8 +2319,8 @@ struct
 			then (print "{Processing ImportType with var = ";
 			      pp_var var; print "\n")
 		    else ()
-	  val _ = kind_valid (D,kind)
-	  val D = insert_kind(D,var,kind)
+	  val kind = kind_valid (D,kind)
+	  val D = insert_stdkind(D,var,kind)
 	    val _ = if (!trace)
 			then (print "Done processing ImportType with var = ";
 			      pp_var var; print "}\n")

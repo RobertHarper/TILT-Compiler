@@ -4,7 +4,7 @@ structure Measure :> MEASURE =
   struct
     open Nil NilRewrite
       
-    local
+(*    local
       structure VarMap = Name.VarMap
 	
       datatype state = STATE of {cbound : bool ref VarMap.map,
@@ -93,10 +93,10 @@ structure Measure :> MEASURE =
 	  module
 	end
     end
-  
+*)  
     local 
       
-      type state = {con:int ref,exp:int ref,kind:int ref,
+      type state = {con:int ref,exp:int ref,kind:int ref,con_vars:int ref,exp_vars:int ref,
 		    active:(string*(int ref)) list,counters:(string*(int ref)) list,
 		    containers:(string*(int ref)) list}
 	
@@ -131,14 +131,14 @@ structure Measure :> MEASURE =
 
       fun contains clist c = Option.isSome (find c clist)
 
-      fun conhandler ({exp,con,kind,active,counters,containers} : state,c : con) = 
+      fun conhandler ({exp,con,kind,active,counters,containers,con_vars,exp_vars} : state,c : con) = 
 	(inc con;
 	 incl active;
 	 inc1 c counters;
 	 if contains active c then NOCHANGE
 	 else (case find c containers of
 		 NONE => NOCHANGE
-	       | SOME entry => CHANGE_RECURSE ({con = con,exp = exp,kind = kind,
+	       | SOME entry => CHANGE_RECURSE ({con = con,exp = exp,kind = kind,con_vars=con_vars,exp_vars=exp_vars,
 						active = entry::active,counters = counters,containers=containers},c))
 	 )
 
@@ -146,16 +146,23 @@ structure Measure :> MEASURE =
 
       fun exphandler ({exp,active,...} : state,_ : exp) = (inc exp;incl active; NOCHANGE)
 
+      fun con_var_xxx (state as {con_vars,...} : state,_,_) = (inc con_vars;(state,NONE))
+      fun exp_var_xxx (state as {exp_vars,...} : state,_,_) = (inc exp_vars;(state,NONE))
+
       val all_handlers =  
 	let
 	  val h = set_kindhandler default_handler kindhandler
 	  val h = set_conhandler h conhandler
 	  val h = set_exphandler h exphandler
+	  val h = set_con_binder h con_var_xxx
+	  val h = set_con_definer h con_var_xxx
+	  val h = set_exp_binder h exp_var_xxx
+	  val h = set_exp_definer h exp_var_xxx
 	in
 	  h
 	end
 
-      val {rewrite_con,rewrite_exp,rewrite_kind,...} = rewriters all_handlers
+      val {rewrite_con,rewrite_exp,rewrite_kind,rewrite_mod,...} = rewriters all_handlers
       val printi = print o Int.toString
     in
       
@@ -163,6 +170,8 @@ structure Measure :> MEASURE =
 	let val exp = ref 0
 	  val con = ref 0
 	  val kind = ref 0
+	  val con_vars = ref 0
+	  val exp_vars = ref 0
 	  val in_mu = ref 0
 	  val mu_count = ref 0
 	  val in_prim = ref 0
@@ -172,6 +181,7 @@ structure Measure :> MEASURE =
 	  val in_record = ref 0
 	  val record_count = ref 0
 	  val state : state = {con = con,exp = exp,kind = kind,active=[],
+			       con_vars = con_vars,exp_vars = exp_vars,
 			       containers = [("Mu_c",in_mu),("Prim_c",in_prim),
 					     ("Sum_c",in_sum),("Record_c",in_record)],
 			       counters   = [("Mu_c",mu_count),("Prim_c",prim_count),
@@ -190,11 +200,15 @@ structure Measure :> MEASURE =
 	    print "Sum_c Nodes           = ";printi (!sum_count);print "\n";
 	    print "Record_c Nodes        = ";printi (!record_count);print "\n";
 	    print "Other Prim_c Nodes    = ";printi (!prim_count);print "\n";
+	    print "Con vars bound        = ";printi (!con_vars);print "\n";
+	    print "Exp vars bound        = ";printi (!exp_vars);print "\n";
 	    print "\n";
 	    !exp + !con + !kind)
 	end
       val con_size  = item_size rewrite_con
       val exp_size  = item_size rewrite_exp
       val kind_size = item_size rewrite_kind
+      val mod_size  = item_size rewrite_mod
+      val measureMod = fn nilmod => (mod_size nilmod;nilmod)
     end
   end

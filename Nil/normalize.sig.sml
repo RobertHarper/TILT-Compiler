@@ -43,6 +43,7 @@ signature NORMALIZE =
 
     val is_hnf       : con -> bool
     val reduce_hnf   : context * con -> bool * con   (* bool indicates whether HNF was reached *)
+    val reduce_hnf'   : context * con * NilSubst.con_subst -> NilSubst.con_subst * con   
     val reduce_once  : context * con -> con
     val reduce       : context * con -> con
     val con_reduce   : context * con_subst -> con -> progress * con_subst * con

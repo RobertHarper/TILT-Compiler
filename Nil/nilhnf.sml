@@ -278,7 +278,7 @@ structure NilHNF :> NILHNF =
 	  
       in
 	if path then
-	  (case find_kind_equation(D,con)
+	  (case find_kind_equation (D,con)
 	     of SOME con => (subtimer ("HNF:Reduce level "^(Int.toString (++depth)),reduce_hnf) (D,con)) before (ignore (--depth))
 	      | NONE => strip_annotate con)
 	else
