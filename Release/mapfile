@@ -1,7 +1,0 @@
-unit Help = "help.sml" {
-	TextIO CommandLine OS String Posix
-}
-unit Config = "config.sml" {
-	Help Date Time CommandLine
-}
-unit MakeRelease = "make.sml" {Help Config OS}

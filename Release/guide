@@ -1,0 +1,19 @@
+Carve out a release by serving a file system based on my CVS working
+directory and creating a tar archive of its contents.  The patterns
+file contains regular expressions that describe the files to serve: To
+make it in to the release, a file must match a + expression and not
+match any - expressions.
+
+# start server
+srvfs -P patterns releasefs /usr/swasey/src/ml96
+
+# mount and take a look
+Local mount /srv/releasefs /n/test
+
+# mount and create archive
+v=1.0
+mount /srv/releasefs /n/tilt-$v
+cd /n; tar c tilt-$v > /tmp/tilt-$v.tar
+
+# kill server
+kill exportfs|rc; rm -f /srv/releasefs
