@@ -601,12 +601,7 @@ struct
 					     in  trace_find_fv(state, frees) tr
 					     end))
 	   | Prim_e (p,clist,elist) =>
-		 let val p = 
-		     (case p of
-			  NilPrimOp(make_vararg(_,e)) => NilPrimOp(make_vararg(Closure,e))
-			| NilPrimOp(make_onearg(_,e)) => NilPrimOp(make_onearg(Closure,e))
-			| _ => p)
-		     fun tfold(t,f) = t_find_fv (state,f) t
+		 let fun tfold(t,f) = t_find_fv (state,f) t
 		     fun cfold(c,f) = c_find_fv (state,f) c
 		     fun efold(e,f) = e_find_fv (state,f) e
 		     val frees = if (NilUtil.allprim_uses_carg p)
@@ -1160,7 +1155,12 @@ struct
 		      | SOME(v,_,_) => Var_e v
 	       end
 	  | Prim_e(NilPrimOp np,clist,elist) => 
-	       Prim_e(NilPrimOp np,map c_rewrite clist, map e_rewrite elist)
+	       let val np = (case np of
+				 make_vararg(_,e) => make_vararg(Closure,e)
+			       | make_onearg(_,e) => make_onearg(Closure,e)
+			       | _ => np)
+	       in  Prim_e(NilPrimOp np,map c_rewrite clist, map e_rewrite elist)
+	       end
 	  | Prim_e(p,clist,elist) => 
 	       Prim_e(p,map c_rewrite clist, map e_rewrite elist)
 	  | Const_e v => arg_exp
@@ -1285,7 +1285,12 @@ struct
        let val c_rewrite = c_rewrite state
        in
 	(case arg_con of
-            Prim_c (primcon,clist) => Prim_c(primcon, map c_rewrite clist)
+            Prim_c (primcon,clist) => 
+		let val primcon = (case primcon of
+				       Vararg_c(_, e) => Vararg_c(Closure,e)
+				     | _ => primcon)
+		in  Prim_c(primcon, map c_rewrite clist)
+		end
 	  | Mu_c (ir,vc_set) => Mu_c(ir,Sequence.fromList 
 					(map (fn (v,c) => (v,c_rewrite c)) (Sequence.toList vc_set)))
 	  | Var_c v => 
