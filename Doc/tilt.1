@@ -1,392 +1,160 @@
+." Prelude for troff derivatives.
+.de EX
+.if t .ft 5
+.nf
+..
+.de EE
+.ft 1
+.fi
+..
 .TH TILT 1
 .SH NAME
-tilt, tilt-nj \- Standard ML compiler
+tilt, tilt-nj, tilt-slaves \- Standard ML compiler
 .SH SYNOPSIS
 .B tilt
 [
-.B -bmpv
+.I option ...
 ]
-[
-.B -a
-.I arch
-]
-[
-.B -fr
-.I flag
-]
-.I groupfile
-\&...
-.br
+.I project ...
+.PP
 .B tilt
 [
-.B -v
+.I option ...
 ]
-.B -s
+.B -o
+.I exe project ...
+.PP
+.B tilt
 [
+.I option ...
+]
+.B -l
+.I lib project ...
+.PP
+.B tilt
+[
+.I option ...
+]
+.BR -p [ p ]
+.I project ...
+.PP
+.B "tilt -s"
+.PP
+.B tilt-slaves
+[
+.B -n
+]
 .RI [ num /] host
-\&...
-]
-.br
-.B tilt
-[
-.B -bv
-]
-[
-.B -a
-.I arch
-]
-.B -c
-.I groupfile
-\&...
-.br
-.B tilt-nj
-[
-.I options
-]
-[
-.I arguments
-]
+.I ...
 .SH DESCRIPTION
 TILT is a compiler for Standard ML (SML) that uses Typed Intermediate
 Languages.  It can make executables and libraries for the SPARC V9 and
 Alpha architectures running SunOS 5.5.1, SunOS 5.7, and Digital Unix
-V4.0D.
+V4.0D. 
 .I Tilt
 is a version of the compiler compiled by TILT.
 .I Tilt-nj
 is a version of the compiler compiled by Standard ML of New Jersey; it
 should run on any Unix system supported by SML/NJ.
 .PP
-Both
-.I tilt
-and
-.I tilt-nj
-accept the following command line options:
+TILT operates on a project description accreted from the named
+.I project
+files.  A project description assigns logical names to compilation
+units and their interfaces and describes the dependencies between them.  By
+default, TILT performs incremental recompilation (IR) to bring every unit
+and interface in the project description up to date.  The options are
 .PD 0
 .TP
-.B -b
-Bootstrap the SML Basis Library.
+.BI -o " exe"
+Perform IR and link every unit into an
+executable
+.IR exe .
+This fails if there are unimplemented units.
 .TP
-.B -m
-Perform parallel makes.  TILT will act as master to any slaves launched
-in the current directory.  Without
-.B -m,
-TILT interleaves master and slave work.
+.BI -l " lib"
+Perform IR and pack every unit and interface into a library
+.IR lib .
 .TP
 .B -p
-Print some statistics after each
-.I groupfile
-is processed.
-.TP
-.B -v
-Each use of
-.B -v
-makes the compiler more verbose.
-.TP
-.BI -a " arch"
-Generate code for
-.I arch
-(sparc or alpha).  The default is the current architecture, if it is
-supported, and sparc otherwise.
-.TP
-.BI -f " flag"
-Set internal
-.I flag;
-these are undocumented.
-.TP
-.BI -r " flag"
-Clear
-.I flag.
+Purge
+(remove) object files for every source unit in
+the project description.
+With a second
+.BR -p ,
+purge all compiler-generated files for every source unit and source
+interface.  Files associated with compiled units and interfaces (ie, library files)
+are not removed.
 .TP
 .B -s
-Act as a slave for any future or on-going parallel make in the current
-directory.  When arguments of the form
-.RI [ num /] host
-are provided, TILT does not act as a slave but instead launches
+Act as a slave for any future or ongoing parallel make in the current
+directory.  When a slave joins a parallel make, the TILT process that
+initiated compilation (the master) sends the target architecture,
+compiler flags, and project description to the slave.
+.TP
+.B -v
+Make TILT more verbose.  This option can be repeated.
+.TP
+.BI -f " F"
+Set the compiler flag
+.I F
+to true; these flags are undocumented.
+.TP
+.BI -r " F"
+Set
+.I F
+to false.
+.TP
+.B -m
+Prevent TILT from forking off a slave process to handle compilation.
+Compilation will proceed when slaves are started (with
+.BR "tilt -s" )
+in the current directory.
+.TP
+.BI -c " U"
+Operate on unit
+.IR U .
+.TP
+.BI -C " I"
+Operate on interface
+.IR I .
+The
+.B -c
+and
+.B -C
+options can be repeated to specify a list of
+.IR roots .
+TILT will operate on a reduced project description
+obtained by discarding
+any units and interfaces that are not prerequisite to
+.IR roots .
+.TP
+.BI -t " T"
+Set the target architecture;
+.I T
+must be
+.B sparc
+or
+.BR alpha .
+The default is the current architecture, if it is supported, and
+.B sparc
+otherwise.
+.PD
+.PP
+.I Tilt-slaves
+launches
 .I num
 slaves on
-.I host.
-.TP
-.B -c
-Delete any previously generated object files and executables.
-With a second
-.B -c,
-TILT also deletes cached interface and dependency information.
-.PD
-.SS Groups
-A group assigns logical names to the files in an SML project,
-describes the dependencies between them, and specifies the libraries
-and executables that TILT should create.
-.PP
-A group may comprise multiple group files that refer to one another.
-The dependencies between group files must form a DAG.  The identifiers
-that may appear free in a group file are environment variables, a few
-predefined variables, identifiers from the Basis Library (unless
-.B -b
-is used), and identifiers from any included or imported group files.
-.PP
-The syntax for constants, comments, and (alphanumeric) identifiers is
-borrowed from SML.  An identifier is either a variable
-.B x,
-a compilation unit name
-.B U,
-an interface name
-.B I,
-or an environment variable
-.B X.
-These categories are disjoint; for example, it is possible to assign
-the same name to a unit and its interface.  Identifiers may not be
-shadowed within a group file and the same variable or compilation unit
-name may not be defined in two group files that are part of the same
-group.  (Naming a unit is not the same as defining it; the distinction
-is whether or not an implementation is provided.  See the following
-description of "import unit".)
-.PP
-A group file comprises a list of entries; these are described in the
-following sections.
-.SS Interfaces
-Every compilation unit has an interface.  Interfaces may be specified
-by the programmer; when a unit is not provided with an interface,
-TILT infers one by examining the unit's source.
-.PP
-Humans write interfaces in source form and specify them with
-entries of the form:
-.IP
-.EX
-source interface I = \f2file\fP { \f2imports\fP }
-.EE
-.PP
-The
-.I file
-in a
-.B source interface
-entry contains specifications similar to an SML signature
-.I spec
-except that functors can be described.  Using the
-the syntactic categories
-.I spec,
-.I funid,
-.I strid,
-and
-.I sigexp
-from the Definition of Standard ML (Revised), the syntax of a source
-interface file is:
-.IP
-.EX
-\f2ispec\fP ::= \f2spec\fP
-        | functor \f2fundesc\fP
-        | \f2ispec1\fP <;> \f2ispec2\fP
-\f2fundesc\fP ::= \f2funid\fP ( \f2strid\fP : \f2sigexp\fP ) : \f2sigexp\fP
-          | \f2funid\fP ( \f2spec\fP ) : \f2sigexp\fP
-          | \f2fundesc\fP and \f2fundesc\fP
-.EE
-.PP
-Associated with every source file is an import list that names the
-units whose interfaces are needed to elaborate the source.  Every free
-identifier in a source file must be declared in one or more of its
-imports' interfaces.  The import list is ordered; shadowing occurs
-from left to right.
-.IP
-.EX
-compiled interface I = \f2file\fP and \f2file\fP
-.EE
-.PP
-.PP
-Compiled interface entries are inserted by TILT into the group files
-describing packaged libraries.  They name a compiled interface
-file and a unit environment file; these files are generated when a
-source interface is compiled or when an interface is inferred for a
-compilation unit.  A unit environment summarizes the context in which
-a compiled file was generated.
-.SS Unit Entries
-
-.SS Expressions
-In the previous sections, string constants were used to name files.
-Group file entries can contain more complicated expressions taken from
-a small, implicitly typed expression language.  Expressions may have
-type bool, string, or int.  String expressions support naming files;
-for example,
-.EX
-"tilt." ^ $target ^ ".exe"
-.EE
-Int and bool expressions support conditional compilation.  Precedence
-is as in SML; for example
-.EX
-if $majorVersion = 1 andalso $minorVersion > 0
-then "new.sml"
-else "old.sml"
-.EE
-parses as
-.EX
-if (($majorVersion = 1) andalso ($minorVersion > 0))
-then "new.sml"
-else "old.sml"
-.EE
-The parser permits parentheses around expressions and after the
-keyword
-.B defined.
-.PP
-The syntax for expressions...
-.SS Conditional Compilation
-.SH GROUP FILE SYNTAX
-The full grammar for group files is:
-.IP
-.EX
-exp ::= scon
-      | env X
-      | exp1 ^ exp2
-      | if exp1 then exp2 else exp3
-      | not exp
-      | exp1 andalso exp2
-      | exp1 orelse exp2
-      | exp1 S= exp2
-      | exp1 B= exp2
-      | exp1 = exp2
-      | exp1 < exp2
-      | exp1 <= exp2
-      | exp1 > exp2
-      | exp1 >= exp2
-      | defined U
-      | defined interface I
-      | defined $x
-      | defined env X
-import ::= U
-imports ::=
-          | import imports
-export ::= interface I
-         | val x
-exports ::=
-          | export exports
-\f2entry\fP ::= source interface \f2I\fP = \f2file\fP { \f2imports\fP }
-       | compiled interface \f2I\fP = \f2file\fP and \f2file\fP
-       | source unit \f2U\fP [: \f2I\fP] = \f2file\fP { \f2imports\fP }
-       | compiled unit \f2U\fP : \f2I\fP = \f2file\fP and \f2file\fP
-       | primitive unit \f2U\fP { \f2imports\fP }
-       | import unit \f2U\fP : \f2I\fP
-       | include group \f2file\fP
-       | import group \f2file\fP
-       | val \f2x\fP = \f2exp\fP
-       | make executable \f2file\fP { [\f2U\fP ...] }
-       | make library \f2file\fP [{ \f2exports\fP }]
-       | #if \f2e\fP \f2entries\fP [#elif \f2e'\fP \f2entries'\fP ...] [#else \f2entries''\fP] #endif
-       | #error \f2msg\fP
-\f2entries\fP ::=
-        | \f2entry\fP \f2entries\fP
-.EE
-.SH MAKE SYSTEM
-The TILT make system has two components: mapfiles and import lists.
-.PP
-Mapfiles are analogous to UNIX makefiles and SML/NJ's .cm files.
-Mapfiles do not need to have any particular suffix.
-Mapfiles map logical module names to filenames.
-For example,
-.EX
-FooBar  Bar/foobar
-.EE
-in a mapfile would indicate that the logical module name FooBar is to
-be associated with the file Baz/foobar.sml.
-Note that the extension .sml is omitted.
-The line
-.EX
-#include mapfile-basis
-.EE
-adds associations for the standard basis library to a mapfile.
-Most basis structures, signatures, and functors are defined in a
-module of the same name.
-Examples include List, LIST, and TextIO.
-The exceptions are IO_SIG, OS_SIG, and SML90_SIG which provide
-signatures IO, OS, and SML90.  The logical names IO, OS, and SML90
-provide the corresponding structures.
-The logical names Prelude and TopLevel together
-provide the terms
-and types bound at the top level like print, map, etc.
-A complete list of logical names used by the basis can be found in
-/usr/local/lib/tilt/Basis/mapfile-basis.
-.PP
-The second feature is a specialized comment placed as the first line
-of an SML source file.
-For example,
-.EX
-(*$import FooBar Goo *)
-.EE
-as the first line of a file indicates that the file depends on the
-modules named FooBar and Goo.
-A file can only depend on modules which appear earlier in the mapfile.
-If a file depends on a module that has not been imported, then unbound
-variable errors will result.
-For example,
-.EX
-(*$import Prelude TopLevel *)
-val _ = TextIO.print "Hello, world"
-.EE
-will not compile because TextIO is missing from the import list.
-.PP
-When processing a mapfile, TILT recompiles any files which are
-out-of-date and generates an executable file named after the last
-module in the mapfile.
-See
-.B PROGRAM EXECUTION
-below for information on what happens when this executable is run.
-.\" XXX: TARGET in mapfiles
-.PP
-Suppose you have a directory of SML files called twelf.
-To get twelf to compile with TILT, the first thing needed is to create
-a mapfile in the twelf directory called mapfile-twelf.
-The basis can be included in mapfile-twelf with the line ``#include
-mapfile-basis''.
-Then each of the SML source files in the twelf directory must be
-listed in the mapfile along with its assigned logical name.
-Then the proper dependencies among the modules needs to be inserted by
-adding import lines to each source file.
-.SH PROGRAM EXECUTION
-TILT has no analogue of C's function main().
-Instead, TILT-generated executables evaluate their top-level
-declarations.
-The order of modules in a mapfile determines the order in which these
-top-level declarations are processed.
-Command line arguments and environment variables are available via
-the standard basis library.
-The following are particularly useful:
-.EX
-CommandLine.name      : unit -> string
-CommandLine.arguments : unit -> string list
-OS.Process.getEnv     : string -> string option
-.EE
-For example, here is an SML program which behaves similar to
-.BR echo (1):
-.EX
-(*$import Prelude TopLevel CommandLine OS *)
-
-(* echo : string list -> unit *)
-fun echo nil = print "\\n"
-  | echo (s::nil) = (print s; print "\\n")
-  | echo (s1::(ss as _::_)) = (print s1; print " "; echo ss)
-    
-val _ = echo (CommandLine.arguments())
-val _ = OS.Process.exit (OS.Process.success)
-.EE
-.SH FILES
-.TP
-/usr/local/lib/tilt
-Directory of compiler and library binaries and support scripts.
-.TP
-/afs/cs/local/tilt/src
-Source code for TITL.
-.TP
-/usr/local/lib/sml/sml-mode/sml-site.el
-.BR emacs (1)
-major mode for editing SML files.
-Read the comments at the top of the file for information on setting
-this up.
+.I host
+using
+.I tilt
+(or
+.I tilt-nj
+if the
+.B -n
+option is present).
+.SS Make system
+.SS Program execution
+.SS Libraries
+.SH EXAMPLES
 .SH SEE ALSO
-.BR sml (1),
-.BR ml-lex (1),
-.BR ml-yacc (1),
-.BR ml-burg (1),
-.BR make (1).
-.SH BUGS
-This is an alpha release of TILT.
-If you think you've found a bug,
-send mail to the
-.B til-bugs@cs.cmu.edu
-mailing list.
+.IR project (6)
