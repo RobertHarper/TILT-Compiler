@@ -87,7 +87,7 @@ m0020	pass	Empty structure.
 m0021	pass	Explicit polymorphism and recursion.
 m0022	pass	Null tuple.
 m0024	pass	Merge sort.
-m0025	fail	[Bug# ?] Word value ranges.
+m0025	fail	[Bug# 0169] Word value ranges.
 m0026	pass	Word32 checks.
 m0027	pass	Word sub checks.
 m0028	fail	[Bug #0103] Word stuff.

@@ -1,5 +1,5 @@
 Number: 0129
-Title:       os exit status and textio
+Title:       printing is lost under test harness
 Keywords:    stdio, exit
 Submitter:   rwh
 Date:        08/16/02
@@ -7,7 +7,14 @@ Version:     CVS
 System:      any
 Severity:    minor
 Problem:     when run in harness, the output does not agree; when run by hand, output is correct.  race condition?
+
+	The harness collects output in a pipe.  It is likely that (1) if
+	output is not to a tty, then TextIO does not flush at the end of
+	each line and (2) OS.Process.exit does not flushing buffers.
+
 Code:        
+	val _ = (TextIO.output (TextIO.stdOut, "hello\n")
+		 ; OS.Process.exit OS.Process.success)
 Transcript:  
 Comments:    
 Fix:         

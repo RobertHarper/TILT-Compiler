@@ -115,7 +115,7 @@
 0126 [closed]	parsing identifiers incorrectly
 0127 [closed]	integer overflow discrepancy
 0128 [closed]	bombing on nonuniform datatypes
-0129 [open]	os exit status and textio
+0129 [open]	printing is lost under test harness
 0130 [closed]	type_of failed in Reify2
 0137 [open]	syntax of special constants
 0138 [open]	date failure
@@ -149,3 +149,4 @@
 0166 [closed]	Elaborator adding classifiers with unbound, free variables to context.
 0167 [closed]	Elaborator bombs on toplevel raise/handle/raise
 0168 [closed]	Real.fromString does not handle nan and inf correctly
+0169 [open]	Word.scan and Word.fromString errors in corner cases

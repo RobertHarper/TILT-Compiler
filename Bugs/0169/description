@@ -1,0 +1,44 @@
+Number: 0169
+Title: Word.scan and Word.fromString errors in corner cases
+Keywords: basis, Word
+Submitter: swasey
+Date: 1/16/2004
+Version: CVS
+System: any
+Severity: minor
+Problem:
+
+	The scanning functions Word.fromString and Word.scan are wrong.
+	These functions are supposed to match a prefix of the input string
+	to a regular expression.  The regular expressions are
+
+		BIN	{ws}(0w)?[0-1]+
+		OCT	{ws}(0w)?[0-7]+
+		DEC	{ws}(0w)?[0-9]+
+		HEX	{ws}(0w?[xX])?[0-9a-fA-F]+
+
+	where {ws} matches optional leading white space.
+
+	TILT's implementation accepts the prefix 0W for any base and the
+	prefix 0w for hex.  In particular, the following code should
+	terminate and does not because fromString and scan accept the
+	wrong regular expressions.
+
+Code:
+	val () =
+		let
+			open StringCvt Word
+			val SOME 0w0 = fromString "0w20Af"
+			val SOME 0w0 = fromString "0W1"
+			val SOME 0w0 = scanString (scan DEC) "0W1"
+			val SOME 0w0 = scanString (scan OCT) "0W1"
+			val SOME 0w0 = scanString (scan HEX) "0w1"
+			val SOME 0w0 = scanString (scan HEX) "0W1"
+		in	()
+		end
+Transcript:
+Comments:
+Fix:
+Test: m0025
+Owner: swasey
+Status: open
