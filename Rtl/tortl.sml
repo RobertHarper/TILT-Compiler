@@ -527,30 +527,18 @@ struct
 		  xexp (state,name,exp,trace,NOTID)
 	      end
 
-	    | Raise_e (exp, _) => (* Restore the stack pointer for CATCH_EXN to use *)
-		  let val (I except,state) = xexp'(state,name,exp,Nil.TraceUnknown,NOTID)
+	    | Raise_e (exp, _) =>
+		  let val _ = add_instr THROW_EXN
+		      val (I except,state) = xexp'(state,name,exp,Nil.TraceUnknown,NOTID)
 		      val rep = niltrace2rep state trace
 		      val _ = add_instr(MV(except,exnarg))
 		      val _ = record_project(exnptr,0,SREGI HANDLER)
 		      val _ = record_project(exnptr,1,SREGI STACK)
-		      val _ = add_instr(ABS_STACKPTR (SREGI STACK, SREGI STACK))
-		  in  add_instr(JMP(SREGI HANDLER,[]));
-		      (VALUE(VOID rep), state)
+		      val _ = add_instr(RESTORESP)
+		      val _ = add_instr(JMP(SREGI HANDLER,[]))
+		  in  (VALUE(VOID rep), state)
 		  end
 
-	    (* The comment below does not make much sense.  As far as I can tell the runtime 
-	     does nothing special in the course of handling an exception other than possibly 
-	     popping some stacklets.  I think the point is that anything we have on the stack
-	     when we install the handler will still be there if we end up in the handler; in 
-	     particular, anything below us on the stack (i.e. data that will be accessed after
-	     the entire Handle_e is finished, i.e. by its continuation) will not be disturbed
-	     by the exception event.  Of course, it is the Raise_e expression, not the 
-	     runtime, that restores the stack pointer before jumping to the handler.
-
-	     However, I am leaving the bizarre comment in because I think people expect to
-	     find it here.             joev, 8/2002.          *)
-            (* --- We rely on the runtime to unwind the stack so we don't need to save the
-	           free variables of the continuation of this expression. *)
 	    | Handle_e {body = exp, bound = exnvar, 
 			handler = handler_body, ...} =>
 		  let
@@ -612,7 +600,7 @@ struct
 		      val _ = add_instr(LADDR(LEA(hl,0),hlreg))
 		      val handlerTerm = LOCATION(REGISTER (false, I hlreg))
 		      val relStack = alloc_regi NOTRACE_INT
-		      val _ = add_instr(REL_STACKPTR (SREGI STACK, relStack))
+		      val _ = add_instr(LOADSP relStack)
 		      val stackptrTerm = LOCATION(REGISTER (false, I relStack))
 		      val exnptrTerm = LOCATION(REGISTER (false, I (SREGI EXNSTACK)))
 		      (* The ordering of fields in the exnrecord is used by the translation
@@ -633,7 +621,7 @@ struct
 		      (* --- now the code for handler --- *)
 		      val _ = add_instr (ILABEL hl)
 		      val _ = add_instr CATCH_EXN
-		                                     (* This translates to updating maxsp so it
+		                                     (* This translates to updating the stack chain; it
 						       relies on stack pointer having been fixed
 						       already by Raise_e.
 						       This must occur first in the handler.
@@ -703,7 +691,7 @@ struct
 	      val thenl = fresh_code_label "zero_case"
 	      val elsel = fresh_code_label "one_case"
 	      val afterl = fresh_code_label "after_zeroone"
-	      val _ = add_instr(BCNDI(NE,r,IMM 0,elsel,false))
+	      val _ = add_instr(BCNDSI(NE,r,IMM 0,elsel,false))
 	      val _ = add_instr(ILABEL thenl)
 	      val (zero,state_zero) = xexp'(state,fresh_named_var "zero_result", 
 						 zeroexp, trace, context)
@@ -757,15 +745,15 @@ struct
 			     end
 		 | NONE => error "empty switch statement")
 
-	  (* If tag cmp i, branch to label *)
-	  fun check lbl cmp i tag = 
-	    (if in_imm_range i
-	       then add_instr(BCNDI(cmp,tag,IMM (w2i i), lbl, true))
-	     else 
-	       let val tmp = alloc_regi(NOTRACE_INT)
-	       in  add_instr(LI(i,tmp));
-		 add_instr(BCNDI(cmp,tag,REG tmp,lbl, true))
-	       end)
+	  (* If tag cmp i, branch to label.  Comparison is unsigned. *)
+	  fun checku lbl cmp i tag = 
+	      (if in_imm_range i
+		   then add_instr(BCNDUI(cmp,tag,IMM (w2i i),lbl,true))
+	       else 
+		   let val tmp = alloc_regi(NOTRACE_INT)
+		   in  add_instr(LI(i,tmp));
+		       add_instr(BCNDUI(cmp,tag,REG tmp,lbl,true))
+		   end)
 
 	  fun do_arm_body (state,body,trace,context) : state =
 	    let val (r,state) = xexp'(state,fresh_var(),body,trace,context)
@@ -796,7 +784,7 @@ struct
 				| scan(states,lab,(i,body)::rest) =
 				  let val next = fresh_code_label "intarm"
 				  in  add_instr(ILABEL lab);
-				      check next NE i r;
+				      checku next NE i r;
 				      scan( do_arm_body(state,body,trace,context)::states, next, rest )
 				  end
 			      val new_states = scan([],fresh_code_label "intarm",arms)
@@ -843,7 +831,7 @@ struct
 						  I ir => ir
 						| _ => error "carried value is an unboxed float")
 			      val state = add_reg (state,bound,c,carried)
-			  in  add_instr(BCNDI(NE,exntag,REG armtagi,next,true));
+			  in  add_instr(BCNDSI(NE,exntag,REG armtagi,next,true));
 			      record_project(exnarg,1,carriedi);
 			      scan( do_arm_body(state,body,trace,context)::states,next,rest )
 			  end
@@ -862,9 +850,9 @@ struct
 		      val contagr = alloc_regi(NOTRACE_INT)
 		      val arityr = alloc_regi(NOTRACE_INT)
 
-		      val _ = add_instr(BCNDI(LE, conr, IMM 255, defaultl, false))
+		      val _ = add_instr(BCNDUI(LE, conr, IMM 255, defaultl, false))
 		      val _ = record_project(conr,0,contagr)
-		      val _ = add_instr(BCNDI(NE, contagr, IMM 5, defaultl, false)) (* skip non-records *)
+		      val _ = add_instr(BCNDSI(NE, contagr, IMM 5, defaultl, false)) (* skip non-records *)
 		      val _ = record_project(conr,1,arityr)
 
 		      fun scan(states,lab,[]) =
@@ -886,7 +874,7 @@ struct
 				  in  loop (pos+1,rest,state)
 				  end
 			      val _ =  add_instr(ILABEL lab);
-			      val _ = add_instr(BCNDI(NE,arityr,IMM arity,next,true));
+			      val _ = add_instr(BCNDSI(NE,arityr,IMM arity,next,true));
 			      val state = loop (2,vklist,state)
 			  in scan( do_arm_body(state,body,trace,context)::states, next, rest)
 			  end
@@ -951,23 +939,23 @@ struct
 			      fun check_ptr() = 
 				  (if (!check_ptr_done) 
 				       then () 
-				   else check nomatchl LE 0w255 r;
-				       check_ptr_done := true)
+				   else (checku nomatchl LE 0w255 r;
+					 check_ptr_done := true))
 			      fun load_tag() = 
 				  (if (!load_tag_done) 
 				       then () 
-				   else record_project(r,0,tag);
-				      load_tag_done := true)
+				   else (record_project(r,0,tag);
+					 load_tag_done := true))
 			  in  
 			      (case (exhaustive andalso TW32.equal(TW32.uplus(i,0w1),total),
 				     TW32.ult(i,tagcount)) of
 				  (true,_) => ()
-				| (_,true) => check next NE i r
+				| (_,true) => checku next NE i r
 				| (_,false) => (if exhaustive then () else check_ptr();
 						if one_carrier
 						    then ()
 						else (load_tag();
-						     check next NE (TW32.uminus(i,tagcount)) tag)));
+						     checku next NE (TW32.uminus(i,tagcount)) tag)));
 		              scan( do_arm_body(state,body,trace,context)::newstates, next, rest )
 			  end
 		      val states = scan([],fresh_code_label "sumarm",arms)
@@ -2018,7 +2006,6 @@ struct
 		 DLABEL (ML_EXTERN_LABEL name) ::
 		 map (fn s => DATA(ML_EXTERN_LABEL (s ^ suffix))) moduleStrings
 	     val gc_table_begin =  mktable("GCTABLE_BEGIN_VAL","_GCTABLE_BEGIN_VAL")
-	     val gc_table_end =	   mktable("GCTABLE_END_VAL","_GCTABLE_END_VAL")
 	     val globals_start =   mktable("GLOBALS_BEGIN_VAL","_GLOBALS_BEGIN_VAL")
 	     val globals_end =     mktable("GLOBALS_END_VAL","_GLOBALS_END_VAL")
 	     val trace_globals_start = mktable("TRACE_GLOBALS_BEGIN_VAL","_TRACE_GLOBALS_BEGIN_VAL")
@@ -2027,7 +2014,6 @@ struct
 			  INT32 (TilWord32.fromInt count)]
 	     val data = List.concat[count,
 				    gc_table_begin,
-				    gc_table_end,
 				    globals_start,
 				    globals_end,
 				    trace_globals_start,

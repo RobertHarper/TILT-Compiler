@@ -1,22 +1,18 @@
-(*$import Prelude TopLevel RTL TilWord32 Name Util String HashString *)
-
-fun in_imm_range x =  TilWord32.ult(x,0w255)
-fun in_ea_disp_range x = x >= ~32768 andalso x<32768
+(*$import RTL TilWord32 Name Util String HashString *)
 
 structure Rtl :> RTL = 
 struct
 
-
-    type var = Name.var
-    val eq_var = Name.eq_var
-    val fresh_var = Name.fresh_var
-    val fresh_named_var = Name.fresh_named_var
-    fun error str = Util.error "rtl.sml" str
+  fun error str = Util.error "rtl.sml" str
     
-    datatype label = ML_EXTERN_LABEL of string
-	           | C_EXTERN_LABEL of string
-                   | LOCAL_DATA of string
-                   | LOCAL_CODE of string
+  type var = Name.var
+  val eq_var = Name.eq_var
+  val fresh_var = Name.fresh_var
+  val fresh_named_var = Name.fresh_named_var
+  datatype label = ML_EXTERN_LABEL of string
+	         | C_EXTERN_LABEL of string
+                 | LOCAL_DATA of string
+                 | LOCAL_CODE of string
 
   datatype sregi = THREADPTR | HEAPALLOC | HEAPLIMIT | 
                    HANDLER | EXNSTACK | EXNARG | STACK
@@ -96,7 +92,7 @@ struct
               | LEA of label * int 
               | RREA of regi * regi    (* needed for the MUTATE *)
 
-  val in_ea_disp_range = in_ea_disp_range
+  fun in_ea_disp_range x = x >= ~32768 andalso x<32768
 
   (* small value: small integer value or register *)
 
@@ -107,7 +103,7 @@ struct
 	      | IMM of int 
 
   (* in_imm_range: is an integer in a range of immediate values *)
-  val in_imm_range = in_imm_range
+  fun in_imm_range x =  TilWord32.ult(x,0w255)
 
   datatype cmp = EQ | LE | LT | GE | GT | NE 
 
@@ -121,7 +117,7 @@ struct
       LI     of TilWord32.word * regi
     | LADDR  of ea * regi               
     | MV     of regi * regi               (* src,dest *)
-    | CMV    of cmp * regi * sv * regi    (* if cmp ra then b <- c *)
+    | CMV    of cmp * regi * sv * regi    (* if ra cmp 0, then c <- b (signed compare) *)
     | FMV    of regf * regf 
 
     | ADD    of regi * sv * regi        (* add(a,b,c): c <- a+b *)
@@ -169,9 +165,10 @@ struct
 
     | BR     of label
 
-    (* BCND(I/F): compare operands with cmp and branch is cmp succeeds 
-                  bool predicts whether branch taken or not *)
-    | BCNDI  of cmp * regi * sv * label * bool  
+    (* BCND(SI/UI/F): compare operands with cmp and branch is cmp succeeds 
+                      bool predicts whether branch taken or not *)
+    | BCNDSI of cmp * regi * sv * label * bool
+    | BCNDUI of cmp * regi * sv * label * bool
     | BCNDF  of cmp * regf * regf * label * bool
     | JMP    of regi * label list
 
@@ -206,8 +203,13 @@ struct
     | MIRROR_GLOBAL_OFFSET of regi    (* 0 or 4 *)
     | MIRROR_PTR_ARRAY_OFFSET of regi (* 0 or 4 *)
 
-    | REL_STACKPTR of regi * regi (* b = relativize (abs stack pointer a) *)
-    | ABS_STACKPTR of regi * regi (* b = absolutize (rel stack pointer b) *)
+    (* Use LOADSP to calculate a representation of the current stack
+       pointer.  To restore a saved stack pointer, first load SREGI
+       STACK with the value from LOADSP then RESTORESP. *)
+      
+    | LOADSP    of regi			(* a <- SP - stackletOffset *)
+    | RESTORESP				(* SP <- SP + stackletOffset; also changes stacklet chain *)
+
     | STOREMUTATE of ea * mutateType
     | NEEDALLOC  of sv                        (* Calls GC if sv words are not allocatable *)
     | NEEDMUTATE of int                      (* Calls GC if int writes won't fit in write list *)

@@ -161,7 +161,13 @@ struct
   fun wordpair2str (a,b) = "(" ^ (i2s (w2i a)) 
       ^ ", " ^ (i2s (w2i b)) ^ ")";
 
-
+  fun cbranch sign (cmp,regi1,sv2,dest,pred) =
+      plain["b"^(cmpi2s cmp sign),
+            regi2s regi1,", ",
+	    sv2s sv2,", ",
+	    label2s dest,
+	    (if !predicted then ", "^(pred2s pred) else "")]
+      
   fun pp_Instr' instr =
 	     case instr of
 		LI (i,ri) => plain["li",word2str i,", ",regi2s ri]
@@ -206,13 +212,8 @@ struct
 	      | CVT_INT2REAL a => opif "int2real" a
 	      | CMPF (cmp,r,v,dest) => opffi (cmpf2s cmp) (r,v,dest)
               | BR l => String("br "^label2s l)
-              | BCNDI (cmp,regi1,sv2,dest,pred) =>
-		    plain["b"^(cmpi2s cmp true),
-			  regi2s regi1,", ",
-			  sv2s sv2,", ",
-			  label2s dest,
-			  (if !predicted then ", "^(pred2s pred)
-			   else "")]
+              | BCNDSI info => cbranch true info
+              | BCNDUI info => cbranch false info
               | BCNDF (cmp,regf1,regf2,dest,pred) =>
 		    plain["br"^(cmpf2s cmp) ,
 			  regf2s regf1,", ",
@@ -256,8 +257,8 @@ struct
 	      | MIRROR_GLOBAL_OFFSET r => plain ["mirror_global_offset",regi2s r]
 	      | MIRROR_PTR_ARRAY_OFFSET r => plain ["mirror_ptr_array_offset",regi2s r]
 
-	      | REL_STACKPTR (ra,rb) => plain ["relStackPtr", regi2s ra, ", ", regi2s rb]
-	      | ABS_STACKPTR (ra,rb) => plain ["absStackPtr", regi2s ra, ", ", regi2s rb]
+	      | LOADSP r => plain ["ldsp", regi2s r]
+	      | RESTORESP => plain ["restoresp"]
 	      | STOREMUTATE (ea,mutType) => plain ["storemutate", ea2s ea, ",", (case mutType of
 										     INT_MUTATE => "intMutate"
 										   | FLOAT_MUTATE => "floatMutate"

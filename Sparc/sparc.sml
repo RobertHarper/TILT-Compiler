@@ -5,6 +5,7 @@ struct
 
     val exclude_intregs = []
     val error = fn s => Util.error "sparc.sml" s
+	
     (* Check against Runtime/thread.h *)
     val iregs_disp          = 0
     val fregs_disp          = iregs_disp + 4 * 32
@@ -14,7 +15,8 @@ struct
     val writelistAlloc_disp = requestInfo_disp + 4 + 4 * 32 + 8 * 32
     val writelistLimit_disp = writelistAlloc_disp + 4
     val stackLimit_disp     = writelistLimit_disp + 4
-    val globalOffset_disp   = stackLimit_disp + 4
+    val stackTop_disp       = stackLimit_disp + 4
+    val globalOffset_disp   = stackTop_disp + 4
     val stackletOffset_disp = globalOffset_disp + 4
     val arrayOffset_disp    = stackletOffset_disp + 4
 
@@ -740,7 +742,7 @@ structure Machine =
        = fn name => ignore o (Stats.counter name)
    val large_stack_frame = counter "Large Stack Frames"
    val large_frame_access = counter "Large Frame Accesses"
-       
+
    fun allocate_stack_frame (sz, prevframe_maxoffset) = 
        let val _ = if sz < 0 then error "allocate_stack_frame given negative size" else ()
 	   val after = freshCodeLabel()
@@ -753,8 +755,8 @@ structure Machine =
 	    bumpSp (~sz),		(* Try to allocate frame on current stacklet *)
 	    [SPECIFIC(LOADI(LD, Rat, INT stackLimit_disp, Rth)),
 	     SPECIFIC(CMP (Rsp, REGop Rat)),
-	     SPECIFIC(CBRANCHI(BG, after, true)),
-	     BASE(MOVE(Rsp, Rframe))],
+	     SPECIFIC(CBRANCHI(BGU, after, true)),
+	     SPECIFIC(NOP)],	(* delay slot *)
 	    bumpSp sz,			(* Restore stack pointer to original value *)
 	    [SPECIFIC(INTOP(OR, Rzero, IMMop (INT prevframe_maxoffset), Rat)),
 	     BASE (MOVE(Rra, Rat2)),

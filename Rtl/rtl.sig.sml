@@ -1,4 +1,4 @@
-(*$import Prelude Name TilWord32 *)
+(*$import Name TilWord32 *)
 signature RTL =
 sig
 
@@ -93,7 +93,7 @@ sig
       LI     of TilWord32.word * regi
     | LADDR  of ea * regi               
     | MV     of regi * regi               (* src,dest *)
-    | CMV    of cmp * regi * sv * regi    (* if cmp ra then b <- c *)
+    | CMV    of cmp * regi * sv * regi    (* if ra cmp 0, then c <- b (signed compare) *)
     | FMV    of regf * regf 
 
 
@@ -142,9 +142,10 @@ sig
 
     | BR     of label
 
-    (* BCND(I/F): compare operands with cmp and branch is cmp succeeds 
-                  bool predicts whether branch taken or not *)
-    | BCNDI  of cmp * regi * sv * label * bool  
+    (* BCND(SI/UI/F): compare operands with cmp and branch is cmp succeeds 
+                      bool predicts whether branch taken or not *)
+    | BCNDSI of cmp * regi * sv * label * bool
+    | BCNDUI of cmp * regi * sv * label * bool
     | BCNDF  of cmp * regf * regf * label * bool
     | JMP    of regi * label list 
                          (* label list includes set of possible destinations.
@@ -195,7 +196,7 @@ sig
        code.  Currently, PUSH_EXN, POP_EXN, THROW_EXN are no-ops
        while CATCH_EXN translate into code that records the fact that
        a handler has entered and some special calling convention code
-       on the Alpha.  (On the Sparc, it is a no-op.  -joev)
+       on the Alpha.
 
        - PUSH_EXN adds a new entry to the exception stack
        - POP_EXN  discards the top entry of the exception stack
@@ -248,8 +249,12 @@ sig
     | MIRROR_GLOBAL_OFFSET of regi    (* 0 or 4 *)
     | MIRROR_PTR_ARRAY_OFFSET of regi (* 0 or 4 *)
 
-    | REL_STACKPTR of regi * regi (* b = relativize (abs stack pointer a) *)
-    | ABS_STACKPTR of regi * regi (* b = absolutize (rel stack pointer b) *)
+    (* Use LOADSP to calculate a representation of the current stack
+       pointer.  To restore a saved stack pointer, first load SREGI
+       STACK with the value from LOADSP then RESTORESP. *)
+      
+    | LOADSP    of regi			(* a <- SP - stackletOffset *)
+    | RESTORESP				(* SP <- SP + stackletOffset; also changes stacklet chain *)
 
     | STOREMUTATE of ea * mutateType
     | NEEDALLOC  of sv                       (* Calls GC if sv words are not allocatable *)
