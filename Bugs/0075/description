@@ -31,6 +31,8 @@ Problem:
 Code:
 Transcript:
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	This is not a new bug.
 
 	The function exn_case in pat.sml was not unifying the argument

@@ -8,6 +8,10 @@ System:      any
 Severity:    major
 Problem:     zero-sized word8 vectors cause a seg fault
 Code:        
+	[Supporting files in CVS prior to 1/6/04.]
+	
+	val a = Word8Array.array (0, 0w42)
+	val sum = Word8Array.foldr (fn (e,a) => Word8.toInt e + a) 0 a
 Transcript:  
 Comments:
 	Word8Array.foldr was not dealing with zero-length

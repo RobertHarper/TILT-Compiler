@@ -54,6 +54,8 @@ Transcript:
 		  [SplayTree_adj_code_169426:806, 0x8176778]    ldah    gp, 525(r26) <0xa246778>        <r26=0x8176778,gp=0xa245840>
 		Runtime call beforeline 806 is GCToML.
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	We aren't using that much memory.  See mem_usage, which tracks
 	the process under GDB.
 
