@@ -13,13 +13,13 @@ make it in to the release, a file must match a + expression and not
 match any - expressions.
 
 # start server
-srvfs -P patterns releasefs /usr/swasey/src/ml96
+srvfs -P patterns releasefs /usr/swasey/src/work/ml96
 
 # mount and take a look
 Local mount /srv/releasefs /n/test
 
 # mount and create archive
-v=1.0
+v=1.1
 mount /srv/releasefs /n/tilt-$v
 cd /n; tar c tilt-$v | gzip -9 > /tmp/tilt-$v.tar.gz
 
