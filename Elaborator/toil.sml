@@ -1531,6 +1531,7 @@ structure Toil
 		  fun temp (opt : (bool * sbnd) option,ce) = (mapopt #2 opt,ce)
 		  fun rename(opt,CONTEXT_SDEC(SDEC(l,dec))) = 
 		      let val lbl = fresh_internal_label ("local_" ^ (Name.label2name l))
+			  val lbl = to_nonexport_lab lbl
 			  val ce' = CONTEXT_SDEC(SDEC(lbl,dec))
 		      in case opt of
 			  NONE => (NONE,ce')
