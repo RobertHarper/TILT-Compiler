@@ -171,7 +171,7 @@ void ReleaseJob(Proc_t *proc)
 #ifdef solaris
   stacklet->retadd = (mem_t) th->saveregs[LINK];
 #else
-  assert(0);
+  stacklet->retadd = (mem_t) th->saveregs[RA];
 #endif
   th->saveregs[ALLOCPTR] = 0;
   th->saveregs[ALLOCLIMIT] = 0;

@@ -575,7 +575,7 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
 #ifdef solaris
   mem_t returnToCallee = (mem_t) curThread->saveregs[LINK];
 #else
-  mem_t returnToCallee = 0; /* XXX */
+  mem_t returnToCallee = (mem_t) curThread->saveregs[RA];
 #endif
   Stacklet_t *oldStacklet, *newStacklet;
   StackChain_t *stackChain = curThread->stack;
@@ -590,7 +590,7 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
 #ifdef solaris
   curThread->saveregs[LINK] = (val_t) (&PopStackletFromML) - 8;
 #else
-  assert(0);
+  /* Thread/stacklet support not yet implemented for alpha.  Leave RA alone. */
 #endif
   Stacklet_KillReplica(newStacklet);
   returnToML(curThread, returnToCallee);
@@ -618,7 +618,7 @@ void PopStackletFromMutator(Thread_t *curThread)
 #ifdef solaris
   curThread->saveregs[LINK] = (val_t) newStacklet->retadd; /* Not really necessary */
 #else
-  assert(0);
+  curThread->saveregs[RA] = (val_t) newStacklet->retadd; /* Not really necessary */
 #endif
   curThread->stackLimit = StackletPrimaryBottom(newStacklet);
   Stacklet_KillReplica(newStacklet);
