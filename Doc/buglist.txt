@@ -4,14 +4,27 @@ HIGH PRIORITY
 	systematically rename in tonil
 
 (1) Debug the typechecker and fix bugs in compiler that the checker reveals
+        The typechecker is *really* slow on functors.  Profiling reveals
+        that a lot of time is spent in the rewriter. Why?
 
-(2) remove Ref_c from Nil;
-    change NIL to include reify results at function formals
+(2) Change NIL to include reify results at function formals
 
 (3) modify tortl to fully rely on reification results;
 	after this, all "assuming TRACE" messages should disappear
 
 (4) document how the system is used (mapfiles and make)
+
+(5) Label-equality is being done on label "names", which does not 
+        seem to distinguish between identifiers from different namespaces.
+        E.g., NIL typechecker can't allow a type foo and a functor foo
+        (the compile-time part of a functor foo) in the same module because
+        the names clash.
+
+(6) The phase-splitter is marking all functions as partial because
+        it doesn't have enough information.  Either it has to keep
+        a term-level context, or HIL fbnds must be marked TOTAL/PARTIAL
+
+
 
 NORMAL PRIORITY
 ---------------
