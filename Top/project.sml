@@ -248,7 +248,7 @@ struct
 	|   _ => fail (#pos desc) (undefined x))
 
     fun lookup_env (desc:desc, X:label) : string =
-	(case (OS.Process.getEnv (Name.label2name X)) of
+	(case (OS.Process.getEnv (Name.label2name' X)) of
 	    SOME s => s
 	|   NONE => fail (#pos desc) (undefined X))
 
@@ -616,7 +616,14 @@ struct
 	    |	E.EXP_ILE (e1,e2) => icmp (e1,e2,op<=)
 	    |	E.EXP_IGT (e1,e2) => icmp (e1,e2,op>)
 	    |	E.EXP_IGE (e1,e2) => icmp (e1,e2,op>=)
-	    |	E.EXP_DEF l => BVAL(isSome(lookup(desc,l)))
+	    |	E.EXP_DEF l =>
+		    let val bound =
+			    if Name.is_env l then
+				isSome(OS.Process.getEnv (Name.label2name' l))
+			    else
+				isSome(lookup(desc,l))
+		    in  BVAL bound
+		    end
 	    |	E.EXP_MARK (_,e) => self e)
 	end
 
