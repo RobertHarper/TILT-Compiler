@@ -4,21 +4,21 @@
 
 struct Bitmap_st
 {
+  long lock;
   int size;
   int pos;
-  unsigned long *data;
   int used;
+  unsigned long *data; 
 };
 
 typedef struct Bitmap_st Bitmap_t;
 
 Bitmap_t *CreateBitmap(int size);
 void      DestroyBitmap(Bitmap_t *);
-int       AllocBitmapRange(Bitmap_t *, int size);
-void      DeallocBitmapRange(Bitmap_t *, int start, int size);
-int       ClearBitmap(Bitmap_t *);
-int       SetBitmapRange(Bitmap_t *, int start, int size);
 int       BitmapSize(Bitmap_t *);
-int       IsSet(Bitmap_t *, unsigned int);
+int       ClearBitmap(Bitmap_t *);
+int       AllocBitmapRange(Bitmap_t *, int size);                /* multiple callers for allocation */
+int       SetBitmapRange(Bitmap_t *, int start, int size);       /* multiple callers for marking */
+int       IsSet(Bitmap_t *, unsigned int);                       /* multiple callers for marking */
 
 #endif 

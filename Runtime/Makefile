@@ -75,7 +75,7 @@ solaris_cc=gcc
 # This allows the runtime to use pointer type that are 32-bit when interacting with ML.
 # -std will define __STDC__ 
 alpha_osf_cflags=-newc -xtaso -w0 -warnprotos -std -c -inline size -g3 -D${sys_name}
-solaris_cflags=-O2 -Winline -finline-functions -Wa,-xarch=v8plus -c -g -D${sys_name}
+solaris_cflags=-O2 -Winline -finline-functions -Wimplicit -Wa,-xarch=v8plus -c -g -D${sys_name}
 CC=${${sys_name}_cc}
 CFLAGS=${${sys_name}_cflags}
 

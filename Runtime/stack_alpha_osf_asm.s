@@ -217,7 +217,7 @@ stack_stub_internal:
 dummy:	
 	ldgp	$gp, 0($gp)	# fix gp so globals work
 	ldq	$26, snapshot_disp(THREADPTR_REG) 
-        s8addl  $at, $26, $at	# $at now contains pointer to a StackSnapshot_t;  C pointer are 8 bytes
+        mull    $at, snapshot_size, $at	# $at now contains pointer to a StackSnapshot_t
 	ldq	$at, 0($at)     # load the StackSnapshot_t into temp
 	ldl	$26, 0($at)	# Relies on save_ra being the first field in StackSnapshot_t
 	stl     $31, 0($at)	# Set to zero to show we've consumed it

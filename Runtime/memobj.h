@@ -10,7 +10,7 @@
 
 struct StackChain__t;
 
-struct Stack__t
+typedef struct MemStack__t
 {
   int id;
   int valid;
@@ -21,21 +21,19 @@ struct Stack__t
   mem_t used_bottom;
   long safety;
   struct StackChain__t *parent;
-};
-
-typedef struct Stack__t Stack_t;
+} MemStack_t;
 
 struct StackChain__t
 {
   int size;
   int count;
-  Stack_t **stacks;
+  MemStack_t **stacks;
 };
 
 typedef struct StackChain__t StackChain_t;
 
-Stack_t* Stack_Alloc(StackChain_t *);
-Stack_t* GetStack(mem_t);
+MemStack_t* Stack_Alloc(StackChain_t *);
+MemStack_t* GetStack(mem_t);
 mem_t StackError(struct ucontext *, mem_t);
 
 
@@ -84,6 +82,7 @@ struct Heap__t
   mem_t mappedTop;         /* The top of the memory region that is mapped. */
   mem_t writeableTop;      /* The top of the memory region that is unprotected. */
   mem_t cursor;            /* The next allocation point in the logical heap. bottom <= cursor <= top */
+  mem_t prevCursor;        /* The value of cursor at the end of hte last GC - used to compute liveness ratio */
   struct range__t range;   /* The physical range bottom to physicalTop */
   pthread_mutex_t *lock;   /* Used to synchronize multiple access to heap object. */
   Bitmap_t *bitmap;        /* Stores starts of objects for debugging */
@@ -95,12 +94,13 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize);
 Heap_t* GetHeap(ptr_t);
 int inSomeHeap(ptr_t v);
 void Heap_Check(Heap_t*);
+void Heap_Reset(Heap_t *);
 void Heap_Resize(Heap_t *, long newSize, int reset);  /* Resizes the heap, making mprotect calls if paranoid;
 							 the cursor is set to bottom if reset is true;
 							 if the heap is being shrunk, then reset must be true */
-int Heap_GetSize(Heap_t *res);
-int Heap_GetMaximumSize(Heap_t *res);
-int Heap_GetAvail(Heap_t *res);
+int Heap_GetSize(Heap_t *res);                        /* Current size */
+int Heap_GetMaximumSize(Heap_t *res);                 /* Maximum size */
+int Heap_GetAvail(Heap_t *res);                       /* Space unused under current size */
 void PadHeapArea(mem_t bottom, mem_t top);
 void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *top);
 

@@ -13,7 +13,7 @@ mem_t oddword_align(mem_t ptr)
 {
   unsigned int v = (unsigned int) ptr;
   if ((v & 7) == 0) 
-    *(ptr++) = SKIP_TAG | (1 << SKIPLEN_OFFSET);
+    *(ptr++) = SKIP_TYPE | (1 << SKIPLEN_OFFSET);
   return ptr;
 }
 
@@ -21,7 +21,7 @@ mem_t evenword_align(mem_t ptr)
 {
   unsigned int v = (unsigned int) ptr;
   if ((v & 7) != 0) 
-    *(ptr++) = SKIP_TAG | (1 << SKIPLEN_OFFSET);
+    *(ptr++) = SKIP_TYPE | (1 << SKIPLEN_OFFSET);
   return ptr;
 }
 
@@ -49,12 +49,15 @@ static mem_t alloc_space(int bytesNeeded)
     }
   }
   else {
+    assert(0);
+/*
     alloc = (mem_t) RuntimeGlobalData_Cur;
     limit = (mem_t) RuntimeGlobalData_End;
     newAlloc = alloc + wordsNeeded;
-    assert(newAlloc <= limit);  /* We should not allocate from global segment too much. */
+    assert(newAlloc <= limit);  
     RuntimeGlobalData_Cur = newAlloc;
     return alloc;
+*/
   }
 }
 
@@ -67,7 +70,7 @@ ptr_t alloc_iarray(int count, int n)
   mem_t alloc = alloc_space(4 * (len + 1));
 
   obj = alloc + 1;
-  obj[-1] = IARRAY_TAG | (count << (2+ARRLEN_OFFSET));
+  obj[-1] = IARRAY_TYPE | (count << (2+ARRLEN_OFFSET));
   while (len > 0)
     obj[--len]  = n;
   
@@ -83,12 +86,12 @@ ptr_t alloc_rarray(int count, double val)
   mem_t alloc = alloc_space(8 * (len + 1)); /* tags and alignment */
   alloc = oddword_align(alloc);
   obj = alloc + 1;
-  obj[-1] = RARRAY_TAG | (len << (2+ARRLEN_OFFSET));
+  obj[-1] = RARRAY_TYPE | (len << (2+ARRLEN_OFFSET));
   while (count > 0) {
     count--;
     ((double *)obj)[count]  = val;
   }
-  obj[2*len] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
+  obj[2*len] = SKIP_TYPE | (1 << SKIPLEN_OFFSET);
   return obj;
 }
 
@@ -97,19 +100,18 @@ val_t get_record(ptr_t rec, int which)
   tag_t tag = rec[-1];
   int len = GET_RECLEN(tag);
 
-  if (!(IS_RECORD(tag))) {
+  if (GET_TYPE(tag) != RECORD_TYPE) {
     printf("BUG: calling get_field on non-record. tag = %d\n",tag);
     exit(-1);
   }
 
   if (which < len)
     return rec[which];
-  else
-    {
-      printf("BUG in get_record: record %d has %d fields.  No field %d.\n",
-	     rec,len,which);
-      exit(-1);
-    }
+  else {
+    printf("BUG in get_record: record %d has %d fields.  No field %d.\n",
+	   rec,len,which);
+    assert(0);
+  }
 }
 
 static ptr_t alloc_small_record(val_t *fields, int mask, int count)
@@ -128,7 +130,7 @@ static ptr_t alloc_small_record(val_t *fields, int mask, int count)
   alloc = alloc_space(4 * (count + 1));
   rec = alloc + 1;
 
-  rec[-1] = RECORD_TAG | (count << RECLEN_OFFSET) | (mask << RECMASK_OFFSET);
+  rec[-1] = RECORD_TYPE | (count << RECLEN_OFFSET) | (mask << RECMASK_OFFSET);
 
   /* Initialize record fields */
   for (i=0; i<count; i++)
@@ -155,12 +157,12 @@ ptr_t alloc_string(int strlen, char *str)
   int offset = 0;
   int wordlen = (strlen + 3) / 4;
   ptr_t res;
-  int tag = IARRAY_TAG | (strlen << ARRLEN_OFFSET);
+  int tag = IARRAY_TYPE | (strlen << ARRLEN_OFFSET);
 
   mem_t alloc = alloc_space(4 * (wordlen + 1));
   res = alloc + 1;
   res[-1] = tag;
-  bcopy(str,(char *)res,strlen);
+  memcpy((char *)res,str,strlen);
 
   return res;
 }
@@ -171,7 +173,7 @@ ptr_t alloc_uninit_string(int strlen, char **raw)
   int offset = 0;
   int wordlen = (strlen + 3) / 4;
   ptr_t res;
-  int tag = IARRAY_TAG | (strlen << ARRLEN_OFFSET);
+  int tag = IARRAY_TYPE | (strlen << ARRLEN_OFFSET);
   mem_t alloc = alloc_space(4 * (wordlen + 1));
   res = alloc + 1;
   res[-1] = tag;
@@ -179,21 +181,22 @@ ptr_t alloc_uninit_string(int strlen, char **raw)
   return res;
 }
 
-/* Shorten a string and fill the space it used to occupy with SKIP_TAG */
+/* Shorten a string and fill the space it used to occupy with SKIP_TYPE */
 void adjust_stringlen(ptr_t str, int newByteLen)
 {
   int i;
   tag_t oldTag = str[-1];
-  tag_t newTag = IARRAY_TAG | (newByteLen << ARRLEN_OFFSET);
+  tag_t newTag = IARRAY_TYPE | (newByteLen << ARRLEN_OFFSET);
   int oldByteLen = GET_ARRLEN(oldTag);
   int oldWordLen = (oldByteLen + 3) / 4;
   int newWordLen = (newByteLen + 3) / 4;
 
+  assert(GET_TYPE(oldTag) == IARRAY_TYPE);
   assert(newByteLen <= oldByteLen);
   if (newWordLen == oldWordLen)
     return;
   str[-1] = newTag;
-  str[newWordLen] = SKIP_TAG | ((oldWordLen - newWordLen) << SKIPLEN_OFFSET);
+  str[newWordLen] = SKIP_TYPE | ((oldWordLen - newWordLen) << SKIPLEN_OFFSET);
 }
 
 ptr_t alloc_recrec(ptr_t rec1, ptr_t rec2)
@@ -257,7 +260,7 @@ ptr_t alloc_intint(int a, int b)
 void init_iarray(ptr_t obj, int byteLen, int v)
 {
   int i;
-  int tag = IARRAY_TAG | (byteLen << ARRLEN_OFFSET);
+  int tag = IARRAY_TYPE | (byteLen << ARRLEN_OFFSET);
   obj[-1] = tag;
   for (i=0; i<(byteLen + 3) / 4; i++)
     obj[i] = v;
@@ -267,7 +270,7 @@ void init_parray(ptr_t obj, int len, ptr_t v)
 {
   int i;
   int byteLen = 4 * len;
-  int tag = PARRAY_TAG | (byteLen << ARRLEN_OFFSET);
+  int tag = PARRAY_TYPE | (byteLen << ARRLEN_OFFSET);
   obj[-1] = tag;
   for (i=0; i<len; i++)
     obj[i] = (val_t) v;
@@ -277,7 +280,7 @@ void init_farray(ptr_t obj, int len, double v)
 {
   int i;
   int byteLen = 8 * len;
-  int tag = RARRAY_TAG | (byteLen << ARRLEN_OFFSET);
+  int tag = RARRAY_TYPE | (byteLen << ARRLEN_OFFSET);
   assert((((unsigned int)obj) & 7) == 0);
   obj[-1] = tag;
   for (i=0; i<len; i++)

@@ -3,12 +3,14 @@
 
 #include "memobj.h"
 #include "queue.h"
+#include "gc.h"
 
-Heap_t *large;
+Heap_t *largeSpace;
 
-void gc_large_init(int threadSafe);
-mem_t gc_large_alloc (Proc_t *, int byteLen);
-void gc_large_addRoots (Queue_t *roots);
-void gc_large_flush(void);
+void gc_large_init(void);
+mem_t gc_large_alloc (Proc_t *, int byteLen, Align_t);   
+void gc_large_startCollect(void);    /* one caller only */
+void gc_large_addRoot (ptr_t root);  /* multiple callers */
+void gc_large_endCollect(void);      /* one caller only */
 
 #endif

@@ -212,13 +212,13 @@
 	.proc	07
 	.align	4
 stack_stub_internal:
-	ld	[THREADPTR_REG + snapshot_disp], LINK_REG
-        sll     LINK_REG, 2, LINK_REG			! C pointers are 4 bytes in size
-	add	LINK_REG, ASMTMP_REG, ASMTMP_REG  ! temp contains index into snapshot table
-	ld	[LINK_REG], ASMTMP_REG   ! load the StackSnapshot_t into temp
-	ld	[ASMTMP_REG], LINK_REG   ! Relies on save_ra being the first field in StackSnapshot_t
-	st      %r0, [ASMTMP_REG]        ! Set to zero to show we've consumed it
+	ld	[THREADPTR_REG + snapshot_disp], LINK_REG	! use LINK_REG to load reference to snapshot table
+        umul    ASMTMP_REG, snapshot_size, ASMTMP_REG	
+	add	LINK_REG, ASMTMP_REG, ASMTMP_REG		! temp points to correct StackSnapshot_t
+	ld	[ASMTMP_REG], LINK_REG				! load link/ra.  relies on save_ra being the first field of StackSnapshot_t
+	st      %r0, [ASMTMP_REG]				! set to zero to show we've consumed it
 	retl
+	nop
 	.size	stack_stub_internal,(.-stack_stub_internal)
 	
 	.proc   07

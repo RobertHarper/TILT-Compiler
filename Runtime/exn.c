@@ -51,37 +51,10 @@ void exn_init()
   }
 }
 
-void raise_exception(struct ucontext *uctxt, ptr_t exn_arg)
-{
-  Thread_t *th = getThread();
-  mem_t code;
-
-  /* Move saved register from uctxt to thread area so it can be restored by raise_exception_raw */
-  GetIRegs(uctxt, th->saveregs);
-
-#ifdef DEBUG
-  {
-    int i;
-    ptr_t exn_ptr = th->saveregs[EXNPTR];
-    code = get_record(exn_ptr,0);
-
-    fprintf(stderr,"\n\n--------exn_raise entered---------\n");
-    fprintf(stderr,"raise: exn_ptr is %d\n",exn_ptr);
-    fprintf(stderr,"raise: rec[-1] is %d\n",((int *)exn_ptr)[-1]);
-    fprintf(stderr,"raise: rec[0] is %d\n",((int *)exn_ptr)[0]);
-    for (i=0; i<32; i++)
-      fprintf(stderr,"RAISE: the_iregs[%d] is %ld\n",i,iregs[i]);
-    fprintf(stderr,"returning from exn_raise to asm linkage\n");
-  }
-#endif
-  
-  raise_exception_raw(th,exn_arg);
-}
-
 void raise_exn(ptr_t exnname, int exnstamp, val_t exnarg, int argPointer)
 {
   val_t fields[3];
-  int mask = argPointer ? 3 : 1;
+  int mask = argPointer ? 6 : 4;
   ptr_t exn;
   Thread_t* th = getThread();
   fields[0] = exnstamp;
@@ -89,6 +62,30 @@ void raise_exn(ptr_t exnname, int exnstamp, val_t exnarg, int argPointer)
   fields[2] = (val_t)exnname;
   exn = alloc_record(fields, &mask, 3);
   raise_exception_raw(th, exn);
+}
+
+void raise_exception(struct ucontext *uctxt, ptr_t exn_arg)
+{
+  Thread_t *th = getThread();
+
+  /* Move saved register from uctxt to thread area so it can be restored by raise_exception_raw */
+  GetIRegs(uctxt, th->saveregs);
+
+  if (debug) {
+    int i;
+    ptr_t exn_ptr = (ptr_t) th->saveregs[EXNPTR];
+    val_t code = get_record(exn_ptr,0);
+
+    fprintf(stderr,"\n\n--------exn_raise entered---------\n");
+    fprintf(stderr,"raise: exn_ptr is %d\n",exn_ptr);
+    fprintf(stderr,"raise: rec[-1] is %d\n",((int *)exn_ptr)[-1]);
+    fprintf(stderr,"raise: rec[0] is %d\n",((int *)exn_ptr)[0]);
+    for (i=0; i<32; i++)
+      fprintf(stderr,"RAISE: the_iregs[%d] is %ld\n",i,th->saveregs[i]);
+    fprintf(stderr,"returning from exn_raise to asm linkage\n");
+  }
+  
+  raise_exception_raw(th,exn_arg);
 }
 
 void printString(ptr_t);
@@ -101,7 +98,7 @@ void toplevel_exnhandler(Thread_t *th)
   ptr_t exn = (ptr_t)saveregs[EXNARG];
 
   printf("Proc %d: Thread %d (%d): Uncaught exception ",
-	 getProc()->stid, th->tid, th->id);
+	 getProc()->procid, th->tid, th->id);
   printString(exnMessageRuntime(exn));
   printf("\n");
   Finish();

@@ -29,13 +29,24 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#define cassert(x) 
+/* #define cassert(x) assert(x) */
 
 #define DivideUp(a,div) (((a) + (div) - 1) / (div))
 #define DivideDown(a,div) ((a)  / (div))
 #define RoundUp(x,mult) (((x) + (mult) - 1) / (mult) * (mult))
-#define RoundDown(x,mult) ((x) / (mult) * (mult))
+#define RoundDown(x,mult) (((x) / (mult)) * (mult))
 #define typed_swap(t,a,b) { t swap_temp = a; a = b; b = swap_temp; }
 #define arraysize(a) (sizeof(a)/sizeof(*(a)))
+
+/* We need two INLINE because cpp will not (reliably) generate newlines.  */
+#ifdef alpha_osf
+#define INLINE1(funName) #pragma inline funName
+#define INLINE2(funName) static
+#else
+#define INLINE1(funName) 
+#define INLINE2(funName) static inline
+#endif
 
 void init_int(int *, int);
 void init_double(double *, double);

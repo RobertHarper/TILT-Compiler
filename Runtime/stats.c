@@ -15,9 +15,6 @@
 int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the Alpha */
 #endif
 
-extern int use_stack_gen;
-
-
 static struct timespec start_tp, stop_tp;
 static struct rusage start_rusage, stop_rusage;
 
@@ -52,6 +49,15 @@ void stop_timer(Timer_t *t)
   clock_gettime(CLOCK_REALTIME, &tp2);
   t->last = 1000.0 * tp_diff(&tp2, &t->tp);
   t->on = 0;
+}
+
+double lap_timer(Timer_t *t)
+{
+  struct timespec tp2;
+  assert(t->on == 1);
+  clock_gettime(CLOCK_REALTIME, &tp2);
+  t->last = 1000.0 * tp_diff(&tp2, &t->tp);
+  return t->last;
 }
 
 void restart_timer(Timer_t *t)
@@ -116,8 +122,8 @@ void reset_histogram(Histogram_t *h)
   for (i=0; i<38; i++)
     h->bucket[i] = 0;
   h->bucketStart[0] = 0.0;
-  h->bucketEnd[0] = 1.0;
-  h->bucketStart[37] = 1.0;
+  h->bucketEnd[0] = 0.001;
+  h->bucketStart[37] = 1000.0;
   h->bucketEnd[37] = MAXDOUBLE;
   for (i=0, base = 0.001; i<6; i++, base *= 10.0) {
     int start = 1 + 6 * i;
@@ -140,6 +146,7 @@ void add_histogram(Histogram_t *h, double data)
 {
   int which = 0;
   assert(sizeof(h->bucket) == 38 * sizeof(int));
+  add_statistic(&h->stat,data);
   if (data < 0.001)
     which = 0;
   else if (data > 1000)
@@ -170,9 +177,15 @@ static void show_statistic(char *str, Statistic_t *s, double totalSum)
 {
   double partialSum = s->sum / 1000.0;
   totalSum /= 1000.0;
-  printf("         %s (s) = %9.2lf (%4.1f%%)  Cnt = %6d   Min/Avg/Max (ms) = %4.3lf < %4.3lf < %4.3lf\n",
-	 str, partialSum, (100.0 * partialSum) / (totalSum + eps), 
-	 s->count, s->min, s->sum/s->count, s->max);
+  if (s->sum == 0.0)
+    return;
+  if (totalSum >= 0.0)
+    printf("         %s (s) = %8.2lf (%4.1f%%)    Cnt = %6d      Min/Avg/Max (ms) = %5.2f < %5.2f < %6.2f\n",
+	   str, partialSum, (100.0 * partialSum) / (totalSum + eps), 
+	   s->count, s->min, s->sum/s->count, s->max);
+  else
+    printf("         %s                         Cnt = %6d      Min/Avg/Max      = %5.2f < %5.2f < %6.2f\n",
+	   str, s->count, s->min, s->sum/s->count, s->max);
 }
 
 static void show_history(char *name, History_t *h)
@@ -194,20 +207,55 @@ static void show_history(char *name, History_t *h)
   printf("\n");
 }
 
+static void show_bucket_end(double v)
+{
+  if (v == MAXDOUBLE)
+    printf(" INF");
+  else if (v >= 1.0 || v < 0.001)
+    printf("%4.0f",v);
+  else if (v >= 0.001) {
+    char buf[16];
+    sprintf(buf,"%.3g",v);
+    printf("%4s",&buf[1]);
+  }
+    
+}
+
+static void show_bucket(Histogram_t *h, int i)
+{
+  printf("[");
+  show_bucket_end(h->bucketStart[i]);
+  printf(",");
+  show_bucket_end(h->bucketEnd[i]);
+  printf(") = %4d", h->bucket[i]);
+}
+
 static void show_histogram(char *name, Histogram_t *h)
 {
-  int i;
-  for (i=0; i<38; i++) {
-    if (i != 0 && (i % 6 == 0))
-      printf("%6s","");
-    printf("[%.3f,",h->bucketStart[i]);
-    if (h->bucketEnd[i] == MAXDOUBLE)
-      printf("INF");
-    else 
-      printf("%.3f", h->bucketEnd[i]);
-    printf(") = %d  ", h->bucket[i]);
-    if (i != 0 && i != 36 && (i % 6 == 5))
-      printf("\n");
+  int i, j;
+  if (h->stat.sum == 0.0)
+    return;
+  printf("         %10s (ms) :    ", name);
+  if (h->bucket[0]) {
+    show_bucket(h,0);
+    printf("            ");
+  }
+  if (h->bucket[37])
+    show_bucket(h,37);
+  printf("\n");
+  for (i=0; i<6; i++) {
+    int significant = 0;
+    for (j=0; j<6; j++) 
+      if (h->bucket[6*i+j+1])
+	significant = 1;
+    if (!significant)
+      continue;
+    printf("            ");
+    for (j=0; j<6; j++) {
+      show_bucket(h,6*i+j+1);
+      printf("   ");
+    }
+    printf("\n");
   }
 }
 
@@ -217,6 +265,16 @@ void stats_init()
   clock_gettime(CLOCK_REALTIME, &start_tp);
 }
 
+const char *collectorTypeString()
+{
+  return (collector_type == Semispace) ? "Semi" : 
+    ((collector_type == Generational) ? "Gen" : 
+     ((collector_type == SemispaceParallel) ? "SemiPara" :
+      ((collector_type == GenerationalParallel) ? "GenPara" : 
+       ((collector_type == SemispaceConcurrent) ? "SemiConc" :
+	((collector_type == GenerationalConcurrent) ? "GenConc" : "????")))));
+}
+
 void stats_finish()
 { 
   int i;
@@ -224,7 +282,7 @@ void stats_finish()
   double AvgStackDepth = TotalStackDepth/((double)NumGC+eps);
   double AvgNewStackDepth = TotalNewStackDepth/((double)NumGC+eps);
   double AvgStackFrameSize = TotalStackSize /(double)(TotalStackDepth+eps);
-  long bytesAllocated = 0, kbytesAllocated = 0, bytesCopied = 0, kbytesCopied = 0;
+  double bytesAllocated = 0.0, bytesCopied = 0.0;
   long NumCopied = 0, NumShared = 0, NumContention = 0, NumRoots = 0, NumLocatives = 0, NumWrites = 0;
 
   getrusage(RUSAGE_SELF,&stop_rusage);
@@ -233,10 +291,8 @@ void stats_finish()
 
   for (i=0; i<NumProc; i++) {
     Proc_t *proc = getNthProc(i);
-    bytesAllocated += proc->bytesAllocated;
-    kbytesAllocated += proc->kbytesAllocated;
-    bytesCopied += proc->bytesCopied;
-    kbytesCopied += proc->kbytesCopied;
+    bytesAllocated += proc->bytesAllocatedStatistic.sum;
+    bytesCopied += proc->bytesCopiedStatistic.sum;
     NumCopied += proc->numCopied;
     NumShared += proc->numShared;
     NumContention += proc->numContention;
@@ -244,73 +300,59 @@ void stats_finish()
     NumLocatives += proc->numLocative;
     NumWrites += proc->numWrite;
   }
-  kbytesAllocated += (bytesAllocated / 1024);
-  kbytesCopied += (bytesCopied / 1024);
-  bytesAllocated %= 1024;
-  bytesCopied %= 1024;
 
   printf("\n\n");
 
   if (!shortSummary) {
     for (i=0; i<NumProc; i++) {
       Proc_t *proc = getNthProc(i);
-      printf("Proc #%d: Alloc         = %9d kb       Copy          = %9d kb\n",
-	     i, proc->kbytesAllocated, proc->kbytesCopied);
-      printf("         Total       (s) = %9.2lf\n", proc->totalTimer.last / 1000.0);
-      show_statistic("  Scheduler", &proc->schedulerStatistic, proc->totalTimer.last);
-      show_statistic("  Mutator  ", &proc->mutatorStatistic, proc->totalTimer.last);
-      show_statistic("  GCOff    ", &proc->gcOffStatistic, proc->totalTimer.last);
-      show_statistic("  GCOn     ", &proc->gcOnHistory.stat, proc->totalTimer.last);
-      show_statistic("    GCGlob ", &proc->gcGlobalStatistic, proc->gcOnHistory.stat.sum);
-      show_statistic("    GCStack", &proc->gcStackStatistic, proc->gcOnHistory.stat.sum);
-      show_history("GCOn Hist   ", &proc->gcOnHistory);
-      show_histogram("GCOn Hist   ", &proc->gcOnHistogram);
+      printf("PROC #%d: Allocated       = %8.0f kb         Copied    = %8.0f kb\n",
+	     i, proc->bytesAllocatedStatistic.sum / 1024.0, proc->bytesCopiedStatistic.sum / 1024.0);
+      printf("         Total       (s) = %8.2lf\n", proc->totalTimer.last / 1000.0);
+      show_statistic(" Scheduler ", &proc->schedulerStatistic, proc->totalTimer.last);
+      show_statistic(" Mutator   ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
+      show_statistic(" GCNone    ", &proc->gcNoneStatistic, proc->totalTimer.last);
+      show_statistic(" GCWork    ", &proc->gcWorkHistogram.stat, proc->totalTimer.last);
+      show_statistic("  GCGlob   ", &proc->gcGlobalStatistic, proc->gcWorkHistogram.stat.sum);
+      show_statistic("  GCStack  ", &proc->gcStackStatistic, proc->gcWorkHistogram.stat.sum);
+      show_statistic("  GCMajor  ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      show_statistic("  GCFlipOn ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      show_statistic("  GCFlipOff", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      show_histogram(" GCWork Histogram", &proc->gcWorkHistogram);
+      show_histogram(" GCMajorWork Hist", &proc->gcMajorWorkHistogram);
+      /*      show_histogram("Mutator Histogram", &proc->mutatorHistogram); */
+      show_statistic("MinSurvRate", &proc->minorSurvivalStatistic, -1.0);
+      show_statistic("MajSurvRate", &proc->majorSurvivalStatistic, -1.0);
+      show_statistic("HeapSize   ", &proc->heapSizeStatistic, -1.0);
     }
   }
 
-  printf("TIME(s): Total time    = %9.3lf s\n", elapsed);
-  printf("GC:      GC_Method     = %9s          stackMethod   = %9s\n"
-	 "         Alloc         = %9d kb       Copy          = %9d kb\n"
-	 "         NumGC         = %9d          NumMajorGC    = %9d\n",
-	 (collector_type == Semispace) ? "Semi" : 
-	 ((collector_type == Generational) ? "Gen " : 
-	  ((collector_type == SemispaceParallel) ? "SemiPara" :
-	   ((collector_type == GenerationalParallel) ? "GenPara" : 
-	    ((collector_type == SemispaceConcurrent) ? "SemiConc" :
-	     ((collector_type == GenerationalConcurrent) ? "GenConc" : "????"))))),
-	 use_stack_gen?"Gener":"Normal",
-	 kbytesAllocated,             kbytesCopied,
-	 NumGC,                           NumMajorGC);
-  printf("         NumRoot       = %9d          NumCopied     = %9d\n"
-	 "         NumShared     = %9d          NumContention = %9d\n", 
-	 NumRoots, NumCopied, NumShared, NumContention);
-  if (collector_type == Generational)
-    printf("         NumWrites       = %9d        NumLocs = %d\n",
-	   NumWrites, NumLocatives);
-  printf(  "STACK:   maxDepth      = %9d          avgFrameSize  = %8.2lf b\n",
-	   MaxStackDepth,                   AvgStackFrameSize);
-  if(use_stack_gen)	   
-    printf("         avgDepth      = %9.1lf      newDepth   = %5.1lf\n",
-	   AvgStackDepth,                   AvgNewStackDepth);
-  else
-    printf("         avgDepth      = %9.1lf\n",  AvgStackDepth);
-  printf("THREAD:  Total Threads = %9d          Max Threads   = %9d\n",
-	 thread_total(),thread_max());
-  printf("MEM(K):  maxPhysMem    = %9d          sharedMem     = %9d\n"
-	 "         unsharedData  = %9d          unsharedStk   = %9d\n",
-	 stop_rusage.ru_maxrss,	          stop_rusage.ru_ixrss,
-	 stop_rusage.ru_idrss,	          stop_rusage.ru_isrss);
-  printf("PAGING:  minorPageFault= %9d          majorPageFault= %9d     swaps = %d\n"
-	 "PROCESS: invCtxtSwap   = %9d          volCtxtSwap   = %9d\n",
-	 stop_rusage.ru_minflt,	stop_rusage.ru_majflt,   stop_rusage.ru_nswap,
-	 stop_rusage.ru_nvcsw,  stop_rusage.ru_nivcsw);
-  
-  printf("MISC:    GCTable       = %9d b  \n"
+  printf("GC:    GCMethod      = %8s     Allocated    = %9.0f kb   NumCopied    = %8d    MaxStkDepth  = %4d\n"
+	 "       StackMethod   = %8s     Copied       = %9.0f kb   NumShared    = %8d    AvgStkDepth  = %4.0f\n",
+	 collectorTypeString(),          bytesAllocated / 1024.0, NumCopied,      MaxStackDepth,
+	 useGenStack?"Gener":"Normal", bytesCopied / 1024.0,    NumShared,      AvgStackDepth); 
+  printf("       NumGC         = %8d     NumRoot      = %9d      NumConflict  = %8d    AvgFrameSize = %4.0f\n"
+	 "       NumMajorGC    = %8d     NumWrite     = %9d      NumLocative  = %8d\n",
+	 NumGC,                          NumRoots,                NumContention,   AvgStackFrameSize,
+	 NumMajorGC,                     NumWrites,               NumLocatives);
+  if(useGenStack)
+    printf("       newStkDepth   = %4.0f\n",  AvgNewStackDepth);
+  printf("MISC:  Total time    = %8.2f s   maxPhysMem   = %9d      minPageFault = %8d    invCtxtSwap  = %5d\n"
+         "       Total Threads = %8d     sharedMem    = %9d      majPageFault = %8d    volCtxtSwap  = %5d\n"
+	 "       Max Threads   = %8d     unsharedData = %9d                                 swapping     = %5d\n"
+	 "                                    unsharedStk  = %9d\n",
+	 elapsed, 	 stop_rusage.ru_maxrss,	 stop_rusage.ru_minflt,	stop_rusage.ru_nvcsw,  
+	 thread_total(), stop_rusage.ru_ixrss,   stop_rusage.ru_majflt, stop_rusage.ru_nivcsw,
+	 thread_max(),	 stop_rusage.ru_idrss,                          stop_rusage.ru_nswap,
+	                 stop_rusage.ru_isrss);
+  /*
+    printf("MISC:    GCTable       = %9d b  \n"
 	 "         SMLGlobal     = %9d b  \n"
 	 "         GlobalTable   = %9d b        MutableTable = %9d b\n",
 	 GCTableSize,                    
 	 SMLGlobalSize,                   
 	 GlobalTableSize,    MutableTableSize);
+  */
 
 }
 

@@ -18,96 +18,50 @@
 #include "client.h"
 #include "show.h"
 
-/* ------------------  Generational array allocation routines ------------------- */
 
-static mem_t alloc_big(int byteLen, int hasPointers)
+
+mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 {
-  mem_t region = NULL;
-  Thread_t *curThread = getThread();
-  Proc_t *proc = curThread->proc;
-  unsigned long *saveregs = curThread->saveregs;
-  int wordLen = byteLen / (sizeof (val_t));
+  mem_t region;
+  ptr_t obj;
+  int tagByteLen = spec->byteLen + 4;
+  Align_t align = (spec->type == DoubleField) ? OddWordAlign : NoWordAlign; /* Since there is one tag word */
 
-  /* Should be at least 0.5K to be considered big */
-  assert(byteLen >= 512);                
-  assert(wordLen * (sizeof (val_t)) == byteLen);
-
-  /* Try to allocate */
-  if (hasPointers) {
-    if (tenuredFrom->cursor + wordLen <= tenuredFrom->top) {
-      region = tenuredFrom->cursor;
-      tenuredFrom->cursor += wordLen;
+  /* Allocate region - use tenured heap if object has pointers */
+  if (spec->type == PointerField) {
+    region = AllocFromHeap(fromSpace, thread, tagByteLen, align);
+    if (region == NULL) {
+      GCFromC(thread, tagByteLen + 4, 1);
+      region = AllocFromHeap(fromSpace, thread, tagByteLen, align);
     }
-  }
-  else
-    region = gc_large_alloc(proc,byteLen);
-
-  /* If allocation failed, perform GC and try again */
-  if (region == NULL) {
-    GCFromC(curThread, 4, 1);
-    if (hasPointers) {
-      if (tenuredFrom->cursor + wordLen <= tenuredFrom->top) {
-	region = tenuredFrom->cursor;
-	tenuredFrom->cursor += wordLen;
-      }
-    }
-    else
-      region = gc_large_alloc(proc,byteLen);
-  }
-
-  assert(region != NULL);
-  assert(tenuredFrom->cursor < tenuredFrom->top);
-
-  /* Update Statistics */
-  gcstat_normal(proc,byteLen, 0, 0);
-  return region;
-}
-
-
-ptr_t alloc_bigintarray_Gen(int elemLen, int initVal, int ptag)
-{
-  /* elemements are byte-sized */
-  int wordLen = 1 + (elemLen + 3) / 4;
-  mem_t space = alloc_big(4 * wordLen,0);
-  ptr_t res = space + 1;
-  init_iarray(res, elemLen, initVal);
-  return res;
-}
-
-ptr_t alloc_bigptrarray_Gen(int elemLen, ptr_t initVal, int ptag)
-{
-  int wordLen = 1 + elemLen;
-  mem_t space = alloc_big(4 * wordLen,1);
-  ptr_t res = space + 1;
-  init_parray(res, elemLen, initVal);
-  return res;
-}
-
-ptr_t alloc_bigfloatarray_Gen(int elemLen, double initVal, int ptag)
-{
-  ptr_t res = NULL;
-  mem_t region = NULL;
-  Thread_t *curThread = getThread();
-  int wordLen = 2 + (elemLen << 1);  /* Includes one word for alignment */
-
-  region = alloc_big(4 * wordLen,0);
-  if ((((val_t)region) & 7) != 0) {
-    region[0] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
-    res = region + 1;
   }
   else {
-    region[wordLen-1] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
-    res = region;
+    region = gc_large_alloc(proc, tagByteLen, align);
+    if (region == NULL) {
+      GCFromC(thread, 4, 1);       /* not bytelen since object is not from tenured space */
+      region = gc_large_alloc(proc, tagByteLen, align);
+    }
   }
-  init_farray(res, elemLen, initVal);
-  return res;
+  assert(region != NULL);
+
+  /* Allocate object; update stats; initialize */
+  obj = region + 1;
+  proc->majorUsage.bytesAllocated += tagByteLen;
+  switch (spec->type) {
+    case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
+    case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
+                        pushStack(proc->primaryReplicaObjRoots, obj);        /* Object is one word past tag */
+			break;
+    case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
+  }
+  return obj;
 }
 
 /* --------------------- Generational collector --------------------- */
 void GCRelease_Gen(Proc_t *proc)
 {
   int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
-  gcstat_normal(proc, alloc, 0, 0);
+  proc->minorUsage.bytesAllocated += alloc;
 }
 
 int GCTry_Gen(Proc_t *proc, Thread_t *th)
@@ -126,8 +80,7 @@ int GCTry_Gen(Proc_t *proc, Thread_t *th)
     return (th->requestInfo <= bytesAvailable);
   }
   else if (th->requestInfo < 0) {
-    unsigned int bytesAvailable = (val_t) proc->writelistEnd - 
-                                  (val_t) proc->writelistCursor;
+    unsigned int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
     return ((-th->requestInfo) <= bytesAvailable);
   }
   else 
@@ -137,134 +90,147 @@ int GCTry_Gen(Proc_t *proc, Thread_t *th)
 
 void GCStop_Gen(Proc_t *proc)
 {
-  Thread_t *oneThread = &(Threads[0]);     /* In a sequential collector, 
-					      there is only one user thread */
   int req_size = 0;
-  Queue_t *root_lists = proc->root_lists;
-  Queue_t *largeRoots = proc->largeRoots;
-  unsigned int copied = 0;
-  unsigned int writes = (proc->writelistCursor - proc->writelistStart) / 2;
+  Thread_t *curThread = NULL;
+  double liveRatio = 0.0;
 
-  if (oneThread->requestInfo > 0)
-    req_size = oneThread->requestInfo;
-    
-  /* A Major GC is forced if the tenured space is potentially too small.  Start timer. */
-  GCType = Minor;
-  if (oneThread->request == MajorGCRequestFromC)
-    GCType = Major;
-  else if ((tenuredFrom->top - tenuredFrom->cursor) < 
-	   (nursery->top - nursery->bottom))
-    GCType = Major;                    /* Forced Major */
-  GCStatus = GCOn;
-  if (GCType != Minor)
-    procChangeState(proc, GCMajor);
+  /* A Major GC is forced if the tenured space is potentially too small.  */
+  if (Heap_GetAvail(fromSpace) < Heap_GetSize(nursery)) 
+    GCType = Major;                    
+  else
+    GCType = Minor;
 
   /* Sanity checks */
+  assert(NumProc == 1);
   assert((0 <= req_size) && (req_size < pagesize));
   assert(nursery->cursor     <= nursery->top);
-  assert(tenuredFrom->cursor <= tenuredFrom->top);
-  assert(tenuredTo->cursor   <= tenuredTo->top);
+  assert(fromSpace->cursor <= fromSpace->top);
+  assert(toSpace->cursor   <= toSpace->top);
   /* At this point, the nursery and tenured from-space may have cross-pointers */
-  if (paranoid) 
-    paranoid_check_all(nursery, tenuredFrom, NULL, NULL);
+  paranoid_check_all(nursery, fromSpace, NULL, NULL, largeSpace);
 
-  /* Compute stack/register/global roots to proc->root_lists. */
-  QueueClear(proc->root_lists);
-  local_root_scan(proc,oneThread);
-  if (GCType == Minor)
+  /* Get all roots */
+  resetStack(proc->roots);
+  procChangeState(proc, GCStack);
+  ResetJob();
+  while ((curThread = NextJob()) != NULL) {
+    /* If negative, requestnfo signifies full writelist */
+    if (curThread->requestInfo >= 0)
+      req_size += curThread->requestInfo;
+    local_root_scan(proc,curThread);
+    if (GCType == Minor && curThread->request == MajorGCRequestFromC)  /* Upgrade to major GC */
+      GCType = Major;      
+  }
+
+  proc->gcSegment1 = (GCType == Minor) ? MinorWork : MajorWork;
+  proc->gcSegment2 = FlipBoth;
+
+  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
+  procChangeState(proc, GCGlobal);
+  if (GCType == Minor) {            /* Roots from globals and back pointers */
     minor_global_scan(proc);
-  else
+    add_writelist_to_rootlist(proc, &nursery->range, &fromSpace->range);
+  }
+  else {
     major_global_scan(proc);
+    discard_writelist(proc);      /* Write list can be ignored on major GC */
+  }
+
+  procChangeState(proc, GC);
+  if (GCType == Major)
+    proc->gcSegment1 = MajorWork;
 
   /* Perform just a minor GC */
   if (GCType == Minor) {
-
     /* --- forward the roots and the writelist; then Cheney-scan until no gray objects */
-    mem_t tenuredFromAlloc = tenuredFrom->cursor;
-    tenuredFromAlloc = forward1_root_lists(proc,root_lists, tenuredFromAlloc,
-					   &nursery->range, &tenuredFrom->range);
-    tenuredFromAlloc = forward1_writelist(proc, tenuredFromAlloc, 
-					  &nursery->range, &tenuredFrom->range);
-    tenuredFromAlloc = scan1_until(proc,tenuredFrom->cursor,tenuredFromAlloc,
-				   &nursery->range, &tenuredFrom->range);
-    copied = (sizeof (val_t)) * (tenuredFromAlloc - tenuredFrom->cursor),
-    tenuredFrom->cursor = tenuredFromAlloc;
+    /* The non-standard use of CopyRange only works for uniprocessors */
+    mem_t scanStart = fromSpace->cursor;   /* Record before it gets changed */
+    SetCopyRange(&proc->minorRange, proc, fromSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
+    proc->minorRange.start = proc->minorRange.cursor = fromSpace->cursor;
+    proc->minorRange.stop = fromSpace->top;
+    while (!isEmptyStack(proc->roots)) 
+      locCopy1_noSpaceCheck(proc, (ploc_t) popStack(proc->roots), &proc->minorRange, &nursery->range);
+    while (!isEmptyStack(proc->primaryReplicaObjRoots)) {
+      /* Not transferScanObj_* since this object is a primaryReplica.
+	 Since this is a stop-copy collector, we can use _locCopy_ and not worry about Flips */
+      ptr_t obj = popStack(proc->primaryReplicaObjRoots);
+      scanObj_locCopy1_noSpaceCheck(proc, obj, &proc->minorRange, &nursery->range);
+    }
+    scanUntil_locCopy1_noSpaceCheck(proc, scanStart, &proc->minorRange, &nursery->range);
+    fromSpace->cursor = proc->minorRange.cursor;
+    proc->minorRange.stop = proc->minorRange.cursor;
+    ClearCopyRange(&proc->minorRange);
+    paranoid_check_all(nursery, fromSpace, fromSpace, NULL, largeSpace);
+    liveRatio = (double) (fromSpace->cursor - fromSpace->prevCursor) / (double) (nursery->cursor - nursery->bottom); 
+    fromSpace->prevCursor = fromSpace->cursor;
+    add_statistic(&proc->minorSurvivalStatistic, liveRatio);
   }
-  
   else if (GCType == Major) {
-
-    int tenuredToSize = Heap_GetMaximumSize(tenuredTo);
-    int maxLive = (sizeof (val_t)) * (tenuredFrom->cursor - tenuredFrom->bottom) +
+    mem_t scanStart = toSpace->bottom;
+    int toSpaceSize = Heap_GetMaximumSize(toSpace);
+    int maxLive = (sizeof (val_t)) * (fromSpace->cursor - fromSpace->bottom) +
                   (sizeof (val_t)) * (nursery->top - nursery->bottom);
-    mem_t tenuredToAlloc = tenuredTo->bottom;
-    Heap_t *fromHeaps[3] = {NULL, NULL, NULL};
-    fromHeaps[0] = nursery;
-    fromHeaps[1] = tenuredFrom;
 
-    /* Write list can be ignored */
-    discard_writelist(proc);
-
-    /* Resize tospace so live data fits, if possible */
-    if (maxLive >= tenuredToSize) {
+    if (maxLive >= toSpaceSize) {
       printf("WARNING: GC failure possible since maxPossibleLive = %d > toSpaceSize = %d\n",
-	     maxLive, tenuredToSize);
-      Heap_Resize(tenuredTo, tenuredToSize, 1);
+	     maxLive, toSpaceSize);
+      Heap_Resize(toSpace, toSpaceSize, 1);
     }    
-    else
-      Heap_Resize(tenuredTo, maxLive, 1);
+    else {
+      Heap_Resize(toSpace, maxLive, 1);
+    }
 
-    /* do the normal roots; writelist can be skipped on a major GC;
+    /* The non-standard use of CopyRange only works for uniprocessors */
+    SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
+    proc->majorRange.start = proc->majorRange.cursor = toSpace->cursor;
+    proc->majorRange.stop = toSpace->top;
+
+    /* do the normal roots; backpointers can be skipped on a major GC;
        then the usual Cheney scan followed by sweeping the large-object region */
-    tenuredToAlloc = forward2_root_lists(proc,root_lists, tenuredToAlloc, 
-					 &nursery->range, &tenuredFrom->range, &tenuredTo->range,
-					 &large->range, largeRoots);
-    tenuredToAlloc = scan2_region(proc,tenuredTo->bottom,tenuredToAlloc,tenuredTo->range.high,
-				  &nursery->range,&tenuredFrom->range,&tenuredTo->range,
-				  &large->range, largeRoots);
-    gc_large_addRoots(largeRoots);
-    gc_large_flush();
-    copied = (sizeof (val_t)) * (tenuredToAlloc - tenuredTo->bottom),
-    tenuredTo->cursor = tenuredToAlloc;
+    gc_large_startCollect();
+    while (!isEmptyStack(proc->roots)) 
+      locCopy2_noSpaceCheck(proc,(ploc_t) popStack(proc->roots), &proc->majorRange,
+			    &nursery->range, &fromSpace->range, &largeSpace->range);
+    resetStack(proc->primaryReplicaObjRoots);
+    scanUntil_locCopy2_noSpaceCheck(proc,scanStart, &proc->majorRange,
+				    &nursery->range, &fromSpace->range, &largeSpace->range);
+    assert(proc->majorRange.cursor < toSpace->top);
+    toSpace->cursor = proc->majorRange.cursor;
+    proc->majorRange.stop = proc->majorRange.cursor;
+    ClearCopyRange(&proc->majorRange);
+    gc_large_endCollect();
+    paranoid_check_all(nursery, fromSpace, toSpace, NULL, largeSpace);
 
-    /* Resize the tenured area now, discard old space, flip space  */
-    HeapAdjust(1, req_size, fromHeaps, tenuredTo);
-    typed_swap(Heap_t *, tenuredFrom, tenuredTo);
-
+    /* Resize the tenured toSpace. Discard fromSpace. Flip Spaces. */
+    liveRatio = HeapAdjust2(req_size, nursery, fromSpace, toSpace);
+    add_statistic(&proc->majorSurvivalStatistic, liveRatio);
+    Heap_Resize(fromSpace,0,1);
+    typed_swap(Heap_t *, fromSpace, toSpace);
   }
-  else
-    assert(0);
+  Heap_Reset(nursery);
 
   /* Update sole thread's allocation pointers and root lists */
   if (GCType == Minor)
     minor_global_promote();
-  QueueClear(largeRoots);
-  QueueClear(root_lists);
   proc->allocStart = nursery->bottom;
   proc->allocCursor = nursery->bottom;
   proc->allocLimit = nursery->top;
+  nursery->cursor = nursery->top;
   assert(proc->writelistCursor == proc->writelistStart);
 
-  /* Sanity checks afterwards */
-  if (paranoid) 
-    paranoid_check_all(nursery, tenuredFrom, tenuredFrom, NULL);
-
   /* stop timer and update counts */
-  gcstat_normal(proc, 0, copied, writes);
-  if (GCType != Minor) {
+  if (GCType == Major) 
     NumMajorGC++;
-    procChangeState(proc, GC);
-  }
-  GCStatus = GCOff;
   NumGC++;
 }
 
 
-void gc_init_Gen() 
+void GCInit_Gen() 
 {
   int cache_size = GetBcacheSize();
 
   init_int(&YoungHeapByte, (int)(0.85 * cache_size));
-  init_int(&MaxHeap, 80 * 1024);
+  init_int(&MaxHeap, 128 * 1024);
   init_int(&MinHeap, 1024);
   if (MinHeap > MaxHeap)
     MinHeap = MaxHeap;
@@ -275,9 +241,9 @@ void gc_init_Gen()
   assert(MinHeap >= 1.2*(YoungHeapByte / 1024));
 
   nursery = Heap_Alloc(YoungHeapByte, YoungHeapByte);
-  tenuredFrom = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  tenuredTo = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  gc_large_init(0);
+  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
+  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  gc_large_init();
 }
 
 

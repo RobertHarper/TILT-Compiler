@@ -1,3 +1,4 @@
+#include "general.h"
 #include "tag.h"
 #include "global.h"
 #include "memobj.h"
@@ -32,35 +33,9 @@ extern ptr_t Div_r_INT, Overflow_r_INT;
 ptr_t DivideByZeroExn, OverflowExn;
 
 /* Little allocation area for data allocated by the runtime. */
-static mem_t RuntimeGlobalData_Start;
+mem_t RuntimeGlobalData_Start;
 mem_t RuntimeGlobalData_Cur;
 mem_t RuntimeGlobalData_End;
-
-int IsText(ptr_t addr)
-{
-  int res = (textstart <= addr) && (addr <= textend);
-  return res;
-}
-
-int IsCompileGlobalData(ptr_t addr)
-{
-  int res = (datastart <= addr) && (addr <= dataend);
-  return res;
-}
-
-
-int IsRuntimeGlobalData(ptr_t addr)
-{
-  return ((RuntimeGlobalData_Start <= addr) &&
-	  (addr < RuntimeGlobalData_End));
-}
-
-int IsGlobalData(ptr_t addr)
-{
-  return (IsCompileGlobalData(addr) || 
-	  IsRuntimeGlobalData(addr));
-}
-
 
 #ifdef solaris
 extern unsigned long firstdata;

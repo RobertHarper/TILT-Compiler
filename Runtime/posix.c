@@ -13,12 +13,15 @@
 #include <stropts.h>
 #include <poll.h>
 #include <sys/utsname.h>
+#include <sys/resource.h>
 #if (defined alpha_osf)
 #include <float.h>
 int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the Alpha */
 #elif (defined solaris)
 #include <ieeefp.h>
 #endif
+#include <fcntl.h>
+#include <libgen.h>
 
 #include "tag.h"
 #include "thread.h"
@@ -147,6 +150,17 @@ struct termio_rep_struct
 typedef struct termio_rep_struct *termio_rep;
 
 
+static int stringlen(ptr_t string)
+{
+  tag_t tag = string[-1];
+  int len;
+  while (TYPE_IS_FORWARD(GET_TYPE(tag)))
+    tag = ((ptr_t)tag) [-1];
+  assert(GET_TYPE(tag) == IARRAY_TYPE);
+  len = GET_ARRLEN(tag);
+  return len;
+}
+
 static void runtime_error(int e);
 static void runtime_error_msg(char* msg);
 static void runtime_error_fmt(const char* fmt, ...);
@@ -155,7 +169,7 @@ static void unimplemented(int lineno)
 {
   runtime_error_fmt("function not implemented at %s:%d", __FILE__, lineno);
 }
-#define UNIMP() unimplemented(__LINE__); return 0
+#define UNIMP() unimplemented(__LINE__); assert(0);
 
 static void* emalloc(size_t size)
 {
@@ -173,12 +187,13 @@ string cstring2mlstring_alloc(char *str)
 
 char* mlstring2cstring_buffer(string mlstring, int len, char *buf)
 {
-  unsigned int tag = ((int *)mlstring)[-1];
-  int bytelen = GET_ARRLEN(tag);
+  int bytelen = stringlen(mlstring);
   char *raw = (char *)mlstring;
-  if ((bytelen+1) > len)
+  if ((bytelen+1) > len) {
      runtime_error_msg("fixed-length buffer too small");
-  bcopy(raw,buf,bytelen);
+     assert(0);
+  }
+  memcpy(buf,raw,bytelen);
   buf[bytelen] = 0;
   return (char *)buf;
 }
@@ -191,8 +206,7 @@ static char* mlstring2cstring_static(string mlstring)
 
 static char* mlstring2cstring_malloc(string mlstring)
 {
-  unsigned int tag = ((int *)mlstring)[-1];
-  int bytelen = GET_ARRLEN(tag);
+  int bytelen = stringlen(mlstring);
   char *buf = emalloc(bytelen+1);
   return mlstring2cstring_buffer(mlstring, bytelen+1, buf);
 }
@@ -214,12 +228,18 @@ static void runtime_error_msg(char* msg)
 
 static void runtime_error_fmt(const char* fmt, ...)
 {
+  va_list ap;
+  va_start(ap, fmt);
+  (void) vfprintf(stderr, fmt, ap);
+  va_end(ap);
+   /*
    char buf[1024];
    va_list args;
    va_start(args, fmt);
    vsprintf(buf, fmt, args);
    va_end(args);
    runtime_error_msg(buf);
+   */
 }
 
 double ln(double arg)
@@ -281,16 +301,6 @@ ptr_t setRoundingMode(int ml_mode)
 ptr_t exnNameRuntime(ptr_t exn)
 {
   return (ptr_t) get_record(exn,2);
-}
-
-static int stringlen(ptr_t string)
-{
-  tag_t tag = string[-1];
-  int len;
-  while (IS_FORWARDPTR(tag))
-    tag = ((ptr_t)tag) [-1];
-  len = GET_ARRLEN(tag);
-  return len;
 }
 
 ptr_t exnMessageRuntime(ptr_t exn)
@@ -996,27 +1006,18 @@ unit posix_filesys_chdir(string dirname)
   return empty_record;
 }
 
-static char* getcwd_size(int size)
-{
-  char* cwd = (char*) emalloc(size);
-  if (getcwd(cwd, size) == NULL) {
-    int e = errno;
-    free(cwd);
-    if (e == ERANGE) {
-      return getcwd_size(size * 2);
-    } else {
-      runtime_error(e);
-      return 0;			/* NOTREACHED */
-    }
-  } else return cwd;
-}
-
 string posix_filesys_getcwd(unit unused)
 {
-  char *cwd = getcwd_size(1024);
-  string mlcwd = cstring2mlstring_alloc(cwd);
-  free(cwd);
-  return mlcwd;
+  char buffer[1024];
+  if (getcwd(buffer, sizeof(buffer) - 1) == NULL) {
+    if (errno == ERANGE) {
+      printf("posix_filesys_getcwd: buffer too small\n");
+      assert(0);
+    }
+    runtime_error(errno);
+    assert(0);
+  }
+  return cstring2mlstring_alloc(buffer);
 }
 
 int posix_filesys_openf(string filename, word oflag, word mode)
@@ -1053,9 +1054,19 @@ unit posix_filesys_symlink(string unused1, string unused)
   UNIMP();
 }
 
-unit posix_filesys_mkdir(string unused1, word unused)
+unit posix_filesys_mkdir(string mlDir, word mode)
 {
-  UNIMP();
+  char *cDir = mlstring2cstring_static(mlDir);
+  int status;
+    printf("mlDir = %d\n", mlDir);
+    printf("mlDir = *%20s*\n", mlDir);
+    printf("trying mkdir (\"%s\", %x) failed\n", cDir, mode);
+status = mkdirp(cDir,mode);
+  if (status) {
+    printf("mkdir (\"%s\", %x) failed with errno = %d\n", cDir, mode, status);
+    UNIMP();
+  }
+  return empty_record;
 }
 
 unit posix_filesys_mkfifo(string unused1, word unused)
@@ -1077,9 +1088,16 @@ unit posix_filesys_rmdir(string unused)
   UNIMP();
 }
 
-string posix_filesys_readlink(string unused)
+string posix_filesys_readlink(string link)
 {
-  UNIMP();
+  char buf[1024];
+  int status = readlink(mlstring2cstring_static(link), buf, sizeof(buf) - 1);
+  if (status == -1) 
+    runtime_error(errno);
+  else {
+    buf[status] = 0;
+    return cstring2mlstring_alloc(buf);
+  }
 }
 
 unit posix_filesys_ftruncate(int unused1, int unused)
@@ -1219,10 +1237,11 @@ ptr_t til_realtime()
 }
 
 
-void printString(ptr_t str)
+ptr_t printString(ptr_t str)
 {
   int len = stringlen(str);
   printf("%.*s", len, (char*) str);
+  return empty_record;
 }
 
 /* Not really appropriate here, but I'm planning on reorganizing anyway. */
@@ -1260,4 +1279,16 @@ string_list commandline_arguments(unit ignored)
 {
   assert(commandline_argv != NULL);
   return array_to_string_list(commandline_argv);
+}
+
+/* debugging */
+ptr_t printAddr(ptr_t addr1, ptr_t addr2, ptr_t addr3)
+{
+  static int count = 0;
+  int i, size = 10000;
+  printf("XXX printAddr #%d: %u   %u = (%u, %u)    %u = (%u, %u)\n", count++, addr1, addr2, addr2[0], addr2[1], addr3, addr3[0], addr3[1]);
+  for (i=0; i<size; i++)
+    if ((ptr_t)addr1[i] == addr2)
+      printf("     First point found at index %d\n", i);
+  return empty_record;
 }

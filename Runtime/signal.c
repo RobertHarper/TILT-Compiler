@@ -214,7 +214,7 @@ void memfault_handler(int signum,
 #endif
 		      struct ucontext *uctxt)
 {
-  Proc_t *sth = getProc();
+  Proc_t *proc = getProc();
 #if (defined alpha_osf) || (defined solaris)
   int code = siginfo->si_code;
 #elif (defined rs_aix)
@@ -228,7 +228,7 @@ void memfault_handler(int signum,
   assert(signum == (siginfo->si_signo));
 #endif
 
-  printf("Proc %d:  Memory error at %d with PC = %d\n",sth->stid, badaddr, badpc);
+  printf("Proc %d:  Memory error at %d with PC = %d\n",proc->procid, badaddr, badpc);
   switch (signum)
     {
     case SIGILL:
@@ -246,7 +246,7 @@ void memfault_handler(int signum,
 	  break;
 	case SEGV_ACCERR:
 	  printf("SEGV_ACCERR  invalid permissions for address %d\n",
-		 sth->stid,badaddr);
+		 proc->procid,badaddr);
 	  if (StackError(uctxt,badaddr))
 	    printf("Stackrelink/overflow not implemented\n");
 	  break;
@@ -269,7 +269,7 @@ void memfault_handler(int signum,
 	switch (code)
 	  {
 	  case BUS_ADRALN:
-	    printf("BUS_ADRALN invalid address alignment\n",sth->stid);
+	    printf("BUS_ADRALN invalid address alignment\n",proc->procid);
 	    break;
 	  case BUS_ADRERR:
 	    printf("BUS_ADRERR non-existent physical address\n");
@@ -292,7 +292,7 @@ void memfault_handler(int signum,
 
   {
     Heap_t *heap = GetHeap(badaddr);
-    Stack_t *stack = GetStack(badaddr);
+    MemStack_t *stack = GetStack(badaddr);
     if (heap != NULL)
       printf("   addr part of a heap obj\n");
     if (stack != NULL)
@@ -436,7 +436,7 @@ void install_signal_handlers(int isMain)
 }
 
 
-float_tester (double arg)
+void float_tester (double arg)
 {
   /*  printf("float_tester = address = %d\n",arg); */
   printf("float_tester = %lf\n",arg);

@@ -12,7 +12,7 @@
 #include <fcntl.h>
 #include "stats.h"
 
-static Stack_t *Stacks;
+static MemStack_t *Stacks;
 static StackChain_t *StackChains;
 static Heap_t  *Heaps;
 
@@ -36,12 +36,12 @@ const mem_t heapstart  = (mem_t) (780 * 1024 * 1024);
 #endif
 
 /* The heaps are managed by a bitmap where each bit corresponds to a 32K chunk of the heap.
-   8192 bits gives us 256 megs of heap space. 
+   We take 288 megs for heap space which result in 9216 bits.
 */
 int pagesize = 0;
 static int chunksize = 32768;
 static Bitmap_t *bmp = NULL;
-static const int Heapbitmap_bits = 8192;
+static const int Heapbitmap_bits = 9216;
 
 
 
@@ -52,8 +52,6 @@ void my_mprotect(int which, caddr_t bottom, int size, int perm)
     fprintf (stderr, "mprotect %d failed (%d,%d,%d) with %d\n",which,bottom,size,perm,errno);
     assert(0);
   }
-  if (paranoid)
-    fprintf (stderr, "mprotect %d succeeded (%d,%d,%d)\n",which,bottom,size,perm);
 }
 
 
@@ -103,10 +101,10 @@ void wordset(mem_t start, unsigned long v, size_t sz)
 void StackInitialize(void)
 {
   int i;
-  Stacks = (Stack_t *)malloc(sizeof(Stack_t) * NumStack);
+  Stacks = (MemStack_t *)malloc(sizeof(MemStack_t) * NumStack);
   StackChains = (StackChain_t *)malloc(sizeof(StackChain_t) * NumStackChain);
   for (i=0; i<NumStack; i++) {
-    Stack_t *stack = &(Stacks[i]);
+    MemStack_t *stack = &(Stacks[i]);
     stack->id = i;
     stack->valid = 0;
     stack->top = 0;
@@ -118,11 +116,11 @@ void StackInitialize(void)
 
 
 
-Stack_t* GetStack(mem_t add)
+MemStack_t* GetStack(mem_t add)
 {
   int i;
   for (i=0; i<NumStack; i++) {
-    Stack_t *s = &Stacks[i];
+    MemStack_t *s = &Stacks[i];
     if (s->valid && 
 	s->id == i &&
 	s->rawbottom <= add &&
@@ -150,21 +148,21 @@ StackChain_t* StackChain_Alloc()
 {
   static int count = 0;
   StackChain_t *res = &(StackChains[count++]);
-  Stack_t* stack = Stack_Alloc(res);
+  MemStack_t* stack = Stack_Alloc(res);
   assert(count <= NumStackChain);
 
   res->count = 1;
   res->size = 4;
-  res->stacks = (Stack_t **) malloc(sizeof(Stack_t *) * res->size);
+  res->stacks = (MemStack_t **) malloc(sizeof(MemStack_t *) * res->size);
   res->stacks[0] = stack;
   return res;
 }
 
-Stack_t* Stack_Alloc(StackChain_t *parent)
+MemStack_t* Stack_Alloc(StackChain_t *parent)
 {
   int i;
   static int count = -1;
-  Stack_t *res = &(Stacks[++count]);
+  MemStack_t *res = &(Stacks[++count]);
   int size = StackSize * kilobyte;
   mem_t start = stackstart + (count * size) / (sizeof (val_t));
   assert(count < NumStack);
@@ -199,6 +197,7 @@ void HeapInitialize(void)
     heap->top = 0;
     heap->bottom = 0;
     heap->cursor = 0;
+    heap->prevCursor = 0;
     heap->mappedTop = 0;
     heap->writeableTop = 0;
     heap->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
@@ -211,7 +210,7 @@ void PadHeapArea(mem_t bottom, mem_t top)
 {
   assert(bottom <= top);
   if (bottom < top)
-    *bottom = SKIP_TAG | ((top - bottom) << SKIPLEN_OFFSET);
+    *bottom = SKIP_TYPE | ((top - bottom) << SKIPLEN_OFFSET);
 }
 
 void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *top)
@@ -267,6 +266,7 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   mem_t start = heapstart + (chunkstart * chunksize) / (sizeof (val_t));
   res->bottom = (mem_t) my_mmap((caddr_t) start, maxsize_pageround, PROT_READ | PROT_WRITE);
   res->cursor = res->bottom;
+  res->prevCursor = res->bottom;
   res->top    = res->bottom + MinSize / (sizeof (val_t));
   res->writeableTop = res->bottom + maxsize_pageround / (sizeof (val_t));
   res->mappedTop = res->writeableTop;
@@ -304,33 +304,40 @@ int Heap_GetAvail(Heap_t *h)
   return (sizeof (val_t)) * (h->top - h->cursor);
 }
 
-/* Semantically, expand the area in the heap */
-void Heap_Resize(Heap_t *h, long newSize, int het)
+void Heap_Reset(Heap_t *h)
+{
+  h->cursor = h->bottom;
+  h->prevCursor = h->bottom;
+}
+
+void Heap_Resize(Heap_t *h, long newSize, int reset)
 {
   long maxSize = (h->mappedTop - h->bottom) * sizeof(val_t);
   long oldSize = (h->top - h->bottom) * sizeof(val_t);
+  long oldWriteableSize = (h->writeableTop - h->bottom) * sizeof(val_t);
   long oldSizeRound = RoundUp(oldSize, pagesize);
   long newSizeRound = RoundUp(newSize, pagesize);
+
   if (newSize > maxSize) {
-    fprintf(stderr,"FATAL ERROR in Heap_Hize at GC %d.  Heap size = %d.  Trying to hize to %d\n",
-	    NumGC, maxSize, newSize);
+    printf("FATAL ERROR in Heap_Resize at GC %d.  Heap size = %d.  Trying to resize to %d\n", NumGC, maxSize, newSize);
     assert(0);
   }
-  if (het)
+  if (reset) {
     h->cursor = h->bottom;
+    h->prevCursor = h->bottom;
+  }
   h->top = h->bottom + (newSize / sizeof(val_t));
-  if (newSizeRound > oldSizeRound) {
-    if (h->top > h->writeableTop) {
-      printf("!!!!!!expanding\n");
-      my_mprotect(6,(caddr_t) h->writeableTop, (h->top - h->writeableTop) * sizeof(val_t), PROT_READ | PROT_WRITE);
-      h->writeableTop = h->top;
-    }
+
+  if (newSizeRound > oldWriteableSize) {
+    my_mprotect(6,(caddr_t) h->writeableTop, newSizeRound - oldWriteableSize, PROT_READ | PROT_WRITE);
+    h->writeableTop = h->bottom + newSizeRound / sizeof(val_t);
   }
-  else if (paranoid) {
-    my_mprotect(7,(caddr_t) (h->bottom + newSizeRound / sizeof(val_t)), oldSizeRound - newSizeRound, PROT_NONE);
-    h->writeableTop = h->top;
+  else if (paranoid && newSizeRound < oldWriteableSize) {
+    my_mprotect(7,(caddr_t) (h->bottom + newSizeRound / sizeof(val_t)), oldWriteableSize - newSizeRound, PROT_NONE);
+    h->writeableTop = h->bottom + newSizeRound / sizeof(val_t);
   }
-  assert(h->bottom <= h->cursor);
+  assert(h->bottom <= h->prevCursor);
+  assert(h->prevCursor <= h->cursor);
   assert(h->cursor <= h->top);
   assert(h->top <= h->writeableTop);
   assert(h->writeableTop <= h->mappedTop);
@@ -339,7 +346,7 @@ void Heap_Resize(Heap_t *h, long newSize, int het)
 
 mem_t StackError(struct ucontext *ucontext, mem_t badadd)
 {
-  Stack_t *faultstack = 0;
+  MemStack_t *faultstack = 0;
   StackChain_t *faultchain = 0;
   int i;
   mem_t sp = GetSp(ucontext);
@@ -358,7 +365,7 @@ mem_t StackError(struct ucontext *ucontext, mem_t badadd)
   if (badadd < faultstack->bottom) {
     printf("Underflow occurred - relinking\n\n");
     if (i == (faultchain->count - 1)) {
-      Stack_t *newstack = 0;
+      MemStack_t *newstack = 0;
       faultstack->used_bottom = sp;
       newstack = Stack_Alloc(faultchain);
       faultchain->stacks[faultchain->count++] = newstack;

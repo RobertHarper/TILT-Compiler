@@ -37,23 +37,30 @@ typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 
 /* Note that 0x0 and 0x4 cannot be used as those are possible pointer values 
    and that position of that tag might be occupied by a forwarding pointer */
-#define RECORD_TAG      0x1
-#define IARRAY_TAG      0x2
-#define PARRAY_TAG      0x3
-#define RARRAY_TAG      0x5
-#define SKIP_TAG        0x6
-#define STALL_TAG       0x7
+#define FORWARD1_TYPE    0x0
+#define FORWARD2_TYPE    0x4
+#define RECORD_TYPE      0x1
+#define IARRAY_TYPE      0x2
+#define PARRAY_TYPE      0x3
+#define RARRAY_TYPE      0x5
+#define SKIP_TYPE        0x6
+#define OTHER_TYPE       0x7
 
-#define GET_TYPE(t)       (((tag_t)t) & 0x7)
-#define IS_RECORD(t)      (GET_TYPE(t) == RECORD_TAG)
-#define IS_IARRAY(t)      (GET_TYPE(t) == IARRAY_TAG)
-#define IS_PARRAY(t)      (GET_TYPE(t) == PARRAY_TAG)
-#define IS_RARRAY(t)      (GET_TYPE(t) == RARRAY_TAG)
-#define IS_SKIP(t)        (GET_TYPE(t) == SKIP_TAG)
-#define IS_FORWARDPTR(t)  ((((tag_t)t) & 0x3) == 0)
+#define STALL_TAG (OTHER_TYPE | (0x0 << 3))
+#define PROCEED_TAG (OTHER_TYPE | (0x1 << 3))
+
+#define TAG_IS_FORWARD(t)  ((((tag_t)t) & 0x3) == 0)
+#define TAG_IS_OTHER(t)    ((((tag_t)t) & 0x7) == OTHER_TYPE)
+
+#define GET_TYPE(t)        (((tag_t)t) & 0x7)
+#define TYPE_IS_ARRAY(t)   ((t) == IARRAY_TYPE) || ((t) == PARRAY_TYPE) || ((t) == RARRAY_TYPE)
+#define TYPE_IS_FORWARD(t) ((t) == FORWARD1_TYPE || (t) == FORWARD2_TYPE)
+
+#define GET_OTHER_INFO(t) (((tag_t)t) >> 3)
 
 #define SKIPLEN_OFFSET   3 /* offset storing number of words to skip */
 #define GET_SKIP(t)       (((tag_t)t) >> SKIPLEN_OFFSET)
+
 #define ARRLEN_OFFSET    3
 #define GET_ARRLEN(t)    (((tag_t)t) >> ARRLEN_OFFSET) /* array length in bytes */
 #define GET_ARRAY_AGE(t) ((((tag_t)t) >> 3) & 3)       /* XXX not sure this is kept */
@@ -65,12 +72,12 @@ typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 #define GET_RECMASK(t)   (((tag_t)t) >> RECMASK_OFFSET)          /* get record mask */
 
 /* Records are not allowed to be empty */
-#define TAG_REC_INT        (RECORD_TAG | (1 << RECLEN_OFFSET) | (0 << RECMASK_OFFSET))
-#define TAG_REC_TRACE      (RECORD_TAG | (1 << RECLEN_OFFSET) | (1 << RECMASK_OFFSET))
-#define TAG_REC_INTINT     (RECORD_TAG | (2 << RECLEN_OFFSET) | (0 << RECMASK_OFFSET))
-#define TAG_REC_TRACEINT   (RECORD_TAG | (2 << RECLEN_OFFSET) | (1 << RECMASK_OFFSET))
-#define TAG_REC_INTTRACE   (RECORD_TAG | (2 << RECLEN_OFFSET) | (2 << RECMASK_OFFSET))
-#define TAG_REC_TRACETRACE (RECORD_TAG | (2 << RECLEN_OFFSET) | (3 << RECMASK_OFFSET))
+#define TAG_REC_INT        (RECORD_TYPE | (1 << RECLEN_OFFSET) | (0 << RECMASK_OFFSET))
+#define TAG_REC_TRACE      (RECORD_TYPE | (1 << RECLEN_OFFSET) | (1 << RECMASK_OFFSET))
+#define TAG_REC_INTINT     (RECORD_TYPE | (2 << RECLEN_OFFSET) | (0 << RECMASK_OFFSET))
+#define TAG_REC_TRACEINT   (RECORD_TYPE | (2 << RECLEN_OFFSET) | (1 << RECMASK_OFFSET))
+#define TAG_REC_INTTRACE   (RECORD_TYPE | (2 << RECLEN_OFFSET) | (2 << RECMASK_OFFSET))
+#define TAG_REC_TRACETRACE (RECORD_TYPE | (2 << RECLEN_OFFSET) | (3 << RECMASK_OFFSET))
 
 
 #define BUG(x) {printf(x); exit(-1); }

@@ -224,14 +224,17 @@ global_exnhandler:
 	.align	4
 raise_exception_raw:
 	mov	%o0, THREADPTR_REG		
-	mov	%o1, %r4			! save exn arg since load_regs leaves r4 alone
-	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
+	mov	%o1, %r4				! save exn arg since load_regs leaves r4 alone
+	add	THREADPTR_REG, MLsaveregs_disp, %r1	
 	call	load_regs
 	nop
 	mov	%r4, EXNARG_REG			! restore exn arg from r4 temp (unmodified by load_regs)
-	ld	[%r1+16], %r4			! restore real r4 
-	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
-	ld	[EXNPTR_REG], ASMTMP_REG	! fetch exn handler code
+	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1		! restore r1 which was used as arg to load_regs
+	ld	[THREADPTR_REG+MLsaveregs_disp+16], %r4		! restore r4 which was used to save exn arg and unmodified by load_regs
+								! don't need to restore r15 as we will overwrite it by jumping
+								! at this point, all registers restored
+	ld	[EXNPTR_REG+4], %sp		! fetch sp of exn handler
+	ld	[EXNPTR_REG], ASMTMP_REG	! fetch pc of exn handler
 	jmpl	ASMTMP_REG, %g0			! jump not return and do not link
 	nop
 	.size	raise_exception_raw,(.-raise_exception_raw)

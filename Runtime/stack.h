@@ -36,12 +36,13 @@
 void show_stack(mem_t sp, mem_t cur_retadd, mem_t top);
 
 void stack_init(void);
-int minor_global_scan(Proc_t *);    /* Return all initialized global locs not in the tenured list */
+void minor_global_scan(Proc_t *);    /* Return all initialized global locs not in the tenured list */
 void minor_global_promote();         /* Move initialized global locs into the tenured list */
-int major_global_scan(Proc_t *);
+void major_global_scan(Proc_t *);
 void local_root_scan(Proc_t *, Thread_t *);
 void stub_error(void);
 
+extern int useGenStack;
 extern long GlobalTableSize;
 extern long MutableTableSize;
 extern long CodeSize;

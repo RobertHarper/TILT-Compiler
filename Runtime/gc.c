@@ -33,12 +33,14 @@ int SHOW_GLOBALS   = 0;
 int SHOW_GCFORWARD = 0;
 
 
-enum GCStatus GCStatus = GCOff;
-enum GCType GCType = Minor;
+GCType_t GCType = Minor;
+GCStatus_t GCStatus = GCOff;
 
 Heap_t *fromSpace = NULL, *toSpace = NULL;
 Heap_t *nursery = NULL, *tenuredFrom = NULL, *tenuredTo = NULL;
-SharedStack_t *workStack = NULL, *majorWorkStack = NULL, *majorRegionWorkStack = NULL;
+SharedObjStack_t *workStack = NULL;
+SharedObjStack_t *largeArrayStack = NULL;
+SharedObjRegionStack_t *majorWorkStack = NULL;
 
 int NumGC = 0;
 int NumMajorGC = 0;
@@ -50,6 +52,18 @@ extern val_t GLOBALS_END_VAL;
 int YoungHeapByte = 0, MaxHeap = 0, MinHeap = 0;
 double MinRatio = 0.0, MaxRatio = 0.0;
 int MinRatioSize = 0,  MaxRatioSize = 0;
+int minOffRequest, minOnRequest;  /* Mutator handed multiples of this amount of space for parallel and concurrent collectors */
+int fetchSize = 25;               /* Number of objects to fetch from global pool */
+int localWorkSize = 50;           /* Number of objects to work on from local pool */
+double copyWeight = 1.0 / 4.0;    /* Does not actually copy fields */
+double scanWeight = 3.0 / 4.0;
+double rootWeight = 10.0;
+int arraySegmentSize = 32 * 1024;
+
+static int (*GCTryFun)(Proc_t *, Thread_t *) = NULL;
+static void (*GCStopFun)(Proc_t *) = NULL;
+static void (*GCReleaseFun)(Proc_t *) = NULL;
+static void (*GCPollFun)(Proc_t *) = NULL;
 
 long ComputeHeapSize(long oldsize, double oldratio)
 {
@@ -79,7 +93,7 @@ long ComputeHeapSize(long oldsize, double oldratio)
   return 1024 * newsize;
 }
 
-void HeapAdjust(int show, unsigned int bytesRequested, Heap_t **froms, Heap_t *to)
+double HeapAdjust(unsigned int bytesRequested, Heap_t **froms, Heap_t *to)
 {
   long copied = 0, occupied = 0, live = 0, newSize = 0;
   double liveRatio = 0.0;
@@ -100,40 +114,85 @@ void HeapAdjust(int show, unsigned int bytesRequested, Heap_t **froms, Heap_t *t
 	   newSize, copied, bytesRequested);
     assert(0);
   }
-  if (show) {
-    fprintf(stderr,"---- MAJOR GC %d (%d): ", NumMajorGC, NumGC);
-    fprintf(stderr,"live = %d     oldHeap = %d(%.3lf)  -> newHeap = %d(%.3lf)\n", 
-	    live, occupied, liveRatio, newSize, ((double)live)/newSize);
+  if (diag) {
+    printf("---- MAJOR GC %d (%d): ", NumMajorGC, NumGC);
+    printf("live = %d     oldHeap = %d(%.3lf)  -> newHeap = %d(%.3lf)\n", 
+	   live, occupied, liveRatio, newSize, ((double)live)/newSize);
   }
+  return liveRatio;
 }
 
-void gc_init(void)
+double HeapAdjust1(unsigned int bytesRequested, Heap_t *from1, Heap_t *to)
 {
+  Heap_t *froms[2];
+  froms[0] = from1;
+  froms[1] = NULL;
+  return HeapAdjust(bytesRequested, froms, to);
+}
+
+double HeapAdjust2(unsigned int bytesRequested, Heap_t *from1, Heap_t *from2, Heap_t *to)
+{
+  Heap_t *froms[3];
+  froms[0] = from1;
+  froms[1] = from2;
+  froms[2] = NULL;
+  return HeapAdjust(bytesRequested, froms, to);
+}
+
+void GCInit(void)
+{
+  init_int(&minOffRequest, 4 * pagesize);
+  init_int(&minOnRequest, pagesize);
+
   switch (collector_type) {
   case Semispace:
-    gc_init_Semi();
+    GCTryFun = GCTry_Semi;
+    GCStopFun = GCStop_Semi;
+    GCReleaseFun = GCRelease_Semi;
+    GCPollFun = NULL;
+    GCInit_Semi();
     break;
   case Generational:
-    gc_init_Gen();
+    GCTryFun = GCTry_Gen;
+    GCStopFun = GCStop_Gen;
+    GCReleaseFun = GCRelease_Gen;
+    GCPollFun = NULL;
+    GCInit_Gen();
     break;
   case SemispaceParallel:
-    gc_init_SemiPara();
+    GCTryFun = GCTry_SemiPara;
+    GCStopFun = GCStop_SemiPara;
+    GCReleaseFun = GCRelease_SemiPara;
+    GCPollFun = GCPoll_SemiPara;
+    GCInit_SemiPara();
     break;
   case GenerationalParallel:
-    gc_init_GenPara();
+    GCTryFun = GCTry_GenPara;
+    GCStopFun = GCStop_GenPara;
+    GCReleaseFun = GCRelease_GenPara;
+    GCPollFun = GCPoll_GenPara;
+    GCInit_GenPara();
     break;
   case SemispaceConcurrent:
-    gc_init_SemiConc();
+    GCTryFun = GCTry_SemiConc;
+    GCStopFun = NULL;
+    GCReleaseFun = GCRelease_SemiConc;
+    GCPollFun = GCPoll_SemiConc;
+    GCInit_SemiConc();
     break;
   case GenerationalConcurrent:
-    gc_init_GenConc();
+    GCTryFun = GCTry_GenConc;
+    GCStopFun = NULL;
+    GCReleaseFun = GCRelease_GenConc;
+    GCPollFun = GCPoll_GenConc;
+    GCInit_GenConc();
     break;
   default: 
     assert(0);
   }
 }
 
-void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalStarts)
+void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalStarts, int doReplica)
 {
   int count = 0, mi, i;
   char buffer[100];
@@ -143,24 +202,24 @@ void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalSta
     mem_t stop = (mem_t) (&GLOBALS_END_VAL)[mi];
     sprintf(buffer, "globals of module %d: %s", mi, label);
     scan_heap(buffer,start,stop,stop, legalHeaps, legalStarts, 
-	      SHOW_GLOBALS && (NumGC >= LEAST_GC_TO_CHECK), NULL);
+	      SHOW_GLOBALS && (NumGC >= LEAST_GC_TO_CHECK), doReplica, NULL);
   }
 }
 
-void paranoid_check_heap_without_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t *start)
+void paranoid_check_heap_without_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t *start, int doReplica)
 {
   int count = 0, mi, i;
   scan_heap(label,curSpace->bottom, curSpace->cursor, 
 	    curSpace->top, legalHeaps, NULL,
-	    0, start);
+	    0, doReplica, start);
 }
 
-void paranoid_check_heap_with_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t **legalStarts)
+void paranoid_check_heap_with_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t **legalStarts, int doReplica)
 {
   int count = 0, mi, i;
   scan_heap(label,curSpace->bottom, curSpace->cursor, 
 	    curSpace->top, legalHeaps, legalStarts,
-	    SHOW_HEAPS && (NumGC >= LEAST_GC_TO_CHECK), NULL);
+	    SHOW_HEAPS && (NumGC >= LEAST_GC_TO_CHECK), doReplica, NULL);
 }
 
 void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bitmap_t **legalStarts)
@@ -183,28 +242,26 @@ void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bi
       
     if (thread->nextThunk == 0) /* thunk not started */
       return;
-    for (count = 0; count < 32; count++)
-      {
-	int data = saveregs[count];
-	if (count == ALLOCPTR) {
-	  if (verbose)
-	    printf("Allocation Register %d has value %d\n", count, data);
-	}
-	else if (count == ALLOCLIMIT) {
-	  if (verbose)
-	    printf("Allocation Limit Register %d has value %d\n", count, data);
-	}
-	else if (!inHeaps((ptr_t)data,legalHeaps,legalStarts) && inSomeHeap((ptr_t)data)) {
-	  static int newval = 62000;
-	  if (diag)
-	    printf("TRACE WARNING GC %d: register %d has from space value %d --> changing to %d\n",
-		   NumGC,count,data,newval);
-	  saveregs[count] = newval; 
-	  newval++;
-	}
-	else if (verbose)
-	  printf("Register %d has okay value %d\n", count, data);
+    for (count = 0; count < 32; count++) {
+      int data = saveregs[count];
+      if (count == ALLOCPTR) {
+	if (verbose)
+	  printf("Allocation Register %d has value %d\n", count, data);
       }
+      else if (count == ALLOCLIMIT) {
+	if (verbose)
+	  printf("Allocation Limit Register %d has value %d\n", count, data);
+      }
+      else if (!inHeaps((ptr_t)data,legalHeaps,legalStarts) && inSomeHeap((ptr_t)data)) {
+	static int newval = 62000;
+	if (diag)
+	  printf("TRACE WARNING GC %d: register %d has from space value %d --> changing to %d\n",
+		 NumGC,count,data,newval);
+	 saveregs[count] = newval++;  
+      }
+      else if (verbose)
+	printf("Register %d has okay value %d\n", count, data);
+    }
 
     for (cursor = sp; cursor < stack_top - 16; cursor++) {
       val_t data = *cursor;
@@ -213,26 +270,29 @@ void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bi
 	if (diag)
 	  printf("TRACE WARNING: stack location %d has illegal heap address %d changing to %d\n",
 		 cursor,data,newval);
-	*cursor = newval; 
-	newval++;
+	 *cursor = newval++;  
       }
     }
 
 }
 
 void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
-			Heap_t *firstReplica, Heap_t *secondReplica)
+			Heap_t *firstReplica, Heap_t *secondReplica,
+			Heap_t *largeSpace)
 {
   char *when = (firstReplica == NULL) ? "Before GC" : "After GC";
   char msg[100];
-  Heap_t *legalPrimaryHeaps[3] = {NULL, NULL,NULL};
-  Heap_t *legalReplicaHeaps[3] = {NULL, NULL,NULL};
+  Heap_t *legalPrimaryHeaps[4] = {NULL, NULL,NULL, NULL};
+  Heap_t *legalReplicaHeaps[4] = {NULL, NULL,NULL, NULL};
+  Bitmap_t *legalPrimaryStarts[4] = {NULL, NULL, NULL, NULL};
+  Bitmap_t *legalReplicaStarts[4] = {NULL, NULL, NULL, NULL};
   Heap_t **legalCurrentHeaps;
-  Bitmap_t *legalPrimaryStarts[3] = {NULL, NULL, NULL};
-  Bitmap_t *legalReplicaStarts[3] = {NULL, NULL, NULL};
   Bitmap_t **legalCurrentStarts;
   Thread_t *curThread;
+  int doReplica = firstReplica != NULL;
 
+  if (!(paranoid && (NumGC % paranoid == 0)))
+    return;
   assert(firstPrimary != NULL);
   legalPrimaryHeaps[0] = firstPrimary;
   legalPrimaryHeaps[1] = secondPrimary;
@@ -242,20 +302,29 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
   legalPrimaryStarts[1] = secondPrimary ? secondPrimary->bitmap : NULL;
   legalReplicaStarts[0] = firstReplica ? firstReplica->bitmap : NULL;
   legalReplicaStarts[1] = secondReplica ? secondReplica->bitmap : NULL;
-
+  if (largeSpace) {
+    if (legalPrimaryHeaps[1])
+      legalPrimaryHeaps[2] = largeSpace;
+    else
+      legalPrimaryHeaps[1] = largeSpace;
+    if (legalReplicaHeaps[1])
+      legalReplicaHeaps[2] = largeSpace;
+    else
+      legalReplicaHeaps[1] = largeSpace;
+  }
   sprintf(msg, "%s: first primary heap", when);
-  paranoid_check_heap_without_start(msg,firstPrimary,legalPrimaryHeaps, legalPrimaryStarts[0]);
+  paranoid_check_heap_without_start(msg,firstPrimary,legalPrimaryHeaps, legalPrimaryStarts[0], 0);
   if (secondPrimary != NULL) {
     sprintf(msg, "%s: second primary heap", when);
-    paranoid_check_heap_without_start(msg,secondPrimary,legalPrimaryHeaps, legalPrimaryStarts[1]);
+    paranoid_check_heap_without_start(msg,secondPrimary,legalPrimaryHeaps, legalPrimaryStarts[1], 0);
   }
   if (firstReplica != NULL) {
     sprintf(msg, "%s: first replica heap", when);
-    paranoid_check_heap_without_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts[0]);
+    paranoid_check_heap_without_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts[0], 0);
   }
   if (secondReplica != NULL) {
     sprintf(msg, "%s: second replica heap", when);
-    paranoid_check_heap_without_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts[1]);
+    paranoid_check_heap_without_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts[1], 0);
   }
 
   if (firstReplica == NULL) {
@@ -274,20 +343,20 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
   }
   ResetJob();
   sprintf(msg, "%s: globals", when);
-  paranoid_check_global(msg, legalCurrentHeaps,legalCurrentStarts);
+  paranoid_check_global(msg, legalCurrentHeaps,legalCurrentStarts, doReplica);
   sprintf(msg, "%s: first primary heap", when);
-  paranoid_check_heap_with_start(msg, firstPrimary, legalPrimaryHeaps, legalPrimaryStarts);
+  paranoid_check_heap_with_start(msg, firstPrimary, legalPrimaryHeaps, legalPrimaryStarts, doReplica);
   if (secondPrimary != NULL) {
     sprintf(msg, "%s: second primary heap", when);
-    paranoid_check_heap_with_start(msg, secondPrimary, legalPrimaryHeaps, legalPrimaryStarts);
+    paranoid_check_heap_with_start(msg, secondPrimary, legalPrimaryHeaps, legalPrimaryStarts, doReplica);
   }
   if (firstReplica != NULL) {
     sprintf(msg, "%s: first replica heap", when);
-    paranoid_check_heap_with_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts);
+    paranoid_check_heap_with_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts, 0);
   }
   if (secondReplica != NULL) {
     sprintf(msg, "%s: second replica heap", when);
-    paranoid_check_heap_with_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts);
+    paranoid_check_heap_with_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts, 0);
   }
 
   if (traceError) {
@@ -299,74 +368,109 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
 
 
 
-/* ------------------------------ Interface Routines -------------------- */
-ptr_t alloc_bigintarray(int byteLen, int value, int ptag)
-{  
-  switch (collector_type) 
-    {
-    case Semispace:              { return alloc_bigintarray_Semi(byteLen,value,ptag); }
-    case Generational:           { return alloc_bigintarray_Gen (byteLen,value,ptag); }
-    case SemispaceParallel:      { return alloc_bigintarray_SemiPara(byteLen,value,ptag); }
-    case GenerationalParallel:   { return alloc_bigintarray_GenPara(byteLen,value,ptag); }
-    case SemispaceConcurrent:    { return alloc_bigintarray_SemiConc(byteLen,value,ptag); }
-    case GenerationalConcurrent: { return alloc_bigintarray_GenConc(byteLen,value,ptag); }
-    default: assert(0);
-    }
-}
-
-ptr_t alloc_bigptrarray(int wordlen, ptr_t value, int ptag)
-{  
-  switch (collector_type) 
-    {
-    case Semispace:              { return alloc_bigptrarray_Semi(wordlen,value,ptag); }
-    case Generational:           { return alloc_bigptrarray_Gen (wordlen,value,ptag); }
-    case SemispaceParallel:      { return alloc_bigptrarray_SemiPara(wordlen,value,ptag); }
-    case GenerationalParallel:   { return alloc_bigptrarray_GenPara(wordlen,value,ptag); }
-    case SemispaceConcurrent:    { return alloc_bigptrarray_SemiConc(wordlen,value,ptag); }
-    case GenerationalConcurrent: { return alloc_bigptrarray_GenConc(wordlen,value,ptag); }
-    default: assert(0);
-    }
-}
-
-ptr_t alloc_bigfloatarray(int loglen, double value, int ptag)
-{  
-  switch (collector_type) {
-    case Semispace:               { return alloc_bigfloatarray_Semi(loglen,value,ptag); }
-    case Generational:            { return alloc_bigfloatarray_Gen (loglen,value,ptag); }
-    case SemispaceParallel:       { return alloc_bigfloatarray_SemiPara(loglen,value,ptag); }
-    case GenerationalParallel:    { return alloc_bigfloatarray_GenPara(loglen,value,ptag); }
-    case SemispaceConcurrent:     { return alloc_bigfloatarray_SemiConc(loglen,value,ptag); }
-    case GenerationalConcurrent:  { return alloc_bigfloatarray_GenConc(loglen,value,ptag); }
-    default: assert(0);
-  }
-}
-
-void gc_poll(Proc_t *sth)
+/* ------------------------------ Helper Routines -------------------- */
+void AlignMemoryPointer(mem_t *allocRef, Align_t align)
 {
+  int curEven = (((val_t)(*allocRef)) & 7) == 0;
+  if ((align == OddWordAlign && curEven) ||
+      (align == EvenWordAlign && !curEven))
+    *((*allocRef)++) = SKIP_TYPE | (1 << SKIPLEN_OFFSET);
+}
+
+mem_t AllocFromThread(Thread_t *thread, int bytesToAlloc, Align_t align) /* bytesToAlloc does not include alignment */
+{
+  mem_t alloc = (mem_t) thread->saveregs[ALLOCPTR];
+  mem_t limit = (mem_t) thread->saveregs[ALLOCLIMIT];
+  int wordsToAlloc = bytesToAlloc >> 2;
+  mem_t region = NULL;
+  if (alloc + wordsToAlloc + (align == NoWordAlign ? 0 : 1) <= limit) {
+    AlignMemoryPointer(&alloc, align);
+    region = alloc;
+    alloc += wordsToAlloc;
+    thread->saveregs[ALLOCPTR] = (val_t) alloc;
+  }
+  assert(thread->saveregs[ALLOCPTR] <= thread->saveregs[ALLOCLIMIT]);
+  return region;
+}
+
+mem_t AllocFromHeap(Heap_t *heap, Thread_t *thread, int bytesToAlloc, Align_t align) /* bytesToAlloc does not include alignment */
+{
+  mem_t start, cursor, limit;
+  int padBytes = bytesToAlloc + ((align == NoWordAlign) ? 0 : 4);
+  int pagePadBytes = RoundUp(padBytes, pagesize);
+  GetHeapArea(fromSpace, pagePadBytes, &start, &cursor, &limit);
+  if (start == NULL) 
+    return NULL;
+  AlignMemoryPointer(&cursor, align);
+  PadHeapArea(cursor + bytesToAlloc / sizeof(val_t), limit);
+  return cursor;
+}
+
+static ptr_t alloc_bigdispatcharray(ArraySpec_t *spec)
+{
+  Proc_t *proc = getProc();
+  Thread_t *thread = proc->userThread;
+  assert(spec->byteLen >= 512);
   switch (collector_type) {
-    case Semispace:               return;
-    case Generational:            return;
-    case SemispaceParallel:       gc_poll_SemiPara(sth); return;
-    case GenerationalParallel:    gc_poll_GenPara(sth); return;
-    case SemispaceConcurrent:     gc_poll_SemiConc(sth); return;
-    case GenerationalConcurrent:  gc_poll_GenConc(sth); return;
+    case Semispace:              return AllocBigArray_Semi(proc,thread,spec);
+    case Generational:           return AllocBigArray_Gen(proc,thread,spec);
+    case SemispaceParallel:      return AllocBigArray_SemiPara(proc,thread,spec);
+    case GenerationalParallel:   return AllocBigArray_GenPara(proc,thread,spec);
+    case SemispaceConcurrent:    return AllocBigArray_SemiConc(proc,thread,spec);
+    case GenerationalConcurrent: return AllocBigArray_GenConc(proc,thread,spec);
     default: assert(0);
   }
-  return;
+}
+
+/* ------------------------------ Interface Routines -------------------- */
+ptr_t alloc_bigintarray(int elemLen, int initVal, int ptag)
+{  
+  ArraySpec_t spec;
+  spec.type = IntField;
+  spec.elemLen = elemLen;
+  spec.byteLen = RoundUp(elemLen, 4);  /* excluding tag */
+  spec.intVal = initVal;
+  return alloc_bigdispatcharray(&spec);
+}
+
+ptr_t alloc_bigptrarray(int elemLen, ptr_t initVal, int ptag)
+{  
+  ArraySpec_t spec;
+  spec.type = PointerField;
+  spec.elemLen = elemLen;
+  spec.byteLen = 4 * elemLen;      /* excluding tag */
+  spec.pointerVal = initVal;
+  return alloc_bigdispatcharray(&spec);
+}
+
+ptr_t alloc_bigfloatarray(int elemLen, double initVal, int ptag)
+{  
+  ArraySpec_t spec;
+  spec.type = DoubleField;
+  spec.elemLen = elemLen;
+  spec.byteLen = 8 * elemLen;      /* excluding tag */
+  spec.doubleVal = initVal;
+  return alloc_bigdispatcharray(&spec);
+}
+
+void GCPoll(Proc_t *proc)
+{
+  if (GCPollFun != NULL)
+    (*GCPollFun)(proc);
 }
 
 
-/* Is there enough room in sth to satisfy mapping th onto it */
-int GCSatisfied(Proc_t *sth, Thread_t *th)
+/* Is there enough room in proc to satisfy mapping th onto it */
+int GCSatisfied(Proc_t *proc, Thread_t *th)
 {
   /* requestInfo < 0 means that many butes in write buffer is requested 
      requestInfo > 0 means that many bytes of allocation is requested */
   if (th->requestInfo < 0) {
-    if ((val_t)sth->writelistCursor - th->requestInfo <= (val_t)sth->writelistEnd)
+    if ((val_t)proc->writelistCursor - th->requestInfo <= (val_t)proc->writelistEnd)
       return 1;
   } 
   else if (th->requestInfo > 0) {
-    if (th->requestInfo + (val_t) sth->allocCursor <= (val_t) sth->allocLimit) 
+    if (th->requestInfo + (val_t) proc->allocCursor <= (val_t) proc->allocLimit) 
       return 1; 
   }
   else 
@@ -374,106 +478,49 @@ int GCSatisfied(Proc_t *sth, Thread_t *th)
   return 0;
 }
 
-/* If there is enough allocation/writelist space in sth to satisy th, return 1.
+/* If there is enough allocation/writelist space in proc to satisy th, return 1.
    If not, try to allocate more and return 2 if succeeded.
-   If there is still not room, perform a GC and return 3 if the th is satisfied by sth. 
+   If there is still not room, perform a stop-copy GC and return 3 if the th is satisfied by proc.
+   If not, try to allocate more and return 4 if succeeded.
    Otherwise, return 0. */
-int GCFromScheduler(Proc_t *sth, Thread_t *th)
+int GCFromScheduler(Proc_t *proc, Thread_t *th)
 {  
-  assert(sth->userThread == NULL);
+  procChangeState(proc, GC);
+  assert(proc->userThread == NULL);
   assert(th->proc == NULL);
-  procChangeState(sth, GC);
-  if (GCSatisfied(sth,th))
+  if (GCSatisfied(proc,th))
     return 1;
-  switch (collector_type) {
-    case Semispace:            
-      if (GCTry_Semi(sth,th))
-	return 2;
-      break;
-    case Generational:
-      if (GCTry_Gen(sth,th))
-	return 2;
-      break;
-    case SemispaceParallel:
-      if (GCTry_SemiPara(sth,th))
-	return 2;
-      break;
-    case GenerationalParallel:
-      if (GCTry_GenPara(sth,th))
-	return 2;
-      break;
-    case SemispaceConcurrent:
-      if (GCTry_SemiConc(sth,th)) {
-	return 2;
-      }
-      break;
-    case GenerationalConcurrent:
-      if (GCTry_GenConc(sth,th))
-	return 2;
-      break;
-    default: 
-      assert(0);
-  }
-  if (diag) {
-    if (th->requestInfo > 0)
-      printf("Proc %d: cannot resume user thread %d; need %d, only have %d; proceeding to stop-copy GC\n",
-	     sth->stid, th->tid, th->requestInfo, sth->allocLimit - sth->allocCursor);
-    else if (th->requestInfo < 0)
-      printf("Proc %d: cannot resume user thread %d; need %d bytes from write list; %d available; proceeding to stop-copy GC\n",
-	     sth->stid, th->tid, -(th->requestInfo), (sth->writelistEnd - sth->writelistCursor) * sizeof(val_t));
-    else 
-      assert(0);
-  }
-  switch (collector_type) {
-    case Semispace:            
-      GCStop_Semi(sth);
-      break;
-    case Generational:
-      GCStop_Gen(sth);
-      break;
-    case SemispaceParallel:
-      GCStop_SemiPara(sth);
-      break;
-    case GenerationalParallel:
-      GCStop_GenPara(sth);
-      break;
-    case SemispaceConcurrent:
-      assert(0);
-    case GenerationalConcurrent:
-      assert(0);
-    default: 
-      assert(0);
-  }
-  if (GCSatisfied(sth,th))
+  if (GCTryFun != NULL && (*GCTryFun)(proc,th))  /* Might have to do work dependent on collector */
+    return 2;
+  procChangeState(proc, GC);                     /* Definitely have to do work when stop/copy */
+  proc->gcSegment1 = MajorWork;                  /* Non-generational collectors only do major GC's */
+  if (GCStopFun != NULL) 
+    (*GCStopFun)(proc);
+  if (GCSatisfied(proc,th))
     return 3;
+  if (GCTryFun != NULL && (*GCTryFun)(proc,th))
+    return 4;
   return 0;
 }
 
 void GCRelease(Proc_t *proc)
 {  
   procChangeState(proc, GC);
-  switch (collector_type) {
-    case Semispace:              GCRelease_Semi(proc); return;
-    case Generational:           GCRelease_Gen(proc); return;
-    case SemispaceParallel:      GCRelease_SemiPara(proc); return;
-    case GenerationalParallel:   GCRelease_GenPara(proc); return;
-    case SemispaceConcurrent:    GCRelease_SemiConc(proc); return;
-    case GenerationalConcurrent: GCRelease_GenConc(proc); return;
-    default: assert(0);
-  }
+  (*GCReleaseFun)(proc);
 }
 
 /* Does not return - goes to scheduler */
 void GCFromMutator(Thread_t *curThread)
 {
-  Proc_t *self = getProc();
+  Proc_t *self = curThread->proc;
   mem_t alloc = (mem_t) curThread->saveregs[ALLOCPTR];
   mem_t limit = (mem_t) curThread->saveregs[ALLOCLIMIT];
   mem_t sysAllocCursor = self->allocCursor;
   mem_t sysAllocLimit = self->allocLimit;
 
   /* Check that we are running on own stack and allocation pointers consistent */
-  assert(self == curThread->proc);
+  if (paranoid)
+    assert(self == (getProc())); /* getProc is slow */
   assert(self->userThread == curThread);
   assert((self->stack - (int) (&self)) < 1024) ;
   assert((limit == sysAllocLimit) || (limit == StopHeapLimit));

@@ -75,21 +75,21 @@ void GetPlatform(PlatformType *platform)
 static PlatformType platform;
 
 #ifdef alpha_osf
-GetBcacheSize() { return platform.bcacheSize; }
-GetIcacheSize() { return platform.icacheSize; }
-GetDcacheSize() { return platform.dcacheSize; }
+int GetBcacheSize() { return platform.bcacheSize; }
+int GetIcacheSize() { return platform.icacheSize; }
+int GetDcacheSize() { return platform.dcacheSize; }
 #endif
 
 #ifdef rs_aix
-GetBcacheSize() { return 256 * 1024; }
-GetIcacheSize() { return 8 * 1024; }
-GetDcacheSize() { return 8 * 1024; }
+int GetBcacheSize() { return 256 * 1024; }
+int GetIcacheSize() { return 8 * 1024; }
+int GetDcacheSize() { return 8 * 1024; }
 #endif
 
 #ifdef solaris
-GetBcacheSize() { return 512 * 1024; }
-GetIcacheSize() { return 8 * 1024; }
-GetDcacheSize() { return 8 * 1024; }
+int GetBcacheSize() { return 512 * 1024; }
+int GetIcacheSize() { return 8 * 1024; }
+int GetDcacheSize() { return 8 * 1024; }
 #endif
 
 

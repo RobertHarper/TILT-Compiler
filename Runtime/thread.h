@@ -27,7 +27,11 @@
 #define Csaveregs_disp      longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+longSz+longSz
 #define writelistAlloc_disp longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+longSz+longSz+32*longSz+32*doubleSz
 #define writelistLimit_disp longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz
-
+#if    defined(solaris)
+#define snapshot_size       16
+#elif  defined(alpha_osf)
+#define snapshot_size       20
+#endif
 #define NoRequest 0
 #define YieldRequest 1
 #define StartRequest 2
@@ -45,19 +49,25 @@
 #include <signal.h>
 
 
+typedef struct Stack__t
+{
+  ptr_t *data;
+  long cursor;
+  long size;
+} Stack_t;
+
 /* These types should be in stack.h but mutually recusrive headers are broken. */
-struct StackSnapshot           /* the size and layout of this structure affects the code in stack_asm.s */
+typedef struct StackSnapshot   /* the size and layout of this structure affects the code in stack_asm.s */
 {
   val_t saved_ra;              /* Real return address for this stub */
   val_t saved_sp;              /* Stack pointer position where stub was inserted */
   unsigned int saved_regstate; /* Register state (mask) at this point */
-  Queue_t *roots;              /* Roots between this stub and the one above it */
-};
-
-typedef struct StackSnapshot StackSnapshot_t;
+  Stack_t *roots;              /* Roots between this stub and the one above it */
+} StackSnapshot_t;
 
 
 /* These types should be in forward.h but mutually recusrive headers are broken. */
+struct RegionStack__t;
 struct Proc__t;
 struct CopyRange__t;
 typedef void discharge_t(struct CopyRange__t *);
@@ -70,9 +80,18 @@ typedef struct CopyRange__t   /* This is essentially an object clumsily expresse
   Heap_t *heap;
   expand_t *expand;
   discharge_t *discharge; 
-  struct Proc__t *sth;
+  struct Proc__t *proc;
+  Stack_t *regionStack;
 } CopyRange_t;
 
+typedef struct Usage__t
+{
+  long bytesAllocated;
+  long bytesCopied;
+  long bytesScanned;
+  long rootsProcessed;
+  long workDone;         /* Weighted average of bytesCopied, bytesScanned, and rootProcessed */
+} Usage_t;
 
 /* Finally, these types actually do belong here */
 /* Thread Status:
@@ -84,7 +103,7 @@ typedef struct CopyRange__t   /* This is essentially an object clumsily expresse
 /* decalpha.sml, sparc.sml, and the ***_disp above have to be changed if the fields are modified 
    Note that long is used to avoid padding problems.
 */
-struct Thread__t
+typedef struct Thread__t
 {
   /* ---- These fields are accessed by assembly code ---- */
   unsigned long      saveregs[32];     /* Register set; compiler relied on this being first */
@@ -109,31 +128,114 @@ struct Thread__t
   /* ---- The remaining fields not accessed by assembly code ---- */
   long               last_snapshot;    /* Index of last used snapshot */
   StackChain_t       *stackchain;      /* Stack */
-  Queue_t            *retadd_queue;
+  unsigned long      lastHashKey;     /* Last hash entry key/data */
+  void               *lastHashData; 
+  Stack_t            *callinfoStack;   /* Corresponds to stack frames */
   long                tid;             /* Thread ID */
   long                id;              /* Structure ID */
   long                status;          /* Thread status */
   struct Thread__t   *parent;
   ptr_t              oneThunk;         /* Avoid allocation by optimizing for common case */
-  Queue_t            *reg_roots;
-};
+} Thread_t;
 
-typedef struct Thread__t Thread_t;
+void copyStack(Stack_t *from, Stack_t *to);     /* non-destructive operation on from */
+void transferStack(Stack_t *from, Stack_t *to); /* destructive operation on from */
+void resizeStack(Stack_t *ostack, int newSize);
+void allocStack(Stack_t *ostack, int size);     /* allocate the data portion of an existing stack */
+Stack_t *createStack(int size);                 /* make a stack from scratch */
 
-typedef struct LocalStack__t
+INLINE1(resetStack)
+INLINE2(resetStack)
+void resetStack(Stack_t *oStack)
 {
-  ptr_t stack[1024];       /* stack contains gray objects */
-  long cursor;
-} LocalStack_t;
+  oStack->cursor = 0;
+}
 
+INLINE1(lengthStack)
+INLINE2(lengthStack)
+int lengthStack(Stack_t *oStack)
+{
+  return oStack->cursor;
+}
 
-/* Note that Scheduler, Mutator, and GC are disjoint whereas GCStack, GCGlobal, and GCMajor are all within GC */
-enum ProcessorState {Scheduler, Mutator, GC, GCStack, GCGlobal, GCMajor};
+INLINE1(pushStack)
+INLINE2(pushStack)
+void pushStack(Stack_t *oStack, ptr_t item)
+{
+  /* assert(item != NULL); */
+  oStack->data[oStack->cursor++] = item;
+  if (oStack->cursor == oStack->size)
+    resizeStack(oStack, 2 * oStack->size);  /* Enough to maintain invariant that it is not full */
+}
 
-struct Proc__t
+INLINE1(pushStack2)
+INLINE2(pushStack2)
+void pushStack2(Stack_t *oStack, ptr_t item1, ptr_t item2)
+{
+  /* assert(item != NULL); */
+  if (oStack->cursor == oStack->size)
+    resizeStack(oStack, 2 * oStack->size);
+  oStack->data[oStack->cursor++] = item1;
+  oStack->data[oStack->cursor++] = item2;
+  if (oStack->cursor == oStack->size)
+    resizeStack(oStack, 2 * oStack->size);
+}
+
+/* Returns NULL if stack is empty */
+INLINE1(popStack)
+INLINE2(popStack)
+ptr_t popStack(Stack_t *oStack)
+{
+  if (oStack->cursor) {
+    return oStack->data[--oStack->cursor];
+  }
+  return NULL;
+}
+
+/* Returns NULL if stack is empty */
+INLINE1(peekStack)
+INLINE2(peekStack)
+ptr_t peekStack(Stack_t *oStack)
+{
+  if (oStack->cursor) {
+    return oStack->data[oStack->cursor-1];
+  }
+  return NULL;
+}
+
+/* Returns NULL if stack is empty */
+INLINE1(popStack2)
+INLINE2(popStack2)
+ptr_t popStack2(Stack_t *oStack, ptr_t *item2Ref)
+{
+  if (oStack->cursor > 1) {
+    *item2Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */
+    return oStack->data[--oStack->cursor];
+  }
+  return NULL;
+}
+
+INLINE1(isEmptyStack)
+INLINE2(isEmptyStack)
+int isEmptyStack(Stack_t *oStack)
+{
+  return oStack->cursor == 0;
+}
+
+/* The states Scheduler, Mutator, GC,and  Done are disjoint.
+   The remaining GC* states are substates of GC.
+ */
+typedef enum ProcessorState__t {Scheduler, Mutator, GC, Done,
+				GCStack, GCGlobal, GCWork} ProcessorState_t;
+/* Each segment might be no collection, minor, or major. 
+   Independently, it migth invole flipping the collector on or off */
+typedef enum GCSegment1__t {NoWork, MinorWork, MajorWork} GCSegment1_t;
+typedef enum GCSegment2__t {Continue, FlipOn, FlipOff, FlipBoth} GCSegment2_t;
+
+typedef struct Proc__t
 {
   int                stack;        /* address of system thread stack that can be used to enter scheduler */
-  int                stid;         /* sys thread id */
+  int                procid;         /* sys thread id */
   mem_t              allocStart;     /* allocation range */
   mem_t              allocCursor;
   mem_t              allocLimit;      
@@ -141,28 +243,45 @@ struct Proc__t
   ploc_t             writelistCursor;
   ploc_t             writelistEnd;
   ptr_t              writelist[4096];
-  int                processor;    /* processor id that this pthread is bound to */
-  pthread_t          pthread;      /* pthread that this system thread is implemented as */
-  Thread_t           *userThread;  /* current user thread mapped to this system thread */
-  LocalStack_t       localStack;   /* Used by parallel collector */
-  int temp;
-
+  int                processor;      /* processor id that this pthread is bound to */
+  pthread_t          pthread;        /* pthread that this system thread is implemented as */
+  Thread_t           *userThread;    /* current user thread mapped to this system thread */
+  Stack_t            minorStack;     /* Used by parallel/concurrent generational collector */
+  Stack_t            majorStack;     /* Used by parallel/concurrent collector */
+  Stack_t            majorRegionStack; /* Used by generational concurrent collector */
   Timer_t            totalTimer;     /* Time spent in entire processor */
   Timer_t            currentTimer;   /* Time spent running any subtask */
-  int                lastGCStatus;   /* Needed to distinguish between gcOff and gcOn */
-  double             lastGCdiff;     /* Needed to remember time in one GC across substates like GCStack, GCGlobal, GCMajor */
-  enum ProcessorState state;         /* What the processor is working on */
+  int                segmentNumber;  /* Counts the Number of times we are in a GC since running a mutator */
+  GCSegment1_t       gcSegment1;     /* Did GC work get done and was it a minor or major GC */
+  GCSegment2_t       gcSegment2;     /* Did GC turn on, turn off, or continue? */
+  double             gcTime;         /* How much time spent on current GC/Scheduler segment? */
+  double             schedulerTime;  /* How much time spent on current GC/Scheduler segment? */
+  ProcessorState_t   state;          /* What the processor is working on */
+  long               numSegment;     /* Number of current segment, incremented each time we switch to a mutator */
+  Usage_t            segUsage;       /* Info for current segment which will be added to a cycle */
+  Usage_t            minorUsage;     /* Info for current GC cycle */
+  Usage_t            majorUsage;
+  Statistic_t        bytesAllocatedStatistic;  /* just minor - won't this exclude large objects? XXXX */
+  Statistic_t        bytesCopiedStatistic;     /* both minor and major */
+                                               /* XXX Should the next 3 be program-wide */
+  Statistic_t        heapSizeStatistic;        /* in Kb */
+  Statistic_t        minorSurvivalStatistic;
+  Statistic_t        majorSurvivalStatistic;
   Statistic_t        schedulerStatistic;
-  Statistic_t        mutatorStatistic;
-  Statistic_t        gcOffStatistic;
-  History_t          gcOnHistory;
-  Histogram_t        gcOnHistogram;
+  Histogram_t        mutatorHistogram;
   Statistic_t        gcStackStatistic;
   Statistic_t        gcGlobalStatistic;
-  Statistic_t        gcMajorStatistic;
+  Statistic_t        gcNoneStatistic;
+  Histogram_t        gcWorkHistogram;
+  Histogram_t        gcMajorWorkHistogram;
+  Histogram_t        gcFlipOffHistogram;
+  Histogram_t        gcFlipOnHistogram;
 
-  Queue_t            *root_lists;
-  Queue_t            *largeRoots;  /* contains pointers into large-pointerless-object area */
+  Stack_t            *roots;                  /* Stack, global roots */
+  Stack_t            *primaryReplicaLocRoots; /* Locations of PRs whose values serve as roots - allocated pointer arrays */
+  Stack_t            *primaryReplicaLocFlips; /* Locations of PRs which need to be flipped when collectors goes off */
+  Stack_t            *primaryReplicaObjRoots; /* PR objects whose contents serve as roots - modified pointer array locations */
+  Stack_t            *primaryReplicaObjFlips; /* PR objects whose locations need to be flipped when collectors goes off */
 
   CopyRange_t        minorRange;   /* Used only by generational collector */
   CopyRange_t        majorRange;
@@ -173,16 +292,12 @@ struct Proc__t
   long               numWrite;
   long               numRoot;
   long               numLocative;
-  long               bytesAllocated;
-  long               kbytesAllocated;
-  long               bytesCopied;
-  long               kbytesCopied;
-};
+} Proc_t;
 
-typedef struct Proc__t Proc_t;
+void procChangeState(Proc_t *, ProcessorState_t);
 
-void procChangeState(Proc_t *, enum ProcessorState);
-
+long updateWorkDone(Proc_t *proc);
+long getWorkDone(Proc_t *proc);
 Thread_t *getThread(void);
 Proc_t *getProc(void);
 Proc_t *getNthProc(int);
@@ -198,12 +313,13 @@ void Interrupt(struct ucontext *);
 void scheduler(Proc_t *);                  /* Unmap user thread of Proc if mapped */
 void Finish(void);
 Thread_t *YieldRest(void);
-void ReleaseJob(Proc_t *sth);
+void ReleaseJob(Proc_t *);
 
 int thread_total(void);
 int thread_max(void);
 
 extern Thread_t    *Threads;
+Thread_t *mainThread;
 
 #endif
 #endif

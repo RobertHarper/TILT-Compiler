@@ -231,11 +231,15 @@ restore_dummy:
 .set noat
 					# restore address from argument
 	bsr	load_regs_MLtoC
-	stq	$18, 24($sp)		# save handler address
-	mov	$16, EXNARG_REG		# restore exn arg - which is same as $26 
-	ldq	$27, 0(EXNPTR_REG)	# fetch exn handler code
-					# no need to pop frame as handler will change sp
-	jmp	$31, ($27), 1
+	mov	$16, EXNARG_REG		# restore exn arg - which is same as $26
+	ldq	$16, MLsaveregs_disp+16*4(THREADPTR_REG)	# restore $16 which was used to save exn arg
+	ldq	$0, MLsaveregs_disp+0*4(THREADPTR_REG)		# restore $0 due to load_regs
+	ldq	$1, MLsaveregs_disp+1*4(THREADPTR_REG)		# restore $1 due to load_regs
+								# don't need to restore r26 and r29 due to load_regs
+	ldq	$sp, MLsaveregs_disp+SP_DISP(THREADPTR_REG)	# restore sp
+	ldq	$sp, 4(EXNPTR_REG)	# fetch sp of handler
+	ldq	$27, 0(EXNPTR_REG)	# fetch pc of handler
+	jmp	$31, ($27), 1		# jump without link
 .set at
 	.end	raise_exception_raw
 

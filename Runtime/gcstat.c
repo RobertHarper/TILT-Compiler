@@ -135,21 +135,6 @@ void gc_sanity_stackreg_check(unsigned long *saveregs, Heap_t *fromspace,
 
 
 
-void gcstat_normal(Proc_t *proc, unsigned int allocsize, unsigned int copied, unsigned int writes)
-{
-  proc->bytesAllocated += allocsize;
-  proc->bytesCopied += copied;
-  proc->kbytesAllocated += (proc->bytesAllocated / 1024);
-  proc->kbytesCopied += (proc->bytesCopied / 1024);
-  proc->bytesAllocated %= 1024;
-  proc->bytesCopied %= 1024;
-  proc->numWrite += writes;
-}
-
-
-
-
-
 #ifdef HEAPPROFILE
 struct ProfileTagEntry
 {

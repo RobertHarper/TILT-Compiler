@@ -18,6 +18,7 @@
 #include "global.h"
 /* #include "mllib.h" */
 #include "client.h"
+#include "stack.h"
 
 int ThreadedVersion = THREADED_VERSION;
 int LEAST_GC_TO_CHECK = 0;
@@ -46,26 +47,25 @@ int process_string(char *var, char *item, char *option)
   if (!prefix_match || (optlen<=len) || (option[len] != '='))
     return 0;
   strcpy(var,option+len+1);
-#ifdef DEBUG
-  printf("Setting item %s to %s\n",item,var);
-#endif
   return 1;
 }
 
 int process_long(long *var, char *item, char *option)
 {
-  int len = strlen(item);
-  int prefix_match = !strncmp(item,option,len);
-  int optlen = strlen(option); 
-  long possval = 0;
-  if (!prefix_match || (optlen<=len) || (option[len] != '='))
-    return 0;
-  possval = atol(option+len+1);
-#ifdef DEBUG
-  printf("Setting item %s to %d\n",item,possval);
-#endif
-  *var = possval;
-  return 1;
+  int itemLen = strlen(item);
+  int optLen = strlen(option); 
+  int prefixMatch = !strncmp(item,option,itemLen);
+  if (prefixMatch) {
+    if (optLen == itemLen) {
+      *var = 1;    /* Special case to act like bool too */
+      return 1;
+    }
+    else if (optLen>itemLen && (option[itemLen] == '=')) {
+      *var = atol(&option[itemLen+1]);
+      return 1;
+    }
+  }
+  return 0;
 }
 
 int process_int(int *var, char *item, char *option)
@@ -109,7 +109,8 @@ struct option_entry table[] =
    0, "genpara", &genpara, "Use the generational, parallel garbage collector",
    0, "semiconc", &semiconc, "Use the semispace, concurrent garbage collector",
    0, "genconc", &genconc, "Use the generational, concurrent garbage collector",
-   0, "paranoid", &paranoid, "Run in paranoid mode",
+   0, "useGenStack", &useGenStack, "Use generational stack tracing",
+   1, "paranoid", &paranoid, "Run in paranoid mode every nth GC",
    0, "verbose", &verbose, "Be verbose when paranoid",
    0, "diag", &diag, "Run in diagnostic mode",
    0, "threadDiag", &threadDiag, "Show thread-related diagnostic messages",
@@ -130,6 +131,11 @@ struct option_entry table[] =
    1, "nurserybyte", &YoungHeapByte, "Set size of nursery in bytes",
    1, "minratio", &MinRatio, "Set the minimum ratio of of live objects to all objects",
    1, "maxratio", &MaxRatio, "Set the maximum ratio of of live objects to all objects",
+   1, "minOffRequest", &minOffRequest, "Minimum size of mutator request when collector is off",
+   1, "minOnRequest", &minOnRequest, "Minimum size of mutator request when collector is on",
+   1, "fetchSize", &fetchSize, "Number of items to fetch from the shared work stack",
+   1, "localWorkSize", &localWorkSize, "Number of items to work on from local shared stack before accessing shared work stack",
+   1, "doCopyCopySync", &doCopyCopySync, "Perform copy-copy synchronization for parallel/concurrent collectiors",
    0, "short", &shortSummary, "Print short summary of execution"};
 
 void process_option(int argc, char **argv)
@@ -229,8 +235,8 @@ int main(int argc, char **argv)
   thread_init();
   global_init(); 
   exn_init();
-  stack_init();
-  gc_init();
+  stack_init();  /* must follow thread_init */
+  GCInit();
 
   thread_go((ptr_t *)(&client_entry),module_count);
   stats_finish();

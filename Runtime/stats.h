@@ -16,6 +16,7 @@ typedef struct Timer__t
 
 void reset_timer(Timer_t *);
 void start_timer(Timer_t *);
+double lap_timer(Timer_t *);
 void restart_timer(Timer_t *);
 void stop_timer(Timer_t *);
 

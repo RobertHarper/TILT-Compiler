@@ -15,55 +15,21 @@
 #include "stats.h"
 #include "gcstat.h"
 #include "show.h"
+#include "platform.h"
 
-
-/* HEAP LAYOUT
-   -----------
-   The heap is set up with a nursery, a tenuredFrom, and a
-   tenuredTo as in any 2-generational collector.  During a minor
-   collection, the live parts of the nursery primary is replicated in
-   tenuredFrom while the primary continues to be allocated
-   from a reserved area of the nursery.  When the collection rate is k,
-   then the reserved area must be at least 1/k times the size of the
-   rest of the nursery.  A similar reserve area must be set up in the
-   tenured area.
-
-   Eventually, a major collection is required.  Unfortunately, the
-   simple scheme of replicating the nursery and tenuredFrom into
-   tenuredTo will fail.  The amount of reserved space in the nursery
-   will only allow a certain amount of replication to occur.  When the
-   reserved area is exhausted, the replication is only partially
-   completed and a flip is impossible.  On the other hand, if the
-   primary is allocated in tenuredFrom, then the collector is no
-   longer generational for the duration of the major collection. 
-   Instead, the replica of the nursery must continue to be made 
-   in tenuredFrom.
-
-   When a major collection is occurring, major collection work
-   (replication of the tenuredFrom graph to tenuerdTo) occurs while
-   minor collections are proceeding.  The tenuerdFrom graph is
-   replicated starting with tenured roots obtained at the end of any
-   minor collection.  During a major collection, the tenuredFrom area
-   continues to fill up as the result of minor collections.  These
-   "allocations" into tenuredFrom need to be replicated as well.
-   Thus, objects allocated during a major GC that are live have 3
-   copies.  Eventually, the major collection and we major-flip
-   the roles of tenuredFrom and tenuredTo.  This flip will conincide
-   with a minor-flip as the major collection cannot complete until
-   the minor collection finishes.
-
+/* 
    BACK-POINTER MUTATIONS
    ----------------------
    During a minor collection, the primary continues to be allocated
    from the nursery even as a replica of the nursery-residing primary
-   is replicated in the tenuredFrom.  The objects in tenuredFrom are
+   is replicated in the fromSpace.  The objects in fromSpace are
    considered primary-replica in the sense that both the primary and
    replica point to it.  At the beginning of the collection, there are
    no pointers back to the nursery and so the mutator continues to see
    only the primary or primary-replica.  Eventually, when the
    collector is turned off, it is possible to discard the nursery
    primary and switch to the replica without modifying the
-   primary-replica at all.  However, when a tenuredFrom-residing
+   primary-replica at all.  However, when a fromSpace-residing
    pointer array is mutated, we may now have a primary-replica array
    pointing back to the primary.  This makes it impossible to discard
    the primary later.  (Almost) Alternatively, we could make the
@@ -152,30 +118,33 @@
      (+) real-time
      (-) requires multiple syncs 
 
-   For now, we choose Solution 1 and store the pointer updates in hte queue modifiedTenuredPtrLoc.
+   For now, we choose Solution 1 and store the pointer updates in the queue modifiedPrimaryReplicaLoc.
 
-   Another concern is the interaction between the presence of back-pointers due to mutation
-   and major collection.  In the absence of mutations, the tenuredFrom space is a closed 
-   graph and is replicated into tenuredTo during major GC work.  With mutations, the major collection
-   may replicate an object into tenuredTo which points back to the nursery.  When this object
-   is scanned, it is not clear how to forward these objects.  The major collector cannot proceed
-   with a minor copy being made and mixing the work of the minor collection here seems too complicated.
-   Since we are using Solution 1 already, we can extend it easily to handle this.
-   Normally, the mutations are applied at the end of a minor GC.  We simply apply them
-   to the tenuredTo replica as well when we reach the end of a major GC.
+   A separate issue is backpointer mutations when there is no
+   collection.  These backpointers must also be considered roots when
+   collection starts.  Like the other backpointer mutations, they must
+   be flipped when the collector is turned off.
+
+   Another concern is the interaction between the back-pointers due
+   and major collections.  In the absence of mutations, the fromSpace
+   graph is closed (except for globals) and is replicated into toSpace
+   during major GC work.  With mutations, the major collector may copy
+   a fromSpace with backpointers, creating a toSpace object with
+   backpointers to the nursery.  When the major collector scans this
+   toSpace object, it will skip over the nursery pointers.  This is OK
+   provided that these locations are fixed when we flip the spaces.
+   Since we are using Solution 1 already, we can extend it easily to
+   handle this.  Normally, the mutations are applied at the end of a
+   minor GC.  We simply apply them to the toSpace replica as well when
+   we reach the end of a major GC.
 
 */
 
-static double scanWeight = 1.0 / 3.0;
-static double copyWeight = 2.0 / 3.0;
-static double rootWeight = 8.0;
+/* weights can be reset in init routine */
 static int reducedNurserySize = 0, expandedNurserySize = 0;
 static int reducedTenuredSize = 0, expandedTenuredSize = 0;
-static int minorCollectionRate = 4;   /* Ratio of minor coll rate to minor alloc rate */
-static int majorCollectionRate = 2;   /* Ratio of major coll rate to major alloc rate(minor coll rate) */
-static int fetchSize     = 25;        /* Number of objects to fetch from global pool */
-static int localWorkSize = 50;        /* Number of objects to work on from local pool */
-static Queue_t *modifiedTenuredPtrLoc = NULL;
+static int minorCollectionRate = 4;   /* Ratio of minor coll rate to alloc rate */
+static int majorCollectionRate = 4;   /* Ratio of major coll rate to alloc rate */
 
 
 /* Compute reduced heap size by reserving area and rounding down to nearest page */
@@ -193,144 +162,83 @@ int reducedToExpanded(int size, int rate)
 
 /* ------------------  Parallel array allocation routines ------------------- */
 
-static mem_t alloc_big_GenConc(int byteLen, int hasPointers)
+mem_t AllocBigArray_GenConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 {
-  Thread_t *curThread = getThread();
-  Proc_t *proc = curThread->proc;
-  unsigned long *saveregs = curThread->saveregs;
-  mem_t region = NULL;
-  int wordLen = byteLen / (sizeof (val_t));
-  int request = RoundUp(byteLen, pagesize);
+  mem_t region;
+  ptr_t obj = NULL;
+  int tagByteLen = spec->byteLen + 4;
+  Align_t align = (spec->type == DoubleField) ? OddWordAlign : NoWordAlign; /* Since there is one tag word */
 
-  /* Should be at least 0.5K to be considered big */
-  assert(byteLen >= 512);                
-
-  /* Get the large region - use tenured heap if object has pointers */
-  if (hasPointers) {
-    if (tenuredFrom->cursor + wordLen <= tenuredFrom->top) {
-      region = tenuredFrom->cursor;
-      tenuredFrom->cursor += wordLen;
+  /* Allocate the space */
+  if (spec->type == PointerField) {
+    region = AllocFromHeap(fromSpace, thread, tagByteLen, align);
+    if (region == NULL) {
+      GCFromC(thread, tagByteLen + 4, 1);
+      region = AllocFromHeap(fromSpace, thread, tagByteLen, align);
     }
-  }
-  else
-    region = gc_large_alloc(proc,byteLen);
-
-  /* If allocation failed, perform GC and try again */
-  if (region == NULL) {
-    GCFromC(curThread, 4, 1);
-    if (hasPointers) {
-      if (tenuredFrom->cursor + wordLen <= tenuredFrom->top) {
-	region = tenuredFrom->cursor;
-	tenuredFrom->cursor += wordLen;
-      }
-    }
-    else
-      region = gc_large_alloc(proc,byteLen);
-  }
-
-  assert(region != NULL);
-  assert(tenuredFrom->cursor < tenuredFrom->top);
-
-  /* Update Statistics */
-  gcstat_normal(proc,byteLen, 0, 0);
-  return region;
-}
-
-ptr_t alloc_bigintarray_GenConc(int elemLen, int initVal, int ptag)
-{
-  /* elemements are byte-sized */
-  int wordLen = 1 + (elemLen + 3) / 4;
-  mem_t space = alloc_big_GenConc(4 * wordLen,0);
-  ptr_t res = space + 1;
-  init_iarray(res, elemLen, initVal);
-  return res;
-}
-
-ptr_t alloc_bigptrarray_GenConc(int elemLen, ptr_t initVal, int ptag)
-{
-  int wordLen = 1 + elemLen;
-  mem_t space = alloc_big_GenConc(4 * wordLen,1);
-  ptr_t res = space + 1;
-  init_parray(res, elemLen, initVal);
-  return res;
-}
-
-ptr_t alloc_bigfloatarray_GenConc(int elemLen, double initVal, int ptag)
-{
-  ptr_t res = NULL;
-  mem_t region = NULL;
-  Thread_t *curThread = getThread();
-  int wordLen = 2 + (elemLen << 1);  /* Includes one word for alignment */
-
-  region = alloc_big_GenConc(4 * wordLen,0);
-  if ((((val_t)region) & 7) != 0) {
-    region[0] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
-    res = region + 1;
   }
   else {
-    region[wordLen-1] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
-    res = region;
+    region = gc_large_alloc(proc, tagByteLen, align);
+    if (region == NULL) {
+      GCFromC(thread, 4, 1);       /* not bytelen since object is not from tenured space */
+      region = gc_large_alloc(proc, tagByteLen, align);
+    }
   }
-  init_farray(res, elemLen, initVal);
-  return res;
-}
+  assert(region != NULL);
 
+  /* Allocate object; update stats; initialize */
+  obj = region + 1;
+  proc->majorUsage.bytesAllocated += tagByteLen;
+  switch (spec->type) {
+    case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
+    case PointerField : 
+      init_parray(obj, spec->elemLen, spec->pointerVal); 
+      pushStack(proc->primaryReplicaObjRoots, obj);        /* Object is one word past tag */
+      break;
+    case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
+  }
+  return obj;
+}
 
 /* --------------------- Concurrent collector --------------------- */
-static long req_size = 0;
+static long totalRequest = 0;  /* Total number of bytes requested by all threads */
 
-static long numOn1 = 0;
-static long numOn2 = 0;
-static long numOn3 = 0;
+/* These are barrier synchronizations which reset the previous one when completed.
+   So, after barrier_n is passed, all processors reset barrier_(n-1).  For this
+   cyclical scheme to work, there must be at least three barriers. 
+*/
+static long numWaitOnProc = 0;  /* waiting for mutators to stop; first proc does prelim work */
+static long numStackOnProc = 0; /* waiting for roots to be computed; determine if GC is major and then resize heaps */
+static long numDoneOnProc = 0;  /* waiting for roots to be forwarded and work to be shared */
 
-static void regionSave(CopyRange_t *copyRange)
-{
-  /* The stack in LocalStack is too big.  XXX */
-  LocalStack_t stack;
-  if (copyRange->start >= copyRange->cursor)
-    return;
-  stack.stack[0] = copyRange->start;
-  stack.stack[1] = copyRange->cursor;
-  stack.cursor = 2;
-  if (diag)
-    printf("Proc %d: Saving region %d to %d\n", copyRange->sth->stid, copyRange->start, copyRange->cursor);
-  SynchStart(majorRegionWorkStack);
-  SynchMid(majorRegionWorkStack);
-  moveToGlobalStack(majorRegionWorkStack, &stack);
-  SynchEnd(majorRegionWorkStack,NULL);
-  assert(stack.cursor == 0);
-}
-
-void expandWithPadSave(CopyRange_t *copyRange, int size)
-{
-  regionSave(copyRange);
-  expandWithPad(copyRange, size);
-}
-
-void dischargeWithPadSave(CopyRange_t *copyRange)
-{
-  regionSave(copyRange);
-  dischargeWithPad(copyRange);
-}
+static long numWaitOffProc = 0;        /* waiting for mutators to stop; first proc does prelim work */
+static long numFlipOffProc = 0;        /* waiting for roots to be replaced with replica;
+				   if starting a major GC, find major roots and move to shared stack */				   
+static long numDoneOffProc = 0;        /* waiting for minor_global_promote; space resize/flip */
 
 static void CollectorOn(Proc_t *proc)
 {
-  int isFirst = 0;
-  Thread_t *curThread;
-  int bytesCopied = 0, rootWork = 0;
-
-  if (diag)
-    printf("Proc %d: CollectorOn\n", proc->stid); 
+  int i, len, isFirst = 0;
+  Thread_t *threadIterator = NULL;
+  Stack_t *objStack = (GCType == Minor) ? &proc->minorStack : &proc->majorStack;
+  CopyRange_t *copyRange = (GCType == Minor) ? &proc->minorRange : &proc->majorRange;
+  range_t *srcRange = (GCType == Minor) ? &nursery->range : &fromSpace->range;
 
   switch (GCStatus) {
     case GCOff:                   /* Signalling to other processors that collector is turning on */
+      if (diag)
+	printf("Proc %d: CollectorOn - stopping other processors\n", proc->procid); 
       GCStatus = GCPendingOn;
       StopAllThreads();
       break;
-    case GCPendingOn: break;      /* Responding to signal that collector is turning on */
-    case GCOn: assert(0);         /* Collector already on */
-    case GCPendingOff: assert(0); /* Someone is turning the collector off while we are turning it on! */
-    default: assert(0);
+    case GCPendingOn:             /* Responding to signal that collector is turning on */
+      if (diag)
+	printf("Proc %d: CollectorOn - stopped by another processor\n", proc->procid); 
+      break;                      
+    case GCOn:                    /* Collector already on */
+    case GCPendingOff:            /* We are turning the collector on after someone has tried turning the collector off */
+    default: 
+      assert(0);
   }
 
   /* Collection cannot proceed until all processors have stopped running mutators.
@@ -338,272 +246,232 @@ static void CollectorOn(Proc_t *proc)
      prelimiary work.  This work must be completed before any processor begins collection.
      As a result, the "first" processor is counted twice.
   */
-  isFirst = (asynchReachBarrier(&numOn1)) == 0;
+  isFirst = (asynchReachBarrier(&numWaitOnProc)) == 0;
   if (isFirst) {
-    if (diag)
-      printf("Proc %d: Starting collection %d.  starting with  type %d\n", proc->stid, NumGC, GCType);
-    if (GCType == Major)              /* A Major GC is ongoing */
-      ;
-    else if (GCType == EndMajor)      /* A Major GC will end at the end of this minor GC */
-      ;
-    else if (GCType == Minor) {
-      /* A Major GC is forced if the tenured space is potentially too small */
-      if (Heap_GetAvail(tenuredFrom) < 2 * Heap_GetSize(nursery)) {
-	GCType = BeginMajor;             
-      }
-      else 
-	GCType = Minor;
-    }
-    else                               /* GCType should not be BeginMajor */
-      assert(0);
-    req_size = 0;
-    ResetJob();                        /* Reset counter so all user threads are scanned */
-    asynchReachBarrier(&numOn1);       /* First processor is counted twice. */
-    if (diag)
-      printf("Proc %d: Starting collection %d of type %d\n", proc->stid, NumGC, GCType);
+    if (GCType == Minor)
+      assert(Heap_GetAvail(fromSpace) > Heap_GetSize(nursery));
+    totalRequest = 0;
+    ResetJob();                               /* Reset counter so all user threads are scanned */
+    asynchReachBarrier(&numWaitOnProc);       /* First processor is counted twice. */
   }
-  /* Wait for all threads to reach this point; note that the first thread is counted twice */
-  if (verbose)
-    printf("Proc %d: waiting for %d procs to stop mutator %s\n",
-	   proc->stid, (NumProc + 1) - numOn1, isFirst ? "First" : "");
-  while (!(asynchCheckBarrier(&numOn1, NumProc + 1, &numOn3)))
+  while (!(asynchCheckBarrier(&numWaitOnProc, NumProc + 1, &numDoneOnProc)))   /* The first thread is counted twice */
     ;
 
-  /* Check local stack empty; reset root lists */
-  assert(proc->localStack.cursor == 0);
-  QueueClear(proc->root_lists);
-  if (GCType == Minor)
-    SetCopyRange(&proc->minorRange, proc, tenuredFrom, expandWithPad, dischargeWithPad);
-  else if (GCType == BeginMajor) {
-    SetCopyRange(&proc->minorRange, proc, tenuredFrom, expandWithPadSave, dischargeWithPadSave);
-    SetCopyRange(&proc->majorRange, proc, tenuredTo, expandWithPad, dischargeWithPad);
+  /* Reset root lists, compute thread-specific roots in parallel,
+     determine whether a major GC was explicitly requested. */
+  procChangeState(proc, GCStack);
+  resetStack(proc->roots);
+  while ((threadIterator = NextJob()) != NULL) {
+    assert(threadIterator->requestInfo >= 0);
+    FetchAndAdd(&totalRequest, threadIterator->requestInfo);
+    local_root_scan(proc,threadIterator);
   }
-  else if (GCType == Major || GCType == EndMajor) {
-    SetCopyRange(&proc->minorRange, proc, tenuredFrom, expandWithPadSave, dischargeWithPadSave);
-  }
+  asynchReachBarrier(&numStackOnProc);
 
-  /* All processors compute thread-specific roots in parallel
-     and determine whether a major GC has been requested. */
-  while ((curThread = NextJob()) != NULL) {
-    assert(curThread->requestInfo >= 0);
-    FetchAndAdd(&req_size, curThread->requestInfo);
-    local_root_scan(proc,curThread);
-    if (GCType == Minor && curThread->request == MajorGCRequestFromC) 
-      GCType = Major;      
-    if (verbose)
-      printf("Proc %d:    computed roots of userThread %d\n", proc->stid,curThread->tid);      
-  }
-  asynchReachBarrier(&numOn2);
-
-  /* The "first" GC processor is in charge of the globals but
+  /* The "first" processor is in charge of the globals but
      must wait until all threads are processed before knowing if GC is major. 
      The major GC does not take effect until the first minor GC is completed.
   */
+  procChangeState(proc, GCGlobal);
   if (isFirst) {
-    while (!(asynchCheckBarrier(&numOn2, NumProc, &numOn1)))
-      ;
     if (paranoid) /* Check heaps before starting GC */
-      paranoid_check_all(nursery, tenuredFrom, NULL, NULL);
-    rootWork += minor_global_scan(proc);           /* Even if major GC */
-    Heap_Resize(nursery,expandedNurserySize,0);
-    if (GCType == BeginMajor) {
-      Heap_Resize(tenuredFrom,expandedTenuredSize,0);
-      Heap_Resize(tenuredTo,expandedTenuredSize,1);
+      paranoid_check_all(nursery, fromSpace, NULL, NULL, largeSpace);
+    while (!(asynchCheckBarrier(&numStackOnProc, NumProc, &numWaitOnProc)))
+      ;
+    resetSharedObjStack(workStack,NumProc);
+    if (GCType == Major) {
+      major_global_scan(proc);
+      Heap_Resize(fromSpace,expandedTenuredSize,0);
+      Heap_Resize(toSpace,expandedTenuredSize,1);
+      gc_large_startCollect();
     }
-    asynchReachBarrier(&numOn2);            /* First processor is counted twice */
+    else {
+      minor_global_scan(proc);
+      Heap_Resize(nursery,expandedNurserySize,0);
+    }
+    asynchReachBarrier(&numStackOnProc);            /* First processor is counted twice */
   }
-  while (!(asynchCheckBarrier(&numOn2, NumProc + 1, &numOn1)))
+  while (!(asynchCheckBarrier(&numStackOnProc, NumProc + 1, &numWaitOnProc)))
     ;
 
-  /* Now forward all the roots which initializes the local work stacks */
-  synchBarrier(&numOn2, NumProc, &numOn1);
-  while (!QueueIsEmpty(proc->root_lists)) {
-    /* Cannot dequeue from roots since this may be a global */
-    Queue_t *roots = (Queue_t *) Dequeue(proc->root_lists);
-    int i, rootCount = 0, len = QueueLength(roots);  
-    for (i=0; i<len; i++) {
-      ploc_t root = (ploc_t) QueueAccess(roots,i);
-      ptr_t obj = *root;
-      bytesCopied += forward1_concurrent_stack(obj,&proc->minorRange,&nursery->range,proc);
-      if (verbose)
-	printf("GC %d: collector on %d root = %d   primary = %d, replica = %d\n",NumGC,++rootCount,root,obj,obj[-1]);
+  /* Check local stack empty, prepare copy range,
+     forward all the roots (first proc handles backpointers),
+     transfer work from local to shared work stack */
+  procChangeState(proc, GC);
+  if (GCType == Major)
+    proc->gcSegment1 = MajorWork;
+
+  assert(isEmptyStack(&proc->minorStack));
+  assert(isEmptyStack(&proc->majorStack));
+  if (GCType == Minor) {
+    if (IsNullCopyRange(&proc->minorRange))   /* First minor GC (after a major GC) */
+      SetCopyRange(&proc->minorRange, proc, fromSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
+  }
+  else
+    SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
+
+  /* modifiedPrimaryReplicaLoc have back pointer roots */
+  len = lengthStack(proc->primaryReplicaLocRoots);
+  if (GCType == Minor) {
+    if (diag)
+      printf("GC %d: %d back pointers when collector turned on.\n", NumGC, len);
+    while (!isEmptyStack(proc->primaryReplicaLocRoots)) {
+      ploc_t primaryReplicaLoc = (ploc_t) popStack(proc->primaryReplicaLocRoots);
+      ptr_t root = *primaryReplicaLoc;
+      pushStack(proc->primaryReplicaLocFlips, (void *) primaryReplicaLoc);
+      alloc1_copyCopySync_primaryStack(proc,root,objStack,copyRange,srcRange);
     }
-    proc->numRoot += len;
+  }
+  else
+    assert(len == 0);
+
+  /* Forward roots */
+  proc->numRoot += lengthStack(proc->roots);
+  while (!isEmptyStack(proc->roots)) {
+    ploc_t root = (ploc_t) popStack(proc->roots);
+    ptr_t obj = *root;
+    alloc1_copyCopySync_primaryStack(proc,obj,objStack,copyRange,srcRange);
   }
 
-  /* Move to global stack */
-  SynchStart(workStack);
-  SynchMid(workStack);
-  moveToGlobalStack(workStack, &proc->localStack);
-  SynchEnd(workStack,NULL);
+  if (GCType == Minor)
+    while (!isEmptyStack(proc->primaryReplicaObjRoots)) {
+      /* Not transferScanObj_* since this object is a primaryReplica.
+	 Not scanObj_locCopy1_* since this object is a primary-replica and we cannot modify it until we Flip. */
+      ptr_t obj = popStack(proc->primaryReplicaObjRoots);
+      scanObj_copy1_copyCopySync_primaryStack(proc, obj, objStack, copyRange, srcRange);
+      pushStack(proc->primaryReplicaObjFlips, obj);
+    }
+  else
+    resetStack(proc->primaryReplicaObjRoots);
 
+  /* Omit popSharedObjStack */
+  pushSharedObjStack(workStack, objStack);
+  assert(isEmptyStack(objStack));
   GCStatus = GCOn;
-  synchBarrier(&numOn3, NumProc, &numOn2);
-  gcstat_normal(proc, 0, bytesCopied, 0);
-  assert(proc->localStack.cursor == 0);
+  synchBarrier(&numDoneOnProc, NumProc, &numStackOnProc);
   flushStore();
 }
 
-static long numOff1 = 0;
-static long numOff2 = 0;
-static long numOff3 = 0;
-static long numOff4 = 0;
-
-int missingRoot = 0;
-
 static void CollectorOff(Proc_t *proc)
 {
-  Thread_t *curThread = NULL;
+  Thread_t *threadIterator = NULL;
   int isFirst;
-  int rootCount = 0;
+  int curGCType = GCType;      /* GCType will be written to during this function for the next GC
+				  and so we save its value here for reading */
 
   if (diag)
-    printf("Proc %d: entered CollectorOff\n", proc->stid);
-  assert(proc->localStack.cursor == 0);        /* Local stack must be empty */
+    printf("Proc %d: entered CollectorOff\n", proc->procid);
+  assert(isEmptyStack(&proc->minorStack));        /* Local stack must be empty */
+  assert(GCStatus == GCPendingOff);
   flushStore();
 
-  assert(GCStatus == GCPendingOff);
-
-  isFirst = (asynchReachBarrier(&numOff1)) == 0;
+  isFirst = (asynchReachBarrier(&numWaitOffProc)) == 0;
   if (isFirst) {
+    if (Heap_GetAvail(fromSpace) < Heap_GetSize(nursery))   
+      GCType = Major;                         /* A Major GC is needed if the tenured fromSpace is too low */
+    else
+      GCType = Minor;
     ResetJob();
-    asynchReachBarrier(&numOff1);
+    asynchReachBarrier(&numWaitOffProc);
   }
-  while (!asynchCheckBarrier(&numOff1, NumProc+1, &numOff4))
+  while (!asynchCheckBarrier(&numWaitOffProc, NumProc+1, &numDoneOffProc))
     ;
-  assert(isEmptyGlobalStack(workStack));            /* After all processors are here, shared work stack must be empty */
-  if (GCType == EndMajor) {                         /* Major stack may contain some small amount of work until all threads stop */
-    assert(isEmptyGlobalStack(majorWorkStack));
-    assert(isEmptyGlobalStack(majorRegionWorkStack));
-  }
+  /* Local stacks must be empty. */
+  assert(isEmptyStack(&proc->minorStack));
+  assert(isEmptyStack(&proc->majorStack));
 
-  /* Replace all roots with replica; doing 2 replica indirection if end of major GC */
+  /* Replace all roots with replica */
+  procChangeState(proc, GCGlobal);
   if (isFirst) {
-    if (GCType == BeginMajor || GCType == EndMajor)   
+    if (curGCType == Major) 
       major_global_scan(proc);
-    else {
+    else 
       minor_global_scan(proc);   
+  }
+  if (curGCType == Major) {
+    assert(isEmptyStack(proc->primaryReplicaObjFlips));
+    assert(isEmptyStack(proc->primaryReplicaLocFlips));
+  }
+  else {
+    while (!isEmptyStack(proc->primaryReplicaObjFlips)) {
+      /* Not transferScanObj_* since this object is a primaryReplica that just needs to be flipped. No copying should actually occur. */
+      ptr_t obj = popStack(proc->primaryReplicaObjFlips);
+      scanObj_locCopy1_copyCopySync_primaryStack(proc, obj, &proc->minorStack,&proc->minorRange,&nursery->range);
     }
-    while (!QueueIsEmpty(modifiedTenuredPtrLoc)) {
-      ptr_t primaryReplica = (ptr_t) Dequeue(modifiedTenuredPtrLoc);
-      int byteDisp = (int) Dequeue(modifiedTenuredPtrLoc);
-      ptr_t field = (ptr_t) primaryReplica[byteDisp / sizeof(ptr_t)];         /* could be primary or replica */
-      ptr_t fieldTenuredFrom;
+    while (!isEmptyStack(proc->primaryReplicaLocFlips)) {
+      ploc_t primaryReplicaLoc = (ploc_t) popStack(proc->primaryReplicaLocFlips);  /* fromSpace */
+      ptr_t field = *primaryReplicaLoc;                                          /* fromSpace or tag/global */
       
       if (inHeap(field,nursery)) {
-	fieldTenuredFrom = (ptr_t) field[-1];
-	primaryReplica[byteDisp / sizeof(ptr_t)] = (val_t) fieldTenuredFrom;  /* switching field to replica */
-      }
-      else
-	fieldTenuredFrom = field;
-      assert(IsTagData(fieldTenuredFrom) ||
-	     IsGlobalData(fieldTenuredFrom) ||
-	     inHeap(fieldTenuredFrom,tenuredFrom));
-      
-      if (GCType == EndMajor) {
-	ptr_t objTenuredTo = (ptr_t) primaryReplica[-1];
-	ptr_t fieldTenuredTo = (ptr_t) fieldTenuredFrom[-1];
-	objTenuredTo[byteDisp / sizeof(ptr_t)] = (val_t) fieldTenuredTo;
-	assert(inHeap(objTenuredTo, tenuredTo));
-	assert(inHeap(fieldTenuredTo, tenuredTo));
+	ptr_t fieldFrom = (ptr_t) field[-1];
+	*primaryReplicaLoc = fieldFrom;  /* switching field to replica */
       }
     }
   }
-  while ((curThread = NextJob()) != NULL) {
-    local_root_scan(proc,curThread);
+
+  procChangeState(proc, GCStack);
+  while ((threadIterator = NextJob()) != NULL) {
+    local_root_scan(proc,threadIterator);
+    if (threadIterator->request == MajorGCRequestFromC) /* Runtime explicitly requests major GC */
+      GCType = Major;
   }
-  while (!QueueIsEmpty(proc->root_lists)) {
-    Heap_t *minorPrimary[2] = {nursery, NULL};
-    Heap_t *minorReplica[2] = {tenuredFrom, NULL};
-    Heap_t *majorPrimary[2] = {tenuredFrom, NULL};
-    Heap_t *majorReplica[2] = {tenuredTo, NULL};
-    Bitmap_t *starts[2] = {NULL, NULL};
-    Queue_t *roots = (Queue_t *) Dequeue(proc->root_lists);
-    int i, len = QueueLength(roots);  
-    for (i=0; i<len; i++) {
-      ploc_t root = (ploc_t) QueueAccess(roots,i);      /* Cannot dequeue from roots since this may be a globals list */
-      loc_t primary = *root, replica, replicaTemp;
-      if (IsGlobalData(primary) || IsTagData(primary))  /* root is global data or small constructor */
-	continue;
-      if (inHeaps(primary,minorReplica, starts))        /* root was forwarded at beginning of GC */
-	replica = primary;
-      else 
-	replica = (loc_t) primary[-1];
-      replicaTemp = replica;
-      if (GCType == BeginMajor) {                       /* These form the roots for the major collection */
-	forward1_concurrent_stack(replica,&proc->majorRange,&tenuredFrom->range,proc);
+
+  procChangeState(proc, GC);
+  proc->numRoot += lengthStack(proc->roots);
+  while (!isEmptyStack(proc->roots)) {
+    ploc_t root = (ploc_t) popStack(proc->roots);     /* Cannot dequeue from roots since this may be a globals list */
+    ptr_t primary = *root;                            /* tag/global or nursery (if minor) or fromSpace or largeSpace */
+    ptr_t replica;
+    if (curGCType == Minor) {
+      if (inHeap(primary,nursery)) {
+	replica = (ptr_t) primary[-1];
+	*root = replica;
       }
-      if (GCType == EndMajor) 
-	if (inHeaps(replica,majorPrimary, starts))      /* root may have been forwarded at beginning of major GC */
-	  replica = (loc_t) replica[-1];
-      if (!inHeaps(replica,(GCType==EndMajor)?majorReplica:minorReplica,starts)) {
-	printf("Proc %d: GC %d: collector off   GCType = %d  root #%d = %d   primary = %d, replicaTemp = %d, replica = %d\n",
-	       proc->stid, NumGC,GCType,++rootCount,root,primary,replicaTemp,replica);
-	missingRoot = 1;
+      else if (paranoid) {
+	assert(IsGlobalData(primary) || 
+	       IsTagData(primary) ||
+	       inHeap(primary,fromSpace) ||
+	       inHeap(primary,largeSpace));
       }
-      *root = replica;
     }
-    proc->numRoot += len;
+    else {                            
+      if (inHeap(primary,fromSpace)) {
+	replica = (ptr_t) primary[-1];
+	*root = replica;
+      }
+      else if (paranoid) {
+	assert(IsGlobalData(primary) || 
+	       IsTagData(primary) ||
+	       inHeap(primary,toSpace) ||
+	       inHeap(primary,largeSpace));
+      }
+    }
   }
-  synchBarrier(&numOff2, NumProc, &numOff1);
-
-  if (missingRoot)
-    assert(0);
-
-  if (isFirst)
-    minor_global_promote();
-  if (GCType == BeginMajor) {                           /* This initializes the shared majorGC work stack */
-    SynchStart(majorWorkStack);
-    SynchMid(majorWorkStack);
-    moveToGlobalStack(majorWorkStack, &proc->localStack);
-    SynchEnd(majorWorkStack,NULL);
-    if (diag)
-      printf("Proc %d: Started Major GC. CopyRange is %d - %d - %d.  majorSharedStack has %d items\n", 
-	     proc->stid, proc->majorRange.start, proc->majorRange.cursor, proc->majorRange.stop,
-	     majorWorkStack->cursor);
-  }
-  synchBarrier(&numOff3, NumProc, &numOff2);
+  synchBarrier(&numFlipOffProc, NumProc, &numWaitOffProc);
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
-    nursery->cursor = nursery->bottom;        /* Always reset nursery */
-    if (paranoid && GCType != EndMajor)
-      paranoid_check_all(nursery, tenuredFrom, tenuredFrom, NULL);  /* At the end of a minor collection, tenuerdFrom should be intact */
-    Heap_Resize(nursery,reducedNurserySize,1);  /* Collection Off now */
-    if (GCType == Minor)
-      ;
-    else if (GCType == BeginMajor) {
-      if (diag)
-	printf("Proc %d: Transitioning to major GC now\n", proc->stid);
-      GCType = Major;
+    double liveRatio = 0.0;
+    if (curGCType == Minor) {
+      paranoid_check_all(nursery, fromSpace, fromSpace, NULL, largeSpace);
+      minor_global_promote();
+      liveRatio = (double) (fromSpace->cursor - fromSpace->prevCursor) / (double) (nursery->cursor - nursery->bottom); 
+      fromSpace->prevCursor = fromSpace->cursor;
+      add_statistic(&proc->minorSurvivalStatistic, liveRatio);
     }
-    else if (GCType == Major) {               /* The Major -> EndMajor transition occurs elsewhere. */
-      if (isEmptyGlobalStack(majorWorkStack)) {
-	/* Note that majorRegionWorkStack does not need to be empty since that contains only 
-	   the work of replicating objects copied into the tenuerdFrom area during a major collection. */
-	if (diag)
-	  printf("Proc %d: Most of major GC completed.  Will flip at end of next minor GC\n", proc->stid);
-	GCType = EndMajor;
-      }
-    }
-    else if (GCType == EndMajor) {
-      Heap_t *froms[3] = {nursery, tenuredFrom, NULL};
-      gc_large_flush();
-      if (paranoid)
-	paranoid_check_all(tenuredFrom, NULL, tenuredTo, NULL);      /* At the end of a major collection, tenuerdTo should be intact */
-      HeapAdjust(0,req_size,froms,tenuredTo);
-      typed_swap(Heap_t *, tenuredFrom, tenuredTo);
-      reducedTenuredSize = Heap_GetSize(tenuredFrom);
+    else {
+      paranoid_check_all(fromSpace, NULL, toSpace, NULL, largeSpace);
+      gc_large_endCollect();
+      liveRatio = HeapAdjust2(totalRequest, nursery, fromSpace, toSpace);
+      add_statistic(&proc->majorSurvivalStatistic, liveRatio);
+      Heap_Resize(fromSpace, 0, 1);
+      typed_swap(Heap_t *, fromSpace, toSpace);
+      reducedTenuredSize = Heap_GetSize(fromSpace);
       expandedTenuredSize = reducedToExpanded(reducedTenuredSize, majorCollectionRate);
-      Heap_Resize(tenuredFrom,reducedTenuredSize,0);  
-      Heap_Resize(tenuredTo,reducedTenuredSize,1);  
-      GCType = Minor;
-      NumMajorGC++;                           /* Increment major GC here */
-      if (diag)
-	printf("Proc %d: Major GC %d completed at minor GC %d\n", proc->stid, NumMajorGC, NumGC);
+      Heap_Resize(fromSpace,reducedTenuredSize,0);  
+      NumMajorGC++;                          
     }
-    else 
-      assert(0);
+    Heap_Resize(nursery,reducedNurserySize,1);
     NumGC++;
     GCStatus = GCOff;
   }
@@ -613,258 +481,212 @@ static void CollectorOff(Proc_t *proc)
   proc->allocCursor = StartHeapLimit;
   proc->allocLimit = StartHeapLimit;
   proc->writelistCursor = proc->writelistStart;
-
   /* Resume normal scheduler work and start mutators */
   if (diag)
-    printf("Proc %d: waiting to sync on completion of CollectorOff\n",proc->stid);
+    printf("Proc %d: waiting to sync on completion of CollectorOff\n",proc->procid);
   flushStore();
-  synchBarrier(&numOff4, NumProc, &numOff3);
+  synchBarrier(&numDoneOffProc, NumProc, &numFlipOffProc);
 }
 
-static void do_local_minor_work(Proc_t *proc, int workToDo)
+static void do_work(Proc_t *proc, int workToDo, int local)
 {
-  int bytesCopied = 0, bytesScanned = 0;
-  int counter = localWorkSize;
-  while (proc->localStack.cursor > 0) {
-    loc_t grayCell = (loc_t)(proc->localStack.stack[--proc->localStack.cursor]);
-    bytesScanned += scan1_object_coarseParallel_stack(grayCell,&proc->majorRange,&nursery->range,&tenuredFrom->range,proc,&bytesCopied);
-    counter--;
-    if (!counter) {
-	if (bytesCopied * copyWeight + bytesScanned * scanWeight >= workToDo)
-	  break;
-	else counter = localWorkSize;
+  int counter, done = 0;
+  Stack_t *objStack = (GCType == Minor) ? &proc->minorStack : &proc->majorStack;
+  CopyRange_t *copyRange = (GCType == Minor) ? &proc->minorRange : &proc->majorRange;
+  range_t *srcRange = (GCType == Minor) ? &nursery->range : &fromSpace->range;
+  while (!done) {
+    if (!local)
+      popSharedObjStack(workStack, objStack, fetchSize);
+    for (counter = localWorkSize; counter > 0; counter--) {
+      ptr_t gray = popStack(objStack);
+      if (gray == NULL) 
+	break;
+      transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primaryStack(proc,gray,objStack,copyRange,srcRange);
     }
+    if (!local) {
+      int sharedWorkDone = pushSharedObjStack(workStack, objStack);
+      if (sharedWorkDone) {
+	GCStatus = GCPendingOff;
+	done = 1;
+      }
+    }
+    else {
+      if (isEmptyStack(objStack))
+	done = 1;
+    }
+    done |= (updateWorkDone(proc) >= workToDo);
   }
-  gcstat_normal(proc, 0, bytesCopied, 0);
-  assert(proc->localStack.cursor == 0);    /* local stack must be empty when we exit */ 
-}
-
-void signalCollectorOff()
-{
+  assert(isEmptyStack(objStack));
   if (diag)
-    printf("Turning Collector Off\n");
-  GCStatus = GCPendingOff;      /* Signals that the amount of work is now bounded and some processors may not participate */
-  StopAllThreads();
-  flushStore();
+    printf("Proc %d: GC %d Segment %d:  do_minor_work:  workToDo = %d segWork = %d   shared workStack has %d items\n",
+	   proc->procid, NumGC, proc->numSegment, workToDo, getWorkDone(proc), workStack->cursor);
 }
 
+ 
 void GCRelease_GenConc(Proc_t *proc)
 {
   mem_t allocCurrent = proc->allocStart;
   mem_t allocStop = proc->allocCursor;
   ploc_t writelistCurrent = proc->writelistStart;
   ploc_t writelistStop = proc->writelistCursor;
-  int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
-  int write = (proc->writelistCursor - proc->writelistStart) / 2;
-  int bytesCopied = 0;
+  int isGCOn = (GCStatus == GCOn) || (GCStatus == GCPendingOff);
+  Stack_t *objStack = (GCType == Minor) ? &proc->minorStack : &proc->majorStack;
+  CopyRange_t *copyRange = (GCType == Minor) ? &proc->minorRange : &proc->majorRange;
+  range_t *srcRange = (GCType == Minor) ? &nursery->range : &fromSpace->range;
 
-  assert(proc->localStack.cursor == 0);    /* local stack must be empty between calls to GCReleas and do_minor_work */
-  proc->allocStart = proc->allocCursor;  /* allocation area is NOT reused */
-  proc->writelistCursor = proc->writelistStart;  /* write list reused once processed */
-  gcstat_normal(proc, alloc, bytesCopied, write);
+  /* Update statistics, reset cursors */
+  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
+  proc->minorUsage.bytesAllocated += sizeof(val_t) * (proc->allocCursor - proc->allocStart);
+  proc->allocStart = proc->allocCursor;          
+  proc->writelistCursor = proc->writelistStart;  
 
-  switch (GCStatus) {
-  case GCOff:
-  case GCPendingOn:
-    return;          /* We don't replicate or process the write list */
-  case GCOn:
-  case GCPendingOff:
-    break;
-  default:
-    assert(0);
-  }
+  /* local stack must be empty between calls to GCRelease and do_minor_work */
+  assert(isEmptyStack(&proc->minorStack)); 
 
-  if (diag)
-    printf("Proc %d: Scanning/Replicating %d to %d\n",proc->stid,allocCurrent,allocStop);
-  while (allocCurrent + 1 < allocStop) {
-    tag_t tag = *allocCurrent;
-    ptr_t obj = allocCurrent + 1;
-    int bytesCopied, objSize;
-    if (IS_SKIP(tag)) {
-      allocCurrent += GET_SKIP(tag);
-      continue;
-    }
-    bytesCopied = forward1_concurrent_stack(obj,&proc->minorRange,&nursery->range,proc);
-    objSize = (bytesCopied) ? bytesCopied : objectLength((ptr_t) obj[-1]);
-    allocCurrent += objSize / sizeof(val_t);
-  }
-
-  if (diag)
-    printf("Proc %d: Processing writes from %d to %d\n",proc->stid,writelistCurrent,writelistStop);
-  while (writelistCurrent < writelistStop) {
-    ptr_t primary = *writelistCurrent++;
-    tag_t tag;
-    int byteDisp = (int) *writelistCurrent++;
-
-    forward1_concurrent_stack(primary,&proc->minorRange,&nursery->range,proc);
-    tag = (tag_t) primary[-1];
-
-    if (!IS_FORWARDPTR(tag)) {       /* primary-replica mutation */
-      assert(!(IS_FORWARDPTR(tag)));
-      switch (GET_TYPE(tag)) {
-      case PARRAY_TAG: 
-	Enqueue(modifiedTenuredPtrLoc, (void *) primary);
-	Enqueue(modifiedTenuredPtrLoc, (void *) byteDisp);
-	if (diag)
-	  printf("Proc %d: primary-replica pointer mutation detected\n", proc->stid);
-	break;
-      case IARRAY_TAG:
-      case RARRAY_TAG:
-	break;
-      default:
-	assert(0);
-      }
-    }
-    else {
-      ptr_t replica = (ptr_t) tag;
-      tag = replica[-1];
-      while (tag == STALL_TAG) {
-	flushStore();
-	tag = replica[-1];
-      }
-      if (IS_FORWARDPTR(tag))        /* a tenuredFrom object that has been replicated during a major GC */
-	tag = ((ptr_t) tag) [-1];
-      switch (GET_TYPE(tag)) {
-      case PARRAY_TAG: { 
-	int wordDisp = byteDisp/ sizeof(val_t);
-	ptr_t primaryField = (ptr_t) primary[wordDisp], replicaField;
-	forward1_concurrent_stack(primaryField,&proc->minorRange,&nursery->range,proc);
-	replicaField = IsTagData(primaryField) ? primaryField : (ptr_t) primaryField[-1];
-	replica[wordDisp] = (val_t) replicaField;  /* update replica with replicated object */
-	break;
-      }
-      case IARRAY_TAG: {
-	int wordDisp = byteDisp/ sizeof(val_t);
-	int primaryField = (int) primary[wordDisp];
-	replica[wordDisp] = primaryField;           /* update replica with primary's non-pointer value */
-	break;
-      }
-      case RARRAY_TAG: {
-	int doublewordDisp = byteDisp / (sizeof(double));
-	double primaryField = (int) primary[doublewordDisp];
-	replica[doublewordDisp] = primaryField;     /* update replica with primary's non-pointer value */
-	break;
-      }
-      default: 
-	printf("Proc %d: Bad tag %d\n", proc->stid, tag);
-	assert(0);
-      }
-    }
-  }
-
-  SynchStart(workStack);
-  if (GCStatus == GCPendingOff) {
-    SynchMid(workStack);
-    SynchEnd(workStack, NULL);
-    do_local_minor_work(proc, pagesize);
-  }
-  else {
-    SynchMid(workStack);
-    moveToGlobalStack(workStack, &proc->localStack);
-    SynchEnd(workStack, &signalCollectorOff);  
-  }
-
-  flushStore();
-  assert(proc->localStack.cursor == 0);    /* local stack must be empty between calls to GCReleas and do_minor_work */
-}
-
-static void do_minor_work(Proc_t *proc, int workToDo)
-{
-  int i, bytesCopied = 0, bytesScanned = 0;
-
-  assert(proc->localStack.cursor == 0); 
-  while ((!(isEmptyGlobalStack(workStack)) || (proc->localStack.cursor>0)) && 
-	 (bytesCopied * copyWeight + bytesScanned * scanWeight < workToDo)) {
-    SynchStart(workStack);
-    if (GCStatus == GCPendingOff) {
-      SynchMid(workStack);
-      SynchEnd(workStack, NULL);
-      do_local_minor_work(proc, workToDo);
-    }
-    else {
-      fetchFromGlobalStack(workStack, &proc->localStack, fetchSize);
-      for (i=0; i < localWorkSize && proc->localStack.cursor > 0; i++) {
-	loc_t grayCell = (loc_t)(proc->localStack.stack[--proc->localStack.cursor]);
-	bytesScanned += scan1_object_coarseParallel_stack(grayCell,&proc->minorRange,&nursery->range,&tenuredFrom->range,proc,&bytesCopied);
-      }
-      SynchMid(workStack);
-      moveToGlobalStack(workStack, &proc->localStack);
-      SynchEnd(workStack, &signalCollectorOff);
-    }
-  }
-  gcstat_normal(proc, 0, bytesCopied, 0);
-  assert(proc->localStack.cursor == 0); 
-}
-
-static void do_major_work(Proc_t *proc, int workToDo)
-{
-  int i, bytesCopied = 0, bytesScanned = 0, lastAndEmpty = 0;
-
-  assert(proc->localStack.cursor == 0);                                        /* local stack must be empty */ 
-  while (!(isEmptyGlobalStack(majorRegionWorkStack)) && 
-	 (bytesCopied * copyWeight + bytesScanned * scanWeight < workToDo)) {
-    /* the stack in LocalStack_t is way too bug */
-    LocalStack_t stack;
-    mem_t allocCurrent, allocStop;
-    stack.cursor = 0;
-    SynchStart(majorRegionWorkStack);
-    fetchFromGlobalStack(majorRegionWorkStack, &stack, 2);
-    SynchMid(majorRegionWorkStack);
-    SynchEnd(majorRegionWorkStack,NULL);
-    if (stack.cursor == 0)
-      continue;
-    assert(stack.cursor == 2);
-    allocCurrent = stack.stack[1];
-    allocStop = stack.stack[0];
+  /* Replicate objects allocated by mutator when the collector is on */
+  if (isGCOn) {
     if (diag)
-      printf("Proc %d: Major Replicating %d to %d\n", proc->stid, allocCurrent, allocStop);
-    assert(allocCurrent <= allocStop);
+      printf("Proc %d: Scanning/Replicating %d to %d\n",proc->procid,allocCurrent,allocStop);
     while (allocCurrent + 1 < allocStop) {
       tag_t tag = *allocCurrent;
       ptr_t obj = allocCurrent + 1;
-      int objSize;
-      if (IS_SKIP(tag)) {
-	allocCurrent += GET_SKIP(tag);
-	continue;
+      int objSize = alloc_unique_primaryStack(proc,obj,objStack,copyRange,srcRange);
+      allocCurrent += objSize / sizeof(val_t);
+    }
+  }
+
+  /* Process writes */
+  if (diag && writelistCurrent < writelistStop)
+    printf("Proc %d: Processing writes from %d to %d\n",proc->procid,writelistCurrent,writelistStop);
+  while (writelistCurrent < writelistStop) {
+    ptr_t mutatorPrimary = *writelistCurrent++;          /* Global, nursery, or fromSpace */
+    int byteDisp = (int) *writelistCurrent++;
+    ptr_t possPrevPtrVal = (ptr_t) *writelistCurrent++;  /* Pointer value only if pointer array was modified */
+    int wordDisp = byteDisp / sizeof(val_t);
+    int doubleWordDisp = byteDisp / (sizeof(double));
+
+    if (IsGlobalData(mutatorPrimary) ||
+	inHeap(mutatorPrimary, largeSpace))
+      continue;
+
+    if (!isGCOn) {                             /* Record back-pointers when GC is off for roots of next GC */
+      if (inHeap(mutatorPrimary, fromSpace)) {
+	tag_t tag = mutatorPrimary[-1];
+	if (TAG_IS_FORWARD(tag))
+	  tag = ((ptr_t) tag)[-1];
+	if (GET_TYPE(tag) == PARRAY_TYPE) 
+	  pushStack(proc->primaryReplicaLocRoots, (ptr_t) &mutatorPrimary[wordDisp]);
       }
-      objSize = forward1_concurrent_stack(obj,&proc->majorRange,&tenuredFrom->range,proc);
-      if (objSize==0 && !(IS_FORWARDPTR(obj[-1])))
+    }
+    else {
+      ptr_t nurseryPrimary = NULL;           /* Used if primary was in nursery */
+      ptr_t fromSpaceEither = NULL;          /* Used for primaryReplica or (minor replica/major primary) */
+      ptr_t toSpaceReplica = NULL;           /* Used only during major GC*/
+      tag_t tag;                             /* Actual tag deteremined after traversing forwarding pointers */
+
+      /* Make a copy of the modified arrays and get tag */
+      if (inHeap(mutatorPrimary, nursery)) {
+	assert(GCType == Minor);
+	nurseryPrimary = mutatorPrimary;
+	alloc1_copyCopySync_primaryStack(proc,nurseryPrimary,objStack,copyRange,srcRange);
+	  fromSpaceEither = (ptr_t) nurseryPrimary[-1];
+	  tag = fromSpaceEither[-1];
+      }
+      else if (inHeap(mutatorPrimary,fromSpace)) {
+	fromSpaceEither = mutatorPrimary;
+	if (GCType == Major) {
+	  alloc1_copyCopySync_primaryStack(proc,fromSpaceEither,objStack,copyRange,srcRange);
+	  toSpaceReplica = (ptr_t) fromSpaceEither[-1];
+	  tag = toSpaceReplica[-1];
+	}
+	else
+	  tag = fromSpaceEither[-1];
+      }
+      else 
 	assert(0);
-      objSize = (objSize) ? objSize : objectLength((ptr_t) obj[-1]);
-      bytesCopied += objSize;
-      allocCurrent += (objSize / sizeof(val_t));
-    }
-    SynchStart(majorWorkStack);
-    SynchMid(majorWorkStack);
-    moveToGlobalStack(majorWorkStack, &proc->localStack);
-    SynchEnd(majorWorkStack,NULL);
+
+      switch (GET_TYPE(tag)) {
+      case IARRAY_TYPE:
+	if (nurseryPrimary)
+	  fromSpaceEither[wordDisp] = nurseryPrimary[wordDisp];
+	if (toSpaceReplica)
+	  toSpaceReplica[wordDisp] = fromSpaceEither[wordDisp];
+	break;
+      case RARRAY_TYPE: 
+	if (nurseryPrimary)
+	  ((double *)fromSpaceEither)[doubleWordDisp] = ((double *)nurseryPrimary)[doubleWordDisp];
+	if (toSpaceReplica)
+	  ((double *)toSpaceReplica)[doubleWordDisp] = ((double *)fromSpaceEither)[doubleWordDisp];
+	break;
+      case PARRAY_TYPE: {
+	/* There are several cases:
+	   (1) MinorGC: The original array is in the nursery.  
+	       (a) The field is in nursery.   Update new array with new (fromSpace) field.
+	       (b) The field is in fromSpace. Update new array with old (fromSpace) field.
+	       (c) The field is in global/largeSpace. Update new array with field.  (fromSpaceField is NULL).
+	   (2) MinorGC: The original array is in fromSpace.
+	       Perform no updates.  Record modification if field is in nursery.  (backpointer)
+	   (3) MajorGC: The original array is in fromSpace.
+               (a) The field is in fromSpace. Update new array with new (toSpace) field.
+	       (b) The field is in global/largeSpace. Update new array with field.  (toSpaceField is NULL).
+	*/
+	ptr_t mutatorField = (ptr_t) mutatorPrimary[wordDisp];
+	ptr_t fromSpaceField = NULL;
+	ptr_t toSpaceField = NULL;
+
+	/* Snapshot-at-the-beginning (Yuasa) write barrier requires copying prevPtrVal 
+	   even if it might die to prevent the mutator from hiding live data */
+	alloc1_copyCopySync_primaryStack(proc,possPrevPtrVal,objStack,copyRange,srcRange);
+
+	if (inHeap(mutatorField,nursery)) {
+	  assert(GCType == Minor);
+	  alloc1_copyCopySync_primaryStack(proc,mutatorField,objStack,copyRange,srcRange);
+	  fromSpaceField = (ptr_t) mutatorField[-1];
+	}
+	else if (inHeap(mutatorField,fromSpace)) {
+	  fromSpaceField = mutatorField;
+	  if (GCType == Major)
+	    alloc1_copyCopySync_primaryStack(proc,fromSpaceField,objStack,copyRange,srcRange);
+	  toSpaceField = (ptr_t) fromSpaceField[-1];
+	}
+	if (GCType == Minor) {
+	  if (inHeap(mutatorPrimary,nursery)) {
+	    if (fromSpaceField != NULL)
+	      fromSpaceEither[wordDisp] = (val_t) fromSpaceField;
+	    else
+	      fromSpaceEither[wordDisp] = (val_t) mutatorField;
+	  }
+	  else {
+	    assert(inHeap(mutatorPrimary,fromSpace));
+	    if (inHeap(mutatorField,nursery)) 
+	      pushStack(proc->primaryReplicaLocFlips, (ptr_t) &mutatorPrimary[wordDisp]);
+	  }
+	}
+	else {  /* GCType == Major */
+	  if (toSpaceField != NULL)
+	    toSpaceReplica[wordDisp] = (val_t) toSpaceField;
+	  else
+	    toSpaceReplica[wordDisp] = (val_t) mutatorField;
+	}
+	break;
+      }
+      default:
+	assert(0);
+      } /* else */
+    } /* switch */
+  } /* while */
+  
+  if (isGCOn) {
+    condPushSharedObjStack(workStack, objStack);
   }
-  assert(proc->localStack.cursor == 0);                                        /* local stack must be empty */ 
-  while (!(isEmptyGlobalStack(majorWorkStack)) &&
-	 (bytesCopied * copyWeight + bytesScanned * scanWeight < workToDo)) {
-    SynchStart(majorWorkStack);
-    fetchFromGlobalStack(majorWorkStack, &proc->localStack, fetchSize);
-    for (i=0; i < localWorkSize && proc->localStack.cursor > 0; i++) {
-      loc_t grayCell = (loc_t)(proc->localStack.stack[--proc->localStack.cursor]);
-      /* The gray objects can have mostly pointers to tenuredFrom but also to nursery.  We skip pointers to the nursery
-	 as these indicate primary-replica back-pointer mutations which are handled later. */
-      bytesScanned += scan1_object_coarseParallel_stack(grayCell,&proc->majorRange,&tenuredFrom->range,&tenuredTo->range,proc,&bytesCopied);
-    }
-    SynchMid(majorWorkStack);
-    moveToGlobalStack(majorWorkStack, &proc->localStack);
-    SynchEnd(majorWorkStack,NULL);
-  }
-  gcstat_normal(proc, 0, bytesCopied, 0);
   flushStore();
-  assert(proc->localStack.cursor == 0);                                        /* local stack must be empty */ 
-  if (diag)
-    printf("Proc %d: do_major_work %d bytes copied. %d items in majorWorkStack and %d regions in majorRegionWorkStack\n",
-	   proc->stid, bytesCopied, majorWorkStack->cursor, majorRegionWorkStack->cursor / 2);
 }
 
 static int GCTry_GenConcHelp(Proc_t *proc, int roundSize)
 {
-  GetHeapArea(nursery,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
+  assert(!(GCType == Major && GCStatus == GCOff));
+  GetHeapArea((GCType == Minor) ? nursery : fromSpace,
+	      roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
   if (proc->allocStart)
     return 1;
   return 0;
@@ -874,59 +696,69 @@ static int GCTry_GenConcHelp(Proc_t *proc, int roundSize)
 int GCTry_GenConc(Proc_t *proc, Thread_t *th)
 {
   int satisfied = 0;  /* satisfied = 1 means GC stayed off; 2 means it turned on or was on */
-  int roundSize = pagesize;                              /* default work amount for idle processor */
+  int roundOffSize = minOffRequest;                            /* default work amount for idle processor */
+  int roundOnSize = minOnRequest;    
+  int minorWorkToDo, majorWorkToDo;
+
   assert(proc->writelistCursor + 2 <= proc->writelistEnd);
   flushStore();
 
   /* Make sure space requirement is not already fulfilled */
   if (th != NULL) {
     if (th->requestInfo < 0) {
-      unsigned int writelistBytesAvailable = (((unsigned int)proc->writelistEnd) - 
-					      ((unsigned int)proc->writelistCursor));
+      unsigned int writelistBytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
       assert((-th->requestInfo) <= writelistBytesAvailable);
       return 1;
     }
     assert(th->requestInfo > 0);
-    roundSize = RoundUp(th->requestInfo,pagesize);
+    roundOffSize = RoundUp(th->requestInfo,minOffRequest);
+    roundOnSize = RoundUp(th->requestInfo,minOnRequest);
   }
+  minorWorkToDo = (1 + minorCollectionRate) * roundOnSize;  /* + 1 for the work done in replicating primary */
+  majorWorkToDo = (1 + majorCollectionRate) * roundOnSize;
 
+  /* If GCStatus is off but GCType is Major, then we immediately start a major collection */
   while (!satisfied) {
     switch (GCStatus) {
     case GCOff:                                          /* Possible GC states: before; after */
     case GCPendingOn:
-      if (GCStatus == GCOff) {                           /* Off, PendingOn; same */
+      if (GCStatus == GCOff && GCType != Major) {        /* Off, PendingOn; same */
 	if (th == NULL ||                                /* Don't allocate/return if not really a thread */
-	    GCTry_GenConcHelp(proc,roundSize)) {
+	    GCTry_GenConcHelp(proc,roundOffSize)) {
 	  if (!satisfied)
 	    satisfied = 1;
 	  break;
 	}
       }
-      CollectorOn(proc);                            /* Off, PendingOn; On, PendingOff */
+      procChangeState(proc, GC);
+      proc->gcSegment1 = (GCType == Major) ? MajorWork : MinorWork;
+      proc->gcSegment2 = FlipOn;
+      CollectorOn(proc);                                 /* Off, PendingOn; On, PendingOff */
       assert(GCStatus == GCOn || GCStatus == GCPendingOff);
-      do_minor_work(proc, minorCollectionRate * roundSize);
-      if (GCType == Major)
-	do_major_work(proc, majorCollectionRate * minorCollectionRate * roundSize);
+      if (GCType == Minor)                               /* Don't do work since we just finished a minor GC if starting a major GC */
+	do_work(proc, minorWorkToDo, 0);
       if ((th == NULL) ||                                /* Idle processor done some work */
 	  (th != NULL && GCStatus == GCOn &&             /* Don't allocate/return if not really a thread */
-	   GCTry_GenConcHelp(proc,roundSize))) {         /* On, PendingOff; same */
+	   GCTry_GenConcHelp(proc,roundOnSize))) {       /* On, PendingOff; same */
 	satisfied = 2;
 	break;
       }
       if (GCStatus == GCPendingOff)                      /* If PendingOff, must loop */
 	break;                    
-      printf("Proc %d: Conc coll fell behind.  GCStatus = %d. Could not allocate %d bytes\n", proc->stid, GCStatus, roundSize);
+      printf("Proc %d: Conc coll fell behind.  GCStatus = %d. Could not allocate %d bytes\n", proc->procid, GCStatus, roundOnSize);
       assert(0);
       break;
     case GCOn:
     case GCPendingOff:                                  /* If PendingOff, shared work is completed. */
+      procChangeState(proc, GC);
+      proc->gcSegment1 = (GCType == Major) ? MajorWork : MinorWork;
+      if (GCType == Major)
+	proc->gcSegment1 = MajorWork;
       if (GCStatus == GCOn)                             /* On, PendingOff; same */
-	do_minor_work(proc, minorCollectionRate * roundSize);
-      if (GCType == Major)                              /* On, PendingOff; same */
-	do_major_work(proc, majorCollectionRate * minorCollectionRate * roundSize);
+	do_work(proc, GCType == Minor ? minorWorkToDo : majorWorkToDo, 0);
       if (GCStatus == GCOn &&                           /* On, PendingOff; same */
 	  th != NULL &&                                 /* Don't allocate/return if not really a thread */
-	  GCTry_GenConcHelp(proc,roundSize)) {
+	  GCTry_GenConcHelp(proc,roundOnSize)) {
 	satisfied = 2;
 	break;
       }
@@ -935,18 +767,21 @@ int GCTry_GenConc(Proc_t *proc, Thread_t *th)
 	 satisfied = 2;
 	 break;
 	}
-	printf("Proc %d: Conc coll fell behind.  GCStatus = %d. Could not allocate %d bytes for %d\n", proc->stid, GCStatus, roundSize, th);
+	printf("Proc %d: Conc coll fell behind.  GCStatus = %d. Could not allocate %d bytes for thread %d\n", 
+	       proc->procid, GCStatus, roundOnSize, th->tid);
 	assert(0);
       }
       assert(GCStatus == GCPendingOff);
-      do_minor_work(proc, 
-		    sizeof(val_t) * Heap_GetSize(nursery)); /* Actually bounded by the allocation of one processor */
-      ClearCopyRange(&proc->minorRange);
-      if (GCType == Major || GCType == EndMajor)
-	do_major_work(proc, majorCollectionRate * minorCollectionRate * sizeof(val_t) * Heap_GetSize(nursery));
-      if (GCType == EndMajor)
-	ClearCopyRange(&proc->majorRange);         /* This field usually persists across multiple minor collections */
-      CollectorOff(proc);                          /* PendingOff; Off, PendingOn */
+      do_work(proc, 
+	      sizeof(val_t) * Heap_GetSize(nursery), 1); /* Actually bounded by the allocation of one processor */
+      if (GCType == Minor) 
+	PadCopyRange(&proc->minorRange);                 /* Pad so that paranoid check works */
+      else if (GCType == Major) {                        /* Carry over minor ranges across minor GCs */
+	ClearCopyRange(&proc->minorRange); 
+	ClearCopyRange(&proc->majorRange);
+      }
+      proc->gcSegment2 = FlipOff;
+      CollectorOff(proc);                               /* PendingOff; Off, PendingOn */
       assert(GCStatus == GCOff || GCStatus == GCPendingOn);
       break;                                            /* Must repeat loop */
     default: 
@@ -957,18 +792,18 @@ int GCTry_GenConc(Proc_t *proc, Thread_t *th)
   return 1;
 }
 
-void gc_poll_GenConc(Proc_t *proc)
+void GCPoll_GenConc(Proc_t *proc)
 {
   (void) GCTry_GenConc(proc, NULL);
 }
 
-void gc_init_GenConc()
+void GCInit_GenConc()
 {
   int cache_size = GetBcacheSize();
   double nurseryFraction = 0.85 + 0.2 * NumProc;
 
   init_int(&YoungHeapByte, (int)(nurseryFraction * cache_size));
-  init_int(&MaxHeap, 80 * 1024);
+  init_int(&MaxHeap, 128 * 1024);
   init_int(&MinHeap, 2048);
   if (MinHeap > MaxHeap)
     MinHeap = MaxHeap;
@@ -979,22 +814,19 @@ void gc_init_GenConc()
   assert(MinHeap >= 1.2*(YoungHeapByte / 1024));
 
   nursery = Heap_Alloc(YoungHeapByte, YoungHeapByte);
-  tenuredFrom = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  tenuredTo = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
 
   expandedNurserySize = YoungHeapByte;
   reducedNurserySize = expandedToReduced(expandedNurserySize, minorCollectionRate);
   reducedNurserySize -= (NumProc - 1) * pagesize;      /* One extra page per processor over one */
-  expandedTenuredSize = Heap_GetSize(tenuredFrom);
+  expandedTenuredSize = Heap_GetSize(fromSpace);
   reducedTenuredSize = expandedToReduced(expandedTenuredSize, majorCollectionRate);
   Heap_Resize(nursery, reducedNurserySize, 0);
-  Heap_Resize(tenuredFrom, reducedTenuredSize, 0);
-  Heap_Resize(tenuredTo, reducedTenuredSize, 0);
+  Heap_Resize(fromSpace, reducedTenuredSize, 0);
+  Heap_Resize(toSpace, reducedTenuredSize, 0);
 
-  modifiedTenuredPtrLoc = QueueCreate(1, 1024);
-  gc_large_init(0);
-  workStack = SharedStack_Alloc(4096);
-  majorWorkStack = SharedStack_Alloc(32768);
-  majorRegionWorkStack = SharedStack_Alloc(1024);
+  gc_large_init();
+  workStack = SharedObjStack_Alloc(32 * 1024);
 }
 

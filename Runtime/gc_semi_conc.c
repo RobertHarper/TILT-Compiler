@@ -15,7 +15,115 @@
 #include "gcstat.h"
 #include "show.h"
 
-/* To make sure the garbage collection does not fall behind, we observe that
+/* Shared Stack and Local Stacks
+   -----------------------------
+   It is tricky to know when a minor collection is over.  Generally,
+   the collection is over when the local stacks and the global stack
+   are simultaneously empty.  To implement this, the shared global
+   stack structure keeps an integer count that indicates how many
+   local stacks are (possibly) non-empty.  Basically, collection work
+   follows the form:
+
+      popSharedObjStack       (* increments activeStack *)
+      ... do some work on local stack ...
+      if (pushSharedObjStack)   (* decrements activeStack;
+         collector off;             return 1 if shared stack is empty and activeStack is 0 *)
+
+   Initialization of the global shared stack from the local stacks is
+   done with specialReturnSharedObjStack:
+
+      ... find roots and generate work on local stack ...
+      initializeSharedObjStack    (* does not decrement activeStack *)
+
+   Thus, after initialization, the activeStack count is accurate.
+   However, a processor, when processing the write list and
+   replicating the most recently allocated memory region, can generate
+   work on its local stack (rather than from the global stack).  We
+   can try to retain the accuracy of activeStack as follows:
+
+   (1) ... local stack empty here ...
+      popSharedObjStack zero items  
+       ... replicate page / process write list generating work on local stack ...
+      pushSharedObjStack              
+
+   The problem with (1) is subtle: the collection may not terminate.
+   When all the live data has been copied, but prior to the the
+   collector being signalled off, one processor might have been just
+   returning from mutation work.  It replicates the recently allocated
+   region, generating work on the local stack, and then the global
+   stack.  When the collector tries to turn off, the global stack is
+   not empty and so all processsors continue to run more mutators.
+   Though unlikely, this can go on indefinitely.  In some sense the
+   problem is that we are not differentiating the data that is live at
+   the beginning of the collection from data that was allocated during
+   collection.  Once the first type of data has been processed, the
+   collection is (or must soon be) over since the amount allocated per
+   round is bounded.
+
+   Since we do not want this second type of work to influence activeStack
+   and hence termination, we could try:
+
+   (2) ... local stack empty here ...
+       ... replicate page / process write list generating work on local stack ...
+       initializeSharedObjStack    
+
+   The problem with (2) is that once termination is signalled by another processor,
+   we do not want to return work to the shared stack.  We can thus test for whether 
+   the collector is off first.
+
+   (3) ... local stack empty here ...
+       ... replicate page / process write list generating work on local stack ...
+       if collector is off
+         then initializeSharedObjStack    
+	 else complete all local work (bounded in size)
+
+   The check is, however, not properly synchronized with the collection being turned off.
+   It might be that the check was made before the collector is turned off.  This could
+   lead to the collector being turned off, followed by more work appearing on the global 
+   stack.  The only safe place to check is inside the shared stack routines
+   which can assure the proper synchronization. So the final version for
+   transferring work is to have
+
+   (4) ... local stack empty here ...
+       ... replicate page / process write list generating work on local stack ...
+       if conditionalReturnToSharedObjStack  (* if global stack empty and activeStack is 0,
+          then ;                               then return false
+	  else complete all local work         else transfer objects; return true
+					     does not decrement activeStack *)
+
+   The follownig is relevant to both parallel and concurrent collectors.
+   In order for a garbage collection to start or finish, all the processors must
+   execute the code that initializes the global stack before checking
+   that the global stack is empty,   This forces an extra synchronization
+   in the collector code, preventing any collector from doing work
+   until all the collectors have initialized the global stack.  That is,
+
+   Phase 1:
+     if (isFirstProcessor)
+       ... get from/to spaces ready ...
+   Phase 2:
+     ... compute roots ...
+     initializeSharedObjStack
+   Phase 3:                       <--- must insure all work is on global stack
+     ... do work ...
+
+   A more elegant and efficient solution is to replace initializeSharedObjStack 
+   with resetSharedObjStack which simply updates activeStack with the given number.  
+   The initialization code then becomes:
+   
+   Phase 1:
+     if (isFirstProcessor)
+       ... get from/to spaces ready ...
+       startSharedObjStack(numProc)   <--- makes shared stack aware that local stacks are not empty
+   Phase 2:
+                             <-- FetchFromSharedObjStack must be omitted for correct numActiveStack 
+     ... compute roots ...
+     pushSharedObjStack
+     ... do work ...
+
+   How much space to reserve
+   -------------------------
+   To make sure the garbage collection does not fall behind, we observe that
    we need to reserve 1/(1+k) of the heap space if the collection rate is k (> 1).
    For example, if we copy 2 bytes for every byte allocated (k = 2),
    then the collector will reserve 1/3 of the heap space so collection will 
@@ -36,85 +144,126 @@
 
 */
 
-static int minOffRequest, minOnRequest;  /* Mutator handed multiples of this amount of space when collector is Off/On */
-static double copyWeight = 3.0 / 4.0;
-static double scanWeight = 1.0 / 4.0;
-static double rootWeight = 10.0;
+/* Weights are set in init routine */
 static int collectionRate = 2;   /* Ratio of collection rate to allocation rate */
-static int fetchSize = 20;       /* Number of objects to fetch from global pool */
-static int localWorkSize = 50;   /* Number of objects to work on from local pool */
 
 /* ------------------  Parallel array allocation routines ------------------- */
 
-static mem_t alloc_big(int byteLen, int hasPointers)
+mem_t AllocBigArray_SemiConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 {
-  Thread_t *curThread = getThread();
-  Proc_t *proc = curThread->proc;
-  unsigned long *saveregs = curThread->saveregs;
-  mem_t res = NULL;
-  int request = RoundUp(byteLen, (GCStatus == GCOff || GCStatus == GCPendingOn) ? minOffRequest : minOnRequest);
+  mem_t region;
+  ptr_t obj;
+  int i, segments = (spec->byteLen < arraySegmentSize) ? 0 : DivideUp(spec->byteLen, arraySegmentSize);
+  int tagByteLen = spec->byteLen + 4 + 4 * segments;
+  Align_t align = (spec->type == DoubleField) ? 
+                        ((segments & 1) ? EvenWordAlign : OddWordAlign) : 
+                        NoWordAlign; 
 
-  /* Should be at least 0.5K to be considered big */
-  assert(byteLen >= 512);                
-
-  /* Get the large region */
-  if (saveregs[ALLOCPTR] + byteLen > saveregs[ALLOCLIMIT]) 
-    GCFromC(curThread, request, 0);
-  assert(saveregs[ALLOCPTR] + byteLen <= saveregs[ALLOCLIMIT]);
-
-  /* Perform actual allocation */
-  res = (mem_t) saveregs[ALLOCPTR];
-  saveregs[ALLOCPTR] = (unsigned long) (res + (byteLen / (sizeof (val_t))));
-
-  gcstat_normal(proc,byteLen, 0, 0);
-  return res;
-}
-
-ptr_t alloc_bigintarray_SemiConc(int elemLen, int initVal, int ptag)
-{
-  /* elemements are byte-sized */
-  int wordLen = 1 + (elemLen + 3) / 4;
-  mem_t space = alloc_big(4 * wordLen,0);
-  ptr_t res = space + 1;
-  init_iarray(res, elemLen, initVal);
-  return res;
-}
-
-ptr_t alloc_bigptrarray_SemiConc(int elemLen, ptr_t initVal, int ptag)
-{
-  int wordLen = 1 + elemLen;
-  mem_t space = alloc_big(4 * wordLen,1);
-  ptr_t res = space + 1;
-  init_parray(res, elemLen, initVal);
-  return res;
-}
-
-ptr_t alloc_bigfloatarray_SemiConc(int elemLen, double initVal, int ptag)
-{
-  ptr_t res = NULL;
-  mem_t region = NULL;
-  Thread_t *curThread = getThread();
-  int wordLen = 2 + (elemLen << 1);  /* Includes one word for alignment */
-
-  region = alloc_big(4 * wordLen,0);
-  if ((((val_t)region) & 7) != 0) {
-    region[0] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
-    res = region + 1;
+  /* Allocate the space */
+  region = AllocFromThread(thread, tagByteLen, align);
+  if (region == NULL) 
+    region = AllocFromHeap(fromSpace, thread, tagByteLen, align);
+  if (region == NULL) {
+    GCFromC(thread, tagByteLen + 4, 0);
+    region = AllocFromThread(thread, tagByteLen, align);
   }
-  else {
-    region[wordLen-1] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
-    res = region;
-  }
-  init_farray(res, elemLen, initVal);
-  return res;
-}
+  assert(region != NULL);
 
+  /* Allocate object; initialize segment tags; update stats; initialize */
+  obj = region + 1 + segments;
+  for (i=0; i<segments; i++)
+    obj[-(2+i)] = PROCEED_TAG;
+  proc->majorUsage.bytesAllocated += tagByteLen;
+  switch (spec->type) {
+    case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
+    case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); break;
+    case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
+  }
+  return obj;
+}
 
 /* --------------------- Concurrent collector --------------------- */
-static long numOff = 0;
-static long numFlip = 0;
-static long numOffDone = 0;
-static long req_size = 0;
+static long req_size = 0;  /* Total number of bytes requested by all threads */
+
+/* These are barrier synchronizations which reset the previous one when completed.
+   So, after barrier_n is passed, all processors reset barrier_(n-1).  For this
+   cyclical scheme to work, there must be at least three barriers. 
+*/
+static long numWaitOnProc = 0;  /* waiting for mutators to stop; first proc does prelim work */
+static long numWasteOnProc = 0; /* required by scheme */
+static long numDoneOnProc = 0;  /* waiting for work to be on shared stack */
+
+static long numWaitOffProc = 0; /* waiting for mutators to stop; first proc does prelim work */
+static long numFlipOffProc = 0; /* waiting for all roots to be replaced with replica */
+static long numDoneOffProc = 0; /* waitinf for heap resize/space flip to complete */
+
+static void CollectorOn(Proc_t *proc)
+{
+  Thread_t *curThread = NULL;
+  int isFirst, rootCount = 0;
+
+  if (diag)
+    printf("Proc %d: CollectorOn\n", proc->procid); 
+
+  switch (GCStatus) {
+  case GCOff:                   /* Signalling to other processors that collector is turning on */
+    GCStatus = GCPendingOn;
+    StopAllThreads();
+    break;
+  case GCPendingOn: break;      /* Responding to signal that collector is turning on */
+  case GCOn: assert(0);         /* Collector already on */
+  case GCPendingOff: assert(0); /* Someone is turning the collector off while we are turning it on! */
+  default: assert(0);
+  }
+
+  /* Check local stack empty; reset root lists */
+  assert(isEmptyStack(&proc->minorStack));
+  resetStack(proc->roots);
+  SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
+
+  isFirst = (synchBarrier(&numWaitOnProc, NumProc, &numDoneOnProc)) == 0;
+  if (isFirst) {
+    int neededSize = Heap_GetSize(fromSpace);
+    neededSize += neededSize / collectionRate;
+    Heap_Resize(fromSpace,neededSize,0);
+    Heap_Resize(toSpace,neededSize,1);
+    procChangeState(proc, GCGlobal);
+    major_global_scan(proc);
+    procChangeState(proc, GC);
+    req_size = 0;
+    resetSharedObjStack(workStack,NumProc);
+    paranoid_check_all(fromSpace, NULL, NULL, NULL, NULL);
+    ResetJob();
+    asynchReachBarrier(&numWaitOnProc);
+  }
+  while (!asynchCheckBarrier(&numWaitOnProc,  NumProc + 1, &numDoneOnProc))
+    ;
+
+  procChangeState(proc, GCStack);
+  while ((curThread = NextJob()) != NULL) {
+    if (curThread->requestInfo >= 0)
+      FetchAndAdd(&req_size, curThread->requestInfo);
+    local_root_scan(proc,curThread);
+  }
+  procChangeState(proc, GC);
+
+  proc->numRoot += lengthStack(proc->roots);
+  while (!isEmptyStack(proc->roots)) {
+    ploc_t root = (ploc_t) popStack(proc->roots);
+    ptr_t obj = *root;
+    alloc1_copyCopySync_primaryStack(proc,obj,&proc->majorStack,&proc->majorRange,&fromSpace->range);
+    if (verbose)
+      printf("GC %d: collector on %d root = %d   primary = %d, replica = %d\n",NumGC,++rootCount,root,obj,obj[-1]);
+  }
+
+  /* Note the omission of popSharedObjStack since we used resetSharedObjStack */
+  pushSharedObjStack(workStack,&proc->majorStack);
+  assert(isEmptyStack(&proc->majorStack));
+  GCStatus = GCOn;
+  synchBarrier(&numWasteOnProc, NumProc, &numWaitOnProc);
+  synchBarrier(&numDoneOnProc, NumProc, &numWasteOnProc);
+  flushStore();
+}
 
 static void CollectorOff(Proc_t *proc)
 {
@@ -123,8 +272,8 @@ static void CollectorOff(Proc_t *proc)
   int rootCount = 0;
 
   if (diag)
-    printf("Proc %d: entered CollectorOff\n", proc->stid);
-  assert(proc->localStack.cursor == 0); 
+    printf("Proc %d: entered CollectorOff\n", proc->procid);
+  assert(isEmptyStack(&proc->majorStack));
   flushStore();
 
   switch (GCStatus) {
@@ -140,64 +289,50 @@ static void CollectorOff(Proc_t *proc)
   }
 
   ClearCopyRange(&proc->majorRange);
-  isFirst = (asynchReachBarrier(&numOff)) == 0;
+  isFirst = (asynchReachBarrier(&numWaitOffProc)) == 0;
   if (isFirst) {
-    if (!(isEmptyGlobalStack(workStack))) {
-      printf("Proc %d: Global Stack is not empty in CollectorOff\n", proc->stid);
-      assert(0);
-    }
     ResetJob();
-    asynchReachBarrier(&numOff);
+    asynchReachBarrier(&numWaitOffProc);
   }
-  while (!asynchCheckBarrier(&numOff, NumProc+1, &numOffDone))
+  while (!asynchCheckBarrier(&numWaitOffProc, NumProc+1, &numDoneOffProc))
     ;
 
   /* Replace all roots (global, local registers, local stack) with replica */
+  procChangeState(proc, GCGlobal);
   if (isFirst) 
     major_global_scan(proc);
+  procChangeState(proc, GCStack);
   while ((curThread = NextJob()) != NULL)
     local_root_scan(proc,curThread);
-  /* Now forward all the roots which initializes the local work stacks */
-  while (!QueueIsEmpty(proc->root_lists)) {
-    /* Cannot dequeue from roots since this may be a global */
-    Heap_t *primaryHeaps[2] = {fromSpace, NULL};
-    Heap_t *replicaHeaps[2] = {toSpace, NULL};
-    Bitmap_t *legalStarts[2] = {NULL, NULL};
-    Queue_t *roots = (Queue_t *) Dequeue(proc->root_lists);
-    int i, len = QueueLength(roots);  
-    for (i=0; i<len; i++) {
-      ploc_t root = (ploc_t) QueueAccess(roots,i);
-      loc_t primary = *root;
-      loc_t replica;
-      if (IsGlobalData(primary) || IsTagData(primary))        /* root is global data or small constructor */
-	continue;
-      if (inHeaps(primary,replicaHeaps, legalStarts))         /* root was forwarded at beginning of GC */
-	continue;
-      replica = (loc_t) primary[-1];
-      if (!inHeaps(replica,replicaHeaps, legalStarts) || verbose) {
-	printf("GC %d: collector off %d root = %d   primary = %d, replica = %d",NumGC, ++rootCount,root,primary,replica);
-	if (!verbose)
-	  printf("   ERROR replica not in to heap\n");
-	else printf("\n");
-      }
+  procChangeState(proc, GC);
+
+  /* Now replace all roots with replicas */
+  proc->numRoot += lengthStack(proc->roots);
+  while (!isEmptyStack(proc->roots)) {
+    ploc_t root = (ploc_t) popStack(proc->roots);
+    ptr_t primary = *root;
+    if (inHeap(primary,fromSpace)) {
+      ptr_t replica = (ptr_t) primary[-1];
       *root = replica;
     }
-    proc->numRoot += len;
+    else if (paranoid) {
+      assert(IsGlobalData(primary) || 
+	     IsTagData(primary) ||
+	     inHeap(primary,toSpace));                      /* root was already flipped - duplicate root */
+    }
   }
 
-  synchBarrier(&numFlip, NumProc, &numOff);
+  synchBarrier(&numFlipOffProc, NumProc, &numWaitOffProc);
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
-    Heap_t *froms[2] = {NULL, NULL};
-    froms[0] = fromSpace;
-
+    double liveRatio = 0.0;
     /* Check the fromspace and tospace heap - zero out all of fromspace */
-    if (paranoid) 
-      paranoid_check_all(fromSpace, NULL, toSpace,NULL);
+    paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
     
     /* Resize heaps and do stats */
-    HeapAdjust(0,req_size,froms,toSpace);
+    liveRatio = HeapAdjust1(req_size,fromSpace,toSpace);
+    add_statistic(&proc->majorSurvivalStatistic, liveRatio);
     Heap_Resize(fromSpace, 0, 1);
     typed_swap(Heap_t *, fromSpace, toSpace);
     NumGC++;
@@ -213,9 +348,9 @@ static void CollectorOff(Proc_t *proc)
 
   /* Resume normal scheduler work and start mutators */
   if (diag)
-    printf("Proc %d: waiting to sync on completion of CollectorOff\n",proc->stid);
+    printf("Proc %d: waiting to sync on completion of CollectorOff\n",proc->procid);
   flushStore();
-  synchBarrier(&numOffDone, NumProc, &numFlip);
+  synchBarrier(&numDoneOffProc, NumProc, &numFlipOffProc);
   flushStore();
 
 }
@@ -227,226 +362,137 @@ void GCRelease_SemiConc(Proc_t *proc)
   ploc_t writelistCurrent = proc->writelistStart;
   ploc_t writelistStop = proc->writelistCursor;
   int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
-  int write = (proc->writelistCursor - proc->writelistStart) / 2;
-  int bytesCopied = 0;
+  int gcOn = (GCStatus == GCOn) || (GCStatus == GCPendingOff);
 
   proc->allocStart = proc->allocCursor;  /* allocation area is NOT reused */  
+  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   proc->writelistCursor = proc->writelistStart;  /* write list reused once processed */
-  gcstat_normal(proc, alloc, bytesCopied, write);
+  proc->minorUsage.bytesAllocated += alloc;
 
-  switch (GCStatus) {
-  case GCOff:
-  case GCPendingOn:
-    return;          /* We don't replicate or process the write list */
-  case GCOn:
-  case GCPendingOff:
-    break;
-  default:
-    assert(0);
-  }
+  assert(isEmptyStack(&proc->majorStack));
 
-  /* Get local ranges ready for use */
-  assert(proc->localStack.cursor == 0);
+  if (!gcOn) 
+    return;
 
   if (diag)
-    printf("Proc %d: Scanning/Replicating %d to %d\n",proc->stid,allocCurrent,allocStop);
+    printf("Proc %d: Scanning/Replicating %d to %d\n",proc->procid,allocCurrent,allocStop);
   while (allocCurrent + 1 < allocStop) {
     tag_t tag = *allocCurrent;
-    ptr_t obj = allocCurrent + 1;
-    int objSize, localBytesCopied;
-    if (IS_SKIP(tag)) {
-      allocCurrent += GET_SKIP(tag);
-      continue;
-    }
-    localBytesCopied = forward1_concurrent_stack(obj,&proc->majorRange,&fromSpace->range,proc);
-    bytesCopied += localBytesCopied;
-    objSize = localBytesCopied ? localBytesCopied : objectLength((ptr_t)obj[-1]);
-    allocCurrent += objSize / sizeof(val_t);
+    ptr_t obj = allocCurrent + 1;  /* Okay even if skip tag */
+    int bytesCopied = alloc_unique_primaryStack(proc,obj,&proc->majorStack,&proc->majorRange,&fromSpace->range);
+    allocCurrent += bytesCopied / sizeof(val_t);
+    /* assert(bytesCopied) != 0 */
   }
 
   if (diag)
-    printf("Proc %d: Processing writes from %d to %d\n",proc->stid,writelistCurrent,writelistStop);
+    printf("Proc %d: Processing writes from %d to %d\n",proc->procid,writelistCurrent,writelistStop);
   while (writelistCurrent < writelistStop) {
     ptr_t primary = *writelistCurrent++, replica;
-    tag_t tag;
     int byteDisp = (int) *writelistCurrent++;
+    ptr_t possPrevPtrVal = (ptr_t) *writelistCurrent++;  /* Pointer value only if pointer array was modified */
+    int wordDisp = byteDisp/ sizeof(val_t);
+    int doublewordDisp = byteDisp / (sizeof(double));
+    tag_t tag;
 
-    forward1_concurrent_stack(primary,&proc->majorRange,&fromSpace->range,proc);
+    if (!inHeap(primary, fromSpace))
+      continue;
+    alloc1_copyCopySync_primaryStack(proc,primary,&proc->majorStack,&proc->majorRange,&fromSpace->range);
     replica = (ptr_t) primary[-1];
     tag = replica[-1];
 
     switch (GET_TYPE(tag)) {
-    case PARRAY_TAG: {
-      int wordDisp = byteDisp/ sizeof(val_t);
-      ptr_t primaryField = (ptr_t) primary[wordDisp], replicaField;
-      forward1_concurrent_stack(primaryField,&proc->majorRange,&fromSpace->range,proc);
-      replicaField = IsTagData(primaryField) ? primaryField : (ptr_t) primaryField[-1];
+    case PARRAY_TYPE: {
+      ptr_t primaryField = (ptr_t) primary[wordDisp];
+      ptr_t replicaField = primaryField;
+      /* Snapshot-at-the-beginning (Yuasa) write barrier requires copying prevPtrVal 
+	 even if it might die to prevent the mutator from hiding live data */
+      alloc1_copyCopySync_primaryStack(proc,possPrevPtrVal, &proc->majorStack, &proc->majorRange, &fromSpace->range);
+      locAlloc1_copyCopySync_primaryStack(proc,&replicaField, &proc->majorStack, &proc->majorRange, &fromSpace->range);
       replica[wordDisp] = (val_t) replicaField;  /* update replica with replicated object */
       break;
     }
-    case IARRAY_TAG: {
-      int wordDisp = byteDisp/ sizeof(val_t);
+    case IARRAY_TYPE: {
       int primaryField = (int) primary[wordDisp];
       replica[wordDisp] = primaryField;       /* update replica with primary's non-pointer value */
       break;
     }
-    case RARRAY_TAG: {
-      int doublewordDisp = byteDisp / (sizeof(double));
-      double primaryField = (int) primary[doublewordDisp];
-      replica[doublewordDisp] = primaryField;  /* update replica with primary's non-pointer value */
+    case RARRAY_TYPE: {
+      double primaryField = ((double *) primary)[doublewordDisp];
+      ((double *)replica)[doublewordDisp] = primaryField;  /* update replica with primary's non-pointer value */
       break;
     }
     default: assert(0);
     }
   }
 
-  SynchStart(workStack);
-  SynchMid(workStack);
-  moveToGlobalStack(workStack,&proc->localStack);
-  SynchEnd(workStack,NULL);
-  
-  flushStore();
+  condPushSharedObjStack(workStack,&proc->majorStack);
 }
 
 
 /* GCStatus is either GCOn or GCPendingOff.
    Upon entry and exit, the local work stack is empty.
-   The routine will copy at least bytesToCopy bytes before returning.  It may copy slightly more.
+   The routine will work up until updateWorkDone() > workToDo is reached.  It may copy slightly more.
    If the local flag is set, then the shared stack is not accessed.
 */
-static int do_work(Proc_t *proc, int workToDo, int local)
+static void do_work(Proc_t *proc, int workToDo, int local)
 {
-  int i, bytesCopied = 0, bytesScanned = 0, lastAndEmpty = 0;
+  assert(isEmptyStack(&proc->majorStack));
 
-  assert(proc->localStack.cursor == 0); 
-
+  while (!isEmptySharedObjStack(largeArrayStack)) {
+    static int first = 1;
+    static Stack_t stack; /* XXXX wrong */
+    int segment;
+    ptr_t primaryArray;
+    if (first) {
+      first = 0;
+      allocStack(&stack, 2); 
+    }
+    popSharedObjStack(largeArrayStack, &stack, 2);
+    if (!isEmptyStack(&stack)) {
+      primaryArray = popStack2(&stack, (ptr_t *) &segment);
+      printf("largeArrayStack:  %d  %d\n", primaryArray, segment);
+    }
+    pushSharedObjStack(largeArrayStack, &stack);
+  }
   if (local) {
     int counter = localWorkSize;
-    while (proc->localStack.cursor > 0) {
-      loc_t grayCell = (loc_t)(proc->localStack.stack[--proc->localStack.cursor]);
-      bytesScanned += scan1_object_coarseParallel_stack(grayCell,&proc->majorRange,&fromSpace->range,&toSpace->range,proc, &bytesCopied);
+    while (1) {
+      ptr_t gray = popStack(&proc->majorStack);
+      if (gray == NULL)
+	break;
+      (void) transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primaryStack(proc,gray,&proc->majorStack,&proc->majorRange,&fromSpace->range);
       counter--;
       if (!counter) {
-	if (bytesCopied * copyWeight + bytesScanned * scanWeight >= workToDo)
+	if (updateWorkDone(proc) >= workToDo)
 	  break;
 	else counter = localWorkSize;
       }
     }
   }
   else {
-    while (!(isEmptyGlobalStack(workStack)) && 
-	   (bytesCopied * copyWeight + bytesScanned * scanWeight < workToDo)) {
-      SynchStart(workStack);
-      fetchFromGlobalStack(workStack,&proc->localStack, fetchSize);
-      for (i=0; i < localWorkSize && proc->localStack.cursor > 0; i++) {
-	loc_t grayCell = (loc_t)(proc->localStack.stack[--proc->localStack.cursor]);
-	bytesScanned += scan1_object_coarseParallel_stack(grayCell,&proc->majorRange,
-							  &fromSpace->range,&toSpace->range,proc, &bytesCopied);
+    while (updateWorkDone(proc) < workToDo) {
+      int i, globalEmpty;
+      popSharedObjStack(workStack,&proc->majorStack, fetchSize);
+      for (i=0; i < localWorkSize; i++) {
+	ptr_t gray = popStack(&proc->majorStack);
+	if (gray == NULL)
+	  break;
+	(void) transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primaryStack(proc,gray,&proc->majorStack,&proc->majorRange, &fromSpace->range);
+	if (getWorkDone(proc) >= workToDo)   /* For large objects */
+	  break;
       }
-      SynchMid(workStack);
-      moveToGlobalStack(workStack,&proc->localStack);
-      lastAndEmpty = SynchEnd(workStack,NULL);
+      globalEmpty = pushSharedObjStack(workStack,&proc->majorStack);
+      if (globalEmpty) {
+	if (diag)
+	  printf("Proc %d: Turning Collector Off\n", proc->procid); 
+	GCStatus = GCPendingOff;
+	break;
+      }
     }
   }
-  if (lastAndEmpty) {
-    if (diag)
-      printf("Proc %d: Turning Collector Off\n", proc->stid); 
-    GCStatus = GCPendingOff;
-  }
-  flushStore();
-  assert(proc->localStack.cursor == 0);
-  gcstat_normal(proc, 0, bytesCopied, 0);
-  return (int) (bytesCopied * copyWeight + bytesScanned * scanWeight);
+  assert(isEmptyStack(&proc->majorStack));
 }
 
-
-
-static long numOn1 = 0;
-static long numOn2 = 0;
-static long numOn3 = 0;
-
-static int CollectorOn(Proc_t *proc)
-{
-  Thread_t *curThread = NULL;
-  int isFirst, rootCount = 0;
-  int bytesCopied = 0, rootWork = 0;
-
-  if (diag)
-    printf("Proc %d: CollectorOn\n", proc->stid); 
-
-  switch (GCStatus) {
-  case GCOff:                   /* Signalling to other processors that collector is turning on */
-    GCStatus = GCPendingOn;
-    StopAllThreads();
-    break;
-  case GCPendingOn: break;      /* Responding to signal that collector is turning on */
-  case GCOn: assert(0);         /* Collector already on */
-  case GCPendingOff: assert(0); /* Someone is turning the collector off while we are turning it on! */
-  default: assert(0);
-  }
-
-  /* Check local stack empty; reset root lists */
-  assert(proc->localStack.cursor == 0);
-  QueueClear(proc->root_lists);
-  SetCopyRange(&proc->majorRange, proc, toSpace, expandWithPad, dischargeWithPad);
-
-  req_size = 0;
-  ResetJob();
-  isFirst = (synchBarrier(&numOn1, NumProc, &numOn3)) == 0;
-  if (paranoid) {
-    if (isFirst) {
-      paranoid_check_all(fromSpace, NULL, NULL, NULL);
-      synchBarrier(&numOn1, NumProc+1, &numOn3);
-    }
-    else {
-      while (!asynchCheckBarrier(&numOn1, NumProc+1, &numOn3))
-	;
-    }
-  }
-
-  if (isFirst) {
-    int neededSize = Heap_GetSize(fromSpace);
-    neededSize += neededSize / collectionRate;
-    Heap_Resize(fromSpace,neededSize,0);
-    Heap_Resize(toSpace,neededSize,1);
-    rootWork = major_global_scan(proc);
-  }
-
-  while ((curThread = NextJob()) != NULL) {
-    assert(curThread->requestInfo >= 0);
-    FetchAndAdd(&req_size, curThread->requestInfo);
-    local_root_scan(proc,curThread);
-  }
-
-  /* Now forward all the roots which initializes the local work stacks */
-  synchBarrier(&numOn2, NumProc, &numOn1);
-  while (!QueueIsEmpty(proc->root_lists)) {
-    /* Cannot dequeue from roots since this may be a global */
-    Queue_t *roots = (Queue_t *) Dequeue(proc->root_lists);
-    int i, len = QueueLength(roots);  
-    rootWork += len;
-    for (i=0; i<len; i++) {
-      ploc_t root = (ploc_t) QueueAccess(roots,i);
-      ptr_t obj = *root;
-      bytesCopied += forward1_concurrent_stack(obj,&proc->majorRange,&fromSpace->range,proc);
-      if (verbose)
-	printf("GC %d: collector on %d root = %d   primary = %d, replica = %d\n",NumGC,++rootCount,root,obj,obj[-1]);
-    }
-    proc->numRoot += len;
-  }
-
-  /* Move to global stack */
-  SynchStart(workStack);
-  SynchMid(workStack);
-  moveToGlobalStack(workStack,&proc->localStack);
-  SynchEnd(workStack,NULL);
-  assert(proc->localStack.cursor == 0);
-  GCStatus = GCOn;
-  synchBarrier(&numOn3, NumProc, &numOn2);
-  flushStore();
-  gcstat_normal(proc, 0, bytesCopied, 0);
-  return (int) (bytesCopied * copyWeight + rootWork * rootWeight);
-}
 
 static int GCTry_SemiConcHelp(Proc_t *proc, int roundSize)
 {
@@ -459,17 +505,15 @@ static int GCTry_SemiConcHelp(Proc_t *proc, int roundSize)
 int GCTry_SemiConc(Proc_t *proc, Thread_t *th)
 {
   int satisfied = 0;
-  int hasGC = 0;
   int roundOffSize = RoundUp(th->requestInfo, minOffRequest);
   int roundOnSize = RoundUp(th->requestInfo, minOnRequest);
-  int workDone = 0, workToDo = collectionRate * roundOnSize;
+  int workToDo = (1 + collectionRate) * roundOnSize;  /* + 1 for the work in replicating primary */
 
-  assert(proc->writelistCursor + 2 <= proc->writelistEnd);
+  assert(proc->writelistCursor + 3 <= proc->writelistEnd);
   flushStore();
 
   if (th->requestInfo < 0) {
-    unsigned int bytesAvailable = (((unsigned int)proc->writelistEnd) - 
-				   ((unsigned int)proc->writelistCursor));
+    unsigned int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
     assert((-th->requestInfo) <= bytesAvailable);
     return 1;
   }
@@ -480,39 +524,41 @@ int GCTry_SemiConc(Proc_t *proc, Thread_t *th)
     case GCOff:                                         /* Possible GC states: before; after */
     case GCPendingOn:
       if (GCStatus == GCOff &&
-	  GCTry_SemiConcHelp(proc,roundOffSize)) {    /* Off, PendingOn; same */
+	  GCTry_SemiConcHelp(proc,roundOffSize)) {      /* Off, PendingOn; same */
 	satisfied = 1;
 	break;
       }
-      hasGC = 1;
-      workDone += CollectorOn(proc);                 /* Off, PendingOn; On, PendingOff */
+      procChangeState(proc, GC);
+      proc->gcSegment1 = MinorWork;
+      proc->gcSegment2 = FlipOn;
+      CollectorOn(proc);                                /* Off, PendingOn; On, PendingOff */
       assert(GCStatus == GCOn || GCStatus == GCPendingOff);
-      if (workDone < workToDo)
-	workDone += do_work(proc, workToDo - workDone, 0); /* On, PendingOff; same */
+      do_work(proc, workToDo, 0);                       /* On, PendingOff; same */
       if ((th == NULL) ||
 	  ((th != NULL) && GCStatus == GCOn &&
-	   GCTry_SemiConcHelp(proc,roundOnSize))) {       /* On, PendingOff; same */
+	   GCTry_SemiConcHelp(proc,roundOnSize))) {     /* On, PendingOff; same */
 	satisfied = 1;
 	break;
       }
       if (GCStatus == GCPendingOff)                     /* On, PendingOff */
 	break;
-      printf("Proc %d: Concurrent collector fell too far behind  - check parameters\n", proc->stid);
+      printf("Proc %d: Concurrent collector fell too far behind  - check parameters\n", proc->procid);
       assert(0);
       break;
     case GCOn:                                       
     case GCPendingOff:
-      hasGC = 1;
-      if (workDone < workToDo)
-	workDone += do_work(proc, workToDo - workDone, 0); /* On, PendingOff; same */
+      procChangeState(proc, GC);
+      proc->gcSegment1 = MinorWork;
+      do_work(proc, workToDo, 0);                    /* On, PendingOff; same */
       if (GCStatus == GCOn &&
 	  GCTry_SemiConcHelp(proc,roundOnSize)) {    /* On, PendingOff; same */
 	satisfied = 1;
 	break;
       }
-      workDone += do_work(proc,                                     /* On, PendingOff; same */                 
-			  sizeof(val_t) * Heap_GetSize(fromSpace),  /* Actually bounded by allocation of all procs since GCOff triggered. */
-			  1);                                       
+      do_work(proc,                                     /* On, PendingOff; same */                 
+	      sizeof(val_t) * Heap_GetSize(fromSpace),  /* Actually bounded by allocation of all procs since GCOff triggered. */
+	      1);                                       
+      proc->gcSegment2 = FlipOff;
       CollectorOff(proc);                               /* On, PendingOff; Off, PendingOn */
       assert(GCStatus == GCOff || GCStatus == GCPendingOn);
       break;
@@ -524,28 +570,26 @@ int GCTry_SemiConc(Proc_t *proc, Thread_t *th)
   return 1;
 }
 
-void gc_poll_SemiConc(Proc_t *sth)
+void GCPoll_SemiConc(Proc_t *proc)
 {
   switch (GCStatus) {
   case GCOff:
     return;
   case GCPendingOn:
-    CollectorOn(sth);
+    CollectorOn(proc);
     return;
   case GCOn:
-    do_work(sth,collectionRate * minOnRequest, 0);  /* collect as though one page had been allocated */
+    do_work(proc,collectionRate * minOnRequest, 0);  /* collect as though one page had been allocated */
     return;
   case GCPendingOff:
-    CollectorOff(sth);
+    CollectorOff(proc);
     return;
   }
 }
 
-void gc_init_SemiConc()
+void GCInit_SemiConc()
 {
-  minOffRequest = 4 * pagesize;
-  minOnRequest = pagesize;
-  init_int(&MaxHeap, 80 * 1024);
+  init_int(&MaxHeap, 128 * 1024);
   init_int(&MinHeap, 256);
   if (MinHeap > MaxHeap)
     MinHeap = MaxHeap;
@@ -555,6 +599,7 @@ void gc_init_SemiConc()
   init_int(&MaxRatioSize, 50 * 1024);
   fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  workStack = SharedStack_Alloc(8192);
+  workStack = SharedObjStack_Alloc(32 * 1024);
+  largeArrayStack = SharedObjStack_Alloc(8 * 1024);
 }
 
