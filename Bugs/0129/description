@@ -1,0 +1,16 @@
+Number: 0129
+Title:       os exit status and textio
+Keywords:    stdio, exit
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     when run in harness, the output does not agree; when run by hand, output is correct.  race condition?
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0088
+Owner: 
+Status: open
