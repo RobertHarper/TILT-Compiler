@@ -67,12 +67,11 @@ and rename_con s con =
     in 
 	case con of 
 	    Prim_c (pc, cons) => Prim_c (pc, map selfc cons)
-	  | Mu_c (bool, vcseq, var) => 
+	  | Mu_c (bool, vcseq) => 
 		let val s = Util.foldsequence (fn ((v,con), s)  => VarMap.insert(s,v, Name.fresh_var() )) s vcseq
 		in 
 		    Mu_c (bool, 
-			  Util.mapsequence (fn (v,c)=> (lookup (s,v), rename_con s c)) vcseq,
-			  lookup (s, var))
+			  Util.mapsequence (fn (v,c)=> (lookup (s,v), rename_con s c)) vcseq)
 		end
 	  | AllArrow_c (openness, eff, vklist, clist, w32, con) =>
 		let val (s, vklist) = rename_vklist s vklist
