@@ -19,18 +19,21 @@ signature ERROR =
 
     (* Get the current region and the string associated with it *)
     val peek_region : unit -> region
-    val peek_region_str : unit -> string
+    val peek_region_string : unit -> string
 
     (* Record a warning and return the string associated with it *)
     val warn_region : unit -> unit
+    val warn_region_with : string -> unit
     val warn_region_string : unit -> string
 
     (* Record an error and return the string associated with it *)
     val error_region : unit -> unit
+    val error_region_with : string -> unit
     val error_region_string : unit -> string
 
     (* Tabbing for multi-line warning/error messages *)
     val tab_region : unit -> unit
+    val tab_region_with : string -> unit
 
     (* Creating place-holder expressions and types *)
     val dummy_type : Il.context * string -> Il.con

@@ -4,7 +4,6 @@
 signature IL =
   sig
 
-    type tag = Name.tag
     type var = Name.var
     type label = Name.label
     type labels = Name.label list
@@ -34,7 +33,7 @@ signature IL =
                  | RAISE   of con * exp       (* annotate with the type of the raised expression *)
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
-                 | EXN_INJECT of string * exp * exp (* tag and value *)
+                 | EXN_INJECT of string * exp * exp (* tag expression and value *)
                  | ROLL    of con * exp
                  | UNROLL  of con * con * exp    (* the recursive and non-recursive type *)
                  | INJ     of {sumtype : con,    (* non-special sum tyoe *)
@@ -109,7 +108,6 @@ signature IL =
     and      dec = DEC_EXP       of var * con * exp option  * bool (* true indicates should inline *)
                  | DEC_CON       of var * kind * con option * bool (* true indicates should inline *)
                  | DEC_MOD       of var * bool * signat
-                 | DEC_EXCEPTION of tag * con
 
 
     and context_entry = 
@@ -123,7 +121,6 @@ signature IL =
 			       fixity_list : fixity_table,
 			       label_list : (path * phrase_class) Name.LabelMap.map,
 			       var_list : (label * phrase_class) Name.VarMap.map * var list,
-			       tag_list : con Name.TagMap.map,
 			       alias_list : label list Name.LabelMap.map}
 
     and phrase_class = PHRASE_CLASS_EXP     of exp * con * exp option * bool

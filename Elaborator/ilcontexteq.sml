@@ -110,8 +110,7 @@ struct
 	       | DEC_CON (v,k,SOME c, inline) => (blastOutChoice 3; blastOutVar v; blastOutKind k; 
 						 blastOutCon c; blastOutBool inline)
 	       | DEC_MOD (v,b,s)      => (blastOutChoice 4; blastOutVar v; blastOutBool b; 
-					  blastOutSig s)
-	       | DEC_EXCEPTION (t,c)  => (blastOutChoice 5; blastOutTag t; blastOutCon c))
+					  blastOutSig s))
 	and blastInDec () =
 	    (case (blastInChoice()) of
 		 0 => DEC_EXP (blastInVar (), blastInCon (), NONE, blastInBool())
@@ -119,7 +118,6 @@ struct
 	       | 2 => DEC_CON (blastInVar (), blastInKind (), NONE, blastInBool())
 	       | 3 => DEC_CON (blastInVar (), blastInKind (), SOME (blastInCon ()), blastInBool())
 	       | 4 => DEC_MOD (blastInVar (), blastInBool (), blastInSig ())
-	       | 5 => DEC_EXCEPTION (blastInTag (), blastInCon ())
 	       | _ => error "bad blastInDec")
 	and blastOutBnd bnd = 
 	    (case bnd of
@@ -264,11 +262,13 @@ struct
 		   | not_uint is => (blastOutChoice 2; blastOutIS is)
 		   | and_uint is => (blastOutChoice 3; blastOutIS is)
 		   | or_uint is => (blastOutChoice 4; blastOutIS is)
-		   | lshift_uint is => (blastOutChoice 5; blastOutIS is)
-		   | mk_ref => (blastOutChoice 6)
-		   | deref => (blastOutChoice 7)
-		   | eq_ref => (blastOutChoice 8)
-		   | setref => (blastOutChoice 9))
+		   | xor_uint is => (blastOutChoice 5; blastOutIS is)
+		   | lshift_uint is => (blastOutChoice 6; blastOutIS is)
+
+		   | mk_ref => (blastOutChoice 7)
+		   | deref => (blastOutChoice 8)
+		   | eq_ref => (blastOutChoice 9)
+		   | setref => (blastOutChoice 10))
 	    end
 
 	and blastInIlPrim () = 
@@ -279,11 +279,13 @@ struct
 		   | 2 => not_uint(blastInIS ())
 		   | 3 => and_uint(blastInIS ())
 		   | 4 => or_uint(blastInIS ())
-		   | 5 => lshift_uint(blastInIS ())
-		   | 6 => mk_ref
-		   | 7 => deref
-		   | 8 => eq_ref
-		   | 9 => setref
+		   | 5 => xor_uint(blastInIS ())
+		   | 6 => lshift_uint(blastInIS ())
+
+		   | 7 => mk_ref
+		   | 8 => deref
+		   | 9 => eq_ref
+		   | 10 => setref
 		   | _ => error "bad blastInIlPrim")
 	    end
 
@@ -345,7 +347,8 @@ struct
 		   | uint2int (is1,is2) => (blastOutChoice 9; blastOutIS is1; blastOutIS is2)
 		   | uinta2uinta (is1,is2) => (blastOutChoice 10; blastOutIS is1; blastOutIS is2)
 		   | uintv2uintv (is1,is2) => (blastOutChoice 11; blastOutIS is1; blastOutIS is2)
-
+		   | int2int (is1,is2) => (blastOutChoice 12; blastOutIS is1; blastOutIS is2)
+		   | uint2uint (is1,is2) => (blastOutChoice 13; blastOutIS is1; blastOutIS is2)
 
 		   (* floatint-point operations *)	
 		   | neg_float fs  => (blastOutChoice 14; blastOutFS fs)
@@ -391,17 +394,20 @@ struct
 		   | not_int is  => (blastOutChoice 50; blastOutIS is)
 		   | and_int is  => (blastOutChoice 51; blastOutIS is)
 		   | or_int is  => (blastOutChoice 52; blastOutIS is)
-		   | lshift_int is  => (blastOutChoice 53; blastOutIS is)
-		   | rshift_int is  => (blastOutChoice 54; blastOutIS is)
-		   | rshift_uint is  => (blastOutChoice 55; blastOutIS is)
+		   | xor_int is  => (blastOutChoice 53; blastOutIS is)
+		   | lshift_int is  => (blastOutChoice 54; blastOutIS is)
+		   | rshift_int is  => (blastOutChoice 55; blastOutIS is)
+		   | rshift_uint is  => (blastOutChoice 56; blastOutIS is)
 			 
 		   (* array and vectors *)
-		   | array2vector t => (blastOutChoice 56; blastOutTable t)
-		   | create_table t => (blastOutChoice 57; blastOutTable t)
-		   | sub t => (blastOutChoice 58; blastOutTable t)
-		   | update t => (blastOutChoice 59; blastOutTable t)
-		   | length_table t => (blastOutChoice 60; blastOutTable t)
-		   | equal_table t => (blastOutChoice 61; blastOutTable t))
+		   | array2vector t => (blastOutChoice 57; blastOutTable t)
+		   | vector2array t => (blastOutChoice 58; blastOutTable t)
+		   | create_table t => (blastOutChoice 59; blastOutTable t)
+		   | create_empty_table t => (blastOutChoice 60; blastOutTable t)
+		   | sub t => (blastOutChoice 61; blastOutTable t)
+		   | update t => (blastOutChoice 62; blastOutTable t)
+		   | length_table t => (blastOutChoice 63; blastOutTable t)
+		   | equal_table t => (blastOutChoice 64; blastOutTable t))
 
 
 
@@ -423,7 +429,8 @@ struct
 		   | 9 => uint2int(blastInIS (), blastInIS ())
 		   | 10 => uinta2uinta(blastInIS (), blastInIS ())
 		   | 11 => uintv2uintv(blastInIS (), blastInIS ())
-
+		   | 12 => int2int (blastInIS (), blastInIS ())
+		   | 13 => uint2uint (blastInIS (), blastInIS ())
 
 		   (* floatint-point operations *)	
 		   | 14 => neg_float(blastInFS ())
@@ -469,17 +476,20 @@ struct
 		   | 50 => not_int(blastInIS ())
 		   | 51 => and_int(blastInIS ())
 		   | 52 => or_int(blastInIS ())
-		   | 53 => lshift_int(blastInIS ())
-		   | 54 => rshift_int(blastInIS ())
-		   | 55 => rshift_uint(blastInIS ())
+		   | 53 => xor_int(blastInIS ())
+		   | 54 => lshift_int(blastInIS ())
+		   | 55 => rshift_int(blastInIS ())
+		   | 56 => rshift_uint(blastInIS ())
 			 
 		   (* array and vectors *)
-		   | 56 => array2vector (blastInTable ())
-		   | 57 => create_table (blastInTable ())
-		   | 58 => sub (blastInTable ())
-		   | 59 => update (blastInTable ())
-		   | 60 => length_table (blastInTable ())
-		   | 61 => equal_table (blastInTable ())
+		   | 57 => array2vector (blastInTable ())
+		   | 58 => vector2array (blastInTable ())
+		   | 59 => create_table (blastInTable ())
+		   | 60 => create_empty_table (blastInTable ())
+		   | 61 => sub (blastInTable ())
+		   | 62 => update (blastInTable ())
+		   | 63 => length_table (blastInTable ())
+		   | 64 => equal_table (blastInTable ())
 
 		   | _ => error "bad blastInPrim")
 
@@ -736,27 +746,24 @@ struct
 	    in  (vmap, vlist)
 	    end
 
-	fun blastOutTagList tag_list = NameBlast.blastOutTagmap (curOut()) (fn _ => blastOutCon) tag_list
-	fun blastInTagList () = NameBlast.blastInTagmap (curIn()) (fn _ => blastInCon())
 
-    fun blastOutContext os (CONTEXT {flatlist, fixity_list, label_list, var_list, tag_list, alias_list}) = 
+
+    fun blastOutContext os (CONTEXT {flatlist, fixity_list, label_list, var_list, alias_list}) = 
 	(cur_out := (SOME os);
 	 if Name.LabelMap.numItems alias_list = 0
 	     then ()
 	 else error "Blasting out context with non-empty alias_list";
 	 blastOutFixityTable fixity_list;
 	 blastOutLabelList label_list;
-	 blastOutVarList var_list;
-	 blastOutTagList tag_list)
+	 blastOutVarList var_list)
 
     fun blastInContext is = 
 	let val _ = cur_in := (SOME is)
 	    val fixity_list = blastInFixityTable ()
 	    val label_list = blastInLabelList ()
 	    val var_list = blastInVarList ()
-	    val tag_list = blastInTagList ()
 	in CONTEXT {flatlist = [], fixity_list = fixity_list, label_list = label_list, 
-		    var_list = var_list, tag_list = tag_list, alias_list = Name.LabelMap.empty}
+		    var_list = var_list, alias_list = Name.LabelMap.empty}
 	end
 
 
@@ -836,7 +843,6 @@ struct
 	fun add_dec(DEC_EXP(v,_,_,_), DEC_EXP(v',_,_,_), vm) = VM.add(v,v',vm)
 	  | add_dec(DEC_CON(v,_,_,_), DEC_CON(v',_,_,_), vm) = VM.add(v,v',vm)
 	  | add_dec(DEC_MOD(v,_,_), DEC_MOD(v',_,_), vm) = VM.add(v,v',vm)
-	  | add_dec(DEC_EXCEPTION(t,_), DEC_EXCEPTION(t',_), vm) = vm
 	  | add_dec _ = raise NOT_EQUAL
 
 	fun add_bnd(BND_EXP(v,_), BND_EXP(v',_), vm) = VM.add(v,v',vm)
@@ -1026,8 +1032,7 @@ struct
                | (DEC_CON(v,kind,conopt,inline), DEC_CON(v',kind',conopt',inline')) =>
 		  VM.eq_var(vm,v,v') andalso eq_kind(vm,kind,kind') andalso
 		  eq_conopt(vm,conopt,conopt') andalso inline=inline'
-	       | (DEC_EXCEPTION(t,con), DEC_EXCEPTION(t',con')) => eq_con(vm,con,con') 
-	       | _ => false                        (* MEMO: () this right?? *)
+	       | _ => false
  
 	and eq_bnd(vm,bnd,bnd') =
 	    case (bnd, bnd')
@@ -1037,7 +1042,7 @@ struct
 	          VM.eq_var(vm,v,v') andalso (b = b') andalso eq_mod(vm,m,m')
                | (BND_CON(v,c), BND_CON(v',c')) =>
 		  VM.eq_var(vm,v,v') andalso eq_con(vm,c,c')
-	       | _ => false                        (* MEMO: () this right?? *)
+	       | _ => false
 
 	and eq_exp (vm,VAR v,VAR v') = VM.eq_var(vm,v,v')
 	  | eq_exp (vm,MODULE_PROJECT(m1,l1),MODULE_PROJECT(m2,l2)) = 

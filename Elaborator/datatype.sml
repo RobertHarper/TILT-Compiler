@@ -198,52 +198,6 @@ structure Datatype
 					else CON_APP(CON_VAR tv, tyvar_mproj)) type_vars
 
 
-(*
-	(* ------------ create the version of constructors types and datatypes that 
-	   ------------ use the type variable projections ------------------------ *)
-	local
-	    val subst_nr2r = zip vardt_list type_cinsts
-	    val subst_c2m = zip tyvar_vars tyvar_mprojs
-	    fun constr_mapper c = con_subst_convar(c,subst_nr2r)
-	    fun constr_mapper' NONE = NONE
-	      | constr_mapper' (SOME c) = SOME(con_subst_convar(c,subst_nr2r))
-	    fun constr_sum_mapper (constr_sum_arg_var_i,constr_con_vars_i,names) =
-		let val (nca,vars) = conopts_split constr_con_vars_i
-		    val carrier = 
-			if is_monomorphic
-			    then CON_VAR constr_sum_arg_var_i
-			else CON_APP(CON_VAR constr_sum_arg_var_i, tyvar_tuple)
-		in CON_SUM{names=names,noncarriers=nca,carrier=carrier,special=NONE}
-		end
-	    fun specialize (CON_SUM{names,noncarriers,carrier,...}) (n,_) = 
-		     (CON_SUM{names=names,
-			      noncarriers=noncarriers,
-			      carrier=carrier,
-			      special=SOME n})
-	      | specialize _ _ = error "specialize got non-sum"
-	in  
-	    val constr_rf = mapmap constr_mapper' constr_nrc
-	    val constr_rf_sum = 
-		(map3 constr_sum_mapper (constr_sumarg_vars,constr_con_vars,constr_labs))
-	    val constr_rf_ssum = map2 (fn (s,opts) => mapcount (specialize s) opts) 
-		                   (constr_rf_sum, constr_nrc)
-	    val top_type_mproj = con_subst_convar(top_type_tyvar,subst_c2m)
-	end 
-
-	  
-        (* -----------  create the carried types -------------- *)
-	fun mapper(constr_con_vars_i, constr_con_labs_i, constr_rf_i) = 
-	    map (fn (NONE,_,_) => NONE
-	          | (SOME v,SOME l,SOME c) => 
-		 let val (c,k) = 
-		     if is_monomorphic 
-			 then (c, KIND_TUPLE 1)
-		     else (con_fun(tyvar_vars,c), KIND_ARROW(num_tyvar,1))
-		 in  SOME(c,SBND(l,BND_CON(v,c)),
-			  SDEC(l,DEC_CON(v,k,SOME c)))
-		 end) (zip3 constr_con_vars_i constr_con_labs_i constr_rf_i)
-	val constr_con_con_sbnd_sdecs = map3 mapper (constr_con_vars, constr_con_labs, constr_rf)
-*)
 
 	(* ----------------- compute the constructors ------------- *)
 	local 

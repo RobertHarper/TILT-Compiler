@@ -11,7 +11,7 @@ struct
     type signat = Il.signat
     type label = Il.label
     type var = Il.var
-    type tag = Il.tag
+    type tag = Name.tag
     type sdec = Il.sdec
     type sdecs = Il.sdecs
     type fixity_table = Il.fixity_table
@@ -33,32 +33,29 @@ struct
 				flatlist = [],
 				fixity_list = [],
 				label_list = LabelMap.empty,
-				var_list = (VarMap.empty,[]),
-				tag_list = TagMap.empty}
+				var_list = (VarMap.empty,[])}
 
 
     fun add_context_fixity(CONTEXT {alias_list, flatlist,fixity_list,
-				    label_list,var_list,tag_list}, 
+				    label_list,var_list}, 
 			   f) = CONTEXT({alias_list = alias_list,
 					 flatlist = flatlist,
 					 fixity_list = f @ fixity_list,
 					 label_list = label_list,
-					 var_list = var_list,
-					 tag_list = tag_list})
+					 var_list = var_list})
     fun add_context_flat(CONTEXT {alias_list, flatlist,fixity_list,
-				  label_list,var_list,tag_list}, entry) = 
+				  label_list,var_list}, entry) = 
 	let val flatlist = entry::flatlist
 	in  CONTEXT({alias_list = alias_list,
 		     flatlist = flatlist,
 			fixity_list = fixity_list,
 			label_list = label_list,
-			var_list = var_list,
-			tag_list = tag_list})
+			var_list = var_list})
 	end
 
 
     fun stat_context(CONTEXT {flatlist,fixity_list,
-			      label_list,var_list,tag_list, alias_list}) = 
+			      label_list,var_list, alias_list}) = 
 	() (* (Name.LabelMap.appi 
 	 (fn (l,(path,pc)) => (print "label = "; print (Name.label2string l); print "\n"))
 	 label_list;
@@ -74,7 +71,7 @@ struct
 				 NONE => PATH(v,[])
 			       | SOME p => join_path_labels(p,[l]))
 	    fun help(CONTEXT {alias_list, flatlist,fixity_list,
-			      label_list,var_list,tag_list}, 
+			      label_list,var_list}, 
 		     v, from_path, pc_maker) =
 		let val path = mk_path v
 		    val obj = from_path path
@@ -87,8 +84,7 @@ struct
 			   flatlist = flatlist,
 			   fixity_list = fixity_list,
 			   label_list = label_list,
-			   var_list = var_list,
-			   tag_list = tag_list}
+			   var_list = var_list}
 		end
 	    fun sdec_help (v,l) (sdec,ctxt) = add_context_sdec'(ctxt,SOME(mk_path v),sdec)
 	in case dec of
@@ -110,46 +106,33 @@ struct
 			  then error "add_context_sdec got DEC_MOD with open label but not a SIGNAT_STRUCTURE"
 		      else ctxt
 		  end
-	  | DEC_EXCEPTION(t,c) => 
-		  let val CONTEXT {alias_list, flatlist,fixity_list,
-				   label_list,var_list,tag_list} = ctxt
-		      val tag_list = Name.TagMap.insert(tag_list,t,c)
-		  in CONTEXT{alias_list = alias_list,
-			     flatlist = flatlist,
-			     fixity_list = fixity_list,
-			     label_list = label_list,
-			     var_list = var_list,
-			     tag_list = tag_list}
-		  end
 	end
     fun add_context_sdec(ctxt,sdec) = add_context_sdec'(add_context_flat(ctxt, CONTEXT_SDEC sdec),NONE,sdec)
 
 
     fun add_context_sig(CONTEXT {alias_list, flatlist,fixity_list,
-				 label_list,var_list,tag_list}, 
+				 label_list,var_list}, 
 			l, v, signat) = 
 	CONTEXT({alias_list = alias_list,
 		 flatlist = (CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,signat))))::flatlist,
 		 fixity_list = fixity_list,
 		 label_list = Name.LabelMap.insert(label_list,l,
 						   (PATH(v,[]), PHRASE_CLASS_SIG(v,signat))),
-		 var_list = var_seq_insert(var_list,v,(l, PHRASE_CLASS_SIG (v,signat))),
-		 tag_list = tag_list})
+		 var_list = var_seq_insert(var_list,v,(l, PHRASE_CLASS_SIG (v,signat)))})
 
     fun add_context_overexp(CONTEXT {alias_list, flatlist,fixity_list,
-				     label_list,var_list,tag_list}, 
+				     label_list,var_list}, 
 			    l, v, celist) = 
 	let val pc = PHRASE_CLASS_OVEREXP celist
 	in  CONTEXT({alias_list = alias_list,
 		     flatlist = (CONTEXT_OVEREXP(l,v,celist))::flatlist,
 		     fixity_list = fixity_list,
 		     label_list = Name.LabelMap.insert(label_list,l, (PATH(v,[]), pc)),
-		     var_list = var_seq_insert(var_list,v,(l, pc)),
-		     tag_list = tag_list})
+		     var_list = var_seq_insert(var_list,v,(l, pc))})
 	end
 
     fun add_context_alias(CONTEXT {alias_list, flatlist,fixity_list,
-				   label_list,var_list,tag_list}, 
+				   label_list,var_list}, 
 			  l, labs) = 
 	let val _ = error "add_context_alias: no one should be using this now"
 	    val alias_list = LabelMap.insert(alias_list,l,labs)
@@ -157,8 +140,7 @@ struct
 		   flatlist = flatlist,
 		   fixity_list = fixity_list,
 		   label_list = label_list,
-		   var_list = var_list,
-		   tag_list = tag_list}
+		   var_list = var_list}
 	end
 
     fun add_context_entry(ctxt, entry) = 
@@ -206,15 +188,10 @@ struct
     fun var_bound(CONTEXT{var_list,...},v) = (case Name.VarMap.find(#1 var_list,v) of
 						  NONE => false
 						| SOME _ => true)
-    fun name_bound(CONTEXT{tag_list,...},t) = (case Name.TagMap.find(tag_list,t) of
-						   NONE => false
-						 | SOME _ => true)
-
 
 
       fun Context_Varlist (CONTEXT {var_list,...}) = rev(#2 var_list)
       fun Context_Lookup' (CONTEXT {var_list,...},v) = Name.VarMap.find(#1 var_list,v)
-      fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = Name.TagMap.find(tag_list,t)
 
 
      fun Context_Lookup (ctxt as CONTEXT{label_list, ...}, lab) = 
@@ -233,7 +210,7 @@ struct
 
       (* faster when first context is larger than second *)
       fun plus (esubster,csubster,ksubster,ssubster,orig_ctxt, 
-		ctxt2 as CONTEXT{flatlist, fixity_list, label_list, var_list, tag_list,alias_list=_}) =
+		ctxt2 as CONTEXT{flatlist, fixity_list, label_list, var_list,alias_list=_}) =
 	  let val ctxt = add_context_fixity(orig_ctxt,fixity_list)
 	      fun varIn (v,ctxt) = (case (Context_Lookup'(ctxt,v)) of
 					NONE => false

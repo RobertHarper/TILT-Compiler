@@ -173,7 +173,8 @@ struct
 			      in (case (Context_Lookup(ctxt,eq_label)) of
 				      SOME(_,PHRASE_CLASS_MOD(m,_,_)) => m
 				    | _ => raise NoEqExp)
-			      end))
+			      end)
+		       | _ => raise NoEqExp)
 		in case (GetModSig(ctxt,meq)) of
 		    SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE (NONE, sdecs),
 				   SIGNAT_STRUCTURE(NONE, [res_sdec]),_) => 

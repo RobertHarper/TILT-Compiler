@@ -174,18 +174,19 @@ struct
 
   fun get_iltype ilprim cons =
       (case (ilprim,cons) of
-	   (not_uint is,_) => (false,[con_uint is], con_uint is)
-	 | (and_uint is,_) => (false,[con_uint is, con_uint is], con_uint is)
-	 | (or_uint is,_) => (false,[con_uint is, con_uint is], con_uint is)
-	 | (xor_uint is,_) => (false,[con_uint is, con_uint is], con_uint is)
-	 | (lshift_uint is,_) => (false,[con_uint is, con_int W32], con_uint is)
-	 | (eq_uint is,_) => (false, [con_uint is, con_uint is], con_bool)
-	 | (neq_uint is,_) => (false, [con_uint is, con_uint is], con_bool)
+	   (not_uint is, []) => (false,[con_uint is], con_uint is)
+	 | (and_uint is, []) => (false,[con_uint is, con_uint is], con_uint is)
+	 | (or_uint is, []) => (false,[con_uint is, con_uint is], con_uint is)
+	 | (xor_uint is, []) => (false,[con_uint is, con_uint is], con_uint is)
+	 | (lshift_uint is, []) => (false,[con_uint is, con_int W32], con_uint is)
+	 | (eq_uint is, []) => (false, [con_uint is, con_uint is], con_bool)
+	 | (neq_uint is, []) => (false, [con_uint is, con_uint is], con_bool)
 
 	 | (mk_ref, [instance]) => (true,[instance],con_ref instance)
 	 | (deref, [instance]) => (true,[con_ref instance], instance)
 	 | (setref, [instance]) => (true,[con_ref instance,instance],con_unit)
-	 | (eq_ref, [instance]) => (false, [con_ref instance, con_ref instance],con_bool))
+	 | (eq_ref, [instance]) => (false, [con_ref instance, con_ref instance],con_bool)
+	 | _ => error "get_iltype is ill-formed")
 
 	   
   fun get_type' prim args = 

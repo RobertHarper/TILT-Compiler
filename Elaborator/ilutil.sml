@@ -411,8 +411,7 @@ structure IlUtil
 	 | DEC_EXP(v,c,SOME e, inline) => DEC_EXP(v, f_con state c, SOME (f_exp state e), inline)
 	 | DEC_CON(v,k,NONE, inline)   => DEC_CON(v, f_kind state k, NONE, inline)
 	 | DEC_CON(v,k,SOME c, inline) => DEC_CON(v, f_kind state k, SOME (f_con state c), inline)
-	 | DEC_MOD(v,b,s)      => DEC_MOD(v, b, f_signat state s)
-	 | DEC_EXCEPTION(n,c)  => DEC_EXCEPTION(n, f_con state c))
+	 | DEC_MOD(v,b,s)      => DEC_MOD(v, b, f_signat state s))
 
 
       val default_bound_convar = []
@@ -626,8 +625,7 @@ structure IlUtil
 		(case dec of
 		     DEC_EXP (v,c,eopt,_) => loop ((v,MODULE_PROJECT(m,l))::ea,ca,ma) rest
 		   | DEC_CON(v,k,copt,_) => loop (ea,(v,CON_MODULE_PROJECT(m,l))::ca,ma) rest
-		   | DEC_MOD(v,_,s) => loop (ea,ca,(v,MOD_PROJECT(m,l))::ma) rest
-		   | _ => loop (ea,ca,ma) rest)
+		   | DEC_MOD(v,_,s) => loop (ea,ca,(v,MOD_PROJECT(m,l))::ma) rest)
 	    val (exptable,contable,modtable) = loop ([],[],[]) sdecs
 	    fun exp_handler (VAR var,bound) = 
 		(case (assoc_eq(eq_var,var,exptable)) of

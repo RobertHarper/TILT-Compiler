@@ -31,7 +31,6 @@ struct
 
     fun pp_var v = String(var2string v)
     fun pp_label l = String(label2string l)
-    fun pp_tag (t : tag) = String(tag2string t)
     fun pp_commalist pobj objlist = pp_list pobj objlist ("(",",",")",false)
     fun pp_semicolonlist pobj objlist = pp_list pobj objlist ("(",";",")",true)
     fun pp_pathlist pobj objlist = pp_list pobj objlist ("",".","",false)
@@ -444,8 +443,7 @@ struct
 				 pp_con seen c]
 	  | DEC_MOD (v,false,s) => help (pp_var v) [pp_signat seen s]
 	  | DEC_MOD (v,true,s) => help (pp_var v) [String " $POLY$ ", 
-						   pp_signat seen s]
-	  | DEC_EXCEPTION (n,c) =>  help (pp_tag n) [pp_con seen c])
+						   pp_signat seen s])
       end
 
     and pp_dec seen dec = let val (f,fs) = pp_dec' seen dec

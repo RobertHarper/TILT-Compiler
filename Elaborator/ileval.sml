@@ -53,8 +53,7 @@ functor IlEval(structure Il : IL
 	     DEC_EXP (v,c) => con_isval c
 	   | DEC_MOD (v,_,s) => true
 	   | DEC_CON (v,k,NONE) => true
-	   | DEC_CON (v,k,SOME c) => con_isval c
-	   | DEC_EXCEPTION (_,c) => con_isval c)
+	   | DEC_CON (v,k,SOME c) => con_isval c)
 
     and con_isval (con : con) =
 	(case con of

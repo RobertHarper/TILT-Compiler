@@ -23,6 +23,9 @@ structure IlStatic
    fun reduce_sigvar(context,v) = 
 	(case (Context_Lookup'(context,v)) of
 	     SOME(_,PHRASE_CLASS_SIG(v,s)) => s
+	   | SOME _ => (print "reduce_sigvar given SIGVAR = "; pp_var v;
+			print "in ctxt bound but not to signature: \n"; Ppil.pp_context context;
+			error "reduce_sigvar given unbound SIGVAR")
 	   | NONE => (print "reduce_sigvar given unbound SIGVAR = "; pp_var v;
 		      print "in ctxt: \n"; Ppil.pp_context context;
 		      error "reduce_sigvar given unbound SIGVAR"))
@@ -176,8 +179,7 @@ fun show_state ({modunself,...}:state) =
 		     let val this_dec = DEC_MOD(v,b,SelfifySig(state,selfify) (popt,s))
 			 val state = add_modpath(state,v,popt)
 		     in (state,SDEC(l,this_dec)::rev_sdecs)
-		     end
-		  | (DEC_EXCEPTION _) => (state,sdec::rev_sdecs))
+		     end)
 	   end
 		    
        and sbnd_folder (popt,selfify) (SBND(l,bnd),(state:state,rev_sbnds)) = 
@@ -326,11 +328,9 @@ fun show_state ({modunself,...}:state) =
 			(DEC_MOD(_,_,s)) => SOME(CLASS_MOD(sig_all_handle(eh et,ch ct,mh mt, fn _ => NONE) s))
 		      | (DEC_EXP(_,c,_,_)) => SOME(CLASS_EXP(con_all_handle(eh et,ch ct,mh mt, fn _ => NONE) c))
 		      | (DEC_CON(_,k,_,_)) => SOME(CLASS_CON k)
-		      | (DEC_EXCEPTION _) => NONE
 		fun extend (et,ct,mt) (l,DEC_MOD(v,_,_)) = (et,ct,(v,l)::mt)
 		  | extend (et,ct,mt) (l,DEC_EXP(v,_,_,_)) = ((v,l)::et,ct,mt)
 		  | extend (et,ct,mt) (l,DEC_CON(v,_,_,_)) = (et,(v,l)::ct,mt)
-		  | extend tables _ = tables
 		fun loop t [] = NONE
 		  | loop t ((SDEC(l',dec))::rest) = if (eq_label(l,l')) 
 							then externalize t dec
@@ -861,9 +861,9 @@ fun show_state ({modunself,...}:state) =
 	   let val (_,signat) = GetModSig(m,ctxt)
 	       val (self,sdecs) = 
 		   (case (reduce_signat ctxt signat) of
-			SIGNAT_FUNCTOR _ => error "cannot project from functor"
-		      | SIGNAT_VAR _ => error "cannot project from SIGNAT_VAR"
-		      | SIGNAT_STRUCTURE (self,sdecs) => (self,sdecs))
+			SIGNAT_STRUCTURE (self,sdecs) => (self,sdecs)
+		      | SIGNAT_FUNCTOR _ => error "cannot project from functor"
+		      | _ => error "signat_var or signat_of not reduce")
 	   in  (case Sdecs_Lookup ctxt (MOD_VAR (fresh_var()),sdecs,[l]) of
 		    NONE => (print "no such label = ";
 			     pp_label l; print " in sig \n";
@@ -936,9 +936,9 @@ fun show_state ({modunself,...}:state) =
 	   let val (_,signat) = GetModSig(m,ctxt)
 	       val (self,sdecs) = 
 		   (case (reduce_signat ctxt signat) of
-			SIGNAT_FUNCTOR _ => error "cannot project from functor"
-		      | SIGNAT_VAR _ => error "cannot project from SIGNAT_VAR"
-		      | SIGNAT_STRUCTURE (self,sdecs) => (self,sdecs))
+			SIGNAT_STRUCTURE (self,sdecs) => (self,sdecs)
+		      | SIGNAT_FUNCTOR _ => error "cannot project from functor"
+		      | _ => error "signat_var or signat_of not reduced")
 	   in  (case Sdecs_Lookup ctxt (MOD_VAR (fresh_var()),sdecs,[l]) of
 		    NONE => (print "no such label = ";
 			     pp_label l; print " in sig \n";
@@ -971,7 +971,8 @@ fun show_state ({modunself,...}:state) =
 		    APP(e1,e2) => (GetExpCon(e1,ctxt),[e2])
 		  | EXTERN_APP(_,e1,es2) => (GetExpCon(e1,ctxt),es2)
 		  | PRIM(p,cs,es) => ((true, IlPrimUtil.get_type' p cs), es)
-		  | ILPRIM(ip,cs,es) => ((true, IlPrimUtil.get_iltype' ip cs),es))
+		  | ILPRIM(ip,cs,es) => ((true, IlPrimUtil.get_iltype' ip cs),es)
+		  | _ => error "GetExpAppCon' got unexpected argument")
 	       val (_,con1,_) = HeadNormalize(con1,ctxt)
 	       val vacon2 = map (fn e => GetExpCon(e,ctxt)) es2
 	       val va2 = Listops.andfold #1 vacon2
@@ -1318,10 +1319,10 @@ fun show_state ({modunself,...}:state) =
 		      | SOME (CLASS_EXP con) => (va,con)
 		      | SOME _ => fail "MODULE_PROJECT: label not of exp")
 	   in case (reduce_signat ctxt signat) of
-	       SIGNAT_FUNCTOR _ => error "cannot project from module with functor signature"
-	     | SIGNAT_VAR _ => error "cannot project from module with signature variable"
-	     | SIGNAT_STRUCTURE(SOME p,sdecs) => self_case(p,sdecs)
-	     | SIGNAT_STRUCTURE (NONE,sdecs) => notself_case sdecs
+	       SIGNAT_STRUCTURE(SOME p,sdecs) => self_case(p,sdecs)
+	     | SIGNAT_STRUCTURE(NONE,sdecs) => notself_case sdecs
+	     | SIGNAT_FUNCTOR _ => error "cannot project from module with functor signature"
+	     | _ => error "signat_var of signat_of is not reduced"
 	   end
 
      | (SEAL (e,c)) => let val (va,c') = GetExpCon(e,ctxt)
@@ -1415,8 +1416,7 @@ fun show_state ({modunself,...}:state) =
 			    | (DEC_CON (_,k,copt,inline)) =>
 				  SOME(true,(PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l),k,copt,inline),[l]))
 			    | (DEC_MOD (_,b,s)) => 
-				SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),b,s),[l]))
-			    | _ => loop m lbl rest)
+				SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),b,s),[l])))
 		else if (is_open l)
 		    then 
 		     (case d of
@@ -1468,8 +1468,7 @@ fun show_state ({modunself,...}:state) =
 			 | (DEC_CON (_,k,copt,inline)) => 
 			       SOME([l],PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l), k,copt, inline))
 			 | (DEC_MOD (_,b,s)) => 
-			       SOME([l],PHRASE_CLASS_MOD(MOD_PROJECT(m,l),b,s))
-			 | _ => loop lbl rest)
+			       SOME([l],PHRASE_CLASS_MOD(MOD_PROJECT(m,l),b,s)))
 		else loop lbl rest
 
 	in
@@ -1549,14 +1548,14 @@ fun show_state ({modunself,...}:state) =
 					  print "asignat is\n"; pp_signat asignat; print "\n";
 					  print "bsignat is\n"; pp_signat bsignat; print "\n"))
 	   in case (reduce_signat ctxt asignat) of
-	       (SIGNAT_STRUCTURE _) => error "Can't apply a structure signature"
-	     | (SIGNAT_VAR _) => error "Can't apply a structure with variable signature"
-	     | SIGNAT_FUNCTOR (v,csignat,dsignat,ar) =>
+	       SIGNAT_FUNCTOR (v,csignat,dsignat,ar) =>
 		   if (Sig_IsSub(ctxt, bsignat, csignat))
 		       then (vaa andalso vab andalso (ar = TOTAL),
 			     sig_subst_modvar(dsignat,[(v,b)]))
 			    else error ("Module Application where" ^ 
 					" argument and parameter signature mismatch")
+	     | (SIGNAT_STRUCTURE _) => error "Can't apply a structure"
+	     | _ => error "signat_var or signat_of is not reduced"
 	   end
      | MOD_LET (v,m1,m2) => 
 	   let val (va1,s1) = GetModSig(m1,ctxt)
@@ -1592,10 +1591,10 @@ fun show_state ({modunself,...}:state) =
 		      | SOME _ => fail "MOD_PROJECT: label found wrong flavor")
 
 	   in case (reduce_signat ctxt signat) of
-	       SIGNAT_FUNCTOR _ => error "cannot project from functor"
-	     | SIGNAT_VAR _ => error "cannot project from variable signature"
-	     | SIGNAT_STRUCTURE (SOME p,sdecs) => self_case(p,sdecs)
+	       SIGNAT_STRUCTURE (SOME p,sdecs) => self_case(p,sdecs)
 	     | SIGNAT_STRUCTURE (NONE,sdecs) => notself_case sdecs
+	     | SIGNAT_FUNCTOR _ => error "cannot project from functor"
+	     | _ => error "signat_var or signat_of is not reduced"
 	   end
 
      | MOD_SEAL (m,s) => let val (va,ps) = GetModSig(m,ctxt)
@@ -1799,12 +1798,10 @@ fun show_state ({modunself,...}:state) =
 	       in (case (reduce_signat ctxt s) of 
 		       SIGNAT_STRUCTURE(NONE,sdecs) => notself_case sdecs
 		     | SIGNAT_STRUCTURE (SOME p,sdecs) => self_case(p,sdecs)
-		     | SIGNAT_VAR _ => (print "CON_MODULE_PROJECT from signat var \n";
-					pp_mod m;
-					error "CON_MODULE_PROJECT from signat var")
 		     | SIGNAT_FUNCTOR _ => (print "CON_MODULE_PROJECT from a functor = \n";
 					    pp_mod m;
-					    error "CON_MODULE_PROJECT from a functor"))
+					    error "CON_MODULE_PROJECT from a functor")
+		     | _ => error "signat_var of signat_of is not reduced")
 	       end))
        end	
 
@@ -1819,7 +1816,6 @@ fun show_state ({modunself,...}:state) =
 
      and Dec_Valid (ctxt : context, dec) = 
 	 let fun var_notin v  = (Context_Lookup'(ctxt,v); false) handle _ => true
-	     fun name_notin n = (Context_Exn_Lookup(ctxt,n); false) handle _ => true
        in  (case dec of
 	      DEC_EXP(v,c,eopt,_) => 
 		  (var_notin v) andalso 
@@ -1832,12 +1828,7 @@ fun show_state ({modunself,...}:state) =
 	    | DEC_CON (v,k,NONE, _) => (var_notin v) andalso (Kind_Valid(k,ctxt))
 	    | DEC_CON (v,k,SOME c, _) => (var_notin v) andalso (Kind_Valid(k,ctxt)) 
 		       andalso (GetConKind(c,ctxt); true)
-	    | DEC_MOD(v,_,s) => (var_notin v) andalso (Sig_Valid(ctxt,s))
-	    | DEC_EXCEPTION(name,CON_TAG c) => ((name_notin name) andalso 
-						(case GetConKind(c,ctxt) of
-						     KIND_TUPLE 1 => true
-						   | _ => false))
-	    | _ => false)
+	    | DEC_MOD(v,_,s) => (var_notin v) andalso (Sig_Valid(ctxt,s)))
        end
 				
 
@@ -1854,6 +1845,7 @@ fun show_state ({modunself,...}:state) =
 	 (Sig_Valid(ctxt,s_arg) andalso 
 	  Sig_Valid(add_context_mod'(ctxt,v,SelfifySig ctxt (PATH(v,[]),s_arg)),s_res))
        | Sig_Valid (ctxt : context, SIGNAT_VAR v) = Sig_Valid(ctxt,reduce_sigvar(ctxt,v))
+       | Sig_Valid (ctxt : context, SIGNAT_OF m) = ((GetModSig(m,ctxt); true) handle _ => false)
 
      and Dec_IsSub (ctxt,d1,d2) = Dec_IsSub' true (ctxt,d1,d2) 
      and Dec_IsEqual (ctxt,d1,d2) = Dec_IsSub' false (ctxt,d1,d2) 
@@ -1880,8 +1872,6 @@ fun show_state ({modunself,...}:state) =
 			     | (NONE, SOME _) => false
 			     | (SOME _, NONE) => isSub)
 		  andalso inline1=inline2
-	    | (DEC_EXCEPTION (n1,c1), DEC_EXCEPTION(n2,c2)) => 
-		  (eq_tag(n1,n2)) andalso (if isSub then sub_con(ctxt,c1,c2) else eq_con(ctxt,c1,c2))
 	    | _ => false)
 
      and eq_exp(ctxt,e1,e2) = (print "alpha-equivalence of expression not done\n";

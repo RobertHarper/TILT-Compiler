@@ -18,7 +18,6 @@ signature ILUTIL =
     type sbnd = Il.sbnd
     type signat = Il.signat
     type context = Il.context
-    type tag = Il.tag
     type decs = Il.decs
     type tyvar = (context,con) Tyvar.tyvar
 
@@ -101,9 +100,9 @@ signature ILUTIL =
     val con_unit : con
     val con_string : con
     val unit_exp : exp
-    val fail_tag : tag
-    val bind_tag : tag
-    val match_tag : tag
+    val fail_tag : Name.tag
+    val bind_tag : Name.tag
+    val match_tag : Name.tag
     val fail_exp : exp
     val bind_exp : exp
     val match_exp : exp

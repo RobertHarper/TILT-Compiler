@@ -233,8 +233,10 @@ structure LinkIl :> LINKIL  =
 					   print "\nENTRIES:\n"; 
 					   (app (fn e => (Ppil.pp_context_entry e; 
 							  print "\n")) ctxtents);
+(*
 					   print "\nCONTEXT:\n";
 					   Ppil.pp_context base_ctxt;
+*)
 					   print "\n")
 				else ()
 		    in  SOME(ctxt,sbnd_ctxtent_list)

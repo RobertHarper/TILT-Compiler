@@ -19,6 +19,7 @@ struct
 	end
     fun tab n = print(spaces n)
     fun tab_region() = tab 10
+    fun tab_region_with str = (tab 10; print str)
 
     val error_level = ref NoError
     val src_region = ref ([] : region list)
@@ -39,7 +40,7 @@ struct
     fun get_error() = !error_level
 
     fun peek_region () = (hd(!src_region))
-    fun peek_region_str () : string = let val (p1,p2) = (hd(!src_region))
+    fun peek_region_string () : string = let val (p1,p2) = (hd(!src_region))
 					  val fp = !filepos
 					  val (f1,r1,c1) = fp p1
 					  val (f2,r2,c2) = fp p2
@@ -51,23 +52,24 @@ struct
 			 if (!track)
 			     then (tab ((length (!src_region)) - 1);
 				   print "PUSH_REGION: "; 
-				   print (peek_region_str()); print "\n")
+				   print (peek_region_string()); print "\n")
 			 else ())
     fun pop_region () = let val _ = if (!track)
 					then (tab ((length (!src_region)) - 1);
 					      print "POP_REGION: "; 
-					      print (peek_region_str()); print "\n")
+					      print (peek_region_string()); print "\n")
 				    else ()
 			in src_region := (tl(!src_region))
 			end
 
-    fun error_region_string() = ("Error at " ^ (peek_region_str()) ^ ", ")
-    fun warn_region_string() = ("Warning at " ^ (peek_region_str()) ^ ", ")
+    fun error_region_string() = ("Error at " ^ (peek_region_string()) ^ ", ")
+    fun warn_region_string() = ("Warning at " ^ (peek_region_string()) ^ ", ")
     fun error_region() = (error_level := error_max(!error_level,Error);
 			  print (error_region_string()))
     fun warn_region() = (error_level := error_max(!error_level,Warn);
 			 print (warn_region_string()))
-
+    fun error_region_with str = (error_region(); print str)
+    fun warn_region_with str = (warn_region(); print str)
 
     fun dummy_type(context,str) = fresh_named_con(context,str)
     fun dummy_exp (context,str) =

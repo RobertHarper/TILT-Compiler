@@ -14,7 +14,6 @@ signature ILCONTEXT =
 	type decs = Il.decs
 	type sdec = Il.sdec
 	type sdecs = Il.sdecs
-	type tag = Il.tag
 	type fixity_table = Il.fixity_table
 	type path = Il.path
 	type context_entry = Il.context_entry
@@ -56,7 +55,6 @@ signature ILCONTEXT =
 	val fixity : context -> fixity_table
 	val Context_Lookup     : context * label -> (path * phrase_class) option
 	val Context_Lookup'    : context * var   -> (label * phrase_class) option
-	val Context_Exn_Lookup : context * tag   -> con option
 	val Context_Varlist    : context -> var list
 
 

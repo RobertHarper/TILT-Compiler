@@ -107,11 +107,6 @@ structure Basis
 	      in   add_ce entry
 	      end
 	      
-	  fun tag_entry (str,t) = 
-		  let val sdec = SDEC(fresh_internal_label str,
-				      DEC_EXCEPTION(t,con_unit))
-		  in  add_ce(CONTEXT_SDEC sdec)
-		  end
 
 
 	  fun type_entry (s,c) =
@@ -123,13 +118,6 @@ structure Basis
 	      in  add_sbnd(sbnd,sdec)
 	      end
 
-	 (* -------------- add the base tags ------------------------- *)
-	  val basetag_list = [("fail", fail_tag),
-			      ("bind", bind_tag),
-			      ("match", match_tag)]
-	  val _ = if (not (!small_context))
-		      then app tag_entry basetag_list
-		  else ()
 
 	 (* -------------- add the base types ------------------------- *)
 	  local
