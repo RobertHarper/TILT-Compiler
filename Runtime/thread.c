@@ -439,8 +439,7 @@ void thread_init()
     reset_timer(&(proc->currentTimer));
     proc->state = Scheduler;
     proc->segmentNumber = 0;
-    proc->gcSegment1 = NoWork;
-    proc->gcSegment2 = Continue;
+    proc->segmentType = 0;
     proc->gcTime = 0;
     proc->schedulerTime = 0;
     resetUsage(&proc->segUsage);
@@ -459,6 +458,7 @@ void thread_init()
     reset_histogram(&proc->gcMajorWorkHistogram);
     reset_histogram(&proc->gcFlipOffHistogram);
     reset_histogram(&proc->gcFlipOnHistogram);
+    reset_histogram(&proc->gcFlipBothHistogram);
     reset_statistic(&proc->gcStackStatistic);
     reset_statistic(&proc->gcGlobalStatistic);
     reset_statistic(&proc->gcReleaseStatistic);
@@ -497,6 +497,8 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
 {
   /* Get the time spent since last here and attribute it */
   double diff = 0.0;
+  if (proc->state == procState)
+    return;
   if (proc->currentTimer.on) {
     restart_timer(&proc->currentTimer);
     diff = proc->currentTimer.last;
@@ -510,8 +512,8 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
 
   switch (proc->state) {
   case Scheduler: {
-    int flipOn = (proc->gcSegment2 == FlipOn);
-    int flipOff = (proc->gcSegment2 == FlipOff || proc->gcSegment2 == FlipBoth);
+    int flipOn = (proc->segmentType & FlipOn);
+    int flipOff = (proc->segmentType & FlipOff);
 
     proc->schedulerTime += diff;
     if (procState == Mutator || procState == Done) {  /* Reset GC-related info once we enter mutator */
@@ -524,10 +526,10 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
 	add_statistic(&proc->workStatistic, updateUsage(&proc->cycleUsage));
 	resetUsage(&proc->cycleUsage);
       }
-      if (proc->gcSegment1 == MinorWork) {
+      if (proc->segmentType & MinorWork) {
 	add_histogram(&proc->gcWorkHistogram, proc->gcTime);
       }
-      else if (proc->gcSegment1 == MajorWork) {
+      else if (proc->segmentType & MajorWork) {
 	add_histogram(&proc->gcWorkHistogram, proc->gcTime);
 	add_histogram(&proc->gcMajorWorkHistogram, proc->gcTime);
       }
@@ -535,21 +537,17 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
 	add_statistic(&proc->gcNoneStatistic, proc->gcTime);
       }
       /* Add statistics related to flipping on/off collector - independent of whether GC is major or minor */
-      if (flipOn) {
-	add_histogram(&proc->gcFlipOnHistogram, proc->gcTime);     
-	if (timeDiag)
-	  printf("FlipOn  %5d:  %3.1f ms %s\n\n", proc->segmentNumber, proc->gcTime, proc->gcTime > 4.0 ? "******" :"");
-      }
-      else if (flipOff) {
-	add_histogram(&proc->gcFlipOffHistogram, proc->gcTime);
+      if (flipOff) 
 	add_statistic(&proc->heapSizeStatistic, Heap_GetSize(fromSpace) / 1024);
-	if (timeDiag)
-	  printf("FlipOff %5d: %3.1f ms %s\n\n", proc->segmentNumber, proc->gcTime, proc->gcTime > 4.0 ? "******" :"");
-      }
+      if (flipOn && flipOff)
+	add_histogram(&proc->gcFlipBothHistogram, proc->gcTime);
+      else if (flipOff) 
+	add_histogram(&proc->gcFlipOffHistogram, proc->gcTime);
+      else if (flipOn) 
+	add_histogram(&proc->gcFlipOnHistogram, proc->gcTime);     
       add_statistic(&proc->schedulerStatistic, proc->schedulerTime);
       proc->segmentNumber++;
-      proc->gcSegment1 = NoWork;
-      proc->gcSegment2 = Continue;
+      proc->segmentType = 0;
       proc->gcTime = 0.0;
       proc->schedulerTime = 0.0;
       proc->numSegment++;

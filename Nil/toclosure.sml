@@ -1,14 +1,16 @@
 (*$import NilContext NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool *)
 
-(* Are argument traces being properly closure converted *)
+(* XXX Are argument traces being properly closure converted? *)
 
 (* Closure conversion is accomplished in two phases.  
    The first phase scans the program for free type and term variables of 
-   all type and term functions and also notes whether a function escapes or not.  
+     all type and term functions and also notes whether a function escapes or not.  
+     Information is associated with function names so function variables must be
+     globally unique.
    The second phase then rewrites the functions into codes and closures.  
-   Thus, before closure conversion, there are Fixopen_b and App_e(Open,...).
-   After closure conversion, there are Fixcode_b, Fixclosure_b, 
-   App_e(Closure,...), and App_e(Code,...).
+     Thus, before closure conversion, there are Fixopen_b and App_e(Open,...).
+     After closure conversion, there are Fixcode_b, Fixclosure_b, 
+     App_e(Closure,...), and App_e(Code,...).
 *)
 
 structure ToClosure
@@ -721,7 +723,7 @@ struct
 				val state = add_boundcvar(s,v)
 			    in (f',state)
 			    end
-	   | (Code_cb(v,vklist,c)) => (f,s)
+	   | (Code_cb(v,vklist,c)) => error "Code function in supposedly unclosed code" (* (f,s) *)
 	   | (Open_cb(v,vklist,c)) =>
 			    let val _ = add_fun v
 				val ls = copy_state s (v,[v])

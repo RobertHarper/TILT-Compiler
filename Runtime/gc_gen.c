@@ -102,8 +102,7 @@ void GCCollect_Gen(Proc_t *proc)
       GCType = Major;      
   }
 
-  proc->gcSegment1 = (GCType == Minor) ? MinorWork : MajorWork;
-  proc->gcSegment2 = FlipBoth;
+  proc->segmentType |= (FlipOn | FlipOff | ((GCType == Minor) ? MinorWork : MajorWork));
 
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   procChangeState(proc, GCGlobal);
@@ -117,8 +116,6 @@ void GCCollect_Gen(Proc_t *proc)
   }
 
   procChangeState(proc, GC);
-  if (GCType == Major)
-    proc->gcSegment1 = MajorWork;
 
   /* Perform just a minor GC */
   if (GCType == Minor) {

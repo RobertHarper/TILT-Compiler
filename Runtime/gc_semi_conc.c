@@ -602,8 +602,7 @@ void GC_SemiConc(Proc_t *proc, Thread_t *th)
 	break;
       }
       procChangeState(proc, GC);
-      proc->gcSegment1 = MajorWork;
-      proc->gcSegment2 = FlipOn;
+      proc->segmentType |= (MajorWork | FlipOn);
       CollectorOn(proc);                                /* Off, PendingOn; On, PendingOff */
       assert(GCStatus == GCOn || GCStatus == GCPendingOff);
       if ((th == NULL) ||
@@ -620,7 +619,7 @@ void GC_SemiConc(Proc_t *proc, Thread_t *th)
      /* We don't let a collector flip off until the next segment */
      case GCOn:       
        procChangeState(proc, GC);
-       proc->gcSegment1 = MajorWork;                  /* On, PendingOff; same */
+       proc->segmentType |= MajorWork;                  /* On, PendingOff; same */
        do_work(proc, workToDo, 0);       
        assert(GC_SemiConcHelp(proc,roundOnSize));  
        satisfied = 1;
@@ -630,8 +629,7 @@ void GC_SemiConc(Proc_t *proc, Thread_t *th)
        break;
      case GCPendingOff:
        procChangeState(proc, GC);
-       proc->gcSegment1 = MajorWork;
-       proc->gcSegment2 = FlipOff;
+       proc->segmentType |= MajorWork | FlipOff;
        do_work(proc,                                     /* PendingOff; same */ 
 	       sizeof(val_t) * Heap_GetSize(fromSpace),  /* Actually bounded by allocation of all procs since GCOff triggered. */
 	       1);              

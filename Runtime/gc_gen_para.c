@@ -114,10 +114,9 @@ static void GCCollect_GenPara(Proc_t *proc)
   strongBarrier(barriers, 2);
 
   /* After barrier, we know if GC is major */
-  proc->gcSegment1 = (GCType == Minor) ? MinorWork : MajorWork;
-  proc->gcSegment2 = FlipBoth;
-  procChangeState(proc, GCGlobal);
+  proc->segmentType |= (FlipOff | FlipOn | ((GCType == Minor) ? MinorWork : MajorWork));
 
+  procChangeState(proc, GCGlobal);
   if (isFirst) {
     if (GCType == Minor)
       ;
@@ -138,8 +137,6 @@ static void GCCollect_GenPara(Proc_t *proc)
   strongBarrier(barriers, 3);
 
   procChangeState(proc, GC);
-  if (GCType == Major)
-    proc->gcSegment1 = MajorWork;
 
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   if (GCType == Minor) {

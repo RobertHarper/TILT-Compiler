@@ -67,8 +67,7 @@ static void GCCollect_Semi(Proc_t *proc)
 
   paranoid_check_all(fromSpace, NULL, NULL, NULL, NULL);
 
-  proc->gcSegment1 = MajorWork;
-  proc->gcSegment2 = FlipBoth;
+  proc->segmentType |= MajorWork | FlipOn | FlipOff;
 
   /* Write list can be ignored */
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;

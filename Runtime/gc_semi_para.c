@@ -79,8 +79,7 @@ static void stop_copy(Proc_t *proc)
   }
   strongBarrier(barriers,1);
 
-  proc->gcSegment1 = MajorWork;
-  proc->gcSegment2 = FlipBoth;
+  proc->segmentType |= (MajorWork | FlipOff | FlipOn);
 
   /* All threads get local structures ready */
   assert(isEmptyStack(proc->rootLocs));

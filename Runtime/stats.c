@@ -228,8 +228,8 @@ double addTimeList(void *procVoid, int w, int d)
 
 static void show_time_statistic_header()
 {
-  printf("                              Sum (s)        Count     Min(ms)   Avg(ms)  Max(ms)\n");
-  printf("        -------------|-----------------------------------------------------------\n");
+  printf("                               Sum (s)        Count     Min(ms)   Avg(ms)  Max(ms)\n");
+  printf("         -------------|-----------------------------------------------------------\n");
 }
 
 static void show_time_statistic(char *str, Statistic_t *s, double totalSum)
@@ -399,20 +399,22 @@ void stats_finish()
       printf("         Copied     = %8.0f kb\n", proc->bytesCopiedStatistic.sum / 1024.0); 
       printf("         Work       = %8.0f kw\n", proc->workStatistic.sum / 1024.0);
       show_time_statistic_header();
-      printf("         Total       |   %8.2lf\n", proc->totalTimer.last / 1000.0);
-      show_time_statistic(" Scheduler ", &proc->schedulerStatistic, proc->totalTimer.last);
-      show_time_statistic(" Mutator   ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
-      show_time_statistic(" GCNone    ", &proc->gcNoneStatistic, proc->totalTimer.last);
-      show_time_statistic(" GCWork    ", &proc->gcWorkHistogram.stat, proc->totalTimer.last);
-      show_time_statistic("  GCRelease", &proc->gcReleaseStatistic, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCGlobal ", &proc->gcGlobalStatistic, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCStack  ", &proc->gcStackStatistic, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCMajor  ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCFlipOn ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCFlipOff", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      printf("          Total       |   %8.2lf\n", proc->totalTimer.last / 1000.0);
+      show_time_statistic(" Scheduler  ", &proc->schedulerStatistic, proc->totalTimer.last);
+      show_time_statistic(" Mutator    ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
+      show_time_statistic(" GCNone     ", &proc->gcNoneStatistic, proc->totalTimer.last);
+      show_time_statistic(" GCWork     ", &proc->gcWorkHistogram.stat, proc->totalTimer.last);
+      show_time_statistic("  GCRelease ", &proc->gcReleaseStatistic, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCGlobal  ", &proc->gcGlobalStatistic, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCStack   ", &proc->gcStackStatistic, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCMajor   ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCFlipBoth", &proc->gcFlipBothHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCFlipOn  ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCFlipOff ", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
       if (!skipHistogram) {
 	show_histogram(" GCWork Histogram", &proc->gcWorkHistogram);
 	show_histogram(" GCMajorWork Hist", &proc->gcMajorWorkHistogram);
+	show_histogram(" GCFlipBoth  Hist", &proc->gcFlipOffHistogram);
 	show_histogram(" GCFlipOff   Hist", &proc->gcFlipOffHistogram);
 	show_histogram(" GCFlipOn    Hist", &proc->gcFlipOnHistogram);
 	/*      show_histogram("Mutator Histogram", &proc->mutatorHistogram); */

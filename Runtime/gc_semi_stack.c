@@ -68,9 +68,7 @@ static void stop_copy(Proc_t *proc)
   ResetJob();                        /* Reset counter so all user threads are scanned */
   req_size = 0;
 
-  proc->gcSegment1 = MajorWork;
-  proc->gcSegment2 = FlipBoth;
-
+  proc->segmentType |= (MajorWork | FlipOn | FlipOff);
   /* All threads get local structures ready */
   assert(isEmptyStack(proc->rootLocs));
   SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);

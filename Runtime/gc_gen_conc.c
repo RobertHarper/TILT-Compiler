@@ -2,6 +2,7 @@
 #include "general.h"
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <values.h>
 
 #include "tag.h"
 #include "queue.h"
@@ -211,6 +212,10 @@ static void CollectorOn(Proc_t *proc)
   CopyRange_t *copyRange = (GCType == Minor) ? &proc->minorRange : &proc->majorRange;
   Heap_t *srcRange = (GCType == Minor) ? nursery : fromSpace;
 
+  /* Major vs Minor of current GC was determined at end of last GC */
+  procChangeState(proc, GC);
+  proc->segmentType |= (FlipOn | ((GCType == Major) ? MajorWork : MinorWork));
+
   switch (GCStatus) {
     case GCOff:                   /* Signalling to other processors that collector is turning on */
       if (collectDiag >= 2)
@@ -294,8 +299,6 @@ static void CollectorOn(Proc_t *proc)
      forward all the roots (first proc handles backpointers),
      transfer work from local to shared work stack */
   procChangeState(proc, GC);
-  if (GCType == Major)
-    proc->gcSegment1 = MajorWork;
 
   assert(isEmptyStack(&proc->majorObjStack));
   if (GCType == Minor) {
@@ -336,6 +339,8 @@ static void CollectorOff(Proc_t *proc)
   int isFirst;
   int curGCType = GCType;      /* GCType will be written to during this function for the next GC
 				  and so we save its value here for reading */
+  procChangeState(proc, GC);
+  proc->segmentType |= FlipOff;
 
   if (collectDiag >= 2)
     printf("Proc %d: entered CollectorOff\n", proc->procid);
@@ -345,9 +350,14 @@ static void CollectorOff(Proc_t *proc)
 
   isFirst = (weakBarrier(barriers,5) == 0);
   if (isFirst) {
-    if (Heap_GetAvail(fromSpace) < Heap_GetSize(nursery))   
-      GCType = Major;                         /* The next GC needs to be a major GC so we must 
-						 begin allocation in the fromSpace immediately. */
+    if (Heap_GetAvail(fromSpace) < Heap_GetSize(nursery)) {
+      /*  The next GC needs to be a major GC so we must begin allocation in the fromSpace immediately. 
+	  We permit allocation to continue so we don't flip on again too soon.  However, allocation
+	  is restricted so the major collection is started soon so that an accurate survival rate
+	  can be computed. */
+      GCType = Major;        
+      fromSpace->top = fromSpace->cursor + (minOffRequest * NumProc) / sizeof(val_t);
+    }
     else
       GCType = Minor;
     ResetJob();
@@ -438,6 +448,9 @@ static void do_work(Proc_t *proc, int workToDo, int local)
   Stack_t *segmentStack = (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack;
   CopyRange_t *copyRange = (GCType == Minor) ? &proc->minorRange : &proc->majorRange;
   Heap_t *srcRange = (GCType == Minor) ? nursery : fromSpace;
+  
+  procChangeState(proc, GC);
+  proc->segmentType |= (GCType == Major) ? MajorWork : MinorWork;
 
   while (!done) {
     ploc_t rootLoc, globalLoc, backLoc;
@@ -769,8 +782,10 @@ void GCRelease_GenConc(Proc_t *proc)
 
 }
 
-static int GC_GenConcHelp(Proc_t *proc, int roundSize)
+static int GC_GenConcHelp(Thread_t *th, Proc_t *proc, int roundSize)
 {
+  if (th == NULL)
+    return 1;
   GetHeapArea((GCType == Minor) ? nursery : fromSpace,
 	      roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
   if (proc->allocStart)
@@ -781,8 +796,7 @@ static int GC_GenConcHelp(Proc_t *proc, int roundSize)
 /* Try to obatain space in proc to run th.  If th is NULL, an idle processor is signified */
 void GC_GenConc(Proc_t *proc, Thread_t *th)
 {
-  int satisfied = 0;  /* satisfied = 1 means GC stayed off; 2 means it turned on or was on */
-  int roundOffSize = minOffRequest;                            /* default work amount for idle processor */
+  int roundOffSize = minOffRequest;        /* Effective request size */
   int roundOnSize = minOnRequest;    
   int minorWorkToDo, majorWorkToDo;
 
@@ -816,52 +830,30 @@ void GC_GenConc(Proc_t *proc, Thread_t *th)
   }
 
   /* If GCStatus is off but GCType is Major, then we immediately start a major collection */
-  while (!satisfied) {
-    switch (GCStatus) {
+  retry:
+  switch (GCStatus) {
     case GCOff:                                          /* Off; Off, PendingOn */
     case GCPendingOn:
-      if (th == NULL ||                                /* Don't allocate/return if not really a thread */
-	  GC_GenConcHelp(proc,roundOffSize)) {
-	if (!satisfied)
-	  satisfied = 1;
-	break;
-      }
-      procChangeState(proc, GC);
-      proc->gcSegment1 = (GCType == Major) ? MajorWork : MinorWork;
-      proc->gcSegment2 = FlipOn;
+      if (GC_GenConcHelp(th, proc,roundOffSize)) 
+	goto satisfied;
       CollectorOn(proc);                                 /* Off, PendingOn; On, PendingOff */
       assert(GCStatus == GCOn || GCStatus == GCPendingOff);
-      if ((th == NULL) ||                                /* Idle processor done some work */
-          (th != NULL && GCStatus == GCOn &&             /* Don't allocate/return if not really a thread */
-           GC_GenConcHelp(proc,roundOnSize))) {       /* On, PendingOff; same */
-        satisfied = 2;
-        break;
-      }
+      goto retry;  
+      if (GC_GenConcHelp(th, proc, roundOnSize))         /* On, PendingOff; same */
+        goto satisfied;
       if (GCStatus == GCPendingOff)                      /* If PendingOff, must loop */
-        break;                    
-      printf("Proc %d: Conc coll fell behind.  Could not allocate %d bytes\n", proc->procid, roundOnSize);
-      printf("        GCType = %d.   GCStatus = %d.\n", GCType, GCStatus);
-      assert(0);
-      break;
+        goto retry;
+      goto failed;
     case GCOn:
-      procChangeState(proc, GC);
-      proc->gcSegment1 = (GCType == Major) ? MajorWork : MinorWork;
       do_work(proc, GCType == Minor ? minorWorkToDo : majorWorkToDo, 0);
-      if (th != NULL)
-	if (!GC_GenConcHelp(proc,roundOnSize)) {
-	  printf("Proc %d: Conc coll fell behind.  Could not allocate %d bytes for thread %d\n", 
-		 proc->procid, roundOnSize, th->tid);
-	  printf("        GCType = %d.   GCStatus = %d.\n", GCType, GCStatus);
-	  assert(0);
-	}
-      satisfied = 2;
-      break;
+      if ((updateWorkDone(proc) < (GCType == Minor ? minorWorkToDo : majorWorkToDo)) &&
+	  GCStatus == GCPendingOff)
+	goto retry;
+      if (GC_GenConcHelp(th,proc,roundOnSize)) 
+	goto satisfied;
+      goto failed;
     case GCPendingOff:                                  /* If PendingOff, shared work is completed. */
-      procChangeState(proc, GC);
-      proc->gcSegment1 = (GCType == Major) ? MajorWork : MinorWork;
-      proc->gcSegment2 = FlipOff;
-      do_work(proc, 
-	      sizeof(val_t) * Heap_GetSize(nursery), 1); /* Actually bounded by the allocation of one processor */
+      do_work(proc, MAXINT, 1);                         /* Actually bounded by the allocation of one processor */
       if (GCType == Minor) 
 	PadCopyRange(&proc->minorRange);                 /* Pad so that paranoid check works */
       else if (GCType == Major) {                        /* Carry over minor ranges across minor GCs */
@@ -871,11 +863,18 @@ void GC_GenConc(Proc_t *proc, Thread_t *th)
       }
       CollectorOff(proc);                               /* PendingOff; Off, PendingOn */
       assert(GCStatus == GCOff || GCStatus == GCPendingOn);
-      break;                                            /* Must repeat loop */
+      goto retry;
     default: 
-      assert(0);
-    }
+       assert(0);
   }
+
+ satisfied:
+  return;
+
+ failed:
+  printf("Proc %d: Collector behind.  Failed to allocate %d bytes for thread %d\n", proc->procid, roundOnSize, th->tid);
+  printf("        GCType = %d.   GCStatus = %d.\n", GCType, GCStatus);
+  assert(0);
 }
 
 void GCPoll_GenConc(Proc_t *proc)

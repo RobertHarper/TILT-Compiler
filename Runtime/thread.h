@@ -184,9 +184,11 @@ typedef struct Thread__t
 typedef enum ProcessorState__t {Scheduler, Mutator, GC, Done,
 				GCStack, GCGlobal, GCRelease, GCWork} ProcessorState_t;
 /* Each segment might be no collection, minor, or major. 
-   Independently, it migth invole flipping the collector on or off */
-typedef enum GCSegment1__t {NoWork, MinorWork, MajorWork} GCSegment1_t;
-typedef enum GCSegment2__t {Continue, FlipOn, FlipOff, FlipBoth} GCSegment2_t;
+   Independently, it migth invole flipping the collector on or off or both */
+#define MinorWork 1
+#define MajorWork 2
+#define FlipOn    4
+#define FlipOff   8
 
 typedef struct Proc__t
 {
@@ -222,8 +224,7 @@ typedef struct Proc__t
   Timer_t            totalTimer;     /* Time spent in entire processor */
   Timer_t            currentTimer;   /* Time spent running any subtask */
   int                segmentNumber;  /* Counts the Number of times we are in a GC since running a mutator */
-  GCSegment1_t       gcSegment1;     /* Did GC work get done and was it a minor or major GC */
-  GCSegment2_t       gcSegment2;     /* Did GC turn on, turn off, or continue? */
+  int                segmentType;    /* Was there minor work, major work, flip off, or flip on? */
   double             gcTime;         /* How much time spent on current GC/Scheduler segment? */
   double             schedulerTime;  /* How much time spent on current GC/Scheduler segment? */
   ProcessorState_t   state;          /* What the processor is working on */
@@ -248,6 +249,7 @@ typedef struct Proc__t
   Histogram_t        gcMajorWorkHistogram;
   Histogram_t        gcFlipOffHistogram;
   Histogram_t        gcFlipOnHistogram;
+  Histogram_t        gcFlipBothHistogram;
 
 
   CopyRange_t        minorRange;   /* Used only by generational collector */
