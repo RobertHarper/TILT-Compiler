@@ -1,0 +1,50 @@
+Number: 0180
+Title:	Extended vs double precision floating point.
+Keywords:	reals
+Submitter:	David Swasey <swasey@cs.cmu.edu>
+Date:	2/14/2005
+Version:	CVS
+System:	linux
+Severity:	major
+Problem:
+
+	TILT stores 64 bit values in memory but the FPU holds 80 bit
+	values in registers.  The meaning of floating point code may
+	depend on what temporaries are spilled.
+
+Code:
+Transcript:
+Comments:
+
+	The x86 FPU supports up to extended precision (80 bits).  The
+	FPU has state that controls how much precision is stored in
+	floating point registers.  The basis math library uses the C
+	math library to implement things like transendentals.  The C
+	math library assumes the FPU is set to use 80 bits in
+	registers.  The basis library assumes 64 bit floating point.
+
+	The basis library knows how to control the FPU precision.
+	(See structure TiltFc in ../../Basis/Numeric/tiltfc.int.) On
+	the x86, this affects the following instructions: FADD, FADDP,
+	FSUB, FSUBP, FSUBR, FSUBRP, FMUL, FMULP, FDIV, FDIVP, FDIVR,
+	FDIVRP, and FSQRT.
+
+Fix:
+
+	We could establish the invariant that the FPU uses 64 bits in
+	registers while executing non-basis ML code.  (Thus, the basis
+	is free to set 80-bit mode to call the C math library.)  In
+	detail, we might
+
+		* Ensure that we avoid any of the TAL floating point
+		instructions that ignore the precision control bits.
+
+		* Set the position as a side effect of loading
+		Prelude.
+
+		* Have Math64 wrap C calls to save/restore precision
+		as the linux libm assumes extended precision.
+
+Test: 
+Owner: swasey
+Status: open

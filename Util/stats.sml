@@ -407,6 +407,11 @@ struct
             FLAG (BOOL r) => r
         |   stat => mismatch (name,Bool,stat))
 
+    fun require_int (name:string) : int ref =
+        (case (require_stat(Int,name)) of
+            FLAG (INT r) => r
+        |   stat => mismatch (name,Int,stat))
+
     fun get_counter (combine:combine) (name:string) : counter =
         let fun maker () = MEAS(COUNTER(make_counter combine))
         in
@@ -430,6 +435,9 @@ struct
 
     fun int (name:string, default:int) : int ref =
         get_int default name
+
+    fun int' (name:string) : int ref =
+        require_int name
 
     val bool : string -> bool ref = require_bool
 

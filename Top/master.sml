@@ -80,6 +80,18 @@ XXX:
 	this example, the node for compiling U would depend on the node ai
 	for generating A's tali file rather than the node a for compiling
 	A.
+
+	>I think what this means is that we could compile the bare interface in a
+	>form that is parametric in the name-mangling --- the components are all
+	>named as in I, but are prepared to be mangled with a unit name prefix
+	>for the benefit of the linker, which does not understand tree-structured
+	>names.  Then each ascription would generate an instance of the interface
+	>obtained by choosing a unit name with which to instantiate the mangling,
+	>essentially turning x into U_x, or whatever the convention is.
+	>
+	>Is this a feasible strategy?
+	>
+	>Bob
 *)
 structure Master :> MASTER =
 struct
@@ -351,12 +363,15 @@ struct
 		    | PENDING' _ => true
 		    | WORKING' _ => true
 		    | DONE _ => true)
-	    fun interface (c : label) : label =
-		(case I.P.D.asc' (get_pdec c)
-		   of SOME I => I
-		    | NONE => c)
+	    val node_to_wait_for : label -> label =
+		if Target.tal() then fn c => c
+		else
+		    (fn c =>
+		     (case I.P.D.asc' (get_pdec c)
+			of SOME I => I
+			 | NONE => c))
 	    val hasInterface : label -> bool =
-		hasInterface' o interface
+		hasInterface' o node_to_wait_for
 	    fun now_ready (a : label) : bool =
 		(case get_status a
 		   of WAITING =>
@@ -366,9 +381,14 @@ struct
 		    | _ => false)
 	    val enabled = List.filter now_ready (get_dependents b)
 	    val _ = app markReady enabled
-	in  if chatty andalso (!MasterDiag) andalso not (null enabled)
+	in  if ((chatty andalso (!MasterDiag)) orelse
+		!MasterVVerbose) andalso not (null enabled)
 	    then
-		(print "  enabled: ";
+		(print "  ";
+		 if !MasterVVerbose
+		 then print (Name.label2longname b ^ " ")
+		 else ();
+		 print "enabled: ";
 		 print_strings 10 (map Name.label2longname enabled);
 		 print "\n")
 	    else ()

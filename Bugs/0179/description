@@ -66,6 +66,9 @@ Fix:
 	SML/NJ 110.0.7 has a different loop---presumably without the
 	off-by-one error---that we could grab.
 
+	Fixed in Array, Word8Array, Word8Vector (unsafe and tal versions).
+	Vector just calls Array so no change there.
+
 Test: bug179
 Owner: swasey
-Status: open
+Status: closed

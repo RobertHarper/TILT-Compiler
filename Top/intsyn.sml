@@ -81,17 +81,17 @@ struct
 	    end
 
 	fun u (pos:pos, l:label) : {info:file, pinterface:file, obj:file, tobj:file,
-				    asm:file, asmz:file, 
-				    asme:file, asme_rel:file, asmi:file, asmi_rel:file, 
+				    asm:file, asmz:file,
+				    asme:file, asme_rel:file, asmi:file, asmi_rel:file,
 				    using_file:file, tali:file, tali_rel:file} =
 	    let val l = Name.label2name' l
 		val target = Target()
 		val root = pdir pos/U/l
 		val root' = root/target
 	    in	{info=root/Info, pinterface=root/Pinterface,
-		 obj=root'/Obj, 
+		 obj=root'/Obj,
 		 tobj = root'/Tobj,
-		 asm=if Target.tal() then root'/Asmtal else root'/Asm, 
+		 asm=if Target.tal() then root'/Asmtal else root'/Asm,
 		 asme=root'/Asmetali, asme_rel=l/target/Asmetali,
 		 asmi=root'/Asmitali, asmi_rel=l/target/Asmitali,
 		 asmz=root'/Asmz,
@@ -105,8 +105,8 @@ struct
 
 	fun link (exe:file) : link =
 	    let val root = cwd()/TM/L/file exe
-	    in	{exe=exe, 
-		 asm=if Target.tal() then root/Asmtal else root/Asm, 
+	    in	{exe=exe,
+		 asm=if Target.tal() then root/Asmtal else root/Asm,
 		 asmz=root/Asmz, obj=root/Obj, tobj=root/Tobj}
 	    end
 
@@ -173,6 +173,7 @@ struct
 	    in	dir = basisdir()
 	    end
 	val runtimedir = (fn () => tiltroot()/Runtime)
+	val bindir = (fn () => tiltroot()/Bin)
 
 	fun tal_include (pos:pos) : file =
 	    pdir pos/U
@@ -383,7 +384,7 @@ struct
 		let val {obj,tobj,using_file,asme,asme_rel,asmi,asmi_rel,tali,tali_rel,...} = F.u(pos,U)
 		in  COMPU
 			{pos=pos, obj=obj, tobj=tobj, using=using, opened=opened,
-			 asc=I,using_file=using_file, 
+			 asc=I,using_file=using_file,
 			 asme=asme, asme_rel=asme_rel,
 			 asmi=asmi, asmi_rel=asmi_rel,
 			 tali=tali, tali_rel=tali_rel}

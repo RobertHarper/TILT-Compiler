@@ -16,7 +16,7 @@
 #
 # Please keep the status bits up to date.
 
-0001	pass	[Bug #0039 on alpha] Arithmetic exceptions.
+0001	pass	Arithmetic exceptions.
 0002	fail	[Should fail due to stronger structure sharing in tilt2] Top-level types and values, basis structures and sharing.
 0003	pass	Overloading.
 0004	pass	Hello world.
@@ -119,7 +119,7 @@ m0054	pass	bytes and characters
 m0055	pass	character patterns
 m0056	pass	word8, char, and general arrays
 m0057	pass	tabulation of vectors
-m0058	pass	command line
+m0058	skip	command line [bogus test]
 m0059	pass	signature constraints
 m0060	skip	infinite integer conversion tests [no Basis structure IntInf]
 m0061	skip	infinite integers [no Basis structure IntInf]

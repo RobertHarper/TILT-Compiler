@@ -1236,6 +1236,10 @@ structure LilToTalState :> LILTOTALSTATE =
 		  end
 		else
 		  let
+		    val () =
+			(case get_loc_stat state loc
+			   of Reserved _ => error "Slot already reserved"
+			    | _ => ())
 		    val (state,r) = reserve_temp_reg' state (Full(c,x))
 		    val state = set_loc_stat state loc (Avail Junk)
 		    val state = slot_reg_mov state slot r
@@ -1245,7 +1249,7 @@ structure LilToTalState :> LILTOTALSTATE =
 	       | _ => 
 		(case get_loc_stat state loc
 		   of Avail rc => (set_loc_stat state loc (Reserved rc),loc)
-		    | _ => error "Already reserved"))
+		    | Reserved rc => (state,loc)))
 	  | NONE => (* Never seen this var before *)
 	   let
 	     val (state,loc) = reserve_loc' memok state (Full (c,x))

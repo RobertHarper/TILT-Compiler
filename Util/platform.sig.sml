@@ -6,7 +6,7 @@
 
 signature PLATFORM =
 sig
-    datatype objtype = SPARC | ALPHA | TALx86
+    datatype objtype = SPARC | TALx86
 
     val littleEndian : objtype -> bool
     val toString : objtype -> string

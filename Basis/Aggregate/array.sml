@@ -254,7 +254,7 @@ structure Array :> ARRAY where type 'a array = 'a array
 	  val (vec, start, stop) = chkSlice slice
 	  fun fold (i, accum) = if ugt(i,start)
 		then let val i' = uminus(i,0w1)
-		     in fold (i', f (uint32toint32 i', unsafe_sub(vec, i), accum))
+		     in fold (i', f (uint32toint32 i', unsafe_sub(vec, i'), accum))
 		     end
 		else accum
 	  in

@@ -113,6 +113,9 @@ Comments:
 	(But these directives should probably not be the default.)
 
 Fix:
+
+	The alpha backend is unsupportable.
+
 Test: 
 Owner: swasey
-Status: open
+Status: closed

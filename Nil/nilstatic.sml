@@ -423,7 +423,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
      error' explanation
     )
 
-
   fun strip_sum (D,con) =
     (case NilUtil.strip_sum (con_head_normalize(D,con)) of
        SOME quad => quad
@@ -2520,6 +2519,78 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	in ()
 	end
 
+      fun ei_error (explanation:string, detail:unit -> unit) : 'a =
+	(
+	 printem ["\n","TYPE ERROR: Problem with exports interface\n\t",
+		  explanation,"\n","Details:\n"];
+	 detail();
+	 error' explanation
+	)
+
+      fun ei_same_label (elabel:label, eilabel:label) : unit =
+	if eq_label(elabel,eilabel) then ()
+	else ei_error ("label mismatch",
+		       fn () => (print "export label "; pp_label elabel;
+				 print " does not match corresponding export_int label ";
+				 pp_label eilabel))
+
+      fun ei_valid' (D:context, es:export_entry list, eis:import_entry list) : unit =
+	(case (es,eis) of
+	   (nil,nil) => ()
+	 | (_, ImportBnd (phase,cb)::eis) =>
+	    let
+		val (var,kind) = kind_of_cbnd(D,cb)
+		val D = insert_stdkind(D,var,kind)
+	    in
+		ei_valid'(D,es,eis)
+	    end
+	 | (ExportType(label,var)::es, ImportType(label',var',kind)::eis) =>
+	    let
+		val () = ei_same_label(label,label')
+		val () = if (!trace)
+			 then (print "{Processing ExportType interface with label = ";
+			       pp_label label; print "\n")
+			 else ()
+		val kind = kind_valid(D,kind)
+		val con = Var_c var
+		val () = con_analyze(D,con,kind)
+		val D = insert_stdkind_equation(D,var',con,kind)
+		val () = if (!trace)
+			 then (print "Done processing ExportType interface with label = ";
+			       pp_label label; print "}\n")
+			 else ()
+	    in
+		ei_valid'(D,es,eis)
+	    end
+	 | (ExportValue(label,var)::es, ImportValue(label',var',tr,con)::eis) =>
+	    let
+		val () = ei_same_label(label,label')
+		val () = if (!trace)
+			 then (print "{Processing ExportValue interface with label = ";
+			       pp_label label; print "\n")
+			 else ()
+		val () = type_analyze(D,con)
+		val () = exp_analyze(D,Var_e var,con)
+		val () = if (!trace)
+			 then (print "Done processing ExportValue interface with label = ";
+			       pp_label label; print "}\n")
+			 else ()
+	    in
+		ei_valid'(D,es,eis)
+	    end
+	 | _ =>
+	    ei_error ("exports and exports_int do not match",
+		      fn () =>
+			(lprintl "exports:"; Ppnil.pp_exportentries es;
+			 lprintl "exports_int:"; Ppnil.pp_importentries eis)))
+
+      fun ei_valid (D:context, es:export_entry list, eis:import_entry list option) : unit =
+	(case eis of
+	   NONE => ()
+	 | SOME eis => ei_valid'(D,es,eis))
+      val ei_valid = wrap "ei_valid" ei_valid
+
+
       fun module_valid' (D,MODULE {bnds,imports,exports,exports_int}) =
 	let
 	  val _ = NilContext.is_well_formed (kind_valid,con_valid,sub_kind) D
@@ -2532,8 +2603,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
           val _ = msg "  Done validating module\n"
 	  val _ = app (export_valid D) exports
           val _ = msg "  Done validating exports\n"
-	  val _ = 
-	    Util.mapopt (fn ei => subtimer("Tchk:Exports_int",foldl import_valid' D) ei) exports_int
+	  val _ = subtimer("Tchk:Exports_int",ei_valid)(D,exports,exports_int)
           val _ = msg "  Done validating exports_int\n"
 	in
 	  ()

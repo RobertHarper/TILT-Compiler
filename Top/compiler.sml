@@ -45,6 +45,8 @@ struct
     fun fail (msg:string) : 'a =
 	raise (Fail msg)
 
+    val VerifyLink = Stats.ff "VerifyLink"	(* talx86 only *)
+
     val CompilerDebug = Stats.ff "CompilerDebug"
     fun debugdo (f : unit -> 'a) : unit =
 	if (!CompilerDebug) then (f(); ()) else ()
@@ -428,8 +430,7 @@ struct
 	    val _ = timestamp()
 	    val tomod =
 		(case (Target.getTarget()) of
-		    Platform.ALPHA => RTL o Linkrtl.nil_to_rtl
-		|   Platform.SPARC => RTL o Linkrtl.nil_to_rtl
+		    Platform.SPARC => RTL o Linkrtl.nil_to_rtl
 		|   Platform.TALx86 => LIL o Linklil.nil_to_lil)
 	    val module = tomod(name,nilmod)
 	    val using = get_using (desc,module)
@@ -437,7 +438,7 @@ struct
 	    fun rtlwrap f module s =
 		(case module of
 		    RTL rmod => f (s,rmod)
-		|   _ => error "Can't translate LIL to sparc/alpha")
+		|   _ => error "Can't translate LIL to RTL backends")
 	    fun lilwrap f module asm_tmp asme_tmp asmi_tmp =
 		(case module of
 		    LIL rmod =>
@@ -450,17 +451,12 @@ struct
 		|   _ => error "Can't translate RTL to TAL")
 	    val () =
 		(case (Target.getTarget()) of
-		    Platform.ALPHA => 
-		      let
-			val toasm = rtlwrap Linkalpha.rtl_to_asm
-		      in Fs.write' (toasm module) asm
-		      end
-		|   Platform.SPARC => 
+		    Platform.SPARC =>
 		      let
 			val toasm = rtlwrap Linksparc.rtl_to_asm
 		      in Fs.write' (toasm module) asm
 		      end
-		|   Platform.TALx86 => 
+		|   Platform.TALx86 =>
 		      let
 			val toasm = lilwrap LinkTAL.lil_to_asm
 		      in Fs.write3' (toasm module) asm asme asmi
@@ -473,8 +469,12 @@ struct
 	files according to flags, returing false if we are not native
 	and assembly is required.
     *)
-    fun tal_includes (desc:I.desc) : string list =
-	let fun folder (pdec:I.pdec, acc:(StringSet.set * string list))
+    fun tal_includes (desc:I.desc, pdec:I.pdec option) : string list =
+	let val desc =
+		(case pdec of
+		    NONE => desc
+		|   SOME pdec => desc @ [pdec])
+	    fun folder (pdec:I.pdec, acc:(StringSet.set * string list))
 		: StringSet.set * string list =
 		let val pos = I.P.D.pos pdec
 		    val dir = I.F.tal_include pos
@@ -483,17 +483,15 @@ struct
 			acc
 		    else
 			let val set = StringSet.add(set,dir)
-			    val list = "-I"::dir::list
+			    val list = dir::list
 			in  (set,list)
 			end
 		end
-	in  if Target.tal() then
-		#2(foldr folder (StringSet.empty,nil) desc)
-	    else
-		nil
+	in  #2(foldr folder (StringSet.empty,nil) desc)
 	end
 
-    fun assemble'' (desc:I.desc, asm:file, asmz:file, obj:file, tobj:file) : bool =
+    fun assemble'' (desc:I.desc, pdec:I.pdec option, asm:file, asmz:file,
+	    obj:file, tobj:file, verify:bool) : bool =
 	let val haveasm = Fs.exists asm
 	    val haveasmz = Fs.exists asmz
 	    val wantasm = !KeepAsm andalso not (!CompressAsm)
@@ -509,14 +507,19 @@ struct
 	    val _ = Timestamp.timestamp()
 	in
 	    if uncompress then Tools.uncompress{src=asmz, dest=asm} else ();
-	    if assemble then Tools.assemble (tal_includes desc,asm,obj,tobj) else ();
+	    if assemble then
+		(case (Target.getTarget()) of
+		    Platform.SPARC => Tools.sparcas {obj=obj,asm=asm}
+		|   Platform.TALx86 => Tools.talx86as {obj=obj, tobj=tobj,
+			verify=verify,incs=tal_includes (desc,pdec), asm=asm})
+	    else ();
 	    if compress then Tools.compress{src=asm, dest=asmz} else ();
 	    if removeasm then Fs.remove asm else ();
 	    if removeasmz then Fs.remove asmz else ();
 	    finished
 	end
 
-    fun finish_compile (desc:I.desc, U:label, ilmod:LinkIl.module, asm:file, 
+    fun finish_compile (desc:I.desc, pdec:I.pdec, U:label, ilmod:LinkIl.module, asm:file,
 			asme:file, asme_rel:file, asmi:file, asmi_rel:file,
 	    asmz:file, obj:file, tobj:file, using:file, tali_rel:file) : bool =
 	let val elab_only =
@@ -524,7 +527,7 @@ struct
 		(!UptoAsm andalso not (!KeepAsm))
 	in  elab_only orelse
 	    (generate(desc,U,asm,asme,asme_rel,asmi,asmi_rel,using,tali_rel,ilmod);
-	     assemble''(desc,asm,asmz,obj,tobj))
+	     assemble''(desc,SOME pdec,asm,asmz,obj,tobj,true))
 	end
 
     fun compile_srci ((desc,pdec):inputs) : bool =
@@ -575,7 +578,7 @@ struct
 		if unchanged orelse tali_ready then ()
 		else compile_tali (pctx,U,pi,tali)
 	    val _ = ack_inter()
-	in  finish_compile (desc,U,ilmod,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali_rel)
+	in  finish_compile (desc,pdec,U,ilmod,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali_rel)
 	end
 
     fun compile_ssrcu (tali_ready:bool) ((desc,pdec):inputs) : bool =
@@ -592,7 +595,7 @@ struct
 	    val _ = reset() (* not essential *)
 	    val opt = LinkIl.elab_sealed_topdec (pctx,U,opened,fp,topdec,pi)
 	    val ilmod = elab_opt (src,opt)
-	in  finish_compile (desc,U,ilmod,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali_rel)
+	in  finish_compile (desc,pdec,U,ilmod,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali_rel)
 	end
 
     fun compile_primu (tali_ready:bool) ((desc,pdec):inputs) : bool =
@@ -607,7 +610,7 @@ struct
 	    val _ = reset() (* not essential *)
 	    val opt = LinkIl.elab_primdec (U,pi)
 	    val ilmod = elab_opt ("primitive unit",opt)
-	in  finish_compile (desc,U,ilmod,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali_rel)
+	in  finish_compile (desc,pdec,U,ilmod,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali_rel)
 	end
 
     fun compile (inputs:inputs, f:unit -> unit) : bool =
@@ -664,7 +667,7 @@ struct
 		out of date.
 	    *)
 	    val _ = Fs.flush_some [asm,asmz,obj,tobj]
-	in  if assemble'' (desc,asm,asmz,obj,tobj) then ()
+	in  if assemble'' (desc,SOME pdec,asm,asmz,obj,tobj,true) then ()
 	    else error "unable to assemble (not native)"
 	end
 
@@ -710,26 +713,26 @@ struct
 	    val _ = timestamp()
 	    val generate : string -> unit =
 		(case (Target.getTarget()) of
-		    Platform.ALPHA => untyped Linkalpha.link
-		|   Platform.SPARC => untyped Linksparc.link
+		    Platform.SPARC => untyped Linksparc.link
 		|   Platform.TALx86 => typed LinkTAL.link)
 	    val _ = reset() (* not essential *)
 	    val _ = Fs.write' generate asm
-	in  
-	  if assemble'' (desc,asm,asmz,obj,tobj) then
-	    if Target.tal() then
-	      let 
-		val tobjs = map (I.P.U.tobj o lookup) units
-		val includes = tal_includes desc
-	      in  Tools.link (includes, tobj::tobjs, exe)
-	      end
-	    else
-	      let 
-		val objs = map (I.P.U.obj o lookup) units
-		val includes = tal_includes desc
-	      in  Tools.link (includes, objs @ [obj], exe)
-	      end
-	  else ()
+	    val verify = !VerifyLink
+	in
+	    if assemble'' (desc,NONE,asm,asmz,obj,tobj,verify) then
+		(case (Target.getTarget()) of
+		    Platform.SPARC =>
+			let val objs = map (I.P.U.obj o lookup) units
+			    val objs = objs @ [obj]
+			in  Tools.sparcld {exe=exe, objs=objs}
+			end
+		|   Platform.TALx86 =>
+			let val tobjs = map (I.P.U.tobj o lookup) units
+			    val tobjs = tobj :: tobjs
+			    val incs = tal_includes (desc,NONE)
+			in  Tools.talx86ld {verify=verify,incs=incs,exe=exe,objs=tobjs}
+			end)
+	    else ()
 	end
 
     (*
@@ -904,7 +907,7 @@ struct
 		if !UptoElaborate orelse not(Target.tal())
 		then dontcopy
 		else copy
-	    val copytobj : file * file -> unit = 
+	    val copytobj : file * file -> unit =
 	      if Target.tal() then copy
 	      else dontcopy
 	    fun writeusing (file:string, using:I.units) : unit =

@@ -101,6 +101,11 @@ Comments:
 	The duplication of code between Array and PreVector and between
 	Word8Array and PreVector8 should be reduced.
 
+	[Comment from Leaf:
+	In that case, I think create_empty_array could go away.  Certainly, all
+	of the uses of empty_array and array0 should (at some point) be taken
+	out of the Basis implementation.]
+
 Fix:
 Test: m0029
 Owner: swasey

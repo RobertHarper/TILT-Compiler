@@ -77,6 +77,7 @@ sig
 	val basisdesc : unit -> file
 	val is_basisdesc : file -> bool
 	val runtimedir : unit -> file
+	val bindir : unit -> file
 
 	val tal_include : pos -> file
     end
@@ -275,7 +276,7 @@ sig
 	    val info : uexp -> file
 	    val info' : uexp -> file option
 	    val obj : uexp -> file
-	    val tobj : uexp -> file 
+	    val tobj : uexp -> file
 	    val pinterface : uexp -> file
 	    val pinterface' : uexp -> file option
 	    val tali : uexp -> file

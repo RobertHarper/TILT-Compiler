@@ -6,7 +6,10 @@ unsupported)
 	echo 1>&2 "runtest: unsupported architecture"
 	exit 1
 	;;
-*)
+talx86)
 	exec "$bindir"/$cputype/runtest ${1+"$@"}
+	;;
+sparc)
+	exec "$bindir"/$cputype/runtest '@fixheap=20000' ${1+"$@"}
 	;;
 esac

@@ -2,7 +2,8 @@
 structure InstrDesc :> INSTRDESC = 
   struct
 
-    fun warn s = (print "WARNING: ";print s;print "\n")
+    val InstrDescWarn = Stats.ff "InstrDescWarn"
+    fun warn s = if !InstrDescWarn then (print "WARNING: ";print s;print "\n") else ()
 
     (* generate_functional_updates (NONE) (SOME "instrdesc") ["preblocks","blocks","instrs"]; *)
     type instrdesc = 

@@ -82,8 +82,8 @@ mkdir $bugno
 	echo  'Submitter:   ' ^ `{whoami}
 	echo  'Date:        ' ^ `{date +%D}
 	field 'Version:     ' '<TILT version number>' 'CVS'
-	field 'System:      ' '<e.g. solaris,alpha,linux>' 'any'
-	field 'Severity:    ' '<critical, major, minor, cosmetic>' 'minor'
+	field 'System:      ' '<e.g. solaris,linux>' 'any'
+	field 'Severity:    ' '<exception,major,reject,library,cosmetic>' 'cosmetic'
 	field 'Problem:     ' '<description of problem>' ''
 	field 'Code:        ' '<SML source code to reproduce the bug>' ''
 	field 'Transcript:  ' '<transcript of execution demonstating the bug>' ''

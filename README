@@ -1,4 +1,4 @@
-This is TILT version 1.0.
+This is TILT version 1.1.
 
 Please send comments and bug reports to
 
@@ -19,9 +19,9 @@ INSTALLING TILT
 
 		http://www.smlnj.org/
 
-	TILT supports the SPARC V9 and Alpha architectures running SunOS
-	5.5.1, SunOS 5.7, SunOS 5.8, SunOS 5.9, and Digital Unix V4.0D but
-	can run on any Unix system supported by SML/NJ.  Unsupported
+	TILT supports the SPARC V9 and Intel x86 architectures running
+	SunOS 5.5.1, SunOS 5.7, SunOS 5.8, SunOS 5.9, and linux but can
+	run on any Unix system supported by SML/NJ.  Unsupported
 	architectures can be used as compilation slaves (for any supported
 	architecture) but TILT can not generate binaries for them.
 
@@ -118,9 +118,9 @@ INCOMPATIBILITIES
 PLANS
 
 	Future versions of TILT will include bug fixes, performance
-	enhancements, a TALx86 backend for linux, a new structure sharing
-	extension, and an updated Basis library.  See the file
-	./KNOWN_BUGS lists known bugs.
+	enhancements, a new structure sharing extension, and an
+	updated Basis library.  See the file ./KNOWN_BUGS lists known
+	bugs.
 
 
 SUPPORT

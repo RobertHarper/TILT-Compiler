@@ -8,7 +8,7 @@ structure ClosureState :> CLOSURESTATE =
 
     val recursive_closures = Stats.ff "LilCloseRecClosures"
     val error = fn s => Util.error "lilclosure_analyze.sml" s
-    val chatlev = ref 0       
+    val chatlev = Stats.int("LilClosureStateChatlev",0)
     fun chat i = !chatlev >= i
       
     type fid = var

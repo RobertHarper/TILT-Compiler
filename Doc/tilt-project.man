@@ -289,7 +289,7 @@ The predefined variables are:
 The master's CPU type.
 Possible values are
 .BR sparc ,
-.BR alpha ,
+.BR talx86 ,
 and
 .BR unsupported .
 .TP
@@ -301,7 +301,7 @@ Possible values for
 are
 .B sparc
 and
-.BR alpha .
+.BR talx86 .
 .B $target
 has an additional suffix representing a few compiler flags which lead to
 incompatible object code; sample values are

@@ -17,6 +17,21 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
     val & = Word.andb
     infix ++ &
 
+    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
+	(case (Ccall(f,a)) of
+	    Normal r => r
+	|   Error e => raise e)
+
+    fun ccall2 (f : ('a, 'b, 'c cresult) -->, a:'a, b:'b) : 'c =
+	(case (Ccall(f,a,b)) of
+	    Normal r => r
+	|   Error e => raise e)
+
+    fun ccall3 (f : ('a, 'b, 'c, 'd cresult) -->, a:'a, b:'b, c:'c) : 'd =
+	(case (Ccall(f,a,b,c)) of
+	    Normal r => r
+	|   Error e => raise e)
+
     type uid = PrePosix.uid
     type gid = PrePosix.gid
 
@@ -39,10 +54,10 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
 	isOpen : bool ref
       }
 
-    val opendir' (* : string -> c_dirstream  *) = fn arg => Ccall(posix_filesys_opendir,arg)
-    val readdir' (* : c_dirstream -> string  *) = fn arg => Ccall(posix_filesys_readdir,arg)
+    val opendir' (* : string -> c_dirstream  *) = fn arg => ccall(posix_filesys_opendir,arg)
+    val readdir' (* : c_dirstream -> string  *) = fn arg => ccall(posix_filesys_readdir,arg)
     val rewinddir' (* : c_dirstream -> unit  *) = fn arg => Ccall(posix_filesys_rewinddir,arg)
-    val closedir' (* : c_dirstream -> unit   *) = fn arg => Ccall(posix_filesys_closedir,arg)
+    val closedir' (* : c_dirstream -> unit   *) = fn arg => ccall(posix_filesys_closedir,arg)
     fun opendir path = DS{
 	    dirStrm = opendir' path,
 	    isOpen = ref true
@@ -58,14 +73,14 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
 	  isOpen := false;
 	  closedir' dirStrm)
 
-    fun chdir  (s : string) : unit = Ccall(posix_filesys_chdir, s)
-    fun getcwd () : string = Ccall(posix_filesys_getcwd,())
+    fun chdir  (s : string) : unit = ccall(posix_filesys_chdir, s)
+    fun getcwd () : string = ccall(posix_filesys_getcwd,())
 
     val stdin  = fd 0
     val stdout = fd 1
     val stderr = fd 2
 
-    fun w_osval (str : string) : word = Ccall(posix_filesys_num,str)
+    fun w_osval (str : string) : word = ccall(posix_filesys_num,str)
     val o_wronly = w_osval "O_WRONLY"
 
     structure S =
@@ -124,27 +139,27 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
 
 
     fun openf (fname : string, omode, O.OFL flags) =
-          fd(Ccall (posix_filesys_openf,fname, flags ++ (PrePosix.omodeToWord omode), 0w0))
+          fd(ccall3(posix_filesys_openf,fname, flags ++ (PrePosix.omodeToWord omode), 0w0))
     fun createf (fname:string, omode, O.OFL oflags, S.MODE mode) = let
           val flags = O.o_creat ++ oflags ++ (PrePosix.omodeToWord omode)
           in
-            fd(Ccall(posix_filesys_openf,fname, flags, mode))
+            fd(ccall3(posix_filesys_openf,fname, flags, mode))
           end
     fun creat (fname:string, S.MODE mode) =
-          fd(Ccall(posix_filesys_openf,fname, O.crflags, mode))
+          fd(ccall3(posix_filesys_openf,fname, O.crflags, mode))
 
     fun umask (S.MODE mode) = S.MODE(Ccall(posix_filesys_umask, mode))
 
-    fun link {old : string, new : string} = Ccall(posix_filesys_link,old,new)
-    fun rename {old : string, new : string} = Ccall(posix_filesys_rename,old,new)
-    fun symlink {old : string, new : string} = Ccall(posix_filesys_symlink,old,new)
-    fun mkdir (dirname : string, S.MODE mode) = Ccall(posix_filesys_mkdir,dirname,mode)
-    fun mkfifo (name : string, S.MODE mode) = Ccall(posix_filesys_mkfifo,name,mode)
+    fun link {old : string, new : string} = ccall2(posix_filesys_link,old,new)
+    fun rename {old : string, new : string} = ccall2(posix_filesys_rename,old,new)
+    fun symlink {old : string, new : string} = ccall2(posix_filesys_symlink,old,new)
+    fun mkdir (dirname : string, S.MODE mode) = ccall2(posix_filesys_mkdir,dirname,mode)
+    fun mkfifo (name : string, S.MODE mode) = ccall2(posix_filesys_mkfifo,name,mode)
 
-    fun unlink name = Ccall(posix_filesys_unlink,name)
-    fun rmdir name = Ccall(posix_filesys_rmdir,name)
-    fun readlink name = Ccall(posix_filesys_readlink,name)
-    fun ftruncate (FD{fd,...}, len) = Ccall(posix_filesys_ftruncate,fd, len)
+    fun unlink name = ccall(posix_filesys_unlink,name)
+    fun rmdir name = ccall(posix_filesys_rmdir,name)
+    fun readlink name = ccall(posix_filesys_readlink,name)
+    fun ftruncate (FD{fd,...}, len) = ccall2(posix_filesys_ftruncate,fd,len)
 
     datatype dev = DEV of word
     fun devToWord (DEV i) = i
@@ -213,9 +228,9 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
           }
 
 
-    fun stat fname = mkStat (Ccall(posix_filesys_stat,fname))
-    fun lstat fname = mkStat (Ccall(posix_filesys_lstat,fname)) (* POSIX 1003.1a *)
-    fun fstat (FD{fd}) = mkStat (Ccall(posix_filesys_fstat,fd))
+    fun stat fname = mkStat (ccall(posix_filesys_stat,fname))
+    fun lstat fname = mkStat (ccall(posix_filesys_lstat,fname)) (* POSIX 1003.1a *)
+    fun fstat (FD{fd}) = mkStat (ccall(posix_filesys_fstat,fd))
 
     datatype access_mode = A_READ | A_WRITE | A_EXEC
     val a_read = w_osval "A_READ"	(* R_OK *)
@@ -231,18 +246,18 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
             List.foldl amtoi a_file l
           end
 
-    fun access (fname, aml) = Ccall(posix_filesys_access,fname, amodeToWord aml)
-    fun chmod (fname, S.MODE m) = Ccall(posix_filesys_chmod,fname, m)
-    fun fchmod (FD{fd}, S.MODE m) = Ccall(posix_filesys_fchmod,fd, m)
-    fun chown (fname, uid, gid) = Ccall(posix_filesys_chown,fname, PrePosix.uidToWord uid, PrePosix.gidToWord gid)
-    fun fchown (fd, uid, gid) = Ccall(posix_filesys_fchown,intOf fd, PrePosix.uidToWord uid, PrePosix.gidToWord gid)
+    fun access (fname, aml) = ccall2(posix_filesys_access,fname, amodeToWord aml)
+    fun chmod (fname, S.MODE m) = ccall2(posix_filesys_chmod,fname,m)
+    fun fchmod (FD{fd}, S.MODE m) = ccall2(posix_filesys_fchmod,fd,m)
+    fun chown (fname, uid, gid) = ccall3(posix_filesys_chown,fname,PrePosix.uidToWord uid,PrePosix.gidToWord gid)
+    fun fchown (fd, uid, gid) = ccall3(posix_filesys_fchown,intOf fd,PrePosix.uidToWord uid,PrePosix.gidToWord gid)
 
-    fun utime (file, NONE) = Ccall(posix_filesys_utime,file, ~1, 0)
+    fun utime (file, NONE) = ccall3(posix_filesys_utime,file,~1,0)
       | utime (file, SOME{actime, modtime}) = let
           val atime = Time.toSeconds actime
           val mtime = Time.toSeconds modtime
           in
-            Ccall(posix_filesys_utime,file,atime,mtime)
+            ccall3(posix_filesys_utime,file,atime,mtime)
           end
 
 (* xxxx can't get option in basis
@@ -250,11 +265,11 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
     val fpathconf'  : (int * string) -> word option = cfun "fpathconf"
 *)
     fun pathconf  (str1, str2) : word option =
-	(case Ccall(posix_filesys_pathconf,str1,str2) of
+	(case ccall2(posix_filesys_pathconf,str1,str2) of
 	    (0,i) => SOME (int32touint32 i)
 	  | _ => NONE)
     fun fpathconf  (FD{fd}, s : string) : word option =
-	(case Ccall(posix_filesys_fpathconf,fd,s) of
+	(case ccall2(posix_filesys_fpathconf,fd,s) of
 	    (0,i) => SOME (int32touint32 i)
 	  | _ => NONE)
 

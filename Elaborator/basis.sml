@@ -286,9 +286,7 @@ structure Basis :> BASIS =
 	       ("real", (int2float))]
 	      
 	    val baseprimeqvalue_list =
-	      [("float_eq", (eq_float F64)),
-	       ("float_neq", (neq_float F64)),
-	       ("ieq", (eq_int W32)),
+	      [("ieq", (eq_int W32)),
 	       ("ineq", (neq_int W32)),
 	       ("ilt", (less_int W32)),
 	       ("igt", (greater_int W32)),

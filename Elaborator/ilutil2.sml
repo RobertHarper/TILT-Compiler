@@ -368,13 +368,17 @@ structure IlUtil :> ILUTIL =
        but expanded primitives takes their multiple arguments "flattened" *)
     fun etaexpand_help (primer,typer) (context,prim,cargs) =
 	let val prim_tipe = typer context prim cargs
-	    val (res_tipe,args_tipes) =
+	    val (res_tipe,args_tipes,os) =
 		(case prim_tipe of
-		     CON_ARROW([c],res_tipe,false,_) => (res_tipe,[c])
-		   | CON_ARROW(clist,res_tipe,false,_) => (res_tipe,clist)
+		     CON_ARROW([c],res_tipe,false,os) => (res_tipe,[c],os)
+		   | CON_ARROW(clist,res_tipe,false,os) => (res_tipe,clist,os)
 		   | _ => (print "cannot expand unexpected non-arrow primitive\n";
 			   pp_con prim_tipe; print "\n";
 			   error "cannot expand unexpected non-arrow primitive"))
+	    val lambda =
+		(case (oneshot_deref os) of
+		    SOME TOTAL => make_total_lambda
+		|   _ => make_lambda)
 	    val vars = map (fn _ => fresh_var()) args_tipes
 	    val arg_var = fresh_var()
 	    val (eargs,arg_tipe) = (case args_tipes of
@@ -385,7 +389,7 @@ structure IlUtil :> ILUTIL =
 										    arg_tipe))
 					     in  (mapcount mapper args_tipes, arg_tipe)
 					     end)
-	in  #1(make_lambda(arg_var,arg_tipe,res_tipe,
+	in  #1(lambda(arg_var,arg_tipe,res_tipe,
 			   primer(prim,cargs,eargs)))
 	end
 

@@ -505,28 +505,32 @@ structure Ppnil :> PPNIL =
       Hbox[String "STATIC ", pp_conbnd cb]
       |  pp_importentry (ImportBnd (Runtime, cb)) =
       Hbox[pp_conbnd cb]
+    fun pp_importentries imports =
+      pp_list pp_importentry imports ("","","",true)
     fun pp_exportentry (ExportValue (l,v)) =
       Hbox[pp_label l, String " = ", pp_var v]
       |  pp_exportentry (ExportType (l,v)) =
       Hbox[pp_label l, String " = ", pp_var v]
-      
+    fun pp_exportentries exports =
+      pp_list pp_exportentry exports ("","","",true)
+
     fun pp_module (MODULE{bnds,imports,exports,exports_int}) =
 	Vbox0 0 1 [pp_bnds bnds,
 		   Break,
 		   String "IMPORTS:", Break,
-		   pp_list pp_importentry imports ("","","",true), Break,
+		   pp_importentries imports, Break,
 		   String "EXPORTS:", Break,
-		   pp_list pp_exportentry exports ("","","",true), Break,
+		   pp_exportentries exports, Break,
 		   pp_opt exports_int (fn ei => (
 						 HOVbox[String "EXPORTS_INT:", Break,
-						 pp_list pp_importentry ei ("","","",true), Break]))
+						 pp_importentries ei, Break]))
 		   ]
 
     fun pp_interface (INTERFACE{imports,exports}) =
       Vbox0 0 1 [String "IMPORTS:", Break,
-		 pp_list pp_importentry imports ("","","",true), Break,
+		 pp_importentries imports, Break,
 		 String "EXPORTS:", Break,
-		 pp_list pp_importentry exports ("","","",true), Break]
+		 pp_importentries exports, Break]
 
     fun help pp = pp
     fun help' pp obj = (wrapper pp TextIO.stdOut obj; ())
@@ -542,6 +546,8 @@ structure Ppnil :> PPNIL =
     val pp_bnds' = help pp_bnds
     val pp_conbnds' = help pp_conbnds
     val pp_exp' = help pp_exp
+    val pp_importentries' = help pp_importentries
+    val pp_exportentries' = help pp_exportentries
     val pp_module' = help pp_module
     val pp_interface' = help pp_interface
 
@@ -556,6 +562,8 @@ structure Ppnil :> PPNIL =
     val pp_conbnds = help' pp_conbnds
     val pp_bnds = help' pp_bnds
     val pp_exp = help' pp_exp
+    val pp_importentries = help' pp_importentries
+    val pp_exportentries = help' pp_exportentries
     val pp_module =
          fn {module, name:string, pass:string, header:string} =>
             (print "PASS: "; print pass; print "\n";

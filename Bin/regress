@@ -14,6 +14,8 @@
 # Otherwise, runs either the NJ compiled TILT, or the TILT
 # compiled TILT, or both, on the entire regression suite.
 
+bindir=`dirname "$0"`
+cd "$bindir/.."
 
 # build the runtime
 if make runtime ; then echo "Compiled runtime" ; else echo "Runtime didn't compile" ; exit 1 ; fi

@@ -10,6 +10,11 @@ structure Time :> TIME =
     val ulte = TiltPrim.ulte
     val op^ = String.^
 
+    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
+	(case (Ccall(f,a)) of
+	    Normal r => r
+	|   Error e => raise e)
+
 (*    structure PB = PreBasis *)
 
   (* get time type from type-only structure *)
@@ -87,7 +92,7 @@ structure Time :> TIME =
 	  (s1 < s2) orelse ((s1 = s2) andalso (u1 <= u2))
 
 
-    fun now () = let val (ts, tu) = Ccall(ml_timeofday,())
+    fun now () = let val (ts, tu) = ccall(posix_time_gettimeofday,())
 	  in
 	    TIME{sec=ts, usec=tu}
 	  end

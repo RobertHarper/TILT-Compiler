@@ -4,8 +4,13 @@ structure Timer :> TIMER =
     type cpu_timer = {user : Time.time, sys : Time.time, gc : Time.time}
     type real_timer = {real : Time.time}
 
+    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
+	(case (Ccall(f,a)) of
+	    Normal r => r
+	|   Error e => raise e)
+
     fun getCPUTimer() : cpu_timer =
-	let val (user_sec, user_usec, sys_sec, sys_usec) = Ccall(til_selfusage,())
+	let val (user_sec, user_usec, sys_sec, sys_usec) = ccall(posix_time_getrusage_self,())
 	in  {user = Time.+(Time.fromSeconds(user_sec),
 			   Time.fromMicroseconds(user_usec)),
 	     sys =  Time.+(Time.fromSeconds(sys_sec),
@@ -13,7 +18,7 @@ structure Timer :> TIMER =
 	     gc = Time.zeroTime}
 	end
     fun getRealTimer() : real_timer =
-	let val (sec, msec) = Ccall(til_realtime,())
+	let val (sec, msec) = Ccall(posix_time_ftime,())
 	in  {real = Time.+(Time.fromSeconds(sec),
 			   Time.fromMilliseconds(msec))}
 	end

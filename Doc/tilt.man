@@ -54,9 +54,9 @@ tilt, tilt-nj, tilt-slaves \- Standard ML compiler
 .PP
 TILT is a compiler for Standard ML (SML) that uses Typed Intermediate
 Languages.
-It can make executables and libraries for the SPARC V9 and Alpha
+It can make executables and libraries for the SPARC V9 and Intel x86
 architectures running SunOS 5.5.1, SunOS 5.7, SunOS 5.8, SunOS 5.9,
-and Digital Unix V4.0D.
+and linux.
 .I Tilt
 is a version of the compiler compiled by TILT.
 .I Tilt-nj
@@ -140,7 +140,7 @@ Set the target architecture;
 must be
 .B sparc
 or
-.BR alpha .
+.BR talx86 .
 The default is the current architecture, if it is supported, and
 .B sparc
 otherwise.

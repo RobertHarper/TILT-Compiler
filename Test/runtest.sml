@@ -330,7 +330,7 @@ struct
     fun platform () : string =
 	(case uname "sysname"
 	   of "SunOS" => "sparc"
-	    | "OSF1" => "alpha"
+	    | "Linux" => "talx86"
 	    | _ => fail "can not run TILT binaries on this platform")
 
     fun eprint (s : string) : unit =

@@ -23,7 +23,7 @@ struct
 		fFormals : w32,
 		body_type : con}
 
-  val debug = ref false
+  val debug = Stats.ff"NilUtilDebug"
 
   fun error s = Util.error "nilutil.sml" s
 

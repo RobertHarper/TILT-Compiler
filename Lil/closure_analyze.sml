@@ -24,7 +24,7 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
-    val chatlev = ref 0       
+    val chatlev = Stats.int("LilClosureAnalyzeChatlev",0)      
     fun chatp i = (!chatlev) >= i
       
     fun chat i s = if chatp i then print s else ()

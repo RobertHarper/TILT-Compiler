@@ -3,15 +3,16 @@ sig
 
     val ToolsDiag : bool ref
     val ShowTools : bool ref	(* show tool invocations *)
-    val DebugAsm : bool ref	(* Make assembler include debugging information. *)
+    val DebugRuntime : bool ref (* Link against debugging runtime *)
     val Profile : bool ref	(* Link against monitor for prof(1) support *)
 
-    val assemble : string list * string * string * string -> unit
-	(* tali include directories, assembler file, object file, type-object file *)
+    val sparcas : {obj:string, asm:string} -> unit
+    val sparcld : {exe:string, objs:string list} -> unit
 
-    val link : string list * string list * string -> unit
-	(* tali include directories, object files, executable name *)
+    val talx86as : {verify:bool, obj:string, tobj:string, incs:string list, asm:string} -> unit
+    val talx86ld : {verify:bool, exe:string, incs:string list, objs:string list} -> unit
 
     val compress : {src : string, dest : string} -> unit
     val uncompress : {src : string, dest : string} -> unit
+
 end

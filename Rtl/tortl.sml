@@ -482,7 +482,7 @@ struct
 		      val fun_reglabel =
 			case getrep state expvar of
 			  VALUE (CODE (clab as (C_EXTERN_LABEL _))) => LABEL' clab
-			| LOCATION loc => (print "Bad rep for "; Ppnil.pp_exp f; print "\n"; REG'(load_ireg_loc(loc,NONE)))
+			| LOCATION loc => REG'(load_ireg_loc(loc,NONE))
 			| _ => error "bad varval for function"
 
 		      val (_,dest) = alloc_reg_trace state trace

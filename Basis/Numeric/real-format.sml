@@ -12,8 +12,10 @@ structure RealFormat : sig
     val fmtReal : StringCvt.realfmt -> real -> string
 
   end = struct
-    val float_eq = TiltPrim.float_eq
-    val float_neq = TiltPrim.float_neq
+    (* Respects NaN on x86. *)
+    fun float_eq (a:real, b:real) : bool =
+	TiltPrim.fgte(a,b) andalso TiltPrim.fgte(b,a)
+    val float_neq = not o float_eq
     val floor = TiltPrim.float2int
     val floor = 
       fn r =>

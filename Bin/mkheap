@@ -5,8 +5,8 @@ case $# in
 	bindir=`dirname "$0"`
 	if test "$TILT_FRONTEND" = "2" 
 	then definefrontend='CM.SymVal.define("TILT_FRONTEND", 2);'
-        else definefrontend=''
-        fi
+	else definefrontend=''
+	fi
 	echo '
 		SMLofNJ.Internals.GC.messages false;
 		'"$definefrontend"'

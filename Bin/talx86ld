@@ -1,0 +1,72 @@
+#!/bin/sh
+
+# usage: talx86ld [-V] [-I dir ...] exe obj ...
+#
+# Link the talx86 object files obj ... to an executable exe.
+# The -I dir options specify a list of include directories to pass to talc.
+# The -V option turns off verification.
+
+incs=
+verify='--no-internals --verify-link' # --verify-program
+usage='usage: talx86ld [-V] [-I dir ...] exe obj ...'
+while :
+do
+	case "$1" in
+	-I)
+		case $# in
+		1)
+			echo 1>&2 "$usage"
+			exit 1
+			;;
+		*)
+			incs="$incs -I $2"
+			shift 2
+			;;
+		esac
+		;;
+	-V)
+		verify=--no-verify
+		shift
+		;;
+	-*)
+		echo 1>&2 "$usage"
+		exit 1
+		;;
+	*)
+		break
+		;;
+	esac
+done
+
+case $# in
+[01])
+	echo 1>&2 "$usage"
+	exit 1
+	;;
+*)
+	exe="$1"
+	shift
+	# Object files are "$@".
+	;;
+esac
+
+bindir=`dirname "$0"`
+runtimedir=`cd "$bindir"/../Lib/talx86; pwd`
+
+cputype=`"$bindir"/cputype`
+case $cputype in
+talx86)
+	exec "$bindir/talc" $verify\
+		--quiet-sys-commands\
+		--translucent-sums -I "$runtimedir" $incs -o "$exe" "$@"\
+		"$runtimedir/runtime.to"\
+		--std-lib "$runtimedir/stdlib"\
+		--trusted "$runtimedir/runtime.a"\
+		"$runtimedir/support.to"
+	;;
+*)
+	# talc is probably a cross-linker
+	echo 1>&2 talx86ld does not know how to link on this machine
+	exit 1
+	;;
+esac

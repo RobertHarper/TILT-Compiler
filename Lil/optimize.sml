@@ -55,6 +55,7 @@ struct
   fun dec r = r := !r - 1
     
   val chatlev = Stats.int("LilOptimizeChatlev",0)
+  val ptreqs_reduced = ref 0
   val folds_reduced = ref 0
   val coercions_cancelled = ref 0
   val switches_flattened  = ref 0
@@ -66,6 +67,7 @@ struct
     
   fun reset_stats() =
     let in
+      ptreqs_reduced := 0;
       folds_reduced :=  0;
       switches_flattened := 0;
       switches_reduced := 0;
@@ -83,7 +85,8 @@ struct
     
   fun chat_stats () =
     if !chatlev > 0 then
-      (print "\t"; print (Int.toString (!folds_reduced));    print " fold/unfold pairs reduced\n";
+      (print "\t"; print (Int.toString (!ptreqs_reduced));   print " ptreq tests reduced\n";
+       print "\t"; print (Int.toString (!folds_reduced));    print " fold/unfold pairs reduced\n";
        print "\t"; print (Int.toString (!coercions_cancelled));    print " other coercions reduced\n";
        print "\t"; print (Int.toString (!switches_reduced)); print " known switches reduced\n" ;
        print "\t"; print (Int.toString (!record_eta));       print " records eta reduced\n";
@@ -865,6 +868,19 @@ struct
 	       in if is_eta then (inc record_eta;Val(do_sv32 state (Var_32 v))) else default()
 	       end
 	    | (Select iw,[LilPrimOp32(Tuple,_,args,_)],_) => (inc record_beta;Val(do_sv32 state (LU.wnth iw args)))
+	    | (Ptreq,[_,_],_) =>
+	       (case sv32s
+		  of [Var_32 x,Var_32 x'] =>
+		      let
+			fun reduce () =
+			  let
+			    val () = inc ptreqs_reduced
+			    val tt = LD.E.bool' true
+			  in Val(do_sv32 state tt)
+			  end
+		      in if Name.eq_var(x,x') then reduce () else default ()
+		      end
+		   | _ => default ())
 	    | _ => default ())
       end
 

@@ -1,0 +1,68 @@
+#!/bin/sh
+
+# usage: talx86as [-V] [-I dir ...] obj tobj asm
+#
+# Assemble the talx86 assemble file asm to object files obj and tobj.
+# The -I dir options specify a list of include directories to pass to talc.
+# The -V option turns off verification.
+
+incs=
+verify=--no-internals
+usage='usage: talx86as [-V] [-I dir ...] obj tobj asm'
+while :
+do
+	case "$1" in
+	-I)
+		case $# in
+		1)
+			echo 1>&2 "$usage"
+			exit 1
+			;;
+		*)
+			incs="$incs -I $2"
+			shift 2
+			;;
+		esac
+		;;
+	-V)
+		verify=--no-verify
+		shift
+		;;
+	-*)
+		echo 1>&2 "$usage"
+		exit 1
+		;;
+	*)
+		break
+		;;
+	esac
+done
+
+case $# in
+[012])
+	echo 1>&2 "$usage"
+	exit 1
+	;;
+*)
+	obj="$1"
+	tobj="$2"
+	asm="$3"
+	;;
+esac
+
+bindir=`dirname "$0"`
+runtimedir=`cd "$bindir"/../Runtime; pwd`
+
+cputype=`"$bindir"/cputype`
+case $cputype in
+talx86)
+	exec "$bindir/talc" $verify -c --translucent-sums\
+		--quiet-asm --quiet-verify\
+		-I "$runtimedir" $incs -o "$obj" -to "$tobj" "$asm"
+	;;
+*)
+	# talc is probably a cross-assembler
+	echo 1>&2 talx86as does not know how to assemble on this machine
+	exit 1
+	;;
+esac

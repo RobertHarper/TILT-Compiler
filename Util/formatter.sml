@@ -17,7 +17,10 @@
 structure Formatter :> FORMATTER  =
    struct
 
-fun fold f l b = foldr f b l
+(* Foldr hits a stupid 8MB stackspace limit on talx86. *)
+fun safe_foldr f i xs = foldl f i (rev xs)
+
+fun fold f l b = safe_foldr f b l
 
 (*
 \subsection{Setting default values}
@@ -796,7 +799,7 @@ make the use of {\tt fmtstreams} on files more convenient.
 	      fun hasnewline s = Listops.orfold (fn c => c = #"\n") (explode s)
 	      val ismulti = Listops.orfold hasnewline strlist
 	      val _ = if ismulti then TextIO.output(outs,Spmod'(0,0)) else ()
-	  in  foldr (fn (s,_) => TextIO.output(outs, s)) () strlist;
+	  in  safe_foldr (fn (s,_) => TextIO.output(outs, s)) () strlist;
 	      TextIO.flushOut outs
 	  end
       (*

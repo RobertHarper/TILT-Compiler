@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# usage: uncompress
+#
+# Uncompress stdin to stdout.
+
+exec gunzip -cq

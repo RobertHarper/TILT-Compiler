@@ -632,7 +632,7 @@ structure Signature :> SIGNATURE =
 	    path : path, (* this path is to the actual polymorphic component *)
 	    varsig_spec : (var * signat) option, (* argument & argument signature of the spec,
 						    unless it's monomorphic *)
-	    con_spec : con, (* the type of the specification *)
+	    con_spec : con, (* the type of the specification; the type of "it" if polymorphic *)
 	    var_actual : var, (* argument of functor signature of actual component *)
 	    eopt : exp option, (* optional inlined definition of actual component *)
 	    inline : bool, (* whether to inline it *)
@@ -667,6 +667,7 @@ structure Signature :> SIGNATURE =
 		   (case varsig_spec of
 			NONE => ctxt
 		      | SOME(_,sig_spec) =>
+			    (* Remember, we made con_spec refer to var_actual. *)
 			    add_context_mod'(ctxt,var_actual,sig_spec))
 
 	       val (sbnds_poly,sdecs_poly,_) = polyinst(ctxt',sdecs_actual)
@@ -708,7 +709,7 @@ structure Signature :> SIGNATURE =
 				     (case (eopt_tyvar,inline) of
 					  (SOME e,true) => e
 					| _ => MODULE_PROJECT(mtemp,it_lab))
-				 val _ = coerce(true,"polyval")
+				 val _ = coerce(true,"poly spec/mono component mismatch")
 			     in  SOME(BND_EXP(name,exp_actual_tyvar),
 				      DEC_EXP(name,con_actual_tyvar,eopt_tyvar,inline))
 			     end
@@ -729,9 +730,30 @@ structure Signature :> SIGNATURE =
 				      | (_,_,[]) => MOD_STRUCTURE [SBND(it_lab,BND_EXP(dummy_var, path2exp path))]
 				      | _ => mtemp)
 			       val s2 = SIGNAT_FUNCTOR(var_actual,s1,inner_sig,TOTAL)
-			       (* only need to coerce if spec is less polymorphic,
-				  i.e. if unification did nothing *)
-			       val coerced = not (is_eta_expand var_actual (sbnds_poly,sdecs_poly))
+			       (*
+				  This may be a premature optimization.
+				  I do not think it can reduce the size of interfaces.  IMO,
+				  we should always coerce.  -dave
+			       *)
+			       (*
+				  We need to coerce if (1) spec is less polymorphic
+				  (ie, unification did nothing) or if (2) spec is as polymorphic
+				  but the order of components differs (eg, if the spec's
+				  sigpoly is ['a::TYPE,'b::TYPE] and the actual sigpoly
+				  is ['b::TYPE,'a::TYPE]).
+			       *)
+			       val coerced = not(
+				  is_eta_expand var_actual (sbnds_poly,sdecs_poly)
+				  andalso
+					let fun labels sdecs = map (fn SDEC(l,_) => l) sdecs
+					    val sdecs_spec =
+						(case s1 of
+						    SIGNAT_STRUCTURE sdecs => sdecs
+						  | _ => error "strange sigpoly")
+					    val spec_order = labels sdecs_spec
+					    val actual_order = labels sdecs_poly
+					in  Listops.eq_list(Name.eq_label,spec_order,actual_order)
+					end)
 			       (*
 				  Even if coercion was unnecessary, we must inline if the actual
 				  component was a datatype constructor.  This has the effect of
@@ -751,7 +773,7 @@ structure Signature :> SIGNATURE =
 			       val m = if coerced orelse (is_datatype_constr path) orelse null sdecs_actual
 					   then MOD_FUNCTOR(TOTAL,var_actual,s1,inner_mod,inner_sig)
 				       else pathmod
-			       val _ = coerce(coerced,"polyval")
+			       val _ = coerce(coerced,"sigpoly mismatch")
 			   in  SOME(BND_MOD(name, true, m),
 				    DEC_MOD(name, true, s2))
 			   end))

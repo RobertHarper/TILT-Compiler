@@ -20,6 +20,11 @@ end
 structure PrePosix :> PRE_POSIX =
 struct
 
+    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
+	(case (Ccall(f,a)) of
+	    Normal r => r
+	|   Error e => raise e)
+
     datatype uid = UID of word
     datatype gid = GID of word
     datatype open_mode = O_RDONLY | O_WRONLY | O_RDWR
@@ -30,7 +35,7 @@ struct
     fun gidToWord (GID i) = i
     fun wordToGid i = GID i
 
-    fun w_osval (str : string) : word = Ccall(posix_filesys_num,str)
+    fun w_osval (str : string) : word = ccall(posix_filesys_num,str)
 
     val o_rdonly = w_osval "O_RDONLY"
     val o_wronly = w_osval "O_WRONLY"
@@ -47,6 +52,6 @@ struct
       | omodeToWord O_WRONLY = o_wronly
       | omodeToWord O_RDWR = o_rdwr
 
-    fun sysconf (s : string) : SysWord.word = Ccall(posix_process_sysconf,s)
+    fun sysconf (s : string) : SysWord.word = ccall(posix_process_sysconf,s)
 
 end

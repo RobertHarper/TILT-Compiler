@@ -17,9 +17,12 @@ struct
    *)
     val mirrorGlobal = Stats.ff "MirrorGlobal"           (* replicate pointer globals *)
     val mirrorGlobalTag = Rtltags.mirrorGlobalTag
+    val TortlWarn = Stats.ff "TortlWarn"
 
     type label = Rtl.label
     fun error s = Util.error "tortl-base.sml" s
+    val warn = fn s =>
+	if !TortlWarn then print ("WARNING: " ^ s ^ "\n") else ()
 
     val do_gcmerge = ref true
     val do_constant_records = ref true
@@ -984,7 +987,7 @@ struct
 
     fun load_freg_val (rep : value, destOpt : regf option) : regf =
 	(case rep of
-	     VOID rep => (print "WARNING: load_freg on VOID\n"; alloc_regf())
+	     VOID rep => (warn "load_freg on VOID"; alloc_regf())
 	   | REAL label =>
 		 let val r = (case destOpt of
 				  NONE => alloc_regf()

@@ -764,6 +764,9 @@ structure NilContextPre
 
     val find_kind_equation = subtimer("Ctx:find_kind_equation",find_kind_equation)
 
+    (* is_well_formed (kind_valid,con_valid,subkind) D
+     * Check whether or not a given context is well-formed.
+     *)
     fun is_well_formed (kind_valid : context * kind -> kind,
 			con_valid : context * con -> kind,
 			subkind : context * kind * kind -> bool) ({kindmap,...}:context) : bool =

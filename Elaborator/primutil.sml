@@ -45,9 +45,9 @@ struct
 	    fun thelp (arg,res) = (true,[arg],res)
 	    fun thelp' (args,res) = (true,args,res)
 
-	    fun create_empty_array con_array instance = thelp'([], con_array)
+	    fun create_empty_array con_array instance = help'([], con_array)
 	    fun create_empty_vector con_vector instance = thelp'([], con_vector)
-	    fun create_array con_array instance = thelp'([con_uint W32, instance], con_array)
+	    fun create_array con_array instance = help'([con_uint W32, instance], con_array)
 	    fun create_vector con_vector instance = thelp'([con_uint W32, instance], con_vector)
 	    fun len_array con_array instance = thelp(con_array, con_uint W32)
 	    fun len_vector con_vector instance = thelp(con_vector, con_uint W32)

@@ -114,8 +114,8 @@ struct
   val kcap = defprimkind Kcap
   val kms = defprimkind Kms
 
-  val k1byte = kbyte B1 (* 32 bit values *)
-  val k2byte = kbyte B2 (* 64 bit values *)
+  val k1byte = kbyte B1 (* 8 bit values *)
+  val k2byte = kbyte B2 (* 16 bit values *)
   val k4byte = kbyte B4 (* 32 bit values *)
   val k8byte = kbyte B8 (* 64 bit values *)
 

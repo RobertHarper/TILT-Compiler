@@ -14,35 +14,35 @@ struct
     fun CHR f a s =
 	let val _ = trace("chr", s)
 	    val ok = ((ignore(f a); false)
-		      handle Chr => true)
+		      handle Chr => true | _ => false)
 	in  trace' ok
 	end
     
     fun OVF f a s =
 	let val _ = trace("overflow", s)
 	    val ok = ((ignore(f a); false)
-		      handle Overflow => true)
+		      handle Overflow => true | _ => false)
 	in  trace' ok
 	end
 
     fun DIV f a s =
 	let val _ = trace("div", s)
 	    val ok = ((ignore(f a); false)
-		      handle Div => true)
+		      handle Div => true | _ => false)
 	in  trace' ok
 	end
 
     fun DOM f a s =
 	let val _ = trace("domain", s)
 	    val ok = ((ignore(f a); false)
-		      handle Domain => true)
+		      handle Domain => true | _ => false)
 	in  trace' ok
 	end
     
     fun UNO f a s =
 	let val _ = trace("unordered", s)
 	    val ok = ((ignore(f a); false)
-		      handle IEEEReal.Unordered => true)
+		      handle IEEEReal.Unordered => true | _ => false)
 	in  trace' ok
 	end
 end

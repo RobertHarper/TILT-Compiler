@@ -3354,8 +3354,7 @@ structure Toil :> TOIL =
 
     val xdec : Il.context * filepos * Ast.dec -> Il.decresult option =
 	fn (ctxt,fp,dec) =>
-	(TVClose.closeDec dec;
-	 overload_wrap ctxt fp xdec IlUtil.decresult_handle (ctxt,dec))
+	(overload_wrap ctxt fp xdec IlUtil.decresult_handle (ctxt,dec))
 
     val xtopspec : Il.context * filepos * Ast.topspec -> Il.entries option =
 	fn (ctxt,fp,topspec) => overload_wrap ctxt fp xtopspec IlUtil.entries_handle (ctxt,topspec)

@@ -24,7 +24,7 @@ structure LilTypecheck :> LILTYPECHECK =
     val checkISsynth = Stats.tt "LilTypecheckCheckIsSynth"
     val limit = ref 6
 
-    val chatlev = ref 0 
+    val chatlev = Stats.int("LilTypecheckChatlev",0)
 
     fun chatp i = !chatlev >= i
 
@@ -1400,6 +1400,7 @@ structure LilTypecheck :> LILTYPECHECK =
 	    val () = reset_checked()
 	  in ()
 	  end handle any => (reset_checked();raise any)
+	val check = wrap1 check
       end
 
     structure I = 
@@ -1421,6 +1422,7 @@ structure LilTypecheck :> LILTYPECHECK =
 	    val () = reset_checked()
 	  in ()
 	  end handle any => (reset_checked();raise any)
+	val check = wrap1 check
       end
 
   end

@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# usage: compress
+#
+# Compress stdin to stdout.
+
+exec gzip -cq9

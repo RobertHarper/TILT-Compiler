@@ -42,7 +42,8 @@ struct
    val debug      = Stats.ff("TonilDebug")
    val full_debug = Stats.ff("TonilFullDebug")
    val printFlat = Stats.ff("TonilPrintFlat")
-   val chatlev    = ref 0
+   val chatlev    = Stats.int("TonilChatlev",0)
+   val TonilWarn  = Stats.ff("TonilWarn")
 
    (* killDeadImport  :  should the import list be GC'ed to include
                          only variables used by the code being split?
@@ -178,7 +179,6 @@ struct
 
    fun error msg = Util.error "tonil.sml" msg
    fun msg str = if (!diag) then print str else ()
-
    fun chat lev str = if (!chatlev) >= lev then print str else ()
    val chat0 = chat 0
    val chat1 = chat 1
@@ -2147,10 +2147,13 @@ end (* local defining splitting context *)
 	       (case lookupVmap (var,context) of
 		    NONE => (var,rest_il_sbnds)
 		  | SOME _ =>
-			let val _ = (print ("WARNING (xsbnds/BND_MOD):  " ^
+			let val _ = 
+				if !TonilWarn then
+				    (print ("WARNING (xsbnds/BND_MOD):  " ^
 					"Compensating for duplicate variable");
 				     Ppnil.pp_var var;
 				     print "\n")
+				else ()
 			    val v = N.derived_var var
 			    val subst = IlUtil.subst_add_modvar(IlUtil.empty_subst, var, Il.MOD_VAR v)
 			    val Il.MOD_STRUCTURE rest' =
@@ -2207,10 +2210,13 @@ end (* local defining splitting context *)
 	       (case lookupVmap(var,context) of
 		    NONE => (var,rest_il_sbnds)
 		  | SOME _ =>
-			let val _ = (print ("WARNING (xsbnds/BND_MOD):  " ^
+			let val _ =
+				if !TonilWarn then
+				    (print ("WARNING (xsbnds/BND_MOD):  " ^
 					    "Duplicate variable found:");
 				     Ppnil.pp_var var;
 				     print "\n")
+				else ()
 			    val v = Name.derived_var var
 			    val subst = IlUtil.subst_add_modvar(IlUtil.empty_subst, var, Il.MOD_VAR v)
 			    val Il.MOD_STRUCTURE rest' =

@@ -8,7 +8,6 @@ Group is
 ../Nil/nil.cm
 ../Rtl/rtl.cm
 ../Backend/backend.cm
-../Alpha/alpha.cm
 ../Sparc/sparc.cm
 ../Lil/lil.cm
 ../TAL/tal.cm

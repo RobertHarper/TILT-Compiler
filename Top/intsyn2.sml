@@ -173,6 +173,7 @@ struct
 	    in	dir = basisdir()
 	    end
 	val runtimedir = (fn () => tiltroot()/Runtime)
+	val bindir = (fn () => tiltroot()/Bin)
 
 	fun tal_include (pos:pos) : file =
 	    pdir pos/U

@@ -1,0 +1,23 @@
+(*
+	Floating point control.  setfc(r,p) sets the FPU rounding mode
+	and precision.
+*)
+structure TiltFc :
+sig
+
+	datatype rounding_mode =
+		TO_NEAREST
+	|	TO_NEGINF
+	|	TO_POSINF
+	|	TO_ZERO
+
+	datatype precision =
+		SINGLE
+	|	DOUBLE
+	|	EXTENDED
+
+	val getfc : unit -> rounding_mode * precision
+
+	val setfc : rounding_mode * precision -> unit
+
+end

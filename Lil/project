@@ -102,7 +102,7 @@ unit NilToLil = "niltolil.sml" { NILTOLIL
 	Nil NilDefs NilSubst NilUtil NilContext Normalize SingletonElim 
 	NilPrimUtilParam Ppnil NilPrimUtil Prim TraceInfo 
 	CompilerControl
-	TilWord64 String
+	TilWord64 String Int
 }
 
 unit CLOSURE_STATE = "closure_state.sig.sml" { Lil Name }

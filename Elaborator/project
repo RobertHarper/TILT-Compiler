@@ -132,7 +132,7 @@ interface Toil = "toil.int" {TOIL}
 unit Toil : Toil = "toil2.sml" {
 	Util Listops Name Tyvar Prim Ast Symbol String TilWord64 Array
 	Int List Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat
-	InfixParse Datatype Equal Error Signature TVClose TOIL
+	InfixParse Datatype Equal Error Signature TOIL
 }
 
 unit BASIS = "basis2.sig.sml" {Il}
@@ -258,7 +258,7 @@ interface Toil = "toil.int" {TOIL}
 unit Toil : Toil = "toil.sml" {
 	Util Listops Name Tyvar Prim Ast Symbol String TilWord64 Array
 	Int List Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat
-	InfixParse Datatype Equal Error Signature TVClose TOIL
+	InfixParse Datatype Equal Error Signature TOIL
 }
 
 unit BASIS = "basis.sig.sml" {Il}

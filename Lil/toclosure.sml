@@ -95,8 +95,8 @@ structure LilClosure :> LILCLOSURE =
 
     val staticalloc = CA.staticalloc
 
-    val debuglev = ref 0
-    val chatlev = ref 0 
+    val debuglev = Stats.int("LilClosureDebuglev",0)
+    val chatlev = Stats.int("LilClosureChatlev",0)
 
     fun chatp i = !(chatlev) >= i
     fun chat i s = if chatp i then print s else ()

@@ -5,31 +5,26 @@ struct
 
     val error = fn s => UtilError.error "platform.sml" s
 
-    datatype objtype = SPARC | ALPHA | TALx86
+    datatype objtype = SPARC | TALx86
 
     fun littleEndian SPARC = false
-      | littleEndian ALPHA = true
       | littleEndian TALx86 = true
 
     fun toString SPARC = "sparc"
-      | toString ALPHA = "alpha"
       | toString TALx86 = "talx86"
 
     fun fromString "sparc" = SOME SPARC
-      | fromString "alpha" = SOME ALPHA
       | fromString "talx86" = SOME TALx86
       | fromString _ = NONE
 
     fun blastOutObjtype (os : B.outstream) (ot : objtype) : unit =
 	(case ot
-	   of ALPHA => B.blastOutInt os 0
-	    | SPARC => B.blastOutInt os 1
-	    | TALx86 => B.blastOutInt os 2)
+	   of SPARC => B.blastOutInt os 0
+	    | TALx86 => B.blastOutInt os 1)
     fun blastInObjtype (is : B.instream) : objtype =
 	(case B.blastInInt is
-	   of 0 => ALPHA
-	    | 1 => SPARC
-	    | 2 => TALx86
+	   of 0 => SPARC
+	    | 1 => TALx86
 	    | _ => error "bad objtype")
     val (blastOutObjtype,blastInObjtype) =
 	B.magic (blastOutObjtype,blastInObjtype,"objtype $Revision$")
@@ -47,7 +42,6 @@ struct
     fun cputype () : cputype =
 	(case get "sysname"
 	   of "SunOS" => SUPPORTED SPARC
-	    | "OSF1" => SUPPORTED ALPHA
 	    | "Linux" => SUPPORTED TALx86 
 	    | _ => UNSUPPORTED)
 

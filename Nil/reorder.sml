@@ -7,8 +7,11 @@ struct
     open Prim Nil
     structure VS = Name.VarSet
 
-    fun error s = Util.error "reorder.sml" s
+    val ReorderWarn = Stats.ff "ReorderWarn"
 
+    fun error s = Util.error "reorder.sml" s
+    val warn = fn s =>
+	if !ReorderWarn then print ("WARNING: " ^ s ^ "\n") else ()
 
     fun freeVarInExp exp =
 	let
@@ -371,7 +374,7 @@ struct
 
       | rcon (Typeof_c exp, env) =
 	let
-	    val _ = print "WARNING: reorder/rcon found a Typeof_c\n"
+	    val _ = warn "reorder/rcon found a Typeof_c"
 
 	    val (exp, exp_vset, exp_category, _) =
 		rexp (exp, env)

@@ -22,8 +22,8 @@ structure LilToTalExp :> LILTOTALEXP =
     val debug = Stats.ff "LilToTalExpDebug"
     val do_tailcall = Stats.tt "LilToTalTailcall"
 
-    val debuglev = ref 0
-    val chatlev = ref 0 
+    val debuglev = Stats.int("LilToTalExpDebuglev",0)
+    val chatlev = Stats.int("LilToTalExpChatlev",0)
 
     fun indent i s = 
       let
@@ -1028,6 +1028,8 @@ structure LilToTalExp :> LILTOTALEXP =
 	 of Const_32 _ => (sv2,sv1)
 	  | _ => (sv1,sv2))
 
+    fun exchange_args (sv1,sv2) = (sv2,sv1)
+
     fun get_primarg32 arg = 
       (case arg
 	 of arg32 sv => sv
@@ -1174,7 +1176,7 @@ structure LilToTalExp :> LILTOTALEXP =
 
     fun gen32d state env signed (sv1,sv2) = 
       let
-	val div_zero = 	exn_raise_instantiate state env (TTD.E.l_div_zero,[]) 
+	val div_zero = 	exn_raise_instantiate state env (TTD.E.l_div_zero,[])
 	val nm = Name.fresh_internal_label "nm"
 	val state = TS.reserve_reg state Tal.Eax
 	val state = TS.reserve_reg state Tal.Edx
@@ -1182,8 +1184,15 @@ structure LilToTalExp :> LILTOTALEXP =
 	val state = 
 	  if signed then 
 	    let
+	      val ok = fresh_tal_lbl "ok"
+	      val overflow = exn_raise_instantiate state env (TTD.E.l_overflow,[])
 	      val state = TS.emit state (Tal.ArithMD(Tal.Idiv,src))
 	      val state = TS.emit state (Tal.Conv(Tal.Cdq))
+	      val state = TS.emit_block state ok NONE
+	      val state = TS.emit state (Tal.Jcc(Tal.Eq,overflow,NONE))
+	      val state = TS.emit state (Tal.Cmp((Tal.Reg Tal.Eax,[]),(Tal.Immed 0wx80000000,[])))
+	      val state = TS.emit state (Tal.Jcc(Tal.NotEq,(ok,[]),NONE))
+	      val state = TS.emit state (Tal.Cmp((src,[]),(Tal.Immed 0wxFFFFFFFF,[])))
 	    in state
 	    end
 	  else
@@ -1192,7 +1201,7 @@ structure LilToTalExp :> LILTOTALEXP =
 	      val state = TS.emit state (Tal.Mov(Tal.Reg Tal.Edx,(Tal.Immed 0w0,[])))
 	    in state
 	    end
-	val state = TS.emit state (Tal.Jcc(Tal.BelowEq,div_zero,NONE))
+	val state = TS.emit state (Tal.Jcc(Tal.Eq,div_zero,NONE))
 	val state = TS.emit state (Tal.Cmp((src,[]),(Tal.Immed 0w0,[])))
 	val state = sv32_unpack_rm state env src nm sv2
 	val state = sv32_trans_reg state env Tal.Eax sv1
@@ -1688,7 +1697,6 @@ structure LilToTalExp :> LILTOTALEXP =
 	  (* Unops *)
 	   
 	  | Prim.not_int _ => Arithun(Tal.Not,get_1primarg32 primargs)
-	  | Prim.neg_int Prim.W32 => Arithun(Tal.Neg,get_1primarg32 primargs)
 	  | Prim.neg_int is => classify_prim32 (Prim.minus_int is, [], arg32(Const_32 (Prim.int (is,TilWord64.fromUnsignedHalf 0w0)))::primargs)
 	  | Prim.abs_int is => error "abs_int should have been compiled away already"
 
@@ -1726,12 +1734,26 @@ structure LilToTalExp :> LILTOTALEXP =
 	  | Prim.uinta2uinta _ => Id(get_1primarg32 primargs)
 	  | Prim.uintv2uintv _ => Id(get_1primarg32 primargs)
 
-	  | Prim.less_float      _ => FRelop(Tal.Below,get_2primargs64 primargs)
+	  (*
+		We compare floats using FUCOMPIP which sets EFLAGS as
+		follows:
+
+			ST0 > ST(i)	000 (ZPC)
+			ST0 < ST(i)	001
+			ST0 = ST(i)	100
+			Unordered	111
+
+		To do right by NaN, we implement > and >= using Above
+		(checks for flags 0x0) and AboveEq (xx0); a<b and a<=b
+		as b>a and b>=a; a=b as a>=b and b>=a (in the basis);
+		and a!=b as not(a=b) (in the basis).
+	  *)
+	  | Prim.less_float      _ => FRelop(Tal.Above,exchange_args(get_2primargs64 primargs))
 	  | Prim.greater_float   _ => FRelop(Tal.Above,get_2primargs64 primargs)
-	  | Prim.lesseq_float    _ => FRelop(Tal.BelowEq,get_2primargs64 primargs)
+	  | Prim.lesseq_float    _ => FRelop(Tal.AboveEq,exchange_args(get_2primargs64 primargs))
 	  | Prim.greatereq_float _ => FRelop(Tal.AboveEq,get_2primargs64 primargs)
-	  | Prim.eq_float _       => FRelop(Tal.Eq,get_2primargs64 primargs)
-	  | Prim.neq_float _      => FRelop(Tal.NotEq,get_2primargs64 primargs)
+	  | Prim.eq_float _       => error "eq_float broken" (* want a >= b andalso b >= a *)
+	  | Prim.neq_float _      => error "neq_float broken" (* want a>b orelse b>a *)
 
 
 	  (* array and vectors *)
@@ -2167,8 +2189,8 @@ structure LilToTalExp :> LILTOTALEXP =
 	      val (sv1,sv2) = (case sv32s
 				 of [sv1,sv2] => (sv1,sv2)
 				  | _ => error "Bad number of args to Ptreq")
-	      val (state,goc1) = allocate_rm_for' state env sv1
 	      val (state,goc2) = allocate_regimm_for' state env sv2
+	      val (state,goc1) = allocate_rm_for' state env sv1
 	      val state = 
 		(case dest
 		   of CONT (_,x) => 
@@ -2945,7 +2967,10 @@ structure LilToTalExp :> LILTOTALEXP =
 	       val t  = TE.typeof_sv32 env arg
 	       val ts = Dec.C.tuple_ptr_ml t
 	       val t = List.nth (ts,1)
-	       val unpack_var' = Dec.C.var t
+	       val unpack_var' =
+		 (case Dec.C.var' t
+		    of SOME v => v
+		     | NONE => Name.fresh_named_var "exn_val_t")
 	       val unpack_var = TE.vartrans env unpack_var'
 	       val unpack_mem_var' = Name.derived_var unpack_var'
 	       val unpack_mem_var = TE.vartrans env unpack_mem_var'
@@ -2957,7 +2982,7 @@ structure LilToTalExp :> LILTOTALEXP =
 	       val lt = TTD.T.forall (unpack_mem_var,Tal.kmem) lt
 	       val state = TS.emit_block state (fresh_tal_lbl "exnr") (SOME lt)
 	       val cargs = internal_label_cons state env
-	       val cargs = cargs@[(Tal.cfield (Tal.cvar unpack_var) Tal.Read)]
+	       val cargs = cargs@[(Tal.cfield (LTC.ctrans env t) Tal.Read)]
 	       val state = fallthru' state cargs
 
 	       val state = sv32_trans_reg state env Tal.Eax arg

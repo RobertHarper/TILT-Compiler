@@ -6,7 +6,7 @@ structure Measure :> MEASURE =
   struct
     open Nil NilRewrite
 
-    val chatlev = ref 0
+    val chatlev = Stats.int("MeasureChatlev",0)
     (* Controls how much extra printed output to produce.
        Greater than 0 gets some output.
        Greater than 1 gets extra ouput, including counts of specific types of constructors. *)

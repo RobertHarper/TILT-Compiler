@@ -18,6 +18,8 @@ signature PPNIL =
     val pp_label'   : Name.label -> Formatter.format
     val pp_list'    : ('a -> Formatter.format) -> 'a list ->
                                   (string * string * string * bool) -> Formatter.format
+    val pp_importentries' : Nil.import_entry list -> Formatter.format
+    val pp_exportentries' : Nil.export_entry list -> Formatter.format
     val pp_module'   : Nil.module -> Formatter.format
     val pp_interface'   : Nil.interface -> Formatter.format
 
@@ -35,6 +37,8 @@ signature PPNIL =
     val pp_label   : Name.label -> unit
     val pp_list    : ('a -> Formatter.format) -> 'a list ->
                                   (string * string * string * bool) -> unit
+    val pp_importentries : Nil.import_entry list -> unit
+    val pp_exportentries : Nil.export_entry list -> unit
     val pp_module   : {module: Nil.module,
                        name: string,
                        pass: string,

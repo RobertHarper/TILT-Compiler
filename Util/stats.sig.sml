@@ -20,6 +20,7 @@ sig
         Flags
     *)
 
+    val int'  : string -> int ref
     val int  : string * int -> int ref
     val bool : string -> bool ref
     val tt : string -> bool ref (* initialized to true *)

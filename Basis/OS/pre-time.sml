@@ -1,7 +1,7 @@
-extern ml_timeofday : (unit, (int * int)) -->
+extern posix_time_gettimeofday : (unit, (int * int) cresult) -->
 
 (* user sec, user usec, system sec, system usec *)
-extern til_selfusage : (unit, int * int * int * int) -->
+extern posix_time_getrusage_self : (unit, (int * int * int * int) cresult) -->
 
 (* wall clock sec, wall clock msec *)
-extern til_realtime : (unit, int * int) -->
+extern posix_time_ftime : (unit, int * int) -->

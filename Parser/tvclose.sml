@@ -28,11 +28,28 @@ structure TVClose: TVCLOSE =
 struct
   open Ast
 
-  structure TVSet =
+  structure TVSet :>
+    sig
+	type set
+	val empty : set
+	val singleton : symbol -> set
+	val uniq : symbol list -> set
+	val merge : set * set -> set
+	val union : set list -> set
+	val remove : set * set -> set
+	val toList : set -> symbol list
+    end =
     struct
+
       infix < >
       fun op< (s0,s1) = Int.< (Symbol.number s0, Symbol.number s1)
       fun op> (s0,s1) = Int.> (Symbol.number s0, Symbol.number s1)
+
+      type set = symbol list	(* Invariant: sorted *)
+
+      val empty = nil
+
+      fun singleton s = [s]
 
       fun enter(new,l) =
 	let fun f [] = [new]
@@ -61,9 +78,10 @@ struct
 	    else remove(xr,if xl<yl then y else yr)
 	| remove(_,y) = y
 
+      fun toList l = l
     end
 
-  fun pass1_exp (VarExp path) = []
+  fun pass1_exp (VarExp path) = TVSet.empty
     | pass1_exp (FnExp rules) = TVSet.union (map pass1_rule rules)
     | pass1_exp (FlatAppExp fixitems) =
         TVSet.union (map (pass1_exp o #item) fixitems)
@@ -76,16 +94,16 @@ struct
     | pass1_exp (LetExp {dec, expr}) =
 	TVSet.merge (pass1_dec dec, pass1_exp expr)
     | pass1_exp (SeqExp exprs) = TVSet.union (map pass1_exp exprs)
-    | pass1_exp (IntExp literal) = []
-    | pass1_exp (WordExp literal) = []
-    | pass1_exp (RealExp string) = []
-    | pass1_exp (StringExp string) = []
-    | pass1_exp (CharExp string) = []
+    | pass1_exp (IntExp literal) = TVSet.empty
+    | pass1_exp (WordExp literal) = TVSet.empty
+    | pass1_exp (RealExp string) = TVSet.empty
+    | pass1_exp (StringExp string) = TVSet.empty
+    | pass1_exp (CharExp string) = TVSet.empty
     | pass1_exp (RecordExp symexps) =
 	TVSet.union (map (pass1_exp o #2) symexps)
     | pass1_exp (ListExp exprs) = TVSet.union (map pass1_exp exprs)
     | pass1_exp (TupleExp exprs) = TVSet.union (map pass1_exp exprs)
-    | pass1_exp (SelectorExp symbol) = []
+    | pass1_exp (SelectorExp symbol) = TVSet.empty
     | pass1_exp (ConstraintExp {expr, constraint}) =
 	TVSet.merge (pass1_exp expr, pass1_ty constraint)
     | pass1_exp (HandleExp {expr, rules}) =
@@ -104,12 +122,12 @@ struct
 
   and pass1_rule (Rule {pat, exp}) = TVSet.merge (pass1_pat pat, pass1_exp exp)
 
-  and pass1_pat WildPat = []
-    | pass1_pat (VarPat path) = []
-    | pass1_pat (IntPat literal) = []
-    | pass1_pat (WordPat literal) = []
-    | pass1_pat (StringPat string) = []
-    | pass1_pat (CharPat string) = []
+  and pass1_pat WildPat = TVSet.empty
+    | pass1_pat (VarPat path) = TVSet.empty
+    | pass1_pat (IntPat literal) = TVSet.empty
+    | pass1_pat (WordPat literal) = TVSet.empty
+    | pass1_pat (StringPat string) = TVSet.empty
+    | pass1_pat (CharPat string) = TVSet.empty
     | pass1_pat (RecordPat {def, flexibility}) =
         TVSet.union (map (pass1_pat o #2) def)
     | pass1_pat (ListPat pats) = TVSet.union (map pass1_pat pats)
@@ -143,11 +161,11 @@ struct
     | pass1_fctexp (MarkFct (fctexp, region)) = pass1_fctexp fctexp
 
   and pass1_dec (ValDec (vbs, rvbs, tvbref)) =
-        (tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_vb (vbs @ rvbs)));
-	 [])
+        (tvbref := !tvbref @ map TempTyv (TVSet.toList(TVSet.union (map pass1_vb (vbs @ rvbs))));
+	 TVSet.empty)
     | pass1_dec (FunDec (fbs, tvbref)) =
-	(tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_fb fbs));
-	 [])
+	(tvbref := !tvbref @ map TempTyv (TVSet.toList(TVSet.union (map pass1_fb fbs)));
+	 TVSet.empty)
     | pass1_dec (ExternDec (sym, ty)) = pass1_ty ty
     | pass1_dec (TypeDec tbs) = TVSet.union (map pass1_tb tbs)
     | pass1_dec (DatatypeDec {datatycs, withtycs}) =
@@ -158,16 +176,16 @@ struct
 		     TVSet.union (map pass1_tb withtycs),
 		     pass1_dec body]
     | pass1_dec (ExceptionDec ebs) = TVSet.union (map pass1_eb ebs)
-    | pass1_dec (StrDec strbs) = (app pass1_strb strbs; [])
-    | pass1_dec (FctDec fctbs) = (app pass1_fctb fctbs; [])
-    | pass1_dec (SigDec sigbs) = []
-    | pass1_dec (FsigDec fsigbs) = []
+    | pass1_dec (StrDec strbs) = (app pass1_strb strbs; TVSet.empty)
+    | pass1_dec (FctDec fctbs) = (app pass1_fctb fctbs; TVSet.empty)
+    | pass1_dec (SigDec sigbs) = TVSet.empty
+    | pass1_dec (FsigDec fsigbs) = TVSet.empty
     | pass1_dec (LocalDec (dec0, dec1)) = (pass1_dec dec0; pass1_dec dec1)
     | pass1_dec (SeqDec decs) = TVSet.union (map pass1_dec decs)
-    | pass1_dec (OpenDec paths) = []
-    | pass1_dec (OvldDec _) = []
-    | pass1_dec (FixDec {fixity: fixity, ops: symbol list}) = []
-    | pass1_dec (ImportDec _) = []
+    | pass1_dec (OpenDec paths) = TVSet.empty
+    | pass1_dec (OvldDec _) = TVSet.empty
+    | pass1_dec (FixDec {fixity: fixity, ops: symbol list}) = TVSet.empty
+    | pass1_dec (ImportDec _) = TVSet.empty
     | pass1_dec (MarkDec (dec, region)) = pass1_dec dec
 
   and pass1_vb (Vb {pat, exp}) = TVSet.merge (pass1_pat pat, pass1_exp exp)
@@ -178,7 +196,7 @@ struct
 
   and pass1_clause (Clause {pats, resultty, exp}) =
         TVSet.union (pass1_exp exp ::
-		     (case resultty of SOME ty => pass1_ty ty | NONE => []) ::
+		     (case resultty of SOME ty => pass1_ty ty | NONE => TVSet.empty) ::
 		     map (pass1_pat o #item) pats)
 
   and pass1_tb (Tb {tyc, def, tyvars}) =
@@ -187,8 +205,8 @@ struct
 
   and pass1_db (Db {tyc, tyvars, rhs}) =
       let fun do_sym_ty (_, SOME ty) = pass1_ty ty
-	    | do_sym_ty _ = []
-	  fun dorhs (Repl _) = []
+	    | do_sym_ty _ = TVSet.empty
+	  fun dorhs (Repl _) = TVSet.empty
 	    | dorhs (Constrs sym_tys) = TVSet.union (map do_sym_ty sym_tys)
 	in
 	  TVSet.remove (TVSet.union (map pass1_tyvar tyvars),
@@ -197,8 +215,8 @@ struct
     | pass1_db (MarkDb (db, region)) = pass1_db db
 
   and pass1_eb (EbGen {exn, etype as SOME ty}) = pass1_ty ty
-    | pass1_eb (EbGen {exn, etype as NONE}) = []
-    | pass1_eb (EbDef _) = []
+    | pass1_eb (EbGen {exn, etype as NONE}) = TVSet.empty
+    | pass1_eb (EbDef _) = TVSet.empty
     | pass1_eb (MarkEb (eb, region)) = pass1_eb eb
 
   and pass1_strb (Strb {name, def, constraint}) = pass1_strexp def
@@ -207,8 +225,8 @@ struct
   and pass1_fctb (Fctb {name, def}) = pass1_fctexp def
     | pass1_fctb (MarkFctb (fctb, region)) = pass1_fctb fctb
 
-  and pass1_tyvar (Tyv symbol) = [symbol]
-    | pass1_tyvar (TempTyv symbol) = [symbol]
+  and pass1_tyvar (Tyv symbol) = TVSet.singleton symbol
+    | pass1_tyvar (TempTyv symbol) = TVSet.singleton symbol
     | pass1_tyvar (MarkTyv (tyvar, region)) = pass1_tyvar tyvar
 
   and pass1_ty (VarTy tyvar) = pass1_tyvar tyvar
@@ -257,18 +275,18 @@ struct
   and pass2_rule env (Rule {pat, exp}) = pass2_exp env exp
 
   and pass2_strexp (VarStr path) = ()
-    | pass2_strexp (BaseStr dec) = pass2_dec [] dec
+    | pass2_strexp (BaseStr dec) = pass2_dec TVSet.empty dec
     | pass2_strexp (ConstrainedStr (strexp, constraint)) = pass2_strexp strexp
     | pass2_strexp (AppStr (path, strexpbools)) =
         app (pass2_strexp o #1) strexpbools
     | pass2_strexp (LetStr (dec, strexp)) =
-	(pass2_dec [] dec; pass2_strexp strexp)
+	(pass2_dec TVSet.empty dec; pass2_strexp strexp)
     | pass2_strexp (MarkStr (strexp, region)) = pass2_strexp strexp
 
   and pass2_fctexp (VarFct _) = ()
     | pass2_fctexp (BaseFct {params, body, constraint}) = pass2_strexp body
     | pass2_fctexp (LetFct (dec, fctexp)) =
-        (pass2_dec [] dec; pass2_fctexp fctexp)
+        (pass2_dec TVSet.empty dec; pass2_fctexp fctexp)
     | pass2_fctexp (AppFct (path, strexpbools, fsigconst)) =
 	app (pass2_strexp o #1) strexpbools
     | pass2_fctexp (MarkFct (fctexp, region)) = pass2_fctexp fctexp
@@ -281,12 +299,14 @@ struct
 	          (case split_tvs rest of (full, temp) => (full, s::temp))
 	      | split_tvs (MarkTyv (tyv, region)::rest) = split_tvs (tyv::rest)
 	    val (full, temp) = split_tvs (!tvlistref)
+	    val full = TVSet.uniq full
+	    val temp = TVSet.uniq temp
 	    val env' = TVSet.merge (env, full)
 	    val newtvs = TVSet.remove (env', temp)
 	    val newbinding = TVSet.merge (full, newtvs)
 	    val newenv = TVSet.merge (env', newtvs)
 	in
-	  tvlistref := map Tyv newbinding;
+	  tvlistref := map Tyv (TVSet.toList newbinding);
 	  newenv
 	end
 
@@ -318,7 +338,7 @@ struct
   and pass2_fb env (Fb clauses) = app (pass2_clause env) clauses
     | pass2_fb env (MarkFb (fb, region)) = pass2_fb env fb
 
-  and pass2_clause env (Clause {pats, resultty, exp}) =pass2_exp env exp
+  and pass2_clause env (Clause {pats, resultty, exp}) = pass2_exp env exp
 
   and pass2_strb (Strb {name, def, constraint}) = pass2_strexp def
     | pass2_strb (MarkStrb (strb, region)) = pass2_strb strb
@@ -326,6 +346,6 @@ struct
   and pass2_fctb (Fctb {name, def}) = pass2_fctexp def
     | pass2_fctb (MarkFctb (fctb, region)) = pass2_fctb fctb
 
-  fun closeDec dec = (pass1_dec dec; pass2_dec [] dec; ())
+  fun closeDec dec = (pass1_dec dec; pass2_dec TVSet.empty dec; ())
 
 end

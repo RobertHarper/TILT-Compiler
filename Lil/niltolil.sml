@@ -27,8 +27,8 @@ structure NiltoLil :> NILTOLIL =
     structure Vmap = Name.VarMap
     structure LO = Listops
     structure Subst = LilSubst
-    val chatlev = ref 0 
-    val debuglev = ref 0
+    val chatlev = Stats.int("NilToLilChatlev",0)
+    val debuglev = Stats.int("NilToLilDebuglev",0)
 
     (* From Util *)
     val error = fn s => Util.error "niltolil.sml" s
@@ -111,7 +111,7 @@ structure NiltoLil :> NILTOLIL =
     fun add_staticrep (Env {D,repVars,staticreps, typedefs, renames,globals}) (v,c) = 
       let
 (*	val _ = debugdo (3,fn () => (print "Adding staticrep:\t";Ppnil.pp_var  v;
-				     print " = ";PpLil.pp_con c;
+				     print " = ";PpLil.pp_con (c());
 				     print "\n"))*)
       in
 	Env {D          = D,
@@ -125,7 +125,7 @@ structure NiltoLil :> NILTOLIL =
     fun add_typedef (Env {D,repVars,staticreps, typedefs, renames,globals}) (v,c) = 
       let
 (*	val _ = debugdo (3,fn () => (print "Adding typedef:\t";Ppnil.pp_var  v;
-				     print " = ";PpLil.pp_con c;
+				     print " = ";PpLil.pp_con (c());
 				     print "\n"))*)
       in
 	Env {D          = D,
@@ -228,7 +228,7 @@ structure NiltoLil :> NILTOLIL =
 				     Ppnil.pp_exp e;
 				     print "\n"))
 	val t = NN.type_of (D,e)
-	val _ = debugdo (5,fn () => (print "kind_of returned type:\n\t";
+	val _ = debugdo (5,fn () => (print "type_of returned type:\n\t";
 				     Ppnil.pp_con t;
 				     print "\n"))
       in t
@@ -1467,7 +1467,7 @@ structure NiltoLil :> NILTOLIL =
 	      | (prim,[t],args) => 
 	       let
 		 val t = ttrans env t
-		 val args = LO.map2 (primarg_trans env) (exps,argtypes)
+		 val args = map (fn e => Lil.arg32 (sv32_trans' env e)) exps
 	       in
 		  (P.ret (Lil.Prim32 (prim,[t],args)),rtype)
 	       end

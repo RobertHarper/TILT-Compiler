@@ -7,7 +7,6 @@ include "../Elaborator/project"
 include "../Nil/project"
 include "../Rtl/project"
 include "../Backend/project"
-include "../Alpha/project"
 include "../Sparc/project"
 include "../TAL/project"
 
@@ -88,7 +87,7 @@ unit COMPILER = "compiler.sig.sml" {Name IntSyn}
 interface Compiler = "compiler.int" {COMPILER}
 unit Compiler : Compiler = "compiler.sml" {
 	COMPILER Name IntSyn ExtSyn LinkParse LinkIl Linknil Linksparc
-	Linkalpha Timestamp Util Stats List Pos Fs Crc Ast Lil Rtl Target
+	Timestamp Util Stats List Pos Fs Crc Ast Lil Rtl Target
 	Platform Tools Listops OS TextIO Project Symbol Linkrtl Linklil
 	LinkTAL Option
 }
@@ -127,16 +126,16 @@ unit MANAGER = "manager.sig.sml" {Name}
 interface Manager = "manager.int" {MANAGER}
 unit Manager : Manager = "manager.sml" {
 	MANAGER Util Stats Name Slave Update Compiler Master Compiler
-	LinkParse Linkrtl Linksparc Linkalpha LinkIl Linknil
+	LinkParse Linkrtl Linksparc LinkIl Linknil Linklil
 	IlContext Hoist Inline NilStatic Specialize Normalize Tools
-	LilTypecheck Int List UtilError IntSyn ToNil
+	LilTypecheck Int List UtilError IntSyn ToNil LinkTAL
 }
 
 unit MAIN = "main.sig.sml" {OS}
 interface Main = "main.int" {MAIN}
 unit Main : Main = "main.sml" {
 	MAIN Manager Util TextIO OS Arg Platform Target Int String
-	UtilError Stats Version IntSyn
+	UtilError Stats Version IntSyn Substring Bool StringCvt
 }
 
 unit Dump = "dump.sml" {

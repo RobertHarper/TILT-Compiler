@@ -61,7 +61,8 @@ struct
    val debug      = Stats.ff("TonilDebug")
    val full_debug = Stats.ff("TonilFullDebug")
    val printFlat = Stats.ff("TonilPrintFlat")
-   val chatlev    = ref 0
+   val chatlev    = Stats.int("TonilChatlev",0)
+   val TonilWarn  = Stats.ff("TonilWarn")
 
    (* killDeadImport  :  should the import list be GC'ed to include
                          only variables used by the code being split?

@@ -18,7 +18,6 @@ signature REAL =
 	(* the number of digits (each 0..radix-1) in mantissa *)
 
     val maxFinite    : real   (* maximum finite number *)
-(*** these cause problems on the alpha? ***)
     val minPos       : real   (* minimum non-zero positive number *)
     val minNormalPos : real   (* minimum non-zero normalized number *)
 

@@ -58,7 +58,7 @@ unit INSTRDESC = "instrdesc.sig.sml" { TAL }
 
 unit InstrDesc = "instrdesc.sml" { 
 	INSTRDESC TAL TalPeep
-	Vector
+	Vector Stats
 }
 
 unit StateTypes = "statetypes.sml" { Lil TAL Name
@@ -70,7 +70,7 @@ unit StackDesc = "stackdesc.sml" {
 	TAL StateTypes LilToTalCon LilToTalEnv
 	LilUtil LilContext
 	Util Name
-	List Int
+	List Int Stats
 }
 
 unit TALINSTRUCTIONS = "instructions.sig.sml" {

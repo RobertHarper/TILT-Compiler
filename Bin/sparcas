@@ -1,0 +1,29 @@
+#!/bin/sh
+
+# usage: sparcas obj asm
+#
+# Assemble the sparc assembler file asm to an object file obj.
+
+case $# in
+2)
+	obj="$1"
+	asm="$2"
+	;;
+*)
+	echo 1>&2 "usage: sparcas obj asm"
+	exit 1
+	;;
+esac
+
+bindir=`dirname "$0"`
+cputype=`"$bindir"/cputype`
+case $cputype in
+sparc)
+	exec /usr/ccs/bin/as -xarch=v8plus -o "$obj" "$asm"
+	;;
+*)
+	# gnu tools can cross-assemble
+	echo 1>&2 sparcas does not know how to assemble on this machine
+	exit 1
+	;;
+esac

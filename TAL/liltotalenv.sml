@@ -9,8 +9,9 @@ structure LilToTalEnv :> LILTOTALENV =
     structure Kindof = S.Kindof
 
     fun error s = Util.error "liltotalenv.sml" s    
-      
-    fun warn s = (print "WARNING: ";print s;print "\n")
+
+    val LilToTalEnvWarn = Stats.ff "LilToTalEnvWarn"
+    fun warn s = if !LilToTalEnvWarn then (print "WARNING: ";print s;print "\n") else ()
 
     fun cout (c : Lil.con) : Lil.con_ = #c c
     fun kout (k : Lil.kind) : Lil.kind_ = #k k

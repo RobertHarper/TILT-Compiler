@@ -14,9 +14,12 @@ structure Reduce
     val do_project_known = Stats.tt("reduce_do_project_known")
     val do_dead = Stats.tt("reduce_do_dead")
     val show_stats = Stats.ff("ShowReduceStats")
+    val ReduceWarn = Stats.ff "ReduceWarn"
 
     open Nil Name Util Prim Listops
     val error = fn s => Util.error "reduce.sml" s
+    val warn = fn s =>
+	if !ReduceWarn then print ("WARNING: " ^ s ^ "\n") else ()
 
     structure Nil = Nil
 
@@ -741,7 +744,7 @@ structure Reduce
 	  | App_e (_, Var_e f, _,_,_) =>
 		VarSet.member (!total_set, f)
 	  (* We don't have to check args because of A-normal form *)
-	  | App_e _ => (print "WARNING: reduce.sml found App not in A-normal form";
+	  | App_e _ => (warn "found App not in A-normal form";
 			false)
 	  | ExternApp_e (exp, elist) =>
 		false
@@ -1229,7 +1232,7 @@ structure Reduce
 				  new_app
 			  end
 		    | App_e ( _, _, _, _, _) =>
-			  (print "WARNING: reduce.sml found app not in A-normal form\n";
+			  (warn "found app not in A-normal form";
 			   exp)
 		    |  ExternApp_e (exp, expl) =>
 			   ExternApp_e (xexp fset exp, map (xexp fset) expl)

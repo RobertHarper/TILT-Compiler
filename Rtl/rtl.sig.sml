@@ -22,7 +22,7 @@ sig
      In C parlance, C externs are r-values, while ML externs
      are l-values.*)
 
-  (* Special registers at the RTL level translate to actual registers at the lower Alpha/Sparc level.
+  (* Special registers at the RTL level translate to actual registers at the lower level.
      The HANDLER, EXNSTACK, EXNARG, and STACK are exposed at this level to allow exceptions to be compiled.
      It would be nice if these last 4 registers are unnecssary.  However, the implementation of
      an exception stack requires allocation and the lower levels cannot correctly insert
@@ -195,8 +195,7 @@ sig
        notably CATCH_EXN, still translate into platform-dependent
        code.  Currently, PUSH_EXN, POP_EXN, THROW_EXN are no-ops
        while CATCH_EXN translate into code that records the fact that
-       a handler has entered and some special calling convention code
-       on the Alpha.
+       a handler has entered.
 
        - PUSH_EXN adds a new entry to the exception stack
        - POP_EXN  discards the top entry of the exception stack

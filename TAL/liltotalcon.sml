@@ -14,8 +14,8 @@ struct
     val error = fn s => Util.error "liltotal.sml" s
     val debug = Stats.ff "LilToTalConDebug"
 
-    val debuglev = ref 0
-    val chatlev = ref 0 
+    val debuglev = Stats.int("LilToTalConDebuglev",0)
+    val chatlev = Stats.int("LilToTalConChatlev",0)
 
     fun chatp i = !(chatlev) >= i
     fun chat i s = if chatp i then print s else ()

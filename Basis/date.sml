@@ -47,25 +47,20 @@ structure Date :> DATE =
 	    | Jul => 6 | Aug => 7 | Sep => 8 | Oct => 9 | Nov => 10 | Dec => 11
 	  (* end case *))
 
-  (* the tuple type used to communicate with C; this 9-tuple has the fields:
-   * tm_sec, tm_min, tm_hour, tm_mday, tm_mon, tm_year, tm_wday, tm_yday,
-   * and tm_isdst.
-   *)
-    type tm = (int * int * int * int * int * int * int * int * int)
+    (* Call C function f and map all exceptions to Date. *)
+    fun wrap (f : ('a,'b cresult)-->, x:'a) : 'b =
+	(case (Ccall (f,x)) of
+	    Normal r => r
+	|   Error _ => raise Date)
 
-  (* wrap a C function call with a handler that maps SysErr exception into Date
-   * exceptions.
-   *)
-    fun wrap f x = (f x) handle _ => raise Date
-
-    (* note: mkTime assumes the tm structure passed to it reflects
+    (* note: mkTime assumes the tmrep passed to it reflects
      * the local time zone
      *)
-    val ascTime : tm -> string = wrap (fn arg => Ccall(posix_ascTime, arg))
-    val localTime : int -> tm = wrap (fn arg => Ccall(posix_localTime, arg))
-    val gmTime : int -> tm = wrap (fn arg => Ccall(posix_gmTime, arg))
-    val mkTime : tm -> int = wrap (fn arg => Ccall(posix_mkTime, arg))
-    val strfTime : (string * tm) -> string = wrap (fn arg => Ccall(posix_strfTime, arg))
+    val ascTime : tmrep -> string = fn arg => Ccall(posix_date_asctime,arg)
+    val localTime : int -> tmrep = fn arg => wrap(posix_date_localtime,arg)
+    val gmTime : int -> tmrep = fn arg => wrap(posix_date_gmtime,arg)
+    val mkTime : tmrep -> int = fn arg => wrap(posix_date_mktime,arg)
+    val strfTime : string * tmrep -> string = fn (s,tm) => Ccall(posix_date_strftime,s,tm)
 
     fun year (DATE{year, ...}) = year
     fun month (DATE{month, ...}) = month

@@ -8,9 +8,10 @@ structure Real64 :> REAL where type real = real
 			   and type Math.real = real =
   struct
     val abs_float = TiltPrim.fabs
-    val float_eq = TiltPrim.float_eq
-    val float_neq = TiltPrim.float_neq
-(*    structure I = InlineT.DfltInt *)
+    (* Respects NaN on x86. *)
+    fun float_eq (a:real, b:real) : bool =
+	TiltPrim.fgte(a,b) andalso TiltPrim.fgte(b,a)
+    val float_neq = not o float_eq
 
     structure Math = Math64
     val real_logb  : real -> int = fn arg => Ccall(real_logb, arg)
@@ -39,7 +40,7 @@ structure Real64 :> REAL where type real = real
     val op == : real * real -> bool = float_eq
     val op != : real * real -> bool = float_neq
 
-    fun unordered(x,y) = Bool.not(x>y orelse x <= y)
+    fun unordered(x,y) = not(x>y orelse x <= y)
     fun ?= (x, y) = (x == y) orelse unordered(x, y)
 
     fun real_scalb (x, k) = raise TiltExn.LibFail "scalb and real_scalb not implemented: multiarg C fun..."
@@ -82,7 +83,7 @@ structure Real64 :> REAL where type real = real
     val negInf = ~posInf
 
     fun isFinite x = negInf < x andalso x < posInf
-    fun isNan x = Bool.not(x==x)
+    fun isNan x = not(x==x)
     fun isNormal x = (case real_logb x
 	   of ~1023 => (x != 0.0)
 	    | 1024 => false
@@ -230,22 +231,17 @@ structure Real64 :> REAL where type real = real
      * May be applied to inf's and nan's.
      *)
       fun realround mode x = let
-            val saveMode = IEEEReal.getRoundingMode ()
+            val saveMode = TiltFc.getfc ()
             in
-              IEEEReal.setRoundingMode mode;
+              TiltFc.setfc(mode,TiltFc.DOUBLE);
               if x>=0.0 then x+maxint-maxint else x-maxint+maxint
-                before IEEEReal.setRoundingMode saveMode
+                before TiltFc.setfc saveMode
             end
     in
-    val realFloor = realround IEEEReal.TO_NEGINF
-    val realCeil = realround IEEEReal.TO_POSINF
-    val realTrunc = realround IEEEReal.TO_ZERO
+    val realFloor = realround TiltFc.TO_NEGINF
+    val realCeil = realround TiltFc.TO_POSINF
+    val realTrunc = realround TiltFc.TO_ZERO
     end
-(*
-    fun realFloor _ = raise TiltExn.LibFail "Real.realFloor unimplemented"
-    fun realCeil _ = raise TiltExn.LibFail "Real.realCeil unimplemented"
-    fun realTrunc _ = raise TiltExn.LibFail "Real.realTrunc unimplemented"
-*)
 
   (* realround(x) returns x rounded to some nearby integer, almost always
    * the nearest integer.

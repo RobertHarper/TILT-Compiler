@@ -8,7 +8,8 @@ structure StackDesc :> STACKDESC =
 
     open StateTypes
 
-    fun warn s = (print "WARNING: ";print s;print "\n")
+    val StackDescWarn = Stats.ff "StackDescWarn"
+    fun warn s = if !StackDescWarn then (print "WARNING: ";print s;print "\n") else ()
     fun error s = Util.error "stackdesc.sml" s
 
     fun b2w i = LU.w2i (i div 0w4)

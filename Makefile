@@ -1,14 +1,17 @@
-# Ensure ./Bin/smlnj has the correct path to the SML/NJ compiler.  The
-# TILT sources compile under SML/NJ versions 110.0.3 and 110.0.7 and
+# The TILT sources compile under SML/NJ version 110.0.7 and
 # under TILT.  If you are compiling with some other SML compiler, then
 # you will probably need to modify our CM files, the script ./Bin/mkheap
 # used to generate SML/NJ heaps, and perhaps some of the TILT code to
 # account for Basis library changes.
 #
-# Ensure that ./Bin/cputype prints sparc, alpha, or unsupported.  (After
+# Ensure ./Bin/smlnj has the correct path to the SML/NJ compiler.
+# If you are compiling for the talx86, then ensure ./Bin/talc has the
+# correct path to your TALx86 root directory.
+#
+# Ensure that ./Bin/cputype prints sparc, talx86, or unsupported.  (After
 # building an SML/NJ heap for TILT with "make heap", you can use
 # ./Bin/tilt-nj to run TILT with the SML/NJ runtime on unsupported
-# systems.)  If you are compiling on a sparc or alpha, then look at
+# systems.)  If you are compiling on a sparc or x86, then look at
 # Runtime/Makefile too.
 #
 # To compile TILT, use "make" or "make with-slaves".  The latter assumes
@@ -68,7 +71,7 @@ arg: FORCE
 # TILT runtime
 
 runtime: FORCE
-	(cd Runtime && $(MAKE) opt dbg)
+	(cd Runtime/$(cputype) && $(MAKE))
 
 # TILT-compiled binaries
 

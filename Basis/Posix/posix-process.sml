@@ -15,6 +15,16 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
     val & = SysWord.andb
     infix ++ &
 
+    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
+	(case (Ccall(f,a)) of
+	    Normal r => r
+	|   Error e => raise e)
+
+    fun ccall2 (f : ('a, 'b, 'c cresult) -->, a:'a, b:'b) : 'c =
+	(case (Ccall(f,a,b)) of
+	    Normal r => r
+	|   Error e => raise e)
+
     type word = SysWord.word
     type s_int = SysInt.int
 
@@ -23,20 +33,20 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
     fun pidToWord (PID i) = SysWord.fromInt i
     fun wordToPid w = PID (SysWord.toInt w)
 
-    fun osval (s : string) : s_int = Ccall(posix_process_num,s)
+    fun osval (s : string) : s_int = ccall(posix_process_num,s)
     val w_osval = SysWord.fromInt o osval
 
     fun fork () =
-          case Ccall(posix_process_fork,()) of
+          case ccall(posix_process_fork,()) of
             0 => NONE
           | child_pid => SOME(PID child_pid)
 
-    fun exec (x: string, y : string list) : 'a = (Ccall(posix_process_exec, x, y);
-						  raise TiltExn.LibFail "exec cannot return")
-    fun exece (x: string, y : string list, z : string list) : 'a = (Ccall(posix_process_exece, x, y, z);
-								    raise TiltExn.LibFail "exece cannot return")
-    fun execp (x: string, y : string list) : 'a = (Ccall(posix_process_execp, x, y);
-						  raise TiltExn.LibFail "execp cannot return")
+    fun exec (x: string, y : string list) : 'a =
+	raise (Ccall(posix_process_exec, x, y))
+    fun exece (x: string, y : string list, z : string list) : 'a =
+	raise (Ccall(posix_process_exece, x, y, z))
+    fun execp (x: string, y : string list) : 'a =
+	raise (Ccall(posix_process_execp, x, y))
 
     datatype waitpid_arg
       = W_ANY_CHILD
@@ -56,7 +66,7 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
       | W_STOPPED of signal
 
       (* (pid',status,status_val) = waitpid' (pid,options)  *)
-    fun waitpid' (pid : s_int, opts : word) : s_int * s_int * s_int = Ccall(posix_process_waitpid, pid, opts)
+    fun waitpid' (pid : s_int, opts : word) : s_int * s_int * s_int = ccall2(posix_process_waitpid, pid, opts)
 
     fun argToInt W_ANY_CHILD = ~1
       | argToInt (W_CHILD (PID pid)) = pid
@@ -108,10 +118,9 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
 
     fun wait () = waitpid(W_ANY_CHILD,[])
 
-    fun exit (x: Word8.word) : 'a = (Ccall(posix_process_exit, x);
-				     raise TiltExn.LibFail "execp cannot return")
+    fun exit (x: Word8.word) : 'a = raise (Ccall(posix_process_exit, x))
 
-    fun kill' (x : s_int, y : s_int) : unit = Ccall(posix_process_kill, x, y)
+    fun kill' (x : s_int, y : s_int) : unit = ccall2(posix_process_kill, x, y)
     fun kill (K_PROC (PID pid), s) = kill'(pid, SysWord.toInt(Sig.toWord s))
       | kill (K_SAME_GROUP, s) = kill'(~1, SysWord.toInt(Sig.toWord s))
       | kill (K_GROUP (PID pid), s) = kill'(~pid, SysWord.toInt(Sig.toWord s))

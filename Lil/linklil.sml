@@ -11,8 +11,7 @@ structure Linklil :> LINKLIL  =
     val show      = Stats.ff "ShowLil"     (* show after each pass *)
     val UpToLil   = Stats.ff "UpToLil"
     val typecheck = Stats.bool "Typecheck"   (* typecheck after each pass *)
-    val showtypecheck = Stats.ff "showTypecheck"   (* typecheck after each pass *)
-    val report = Stats.tt "HashConsReport"
+    val report = Stats.ff "HashConsReport"
     val show_collisions = Stats.ff "HashConsShowCollisions"
     val _ = LilSubst.install {pp_con = PpLil.pp_con}
     val _ = if !SelfCheck then SelfCheck.check () else ()

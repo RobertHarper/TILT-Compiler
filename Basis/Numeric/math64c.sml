@@ -1,6 +1,8 @@
 structure Math64 :> MATH where type real = real =
   struct
-    val float_eq = TiltPrim.float_eq
+    (* Respects NaN on x86. *)
+    fun float_eq (a:real, b:real) : bool =
+	TiltPrim.fgte(a,b) andalso TiltPrim.fgte(b,a)
     val floor = TiltPrim.float2int
 
     (* div and mod will eventually be overloaded to work at multiple types *)
@@ -31,8 +33,6 @@ structure Math64 :> MATH where type real = real =
     val cosh  : real -> real = fn arg => Ccall(cosh, arg)
     val tanh  : real -> real = fn arg => Ccall(tanh, arg)
 
-    (* the following copied from math64.sml -- we neeed atan2 and pow since
-       we don't have multi-arg call to C yet *)
     infix 4 ==
     val (op ==) = float_eq
     local
@@ -73,8 +73,13 @@ structure Math64 :> MATH where type real = real =
 	 * the nearest integer.
 	 *  May be applied to inf's and nan's.
 	 *)
-	fun realround x = if x>=0.0 then x+maxint-maxint else x-maxint+maxint
-
+	fun realround x =
+	    let val fc = TiltFc.getfc()
+		val () = TiltFc.setfc(#1 fc,TiltFc.DOUBLE)
+		val x = if x>=0.0 then x+maxint-maxint else x-maxint+maxint
+		val () = TiltFc.setfc fc
+	    in  x
+	    end
 	fun isInt y = realround(y)-y == 0.0
 	fun isOddInt(y) = isInt((y-1.0)*0.5)
 	fun intpow(x,0) = 1.0

@@ -25,7 +25,9 @@ struct
 	open Util Nil NilUtil Listops
  	val error = fn s => Util.error "optimize.sml" s
 
-	val warn = fn s => print ("WARNING: "^s^"\n")
+	val OptimizeWarn = Stats.ff "OptimizeWarn"
+	val warn = fn s =>
+	    if !OptimizeWarn then print ("WARNING: "^s^"\n") else ()
 
 	val debug = Stats.ff("OptimizeDebug")
 	val doTimer = Stats.ff("DoOptimizeTimer")
@@ -43,7 +45,7 @@ struct
 	val reduce_onearg_apps = Stats.tt "ReduceOneargApps"
 	val kill_imports  = CompilerControl.KillDeadImport
 
-	val chatlev = ref 0
+	val chatlev = Stats.int("OptimizeChatlev",0)
 	val folds_reduced = ref 0
 	val coercions_cancelled = ref 0
 	val switches_flattened  = ref 0

@@ -135,6 +135,7 @@ structure Basis :> BASIS =
 	  val argvar = fresh_var()
 	  val lbls = Listops.map0count (fn i => internal_label (str^(Int.toString i))) n
 	  val sdecs = map (fn l => SDEC(l,DEC_CON(fresh_var(),KIND,NONE, false))) lbls
+	  val sdecs = IlUtil.sort_typearg_sdecs sdecs
 	  val argsig = SIGNAT_STRUCTURE(sdecs)
 	  val inner_ctxt = add_context_dec(context,DEC_MOD(argvar,false,argsig))
 	  val instcons = map (fn l => CON_MODULE_PROJECT(MOD_VAR argvar,l)) lbls

@@ -12,6 +12,11 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
                            and type poll_info = PreOS.IO.poll_info =
   struct
 
+    fun ccall2 (f : ('a, 'b, 'c cresult) -->, a:'a, b:'b) : 'c =
+	(case (Ccall(f,a,b)) of
+	    Normal r => r
+	|   Error e => raise e)
+
   (* an iodesc is an abstract descriptor for an OS object that
    * supports I/O (e.g., file, tty device, socket, ...).
    *)
@@ -102,7 +107,7 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
 		     end
 		  | NONE => NONE
 		(* end case *))
-	  val info = Ccall(posix_os_poll, List.map fromPollDesc pds, timeOut)
+	  val info = ccall2(posix_os_poll, List.map fromPollDesc pds, timeOut)
 	  in
 	    List.map toPollInfo info
 	  end

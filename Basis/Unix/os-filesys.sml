@@ -9,6 +9,11 @@
 structure OS_FileSys :> OS_FILE_SYS =
   struct
 
+    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
+	(case (Ccall(f,a)) of
+	    Normal r => r
+	|   Error e => raise e)
+
     structure P_FSys = Posix.FileSys
 
 (*    val sysWordToWord = Word.fromLargeWord o SysWord.toLargeWord *)
@@ -110,7 +115,7 @@ structure OS_FileSys :> OS_FILE_SYS =
 	  end
 
 (*    val tmpName : unit -> string = CInterface.c_function "POSIX-OS" "tmpname" *)
-    fun tmpName() : string = Ccall(posix_os_tmpname,())
+    fun tmpName() : string = ccall(posix_os_tmpname,())
 
     datatype file_id = FID of {dev : SysWord.word, ino : SysWord.word}
 

@@ -1,0 +1,45 @@
+#!/bin/sh
+
+# usage: sparcld exe obj ...
+#
+# Link the sparc object files obj ... to an executable file exe.
+
+case $# in
+[01])
+	echo 1>&2 'usage: sparcld exe obj ...'
+	exit 1
+	;;
+*)
+	exe="$1"
+	shift
+	# Object files are "$@".
+	;;
+esac
+
+bindir=`dirname "$0"`
+runtimedir=`cd "$bindir"/../Lib/sparc; pwd`
+
+firstdata="$runtimedir/firstdata.o"
+runtime="$runtimedir/runtime.a"
+
+cputype=`"$bindir"/cputype`
+case $cputype in
+sparc)
+	crt1=`gcc --print-file-name=crt1.o`
+	crti=`gcc --print-file-name=crti.o`
+	crtbegin=`gcc --print-file-name=crtbegin.o`
+	libgcc=`gcc --print-file-name=libgcc.a`
+	crtend=`gcc --print-file-name=crtend.o`
+	crtn=`gcc --print-file-name=crtn.o`
+
+	exec /usr/ccs/bin/ld -o "$exe" "$firstdata" "$crt1" "$crti"\
+		/usr/ccs/lib/values-Xa.o "$crtbegin" "$@" "$runtime"\
+		-lpthread -lposix4 -lgen -lm -lc "$libgcc" "$crtend"\
+		"$crtn"
+	;;
+*)
+	# gnu tools can cross-link
+	echo 1>&2 sparcld does not know how to link on this machine
+	exit 1
+	;;
+esac

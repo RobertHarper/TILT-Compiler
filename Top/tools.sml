@@ -9,93 +9,13 @@ struct
     fun msg str = if (!ToolsDiag) then print str else ()
 
     val ShowTools = Stats.ff "ShowTools"
-    val DebugAsm = Stats.tt "DebugAsm"
     val DebugRuntime = Stats.ff "DebugRuntime"
     val Profile = Stats.ff "Profile"
 
-    fun release () : string =
-	if !DebugRuntime then "dbg" else "opt"
-
-    type config = {assembler : string list,
-		   linker : string list,
-		   ldpre : string list,
-		   ldpost : string list}
-
-    fun runtimeFile (path : string) : string =
-	let val runtimedir = IntSyn.F.runtimedir()
-	in  OS.Path.joinDirFile{dir=runtimedir, file=path}
+    fun binFile (path : string) : string =
+	let val bindir = IntSyn.F.bindir()
+	in  OS.Path.joinDirFile{dir=bindir, file=path}
 	end
-
-    fun chop (s:string) : string =
-	if size s = 0 then s
-	else String.extract (s, 0, SOME (size s - 1))
-
-    fun gccFile (file:string) : string =
-	chop (Util.outputOf ["gcc","--print-file-name="^file])
-
-    val sparcConfig : unit -> config =
-	Util.memoize(fn () =>
-		     let
-			 val libc = if !Profile
-					then "/usr/lib/libp/libc.a"
-				    else "-lc"
-
-			 val libm = "-lm" (* note: /usr/lib/libp/libm.a leads to ldd.so errors on cuff *)
-
-			 val crt1 = if !Profile then gccFile "mcrt1.o" else gccFile "crt1.o"
-
-			 val libdl = if !Profile
-					 then ["-ldl"]
-				     else []
-		     in
-			 {assembler = ["/usr/ccs/bin/as", "-xarch=v8plus"],
-			  linker    = ["/usr/ccs/bin/ld"],
-			  ldpre     = [runtimeFile "sparc/"^release()^"/firstdata.o", crt1, gccFile "crti.o",
-				       "/usr/ccs/lib/values-Xa.o", gccFile "crtbegin.o"],
-			  ldpost    = ([runtimeFile "runtime-sparc-"^release()^".a", "-lpthread","-lposix4", "-lgen",
-					libm, libc, gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"] @
-				       libdl)}
-		     end)
-
-
-    val alphaConfig : unit -> config =
-	Util.memoize(fn() =>
-		     let
-			 val debug = if (!DebugAsm) then ["-g"] else nil
-			 val crt = if (!Profile)
-				       then ["/usr/lib/cmplrs/cc/mcrt0.o",
-					     "/usr/lib/cmplrs/cc/libprof1_r.a",
-					     "/usr/lib/cmplrs/cc/libpdf.a"]
-				   else ["/usr/lib/cmplrs/cc/crt0.o"]
-		     in
-			 {assembler = ["/usr/bin/as"] @ debug,
-			  linker    = ["/usr/bin/ld", "-call_shared", "-D", "a000000", "-T", "8000000"] @ debug,
-			  ldpre     = crt,
-			  ldpost    = [runtimeFile "runtime-alpha-"^release()^".a", "-lpthread", "-lmach", "-lexc", "-lm",
-				       "-lc", "-lrt"]}
-		     end)
-
-    val talx86Config : unit -> config =
-	Util.memoize(fn () =>
-		     let
-		     in
-			 {assembler = ["talc.exe", "--no-internals", "-c", "--translucent-sums", "-I", IntSyn.F.runtimedir()],
-			  linker    = ["talc.exe", "--verify-link", "--no-internals", "--translucent-sums", "-I", IntSyn.F.runtimedir()],
-			  ldpre     = [],
-			  ldpost    = [runtimeFile "talx86runtime.to"
-				       , "--std-lib", runtimeFile "stdlib"
-				       , "--std-lib", runtimeFile "tal_posix"
-				       , "--std-lib", runtimeFile "tal_ml_c_interface"
-				       , runtimeFile "support.talx86.to"] 
-			  }
-		     end)
-
-
-    fun targetConfig () : config =
-	(case Target.getTarget()
-	   of Platform.ALPHA => alphaConfig()
-	    | Platform.SPARC => sparcConfig()
-	    | Platform.TALx86 => talx86Config())
 
     fun run' (arg as {command:string list, stdin:string option, stdout:string option}) : unit =
 	let val _ =
@@ -110,7 +30,7 @@ struct
 			    |	SOME file => [">",file])
 			val msg = List.concat[command,stdin,stdout]
 			val msg = Listops.concatWith " " msg
-		    in  print "running: "; print msg; print "\n"
+		    in	print "running: "; print msg; print "\n"
 		    end
 		else ()
 	in  Util.run arg
@@ -121,57 +41,76 @@ struct
 	in  run'{command=command, stdin=NONE, stdout=NONE}
 	end
 
-    fun assemble (tal_includes : string list, asmFile : string, objFile : string, tobjFile : string) : unit =
+    fun sparcas {obj:string, asm:string} : unit =
 	let val _ = msg "  Assembling\n"
-	    val _ = Target.checkNative()
-	    val {assembler, ...} = targetConfig()
-	in
-	  if Target.tal () then 
-	    let
-	      fun writer tmp1 tmp2 = run [assembler,tal_includes,["-o", tmp1, "-to", tmp2, asmFile]]
-	    in Fs.write2' writer objFile tobjFile
-	    end
-	  else
-	    let
-	      fun writer tmp = run [assembler,tal_includes,["-o", tmp, asmFile]]
-	    in Fs.write' writer objFile
-	    end
+	    val cmd = binFile "sparcas"
+	    fun writer tmp = run[[cmd,tmp,asm]]
+	    val _ = Fs.write' writer obj
+	in  ()
 	end
-	    
 
-    (*
-	We do not have a good temporary name because exeFile is not
-	inside a TM directory.
-    *)
-    fun link (tal_includes : string list, objFiles : string list, exeFile : string) : unit =
+    fun sparcld {exe:string, objs:string list} : unit =
 	let val _ = msg "  Linking\n"
-	    val _ = Target.checkNative()
-	    val {linker, ldpre, ldpost, ...} = targetConfig()
-	in  run [linker, tal_includes, ["-o", exeFile], ldpre, objFiles, ldpost]
+	    val ld = binFile "sparcld"
+	    val _ = run[[ld,exe],objs]
+	in  ()
+	end
+
+    fun inc_args (dirs:string list) : string list =
+	let fun folder (dir, args) = "-I" :: dir :: args
+	in  foldr folder nil dirs
+	end
+
+    fun verify_args (verify:bool) : string list =
+	if verify then [] else ["-V"]
+
+    fun talx86as {verify:bool, obj:string, tobj:string, incs:string list, asm:string} : unit =
+	let val _ = msg "  Assembling\n"
+	    val cmd = binFile "talx86as"
+	    val verify = verify_args verify
+	    val incs = inc_args incs
+	    fun writer tmp1 tmp2 = run[[cmd],verify,incs,[tmp1,tmp2,asm]]
+	    val _ = Fs.write2' writer obj tobj
+	in  ()
+	end
+
+    fun talx86ld {verify:bool, exe:string, incs:string list, objs:string list} : unit =
+	let val _ = msg "  Linking\n"
+	    val ld = binFile "talx86ld"
+	    val verify = verify_args verify
+	    val incs = inc_args incs
+	    val () = run[[ld],verify,incs,[exe],objs]
+	in  ()
 	end
 
     fun compress {src : string, dest : string} : unit =
 	let val _ = msg "  Compressing\n"
-	    fun writer (tmp:string) : unit =
+	    val cmd = binFile "compress"
+	    fun writer tmp =
 		run'
-		    {command = ["gzip","-cq9"],
-		     stdin = SOME src,
-		     stdout = SOME tmp}
-	in  Fs.write' writer dest
+		    {command=[cmd],
+		     stdin=SOME src,
+		     stdout=SOME tmp}
+	    val _ = Fs.write' writer dest
+	in  ()
 	end
 
     fun uncompress {src : string, dest : string} : unit =
 	let val _ = msg "  Uncompressing\n"
+	    val cmd = binFile "uncompress"
 	    fun writer (tmp:string) : unit =
 		run'
-		    {command = ["gunzip", "-cq"],
+		    {command = [cmd],
 		     stdin = SOME src,
 		     stdout = SOME tmp}
-	in  Fs.write' writer dest
+	    val _ = Fs.write' writer dest
+	in  ()
 	end
 
-    val assemble = Stats.timer("assembling",assemble)
-    val link = Stats.timer("linking",link)
+    val sparcas = Stats.timer("assembling",sparcas)
+    val sparcld = Stats.timer("linking",sparcld)
+    val talx86as = Stats.timer("assembling",talx86as)
+    val talx86ld = Stats.timer("linking",talx86ld)
     val compress = Stats.timer("compressing",compress)
     val uncompress = Stats.timer("uncompressing",uncompress)
 end

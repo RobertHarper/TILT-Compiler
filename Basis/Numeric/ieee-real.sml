@@ -6,9 +6,6 @@
 structure IEEEReal :> IEEE_REAL =
   struct
 
-  (* this may cause portability problems to 64-bit systems *)
-(*    structure Int = Int31 *)
-
     exception Unordered
 
     datatype real_order = LESS | EQUAL | GREATER | UNORDERED
@@ -22,31 +19,16 @@ structure IEEEReal :> IEEE_REAL =
       | NORMAL
       | SUBNORMAL
 
-    datatype rounding_mode
-      = TO_NEAREST
-      | TO_NEGINF
-      | TO_POSINF
-      | TO_ZERO
+    datatype rounding_mode = datatype TiltFc.rounding_mode
 
-    fun intToRM 0 = TO_NEAREST
-      | intToRM 1 = TO_ZERO
-      | intToRM 2 = TO_POSINF
-      | intToRM 3 = TO_NEGINF
+    fun setRoundingMode (r:rounding_mode) : unit =
+	let val (_,p) = TiltFc.getfc()
+	    val () = TiltFc.setfc(r,p)
+	in  ()
+	end
 
-(*
-    val ctlRoundingMode : int option -> int =
-	    CInterface.c_function "SMLNJ-Math" "ctlRoundingMode"
-    fun setRoundingMode' m = (ctlRoundingMode (SOME m); ())
-*)
-    fun setRoundingMode' m = (Ccall(setRoundingMode,m); ())
-    fun getRoundingMode'() = Ccall(getRoundingMode,0)
-
-    fun setRoundingMode TO_NEAREST	= setRoundingMode' 0
-      | setRoundingMode TO_ZERO		= setRoundingMode' 1
-      | setRoundingMode TO_POSINF	= setRoundingMode' 2
-      | setRoundingMode TO_NEGINF	= setRoundingMode' 3
-    (* dummy arg *)
-    fun getRoundingMode () = intToRM (getRoundingMode' ())
+    fun getRoundingMode () : rounding_mode =
+	#1(TiltFc.getfc())
 
     type decimal_approx = {
 	kind : float_class,

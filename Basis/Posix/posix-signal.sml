@@ -14,7 +14,12 @@ structure POSIX_Signal :> POSIX_SIGNAL =
     fun toWord (SIG i) = SysWord.fromInt i
     fun fromWord w = SIG (SysWord.toInt w)
 
-    fun osval str = Ccall(posix_signal_num,str)
+    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
+	(case (Ccall(f,a)) of
+	    Normal r => r
+	|   Error e => raise e)
+
+    fun osval str = ccall(posix_signal_num,str)
 
     val abrt = SIG(osval "abrt")
     val alrm = SIG(osval "alrm")

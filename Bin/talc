@@ -1,0 +1,7 @@
+#!/bin/sh
+bindir=`dirname "$0"`
+taldir=`cd "$bindir"/../../talc; pwd`
+TALCLIB="$taldir/runtime"
+PATH="$taldir/build;$PATH"
+export TALCLIB PATH
+exec "$taldir/build/talc.exe" ${1+"$@"}

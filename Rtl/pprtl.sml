@@ -226,6 +226,7 @@ struct
 		      results, save} =>
 		   HOVbox0 1 15 1
 		   [String (extend ("call_" ^ (calltype2s call_type))),
+		    Break,
 		    String (case func of
 				REG' f => (regi2s f)
 			      | LABEL' l => (label2s l)),

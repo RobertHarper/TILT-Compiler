@@ -97,8 +97,8 @@ struct
 	 (IN_REG r, IN_REG r') => [BASE(MOVE (r,r'))]
        | (IN_REG r, ON_STACK s) => [BASE(PUSH(r,s))]
        | (ON_STACK s, IN_REG r') => [BASE(POP(r',s))]
-       | (ON_STACK s, ON_STACK s') => (error "Warning! mv: mem-to-mem transfer")
-       | _ => error "m: not a valid argument source or dest"
+       | (ON_STACK s, ON_STACK s') => (error "mv: mem-to-mem transfer")
+       | _ => error "mv: not a valid argument source or dest"
 
    fun mv2reg (loc : assign,dest : register) : instruction =
      case loc of
@@ -698,7 +698,7 @@ struct
 			  (case calltype of
 			       ML_TAIL _ =>
 				   (if (length args > length Machineutils.indirect_int_args)
-				       then error "too many args in tailcall: checked? in toalpha/tosparc"
+				       then error "too many args in tailcall: checked?"
 				    else ())
 
 			     | _ => add_info {label=return_label,live=live})
@@ -717,7 +717,22 @@ struct
 			| (C_NORMAL, DIRECT (l, _)) =>
 			      (print "C_NORMAL call non-C_EXTERN_LABEL"; print (msLabel l); print "\n";
 			       error "C_NORMAL call non-C_EXTERN_LABEL")
-			| (C_NORMAL, _) => error "C_NORMAL call but not DIRECT"
+
+			| (C_NORMAL, INDIRECT r) =>
+			      let val (def,use) = defUse instr
+				  val {precode, srcmap, srctmp, dstmap, postcode} = putInRegs use def
+				  val reg = if isPhysical r then r else
+				  (case Regmap.find(srcmap,r) of
+				       SOME r => r
+				     | NONE => error "fs failed")
+			      in  precode @
+				  [BASE(BSR (C_EXTERN_LABEL "save_regs_MLtoC", NONE, no_moddef_info)),
+				   BASE(JSR (true, reg, 1, [])),
+				   BASE(ILABEL return_label)] @
+				  (std_return_code NONE) @
+				  [BASE(BSR (C_EXTERN_LABEL "load_regs_MLtoC", NONE, no_moddef_info))] @
+				  (std_return_code NONE)
+			      end
 
 			| (ML_NORMAL, DIRECT (label, sraOpt)) =>
 			      ([BASE(BSR (label, sraOpt, no_moddef_info)),
@@ -833,7 +848,7 @@ struct
 					print ": ";
 					print (msInstruction ("", stripAnnot instr));
 					raise GETREGBUG)
-			| e => (error "UNK ERROR while processing: ";
+			| e => (print "UNK ERROR while processing: ";
 				print (msInstruction ("", stripAnnot instr));
 				raise e))
 
