@@ -509,9 +509,8 @@ struct
 				       print "context = "; (* Ppil.pp_context context; *) print "\n"))
 
 	    val _ = num := 0
-	    (* FIXME Bug 0090 - We can't just look up bool like this, because it may have been rebound.
-	       (same goes for true and false, but we plan to put syntactic restrictions preventing
-	       the programmer from rebinding those as per the definition) *)
+	    (* We plan syntactic restrictions preventing the programmer from rebinding
+	       bool, true, or false. *)
 	    val (cbool, truee, falsee) =
 		(case bool
 		   of NONE => (U.con_bool context, U.true_exp context, U.false_exp context)
