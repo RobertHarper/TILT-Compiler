@@ -75,6 +75,10 @@ signature ILCONTEXT =
     val obscure_labels : Il.context * label_info -> Il.context
     val unobscure_labels : Il.module * label_info -> Il.module
 	
+    (* Support for name mangling.  List labels in context that may be
+       an import after phase splitting.  *)
+    val list_labels : Il.context -> label list
+	
     (* ---- These lookup functions don't perform selfification ---- *)		
     val Context_Fixity       : context -> Fixity.fixity Name.LabelMap.map
     val Context_Lookup_Overload : context * label -> Il.ovld option

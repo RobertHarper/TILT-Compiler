@@ -151,41 +151,6 @@ structure Machine =
       | msReg (R n) = "%r" ^ (ms n)
       | msReg (F n) = "%f" ^ (ms n)
 	
-    val makeAsmLabel =
-	let 
-	    fun loop [] = ""
-	      | loop (#"'" :: rest) = "PRIME" ^ (loop rest)
-	      | loop (#"!" :: rest) = "BANG" ^ (loop rest)
-	      | loop (#"%" :: rest) = "PERCENT" ^ (loop rest)
-	      | loop (#"&" :: rest) = "AND" ^ (loop rest)
-	      | loop (#"$" :: rest) = "DOLLAR" ^ (loop rest)
-	      | loop (#"#" :: rest) = "HASH" ^ (loop rest)
-	      | loop (#"+" :: rest) = "PLUS" ^ (loop rest)
-	      | loop (#"-" :: rest) = "MINUS" ^ (loop rest)
-	      | loop (#"/" :: rest) = "SLASH" ^ (loop rest)
-	      | loop (#":" :: rest) = "COLON" ^ (loop rest)
-	      | loop (#"<" :: rest) = "LT" ^ (loop rest)
-	      | loop (#"=" :: rest) = "EQ" ^ (loop rest)
-	      | loop (#">" :: rest) = "GT" ^ (loop rest)
-	      | loop (#"?" :: rest) = "QUEST" ^ (loop rest)
-	      | loop (#"@" :: rest) = "AT" ^ (loop rest)
-	      | loop (#"\\" :: rest) = "BACKSLASH" ^ (loop rest)
-	      | loop (#"~" :: rest) = "TILDE" ^ (loop rest)
-	      | loop (#"`" :: rest) = "ANTIQUOTE" ^ (loop rest)
-	      | loop (#"^" :: rest) = "HAT" ^ (loop rest)
-	      | loop (#"|" :: rest) = "BAR" ^ (loop rest)
-	      | loop (#"*" :: rest) = "STAR" ^ (loop rest)
-        | loop (s :: rest) = (String.str s) ^ (loop rest)
-	in
-	    loop o explode
-	end
-    
-
-  fun msLabel (LOCAL_CODE s) = makeAsmLabel s
-    | msLabel (LOCAL_DATA s) = makeAsmLabel s
-    | msLabel (ML_EXTERN_LABEL s) = makeAsmLabel ("ml_" ^ s)
-    | msLabel (C_EXTERN_LABEL s) = makeAsmLabel s
-
 
   fun loadi_to_ascii LD  = "ld"
     | loadi_to_ascii LDUB = "ldub"
@@ -578,15 +543,18 @@ structure Machine =
       | cFlow (BASE (BSR (label as LOCAL_CODE _,_,_))) = BRANCH (true, [label])
       | cFlow (BASE (BSR (label as LOCAL_DATA _,_,_))) = BRANCH (true, [label])
       | cFlow (BASE (BSR (label as _,_,_)))            = BRANCH (true, [])
-      | cFlow (SPECIFIC (CBRANCHI(_, ML_EXTERN_LABEL _, _))) = DELAY_BRANCH (true, [])
-      | cFlow (SPECIFIC (CBRANCHI(_, C_EXTERN_LABEL _, _)))  = DELAY_BRANCH (true, [])
-      | cFlow (SPECIFIC (CBRANCHI(_, llabel, _)))                = DELAY_BRANCH (true, [llabel])
-      | cFlow (SPECIFIC (CBRANCHR(_, _, ML_EXTERN_LABEL _, _)))  = DELAY_BRANCH (true, [])
-      | cFlow (SPECIFIC (CBRANCHR(_, _, C_EXTERN_LABEL _, _)))   = DELAY_BRANCH (true, [])
-      | cFlow (SPECIFIC (CBRANCHR(_, _, llabel, _)))             = DELAY_BRANCH (true, [llabel])
-      | cFlow (SPECIFIC (CBRANCHF(_, ML_EXTERN_LABEL _)))        = DELAY_BRANCH (true, [])
-      | cFlow (SPECIFIC (CBRANCHF(_, C_EXTERN_LABEL _)))         = DELAY_BRANCH (true, [])
-      | cFlow (SPECIFIC (CBRANCHF(_, llabel)))                   = DELAY_BRANCH (true, [llabel])
+      | cFlow (SPECIFIC (CBRANCHI(_, ML_EXTERN_LABEL _, _)))   = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHI(_, LINK_EXTERN_LABEL _, _))) = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHI(_, C_EXTERN_LABEL _, _)))    = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHI(_, llabel, _)))                 = DELAY_BRANCH (true, [llabel])
+      | cFlow (SPECIFIC (CBRANCHR(_, _, ML_EXTERN_LABEL _, _)))   = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHR(_, _, LINK_EXTERN_LABEL _, _))) = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHR(_, _, C_EXTERN_LABEL _, _)))    = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHR(_, _, llabel, _)))              = DELAY_BRANCH (true, [llabel])
+      | cFlow (SPECIFIC (CBRANCHF(_, ML_EXTERN_LABEL _)))         = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHF(_, LINK_EXTERN_LABEL _)))       = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHF(_, C_EXTERN_LABEL _)))          = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHF(_, llabel)))                    = DELAY_BRANCH (true, [llabel])
       | cFlow (BASE (Core.JSR(_,_,_,labels))) = BRANCH (false, labels)
       | cFlow (BASE (Core.RET(_,_)))  = BRANCH (false, [])
       | cFlow (BASE(RTL(CALL {calltype=(Rtl.ML_TAIL _), ...})))  = BRANCH (true, []) (* why possible *)

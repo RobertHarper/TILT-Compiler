@@ -54,7 +54,7 @@ struct
 
 (* ----------------------------------------------------------------- *)
 
-   fun allocateModule (prog as Rtl.MODULE{procs, data, main, global}) =
+   fun allocateModule (prog as Rtl.MODULE{procs, data, entry, global}) =
      let
        val names = map (fn (Rtl.PROC{name,...}) => name) procs
        local
@@ -246,42 +246,26 @@ struct
 	 in ()
 	 end
 
-       (* Functions like (ML_EXTERN_LABEL o msLabel) are not
-	  idempotent because msLabel does some mangling to avoid
-	  linker conflicts between C and ML code.  We have to be
-	  careful not to mangle the same label twice.  *)
-
-       val mangled = Machine.msLabel main
-       val main' = (case main
-		      of ML_EXTERN_LABEL s => s
-		       | _ => error "bad main label")
-	   
-       val trace_global_start = ML_EXTERN_LABEL(main'^"_TRACE_GLOBALS_BEGIN_VAL")
-       val trace_global_end = ML_EXTERN_LABEL(main'^"_TRACE_GLOBALS_END_VAL")
-       
        val _ = app emitString programHeader;
-       val _ = dumpGCDatalist (Tracetable.MakeTableHeader main');
+       val _ = dumpGCDatalist (Tracetable.MakeTableHeader (#gc_table entry));
 
        val _ = app initSig procs
 
        val _ = app emitString textStart;
-       val _ = emitString ("\t.globl "^mangled^"_CODE_END_VAL\n");
-       val _ = emitString ("\t.globl "^mangled^"_CODE_BEGIN_VAL\n");
-       val _ = emitString (""^mangled^"_CODE_BEGIN_VAL:\n");
+
        val _ = Listops.mapcount allocateComponent component_names
 
      in (* allocateProg *)
 
        subtimer("backend_output",
 		fn() => (app emitString textStart;
-			 emitString (mangled^"_CODE_END_VAL:\n");
-			 dumpGCDatalist (Tracetable.MakeTableTrailer main');
+			 dumpGCDatalist (Tracetable.MakeTableTrailer ());
 			 app emitString dataStart;
 			 dumpDatalist data;
 			 emitString ("\t.long 0" ^ commentHeader ^ "filler\n\n");
 			 let val globalData = map DATA global
-			     val globalData = [DLABEL trace_global_start] @ globalData @
-				              [DLABEL trace_global_end, 
+			     val globalData = [DLABEL (#trace_global_start entry)] @ globalData @
+				              [DLABEL (#trace_global_end entry), 
 					       COMMENT "filler so label is defined", INT32 0w0]
 			 in  dumpDatalist globalData
 			 end;

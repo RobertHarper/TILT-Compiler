@@ -367,6 +367,17 @@ struct
 		end
 	   | PHRASE_CLASS_SIG (_, s) => VarSet.union(set, sig_free s))
 
+    (* is_open_internal_path checks if a path consists of a sequence of open labels ending with
+       an internal label. *)
+    fun is_open_internal_path (_,PATH(v,[])) = false
+      | is_open_internal_path (pathmap,PATH(v,labs)) = 
+	(case labs of
+	     [lab] => (case PathMap.find(pathmap,(v,[])) of
+			   NONE => (print "Could not find "; pp_var v; print "\n"; error "is_open_internal_path failed")
+			 | SOME (l,_) => is_open l andalso is_label_internal lab)
+	   | _ => let val len = length labs
+		  in is_open (List.nth(labs, len - 2)) andalso is_label_internal (List.nth(labs, len - 1))
+		  end)
 
     (* adding the partial context to the context *)
     fun plus_context (ctxt as CONTEXT{fixityMap = fm1, overloadMap = om1,
@@ -386,17 +397,6 @@ struct
 	    val fixityMap = LabelMap.unionWithi
 		            (fn (l, _, _) => error ("fixityMap not disjoint at " ^ (label2name l)))
 			    (fm1,fm2)
-	    (* is_open_internal_path checks if a path consists of a sequence of open labels ending with
-               an internal label *)
-	    fun is_open_internal_path (_,PATH(v,[])) = false
-	      | is_open_internal_path (pathmap,PATH(v,labs)) = 
-		(case labs of
-		     [lab] => (case PathMap.find(pathmap,(v,[])) of
-				   NONE => (print "Could not find "; pp_var v; print "\n"; error "is_open_internal_path failed")
-				 | SOME (l,_) => is_open l andalso is_label_internal lab)
-		   | _ => let val len = length labs
-			  in is_open (List.nth(labs, len - 2)) andalso is_label_internal (List.nth(labs, len - 1))
-			  end)
             (* Combine the labelMaps from both contexts.
                For any labels in the domain of both labelMaps, check that at least one corresponds to an
                open_internal_path.  Why is this the right thing?
@@ -643,6 +643,17 @@ struct
 	     binds)
 	end
 
+    fun list_labels (CONTEXT{fixityMap, labelMap, pathMap, ...}) : label list =
+	let
+	    (* We do not have to add the domain of overloadMap because
+	       the elaborator resolves overloading. *)
+	    fun addPath (l : label, (p,pc) : path * phrase_class, acc) =
+		if is_open_internal_path(pathMap,p)
+		    then acc
+		else l :: acc
+	in  Name.LabelMap.foldli addPath nil labelMap
+	end
+    
     fun removeNonExport (CONTEXT{pathMap, overloadMap, labelMap, ordering, fixityMap}, frees) = 
 	let val ordering = List.filter (fn PATH p => let val SOME(l,_) = Name.PathMap.find(pathMap,p)
 						in  not (is_nonexport l)

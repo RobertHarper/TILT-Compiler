@@ -8,7 +8,7 @@ structure UpdateHelp
 struct
     val error = fn s => Util.error "updatehelp.sml" s
 	
-    val compressAsm = Stats.tt "compress_asm"
+    val compressAsm = Stats.ff "compress_asm"
 	
     structure Cache = FileCache (type internal = unit
 				 val equaler = fn _ => true
@@ -31,7 +31,7 @@ struct
 		  asmFile : string,
 		  asmzFile : string,
 		  objFile : string}
-    type state = notes * Compiler.il_module option
+    type state = notes * (Compiler.il_module * Compiler.unitmap) option
     datatype asmfiles = COMPRESSED | UNCOMPRESSED | BOTH | NEITHER
 	
     (* goalAsmFiles : unit -> asmfiles *)
@@ -63,12 +63,12 @@ struct
 				     Ue.insert (acc, Paths.unitName paths, crc)
 				 end) Ue.empty paths_list
 	
-    (* elaborate : notes * bool -> LinkIl.module *)
+    (* elaborate : notes * bool -> Compiler.il_module * Compiler.unitmap *)
     fun elaborate ({unit, target, imports, ilFile, infoFile, ...} : notes, alreadyUptodate) =
 	let val interfaceFile = Paths.interfaceFile target
 	    val sourceFile = Paths.sourceFile target
 	    val constrained = Cache.exists interfaceFile
-	    val (ilModule, ilFileWritten) =
+	    val (ilModule, unitmap, ilFileWritten) =
 		Compiler.elaborate {unit = unit,
 				    smlFile = sourceFile,
 				    intFile = (if constrained
@@ -89,7 +89,7 @@ struct
 	    (* We check after writing the .info file. *)
 	    val _ = if not (ilFileWritten andalso alreadyUptodate) then ()
 		    else error ("Elaborator overwrote an up-to-date context: " ^ ilFile)
-	in  ilModule
+	in  (ilModule, unitmap)
 	end
     
     (* remove : string -> unit *)
@@ -100,17 +100,18 @@ struct
 
     (* generate : state -> unit *)
     exception Stop
-    fun generate (notes as {unit, target, asmFile, asmzFile, ...} : notes, il_module') =
+    fun generate (notes as {unit, target, asmFile, asmzFile, ...} : notes, opt) =
 	let val _ = Help.chat ("  [Compiling " ^ unit ^ " to assembly]\n")
-	    val il_module = case il_module'
-			      of NONE => elaborate (notes, true)
-			       | SOME il_module => il_module
+	    val (il_module, unitmap) =
+		(case opt
+		   of NONE => elaborate (notes, true)
+		    | SOME x => x)
 
 		val nil_module = if !Help.uptoElaborate then raise Stop
 				 else Compiler.il_to_nil (unit, il_module)
 
 		val rtl_module = if (!Help.uptoPhasesplit) orelse (!Help.uptoClosureConvert) then raise Stop
-				 else Compiler.nil_to_rtl (unit, nil_module)
+				 else Compiler.nil_to_rtl (unit, unitmap, nil_module)
 
 		val _ = if (!Help.uptoRtl) then raise Stop
 			else (remove asmzFile; (* In case we fail, avoid inconsistent copies *)

@@ -33,9 +33,9 @@ signature TRACETABLE =
     val ShowDebug        : bool ref
     val ShowDiag         : bool ref
     val TagEntry         : bool ref
-    val MakeTableHeader  : string            -> Rtl.data list
-    val MakeTable        : callinfo list     -> Rtl.data list
-    val MakeTableTrailer : string            -> Rtl.data list
+    val MakeTableHeader  : Rtl.label     -> Rtl.data list
+    val MakeTable        : callinfo list -> Rtl.data list
+    val MakeTableTrailer : unit          -> Rtl.data list
 (*
     (* MakeMutableTable: given list of traceable global variables,
        construct table.   A ``global variable'' is a memory location containing

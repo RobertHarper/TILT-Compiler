@@ -49,8 +49,9 @@ struct
   fun pp_var' v = String (var2s v)
   fun bool2s true = "true"
     | bool2s false = "false"
-  fun label2s (ML_EXTERN_LABEL s) = "ML "^s
-    | label2s (C_EXTERN_LABEL s) = "C "^s
+  fun label2s (ML_EXTERN_LABEL s) = "ML" ^ s
+    | label2s (LINK_EXTERN_LABEL s) = "LINK" ^ s
+    | label2s (C_EXTERN_LABEL s) = "C" ^ s
     | label2s (LOCAL_CODE s) = "LC" ^ s
     | label2s (LOCAL_DATA s) = "LD" ^ s
   fun rep2s TRACE  = "(TRACE)"
@@ -331,10 +332,10 @@ struct
 		      pp_code' code,
 		      String "}", Break])
 	   
-  fun pp_Module' (MODULE{procs,data,main,global}) =
+  fun pp_Module' (MODULE{procs,data,entry,global}) =
       Vbox0 0 1 ([Break,
-		 String ("main = "^(label2s main)),
-		 Break, Break]
+                  String ("main = "^(label2s (#main entry))),
+		  Break, Break]
 		 @ 
 		 (separate Break (map pp_Proc' procs))
 		 @

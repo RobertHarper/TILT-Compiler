@@ -11,6 +11,7 @@ struct
   val fresh_named_var = Name.fresh_named_var
   datatype label = ML_EXTERN_LABEL of string
 	         | C_EXTERN_LABEL of string
+		 | LINK_EXTERN_LABEL of string
                  | LOCAL_DATA of string
                  | LOCAL_CODE of string
 
@@ -37,23 +38,28 @@ struct
   datatype regf = REGF of var * rep
   datatype reg = I of regi | F of regf
 
-  (* LOCAL_CODE < LOCAL_DATA < ML_EXTERN_LABEL < C_EXTERN_LABEL *)
+  (* LOCAL_CODE < LOCAL_DATA < LINK_EXTERN_LABEL < ML_EXTERN_LABEL < C_EXTERN_LABEL *)
   fun compare_label (LOCAL_CODE s1, LOCAL_CODE s2) = String.compare(s1,s2)
     | compare_label (LOCAL_DATA s1, LOCAL_DATA s2) = String.compare(s1,s2)
+    | compare_label (LINK_EXTERN_LABEL s1, LINK_EXTERN_LABEL s2) = String.compare(s1,s2)
     | compare_label (ML_EXTERN_LABEL s1, ML_EXTERN_LABEL s2) = String.compare(s1,s2)
     | compare_label (C_EXTERN_LABEL s1, C_EXTERN_LABEL s2) = String.compare(s1,s2)
     | compare_label (LOCAL_CODE _, _) = LESS
     | compare_label (_, LOCAL_CODE _) = GREATER
     | compare_label (LOCAL_DATA _, _) = LESS
     | compare_label (_, LOCAL_DATA _) = GREATER
+    | compare_label (LINK_EXTERN_LABEL _, _) = LESS
+    | compare_label (_, LINK_EXTERN_LABEL _) = GREATER
     | compare_label (ML_EXTERN_LABEL _, _) = LESS
     | compare_label (_, ML_EXTERN_LABEL _) = GREATER
   fun eq_label (ML_EXTERN_LABEL s1, ML_EXTERN_LABEL s2) = s1 = s2
+    | eq_label (LINK_EXTERN_LABEL s1, LINK_EXTERN_LABEL s2) = s1 = s2
     | eq_label (C_EXTERN_LABEL s1, C_EXTERN_LABEL s2) = s1 = s2
     | eq_label (LOCAL_DATA s1, LOCAL_DATA s2) = s1 = s2
     | eq_label (LOCAL_CODE s1, LOCAL_CODE s2) = s1 = s2
     | eq_label (_,_) = false
   fun hash_label (ML_EXTERN_LABEL s) = HashString.hashString s
+    | hash_label (LINK_EXTERN_LABEL s) = HashString.hashString s
     | hash_label (C_EXTERN_LABEL s) = HashString.hashString s
     | hash_label (LOCAL_CODE s) = HashString.hashString s
     | hash_label (LOCAL_DATA s) = HashString.hashString s
@@ -242,11 +248,17 @@ struct
 			   save : reg list,
                            vars : (int * int) option}
 
+  type entry = {main : label,
+		global_start : label,
+		global_end : label,
+		gc_table : label,
+		trace_global_start : label,
+		trace_global_end : label}
+       
   datatype module = MODULE of
                           {procs : proc list,
-			   data : data list,
-			   main : label,
+			   data : data list,  (* assumed that data segment starts even-word aligned *)
+			   entry : entry,
 			   global : label list}
 
-end (* fuctor RTL *)
-
+end

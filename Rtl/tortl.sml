@@ -69,6 +69,7 @@ struct
   val debug_full_env = ref false
   val debug_simp = ref false
   val debug_bound = ref false
+
   val zip = Listops.zip
 
   val char_con = NilDefs.char_con
@@ -99,12 +100,48 @@ struct
     val localArray = fresh_named_var "array"
     val localVector = fresh_named_var "vector"
 
-    val {vararg,
-	 onearg,
-	 bnds = vararg_onearg_bnds} = Vararg.generate()
-    val {sub,vsub,len,vlen,update,array,vector,
-	 bnds = aggregate_bnds} = Optimize.generate()
+    local
+	val {vararg,
+	     onearg,
+	     bnds = vararg_onearg_bnds} = Vararg.generate()
+	val {sub,vsub,len,vlen,update,array,vector,
+	     bnds = aggregate_bnds} = Optimize.generate()
 
+	type info = (Nil.label * Nil.var * Nil.niltrace * Nil.con) * Nil.var
+	val linkunit : info list = [(vararg, localVararg),
+				    (onearg, localOnearg),
+				    (sub, localSub),
+				    (vsub, localVsub),
+				    (len, localLen),
+				    (vlen, localVlen),
+				    (update, localUpdate),
+				    (array, localArray),
+				    (vector, localVector)]
+	fun makeImport (((l,_,tr,c),v) : info) = Nil.ImportValue(l,v,tr,c)
+	fun makeExport (((l,v,_,_),_) : info) = Nil.ExportValue(l,v)
+	fun getLabel (((l,_,_,_),_) : info) = l
+    in
+	val linkUnitbnds    : Nil.bnd list          = aggregate_bnds @ vararg_onearg_bnds
+	val linkUnitimports : Nil.import_entry list = map makeImport linkunit
+	val linkUnitexports : Nil.export_entry list = map makeExport linkunit
+	val linkUnitlabels  : Nil.label list        = map getLabel linkunit
+    end
+
+    (* Name mangling
+
+       If a compilation unit named U exports a name N, then the linker
+       sees U.N rather than N.  For this to make sense, unit names can
+       not contain #".".  This mangling is orthogonal to the ML + C +
+       LINK external label distinction.  *)
+
+    fun mangle (unitname : string) (name : string) : string = unitname ^ "." ^ name
+
+    fun mangleLabel (unitname : string) (l : Nil.label) : string =
+	mangle unitname (Name.label2string l)
+
+    fun mangleVar (unitname : string) (v : Nil.var) : string =
+	mangle unitname (Name.var2string v)
+	
     val exncounter_label = C_EXTERN_LABEL "exncounter"
     val error = fn s => (Util.error "tortl.sml" s)
 
@@ -175,8 +212,7 @@ struct
 		      val _ = msg "working on fixcode_b\n"
 		      fun folder (((v,funcon),function),s) =
 			  let val _ = add_global v
-			  in  add_code (s, v, funcon, LOCAL_CODE ((get_unitname()) ^ "_" 
-								  ^ (Name.var2string v)))
+			  in  add_code (s, v, funcon, LOCAL_CODE (mangleVar (get_unitname()) v))
 			  end
 		      val var_fun_list = (Sequence.toList var_fun_seq)
 		      val state = foldl folder state var_fun_list
@@ -289,7 +325,7 @@ struct
 		end
 	 | Code_cb (conwork as (name,vklist,c)) => 
 		let val funkind = Arrow_k(Code,vklist,Single_k c)
-		    val l = LOCAL_CODE((get_unitname()) ^ "_" ^ (Name.var2string name))
+		    val l = LOCAL_CODE(mangleVar (get_unitname()) name)
 		    val _ = add_global name
 		    val state = add_conterm (state,NONE,name,funkind, SOME(VALUE(CODE l)))
 		    val _ = if phase = Compiletime
@@ -430,7 +466,7 @@ struct
 		      val expvar = case f of Var_e v => v | _ => error "Function in an extern app should be a variable."
 		      val fun_reglabel =
 			case getrep state expvar of
-			  VALUE (CODE (ML_EXTERN_LABEL s)) => LABEL' (C_EXTERN_LABEL s)
+			  VALUE (CODE (clab as (C_EXTERN_LABEL _))) => LABEL' clab
 			| LOCATION loc => (print "Bad rep for "; Ppnil.pp_exp f; print "\n"; REG'(load_ireg_loc(loc,NONE)))
 			| _ => error "bad varval for function"
 				     
@@ -1700,7 +1736,7 @@ struct
       fun doconfun is_top (state,vname,vklist,body) =
 	  let 
 	      val name = (case (Name.VarMap.find(!exports,vname)) of
-			      NONE => LOCAL_CODE ((get_unitname()) ^ "_" ^ (Name.var2string vname))
+			      NONE => LOCAL_CODE (mangleVar (get_unitname()) vname)
 			    | SOME [] => error "export has no labels"
 			    | SOME (l::_) => l)
 	      val _ = incFun()
@@ -1735,7 +1771,7 @@ struct
 				     eFormals=vclist,
 				     fFormals=vflist,body,...}) =
 	  let 
-	      val name = LOCAL_CODE ((get_unitname()) ^ "_" ^ (Name.var2string vname))
+	      val name = LOCAL_CODE (mangleVar (get_unitname()) vname)
 	      val _ = reset_state(is_top, (vname, name))
 	      val _ = incFun()
 	      val _ = msg ("-----dofun_help : " ^ (Pprtl.label2s name) ^ "\n")
@@ -1877,67 +1913,103 @@ struct
       in  globals
       end
 
-  (* unitname is the name of the unit; unit names are globally unique. *)
+   (* A unitmap takes a label to its mangled form. *)
+   type unitmap = Rtl.label Name.LabelMap.map
 
-   fun unitMain (unit : string) : string = unit ^ "_unit"
+   val empty : unitmap = Name.LabelMap.empty
        
-   fun translate (unitname : string,
+   fun extend' (map : unitmap, l : Nil.label, mangled : Rtl.label) : unitmap =
+       (case Name.LabelMap.find (map, l)
+	  of NONE => Name.LabelMap.insert (map, l, mangled)
+	   | SOME _ =>
+	      error ("label " ^ Name.label2string l ^ " already in unitmap"))
+
+   (* Extern/C labels are mangled differently; this is handled below. *)
+   fun extend (map : unitmap, l : Nil.label, unitname : string) : unitmap =
+       extend' (map, l, ML_EXTERN_LABEL (mangleLabel unitname l))
+
+    fun restrict (map : unitmap, domain : Nil.label list) : unitmap =
+	let val set = Name.LabelSet.addList(Name.LabelSet.empty, domain)
+	    fun p (l,_) = Name.LabelSet.member(set,l)
+	in  Name.LabelMap.filteri p map
+	end
+    
+   fun lookupImport (map : unitmap) (l : Nil.label) : Rtl.label =
+       (case Name.LabelMap.find (map, l)
+	  of SOME mangled => mangled
+	   | NONE => error ("label " ^ Name.label2string l ^ " not in unitmap"))
+
+   fun mkentry (unitname : string) : entry =
+       let fun base s = LINK_EXTERN_LABEL (mangle unitname s)
+       in
+	   {main               = base "main",
+	    global_start       = base "globalstart",
+	    global_end         = base "globalend",
+	    gc_table           = base "gctable",
+	    trace_global_start = base "traceglobalstart",
+	    trace_global_end   = base "traceglobalend"}
+       end
+
+   fun translate (unitname : string, unitmap : unitmap,
 		  Nil.MODULE{bnds, imports, exports}) = 
          let 
 
-	     (* Augment imports with vector/array operations that are in the link file *)
-	     fun makeImport ((l,_,tr,c),v) = ImportValue(l,v,tr,c)
-	     val imports = if (unitname = linkUnitname)
-			       then imports
-			   else(makeImport(vararg, localVararg))::
-			       (makeImport(onearg, localOnearg))::
-			       (makeImport(sub, localSub))::
-			       (makeImport(vsub, localVsub))::
-			       (makeImport(len, localLen))::
-			       (makeImport(vlen, localVlen))::
-			       (makeImport(update, localUpdate))::
-			       (makeImport(array, localArray))::
-			       (makeImport(vector, localVector))::
-			       imports
+	     (* Augment imports and unitmap with vector/array operations that are in the link file. *)
+	     val (imports, unitmap) =
+		 if (unitname = linkUnitname)
+		     then (imports, unitmap)
+		 else
+		     (linkUnitimports @ imports,
+		      foldl (fn (l,map) => extend (map,l,linkUnitname)) unitmap linkUnitlabels)
+
+	     val mangleLabel  = mangleLabel unitname
+	     val lookupImport = lookupImport unitmap
 
 	     val trueGlobals = computeGlobals(imports, bnds, exports)
 
 	     (* Create named exports for setting global state *)
 	     local
-		 fun help l = ML_EXTERN_LABEL(Name.label2string l)
+		 fun help l = ML_EXTERN_LABEL(mangleLabel l)
 		 fun mapper (ExportValue(l,v)) = (v, help l)
 		   | mapper (ExportType(l,v)) = (v, help l)
 	     in  val named_exports = map mapper exports
 	     end
 
              (* Set global state and reset debugging info *)
-	     val mainString = unitMain unitname
-	     val mainCodeName = ML_EXTERN_LABEL(unitname ^ "_main")
-	     val mainCodeVar = Name.fresh_named_var(unitname ^ "_main")
-	     val mainName = ML_EXTERN_LABEL mainString
-	     val closureAddr = ML_EXTERN_LABEL (mainString ^ "_closure")
+	     val entry = mkentry unitname
+	     val closureLabel = LINK_EXTERN_LABEL(mangle unitname "closure")
+	     val mainCodeLabel = LINK_EXTERN_LABEL(mangle unitname "code")
+	     val mainCodeVar = Name.fresh_named_var "code"
 	     val _ = set_global_state (unitname,
-				       (mainCodeVar,mainCodeName)::named_exports,
+				       (mainCodeVar,mainCodeLabel)::named_exports,
 				       trueGlobals)
 	     val _ = resetDepth()
 	     val _ = resetWork()
 	     val exp = Let_e(Sequential, bnds, NilDefs.unit_exp)
 	     val con = NilDefs.unit_con
 
-	     val _ = reset_state(true, (mainCodeVar, mainCodeName))
+	     val _ = reset_state(true, (mainCodeVar,mainCodeLabel))
 	     fun folder (ImportValue(l,v,tr,c),s) = 
-		 let val mllab = ML_EXTERN_LABEL(Name.label2string l)
-		     val rep = niltrace2rep s tr
-		     (* For extern or C functions, 
-		      the label IS the code value rather than an address containing the code value *)
+		 let (* For extern/C functions:
+		        (1) The label IS the code value rather than an address
+			    containing the code value.
+			(2) The label should be mangled differently from ML values.
+			*)
 		     val lv = 			 
 			 (case c of
-			      ExternArrow_c _ => VALUE(CODE mllab)
-			    | _ => LOCATION(GLOBAL(mllab,rep)))
+			      ExternArrow_c _ =>
+				  let val clab = C_EXTERN_LABEL(Name.label2string l)
+				  in  VALUE(CODE clab)
+				  end
+			    | _ =>
+				  let val mllab = lookupImport l
+				      val rep = niltrace2rep s tr
+				  in  LOCATION(GLOBAL(mllab,rep))
+				  end)
 		 in  add_term(s,v,c,lv,NONE)
 		 end
 	       | folder (ImportType(l,v,k),s) = 
-		 let val vl = (GLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
+		 let val vl = GLOBAL(lookupImport l,TRACE)
 		 in  add_conterm (s,SOME l,v,k, SOME(LOCATION vl))
 		 end
 	       | folder (ImportBnd (phase, cb), s) =
@@ -1969,30 +2041,33 @@ struct
 	     val {dynamic,static=moduleClosureTag} = Rtltags.recordtag [NOTRACE_CODE, TRACE, TRACE]
 	     val {dynamic,static=globalTag} = Rtltags.recordtag [TRACE, TRACE] (* Doubled for replicaGlobals *)
 	     val _ = add_data(INT32(moduleClosureTag))
-	     val _ = add_data(DLABEL(closureAddr))
-	     val _ = add_data(DATA(mainCodeName))
+	     val _ = add_data(DLABEL(closureLabel))
+	     val _ = add_data(DATA(mainCodeLabel))
 	     val _ = add_data(INT32(0w0))
 	     val _ = add_data(INT32(0w0))
 
 	     val _ = add_data(INT32(globalTag))
-	     val _ = add_data(DLABEL(mainName))
-	     val _ = add_data(DATA(closureAddr))
-	     val _ = add_data(DATA(closureAddr))
+	     val _ = add_data(DLABEL(#main entry))
+	     val _ = add_data(DATA(closureLabel))
+	     val _ = add_data(DATA(closureLabel))
 
 	     val procs = rev (!pl)
 	     val data = rev (!dl)
-(*XXX*)	     val globalStart = ML_EXTERN_LABEL (mainString ^ "_GLOBALS_BEGIN_VAL")
-(*XXX*)	     val globalEnd = ML_EXTERN_LABEL (mainString ^ "_GLOBALS_END_VAL")
-	     val data = (DLABEL globalStart) ::
+		 
+	     (* We want to eliminate global_end in favor of a sentinal
+	        or explicit count.  The solaris linker inserts padding
+	        that could, in principle, confuse the runtime. *)
+		 
+	     val data = (DLABEL (#global_start entry)) ::
 		        (data @ 
-			 [DLABEL globalEnd,
+			 [DLABEL (#global_end entry),
 			  INT32 0w0])
 	     val {partialRecordLabels, 
 		  partialRecords, totalRecords,
 		  partialFields, totalFields} = get_static_records()
 	     val module = Rtl.MODULE {procs = procs,
 				      data = data,
-				      main = mainName,
+				      entry = entry,
 				      global = partialRecordLabels}
 
 	     val _ = resetDepth()
@@ -2002,66 +2077,55 @@ struct
 	 in module
 	 end
 
+     fun linkUnit (entries : entry list) : Rtl.module =
+	 let
+	     open Nil		 
+	     type acc = import_entry list * bnd list * unitmap
+	     fun importUnit (entry : entry, (imports, bnds, map) : acc) : acc =
+		 let
+		     val lab = Name.fresh_internal_label "import"
+		     val v1 = Name.fresh_var()
+		     val v3 = Name.fresh_var()
+		     val c = AllArrow_c {openness = Closure, effect = Partial,
+					 tFormals = [], eFormals = [], fFormals = 0w0,
+					 body_type = Prim_c(Record_c [], [])}
+		     val nt = TraceKnown TraceInfo.Trace
+		     val import = ImportValue (lab, v1, nt, c)
+		     val bnd = Exp_b(v3, nt, App_e(Closure, Var_e v1, [], [], []))
+		 in  (import :: imports,
+		      bnd :: bnds,
+		      extend' (map, lab, #main entry))
+		 end
+	     val (modimports, modbnds, unitmap) = foldr importUnit (nil, nil, empty) entries
+	     val nilmod = MODULE{bnds = linkUnitbnds @ modbnds,
+				 imports = modimports,
+				 exports = linkUnitexports}
+	 in
+	     translate(linkUnitname,unitmap,nilmod)
+	 end
+     
+     fun entryTables (unitnames : string list) =
+	 let
+	     val entries : entry list = map mkentry unitnames
+	     val Rtl.MODULE{procs,data=linkData,
+			    entry,global} = linkUnit entries
+	     val entries = (mkentry linkUnitname) :: entries
 
-     fun entryTables (units : string list) = 
-	 let val nt = TraceKnown TraceInfo.Trace
-	     val registerVar = Name.fresh_var()
-	     val stringCon = Prim_c(Array_c, [Prim_c (Int_c Prim.W8, [])])
-	     val registerImport = Nil.ImportValue (Name.symbol_label(Symbol.varSymbol "registerThunk"),
-						   registerVar, nt, 
-						   ExternArrow_c([stringCon],Prim_c(Record_c [], [])))
-	     val moduleStrings = map unitMain units
-	     fun makeImportBnd lab = 
-	     let open Nil
-		 val lab = Name.symbol_label (Symbol.varSymbol lab)
-		 val v1 = Name.fresh_var()
-(*		 val v2 = Name.fresh_var()*)
-		 val v3 = Name.fresh_var()
-		 val c = AllArrow_c {openness = Closure, effect = Partial,
-				     tFormals = [], eFormals = [], fFormals = 0w0,
-				     body_type = Prim_c(Record_c [], [])}
-(*		 val str = Name.label2string lab
-		 fun tabulator i = Const_e(Prim.int (Prim.W8, TilWord64.fromInt(ord (String.sub(str,i)))))
-		 val strVal = Const_e (Prim.vector(Prim_c(Int_c Prim.W8,[]),
-						   Array.tabulate(size str, tabulator)))
-*)
-	     in  (Nil.ImportValue (lab, v1, nt, c),
-		  [
-		   Nil.Exp_b(v3, nt, App_e(Closure, Var_e v1, [], [], []))])
-	     end
-	     val (moduleImports,moduleBndLists) = Listops.unzip (map makeImportBnd moduleStrings)
-	     val moduleBnds = Listops.flatten moduleBndLists
-	     val nilmod = Nil.MODULE{bnds = aggregate_bnds @ vararg_onearg_bnds @ moduleBnds,
-				     imports = registerImport :: moduleImports,
-				     exports = map (fn (l,v,tr,c) => ExportValue(l,v))
-				                [sub,vsub,len,vlen,update,array,vector,vararg,onearg]}
-	     val Rtl.MODULE{procs=linkProcs,data=linkData,
-			    main=linkMain,global=linkGlobal} = translate(linkUnitname,nilmod)
-	     val linkMainString = (case linkMain
-				     of ML_EXTERN_LABEL str => str
-				      | _ => error "bad module label")
-	     val moduleStrings = linkMainString :: moduleStrings
-	     val count = length moduleStrings
-             fun mktable(name,suffix) =
-		 DLABEL (ML_EXTERN_LABEL name) ::
-		 map (fn s => DATA(ML_EXTERN_LABEL (s ^ suffix))) moduleStrings
-	     val gc_table_begin =  mktable("GCTABLE_BEGIN_VAL","_GCTABLE_BEGIN_VAL")
-	     val globals_start =   mktable("GLOBALS_BEGIN_VAL","_GLOBALS_BEGIN_VAL")
-	     val globals_end =     mktable("GLOBALS_END_VAL","_GLOBALS_END_VAL")
-	     val trace_globals_start = mktable("TRACE_GLOBALS_BEGIN_VAL","_TRACE_GLOBALS_BEGIN_VAL")
-	     val trace_globals_end =   mktable("TRACE_GLOBALS_END_VAL","_TRACE_GLOBALS_END_VAL")
-	     val count = [DLABEL (ML_EXTERN_LABEL "module_count"),
-			  INT32 (TilWord32.fromInt count)]
-	     val data = List.concat[count,
-				    gc_table_begin,
-				    globals_start,
-				    globals_end,
-				    trace_globals_start,
-				    trace_globals_end]
-	 in  MODULE{procs = linkProcs,
-		    data = linkData @ data,
-		    main = linkMain,
-		    global = linkGlobal}
+	     fun mktable (name : string, proj : entry -> Rtl.label) : Rtl.data list =
+		 DLABEL (LINK_EXTERN_LABEL name) ::
+		 map (DATA o proj) entries
+
+	     val data = List.concat[linkData,
+				    [DLABEL (LINK_EXTERN_LABEL "modulecount"),
+				     INT32 (TilWord32.fromInt (length entries))],
+				    mktable("gctable", #gc_table),
+				    mktable("globalstart", #global_start),
+				    mktable("globalend", #global_end),
+				    mktable("traceglobalstart", #trace_global_start),
+				    mktable("traceglobalend", #trace_global_end)]
+
+	 in  Rtl.MODULE{procs=procs, data=data,
+			entry=entry, global=global}
          end
 
 end

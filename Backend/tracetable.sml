@@ -506,10 +506,9 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		 labeldata :: templist)
 	end
     
-    fun MakeTableHeader name = 
-	[COMMENT "gcinfo",DLABEL(ML_EXTERN_LABEL (name^"_GCTABLE_BEGIN_VAL"))]
+    fun MakeTableHeader label = [DLABEL(label)]
     fun MakeTable (calllist) = List.concat (map do_callinfo calllist)
-    fun MakeTableTrailer name = 
+    fun MakeTableTrailer () = 
 	(if !ShowDebug
 	     then (print ("\nTraceability Table Summary: \n");
 		   print ("  Count_unset_reg: " ^ (Int.toString (!Count_unset_reg)) ^ "\n");

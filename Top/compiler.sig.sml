@@ -14,6 +14,7 @@ sig
 
     type unit_paths = Paths.unit_paths
     type il_module
+    type unitmap
     type nil_module
     type rtl_module
 
@@ -38,13 +39,13 @@ sig
      *)
     val elaborate : {unit : string, smlFile : string, intFile : string option,
 		     targetIlFile : string, imports : import list}
-	-> il_module * bool					(* true if ilFile written to disk  *)
+	-> il_module * unitmap * bool				(* true if ilFile written to disk  *)
 	
     val il_to_nil : string * il_module -> nil_module		(* unit name *)
 	
-    val nil_to_rtl : string * nil_module -> rtl_module		(* unit name *)
+    val nil_to_rtl : string * unitmap * nil_module -> rtl_module (* unit name *)
 	
-    val rtl_to_asm : string * rtl_module -> unit		(* assembler target *)
+    val rtl_to_asm : string * rtl_module -> unit	        (* assembler target *)
 
     (* Create initialization code for the given units. *)
     val link : string * string list -> unit			(* assembler target, unit names *)

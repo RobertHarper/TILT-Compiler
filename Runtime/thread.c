@@ -1289,13 +1289,3 @@ double segmentTime(Proc_t *proc)
 {
   return lap_timer(&proc->currentTimer);
 }
-
-ptr_t registerThunk(ptr_t mlString)
-{
-  /*
-    char buffer[256];
-    mlstring2cstring_buffer(mlString, sizeof(buffer), buffer);
-    printf("registerThunk: %20s   Threads[0].saveregs[ALLOC] = %dd\n", buffer, Threads[0].saveregs[ALLOCPTR]);
-  */
-  return empty_record;
-}

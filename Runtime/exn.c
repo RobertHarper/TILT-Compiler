@@ -42,12 +42,12 @@ static ptr_t exn_lookup(ptr_t global)
 
 ptr_t getOverflowExn(void)
 {
-  return exn_lookup(&ml_Overflow_r_INT);
+  return exn_lookup(&ml_Prelude_DOTOverflow__r__INT);
 }
 
 ptr_t getDivExn(void)
 {
-  return exn_lookup(&ml_Div_r_INT);
+  return exn_lookup(&ml_Prelude_DOTDiv__r__INT);
 }
 
 /* The components of an exception packet. */
@@ -81,7 +81,7 @@ static ptr_t mkExn(ptr_t exnname, int exnstamp, val_t exnarg, int argPointer)
 /* Get the exception stamp for the ith TiltExn componenet. */
 static int getTiltExnStamp(int i)
 {
-  ptr_t global = &ml_TiltExn_STR_r_INT;
+  ptr_t global = &ml_Prelude_DOTTiltExn__STR__r__INT;
   ptr_t tiltexn = (ptr_t) GetGlobal(global);
   ptr_t exnmod = GET_PTR(tiltexn, i);
   int stamp = GET_INT(exnmod, MOD_STAMP);

@@ -384,7 +384,10 @@ struct
     automatically *)
 				  if hasRpv then [BASE(LADDR(Rpv_virt,LOCAL_CODE label))] 
 				  else []
-(* new code *)              | DIRECT (ML_EXTERN_LABEL label, _) => 
+			    | DIRECT (LINK_EXTERN_LABEL label, _) =>
+				  if hasRpv then [BASE(LADDR(Rpv_virt,LINK_EXTERN_LABEL label))] 
+				  else []
+                            | DIRECT (ML_EXTERN_LABEL label, _) => 
 				  if hasRpv then [BASE(LADDR(Rpv_virt,ML_EXTERN_LABEL label))] 
 				  else []
                             | DIRECT (C_EXTERN_LABEL label, _) =>

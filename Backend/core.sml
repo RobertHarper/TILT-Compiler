@@ -48,35 +48,42 @@ struct
     val w2i = W.toInt
     fun ms n = if n<0 then ("-"^(Int.toString (~n))) else Int.toString n
 
-      
-  val makeAsmLabel =
-    let 
-      fun loop [] = ""
-        | loop (#"'" :: rest) = "PRIME" ^ (loop rest)
-        | loop (#"!" :: rest) = "BANG" ^ (loop rest)
-        | loop (#"%" :: rest) = "PERCENT" ^ (loop rest)
-        | loop (#"&" :: rest) = "AND" ^ (loop rest)
-        | loop (#"$" :: rest) = "DOLLAR" ^ (loop rest)
-        | loop (#"#" :: rest) = "HASH" ^ (loop rest)
-        | loop (#"+" :: rest) = "PLUS" ^ (loop rest)
-        | loop (#"-" :: rest) = "MINUS" ^ (loop rest)
-        | loop (#"/" :: rest) = "SLASH" ^ (loop rest)
-        | loop (#":" :: rest) = "COLON" ^ (loop rest)
-        | loop (#"<" :: rest) = "LT" ^ (loop rest)
-        | loop (#"=" :: rest) = "EQ" ^ (loop rest)
-        | loop (#">" :: rest) = "GT" ^ (loop rest)
-        | loop (#"?" :: rest) = "QUEST" ^ (loop rest)
-        | loop (#"@" :: rest) = "AT" ^ (loop rest)
-        | loop (#"\\" :: rest) = "BACKSLASH" ^ (loop rest)
-        | loop (#"~" :: rest) = "TILDE" ^ (loop rest)
-        | loop (#"`" :: rest) = "ANTIQUOTE" ^ (loop rest)
-        | loop (#"^" :: rest) = "HAT" ^ (loop rest)
-        | loop (#"|" :: rest) = "BAR" ^ (loop rest)
-        | loop (#"*" :: rest) = "STAR" ^ (loop rest)
-        | loop (s :: rest) = (String.str s) ^ (loop rest)
-    in
-      loop o explode
-    end
+    fun makeAsmLabel (s : string) : string =
+	let 
+	    fun xlate (#"_") = "__"
+	      | xlate (#".") = "_DOT"
+	      | xlate (#"'") = "_PRIME"
+	      | xlate (#"!") = "_BANG"
+	      | xlate (#"%") = "_PERCENT"
+	      | xlate (#"&") = "_AND"
+	      | xlate (#"$") = "_DOLLAR"
+	      | xlate (#"#") = "_HASH"
+	      | xlate (#"+") = "_PLUS"
+	      | xlate (#"-") = "_MINUS"
+	      | xlate (#"/") = "_SLASH"
+	      | xlate (#":") = "_COLON"
+	      | xlate (#"<") = "_LT"
+	      | xlate (#"=") = "_EQ"
+	      | xlate (#">") = "_GT"
+	      | xlate (#"?") = "_QUEST"
+	      | xlate (#"@") = "_AT"
+	      | xlate (#"\\") = "_BACKSLASH"
+	      | xlate (#"~") = "_TILDE"
+	      | xlate (#"`") = "_ANTIQUOTE"
+	      | xlate (#"^") = "_HAT"
+	      | xlate (#"|") = "_BAR"
+	      | xlate (#"*") = "_STAR"
+	      | xlate c = String.str c
+	in  String.translate xlate s
+	end
+
+  fun msLabel (LOCAL_CODE s) = makeAsmLabel s
+    | msLabel (LOCAL_DATA s) = makeAsmLabel s
+    | msLabel (ML_EXTERN_LABEL s) = "ml_" ^ makeAsmLabel s
+    | msLabel (LINK_EXTERN_LABEL s) = "link_" ^ makeAsmLabel s
+    | msLabel (C_EXTERN_LABEL s) = s	(* We should probably change the lexer/parser to require
+					   that C externs match /[_a-zA-Z][_a-zA-Z0-9]*/.  *)
+
   fun msReg (R n) = "$" ^ (ms n)
     | msReg (F n) = "$f" ^ (ms n)
 

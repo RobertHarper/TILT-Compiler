@@ -314,7 +314,7 @@ int main(int argc, char **argv)
   stack_init();  /* must follow thread_init */
   GCInit();
 
-  thread_go((ptr_t) GetGlobal(&ml_LINKUNIT_unit));
+  thread_go((ptr_t) GetGlobal(&link_LINKUNIT_DOTmain));
   stats_finish();
   return 0;
 }

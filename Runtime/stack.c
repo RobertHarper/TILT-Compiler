@@ -20,11 +20,11 @@ int save_rate = 70;
 int useGenStack = 0;
 
 
-static mem_t GCTABLE_BEGIN_ADDR = &ml_GCTABLE_BEGIN_VAL;
-static mem_t GLOBALS_BEGIN_ADDR = &ml_GLOBALS_BEGIN_VAL;
-static mem_t GLOBALS_END_ADDR = &ml_GLOBALS_END_VAL;
-static mem_t TRACE_GLOBALS_BEGIN_ADDR = &ml_TRACE_GLOBALS_BEGIN_VAL;
-static mem_t TRACE_GLOBALS_END_ADDR = &ml_TRACE_GLOBALS_END_VAL;
+static mem_t gctable = &link_gctable;
+static mem_t globalstart = &link_globalstart;
+static mem_t globalend = &link_globalend;
+static mem_t traceglobalstart = &link_traceglobalstart;
+static mem_t traceglobalend = &link_traceglobalend;
 
 int debugStack = 0;
 long MaxStackDepth = 0;
@@ -98,8 +98,8 @@ void stack_init(void)
   assert(GCTableEntryIDFlag == 0);
 #endif
 
-  for (mi=0; mi<ml_module_count; mi++) {
-    int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
+  for (mi=0; mi<link_modulecount; mi++) {
+    int *startpos = (int *)(gctable[mi]);
     int *curpos = startpos; 
     if (debugStack) 
       printf("Scanning GC tables of module %d at %d\n", mi, startpos);
@@ -110,19 +110,14 @@ void stack_init(void)
       curpos += entrySize;
     }
     GCTableSize += (unsigned long)curpos - (unsigned long)startpos;
-    SMLGlobalSize += (long)(GLOBALS_END_ADDR[mi]) - 
-      (long)(GLOBALS_BEGIN_ADDR[mi]);
-    MutableTableSize += (long)(TRACE_GLOBALS_END_ADDR[mi]) - 
-      (long)(TRACE_GLOBALS_BEGIN_ADDR[mi]);
-/*
-       GlobalTableSize += (long)(GLOBAL_TABLE_END_ADDR[mi]) - 
-	           (long)(GLOBAL_TABLE_BEGIN_ADDR[mi]);
-                   
-*/
+    SMLGlobalSize += (long)(globalend[mi]) - 
+      (long)(globalstart[mi]);
+    MutableTableSize += (long)(traceglobalend[mi]) - 
+      (long)(traceglobalstart[mi]);
     }
   CallinfoHashTable = CreateHashTable(2*count);
-  for (mi=0; mi<ml_module_count; mi++) {
-    int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
+  for (mi=0; mi<link_modulecount; mi++) {
+    int *startpos = (int *)(gctable[mi]);
     int *curpos = startpos; 
     while (*curpos) {
       e.key = (unsigned long)(*curpos);
@@ -132,13 +127,6 @@ void stack_init(void)
       curpos += GET_ENTRYSIZE(((Callinfo_t *)curpos)->size0);
     }
   }
-  /*
-  for (mi=0; mi<NUM_STACK_STUB; mi++) {
-    e.key = (unsigned long)(GetStackStub(mi));
-    e.data = (void *)mi;
-    HashTableInsert(CallinfoHashTable,&e);
-  }
-  */
   global_root_init();
 }
 
@@ -661,16 +649,6 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
       addRegRoots(proc, (unsigned long *)(th->saveregs),  bottomRegstate | (1 << EXNPTR));
     /* downcount++;*/
   }
-  /*
-    lapPerfMon(proc,0);
-    t2 = segmentTime(proc) - t1;
-  if (t1 + t2 > 1.0) {
-    printf("complete_root_scan: %.2f ms    up = %d (%.2f)   down = %d (%.2f)   hit/miss = %d %d   try = %d  %d %d  spec = %d  work = %d\n",
-	   t1 + t2, upcount, t1, downcount, t2, hit,miss, try1, try2, try3, special, updateWorkDone(proc));
-    showPerfMon(proc, 0);
-  }
-  */
-
 }
 
 
@@ -707,9 +685,9 @@ static Set_t *tenuredGlobal;        /* Accumulates the contents of promotedGloba
 void global_root_init(void)
 {
   int mi, numGlobals = 0;  
-  for (mi=0; mi<ml_module_count; mi++) {
-    mem_t start = (mem_t)TRACE_GLOBALS_BEGIN_ADDR[mi];
-    mem_t stop = (mem_t)TRACE_GLOBALS_END_ADDR[mi];
+  for (mi=0; mi<link_modulecount; mi++) {
+    mem_t start = (mem_t)traceglobalstart[mi];
+    mem_t stop = (mem_t)traceglobalend[mi];
     numGlobals += stop - start;
   }
   promotedGlobal = SetCreate(numGlobals);
@@ -763,9 +741,9 @@ void NullGlobals(int globalOffset)
 {
   int mi;
   /* Null out replica global vars */
-  for (mi=0; mi<ml_module_count; mi++) {
-    mem_t start = (mem_t)TRACE_GLOBALS_BEGIN_ADDR[mi];
-    mem_t stop = (mem_t)TRACE_GLOBALS_END_ADDR[mi];
+  for (mi=0; mi<link_modulecount; mi++) {
+    mem_t start = (mem_t)traceglobalstart[mi];
+    mem_t stop = (mem_t)traceglobalend[mi];
     for ( ; start < stop; start++) {
       mem_t global = (mem_t) (*start);
       global[globalOffset / sizeof(val_t)] = uninit_val;

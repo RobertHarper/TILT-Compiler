@@ -5,6 +5,7 @@ sig
   type var = Name.var
   datatype label = ML_EXTERN_LABEL of string
                  | C_EXTERN_LABEL of string
+		 | LINK_EXTERN_LABEL of string
                  | LOCAL_DATA of string
                  | LOCAL_CODE of string
 
@@ -302,7 +303,8 @@ sig
 
      data is a list of static data for the module.
 
-     main is the entry point for the module.
+     entry is a collection of entry points for the module used by the runtime
+     and linkunit.
 
      global is a list of addresses of objects whose fields may point into the heap
        (1) The list contains addresses of statically allocated objects which have
@@ -314,11 +316,18 @@ sig
      Objects in the global list must contain a header word.
 
   *)
- 
+
+  type entry = {main : label,
+		global_start : label,
+		global_end : label,
+		gc_table : label,
+		trace_global_start : label,
+		trace_global_end : label}
+       
   datatype module = MODULE of
                           {procs : proc list,
 			   data : data list,  (* assumed that data segment starts even-word aligned *)
-			   main : label,
+			   entry : entry,
 			   global : label list}
 
 end (* RTL *)

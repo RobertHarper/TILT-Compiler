@@ -123,41 +123,6 @@ structure Machine =
       | msReg (R n) = "$" ^ (ms n)
       | msReg (F n) = "$f" ^ (ms n)
 	
-    val makeAsmLabel =
-	let 
-	    fun loop [] = ""
-	      | loop (#"'" :: rest) = "PRIME" ^ (loop rest)
-	      | loop (#"!" :: rest) = "BANG" ^ (loop rest)
-	      | loop (#"%" :: rest) = "PERCENT" ^ (loop rest)
-	      | loop (#"&" :: rest) = "AND" ^ (loop rest)
-	      | loop (#"$" :: rest) = "DOLLAR" ^ (loop rest)
-	      | loop (#"#" :: rest) = "HASH" ^ (loop rest)
-	      | loop (#"+" :: rest) = "PLUS" ^ (loop rest)
-	      | loop (#"-" :: rest) = "MINUS" ^ (loop rest)
-	      | loop (#"/" :: rest) = "SLASH" ^ (loop rest)
-	      | loop (#":" :: rest) = "COLON" ^ (loop rest)
-	      | loop (#"<" :: rest) = "LT" ^ (loop rest)
-	      | loop (#"=" :: rest) = "EQ" ^ (loop rest)
-	      | loop (#">" :: rest) = "GT" ^ (loop rest)
-	      | loop (#"?" :: rest) = "QUEST" ^ (loop rest)
-	      | loop (#"@" :: rest) = "AT" ^ (loop rest)
-	      | loop (#"\\" :: rest) = "BACKSLASH" ^ (loop rest)
-	      | loop (#"~" :: rest) = "TILDE" ^ (loop rest)
-	      | loop (#"`" :: rest) = "ANTIQUOTE" ^ (loop rest)
-	      | loop (#"^" :: rest) = "HAT" ^ (loop rest)
-	      | loop (#"|" :: rest) = "BAR" ^ (loop rest)
-	      | loop (#"*" :: rest) = "STAR" ^ (loop rest)
-        | loop (s :: rest) = (String.str s) ^ (loop rest)
-	in
-	    loop o explode
-	end
-    
-
-  fun msLabel (LOCAL_CODE s) = makeAsmLabel s
-    | msLabel (LOCAL_DATA s) = makeAsmLabel s
-    | msLabel (ML_EXTERN_LABEL s) = makeAsmLabel ("ml_" ^ s)
-    | msLabel (C_EXTERN_LABEL s) = makeAsmLabel s
-
 
   fun storei_to_ascii STL = "stl"
     | storei_to_ascii STQ = "stq"

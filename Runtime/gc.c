@@ -328,9 +328,9 @@ void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalSta
   int count = 0, mi, i;
   char buffer[100];
   /* check globals */
-  for (mi=0; mi<ml_module_count; mi++) {
-    mem_t start = (mem_t) (&ml_GLOBALS_BEGIN_VAL)[mi];
-    mem_t stop = (mem_t) (&ml_GLOBALS_END_VAL)[mi];
+  for (mi=0; mi<link_modulecount; mi++) {
+    mem_t start = (mem_t) (&link_globalstart)[mi];
+    mem_t stop = (mem_t) (&link_globalend)[mi];
     sprintf(buffer, "globals of module %d: %s", mi, label);
     scan_heap(buffer,start,stop,stop, legalHeaps, legalStarts, 
 	      SHOW_GLOBALS && (NumGC >= LEAST_GC_TO_CHECK), replicaType, NULL);

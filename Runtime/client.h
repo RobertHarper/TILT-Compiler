@@ -3,20 +3,17 @@
 
 #include "tag.h"
 
-extern ptr_t client_entry;
-
-extern int ml_module_count;
-extern val_t ml_GCTABLE_BEGIN_VAL;
-extern val_t ml_GCTABLE_END_VAL;
-extern val_t ml_GLOBALS_BEGIN_VAL;
-extern val_t ml_GLOBALS_END_VAL;
-extern val_t ml_TRACE_GLOBALS_BEGIN_VAL;
-extern val_t ml_TRACE_GLOBALS_END_VAL;
+extern int link_modulecount;
+extern val_t link_gctable;
+extern val_t link_globalstart;
+extern val_t link_globalend;
+extern val_t link_traceglobalstart;
+extern val_t link_traceglobalend;
 
 /* Access these like val = GetGlobal(&label) */
-extern val_t ml_Div_r_INT;
-extern val_t ml_Overflow_r_INT;
-extern val_t ml_TiltExn_STR_r_INT;
-extern val_t ml_LINKUNIT_unit;
+extern val_t ml_Prelude_DOTDiv__r__INT;
+extern val_t ml_Prelude_DOTOverflow__r__INT;
+extern val_t ml_Prelude_DOTTiltExn__STR__r__INT;
+extern val_t link_LINKUNIT_DOTmain;
 
 #endif

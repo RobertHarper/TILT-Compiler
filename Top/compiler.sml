@@ -8,11 +8,13 @@ struct
     val showWrittenContext = Stats.ff("ShowWrittenContext")
     val writeUnselfContext = Stats.ff("WriteUnselfContext")
     val showImports = Stats.ff("ShowImports")
+    val ShowUnitmap = Stats.ff("ShowUnitmap")
     val timestamp = Timestamp.timestamp
     fun wrap f arg = (timestamp(); f arg)
 
     type unit_paths = Paths.unit_paths
     type il_module = LinkIl.module
+    type unitmap = Linkrtl.unitmap
     type nil_module = Nil.module
     type rtl_module = Rtl.module
 
@@ -104,6 +106,27 @@ struct
 		    | SOME pctxt => pctxt)
 	    fun updateTiltprim pctxt = saved := SOME pctxt
 	end
+
+    fun list_labels (ctxt : Il.context) : Il.label list =
+	let
+	    val labels = LinkIl.IlContext.list_labels ctxt
+	    val labels = foldl (fn (l,acc) =>
+				let val (c,r) = Name.make_cr_labels l
+				in  (l :: c :: r :: acc)
+				end) nil labels
+	in  labels
+	end
+	
+    fun extend (map : unitmap, unitname : string, pctxt : Il.partial_context) : unitmap =
+	let fun extend' (l,map) = Linkrtl.extend(map,l,unitname)
+	    val labels = list_labels (#1 pctxt)
+	    val _ = if (!ShowUnitmap)
+			then (print "partial context: "; LinkIl.Ppil.pp_pcontext pctxt; print "\n";
+			      print "unitname: "; print unitname; print "\n";
+			      print "labels: "; app (fn l => (LinkIl.Ppil.pp_label l; print "  ")) labels; print "\n")
+		    else ()
+	in  foldl extend' map labels
+	end
     
     fun getContext imports =
 	let val _ = if (!showImports) then chatImports imports else ()
@@ -111,22 +134,26 @@ struct
 	    val _ = IlCache.tick()
 	    val start = Time.now()
 	    val plus_context = Stats.timer("AddingContext",LinkIl.plus_context)
-	    fun folder (FILE (p,k), (cached, uncached, context, label_info)) =
+	    fun folder (FILE (p,k), (cached, uncached, unitmap, context, label_info)) =
 		let val ilFile = Paths.ilFile p
+		    val unitname = Paths.unitName p
 		    val (iscached,pctxt) = IlCache.read ilFile
+		    val unitmap = extend(unitmap,unitname,pctxt)
 		    val (cached,uncached) = if iscached then (ilFile :: cached, uncached)
 					    else (cached, ilFile :: uncached)
 		    val (pctxtopt, context) = plus_context (context, pctxt)
-		    val _ = (case pctxtopt
-			       of SOME new => ignore (IlCache.updateCache (ilFile, new))
-				| NONE => ())
+		    val pctxt = (case pctxtopt
+				   of SOME new => (ignore (IlCache.updateCache (ilFile, new));
+						   new)
+				    | NONE => pctxt)
 		    val label_info = (case k
 					of INDIRECT => LinkIl.IlContext.get_labels (pctxt, label_info)
 					 | DIRECT => label_info)
-		in  (cached, uncached, context, label_info)
+		in  (cached, uncached, unitmap, context, label_info)
 		end
-	      | folder (PRIM k, (cached, uncached, context, label_info)) =
+	      | folder (PRIM k, (cached, uncached, unitmap, context, label_info)) =
 		let val pctxt = tiltprim context
+(* 		    val unitmap = extend(unitmap,"TiltPrim",pctxt) *)
 		    val (pctxtopt, context) = plus_context (context, pctxt)
 		    val _ = (case pctxtopt
 			       of SOME new => updateTiltprim new
@@ -134,10 +161,10 @@ struct
 		    val label_info = (case k
 					of INDIRECT => LinkIl.IlContext.get_labels (pctxt, label_info)
 					 | DIRECT => label_info)
-		in  (cached, uncached, context, label_info)
+		in  (cached, uncached, unitmap, context, label_info)
 		end
-	    val init = (nil, nil, LinkIl.empty_context, LinkIl.IlContext.empty_label_info)
-	    val (cached, uncached, context, indirect_labels) = foldl folder init imports
+	    val init = (nil, nil, Linkrtl.empty, LinkIl.empty_context, LinkIl.IlContext.empty_label_info)
+	    val (cached, uncached, unitmap, context, indirect_labels) = foldl folder init imports
 	    val context = LinkIl.IlContext.obscure_labels (context, indirect_labels)
 	    val totalSize = foldl (fn (ilFile,acc) => acc + (IlCache.size ilFile)) 0
 	    val chatInt = Help.chat o Int.toString
@@ -157,12 +184,12 @@ struct
 	    val _ = (Help.chat "  [Elaboration context took ";
 		     Help.chat (Real.toString diff);
 		     Help.chat " seconds.]\n")
-	in  (context, indirect_labels)
+	in  (unitmap, context, indirect_labels)
 	end
 
-    (* elaborate : {...} -> il_module * bool *)
+    (* elaborate : {...} -> il_module * unitmap * bool *)
     fun elaborate {unit, smlFile, intFile, targetIlFile, imports} =
-	let val (ctxt, label_info) = getContext imports
+	let val (unitmap, ctxt, label_info) = getContext imports
 	    val _ = timestamp()
 	    val _ = Help.chat ("  [Parsing " ^ smlFile ^ "]\n")
 	    val (lines,fp, _, dec) = parse_impl smlFile
@@ -199,6 +226,8 @@ struct
 		in  (reduced_ctxt, partial_ctxt, binds)
 		end
 	    val il_module = LinkIl.IlContext.unobscure_labels (il_module, label_info)
+	    (* Trim unitmap *)
+	    val unitmap = Linkrtl.restrict(unitmap, list_labels (#1 il_module))
 	    (* Update il file *)
 	    val _ = IlCache.flushSome [targetIlFile]
 	    val (_, partial_ctxt, _) = il_module
@@ -208,7 +237,7 @@ struct
 	    val _ = if written then ()
 		    else Help.chat " - unnecessary"
 	    val _ = Help.chat "]\n"
-	in  (il_module, written)
+	in  (il_module, unitmap, written)
 	end
     
     (* il_to_nil : string * il_module -> nil_module *)
@@ -223,8 +252,7 @@ struct
 			       of Target.TIL_ALPHA => Linkalpha.rtl_to_asm
 				| Target.TIL_SPARC => Linksparc.rtl_to_asm
 	    val rtl_to_asm = wrap rtl_to_asm
-	    val mainLabel = rtl_to_asm arg
-	in  ()
+	in  rtl_to_asm arg
 	end
 
     (* link : string * string list -> unit *)
