@@ -93,7 +93,7 @@ slaves: FORCE
 
 install: FORCE
 	-mkdir $(PREFIX)/lib $(PREFIX)/lib/tilt
-	tar cf - Bin Lib Heaps | (cd $(PREFIX)/lib/tilt && tar xf -)
+	tar cf - Bin Lib Heaps Runtime/*.a | (cd $(PREFIX)/lib/tilt && tar xf -)
 	-mkdir $(PREFIX)/man $(PREFIX)/man/man1
 	cp Doc/tilt.1 $(PREFIX)/man/man1 && chmod 644 $(PREFIX)/man/man1
 	-mkdir $(PREFIX)/bin
