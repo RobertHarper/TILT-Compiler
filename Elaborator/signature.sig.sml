@@ -21,14 +21,11 @@ sig
     val xsig_sharing_types : context *  sdec list * labels list -> sdec list
     val xsig_sharing_structures : context *  sdec list * labels list -> sdec list
 
-    (* xcoerce_seal  : ... * mod_actual * sig_actual * sig_target -> mod_result
-       xcoerce_seal' : ... * mod_actual * sig_actual * sig_target -> mod_result * sigopt_unsealed
+    (* xcoerce_seal  : context * mod_actual * sig_actual * sig_target -> mod_result
 
           Sig_actual is the signature of mod_actual.
 	  Sig_target does not contain mod_actual.
 	  Mod_result contains mod_actual and has signature sig_target.
-	  Sigopt_unsealed contains the most precise signature of mod_result if it had not been sealed
-	     (If mod_actual is valuable or no coercion is necessary, then this is SOME signat.)
 
        xcoerce_transparent : ... * mod_actual * sig_actual * sig_target -> mod_result * sig_result
 
@@ -37,15 +34,15 @@ sig
 	  Mod_result contains mod_actual.
 	  Sig_result is the signature of mod_result.
 
-       xcoerce_functor : ... * context * path_actual * sig_actual * sig_target -> mod_result * sig_result
+       xcoerce_functor : context * path_actual * sig_actual * sig_target -> mod_result
 	  Context contains path_actual already.
           Sig_actual is the signature of module path_actual and contains path_actual.
   	  Sig_target does not contain path_actual.
-	  Mod_result contains but does not bind path_actual.
+	  Mod_result contains but does not bind path_actual; its signature
+	  is a sub-signature of sig_target.
     *)
     val xcoerce_seal        : context * mod * signat * signat -> mod
-    val xcoerce_seal'       : context * mod * signat * signat -> mod * signat option
     val xcoerce_transparent : context * mod * signat * signat -> mod * signat
-    val xcoerce_functor     : context * path * signat * signat -> mod * signat
+    val xcoerce_functor     : context * path * signat * signat -> mod
 
 end
