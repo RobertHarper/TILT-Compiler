@@ -3,8 +3,16 @@ structure Linker :> LINKER =
   struct
 
     val as_path = "as"
+    fun preld() = 
+	let val alpha = "ld -r " 
+	    val solaris = "ld"
+	in   case !Til.platform of
+	       Til.MLRISC_ALPHA => alpha
+	     | Til.TIL_ALPHA => alpha
+	     | Til.MLRISC_SPARC => solaris
+	end
     fun ld() = 
-	let val alpha = "ld -D a000000 -T 8000000 -o " 
+	let val alpha = "ld -D a000000 -T 8000000 " 
 	    val solaris = "ld"
 	in   case !Til.platform of
 	       Til.MLRISC_ALPHA => alpha
@@ -225,7 +233,7 @@ structure Linker :> LINKER =
 	  fun pr_list [] = ""
 	    | pr_list [a] = a
 	    | pr_list (a::xs) = a ^ " " ^ pr_list xs
-	  val command = (ld() ^ " -r -o " ^ o_file ^ 
+	  val command = (preld() ^ " -o " ^ o_file ^ 
 			 " " ^ pr_list o_files)
 	  val _ = (print "Running: "; print command; print "\n")
 	  val success = Util.system command
