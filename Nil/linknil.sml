@@ -133,7 +133,7 @@ structure Linknil (* : LINKNIL *) =
 				    structure PrimUtil = NilPrimUtil
 				    structure Subst = NilSubst)
 
-    structure NilOpts = NilOpts (structure Nil = Nil
+    structure DoOpts = DoOpts (structure Nil = Nil
 			       structure NilPrimUtil = NilPrimUtil 
 			       structure PpNil = PpNil
 			       structure NilContext = NilContext
@@ -435,7 +435,7 @@ structure Linknil (* : LINKNIL *) =
 	      else ()
 
 
-	    val nilmod = if (!do_opt) then (Stats.timer("Nil Optimization", NilOpts.do_opts debug)) nilmod else nilmod
+	    val nilmod = if (!do_opt) then (Stats.timer("Nil Optimization", DoOpts.do_opts debug)) nilmod else nilmod
 	    val _ = if debug andalso (!do_opt)
 			then (print "\n\n=======================================\n\n";
 			      print "nil optimization results:\n";

@@ -7,6 +7,7 @@ Group
 
         structure Linknil
 	structure LinkIl
+	structure NilOpts
 is
 
 ../smlnj-lib.cm         	(* ------ SML/NJ library ------ *)
@@ -53,10 +54,16 @@ nilerror.sig.sml
 nilerror.sml
 subst.sml
 subst.sig.sml
+
 (* ----- Optimizer Stuff ------- *)
+NilOpts/nilopts.sig.sml
+NilOpts/nilopts.sml
 NilOpts/squish.sig.sml
 NilOpts/squish.sml
-NilOpts/anormalize.sml
+NilOpts/exptable.sig.sml
+NilOpts/exptable.sml
+NilOpts/pass.sig.sml
+NilOpts/anormalize-cse.sml
 NilOpts/reduce.sml
 NilOpts/flattenargs.sml
 NilOpts/linkopt.sml
