@@ -1,9 +1,13 @@
 (*$import Util Listops Name Prim Int Symbol TilWord64 Array Tyvar List Ast Il IlStatic Ppil IlUtil IlContext Datatype Error PAT AstHelp Stats Option *)
 
-(* XXX should coalesce constants (what do you mean?) *)
-
-(* The pattern matcher compiles the external AST patterns into an internal set
-   of core patterns.  These are divided into two sets:
+(* 
+   The pattern matcher is used to compile external language patterns into IL
+   expressions. These are generated as a series of 'if'-style tests (for
+   constants -- which can sometimes be changed into intswitches later in
+   the compiler) or EXN_CASE and CASE constructs for exns and sums.
+   
+   The pattern matcher first compiles the external AST patterns into
+   an internal set of core patterns. These are divided into two sets:
        irrefutable: Record, Ref, and Wild.
        refutable: various sum types such as Int, datatype constructors, ...
 
@@ -60,13 +64,13 @@
    (3) Choose SUM column - all arms will be used
    (4) Choose INT column 
        (a) All columns are INT columns.  Branch on all arms of 1st column.
-           This can be considered a degenerate use of untilAnyWild.    XXX tom ?
+           This can be considered a degenerate use of untilSelfWild.
        (b) Otherwise, there is a wild somewhere. 
            Choose only arms in which there is a Wild in the arm.  
 	   We must also include the arms which have the
 	   same Int pattern as arms we are including.  Finally,
 	   we must preserve the relative ordering of the arms we select out.
-	   This is a use of chooseAnyWild.
+	   This is a use of untilSelfWild.
    (5) Choose SUMWILD or INTWILD column with the latest occurring Wild.
        Prefer SUMWILD in case of ties.  If still tied, go from left to right.
        (a) If the first row is composed entirely of Wilds (other than in the 
@@ -78,25 +82,18 @@
            row with a Wild in the chosen column.
 	   This is a use of untilSelfWild.
 
-XXXXX change choosing criterion of (5) to stop at first non-wild in other column
-         since non-wilds will require defaults
+   XXX datatypes that have only one constructor could also be considered IRREF
+               - Tom
+   
+   XXX change choosing criterion of (5) to stop at first non-wild in other column
+       since non-wilds will require defaults
+
+   XXX should coalesce constants
+
+   Some invariants to be aware of:
+    - Arguments are always variables, so we can discard or duplicate them without
+      any effects
 *)
-
-
-(* XXX tom - put this comment somewhere? *)
-
-    (* The core routine is a match function that takes 
-     
-     (0) a typing context
-     (1) a list of arguments - variables and types
-     (2) a list of rules 
-         (a) ML source level patterns
-	 (b) variables that have already been bound
-	 (c) a function called with the bound variables which generates the HIL expression
-     (3) a default expression generator to be executed if the patterns all fail
-
-     *)
-
 
 
 structure Pat :> PAT =
@@ -109,11 +106,16 @@ struct
     structure C = IlContext
     structure N = Name
 
-    (* XXX tom ? *)
     val do_result_type = Stats.tt("PatResultType")
     val debug = Stats.ff("Pattern_debug")
 
     val error = fn s => Util.error "pat.sml" s
+    fun error_reg s =
+	let in
+	    Error.error_region ();
+	    error s
+	end
+
     fun printint i = print (Int.toString i)
     fun debugdo t = if (!debug) then (t(); ()) else ()
     val wildSymbol = (Symbol.varSymbol "_")
@@ -131,11 +133,12 @@ struct
       | Word of Ast.literal 
       | Char of string
       | String of string
-      | Vector of pattern list
       | Constructor of Ast.path * pattern option  (* Datatype constructors may be value-carrying *)
       | Exception of Ast.path * exp * (con * pattern) option    (* Exn constructors may be value-carrying *)
 
     (* The symbol list comes from VarPats as well as LayeredPats.
+       (for instance, an external language pattern "x" is compiled
+        an IL ([x], [], Wild).)
        The con list comes from ConstraintPats. *)
     withtype pattern = symbol list * con list * basePattern 
 
@@ -175,7 +178,6 @@ struct
       | pp_basePattern (Word lit) = print (TilWord64.toDecimalString lit)
       | pp_basePattern (Char str) = (print "#\""; print str; print "\"")
       | pp_basePattern (String str) = (print "\""; print str; print "\"")
-      | pp_basePattern (Vector _) = print "Vector"
       | pp_basePattern (Constructor (path, patOpt)) = pp_app(path,patOpt)
       | pp_basePattern (Exception (path, _, NONE)) = pp_app(path,NONE)
       | pp_basePattern (Exception (path, _, SOME(_,pat))) = pp_app(path,SOME pat)
@@ -191,11 +193,10 @@ struct
 	 print "    ....   ")
 
     fun pp_baseRule ((bpats, bound, body) : baseRule) = 
-	(map (fn p => (pp_basePattern p; print "   ")) bpats
-(*	 print "    BOUND = "; pp_bound bound; 
-	 print "    ARM =  ..."
-*)
-	 )
+	let in
+	    map (fn p => (pp_basePattern p; print "   ")) bpats ;
+	    print "\n ... bound: "; pp_bound bound
+	end
 
     (* Link in some functions from modules that depend on this one.
        The linking is performed in linkil.sml;
@@ -223,7 +224,11 @@ struct
 	fun expcompile arg = (Option.valOf (!cxexp)) arg
     end
 
-    (* If an overloaded expression is known, use it. *)
+    (* If an overloaded expression is known, use it. 
+       In fact, these aren't really "overloaded"; they
+       are delayed computations used in 'compile' to
+       prevent code from being duplicated.
+       *)
     fun derefOverexp (exp as (OVEREXP (_,_,eOneshot))) = 
 	(case Util.oneshot_deref eOneshot of
 	     NONE => exp
@@ -231,6 +236,8 @@ struct
       | derefOverexp e = e
 
     (* reduces eta-expanded records 
+       This translation is not general, but appears to be
+       OK for the limited circumstances in which it is used.
 
        (1)
        let ... no variable bindings ...
@@ -247,7 +254,9 @@ struct
        in { l1 = v1, l2 = v2, l3 = v3 }
        end
 
-       XXX tom how do we know this won't erase effectful bindings in (2)?
+       XXX this will do the transformation even if r is shorter than the
+           record created (is this ok because of width subtyping?)
+       XXX how do we know this won't erase effectful bindings in (2)?
        *)
     fun reduce_let e = 
       (case e of
@@ -260,8 +269,10 @@ struct
 					      else e
 	        (* 2 *)
 	    | RECORD le_exp =>
-		 let val vars = map (fn (_,VAR v) => v
-	                              | _ => N.fresh_named_var "dummy") le_exp
+		 let 
+		     val dummy = N.fresh_named_var "dummy"
+		     val vars = map (fn (_,VAR v) => v
+	                              | _ => dummy) le_exp
 
 		     (* see if the variable used in the expression for this field is
 			bound as a projection of the same field from another record *)
@@ -279,8 +290,8 @@ struct
 			     (* If every field is a projection from the existing record variable *)
 			     if List.all (fn SOME v => N.eq_var (v,baseVar)
 			                        | _ => false) rest then
-				 (* And that variable is not bound here 
-				    XXX (but only checked if to a projection from a variable!) *)
+				 (* And that variable was not bound in this let 
+				    (XXX tom - but only as a projection?) *)
 				 case search bnds (0,baseVar) of
 				     NONE => VAR baseVar
 				   | _ => e
@@ -294,9 +305,7 @@ struct
        as well make them NONE if the expression is a case that won't
        ever match anything. This checks for such cases and returns
        NONE (empty case) or SOME e (a possibly reduced expression)
-       accordingly.       
-       
-       XXX tom - really ok to throw away the argument?
+       accordingly.
        *)
     fun compress_case (exp as (CASE{arms,default,...})) : exp option = 
 	let fun do_arms (no_arms,acc,[]) = (no_arms, rev acc)
@@ -333,122 +342,124 @@ struct
 		   | (WILD, WILD) => loop (n+1, WILD, rest)
 		   | (WILD, SUM bp) => SUMWILD (0, bp)
 		   | (WILD, INT) => INTWILD 0
-		   | (WILD, _) => error "cannot get a SUMWILD or INTWILD in one element"
+		   | (WILD, _) => error_reg "cannot get a SUMWILD or INTWILD in one element"
 		   | (SUM _, SUM _) => loop (n+1, acc, rest)
 		   | (SUM bp, WILD) => SUMWILD (n, bp)
-		   | (SUM _, _) => error "expected SUM or WILD"
+		   | (SUM _, _) => error_reg "patterns do not agree: expected SUM or WILD"
 		   | (INT, INT) => loop (n+1, INT, rest)
 		   | (INT, WILD) => INTWILD n
-		   | (INT, _) => error "expeceted INT or WILD")
+		   | (INT, _) => error_reg "patterns do not agree: expected INT or WILD")
 	in  loop (1, reduce pat, map reduce pats)
 	end
 
 
     (* pat2Pattern takes the AST patterns and produces a simplified internal pattern *)
-     local
+    local
+	(* XXX bug 0084 -- We can't just look these up, because they may have been
+	   rebound. -- Tom *)
 	 fun listpat2pat [] = Ast.VarPat [Symbol.varSymbol "nil"]
 	   | listpat2pat (p::rest) = Ast.AppPat{constr=Ast.VarPat[Symbol.varSymbol "::"],
 						argument=Ast.TuplePat[p,listpat2pat rest]}
-     in
+
+	 fun unmarkpat (Ast.MarkPat (pat, _)) = unmarkpat pat
+	   | unmarkpat p = p
+    in
 	 fun pat2Pattern context (pat : Ast.pat) : pattern = 
 	   let open Ast
-	       val pat2Pattern = pat2Pattern context
-	   in  (case pat of
+	       val ptop = pat2Pattern context
+	   in  
+	       case pat of
 		  WildPat => ([], [], Wild)
 		| VarPat p => if (Datatype.is_constr context p)
 				      then ([],[], Constructor(p,NONE))
 			      else (case Datatype.exn_lookup context p of
 				    NONE => (case p of
-						 [s] => ([s], [], Wild)
+						 [s] => 
+						     if (Symbol.name s = "ref") then
+							 error_reg "constructor used without argument in pattern"
+						     else ([s], [], Wild)
 					       | _ => (Error.error_region();
 						       print "non-constructor path pattern: ";
 						       AstHelp.pp_path p; print "\n";
 						       error "non-constructor path pattern"))
 				  | SOME {stamp, carried_type=NONE} => ([], [], Exception(p, stamp, NONE))
-				  | SOME {stamp, carried_type} => error "exception constructoris missing pattern")
+				  | SOME _ => error_reg "exception constructor is missing pattern")
 		| IntPat lit => ([], [], Int lit)
 		| WordPat lit => ([], [], Word lit)
 		| StringPat str => ([], [], String str)
 		| CharPat str => ([], [], Char str)
 		| RecordPat {def:(symbol * pat) list, flexibility:bool} => 
-			  let val fields = map (fn (s,p) => (N.symbol_label s, pat2Pattern p)) def
+			  let val fields = map (fn (s,p) => (N.symbol_label s, ptop p)) def
 			  in  ([], [], Record {fields = fields, flexibility = flexibility})
 			  end
-		| ListPat p => 
-		    let fun listpat2pat [] = Ast.VarPat [Symbol.varSymbol "nil"]
-			  | listpat2pat (p::rest) = Ast.AppPat{constr=Ast.VarPat[Symbol.varSymbol "::"],
-							       argument=Ast.TuplePat[p,listpat2pat rest]}
-		    in pat2Pattern(listpat2pat p) 
-		    end
+		| ListPat p => ptop (listpat2pat p) 
 		| TuplePat pats => 
-		    let fun tuple_case _ [] = []
-			  | tuple_case n (p::r) = (U.generate_tuple_symbol n,p)::(tuple_case (n+1) r)
-			val fields = tuple_case 1 pats
-		    in  pat2Pattern(RecordPat{def = fields, flexibility = false})
+		    let val fields = Listops.mapcount (fn (i,p) => (U.generate_tuple_symbol (i+1), p)) pats
+		    in  ptop(RecordPat{def = fields, flexibility = false})
 		    end
 		| FlatAppPat patfixes => error "flatapppat should be parsed away"
-		| AppPat {constr:pat,argument:pat} => 
-		      (case (case constr of Ast.MarkPat(p,_) => p | _ => constr) of
+		| AppPat {constr:pat, argument:pat} => 
+		      (case unmarkpat constr of
 			   Ast.VarPat p => 
 			       if (Datatype.is_constr context p)
-				   then ([], [], Constructor(p, SOME (pat2Pattern argument)))
+				   then ([], [], Constructor(p, SOME (ptop argument)))
 			       else (case Datatype.exn_lookup context p of
 					 NONE => if (case p of
 						      [s] => Symbol.name s = "ref"
 						    | _ => false)
-						     then ([], [], Ref (pat2Pattern argument))
+						     then ([], [], Ref (ptop argument))
 						 else (Error.error_region();
-						       print "non-constructor path pattern: ";
+						       print "non-constructor in app pattern: ";
 						       AstHelp.pp_path p; print "\n";
-						       error "non-constructor path pattern")
-				       | SOME {stamp, carried_type=NONE} => error "exception constris not value-carrying"
+						       error "non-constructor in app pattern")
+				       | SOME {stamp, carried_type=NONE} => 
+						     error_reg ("non-value-carrying exception constructor " ^
+								"applied to argument in pattern")
 				       | SOME {stamp, carried_type=SOME c} => 
-					     ([], [], Exception(p, stamp, SOME (c, pat2Pattern argument))))
-			 | _ => error "AppPat applied a non-path")
+					     ([], [], Exception(p, stamp, SOME (c, ptop argument))))
+			 | _ => error_reg "AppPat applied a non-path")
 		| ConstraintPat{pattern,constraint} =>
 		      let val c = typecompile (context,constraint)
-			  val (syms, cons, bp) = pat2Pattern pattern
+			  val (syms, cons, bp) = ptop pattern
 		      in  (syms, c :: cons, bp)
 		      end
-		| VectorPat pats => ([], [], Vector(map pat2Pattern pats))
+		| VectorPat pats => error "Vector patterns are not supported"
 		| LayeredPat{varPat=Ast.VarPat[s],expPat} =>
-		      let val (syms, cons, bp) = pat2Pattern expPat
+		      let val (syms, cons, bp) = ptop expPat
 		      in  (s :: syms, cons, bp)
 		      end
 		| LayeredPat _ => error "Funny varPat in LayeredPat"
-		| MarkPat (p,r) => pat2Pattern p)
+		| MarkPat (p,r) => ptop p
 	   end
      end
 
 
-    (* keep the members of b2 whose symbols are in b1 in the order of b1 *)
+    (* take the intersection of two binding lists ((symbol * var * con) list):
+       keep the members of b2 whose symbols are in b1 in the order of b1 *)
     fun bound_intersect (b1 : bound, b2 : bound) : bound = 
 	let fun teq (s,_,_) (s',_,_) = Symbol.eq(s,s')
 	    fun mapper t = List.find (teq t) b2
 	in  List.mapPartial mapper b1
 	end
 
-    fun arm2sdecs(_,svc_list,_) = map (fn (s,v,c) => (SDEC(N.symbol_label s,
-							   DEC_EXP(v,c,NONE, false)))) svc_list
-
+    (* checks that con <: fullCon,
+       otherwise promote fullCon to its supertype
+        (makes total arrows partial, removes special sum info)
+       and try again...
+       *)
     fun check_rescon (context, {fullCon, ...} : resCon, con) = 
-	let val ok = IlStatic.sub_con(context,con,!fullCon)
-	    val _ = if ok then () else fullCon := (IlStatic.supertype (!fullCon))
-	    val ok = ok orelse IlStatic.sub_con(context,con,!fullCon)
-	in  if ok then ()
-	    else (Error.error_region();
-		  print "Result type mismatch.\n  Expected type: "; Ppil.pp_con (!fullCon);
-		  print "\n  Actual type: "; Ppil.pp_con con; print "\n")
-	end
+	if IlStatic.sub_con(context ,con, !fullCon) orelse
+	   IlStatic.sub_con(context, con, (fullCon := IlStatic.supertype (!fullCon); !fullCon)) then ()
+	else let in
+		Error.error_region();
+		print "Result type mismatch.\n  Expected type: "; Ppil.pp_con (!fullCon);
+		print "\n  Actual type: "; Ppil.pp_con con; print "\n"
+	     end
 
-    (* ----- creates a let binding construct ----------------------------------
-     It returns 
-     (1) a bnd option that should (if present) wrap the exp to be bound
-     (2) a var/type pair (with externally available symbol)
-           to augment the arm with so that eventual
-           compilation will occur in the right context.
-	   If the let was created for case_exps, then the augmentation is unnecessary.
-     ------------------------------------------------------------------------ *)
+    (* wrapbnds creates a let (but does some simple local optimization)
+       wrapbnds' does the same, but alpha-varies all BND_EXP bindings.
+       *)
+    val wrapbnds = U.make_let
 
     fun wrapbnds' ([] : bnds, e : exp) = e
       | wrapbnds' (bnds, e) = 
@@ -464,65 +475,60 @@ struct
 	in  U.make_let (bnds, e)
 	end
 
-    fun wrapbnds ([] : bnds, e : exp) = e
-      | wrapbnds (bnds, e) = U.make_let (bnds, e)
-    fun wrapbnd (b, e) = wrapbnds([b],e)
+    (* Given a record variable rv,
+       A list of n variables, n constructors, and n labels,
+       return bindings
+           v1 = #l1 (rv : rcon)
+	   v2 = #l2 (rv : rcon)
+           ...
+           vn = #ln (rv : rcon)
+       where rcon is {l1 : c1, l2 : c2, ..., ln : cn }
 
+       XXX - bind rcon as well to save space
+       *)
 
     fun letprojecthelp (rv : Il.var,
 			vars : var list, cons : con list, 
-			labels : label list)
-      : Il.bnds =
-      let val rcon = CON_RECORD(U.sort_labelpair(Listops.zip labels cons))
-	  val bnds = Listops.map2 (fn (v,l) => BND_EXP(v,RECORD_PROJECT(VAR rv,l,rcon))) (vars,labels)
-      in  bnds
-      end
-
-  (* ------------- MAIN ROUTINE --------------------------------------
-   compile takes a list of arguments the entire match is applied to
-   and a list match-rules, each of which consists of
-   a list of (pattern list * bound var * Ast.exp) that represents pattern 
-   sequence for that arm. The option denotes the to-be-compiled body 
-   of the rule if the match succeeds.
-     If the option is NONE, the return value should be a tuple of the 
-     variables bound by that pattern.  If there is only one variable,
-     then it is NOT tupled up.  To be well-typed, 
-     the option can be NONE only if there is one match-rule.
-     
-     The result is a case expression with its type.  
-     Also returned is a list, one for each match-rule supplied, 
-     of the variables and their types bound in each pattern.
-    -------------------------------------------------------------- *)
+			labels : label list) : Il.bnds =
+	let val rcon = CON_RECORD(U.sort_labelpair(Listops.zip labels cons))
+	    val bnds = Listops.map2 (fn (v,l) => BND_EXP(v,RECORD_PROJECT(VAR rv,l,rcon))) (vars,labels)
+	in  bnds
+	end
 
     local
+	(* unify or fail with error message *)
 	fun check context actual_c constrain_c = 
-	    if (IlStatic.eq_con(context,actual_c, constrain_c))
+	    if (IlStatic.eq_con(context, actual_c, constrain_c))
 		then ()
 	    else (Error.error_region();
-		  print "Actual type: "; Ppil.pp_con actual_c; print "\n";
-		  print "Pattern type: "; Ppil.pp_con constrain_c; print "\n")
+		  print "actual type does not match constraint in pattern\n";
+		  print "  Actual type: "; Ppil.pp_con actual_c; print "\n";
+		  print "  Pattern type: "; Ppil.pp_con constrain_c; print "\n")
 
+	(* update list of bound variables, maintaining no shadowing invariant *)
 	fun extendBound((s,(v,c) : arg), bound : bound) : bound = 
 	    let fun notshadow (s2,_,_) = not(Symbol.eq(s,s2))
 		val bound = List.filter notshadow bound
-		val bound = (s,v,c)::bound
-	    in  bound
+	    in  (s,v,c)::bound
 	    end
 	
     in
-	
+
+	(* adds variables in 'bound' to context *)
 	fun extendContext(ctxt, bound : bound) : context = 
-	    let fun folder((s,v,c), ctxt) = C.add_context_sdec(ctxt, SDEC(N.symbol_label s,
-									  DEC_EXP(v, c, NONE, false)))
+	    let fun folder((s,v,c), ctxt) = C.add_context_sdec(ctxt, 
+							       SDEC(N.symbol_label s,
+								    DEC_EXP(v, c, NONE, false)))
 	    in  foldl folder ctxt bound
 	    end
 
+	(* cons a new basepattern onto a baserule *)
 	fun extendBaseRule context (baseRule : baseRule, pat : pattern, arg : arg) : baseRule =
 	    let val (basePats, bound, body) = baseRule
-		val (_,actual_c) = arg
+		val (_, actual_c) = arg
 		val (syms, cons, basePat) = pat
 		val _ = app (check context actual_c) cons
-		val bound = foldl (fn (s,bound) => extendBound((s, arg), bound)) bound syms
+		val bound = foldl (fn (s, bound) => extendBound((s, arg), bound)) bound syms
 	    in  (basePat :: basePats, bound, body)
 	    end
 
@@ -539,57 +545,52 @@ struct
 
     end
 
- (* ------------------------------------------------------------------------------
-    various cases to handle certain collected pattern types 
-    --------------------------------------------------------------------------- *)
+    (* find all the variables that are bound by a pattern *)
+    fun get_bound context (pat : Ast.pat) : Ast.symbol list = 
+	let open Ast
+	in  (case pat of
+	    WildPat => []
+          | VarPat [s] => if (Datatype.is_constr context [s] orelse
+			      (case Datatype.exn_lookup context [s] of
+				   NONE => false
+				 | SOME _ => true))
+			      then [] 
+			  else [s]
+          | VarPat _ => []
+          | IntPat _ => []
+          | WordPat _ => []
+          | StringPat _ => []
+          | CharPat _ => []
+          | RecordPat {def:(symbol * pat) list, ...} => 
+		 Listops.flatten(map (fn (_,p) => get_bound context p) def)
+          | ListPat p => Listops.flatten(map (get_bound context) p)
+          | TuplePat p => Listops.flatten(map (get_bound context) p)
+	  | FlatAppPat patfixes => error "flatapppat should be parsed away"
+          | AppPat {constr:pat, argument:pat} => get_bound context argument
+          | ConstraintPat {pattern:pat, constraint:ty} => get_bound context pattern
+          | LayeredPat {varPat:pat, expPat:pat} => (get_bound context varPat) @ (get_bound context expPat)
+          | VectorPat _ => error "Vector patterns are not supported"
+          | MarkPat (p,r) => get_bound context p)
+	end
 
+    (* listExtract n l
+       returns the nth element and the list with that element removed *)
     fun listExtract _ [] = error "listExtract given list too short"
       | listExtract 0 (a::rest) = (a,rest)
       | listExtract n (a::rest) = 
 	let val (elem,remain) = listExtract (n-1) rest
 	in  (elem, a::remain)
 	end
-    fun ruleExtract n (pats, bound, body) = 
+
+    (* extract the nth pattern from a rule, return the pattern 
+       and the rule with that pattern removed
+       extractpat : int -> baseRule -> basePattern * baseRule
+       *)
+    fun extractpat n (pats : basePattern list, bound : bound, body : body) =
 	let val (targetPat, pats) = listExtract n pats
 	in  (targetPat, (pats, bound, body))
 	end
 
-    fun record_ref_dispatch (extractFun,n,args,arms) = 
-	let (* Can never fail -- type error otherwise *) 
-	    val (targetArg, restArgs) = listExtract n args
-	    fun mapper rule = 
-		let val (targetPat, rule) = ruleExtract n rule
-		    val info = extractFun targetPat
-		in  (info, rule)
-		end
-	    val info_arms = map mapper arms
-	in  (targetArg,restArgs,info_arms)
-	end
-
-    (* -----------------------------------------------------------------
-     Input:  (1) column number n
-             (2) a value-returning predicate on base patterns,
-	     (3) a list of arguments
-	     (4) a list of baseRules
-     Output: (1) the nth argument
-             (2) the remaining arguments
-	     (3) maximal prefix of given baseRules that satisfy the predicate
-	         along with the value returned by the predicate
-	     (4) the remaining baseRules
-     ---------------------------------------------------------------- *)
-    fun getPrefix (n, patpred, args, arms)
-	: (arg * arg list * ('a * baseRule) list * baseRule list) = 
-	let val (targetArg, restArgs) = listExtract n args
-	    fun loop [] acc = (rev acc,[])
-	      | loop (arms as (rule::restRules)) acc =
-		let val (targetPat, rule') = ruleExtract n rule
-		in  (case (patpred targetPat) of
-			 SOME obj => loop restRules ((obj,rule')::acc)
-		       | NONE => (rev acc,arms))
-		end
-	    val (info_arms, unmatchedArms) = loop arms []
-	in (targetArg, restArgs, info_arms, unmatchedArms)
-	end
 
     fun eqLiteral (Int lit, Int lit') = TilWord64.equal(lit, lit') 
       | eqLiteral (Word lit, Word lit') = TilWord64.equal(lit, lit') 
@@ -601,14 +602,12 @@ struct
       | conLiteral (String str) = CON_VECTOR(CON_UINT W8)
       | conLiteral (Char str) = CON_UINT W8
       | conLiteral _ = error "conLiteral: pattern is not literal"
-    fun isLiteral (Int lit) = true
-      | isLiteral (Word lit) = true
-      | isLiteral (String str) = true
-      | isLiteral (Char str) = true
-      | isLiteral _ = false
 
-    fun equalerLiteral (context, v, basePat) = 
-	(case basePat of
+    (* generate an expression testing v against b (a literal pattern).
+       This is used in constant_case below to generate the decision tree. *)
+    fun equalerLiteral (context, v : Il.var, b : basePattern) : Il.exp =
+	(debugdo (fn () => print "equalerliteral\n");
+	 case b of
 	     Int lit =>
 		 let val const = int(W32, lit)
 		 in  PRIM (eq_int W32,[],[VAR v,SCON const])
@@ -618,7 +617,8 @@ struct
 		 in  ILPRIM (eq_uint W32,[],[VAR v,SCON const])
 		 end
 	   | String str =>
-		 let fun mapper c = SCON(uint(W8,TilWord64.fromInt (ord c)))
+		 let val _ = debugdo (fn () => print "looking up eq for string...\n")
+		     fun mapper c = SCON(uint(W8,TilWord64.fromInt (ord c)))
 		     val str = SCON(vector (CON_UINT W8, Array.fromList(map mapper (explode str))))
 		     val string_eq_label = N.to_eq(N.symbol_label (Symbol.tycSymbol "string"))
 		     val string_eq = (case (C.Context_Lookup_Label(context,string_eq_label)) of
@@ -628,119 +628,146 @@ struct
 		 end
 	   | Char cstr =>
 		 let val char = Util.CharStr2char cstr
-		 in  ILPRIM (eq_uint W8,[], [VAR v,SCON(uint(W8,TilWord64.fromInt (ord char)))])
+		 in  ILPRIM (eq_uint W8, [], [VAR v, SCON(uint(W8, TilWord64.fromInt (ord char)))])
 		 end
 	   | _ => error "equalerLiteral given non-literal pattern")
 
-
-(* XXXXXXXXXXXXXXXXXXXXXXXXX
- code snippet that inlines string equality
-			    fun equaler v = 
-			    let val len = size ss
-				val lenbool = ILPRIM(eq_uint W32,[],
-						   [PRIM(length_table (IntVector W8),[],[VAR v]),
-						    SCON(uint (W32, TilWord64.fromInt len))])
-				val z = chr 0
-				val v' = N.fresh_var()
-				fun loop _ [] = true_exp
-				  | loop n [a] = loop n [a,z,z,z]
-				  | loop n [a,b] = loop n [a,b,z,z]
-				  | loop n [a,b,c] = loop n [a,b,c,z]
-				  | loop n (a::b::c::d::rest) = 
-				    let fun shift sh ch = TilWord64.lshift(TilWord64.fromInt(ord ch),sh)
-					val (a,b,c,d) = if (!(Stats.bool "littleEndian"))
-								then (a,b,c,d)
-								else (d,c,b,a)
-					val (a,b,c,d) = (shift 0 a, shift 8 b, shift 16 c, shift 24 d)
-					val e = TilWord64.orb(TilWord64.orb(a,b),TilWord64.orb(c,d))
-					val match = ILPRIM(eq_uint W32,[],
-							 [SCON(uint (W32, e)),
-							  PRIM(sub (IntVector W32),[],
-							       [VAR v', 
-								SCON(uint (W32, TilWord64.fromInt n))])])
-				    in  (case rest of
-					     [] => match
-					   | _ => make_ifthenelse(match,loop (n+1) rest,
-								  false_exp, con_bool))
-				    end
-				val content_bool = 
-				    U.make_let([BND_EXP(v',PRIM(uintv2uintv (W8,W32),[],[VAR v]))],
-					loop 0 (explode ss))
-			    in  make_ifthenelse(lenbool,content_bool,false_exp,con_bool)
-			    end
-XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
+    (* For "code snippet that inlines string equality", see CVS before 13 Aug 02 *)
 
 
-    fun wild_case (col, context, args, arms, def, resCon) : exp = 
+    fun record_ref_dispatch (extractFun,n,args,arms) = 
+	let (* Can never fail -- type error otherwise *) 
+	    val (targetArg, restArgs) = listExtract n args
+	    fun mapper rule = 
+		let val (targetPat, rule) = extractpat n rule
+		in  (extractFun targetPat, rule)
+		end
+	in  (targetArg, restArgs, map mapper arms)
+	end
+
+    (* When we decide to split on a column, we call one of these routines.
+       read match (below) before this code *)
+
+    (* wild_case just removes that entire column and the corresponding arg *)
+    fun wild_case (col, context, args, arms : baseRule list, def, resCon) : exp = 
 	let val _ = debugdo (fn () => print "wild_case\n")
-	    fun wildpred Wild = SOME ()
-	      | wildpred _ = error "must have Wild here"
-	    val (targetArg,argRest,info_arms,unmatchedArms) = getPrefix(col,wildpred,args,arms)
-	    val _ = if (null unmatchedArms)
-			then ()
-		    else error "must have all Wilds here"
-	    val arms = map #2 info_arms
+	    fun mapper rule =
+		case extractpat col rule of
+		    (Wild, r) => r
+		  | _ => error "must have Wild here"
+	    val (_, argRest) = listExtract col args
+	    val arms = map mapper arms
 	in  match(context, argRest, arms, def, resCon)
 	end
 
+    (* ref_case binds a new variable to the contents of the ref cell, uses that
+       as the new argument for that column, and recurses with the ref constructor 
+       stripped from those patterns.
+
+       case a b c of
+           ref p11    p12    p13  => ...
+           ref p21    p22    p23  => ...
+           ref p31    p32    p33  => ...
+
+       becomes
+
+       let a' = !a
+       in
+       case a' b c of
+           p11    p12    p13  => ...
+           p21    p22    p23  => ...
+           p31    p32    p33  => ...
+       end
+
+       *)
     and ref_case (col, context, args, arms, def, resCon) : exp = 
 	let val _ = debugdo (fn () => print "ref_case\n")
 	    fun extractRefInfo (Ref pattern) = pattern
 	      | extractRefInfo Wild = ([], [], Wild)
 	      | extractRefInfo _ = error "must have ref or wild here"
-	    val (targetArg, restArgs, info_arms) = record_ref_dispatch(extractRefInfo,col,args,arms)
+
+	    val ((var,con), restArgs, info_arms) = record_ref_dispatch(extractRefInfo, col, args, arms)
+
+	    (* unify with ref *)
 	    val elemcon = U.fresh_con context
-	    val (var,con) = targetArg
 	    val _ = if (IlStatic.eq_con(context, con, CON_REF elemcon))
 			then ()
-		    else (Error.error_region();
-			  print "ref pattern used on a non-ref argument\n")
+		    else (error_reg "ref pattern used on a non-ref argument")
+			
+	    (* bind a new variable for the contents of the ref *)
 	    val v = N.fresh_var()
 	    val bnd = BND_EXP(v,ILPRIM(deref,[elemcon],[VAR var]))
 	    val newarg = (v,elemcon)
 	    val newargs = newarg::restArgs
 	    val context = C.add_context_dec(context,DEC_EXP(v,elemcon,NONE, false))
-	    val newarms = map (fn (p,rule) => extendBaseRule context(rule, p, newarg)) info_arms
-	    val ec = match(context,newargs,newarms,def,resCon)
-	in  wrapbnd(bnd, ec)
+
+	    val newarms = map (fn (p,rule) => extendBaseRule context (rule, p, newarg)) info_arms
+	(* emit this binding and recurse *)
+	in  wrapbnds([bnd], match(context,newargs,newarms,def,resCon))
 	end
 
+  (* record_case projects the components of the record, binds them to new variables, then
+     adds each one as an argument (replacing the original record argument) and exploding
+     the components of the record pattern.
+
+     case a of
+	 (p1, p2, p3) => ...
+         (q1, q2, q3) => ...
+
+     becomes
+
+     let a1 = #1 a
+	 a2 = #2 a
+	 a3 = #3 a
+     in
+     case a1 a2 a3 of
+	 p1   p2   p3 => ...
+	 q1   q2   q3 => ...
+     end
+
+     Most of the extra complication below arises from the need to handle flex records.
+     We need to pick the set of labels actually used (and project only those), but also
+     make sure that the patterns can all belong to the same record!
+
+     *)
   and record_case (col, context, args, arms, def, resCon) : exp = 
-    let val _ = debugdo (fn () => print "record_case\n")
+    let 
+	val _ = debugdo (fn () => print "record_case\n")
 	fun extractRecordInfo(Record {fields,flexibility}) = (fields, flexibility)
 	  | extractRecordInfo Wild = ([], true)
 	  | extractRecordInfo _ = error "must have record or wild here"
 	val (targetArg, restArgs, info_arms) = record_ref_dispatch (extractRecordInfo,col,args,arms)
-	fun is_subset ([],s2) = true
-	  | is_subset (r1::s1,s2) = Listops.member_eq(N.eq_label,r1,s2) andalso is_subset(s1,s2)
-	fun same(s1,s2) = if (is_subset(s1,s2) 
-			      andalso is_subset(s2,s1))
-			      then s2
-			  else error "tuprec_case failed same"
-	fun subset(s1,s2) = if (is_subset(s1,s2)) 
-				then s2 
-			    else error "tuprec_case failed subset"
-	fun merge([],s2) = s2
-	  | merge(s1::r1,s2) = if (Listops.member_eq(N.eq_label,s1,s2))
-				   then merge(r1,s2)
-			       else merge(r1,s1::s2)
+
+	fun same(s1,s2) = if Listops.sameset_eq N.eq_label s1 s2 then s2
+			  else error_reg "flex records do not all agree in record patterns (test: same)"
+
+	fun subset(s1,s2) = if Listops.subset_eq N.eq_label s1 s2 then s2 
+			    else error_reg "flex records do not all agree in record patterns (test: subset)"
+
+	(* check that there are no duplicate labels *)
 	fun unique (splist : (label * pattern) list) = 
 	    let fun folder((l,_),acc) = if (Listops.member_eq(N.eq_label,l,acc))
-					    then error "tuprec_case failed due to duplicate field names"
+					    then error_reg "duplicate field names in record pattern"
 					else l::acc
 	    in foldr folder [] splist (* foldr preserves the order *)
 	    end
+
+	(* get the list of used labels and verify that flex records are ok...
+	   flex: true if "still flexible"
+	   flag: true if this record is flexible *)
 	fun folder (((splist : (label * pattern) list,flag),_),(syms,flex)) = 
 	    (case (flag,flex) of
-		 (false,false) => (same(unique splist,syms),false)
-	       | (true,false) => (subset(unique splist,syms),false)
-	       | (false,true) => (subset(syms,unique splist),false)
-	       | (true,true) => (merge(unique splist,syms),true))
+		 (false,false) => (same(unique splist,syms), false)
+	       | (true,false) => (subset(unique splist,syms), false)
+	       | (false,true) => (subset(syms,unique splist), false)
+	       | (true,true) => (Listops.list_sum_eq (N.eq_label, unique splist, syms), true))
 	val (syms,flex) = foldl folder ([],true) info_arms
+
+	(* create bindings and recurse *)
 	fun fetch splist s : pattern = (case Listops.assoc_eq(N.eq_label,s,splist) of
 					    SOME p => p
 					  | NONE => ([], [], Wild))
-	fun acc_normalize((splist,flex),arm) = (map (fetch splist) syms, arm)
+	fun acc_normalize((splist,_),arm) = (map (fetch splist) syms, arm)
 	val accs' = map acc_normalize info_arms
 	val (var1,con1) = targetArg
 	val rvars = map (fn _ => N.fresh_var()) syms
@@ -750,7 +777,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	val argcon = if flex 
 			 then CON_FLEXRECORD(ref (FLEXINFO(Tyvar.new_stamp(),false,lc)))
 		     else CON_RECORD lc
-	val _ = if (IlStatic.eq_con(context,con1,argcon))
+	val _ = if (IlStatic.eq_con(context, con1, argcon))
 		    then ()
 		else (Error.error_region();
 		      print "tuple/record pattern used on a non-record argument\n";
@@ -766,15 +793,40 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
     in  wrapbnds(rbnds,e)
     end
 
+  (* exn_case uses the selector much like constant_case (below) to
+     get info_arms (the patterns and success continuations we'll be splitting on)
+     and unmatchedArms (the new failure continuation)
+	 
+     case x of
+	 Match =>  ...
+       | Div =>  ...
+       | Fail s =>  ...
+
+     becomes
+
+     EXN_CASE x of
+         Match   with   fn () => ...
+       | Div     with   fn () => ...
+       | Fail    with   fn s  => ...
+
+     *)
+
   and exn_case(col, context, args, arms, def, resCon, selector) : exp = 
-      let val _ = debugdo (fn () => print "exn_case\n")
+      let 
+	  val _ = debugdo (fn () => print "exn_case\n")
+
 	  val (pat_arms, unmatchedArms) = selector(col, arms)
 	  val info_arms = map (fn (Exception info, arm) => (info, arm)
 			        | _ => error "must have exception here") pat_arms
-	  val (targetArg, restArgs) = listExtract col args
+
+	  val ((exnvar,exncon), restArgs) = listExtract col args
 	  val def = (case unmatchedArms of
 			 [] => def
 		       | _ => fn () => match(context,args,unmatchedArms,def,resCon))
+
+	  (* generate the arms for the exn_case.
+	     Basically just pull out the stamp and con (or use unit if not value-carrying),
+	     and generate a lambda as the handler. *)
 	  val rescon = ref(U.fresh_con context)
 	  val v = N.fresh_named_var "exnarg_var"
 	  fun helper ((path,stamp,typepat_opt), arm : baseRule) = 
@@ -793,7 +845,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 		  val body = #1(U.make_lambda(v,con,!(#shortCon resCon),e))
 	      in (stamp,con,body)
 	      end
-	  val (exnvar,exncon) = targetArg
+
 	  val _ = if (IlStatic.eq_con(context,exncon,CON_ANY))
 		      then ()
 		  else (Error.error_region();
@@ -805,52 +857,57 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	      let val e = def()
 	      in  compress_case e 
 	      end
-      in  EXN_CASE{arg=exnarg, arms=arms', default = default', tipe = !(#shortCon(resCon))}
+      in  EXN_CASE{arg=exnarg, arms=arms', default = default', tipe = !(#shortCon resCon)}
       end
 
+  (* XXX document *)
 
   and constructor_case (col, context, args, arms, def, resCon, selector) : exp = 
-    let val _ = debugdo (fn () => print "constructor_case\n")
+    let 
+      val _ = debugdo (fn () => print "constructor_case\n")
+
+      (* get the argument we're testing, and the rest *)
+      val ((casevar, casecon), restArgs) = listExtract col args
+
+      (* use selector to find our series of tests (with their success continuations)
+	 and the failure continuation *)
       val (pat_arms, unmatchedArms) =  selector(col, arms)
       val info_arms = map (fn (Constructor info, arm) => (info, arm)
 			    | _ => error "must have constructor here") pat_arms
-      val (targetArg, restArgs) = listExtract col args
       val def = (case unmatchedArms of
 		     [] => def	
 		   | _ => fn () => match(context,args,unmatchedArms,def,resCon))
-      val (casevar, casecon) = targetArg
       val casearg = VAR casevar
       val rescon_var = N.fresh_named_var "rescon_var"
       val rescon = ref(U.fresh_con context)
       val rsvar = N.fresh_named_var "sumswitch_arg"
 
-      val ((ast_path,_),_)::_ = info_arms
+      (* can't fail; this column has stuff in it or we'd be done in match! *)
+      val ((ast_path,_),_) = hd info_arms
+
       val {instantiated_type = datacon,
 	   instantiated_sumtype = sumtype,
 	   arms = constr_patconopt_list,
-	   expose_exp} = Datatype.instantiate_datatype_signature(context,ast_path,polyinst)
+	   expose_exp} = Datatype.instantiate_datatype_signature(context, ast_path, polyinst)
 
       local
-	  val (names,noncarriers,carrier) = 
-	      (case (IlStatic.con_head_normalize(context,sumtype)) of
-		   CON_SUM{names,noncarriers,carrier,special} => (names,noncarriers,carrier)
-		 | c => (print "sumcon not reducible to SUM_CON: ";
+	  val (names, noncarriers, carrier) = 
+	      (case IlStatic.con_head_normalize (context, sumtype) of
+		   CON_SUM{names,noncarriers,carrier,special} => (names, noncarriers, carrier)
+		 | c => (Error.error_region ();
+			 print "sumcon not reducible to SUM_CON: ";
 			 Ppil.pp_con c; print "\n";
 			 error "sumcon not reducible to SUM_CON"))
-      in  fun mk_ssumcon i = CON_SUM{names=names,
+      in  
+	  fun mk_ssumcon i = CON_SUM{names=names,
 				     noncarriers=noncarriers,
 				     carrier=carrier,
 				     special=SOME i}
       end
 
-
-      local
-	  val SOME(_,PHRASE_CLASS_EXP(_,actualtype,_,_)) = C.Context_Lookup_Var(context,casevar)
-      in  val jopt = (case actualtype of
-			  CON_SUM{names,noncarriers,carrier,special} => special
-			| _ => NONE)
-      end
-
+      val jopt = case C.Context_Lookup_Var(context, casevar) of
+	            SOME(_,PHRASE_CLASS_EXP(_,CON_SUM{special,...},_,_)) => special
+		  | _ => NONE
 
       val _ = if IlStatic.sub_con(context,casecon,datacon)
 		  then ()
@@ -858,7 +915,6 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 		    print "datacon is "; Ppil.pp_con datacon; print "\n";
 		    print "casecon is "; Ppil.pp_con casecon; print "\n";
 		    print "constructor pattern used on an argument of the wrong type\n")
-
 
       fun getarm (i,{name=cur_constr,arg_type}) : exp option = 
 	let 
@@ -870,7 +926,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 		     (false,_, _) => NONE
 		   | (true,NONE, NONE) => SOME baseRule
 		   | (true,SOME argpat, SOME arg) => SOME(extendBaseRule context (baseRule, argpat, arg))
-		   | (true, _, _) => error "value-carrying vs non-value-carrying mismatch")
+		   | (true, _, _) => error_reg "value-carrying vs non-value-carrying mismatch")
 	    val relevants : baseRule list = List.mapPartial armhelp info_arms
 
 	    val context = C.add_context_dec(context,DEC_EXP(casevar,mk_ssumcon i,NONE, false))
@@ -912,22 +968,53 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
     in   case_exp
     end
 
+    (* constant_case emits a series of branches on the selected column.
+       The selector function determines
+         info_arms: In order, check against the basePattern, and continue with the baseRule 
+	            if a match.
+	 unmatchedArms: the default for recursive calls will "fall through" to test these.
 
-    and constant_case(col, context, args, arms, def, resCon, selector) : exp = 
-	let val _ = debugdo (fn () => print "constant_case\n")
+       The selector function is chosen by some magic guesses about what will lead to
+       less duplication. See the code in 'match' and description at the top of the file.
+
+       *)
+    and constant_case(col, context, args, arms, def, resCon, 
+		      selector : int * baseRule list -> (basePattern * baseRule) list * baseRule list) : exp = 
+	let 
+	    val _ = debugdo (fn () => print ("constant_case column " ^ Int.toString col ^ "\n"))
 	    val (info_arms, unmatchedArms) =  selector(col, arms)
+	    val _ = debugdo (fn () => 
+			     let in
+				 print "info_arms: \n"; 
+				 app (fn (bp, br) => 
+				      let in
+					  print " * "; pp_basePattern bp ; print "\n";
+					  print " + "; pp_baseRule br ; print "\n\n"
+				      end) info_arms;
+				 print "unmatched: \n";
+				 app (fn br => (print " + "; pp_baseRule br; print "\n")) unmatchedArms;
+				 print "\n"
+			     end)
+
+	    (* default for recursive calls -- handle the unmatched arms, if any *)
 	    val def = (case unmatchedArms of
 			   [] => def
 			 | _ => fn () => match(context,args,unmatchedArms,def,resCon))
-	    val (targetArg, restArgs) = listExtract col args
-	    val (var,con) = targetArg
+
+	    val ((var, con), restArgs) = listExtract col args
+
+	    (* generate the series of if tests. matchOne collects up
+	       all the rules that have the same constant as the one we're
+	       about to test, so that we don't do any redundant tests.
+	       *)
 	    fun matchOne [] = error "matchOne given no rules"
 	      | matchOne (info_arms as (targetPat,_)::_) = 
 		let val litCon = conLiteral targetPat
 		    val _ = if (IlStatic.eq_con(context,litCon,con))
 				then ()
-			    else (Error.error_region();
-				  print "base type mismatches argument type\n")
+			    else (Error.error_region ();
+				  print "type of pattern does not agree with argument\n";
+				  print "Argument type: "; Ppil.pp_con con; print "\n")
 		    fun pred (p, _) = eqLiteral(p,targetPat)
 		    val (matches,mismatches) = List.partition pred info_arms
 		    val match_rules = map #2 matches
@@ -949,6 +1036,16 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	in  foldr folder (def()) pat_e_list
 	end
 
+  (* match context args arms def resCon
+     args   : (var * con) list
+     arms   : (basePattern list * bound * body) list
+     def    : unit -> exp
+     resCon : {shortCon : con ref, fullCon : con ref}     
+
+     This is the meat of the pattern matcher, which implements the
+     strategy described at the top of the file.
+
+     *)
   and match (context,
 	     args : arg list,
 	     arms : baseRule list,
@@ -957,6 +1054,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
       let 
 
 	  val _ = debugdo (fn () =>
+			   if length arms > 0 andalso length args > 0 then
 			   let in
 			       print "\nMATCH called with "; 
 			       printint (length args); print " args:\n";
@@ -964,67 +1062,96 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 							       pp_arg arg; print "\n")) args;
 			       print "\nand with "; printint (length arms); print " arms:\n";
 			       Listops.mapcount (fn(i,br) => (print "  ARM #"; printint i; 
-							      print ": "; pp_baseRule br; print "\n")) arms
-			   end)
+							      print ": "; pp_baseRule br; print "\n")) arms;
+			       ()
+			   end
+			   else ())
 
-	  (* Choose rules until pred is satisfied. First rule MUST fail predicate. *)
-	  fun untilPred (pred,col,rules) = 
-	      let fun loop acc [] = (rev acc, [])
+	  (* Choose rules until pred is satisfied. 
+	     The pred is run on the pair of the pattern in question and the list of
+	        patterns with that one removed.
+
+	     We check that the first rule fails the predicate.
+	     returns matched (pred false), unmatched (pred true on first).
+	     *)
+	  fun untilPred (pred : (basePattern * basePattern list) -> bool, col, rules : baseRule list) = 
+	      let 
+		  fun loop acc [] = (rev acc, [])
 		    | loop acc (rules as (rule::rest)) =
-		       let val split as (selfPat, reducedRule) = ruleExtract col rule
-			   val (otherPats,_,_) = reducedRule
+		       let val split as (selfPat, restrules) = extractpat col rule
+			   val (otherPats,_,_) = restrules
 		       in  if (pred(selfPat,otherPats))
 			       then (rev acc, rules)
 			   else loop (split::acc) rest
 		       end
-		  val (matched, unmatched) = loop [] rules
-		  val _ = (case matched of
-			       [] => error "untilPred: matched empty"
-			     | _ => ())
-	      in  (matched, unmatched)
+	      in  
+		  case loop nil rules of
+		      ([], _) => error "untilPred: matched empty"
+		    | res => res
 	      end
-	  fun untilSelfWild (col,rules) = 
-	      let fun isSelfWild (Wild,_) = true
-		    | isSelfWild (bp, _) = false
-	      in  untilPred (isSelfWild,col,rules)
-	      end
-	  fun anyNonwild pats = Listops.orfold (fn Wild => false | bp => true) pats
+
+	  fun isWild Wild = true 
+	    | isWild _ = false
+
+	  fun untilSelfWild (col, rules) = 
+	      untilPred (isWild o #1, col, rules)
+
+	  fun anyNonwild pats = not (List.all isWild pats)
+
 	  fun untilOtherNonwild (col,rules) = 
 	      let fun isOtherNonwild (_, otherPats) = anyNonwild otherPats
 	      in  untilPred (isOtherNonwild,col,rules)
 	      end
-	  fun chooseAnyWild (col,rules) = 
+
+	  fun chooseAnyWild (col, rules : baseRule list) : (basePattern * baseRule) list * baseRule list =
 	      let 
-		  fun ruleHasWild(pats,_,_) = Listops.orfold (fn Wild => true | _ => false) pats
+		  (* get rules that have wild anywhere*)
+		  fun ruleHasWild(pats,_,_) = List.exists isWild pats
 		  val rulesWithWild = List.filter ruleHasWild rules
-		  fun getPat rule = #1(ruleExtract col rule)
+
+		  (* get just the column in question of those rules *)
+		  fun getPat (pats,_,_) = List.nth (pats, col)
 		  val targetPats = map getPat rulesWithWild
-		  fun pred rule = 
-		      let val (curPat,_) = ruleExtract col rule
+
+		  (* basepattern at column from rule is in targetpats *)
+		  fun pred (pats,_,_) = 
+		      let val curPat = List.nth (pats, col) 
 		      in  Listops.member_eq(eqLiteral, curPat, targetPats)
 		      end
+
 		  val (matches,mismatches) = List.partition pred rules
-		  val info_arms = map (ruleExtract col) matches
+		  val info_arms = map (extractpat col) matches
 	      in  (info_arms, mismatches)
 	      end
 
       in
 	  case (arms,args) of
+	    (* no rules: use default *)
 	      ([],_) => def()
+	    (* no arguments: match succeeds, use rule *)
 	    | ([([],bound,body)], []) => let val (e,c) = body(context,bound)
 					     val _ = check_rescon(context, resCon, c)
 					 in  e
 					 end
+	    (* no arguments, but many rules: redundant *)
 	    | (_, []) => (Error.error_region();
 			  print "Redundant matches.\n";
 			  debugdo (fn () => Ppil.pp_context context);
 			  #1(Error.dummy_exp (context,"RedundantMatch")))
 	    | _ =>
 		  let
-		      val matrix = map #1 arms
-		      val transposedMatrix = Listops.transpose matrix
-		      val colTypes = map computeColumnType transposedMatrix
 
+		      val matrix = map #1 arms
+
+		      (* compute the columntypes of columns *)
+		      val colTypes = map computeColumnType (Listops.transpose matrix)
+
+		      (* the following functions are chained from the bottom up
+			 (as described in the strategy at the top of this file);
+			 first we look for a column of wilds, then irrefutable,
+			 sum, int, mix... On success, we dispatch to the appropriate
+			 mutually-recursive function.
+			 *)
 		      fun lookForMIX() = 
 			  let fun greater(SUMWILD (m,_), SUMWILD (n,_)) = m > n
 				| greater(INTWILD m, INTWILD n) = m > n
@@ -1042,8 +1169,8 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 			      val (maxCol, maxColType) = loop 1 (0, firstCol) restCol
 			      fun handleSum f =
 				  let val rule::_ = arms
-				      val (_, (otherPats, _, _)) = ruleExtract maxCol rule
-				      val selector = if (anyNonwild otherPats orelse ((length args) = 1))
+				      val (_, (otherPats, _, _)) = extractpat maxCol rule
+				      val selector = if (anyNonwild otherPats orelse (length args = 1))
 							 then untilSelfWild
 						     else untilOtherNonwild
 				  in  f(maxCol, context, args, arms, def, resCon, selector)
@@ -1056,6 +1183,9 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 				 | _ => error "must have SUMWILD or INTWILD here")
 			  end
 
+		      (* If all columns are INT, choose the first with untilSelfWild (??)
+			 otherwise, choose the first INT we see, with chooseAnyWild (??)
+			 *)
 		      fun lookForINT() = 
 			  let fun isINT INT = true
 				| isINT _ = false
@@ -1099,18 +1229,27 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 			  in  loop 0 colTypes
 			  end
 
-		      val ec = lookForWILD()
-
-		  in ec
+		  in lookForWILD ()
 		  end
       end (* end of match *)
 
 
+ (* Compile takes external-language expressions and patterns and
+    invokes match appropriately. One tricky thing that this does
+    is make sure that no code is ever duplicated by setting up
+    thunks and hoisting the body of an arm up as a function if
+    it is emitted multiple times. Read on ... 
+
+    default : con -> unit -> exp
+    This is a suspended function to generate the default. In
+    general it needs the return type of the match in order to
+    do a RAISE at the right type. 
+    *)
 
  fun compile (context : context,
 	      compile_args : arg list, 
 	      compile_arms : (Ast.pat list * Ast.exp) list,
-	      default_exn : exp)
+	      default : Il.con -> unit -> exp)
      : exp * con = 
     let
 	val _ = debugdo (fn () => print "--------------- COMPILE called -----------------\n\n")
@@ -1118,27 +1257,45 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	val shortCon = if (!do_result_type)
 			   then ref(CON_VAR(N.fresh_named_var "shortResultType"))
 		       else fullCon
-	val resCon = {fullCon = fullCon, shortCon = shortCon}
-	fun mapper (clause,e) =
-	    let val r = ref([], NONE)
+
+	(* generate "r" and rules for each arm 
+	   The first field of r is a list of exp oneshots where we 
+	      emitted the body (and the variables bound at that location).
+	      Below, these will be set with either the direct expression or
+	      a call to the hoisted function.
+	   The second field is a suspended elaboration of the expression.
+	      (or, eventually, the memoized result of elaboration!)
+	   *)
+	fun mapper (clause : Ast.pat list, e : Ast.exp) =
+	    let 
+		val r = ref([], NONE)
 		val pats = map (pat2Pattern context) clause
+
+		(* Suspended body-creation function.
+		   Each time it's called, it adds a new oneshot onto
+		   the list in "r", and emits OVEREXP of that oneshot. *)
 		fun body (ctxt,bound) =
 		    let val ctxt = extendContext(ctxt,bound)
 			val one = Util.oneshot()
 			val carried as (_,(e,c,va)) = 
 			    (case #2(!r) of
-				 NONE => (bound,expcompile(ctxt,e))
-			       | SOME t => t)
+				 NONE => (bound, expcompile(ctxt,e))
+			       | SOME memoized => memoized)
 			val _ = r := ((one,bound)::(#1(!r)), SOME carried)
-			val e = OVEREXP(c,va,one) 
-		    in  (e,c)
+		    (* abuse OVEREXP to hold a delayed expression *)
+		    in  (OVEREXP(c, va, one), c)
 		    end
 		val rule = (pats,[],body) 
-	    in  (r, rule)
+	    in  
+		(r, rule)
 	    end
-	val (list,rules) = Listops.unzip (map mapper compile_arms)
+	val (rs, rules) = Listops.unzip (map mapper compile_arms)
 	    
-	fun wrapper ec =
+	(* Loop over the whole "rs" list. If the arm was used only
+	   once, put the body in there directly. If it was used more than once,
+	   bind it above the match as a function, and make calls to it
+	   at each location where it was used. *)
+	fun wrapper (ec : exp) : exp =
 	    let fun folder(ref(one_bounds,SOME(bound,(e,c,va))),bnds) = 
 		if (length one_bounds<2) 
 		    then (Util.oneshot_set(#1(hd one_bounds),e); bnds)
@@ -1148,26 +1305,28 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 			val bound = List.filter (fn (s,_,_) => not(Symbol.eq(s,wildSymbol))) bound
 			val one_bounds = map (fn (one,b) => 
 					      (one,bound_intersect(bound,b))) one_bounds
-			 val bound_vars = map #2 bound
-			 val bound_cons = map #3 bound
-			 val funvar = N.fresh_named_var "repeat_patbody"
-			 val (argvar, argcon) = 
-			     (case bound of
-				  [(_,v,c)] => (N.derived_var v, c)
-				| _ => (N.fresh_named_var "repeat_casevar",
-					U.con_tuple bound_cons))
-			 val labels = Listops.mapcount
-			     (fn (n,_) => U.generate_tuple_label(n+1)) bound
-			 val lbnds = letprojecthelp(argvar,bound_vars,
-						    bound_cons,labels)
+			val bound_vars = map #2 bound
+			val bound_cons = map #3 bound
+			val funvar = N.fresh_named_var "repeat_patbody"
+			val (argvar, argcon) = 
+			    (case bound of
+				 [(_,v,c)] => (N.derived_var v, c)
+			       | _ => (N.fresh_named_var "repeat_casevar",
+				       U.con_tuple bound_cons))
+			val labels = Listops.mapcount
+			    (fn (n,_) => U.generate_tuple_label(n+1)) bound
+			val lbnds = letprojecthelp(argvar,bound_vars,
+						   bound_cons,labels)
 			val e = 
 			    (case bound of
 				 [(_,bound_var,_)] =>
 				     IlUtil.exp_subst
 				      (e,U.subst_add_expvar(U.empty_subst,bound_var,VAR argvar))
 			       | _ =>  wrapbnds'(lbnds,e))
-			val (lambda,funcon) = U.make_lambda(argvar,argcon,!(#shortCon resCon),e)
+			val (lambda,funcon) = U.make_lambda(argvar,argcon,!shortCon,e)
 			val bnd = BND_EXP(funvar,lambda)
+
+			(* set all of the oneshots to be an application. *)
 			fun apper(one,bounds : bound) = 
 			    let val bound_vars = map #2 bounds
 				val call = APP(VAR funvar,
@@ -1179,53 +1338,30 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 			val _ = app apper one_bounds
 		     in  bnd :: bnds
 		     end
+		  (* if the expression is NONE, then it was never emitted.
+		     This is a little bogus, because the expression will never be
+		     type-checked. But this also shouldn't happen unless there are
+		     redundant arms, which we catch and fail on.
+		     *)
 		  | folder(ref([],NONE),bnds) = bnds
 		  | folder(ref(_,NONE),bnds) = error "non-empty oneshot list with NONE"
-		val bnds = foldl folder [] list
-		val res = wrapbnds(bnds,ec)
-	    in  res
+
+		val bnds = foldl folder [] rs
+	    in  wrapbnds (bnds, ec)
 	    end
 
 	val baseRules = map (fn r => reduceRule context (r, compile_args)) rules
-	fun default _ = RAISE(!shortCon, default_exn)
-	val almost_e = match(context,compile_args,baseRules,default,resCon)
+
+	(* finally call match *)
+	val almost_e = match(context,compile_args,baseRules,(default (!shortCon)),{fullCon = fullCon, shortCon = shortCon})
 	val very_nearly_e = wrapper almost_e
+	(* bind "short" result type if flag set *)
 	val final_e = (case (!do_result_type, !shortCon) of
 			   (true, CON_VAR v) => U.make_let([BND_CON(v,!fullCon)], very_nearly_e)
 			 | _ => very_nearly_e)
 
     in  (final_e, !fullCon)
     end
-
-
-    (* find all the variables that are bound by a pattern *)
-    fun get_bound context (pat : Ast.pat) : Ast.symbol list = 
-	let open Ast
-	in  (case pat of
-	    WildPat => []
-          | VarPat [s] => if (Datatype.is_constr context [s] orelse
-			      (case Datatype.exn_lookup context [s] of
-				   NONE => false
-				 | SOME _ => true))
-			      then [] 
-			  else [s]
-          | VarPat _ => []
-          | IntPat _ => []
-          | WordPat _ => []
-          | StringPat _ => []
-          | CharPat _ => []
-          | RecordPat {def:(symbol * pat) list, flexibility:bool} => 
-		 Listops.flatten(map (fn (_,p) => get_bound context p) def)
-          | ListPat p => Listops.flatten(map (get_bound context) p)
-          | TuplePat p => Listops.flatten(map (get_bound context) p)
-	  | FlatAppPat patfixes => error "flatapppat should be parsed away"
-          | AppPat {constr:pat, argument:pat} => get_bound context argument
-          | ConstraintPat {pattern:pat, constraint:ty} => get_bound context  pattern
-          | LayeredPat {varPat:pat, expPat:pat} => (get_bound context varPat) @ (get_bound context expPat)
-          | VectorPat p => Listops.flatten(map (get_bound context) p)
-          | MarkPat (p,r) => get_bound context p)
-	end
-
 
     (* ============ client interfaces =========================== *)
     (* ---- bindCompile creates bindings ----------------------- *)
@@ -1234,38 +1370,61 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 		     arg = (argvar : var, argc : con)}
                     : (sbnd * sdec) list =
       let 
+
+	(* the one arm for this pattern will be a tuple of all the variables
+	   it binds. *)
 	val boundsyms = get_bound context bindpat
 
 	val context = C.add_context_dec(context,DEC_EXP(argvar,argc,NONE,false))
 	val args = [(argvar,argc)] 
 	val astTuple = Ast.TupleExp(map (fn s => Ast.VarExp [s]) boundsyms)
 	val arms = [([bindpat],astTuple)]
-	val default_exn = U.matchexn_exp
-	val (binde,bindc) = compile(context,args,arms,default_exn)
+
+	fun default returntype () = 
+	    let in
+		(* if we generate this code, then (syntactically) there is a path to
+		   a Match or Bind exception. So, print a warning. *)
+		Error.warn_region_with "binding nonexhaustive\n";
+		RAISE(returntype, U.bindexn_exp)
+	    end
+
+	val (binde,bindc) = compile(context, args, arms, default)
 	val binde = reduce_let binde
 
+	(* generate bindings for the variables bound in the pattern, if applicable.
+	   
+	   val (a, 2, c) = (1, 2, 3)
 
+	   becomes
+
+	   bindTuple = case ... => (1, 3)
+	   a = #1 bindTuple
+           c = #2 bindTuple
+	   *)
 	local
 	    val tupleLabel = N.internal_label "bindTuple"
 	    val tupleVar = N.fresh_named_var "bindTuple"
-	in  val (tupleSbndSdec,base) = 
+	in  val (tupleSbndSdec,base) =
 	         (case binde of
 		      VAR v => ([],binde)
 		    | _ => ([(SBND(tupleLabel,(BND_EXP(tupleVar,binde))),
 			      SDEC(tupleLabel,(DEC_EXP(tupleVar,bindc,NONE,false))))],
 			    VAR tupleVar))
 	end
+
 	val lc_list = (case IlStatic.con_head_normalize(context, bindc) of
 			   CON_RECORD lc_list => lc_list
 			 | c => (Ppil.pp_con c; print "\n"; error "bindc not a tuple"))
+
 	fun mapper(n,s) = 
 	    let val l = N.symbol_label s
 		val v = N.gen_var_from_symbol s
 		val (fieldLabel, fieldCon) = List.nth(lc_list,n)
-		val fieldExp = RECORD_PROJECT(base, fieldLabel ,bindc)
+		val fieldExp = RECORD_PROJECT(base, fieldLabel, bindc)
 	    in   (SBND(l,(BND_EXP(v,fieldExp))),
 		  SDEC(l,(DEC_EXP(v,fieldCon,NONE,false))))
 	    end
+
 	val external_sbnd_sdecs = Listops.mapcount mapper boundsyms
 	val final_sbnd_sdecs = 
 	    (case (tupleSbndSdec,external_sbnd_sdecs) of
@@ -1279,30 +1438,32 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
       in final_sbnd_sdecs
       end
 
-
-
-    (* ---- caseCompile compiles a case expression in to an Il.exp/Il.con --- *)
+    (* Compile an AST case into an IL exp/con. This essentially
+       just involves calling match. When used for an SML handle
+       expression, we want to re-raise the exception (case 
+       argument) rather than raising Match. *)
     fun caseCompile {context : context,
 		     arms = cases : (Ast.pat * Ast.exp) list, 
-		     arg = (argvar : Il.var, argc : Il.con),
+		     arg = (argv : Il.var, argc : Il.con),
 		     reraise}
       : Il.exp * Il.con = 
       let 
-	val args = [(argvar,argc)]
-	val context = C.add_context_dec(context,DEC_EXP(argvar,argc,NONE,false))
+	val args = [(argv, argc)]
+	val context = C.add_context_dec(context, DEC_EXP(argv,argc,NONE,false))
 	val arms = map (fn (pat,body) => ([pat], body)) cases
-	val default_exn = 
-	    if reraise
-		then let val (v,c)::_ = args
-			 val _ =  if (IlStatic.eq_con(context,c,CON_ANY))
-				      then ()
-				  else (Error.error_region();
-					print "default of pattern not an exn type\n")
-		     in  VAR v
-		     end
-	    else U.matchexn_exp
 
-      in  compile (context,args,arms,default_exn)
+	val _ = if reraise andalso not (IlStatic.eq_con(context,argc,CON_ANY))
+		    then error_reg "default of pattern not an exn type"
+		else ()
+
+	fun default returntype () = 
+	    if reraise then RAISE(returntype, VAR argv)
+	    else let in
+		    Error.warn_region_with "match nonexhaustive\n";
+		    RAISE(returntype, U.matchexn_exp)
+		 end
+
+      in  compile (context, args, arms, default)
       end
 
 
@@ -1313,7 +1474,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
       let 
 	(* -------- we begin by creating arguments of the same name as the 
 	   -------- as the variable pattern when possible; just for legibility *)
-	local
+
 	  fun getname [] = "mvar"
 	    | getname ((Ast.VarPat[s])::rest) = if Datatype.is_constr context [s]
 						    then getname rest
@@ -1321,18 +1482,23 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	    | getname (_::rest) = getname rest
 	  fun getnames ([]::_) = []
 	    | getnames clauses = (getname (map hd clauses)) :: (getnames (map tl clauses))
-	  val clauses = map #1 rules
-	  val names = getnames clauses
-	in 
+	  val names = getnames (map #1 rules)
+	      
 	  val args = map (fn s => (N.fresh_named_var s,
 				   U.fresh_named_con (context,s))) names
-	end
-	(* ---- call main routine to get compiled body; creating arms by
-	   ---- adding context entries to reflect these arguments ----- *)
-	val context = foldl (fn ((v,c),ctxt) => C.add_context_dec(ctxt,DEC_EXP(v,c,NONE,false))) context args
-	val default_exn = U.matchexn_exp
-	val (e,c) = compile (context,args,rules,default_exn)
-		    
+
+	  (* ---- call main routine to get compiled body; creating arms by
+	     ---- adding context entries to reflect these arguments ----- *)
+	  val context = foldl (fn ((v,c),ctxt) => C.add_context_dec(ctxt,DEC_EXP(v,c,NONE,false))) context args
+
+	  fun default returntype () = 
+	      let in
+		  Error.warn_region_with "match nonexhaustive\n";
+		  RAISE(returntype, U.matchexn_exp)
+	      end
+
+	  val (e,c) = compile (context,args,rules,default)
+
       in {arglist = args, body = (e,c) }
       end
 
