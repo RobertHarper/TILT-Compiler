@@ -1,4 +1,8 @@
-(*$import Prelude TopLevel Util Stats Nil Int Prim Array String Name Listops Sequence LINEARIZE NilUtil Ppnil Normalize *)
+(*$import Util Stats Nil Int Prim Array String Name Listops Sequence LINEARIZE NilUtil Ppnil Normalize *)
+
+(*
+ Tools for putting Nil code into A-normal form
+*)
 
 structure Linearize
     :> LINEARIZE =
@@ -9,19 +13,39 @@ struct
     val linearize = Stats.tt("Linearize")
     val debug = ref false
 
-    open Nil Name NilUtil Ppnil Listops
+    open Nil
+
+    val foldl_acc = Listops.foldl_acc
+    val flatten = Listops.flatten
+    val mapmap = Listops.mapmap
+
+    structure VarMap = Name.VarMap
+    structure VarSet = Name.VarSet
+
+    val derived_var = Name.derived_var
+
+    val pp_kind = Ppnil.pp_kind
+    val pp_con = Ppnil.pp_con
+    val pp_exp = Ppnil.pp_exp
+
     val list2sequence = Sequence.fromList
     val sequence2list = Sequence.toList
 
-
-
     fun map_unzip f ls = Listops.unzip(map f ls)
 
+    (* Code for handling renaming variables with fresh names and keeping track of various translation statistics *)
     local
 	type state = bool * var VarMap.map
+	(* 1: whether or not unbound variables are allowed in input
+	   2: mapping of variables in input to different variables in output *)
+
 	val seen : VarSet.set ref = ref VarSet.empty
+        (* variable names that have been encountered in the input code thus far *)
     in
 	type state = state
+
+        (* References for keeping translation statistics *)
+
 	val num_renamed = ref 0
 	val num_var = ref 0
 	val num_lexp = ref 0
@@ -48,6 +72,11 @@ struct
 	fun inc n = n := !n + 1
 	fun dec n = n := !n - 1
 	    
+        (*
+	 val reset_state : bool -> state
+	 reset_state canBeOpen ==> a new state that allows unbound variables iff canBeOpen
+	 Effects: Resets seen and statistics references
+	*)
 	fun reset_state canBeOpen : state = (seen := VarSet.empty; 
 					     num_renamed := 0;
 					     num_var := 0;
@@ -69,6 +98,7 @@ struct
 					     depth_lkind_single := 0;
 					     (canBeOpen,VarMap.empty))
 
+        (* debug routine to print information on a state *)
 	fun state_stat str ((canBeOpen,m) : state) : unit = 
 	    let val _ = if (!debug)
 			    then (print str; print "----\n";
@@ -86,14 +116,24 @@ struct
 	    in ()
 	    end
 
+	(*
+	 val find_var : state * var -> var
+	 find_var (state, v) ==> replacement variable for v in state
+	 Effects: Error if an unbound variable is requested for a state which does not allow unbound variables
+        *)
 	fun find_var ((canBeOpen,s) : state,v : var) : var = 
 	     case (VarMap.find(s,v)) of
 		 NONE => if canBeOpen
 			     then v
 			 else error ("find_var failed on " ^ (Name.var2string v))
 	       | SOME v' => v'
-
-	    
+  
+        (*
+	 val add_var : state * var -> state * var
+	 add_var (state, v) ==> (state modified to replace v with a fresh variable,
+	                         the fresh variable chosen)
+	 Effects: Can modify statistics on number of renamed variables
+        *)
 	fun add_var ((canBeOpen,m) : state, v : var) : state * var = 
 	    let val is_seen = VarSet.member(!seen,v)
 		val _ = if (!debug)
@@ -116,13 +156,20 @@ struct
 
     end
 
-
+    (*
+     val small_con : con -> bool
+	 small_con con ==> whether con is a "small constructor" suitable to be bound in A-normal form
+    *)
     fun small_con con =
 	case con of 
 	    Var_c _ => true
 	  | Prim_c (primcon, clist) => length clist = 0 
 	  | _ => false
 
+    (*
+     val small_exp : exp -> bool
+	 small_exp exp ==> whether exp is a "small expression" suitable to be bound in A-normal form
+    *)
     fun small_exp exp =
 	case exp of 
 	    Var_e _ => true
@@ -132,6 +179,22 @@ struct
           | Const_e (Prim.uint _) => true
 	  | _ => false
 
+
+    (*
+     Most of the translation functions below take a boolean "lift" parameter. This ensures that Let's in the entity to be
+     translated and its component parts have their bindings "lifted" to the list of extra bindings generated as part of
+     A-normalizing, instead of translating them into new Let's. It also guarantees that, where possible,
+     (sub)expressions and (sub)constructors are translated as small expressions/constructors or Let's with small
+     expression/constructor bodies.
+    *)
+
+
+    (*
+      val lvalue : bool -> state -> value -> bnd list * value
+	  lvalue lift state value ==> (bnds, value') such that Let bnds In value' End is an A-normal form equivalent to value,
+	      using the variable renamings from state
+	  Effects: Error if value is an array or ref
+    *)
     fun lvalue lift state value = 
       (case value 
 	 of Prim.array (con, arr) => error "Arrays shouldn't ever show up"
@@ -154,6 +217,10 @@ struct
 				in (cbnds,Prim.tag (t,con)) end
 	  | _ => ([],value))
 
+   (*
+    val lswitch : bool -> state -> switch -> switch
+    lswitch lift state switch ==> switch with its component constructors and terms A-normalized using state
+   *)
    and lswitch lift state switch = 
      (case switch of
 	  Intsw_e {size,arg,arms,default,result_type} =>
@@ -197,9 +264,16 @@ struct
 	      in  Typecase_e {arg=arg, arms=arms, default=default, result_type=result_type}
 	      end)
 
+   (*
+    val lbnd : state -> bnd -> bnd list * state
+    lbnd state bnd ==> (bnds, state'), where bnds is a sequence of A-normal form bindings equivalent to bnd.
+	Uses state's variable renamings, with state' obtained from state to include new variables encountered
+   *)
    and lbnd state arg_bnd : bnd list * state =
        let 
 	   fun add_vars state vx_list = foldl (fn ((v,_),s) => #1(add_var(s,v))) state vx_list
+
+	   (* Open/Code fold function *)
 	   fun vf_help wrapper vf_set = 
 	       let val vf_list = sequence2list vf_set
 		   val newstate = add_vars state vf_list
@@ -207,6 +281,8 @@ struct
 						   lfunction newstate f)) vf_list
 	       in  ([wrapper (list2sequence vf_list)], newstate)
 	       end
+
+           (* Closure fold function *)
 	   fun vcl_help state (v,{code,cenv,venv,tipe}) = 
 	       let val v = find_var(state,v)
 		   val cenv' = lcon_flat state cenv
@@ -239,6 +315,10 @@ struct
 				 end)
        end
 
+   (*
+    val lfunction : state -> function -> function
+    lfunction state func ==> func with its component parts A-normalized, using state
+   *)
    and lfunction state (Function{effect,recursive,isDependent,
 				 tFormals,eFormals,fFormals,body,body_type}) : function =
        let 
@@ -258,7 +338,10 @@ struct
 		    body=body,body_type=body_type}
        end
 
-
+   (*
+    val lexp : bool -> state -> exp -> bnd list * exp
+    lexp lift state exp ==> (bnds, exp') such that Let bnds In exp' End is an A-normal equivalent of exp, using state.
+   *)
    and lexp lift state arg_exp : bnd list * exp =
        let val (bnds,e) = lexp' lift state arg_exp
        in  if (small_exp e orelse not (!linearize) orelse not lift)
@@ -288,6 +371,11 @@ struct
 		    pp_exp arg_exp; print "\n"; raise e)
 
 
+   (*
+    val lexp': bool -> state -> exp -> bnd list * exp
+    lexp' lift state exp ==> (bnds, exp') such that Let bnds In exp' End is an A-normal equivalent of exp, using state.
+	Does not guarantee that exp' is small.
+   *)
    and lexp' lift state arg_exp : bnd list * exp =
 	let val _ = num_lexp := !num_lexp + 1;
 	    val self = lexp lift state
@@ -381,7 +469,11 @@ struct
 		     
 	end
 
-
+   (*
+    val lcbnd : bool -> state -> conbnd -> conbnd list * state
+    lcbnd lift state cbnd ==> (cbnds, state'), such that cbnds are an A-normalized version of cbnd, translated using state
+        and updating state' from state to include new variables encountered
+   *)
    and lcbnd lift state arg_cbnd : conbnd list * state =
        let val _ = state_stat "lcbnd" state
 	   fun lconfun wrapper (v,vklist,c) = 
@@ -403,18 +495,39 @@ struct
 	     | Code_cb arg => lconfun Code_cb arg)
        end
 
+   (*
+    val lcbnds : bool * state * conbnd list -> conbnd list * state
+    lcbnds lift state cbnds ==> (cbnds', state') such that cbnds' are an A-normalized version of cbnds, translated using state
+	and updating state' from state to include new variables
+   *)
    and lcbnds lift state cbnds : conbnd list * state = 
        let val (cbnds,state) = foldl_acc (fn (cbnd,s) => lcbnd lift s cbnd) state cbnds
        in  (flatten cbnds, state)
        end
 
+   (*
+    val lcon_lift : state -> con -> conbnd list * con
+    lcon_lift state con ==> (cbnds, con'), such that Let cbnds In con' End is an A-normal version of con, translated using state.
+	The translation is performed in lift mode.
+   *)
    and lcon_lift state arg_con : conbnd list * con = lcon true state arg_con
+
+   (*
+    val lcon_lift' : state -> con -> con
+    lcon_lift' state con ==> an A-normal version of con, translated using state and in lift mode
+   *)
    and lcon_lift' state arg_con : con = 
        let val (cbnds,c) = lcon true state arg_con
        in  (case cbnds of
 		[] => c
 	      | _ => Let_c(Sequential,cbnds,c))
        end
+
+   (*
+    val lcon_flat : state -> con -> con
+    lcon_flat state con ==> a non-lift translation of con into a single A-normal form constructor, using state
+    Effects: Error if extra bindings are generated translating con
+   *)
    and lcon_flat state arg_con : con  = 
 	let val (cbnds,c) = lcon false state arg_con
 	    val _ = (case cbnds of
@@ -429,11 +542,26 @@ struct
 	in  c
 	end
 
+   (*
+    val lexp_lift : state -> exp -> bnd list * exp
+    lexp_lift state exp ==> a lift mode translation of exp, using state
+   *)
    and lexp_lift state arg_exp : bnd list * exp = lexp true state arg_exp
+
+   (*
+    val lexp_lift' : state -> exp -> exp
+    lexp_lift' state exp ==> a lift mode translation of exp, using state, returned as a single Let expression
+   *)
    and lexp_lift' state arg_exp : exp = 
        let val (bnds,e) = lexp true state arg_exp
        in  NilUtil.makeLetE Sequential bnds e
        end
+
+   (*
+    val lexp_flat : state -> exp -> exp
+    lexp_flat state exp ==> a non-lift mode translation of exp, using state
+    Effects: Error if extra bindings are generated translating exp
+   *)
    and lexp_flat state arg_exp : exp  = 
 	let val (bnds,e) = lexp false state arg_exp
 	    val _ = (case bnds of
@@ -447,6 +575,10 @@ struct
 	in  e
 	end
 
+   (*
+    val lcon : bool -> state -> con -> conbnd list * con
+    lcon lift state con ==> (cbnds, con'), such that Let cbnds In con' End is an A-normal version of con, translated with state
+   *)
    and lcon lift state arg_con : conbnd list * con  = 
        let val (cbnds,c) = lcon' lift state arg_con
        in  if (small_con c orelse not (!linearize) orelse not lift)
@@ -458,6 +590,12 @@ struct
        handle e => (print "exception in lcon call with con =\n";
 		    pp_con arg_con; print "\n"; raise e)
 
+   (*
+    val lcon': bool -> state -> con -> conbnd list * con
+    lcon' lift state con ==> (cbnds, con'), such that Let cbnds In con' End is an A-normal version of con, translated with state.
+	Does not guarantee that con' is small.
+    Effects: Error if con is a Typecase_c
+   *)
    and lcon' lift state arg_con : conbnd list * con  = 
        let val local_lcon = lcon lift
 	   val _ = (inc num_lcon;
@@ -562,34 +700,56 @@ struct
 				end
        end
 
+   (*
+    fun lvk : state -> var * kind -> (var * kind) * state
+    lvk state (v, k) ==> ((v', k'), state'), such that v' is the renaming of v, k' is k A-normalized, and state' is state with
+	information on v added
+   *)
    and lvk state (v,k) = 
 	   let val k = lkind state k
 	       val (state,v) = add_var(state,v)
 	   in  ((v,k), state)
 	   end
 
-
+   (*
+    fun lvklist : state -> (var * kind) list -> (var * kind) list * state
+    lvklist state vklist ==> (vklist', state'), such that vklist' is the result of mapping lvk over vklist, with state' the
+	result of accumulating state changes over the mapping
+   *)
    and lvklist state vklist = 
-       let fun vkfolder((v,k),(acc,state)) = 
+       let fun vkfolder((v,k),state) = 
 	   let val k = lkind state k
 	       val (state,v) = add_var(state,v)
-	   in  ((v,k)::acc, state)
+	   in  ((v,k), state)
 	   end
-	   val (rev_vklist,state) = foldl vkfolder ([],state) vklist
-       in  (rev rev_vklist, state)
+       in  foldl_acc vkfolder state vklist
        end
 
+   (*
+    val lvc : bool -> state -> var * con -> (conbnd list * (var * con)) * state
+    lvc lift state (v, c) ==> ((cbnds, (v', c')), state'), such that v' is the renaming of v in state' and
+	Let cbnds In c' End is an A-normalized version of c
+   *)
    and lvc lift state (v,c) : (conbnd list * (var * con)) * state = 
 	   let val (cbnds,c) = lcon lift state c
 	       val (state,v) = add_var(state,v)
 	   in  ((cbnds,(v,c)), state)
 	   end
 
+   (*
+    val lvclist : state -> (var * con) list -> cbnds list * (var * con) list * state
+    lvclist state vclist ==> folding of lvc over vclist using state
+   *)
    and lvclist state vclist = 
        let val (temp,state) = foldl_acc (fn (vc,s) => (lvc true s vc)) state vclist
        in  (flatten(map #1 temp), map #2 temp, state)
        end
 
+   (*
+    val lvtrclist_flat : state -> (var * niltrace * con) list -> (var * niltrace * con) list * state
+    lvtrclist_flat state vtrclist ==> (vtrclist', state'), where vtrclist' is vtrclist with variables renamed
+	(and state' updated from state appopriately) and constructors replaced with flat A-normal versions
+   *)
    and lvtrclist_flat state vtrclist = 
        let fun vtrcfolder((v,tr,c),state) =
 	   let val _ = inc depth_lcon_function
@@ -601,6 +761,11 @@ struct
        in  foldl_acc vtrcfolder state vtrclist
        end
 
+   (*
+    val lvoptclist : state -> (var option * con) list
+    lvoptclist state vclist ==> (vclist', state'), with vclist' created from vclist by A-normalizing constructors and renaming
+	variables (with appropriate changes made to state' from state)
+   *)
    and lvoptclist state vclist = 
        let fun vcfolder((vopt,c),state) =
 	   let val _ = inc depth_lcon_function
@@ -617,11 +782,20 @@ struct
        in  (vopt_c, state)
        end
 
+   (*
+    val lkind : state -> kind -> kind
+    lkind state kind ==> A-normalized version of kind, translated using state
+   *)
    and lkind state arg_kind : kind = 
        ((lkind' state arg_kind)
        handle e => (print "exception in lkind call with kind =\n";
 		    pp_kind arg_kind; print "\n"; raise e))
 
+   (*
+    val lkind' : state -> kind -> kind
+    lkind' state kind ==> A-normalized version of kind, translated using state.
+	Constructors contained within kind are translated flatly.
+   *)    
    and lkind' state arg_kind : kind = 
        (inc num_lkind;
 	bumper(num_lkind_single, depth_lkind_single);
@@ -651,10 +825,18 @@ struct
 					  end)
 
 
+   (*
+    val lexport : state -> export_entry -> export_entry
+    lexport state export ==> export with its variable renamed according to state
+   *)
    fun lexport state (ExportValue(l,v)) = ExportValue(l,find_var(state,v))
      | lexport state (ExportType(l,v)) = ExportType(l,find_var(state,v))
 
-
+   (*
+    val limport : import_entry * state -> import_entry * state
+    limport (import, state) ==> (import', state'), where import is import' with its variable renamed according to state
+	and constructor (if present) A-normalized (with state' updated from state appropriately)
+   *)
    fun limport (ImportValue(l,v,tr,c),s) =
        let val (s,v) = add_var(s,v)
 	   val _ = inc depth_lcon_import
@@ -669,14 +851,16 @@ struct
        in  (ImportType(l,v,lkind s k),s)
        end
 
-   fun limports (imports,s) = 
-       let fun folder(imp,(acc,s)) = let val (imp,s) = limport(imp,s)
-				     in  (imp::acc,s)
-				     end
-	   val (rev_imps,s) = foldl folder ([],s) imports
-       in  (rev rev_imps, s)
-       end
-       
+   (*
+    val limports : import_entry list * state -> import_entry_list * state
+    limports (imports, state) ==> folding of limport over imports using state
+   *)
+   fun limports (imports,s) = foldl_acc limport s imports
+
+   (*
+    val linearize_exp : exp -> exp
+    linearize_exp exp ==> A-normal version of exp
+   *)       
    fun linearize_exp e = 
        let (* Permit expression to be open *)
 	   val state = reset_state true
@@ -685,6 +869,10 @@ struct
        in  e
        end
 
+   (*
+    val linearize_mod : module -> module
+    linearize_mod module ==> module with bindings, imports, and exports A-normalized
+   *)
    fun linearize_mod (MODULE{bnds,imports,exports}) = 
        let (* Module must be closed *)
 	   val state = reset_state false
