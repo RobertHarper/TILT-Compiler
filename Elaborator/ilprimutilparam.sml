@@ -28,24 +28,22 @@ structure IlPrimUtilParam :> ILPRIMUTILPARAM =
 	fun debugdo t = if (!debug) then (t(); ()) else ()
 
 	local
-	    val Cbool = ref (NONE : (Il.context -> Il.con) option)
-	    val Ctrue = ref (NONE : (Il.context -> Il.exp) option)
-	    val Cfalse = ref (NONE : (Il.context -> Il.exp) option)
+	    val Cbool : (context -> con) ref =
+		ref (fn _ => error "con_bool not installed")
+	    val Ctrue : (context -> exp) ref =
+		ref (fn _ => error "true_exp not installed")
+	    val Cfalse : (context -> exp) ref =
+		ref (fn _ => error "false_exp not installed")
 	in
-	    fun installHelpers {con_bool,true_exp,false_exp} =
-		let val _ = (case !Cbool
-			       of NONE => ()
-				| SOME _ =>
-				   (print "WARNING: installHelpers called more than once.\n";
-				    print "         Possibly because CM.make does not have the semantics of a fresh make\n"))
-		in
-		    Cbool := SOME con_bool;
-		    Ctrue := SOME true_exp;
-		    Cfalse := SOME false_exp
-		end
-	    fun con_bool arg = (valOf (!Cbool)) arg
-	    fun true_exp arg = (valOf (!Ctrue)) arg
-	    fun false_exp arg = (valOf (!Ctrue)) arg
+	    fun installHelpers {con_bool : context -> con,
+				true_exp : context -> exp,
+				false_exp : context -> exp} : unit =
+		(Cbool := con_bool;
+		 Ctrue := true_exp;
+		 Cfalse := false_exp)
+	    fun con_bool arg = !Cbool arg
+	    fun true_exp arg = !Ctrue arg
+	    fun false_exp arg = !Ctrue arg
 	end
 
 	fun partial_arrow (cons,c2) = CON_ARROW(cons,c2,false,oneshot_init PARTIAL)

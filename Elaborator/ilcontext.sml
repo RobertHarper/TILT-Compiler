@@ -61,20 +61,17 @@ struct
 	distinct types.
     *)
     local
-	val Ceq_con = ref (NONE : (context * con * con -> bool) option)
-	fun eq_con arg = let val SOME eq_con = !Ceq_con
-			 in  eq_con arg
-			 end
+	val Ceq_con : (context * con * con -> bool) ref =
+	    ref (fn _ => error "eq_con not installed")
+	fun eq_con arg = (!Ceq_con arg)
 	fun eq ctxt ((c1,e1,d1),(c2,e2,d2)) = eq_con(ctxt,c1,c2)
 	fun sub ctxt (exp1, exp2) = Listops.list_diff_eq(eq ctxt, exp1, exp2)
 	fun add ctxt (exp1, exp2) = Listops.list_sum_eq(eq ctxt, exp1, exp2)
 	fun expanded f (o1, o2) = ovld_collapse (f (ovld_expand o1, ovld_expand o2))
     in
-	fun installHelpers{eq_con} =
-	    ((case !Ceq_con of
-		 NONE => ()
-	       | SOME _ => (print "WARNING: IlContext.installHelpers called more than once.\n"));
-	     Ceq_con := SOME eq_con)
+	fun installHelpers{eq_con : context * con * con -> bool} : unit =
+	    Ceq_con := eq_con
+
 	fun ovld_add (label, ctxt, ovld1 as OVLD (_, d1), ovld2 as OVLD (_, d2)) =
 	    let val _ = case (d1, d2)
 			  of (SOME _, SOME _) =>

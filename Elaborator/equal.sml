@@ -28,13 +28,13 @@ struct
     and ReallyNoEqExp
 
     local
-	val cadd_eq_entry = ref (NONE : ((Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit) option);
+	val cadd_eq_entry : ((context,con,exp) Tyvar.tyvar -> unit) ref =
+	    ref(fn _ => error "add_eq_entry not installed")
     in
-	fun installHelpers { add_eq_entry : (Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit } = cadd_eq_entry := SOME add_eq_entry;
-	fun add_eq_entry arg =
-	    case !cadd_eq_entry of
-		NONE => error "add_eq_entry not installed"
-	      | SOME f => f arg
+	fun installHelpers { add_eq_entry : (context,con,exp) Tyvar.tyvar -> unit } : unit=
+	    cadd_eq_entry := add_eq_entry
+
+	fun add_eq_entry arg = !cadd_eq_entry arg
     end
 
     (* used to create the "bind" function below for constructors and expressions.
@@ -338,7 +338,7 @@ struct
 	       (* if it's from a module, look for the equality function in that module *)
 	       | CON_MODULE_PROJECT(m,l) =>
 		  let val e = MODULE_PROJECT(m,N.to_eq l)
-		  in (UtilError.dontShow IlStatic.GetExpCon (ctxt,e)
+		  in (IlStatic.GetExpCon (ctxt,e)
 		      handle _ => raise NoEqExp);
 		      (e, #con_eqfun state con)
 		  end
