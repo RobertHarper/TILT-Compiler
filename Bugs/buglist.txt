@@ -81,3 +81,4 @@
 0081 [open]	Compiled compiler seg faults.
 0082 [open]     Type of thunk prematurely made a rigid record
 0083 [open]	Backend liveness analysis is too conservative.
+0084 [open] Shadowing :: or nil makes list patterns fail to compile
