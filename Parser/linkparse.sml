@@ -1,9 +1,12 @@
-(*$import FrontEnd LINKPARSE NamedForm TVClose ErrorMsg Stats *)
+(*$import FrontEnd LINKPARSE NamedForm TVClose ErrorMsg Util Stats *)
 
 
 structure LinkParse :> LINK_PARSE =
 struct
-  exception Parse of FrontEnd.parseResult
+  val error = fn s => Util.error "linkparse.sml" s
+
+  fun parseError fileName expected =
+      error ("File " ^ fileName ^ " could not be parsed as an " ^ expected ^ " file")
 
   val doNamedForm = Stats.tt "DoNamedForm"
 
@@ -31,12 +34,12 @@ struct
 	      val _ = TextIO.closeIn ins
 	  in (lines,fp,imports,dec)
 	  end
-      | (ins,_,result) => (TextIO.closeIn ins; raise Parse result)
+      | (ins,_,result) => (TextIO.closeIn ins; parseError s "implementation")
     fun parse_inter s =
       case parse s of 
 	(ins,fp,FrontEnd.PARSE_INTER (lines,includes,specs)) => 
 	    (TextIO.closeIn ins; (lines,fp,includes,specs))
-      | (ins,_,result) => (TextIO.closeIn ins; raise Parse result)
+      | (ins,_,result) => (TextIO.closeIn ins; parseError s "interface")
   end
 
   val parse_impl = Stats.timer("Parsing", parse_impl)
