@@ -264,12 +264,19 @@ void work(SysThread_t *sth)
 {
   Thread_t *th = sth->userThread;
 
+  /* System thread should not be mapped */
   assert(th == NULL);
 
   /* Wait for next user thread and remove from queue. Map system thread. */
   while (th == NULL) {
+#ifdef alpha_osf
     if (NumReadyJob() == 0)
       sched_yield();
+#endif
+#ifdef solaris
+    while (NumReadyJob() == 0)
+      ;
+#endif
     /* We _might_ have some work now */
     th = FetchJob();
     if (th != NULL) {
@@ -294,11 +301,15 @@ void work(SysThread_t *sth)
 	printf("SysThread %d: starting user thread %d (%d) with %d < %d\n",
 	     sth->stid, th->tid, th->id, 
 	     th->saveregs[ALLOCPTR_REG], th->saveregs[ALLOCLIMIT_REG]);
-      if (th->num_add == 0)
+      *((int *)(268943328)) = 255;
+      printf("written to %u\n",268943328);
+      *((int *)(268943336)) = 255;
+      printf("written to %u\n",268943336);
+      if (th->num_add == 0) 
 	start_client(th,&(th->start_address), 1);
       else
 	start_client(th,(value_t *)th->start_address, th->num_add);
-      assert(FALSE);
+      assert(0);
     }
   else  /* Thread not starting for first time */
     {
@@ -370,23 +381,23 @@ void Finish()
   work(sth);
 }
 
-void YieldRest()
+Thread_t *YieldRest()
 {
   SysThread_t *sth = getSysThread();
   ReleaseJob(sth);
   work(sth);
+  return sth->userThread;
 }
 
 /* Should be called from the timer handler.  Causes the current user thread to GC soon. */ 
-void Interrupt(struct sigcontext *scp)
+void Interrupt(struct ucontext *uctxt)
 {
   Thread_t *th = getThread();
   if (!th->notInML)
     {
-      long *the_pc = GetPc(scp);
-      long *the_iregs = GetIRegs(scp);
-      printf("      setting heap limit while at %d\n",*the_pc);
-      the_iregs[ALLOCLIMIT_REG] = StopHeapLimit;
+      long pc = GetPc(uctxt);
+      SetIReg(uctxt, ALLOCLIMIT_REG, StopHeapLimit);
+      printf("      setting heap limit to %d while at %d\n",StopHeapLimit, pc);
     }
   return;
 }

@@ -9,6 +9,7 @@
 #include "thread.h"
 #include "exn.h"
 #include "til-signal.h"
+#include <signal.h>
 #include "thread.h"
 
 #ifdef alpha_osf
@@ -28,18 +29,71 @@
 #endif
 
 #ifdef alpha_osf
-long *GetPc(struct sigcontext *scp)    { return &(scp->sc_pc); }
-long *GetSp(struct sigcontext *scp)    { return &(scp->sc_sp); }
-long *GetIRegs(struct sigcontext *scp) { return &(scp->sc_regs[0]); }
-long  GetBadAddr(struct sigcontext *scp, siginfo_t *siginfo) { return (long)(siginfo->si_addr); }
+long GetPc(struct ucontext *uctxt)          { return (uctxt->uc_mcontext.sc_pc); }
+long GetSp(struct ucontext *uctxt)          { return (uctxt->uc_mcontext.sc_sp); }
+long GetIReg(struct ucontext *uctxt, int i) { return (uctxt->uc_mcontext.sc_regs[i]); }
+void SetIReg(struct ucontext *uctxt, int i, long v) { uctxt->uc_mcontext.sc_regs[i] = v; }
+
+long GetBadAddr(struct ucontext *uctxt, 
+		 siginfo_t *siginfo)   { return (long)(siginfo->si_addr); }
 #endif
 
+
 #ifdef rs_aix
-long *GetPc(struct sigcontext *scp)    { return &((scp)->sc_jmpbuf.jmp_context.iar); }
-long *GetSp(struct sigcontext *scp)    { return &((scp)->sc_jmpbuf.jmp_context.gpr[1]); }
-long *GetIRegs(struct sigcontext *scp) { return &((scp)->sc_jmpbuf.jmp_context.gpr[0]); }
-long  GetBadAddr(struct sigcontext *scp, int dummy) { return &((scp)->sc_jmpbuf.jmp_context.o_vaddr); }
+scp is sigcontext obtained from uctxt
+long *GetPc(struct ucontext *uctxt)    { return &((scp)->sc_jmpbuf.jmp_context.iar); }
+long *GetSp(struct ucontext *uctxt)    { return &((scp)->sc_jmpbuf.jmp_context.gpr[1]); }
+long *GetIRegs(struct ucontext *uctxt) { return &((scp)->sc_jmpbuf.jmp_context.gpr[0]); }
+long  GetBadAddr(struct ucontext *uctxt, int dummy) { return &((scp)->sc_jmpbuf.jmp_context.o_vaddr); }
 #endif
+
+#ifdef solaris
+long GetIReg(struct ucontext *uctxt, int i)    
+{ 
+  if (i == 0)
+    return 0;
+  if (i <= 15)
+    return uctxt->uc_mcontext.gregs[REG_G1 + (i - 1)];
+  if (i < 32) {
+    gwindows_t *gwins = uctxt->uc_mcontext.gwins;
+    if (gwins != NULL)
+      if (i < 24)
+	return (gwins->wbuf[gwins->wbcnt].rw_local[i-16]);
+      else 
+	return (gwins->wbuf[gwins->wbcnt].rw_in[i-24]);
+    else assert(0);
+  }
+  assert(0);
+}
+
+void SetIReg(struct ucontext *uctxt, int i, long v)    
+{ 
+  if (i == 0)
+    return;
+  if (i <= 15)
+    uctxt->uc_mcontext.gregs[REG_G1 + (i - 1)] = v;
+  if (i < 32) {
+    gwindows_t *gwins = uctxt->uc_mcontext.gwins;
+    if (gwins != NULL)
+      if (i < 24)
+	(gwins->wbuf[gwins->wbcnt].rw_local[i-16]) = v;
+      else 
+	(gwins->wbuf[gwins->wbcnt].rw_in[i-24]) = v;
+    else assert(0);
+  }
+}
+long GetPc(struct ucontext *uctxt)    { return uctxt->uc_mcontext.gregs[REG_PC]; }
+long GetSp(struct ucontext *uctxt)    { return GetIReg(uctxt,SP_REG); }
+long GetBadAddr(struct ucontext *uctxt, 
+		 siginfo_t *siginfo)   { return (long)(siginfo->si_addr); }
+#endif
+
+void GetIRegs(struct ucontext *uctxt,long *dest) 
+{ 
+  int i;
+  for (i=0; i<32; i++)
+    dest[i] = GetIReg(uctxt,i);
+}
 
 int zero()
 {
@@ -62,6 +116,12 @@ void float_exn_on()
 void float_exn_on()
 {
   fp_enable_all();
+}
+#endif
+#ifdef solaris
+void float_exn_on()
+{
+  printf("need to implemented float_exn_on for SPARC");
 }
 #endif
 
@@ -145,10 +205,13 @@ void memfault_handler(int signum,
 #ifdef alpha_osf
 		      siginfo_t *siginfo, 
 #endif
+#ifdef solaris
+		      siginfo_t *siginfo, 
+#endif
 #ifdef rs_aix
 		      int always_zero,
 #endif
-		      struct sigcontext *scp)
+		      struct ucontext *uctxt)
 {
   SysThread_t *sth = getSysThread();
   int badaddr = 0;
@@ -163,7 +226,7 @@ void memfault_handler(int signum,
   int siginfo = 0;
   int code = 0;
 #endif
-  badaddr = GetBadAddr(scp,siginfo);
+  badaddr = GetBadAddr(uctxt,siginfo);
   switch (signum)
     {
     case SIGILL:
@@ -182,7 +245,7 @@ void memfault_handler(int signum,
 	case SEGV_ACCERR:
 	  printf("SysThread %d: SEGV_ACCERR  invalid permissions for address %d\n",
 		 sth->stid,badaddr);
-	  if (StackError(scp,badaddr))
+	  if (StackError(uctxt,badaddr))
 	    printf("Stackrelink/overflow not implemented\n");
 	  break;
 	default:
@@ -190,7 +253,7 @@ void memfault_handler(int signum,
 	  break;
 	}
 #else
-      if (StackError(scp,badaddr))
+      if (StackError(uctxt,badaddr))
 	printf("Stackrelink/overflow not implemented\n");
 #endif
       }
@@ -251,7 +314,7 @@ void fpe_handler(int signum,
 #ifdef rs_aix
 		 int always_zero,
 #endif
-		 struct sigcontext *scp)
+		 struct ucontext *uctxt)
 {
 #ifdef alpha_osf
   int signo = siginfo->si_signo;
@@ -264,23 +327,23 @@ void fpe_handler(int signum,
     case FPE_INTDIV:
       gprintf("%d %d ",errno,code);
       gprintf("Integer divide by zero\n");
-      raise_exception(scp,divide_exn);
+      raise_exception(uctxt,divide_exn);
       break;
     case FPE_FLTDIV:
       gprintf("%d %d ",errno,code);
       gprintf("Float   divide by zero\n");
-      raise_exception(scp,divide_exn);
+      raise_exception(uctxt,divide_exn);
       break;
     case FPE_INTOVF:
       gprintf("%d %d ",errno,code);
       gprintf("Integer overflow: too bad we never get this\n");
-      raise_exception(scp,overflow_exn);
+      raise_exception(uctxt,overflow_exn);
       break;
     case FPE_FLTOVF:
       gprintf("%d %d ",errno,code);
       gprintf("Float overflow: or could be integer overflow\n");
 return;
-      raise_exception(scp,overflow_exn);
+      raise_exception(uctxt,overflow_exn);
       break;
     case FPE_FLTUND:
       printf("%d %d ",errno,code);
@@ -322,13 +385,13 @@ void alarm_handler(int signum,
 #ifdef rs_aix
 		   int always_zero,
 #endif
-		   struct sigcontext *scp)
+		   struct ucontext *uctxt)
 {
 #ifdef alpha_osf
   if (siginfo != 0)
     printf("siginfo for alarm_handler is not nil\n");
 #endif
-  Interrupt(scp);
+  Interrupt(uctxt);
 }
 
 extern int ThreadedVersion;
@@ -361,6 +424,7 @@ void signal_init()
   sigaction(SIGVTALRM,&newact,&oldact); 
 
   /* install a stack for signal handlers */
+#ifdef alpha_osf
   {
     struct sigstack in;
     struct sigstack out;
@@ -369,6 +433,7 @@ void signal_init()
     in.ss_onstack = 0;
     sigstack(&in,&out);
   }
+#endif
 
   if (ThreadedVersion)
   {

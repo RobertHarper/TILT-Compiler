@@ -78,7 +78,7 @@ structure Util :> UTIL =
 	    let val is = TextIO.openIn "sysname"
 		val str = TextIO.input is
 		val _ = TextIO.closeIn is
-	    in  substring("alpha",str)
+	    in  substring("alpha",str) orelse substring("sun",str)
 	    end)
        end
    fun system command = 

@@ -10,31 +10,31 @@ sig
 
    val allocateProc : {getSignature  : Machine.label -> Machine.procsig,
 		       name          : Machine.label,
-		       block_map     : Bblock.bblock Machine.Labelmap.map,
-		       tracemap      : (Machine.register option * Tracetable.trace) Machine.Regmap.map,
+		       block_map     : Bblock.bblock Core.Labelmap.map,
+		       tracemap      : (Machine.register option * Tracetable.trace) Core.Regmap.map,
 		       stack_resident : Machine.stacklocation 
-		                                 Machine.Regmap.map,
+		                                 Core.Regmap.map,
 		       procsig       : Machine.procsig} 
                       -> (Machine.procsig * 
-			  Bblock.bblock Machine.Labelmap.map *
+			  Bblock.bblock Core.Labelmap.map *
 			  Machine.label list *
 			  Machine.data list)
 
 
    val allocateProc1 : {getSignature  : Machine.label -> Machine.procsig,
 		       name          : Machine.label,
-		       block_map     : Bblock.bblock Machine.Labelmap.map,
-		       tracemap      : (Machine.register option * Tracetable.trace) Machine.Regmap.map,
+		       block_map     : Bblock.bblock Core.Labelmap.map,
+		       tracemap      : (Machine.register option * Tracetable.trace) Core.Regmap.map,
 		       stack_resident : Machine.stacklocation 
-		                                 Machine.Regmap.map,
+		                                 Core.Regmap.map,
 		       procsig       : Machine.procsig} 
                       -> 
                        ({getSignature  : Machine.label -> Machine.procsig,
 		       name          : Machine.label,
-		       block_map     : Bblock.bblock Machine.Labelmap.map,
-		       tracemap      : (Machine.register option * Tracetable.trace) Machine.Regmap.map,
+		       block_map     : Bblock.bblock Core.Labelmap.map,
+		       tracemap      : (Machine.register option * Tracetable.trace) Core.Regmap.map,
 		       stack_resident : Machine.stacklocation 
-		                                 Machine.Regmap.map,
+		                                 Core.Regmap.map,
 		       procsig       : Machine.procsig} 
 			* (Machine.assign list) option   
 			* int * int * Machine.label list)
@@ -42,15 +42,15 @@ sig
    val allocateProc2 : 
                      ({getSignature  : Machine.label -> Machine.procsig,
 		       name          : Machine.label,
-		       block_map     : Bblock.bblock Machine.Labelmap.map,
-		       tracemap      : (Machine.register option * Tracetable.trace) Machine.Regmap.map,
+		       block_map     : Bblock.bblock Core.Labelmap.map,
+		       tracemap      : (Machine.register option * Tracetable.trace) Core.Regmap.map,
 		       stack_resident : Machine.stacklocation 
-		                                 Machine.Regmap.map,
+		                                 Core.Regmap.map,
 		       procsig       : Machine.procsig} 
 			* (Machine.assign list) option 		
 			* int * int * Machine.label list)
                       -> (Machine.procsig * 
-			  Bblock.bblock Machine.Labelmap.map *
+			  Bblock.bblock Core.Labelmap.map *
 			  Machine.label list *
 			  Machine.data list)
 end

@@ -1,19 +1,19 @@
-(*$import RTL MACHINE *)
+(*$import Core *)
+
 signature TRACETABLE =
   sig
-    structure Machine : MACHINE
 
     datatype calllabel = CALLLABEL of Rtl.label
     datatype trace     = TRACE_YES 
                        | TRACE_NO
                        | TRACE_UNSET   (* unset variable; handle specially for gener GC *)
-		       | TRACE_CALLEE     of Machine.register
+		       | TRACE_CALLEE     of Core.register
 			 (* should be resolved to ACTUAL stack locations in the end *)
-		       | TRACE_STACK      of Machine.stacklocation
+		       | TRACE_STACK      of Core.stacklocation
 		        (* stack pos, rec pos *)
-		       | TRACE_STACK_REC  of Machine.stacklocation * int list
-		       | TRACE_GLOBAL     of Machine.label
-		       | TRACE_GLOBAL_REC of Machine.label * int list
+		       | TRACE_STACK_REC  of Core.stacklocation * int list
+		       | TRACE_GLOBAL     of Core.label
+		       | TRACE_GLOBAL_REC of Core.label * int list
 
 		       (* trace status should never be needed.  A bug 
 			  if it is.*)
@@ -24,7 +24,7 @@ signature TRACETABLE =
       {calllabel  : calllabel, 
        framesize  : int,
        retaddpos  : int,
-       regtrace   : (Machine.register * trace) list,
+       regtrace   : (Core.register * trace) list,
        stacktrace : (int * trace) list                   
        }
 

@@ -57,6 +57,7 @@ signature MLRISC_PSEUDO = sig
 		      -> unit
   val sizeOf:	    pseudo_op * int -> int
   val adjustLabels: pseudo_op * int -> unit
+  val removable : pseudo_op -> bool
 
 end
 

@@ -323,12 +323,11 @@ struct
 	    add_instr(BCNDI(NE,cmptemp,fsmall_alloc,true));
 	    add_instr(CALL{call_type = C_NORMAL,
 			   func = LABEL' (C_EXTERN_LABEL "alloc_bigfloatarray"),
-			   args = ((case ptag_opt of 
-					NONE => [len]
-				      | SOME ptag => [len,ptag]),
-				   [fr]),
-			   results = ([dest],[]),
-			   save = SAVE(getLocals())});
+			   args = (case ptag_opt of 
+					NONE => [I len,F fr]
+				      | SOME ptag => [I len,I ptag,F fr]),
+			   results = [I dest],
+			   save = getLocals()});
 	    add_instr(BR fafter);
 	     
 	    (* inline allocation code - start by doing the tag stuff*)
@@ -472,11 +471,11 @@ struct
 		     add_instr(BCNDI(NE,cmptemp,ismall_alloc,true));
 		     add_instr(CALL{call_type = C_NORMAL,
 				    func = LABEL' (C_EXTERN_LABEL "alloc_bigintarray"),
-				    args = ((case ptag_opt of
-						 NONE => [wordlen,v]
-					       | SOME ptag => [wordlen,v,ptag]), []),
-				    results = ([dest],[]),
-				    save = SAVE(getLocals())});
+				    args = (case ptag_opt of
+						 NONE => [I wordlen,I v]
+					       | SOME ptag => [I wordlen, I v, I ptag]),
+				    results = [I dest],
+				    save = getLocals()});
 		     add_instr(BR gafter);
 		     do_code_align();
 		     add_instr(ILABEL ismall_alloc);
@@ -532,11 +531,11 @@ struct
 		 add_instr(BCNDI(NE,cmptemp,psmall_alloc,true));
 		 add_instr(CALL{call_type = C_NORMAL,
 				func = LABEL' (C_EXTERN_LABEL "alloc_bigptrarray"),
-				args = ((case ptag_opt of
-					    NONE => [len,v]
-					  | SOME ptag => [len,v,ptag]), []),
-				results = ([dest],[]),
-				save = SAVE(getLocals())});
+				args = (case ptag_opt of
+					    NONE => [I len, I v]
+					  | SOME ptag => [I len, I v,I ptag]),
+				results = [I dest],
+				save = getLocals()});
 		 add_instr(BR gafter);
 		 do_code_align();
 		 add_instr(ILABEL psmall_alloc);

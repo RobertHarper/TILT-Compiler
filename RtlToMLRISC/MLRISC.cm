@@ -16,7 +16,8 @@ signature RA_USER_PARAMS
 
 signature ALPHA32INSTR
 signature ALPHA32_PSEUDO_INSTR
-
+signature SPARCINSTR
+signature SPARC_PSEUDO_INSTR
 (* signature X86INSTR *)
 
 structure AsmStream
@@ -25,7 +26,7 @@ structure Label
 structure LabelExp
 
 structure Alpha32Cells
-
+structure SparcCells
 (* structure X86Cells *)
 
 functor AsmEmit
@@ -40,6 +41,15 @@ functor Alpha32Instr
 functor Alpha32Props
 functor Alpha32RegAlloc
 functor Alpha32Rewrite
+functor Alpha32Shuffle
+
+functor Sparc
+functor SparcAsmEmitter
+functor SparcInstr
+functor SparcProps
+functor SparcRegAlloc
+functor SparcRewrite
+functor SparcShuffle
 
 (*
 functor X86

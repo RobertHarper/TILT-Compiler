@@ -34,11 +34,5 @@ signature EMIT_RTL = sig
    *)
   val emitModule: module -> unit
 
-  (*
-   * Emit a native entry table for a given list of module labels.
-   * labels -> the module labels to construct the entry table from
-   *)
-  val emitEntryTable: label list -> unit
-
 end
 

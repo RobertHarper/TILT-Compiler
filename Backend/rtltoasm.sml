@@ -12,9 +12,8 @@ functor Rtltoasm (val commentHeader : string
 		      = Callconv.Machine
 		      = Procalloc.Machine
 		      = Procalloc.Bblock.Machine
-		      = Procalloc.Tracetable.Machine
 		      = Toasm.Machine
-(* should not be needed *) = Printutils.Bblock.Machine = Printutils.Tracetable.Machine
+(* should not be needed *) = Printutils.Bblock.Machine 
 
 
 		  sharing Printutils.Bblock 
@@ -22,8 +21,8 @@ functor Rtltoasm (val commentHeader : string
 		    = Toasm.Bblock
 
 		  sharing Printutils.Tracetable
-		    = Procalloc.Tracetable 
-		    = Toasm.Tracetable)
+		      = Procalloc.Tracetable 
+		      = Toasm.Tracetable)
 
 		     :> RTLTOASM  =
 struct
@@ -31,8 +30,8 @@ struct
 
    open Callconv Printutils Machineutils Rtl
    open Machine
+   open Core
 
-   fun flatten arg = foldr (op @) [] arg
    val debug       = ref false
    val knowns      = ref false
    val msgs        = ref false
@@ -126,10 +125,8 @@ struct
          | initSigs (proc::rest)=
 	   let 
 	     val (Rtl.PROC{name, args, results, return, known, ...}) = proc
-	     val args = (map Toasm.translateIReg (#1 args)) @
-	                (map Toasm.translateFReg (#2 args))
-	     val results  = (map Toasm.translateIReg (#1 results)) @
-	                (map Toasm.translateFReg (#2 results))
+	     val args = map Toasm.translateReg args
+	     val results  = map Toasm.translateReg results
              val return = Toasm.translateIReg return
 
 	     val sign = if known andalso (! knowns) andalso (length args <= 15) then
@@ -205,7 +202,7 @@ struct
 			 then (print "allocateProc 1 : 1\n")
 		     else ()
 
-		 val code_labels = flatten code_labels_listlist
+		 val code_labels = Listops.flatten code_labels_listlist
 		 val _ = app (fn name =>
 			         let val PROCSIG{args,res,
 						 allocated,...} = getSig name
@@ -356,7 +353,7 @@ struct
 					  (allocateProc2 x,cls)
 		 | _ => error "allocateproc in allocatecomponent"
 	     val code_labels_listlist = map (fn ((_,a),b) => (a @ b)) (map final_alloc temps)
-	     val code_labels = flatten code_labels_listlist
+	     val code_labels = Listops.flatten code_labels_listlist
 	     val _ = if (!debug)
 			 then (print "done allocating component #"; 
 			       print (Int.toString count); print "\n")
@@ -384,7 +381,7 @@ struct
        val _ = emitString ("\t.globl "^main'^"_CODE_BEGIN_VAL\n");
        val _ = emitString (""^main'^"_CODE_BEGIN_VAL:\n");
        val code_labels_listlist = Listops.mapcount allocateComponent component_names;
-       val code_labels = flatten code_labels_listlist
+       val code_labels = Listops.flatten code_labels_listlist
      in (* allocateProg *)
        app emitString textStart;
        emitString (main'^"_CODE_END_VAL:\n");
@@ -412,39 +409,4 @@ struct
      end (* allocateProg *)
        handle e => (Printutils.closeOutput (); raise e)
 
-     fun dumpEntryTables nl =
-	 let val count = length nl
-	     val nl = map msLabel nl
-             fun mktable(name,suffix) =
-	       let 
-		 val temps = map (fn s => s ^ suffix) nl
-		 val _ = app (fn s => emitString(extern_decl s)) temps
-	       in
-		 DLABEL (ML_EXTERN_LABEL name) ::
-		 map (fn s => DATA(ML_EXTERN_LABEL s)) temps
-	       end
-	     val gc_table_begin =    mktable("GCTABLE_BEGIN_VAL","_GCTABLE_BEGIN_VAL")
-	     val gc_table_end =	     mktable("GCTABLE_END_VAL","_GCTABLE_END_VAL")
-	     val sml_globals =       mktable("SML_GLOBALS_BEGIN_VAL","_SML_GLOBALS_BEGIN_VAL")
-	     val end_sml_globals =   mktable("SML_GLOBALS_END_VAL","_SML_GLOBALS_END_VAL")
-	     val muttable_begin =    mktable("MUTABLE_TABLE_BEGIN_VAL","_MUTABLE_TABLE_BEGIN_VAL")
-	     val muttable_end =      mktable("MUTABLE_TABLE_END_VAL","_MUTABLE_TABLE_END_VAL")
-	     val codetable_begin =   mktable("CODE_BEGIN_VAL","_CODE_BEGIN_VAL")
-	     val codetable_end =     mktable("CODE_END_VAL","_CODE_END_VAL")
-             val entrytable =        mktable("client_entry","")
-	     val count = [DLABEL (ML_EXTERN_LABEL "module_count"),
-			  INT32 (TilWord32.fromInt count)]
-         in  
-	    dumpDatalist count;
-	    dumpDatalist gc_table_begin;
-	    dumpDatalist gc_table_end;
-	    dumpDatalist sml_globals;
-	    dumpDatalist end_sml_globals;
-	    dumpDatalist muttable_begin;
-	    dumpDatalist muttable_end;
-	    dumpDatalist codetable_begin;
-	    dumpDatalist codetable_end;
-	    dumpDatalist entrytable
-         end
-
-end 
+end

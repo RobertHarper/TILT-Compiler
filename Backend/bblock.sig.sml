@@ -1,4 +1,4 @@
-(*$import MACHINE MACHINEUTILS TRACETABLE *)
+(*$import Core MACHINE MACHINEUTILS TRACETABLE *)
 (* Definitions of annotated instructions and basic blocks, and some
    simple dataflow operations on them.*)
 
@@ -12,7 +12,7 @@ sig
    (* Annotations on an instruction *)
 
    datatype 'a annotated = NO_ANN of 'a
-                         | LIVE of Machine.Regset.set * 'a
+                         | LIVE of Core.Regset.set * 'a
 
    (* definition of a basic block:
 	   instrs: Instructions are kept in REVERSE order
@@ -34,10 +34,10 @@ sig
    *)
 
     datatype bblock = BLOCK of {instrs    : Machine.instruction annotated list ref,
- 			        def       : Machine.Regset.set,
-                                use       : Machine.Regset.set,
- 			        in_live   : Machine.Regset.set ref,
- 			        out_live  : Machine.Regset.set ref,
+ 			        def       : Core.Regset.set,
+                                use       : Core.Regset.set,
+ 			        in_live   : Core.Regset.set ref,
+ 			        out_live  : Core.Regset.set ref,
  			        truelabel : bool,
  			        succs     : Machine.label list ref}
 
@@ -47,12 +47,12 @@ sig
    val stripAnnot     : 'a annotated -> 'a
    val msAnnotation   : 'a annotated -> string
 
-   val live : Machine.instruction annotated -> Machine.Regset.set
+   val live : Machine.instruction annotated -> Core.Regset.set
    val defUse : Machine.instruction -> Machine.register list * Machine.register list
    val blockDefUse : bblock -> bblock
-   val liveVars : ((Machine.register option * Tracetable.trace) Machine.Regmap.map)
-                   -> bblock Machine.Labelmap.map -> Machine.label -> 
-                      bblock Machine.Labelmap.map
+   val liveVars : ((Machine.register option * Tracetable.trace) Core.Regmap.map)
+                   -> bblock Core.Labelmap.map -> Machine.label -> 
+                      bblock Core.Labelmap.map
 
 end
 

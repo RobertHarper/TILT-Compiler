@@ -3,11 +3,9 @@ functor Decalphautils(structure Decalpha: DECALPHA)
     :> MACHINEUTILS where Machine = Decalpha.Machine =
 struct
 
-
-   structure Machine = Decalpha 
-
    open Decalpha
    open Machine
+   open Core
 
    val error = fn s => Util.error "decalphautils.sml" s
 

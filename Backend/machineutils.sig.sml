@@ -1,4 +1,5 @@
-(*$import MACHINE ORD_MAP ORD_SET *)
+(*$import Core MACHINE ORD_MAP ORD_SET *)
+
 signature MACHINEUTILS =
 sig
 
@@ -26,9 +27,9 @@ sig
    val indirect_callee_saved_regs   : Machine.register list
 
 
-   val listToSet     : Machine.register list -> Machine.Regset.set
-   val setToList     : Machine.Regset.set -> Machine.register list
-   val msRegSet      : Machine.Regset.set -> string
+   val listToSet     : Machine.register list -> Core.Regset.set
+   val setToList     : Core.Regset.set -> Machine.register list
+   val msRegSet      : Core.Regset.set -> string
    val msRegList     : Machine.register list -> string
 
 

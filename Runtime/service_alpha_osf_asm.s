@@ -91,16 +91,6 @@ start_client:
  	stq	$17, 0($sp)	# save current thunk
  	stq	$19, 8($sp)	# save limit thunk
 thunk_loop:
- # nuke regs for debugging
-	lda	$0,  1200($31)
-	lda	$1,  1201($31)
-	lda	$2,  1202($31)
-	lda	$3,  1203($31)
-	lda	$4,  1204($31)
-	lda	$5,  1205($31)
-	lda	$6,  1206($31)
-	lda	$7,  1207($31)
-	lda	$8,  1208($31)
 	stl	$31, notinml_disp(THREADPTR_SYMREG)
 .set noat
  	ldq	$17, 0($sp)	# fetch current thunk
@@ -176,54 +166,21 @@ global_exnhandler:
 global_exn_handler_dummy:	
 	ldgp	$gp, 0($gp)
 	lda	$sp, -320($sp)
-.set noat
-	stq	$0, 16($sp)
-	stq	$1, 24($sp)
-	stq	$2, 32($sp)
-	stq	$3, 40($sp)
-	stq	$4, 48($sp)
-	stq	$5, 56($sp)
-	stq	$6, 64($sp)
-	stq	$7, 72($sp)
-	stq	$8, 80($sp)
-	stq	$9, 88($sp)
-	stq	$10, 96($sp)
-	stq	$11, 104($sp)
-	stq	$12, 112($sp)
-	stq	$13, 120($sp)
-	stq	$14, 128($sp)
-	stq	$15, 136($sp)
-	stq	$16, 144($sp)
-	stq	$17, 152($sp)
-	stq	$18, 160($sp)
-	stq	$19, 168($sp)
-	stq	$20, 176($sp)
-	stq	$21, 184($sp)
-	stq	$22, 192($sp)
-	stq	$23, 200($sp)
-	stq	$24, 208($sp)
-	stq	$25, 216($sp)
-	stq	$26, 224($sp)
-	stq	$27, 232($sp)
-	stq	$28, 240($sp)
-	stq	$29, 248($sp)
-	stq	$30, 256($sp)	
-	stq	$31, 264($sp)
-	lda	$16, 16($sp)
-	lda	$27, toplevel_exnhandler
+	bsr	save_regs
+	mov	THREADPTR_SYMREG, $16
 	bsr	toplevel_exnhandler
 	jsr	abort
 	.end	global_exnhandler
 
  # ------------------------------------------------------------
- # first C arg = where regs are
- # second C arg = exn argument
+ # first C arg = thread structure
+ # second C arg = exn argument	;  will eventually pass in return address
  # third C arg = exn code handler address
  # ------------------------------------------------------------
 	.ent	raise_exception_raw
 raise_exception_raw:
 	lda	$sp, -64($sp)	# allocate frame
-	stq	$16, 8($sp)	# save where regs are
+	mov	$16, THREADPTR_SYMREG	# save where regs are
 	stq	$17, 16($sp)	# save the exn value
 	stq	$18, 24($sp)	# save handler address
 	br	$gp, restore_dummy
@@ -231,39 +188,11 @@ restore_dummy:
 	ldgp	$gp, 0($gp)	# get own gp
 .set noat
 				# restore address from argument
-	ldq	$0, 0($16)
-	ldq	$1, 8($16)
-	ldq	$2, 16($16)
-	ldq	$3, 24($16)
-	ldq	$4, 32($16)
-	ldq	$5, 40($16)
-	ldq	$6, 48($16)
-	ldq	$7, 56($16)
-	ldq	$8, 64($16)
-	ldq	$9, 72($16)	# exn ptr must be restored
-	ldq	$10, 80($16)	# alloc limit must be restored
-	ldq	$11, 88($16)	# alloc ptr must be restored
-	ldq	$12, 96($16)
-	ldq	$13, 104($16)
-	ldq	$14, 112($16)
-	ldq	$15, 120($16)
-				# regs 16 to 21 are C arg regs and need not be restored
-	ldq	$22, 176($16)	
-	ldq	$23, 184($16)
-	ldq	$24, 192($16)	
-	ldq	$25, 200($16)	
-				# skip exn argument
-	ldq	$27, 216($16)
-	ldq	$28, 224($16)
-				# $29 is gp
-				# $30 is sp
-				# $31 is zero
-	
-	ldq	$26, 16($sp)	# restore exn arg
-	ldq	$at, 24($sp)	# restore where to go
-	ldq	$sp, 240($16)	# restore SP from saved regs at end
-	mov	$at, $27
-	jmp	$31, ($at), 1
+	bsr	load_regs
+	ldq	$26, 16($sp)	# pass exn arg
+	ldq	$27, 24($sp)	# restore where to go
+				# no need to pop frame as handler will change sp
+	jmp	$31, ($27), 1
 .set at
 	.end	raise_exception_raw
 

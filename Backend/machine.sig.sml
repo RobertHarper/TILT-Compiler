@@ -1,28 +1,14 @@
-(*$import Rtl Name TilWord32 *)
+(*$import Core Rtl Name TilWord32 *)
+
 signature MACHINE =
   sig
 
-    datatype register = R of int
-                      | F of int
+    type register = Core.register
+    type stacklocation = Core.stacklocation
+    type label = Core.label
+    type data = Core.data
+    type assign = Core.assign
 
-
-    type align = Rtl.align
-    type label = Rtl.label
-    type data = Rtl.data
-
-   structure Labelmap : ORD_MAP where type Key.ord_key = label
-   structure Regmap   : ORD_MAP where type Key.ord_key = register
-   structure Regset   : ORD_SET where type Key.ord_key = register
-
-    type specific_instruction
-    datatype stacklocation = CALLER_FRAME_ARG of int
-                           | THIS_FRAME_ARG of int
-                           | SPILLED_INT of int
-                           | SPILLED_FP of int
-                           | ACTUAL4 of int
-                           | ACTUAL8 of int
-                           | RETADD_POS
-      
     val sloc2int  : stacklocation -> int (* return offset if stacklocation concrete *)
     val isInt     : register -> bool
     val isFloat   : register -> bool
@@ -54,14 +40,13 @@ signature MACHINE =
                        | INDIRECT of register
     datatype rtl_instruction =
       CALL of 
-      {extern_call : bool,               (* is this a C call? *)
+      {calltype : Rtl.calltype,          (* is this a C call? *)
        func: call_type,                  (* label or temp containing addr. *)
        args : register list,             (* integer, floating temps *)
        results : register list,          (* integer, floating temps *)
        argregs : register list option,   (* actual registers *)
        resregs : register list option,   (*   "         "    *)
-       destroys: register list option,   (*   "         "    *)
-       tailcall : bool}
+       destroys: register list option}   (*   "         "    *)
     | JMP of register * label list
     | RETURN of {results: register list}        (* formals *)
     | SAVE_CS of label
@@ -88,6 +73,7 @@ signature MACHINE =
     | ICOMMENT of string
     | LADDR of register * label         (* dest, label *)
 
+    type specific_instruction
 
     datatype instruction = 
       BASE     of base_instruction
@@ -98,6 +84,7 @@ signature MACHINE =
     val msData          : Rtl.data -> (int * string) list
     val msInstruction   : string -> instruction -> string
     val msStackLocation : stacklocation -> string
+    val assign2s        : assign -> string
 
     val num_iregs : int
     val num_fregs : int
@@ -135,14 +122,6 @@ signature MACHINE =
    val cFlow : instruction -> (bool * label list) option
    val extern_decl : string -> string
 
-   (* Where a given pseudoregister is physically located *)
-   datatype assign = IN_REG of register
-                   | ON_STACK of stacklocation
-                   | HINT of register
-		   | UNKNOWN
-
-   val assign2s  : assign -> string
-   val eqAssigns : assign -> assign -> bool
 
 
    (* information on a procedure:

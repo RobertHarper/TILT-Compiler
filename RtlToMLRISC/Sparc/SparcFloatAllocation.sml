@@ -1,11 +1,11 @@
-(*$import TopLevel SPARC32Instr CELLS FlowGraph FLOAT_CONVENTION INTEGER_CONVENTION MLRISC_REGION SPARC32INSTR RA REGISTER_ALLOCATION *)
+(*$import TopLevel SPARCInstr CELLS FlowGraph FLOAT_CONVENTION INTEGER_CONVENTION MLRISC_REGION RA REGISTER_ALLOCATION *)
 
 (* =========================================================================
  * SparcFloatAllocation.sml
  * ========================================================================= *)
 
 functor SparcFloatAllocation(
-	  structure SparcInstructions: SPARC32INSTR
+	  structure SparcInstructions: SPARCINSTR
 	  structure Cells:	       CELLS
 	  structure FloatConvention:   FLOAT_CONVENTION
 	  structure FlowGraph:	       FLOWGRAPH
@@ -14,10 +14,10 @@ functor SparcFloatAllocation(
 
 	  structure SparcRewrite: sig
 
-	    structure I: SPARC32INSTR
+	    structure I: SPARCINSTR
 
-	    val frewriteUse: I.instruction * int * int -> I.instruction
-	    val frewriteDef: I.instruction * int * int -> I.instruction
+	    val frewriteUse: (int -> int) * I.instruction * int * int -> I.instruction
+	    val frewriteDef: (int -> int) * I.instruction * int * int -> I.instruction
 
 	  end
 
@@ -27,6 +27,8 @@ functor SparcFloatAllocation(
 					     SparcInstructions.operand
 				  and type I.instruction =
 					     SparcInstructions.instruction
+				  and type B.name = 
+				             SparcMLRISCBlockname.name
 	  ): sig
 	    datatype mode = REGISTER_ALLOCATION | COPY_PROPAGATION
 	    val ra: mode -> FlowGraph.cluster -> FlowGraph.cluster
@@ -69,7 +71,7 @@ functor SparcFloatAllocation(
 
   structure GetRegister =
     GetReg(val available = FloatConvention.available
-	   val nRegs	 = 32)
+	   val nRegs	 = 64)
 
   (* -- user parameters structure ------------------------------------------ *)
 
@@ -77,11 +79,13 @@ functor SparcFloatAllocation(
 	      :> RA_USER_PARAMS
 		   where type I.operand	    = SparcInstructions.operand
 		     and type I.instruction = SparcInstructions.instruction
+		     and type B.name        = SparcMLRISCBlockname.name
 	      = struct
 
     (* -- structures ------------------------------------------------------- *)
 
     structure I = SparcInstructions
+    structure B = SparcMLRISCBlockname
 
     (* -- register allocation values --------------------------------------- *)
 
@@ -89,23 +93,28 @@ functor SparcFloatAllocation(
     val dedicated = FloatConvention.dedicated
     val getreg	  = GetRegister.getreg
 
-    fun copyInstr(dest, src) = SparcInstructions.FCOPY(dest, src, ref NONE)
+    exception Unimplemented
+    fun copyInstr((dest, src),_) = (raise Unimplemented;
+					SparcInstructions.FCOPY{dst = dest, src = src, 
+								impl = ref NONE, tmp = NONE})
 
     (* -- spill functions -------------------------------------------------- *)
 
     local
       fun template(id, offset) =
 	    SparcInstructions.FSTORE{
-	      stOp = SparcInstructions.STT,
-	      r	   = id,
-	      b	   = IntegerConvention.stackPointer,
-	      d	   = SparcInstructions.CONSTop offset,
+	      s    = SparcInstructions.STDF,
+	      d	   = id,
+	      r	   = IntegerConvention.stackPointer,
+	      i	   = SparcInstructions.CONST offset,
 	      mem  = stack
 	    }::nil
     in
-      fun spill{instr = instruction, reg = target} =
+      fun spill{regmap = _, id = _,
+		instr = instruction, reg = target} =
 	    case instruction of
-	      SparcInstructions.FCOPY([_], [source], _) => 
+	      SparcInstructions.FCOPY{dst = [_], src = [source], 
+				      tmp = _, impl = _} => 
 		{code  = template(source, !lookupSpill target),
 		 proh  = [],
 		 instr = NONE}
@@ -116,23 +125,25 @@ functor SparcFloatAllocation(
 		  {code	 = template(target', !lookupSpill target),
 		   proh	 = [target'],
 		   instr = SOME(SparcRewrite.frewriteDef
-				  (instruction, target, target'))}
+				  (fn (x:int) => x, instruction, target, target'))}
 		end
     end
 
     local
       fun template(id, offset, tail) =
 	    SparcInstructions.FLOAD{
-	      ldOp = SparcInstructions.LDT,
-	      r	   = id,
-	      b	   = IntegerConvention.stackPointer,
-	      d	   = SparcInstructions.CONSTop offset,
+	      l    = SparcInstructions.LDDF,
+	      d	   = id,
+	      r	   = IntegerConvention.stackPointer,
+	      i	   = SparcInstructions.CONST offset,
 	      mem  = stack
 	    }::tail
     in
-      fun reload{instr = instruction, reg = source} =
+      fun reload{regmap = _, id = _,
+		 instr = instruction, reg = source} =
 	    case instruction of
-	      SparcInstructions.FCOPY([target], [_], _) => 
+	      SparcInstructions.FCOPY{dst = [target], src = [_], 
+				      impl = _, tmp = _} => 
 		{code = template(target, !lookupReload source, []),
 		 proh = []}
 	    | _ =>
@@ -141,7 +152,7 @@ functor SparcFloatAllocation(
 		in
 		  {code = template(source', !lookupReload source,
 				   [SparcRewrite.frewriteUse
-				      (instruction, source, source')]),
+				      (fn (x:int) => x, instruction, source, source')]),
 		   proh = [source']}
 		end
     end

@@ -7,6 +7,6 @@ void exn_init(void);
 typedef value_t exn;
 extern exn divide_exn;
 extern exn overflow_exn;
-void raise_exception(struct sigcontext *, exn);
+void raise_exception(struct ucontext *, exn);
 
 #endif

@@ -16,14 +16,20 @@ local
 
   structure AlphaFlowGraph =
     FlowGraph(structure I = Alpha32Instr
-	      structure P = AlphaMLRISCPseudo)
+	      structure P = AlphaMLRISCPseudo
+	      structure B = AlphaMLRISCBlockname)
+
+  structure Alpha32Shuffle = 
+      Alpha32Shuffle(Alpha32Instr)
 
   structure Alpha32Props =
     Alpha32Props(val exnptrR		= [] (* ??? *)
-		 structure Alpha32Instr = Alpha32Instr)
+		 structure Alpha32Instr = Alpha32Instr
+		 structure Shuffle = Alpha32Shuffle)
 
   structure AlphaPseudoInstr =
-    AlphaPseudoInstr(structure Alpha32Instr = Alpha32Instr)
+    AlphaPseudoInstr(structure Alpha32Instr = Alpha32Instr
+		     structure Shuffle = Alpha32Shuffle)
 
   structure Alpha32Rewrite =
     Alpha32Rewrite(Alpha32Instr)
@@ -32,7 +38,8 @@ local
 
   structure Alpha32AsmEmitter =
     Alpha32AsmEmitter(structure Instr	  = Alpha32Instr
-		      structure FlowGraph = AlphaFlowGraph)
+		      structure FlowGraph = AlphaFlowGraph
+		      structure Shuffle = Alpha32Shuffle)
 
   (* -- structures --------------------------------------------------------- *)
 

@@ -1,4 +1,4 @@
-(*$import TopLevel Sparc32Instr SparcMLRISCConstant SparcMLRISCRegion SparcMLRISCPseudo FlorGraph Sparc32Props SparcPseudoInstr Sparc32Rewrite Sparc32AsmEmitter AsmEmit SparcIntegerAllocation SparcFloatAllocation Sparc32 *)
+(*$import TopLevel SparcInstr SparcMLRISCConstant SparcMLRISCRegion SparcMLRISCPseudo FlorGraph SparcProps SparcPseudoInstr SparcRewrite SparcAsmEmitter AsmEmit SparcIntegerAllocation SparcFloatAllocation Sparc *)
 
 (* =========================================================================
  * SparcMLTreeComp.sml
@@ -8,90 +8,99 @@ local
 
   (* -- structures --------------------------------------------------------- *)
 
-  structure Sparc32Instr =
-    Sparc32Instr(structure Const  = SparcMLRISCConstant
+  structure SparcInstr =
+    SparcInstr(structure Const  = SparcMLRISCConstant
 		 structure Region = SparcMLRISCRegion)
 
   (* -- structures --------------------------------------------------------- *)
 
   structure SparcFlowGraph =
-    FlowGraph(structure I = Sparc32Instr
-	      structure P = SparcMLRISCPseudo)
+    FlowGraph(structure I = SparcInstr
+	      structure P = SparcMLRISCPseudo
+	      structure B = SparcMLRISCBlockname)
 
-  structure Sparc32Props =
-    Sparc32Props(val exnptrR		= [] (* ??? *)
-		 structure Sparc32Instr = Sparc32Instr)
+  structure SparcShuffle = 
+      SparcShuffle(SparcInstr)
+
+  structure SparcProps =
+    SparcProps(val exnptrR		= [] (* ??? *)
+	       structure SparcInstr = SparcInstr
+	       structure Shuffle = SparcShuffle)
 
   structure SparcPseudoInstr =
-    SparcPseudoInstr(structure Sparc32Instr = Sparc32Instr)
+    SparcPseudoInstr(structure SparcInstr = SparcInstr
+		     structure Shuffle = SparcShuffle)
 
-  structure Sparc32Rewrite =
-    Sparc32Rewrite(Sparc32Instr)
+  structure SparcRewrite =
+    SparcRewrite(SparcInstr)
 
   (* -- structures --------------------------------------------------------- *)
 
-  structure Sparc32AsmEmitter =
-    Sparc32AsmEmitter(structure Instr	  = Sparc32Instr
-		      structure FlowGraph = SparcFlowGraph)
+  structure SparcAsmEmitter =
+    SparcAsmEmitter(structure Instr	  = SparcInstr
+		    structure FlowGraph = SparcFlowGraph
+		    structure Shuffle = SparcShuffle)
 
   (* -- structures --------------------------------------------------------- *)
 
   structure SparcAsmEmit =
     AsmEmit(structure F = SparcFlowGraph
-	    structure E = Sparc32AsmEmitter)
+	    structure E = SparcAsmEmitter)
 
-  structure Sparc32RegAlloc =
-    Sparc32RegAlloc(structure P	  = Sparc32Props
-		    structure I	  = Sparc32Instr
+  structure SparcRegAlloc =
+    SparcRegAlloc(structure P	  = SparcProps
+		    structure I	  = SparcInstr
 		    structure F	  = SparcFlowGraph
-		    structure Asm = Sparc32AsmEmitter)
+		    structure Asm = SparcAsmEmitter)
 
   (* -- structures --------------------------------------------------------- *)
 
   structure SparcIntegerAllocation =
-    SparcIntegerAllocation(structure SparcInstructions = Sparc32Instr
-			   structure SparcRewrite      = Sparc32Rewrite
-			   structure Cells	       = Sparc32Cells
+    SparcIntegerAllocation(structure SparcInstructions = SparcInstr
+			   structure SparcRewrite      = SparcRewrite
+			   structure Cells	       = SparcCells
 			   structure FlowGraph	       = SparcFlowGraph
 			   structure IntegerConvention = SparcIntegerConvention
 			   structure MLRISCRegion      = SparcMLRISCRegion
 			   structure RegisterSpillMap  = SparcRegisterSpillMap
-			   functor RegisterAllocation  = Sparc32RegAlloc.IntRa)
+			   functor RegisterAllocation  = SparcRegAlloc.IntRa)
 
   structure SparcFloatAllocation =
-    SparcFloatAllocation(structure SparcInstructions = Sparc32Instr
-			 structure SparcRewrite	     = Sparc32Rewrite
-			 structure Cells	     = Sparc32Cells
+    SparcFloatAllocation(structure SparcInstructions = SparcInstr
+			 structure SparcRewrite	     = SparcRewrite
+			 structure Cells	     = SparcCells
 			 structure FloatConvention   = SparcFloatConvention
 			 structure FlowGraph	     = SparcFlowGraph
 			 structure IntegerConvention = SparcIntegerConvention
 			 structure MLRISCRegion	     = SparcMLRISCRegion
 			 structure RegisterSpillMap  = SparcRegisterSpillMap
-			 functor RegisterAllocation  = Sparc32RegAlloc.FloatRa)
+			 functor RegisterAllocation  = SparcRegAlloc.FloatRa)
 
   (* -- values ------------------------------------------------------------- *)
 
-  val alpha_codegen = SparcAsmEmit.asmEmit o
+  val sparc_codegen = SparcAsmEmit.asmEmit o
 		      SparcFloatAllocation.allocateCluster o
 		      SparcIntegerAllocation.allocateCluster
 
   (* -- structures --------------------------------------------------------- *)
 
   structure SparcFlowGraphGen =
-    FlowGraphGen(val codegen	     = alpha_codegen
+    FlowGraphGen(val codegen	     = sparc_codegen
 		 structure Flowgraph = SparcFlowGraph
-		 structure InsnProps = Sparc32Props
+		 structure InsnProps = SparcProps
 		 structure MLTree    = SparcMLTree)
 
 in
 
   (* -- structures --------------------------------------------------------- *)
 
+  val _ = print "\n***Warning: overflowtrap in application of functor Sparc in file Sparc/SparcMLTreeComp.sml is empty***\n\n"
   structure SparcMLTreeComp =
-    Sparc32(structure Flowgen	    = SparcFlowGraphGen
-	    structure Sparc32MLTree = SparcMLTree
-	    structure Sparc32Instr  = Sparc32Instr
-	    structure PseudoInstrs  = SparcPseudoInstr)
+    Sparc(structure Flowgen	    = SparcFlowGraphGen
+	  structure SparcMLTree = SparcMLTree
+	  structure SparcInstr  = SparcInstr
+	  structure PseudoInstrs  = SparcPseudoInstr
+	  val overflowtrap = [])
 
   structure SparcIntegerAllocation = SparcIntegerAllocation
   structure SparcFloatAllocation   = SparcFloatAllocation

@@ -7,6 +7,9 @@
 #ifdef rs_aix
 #include "interface_aix.h"
 #endif
+#ifdef solaris
+#include "interface_solaris.h"
+#endif
 
 #undef GCTABLE_HASENTRYID
 #undef DIAG

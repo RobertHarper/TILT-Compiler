@@ -25,33 +25,16 @@ structure AlphaLink :> LINKASM
   fun wrapper string command = Stats.timer(string,command)
   val comp = wrapper "toasm" comp
 
-  fun link(srcfile, labels) =
-	let
-	  val asmfile = srcfile^asm_suffix
-	  val stream  = TextIO.openAppend asmfile
-	in
-	  AsmStream.asmOutStream := stream;
-	  AlphaEmitRtlMLRISC.emitEntryTable labels;
-	  TextIO.closeOut stream;
-	  ()
-	end
-
-  fun mk_link_file(asmfile, labels) = 
-	let
-	  val stream = TextIO.openOut asmfile
-	in
-	  AsmStream.asmOutStream := stream;
-	  AlphaEmitRtlMLRISC.emitEntryTable labels;
-	  TextIO.closeOut stream;
-	  ()
-	end
-
-
-  fun rtl_to_asm (filename, rtlmod) : string * Rtl.label =
+  fun rtl_to_asm (asm_file, rtlmod) : string * Rtl.label =
       let val Rtl.MODULE{main,...} = rtlmod
-      in (comp(filename ^ ".s",rtlmod), main)
+      in (comp(asm_file,rtlmod), main)
       end
 
+  fun link (asm_file,labels) = 
+    let val rtlmod = Tortl.entryTables labels
+	val _ = rtl_to_asm(asm_file,rtlmod)
+    in  ()
+    end
 
 end
 

@@ -1,19 +1,18 @@
-(*$import TopLevel INTEGER_CONVENTION AlphaMLTreeExtra *)
+(*$import TopLevel INTEGER_CONVENTION SparcMLTreeExtra *)
 
-***not ported yet ***
 (* =========================================================================
- * AlphaIntegerConvention.sml
+ * SparcIntegerConvention.sml
  * ========================================================================= *)
 
-structure AlphaIntegerConvention
+structure SparcIntegerConvention
 	    :> INTEGER_CONVENTION
 		 where type id	 = int
-		   and type rexp = AlphaMLTreeExtra.MLTree.rexp
+		   and type rexp = SparcMLTreeExtra.MLTree.rexp
 	    = struct
 
   (* -- structures --------------------------------------------------------- *)
 
-  structure MLTreeExtra = AlphaMLTreeExtra
+  structure MLTreeExtra = SparcMLTreeExtra
 
   structure MLTree = MLTreeExtra.MLTree
 
@@ -25,32 +24,32 @@ structure AlphaIntegerConvention
 
   (* -- values ------------------------------------------------------------- *)
 
-  val zero		= 31
-  val callPointer	= 27
-  val returnPointer	= 26
-  val globalPointer	= 29
-  val stackPointer	= 30
-  val threadPointer     = 12
-  val heapPointer	= 13
-  val heapLimit		= 14
-  val exceptionPointer	= 15
-  val exceptionArgument = 26
-  val temporary1	= 28
-  val temporary2	= 25
+  val zero		= 0  (* required by hardware *)
+  val returnPointer	= 15 (* required by hardware; contains call address not return address *)
+  val stackPointer	= 14 (* by convention *)
+  val threadPointer     = 1
+  val heapPointer	= 2
+  val heapLimit		= 3
+  val exceptionPointer	= 4
+  val exceptionArgument = returnPointer
+  val temporary1	= 16
+  val temporary2	= 17
 
-  val arguments	   = [16, 17, 18, 19, 20, 21]
-  val results	   = [0]
-  val callerSaves1 = [1, 2, 3, 4, 5, 6, 7, 8]
-  val callerSaves2 = [22, 23, 24, 25]
-  val calleeSaves  = [ 9, 10, 11 (* , 12, 13, 14, 15 *)]
+  val arguments	  = [8, 9, 10, 11, 12, 13]
+  val results	  = [8]
+  val callerSaves = [5, 6, 7] @ [16, 17, 18, 19, 20, 21, 22, 23]
+  val calleeSaves = []
 
-  val available = results@callerSaves1@calleeSaves@arguments@callerSaves2@
-		  [callPointer]
-  val dedicated = [12, 13, 14, 15, 26, 28, 29, 30, 31]
+  val sort = Listops.insertion_sort Int.compare 
+  val available = sort (results @ callerSaves @ calleeSaves @ arguments)
+  (* We exclude temporary2 from dedicated *)
+  val dedicated = [zero, returnPointer, stackPointer, threadPointer,
+		   heapPointer, heapLimit, exceptionPointer,
+		   temporary1]
   val preserve	= calleeSaves
-  val define	= results@callerSaves1@arguments@callerSaves2@[callPointer]
-  val use	= arguments@[callPointer]
-  val escape	= results@calleeSaves
+  val define	= sort (results @ callerSaves @ arguments)
+  val use	= arguments
+  val escape	= sort (results @ calleeSaves)
 
   (* -- functions ---------------------------------------------------------- *)
 

@@ -154,25 +154,25 @@ end
 
 *)
 
-functor Ifgraph (structure Machine : MACHINE) :> IFGRAPH where Machine = Machine =
+functor Ifgraph (structure Machine : MACHINE) :> IFGRAPH =
 
 struct
 
-    structure Machine = Machine
     val badness_threshold = ref 128
 
     val error = fn s => Util.error "ifgraph.sml" s
 
+    open Core
     open Machine
 
-    fun eqReg (r1,r2) = Machine.eqRegs r1 r2
+    fun eqReg (r1,r2) = eqRegs r1 r2
 
 
      structure HashKey =
        struct
-         type hash_key = Machine.register
-         fun hashVal (Machine.R v) = Word.fromInt v
-           | hashVal (Machine.F v) = Word.fromInt v
+         type hash_key = register
+         fun hashVal (R v) = Word.fromInt v
+           | hashVal (F v) = Word.fromInt v
 	 val sameKey = eqReg
        end
      structure A : MONO_HASH_TABLE = HashTableFn(HashKey)
@@ -184,7 +184,7 @@ struct
 	  graph is a hash table with one entry for each of the non-bad nodes
 	    each entry contains a set of non-bad neighbors *)
 
-     type node = Machine.register
+     type node = register
      datatype graph = GRAPH of {size : int ref,
 				bad : Regset.set ref,
 				all : Regset.set ref,
@@ -211,8 +211,8 @@ struct
      fun nodes (GRAPH {all,...}) = !all
      fun nodes_excluding_physical (GRAPH {all,...}) = !all
      
-     val num_general_iregs = length Machine.general_iregs
-     val num_general_fregs = length Machine.general_fregs
+     val num_general_iregs = length general_iregs
+     val num_general_fregs = length general_fregs
      val general_iregs = Regset.addList(Regset.empty,general_iregs)
      val general_fregs = Regset.addList(Regset.empty,general_fregs)
 

@@ -35,10 +35,10 @@ typedef char word8;
 typedef value_t word8array;
 typedef const value_t word8vector;
 typedef value_t string;
-PAIR(intpair,int,int,intpair_long,intpair_struct);
+PAIR(intpair,int,int,intpair_long,intpair_struct)
 typedef intpair intpair_option;
 typedef string string_option;
-TRIPLE(inttriple,int,int,int,inttriple_long,inttriple_struct);
+TRIPLE(inttriple,int,int,int,inttriple_long,inttriple_struct)
 PAIR(wordpair,word,word,wordpair_long,wordpair_struct)
 PAIR(intword,int,word,intword_long,intword_struct)
 LIST(intword,intword_list,intword_list_long,intword_list_struct)
@@ -692,11 +692,11 @@ word posix_process_sysconf(string arg)
 {
   int i;
   char* carg = mlstring2cstring(arg);
-  for (i=0; i<((sizeof sysconf_values)/(sizeof (name_val_t))); i++)
+  for (i=0; i<((sizeof sysconf_keys)/(sizeof (name_val_t))); i++)
     {
-      char *name = sysconf_values[i].name;
+      char *name = sysconf_keys[i].name;
       if (!(strcmp(name,carg)))
-	return sysconf_values[i].id;
+	return sysconf(sysconf_keys[i].id);
     }
   printf("posix_process_sysconf could not find entry '%s'\n",carg);
   assert(0);

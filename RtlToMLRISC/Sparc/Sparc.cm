@@ -9,7 +9,6 @@ structure SparcLink
 
 is
 
-../../Sparc/Sparc.cm
 ../../smlnj-lib.cm
 
 ../RtlToMLRISC.cm
@@ -25,6 +24,7 @@ SparcLink.sml
 SparcMLRISCConstant.sml
 SparcMLRISCPseudo.sml
 SparcMLRISCRegion.sml
+SparcMLRISCBlockname.sml
 SparcMLTree.sml
 SparcMLTreeComp.sml
 SparcPseudoInstr.sml

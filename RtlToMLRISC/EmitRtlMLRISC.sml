@@ -1,4 +1,4 @@
-(*$import TopLevel BASIC_BLOCK CALL_CONVENTION_BASIS CELLS CALL_CONVENTION REGISTER_ALLOCATION FLOAT_CONVENTION INTEGER_CONVENTION REGISTER_LIVENESS DenseIntSet MLRISC_CONSTANT MLRISC_PSEUDO MLRISC_REGION MLTREECOMP MLTREE_EXTRA REGISTER_SPILL_MAP REGISTER_TRACE_MAP Name SPILL_RELOAD SPILL_FRAME TRACETABLE EMIT_RTL DenseRegisterMap Rtl Label *)
+(*$import TopLevel BASIC_BLOCK CALL_CONVENTION_BASIS CELLS CALL_CONVENTION REGISTER_ALLOCATION FLOAT_CONVENTION INTEGER_CONVENTION REGISTER_LIVENESS DenseIntSet MLRISC_CONSTANT MLRISC_PSEUDO MLRISC_REGION MLTREECOMP MLTREE_EXTRA REGISTER_SPILL_MAP REGISTER_TRACE_MAP Name SPILL_RELOAD SPILL_FRAME TRACETABLE EMIT_RTL DenseRegisterMap Rtl Label Core *)
 
 (* =========================================================================
  * EmitRtlMLRISC.sml
@@ -25,6 +25,7 @@ functor EmitRtlMLRISC(
 	  structure RegisterTraceMap:	 REGISTER_TRACE_MAP
 					   where type rep = Rtl.rep
 					     and type var = Name.var
+                                             and type stacklocation = Core.stacklocation
 	  structure SpillReload:	 SPILL_RELOAD
 	  structure StackFrame:		 STACK_FRAME
 	  structure TraceTable:		 TRACETABLE
@@ -71,8 +72,6 @@ functor EmitRtlMLRISC(
 		       CallConventionBasis.stm
 	      and type StackFrame.frame =
 		       ExternalConvention.frame
-	      and type TraceTable.Machine.stacklocation =
-		       RegisterTraceMap.stacklocation
 	      and type TraceTable.trace =
 		       RegisterTraceMap.trace
 	) :> EMIT_RTL
@@ -86,7 +85,6 @@ functor EmitRtlMLRISC(
   structure RegisterMap = DenseRegisterMap
   structure LabelMap    = RegisterMap(structure HashTable = StringHashTable)
 
-  structure Machine = TraceTable.Machine
   structure MLTree  = MLTreeExtra.MLTree
   structure VarSet  = Name.VarSet
 
@@ -220,7 +218,7 @@ functor EmitRtlMLRISC(
 	      val label' = Label'.translate label
 	    in
 	      print(Label.nameOf label'^"("^Int.toString framesize^"): ");
-	      app (fn(Machine.R reg, trace) =>
+	      app (fn(Core.R reg, trace) =>
 		     print("$"^Int.toString reg^"=>"^
 			   TraceTable.trace2string trace^" ")) regtrace;
 	      app (fn(offset, trace) =>
@@ -305,8 +303,8 @@ functor EmitRtlMLRISC(
        * Start a new procedure.
        *)
       fun open_() = (frameRef	:= StackFrame.frame();
-		     integerMin := Cells.maxReg();
-		     floatMin	:= Cells.maxFreg())
+		     integerMin := Cells.maxCell();
+		     floatMin	:= Cells.maxCell())
 
       (*
        * Terminate the current procedure.
@@ -329,14 +327,14 @@ functor EmitRtlMLRISC(
       fun integers() =
 	    let
 	      val min = !integerMin
-	      val max = Cells.maxReg()
+	      val max = Cells.maxCell()
 	    in
 	      fn id => id>=min andalso id<max
 	    end
       fun floats() =
 	    let
 	      val min = !floatMin
-	      val max = Cells.maxFreg()
+	      val max = Cells.maxCell()
 	    in
 	      fn id => id>=min andalso id<max
 	    end
@@ -434,7 +432,7 @@ functor EmitRtlMLRISC(
 	    RegisterTraceMap.lookup lookupGeneral traceMap register
 
       local
-	val spill	   = Machine.ACTUAL4 o MLRISCConstant.valueOf o
+	val spill	   = Core.ACTUAL4 o MLRISCConstant.valueOf o
 			     RegisterSpillMap.lookupReload spillMap
 	val trace	   = RegisterTraceMap.trace spill traceMap
 	val testReload	   = RegisterSpillMap.testReload spillMap
@@ -452,7 +450,7 @@ functor EmitRtlMLRISC(
 		fun traceLoaded1(id, loaded) = 
 		      case testSpillState id of
 			SOME _ => loaded
-		      | NONE   => (Machine.R(physical id), trace id)::loaded
+		      | NONE   => (Core.R(physical id), trace id)::loaded
 	      in
 		IntSet.foldr traceLoaded1 []
 	      end
@@ -669,14 +667,19 @@ functor EmitRtlMLRISC(
 
   structure RegisterSet = struct
 
+    fun translate_one (Rtl.I ir) = Register.translate ir
+      | translate_one (Rtl.F fr) = FloatRegister.translate fr
+
+    fun translate_onecall (Rtl.I ir) = ExternalConvention.integer(Register.translate ir)
+      | translate_onecall (Rtl.F fr) = ExternalConvention.float(FloatRegister.translate fr)
+
     (*
      * Return a pair of lists of registers for a given Rtl register set.
      * floating-point registers.
      * -> the Rtl register set
      * <- the register lists
      *)
-    fun translate(integers, floats) =
-	  (map Register.translate integers, map FloatRegister.translate floats)
+    val translate = map translate_one
 
     (*
      * Return a list of calling convention registers set for a given Rtl
@@ -685,9 +688,7 @@ functor EmitRtlMLRISC(
      * -> the Rtl register set
      * <- the register list
      *)
-    fun translateCall(integers, floats) =
-	  map (ExternalConvention.integer o Register.translate) integers@
-	  map (ExternalConvention.float o FloatRegister.translate) floats
+    val translateCall = map translate_onecall
 
   end
 
@@ -866,7 +867,8 @@ functor EmitRtlMLRISC(
      * <- the MLRISC conditional expression
      *)
     fun translateZero(operand, expression) =
-	  translate(operand, expression, MLTree.REG IntegerConvention.zero)
+	  translate(operand, expression, 
+		    MLTree.REG IntegerConvention.zero) 
 
     (*
      * Return an MLRISC condition and conditional expression for a given
@@ -877,7 +879,10 @@ functor EmitRtlMLRISC(
      * <- the MLRISC conditional expression
      *)
     fun translateZeroFloat(operand, expression) =
-	  translateFloat(operand, expression, MLTree.FREG FloatConvention.zero)
+	translateFloat(operand, expression, 
+		       case FloatConvention.zero of
+			   SOME z => MLTree.FREG z
+			 | _ => MLTree.LOADD(externalExp "double_zero",memory))
 
   end
 
@@ -1185,19 +1190,6 @@ functor EmitRtlMLRISC(
 	     MLTree.DEFINELABEL doneLabel]
 	  end
 
-    local
-      fun code procedure (src, dest) =
-	    callC(externalExp procedure,
-		  [ExternalConvention.float src],
-		  [ExternalConvention.float dest])
-    in
-      val SQRT	 = code "sqrt"
-      val SIN	 = code "sin"
-      val COS	 = code "cos"
-      val ARCTAN = code "atan"
-      val EXP	 = code "exp"
-      val LN	 = code "ln"
-    end
 
     fun BR label =
 	  [MLTree.CODE[MLTree.JMP(labelExp label, [label])]]
@@ -1299,13 +1291,9 @@ functor EmitRtlMLRISC(
 		  [MLTree.CODE(logwrite @ [MLTree.STORE32(address, src, memory)])]
 	    | SOME isptr => 
 		  let val afterLabel = newLabel()
-		      val compare = MLTree.CMP(MLTree.EQ,
-					       isptr,
-					       MLTree.REG IntegerConvention.zero,
-					       MLTree.LR)
 		  in
-		      [MLTree.CODE[MLTree.BCC(MLTree.EQ, compare, afterLabel)],
-		       MLTree.CODE logwrite,
+		      BCNDI(Rtl.EQ, isptr, afterLabel, false) @
+		      [MLTree.CODE logwrite,
 		       MLTree.DEFINELABEL afterLabel,
 		       MLTree.CODE[MLTree.STORE32(address, src, memory)]]
 		  end
@@ -1341,28 +1329,6 @@ functor EmitRtlMLRISC(
 	    [MLTree.DEFINELABEL skipLabel]
 	  end
 
-    local
-      fun code(size, moveValue, dest, alloc_raw) =
-	    [MLTree.CODE[
-	       MLTree.MV(IntegerConvention.temporary1, size),
-	       moveValue
-	     ]]@
-	    callRaw IntSet.empty (externalExp alloc_raw)@
-	      (* need liveness ??? *)
-	    [MLTree.CODE[
-	       MLTree.MV(dest, MLTree.REG IntegerConvention.temporary1)
-	     ]]
-    in
-      fun INT_ALLOC(size, value, dest) =
-	    code(size, mv(IntegerConvention.temporary2, value),
-		 dest, "int_alloc_raw")
-      fun FLOAT_ALLOC(size, value, dest) =
-	    code(size, MLTree.FMV(FloatConvention.temporary1, value),
-		 dest, "float_alloc_raw")
-      fun PTR_ALLOC(size, value, dest) =
-	    code(size, mv(IntegerConvention.temporary2, value),
-		 dest, "ptr_alloc_raw")
-    end
 
     val SOFT_VBARRIER = []
     val SOFT_ZBARRIER = []
@@ -1468,18 +1434,6 @@ functor EmitRtlMLRISC(
       | translateInstruction(Rtl.CMPF(compare, left, right, dest)) =
 	  CMPF(compare, srcFloatReg left, srcFloatReg right, destReg dest)
 
-      | translateInstruction(Rtl.SQRT(src, dest)) =
-	  SQRT(destFloatReg src, destFloatReg dest)
-      | translateInstruction(Rtl.SIN(src, dest)) =
-	  SIN(destFloatReg src, destFloatReg dest)
-      | translateInstruction(Rtl.COS(src, dest)) =
-	  COS(destFloatReg src, destFloatReg dest)
-      | translateInstruction(Rtl.ARCTAN(src, dest)) =
-	  ARCTAN(destFloatReg src, destFloatReg dest)
-      | translateInstruction(Rtl.EXP(src, dest)) =
-	  EXP(destFloatReg src, destFloatReg dest)
-      | translateInstruction(Rtl.LN(src, dest)) =
-	  LN(destFloatReg src, destFloatReg dest)
 
       | translateInstruction(Rtl.BR target) =
 	  BR(label target)
@@ -1516,11 +1470,12 @@ functor EmitRtlMLRISC(
       | translateInstruction(Rtl.CALL{func	  = procedure,
 				      args	  = arguments,
 				      results	  = results,
-				      extern_call = externalFlag,
-				      tailcall	  = tailFlag, (* ??? *)
-				      save	  = Rtl.SAVE save,
-				      ...}) =
-	  (if externalFlag then externalCALL else CALL)
+				      call_type,
+				      save}) =
+	  (case call_type of
+	       Rtl.ML_NORMAL => CALL
+	     | Rtl.C_NORMAL => externalCALL
+	     | Rtl.ML_TAIL _ => CALL)
 	     (RegisterOrLabel.translate procedure,
 	      RegisterSet.translateCall arguments,
 	      RegisterSet.translateCall results,
@@ -1534,15 +1489,8 @@ functor EmitRtlMLRISC(
 	  MUTATE(ea address, srcReg src, NONE)
       | translateInstruction(Rtl.MUTATE(address, src, SOME src2)) = 
 	  MUTATE(ea address, srcReg src, SOME(srcReg src2))
-
       | translateInstruction(Rtl.NEEDGC src) =
 	  NEEDGC(value src)
-      | translateInstruction(Rtl.FLOAT_ALLOC(length, initial, dest, _)) =
-	  FLOAT_ALLOC(srcReg length, srcFloatReg initial, destReg dest)
-      | translateInstruction(Rtl.INT_ALLOC(length, initial, dest, _)) =
-	  INT_ALLOC(srcReg length, srcReg initial, destReg dest)
-      | translateInstruction(Rtl.PTR_ALLOC(length, initial, dest, _)) =
-	  PTR_ALLOC(srcReg length, srcReg initial, destReg dest)
 
       | translateInstruction(Rtl.SOFT_VBARRIER trap) =
 	  SOFT_VBARRIER
@@ -1751,6 +1699,11 @@ functor EmitRtlMLRISC(
 	      fun reg(Rtl.REGI(var, _)) = VarSet.member(set, var)
 		| reg _			= false
 
+	      fun freg(Rtl.REGF(var, _)) = VarSet.member(set, var)
+
+	      fun areg(Rtl.I ir) = reg ir
+		| areg(Rtl.F fr) = freg fr
+
 	      fun value(Rtl.REG src) = reg src
 		| value _	     = false
 
@@ -1759,8 +1712,8 @@ functor EmitRtlMLRISC(
 	      fun regOrLabel(Rtl.REG' src) = reg src
 		| regOrLabel _		   = false
 
-	      fun regOption(SOME src) = reg src
-		| regOption NONE      = false
+	      fun calltype(Rtl.ML_TAIL src) = reg src
+		| calltype _ = false
 
 	      fun uses'(instruction::instructions) =
 		    (case instruction of
@@ -1832,23 +1785,17 @@ functor EmitRtlMLRISC(
 			 ea address
 		     | Rtl.STOREQF(address, _) =>
 			 ea address
-		     | Rtl.CALL{func   = procedure,
-				return = return,
-				args   = (args, _),
+		     | Rtl.CALL{func = procedure,
+				call_type,
+				args,
 				...} =>
 			 regOrLabel procedure orelse
-			 regOption return orelse
-			 List.exists reg args
+			 calltype call_type orelse
+			 List.exists areg args
 		     | Rtl.RETURN src =>
 			 reg src
 		     | Rtl.NEEDGC src =>
 			 value src
-		     | Rtl.FLOAT_ALLOC(length, _, _, _) =>
-			 reg length
-		     | Rtl.INT_ALLOC(length, initial, _, _) =>
-			 reg length orelse reg initial
-		     | Rtl.PTR_ALLOC(length, initial, _, _) =>
-			 reg length orelse reg initial
 		     | _ =>
 			 false) orelse uses' instructions
 		| uses' nil =
@@ -1901,7 +1848,7 @@ functor EmitRtlMLRISC(
        * filtering physical registers seems arbitrary--what are the properties
        * of live registers that should not be traced across call sites? ???
        *)
-      val keepPseudo = IntSet.filter (fn id => id>=Cells.firstPseudoReg)
+      val keepPseudo = IntSet.filter (fn id => id>=Cells.firstPseudo)
 
       fun updateLive live (liveRef, _) =
 	    liveRef := keepPseudo live
@@ -1983,7 +1930,7 @@ functor EmitRtlMLRISC(
      * source -> the callee register to assign it to
      *)
     fun assignCallee(target, source) =
-	  Register.assign(target, TraceTable.TRACE_CALLEE(Machine.R source))
+	  Register.assign(target, TraceTable.TRACE_CALLEE(Core.R source))
 
     (*
      * Return a membership predicate for a given set of integers.
@@ -1996,7 +1943,7 @@ functor EmitRtlMLRISC(
 			   args	   = arguments,
 			   results = results,
 			   code	   = instructions,
-			   save	   = Rtl.SAVE saves,
+			   save	   = saves,
 			   known   = knownFlag, (* ??? *)
 			   ...}) =
 	  let
@@ -2255,54 +2202,6 @@ functor EmitRtlMLRISC(
 			      (emit protect Module.close) operand)
   end
 
-  fun emitEntryTable labels =
-	let
-	  val names = map Label'.string labels
-
-	  fun table name =
-		let
-		  fun data prefix =
-			Rtl.DATA(Rtl.ML_EXTERN_LABEL(prefix^"_"^name))
-		in
-		  Rtl.DLABEL(Rtl.ML_EXTERN_LABEL name)::map data names
-		end
-
-	  val header = [
-		MLTree.BEGINCLUSTER,
-		MLTree.PSEUDO_OP MLRISCPseudo.TableHeader
-	      ]
-
-	  val trailer = [
-		MLTree.PSEUDO_OP MLRISCPseudo.TableTrailer,
-		MLTree.ENDCLUSTER(Cluster.map())
-	      ]
-
-	  val tables = [
-		table "GCTABLE_BEGIN_VAL",
-		table "GCTABLE_END_VAL",
-		table "SML_GLOBALS_BEGIN_VAL",
-		table "SML_GLOBALS_END_VAL",
-		table "GLOBAL_TABLE_BEGIN_VAL",
-		table "GLOBAL_TABLE_END_VAL",
-		table "MUTABLE_TABLE_BEGIN_VAL",
-		table "MUTABLE_TABLE_END_VAL",
-		table "CODE_BEGIN_VAL",
-		table "CODE_END_VAL"
-	      ]
-
-	  val module_count = [
-		Rtl.DLABEL(Rtl.ML_EXTERN_LABEL "module_count"),
-		Rtl.INT32(Word32.fromInt(length names))
-	      ]
-
-	  val client_entry = table "client_entry"
-	in
-	  emitMLTree header;
-	  app emitData tables;
-	  emitData module_count;
-	  emitData client_entry;
-	  emitMLTree trailer
-	end
 
 end
 

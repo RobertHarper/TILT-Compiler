@@ -13,7 +13,6 @@ sig
    val rep2s : Rtl.rep -> string
 
    val pp_var' : Rtl.var -> Formatter.format
-   val pp_Save' : Rtl.save -> Formatter.format
    val pp_Instr' : Rtl.instr -> Formatter.format
    val pp_Data' : Rtl.data -> Formatter.format
    val pp_Proc' : Rtl.proc -> Formatter.format
@@ -21,7 +20,6 @@ sig
    val pp_tags': Rtltags.tags -> Formatter.format
 
    val pp_var : Rtl.var -> unit
-   val pp_Save : Rtl.save -> unit
    val pp_Instr : Rtl.instr -> unit
    val pp_Data : Rtl.data -> unit
    val pp_Proc : Rtl.proc -> unit

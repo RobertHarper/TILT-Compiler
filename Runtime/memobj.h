@@ -5,6 +5,7 @@
 
 #include "tag.h"
 #include <pthread.h>
+#include <ucontext.h>
 
 struct StackChain__t;
 
@@ -34,7 +35,7 @@ typedef struct StackChain__t StackChain_t;
 
 Stack_t* Stack_Alloc(StackChain_t *);
 Stack_t* GetStack(value_t);
-int StackError(struct sigcontext *, long);
+int StackError(struct ucontext *, long);
 
 
 StackChain_t* StackChain_Alloc(void);

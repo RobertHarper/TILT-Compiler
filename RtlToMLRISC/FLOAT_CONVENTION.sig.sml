@@ -24,7 +24,7 @@ signature FLOAT_CONVENTION = sig
   (*
    * Always zero.
    *)
-  val zero: id
+  val zero: id option
 
   (*
    * Used to hold temporary values in standard code sequences.

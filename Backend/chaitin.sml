@@ -49,15 +49,8 @@ functor Chaitin(val commentHeader: string
 		structure Machineutils : MACHINEUTILS
 		structure Callconv : CALLCONV
 
-		sharing Printutils.Tracetable.Machine 
-		      = Printutils.Bblock.Machine 
-		      = Printutils.Bblock.Tracetable.Machine 
+		sharing Printutils.Bblock.Machine 
 		      = Printutils.Machine 
-		      = Color.Trackstorage.Machine 
-		      = Color.Machine
-		      = Color.Ifgraph.Machine 
-		      = Color.Trackstorage.Machine 
-		      = Color.Ifgraph.Machine
 		      = Callconv.Machine 
 		      = Machineutils.Machine 
 
@@ -65,12 +58,13 @@ functor Chaitin(val commentHeader: string
 
 		  ) :> PROCALLOC where Bblock = Printutils.Bblock 
                                  where Tracetable = Printutils.Tracetable 
-				 where Machine = Color.Machine =
+				 where Machine = Machineutils.Machine =
 struct
 
    open Rtl
    open Callconv Color Printutils Machineutils
    open Tracetable 
+   open Core
    open Machine
    open Bblock
 
@@ -212,7 +206,7 @@ struct
 		     C_call = false}
 		 end
 
-	   | (CALL{extern_call = true,
+	   | (CALL{calltype = C_NORMAL,
 		   func = DIRECT (ML_EXTERN_LABEL _, _), args, results,  
 				 argregs, resregs, destroys, ...}) =>
 		  let 
@@ -234,7 +228,7 @@ struct
 		  C_call = true}
               end
 
-	   | (CALL{extern_call = true,
+	   | (CALL{calltype = C_NORMAL,
 		   func = DIRECT (C_EXTERN_LABEL _, _), 
 		   args, results,  
 		   argregs, resregs, destroys, ...}) =>
@@ -397,8 +391,8 @@ struct
 	   fun check_arg (ON_STACK (THIS_FRAME_ARG i)) =
 	              max_on_stack := Int.max (!max_on_stack,i+1)
 	     | check_arg _ = ()
-	   fun expand_call (call as CALL{extern_call,args,func,results,
-					  tailcall,destroys,...}) : instruction list =
+	   fun expand_call (call as CALL{calltype,args,func,results,
+					  destroys,...}) : instruction list =
 	           let val {arg_pos,res_pos,
 			    C_call,regs_destroyed=destroyed_by_call,
 			    regs_modified=modified_by_call,
@@ -430,14 +424,13 @@ struct
 			    | INDIRECT reg => [mvregs(reg,Rpv_virt)]
 (*			    | _ => error "replace_calls: pv move") *)
 				)
-			      @ (BASE(RTL(CALL{extern_call = extern_call,
+			      @ (BASE(RTL(CALL{calltype=calltype,
 					       func=func,
 					       args=arg_regs,
 					       results=result_regs,
 					       argregs=SOME arg_regs,
 					       resregs=SOME result_regs,
-					       destroys=destroys,
-					       tailcall=tailcall})) ::
+					       destroys=destroys})) ::
 				 mvlist(res_pos,map IN_REG results))
 				 
 
@@ -766,8 +759,7 @@ struct
 			  val jump_instr = BASE(JSR(false,jump_reg,1,rtllabs))
 		      in  mov_instr :: fixup_code @ [jump_instr]
 		      end
-		  | BASE(RTL (CALL{func, args, results, 
-				   tailcall, ...})) =>
+		  | BASE(RTL (CALL{func, args, results, calltype, ...})) =>
 		    (let val return_label = (case next_label of
 					       NONE => freshCodeLabel()
 					     | SOME l => l)
@@ -790,13 +782,13 @@ struct
 			       print "\n")
 *)
 		      val _ = 
-			case (maybe_overflow_args,func, tailcall) of
+			case (maybe_overflow_args,func, calltype) of
 			  (true,_,_) =>
 			    add_info {label=return_label,live=live} 
-			    | (_,DIRECT (C_EXTERN_LABEL _, _), _) => 
+			| (_,DIRECT (C_EXTERN_LABEL _, _), _) => 
 			    add_info {label=return_label,live=live} 
-			    | (_,_, true) => ()
-			    | _ => add_info {label=return_label,live=live}
+			| (_,_, ML_TAIL _) => ()
+			| _ => add_info {label=return_label,live=live}
 			    
 		      fun stack_fixup_code1 () = 
 			(map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots) 
@@ -810,6 +802,9 @@ struct
 					     regs_destroyed = [] : register list,
 					     args = [] : register list}
 		      (* Actual call *)
+		      val tailcall = (case calltype of
+					  ML_TAIL _ => true
+					| _ => false)
 		      val br_instrs : instruction list = 
 			case (func, tailcall) of
 			  (DIRECT (LOCAL_CODE label,_), false) => 
@@ -1224,9 +1219,9 @@ struct
 						   callee_saved,
 						   blocklabels,
 						   args, res} : procsig,
-		       stack_resident : Machine.stacklocation
-		                        Machine.Regmap.map,
-		       tracemap     : (Machine.register option * Tracetable.trace) Regmap.map}) = 
+		       stack_resident : stacklocation
+		                        Regmap.map,
+		       tracemap     : (register option * Tracetable.trace) Regmap.map}) = 
 
      let
        val _ = msg "\tentered allocateproc1\n"
@@ -1318,7 +1313,7 @@ struct
 						    blocklabels,
 						    args, res} : procsig,
 		       stack_resident : Machine.stacklocation
-		                        Machine.Regmap.map,
+		                        Regmap.map,
 		       tracemap     : (Machine.register option * Tracetable.trace) Regmap.map},
 		      arg_ra_pos : assign list option, 
 		      max_passed_args, max_C_args, block_labels) = 

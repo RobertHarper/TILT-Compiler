@@ -172,5 +172,7 @@ structure AlphaMLRISCPseudo
 
   fun adjustLabels _ = raise Unimplemented (* ??? *)
 
+  fun removable _ = raise Unimplemented (* ??? *)
+
 end
 

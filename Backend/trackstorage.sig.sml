@@ -1,8 +1,7 @@
-(*$import MACHINE *)
+(*$import Core *)
+
 signature TRACKSTORAGE =
 sig
-
-  structure Machine : MACHINE
 
   type info
 
@@ -15,23 +14,23 @@ sig
      be resident on the stack.   These are assumed to fill the
      first N integers slots.*)
 
-  val newInfo : {callee_saves: Machine.register list,
-		 regs_destroyed   : Machine.register list,
+  val newInfo : {callee_saves: Core.register list,
+		 regs_destroyed   : Core.register list,
 		 max_on_stack : int,
 		 max_C_args : int,
-		 stack_resident : Machine.stacklocation Machine.Regmap.map}
+		 stack_resident : Core.stacklocation Core.Regmap.map}
                     -> info (* init with callee-save registers *)
   
-  val stackOffset : info -> Machine.register list * Machine.register -> Machine.stacklocation
-  val noteUsed    : info -> Machine.register -> unit
+  val stackOffset : info -> Core.register list * Core.register -> Core.stacklocation
+  val noteUsed    : info -> Core.register -> unit
 
   datatype summary = SUMMARY of 
-                    {registers_used    : Machine.register list,
+                    {registers_used    : Core.register list,
 		     stackframe_size   : int,
-		     callee_save_slots : (Machine.register * Machine.stacklocation) list,
+		     callee_save_slots : (Core.register * Core.stacklocation) list,
 		     tailcallImpossible : unit -> bool,
-		     fixStackOffset    : Machine.stacklocation -> 
-		                         Machine.stacklocation}
+		     fixStackOffset    : Core.stacklocation -> 
+		                         Core.stacklocation}
 
   val summarize : info -> summary
 

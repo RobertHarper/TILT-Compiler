@@ -1,4 +1,4 @@
-(*$import TopLevel BasicBlock SparcMLRISCPseudo SparcMLTreeExtra IntegerDataFlow LittleEndianTraceTable SpillReload SparcFloatConvention SparcIntegerConvention IntegerLiveness EmitRtlMLRISC Sparc32Cells SparcCallConventionBasis SparcFloatAllocation SparcIntegerAllocation SparcMLRISCConstant SparcMLRISCPseudo SparcMLRISCRegion SparcMLTreeComp SparcRegisterSpillMap SparcStandardFrame *)
+(*$import TopLevel BasicBlock SparcMLRISCPseudo SparcMLTreeExtra IntegerDataFlow LittleEndianTraceTable SpillReload SparcFloatConvention SparcIntegerConvention IntegerLiveness EmitRtlMLRISC SparcCells SparcCallConventionBasis SparcFloatAllocation SparcIntegerAllocation SparcMLRISCConstant SparcMLRISCPseudo SparcMLRISCRegion SparcMLTreeComp SparcRegisterSpillMap SparcStandardFrame *)
 
 (* =========================================================================
  * SparcEmitRtlMLRISC.sml
@@ -8,26 +8,11 @@ local
 
   (* -- structures --------------------------------------------------------- *)
 
-  structure Decalpha =
-    Decalpha(
-      val exclude_intregs = []: int list
-      structure Rtl = Rtl
-    )
-
-  (* -- structures --------------------------------------------------------- *)
-
-  structure Decalphautils =
-    Decalphautils(
-      structure Decalpha = Decalpha
-    )
-
-  (* -- structures --------------------------------------------------------- *)
-
   structure SparcTraceTable =
     Tracetable(
-      val little_endian = true
-      structure MU = Decalphautils
+      val little_endian = false
     )
+
 
   (* -- structures --------------------------------------------------------- *)
 
@@ -44,7 +29,7 @@ local
 
   structure SparcRtlRegisterTraceMap =
     RtlRegisterTraceMap(
-      structure Cells	   = Sparc32Cells
+      structure Cells	   = SparcCells
       structure TraceTable = SparcTraceTable
     )
 
@@ -76,7 +61,7 @@ in
     EmitRtlMLRISC(
       structure BasicBlock	    = SparcBasicBlock
       structure CallConventionBasis = SparcCallConventionBasis
-      structure Cells		    = Sparc32Cells
+      structure Cells		    = SparcCells
       structure ExternalConvention  = SparcExternalConvention
       structure FloatAllocation	    = SparcFloatAllocation
       structure FloatConvention	    = SparcFloatConvention

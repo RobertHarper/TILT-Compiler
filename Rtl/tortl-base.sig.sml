@@ -18,9 +18,10 @@ sig
     type label = Rtl.label
     type var = Name.var
     type sv = Rtl.sv
+    type reg = Rtl.reg
 
     (* local notion of register *)
-    datatype reg = I of regi | F of regf
+
 
     (* RTL values can be located somewhere or the value is known *)
     datatype var_loc = 
@@ -54,7 +55,7 @@ sig
    val reset_global_state : (var * label) list * Name.VarSet.set -> unit
    val reset_state : bool * (var * label) -> unit
    val get_proc : unit -> Rtl.proc
-   val set_args : (regi list * regf list) * regi -> unit
+   val set_args : reg list * regi -> unit
    val add_proc : Rtl.proc -> unit
    val exports : Rtl.label list Name.VarMap.map ref 
    val get_mutable : unit -> (label * rep) list
@@ -82,9 +83,8 @@ sig
    val getconvarrep : state -> var -> convar_rep
    val getconvarrep' : state -> var -> convar_rep option
    val getCurrentFun : unit -> var * label
-   val getLocals : unit -> (regi list * regf list)
-   val getArgI : unit -> regi list
-   val getArgF : unit -> regf list
+   val getLocals : unit -> reg list
+   val getArgs : unit -> reg list
    val getResult : (unit -> reg) -> reg
    val getTop : unit -> label
    val istoplevel : unit -> bool
@@ -140,6 +140,8 @@ sig
    val coercef : reg -> regf
    val shuffle_iregs : regi list * regi list -> unit
    val shuffle_fregs : regf list * regf list -> unit
+   val shuffle_regs  : reg  list * reg  list -> unit
+   val mv : reg * reg -> instr (* src -> dest *)
    val boxFloat : state * regf -> regi * state
    val boxFloat_vl : state * loc_or_val -> loc_or_val * state
    val unboxFloat : regi -> regf

@@ -24,10 +24,9 @@ sig
 
   datatype regi = REGI of var * rep  (* int in var is register # *)
                 | SREGI of sregi
-  and regf = REGF of var * rep
 
-  and rep_path = Projvar_p of (regi * int list)     (* if the list is empty, then it is not a projection *)
-               | Projlabel_p of (label * int list)  (* if the list is empty, then it is just a label *)
+  and rep_path = Projvar_p of (regi * int list)     (* if list is empty, then it is not a projection *)
+               | Projlabel_p of (label * int list)  (* if list is empty, then it is just a label *)
                | Notneeded_p
 
   and rep = TRACE
@@ -43,19 +42,17 @@ sig
          | LOCATIVE
          | COMPUTE of rep_path
 
+  datatype regf = REGF of var * rep
+  datatype reg = I of regi | F of regf
+
   val eqsregi : sregi * sregi -> bool
   val eqregi  : regi * regi -> bool
   val eqregf  : regf * regf -> bool
+  val eqreg : reg * reg -> bool
 
   val regi2int : regi -> int
   val sregi2int : sregi -> int
 
-
-  (* save: set of registers to save before a procedure call or at the
-     start of executing a procedure body.  These registers are restored
-     after the procedure call or executing the procedure body.*)
-
-  datatype save = SAVE of regi list * regf list
 
  (* effective address: register + sign-extended displacement *) 
   datatype ea = EA of regi * int  
@@ -162,15 +159,15 @@ sig
        The call may be a normal ML call or a normal C call.  If the call
           is an ML tailcall, then there are no results and the extra
 	  register contains the return address to return to.
-           _save contains registers the caller would like saved
-		and restored
+       The save field contains registers the caller would like save/restore
+          around the call.
     *)
 
     | CALL of {call_type : calltype,
 	       func: reg_or_label,
-	       args : regi list * regf list, 
-	       results : regi list * regf list,
-	       save : save}
+	       args : reg list,
+	       results : reg list,
+	       save : reg list}
 
     | RETURN of regi                 (* address to return to *)
 
@@ -268,11 +265,11 @@ sig
   *)
   datatype proc = PROC of {name : label,
 			   return : regi,
-			   args : regi list * regf list ,
-			   results : regi list * regf list,
+			   args : reg list,
+			   results : reg list,
 			   code : instr array,
 			   known : bool,
-			   save : save,
+			   save : reg list,
                            vars : (int * int) option}
 
 

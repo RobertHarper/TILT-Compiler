@@ -7,14 +7,10 @@ functor Color1(structure Machine : MACHINE
 	       structure Trackstorage : TRACKSTORAGE
 	       structure MU : MACHINEUTILS
 	       structure Printutils : PRINTUTILS
+	       sharing MU.Machine = Machine)
 
-	       sharing MU.Machine = Trackstorage.Machine 
-	                          = Printutils.Machine
-		                  = Ifgraph.Machine
-		                  = Machine)
     :> COLOR where Trackstorage = Trackstorage
-             where Ifgraph = Ifgraph
-	     where Machine = Machine =
+             where Ifgraph = Ifgraph =
 
 struct
   structure Ifgraph = Ifgraph
@@ -22,7 +18,7 @@ struct
   structure MU = MU
 
   open MU MU.Machine Printutils
-
+  open Core
 
   val debug = ref false
 

@@ -1,4 +1,4 @@
-(*$import MACHINEUTILS TRACETABLE Int32 Util List *)
+(*$import Core TRACETABLE Int32 Util List *)
 
 (* This is how the compiler tells the runtime about how to determine all roots
    from the registers and from the stack.  The runtime, at GC, will walk the 
@@ -44,26 +44,22 @@ OLD   4 bytes to indiate return address position in frame
      Then comes the "word" data.  This variable-sized data comes in the order of all
      the stack slots first and then all the register.
 *)
-functor Tracetable(val little_endian    : bool 
-		   structure MU : MACHINEUTILS)
-  :> TRACETABLE where Machine = MU.Machine = 
+functor Tracetable(val little_endian    : bool)
+  :> TRACETABLE =
   struct
 
-    structure MU = MU
     open Rtl
-    open MU
-    open MU.Machine
 
-    datatype calllabel = CALLLABEL of MU.Machine.label
+    datatype calllabel = CALLLABEL of Core.label
     datatype trace     = TRACE_YES 
                        | TRACE_NO
                        | TRACE_UNSET   (* unset variable; handle specially for gener GC *)
       (* traceability depends on traceability of reg at this moment *)
-		       | TRACE_CALLEE     of MU.Machine.register
+		       | TRACE_CALLEE     of Core.register
       (* should be resolved to actual stack locations in the end; word-sized *)
-		       | TRACE_STACK      of MU.Machine.stacklocation
+		       | TRACE_STACK      of Core.stacklocation
       (* stack pos, rec pos *)
-		       | TRACE_STACK_REC  of MU.Machine.stacklocation * int list
+		       | TRACE_STACK_REC  of Core.stacklocation * int list
 		       | TRACE_GLOBAL     of label
 		       | TRACE_GLOBAL_REC of label * int list
 
@@ -74,7 +70,7 @@ functor Tracetable(val little_endian    : bool
       {calllabel  : calllabel, 
        framesize  : int,
        retaddpos  : int,
-       regtrace   : (MU.Machine.register * trace) list,
+       regtrace   : (Core.register * trace) list,
        stacktrace : (int * trace) list                   
        }
 
@@ -225,16 +221,16 @@ functor Tracetable(val little_endian    : bool
     fun tr2bot TRACE_NO                  = (inc Count_no; 0)
       | tr2bot TRACE_YES                 = (inc Count_yes; 1)
       | tr2bot (TRACE_CALLEE  r)         = 
-	(inc Count_callee; addbyte (MU.Machine.regNum r); 2)
+	(inc Count_callee; addbyte (Core.regNum r); 2)
       | tr2bot (TRACE_UNSET) = 
 	(inc Count_unset_stack; 
 	addword_int (i2w (~1)); addword_int (i2w (~1)); 3) 
       | tr2bot (TRACE_STACK sloc) = 
-	(inc Count_stack; addword_int (i2w 0); addword_int (i2w (sloc2int sloc)); 3) 
+	(inc Count_stack; addword_int (i2w 0); addword_int (i2w (Core.sloc2int sloc)); 3) 
       | tr2bot (TRACE_GLOBAL lab)        = 
 	(inc Count_global; addword_int (i2w 1); addword_label lab; 3)
       | tr2bot (TRACE_STACK_REC (sloc,indices)) =
-        let val pos = sloc2int sloc
+        let val pos = Core.sloc2int sloc
 	    val res = 2 + 4 * (indices2int indices)
 	    val _ = if (!ShowDebug)
 			 then (print ("trace_stack_rec  pos,i,val" ^ 
@@ -255,13 +251,15 @@ functor Tracetable(val little_endian    : bool
     fun regtr2bits _ TRACE_NO                  = (inc Count_no; (0,0))
       | regtr2bits _ TRACE_YES                 = (inc Count_yes; (1,0))
       | regtr2bits cr (TRACE_CALLEE  r)        = 
-	if (cr = MU.Machine.regNum r) then
+	if (cr = Core.regNum r) then
 	    (inc Count_callee; (1,1))
-	else error "regtr2bot: non matching TRACE_CALLEE"
+	else (print ("ERROR WRONG WRONG WRONG: regtr2bot: non matching TRACE_CALLEE: " ^
+		    (Int.toString cr) ^ " != " ^ (Int.toString (Core.regNum r)));
+	      (1,0))
       | regtr2bits _ (TRACE_UNSET) = 
 	(inc Count_unset_reg; addword_int (i2w (~1)); addword_int (i2w (~1)); (0,1))
       | regtr2bits _ (TRACE_STACK sloc) = 
-	(inc Count_stack; addword_int (i2w 0); addword_int (i2w (sloc2int sloc)); (0,1))
+	(inc Count_stack; addword_int (i2w 0); addword_int (i2w (Core.sloc2int sloc)); (0,1))
       | regtr2bits _ (tr as TRACE_STACK_REC _) = (tr2bot tr; (0,1))
       | regtr2bits _ (tr as TRACE_GLOBAL _)        = (tr2bot tr; (0,1))
       | regtr2bits _ (tr as TRACE_GLOBAL_REC _) =  (tr2bot tr; (0,1))
@@ -289,7 +287,7 @@ functor Tracetable(val little_endian    : bool
 		    NONE => TRACE_NO
 		  | (SOME (v,t)) => t
 	    fun reglookup n = 
-		let fun mapper (v,t) = if (n = MU.Machine.regNum v)
+		let fun mapper (v,t) = if (n = Core.regNum v)
 					   then SOME t
 				       else NONE
 		    val matches = List.mapPartial mapper regtrace
@@ -306,7 +304,7 @@ functor Tracetable(val little_endian    : bool
 		end
 (*
 	    fun reglookup n = 
-		case (List.find (fn (v,t) => (n = MU.Machine.regNum v)) regtrace) of
+		case (List.find (fn (v,t) => (n = Core.regNum v)) regtrace) of
 		    NONE => TRACE_NO
 		  | (SOME (v,t)) => t
 *)
@@ -354,7 +352,7 @@ functor Tracetable(val little_endian    : bool
 			print "  and  sum count = "; print (Int.toString sum); print "\n")
 		val _ = if (!ShowDiag) then
 		    (print "\n------------------------\n"; 
-		     print (msLabel lab); print ":\n";
+		     print (Pprtl.label2s lab); print ":\n";
 		     app (fn (v,t) => (print (Int.toString v);
 				       print (tr2s t); 
 				       print "\n")) stacktrace;

@@ -8,25 +8,9 @@ local
 
   (* -- structures --------------------------------------------------------- *)
 
-  structure Decalpha =
-    Decalpha(
-      val exclude_intregs = []: int list
-      structure Rtl = Rtl
-    )
-
-  (* -- structures --------------------------------------------------------- *)
-
-  structure Decalphautils =
-    Decalphautils(
-      structure Decalpha = Decalpha
-    )
-
-  (* -- structures --------------------------------------------------------- *)
-
   structure AlphaTraceTable =
     Tracetable(
       val little_endian = true
-      structure MU = Decalphautils
     )
 
   (* -- structures --------------------------------------------------------- *)

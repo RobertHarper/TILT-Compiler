@@ -2,25 +2,13 @@
 functor Divmult(structure Decalpha : DECALPHA 
 		structure MU : MACHINEUTILS 
 			     (* where Machine = Decalpha  this break 109.30 so we must have the following mess *) 
-(*			     where Machine.Rtl = Decalpha.Rtl
-			     where type Machine.register = Decalpha.register
-			     where type Machine.loclabel = Decalpha.loclabel
-			     where type Machine.label = Decalpha.label
-			     where type Machine.align = Decalpha.align
-			     where type Machine.specific_instruction = Decalpha.specific_instruction
-			     where type Machine.stacklocation = Decalpha.stacklocation
-			     where type Machine.call_type = Decalpha.call_type
-			     where type Machine.rtl_instruction = Decalpha.rtl_instruction
-			     where type Machine.base_instruction = Decalpha.base_instruction
-			     where type Machine.instruction = Decalpha.instruction
-			     where type Machine.assign = Decalpha.assign
-			     where type Machine.procsig = Decalpha.procsig *)
 		    sharing MU.Machine = Decalpha.Machine
 			     ) 
   :> DIVMULT where DA = Decalpha = 
   struct
     open Decalpha
     open Machine
+    open Core
     structure MU = MU
     structure DA = Decalpha
       

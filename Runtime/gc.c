@@ -102,7 +102,11 @@ void debug_and_stat_before(unsigned long *saveregs, long req_size)
 
   Thread_t *curThread = getThread();
   long sp = saveregs[SP_REG];
+#ifdef solaris
+  long ret_add = saveregs[LINK_REG] + 8;
+#else
   long ret_add = saveregs[RA_REG];
+#endif
 
   /* -------- print some debugging info and gather write statistics ---------- */
   int i;
@@ -361,35 +365,33 @@ void debug_after_collect()
 
 
 /* ------------------------------ Interface Routines -------------------- */
-void int_alloc() 
+value_t alloc_bigintarray(int wordlen, value_t value, int ptag)
 {  
   switch (collector_type) 
     {
-    case Semispace : { int_alloc_semi(); break; }
-    case Generational : { int_alloc_gen(); break; }
-    case Parallel : {int_alloc_para(); break; }
+    case Semispace :    { return alloc_bigintarray_semi(wordlen,value,ptag); }
+    case Generational : { return alloc_bigintarray_gen (wordlen,value,ptag); }
+    case Parallel :     { return alloc_bigintarray_para(wordlen,value,ptag); }
     }
 }
 
-
-void ptr_alloc() 
+value_t alloc_bigptrarray(int wordlen, value_t value, int ptag)
 {  
   switch (collector_type) 
     {
-    case Semispace : { ptr_alloc_semi(); break; }
-    case Generational : { ptr_alloc_gen(); break; }
-    case Parallel : {ptr_alloc_para(); break; }
+    case Semispace :    { return alloc_bigptrarray_semi(wordlen,value,ptag); }
+    case Generational : { return alloc_bigptrarray_gen (wordlen,value,ptag); }
+    case Parallel :     { return alloc_bigptrarray_para(wordlen,value,ptag); }
     }
 }
 
-
-void float_alloc() 
+value_t alloc_bigfloatarray(int loglen, double value, int ptag)
 {  
   switch (collector_type) 
     {
-    case Semispace : { float_alloc_semi(); break; }
-    case Generational : { float_alloc_gen(); break; }
-    case Parallel : {float_alloc_para(); break; }
+    case Semispace :    { return alloc_bigfloatarray_semi(loglen,value,ptag); }
+    case Generational : { return alloc_bigfloatarray_gen (loglen,value,ptag); }
+    case Parallel :     { return alloc_bigfloatarray_para(loglen,value,ptag); }
     }
 }
 
@@ -400,7 +402,7 @@ void poll()
   return;
 }
 
-void gc(Thread_t *curThread)
+Thread_t *gc(Thread_t *curThread)
 {
 
   /* If thread preempted, not a real GC */
@@ -421,6 +423,7 @@ void gc(Thread_t *curThread)
 #ifdef DEBUG
   printf("NumGC = %d over\n",NumGC-1);
 #endif
+  return curThread;
 }
 
   

@@ -15,8 +15,8 @@ functor AlphaIntegerAllocation(
 
 	    structure I: ALPHA32INSTR
 
-	    val rewriteUse: I.instruction * int * int -> I.instruction
-	    val rewriteDef: I.instruction * int * int -> I.instruction
+	    val rewriteUse: (int -> int) * I.instruction * int * int -> I.instruction
+	    val rewriteDef: (int -> int) * I.instruction * int * int -> I.instruction
 
 	  end
 
@@ -26,6 +26,8 @@ functor AlphaIntegerAllocation(
 					     AlphaInstructions.operand
 				  and type I.instruction =
 					     AlphaInstructions.instruction
+				  and type B.name = 
+				             AlphaMLRISCBlockname.name
 	  ): sig
 	    datatype mode = REGISTER_ALLOCATION | COPY_PROPAGATION
 	    val ra: mode -> FlowGraph.cluster -> FlowGraph.cluster
@@ -35,7 +37,8 @@ functor AlphaIntegerAllocation(
 		       AlphaRewrite.I.instruction
 	      and type MLRISCRegion.region =
 		       AlphaInstructions.Region.region
-	) :> REGISTER_ALLOCATION
+	) 
+ :> REGISTER_ALLOCATION
 	       where type id	  = int
 		 and type offset  = AlphaInstructions.Constant.const
 		 and type cluster = FlowGraph.cluster
@@ -74,11 +77,13 @@ functor AlphaIntegerAllocation(
 	      :> RA_USER_PARAMS
 		   where type I.operand	    = AlphaInstructions.operand
 		     and type I.instruction = AlphaInstructions.instruction
+		     and type B.name        = AlphaMLRISCBlockname.name
 	      = struct
 
     (* -- structures ------------------------------------------------------- *)
 
     structure I = AlphaInstructions
+    structure B = AlphaMLRISCBlockname
 
     (* -- register allocation values --------------------------------------- *)
 
@@ -86,7 +91,11 @@ functor AlphaIntegerAllocation(
     val dedicated = IntegerConvention.dedicated
     val getreg	  = GetRegister.getreg
 
-    fun copyInstr(dest, src) = AlphaInstructions.COPY(dest, src, ref NONE)
+    exception Unimplemented
+    fun copyInstr ((dest, src), i) = 
+	(raise Unimplemented;
+	AlphaInstructions.COPY{dst = dest, src = src, 
+			       impl = ref NONE, tmp = NONE})
 
     (* -- spill functions -------------------------------------------------- *)
 
@@ -100,9 +109,10 @@ functor AlphaIntegerAllocation(
 	      mem  = stack
 	    }::nil
     in
-      fun spill{instr = instruction, reg = target} =
+      fun spill{regmap = _, id = _, 
+		instr = instruction, reg = target} =
 	    case instruction of
-	      AlphaInstructions.COPY([_], [source], _) =>
+	      AlphaInstructions.COPY{dst = [_], src = [source], ...} =>
 		{code  = template(source, !lookupSpill target),
 		 proh  = [],
 		 instr = NONE}
@@ -113,7 +123,7 @@ functor AlphaIntegerAllocation(
 		  {code	 = template(target', !lookupSpill target),
 		   proh	 = [target'],
 		   instr = SOME(AlphaRewrite.rewriteDef
-				  (instruction, target, target'))}
+				  (fn (x:int) => x, instruction, target, target'))}
 		end
     end
 
@@ -127,9 +137,10 @@ functor AlphaIntegerAllocation(
 	      mem  = stack
 	    }::tail
     in
-      fun reload{instr = instruction, reg = source} =
+      fun reload{regmap = _, id = _, 
+		 instr = instruction, reg = source} =
 	    case instruction of
-	      AlphaInstructions.COPY([target], [_], _) =>
+	      AlphaInstructions.COPY{dst = [target], src = [_], ...} =>
 		{code = template(target, !lookupReload source, []),
 		 proh = []}
 	    | _ =>
@@ -138,7 +149,7 @@ functor AlphaIntegerAllocation(
 		in
 		  {code = template(source', !lookupReload source,
 				   [AlphaRewrite.rewriteUse
-				      (instruction, source, source')]),
+				      (fn (x:int) => x, instruction, source, source')]),
 		   proh = [source']}
 		end
     end
@@ -160,6 +171,7 @@ functor AlphaIntegerAllocation(
   in
     fun allocateCluster cluster = allocate cluster before GetRegister.reset()
   end
+
 
 end
 

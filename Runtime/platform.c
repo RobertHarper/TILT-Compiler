@@ -86,6 +86,13 @@ GetIcacheSize() { return 8 * 1024; }
 GetDcacheSize() { return 8 * 1024; }
 #endif
 
+#ifdef solaris
+GetBcacheSize() { return 512 * 1024; }
+GetIcacheSize() { return 8 * 1024; }
+GetDcacheSize() { return 8 * 1024; }
+#endif
+
+
 void platform_init()
 {
 #ifdef alpha_osf

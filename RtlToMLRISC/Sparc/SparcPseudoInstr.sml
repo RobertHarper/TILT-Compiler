@@ -1,20 +1,18 @@
-(*$import TopLevel ALPHA32INSTR ALPHA32_PSEUDO_INSTR *)
-
-***not ported yet ***
+(*$import TopLevel SPARC32INSTR SPARC32_PSEUDO_INSTR *)
 
 (* =========================================================================
- * AlphaPseudoInstr.sml
+ * SparcPseudoInstr.sml
  * ========================================================================= *)
 
-functor AlphaPseudoInstr(
-	  structure Alpha32Instr: ALPHA32INSTR
-	) :> ALPHA32_PSEUDO_INSTR
-               where I = Alpha32Instr
+functor SparcPseudoInstr(
+	  structure SparcInstr: SPARCINSTR
+	) :> SPARC_PSEUDO_INSTR
+               where I = SparcInstr
           = struct
 
   (* -- structures --------------------------------------------------------- *)
 
-  structure I = Alpha32Instr
+  structure I = SparcInstr
 
   (* -- types -------------------------------------------------------------- *)
 
@@ -26,21 +24,15 @@ functor AlphaPseudoInstr(
 
   (* -- functions ---------------------------------------------------------- *)
 
-  local
-    (* not sure what these are used for ??? *)
-    val temps = foldl I.C.addReg I.C.empty [23, 24, 25, 26, 28]
-  in
-    fun divl({ra, rb, rc}, _) = 
-      [I.PSEUDOARITH{oper = I.DIVL, ra = ra, rb = rb, rc = rc, tmps = temps}]
+   fun umul({r,i,d},reduceOpnd) = [I.ARITH{a=I.UMUL,r=r,i=i,d=d,cc=false}]
+   fun smul({r,i,d},reduceOpnd) = [I.ARITH{a=I.SMUL,r=r,i=i,d=d,cc=false}]
+   fun udiv({r,i,d},reduceOpnd) = 
+      [I.WRY{r=0,i=I.IMMED 0},I.ARITH{a=I.UDIV,r=r,i=i,d=d,cc=false}]
+   fun sdiv({r,i,d},reduceOpnd) = 
+      [I.WRY{r=0,i=I.IMMED 0},I.ARITH{a=I.SDIV,r=r,i=i,d=d,cc=false}]
 
-    fun divlu({ra, rb, rc}, _) = 
-      [I.PSEUDOARITH{oper = I.DIVLU, ra = ra, rb = rb, rc = rc, tmps = temps}]
-  end
-
-  (*
-   * We use a procedure in the runtime system for this.
-   *)
-  fun cvti2d _ = raise Unimplemented
+   (* We use the runtime for this *)
+   fun cvti2d _ = raise Unimplemented
 
 end
 

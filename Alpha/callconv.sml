@@ -2,19 +2,16 @@
 functor DecalphaCallconv(structure Decalpha : DECALPHA
 			 structure Machineutils : MACHINEUTILS 	
 	 (* where Machine = Decalpha  this break 109.30 so we must use sharing *)
-			 sharing Machineutils.Machine = Decalpha.Machine
-(*			 sharing Machineutils.Machine.Rtl = Decalpha.Machine.Rtl  *)
-			     )
+			 sharing Machineutils.Machine = Decalpha.Machine)
 
     :> CALLCONV where Machine = Decalpha.Machine =
 struct
 
-  structure Machine = Machineutils.Machine
   structure Machineutils = Machineutils
-  
   open Machineutils 
   open Decalpha
   open Machine
+  open Core
 
   datatype actuals = 
 	ACTUALS of {args : assign list,

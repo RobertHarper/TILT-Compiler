@@ -1,12 +1,10 @@
 (*$import TopLevel MLRISC_PSEUDO DenseIntSet Label Word32 *)
 
-***** has not been ported **********
-
 (* =========================================================================
- * AlphaMLRISCPseudo.sml
+ * SparcMLRISCPseudo.sml
  * ========================================================================= *)
 
-structure AlphaMLRISCPseudo
+structure SparcMLRISCPseudo
 	    :> MLRISC_PSEUDO
 		 where type idSet = DenseIntSet.set
 	    = struct
@@ -94,42 +92,34 @@ structure AlphaMLRISCPseudo
 	  end
 
     fun fixString string = foldr op^ "" (map Char.toString (explode string))
+    fun pow(a,0) = 1
+      | pow(a,n) = a * (pow(a,n-1))
+    fun section str = "\t.section \"." ^ str ^ "\"\n"
   in
-    fun toString(ModuleHeader) =
-	  "\t.set reorder\n"^
-	  "\t.set macro\n"^
-	  "\t.set noat\n"
-      | toString(ModuleTrailer) =
-	  "\t.text\n" (* hack for overflow handler ??? *)
-      | toString(TextHeader) =
-	  "\t.text\n"
-      | toString(TextTrailer) =
-	  ""
-      | toString(DataHeader) =
-	  "\t.data\n"
-      | toString(DataTrailer) =
-	  ""
-      | toString(TableHeader) =
-	  "\t.data\n"
-      | toString(TableTrailer) =
-	  ""
-      | toString(ClusterHeader) =
-	  ""
-      | toString(ClusterTrailer) =
-	  ""
+    fun toString(ModuleHeader) = ""
+      | toString(ModuleTrailer) = section "text" (* hack for overflow handler ??? *)
+      | toString(TextHeader) =	  section "text"
+      | toString(TextTrailer) =	  ""
+      | toString(DataHeader) =	  section "data"
+      | toString(DataTrailer) =	  ""
+      | toString(TableHeader) =	  section "data"
+      | toString(TableTrailer) =  ""
+      | toString(ClusterHeader) = ""
+      | toString(ClusterTrailer) = ""
       | toString(ProcedureHeader label) =
 	  let
 	    val name = fixLabel(Label.nameOf label)
 	  in
 	    "\n"^
-	    "\t.ent "^name^"\n"^
+	    "\t.proc  07\n"^
+	    "\t.align 4\n"^
 	    name^":\n"
 	  end
       | toString(ProcedureTrailer label) =
 	  let
 	    val name = fixLabel(Label.nameOf label)
 	  in
-	    "\t.end "^name^"\n"
+	    "\t.size "^name^",(.-" ^ name ^ ")\n"
 	  end
       | toString(Export label) =
 	  let
@@ -140,29 +130,29 @@ structure AlphaMLRISCPseudo
       | toString(CallSite(ref live, emit)) =
 	  (emit live; "")
       | toString(Align size) =
-	  "\t.align "^Int.toString size^"\n"
+	  "\t.align "^Int.toString (pow(2,size))^"\n"
       | toString(AlignOdd 3) =
-	  "\t.align 3\n\t.long 0x0\n"
+	  "\t.align 8\n\t.word 0\n"
       | toString(AlignOdd 4) =
-	  "\t.align 4\n\t.quad 0x0\n\t.long 0x0\n"
+	  "\t.align 16\n\t.word 0, 0, 0\n"
       | toString(AlignOdd _) =
 	  raise Unimplemented (* ??? *)
       | toString(Comment message) =
-	  "\t# "^message^"\n"
+	  "\t! "^message^"\n"
       | toString(Integer value) =
-	  "\t.long 0x"^Word32.toString value^"\n"
+	  "\t.word 0x"^Word32.toString value^"\n"
       | toString(IntegerFloatSize value) =
 	  "\t.quad 0x"^Word32.toString value^"\n"
       | toString(Float value) =
-	  "\t.t_floating "^fixFloat value^"\n"
+	  "\t.double "^fixFloat value^"\n"
       | toString(Label label) =
-	  "\t.long "^fixLabel(Label.nameOf label)^"\n"
+	  "\t.word "^fixLabel(Label.nameOf label)^"\n"
       | toString(IntegerArray(size, value)) =
-	  "\t.long 0x"^Word32.toString value^" : "^Int.toString size^"\n"
+	  "\t.word 0x"^Word32.toString value^" : "^Int.toString size^"\n"
       | toString(FloatArray(size, value)) =
-	  "\t.t_floating "^fixFloat value^" : "^Int.toString size^"\n"
+	  "\t.double "^fixFloat value^" : "^Int.toString size^"\n"
       | toString(LabelArray(size, label)) =
-	  "\t.long "^fixLabel(Label.nameOf label)^" : "^Int.toString size^"\n"
+	  "\t.word "^fixLabel(Label.nameOf label)^" : "^Int.toString size^"\n"
       | toString(String value) =
 	  "\t.ascii \""^fixString value^"\"\n"
   end
@@ -172,6 +162,8 @@ structure AlphaMLRISCPseudo
   fun sizeOf _ = raise Unimplemented (* ??? *)
 
   fun adjustLabels _ = raise Unimplemented (* ??? *)
+
+  fun removable _ = raise Unimplemented (* ??? *)
 
 end
 

@@ -1,7 +1,6 @@
 (*$import MACHINEUTILS BBLOCK Int32 Util Listops TRACETABLE List *)
 functor Bblock(structure Machineutils : MACHINEUTILS
-	       structure Tracetable : TRACETABLE 
-	       sharing Tracetable.Machine = Machineutils.Machine)
+	       structure Tracetable : TRACETABLE)
     :> BBLOCK where Tracetable = Tracetable
               where Machine = Machineutils.Machine =
 struct
@@ -9,7 +8,7 @@ struct
    structure Machine = Machineutils.Machine
    structure Tracetable = Tracetable
 
-   open Machineutils Machineutils.Machine
+   open Machineutils Machineutils.Machine Core
    (* Annotations on an instruction *)
    datatype 'a annotated = NO_ANN of 'a
                          | LIVE of Regset.set * 'a
@@ -188,7 +187,7 @@ struct
 
    (* Use the in_live and out_live values determined from findLiveTemps()
       to annotate individual instructions. *)
-   fun liveVars compute_map (block_map : bblock Machine.Labelmap.map) first_label =
+   fun liveVars compute_map (block_map : bblock Labelmap.map) first_label =
      let 
 	                      
        (* Scan backwards to compute which variables are live after each instruction in

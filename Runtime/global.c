@@ -58,7 +58,9 @@ int IsConstructorData(value_t addr)
   return (addr < 256);
 }
 
-
+#ifdef solaris
+extern int firstdata;
+#endif
 
 void global_init()
 {
@@ -81,8 +83,15 @@ void global_init()
   masks[0] = 0;
   OverflowExn  = alloc_record(fields,masks,2);
   
+#ifdef alpha_osf
   datastart = (value_t) &_fdata;
   dataend   = (value_t) &_end;  
   /* _edata does not seem to work at all, in fact, it's less then _fdata */
+#endif
+
+#ifdef solaris
+  datastart = (value_t) &firstdata;
+  dataend   = (value_t) &_end;  
+#endif
 
 }

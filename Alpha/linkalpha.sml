@@ -6,7 +6,6 @@ struct
   val error = fn s => Util.error "linkalpha.sml" s
   open Linkrtl
 
-  val do_tailcalls = ref true
 
   structure Decalpha = Decalpha(val exclude_intregs = [] : int list
 				structure Rtl = Rtl)
@@ -35,7 +34,7 @@ struct
 
 
   structure Tracetable = Tracetable(val little_endian = true
-				    structure MU = Decalphautils)
+				    structure ArgMachine = Decalpha.Machine)
 
   structure Bblock = Bblock(structure Machineutils = Decalphautils
 			    structure Tracetable = Tracetable)
@@ -44,8 +43,7 @@ struct
   structure Divmult = Divmult(structure Decalpha = Decalpha
 			      structure MU = Decalphautils)
 
-  structure Toalpha = Toalpha(val do_tailcalls = do_tailcalls
-			      structure Decalpha = Decalpha
+  structure Toalpha = Toalpha(structure Decalpha = Decalpha
 			      structure Pprtl = Pprtl
 			      structure Machineutils = Decalphautils
 			      structure ArgTracetable = Tracetable
@@ -175,26 +173,15 @@ struct
   fun wrapper string command = Stats.timer(string,command)
   val comp = wrapper "toasm" comp
 
-  fun link (srcfile,labels) = 
-    let 
-      val asm_file = srcfile ^ (asm_suffix())
-      val _ = Printutils.openAppend asm_file
-      val _ = Rtltoalpha.dumpEntryTables labels 
-      val _ = Printutils.closeOutput()
-    in ()
-    end
-
-  fun mk_link_file (asm_file,labels) = 
-    let 
-      val _ = Printutils.openOutput asm_file
-      val _ = Rtltoalpha.dumpEntryTables labels 
-      val _ = Printutils.closeOutput()
-    in ()
-    end
-
-  fun rtl_to_asm (filename, rtlmod) : string * Rtl.label =
+  fun rtl_to_asm (asm_file, rtlmod) : string * Rtl.label =
       let val Rtl.MODULE{main,...} = rtlmod
-      in (comp(filename ^ ".s",rtlmod), main)
+      in (comp(asm_file, rtlmod), main)
       end
+
+  fun link (asm_file,labels) = 
+    let val rtlmod = Tortl.entryTables labels
+	val _ = rtl_to_asm(asm_file,rtlmod)
+    in  ()
+    end
 
 end

@@ -92,9 +92,7 @@ voidfun_t stub_decl(stack_stub_,17);
 voidfun_t stub_decl(stack_stub_,18);
 voidfun_t stub_decl(stack_stub_,19);
 
-
-
-void *stack_stubs[NUM_STACK_STUB] = { 
+voidfun_t *stack_stubs[NUM_STACK_STUB] = { 
   stub_decl(stack_stub_,00),  stub_decl(stack_stub_,01),
   stub_decl(stack_stub_,02),  stub_decl(stack_stub_,03),
   stub_decl(stack_stub_,04),  stub_decl(stack_stub_,05),
@@ -178,10 +176,6 @@ long SMLGlobalSize = 0;
 long GlobalTableSize = 0;
 long MutableTableSize = 0;
 
-
-
-extern value_t ml_input_gcentry;
-extern value_t ml_lookahead_gcentry; 
 
 
 value_t GetStackStub(unsigned int n)
@@ -273,21 +267,6 @@ void stack_init()
 #endif
       HashTableInsert(CallinfoHashTable,&e);
     }
-  e.key = (unsigned long)ml_input_gcentry;
-  e.data = (void *)&ml_input_gcentry;
-  HashTableInsert(CallinfoHashTable,&e);
-  
-#ifdef DEBUG
-  printf("&in.. and input_gcentry are  %d  %d\n",
-	 &ml_input_gcentry, ml_input_gcentry);
-  printf("&lo.. and lookahead_gcentry are  %d  %d\n",
-	 &ml_lookahead_gcentry, ml_lookahead_gcentry);
-#endif
-
-  e.key = (unsigned long)ml_lookahead_gcentry;
-  e.data = (void *)&ml_lookahead_gcentry;
-  HashTableInsert(CallinfoHashTable,&e);
-
 }
 
 
@@ -297,10 +276,6 @@ Callinfo_t *LookupCallinfo(value_t ret_add)
   struct HashEntry *e;
   e = HashTableLookup(CallinfoHashTable,(unsigned long)ret_add,0);
 #ifdef DEBUG
-  if (ret_add == (value_t) ml_input_gcentry)
-    printf("input_dogc lookup in stack trace\n");
-  if (ret_add == (value_t) ml_lookahead_gcentry)
-    printf("lookahead_dogc lookup in stack trace\n");
   if (e && ((value_t)(e->data) < NUM_STACK_STUB))
     { printf("stack_stub_%d lookup in stack trace\n",e->data); return NULL; }
   if (e)
@@ -565,10 +540,13 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
       /*      printf("\n*** framesize_word = %d\n",framesize_word+3); */
       for (mi=0; mi<(framesize_word+3)>>2; mi++)
 	{
-#ifdef alpha_osf
+#ifdef little_endian
 	  unsigned long v = (long)(((char*)(callinfo->__rawdata))[mi]);	
+#ifdef big_endian
+#error big and little endian both defined
 #endif
-#ifdef rs_aix
+#endif
+#ifdef big_endian
 	  unsigned mi_bigendian = (mi & (~3)) | (3 - (mi & 3));
 	  unsigned long v = (long)(((char*)(callinfo->__rawdata))[mi_bigendian]);
 #endif
@@ -840,7 +818,11 @@ unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
   value_t this_exnptr = saveregs[EXNPTR_REG];
   extern value_t global_exnrec;
   long sp = saveregs[SP_REG];
-  long retadd = saveregs[RA_REG];
+#ifdef solaris
+  long ret_add = saveregs[LINK_REG] + 8;
+#else
+  long ret_add = saveregs[RA_REG];
+#endif
 
   if (!last_exnptr)
     last_exnptr = (value_t)(&global_exnrec);
@@ -848,10 +830,10 @@ unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
   QueueClear(ScanQueue);
   
   if (use_stack_gen)
-    regstate = trace_stack_gen( th, saveregs, sp,  retadd, top, 
+    regstate = trace_stack_gen( th, saveregs, sp,  ret_add, top, 
 				root_lists, last_exnptr, this_exnptr);
   else
-    regstate = trace_stack_normal( th, saveregs, sp,  retadd, top, root_lists);
+    regstate = trace_stack_normal( th, saveregs, sp,  ret_add, top, root_lists);
 
   last_exnptr = this_exnptr;
 

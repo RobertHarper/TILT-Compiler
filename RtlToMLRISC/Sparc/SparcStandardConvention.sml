@@ -1,28 +1,26 @@
-(*$import TopLevel FLOAT_CONVENTION INTEGER_CONVENTION AlphaCallconventionBasis AlphaMLTreeExtra AlphaStandardFrame *)
-
-***not ported yet ***
+(*$import TopLevel FLOAT_CONVENTION INTEGER_CONVENTION SparcCallconventionBasis SparcMLTreeExtra SparcStandardFrame *)
 
 (* =========================================================================
- * AlphaStandardConvention.sml
+ * SparcStandardConvention.sml
  * ========================================================================= *)
 
-functor AlphaStandardConvention(
+functor SparcStandardConvention(
 	  structure FloatConvention:   FLOAT_CONVENTION where type id = int
 	  structure IntegerConvention: INTEGER_CONVENTION where type id = int
 	) :> CALL_CONVENTION
-	       where type id	     = AlphaCallConventionBasis.id
-		 and type register   = AlphaCallConventionBasis.register
-		 and type assignment = AlphaCallConventionBasis.assignment
-		 and type frame	     = AlphaCallConventionBasis.frame
-		 and type rexp	     = AlphaMLTreeExtra.MLTree.rexp
-		 and type mltree     = AlphaMLTreeExtra.MLTree.mltree
+	       where type id	     = SparcCallConventionBasis.id
+		 and type register   = SparcCallConventionBasis.register
+		 and type assignment = SparcCallConventionBasis.assignment
+		 and type frame	     = SparcCallConventionBasis.frame
+		 and type rexp	     = SparcMLTreeExtra.MLTree.rexp
+		 and type mltree     = SparcMLTreeExtra.MLTree.mltree
 	  = struct
 
   (* -- structures --------------------------------------------------------- *)
 
-  structure Basis	= AlphaCallConventionBasis
-  structure MLTreeExtra = AlphaMLTreeExtra
-  structure StackFrame	= AlphaStandardFrame
+  structure Basis	= SparcCallConventionBasis
+  structure MLTreeExtra = SparcMLTreeExtra
+  structure StackFrame	= SparcStandardFrame
 
   structure MLTree = MLTreeExtra.MLTree
 
@@ -42,8 +40,6 @@ functor AlphaStandardConvention(
   (* -- values ------------------------------------------------------------- *)
 
   val returnPointer = IntegerConvention.returnPointer
-  val callPointer   = IntegerConvention.callPointer
-  val globalPointer = IntegerConvention.globalPointer
 
   val arguments = (IntegerConvention.arguments, FloatConvention.arguments)
   val results	= (IntegerConvention.results, FloatConvention.results)
@@ -117,15 +113,14 @@ functor AlphaStandardConvention(
   in
     fun call wrapper frame (procedure, arguments, results) =
 	  let
-	    val (before_, after) = wrapper procedure
+	    nonfix before
+	    val (before, after) = wrapper procedure
 	    val use		 = useArguments arguments
 	  in
 	    [MLTree.CODE(marshalArguments frame arguments)]@
-	    [MLTree.CODE[MLTreeExtra.mv(callPointer, procedure)]]@
-	    before_@
-	    [MLTree.CODE[MLTree.CALL(MLTree.REG callPointer, define, use)]]@
+	    before@
+	    [MLTree.CODE[MLTree.CALL(procedure, define, use)]]@
 	    after@
-	    [MLTree.CODE[MLTree.MV(globalPointer, MLTree.REG returnPointer)]]@
 	    [MLTree.CODE(unmarshalResults frame results)]
 	  end
   end
@@ -137,8 +132,7 @@ functor AlphaStandardConvention(
   val floatSave	  = Basis.floatAssignments
 
   fun enter frame (arguments, saves, body) =
-	[MLTree.CODE[MLTree.MV(globalPointer, MLTree.REG callPointer)],
-	 MLTree.CODE[Basis.allocateFrame frame],
+	[MLTree.CODE[Basis.allocateFrame frame],
 	 MLTree.CODE(Basis.saveReturnIfCall frame body),
 	 MLTree.CODE(Basis.setAssignment saves),
 	 MLTree.CODE(unmarshalArguments frame arguments)]

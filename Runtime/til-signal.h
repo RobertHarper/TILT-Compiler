@@ -3,11 +3,13 @@
 #ifndef _til_signal_h
 #define _til_signal_h
 
-#include <signal.h>
+#include <ucontext.h>
 
 void signal_init(void);
-long *GetSp(struct sigcontext *scp);
-long *GetPc(struct sigcontext *scp);
-long *GetIRegs(struct sigcontext *scp);
+long GetSp(struct ucontext *);
+long GetPc(struct ucontext *);
+long GetIReg(struct ucontext *, int);
+void GetIRegs(struct ucontext *, long *);
+void SetIReg(struct ucontext *, int, long);
 
 #endif

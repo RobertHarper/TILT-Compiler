@@ -8,6 +8,6 @@ sig
    val show_labels : bool ref
 
    val allocateModule : Rtl.module -> unit
-   val dumpEntryTables : Rtl.label list -> unit
+
 end
 

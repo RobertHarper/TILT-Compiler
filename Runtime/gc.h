@@ -2,7 +2,7 @@
 #include "thread.h"
 
 void gc_init(void);
-void gc(Thread_t *curThread);
+Thread_t *gc(Thread_t *curThread); /* Returns the current thread */
 void gc_finish(void);
 void poll(void);
 
@@ -17,15 +17,19 @@ void gc_init_para(void);
 void gc_finish_semi(void);
 void gc_finish_gen(void);
 void gc_finish_para(void);
-void int_alloc_semi(void);
-void float_alloc_semi(void);
-void ptr_alloc_semi(void);
-void int_alloc_gen(void);
-void float_alloc_gen(void);
-void ptr_alloc_gen(void);
-void int_alloc_para(void);
-void float_alloc_para(void);
-void ptr_alloc_para(void);
+
+value_t alloc_bigintarray_semi(int len, value_t value, int tag);
+value_t alloc_bigintarray_gen (int len, value_t value, int tag);
+value_t alloc_bigintarray_para(int len, value_t value, int tag);
+
+value_t alloc_bigptrarray_semi(int len, value_t value, int tag);
+value_t alloc_bigptrarray_gen (int len, value_t value, int tag);
+value_t alloc_bigptrarray_para(int len, value_t value, int tag);
+
+value_t alloc_bigfloatarray_semi(int loglen, double value, int tag);
+value_t alloc_bigfloatarray_gen (int loglen, double value, int tag);
+value_t alloc_bigfloatarray_para(int loglen, double value, int tag);
+
 
 extern long YoungHeapByte, MaxHeap, MinHeap;
 extern double TargetRatio, MaxRatio;

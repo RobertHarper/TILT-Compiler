@@ -24,22 +24,15 @@ signature INTEGER_CONVENTION = sig
   (*
    * Always zero.
    *)
-  val zero: id
+  val zero: id  
+
 
   (*
-   * The code address for a procedure call.
-   *)
-  val callPointer: id
-
-  (*
-   * The code address for a procedure return.
+   * Alpha: The code address for a procedure return.
+   * Sparc: The code address for the calling instruction.  
+   *        Due to a delay slot, the actual return address is (calling instruction + 8).
    *)
   val returnPointer: id
-
-  (*
-   * The base address of the global variables.
-   *)
-  val globalPointer: id
 
   (*
    * The address of the top of the stack.

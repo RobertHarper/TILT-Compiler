@@ -1,8 +1,7 @@
-(*$import IFGRAPH TRACKSTORAGE MACHINEUTILS *)
+(*$import IFGRAPH TRACKSTORAGE MACHINEUTILS Core *)
 
 signature COLOR =
 sig
-   structure Machine : MACHINE
    structure Trackstorage : TRACKSTORAGE
    structure Ifgraph : IFGRAPH
 
@@ -21,9 +20,9 @@ sig
 
 
    val color : Ifgraph.graph * Trackstorage.info * 
-	       Machine.stacklocation Machine.Regmap.map *
-	       (Machine.register -> (Machine.register * int) list) ->
-	        Machine.assign Machine.Regmap.map
+	       Core.stacklocation Core.Regmap.map *
+	       (Core.register -> (Core.register * int) list) ->
+	        Core.assign Core.Regmap.map
 end
 
 	 

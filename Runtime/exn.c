@@ -21,7 +21,7 @@ exn divide_exn;
 exn overflow_exn;
 extern int Divide_exncon;
 extern int Overflow_exncon;
-extern void raise_exception_raw(long *regs, value_t exn_arg, value_t code);
+extern void raise_exception_raw(Thread_t *th, value_t exn_arg, value_t code);
 
 
 void exn_init()
@@ -37,11 +37,15 @@ void exn_init()
   overflow_exn = alloc_recrec(*(value_t *)Overflow_exncon,0);
 }
 
-void raise_exception(struct sigcontext *scp, exn exn_arg)
+void raise_exception(struct ucontext *uctxt, exn exn_arg)
 {
-  long *the_iregs = (long *) GetIRegs(scp);
-  value_t exn_ptr = (value_t)(the_iregs[EXNPTR_REG]);
-  value_t code = get_record(exn_ptr,0);
+  Thread_t *th = getThread();
+  value_t exn_ptr;
+  value_t code;
+
+  GetIRegs(uctxt, th->saveregs);
+  exn_ptr = th->saveregs[EXNPTR_REG];
+  code = get_record(exn_ptr,0);
 
 #ifdef DEBUG
   {
@@ -51,20 +55,19 @@ void raise_exception(struct sigcontext *scp, exn exn_arg)
     fprintf(stderr,"raise: rec[-1] is %d\n",((int *)exn_ptr)[-1]);
     fprintf(stderr,"raise: rec[0] is %d\n",((int *)exn_ptr)[0]);
     for (i=0; i<32; i++)
-      fprintf(stderr,"RAISE: the_iregs[%d] is %ld\n",i,the_iregs[i]);
-    fprintf(stderr,"raise: the_iregs[0] is %d\n",the_iregs[0]);
-    fprintf(stderr,"raise: the_iregs[at] is %d\n",the_iregs[ASMTMP_REG]);
+      fprintf(stderr,"RAISE: the_iregs[%d] is %ld\n",i,iregs[i]);
     fprintf(stderr,"returning from exn_raise to asm linkage\n");
   }
 #endif
   
-  raise_exception_raw(the_iregs,exn_arg,code);
+  raise_exception_raw(th,exn_arg,code);
 }
 
-void toplevel_exnhandler(long *saveregs)
+void toplevel_exnhandler(Thread_t *curThread)
 {
   char buf[100];
   char *msg;
+  long *saveregs = curThread->saveregs;
   value_t exn_arg = (saveregs[EXNARG_REG]);
   value_t first = get_record(exn_arg,0);
 

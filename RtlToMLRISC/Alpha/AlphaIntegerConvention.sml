@@ -6,7 +6,11 @@
  * ========================================================================= *)
 
 structure AlphaIntegerConvention
-	    :> INTEGER_CONVENTION
+	    :> sig
+                 include INTEGER_CONVENTION
+		 val callPointer: id (* address for a procedure call, needed to fix globalPointer *)
+		 val globalPointer: id (* base address of current global table *)
+               end
 		 where type id	 = int
 		   and type rexp = AlphaMLTreeExtra.MLTree.rexp
 	    = struct
@@ -38,19 +42,23 @@ structure AlphaIntegerConvention
   val temporary1	= 28
   val temporary2	= 25
 
+  val sort = Listops.insertion_sort Int.compare 
+
   val arguments	   = [16, 17, 18, 19, 20, 21]
   val results	   = [0]
-  val callerSaves1 = [1, 2, 3, 4, 5, 6, 7, 8]
-  val callerSaves2 = [22, 23, 24, 25]
+  val callerSaves = [1, 2, 3, 4, 5, 6, 7, 8, 22, 23, 24, 25]
   val calleeSaves  = [ 9, 10, 11 (* , 12, 13, 14, 15 *)]
 
-  val available = results@callerSaves1@calleeSaves@arguments@callerSaves2@
-		  [callPointer]
-  val dedicated = [12, 13, 14, 15, 26, 28, 29, 30, 31]
+  val available = sort (results @ callerSaves @ calleeSaves @ arguments @ [callPointer])
+      
+  (* We exclude temporary2 and callPointer from dedicated *)
+  val dedicated = [zero, returnPointer, stackPointer, threadPointer,
+		   heapPointer, heapLimit, exceptionPointer,
+		   temporary1]
   val preserve	= calleeSaves
-  val define	= results@callerSaves1@arguments@callerSaves2@[callPointer]
-  val use	= arguments@[callPointer]
-  val escape	= results@calleeSaves
+  val define	= sort (results @ callerSaves @ arguments @ [callPointer])
+  val use	= sort (arguments @ [callPointer])
+  val escape	= sort (results @ calleeSaves)
 
   (* -- functions ---------------------------------------------------------- *)
 

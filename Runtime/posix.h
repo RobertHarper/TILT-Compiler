@@ -260,7 +260,7 @@ static name_val_t tty_values [] = {
   {"TOSTOP", TOSTOP},
 };
 
-static name_val_t sysconf_values [] = {
-  {"JOB_CONTROL", _POSIX_JOB_CONTROL},
-  {"CLK_TCK", CLK_TCK}
+static name_val_t sysconf_keys [] = {
+  {"JOB_CONTROL", _SC_JOB_CONTROL},
+  {"CLK_TCK", _SC_CLK_TCK}
 };

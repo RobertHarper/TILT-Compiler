@@ -1,8 +1,16 @@
 #define reg_disp       0
-#define maxsp_disp     8*32+8*32
-#define snapshot_disp  8*32+8*32+8
-#define sysThread_disp 8*32+8*32+8+8
-#define notinml_disp   8*32+8*32+8+8+8
+#ifdef alpha_osf
+#define longsize       8
+#define ptrsize        8
+#endif
+#ifdef solaris
+#define longsize       4
+#define ptrsize        4
+#endif
+#define maxsp_disp     longsize*32+8*32
+#define snapshot_disp  longsize*32+8*32+longsize
+#define sysThread_disp longsize*32+8*32+longsize+ptrsize
+#define notinml_disp   longsize*32+8*32+longsize+ptrsize+ptrsize
 
 #ifndef _inside_stack_h
 #ifndef _asm_
@@ -77,9 +85,10 @@ Thread_t *NextJob(void);
 
 void thread_init(void);
 void thread_go(value_t start_adds, int num_add);
-void Interrupt(struct sigcontext *scp);
+void Interrupt(struct ucontext *);
 void scheduler(void);
 void Finish(void);
+Thread_t *YieldRest(void);
 
 int thread_total(void);
 int thread_max(void);

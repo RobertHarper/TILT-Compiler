@@ -5,7 +5,8 @@
 signature COMPILER =
  sig
 
-   val use_mlrisc : bool ref
+   datatype platform = TIL_ALPHA | MLRISC_ALPHA | MLRISC_SPARC
+   val platform : platform ref
 
    type sbnd and context_entry and context
 

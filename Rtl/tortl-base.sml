@@ -48,7 +48,6 @@ struct
   	   Perform a lookup to determine if the subcomponents are constants or not.
    *)
 
-   datatype reg = I of Rtl.regi | F of Rtl.regf
    datatype var_loc = VREGISTER of bool * reg 
 		    | VGLOBAL of label * rep  (* I am located at this label: closure, data, ... *)
    and var_val = VINT of TW32.word
@@ -463,10 +462,10 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 
   (* ----- Data structures for the current function being compiled 
    il: list of instructions for the current function being compiled
-   localreg{i/f} : computing SAVE sets for RTL interpreter 
+   localregs : computing SAVE sets for RTL interpreter 
    top: label at top of current function (past prelude code)
    currentfun: the current function being compiled
-   argreg{i/f}: the argument registers  
+   argregs : the argument registers  
    ---> If top and currentfun and NONE, then we are at top-level 
         and the register lists will also be empty.   <--- *)
 
@@ -479,11 +478,9 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 					       LOCAL_CODE "dummy_fun")
        val resultreg : reg option ref = ref NONE
        val il : (Rtl.instr ref) list ref = ref nil
-       val localregi : regi list ref = ref nil
-       val localregf : regf list ref = ref nil
+       val localregs : reg list ref = ref nil
        val returnreg : regi option ref = ref NONE
-       val argregi : regi list ref = ref nil
-       val argregf : regf list ref = ref nil
+       val argregs : reg list ref = ref nil
        val curgc : instr ref option ref = ref NONE
        val gcstack : instr ref option list ref = ref []
        fun add_instr' i = il := (ref i) :: !il;
@@ -491,19 +488,16 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
        fun istoplevel() = !istop
        fun getTop() = !top
        fun getCurrentFun() = !currentfun
-       fun getResult thunk = (case !resultreg of
-				  SOME r => r
-				| NONE => let val r = thunk()
-					      val _ = 
-						  (case r of
-						       I ir => localregi := (ir :: (!localregi))
-						     | F fr => localregf := (fr :: (!localregf)))
-					      val _ = resultreg := SOME r
-					  in  r
-					  end)
-       fun getLocals() = (!localregi, !localregf)
-       fun getArgI() = !argregi
-       fun getArgF() = !argregf
+       fun getResult thunk = 
+	   (case !resultreg of
+		SOME r => r
+	      | NONE => let val r = thunk()
+			    val _ = localregs := (r :: (!localregs))
+			    val _ = resultreg := SOME r
+			in  r
+			end)
+       fun getLocals() = !localregs
+       fun getArgs() = !argregs
 
        fun add_data d = dl := d :: !dl
 
@@ -558,30 +552,22 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	   end
 
 
-       fun alloc_regi (traceflag) = 
-	   let val r = REGI(fresh_var(),traceflag)
-	   in localregi := r :: (!localregi);
-	       r
-	   end
-       
-       fun alloc_regf () = 
-	   let val r = REGF(fresh_var(),NOTRACE_REAL)
-	   in localregf := r :: (!localregf);
-	       r
-	   end
-       
        fun alloc_named_regi v traceflag = 
 	   let val r = REGI (v,traceflag)
-	   in localregi := r :: (!localregi);
+	   in  localregs := (I r) :: (!localregs);
 	       r
 	   end
+       fun alloc_regi (traceflag) = alloc_named_regi (fresh_var()) traceflag
+
        
        fun alloc_named_regf v = 
 	   let val r = REGF (v,NOTRACE_REAL)
-	   in localregf := r :: (!localregf);
+	   in  localregs := (F r) :: (!localregs);
 	       r
 	   end
 
+       fun alloc_regf () = alloc_named_regf (fresh_var())
+       
        fun alloc_reg_trace state trace = 
 	   let val rep = niltrace2rep state trace
 	   in  case rep of
@@ -606,13 +592,10 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		convarmap = convarmap, env = env, gcstate = gcstate}
 	   end
 
-       fun set_args ((iargs,fargs),return) = 
-	   (argregi := iargs;
-	    argregf := fargs;
+       fun set_args (args,return) = 
+	   (argregs := args;
 	    returnreg := SOME return;
-	    localregi := return :: iargs;
-	    localregf := fargs)
-
+	    localregs := (I return) :: args)
 
        fun reset_state (is_top,names) = 
 	   (istop := is_top;
@@ -643,19 +626,18 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
        fun get_proc() = 
 	let val (_,name) = !currentfun
 	    val code =  map ! (rev (!il))
-	    val results = (case !resultreg of
-			       NONE => error "result reg still unknown"
-			     | SOME(I ir) => ([ir],[])
-			     | SOME(F fr) => ([],[fr]))
 	    val SOME return = !returnreg
-	in  PROC{name=name,
-		 return=return,
-		 args=(!argregi,!argregf),
-		 results=results,
-		 code=Array.fromList code,
-		 known=false,
-		 save=SAVE(nil,nil),
-		 vars=NONE}
+	    val results = (case !resultreg of
+			       SOME r => [r]
+			     | NONE => [])
+	in  PROC{name    = name,
+		 return  = return,
+		 args    = !argregs,
+		 results = results,
+		 code    = Array.fromList code,
+		 known   = false,
+		 save    = nil,
+		 vars    = NONE}
 	end
 
    end
@@ -1156,25 +1138,24 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 
 
   local
-    fun shuffle_regs (src : 'a list,dest : 'a list, 
-		      eqreg : ('a * 'a) -> bool,
-		      alloc : 'a -> 'a, 
-		      mover: ('a * 'a) -> instr) =
+    fun shuffle (eqreg : ('a * 'a) -> bool,
+		 alloc : 'a -> 'a, 
+		 mover: ('a * 'a) -> instr)
+	        (src : 'a list,
+		 dest : 'a list) = 
       let fun isdest r = member_eq(eqreg,r, dest)
 	
 	local
-	  (* given two lists, zip the lists, and remove any pairs 
-	   whose two components are equal.*)
-	  fun sieve2 (a,b) =
-	    let fun f(h::t,h'::t') =
-	      let val (nt,nt') = f (t,t')
-	      in if eqreg(h,h') then (nt,nt')
-		 else (h::nt,h'::nt')
+	  (* given two lists of equal length, remove corresponding equal elements *)
+	  fun sieve2 (h::t,h'::t') =
+	      let val (nt,nt') = sieve2 (t,t')
+	      in  if eqreg(h,h') 
+		      then (nt,nt')
+		  else (h::nt,h'::nt')
 	      end
-		  | f(nil,nil) = (nil,nil)
-		  | f _ = error "sieve2"
-		      in f (a,b)
-		      end
+	    | sieve2(nil,nil) = (nil,nil)
+	    | sieve2 _ = error "sieve2"
+
 	in  (* remove assignments of register to self *)
 	  val (src,dest) = sieve2 (src,dest)
 	end
@@ -1202,16 +1183,20 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	  | merge _ = error "shuffle_regs/merge"
       in merge (tmps,dest)
       end
+    fun iclone (REGI(_,rep)) = alloc_regi(rep)
+      | iclone (SREGI EXNARG) = alloc_regi(TRACE)
+      | iclone (SREGI EXNPTR) = alloc_regi(TRACE)
+      | iclone (SREGI _) = alloc_regi(NOTRACE_INT)
+    fun fclone (_ : regf) = alloc_regf()
+    fun clone (I ir) = I(iclone ir)
+      | clone (F fr) = F(fclone fr)
   in
-    fun shuffle_fregs (src : regf list,dest : regf list) =
-      shuffle_regs(src, dest, eqregf, fn (arg) => alloc_regf(), FMV)
-    fun shuffle_iregs (src : regi list,dest : regi list) =
-      shuffle_regs(src, dest, eqregi, 
-		   (fn (REGI(_,rep)) => alloc_regi(rep)
-		 | (SREGI EXNARG) => alloc_regi(TRACE)
-		 | (SREGI EXNPTR) => alloc_regi(TRACE)
-		 | (SREGI _) => alloc_regi(NOTRACE_INT))
-		   , MV)
+    fun mv (I ir1, I ir2) = MV(ir1,ir2)
+      | mv (F fr1, F fr2) = FMV(fr1,fr2)
+      | mv _ = error "cannot move between int and float regs"
+    val shuffle_fregs =	shuffle (eqregf, fclone, FMV)
+    val shuffle_iregs = shuffle (eqregi, iclone, MV)
+    val shuffle_regs  = shuffle (eqreg, clone, mv)
   end
 
 

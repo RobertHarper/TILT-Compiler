@@ -20,8 +20,8 @@ sig
                     (Machine.assign * Machine.assign) -> unit
    val print_lab  : Rtl.label -> unit
    val print_list : ('a -> unit) -> 'a list -> unit
-   val print_set  : Machine.Regset.set -> unit
-   val print_map  : Machine.assign Machine.Regmap.map -> unit
+   val print_set  : Core.Regset.set -> unit
+   val print_map  : Machine.assign Core.Regmap.map -> unit
    val print_pair : ('a -> unit ) -> ('b -> unit) -> ('a * 'b) -> unit
    val print_int  : int -> unit
    val print_trace : Tracetable.trace -> unit
@@ -30,12 +30,12 @@ sig
 
    val dumpBlocks : bool -> Machine.label -> 
                             Machine.procsig -> 
-			    Bblock.bblock Machine.Labelmap.map -> 
+			    Bblock.bblock Core.Labelmap.map -> 
 			    Machine.label list -> unit
 
    val dumpProc : Machine.label *
                  Machine.procsig *
-                 Bblock.bblock Machine.Labelmap.map * 
+                 Bblock.bblock Core.Labelmap.map * 
 	         Machine.label list *
 		 bool -> unit
    val dumpCodeLabel : Machine.label list -> unit

@@ -6,6 +6,9 @@ Group is
 ../Nil/nil.cm               (* ------ Nil Stuff ------------ *)
 ../Rtl/rtl.cm
 
+core.sig.sml
+core.sml
+
 machine.sig.sml
 machineutils.sig.sml
 bblock.sig.sml

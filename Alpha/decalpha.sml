@@ -11,27 +11,10 @@ struct
   struct
     structure Rtl = Rtl
 
-    datatype register = R of int | F of int
+    open Core
 
-
-      datatype operand = REGop of register
-	               | IMMop of int
-
-
-
-      datatype stacklocation =
-	  CALLER_FRAME_ARG of int
-	| THIS_FRAME_ARG of int
-	| SPILLED_INT of int
-	| SPILLED_FP of int
-	| ACTUAL4 of int
-	| ACTUAL8 of int
-	| RETADD_POS
-      
-      type label = Rtl.label
-      type data = Rtl.data
-      type align = Rtl.align
-
+    datatype operand = REGop of register
+	             | IMMop of int
 
     val Rzero   = R 31  (* Standard Alpha convention *)
     val Rsp     = R 30  (* Standard Alpha convention *)
@@ -54,12 +37,6 @@ struct
     val Fzero   = F 31  (* Standard Alpha convention *)
     val Fat     = F 30  (* volatile *)
     val Fat2    = F 29  (* volatile *)
-
-    fun isFloat (F _) = true
-      | isFloat _ = false
-
-    fun isInt (R _) = true
-      | isInt _ = false
 
 
     fun isPhysical (R i) = i<32
@@ -107,14 +84,13 @@ struct
 
   datatype rtl_instruction =
     CALL of 
-    {extern_call : bool,               (* Is this an extern call to C *)
+    {calltype : Rtl.calltype,          (* Is this an extern call to C *)
      func: call_type,                  (* label or temp containing addr. *)
      args : register list,             (* integer, floating temps *)
      results : register list,          (* integer, floating temps *)
      argregs : register list option,   (* actual registers *)
      resregs : register list option,   (*   "         "    *)
-     destroys: register list option,   (*   "         "    *)
-     tailcall : bool}
+     destroys: register list option}   (*   "         "    *)
 
     | RETURN of {results: register list}       (* formals *)
 
@@ -315,12 +291,12 @@ struct
     | reglist_to_ascii [r] = (msReg r)
     | reglist_to_ascii (r::rs) = (msReg r) ^ "," ^ (reglist_to_ascii rs)
 
-  fun rtl_to_ascii (CALL {func=DIRECT (func,_), tailcall=true, 
+  fun rtl_to_ascii (CALL {func=DIRECT (func,_), calltype = Rtl.ML_TAIL _,
 			  args, results,...}) =
            "(tail)CALL " ^ (msLabel func) ^ " (" ^
 	   (reglist_to_ascii args) ^ " ; " ^ (reglist_to_ascii results)
            ^ ")"
-    | rtl_to_ascii (CALL {func=INDIRECT Raddr, tailcall=true, ...}) = 
+    | rtl_to_ascii (CALL {func=INDIRECT Raddr, calltype = Rtl.ML_TAIL _, ...}) = 
            "(tail)CALL via " ^ msReg Raddr
     | rtl_to_ascii (CALL {func=INDIRECT Raddr, ...}) = 
            "CALL via " ^ msReg Raddr
@@ -343,10 +319,6 @@ struct
     | msStackLocation (ACTUAL8 i) = "8@" ^ (ms i)
     | msStackLocation (RETADD_POS) = "RETADD_POS"
 
-  fun sloc2int (ACTUAL4 x) = x
-    | sloc2int (ACTUAL8 x) = x
-    | sloc2int arg = error ("decalpha.sml: Attempt to concretize stacklocation: " ^ (msStackLocation arg))
-    
   val comma  	    	       = ", "
   val tab                      = "\t"
   val newline                  = "\n"
@@ -535,13 +507,6 @@ struct
    fun ireg n = R n
    fun freg n = F n
 
-   fun regNum (R n) = n
-     | regNum (F n) = n
-
-   fun eqRegs (R n) (R n') = n = n'
-     | eqRegs (F n) (F n') = n = n'
-     | eqRegs _ _ = false
-
    fun regLE (R n) (R n') = n <= n'
      | regLE (F n) (F n') = n <= n'
      | regLE _ _ = false
@@ -654,15 +619,13 @@ struct
       | cFlow (SPECIFIC (CBRANCHF(_, _, label))) = SOME (true, [label])
       | cFlow (BASE (JSR(_,_,_,labels)))         = SOME (false, labels)
       | cFlow (BASE (RET(_,_)))  = SOME (false, [])
-      | cFlow (BASE(RTL(CALL {tailcall=false, ...}))) = SOME (true, [])
-      | cFlow (BASE(RTL(CALL {tailcall=true, ...})))  = SOME (true, []) 
-(*      | cFlow (BASE(RTL(CALL {tailcall=true, ...})))  = SOME (false, []) *)
+      | cFlow (BASE(RTL(CALL {calltype=(Rtl.ML_TAIL _), ...})))  = SOME (true, []) (* why possible *)
+      | cFlow (BASE(RTL(CALL _))) = SOME (true, [])
       | cFlow (BASE(RTL(RETURN _)))          = SOME (false, [])
       | cFlow (BASE(RTL(SAVE_CS label))) = SOME (true, [label])
       | cFlow (BASE(TAILCALL label))         = SOME (false, [])
       | cFlow _ = NONE
 
-   fun eqLabs l1 l2 = Rtl.eq_label(l1,l2)
 
    (* map src registers using fs and destination using fd and return mapped instruction *)
    fun translate_to_real_reg(i,fs,fd) = 
@@ -727,16 +690,6 @@ struct
 	| (F _,ACTUAL8 offset) => SPECIFIC(LOADF(LDT, dst, offset, Rsp))
 	| _ => error "allocateBlock: pop"
 
-
-   (* Where a given pseudoregister is physically located *)
-   datatype assign = IN_REG of register
-                   | ON_STACK of stacklocation
-                   | HINT of register
-		   | UNKNOWN
-
-   fun eqAssigns (IN_REG a) (IN_REG b) = eqRegs a b
-     | eqAssigns (ON_STACK a) (ON_STACK b) = (a = b)
-     | eqAssigns _ _ = false
 
    (* information on a procedure *)
 

@@ -1,6 +1,7 @@
- # Assumes that the thread pointer points to a structure whose first 64 quads are
- # the general and floating point register set and that the thread pointer register
- # is unmodified by call to gc_raw	 
+ # (1) Assumes that the thread pointer points to a structure containing
+ # 32 longs constituting the integer register set followed by 32 doubles
+ # constituting the floating-point register set
+ # (2) Assumes that the thread pointer is unmodified by call to gc_raw	  
 		
 #define _asm_
 #include "general.h"
@@ -10,55 +11,24 @@
 	.text	
 	.align	4
 	.globl	gc_raw
-	.globl	float_alloc_raw
-	.globl	int_alloc_raw
-	.globl	ptr_alloc_raw
 	.globl	context_restore
 	.globl	old_alloc
 	.globl	cur_alloc_ptr
 	.globl	save_regs
+	.globl	save_iregs
 	.globl	load_regs
+	.globl	load_iregs
 	
  # ----------------- save_regs---------------------------------
- # saves entire register set except for the return address register
+ # ----------------- save_iregs--------------------------------
+ # save_regs saves entire register set (excluding the return address register)
+ # save_iregs saves only integer register set (excluding the return address register)
  # does not use a stack frame or change any registers
  # ----------------------------------------------------------
 	.ent	save_regs
 	.frame $sp, 0, $26
 save_regs:	
 .set noat
-	stq	$0, (THREADPTR_SYMREG)
-	stq	$1, 8(THREADPTR_SYMREG)
-	stq	$2, 16(THREADPTR_SYMREG)
-	stq	$3, 24(THREADPTR_SYMREG)
-	stq	$4, 32(THREADPTR_SYMREG)
-	stq	$5, 40(THREADPTR_SYMREG)
-	stq	$6, 48(THREADPTR_SYMREG)
-	stq	$7, 56(THREADPTR_SYMREG)
-	stq	$8, 64(THREADPTR_SYMREG)
-	stq	$9, 72(THREADPTR_SYMREG)
-	stq	$10, 80(THREADPTR_SYMREG)
-	stq	$11, 88(THREADPTR_SYMREG)
-	stq	$12, 96(THREADPTR_SYMREG)
-	stq	$13, 104(THREADPTR_SYMREG)  
-	stq	$14, 112(THREADPTR_SYMREG)
-	stq	$15, 120(THREADPTR_SYMREG)
-	stq	$16, 128(THREADPTR_SYMREG)
-	stq	$17, 136(THREADPTR_SYMREG)
-	stq	$18, 144(THREADPTR_SYMREG)
-	stq	$19, 152(THREADPTR_SYMREG)
-	stq	$20, 160(THREADPTR_SYMREG)
-	stq	$21, 168(THREADPTR_SYMREG)
-	stq	$22, 176(THREADPTR_SYMREG)
-	stq	$23, 184(THREADPTR_SYMREG)
-	stq	$24, 192(THREADPTR_SYMREG)
-	stq	$25, 200(THREADPTR_SYMREG)
-	stq	$27, 216(THREADPTR_SYMREG)
-	stq	$28, 224(THREADPTR_SYMREG)
-	stq	$29, 232(THREADPTR_SYMREG)
-	stq	$30, 240(THREADPTR_SYMREG)
-	stq	$31, 248(THREADPTR_SYMREG)
-
 	stt	$f0, 256(THREADPTR_SYMREG)   
 	stt	$f1, 264(THREADPTR_SYMREG)
 	stt	$f2, 272(THREADPTR_SYMREG)
@@ -91,51 +61,54 @@ save_regs:
 	stt	$f29, 488(THREADPTR_SYMREG)
 	stt	$f30, 496(THREADPTR_SYMREG)
 	stt	$f31, 504(THREADPTR_SYMREG)
+save_iregs:	
+	stq	$0, (THREADPTR_SYMREG)
+	stq	$1, 8(THREADPTR_SYMREG)
+	stq	$2, 16(THREADPTR_SYMREG)
+	stq	$3, 24(THREADPTR_SYMREG)
+	stq	$4, 32(THREADPTR_SYMREG)
+	stq	$5, 40(THREADPTR_SYMREG)
+	stq	$6, 48(THREADPTR_SYMREG)
+	stq	$7, 56(THREADPTR_SYMREG)
+	stq	$8, 64(THREADPTR_SYMREG)
+	stq	$9, 72(THREADPTR_SYMREG)
+	stq	$10, 80(THREADPTR_SYMREG)
+	stq	$11, 88(THREADPTR_SYMREG)
+	stq	$12, 96(THREADPTR_SYMREG)
+	stq	$13, 104(THREADPTR_SYMREG)  
+	stq	$14, 112(THREADPTR_SYMREG)
+	stq	$15, 120(THREADPTR_SYMREG)
+	stq	$16, 128(THREADPTR_SYMREG)
+	stq	$17, 136(THREADPTR_SYMREG)
+	stq	$18, 144(THREADPTR_SYMREG)
+	stq	$19, 152(THREADPTR_SYMREG)
+	stq	$20, 160(THREADPTR_SYMREG)
+	stq	$21, 168(THREADPTR_SYMREG)
+	stq	$22, 176(THREADPTR_SYMREG)
+	stq	$23, 184(THREADPTR_SYMREG)
+	stq	$24, 192(THREADPTR_SYMREG)
+	stq	$25, 200(THREADPTR_SYMREG)
+	# skip return address register
+	stq	$27, 216(THREADPTR_SYMREG)
+	stq	$28, 224(THREADPTR_SYMREG)
+	stq	$29, 232(THREADPTR_SYMREG)
+	stq	$30, 240(THREADPTR_SYMREG)
+	stq	$31, 248(THREADPTR_SYMREG)
 
 	ret	$31, ($26), 1	
 .set at
 	.end	save_regs	
 
  # ----------------- load_regs---------------------------------
- # loads entire register set except for the return address register
+ # ----------------- load_iregs---------------------------------
+ # load_regs loads entire register set (excluding return address register)
+ # load_iregs loads integer register set (excluding return address register)
  # does not use a stack frame or change any registers
  # ----------------------------------------------------------
 	.ent	load_regs
 	.frame $sp, 0, $26
 load_regs:	
 .set noat
-	ldq	$0, (THREADPTR_SYMREG)
-	ldq	$1, 8(THREADPTR_SYMREG)
-	ldq	$2, 16(THREADPTR_SYMREG)
-	ldq	$3, 24(THREADPTR_SYMREG)
-	ldq	$4, 32(THREADPTR_SYMREG)
-	ldq	$5, 40(THREADPTR_SYMREG)
-	ldq	$6, 48(THREADPTR_SYMREG)
-	ldq	$7, 56(THREADPTR_SYMREG)
-	ldq	$8, 64(THREADPTR_SYMREG)
-	ldq	$9, 72(THREADPTR_SYMREG)
-	ldq	$10, 80(THREADPTR_SYMREG)
-	ldq	$11, 88(THREADPTR_SYMREG)
-	ldq	$12, 96(THREADPTR_SYMREG)
-	ldq	$13, 104(THREADPTR_SYMREG)  
-	ldq	$14, 112(THREADPTR_SYMREG)
-	ldq	$15, 120(THREADPTR_SYMREG)
-	ldq	$16, 128(THREADPTR_SYMREG)
-	ldq	$17, 136(THREADPTR_SYMREG)
-	ldq	$18, 144(THREADPTR_SYMREG)
-	ldq	$19, 152(THREADPTR_SYMREG)
-	ldq	$20, 160(THREADPTR_SYMREG)
-	ldq	$21, 168(THREADPTR_SYMREG)
-	ldq	$22, 176(THREADPTR_SYMREG)
-	ldq	$23, 184(THREADPTR_SYMREG)
-	ldq	$24, 192(THREADPTR_SYMREG)
-	ldq	$25, 200(THREADPTR_SYMREG)
-	ldq	$27, 216(THREADPTR_SYMREG)
-	ldq	$28, 224(THREADPTR_SYMREG)
-	ldq	$29, 232(THREADPTR_SYMREG)
-	ldq	$30, 240(THREADPTR_SYMREG)
-	ldq	$31, 248(THREADPTR_SYMREG)
-
 	ldt	$f0, 256(THREADPTR_SYMREG)   
 	ldt	$f1, 264(THREADPTR_SYMREG)
 	ldt	$f2, 272(THREADPTR_SYMREG)
@@ -168,6 +141,39 @@ load_regs:
 	ldt	$f29, 488(THREADPTR_SYMREG)
 	ldt	$f30, 496(THREADPTR_SYMREG)
 	ldt	$f31, 504(THREADPTR_SYMREG)
+load_iregs:	
+	ldq	$0, (THREADPTR_SYMREG)
+	ldq	$1, 8(THREADPTR_SYMREG)
+	ldq	$2, 16(THREADPTR_SYMREG)
+	ldq	$3, 24(THREADPTR_SYMREG)
+	ldq	$4, 32(THREADPTR_SYMREG)
+	ldq	$5, 40(THREADPTR_SYMREG)
+	ldq	$6, 48(THREADPTR_SYMREG)
+	ldq	$7, 56(THREADPTR_SYMREG)
+	ldq	$8, 64(THREADPTR_SYMREG)
+	ldq	$9, 72(THREADPTR_SYMREG)
+	ldq	$10, 80(THREADPTR_SYMREG)
+	ldq	$11, 88(THREADPTR_SYMREG)
+	ldq	$12, 96(THREADPTR_SYMREG)
+	ldq	$13, 104(THREADPTR_SYMREG)  
+	ldq	$14, 112(THREADPTR_SYMREG)
+	ldq	$15, 120(THREADPTR_SYMREG)
+	ldq	$16, 128(THREADPTR_SYMREG)
+	ldq	$17, 136(THREADPTR_SYMREG)
+	ldq	$18, 144(THREADPTR_SYMREG)
+	ldq	$19, 152(THREADPTR_SYMREG)
+	ldq	$20, 160(THREADPTR_SYMREG)
+	ldq	$21, 168(THREADPTR_SYMREG)
+	ldq	$22, 176(THREADPTR_SYMREG)
+	ldq	$23, 184(THREADPTR_SYMREG)
+	ldq	$24, 192(THREADPTR_SYMREG)
+	ldq	$25, 200(THREADPTR_SYMREG)
+	# skip return address register
+	ldq	$27, 216(THREADPTR_SYMREG)
+	ldq	$28, 224(THREADPTR_SYMREG)
+	ldq	$29, 232(THREADPTR_SYMREG)
+	ldq	$30, 240(THREADPTR_SYMREG)
+	ldq	$31, 248(THREADPTR_SYMREG)
 
 	ret	$31, ($26), 1	
 .set at
@@ -201,32 +207,6 @@ gc_raw_getgp:
 .set at			
 	.end	gc_raw
 
- # --------------- float_alloc_raw ----------------------
- # return address comes in normal return address register
- # array logical size come in at temp register
- # array initial value come in at ftemp register
- # optional profile tag comes in at alloc_limit register
- # result goes back in temp	
- # ------------------------------------------------------
-	.ent	float_alloc_raw 
-	.frame $sp, 0, $26
-	.prologue 0
-float_alloc_raw:
-.set noat
-	stq	$26, 208(THREADPTR_SYMREG)	# note that this is return address of float_alloc_raw
-	bsr	save_regs
-.set at
-	br	$gp, float_alloc_raw_getgp
-float_alloc_raw_getgp:	
-	ldgp	$gp, 0($gp)			# compute correct gp for self	
-	jsr	$26, float_alloc
-	ldgp	$gp, 0($26)			# compute correct gp for self	
-.set noat
-	bsr	load_regs
-	ldq	$26, 208(THREADPTR_SYMREG)	# note that this is return address of float_alloc_raw
-	ret	$31, ($26), 1	
-.set at			
-	.end	float_alloc_raw
 
  # ----------------- old_alloc --------------------------
  # return address comes in $26
@@ -286,61 +266,6 @@ no_limit_reset:
 .set at
 	.end	old_alloc
 
-
- # ----------------- int_alloc_raw ----------------------
- # return address comes in normal return address register
- # array logical size come in at temp register
- # array initial value come in at temp2 register
- # optional profile tag comes in at alloc_limit register
- # result goes back in temp	
- # ------------------------------------------------------
-	.ent	int_alloc_raw
-	.frame $sp, 0, $26
-	.prologue 0
-int_alloc_raw:
-.set noat
-	stq	$26, 208(THREADPTR_SYMREG)	# note that this is return address of int_alloc_raw
-	bsr	save_regs
-.set at
-	br	$gp, int_alloc_raw_getgp
-int_alloc_raw_getgp:	
-	ldgp	$gp, 0($gp)			# compute correct gp for self	
-	jsr	$26, int_alloc
-	ldgp	$gp, 0($26)			# compute correct gp for self	
-.set noat
-	bsr	load_regs
-	ldq	$26, 208(THREADPTR_SYMREG)	# note that this is return address of int_alloc_raw
-	ret	$31, ($26), 1	
-.set at			
-	.end	int_alloc_raw
-
-
- # ----------------- ptr_alloc_raw ----------------------
- # return address comes in normal return address register
- # array logical size come in at temp register
- # array initial value come in at temp2 register
- # optional profile tag comes in at alloc_limit register
- # result goes back in temp	
- # ------------------------------------------------------
-	.ent	ptr_alloc_raw
-	.frame $sp, 0, $26
-	.prologue 0
-ptr_alloc_raw:
-.set noat
-	stq	$26, RA_DISP(THREADPTR_SYMREG)	# note that this is return address of ptr_alloc_raw
-	bsr	save_regs
-.set at
-	br	$gp, ptr_alloc_raw_getgp
-ptr_alloc_raw_getgp:	
-	ldgp	$gp, 0($gp)			# compute correct gp for self	
-	jsr	$26, ptr_alloc
-	ldgp	$gp, 0($26)			# compute correct gp for self	
-.set noat
-	bsr	load_regs
-	ldq	$26, RA_DISP(THREADPTR_SYMREG)	# note that this is return address of ptr_alloc_raw
-	ret	$31, ($26), 1	
-.set at			
-	.end	ptr_alloc_raw
 
 
  # --------------------------------------------------------

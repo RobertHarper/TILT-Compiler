@@ -140,7 +140,7 @@ int ml_end_of_stream(value_t des)
   return !!(feof(des2ptr(des)));
 }
 
-value_t mla_lookahead(value_t _des)
+value_t ml_lookahead(value_t _des)
 {
   int found = 0;
   char c;
@@ -177,7 +177,7 @@ value_t ml_input1(value_t _des)
 
 }
 
-value_t mla_input(value_t _des, value_t numtoread)
+value_t ml_input(value_t _des, value_t numtoread)
 {
   /* XXX this treatment of descriptor is wrong */
   FILE *F = des2ptr(_des);

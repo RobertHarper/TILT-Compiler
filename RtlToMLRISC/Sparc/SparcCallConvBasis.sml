@@ -7,7 +7,7 @@
 
 structure SparcCallConventionBasis =
   CallConventionBasis(
-    structure Cells		= Sparc32Cells
+    structure Cells		= SparcCells
     structure IntegerConvention = SparcIntegerConvention
     structure MLRISCRegion	= SparcMLRISCRegion
     structure MLTreeExtra	= SparcMLTreeExtra

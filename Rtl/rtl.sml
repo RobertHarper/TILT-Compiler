@@ -20,19 +20,26 @@ struct
   datatype sregi = HEAPPTR | HEAPLIMIT | EXNPTR | EXNARG | STACKPTR | THREADPTR
   datatype regi = REGI of var * rep  (* int in var is register # *)
                 | SREGI of sregi
-  and regf = REGF of var * rep
 
-  and rep_path = Projvar_p of (regi * int list)
-               | Projlabel_p of (label * int list) | Notneeded_p
+  and rep_path = Projvar_p of (regi * int list)     (* if list is empty, then it is not a projection *)
+               | Projlabel_p of (label * int list)  (* if list is empty, then it is just a label *)
+               | Notneeded_p
 
   and rep = TRACE
           | UNSET         (* a locative address that is not yet set; needs to be set once *)
           | NOTRACE_INT
           | NOTRACE_CODE
           | NOTRACE_REAL
-          | LABEL 
-          | LOCATIVE
-          | COMPUTE of rep_path
+            (* global label --- outside the heap, so it shouldn't
+	       be traced *)
+         | LABEL 
+	    (* LOCATIVE: pointer into middle of array/record. 
+	       This must NEVER be live across a GC point *)
+         | LOCATIVE
+         | COMPUTE of rep_path
+
+  datatype regf = REGF of var * rep
+  datatype reg = I of regi | F of regf
 
   fun eq_label (ML_EXTERN_LABEL s1, ML_EXTERN_LABEL s2) = s2 = s1
     | eq_label (C_EXTERN_LABEL s1, C_EXTERN_LABEL s2) = s2 = s1
@@ -49,6 +56,9 @@ struct
     | eqregi (SREGI a, SREGI b) = eqsregi(a,b)
     | eqregi _ = false
   fun eqregf(REGF(v,_),REGF(v',_)) = eq_var(v,v')
+  fun eqreg (I ir1, I ir2) = eqregi(ir1,ir2)
+    | eqreg (F fr1, F fr2) = eqregf(fr1,fr2)
+    | eqreg _ = false
 
   fun sregi2int HEAPPTR = 0
     | sregi2int HEAPLIMIT = 1
@@ -60,12 +70,6 @@ struct
   (* This is okay since variable number start at 256 *)
   fun regi2int (REGI (v,_)) = Name.var2int v
     | regi2int (SREGI sregi) = sregi2int sregi
-
-  (* save: set of registers to save before a procedure call or at the
-     start of executing a procedure body.  These registers are restored
-     after the procedure call or executing the procedure body.*)
-
-  datatype save = SAVE of regi list * regf list
 
  (* effective address: register + sign-extended displacement *) 
   datatype ea = EA of regi * int  
@@ -158,9 +162,9 @@ struct
 
     | CALL of {call_type : calltype,
 	       func: reg_or_label,
-	       args : regi list * regf list, 
-	       results : regi list * regf list,
-	       save : save}
+	       args : reg list,
+	       results : reg list,
+	       save : reg list}
     | RETURN of regi                 (* address to return to *)
 
     (* see signature for comments *)
@@ -214,11 +218,11 @@ struct
   (* see sig for comments *)
   datatype proc = PROC of {name : label,
 			   return : regi,
-			   args : regi list * regf list ,
-			   results : regi list * regf list,
+			   args : reg list,
+			   results : reg list,
 			   code : instr array,
 			   known: bool,
-			   save : save,
+			   save : reg list,
                            vars : (int * int) option}
 
   datatype module = MODULE of

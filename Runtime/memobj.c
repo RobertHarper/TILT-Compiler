@@ -9,8 +9,9 @@
 #include <errno.h>
 #include "general.h"
 #include "til-signal.h"
+#include <fcntl.h>
 
-#undef SHOW_MMAP
+#define SHOW_MMAP
 
 void my_mprotect(int which, caddr_t bottom, int size, int perm)
 {
@@ -28,11 +29,30 @@ void my_mprotect(int which, caddr_t bottom, int size, int perm)
     }
 }
 
-int my_mmap(caddr_t start, int size, int prot, int flags)
+int my_mmap(caddr_t start, int size, int prot)
 {
-  int v = (value_t) mmap(start,size,prot,flags,-1,0);
+  static int fd = -1;
+  value_t v;
+#ifdef solaris
+  {
+    if (fd == -1)
+      if ((fd = open("/dev/zero", O_RDWR)) == -1) {
+	printf ("unable to open /dev/zero, errno = %d\n", errno);
+	exit(-1);
+      }
+    v = mmap((caddr_t) start,size, prot,
+	     MAP_FIXED | MAP_PRIVATE, fd, 0);
+  }
+#else
+  v = mmap((caddr_t) start, size, prot,
+	      MAP_ANONYMOUS | MAP_FIXED, fd, 0);
+#endif
 #ifdef SHOW_MMAP
-  printf ("mmap (%d,%d,%d,%d)\n",start,size,prot,flags);
+  printf ("mmap (%d,%d,%d)\n",start,size,prot);
+  if (prot == (PROT_READ | PROT_WRITE)) {
+    *((int *)(start)) = 255;
+    printf("written to %u\n",start);
+  }
 #endif
   return v;
 }
@@ -66,6 +86,11 @@ static const int heapstart  = 512 * 1024 * 1024;
 static const int stackstart = 768 * 1024 * 1024;
 static const int heapstart  = 780 * 1024 * 1024;
 #endif
+#ifdef solaris 
+static const int stackstart = 256 * 1024 * 1024;
+static const int heapstart  = 512 * 1024 * 1024;
+#endif
+
 int pagesize = 0;
 static int chunksize = 32768;
 static Bitmap_t *bmp = NULL;
@@ -148,8 +173,7 @@ Stack_t* Stack_Alloc(StackChain_t *parent)
 
   res->safety = 2 * pagesize;
   res->parent = parent;
-  res->rawbottom = my_mmap((caddr_t) start,size,
-			   PROT_READ | PROT_WRITE,MAP_ANONYMOUS | MAP_FIXED);
+  res->rawbottom = my_mmap((caddr_t) start,size,PROT_READ | PROT_WRITE);
   if (res->rawbottom == -1)
       exit(-1);
   res->rawtop    = res->rawbottom + size;
@@ -246,10 +270,8 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   assert(MaxSize >= MinSize);
 
   res->safety = safety;
-  res->rawbottom = (value_t) my_mmap((caddr_t) start,fullsize_pageround,
-				  PROT_NONE,MAP_ANONYMOUS | MAP_FIXED);
-  if (res->rawbottom == -1)
-      exit(-1);
+  res->rawbottom = (value_t) my_mmap((caddr_t) start,fullsize_pageround, PROT_NONE);
+  assert(res->rawbottom != -1);
 
   res->rawtop = res->rawbottom + fullsize_pageround;
   res->bottom = res->rawbottom + res->safety;
@@ -325,15 +347,15 @@ void Heap_Resize(Heap_t *res, long newsize)
     }
 }
 
-int StackError(struct sigcontext *scp, long badadd)
+int StackError(struct ucontext *ucontext, long badadd)
 {
   Stack_t *faultstack = 0;
   StackChain_t *faultchain = 0;
   int i;
-  long sp = (long)GetSp(scp);
+  long sp = (long)GetSp(ucontext);
 
   printf("\n------------------StackError---------------------\n");
-  printf("sp, badreference:  %d   %d\n",sp,badadd);
+  printf("sp, badreference:  %u   %u\n",sp,badadd);
 
   faultstack = GetStack(badadd);
   if (faultchain == 0)
@@ -384,11 +406,11 @@ void memobj_init()
     value_t global_start = datastart;
     value_t res = (value_t) my_mmap((caddr_t)semantic_garbage_offset,
 				    (size_t)semantic_garbage_offset,
-				    PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_FIXED);
+				    PROT_READ | PROT_WRITE);
     assert(res == semantic_garbage_offset);
     res = (value_t) my_mmap((caddr_t)global_start + semantic_garbage_offset,
 			    (size_t)(4 * 1024 * 1024),
-			    PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_FIXED);
+			    PROT_READ | PROT_WRITE);
     assert(res == global_start + semantic_garbage_offset);
     printf("SEMANTIC GARBAGE: about to memset initially\n");
     wordset((void *)(global_start+semantic_garbage_offset),1,(size_t)(4 * 1024 * 1024));
@@ -397,7 +419,11 @@ void memobj_init()
 #endif
 
   bmp = CreateBitmap(Heapbitmap_bits);
+#ifdef solaris
+  pagesize = sysconf(_SC_PAGESIZE);
+#else
   pagesize = sysconf(_SC_PAGE_SIZE);
+#endif
   StackInitialize();
   HeapInitialize();
 

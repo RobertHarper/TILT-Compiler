@@ -28,11 +28,13 @@ alpha_osf20_sys_name = alpha_osf
 alpha_osf32_sys_name = alpha_osf
 alpha_dux40_sys_name = alpha_osf
 rs_aix32_sys_name = rs_aix
+sun4_55_sys_name = solaris
 
 alpha_osf20_chip_name = alpha
 alpha_osf32_chip_name = alpha
 alpha_dux40_chip_name = alpha
 rs_aix32_chip_name = ppc
+sun4_55_chip_name = sparc
 
 full_sys_name = $(shell sys)
 sys_name=${${full_sys_name}_sys_name}
@@ -41,22 +43,9 @@ chip_name=${${full_sys_name}_chip_name}
 objdir=obj_${sys_name}
 ASM=${sys_name}_asm
 MAIN=main_nothread.o
-COREFILES_OBJ=${objdir}/posix.o ${objdir}/gcstat.o ${objdir}/forward.o ${objdir}/gc_semi.o ${objdir}/gc_gen.o ${objdir}/gc_para.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/mllib.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/gc_${ASM}.o ${objdir}/mllib_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o 
+COREFILES_OBJ=${objdir}/posix.o ${objdir}/gcstat.o  ${objdir}/gc_semi.o ${objdir}/gc_gen.o ${objdir}/gc_para.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/mllib.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o  ${objdir}/gc_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/forward.o
 COREFILES_HPROF_OBJ=$(COREFILES_OBJ:.o=.hprof.o)
 
-preludes=
-prelude_hprofs=
-prelude_oldallocs=
-prelude_objs=
-prelude_hprof_objs=
-prelude_oldalloc_objs=
-
-#preludes=prelude0.sml.${chip_name}.s prelude1.sml.${chip_name}.s prelude2.sml.${chip_name}.s
-#prelude_hprofs=prelude0.sml.hprof.${chip_name}.s prelude1.sml.hprof.${chip_name}.s prelude2.sml.hprof.${chip_name}.s
-#prelude_oldallocs=prelude0.sml.oldalloc.${chip_name}.s prelude1.sml.oldalloc.${chip_name}.s prelude2.sml.oldalloc.${chip_name}.s
-#prelude_objs=${objdir}/prelude0.sml.o ${objdir}/prelude1.sml.o ${objdir}/prelude2.sml.o
-#prelude_hprof_objs=${objdir}/prelude0.sml.hprof.o ${objdir}/prelude1.sml.hprof.o ${objdir}/prelude2.sml.hprof.o
-#prelude_oldalloc_objs=${objdir}/prelude0.sml.oldalloc.o ${objdir}/prelude1.sml.oldalloc.o ${objdir}/prelude2.sml.oldalloc.o
 
 out=ml.out
 target=foo.sml.${ASM}.s
@@ -74,17 +63,25 @@ endif
 
 # --------------------------- C and asm flags ---------------------------
 #CC=gcc -D__C_ASM_H -DGCC
-CC=cc
-CFLAGS=-warnprotos -D__STDC__ -c -g -D${sys_name}
-#CFLAGS=-c -O2 -D${sys_name}
+alpha_osf_cc=cc
+solaris_cc=gcc
+# /usr/local/opt/SUNWspro/bin/cc Solaris ANSI C compiler
+# /usr/lang/cc for SunOS 
+alpha_osf_cflags=-warnprotos -D__STDC__ -c -g -D${sys_name}
+solaris_cflags=-Wa,-xarch=v8plus -c -g -D${sys_name}
+CC=${${sys_name}_cc}
+CFLAGS=${${sys_name}_cflags}
 
-alpha_osf_asflags=-O1 -g
-rs_aix_asflags=-mppc 
-META_ASFLAGS=${sys_name}_asflags
-ASFLAGS=${${META_ASFLAGS}} -D${sys_name}
+# --------------------------- assembler flag ----------------------------
+alpha_osf_asflags=-O1 -g -Dalpha_osf
+rs_aix_asflags=-mppc -Drs_aix
+solaris_asflags=-xarch=v8plus -P -Dsolaris
+ASFLAGS=${${sys_name}_asflags}
 
+# --------------------------- linker flag, CRT, libs -------------------------
 alpha_osf_ldflags=-D 40000000 -T 20000000 -non_shared
 rs_aix_ldflags=-H512 -T512
+sparc_solaris_ldflags=
 META_LDFLAGS=${sys_name}_ldflags
 ifeq ($(ATOM),1)
 	LDFLAGS=-r -N ${${META_LDFLAGS}}
@@ -92,41 +89,42 @@ else
 	LDFLAGS=${${META_LDFLAGS}}
 endif
 
-
 alpha_osf_crt=/usr/lib/cmplrs/cc/crt0.o 
 rs_aix_crt=/usr/lib/crt0.o 
+sparc_solaris_crt=/usr/lib/crt0.o 
 CRT=${${sys_name}_crt}
 
+alpha_osf_libs=-lm -lsys5 -lc -lots -lpthreads
+rs_aix_libs=-lm -lsys5 -lc -lots -lpthreads
+sparc_solaris_libs=-lm -lsys5 -lc -lots -lpthreads
+LIBS=${${sys_name}_libs}
 
 
 # --------------------------- Make asm target with default rules --------
-.s.o:
+.s.o: thread.h
 	as ${ASFLAGS} -o $@ $*.s
 
 
 
 # ------------------------------ Link Phase ----------------------------
-runtime.${sys_name}.a: ${preludes} ${prelude_objs}  ${COREFILES_OBJ}
+runtime.${sys_name}.a: ${COREFILES_OBJ}
 	rm -f ${runtime_lib}
-	ar qc ${runtime_lib} ${COREFILES_OBJ} ${prelude_objs} 
+	ar qc ${runtime_lib} ${COREFILES_OBJ} 
 
 
-runtime.${sys_name}.hprof.a: ${prelude_hprofs} ${prelude_hprof_objs}  ${COREFILES_HPROF_OBJ}
+runtime.${sys_name}.hprof.a: ${COREFILES_HPROF_OBJ}
 	rm -f ${runtime_lib}
-	ar qc ${runtime_lib} ${COREFILES_HPROF_OBJ} ${prelude_hprof_objs} 
+	ar qc ${runtime_lib} ${COREFILES_HPROF_OBJ} 
 
-runtime.${sys_name}.oldalloc.a: ${prelude_oldallocs} ${prelude_oldalloc_objs}  ${COREFILES_OBJ}
+runtime.${sys_name}.oldalloc.a: ${COREFILES_OBJ}
 	rm -f ${runtime_lib}
-	ar qc ${runtime_lib} ${COREFILES_OBJ} ${prelude_oldalloc_objs} 
+	ar qc ${runtime_lib} ${COREFILES_OBJ} 
 
-
-target_lib: ${runtime_lib}
-	cp ${runtime_lib} ${target_lib}
-
+runtime: ${runtime_lib} ${objdir}/firstdata.o
 
 prog: ${targetobjs} ${runtime_lib}
 	rm -f ${out}
-	ld ${LDFLAGS} -o ${out} ${CRT} ${targetobjs} ${runtime_lib} -lm -lc -lots -lpthreads
+	ld ${LDFLAGS} -o ${out} ${CRT} ${targetobjs} ${runtime_lib} ${LIBS}
 ifeq ($(ATOM),1)
 	atom ${out} -32addr -tool gprof -o ${out}.gprof.exe
 	atom ${out} -32addr -tool iprof -o ${out}.iprof.exe
@@ -138,14 +136,8 @@ else
 endif
 
 # ------------------------------ Core Code ----------------------------
-${objdir}/prelude0.sml.o: prelude0.sml.${chip_name}.s
-	as ${ASFLAGS} -o $@ prelude0.sml.${chip_name}.s
-
-${objdir}/prelude1.sml.o: prelude1.sml.${chip_name}.s
-	as ${ASFLAGS} -o $@ prelude1.sml.${chip_name}.s
-
-${objdir}/prelude2.sml.o: prelude2.sml.${chip_name}.s
-	as ${ASFLAGS} -o $@ prelude2.sml.${chip_name}.s
+${objdir}/firstdata.o: firstdata.c
+	${CC} -o $@ ${CFLAGS} firstdata.c
 
 ${objdir}/posix.o: general.h posix.c posix.h
 	${CC} -o $@ ${CFLAGS} posix.c
@@ -233,26 +225,8 @@ ${objdir}/mllib.o: mllib.c tag.h
 ${objdir}/platform.o: platform.c platform.h
 	${CC} -o $@ ${CFLAGS} platform.c
 
-# ---------------------------- Core oldalloc Code ----------------------------
-${objdir}/prelude0.sml.oldalloc.o: prelude0.sml.oldalloc.${chip_name}.s
-	as ${ASFLAGS} -o $@ prelude0.sml.oldalloc.${chip_name}.s
-
-${objdir}/prelude1.sml.oldalloc.o: prelude1.sml.oldalloc.${chip_name}.s
-	as ${ASFLAGS} -o $@ prelude1.sml.oldalloc.${chip_name}.s
-
-${objdir}/prelude2.sml.oldalloc.o: prelude2.sml.oldalloc.${chip_name}.s
-	as ${ASFLAGS} -o $@ prelude2.sml.oldalloc.${chip_name}.s
 
 # ---------------------------- Core hprof Code ----------------------------
-${objdir}/prelude0.sml.hprof.o: prelude0.sml.hprof.${chip_name}.s
-	as ${ASFLAGS} -o $@ prelude0.sml.hprof.${chip_name}.s
-
-${objdir}/prelude1.sml.hprof.o: prelude1.sml.hprof.${chip_name}.s
-	as ${ASFLAGS} -o $@ prelude1.sml.hprof.${chip_name}.s
-
-${objdir}/prelude2.sml.hprof.o: prelude2.sml.hprof.${chip_name}.s
-	as ${ASFLAGS} -o $@ prelude2.sml.hprof.${chip_name}.s
-
 ${objdir}/global.hprof.o: global.c global.h general.h
 	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE global.c
 

@@ -84,6 +84,9 @@ struct
     (if !symbolic_name then var2s v else i2s(Name.var2int v))
        ^ (rep2s tf)
 
+  fun reg2s (I regi) = regi2s regi
+    | reg2s (F regf) = regf2s regf
+
   fun ea2s (EA (r,d)) = i2s d^"("^regi2s r^")"
 
   fun sv2s (REG r) = regi2s r
@@ -138,14 +141,8 @@ struct
     end
 
   val pp_RegiList' = pp_List' (String o regi2s)
-
   val pp_RegfList' = pp_List' (String o regf2s)
-
-  fun pp_RegPair' (intregs,fregs) =
-      HOVbox [String "(",pp_RegiList' intregs,
-	      String "; ",pp_RegfList' fregs,String ")"]
-
-  fun pp_Save'(SAVE p) = pp_RegPair' p
+  val pp_RegList' = pp_List' (String o reg2s)
 
 
 
@@ -241,8 +238,8 @@ struct
 			  else nil))
               | JMP (r,labels) => Hbox [String ("jmp "^regi2s r),
 					pp_List' (String o label2s) labels]
-              | CALL {call_type, func, args=(ia,fa),
-		      results=(ir,fr), save} =>
+              | CALL {call_type, func, args,
+		      results, save} =>
 		   HOVbox0 1 15 1
 		   [String (extend ("call_" ^ (calltype2s call_type))),
 		    String (case func of
@@ -250,16 +247,15 @@ struct
 			      | LABEL' l => (label2s l)),
 		    Break,
 		    String "arguments = (",
-		    pp_RegPair'(ia,fa),
+		    pp_RegList' args,
 		    Break,
-
 		    String "results = (",
-		    pp_RegPair'(ir,fr),
+		    pp_RegList' results,
 		    Break,
-
-		    if !elideSave then String ""
-		    else (HOVbox [String " saved = ",pp_Save' save]),
-			String "}"]
+		    if !elideSave 
+			then String ""
+		    else (HOVbox [String " saved = ",pp_RegList' save]),
+		    String "}"]
               | RETURN r => plain["return", regi2s r]
 	      | SAVE_CS  l => String ("save_cs"^label2s l)
               | END_SAVE => String "end save"
@@ -334,18 +330,18 @@ struct
       else ();
 	   Vbox0 0 1 [String(label2s name),
 		      Break,
-		      Hbox[String "     ", HOVbox[String "args = ",pp_RegPair' args]],
+		      Hbox[String "     ", HOVbox[String "args = ",pp_RegList' args]],
 		      Break,
 		      Hbox[String "     ret = ",String (regi2s return)],
 		      Break,
 		      Hbox[String "     known = ",String (bool2s known)],
 		      Break,
-		      Hbox[String "     ", HOVbox[String "results = ",pp_RegPair' results]],
+		      Hbox[String "     ", HOVbox[String "results = ",pp_RegList' results]],
 		      Break,
 		      if !elideSave 
 			  then String ""
 		      else (HOVbox [String " save = ",
-				    pp_Save' save,
+				    pp_RegList' save,
 				    String ","]),
 		      Break,
 		      String "{", Break,
@@ -396,7 +392,6 @@ struct
       end
     fun help pp obj = (wrapper pp TextIO.stdOut obj; ())
     val pp_var = help pp_var'
-    val pp_Save = help pp_Save'
     val pp_Instr = help pp_Instr'
     val pp_Data = help pp_Data'
     val pp_Proc = help pp_Proc'

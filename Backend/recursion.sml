@@ -49,7 +49,7 @@ struct
       (* Add edge to the tailcall graph if the instruction is 
          a tailcall *)
       fun addTailCall proc (Rtl.CALL{func=Rtl.LABEL' l,
-				     tailcall=true, ...}) =
+				     call_type=ML_TAIL, ...}) =
 	     if isLocal l
 		 then (Graph.insert_edge(tailcallgraph, (proc, l));
 		       Graph.insert_edge(tailcallgraph, (l, proc)))

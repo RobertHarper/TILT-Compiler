@@ -25,7 +25,7 @@ structure AlphaFloatConvention
 
   (* -- values ------------------------------------------------------------- *)
 
-  val zero	 = 31
+  val zero	 = SOME 31
   val temporary2 = 29
   val temporary1 = 30
 

@@ -148,9 +148,6 @@ int main(int argc, char **argv)
   int i;
   Thread_t *th, *th2;
 
-#ifdef
-  printf("Entered main\n");
-#endif
   process_option(argc,argv);
 
   stats_init();

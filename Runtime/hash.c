@@ -44,12 +44,12 @@ void HashTableInsert(HashTable_t *h, HashEntry_t *e)
 }
 HashEntry_t * HashTableLookup(HashTable_t *h, unsigned long key, int insert)
 {
-  /* delta and h->size must be rel prime; assuming h->size if a power of 2
-     it is sufficient to make delta odd */
-  unsigned long b = 0x58d2d93f;
-  unsigned long start = ((key * b) >> 32) & h->logmask;
-  unsigned long delta = (((key * b) >> 16) | 1) & h->logmask;
-  unsigned long cur = start;
+  /* delta and h->size must be relatively prime; 
+     if we assume h->size is a power of 2, it is sufficient to make delta odd */
+  unsigned int b = 0x58d2d93f;
+  unsigned int start = (key * b) & h->logmask;
+  unsigned int delta = (((key * b) >> 8) | 1) & h->logmask;
+  unsigned int cur = start;
   int count=0;
   while (1)
     {

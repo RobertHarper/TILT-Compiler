@@ -1,12 +1,32 @@
-(*$import LINKER Util Crc Listops OS Name Linkalpha *)
+(*$import LINKER Til Util Crc Listops OS Name Linkalpha *)
 structure Linker :> LINKER =
   struct
 
     val as_path = "as"
-    val ld_path = "ld"
-    val startup_lib = "/usr/lib/cmplrs/cc/crt0.o "
-    val ld_libs = "Runtime/runtime.alpha_osf.a -call_shared -lpthread -lmach -lexc -lc -lm"
-                  (* runtime, etc *)
+    fun ld() = 
+	let val alpha = "ld -D a000000 -T 8000000 -o " 
+	    val solaris = "ld"
+	in   case !Til.platform of
+	       Til.MLRISC_ALPHA => alpha
+	     | Til.TIL_ALPHA => alpha
+	     | Til.MLRISC_SPARC => solaris
+	end
+    fun crt() = 
+	let val alpha = "/usr/lib/cmplrs/cc/crt0.o "
+	    val solaris = "Runtime/obj_solaris/firstdata.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crt1.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crti.o /usr/ccs/lib/values-Xa.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtbegin.o  -L/usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2 -L/usr/ccs/bin -L/usr/ccs/lib -L/usr/local/lib"
+	in   case !Til.platform of
+	       Til.MLRISC_ALPHA => alpha
+	     | Til.TIL_ALPHA => alpha
+	     | Til.MLRISC_SPARC => solaris
+	end
+    fun ld_libs() = 
+	let val alpha = "Runtime/runtime.alpha_osf.a -call_shared -lpthread -lmach -lexc -lm -lsys5 -lc"
+	    val solaris = "Runtime/runtime.solaris.a -lpthread -lm -lc -lgcc /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtend.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtn.o"
+	in  case !Til.platform of
+	       Til.MLRISC_ALPHA => alpha
+	     | Til.TIL_ALPHA => alpha
+	     | Til.MLRISC_SPARC => solaris
+	end
     val error = fn x => Util.error "Linker" x
 
     fun base2uo s = s ^ ".uo"
@@ -205,7 +225,7 @@ structure Linker :> LINKER =
 	  fun pr_list [] = ""
 	    | pr_list [a] = a
 	    | pr_list (a::xs) = a ^ " " ^ pr_list xs
-	  val command = (ld_path ^ " -r -o " ^ o_file ^ 
+	  val command = (ld() ^ " -r -o " ^ o_file ^ 
 			 " " ^ pr_list o_files)
 	  val _ = (print "Running: "; print command; print "\n")
 	  val success = Util.system command
@@ -231,12 +251,16 @@ structure Linker :> LINKER =
 		   val unitnames = map #1 exports
 		   val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL
 					   ("main_" ^ un ^ "_doit")) unitnames
-		   val _ = Linkalpha.mk_link_file (link_s, local_labels)
+		   val _ = (case !Til.platform of
+				Til.MLRISC_ALPHA => AlphaLink.link
+			      | Til.TIL_ALPHA => Linkalpha.link
+			      | Til.MLRISC_SPARC => SparcLink.link)
+		       (link_s, local_labels)
 		   val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)
 		   val _ = if success then ()
 			   else error "mk_exe - as failed"
-		   val command = (ld_path ^ " -D a000000 -T 8000000 -o " ^ 
-				  exe_result ^ " " ^ startup_lib ^ " " ^ o_temp ^ " " ^ link_o ^ " " ^ ld_libs)
+		   val command = (ld() ^ " -o " ^
+				  exe_result ^ " " ^ (crt()) ^ " " ^ o_temp ^ " " ^ link_o ^ " " ^ ld_libs())
 		   val _ = (print "Running: "; print command; print "\n")
 		   val success = Util.system command
 		   val _ = if success then ()

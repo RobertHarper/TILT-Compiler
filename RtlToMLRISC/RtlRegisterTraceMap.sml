@@ -1,4 +1,4 @@
-(*$import TopLevel CELLS TRACETABLE REGISTER_TRACE_MAP DenseIntSet DenseRegisterMap *)
+(*$import TopLevel CELLS Core TRACETABLE REGISTER_TRACE_MAP DenseIntSet DenseRegisterMap *)
 
 
 (* =========================================================================
@@ -13,7 +13,7 @@ functor RtlRegisterTraceMap(
 		 and type id		= DenseRegisterMap.id
 		 and type rep		= Rtl.rep
 		 and type trace		= TraceTable.trace
-		 and type stacklocation = TraceTable.Machine.stacklocation
+		 and type stacklocation = Core.stacklocation
 		 and type idSet		= DenseIntSet.set
 	  = struct
 
@@ -34,7 +34,7 @@ functor RtlRegisterTraceMap(
 
   type register = var * rep
 
-  type stacklocation = TraceTable.Machine.stacklocation
+  type stacklocation = Core.stacklocation
 
   type idSet = IntSet.set
 

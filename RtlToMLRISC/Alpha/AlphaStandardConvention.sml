@@ -7,7 +7,12 @@
 
 functor AlphaStandardConvention(
 	  structure FloatConvention:   FLOAT_CONVENTION where type id = int
-	  structure IntegerConvention: INTEGER_CONVENTION where type id = int
+	  structure IntegerConvention: 
+		    sig
+		      include INTEGER_CONVENTION 
+		      val callPointer: id (* address for a procedure call, needed to fix globalPointer *)
+		      val globalPointer: id (* base address of current global table *)
+		    end where type id = int
 	) :> CALL_CONVENTION
 	       where type id	     = AlphaCallConventionBasis.id
 		 and type register   = AlphaCallConventionBasis.register

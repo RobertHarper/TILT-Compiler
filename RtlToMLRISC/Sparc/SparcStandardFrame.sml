@@ -1,19 +1,17 @@
-(*$import TopLevel STACK_FRAME AlphaMLRISCConstant *)
-
-***not ported yet***
+(*$import TopLevel STACK_FRAME SparcMLRISCConstant *)
 
 (* =========================================================================
- * AlphaStandardFrame.sml
+ * SparcStandardFrame.sml
  * ========================================================================= *)
 
-structure AlphaStandardFrame
+structure SparcStandardFrame
 	    :> STACK_FRAME
-		 where type offset = AlphaMLRISCConstant.const
+		 where type offset = SparcMLRISCConstant.const
 	    = struct
 
   (* -- structures --------------------------------------------------------- *)
 
-  structure MLRISCConstant = AlphaMLRISCConstant
+  structure MLRISCConstant = SparcMLRISCConstant
 
   (* -- types -------------------------------------------------------------- *)
 
@@ -23,7 +21,7 @@ structure AlphaStandardFrame
    * A stack frame is represented as the the maximum argument offset plus the
    * next unused offsets for the return, integer, and float regions.
    *
-   * Alpha stack frames are arranged physically as follows:
+   * Sparc stack frames are arranged physically as follows:
    *
    * +------------------------------
    * | incoming argument n-1
@@ -43,7 +41,7 @@ structure AlphaStandardFrame
    * | local integer 0
    * +------------------------------
    * | return address (optional)     0 or 8 bytes
-   * +------------------------------
+   * +-------------------------------------------------
    * | outgoing argument n-1
    * |	 ...			     n*8 bytes
    * | outgoing argument 0

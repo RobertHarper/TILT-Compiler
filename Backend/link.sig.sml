@@ -8,11 +8,9 @@ sig
      *)
     val rtl_to_asm : string * Rtl.module -> string * Rtl.label
 
-    (* add table info into corresponding asm file *)
+    (* create an asm file of table info using given labels *)
     val link : string * (Rtl.label list) -> unit 
 
-    (* the string is the name of the asm-file to create *)
-    val mk_link_file : string * (Rtl.label list) -> unit
 
 end
 

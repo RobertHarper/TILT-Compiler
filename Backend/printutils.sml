@@ -4,7 +4,7 @@ functor Printutils(val commentHeader : string
                    structure Tracetable : TRACETABLE
 		   structure Bblock : BBLOCK
 		   sharing Tracetable = Bblock.Tracetable
-		   sharing Tracetable.Machine = Machineutils.Machine = Bblock.Machine)
+		   sharing Machineutils.Machine = Bblock.Machine)
 		      :> PRINTUTILS where Bblock = Bblock
                                     where Machine = Machineutils.Machine
 				    where Tracetable = Tracetable =
@@ -15,6 +15,7 @@ struct
    structure Tracetable = Tracetable
 
    open Machineutils Machineutils.Machine Bblock
+   open Core
 
    val show_labels = ref true
    val debug = ref false

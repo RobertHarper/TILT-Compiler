@@ -400,6 +400,7 @@ struct
 		      val (rev_iregs, rev_fregs, state) = foldl efolder ([],[],state) elist
 		      val iregs = rev rev_iregs
 		      val fregs = rev rev_fregs
+		      val args = (map I iregs) @ (map F fregs)
 
 		      val Var_e expvar = f
 		      val (vlopt,vvopt,funcon) = getrep state expvar
@@ -421,16 +422,13 @@ struct
 		      val (_,ExternArrow_c(_,rescon)) = simplify_type state funcon
 		      val SOME niltrace = traceinfo_opt
 		      val (_,dest) = alloc_reg_trace state niltrace
-		      val results = (case dest of
-					 F fr => ([],[fr])
-				       | I ir => ([ir],[]))	      
 		      val _ = add_instr(LI(0w1,tmp1))
 		      val _ = add_instr(STORE32I(EA(SREGI THREADPTR,notinml_disp),tmp1))
 		      val _ = add_instr(CALL{call_type = C_NORMAL,
-					     func=fun_reglabel,
-					     args=(iregs,fregs),
-					     results=results,
-					     save=SAVE(getLocals())})
+					     func = fun_reglabel,
+					     args = args,
+					     results = [dest],
+					     save = getLocals()})
 		      val _ = add_instr(LI(0w0,tmp2))
 		      val _ = add_instr(STORE32I(EA(SREGI THREADPTR,notinml_disp),tmp2))
 		      val result = (VAR_LOC(VREGISTER (false,dest)), rescon,
@@ -537,40 +535,36 @@ struct
 		      val iregs = (cregsi @ cregsi' @ 
 				   (map (coercei "call") eregs) @
 				   (map (coercei "call") eregs'))
-
 		      val fregs = map coercef efregs
+		      val args = (map I iregs) @ (map F fregs)
 
 		      val SOME niltrace = traceinfo_opt
 		      val (resrep,dest) = alloc_reg_trace state niltrace
 		      val context = if (#elim_tail_call(!cur_params))
 					then context
 				    else NOTID
-		      val results = (case dest of
-					 F fr => ([],[fr])
-				       | I ir => ([ir],[]))
 		  in
 		      (case (context,selfcall) of
 			   (NOTID, _) => 
 			       (add_instr(CALL{call_type = ML_NORMAL,
 					       func = fun_reglabel,
-					       args = (iregs,fregs),
-					       results = results,
-					       save=SAVE(getLocals())});
+					       args = args,
+					       results = [dest],
+					       save = getLocals()});
 				add_instr (ICOMMENT ("done making normal call"));
 				(VAR_LOC(VREGISTER (false,dest)), rescon,
 				 new_gcstate state))
 			 | (ID r,true) =>  
-			       (shuffle_iregs(iregs,getArgI());
-				shuffle_fregs(fregs,getArgF());
+			       (shuffle_regs(args,getArgs());
 				add_instr(BR (getTop()));
 				add_instr (ICOMMENT ("done making self tail call"));
 				(VAR_VAL (VVOID resrep), rescon, state))
 			 | (ID r,false) =>
 			       (add_instr(CALL{call_type = ML_TAIL r,
-					       func=fun_reglabel,
-					       args=(iregs,fregs),
-					       results=([],[]),
-					       save=SAVE([],[])});
+					       func = fun_reglabel,
+					       args = args,
+					       results = [dest],
+					       save = []});
 				add_instr (ICOMMENT ("done making tail call"));
 				(VAR_LOC(VREGISTER (false,dest)), rescon,
 				 new_gcstate state)))
@@ -745,19 +739,13 @@ struct
 						 zeroexp, traceinfo_opt, context)
 	      val SOME traceinfo = traceinfo_opt
 	      val (_,dest) = alloc_reg_trace state traceinfo
-	      val _ = (case (zero, dest) of 
-			   (I zz, I d) => add_instr(MV (zz,d))
-			 | (F zz, F d) => add_instr(FMV (zz,d))
-			 | _ => error "zero_one: different arms have results in float and int registers")
+	      val _ = add_instr(mv(zero, dest))
 	      val _ = add_instr(BR afterl)
 	      val _ = add_instr(ILABEL elsel)
 	      val (one,ocon,state_one) = xexp'(state,fresh_named_var "nonzero_result", oneexp, 
 					       traceinfo_opt, context)
 	      val state = join_states[state_zero,state_one]
-	      val _ = (case (one,dest) of 
-			   (I oo, I d) => add_instr(MV (oo,d))
-			 | (F oo, F d) => add_instr(FMV (oo,d))
-			 | _ => error "zero_one: different arms have results in float and int registers")
+	      val _ = add_instr(mv(one,dest))
 	      val _ = add_instr(ILABEL afterl)
 	  in (VAR_LOC (VREGISTER (false, dest)), zcon,state)
 	  end
@@ -773,23 +761,20 @@ struct
 	  val rescon = ref NONE
 	  val dest = ref NONE
 	  val SOME traceinfo = traceinfo_opt
-	  fun mv (r,c) = let val _ = (case (!dest) of
+	  fun move (r,c) = let val _ = (case (!dest) of
 					  NONE => dest := (SOME (#2(alloc_reg_trace state traceinfo)))
 					| _ => ())
 			     val _ = (case !rescon of
 					  NONE => rescon := SOME c
 					| _ => ())
 			     val d = valOf(!dest)
-			 in (case (r,d) of
-				 (I ir1, I ir2) => add_instr(MV(ir1,ir2))
-			       | (F fr1, F fr2) => add_instr(FMV(fr1,fr2))
-			       | _ => error "register mismatch")
+			 in add_instr(mv(r,d))
 			 end
 	  fun no_match state = 
 	      (case (!rescon) of
 		   SOME c => let val (r,c,newstate) = xexp'(state,fresh_var(),Raise_e(NilUtil.match_exn,c),
 							    NONE, context)
-			     in  mv(r,c); newstate
+			     in  move(r,c); newstate
 			     end
 		 | NONE => error "empty switch statement")
 	  val switchcount = Stats.counter("RTLswitch")()
@@ -813,7 +798,7 @@ struct
 				     | SOME e => 
 					   let val (r,c,newstate) = (xexp'(state,fresh_var(),e,
 									   traceinfo_opt,context))
-					   in  mv(r,c); newstate::states
+					   in  move(r,c); newstate::states
 					   end)
 				| scan(states,lab,(i,body)::rest) =
 				  let val next = fresh_code_label "intarm"
@@ -829,7 +814,7 @@ struct
 				      add_instr(BCNDI(EQ,test,next,true));
 				      let val (r,c,newstate) = 
 					  xexp'(state,fresh_var(),body,NONE,context)
-				      in  mv(r,c);
+				      in  move(r,c);
 					  add_instr(BR afterl);
 					  scan(newstate::states,next,rest)
 				      end
@@ -859,12 +844,12 @@ struct
 						| NONE => error "no arms")
 				       val (r,c,newstate) = xexp'(state,fresh_var(),
 								  Raise_e(arg,con),NONE,context)
-				   in  mv(r,c); newstate :: states
+				   in  move(r,c); newstate :: states
 				   end
 			     | SOME e => 
 				   let val (r,c,newstate) = xexp'(state,fresh_var(),e,
 								  traceinfo_opt,context)
-				   in  mv(r,c); newstate :: states
+				   in  move(r,c); newstate :: states
 				   end)
 			| scan(states,lab,(armtag,body)::rest) = 
 			  let 
@@ -884,7 +869,7 @@ struct
 			      add_instr(LOAD32I(EA(exnarg,4),carriedi));
 			      let val (r,c,state) = xexp'(state,fresh_var(),body,
 							  NONE,context)
-			      in  mv(r,c);
+			      in  move(r,c);
 				  add_instr(BR afterl);
 				  scan(state::states,next,rest)
 			      end
@@ -939,7 +924,7 @@ struct
 				   | SOME e => 
 					 let val (r,c,state) = xexp'(state,fresh_var(),e,
 								     traceinfo_opt,context)
-					 in  mv(r,c); state::newstates
+					 in  move(r,c); state::newstates
 					 end))
 			| scan(newstates,lab,(i,body)::rest) =
 			  let val next = fresh_code_label "sumarm"
@@ -983,7 +968,7 @@ struct
 						     check next EQ (TW32.uminus(i,tagcount)) tag)));
 			      let val (r,c,state) = xexp'(state,fresh_var(),body,
 							  NONE,context)
-			      in mv(r,c);
+			      in move(r,c);
 				  add_instr(BR afterl);
 				  scan(state::newstates,next,rest)
 			      end
@@ -1727,10 +1712,10 @@ struct
 				add_instr(LOAD32I(EA(clregi,4),envregi)))
 		       val desti = alloc_regi TRACE
 		       val _ = add_instr(CALL{call_type = ML_NORMAL,
-					      func=REG' coderegi,
-					      args=(cregsi @ [envregi],[]),
-					      results=([desti],[]),
-					      save=SAVE(getLocals())})
+					      func = REG' coderegi,
+					      args = (map I cregsi) @ [I envregi],
+					      results = [I desti],
+					      save = getLocals()})
 		       val state = new_gcstate state
 		       val _ = add_instr(ICOMMENT "done making constructor call")
 		   in (const,VAR_LOC (VREGISTER (const,I desti)),resk,state)
@@ -1761,7 +1746,7 @@ struct
 			in  (r,s')
                         end
 	      val (cargs,state) = foldl_list folder state vklist
-	      val args = (cargs,[])
+	      val args = map I cargs
 	      val return = alloc_regi(LABEL)
 	      val _ = set_args(args, return)
 	      val state = needgc(state,IMM 0)
@@ -1801,7 +1786,7 @@ struct
                                            end
               val (efargs,state) = foldl_list folder state vflist
 
-	      val args = (cargs @ eiargs, efargs)
+	      val args = (map I cargs) @ (map I eiargs) @ (map F efargs)
 	      val return = alloc_regi(LABEL)
 	      val _ = set_args(args, return)
 	      val state = needgc(state,IMM 0)
@@ -1811,11 +1796,7 @@ struct
 	      val results = (case result of
 				 I ir => ([ir],[])
 			       | F fr => ([],[fr]))
-	      val mvinstr = (case (r,result) of
-				 (I ir1,I ir2) => MV(ir1,ir2)
-			       | (F fr1,F fr2) => FMV(fr1,fr2)
-			       | _ => error "register mismatch")
-	      val _ = (add_instr mvinstr;
+	      val _ = (add_instr(mv(r,result));
 		       add_instr(RETURN return))
 	      val p = get_proc()
 	  in  p
@@ -1922,16 +1903,12 @@ struct
 	     val state = needgc(make_state(),IMM 0)
 	     val state = foldl folder state imports
 	     val return = alloc_regi(LABEL)
-	     val args = ([],[])
+	     val args = []
 	     val _ = set_args(args, return)
 	     val (r,c,state) = xexp'(state,fresh_named_var "result",exp,
 				      NONE, ID return)
 	      val result = getResult(fn() => r)
-	      val mvinstr = (case (r,result) of
-				 (I ir1,I ir2) => MV(ir1,ir2)
-			       | (F fr1,F fr2) => FMV(fr1,fr2)
-			       | _ => error "register mismatch")
-	      val _ = (add_instr mvinstr;
+	      val _ = (add_instr (mv(r,result));
 		       add_instr(RETURN return))
 	      val p = get_proc()
 	     val _ = add_proc p

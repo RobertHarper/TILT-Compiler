@@ -235,8 +235,7 @@ structure Listops :> LISTOPS =
 	     | _ => a::bs
 	fun sort [] = []
 	  | sort (a::aa) = insert (a, sort aa)
-      in
-	sort 
+      in sort
       end
 
     fun exist_pair pred = 
