@@ -703,7 +703,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
  	val rbnds = letprojecthelp(var1,rvars,rcons,syms)
 	val lc = sort_labelpair (zip syms rcons)
 	val argcon = if flex 
-			 then CON_FLEXRECORD(ref (FLEXINFO(Tyvar.get_stamp(),false,lc)))
+			 then CON_FLEXRECORD(ref (FLEXINFO(Tyvar.new_stamp(),false,lc)))
 		     else CON_RECORD lc
 	val _ = if (eq_con(context,con1,argcon))
 		    then ()
