@@ -12,28 +12,16 @@ Problem:
 	WARNING (xsbnds/BND_MOD):  Duplicate variable found:strbindvar_8798
 	WARNING (xsbnds/BND_MOD):  Duplicate variable found:strbindvar_8799
 	WARNING (xsbnds/BND_MOD):  Duplicate variable found:exn_structure_8802
-	WARNING (xsbnds/BND_MOD):  Duplicate variable found:strbindvar_8798
-	WARNING (xsbnds/BND_MOD):  Duplicate variable found:strbindvar_8798
-	WARNING (xsbnds/BND_MOD):  Duplicate variable found:_973
-	WARNING (xsbnds/BND_MOD):  Duplicate variable found:strbindvar_8799
-	WARNING (xsbnds/BND_MOD):  Duplicate variable found:exn_structure_8802
 
-	with transparant ascription and
+	when compiling the following code.  (The generated code is correct.)
 
-	WARNING (xsbnds/BND_MOD):  Duplicate variable found:strbindvar_8798
-	WARNING (xsbnds/BND_MOD):  Duplicate variable found:strbindvar_8799
-	WARNING (xsbnds/BND_MOD):  Duplicate variable found:exn_structure_8802
-
-	with opaque ascription when compiling Parser/join.sml.
 Code:
-	(*$import *)
 	signature TOKEN =
 	    sig
 	    end
 	signature PARSER_DATA =
 	   sig
 	 	type arg
-	
 		structure Token : TOKEN
 	    end
 	signature ARG_PARSER = 

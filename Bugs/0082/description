@@ -7,20 +7,58 @@ Version:     CVS
 System:	     any
 Severity:    reject
 Problem:     
+
 	Flexible records seem to be sometimes made rigid before they
-	ought to be.  This is an old bug from the buglist in the Doc
-	directory.
+	ought to be.  TILT rejects the following code.
 
-		
-Code:	     
+Code:	   
 
+	(* example 1 *)
 	fun g {a,b} = a + b + 3
-
 	fun f thunk = 
 	  let val {a, ...} = thunk  
 	  in  g thunk
 	  end
 
+	(* example 2 *)
+	fun f(r as {...}) =
+		let	fun g() = r
+		in
+			[r, {a=1}]
+		end
+
+	(* example 3 *)
+	val _ =
+		let
+			val g = #foo
+			val _ = g {foo = 13, goo = 1.0}
+			val _ = g {foo = "yes", goo = 1.0}
+		in
+			()
+		end
+
+	(* example 4 *)
+	val _ =
+		let
+			val f = #foo
+			val g = fn h => fn y => h (f y)
+			val h = fn x => f x
+			val _ = f {foo=0, bar=1}
+		in
+			()
+		end
+
+	(* example 5 *)
+	val f = #foo
+	val g = (fn x => x) f
+	val _ = f {foo=0, bar=1}
+
+	(* example 6 *)
+	structure S =
+	struct
+		val f = #foo
+	end
+	val _ = S.f {foo=1, goo=2}
 
 Transcript:  
 
@@ -33,6 +71,8 @@ testing/test_file.sml:6.3-8.6 Error:  application is ill-typed.
   Expanded argument type: {!a_LAB = metavar_230055_452!}
 
 Comments:
+
+	This is an old bug from the buglist in the Doc directory.	
 
 	The project descriptions flexrecord1, flexrecord3, flexrecord4,
 	flexrecord5, flexrecord8, flexrecord9 are specific tests from

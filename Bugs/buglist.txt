@@ -117,7 +117,7 @@
 0128 [closed]	bombing on nonuniform datatypes
 0129 [closed]	printing is lost under test harness
 0130 [closed]	type_of failed in Reify2
-0138 [open]	Unimplemented functions in structure Date.
+0138 [open]	Problems with structure Date.
 0139 [closed]	filesys discrepancies
 0140 [open]	String.fromCString not implemented
 0141 [closed]	Bugs in StringCvt.
@@ -136,10 +136,10 @@
 0155 [open]	Type sharing fails on corner case.
 0156 [closed]	datatypes and scope
 0157 [open]	Memory leak: continuous slow heap growth
-0158 [open]	pattern compiler rejecting valid code
+0158 [open]	Pattern compiler rejects some redundant patterns.
 0159 [closed]	Phase splitter bombing on datatype replication.
 0160 [open]	Ugly hack: add_context_label
-0161 [open]	should not allow whitespace in long.identifier
+0161 [open]	TILT permits whitespace in long.identifier.
 0162 [closed]	Queue.delete is broken.
 0163 [closed]	Pattern compiler causing elaborator to bomb.
 0164 [closed]	Garbage collector skipping global roots.
@@ -155,5 +155,5 @@
 0174 [open]	Layout of GC tables is imperfect.
 0175 [open]	TILT does not include the latest SML/NJ library.
 0176 [open]	TILT can not compile with -fnil_debug.
-0177 [open]	nonexhaustive match warning is overly pessimistic
+0177 [open]	Nonexhaustive match warning is overly pessimistic.
 0178 [open]	Word8Array and Array each use a single empty array.

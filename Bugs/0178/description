@@ -30,10 +30,12 @@ Problem:
 
 	The definition is silent on arrays.
 
+Code:
+Transcript:
+Comments:
+
 	The following code should print a lot of OK messages rather than a
 	lot of WRONG messages.
-
-Code:
 
 	fun chck' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
 	fun tst0 s s' = print (s ^ "    \t" ^ s' ^ "\n");
@@ -72,9 +74,6 @@ Code:
 				       (copy{src=array0, si=0, dst=array0, di=0, len=SOME 0};
 					array0 <> array(0, w127)));
 	end;
-
-Transcript:
-Comments:
 
 	The equality compiler considers two empty arrays inequal; that is,
 	the expression

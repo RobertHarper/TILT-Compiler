@@ -1,5 +1,5 @@
 Number: 0177
-Title:       nonexhaustive match warning is overly pessimistic
+Title:       Nonexhaustive match warning is overly pessimistic.
 Keywords:    pattern compilation
 Submitter:   tom7
 Date:        02/09/04
@@ -8,7 +8,7 @@ System:      any
 Severity:    minor
 Problem:     
 
-             We sometimes report a nonexhaustive match for exhaustive
+             TILT sometimes report a nonexhaustive match for exhaustive
              patterns.
 
 Code:        

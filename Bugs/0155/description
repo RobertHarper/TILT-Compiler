@@ -3,37 +3,39 @@ Title:       Type sharing fails on corner case.
 Keywords:    type sharing
 Submitter:   dreyer
 Date:        08/26/02
-Version:     
-System:      
+Version:     cvs
+System:      any
 Severity:    reject
 Problem:     
 
-In the example below, v should really be considered flexible, because
-it is beta-equivalent to \a,b.t(a,b), which is the eta-expansion of t.
-We implement the flexibility check by normalizing the definition of v,
-but our HIL notion of normalization is a bit too simple.  In
-particular, we do not reduce under a lambda, unless the lambda is a
-simple eta-expansion (in which case we eta-reduce it).  This only seems to
-be a problem in stupid corner cases like this one.
+	TILT fails to elaborate the following code.  In the example, v
+	should be considered flexible, because it is beta-equivalent to
+	\a,b.t(a,b), which is the eta-expansion of t.
 
 Code:        
 
-(*$import *)
-
-signature S = sig
-  type ('a,'b) t
-  type ('a,'b) u = ('b,'a) t
-  type ('a,'b) v = ('b,'a) u
-  sharing type t = v
-end
+	signature S =
+	sig
+		type ('a,'b) t
+		type ('a,'b) u = ('b,'a) t
+		type ('a,'b) v = ('b,'a) u
+		sharing type t = v
+	end
 
 Transcript:  
 
-Error: cannot share abstract with concrete type:
-ABSTRACT t_TYC  -->  KIND(2 -> TYPE)
-CONCRETE v_TYC  -->  KIND(2 -> TYPE)  = /-\(_38691, _38692)CON_APP(CON_PATH(modtemp_38702.u_TYC); _38692, _38691)
+	Error: cannot share abstract with concrete type:
+	ABSTRACT t_TYC  -->  KIND(2 -> TYPE)
+	CONCRETE v_TYC  -->  KIND(2 -> TYPE)  = /-\(_38691, _38692)CON_APP(CON_PATH(modtemp_38702.u_TYC); _38692, _38691)
 
 Comments:    
+
+	We implement the flexibility check by normalizing the definition
+	of v, but our HIL notion of normalization is a bit too simple.  In
+	particular, we do not reduce under a lambda, unless the lambda is
+	a simple eta-expansion (in which case we eta-reduce it).  This
+	only seems to be a problem in stupid corner cases like this one.
+
 Fix:         
 Test: bug155
 Owner: swasey

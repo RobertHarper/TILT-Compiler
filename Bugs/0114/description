@@ -6,11 +6,10 @@ Date:        08/16/02
 Version:     CVS
 System:      any
 Severity:    reject
-Problem:     fails to type check, perhaps because of word overloading problem
+Problem:
+	The following code does not typecheck.
 Code:        
-	(* ../../Test/bug114/project *)
 	val f : Word8.word -> int = fn 0w0 => 1
-
 Transcript:  
 
 	test.sml:1.29-1.40 Warning: match nonexhaustive

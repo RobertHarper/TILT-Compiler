@@ -8,28 +8,25 @@ System:	     any
 Severity:    reject
 Problem:
 
-	[In addressing this bug, we should create regression tests that
-	verify the compiler rejects any code violating a syntactic
-	restriction.]
+	TILT is not checking all the syntactic restrictions listed on
+	pages 8, 9, and 12 of the Definition.
 
-	(1) TILT is not checking all the syntactic restrictions listed
-	    on pages 8, 9, and 12 of the Definition.
+	TILT may be ignoring the restrictions on pages 27 and 28 of the
+	Definition.
 
-	(2) TILT may be ignoring the restrictions on pages 27 and 28
-	    of the Definition.
-
-	(3) The syntax for recursive value declarations is wrong.  We accept
-		VAL REC tyvarseq rvb
-	    which should be
-	        VAL tyvarseq REC rvb
-	[This has been fixed.]
-
-	(4) The parser is not generating enough MarkPat expressions.
-	    Try compiling the targets Bind_TuplePat, Bind_ListPat, and
-	    Bind_LayeredPat from (1)'s mapfile.
 Code:
 Transcript:
 Comments:
+
+	In addressing this bug, we should create regression tests that
+	verify the compiler rejects any code violating a syntactic
+	restriction.
+
+	The parser may not be generating enough MarkPat expressions.  When
+	TILT is fixed to reject the illegal code, we should ensure the
+	error messages are precise enough.  (Try compiling the targets
+	Bind_TuplePat, Bind_ListPat, and Bind_LayeredPat.)
+
 	Performing syntactic checks in a new pass (distinct from
 	elaboration) is nontrivial.  We end up duplicating a lot of
 	the machinery of the elaborator.  To detect duplicate variable
@@ -47,21 +44,30 @@ Comments:
 	For (1) see mapfile and the associated files.
 
 	------
-Notes for FunDec:
-
-  and dec = ...
-	  | FunDec of fb list * tyvar list ref		(* recursive functions *)
-
-  and fb = Fb of clause list
-	 | MarkFb of fb * region
-
-  (* CLAUSE: a definition for a single pattern in a function binding *)
-  and clause = Clause of {pats: pat fixitem list, resultty: ty option, exp:exp}
-
-* the function's name is embedded in the first pattern of each fb.
-* fb, pat, and fixitem have associated region information.
+	Notes for FunDec:
 	
+	  and dec = ...
+		  | FunDec of fb list * tyvar list ref		(* recursive functions *)
+	
+	  and fb = Fb of clause list
+		 | MarkFb of fb * region
+	
+	  (* CLAUSE: a definition for a single pattern in a function binding *)
+	  and clause = Clause of {pats: pat fixitem list, resultty: ty option, exp:exp}
+	
+	* the function's name is embedded in the first pattern of each fb.
+	* fb, pat, and fixitem have associated region information.
+		
 Fix:
+
+	The parser has been fixed to address a problem uncovered with this
+	bug:
+
+	> The syntax for recursive value declarations is wrong.  We accept
+	>	VAL REC tyvarseq rvb
+	> which should be
+	>	VAL tyvarseq REC rvb
+
 Test: n57 n59
 Owner: swasey
 Status: open

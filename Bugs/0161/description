@@ -1,5 +1,5 @@
 Number: 0161
-Title:       should not allow whitespace in long.identifier
+Title:       TILT permits whitespace in long.identifier.
 Keywords:    parser parsing longid lexer
 Submitter:   tom7
 Date:        03/12/03
@@ -7,28 +7,27 @@ Version:     CVS 12 Mar 2003
 System:      any
 Severity:    reject
 Problem:     
-             TILT's parser(lexer) accepts the following code:
+             TILT's accepts the following code:
       
                 structure S = struct val x = 3 end;
 
                 val y = S . x
 
-             SML/NJ is the only other ML compiler I know about that 
-             accepts this code. 
+	Steve Weeks points out:
 
-             Steve Weeks points out:
-
-                Section 2.5 says "each item of lexical analysis is a
-                either a reserved word, a numeric label, a special 
-		constant, or a long identifier" and "Comments and 
-		formatting characters separate items ... and are 
-		otherwise ignored".  Together, I take these to mean 
-		that spaces separate "S . x" into three items of 
+		Section 2.5 says "each item of lexical analysis is a either a
+		reserved word, a numeric label, a special constant, or a long
+		identifier" and "Comments and formatting characters separate
+		items ...  and are otherwise ignored".  Together, I take these
+		to mean that spaces separate "S . x" into three items of
 		lexical analysis.
-
-Code:        See above.
+Code:
 Transcript:
 Comments:
+
+	SML/NJ is the only other ML compiler I know about that 
+	accepts this code. 
+
 Fix:
 Test: *
 Owner: *

@@ -1,5 +1,5 @@
 Number: 0158
-Title:       pattern compiler rejecting valid code
+Title:       Pattern compiler rejects some redundant patterns.
 Keywords:    elaborator,pattern compiler,redundant matches
 Submitter:   swasey
 Date:        10/15/02
@@ -7,28 +7,29 @@ Version:     CVS
 System:      any
 Severity:    reject
 Problem:
-	With the code
 
-		val f = fn x :: xr => xr
-		         | true::_ => []
+	TITL does not elaborate
 
-	the compiler bombs in untilSelfWild with "untilPred: matched empty"
+		val f = fn x :: xr => xr | true::_ => []
 
-	With the code
+	or
 
-		val f = fn (x : int) => 10
-		         | y => 11
-
-	the compiler rejects with "Redundant matches"
+		val f = fn (x : int) => 10 | y => 11
 
 	In both cases, the compiler should issue a redundant match warning
 	and continue compilation.  (See page 28 of the Definition.)
+
 Code:        
 Transcript:  
 Comments:
 
-	Check that the pattern compiler properly handles other forms
-	of redundant and non-exhaustive matches.
+	With the first example, TILT bombs in untilSelfWild with
+	"untilPred: matched empty".
+
+	With the second, TILT rejects with "Redundant matches".
+
+	Check that the pattern compiler properly handles other forms of
+	redundant and non-exhaustive matches.
 
 Fix:         
 Test: n126

@@ -18,67 +18,65 @@ Problem:
 	some maximum that seems to be based on MaxHeap.  By default, 
 	this maximum is about 338M.  With @maxheap=60000, it
 	seems to be around 90M.
-	
-
 Code:
 
-local
-  fun alloc_large n = 
-    let
-      (* Vararg will flatten this *)
-      fun loop1 (n,acc) = if n = 0 then acc else loop1 (n-1,1::acc)
-    in loop1(n,[])
-    end	
-
-  (* Vararg will flatten this *)
-  fun loop (n,j) = 
-    if n = 0 then () 
-    else let val _ = alloc_large j 
-	 in loop (n-1,j) end
-in
-  val _ = loop (10000000,1000)
-end
+	local
+	  fun alloc_large n = 
+	    let
+	      (* Vararg will flatten this *)
+	      fun loop1 (n,acc) = if n = 0 then acc else loop1 (n-1,1::acc)
+	    in loop1(n,[])
+	    end	
+	
+	  (* Vararg will flatten this *)
+	  fun loop (n,j) = 
+	    if n = 0 then () 
+	    else let val _ = alloc_large j 
+		 in loop (n-1,j) end
+	in
+	  val _ = loop (10000000,1000)
+	end
 
 Transcript:  
 Comments:    
 
-With the parameters as written, the code will run for about 10
-minutes.  After the phase during which the initial heap is filled up,
-the space should be constant, but instead grows slowly (on the order
-of 1M every 10-15 seconds for the generational collector, and 1M every
-minute for the semi-space collector).  If the first parameter is
-increased by a factor of 10, the growth will eventually peak.  The VM
-size size grows quickly to a maximum of 338M, and the resident set
-size slowly grows to 335M, and then stop growing entirely.  If
-@maxheap is set to 60000, the VM grows to 90M, and the resident size
-stops at 88M.
-
-I have verified that the asm code for both functions uses direct
-calls, and the max stack depth reported by the @info=3 flag is 4.
-Because of the vararg optimization, the only allocation point in the
-generated user code comes from allocating the cons cell.
-
-The information printed out by the collector with the @collectDiag=1
-flag set suggests that the heap size and the amount of live data as
-viewed by the collector is *not* growing.  In particular, the
-generational collector will print out something like the following at
-every major GC:
-
-GC warning: There is 33 kb of live data.  The desired new heap size is 168 kb but is upwardly constrained to 2048 kb.
----- GC 268438 (812): req =  12    live =   34344    withhold =       0    oldHeap =  2100144(0.016)   ->   newHeap =  2097152(0.016)
-
-the amount of data reported by this does not grow over the lifetime of
-the program, but varies continually within the range of about 25-38k.
-The printouts for the semi-space collector are similar, except for
-some reason that I do not understand, the amount of live data is
-always 44kb.  The semi-space collector also runs about 1.7 times
-slower.
-
-The semi-space collector also copies twice as much data, which seems a
-little odd for this program, but could be correct.  It also claims
-(according to the info printout) to have allocated about 8k more data.  
-
-
+	With the parameters as written, the code will run for about 10
+	minutes.  After the phase during which the initial heap is filled up,
+	the space should be constant, but instead grows slowly (on the order
+	of 1M every 10-15 seconds for the generational collector, and 1M every
+	minute for the semi-space collector).  If the first parameter is
+	increased by a factor of 10, the growth will eventually peak.  The VM
+	size size grows quickly to a maximum of 338M, and the resident set
+	size slowly grows to 335M, and then stop growing entirely.  If
+	@maxheap is set to 60000, the VM grows to 90M, and the resident size
+	stops at 88M.
+	
+	I have verified that the asm code for both functions uses direct
+	calls, and the max stack depth reported by the @info=3 flag is 4.
+	Because of the vararg optimization, the only allocation point in the
+	generated user code comes from allocating the cons cell.
+	
+	The information printed out by the collector with the @collectDiag=1
+	flag set suggests that the heap size and the amount of live data as
+	viewed by the collector is *not* growing.  In particular, the
+	generational collector will print out something like the following at
+	every major GC:
+	
+	GC warning: There is 33 kb of live data.  The desired new heap size is 168 kb but is upwardly constrained to 2048 kb.
+	---- GC 268438 (812): req =  12    live =   34344    withhold =       0    oldHeap =  2100144(0.016)   ->   newHeap =  2097152(0.016)
+	
+	the amount of data reported by this does not grow over the lifetime of
+	the program, but varies continually within the range of about 25-38k.
+	The printouts for the semi-space collector are similar, except for
+	some reason that I do not understand, the amount of live data is
+	always 44kb.  The semi-space collector also runs about 1.7 times
+	slower.
+	
+	The semi-space collector also copies twice as much data, which seems a
+	little odd for this program, but could be correct.  It also claims
+	(according to the info printout) to have allocated about 8k more data.  
+	
+	
 Fix:       
 Test: *
 Owner: *
