@@ -534,7 +534,7 @@ structure Signature :> SIGNATURE =
 	    in splitAbstract slot_pairs
 	    end
 	  val sdecsAbstractEqual = xsig_sharing_rewrite(ctxt,sdecs) (slabs_abs,sdecs)
-	  val _ = (print "\n";pp_signat (SIGNAT_STRUCTURE(sdecsAbstractEqual));print "\n")
+	  val _ = debugdo (fn () => (print "\n";pp_signat (SIGNAT_STRUCTURE(sdecsAbstractEqual));print "\n"))
 	  val sigAbstractEqual= SelfifySig ctxt(mpath,SIGNAT_STRUCTURE(sdecsAbstractEqual))
 	  val ctxt'' = add_context_mod'(ctxt,mjunk,sigAbstractEqual)
 
