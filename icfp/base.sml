@@ -51,7 +51,7 @@ struct
 	in  loop start
 	end
 
-		fun exit_ok () = OS.Process.exit 0;
-		fun exit_error () = OS.Process.exit 1;
+    fun exit_ok () = OS.Process.exit 0
+    fun exit_error () = OS.Process.exit 1
 
 end

@@ -3,9 +3,9 @@ structure Top :>
 
     sig
 
-	val runFile : string -> 'a
+	val runFile : string -> unit
 	val testAll : unit -> unit
-	val run     : unit   -> 'a
+	val run     : unit   -> unit
 
 	val tests1 : string list
 	val tests2 : string list
@@ -17,20 +17,20 @@ structure Top :>
 
     struct
 
-	fun goahead s =
+	fun goahead s drop =
 	    let val SOME ast = ParseString.parse s
 		
 		val _ = Eval.eval ast 
 		    handle e as Base.Eval s => (print "Evaluation Error: "; print s; 
 						print "\n"; raise e)
-	    in  Base.exit_ok ()
-	    end handle _ => Base.exit_error ()
+	    in  if drop then Base.exit_ok () else ()
+	    end handle _ => if drop then Base.exit_error () else ()
 		
-	(* from a file *)	
-	fun runFile file = goahead (ParseString.file2string file)
+	(* from a file - don't exit *)	
+	fun runFile file = goahead (ParseString.file2string file) false
 
-	(* from standard in *)
-	fun run () = goahead (Stdin.stdintostring ())
+	(* from standard in - then exit *)
+	fun run () = goahead (Stdin.stdintostring ()) true
 
 	val tests1 = 
 	    ["scene1.gml",
