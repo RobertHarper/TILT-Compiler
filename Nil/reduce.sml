@@ -883,15 +883,13 @@ structure Reduce
              
 		  (* --------------------- Term bindings ------------------------ *)
 
-		  | Exp_b ( x,nt, Prim_e (NilPrimOp (record labels), cons, exps )) => 
+		  | Exp_b ( x,nt, Prim_e (NilPrimOp (record labels), _, exps )) => 
 		      let fun dec (Var_e a) =  update_count ESC (s(a)) ~1 fset
 			    | dec _ = ()
 			      
 		      in  
 			if ( dead_var x ) 
 			      then (app dec exps; 
-				    app (fn (con) => 
-					 (census_con fset (~1, con))) cons;
 				    xbnds fset rest body )
 					    
 			      else
@@ -903,12 +901,11 @@ structure Reduce
 				 in
 				     if (dead_var x )
 					 then ( app dec exps ;
-					       app (fn (con) => (census_con fset (~1, con))) cons;
 					       (rest, body) )
 				     else 
 					 ( Exp_b ( x, nt,
 						  Prim_e (NilPrimOp (record labels), 
-							  map (xcon fset)cons, map subst exps)) :: rest, body )
+							  [], map subst exps)) :: rest, body )
 				 end 
 			end 
 		    

@@ -118,7 +118,7 @@ functor Flatten( structure PrimUtil : PRIMUTIL
 			  [Exp_b (recordArg, 
 				  TraceUnknown,
 				  Prim_e (NilPrimOp (record labels), 
-					  map NilRename.renameCon newcons, exps))],
+					  [], exps))],
 			  body)
 		   
 		 (* We'll on the body later *)
