@@ -8,11 +8,8 @@ struct
   val doNamedForm = Stats.tt "DoNamedForm"
 
   type filepos = SourceMap.charpos -> string * int * int
-  type 'a parser = string -> int * filepos * string list * 'a
+  type 'a parser = string -> (int * filepos * string list * 'a) option
       
-  fun parseError fileName expected =
-      error ("File " ^ fileName ^ " could not be parsed as an " ^ expected ^ " file")
-
   fun make_source s = 
       let val instream = TextIO.openIn s
       in  (instream,
@@ -21,16 +18,17 @@ struct
       end
 
   fun parse (name, parser, cleanup) s =
-      let val (instream,src) = make_source s
+      let
+	  val (instream,src) = make_source s
 	  val fp = Source.filepos src
       in
 	  case parser src
 	    of FrontEnd.SUCCESS (lines, imports, contents) =>
 		let val contents = cleanup contents
 		    val _ = TextIO.closeIn instream
-		in  (lines,fp,imports,contents)
+		in  SOME (lines,fp,imports,contents)
 		end
-	     | _ => (TextIO.closeIn instream; parseError s name)
+	     | _ => (TextIO.closeIn instream; NONE)
       end
 
   fun tvscope_dec dec = (TVClose.closeDec dec; dec)
@@ -52,30 +50,3 @@ struct
   val parse_impl = Stats.timer("Parsing", parse_impl)
   val parse_inter = Stats.timer("Parsing", parse_inter)
 end;
-
-
-
-(*
-structure X =
-struct
-  fun ppdec message dec =
-    let val ppstream = PrettyPrint.mk_ppstream (ErrorMsg.defaultConsumer())
-	val style = PrettyPrint.CONSISTENT
-	val offset = 0
-    in
-      PrettyPrint.begin_block ppstream style offset;
-      PrettyPrint.add_newline ppstream;
-      PrettyPrint.add_newline ppstream;
-      PrettyPrint.add_string ppstream message;
-      PrettyPrint.add_newline ppstream;
-      PPAst.ppDec ppstream (dec, 50);
-      PrettyPrint.end_block ppstream
-    end
-
-  fun do_close dec =
-    (ppdec "Declaration as parsed:" dec;
-     TVClose.closeDec dec;
-     ppdec "Declaration after type variable binding:" dec;
-     dec)
-end
-*)

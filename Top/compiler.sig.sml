@@ -28,6 +28,9 @@ sig
     (* In all compiler phases, unit names may be used to generate
      * unique identifiers.  We assume that unit names are globally
      * unique.  *)
+
+    val parse_impl_import : string -> string list
+    val parse_inter_import : string -> string list
 	
     (* Elaborate source file (against interface file if constrained)
      * in the context of imports.  May write a new targetIlFile and

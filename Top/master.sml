@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Stats Update UpdateHelp Time Graph Compiler TextIO Real Vector String Char Int Listops SplayMapFn ListMergeSort MASTER Communication TopHelp Prelink LinkParse Tools Background OS List Platform Dirs Target Paths Statistics *)
+(*$import Prelude TopLevel Util Stats Update UpdateHelp Time Graph Compiler TextIO Real Vector String Char Int Listops SplayMapFn ListMergeSort MASTER Communication TopHelp Prelink Tools Background OS List Platform Dirs Target Paths Statistics *)
 
 (* 
    The master sets up by deleting all channels and then takes master steps which are:
@@ -301,9 +301,9 @@ struct
 	    end
     in
 	fun parse_impl_import file = 
-	    parse_depend (#3 o LinkParse.parse_impl) file
+	    parse_depend Compiler.parse_impl_import file
 	fun parse_inter_include file = 
-	    parse_depend (#3 o LinkParse.parse_inter) file
+	    parse_depend Compiler.parse_inter_import file
     end
 
     (* setMapping : string * bool -> unit *)

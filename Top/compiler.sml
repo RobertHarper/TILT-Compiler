@@ -26,6 +26,17 @@ struct
 	FILE of unit_paths * kind
       | PRIM of kind
 
+    fun pwrap (f : string -> 'a option) (file : string) : 'a =
+	(case f file
+	   of NONE => raise Reject ("could not parse " ^ file)
+	    | SOME r => r)
+
+    val parse_impl = pwrap LinkParse.parse_impl
+    val parse_inter = pwrap LinkParse.parse_inter
+
+    val parse_impl_import = (#3) o parse_impl
+    val parse_inter_import = (#3) o parse_inter
+
     fun ilFile (FILE (p,_)) = SOME (Paths.ilFile p)
       | ilFile _ = NONE
 	
@@ -158,7 +169,7 @@ struct
 	let val (ctxt, label_info) = getContext imports
 	    val _ = timestamp()
 	    val _ = Help.chat ("  [Parsing " ^ smlFile ^ "]\n")
-	    val (lines,fp, _, dec) = LinkParse.parse_impl smlFile
+	    val (lines,fp, _, dec) = parse_impl smlFile
 	    val _ = if (lines > 3000) (* XXX: reconsider *)
 			then (Help.chat "  [Large file: ";
 			      Help.chat (Int.toString lines);
@@ -169,7 +180,7 @@ struct
 	    val il_module_opt =
 		case intFile
 		  of SOME intFile' =>
-		      let val (_,fp2, _, specs) = LinkParse.parse_inter intFile'
+		      let val (_,fp2, _, specs) = parse_inter intFile'
 			  val _ = Help.chat ("  [Warning: constraints currently coerce.  ")
 			  val _ = Help.chat ("Not compatible with our notion of freshness.]\n")
 			  val _ = timestamp()

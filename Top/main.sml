@@ -123,6 +123,9 @@ struct
       | errorMsg (ArgErr msg) = msg
       | errorMsg (e) = exnMessage e
 
+    (* This error code is recognized by test harness. *)
+    fun reject () = (Posix.Process.exit 0w10)
+	
     (* main : string * string list -> OS.Process.status *)
     fun main (_, args) =
 	(let val _ = UtilError.showErrors := false
@@ -134,7 +137,7 @@ struct
 		 (case e
 		    of Compiler.Reject msg =>
 			(printMsg msg;
-			 Posix.Process.exit 0w10)
+			 reject())
 		     | _ => (printMsg (errorMsg e);
 			     OS.Process.failure))
 end
