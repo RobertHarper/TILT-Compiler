@@ -4,6 +4,9 @@
 
 signature COMPILER =
  sig
+
+   val use_mlrisc : bool ref
+
    type sbnd and context_entry and context
 
    val debug_asm : bool ref (* use the -g flag in call to assembler *)

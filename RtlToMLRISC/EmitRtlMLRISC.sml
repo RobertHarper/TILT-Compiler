@@ -2132,7 +2132,7 @@ functor EmitRtlMLRISC(
 
 	    fun translateProcedure'(procedure as Rtl.PROC{name = label, ...}) =
 		  (if Rtl.eq_locallabel(label, main) then
-		     define "_client_entry"
+		     define "" (* "_client_entry" *)
 		   else
 		     [])@
 		  translateProcedure procedure

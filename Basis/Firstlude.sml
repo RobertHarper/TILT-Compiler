@@ -36,7 +36,7 @@ exception Interrupt
 exception Io of char vector
 exception Domain
 exception Span
-
+exception Fail of char vector
 
 (* must have vector_eq for vector types to be used: may change if elaborator changes *)
 fun vector_eq (equaler : 'a * 'a -> bool) (x : 'a vector, y : 'a vector) = 
@@ -53,8 +53,8 @@ datatype substring = SS of (string * int * int)
 (* Predefined external functions *)
 (* we cannot use types defined in this module for the externs 
    because of a deficiency in the phase-splitter *)
-extern exnName : (exn, char vector) -->
-extern exnMessage : (exn, char vector) -->
+extern exnNameRuntime : (exn, char vector) -->
+extern exnMessageRuntime : (exn, char vector) -->
 extern real_logb : (float, int) -->
 extern real_scalb : (float * int, float) -->
 extern sqrt : (float, float) -->
@@ -73,6 +73,13 @@ extern cosh : (float, float) -->
 extern setRoundingMode : (int, int) -->
 extern getRoundingMode : (int, int) -->
 extern ml_timeofday : (unit, (int * int)) -->
+
+    fun f o g = fn x => f(g x)
+    fun a before b = a
+    fun ignore _ = ()
+
+    fun exnName exn = exnNameRuntime exn
+    fun exnMessage exn = exnMessageRuntime exn
 
 	fun rev l = 
 	    let fun revappend([],x) = x

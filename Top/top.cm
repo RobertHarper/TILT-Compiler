@@ -6,6 +6,7 @@ Group is
 ../Rtl/rtl.cm
 ../Backend/backend.cm
 ../Alpha/alpha.cm
+../RtlToMLRISC/Alpha/Alpha.cm
 (*
 ../Ppc/ppc.cm
 ../C/c.cm

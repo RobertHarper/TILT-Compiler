@@ -30,4 +30,4 @@ overload >= : 'a as igte and bgte and ugte and fgte and String.>=
 
 fun raw_print(s : string) : unit = output(1,s)
 val print = textio_print
-val (op o) = General.o
+

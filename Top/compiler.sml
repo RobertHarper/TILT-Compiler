@@ -2,6 +2,7 @@
 structure Til : COMPILER =
     struct
 
+	val use_mlrisc = ref false
 
 	type sbnd = LinkIl.Il.sbnd
 	and context_entry = LinkIl.Il.context_entry
@@ -15,12 +16,13 @@ structure Til : COMPILER =
 	val keep_asm = ref false
 	fun get_debug_flag() = if (!debug_asm) then " -g " else ""
 	fun assemble(s_file,o_file) =
-	    let val command = as_path ^ (get_debug_flag()) ^ " -c -o " ^ o_file ^ " " ^ s_file
-		val rmcommand = "rm " ^ s_file
+	    let val as_command = as_path ^ (get_debug_flag()) ^ " -c -o " ^ o_file ^ " " ^ s_file
+		val rm_command = "rm " ^ s_file
+		val compress_command = "gzip -f " ^ s_file ^ " &"
 	    in  if (not has_sys)
 	        then 
                   let val os = TextIO.openOut "worklist"
-	              val _ = TextIO.output(os,command)
+	              val _ = TextIO.output(os,as_command)
 	              val _ = TextIO.closeOut os
 		      fun sleep() = ()
 		      fun loop() = if OS.FileSys.access("worklist",[])
@@ -28,12 +30,12 @@ structure Til : COMPILER =
                   in  loop()
                   end
 	        else 
-	          (if (OS.Process.system command =  OS.Process.success 
+	          (if (OS.Process.system as_command =  OS.Process.success 
 		       andalso ((OS.FileSys.fileSize o_file > 0)
 				handle _ => false))
 		       then (if (!keep_asm)
-				 then ()
-			     else (OS.Process.system rmcommand; ()))
+				 then (OS.Process.system compress_command; ())
+			     else (OS.Process.system rm_command; ()))
 		  else error "assemble. System command as failed")
 	    end
 
@@ -42,7 +44,12 @@ structure Til : COMPILER =
 	    let val sdecs = LinkIl.IlContext.context_to_sdecs ctxt'
 		val nilmod = Linknil.il_to_nil (unitName, (ctxt, sbnd_entries))
 		val rtlmod = Linkrtl.nil_to_rtl (nilmod,unitName)
-		val _ = Linkalpha.rtl_to_alpha(unitName, rtlmod)    (* creates unitName.s file with main label
+		val rtl_to_alpha = Linkalpha.rtl_to_alpha
+(*
+		val rtl_to_alpha = if (!use_mlrisc) 
+				       then AlphaLink.rtl_to_alpha else Linkalpha.rtl_to_alpha
+*)
+		val _ = rtl_to_alpha(unitName, rtlmod)    (* creates unitName.s file with main label
 								     * `unitName_doit' *)
 		val _ = assemble(unitName ^ ".s", unitName ^ ".o")
 	    in ()

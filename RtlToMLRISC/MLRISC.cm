@@ -17,7 +17,7 @@ signature RA_USER_PARAMS
 signature ALPHA32INSTR
 signature ALPHA32_PSEUDO_INSTR
 
-signature X86INSTR
+(* signature X86INSTR *)
 
 structure AsmStream
 structure Intmap
@@ -26,7 +26,7 @@ structure LabelExp
 
 structure Alpha32Cells
 
-structure X86Cells
+(* structure X86Cells *)
 
 functor AsmEmit
 functor FlowGraph
@@ -41,13 +41,15 @@ functor Alpha32Props
 functor Alpha32RegAlloc
 functor Alpha32Rewrite
 
+(*
 functor X86
 functor X86AsmEmitter
 functor X86Instr
 functor X86Props
 functor X86RegAlloc
+*)
 
 is
 
-/afs/cs.cmu.edu/project/fox/member/andrewb/src/Tiger/MLRISC/MLRISC.cm
+MLRISC/MLRISC.cm
 

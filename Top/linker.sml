@@ -223,14 +223,16 @@ structure Linker :> LINKER =
 
       in case imports
 	   of nil => (* everything has been resolved *)
-	       let val unitnames = map #1 exports
+	       let val link_s = "link_" ^ exe_result ^ ".s"
+		   val link_o = "link_" ^ exe_result ^ ".o"
+		   val unitnames = map #1 exports
 		   val local_labels = map (fn un => Linkrtl.Rtl.LOCAL_CODE 
 					   (Name.non_generative_named_var ("main_" ^ un ^ "_doit"))) unitnames
-		   val _ = Linkalpha.mk_link_file ("link_clients.s", local_labels)
-		   val _ = if OS.Process.system (as_path ^ " -o link_clients.o link_clients.s") = OS.Process.success then ()
+		   val _ = Linkalpha.mk_link_file (link_s, local_labels)
+		   val _ = if OS.Process.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s) = OS.Process.success then ()
 			   else error "mk_exe - as failed"
 		   val command = (ld_path ^ " -D 40000000 -T 20000000 -non_shared -o " ^ 
-				  exe_result ^ " " ^ startup_lib ^ " " ^ o_temp ^ " link_clients.o " ^ ld_libs)
+				  exe_result ^ " " ^ startup_lib ^ " " ^ o_temp ^ " " ^ link_o ^ " " ^ ld_libs)
 		   val _ = (print "Running: "; print command; print "\n")
 		   val _ = if OS.Process.system command = OS.Process.success then ()
 			   else (print "load failed: "; print command; print "\n";

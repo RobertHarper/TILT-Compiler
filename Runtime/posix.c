@@ -172,13 +172,13 @@ int setRoundingMode(int unused)
   assert(0);
 }
 
-char* exnName(void *unused)
+char* exnNameRuntime(void *unused)
 {
   printf("POSIX function not defined at line %d\n", __LINE__);
   assert(0);
 }
 
-char* exnMessage(void *unused)
+char* exnMessageRuntime(void *unused)
 {
   printf("POSIX function not defined at line %d\n", __LINE__);
   assert(0);
