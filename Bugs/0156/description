@@ -6,10 +6,20 @@ Date:        10/08/02
 Version:     CVS
 System:      any
 Severity:    minor
-Problem:     TILT bombs on test n16 in the reduce_to_remove part of compiling a LetExp.
+Problem:
+
+	TILT bombs in reduce_to_remove while compiling ``let datatype
+	t = A in A end''
+
 Code:        
 Transcript:  
-Comments:    
+Comments:
+
+	Does HS permits this code?  If not, then we need to change the
+	"error" in reduce_to_remove into a real error message (because
+	the user code is wrong).  If so, then we need to fix the
+	translation of LetExp.
+
 Fix:         
 Test: n16
 Owner: swasey
