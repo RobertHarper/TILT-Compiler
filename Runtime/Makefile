@@ -124,7 +124,7 @@ target_lib: ${runtime_lib}
 
 prog: ${targetobjs} ${runtime_lib}
 	rm -f ${out}
-	ld ${LDFLAGS} -o ${out} ${CRT} ${targetobjs} ${runtime_lib} -lm -lc
+	ld ${LDFLAGS} -o ${out} ${CRT} ${targetobjs} ${runtime_lib} -lm -lc -lots
 ifeq ($(ATOM),1)
 	atom ${out} -32addr -tool gprof -o ${out}.gprof.exe
 	atom ${out} -32addr -tool iprof -o ${out}.iprof.exe
