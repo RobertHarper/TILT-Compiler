@@ -57,9 +57,9 @@ sig
   val atop: 'b env * 'b env -> 'b env
       (* atop(e1,e2): place e1 on top of e2 *)
 
-  val consolidate: '1b env -> '1b env
+  val consolidate: 'b env -> 'b env
   val app: (Symbol.symbol * 'b -> unit) -> 'b env -> unit
-  val map: ('1b -> '1b) -> '1b env -> '1b env
+  val map: ('b -> 'b) -> 'b env -> 'b env
   val fold: ((Symbol.symbol * 'b) * 'a -> 'a) -> 'a -> 'b env -> 'a
 
   val symbols : 'b env -> Symbol.symbol list 
@@ -69,12 +69,15 @@ end (* signature ENV *)
 
 (*
  * $Log$
-# Revision 1.4  98/02/27  17:32:12  pscheng
+# Revision 1.5  99/02/05  15:58:28  pscheng
+# *** empty log message ***
+# 
+# Revision 1.4  1998/02/27  17:32:12  pscheng
 # The fix in compilation of implementation files with interfaces
 # allows Symbol and FastSymbol to be exported without Env.
 # Thus, HIL no longer depends on Env (which had depended on many
 # Basis modules) .
-# 
+#
 # Revision 1.3  1998/02/15  22:43:22  pscheng
 # bootstrapping changes
 #

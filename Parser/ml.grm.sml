@@ -1,3 +1,5 @@
+(*$import YaccBase ML_TOKENS Ast ErrorMsg AstUtil StrgHash Array *)
+
 functor MLLrValsFun(structure Token : TOKEN)
  : sig structure ParserData : PARSER_DATA
        structure Tokens : ML_TOKENS

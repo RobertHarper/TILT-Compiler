@@ -51,7 +51,7 @@ stream.sml       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-ya
 
 
 (* ml.grm - letting CM use the 109.25 version fails so manually use 109.22 *)
-ml.grm.sig
+ml.grm.sig.sml
 ml.grm.sml
 
 frontend.sig.sml   (* modificication of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/frontend.sml *)
