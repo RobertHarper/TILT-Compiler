@@ -10,7 +10,16 @@ Problem:     semantics of type specifications is wrong
 Code:        
 Transcript:  
 Comments:    
+
+[Derek] We have decided not to follow the Definition on this point
+because the Definition doesn't make sense.  In particular, the
+Definition says that type t1 = tau1 and ... and tn = taun, when
+appearing in a declaration, is elaborated as a simultaneous binding,
+whereas the same thing, appearing in a specification, is supposed to
+elaborate sequentially.  Anyone who relies on this behavior is a
+complete idiot.
+
 Fix:         
 Test: m0124
 Owner: 
-Status: open
+Status: closed

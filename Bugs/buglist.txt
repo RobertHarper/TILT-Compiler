@@ -109,7 +109,7 @@
 0112 [closed]	option exception
 0113 [open]	parsing problem
 0114 [open]	overloading constants
-0115 [open]	withtype scoping wrong
+0115 [closed]	withtype scoping wrong
 0117 [open]	option failure
 0118 [open]	syntax discrepancies
 0119 [open]	discrepancies on byte/char tests
@@ -141,7 +141,7 @@
 0145 [open]	discrepancies with time results
 0146 [open]	integer constant too large
 0147 [open]	discrepancies with time tests
-0148 [open]	type specification error
+0148 [closed]	type specification error
 0149 [open]	type checking error
 0150 [open]	parsing problem on non-corner case
 0151 [open]	name clash problem in ld

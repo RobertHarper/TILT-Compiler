@@ -18,6 +18,20 @@ Comments:
 Fix:         
 	[Leaf] More sanity checking code was added to the phase-splitter.
 	Derek fixed the actual bug in the elaborator.
+
+[Derek] The phase-splitter expects that all references to a datatype
+constructor have been inlined by the elaborator, and it therefore can
+eliminate the "inner module" of a datatype.  This turned out not to be
+the case, in particular when coercing a polymorphic datatype
+constructor to a polyval spec.  (Actually, there are other references
+made to a datatype inner module, but they are only within other
+datatype inner modules which get eliminated by the phase-splitter as
+well, e.g. when coercing a datatype to a datatype spec, we copy a path
+to the inner module to make the result shorter.)
+
+This appeared to be a long-standing bug, as there was no code in place
+to do inlining when coercing from a polymorphic value.  Now there is.
+
 Test: m0059
 Owner: rwh
 Status: closed

@@ -7,7 +7,7 @@
 structure Option :> OPTION where type 'a option = 'a option =
   struct
 
-    datatype 'a option = datatype option
+    datatype option = datatype option
     exception Option = Option
 
     fun getOpt (SOME x, y) = x

@@ -11,6 +11,11 @@ Code:
 Transcript:  
 Comments:    
 Fix:         
+
+[Derek] Prior to elaboration of datatypes, any withtype definitions
+get macro-expanded.  This is done by InfixParse.parse_datbind,
+and there were a couple bugs there that are now fixed.
+
 Test: m0047
 Owner: rwh
-Status: open
+Status: closed
