@@ -155,6 +155,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val exp_tuple              = NilUtil.exp_tuple
   val con_tuple              = NilUtil.con_tuple
 
+  val bool_con               = NilUtil.bool_con
+
   val same_openness          = NilUtil.same_openness
   val same_effect            = NilUtil.same_effect
   val primequiv              = NilUtil.primequiv
@@ -1743,6 +1745,15 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     let
       val subtimer = fn args => if !profile orelse !exp_profile then Stats.subtimer' args else #2 args
 
+      fun conditionCode_valid (D,arg) = 
+	(case arg 
+	   of Exp_cc exp       => exp_analyze(D,exp,bool_con)
+	    | And_cc (cc1,cc2) => (conditionCode_valid(D,cc1);
+				   conditionCode_valid(D,cc2))
+	    | Or_cc (cc1,cc2)  => (conditionCode_valid(D,cc1);
+				   conditionCode_valid(D,cc2))
+	    | Not_cc cc        => conditionCode_valid(D,cc))
+	   
       (*Do an application node. *)
       fun do_app (openness,app,cons,texps,fexps) =
 	let           
@@ -1922,15 +1933,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   sum_exn (mk_sum,check_arg) (D,arg,bound,arms,default,result_type)
 		 end
 
-	      | Ifthenelse_e {arg,thenArm,elseArm,result_type} => 
+		| Ifthenelse_e {arg,thenArm,elseArm,result_type} => 
 		 let
-		     (* things to check:
-		      (1) arg is well-formed (entails writing wellFormedConditionCode)
-		      (2) result_type is well-formed
-		      (3) thenArm and elseArm are well-typed with result_type
-		      *)
-		 in
-		   error "nilstatic.sml" "Ifthenelse_e not done"
+		   val _ = conditionCode_valid (D,arg)
+		   val _ = type_analyze(D,result_type)
+		   val _ = exp_analyze(D,thenArm,result_type)
+		   val _ = exp_analyze(D,elseArm,result_type)
+		 in result_type
 		 end
 	       
 		| Exncase_e {arg,bound,arms,default,result_type} =>

@@ -47,9 +47,6 @@ NilContextPre nilcontextpre
 NORMALIZE normalize.sig
 Normalize normalize
 
-NILHNF	nilhnf.sig
-NilHNF	nilhnf
-
 NILCONTEXT nilcontext.sig
 NilContext nilcontext
 

@@ -629,6 +629,29 @@ structure NilRewrite :> NILREWRITE =
 				     result_type = result_type}))
 		 else NONE
 	       end
+	   | Ifthenelse_e {arg,thenArm,elseArm,result_type} => 
+	       let
+		 val changed = ref false
+		 fun do_cc cc = 
+		   (case cc
+		      of Exp_cc exp       => Exp_cc (recur_e changed state exp)
+		       | And_cc (cc1,cc2) => And_cc (do_cc cc1,do_cc cc2)
+		       | Or_cc (cc1,cc2)  => Or_cc  (do_cc cc1,do_cc cc2)
+		       | Not_cc cc        => Not_cc (do_cc cc))
+	   
+		 val arg     = do_cc arg
+		 val thenArm = recur_e changed state thenArm
+		 val elseArm = recur_e changed state elseArm
+		 val result_type = recur_c changed state result_type
+	       in
+		 if !changed then
+		   SOME (Switch_e
+			 (Ifthenelse_e {arg         = arg,
+					thenArm     = thenArm,
+					elseArm     = elseArm,
+					result_type = result_type}))
+		 else NONE
+	       end
 	     )
 
 	and rewrite_exp (state : 'state) (exp : exp) : exp option =
