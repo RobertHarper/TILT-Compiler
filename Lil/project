@@ -1,8 +1,8 @@
-include $libdir ^ "/smlnj-lib/desc"
-include "../Util/mapfile-util"
-include "../Nil/mapfile-nil"
-include "../Parser/mapfile-parse"
-include "../Elaborator/mapfile-elaborate"
+include $libdir ^ "/smlnj-lib/project"
+include "../Util/project"
+include "../Nil/project"
+include "../Parser/project"
+include "../Elaborator/project"
 
 unit LIL = "lil.sig.sml" { Word32 TilWord32 Name Prim Word ORD_MAP ORD_SET }
 unit Lil = "lil.sml" { LIL ORD_KEY HASH_KEY Word32 TilWord32 
@@ -62,12 +62,13 @@ unit LilDefs = "lildefs.sml" { LILDEFS
 unit TRANSLATIONDEFS = "translationdefs.sig.sml" { Lil Pexp Prim }
 unit TranslationDefs = "translationdefs.sml" { TRANSLATIONDEFS
 	Lil LilDefs Util Pexp Prim LilUtil Deconstruct Reduce Listops LilRename
-	Stats Name List
+	CompilerControl Stats Name List
 }
 
 unit LILCONTEXT = "lilcontext.sig.sml" { Lil LilSubst }
 unit LilContext = "lilcontext.sml" { LILCONTEXT 
 	Lil Util Name LilSubst LilDefs LilUtil Deconstruct Prim Listops 
+	UtilError
 	IntBinaryMap Option List
 }
 
@@ -99,7 +100,9 @@ unit NilToLil = "niltolil.sml" { NILTOLIL
 	Lil LilDefs TranslationDefs Name Util Listops TilWord32 Stats List Array ListPair
 	LilSubst LilUtil LilRename Synthesis Pexp PpLil
 	Nil NilDefs NilSubst NilUtil NilContext Normalize SingletonElim 
-	NilPrimUtilParam Ppnil NilPrimUtil Prim TraceInfo
+	NilPrimUtilParam Ppnil NilPrimUtil Prim TraceInfo 
+	CompilerControl
+	TilWord64 String
 }
 
 unit CLOSURE_STATE = "closure_state.sig.sml" { Lil Name }
@@ -140,9 +143,13 @@ unit LilOptimize = "optimize.sml" { LILOPTIMIZE
 
 unit LILLINKUNIT = "linkunit.sig.sml" { Lil }
 unit LilLinkUnit = "linkunit.sml" { LILLINKUNIT
-	Lil PpLil 
-	Util
+	Lil PpLil LilDefs TranslationDefs Pexp
+	Util Name Listops 
+	String List
 }
+
+unit CFLATTEN = "coercion_flatten.sig.sml" { Lil }
+unit CFlatten = "coercion_flatten.sml" { CFLATTEN Pexp Lil Util Listops }
 
 unit LINKLIL = "linklil.sig.sml" { Nil Lil PPLIL }
 unit Linklil = "linklil.sml" { LINKLIL
