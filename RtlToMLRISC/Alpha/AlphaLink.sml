@@ -29,8 +29,6 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
   (* -- MLRISC structures -------------------------------------------------- *)
 
   structure Constant = AlphaMLRISCConstant
-  structure Float    = AlphaFloatConvention
-  structure Integer  = AlphaIntegerConvention
   structure Pseudo   = AlphaMLRISCPseudo
 
   structure RegisterSpillMap =
@@ -58,6 +56,17 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 				       structure F   = FlowGraph
 				       structure Asm = AsmEmitter)
 
+  structure MLTree = MLTreeF(structure Const = Constant
+			     structure P     = Pseudo)
+
+  structure MLTreeExtra = MLTreeExtra(structure MLTree = MLTree)
+
+  structure Float =
+    AlphaFloatConvention(structure MLTreeExtra = MLTreeExtra)
+
+  structure Integer =
+    AlphaIntegerConvention(structure MLTreeExtra = MLTreeExtra)
+
   structure IntegerAllocation =
     AlphaIntegerAllocation(structure AlphaInstructions = Instr
 			   structure AlphaRewrite      = Rewrite
@@ -78,9 +87,6 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 			 structure RegisterSpillMap  = RegisterSpillMap
 			 functor RegisterAllocation  = RegAlloc.FloatRa)
 
-  structure MLTree = MLTreeF(structure Const = Constant
-			     structure P     = Pseudo)
-
   structure AsmEmit = AsmEmit(structure F = FlowGraph
 			      structure E = AsmEmitter)
 
@@ -98,8 +104,6 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 				 structure Alpha32Instr	 = Instr)
 
   (* -- emitter structures ------------------------------------------------- *)
-
-  structure MLTreeExtra = MLTreeExtra(structure MLTree = MLTree)
 
   structure CallConventionBasis =
     CallConventionBasis(structure Cells		    = Alpha32Cells
