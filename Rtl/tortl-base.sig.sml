@@ -59,8 +59,12 @@ sig
    val set_args : reg list * regi -> unit
    val add_proc : Rtl.proc -> unit
    val exports : Rtl.label list Name.VarMap.map ref 
-   val add_mutable : label -> unit
-   val get_mutable : unit -> label list
+   val add_static_record : label * int * int -> unit   (* Number of non-heap pointer fields and (possible) heap pointer fields *)
+   val get_static_records : unit -> {partialRecords : int,
+				     totalRecords : int,
+				     partialFields : int,
+				     totalFields : int,
+				     partialRecordLabels : label list}
    val pl : Rtl.proc list ref
    val dl : Rtl.data list ref
    

@@ -81,7 +81,6 @@ extern int NumStackChain;
 extern int NumHeap;
 extern int NumGC, NumMajorGC;
 extern int shortSummary;
-extern int pagesize;
 
 #endif
 

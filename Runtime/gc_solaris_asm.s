@@ -13,10 +13,13 @@
 	.globl	load_regs
 	.globl	save_regs
 	.globl	GCFromML
-	.globl	returnFromGCFromML
+	.globl	NewStackletFromML
+	.globl	PopStackletFromML
 	.globl	GCFromC
+	.globl	returnFromGCFromML
 	.globl	returnFromGCFromC
 	.globl	returnFromYield
+	.globl	returnToML
 	.globl	save_regs_MLtoC
 	.globl	load_regs_MLtoC
 
@@ -205,7 +208,7 @@ load_regs_ok:
 	.size	load_regs,(.-load_regs)
 
 
- ! ----------------- gcFromML ---------------------------------
+ ! ----------------- GCFromML ---------------------------------
  ! return address comes in normal return address register
  ! temp register contains request size + heap pointer
  ! does not use a stack frame 
@@ -232,28 +235,97 @@ GCFromML:
 	call	abort
 	nop
 	.size GCFromML,(.-GCFromML)
+
+ ! ----------------- NewStackletFromML --------------------------------------------------------------------
+ ! When an ML function A calls B, the prolog of B checks if a new stacklet is necessary.  If so, this routine is called.
+ ! Rra:	 The return address back to B comes in the normal return address register
+ ! Rat2: The return address of B back to A is saved in Rat2
+ ! Rat:	 Rat (normal temp) contains offset above highest argument retrieved from previous frame for additional arguments
+ ! -----------------------------------------------------------------------------------------------------
+	.proc	07
+	.align  4
+NewStackletFromML:	
+	flushw
+	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually 
+	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
+	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
+	call	save_regs					
+	nop
+	mov	THREADPTR_REG, CFIRSTARG_REG			! pass user thread pointer as arg
+	mov	ASMTMP_REG, CSECONDARG_REG			! pass max offset we need to copy
+	ld	[THREADPTR_REG + proc_disp], ASMTMP_REG		! must use temp so SP always correct
+	ld	[ASMTMP_REG], SP_REG				! run on system thread stack
+	call	NewStackletFromMutator				! call runtime GC
+	nop
+	call	abort
+	nop
+	.size NewStackletFromML,(.-NewStackletFromML)
+
+
+ ! ----------------- PopStackletFromML --------------------------------------------------------------------
+ ! return address comes in normal return address register
+ ! does not use a stack frame 
+ ! -----------------------------------------------------------------------------------------------------
+	.proc	07
+	.align  4
+PopStackletFromML:	
+	flushw
+	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually 
+	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
+	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
+	call	save_regs					
+	nop
+	mov	THREADPTR_REG, CFIRSTARG_REG			! pass user thread pointer as arg
+	ld	[THREADPTR_REG + proc_disp], ASMTMP_REG		! must use temp so SP always correct
+	ld	[ASMTMP_REG], SP_REG				! run on system thread stack
+	call	PopStackletFromMutator				! call runtime GC
+	nop
+	call	abort
+	nop
+	.size PopStackletFromML,(.-PopStackletFromML)		
 	
  ! -------------------------------------------------------------------------------
- ! returnFromGCFromML is called from the runtime with the thread pointer argument
+ ! returnToML is called from the runtime with
+ ! thread pointer as 1st argument
+ ! link value/return address as 2nd argument - this may or may not be the same saveregs[LINK]
  ! -------------------------------------------------------------------------------
 	.proc	07
 	.align  4
-returnFromGCFromML:
+returnToML:
 	flushw	
 	mov	CFIRSTARG_REG, THREADPTR_REG		! restore THREADPTR_REG
+	mov	CSECONDARG_REG, %r4			! use r4 as temp for return address
 	st	%g0, [THREADPTR_REG + notinml_disp]	! set notInML to zero
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
 	call	load_regs				! don't need to save return address
 	nop						
-	ld	[%r1+16], %r4				! restore r4 which we use as temp
-	ld	[%r1+LINK_DISP], LINK_REG		! restore return address back to ML code
+	mov	%r4, ASMTMP2_REG
+	ld	[%r1+60], %r15				! restore r15 which we do no use to return to
+	ld	[%r1+16], %r4				! restore r4 which we use as temp	
+	ld	[%r1+LINK_DISP], LINK_REG		! restore return address register but not used to get back to ML
 	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
-	retl
+	jmpl	ASMTMP2_REG+8, %g0
+	nop
+	call	abort
+	nop	
+	.size returnToML,(.-returnToML)
+
+ ! -------------------------------------------------------------------------------
+ ! returnFromGCFromML is called from the runtime with the thread pointer argument
+ ! thread pointer as 1st argument
+ ! -------------------------------------------------------------------------------
+	.proc	07
+	.align  4
+returnFromGCFromML:
+	ld	[CFIRSTARG_REG+LINK_DISP], CSECONDARG_REG
+	ba	returnToML
 	nop
 	call	abort
 	nop	
 	.size returnFromGCFromML,(.-returnFromGCFromML)
-
+	
  ! ----------------- gcFromC ---------------------------------
  ! gcFromC is called from the runtime system with 3 arguments:	
  !	thread pointer, request size, a bool for majorGC

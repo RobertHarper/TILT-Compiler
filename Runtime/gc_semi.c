@@ -81,6 +81,7 @@ void GCStop_Semi(Proc_t *proc)
   mem_t allocLimit = proc->allocLimit;
   Thread_t *curThread = NULL;
   double liveRatio = 0.0;
+  ploc_t globalLoc, rootLoc;
 
   /* Check that processor is unmapped, write list is not overflowed, allocation region intact */
   procChangeState(proc, GC);
@@ -98,13 +99,13 @@ void GCStop_Semi(Proc_t *proc)
   discard_writelist(proc);
 
   /* Compute the roots from the stack and register set */
-  resetStack(proc->roots);
+  assert(isEmptyStack(proc->rootLocs));
   procChangeState(proc, GCStack);
   ResetJob();
   while ((curThread = NextJob()) != NULL) {
     if (curThread->requestInfo >= 0)
       bytesRequested += curThread->requestInfo;
-    local_root_scan(proc,curThread);
+    thread_root_scan(proc,curThread);
   }
   procChangeState(proc, GCGlobal);
   major_global_scan(proc);
@@ -116,9 +117,12 @@ void GCStop_Semi(Proc_t *proc)
   SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
   proc->majorRange.start = proc->majorRange.cursor = toSpace->cursor;
   proc->majorRange.stop = toSpace->top;
-  while (!isEmptyStack(proc->roots)) 
-    locCopy1_noSpaceCheck(proc, (ploc_t) popStack(proc->roots), &proc->majorRange, &fromSpace->range);
-  scanUntil_locCopy1_noSpaceCheck(proc,toSpace->range.low,&proc->majorRange, &fromSpace->range);
+  while (rootLoc = (ploc_t) popStack(proc->rootLocs))     /* NULL when empty */
+    locCopy1_noSpaceCheck(proc, rootLoc, &proc->majorRange, fromSpace);
+  assert(primaryGlobalOffset == 0);
+  while (globalLoc = (ploc_t) popStack(proc->globalLocs)) /* NULL when empty */
+    locCopy1_noSpaceCheck(proc, (ploc_t) globalLoc, &proc->majorRange, fromSpace);
+  scanUntil_locCopy1_noSpaceCheck(proc,toSpace->range.low,&proc->majorRange, fromSpace);
   toSpace->cursor = proc->majorRange.cursor;
   proc->majorRange.stop = proc->majorRange.cursor;
   ClearCopyRange(&proc->majorRange);

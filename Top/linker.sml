@@ -42,7 +42,8 @@ structure Linker :> LINKER =
 			  linker    = ["/usr/ccs/bin/ld"], (* -L/usr/local/lib ? *)
 			  ldpre     = [runtimeFile "obj_solaris/firstdata.o", gccFile "crt1.o", gccFile "crti.o",
 				       "/usr/ccs/lib/values-Xa.o", gccFile "crtbegin.o"],
-			  ldpost    = [runtimeFile "runtime.solaris.a", "-lpthread","-lposix4", "-lgen", "-lm", "-lc",
+			  ldpost    = ["-L/afs/cs/project/fox/member/pscheng/ml96/SparcPerfMon/lib", 
+				       runtimeFile "runtime.solaris.a", "-lperfmon", "-lpthread","-lposix4", "-lgen", "-lm", "-lc",
 				       gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"]}
 		     end)
     val alphaConfig : config Delay.value =

@@ -23,9 +23,6 @@
 int ThreadedVersion = THREADED_VERSION;
 int LEAST_GC_TO_CHECK = 0;
 
-int NumHeap       = 20;
-int NumStack      = 100;
-int NumStackChain = 100;
 int NumThread     = 100;
 int NumProc       = 1;
 
@@ -124,7 +121,7 @@ struct option_entry table[] =
    0, "showheaps", &SHOW_HEAPS, "Show heaps before and after each GC",
    0, "showglobals", &SHOW_GLOBALS, "Show globals before and after each GC",
    1, "showatgc", &LEAST_GC_TO_CHECK, "Check/show heaps starting at this GC",
-   1, "stacksize", &StackSize, "Stack size of threads measured in Kbytes",
+   1, "stackletSize", &StackletSize, "Stack size of thread stacklets measured in Kbytes",
    1, "proc", &NumProc, "Use this many processors",
    1, "minheap", &MinHeap, "Set minimum size of heap in Kbytes",
    1, "maxheap", &MaxHeap, "Set maximum size of heap in Kbytes",
@@ -138,6 +135,8 @@ struct option_entry table[] =
    1, "objFetchSize", &objFetchSize, "Number of items to fetch from the shared work stack",
    1, "localWorkSize", &localWorkSize, "Number of items to work on from local shared stack before accessing shared work stack",
    1, "doCopyCopySync", &doCopyCopySync, "Perform copy-copy synchronization for parallel/concurrent collectiors",
+   3, "majorCollectionRate", &majorCollectionRate, "Rate of concurrent collector",
+   1, "perfType", &perfType, "Type of performance counters",
    0, "short", &shortSummary, "Print short summary of execution"};
 
 void process_option(int argc, char **argv)
@@ -223,6 +222,8 @@ void init_double(double *x, double y)
     *x = y;
 }
 
+extern ptr_t LINKUNIT_unit;
+
 int main(int argc, char **argv)
 {
   int i;
@@ -240,7 +241,7 @@ int main(int argc, char **argv)
   stack_init();  /* must follow thread_init */
   GCInit();
 
-  thread_go((ptr_t *)(&client_entry),module_count);
+  thread_go((ptr_t) GetGlobal((ptr_t) &LINKUNIT_unit));
   stats_finish();
   return 0;
 }

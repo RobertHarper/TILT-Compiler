@@ -9,8 +9,6 @@ sig
    structure Tracetable : TRACETABLE
 
 
-   val translateIReg         : Rtl.regi -> Machine.register
-   val translateFReg         : Rtl.regf -> Machine.register
    val translateReg          : Rtl.reg -> Machine.register
 
    (* Returns list of labels for all the basic blocks, in the same
@@ -24,6 +22,4 @@ sig
      * ((Machine.register option * Tracetable.trace) Core.Regmap.map)
      * (Machine.stacklocation Core.Regmap.map)
 				    
-   val translateRep : Rtl.rep -> Machine.register option * Tracetable.trace 
-
 end

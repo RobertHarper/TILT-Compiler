@@ -2,7 +2,6 @@
 
 (* WARNING: Use Rat or Rat2 only if sure that no spills (or at most one if one of Rat/Rat2 is used)
               will cause usage of Rat/Rat2 during the live range of Rat/Rat2.
-   THREAD_UNSAFE ERROR XXX: don't use FPTOFROMINT; use thread-specific slot
 *)
 
 (* Translation from Rtl to Sparc pseudoregister-assembly. 
@@ -45,6 +44,7 @@ struct
       SPARC register type.  *)
 
    val tracemap = ref (Regmap.empty) : (register option * Tracetable.trace) Regmap.map ref
+   val inProc = ref false
 
    local
      (* stack slot position of next variable to be made stack-resident *)
@@ -56,8 +56,8 @@ struct
      fun init_stack_res () = (count := 0; stack_res := Regmap.empty)
      fun get_stack_res () = !stack_res
      fun add_stack x =
-	 (case Regmap.find(!stack_res,x)
-	  of SOME i => i
+	 (case Regmap.find(!stack_res,x) of
+	     SOME i => i
 	   | NONE => 
 		 let val a = !count
 		 in stack_res := Regmap.insert(!stack_res,x,SPILLED_INT(!count));
@@ -67,32 +67,42 @@ struct
    end
 
 
+   fun var2ireg v = R (Name.var2int v)
 
    fun translateRep rep =
-       case rep of
-	  Rtl.TRACE => (NONE, Tracetable.TRACE_YES)
-        | Rtl.LOCATIVE => (NONE, Tracetable.TRACE_IMPOSSIBLE)
-        | Rtl.COMPUTE path =>
-	      (case path of
-	         Rtl.Projvar_p (Rtl.REGI(v,_),[]) => 
-		     ((case (Regmap.find(!tracemap,R (Name.var2int v))) of
-			   NONE => NONE
-			 | SOME (ropt,_) => ropt),
-			   Tracetable.TRACE_STACK(add_stack (R (Name.var2int v))))
+       let fun translateVar v = 
+	   ((case (Regmap.find(!tracemap, var2ireg v)) of
+		 NONE => if (!inProc)
+			     then (print "Warning: Missing binding for type variable "; print (msReg (var2ireg v));
+				   error "ERROR: Missing binding for type variable ")
+			 else ()
+	       | SOME _ => ()); 
+	    R(Name.var2int v))
+       in  case rep of
+	   Rtl.TRACE => (NONE, Tracetable.TRACE_YES)
+	 | Rtl.LOCATIVE => (NONE, Tracetable.TRACE_IMPOSSIBLE)
+	 | Rtl.COMPUTE path =>
+	       (case path of
+		    Rtl.Projvar_p (Rtl.REGI(v,_),[]) => 
+			let val v = translateVar v
+			in  (SOME v, Tracetable.TRACE_STACK(add_stack v))
+			end
 	       | Rtl.Projvar_p (Rtl.REGI(v,_),i) => 
-		     ((case (Regmap.find(!tracemap,R (Name.var2int v))) of
-			   NONE => NONE
-			 | SOME (ropt,_) => ropt),
-		       Tracetable.TRACE_STACK_REC(add_stack(R (Name.var2int v)),i))
+			let val v = translateVar v
+			in  (SOME v, Tracetable.TRACE_STACK_REC(add_stack v, i))
+			end
 	       | Rtl.Projvar_p (Rtl.SREGI _, i) => error "SREG should not contain type"
-	       | Rtl.Projlabel_p (l,[]) => (NONE,Tracetable.TRACE_GLOBAL l)
-	       | Rtl.Projlabel_p (l,i) => (NONE,Tracetable.TRACE_GLOBAL_REC (l,i))
+	       | Rtl.Projlabel_p (l,[]) => (NONE,Tracetable.TRACE_LABEL l)
+	       | Rtl.Projlabel_p (l,i) => (NONE,Tracetable.TRACE_LABEL_REC (l,i))
+	       | Rtl.Projglobal_p (l,[]) => (NONE,Tracetable.TRACE_GLOBAL l)
+	       | Rtl.Projglobal_p (l,i) => (NONE,Tracetable.TRACE_GLOBAL_REC (l,i))
 	       | Rtl.Notneeded_p => (NONE,Tracetable.TRACE_IMPOSSIBLE))
 	| Rtl.UNSET => (NONE,Tracetable.TRACE_UNSET)
 	| Rtl.NOTRACE_INT => (NONE,Tracetable.TRACE_NO)
 	| Rtl.NOTRACE_REAL => (NONE,Tracetable.TRACE_NO)
 	| Rtl.NOTRACE_CODE => (NONE,Tracetable.TRACE_NO)
 	| Rtl.NOTRACE_LABEL => (NONE,Tracetable.TRACE_NO)
+       end
 
    fun internal_translateRep v Rtl.UNSET = (add_stack (R (Name.var2int v)); 
 					    translateRep Rtl.UNSET)
@@ -107,8 +117,10 @@ struct
      | translateSReg Rtl.HANDLER = Rhandler
      
    fun translateIReg (Rtl.REGI (v, rep)) = 	
-       (tracemap := Regmap.insert(!tracemap,R (Name.var2int v),internal_translateRep v rep);
-	R (Name.var2int v))
+       let val vv = R (Name.var2int v)
+	   val _ = tracemap := Regmap.insert(!tracemap, vv, internal_translateRep v rep)
+       in  vv
+       end
      | translateIReg (Rtl.SREGI s) = translateSReg s
      
    fun translateFReg (Rtl.REGF (v, _)) = F (2 * (Name.var2int v))
@@ -152,7 +164,7 @@ struct
 
    (* The current procedure's formal return variables; accessible
       here so that we can add them to DecAlpha's RETURN assembly op *)
-   val current_res    = ref []              : register list ref
+   val current_res    = ref []              : Rtl.reg list ref
 
    (* Name/Label of the block currently being allocated *)
    val current_label  = ref (freshCodeLabel ()) : label ref
@@ -793,7 +805,7 @@ struct
 					  argregs  = NONE,
 					  resregs  = NONE,
 					  destroys = NONE})));
-		     emit (BASE (RTL (RETURN {results = !current_res}))))
+		     emit (BASE (RTL (RETURN {results = map translateReg (!current_res)}))))
 	      | _ => 
 		    emit (BASE(RTL (CALL{calltype = call_type,
 					 func     = func,
@@ -806,7 +818,7 @@ struct
 
 
      | translate (Rtl.RETURN rtl_Raddr) =
-          emit (BASE (RTL (RETURN {results = ! current_res})))
+          emit (BASE (RTL (RETURN {results = map translateReg (!current_res)})))
 
      | translate (Rtl.PUSH_EXN) = ()
      | translate (Rtl.POP_EXN) = ()
@@ -814,10 +826,13 @@ struct
      | translate (Rtl.CATCH_EXN) = 
 	  let val tmp1 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
 	      val tmp2 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
-	  in  translate(Rtl.LOAD32I(Rtl.REA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1));
-	      translate(Rtl.CMPUI(Rtl.GT,Rtl.SREGI Rtl.STACK,Rtl.REG tmp1,tmp2));
-	      translate(Rtl.CMV(Rtl.NE,tmp2,Rtl.REG(Rtl.SREGI Rtl.STACK), tmp1));
-	      translate(Rtl.STORE32I(Rtl.REA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1))
+	  in  (*
+	       translate(Rtl.LOAD32I(Rtl.REA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1));
+	       translate(Rtl.CMPUI(Rtl.GT,Rtl.SREGI Rtl.STACK,Rtl.REG tmp1,tmp2));
+	       translate(Rtl.CMV(Rtl.NE,tmp2,Rtl.REG(Rtl.SREGI Rtl.STACK), tmp1));
+	       translate(Rtl.STORE32I(Rtl.REA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1))
+	       *)
+	      ()
 	  end
 
      | translate (Rtl.LOAD8I (ea, rtl_Rdest)) =
@@ -854,6 +869,40 @@ struct
        let val (Raddr, disp) = loadEA ea
 	   val Fsrc = translateFReg rtl_Fsrc
        in  emit (SPECIFIC (STOREF (STDF, Fsrc, disp, Raddr)))
+       end
+
+     | translate (Rtl.LOADGLOBAL (l, rtl_Rdest)) =
+       let val globalOffset = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
+	   val (Raddr, disp) = loadEA (Rtl.LEA(l,0))
+	   val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (LOADI (LD, globalOffset, INT globalOffset_disp, Rth)));
+	   emit (SPECIFIC (INTOP (ADD, Raddr, REGop globalOffset, Raddr)));
+	   emit (SPECIFIC (LOADI (LD, Rdest, disp, Raddr)))
+       end
+
+     | translate (Rtl.INITGLOBAL (l, rtl_Rsrc)) =
+       let val globalOffset = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
+	   val (Raddr, disp) = loadEA (Rtl.LEA(l,0))
+	   val Rsrc = translateIReg rtl_Rsrc
+       in  emit (SPECIFIC (LOADI (LD, globalOffset, INT globalOffset_disp, Rth)));
+	   emit (SPECIFIC (INTOP (ADD, Raddr, REGop globalOffset, Raddr)));
+	   emit (SPECIFIC (STOREI (ST, Rsrc, disp, Raddr)))
+       end
+
+     | translate (Rtl.REL_STACKPTR (rtl_Rsrc, rtl_Rdest)) =
+       let val stackletOffset = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
+	   val Rsrc = translateIReg rtl_Rsrc
+	   val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (LOADI (LD, stackletOffset, INT stackletOffset_disp, Rth)));
+	   emit (SPECIFIC (INTOP (SUB, Rsrc, REGop stackletOffset, Rdest)))
+       end
+
+     | translate (Rtl.ABS_STACKPTR (rtl_Rsrc, rtl_Rdest)) =
+       let val stackletOffset = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
+	   val Rsrc = translateIReg rtl_Rsrc
+	   val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (LOADI (LD, stackletOffset, INT stackletOffset_disp, Rth)));
+	   emit (SPECIFIC (INTOP (ADD, Rsrc, REGop stackletOffset, Rdest)))
        end
 
      | translate (Rtl.ICOMMENT str) = emit (BASE(ICOMMENT str))
@@ -960,36 +1009,36 @@ struct
    fun translateProc (Rtl.PROC {name, args, code, results, return, 
 				save = _, vars = _}) =
      let
-       val args   = map translateReg args
-       val res    = map translateReg results
-       val return = translateIReg return
-     in
-
        (* initialization *)
-       tracemap := Regmap.empty;
-       block_map := Labelmap.empty;
-       current_blocklabels := [];
-       current_proc := name;
-       current_res := res;
-       init_stack_res();
-       
+       val _ = inProc := true
+       val _ = tracemap := Regmap.empty;
+       val _ = block_map := Labelmap.empty
+       val _ = current_blocklabels := []
+       val _ = current_proc := name
+       val _ = init_stack_res()
+
+       val _ = map translateReg args     (* Args are defined on entry so we need to define them *)
+       val _ = translateIReg return
+       val _ = current_res := results    (* Args are defined on entry so we need to define them *)
+
        (* Create (empty) preamble block with same name as the procedure *)
-       resetBlock name true false;
-       saveBlock ();
+       val _ = resetBlock name true false
+       val _ = saveBlock ()
 
        (* Start a new block *)
-       resetBlock (freshCodeLabel()) true true;
+       val _ = resetBlock (freshCodeLabel()) true true
 
        (* Translate instructions *)
-       translateCode code;
+       val _ = translateCode code
 
-       
        (* Flush last block *)
-       saveBlock ();
+       val _ = saveBlock ()
 
        (* Return blocklabels with blocks in the SAME order as in
           the Rtl code, and the associated block_map *)
-       (rev (! current_blocklabels), ! block_map, ! tracemap, get_stack_res())
+       val res = (rev (! current_blocklabels), ! block_map, ! tracemap, get_stack_res())
+       val _ = inProc := false
+     in  res
      end
 
 end (* struct *)

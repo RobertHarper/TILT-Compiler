@@ -37,6 +37,7 @@ typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 
 /* Note that 0x0 and 0x4 cannot be used as those are possible pointer values 
    and that position of that tag might be occupied by a forwarding pointer */
+#define uninit_val       258
 #define FORWARD1_TYPE    0x0
 #define FORWARD2_TYPE    0x4
 #define RECORD_TYPE      0x1

@@ -28,8 +28,13 @@ int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the
 #include "create.h"
 #include "posix.h"
 #include "global.h"
+#include "stack.h"
 #include "exn.h"
 
+#ifdef sparc
+int getrusage(int who, struct rusage *rusage);  /* Not in header files for some reason */
+int ftime(struct timeb *tp);
+#endif
 
 #define PAIR(t,t1,t2,tlong,tstruct) struct tstruct { t1 first; t2 second; }; \
                                     typedef struct tstruct *tlong; \
@@ -309,9 +314,9 @@ ptr_t exnMessageRuntime(ptr_t exn)
   char* msg = NULL;
   val_t exnstamp = get_record(exn,0);
   
-  if (exnstamp == *DivideByZeroExn)
+  if (exnstamp == *getDivExn())
     msg = "divide by zero";
-  else if (exnstamp == *OverflowExn)
+  else if (exnstamp == *getOverflowExn())
     msg = "overflow";
   else if (exnstamp == RuntimeStamp()) {
     int e = get_record(exn,1);

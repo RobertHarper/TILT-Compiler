@@ -50,8 +50,7 @@ mem_t AllocBigArray_GenPara(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
     case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
-                        pushStack(&proc->rootVals, spec->pointerVal);        
-                        pushStack(proc->primaryReplicaObjFlips, obj);        
+                        pushStack(proc->primaryReplicaObjRoots, obj);        
                         break;
     case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
   }
@@ -100,6 +99,8 @@ void GCStop_GenPara(Proc_t *proc)
   int isFirst = 0;                    /* Am I the first processor? */
   static long req_size;            /* These are shared across processors. */
   Thread_t *curThread = NULL;
+  ploc_t rootLoc, globalLoc;
+  ptr_t PRObj;
 
   /* Collection cannot proceed until all processors have stopped running mutators.
      While waiting for the processors, the "first" processor begins to do some
@@ -127,9 +128,9 @@ void GCStop_GenPara(Proc_t *proc)
     ;
 
   /* Get local ranges ready for use; check local stack empty; reset root lists */
-  assert(isEmptyStack(&proc->minorStack));
-  assert(isEmptyStack(&proc->majorStack));
-  resetStack(proc->roots);
+  assert(isEmptyStack(&proc->minorObjStack));
+  assert(isEmptyStack(&proc->majorObjStack));
+  assert(isEmptyStack(proc->rootLocs));
 
   /* All processors compute thread-specific roots in parallel
      and determine whether a major GC has been requested. */
@@ -138,11 +139,9 @@ void GCStop_GenPara(Proc_t *proc)
     /* If negative, requestnfo signifies full writelist */
     if (curThread->requestInfo >= 0)
       FetchAndAdd(&req_size, curThread->requestInfo);
-    local_root_scan(proc,curThread);
+    thread_root_scan(proc,curThread);
     if (GCType == Minor && curThread->request == MajorGCRequestFromC)  /* Upgrade to major GC */
       GCType = Major;      
-    if (diag)
-      printf("Proc %d:    computed roots of userThread %d\n", proc->procid,curThread->tid);      
   }
   asynchReachBarrier(&numRootProc);
 
@@ -182,7 +181,7 @@ void GCStop_GenPara(Proc_t *proc)
 
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   if (GCType == Minor) 
-    add_writelist_to_rootlist(proc, &nursery->range, &fromSpace->range);
+    add_writelist_to_rootlist(proc, nursery, fromSpace);
   else
     discard_writelist(proc);
 
@@ -194,70 +193,76 @@ void GCStop_GenPara(Proc_t *proc)
     SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
   
   /* Now forward all the roots which initializes the local work stacks */
-  proc->numRoot += lengthStack(proc->roots);
-  while (!isEmptyStack(proc->roots)) {
-      ploc_t root = (ploc_t) popStack(proc->roots);
-      if (GCType == Minor) 
-	locCopy1_copyCopySync_primaryStack(proc,root,&proc->minorStack,&proc->minorRange,&nursery->range);
-      else
-	locCopy2L_copyCopySync_primaryStack(proc,root,&proc->majorStack,&proc->majorRange,&nursery->range,&fromSpace->range,&largeSpace->range);
-  }
-  while (!isEmptyStack(&proc->rootVals)) {
-      ptr_t rootVal = (ptr_t) popStack(&proc->rootVals);
-      if (GCType == Minor) 
-	copy1_copyCopySync_primaryStack(proc,rootVal,&proc->minorStack,&proc->minorRange,&nursery->range);
-      else
-	copy2L_copyCopySync_primaryStack(proc,rootVal,&proc->majorStack,&proc->majorRange,&nursery->range,&fromSpace->range,&largeSpace->range);
-  }
-  if (GCType == Minor)
-    while (!isEmptyStack(proc->primaryReplicaObjFlips)) {
+  proc->numRoot += lengthStack(proc->rootLocs) + lengthStack(proc->globalLocs);
+  assert(primaryGlobalOffset == 0);
+  if (GCType == Minor) {
+    while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
+      locCopy1_copyCopySync_primaryStack(proc, rootLoc,
+					 &proc->minorObjStack,&proc->minorRange,nursery);
+    while (globalLoc = (ploc_t) popStack(proc->globalLocs))
+      locCopy1_copyCopySync_primaryStack(proc, globalLoc,
+					 &proc->minorObjStack,&proc->minorRange,nursery);
+    while (PRObj = popStack(proc->primaryReplicaObjRoots)) {
       /* Not transferScanObj_* since this object is a primaryReplica.
 	 Since this is a stop-copy collector, we can use _locCopy_ immediately */
-      ptr_t obj = popStack(proc->primaryReplicaObjFlips);
-      scanObj_locCopy1_copyCopySync_primaryStack(proc, obj, &proc->minorStack,&proc->minorRange,&nursery->range);
+      scanObj_locCopy1_copyCopySync_primaryStack(proc, PRObj, &proc->minorObjStack,&proc->minorRange,nursery);
     }
-  else
-    resetStack(proc->primaryReplicaObjFlips);
+  }
+  else { /* Major collection */
+    while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
+      locCopy2L_copyCopySync_primaryStack(proc, rootLoc,
+					  &proc->majorObjStack,&proc->majorRange,nursery,fromSpace,largeSpace);
+    while (globalLoc = (ploc_t) popStack(proc->globalLocs)) 
+      locCopy2L_copyCopySync_primaryStack(proc, globalLoc,
+					  &proc->majorObjStack,&proc->majorRange,nursery,fromSpace,largeSpace);
+    resetStack(proc->primaryReplicaObjRoots);
+  }
+  assert(isEmptyStack(proc->primaryReplicaObjFlips));
 
   /* Move everything from local stack to global stack to balance work; note the omitted popSharedStack */
   pushSharedStack(workStack, 
-		  &proc->rootVals,
-		  (GCType == Minor) ? &proc->minorStack : &proc->majorStack,
+		  &proc->threads, proc->globalLocs, proc->rootLocs, 
+		  (GCType == Minor) ? &proc->minorObjStack : &proc->majorObjStack,
 		  (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack);
 
   /* Get work from global stack; operate on local stack; put work back on global stack */
   while (1) {
     int i, globalEmpty;
     popSharedStack(workStack, 
-		   &proc->rootVals, 0,
-		   (GCType == Minor) ? &proc->minorStack : &proc->majorStack, objFetchSize,
+		   &proc->threads, threadFetchSize,
+		   proc->globalLocs, globalLocFetchSize,
+		   proc->rootLocs, rootLocFetchSize,
+		   (GCType == Minor) ? &proc->minorObjStack : &proc->majorObjStack, objFetchSize,
 		   (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack, 0);
+    assert(isEmptyStack(&proc->threads));
+    assert(isEmptyStack(proc->globalLocs));
+    assert(isEmptyStack(proc->rootLocs));
     if (GCType == Minor) {
       for (i=0; i < localWorkSize; i++) {
-	ptr_t gray = popStack(&proc->minorStack);
+	ptr_t gray = popStack(&proc->minorObjStack);
 	if (gray == NULL)
 	  break;
-	(void) transferScanObj_locCopy1_copyCopySync_primaryStack(proc,gray,&proc->minorStack,&proc->minorRange,&nursery->range);
+	(void) transferScanObj_locCopy1_copyCopySync_primaryStack(proc,gray,&proc->minorObjStack,&proc->minorRange,nursery);
       }
     }
     else {
       for (i=0; i < localWorkSize; i++) {
-	ptr_t gray = popStack(&proc->majorStack);
+	ptr_t gray = popStack(&proc->majorObjStack);
 	if (gray == NULL)
 	  break;
-	(void) transferScanObj_locCopy2L_copyCopySync_primaryStack(proc,gray,&proc->majorStack,&proc->majorRange,
-								  &nursery->range,&fromSpace->range,&largeSpace->range);
+	(void) transferScanObj_locCopy2L_copyCopySync_primaryStack(proc,gray,&proc->majorObjStack,&proc->majorRange,
+								  nursery,fromSpace,largeSpace);
       }
     }
     globalEmpty = pushSharedStack(workStack, 
-				  &proc->rootVals, 
-				  (GCType == Minor) ? &proc->minorStack : &proc->majorStack,
+				  &proc->threads, proc->globalLocs, proc->rootLocs,
+				  (GCType == Minor) ? &proc->minorObjStack : &proc->majorObjStack,
 				  (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack);
     if (globalEmpty)
       break;
   }
-  assert(isEmptyStack(&proc->minorStack));
-  assert(isEmptyStack(&proc->majorStack));
+  assert(isEmptyStack(&proc->minorObjStack));
+  assert(isEmptyStack(&proc->majorObjStack));
 
 
   if (GCType == Major) {                          /* Carry over minor ranges across minor GCs */
@@ -282,7 +287,7 @@ void GCStop_GenPara(Proc_t *proc)
 
     /* Globals, statistics, resize/reset/flip */
     if (GCType == Minor) {
-      minor_global_promote();
+      minor_global_promote(proc);
       liveRatio = (double) (fromSpace->cursor - fromSpace->prevCursor) / (double) (nursery->cursor - nursery->bottom); 
       fromSpace->prevCursor = fromSpace->cursor;
       add_statistic(&proc->minorSurvivalStatistic, liveRatio);
@@ -337,6 +342,6 @@ void GCInit_GenPara()
   fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
   gc_large_init();
-  workStack = SharedStack_Alloc(0, 16384, 1024);
+  workStack = SharedStack_Alloc(0, 0, 0, 16384, 1024);
 }
 

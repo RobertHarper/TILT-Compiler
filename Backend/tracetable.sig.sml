@@ -12,6 +12,8 @@ signature TRACETABLE =
 		       | TRACE_STACK      of Core.stacklocation
 		        (* stack pos, rec pos *)
 		       | TRACE_STACK_REC  of Core.stacklocation * int list
+		       | TRACE_LABEL     of Core.label
+		       | TRACE_LABEL_REC of Core.label * int list
 		       | TRACE_GLOBAL     of Core.label
 		       | TRACE_GLOBAL_REC of Core.label * int list
 

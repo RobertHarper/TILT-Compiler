@@ -54,7 +54,7 @@ static int show_field(int show, Field_t fieldType, ptr_t primary, ptr_t replica,
   isNonheapPointer = ((fieldType == PointerField) &&
 		      (IsTagData(primaryField) ||
 		       IsGlobalData(primaryField) ||
-		       primaryField == (ptr_t) 258));
+		       primaryField == (ptr_t) uninit_val));
 
   switch (fieldType) {
     case PointerField: 

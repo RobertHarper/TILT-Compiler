@@ -90,17 +90,9 @@ start_client:
 							! don't need to restore return address
 	ld	[%r1+16], %r4				! restore r4 which is not restored by load_regs
 	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
-	ba	start_client_retadd_val
-	nop
-thunk_loop:
-	st	%g0, [THREADPTR_REG + notinml_disp]
- 	ld	[THREADPTR_REG + nextThunk_disp], %o0		! fetch nextThunk
-	add	%o0, 1, %o1					! increment and
- 	st	%o1, [THREADPTR_REG + nextThunk_disp]		!   save nextThunk
- 	ld	[THREADPTR_REG + thunk_disp], %o1		! fetch thunks
-	sll	%o0, 2, %o0				
-	add	%o1, %o0, %o0				! %o0 holds current thunk's address
-	ld	[%o0], ASMTMP_REG			! fetch current thunk
+	st	%g0, [THREADPTR_REG + notinml_disp]             ! leaving to ML
+ 	ld	[THREADPTR_REG + thunk_disp], ASMTMP_REG	! fetch thunk
+ 	st	%g0, [THREADPTR_REG + thunk_disp]		! erase thunk
 	ld	[ASMTMP_REG + 0], LINK_REG		! fetch code pointer
 	ld	[ASMTMP_REG + 4], %o0			! fetch type env
 	ld	[ASMTMP_REG + 8], %o1			! fetch term env
@@ -110,13 +102,6 @@ thunk_loop:
 	jmpl	LINK_REG, %o7				! jump to thunk
 	nop
 start_client_retadd_val:					! used by stack.c
-
-	ld	[THREADPTR_REG + nextThunk_disp], %o0		! fetch nextThunk
-
-	
-	ld	[THREADPTR_REG + numThunk_disp], %o1		! fetch numThunk
-	cmp	%o0, %o1
-	bl	thunk_loop					! execute if nextThunk < numThunk
 	nop
 	mov	1, ASMTMP_REG
 	st	ASMTMP_REG, [THREADPTR_REG + notinml_disp]
@@ -233,7 +218,10 @@ raise_exception_raw:
 	ld	[THREADPTR_REG+MLsaveregs_disp+16], %r4		! restore r4 which was used to save exn arg and unmodified by load_regs
 								! don't need to restore r15 as we will overwrite it by jumping
 								! at this point, all registers restored
-	ld	[EXNPTR_REG+4], %sp		! fetch sp of exn handler
+	ld	[EXNPTR_REG+4], ASMTMP_REG	! fetch sp of exn handler
+	setuw	primaryStackletOffset, ASMTMP2_REG ! expands to 2 instr
+	ld	[ASMTMP2_REG], ASMTMP2_REG
+	add	ASMTMP_REG, ASMTMP2_REG, %sp
 	ld	[EXNPTR_REG], ASMTMP_REG	! fetch pc of exn handler
 	jmpl	ASMTMP_REG, %g0			! jump not return and do not link
 	nop

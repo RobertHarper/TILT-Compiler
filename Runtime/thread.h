@@ -14,19 +14,16 @@
 #endif
 
 #define MLsaveregs_disp     0
-#define maxsp_disp          longSz*32+8*32
-#define snapshot_disp       longSz*32+8*32+longSz
-#define proc_disp           longSz*32+8*32+longSz+CptrSz
-#define notinml_disp        longSz*32+8*32+longSz+CptrSz+CptrSz
-#define scratch_disp        longSz*32+8*32+longSz+CptrSz+CptrSz+longSz
-#define thunk_disp          longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz
-#define nextThunk_disp      longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz+CptrSz
-#define numThunk_disp       longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz+CptrSz+longSz
-#define request_disp        longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz
-#define requestInfo_disp    longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz
-#define Csaveregs_disp      longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+longSz+longSz
-#define writelistAlloc_disp longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+longSz+longSz+32*longSz+32*doubleSz
-#define writelistLimit_disp longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz
+#define proc_disp           longSz*32+8*32
+#define notinml_disp        longSz*32+8*32+CptrSz
+#define scratch_disp        longSz*32+8*32+CptrSz+longSz
+#define thunk_disp          longSz*32+8*32+CptrSz+longSz+doubleSz
+#define request_disp        longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz
+#define requestInfo_disp    longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz+longSz
+#define Csaveregs_disp      longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz
+#define writelistAlloc_disp longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+32*longSz+32*doubleSz
+#define writelistLimit_disp longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz
+#define stackLimit_disp     longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz+MLptrSz 
 #if    defined(solaris)
 #define snapshot_size       16
 #elif  defined(alpha_osf)
@@ -47,23 +44,6 @@
 #include "stats.h"
 #include "queue.h"
 #include <signal.h>
-
-
-typedef struct Stack__t
-{
-  ptr_t *data;
-  long cursor;
-  long size;
-} Stack_t;
-
-/* These types should be in stack.h but mutually recusrive headers are broken. */
-typedef struct StackSnapshot   /* the size and layout of this structure affects the code in stack_asm.s */
-{
-  val_t saved_ra;              /* Real return address for this stub */
-  val_t saved_sp;              /* Stack pointer position where stub was inserted */
-  unsigned int saved_regstate; /* Register state (mask) at this point */
-  Stack_t *roots;              /* Roots between this stub and the one above it */
-} StackSnapshot_t;
 
 
 /* These types should be in forward.h but mutually recusrive headers are broken. */
@@ -87,17 +67,24 @@ typedef struct CopyRange__t   /* This is essentially an object clumsily expresse
 typedef struct Usage__t
 {
   long bytesAllocated;
-  long bytesCopied;
-  long bytesScanned;
-  long rootsProcessed;
+  long fieldsCopied;
+  long fieldsScanned;
+  long objsCopied;
+  long objsScanned;
+  long pagesTouched;
+  long globalsProcessed;
+  long stackSlotsProcessed;
   long workDone;         /* Weighted average of bytesCopied, bytesScanned, and rootProcessed */
 } Usage_t;
 
 /* Finally, these types actually do belong here */
-/* Thread Status:
-     -1 : Thread is done
-     0 : Thread is ready to be scheduled
-     1 or more : Thread is running already or is blocked; not eligible to be run
+/* Thread State:
+   used    0 if thread structure is free; otherwise, 1
+   status -1 : Thread has completed execution but may not be free due to pinning
+           0 : Thread is ready to be scheduled
+          >0 : Thread is running already or is blocked; not eligible to be run
+   pinned  1 if thread must remain in scheduler queue even if not eligible to run
+
 */
      
 /* decalpha.sml, sparc.sml, and the ***_disp above have to be changed if the fields are modified 
@@ -108,14 +95,10 @@ typedef struct Thread__t
   /* ---- These fields are accessed by assembly code ---- */
   unsigned long      saveregs[32];     /* Register set; compiler relied on this being first */
   double             fregs[32];        /* Register set; compiler relied on this being second */
-  long               maxSP;            /* Used by mutator exn handler; compiler relies on this third */
-  StackSnapshot_t    *snapshots;       /* Used by stack.c and stack_asm.s */
   struct Proc__t     *proc;            /* of type Proc_t * - relied on by service_alpha_osf.s  */
   long               notInML;          /* set to true whenever mutator calls a normal external function */
   double             scratch;
-  ptr_t              *thunks;          /* Array of num_add unit -> unit */
-  long               nextThunk;        /* Index of next unstarted thunk.  Initially zero. */
-  long               numThunk;         /* Number of thunks.  At least one. */
+  ptr_t              thunk;            /* Thunk of this thread - NULL after thunk has started */
   long               request;          /* Why were we stoppped and how do we resume? */
   long               requestInfo;      /* If positive, how many bytes needed for allocation.
 					  If negative, how many bytes of write buffer needed. */
@@ -124,130 +107,24 @@ typedef struct Thread__t
   double             Cfregs[32];        
   ploc_t             writelistAlloc;
   ploc_t             writelistLimit;
+  mem_t              stackLimit;       /* Bottom of current stack */
+  int                globalOffset;     /* zero or four */
+  int                stackletOffset;   /* zero or stackletSize * 1024 */
 
-  /* ---- The remaining fields not accessed by assembly code ---- */
-  long               last_snapshot;    /* Index of last used snapshot */
-  StackChain_t       *stackchain;      /* Stack */
-  unsigned long      lastHashKey;     /* Last hash entry key/data */
-  void               *lastHashData; 
-  Stack_t            *callinfoStack;   /* Corresponds to stack frames */
-  long                tid;             /* Thread ID */
-  long                id;              /* Structure ID */
-  long                status;          /* Thread status */
+  /* ---- The remaining fields not accessed by assembly code or mutator ---- */
+  StackChain_t       *stack;
+  StackChain_t       *snapshot;          /* Stack chain copied for concurrent collector */
+  unsigned long       snapshotRegs[32];  /* Register set copied for concurrent collector */
+  ptr_t               snapshotThunk;     /* used by concurrent collector */
+  long                tid;               /* Thread ID */
+  long                id;                /* Structure ID */
+  int                 used;
+  long                status;            /* long so fetchAndAdd works */
+  int                 pinned;
   struct Thread__t   *parent;
-  ptr_t              oneThunk;         /* Avoid allocation by optimizing for common case */
 } Thread_t;
 
-void copyStack(Stack_t *from, Stack_t *to);     /* non-destructive operation on from */
-void transferStack(Stack_t *from, Stack_t *to); /* destructive operation on from */
-void resizeStack(Stack_t *ostack, int newSize);
-void allocStack(Stack_t *ostack, int size);     /* allocate the data portion of an existing stack */
-Stack_t *createStack(int size);                 /* make a stack from scratch */
 
-INLINE1(resetStack)
-INLINE2(resetStack)
-void resetStack(Stack_t *oStack)
-{
-  oStack->cursor = 0;
-}
-
-INLINE1(lengthStack)
-INLINE2(lengthStack)
-int lengthStack(Stack_t *oStack)
-{
-  return oStack->cursor;
-}
-
-INLINE1(pushStack)
-INLINE2(pushStack)
-void pushStack(Stack_t *oStack, ptr_t item)
-{
-  /* assert(item != NULL); */
-  oStack->data[oStack->cursor++] = item;
-  if (oStack->cursor == oStack->size)
-    resizeStack(oStack, 2 * oStack->size);  /* Enough to maintain invariant that it is not full */
-}
-
-INLINE1(pushStack2)
-INLINE2(pushStack2)
-void pushStack2(Stack_t *oStack, ptr_t item1, ptr_t item2)
-{
-  /* assert(item != NULL); */
-  if (oStack->cursor == oStack->size)
-    resizeStack(oStack, 2 * oStack->size);
-  oStack->data[oStack->cursor++] = item1;
-  oStack->data[oStack->cursor++] = item2;
-  if (oStack->cursor == oStack->size)
-    resizeStack(oStack, 2 * oStack->size);
-}
-
-INLINE1(pushStack3)
-INLINE2(pushStack3)
-void pushStack3(Stack_t *oStack, ptr_t item1, ptr_t item2, ptr_t item3)
-{
-  /* assert(item != NULL); */
-  if (oStack->cursor == oStack->size)
-    resizeStack(oStack, 2 * oStack->size);
-  oStack->data[oStack->cursor++] = item1;
-  oStack->data[oStack->cursor++] = item2;
-  oStack->data[oStack->cursor++] = item3;
-  if (oStack->cursor == oStack->size)
-    resizeStack(oStack, 2 * oStack->size);
-}
-
-/* Returns NULL if stack is empty */
-INLINE1(popStack)
-INLINE2(popStack)
-ptr_t popStack(Stack_t *oStack)
-{
-  if (oStack->cursor) {
-    return oStack->data[--oStack->cursor];
-  }
-  return NULL;
-}
-
-/* Returns NULL if stack is empty */
-INLINE1(peekStack)
-INLINE2(peekStack)
-ptr_t peekStack(Stack_t *oStack)
-{
-  if (oStack->cursor) {
-    return oStack->data[oStack->cursor-1];
-  }
-  return NULL;
-}
-
-/* Returns NULL if stack is empty */
-INLINE1(popStack2)
-INLINE2(popStack2)
-ptr_t popStack2(Stack_t *oStack, ptr_t *item2Ref, ptr_t *item3Ref)
-{
-  if (oStack->cursor > 1) {
-    *item2Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */
-    return oStack->data[--oStack->cursor];
-  }
-  return NULL;
-}
-
-/* Returns NULL if stack is empty */
-INLINE1(popStack3)
-INLINE2(popStack3)
-ptr_t popStack3(Stack_t *oStack, ptr_t *item2Ref, ptr_t *item3Ref)
-{
-  if (oStack->cursor > 2) {
-    *item3Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */
-    *item2Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */
-    return oStack->data[--oStack->cursor];
-  }
-  return NULL;
-}
-
-INLINE1(isEmptyStack)
-INLINE2(isEmptyStack)
-int isEmptyStack(Stack_t *oStack)
-{
-  return oStack->cursor == 0;
-}
 
 /* The states Scheduler, Mutator, GC,and  Done are disjoint.
    The remaining GC* states are substates of GC.
@@ -273,11 +150,20 @@ typedef struct Proc__t
   int                processor;      /* processor id that this pthread is bound to */
   pthread_t          pthread;        /* pthread that this system thread is implemented as */
   Thread_t           *userThread;    /* current user thread mapped to this system thread */
-  Stack_t            minorStack;     /* Used by parallel/concurrent generational collector */
+
+  Stack_t            *globalLocs;             /* Global variables */
+  Stack_t            *rootLocs;               /* Stack root locations containing root values */
+  Stack_t            threads;                /* Used by incremental collector for breaking up scanning stacks */
+  Stack_t            minorObjStack;     /* Used by parallel/concurrent generational collector */
   Stack_t            minorSegmentStack; 
-  Stack_t            majorStack;     /* Used by parallel/concurrent collector */
+  Stack_t            majorObjStack;     /* Used by parallel/concurrent collector */
   Stack_t            majorSegmentStack;  
-  Stack_t            majorRegionStack; /* Used by generational concurrent collector */
+  Stack_t            majorRegionStack; /* Possibly used by a generational concurrent collector */
+  Stack_t            *primaryReplicaObjRoots; /* PR objects whose values serve as roots - allocated ptr array */
+  Stack_t            *primaryReplicaObjFlips; /* PR objects whose locs must be flipped when minor collector goes off - allocated ptr array */
+  Stack_t            *primaryReplicaLocRoots; /* Locations of PRs whose values serve as roots - modified ptr array loc */
+  Stack_t            *primaryReplicaLocFlips; /* Locations of PRs which need to be flipped when collectors goes off - modified ptr array loc */
+
   Timer_t            totalTimer;     /* Time spent in entire processor */
   Timer_t            currentTimer;   /* Time spent running any subtask */
   int                segmentNumber;  /* Counts the Number of times we are in a GC since running a mutator */
@@ -306,12 +192,6 @@ typedef struct Proc__t
   Histogram_t        gcFlipOffHistogram;
   Histogram_t        gcFlipOnHistogram;
 
-  Stack_t            *roots;                  /* Stack, global root locations containing root values */
-  Stack_t            rootVals;                /* Used by incremental collector for breaking up initial root processing 
-						      and by generational for ptr array allocation */
-  Stack_t            *primaryReplicaObjFlips; /* PR objects whose locs must be flipped when minor collector goes off - allocated ptr array */
-  Stack_t            *primaryReplicaLocRoots; /* Locations of PRs whose values serve as roots - modified ptr array loc */
-  Stack_t            *primaryReplicaLocFlips; /* Locations of PRs which need to be flipped when collectors goes off - modified ptr array loc */
 
   CopyRange_t        minorRange;   /* Used only by generational collector */
   CopyRange_t        majorRange;
@@ -322,12 +202,21 @@ typedef struct Proc__t
   long               numWrite;
   long               numRoot;
   long               numLocative;
+
+  unsigned long      lastHashKey;     /* Last hash entry key/data for optimizing LookupCallinfo */
+  void               *lastHashData; 
+
 } Proc_t;
 
 void procChangeState(Proc_t *, ProcessorState_t);
 
 long updateWorkDone(Proc_t *proc);
-long getWorkDone(Proc_t *proc);
+INLINE1(getWorkDone)
+INLINE2(getWorkDone)
+long getWorkDone(Proc_t *proc)
+{
+  return proc->segUsage.workDone;
+}
 Thread_t *getThread(void);
 Proc_t *getProc(void);
 Proc_t *getNthProc(int);
@@ -336,14 +225,17 @@ extern pthread_mutex_t ScheduleLock;       /* locks (de)scheduling of sys thread
 void ResetJob(void);                       /* For iterating over all jobs in work list */
 Thread_t *NextJob(void);
 void StopAllThreads(void);                 /* Change all user thread's limit to StopHeapLimit */
+double segmentTime(Proc_t *);              /* Time of current GC segment */
 
 void thread_init(void);
-void thread_go(ptr_t *thunks, int numThunk);
+void thread_go(ptr_t thunk);
 void Interrupt(struct ucontext *);
 void scheduler(Proc_t *);                  /* Unmap user thread of Proc if mapped */
 void Finish(void);
 Thread_t *YieldRest(void);
 void ReleaseJob(Proc_t *);
+void Thread_Pin(Thread_t *th);
+void Thread_Unpin(Thread_t *th);
 
 int thread_total(void);
 int thread_max(void);

@@ -112,19 +112,19 @@ int splitAlloc_copyCopySync(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
 /* copy1_noSpaceCheck */
 INLINE1(copy1_noSpaceCheck)
 INLINE2(copy1_noSpaceCheck)
-void copy1_noSpaceCheck(Proc_t *proc, ptr_t obj, CopyRange_t *copyRange, range_t *from)
+void copy1_noSpaceCheck(Proc_t *proc, ptr_t obj, CopyRange_t *copyRange, Heap_t *from)
 {
-  if ((val_t) obj - (val_t)from->low < from->diff) 
+  if ((val_t) obj - (val_t)from->range.low < from->range.diff) 
     copy_noSpaceCheck(proc,obj,copyRange);
 }
 
 /* locCopy1_noSpaceCheck */
 INLINE1(locCopy1_noSpaceCheck)
 INLINE2(locCopy1_noSpaceCheck)
-void locCopy1_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange, range_t *from)
+void locCopy1_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange, Heap_t *from)
 {
   ptr_t obj = *loc;
-  if ((val_t) obj - (val_t)from->low < from->diff) {
+  if ((val_t) obj - (val_t)from->range.low < from->range.diff) {
     copy_noSpaceCheck(proc,obj,copyRange);
     *loc = (ptr_t) obj[-1];
   }
@@ -134,15 +134,15 @@ void locCopy1_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange, ran
 INLINE1(locCopy2L_noSpaceCheck)
 INLINE2(locCopy2L_noSpaceCheck)
 void locCopy2L_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange,
-			   range_t *from, range_t *from2, range_t *large)
+			    Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
   ptr_t obj = *loc;
-  if (((val_t) obj - (val_t) from->low < from->diff) ||  
-      ((val_t) obj - (val_t) from2->low < from2->diff)) {
+  if (((val_t) obj - (val_t) from->range.low < from->range.diff) ||  
+      ((val_t) obj - (val_t) from2->range.low < from2->range.diff)) {
     copy_noSpaceCheck(proc,obj,copyRange);
     *loc = (ptr_t) obj[-1];
   }
-  else if ((val_t) obj - (val_t) large->low < large->diff)
+  else if ((val_t) obj - (val_t) large->range.low < large->range.diff)
     gc_large_addRoot(obj);
 }
 
@@ -152,12 +152,14 @@ void locCopy2L_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange,
 */
 INLINE1(splitAlloc_primaryStack)
 INLINE2(splitAlloc_primaryStack)
-int splitAlloc_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, range_t *from)
+int splitAlloc_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   tag_t tag;
   int bytesCopied = splitAlloc(proc,white,copyRange);
-  if (bytesCopied) 
+  if (bytesCopied) {
+    proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
     pushStack(localStack, white);
+  }
   return bytesCopied;
 }
 
@@ -166,9 +168,9 @@ int splitAlloc_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, Copy
 /* copy1_copyCopySync_replicaStack */
 INLINE1(copy1_copyCopySync_replicaStack)
 INLINE2(copy1_copyCopySync_replicaStack)
-void copy1_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, range_t *from)
+void copy1_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
-  if ((val_t) white - (val_t)from->low < from->diff) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
     if (bytesCopied) {
       ptr_t gray = (ptr_t) white[-1];
@@ -180,11 +182,12 @@ void copy1_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, Stack_t *localSt
 /* splitAlloc1_copyCopySync_primaryStack */
 INLINE1(splitAlloc1_copyCopySync_primaryStack)
 INLINE2(splitAlloc1_copyCopySync_primaryStack)
-void splitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, range_t *from)
+void splitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
-  if ((val_t) white - (val_t)from->low < from->diff) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = splitAlloc_copyCopySync(proc,white,copyRange);
     if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
     }
   }
@@ -193,74 +196,82 @@ void splitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *l
 /* splitAlloc1L_copyCopySync_primaryStack */
 INLINE1(splitAlloc1L_copyCopySync_primaryStack)
 INLINE2(splitAlloc1L_copyCopySync_primaryStack)
-void splitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, range_t *from, range_t *large)
+void splitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from, Heap_t *large)
 { 
-  if ((val_t) white - (val_t)from->low < from->diff) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = splitAlloc_copyCopySync(proc,white,copyRange);
     if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
     }
   }
-  else if ((val_t) white - (val_t) large->low < large->diff)
+  else if ((val_t) white - (val_t) large->range.low < large->range.diff)
     gc_large_addRoot(white);
 }
 
 /* locCopy1_copyCopySync_replicaStack */
 INLINE1(locCopy1_copyCopySync_replicaStack)
 INLINE2(locCopy1_copyCopySync_replicaStack)
-void locCopy1_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, range_t *from)
+void locCopy1_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   ptr_t white = *loc;							
-  if ((val_t) white - (val_t)from->low < from->diff) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
-    if (bytesCopied) 
+    if (bytesCopied) {
       pushStack(localStack, gray);
+    }
   }
 }
 
 /* copy1_copyCopySync_primaryStack */
 INLINE1(copy1_copyCopySync_primaryStack)
 INLINE2(copy1_copyCopySync_primaryStack)
-void copy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, range_t *from)
+void copy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
-  if ((val_t) white - (val_t)from->low < from->diff) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
-    if (bytesCopied) 
+    if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
+    }
   }
 }
 
 /* locCopy1_copyCopySync_primaryStack */
 INLINE1(locCopy1_copyCopySync_primaryStack)
 INLINE2(locCopy1_copyCopySync_primaryStack)
-void locCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, range_t *from)
+void locCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   ptr_t white = *loc;							
-  if ((val_t) white - (val_t)from->low < from->diff) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
-    if (bytesCopied) 
+    if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
+    }
   }
 }
 
 /* locCopy1L_copyCopySync_primaryStack */
 INLINE1(locCopy1L_copyCopySync_primaryStack)
 INLINE2(locCopy1L_copyCopySync_primaryStack)
-void locCopy1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, range_t *from, range_t *large)
+void locCopy1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from, Heap_t *large)
 { 
   ptr_t white = *loc;							
-  if ((val_t) white - (val_t)from->low < from->diff) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
-    if (bytesCopied) 
+    if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
+    }
   }
-  else if ((val_t) white - (val_t) large->low < large->diff)
+  else if ((val_t) white - (val_t) large->range.low < large->range.diff)
     gc_large_addRoot(white);
 }
 
@@ -268,18 +279,19 @@ void locCopy1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
 INLINE1(locCopy2L_copyCopySync_replicaStack)
 INLINE2(locCopy2L_copyCopySync_replicaStack)
 void locCopy2L_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange,
-					range_t *from, range_t *from2, range_t *large)
+					 Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
   ptr_t white = *loc;
-  if (((val_t) white - (val_t)from->low < from->diff) ||
-      ((val_t) white - (val_t)from2->low < from2->diff)) {
+  if (((val_t) white - (val_t)from->range.low < from->range.diff) ||
+      ((val_t) white - (val_t)from2->range.low < from2->range.diff)) {
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
-    if (bytesCopied) 
+    if (bytesCopied) {
       pushStack(localStack, gray);
+    }
     *loc = gray;
   }
-  else if ((val_t) white - (val_t) large->low < large->diff)
+  else if ((val_t) white - (val_t) large->range.low < large->range.diff)
     gc_large_addRoot(white);
 }
 
@@ -288,16 +300,25 @@ void locCopy2L_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *loca
 INLINE1(copy2L_copyCopySync_primaryStack)
 INLINE2(copy2L_copyCopySync_primaryStack)
 void copy2L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange,
-					range_t *from, range_t *from2, range_t *large)
+				      Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
-  if (((val_t) white - (val_t)from->low < from->diff) ||
-      ((val_t) white - (val_t)from2->low < from2->diff)) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
-    if (bytesCopied) 
+    if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
+    }
   }
-  else if ((val_t) white - (val_t) large->low < large->diff)
+  else if ((val_t) white - (val_t)from2->range.low < from2->range.diff) {
+    int bytesCopied = copy_copyCopySync(proc,white,copyRange);
+    ptr_t gray = (ptr_t) white[-1];
+    if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from2,white); 
+      pushStack(localStack, white);
+    }
+  }
+  else if ((val_t) white - (val_t) large->range.low < large->range.diff)
     gc_large_addRoot(white);
 }
 
@@ -305,32 +326,43 @@ void copy2L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localS
 INLINE1(locCopy2L_copyCopySync_primaryStack)
 INLINE2(locCopy2L_copyCopySync_primaryStack)
 void locCopy2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange,
-					range_t *from, range_t *from2, range_t *large)
+					 Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
   ptr_t white = *loc;
-  if (((val_t) white - (val_t)from->low < from->diff) ||
-      ((val_t) white - (val_t)from2->low < from2->diff)) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
-    if (bytesCopied) 
+    if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
+    }
   }
-  else if ((val_t) white - (val_t) large->low < large->diff)
+  else if ((val_t) white - (val_t)from2->range.low < from2->range.diff) {
+    int bytesCopied = copy_copyCopySync(proc,white,copyRange);
+    ptr_t gray = (ptr_t) white[-1];
+    *loc = gray;
+    if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from2,white); 
+      pushStack(localStack, white);
+    }
+  }
+  else if ((val_t) white - (val_t) large->range.low < large->range.diff)
     gc_large_addRoot(white);
 }
 
 /* locAlloc1_copyCopySync_primaryStack */
 INLINE1(locAlloc1_copyCopySync_primaryStack)
 INLINE2(locAlloc1_copyCopySync_primaryStack)
-void locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, range_t *from)
+void locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   ptr_t white = *loc;							
-  if ((val_t) white - (val_t)from->low < from->diff) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = alloc_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
     }
   }
@@ -339,14 +371,15 @@ void locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
 /* locSplitAlloc1_copyCopySync_primaryStack */
 INLINE1(locSplitAlloc1_copyCopySync_primaryStack)
 INLINE2(locSplitAlloc1_copyCopySync_primaryStack)
-void locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, range_t *from)
+void locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   ptr_t white = *loc;							
-  if ((val_t) white - (val_t)from->low < from->diff) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = splitAlloc_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
     }
   }
@@ -356,18 +389,19 @@ void locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t 
 /* locSplitAlloc1L_copyCopySync_primaryStack */
 INLINE1(locSplitAlloc1L_copyCopySync_primaryStack)
 INLINE2(locSplitAlloc1L_copyCopySync_primaryStack)
-void locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, range_t *from, range_t *large)
+void locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from, Heap_t *large)
 { 
   ptr_t white = *loc;							
-  if ((val_t) white - (val_t)from->low < from->diff) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = splitAlloc_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
     }
   }
-  else if ((val_t) white - (val_t) large->low < large->diff)
+  else if ((val_t) white - (val_t) large->range.low < large->range.diff)
     gc_large_addRoot(white);
 }
 
@@ -376,25 +410,35 @@ void locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t
 INLINE1(locAlloc2L_copyCopySync_primaryStack)
 INLINE2(locAlloc2L_copyCopySync_primaryStack)
 void locAlloc2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, 
-					range_t *from, range_t *from2, range_t *large)
+					  Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
   ptr_t white = *loc;							
-  if (((val_t) white - (val_t)from->low < from->diff) ||
-      ((val_t) white - (val_t)from2->low < from2->diff)) {
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = alloc_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
-    if (bytesCopied) 
+    if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
       pushStack(localStack, white);
+    }
   }
-  else if ((val_t) white - (val_t) large->low < large->diff)
+  else if ((val_t) white - (val_t)from2->range.low < from2->range.diff) {
+    int bytesCopied = alloc_copyCopySync(proc,white,copyRange);
+    ptr_t gray = (ptr_t) white[-1];
+    *loc = gray;
+    if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from2,white); 
+      pushStack(localStack, white);
+    }
+  }
+  else if ((val_t) white - (val_t) large->range.low < large->range.diff)
     gc_large_addRoot(white);
 }
 
 
 /* ------------------- Writelist Routines ---------------------- */
 void discard_writelist(Proc_t *proc);
-void add_writelist_to_rootlist(Proc_t *proc, range_t *from, range_t *to);
+void add_writelist_to_rootlist(Proc_t *proc, Heap_t *from, Heap_t *to);
 
 /* ------------------- Scanning Routines ---------------------- */
 
@@ -404,40 +448,40 @@ void add_writelist_to_rootlist(Proc_t *proc, range_t *from, range_t *to);
    transferScanObj_copyWriteSync_locCopy?_copyCopySync_primaryStack - Concurrent collectors
 */
 void scanObj_locCopy1_noSpaceCheck(Proc_t *proc, ptr_t obj, 
-				   CopyRange_t *copyRange, range_t *from_range);
+				   CopyRange_t *copyRange, Heap_t *from_range);
 void scanUntil_locCopy1_noSpaceCheck(Proc_t *, mem_t start_scan, 
-				     CopyRange_t *, range_t *from_range);
+				     CopyRange_t *, Heap_t *from_range);
 void scanUntil_locCopy2L_noSpaceCheck(Proc_t *, mem_t start_scan, CopyRange_t *,
-				     range_t *from_range, range_t *from2_range, range_t *large);
+				     Heap_t *from_range, Heap_t *from2_range, Heap_t *large);
 
 void scanObj_locCopy1_copyCopySync_replicaStack(Proc_t *, ptr_t gray_obj, Stack_t *, CopyRange_t *copyRange,
-						range_t *from_range);
+						Heap_t *from_range);
 void scanObj_locCopy2L_copyCopySync_replicaStack(Proc_t *, ptr_t gray_obj, Stack_t *, CopyRange_t *copyRange,
-						range_t *from_range, range_t *from2_range, range_t *large_range);
+						Heap_t *from_range, Heap_t *from2_range, Heap_t *large_range);
 
 void scanObj_copy1_copyCopySync_primaryStack(Proc_t *, ptr_t replicaGray, Stack_t *, CopyRange_t *copyRange,
-					     range_t *from_range);
+					     Heap_t *from_range);
 void scanObj_locCopy1_copyCopySync_primaryStack(Proc_t *, ptr_t replicaGray, Stack_t *, CopyRange_t *copyRange,
-						range_t *from_range);
+						Heap_t *from_range);
 void scanObj_locCopy1L_copyCopySync_primaryStack(Proc_t *, ptr_t replicaGray, Stack_t *, CopyRange_t *copyRange,
-						 range_t *from_range, range_t *large_range);
+						 Heap_t *from_range, Heap_t *large_range);
 void transferScanObj_locCopy1_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, Stack_t *, CopyRange_t *copyRange,
-							range_t *from_range);
+							Heap_t *from_range);
 void transferScanObj_locCopy2L_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, Stack_t *, CopyRange_t *copyRange,
-							range_t *from_range, range_t *from2_range, range_t *large_range);
+							Heap_t *from_range, Heap_t *from2_range, Heap_t *large_range);
 
 void transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, 
 									    Stack_t *obj, Stack_t *seg, CopyRange_t *copyRange,
-									    range_t *from_range);
+									    Heap_t *from_range);
 void transferScanObj_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, 
 									     Stack_t *obj, Stack_t *seg, CopyRange_t *copyRange,
-									     range_t *from_range, range_t *large_range);
+									     Heap_t *from_range, Heap_t *large_range);
 void transferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, int start, int end,
 										Stack_t *obj, Stack_t *seg, CopyRange_t *copyRange,
-										range_t *from_range);
+										Heap_t *from_range);
 void transferScanSegment_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, int start, int end,
 										 Stack_t *obj, Stack_t *seg, CopyRange_t *copyRange,
-										 range_t *from_range, range_t *large_range);
+										 Heap_t *from_range, Heap_t *large_range);
 
 
 #endif

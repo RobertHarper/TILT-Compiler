@@ -79,6 +79,7 @@ void reset_histogram(Histogram_t *);
 void add_histogram(Histogram_t *, double);
 
 /* Initializing timers; show statistics */
+void add_statString(char *);
 void stats_init(void);
 void stats_finish(void);
 

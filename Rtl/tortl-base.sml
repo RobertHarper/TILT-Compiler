@@ -25,6 +25,7 @@ struct
     val do_writeBarrier = Stats.tt("WriteBarrier")
     val do_fullWriteBarrier = Stats.tt("FullWriteBarrier")
     val do_arrayReadBarrier = Stats.tt("ArrayReadBarrier")
+    val do_double_globalVars = Stats.tt("DoubleGlobalVars") (* Each word-sized global variable is doubled in place *)
 
     val do_constant_records = ref true
     val do_forced_constant_records = ref true
@@ -172,10 +173,29 @@ struct
 	print "\n\n")
 
    local
-       val mutable : label list ref = ref nil
-   in  fun add_mutable lr = mutable := lr :: !mutable
-       fun get_mutable() = !mutable
-       fun reset_mutable() = mutable := nil
+       val partialRecordLabels : label list ref = ref nil
+       val partialRecords = ref 0
+       val totalRecords = ref 0
+       val partialFields = ref 0
+       val totalFields = ref 0
+   in  fun add_static_record (l, nonHeapFields, heapFields) =
+         (if (heapFields > 0)
+	      then (partialRecordLabels := l :: !partialRecordLabels;
+		    partialRecords := 1 + !partialRecords)
+	  else 
+	      totalRecords := 1 + !totalRecords;
+	  partialFields := heapFields + (!partialFields);
+	  totalFields := nonHeapFields + (!totalFields))
+       fun get_static_records() = {partialRecords = !partialRecords,
+				   totalRecords = !totalRecords,
+				   partialFields = !partialFields,
+				   totalFields = !totalFields,
+				   partialRecordLabels = !partialRecordLabels}
+       fun reset_records() = (partialRecordLabels := nil;
+			      partialRecords := 0;
+			      totalRecords := 0;
+			      partialFields := 0;
+			      totalFields := 0)
    end
    fun add_proc p = pl := p :: !pl
        
@@ -339,24 +359,24 @@ struct
   fun cpath2indices (state : state) k labs = 
       let fun loop acc _ [] = rev acc
 	    | loop acc (k as Record_k fields_seq) (label::rest) = 
-	  let fun extract acc [] = (print "could not find label "; Ppnil.pp_label label; 
-				    print " in the fields of "; Ppnil.pp_kind k; print "\n";
-				    error "bad Proj_c")
-		| extract acc (((l,_),fc)::rest) = 
-	        if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
-	      val fields_list = (Sequence.toList fields_seq)
-	      val (con,index) = extract 0 fields_list 
-	      val acc = if (!do_single_crecord andalso length fields_list = 1)
-			    then acc
-			else (index::acc) 
-	  in  loop acc con rest
-	  end
+	      let fun extract acc [] = (print "could not find label "; Ppnil.pp_label label; 
+					print " in the fields of "; Ppnil.pp_kind k; print "\n";
+					error "bad Proj_c")
+		    | extract acc (((l,_),fc)::rest) = 
+		  if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
+		  val fields_list = (Sequence.toList fields_seq)
+		  val (con,index) = extract 0 fields_list 
+		  val acc = if (!do_single_crecord andalso length fields_list = 1)
+				then acc
+			    else (index::acc) 
+	      in  loop acc con rest
+	      end
 	    | loop acc (Single_k c) labs = 
-	  let val k = subtimer("RTLkind_of0", NilContext.kind_of) (#1 (#env state),c)
-	  in  loop acc k labs
-	  end
+	      let val k = subtimer("RTLkind_of0", NilContext.kind_of) (#1 (#env state),c)
+	      in  loop acc k labs
+	      end
 	    | loop acc (SingleType_k c) labs = 
-	  loop acc Type_k labs
+	      loop acc Type_k labs
 	    | loop acc _ labs = error "expect record kind"
       in  loop [] k labs
       end
@@ -403,7 +423,7 @@ struct
 	      | SOME(_,SOME(CODE _)) => error "constructor function cannot be a type"
 	      | SOME(SOME(REGISTER (_,I r)),_) => (COMPUTE(Projvar_p (r,labs)))
 	      | SOME(SOME(REGISTER (_,F _)),_) => error "constructor in float reg"
-	      | SOME(SOME(GLOBAL (l,_)),_) => (COMPUTE(Projlabel_p(l,0::labs)))
+	      | SOME(SOME(GLOBAL (l,_)),_) => (COMPUTE(Projglobal_p(l,labs)))
 	      | _ => (print "niltrace2rep convar = ";
 		      print (var2string v); print "\n";
 		      error "no information on this convar!!"))
@@ -611,7 +631,8 @@ struct
 	    localregs := (I return) :: args)
 
        fun reset_state (is_top,names) = 
-	   (istop := is_top;
+	   (resultreg := NONE;
+	    istop := is_top;
 	    currentfun := names;
 	    top := fresh_code_label "funtop";
 	    il := nil; 
@@ -633,7 +654,7 @@ struct
 		dw := 0;
 		dl := nil;
 		pl := nil;
-		reset_mutable();
+		reset_records();
 		reset_state(false,(fresh_named_var "code", fresh_code_label "code"));
 		clear_stats())
 	   end
@@ -740,18 +761,16 @@ struct
    the following are functions that load integer registers or float registers
    or load an sv; for int/float regs, one can optionally specify a dest register *)
 
+
     (* --- load an RTL location into an integer register --- *)
     fun load_ireg_loc (loc : location, destOpt : regi option) =
 	(case loc of
 	     GLOBAL(l,NOTRACE_REAL) => error "load_ireg called with (GLOBAL real)"
-	   | GLOBAL(label,rep) =>
-		 let val reg = 
-		     (case destOpt of
-			  NONE => alloc_regi rep
-			| SOME d => d)
-		 in  add_instr(LOAD32I(LEA(label,0),reg));
-		     reg
-		 end
+	   | GLOBAL(label,rep) => let val dest = (case destOpt of
+						      NONE => alloc_regi rep
+						    | SOME d => d)
+				  in  add_instr(LOADGLOBAL(label,dest)); dest
+				  end
 	   | REGISTER (_,I ir) => (case destOpt of
 					NONE => ir
 				      | SOME d => (add_instr(MV(ir,d)); d))
@@ -927,14 +946,18 @@ struct
 	     | Projlabel_p (lab,ind) => let val addr = alloc_regi NOTRACE_LABEL
 					    val _ = add_instr(LADDR(LEA(lab,0),addr))
 					in  loop(addr,ind)
-					end)
+					end
+	     | Projglobal_p (lab,ind) => let val addr = alloc_regi NOTRACE_LABEL
+					     val _ = add_instr(LOADGLOBAL(lab, addr))
+					 in  loop(addr,ind)
+					 end)
       end
 
   fun allocate_global (label,labels,rtl_rep,lv) = 
       let 
 	  val _ = incGlobal()
 	  val _ = add_data(COMMENT "Global")
-	  val (tagData, tagMaskOpt) = 
+	  val (wordSized,tagData, tagMaskOpt) = 
 	      (case rtl_rep of
 		   LOCATIVE => error "global locative"
 		 | UNSET => error "global unset"
@@ -942,11 +965,13 @@ struct
 		       let val tagData = mk_recordtag [NOTRACE_INT, NOTRACE_INT]
 			   val {dynamic=[],static} = tagData
 		       in  oddlong_align();
-			   (static, NONE)
+			   (false,static, NONE)
 		       end
 		 | _ => 
-		       let val tagData = mk_recordtag [rtl_rep]
-			   val {dynamic,static} = tagData
+		       let val {dynamic,static} = mk_recordtag 
+                               			   (if !do_double_globalVars
+							 then [rtl_rep, rtl_rep]
+						     else [rtl_rep])
 			   val maskOpt = 
 			       (case dynamic of 
 				    [] => NONE
@@ -962,59 +987,65 @@ struct
 					    val _ = app do_bit dynamic
 					in  SOME mask
 					end)
-		       in  (static, maskOpt)
+		       in  (true, static, maskOpt)
 		       end)
-	  fun doInitialize() = 
-	      (add_data (INT32 tagData);
-	       app (fn l => add_data(DLABEL l)) (label::labels);
-	       (case tagMaskOpt of
-		    NONE => ()
-		  | SOME tagMask => error "cannot doInitialize with tagMask present"))
-	  fun doUninitialize() = 
-	      let val tag = alloc_regi NOTRACE_INT
-		  val _ = add_mutable label
-	      in  add_data (INT32 (Rtltags.skip 2));  (* indicates uninitialized global *)
+	  fun doNonHeap(datum,instrs) = 
+	      let val _ = (case tagMaskOpt of
+			       NONE => ()
+			     | SOME tagMask => error "cannot doNonHeap with tagMask present")
+		  val _ = add_static_record (label, 1, 0)
+	      in  add_data (INT32 tagData);
 		  app (fn l => add_data(DLABEL l)) (label::labels);
+		  add_data (datum);
+		  if (wordSized andalso !do_double_globalVars)
+		      then add_data(datum)
+		  else ();
+		  app add_instr instrs
+	      end
+
+	  fun doHeap(instrs) = 
+	      let val tag = alloc_regi NOTRACE_INT
+		  val _ = add_static_record (label, 0, 1)
+	      in  add_data (INT32 (Rtltags.skip (if !do_double_globalVars then 3 else 2)));  
+		  app (fn l => add_data(DLABEL l)) (label::labels);
+		  add_data(INT32 uninit_val);
+		  if (!do_double_globalVars)
+		      then add_data(INT32 uninit_val)
+		  else ();
 		  add_instr(LI(tagData, tag));
 		  (case tagMaskOpt of
 		       NONE => ()
 		     | SOME mask => add_instr(ORB(mask,REG tag,tag)));
-		  add_instr(STORE32I(LEA(label,~4), tag))
+		  add_instr(STORE32I(LEA(label,~4), tag));
+		  app add_instr instrs
 	      end
 
 	  val labelEa = LEA(label,0)
       in  (case lv of
 	     LOCATION (REGISTER (_,reg)) =>
 		 (case reg of
-		      I r => (doUninitialize(); (* could optimize for non-pointers *)
-			      add_data(INT32 uninit_val);
-			      add_instr(STORE32I(labelEa,r)))  
-		    | F r => (doInitialize();   (* ok since floats are never pointers *)
-			      add_data(FLOAT "0.0");
-			      add_instr(STORE64F(labelEa,r))))
+		      I r => doHeap([INITGLOBAL(label,r)])
+		    | F r => doNonHeap(FLOAT "0.0", [STORE64F(labelEa,r)]))
 	   | LOCATION (GLOBAL (l,rep)) => 
 		      let val value = alloc_regi rep
-		      in  if (repIsNonheap rep)
-			      then doInitialize()
-			  else doUninitialize();
-			  add_data(INT32 uninit_val);
-			  add_instr(LOAD32I(LEA(l,0),value));
-			  add_instr(STORE32I(labelEa, value))
+			  val instrs = [LOADGLOBAL(l,value),
+					INITGLOBAL(label,value)]
+		      in if (repIsNonheap rep)
+			     then doNonHeap(INT32 0w0, instrs)
+			 else doHeap(instrs)
 		      end
 	   | VALUE (VOID _) => (print "Warning: alloc_global got a VOID\n";
-				doInitialize();
-				add_data(INT32 0w0))
-	   | VALUE (INT w32) => (doInitialize(); add_data(INT32 w32))
-	   | VALUE (TAG w32) => (doInitialize(); add_data(INT32 w32))
+				doNonHeap(INT32 0w0, []))
+	   | VALUE (INT w32) => doNonHeap(INT32 w32, [])
+	   | VALUE (TAG w32) => doNonHeap(INT32 w32, [])
 	   | VALUE (REAL l) => let val fr = alloc_regf()
-			       in  doInitialize();
-				   add_data(FLOAT "0.0");
-				   add_instr(LOAD64F(LEA(l,0), fr));
-				   add_instr(STORE64F(labelEa, fr))
+			       in  doNonHeap(FLOAT "0.0",
+					     [LOAD64F(LEA(l,0), fr),
+					      STORE64F(labelEa, fr)])
 			       end
-	   | VALUE (RECORD (l,_)) => (doInitialize(); add_data(DATA l))
-	   | VALUE (LABEL l) => (doInitialize(); add_data(DATA l))
-	   | VALUE (CODE l) => (doInitialize(); add_data(DATA l)))
+	   | VALUE (RECORD (l,_)) => doNonHeap(DATA l,[])
+	   | VALUE (LABEL l) => doNonHeap(DATA l,[])
+	   | VALUE (CODE l) => doNonHeap(DATA l,[]))
       end
 
 

@@ -96,31 +96,20 @@ start_client:
 	br	$gp, start_client_getgp1
 start_client_getgp1:	
 	ldgp	$gp, 0($gp)				# fix $gp
-	br	$31, after_loop
-thunk_loop:
 	stq	$31, notinml_disp(THREADPTR_REG)
 .set noat
- 	ldl	$16, nextThunk_disp(THREADPTR_REG)	# fetch nextThunk
-	addl	$16, 1, $17				# increment and
- 	stl	$17, nextThunk_disp(THREADPTR_REG)	#   save nextThunk
- 	ldq	$17, thunk_disp(THREADPTR_REG)		# fetch thunks
-	s4addq	$16, $17, $16				# $16 holds current thunk' address
-	ldl	$at, ($16)				# fetch current thunk
+ 	ldq	$at, thunk_disp(THREADPTR_REG)		# fetch thunk
+	stl	$31, thunk_disp(THREADPTR_REG)		# erase thunk
 	ldl	$27, ($at)				# fetch code pointer
 	ldl	$0, 4($at)				# fetch type env
 	ldl	$1, 8($at)				# fetch term env
 	lda	EXNPTR_REG, global_exnrec		# install global handler
 	stl	$sp, 4(EXNPTR_REG)			# initialize the stack pointer
 	jsr	$26,  ($27)				# jump to thunk
-start_client_retadd_val:	
+start_client_retadd_val:				# used by stack.c
 	br	$gp, start_client_getgp2
 start_client_getgp2:	
-	ldgp	$gp, 0($gp)
-after_loop:	
-	ldl	$16, nextThunk_disp(THREADPTR_REG)	# fetch nextThunk
-	ldl	$17, numThunk_disp(THREADPTR_REG)	# fetch numThunk
-	cmplt	$16, $17, $at
-	bne	$at, thunk_loop				# execute if nextThunk < numThunk
+	ldgp	$gp, 0($gp)				$ fix gp
 	lda	$at, 1($31)
 	stl	$at, notinml_disp(THREADPTR_REG)
 	addq	THREADPTR_REG, MLsaveregs_disp, $0
@@ -236,8 +225,10 @@ restore_dummy:
 	ldq	$0, MLsaveregs_disp+0*4(THREADPTR_REG)		# restore $0 due to load_regs
 	ldq	$1, MLsaveregs_disp+1*4(THREADPTR_REG)		# restore $1 due to load_regs
 								# don't need to restore r26 and r29 due to load_regs
-	ldq	$sp, MLsaveregs_disp+SP_DISP(THREADPTR_REG)	# restore sp
-	ldq	$sp, 4(EXNPTR_REG)	# fetch sp of handler
+	lda	ASMTMP2_REG, primaryStackletOffset
+	ldl	ASMTMP2_REG, ASMTMP2_REG
+	ldq	ASMTMP_REG, 4(EXNPTR_REG)	# fetch sp in handler
+	addq	ASMTMP_REG, ASMTMP2_REG, $sp	# restore sp		
 	ldq	$27, 0(EXNPTR_REG)	# fetch pc of handler
 	jmp	$31, ($27), 1		# jump without link
 .set at

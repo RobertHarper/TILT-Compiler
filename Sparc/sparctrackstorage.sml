@@ -28,6 +28,7 @@ struct
   datatype summary = SUMMARY of 
                     {registers_used    : Machine.register list,
 		     stackframe_size   : int,
+		     prevframe_maxoffset : int,
 		     callee_save_slots : (Machine.register * stacklocation) list,
 		     fixStackOffset    : Machine.stacklocation -> 
 		                         Machine.stacklocation}
@@ -216,6 +217,9 @@ struct
     in
       SUMMARY {registers_used = registers_used,
 	       stackframe_size = stackframe_size,
+	       prevframe_maxoffset = if (!num_args = 0)
+					 then 0
+				     else ra_offset,
 	       callee_save_slots = callee_save_slots,
 	       fixStackOffset = fixStackOffset}
     end

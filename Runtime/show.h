@@ -22,7 +22,7 @@ INLINE1(inHeap)
 INLINE2(inHeap)
 int inHeap(ptr_t v, Heap_t *heap)
 {
-  return ((v >= heap->bottom) && (v <= heap->top));
+  return (((val_t) v - (val_t) heap->bottom) < heap->size);
 }
 
 #endif

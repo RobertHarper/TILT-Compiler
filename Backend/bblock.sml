@@ -79,17 +79,25 @@ struct
        in  foldl folder baseset addlist
        end
 
-   fun blockDefUse (BLOCK{instrs,
-                           def,
-                           use,
-                           in_live,
-                           out_live,
-                           truelabel,
-                           succs}) =
+   fun blockDefUse compute_map (BLOCK{instrs,
+				      def,
+				      use,
+				      in_live,
+				      out_live,
+				      truelabel,
+				      succs}) =
        let 
          (* We don't want special registers to appear in def/use sets
 	    when we are done though we permit them in intermediate results *)
-           fun loop ([],use,def) = (use - special_regs_set, def - special_regs_set)
+           fun loop ([],use,def) = 
+	       let val use = use - special_regs_set
+		   val def = def - special_regs_set
+		   val use = 
+		       Regset.foldl (fn (f,acc) => (case (Regmap.find(compute_map,f)) of
+							SOME (SOME c,_) => Regset.add(acc,c)
+						      | _ => acc)) use use
+	       in  (use, def)
+	       end
              | loop (h :: t,use, def) =
                  let val (instr_def, instr_use) = defUse (stripAnnot h)
                      (* we could convert these very short lists to sets and use set operation;
@@ -206,7 +214,6 @@ struct
 
 	  Taken from Aho, Sethi, Ullman, live-variable analysis (eq. 10.11) *)
 
-      
        fun loop (out,[]) = []
 	 | loop (out,instr :: instrs) =
 	      let val instr = stripAnnot instr
@@ -230,7 +237,7 @@ struct
 	    instrs := loop (! out_live, !instrs)
 
       (* compute def/use and zap bblock in_live/out_line information *)
-       val block_map' = subtimer("bblock_defuse", Labelmap.map blockDefUse) block_map
+       val block_map' = subtimer("bblock_defuse", Labelmap.map (blockDefUse compute_map)) block_map
      in
        (* find live vars at block boundaries *)
        subtimer("bblock_findLiveTemp", findLiveTemps block_map') first_label;

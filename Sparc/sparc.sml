@@ -8,12 +8,14 @@ struct
     val error = fn s => Util.error "sparc.sml" s
     (* Check against Runtime/thread.h *)
     val iregs_disp         = 0
+    val heapLimit_disp     = iregs_disp + 4 * 5
     val fregs_disp         = iregs_disp + 4 * 32
-    val maxsp_disp         = fregs_disp + 8 * 32
-    val threadScratch_disp = maxsp_disp + 4 + 4 + 4 + 4
-    val writelistAlloc_disp = threadScratch_disp + 8 + 4 + 4 * 5 + 4 * 32 + 8 * 32
+    val threadScratch_disp = fregs_disp + 8 * 32 + 4 + 4
+    val writelistAlloc_disp = threadScratch_disp + 8 + 4 + 4 * 3 + 4 * 32 + 8 * 32
     val writelistLimit_disp = writelistAlloc_disp + 4
-    val heapLimit_disp = iregs_disp + 4 * 5
+    val stackLimit_disp     = writelistLimit_disp + 4
+    val globalOffset_disp   = stackLimit_disp + 4
+    val stackletOffset_disp   = globalOffset_disp + 4
 
 structure Machine = 
   struct
@@ -627,13 +629,30 @@ structure Machine =
    fun extern_decl s = ""
 
 
-   fun increase_stackptr sz = if (sz >= 0)
-				  then [SPECIFIC(INTOP(ADD, Rsp, IMMop (INT sz), Rsp))]
-			      else error "increase_stackptr given negative stack size"
-   fun decrease_stackptr sz = if (sz >= 0)
-				  then [BASE(MOVE(Rsp, Rframe)),
-					SPECIFIC(INTOP(SUB, Rsp, IMMop (INT sz), Rsp))]
-			      else error "decrease_stackptr given negative stack size"
+   fun allocate_stack_frame (sz, prevframe_maxoffset) = 
+       let val after = freshCodeLabel()
+	   val _ = if (sz < 0 orelse sz >= 0x1000)
+		       then error "allocate_stackptr given bad stack size"
+		   else ()
+       in [BASE(MOVE(Rsp, Rframe)),   (* Frame pointer always gets old stack pointer value - Is this right with stacklets? *)
+	   SPECIFIC(INTOP(SUB, Rsp, IMMop (INT sz), Rsp)),
+	   SPECIFIC(LOADI(LD, Rat, INT stackLimit_disp, Rth)),
+	   SPECIFIC(CMP (Rsp, REGop Rat)),
+	   SPECIFIC(CBRANCHI(BG, after)),
+	   BASE(MOVE(Rsp, Rframe)),
+	   SPECIFIC(INTOP(ADD, Rsp, IMMop (INT sz), Rsp)),   (* Restore stack pointer to original value *)
+	   SPECIFIC(INTOP(OR, Rzero, IMMop (INT prevframe_maxoffset), Rat)),
+	   BASE (MOVE(Rra, Rat2)),
+	   BASE (BSR (Rtl.ML_EXTERN_LABEL ("NewStackletFromML"), NONE,
+		      {regs_modified=[Rat], regs_destroyed=[Rat],
+		       args=[Rat]})),
+	   SPECIFIC(INTOP(SUB, Rsp, IMMop (INT sz), Rsp)),   (* Reallocate frame on new stacklet *)
+	   BASE(ILABEL after)]
+       end
+				
+   fun deallocate_stack_frame sz = if (sz >= 0)
+				    then [SPECIFIC(INTOP(ADD, Rsp, IMMop (INT sz), Rsp))]
+				else error "deallocate_stackptr given negative stack size"
    fun std_entry_code() = []
    fun std_return_code(NONE) = []
      | std_return_code(SOME sra) = []

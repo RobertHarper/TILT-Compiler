@@ -569,11 +569,12 @@ fun bhForces ([] : particle list) : force list = []
 fun bhForcesP ([] : particle list) : force list = []
   | bhForcesP [_] = [vecZero]
   | bhForcesP ss =
-    let
+    let 
 	val box = boundingBox ss
 	val tree = createTreeP (box, ss)
+	val res = mapP (fn s => treeForce (tree, s)) ss
     in
-	mapP (fn s => treeForce (tree, s)) ss
+	res
     end
 
 (*
@@ -602,7 +603,8 @@ fun simulate makeForce particles delta cur stop when =
 	       show_particlelist particles)
      else ();
      if (cur < stop)
-	 then let val forces = makeForce particles
+	 then let 
+		  val forces = makeForce particles
 		  val particles = applyForceAndMove(particles, forces, delta)
 	      in  simulate makeForce particles delta (cur+1) stop when
 	      end

@@ -14,6 +14,8 @@
 #include "stats.h"
 #include "gcstat.h"
 #include "show.h"
+#include "platform.h"
+#include "forward.h"
 
 /* Shared Stack and Local Stacks
    -----------------------------
@@ -144,8 +146,6 @@
 
 */
 
-/* Weights are set in init routine */
-static int collectionRate = 2;   /* Ratio of collection rate to allocation rate */
 
 /* ------------------  Parallel array allocation routines ------------------- */
 
@@ -197,6 +197,7 @@ static long numWaitOffProc = 0; /* waiting for mutators to stop; first proc does
 static long numFlipOffProc = 0; /* waiting for all roots to be replaced with replica */
 static long numDoneOffProc = 0; /* waitinf for heap resize/space flip to complete */
 
+
 static void CollectorOn(Proc_t *proc)
 {
   Thread_t *curThread = NULL;
@@ -217,46 +218,43 @@ static void CollectorOn(Proc_t *proc)
   }
 
   /* Check local stack empty; reset root lists */
-  assert(isEmptyStack(&proc->minorStack));
-  resetStack(proc->roots);
+  assert(isEmptyStack(&proc->majorObjStack));
+  assert(isEmptyStack(proc->rootLocs));
   SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
 
   isFirst = (synchBarrier(&numWaitOnProc, NumProc, &numDoneOnProc)) == 0;
   if (isFirst) {
     int neededSize = Heap_GetSize(fromSpace);
-    neededSize += neededSize / collectionRate;
+    Heap_ResetFreshPages(fromSpace);
+    neededSize += neededSize / majorCollectionRate;
     Heap_Resize(fromSpace,neededSize,0);
     Heap_Resize(toSpace,neededSize,1);
+    paranoid_check_all(fromSpace, NULL, NULL, NULL, NULL);
+    req_size = 0;
+    resetSharedStack(workStack,NumProc);
     procChangeState(proc, GCGlobal);
     major_global_scan(proc);
     procChangeState(proc, GC);
-    req_size = 0;
-    resetSharedStack(workStack,NumProc);
-    paranoid_check_all(fromSpace, NULL, NULL, NULL, NULL);
     ResetJob();
     asynchReachBarrier(&numWaitOnProc);
   }
   while (!asynchCheckBarrier(&numWaitOnProc,  NumProc + 1, &numDoneOnProc))
     ;
-
   procChangeState(proc, GCStack);
   while ((curThread = NextJob()) != NULL) {
+    Thread_t *thread = initial_root_scan(proc,curThread);
+    if (thread != NULL)
+      pushStack(&proc->threads, (ptr_t) thread);
     if (curThread->requestInfo >= 0) /* Allocation request */
       FetchAndAdd(&req_size, curThread->requestInfo);
-    local_root_scan(proc,curThread);
   }
   procChangeState(proc, GC);
 
-  proc->numRoot += lengthStack(proc->roots);
-  while (!isEmptyStack(proc->roots)) {
-    ploc_t root = (ploc_t) popStack(proc->roots);
-    ptr_t obj = *root;
-    pushStack(&proc->rootVals, obj);
-  }
+  proc->numRoot += lengthStack(proc->rootLocs) + lengthStack(proc->globalLocs);
 
   /* Note the omission of popSharedStack since we used resetSharedStack */
-  pushSharedStack(workStack,&proc->rootVals,&proc->majorStack,&proc->majorSegmentStack);
-  assert(isEmptyStack(&proc->majorStack));
+  pushSharedStack(workStack,&proc->threads,proc->globalLocs,proc->rootLocs,&proc->majorObjStack,&proc->majorSegmentStack);
+  assert(isEmptyStack(&proc->majorObjStack));
   GCStatus = GCOn;
   synchBarrier(&numWasteOnProc, NumProc, &numWaitOnProc);
   synchBarrier(&numDoneOnProc, NumProc, &numWasteOnProc);
@@ -264,15 +262,36 @@ static void CollectorOn(Proc_t *proc)
 }
 
 
+INLINE1(flipRootLoc)
+INLINE2(flipRootLoc)
+void flipRootLoc(ploc_t root)
+{
+  ptr_t primary = *root;
+  if (inHeap(primary,fromSpace)) {
+    ptr_t replica = (ptr_t) primary[-1];
+    *root = replica;
+  }
+  else if (paranoid) {
+    assert(IsGlobalData(primary) || 
+	   IsTagData(primary) ||
+	   inHeap(primary,toSpace));                      /* root was already flipped - duplicate root */
+  }
+}
+
 static void CollectorOff(Proc_t *proc)
 {
+  extern int stkSize;
+  extern double s1, s2, s3, s4;
+  double t1, t2, t3, t4;
   Thread_t *curThread = NULL;
   int isFirst;
   int rootCount = 0;
+  ploc_t rootLoc, globalLoc;
 
+  t1 = segmentTime(proc);
   if (diag)
     printf("Proc %d: entered CollectorOff\n", proc->procid);
-  assert(isEmptyStack(&proc->majorStack));
+  assert(isEmptyStack(&proc->majorObjStack));
   flushStore();
 
   switch (GCStatus) {
@@ -296,30 +315,28 @@ static void CollectorOff(Proc_t *proc)
   while (!asynchCheckBarrier(&numWaitOffProc, NumProc+1, &numDoneOffProc))
     ;
 
+  assert(isEmptyStack(proc->rootLocs));
+
   /* Replace all roots (global, local registers, local stack) with replica */
   procChangeState(proc, GCGlobal);
   if (isFirst) 
-    major_global_scan(proc);
+    minor_global_scan(proc);                /* Minor scan since the tenured roots are already flipped */
+  while (globalLoc = (ploc_t) popStack(proc->globalLocs)) {
+    ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
+    flipRootLoc(replicaLoc);
+  }
+
   procChangeState(proc, GCStack);
-  while ((curThread = NextJob()) != NULL)
-    local_root_scan(proc,curThread);
+  while ((curThread = NextJob()) != NULL) 
+    complete_root_scan(proc, curThread);
   procChangeState(proc, GC);
 
-  /* Now replace all roots with replicas */
-  proc->numRoot += lengthStack(proc->roots);
-  while (!isEmptyStack(proc->roots)) {
-    ploc_t root = (ploc_t) popStack(proc->roots);
-    ptr_t primary = *root;
-    if (inHeap(primary,fromSpace)) {
-      ptr_t replica = (ptr_t) primary[-1];
-      *root = replica;
-    }
-    else if (paranoid) {
-      assert(IsGlobalData(primary) || 
-	     IsTagData(primary) ||
-	     inHeap(primary,toSpace));                      /* root was already flipped - duplicate root */
-    }
-  }
+  t2 = segmentTime(proc);
+  proc->numRoot += lengthStack(proc->rootLocs) + lengthStack(proc->globalLocs);
+  /* Flip stack slots */
+  while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
+    flipRootLoc(rootLoc);
+  t3 = segmentTime(proc);
 
   synchBarrier(&numFlipOffProc, NumProc, &numWaitOffProc);
 
@@ -333,6 +350,8 @@ static void CollectorOff(Proc_t *proc)
     liveRatio = HeapAdjust1(req_size,fromSpace,toSpace);
     add_statistic(&proc->majorSurvivalStatistic, liveRatio);
     Heap_Resize(fromSpace, 0, 1);
+    typed_swap(int, primaryGlobalOffset, replicaGlobalOffset);
+    typed_swap(int, primaryStackletOffset, replicaStackletOffset);
     typed_swap(Heap_t *, fromSpace, toSpace);
     NumGC++;
     GCStatus = GCOff;
@@ -352,6 +371,13 @@ static void CollectorOff(Proc_t *proc)
   synchBarrier(&numDoneOffProc, NumProc, &numFlipOffProc);
   flushStore();
 
+  t4 = segmentTime(proc);
+  /*
+  printf("\ncomplete_root_scan: %3.2f + %3.2f + %3.2f = %3.2f ms    size = %d\n", 
+	 s2-s1, s3-s2, s4-s3, s4-s1, stkSize);
+  printf("CollectorOff %5d: %3.2f + %3.2f + %3.2f + %3.2f = %3.2f ms\n", 
+	 proc->segmentNumber, t1, t2-t1, t3-t2, t4-t3, t4);
+	 */
 }
 
 void GCRelease_SemiConc(Proc_t *proc)
@@ -368,14 +394,12 @@ void GCRelease_SemiConc(Proc_t *proc)
   proc->writelistCursor = proc->writelistStart;  /* write list reused once processed */
   proc->minorUsage.bytesAllocated += alloc;
 
-  assert(isEmptyStack(&proc->majorStack));
-
   if (!gcOn) 
     return;
 
   if (diag)
     printf("Proc %d: Scanning/Replicating %d to %d\n",proc->procid,allocCurrent,allocStop);
-  while (allocCurrent + 1 < allocStop) {
+  while (allocCurrent + 1 <= allocStop) { /* There may be no data for empty array */
     int objSize;
     ptr_t obj = allocCurrent;  /* Eventually becomes start of object */
     tag_t tag = *obj;
@@ -386,7 +410,7 @@ void GCRelease_SemiConc(Proc_t *proc)
     while (tag == SEGPROCEED_TAG || tag == SEGSTALL_TAG)
       tag = *(++obj); /* Skip past segment tags */
     obj++;            /* Skip past object tag */
-    objSize = splitAlloc_primaryStack(proc,obj,&proc->majorStack,&proc->majorRange,&fromSpace->range);
+    objSize = splitAlloc_primaryStack(proc,obj,&proc->majorObjStack,&proc->majorRange,fromSpace);
     if (objSize == 0) {
       mem_t dummy = NULL;
       objSize = objectLength(obj, &dummy);
@@ -408,7 +432,7 @@ void GCRelease_SemiConc(Proc_t *proc)
 
     if (!inHeap(primary, fromSpace))
       continue;
-    splitAlloc1_copyCopySync_primaryStack(proc,primary,&proc->majorStack,&proc->majorRange,&fromSpace->range);
+    splitAlloc1_copyCopySync_primaryStack(proc,primary,&proc->majorObjStack,&proc->majorRange,fromSpace);
     replica = (ptr_t) primary[-1];
     tag = replica[-1];
     byteLen = GET_ARRLEN(tag);
@@ -416,7 +440,7 @@ void GCRelease_SemiConc(Proc_t *proc)
       while (primary[-1] == STALL_TAG)
 	;
     else {
-      int segment = DivideUp(byteLen, arraySegmentSize);
+      int segment = DivideUp(byteDisp, arraySegmentSize);
       while (primary[-2-segment] == SEGSTALL_TAG)
 	;
     }
@@ -426,8 +450,8 @@ void GCRelease_SemiConc(Proc_t *proc)
       ptr_t replicaField = primaryField;
       /* Snapshot-at-the-beginning (Yuasa) write barrier requires copying prevPtrVal 
 	 even if it might die to prevent the mutator from hiding live data */
-      splitAlloc1_copyCopySync_primaryStack(proc,possPrevPtrVal, &proc->majorStack, &proc->majorRange, &fromSpace->range);
-      locSplitAlloc1_copyCopySync_primaryStack(proc,&replicaField, &proc->majorStack, &proc->majorRange, &fromSpace->range);
+      splitAlloc1_copyCopySync_primaryStack(proc,possPrevPtrVal, &proc->majorObjStack, &proc->majorRange, fromSpace);
+      locSplitAlloc1_copyCopySync_primaryStack(proc,&replicaField, &proc->majorObjStack, &proc->majorRange, fromSpace);
       replica[wordDisp] = (val_t) replicaField;  /* update replica with replicated object */
       break;
     }
@@ -444,9 +468,19 @@ void GCRelease_SemiConc(Proc_t *proc)
     default: assert(0);
     }
   }
-  condPushSharedStack(workStack,&proc->rootVals,&proc->majorStack,&proc->majorSegmentStack);
+  condPushSharedStack(workStack,&proc->threads,proc->globalLocs,proc->rootLocs,
+		      &proc->majorObjStack,&proc->majorSegmentStack);
 }
 
+
+static int intcompare(int *i, int *j)
+{
+  if (*i > *j)
+    return 1;
+  if (*i < *j)
+    return -1;
+  return 0;
+}
 
 /* GCStatus is either GCOn or GCPendingOff.
    Upon entry and exit, the local work stack is empty.
@@ -455,25 +489,35 @@ void GCRelease_SemiConc(Proc_t *proc)
 */
 static void do_work(Proc_t *proc, int workToDo, int local)
 {
-  assert(isEmptyStack(&proc->majorStack));
-  assert(isEmptyStack(&proc->majorSegmentStack));
+  double startTime, endTime;
+  int startWork, endWork, count = 0;
+  int iii = 0;
 
+  if (!local) {
+    assert(isEmptyStack(&proc->majorObjStack));
+    assert(isEmptyStack(&proc->majorSegmentStack));
+  }
+  
+  startTime = segmentTime(proc);
+  resetPerfMon();
+  startWork = updateWorkDone(proc);
   if (local) {
     int counter = localWorkSize;
-    assert(isEmptyStack(&proc->rootVals));
+    assert(isEmptyStack(proc->rootLocs));
+    assert(isEmptyStack(proc->globalLocs));
     while (!isEmptyStack(&proc->majorSegmentStack)) {
       int start, end;
       ptr_t gray = popStack3(&proc->majorSegmentStack,(ptr_t *)&start,(ptr_t *)&end);
       (void) transferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,start,end,
-											&proc->majorStack,&proc->majorSegmentStack,
-											&proc->majorRange, &fromSpace->range);
+											&proc->majorObjStack,&proc->majorSegmentStack,
+											&proc->majorRange, fromSpace);
     }
     while (1) {
-      ptr_t gray = popStack(&proc->majorStack);
+      ptr_t gray = popStack(&proc->majorObjStack);
       if (gray == NULL)
 	break;
-      (void) transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,&proc->majorStack,&proc->majorSegmentStack,
-										    &proc->majorRange,&fromSpace->range);
+      (void) transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,&proc->majorObjStack,&proc->majorSegmentStack,
+										    &proc->majorRange,fromSpace);
       counter--;
       if (!counter) {
 	if (updateWorkDone(proc) >= workToDo)
@@ -485,28 +529,45 @@ static void do_work(Proc_t *proc, int workToDo, int local)
   else {
     while (updateWorkDone(proc) < workToDo) {
       int i, globalEmpty;
-      popSharedStack(workStack, &proc->rootVals, rootValFetchSize, &proc->majorStack, objFetchSize, &proc->majorSegmentStack, segFetchSize);
-      while (!isEmptyStack(&proc->rootVals)) {
-	ptr_t obj = popStack(&proc->rootVals);
-	splitAlloc1_copyCopySync_primaryStack(proc,obj,&proc->majorStack,&proc->majorRange,&fromSpace->range); 
+      Thread_t *thread;
+      ploc_t rootLoc, globalLoc;
+
+      popSharedStack(workStack, &proc->threads, threadFetchSize,
+		     proc->globalLocs, globalLocFetchSize,
+		     proc->rootLocs, rootLocFetchSize, 
+		     &proc->majorObjStack, objFetchSize, &proc->majorSegmentStack, segFetchSize);
+      while (thread = (Thread_t *) popStack(&proc->threads)) {
+	if (!work_root_scan(proc, thread, workToDo))
+	  pushStack(&proc->threads, (ptr_t) thread);
+      }
+      while (rootLoc = (ploc_t) popStack(proc->rootLocs)) {
+	locSplitAlloc1_copyCopySync_primaryStack(proc,rootLoc,&proc->majorObjStack,&proc->majorRange,fromSpace); 
+      }
+      while (globalLoc = (ploc_t) popStack(proc->globalLocs)) {
+	ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
+	locSplitAlloc1_copyCopySync_primaryStack(proc,replicaLoc,&proc->majorObjStack,&proc->majorRange,fromSpace); 
       }
       while (!isEmptyStack(&proc->majorSegmentStack)) {
 	int start, end;
 	ptr_t gray = popStack3(&proc->majorSegmentStack,(ptr_t *)&start,(ptr_t *)&end);
 	(void) transferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,start,end,
-											  &proc->majorStack,&proc->majorSegmentStack,
-											  &proc->majorRange, &fromSpace->range);
+											  &proc->majorObjStack,&proc->majorSegmentStack,
+											  &proc->majorRange, fromSpace);
       }
       for (i=0; i < localWorkSize; i++) {
-	ptr_t gray = popStack(&proc->majorStack);
-	if (gray == NULL)
+	ptr_t gray = popStack(&proc->majorObjStack);
+	if (gray == NULL) 
 	  break;
-	(void) transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,&proc->majorStack,&proc->majorSegmentStack,
-										 &proc->majorRange, &fromSpace->range);
+	(void) transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,&proc->majorObjStack,&proc->majorSegmentStack,
+										 &proc->majorRange, fromSpace);
 	if (getWorkDone(proc) >= workToDo)   /* For large objects */
 	  break;
       }
-      globalEmpty = pushSharedStack(workStack,&proc->rootVals,&proc->majorStack, &proc->majorSegmentStack);
+      lapPerfMon();
+      iii++;
+      assert(iii < 50);
+      globalEmpty = pushSharedStack(workStack,&proc->threads,proc->globalLocs,proc->rootLocs,
+				    &proc->majorObjStack, &proc->majorSegmentStack);
       if (globalEmpty) {
 	if (diag)
 	  printf("Proc %d: Turning Collector Off\n", proc->procid); 
@@ -515,7 +576,41 @@ static void do_work(Proc_t *proc, int workToDo, int local)
       }
     }
   }
-  assert(isEmptyStack(&proc->majorStack));
+  assert(isEmptyStack(&proc->majorObjStack));
+
+
+  endTime = segmentTime(proc);
+  endWork = updateWorkDone(proc);
+
+  lapPerfMon();
+  if (0) {
+    char temp[200];
+    extern int pic1[];
+    int allInstr = 0;
+    int i, j, k;
+    double duration = endTime - startTime;
+    int workDone = endWork - startWork;
+    int fast = duration < 0.7;
+    int slow = duration > 3.0;
+    int realSlow = duration > 3.5;
+    int max = 0;
+    for (i=0; i<iii; i++)
+      allInstr += pic1[i];
+    sprintf(temp, "%5d %5d   %5d %5d  %5d %3d   %3d    %6.2f  %7d   %.1f\n",
+	    proc->segUsage.fieldsCopied,      proc->segUsage.objsCopied,       
+	    proc->segUsage.fieldsScanned,     proc->segUsage.objsScanned,
+	    proc->segUsage.globalsProcessed, proc->segUsage.stackSlotsProcessed, 
+	    proc->segUsage.pagesTouched, 
+	    duration, allInstr, duration * 1e6 / allInstr);
+    if (!fast)
+      add_statString(temp);
+    if (realSlow)
+      printf("\n********************************************************************\n");
+    else
+      printf("\n--------------------------------------------------------------------\n");
+    printf("do_work %d:  work = %d   unitCost = %.1f   pages = %d\n      %s",
+	   proc->segmentNumber, workDone, 1e5 * duration / workDone, max, temp);
+  }
 }
 
 
@@ -532,7 +627,7 @@ int GCTry_SemiConc(Proc_t *proc, Thread_t *th)
   int satisfied = 0;
   int roundOffSize = RoundUp(th->requestInfo, minOffRequest);
   int roundOnSize = RoundUp(th->requestInfo, minOnRequest);
-  int workToDo = (1 + collectionRate) * roundOnSize;  /* + 1 for the work in replicating primary */
+  int workToDo = (int) (1.0 + majorCollectionRate) * roundOnSize;  /* + 1 for the work in replicating primary */
 
   assert(proc->writelistCursor + 3 <= proc->writelistEnd);
   flushStore();
@@ -571,23 +666,27 @@ int GCTry_SemiConc(Proc_t *proc, Thread_t *th)
       printf("Proc %d: Concurrent collector fell too far behind  - check parameters\n", proc->procid);
       assert(0);
       break;
-    case GCOn:                                       
-    case GCPendingOff:
-      procChangeState(proc, GC);
-      proc->gcSegment1 = MinorWork;
-      do_work(proc, workToDo, 0);                    /* On, PendingOff; same */
-      if (GCStatus == GCOn &&
-	  GCTry_SemiConcHelp(proc,roundOnSize)) {    /* On, PendingOff; same */
-	satisfied = 1;
-	break;
-      }
-      do_work(proc,                                     /* On, PendingOff; same */                 
-	      sizeof(val_t) * Heap_GetSize(fromSpace),  /* Actually bounded by allocation of all procs since GCOff triggered. */
-	      1);                                       
-      proc->gcSegment2 = FlipOff;
-      CollectorOff(proc);                               /* On, PendingOff; Off, PendingOn */
-      assert(GCStatus == GCOff || GCStatus == GCPendingOn);
-      break;
+     /* We don't let a collector flip off until the next segment */
+     case GCOn:                                       
+       procChangeState(proc, GC);
+       proc->gcSegment1 = MinorWork;                  /* On, PendingOff; same */
+       do_work(proc, workToDo, 0);                    
+       assert(GCTry_SemiConcHelp(proc,roundOnSize));  
+       satisfied = 1;
+       if (GCStatus == GCPendingOff)
+	 assert(isEmptyStack(&proc->majorObjStack));
+       assert(GCStatus == GCOn || GCStatus == GCPendingOff);
+       break;
+     case GCPendingOff:
+       procChangeState(proc, GC);
+       proc->gcSegment1 = MinorWork;
+       proc->gcSegment2 = FlipOff;
+       do_work(proc,                                     /* PendingOff; same */ 
+	       sizeof(val_t) * Heap_GetSize(fromSpace),  /* Actually bounded by allocation of all procs since GCOff triggered. */
+	       1);                                       
+       CollectorOff(proc);                               /* PendingOff; Off, PendingOn */
+       assert(GCStatus == GCOff || GCStatus == GCPendingOn);
+       break;
     default: 
       assert(0);
     }
@@ -605,7 +704,7 @@ void GCPoll_SemiConc(Proc_t *proc)
     CollectorOn(proc);
     return;
   case GCOn:
-    do_work(proc,collectionRate * minOnRequest, 0);  /* collect as though one page had been allocated */
+    do_work(proc, (int) majorCollectionRate * minOnRequest, 0);  /* collect as though one page had been allocated */
     return;
   case GCPendingOff:
     CollectorOff(proc);
@@ -615,6 +714,7 @@ void GCPoll_SemiConc(Proc_t *proc)
 
 void GCInit_SemiConc()
 {
+  printf("temporary stuff in collector\n");
   init_int(&MaxHeap, 128 * 1024);
   init_int(&MinHeap, 256);
   if (MinHeap > MaxHeap)
@@ -625,7 +725,7 @@ void GCInit_SemiConc()
   init_int(&MaxRatioSize, 50 * 1024);
   fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  workStack = SharedStack_Alloc(12 * 1024, 32 * 1024, 4 * 1024);
+  workStack = SharedStack_Alloc(100, 16 * 1024, 1024, 32 * 1024, 4 * 1024);
   arraySegmentSize = 4 * 1024;
 }
 

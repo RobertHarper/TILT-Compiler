@@ -58,6 +58,8 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		       | TRACE_STACK      of Core.stacklocation
       (* stack pos, rec pos *)
 		       | TRACE_STACK_REC  of Core.stacklocation * int list
+		       | TRACE_LABEL     of Core.label
+		       | TRACE_LABEL_REC of Core.label * int list
 		       | TRACE_GLOBAL     of label
 		       | TRACE_GLOBAL_REC of label * int list
 
@@ -172,45 +174,39 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
     val Count_yes = ref 0;
     val Count_unset_reg = ref 0;
     val Count_unset_stack = ref 0;
-    val Count_stack = ref 0;
     val Count_stack_rec = ref 0;
     val Count_callee = ref 0;
-    val Count_global = ref 0;
+    val Count_label_rec = ref 0;
     val Count_global_rec = ref 0;
     fun inc x = x := (!x + 1)
 
     (* these number must match up with the macros in stack.h *)
     (* the lower 2 bits are used for other things so we only have 30 bits *)
     local
-	val amounts = [6,8,8,8] (* must sum to <= 30 *)
-	val pow_amounts = [1,64,64*256,64*256*256]
-	val maxindices = length amounts
+	val bits = [6,8,8,8] (* must sum to <= 30 *)
+	val pows = [1,64,64*256,64*256*256]
+	val maxes  = [31,63,63,63]
+	val maxindices = length bits
 	fun local_error indices = 
 	     (print ("indices2int: ");
 	      app (fn m => (print (Int.toString m);
 			    print "  ")) indices;
 	      print "\n")
-    (*			 print " --> ";
-     print (Int.toString res);
-     print "\n")
-	     *)
-	fun loop [] _ = 0
-	  | loop (index::rest) (pow::pow_rest) = 
-	      let val index = if (pow = 1) then index else index+1
-		  val restsum = loop rest pow_rest
-	      in  index * pow + restsum
+	fun loop [] _ _ = 0
+	  | loop (index::indexRest) (pow::powRest) (max::maxRest) = 
+	      let val restsum = loop indexRest powRest maxRest
+		  val _ = if (index + 1 > max)
+			      then error "index too large"
+			  else ()
+	      in  (index + 1) * pow + restsum
 	      end
-	  | loop curfactor _ = error "indices2int failed: can't get to this pattern"
-
     in
 	fun indices2int indices = 
 	    let val len = length indices
-	        val res = if (len = 0)
-			      then error "no index"
-			  else if (len > maxindices)
-				   then (local_error indices;
-					 error "too many indices")
-			       else (loop indices pow_amounts)
+	        val res = if (len > maxindices)
+			      then (local_error indices;
+				    error "too many indices")
+			  else (loop indices pows maxes)
 	    in res
 	    end
     end
@@ -223,25 +219,24 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
       | tr2bot (TRACE_UNSET) = 
 	(inc Count_unset_stack; 
 	addword_int (i2w (~1)); addword_int (i2w (~1)); 3) 
-      | tr2bot (TRACE_STACK sloc) = 
-	(inc Count_stack; addword_int (i2w 0); addword_int (i2w (Core.sloc2int sloc)); 3) 
-      | tr2bot (TRACE_GLOBAL lab)        = 
-	(inc Count_global; addword_int (i2w 1); addword_label lab; 3)
+      | tr2bot (TRACE_STACK sloc) = tr2bot(TRACE_STACK_REC (sloc, []))
+      | tr2bot (TRACE_LABEL lab) = tr2bot (TRACE_LABEL_REC (lab, []))
+      | tr2bot (TRACE_GLOBAL lab) = tr2bot (TRACE_GLOBAL_REC (lab, []))
       | tr2bot (TRACE_STACK_REC (sloc,indices)) =
-        let val pos = Core.sloc2int sloc
-	    val res = 2 + 4 * (indices2int indices)
-	    val _ = if (!ShowDebug)
-			 then (print ("trace_stack_rec  pos,i,val" ^ 
-				      (Int.toString pos) ^ "," ^ (Int.toString (hd indices)) ^ "," ^
-				      (Int.toString res) ^ "\n"))
-		     else ()
-	in
-	    (inc Count_stack_rec; addword_int (i2w res);
-	     addword_int (i2w pos); 3)
-        end
+	(inc Count_stack_rec; 
+	 addword_int (i2w (0 + 4 * (indices2int indices)));
+	 addword_int (i2w (Core.sloc2int sloc));
+	 3)
+      | tr2bot (TRACE_LABEL_REC (lab,indices)) =
+	(inc Count_label_rec; 
+	 addword_int (i2w (1 + 4 * (indices2int indices)));
+	 addword_label lab;
+	 3)
       | tr2bot (TRACE_GLOBAL_REC (lab,indices)) =
-	(inc Count_global_rec; addword_int (i2w (3+4*(indices2int indices)));
-	 addword_label lab; 3)
+	(inc Count_label_rec; 
+	 addword_int (i2w (2 + 4 * (indices2int indices)));
+	 addword_label lab;
+	 3)
       | tr2bot TRACE_IMPOSSIBLE          = 
 	error "cannot get a trace impossible while making table"
 
@@ -256,11 +251,12 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 	      (1,0))
       | regtr2bits _ (TRACE_UNSET) = 
 	(inc Count_unset_reg; addword_int (i2w (~1)); addword_int (i2w (~1)); (0,1))
-      | regtr2bits _ (TRACE_STACK sloc) = 
-	(inc Count_stack; addword_int (i2w 0); addword_int (i2w (Core.sloc2int sloc)); (0,1))
+      | regtr2bits _ (tr as TRACE_STACK sloc) = (tr2bot tr; (0,1))
       | regtr2bits _ (tr as TRACE_STACK_REC _) = (tr2bot tr; (0,1))
       | regtr2bits _ (tr as TRACE_GLOBAL _)        = (tr2bot tr; (0,1))
       | regtr2bits _ (tr as TRACE_GLOBAL_REC _) =  (tr2bot tr; (0,1))
+      | regtr2bits _ (tr as TRACE_LABEL _)        = (tr2bot tr; (0,1))
+      | regtr2bits _ (tr as TRACE_LABEL_REC _) =  (tr2bot tr; (0,1))
       | regtr2bits _ TRACE_IMPOSSIBLE          = 
 	error "cannot get a trace impossible while making table"
 
@@ -268,8 +264,12 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
       | msTrace TRACE_YES                 = "yes"
       | msTrace TRACE_UNSET               = "unset"
       | msTrace (TRACE_CALLEE  r)         = "callee"
-      | msTrace (TRACE_STACK sloc) = "stack"
+      | msTrace (TRACE_STACK sloc)        = "stack"
       | msTrace (TRACE_STACK_REC (sloc,i)) = "stack_rec"
+      | msTrace (TRACE_LABEL sloc)        = "label"
+      | msTrace (TRACE_LABEL_REC (sloc,i)) = "label_rec"
+      | msTrace (TRACE_GLOBAL sloc)        = "global"
+      | msTrace (TRACE_GLOBAL_REC (sloc,i)) = "global_rec"
       | msTrace _          = 	"<ignoring trace>"
 
     fun do_callinfo (CALLINFO {calllabel=CALLLABEL lab,framesize,retaddpos,
@@ -321,17 +321,15 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		val (yes,no,callee,spec) = (!Count_yes,!Count_no,!Count_callee,
 					    !Count_unset_reg +
 					    !Count_unset_stack +
-					    !Count_stack +
+					    !Count_label_rec +
 					    !Count_stack_rec +
-					    !Count_global +
 					    !Count_global_rec)
 		val stackbots = stackloop 0
 		val (n_yes,n_no,n_callee,n_spec) = (!Count_yes,!Count_no,!Count_callee,
 					    !Count_unset_reg +
 					    !Count_unset_stack +
-					    !Count_stack +
+					    !Count_label_rec +
 					    !Count_stack_rec +
-					    !Count_global +
 					    !Count_global_rec)
 		val sum = (n_spec + n_yes + n_no + n_callee) - 
 		    (spec + yes + no + callee)
@@ -434,10 +432,9 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		   print ("  Count_unset_stack: " ^ (Int.toString (!Count_unset_stack)) ^ "\n");
 		   print ("  Count_no: " ^ (Int.toString (!Count_no)) ^ "\n");
 		   print ("  Count_yes: " ^ (Int.toString (!Count_yes)) ^ "\n");
-		   print ("  Count_stack: " ^ (Int.toString (!Count_stack)) ^ "\n");
-		   print ("  Count_stack_rec: " ^ (Int.toString (!Count_stack_rec)) ^ "\n");
 		   print ("  Count_callee: " ^ (Int.toString (!Count_callee)) ^ "\n");
-		   print ("  Count_global: " ^ (Int.toString (!Count_global)) ^ "\n");
+		   print ("  Count_stack_rec: " ^ (Int.toString (!Count_stack_rec)) ^ "\n");
+		   print ("  Count_label_rec: " ^ (Int.toString (!Count_label_rec)) ^ "\n");
 		   print ("  Count_global_rec: " ^ (Int.toString (!Count_global_rec)) ^ "\n");
 		   print "\n")
 	 else ();

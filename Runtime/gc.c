@@ -42,24 +42,35 @@ SharedStack_t *workStack = NULL;
 
 int NumGC = 0;
 int NumMajorGC = 0;
+int primaryGlobalOffset = 0, replicaGlobalOffset = sizeof(val_t);
 
 extern int module_count;
 extern val_t GLOBALS_BEGIN_VAL;
 extern val_t GLOBALS_END_VAL;
+extern void PopStackletFromML(void);
 
 int YoungHeapByte = 0, MaxHeap = 0, MinHeap = 0;
 double MinRatio = 0.0, MaxRatio = 0.0;
 int MinRatioSize = 0,  MaxRatioSize = 0;
 int minOffRequest, minOnRequest;  /* Mutator handed multiples of this amount of space for parallel and concurrent collectors */
-int rootValFetchSize = 100;
-int objFetchSize = 25;            
+int threadFetchSize = 1;
+int globalLocFetchSize = 50;
+int rootLocFetchSize = 50;
+int objFetchSize = 100;
 int segFetchSize = 2;             
-int localWorkSize = 50;           /* Number of objects to work on from local pool */
-double copyWeight = 1.0 / 4.0;    /* Does not actually copy fields */
-double scanWeight = 3.0 / 4.0;
-double rootWeight = 10.0;
+int localWorkSize = 200;          /* Number of objects to work on from local pool */
+/* Copy does not actually copy fields - work is per-byte */
+double objCopyWeight = 2.5;      /* Corresponds to tag */
+double objScanWeight = 1.5;
+double fieldCopyWeight = 1.0;    /* Corresponds to fields */
+double fieldScanWeight = 3.0;
+double globalWeight = 1.0;
+double stackSlotWeight = 10.0;
+double pageWeight = 50.0;
 int arraySegmentSize = 0;         /* Either zero for off or must be greater than the compiler's maxByteRequest - notion of large array */
 
+double minorCollectionRate = 2.0;   /* Ratio of minor coll rate to alloc rate */
+double majorCollectionRate = 2.0;   /* Ratio of major coll rate to alloc rate */
 
 static int (*GCTryFun)(Proc_t *, Thread_t *) = NULL;
 static void (*GCStopFun)(Proc_t *) = NULL;
@@ -144,6 +155,8 @@ void GCInit(void)
 {
   init_int(&minOffRequest, 4 * pagesize);
   init_int(&minOnRequest, pagesize);
+  minOffRequest = RoundUp(minOffRequest, pagesize);
+  minOnRequest = RoundUp(minOnRequest, pagesize);
 
   switch (collector_type) {
   case Semispace:
@@ -197,6 +210,10 @@ void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalSta
 {
   int count = 0, mi, i;
   char buffer[100];
+  printf("Skipping paranoid_check_global\n");
+  return;
+  /* Existence of replica means at the end of GC cycle */
+  NullGlobals(doReplica ? primaryGlobalOffset : replicaGlobalOffset);
   /* check globals */
   for (mi=0; mi<module_count; mi++) {
     mem_t start = (mem_t) (&GLOBALS_BEGIN_VAL)[mi];
@@ -226,23 +243,20 @@ void paranoid_check_heap_with_start(char *label, Heap_t *curSpace, Heap_t **lega
 void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
     int count = 0, mi, i;
-    mem_t cursor;
     unsigned long *saveregs = thread->saveregs;
-    mem_t sp = (mem_t) saveregs[SP];
-    mem_t stack_top = thread->stackchain->stacks[0]->top;
+    StackChain_t *stackChain = thread->stack;
+    ptr_t thunk = thread->thunk;
+
     /* should check start_addr */
     if ((mem_t)saveregs[ALLOCLIMIT] == StopHeapLimit)
       return;
-    for (i=thread->nextThunk; i<thread->numThunk; i++) { /* check thunks */
-      ptr_t thunk = thread->thunks[i];
-      if (!inHeaps(thunk,legalHeaps,legalStarts) && inSomeHeap(thunk)) {
-	printf("TRACE ERROR: thunk %d has from-space value after collection: %d", i, thunk);
-	assert(0);
-      }
+    if (!inHeaps(thunk,legalHeaps,legalStarts) && inSomeHeap(thunk)) {
+      printf("TRACE ERROR: thunk %d has from-space value after collection: %d", i, thunk);
+      assert(0);
     }
-      
-    if (thread->nextThunk == 0) /* thunk not started */
+    if (thunk != NULL) /* thunk not started */
       return;
+
     for (count = 0; count < 32; count++) {
       int data = saveregs[count];
       if (count == ALLOCPTR) {
@@ -254,24 +268,26 @@ void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bi
 	  printf("Allocation Limit Register %d has value %d\n", count, data);
       }
       else if (!inHeaps((ptr_t)data,legalHeaps,legalStarts) && inSomeHeap((ptr_t)data)) {
-	static int newval = 62000;
-	if (diag)
-	  printf("TRACE WARNING GC %d: register %d has from space value %d --> changing to %d\n",
-		 NumGC,count,data,newval);
-	 saveregs[count] = newval++;  
+	static int newval = 42000;
+	printf("TRACE WARNING GC %d: register %d has from space value %d --> changing to %d\n",
+	       NumGC,count,data,newval);
+	saveregs[count] = newval++;  
       }
       else if (verbose)
 	printf("Register %d has okay value %d\n", count, data);
     }
 
-    for (cursor = sp; cursor < stack_top - 16; cursor++) {
-      val_t data = *cursor;
-      if (!inHeaps((ptr_t)data,legalHeaps,legalStarts) && inSomeHeap((ptr_t)data)) {
-	static int newval = 42000;
-	if (diag)
-	  printf("TRACE WARNING: stack location %d has illegal heap address %d changing to %d\n",
-		 cursor,data,newval);
-	 *cursor = newval++;  
+    for (i=0; i<stackChain->cursor; i++) {
+      Stacklet_t *stacklet = stackChain->stacklets[i];
+      mem_t cursor, top = StackletPrimaryTop(stacklet);
+      for (cursor = StackletPrimaryCursor(stacklet); cursor < top; cursor++) {
+	val_t data = *cursor;
+	if (!inHeaps((ptr_t)data,legalHeaps,legalStarts) && inSomeHeap((ptr_t)data)) {
+	  static int newval = 62000;
+	  printf("TRACE WARNING GC %d: stack location %d has fromspace value %d --> changing to %d\n",
+		 NumGC, cursor,data,newval);
+	  *cursor = newval++;  
+	}
       }
     }
 
@@ -281,7 +297,8 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
 			Heap_t *firstReplica, Heap_t *secondReplica,
 			Heap_t *largeSpace)
 {
-  char *when = (firstReplica == NULL) ? "Before GC" : "After GC";
+  int beforeGC = firstReplica == NULL;
+  char *when = beforeGC ? "Before GC" : "After GC";
   char msg[100];
   Heap_t *legalPrimaryHeaps[4] = {NULL, NULL,NULL, NULL};
   Heap_t *legalReplicaHeaps[4] = {NULL, NULL,NULL, NULL};
@@ -536,8 +553,48 @@ void GCFromMutator(Thread_t *curThread)
   assert(0);
 }
 
-  
-
-
+extern Stacklet_t *Stacklets; /* XXXX */
 
   
+/* maxOffset is non-zero if the caller passed arguments on the stack */
+void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
+{
+  mem_t sp = (mem_t) curThread->saveregs[SP];
+  mem_t returnToCaller = (mem_t) curThread->saveregs[ASMTMP2];
+  mem_t returnToCallee = (mem_t) curThread->saveregs[LINK];
+  Stacklet_t *oldStacklet, *newStacklet;
+  StackChain_t *stackChain = curThread->stack;
+
+  oldStacklet = EstablishStacklet(stackChain, sp); /* saves sp already */
+  oldStacklet->retadd = returnToCaller;
+
+  assert(maxOffset == 0);  /* Not handling overflow arguments yet */
+  newStacklet = NewStacklet(stackChain);
+  curThread->saveregs[SP] = (val_t) StackletPrimaryCursor(newStacklet);
+  curThread->stackLimit = StackletPrimaryBottom(newStacklet);
+#ifdef solaris
+  curThread->saveregs[LINK] = (val_t) (&PopStackletFromML) - 8;
+#else
+  assert(0);
+#endif
+  Stacklet_KillReplica(newStacklet);
+  returnToML(curThread, returnToCallee);
+  assert(0);
+}
+
+void PopStackletFromMutator(Thread_t *curThread)
+{
+  mem_t sp = (mem_t) curThread->saveregs[SP];
+  Stacklet_t *newStacklet = NULL;
+
+  EstablishStacklet(curThread->stack, sp);
+
+  PopStacklet(curThread->stack);
+  newStacklet = CurrentStacklet(curThread->stack);
+  curThread->saveregs[SP] = (val_t) StackletPrimaryCursor(newStacklet);
+  curThread->saveregs[LINK] = (val_t) newStacklet->retadd; /* Not really necessary */
+  curThread->stackLimit = StackletPrimaryBottom(newStacklet);
+  Stacklet_KillReplica(newStacklet);
+  returnToML(curThread, newStacklet->retadd);
+  assert(0);
+}

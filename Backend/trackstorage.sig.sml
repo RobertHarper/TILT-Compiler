@@ -27,9 +27,9 @@ sig
   datatype summary = SUMMARY of 
                     {registers_used    : Core.register list,
 		     stackframe_size   : int,
+		     prevframe_maxoffset : int,
 		     callee_save_slots : (Core.register * Core.stacklocation) list,
-		     fixStackOffset    : Core.stacklocation -> 
-		                         Core.stacklocation}
+		     fixStackOffset    : Core.stacklocation -> Core.stacklocation}
 
   val summarize : info -> summary
 

@@ -352,7 +352,7 @@ struct
       calls.   These need to be marked as used, so that the correct
       code for callee-save may be generated.*)
 
-     fun replace_calls (getSignature : label -> procsig, blockmap, tracemap) =
+     fun replace_calls (getSignature : label -> procsig, blockmap) =
        let val max_on_stack = ref 0
 	   val max_C_args = ref 0
 	   val regs_destroyed = ref Regset.empty
@@ -682,7 +682,7 @@ struct
 			    
 		      fun stack_fixup_code1 () = 
 			(map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots) 
-		      val stack_fixup_code2 = increase_stackptr stackframe_size
+		      val stack_fixup_code2 = deallocate_stack_frame stackframe_size
 			
 		      val no_moddef_info = { regs_modified = [] : register list,
 					     regs_destroyed = [] : register list,
@@ -756,7 +756,7 @@ struct
 		       let val callee_restore_code = 
 			 map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots
 			   val res : instruction list = callee_restore_code @ 
-			       (increase_stackptr stackframe_size) @
+			       (deallocate_stack_frame stackframe_size) @
 			       [BASE(RET(false, 1))]
 		       in  res
 		       end
@@ -1031,12 +1031,13 @@ struct
 
    fun createPreamble (block_map,name,arg_pos,
 			     Trackstorage.SUMMARY{callee_save_slots,
-						  stackframe_size,fixStackOffset,...}) =
+						  stackframe_size,prevframe_maxoffset,
+						  fixStackOffset,...}) =
        let 
 	   val BLOCK {instrs,...} = (case Labelmap.find(block_map,name) of
 					 SOME bl => bl | NONE => error "missing block")
 	   val reversed_i = ((std_entry_code()) @
-			     (decrease_stackptr stackframe_size) @
+			     (allocate_stack_frame (stackframe_size, prevframe_maxoffset)) @
 			     [BASE(PUSH_RET(SOME(fixStackOffset RETADD_POS)))] @
 			     (map (fn (r, i) => push(r, i)) callee_save_slots))
 	   val ordered_i = rev (map NO_ANN reversed_i)
@@ -1064,7 +1065,6 @@ struct
 
      let
        val _ = msg "\tentered allocateproc1\n"
-       val local_tracemap = ref tracemap
 
        val _ = if !debug then
 	           (emitString commentHeader;
@@ -1086,7 +1086,7 @@ struct
 
       val (max_passed_args, max_C_args, regs_destroyed, regs_modified) =
 	       (msg "\treplacing calls\n";
-		replace_calls (getSignature, block_map, local_tracemap))
+		replace_calls (getSignature, block_map))
 
        val _ = if !debug then
 	           (emitString commentHeader;
@@ -1097,7 +1097,7 @@ struct
 	       else ()
        val _ = msg  "\tannotating\n"
 	   
-       val block_map = subtimer("chaitin_annotate", Bblock.liveVars (!local_tracemap) block_map) name
+       val block_map = subtimer("chaitin_annotate", Bblock.liveVars tracemap block_map) name
 	   
        val _ = 
 	   if (! debug) then 
@@ -1107,8 +1107,6 @@ struct
 		emitString commentHeader;
 		emitString " done annotation\n")
 	   else ()
-
-       val tracemap = !local_tracemap
 
        val _ = msg("processing procedure "^msLabel name^"\n")
 

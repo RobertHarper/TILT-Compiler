@@ -292,11 +292,11 @@ void memfault_handler(int signum,
 
   {
     Heap_t *heap = GetHeap(badaddr);
-    MemStack_t *stack = GetStack(badaddr);
+    Stacklet_t *stacklet = GetStacklet(badaddr);
     if (heap != NULL)
       printf("   addr part of a heap obj\n");
-    if (stack != NULL)
-      printf("   addr part of a stack obj\n");
+    if (stacklet != NULL)
+      printf("   addr part of a stacklet obj\n");
   }
   exit(-1);
 }
@@ -322,22 +322,22 @@ void fpe_handler(int signum,
     case FPE_INTDIV:
       if (paranoid) 
 	printf("Integer divide by zero: %d %d ",errno,code);
-      raise_exception(uctxt,DivideByZeroExn);
+      raise_exception(uctxt,getDivExn());
       break;
     case FPE_FLTDIV:
       if (paranoid) 
 	printf("Float divide by zero: %d %d ",errno,code);
-      raise_exception(uctxt,DivideByZeroExn);
+      raise_exception(uctxt,getDivExn());
       break;
     case FPE_INTOVF:
       if (paranoid) 
 	printf("Integer overflow: we are not getting this... %d %d ",errno,code);
-      raise_exception(uctxt,OverflowExn);
+      raise_exception(uctxt,getOverflowExn());
       break;
     case FPE_FLTOVF: 
       if (paranoid)
 	printf("Float OR integer overflow: %d %d ",errno,code);
-      raise_exception(uctxt,OverflowExn);
+      raise_exception(uctxt,getOverflowExn());
       break;
     case FPE_FLTUND:
       printf("Float underflow: %d %d ",errno,code);

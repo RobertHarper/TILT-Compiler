@@ -1,10 +1,10 @@
 #ifndef _global_h
 #define _global_h
 
-/*  global_init should be called once; the rest are thread-safe */
+/* From Basis - access is safe only though GetGlobal */
+ptr_t getOverflowExn();
+ptr_t getDivExn();
 
-extern ptr_t DivideByZeroExn;
-extern ptr_t OverflowExn;
 /* extern mem_t RuntimeGlobalData_Start, RuntimeGlobalData_Cur, RuntimeGlobalData_End; */
 extern mem_t datastart, dataend;
 extern mem_t textstart, textend;

@@ -81,43 +81,6 @@ typedef struct CallinfoCursor__t
 
 typedef unsigned int bot;
 
-typedef void (voidfun_t)();
-#define stub_decl(m,n) \
-m##n##0, m##n##1, m##n##2, m##n##3, m##n##4, m##n##5, m##n##6, m##n##7, m##n##8, m##n##9
-
-voidfun_t stub_decl(stack_stub_,00);
-voidfun_t stub_decl(stack_stub_,01);
-voidfun_t stub_decl(stack_stub_,02);
-voidfun_t stub_decl(stack_stub_,03);
-voidfun_t stub_decl(stack_stub_,04);
-voidfun_t stub_decl(stack_stub_,05);
-voidfun_t stub_decl(stack_stub_,06);
-voidfun_t stub_decl(stack_stub_,07);
-voidfun_t stub_decl(stack_stub_,08);
-voidfun_t stub_decl(stack_stub_,09);
-voidfun_t stub_decl(stack_stub_,10);
-voidfun_t stub_decl(stack_stub_,11);
-voidfun_t stub_decl(stack_stub_,12);
-voidfun_t stub_decl(stack_stub_,13);
-voidfun_t stub_decl(stack_stub_,14);
-voidfun_t stub_decl(stack_stub_,15);
-voidfun_t stub_decl(stack_stub_,16);
-voidfun_t stub_decl(stack_stub_,17);
-voidfun_t stub_decl(stack_stub_,18);
-voidfun_t stub_decl(stack_stub_,19);
-
-voidfun_t *stack_stubs[NUM_STACK_STUB] = { 
-  stub_decl(stack_stub_,00),  stub_decl(stack_stub_,01),
-  stub_decl(stack_stub_,02),  stub_decl(stack_stub_,03),
-  stub_decl(stack_stub_,04),  stub_decl(stack_stub_,05),
-  stub_decl(stack_stub_,06),  stub_decl(stack_stub_,07),
-  stub_decl(stack_stub_,08),  stub_decl(stack_stub_,09),
-  stub_decl(stack_stub_,10),  stub_decl(stack_stub_,11),
-  stub_decl(stack_stub_,12),  stub_decl(stack_stub_,13),
-  stub_decl(stack_stub_,14),  stub_decl(stack_stub_,15),
-  stub_decl(stack_stub_,16),  stub_decl(stack_stub_,17),
-  stub_decl(stack_stub_,18),  stub_decl(stack_stub_,19)
-};
 
 
 extern val_t global_exnrec; /* C/asm convention has asm label be the Lvalue in C */
@@ -166,19 +129,12 @@ long SMLGlobalSize = 0;
 long GlobalTableSize = 0;
 long MutableTableSize = 0;
 
-mem_t GetStackStub(unsigned int n)
-{
-  if (n < NUM_STACK_STUB)
-    return (mem_t) (stack_stubs[n]);
-  assert(0);
-}
-
 void global_root_init();
 
 void stack_init()
 {
   struct HashEntry e;
-  unsigned int mi = 0, count=NUM_STACK_STUB, i,j;
+  unsigned int mi = 0, count=0, i,j;
 
 #ifdef GCTABLE_HASENTRYID
   assert(GCTableEntryIDFlag == 1);
@@ -222,34 +178,40 @@ void stack_init()
       curpos += GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes);
     }
   }
+  /*
   for (mi=0; mi<NUM_STACK_STUB; mi++) {
     e.key = (unsigned long)(GetStackStub(mi));
     e.data = (void *)mi;
     HashTableInsert(CallinfoHashTable,&e);
   }
+  */
   global_root_init();
 }
 
 
-static Callinfo_t *LookupCallinfo(Thread_t *th, val_t ret_add)
+static Callinfo_t *LookupCallinfo(Proc_t *proc, val_t retAdd)
 {
   struct HashEntry *e;
+#if defined(alpha_osf)
+  val_t key = retAdd;
+#elif defined(solaris)
+  val_t key = retAdd + 8;  /* We add 2 words because 
+			      (1) the link value is the address of the calling instruction
+			      (2) there is a delay slot. */
+#else
+    error platform not defined
+#endif
 
-  if ((val_t) th->lastHashKey == ret_add) 
-    return th->lastHashData;
+  if ((val_t) proc->lastHashKey == key)
+    return proc->lastHashData;
 
-  e = HashTableLookup(CallinfoHashTable,(unsigned long)ret_add,0);
+  e = HashTableLookup(CallinfoHashTable,(unsigned long) key,0);
   if (e == NULL) {
-    fprintf(stderr,"FATAL ERROR: ret_add = %d not found in table during stack trace\n",ret_add);
+    fprintf(stderr,"FATAL ERROR: key = %d not found in table during stack trace\n",key);
     assert(0);
   }
-  if (((val_t)e->data) < NUM_STACK_STUB) {
-    val_t ra = th->snapshots[(val_t)e->data].saved_ra;
-    assert(0);
-    return LookupCallinfo(th, ra);
-  }
-  th->lastHashKey = e->key;
-  th->lastHashData = e->data;
+  proc->lastHashKey = e->key;
+  proc->lastHashData = e->data;
   return (Callinfo_t *) e->data;
 }
 
@@ -268,54 +230,25 @@ void resetCursor(CallinfoCursor_t *cursor, Callinfo_t *callinfo)
     cursor->RAQuadOffset = LookupSpecialByte(cursor);
 }
 
-/* *sp_ptr initially points to the bottom of a frame with *cur_retadd_ptr as the retadd
-   we walk stack frames until we have scanned frame_to_trace frames
-        or we have examined all frames which lie below top
-        or we hit a stub routine return address
-   the resulting return addresses are deposited in q
-   *sp_ptr will return pointing to the top of the last processed frame
-   *cur_retadd_ptr will correspond to the last process frame 
-*/
-static int findretadd(Thread_t *th, mem_t *sp_ptr, val_t *cur_retadd_ptr, mem_t top, 
-		      Stack_t *callinfoStack, int frame_to_trace)
+INLINE1(PathProject)
+INLINE2(PathProject)
+ptr_t PathProject(ptr_t base, int index)
 {
-  int count = 0, done = 0;
-  mem_t curSP = *sp_ptr, nextSP;
-  val_t curRA = *cur_retadd_ptr, nextRA;
-  resetStack(callinfoStack);
-  assert(curSP <= top);
-  for ( ; frame_to_trace > 0; frame_to_trace--) {
-    Callinfo_t *callinfo = LookupCallinfo(th,curRA);
-    CallinfoCursor_t localCursor, *cursor = &localCursor;
-
-    pushStack(callinfoStack, (ptr_t) callinfo);
-    resetCursor(cursor, callinfo);
-    nextSP = curSP + cursor->frameSize;
-#if defined(alpha_osf)
-    nextRA = (val_t)curSP[cursor->RAQuadOffset];
-#elif defined(solaris)
-    nextRA = (val_t)(((mem_t)curSP[cursor->RAQuadOffset]) + 2); /* We add 2 words because 
-								   (1) the link value is the address of the calling instruction
-								   (2) there is a delay slot. */
-#else
-    error platform not defined
-#endif
-    if (debugStack)
-      printf("%d: top = %d   curSP = %d  curRA = %d     nextSP = %d nextRA = %d\n",
-	     count++,top,curSP,curRA,nextSP,nextRA);
-    curSP = nextSP;
-    curRA = nextRA;
-    if (curRA == (val_t)(&start_client_retadd_val) || (curSP == top)) {
-      done = 1;
-      break;
-    }
-  }
-  assert(nextSP <= top);
-  *sp_ptr = curSP;
-  *cur_retadd_ptr = curRA;
-  return done;
+  ptr_t res = base;
+  int rec_pos1 = GET_SPECIAL_REC_POS(index);
+  int rec_pos2 = GET_SPECIAL_REC_POS2(index);
+  int rec_pos3 = GET_SPECIAL_REC_POS3(index);
+  int rec_pos4 = GET_SPECIAL_REC_POS4(index);
+  if (debugStack)
+    printf("[%d,%d,%d,%d]) = ", rec_pos1, rec_pos2, rec_pos3, rec_pos4);
+  if (rec_pos1 > 0) res = (ptr_t) res[rec_pos1-1];
+  if (rec_pos2 > 0) res = (ptr_t) res[rec_pos2-1];
+  if (rec_pos3 > 0) res = (ptr_t) res[rec_pos3-1];
+  if (rec_pos4 > 0) res = (ptr_t) res[rec_pos4-1];
+  if (debugStack)
+    printf("%d\n", res);
+  return res;
 }
-
 
 int should_trace_special(CallinfoCursor_t *cursor, mem_t cur_sp, int regstate,
 			 loc_t data_add, int i)
@@ -328,48 +261,31 @@ int should_trace_special(CallinfoCursor_t *cursor, mem_t cur_sp, int regstate,
   LookupSpecialWordPair(cursor, &special_type,&special_data);
 
   if (debugStack)
-    printf("slot %4d: %12ud  TRACE_SPECIAL(%d, %d) ",
+    printf("slot %4d: %12d  TRACE_SPECIAL(%d, %d) ",
 	   i,data,special_type,special_data);
   if (IS_SPECIAL_UNSET(special_type)) {
     printf(" - UNSET\n");
     printf("Registers/Stack locatiobs of type UNSET is not supported\n");
     assert(0);
   }
-  else if (IS_SPECIAL_STACK(special_type)) {
-    res = (ptr_t) cur_sp[special_data/4];
-    if (debugStack)
-      printf(" - SPECIAL_STACK(%d) = %d", special_data, res);
-  }
-  else if (IS_SPECIAL_GLOBAL(special_type)) {
-    res = (ptr_t) (*((loc_t)special_data));
-    if (debugStack)
-      printf(" - SPECIAL_GLOBAL(%d) = %d", special_data, res);
-  }
   else if (IS_SPECIAL_STACK_REC(special_type)) {
-    int rec_pos = GET_SPECIAL_STACK_REC_POS(special_type);
-    int rec_pos2 = GET_SPECIAL_STACK_REC_POS2(special_type);
-    int rec_pos3 = GET_SPECIAL_STACK_REC_POS3(special_type);
-    int rec_pos4 = GET_SPECIAL_STACK_REC_POS4(special_type);
-    res = (ptr_t)(cur_sp[special_data/4]);
-    res = (ptr_t)(res[rec_pos]);   /* First projection must exist and is not offset by 1 */
-    if (rec_pos2 > 0) res = (ptr_t) res[rec_pos2-1];
-    if (rec_pos3 > 0) res = (ptr_t) res[rec_pos3-1];
-    if (rec_pos4 > 0) res = (ptr_t) res[rec_pos4-1];
+    ptr_t base = (ptr_t)(cur_sp[special_data/4]);
     if (debugStack)
-      printf(" - SPECIAL_STACK_REC(%d[%d,%d,%d,%d]) = %d", special_data, rec_pos, rec_pos2, rec_pos3, rec_pos4, res);
+      printf(" - SPECIAL_STACK_REC(%d", base);
+    res = PathProject(base, special_type);
+  }
+  else if (IS_SPECIAL_LABEL_REC(special_type)) {
+    ptr_t base = (ptr_t) special_data; 
+    if (debugStack)
+      printf(" - SPECIAL_LABEL_REC(%d", base);
+    res = PathProject(base, special_type);
   }
   else if (IS_SPECIAL_GLOBAL_REC(special_type)) {
-    int rec_pos = GET_SPECIAL_STACK_GLOBAL_POS(special_type);
-    int rec_pos2 = GET_SPECIAL_STACK_GLOBAL_POS2(special_type);
-    int rec_pos3 = GET_SPECIAL_STACK_GLOBAL_POS3(special_type);
-    int rec_pos4 = GET_SPECIAL_STACK_GLOBAL_POS4(special_type);
-    res = (ptr_t) special_data; 
-    res = (ptr_t) res[rec_pos]; /* First projection must exist and is not offset by 1 */
-    if (rec_pos2 > 0) res = (ptr_t) res[rec_pos2-1];
-    if (rec_pos3 > 0) res = (ptr_t) res[rec_pos3-1];
-    if (rec_pos4 > 0) res = (ptr_t) res[rec_pos4-1];
+    ptr_t global = (ptr_t) special_data;  /* just global address */
+    ptr_t base = (ptr_t) global[primaryGlobalOffset / sizeof(val_t)];
+    res = PathProject(base, special_type);
     if (debugStack)
-      printf(" - SPECIAL_GLOBAL_REC(%d[%d,%d,%d,%d]) = %d", special_data, rec_pos, rec_pos2, rec_pos3, rec_pos4, res);
+      printf(" - SPECIAL_GLOBAL_REC(%d", base);
   }
   else
     assert(0);
@@ -409,27 +325,54 @@ int should_trace(unsigned long trace,
     return should_trace_special(cursor, cur_sp, regstate, data_add, i);
 }
 
+static int uptrace_stacklet(Proc_t *proc, Stacklet_t *stacklet, int stackletOffset)
+{
+  Stack_t *callinfoStack = stacklet->callinfoStack;
+  int count = 0;
+  mem_t curSP = stacklet->baseCursor + stackletOffset / sizeof(val_t), nextSP;
+  mem_t curRA = stacklet->retadd, nextRA;
+  mem_t top = stacklet->baseTop + stackletOffset / sizeof(val_t);
+  resetStack(callinfoStack);
+
+  while (curSP < top) {
+    Callinfo_t *callinfo = LookupCallinfo(proc,(val_t)curRA);
+    CallinfoCursor_t localCursor, *cursor = &localCursor;
+    pushStack(callinfoStack, (ptr_t) callinfo);
+    resetCursor(cursor, callinfo);
+    nextSP = curSP + cursor->frameSize;
+    nextRA = (mem_t)curSP[cursor->RAQuadOffset];
+
+    if (debugStack)
+      printf("%d: top = %d   curSP = %d  curRA = %d     nextSP = %d nextRA = %d\n",
+	     count++,top,curSP,curRA,nextSP,nextRA);
+    curSP = nextSP;
+    curRA = nextRA;
+    if (curRA == (mem_t)(&start_client_retadd_val))
+      assert(curSP == top);
+    proc->segUsage.stackSlotsProcessed += 2;
+  }
+  assert(curSP == top);
+}
 
 
 /* 
+Scan stacklet for root locations.
+New register state is recorded in stacklet.
 The return address in the queue identifies the frame
 which is pointed to by bot_sp at the moment.  Note that
 bot_sp points to the top of this frame.  Thus, when we are
 done, bot_sp will point to the bottom of the last processed frame.  
-Returns number of frames left. 
+
 */
-int trace_stack_step(Thread_t *th, unsigned long *saveregs,
-		     mem_t *bot_sp, Stack_t *callinfoStack,
-		     mem_t top,
-		     Stack_t *roots, unsigned int *regstate_ptr, 
-		     unsigned int frame_to_trace)
+static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
+				       int stackletOffset, long *saveregs)
 {
   int i, j, k;
-  mem_t cur_sp = *bot_sp;
-  unsigned int regstate = *regstate_ptr;
-  assert((((int)cur_sp) & 15) == 0);  /* frames are multiples of 16 bytes */
+  mem_t cur_sp = stacklet->baseTop + stackletOffset / sizeof(val_t);
+  unsigned int regstate = stacklet->topRegstate;
+  Stack_t *callinfoStack = stacklet->callinfoStack;
 
-  while (!isEmptyStack(callinfoStack) && ((frame_to_trace--)>0)) { 
+  while (!isEmptyStack(callinfoStack)) {
     Callinfo_t *callinfo = (Callinfo_t *) popStack(callinfoStack);
     CallinfoCursor_t acursor, *cursor = &acursor;
     int numChunks;
@@ -437,6 +380,7 @@ int trace_stack_step(Thread_t *th, unsigned long *saveregs,
 
     numChunks = (cursor->frameSize+15)>>4; /* A chunk is the number of slots for one word of info */
     cur_sp -= cursor->frameSize;
+    proc->segUsage.stackSlotsProcessed += cursor->frameSize;
     if (debugStack) {
       printf("==========================================================\n");
       printf("SP = %d   RA = %d   FrameSize = %d words\n", cur_sp,cursor->callinfo->retadd,cursor->frameSize);
@@ -466,7 +410,7 @@ int trace_stack_step(Thread_t *th, unsigned long *saveregs,
 	    ptr_t data = (ptr_t) cur_sp[curSlot];
 	    if (IsTagData(data) || IsGlobalData(data))
 	      continue;
-	    pushStack(roots, (ptr_t) &cur_sp[curSlot]);
+	    pushStack(proc->rootLocs, (ptr_t) &cur_sp[curSlot]);
 	  }
 	}
       }
@@ -480,224 +424,205 @@ int trace_stack_step(Thread_t *th, unsigned long *saveregs,
       unsigned int calleeMask = ra & rb;   /* inherit register values from previous frame */
       unsigned int specialBits = ~ra & rb; /* contains pointers depending on additional information */
       unsigned int tempRegstate = yesBits | (calleeMask & regstate);
-      if (specialBits) {
-	  for (i=0; i<32; i++) {
-	    mem_t data_add = (mem_t) &(saveregs[i]);
-	    if (!(specialBits & (1U << i)))
-	      continue;
-	    if (should_trace_special(cursor, cur_sp, regstate, data_add, -1))
-	      tempRegstate |= 1 << i;
-	  }
+      for (i=0; i<8; i++) {
+	if (((specialBits >> (4*i)) & 0xf) == 0)
+	  continue;
+	for (j=0; j<4; j++) {
+	  int pos = 4*i + j;
+	  mem_t data_add = (mem_t) &saveregs[pos];
+	  if ((specialBits & (1U << pos)) &&
+	      (should_trace_special(cursor, cur_sp, regstate, data_add, -1)))
+	    tempRegstate |= 1 << pos;
+	}
       }
       regstate = tempRegstate;
     }
-    
   }
-  *bot_sp = cur_sp;
-  *regstate_ptr = regstate;
-  
-   return lengthStack(callinfoStack);
-}
-
-unsigned int trace_stack_normal(Proc_t *proc, Thread_t *th, unsigned long *saveregs,
-				mem_t bot_sp, val_t cur_retadd, mem_t top,
-				Stack_t *allRoots)
-{
-  Stack_t *callinfoStack = th->callinfoStack;
-  Stack_t *roots = th->snapshots[0].roots;
-  mem_t cur_sp = bot_sp;
-  unsigned int regstate = 0;
-  int numFrames, notDone;
-
-  (void) findretadd(th,&cur_sp,&cur_retadd,top,callinfoStack,MAXINT);
-  numFrames = lengthStack(callinfoStack);
-  TotalStackDepth += numFrames;
-  MaxStackDepth = (numFrames < MaxStackDepth) ? MaxStackDepth : numFrames;
-  TotalStackSize += top - bot_sp;
-
-  resetStack(roots);
-  notDone = trace_stack_step(th, saveregs,&cur_sp, callinfoStack, top,
-			     roots, &regstate, MAXINT);
-  assert(!notDone);
-  copyStack(roots,allRoots);
-
+  stacklet->bottomRegstate = regstate;
   return regstate;
 }
 
 
-
-/* topStack  = the top of ths stack to be scanned = just above the oldest frame
-   botStack  = the bottom of the stack to be scanned = address of most recent frame
-   botRetAdd = the return address corresponding to and used to decode the most recent frame
-*/
-unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
-			     mem_t botStack, val_t botRetAdd, mem_t topStack, Stack_t *allRoots)
+static void addRegRoots(Proc_t *proc, unsigned long *saveregs, unsigned int regMask)
 {
-  Proc_t *proc = th->proc;
-  Stack_t *callinfoStack = th->callinfoStack;
-  unsigned int regstate = 0;
-  int i, j, lastUnused, done;
-  mem_t topModifiedStack;              /* Top of the modified part of the stack */
-  mem_t topModifiedFrame;              /* Top frame of the modified part of the stack */
-  mem_t curFrame;
-
-  TotalStackSize += topStack - botStack;
-
-  /* Starting from the top of the stack, find the last unmodified segment */
-  for (lastUnused = -1; lastUnused < th->last_snapshot; lastUnused++) {
-    if (th->snapshots[lastUnused+1].saved_ra == 0)             /* Segment was modified by function return */
-      break;
-    if (th->maxSP >= th->snapshots[lastUnused+1].saved_sp)     /* Segment modified due to exceptions */
-      break;
-  }
-  th->maxSP = 0;
-  th->last_snapshot = lastUnused;
-
-  /* Add the previously recorded root lists of unmodified segments.  
-     Use the register state and stack frame bottom of the last segment. */
-  topModifiedStack = topStack;
-  for (i=0; i<=th->last_snapshot; i++) {
-    Stack_t *r = th->snapshots[i].roots;
-    copyStack(r,allRoots);
-    regstate = th->snapshots[th->last_snapshot].saved_regstate;
-    topModifiedStack = (mem_t) th->snapshots[th->last_snapshot].saved_sp;
-  }
-  assert(botStack <= topModifiedStack);
-  assert(topModifiedStack <= topStack);
-
-  /* Find return addresses of the modified portion of the stack. Update statistics. */
-  { 
-    int predone = save_rate * (th->last_snapshot+1);
-    int numNewFrames, curstack_depth;
-    val_t curRA = botRetAdd;
-    mem_t curFrame = botStack;
-
-    (void) findretadd(th,&curFrame,&curRA,topModifiedStack,callinfoStack,MAXINT);
-    topModifiedFrame = curFrame;
-    numNewFrames = lengthStack(callinfoStack);
-    TotalNewStackDepth += numNewFrames;
-    curstack_depth = numNewFrames + predone;
-    TotalStackDepth += curstack_depth;
-    if (MaxStackDepth < curstack_depth) 
-      MaxStackDepth = curstack_depth;
-    if (debugStack)
-      printf("predone/total  %d/%d/%d\n",predone,curstack_depth);
-  }
-
-  for (curFrame = topModifiedFrame, done = 0; !done; ) {
-    unsigned int inner_save_rate = save_rate;
-    Stack_t *r = th->snapshots[th->last_snapshot+1].roots;
-
-    if (r == NULL) {
-      r = createStack(50);
-      th->snapshots[th->last_snapshot+1].roots = r;
+  int i;
+  for (i=0; i<32; i++)
+    if (regMask & (1 << i)) {
+      ploc_t rootLoc = (ploc_t) &saveregs[i];
+      ptr_t rootVal = *rootLoc;
+      if (!(IsTagData(rootVal)) && !(IsGlobalData(rootVal))) 
+	pushStack(proc->rootLocs, (ptr_t) rootLoc);
     }
-    resetStack(r);
-
-    if (th->last_snapshot + 2 >= NUM_STACK_STUB)
-      inner_save_rate = MAXINT;
-    done = !trace_stack_step(th, saveregs, &curFrame, callinfoStack, topModifiedStack,
-			     r, &regstate, inner_save_rate);
-    copyStack(r,allRoots);
-    
-    if (!done) {
-      StackSnapshot_t *snapshots = th->snapshots;
-      Callinfo_t *callinfo = (Callinfo_t *) peekStack(callinfoStack);
-      val_t next_retadd = callinfo->retadd;
-      CallinfoCursor_t aCursor, *nextCursor = &aCursor;
-      mem_t nextFrame, nextRAslot, stubAddr;
-
-      resetCursor(nextCursor, callinfo);
-      nextFrame = curFrame - nextCursor->frameSize;
-      nextRAslot = nextFrame + nextCursor->RAQuadOffset;
-
-      th->last_snapshot++; 
-      snapshots[th->last_snapshot].roots = r;
-      snapshots[th->last_snapshot].saved_regstate = regstate;
-      snapshots[th->last_snapshot].saved_sp = (unsigned long) curFrame;
-      snapshots[th->last_snapshot].saved_ra = *nextRAslot;
-      if (debugStack) {
-	printf("snapshots = %d, snapshots[th->last_snapshot]=%d,   "
-	       "s[c]->saved_ra=%d,   s[c]->saved_sp=%d\n",
-	       snapshots,snapshots[th->last_snapshot],
-	       snapshots[th->last_snapshot].saved_ra,
-	       snapshots[th->last_snapshot].saved_sp);
-	printf("saving(%d): curFrame = %d   nextFrame = %d   nextRAslot = %d   *nextRAslot = %d   regstate=%d\n",
-	       th->last_snapshot, curFrame, nextFrame, nextRAslot, *nextRAslot, regstate);
-      }
-      stubAddr = GetStackStub(th->last_snapshot);
-#ifdef solaris
-      *nextRAslot = (val_t) (stubAddr - 2);     /* 2 instructions removed so return works -
-						    one since PC saved at call, another for delay slot */
-#else
-      *nextRAslot = stubAddr;
-#endif
-    }
-  }
-  
-  if (debugStack)
-    printf("stack_trace_gen: th->last_snapshot=%d\n",th->last_snapshot);
-
-  return regstate;
 }
 
-
-void local_root_scan(Proc_t *proc, Thread_t *th)
+void thread_root_scan(Proc_t *proc, Thread_t *th)
 {
   unsigned long *saveregs = (unsigned long *)(th->saveregs);
-  unsigned long i;
+  int i, numFrames = 0, numWords = 0;
+  unsigned int regMask = 0;
+  StackChain_t *stack = th->stack;
+  ptr_t thunk = th->thunk;
 
-  /* Include thunks that have not been used */
-  for (i=th->nextThunk; i<th->numThunk; i++) {
-    mem_t thunkAddr = &(((ptr_t)th->thunks)[i]);
-    ptr_t thunk = (ptr_t) *thunkAddr;
+  if (thunk != NULL) {
     if (!IsTagData(thunk) && !IsGlobalData(thunk)) 
-      pushStack(proc->roots,thunkAddr);
-  }
-  
-  if (th->nextThunk != 0) {  /* thread has started */
-    mem_t bottomFrame = (mem_t) saveregs[SP];
-#ifdef solaris
-    val_t bottomRA = ((val_t) saveregs[LINK] + 8);  /* 2 instructions added - 
-						      one since PC saved at call, 
-						      another for delay slot */
-#else
-    val_t bottomRA = saveregs[RA];
-#endif
-    unsigned int regMask = 0;
-    mem_t topStack = GetStack(bottomFrame)->top;
-
-    if (useGenStack)
-      regMask = trace_stack_gen(th, saveregs, bottomFrame, bottomRA, topStack, proc->roots);
-    else
-      regMask = trace_stack_normal(proc, th, saveregs, bottomFrame, bottomRA, topStack, proc->roots);
-    regMask |= 1 << EXNPTR;
-
-    for (i=0; i<32; i++)
-      if (regMask & (1 << i)) {
-	ptr_t root = (ptr_t) saveregs[i];
-	if (!(IsTagData(root)) && !(IsGlobalData(root))) {
-	  if (debugStack)
-	    printf("Register %d with value %d is a ROOT\n", i, root);
-	  pushStack(proc->roots, (int *)(&(saveregs[i])));
-	}
-      }
+      pushStack(proc->rootLocs, (ptr_t) &(th->thunk));
+    return;   /* Thunk not yet started and so no more roots */
   }
 
+  for (i=stack->cursor-1; i>=0; i--) {
+    Stacklet_t *stacklet = stack->stacklets[i];
+    uptrace_stacklet(proc, stacklet, primaryStackletOffset);
+    numFrames += lengthStack(stacklet->callinfoStack);
+    numWords += stacklet->baseTop - stacklet->baseCursor;
+  }
+  TotalStackDepth += numFrames;
+  MaxStackDepth = (numFrames < MaxStackDepth) ? MaxStackDepth : numFrames;
+  TotalStackSize += numWords * sizeof(val_t);
+
+  assert(stack->stacklets[0]->topRegstate == 0);
+  for (i=0; i<stack->cursor; i++) {
+    Stacklet_t *stacklet = stack->stacklets[i];
+    unsigned int nextRegstate = downtrace_stacklet(proc, stacklet, primaryStackletOffset, saveregs);
+    if (i+1 < stack->cursor)
+      stack->stacklets[i+1]->topRegstate = nextRegstate;
+  }
+  regMask = (CurrentStacklet(stack)->bottomRegstate) | (1 << EXNPTR);
+  addRegRoots(proc, (unsigned long *)(th->saveregs), regMask);
+}
+
+Thread_t *initial_root_scan(Proc_t *proc, Thread_t *th)
+{
+  int i, numFrames = 0, numWords = 0;
+  StackChain_t *stack = th->stack;
+  StackChain_t *snapshot;
+  ptr_t thunk = th->thunk;
+
+  Thread_Pin(th);
+    
+  if (thunk != NULL) {
+    if (!IsTagData(thunk) && !IsGlobalData(thunk)) {
+      th->snapshotThunk = thunk;
+      pushStack(proc->rootLocs, (ptr_t) &th->snapshotThunk);
+    }
+    return NULL;   /* Thunk not yet started and so no more roots */
+  }
+
+  assert(stack->cursor > 0);
+  assert(th->snapshot == NULL);
+  snapshot = StackChain_Copy(stack);        /* New stack chain and copy stacklet from primary to replica area */
+  proc->segUsage.stackSlotsProcessed += (StackChain_Size(snapshot) / 4) / 4;
+
+  th->snapshot = snapshot;
+  for (i=0; i<32; i++)
+    th->snapshotRegs[i] = th->saveregs[i];  
+
+  /* Do the uptrace to initialize stacklet starting with most recent stacklet */
+  for (i=snapshot->cursor-1; i>=0; i--) {
+    Stacklet_t *stacklet = snapshot->stacklets[i];
+    uptrace_stacklet(proc, stacklet, replicaStackletOffset);
+    numFrames += lengthStack(stacklet->callinfoStack);
+    numWords += stacklet->baseTop - stacklet->baseCursor;
+  }
+
+  TotalStackDepth += numFrames;
+  MaxStackDepth = (numFrames < MaxStackDepth) ? MaxStackDepth : numFrames;
+  TotalStackSize += numWords * sizeof(val_t);
+
+  assert(snapshot->cursor > 0);
+  return th;
+}
+
+/* This will fill up rootLocs */
+int work_root_scan(Proc_t *proc, Thread_t *th, int workToDo)
+{
+  int i, done;
+  StackChain_t *snapshot = th->snapshot;
+
+  assert(!useGenStack);
+  assert(snapshot->cursor>0);
+  while (snapshot->cursor>0) {
+    /* Get the oldest stacklet */
+    Stacklet_t *stacklet = snapshot->stacklets[0];
+    unsigned int nextRegstate = downtrace_stacklet(proc, stacklet, replicaStackletOffset, th->snapshotRegs);
+    /* Propagate regstate to next stacklet if it exists */
+    if (snapshot->cursor > 1)
+      snapshot->stacklets[1]->topRegstate = nextRegstate;
+    /* Otherwise, bottom stacklet includes registers */
+    else {
+      int regMask = nextRegstate | (1 << EXNPTR);
+      assert(snapshot->cursor == 1);
+      addRegRoots(proc, (unsigned long *)(th->snapshotRegs), regMask);
+    }
+    DequeueStacklet(snapshot);   /* Remove oldest stacklet */
+    if (updateWorkDone(proc) > workToDo)
+      break;
+  }
+  return (snapshot->cursor == 0);
+}
+
+int stkSize = 0;
+double s1, s2, s3, s4;
+/* Will fill up rootsLocs */
+void complete_root_scan(Proc_t *proc, Thread_t *th)
+{
+  int i, regMask;
+  StackChain_t *stack= th->stack;
+  int firstActive = stack->cursor;
+
+  /* Thread might not be really be live but was pinned to preserve liveness so 
+     that snapshot, snapshotThunk, and snapshotRegs can be used */
+  Thread_Unpin(th);   /* Might not have been pinned if thread created after start of GC */
+  if (th->used == 0)  /* Thread is actually dead now.  Was live only due to pinning */
+    return;
+
+  s1 = segmentTime(proc);
+  if (th->snapshot != NULL) {
+    StackChain_Dealloc(th->snapshot);
+    th->snapshot = NULL;
+  }
+  if (th->thunk != NULL) {
+    if (!IsTagData(th->thunk) && !IsGlobalData(th->thunk)) 
+      pushStack(proc->rootLocs, (ptr_t) &(th->thunk));
+    return;   /* Thunk not yet started and so no more roots */
+  }
+
+  for (i=0; i<stack->cursor; i++) {
+    Stacklet_t *stacklet = stack->stacklets[i];
+    if (stacklet->active) { /* Replica is not up-to-date if stacklet active */
+      if (firstActive == stack->cursor)
+	firstActive = i;
+      Stacklet_Copy(stacklet);
+    }
+  }
+  assert(firstActive <= stack->cursor);  /* Could equal if collection finished in first segment */
+
+  s2 = segmentTime(proc);
+  for (i=stack->cursor-1; i>=firstActive; i--) {
+    stkSize = stack->stacklets[i]->baseTop - stack->stacklets[i]->baseCursor;
+    uptrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset);
+  }
+  s3 = segmentTime(proc);
+  for (i=firstActive; i<stack->cursor; i++)
+    downtrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset, th->saveregs);
+  regMask = (CurrentStacklet(stack)->bottomRegstate) | (1 << EXNPTR);
+  addRegRoots(proc, (unsigned long *)(th->saveregs), regMask);
+  s4 = segmentTime(proc);
 }
 
 /* ----------------------------------------------------- 
    ---------------- GLOBAL STUFF ----------------------- */
+/* Global variables are the only possible roots since they
+   may contain heap values.  Before a global variable is initialized,
+   it is not known whether is it of a pointer type (due to abstraction).
+   Global variables of type float should not be considered.
+*/
 
-static Stack_t *potentialGlobal;     
-static Stack_t *potentialGlobalTemp;
-static int lastModulePreprocessed;   /* last module whose globals have been entered into the potential list */
-static Stack_t promotedGlobalLoc;    /* check each potential global to see if
-					it has been initialized;  if so,
-					remove the global from potentialGlobal
-					and move all its pointers fields 
-					into promotedGlobalLoc */
-static Stack_t tenuredGlobalLoc;     /* accumulates the contents of promotedGlobalLoc
+static Stack_t *potentialGlobal;     /* All global variable's location start here during initialization */
+static Stack_t *potentialGlobalTemp; /* Temporary stack */
+static Stack_t promotedGlobal;       /* Each potential global is examined to see if it has been initialized.
+					If so, the global variable's address is placed in promotedGlobal.
+					Otherwise, it remains in potentialGlobal. */
+static Stack_t tenuredGlobal;        /* Accumulates the contents of promotedGlobal
 					across all previous calls to minor_global_promote */
 
 
@@ -709,37 +634,39 @@ void global_root_init()
     mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
     numGlobals += stop - start;
   }
-  lastModulePreprocessed = 0;
   potentialGlobal = createStack(numGlobals);
   potentialGlobalTemp = createStack(numGlobals);
-  allocStack(&promotedGlobalLoc, numGlobals);
-  allocStack(&tenuredGlobalLoc, numGlobals);
-}
-
-void do_global_work(Proc_t *proc, int workToDo)
-{
-  int lastModuleStarted = (mainThread == NULL) ? module_count : mainThread->nextThunk;
-  
-  /* A module's globals are not initialized until the module has been started */
-  while (lastModulePreprocessed<lastModuleStarted && 
-	 updateWorkDone(proc) <= workToDo) {
-    mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[lastModulePreprocessed]);
-    mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[lastModulePreprocessed]);
+  allocStack(&promotedGlobal, numGlobals);
+  allocStack(&tenuredGlobal, numGlobals);
+  for (mi=0; mi<module_count; mi++) {
+    mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
+    mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
     for ( ; start < stop; start++) {
       mem_t global = (mem_t) (*start);
       pushStack(potentialGlobal, global);
     }
-    proc->segUsage.rootsProcessed += stop - start;
-    lastModulePreprocessed++;
   }
+}
+
+void do_global_work(Proc_t *proc, int workToDo)
+{
+  mem_t global;
+
   assert(isEmptyStack(potentialGlobalTemp));
-  while (!isEmptyStack(potentialGlobal)) {
-    mem_t global = (mem_t) popStack(potentialGlobal);
+  proc->segUsage.globalsProcessed += lengthStack(potentialGlobal);
+  while (global = (mem_t) popStack(potentialGlobal)) {
     tag_t tag = global[-1];
-    if (GET_TYPE(tag) == SKIP_TYPE)
+    if (GET_TYPE(tag) == SKIP_TYPE) /* Not yet initialized */
       pushStack(potentialGlobalTemp, global);
     else {
-      proc->segUsage.rootsProcessed += getNontagNonglobalPointerLocations(global, &promotedGlobalLoc);
+      proc->segUsage.globalsProcessed++;
+      assert(global[replicaGlobalOffset / sizeof(val_t)] == uninit_val);
+      if (tag == TAG_REC_INTINT) 
+	DupGlobal(global);
+      else if (tag == TAG_REC_TRACETRACE) 
+	pushStack(&promotedGlobal, global);
+      else
+	assert(0);
     }
   }
   typed_swap(Stack_t *, potentialGlobal, potentialGlobalTemp);
@@ -748,21 +675,40 @@ void do_global_work(Proc_t *proc, int workToDo)
 void minor_global_scan(Proc_t *proc)
 {  
   do_global_work(proc,MAXINT);
-  copyStack(&promotedGlobalLoc, proc->roots);
+  copyStack(&promotedGlobal, proc->globalLocs);
 }
 
-/* Transfers items from promotedGlobalLoc to tenuredGlobalLoc */
-void minor_global_promote()
+/* Transfers items from promotedGlobal to tenuredGlobal */
+void minor_global_promote(Proc_t *proc)
 {
-  transferStack(&promotedGlobalLoc, &tenuredGlobalLoc);
+  proc->segUsage.globalsProcessed += lengthStack(&promotedGlobal);
+  transferStack(&promotedGlobal, &tenuredGlobal);
 }
 
 void major_global_scan(Proc_t *proc)
 {
   do_global_work(proc,MAXINT);
-  minor_global_promote();
-  assert(isEmptyStack(&promotedGlobalLoc));
-  proc->segUsage.rootsProcessed += lengthStack(&tenuredGlobalLoc);
-  copyStack(&tenuredGlobalLoc, proc->roots);
+  minor_global_promote(proc);
+  assert(isEmptyStack(&promotedGlobal));
+  proc->segUsage.globalsProcessed += lengthStack(&tenuredGlobal);
+  copyStack(&tenuredGlobal, proc->globalLocs);
 }
 
+void NullGlobals(int globalOffset)
+{
+  int mi;
+  /* Null out reeplica global vars */
+  for (mi=0; mi<module_count; mi++) {
+    mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
+    mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
+    for ( ; start < stop; start++) {
+      mem_t global = (mem_t) (*start);
+      global[globalOffset / sizeof(val_t)] = uninit_val;
+    }
+  }
+}
+
+val_t GetGlobal(ptr_t globalLoc)
+{
+  return globalLoc[primaryGlobalOffset / sizeof(val_t)];
+}

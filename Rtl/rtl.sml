@@ -24,6 +24,7 @@ struct
 
   and rep_path = Projvar_p of (regi * int list)     (* if list is empty, then it is not a projection *)
                | Projlabel_p of (label * int list)  (* if list is empty, then it is just a label *)
+               | Projglobal_p of (label * int list)  (* if list is empty, then it is just the global *)
                | Notneeded_p
 
   and rep = TRACE
@@ -181,6 +182,10 @@ struct
     | STORE32I  of ea * regi     (* unchecked stores *)
     | LOAD64F   of ea * regf
     | STORE64F  of ea * regf     (* unchecked stores *)
+    | LOADGLOBAL of label * regi  (* load/init word-sized globals *)
+    | INITGLOBAL of label * regi
+    | REL_STACKPTR of regi * regi (* b = relativize (abs stack pointer a) *)
+    | ABS_STACKPTR of regi * regi (* b = absolutize (rel stack pointer b) *)
     | STOREMUTATE of ea * mutateType
     | NEEDALLOC  of sv                        (* Calls GC if sv words are not allocatable *)
     | NEEDMUTATE of int                      (* Calls GC if int writes won't fit in write list *)

@@ -18,11 +18,12 @@ sig
   
   val in_imm_range : int -> bool
   val in_ea_disp_range : int -> bool
-  val maxsp_disp : int
   val threadScratch_disp : int
   val writelistAlloc_disp : int
   val writelistLimit_disp : int
   val heapLimit_disp : int
+  val globalOffset_disp : int
+  val stackletOffset_disp : int
 
   datatype storei_instruction = STL | STQ  | STQ_U
   datatype storef_instruction = STT | STS

@@ -5,41 +5,66 @@
 
 #include "bitmap.h"
 #include "tag.h"
+#include "queue.h"
 #include <pthread.h>
 #include <ucontext.h>
 
+#if (defined solaris)
+#define pagesize 8192
+#elif (defined alpha)
+#define pagesize 8192
+#endif
+
+extern int StackletSize;
+extern int primaryStackletOffset, replicaStackletOffset;
 struct StackChain__t;
 
-typedef struct MemStack__t
+/* Each stacklet is actually a pair of stacklets.  The variable stackletOffset indicatse which one we use */
+typedef struct Stacklet__t
 {
-  int id;
-  int valid;
-  mem_t top;
-  mem_t bottom;
-  mem_t rawtop;
-  mem_t rawbottom;
-  mem_t used_bottom;
-  long safety;
-  struct StackChain__t *parent;
-} MemStack_t;
+  int  count;                    /* Reference count of how many stack chains I belong to */
+  int mapped;                    /* Has memory been mapped to this stacklet */
+  int active;                    /* The stack is or has been used by the mutator so the replica cannot be used for flipping. */
+  mem_t baseBottom;              /* Base region of mapped memory with cursor - Other region obtained by adding constant offset. */
+  mem_t baseCursor;
+  mem_t baseTop;
+  mem_t retadd;                  /* retadd necessary for resumption */
+  /* These fields are for scanning the stack */
+  unsigned int topRegstate;            /* Register state (mask) at top frame */
+  unsigned int bottomRegstate;         /* Register state (mask) at bottom frame */
+  Stack_t             *callinfoStack;  /* Corresponds to stack frames of this stacklet */
+} Stacklet_t;
 
 struct StackChain__t
 {
-  int size;
-  int count;
-  MemStack_t **stacks;
+  int used;
+  int cursor;                  /* Index of first uninitialized stacklet */
+  Stacklet_t *stacklets[10];   /* Should be dynamic XXXX */
 };
 
 typedef struct StackChain__t StackChain_t;
 
-MemStack_t* Stack_Alloc(StackChain_t *);
-MemStack_t* GetStack(mem_t);
+StackChain_t* StackChain_Alloc(void);       /* Obtains an initial stacklet */
+void StackChain_Dealloc(StackChain_t *);
+StackChain_t* StackChain_Copy(StackChain_t *);  /* Dupliacte stacklets and link to replicas */
+int StackChain_Size(StackChain_t *);  /* Total sizes of active area of stacklets */
+
+mem_t StackletPrimaryTop(Stacklet_t *stacklet);
+mem_t StackletPrimaryCursor(Stacklet_t *stacklet);
+mem_t StackletPrimaryBottom(Stacklet_t *stacklet);
+
+void Stacklet_Dealloc(Stacklet_t *stacklet); /* Decrease reference count; if freed, call dealloc on replica */
+Stacklet_t* GetStacklet(mem_t);   /* Stack chain can be obatined by looking at parent field */
+Stacklet_t* CurrentStacklet(StackChain_t *);  /* Get bottom stacklet of chain */
+Stacklet_t *NewStacklet(StackChain_t *); /* Allocate new stacklet to chain */
+Stacklet_t *EstablishStacklet(StackChain_t *stackChain, mem_t sp); /* fix stackchain cursor (possible exceptions); return active stacklet */
+void PopStacklet(StackChain_t *); /* Pop most recent stacklet - at least one must remain */
 mem_t StackError(struct ucontext *, mem_t);
+void Stacklet_Copy(Stacklet_t *);   /* Replica area copied from primary area of stacklet */
+void Stacklet_KillReplica(Stacklet_t *);                  /* Mark replica area inconsistent with primary area */
+void DequeueStacklet(StackChain_t *stackChain);
 
-
-StackChain_t* StackChain_Alloc(void);
 void memobj_init(void);
-int InStackChain(StackChain_t*, mem_t);
 
 struct range__t
 {
@@ -83,8 +108,10 @@ struct Heap__t
   mem_t writeableTop;      /* The top of the memory region that is unprotected. */
   mem_t cursor;            /* The next allocation point in the logical heap. bottom <= cursor <= top */
   mem_t prevCursor;        /* The value of cursor at the end of hte last GC - used to compute liveness ratio */
+  int   size;              /* bottom - top in bytes - makes inHeap faster */
   struct range__t range;   /* The physical range bottom to physicalTop */
   pthread_mutex_t *lock;   /* Used to synchronize multiple access to heap object. */
+  int      *freshPages;    /* Pages not access by collector since start of GC */
   Bitmap_t *bitmap;        /* Stores starts of objects for debugging */
 };
 
@@ -95,6 +122,17 @@ Heap_t* GetHeap(ptr_t);
 int inSomeHeap(ptr_t v);
 void Heap_Check(Heap_t*);
 void Heap_Reset(Heap_t *);
+void Heap_ResetFreshPages(Heap_t *);
+INLINE1(Heap_TouchPage)
+INLINE2(Heap_TouchPage)
+int Heap_TouchPage(Heap_t *h, mem_t addr) /* Returns 1 if fresh */
+{
+  int offset = sizeof(val_t) * (addr - h->bottom);
+  int page = DivideDown(offset, pagesize);
+  int fresh = h->freshPages[page];
+  h->freshPages[page] = 0;
+  return fresh;
+}
 void Heap_Resize(Heap_t *, long newSize, int reset);  /* Resizes the heap, making mprotect calls if paranoid;
 							 the cursor is set to bottom if reset is true;
 							 if the heap is being shrunk, then reset must be true */
@@ -106,7 +144,7 @@ void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *to
 
 extern mem_t StartHeapLimit; /* When we don't have a real initial heap limit, use this one */
 extern mem_t StopHeapLimit;  /* When heap limit is being used to interrupt a thread, use this one */
-extern int pagesize;
+
 
 #endif
 

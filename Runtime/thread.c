@@ -15,6 +15,7 @@
 #include <pthread.h>
 #include "gc.h"
 #include "forward.h"
+#include "platform.h"
 
 int    threadDiag = 0;
 
@@ -29,12 +30,10 @@ static long NumActiveProc = 0;                 /* Number of processor threads ac
 static int EmptyPlain = 0;                    /* Normal shared variable set to true when there are no more jobs */
 static pthread_cond_t EmptyCond;              /* Signals no more jobs */
 static pthread_mutex_t EmptyLock;             /* Lock associated with EmptyCond */
-static int topThread = 0;                     /* points just beyond last job on work list */
+static int activeThread = 0;                  /* number of threads in work list */
 static int curThread = 0;                     /* cursor for iterating over all jobs */
-static const int ThreadDone = -1;
-static const int ThreadNew = -1;
 
-extern void start_client(Thread_t *, ptr_t *, int);
+extern void start_client(Thread_t *);
 extern void context_restore(Thread_t *);
 
 Thread_t *mainThread = NULL;
@@ -59,17 +58,18 @@ void LocalUnlock(void)
 
 int NumTotalJob(void)
 {
-  return topThread;
+  return activeThread;
 }
 
 int NumReadyJob(void)
 {
   int i, count = 0;
   LocalLock();
-  for (i=0; i<topThread; i++) 
-    if (JobQueue[i]->status >= 0) {
+  for (i=0; i<NumThread; i++) {
+    Thread_t *th = JobQueue[i];
+    if (th != NULL && th->status >= 0) 
       count++;
-    }
+  }
   LocalUnlock();
   return count;
 }
@@ -96,39 +96,44 @@ Thread_t *NextJob(void)
 
 void AddJob(Thread_t *th)
 {
+  int i, j;
   LocalLock();
   th->status = 0;
-  if (th->parent) {
-    int i, j;
+  if (th->parent) 
     FetchAndAdd(&th->parent->status,1);
-  }
-  JobQueue[topThread] = th;
-  topThread++;
-  maxThread = (topThread > maxThread) ? topThread : maxThread;
+  for (i=0; i<NumThread; i++)
+    if (JobQueue[i] == NULL) {
+      JobQueue[i] = th;
+      break;
+    }
+  assert(i < NumThread);
+  activeThread++;
+  maxThread = (activeThread > maxThread) ? activeThread : maxThread;
   flushStore();
   LocalUnlock();
 }
 
-Thread_t *FetchJob(void)
+Thread_t *FetchJob()
 {
   int i;
   LocalLock();
-  for (i=topThread-1; i>=0; i--) {
+  for (i=NumThread-1; i>=0; i--) {
     Thread_t *th = JobQueue[i];
-    if (th->status == 0) {
+    if (th != NULL && th->status == 0) {
       FetchAndAdd(&th->status,1);
       LocalUnlock();
       return th;
     }
   }
   LocalUnlock();
-  return 0;
+  return NULL;
 }
 
 void ReleaseJob(Proc_t *proc)
 {
   int i;
   Thread_t *th = proc->userThread;
+  Stacklet_t *stacklet;
   mem_t proc_allocCursor = proc->allocCursor;
   mem_t proc_allocLimit = proc->allocLimit;
   mem_t proc_writelistCursor = (mem_t) proc->writelistCursor;
@@ -153,6 +158,8 @@ void ReleaseJob(Proc_t *proc)
   procChangeState(proc, Scheduler);
 
   /* Null out thread's version of allocation and write-list */
+  stacklet = EstablishStacklet(th->stack, (mem_t) th->saveregs[SP]); /* updates stacklet->cursor */
+  stacklet->retadd = (mem_t) th->saveregs[LINK];
   th->saveregs[ALLOCPTR] = 0;
   th->saveregs[ALLOCLIMIT] = 0;
   th->writelistAlloc = 0;
@@ -173,6 +180,71 @@ void ReleaseJob(Proc_t *proc)
 }
 
 
+
+/* Does not do locking to prevent multiple access.  Assumes caller does it. */
+void Thread_Create(Thread_t *th, Thread_t *parent, ptr_t thunk)
+{
+  assert(th->used == 0);
+  assert(th->status == -1);
+  assert(!th->pinned);
+  assert(&(Threads[th->id]) == th);
+  th->used = 1;
+  th->status = 0;
+  th->tid = FetchAndAdd(&totalThread,1);
+  th->parent = parent;
+  th->request = StartRequest;
+  th->saveregs[THREADPTR] = (long) th;
+  th->saveregs[ALLOCLIMIT] = 0;
+  th->globalOffset = 0;
+  th->stackletOffset = 0;
+  th->thunk = thunk;
+  if (th->stack == NULL)
+    th->stack = StackChain_Alloc(); 
+  th->snapshot = NULL;
+}
+
+void Thread_Pin(Thread_t *th)
+{
+  assert(th->pinned == 0);
+  th->pinned = 1;
+}
+
+/* Provisionally delete thread if unpinned and unused */
+void Thread_Free(Thread_t *th)
+{
+  int i, j, done;
+  LocalLock();
+  for (i=0; i<NumThread; i++) {
+    if (JobQueue[i] == th) {
+      assert(th->status < 0 || !th->pinned);
+      if ((th->status < 0) && !th->pinned) {
+	JobQueue[i] = NULL;
+	activeThread--;
+	StackChain_Dealloc(th->stack);
+	th->stack = NULL;
+	if (th->snapshot != NULL)
+	  StackChain_Dealloc(th->snapshot);
+	th->snapshot = NULL;
+	th->used = 0;
+      }
+      break;
+    }
+  }
+  assert(i < NumThread);              /* Thread must have been in scheduler */
+  done = activeThread == 0;
+  LocalUnlock();
+  if (done) {
+    EmptyPlain = 1;                   /* Causes all worker processors to terminate */
+    pthread_cond_signal(&EmptyCond);  /* Wake up main thread if there are no more jobs */
+  }
+}
+
+void Thread_Unpin(Thread_t *th)
+{
+  th->pinned = 0;
+  Thread_Free(th);
+}
+
 void DeleteJob(Proc_t *proc)
 {
   int i, j;
@@ -180,31 +252,14 @@ void DeleteJob(Proc_t *proc)
   assert(th->proc == proc);
   FetchAndAdd(&(th->status),1);  /* We increment status so it doesn't get scheduled when released */
   ReleaseJob(proc);
-  LocalLock();
-  if (mainThread == th)
-    mainThread = NULL;
-  for (i=0; i<NumThread; i++) {
-    if (JobQueue[i] == th) {
-      if (th->parent) {
-	FetchAndAdd(&(th->parent->status),-1);
-	assert(th->parent->status >= 0); /* Parent must not have already finished */
-      }
-      for (j=i; j<NumThread-1; j++)
-	JobQueue[j] = JobQueue[j+1];
-      topThread--;
-      if (threadDiag)
-	printf("DeleteJob: topThread = %d.  Signalling EmptyCond.\n", topThread); 
-      th->status = ThreadDone;            /* Now, we put it back in the free pool */
-      LocalUnlock();
-      if (topThread == 0) {
-	EmptyPlain = 1;                   /* Causes all worker processors to terminate */
-	pthread_cond_signal(&EmptyCond);  /* Wake up main thread if there are no more jobs */
-      }
-      return;
-    }
+  if (th->parent) {
+    FetchAndAdd(&(th->parent->status),-1);
+    assert(th->parent->status >= 0); /* Parent must not have already finished */
   }
-  printf("Error deleteing user thread %d (%d)\n",th->tid,th->id);
-  assert(0);
+  assert(th->status == 1);
+  th->status = -1; 
+  Thread_Free(th); 
+  return;
 }
 
 
@@ -223,24 +278,6 @@ void StopAllThreads()
 
 
 /* --------------------- Helpers ---------------------- */
-void check(char *str, Proc_t *proc)
-{
-  int i, j;
-  return;
-  for (i=0; i<NumThread; i++) {
-    if (Threads[i].status < 0)
-      continue;
-    for (j=Threads[i].nextThunk; j<Threads[i].numThunk; j++) {
-      ptr_t t = Threads[i].thunks[j];
-      if (t != 0 && *t > 1000000) {
-	printf("Proc %d: check at %s failed: Threads[%d].oneThunk = %d mapped to proc %d\n",
-	       (proc == 0) ? -1 : proc->procid,
-	       str,i,*t,Threads[i].proc);
-	assert(0);
-      }
-    }
-  }
-}
 
 Proc_t *getNthProc(int i)
 {
@@ -271,33 +308,39 @@ Thread_t *getThread()
 void resetUsage(Usage_t *u)
 {
   u->bytesAllocated = 0;
-  u->bytesCopied = 0;
-  u->bytesScanned = 0;
-  u->rootsProcessed = 0;
+  u->fieldsCopied = 0;
+  u->fieldsScanned = 0;
+  u->objsCopied = 0;
+  u->objsScanned = 0;
+  u->pagesTouched = 0 ;
+  u->globalsProcessed = 0;
+  u->stackSlotsProcessed = 0;
   u->workDone = 0;
 }
 
 long updateWorkDone(Proc_t *proc)
 {
   Usage_t *u = &proc->segUsage;
-  u->workDone = (long) (u->bytesCopied * copyWeight + 
-			u->bytesScanned * scanWeight +
-			u->rootsProcessed * rootWeight);
-  return u->workDone;
-}
-
-long getWorkDone(Proc_t *proc)
-{
-  Usage_t *u = &proc->segUsage;
+  u->workDone = (long) (u->fieldsCopied * fieldCopyWeight + 
+			u->fieldsScanned * fieldScanWeight +
+			u->objsCopied * objCopyWeight + 
+			u->objsScanned * objScanWeight +
+			u->pagesTouched * pageWeight +
+			u->globalsProcessed * globalWeight +
+			u->stackSlotsProcessed * stackSlotWeight);
   return u->workDone;
 }
 
 static void attributeUsage(Usage_t *from, Usage_t *to)
 {
   to->bytesAllocated += from->bytesAllocated;
-  to->bytesCopied += from->bytesCopied;
-  to->bytesScanned += from->bytesScanned;
-  to->rootsProcessed += from->rootsProcessed;
+  to->fieldsCopied += from->fieldsCopied;
+  to->fieldsScanned += from->fieldsScanned;
+  to->objsCopied += from->objsCopied;
+  to->objsScanned += from->objsScanned;
+  to->pagesTouched += from->pagesTouched;
+  to->globalsProcessed += from->globalsProcessed;
+  to->stackSlotsProcessed += from->stackSlotsProcessed;
   resetUsage(from);
 }
 
@@ -305,104 +348,25 @@ static void attributeUsage(Usage_t *from, Usage_t *to)
 void fillThread(Thread_t *th, int i)
 {
   th->id = i;
-  th->status = ThreadNew;
   th->tid = -1;
+  th->status = -1;
+  th->used = 0;
+  th->pinned = 0;
   th->parent = NULL;
   th->request = StartRequest;
-  th->maxSP = 0;
-  th->last_snapshot = -1;
-  th->snapshots = (StackSnapshot_t *)malloc(NUM_STACK_STUB * sizeof(StackSnapshot_t));
-  for (i=0; i<NUM_STACK_STUB; i++) {
-    th->snapshots[i].saved_ra = (val_t) stub_error;
-    th->snapshots[i].saved_sp = (val_t) 0;
-    th->snapshots[i].saved_regstate = 0;
-    th->snapshots[i].roots = (i == 0) ? createStack(50) : NULL;
-  }
   th->saveregs[THREADPTR] = (long) th;
   th->saveregs[ALLOCLIMIT] = 0;
-  th->lastHashKey = 0;
-  th->lastHashData = NULL;
-  th->callinfoStack = createStack(2000);
-  th->stackchain = NULL;
-  th->thunks = (ptr_t *) 69;
+  th->stack = NULL;
+  th->snapshot = NULL;
+  th->thunk = NULL;
 }
 
-void resetThread(Thread_t *th, Thread_t *parent, ptr_t *thunks, int numThunk)
-{
-  assert(&(Threads[th->id]) == th);
-  th->tid = FetchAndAdd(&totalThread,1);
-  th->parent = parent;
-  th->request = StartRequest;
-  th->last_snapshot = -1;
-  th->saveregs[THREADPTR] = (long) th;
-  th->saveregs[ALLOCLIMIT] = 0;
-  if (numThunk == 0) { 
-    /* thunks actually is a thunk */
-    th->thunks = &(th->oneThunk);
-    th->oneThunk = (ptr_t) thunks;
-    th->nextThunk = 0;
-    th->numThunk = 1;
-  }
-  else {
-    th->thunks = thunks;
-    th->oneThunk = 0;
-    th->nextThunk = 0;
-    th->numThunk = numThunk;
-  }
-  check("threadcreate_mid",getProc());
-  if (th->stackchain == NULL)
-    th->stackchain = StackChain_Alloc(); 
-  resetStack(th->snapshots[0].roots);
-  resetStack(th->callinfoStack);
-}
 
-void copyStack(Stack_t *from, Stack_t *to)      /* non-destructive operation on from */
-{
-  int i;
-  if (from->cursor + to->cursor + 1 >= to->size)
-    resizeStack(to, from->cursor + to->size);
-  memcpy(&to->data[to->cursor], &from->data[0], from->cursor * sizeof(ptr_t));
-  to->cursor += from->cursor;
-  assert(to->cursor < to->size);
-}
 
-void transferStack(Stack_t *from, Stack_t *to)  /* destructive operation on from */
-{
-  copyStack(from,to);
-  from->cursor = 0;
-}
-
-void allocStack(Stack_t *ostack, int size)
-{
-  ostack->cursor = 0;
-  ostack->size = size;
-  ostack->data = (ptr_t *) malloc(size * sizeof(ptr_t));
-  memset((void *)ostack->data, 0, size * sizeof(ptr_t));
-}
-
-Stack_t *createStack(int size)
-{
-  Stack_t *res = (Stack_t *) malloc(sizeof(Stack_t));
-  allocStack(res, size);
-  return res;
-}
-
-void resizeStack(Stack_t *ostack, int newSize)
-{
-  int i;
-  ptr_t *newData = (ptr_t *) malloc(newSize * sizeof(ptr_t));
-  assert(ostack->cursor < newSize);
-  for (i=0; i<ostack->size; i++)
-    newData[i] = ostack->data[i];
-  free(ostack->data);
-  ostack->data = newData;
-  ostack->size = newSize;
-}
 
 void thread_init()
 {
   int i, j;
-  assert(sizeof(StackSnapshot_t) == snapshot_size);
   assert(intSz == sizeof(int));
   assert(longSz == sizeof(long));
   assert(CptrSz == sizeof(int *));
@@ -424,8 +388,8 @@ void thread_init()
   for (i=0; i<NumProc; i++) {
     Proc_t *proc = &(Procs[i]); /* Structures are by-value in C */
     proc->procid = i;
-    allocStack(&proc->minorStack, 16384);
-    allocStack(&proc->majorStack, 1024);
+    allocStack(&proc->minorObjStack, 16384);
+    allocStack(&proc->majorObjStack, 1024);
     allocStack(&proc->minorSegmentStack, 16384);
     allocStack(&proc->majorSegmentStack, 1024);
     allocStack(&proc->majorRegionStack, 1024);
@@ -437,8 +401,10 @@ void thread_init()
     proc->writelistEnd = &(proc->writelist[(sizeof(proc->writelist) / sizeof(ptr_t)) - 2]);
     for (j=0; j<(sizeof(proc->writelist) / sizeof(ptr_t)); j++)
       proc->writelist[j] = 0;
-    proc->roots = createStack(10000);
-    allocStack(&proc->rootVals, 10000);
+    proc->globalLocs = createStack(8192);
+    proc->rootLocs = createStack(4096);
+    allocStack(&proc->threads, 100);
+    proc->primaryReplicaObjRoots = createStack(200);
     proc->primaryReplicaObjFlips = createStack(200);
     proc->primaryReplicaLocRoots = createStack(500);
     proc->primaryReplicaLocFlips = createStack(1000);
@@ -474,6 +440,8 @@ void thread_init()
     proc->numWrite = 0;
     proc->numRoot = 0;
     proc->numLocative = 0;
+    proc->lastHashKey = 0;
+    proc->lastHashData = NULL;
   }
   pthread_cond_init(&EmptyCond,NULL);
   pthread_mutex_init(&EmptyLock,NULL);
@@ -484,11 +452,11 @@ void thread_init()
 static char* state2str(ProcessorState_t procState)
 {
   switch (procState) {
-  case Scheduler : return "Scheduler";
-  case Mutator : return "Mutator";
-  case GC : return "GC";
-  case GCStack : return "GCStack";
-  case GCGlobal : return "GCGlboal";
+  case Scheduler: return "Scheduler";
+  case Mutator: return "Mutator";
+  case GC: return "GC";
+  case GCStack: return "GCStack";
+  case GCGlobal: return "GCGlboal";
   case GCWork: return "GCWork";
   default : return "unknownProcState";
   }
@@ -536,7 +504,7 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
 	  add_histogram(&proc->gcFlipOnHistogram, proc->gcTime);
 	else if (proc->gcSegment2 == FlipOff || proc->gcSegment2 == FlipBoth) {
 	  add_histogram(&proc->gcFlipOffHistogram, proc->gcTime);
-	  add_statistic(&proc->bytesCopiedStatistic, proc->majorUsage.bytesCopied);
+	  add_statistic(&proc->bytesCopiedStatistic, 4 * proc->majorUsage.fieldsCopied);
 	  resetUsage(&proc->majorUsage);
 	}
       }
@@ -546,8 +514,8 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
 	else if (proc->gcSegment2 == FlipOff || proc->gcSegment2 == FlipBoth) {
 	  add_histogram(&proc->gcFlipOffHistogram, proc->gcTime);
 	  add_statistic(&proc->bytesAllocatedStatistic, proc->minorUsage.bytesAllocated);
-	  add_statistic(&proc->bytesCopiedStatistic, proc->minorUsage.bytesCopied);
-	  proc->majorUsage.bytesAllocated += proc->minorUsage.bytesCopied;
+	  add_statistic(&proc->bytesCopiedStatistic, 4 * proc->minorUsage.fieldsCopied);
+	  proc->majorUsage.bytesAllocated += 4 * proc->minorUsage.fieldsCopied;
 	  resetUsage(&proc->minorUsage);
 	}
       }
@@ -589,36 +557,24 @@ int thread_max()
   return maxThread;
 }
 
-/* If numThunk is zero, then thunks IS the thunk rather than an array of thunks */
-Thread_t *thread_create(Thread_t *parent, ptr_t *thunks, int numThunk)
+Thread_t *thread_create(Thread_t *parent, ptr_t thunk)
 {
   int i;
-  Thread_t *th = NULL;
-
   for (i=0; i<NumThread; i++) {
-    Thread_t *temp = &(Threads[i]);
-    if (temp->status == ThreadNew) {
+    Thread_t *th = &(Threads[i]);
+    if (th->used == 0) {    /* Test first without locking */
       LocalLock();
-      if (temp->status == ThreadNew) 
-	temp->status = 0;
-      else {
+      if (th->used == 0) {  /* Should still be free, most likely */
+	Thread_Create(th, parent, thunk);
 	LocalUnlock();
-	continue;
+	return th;
       }
       LocalUnlock();
-      th = temp;
-      break;
     }
   }
-
-  if (th == NULL) {
-    printf("Work list has %d threads\n",NumTotalJob());
-    printf("thread_create failed\n");
-    assert(0);
-  }
-  assert(th->status == 0);
-  resetThread(th, parent, thunks, numThunk);
-  return th;
+  printf("Work list has %d threads\n",NumTotalJob());
+  printf("thread_create failed\n");
+  assert(0);
 }
 
 
@@ -649,6 +605,9 @@ void save_regs_fail(int memValue, int regValue)
 
 static void mapThread(Proc_t *proc, Thread_t *th)
 {
+  Stacklet_t *stacklet = CurrentStacklet(th->stack);
+
+  Stacklet_KillReplica(stacklet);
   assert(proc->userThread == NULL);
   assert(th->proc == NULL);
   proc->userThread = th;
@@ -657,6 +616,11 @@ static void mapThread(Proc_t *proc, Thread_t *th)
   th->saveregs[ALLOCLIMIT] = (reg_t) proc->allocLimit;
   th->writelistAlloc = proc->writelistCursor;
   th->writelistLimit = proc->writelistEnd;
+  th->globalOffset = primaryGlobalOffset;
+  th->stackletOffset = primaryStackletOffset;
+  th->saveregs[THREADPTR] = (val_t) th;
+  th->saveregs[SP] = (val_t) StackletPrimaryCursor(stacklet);
+  th->stackLimit = StackletPrimaryBottom(stacklet);
 }
 
 /* Processor should not be mapped to any user thread */
@@ -682,7 +646,10 @@ static void work(Proc_t *proc)
 #endif
     th = FetchJob();  /* Provisionally grab thread but don't map onto processor yet */
     if (th == NULL) {
+      procChangeState(proc, Scheduler);
       GCPoll(proc);
+      procChangeState(proc, Scheduler);
+      procChangeState(proc, Mutator);    /* So that segment counter increases */
       procChangeState(proc, Scheduler);
     }
     if (EmptyPlain) {
@@ -720,10 +687,7 @@ Abort
       returnFromYield(th);
     }
     case StartRequest: {              /* Starting thread for the first time */
-      mem_t stack_top = th->stackchain->stacks[0]->top;
-      assert(th->nextThunk == 0);
-      th->saveregs[THREADPTR] = (long)th;
-      th->saveregs[SP] = (long)stack_top - 128;       /* Get some initial room; Sparc requires at least 68 byte for the save area */
+      assert(th->thunk != NULL);
       mapThread(proc,th);
       if (threadDiag) {
 	printf("Proc %d: starting user thread %d (%d) with %d <= %d\n",
@@ -732,7 +696,7 @@ Abort
       }
       flushStore();  /* make visible changes to other processors */
       procChangeState(proc, Mutator);
-      start_client(th,th->thunks, th->numThunk);
+      start_client(th);
       assert(0);
     }
 
@@ -770,7 +734,7 @@ Abort
       else if (th->request == GCRequestFromC ||
 	       th->request == MajorGCRequestFromC) {
 	if (threadDiag)
-	  printf("Proc %d: Resuming thread %d from GCRequestFromML of %d bytes with allocation region %d < %d and writelist %d < %d\n",
+	  printf("Proc %d: Resuming thread %d from Major/C GCRequestFromML of %d bytes with allocation region %d < %d and writelist %d < %d\n",
 		 proc->procid, th->tid, th->requestInfo, proc->allocCursor, proc->allocLimit,
 		 th->writelistAlloc, th->writelistLimit);
 	flushStore();  /* make visible changes to other processors */
@@ -801,6 +765,7 @@ static void* proc_go(void* unused)
   if (threadDiag)
     printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
 #endif
+  initializePerfMon();
   install_signal_handlers(0);
   proc->stack = (int)(&proc) & (~255);
   FetchAndAdd(&NumActiveProc, 1);
@@ -811,12 +776,12 @@ static void* proc_go(void* unused)
   return 0;
 }
 
-void thread_go(ptr_t *thunks, int numThunk)
+void thread_go(ptr_t thunk)
 {
   int curproc = -1;
   int i, status;
 
-  mainThread = thread_create(NULL,thunks,numThunk);
+  mainThread = thread_create(NULL,thunk);
   AddJob(mainThread);
 
   /* Create system threads that run off the user thread queue */
@@ -879,49 +844,13 @@ void thread_go(ptr_t *thunks, int numThunk)
 
 
 /* ------------------ Mutator interface ----------------- */
-int showIntList(ptr_t v)
-{
-  printf("%d: %d %d\n",v, v[0], v[1]);
-  return 256; /* ML unit */
-}
 
-int showInt(val_t v)
-{
-  printf("%d",v); 
-  return 256; /* ML unit */
-}
-
-int showIntRef(ptr_t v)
-{
-  printf("%d: %d", v, *v); 
-  return 256; /* ML unit */
-}
-
-int threadID()
-{
-  Proc_t *proc = getProc();
-  Thread_t *th = proc->userThread;
-  int temp = proc->procid;
-  temp = 1000 * temp + th->tid;
-  temp = 1000 * temp + th->id;
-  return temp;
-}
 
 Thread_t *SpawnRest(ptr_t thunk)
 {
   Proc_t *proc = getProc();
   Thread_t *parent = proc->userThread;
   Thread_t *child = NULL;
-
-  assert(proc->stack - ((int) &proc) < 1024);   /* stack frame for this function should be < 1K */
-  assert(parent->proc == proc);
-  check("Spawnstart",proc);
-  if (thunk < (mem_t) 1000000) {
-    printf("Proc %d: Thread %d: Spawn given bad thunk %d\n",
-	   proc->procid, parent->tid, thunk);
-  }
-  child = thread_create(parent,(ptr_t *)thunk, 0);    /* zero indicates passing one actual thunk */
-  check("Spawnmid",proc);
 
   switch (collector_type) {
   case Semispace:
@@ -936,11 +865,14 @@ Thread_t *SpawnRest(ptr_t thunk)
     assert(0);
   }
 
+  assert(proc->stack - ((int) &proc) < 1024);   /* stack frame for this function should be < 1K */
+  assert(parent->proc == proc);
+
+  child = thread_create(parent,thunk);    /* zero indicates passing one actual thunk */
   AddJob(child);
   if (threadDiag)
     printf("Proc %d: user thread %d spawned user thread %d (status = %d)\n",
 	   proc->procid,parent->tid,child->tid,child->status);
-  check("Spawnend",proc);
   return parent;
 }
 
@@ -951,10 +883,8 @@ void Finish()
   Proc_t *proc = getProc();
   Thread_t *th = proc->userThread;
   assert(((int)proc->stack - (int)(&proc)) < 1024); /* THis function's frame should not be more than 1K. */
-  check("Finishstart",proc);
   if (threadDiag) printf("Proc %d: finished user thread %d\n",proc->procid,th->tid);
   DeleteJob(proc);
-  check("Finishend",proc);
   work(proc);
   assert(0);
 }
@@ -963,11 +893,9 @@ void Finish()
 Thread_t *YieldRest()
 {
   Proc_t *proc = getProc();
-  check("YieldReststart",proc);
   proc->userThread->request = YieldRequest;  /* Record why this thread pre-empted */
   proc->userThread->saveregs[RESULT] = 256;  /* ML representation of unit */
   ReleaseJob(proc);
-  check("YieldRestend",proc);
   work(proc);
   assert(0);
   return 0;
@@ -997,4 +925,7 @@ void schedulerRest(Proc_t *proc)
 }
 
 
-
+double segmentTime(Proc_t *proc)
+{
+  return proc->gcTime + lap_timer(&proc->currentTimer);
+}

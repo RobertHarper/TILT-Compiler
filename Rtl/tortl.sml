@@ -412,12 +412,7 @@ struct
 		      val fun_reglabel = 
 				(case (vlopt,vvopt) of
 				     (NONE,SOME(CODE l)) => LABEL' l
-				   | (SOME(REGISTER (_,I r)),_) => REG' r
-				   | (SOME(GLOBAL (l,_)),_) => 
-					 let val reg = alloc_regi NOTRACE_CODE
-					 in  add_instr(LOAD32I(LEA(l,0),reg));
-					     REG' reg
-					 end
+				   | (SOME loc, _) => REG'(load_ireg_loc(loc, NONE))
 				   | _ => error "bad varloc or varval for function")
 				     
 				     
@@ -461,12 +456,7 @@ struct
 			  in  (Name.eq_var(#1(getCurrentFun()), expvar), 
 			       (case (vlopt,vvopt) of
 				    (NONE,SOME(CODE l)) => LABEL' l
-				  | (SOME(REGISTER (_,I r)),_) => REG' r
-				  | (SOME(GLOBAL (l,_)),_) => 
-					let val reg = alloc_regi NOTRACE_CODE
-					in  add_instr(LOAD32I(LEA(l,0),reg));
-					    REG' reg
-					end
+				  | (SOME loc, _) => REG'(load_ireg_loc(loc, NONE))
 				  | _ => error "bad varloc or varval for function"),
 				    [], [],state)
 			  end
@@ -533,6 +523,7 @@ struct
 		      val _ = add_instr(MV(except,exnarg))
 		      val _ = record_project(exnptr,0,SREGI HANDLER)
 		      val _ = record_project(exnptr,1,SREGI STACK)
+		      val _ = add_instr(ABS_STACKPTR (SREGI STACK, SREGI STACK))
 		  in  add_instr(JMP(SREGI HANDLER,[]));
 		      (VALUE(VOID rep), state)
 		  end
@@ -598,7 +589,9 @@ struct
 		      val hlreg = alloc_regi NOTRACE_CODE
 		      val _ = add_instr(LADDR(LEA(hl,0),hlreg))
 		      val handlerTerm = LOCATION(REGISTER (false, I hlreg))
-		      val stackptrTerm = LOCATION(REGISTER (false, I (SREGI STACK)))
+		      val relStack = alloc_regi NOTRACE_INT
+		      val _ = add_instr(REL_STACKPTR (SREGI STACK, relStack))
+		      val stackptrTerm = LOCATION(REGISTER (false, I relStack))
 		      val exnptrTerm = LOCATION(REGISTER (false, I (SREGI EXNSTACK)))
 		      (* The ordering of fields in the exnrecord is used by the translation
 		         of Raise_e and the global_exnrec of service_*.s *)
@@ -1866,6 +1859,7 @@ struct
 	     val mainCodeName = ML_EXTERN_LABEL(unitname ^ "_main")
 	     val mainCodeVar = Name.fresh_named_var(unitname ^ "_main")
 	     val mainName = ML_EXTERN_LABEL mainString
+	     val closureAddr = ML_EXTERN_LABEL (mainString ^ "_closure")
 	     val _ = set_global_state (unitname,
 				       (mainCodeVar,mainCodeName)::named_exports,
 				       trueGlobals)
@@ -1908,11 +1902,17 @@ struct
 
 	     val _ = add_data(COMMENT("Module closure"))
 	     val {dynamic,static=moduleClosureTag} = Rtltags.recordtag [NOTRACE_CODE, TRACE, TRACE]
+	     val {dynamic,static=globalTag} = Rtltags.recordtag [TRACE, TRACE] (* Doubled for replicaGlobals *)
 	     val _ = add_data(INT32(moduleClosureTag))
-	     val _ = add_data(DLABEL(mainName))
+	     val _ = add_data(DLABEL(closureAddr))
 	     val _ = add_data(DATA(mainCodeName))
 	     val _ = add_data(INT32(0w0))
 	     val _ = add_data(INT32(0w0))
+
+	     val _ = add_data(INT32(globalTag))
+	     val _ = add_data(DLABEL(mainName))
+	     val _ = add_data(DATA(closureAddr))
+	     val _ = add_data(DATA(closureAddr))
 
 	     val procs = rev (!pl)
 	     val data = rev (!dl)
@@ -1922,10 +1922,20 @@ struct
 		        (data @ 
 			 [DLABEL globalEnd,
 			  INT32 0w0])
+	     val {partialRecordLabels, 
+		  partialRecords, totalRecords,
+		  partialFields, totalFields} = get_static_records()
 	     val module = Rtl.MODULE {procs = procs,
 				      data = data,
 				      main = mainName,
-				      global = get_mutable()}
+				      global = partialRecordLabels}
+
+	     (* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX *)
+	     val _ = (print "XXXXXXXXXXXXX    "; 
+		      print (Int.toString partialFields); print " partial fields  ";
+		      print (Int.toString totalFields); print " total fields   ";
+		      print (Int.toString partialRecords); print " partial records  ";
+		      print (Int.toString totalRecords); print " total records   \n")
 
 	     val _ = resetDepth()
 	     val _ = resetWork()
@@ -1934,9 +1944,23 @@ struct
 	 in module
 	 end
 
+
      fun entryTables moduleLabels = 
-	 let val nilmod = Nil.MODULE{bnds = aggregate_bnds @ vararg_onearg_bnds,
-				     imports = [],
+	 let fun makeImportBnd (ML_EXTERN_LABEL lab) = 
+	     let open Nil
+		 val lab = Name.symbol_label (Symbol.varSymbol lab)
+		 val v1 = Name.fresh_var()
+		 val v2 = Name.fresh_var()
+		 val nt = TraceKnown TraceInfo.Trace
+		 val c = AllArrow_c {openness = Closure, effect = Partial, isDependent = false,
+				     tFormals = [], eFormals = [], fFormals = 0w0,
+				     body_type = Prim_c(Record_c ([], NONE),[])}
+	     in  (Nil.ImportValue (lab, v1, nt, c),
+		  Nil.Exp_b(v2, nt, App_e(Closure, Var_e v1, [], [], [])))
+	     end
+	     val (moduleImports,moduleBnds) = unzip (map makeImportBnd moduleLabels)
+	     val nilmod = Nil.MODULE{bnds = aggregate_bnds @ vararg_onearg_bnds @ moduleBnds,
+				     imports = moduleImports,
 				     exports = map (fn (l,v,tr,c) => ExportValue(l,v))
 				                [sub,vsub,len,vlen,update,array,vector,vararg,onearg]}
 	     val Rtl.MODULE{procs=linkProcs,data=linkData,
@@ -1954,7 +1978,6 @@ struct
 	     val globals_end =     mktable("GLOBALS_END_VAL","_GLOBALS_END_VAL")
 	     val trace_globals_start = mktable("TRACE_GLOBALS_BEGIN_VAL","_TRACE_GLOBALS_BEGIN_VAL")
 	     val trace_globals_end =   mktable("TRACE_GLOBALS_END_VAL","_TRACE_GLOBALS_END_VAL")
-             val entrytable =      mktable("client_entry","")
 	     val count = [DLABEL (ML_EXTERN_LABEL "module_count"),
 			  INT32 (TilWord32.fromInt count)]
 	     val data = List.concat[count,
@@ -1963,9 +1986,8 @@ struct
 				    globals_start,
 				    globals_end,
 				    trace_globals_start,
-				    trace_globals_end,
-				    entrytable]
-	 in  MODULE{procs = linkProcs, 
+				    trace_globals_end]
+	 in  MODULE{procs = linkProcs,
 		    data = linkData @ data,
 		    main = linkMain,
 		    global = linkGlobal}

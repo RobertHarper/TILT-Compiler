@@ -16,8 +16,7 @@ struct
     structure TW32 = TilWord32
     structure TW64 = TilWord64
 
-    val do_constant_records = ref true
-    val do_forced_constant_records = ref true
+    val do_reject_nonValue = Stats.tt("Reject_NonValue")
     val debug = Stats.ff("TortlRecordDebug")
 
     val empty_record_int = 256
@@ -32,7 +31,8 @@ struct
 		    then error "max_record_core given too maxn terms" else ()
 	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length terms)) ^ "-record"))
 
-	val is_mutable = ref false
+	val heapCount = ref 0
+	val nonHeapCount = ref 0
 	val dest = alloc_regi TRACE
 
 	val tagwords = [recordtag reps]
@@ -74,27 +74,30 @@ struct
 	fun scan_vals (offset,_,[]) = offset
 	  | scan_vals (offset,[],vl::vls) = error "not enough reps"
 	  | scan_vals (offset,rep::reps,vl::vls) =
-	    ((case (const,vl) of
-		  (true, VALUE (INT w32)) => add_data(INT32 w32)
-		| (true, VALUE (TAG w32)) => add_data(INT32 w32)
-		| (true, VALUE (RECORD (l,_))) => add_data(DATA l)
-		| (true, VALUE (LABEL l)) => add_data(DATA l)
-		| (true, VALUE (CODE l)) => add_data(DATA l)
-		| (true, VALUE (REAL l)) => error "make_record_core given REAL"
-		| (true, VALUE (VOID _)) => error "make_record_core given VOID"
-		| _ => let val r = load_ireg_term(vl,NONE)
-		       in  if const 
-			       then 
-				   let val nonheap = repIsNonheap rep
-				       val _ = if nonheap then () else is_mutable := true
-				   in  add_data(INT32 uninit_val);
-				       add_instr(STORE32I(LEA(recordLabel, 
-							      offset - 4 * (length tagwords)), r))
-				   end
-			   else 
-			       storenew(REA(heapptr(),offset),r,rep)
-		       end);
-	    scan_vals(offset+4,reps,vls))
+	    (if const
+		 then (case vl of
+			   VALUE v => (nonHeapCount := 1 + !nonHeapCount;
+				       (case v of
+					    (INT w32) => add_data(INT32 w32)
+					  | (TAG w32) => add_data(INT32 w32)
+					  | (RECORD (l,_)) => add_data(DATA l)
+					  | (LABEL l) => add_data(DATA l)
+					  | (CODE l) => add_data(DATA l)
+					  | (REAL l) => error "make_record_core given REAL"
+					  | (VOID _) => error "make_record_core given VOID"))
+			 | _ => let val nonheap = repIsNonheap rep
+				    val _ = if nonheap
+						then nonHeapCount := 1 + !nonHeapCount
+					    else heapCount := 1 + !heapCount;
+				    val r = load_ireg_term(vl,NONE)
+				in  add_data(INT32 uninit_val);
+				    add_instr(STORE32I(LEA(recordLabel, 
+							  offset - 4 * (length tagwords)), r))
+				end)
+	     else let val r = load_ireg_term(vl,NONE)
+		  in  storenew(REA(heapptr(),offset),r,rep)
+		  end;
+	     scan_vals(offset+4,reps,vls))
 
         (* sometime the tags must be computed at run-time *)
 	fun do_dynamic (r,{bitpos,path}) =
@@ -136,9 +139,9 @@ struct
 	  else (LOCATION (REGISTER (false,I dest)), NONE)
       val offset = scan_vals (offset, reps, terms)
 
-      (* The test for is_mutable and call to add_mutable must FOLLOW scan_vals *)
-      val _ = (case (const andalso !is_mutable, templabelopt) of
-		   (true, SOME label) => add_mutable label
+      (* The values of nonHeapCount and heapCount must be accessed only after scan_vals *)
+      val _ = (case (const, templabelopt) of
+		   (true, SOME label) => add_static_record (label, !nonHeapCount, !heapCount)
 		 | (true, NONE) => error "impossible control flow"
 		 | _ => ())
       val _ = if const
@@ -168,21 +171,34 @@ struct
       in   check terms
       end
 
-  (* These are the interface functions: determines static allocation *)
-  fun make_record (state, terms) = 
-      let fun is_value (VALUE _) = true 
-	    | is_value _ = false
-	  val reps = map term2rep terms
-	  fun is_static (COMPUTE _) = false
-	    | is_static _ = true
-	  val const = (istoplevel() orelse (andfold is_value terms)) andalso (andfold is_static reps)
-	  val const = const andalso (!do_constant_records)
-      in  make_record_help(const,state,reps,terms,NONE)
+  fun is_value_nonCompute terms = 
+      let val reps = map term2rep terms
+	  fun loop (vFlag,ncFlag) [] = (vFlag,ncFlag,reps)
+	    | loop (vFlag,ncFlag) ((term,rep)::rest) = 
+	      let val vFlag = vFlag andalso (case term of
+						 VALUE _ => true
+					       | _ => false)
+		  val ncFlag = ncFlag andalso (case rep of
+						   COMPUTE _ => false
+						 | _ => true)
+	      in  loop (vFlag,ncFlag) rest
+	      end
+      in  loop (true,true) (zip terms reps)
       end
 
+  (* These are the interface functions: determines static allocation *)
+  fun make_record (state, terms) = 
+      let val (allValues, allNonComputes, reps) = is_value_nonCompute terms
+	  val const = allNonComputes andalso (if (!do_reject_nonValue)
+						  then allValues
+					      else (istoplevel() orelse allValues))
+      in  make_record_help(const,state,reps,terms,NONE)
+      end
+  
   fun make_record_const (state, terms, labopt) = 
-      let val reps = map term2rep terms
-	  val res as (lv,_) = make_record_help(!do_forced_constant_records,state, reps, terms, labopt)
+      let val (allValues, allNonComputes, reps) = is_value_nonCompute terms
+	  val const = allNonComputes andalso (allValues orelse not (!do_reject_nonValue))
+	  val res as (lv,_) = make_record_help(const,state, reps, terms, labopt)
 	  val labopt2 = (case lv of
 			     VALUE(RECORD(lab,_)) => SOME lab
 			   | VALUE(LABEL lab) => SOME lab
@@ -195,7 +211,7 @@ struct
 		     | _ => error "make_record_const failed")
       in  res
       end
-
+  
   fun make_record_mutable (state, terms) = 
       let val reps = map term2rep terms
       in  make_record_help(false,state,reps,terms,NONE)

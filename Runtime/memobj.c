@@ -12,14 +12,20 @@
 #include <fcntl.h>
 #include "stats.h"
 
-static MemStack_t *Stacks;
+Stacklet_t *Stacklets; /* XXXX should be static */
 static StackChain_t *StackChains;
 static Heap_t  *Heaps;
+
+int NumHeap       = 20;
+int NumStacklet   = 100;
+int NumStackChain = 100;
 
 mem_t StopHeapLimit  = (mem_t) 1; /* A user thread heap limit used to indicates that it has been interrupted */
 mem_t StartHeapLimit = (mem_t) 2; /* A user thread heap limit used to indicates that it has not been given space */
 
-int StackSize = 2048; /* mesaure in Kb */
+int StackletSize = 128; /* mesaure in Kb */
+int primaryStackletOffset, replicaStackletOffset;
+
 static const int megabyte  = 1024 * 1024;
 static const int kilobyte  = 1024;
 #ifdef alpha_osf
@@ -38,7 +44,6 @@ const mem_t heapstart  = (mem_t) (780 * 1024 * 1024);
 /* The heaps are managed by a bitmap where each bit corresponds to a 32K chunk of the heap.
    We take 288 megs for heap space which result in 9216 bits.
 */
-int pagesize = 0;
 static int chunksize = 32768;
 static Bitmap_t *bmp = NULL;
 static const int Heapbitmap_bits = 9216;
@@ -90,101 +95,235 @@ mem_t my_mmap(caddr_t start, int size, int prot)
 }
 
 
-void wordset(mem_t start, unsigned long v, size_t sz)
-{
-  unsigned long *end = (void *)(((unsigned int)start) + sz), *cur;
-  for (cur=(unsigned long *)start; cur<end; cur++)
-    *cur = v;
-}
-
-
 void StackInitialize(void)
 {
   int i;
-  Stacks = (MemStack_t *)malloc(sizeof(MemStack_t) * NumStack);
+  Stacklets = (Stacklet_t *)malloc(sizeof(Stacklet_t) * NumStacklet);
   StackChains = (StackChain_t *)malloc(sizeof(StackChain_t) * NumStackChain);
-  for (i=0; i<NumStack; i++) {
-    MemStack_t *stack = &(Stacks[i]);
-    stack->id = i;
-    stack->valid = 0;
-    stack->top = 0;
-    stack->bottom = 0;
-    stack->rawtop = 0;
-    stack->rawbottom = 0;
+  for (i=0; i<NumStacklet; i++) {
+    Stacklets[i].count = 0;
+    Stacklets[i].mapped = 0;
   }
+  for (i=0; i<NumStackChain; i++)
+    StackChains[i].used = 0;
+}
+
+void Stacklet_Dealloc(Stacklet_t *stacklet)
+{
+  assert(stacklet->count > 0);
+  stacklet->count--;
+}
+
+void Stacklet_KillReplica(Stacklet_t *stacklet)
+{
+  assert(stacklet->count > 0);
+  stacklet->active = 1;
+}
+
+static Stacklet_t* Stacklet_Alloc()
+{
+  int i;
+  Stacklet_t *res = NULL;
+  int size = StackletSize * kilobyte;  /* for just one of the two: primary and replica */
+  int safety = pagesize;
+
+  for (i=0; i<NumStacklet; i++)
+    if (Stacklets[i].count == 0) {
+      res = &Stacklets[i];
+      break;
+    }
+  assert(res != NULL);
+
+  res->count = 1;
+  res->active = 0;
+  if (!res->mapped) {
+    mem_t start = stackstart + (2 * i * size) / (sizeof (val_t)), middle, end;
+
+    start = my_mmap((caddr_t) start, 2 * size, PROT_READ | PROT_WRITE); /* Might get different base */
+    middle = start + size / (sizeof (val_t));
+    end = start + 2 * size / (sizeof (val_t));
+    res->baseBottom = start + safety / (sizeof (val_t));
+    res->baseTop    = middle - safety / (sizeof (val_t));
+    res->baseTop    = res->baseTop - ((safety + 128) / sizeof(val_t)); /* Get some initial room in multiples of 64 bytes; 
+								  Sparc requires at least 68 byte for the save area */
+    my_mprotect(0, (caddr_t) start,                                   safety, PROT_NONE);
+    my_mprotect(1, (caddr_t) (middle - (safety / sizeof(val_t))), 2 * safety, PROT_NONE);
+    my_mprotect(2, (caddr_t) (end    - (safety / sizeof(val_t))),     safety, PROT_NONE);
+
+    res->callinfoStack = createStack(size / (32 * sizeof (val_t)));
+    res->mapped = 1;
+  }
+  res->baseCursor = res->baseTop;
+  res->topRegstate = 0;
+  res->bottomRegstate = 0;
+  resetStack(res->callinfoStack);
+  return res;
+}
+
+mem_t StackletPrimaryTop(Stacklet_t *stacklet)
+{
+  return stacklet->baseTop + (primaryStackletOffset / sizeof(val_t));
+}
+
+mem_t StackletPrimaryCursor(Stacklet_t *stacklet)
+{
+  return stacklet->baseCursor + (primaryStackletOffset / sizeof(val_t));
 }
 
 
+mem_t StackletPrimaryBottom(Stacklet_t *stacklet)
+{
+  return stacklet->baseBottom + (primaryStackletOffset / sizeof(val_t));
+}
 
-MemStack_t* GetStack(mem_t add)
+Stacklet_t *NewStacklet(StackChain_t *stackChain)
 {
   int i;
-  for (i=0; i<NumStack; i++) {
-    MemStack_t *s = &Stacks[i];
-    if (s->valid && 
-	s->id == i &&
-	s->rawbottom <= add &&
-	s->rawtop    >= add)
+  Stacklet_t *newStacklet = Stacklet_Alloc(stackChain);
+  stackChain->stacklets[stackChain->cursor++] = newStacklet;
+  for (i=0; i<stackChain->cursor; i++) 
+    assert(stackChain->stacklets[i]->count > 0);
+  return newStacklet;
+}
+
+/* Copy primary into replica */
+void Stacklet_Copy(Stacklet_t *stacklet)
+{
+  int activeSize = (stacklet->baseTop - stacklet->baseCursor) * sizeof(val_t);
+  mem_t primaryBottom = stacklet->baseBottom + (primaryStackletOffset / sizeof(val_t));
+  mem_t replicaBottom = stacklet->baseBottom + (replicaStackletOffset / sizeof(val_t));
+  mem_t primaryCursor = stacklet->baseCursor + (primaryStackletOffset / sizeof(val_t));
+  mem_t replicaCursor = stacklet->baseCursor + (replicaStackletOffset / sizeof(val_t));
+  assert(stacklet->count > 0);
+  assert(stacklet->baseBottom <= stacklet->baseCursor && stacklet->baseCursor <= stacklet->baseTop);
+  memcpy(replicaCursor, primaryCursor, activeSize);
+}
+
+
+/* Given the new sp, establish the most recent stacklet, remembering possible raised exceptions.
+   Return the most recent stacklet.
+*/
+Stacklet_t *EstablishStacklet(StackChain_t *stackChain, mem_t sp)
+{
+  int i,active;
+  mem_t sp_base = sp - primaryStackletOffset / sizeof(val_t);
+  for (active=stackChain->cursor-1; active>=0; active--) {
+    Stacklet_t *stacklet = stackChain->stacklets[active];
+    if (stacklet->baseBottom <= sp_base && sp_base <= stacklet->baseTop) { /* Not cursor since that is not reliable yet */
+      stacklet->baseCursor = sp_base;
+      break;
+    }
+  }
+  assert(active>=0);
+  for (i=active+1; i<stackChain->cursor; i++) {
+    Stacklet_Dealloc(stackChain->stacklets[i]);
+    stackChain->stacklets[i] = NULL;
+  }
+  stackChain->cursor = active + 1;
+  return stackChain->stacklets[active]; 
+}
+
+
+/* Deallocate most recent stacklet - at least one active must remain */
+void PopStacklet(StackChain_t *stackChain)
+{
+  int active = stackChain->cursor - 1;
+  Stacklet_Dealloc(stackChain->stacklets[active]);
+  stackChain->stacklets[active] = NULL;
+  stackChain->cursor--;
+  assert(stackChain->cursor > 0);
+}
+
+/* Remove oldest stacklet from stack chain */
+void DequeueStacklet(StackChain_t *stackChain)
+{
+  int i;
+  Stacklet_Dealloc(stackChain->stacklets[0]);
+  for (i=1; i<stackChain->cursor; i++) {
+    stackChain->stacklets[i-1] = stackChain->stacklets[i];
+    assert(stackChain->stacklets[i-1]->count > 0);
+  }
+  stackChain->stacklets[stackChain->cursor-1] = NULL;
+  stackChain->cursor--;
+  assert(stackChain->cursor>=0);
+}
+
+StackChain_t* StackChain_BaseAlloc()
+{
+  int i;
+  for (i=0; i<NumStackChain; i++)
+    if (!StackChains[i].used) {
+      StackChain_t *res = &StackChains[i];
+      res->used = 1;
+      res->cursor = 0;
+      return res;
+    }
+  assert(0);
+}
+
+StackChain_t* StackChain_Copy(StackChain_t *src)
+{
+  int i;
+  StackChain_t* res = StackChain_BaseAlloc();
+  assert(src->used);
+  res->cursor = src->cursor;
+  for (i=0; i<src->cursor; i++) {
+    res->stacklets[i] = src->stacklets[i];
+    src->stacklets[i]->count++;
+    Stacklet_Copy(src->stacklets[i]);
+  }
+  return res;
+}
+
+int StackChain_Size(StackChain_t *chain) 
+{
+  int i, sum = 0;
+  for (i=0; i<chain->cursor; i++) {
+    Stacklet_t *stacklet = chain->stacklets[i];
+    sum += (stacklet->baseTop - stacklet->baseCursor) * sizeof(val_t);
+  }
+  return sum;
+}
+
+
+StackChain_t* StackChain_Alloc()
+{
+  StackChain_t* res = StackChain_BaseAlloc();
+  NewStacklet(res);
+  return res;
+}
+
+void StackChain_Dealloc(StackChain_t *stackChain)
+{
+  int i;
+  for (i=0; i<stackChain->cursor; i++)
+    Stacklet_Dealloc(stackChain->stacklets[i]);
+  stackChain->used = 0;
+  stackChain->cursor = 0;
+}
+
+Stacklet_t* GetStacklet(mem_t add)
+{
+  int i;
+  mem_t offsetAdd = add - StackletSize * kilobyte / sizeof(val_t);
+  for (i=0; i<NumStacklet; i++) {
+    Stacklet_t *s = &Stacklets[i];
+    if (s->count && 
+	((s->baseBottom <= add && s->baseTop >= add) ||
+	 (s->baseBottom <= offsetAdd && s->baseTop >= offsetAdd)))
       return s;
   }
   return NULL;
 }
 
-int InStackChain(StackChain_t *sc, mem_t addr) 
+Stacklet_t* CurrentStacklet(StackChain_t *stackChain)
 {
-  int i;
-  for (i=0; i<sc->count; i++) {
-    fprintf(stderr,"instackchain bottom = %d, addr = %d, top = %d\n",
-	  sc->stacks[i]->bottom, addr ,
-	   sc->stacks[i]->top);
-    if (sc->stacks[i]->bottom <= addr &&
-	sc->stacks[i]->top >= addr)
-      return 1;
-  }
-  return 0;
+  Stacklet_t *stacklet = stackChain->stacklets[stackChain->cursor-1];
+  assert(stackChain->used);
+  assert(stackChain->cursor > 0);
+  assert(stacklet->count > 0);
+  return stacklet;
 }
-
-StackChain_t* StackChain_Alloc()
-{
-  static int count = 0;
-  StackChain_t *res = &(StackChains[count++]);
-  MemStack_t* stack = Stack_Alloc(res);
-  assert(count <= NumStackChain);
-
-  res->count = 1;
-  res->size = 4;
-  res->stacks = (MemStack_t **) malloc(sizeof(MemStack_t *) * res->size);
-  res->stacks[0] = stack;
-  return res;
-}
-
-MemStack_t* Stack_Alloc(StackChain_t *parent)
-{
-  int i;
-  static int count = -1;
-  MemStack_t *res = &(Stacks[++count]);
-  int size = StackSize * kilobyte;
-  mem_t start = stackstart + (count * size) / (sizeof (val_t));
-  assert(count < NumStack);
-
-  res->safety = 2 * pagesize;
-  res->parent = parent;
-  res->rawbottom = my_mmap((caddr_t) start,size,PROT_READ | PROT_WRITE);
-  res->rawtop = res->rawbottom + size / (sizeof (val_t));
-  res->bottom = res->rawbottom + res->safety / (sizeof (val_t));
-  res->top    = res->rawtop    - res->safety / (sizeof (val_t));
-  res->valid  = 1;
-  assert(res->rawbottom != (mem_t) -1);
-  assert(res->rawtop < heapstart);
-
-  my_mprotect(0, (caddr_t) res->rawbottom, res->safety,              PROT_NONE);
-  my_mprotect(1, (caddr_t) res->bottom,    size - 2 * res->safety,   PROT_READ | PROT_WRITE);
-  my_mprotect(2, (caddr_t) res->top,       res->safety,              PROT_NONE);
-
-  return res;
-}
-
-
 
 void HeapInitialize(void)
 {
@@ -257,6 +396,7 @@ void SetRange(range_t *range, mem_t low, mem_t high)
 Heap_t* Heap_Alloc(int MinSize, int MaxSize)
 {
   static int heap_count = 0;
+  int stat;
   mem_t cursor;
   Heap_t *res = &(Heaps[heap_count++]);
   int maxsize_pageround = RoundUp(MaxSize,pagesize);
@@ -264,6 +404,7 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
 
   int chunkstart = AllocBitmapRange(bmp,maxsize_chunkround / chunksize);
   mem_t start = heapstart + (chunkstart * chunksize) / (sizeof (val_t));
+  res->size = maxsize_pageround;
   res->bottom = (mem_t) my_mmap((caddr_t) start, maxsize_pageround, PROT_READ | PROT_WRITE);
   res->cursor = res->bottom;
   res->prevCursor = res->bottom;
@@ -273,6 +414,8 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   SetRange(&(res->range), res->bottom, res->mappedTop);
   res->valid  = 1;
   res->bitmap = paranoid ? CreateBitmap(maxsize_pageround / 4) : NULL;
+  res->freshPages = (int *) malloc(maxsize_pageround / pagesize * sizeof(int));
+  assert(res->freshPages != NULL);
   assert(res->bottom != (mem_t) -1);
   assert(chunkstart >= 0);
   assert(heap_count < NumHeap);
@@ -280,14 +423,23 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   /* Lock down pages and force page-table to be initialized; otherwise, PadHeapArea can often take 0.1 - 0.2 ms. 
      Even with this, there are occasional (but far fewer) page table misses.
    */
-  /*
-  mlock((caddr_t) res->bottom, maxsize_pageround); 
-  for (cursor = res->bottom; cursor < res->mappedTop; cursor += pagesize / sizeof(val_t))
-    *cursor = 0;
-    */
+  if (geteuid() == 0) {
+    stat = mlock((caddr_t) res->bottom, maxsize_pageround); 
+    if (stat) {
+      printf("mlock failed with errno %d\n", errno);
+      assert(0);
+    }
+  }
   return res;
 }
 
+void Heap_ResetFreshPages(Heap_t *h)
+{
+  int MaxSize = sizeof(val_t) * (h->mappedTop - h->bottom);
+  int i, pages = DivideUp(MaxSize,pagesize);
+  for (i=0; i<pages; i++)
+    h->freshPages[i] = 1;
+}
 
 int Heap_GetMaximumSize(Heap_t *h)
 {
@@ -346,59 +498,34 @@ void Heap_Resize(Heap_t *h, long newSize, int reset)
 
 mem_t StackError(struct ucontext *ucontext, mem_t badadd)
 {
-  MemStack_t *faultstack = 0;
+  Stacklet_t *faultstack = 0;
   StackChain_t *faultchain = 0;
   int i;
   mem_t sp = GetSp(ucontext);
 
   printf("\n------------------StackError---------------------\n");
   printf("sp, badreference:  %u   %u\n",sp,badadd);
-
-  faultstack = GetStack((mem_t) badadd);
-  if (faultchain == 0)
-    return 0;
-  faultchain = faultstack->parent;
-  for (i=0; i<faultchain->count; i++)
-    if (faultstack == faultchain->stacks[i])
-      break;
-
-  if (badadd < faultstack->bottom) {
-    printf("Underflow occurred - relinking\n\n");
-    if (i == (faultchain->count - 1)) {
-      MemStack_t *newstack = 0;
-      faultstack->used_bottom = sp;
-      newstack = Stack_Alloc(faultchain);
-      faultchain->stacks[faultchain->count++] = newstack;
-      return newstack->top;
-    }
-    else
-      return faultchain->stacks[i+1]->top;
-  }
-  else {
-    if (i > 0) {
-      printf("Overflow occurred - relinking \n\n");
-      return faultchain->stacks[i-1]->used_bottom;
-    }
-    else {
-      printf("Overflowed bottom stack: FATAL ERROR\n");
-      exit(-1);
-    }
-  }
-  exit(-1);
-  return 0;
+  assert(0);
 }
 
 extern mem_t datastart;
 
 void memobj_init()
 {
+  Stacklet_t *s1, *s2;
   bmp = CreateBitmap(Heapbitmap_bits);
 #ifdef solaris
-  pagesize = sysconf(_SC_PAGESIZE);
+  assert(pagesize == sysconf(_SC_PAGESIZE));
 #else
-  pagesize = sysconf(_SC_PAGE_SIZE);
+  assert(pagesize == sysconf(_SC_PAGE_SIZE));
 #endif
   StackInitialize();
   HeapInitialize();
-
+  primaryStackletOffset = 0;
+  replicaStackletOffset = StackletSize * kilobyte;
+  /* So we don't pay mmap for first thread - general case? */
+  s1 = Stacklet_Alloc(NULL);
+  s2 = Stacklet_Alloc(NULL);
+  Stacklet_Dealloc(s1);
+  Stacklet_Dealloc(s2);
 }

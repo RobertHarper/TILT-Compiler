@@ -12,6 +12,7 @@
 #endif
 
 #include "general.h"
+#include "stack.h"
 
 #ifdef rs_aix
 #define _fdata _data
@@ -28,9 +29,19 @@ extern unsigned long _end;
 mem_t datastart, dataend;
 mem_t textstart, textend;
 
-/* From Basis */
-extern ptr_t Div_r_INT, Overflow_r_INT;
-ptr_t DivideByZeroExn, OverflowExn;
+extern val_t Div_r_INT, Overflow_r_INT;   /* Must use & to get global's address */
+  
+ptr_t getOverflowExn()
+{
+  return (ptr_t) GetGlobal(&Div_r_INT);
+}
+
+ptr_t getDivExn()
+{
+  return (ptr_t) GetGlobal(&Overflow_r_INT);
+}
+
+
 
 /* Little allocation area for data allocated by the runtime. */
 mem_t RuntimeGlobalData_Start;
@@ -53,9 +64,6 @@ void global_init()
   RuntimeGlobalData_Cur = RuntimeGlobalData_Start;
   RuntimeGlobalData_End = RuntimeGlobalData_Start + RuntimeGlobalDataSize;
 
-  DivideByZeroExn = Div_r_INT;
-  OverflowExn  = Overflow_r_INT;
-  
 #ifdef alpha_osf
   datastart = (mem_t) &_fdata;
   dataend   = (mem_t) &_edata;  

@@ -67,6 +67,7 @@ struct
        in  case p of
 	   Projvar_p (v,indices) => regi2s v^(loop indices)
 	 | Projlabel_p (l,indices) => label2s l^(loop indices)
+	 | Projglobal_p (l,indices) => "(*" ^ label2s l ^ ")" ^(loop indices)
 	 | Notneeded_p => "Notneed"
        end
 
@@ -251,6 +252,10 @@ struct
 	      | STORE8I (ea,r)  => op2si "stb" (ea, r)
 	      | STORE32I (ea,r) => op2si "stl" (ea, r)
               | STORE64F (ea,fr) => plain ["stt",regf2s fr,", ",ea2s ea]
+	      | LOADGLOBAL (l,r) => plain ["ldGlobal",label2s l, ", ", regi2s r]
+	      | INITGLOBAL (l,r) => plain ["initGlobal",label2s l, ", ", regi2s r]
+	      | REL_STACKPTR (ra,rb) => plain ["relStackPtr", regi2s ra, ", ", regi2s rb]
+	      | ABS_STACKPTR (ra,rb) => plain ["absStackPtr", regi2s ra, ", ", regi2s rb]
 	      | STOREMUTATE (ea,mutType) => plain ["storemutate", ea2s ea, ",", (case mutType of
 										     INT_MUTATE => "intMutate"
 										   | FLOAT_MUTATE => "floatMutate"

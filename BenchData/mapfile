@@ -1,10 +1,10 @@
 #include ../Self/mapfile-lib
 Help 		help
 lexgen		lexgen 		
+//life		life		
 //treap		treap		
 //simple		simple		
 //fft		fft     	
-//life		life		
 //leroy		leroy		
 //rbtree          rbtree  	
 //boyer		boyer   	

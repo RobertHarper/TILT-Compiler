@@ -50,8 +50,7 @@ mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
   case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
-                      pushStack(&proc->rootVals, spec->pointerVal);
-                      pushStack(proc->primaryReplicaObjFlips, obj);
+                      pushStack(proc->primaryReplicaObjRoots, obj);
 		      break;
     case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
   }
@@ -94,6 +93,8 @@ void GCStop_Gen(Proc_t *proc)
   int req_size = 0;
   Thread_t *curThread = NULL;
   double liveRatio = 0.0;
+  ploc_t rootLoc, globalLoc;
+  ptr_t PRObj;
 
   /* A Major GC is forced if the tenured space is potentially too small.  */
   if (Heap_GetAvail(fromSpace) < Heap_GetSize(nursery)) 
@@ -111,14 +112,14 @@ void GCStop_Gen(Proc_t *proc)
   paranoid_check_all(nursery, fromSpace, NULL, NULL, largeSpace);
 
   /* Get all roots */
-  resetStack(proc->roots);
+  assert(isEmptyStack(proc->rootLocs));
   procChangeState(proc, GCStack);
   ResetJob();
   while ((curThread = NextJob()) != NULL) {
     /* If negative, requestnfo signifies full writelist */
     if (curThread->requestInfo >= 0)
       req_size += curThread->requestInfo;
-    local_root_scan(proc,curThread);
+    thread_root_scan(proc,curThread);
     if (GCType == Minor && curThread->request == MajorGCRequestFromC)  /* Upgrade to major GC */
       GCType = Major;      
   }
@@ -130,7 +131,7 @@ void GCStop_Gen(Proc_t *proc)
   procChangeState(proc, GCGlobal);
   if (GCType == Minor) {            /* Roots from globals and back pointers */
     minor_global_scan(proc);
-    add_writelist_to_rootlist(proc, &nursery->range, &fromSpace->range);
+    add_writelist_to_rootlist(proc, nursery, fromSpace);
   }
   else {
     major_global_scan(proc);
@@ -149,17 +150,17 @@ void GCStop_Gen(Proc_t *proc)
     SetCopyRange(&proc->minorRange, proc, fromSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
     proc->minorRange.start = proc->minorRange.cursor = fromSpace->cursor;
     proc->minorRange.stop = fromSpace->top;
-    while (!isEmptyStack(proc->roots)) 
-      locCopy1_noSpaceCheck(proc, (ploc_t) popStack(proc->roots), &proc->minorRange, &nursery->range);
-    while (!isEmptyStack(&proc->rootVals)) 
-      copy1_noSpaceCheck(proc, (ptr_t) popStack(&proc->rootVals), &proc->minorRange, &nursery->range);
-    while (!isEmptyStack(proc->primaryReplicaObjFlips)) {
+    while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
+      locCopy1_noSpaceCheck(proc, rootLoc, &proc->minorRange, nursery);
+    assert(primaryGlobalOffset == 0);
+    while (globalLoc = (ploc_t) popStack(proc->globalLocs)) 
+      locCopy1_noSpaceCheck(proc, globalLoc, &proc->minorRange, nursery);
+    while (PRObj = popStack(proc->primaryReplicaObjRoots)) {
       /* Not transferScanObj_* since this object is a primaryReplica.
 	 Since this is a stop-copy collector, we can use _locCopy_ immediately */
-      ptr_t obj = popStack(proc->primaryReplicaObjFlips);
-      scanObj_locCopy1_noSpaceCheck(proc, obj, &proc->minorRange, &nursery->range);
+      scanObj_locCopy1_noSpaceCheck(proc, PRObj, &proc->minorRange, nursery);
     }
-    scanUntil_locCopy1_noSpaceCheck(proc, scanStart, &proc->minorRange, &nursery->range);
+    scanUntil_locCopy1_noSpaceCheck(proc, scanStart, &proc->minorRange, nursery);
     fromSpace->cursor = proc->minorRange.cursor;
     proc->minorRange.stop = proc->minorRange.cursor;
     ClearCopyRange(&proc->minorRange);
@@ -191,12 +192,16 @@ void GCStop_Gen(Proc_t *proc)
     /* do the normal roots; backpointers can be skipped on a major GC;
        then the usual Cheney scan followed by sweeping the large-object region */
     gc_large_startCollect();
-    while (!isEmptyStack(proc->roots)) 
-      locCopy2L_noSpaceCheck(proc,(ploc_t) popStack(proc->roots), &proc->majorRange,
-			    &nursery->range, &fromSpace->range, &largeSpace->range);
-    resetStack(proc->primaryReplicaObjFlips);
+    while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
+      locCopy2L_noSpaceCheck(proc, rootLoc, &proc->majorRange,
+			     nursery, fromSpace, largeSpace);
+    assert(primaryGlobalOffset == 0);
+    while (globalLoc = (ploc_t) popStack(proc->globalLocs)) 
+      locCopy2L_noSpaceCheck(proc, globalLoc, &proc->majorRange,
+			    nursery, fromSpace, largeSpace);
+    resetStack(proc->primaryReplicaObjRoots);
     scanUntil_locCopy2L_noSpaceCheck(proc,scanStart, &proc->majorRange,
-				    &nursery->range, &fromSpace->range, &largeSpace->range);
+				    nursery, fromSpace, largeSpace);
     assert(proc->majorRange.cursor < toSpace->top);
     toSpace->cursor = proc->majorRange.cursor;
     proc->majorRange.stop = proc->majorRange.cursor;
@@ -214,7 +219,7 @@ void GCStop_Gen(Proc_t *proc)
 
   /* Update sole thread's allocation pointers and root lists */
   if (GCType == Minor)
-    minor_global_promote();
+    minor_global_promote(proc);
   proc->allocStart = nursery->bottom;
   proc->allocCursor = nursery->bottom;
   proc->allocLimit = nursery->top;

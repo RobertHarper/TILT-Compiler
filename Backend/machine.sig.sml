@@ -77,8 +77,8 @@ signature MACHINE =
        instruction * (register -> register)
                            * (register -> register) -> instruction
     
-   val increase_stackptr : int -> instruction list
-   val decrease_stackptr : int -> instruction list
+   val allocate_stack_frame : int * int -> instruction list  (* Frame size in bytes, Max offset of previous frame used *)
+   val deallocate_stack_frame : int -> instruction list  (* Frame size in bytes *)
    val std_return_code : register option -> instruction list (* register contains pv for gp reload *)
    val std_entry_code : unit -> instruction list
 

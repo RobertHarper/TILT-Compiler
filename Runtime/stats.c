@@ -14,6 +14,10 @@
 #if (defined alpha_osf)
 int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the Alpha */
 #endif
+#ifdef sparc
+int getrusage(int who, struct rusage *rusage);  /* Not in header files for some reason */
+int ftime(struct timeb *tp);   /* Not in header file */
+#endif
 
 static struct timespec start_tp, stop_tp;
 static struct rusage start_rusage, stop_rusage;
@@ -259,8 +263,18 @@ static void show_histogram(char *name, Histogram_t *h)
   }
 }
 
+int statStringCursor = 0;
+char statString[1000000];
+void add_statString(char *msg)
+{
+  strcat(&statString[statStringCursor], msg);
+  statStringCursor += strlen(msg);
+  assert(statStringCursor < sizeof(statString));
+}
+
 void stats_init()
 {   
+  statString[0] = 0;
   getrusage(RUSAGE_SELF,&start_rusage);
   clock_gettime(CLOCK_REALTIME, &start_tp);
 }
@@ -275,9 +289,12 @@ const char *collectorTypeString()
 	((collector_type == GenerationalConcurrent) ? "GenConc" : "????")))));
 }
 
+
+
 void stats_finish()
 { 
   int i;
+  FILE *fd;
   double elapsed;
   double AvgStackDepth = TotalStackDepth/((double)NumGC+eps);
   double AvgNewStackDepth = TotalNewStackDepth/((double)NumGC+eps);
@@ -320,6 +337,7 @@ void stats_finish()
       show_statistic("  GCFlipOff", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
       show_histogram(" GCWork Histogram", &proc->gcWorkHistogram);
       show_histogram(" GCMajorWork Hist", &proc->gcMajorWorkHistogram);
+      show_histogram(" GCFlipOff   Hist", &proc->gcFlipOffHistogram);
       /*      show_histogram("Mutator Histogram", &proc->mutatorHistogram); */
       show_statistic("MinSurvRate", &proc->minorSurvivalStatistic, -1.0);
       show_statistic("MajSurvRate", &proc->majorSurvivalStatistic, -1.0);
@@ -354,5 +372,11 @@ void stats_finish()
 	 GlobalTableSize,    MutableTableSize);
   */
 
+
+  fd = fopen("runStats", "w");
+  i = fwrite(statString,1,statStringCursor,fd);
+  assert(statStringCursor == i);
+  fclose(fd);
 }
+
 

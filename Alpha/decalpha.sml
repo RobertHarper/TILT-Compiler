@@ -8,12 +8,15 @@ struct
     val error = fn s => Util.error "decalpha.sml" s
     (* Check against Runtime/thread.h *)
     val iregs_disp         = 0
+    val heapLimit_disp      = iregs_disp + 8 * 14
     val fregs_disp         = iregs_disp + 8 * 32
-    val maxsp_disp         = fregs_disp + 8 * 32
-    val threadScratch_disp = maxsp_disp + 8 + 2*8 + 8
-    val writelistAlloc_disp = threadScratch_disp + 8 + 8 + 8 * 5 + 8 * 32 + 8 * 32
+    val proc_disp          = fregs_disp + 8 * 32 
+    val threadScratch_disp = proc_disp + 8 + 8
+    val writelistAlloc_disp = threadScratch_disp + 8 + 4 + 8 * 3 + 8 * 32 + 8 * 32
     val writelistLimit_disp = writelistAlloc_disp + 4  (* ploc_t is 4 bytes *)
-    val heapLimit_disp = iregs_disp + 8 * 14
+    val stackLimit_disp     = writelistLimit_disp + 4
+    val globalOffset_disp   = stackLimit_disp + 4
+    val stackletOffset_disp   = globalOffset_disp + 4
 
 structure Machine = 
   struct
@@ -641,12 +644,12 @@ structure Machine =
 		 NONE => error "no Rpv for Alpha"
 	       | SOME x => x)
 
-   fun increase_stackptr sz = if (sz >= 0)
-				  then [SPECIFIC(LOADI(LDA, Rsp, sz, Rsp))]
-			      else error "increase_stackptr given negative stack size"
-   fun decrease_stackptr sz = if (sz >= 0)
-				  then [SPECIFIC(LOADI(LDA, Rsp, ~sz, Rsp))]
-			      else error "decrease_stackptr given negative stack size"
+   fun allocate_stack_frame (sz, prevframe_maxoffset) = if (sz >= 0)
+							    then [SPECIFIC(LOADI(LDA, Rsp, ~sz, Rsp))]
+							else error "allocate_stackptr given negative stack size"
+   fun deallocate_stack_frame sz = if (sz >= 0)
+				    then [SPECIFIC(LOADI(LDA, Rsp, sz, Rsp))]
+				else error "deallocate_stackptr given negative stack size"
    fun std_entry_code() = [SPECIFIC(LOADI(LDGP, Rgp, 0, pv))]
    fun std_return_code(NONE) = [SPECIFIC(LOADI(LDGP, Rgp, 0, Rra))]
      | std_return_code(SOME sra) = [SPECIFIC(LOADI(LDGP, Rgp, 0, sra))]

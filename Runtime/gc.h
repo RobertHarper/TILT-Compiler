@@ -6,8 +6,9 @@
 #include "bitmap.h"
 #include "create.h"
 #include "gc_para.h"
+
 extern int NumGC;
-extern int pagesize;
+extern int primaryGlobalOffset, replicaGlobalOffset;   /* Used by concurrent collector to support global root redirection */
 
 /* State of the collector */
 typedef enum GCStatus__t { GCOff, GCPendingOn, GCOn, GCPendingOff } GCStatus_t;
@@ -86,7 +87,7 @@ void GCRelease_GenPara(Proc_t *proc);
 void GCRelease_SemiConc(Proc_t *proc);
 void GCRelease_GenConc(Proc_t *proc);
 
-
+int returnToML(Thread_t *, mem_t linkValue);
 int returnFromGCFromC(Thread_t *);
 int returnFromGCFromML(Thread_t *);
 int returnFromYield(Thread_t *);
@@ -104,7 +105,9 @@ extern int MinRatioSize, MaxRatioSize;
 extern long NumRoots, NumContentions, NumWrites, NumLocatives;
 extern int GenKBytesCollected;
 extern int minOffRequest, minOnRequest;  /* Mutator handed multiples of this amount of space for parallel and concurrent collectors */
-extern int rootValFetchSize;             /* Number of root values to fetch from global pool */
+extern int threadFetchSize;              /* Number of thread/stackchains to fetch */
+extern int globalLocFetchSize;           /* Number of globals to fetch from global pool */
+extern int rootLocFetchSize;             /* Number of root locs to fetch from global pool */
 extern int objFetchSize;                 /* Number of objects to fetch from global pool */
 extern int segFetchSize;                 /* Number of (large object) segments to fetch from global pool */
 extern int localWorkSize;                /* Number of objects to work on from local pool */
@@ -113,9 +116,17 @@ extern int arraySegmentSize;             /* If zero, not splitting large arrays.
 					    An array of more than arraySegmentSize bytes is considered large and
 					    broken into segments for incremental copying.
 					    Each segment (except possibly the last) is of size arraySegmentSize. */
-extern double copyWeight;
-extern double scanWeight;
-extern double rootWeight;
+
+extern double minorCollectionRate;   /* Ratio of minor coll rate to alloc rate */
+extern double majorCollectionRate;   /* Ratio of major coll rate to alloc rate */
+
+extern double objCopyWeight;  
+extern double objScanWeight;
+extern double fieldCopyWeight;  
+extern double fieldScanWeight;
+extern double pageWeight;
+extern double globalWeight;
+extern double stackSlotWeight;
 
 long ComputeHeapSize(long oldsize, double oldratio);
 double HeapAdjust1(unsigned int reqSize, Heap_t *from1, Heap_t *to);
