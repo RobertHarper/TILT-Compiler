@@ -46,8 +46,7 @@ extern val_t global_exnrec; /* C/asm convention has asm label be the Lvalue in C
 
 void stub_error(void)
 {
-  printf("stub_error: should be a dead ra");
-  assert(0);
+  DIE("stub_error: should be a dead ra");
 }
 
 INLINE(LookupStackBot)
@@ -162,10 +161,8 @@ Callinfo_t *LookupCallinfo(Proc_t *proc, val_t retAdd)
      return proc->lastHashData;
    }
   e = HashTableLookup(CallinfoHashTable,(unsigned long) key,0);
-  if (e == NULL) {
-    fprintf(stderr,"FATAL ERROR: key = %d not found in table during stack trace\n",key);
-    assert(0);
-  }
+  if (e == NULL)
+    DIE("unknown return address during stack trace");
   proc->lastHashKey = e->key;
   proc->lastHashData = e->data;
   return (Callinfo_t *) e->data;
@@ -285,11 +282,10 @@ int should_trace_special(CallinfoCursor_t *cursor, mem_t cur_sp, int regstate,
   } else if (IS_SPECIAL_GLOBAL_REC(type)) {
     ptr_t global = (ptr_t) special_data;  /* just global address */
     base = (ptr_t) global[primaryGlobalOffset / sizeof(val_t)];
-  } else if (IS_SPECIAL_UNSET(type)) {
-    printf("Registers/Stack locations of type UNSET are not supported\n");
-    assert(0);
-  } else
-    assert(0);
+  } else if (IS_SPECIAL_UNSET(type))
+    DIE("Registers/Stack locations of type UNSET are not supported");
+  else
+    DIE("malformed trace table");
   res = PathProject(cursor, base, special_type);
   shouldTrace = (((val_t) res) > 3);   /* Types 0 to 3 represent integral/non-pointer types */
   return shouldTrace;
@@ -474,7 +470,7 @@ void installThreadRoot(Thread_t *th, vploc_t rootLoc)
       return;
     }
   }
-  assert(0);
+  DIE("installThreadRoot out of rootLocs entries");
 }
 
 /* Might be given rootLoc that was never installed */
@@ -723,9 +719,7 @@ void global_root_init(void)
 void add_global_root(Proc_t *proc, vmem_t global)
 {
   tag_t tag = global[-1];
-  if (tag == TAG_REC_INT) 
-    assert(0);
-  else if (tag == TAG_REC_TRACE) {
+  if (tag == TAG_REC_TRACE) {
     ptr_t globalVal = (ptr_t) *global;
     if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
       SetPush(promotedGlobal, (ptr_t) global);
@@ -739,7 +733,7 @@ void add_global_root(Proc_t *proc, vmem_t global)
       DupGlobal(global);
   }
   else 
-    assert(0);
+    DIE("add_global_root bad tag");
   proc->segUsage.globalsProcessed++;
 }
 

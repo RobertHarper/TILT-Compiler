@@ -164,23 +164,23 @@ long ComputeHeapSize(long live, double curRatio, double rate, int phases)
 
   if (live > maxReducedSize) {
     fprintf(stderr,"GC error: Amount of live data (%d) exceeds maxiumum heap size (%d)\n", live, maxReducedSize);
-    assert(0);
+    DIE("out of memory");
   }
   if (newExpandedSize > MaxHeapByte) {
     double constrainedRatio = ((double)live) / maxReducedSize;
     if (collectDiag >= 1 || constrainedRatio > 0.95)
-      printf("GC warning: There is %d kb of live data.  The desired new heap size is %d kb but is downwardly constrained to %d kb.\n",
+      fprintf(stderr,"GC warning: There is %d kb of live data.  The desired new heap size is %d kb but is downwardly constrained to %d kb.\n",
 	     live / 1024, newReducedSize / 1024, maxReducedSize / 1024);
     if (constrainedRatio >= 1.00)
-      printf("GC warning: New liveness ratio is too high %lf.\n", constrainedRatio);
+      fprintf(stderr,"GC warning: New liveness ratio is too high %lf.\n", constrainedRatio);
     else if (constrainedRatio > 0.90)
-      printf("GC warning: New liveness ratio is dangerously high %lf.\n", constrainedRatio);
+      fprintf(stderr,"GC warning: New liveness ratio is dangerously high %lf.\n", constrainedRatio);
     newReducedSize = maxReducedSize;
     newExpandedSize = MaxHeapByte;
   }
   if (newExpandedSize < MinHeapByte) {
     if (collectDiag >= 1)
-      printf("GC warning: There is %d kb of live data.  The desired new heap size is %d kb but is upwardly constrained to %d kb.\n",
+      fprintf(stderr,"GC warning: There is %d kb of live data.  The desired new heap size is %d kb but is upwardly constrained to %d kb.\n",
 	     live / 1024, newReducedSize / 1024, minReducedSize / 1024);
     newReducedSize = minReducedSize;
     newExpandedSize = MinHeapByte;
@@ -214,10 +214,12 @@ void HeapAdjust(int request, int unused, int withhold, double rate, int phases, 
   newSize = ComputeHeapSize(live, liveRatio, rate, phases);
   Heap_Resize(to, newSize, 0);
   if (newSize - copied < request) {
-    printf("Error: newSize - copied < request\n");
-    printf("       %d - %d <= %d\n\n",
-	   newSize, copied, request);
-    assert(0);
+    if(collectDiag >= 1){
+      printf("Error: newSize - copied < request\n");
+      printf("       %d - %d <= %d\n\n",
+	     newSize, copied, request);
+    }
+    DIE("out of memory");
   }
   if (collectDiag >= 1) {
     printf("---- GC %d (%d): ", NumGC, NumMajorGC);
@@ -310,7 +312,7 @@ void GCInit(void)
     GCInit_GenConc();
     break;
   default: 
-    assert(0);
+    DIE("bad collector type");
   }
   if (forceMirrorArray)
     mirrorArray = 1;
@@ -361,10 +363,8 @@ void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bi
     /* should check start_addr */
     if ((mem_t)saveregs[ALLOCLIMIT] == StopHeapLimit)
       return;
-    if (!inHeaps(thunk,legalHeaps,legalStarts) && inSomeHeap(thunk)) {
-      printf("TRACE ERROR at GC %d: thread %d's thunk %d is in from-space\n", NumGC, thread->tid, thunk);
-      assert(0);
-    }
+    if (!inHeaps(thunk,legalHeaps,legalStarts) && inSomeHeap(thunk))
+      DIE("trace error");
     if (thunk != NULL) /* thunk not started */
       return;
 
@@ -502,8 +502,8 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
   }
 
   if (numErrors) {
-    printf("\n\nProgram halted due to %d TRACE ERROR(s).  At most %d shown.\n\n", numErrors, errorsToShow);
-    assert(0);
+    fprintf(stderr,"\n\nProgram halted due to %d TRACE ERROR(s).  At most %d shown.\n\n", numErrors, errorsToShow);
+    DIE("trace errors");
   }
 }
 
@@ -557,7 +557,7 @@ static ptr_t alloc_bigdispatcharray(ArraySpec_t *spec)
     case GenerationalParallel:   result = AllocBigArray_GenPara(proc,thread,spec); break;
     case SemispaceConcurrent:    result = AllocBigArray_SemiConc(proc,thread,spec); break;
     case GenerationalConcurrent: result = AllocBigArray_GenConc(proc,thread,spec); break;
-    default: assert(0);
+    default: DIE("collector type");
   }
   if (spec->type == PointerField || spec->type == MirrorPointerField)
     uninstallThreadRoot(thread,&spec->pointerVal);
@@ -629,7 +629,7 @@ int GCSatisfiable(Proc_t *proc, Thread_t *th)
     return (allocSpaceLeft > minAllocRegion) && (requestInfo < allocSpaceLeft);
   }
   else
-    assert(0);
+    DIE("bad GC request");
 }
 
 /* Assign heap to allocation area of a processor - if heap is null, fields set to StartHeapLimit - must be null for multiple processors*/
@@ -688,7 +688,7 @@ void GCFromMutator(Thread_t *curThread)
   UpdateJob(proc); /* Update processor's info, GCRelease thread, but don't unmap */
   procChangeState(proc, Scheduler, 1003);
   scheduler(proc);
-  assert(0);
+  DIE("scheduler returned");
 }
 
 #if defined(solaris)
@@ -739,10 +739,10 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
   curThread->saveregs[SP] = (val_t) StackletPrimaryCursor(newStacklet);
   curThread->stackLimit = StackletPrimaryBottom(newStacklet);
   curThread->stackTop = StackletPrimaryTop(newStacklet);
-  curThread->saveregs[RA] = mkra(&PopStackletFromML);
+  curThread->saveregs[RA] = mkra((void*)&PopStackletFromML);	/* cast silences alpha cc */
   Stacklet_KillReplica(newStacklet);
   returnToML(curThread, returnToCallee);
-  assert(0);
+  DIE("mutator returned");
 }
 
 void PopStackletFromMutator(Thread_t *curThread)
@@ -768,5 +768,5 @@ void PopStackletFromMutator(Thread_t *curThread)
   curThread->stackTop = StackletPrimaryTop(newStacklet);
   Stacklet_KillReplica(newStacklet);
   returnToML(curThread, newStacklet->retadd);
-  assert(0);
+  DIE("mutator returned");
 }

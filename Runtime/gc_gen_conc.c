@@ -212,7 +212,7 @@ mem_t AllocBigArray_GenConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
     obj[-(2+i)] = SEGPROCEED_TAG;
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
-    case PointerField : assert(0);
+    case PointerField : DIE("pointer array");
     case MirrorPointerField : 
       init_double_ptr_array(obj, spec->elemLen, spec->pointerVal); 
       SetPush(&proc->work.backObjs, obj);
@@ -264,7 +264,7 @@ static void CollectorOn(Proc_t *proc)
     case GCPendingAgressive:
       break;
     default: 
-      assert(0);
+      DIE("CollectorOn");
   }
 
   /* Collection cannot proceed until all processors have stopped running mutators.
@@ -360,7 +360,7 @@ static void CollectorTransition(Proc_t *proc)
     case GCPendingOn:             /* Responding to signal that collector is turning on */
       break;
     default: 
-      assert(0);
+      DIE("CollectorTransition");
   }
 
   /* Collection cannot proceed until all processors have stopped running mutators.
@@ -770,7 +770,7 @@ void GCRelease_GenConc(Proc_t *proc)
 	  tag = fromSpaceEither[-1];
       }
       else 
-	assert(0);
+	DIE("mutatorPrimary in neither fromSpace nor nursery");
 
 
       /* Copy-Write synchronization on replica object */
@@ -803,7 +803,7 @@ void GCRelease_GenConc(Proc_t *proc)
 	  ((double *)toSpaceReplica)[doubleWordDisp] = ((double *)fromSpaceEither)[doubleWordDisp];
 	break;
       case PTR_ARRAY_TYPE: 
-	assert(0); 
+	DIE("pointer array"); 
       case MIRROR_PTR_ARRAY_TYPE: {
 	/* Snapshot-at-the-beginning (Yuasa) write barrier requires copying prevPtrVal 
 	   even if it might die to prevent the mutator from hiding live data.
@@ -860,7 +860,7 @@ void GCRelease_GenConc(Proc_t *proc)
 	break;
       }
       default:
-	assert(0);
+	DIE("bad tag type");
       } /* else */
     } /* switch */
   } /* while */
@@ -961,16 +961,16 @@ void GC_GenConc(Proc_t *proc, Thread_t *th)
       CollectorOff(proc);                               /* PendingOff; Off, PendingOn */
       goto retry;
     default: 
-       assert(0);
+       DIE("GC_GenConc");
   }
 
  satisfied:
   return;
 
  fail:
-  printf("Proc %d: Collector behind.  Failed to allocate %d bytes for thread %d\n", proc->procid, roundOnSize, th->tid);
-  printf("        GCType = %d.   GCStatus = %d.\n", GCType, GCStatus);
-  assert(0);
+  fprintf(stderr,"Proc %d: Collector behind.  Failed to allocate %d bytes for thread %d\n", proc->procid, roundOnSize, th->tid);
+  fprintf(stderr,"        GCType = %d.   GCStatus = %d.\n", GCType, GCStatus);
+  DIE("out of memory");
 }
 
 void GCPoll_GenConc(Proc_t *proc)

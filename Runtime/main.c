@@ -25,6 +25,12 @@ int checkAtGC = 0;
 
 void setCommandLine(char* cmd, char** argv);
 
+void DIE(char* msg)
+{
+  fprintf(stderr,"tilt runtime error: %s\n",msg);
+  abort();
+}
+
 int process_bool(int *var, char *item, char *option)
 {
   int match = !strcasecmp(item,option);
@@ -229,16 +235,14 @@ void process_option(int argc, char **argv)
 	    matched = process_string(table[i].item, table[i].name, option);
 	    break;
 	  }
-	  default: {
-	    printf("Unknown type for option entry %d", table[i].name);
-	    assert(0);
-	  }
+	  default:
+	    DIE("unknown type for option entry");
 	}
 	if (matched) break;
       }
       if (!matched) {
-	printf("Unknown option argument '%s'\n",option);
-	assert(0);
+	fprintf(stderr,"unknown option '%s'\n",option);
+	exit(1);
       }
     }
   setCommandLine(argv[0], cur);
@@ -273,7 +277,7 @@ void process_option(int argc, char **argv)
 	case 3 : printf("double = %lf", *(double *)(table[i].item)); break;
         case 4 : printf("byte = %d", *(int *)(table[i].item)); break;
         case 5 : printf("string option = %s", *(char**)(table[i].item) ? *(char**)(table[i].item) : "NONE"); break;
-	default : printf("Unknown type!!!", table[i].name); assert(0);
+	default : DIE("unknown type");
       }
       printf(" -- %s\n", table[i].description);
     }

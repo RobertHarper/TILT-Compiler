@@ -50,8 +50,8 @@ static void moveToSharedStack(Set_t *to, Set_t *from)
   int numToTransfer = SetLength(from);
   ptr_t * oldToCursor = (ptr_t *) FetchAndAdd((long *)&to->last, 4 * numToTransfer);
   if (to->last >= to->limit && to->limit > to->data) {
-    printf("Shared stack %d of size %d overflowed with %d items\n", to, to->size, to->last - to->data);
-    assert(0);
+    fprintf(stderr,"Shared stack %d of size %d overflowed with %d items\n", to, to->size, to->last - to->data);
+    DIE("shared stack overflow");
   }
   memcpy(oldToCursor, from->first, sizeof(val_t) * numToTransfer);
   from->last = from->data;

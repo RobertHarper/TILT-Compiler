@@ -194,9 +194,9 @@ void gcstat_heapprofile_beforecollect(value_t *bot, value_t *top)
       continue; 
     }
     if (GET_TYPE(tag) == FORWARD_TAG) {
-	printf("\n\nproftag,tag is %d/%d  at  %d\n", proftag,tag,cur);
-	printf("heapprofile: no forward tags should be in from space\n");
-	assert(0);
+	fprintf(stderr,"\n\nproftag,tag is %d/%d  at  %d\n", proftag,tag,cur);
+	fprintf(stderr,"heapprofile: no forward tags should be in from space\n");
+	DIE("heap profile");
       }
     size = objlength(cur,&temp);
     update_object_profile(&allocated_object_profile,(value_t *)temp);
@@ -229,12 +229,12 @@ void gcstat_heapprofile_aftercollect(value_t *bot, value_t *top)
 	  {
 	    if (NumGC < age)
 	      {
-		printf("cur = %d\n",cur);
-		printf("proftag = %d\n",proftag);
-		printf("tag = %d\n",tag);
-		printf("NumGC = %d\n",NumGC);
-		printf("age = %d\n",age);
-		assert(0);
+		fprintf(stderr,"cur = %d\n",cur);
+		fprintf(stderr,"proftag = %d\n",proftag);
+		fprintf(stderr,"tag = %d\n",tag);
+		fprintf(stderr,"NumGC = %d\n",NumGC);
+		fprintf(stderr,"age = %d\n",age);
+		DIE("bad object age");
 	      }
 	    x->total_age += NumGC - age;
 	    x->total_oldcount++;

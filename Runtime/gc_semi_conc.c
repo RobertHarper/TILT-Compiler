@@ -220,7 +220,7 @@ mem_t AllocBigArray_SemiConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
       alloc1_copyCopySync(proc, obj, fromSpace);
     }
     else
-      assert(0);
+      DIE("bad ordering");
   }
   return obj;
 }
@@ -251,7 +251,7 @@ static void CollectorOn(Proc_t *proc)
     break;
   case GCPendingOn:             /* Responding to signal that collector is turning on */
   case GCPendingAgressive: break;
-  default: assert(0);
+  default: DIE("CollectorOn");
   }
 
   /* Check local stack empty; reset root lists */
@@ -312,7 +312,7 @@ static void CollectorTransition(Proc_t *proc)
     StopAllThreads();
     break;
   case GCPendingOn: break;         /* Responding to signal that collector is turning on */
-  default: assert(0);
+  default: DIE("CollectorTransition");
   }
 
   isFirst = (weakBarrier(barriers, proc) == 0);
@@ -366,7 +366,7 @@ static void CollectorOff(Proc_t *proc)
     StopAllThreads();
     break;
   case GCPendingOff: break;   /* Responding to someone's signal to turn collector off */
-  default: assert(0);
+  default: DIE("CollectorOff");
   }
 
   ClearCopyRange(&proc->copyRange);
@@ -573,7 +573,7 @@ void GCRelease_SemiConc(Proc_t *proc)
       ((double *)replica)[doublewordDisp] = primaryField;  /* update replica with primary's non-pointer value */
       break;
     }
-    default: assert(0);
+    default: DIE("GCRelease_SemiConc");
     }
   } /* while */
   if (ordering == HybridOrder)   /* Add new gray objects */
@@ -682,7 +682,7 @@ static void do_work(Proc_t *proc, int additionalWork)
       }
     }
     else
-      assert(0);
+      DIE("bad ordering");
 
     while (!updateReachCheckWork(proc) &&
 	   ((stacklet = (Stacklet_t *) SetPop(&proc->work.stacklets)) != NULL)) {
@@ -880,16 +880,15 @@ void GC_SemiConc(Proc_t *proc, Thread_t *th)
        CollectorOff(proc);
        goto retry;
     default: 
-      assert(0);
+      DIE("GC_SemiConc");
     }
 
  satisfied:
   assert(proc->work.hasShared == 0);
     return;
  fail:
-    printf("Proc %d: Concurrent collector fell too far behind  - check parameters\n", proc->procid);
-    assert(0);
-
+    fprintf(stderr,"Proc %d: Concurrent collector fell too far behind  - check parameters\n", proc->procid);
+    DIE("out of memory");
 }
 
 void GCPoll_SemiConc(Proc_t *proc)

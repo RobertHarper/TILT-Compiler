@@ -73,11 +73,11 @@ static int show_field(int show, Field_t fieldType,
       else {
 	if (inHeaps(primaryField,legalHeaps,NULL)) {
 	  if (numErrors++ < errorsToShow)
-	    printf("\n  !!!!TRACE ERROR: bad pointer (in range) %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
+	    fprintf(stderr,"\n  !!!!TRACE ERROR: bad pointer (in range) %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
 	}
 	else {
 	  if (numErrors++ < errorsToShow)
-	    printf("\n  !!!!TRACE ERROR: bad pointer (out of range) %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
+	    fprintf(stderr,"\n  !!!!TRACE ERROR: bad pointer (out of range) %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
 	}
 	return 0;
       }
@@ -85,8 +85,8 @@ static int show_field(int show, Field_t fieldType,
 	if (isNonheapPointer) {
 	  if (primaryField != replicaField &&
 	    (numErrors++ < errorsToShow)) {
-	    printf("\n  !!!!TRACE ERROR at GC %2d: replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
-	    printf("\n                                              %d[%d] = *%d*\n",replica,ri,replicaField);
+	    fprintf(stderr,"\n  !!!!TRACE ERROR at GC %2d: replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
+	    fprintf(stderr,"\n                                              %d[%d] = *%d*\n",replica,ri,replicaField);
 	    return 0;
 	  }
 	}
@@ -94,9 +94,9 @@ static int show_field(int show, Field_t fieldType,
 	  if (primaryField != replicaField &&               /* Primary and replica may share in a generational collector */
 	      (ptr_t) primaryField[-1] != replicaField &&
 	      (numErrors++ < errorsToShow)) {
-	    printf("\n  !!!!TRACE ERROR at GC %2d: ptr replica mismatch: %d[%d] = %d -> *%d*",NumGC,
+	    fprintf(stderr,"\n  !!!!TRACE ERROR at GC %2d: ptr replica mismatch: %d[%d] = %d -> *%d*",NumGC,
 		   primary,i,primaryField,primaryField[-1]);
-	    printf("\n                                                  %d[%d] = *%d*\n",
+	    fprintf(stderr,"\n                                                  %d[%d] = *%d*\n",
 		   replica,ri,replicaField);
 	    return 0;
 	  }
@@ -111,8 +111,8 @@ static int show_field(int show, Field_t fieldType,
 	  printf("\n !!!!TRACE WARNING at GC %2d: found suspicious int %d at %d[%d]\n",NumGC,primaryField,primary,i);
       if (replica && primaryField != replicaField &&
 	  (numErrors++ < errorsToShow)) {
-	printf("\n  !!!!TRACE ERROR at GC %2d: int replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
-	printf("\n                                                  %d[%d] = *%d*\n",replica,ri,replicaField);
+	fprintf(stderr,"\n  !!!!TRACE ERROR at GC %2d: int replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
+	fprintf(stderr,"\n                                                  %d[%d] = *%d*\n",replica,ri,replicaField);
 	return 0;
       }
       break;
@@ -120,13 +120,13 @@ static int show_field(int show, Field_t fieldType,
       if (show) 
 	printf("R(%10g)  ", primaryDoubleField); 
       if (replica && !(isnan(primaryDoubleField) && isnan(replicaDoubleField)) && primaryDoubleField != replicaDoubleField) {
-	printf("\n  !!!!TRACE ERROR at GC %2d: double replica mismatch: %d[%d] = *%g*",NumGC,primary,i,primaryDoubleField);
-	printf("\n                                                     %d[%d] = *%g*\n",replica,ri,replicaDoubleField);
+	fprintf(stderr,"\n  !!!!TRACE ERROR at GC %2d: double replica mismatch: %d[%d] = *%g*",NumGC,primary,i,primaryDoubleField);
+	fprintf(stderr,"\n                                                     %d[%d] = *%g*\n",replica,ri,replicaDoubleField);
 	return 0;
       }
       break;
     default:
-      assert(0);
+      DIE("bad field type in show_field");
   }
 
   
@@ -178,8 +178,8 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, ShowType_t replicaType, Hea
       int len = GET_RECLEN(tag);
       int mask = GET_RECMASK(tag);
       if (mask >> len) {
-	printf("TRACE ERROR: Bad record tag %d at %d\n", tag, start);
-	assert(0);
+	fprintf(stderr,"TRACE ERROR: Bad record tag %d at %d\n", tag, start);
+	DIE("bad record tag in show_obj");
       }
       if (show)
 	printf("REC(%d)   %ld: ", len, obj);
@@ -253,7 +253,7 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, ShowType_t replicaType, Hea
 	    fieldlen = loglen;
 	    typeDesc = "PAR";
 	    break;
-	  default: assert(0);
+	  default: DIE("impossible");
 	}
 	if (show) 
 	  printf("%s(%ld/%ld)  %ld: ",typeDesc,wordlen,loglen,obj);
@@ -267,7 +267,7 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, ShowType_t replicaType, Hea
 	    case QUAD_ARRAY_TYPE: show_field(show,DoubleField,obj,replica,i,i,legalHeaps,legalStarts); break;
 	      break;
 	    default : 
-	      assert(0);
+	      DIE("impossible");
 	  }
 	  if (show && ((i+1) / 8 * 8) == (i+1))
 	    printf("\n");
@@ -310,8 +310,8 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, ShowType_t replicaType, Hea
 	end = obj + 2;
       }
       else {
-	printf("\nshow_obj  tag = %d(%d) at address = %d\n",tag,GET_TYPE(tag),obj);
-	assert(0);
+	fprintf(stderr,"\nshow_obj  tag = %d(%d) at address = %d\n",tag,GET_TYPE(tag),obj);
+	DIE("show_obj");
       }
       break;
   }

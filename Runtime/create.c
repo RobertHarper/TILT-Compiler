@@ -99,18 +99,13 @@ val_t get_record(ptr_t rec, int which)
   tag_t tag = rec[-1];
   int len = GET_RECLEN(tag);
 
-  if (GET_TYPE(tag) != RECORD_TYPE) {
-    fprintf(stderr,"BUG: calling get_field on non-record. tag = %d\n",tag);
-    exit(-1);
-  }
+  if (GET_TYPE(tag) != RECORD_TYPE)
+    DIE("get_record on non-record");
 
   if (which < len)
     return rec[which];
-  else {
-    fprintf(stderr,"BUG in get_record: record %d has %d fields.  No field %d.\n",
-	    rec,len,which);
-    assert(0);
-  }
+  else
+    DIE("get_record limit check");
 }
 
 static ptr_t alloc_small_record(val_t *fields, int mask, int count)
@@ -145,7 +140,7 @@ ptr_t alloc_record(val_t *fields, int* masks, int count)
    * Bits 0..(RECLEN_MAX - 1) of masks[i] are significant.
    */
   if (count > RECLEN_MAX)
-    BUG("alloc_record not quite fully imped");
+    DIE("alloc_record not fully imped");
 
   return alloc_small_record(fields, masks[0], count); 
 }
@@ -221,7 +216,7 @@ ptr_t alloc_manyint(int count, int v)
   int i;
 
   if (count > arraysize(fields))
-    BUG("alloc_manyint not quite fully imped");
+    DIE("alloc_manyint not fully imped");
 
   for (i=0; i<count; i++)
     fields[i] = v;
@@ -239,7 +234,7 @@ ptr_t alloc_manyintrec(int count, int v, ptr_t rec)
   int i;
 
   if (count + 1 > arraysize(fields))
-    BUG("alloc_manyintrec not quite fully imped");
+    DIE("alloc_manyintrec not fully imped");
 
   for (i=0; i<count; i++)
     fields[i] = v;

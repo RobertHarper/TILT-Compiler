@@ -97,11 +97,8 @@ mem_t AllocFromCopyRangeSlow(Proc_t *proc, int request, Align_t align)
   if (alignedRequest >= copyChunkSize) {
     mem_t start, cursor, stop;
     GetHeapArea(copyRange->heap, alignedRequest, &start, &cursor, &stop);
-    if (start == NULL) {
-      fprintf(stderr,"Error: AllocFromCopyRangeSlow failed to allocate %d bytes from heap\n", alignedRequest);
-      fprintf(stderr,"       GC = %d    GCStatus = %d    GCtype = %d\n", NumGC, GCStatus, GCType);
-      assert(0);
-    }
+    if (start == NULL)
+      DIE("out of large object memory");
     cursor = AlignMemoryPointer(cursor,align);
     region = cursor;
     cursor += (request / sizeof(val_t));
@@ -187,14 +184,8 @@ unsigned long objectLength(ptr_t obj, mem_t *start)
        }
     /* Fall-through */
     case FORWARD1_TYPE:
-    case FORWARD2_TYPE: {
-      mem_t tagstart = (mem_t) (obj - 1);
-      fprintf(stderr,"bad tag %d at %d\n",tag,tagstart);
-      memdump("",tagstart-10,30,tagstart);
-      fprintf(stderr,"\n\n\n");
-      fprintf(stderr,"NumGC is %d\n",NumGC);
-      assert(0);
-    }
+    case FORWARD2_TYPE:
+      DIE("bad tag");
   } /* case */
 }
 
@@ -257,11 +248,8 @@ tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag)
     }
     else if (TAG_IS_FORWARD(localStall))
       tag = localStall;
-    else {
-      fprintf(stderr,"Proc %d: forward.c: Odd tag of %d from white obj %d with original tag = %d -----------\n", 
-	      proc->procid, localStall, white, tag);
-      assert(0);
-    }
+    else
+      DIE("odd tag from white object");
   }
   return tag;
 #endif
@@ -363,10 +351,11 @@ ptr_t genericAlloc(Proc_t *proc, ptr_t white, int doCopy,
     return obj;
   }
 
-  printf("\n\nError in genericAlloc: bad tag value %d of white object %d\n",tag, white);
-  memdump("", white - 8, 16, white - 1);
-
-  assert(0);
+  if(diag){
+    printf("\n\nError in genericAlloc: bad tag value %d of white object %d\n",tag, white);
+    memdump("", white - 8, 16, white - 1);
+  }
+  DIE("bad tag value of white object");
 }
 
 ptr_t copy(Proc_t *proc, ptr_t white)
@@ -483,8 +472,8 @@ void process_writelist(Proc_t *proc, Heap_t *from, Heap_t *to)
     else if (type == PTR_ARRAY_TYPE || type == MIRROR_PTR_ARRAY_TYPE)
       ;
     else {
-      printf("Error in process_writelist: obj = %d   tag = %d   type = %d\n", obj, tag, type);
-      assert(0);
+      if(diag) printf("Error in process_writelist: obj = %d   tag = %d   type = %d\n", obj, tag, type);
+      DIE("error in process_writelist");
     }
     field  = (ploc_t) (obj + byteOffset / sizeof(val_t));
     data = *field;
