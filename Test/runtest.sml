@@ -6,9 +6,9 @@ NAME
 		- regression test harness for the TILT compiler
 
 SYNOPSIS
-	runtest [-fn] testdir ...
+	runtest [-fnc] testdir ...
 
-	runall [-fn]
+	runall [-fnc]
 
 	tilt [tilt-options]
 	tilt-nj [tilt-options]
@@ -18,13 +18,15 @@ DESCRIPTION
 	fails.  Each testdir defines a single test, as described in
 	the file README.  With the -f option, runtest will keep going
 	after failure.  The -n option causes runtest to use a version
-	of TILT hosted under the SML/NJ runtime.
+	of TILT hosted under the SML/NJ runtime.  Runtest purges
+	compiler-generated files before each test and after each
+	successful test.  The -c option prevents this cleanup.
 
         A test comprises some SML code and an expected result.
 	Runtest uses TILT to compile the test code then runs the
 	generated executable.  If the observed result does not match
-	the expected result, then the test fails.  Possible results
-	are:
+	the expected result, then the test fails and runtest prints
+	the observed result.  Possible results are:
 
 	Bomb	TILT failed while compiling the test code
 	Reject	TILT rejected the test code as invalid
@@ -37,9 +39,6 @@ DESCRIPTION
 	when it rejects a program.  Any other behavior is considered a
 	Bomb.  TILT's output and the exit status of a test's executable
 	are ignored.
-
-	Runtest purges compiler-generated files before each test and
-	after each successful test.
 
 	Runall runs the tests listed in testlist.txt.
 
@@ -120,6 +119,7 @@ sig
 
     (* May raise Crash *)
     val run_test : {tilt : string,
+		    clean : bool,
 		    mapfile : string,
 		    resultfile : string,
 		    binary : string} -> status
@@ -136,9 +136,6 @@ struct
 
     fun fail (msg : string) : 'a = raise Crash msg
 
-    fun eprint (s : string) : unit =
-	TextIO.output(TextIO.stdErr, s)
-	
     fun input_all (fd : IO.file_desc) : string =
 	let val blocksize = 1024*8	(* generous, arbitrary *)
 	    val buf = Buf.empty()
@@ -207,13 +204,11 @@ struct
       | Raw of raw_result		(* test program ran to result *)
 
     fun result_string (r : result) : string =
-	let val s = (case r
-		       of Bomb => "Bomb\n"
-			| Reject => "Reject\n"
-			| Raw (Exit (_,s)) => "Exit\n" ^ s
-			| Raw Suicide => "Suicide\n")
-	in  "<<" ^ s ^ ">>"
-	end
+	(case r
+	   of Bomb => "Bomb\n"
+	    | Reject => "Reject\n"
+	    | Raw (Exit (_,s)) => "Exit\n" ^ s
+	    | Raw Suicide => "Suicide\n")
 	     
     fun same_result (r : result, r' : result) : bool =
 	(case (r, r')
@@ -247,11 +242,14 @@ struct
       | Failure of string
 
     fun run_test {tilt : string,
+		  clean : bool,
 		  mapfile : string,
 		  resultfile : string,
 		  binary : string} : status =
 	let
-	    fun cleanup () = run_for_effect [tilt,"-C",mapfile]
+	    val cleanup = if clean
+			      then fn () => run_for_effect [tilt,"-C",mapfile]
+			  else fn () => ()
 	    val _ = cleanup()
 	    val expected = read_result resultfile
 	    val actual =
@@ -264,8 +262,7 @@ struct
 	    if same_result (expected, actual)
 		then (cleanup(); Success)
 	    else
-		Failure ("expected " ^ result_string expected ^ ", got " ^
-			 result_string actual)
+		Failure (result_string actual)
 	end
 end
 
@@ -296,6 +293,7 @@ struct
 
     fun fixup (path : string) : string = path
     fun run_test {tilt : string,
+		  clean : bool,
 		  platform : string,
 		  fail : unit -> unit} (testdir : string) : unit =
 	let
@@ -304,6 +302,7 @@ struct
 	    val result = P.joinDirFile{dir=testdir, file="result"}
 	    val binary = fixup(P.joinDirFile{dir=testdir, file="Test."^platform^".exe"})
 	    val arg = {tilt=tilt,
+		       clean=clean,
 		       mapfile=mapfile,
 		       resultfile=result,
 		       binary=binary}
@@ -311,7 +310,7 @@ struct
 	    (case Test.run_test arg
 	       of Test.Success => ()
 		| Test.Failure msg =>
-		   (eprint ("FAILURE in " ^ testdir ^ ": " ^ msg ^ "\n");
+		   (eprint ("FAILURE in " ^ testdir ^ "\n" ^ msg);
 		    fail()))
 	end
 
@@ -322,13 +321,14 @@ struct
     fun main () : unit =
 	(let
 	     val opts = [G.Noarg (#"f",#"f"),
-			 G.Noarg (#"n",#"n")]
+			 G.Noarg (#"n",#"n"),
+			 G.Noarg (#"c",#"c")]
 	     val args = CommandLine.arguments()
 	 in
 	     (case G.getopt (opts,args)
 		of G.Error msg =>
 		    raise fail (msg ^ "\nusage: " ^ CommandLine.name() ^
-				" [-fn] testdir ...")
+				" [-fnc] testdir ...")
 		 | G.Success (flags, args) =>
 			let
 			    fun has (flag : char) : bool =
@@ -339,6 +339,7 @@ struct
 			    val fail = if has #"f" then fn () => ()
 				       else fn () => fail "test failed"
 			    val run = run_test {tilt=tilt,
+						clean=not (has #"c"),
 						platform=platform(),
 						fail=fail}
 			in
