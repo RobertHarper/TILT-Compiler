@@ -14,7 +14,5 @@ formatter.sig.sml
 formatter.sml
 graphutil.sig.sml
 graphutil.sml
-name.sig.sml
-name.sml
-asthelp.sig.sml
-asthelp.sml
+
+
