@@ -111,7 +111,7 @@ copyFile Bin/tilt `{commonPath bin/tilt}
 copyFile Doc/tilt.1 `{commonPath man/man1/tilt.1}
 copyStuff `{archPath sun4_55 lib/tilt} \
 		Runtime/obj_solaris/firstdata.o \
-		Runtime/runtime.alpha_osf.a \
+		Runtime/runtime.solaris.a \
 		Heaps/tilt.sparc-solaris
 		#Top.sparc.exe
 copyStuff `{archPath alpha_dux40 lib/tilt} \
