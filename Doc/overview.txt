@@ -20,10 +20,20 @@ Using TILT
 	The primary method of use is "Manager.make" which takes
 	the name of a mapfile.  See TILT make on what a mapfile
 	is and how to set up sources for use with a mapfile.
+(3) TILT also has a parallel make (Manager.pmake) which is invoked with
+	an additional argument, a list of machine names.
+	This will launch slave processes on the specified machine.
+	The original process then acts as the master process to 
+	control these slaves in compilation.  The "pmake" function
+	can be decomposed into starting a "Manager.master" on the
+	the original process and then running "Manager.slave" on
+	the slave processes.
+    Note that the master and slaves processes must be started in
+	the same directory.
 
-=========
-TILT make
-=========
+================
+TILT make system
+================
 The TILT make system has 2 components: mapfiles and import lists.
 
 Mapfiles are analagous to UNIX makefiles and SML/NJ's .cm files.
@@ -270,8 +280,6 @@ Backend:
 469  rtltoasm.sml	Non-architecture specific portion of translation from RTL to native assembly
 495  tracetable.sml	Compute GC descriptors
  26  vargraph.sml	Used for expressing call graphs
-
-Note: There is no link file here since the backend is parameterized by the architecture.
 
 
 Alpha:
