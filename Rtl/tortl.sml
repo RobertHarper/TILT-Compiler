@@ -2,6 +2,23 @@
 (* to do: strive for VLABEL not VGLOBAL *)
 (* xtagsum_dynamic record case is fragile *)
 
+(* A state contains classification information(type/kind),
+                    residence information(register/global label),
+		    and value information(int/label).
+		    Only one of the latter two must be present.
+   There is a current state and a global state.
+   The latter contains only variables that have to be globally visible,
+      This is a subset of variables bound at the top-level (outside any lambda).
+      It is a subset because we would like unreferenced top-level variables to reside
+      in registers, thus reducing a proliferation of global labels. 
+      However, we consider all top-level type variables (say a) to be global even if not
+      apparently used inside a lambda since a type reduction of a type term (b = {l = a})
+      containing another global type variable(b) may yield to this type variable a.
+      All imported variables are both top-level and global.  
+      The check for global and top-level variables must also consider exports.
+*)
+   
+ 
 functor Tortl(structure Rtl : RTL
 	      structure Pprtl : PPRTL 
 	      structure Rtltags : RTLTAGS 
@@ -18,6 +35,7 @@ functor Tortl(structure Rtl : RTL
 struct
 
 val do_constant_records = ref true
+val do_gcmerge = ref true
 val debug = ref false
 val debug_full = ref false
 val debug_simp = ref false
@@ -108,7 +126,7 @@ val debug_bound = ref false
 
    exception NotFound
    val exports = ref (Name.VarMap.empty : (Name.label list) Name.VarMap.map)
-   val nonglobals = ref VarSet.empty
+   val globals = ref VarSet.empty
    val dl : Rtl.data list ref = ref nil
    val pl : Rtl.proc list ref = ref nil
    type state = {env : NilContext.context,
@@ -119,9 +137,12 @@ val debug_bound = ref false
 			       convarmap = VarMap.empty}
    val global_state : state ref = ref (make_state())
 
-   fun stat_state ({convarmap,...} : state) = (VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) convarmap;
-						     print "\n\n")
-
+   fun stat_state ({convarmap,...} : state) = 
+       (VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) convarmap; print "\n\n")
+   fun show_state ({env,...} : state) = 
+       (print "Showing environment part of state:\n";
+	NilContext.print_context env;
+	print "\n\n")
 
    local
        val mutable_objects : label list ref = ref nil
@@ -226,15 +247,16 @@ val debug_bound = ref false
 
   fun top_rep (v,rep) = 
       (case rep of
-	   (SOME(VGLOBAL _),_,_) => true
-	 | (_, SOME(VCODE _), _) => true
-	 | (_, SOME(VLABEL _), _) => true
-	 | _ => (VarSet.member(!nonglobals,v)))
+(* 	   (SOME(VGLOBAL _),_,_) => true *)
+	   (_, SOME(VCODE _), _) => true
+(*	 | (_, SOME(VLABEL _), _) => true *)
+	 | _ => (VarSet.member(!globals,v)))
 
   fun env_insert' istop ({env,varmap,convarmap} : state) (v,k,copt) : state = 
       let val _ = if (!debug_bound)
 		      then (print "env adding v = ";
-			    Ppnil.pp_var v; print "\n")
+			    Ppnil.pp_var v; print "   istop = ";
+			    print (Bool.toString istop); print "\n")
 		  else ()
 	  val newenv = insert_kind(env,v,k,copt)
 	  val newstate = {env=newenv,varmap=varmap,convarmap=convarmap}
@@ -248,7 +270,8 @@ val debug_bound = ref false
 		  else ()
 	  val _ = if (!debug_bound)
 		      then (print "env done adding to v = ";
-			    Ppnil.pp_var v; print "\n")
+			    Ppnil.pp_var v; print "   istop = ";
+			    print (Bool.toString istop); print "\n")
 		  else ()
       in  newstate
       end
@@ -419,6 +442,7 @@ val debug_bound = ref false
 	       end
 	 | (Let_c _) => NONE
 	 | (App_c _) => NONE
+	 | (Typecase_c _) => NONE
 	 | (Crecord_c _) => error "Crecord_c not a type"
 	 | (Closure_c _) => error "Closure_c not a type"
 	 | (Annotate_c (_,c)) => con2rep_raw state c
@@ -439,6 +463,7 @@ val debug_bound = ref false
 			     (Proj_c _) => simp(#2(simplify_type state c))
 			   | (Let_c _) => simp(#2(simplify_type state c))
 			   | (App_c _) => simp(#2(simplify_type state c))
+			   | (Var_c _) => simp(#2(simplify_type state c))
 			   | _ => simp c)
 	    val c = reduce con handle e => (failure NONE; raise e)
 	in case (con2rep_raw state c) handle e => (failure (SOME c); raise e) of
@@ -464,7 +489,8 @@ val debug_bound = ref false
 	 | VREAL _ => NOTRACE_REAL
 	 | VRECORD _ => TRACE
 	 | VLABEL _ => LABEL
-	 | VCODE _ => NOTRACE_CODE)
+	 | VCODE _ => NOTRACE_CODE
+	 | VVOID r => r)
 
   fun valloc2rep (VAR_VAL varval) = varval2rep varval
     | valloc2rep (VAR_LOC varloc) = varloc2rep varloc
@@ -492,6 +518,7 @@ val debug_bound = ref false
        val argregi : regi list ref = ref nil
        val argregf : regf list ref = ref nil
        val curgc : instr ref option ref = ref NONE
+       fun add_instr' i = il := (ref i) :: !il;
    in  
        fun istoplevel() = !istop
        fun getTop() = !top
@@ -502,9 +529,21 @@ val debug_bound = ref false
        fun getArgF() = !argregf
 
        fun add_data d = dl := d :: !dl
-       fun add_instr i = il := (ref i) :: !il
+       fun invalidate_gc() = curgc := NONE
+       fun add_instr i = 
+	   (add_instr' i;
+	    case i of
+		NEEDGC _ => error "should use needgc to add a NEEDGC"
+	      | JMP _ => invalidate_gc()
+	      | CALL _ => invalidate_gc()
+	      | FLOAT_ALLOC _ => invalidate_gc()
+	      | INT_ALLOC _ => invalidate_gc()
+	      | PTR_ALLOC _ => invalidate_gc()
+	      | _ => ())
+
        fun needgc operand = 
-	   (case (operand,!curgc) of
+	 if (!do_gcmerge)
+	  then (case (operand,!curgc) of
 		(IMM _,NONE) => let val i = NEEDGC operand
 				    val r = ref i
 				in  (il := r :: !il; curgc := SOME r)
@@ -514,9 +553,10 @@ val debug_bound = ref false
 				in  r := i
 				end
 	      | (IMM _, SOME _) => error "curgc is not a NEEDGC IMM"
-	      | (_, NONE) => add_instr(NEEDGC operand)
-	      | (_, SOME _) => (curgc := NONE;
-				add_instr(NEEDGC operand)))
+	      | (_, NONE) => add_instr'(NEEDGC operand)
+	      | (_, SOME _) => (invalidate_gc();
+				add_instr'(NEEDGC operand)))
+	 else add_instr'(NEEDGC operand)
 
        fun alloc_regi (traceflag) = 
 	   let val r = REGI(fresh_var(),traceflag)
@@ -568,7 +608,7 @@ val debug_bound = ref false
 			    | _ => fargs))
 
        fun reset_state (is_top,name) = 
-	   (curgc := NONE;
+	   (invalidate_gc();
 	    istop := is_top;
 	    currentfun := LOCAL_CODE name;
 	    top := alloc_code_label();
@@ -590,7 +630,7 @@ val debug_bound = ref false
 		resetWork();
 		global_state :=  make_state();
 		exports := (foldl exp_adder VarMap.empty exportlist);
-		nonglobals := ngset;
+		globals := ngset;
 		dl := nil;
 		pl := nil;
 		reset_mutable_objects();
@@ -674,18 +714,17 @@ val debug_bound = ref false
 		 error("coercei: expected int register, found float register "^regf2s r))
 				      
 
-  (* adding term-level variables *)
+  (* adding term-level variables and functions *)
   fun add_var' s (v,vlopt,vvopt,con) =  lvarmap_insert (istoplevel()) s (v,(vlopt,vvopt,con))
   fun add_var  s (v,reg,con)         =  add_var' s (v,SOME(VREGISTER reg), NONE, con)
   fun add_varloc s (v,vl,con)        =  add_var' s (v,SOME vl,NONE,con)
   fun add_code s (v,l,con)           =  add_var' s (v,NONE, SOME(VCODE l), con)
 
-  (* adding constructor-level variables *)
+  (* adding constructor-level variables and functions *)
   fun add_convar s (v,vlopt,vvopt,kind,copt) = 
-lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
-
-  fun add_convar_label s (v,l,kind,copt) = 
-        lconvarmap_insert (istoplevel()) s (v,(NONE, SOME(VLABEL l),kind))copt
+      lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
+  fun add_concode s (v,l,kind,copt) = 
+        lconvarmap_insert (istoplevel()) s (v,(NONE, SOME(VCODE l),kind))copt
 
 
     
@@ -943,48 +982,77 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 		    con : con,
 		    lv : loc_or_val) : state =
     let 
-	val (label,labels) = (case (Name.VarMap.find(!exports,v)) of
-				  SOME [] => error "no label for export"
-				| SOME (first::rest) => (ML_EXTERN_LABEL(Name.label2string first),
-							 map (fn l => ML_EXTERN_LABEL(Name.label2string l)) rest)
-				| NONE => (LOCAL_LABEL(alloc_named_data_label v),[]))
+(*
+val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
+	 Name.VarMap.appi (fn (v,labs) =>
+			   (Pprtl.pp_var v; print " --> ";
+			    app (fn l => (print (Name.label2string l);
+					  print ",  ")) labs;
+			    print "\n")) (!exports))
+*)
+	val (label_opt,labels) = 
+	    (case (Name.VarMap.find(!exports,v)) of
+		 SOME [] => error "no label for export"
+	       | SOME (first::rest) => 
+		     (SOME(ML_EXTERN_LABEL(Name.label2string first)),
+		      map (fn l => ML_EXTERN_LABEL(Name.label2string l)) rest)
+	       | NONE => (NONE,[]))
+
+
+
+	val (label_opt,vv_opt) = 
+	    (case (lv,label_opt) of
+               (VAR_VAL vv, NONE) => (NONE,SOME vv)
+	     | (_, NONE) => (SOME(LOCAL_LABEL(alloc_named_data_label v)),NONE)
+	     | (VAR_VAL vv, SOME _) => (label_opt, SOME vv)
+	     | (_, SOME _) => (label_opt, NONE))
+
+
+
       val addr = alloc_regi LABEL
       val loc = alloc_regi LABEL
       val rtl_rep = con2rep state con
-      val state' = add_var' state (v,SOME(VGLOBAL(label,rtl_rep)),
-				   (case lv of
-					VAR_VAL vv => SOME vv
-				      | _ => NONE),
+
+      val state' = add_var' state (v,
+				   case label_opt of
+				       NONE => NONE
+				     | SOME label => 
+					   SOME(VGLOBAL(label,rtl_rep)),
+				   vv_opt,
 				   con)
-      val _ = (case rtl_rep of
-		   (TRACE | COMPUTE _) => add_mutable_variable(label,rtl_rep)
-		 | _ => ())
-    in 
-	(case lv of
-	     VAR_VAL (VREAL _) => add_data(ALIGN (QUAD))
-	   | _ => ());
-	app (fn l => add_data(DLABEL l)) labels;
-	add_data(DLABEL (label));
-	case lv of
-	    VAR_LOC (VREGISTER reg) => (add_instr(LADDR(label,0,addr));
-					(case reg of
-					     I r => (add_data(INT32(i2w 0));
-						     add_instr(STORE32I(EA(addr,0),r)))
-					   | F r => (add_data(FLOAT "0.0");
-						     add_instr(STOREQF(EA(addr,0),r)))))
-	  | VAR_LOC (VGLOBAL (l,rep)) => let val value = alloc_regi rep
-					 in  (add_data(INT32 0w99);
-					      add_instr(LADDR(label,0,addr));
-					      add_instr(LADDR(l,0,loc));
-					      add_instr(LOAD32I(EA(loc,0),value));
-					      add_instr(STORE32I(EA(addr,0),value)))
-					 end
-	  | VAR_VAL (VVOID _) => error "alloc_global got void"
-	  | VAR_VAL (VINT w32) => add_data(INT32 w32)
-	  | VAR_VAL (VREAL l) => add_data(DATA l)
-	  | VAR_VAL (VRECORD (l,_)) => add_data(DATA l)
-	  | VAR_VAL (VLABEL l) => add_data(DATA l)
-	  | VAR_VAL (VCODE l) => add_data(DATA l);
+    in  (case label_opt of
+	NONE => ()
+      | SOME label =>
+	    (Stats.counter("RTLglobal") ();
+	     (case rtl_rep of
+		  (TRACE | COMPUTE _) => add_mutable_variable(label,rtl_rep)
+		| _ => ());
+	      (case lv of
+		   VAR_VAL (VREAL _) => add_data(ALIGN (QUAD))
+		 | _ => ());
+	       app (fn l => add_data(DLABEL l)) labels;
+	       add_data(DLABEL (label));
+	       (case lv of
+		    VAR_LOC (VREGISTER reg) => 
+			(add_instr(LADDR(label,0,addr));
+			 (case reg of
+			      I r => (add_data(INT32(i2w 0));
+				      add_instr(STORE32I(EA(addr,0),r)))
+			    | F r => (add_data(FLOAT "0.0");
+				      add_instr(STOREQF(EA(addr,0),r)))))
+		  | VAR_LOC (VGLOBAL (l,rep)) => let val value = alloc_regi rep
+						 in  (add_data(INT32 0w99);
+						      add_instr(LADDR(label,0,addr));
+						      add_instr(LADDR(l,0,loc));
+						      add_instr(LOAD32I(EA(loc,0),value));
+						      add_instr(STORE32I(EA(addr,0),value)))
+						 end
+		  | VAR_VAL (VVOID _) => error "alloc_global got nvoid"
+		  | VAR_VAL (VINT w32) => add_data(INT32 w32)
+		  | VAR_VAL (VREAL l) => add_data(DATA l)
+		  | VAR_VAL (VRECORD (l,_)) => add_data(DATA l)
+		  | VAR_VAL (VLABEL l) => add_data(DATA l)
+		  | VAR_VAL (VCODE l) => add_data(DATA l))));
 	state'
     end
 
@@ -994,28 +1062,46 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 		       kind : kind,
 		       copt : con option) : state = 
     let 
-	val (label,labels) = (case (Name.VarMap.find(!exports,v)) of
-				  SOME [] => error "no label for export"
-				| SOME (first::rest) => (ML_EXTERN_LABEL(Name.label2string first),
-							 map (fn l => ML_EXTERN_LABEL(Name.label2string l)) rest)
-				| NONE => (LOCAL_LABEL(alloc_named_data_label v),[]))
-      val state' = add_convar state(v,SOME(VGLOBAL(label,TRACE)), 
-				       (case lv of
-					    (VAR_VAL vv) => SOME vv
-					  | _ => NONE),
-				       kind, copt)
-      val addr = alloc_regi LABEL
-      val _ = add_mutable_variable(label,TRACE)
-    in 
-	app (fn l => add_data(DLABEL l)) labels;
-	add_data(DLABEL (label));
-	(case lv of
-	     (VAR_VAL(VLABEL l)) => add_data(DATA l)
-	   | _ => (let val ir = load_ireg_locval(lv,NONE)
-		   in  add_data(INT32(i2w 0));
-		       add_instr(LADDR(label,0,addr));
-		       add_instr(STORE32I(EA(addr,0),ir))
-		   end));
+	(* we lay out the convar as a global if it is exported or we
+	   don't already know its value; if the value is known and
+	   it is not exported, then later code will simply use the VAR_VAL *)
+	val (label_opt,labels) = 
+	    (case (Name.VarMap.find(!exports,v)) of
+		 SOME [] => error "no label for export"
+	       | SOME (first::rest) => 
+		     (SOME(ML_EXTERN_LABEL(Name.label2string first)),
+		      map (fn l => ML_EXTERN_LABEL(Name.label2string l)) rest)
+	       | NONE => (NONE,[]))
+	val (label_opt,vv_opt) = 
+	    (case (lv,label_opt) of
+               (VAR_VAL vv, NONE) => (NONE,SOME vv)
+	     | (_, NONE) => (SOME(LOCAL_LABEL(alloc_named_data_label v)),NONE)
+	     | (VAR_VAL vv, SOME _) => (label_opt, SOME vv)
+	     | (_, SOME _) => (label_opt, NONE))
+      val state' = add_convar state(v,
+				    case label_opt of
+					NONE => NONE
+				      | SOME label => 
+					    SOME(VGLOBAL(label,TRACE)),
+				    vv_opt, kind, copt)
+    in
+	(case label_opt of
+	    SOME label => 
+		let val _ = Stats.counter("RTLconglobal") ()
+		    val addr = alloc_regi LABEL
+		    val _ = add_mutable_variable(label,TRACE)
+		in 
+		    app (fn l => add_data(DLABEL l)) labels;
+		    add_data(DLABEL (label));
+		    (case lv of
+			 (VAR_VAL(VLABEL l)) => add_data(DATA l)
+		       | _ => (let val ir = load_ireg_locval(lv,NONE)
+			       in  add_data(INT32(i2w 0));
+				   add_instr(LADDR(label,0,addr));
+				   add_instr(STORE32I(EA(addr,0),ir))
+			       end))
+		end
+	    | NONE => ());
 	state'
     end
 
@@ -1158,14 +1244,14 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 	  case bnd of
 	      Con_b (v,k,c) => 
 		  let val (lv,k) = xcon'(state,v,c,SOME k)
-		      val s' =  (if (istoplevel() andalso not(VarSet.member(!nonglobals,v)))
+		      val s' =  (if (istoplevel())
 				     then alloc_conglobal (state,v,lv,k,SOME c)
 				 else add_convar state (v,SOME(VREGISTER(load_reg_locval(lv,NONE))),
 							NONE,k,SOME c))
 		  in  s'
 		  end
 	    | Exp_b (v,c,e) => let val (loc_or_val,_) = xexp(state,v,e,SOME c,NOTID)
-				   val s' = (if istoplevel() andalso not(VarSet.member(!nonglobals,v))
+				   val s' = (if istoplevel() 
 						 then alloc_global (state,v,c,loc_or_val)
 					     else 
 						 case loc_or_val of
@@ -1239,7 +1325,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 	    | Code_cb (conwork as (name,vklist,c,k)) => 
 		  let val funkind = Arrow_k(Code,vklist,k)
 		      val l = LOCAL_LABEL(LOCAL_CODE name)
-		      val state = add_convar_label state (name,l,funkind,
+		      val state = add_concode state (name,l,funkind,
 						      SOME(Let_c(Sequential,[cbnd],Var_c name)))
 		      val s' = promote_maps (istoplevel()) state
 		  in  (addWork (ConFunWork(s',name,vklist,c,k)); state)
@@ -1395,7 +1481,8 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 			  val callcount = get_callcount()
 		      local
 			  val _ = add_instr (ICOMMENT ((case openness of
-							   Code => "making a direct call "
+							    Open => error "no open calls permitted here"
+							  | Code => "making a direct call "
 							 | ExternCode => "making a direct extern call "
 							 | Closure => "making a closure call ")
 						       ^ (Int.toString callcount)))
@@ -1500,7 +1587,8 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 					    else do_call (SOME r));
 				    (VAR_LOC(VREGISTER dest), rescon))
 		      val _ = add_instr (ICOMMENT ((case openness of
-						       Code => "done making a direct call "
+							Open => error "no open calls permitted here"
+						     | Code => "done making a direct call "
 						     | ExternCode => "done making a direct extern call "
 						     | Closure => "done making a closure call ")
 						   ^ (Int.toString callcount)))
@@ -1579,6 +1667,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 
 
 		      (* --- now the code for handler --- *)
+		      val _ = invalidate_gc()
 		      val xr = alloc_named_regi exnvar TRACE;
 		      val state' = add_var state (exnvar,I xr,exncon)
 		      val _ = (add_instr(ILABEL hl);
@@ -1621,7 +1710,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 				 | (F hreg,F reg) => add_instr(FMV(hreg,reg))
 				 | _ => error "hreg/ireg mismatch in handler")
 		      val _ = add_instr(ILABEL bl)
-
+		      val _ = invalidate_gc()
 
 		  in 
 		      (* for debugging, should check that arg_c and hcon are the same *)
@@ -1774,6 +1863,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 			  (SOME r,SOME c) => (VAR_LOC(VREGISTER r),c)
 			| _ => error "no arms"
 		  end 
+	    | Typecase_e _ => error "typecase_e not implemented"
 	    | Sumsw_e {info = (tagcount,cons), arg, arms, default} => 
 		  let val r = (case (xexp'(state,fresh_named_var "sumsw_arg",arg,NONE,NOTID)) of
 				   (I ireg,_) => ireg
@@ -2715,7 +2805,11 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 			  | (PtrArray, [c]) => Prim_c(Array_c, [c])
 			  | (PtrVector, [c]) => Prim_c(Vector_c, [c])
 			  | (WordArray, [c]) => Prim_c(Array_c, [c])
-			  | (WordVector, [c]) => Prim_c(Vector_c, [c]))
+			  | (WordVector, [c]) => Prim_c(Vector_c, [c])
+			  | (PtrArray, _) => error "ill-formed aggregate type"
+			  | (PtrVector, _) => error "ill-formed aggregate type"
+			  | (WordArray, _) => error "ill-formed aggregate type"
+			  | (WordVector, _) => error "ill-formed aggregate type")
 
 	     | (create_table t) => (case vl_list of
 					    [vl1,vl2] => xarray(state,extract_type(t,clist),vl1,vl2)
@@ -3350,7 +3444,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 	     | Prim_c(BoxFloat_c F32, []) => mk_ptr 10
 	     | Prim_c(BoxFloat_c F64, []) => mk_ptr 11
 	     | Prim_c(Exn_c,[]) => mk_ptr 12
-	     | Prim_c(Exntag_c,[c]) => mk_sum(11,[c])
+	     | Prim_c(Exntag_c,[c]) => mk_sum(12,[c])
 	     | Prim_c(Array_c,[c]) => mk_sum(0,[c])
 	     | Prim_c(Vector_c,[c]) => mk_sum(1,[c])
 	     | Prim_c(Ref_c,[c]) => mk_sum(2,[c])
@@ -3396,14 +3490,18 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 	     | AllArrow_c (Code,_,_,clist,numfloat,c) => 
 (*		   mk_sum_help(NONE,[10,TW32.toInt numfloat],c::clist) *)
 		   mk_sum_help(NONE,[10],[])
+	     | AllArrow_c (ExternCode,_,_,clist,numfloat,c) => 
+(*		   mk_sum_help(NONE,[11,TW32.toInt numfloat],c::clist) *)
+		   mk_sum_help(NONE,[11],[])
 	     | Var_c v => (case (getconvarrep state v) of
 			       (_,SOME vv, k) => (VAR_VAL vv,k)
 			     | (SOME vl,_, k) => (VAR_LOC vl,k)
 			     | (NONE,NONE,_) => error "no info on convar")
-	     | Let_c (letsort, cbnds, c) => let fun folder (cbnd,s) = xconbnd s cbnd
-						val s' = foldl folder state cbnds
-					    in  xcon'(s',fresh_var(),c, kopt)
-					    end
+	     | Let_c (letsort, cbnds, c) => 
+		   let fun folder (cbnd,s) = xconbnd s cbnd
+		       val s' = foldl folder state cbnds
+		   in  xcon'(s',fresh_var(),c, kopt)
+		   end
 	     | Crecord_c lclist => 
 		   let val vars = map (fn (l,_) => fresh_named_var (label2string l)) lclist
 		       fun doer (v,(l,c)) = (l,v,xcon(state,v,c,NONE))
@@ -3439,6 +3537,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 			 | kinder _ = error "bad Closure_c"
 		   in  mk_sum_help(SOME kinder,[],[c1,c2])
 		   end
+	     | Typecase_c _ => error "typecase_c not implemented"
 	     | App_c (c,clist) => (* pass in env argument first *)
 		   let val (clregi,k) = xcon(state,fresh_named_var "closure",c,NONE)
 		       val resk = (case (kopt,NilUtil.strip_singleton k) of
@@ -3728,6 +3827,117 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 					     worklist_loop()))
   end
 
+  (* compute toplevel non-globals: that is, "globals"
+   that are not accessed inside any function and that are unexported;
+   when this is the case, we can allocate statically *)
+  fun compute_globals (bnds : bnd list, exports : export_entry list, imports : import_entry list) =
+      let 
+	  val toplevels = ref VarSet.empty
+	  val globals = ref VarSet.empty
+	  fun addtop v = toplevels := VarSet.add(!toplevels,v)
+	  fun addglobal v = globals := VarSet.add(!globals,v)
+	  val numfuns = ref 0
+	  val numconfuns = ref 0
+	  val inner = 
+	      let 
+		  fun add v = (if (VarSet.member(!toplevels,v))
+				   then (addglobal v
+					 handle e => (print "yep, this delete\n";
+						      raise e))
+			       else ();
+				   NOCHANGE)
+		  fun ehandle (_,Var_e v) = add v
+		    | ehandle _ = NOCHANGE
+		  fun chandle (_,Var_c v) = add v
+		    | chandle _ = NOCHANGE
+		  fun bndhandle (_,Fixcode_b s) = (numfuns := (!numfuns) + (length (sequence2list s)); 
+						   NOCHANGE)
+		    | bndhandle _ = NOCHANGE
+		  fun cbndhandle (_,Code_cb _) = (numconfuns := (!numconfuns) + 1; NOCHANGE)
+		    | cbndhandle _ = NOCHANGE
+		      
+	      in  (ehandle,
+		   bndhandle,
+		   chandle,
+		   cbndhandle,
+		   fn _ => NOCHANGE)
+	      end
+	  
+	  val outer = 
+	      let 
+		  fun bndhandle (_,Con_b(v,_,_)) = (addtop v; addglobal v; NOCHANGE)
+		    | bndhandle (_,Exp_b(v,_,_)) = (addtop v; NOCHANGE)
+		    | bndhandle (_,Fixopen_b _) = error "encountered fixopen"
+		    | bndhandle (_,bnd as (Fixcode_b vfset)) = 
+		      let val _ = numfuns := (!numfuns) + 1
+			  val vflist = set2list vfset
+			  fun dofun (Function (_,_,vklist,vclist,_,e,c)) = 
+			      let
+				  val _ = map (fn (_,k) => kind_rewrite inner k) vklist
+				  val _ = map (fn (_,c) => con_rewrite inner c) vclist
+				  val _ = exp_rewrite inner e
+				  val _ = con_rewrite inner c
+			      in  ()
+			      end
+			  val _ = app (fn (v,f) => dofun f) vflist
+		      in  CHANGE_NORECURSE [bnd]
+		      end
+		    | bndhandle (_,bnd as (Fixclosure_b(_,vclset))) = 
+		      let val vcllist = set2list vclset
+			  fun docl {code,cenv,venv,tipe} = 
+			      let
+				  val _ = exp_rewrite inner venv
+				  val _ = con_rewrite inner cenv
+			      (* don't need to do tipe *)
+			      in  ()
+			      end
+			  val _ = app (fn (v,cl) => (addtop v; docl cl)) vcllist
+		      in  CHANGE_NORECURSE [bnd]
+		      end
+		  
+		  fun chandle (_,Mu_c(_,vcseq,_)) = (map (fn (v,_) => 
+							  (addtop v; addglobal v))
+						     (sequence2list vcseq);
+						     NOCHANGE)
+		    | chandle _ = NOCHANGE
+		  fun cbhandle (_,Con_cb (v,_,_)) = (addtop v; addglobal v; NOCHANGE)
+		    | cbhandle (_,Open_cb _) = error "encountered open_cb"
+		    | cbhandle (_,cbnd as (Code_cb (_,vklist,c,k))) = 
+		      let val _ = numconfuns := (!numconfuns) + 1
+			  val _ = map (fn (_,k) => kind_rewrite inner k) vklist
+			  val _ = kind_rewrite inner k
+			  val _ = con_rewrite inner c
+		      in  CHANGE_NORECURSE [cbnd]
+		      end
+	      in  (fn _ => NOCHANGE,
+		   bndhandle,
+		   chandle,
+		   cbhandle,
+		   fn _ => NOCHANGE)
+	      end
+	  fun do_export (ExportValue(l,e,c)) = (exp_rewrite inner e;
+						con_rewrite inner c; ())
+	    | do_export (ExportType(l,c,k)) = (con_rewrite inner c;
+					       kind_rewrite inner k; ())
+	  fun do_import (ImportValue(l,v,_)) = (addtop v; addglobal v)
+	    | do_import (ImportType(l,v,_)) =  (addtop v; addglobal v)
+	  val _ = map (bnd_rewrite outer) bnds
+	  val _ = app do_export exports
+	  val _ = app do_import imports
+	  val _ = (print "There are "; print (Int.toString (!numfuns));
+		   print " functions and "; print (Int.toString (!numconfuns));
+		   print " constructor functions\n")
+	  val _ = if (!debug)
+		      then (print "Globals are: ";
+			    VarSet.app (fn v => (Pprtl.pp_var v; print "\n")) (!globals);
+			    print "\n\n";
+			    print "Top-levels are: ";
+			    VarSet.app (fn v => (Pprtl.pp_var v; print "\n")) (!toplevels);
+			    print "\n\n")
+		  else ()
+      in  !globals
+      end (* compute_globals *)
+
 
   (* unitname is the name of the unit; unit names are globally unique. *)
 
@@ -3736,100 +3946,12 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 					  exports : export_entry list}) =
          let 
 
-	     (* compute toplevel non-globals: that is, "globals"
-	       that are not accessed inside any function and that are unexported;
-	       when this is the case, we can allocate statically *)
 	     val _ = if (!debug)
 			 then print "tortl - entered translate\n"
 		     else ()
-	     local
-		 val nonglobals = ref VarSet.empty
-		 val numfuns = ref 0
-		 val numconfuns = ref 0
-		 val inner = 
-		     let 
-			 fun remove v = (if (VarSet.member(!nonglobals,v))
-					     then ((nonglobals := VarSet.delete(!nonglobals,v))
-						 handle e => (print "yep, this delete\n";
-							      raise e))
-					 else ();
-					NOCHANGE)
-			 fun ehandle (_,Var_e v) = remove v
-			   | ehandle _ = NOCHANGE
-			 fun chandle (_,Var_c v) = remove v
-			   | chandle _ = NOCHANGE
-			 fun bndhandle (_,Fixcode_b s) = (numfuns := (!numfuns) + (length (sequence2list s)); 
-							  NOCHANGE)
-			   | bndhandle _ = NOCHANGE
-			 fun cbndhandle (_,Code_cb _) = (numconfuns := (!numconfuns) + 1; NOCHANGE)
-			   | cbndhandle _ = NOCHANGE
 
-		     in  (ehandle,
-			  bndhandle,
-			  chandle,
-			  cbndhandle,
-			  fn _ => NOCHANGE)
-		     end
 
-		 val outer = 
-		     let 
-			 fun bndhandle (_,Con_b(v,_,_)) = (nonglobals := VarSet.add(!nonglobals,v); NOCHANGE)
-			   | bndhandle (_,Exp_b(v,_,_)) = (nonglobals := VarSet.add(!nonglobals,v); NOCHANGE)
-			   | bndhandle (_,Fixopen_b _) = error "encountered fixopen"
-			   | bndhandle (_,bnd as (Fixcode_b vfset)) = 
-			     let val _ = numfuns := (!numfuns) + 1
-				 val vflist = set2list vfset
-				 fun dofun (Function (_,_,vklist,vclist,_,e,c)) = 
-				     let
-					 val _ = map (fn (_,k) => kind_rewrite inner k) vklist
-					 val _ = map (fn (_,c) => con_rewrite inner c) vclist
-					 val _ = exp_rewrite inner e
-					 val _ = con_rewrite inner c
-				     in  ()
-				     end
-				 val _ = app (fn (v,f) => dofun f) vflist
-			     in  CHANGE_NORECURSE [bnd]
-			     end
-			   | bndhandle (_,bnd as (Fixclosure_b(_,vclset))) = 
-			     let val vcllist = set2list vclset
-				 fun docl {code,cenv,venv,tipe} = 
-				     let
-					 val _ = exp_rewrite inner venv
-					 val _ = con_rewrite inner cenv
-					     (* don't need to do tipe *)
-				     in  ()
-				     end
-				 val _ = app (fn (v,cl) => docl cl) vcllist
-			     in  CHANGE_NORECURSE [bnd]
-			     end
-
-			 fun cbhandle (_,Con_cb (v,_,_)) = (nonglobals := VarSet.add(!nonglobals,v); NOCHANGE)
-			   | cbhandle (_,Open_cb _) = error "encountered open_cb"
-			   | cbhandle (_,cbnd as (Code_cb (_,vklist,c,k))) = 
-			     let val _ = numconfuns := (!numconfuns) + 1
-				 val _ = map (fn (_,k) => kind_rewrite inner k) vklist
-				 val _ = kind_rewrite inner k
-				 val _ = con_rewrite inner c
-			     in  CHANGE_NORECURSE [cbnd]
-			     end
-		     in  (fn _ => NOCHANGE,
-			  bndhandle,
-			  fn _ => NOCHANGE,
-			  cbhandle,
-			  fn _ => NOCHANGE)
-		     end
-		 fun do_export (ExportValue(l,e,c)) = (exp_rewrite inner e;
-						       con_rewrite inner c; ())
-		   | do_export (ExportType(l,c,k)) = (con_rewrite inner c;
-						      kind_rewrite inner k; ())
-		 val _ = map (bnd_rewrite outer) bnds
-		 val _ = app do_export exports
-		 val _ = (print "There are "; print (Int.toString (!numfuns));
-			  print " functions and "; print (Int.toString (!numconfuns));
-			  print " constructor functions\n")
-	     in  val nonglobals = !nonglobals
-	     end (* local *)
-
+	     val globals = compute_globals(bnds,exports,imports)
 
 	     val _ = if (!debug)
 			 then print "tortl - handling exports now\n"
@@ -3844,7 +3966,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 	     in  val named_exports = map mapper exports
 	     end
 
-	     val _ = reset_global_state (map #1 named_exports,nonglobals)
+	     val _ = reset_global_state (map #1 named_exports,globals)
 
 	     (* we put non-variable exports at the tail of the program;
               creating a main expression to be translated  *)
