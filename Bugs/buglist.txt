@@ -1,5 +1,4 @@
 0001 [closed]	Parser failes on seemingly OK file.
-0002 [closed]	Bus error on solaris.
 0003 [open]	Runtime assertion while compiling twelf with TILT-generated TILT.
 0004 [closed]	Segv in gc_large_alloc on solaris. 
 0005 [closed]	Possible code generation error.
