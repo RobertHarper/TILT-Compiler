@@ -1,3 +1,4 @@
+(*$import Ast IL *)
 (* Handles infix parsing of pattern and expressions. *)
 signature INFIXPARSE = 
   sig

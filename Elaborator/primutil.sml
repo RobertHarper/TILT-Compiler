@@ -1,3 +1,4 @@
+(*$import PRIM PPPRIM PRIMUTILPARAM Real64 *)
 functor PrimUtil(structure Prim : PRIM
 		 structure Ppprim : PPPRIM
 		 structure PrimUtilParam : PRIMUTILPARAM
@@ -5,7 +6,10 @@ functor PrimUtil(structure Prim : PRIM
 		 sharing type PrimUtilParam.value = Prim.value
 		 sharing type PrimUtilParam.intsize = Prim.intsize
 		 sharing type PrimUtilParam.floatsize = Prim.floatsize)
-    : PRIMUTIL =
+    :> PRIMUTIL where Prim = Prim 
+                where type con = PrimUtilParam.con
+		where type exp = PrimUtilParam.exp
+		=
 
 struct
 

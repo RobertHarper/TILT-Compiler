@@ -1,5 +1,11 @@
+(*$import IL PRIMUTILPARAM *)
 functor IlPrimUtilParam(structure Il : IL)
-    : PRIMUTILPARAM =
+    :> PRIMUTILPARAM where type con = Il.con 
+                     where type exp = Il.exp
+		     where type intsize = Il.Prim.intsize
+		     where type floatsize = Il.Prim.floatsize
+		     where type ('con,'exp) value = ('con,'exp) Il.Prim.value
+    =
     struct
 
 (*	open IlUtil  *)
@@ -19,10 +25,16 @@ functor IlPrimUtilParam(structure Il : IL)
 	val unit_exp : exp = RECORD[]
 	val con_unit = CON_RECORD[]
 	val con_bool = CON_SUM{noncarriers = 2,
-			       carriers = [],
+			       carrier = CON_TUPLE_INJECT[],
 			       special = NONE}
-	val false_exp = INJ{noncarriers=2,carriers=[],special=0,inject=NONE}
-	val true_exp = INJ{noncarriers=2,carriers=[],special=1,inject=NONE}
+	val con_true = CON_SUM{noncarriers = 2,
+			       carrier = CON_TUPLE_INJECT[],
+			       special = SOME 0}
+	val con_false = CON_SUM{noncarriers = 2,
+			       carrier = CON_TUPLE_INJECT[],
+			       special = SOME 1}
+	val false_exp = INJ{sumtype=con_false,inject=NONE}
+	val true_exp = INJ{sumtype=con_true,inject=NONE}
 	    
 	fun con_tuple conlist = CON_RECORD(Listops.mapcount (fn (i,c) => 
 							     (generate_tuple_label (i+1),c)) conlist)

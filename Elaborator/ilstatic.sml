@@ -4,6 +4,7 @@ functor IlStatic(structure Il : IL
 		 structure PrimUtil : PRIMUTIL
 		 structure Ppil : PPIL
 		 structure IlUtil : ILUTIL
+		 sharing Ppil.IlContext = IlContext
 		 sharing Ppil.Il = IlUtil.Il = IlContext.Il = Il
 		 sharing PrimUtil.Prim = Il.Prim
 		 sharing type PrimUtil.con = Il.con
@@ -654,10 +655,10 @@ end
 		    val c2' = con_subst_convar(c2,table)
 		in self(c1,c2',ctxt',is_sub)
 		end
-	  | (CON_SUM {noncarriers=n1,carriers=c1,special=i1},
-	     CON_SUM {noncarriers=n2,carriers=c2,special=i2}) =>
+	  | (CON_SUM {noncarriers=n1,carrier=c1,special=i1},
+	     CON_SUM {noncarriers=n2,carrier=c2,special=i2}) =>
 		(i1=i2 orelse (i2=NONE andalso is_sub)) andalso (n1=n2) andalso
-		eq_list (fn (a,b) => self(a,b,ctxt,is_sub), c1, c2)
+		self(c1,c2,ctxt,is_sub)
 	  | (CON_TUPLE_INJECT cs1, CON_TUPLE_INJECT cs2) => 
 		eq_list (fn (a,b) => self(a,b,ctxt,is_sub), cs1, cs2)
 	  | (CON_TUPLE_PROJECT (i1, c1), CON_TUPLE_PROJECT(i2,c2)) => 
@@ -980,10 +981,10 @@ end
 	   let val (va,con) = GetExpCon(e,ctxt)
 	   in if (eq_con_from_get_exp2(c,con,ctxt)) 
 		  then (case c of
-			    CON_SUM{noncarriers,carriers,special=SOME i} => 
+			    CON_SUM{noncarriers,carrier,special=SOME i} => 
 				if (i<noncarriers) 
 				    then error "SUM_TAIL projecting noncarrier"
-				else (va,List.nth(carriers,(i-noncarriers)))
+				else (va,CON_TUPLE_PROJECT((i-noncarriers),carrier))
 			  | _ => error "adornment of SUM_TAIL not a CON_SUM(SOME _,...)")
 	      else error "SUM_TAIL: adornment mismatches type of expression"
 	   end
@@ -1073,32 +1074,49 @@ end
 			     else error "projected decoration has the wrong KIND_ARROW")
 		      | _ => error "projected decoration has the wrong kind"))
        end
-    | (INJ {noncarriers,carriers,inject=NONE,special}) =>
-	  if (special<noncarriers)
-	      then (true,CON_SUM{noncarriers=noncarriers,
-				 carriers=map (fn c => Normalize(c,ctxt)) carriers,
-				 special=NONE})
-	  else (error "INJ: bad injection")
-    | (INJ {noncarriers,carriers,inject=SOME e,special}) =>
+    | (INJ {sumtype,inject}) =>
+       let val sumtype = (case sumtype of
+			      CON_SUM _ => sumtype
+			    | _ => Normalize(sumtype,ctxt))
+	   val (carrier,noncarriers,special) = 
+	         (case sumtype of
+		      CON_SUM {carrier,noncarriers,special=SOME special} =>
+			  (carrier,noncarriers,special)
+		    | _ => error "INJ got type irreudcible to a special sumtype")
+       in  
+	(case inject of
+	   NONE => 
+	       if (special<noncarriers)
+		   then (true,CON_SUM{noncarriers=noncarriers,
+				      carrier= Normalize(carrier,ctxt),
+				      special=NONE})
+	       else (error "INJ: bad injection")
+	| SOME e =>
 	  if (special<noncarriers)
 	      then (error "INJ: bad injection")
 	  else let val (va,econ) = GetExpCon(e,ctxt)
-		   val clist = map (fn c => Normalize(c,ctxt)) carriers
+		   val carrier = Normalize(carrier,ctxt)
 		   val i = special - noncarriers (* i >= 0 *)
-		   val n = length clist
+		   val (n,fieldcon_opt) = 
+		       (case carrier of 
+		             CON_TUPLE_INJECT [] => (0,NONE)
+		           | CON_TUPLE_INJECT clist => (length clist, SOME(List.nth(clist,i)))
+			   | _ => (1,SOME carrier))
 	       in if (i >= n)
 		      then
 			  (print "INJ: injection field out of range in exp:";
 			   Ppil.pp_exp exparg; print "\n";
 			   error "INJ: injection field out of range")
-		  else if (eq_con_from_get_exp7(econ, List.nth(clist,i), ctxt))
-			   then (va,CON_SUM{noncarriers=noncarriers,carriers=clist,special=NONE})
+		  else
+		      if (eq_con_from_get_exp7(econ, valOf fieldcon_opt, ctxt))
+			   then (va,CON_SUM{noncarriers=noncarriers,carrier=carrier,special=NONE})
 		       else (print "INJ: injection does not type check eq_con failed on: ";
 			     Ppil.pp_exp exparg; print "\n";
 			     print "econ is "; Ppil.pp_con econ; print "\n";
-			     print "nth clist is "; Ppil.pp_con (List.nth(clist,i)); print "\n";
+			     print "nth clist is "; Ppil.pp_con (valOf fieldcon_opt); print "\n";
 			     error "INJ: injection does not typecheck")
-	       end
+	       end)
+       end
      | (EXN_CASE {arg,arms,default,tipe}) =>
 	   let 
 	       val (_,argcon) = GetExpCon(arg,ctxt)
@@ -1130,13 +1148,20 @@ end
 			    end)
 	   in (false, tipe)
 	   end
-     | (CASE {noncarriers,carriers,arg,arms,tipe,default}) => 
+     | (CASE {sumtype,arg,arms,tipe,default}) => 
 	   let 
+	       val sumtype = (case sumtype of
+				  CON_SUM _ => sumtype
+				| _ => Normalize(sumtype,ctxt))
+	       val {carrier,noncarriers,special=_} = 
+		   (case sumtype of
+			CON_SUM triple => triple
+		      | _ => error "CASE got type irreudcible to a sumtype")
 	       val n = length arms
-	       val carriers = map (fn c => Normalize' "CASE" (c,ctxt)) carriers
+	       val carrier = Normalize' "CASE" (carrier,ctxt)
 	       val (va,eargCon) = GetExpCon(arg,ctxt)
 	       val sumcon = CON_SUM {special = NONE,
-				     carriers = carriers,
+				     carrier = carrier,
 				     noncarriers = noncarriers}
 	       fun loop _ va [] =  
 		   (case default of 
@@ -1153,7 +1178,7 @@ end
 			    val va = va andalso va'
 			    val tipe' = if (n < noncarriers) then tipe 
 					else CON_ARROW([CON_SUM{special = SOME n,
-							       carriers = carriers,
+							       carrier = carrier,
 							       noncarriers = noncarriers}],
 						       tipe,false,oneshot())
 			in  
@@ -1385,9 +1410,7 @@ end
 
     and HeadNormalize' (arg,ctxt) : (bool * con) = 
 	 (case arg of
-	      CON_FUN ([v],CON_APP(c,CON_VAR v')) => 
-		  if (eq_var(v,v')) then HeadNormalize(c,ctxt) else (false,arg)
-	    | CON_OVAR ocon => let val tv = ocon_deref ocon
+	      CON_OVAR ocon => let val tv = ocon_deref ocon
 			    val (_,c') = HeadNormalize(CON_TYVAR tv,ctxt)
 			       in (true,c')
 			       end
@@ -1421,6 +1444,16 @@ end
 					       end
 		    | _ => (f,CON_TUPLE_PROJECT(i,c))
 		  end
+	    (* Eta contract functions *)
+	    | c as CON_FUN([v],CON_APP(f,CON_VAR v')) => if (eq_var(v,v')) then HeadNormalize(f,ctxt)
+							else (false,c)
+	    | c as CON_FUN(vars,CON_APP(f,CON_TUPLE_INJECT args)) =>
+		let fun match (v,(CON_VAR v')) = eq_var(v,v')
+		      | match _ = false
+		in  if (length vars = length args andalso (andfold match (zip vars args)))
+			then HeadNormalize(f,ctxt)
+		     else (false,c)
+		end
 	    | CON_APP(c1,c2) => 
 		  let val (f1,c1') = HeadNormalize(c1,ctxt)
 		      val (f2,c2') = HeadNormalize(c2,ctxt)
@@ -1507,9 +1540,9 @@ end
 	    in arg
 	    end
       | (CON_FUN (vs,c))          => CON_FUN (vs,c)
-      | (CON_SUM {noncarriers,carriers,special}) => 
+      | (CON_SUM {noncarriers,carrier,special}) => 
 	    CON_SUM{noncarriers = noncarriers,
-		    carriers = map (fn c => Normalize(c,ctxt)) carriers,
+		    carrier = Normalize(carrier,ctxt),
 		    special = special}
       | (CON_TUPLE_INJECT cs)     => CON_TUPLE_INJECT (map (fn c => Normalize(c,ctxt)) cs)
       | (CON_TUPLE_PROJECT (i,c)) => let val c' = Normalize(c,ctxt)

@@ -1,3 +1,5 @@
+(*$import TilWord64 Array Name *)
+
 signature PRIM = 
   sig
 

@@ -1,9 +1,9 @@
-(*$InfixParse : UTIL AST ASTHELP *)
+(*$import INFIXPARSE IL PPIL ASTHELP ListMergeSort *)
 functor InfixParse(structure Il : IL
 		   structure Ppil : PPIL
 		   structure AstHelp : ASTHELP
 		   sharing Ppil.Il = Il)
-  : INFIXPARSE = 
+  :> INFIXPARSE where Il = Il = 
   struct
 
     structure Il = Il
@@ -219,9 +219,13 @@ functor InfixParse(structure Il : IL
 	  | is_applicable _ = false
 	fun help (pat : Ast.pat) : Ast.pat = 
 	    (case pat of
-		 (Ast.WildPat | Ast.VarPat _ | Ast.IntPat _ | Ast.WordPat _ | 
-		  Ast.StringPat _ | Ast.CharPat _) => pat
-		| Ast.RecordPat {def,flexibility} => Ast.RecordPat{def=map (fn (s,p) => (s,self_one p)) def,
+		 Ast.WildPat  => pat
+	       | Ast.VarPat _  => pat
+	       | Ast.IntPat _  => pat
+	       | Ast.WordPat _  => pat
+	       |  Ast.StringPat _  => pat
+	       | Ast.CharPat _ => pat
+	       | Ast.RecordPat {def,flexibility} => Ast.RecordPat{def=map (fn (s,p) => (s,self_one p)) def,
 								   flexibility=flexibility}
 	      | Ast.ListPat pats => Ast.ListPat (map self_one pats)
 	      | Ast.TuplePat pats => Ast.TuplePat (map self_one pats)

@@ -1,3 +1,5 @@
+(*$import TYVAR Listops Name Util List *)
+
 (* Type variables parameterized over types *)
 functor Tyvar()
   : TYVAR =

@@ -1,5 +1,7 @@
+(*$import TilWord64 Array PRIM Name *)
+
 functor Prim()
-  : PRIM = 
+  :> PRIM = 
   struct
 
     datatype intsize = W8 | W16 | W32 | W64

@@ -5,8 +5,9 @@ functor Signature(structure Il : IL
 		 structure Ppil : PPIL
 		 structure AstHelp : ASTHELP
 		 structure IlContext : ILCONTEXT
-		 sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
-    : SIGNATURE =
+		  sharing Ppil.IlContext = IlContext
+		  sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
+    :> SIGNATURE where IlContext = IlContext =
 
   struct
 
@@ -29,6 +30,25 @@ functor Signature(structure Il : IL
     type labels = label list
 
     (* ----------------- Misc Helper Functions ----------------------- *)
+    fun eta_contract (m as (MOD_FUNCTOR(vsig,signat,MOD_APP(f,arg)))) = 
+	let fun match (SBND(l1,BND_CON(_,c)),SDEC(l2,DEC_CON _)) =
+		(case con_deref c of
+		  CON_MODULE_PROJECT(MOD_VAR v,l3) =>
+			(eq_label(l1,l2) andalso eq_label(l2,l3) andalso eq_var(vsig,v))
+		| _ => false)
+	      | match (SBND(l1,BND_EXP(_,_)), SDEC(l2,DEC_EXP _)) = 
+		     (eq_label(l1,l2) andalso is_eq_lab l1)
+	      | match _ = (print "match OTHER case\n"; false)
+	in  (case (signat,arg) of
+		(SIGNAT_STRUCTURE(_,sdecs),MOD_STRUCTURE sbnds) => 
+			if ((length sbnds = length sdecs) andalso
+			    (andfold match (Listops.zip sbnds sdecs)))
+			then (true,f) else (false,m)
+	      | _ => (false,m))
+	end
+
+      | eta_contract m = (false,m)
+
     fun kind_eq_shape (KIND_INLINE(k1,_),k2) = kind_eq_shape(k1,k2)
       | kind_eq_shape (k1,KIND_INLINE(k2,_)) = kind_eq_shape(k1,k2)
       | kind_eq_shape (k1,k2) = k1 = k2
@@ -63,7 +83,7 @@ functor Signature(structure Il : IL
 	      in  case (type_is_abstract(v,c')) of
 		  SOME lbls => SOME lbls
 		| NONE => (error_region();
-			   print "can't share non-abstact type component";
+			   print "can't share non-abstract type component";
 			   pp_con c'; print "\n";
 			   NONE)
 	      end
@@ -172,6 +192,96 @@ functor Signature(structure Il : IL
     (* --------------------------------------------------------- 
       ------------------ SIGNATURE PATCHING -------------------
       --------------------------------------------------------- *)
+    exception SharingError
+    type lpath = label list
+    type cluster = path option ref * lpath list
+(*
+    fun xsig_sharing_multi_rewrite(sdecs,all_lpaths : lpath list list) : sdecs = 
+        let fun folder (lpaths,acc) = 
+	       let val r = ref NONE
+		   fun inner_folder(lpath,acc) = (lpath,r)::acc
+	       in  foldl inner_folder acc lpaths
+	       end
+	    val clusters = foldl folder [] all_lpaths
+	    fun lookup curpath : con = 
+		(Listops.assoc_eq(map #2 curpath,clusters) of
+		 NONE => error "lookup failed"
+	       | SOME (ref (SOME c)) => SOME c
+	       | SOME r => let val [(v,_),vlrest] = curpath
+			       val p = COMPOUND_PATH(v,map #2 vlrest)
+			       val c = path2con curpath
+			       val _ = r := c
+			   in  NONE
+			   end)
+	    fun traverse _ [] = [] 
+              | traverse curpath ((SDEC(l,dec))::rest) =
+		let val dec' = 
+		    (case dec of
+			 DEC_CON(v,k,copt) => 
+			     DEC_CON(v,k,lookup curpath)
+		       | DEC_MOD(v,SIGNAT_STRUCTURE(popt,sdecs)) =>
+			     let val sdecs' = traverse (cur_path@[(v,l)]) sdecs
+			     in DEC_MOD(v,SIGNAT_STRUCTURE(popt,sdecs'))
+			     end
+		       | _ => dec
+                in (SDEC(l,dec')) :: (traverse curpath rest)
+	        end
+	in traverse [] sdecs
+        end
+*)
+      (* labels is a list of paths (relative to the sdecs) to opaque type
+	 components;  we search for the one that occurs first and
+         then transparently type-abbreviate all of the rest to the first one *)
+      fun xsig_sharing_rewrite(sdecs,labels : lpath list) : sdecs = 
+        let local val firstpath = ref NONE
+            in fun transparent (curpath : (var * label) list) = 
+		case (!firstpath) of
+		  SOME firstpath => 
+		      let fun vlpath2con [] = elab_error "transparent got empty path"
+			    | vlpath2con ((v,_)::vlrest) = 
+				    let val p = COMPOUND_PATH(v,map #2 vlrest)
+				    in  SOME(path2con p)
+				    end
+			  fun combine_path first [] = vlpath2con first
+			    | combine_path [] _ = error "bad paths"
+			    | combine_path (first as ((v,_)::firstrest))
+			      ((v',_)::secondrest) = 
+			      if (eq_var(v,v')) 
+				  then combine_path firstrest secondrest
+			      else vlpath2con first
+		      in  combine_path firstpath curpath
+		      end
+                | NONE => (firstpath := SOME curpath; NONE)
+
+	    end
+            fun match l labels = 
+	    let fun folder(lab::labs,(match,mismatch)) = 
+			if (eq_label(l,lab))
+				then (labs::match,mismatch)
+			else (match,(lab::labs)::mismatch)
+	          | folder([],_) = elab_error "xsig_sdecs_rewrite: match failed"
+            in foldl folder ([],[]) labels
+	    end
+	    fun traverse _ [] = [] 
+	      | traverse (_,[]) sdecs = sdecs
+              | traverse (cur_path,labels) ((SDEC(l,dec))::rest) =
+		let val (match_lab,labels) = match l labels
+                    val dec' = 
+			if (length match_lab = 0) 
+			then dec 
+			else case dec of
+		      DEC_CON(v,k,copt) => 
+			DEC_CON(v,k,transparent (cur_path @ [(v,l)]))
+                    | DEC_MOD(v,SIGNAT_STRUCTURE(popt,sdecs)) =>
+			let val sdecs' = traverse(cur_path@[(v,l)],match_lab) sdecs
+			in DEC_MOD(v,SIGNAT_STRUCTURE(popt,sdecs'))
+			end
+                    | _ => dec
+                in (SDEC(l,dec')) :: (traverse (cur_path,labels) rest)
+	        end
+	in traverse ([],labels) sdecs
+        end
+
     fun xsig_wheretype(ctxt,orig_sdecs,lbls, con, kind) : sdecs =
       let 
 	  local val fv = con_free_convar con
@@ -237,123 +347,74 @@ functor Signature(structure Il : IL
 
 
   and xsig_sharing_structure(ctxt,sdecs,paths) : sdecs = 
-      let exception LocalError
-      in
-	  let
-	      type lpath = label list
-	      val mjunk = MOD_VAR(fresh_named_var "mjunk")
-	      fun path2sdecs p = (case (Sdecs_Lookup'(mjunk,sdecs,p)) of
-				      SOME(l,PHRASE_CLASS_MOD(_,SIGNAT_STRUCTURE(_,sd))) => (l,sd)
-				    | _ => (error_region();
-					    print "structure sharing given a non-structure component\n";
-					    raise LocalError))
-	      val lpath_sdecs_list : (lpath * sdecs) list = map path2sdecs paths
-	      fun getcomponents (lpath,sdecs) : (lpath * lpath list) = 
-		  let
-		      fun traverse (SDEC(l,DEC_CON _)) = if (is_label_internal l)
-							     then []
-							 else (print "xsig_sharing_structure including:";
-							       Ppil.pp_label l; print "\n";
-							       [[l]] )
-			| traverse (SDEC(l,DEC_MOD (v,SIGNAT_STRUCTURE(_,sdecs)))) = 
+      let
+	  val _ = print "xsig_sharing_structre called\n"
+	  type lpath = label list
+	  val mjunk = MOD_VAR(fresh_named_var "mjunk")
+	  fun path2sdecs p = 
+	      (case (Sdecs_Lookup'(mjunk,sdecs,p)) of
+		   SOME(l,PHRASE_CLASS_MOD(_,(SIGNAT_STRUCTURE(_,sd)) : Il.signat)) => (l,sd)
+		 | _ => (error_region();
+			 print "structure sharing given a non-structure component\n";
+			 raise SharingError))
+	  val lpath_sdecs_list : (lpath * sdecs) list = map path2sdecs paths
+	  fun getcomponents (lpath,sdecs) : (lpath * lpath list) = 
+	      let
+		  fun traverse (SDEC(l,DEC_CON (_,_,NONE))) =
+		      if (is_label_internal l)
+			  then []
+		      else [[l]]
+		    | traverse (SDEC(l,DEC_MOD (v,SIGNAT_STRUCTURE(_,sdecs)))) = 
 			  let val lpaths = List.concat (map traverse sdecs)
 			  in map (fn lpath => (l :: lpath)) lpaths
 			  end
-			| traverse _ = []
-		  in (lpath, List.concat (map traverse sdecs))
-		  end
-	      val lpath_lpaths_list : (lpath * lpath list) list = map getcomponents lpath_sdecs_list
-	      val lpaths = #2 (hd lpath_lpaths_list)
-	      val num_types = length lpaths
-	      val _ = if (andfold (fn (_,lpaths) => length lpaths = num_types) lpath_lpaths_list)
-			  then ()
-		      else (error_region();
-			    print "structure sharing failed\n";
-			    raise LocalError)
-	      val labels : lpath list list = (map (fn (lpath,lpaths) => map (fn lps => lpath @ lps) lpaths) 
-					      lpath_lpaths_list)
-	      val labels_list : lpath list list = mapmap (fn l => case follow_labels (sdecs,ctxt) l of
-							  SOME lbls => lbls
-							| NONE => raise LocalError) labels
-	      val labels_list = Listops.transpose labels_list
-	      fun folder (labels : label list list,sdecs) = xsig_sharing_rewrite(sdecs,labels)
-	  in (foldl folder sdecs labels_list)
-	  end
-      handle LocalError => sdecs
+		    | traverse _ = []
+	      in (lpath, List.concat (map traverse sdecs))
+	      end
+	  val lpath_lpaths_list : (lpath * lpath list) list = map getcomponents lpath_sdecs_list
+	  val lpaths = #2 (hd lpath_lpaths_list)
+	  val num_types = length lpaths
+	  val _ = if (andfold (fn (_,lpaths) => length lpaths = num_types) lpath_lpaths_list)
+		      then ()
+		  else (error_region();
+			print "structure sharing failed\n";
+			raise SharingError)
+	  val labels : lpath list list = (map (fn (lpath,lpaths) => map (fn lps => lpath @ lps) lpaths) 
+					  lpath_lpaths_list)
+	  val follow_labels = follow_labels (sdecs,ctxt)
+	  val labels_list : lpath list list = 
+	      mapmap (fn l => case follow_labels l of
+		      SOME lbls => lbls
+		    | NONE => raise SharingError) labels
+	  val labels_list = Listops.transpose labels_list
+	  val _ = print "xsig_sharing_structre calling rewrite\n"
+	  fun folder (labels : label list list,sdecs) = xsig_sharing_rewrite(sdecs,labels)
+	  val res = (foldl folder sdecs labels_list)
+	  val _ = print "xsig_sharing_structre done\n"
+      in  res
       end
+  handle SharingError => sdecs
+
 
 
 
   and xsig_sharing_type(ctxt,sdecs,path) : sdecs = 
-      let exception LocalError
-	  val mjunk = MOD_VAR(fresh_named_var "mjunk")
+      let val mjunk = MOD_VAR(fresh_named_var "mjunk")
 	  fun path2label p = (case (Sdecs_Lookup'(mjunk,sdecs,p)) of
 				  SOME(l,_) => l
 				| NONE => (error_region();
 					   print "sharing type got a non-existent component\n";
-					   raise LocalError))
+					   raise SharingError))
       in  
 	  let val labels = map path2label path
 	      val labels = map (fn l => case (follow_labels (sdecs,ctxt) l) of 
 				SOME lbls => lbls
-			      | NONE => raise LocalError) labels
+			      | NONE => raise SharingError) labels
 	  in xsig_sharing_rewrite(sdecs,labels)
 	  end
-      handle LocalError => sdecs
+      handle SharingError => sdecs
       end
 
-      (* labels is a list of paths (relative to the sdecs) to opaque type
-	 components;  we search for the one that occurs first and
-         then transparently type-abbreviate all of the rest to the first one *)
-      and xsig_sharing_rewrite(sdecs,labels) : sdecs = 
-        let local val firstpath = ref NONE
-            in fun transparent (curpath : (var * label) list) = 
-		case (!firstpath) of
-		  SOME firstpath => 
-		      let fun vlpath2con [] = elab_error "transparent got empty path"
-			    | vlpath2con ((v,_)::vlrest) = 
-				    let val p = COMPOUND_PATH(v,map #2 vlrest)
-				    in  SOME(path2con p)
-				    end
-			  fun combine_path first [] = vlpath2con first
-			    | combine_path [] _ = error "bad paths"
-			    | combine_path (first as ((v,_)::firstrest))
-			      ((v',_)::secondrest) = 
-			      if (eq_var(v,v')) 
-				  then combine_path firstrest secondrest
-			      else vlpath2con first
-		      in  combine_path firstpath curpath
-		      end
-                | NONE => (firstpath := SOME curpath; NONE)
-
-	    end
-            fun match l labels = 
-	    let fun folder(lab::labs,(match,mismatch)) = 
-			if (eq_label(l,lab))
-				then (labs::match,mismatch)
-			else (match,(lab::labs)::mismatch)
-	          | folder([],_) = elab_error "xsig_sdecs_rewrite: match failed"
-            in foldl folder ([],[]) labels
-	    end
-	    fun traverse _ [] = [] 
-	      | traverse (_,[]) sdecs = sdecs
-              | traverse (cur_path,labels) ((SDEC(l,dec))::rest) =
-		let val (match_lab,labels) = match l labels
-                    val dec' = 
-			if (length match_lab = 0) 
-			then dec 
-			else case dec of
-		      DEC_CON(v,k,copt) => 
-			DEC_CON(v,k,transparent (cur_path @ [(v,l)]))
-                    | DEC_MOD(v,SIGNAT_STRUCTURE(popt,sdecs)) =>
-			let val sdecs' = traverse(cur_path@[(v,l)],match_lab) sdecs
-			in DEC_MOD(v,SIGNAT_STRUCTURE(popt,sdecs'))
-			end
-                    | _ => dec
-                in (SDEC(l,dec')) :: (traverse (cur_path,labels) rest)
-	        end
-	in traverse ([],labels) sdecs
-        end
 
     (* --------------------------------------------------------- 
       ------------------ COERCION COMPILATION-------------------
@@ -571,7 +632,7 @@ functor Signature(structure Il : IL
 	    varsig_option : (var * signat) option, (* indicates whether spec is poly *)
 	    spec_con : con, (* the type of the specification *)
 	    actual_sig : signat} (* the signature of the component *)
-		  : (bnd * dec * context) option = 
+		  : bool * (bnd * dec * context) option = 
 	   let 
 	       fun local_error () =
 		   (error_region();
@@ -593,7 +654,7 @@ functor Signature(structure Il : IL
 		    print "Actual type: ";
 		    pp_signat actual_sig;
 		    print "\n";
-		    NONE)
+		    (true,NONE))
 		   
 	       val SIGNAT_FUNCTOR(var_poly,
 				  sig_poly as SIGNAT_STRUCTURE (NONE,
@@ -629,9 +690,10 @@ functor Signature(structure Il : IL
 		   let val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
 		   in if (sub_con(ctxt',con'',spec_con))
 			  then 
-			      SOME(BND_EXP(name,MODULE_PROJECT(mtemp,it_lab)),
-				   DEC_EXP(name,con''),
-				   ctxt)
+			      (true,
+			       SOME(BND_EXP(name,MODULE_PROJECT(mtemp,it_lab)),
+				    DEC_EXP(name,con''),
+				    ctxt))
 		      else local_error()
 		   end
 	     | SOME (v1,s1) => 
@@ -645,9 +707,10 @@ functor Signature(structure Il : IL
 				  TOTAL))
 		   in  if (sub_con(ctxt',con'',spec_con))
 			   then 
-			       SOME(BND_MOD(name,MOD_FUNCTOR(v1,s1,mtemp)),
-				    DEC_MOD(name, s2),
-				    ctxt)
+			       let val (reduced,m) = eta_contract(MOD_FUNCTOR(v1,s1,mtemp))
+			       in  (not reduced,
+				    SOME(BND_MOD(name, m), DEC_MOD(name, s2), ctxt))
+			       end
 		       else local_error()
 		   end
 	   end 
@@ -818,15 +881,20 @@ functor Signature(structure Il : IL
 				      NONE)
 				  end
 			    | SOME(lbls,PHRASE_CLASS_MOD (_,s)) => 
-				  let val _ = coerced := true
-				      val name = derived_var v
+				  let val name = derived_var v
 				      val path = join_path_labels(path_actual,lbls)
-				  in  polyval_case (ctxt, polyinst)
-				      {name = derived_var v,
-				       path = path,
-				       varsig_option = NONE,
-				       spec_con = c,
-				       actual_sig = s}
+				      val (coerced',result) = 
+					  polyval_case (ctxt, polyinst)
+					  {name = derived_var v,
+					   path = path,
+					   varsig_option = NONE,
+					   spec_con = c,
+					   actual_sig = s}
+				      val _ = if coerced' 
+						  then (print "coerced because of polyval\n";
+							coerced := true)
+					      else ()
+				  in  result
 				  end
 			    | SOME(_,PHRASE_CLASS_CON _) => 
 				  (error_region();
@@ -860,13 +928,18 @@ functor Signature(structure Il : IL
 			       if (eq_label (maybe_it1, it_lab) andalso
 				   eq_label (maybe_it1, it_lab))
 				   then  
-				       let val _ = coerced := true
-				       in polyval_case (ctxt,polyinst)
-					   {name = derived_var v,
-					    path = join_path_labels(path_actual,lbls),
-					    varsig_option = SOME(v1,s1),
-					    spec_con = c1,
-					    actual_sig = ss2}
+				       let val (coerced',result) = 
+					       polyval_case (ctxt,polyinst)
+					       {name = derived_var v,
+						path = join_path_labels(path_actual,lbls),
+						varsig_option = SOME(v1,s1),
+						spec_con = c1,
+						actual_sig = ss2}
+					   val _ = if coerced' 
+					       then (print "coerced because of polyval\n";
+						     coerced := true)
+						   else ()
+				       in  result
 				       end
 			       else (error_region();
 				     print "Functor specifiction inside structure\n";
@@ -1023,7 +1096,10 @@ functor Signature(structure Il : IL
 	val match = (actual_str_length = target_str_length) andalso
 			Listops.eq_list((fn (SDEC(l1,_),SDEC(l2,_)) => eq_label(l1,l2)), asd,tsd)
 
-	val _ = if match then () else coerced := true
+	val _ = if match then () 
+		else 
+		    (print "coerced set to true because of length mismatch\n";
+		     coerced := true)
 
 	val _ = if (!debug andalso not match) 
 	        then (print "coerced set to true because of length mismatch\n";
@@ -1046,15 +1122,11 @@ functor Signature(structure Il : IL
 			  print "\n")
 		else ()
 
-	val _ = if (!debug)
-		    then (print "\n\nxcoerce result:\n";
-			  if (!debug_full)
-			      then (print "\nmodule:\n";
-				    pp_mod m;
-				    print "\nsig:\n";
-				    pp_signat s)
-			  else ();
-			  print "\n")
+	val _ = if (!debug_full)
+		    then (print "\nmodule:\n";
+			  pp_mod m;
+			  print "\nsig:\n";
+			  pp_signat s)
 		else ()
 		    
       in if !coerced

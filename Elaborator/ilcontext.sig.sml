@@ -1,3 +1,4 @@
+(*$import IL Formatter *)
 signature ILCONTEXT =
     sig
 
@@ -57,12 +58,8 @@ signature ILCONTEXT =
 	  | CLASS_SIG
 	  | CLASS_OVEREXP
 	    
-	datatype phrase_class = 
-	    PHRASE_CLASS_EXP  of exp * con
-	  | PHRASE_CLASS_CON  of con * kind
-	  | PHRASE_CLASS_MOD  of mod * signat
-	  | PHRASE_CLASS_SIG  of signat
-	  | PHRASE_CLASS_OVEREXP of (con * exp) list
+
+	type phrase_class = Il.phrase_class
 
         (* ----- Useful structure-related helper functions ------- *)	    
         (* ----- Sdecs_Lookup' looks inside starred structure --------- *)
@@ -97,7 +94,6 @@ signature ILCONTEXT =
 				pp_signat : signat -> Formatter.format} *
 	    context -> Formatter.format
 
-	val blastOutContext : BinIO.outstream -> context -> unit
-	val blastInContext : BinIO.instream -> context
+
 
     end

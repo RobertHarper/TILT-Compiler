@@ -6,7 +6,7 @@ functor Basis(structure Il : IL
 	      structure IlUtil : ILUTIL
 	      structure Datatype : DATATYPE
 	      structure Toil : TOIL
-	      sharing Datatype.IlContext = IlContext
+	      sharing Datatype.IlContext = Ppil.IlContext = IlContext
 	      sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il 
 		                   = Toil.Il = Il) : BASIS =
   struct
@@ -527,6 +527,7 @@ xxxxx *)
 		    end
 
 
+(*
 		val list_sbnd_sdecs = Datatype.compile {context = !result,
 							typecompile = typecompile,
 							datatycs = listdb : Ast.db list,
@@ -536,7 +537,7 @@ xxxxx *)
 		val (list_sbnds,list_sdecs) = (map #1 list_sbnd_sdecs,
 					       map #2 list_sbnd_sdecs)
 
-
+*)
 (*
 		val _ = (print "=========================================\n";
 			 print "list_sbnds are: ";
@@ -547,7 +548,8 @@ xxxxx *)
 			 print "\n\n\n")
 *)
 
-		val bool_sbnd_sdecs = Datatype.compile {context = !result,
+		val bool_sbnd_sdecs = Datatype.compile {transparent = true,
+							context = !result,
 							typecompile = typecompile,
 							datatycs = booldb : Ast.db list,
 							eq_compile = Toil.xeq,
@@ -555,30 +557,10 @@ xxxxx *)
 		val (bool_sbnds,bool_sdecs) = (map #1 bool_sbnd_sdecs,
 					       map #2 bool_sbnd_sdecs)
 
-		val bool_imp_sdecs = IlStatic.GetSbndsSdecs(!result,bool_sbnds)
 
+		val bool_self_sdecs = map (fn (SDEC(l,dec)) => 
+					   SDEC(l,IlStatic.SelfifyDec dec)) bool_sdecs
 (*
-		val susp_sbnd_sdecs = Datatype.compile {context = !result,
-							typecompile = typecompile,
-							datatycs = suspdb : Ast.db list,
-							withtycs = [] : Ast.tb list,
-							eq_compile = Toil.xeq}
-		    
-		    
-		val (susp_sbnds,susp_sdecs) = (map #1 susp_sbnd_sdecs,
-					       map #2 susp_sbnd_sdecs)
-
-*)
-
-(*
-		val datatype_sbnds = bool_sbnds
-		val datatype_sdecs = bool_sdecs
-
-	   val datatype_sbnds = bool_sbnds @ susp_sbnds @ list_sbnds 
-	   val datatype_sdecs = bool_sdecs @ susp_sdecs @ list_sdecs 
-	   val _ = (print "list_sdecs are:\n "; Ppil.pp_sdecs list_sdecs; print "\n\n")
-	   val datatype_self_sdecs = map (fn (SDEC(l,dec)) => SDEC(l,IlStatic.SelfifyDec dec)) datatype_sdecs
-*)
 	      fun self_sdec (SDEC(l,dec)) = SDEC(l,IlStatic.SelfifyDec dec)
 
 	      val lbl = fresh_open_internal_label "basis_dt_inline"
@@ -591,15 +573,10 @@ xxxxx *)
 				 Ppil.pp_mod temp; print "\n";
 				 error "cannot inline datatype module!"))
 		  end
-
-	(* we use a precise signature for bool type so that the elaborator can use
-	   the fact that a bool is a CON_SUM(2,[]) *)
-	      val final_sdec = SDEC(lbl,DEC_MOD(v,SIGNAT_INLINE_STRUCTURE{self=NONE,
-									abs_sig = bool_imp_sdecs,
-									imp_sig = bool_imp_sdecs,
-									code = bool_sbnds_inline}))
 	      val final_sdec = self_sdec final_sdec
-	      val _ = result := add_context_sdec(!result, final_sdec)
+*)
+
+	      val _ = result := add_context_sdecs(!result, bool_self_sdecs)
 
 (*
 	      val _ = (print "!result is: "; Ppil.pp_context (!result); print "\n";

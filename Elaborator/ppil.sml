@@ -1,11 +1,12 @@
+(*$import IL ILCONTEXT PPPRIM FORMATTER Bool PPIL *)
 (* Il pretty-printer. *)
 functor Ppil(structure Il : IL
 	     structure IlContext : ILCONTEXT
-	     structure AstHelp : ASTHELP
 	     structure Ppprim : PPPRIM
 	     sharing Il.Prim = Ppprim.Prim
 	     sharing IlContext.Il = Il)
-	: PPIL  = 
+	:> PPIL where Il = Il
+                where IlContext = IlContext =
   struct
 
     structure IlContext = IlContext
@@ -83,15 +84,34 @@ functor Ppil(structure Il : IL
     (* is it basic with respect to printing *)
     fun is_base_con con = 
       (case con of
-	 (CON_INT _ | CON_FLOAT _ | CON_UINT _ | CON_ANY | CON_VAR _) => true
+	 (CON_INT _) => true
+       | CON_FLOAT _ => true
+       | CON_UINT _ => true
+       | CON_ANY => true
+       | CON_VAR _ => true
        | (CON_TYVAR tyvar) => (case tyvar_deref tyvar of
 				       NONE => true
 				     | SOME c => is_base_con c)
        | _ => false)
 
 
-
-    fun pp_con (seen : (context,con) tyvar list) (arg_con : con) : format = 
+    fun pp_recordcon (seen : (context,con) tyvar list) (isflex,rdecs) : format = 
+	let val is_tuple = rdecs_is_tuple rdecs
+	    val format = (case (is_tuple,isflex) of
+			      (true,false) => ("{", " *","}", false)
+			    | (true,true) => ("{?", " *","?}", false)
+			    | (false,false) => ("{", ",","}", false)
+			    | (false,true) => ("{?", ",","?}", false))
+	    val doer = if is_tuple
+			   then (fn (l,c) => pp_con seen c)
+		       else
+			   (fn (l,c) => Hbox[pp_label l,
+					     String " = ",
+					     pp_con seen c])
+	in pp_list doer rdecs format
+	end
+    
+    and pp_con (seen : (context,con) tyvar list) (arg_con : con) : format = 
       (case arg_con of
 	 CON_OVAR ocon => pp_con seen (CON_TYVAR (ocon_deref ocon))
        | CON_VAR var => pp_var var
@@ -149,33 +169,13 @@ functor Ppil(structure Il : IL
        | CON_FLEXRECORD (ref(FLEXINFO(_,true,[]))) => String "UNIT"
        | CON_FLEXRECORD (ref(FLEXINFO(_,false,[]))) => String "FLEXUNIT"
        | CON_FLEXRECORD (ref(INDIRECT_FLEXINFO rf)) => pp_con seen (CON_FLEXRECORD rf)
-       | (CON_RECORD _ | CON_FLEXRECORD (ref (FLEXINFO _))) =>
-	     let 
-		 val (isflex,rdecs) = 
-		     (case arg_con of
-			  CON_RECORD rdecs => (false,rdecs)
-			| CON_FLEXRECORD (ref (FLEXINFO(_,true,rdecs))) => (false,rdecs)
-			| CON_FLEXRECORD (ref (FLEXINFO(_,false,rdecs))) => (true,rdecs)
-                        | _ => error "must have record or direct flex_record here")
-		 val is_tuple = rdecs_is_tuple rdecs
-		 val format = (case (is_tuple,isflex) of
-				   (true,false) => ("{", " *","}", false)
-				 | (true,true) => ("{?", " *","?}", false)
-				 | (false,false) => ("{", ",","}", false)
-				 | (false,true) => ("{?", ",","?}", false))
-		 val doer = if is_tuple
-				then (fn (l,c) => pp_con seen c)
-			    else
-				(fn (l,c) => Hbox[pp_label l,
-						  String " = ",
-						  pp_con seen c])
-	     in pp_list doer rdecs format
-	     end
+       | (CON_RECORD rdecs) => pp_recordcon seen (false,rdecs)
+       | CON_FLEXRECORD (ref (FLEXINFO (_,isrigid,rdecs))) => pp_recordcon seen (not isrigid,rdecs)
        | CON_FUN (vlist,con) => HOVbox[String "/-\\",
 				       pp_list pp_var vlist ("(", ",",")", false),
 				       pp_con seen con]
-       | CON_SUM {noncarriers,carriers,special} => 
-	     pp_list (pp_con seen) carriers ("SUM"^ (case special of 
+       | CON_SUM {noncarriers,carrier,special} => 
+	     pp_list (pp_con seen) [carrier] ("SUM"^ (case special of 
 							NONE => ""
 						      | SOME x => (Int.toString x))
 					    ^"(" ^ (Int.toString noncarriers) ^ "; ",
@@ -187,36 +187,6 @@ functor Ppil(structure Il : IL
 						  String ", ",
 						  pp_label label])
 
-    and pp_db (db : Ast.db) = 
-      let 
-	open AstHelp
-	fun pp_def (sym,NONE) = pp_sym' sym
-	  | pp_def (sym, SOME ty) = HOVbox[pp_sym' sym, 
-					   String " of ",
-					   pp_ty' ty]
-	fun pp_rhs (Ast.Repl path) = pp_list pp_sym' path ("",".","",true)
-	  | pp_rhs (Ast.Constrs sym_tys) = pp_list pp_def sym_tys (""," | ","",true)
-	val (name,tparams,rhs) = db_strip db
-      in HOVbox((case tparams of
-		  [] => []
-		| _ => [pp_list pp_tyvar' tparams ("(",", ",")",false)]) @
-		[pp_sym' name,
-		 String " = ",
-		 pp_rhs rhs])
-      end
-
-    and pp_tb (tb : Ast.tb) = 
-      let 
-	open AstHelp 
-	val (name,tparams,ty) = tb_strip tb
-      in 
-	HOVbox((case tparams of
-		  [] => []
-		| _ => [pp_list pp_tyvar' tparams ("(",", ",")",false)]) @
-	       [pp_sym' name,
-		String " = ",
-		pp_ty' ty])
-      end
 
     and pp_mod seen module =
 	  (case module of
@@ -347,20 +317,16 @@ functor Ppil(structure Il : IL
        | UNROLL (con1,con2,e) => pp_region "UNROLL(" ")"
 			  [pp_con seen con1, String ",", 
 			   pp_con seen con2, String ",", pp_exp seen e]
-       | INJ {noncarriers,carriers,special,inject} => 
+       | INJ {sumtype,inject} => 
 	     pp_region "INJ(" ")"
-	     [String ((Int.toString noncarriers) ^ "; "),
-	      pp_list (pp_con seen) carriers ("[",", ","]",false), 
-	      String ("," ^ (Int.toString special) ^ ","), 
+	     [pp_con seen sumtype,
 	      case inject of
 		  NONE => String "NONE"
 		| SOME e => pp_exp seen e]
-       (*       | TAG (name,c) => pp_region "TAG(" ")" [pp_tag name, pp_con seen c] *)
-       | CASE {noncarriers,carriers,arg,arms,tipe,default} =>
+(*   | TAG (name,c) => pp_region "TAG(" ")" [pp_tag name, pp_con seen c] *)
+       | CASE {sumtype,arg,arms,tipe,default} =>
 	     pp_region "CASE(" ")"
-	     ((pp_con seen (CON_SUM {special = NONE,
-				     carriers = carriers,
-				     noncarriers = noncarriers})) :: (String ",") :: Break ::
+	     ((pp_con seen sumtype) :: (String ",") :: Break ::
 	      (pp_exp seen arg) :: (String ",") :: Break ::
 	      (pp_con seen tipe) :: (String ",") :: Break ::
 	      (pp_list (fn NONE => String "NONE" 

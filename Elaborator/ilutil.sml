@@ -90,10 +90,16 @@ functor IlUtil(structure Ppil : PPIL
 			    end
     val con_string = CON_VECTOR (CON_UINT W8)
     val con_bool =  CON_SUM{noncarriers = 2,
-			    carriers = [],
+			    carrier = CON_TUPLE_INJECT[],
 			    special = NONE}
-    val false_exp = INJ{noncarriers=2,carriers=[],special=0,inject=NONE}
-    val true_exp = INJ{noncarriers=2,carriers=[],special=1,inject=NONE}
+    val con_false =  CON_SUM{noncarriers = 2,
+			    carrier = CON_TUPLE_INJECT[],
+			    special = SOME 0}
+    val con_true =  CON_SUM{noncarriers = 2,
+			    carrier = CON_TUPLE_INJECT[],
+			    special = SOME 1}
+    val false_exp = INJ{sumtype=con_false,inject=NONE}
+    val true_exp = INJ{sumtype=con_true,inject=NONE}
     fun make_lambda_help (a,var,con,rescon,e) 
       : exp * con = let val var' = fresh_var()
 			val fbnd = FBND(var',var,con,rescon,e)
@@ -102,7 +108,7 @@ functor IlUtil(structure Ppil : PPIL
     fun make_total_lambda (var,con,rescon,e) = make_lambda_help(TOTAL,var,con,rescon,e)
     fun make_lambda (var,con,rescon,e) = make_lambda_help(PARTIAL,var,con,rescon,e)
     fun make_ifthenelse(e1,e2,e3,c) : exp = 
-	CASE{noncarriers=2,carriers=[],arg=e1,
+	CASE{sumtype=con_bool,arg=e1,
 	     arms=[SOME e3,SOME e2],default=NONE,tipe=c}
     fun make_seq eclist =
 	let fun loop _ [] = error "make_seq given empty list"
@@ -261,13 +267,10 @@ functor IlUtil(structure Ppil : PPIL
 	   | EXN_INJECT (s,e1,e2) => EXN_INJECT(s,self e1, self e2)
 	   | ROLL (c,e) => ROLL(f_con state c, self e)
 	   | UNROLL (c1,c2,e) => UNROLL(f_con state c1, f_con state c2, self e)
-	   | INJ {carriers,noncarriers,special,inject} => INJ{noncarriers=noncarriers,
-							      carriers = map (f_con state) carriers, 
-							      special = special,
-							      inject = Util.mapopt self inject}
-	   | CASE{carriers,noncarriers,arg,arms,default,tipe} =>
-		 CASE{noncarriers = noncarriers,
-		      carriers = map (f_con state) carriers,
+	   | INJ {sumtype,inject} => INJ{sumtype = f_con state sumtype,
+					 inject = Util.mapopt self inject}
+	   | CASE{sumtype,arg,arms,default,tipe} =>
+		 CASE{sumtype = f_con state sumtype,
 		      arg = self arg,
 		      arms = map (Util.mapopt self) arms,
 		      default = Util.mapopt self default,
@@ -319,9 +322,9 @@ functor IlUtil(structure Ppil : PPIL
 		     | CON_FUN (vars,c) => let val state' = add_convars(state,vars)
 					   in CON_FUN(vars,f_con state' c)
 					   end
-		     | CON_SUM {noncarriers,special,carriers} =>
+		     | CON_SUM {noncarriers,special,carrier} =>
 			   CON_SUM{special=special,noncarriers=noncarriers,
-				   carriers = map self carriers}
+				   carrier = self carrier}
 		     | CON_TUPLE_INJECT clist => CON_TUPLE_INJECT (map self clist)
 		     | CON_TUPLE_PROJECT (i,c) =>  CON_TUPLE_PROJECT (i, self c)
 		     | CON_MODULE_PROJECT (m,l) => CON_MODULE_PROJECT(f_mod state m, l)))
@@ -467,6 +470,10 @@ functor IlUtil(structure Ppil : PPIL
 	end
 
 
+    fun canonical_tyvar_label n = 
+	if (n<0 orelse n>25) then error "canonical_tyvar_label given number out of range"
+	else symbol_label(Symbol.tyvSymbol ("'" ^ (String.str (chr (ord #"a" + n)))))
+
       fun rebind_free_type_var(tv_stamp : stamp,
 			       argcon : con, context, targetv : var) 
 	  : ((context,con)Tyvar.tyvar * label * bool) list = 
@@ -499,8 +506,7 @@ functor IlUtil(structure Ppil : PPIL
 				mod_handler = default_mod_handler,
 				sig_handler = default_sig_handler})
 	  val _ = f_con handlers argcon
-	  val res = mapcount (fn (n,tv) => (tv, 
-					    internal_label ("tv" ^ (Int.toString n)),
+	  val res = mapcount (fn (n,tv) => (tv, canonical_tyvar_label n,
 (*				   internal_label (tyvar2string tv), can't be generative *)
 					    tyvar_is_use_equal tv)) (!free_tyvar)
 	  val _ = (map (fn (tv,lbl,useeq) => 
@@ -1134,14 +1140,12 @@ functor IlUtil(structure Ppil : PPIL
     val error_sig = fn sg => fn s => error_obj pp_signat "signature" sg s
 
 
+    val nonexport_str = "*nonexport_"
+    val dt_str = nonexport_str ^ "dt_"
     val eq_str = "*eq_"
-    val dt_str = "*dt_"
-    val top_str = "*top_"
-    val export_str = "*export_"
-    fun is_eq_lab lab = is_label_internal lab andalso (substring (eq_str,label2string lab))
-    fun is_export_lab lab = is_label_internal lab andalso (substring (export_str,label2string lab))
-    fun is_datatype_lab lab = is_label_internal lab andalso (substring (dt_str,label2string lab))
-    fun is_top_lab lab = is_label_internal lab andalso (substring (top_str,label2string lab))
+    fun is_nonexport_lab lab = substring (nonexport_str,label2string lab)
+    fun is_eq_lab lab = substring (eq_str,label2string lab)
+    fun is_datatype_lab lab =  substring (dt_str,label2string lab)
     local
 	fun to_meta_lab meta_str lab =
 	  let
@@ -1149,24 +1153,11 @@ functor IlUtil(structure Ppil : PPIL
 	      val final_str = meta_str ^ str
 	  in  internal_label final_str
 	  end
-    in  fun to_export_lab lab = to_meta_lab export_str lab 
-	fun to_top_lab lab = to_meta_lab top_str lab 
-	fun to_eq_lab lab = to_meta_lab eq_str(if (is_top_lab lab)
-						   then lab
-					       else to_top_lab lab)
-(*	fun to_top_lab lab = lab *)
+    in  fun to_nonexport_lab lab = to_meta_lab nonexport_str lab 
+	fun to_eq_lab lab = to_meta_lab eq_str lab
 	fun to_datatype_lab lab = openlabel (to_meta_lab dt_str lab)
     end
 
-
-    fun is_exportable_lab l =
-	(not (is_label_internal l)) orelse
-	(is_eq_lab l) orelse
-	(is_top_lab l) orelse
-	(is_export_lab l) orelse
-	let val str = label2string l
-	in (substring ("open",str))
-	end
 
 
     fun is_inline_bnd (BND_EXP(v,e)) = is_inline_exp e

@@ -7,10 +7,12 @@ functor Pat(structure Il : IL
 	    structure AstHelp : ASTHELP
 	    structure Datatype : DATATYPE
 	    structure IlContext : ILCONTEXT
-	    sharing Datatype.IlContext = IlContext
+	    sharing Datatype.IlContext = Ppil.IlContext = IlContext
 	    sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
-  : PAT =
+   : PAT  =
   struct
+
+      val do_result_type = ref true
     
     type polyinst = Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list 
     type typecompile = Il.context * Ast.ty -> Il.con
@@ -38,10 +40,10 @@ functor Pat(structure Il : IL
 	    fun mod_handler (m : mod) : mod option = NONE
 	    fun con_handler (c : con) : con option = 
 		(case c of
-		   CON_SUM {noncarriers,carriers,special} =>
+		   CON_SUM {noncarriers,carrier,special} =>
 			SOME(CON_SUM{noncarriers = noncarriers,
 					special = NONE,
-					carriers = map supertype carriers})
+					carrier = supertype carrier})
 		| _ => NONE)
 	in  con_all_handle(arg_con,exp_handler,con_handler,mod_handler, fn _ => NONE)
 	end
@@ -162,9 +164,12 @@ functor Pat(structure Il : IL
 		fresh_con, expcompile} : patarg,
 	       compile_args : case_exp list, 
 	       compile_arms : arm' list,
-	       compile_default : def)
+	       compile_default : def,
+	       result_type_var : var option)
      : (exp * con) =
     let
+
+	val wildSymbol = (Symbol.varSymbol "_")
 
       local 
 	    fun folder((clause,bound,NONE),(ls,arms)) = (ls, (clause,bound,NONE)::arms)
@@ -190,23 +195,55 @@ functor Pat(structure Il : IL
 		let fun folder(ref(one_bounds,SOME(bound,(e,c,va))),bnds) = 
 			if (length one_bounds<2) 
 			  then (oneshot_set(#1(hd one_bounds),e); bnds)
-			else let val bounds_list = map #2 one_bounds
-				 val bounds = foldl bound_intersect bound bounds_list
-				 val bounds_list = map (fn b => bound_intersect(bound,b)) bounds_list
-				 val bound_vars = map #2 bounds
-				 val bound_cons = map #3 bounds
+			else let
+				         
+				 val bound = foldl bound_intersect bound (map #2 one_bounds)
+				 val bound = List.filter (fn (s,_,_) => not(Symbol.eq(s,wildSymbol))) bound
+
+				 val _ = (print "BEFORE: one_bounds:\n";
+					  app (fn (one,b) =>
+					       (app(fn (s,v,_) =>
+						   (print(Symbol.name s); print " -> ";
+						   pp_var v; print "    ")) b;
+						print "\n")) one_bounds;
+					  print "\n\n")
+
+				 val one_bounds = map (fn (one,b) => 
+						       (one,bound_intersect(bound,b))) one_bounds
+
+				 val _ = (print "AFTER: one_bounds:\n";
+					  app (fn (one,b) =>
+					       (app(fn (s,v,_) =>
+						   (print(Symbol.name s); print " -> ";
+						   pp_var v; print "    ")) b;
+						print "\n")) one_bounds;
+					  print "\n\n")
+
+				 val bound_vars = map #2 bound
+				 val bound_cons = map #3 bound
 				 val funvar = Name.fresh_named_var "repeat_patbody"
-				 val argvar = Name.fresh_named_var "repeat_casevar"
-				 val argcon = con_tuple bound_cons
+				 val argvar = if (length bound_cons = 1)
+						then hd bound_vars
+					      else Name.fresh_named_var "repeat_casevar"
+				 val argcon = if (length bound_cons = 1)
+						then hd bound_cons
+						else con_tuple bound_cons
 				 val labels = Listops.mapcount
-				     (fn (n,_) => generate_tuple_label(n+1)) bounds
-				 val lbnds = letprojecthelp(argvar,bound_vars,bound_cons,labels)
-				 val (e,c) = wrapbnds(lbnds,(e,c))
+				     (fn (n,_) => generate_tuple_label(n+1)) bound
+				 val lbnds = letprojecthelp(argvar,bound_vars,
+							bound_cons,labels)
+				 val (e,c) = if (length bound_cons = 1)
+						then (e,c)
+						else wrapbnds(lbnds,(e,c))
 				 val (lambda,funcon) = make_lambda(argvar,argcon,c,e)
 				 val bnd = BND_EXP(funvar,lambda)
 				 fun apper(one,bounds : bound) = 
 				     let val bound_vars = map #2 bounds
-					 val call = APP(VAR funvar,[exp_tuple(map VAR bound_vars)])
+					 val call = APP(VAR funvar,
+							if (length bound_cons = 1)
+							then [VAR (hd bound_vars)]
+							else
+							[exp_tuple(map VAR bound_vars)])
 				     in  oneshot_set(one,call)
 				     end
 			         val _ = app apper one_bounds
@@ -373,7 +410,7 @@ functor Pat(structure Il : IL
 		(sub_con(context,c,!rescon)) orelse
 		(rescon := supertype (!rescon);
 		sub_con(context,c,!rescon))      
-      fun getarm datacon (sumcon : int * con list) (i,{name=cur_constr,arg_type}) : exp option = 
+      fun getarm datacon (i,ssumcon,{name=cur_constr,arg_type}) : exp option = 
 	let 
 	  fun armhelp ((path,patopt), (clause,bound,body)) : arm option = 
 	      (case (eq_label(cur_constr, symbol_label (List.last path)), patopt) of
@@ -394,9 +431,7 @@ functor Pat(structure Il : IL
 		  Ppil.pp_context context; print "\n\n")
 *)
 	  val rsvar = fresh_var()
-	  val rscon = CON_SUM{carriers = #2 sumcon,
-			      noncarriers = #1 sumcon,
-			      special = SOME i}
+
 	in (case (relevants : arm list, arg_type) of
 	      ([],_) => NONE
 	    | (_,NONE) => let 
@@ -416,21 +451,21 @@ functor Pat(structure Il : IL
 					 then ()
 				     else (error_region();
 					   print "results types of rules mismatch\n")
-			       in SOME(#1 (make_lambda(rsvar,rscon,mc,
-					   LET([BND_EXP(var,SUM_TAIL(rscon,VAR rsvar))],me))))
+			       in SOME(#1 (make_lambda(rsvar,ssumcon,
+						       (case result_type_var of
+							    NONE => mc
+							  | SOME v => CON_VAR v),
+					   LET([BND_EXP(var,SUM_TAIL(ssumcon,VAR rsvar))],me))))
 		       end)
 	end
 
       val {instantiated_type = datacon,
+	   instantiated_sumtype = sumtype,
+	   instantiated_special_sumtype = ssumtypes,
 	   arms = constr_patconopt_list,
 	   expose_exp} = Datatype.instantiate_datatype_signature(context,#1(#1(hd accs)),polyinst)
 
-      fun loop (nca,ca) [] = (nca,rev ca)
-	| loop (nca,ca) ({name,arg_type = NONE}::rest) = loop (nca+1,ca) rest
-	| loop (nca,ca) ({name,arg_type = SOME c}::rest) = loop (nca,c::ca) rest
-      val sumcon as (nca,ca) = loop (0,[]) constr_patconopt_list
-      val expopt_list : (exp option) list = 
-	                                    mapcount (getarm datacon sumcon) constr_patconopt_list
+      val expopt_list = map2count (getarm datacon) (ssumtypes,constr_patconopt_list)
 
       val _ = debugdo (fn () => (print "Got these arms:";
 				 mapcount (fn (i,eopt) => (print "Arm #"; printint i; print ": ";
@@ -445,8 +480,7 @@ functor Pat(structure Il : IL
 			 NONE => APP(expose_exp,[casearg])
 		       | SOME e => e)
       val case_exp = 
-	  (CASE{noncarriers = nca,
-	       carriers = ca,
+	  (CASE{sumtype=sumtype,
 	       arg = arg,
 	       arms = expopt_list,
 	       default = 
@@ -466,7 +500,9 @@ functor Pat(structure Il : IL
 				   print "\n");
 				 SOME e)
 			end),
-		tipe =  con_deref (!rescon)})
+		tipe =  (case result_type_var of
+			     NONE => con_deref (!rescon)
+			   | SOME v => CON_VAR v)})
     in   (case_exp, con_deref (!rescon))
     end
 
@@ -487,7 +523,9 @@ debugdo
        ([],_) => (case def of
 		    SOME ec_thunk => ec_thunk()
 		  | NONE => let val c = fresh_con context
-			    in (Il.RAISE(c,bindexn_exp),c)
+			    in (Il.RAISE(case result_type_var of
+					     NONE => c
+					   | SOME v => CON_VAR v,bindexn_exp),c)
 			    end)
      | ((_,bound,NONE)::_,[]) => (let val (vars,cons) = (map #2 bound, map #3 bound)
 				  in (exp_tuple (map VAR vars), con_tuple cons)
@@ -599,7 +637,7 @@ debugdo
 	       fun var_dispatch() = 
 		 let 
 		   fun varpred (Ast.VarPat [v]) = if (is_constr [v]) then NONE else SOME v
-		     | varpred (Ast.WildPat) = SOME (Symbol.varSymbol "_")
+		     | varpred (Ast.WildPat) = SOME wildSymbol
 		     | varpred (Ast.VarPat _) = NONE
 		     | varpred _ = NONE
 		   val (accs,def) = find_maxseq varpred arms
@@ -682,7 +720,10 @@ debugdo
 				 then ()
 			     else (error_region();
 				   print "different result type in different arms\n")
-		     val ite_exp = make_ifthenelse(eq var,e1,e2,c1)
+		     val ite_exp = make_ifthenelse(eq var,e1,e2,
+						   case result_type_var of
+						       NONE => c1
+						     | SOME v => CON_VAR v)
 		   in (ite_exp,c1)
 		   end
 
@@ -807,28 +848,6 @@ debugdo
           | DelayPat _ => error "delaypat not handled")
 	end
 
-    fun minimize_result_type (e,c) = 
-	let val resvar = fresh_named_var "result_type"
-	    val restipe = CON_VAR resvar
-	    fun fun_rewrite (FIX(recur,arrow,fbnds)) = FIX(recur,arrow, map fbnd_rewrite fbnds)
-	      | fun_rewrite e = e
-	    and fbnd_rewrite (FBND(v,argvar,argcon,rescon,body)) = 
-		FBND(v,argvar,argcon,restipe,e_rewrite body)
-	    and e_rewrite (CASE{noncarriers,carriers,arg,arms,tipe,default}) = 
-		let val default = Util.mapopt e_rewrite default
-		    fun mapper (count,arm) = if (count < noncarriers)
-						 then Util.mapopt e_rewrite arm
-					     else Util.mapopt fun_rewrite arm
-		    val arms = mapcount mapper arms
-		in  CASE{noncarriers=noncarriers,carriers=carriers,
-			 arg=arg,arms=arms,tipe=restipe,default=default}
-		end
-	      | e_rewrite (LET(bnds,e)) = LET(bnds,e_rewrite e)
-	      | e_rewrite (RAISE(c,e)) = RAISE(restipe, e_rewrite e)
-	      | e_rewrite e = e
-	in  (LET([BND_CON(resvar,c)],e_rewrite e), c)
-	end
-
 
     (* ============ client interfaces =========================== *)
     (* ---- bindCompile creates bindings ----------------------- *)
@@ -847,8 +866,8 @@ debugdo
 	val args = [CASE_VAR (argvar,argc)] 
 	val arms = [([bindpat],[],SOME(Ast.TupleExp(map (fn s => Ast.VarExp [s]) boundsyms)))]
 	val res_con = fresh_con context
-	val def = SOME (fn () => (Il.RAISE(res_con,bindexn_exp),res_con))
-	val (binde,bindc) = compile(patarg,args,arms,def)
+	val def = SOME (fn () => (Il.RAISE(res_con, bindexn_exp),res_con))
+	val (binde,bindc) = compile(patarg,args,arms,def,NONE)
 (*
 	val _ = (print "bindcompile returned from compile.\nGot e = ";
 		 Ppil.pp_exp binde; print "\n\nand Got c = ";
@@ -917,9 +936,15 @@ debugdo
 	val res_con = fresh_con context
 (*	val def = SOME (Il.RAISE(res_con,matchexn_exp),res_con) *)
 	val def = NONE
-	val ec = compile (patarg,args,arms,def)
-	val ec = minimize_result_type ec
-      in ec
+	val result_type_var  = fresh_named_var "result_type"
+	val (e,c) = compile (patarg,args,arms,def,
+			     if !do_result_type
+				 then SOME result_type_var
+			     else NONE)
+	val e = if (!do_result_type) 
+		    then LET([BND_CON(result_type_var,c)],e)
+		else e
+      in (e,c)
       end
 
 
@@ -954,6 +979,7 @@ debugdo
 	   ---- adding context entries to reflect these arguments ----- *)
 	val arms : arm' list = map (fn (cl,body) => (cl,bound, SOME body)) cases
 	val args = map2 (fn (v,c) => CASE_VAR(v,c)) (argvars,argcons)
+	val result_type_var  = fresh_named_var "result_type"
 	val default = if (reraise) 
 			then let val (v,c) = (hd argvars, hd argcons)
 				 val _ =  if (eq_con(context,c,CON_ANY))
@@ -961,12 +987,20 @@ debugdo
 					  else (error_region();
 						print "default of pattern not an exn type\n")
 				 val res_con = fresh_con context
-			     in SOME(fn()=>(RAISE (res_con,VAR v),res_con))
+			     in SOME(fn()=>(RAISE (if (!do_result_type)
+						       then CON_VAR result_type_var
+						   else res_con,
+						   VAR v),res_con))
 			     end
 		      else NONE
-	val ec = compile (patarg,args,arms,default)
-	val (e,c) = minimize_result_type ec
-
+	val (e,c) = compile (patarg,args,arms,default,
+			     if (!do_result_type)
+				 then SOME result_type_var
+			     else NONE)
+	val e = if (!do_result_type)
+		    then LET([BND_CON(result_type_var,c)],e)
+		else e
+		    
 	val _ = debugdo (fn () => (print "\n\n***************\n";
 				   pp_exp e;
 				   print "\n\n*******MATCH COMPILE EXIT********\n"))

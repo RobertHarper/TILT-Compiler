@@ -1,3 +1,4 @@
+(*$import PRIM *)
 signature PRIMUTIL =
     sig
 	structure Prim : PRIM

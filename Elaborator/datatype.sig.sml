@@ -1,3 +1,4 @@
+(*$import ILCONTEXT Ast *)
 (* Datatype compiler and destructurer of compiled modules/signatures. *)
 signature DATATYPE = 
   sig
@@ -13,7 +14,8 @@ signature DATATYPE =
     (* Takes a context, a procedure for type expression compilation, and
        datatype and withtype specifications, and returns a module and 
        signature for the datatype declaration. *)
-    val compile : {context : IlContext.context,
+    val compile : {transparent : bool,
+		   context : IlContext.context,
 		   typecompile : IlContext.context * Ast.ty -> IlContext.Il.con,
 		   datatycs : Ast.db list,
 		   eq_compile : IlContext.context * IlContext.con -> IlContext.exp option,
@@ -45,6 +47,8 @@ signature DATATYPE =
 	    (IlContext.Il.context * IlContext.Il.sdecs -> 
 	     IlContext.Il.sbnd list * IlContext.Il.sdecs * IlContext.Il.con list)
 	    -> {instantiated_type : IlContext.Il.con,
+		instantiated_sumtype : IlContext.Il.con,
+		instantiated_special_sumtype : IlContext.Il.con list,
 		arms : {name : IlContext.Il.label, arg_type : IlContext.Il.con option} list,
 		expose_exp : IlContext.Il.exp}
 			 

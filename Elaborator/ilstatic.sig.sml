@@ -1,3 +1,4 @@
+(*$import IL PRIMUTIL *)
 (* Static Semantics of the IL. *)
 signature ILSTATIC = 
   sig

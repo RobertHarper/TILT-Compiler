@@ -1,3 +1,4 @@
+(*$import IL *)
 (* Utility routines for the internal language. *)
 signature ILUTIL =
   sig
@@ -71,14 +72,14 @@ signature ILUTIL =
     val stamp_lab   : label
     val case_lab : label
     val expose_lab : label
-    val to_export_lab : label -> label
-    val to_top_lab : label -> label
-    val to_eq_lab : label -> label       (* takes any internal label and 
-				           generate the unique eq internal label *)
-    val is_eq_lab : label -> bool
-    val to_datatype_lab : label -> label (* these are used for the inner datatype structures *)
+    val to_nonexport_lab : label -> label  (* make corresponding nonexportable label *)
+    val to_datatype_lab : label -> label (* make an open nonexportable datatype label *)
+    val to_eq_lab : label -> label       (* from a label to the equal function label *)
+
+    val is_nonexport_lab : label -> bool
     val is_datatype_lab : label -> bool 
-    val is_exportable_lab : label -> bool
+    val is_eq_lab : label -> bool
+
     val functor_arg_lab : label
     val con_unit : con
     val con_string : con

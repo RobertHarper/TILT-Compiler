@@ -1,3 +1,4 @@
+(*$import ILCONTEXT *)
 (* Equality compiler *)
 signature EQUAL = 
   sig

@@ -1,7 +1,8 @@
+(*$import Util Name Listops IL *)
 (* The Il datatypes. *)
 functor Il(structure Prim : PRIM
 	   structure Tyvar : TYVAR)
-  : ILLEAK = 
+  :> IL where Prim = Prim where Tyvar = Tyvar = 
   struct
 
     open Util Listops Name
@@ -45,13 +46,10 @@ functor Il(structure Prim : PRIM
                  | EXN_INJECT of string * exp * exp (* tag and value *)
                  | ROLL    of con * exp
                  | UNROLL  of con * con * exp
-                 | INJ     of {noncarriers : int,
-			       carriers : con list,
-			       special : int,
+                 | INJ     of {sumtype : con,
 			       inject : exp option}
                  (* case over sum types of exp with arms and defaults*)
-                 | CASE    of {noncarriers : int,
-			       carriers : con list,
+                 | CASE    of {sumtype : con,
 			       arg : exp,
 			       arms : (exp option) list,
 			       tipe : con,
@@ -84,7 +82,7 @@ functor Il(structure Prim : PRIM
                  | CON_RECORD        of (label * con) list
                  | CON_FUN           of var list * con
                  | CON_SUM           of {noncarriers : int,
-					 carriers : con list,
+					 carrier : con,
 					 special : int option}
                  | CON_TUPLE_INJECT  of con list
                  | CON_TUPLE_PROJECT of int * con 

@@ -27,10 +27,10 @@ infixparse.sig.sml
 infixparse.sml
 basis.sig.sml
 basis.sml
-illeak.sig.sml
 ilcontext.sig.sml
 ilcontext.sml 
 (* slowilcontext.sml *)
+
 equal.sig.sml
 equal.sml
 datatype.sig.sml
@@ -40,8 +40,10 @@ pat.sml
 (*coerce.sml *)
 toil.sig.sml
 toil.sml
+(*
 ileval.sig.sml
 ileval.sml
+*)
 linkil.sml 
 elaborator.sig.sml
 ilcontexteq.sig.sml
@@ -51,3 +53,4 @@ error.sig.sml
 error.sml
 signature.sig.sml
 signature.sml
+

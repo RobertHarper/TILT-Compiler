@@ -39,8 +39,8 @@ functor IlEval(structure Il : IL
 	   | EXN_INJECT (_,t,e) => exp_isval e
 	   | ROLL (c,e) => (con_isval c) andalso (exp_isval e)
 	   | UNROLL (c1,c2,e) => (con_isval c1) andalso (con_isval c2) andalso (exp_isval e)
-	   | INJ {carriers,special,inject,noncarriers} => 
-		 (andfold con_isval carriers) andalso (case inject of NONE => true | SOME e => exp_isval e))
+	   | INJ {sumtype,inject} => 
+		 (con_isval sumtype) andalso (case inject of NONE => true | SOME e => exp_isval e))
 
     and bnd_isval (bnd : bnd) = 
 	(case bnd of
@@ -280,13 +280,13 @@ functor IlEval(structure Il : IL
 			       in FIX(r,a,map help fbnds)
 			       end
 	  | (APP(e1,es2)) => APP(reduce_exp env e1, map (reduce_exp env) es2)
-	  | CASE {noncarriers,carriers,arg,arms,default,tipe} =>
+	  | CASE {sumtype,arg,arms,default,tipe} =>
 			       ((* print "----------- REDUCING CASE cons:\n";
 				Ppil.pp_con (CON_SUM(NONE,cons)); *)
-				CASE{noncarriers = noncarriers,
-				     carriers = (map (reduce_con env) carriers),
+				CASE{sumtype = reduce_con env sumtype,
 				     arg = reduce_exp env arg, 
-				     arms = map (fn NONE => NONE | SOME e => SOME(reduce_exp env e)) arms, 
+				     arms = map (fn NONE => NONE 
+				                  | SOME e => SOME(reduce_exp env e)) arms, 
 				     default = Util.mapopt (reduce_exp env) default,
 				     tipe = reduce_con env tipe})
 	  | LET (bnds,body) => LET(map (reduce_bnd env) bnds, reduce_exp env body)
@@ -354,7 +354,7 @@ functor IlEval(structure Il : IL
 						    | _ => error "projection not from record")
 					 end
 	   | SUM_TAIL (c,e) => (case (eval_exp env e, eval_con env c) of
-					 (INJ{special=i,inject=SOME ee,...},
+					 (INJ{sumtype=CON_SUM{special=SOME i,...},inject=SOME ee},
 					  CON_SUM{special=SOME i',noncarriers,...}) => 
 					 if (i=i' andalso i'>=noncarriers) then ee 
 					 else error "SUM_TAIL: adornment and exp type mismatch"
@@ -379,13 +379,11 @@ functor IlEval(structure Il : IL
 						     "UNROLL(ROLL(e)) bad"
 			      | _ => error_exp e' "UNROLL did not get a ROLL arg"
 			    end
-	   | INJ {carriers,noncarriers,special,inject} => INJ{carriers = map (eval_con env) carriers, 
-							      special = special,
-							      inject = Util.mapopt (eval_exp env) inject,
-							      noncarriers = noncarriers}
-	   | CASE {noncarriers,carriers,arg,arms,default,tipe} =>
+	   | INJ {sumtype,inject} => INJ{sumtype = eval_con env sumtype,
+					 inject = Util.mapopt (eval_exp env) inject}
+	   | CASE {sumtype=_,arg,arms,default,tipe} =>
                (case (eval_exp env arg) of
-		    ee as INJ{carriers,noncarriers,special,inject} => 
+		    ee as INJ{sumtype=CON_SUM{carriers,noncarriers,special=SOME special},inject} => 
 			let fun loop 1 [] = error "too few arms in CASE or bad sum value"
 			      | loop 1 (NONE::rest) = (case default of
 							   NONE => error "no matches and no def in CASE"
@@ -397,7 +395,7 @@ functor IlEval(structure Il : IL
 			      | loop n (_::rest) = loop (n-1) rest
 			in loop special arms
 			end
-	          | v => error_exp v "CASE got a non-sum value arguments")
+	          | v => error_exp v "CASE got a non-special sum value arguments")
 	   | EXN_CASE {arg,arms,default,tipe} =>
 		    (case (eval_exp env arg) of
 			 (ep as (EXN_INJECT(_,SCON(tag(t,c)),value))) => 

@@ -5,6 +5,7 @@ signature PAT =
     structure Il : IL
 
     val debug : bool ref
+    val do_result_type : bool ref
 
     type patarg = {context : Il.context,
 		   typecompile : Il.context * Ast.ty -> Il.con,

@@ -16,7 +16,7 @@ functor Toil(structure Il : IL
 	     structure Equal : EQUAL
 	     structure Error : ERROR
 	     structure Signature : SIGNATURE
-	     sharing Datatype.IlContext = Equal.IlContext = Signature.IlContext = IlContext 
+	     sharing Ppil.IlContext = Datatype.IlContext = Equal.IlContext = Signature.IlContext = IlContext 
 	     sharing IlContext.Il = InfixParse.Il = Pat.Il = Ppil.Il
 	       = IlUtil.Il = IlStatic.Il = Il)
    : TOIL =  
@@ -66,6 +66,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
     type filepos = Ast.srcpos -> string * int * int
 
 
+    fun canonical_tyvar_label n = 
+	if (n<0 orelse n>25) then error "canonical_tyvar_label given number out of range"
+	else symbol_label(Symbol.tyvSymbol ("'" ^ (String.str (chr (ord #"a" + n)))))
 
 
     (*  --------- Elaboration state contains: -------------------------
@@ -1072,7 +1075,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 
 
    and xdatatype (context,datatycs) : (sbnd * sdec) list =
-       let val sbnd_sdecs = Datatype.compile{context=context,
+       let val sbnd_sdecs = Datatype.compile{transparent=false,
+					     context=context,
 					     typecompile=xty,
 					     datatycs=datatycs,
 					     eq_compile=xeq,
@@ -1401,7 +1405,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 
 		  val fbnds = map #1 fbnd_con_list
 		  val fbnd_cons : con list = map #2 fbnd_con_list
-		  val top_label = fresh_internal_label "polyfuns"
+		  val top_label = to_nonexport_lab(fresh_internal_label "polyfuns")
 		  val top_var = fresh_named_var "polyfuns"
 		  val top_exp_con = (FIX(true,PARTIAL,fbnds),
 				     case fbnd_cons of
@@ -1528,8 +1532,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				  NONE => (context,c,SIGNAT_STRUCTURE(NONE,[]))
 				| SOME m => 
 				      let
-					  fun mapper n = internal_label ("tv" ^ (Int.toString n)) 
-					  val lbls = Listops.map0count mapper m
+					  val lbls = Listops.map0count canonical_tyvar_label m
 					  fun mapper l = 
 					      let val eql = to_eq_lab l
 						  val v = fresh_var()
@@ -1661,8 +1664,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		  val (_,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list1)
 		  val boolsbnd_ctxt_list2 = xdec' false (context',dec2)
 		  fun temp (opt : (bool * sbnd) option,ce) = (mapopt #2 opt,ce)
-		  fun rename(opt,CONTEXT_SDEC(SDEC(_,dec))) = 
-		      let val lbl = fresh_internal_label "local"
+		  fun rename(opt,CONTEXT_SDEC(SDEC(l,dec))) = 
+		      let val lbl = fresh_internal_label ("local_" ^ (Name.label2name l))
 			  val ce' = CONTEXT_SDEC(SDEC(lbl,dec))
 		      in case opt of
 			  NONE => (NONE,ce')
@@ -1870,8 +1873,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				[] => DEC_EXP(eq_var,mk_eq_con(CON_VAR type_var))
 			      | _ => 
 				let val vpoly = fresh_named_var "vpoly"
-				    fun mapper (n,_) = internal_label ("tv" ^ (Int.toString n)) 
-				    val lbls = Listops.mapcount mapper tyvars
+				    val lbls = Listops.map0count canonical_tyvar_label (length tyvars)
 				    fun mapper l = 
 					let val eql = to_eq_lab l
 					    val v = fresh_var()
@@ -1925,7 +1927,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			      xstrexp(context,Ast.VarStr syms2, Ast.NoSig)) of
 			    (SOME(labels1,PHRASE_CLASS_MOD(_,s1)),
 			     (_,_,SIGNAT_STRUCTURE(_,sdecs2))) =>
-				let fun find_labels' path (SDEC(l,DEC_CON (_,k,_)),acc) = 
+				let fun find_labels' path (SDEC(l,DEC_CON (_,k,NONE)),acc) = 
 				           if (is_label_internal l) then acc else (k,l::path)::acc
 				      | find_labels' path (SDEC(l,DEC_MOD (_,s)),acc) = 
 				                       (find_labels (l::path) s)@acc
@@ -2013,7 +2015,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		    | ftv_sym => 
 			let 
 			    val varpoly = fresh_named_var "var_poly"
-			    fun help tv_sym = 
+			    fun help (n,tv_sym) = 
 				let val type_lab = symbol_label tv_sym
 				    val eq_lab = to_eq_lab type_lab
 				    val type_var = fresh_var()
@@ -2029,7 +2031,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				    then [type_sdec,eq_sdec]
 				   else [type_sdec]
 				end
-			    val sigpoly = SIGNAT_STRUCTURE(NONE,flatten(map help ftv_sym))
+			    val sigpoly = SIGNAT_STRUCTURE(NONE,flatten(mapcount help ftv_sym))
 			    val context' = add_context_mod(context,
 							      fresh_open_internal_label "lbl",
 							      varpoly, 
@@ -2312,7 +2314,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			      val temp = mod_subst_modvar(modc_body,
 							  [(modc_v0,argmod)])
 			      val sealed = MOD_SEAL(temp,sig1')
-			      val lbl = to_export_lab(fresh_internal_label "coerced")
+			       (* internal labels are exportable *)
+			      val lbl = fresh_internal_label "coerced"
 			      val sbnd_ce = 
 				  (SOME(SBND(lbl,BND_MOD(newvar,sealed))),
 				   CONTEXT_SDEC(SDEC(lbl,DEC_MOD(newvar,sig1'))))

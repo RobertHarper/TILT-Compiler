@@ -1,15 +1,17 @@
+(*$import IL ILSTATIC ILUTIL PPIL ILCONTEXT EQUAL *)
 (* Equality compiler *)
 functor Equal(structure Il : IL
 		 structure IlStatic : ILSTATIC
 		 structure IlUtil : ILUTIL
-		 structure Ppil : PPIL
-		 structure IlContext : ILCONTEXT
-		 sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
-    : EQUAL = 
+		 structure IlContext : ILCONTEXT 
+		 structure Ppil : PPIL 
+		 sharing Ppil.IlContext = IlContext 
+		 sharing IlContext.Il = IlUtil.Il = IlStatic.Il = Ppil.Il = Il)
+    :> EQUAL where IlContext = IlContext =
 struct
 
     structure Il = Il
-    open AstHelp Il IlStatic IlUtil Ppil 
+    open Il IlStatic IlUtil Ppil 
     open Util Listops Name IlContext Tyvar
 
     val elab_error = fn s => error "equal.sml: elaborator impossibility" s
@@ -18,6 +20,7 @@ struct
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
     fun con_normalize (arg as (ctxt,con)) = IlStatic.con_normalize arg handle e => con
+    fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg handle e => con
 
     exception NoEqExp
 
@@ -81,7 +84,7 @@ struct
 		in #1(make_total_lambda(v,paircon,con_bool,
 					make_let([(v1,e1),(v2,e2)],body)))
 		end
-	  | CON_SUM {carriers,noncarriers,special} =>
+	  | CON_SUM {carrier,noncarriers,special} =>
 		let 
 		    val v = fresh_named_var "eqargpair"
 		    val v1 = fresh_named_var "eqarg1"
@@ -89,11 +92,16 @@ struct
 		    val paircon = con_tuple[con',con']
 		    val e1 = RECORD_PROJECT(VAR v,generate_tuple_label 1,paircon)
 		    val e2 = RECORD_PROJECT(VAR v,generate_tuple_label 2,paircon)
+		    val carriers =  
+			(case (con_head_normalize(ctxt,carrier)) of 
+		             CON_TUPLE_INJECT [] => []
+			   | CON_TUPLE_INJECT clist => clist
+			   | c => [c])
 		    val totalcount = (noncarriers + length carriers)
 		    fun help i = let val var' = fresh_named_var "eqarg1"
 				     val var'' = fresh_named_var "eqarg2"
 				     val is_carrier = i >= noncarriers
-				     val sumc = CON_SUM{carriers=carriers,
+				     val sumc = CON_SUM{carrier=carrier,
 							noncarriers=noncarriers,
 							special = SOME i}
 				     val armbody = if is_carrier
@@ -112,8 +120,10 @@ struct
 										 armbody)))
 							else armbody)
 					  else NONE) totalcount
-				     val switch = CASE{noncarriers = noncarriers,
-						       carriers = carriers,
+				     val switch = CASE{sumtype = 
+						       CON_SUM{noncarriers = noncarriers,
+							       carrier = carrier,
+							       special = NONE},
 						       arg = VAR v2,
 						       arms = arms2,
 						       default = SOME false_exp,
@@ -125,12 +135,14 @@ struct
 					  else switch)
 				 end
 		    val arms1 = map0count help totalcount
-		    val body = CASE{noncarriers = noncarriers,
-					  carriers = carriers,
-					  arg = VAR v1,
-					  arms = arms1,
-					  default = NONE,
-					  tipe = con_bool}
+		    val body = CASE{sumtype = 
+				    CON_SUM{noncarriers = noncarriers,
+					    carrier = carrier,
+					    special = NONE},
+				    arg = VAR v1,
+				    arms = arms1,
+				    default = NONE,
+				    tipe = con_bool}
 (*  val body = make_catch(inner_body,con_bool,match_exp,con_unit,false_exp) *)
 		in #1(make_total_lambda(v,paircon,con_bool,
 				  make_let([(v1,e1),(v2,e2)],body)))

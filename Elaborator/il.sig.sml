@@ -1,5 +1,6 @@
+(*$import Fixity TYVAR Name PRIM *)
 (* The datatypes for the internal language. *)
-signature IL = 
+signature IL =
   sig
 
     structure Prim : PRIM
@@ -21,7 +22,6 @@ signature IL =
 
     type fixity_table = (label * Fixity.fixity) list 
 
-    type context
     datatype exp = OVEREXP of con * bool * exp Util.oneshot (* type, valuable, body *)
                  | SCON    of value
                  | PRIM    of prim * con list * exp list   (* fully applied primitivies only *)
@@ -30,7 +30,7 @@ signature IL =
                  | ETAILPRIM of ilprim * con list
                  | VAR     of var
                  | APP     of exp * exp list
-                 | FIX     of bool * arrow * fbnd list (* bool = false indicates non-recursive *)
+                 | FIX     of bool * arrow * fbnd list
                  | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
                  | SUM_TAIL of con * exp
@@ -38,16 +38,13 @@ signature IL =
                  | RAISE   of con * exp       (* annotate with the type of the raised expression *)
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
-                 | EXN_INJECT of string * exp * exp (* name and tag and value *)
+                 | EXN_INJECT of string * exp * exp (* tag and value *)
                  | ROLL    of con * exp
                  | UNROLL  of con * con * exp    (* the recursive and non-recursive type *)
-                 | INJ     of {noncarriers : int,
-			       carriers : con list,
-			       special : int,
+                 | INJ     of {sumtype : con,
 			       inject : exp option}
                  (* case over sum types of exp with arms and defaults*)
-                 | CASE    of {noncarriers : int,
-			       carriers : con list,
+                 | CASE    of {sumtype : con,
 			       arg : exp,
 			       arms : (exp option) list,
 			       tipe : con,
@@ -78,15 +75,13 @@ signature IL =
                  | CON_ANY
                  | CON_REF           of con
                  | CON_TAG           of con
-	         (* multi-argument functions can be imported; bool indicates closed code *)
-	         (* primitives are multi-argument also *)
                  | CON_ARROW         of con list * con * bool * (arrow Util.oneshot)
                  | CON_APP           of con * con
                  | CON_MU            of con
                  | CON_RECORD        of (label * con) list
                  | CON_FUN           of var list * con
                  | CON_SUM           of {noncarriers : int,
-					 carriers : con list,
+					 carrier : con,
 					 special : int option}
                  | CON_TUPLE_INJECT  of con list
                  | CON_TUPLE_PROJECT of int * con 
@@ -118,10 +113,11 @@ signature IL =
                  | DEC_CON       of var * kind * con option 
                  | DEC_EXCEPTION of tag * con
 
+
     and inline = INLINE_MODSIG of mod * signat
-	  | INLINE_EXPCON  of exp * con
-	  | INLINE_CONKIND of con * kind
-	  | INLINE_OVER    of (con * exp) list
+               | INLINE_EXPCON of exp * con
+               | INLINE_CONKIND of con * kind
+	       | INLINE_OVER   of  (con * exp) list
 
     and context_entry = 
 		CONTEXT_INLINE of label * var * inline
@@ -129,6 +125,19 @@ signature IL =
 	      | CONTEXT_SDEC   of sdec
 	      | CONTEXT_SIGNAT of label * var * signat
               | CONTEXT_FIXITY of fixity_table
+
+    and context = CONTEXT of  {flatlist : context_entry list,
+			       fixity_list : fixity_table,
+			       label_list : (path * phrase_class) Name.LabelMap.map,
+			       var_list : (label * phrase_class) Name.VarMap.map * var list,
+			       tag_list : con Name.TagMap.map,
+			       alias_list : label list Name.LabelMap.map}
+
+	and phrase_class = PHRASE_CLASS_EXP  of exp * con
+	  | PHRASE_CLASS_CON  of con * kind
+	  | PHRASE_CLASS_MOD  of mod * signat
+	  | PHRASE_CLASS_SIG  of signat
+	  | PHRASE_CLASS_OVEREXP of (con * exp) list
 
     withtype value = (con,exp) Prim.value
     and decs = dec list

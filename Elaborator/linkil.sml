@@ -95,13 +95,14 @@ structure LinkIl (* : LINKIL *) =
 				structure Toil = Toil
 				structure Datatype = Datatype      
 				structure IlUtil = IlUtil);
+(*
 	structure IlEval = IlEval(structure Il = Il
 				  structure IlContext = IlContext
 				  structure PrimUtil = IlPrimUtil
 				  structure IlStatic = IlStatic
 				  structure IlUtil = IlUtil
 				  structure Ppil = Ppil);
-	    
+*)	    
 	open Il IlUtil Ppil IlStatic Formatter
 	    
 	structure Il = Il

@@ -1,3 +1,4 @@
+(*$import PPPRIM PRIM Util Formatter *)
 (* Primitives pretty-printer. *)
 functor Ppprim(structure ArgPrim : PRIM)
 	: PPPRIM where Prim = ArgPrim =
@@ -251,7 +252,7 @@ functor Ppprim(structure ArgPrim : PRIM)
     fun pp_tag n = String(Name.tag2string n)
     fun pp_value exp2value pp_exp pp_con scon =
 	let 
-	    fun doint ((W64 | W32 | W16 | W8),w) = TilWord64.toDecimalString w
+	    fun doint (intsize,w) = TilWord64.toDecimalString w
 	in case scon of
 	    int (is,i) => String (doint (is,i))
 	  | uint (is,i) => String (doint (is,i))

@@ -1,3 +1,4 @@
+(*$import ERROR *)
 (* Stateful module holding the error state of the elaboration process *)
 
 structure Error :> ERROR = 

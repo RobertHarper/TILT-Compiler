@@ -1,3 +1,5 @@
+(*$import Ast SourceMap *)
+
 signature ERROR = 
   sig
     datatype ErrorLevel = Error | NoError | Warn

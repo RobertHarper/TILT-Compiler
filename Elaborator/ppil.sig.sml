@@ -1,10 +1,10 @@
+(*$import IL ILCONTEXT *)
 (* Pretty-printing routines for the internal language. *)
 signature PPIL =
   sig
 
     structure Il : IL
-    structure IlContext : ILCONTEXT 
-    sharing IlContext.Il = Il
+    structure IlContext : ILCONTEXT
 
 
     (* type variables can be displayed in different ways *)
