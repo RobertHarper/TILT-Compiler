@@ -1233,16 +1233,13 @@ struct
        end
 
      | xexp context (Il.SUM_TAIL (_, il_exp)) =
-       error "SUM_TAIL unimplemented"
-(*
        let
-	   val (exp, Prim_c(Sum_c (SOME i), cons), valuable) = xexp context il_exp
+	   val (exp, Prim_c(Sum_c {known = SOME i, tagcount}, cons), valuable) = xexp context il_exp
        in
-	   (Prim_e (NilPrimOp (project_sum (Word32.fromInt i)), 
+	   (Prim_e (NilPrimOp (project_sum {sumtype = i, tagcount = tagcount}), 
 		    cons, [exp]),
-	    List.nth (cons, i), valuable)
+	    List.nth (cons, TilWord32.toInt (TilWord32.uminus(i,tagcount))), valuable)
        end
-*)
 
      | xexp context (Il.HANDLE (il_exp1, il_exp2)) = 
        let
