@@ -956,7 +956,7 @@ struct
     and cbnd_find_fv (cbnd,(f,s)) = 
 	(case cbnd of
 	     Con_cb(v,c) => let val f' = c_find_fv (s,f) c
-				val k = Singleton_k c
+				val k = Single_k c
 				val state = add_boundcvar'(s,v,c,k)
 			    in (f',state)
 			    end
@@ -968,7 +968,7 @@ struct
 				val f' = k_find_fv (ls,f) k
 				val f'' = c_find_fv (ls,f') c
 				val _ = add_frees(v,f'')
-				val ak = Singleton_k(#2(extractCbnd cbnd))
+				val ak = Single_k(#2(extractCbnd cbnd))
 			    in  (remove_free(s,f''), add_boundcvar(s,v,ak))
 			    end)
 			
@@ -1006,7 +1006,7 @@ struct
 			  NONE => frees
 			| SOME (k,r) => 
 			      let 
-				  val k = Singleton_k(Var_c v)
+				  val k = Single_k(Var_c v)
 			      in  free_cvar_add(frees,v,k)
 			      end)
 	       | Typecase_c {arg, arms, default, kind} => 
@@ -1042,7 +1042,7 @@ struct
 			  in  (case cpath_isfree(state,frees,(v,labels)) of
 			 	NONE => frees
 			      | SOME k => 
-				let val k = Singleton_k(Proj_c(c,l))
+				let val k = Single_k(Proj_c(c,l))
 				in  free_cpath_add(frees,(v,labels),k)
 				end)
 			  end
@@ -1056,7 +1056,8 @@ struct
 	and k_find_fv' (state,frees) kind : frees =
 	    (case kind of
 	    Type_k => frees
-	  | Singleton_k c => (c_find_fv (state,frees) c)
+	  | SingleType_k c => (c_find_fv (state,frees) c)
+	  | Single_k c => (c_find_fv (state,frees) c)
 	  | (Record_k lv_kind_seq) =>
 		 let fun folder (((l,v),k),(f,s)) = (k_find_fv (s,f) k, add_boundcvar(s,v,k))
 		 in  #1(Sequence.foldl folder (frees,state) lv_kind_seq)
@@ -1201,9 +1202,9 @@ struct
 	   val {code_var, fidtype_var, unpack_var, cenv_var, venv_var, ...} = get_static v
 	   val {freecpaths,freecpaths_map,freeepaths_map=pc_free,...} = get_frees v
 	   (* was kept in reverse order *)
-	   val vkl_free = map (fn p => let (* the k is shape only *)
+	   val vkl_free = map (fn p => let (* XXX the k is shape only *)
 					   val SOME(v,_,k) = PathMap.find(freecpaths_map,p)
-					   val k = Singleton_k(path2con p)
+					   val k = Single_k(path2con p)
 					   val l = Name.internal_label(Name.var2string v)
 				      in  (p,v,k,l)
 				      end)
@@ -1607,7 +1608,8 @@ struct
   and k_rewrite state arg_kind : kind =
        (case arg_kind of 
 	    Type_k => arg_kind
-	  | Singleton_k c =>  Singleton_k (c_rewrite state c)
+	  | SingleType_k c =>  SingleType_k (c_rewrite state c)
+	  | Single_k c =>  Single_k (c_rewrite state c)
 	  | (Record_k lvkseq) => let val lvklist = Sequence.toList lvkseq
 				     val lvklist = map (fn ((l,v),k) => ((l,v),k_rewrite state k)) lvklist
 				 in  Record_k(Sequence.fromList lvklist)

@@ -347,7 +347,8 @@ structure NilRewrite :> NILREWRITE =
 	    fun dokind (state,kind) = 
 	      (case kind 
 		 of Type_k => NONE
-		  | (Singleton_k con) => mapopt Singleton_k (rewrite_con state con)
+		  | (SingleType_k con) => mapopt SingleType_k (rewrite_con state con)
+		  | (Single_k con) => mapopt Single_k (rewrite_con state con)
 		  | (Record_k fieldseq) =>
 		   let
 		     val changed = ref false

@@ -215,7 +215,8 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
      fun do_kind (state : state) (kind : kind) : kind = 
 	  (case kind of 
 	       Type_k => kind
-	     | Singleton_k c => Singleton_k(do_con state c)
+	     | SingleType_k c => SingleType_k(do_con state c)
+	     | Single_k c => Single_k(do_con state c)
 	     | Record_k(lvk_seq) => let fun folder(((l,v),k),state) = (((l,v),do_kind state k),
 								       add_kind(state,v,k))
 				    in  Record_k(#1(Sequence.foldl_acc folder state lvk_seq))
@@ -275,7 +276,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
       and do_cbnd(cbnd : conbnd, state : state) : conbnd * state = 
 	  (case cbnd of
 	       Con_cb(v,c) => (Con_cb(v,do_con state c), 
-			       add_kind(state,v,Singleton_k c))
+			       add_kind(state,v,Single_k c))
 	     | Open_cb(v,vklist,c,k) => let val state' = add_kind(state,v,Arrow_k(Open,vklist,k))
 					    val (vklist,state) = do_vklist state vklist
 					in  (Open_cb(v,vklist,

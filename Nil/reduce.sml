@@ -426,8 +426,8 @@ structure Reduce
 	fun scan_kind fset kind = 
 	  case kind of
 	    Type_k => ()
-	  | Singleton_k (con) =>
-	      (scan_con fset con)
+	  | SingleType_k con => scan_con fset con
+	  | Single_k con => scan_con fset con
 	  | Record_k lkseq =>
 	      Sequence.app (fn (lv, k) => scan_kind fset k) lkseq
 	    | Arrow_k (_, vklist, k) =>
@@ -741,8 +741,8 @@ structure Reduce
 	  fun xkind fset kind = 
 	    case kind of 
 	      Type_k => kind
-	    | Singleton_k ( c) => 
-		Singleton_k (xcon fset c)
+	    | SingleType_k c => SingleType_k (xcon fset c)
+	    | Single_k c => Single_k (xcon fset c)
 	    | Record_k lvkseq =>
 		Record_k ( Sequence.map (fn ((l,v), kind) =>
 					 ((l,v), xkind fset kind)) lvkseq)

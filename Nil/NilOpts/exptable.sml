@@ -313,9 +313,13 @@ struct
 	   | (Type_k, _) => LESS
 	   | (_, Type_k) => GREATER
 
-	   | (Singleton_k c1, Singleton_k c2) => cmp_con(c2,c2)
-	   | (Singleton_k _, _) => LESS
-	   | (_, Singleton_k _) => GREATER
+	   | (SingleType_k c1, SingleType_k c2) => cmp_con(c2,c2)
+	   | (SingleType_k _, _) => LESS
+	   | (_, SingleType_k _) => GREATER
+
+	   | (Single_k c1, Single_k c2) => cmp_con(c2,c2)
+	   | (Single_k _, _) => LESS
+	   | (_, Single_k _) => GREATER
 
 	   | (Record_k lvk1, Record_k lvk2) =>
 		 let fun cmp(((l1,v1),k1), ((l2,v2),k2)) = 

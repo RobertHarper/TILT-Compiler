@@ -279,7 +279,7 @@ struct
 			else (index::acc) 
 	  in  loop acc con rest
 	  end
-	    | loop acc (Singleton_k c) labs = 
+	    | loop acc (Single_k c) labs = 
 	  let val k = Stats.subtimer("RTLgetshape0",
 				     Normalize.get_shape)  (#env state,c)
 	  in  loop acc k labs

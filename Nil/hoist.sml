@@ -52,7 +52,8 @@ struct
   fun freeKindVars k = 
     let
       fun loop (Type_k, s) = s
- 	| loop (Singleton_k c, s) = union(freeConVars c,s)
+ 	| loop (SingleType_k c, s) = union(freeConVars c,s)
+ 	| loop (Single_k c, s) = union(freeConVars c,s)
 	| loop (Record_k r,s) = foldr (fn (a,b) => union(a,b)) s (map freeKindVars (map #2 (Sequence.toList r)))
 	| loop (Arrow_k (oness,vkl,k),s) = union((foldr (fn (a,b) => union(a,b)) s (map freeKindVars (map #2 vkl))),
 						 (freeKindVars k))

@@ -209,7 +209,7 @@ struct
       | reify_seq_bnds ctxt ((Con_b (_,cb))::bs, body, pset) =
            let
               val (v,c) = NilUtil.extractCbnd cb
-              val ctxt = NilContext.insert_kind(ctxt, v, Singleton_k c)
+              val ctxt = NilContext.insert_kind(ctxt, v, Single_k c)
               val (bs', body', pset) = reify_seq_bnds ctxt (bs, body, pset)
               val (phase, pset) = decide_con_b_phase ctxt (cb, pset)
            in

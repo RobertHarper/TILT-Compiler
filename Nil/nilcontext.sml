@@ -224,7 +224,8 @@ structure NilContext
    fun make_shape (D:context,kind:kind):kind = 
      (case kind 
 	of Type_k => kind
-	 | Singleton_k con => shape_of (D,con)  
+	 | SingleType_k con => Type_k
+	 | Single_k con => shape_of (D,con)  
 	 | Record_k elts => 
 	  let 
 	    fun folder(((l,v),k),D) = let val k' = make_shape(D,k)
@@ -511,7 +512,7 @@ structure NilContext
 			      print ("Type not properly renamed when inserted into context"))) *)
 		   ]
 	 else ();
-       val kind = Singleton_k (con)
+       val kind = Single_k (con)
        fun sthunk() = make_shape (context,kind)
        val entry = {eqn = SOME con,
 		    kind = kind,
@@ -559,7 +560,7 @@ structure NilContext
 			   else loop (NilSubst.add subst (v,Proj_c(c,l'))) rest
 		 in  loop subst lvk_list
 		 end
-	    | Singleton_k c => (CON(Proj_c(c,l)), subst)
+	    | Single_k c => (CON(Proj_c(c,l)), subst)
 	    | _ => 
 		 (print "bad kind to project from = \n";
 		  Ppnil.pp_kind k;
@@ -575,7 +576,7 @@ structure NilContext
 		in  
 		  (KIND k, foldl folder subst (Listops.zip vklist clist))
 		end
-	       | Singleton_k c => (CON(App_c(c,clist)), subst)
+	       | Single_k c => (CON(App_c(c,clist)), subst)
 	       | _ => error (locate "app_kind") "bad kind to app_kind")
 
 	 fun traverse c : result * con subst = 
@@ -611,7 +612,8 @@ structure NilContext
      in 
        (case traverse con 
 	  of (CON c, _) => SOME c
-	   | (KIND (Singleton_k c),subst) => SOME (NilSubst.substConInCon subst c)
+	   | (KIND (SingleType_k c),subst) => SOME (NilSubst.substConInCon subst c)
+	   | (KIND (Single_k c),subst) => SOME (NilSubst.substConInCon subst c)
 	   | _ => NONE)
 
 	  handle Opaque => NONE

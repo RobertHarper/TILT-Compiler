@@ -93,7 +93,8 @@ structure Ppnil	:> PPNIL =
 			    String "; ",
 			    pp_kind k,
 			    String ")"]
-	       | Singleton_k c => (pp_region "SINGLETON(" ")" [pp_con c]))
+	       | SingleType_k c => (pp_region "SINGLE_TYPE(" ")" [pp_con c])
+	       | Single_k c => (pp_region "SINGLE(" ")" [pp_con c]))
 
 
     and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_var v, String " = ", pp_con c]

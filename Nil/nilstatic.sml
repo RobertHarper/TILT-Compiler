@@ -364,7 +364,7 @@ struct
   fun is_type D kind = 
     (case make_shape (D,kind)
        of Type_k => true
-        | Singleton_k _ => true
+        | SingleType_k _ => true
 	| _ => false)
 
   fun assertWellFormed context = 
@@ -409,7 +409,13 @@ struct
   and kind_valid' (D : context, kind : kind) : unit = 
     (case kind of
        Type_k => ()
-     | Singleton_k con => 
+     | SingleType_k con => 
+	 let
+	   val kind = con_valid (D,con)
+	 in
+	   ()
+	 end
+     | Single_k con => 
 	 let
 	   val kind = con_valid (D,con)
 	 in
@@ -735,7 +741,7 @@ struct
 	     in
 	       ()
 	     end)
-      val kind = Singleton_k(constructor)
+      val kind = Single_k(constructor)
     in
       kind
     end
@@ -765,7 +771,7 @@ struct
 	  val var' = derived_var var
 	  val bnd = maker (var',formals,body,body_kind)
 	  val con = Let_c (Sequential,[bnd],Var_c var')
-	  val D = insert_kind(D,var,Singleton_k con)
+	  val D = insert_kind(D,var,Single_k con)
 	    val _ = if (!trace)
 			then (print "Done processing Open_cb/Code_cb with var = ";
 			      pp_var var; print "}\n")
@@ -822,14 +828,19 @@ struct
       val res = 
       (case (kind1,kind2) 
 	 of (Type_k, Type_k) => true
-	  | (Type_k, Singleton_k _) => false
 	  | (Type_k,_) => false
-	  | (Singleton_k _ ,Type_k) => is_type D kind1
-	  | (Singleton_k (c1),Singleton_k (c2)) => 
+	  | (SingleType_k _ ,Type_k) => true
+	  | (SingleType_k (c1),SingleType_k (c2)) => 
+	     type_equiv(D,c1,c2)
+	  | (SingleType_k (c1),Single_k (c2)) => 
 	   subeq_kind is_eq (D,push_singleton (D,c1),push_singleton (D,c2))
-	  | (Singleton_k (c1),k2) => (* k2 must be a higher kind *)
+	  | (SingleType_k (c1), _) => false
+	  | (Single_k _ ,Type_k) => is_type D kind1
+	  | (Single_k (c1),Single_k (c2)) => 
+	   subeq_kind is_eq (D,push_singleton (D,c1),push_singleton (D,c2))
+	  | (Single_k (c1),k2) => (* k2 must be a higher kind *)
 	   subeq_kind is_eq (D,push_singleton (D,c1),k2)
-	  | (k1,Singleton_k (c2)) => (* k1 must be a higher kind *)
+	  | (k1,Single_k (c2)) => (* k1 must be a higher kind *)
 	   subeq_kind is_eq (D,k1,push_singleton (D,c2))
 	  | (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
 	   (if eq_len (formals1,formals2) then
@@ -889,12 +900,13 @@ struct
 		     | SOME Type_k => true
 		     | SOME _ => error' "con_structural_equiv returned bad kind")
 	      end
-	| Singleton_k c => true
+	| SingleType_k c => true
+	| Single_k c => true
 	| Record_k lvk_seq => 
 	      let fun folder (((l,v),k),(D,equal)) =
 		      let val equal = equal andalso
 			             con_equiv(D,Proj_c(c1,l),Proj_c(c2,l),k)
-			  val D = NilContext.insert_kind(D,v,Singleton_k(Proj_c(c1,l)))
+			  val D = NilContext.insert_kind(D,v,Single_k(Proj_c(c1,l)))
 		      in  (D,equal)
 		      end
 		  val (D,equal) = Sequence.foldl folder (D,true) lvk_seq
@@ -1049,7 +1061,7 @@ struct
 			fun folder ((v,k),c1,c2, (D,subst,equal)) =
 			  if equal then 
 			      let val equal = con_equiv(D,c1,c2,k)
-				  val D = NilContext.insert_kind(D,v,Singleton_k c1)
+				  val D = NilContext.insert_kind(D,v,Single_k c1)
 				  val subst = Subst.add subst (v,c1)
 			      in  (D,subst,equal)
 			      end
@@ -1691,7 +1703,7 @@ struct
 		 val body_c = varConConSubst v cenv body_c
 
 		 val _ = 
-		   (sub_kind (D,Singleton_k(cenv),last_k) andalso type_equiv (D',vcon,last_c)) orelse
+		   (sub_kind (D,Single_k(cenv),last_k) andalso type_equiv (D',vcon,last_c)) orelse
 		   (perr_k_k (last_k,ckind);
 		    perr_c_c (last_c,vcon);
 		    (error (locate "bnd_valid") "Mismatch in closure" handle e => raise e))

@@ -169,8 +169,9 @@ struct
 
   fun selfify (con,kind) =
     (case kind of
-          Type_k => Singleton_k con
-	| Singleton_k _ => kind
+          Type_k => SingleType_k con
+	| SingleType_k _ => kind
+	| Single_k _ => kind
 	| Record_k entries => 
 	 Record_k (Sequence.map (fn ((l,v),k) => ((l,v),selfify (Proj_c (con,l),k))) entries)
 	| Arrow_k (openness,args,return) => 
@@ -181,7 +182,8 @@ struct
 	   Arrow_k (openness,args,selfify(App_c (con,actuals),return))
 	 end)
 
-  fun singletonize (kind as Singleton_k(_),con) = kind
+  fun singletonize (kind as SingleType_k(_),con) = kind
+    | singletonize (kind as Single_k(_),con) = kind
     | singletonize (kind,con) = selfify(con,kind)
 
   local
@@ -420,7 +422,8 @@ struct
       fun dokind kind = 
 	  (case kind 
 	     of Type_k => kind
-	     | (Singleton_k con) => Singleton_k(f_con state con)
+	     | (SingleType_k con) => SingleType_k(f_con state con)
+	     | (Single_k con) => Single_k(f_con state con)
 	     | (Record_k fieldseq) =>
 	      let
 		fun fold_one (((lbl,var),kind),state) = 
@@ -1062,7 +1065,8 @@ struct
   fun is_shape kind = 
     (case kind 
        of Type_k => true
-        | Singleton_k con => false
+        | SingleType_k con => false
+        | Single_k con => false
         | Record_k elts => Sequence.all (fn (_,k) => is_shape k) elts
         | Arrow_k (openness, formals, return) => 
 (****

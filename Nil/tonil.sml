@@ -254,8 +254,9 @@ struct
    fun stripKind k : kind =
        if (!do_kill_cpart_of_functor)
 	   then (case k of
-		Singleton_k _ => k
-	      | Type_k => k
+		Type_k => k
+	      | SingleType_k _ => k
+	      | Single_k _ => k
 	      | Record_k seq => let val lvk = Sequence.toList seq
 				    val lvk = Listops.map_second stripArrowKind lvk
 				    val lvk = List.mapPartial (fn (lv,(false,k)) => SOME(lv,k)
@@ -291,7 +292,8 @@ struct
 				   end
 			   in loop context (Sequence.toList seq)
 			   end
-	 | Singleton_k _ =>  error "killRecordKind' got singleton kind" 
+	 | SingleType_k _ =>  error "killRecordKind' got singleton kind" 
+	 | Single_k _ =>  error "killRecordKind' got singleton kind" 
 (*			   killRecordKind' context (Normalize.make_shape context k)  *)
 	 | _ => false)
 
@@ -305,7 +307,8 @@ struct
 				 then SOME(openness,vklist)
 			     else NONE
 			 end
-		   | Singleton_k _ =>  error "killArrowKind' got singleton kind" 
+		   | SingleType_k _ =>  error "killArrowKind' got singleton kind" 
+		   | Single_k _ =>  error "killArrowKind' got singleton kind" 
 (* killArrowKind' context (Normalize.make_shape context k)  *)
 		   | _ => NONE)
        else NONE
@@ -452,7 +455,7 @@ val NILctx' = (case k_shape_opt of
    fun update_NILctx_insert_kind_equation(CONTEXT{NILctx,sigmap,vmap,used,
 						  memoized_mpath,alias},
 					  v,c,k_shape_opt) = 
-       let val k = Singleton_k c
+       let val k = Single_k c
 	   val NILctx' = NilContext.insert_kind(NILctx,v,k)
 (*
 	   val NILctx' = 
@@ -2160,8 +2163,8 @@ end (* local defining splitting context *)
 	      val cbnds' = map makeConb cbnds
 	      val ebnds = flattenCatlist ebnd_mod_cat
 	      val con_mod = NilUtil.makeLetC cbnds name_mod_c
-	      val knd_context = Singleton_k con_mod
-	      val knd_use = Singleton_k con_mod
+	      val knd_context = Single_k con_mod
+	      val knd_use = Single_k con_mod
 	      val e = NilUtil.makeLetE Sequential
 		      (cbnds' @ ebnds)
 		      name_mod_r
@@ -2398,7 +2401,7 @@ end (* local defining splitting context *)
 		  | (_,NONE) => xkind context knd
 		  | (_,SOME il_con) => 
 			(let val (c,k_context) = xcon context il_con
-			 in  (Singleton_k c, k_context, Singleton_k c)
+			 in  (Single_k c, k_context, Single_k c)
 			 end))
 
 	   (* XXX rename should be replaced with systematic
@@ -2432,7 +2435,7 @@ end (* local defining splitting context *)
        end
      | xkind context (Il.KIND_INLINE (k,c)) = 
 	 let val (con,knd_shape) = xcon context c
-	 in  (Singleton_k con, knd_shape, Singleton_k con)
+	 in  (Single_k con, knd_shape, Single_k con)
 	 end
 
   fun make_cr_labels l = (Name.internal_label((Name.label2string l) ^ "_c"),
@@ -2462,7 +2465,7 @@ end (* local defining splitting context *)
 					     raise e)
 			    val it = ImportType(l,v,(case nil_con of
 						 NONE => kind_use
-					       | SOME c => Singleton_k c))
+					       | SOME c => Single_k c))
 			in  (if kill_con then imports else it::imports,
 			     case nil_con of 
 				 NONE => update_NILctx_insert_kind(context, v, kind_context, NONE)

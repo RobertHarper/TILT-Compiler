@@ -45,14 +45,13 @@ sig
   datatype letsort = Sequential | Parallel
   datatype phase = Runtime | Compiletime
   datatype kind = 
-      Type_k                        (* classifies constructors that are types *)
-    | Singleton_k of con            (* singleton-kind at kind type that leaks 
-				               through the constructor *)
-                                    (* dependent record kind classify records of 
-				           constructors *)
+      Type_k                        (* constructors that are types *)
+    | SingleType_k of con           (* singleton-kind at kind type *)
+    | Single_k of con               (* singleton-kind at any kind *)
+                                    (* dependent record kind *)
     | Record_k of ((label*var),kind) sequence
-                                    (* dependent arrow kinds classify open 
-				       constructor funs, closed funs, or closures *)
+                                    (* dependent arrow kinds for open 
+				       constr funs, closed funs, or closures *)
     | Arrow_k of openness * (var * kind) list * kind 
 
 

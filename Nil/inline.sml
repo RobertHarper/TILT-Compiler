@@ -126,7 +126,8 @@ function *)
       fun akind (kind:kind):int = 
 	(case kind of
 	   Type_k => 1
-         | Singleton_k c => 1 + (acon c)
+         | SingleType_k c => 1 + (acon c)
+         | Single_k c => 1 + (acon c)
 	 | Record_k lvks => 1 + (asequence akind lvks)
 	 | Arrow_k (ot,vks,k) => 1 + (akind k) + (avks vks)
 	)

@@ -512,11 +512,16 @@ struct
 
 	case arg_kind of
 	    Type_k => arg_kind
-	  | Singleton_k c => let val _ = inc depth_lcon_single
-			         val c = lcon_flat state c
-	                         val _ = dec depth_lcon_single
-			     in  Singleton_k c
-			     end
+	  | SingleType_k c => let val _ = inc depth_lcon_single
+				  val c = lcon_flat state c
+				  val _ = dec depth_lcon_single
+			      in  SingleType_k c
+			      end
+	  | Single_k c => let val _ = inc depth_lcon_single
+			      val c = lcon_flat state c
+			      val _ = dec depth_lcon_single
+			  in  Single_k c
+			  end
 	  | Record_k lvk_seq => 
 		let fun folder (((l,v),k),state) = 
 			let val ((v,k),state) = lvk state (v,k)

@@ -86,7 +86,8 @@ struct
     let open Nil NilUtil Name Util
     in  (case kind of
           Type_k => c
-	| Singleton_k c2 => c2
+	| SingleType_k c2 => c2
+	| Single_k c2 => c2
 	| Record_k elts => 
 	 let
 	   fun folder (((label,var),kind),subst) = 
@@ -358,7 +359,8 @@ struct
   and kind_normalize state (kind : kind) : kind = 
     (case kind of
           Type_k => kind
-	| Singleton_k con => Singleton_k(con_normalize' state con)
+	| SingleType_k con => SingleType_k(con_normalize' state con)
+	| Single_k con => Single_k(con_normalize' state con)
 	| Record_k elts => 
 	 let
 	   val elt_list = Sequence.toList elts
@@ -1357,11 +1359,11 @@ struct
 		 (case bnd
 		    of Open_cb (args as (var,formals,body,body_kind)) =>
 		      if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
-			substConInKind subst (Arrow_k(Open,formals,Singleton_k body))
+			substConInKind subst (Arrow_k(Open,formals,Single_k body))
 		      else loop(rest,add_bnd subst Open_cb args)
 		     | Code_cb (args as (var,formals,body,body_kind)) => 
 			if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
-			  substConInKind subst (Arrow_k(Code,formals,Singleton_k body))
+			  substConInKind subst (Arrow_k(Code,formals,Single_k body))
 			else loop(rest,add_bnd subst Code_cb args)
 		     | Con_cb (var,con) => loop(rest,NilSubst.add subst (var,substConInCon subst con)))
 	     in
@@ -1384,7 +1386,7 @@ struct
 	    | (Crecord_c entries) => 
 	      let
 		val k_entries = 
-		  map (fn (l,c) => ((l,fresh_named_var "crec_push_singleton"),Singleton_k c)) entries
+		  map (fn (l,c) => ((l,fresh_named_var "crec_push_singleton"),Single_k c)) entries
 	      in Record_k (Sequence.fromList k_entries)
 	      end
 	    
@@ -1439,8 +1441,9 @@ struct
 	 else ()
 
       val res = 
-	(case kind
-	   of Singleton_k con => push_singleton (D,con)
+	(case kind of
+	      SingleType_k _ => Type_k
+	    | Single_k con => push_singleton (D,con)
 	    | _ => kind)
 
       val _ = if !show_calls 
@@ -1454,7 +1457,7 @@ struct
 	    (isRenamedKind D res,
 	     fn () => (Ppnil.pp_kind res;
 		       lprintl ("Kind not properly renamed in push_singleton"))),
-	    ((case res of (Singleton_k _) => false | _ => true),
+	    ((case res of (SingleType_k _) => false | (Single_k _) => false | _ => true),
 	     fn () => (perr_k_k (kind,res);
 		       lprintl ("Failed to strip singleton")))
 	    ]

@@ -532,7 +532,8 @@ struct
 	and do_kind (state : state) (kind : kind) : kind = 
 	  (case kind of 
 		Type_k => kind
-              | Singleton_k c => Singleton_k(do_con state c)
+              | SingleType_k c => SingleType_k(do_con state c)
+              | Single_k c => Single_k(do_con state c)
   	      | Record_k(lvk_seq) => let fun folder(((l,v),k),state) = (((l,v),do_kind state k),
 									add_kind(state,v,k))
 				     in  Record_k(#1(Sequence.foldl_acc folder state lvk_seq))
@@ -618,14 +619,14 @@ struct
 			val state = (case c of
 					 Var_c _ => state
 				       | _ => add_availC(state, c, v))
-			val state = add_kind(state,v,Singleton_k c)
+			val state = add_kind(state,v,Single_k c)
 			val state = add_alias(state,v,alias)
 		    in  (Con_cb(v,c), state)
 		    end
 	      | Open_cb(v,vklist,c,k) => let val state = add_var(state,v)
 					     val state' = enter_var(state,v)
 					     val state = add_kind(state,v,
-								  Singleton_k (#2(extractCbnd cbnd)))
+								  Single_k (#2(extractCbnd cbnd)))
 					     val (vklist,state') = do_vklist state' vklist
 					 in  (Open_cb(v,vklist,
 						      do_con state' c, do_kind state' k), state)
@@ -633,7 +634,7 @@ struct
 	      | Code_cb(v,vklist,c,k) => let val state = add_var(state,v)
 					     val state' = enter_var(state,v)
 					     val state = add_kind(state,v,
-								  Singleton_k (#2(extractCbnd cbnd)))
+								  Single_k (#2(extractCbnd cbnd)))
 					     val (vklist,state') = do_vklist state' vklist
 					 in  (Code_cb(v,vklist, 
 						do_con state' c, do_kind state' k), state)
