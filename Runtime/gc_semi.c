@@ -1,5 +1,3 @@
-/* Not thread-safe */
-
 #include "general.h"
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -15,9 +13,6 @@
 #include "stats.h"
 #include "gcstat.h"
 #include "show.h"
-
-
-static Heap_t *fromheap = NULL, *toheap = NULL;
 
 
 /* ------------------  Semispace array allocation routines ------------------- */
@@ -98,10 +93,10 @@ int GCTry_Semi(SysThread_t *sysThread, Thread_t *th)
   assert(sysThread->userThread == NULL);
   assert(th->sysThread == NULL);
   if (sysThread->allocLimit == StartHeapLimit) {
-    sysThread->allocStart = fromheap->bottom;
-    sysThread->allocCursor = fromheap->bottom;
-    sysThread->allocLimit = fromheap->top;
-    fromheap->alloc_start = fromheap->top;
+    sysThread->allocStart = fromSpace->bottom;
+    sysThread->allocCursor = fromSpace->bottom;
+    sysThread->allocLimit = fromSpace->top;
+    fromSpace->cursor = fromSpace->top;
   }
   discard_writelist(sysThread);
   if (th->requestInfo > 0) {
@@ -126,8 +121,7 @@ void GCStop_Semi(SysThread_t *sysThread)
   int bytesRequested;
   mem_t allocCursor = sysThread->allocCursor;
   mem_t allocLimit = sysThread->allocLimit;
-  mem_t to_ptr = toheap->bottom;
-  range_t from_range, to_range;
+  mem_t to_ptr = toSpace->bottom;
   Queue_t *root_lists = sysThread->root_lists;
 
   /* Start timing this collection */
@@ -142,62 +136,58 @@ void GCStop_Semi(SysThread_t *sysThread)
   assert(allocCursor <= allocLimit);
   assert(bytesRequested >= 0);
 
-  fromheap->alloc_start = allocCursor;
+  fromSpace->cursor = allocCursor;
 
   if (paranoid) 
-    paranoid_check_all(fromheap, NULL, NULL, NULL);
+    paranoid_check_all(fromSpace, NULL, NULL, NULL);
 
   /* Write list can be ignored */
   discard_writelist(sysThread);
 
   /* Compute the roots from the stack and register set */
   QueueClear(sysThread->root_lists);
-  local_root_scan(sysThread,oneThread,fromheap);
+  local_root_scan(sysThread,oneThread);
   major_global_scan(sysThread);
     
-  /* Get tospace and ranges ready for the collection */
-  Heap_Unprotect(toheap, fromheap->top - fromheap->bottom);
-  SetRange(&from_range, fromheap->bottom, fromheap->top);
-  SetRange(&to_range, toheap->bottom, toheap->top);
-
+  /* Get toSpace ready for the collection */
+  Heap_Unprotect(toSpace, fromSpace->top - fromSpace->bottom);
 
   /* forward the roots */
-  to_ptr = forward1_root_lists(root_lists, to_ptr, 
-			       &from_range, &to_range);
+  to_ptr = forward1_root_lists(root_lists, to_ptr, &fromSpace->range, &toSpace->range);
 
   /* perform a Cheney scan */
-  to_ptr = scan1_until(to_range.low,to_ptr,&from_range,&to_range);
-  toheap->alloc_start = to_ptr;
+  to_ptr = scan1_until(toSpace->range.low, to_ptr, &fromSpace->range, &toSpace->range);
+  toSpace->cursor = to_ptr;
 
   if (debug && SHOW_HEAPS) {
-	memdump("From Heap After collection:", fromheap->bottom,40,0);
-        memdump("To Heap After collection:", toheap->bottom,40,0);
-	show_heap_raw("FINAL FROM",(allocCursor - fromheap->bottom),
-		      fromheap->bottom,fromheap->top,
-		      toheap->bottom,toheap->top);
+	memdump("From Heap After collection:", fromSpace->bottom,40,0);
+        memdump("To Heap After collection:", toSpace->bottom,40,0);
+	show_heap_raw("FINAL FROM",(allocCursor - fromSpace->bottom),
+		      fromSpace->bottom,fromSpace->top,
+		      toSpace->bottom,toSpace->top);
   }
 
   if (paranoid) 
-    paranoid_check_all(fromheap, NULL, toheap, NULL);
+    paranoid_check_all(fromSpace, NULL, toSpace, NULL);
 
-  gcstat_normal((sizeof (val_t)) * (allocCursor - fromheap->alloc_start),
-		(sizeof (val_t)) * (to_ptr - toheap->bottom),
+  gcstat_normal((sizeof (val_t)) * (allocCursor - fromSpace->cursor),
+		(sizeof (val_t)) * (to_ptr - toSpace->bottom),
 		0);
 
   /* Resize the tospace, discard old space, flip space */
   {
     Heap_t *froms[2] = {NULL, NULL};
-    froms[0] = fromheap;
-    HeapAdjust(0, bytesRequested, froms, toheap);
-    Heap_Protect(fromheap);
-    typed_swap(Heap_t *, fromheap, toheap);
+    froms[0] = fromSpace;
+    HeapAdjust(0, bytesRequested, froms, toSpace);
+    Heap_Protect(fromSpace);
+    typed_swap(Heap_t *, fromSpace, toSpace);
   }
 
   /* Update systhread's allocation variables */
-  fromheap->alloc_start = to_ptr;
-  sysThread->allocStart = fromheap->alloc_start;
-  sysThread->allocCursor = fromheap->alloc_start;
-  sysThread->allocLimit = fromheap->top;
+  fromSpace->cursor = to_ptr;
+  sysThread->allocStart = fromSpace->cursor;
+  sysThread->allocCursor = fromSpace->cursor;
+  sysThread->allocLimit = fromSpace->top;
   assert(sysThread->writelistCursor == sysThread->writelistStart);
 
   NumGC++;
@@ -218,14 +208,14 @@ void gc_init_Semi()
   init_double(&MaxRatio, 0.7);
   init_int(&MinRatioSize, 512);         
   init_int(&MaxRatioSize, 50 * 1024);
-  fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  toheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
+  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
 }
 
 
 void gc_finish_Semi()
 {
   Thread_t *th = getThread();
-  int allocsize = th->saveregs[ALLOCPTR] - (unsigned int)(fromheap->alloc_start);
+  int allocsize = th->saveregs[ALLOCPTR] - (unsigned int)(fromSpace->cursor);
   gcstat_normal(allocsize,0,0);
 }

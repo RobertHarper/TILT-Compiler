@@ -211,6 +211,7 @@ global_exn_handler_dummy:
 	ldgp	$gp, 0($gp)
 	ldl	$sp, 4(EXNPTR_REG)
 	stq	EXNARG_REG, EXNARG_DISP(THREADPTR_REG)
+	addq	THREADPTR_REG, MLsaveregs_disp, $0		# use ML save area of thread pointer
 	bsr	save_regs
 	mov	THREADPTR_REG, $16
 	lda	$27, toplevel_exnhandler

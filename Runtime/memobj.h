@@ -42,16 +42,25 @@ StackChain_t* StackChain_Alloc(void);
 void memobj_init(void);
 int InStackChain(StackChain_t*, mem_t);
 
+struct range__t
+{
+  mem_t low;         /* pointers */
+  mem_t high;
+  unsigned int diff;    /* difference in bytes = 4 * (high - low) */
+};
+
+typedef struct range__t range_t;
+
 struct Heap__t
 {
-  int id;                    /* The ID for the heap object. */
-  int valid;                 /* Indicates whether this heap is in current use. */
+  int id;                  /* The ID for the heap object. */
+  int valid;               /* Indicates whether this heap is in current use. */
   mem_t bottom;            /* The physical and logical bottom of the memory region and heap. */
   mem_t top;               /* The logical top of the heap. */
-  mem_t actualTop;         /* The physical top of the memory region. */
-  mem_t alloc_start;       /* The next allocation point in the logical heap. 
-				This must lie between bottom and top.  */
-  pthread_mutex_t *lock;     /* Used to synchronize multiple access to heap object. */
+  mem_t physicalTop;       /* The physical top of the memory region. */
+  mem_t cursor;            /* The next allocation point in the logical heap. bottom <= cursor <= top */
+  struct range__t range;    /* The physical range bottom to physicalTop */
+  pthread_mutex_t *lock;   /* Used to synchronize multiple access to heap object. */
 };
 
 typedef struct Heap__t Heap_t;
@@ -59,11 +68,13 @@ typedef struct Heap__t Heap_t;
 Heap_t* Heap_Alloc(int MinSize, int MaxSize);
 Heap_t* GetHeap(ptr_t);
 int inSomeHeap(ptr_t v);
+void Heap_Check(Heap_t*);
 void Heap_Protect(Heap_t*);
 void Heap_Resize(Heap_t *res, long newsize);
 void Heap_Unprotect(Heap_t *, long newsize);
 int Heap_GetSize(Heap_t *res);
 int Heap_GetAvail(Heap_t *res);
+void PadHeapArea(mem_t bottom, mem_t top);
 void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *top);
 
 extern mem_t StartHeapLimit; /* When we don't have a real initial heap limit, use this one */

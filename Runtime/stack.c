@@ -443,8 +443,7 @@ int trace_stack_step(Thread_t *th, unsigned long *saveregs,
 		     mem_t *bot_sp, Queue_t *retadd_queue,
 		     mem_t top,
 		     Queue_t *roots, unsigned int *regstate_ptr, 
-		     unsigned int frame_to_trace,
-		     Heap_t *fromspace)
+		     unsigned int frame_to_trace)
 {
   unsigned int mi;
   mem_t cur_sp = *bot_sp;
@@ -552,7 +551,7 @@ int trace_stack_step(Thread_t *th, unsigned long *saveregs,
 
 unsigned int trace_stack_normal(Thread_t *th, unsigned long *saveregs,
 				mem_t bot_sp, mem_t cur_retadd, mem_t top,
-				Queue_t *root_lists, Heap_t *fromspace)
+				Queue_t *root_lists)
 {
   Queue_t *retadd_queue = th->retadd_queue;
   Queue_t *roots = th->snapshots[0].roots;
@@ -569,7 +568,7 @@ unsigned int trace_stack_normal(Thread_t *th, unsigned long *saveregs,
   QueueClear(roots);
   while (not_done)
     not_done = trace_stack_step(th, saveregs,&cur_sp, retadd_queue, top,
-				roots, &regstate, MAXINT, fromspace);
+				roots, &regstate, MAXINT);
 
   Enqueue(root_lists,roots);
   return regstate;
@@ -580,8 +579,7 @@ unsigned int trace_stack_normal(Thread_t *th, unsigned long *saveregs,
 /* lastexptr is the value of exnptr after the last garbage collection */
 unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 			     mem_t bot_sp, mem_t cur_retadd, mem_t top,
-			     Queue_t *root_lists, ptr_t last_exnptr, ptr_t this_exnptr,
-			     Heap_t *fromspace)
+			     Queue_t *root_lists, ptr_t last_exnptr, ptr_t this_exnptr)
 {
   SysThread_t *sth = th->sysThread;
   Queue_t *retadd_queue = th->retadd_queue;
@@ -644,7 +642,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 
       QueueClear(r);
       not_done = trace_stack_step(th, saveregs, &bot_sp, retadd_queue, top,
-				  r, &regstate, inner_save_rate,fromspace);
+				  r, &regstate, inner_save_rate);
       Enqueue(root_lists,r);
 
       if (not_done)
@@ -686,7 +684,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 
 
 unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
-			 mem_t top, Queue_t *root_lists, Heap_t *fromspace)
+			 mem_t top, Queue_t *root_lists)
 {
   unsigned int regstate = 0;
   static ptr_t last_exnptr = 0; 
@@ -705,9 +703,9 @@ unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
 
   if (use_stack_gen)
     regstate = trace_stack_gen( th, saveregs, sp,  ret_add, top, 
-				root_lists, last_exnptr, this_exnptr, fromspace);
+				root_lists, last_exnptr, this_exnptr);
   else
-    regstate = trace_stack_normal( th, saveregs, sp,  ret_add, top, root_lists, fromspace);
+    regstate = trace_stack_normal( th, saveregs, sp,  ret_add, top, root_lists);
 
   last_exnptr = this_exnptr;
 
@@ -755,7 +753,7 @@ void debug_after_rootscan(unsigned long *saveregs, int regmask,
   }
 }
 
-void local_root_scan(SysThread_t *sth, Thread_t *th, Heap_t *fromspace)
+void local_root_scan(SysThread_t *sth, Thread_t *th)
 {
   Queue_t *root_lists = sth->root_lists;
   Queue_t *reg_roots = th->reg_roots;
@@ -779,7 +777,7 @@ void local_root_scan(SysThread_t *sth, Thread_t *th, Heap_t *fromspace)
   if (th->nextThunk != 0) {  /* thread has started */
     mem_t sp = (mem_t) saveregs[SP];
     Stack_t *stack = GetStack(sp);
-    regmask = trace_stack(th, saveregs, stack->top, root_lists, fromspace);
+    regmask = trace_stack(th, saveregs, stack->top, root_lists);
     regmask |= 1 << EXNPTR;
     for (i=0; i<32; i++)
       if ((regmask & (1 << i)) && (!(IsTagData((ptr_t)(saveregs[i])))) && (!(IsGlobalData((ptr_t)(saveregs[i]))))) {

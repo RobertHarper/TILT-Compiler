@@ -204,6 +204,7 @@ scheduler:
 global_exnhandler:
 	st	EXNARG_REG, [THREADPTR_REG + EXNARG_DISP]    ! note that this is return address of Yield
 	ld	[EXNPTR_REG + 4], SP_REG
+	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs
 	nop
 	mov	THREADPTR_REG, %o0

@@ -19,9 +19,6 @@
 #include "gc_large.h"
 
 
-static Heap_t *nursery = NULL;
-static Heap_t *tenuredFrom = NULL, *tenuredTo = NULL;
-
 /* ------------------  Generational array allocation routines ------------------- */
 
 static mem_t alloc_big(int byteLen, int hasPointers)
@@ -145,7 +142,7 @@ static long synch1 = 0;   /* waiting for mutators to stop and first processor to
 static long synch2 = 0;   /* waiting for processors to process threads so that
 			     thread roots are moved to shared area and GCtype */
 static long synch3 = 0;   /* waiting for first processor, using GCtype, to 
-			     set to_alloc_start, compute global roots, and transfer to shared area */
+			     set to_cursor_first, compute global roots, and transfer to shared area */
 static long synch4 = 0;   /* waiting for main collection to complete */
 static long synch5 = 0;   /* waiting for large area flush, heap resize, space flip before resuming mutators */
 
@@ -153,10 +150,9 @@ void GCStop_GenPara(SysThread_t *sysThread)
 {
   int isFirst = 0;                    /* Am I the first processor? */
   mem_t to_alloc = 0, to_limit = 0;   /* Processor-specific allocation pointers */
-  mem_t to_alloc_start = NULL;        /* Used only by "first" thread */
+  mem_t to_cursor_first = NULL;       /* Used only by "first" thread */
   unsigned int allocated = 0;
   unsigned int copied = 0;
-  range_t nurseryRange, tenuredFromRange, tenuredToRange, largeRange;
   static long req_size;            /* These are shared across processors. */
   Thread_t *curThread = NULL;
 
@@ -172,12 +168,12 @@ void GCStop_GenPara(SysThread_t *sysThread)
   isFirst = (asynchReachBarrier(&synch1)) == 0;
   if (isFirst) {
     /* A Major GC is forced if the tenured space is potentially too small */
-    if ((tenuredFrom->top - tenuredFrom->alloc_start) < 
+    if ((tenuredFrom->top - tenuredFrom->cursor) < 
 	2 * (nursery->top - nursery->bottom))
       GCType = Major;    /* ForcedMajor */
     else 
       GCType = Minor;
-    allocated = (sizeof (val_t)) * (nursery->top - nursery->alloc_start);  
+    allocated = (sizeof (val_t)) * (nursery->top - nursery->cursor);  
     req_size = 0;
     ResetJob();                        /* Reset counter so all user threads are scanned */
     asynchReachBarrier(&synch1);       /* First processor is counted twice. */
@@ -190,10 +186,6 @@ void GCStop_GenPara(SysThread_t *sysThread)
     ;
 
   /* Get local ranges ready for use; check local stack empty; reset root lists */
-  SetRange(&nurseryRange, nursery->bottom, nursery->top);
-  SetRange(&tenuredFromRange, tenuredFrom->bottom, tenuredFrom->top);
-  SetRange(&tenuredToRange, tenuredTo->bottom, tenuredTo->top);
-  SetRange(&largeRange, large->bottom, large->top);
   assert(sysThread->LocalCursor = 0);
   QueueClear(sysThread->root_lists);
 
@@ -202,7 +194,7 @@ void GCStop_GenPara(SysThread_t *sysThread)
   while ((curThread = NextJob()) != NULL) {
     assert(curThread->requestInfo >= 0);
     FetchAndAdd(&req_size, curThread->requestInfo);
-    local_root_scan(sysThread,curThread,nursery);
+    local_root_scan(sysThread,curThread);
     if (GCType == Minor && curThread->request == MajorGCRequestFromC) 
       GCType = Major;      
     if (diag)
@@ -215,12 +207,12 @@ void GCStop_GenPara(SysThread_t *sysThread)
   if (isFirst) {
     while (!(asynchCheckBarrier(&synch2, NumSysThread, &synch1)))
       ;
-    to_alloc_start = (GCType == Minor) ? tenuredFrom->alloc_start : tenuredTo->alloc_start;
+    to_cursor_first = (GCType == Minor) ? tenuredFrom->cursor : tenuredTo->cursor;
     if (GCType == Minor)
       minor_global_scan(sysThread);
     else {
       int tenuredToSize = (sizeof (val_t)) * (tenuredTo->top - tenuredTo->bottom);
-      int maxLive = (sizeof (val_t)) * (tenuredFrom->alloc_start - tenuredFrom->bottom) +
+      int maxLive = (sizeof (val_t)) * (tenuredFrom->cursor - tenuredFrom->bottom) +
 	            (sizeof (val_t)) * (nursery->top - nursery->bottom);
       if (maxLive >= tenuredToSize) {
 	printf("WARNING at GC %d: failure possible since maxPossibleLive = %d > toSpaceSize = %d\n",
@@ -244,14 +236,14 @@ void GCStop_GenPara(SysThread_t *sysThread)
     for (i=0; i<len; i++) {
       ploc_t root = (ploc_t) QueueAccess(roots,i);
       if (GCType == Minor) 
-	forward1_coarseParallel_stack(root,&to_alloc,&to_limit,tenuredFrom,&nurseryRange,sysThread);
+	forward1_coarseParallel_stack(root,&to_alloc,&to_limit,tenuredFrom,&nursery->range,sysThread);
       else
-	forward2_coarseParallel_stack(root,&to_alloc,&to_limit,tenuredTo,&nurseryRange,
-			      &tenuredFromRange,&largeRange,sysThread);
+	forward2_coarseParallel_stack(root,&to_alloc,&to_limit,tenuredTo,&nursery->range,
+			      &tenuredFrom->range,&large->range,sysThread);
     }
     if (GCType == Minor) 
       forward1_writelist_coarseParallel_stack(&to_alloc, &to_limit,
-				      tenuredFrom, &nurseryRange, &tenuredFromRange, sysThread);
+					      tenuredFrom, &nursery->range, &tenuredFrom->range, sysThread);
     else
       discard_writelist(sysThread);
   }
@@ -280,10 +272,10 @@ void GCStop_GenPara(SysThread_t *sysThread)
 	loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
 	if (GCType == Minor)
 	  scan1_object_coarseParallel_stack(grayCell,&to_alloc,&to_limit,tenuredFrom,
-				    &nurseryRange,&tenuredToRange,sysThread);
+				    &nursery->range,&tenuredTo->range,sysThread);
 	else 
 	  scan2_object_coarseParallel_stack(grayCell,&to_alloc,&to_limit,tenuredTo,
-				    &nurseryRange,&tenuredFromRange,&tenuredToRange,sysThread);
+					    &nursery->range,&tenuredFrom->range,&tenuredTo->range,sysThread);
       }
       SynchMid();
       moveToGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor));
@@ -293,9 +285,7 @@ void GCStop_GenPara(SysThread_t *sysThread)
   if (GCType != Minor)
     gc_large_addRoots(sysThread->largeRoots);
 
-  if (paranoid)   /* Zero out rest of region */
-    if (to_alloc < to_limit)
-      *to_alloc = SKIP_TAG | ((to_limit - to_alloc) << SKIPLEN_OFFSET);
+  PadHeapArea(to_alloc, to_limit);
 
   /* Wait for all active threads to reach this point so all forwarding is complete */
   if (diag)
@@ -309,8 +299,8 @@ void GCStop_GenPara(SysThread_t *sysThread)
     Heap_t *to = (GCType == Minor) ? tenuredFrom : tenuredTo;
     long alloc = (sizeof (val_t)) * (nursery->top - nursery->bottom);
     long copied = (GCType == Minor) ?
-                  (sizeof (val_t)) * (to_alloc_start - to->alloc_start) :
-                  (sizeof (val_t)) * (to->alloc_start - to->bottom);
+                  (sizeof (val_t)) * (to_cursor_first - to->cursor) :
+                  (sizeof (val_t)) * (to->cursor - to->bottom);
     froms[0] = nursery;
     if (GCType != Minor)
       froms[1] = tenuredFrom;
@@ -327,7 +317,7 @@ void GCStop_GenPara(SysThread_t *sysThread)
     
     /* Resize heaps and do stats */
     gcstat_normal(alloc,copied,0);
-    nursery->alloc_start = nursery->bottom;
+    nursery->cursor = nursery->bottom;
     if (GCType != Minor) {
       gc_large_flush();
       HeapAdjust(0,req_size,froms,tenuredTo);
@@ -386,6 +376,6 @@ void gc_finish_GenPara()
 {
   Thread_t *th = getThread();
   unsigned int allocsize = (unsigned int)(th->saveregs[ALLOCPTR]) - 
-                           (unsigned int)(nursery->alloc_start);
+                           (unsigned int)(nursery->cursor);
   gcstat_normal(allocsize,0,0);
 }

@@ -35,6 +35,9 @@ int SHOW_GCFORWARD = 0;
 enum GCStatus GCStatus = GCOff;
 enum GCType GCType = Minor;
 
+Heap_t *fromSpace = NULL, *toSpace = NULL;
+Heap_t *nursery = NULL, *tenuredFrom = NULL, *tenuredTo = NULL;
+
 int NumGC = 0;
 int NumMajorGC = 0;
 int NumLocatives = 0;
@@ -44,9 +47,6 @@ int NumWrites = 0;
 extern int module_count;
 extern val_t GLOBALS_BEGIN_VAL;
 extern val_t GLOBALS_END_VAL;
-
-static range_t null_range;
-
 
 int YoungHeapByte = 0, MaxHeap = 0, MinHeap = 0;
 double MinRatio = 0.0, MaxRatio = 0.0;
@@ -110,7 +110,6 @@ void HeapAdjust(int show, unsigned int bytesRequested, Heap_t **froms, Heap_t *t
 
 void gc_init(void)
 {
-  SetRange(&null_range,0,0);
   switch (collector_type) {
   case Semispace:
     gc_init_Semi();
@@ -462,11 +461,7 @@ void GCFromMutator(Thread_t *curThread)
   assert(alloc <= sysAllocLimit);
 
   /* Write skip tag to indicate the end of region and then release job */
-  if (alloc < sysAllocLimit) {
-    unsigned int wordsLeft = sysAllocLimit - alloc;
-    tag_t skiptag = SKIP_TAG | (wordsLeft << SKIPLEN_OFFSET);
-    *alloc = skiptag;
-  }
+  PadHeapArea(alloc, sysAllocLimit);
 
   /* For now, always unmap the job and run the scheduler which will invoke GC if necessary */
   ReleaseJob(self);

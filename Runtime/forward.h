@@ -11,14 +11,7 @@
 #include "memobj.h"
 #include "thread.h"
 
-struct range_st
-{
-  mem_t low;            /* pointers */
-  mem_t high;
-  unsigned int diff;    /* difference in bytes = 4 * (high - low) */
-};
 
-typedef struct range_st range_t;
 
 void SetRange(range_t *range, mem_t low, mem_t high);
 

@@ -51,7 +51,7 @@ void show_stack(mem_t sp, mem_t cur_retadd, mem_t top);
 void stack_init(void);
 void minor_global_scan(SysThread_t *);
 void major_global_scan(SysThread_t *);
-void local_root_scan(SysThread_t *, Thread_t *, Heap_t *fromspace);
+void local_root_scan(SysThread_t *, Thread_t *);
 void stub_error(void);
 
 extern long GlobalTableSize;

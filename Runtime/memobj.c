@@ -124,16 +124,15 @@ void StackInitialize(void)
   int i;
   Stacks = (Stack_t *)malloc(sizeof(Stack_t) * NumStack);
   StackChains = (StackChain_t *)malloc(sizeof(StackChain_t) * NumStackChain);
-  for (i=0; i<NumStack; i++)
-    {
-      Stack_t *stack = &(Stacks[i]);
-      stack->id = i;
-      stack->valid = 0;
-      stack->top = 0;
-      stack->bottom = 0;
-      stack->rawtop = 0;
-      stack->rawbottom = 0;
-    }
+  for (i=0; i<NumStack; i++) {
+    Stack_t *stack = &(Stacks[i]);
+    stack->id = i;
+    stack->valid = 0;
+    stack->top = 0;
+    stack->bottom = 0;
+    stack->rawtop = 0;
+    stack->rawbottom = 0;
+  }
 }
 
 
@@ -141,15 +140,14 @@ void StackInitialize(void)
 Stack_t* GetStack(mem_t add)
 {
   int i;
-  for (i=0; i<NumStack; i++)
-    {
-      Stack_t *s = &Stacks[i];
-      if (s->valid && 
-	  s->id == i &&
-	  s->rawbottom <= add &&
-	  s->rawtop    >= add)
-	return s;
-    }
+  for (i=0; i<NumStack; i++) {
+    Stack_t *s = &Stacks[i];
+    if (s->valid && 
+	s->id == i &&
+	s->rawbottom <= add &&
+	s->rawtop    >= add)
+      return s;
+  }
   return NULL;
 }
 
@@ -236,6 +234,12 @@ void HeapInitialize(void)
 }
 
 
+void PadHeapArea(mem_t bottom, mem_t top)
+{
+  assert(bottom <= top);
+  if (bottom < top)
+    *bottom = SKIP_TAG | ((top - bottom) << SKIPLEN_OFFSET);
+}
 
 void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *top)
 {
@@ -248,7 +252,7 @@ void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *top)
     end = 0;
   }
   else {
-    *start = SKIP_TAG | ((end - start) << SKIPLEN_OFFSET);
+    PadHeapArea(start,end);
     heap->alloc_start = end;
   }
   *bottom = start;
@@ -274,6 +278,13 @@ int inSomeHeap(ptr_t v)
   return (v >= heapstart && v < heapstart + (totalHeapSize / sizeof (val_t)));
 }
 
+void Heap_Check(Heap_t *h)
+{
+  assert(h->bottom <= h->cursor);
+  assert(h->cursor <= h->top);
+  assert(h->top <= h->physicalTop);
+}
+
 Heap_t* Heap_Alloc(int MinSize, int MaxSize)
 {
   static int heap_count = 0;
@@ -285,18 +296,17 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   int chunkstart = AllocBitmapRange(bmp,maxsize_chunkround / chunksize);
   mem_t start = heapstart + (chunkstart * chunksize) / (sizeof (val_t));
   res->bottom = (mem_t) my_mmap((caddr_t) start, maxsize_pageround, PROT_READ | PROT_WRITE);
-  res->alloc_start = res->bottom;
+  res->cursor = res->bottom;
   res->top    = res->bottom + MinSize / (sizeof (val_t));
-  res->actualTop = res->bottom + maxsize_pageround / (sizeof (val_t));
+  res->physicalTop = res->bottom + maxsize_pageround / (sizeof (val_t));
+  res->range.low = res->bottom;
+  res->range.high = res->physicalTop;
   res->valid  = 1;
 
   assert(res->bottom != (mem_t) -1);
   assert(chunkstart >= 0);
   assert(heap_count < NumHeap);
   assert(MaxSize >= MinSize);
-  assert(res->bottom <= res->alloc_start);
-  assert(res->alloc_start <= res->top);
-  assert(res->top <= res->actualTop);
 
   return res;
 }
@@ -304,7 +314,7 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
 
 void Heap_Protect(Heap_t* res)
 {
-  long size = res->actualTop - res->bottom;
+  long size = res->physicalTop - res->bottom;
   assert((size / pagesize * pagesize) == size);
   my_mprotect(6,(caddr_t) res->bottom, size, PROT_NONE);
 
@@ -322,19 +332,19 @@ int Heap_GetAvail(Heap_t *h)
 
 void Heap_Resize(Heap_t *h, long newsize)
 {
-  int actualSize = h->actualTop - h->bottom;
+  int actualSize = h->physicalTop - h->bottom;
   if (newsize > actualSize) {
       fprintf(stderr,"FATAL ERROR in Heap_Resize at GC %d.  Heap size = %d.  Trying to resize to %d\n",
 	      NumGC, actualSize, newsize);
       assert(0);
     }
   h->top = h->bottom + (newsize / (sizeof (val_t))); 
-  assert(h->top <= h->actualTop);
+  Heap_Check(h);
 }
 
 void Heap_Unprotect(Heap_t *res, long newsize)
 {
-  long size = res->actualTop - res->bottom;
+  long size = res->physicalTop - res->bottom;
   assert((size / pagesize * pagesize) == size);
   my_mprotect(7,(caddr_t) res->bottom, size, PROT_READ | PROT_WRITE);
   Heap_Resize(res, newsize);

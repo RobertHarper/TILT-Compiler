@@ -40,10 +40,9 @@ static double time_diff (struct timeval *start,
   return(time2double(finish)-time2double(start));
 }
 
-
-void reset_timer(char* name, timer_mt *t)
+void reset_timer(const char* name, timer_mt *t)
 {
-  t->name = name;
+  strncpy(t->name, name, sizeof(t->name));
   t->user = t->sys = 0.0;
   t->on =  0;
 }
@@ -56,11 +55,10 @@ void add_timer(timer_mt *t, timer_mt *t2)
 
 void start_timer(timer_mt *t)
 {
-  if (t->on)
-    {
-      printf("ERROR: Can't start a timer that is already started: %s\n",t->name);
-      exit(-1);
-    }
+  if (t->on) {
+    printf("ERROR: Can't start a timer that is already started: %s\n",t->name);
+    exit(-1);
+  }
   t->on = 1;
   getrusage(RUSAGE_SELF,&(t->cur_usage));
 }
@@ -69,11 +67,10 @@ void stop_timer(timer_mt *t)
 {
   struct rusage finish;
   double user_inc, sys_inc;
-  if (!t->on)
-    {
-      printf("ERROR: Can't stop a timer that has not been started\n");
-      exit(-1);
-    }
+  if (!t->on) {
+    printf("ERROR: Can't stop a timer that has not been started\n");
+    exit(-1);
+  }
   getrusage(RUSAGE_SELF,&finish);
   user_inc = time_diff(&(t->cur_usage.ru_utime),&(finish.ru_utime));
   sys_inc = time_diff(&(t->cur_usage.ru_stime),&(finish.ru_stime));

@@ -9,13 +9,16 @@ extern int pagesize;
    The *Pending* states are used to interrupt all processors for the parallel and concurrent collectors.
    The Major type is used for generational collectors.
    The BeginMajor type is used for the generational, concurrent collector.
- */
+*/
 enum GCStatus { GCOff, GCPendingOn, GCOn, GCPendingOff };
 enum GCType { Minor, Major, BeginMajor };  
 
 extern enum GCStatus GCStatus;
 extern enum GCType GCType;
 
+/* Heaps used by various collectors.  */
+Heap_t *fromSpace, *toSpace;
+Heap_t *nursery, *tenuredFrom, *tenuredTo;
 
 /* GCFromML has a non-standard calling convention */
 void GCFromC(Thread_t *, int RequestSizeBytes, int isMajor);

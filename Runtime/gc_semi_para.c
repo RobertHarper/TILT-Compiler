@@ -16,9 +16,6 @@
 #include "show.h"
 
 
-static Heap_t *fromheap = NULL, *toheap = NULL;
-
-
 /* ------------------  Parallel array allocation routines ------------------- */
 
 static mem_t alloc_big(int byteLen, int hasPointers)
@@ -95,10 +92,8 @@ static void stop_copy(SysThread_t *sysThread)
   int i;
   int isFirst = 0;
   mem_t to_alloc_start;         /* Designated thread records this initially */
-  mem_t to_alloc = 0;
-  mem_t to_limit = 0;
+  mem_t to_alloc = 0, to_limit = 0;
   Thread_t *curThread = NULL;
-  range_t from_range, to_range;
   static long req_size;            /* These are shared across processors. */
   
   /* start timer */
@@ -111,8 +106,8 @@ static void stop_copy(SysThread_t *sysThread)
      by counting the first thread twice in the barrier size. */
   isFirst = (asynchReachBarrier(&numWaitThread)) == 0;
   if (isFirst) {
-    Heap_Unprotect(toheap,
-		((sizeof (val_t)) * (fromheap->top - fromheap->bottom)) + NumSysThread * pagesize);
+    Heap_Unprotect(toSpace,
+		((sizeof (val_t)) * (fromSpace->top - fromSpace->bottom)) + NumSysThread * pagesize);
     ResetJob();                        /* Reset counter so all user threads are scanned */
     req_size = 0;
     asynchReachBarrier(&numWaitThread);
@@ -124,8 +119,6 @@ static void stop_copy(SysThread_t *sysThread)
 
 
   /* All threads get local ranges ready for use */
-  SetRange(&from_range, fromheap->bottom, fromheap->top);
-  SetRange(&to_range, toheap->bottom, toheap->top);
   sysThread->LocalCursor = 0;
   QueueClear(sysThread->root_lists);
 
@@ -142,7 +135,7 @@ static void stop_copy(SysThread_t *sysThread)
   while ((curThread = NextJob()) != NULL) {
     assert(curThread->requestInfo >= 0);
     FetchAndAdd(&req_size, curThread->requestInfo);
-    local_root_scan(sysThread,curThread,fromheap);
+    local_root_scan(sysThread,curThread);
     if (diag)
       printf("Proc %d:    computed roots of userThread %d\n",
 	     sysThread->stid,curThread->tid);      
@@ -155,7 +148,7 @@ static void stop_copy(SysThread_t *sysThread)
     int i, len = QueueLength(roots);  
     for (i=0; i<len; i++) {
       ploc_t root = (ploc_t) QueueAccess(roots,i);
-      forward1_coarseParallel_stack(root,&to_alloc,&to_limit,toheap,&from_range,sysThread);
+      forward1_coarseParallel_stack(root,&to_alloc,&to_limit,toSpace,&fromSpace->range,sysThread);
     }
   }
 
@@ -181,7 +174,7 @@ static void stop_copy(SysThread_t *sysThread)
       /* Work on up to 10 items */
       for (i=0; i < 10 && sysThread->LocalCursor > 0; i++) {
 	loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
-	scan1_object_coarseParallel_stack(grayCell,&to_alloc,&to_limit,toheap,&from_range,&to_range,sysThread);
+	scan1_object_coarseParallel_stack(grayCell,&to_alloc,&to_limit,toSpace,&fromSpace->range,&toSpace->range,sysThread);
       }
       SynchMid();
       moveToGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor));
@@ -189,9 +182,7 @@ static void stop_copy(SysThread_t *sysThread)
     }
   }
 
-  if (paranoid)   /* Zero out rest of local allocation region */
-    if (to_alloc < to_limit)
-      *to_alloc = SKIP_TAG | ((to_limit - to_alloc) << SKIPLEN_OFFSET);
+  PadHeapArea(to_alloc, to_limit);
 
   /* Wait for all active threads to reach this point so all forwarding is complete */
   if (diag)
@@ -202,23 +193,23 @@ static void stop_copy(SysThread_t *sysThread)
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
-    long alloc = (sizeof (val_t)) * (fromheap->top - fromheap->bottom);
-    long copied = (sizeof (val_t)) * (toheap->alloc_start - toheap->bottom);
+    long alloc = (sizeof (val_t)) * (fromSpace->top - fromSpace->bottom);
+    long copied = (sizeof (val_t)) * (toSpace->cursor - toSpace->bottom);
     Heap_t *froms[2] = {NULL, NULL};
-    froms[0] = fromheap;
+    froms[0] = fromSpace;
 
     /* Check the tospace heap - zero out all of fromspace */
     if (paranoid) {
-      bzero((char *)fromheap->bottom, (sizeof (val_t)) * (fromheap->top - fromheap->bottom));
-      paranoid_check_all(fromheap, NULL, toheap, NULL);
+      bzero((char *)fromSpace->bottom, (sizeof (val_t)) * (fromSpace->top - fromSpace->bottom));
+      paranoid_check_all(fromSpace, NULL, toSpace, NULL);
     }
     
     /* Resize heaps and do stats */
     gcstat_normal(alloc,copied,0);
-    HeapAdjust(0,req_size,froms,toheap);
-    Heap_Unprotect(toheap, fromheap->top - fromheap->bottom + alloc); 
-    fromheap->alloc_start = fromheap->bottom;
-    typed_swap(Heap_t *, fromheap, toheap);
+    HeapAdjust(0,req_size,froms,toSpace);
+    Heap_Unprotect(toSpace, fromSpace->top - fromSpace->bottom + alloc); 
+    fromSpace->cursor = fromSpace->bottom;
+    typed_swap(Heap_t *, fromSpace, toSpace);
     NumGC++;
   }
 
@@ -253,7 +244,7 @@ int GCTry_SemiPara(SysThread_t *sysThread, Thread_t *th)
 
   discard_writelist(sysThread);
   if (th->requestInfo > 0) {
-    GetHeapArea(fromheap,roundSize,&tmp_alloc,&tmp_limit);
+    GetHeapArea(fromSpace,roundSize,&tmp_alloc,&tmp_limit);
     if (tmp_alloc) {
       if (diag) 
 	printf("Proc %d: Grabbed %d page(s) at %d\n",sysThread->stid,roundSize/pagesize,tmp_alloc);
@@ -294,14 +285,14 @@ void gc_init_SemiPara()
   init_double(&MaxRatio, 0.7);
   init_int(&MinRatioSize, 512);         
   init_int(&MaxRatioSize, 50 * 1024);
-  fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  toheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
+  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
 }
 
 
 void gc_finish_SemiPara()
 {
   Thread_t *th = getThread();
-  int allocsize = (unsigned int) th->saveregs[ALLOCPTR] - (unsigned int) fromheap->alloc_start;
+  int allocsize = (unsigned int) th->saveregs[ALLOCPTR] - (unsigned int) fromSpace->cursor;
   gcstat_normal(allocsize,0,0);
 }

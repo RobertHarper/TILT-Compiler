@@ -16,7 +16,6 @@
 #include "show.h"
 
 
-static Heap_t *fromheap = NULL, *toheap = NULL;
 static int collectionRate = 4;   /* Ratio of collection rate to allocation rate */
 static int fetchSize = 20;       /* Number of objects to fetch from global pool */
 static int localWorkSize = 40;   /* Number of objects to work on from local pool */
@@ -127,7 +126,7 @@ static void CollectorOff(SysThread_t *sysThread)
   if (isFirst) 
     major_global_scan(sysThread);
   while ((curThread = NextJob()) != NULL)
-    local_root_scan(sysThread,curThread,fromheap);
+    local_root_scan(sysThread,curThread);
   /* Now forward all the roots which initializes the local work stacks */
   while (!QueueIsEmpty(sysThread->root_lists)) {
     /* Cannot dequeue from roots since this may be a global */
@@ -136,8 +135,8 @@ static void CollectorOff(SysThread_t *sysThread)
     Bitmap_t *legalStarts[2] = {NULL, NULL};
     Queue_t *roots = (Queue_t *) Dequeue(sysThread->root_lists);
     int i, len = QueueLength(roots);  
-    legalPrimaryHeaps[0] = fromheap;
-    legalReplicaHeaps[0] = toheap;
+    legalPrimaryHeaps[0] = fromSpace;
+    legalReplicaHeaps[0] = toSpace;
     for (i=0; i<len; i++) {
       ploc_t root = (ploc_t) QueueAccess(roots,i);
       loc_t primary = *root;
@@ -159,23 +158,23 @@ static void CollectorOff(SysThread_t *sysThread)
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
-    long alloc = (sizeof (val_t)) * (fromheap->top - fromheap->bottom);
-    long copied = (sizeof (val_t)) * (toheap->alloc_start - toheap->bottom);
+    long alloc = (sizeof (val_t)) * (fromSpace->top - fromSpace->bottom);
+    long copied = (sizeof (val_t)) * (toSpace->cursor - toSpace->bottom);
     Heap_t *froms[2] = {NULL, NULL};
-    froms[0] = fromheap;
+    froms[0] = fromSpace;
 
     /* Check the fromspace and tospace heap - zero out all of fromspace */
     if (paranoid) {
-      paranoid_check_all(fromheap, NULL, toheap,NULL);
-      bzero((char *)fromheap->bottom, (sizeof (val_t)) * (fromheap->top - fromheap->bottom));
+      paranoid_check_all(fromSpace, NULL, toSpace,NULL);
+      bzero((char *)fromSpace->bottom, (sizeof (val_t)) * (fromSpace->top - fromSpace->bottom));
     }
     
     /* Resize heaps and do stats */
     gcstat_normal(alloc,copied,0);
-    HeapAdjust(0,req_size,froms,toheap);
-    Heap_Protect(fromheap);
-    fromheap->alloc_start = fromheap->bottom;
-    typed_swap(Heap_t *, fromheap, toheap);
+    HeapAdjust(0,req_size,froms,toSpace);
+    Heap_Protect(fromSpace);
+    fromSpace->cursor = fromSpace->bottom;
+    typed_swap(Heap_t *, fromSpace, toSpace);
     NumGC++;
     GCStatus = GCOff;
   }
@@ -200,7 +199,6 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
   ploc_t writelistCurrent = sysThread->writelistStart;
   ploc_t writelistStop = sysThread->writelistCursor;
   mem_t to_alloc = 0, to_limit = 0;
-  range_t from_range, to_range;
   int bytesCopied = 0;
 
   sysThread->allocStart = sysThread->allocCursor;  /* allocation area is NOT reused */  
@@ -219,8 +217,6 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
   }
 
   /* Get local ranges ready for use */
-  SetRange(&from_range, fromheap->bottom, fromheap->top);
-  SetRange(&to_range, toheap->bottom, toheap->top);
   assert(sysThread->LocalCursor == 0);
 
   if (diag)
@@ -233,7 +229,7 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
       allocCurrent += GET_SKIP(tag);
       continue;
     }
-    bytesCopied = forward1_concurrent_stack(obj,&to_alloc,&to_limit,toheap,&from_range,sysThread);
+    bytesCopied = forward1_concurrent_stack(obj,&to_alloc,&to_limit,toSpace,&fromSpace->range,sysThread);
     objSize = (bytesCopied) ? bytesCopied : objectLength((ptr_t)obj[-1]);
     allocCurrent += objSize / sizeof(val_t);
   }
@@ -245,14 +241,14 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
     tag_t tag;
     int wordDisp = (int) *writelistCurrent++;
 
-    forward1_concurrent_stack(primary,&to_alloc,&to_limit,toheap,&from_range,sysThread);
+    forward1_concurrent_stack(primary,&to_alloc,&to_limit,toSpace,&fromSpace->range,sysThread);
     replica = (ptr_t) primary[-1];
     tag = replica[-1];
 
     switch (GET_TYPE(tag)) {
     case PARRAY_TAG: {
       ptr_t primaryField = (ptr_t) primary[wordDisp], replicaField;
-      forward1_concurrent_stack(primaryField,&to_alloc,&to_limit,toheap,&from_range,sysThread);
+      forward1_concurrent_stack(primaryField,&to_alloc,&to_limit,toSpace,&fromSpace->range,sysThread);
       replicaField = (ptr_t) primaryField[-1];
       replica[wordDisp] = (val_t) replicaField;  /* update replica with replicated object */
       break;
@@ -278,8 +274,7 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
   SynchEnd();
   
   /* XXX wastage of space */
-  if (to_alloc < to_limit)
-    *to_alloc = SKIP_TAG | ((to_limit - to_alloc) << SKIPLEN_OFFSET);
+  PadHeapArea(to_alloc, to_limit);
   flushStore();
 }
 
@@ -287,16 +282,12 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
 static void do_work(SysThread_t *sysThread, int bytesToCopy)
 {
   int i;
-  mem_t to_alloc_start;         /* Designated thread records this initially */
+  mem_t to_cursor;         /* Designated thread records this initially */
   mem_t to_alloc = 0;
   mem_t to_limit = 0;
-  range_t from_range, to_range;
   int bytesCopied = 0;
   int lastAndEmpty = 0;
 
-  /* Get local ranges ready for use */
-  SetRange(&from_range, fromheap->bottom, fromheap->top);
-  SetRange(&to_range, toheap->bottom, toheap->top);
   assert(sysThread->LocalCursor == 0); 
 
   while (!(isEmptyGlobalStack()) && bytesCopied < bytesToCopy) {
@@ -305,15 +296,14 @@ static void do_work(SysThread_t *sysThread, int bytesToCopy)
     fetchFromGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor), fetchSize);
     for (i=0; i < localWorkSize && sysThread->LocalCursor > 0; i++) {
       loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
-      int bytesScanned = scan1_object_coarseParallel_stack(grayCell,&to_alloc,&to_limit,toheap,&from_range,&to_range,sysThread);
+      int bytesScanned = scan1_object_coarseParallel_stack(grayCell,&to_alloc,&to_limit,toSpace,&fromSpace->range,&toSpace->range,sysThread);
       bytesCopied += bytesScanned;
     }
     SynchMid();
     moveToGlobalStack(sysThread->LocalStack, &(sysThread->LocalCursor));
     lastAndEmpty = SynchEnd();
   }
-  if (to_alloc < to_limit)
-    *to_alloc = SKIP_TAG | ((to_limit - to_alloc) << SKIPLEN_OFFSET);
+  PadHeapArea(to_alloc, to_limit);
 
   if (lastAndEmpty)
     CollectorOff(sysThread);
@@ -329,7 +319,7 @@ static int GCTry_SemiConcHelp(SysThread_t *sysThread, int roundSize)
   switch (GCStatus) {
     case GCOff: 
     case GCOn: 
-       GetHeapArea(fromheap,roundSize,&tmp_alloc,&tmp_limit);
+       GetHeapArea(fromSpace,roundSize,&tmp_alloc,&tmp_limit);
        break;
     case GCPendingOn: 
     case GCPendingOff: 
@@ -353,7 +343,6 @@ static void CollectorOn(SysThread_t *sysThread)
 {
   Thread_t *curThread = NULL;
   int isFirst;
-  range_t from_range, to_range;
   mem_t to_alloc = 0, to_limit = 0;
   int rootCount = 0;
 
@@ -371,9 +360,7 @@ static void CollectorOn(SysThread_t *sysThread)
   default: assert(0);
   }
 
-  /* Get local ranges ready for use; check local stack empty; reset root lists */
-  SetRange(&from_range, fromheap->bottom, fromheap->top);
-  SetRange(&to_range, toheap->bottom, toheap->top);
+  /* Check local stack empty; reset root lists */
   assert(sysThread->LocalCursor == 0);
   QueueClear(sysThread->root_lists);
 
@@ -382,7 +369,7 @@ static void CollectorOn(SysThread_t *sysThread)
   isFirst = (synchBarrier(&numOn1, NumSysThread, &numOn3)) == 0;
   if (paranoid) {
     if (isFirst) {
-      paranoid_check_all(fromheap, NULL, NULL, NULL);
+      paranoid_check_all(fromSpace, NULL, NULL, NULL);
       synchBarrier(&numOn1, NumSysThread+1, &numOn3);
     }
     else {
@@ -391,16 +378,16 @@ static void CollectorOn(SysThread_t *sysThread)
     }
   }
   if (isFirst) {
-    int neededSize = (sizeof(val_t)) * (fromheap->top - fromheap->bottom);
+    int neededSize = (sizeof(val_t)) * (fromSpace->top - fromSpace->bottom);
     neededSize += neededSize / collectionRate;
-    Heap_Resize(fromheap,neededSize);
-    Heap_Unprotect(toheap,neededSize);
+    Heap_Resize(fromSpace,neededSize);
+    Heap_Unprotect(toSpace,neededSize);
     major_global_scan(sysThread);
   }
   while ((curThread = NextJob()) != NULL) {
     assert(curThread->requestInfo >= 0);
     FetchAndAdd(&req_size, curThread->requestInfo);
-    local_root_scan(sysThread,curThread,fromheap);
+    local_root_scan(sysThread,curThread);
   }
 
   /* Now forward all the roots which initializes the local work stacks */
@@ -412,14 +399,13 @@ static void CollectorOn(SysThread_t *sysThread)
     for (i=0; i<len; i++) {
       ploc_t root = (ploc_t) QueueAccess(roots,i);
       ptr_t obj = *root;
-      forward1_concurrent_stack(obj,&to_alloc,&to_limit,toheap,&from_range,sysThread);
+      forward1_concurrent_stack(obj,&to_alloc,&to_limit,toSpace,&fromSpace->range,sysThread);
       if (verbose)
 	printf("GC %d: collector on %d root = %d   primary = %d, replica = %d\n",NumGC,++rootCount,root,obj,obj[-1]);
     }
   }
 
-  if (to_alloc < to_limit)
-    *to_alloc = SKIP_TAG | ((to_limit - to_alloc) << SKIPLEN_OFFSET);
+  PadHeapArea(to_alloc, to_limit);
 
   /* Move to global stack */
   SynchStart();
@@ -473,7 +459,7 @@ int GCTry_SemiConc(SysThread_t *sysThread, Thread_t *th)
     break;
   case GCPendingOff:
     do_work(sysThread,sizeof(val_t) * 
-	    (fromheap->top - fromheap->bottom));    /* this is bounded by the size of objects allocated 
+	    (fromSpace->top - fromSpace->bottom));    /* this is bounded by the size of objects allocated 
 						       by all processors since CollectorOff is triggered */
     if (GCStatus == GCPendingOff)                                  /* do_work may trigger CollectorOff */
       CollectorOff(sysThread);
@@ -511,13 +497,13 @@ void gc_init_SemiConc()
   init_double(&MaxRatio, 0.7);
   init_int(&MinRatioSize, 512);         
   init_int(&MaxRatioSize, 50 * 1024);
-  fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  toheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
+  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
 }
 
 void gc_finish_SemiConc()
 {
   Thread_t *th = getThread();
-  int allocsize = (unsigned int) th->saveregs[ALLOCPTR] - (unsigned int) fromheap->alloc_start;
+  int allocsize = (unsigned int) th->saveregs[ALLOCPTR] - (unsigned int) fromSpace->cursor;
   gcstat_normal(allocsize,0,0);
 }

@@ -339,8 +339,7 @@ int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t 
     case TAG_REC_TRACE:
       {
 	if (alloc+2 >= limit) {
-	  if (alloc < limit)
-	    *alloc = SKIP_TAG | ((limit - alloc) << SKIPLEN_OFFSET);
+	  PadHeapArea(alloc, limit);
 	  GetHeapArea(toheap,pagesize,alloc_ptr,limit_ptr);
 	  alloc = *alloc_ptr;
 	  limit = *limit_ptr;
@@ -361,8 +360,7 @@ int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t 
     case TAG_REC_TRACETRACE:
       {
 	if (alloc+3 >= limit) {
-	  if (alloc < limit)
-	    *alloc = SKIP_TAG | ((limit - alloc) << SKIPLEN_OFFSET);
+	  PadHeapArea(alloc, limit);
 	  GetHeapArea(toheap,pagesize,alloc_ptr,limit_ptr);
 	  alloc = *alloc_ptr;
 	  limit = *limit_ptr;
@@ -397,8 +395,7 @@ int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t 
 	if (alloc + (2+wordlen) >= limit) {
 	  int requestBytes = 4 * (2 + wordlen);
 	  int request = (requestBytes + pagesize - 1) / pagesize * pagesize;
-	  if (alloc < limit)
-	    *alloc = SKIP_TAG | ((limit - alloc) << SKIPLEN_OFFSET);
+	  PadHeapArea(alloc, limit);
 	  GetHeapArea(toheap,request,alloc_ptr,limit_ptr);
 	  alloc = *alloc_ptr;
 	  limit = *limit_ptr;
@@ -435,8 +432,7 @@ int copy_coarseParallel(ptr_t white, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t 
 	}
 
 	if (alloc+1+numfields >= limit) {
-	  if (alloc < limit)
-	    *alloc = SKIP_TAG | ((limit - alloc) << SKIPLEN_OFFSET);
+	  PadHeapArea(alloc, limit);
 	  GetHeapArea(toheap,pagesize,alloc_ptr,limit_ptr);
 	  alloc = *alloc_ptr;
 	  limit = *limit_ptr;

@@ -325,20 +325,12 @@ void thread_init()
   for (i=0; i<NumThread; i++)
     fillThread(&Threads[i], i);
   for (i=0; i<NumSysThread; i++) {
-    char *temp;
+    char temp[40];
     SysThread_t *sth = &(SysThreads[i]); /* Structures are by-value in C */
     sth->stid = i;
     sth->allocStart = StartHeapLimit;
     sth->allocCursor = StartHeapLimit;
     sth->allocLimit = StartHeapLimit;
-    temp = malloc(20 * sizeof(char));
-    sprintf(temp, "stacktime_%d", i);
-    reset_timer(temp,&(sth->stacktime));
-    temp = malloc(20 * sizeof(char));
-    sprintf(temp, "gctime_%d", i);
-    reset_timer(temp,&(sth->gctime));
-    temp = malloc(20 * sizeof(char));
-    sprintf(temp, "majorgcime_%d", i);
     reset_timer(temp,&(sth->majorgctime));
     sth->writelistStart = &(sth->writelist[0]);
     sth->writelistCursor = sth->writelistStart;
@@ -347,6 +339,11 @@ void thread_init()
       sth->writelist[j] = 0;
     sth->root_lists = QueueCreate(0,50);
     sth->largeRoots = QueueCreate(0,50);
+    sprintf(temp, "stacktime_%d", i);
+    reset_timer(temp,&(sth->stacktime));
+    sprintf(temp, "gctime_%d", i);
+    reset_timer(temp,&(sth->gctime));
+    sprintf(temp, "majorgcime_%d", i);
   }
   pthread_cond_init(&EmptyCond,NULL);
   pthread_mutex_init(&EmptyLock,NULL);

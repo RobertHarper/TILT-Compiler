@@ -9,7 +9,7 @@
 
 struct timer_st
 {
-  char *name;
+  char name[40];
   int on;
   double user, sys;
   struct rusage cur_usage;
@@ -17,7 +17,7 @@ struct timer_st
 
 typedef struct timer_st timer_mt;
 
-void reset_timer(char *, timer_mt *);
+void reset_timer(const char *, timer_mt *);
 void start_timer(timer_mt *);
 void stop_timer(timer_mt *);
 double getuser_timer(timer_mt *);
