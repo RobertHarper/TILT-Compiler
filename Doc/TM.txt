@@ -21,7 +21,7 @@ A project is made up of a number of compilation units and a mapfile.
 
 ** Mapfile
 
-A mapfile is is a list of compilation units in "use"-file order. It
+A mapfile is a list of compilation units in "use"-file order. It
 introduces names for the compilation units and maps them to
 implementation and interface files. Compilation unit names are
 arbitrary, though the name of a compilation unit typically matches the
