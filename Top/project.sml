@@ -695,9 +695,9 @@ struct
 			     Pos.tostring pos1,") because ",msg]
 			else
 			    [label_name I2,
-			     " not equivalent to the unit's interface (",
-			     label_name I1," at ",Pos.tostring pos1,
-			     ") because ",msg]
+			     " not equivalent to the interface ",
+			     label_name I1," ascribed at ",Pos.tostring pos1,
+			     " because ",msg]
 		in  fail pos2 (concat msg)
 		end
 	in

@@ -259,7 +259,7 @@ unevaluated expressions and all unselected
 .I decs
 are otherwise ignored.
 .PP
-The eight form of declaration causes TILT to terminate with
+The eigth form of declaration causes TILT to terminate with
 an error message containing
 .IR ve .
 .SS Basis library

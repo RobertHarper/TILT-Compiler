@@ -92,7 +92,7 @@ struct
 	type link = {exe:file, asm:file, asmz:file, obj:file}
 
 	fun link (exe:file) : link =
-	    let val root = cwd()/L/file exe
+	    let val root = cwd()/TM/L/file exe
 	    in	{exe=exe, asm=root/Asm, asmz=root/Asmz, obj=root/Obj}
 	    end
 
