@@ -1,24 +1,17 @@
-(*$import Prelude Fixity Util Name Listops IL Prim Tyvar *)
+(*$import Fixity Name Prim Tyvar Util IL *)
 
 structure Il :> IL =
-  struct
+struct
 
-    open Util Listops Name
-    structure Prim = Prim
-    structure Tyvar = Tyvar
-    open Prim
-
-    val error = fn s => error "il.sml" s
     type var = Name.var
     type label = Name.label
     type labels = Name.label list
+    type vpath = Name.vpath
     type prim = Prim.prim
     type ilprim = Prim.ilprim
 
-
     datatype path = PATH of var * labels
     datatype arrow = TOTAL | PARTIAL
-
 
     datatype exp = OVEREXP of con * bool * exp Util.oneshot (* type, valuable, body *)
                  | SCON    of value
@@ -37,8 +30,8 @@ structure Il :> IL =
                  | RAISE   of con * exp       (* annotate with the type of the raised expression *)
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
-                 | EXN_INJECT of string * exp * exp (* tag exp and value *)
-		 | COERCE of exp * con list * exp        (* Coercion value, type arguments, term *)
+                 | EXN_INJECT of string * exp * exp (* tag expression and value *)
+                 | COERCE of exp * con list * exp        (* Coercion value, type arguments, term *)
                  | FOLD   of var list * con * con                 (* Fold coercion   : unrolled type, rolled type (hopefully names) *)
                  | UNFOLD of var list * con * con                 (* Unfold coercion : rolled type, unrolled type (hopefully names) *)
                  | ROLL    of con * exp
@@ -93,7 +86,7 @@ structure Il :> IL =
                  | CON_TUPLE_PROJECT of int * con 
                  | CON_MODULE_PROJECT of mod * label
     and     kind = KIND
-	         | KIND_TUPLE of int
+                 | KIND_TUPLE of int
                  | KIND_ARROW of int * kind
     and      mod = MOD_VAR of var
                  | MOD_STRUCTURE of sbnd list
@@ -105,13 +98,13 @@ structure Il :> IL =
     and     sbnd = SBND of label * bnd
     and      bnd = BND_EXP of var * exp
                  | BND_CON of var * con
-                 | BND_MOD of var * bool * mod
+                 | BND_MOD of var * bool * mod (* bool indicates polymorphism encoded with modules;
+						  used by phase-splitter *)
 
     and   signat = SIGNAT_STRUCTURE of sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * arrow
 		 | SIGNAT_VAR of var
 	         | SIGNAT_OF of path
-                 | SIGNAT_SELF of path * signat option * signat  (* self, optional unselfified sig, selfified sig *)
 
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con * exp option  * bool (* true indicates should inline *)
@@ -126,11 +119,61 @@ structure Il :> IL =
       | CONTEXT_FIXITY of label * Fixity.fixity
       | CONTEXT_OVEREXP of label * ovld
 
-    and context = CONTEXT of  {fixityMap : Fixity.fixity Name.LabelMap.map,
-			       overloadMap : ovld Name.LabelMap.map,
-			       pathMap  : (label * phrase_class) Name.PathMap.map,
-			       ordering : path list,
-			       labelMap : (path * phrase_class) Name.LabelMap.map}
+    (*
+       A context contains
+	 (A) An ordered mapping of labels and variables to some classifier information.
+	 (B) A table memoizing transformed module signatures.
+	 (C) A mapping from top-level labels to paths for the star convention.
+	 (D) A mapping from overloaded labels to the overloaded types and expressions.
+         (E) A mapping from labels to fixity information.
+       The labels of (C) are a superset of the labels of (A).
+       The labels of (C) and (D) are disjoint.
+
+       Invariants:
+
+		The entries of varMap, listed in (rev ordering) order,
+		form a well-formed elaboration context.
+
+       		If (v,(l,pc)) in varMap, then (l,(v,nil) in labelMap.
+		
+		If (l,(v,nil)) in labelMap, then (v,(l',pc)) in varMap.
+
+		(l,(v,labs)) in labelMap, where labs is non-nil, iff
+		the label l is visible at the top-level due to the
+		star convention and v.labs is the corresponding path.
+
+		If (v,s) in !memo, then decs |- v : s and s is fully
+		transparant, deeply reduced, and contains no
+		non-binding occurrences of local variables.
+		
+		dom(overloadMap) and dom(labelMap) are disjoint.
+		
+       Comments:
+       
+		Equality compilation needs to map constructor
+		variables to labels so varMap entries do not have the
+		form (v,pc).
+
+		Pattern compilation needs to map multiple bound labels
+		to the same variable so there is not a one-to-one
+		correspondence between the entries in varMap and the
+		entries of the form (l,(v,nil)) in labelMap.
+		
+		When a module variable is looked up, it's signature is
+		transformed and memoized in !memo.  Rather than risk
+		aliasing errors, we allocate a new ref cell for each
+		new context, even when two contexts can "obviously"
+		share a ref cell.
+		
+		The union of dom(overloadMap) and dom(labelMap) is the
+		set of top-level labels.
+    *)
+    and context = CONTEXT of  {varMap : (label * phrase_class) Name.VarMap.map,
+			       ordering : var list,
+			       labelMap : vpath Name.LabelMap.map,
+			       memo : signat Name.VarMap.map ref,
+			       fixityMap : Fixity.fixity Name.LabelMap.map,
+			       overloadMap : ovld Name.LabelMap.map}
 
     and phrase_class = PHRASE_CLASS_EXP     of exp * con * exp option * bool
                      | PHRASE_CLASS_CON     of con * kind * con option * bool
@@ -138,7 +181,7 @@ structure Il :> IL =
                      | PHRASE_CLASS_SIG     of var * signat
 
     withtype value = (con,exp) Prim.value
-    and decs = dec list
+    type decs = dec list
 
     type bnds  = bnd list
     type sdecs = sdec list

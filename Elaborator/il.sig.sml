@@ -1,4 +1,4 @@
-(*$import Prelude Fixity Name Prim Tyvar Util *)
+(*$import Fixity Name Prim Tyvar Util *)
 
 (* The datatypes for the internal language. *)
 signature IL =
@@ -7,6 +7,7 @@ signature IL =
     type var = Name.var
     type label = Name.label
     type labels = Name.label list
+    type vpath = Name.vpath
     type prim = Prim.prim
     type ilprim = Prim.ilprim
 
@@ -105,7 +106,6 @@ signature IL =
                  | SIGNAT_FUNCTOR of var * signat * signat * arrow
 		 | SIGNAT_VAR of var
 	         | SIGNAT_OF of path
-                 | SIGNAT_SELF of path * signat option * signat  (* self, optional unselfified sig, selfified sig *)
 
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con * exp option  * bool (* true indicates should inline *)
@@ -120,44 +120,61 @@ signature IL =
       | CONTEXT_FIXITY of label * Fixity.fixity
       | CONTEXT_OVEREXP of label * ovld
 
-    (* A context contains 
-         (A) A mapping from labels to fixity information,
-	 (B) An ordered  mapping of labels and variables to some classifier information.  
-	 (C) A mapping from overloaded labels to the overloaded types and expressions.
-	 The labels of (B) and (C) are disjoint.
-       The underlying structure of (B) consists of 
-         (a) An ordered mapping of variables to classifier (phrase_class).
-	     Entries in this mapping can never be shadowed so it is
-	     illegal to insert a new entry with the same variable.
-         (b) An unordered mapping of labels to variables which are in the first mapping.
-	     Entries in this mapping can be shadowed so it is possible
-	     to insert a new entry with a label that already exists.
-       There are 3 additional operations we want to make possible:
-         (1) Strutures that have "open" labels signify that their components
-	     must be searched when performing label lookup.  Thus, the
-	     corresponding internal name might be a path (and not just a variable).
-	     To support these "open" lookups, we must extend variables to paths.
-	 (2) We want to make obtaining classifier from a label fast.
-	 (3) We want to obtain the label that maps onto a particular variable.
-	     This is possible if the label has not been shadowed.
-       To support this we use the following structures.
-         (i)   pathMap: An unordered mapping that takes a paths to a label and a classifier
-	 (ii)  ordering: A reversed list of the paths to maintain the ordering required by (a)
-	                 since the pathMap in (i) is unordered
-	 (iii) labelMap: A mapping that takes a label to a path and a classifier
-       Notes:
-         (!) Because of the possibility of shadowing, an insertion of a new label
-             may require the previously existing label to be changed in both
-	     the labelMap and the pathMap.
-         (+) The labelMap is redundant and can be reconstructed from pathMap.
-	     Thus, it does not need to be written out to disk.
-    *)
+    (*
+       A context contains
+	 (A) An ordered mapping of labels and variables to some classifier information.
+	 (B) A table memoizing transformed module signatures.
+	 (C) A mapping from top-level labels to paths for the star convention.
+	 (D) A mapping from overloaded labels to the overloaded types and expressions.
+         (E) A mapping from labels to fixity information.
+       The labels of (C) are a superset of the labels of (A).
+       The labels of (C) and (D) are disjoint.
 
-    and context = CONTEXT of  {fixityMap : Fixity.fixity Name.LabelMap.map,
-			       overloadMap : ovld Name.LabelMap.map,
-			       pathMap  : (label * phrase_class) Name.PathMap.map,
-			       ordering : path list,
-			       labelMap : (path * phrase_class) Name.LabelMap.map} (* reconstructed from pathMap *)
+       Invariants:
+
+		The entries of varMap, listed in (rev ordering) order,
+		form a well-formed elaboration context.
+
+       		If (v,(l,pc)) in varMap, then (l,(v,nil) in labelMap.
+		
+		If (l,(v,nil)) in labelMap, then (v,(l',pc)) in varMap.
+
+		(l,(v,labs)) in labelMap, where labs is non-nil, iff
+		the label l is visible at the top-level due to the
+		star convention and v.labs is the corresponding path.
+
+		If (v,s) in !memo, then decs |- v : s and s is fully
+		transparant, deeply reduced, and contains no
+		non-binding occurrences of local variables.
+		
+		dom(overloadMap) and dom(labelMap) are disjoint.
+		
+       Comments:
+       
+		Equality compilation needs to map constructor
+		variables to labels so varMap entries do not have the
+		form (v,pc).
+
+		Pattern compilation needs to map multiple bound labels
+		to the same variable so there is not a one-to-one
+		correspondence between the entries in varMap and the
+		entries of the form (l,(v,nil)) in labelMap.
+		
+		When a module variable is looked up, it's signature is
+		transformed and memoized in !memo.  Rather than risk
+		aliasing errors, we allocate a new ref cell for each
+		new context, even when two contexts can "obviously"
+		share a ref cell.
+		
+		The union of dom(overloadMap) and dom(labelMap) is the
+		set of top-level labels.
+    *)
+    and context = CONTEXT of  {varMap : (label * phrase_class) Name.VarMap.map,
+			       ordering : var list,
+			       labelMap : vpath Name.LabelMap.map,
+			       memo : signat Name.VarMap.map ref,
+			       fixityMap : Fixity.fixity Name.LabelMap.map,
+			       overloadMap : ovld Name.LabelMap.map}
 
     and phrase_class = PHRASE_CLASS_EXP     of exp * con * exp option * bool
                      | PHRASE_CLASS_CON     of con * kind * con option * bool
