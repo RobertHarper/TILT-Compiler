@@ -1,11 +1,15 @@
-(*$import Prelude TopLevel Name Util Listops Sequence List TraceInfo Int TilWord32 NilSubst NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize NilDefs *)
+(*$import Name Util Listops Sequence List TraceInfo Int TilWord32 NilSubst NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize NilDefs *)
+
+(* Converting functions with either statically and dynamically known parameter types such that they take a single record
+ * argument to use multiple arguments, as well as generating code to apply vararg/onearg at runtime
+ *)
 
 (* A note about renaming: there is an optimizer invariant that all
    bound variables must be unique.  Constructor level variables get
    duplicated by reduction.  We could rename (in the sense of
    NilRename) all values returned from the normalizer but this would
    lead to some unnecessary work.  Instead, a constructor is renamed
-   only if it comes from the normalizer and its being returned as part
+   only if it comes from the normalizer and it's being returned as part
    of the vararg translation (as opposed to merely guiding the
    translation).  *)
 
@@ -241,6 +245,9 @@ struct
     local
 	datatype state = STATE of {count : int,
 				   ctxt : NilContext.context}
+	(* count = flatten threshhold
+	 * ctxt = typing context threaded through translation
+	 *)
     in  type state = state
 	fun new_state i = STATE {ctxt = NilContext.empty(),
 				 count = i}
@@ -298,7 +305,9 @@ struct
 	   | _ => NONE)
 
     fun is_record state arg =
-	(case reduce state getrecord arg of
+	(case reduce state getrecord arg of (* reduce here will simplify the constructor until getrecord returns SOME _ or
+					     * no more reduction is possible
+					     *)
 	     Normalize.REDUCED rt => rt
 	   | Normalize.UNREDUCED c => (if (!debug) 
 					  then (print "is_record returning DYNAMIC with con = ";
@@ -320,7 +329,7 @@ struct
 	     | Arrow_k(openness,vklist,k) => let val (vklist,state) = do_vklist state vklist
 					     in  Arrow_k(openness,vklist,do_kind state k)
 					     end)
-	       
+
       and do_con (state : state) (con : con) : con =
 	  (case con of
 	       Prim_c(pc,clist) => 
@@ -341,7 +350,7 @@ struct
 		   end
 	     | AllArrow_c{openness,effect,isDependent,
 			  tFormals=[],fFormals=0w0,eFormals=[(argvopt,argc)],body_type=resc} =>
-		   do_arrow state (openness,effect,isDependent,argvopt,argc,resc)
+		   do_arrow state (openness,effect,isDependent,argvopt,argc,resc) (* possible flattening opportunity *)
 	     | AllArrow_c{openness,effect,isDependent,
 			  tFormals,eFormals,fFormals,body_type} =>
 		   let val (tFormals,state) = do_vklist state tFormals
@@ -443,7 +452,7 @@ struct
 			    val e = do_exp state e
 		        in  Let_e(letsort,bnds,e)
 			end
-		| App_e(Open,f,[],[e],[]) => do_app state (f,e)
+		| App_e(Open,f,[],[e],[]) => do_app state (f,e) (* the function may have been flattened *)
 		| App_e(openness,f,clist,elist,eflist) => 
 			App_e(openness, do_exp state f, map (do_con state) clist, 
 			      map (do_exp state) elist, map (do_exp state) eflist)
@@ -477,6 +486,9 @@ struct
 		      Unfold_e (vars,from,to)
 		  end)
 
+     (* The extras passed in are possible bindings of a vararg'd version of the original function (with a new name pvar) to the
+      * original function name funvar.
+      *)
      and do_fun (state, extras)
 	        (funvar,Function{effect,recursive,isDependent,
 				 tFormals,fFormals,eFormals,
@@ -490,7 +502,6 @@ struct
 	     fun change(v,argc,labels,cons) = 
 		 let val body_type = do_con state body_type
 		     val innerState = add_con(state,v,argc)
-(*		     val argc = do_con state argc *)
 		     val vars = map (Name.fresh_named_var o Name.label2name) labels
 		     val vtrclist = Listops.map2 (fn (v,c) => (v, TraceUnknown, NilRename.renameCon (do_con state c))) (vars,cons)
 		     val (_,trs,cons) = unzip3 vtrclist
@@ -499,6 +510,10 @@ struct
 								       map NilRename.renameCon cons,
 								       map Var_e vars,
 								       SOME v)
+			 (* Create a record that collects the flattened arguments in the form the original function used.
+			  * Hopefully known projection optimizations will reduce projections from this record,
+			  * and then it will be removed by dead code checks.
+			  *)
 		     val body = do_exp innerState body
 		     val body = NilSubst.substExpInExp subst body
 		     val body = makeLetE Sequential (recordBnds @ extraBnds) body
@@ -517,7 +532,7 @@ struct
 				       tFormals=tFormals, fFormals=fFormals, eFormals=eFormals,
 				       body=body, body_type=body_type})
 		 end
-		 
+
 	 in  (case (tFormals,fFormals,eFormals) of
 		  ([],[],[(v,_,argc)]) =>
 		      (case (is_record state argc) of
@@ -525,11 +540,17 @@ struct
 			 | RECORD(ls,cs) => if ((length ls) <= get_count state)
 						then change(v,argc,ls,cs)
 					    else default funvar
-			 | DYNAMIC => default pvar
+			 | DYNAMIC => default pvar (* Keep the old function, but give it a new name.
+						    * The old name will be a varargification of the new one, supplied by
+						    * the getExtra function below.
+						    *)
 			 | NOT_TYPE => error "ill-formed lambda")
 		| _ => default funvar)
 	 end
-	 
+
+     (* Get extra binding creating a vararg version of the given function with var as the vararg'd name and pvar as the original,
+      * if the function is eligible to be vararg'd.
+      *)
      and getExtra state (var,Function{tFormals=[],fFormals=[],eFormals=[(_,_,argc)],body_type,effect,...},
 			 pvar) =
 	 (case (is_record state argc) of
@@ -546,7 +567,7 @@ struct
 	     val arg' = do_exp state arg
 	     val con = type_of(state,f)
 	     val nochange = App_e(Open,f',[],[arg'],[])
-	     fun change(labels) = 
+	     fun change(labels) = (* single record parameter of statically known type *)
 		 if ((length labels) <= flattenThreshold)
 		     then 
 			 let val v = fresh_named_var "funarg"
@@ -557,8 +578,8 @@ struct
 			 in  Linearize.linearize_exp result
 			 end
 		 else nochange
-	     fun dynamic(openness,effect,argc,resc) =  
-		 let val v = fresh_named_var "oneargVersion"
+	     fun dynamic(openness,effect,argc,resc) = (* single record parameter of dynamically known type *)
+		 let val v = fresh_named_var "oneargVersion" (* Not used? *)
 		     val result = App_e(openness,
 					Prim_e(NilPrimOp(make_onearg(openness,effect)), [],
 					       [cr argc, cr resc],
@@ -575,7 +596,7 @@ struct
 				| RECORD(ls,_) => change(ls)
 				| DYNAMIC => dynamic(openness,effect,argc,resc)
 				| NOT_TYPE => error "ill-formed application")
-	               | NoTransform _ => 
+	               | NoTransform _ =>
 				  (print "application in which function does not have mono arrow type: \n";
 				   Ppnil.pp_con con; print "\n";
 				   error "application in which function does not have mono arrow type"))
