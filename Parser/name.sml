@@ -47,18 +47,22 @@ structure Name :> NAME =
 
     val labels_name_sorted_distinct = all_pairs (fn (l1,l2) => compare_label(l1,l2) = LESS)
 
-    (* XXX small variable numbers could be mapped to physical registers at the tortl level *)
-    val var_counter = ref 256
-    val tag_counter = ref 256
-    val label_counter = ref 256
+    (*
+	small variable numbers could be mapped to physical registers
+	at the tortl level
+    *)
+    val counter_base = 256
+    val var_counter = ref counter_base
+    val tag_counter = ref counter_base
+    val label_counter = ref counter_base
 
     fun inc_counter counter =
       let val res = !counter
 	  val _ = counter := res + 1
       in res
       end
+    fun reset_counter (counter : int ref) : unit = counter := counter_base
     fun update_var_counter n = var_counter := (Int.max(!var_counter,n + 1))
-    fun update_label_counter n = label_counter := (Int.max(!label_counter,n + 1))
     fun update_tag_counter n = tag_counter := (Int.max(!tag_counter,n + 1))
 
     (* these values copied from NJ source env/env.sml *)
@@ -78,10 +82,7 @@ structure Name :> NAME =
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
 
 
-    fun construct_label (i,s) =
-	let val _ = update_label_counter i
-	in  (i,s)
-	end
+    fun construct_label x = x
     fun construct_tag  (i,s) =
 	let val _ = update_tag_counter i
 	in  (i,s)
@@ -128,6 +129,7 @@ structure Name :> NAME =
 	in  (hash, str)
 	end
 
+    fun reset_label_counter () : unit = reset_counter label_counter
     fun fresh_string s = s ^ "_" ^ Int.toString(inc_counter label_counter)
     fun fresh_internal_label s = internal_label(fresh_string s)
 

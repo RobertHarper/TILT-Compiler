@@ -26,6 +26,7 @@ signature NAME =
     val fresh_var : unit -> var
     val fresh_tag : unit -> tag
     val gen_var_from_symbol : Symbol.symbol -> var  (* conveniently extracts string for you *)
+    val reset_label_counter : unit -> unit
     val fresh_internal_label  : string -> label
     val derived_var : var -> var
     val rename_var : var * string -> unit
