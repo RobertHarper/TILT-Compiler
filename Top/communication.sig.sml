@@ -18,8 +18,7 @@ sig
       | ACK_DONE of string * Update.plan	(* Slave gives up on job, informing master what steps are left. *)
       | ACK_ERROR of string			(* Slave signals that an error occurred during job. *)
       | FLUSH of (Target.platform *		(* Master signals that slave should flush file cache and set boolean flags - *)
-		  (string * bool) list)		(* each flag is a pair of the flag name and value.  Currently skipped when
-						   master and slave are the same. *)
+		  (string * bool) list)		(* each flag is a pair of the flag name and value. *)
       | REQUEST of (Paths.unit_paths *		(* Master request slave to compile. *)
 		    Paths.unit_paths list *
 		    Update.plan)
