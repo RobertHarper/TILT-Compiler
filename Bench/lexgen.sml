@@ -1,3 +1,4 @@
+(*$import Prelude *)
 
 val makestring_int = Int.toString
 fun fold f l a = foldr f a l

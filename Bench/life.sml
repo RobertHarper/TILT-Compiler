@@ -1,3 +1,4 @@
+(*$import Prelude *)
 local
     exception ex_undefined of string
     fun error str = raise ex_undefined str

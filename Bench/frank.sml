@@ -1,3 +1,4 @@
+(*$import Prelude *)
 local
     val makestring_int = Int.toString
 

@@ -1,3 +1,4 @@
+(*$import Prelude *)
 local
     fun length l = 
 	let fun j(k,nil) = k
