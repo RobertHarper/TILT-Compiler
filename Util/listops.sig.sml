@@ -131,14 +131,15 @@ signature LISTOPS =
      * Return the 0 based index of the first element of l for which p return true.
      *)
     val index_of : ('a -> bool) -> 'a list -> int
+
    (* catenable lists *)
-   datatype 'a catlist =
-       LIST of 'a list
-     | CONS of 'a * 'a catlist
-     | APPEND of 'a catlist list
-     | SNOC of 'a catlist * 'a
-     | SINGLETON of 'a
-     | NIL
+   type 'a catlist
+   val LIST : 'a list -> 'a catlist
+   val CONS : 'a * 'a catlist -> 'a catlist
+   val APPEND : 'a catlist list -> 'a catlist
+   val SNOC : 'a catlist * 'a -> 'a catlist
+   val SINGLETON : 'a -> 'a catlist
+   val NIL : 'a catlist
 
    val flattenCatlist : 'a catlist -> 'a list
 
