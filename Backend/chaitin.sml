@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core Int Rtl PRINTUTILS BBLOCK CALLCONV TRACKSTORAGE IFGRAPH COLOR TRACETABLE MACHINEUTILS INTRAPROC Stats TextIO Util Listops List *)
+(*$import Prelude TopLevel Core Int Rtl PRINTUTILS BBLOCK CALLCONV TRACKSTORAGE IFGRAPH COLOR TRACETABLE MACHINEUTILS INTRAPROC Stats TextIO Util Listops List UtilError *)
 (* Graph-coloring register allocator.
        Notes on constructing the interference graph for procedures.
        
@@ -387,6 +387,9 @@ struct
 (* new code *)              | DIRECT (ML_EXTERN_LABEL label, _) => 
 				  if hasRpv then [BASE(LADDR(Rpv_virt,ML_EXTERN_LABEL label))] 
 				  else []
+                            | DIRECT (C_EXTERN_LABEL label, _) =>
+				  if hasRpv then [BASE(LADDR(Rpv_virt,C_EXTERN_LABEL label))] 
+				  else []
 			    | INDIRECT reg => 
 				  if hasRpv then [BASE(MOVE(reg,Rpv_virt))] else [])
 			      @ (BASE(RTL(CALL{calltype=calltype,
@@ -701,17 +704,17 @@ struct
 		      val br_instrs : instruction list = 
 			case (calltype, func) of
 
-			  (C_NORMAL, DIRECT (label as (ML_EXTERN_LABEL _), sraOpt)) => 
-			      [BASE(BSR (ML_EXTERN_LABEL "save_regs_MLtoC", NONE, no_moddef_info)),
+			  (C_NORMAL, DIRECT (label as (C_EXTERN_LABEL _), sraOpt)) =>
+			      [BASE(BSR (C_EXTERN_LABEL "save_regs_MLtoC", NONE, no_moddef_info)),
 			       BASE(BSR (label, sraOpt, no_moddef_info)),
 			       BASE(ILABEL return_label)] @
 			      (std_return_code sraOpt) @
-			      [BASE(BSR (ML_EXTERN_LABEL "load_regs_MLtoC", NONE, no_moddef_info))] @
+			      [BASE(BSR (C_EXTERN_LABEL "load_regs_MLtoC", NONE, no_moddef_info))] @
 			      (std_return_code NONE)
 
 			| (C_NORMAL, DIRECT (l, _)) => 
-			      (print "C_NORMAL call non-ML_EXTERN_LABEL"; print (msLabel l); print "\n";
-			       error "C_NORMAL call non-ML_EXTERN_LABEL")
+			      (print "C_NORMAL call non-C_EXTERN_LABEL"; print (msLabel l); print "\n";
+			       error "C_NORMAL call non-C_EXTERN_LABEL")
 			| (C_NORMAL, _) => error "C_NORMAL call but not DIRECT"
 
 			| (ML_NORMAL, DIRECT (label, sraOpt)) =>
@@ -840,10 +843,13 @@ struct
 
 	     val instrs_out = 
 	       instructionLoop instrs_in
-	       handle e => if !debug then raise e
-			   else (print "exception in allocateBlock ignored\n";
-				 print "No vblock code will be generated.\n";
-				 [])
+	       handle e =>
+		   (case e
+		      of UtilError.BUG _ => raise e
+		       | _ => if !debug then raise e
+			      else (print "exception in allocateBlock ignored\n";
+				    print "No vblock code will be generated.\n";
+				    []))
 
 	     val _ = if (! debug) then
 	       (emitString "block out:\n";

@@ -124,14 +124,6 @@ struct
     end
   fun msRegSet s = msRegList (setToList s)
 
-(*
-  fun translateLocalLabel loclabel = loclabel
-  fun translateCodeLabel loclabel = loclabel
-  fun translateLabel (Rtl.LOCAL_LABEL ll) = I (translateLocalLabel ll)
-    | translateLabel (Rtl.ML_EXTERN_LABEL label) = MLE label
-    | translateLabel (Rtl.C_EXTERN_LABEL label) = CE (label,NONE)
-*)
-
   (* ".align 3" even-word aligns *)
   val programHeader = ["\t.set noat\n"]
   fun procedureHeader label = [" \t.align 3\n", "\t.ent " ^ (msLabel (label)) ^ "\n"]

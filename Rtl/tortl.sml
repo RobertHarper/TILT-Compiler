@@ -64,7 +64,7 @@ struct
     val {sub,vsub,len,vlen,update,array,vector,
 	 bnds = aggregate_bnds} = Optimize.generate()
 
-    val exncounter_label = ML_EXTERN_LABEL "exncounter"
+    val exncounter_label = C_EXTERN_LABEL "exncounter"
     val error = fn s => (Util.error "tortl.sml" s)
     structure TW32 = TilWord32
     structure TW64 = TilWord64
@@ -373,7 +373,7 @@ struct
 
 		      val fun_reglabel = 
 				(case (vlopt,vvopt) of
-				     (NONE,SOME(CODE l)) => LABEL' l
+				     (NONE,SOME(CODE (ML_EXTERN_LABEL s))) => LABEL' (C_EXTERN_LABEL s)
 				   | (SOME loc, _) => REG'(load_ireg_loc(loc, NONE))
 				   | _ => error "bad varloc or varval for function")
 				     
@@ -1819,6 +1819,8 @@ struct
 
   (* unitname is the name of the unit; unit names are globally unique. *)
 
+   fun unitMain (unit : string) : string = unit ^ "_unit"
+       
    fun translate (unitname : string,
 		  Nil.MODULE{bnds, imports, exports}) = 
          let 
@@ -1849,7 +1851,7 @@ struct
 	     end
 
              (* Set global state and reset debugging info *)
-	     val mainString = unitname ^ "_unit"
+	     val mainString = unitMain unitname
 	     val mainCodeName = ML_EXTERN_LABEL(unitname ^ "_main")
 	     val mainCodeVar = Name.fresh_named_var(unitname ^ "_main")
 	     val mainName = ML_EXTERN_LABEL mainString
@@ -1880,7 +1882,7 @@ struct
 		 end
 	     val localMirrorArray = load_ireg_val(INT (if (!Rtltags.mirrorPtrArray) then 0w1 else 0w0), NONE)
 	     val _ = add_instr(CALL{call_type = C_NORMAL,
-				    func = LABEL' (ML_EXTERN_LABEL "AssertMirrorPtrArray"),
+				    func = LABEL' (C_EXTERN_LABEL "AssertMirrorPtrArray"),
 				    args = [I localMirrorArray],
 				    results = [],
 				    save = getLocals()})
@@ -1916,8 +1918,8 @@ struct
 
 	     val procs = rev (!pl)
 	     val data = rev (!dl)
-	     val globalStart = ML_EXTERN_LABEL (mainString ^ "_GLOBALS_BEGIN_VAL")
-	     val globalEnd = ML_EXTERN_LABEL (mainString ^ "_GLOBALS_END_VAL")
+(*XXX*)	     val globalStart = ML_EXTERN_LABEL (mainString ^ "_GLOBALS_BEGIN_VAL")
+(*XXX*)	     val globalEnd = ML_EXTERN_LABEL (mainString ^ "_GLOBALS_END_VAL")
 	     val data = (DLABEL globalStart) ::
 		        (data @ 
 			 [DLABEL globalEnd,
@@ -1938,14 +1940,15 @@ struct
 	 end
 
 
-     fun entryTables moduleLabels = 
+     fun entryTables (units : string list) = 
 	 let val nt = TraceKnown TraceInfo.Trace
 	     val registerVar = Name.fresh_var()
 	     val stringCon = Prim_c(Array_c, [Prim_c (Int_c Prim.W8, [])])
 	     val registerImport = Nil.ImportValue (Name.symbol_label(Symbol.varSymbol "registerThunk"),
 						   registerVar, nt, 
 						   ExternArrow_c([stringCon],Prim_c(Record_c([],NONE),[])))
-	     fun makeImportBnd (ML_EXTERN_LABEL lab) = 
+	     val moduleStrings = map unitMain units
+	     fun makeImportBnd lab = 
 	     let open Nil
 		 val lab = Name.symbol_label (Symbol.varSymbol lab)
 		 val v1 = Name.fresh_var()
@@ -1964,7 +1967,7 @@ struct
 		   (* Nil.Exp_b(v2, nt, ExternApp_e(Var_e registerVar,[strVal])), *)
 		   Nil.Exp_b(v3, nt, App_e(Closure, Var_e v1, [], [], []))])
 	     end
-	     val (moduleImports,moduleBndLists) = Listops.unzip (map makeImportBnd moduleLabels)
+	     val (moduleImports,moduleBndLists) = Listops.unzip (map makeImportBnd moduleStrings)
 	     val moduleBnds = Listops.flatten moduleBndLists
 	     val nilmod = Nil.MODULE{bnds = aggregate_bnds @ vararg_onearg_bnds @ moduleBnds,
 				     imports = registerImport :: moduleImports,
@@ -1972,9 +1975,10 @@ struct
 				                [sub,vsub,len,vlen,update,array,vector,vararg,onearg]}
 	     val Rtl.MODULE{procs=linkProcs,data=linkData,
 			    main=linkMain,global=linkGlobal} = translate(linkUnitname,nilmod)
-	     val moduleLabels = linkMain :: moduleLabels
-	     val moduleStrings = map (fn ML_EXTERN_LABEL str => str
-                                       | _ => error "bad module label") moduleLabels
+	     val linkMainString = (case linkMain
+				     of ML_EXTERN_LABEL str => str
+				      | _ => error "bad module label")
+	     val moduleStrings = linkMainString :: moduleStrings
 	     val count = length moduleStrings
              fun mktable(name,suffix) =
 		 DLABEL (ML_EXTERN_LABEL name) ::

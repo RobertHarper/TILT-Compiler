@@ -50,6 +50,7 @@ struct
   fun bool2s true = "true"
     | bool2s false = "false"
   fun label2s (ML_EXTERN_LABEL s) = "ML "^s
+    | label2s (C_EXTERN_LABEL s) = "C "^s
     | label2s (LOCAL_CODE s) = "LC" ^ s
     | label2s (LOCAL_DATA s) = "LD" ^ s
   fun rep2s TRACE  = "(TRACE)"

@@ -20,12 +20,12 @@ int save_rate = 70;
 int useGenStack = 0;
 
 
-static mem_t GCTABLE_BEGIN_ADDR = &GCTABLE_BEGIN_VAL;
-static mem_t GCTABLE_END_ADDR = &GCTABLE_END_VAL;
-static mem_t GLOBALS_BEGIN_ADDR = &GLOBALS_BEGIN_VAL;
-static mem_t GLOBALS_END_ADDR = &GLOBALS_END_VAL;
-static mem_t TRACE_GLOBALS_BEGIN_ADDR = &TRACE_GLOBALS_BEGIN_VAL;
-static mem_t TRACE_GLOBALS_END_ADDR = &TRACE_GLOBALS_END_VAL;
+static mem_t GCTABLE_BEGIN_ADDR = &ml_GCTABLE_BEGIN_VAL;
+static mem_t GCTABLE_END_ADDR = &ml_GCTABLE_END_VAL;
+static mem_t GLOBALS_BEGIN_ADDR = &ml_GLOBALS_BEGIN_VAL;
+static mem_t GLOBALS_END_ADDR = &ml_GLOBALS_END_VAL;
+static mem_t TRACE_GLOBALS_BEGIN_ADDR = &ml_TRACE_GLOBALS_BEGIN_VAL;
+static mem_t TRACE_GLOBALS_END_ADDR = &ml_TRACE_GLOBALS_END_VAL;
 
 int debugStack = 0;
 long MaxStackDepth = 0;
@@ -100,7 +100,7 @@ void stack_init(void)
   assert(GCTableEntryIDFlag == 0);
 #endif
 
-  for (mi=0; mi<module_count; mi++) {
+  for (mi=0; mi<ml_module_count; mi++) {
     int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
     int *endpos = (int *)(GCTABLE_END_ADDR[mi]);
     int *curpos = startpos; 
@@ -124,7 +124,7 @@ void stack_init(void)
 */
     }
   CallinfoHashTable = CreateHashTable(2*count);
-  for (mi=0; mi<module_count; mi++) {
+  for (mi=0; mi<ml_module_count; mi++) {
     int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
     int *endpos = (int *)(GCTABLE_END_ADDR[mi]);
     int *curpos = startpos; 
@@ -714,9 +714,9 @@ static Set_t *tenuredGlobal;        /* Accumulates the contents of promotedGloba
 void global_root_init(void)
 {
   int mi, numGlobals = 0;  
-  for (mi=0; mi<module_count; mi++) {
-    mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
-    mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
+  for (mi=0; mi<ml_module_count; mi++) {
+    mem_t start = (mem_t)TRACE_GLOBALS_BEGIN_ADDR[mi];
+    mem_t stop = (mem_t)TRACE_GLOBALS_END_ADDR[mi];
     numGlobals += stop - start;
   }
   promotedGlobal = SetCreate(numGlobals);
@@ -772,9 +772,9 @@ void NullGlobals(int globalOffset)
 {
   int mi;
   /* Null out replica global vars */
-  for (mi=0; mi<module_count; mi++) {
-    mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
-    mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
+  for (mi=0; mi<ml_module_count; mi++) {
+    mem_t start = (mem_t)TRACE_GLOBALS_BEGIN_ADDR[mi];
+    mem_t stop = (mem_t)TRACE_GLOBALS_END_ADDR[mi];
     for ( ; start < stop; start++) {
       mem_t global = (mem_t) (*start);
       global[globalOffset / sizeof(val_t)] = uninit_val;

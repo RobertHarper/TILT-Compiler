@@ -117,13 +117,7 @@ struct
       structure Labelkey : ORD_KEY = 
 	  struct
 	      type ord_key = Rtl.label
-	      fun compare (LOCAL_CODE s1, LOCAL_CODE s2) = String.compare(s1,s2)
-		| compare (LOCAL_DATA s1, LOCAL_DATA s2) = String.compare(s1,s2)
-		| compare (ML_EXTERN_LABEL s1, ML_EXTERN_LABEL s2) = String.compare(s1,s2)
-		| compare (LOCAL_CODE _, _) = LESS
-		| compare (_, LOCAL_CODE _) = GREATER
-		| compare (LOCAL_DATA _, _) = LESS
-		| compare (_, LOCAL_DATA _) = GREATER
+	      val compare = Rtl.compare_label
 	  end
   in  structure Labelmap = SplayMapFn(Labelkey)
       structure Labelset = BinarySetFn(Labelkey)

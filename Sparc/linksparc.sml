@@ -80,9 +80,9 @@ struct
       in  main
       end
 
-  fun link (asm_file,labels) = 
-    let val rtlmod = Tortl.entryTables labels
-	val _ = rtl_to_asm(asm_file,rtlmod)
+  fun link {asmFile, units} = 
+    let val rtlmod = Tortl.entryTables units
+	val _ = rtl_to_asm(asmFile,rtlmod)
     in  ()
     end
 

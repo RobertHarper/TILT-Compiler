@@ -237,8 +237,7 @@ struct
 			  of Target.TIL_ALPHA => Linkalpha.link
 			   | Target.TIL_SPARC => Linksparc.link)
 	    val link = wrap link
-	    val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL (un ^ "_unit")) units
-	    val ignoredLabel = link (asmFile, local_labels)
+	    val ignoredLabel = link {asmFile=asmFile,units=units}
 	in  ()
 	end
 end

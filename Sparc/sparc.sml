@@ -181,7 +181,8 @@ structure Machine =
 
   fun msLabel (LOCAL_CODE s) = makeAsmLabel s
     | msLabel (LOCAL_DATA s) = makeAsmLabel s
-    | msLabel (ML_EXTERN_LABEL label) = (makeAsmLabel label)
+    | msLabel (ML_EXTERN_LABEL s) = makeAsmLabel ("ml_" ^ s)
+    | msLabel (C_EXTERN_LABEL s) = makeAsmLabel s
 
 
   fun loadi_to_ascii LD  = "ld"
@@ -576,10 +577,13 @@ structure Machine =
       | cFlow (BASE (BSR (label as LOCAL_DATA _,_,_))) = BRANCH (true, [label])
       | cFlow (BASE (BSR (label as _,_,_)))            = BRANCH (true, [])
       | cFlow (SPECIFIC (CBRANCHI(_, ML_EXTERN_LABEL _, _))) = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHI(_, C_EXTERN_LABEL _, _)))  = DELAY_BRANCH (true, [])
       | cFlow (SPECIFIC (CBRANCHI(_, llabel, _)))                = DELAY_BRANCH (true, [llabel])
       | cFlow (SPECIFIC (CBRANCHR(_, _, ML_EXTERN_LABEL _, _)))  = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHR(_, _, C_EXTERN_LABEL _, _)))   = DELAY_BRANCH (true, [])
       | cFlow (SPECIFIC (CBRANCHR(_, _, llabel, _)))             = DELAY_BRANCH (true, [llabel])
       | cFlow (SPECIFIC (CBRANCHF(_, ML_EXTERN_LABEL _)))        = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHF(_, C_EXTERN_LABEL _)))         = DELAY_BRANCH (true, [])
       | cFlow (SPECIFIC (CBRANCHF(_, llabel)))                   = DELAY_BRANCH (true, [llabel])
       | cFlow (BASE (Core.JSR(_,_,_,labels))) = BRANCH (false, labels)
       | cFlow (BASE (Core.RET(_,_)))  = BRANCH (false, [])
@@ -754,7 +758,7 @@ structure Machine =
 	    bumpSp sz,			(* Restore stack pointer to original value *)
 	    [SPECIFIC(INTOP(OR, Rzero, IMMop (INT prevframe_maxoffset), Rat)),
 	     BASE (MOVE(Rra, Rat2)),
-	     BASE (BSR (Rtl.ML_EXTERN_LABEL ("NewStackletFromML"), NONE,
+	     BASE (BSR (Rtl.C_EXTERN_LABEL ("NewStackletFromML"), NONE,
 			{regs_modified=[Rat], regs_destroyed=[Rat],
 			 args=[Rat]}))],
 	    bumpSp (~sz),		(* Allocate frame on new stacklet *)

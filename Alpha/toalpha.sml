@@ -402,7 +402,7 @@ struct
 	    wants arguments in $24 & 25, its address in $27, a return
             address in $23, and returns its result in $27. *)
 	 emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
-			      func = DIRECT (Rtl.ML_EXTERN_LABEL "__divl", SOME (ireg 23)),
+			      func = DIRECT (Rtl.C_EXTERN_LABEL "__divl", SOME (ireg 23)),
 			      args = [Rsrc1, Rsrc2],
 			      results = [Rdest],
 			      argregs = SOME [ireg 24, ireg 25],
@@ -426,7 +426,7 @@ struct
 	   in
 	     emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero)));
 	     emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
-				  func = DIRECT (Rtl.ML_EXTERN_LABEL "__divl",SOME (ireg 23)),
+				  func = DIRECT (Rtl.C_EXTERN_LABEL "__divl",SOME (ireg 23)),
 				  args = [Rsrc1, Rsrc2],
 				  results = [Rdest],
 				  argregs = SOME [ireg 24, ireg 25],
@@ -452,7 +452,7 @@ struct
 	    wants arguments in $24 & 25, its address in $27, a return
             address in $23, and returns its result in $27 and the pv in $23. *)
 	   emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
-				func = DIRECT (Rtl.ML_EXTERN_LABEL "__reml",SOME(ireg 23)),
+				func = DIRECT (Rtl.C_EXTERN_LABEL "__reml",SOME(ireg 23)),
 				args = [Rsrc1, Rsrc2],
 				results = [Rdest],
 				argregs = SOME [ireg 24, ireg 25],
@@ -477,7 +477,7 @@ struct
 	    wants arguments in $24 & 25, its address in $27, a return
             address in $23, and returns its result in $27. *)
 	 emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
-			      func = DIRECT (Rtl.ML_EXTERN_LABEL "__divlu", SOME (ireg 23)),
+			      func = DIRECT (Rtl.C_EXTERN_LABEL "__divlu", SOME (ireg 23)),
 			      args = [Rsrc1, Rsrc2],
 			      results = [Rdest],
 			      argregs = SOME [ireg 24, ireg 25],
@@ -501,7 +501,7 @@ struct
 	    wants arguments in $24 & 25, its address in $27, a return
             address in $23, and returns its result in $27 and the pv in $23. *)
 	   emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
-				func = DIRECT (Rtl.ML_EXTERN_LABEL "__remlu",SOME(ireg 23)),
+				func = DIRECT (Rtl.C_EXTERN_LABEL "__remlu",SOME(ireg 23)),
 				args = [Rsrc1, Rsrc2],
 				results = [Rdest],
 				argregs = SOME [ireg 24, ireg 25],
@@ -1069,7 +1069,7 @@ struct
 	   else (load_imm (i2w bytesNeeded, Rat);
 		 emit (SPECIFIC (INTOP(SUBL, Rheap, REGop Rat, Rat))));
 	   emit (BASE (GC_CALLSITE afterLabel));
-	   emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
+	   emit (BASE (BSR (Rtl.C_EXTERN_LABEL ("GCFromML"), NONE,
 			    {regs_modified=[Rat], regs_destroyed=[Rat],
 			     args=[Rat]})));
 	   translate (Rtl.ILABEL afterLabel)
@@ -1097,7 +1097,7 @@ struct
 	 emit (SPECIFIC (INTOP   (CMPULE, Rat, REGop Rhlimit, Rat2)));
 	 emit (SPECIFIC (CBRANCHI(BNE, Rat2, rtl_loclabel)));
 	 emit (BASE (GC_CALLSITE rtl_loclabel));
-	 emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
+	 emit (BASE (BSR (Rtl.C_EXTERN_LABEL ("GCFromML"), NONE,
 			     {regs_modified=[Rat], regs_destroyed=[Rat],
 			      args=[Rat]})));
 	 translate (Rtl.ILABEL rtl_loclabel)

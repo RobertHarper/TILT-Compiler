@@ -339,7 +339,7 @@ struct
 			| TNE => BE)
 	   val afterLabel = Rtl.fresh_code_label "afterOverflowCheck"
        in  emit (SPECIFIC (CBRANCHI (cc, afterLabel, true)));
-	   emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("OverflowFromML"), NONE,
+	   emit (BASE (BSR (Rtl.xML_EXTERN_LABEL ("OverflowFromML"), NONE,
 			    {regs_modified=[], regs_destroyed=[], args=[]})));
 	   translate_local_label afterLabel
        end
@@ -348,13 +348,13 @@ struct
        let val branch = (case trapi
 			   of TVS => BVS
 			    | TNE => BNE)
-       in  emit (SPECIFIC (CBRANCHI (branch, Rtl.ML_EXTERN_LABEL "localOverflowFromML", false)))
+       in  emit (SPECIFIC (CBRANCHI (branch, Rtl.C_EXTERN_LABEL "localOverflowFromML", false)))
        end
    fun hard_vbarrier (trapi : trap_instruction) = if (!branchingTraps) then test_overflow trapi
 						  else trap_overflow trapi
 (*
    (* Division by check occurs before the operation.  The trap always occurs.  *)
-   fun test_zero' (IMMop (INT 0)) = emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("DivFromML"), NONE,
+   fun test_zero' (IMMop (INT 0)) = emit (BASE (BSR (Rtl.xML_EXTERN_LABEL ("DivFromML"), NONE,
 						     {regs_modified=[], regs_destroyed=[], args=[]})))
      | test_zero' (IMMop (INT _)) = ()
      | test_zero' opDivisor =
@@ -363,14 +363,14 @@ struct
 		      of REGop rDivisor => emit (SPECIFIC (CBRANCHR (BRNZ, rDivisor, afterLabel, true)))
 		       | _ => (emit (SPECIFIC (CMP (Rzero, opDivisor)));
 			       emit (SPECIFIC (CBRANCHI (BNE, afterLabel, true)))))
-	   val _ = emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("DivFromML"), NONE,
+	   val _ = emit (BASE (BSR (Rtl.xML_EXTERN_LABEL ("DivFromML"), NONE,
 				    {regs_modified=[], regs_destroyed=[], args=[]})))
 	   val _ = translate_local_label afterLabel
        in  ()
        end
 *)
    local
-       val divLbl = Rtl.ML_EXTERN_LABEL "localDivFromML"
+       val divLbl = Rtl.C_EXTERN_LABEL "localDivFromML"
    in
        (* Division by zero check occurs before the operation.  The trap always occurs.  *)
        fun test_zero' (IMMop (INT 0)) = emit (BASE (BR divLbl))
@@ -478,7 +478,7 @@ struct
 			end)
        in
 	 translate(Rtl.CALL{call_type = Rtl.C_NORMAL,
-			    func = Rtl.LABEL' (Rtl.ML_EXTERN_LABEL ".urem"),
+			    func = Rtl.LABEL' (Rtl.C_EXTERN_LABEL ".urem"),
 			    args = [Rtl.I rtl_Rsrc1, Rtl.I rtl_Rsrc2],
 			    results = [Rtl.I rtl_Rdest],
 			    save = []})
@@ -588,7 +588,7 @@ struct
        in
 	 test_zero (translateOp op2);
 	 translate(Rtl.CALL{call_type = Rtl.C_NORMAL, (* XXX should use our own asm routine so this can ML_NORMAL *)
-			    func = Rtl.LABEL' (Rtl.ML_EXTERN_LABEL ".rem"),
+			    func = Rtl.LABEL' (Rtl.C_EXTERN_LABEL ".rem"),
 			    args = [Rtl.I rtl_Rsrc1, Rtl.I rtl_Rsrc2],
 			    results = [Rtl.I rtl_Rdest],
 			    save = []})
@@ -1001,7 +1001,7 @@ struct
 	   else (load_imm (i2w bytesNeeded, Rat);
 		 emit (SPECIFIC (INTOP(SUB, Rheap, REGop Rat, Rat))));
 	   emit (BASE (GC_CALLSITE afterLabel));
-	   emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
+	   emit (BASE (BSR (Rtl.C_EXTERN_LABEL ("GCFromML"), NONE,
 			    {regs_modified=[Rat], regs_destroyed=[Rat],
 			     args=[Rat]})));
 	   translate (Rtl.ILABEL afterLabel)
@@ -1030,7 +1030,7 @@ struct
 	  emit (SPECIFIC (CMP     (Rat, REGop Rhlimit)));
 	  emit (SPECIFIC (CBRANCHI(BLE, rtl_loclabel,true)));
 	  emit (BASE (GC_CALLSITE rtl_loclabel));
-	  emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
+	  emit (BASE (BSR (Rtl.C_EXTERN_LABEL ("GCFromML"), NONE,
 			   {regs_modified=[Rat], regs_destroyed=[Rat],
 			    args=[Rat]})));
 	  translate (Rtl.ILABEL rtl_loclabel)

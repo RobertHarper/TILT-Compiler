@@ -503,7 +503,7 @@ struct
        val istop : bool ref = ref false
        val top : label ref = ref (LOCAL_CODE "dummy_top")
        val currentfun : (var * label) ref = ref (fresh_named_var "dummy_fun",
-					       LOCAL_CODE "dummy_fun")
+						 LOCAL_CODE "dummy_fun")
        val resultreg : reg option ref = ref NONE
        val il : (Rtl.instr ref) list ref = ref nil
        val localregs : reg list ref = ref nil

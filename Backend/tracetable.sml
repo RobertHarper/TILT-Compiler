@@ -526,34 +526,4 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 	  DLABEL(ML_EXTERN_LABEL (name^"_GCTABLE_END_VAL")),
 	  INT32 wzero])
 
-
-    fun MakeMutableTable (name,arg) = 
-      let
-	  fun do_lab_trace(lab,trace) = 
-	      let 
-		  val _ = clearbytes()
-		  val _ = clearwords()
-		  val botword = botlist2wordlist [tr2bot trace]
-		  fun comfilter [] = []
-		    | comfilter ((COMMENT _)::rest) = comfilter rest
-		    | comfilter (a::rest) = a::(comfilter rest)
-		  val specdata = 
-		      case (comfilter (getbytes() @ getwords())) of
-			  [] => [COMMENT "filler",INT32 (i2w 0),INT32(i2w 0)]
-			| [a] => [COMMENT "bytestuff",a,
-				  COMMENT "filler",INT32(i2w 0)]
-			| [a,b] => [COMMENT "wordstuff",a,b]
-			| _ => error "global table entry wrong"
-	      in (COMMENT "-----global label and bot----") ::
-		  (DATA lab) :: (map INT32 botword) @ specdata
-	      end
-      in
-	[DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_BEGIN_VAL"))]
-	@ (List.concat (map do_lab_trace arg))
-	@ [COMMENT "filler for alignment of global_table",
-	   DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_END_VAL")),
-	   INT32 wzero]
-      end
-
-
   end

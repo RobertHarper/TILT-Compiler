@@ -3,11 +3,14 @@ signature RTL =
 sig
 
   type var = Name.var
-  datatype label = ML_EXTERN_LABEL of string  
+  datatype label = ML_EXTERN_LABEL of string
+                 | C_EXTERN_LABEL of string
                  | LOCAL_DATA of string
                  | LOCAL_CODE of string
 
+  val compare_label : label * label -> order
   val eq_label : label * label -> bool
+  val hash_label : label -> word
   val named_data_label : string -> label
   val named_code_label : string -> label
   val fresh_data_label : string -> label
@@ -314,6 +317,3 @@ sig
 			   global : label list}
 
 end (* RTL *)
-
-
-

@@ -362,7 +362,7 @@ struct
 	    end;
 	    (* call the runtime to allocate large array *)
 	    add_instr(CALL{call_type = C_NORMAL,
-			   func = LABEL' (ML_EXTERN_LABEL "alloc_bigfloatarray"),
+			   func = LABEL' (C_EXTERN_LABEL "alloc_bigfloatarray"),
 			   args = [I len,F fr],
 			   results = [I dest],
 			   save = getLocals()});
@@ -483,7 +483,7 @@ struct
 			    add_instr(BCNDI(LE, wordlen, REG dataMax, ismall_alloc, true))
 			end
 		val _ = add_instr(CALL{call_type = C_NORMAL,
-				    func = LABEL' (ML_EXTERN_LABEL "alloc_bigintarray"),
+				    func = LABEL' (C_EXTERN_LABEL "alloc_bigintarray"),
 				    args = [I bytelen,I word],
 				    results = [I dest],
 				    save = getLocals()})
@@ -525,7 +525,7 @@ struct
 			    add_instr(BCNDI(LE, wordLen, REG dataMax, psmall_alloc, true))
 			end
 		val _ = add_instr(CALL{call_type = C_NORMAL,
-				       func = LABEL' (ML_EXTERN_LABEL "alloc_bigptrarray"),
+				       func = LABEL' (C_EXTERN_LABEL "alloc_bigptrarray"),
 				       args = [I len, I initv],
 				       results = [I dest],
 				       save = getLocals()})

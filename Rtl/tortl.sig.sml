@@ -10,6 +10,6 @@ sig
    val debug_bound : bool ref
 
    val translate : (string * Nil.module) -> Rtl.module  (* unit name *)
-   val entryTables : Rtl.label list -> Rtl.module
+   val entryTables : string list -> Rtl.module (* unit names *)
 
 end

@@ -15,7 +15,7 @@
 #include "stats.h"
 #include "gcstat.h"
 #include "show.h"
-
+#include "client.h"
 
 
 /* use generational by default */
@@ -61,9 +61,6 @@ int forceMirrorArray = 0, mirrorGlobal = 0, mirrorArray = 0;
 int primaryGlobalOffset = 0, replicaGlobalOffset = sizeof(val_t);
 int primaryArrayOffset = 0, replicaArrayOffset = sizeof(val_t);
 
-extern int module_count;
-extern val_t GLOBALS_BEGIN_VAL;
-extern val_t GLOBALS_END_VAL;
 extern void PopStackletFromML(void);
 
 int minAllocRegion = 256;         /* Minimum allocation region size in bytes.  Mutator will be resumed with at least this 
@@ -329,9 +326,9 @@ void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalSta
   int count = 0, mi, i;
   char buffer[100];
   /* check globals */
-  for (mi=0; mi<module_count; mi++) {
-    mem_t start = (mem_t) (&GLOBALS_BEGIN_VAL)[mi];
-    mem_t stop = (mem_t) (&GLOBALS_END_VAL)[mi];
+  for (mi=0; mi<ml_module_count; mi++) {
+    mem_t start = (mem_t) (&ml_GLOBALS_BEGIN_VAL)[mi];
+    mem_t stop = (mem_t) (&ml_GLOBALS_END_VAL)[mi];
     sprintf(buffer, "globals of module %d: %s", mi, label);
     scan_heap(buffer,start,stop,stop, legalHeaps, legalStarts, 
 	      SHOW_GLOBALS && (NumGC >= LEAST_GC_TO_CHECK), replicaType, NULL);

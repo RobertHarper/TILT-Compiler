@@ -36,13 +36,13 @@ signature TRACETABLE =
     val MakeTableHeader  : string            -> Rtl.data list
     val MakeTable        : callinfo list     -> Rtl.data list
     val MakeTableTrailer : string            -> Rtl.data list
-
+(*
     (* MakeMutableTable: given list of traceable global variables,
        construct table.   A ``global variable'' is a memory location containing
        a possibly traceable value.*)
 
     val MakeMutableTable  : string * (Rtl.label * trace) list -> Rtl.data list
-
+*)
     val msTrace : trace -> string
   end;
 

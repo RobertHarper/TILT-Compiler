@@ -154,7 +154,8 @@ structure Machine =
 
   fun msLabel (LOCAL_CODE s) = makeAsmLabel s
     | msLabel (LOCAL_DATA s) = makeAsmLabel s
-    | msLabel (ML_EXTERN_LABEL label)     = (makeAsmLabel label)
+    | msLabel (ML_EXTERN_LABEL s) = makeAsmLabel ("ml_" ^ s)
+    | msLabel (C_EXTERN_LABEL s) = makeAsmLabel s
 
 
   fun storei_to_ascii STL = "stl"
@@ -699,7 +700,7 @@ structure Machine =
 	    bumpSp sz,			(* Restore stack pointer to original value *)
 	    [SPECIFIC (LOADI (LDA, Rat, prevframe_maxoffset, Rzero)),
 	     BASE (MOVE (Rra, Rat2)),
-	     BASE (BSR (Rtl.ML_EXTERN_LABEL ("NewStackletFromML"), NONE,
+	     BASE (BSR (Rtl.C_EXTERN_LABEL ("NewStackletFromML"), NONE,
 			{regs_modified=[Rat], regs_destroyed=[Rat],
 			 args=[Rat]}))],
 	    bumpSp (~sz),		(* Reallocate frame on new stacklet *)

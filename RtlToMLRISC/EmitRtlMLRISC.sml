@@ -732,9 +732,9 @@ functor EmitRtlMLRISC(
        * -> the Rtl label
        * <- the label
        *)
-      fun translate(Rtl.ML_EXTERN_LABEL name) = externalLabel name
-	| translate(Rtl.LOCAL_DATA name)      = lookupData name
-	| translate(Rtl.LOCAL_CODE name)      = lookupCode name
+      fun translate(Rtl.xML_EXTERN_LABEL name) = externalLabel name
+	| translate(Rtl.xLOCAL_DATA name)      = lookupData name
+	| translate(Rtl.xLOCAL_CODE name)      = lookupCode name
 
       (*
        * Return the string of a given Rtl label.
@@ -744,9 +744,9 @@ functor EmitRtlMLRISC(
       local
 	val fixLabel = MLRISCPseudo.fixLabel
       in
-	fun string(Rtl.ML_EXTERN_LABEL name) = fixLabel name
-	  | string(Rtl.LOCAL_DATA name)      = "LD"^fixLabel name
-	  | string(Rtl.LOCAL_CODE name)      = "LC"^fixLabel name
+	fun string(Rtl.xML_EXTERN_LABEL name) = fixLabel name
+	  | string(Rtl.xLOCAL_DATA name)      = "LD"^fixLabel name
+	  | string(Rtl.xLOCAL_CODE name)      = "LC"^fixLabel name
       end
 
       (*
@@ -1535,7 +1535,7 @@ functor EmitRtlMLRISC(
 	    val label' = Label'.translate label
 	  in
 	    case label of
-	      Rtl.ML_EXTERN_LABEL _ => externalDLABEL label'
+	      Rtl.xML_EXTERN_LABEL _ => externalDLABEL label'
 	    | _	                    => DLABEL label'
 	  end
   end

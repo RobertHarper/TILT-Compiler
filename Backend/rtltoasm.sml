@@ -246,14 +246,18 @@ struct
 	 in ()
 	 end
 
+       (* Functions like (ML_EXTERN_LABEL o msLabel) are not
+	  idempotent because msLabel does some mangling to avoid
+	  linker conflicts between C and ML code.  We have to be
+	  careful not to mangle the same label twice.  *)
 
-       val main' = Machine.msLabel main
-       val client_entry = main'^"_client_entry"
-       val global_start = main'^"_GLOBALS_BEGIN_VAL"
-       val global_end = main'^"_GLOBALS_END_VAL"
-       val trace_global_start = main'^"_TRACE_GLOBALS_BEGIN_VAL"
-       val trace_global_end = main'^"_TRACE_GLOBALS_END_VAL"
-
+       val mangled = Machine.msLabel main
+       val main' = (case main
+		      of ML_EXTERN_LABEL s => s
+		       | _ => error "bad main label")
+	   
+       val trace_global_start = ML_EXTERN_LABEL(main'^"_TRACE_GLOBALS_BEGIN_VAL")
+       val trace_global_end = ML_EXTERN_LABEL(main'^"_TRACE_GLOBALS_END_VAL")
        
        val _ = app emitString programHeader;
        val _ = dumpGCDatalist (Tracetable.MakeTableHeader main');
@@ -261,23 +265,23 @@ struct
        val _ = app initSig procs
 
        val _ = app emitString textStart;
-       val _ = emitString ("\t.globl "^main'^"_CODE_END_VAL\n");
-       val _ = emitString ("\t.globl "^main'^"_CODE_BEGIN_VAL\n");
-       val _ = emitString (""^main'^"_CODE_BEGIN_VAL:\n");
+       val _ = emitString ("\t.globl "^mangled^"_CODE_END_VAL\n");
+       val _ = emitString ("\t.globl "^mangled^"_CODE_BEGIN_VAL\n");
+       val _ = emitString (""^mangled^"_CODE_BEGIN_VAL:\n");
        val _ = Listops.mapcount allocateComponent component_names
 
      in (* allocateProg *)
 
        subtimer("backend_output",
 		fn() => (app emitString textStart;
-			 emitString (main'^"_CODE_END_VAL:\n");
+			 emitString (mangled^"_CODE_END_VAL:\n");
 			 dumpGCDatalist (Tracetable.MakeTableTrailer main');
 			 app emitString dataStart;
 			 dumpDatalist data;
 			 emitString ("\t.long 0" ^ commentHeader ^ "filler\n\n");
 			 let val globalData = map DATA global
-			     val globalData = [DLABEL (ML_EXTERN_LABEL trace_global_start)] @ globalData @
-				              [DLABEL (ML_EXTERN_LABEL trace_global_end), 
+			     val globalData = [DLABEL trace_global_start] @ globalData @
+				              [DLABEL trace_global_end, 
 					       COMMENT "filler so label is defined", INT32 0w0]
 			 in  dumpDatalist globalData
 			 end;

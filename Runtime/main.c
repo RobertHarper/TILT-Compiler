@@ -18,6 +18,7 @@
 #include "stats.h"
 #include "global.h"
 #include "stack.h"
+#include "client.h"
 
 int LEAST_GC_TO_CHECK = 0;
 int checkAtGC = 0;
@@ -292,8 +293,6 @@ void init_double(double *x, double y)
     *x = y;
 }
 
-extern ptr_t LINKUNIT_unit;
-
 int main(int argc, char **argv)
 {
   int i;
@@ -311,7 +310,7 @@ int main(int argc, char **argv)
   stack_init();  /* must follow thread_init */
   GCInit();
 
-  thread_go((ptr_t) GetGlobal((ptr_t) &LINKUNIT_unit));
+  thread_go((ptr_t) GetGlobal(&ml_LINKUNIT_unit));
   stats_finish();
   return 0;
 }
