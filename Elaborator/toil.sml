@@ -1033,9 +1033,9 @@ val _ = print "plet0\n"
 	     val fbnds = map #1 fbnd_con_list
 	     val fbnd_cons : con list = map #2 fbnd_con_list
 	     (* Use symbols cannot have a bang andalphnumeric characters *)
-	     val top_name = foldl (fn (l,s) => (Name.label2name l) ^ "_" ^ s) "!polyfun" fun_ids
-	     val top_label = to_nonexport(internal_label top_name)
-	     val top_var = fresh_named_var "polyfun"
+	     val top_name = foldl (fn (l,s) => (Name.label2name l) ^ "_" ^ s) "" fun_ids
+	     val top_label = to_nonexport(to_cluster (internal_label top_name))
+	     val top_var = fresh_named_var "cluster"
 	     val top_exp_con = (FIX(true,PARTIAL,fbnds),
 				case fbnd_cons of
 				    [c] => c
@@ -2129,8 +2129,9 @@ val _ = print "plet0\n"
 				  (case (mod2path argmod) of
 				       SOME p => p
 				     | _ => elab_error "xstrexp: functor argument became non-variable")
-			      val coerced_lbl = internal_label "!coerced"
-			      val coerced_var = fresh_named_var "coerced_structure"
+			      val varName = Symbol.name var
+			      val coerced_lbl = internal_label ("!coerced_" ^ varName)
+			      val coerced_var = fresh_named_var ("coerced_" ^ varName)
 
 			      val (modc_body,sig1') = 
 				  Signature.xcoerce_functor(polyinst,context,argpath,signat,sig1)

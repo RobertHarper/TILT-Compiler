@@ -388,4 +388,61 @@ LINKPARSE Parser/linkparse.sig
 LinkParse Parser/linkparse
 
 
+#################### Elaborator directory #################
+
+PRIM    Elaborator/prim.sig
+Prim    Elaborator/prim
+PPPRIM  Elaborator/ppprim.sig
+Ppprim  Elaborator/ppprim
+TYVAR   Elaborator/tyvar.sig
+Tyvar   Elaborator/tyvar
+
+IL	Elaborator/il.sig
+Il	Elaborator/il
+PPIL	Elaborator/ppil.sig
 bug2 Test/bug2
+Ppil	Elaborator/ppil
+PRIMUTILPARAM Elaborator/primutilparam.sig 
+IlPrimUtilParam Elaborator/ilprimutilparam
+PRIMUTIL Elaborator/primutil.sig
+PrimUtil Elaborator/primutil
+ILUTIL Elaborator/ilutil.sig
+IlUtil Elaborator/ilutil
+
+ILCONTEXT Elaborator/ilcontext.sig
+IlContext Elaborator/ilcontext
+ILCONTEXTEQ Elaborator/ilcontexteq.sig
+IlContextEq Elaborator/ilcontexteq
+	
+ERROR Elaborator/error.sig
+Error Elaborator/error
+
+INFIXPARSE Elaborator/infixparse.sig
+InfixParse Elaborator/infixparse
+
+
+
+ILSTATIC  Elaborator/ilstatic.sig
+IlStatic  Elaborator/ilstatic
+
+EQUAL Elaborator/equal.sig
+Equal Elaborator/equal
+DATATYPE Elaborator/datatype.sig
+Datatype Elaborator/datatype
+SIGNATURE Elaborator/signature.sig
+Signature Elaborator/signature
+
+PAT Elaborator/pat.sig
+Pat Elaborator/pat
+
+TOIL Elaborator/toil.sig
+Toil Elaborator/toil
+
+BASIS Elaborator/basis.sig
+Basis Elaborator/basis
+
+LINKIL Elaborator/linkil.sig
+LinkIl Elaborator/linkil
+
+
+elabtest Self/elabtest

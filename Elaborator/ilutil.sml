@@ -846,6 +846,7 @@ structure IlUtil
     val nonexport_str = "-X"
     val eq_str = "+E"
     val dt_str = "+O-X+D"
+    val cluster_str = "+C"
 
     fun is_open lab = 
 	let val str = label2name lab
@@ -855,6 +856,7 @@ structure IlUtil
     fun is_nonexport lab =  substring (nonexport_str,label2name lab)
     fun is_eq lab = substring (eq_str,label2name lab)
     fun is_dt lab = substring (dt_str,label2name lab)
+    fun is_cluster lab = substring (cluster_str,label2name lab)
 
     local
 	fun to_meta_lab meta_str lab =
@@ -867,6 +869,7 @@ structure IlUtil
 	fun to_nonexport lab = to_meta_lab nonexport_str lab 
 	fun to_eq lab = to_meta_lab eq_str lab
 	fun to_dt lab = to_meta_lab dt_str lab
+	fun to_cluster lab = to_meta_lab cluster_str lab
     end
 
     fun label2name lab = 

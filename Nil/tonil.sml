@@ -1,4 +1,4 @@
-(*$import Il Nil Ppil IlUtil IlContext IlStatic NilUtil NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL Option NilRename *)
+(*$import Il Nil Ppil IlUtil IlContext IlStatic NilUtil NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL Option *)
 
 (* We box all floats and translate floating point operations accordingly.
    Thus, kind type is replaced by work types.
@@ -49,6 +49,19 @@ struct
        fun addToVmap (vmap, var, var_c, var_r) = 
 	   Name.VarMap.insert (vmap, var, (var_c, var_r))
 
+       fun newSplit (var, vmap) = 
+	   let
+	       val var_name = if (!keep_hil_numbers) then
+	                         Name.var2string var
+                              else
+                                 Name.var2name var
+	       val var_c = Name.fresh_named_var (var_name ^ "_c")
+	       val var_r = Name.fresh_named_var (var_name ^ "_r")
+	   in
+	       (var_c, var_r, addToVmap(vmap, var, var_c, var_r))
+	   end
+       
+
    in
        fun lookupVmap (var, vmap) = Name.VarMap.find (vmap, var)
 	   
@@ -62,24 +75,11 @@ struct
 						print ",";
 						Ppnil.pp_var v2;
 						print ") ")) vmap
-
-       fun splitNewVar (var, vmap) = 
-	   let
-	       val var_name = if (!keep_hil_numbers) then
-	                         Name.var2string var
-                              else
-                                 Name.var2name var
-	       val var_c = Name.fresh_named_var (var_name ^ "_c")
-	       val var_r = Name.fresh_named_var (var_name ^ "_r")
-	   in
-	       (var_c, var_r, addToVmap(vmap, var, var_c, var_r))
-	   end
 	   	   
-       fun splitOldVar (var, vmap) =
+       fun splitVar (var, vmap) =
 	   (case (lookupVmap (var, vmap)) of
-		NONE => error "splitOldVar: variable not found"
+		NONE => newSplit (var, vmap)
 	      | SOME (var_c, var_r) => (var_c, var_r, vmap))
-
 
    end
 
@@ -329,19 +329,9 @@ in
    fun NilContext_kind_standardize(CONTEXT{NILctx,...},k) = NilContext.kind_standardize(NILctx, k)
    fun NilContext_kind_of(CONTEXT{NILctx,...},c) = NilContext.kind_of(NILctx, c)
 
-   val splitNewVar = fn (var,CONTEXT{NILctx,sigmap,
+   val splitVar = fn (var,CONTEXT{NILctx,sigmap,
 			     used,vmap,rmap,alias,memoized_mpath,polyfuns}) =>
-                  let val (var_c,var_r,vmap') = splitNewVar(var,vmap)
-		  in  ((var_c,var_r),
-		       CONTEXT{NILctx=NILctx, sigmap=sigmap,
-			       used=used, vmap=vmap', rmap=rmap,
-			       memoized_mpath=memoized_mpath,
-			       alias=alias,polyfuns=polyfuns})
-		  end
-
-   val splitOldVar = fn (var,CONTEXT{NILctx,sigmap,
-			     used,vmap,rmap,alias,memoized_mpath,polyfuns}) =>
-                  let val (var_c,var_r,vmap') = splitOldVar(var,vmap)
+                  let val (var_c,var_r,vmap') = splitVar(var,vmap)
 		  in  ((var_c,var_r),
 		       CONTEXT{NILctx=NILctx, sigmap=sigmap,
 			       used=used, vmap=vmap', rmap=rmap,
@@ -350,7 +340,7 @@ in
 		  end
 
    val chooseName = (fn (NONE, ctxt) => let val v = Name.fresh_var()
-					    val ((vc,vr),ctxt) = splitNewVar(v,ctxt)
+					    val ((vc,vr),ctxt) = splitVar(v,ctxt)
 					in  (v,vc,vr,ctxt)
 					end
 		      | (SOME (var,var_c,var_r), ctxt) => (var, var_c, var_r, ctxt))
@@ -657,7 +647,7 @@ end (* local defining splitting context *)
 		let fun loop (Il.MOD_VAR v) acc = (Name.var2name v) ^ acc
 		      | loop (Il.MOD_PROJECT (m,l)) acc = loop m ("_" ^ (Name.label2name l) ^ acc)
 		    val var = Name.fresh_named_var(loop mpath "")
-		    val ((var_c, var_r), context) = splitNewVar (var, context)
+		    val ((var_c, var_r), context) = splitVar (var, context)
 		    val {cbnd_cat : conbnd catlist,
 			 ebnd_cat,name_c,name_r,
 			 (*knd_c,*)context} =
@@ -678,7 +668,7 @@ end (* local defining splitting context *)
 
    and xmod' context (il_mod as (Il.MOD_VAR var_mod), preferred_name) : mod_result = 
        let
-	   val ((var_mod_c, var_mod_r), context) = splitOldVar (var_mod, context)
+	   val ((var_mod_c, var_mod_r), context) = splitVar (var_mod, context)
 	   val _ = NilContext_use_var(context,var_mod_r)
 	   val _ = NilContext_use_var(context,var_mod_c)
 
@@ -829,152 +819,99 @@ end (* local defining splitting context *)
 	    context  = context}
        end
 
-     | xmod' context (Il.MOD_FUNCTOR(arrow, arg_var, il_arg_signat, ilmod_body, ilmod_signat), 
+     | xmod' context (Il.MOD_FUNCTOR(arrow,var_arg, il_arg_signat, ilmod_body, ilmod_signat), 
 		    preferred_name) =
        let
-
 	   (* Pick the name of the result *)
-	   val (var_fun, var_fun_c, var_fun_r, context) = chooseName (preferred_name, context)
-            	   
+	   val (var_fun, var_fun_c, var_fun_r, context) = 
+	       chooseName (preferred_name, context)
            val name_fun_c = Var_c var_fun_c
 	   val name_fun_r = Var_e var_fun_r
 
-	   (* Split the argument variable and update the context with the type part *)
-	   val _ = clear_memo arg_var
-	   val ((arg_c_var, arg_r_var), context') = splitNewVar (arg_var, context)
+	   (* Split the argument parameter *)
+	   val ((var_arg_c, var_arg_r), context') = splitVar (var_arg, context)
+	   val (var_arg_c, var_arg_r, context',var_arg,ilmod_body) = 
+		(case NilContext_find_kind(context',var_arg_c) of
+			NONE => (var_arg_c, var_arg_r, context',var_arg,ilmod_body)
+		      | SOME _ =>
+			let val _ = print "Duplicate functor var_arg in HIL\n"
+			    val var_arg' = Name.derived_var var_arg
+			    val subst = IlUtil.subst_add_convar(IlUtil.empty_subst,var_arg,Il.CON_VAR var_arg')
+			    val ilmod_body = IlUtil.mod_subst(ilmod_body,subst)
+		     	    val ((var_arg_c, var_arg_r), context') = splitVar (var_arg', context')
+			in  (var_arg_c, var_arg_r, context',var_arg',ilmod_body)
+			end)
 
-	   (* Split the argument signature and bind the type part in the context *)
-	   val (arg_knd, arg_type) = xsig context' (Var_c arg_c_var, il_arg_signat)
-	   val context' = update_NILctx_insert_kind(context', arg_c_var, arg_knd)
+	   val _ = clear_memo var_arg
 
+	   val (knd_arg, con_arg) = 
+	         xsig context' (Var_c var_arg_c, il_arg_signat)
 
-           (* If we're doing pre-projections, then bind variables
-              corresponding to all the sub-signatures in the argument
-              structure *)
+	   val context' = update_NILctx_insert_kind(context', var_arg_c, knd_arg)
+
+	   val (_,con_res) = xsig context' (App_c(name_fun_c, [Var_c var_arg_c]), 
+					    ilmod_signat)
+
            val (cbnd_preproject_cat,ebnd_preproject_cat,context') = 
 	       if (!do_preproject)
 		   then let val {cbnd_cat = cbnd_preproject_cat,
 				 ebnd_cat = ebnd_preproject_cat,
 				 context = context'} = 
-		             preproject(arg_var,il_arg_signat,context')
+		             preproject(var_arg,il_arg_signat,context')
 			in (cbnd_preproject_cat, ebnd_preproject_cat, context')
 			end
 	       else (LIST[], LIST[], context')
 
            (* Split the functor body *)
+		
 	   val {cbnd_cat = cbnd_body_cat, 
 		ebnd_cat = ebnd_body_cat, 
 		name_c = name_body_c,
 		name_r = name_body_r,
-		context = _} = xmod context' (ilmod_body, NONE)
+(*		knd_c = knd_body_c, *)
+		context = _
+		} = xmod context' (ilmod_body, NONE)
 
-	   (* create the bindings *)
-	   val cbnd_cat = APPEND[cbnd_preproject_cat, cbnd_body_cat]
-	   val ebnd_cat = APPEND[ebnd_preproject_cat, ebnd_body_cat]
+	   val cbnd_body_cat = APPEND[cbnd_preproject_cat, cbnd_body_cat]
+	   val ebnd_body_cat = APPEND[ebnd_preproject_cat, ebnd_body_cat]
 
-	   val (_, result_r_type) = xsig context' (Var_c arg_c_var, il_arg_signat)
+	   val effect = xeffect arrow
 
-	   (* Get the result type.
-              The kind of the result's compile-time part is not needed because
-              we don't have this annotation for constructor-level functions.
-              BTW, it wouldn't be the most-specific return type anyway.
-            *)
-	   val (_,con_res) = xsig context' (App_c(name_fun_c, [Var_c arg_c_var]),
-                                            ilmod_signat)
+           val cbnds_body = flattenCatlist cbnd_body_cat
+           val ebnds_body = flattenCatlist ebnd_body_cat
 
-
-	   (* Create the pre_c function. *)
-
-           val var_fun_pre_c = Name.fresh_named_var ((Name.var2name var_fun) ^ "_pre_c")
-	   val name_fun_pre_c = Var_c var_fun_pre_c
-
-           val cbnds_body = flattenCatlist cbnd_cat
-
-	   val bound_vars = NilUtil.varsBoundByCbnds cbnds_body
-	   val pre_c_labels = 
-	       map (fn var => Name.fresh_internal_label (Name.var2name var)) bound_vars
-
-	   val var_third_arg_c = Name.derived_var arg_c_var
-
-	   val pre_c_body = NilRename.renameCon
-	       (NilUtil.makeLetC cbnds_body
-		(Crecord_c (Listops.zip pre_c_labels (map Var_c bound_vars))))
-
-	   val pre_c_body = 
-	       NilSubst.varConConSubst arg_c_var (Var_c var_third_arg_c) pre_c_body 
-
-	   (* Create the _c function
-            *)
-
-           (* Figure out which variable (bound in these bindings or outside) 
-	      corresponds to the compile-time part of the result
-            *)
-	   val var_other_arg_c = Name.derived_var arg_c_var
-	   val var_body_c = (case name_body_c of
-				 Var_c v => v
-			       | _ => (print "name_body_c = ";
-				       Ppnil.pp_con name_body_c;
-				       print "\n";
-				       error "name_body_c ended up not being a variable"))
-
-	   (* Create the body of the _c function *)
-	   val vl_list = Listops.zip bound_vars pre_c_labels
-	   val c_body = 
-	       (case Listops.assoc_eq (Name.eq_var, var_body_c, vl_list) of
-		    SOME c_body_label => Proj_c(App_c(name_fun_pre_c, [Var_c var_other_arg_c]),
-						c_body_label)
-		  | NONE => name_body_c)
-
-	   (* Create the final cbnds *)
-	       
-	   val cbnd_fun_cat = 
-	        LIST [Open_cb(var_fun_pre_c, [(var_third_arg_c, arg_knd)], pre_c_body),
-		      Open_cb(var_fun_c, [(var_other_arg_c, NilRename.renameKind arg_knd)], c_body)]
-
-	   (* Create the _r function
-            *)
-
-	   val pre_c_app_var = Name.fresh_named_var "pre_c_app_var"
-	   val pre_c_app = Var_c pre_c_app_var
-
-           val con_bnds_for_ebnds =
-	       (Con_b(Runtime, Con_cb(pre_c_app_var, 
-				      App_c(name_fun_pre_c, [Var_c arg_c_var]))))
-	       :: (Listops.map (fn (v,l) => (Con_b(Runtime, Con_cb(v, Proj_c(pre_c_app, l)))))
-		   vl_list)
-
-           val ebnds_body = flattenCatlist ebnd_cat
-
-	   val con_res' = NilUtil.makeLetC (flattenCatlist cbnd_preproject_cat) con_res
+	   val con_res' = NilUtil.makeLetC cbnds_body con_res
+(*
+	   val knd_fun_c = Arrow_k(Open, [(var_arg_c, knd_arg)], knd_body_c)
+*)
+           val con_body = NilUtil.makeLetC cbnds_body name_body_c
+           val cbnd_fun_cat = 
+	       LIST[Open_cb(var_fun_c, [(var_arg_c, knd_arg)],
+			    con_body)]
 
 	   val ebnd_fun_cat =  
 	       LIST[Fixopen_b (Sequence.fromList
 			      [(var_fun_r,
 			       Function{recursive = Leaf,
-					effect = xeffect arrow,
+					effect = effect,
 					isDependent =  true,
-					tFormals = [(arg_c_var, arg_knd)],
-					eFormals = [(arg_r_var, TraceUnknown, arg_type)],
+					tFormals = [(var_arg_c, knd_arg)],
+					eFormals = [(var_arg_r, TraceUnknown, con_arg)],
 					fFormals = [],
 					body = (NilUtil.makeLetE Sequential
-						(con_bnds_for_ebnds @ ebnds_body)
+						((map makeConb cbnds_body) @ ebnds_body)
 						name_body_r),
 					body_type = con_res'})])]
 
-	   (* Add the two new constructor functions to the typing context *)
-	   val context = 
-	       update_NILctx_insert_kind
-	         ((update_NILctx_insert_kind
-		   (context, var_fun_pre_c, 
-		    Arrow_k(Open, [(arg_c_var, arg_knd)], Single_k(pre_c_body)))),
-		  var_fun_c, 
-		  Arrow_k(Open, [(var_other_arg_c, arg_knd)], Single_k(c_body)))
-		   
+	   val context = update_NILctx_insert_kind(context, var_fun_c, 
+                           Arrow_k(Open, [(var_arg_c, knd_arg)], Single_k(con_body)))
+
        in
 	   {cbnd_cat = cbnd_fun_cat,
             ebnd_cat = ebnd_fun_cat,
 	    name_c = name_fun_c,
 	    name_r = name_fun_r,
+	    (* knd_c = knd_fun_c, *)
 	    context = context}
        end
    
@@ -1030,7 +967,7 @@ end (* local defining splitting context *)
 
 	   val _ = clear_memo var_loc
 
-	   val ((var_loc_c, var_loc_r), context) = splitNewVar (var_loc, context)
+	   val ((var_loc_c, var_loc_r), context) = splitVar (var_loc, context)
 
 	   val {cbnd_cat = cbnd_loc_cat,
 		ebnd_cat = ebnd_loc_cat,
@@ -1116,7 +1053,7 @@ end (* local defining splitting context *)
 				 Il.BND_EXP(top_var, 
 					    il_exp as Il.FIX(_, _, fbnds)))
 			 ::rest_il_sbnds) =
-       (if (Util.substring("polyfun!",Name.label2string lbl)) then
+       (if (IlUtil.is_cluster lbl) then
 	   let
 	       (* external_labels = Exported labels for these functions.
                   external_vars = Variables to which the functions should be bound
@@ -1202,7 +1139,7 @@ end (* local defining splitting context *)
                         in the HIL fix-construct.
         il_functions = Bodies of the functions in this mutually-recursive group *)
 
-	       val ((poly_var_c, poly_var_r), context') = splitNewVar (poly_var, context)
+	       val ((poly_var_c, poly_var_r), context') = splitVar (poly_var, context)
 	       val (knd_arg, con_arg) = 
 		                  xsig context' (Var_c poly_var_c, il_arg_signat)
 
@@ -1221,7 +1158,7 @@ end (* local defining splitting context *)
 		   let
 		       fun folder (v,context) = 
 			   let
-			       val ((_,v_r),context) = splitNewVar(v,context)
+			       val ((_,v_r),context) = splitVar(v,context)
 			   in
 			       (v_r, context)
 			   end
@@ -1349,8 +1286,6 @@ end (* local defining splitting context *)
 
 	   val _ = clear_memo var
 
-(**** CS: not necessary once we have the splitNewVar function distinct from splitVar
-
            (* Unfortunately, the HIL may duplicate variables, and the flattening
               of modules may put duplicates that used to have disjoint scopes
               into overlapping scopes. *)
@@ -1369,9 +1304,9 @@ end (* local defining splitting context *)
 				IlUtil.mod_subst(Il.MOD_STRUCTURE rest_il_sbnds,subst)
 			in (v,rest')
 			end)
-****)
 
-	   val ((var_c, var_r), context) = splitNewVar (var, context)
+
+	   val ((var_c, var_r), context) = splitVar (var, context)
 	       
 	   val {cbnd_cat = cbnd_mod_cat, 
 		ebnd_cat = ebnd_mod_cat,
@@ -1400,7 +1335,7 @@ end (* local defining splitting context *)
 
      | xsbnds_rewrite_3 context (Il.SBND(lbl, Il.BND_MOD(var, true, il_polymod))::rest_il_sbnds) =
        let
-           val ((_, var_r), context) = splitNewVar(var, context)
+           val ((_, var_r), context) = splitVar(var, context)
            val bnd = xpolymod context (var_r, il_polymod)
 
            val context = update_polyfuns (context, var_r)
@@ -1422,7 +1357,7 @@ end (* local defining splitting context *)
          let
 	     val _ = clear_memo poly_var
 (*	     val _ = (print "xpolymod binding for "; Ppil.pp_var v_r; print "\n") *)
-	     val ((poly_var_c, poly_var_r), context') = splitNewVar (poly_var, context)
+	     val ((poly_var_c, poly_var_r), context') = splitVar (poly_var, context)
 
 	     val (knd_arg, arg_type) = 
 		 xsig context' (Var_c poly_var_c, il_arg_signat)
@@ -1459,7 +1394,7 @@ end (* local defining splitting context *)
 	 (case extractPathLabels il_mod of
 	      (Il.MOD_VAR v', lbls) => 
 		  let
-		      val ((_,v'_r),_) = splitOldVar(v',context)
+		      val ((_,v'_r),_) = splitVar(v',context)
 		      val _ = NilContext_use_var(context,v'_r)
 		  in 
 		      Exp_b(v_r, TraceUnknown, selectFromRec(Var_e v'_r, lbls))
@@ -1500,7 +1435,7 @@ end (* local defining splitting context *)
 
 	   fun check_proj(Il.MOD_VAR v,ls) = 
 	       let
-		   val ((v_c,_),_) = splitOldVar(v, context)
+		   val ((v_c,_),_) = splitVar(v, context)
 	       in
 		   NilContext_use_var(context, v_c);
 		   lookup_con_memo (v,ls) (fn()=> xcon' context il_con)
@@ -1510,8 +1445,9 @@ end (* local defining splitting context *)
 	   val result = (case (!do_memoize,il_con) of
 			     (true,Il.CON_MODULE_PROJECT(m,l)) => check_proj(m,[l])
 			   | _ => xcon' context il_con)
-	       handle e => (if (!debug) then print ("Exception detected in call " ^ 
-						    (Int.toString this_call) ^ " to xcon\n") else ();
+	       handle e => (if (!debug) then (print ("Exception detected in call " ^ 
+						    (Int.toString this_call) ^ " to xcon: ");
+					      Ppil.pp_con il_con; print "\n") else ();
 			    raise e)
 
 	in
@@ -2095,7 +2031,7 @@ end (* local defining splitting context *)
 			(case (extractPathLabels il_mod_fun) of
 			     (Il.MOD_VAR v, lbls) => 
 				 let
-				     val ((_,v_r),_) = splitOldVar (v, context)
+				     val ((_,v_r),_) = splitVar (v, context)
 				 in
 				     if ((!elaborator_specific_optimizations) andalso
 					 ((var_is_polyfun(context, v_r)) orelse is_it_proj)) then
@@ -2213,7 +2149,7 @@ end (* local defining splitting context *)
 		    Il.SIGNAT_STRUCTURE(_,[Il.SDEC(it_lbl,Il.DEC_EXP _)]) => Name.eq_label(it_lbl,IlUtil.it_lab)
 		  | _ => false)
 
-	   val ((var_c, var_r), context) = splitNewVar (var, context)
+	   val ((var_c, var_r), context) = splitVar (var, context)
 	   val (knd, con) = xsig context (Var_c var_c, sig_dom)
 	   val context = update_NILctx_insert_kind(context, var_c, knd)
 	       
@@ -2315,7 +2251,7 @@ end (* local defining splitting context *)
 	   fun loop [] = []
 	     | loop ((sdec as 
 		     Il.SDEC(lab,Il.DEC_EXP(top_var,il_con, _, _))) :: rest) = 
-	        if (Util.substring("polyfun!",Name.label2string lab)) then
+	        if (IlUtil.is_cluster lab) then
 		   let
 (*		       val _ = print "entered mono optimization case\n" *)
 		       val clist = (case il_con of
@@ -2372,7 +2308,7 @@ end (* local defining splitting context *)
 		    Il.SDEC(lbl, d as Il.DEC_MOD(var,is_poly,signat)) :: rest) =
        let
 	   val _ = clear_memo var
-	   val ((var_c, var_r), context') = splitNewVar (var, context)
+	   val ((var_c, var_r), context') = splitVar (var, context)
 	   val (knd, con) = xsig context' (Proj_c(con0, lbl), signat)
 	       
 	   val context' = update_NILctx_insert_kind(context', var_c, knd)
@@ -2459,7 +2395,7 @@ end (* local defining splitting context *)
 		  | Il.PHRASE_CLASS_MOD (_,is_polyfun,il_sig) => 
 			let
 			    val (l_c,l_r) = make_cr_labels l
-			    val ((v_c, v_r),context) = splitNewVar (v, context)
+			    val ((v_c, v_r),context) = splitVar (v, context)
 			    val il_sig = IlStatic.UnselfifySig IlContext.empty_context (PATH(v,[]), il_sig)
 			    val (knd, type_r) = xsig context (Var_c v_c, il_sig)
 				
@@ -2594,7 +2530,7 @@ end (* local defining splitting context *)
 			     end
 		       | (true,Il.DEC_MOD (v,is_polyfun,s)) => 
 			     let val (lc,lr) = make_cr_labels l
-				 val ((vc,vr),_) = splitOldVar (v,final_context)
+				 val ((vc,vr),_) = splitVar (v,final_context)
 				 val exports = 
 				     if is_polyfun then
 					 (ExportValue(lr,vr)::exports)

@@ -87,11 +87,13 @@ signature ILUTIL =
     val to_nonexport : label -> label
     val to_eq: label -> label       
     val to_dt: label -> label       
+    val to_cluster: label -> label       
 
     val is_open : label -> bool
     val is_nonexport : label -> bool
     val is_eq : label -> bool
     val is_dt : label -> bool
+    val is_cluster : label -> bool
 
     (* Lose all characteristics *)
     val label2name : label -> string
