@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Stats Update UpdateHelp Time Graph Compiler TextIO Real Vector String Char Int Listops SplayMapFn ListMergeSort MASTER Communication TopHelp Prelink Tools Background OS List Platform Dirs Target Paths Statistics *)
+(*$import Prelude TopLevel Util Stats Update UpdateHelp Time Graph Compiler TextIO Real Vector String Char Int Listops SplayMapFn ListMergeSort MASTER Communication TopHelp Prelink Tools Background OS List Platform Dirs Target Paths Statistics Info *)
 
 (* 
    The master sets up by deleting all channels and then takes master steps which are:
@@ -19,6 +19,7 @@ functor Master (val bootstrap : bool
     :> MASTER =
 struct
     val error = fn s => Util.error "master.sml" s
+    val reject = fn s => raise (Compiler.Reject s)
 
     val checkPointVerbose = Stats.tt "CheckPointVerbose"
     val showEnable = Stats.ff "ShowEnable"
@@ -136,15 +137,15 @@ struct
 		(chat "  Cycle detected in mapfile: ";
 		 chat_strings 20 nodes;
 		 chat "\n";
-		 error "Cycle detected in mapfile")
+		 reject "Cycle detected in mapfile")
 		 | Dag.UnknownNode node =>
-		let val msg = "  " ^ node ^ " not defined in mapfile."
+		let val msg = node ^ " not defined in mapfile"
 		in
-		    chat msg;
+		    chat ("  " ^ msg);
 		    chat "  Used by ";
 		    chat_strings 20 (Dag.children' (g, node));
 		    chat "\n";
-		    error msg
+		    reject msg
 		end
 		  
 	type collapse = {maxWeight : int, maxParents : int, maxChildren : int}
@@ -235,13 +236,21 @@ struct
 			    in  String.sub(s,0) = #";" orelse
 				(len >= 2 andalso String.substring(s,0,2) = "//")
 			    end
-	    fun compunit (unitname, filebase, isTarget) =
-		UNIT {paths = mkPaths (unitname, filebase),
-		      isTarget = bootstrap orelse isTarget,
-		      isBasis = isBasis}
-	    fun fail (n,line,msg) = error ("Line " ^ (Int.toString n) ^ " of " ^ mapfile ^
-					   " " ^ msg ^ ": " ^ line ^ "\n")
-	    fun loop (n, acc) = 
+	    fun fail (n,line,msg) = reject ("Line " ^ (Int.toString n) ^ " of " ^ mapfile ^
+					    " " ^ msg ^ ": " ^ line ^ "\n")
+	    fun add_unit (n : int, line : string, unitname : string, filebase : string, isTarget : bool, acc : compunit list) =
+		(case (unitname <> primUnitName, Info.validUnit unitname)
+		   of (true, true) =>
+		       let val unit = UNIT {paths = mkPaths (unitname, filebase),
+					    isTarget = bootstrap orelse isTarget,
+					    isBasis = isBasis}
+		       in
+			   loop (n+1, unit :: acc)
+		       end
+		    | (false, _) => fail (n,line,"uses the special unit name " ^ primUnitName)
+		    | (_, false) => fail (n,line,"uses an invalid unit name " ^ unitname))
+		    
+	    and loop (n, acc) = 
 		if (TextIO.endOfStream is)
 		    then rev acc
 		else 
@@ -259,15 +268,11 @@ struct
 			   | [unitname] =>
 			         if unitname = primUnitName
 				     then loop (n+1, PRIM :: acc)
-				 else fail (n,line,"specifies no source for a unit other than " ^ primUnitName)
+				 else fail (n,line,"specifies no source for unit " ^ unitname)
 			   | [unitname, filebase] =>
-				 if unitname <> primUnitName
-				     then loop (n+1, compunit (unitname, filebase, false) :: acc)
-				 else fail (n,line,"uses the special unit name " ^ primUnitName)
+				 add_unit(n,line,unitname,filebase,false,acc)
 			   | [unitname, filebase, "TARGET"] =>
-				 if unitname <> primUnitName
-				     then loop (n+1, compunit (unitname, filebase, true) :: acc)
-				 else fail (n,line,"uses the special unit name " ^ primUnitName)
+				 add_unit(n,line,unitname,filebase,true,acc)
 			   | [] => loop (n, acc)
 			   | _ => fail (n,line,"is ill-formed"))
 		    end
@@ -352,8 +357,8 @@ struct
 		    val next_pos = get_position unit
 		    fun check import = if (get_position import < next_pos) then ()
 				       else
-					   error ("Mapfile file ordering is inconsistent because " ^
-						  unit ^ " imports " ^ import ^ " but precedes it.")
+					   reject ("Mapfile file ordering is inconsistent because " ^
+						   unit ^ " imports " ^ import ^ " but precedes it.")
 		in  app check import_tr
 		end
 	    
