@@ -221,6 +221,8 @@ struct
        (case VarMap.find (convarmap,v) of
 	   NONE => NONE
 	 | SOME (vl,vv) => let val k = NilContext.find_shape(env,v)
+	                       (* XXX should be removed when uniqueness invariant is removed *)
+			       val k = NilSubst.renameCVarsKind k 
 			     in  SOME(vl,vv,k)
 			     end)
 
