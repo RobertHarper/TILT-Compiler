@@ -1,3 +1,19 @@
+.\" TILT manual page
+.\"
+.\" Use .BE and .EE to bracket example code.
+.\" BE
+.de BE
+.nf	\" no filling
+.sp	\" vertical space
+.in +5	\" indent
+..
+.\" EE
+.de EE
+.fi	\" filling
+.sp	\" vertical space
+.in -5	\" indent
+..
+.\"
 .TH TILT 1 "16 January 2000" "Version 0.1"
 .SH NAME
 tilt \- Standard ML compiler
@@ -8,13 +24,12 @@ tilt \- Standard ML compiler
 .SH DESCRIPTION
 The TILT (or TIL-Two) Compiler Project is a joint effort between
 researchers at Cornell and Carnegie Mellon.  The goal of the project
-is to produce a compiler for the ML-family of programming languages
-(SML'97, Caml Special Light, and KML) that takes advantage of types
+is to produce a compiler for SML'97 that takes advantage of types
 throughout compilation in order to produce better code without
 compromising safety or correctness.
 .PP
 .I tilt
-has sparc and alpha backends and will only produce executables
+has sparc and alpha back-ends and will only produce executables
 on those platforms.  You can run slaves
 .RB ( -s
 or
@@ -82,48 +97,60 @@ Print version information.
 .SH MAKE SYSTEM
 The TILT make system has two components: mapfiles and import lists.
 .PP
-Mapfiles are analagous to UNIX makefiles and SML/NJ's .cm files.
+Mapfiles are analogous to UNIX makefiles and SML/NJ's .cm files.
 Mapfiles do not need to have any particular suffix.
 Mapfiles map logical module names to filenames.  For example,
-the following line in a mapfile would indicate that the logical
-module name FooBar is to be associated with the file Baz/foobar.sml.
-Note that the extension .sml is omitted.
-.PP
+.BE
 FooBar  Bar/foobar
+.EE
+in a mapfile would indicate that the logical module name FooBar is to
+be associated with the file Baz/foobar.sml.
+.\"
+Note that the extension .sml is omitted.  The line
+.BE
+#include mapfile-basis
+.EE
+adds associations for the standard basis library to a mapfile.  Most
+basis structures, signatures, and functors are defined in a module of
+the same name.  Examples include List, LIST, and TextIO.  The logical
+name TopLevel corresponds to the module containing terms and types
+bound at the top level like print, map, etc.  A complete list of
+logical names used by the basis can be found in
+/usr/local/lib/tilt/Basis/mapfile-basis.
 .PP
 The second feature is a specialized comment placed as the first line
-of an SML source file.  For example, the following first line of a file
-indicates that the file depends on the modules FooBar and Goo.
-.PP
+of an SML source file.  For example,
+.BE
 (*$import FooBar Goo *)
+.EE
+as the first line of a file indicates that the file depends on the
+modules named FooBar and Goo.  A file can only depend on
+modules which appear earlier in the mapfile.  If a file depends on a
+module that has not been imported, then unbound variable errors will
+result.  For example,
+.BE
+(*$import *)
+val _ = TextIO.print "Hello, world"
+.EE
+will not compile because TextIO is missing from the import list.
 .PP
-Suppose you have a directory of SML files called twelf.  To get
-twelf to compile with 
+When processing a mapfile, TILT recompiles any files which are
+out-of-date and generates an executable file named after the last
+module in the mapfile.  There is no analogue of C's function main().
+Top-level declarations are executed at runtime.  The order of modules
+in a mapfile determines the order in which these top-level
+declarations are processed.
+.PP
+Suppose you have a directory of SML files called twelf.  To get twelf
+to compile with
 .IR tilt ,
-the first thing needed is to create a
-mapfile in the twelf directory called mapfile-twelf.  Then each of
-the SML source files in the twelf directory must be listed in the
-mapfile along with its assigned logical name.  Then the proper
-dependencies among the modules need to be inserted by adding
-import lines to each source file.  The basis can be included in
-mapfile-twelf with the following line:
-.PP
-#include mapfile-basis
-.PP
-Each source file that uses a basis structure, signature, or functor
-will require the logical name of the file containing the module.  Most
-logical names are the same as their structure, signature, or functor.
-Examples include List, LIST, and TextIO.  The logical name TopLevel
-corresponds to the module containing terms and types bound at the top
-level like print, map, etc.  A complete list of the logical names
-used by the basis can be found in /usr/local/lib/tilt/Basis/mapfile-basis.
-.PP
-It is unlikely that the dependencies will have been correctly set up
-when
-.I tilt
-is first run.  Error messages that result because of this
-will be of the "unbound variable" sort.  For example, if the structure
-Posix is unbound, then add Posix to the import list.
+the first thing needed is to create a mapfile in the twelf directory
+called mapfile-twelf.  The basis can be included in mapfile-twelf with
+the line ``#include mapfile-basis''.  Then each of the SML source
+files in the twelf directory must be listed in the mapfile along with
+its assigned logical name.  Then the proper dependencies among the
+modules needs to be inserted by adding import lines to each source
+file.
 .SH FILES
 .TP
 /usr/local/lib/tilt
