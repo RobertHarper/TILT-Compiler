@@ -271,6 +271,29 @@ val debug_bound = ref false
   (* Takes a constructor and returns the RTL representation.
      The head-normal form must be statically known. That is, this constructor
      must not involve any computation to determine the RTL representation. *)
+
+  fun cpath2indices (state : state) k labs = 
+      let fun loop acc _ [] = rev acc
+	    | loop acc (Record_k fields_seq) (label::rest) = 
+	  let fun extract acc [] = error "bad Proj_c"
+		| extract acc (((l,_),fc)::rest) = 
+	      if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
+	      val fields_list = (Sequence.toList fields_seq)
+	      val (con,index) = extract 0 fields_list 
+	      val acc = if (!do_single_crecord andalso length fields_list = 1)
+			    then acc
+			else (index::acc) 
+	  in  loop acc con rest
+	  end
+	    | loop acc (Singleton_k c) labs = 
+	  let val k = Stats.subtimer("RTLgetshape0",
+				     Normalize.get_shape (#env state)) c
+	  in  loop acc k labs
+	  end
+	    | loop acc _ labs = error "expect record kind"
+      in  loop [] k labs
+      end
+
    fun con2rep_raw (state : state) con : rep option = 
        let fun primcon2rep (pcon,clist) = 
 	   case (pcon,clist) of
@@ -319,25 +342,8 @@ val debug_bound = ref false
 		     | koop (Var_c v) acc = (v,acc)
 		     | koop _ _ = error "projection is not a chain of projections from a variable"
 		   val (v,labels) = koop con []
-		   fun loop acc _ [] = rev acc
-		     | loop acc (Record_k fields_seq) (label::rest) = 
-		       let fun extract acc [] = error "bad Proj_c"
-			     | extract acc (((l,_),fc)::rest) = 
-			       if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
-			   val fields_list = (Sequence.toList fields_seq)
-			   val (con,index) = extract 0 fields_list 
-			   val acc = if (!do_single_crecord andalso length fields_list = 1)
-					 then acc
-				     else (index::acc) 
-		       in  loop acc con rest
-		       end
-		     | loop acc (Singleton_k c) labs = 
-		       let val k = Stats.subtimer("RTLgetshape0",
-	 				Normalize.get_shape (#env state)) c
-		       in  loop acc k labs
-		       end
-		     | loop acc _ labs = error "expect record kind"
-		   fun indices wrap kind = let val temp = loop [] kind labels
+		  
+		   fun indices wrap kind = let val temp = cpath2indices state kind labels
 					   in  if (length temp > 3)
 						then NONE else SOME(wrap temp)
 					   end
@@ -364,6 +370,39 @@ val debug_bound = ref false
 	 | (Crecord_c _) => error "Crecord_c not a type"
 	 | (Closure_c _) => error "Closure_c not a type"
 	 | (Annotate_c (_,c)) => con2rep_raw state c
+       end
+
+   fun niltrace2rep (state : state) niltrace : rep =
+       let fun pathcase (v,labs) = 
+	   (case getconvarrep' state v of
+		SOME(_,SOME(VRECORD (l,_)),_) => (COMPUTE(Projlabel_p (l,labs)))
+	      | SOME(_,SOME(VLABEL l),_) => (COMPUTE(Projlabel_p (l,labs)))
+	      | SOME(_,SOME(VVOID _),_) => error "constructor is void"
+	      | SOME(_,SOME(VREAL _),_) => error "constructor represented as  a float"
+	      | SOME(_,SOME(VCODE _),_) => error "constructor function cannot be a type"
+	      | SOME(SOME(VREGISTER (_,I r)),_,_) => (COMPUTE(Projvar_p (r,labs)))
+	      | SOME(SOME(VREGISTER (_,F _)),_,_) => error "constructor in float reg"
+	      | SOME(SOME(VGLOBAL (l,_)),_,_) => (COMPUTE(Projlabel_p(l,0::labs)))
+	      | SOME(NONE,NONE,_) => error "no information on this convar!!"
+	      | NONE => error "no information on this convar!!")
+       in  
+	   (case niltrace of
+		Nil.TraceUnknown => error "TraceUnknown"
+	      | (Nil.TraceCompute v) => pathcase(v,[])
+	      | (Nil.TraceKnown t) => 
+		    (case t of
+			 TraceInfo.Trace => TRACE
+		       | TraceInfo.Unset => UNSET
+		       | TraceInfo.Notrace_Int => NOTRACE_INT
+		       | TraceInfo.Notrace_Code => NOTRACE_CODE
+		       | TraceInfo.Notrace_Real => NOTRACE_REAL
+		       | TraceInfo.Label => LABEL
+		       | TraceInfo.Locative => LOCATIVE
+		       | TraceInfo.Compute (v,labs) => 
+			     let val SOME(_,_,k) = getconvarrep' state v
+				 val labs = cpath2indices state k labs
+			     in  pathcase(v,labs)
+			     end))
        end
 
    fun con2rep state con : rep =
@@ -446,7 +485,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
        val top : label ref = ref (LOCAL_CODE "dummy_top")
        val currentfun : (var * label) ref = ref (fresh_named_var "dummy_fun",
 					       LOCAL_CODE "dummy_fun")
-       val resultreg : reg ref = ref (F(REGF(fresh_named_var "badreg",NOTRACE_REAL)))
+       val resultreg : reg option ref = ref NONE
        val il : (Rtl.instr ref) list ref = ref nil
        val localregi : regi list ref = ref nil
        val localregf : regf list ref = ref nil
@@ -459,7 +498,16 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
        fun istoplevel() = !istop
        fun getTop() = !top
        fun getCurrentFun() = !currentfun
-       fun getResult() = !resultreg
+       fun getResult thunk = (case !resultreg of
+				  SOME r => r
+				| NONE => let val r = thunk()
+					      val _ = 
+						  (case r of
+						       I ir => localregi := (ir :: (!localregi))
+						     | F fr => localregf := (fr :: (!localregf)))
+					      val _ = resultreg := SOME r
+					  in  r
+					  end)
        fun getLocals() = (!localregi, !localregf)
        fun getArgI() = !argregi
        fun getArgF() = !argregf
@@ -540,7 +588,14 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	   in localregf := r :: (!localregf);
 	       r
 	   end
-       
+
+       fun alloc_reg_trace state trace = 
+	   let val rep = niltrace2rep state trace
+	   in  case rep of
+	       NOTRACE_REAL => F(alloc_regf())
+	     | _ => I(alloc_regi rep)
+	   end
+
        fun alloc_reg state c = 
 	   case c of (* might need to normalize *)
 	       Nil.Prim_c(Float_c _,[]) => F(alloc_regf())
@@ -558,16 +613,12 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		convarmap = convarmap, env = env, gcstate = gcstate}
 	   end
 
-       fun set_args_result ((iargs,fargs),result,return) = 
-	   (resultreg := result;
-	    argregi := iargs;
+       fun set_args ((iargs,fargs),return) = 
+	   (argregi := iargs;
 	    argregf := fargs;
-	    localregi := (case result of
-			      I ir => ir :: return :: iargs
-			    | _ => return :: iargs);
-	    localregf := (case result of
-			      F fr => fr :: fargs
-			    | _ => fargs))
+	    localregi := return :: iargs;
+	    localregf := fargs)
+
 
        fun reset_state (is_top,names) = 
 	   (istop := is_top;

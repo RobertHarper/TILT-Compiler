@@ -53,7 +53,7 @@ sig
    val reset_global_state : (var * label) list * Name.VarSet.set -> unit
    val reset_state : bool * (var * label) -> unit
    val get_code: unit -> instr list
-   val set_args_result : (regi list * regf list) * reg * regi -> unit
+   val set_args : (regi list * regf list) * regi -> unit
    val add_proc : Rtl.proc -> unit
    val exports : Rtl.label list Name.VarMap.map ref 
    val get_mutable_variables : unit -> (label * rep) list
@@ -85,7 +85,7 @@ sig
    val getLocals : unit -> (regi list * regf list)
    val getArgI : unit -> regi list
    val getArgF : unit -> regf list
-   val getResult : unit -> reg
+   val getResult : (unit -> reg) -> reg
    val getTop : unit -> label
    val istoplevel : unit -> bool
 
@@ -114,7 +114,7 @@ sig
    val alloc_named_regf : var -> regf
    val alloc_reg : state -> con -> reg
    val alloc_named_reg : state -> con * var -> reg
-
+   val alloc_reg_trace : state -> Nil.niltrace -> reg
 
    (* Routines for adding code and data *)
    val add_instr : instr -> unit

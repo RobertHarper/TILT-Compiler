@@ -88,9 +88,9 @@ struct
   fun xbnd state (bnd : bnd) : state =
       (case bnd of
 	      Con_b (phase,cbnd) => xconbnd state (phase,cbnd)
-	    | Exp_b (v,_,e) => 
+	    | Exp_b (v,t,e) => 
 		  let val c = type_of state e
-		      val (loc_or_val,_,state) = xexp(state,v,e,SOME c,NOTID)
+		      val (loc_or_val,_,state) = xexp(state,v,e,SOME t,NOTID)
 		  in  (case (istoplevel(),loc_or_val) of
 			   (true, _)           => add_global (state,v,c,loc_or_val)
 			 | (false, VAR_LOC vl) => add_var    (state,v,c,SOME vl,NONE)
@@ -172,8 +172,10 @@ struct
 				 val funcon = Let_c(Sequential,[cbnd],Var_c name)
 				 val l = LOCAL_CODE(Name.var2string name)
 				 val state = add_concode "5" (state,name,funkind,NONE, SOME funcon,l)
-				 val s' = promote_maps state
-			     in  (addWork (ConFunWork(s',name,vklist,c,k)); state)
+				 val _ = if phase = Compiletime
+					     then ()
+					 else addWork (ConFunWork(promote_maps state,name,vklist,c,k))
+			     in  state
 			     end
 	 | Open_cb _ => (print "open Fun_cb:\n";
 			     Ppnil.pp_conbnd cbnd; print "\n";
@@ -281,10 +283,10 @@ struct
   and xexp' (state : state, (* state of bound variables *)
 	     name : var, (* Purely for debugging and generation of useful names *)
 	     e : exp,    (* The expression being translated *)
-	     copt : con option,    (* The type of the expression being translated *)
+	     traceinfo_opt : niltrace option,  (* The type of the expression being translated *)
 	     context     (* The evaluation context this expression is in *)
 	     ) : reg * con * state =
-      (case xexp(state,name,e,copt,context) of
+      (case xexp(state,name,e,traceinfo_opt,context) of
 	   (VAR_LOC var_loc, c, s) => (load_reg_loc(var_loc,NONE),c, s)
 	 | (VAR_VAL var_val, c, s) => (load_reg_val(var_val,NONE),c, s))
 
@@ -298,7 +300,7 @@ struct
   and xexp (state : state, (* state of bound variables *)
 	    name  : var, (* Purely for debugging and generation of useful names *)
 	    arg_e : exp,         (* The expression being translated *)
-	    copt  : con option,  (* The type of the expression being translated *)
+	    traceinfo_opt  : niltrace option,  (* The type of the expression being translated *)
 	    context     (* The evaluation context this expression is in *)
 	    ) : loc_or_val * con * state =
       let 
@@ -312,7 +314,7 @@ struct
 			    else ();
 			    print "\n")
 		  else ()  
-	  val res = xexp''(state,name,arg_e,copt,context)
+	  val res = xexp''(state,name,arg_e,traceinfo_opt,context)
 	  val _ = if (!debug)
 		      then (print "xexp ";  print (Int.toString (!exp_depth));
 			    print " returned \n";
@@ -330,7 +332,7 @@ struct
   and xexp'' (state : state, (* state of bound variables *)
 	    name  : var, (* Purely for debugging and generation of useful names *)
 	    arg_e : exp,         (* The expression being translated *)
-	    copt  : con option,  (* The type of the expression being translated *)
+	    traceinfo_opt  : niltrace option,  (* The type of the expression being translated *)
 	    context     (* The evaluation context this expression is in *)
 	    ) : loc_or_val * con * state =
       let 
@@ -346,15 +348,16 @@ struct
 	    | Let_e (_, bnds, body) => 
 		  let fun folder (bnd,s) = xbnd s bnd
 		      val state = foldl folder state bnds
-		      val (lv,c,state) = xexp(state,fresh_var(),body,copt,context)
+		      val (lv,c,state) = xexp(state,fresh_var(),body,traceinfo_opt,context)
 		      val cbnds = List.mapPartial (fn (Con_b (_,cb)) => SOME cb
 		                                    | _ => NONE) bnds
 		      val c' = Let_c(Sequential,cbnds,c)
 		  in  (lv,c',state)
 		  end
-	    | Prim_e (NilPrimOp nilprim, clist, elist) => xnilprim(state,nilprim,clist,elist,context,copt)
+	    | Prim_e (NilPrimOp nilprim, clist, elist) => xnilprim(state,nilprim,clist,elist,
+								   context,traceinfo_opt)
 	    | Prim_e (PrimOp prim, clist, elist) => xprim(state,prim,clist,elist,context)
-	    | Switch_e sw => xswitch(state,name,sw,copt,context)
+	    | Switch_e sw => xswitch(state,name,sw,traceinfo_opt,context)
 	    | ExternApp_e (f, elist) => (* assume the environment is passed in first *)
 		  let 
 		      val _ = add_instr (ICOMMENT ("making external call"))
@@ -392,18 +395,9 @@ struct
 				   | _ => error "bad varloc or varval for function")
 				     
 				     
-		      val rescon = 
-			  (case (copt,#2(simplify_type state funcon)) of
-			       (SOME c,_) => c
-			     | (NONE,ExternArrow_c(_,c)) => c
-			     | (_,c) => 
-				   (print "cannot compute type of result of call\n";
-				    print "funcon = \n"; Ppnil.pp_con funcon; print "\n";
-				    print "reduced to \n"; Ppnil.pp_con c; print "\n";
-				    error "cannot compute type of result of call"))
-			       
-
-		      val dest = alloc_reg state rescon
+		      val (_,ExternArrow_c(_,rescon)) = simplify_type state funcon
+		      val SOME niltrace = traceinfo_opt
+		      val dest = alloc_reg_trace state niltrace
 		      val results = (case dest of
 					 F fr => ([],[fr])
 				       | I ir => ([ir],[]))	      
@@ -507,11 +501,10 @@ struct
 				  else NilUtil.alpha_normalize_con(Let_c(Sequential,cbnds,rescon))
 			      end
 			  val rescon = 
-			      (case (copt,#2(simplify_type state funcon)) of
-				   (SOME c,_) => c
-				 | (NONE,Prim_c(Vararg_c _, [_,rescon])) => reduce([],clist,rescon)
-				 | (NONE,AllArrow_c(_,_,vklist,_,_,_,rescon)) => reduce(vklist,clist,rescon)
-				 | (_,c) => (print "cannot compute type of result of call\n";
+			      (case (#2(simplify_type state funcon)) of
+				   (Prim_c(Vararg_c _, [_,rescon])) => reduce([],clist,rescon)
+				 | (AllArrow_c(_,_,vklist,_,_,_,rescon)) => reduce(vklist,clist,rescon)
+				 | c => (print "cannot compute type of result of call\n";
 					  print "funcon = \n"; Ppnil.pp_con funcon; print "\n";
 					  print "reduced to \n"; Ppnil.pp_con c; print "\n";
 					  error "cannot compute type of result of call"))
@@ -524,13 +517,15 @@ struct
 
 		      val fregs = map coercef efregs
 
+		      val SOME niltrace = traceinfo_opt
+		      fun thunk() = alloc_reg_trace state niltrace
 		      fun do_call return_opt = 
 			  let val tailcall=(case return_opt of
 						       SOME _ => true
 						     | NONE => false)
 			      val dest = if tailcall
-					     then getResult()
-					 else alloc_reg state rescon
+					     then getResult thunk
+					 else thunk()
 			      val results = (case dest of
 						 F fr => ([],[fr])
 					       | I ir => ([ir],[]))	      
@@ -550,7 +545,7 @@ struct
 					    (shuffle_iregs(iregs,getArgI());
 					     shuffle_fregs(fregs,getArgF());
 					     add_instr(BR (getTop()));
-					     alloc_reg state rescon)
+					     thunk())
 				      | (ID r,true,false) => do_call (SOME r))
 		      val result = (VAR_LOC(VREGISTER (false,dest)), rescon,
 				     new_gcstate state)
@@ -560,7 +555,7 @@ struct
 		  end
 
 	    | Raise_e (exp, con) =>
-		  let val (I ir,_,state) = xexp'(state,name,exp,SOME(Prim_c(Exn_c,[])),NOTID)
+		  let val (I ir,_,state) = xexp'(state,name,exp,NONE,NOTID)
 		      val newpc = alloc_regi LABEL
 		      val rep = con2rep state con
 		  in  add_instr(LOAD32I(EA(exnptr,0),newpc));
@@ -627,7 +622,7 @@ struct
 
                       (* --- compute the body; restore the exnpointer; branch to after handler *)
 		      (* NOTID and not context because we have to remove the exnrecord *)
-		      val (reg,arg_c,state) = xexp'(state,name,exp,copt,NOTID)
+		      val (reg,arg_c,state) = xexp'(state,name,exp,traceinfo_opt,NOTID)
 		      val _ = (add_instr(LOAD32I(EA(exnptr,8),exnptr));
 			       add_instr(BR bl));
 
@@ -709,22 +704,26 @@ struct
 
       (* The trick is to notice that for certain args, the comparison and computation
          can be folded into one instruction. *)
-      and zero_one (state : state, r : regi, copt : con option, zeroexp, oneexp, context) : loc_or_val * con * state = 
+      and zero_one (state : state, r : regi, 
+		    traceinfo_opt : niltrace option, zeroexp, oneexp, context) : loc_or_val * con * state = 
 	  let 
 	      val thenl = fresh_code_label "zero_case"
 	      val elsel = fresh_code_label "one_case"
 	      val afterl = fresh_code_label "after_zeroone"
 	      val _ = add_instr(BCNDI(NE,r,elsel,false))
 	      val _ = add_instr(ILABEL thenl)
-	      val (zero,zcon,state_zero) = xexp'(state,fresh_named_var "zero_result", zeroexp, copt, context)
-	      val dest = alloc_reg state zcon
+	      val (zero,zcon,state_zero) = xexp'(state,fresh_named_var "zero_result", 
+						 zeroexp, traceinfo_opt, context)
+	      val SOME traceinfo = traceinfo_opt
+	      val dest = alloc_reg_trace state traceinfo
 	      val _ = (case (zero, dest) of 
 			   (I zz, I d) => add_instr(MV (zz,d))
 			 | (F zz, F d) => add_instr(FMV (zz,d))
 			 | _ => error "zero_one: different arms have results in float and int registers")
 	      val _ = add_instr(BR afterl)
 	      val _ = add_instr(ILABEL elsel)
-	      val (one,ocon,state_one) = xexp'(state,fresh_named_var "nonzero_result", oneexp, copt, context)
+	      val (one,ocon,state_one) = xexp'(state,fresh_named_var "nonzero_result", oneexp, 
+					       traceinfo_opt, context)
 	      val state = join_states[state_zero,state_one]
 	      val _ = (case (one,dest) of 
 			   (I oo, I d) => add_instr(MV (oo,d))
@@ -738,14 +737,15 @@ struct
   and xswitch (state : state,
 	       name : var,  (* Purely for debugging and generation of useful names *)
 	       sw : switch, (* The switch expression being translated *)
-	       arg_c : con option, (* The type of the switch expression *)
+	       traceinfo_opt : niltrace option, (* The type of the switch expression *)
 	       context      (* The evaluation context this expression is in *)
 	       ) : loc_or_val * con * state =
       let
 	  val rescon = ref NONE
 	  val dest = ref NONE
+	  val SOME traceinfo = traceinfo_opt
 	  fun mv (r,c) = let val _ = (case (!dest) of
-					  NONE => dest := (SOME (alloc_reg state c))
+					  NONE => dest := (SOME (alloc_reg_trace state traceinfo))
 					| _ => ())
 			     val _ = (case !rescon of
 					  NONE => rescon := SOME c
@@ -768,12 +768,12 @@ struct
 	  case sw of
 	      Intsw_e {size, arg, arms, default} => 
 		  let val (r,state) = (case (xexp'(state,fresh_named_var "intsw_arg",arg,
-					   SOME(Prim_c(Int_c size,[])),NOTID)) of
+						   NONE,NOTID)) of
 				   (I ireg,_,state) => (ireg,state)
 				 | (F _,_,_) => error "intsw argument in float register")
 		  in  case (arms,default) of
-		      ([(0w0,z)],SOME e) => zero_one(state, r, arg_c, z, e, context)
-		    | ([(0w0,z),(0w1,one)],NONE) => zero_one(state, r, arg_c, z, one, context)
+		      ([(0w0,z)],SOME e) => zero_one(state, r, traceinfo_opt, z, e, context)
+		    | ([(0w0,z),(0w1,one)],NONE) => zero_one(state, r, traceinfo_opt, z, one, context)
 		    | _ => (* general case *)
 			  let 
 			      val afterl = fresh_code_label "after_intcase"
@@ -782,7 +782,8 @@ struct
 				   case default of
 				       NONE => (no_match state::states)
 				     | SOME e => 
-					   let val (r,c,newstate) = (xexp'(state,fresh_var(),e,arg_c,context))
+					   let val (r,c,newstate) = (xexp'(state,fresh_var(),e,
+									   traceinfo_opt,context))
 					   in  mv(r,c); newstate::states
 					   end)
 				| scan(states,lab,(i,body)::rest) =
@@ -827,11 +828,13 @@ struct
 				   let val con = (case !rescon of
 						  SOME c => c 
 						| NONE => error "no arms")
-				       val (r,c,newstate) = xexp'(state,fresh_var(),Raise_e(arg,con),SOME con,context)
+				       val (r,c,newstate) = xexp'(state,fresh_var(),
+								  Raise_e(arg,con),NONE,context)
 				   in  mv(r,c); newstate :: states
 				   end
 			     | SOME e => 
-				   let val (r,c,newstate) = xexp'(state,fresh_var(),e,arg_c,context)
+				   let val (r,c,newstate) = xexp'(state,fresh_var(),e,
+								  traceinfo_opt,context)
 				   in  mv(r,c); newstate :: states
 				   end)
 			| scan(states,lab,(armtag,body)::rest) = 
@@ -880,10 +883,10 @@ struct
 		  (0w2,[], [(0w0,zeroexp),(0w1,oneexp)], NONE) => 
 			let val (r,state) = 
 			    (case (xexp'(state,fresh_named_var "intsw_arg",arg,
-					 SOME(Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[])),NOTID)) of
+					 NONE,NOTID)) of
 				 (I ireg,_,state) => (ireg,state)
 			       | (F _,_,_) => error "intsw argument in float register")
-			in  zero_one(state,r, arg_c, zeroexp, oneexp, context)
+			in  zero_one(state,r, traceinfo_opt, zeroexp, oneexp, context)
 			end
 		| _ =>
 		  let val (I r,_,state) = xexp'(state,fresh_named_var "sumsw_arg",arg,NONE,NOTID)
@@ -905,7 +908,8 @@ struct
 				case default of
 				     NONE => (no_match state)::newstates
 				   | SOME e => 
-					 let val (r,c,state) = xexp'(state,fresh_var(),e,arg_c,context)
+					 let val (r,c,state) = xexp'(state,fresh_var(),e,
+								     traceinfo_opt,context)
 					 in  mv(r,c); state::newstates
 					 end))
 			| scan(newstates,lab,(i,body)::rest) =
@@ -970,7 +974,7 @@ struct
 
 
 
-  and xnilprim(state : state, nilprim,clist,elist,context,copt) : loc_or_val * con * state = 
+  and xnilprim(state : state, nilprim,clist,elist,context,traceinfo_opt) : loc_or_val * con * state = 
       let fun error' s = (print "NIL primexpression was:\n";
 			  Ppnil.pp_exp (Nil.Prim_e(Nil.NilPrimOp nilprim, clist,elist));
 			  print "\n";
@@ -991,7 +995,8 @@ struct
 	       in  (lv, c, state)
 	       end
 	 | select label => 
-	       let val [e] = elist 
+	       let 
+		   val [e] = elist 
 		   val (I addr,reccon,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
 		   val (_,Prim_c(Record_c (labels,_),fieldcons)) = simplify_type state reccon
 		   fun loop [] _ n = error' "bad select 1"
@@ -1000,12 +1005,9 @@ struct
 							    then (n,c1)
 							else loop lrest crest (n+1)
 		   val (which,con) = loop labels fieldcons 0
-		   val con = (case copt of 
-				  NONE => con 
-				| SOME c => c)
-		   val desti = (case (alloc_reg state con) of
-				    I ir => ir
-				  | _ => error "records cannot have floats")
+		   val I desti = (case traceinfo_opt of
+				      SOME traceinfo => alloc_reg_trace state traceinfo
+				    | _ => alloc_reg state con)
 		   val _ = add_instr(LOAD32I(EA(addr,which * 4), desti))
 	       in  (VAR_LOC(VREGISTER(false, I desti)), con, state)
 	       end
@@ -1029,28 +1031,30 @@ struct
 		in  TortlSum.xsum_dynamic ((state,known,hd clist),c_lv,e_lv)
 		end
 	 | project_sum_record (k,field) => 
-	       let val e = hd elist
+	       let val SOME traceinfo = traceinfo_opt
+		   val e = hd elist
 		   val (r,econ,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
 		   val base = coercei "" r
-	       in  TortlSum.xproject_sum_record ((state,k,econ),field,clist,base)
+	       in  TortlSum.xproject_sum_record ((state,k,econ),field,clist,base,traceinfo)
 	       end
 
 	 | project_sum_nonrecord k =>
-	       let val sumcon = hd clist
+	       let val SOME traceinfo = traceinfo_opt
+		   val sumcon = hd clist
 		   val e = hd elist
 		   val (r,ssumcon,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
 		   val base = coercei "" r
-	       in  TortlSum.xproject_sum_nonrecord ((state,k,sumcon),
-						    base,ssumcon)
+	       in  TortlSum.xproject_sum_nonrecord ((state,k,sumcon),base,ssumcon,traceinfo)
 	       end
 
 	 | project_sum k =>
-	       let val sumcon = hd clist
+	       let val SOME traceinfo = traceinfo_opt
+		   val sumcon = hd clist
 		   val e = hd elist
 		   val (er,ssumcon,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
 		   val (cr,_,state) = xcon(state,fresh_var(),sumcon,NONE)
 		   val base = coercei "" er
-	       in  TortlSum.xproject_sum_dynamic ((state,k,sumcon),cr,base)
+	       in  TortlSum.xproject_sum_dynamic ((state,k,sumcon),cr,base,traceinfo)
 	       end
 
 	 | box_float Prim.F64 => 
@@ -1129,26 +1133,27 @@ struct
 
   and xprim(state : state, prim,clist,elist,context) : loc_or_val * con * state = 
       let open Prim
-	  fun makecall str arg_types ret_type =
+	  open TraceInfo
+	  fun makecall str arg_types ret_type ret_trace =
 	  let 
 	      val codevar = fresh_var()
 	      val label = C_EXTERN_LABEL str
 	      val tipe = ExternArrow_c(arg_types,ret_type)
 	      val state' = add_var (state,codevar,tipe,NONE,SOME(VCODE label))
 	      val exp = ExternApp_e(Var_e codevar,elist)
-	  in xexp(state',fresh_var(),exp,NONE,context)
+	  in xexp(state',fresh_var(),exp,SOME (TraceKnown ret_trace),context)
 	  end
       in (case prim of
-	      output => makecall "ml_output" [int_con,string_con] unit_con
-	    | input => makecall "ml_input"  [int_con] string_con
-	    | input1 => makecall "ml_input1" [int_con] char_con
-	    | lookahead => makecall "ml_lookahead" [int_con] char_con
-	    | open_in => makecall "ml_open_in" [string_con] int_con
-	    | open_out => makecall "ml_open_out" [string_con] int_con
-	    | close_in => makecall "ml_close_in" [int_con] unit_con
-	    | close_out => makecall "ml_close_out" [int_con] unit_con
-	    | end_of_stream => makecall "ml_end_of_stream" [int_con] bool_con
-	    | flush_out => makecall "ml_flush_out" [int_con] unit_con
+	      output => makecall "ml_output" [int_con,string_con] unit_con Trace
+	    | input => makecall "ml_input"  [int_con] string_con Trace
+	    | input1 => makecall "ml_input1" [int_con] char_con Notrace_Int
+	    | lookahead => makecall "ml_lookahead" [int_con] char_con Notrace_Int
+	    | open_in => makecall "ml_open_in" [string_con] int_con Notrace_Int
+	    | open_out => makecall "ml_open_out" [string_con] int_con Notrace_Int
+	    | close_in => makecall "ml_close_in" [int_con] unit_con Trace
+	    | close_out => makecall "ml_close_out" [int_con] unit_con Trace
+	    | end_of_stream => makecall "ml_end_of_stream" [int_con] bool_con Trace
+	    | flush_out => makecall "ml_flush_out" [int_con] unit_con Trace
 	    | neg_int is => xprim'(state,minus_int Prim.W32,clist,
 				   (Const_e(Prim.int(Prim.W32,TW64.zero)))::elist,context)
 	    | _ => xprim'(state,prim,clist,elist,context))
@@ -1706,7 +1711,8 @@ struct
 		       val resk = (case (kopt,k) of
 				       (SOME k, _) => k
 				     | (_,Arrow_k(_,_,resk)) => resk
-				     | _ => error "bad kind to App_c")
+				     | _ => (print "bad kind to App_c\n"; Ppnil.pp_kind k;
+					     error "bad kind to App_c"))
 		       val (cregsi,(const_arg,state)) = 
 			   foldl_list  (fn (c,(const,state)) => 
 				   let val (const',vl,_,state) = xcon'(state,fresh_named_var "clos_arg",c,NONE)
@@ -1756,14 +1762,16 @@ struct
                         end
 	      val (cargs,state) = foldl_list folder state vklist
 	      val args = (cargs,[])
-	      val resulti = alloc_regi TRACE
-	      val results = ([resulti],[])
 	      val return = alloc_regi(LABEL)
-	      val _ = set_args_result(args, I resulti, return)
+	      val _ = set_args(args, return)
 	      val state = needgc(state,IMM 0)
 	      val (ir,k,state) = xcon(state,fresh_named_var "result",body,NONE)
+	      val result = getResult(fn() => I ir)
+	      val I resulti = result
 	      val _ = (add_instr(MV(ir,resulti));
 		       add_instr(RETURN return))
+	      val I resulti = result
+	      val results = ([resulti],[])
 	      val code = get_code()
 	      val p = PROC{name=name,
 			   return=return,
@@ -1804,15 +1812,15 @@ struct
               val (efargs,state) = foldl_list folder state vflist
 
 	      val args = (cargs @ eiargs, efargs)
-	      val result = alloc_reg state con
+	      val return = alloc_regi(LABEL)
+	      val _ = set_args(args, return)
+	      val state = needgc(state,IMM 0)
+	      val (r,c,state) = xexp'(state,fresh_named_var "result",body,
+				      NONE, ID return)
+	      val result = getResult(fn() => r)
 	      val results = (case result of
 				 I ir => ([ir],[])
 			       | F fr => ([],[fr]))
-	      val return = alloc_regi(LABEL)
-	      val _ = set_args_result(args, result, return)
-	      val state = needgc(state,IMM 0)
-	      val (r,c,state) = xexp'(state,fresh_named_var "result",body,
-				SOME con, ID return)
 	      val mvinstr = (case (r,result) of
 				 (I ir1,I ir2) => MV(ir1,ir2)
 			       | (F fr1,F fr2) => FMV(fr1,fr2)
@@ -1862,115 +1870,6 @@ struct
 		   end)
   end
 
-  (* compute toplevel non-globals: that is, "globals"
-   that are not accessed inside any function and that are unexported;
-   when this is the case, we can allocate statically *)
-  fun compute_globals (bnds : bnd list, exports : export_entry list, imports : import_entry list) =
-      let 
-	  val toplevels = ref VarSet.empty
-	  val globals = ref VarSet.empty
-	  fun addtop v = toplevels := VarSet.add(!toplevels,v)
-	  fun addglobal v = globals := VarSet.add(!globals,v)
-	  val numfuns = ref 0
-	  val numconfuns = ref 0
-	  val inner = 
-	      let 
-		  fun add v = (if (VarSet.member(!toplevels,v))
-				   then (addglobal v
-					 handle e => (print "yep, this delete\n";
-						      raise e))
-			       else ();
-				   NOCHANGE)
-		  fun ehandle (_,Var_e v) = add v
-		    | ehandle _ = NOCHANGE
-		  fun chandle (_,Var_c v) = add v
-		    | chandle _ = NOCHANGE
-		  fun bndhandle (_,Fixcode_b s) = (numfuns := (!numfuns) + (Sequence.length s);
-						   NOCHANGE)
-		    | bndhandle _ = NOCHANGE
-		  fun cbndhandle (_,Code_cb _) = (numconfuns := (!numconfuns) + 1; NOCHANGE)
-		    | cbndhandle _ = NOCHANGE
-		      
-	      in  (ehandle,
-		   bndhandle,
-		   chandle,
-		   cbndhandle,
-		   fn _ => NOCHANGE)
-	      end
-	  
-	  val outer = 
-	      let 
-		  fun bndhandle (_,Con_b(_,cb)) = NOCHANGE
-		    | bndhandle (_,Exp_b(v,_,_)) = (addtop v; NOCHANGE)
-		    | bndhandle (_,Fixopen_b _) = error "encountered fixopen"
-		    | bndhandle (_,bnd as (Fixcode_b vfseq)) = 
-		      let val _ = numfuns := (!numfuns) + 1
-			  fun dofun (Function (_,_,vklist,_,vclist,_,e,c)) = 
-			      let
-				  val _ = map (fn (_,k) => kind_rewrite inner k) vklist
-				  val _ = map (fn (_,c) => con_rewrite inner c) vclist
-				  val _ = exp_rewrite inner e
-				  val _ = con_rewrite inner c
-			      in  ()
-			      end
-			  val _ = Sequence.app (fn (v,f) => dofun f) vfseq
-		      in  CHANGE_NORECURSE [bnd]
-		      end
-		    | bndhandle (_,bnd as (Fixclosure_b(_,vclseq))) = 
-		      let fun docl {code,cenv,venv,tipe} = 
-			      let
-				  val _ = exp_rewrite inner venv
-				  val _ = con_rewrite inner cenv
-			      (* don't need to do tipe *)
-			      in  ()
-			      end
-			  val _ = Sequence.app (fn (v,cl) => (addtop v; docl cl)) vclseq
-		      in  CHANGE_NORECURSE [bnd]
-		      end
-		  
-		  fun chandle (_,Mu_c(_,vcseq)) = (Sequence.app (fn (v,_) => 
-							  (addtop v; addglobal v))
-						     vcseq;
-						     NOCHANGE)
-		    | chandle _ = NOCHANGE
-		  fun cbhandle (_,Con_cb (v,_)) = (addtop v; addglobal v; NOCHANGE)
-		    | cbhandle (_,Open_cb _) = error "encountered open_cb"
-		    | cbhandle (_,cbnd as (Code_cb (_,vklist,c,k))) = 
-		      let val _ = numconfuns := (!numconfuns) + 1
-			  val _ = map (fn (_,k) => kind_rewrite inner k) vklist
-			  val _ = kind_rewrite inner k
-			  val _ = con_rewrite inner c
-		      in  CHANGE_NORECURSE [cbnd]
-		      end
-		  fun khandle (_,k) = CHANGE_NORECURSE k
-	      in  (fn _ => NOCHANGE,
-		   bndhandle,
-		   chandle,
-		   cbhandle,
-		   khandle)
-	      end
-	  fun do_export (ExportValue(l,e)) = (exp_rewrite inner e; ())
-	    | do_export (ExportType(l,c)) = (con_rewrite inner c; ())
-
-	  fun do_import (ImportValue(l,v,_)) = (addtop v; addglobal v)
-	    | do_import (ImportType(l,v,_)) =  (addtop v; addglobal v)
-	  val _ = map (bnd_rewrite outer) bnds
-	  val _ = app do_export exports
-	  val _ = app do_import imports
-	  val _ = (print "There are "; print (Int.toString (!numfuns));
-		   print " functions and "; print (Int.toString (!numconfuns));
-		   print " constructor functions\n")
-	  val _ = if (!debug)
-		      then (print "Globals are: ";
-			    VarSet.app (fn v => (Pprtl.pp_var v; print "\n")) (!globals);
-			    print "\n\n";
-			    print "Top-levels are: ";
-			    VarSet.app (fn v => (Pprtl.pp_var v; print "\n")) (!toplevels);
-			    print "\n\n")
-		  else ()
-      in  !globals
-      end (* compute_globals *)
-
 
   (* unitname is the name of the unit; unit names are globally unique. *)
 
@@ -1983,59 +1882,33 @@ struct
 			 then print "tortl - entered translate\n"
 		     else ()
 
-(*
-	     val globals = Stats.subtimer("RTL_compute_globals",compute_globals)(bnds,exports,imports)
-*)
-	     val globals = VarSet.empty
+	     val toplevel_locals = VarSet.empty
 
 	     val _ = if (!debug)
 			 then print "tortl - handling exports now\n"
 		     else ()
 
-	     (* we do something special for exports of a variable *)
+
 	     local
-		 fun is_import v (ImportValue(l,v',_)) = eq_var(v,v')
-		   | is_import v (ImportType(l,v',_)) = eq_var(v,v')
-		 fun mapper exp =
-		     case exp of
-			 ExportValue(l,e) =>
-			     let val lab = ML_EXTERN_LABEL(Name.label2string l)
-				 val v = fresh_var()
-				 val default = ((v,lab), SOME (Exp_b(v,TraceUnknown,e))) 
-			     in  case e of
-				 Var_e v => 
-				     if (Listops.orfold (is_import v) imports)
-					 then default
-				     else ((v,lab),NONE)
-			       | _ => (* default *)
-                                      error "export of non-variable"
-			     end
-		       | ExportType(l,c) =>
-			     let val lab = ML_EXTERN_LABEL(Name.label2string l)
-				 val v = fresh_var()
-				 val default = ((v,lab), SOME (Con_b(Runtime,Con_cb(v,c))))
-			     in  case c of
-				 Var_c v => 
-				     if (Listops.orfold (is_import v) imports)
-					 then default
-				     else ((v,lab),NONE)
-			       | _ => default
-			     end
-		 val temp = map mapper exports
-	     in  val named_exports = map #1 temp
-		 val export_bnds = List.mapPartial #2 temp 
+		 fun mapper (ExportValue(l,v)) =
+		     let val lab = ML_EXTERN_LABEL(Name.label2string l)
+		     in  (v,lab)
+		     end
+		   |  mapper (ExportType(l,v)) =
+		     let val lab = ML_EXTERN_LABEL(Name.label2string l)
+		     in  (v,lab)
+		     end
+	     in  val named_exports = map mapper exports
 	     end
 	     val mainVar = Name.fresh_named_var("main_" ^ unitname ^ "_doit")
 	     val mainName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_doit")
 	     val _ = resetDepth()
 	     val _ = resetWork()
 	     val _ = reset_global_state ((mainVar,mainName)::named_exports,
-					 globals)
-
-	     val exp = Let_e(Sequential, bnds,
-			     Let_e(Sequential,export_bnds,
-				   Const_e(Prim.int(Prim.W32,TW64.zero))))
-	     val con = Prim_c(Int_c Prim.W32,[])
+					 toplevel_locals)
+		 
+	     val exp = Let_e(Sequential, bnds,NilUtil.true_exp)
+	     val con = NilUtil.bool_con
 
 	     (* set the translation parameters *)
 	     val _ = cur_params := trans_params
@@ -2053,16 +1926,15 @@ struct
 	     fun folder (ImportValue(l,v,c),s) = 
 		 (* For extern or C functions, the label IS the value rather than a pointer *)
 		 let val mllab = ML_EXTERN_LABEL(Name.label2string l)
-		     val result = 
+		     val lv = 			 
 			 (case c of
-			      ExternArrow_c _ => add_var (s,v,c,NONE,SOME(VCODE mllab))
-			    | _ => add_var (s,v,c,SOME(VGLOBAL(mllab,con2rep s c)),NONE))
-		 in  result
+			      ExternArrow_c _ => VAR_VAL(VCODE mllab)
+			    | _ => VAR_LOC(VGLOBAL(mllab,con2rep s c)))
+		 in  add_global(s,v,c,lv)
 		 end
 	       | folder (ImportType(l,v,k),s) = 
 		 let val vl = (VGLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
-		     val result = add_convar "8" (s,v,k,NONE,NONE, SOME vl, NONE)
-		 in  result
+		 in  add_conglobal "1" (s,v,k,NONE,NONE, VAR_LOC vl)
 		 end
 	     val state = foldl folder (make_state()) imports
 	     val p as PROC{name,return,args,results,code,known,save,vars} =

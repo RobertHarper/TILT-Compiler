@@ -16,8 +16,8 @@ sig
   val xsum_nonrecord : (typearg * loc_or_val option) -> loc_or_val * con * state
   val xsum_record    : (typearg * loc_or_val list) -> loc_or_val * con * state
 
-  val xproject_sum_dynamic   : (typearg * regi * regi) -> loc_or_val * con * state
-  val xproject_sum_record    : (typearg * Name.label * con list * regi) -> loc_or_val * con * state
-  val xproject_sum_nonrecord : (typearg * regi * con) -> loc_or_val * con * state
+  val xproject_sum_dynamic   : (typearg * regi * regi * Nil.niltrace) -> loc_or_val * con * state
+  val xproject_sum_record    : (typearg * Name.label * con list * regi * Nil.niltrace) -> loc_or_val * con * state
+  val xproject_sum_nonrecord : (typearg * regi * con * Nil.niltrace) -> loc_or_val * con * state
 
 end
