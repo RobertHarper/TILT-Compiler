@@ -1,8 +1,10 @@
-(*$import Prelude TopLevel BinIO TopHelp Int Name Time ListPair Real Listops Paths COMPILER LinkParse Il LinkIl Nil Linknil Rtl Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay Paths Timestamp *)
+(*$import BinIO TopHelp Int Name Time ListPair Real Listops Paths COMPILER LinkParse Il LinkIl Nil Linknil Rtl Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay Paths Timestamp *)
 
 structure Compiler :> COMPILER =
 struct
 
+    exception Reject of string
+    
     val error = fn x => Util.error "compiler.sml" x
 
     val showWrittenContext = Stats.ff("ShowWrittenContext")
@@ -182,7 +184,7 @@ struct
 		      end
 	    val il_module =
 		case il_module_opt
-		  of NONE => error("File " ^ smlFile ^ " failed to elaborate.")
+		  of NONE => raise Reject(smlFile ^ " failed to elaborate")
 		   | SOME ilmodule' => ilmodule'
 	    val il_module =
 		let val (_, partial_ctxt, binds) = il_module

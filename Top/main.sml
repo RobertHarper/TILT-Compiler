@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List String Int OS MAIN Manager Stats Getopt UtilError Dirs Target *)
+(*$import List String Int OS MAIN Manager Stats Getopt UtilError Dirs Target Compiler *)
 
 structure Main : MAIN =
 struct
@@ -111,9 +111,15 @@ struct
 		  end
 	end
 
+    fun printMsg (msg : string) : unit =
+	let fun eprint s = TextIO.output(TextIO.stdErr, s)
+	in  eprint "tilt: ";
+	    eprint msg;
+	    eprint "\n"
+	end
+	    
     (* errorMsg : exn -> string *)
-    fun errorMsg (UtilError.BUG msg) = (* Not yet true that BUG implies a compiler error.
-				         "internal error: " ^ *) msg
+    fun errorMsg (UtilError.BUG msg) = ("internal error: " ^ msg)
       | errorMsg (ArgErr msg) = msg
       | errorMsg (e) = exnMessage e
 
@@ -124,8 +130,11 @@ struct
 	 in
 	     run cmds; OS.Process.success
 	 end)
-	     handle e => (print "tilt: ";
-			  print (errorMsg e);
-			  print "\n";
-			  OS.Process.failure)
+	     handle e =>
+		 (case e
+		    of Compiler.Reject msg =>
+			(printMsg msg;
+			 Posix.Process.exit 0w10)
+		     | _ => (printMsg (errorMsg e);
+			     OS.Process.failure))
 end
