@@ -26,6 +26,7 @@ signature NILUTIL =
     val freeExpConVarInKind : bool * int * Nil.kind -> Name.VarSet.set * Name.VarSet.set
     val freeExpConVarInBnd  : bool * int * Nil.bnd  -> Name.VarSet.set * Name.VarSet.set
     val freeConVarInCon     : bool * int * Nil.con  -> Name.VarSet.set
+    val freeConVarInCbnd    : bool * int * Nil.conbnd -> Name.VarSet.set
     val freeConVarInKind    :        int * Nil.kind -> Name.VarSet.set
     val freeVarInKind       :        int * Nil.kind -> Name.VarSet.set
 
@@ -39,7 +40,10 @@ signature NILUTIL =
 
     val convert_sum_to_special : Nil.con * TilWord32.word -> Nil.con
 
-    val flattenCbnds : Nil.conbnd list -> Nil.conbnd list
+    val flattenCbnds : Nil.conbnd list -> Nil.conbnd list    
+
+    val flattenCLet  : Nil.con -> Nil.con
+
     val extractCbnd : Nil.conbnd -> Nil.var * Nil.con
 
     val makeConb    : Nil.conbnd -> Nil.bnd  (* Annotated as Runtime *)
@@ -49,6 +53,11 @@ signature NILUTIL =
     val makeSelect  : Nil.exp -> Nil.label list -> Nil.exp
 
 
+    val nameType : string -> Nil.con -> Nil.conbnd list * Nil.con
+    (* Make a record type with bindings for all non-variable types *)
+    val makeNamedRecordType : string -> Nil.label list -> Nil.con list -> Nil.conbnd list * Nil.con
+
+    val makeNamedArrowType : string -> Nil.effect -> Nil.con -> Nil.con -> Nil.conbnd list * Nil.con
 
     val same_openness : Nil.openness * Nil.openness -> bool
     val same_effect   : Nil.effect * Nil.effect -> bool

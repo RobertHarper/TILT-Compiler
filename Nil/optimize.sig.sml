@@ -5,6 +5,8 @@ signature OPTIMIZE =
       val debug : bool ref
       (* Print debug information *)
 
+      val chatlev : int ref
+
       val optimize :  {doDead : bool,
 		       doProjection : int option,
 		       doUncurry : bool,

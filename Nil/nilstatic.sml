@@ -297,6 +297,38 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
   (* Local helpers *)
 
+
+  local
+    structure Set = Name.VarSet
+    val vars : Set.set ref = ref Set.empty
+    val bound_count = Stats.int "BoundVariables"
+    val unused_count = Stats.int "UnusedVariables"
+
+    fun mark v = (vars := Set.add (!vars,v);bound_count := !bound_count + 1)
+    fun see v = if Set.member (!vars,v) then vars := Set.delete (!vars, v) else ()
+
+    fun insert_xxx inserter (ctxt,v,xxx) = (mark v;inserter(ctxt,v,xxx))
+    fun insert_xxx_list inserter (ctxt,xxxs) = (Listops.map_first mark xxxs;inserter(ctxt,xxxs))
+    fun insert_xxx_eqn inserter (ctxt,v,xxx,eqn) = (mark v;inserter(ctxt,v,xxx,eqn))
+    fun find_xxx finder (ctxt,v) = (see v;finder (ctxt,v))
+  in
+    fun var_reset () = vars := Set.empty
+    fun var_stats () = unused_count := !unused_count + (Set.numItems (!vars))
+    val insert_con              = insert_xxx insert_con
+    val insert_con_list         = insert_xxx_list insert_con_list
+    val insert_kind             = insert_xxx insert_kind
+    val insert_kind_equation    = insert_xxx_eqn insert_kind_equation
+    val insert_equation         = insert_xxx insert_equation
+    val insert_kind_list        = insert_xxx_list insert_kind_list
+    val insert_stdkind          = insert_xxx insert_stdkind
+    val insert_stdkind_equation = insert_xxx_eqn insert_stdkind_equation
+
+    val find_con      = find_xxx find_con
+    val find_max_kind = find_xxx find_max_kind
+      
+  end
+
+
   fun msg str = if (!NilStaticDiag) then print str else ()
 
   fun foldl_all2 ffun init (l1,l2) =
@@ -2426,7 +2458,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	let
 	  val _ = clear_stack ()
 	  val _ = push_mod(module,D)
-
+	  val _ = var_reset()
 	  val _ =
 	    if (!assertions) then
 	      assert (locate "module_valid")
@@ -2452,6 +2484,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		  else ()
 
 	  val _ = pop()
+	  val _ = var_stats()
 	in  res
 	end
 

@@ -23,8 +23,6 @@ structure Linknil :> LINKNIL  =
 				   str)
 
     val phasesplit  = makeEntry (true, "Phasesplit")
-    val typeofelim1 = makeEntry (true, "TypeofElim1")
-    val typeofelim2 = makeEntry (true, "TypeofElim2")
     val cc          = makeEntry (true, "ClosureConv")
     val optimize1   = makeEntry (true, "Optimize1")
     val optimize2   = makeEntry (true, "Optimize2")
@@ -46,6 +44,7 @@ structure Linknil :> LINKNIL  =
     val inline3     = makeEntry (true, "Inline3")
     val coerce_elim = makeEntry (false, "CoerceElim")
     val sing_elim   = makeEntry (false, "SingElim")
+    val rename2      = makeEntry (false, "Rename2")
 
     val walk         = makeEntry (true, "Walk")
     val context_walk = makeEntry (true, "ContextWalk")
@@ -114,6 +113,23 @@ structure Linknil :> LINKNIL  =
 	    val _ = if !checkphase orelse !typecheck then
 		      Stats.timer(phasename^"_Typecheck",NilStatic.module_valid) (NilContext.empty (), nilmod)
 		    else ()
+(*	    val _ = 
+	      let
+		val max = Stats.int "MaxVarsBound"
+		val phasemax = Stats.int (phasename^"MaxVarsBound")
+		val bound_count = Stats.int "BoundVariables"
+		val unused_count = Stats.int "UnusedVariables"
+		val phasebound = Stats.int (phasename^"::BoundVariables")
+		val phaseunused = Stats.int (phasename^"::UnusedVariables")
+	      in
+		phasemax := Int.max (!max,!phasemax);
+		phasebound := Int.max (!bound_count,!phasebound);
+		phaseunused := Int.max (!unused_count,!phaseunused);
+		max := 0;
+		bound_count := 0;
+		unused_count := 0
+	      end*)
+
 	    (* Note that these get redirected in the self-compile,
 	     * since TIL can't handle the Wizard.  (Datatype bug)
 	     *)
@@ -176,12 +192,12 @@ structure Linknil :> LINKNIL  =
 	    val nilmod = transform rename (Linearize.linearize_mod, nilmod)
 
 
-(*
+
 
 	    val nilmod = transform sing_elim (SingletonElim.R_module, nilmod)
 
-	    val nilmod = transform rename (Linearize.linearize_mod, nilmod)
-*)
+	    val nilmod = transform rename2 (Linearize.linearize_mod, nilmod)
+
 	    val nilmod = transform hoist1 (Hoist.optimize, nilmod)
 
 	    val nilmod = transform optimize1

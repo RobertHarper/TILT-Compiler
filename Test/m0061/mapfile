@@ -1,2 +1,4 @@
+import group $libdir ^ "/smlnj-lib/group"
+
 source unit Test = "conv2.sml" {}
-make executable "Test." ^ $target ^ ".exe" {Test}
+make executable "Test." ^ $target ^ ".exe" {Test StringCvt IntInf }

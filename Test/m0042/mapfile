@@ -1,2 +1,3 @@
+import group $libdir ^ "/smlnj-lib/group"
 source unit Test = "array5.sml" {Array2 Int}
 make executable "Test." ^ $target ^ ".exe" {Test}

@@ -112,4 +112,11 @@ source unit IOUtil = "io-util.sml" {IO_UTIL TextIO}
 	BIT_VECTOR     bit-vector-sig
 	BitVector      bit-vector
 *)
+
+
+source unit INT_INF = "int-inf-sig.sml" {Int INTEGER}
+source unit IntInf = "int-inf.sml" { 
+	StringCvt Word32 Int32 Int String Word INT_INF Char LargeInt Vector List CharVector
+}
+
 make library $libdir ^ "/smlnj-lib"

@@ -45,7 +45,7 @@ bug151d	pass	name-mangling test [x] <- * <- * -> [x]
 bug154	pass	Equality allowed on non-eqtypes by elaborator.
 bug155	fail	Type sharing fails on corner case.
 bug159	fail	Datatype replication.
-bug163	fail	Pattern compiler causing elaborator to bomb.
+bug163	pass	[Bug# 0163] Pattern compiler causing elaborator to bomb.
 bug165	fail	Elaborator shadowing variables.
 bug166	fail	Elaborator adding classifiers with unbound, free variables to context.
 m0001	pass	Raise uncaught exception.
@@ -242,9 +242,9 @@ n53	pass	type inference with type constructors
 n54	pass	type inference
 n55	fail	value restriction
 n56	fail	duplicate id pattern
-n57	fail	duplicate label in record
+n57	pass	duplicate label in record
 n58	pass	duplicate label in record pattern
-n59	fail	duplicate label in record type
+n59	pass	duplicate label in record type
 n60	fail	duplicate id in "and" binding
 n61	fail	duplicate id in "and" type binding
 n62	fail	duplicate id in "and" type binding

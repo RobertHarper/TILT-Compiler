@@ -237,7 +237,7 @@ struct
     fun run_for_effect (program : string list) : unit =
 	(case run_program program
 	   of Exit (0, _) => ()
-	    | _ => fail (hd program ^ " failed"))
+	    | _ => fail ((foldr (op ^) "" program) ^ " failed"))
 	     
     datatype result =
 	Bomb				(* TILT bombed *)

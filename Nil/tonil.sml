@@ -41,6 +41,7 @@ struct
    val diag       = Stats.ff("TonilDiag")
    val debug      = Stats.ff("TonilDebug")
    val full_debug = Stats.ff("TonilFullDebug")
+   val chatlev    = ref 0
 
    (* killDeadImport  :  should the import list be GC'ed to include
                          only variables used by the code being split?
@@ -146,6 +147,10 @@ struct
    fun error msg = Util.error "tonil.sml" msg
    fun msg str = if (!diag) then print str else ()
 
+   fun chat lev str = if (!chatlev) >= lev then print str else ()
+   val chat0 = chat 0
+   val chat1 = chat 1
+   val chat2 = chat 2
 
    (*****************************)
    (* Various utility functions *)
@@ -491,6 +496,7 @@ in (* local *)
      fun get_hilctxt (CONTEXT{HILctx,...}) = HILctx
 
      fun get_used (CONTEXT{used,...}) = !used
+     fun reset_used (CONTEXT{used,...}) = used := N.VarSet.empty
 
      fun var_is_used (CONTEXT{used,...}) var = N.VarSet.member(!used,var)
 
@@ -538,6 +544,28 @@ in (* local *)
 				   v, k) =
        let
 	 val NILctx' = NilContext.insert_kind(NILctx,v,k)
+       in  CONTEXT{NILctx=NILctx', HILctx=HILctx,
+		   sigmap=sigmap, vmap=vmap, rmap=rmap, used = used,
+		   memoized_mpath=memoized_mpath, alias=alias,
+		   polyfuns=polyfuns}
+       end
+
+     fun update_NILctx_insert_cbnd(CONTEXT{NILctx,HILctx,sigmap,vmap,rmap,
+					   used,memoized_mpath,alias,polyfuns},
+				   cb) =
+       let
+	 val NILctx' = NilContext.insert_cbnd(NILctx,cb)
+       in  CONTEXT{NILctx=NILctx', HILctx=HILctx,
+		   sigmap=sigmap, vmap=vmap, rmap=rmap, used = used,
+		   memoized_mpath=memoized_mpath, alias=alias,
+		   polyfuns=polyfuns}
+       end
+
+     fun update_NILctx_insert_cbnd_list(CONTEXT{NILctx,HILctx,sigmap,vmap,rmap,
+						used,memoized_mpath,alias,polyfuns},
+					cbs) =
+       let
+	 val NILctx' = NilContext.insert_cbnd_list(NILctx,cbs)
        in  CONTEXT{NILctx=NILctx', HILctx=HILctx,
 		   sigmap=sigmap, vmap=vmap, rmap=rmap, used = used,
 		   memoized_mpath=memoized_mpath, alias=alias,
@@ -716,6 +744,15 @@ in (* local *)
 		     memoized_mpath=memoized_mpath, alias=alias,
 		     polyfuns=polyfuns}
 	 end
+     fun update_NILctx_insert_con_list(CONTEXT{NILctx,HILctx,sigmap,vmap,rmap, used,
+					       memoized_mpath,alias,polyfuns},vcs) =
+	 let
+	   val NILctx' = NilContext.insert_con_list(NILctx,vcs)
+	 in  CONTEXT{NILctx=NILctx', HILctx=HILctx,
+		     sigmap=sigmap, vmap=vmap, rmap=rmap, used = used,
+		     memoized_mpath=memoized_mpath, alias=alias,
+		     polyfuns=polyfuns}
+	 end
 
      val insert_con = update_NILctx_insert_con
      val insert_kind = update_NILctx_insert_kind
@@ -723,10 +760,9 @@ in (* local *)
 
      fun strip_arrow_norm (CONTEXT{NILctx,...}) c = Normalize.strip_arrow_norm NILctx c
 
-     fun get_con(CONTEXT{NILctx,...},v) = NilContext.find_con(NILctx,v)
-     val find_con = get_con
+     fun find_con(CONTEXT{NILctx,...},v) = NilContext.find_con(NILctx,v)
 
-     fun type_of (CONTEXT{NILctx,...}) e = Normalize.type_of (NILctx, e)
+     fun type_of (CONTEXT{NILctx,...}) e = NilRename.renameCon (Normalize.type_of (NILctx, e))
 
 end (* local defining splitting context *)
 
@@ -784,7 +820,7 @@ end (* local defining splitting context *)
 				   it by calling thunk(), but this is now
 				   avoided
 				 *)
-		                result
+		                NilRename.renameCon result
 	       | NONE => (* We haven't seen this path before, so we have
 			    to do the actual translation, which is
 			    performed by the thunk.
@@ -952,7 +988,7 @@ end (* local defining splitting context *)
 								      name_c)
 				   val context' = insert_con(context,
 							     req_r,
-							     con_r)
+							     NilRename.renameCon con_r)
 			       in  (Var_c req_c, Var_e req_r,
 				    LIST[Con_cb(req_c,name_c)],
 				    LIST[Exp_b(req_r, TraceUnknown, name_r)],
@@ -1100,7 +1136,7 @@ end (* local defining splitting context *)
               been determined at its binding site.
             *)
 	   val ((var_mod_c, var_mod_r), context) = splitVar (var_mod,context)
-	   val _ = mark_var_used(context,var_mod_r)
+	   val _ = if con_only then () else mark_var_used(context,var_mod_r) 
 	   val _ = mark_var_used(context,var_mod_c)
 
            val _ = if (!full_debug)
@@ -1242,7 +1278,6 @@ end (* local defining splitting context *)
 					   NU.makeSelect name_mod_r [lbl])]
 	   val ebnd_cat = APPEND[ebnd_mod_cat, ebnd_cat_proj]
 
-	   val con_proj_c = selectFromCon(name_mod_c, lbls)
 	   val exp_proj_r = selectFromRec(name_mod_r, lbls)
 
            (* Extend context *)
@@ -1435,32 +1470,25 @@ end (* local defining splitting context *)
 		   val r = Prim_e (NilPrimOp (record labels),[], [], (Var_e tvar)::exps)
                    (* Note that exps will always be of the form (Var_e v)
                      *)
-		   val rtype = Prim_c(Record_c labels,map (type_of context) exps)
-
-		   val rtype_var = Name.fresh_named_var ((Name.var2name var_str_r)^"_type")
+		   val (recbnds,rtype) = NU.makeNamedRecordType ((Name.var2name var_str_r)^"_type1") labels (map (type_of context) exps)
 
 		   val trs = map (fn _ => TraceUnknown) labels
 
 		   val bnds =
-		     LIST[Con_b (Runtime,Con_cb(rtype_var,rtype)),
-			  Exp_b (tvar,TraceUnknown,
-				 Prim_e(NilPrimOp mk_record_gctag, trs,[Var_c rtype_var],[])),
-			  Exp_b (var_str_r, TraceUnknown,r)]
+		     APPEND[LIST (map (fn cb => (Con_b (Runtime,cb))) recbnds),
+			    LIST [Exp_b (tvar,TraceUnknown,
+					 Prim_e(NilPrimOp mk_record_gctag, trs,[rtype],[])),
+				  Exp_b (var_str_r, TraceUnknown,r)]]
 
-		   val context = update_NILctx_insert_kind_equation(context, rtype_var,rtype)
-		   val context = insert_con(context,tvar,Prim_c(GCTag_c,[Var_c rtype_var]))
-		   val context = insert_con(context, var_str_r, Var_c rtype_var)
+		   val context = update_NILctx_insert_cbnd_list(context,recbnds)
+		   val context = insert_con(context,tvar,Prim_c(GCTag_c,[rtype]))
+		   val context = insert_con(context, var_str_r, rtype)
 		 in
 		     (context, bnds)
 		 end
 
 	   val ebnd_cat = APPEND[ebnd_cat_bnds,ebnd_cat_str]
 
-(* Come back to later...
-	   (* Extend context *)
-	   val context =
-	     update_NILctx_insert_kind_equation(context, var_str_c, con_str_c)
-*)
        in
 	   {cbnd_cat = cbnd_cat,
 	    ebnd_cat = ebnd_cat,
@@ -1676,8 +1704,6 @@ end (* local defining splitting context *)
                 *)
 	       val (ftbnds, nil_fn_seq) =
 		   let
-		     (*val Let_e (_,(Fixopen_b nil_fn_set)::_,_) =
-		       xexp context il_exp*)
 		       val (ftbnds, (Fixopen_b nil_fn_set)::_, _) = xfix context il_params
 		   in
 		       (ftbnds, nil_fn_set)
@@ -1692,12 +1718,11 @@ end (* local defining splitting context *)
                   variables in external_vars) should use the names
                   appearing in the returned NIL bindings.
                 *)
-	       val context' = insert_given_vars(external_vars,
-						internal_renamed_vars,
-						context)
-	       val context' = foldl (fn (Con_b(_, Con_cb(v, c)), context) => insert_kind_equation(context, v, c)
-				      | (_, context) => context) context' ftbnds
-	       val context' = foldl (fn ((v, c), context) => insert_con(context, v, c)) context' internal_renamed_pairs
+	       val context = insert_given_vars(external_vars,
+					       internal_renamed_vars,
+					       context)
+	       val context = update_NILctx_insert_cbnd_list (context,ftbnds)
+	       val context = foldl (fn ((v, c), context) => insert_con(context, v, c)) context internal_renamed_pairs
 
                (* The translation of the initial cluster binding and all
                   the following projections is this single binding
@@ -1710,12 +1735,12 @@ end (* local defining splitting context *)
 	       val {final_context, cbnd_cat, ebnd_cat, record_c_con_items,
 		    record_c_knd_items,
 		    record_r_exp_items} =
-		 xsbnds context' rest_il_sbnds'
+		 xsbnds context rest_il_sbnds'
 
 	   in
 	       {final_context = final_context,
 		cbnd_cat = cbnd_cat,
-		ebnd_cat = APPEND[LIST ftbnds, CONS(ebnd, ebnd_cat)],
+		ebnd_cat = APPEND[LIST (map NU.makeConb ftbnds), CONS(ebnd, ebnd_cat)],
 		record_c_con_items = record_c_con_items,
 		record_c_knd_items = record_c_knd_items,
 		record_r_exp_items = (* If this is in a module, then
@@ -1812,7 +1837,7 @@ end (* local defining splitting context *)
 		  functions = Bodies of the functions in this
 		                 mutually-recursive group *)
                val (internal_pairs, functions) =
-		   Listops.unzip (Sequence.toList set)
+		   Listops.unzip set
 	       val (internal_vars, ebnd_types) =
 		   unzip internal_pairs
 
@@ -1878,78 +1903,93 @@ end (* local defining splitting context *)
 		     NU.makeLetE Sequential bnds e
 		   end
 
+	       val ftbnds_subst = 
+		 let fun folder (cb,s) = let val (v,c) = NU.extractCbnd cb
+					 in NS.C.addr (s,v,c)
+					 end
+		 in foldl folder (NS.C.empty()) ftbnds
+		 end
+
+	       val ftbnds_context = update_NILctx_insert_cbnd_list(context,ftbnds)
+
+
                (* Rewrite each function into this curried outer/inner
-                  function pair.
+                * function pair.
                 *)
                fun reviseFunction ((internal_var,
-				   external_var_r, inner_var,
-				    ftbnd as Con_b(_, Con_cb(ftype, arrow_con)), con
-				   (*AllArrow_c{body_type = inner_body_type,
-					      eFormals = [arg_con],
-					      tFormals = [], fFormals = 0w0, ...}*),
+				   external_var_r, inner_var, inner_type,
 				   Function{effect,recursive,
 					    tFormals = [],
 					    eFormals = [(arg_var,arg_tr)],
 					    fFormals = [],
 					    body}), context) =
 		   let
-		       val context = insert_kind_equation(context, ftype, arrow_con)
+		     val {body_type = inner_body_type,
+			  eFormals = [arg_con],
+			  tFormals = [], fFormals = 0w0, ...} = strip_arrow_norm ftbnds_context inner_type
 
-		       val {body_type = inner_body_type,
-			eFormals = [arg_con],
-			tFormals = [], fFormals = 0w0, ...} = strip_arrow_norm context con
+		     val body' = wrap(internal_var, inner_var, body)
+		       
+		     (* I could build a let here.  But these are the bnds for the whole cluster,
+		      * most of which are extraneous for this type.  The only time that they are likely
+		      * to all be relevant, is when there is a single function (an important special case
+		      * because of functors).
+		      *)
 
-		       val body' = wrap(internal_var, inner_var, body)
+		     val closed_inner_body_type = (if num_functions = 1 then NU.makeLetC ftbnds else NS.substConInCon ftbnds_subst) inner_body_type
+		     val closed_arg_con = NS.substConInCon ftbnds_subst arg_con
+		       
+		     val closed_outer_body_type = AllArrow_c{openness = Open, effect = effect,
+							     tFormals = [],
+							     eFormals = [closed_arg_con],
+							     fFormals = 0w0,
+							     body_type = closed_inner_body_type}
 
-		       val outer_body_type = AllArrow_c{openness = Open, effect = effect,
-							tFormals = [],
-							eFormals = [arg_con],
-							fFormals = 0w0,
-							body_type = inner_body_type}
-		       val outer_type = AllArrow_c{openness = Open, effect = Total,
-				   tFormals = [(poly_var_c, knd_arg)], eFormals = [con_arg],
-				   fFormals = 0w0, body_type = outer_body_type}
-		       val inner_type = outer_body_type
-		       (*val inner_ftype = Name.fresh_named_var (Name.var2name inner_var ^ "_type")*)
+		     val outer_type = AllArrow_c{openness = Open, effect = Total,
+						 tFormals = [(poly_var_c, knd_arg)], 
+						 eFormals = [con_arg],
+						 fFormals = 0w0, 
+						 body_type = closed_outer_body_type}
 
-		       val outer_ftype = Name.fresh_named_var (Name.var2name external_var_r ^ "_type")
+		       
+		     val outer_ftype = Name.fresh_named_var (Name.var2name external_var_r ^ "_type")
 
-		       (*val context = insert_kind_equation(context, inner_ftype, inner_type)*)
-		       val context = insert_kind_equation(context, outer_ftype, outer_type)
-		   in  ((Con_b(Compiletime, Con_cb(outer_ftype, outer_type)),
-			((external_var_r, Var_c outer_ftype),
-			Function{effect = Total,
-				recursive = Leaf,
-				tFormals = [poly_var_c],
-				eFormals = [(poly_var_r, TraceUnknown)],
-				fFormals = [],
-				body = Let_e (Sequential,
-				       [ftbnd, Fixopen_b
-					(Sequence.fromList
-					 [((inner_var, inner_type),
-					   Function{effect=effect,recursive=recursive,
-						    tFormals = [],
-						    eFormals = [(arg_var,arg_tr)],
-						    fFormals = [],
-						    body = body'})])],
-				       Var_e inner_var)})), context)
+		     val context = insert_kind_equation(context, outer_ftype, outer_type)
+		     val context = insert_con(context,external_var_r,Var_c outer_ftype)
+		     val bnd = Con_b(Compiletime, Con_cb(outer_ftype, outer_type))
+		     val vc = (external_var_r, Var_c outer_ftype)
+		     val f = Function{effect = Total,
+				      recursive = Leaf,
+				      tFormals = [poly_var_c],
+				      eFormals = [(poly_var_r, TraceUnknown)],
+				      fFormals = [],
+				      body = 
+				      Let_e (Sequential,
+					     (map NU.makeConb ftbnds)@
+					     [Fixopen_b
+					      [((inner_var, inner_type),
+						Function{effect=effect,recursive=recursive,
+							 tFormals = [],
+							 eFormals = [(arg_var,arg_tr)],
+							 fFormals = [],
+							 body = body'})
+					       ]
+					      ],
+					     Var_e inner_var
+					     )
+				      }
+		     val vcf = (vc,f)
+		   in  ((bnd,vcf),context)
 		   end
 
                val (ebnd_entries, context) = foldl_acc reviseFunction context
-				   (Listops.zip6 internal_vars external_var_rs inner_vars ftbnds ebnd_types functions)
+				   (Listops.zip5 internal_vars external_var_rs inner_vars ebnd_types functions)
 
 	       val (outer_bnds, ebnd_entries) = Listops.unzip ebnd_entries
 
 	       val ebnds = outer_bnds @ [Fixopen_b ebnd_entries]
 
-               (* Currently unused, but will be needed if we start
-                  returning contexts with types, to avoid requiring
-                  Typeof_c's *)
-               (* val ebnd_types = map (NU.function_type Open) functions *)
-
                val context = update_polyfuns_list(context, external_var_rs)
-	       val context = foldl (fn (((v, c), _), context) =>
-				    insert_con(context, v, c)) context ebnd_entries
 
 	       (* Translate the remaining bindings
 		*)
@@ -2616,14 +2656,12 @@ end (* local defining splitting context *)
 		       ()
 	   (*val Let_e (_, [_, Fixopen_b fns], Var_e var) = xexp context exp*)
 	   val (ftbnds, [Fixopen_b fns], Var_e var) = xfix context param
-	   val context = foldl (fn (Con_b(_, Con_cb(v, c)), context) => insert_kind_equation(context, v, c)
-				 | (_, context) => context) context ftbnds
        in
 	   case List.find (fn ((v, _), _) => Name.eq_var(var,v)) fns of
 	       SOME ((_, con), Function{tFormals=[],
 			      eFormals=[(v,_)],fFormals=[],body,...}) =>
 		     let
-			 val {eFormals=[c],...} = strip_arrow_norm context con
+			 val {eFormals=[c],...} = strip_arrow_norm context (NU.makeLetC ftbnds con)
 		     in
 			 (v,c,body)
 		     end
@@ -2710,16 +2748,15 @@ end (* local defining splitting context *)
 	       (ftbnds, [Fixopen_b set], hd names)
 	    else
 	     let
-	       val rtype = Prim_c(Record_c labels,types)
-	       val cvar = N.fresh_named_var "gctag_arg"
-	       val cbnd = NU.makeConb (Con_cb(cvar,rtype))
+	       val (cbnds,rtype) = NU.makeNamedRecordType "gctag_arg" labels types
 	       val evar = N.fresh_named_var "gctag"
 	       val trs = map (fn _ => TraceUnknown) labels
-	       val tag = Prim_e(NilPrimOp mk_record_gctag,trs,[Var_c cvar],[])
+	       val tag = Prim_e(NilPrimOp mk_record_gctag,trs,[rtype],[])
 	       val ebnd = Exp_b (evar,TraceUnknown,tag)
 	       val fields = (Var_e evar)::names
+	       val ftbnds = ftbnds@cbnds
 	     in
-		 (ftbnds, [Fixopen_b set, cbnd, ebnd], Prim_e(NilPrimOp (record labels), [],[], fields))
+		 (ftbnds, [Fixopen_b set,ebnd], Prim_e(NilPrimOp (record labels), [],[], fields))
 	     end
        end
 
@@ -2923,7 +2960,7 @@ end (* local defining splitting context *)
        let
 	   val (ftbnds, fbnds, body) = xfix context (is_recur, il_arrow, fbnds)
        in
-	   NU.makeLetE Sequential (ftbnds @ fbnds) body
+	   NU.makeLetE Sequential ((map NU.makeConb ftbnds) @ fbnds) body
        end
 
      (* The empty record does not take gctag, so treat it specially
@@ -2944,7 +2981,7 @@ end (* local defining splitting context *)
 			  end
 	   val (bnds,types,trs,exps) = Listops.unzip4 (map mapper exps)
 
-	   val rtype = Prim_c(Record_c labels, types)
+	   val (recbnds,rtype) = NU.makeNamedRecordType "record_gctag_arg" labels types
 
 	   val evar = N.fresh_named_var "gctag"
 	   val tag = Prim_e(NilPrimOp mk_record_gctag, trs,[rtype],[])
@@ -2952,7 +2989,7 @@ end (* local defining splitting context *)
 
 	   val fields = (Var_e evar)::exps
        in
-	 NU.makeLetE Sequential (bnds @ [tbnd])
+	 NU.makeLetE Sequential (bnds @ (map NU.makeConb recbnds) @ [tbnd] )
 	 (Prim_e (NilPrimOp (record labels), [],[], fields))
        end
 
@@ -3340,74 +3377,70 @@ end (* local defining splitting context *)
           *)
          xexp context exp
 
-   (* xfbnds.  Translation of the core of the Il.FIX construct
+   (* xfbnds.  Translation of the core of the Il.FIX construct.
+    * Return a list of cbnds, and the new function bound
     *)
    and xfbnds context (is_recur, il_arrow, fbnds) =
        let
-	   val recursive = if is_recur then Arbitrary else NonRecursive
-	   val totality = xeffect il_arrow
-	   val fun_names = map (fn Il.FBND(v,_,_,_,_) => v) fbnds
-	   val (fun_names', context') = insert_rename_vars (fun_names, context)
-
-
-	   fun mark_non_recur ((v,c),Function {recursive, effect, tFormals, eFormals, fFormals, body}) =
-	       ((v,c),Function{recursive = NonRecursive, effect=effect,
+	 val recursive = if is_recur then Arbitrary else NonRecursive
+	 val totality = xeffect il_arrow
+	 val fun_names = map (fn Il.FBND(v,_,_,_,_) => v) fbnds
+	 val (fun_names, context) = insert_rename_vars (fun_names, context)
+	   
+	   
+	 fun mark_non_recur ((v,c),Function {recursive, effect, tFormals, eFormals, fFormals, body}) =
+	   ((v,c),Function{recursive = NonRecursive, effect=effect,
 			   tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
 			   body=body})
+	   
+	 (* Pre compute the new function name, the argument type, and 
+	  * the function type for each function
+	  *)
+	 fun premapper (Il.FBND(var1, var2, il_con1, il_con2, body)) =
+	   let
+	     val var1' = rename_var(var1, context)
+	     val con1 = xcon context il_con1
+	     val con2 = xcon context il_con2
+	     val aname = Name.var2name var2 ^ "_type"
+	     val (cb1,con1) = NU.nameType aname con1
+	     val name = Name.var2name var1' ^ "_type"
+	     val (ftbnds,ftype) = NU.makeNamedArrowType name totality con1 con2
+	   in
+	     (cb1@ftbnds, (var1', ftype), con1)
+	   end
+	 
+	 val (ftbnds,vcs,argtypes) = unzip3 (map premapper fbnds)
+	 val ftbnds = Listops.flatten ftbnds
 
-	   fun t from to = AllArrow_c{effect = totality, openness = Open,
-						  tFormals = [], eFormals = [from], fFormals = 0w0,
-						  body_type = to}
-	   fun premapper (Il.FBND(var1, var2, il_con1, il_con2, body)) =
-	       let
-		   val var1' = rename_var(var1, context')
-		   val con1 = xcon context' il_con1
-		   val con2 = xcon context' il_con2
-		   val con = t con1 con2
-		   val ftype = Name.fresh_named_var (Name.var2name var1' ^ "_type")
-	       in
-		   (var1', con1, con2, ftype, con)
-	       end
-
-	   val pre = map premapper fbnds
-
-	   (*Insert the function type
-	    *)
-	   val context' =
-	       foldl (fn ((v, _, _, tv, c), context) =>
-		      let
-			  val context = insert_kind_equation(context, tv, c)
-			  val context = insert_con(context, v, Var_c tv)
-		      in
-			  context
-		      end) context' pre
-
-	   fun mapper ((var1', con1, con2, tv, arrow_con), Il.FBND(var1, var2, il_con1, il_con2, body)) =
-	       let
-		   val (var2',context'') = insert_rename_var (var2, context')
-
-		   val context'' = update_NILctx_insert_con(context'', var2', con1)
-		   val body' = xexp context'' body
-	       in   (Con_b(Compiletime, Con_cb(tv, arrow_con)),
-		     ((var1', Var_c tv),
-		      Function{recursive = recursive, effect = totality,
-			       tFormals = [], eFormals = [(var2', TraceUnknown)],
-			       fFormals=[], body = body'}))
-	       end
-
-	   val (bnds,vcflist) = unzip (ListPair.map mapper (pre,fbnds))
-
-	   (* If none of the variables have been used at all yet, then we know
-	    * that none of the functions are actually recursive.  This is a conservative
-	    * approximation that catches most cases.
-	    *)
-	   val vcflist = if List.exists (var_is_used context') fun_names'
-			  then vcflist
-			else map mark_non_recur vcflist
-
-       in (bnds,vcflist)
+	 val context = update_NILctx_insert_cbnd_list(context,ftbnds)
+	 val context = update_NILctx_insert_con_list(context,vcs)
+	   
+	 fun mapper ((var1', arrow_con), argcon, Il.FBND(var1, var2, il_con1, il_con2, body)) =
+	   let
+	     val (var2',context) = insert_rename_var (var2, context)
+	       
+	     val context = update_NILctx_insert_con(context, var2', argcon)
+	     val body' = xexp context body
+	   in   
+	     ((var1', arrow_con),
+	      Function{recursive = recursive, effect = totality,
+		       tFormals = [], eFormals = [(var2', TraceUnknown)],
+		       fFormals=[], body = body'})
+	   end
+	 
+	 val vcflist = map3 mapper (vcs,argtypes,fbnds)
+	   
+	 (* If none of the variables have been used at all yet, then we know
+	  * that none of the functions are actually recursive.  This is a conservative
+	  * approximation that catches most cases.
+	  *)
+	 val vcflist = if List.exists (var_is_used context) fun_names
+			 then vcflist
+		       else map mark_non_recur vcflist
+			 
+       in (ftbnds,vcflist)
        end
-         handle e => (print "uncaught exception in xfbnds\n";
+     handle e => (print "uncaught exception in xfbnds\n";
 		      raise e)
 
    (* xbnds.  Translation of a sequence of bindings.
@@ -3487,23 +3520,16 @@ end (* local defining splitting context *)
 			   NONE => error "unbound signature variable"
 			 | SOME s => s)
 
-     |  xsig' context (con0,Il.SIGNAT_OF il_path) =
-          let val {cbnd_cat = cbnd_mod_cat,
-		   ebnd_cat = ebnd_mod_cat,
-		   name_c   = name_mod_c,
-		   name_r   = name_mod_r,
-		   context  = context,
-		   ...} = xmod context (false, IlUtil.path2mod il_path, NONE)
+     |  xsig' context (con0,Il.SIGNAT_OF (Il.PATH (v,lbls))) =
+          let 
+	    val ((vc,vr),_) = splitVar(v,context)
 
-	      val cbnds = flattenCatlist cbnd_mod_cat
-	      val cbnds' = map NU.makeConb cbnds
-	      val ebnds = flattenCatlist ebnd_mod_cat
-	      val con_mod = NU.makeLetC cbnds name_mod_c
-	      val e = NU.makeLetE Sequential
-		      (cbnds' @ ebnds)
-		      name_mod_r
+	    val _ = mark_var_used(context,vc)
+	    
+	    val con_proj = selectFromCon(Var_c vc,lbls)
+	    val exp_proj = selectFromRec(Var_e vr,lbls)
 
-	  in  (Single_k(con_mod), type_of context name_mod_r)
+	  in  (Single_k(con_proj), type_of context exp_proj)
 	  end
 
      | xsig' context (con0,Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
@@ -3550,7 +3576,10 @@ end (* local defining splitting context *)
 	   val (erlabs, ervars, ercons) = Listops.unzip3 erdecs
 
            (* Create the type part *)
-	   val type_r = Prim_c(Record_c erlabs, ercons)
+	   val type_r = 
+	     let val (rbnds,rtype) = NU.makeNamedRecordType "sig_term_type" erlabs ercons
+	     in NU.makeLetC rbnds rtype
+	     end
 
            (* If this is the signature of a single-element module
               with the "it" label (and hence an artifact of encoding
@@ -3823,9 +3852,25 @@ end (* local defining splitting context *)
 								  v_c, knd)
 			  val context = update_NILctx_insert_label(context,
 								   l_c, v_c)
+
+			  (* Horrible icky hack.  Better to make xsig possibly return cbnds *)
+			  val (tbnds,type_r) = 
+			    (case NU.flattenCLet type_r
+			       of Let_c (_,tbnds,body) => (tbnds,body)
+				| Var_c v => ([],Var_c v)
+				| _ => 
+				 let
+				   val type_r_var = Name.fresh_named_var ((Name.var2name v_r)^"_type")
+				 in ([Con_cb(type_r_var,type_r)],Var_c type_r_var)
+				 end)
+
+			  val context = update_NILctx_insert_cbnd_list(context,tbnds)
+
 			  val context = insert_con(context, v_r, type_r)
 			  val context = update_NILctx_insert_label(context,
 								   l_r, v_r)
+
+			  val ivtbs = rev (map (fn cb => ImportBnd(Runtime,cb)) tbnds)
 
 			  val iv = ImportValue(l_r,v_r,TraceUnknown,type_r)
 			  val it = ImportType(l_c,v_c,knd)
@@ -3834,9 +3879,9 @@ end (* local defining splitting context *)
 			     then we don't ever need the type part.
 			   *)
 			  if is_polyfun then
-			    (iv::imports, update_polyfuns(context, v_r))
+			    (iv::ivtbs@imports, update_polyfuns(context, v_r))
 			  else
-			    (iv::it::imports, context)
+			    (iv::ivtbs@(it::imports), context)
 			end
 		  | _ => error "saw non-module CONTEXT_SDEC")
 
@@ -3912,6 +3957,13 @@ end (* local defining splitting context *)
 
 	    val _ = msg "  Initial context is phase-split\n"
 
+	    (* Since we actually compute FV sets for imports during filtering,
+	     * we only care about the status of variables from the body
+	     * of the module.  Keeping the used information from above
+	     * could in principle interfere with cascaded elimination.
+	     *)
+	    val _ = reset_used initial_splitting_context
+
 	    (* Phase-split the bindings
              *)
 	    val {cbnd_cat, ebnd_cat, final_context, ...} =
@@ -3940,11 +3992,20 @@ end (* local defining splitting context *)
               | filter_imports ((iv as ImportValue(l,v,_,c)) :: rest) =
 		   let
 		       val result as (imports, used) = filter_imports rest
+		       val isused = VarSet.member(used, v)
+		       val keep = N.keep_import l
+		       val _ = 
+			 if isused then 
+			   chat2 ("Keeping label " ^ N.label2name l ^ " : used\n")
+			 else if keep then 
+			   chat2 ("Keeping label   " ^ N.label2name l ^ " : keep\n")
+		         else
+			   chat2 ("Filtering label " ^ N.label2name l ^ "\n")
 		   in
-		       if (VarSet.member(used, v) orelse N.keep_import l) then
+		       if (isused orelse keep) then
 			   (iv :: imports,
-			    let val (fvTerm,fvType) = NU.freeExpConVarInCon(true,0,c)
-			    in  VarSet.union(used, VarSet.union(fvTerm, fvType))
+			    let val fvType = NU.freeConVarInCon(true,0,c)
+			    in  VarSet.union(used, fvType)
 			    end)
 		       else
 			   (filtering l; result)
@@ -3952,19 +4013,37 @@ end (* local defining splitting context *)
               | filter_imports ((it as ImportType(l,v,k)) :: rest) =
 		   let
 		       val result as (imports, used) = filter_imports rest
+		       val isused = VarSet.member(used, v)
+		       val keep = N.keep_import l
+		       val _ = 
+			 if isused then 
+			   chat2 ("Keeping label " ^ N.label2name l ^ " : used\n")
+			 else if keep then 
+			   chat2 ("Keeping label   " ^ N.label2name l ^ " : keep\n")
+		         else
+			   chat2 ("Filtering label " ^ N.label2name l ^ "\n")
 		   in
-		       if (VarSet.member(used, v) orelse N.keep_import l) then
+		       if (isused orelse keep) then
 			   (it :: imports,
 			    VarSet.union(used, NU.freeVarInKind (0,k)))
 		       else
 			   (filtering l; result)
 		   end
-              | filter_imports ((ib as ImportBnd cb) :: rest) =
+              | filter_imports ((ib as ImportBnd (phase,cb)) :: rest) =
 		   let
-		       val result as (imports, used) = filter_imports rest
+		     val result as (imports, used) = filter_imports rest
+		     val v = (case cb 
+				of Con_cb (v,_)    => v
+				 | Open_cb (v,_,_) => v
+				 | Code_cb (v,_,_) => v)
 		   in
+		     if VarSet.member(used, v) then
 		       (ib :: imports,
-			used)
+			let val fvType = NU.freeConVarInCbnd(true,0,cb)
+			in  VarSet.union(used, fvType)
+			end)
+		     else
+		       result
 		   end
 
 	    val imports = if (!killDeadImport) then

@@ -3,6 +3,8 @@ sig
 
     val diag : bool ref
     val debug : bool ref
+    val chatlev : int ref
+
     val full_debug : bool ref
     val do_memoize : bool ref
     val killDeadImport : bool ref

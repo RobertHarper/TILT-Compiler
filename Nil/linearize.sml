@@ -908,7 +908,11 @@ struct
        end
 
      (* There are no import bnds yet *)
-     | limport (imp as ImportBnd _,s) = ([imp],s)
+     | limport (imp as ImportBnd (phase,cb),s) = 
+       let
+	 val (cbnds,s) = lcbnd true s cb
+       in (map (fn cb => (ImportBnd(phase,cb))) cbnds,s)
+       end
 
    (*
     val limports : import_entry list * state -> import_entry_list * state

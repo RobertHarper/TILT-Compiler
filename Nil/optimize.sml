@@ -37,8 +37,9 @@ struct
 	val reduce_varargs = Stats.tt "ReduceVarargs"
 	val reduce_oneargs = Stats.tt "ReduceOneargs"
 	val reduce_onearg_apps = Stats.tt "ReduceOneargApps"
+	val kill_imports = Stats.tt "KillImports"
 
-	val chat = Stats.ff "OptimizeChat"
+	val chatlev = ref 0
 	val folds_reduced = ref 0
 	val coercions_cancelled = ref 0
 	val switches_flattened  = ref 0
@@ -46,6 +47,8 @@ struct
 	val varargs_reduced = ref 0
 	val oneargs_reduced = ref 0
 	val onearg_apps_reduced = ref 0
+	val imports_killed = ref 0
+
 	fun reset_stats() =
 	  let in
 	    folds_reduced :=  0;
@@ -54,11 +57,17 @@ struct
 	    switches_reduced := 0;
 	    varargs_reduced := 0;
 	    oneargs_reduced := 0;
-	    onearg_apps_reduced := 0
+	    onearg_apps_reduced := 0;
+	    imports_killed := 0
 	  end
 
+	fun chat lev str = if (!chatlev) >= lev then print str else ()
+	val chat0 = chat 0
+	val chat1 = chat 1
+	val chat2 = chat 2
+
 	fun chat_stats () =
-	  if !chat then
+	  if !chatlev > 0 then
 	    (print "\t";
 	     print (Int.toString (!folds_reduced));
 	     print " fold/unfold pairs reduced\n";
@@ -79,7 +88,10 @@ struct
 	     print " oneargs reduced\n" ;
 	     print "\t";
 	     print (Int.toString (!onearg_apps_reduced));
-	     print " onearg apps reduced\n"
+	     print " onearg apps reduced\n";
+	     print "\t";
+	     print (Int.toString (!imports_killed));
+	     print " imports killed\n"
 	     ) else ()
 
 
@@ -1805,10 +1817,25 @@ struct
 				end)
 	  end
 
-	fun do_import(ImportValue(l,v,tr,c),state) = (ImportValue(l,v,do_niltrace state tr,do_con state c),
-						      add_label(add_con(state,v,c),l,v))
-	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k),
-						   add_label(add_kind(state,v,k),l,v))
+	fun do_import(ImportValue(l,v,tr,c),state) = 
+	  let
+	    val state = if !kill_imports then add_var (state,v) else state
+	    val inner_state = if !kill_imports then enter_var (state,v) else state
+	    val tr = do_niltrace inner_state tr
+	    val c = do_con inner_state c
+	    val state = add_label(add_con(state,v,c),l,v)
+	    val _ = if !kill_imports andalso Name.keep_import l then use_var(state,v) else ()
+	  in (ImportValue(l,v,tr,c),state)
+	  end
+	  | do_import(ImportType(l,v,k),state)  = 
+	  let
+	    val state = if !kill_imports then add_var (state,v) else state
+	    val inner_state = if !kill_imports then enter_var (state,v) else state
+	    val k = do_kind inner_state k
+	    val state = add_label(add_kind(state,v,k),l,v)
+	    val _ = if !kill_imports andalso Name.keep_import l then use_var(state,v) else ()
+	  in (ImportType(l,v,k),state)
+	  end
 	  | do_import(ImportBnd (phase, cb),state)  =
 	    let
 		val (cb, state) = do_cbnd (cb, state)
@@ -1849,26 +1876,25 @@ struct
 	      val bnds = if (null export_bnds) then bnds else bnds @ export_bnds
               val bnds = List.mapPartial (bnd_used state) bnds
 	      val bnds = flattenBnds bnds
-	      val _ = chat_stats ()
 
 	      fun import_used (ImportBnd (_, cbnd)) = cbnd_used state cbnd
-		| import_used _ = true
+		| import_used (ImportType (l,v,_)) = 
+		(not (!kill_imports)) orelse
+		(is_used_var (state,v)) orelse
+		(inc imports_killed;
+		 chat2 ("Filtering label " ^ Name.label2name l ^ "\n");
+		 false)
+		| import_used (ImportValue (l,v,_,_)) = 
+		(not (!kill_imports)) orelse
+		(is_used_var (state,v)) orelse
+		(inc imports_killed;
+		 chat2 ("Filtering label " ^ Name.label2name l ^ "\n");
+		 false)
+
 	      val imports = List.filter import_used imports
 
-	      val _ = if !chat then
-		(print "\t";
-		 print (Int.toString (!folds_reduced));
-		 print " fold/unfold pairs reduced\n";
-		 print "\t";
-		 print (Int.toString (!coercions_cancelled));
-		 print " coercion pairs reduced\n";
-		 print "\t";
-		 print (Int.toString (!switches_flattened));
-		 print " int switches flattened\n" ;
-		 print "\t";
-		 print (Int.toString (!switches_reduced));
-		 print " known switches reduced\n"
-		 ) else ()
+	      val _ = chat_stats ()
+
 	  in  MODULE{imports=imports,exports=exports,bnds=bnds}
 	  end
 

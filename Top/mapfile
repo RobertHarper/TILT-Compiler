@@ -25,7 +25,7 @@ source unit Target = "target.sml" {
 	TARGET Stats Word32 Util Platform Linkrtl Core Blaster
 }
 source unit PATHS = "paths.sig.sml" {Blaster Formatter}
-source unit Paths = "paths.sml" {PATHS Target OS Blaster Util Formatter}
+source unit Paths = "paths.sml" {PATHS Target OS Blaster Util Formatter Int Platform String Word32}
 source unit FILE = "file.sig.sml" {Blaster}
 source interface FILE = "file.int" {FILE}
 source unit File : FILE = "file.sml" {
@@ -81,7 +81,7 @@ source unit COMMUNICATION = "communication.sig.sml" {
 source unit Communication = "communication.sml" {
 	Util Update String Posix Int Word32 Stats COMMUNICATION OS
 	List Platform Dirs Target Tools Queue Linknil Blaster
-	BinIO Formatter Bool Compiler
+	BinIO Formatter Bool Compiler Paths
 }
 source unit STATISTICS = "statistics.sig.sml" {}
 source unit Statistics = "statistics.sml" {

@@ -70,19 +70,41 @@ struct
 
   fun makeConb cbnd = Con_b (Runtime,cbnd)
 
-  (* Loses Parallel information *)
-  fun flattenCbnds cbnds =
-      let fun loop [] acc = rev acc
-	    | loop (cbnd::rest) acc =
-	  loop rest (case cbnd of
-			 Con_cb(v,Let_c(sort, cbnds, c)) =>
-			     let val cbnds = flattenCbnds cbnds
-				 val cbnd = Con_cb(v,c)
-			     in  cbnd :: ((rev cbnds) @ acc)
-			     end
-		       | _ => cbnd::acc)
-      in  loop cbnds []
+  (* Loses Parallel information 
+   * Return bounds in reverse order 
+   *)
+  fun flattenCbnds' cbnds =
+      let 
+	fun loop [] acc = acc
+	  | loop (cbnd::rest) acc =
+	  let
+	    val acc =
+	      (case cbnd of
+		 Con_cb(v,c) => 
+		   let
+		     val (cbnds,c) = flattenCLet' c
+		   in Con_cb(v,c)::cbnds@acc
+		   end
+	       | _ => cbnd::acc)
+	  in loop rest acc
+	  end
+      in loop cbnds []
       end
+  and flattenCLet' c = 
+    (case c
+       of Let_c (_,cbnds,body) => 
+	 let
+	   val rcbnds = flattenCbnds' cbnds
+	   val (brcbnds,body) = flattenCLet' body
+	 in (brcbnds@rcbnds,body)
+	 end
+	| _ => ([],c))
+
+  fun flattenCbnds cbnds = rev (flattenCbnds' cbnds)
+  fun flattenCLet c = 
+    (case flattenCLet' c
+       of ([],body) => body
+	| (rcbnds,body) => Let_c(Sequential,rev rcbnds,body))
 
 
   fun project_from_kind(lvk_seq,con,label) =
@@ -917,6 +939,12 @@ struct
 	    !cvars_ref
 	end
 
+    fun freeConVarInCbnd(lookInKind,minLevel,c) =
+	let val (evars_ref,cvars_ref,handler) = free_handler (lookInKind,minLevel)
+	in  f_cbnd handler c;
+	  !cvars_ref
+	end
+
     fun freeConVarInKind (minLevel, k) =
 	let val (evars_ref,cvars_ref,handler) = free_handler (true, minLevel)
 	in  f_kind handler k;
@@ -1315,6 +1343,43 @@ struct
       | makeAppE fn_exp cargs eargs fargs =
             App_e(Open, fn_exp, cargs, eargs, fargs)
 
+    fun makeNamedRecordType rname labels cons = 
+      let
+
+	fun folder ((l,c),rbnds) =
+	  if small_con c then (c,rbnds)
+	  else
+	    let
+	      val tvar = Name.fresh_named_var ((label2name l)^"_type")
+	      val bnd = Con_cb(tvar,c)
+	    in (Var_c tvar,bnd::rbnds)
+	    end
+	val (cons,rbnds) = Listops.foldl_acc folder [] (zip labels cons)
+	val tvar = Name.fresh_named_var rname
+	val rtype = Prim_c( Record_c labels,cons)
+	val bnds = rev (Con_cb(tvar,rtype)::rbnds)
+      in (bnds,Var_c tvar)
+      end
+
+    fun nameType s c = 
+      if small_con c then ([],c) 
+      else 
+	let
+	  val cname = Name.fresh_named_var s
+	in ([Con_cb(cname,c)],Var_c cname)
+	end
+
+    fun makeNamedArrowType rname totality from to = 
+      let
+	val (fbnds,from) = nameType "from_type" from
+	val (tbnds,to)   = nameType "to_type" to
+	val arrow = 
+	  AllArrow_c{effect = totality, openness = Open,
+		     tFormals = [], eFormals = [from], fFormals = 0w0,
+		     body_type = to}
+	val (abnds,arrow) = nameType rname arrow
+      in (fbnds@tbnds@abnds,arrow)
+      end
 
     (* makeSelect.  Given a record expression r and a list lbls
      * of labels, produce the term corresponding to r.lbls

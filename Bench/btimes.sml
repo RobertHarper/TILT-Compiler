@@ -138,8 +138,6 @@ local
     in ()
     end
 
-  structure G = Getopt
-
   fun eprint (s : string) : unit =
     TextIO.output(TextIO.stdErr, s)
 
@@ -166,26 +164,25 @@ local
 	 (msg ^ "\nusage: " ^ CommandLine.name() ^  " [-r n] [ benchmarks ]\n")
 
        fun fail msg = FAIL (usage msg)
+
        fun parseInt s = 
 	 (case Int.fromString s
 	    of SOME i => i
 	     | NONE => fail "argument to -r is not an integer")
 
-       val opts = [G.Arg (#"r",parseInt)]
-
        val args = CommandLine.arguments() 
-       val (runs,args) = 
-	 (case G.getopt (opts,args)
-	    of G.Error msg => fail msg
-	     | G.Success (num,args) => 
-	      let 
-		val num = case num of [i] => i | _ => 1
-		val args = case args 
-			     of [] => benchmarks
-			      | _ => findall args benchmarks 
-	      in (num,args)
-	      end)
-     in report (runs,args)
+
+       fun parse_options ({argc,eargf,acc,...} : int Arg.argument) : int = 
+	 (case argc 
+	    of #"r" => parseInt (eargf (fn () => fail "-r requires argument"))
+	     | _ => fail ("-" ^ str argc ^" not a valid option"))
+
+
+       val (args,runs) = Arg.arguments parse_options (args,1)
+       val torun = case args 
+		     of [] => benchmarks
+		      | _ => findall args benchmarks
+     in report (runs,torun)
      end)
        handle e => (eprint (CommandLine.name());
 		    eprint ": ";

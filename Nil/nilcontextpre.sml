@@ -192,12 +192,16 @@ structure NilContextPre
     * about 1/12 of the insertion time.  I think Splay Maps make repeated
     * splays on the same value cheap.
     *)
-
+   val var_max = Stats.int "MaxVarsBound"
    fun Vinsert (map,v,value) =
+     let
+       val n = V.numItems map
+       val _ = if n > !var_max then var_max := n else ()
+     in
        if contains map v then
 	 error (locate "Vinsert") ("Variable already occurs in context: "^(Name.var2string v))
        else V.insert (map,v,value)
-
+     end
 
    val Vinsert = fn args => subtimer("Ctx:Vinsert",Vinsert) args
    val Vfind   = fn args => subtimer("Ctx:Vfind",Vfind) args
@@ -642,6 +646,8 @@ structure NilContextPre
 	  in
 	    insert_kind(ctxt,v,k)
 	  end)
+
+   fun insert_cbnd_list (ctxt:context,cbnds:conbnd list) :context = foldl (fn (cb,ctxt) => insert_cbnd (ctxt,cb)) ctxt cbnds
 
    fun insert_bnd_pre (typeof : context*exp -> con) (ctxt as {conmap,kindmap,varmap,counter}:context,bnd:bnd) :context =
      (case bnd of

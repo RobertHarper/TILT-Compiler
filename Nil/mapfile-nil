@@ -192,7 +192,7 @@ source unit ToNil = "tonil.sml" {
 	Name Listops Util Sequence List Prim Tyvar Int Word32 Array
 	TilWord64 TilWord32 Il Nil Ppil IlUtil IlContext IlStatic NilUtil
 	NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL
-	Option NilPrimUtil NilDefs ListPair
+	Option NilPrimUtil NilDefs ListPair NilRename
 }
 
 source unit PASS = "pass.sig.sml" {Nil}
@@ -236,6 +236,11 @@ source unit CoerceElim = "coerce-elim.sml" {
 	Int Name Sequence NilRename
 }
 
+source unit SINGLETONELIM = "singleton-elim.sig.sml" {Nil NilContext}
+source unit SingletonElim = "singleton-elim.sml" {
+	Nil NilUtil NilContext Normalize SINGLETONELIM Name Util Listops NilSubst Option Prim Array
+}
+
 source unit LINKNIL = "linknil.sig.sml" {
 	Il Nil NILUTIL NILCONTEXT PPNIL NORMALIZE TONIL VARARG
 }
@@ -244,6 +249,6 @@ source unit Linknil : Linknil = "linknil.sml" {
 	Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil
 	ToNil Optimize Specialize Normalize Linearize ToClosure LINKNIL
 	Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic
-	Inline PpnilHtml Measure Vararg Real Timestamp CoerceElim
+	Inline PpnilHtml Measure Vararg Real Timestamp CoerceElim SingletonElim
 }
 

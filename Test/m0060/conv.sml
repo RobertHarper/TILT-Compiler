@@ -1,4 +1,25 @@
-val big: IntInf.int = 0x80000000
+(*
+ * NJ rejects this as well.  I believe that they and we are both
+ * incorrect to reject ~ and +, etc. at type IntInf.int. The Basis 
+ * documentation specifies that these should be overloaded to include 
+ * IntInf.int.
+ *
+ *   val + : num * num -> num int * int -> int
+ *   val ~ : realint -> realint int -> int
+ *
+ * where
+ *   int := {Int.int, IntN.int, IntInf.int, Position.int} 
+ *   word := {Word.word, Word8.word, WordN.word, SysWord.word} 
+ *   real := {Real.real, RealN.real}
+ *   realint := real union int 
+ *   num := word union int union real
+ *
+ *  I'm not sure what the overloaded status of integer constants should be.
+ *
+ * -leaf
+ *)
+
+val big : IntInf.int = 0x80000000
 
 fun try (barg: IntInf.int): unit =
        let val small = SOME (IntInf.toInt barg)

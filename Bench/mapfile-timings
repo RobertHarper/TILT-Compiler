@@ -1,10 +1,5 @@
 import group $libdir ^ "/smlnj-lib/group"
-
-
-source unit GETOPT = "../Top/getopt.sig.sml" {}
-source unit Getopt = "../Top/getopt.sml" {
-	GETOPT String Char List
-}
+import group $libdir ^ "/arg/group"
 
 source unit life = "life.sml" {}
 source unit leroy = "leroy.sml" {List Int}
@@ -42,7 +37,7 @@ source unit Taku = "taku.sml" {Int}
 source unit btimes = "btimes.sml" {
 	Time Timer List String life leroy fft boyer simple tyan msort pia
 	frank lexgen ListPair Real Arithmetic BarnesHut PQueens Quicksort
-	Quicksort2 Isort Takc Taku Getopt TextIO CommandLine Int OS
+	Quicksort2 Isort Takc Taku Arg TextIO CommandLine Int OS
 }
 make executable "btimes." ^ $target ^ ".exe" {btimes}
 

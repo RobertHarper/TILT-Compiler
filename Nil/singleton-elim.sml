@@ -2,6 +2,8 @@ structure SingletonElim :> SINGLETONELIM =
   struct
     open Nil
 
+    structure NU = NilUtil 
+
     val error = fn s => Util.error "singleton_elim" s
     val foldl_acc = Listops.foldl_acc
     val map_second = Listops.map_second
@@ -59,7 +61,7 @@ structure SingletonElim :> SINGLETONELIM =
 		   end
 		 val (cbsfields,_) = foldl_acc folder env lvks
 		 val (cbs,fields) = unzip cbsfields
-	       in Let_c (Sequential,cbs,Crecord_c fields)
+	       in NU.makeLetC cbs (Crecord_c fields)
 	       end
 	      | Arrow_k (os,vks,k) =>
 	       let
@@ -80,7 +82,7 @@ structure SingletonElim :> SINGLETONELIM =
 		 val k = erasek env k
 
 		 val name = Name.fresh_named_var "erasure_fun"
-		 val newbody = Let_c (Sequential,bnds,body)
+		 val newbody = NU.makeLetC bnds body
 		 val lam = Open_cb (name,vks,newbody)
 
 	       in Let_c (Sequential,[lam],Var_c name)
@@ -108,12 +110,12 @@ structure SingletonElim :> SINGLETONELIM =
 	  | ExternArrow_c (clist,c) => ExternArrow_c (R_clist env clist,R_c env c)
 	  | AllArrow_c {openness,effect,tFormals,eFormals,fFormals,body_type} =>
 	      let
-		val (vks,vcs,env) = R_vklist env tFormals
+		val (tFormals,vcs,env) = R_vklist env tFormals
 		val subst = NilSubst.C.seqFromList vcs
 		val eFormals = R_clist env eFormals
 		val eFormals = map (fn c => NilSubst.substConInCon subst c) eFormals
 		val body_type = R_c env body_type
-		val body_type = Let_c (Sequential,map Con_cb vcs,body_type)
+		val body_type = NU.makeLetC (map Con_cb vcs) body_type
 	      in
 		AllArrow_c {openness=openness,effect=effect,
 			    tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
@@ -157,7 +159,7 @@ structure SingletonElim :> SINGLETONELIM =
 	  let
 	    val (vks,vcs,env') = R_vklist env vklist
 	    val c = R_c env' c
-	    val c = Let_c(Sequential,map Con_cb vcs,c)
+	    val c = NU.makeLetC (map Con_cb vcs) c
 	    val cb = wrapper(v,vks,c)
 	    val env = insert_cbnd env cb
 	  in (cb,env)
@@ -165,7 +167,7 @@ structure SingletonElim :> SINGLETONELIM =
       in (case cbnd
 	    of Con_cb (v,c) =>
 	      let val c = R_c env c
-	      in (Con_cb(v,R_c env c),insert_equation env (v,c))
+	      in (Con_cb(v,c),insert_equation env (v,c))
 	      end
 	     | Open_cb arg => R_confun Open_cb arg
 	     | Code_cb arg => R_confun Code_cb arg)
@@ -230,7 +232,7 @@ structure SingletonElim :> SINGLETONELIM =
 	      let
 		fun mapper((v,c),{code,cenv,venv}) =
 		  ((v,R_c env c),{code = code,cenv = R_c env cenv, venv = R_e env venv})
-	      in (Fixclosure_b (flag, Sequence.map mapper vcl_set),env)
+	      in (Fixclosure_b (flag, map mapper vcl_set),env)
 	      end)
      in res
      end
@@ -240,11 +242,12 @@ structure SingletonElim :> SINGLETONELIM =
        val arg as {tFormals=vks,...} = rename_arrow (strip_arrow env c,tFormals)
        val c = R_c env c
 
-       val (_,vcs,env) = R_vklist env vks
+       val (vks,vcs,env) = R_vklist env vks
+       val tFormals = map #1 vks
        val body = R_e env body
        val cbnds = map Con_cb vcs
        val bnds = map (fn cb => Con_b(Runtime,cb)) cbnds
-       val body = Let_e(Sequential,bnds,body)
+       val body = NU.makeLetE Sequential bnds body
 
      in ((v,c), Function{effect=effect,recursive=recursive,
 			 tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
@@ -266,9 +269,9 @@ structure SingletonElim :> SINGLETONELIM =
 		     result_type=R_c env result_type}
 	| Typecase_e {arg,arms,default,result_type} => error "Typecase_e not done")
 
-   fun R_import (ImportValue(l,v,tr,c),(s,bnds,env)) =
-     (ImportValue(l,v,tr,NilSubst.substConInCon s (R_c env c)),(s,bnds,env))
-     | R_import (ImportType(l,v,k),(s,bnds,env)) =
+   fun R_import (ImportValue(l,v,tr,c),(rbnds,env)) =
+     ((ImportValue(l,v,tr,R_c env c))::rbnds,env)
+     | R_import (ImportType(l,v,k),(rbnds,env)) =
      let
        val newv = Name.derived_var v
        val (newc,k) =
@@ -277,20 +280,29 @@ structure SingletonElim :> SINGLETONELIM =
 	    | NONE => (Var_c newv,k)
 
        val env = insert_kind env (v,k)
-
-     in (ImportType(l,newv,k),(NilSubst.C.addr (s,v,newc),Con_cb(v,newc)::bnds,env))
+       val rbnds = 
+	 (ImportBnd(Runtime,Con_cb(v,newc)))::
+	 (ImportType(l,newv,k)) ::
+	 rbnds
+	  
+     in (rbnds,env)
      end
+     | R_import (ImportBnd(p,cb),(rbnds,env)) =
+     let 
+       val (cb,env) = R_cbnd env cb 
+     in ((ImportBnd(p,cb))::rbnds,env)  
+     end
+   
    fun R_imports imports =
      let
-       val (imports,(subst,revbnds,env)) = foldl_acc R_import (NilSubst.C.empty(),[],new_env()) imports
-     in (imports,rev revbnds,env)
+       val (rimports,env) = foldl R_import ([],new_env()) imports
+     in (rev rimports,env)
      end
 
    fun R_module (MODULE{bnds,imports,exports}) =
      let
-       val (imports,cbnds,env) = R_imports imports
+       val (imports,env) = R_imports imports
        val (bnds,_) = R_bnds env bnds
-       val bnds = (map (fn cb => Con_b(Runtime,cb)) cbnds)@bnds
      in MODULE{bnds=bnds,imports=imports,exports=exports}
      end
 

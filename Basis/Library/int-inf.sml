@@ -47,7 +47,7 @@ structure IntInf :> INT_INF =
       end = struct
 
         structure W = Word32
-        structure I = Int31
+        structure I = Int32
 
         val op <  = W.<
         val op >= = W.>=
@@ -829,7 +829,8 @@ structure IntInf :> INT_INF =
               | cvt (SOME(i,cs),wr) = SOME(wr i, cs)
             in
               case (getc cs')
-               of (SOME((#"~" | #"-"), cs'')) => cvt(scanFn getc cs'',zneg)
+               of (SOME(#"~", cs'')) => cvt(scanFn getc cs'',zneg)
+		| (SOME(#"-", cs'')) => cvt(scanFn getc cs'',zneg)
                 | (SOME(#"+", cs'')) => cvt(scanFn getc cs'',posi)
                 | (SOME _) => cvt(scanFn getc cs',posi)
                 | NONE => NONE
