@@ -149,3 +149,4 @@
 0153 [open]	Sharing abstract type and eqtype specs is broken.
 0154 [open]	Equality allowed on non-eqtypes by elaborator.
 0155 [open]	Type sharing fails on corner case.
+0156 [open]	datatypes and scope
