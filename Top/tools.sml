@@ -42,13 +42,7 @@ struct
 
 			 val libm = "-lm" (* note: /usr/lib/libp/libm.a leads to ldd.so errors on cuff *)
 
-			 val crt1 =
-			     if !Profile then
-				 (* Hack so we can profile on cuff. *)
-				 (case gccFile "mcrt1.o"
-				    of "mcrt1.o" => "/afs/cs/project/fox/member/swasey/ml96/Runtime/mcrt1.o"
-				     | s => s)
-			     else gccFile "crt1.o"
+			 val crt1 = if !Profile then gccFile "mcrt1.o" else gccFile "crt1.o"
 
 			 val libdl = if !Profile
 					 then ["-ldl"]
@@ -58,8 +52,7 @@ struct
 			  linker    = ["/usr/ccs/bin/ld"],
 			  ldpre     = [runtimeFile "sparc/"^release()^"/firstdata.o", crt1, gccFile "crti.o",
 				       "/usr/ccs/lib/values-Xa.o", gccFile "crtbegin.o"],
-			  ldpost    = (["-L/afs/cs/project/fox/member/pscheng/ml96/SparcPerfMon/lib",
-					runtimeFile "runtime-sparc-"^release()^".a", "-lperfmon", "-lpthread","-lposix4", "-lgen",
+			  ldpost    = ([runtimeFile "runtime-sparc-"^release()^".a", "-lpthread","-lposix4", "-lgen",
 					libm, libc, gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"] @
 				       libdl)}
 		     end)

@@ -91,7 +91,7 @@ cleandepend: FORCE
 	-rm Makefile.bak
 
 clean: FORCE cleandepend
-	-rm -rf */dbg/* */opt/* *.a
+	-rm -rf */dbg/*.o */opt/*.o *.a
 
 tags: FORCE
 	-etags '--regex=/INLINE(\(.*\))/\1/' *.[chs]

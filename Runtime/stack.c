@@ -633,7 +633,6 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   if (th->thunk != NULL) 
     return;   /* Thunk not yet started and so no more roots */
 
-  /*  resetPerfMon(proc); */
   for (i=0; i<stack->cursor; i++) {
     Stacklet_t *stacklet = stack->stacklets[i];
     if (stacklet->state != InactiveCopied) { /* Replica is not up-to-date if stacklet active */
@@ -641,15 +640,10 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
 	firstActive = i;
       stacklet->state = Pending;
       Stacklet_Copy(stacklet);
-      /* upcount++;
-	 lapPerfMon(proc, 0); */
       uptrace_stacklet(proc, stacklet, replicaStackletOffset);
     }
   }
   assert(firstActive <= stack->cursor);  /* Could equal if collection finished in first segment */
-  /*  t1 = segmentTime(proc); 
-  lapPerfMon(proc,0);
-  */
   for (i=firstActive; i<stack->cursor; i++) {
     volatile reg_t* replicaRegs = &stack->stacklets[i]->bottomBaseRegs[replicaStackletOffset == 0 ? 0 : 32];
     int bottomRegstate = downtrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset, th->saveregs);

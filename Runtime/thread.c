@@ -1104,7 +1104,6 @@ static void* proc_go(void* untypedProc)
 #endif
   }
   proc->pthread = pthread_self();
-  initializePerfMon(proc);
   install_signal_handlers(0);
   proc->stack = (int)(&proc) & (~255);
   FetchAndAdd(&NumActiveProc, 1);
