@@ -1,0 +1,2 @@
+source unit OPTIONAL = "optional.sig.sml" {}
+make executable "Test." ^ $target ^ ".exe" {OPTIONAL}

@@ -1,0 +1,35 @@
+Number: 0165
+Title:       Elaborator shadowing variables.
+Keywords:    Elaborator, signature patching
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        5/1/03
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	When compiling the following code, the compiler bombs because
+	of variable shadowing.
+Code:
+	signature POSIX_SYS_DB = sig end
+	signature POSIX = sig structure SysDB : POSIX_SYS_DB end
+	
+	signature OPTIONAL =
+	sig
+		structure Posix : POSIX
+		structure PosixSysDB : POSIX_SYS_DB
+			sharing Posix.SysDB = Posix.SysDB
+	end
+Transcript:
+	; tilt-nj -m mapfile
+	Error: ilcontext.sml: variable shadowing
+	slave cuff.link.2897 signalled an error during job OPTIONAL
+	tilt: internal error: ilcontext.sml: variable shadowing
+Comments:
+
+	I think the problem is in how ../../Elaborator/signature.sml
+	handles the sharing specification.
+
+Fix:
+Test: bug165
+Owner: swasey
+Status: open
