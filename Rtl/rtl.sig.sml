@@ -4,7 +4,6 @@ sig
 
   type var = Name.var
   datatype label = ML_EXTERN_LABEL of string  
-                 | C_EXTERN_LABEL of string
                  | LOCAL_DATA of string
                  | LOCAL_CODE of string
 
@@ -107,13 +106,15 @@ sig
     | CMPSI  of cmp * regi * sv * regi  (* c <- a op b *)
     | CMPUI  of cmp * regi * sv * regi  (* c <- a op b *)
 
-    | NOTB of regi * regi
-    | ANDB   of regi * sv * regi
-    | ORB    of regi * sv * regi
-    | XORB   of regi * sv * regi 
-    | SRA   of regi * sv * regi (* shift right arithmetic:(value, shift)*)
-    | SRL   of regi * sv * regi (* shift right logical *)
-    | SLL   of regi * sv * regi (* shift left logical *)
+    | NOTB    of regi * regi
+    | ANDB    of regi * sv * regi
+    | ORB     of regi * sv * regi
+    | ANDNOTB of regi * sv * regi
+    | ORNOTB  of regi * sv * regi
+    | XORB    of regi * sv * regi 
+    | SRA     of regi * sv * regi (* shift right arithmetic:(value, shift)*)
+    | SRL     of regi * sv * regi (* shift right logical *)
+    | SLL     of regi * sv * regi (* shift left logical *)
 
     | CVT_REAL2INT  of regf * regi  (* does a floor with rounding towards neg inf *)
     | CVT_INT2REAL  of regi * regf  (* converts int to real format *)
@@ -210,6 +211,8 @@ sig
 
     | LOAD32I  of ea * regi           (* displacements not scaled *)
     | STORE32I of ea * regi           (* unchecked stores *)
+    | LOAD8I  of ea * regi            (* displacements not scaled *)
+    | STORE8I of ea * regi            (* unchecked stores *)
     | LOADQF   of ea * regf
     | STOREQF  of ea * regf
 

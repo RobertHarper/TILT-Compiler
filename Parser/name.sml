@@ -128,6 +128,14 @@ structure Name :> NAME =
 	  | (false,_) => 
 		 (case space of
 		      0 => str
+		    | 1 => str ^ "_SIG"
+		    | 2 => str ^ "_STR"
+		    | 3 => str ^ "_FSIG"
+		    | 4 => str ^ "_FCT"
+		    | 5 => str ^ "_TYC"
+		    | 6 => str ^ "_LAB"
+		    | 7 => str ^ "_TYV"
+		    | 8 => str ^ "_FIX"
 		    | x => str ^ "_" ^ (Int.toString x)))
       end
     fun loc2string (i) = ("LOC_" ^ (Int.toString i))

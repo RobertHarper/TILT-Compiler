@@ -50,7 +50,6 @@ struct
   fun bool2s true = "true"
     | bool2s false = "false"
   fun label2s (ML_EXTERN_LABEL s) = "ML "^s
-    | label2s (C_EXTERN_LABEL s) = "C "^s
     | label2s (LOCAL_CODE s) = "LC" ^ s
     | label2s (LOCAL_DATA s) = "LD" ^ s
   fun rep2s TRACE  = "(TRACE)"
@@ -192,9 +191,11 @@ struct
 	      | MODT a => op3i "modl/v" a
               | CMPUI (cmp,r,v,dest) => op3i ("cmp"^cmpi2s cmp false) (r,v,dest)
               | CMPSI (cmp,r,v,dest) => op3i ("cmp"^cmpi2s cmp true)  (r,v,dest)
-	      | NOTB a => op2i "and" a
+	      | NOTB a => op2i "not" a
 	      | ANDB a => op3i "and" a
 	      | ORB a => op3i "or" a
+	      | ANDNOTB a => op3i "andnot" a
+	      | ORNOTB a => op3i "ornot" a
               | XORB a => op3i "xor" a
               | SRA a => op3i "sra" a
               | SRL a => op3i "srl" a
@@ -249,6 +250,8 @@ struct
 	      | RESTORE_CS => String "restore_cs"
 	      | LOAD32I a       => op2li "ldl" a
 	      | STORE32I a      => op2si "stl" a
+	      | LOAD8I a       => op2li "ldb" a
+	      | STORE8I a      => op2si "stb" a
               | LOADQF (ea,r)   => plain ["ldt ",regf2s r,", ",ea2s ea]
               | STOREQF (ea,r)  => plain ["stt ",regf2s r,", ",ea2s ea]
 

@@ -30,12 +30,7 @@ struct
 				    structure Machineutils = Sparcutils
 				    structure Tracetable = Tracetable)
 
-
-
-  structure Graph = Labelgraph()
-
-  structure Recursion = Recursion(structure Graph = Graph
-				  structure Printutils = Printutils)
+  structure Recursion = Recursion(structure Printutils = Printutils)
 
   structure Trackstorage = SparcTrackstorage(structure Printutils = Printutils	
 					     structure Machineutils = Sparcutils)

@@ -20,9 +20,9 @@ structure Til : COMPILER =
     fun as_flag() = 
 	(case !platform of
 	     TIL_ALPHA => if (!debug_asm) then " -g " else ""
-	   | TIL_SPARC => if (!debug_asm) then " -g " else ""
+	   | TIL_SPARC => if (!debug_asm) then " -xarch=v8plus" else "-xarch=v8plus"
 	   | MLRISC_ALPHA => if (!debug_asm) then " -g " else ""
-	   | MLRISC_SPARC => "-xarch=v8plus")
+	   | MLRISC_SPARC => if (!debug_asm) then " -xarch=v8plus" else "-xarch=v8plus")
     fun assemble(s_file,o_file) =
 	let val as_command = as_path ^ " " ^ (as_flag()) ^ " -o " ^ o_file ^ " " ^ s_file
 	    val rm_command = "rm " ^ s_file

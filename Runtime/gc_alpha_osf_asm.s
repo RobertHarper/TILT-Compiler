@@ -18,6 +18,8 @@
 	.globl	save_iregs
 	.globl	load_regs
 	.globl	load_iregs
+	.globl	save_regs_forC
+	.globl	load_regs_forC
 	
  # ----------------- save_regs---------------------------------
  # ----------------- save_iregs--------------------------------
@@ -27,7 +29,8 @@
  # ----------------------------------------------------------
 	.ent	save_regs
 	.frame $sp, 0, $26
-save_regs:	
+save_regs:
+save_regs_forC:	
 .set noat
 	stt	$f0, 256(THREADPTR_SYMREG)   
 	stt	$f1, 264(THREADPTR_SYMREG)
@@ -143,6 +146,7 @@ load_regs:
 	ldt	$f31, 504(THREADPTR_SYMREG)
 load_iregs:	
 	ldq	$0, (THREADPTR_SYMREG)
+load_regs_forC:	
 	ldq	$1, 8(THREADPTR_SYMREG)
 	ldq	$2, 16(THREADPTR_SYMREG)
 	ldq	$3, 24(THREADPTR_SYMREG)
@@ -181,7 +185,7 @@ load_iregs:
 		
  # ----------------- gc_raw ---------------------------------
  # return address comes in normal return address register
- # request size come in at heap limit
+ # temp register contains heap pointer + request size
  # does not use a stack frame 
  # ----------------------------------------------------------
 	.ent	gc_raw
@@ -189,7 +193,7 @@ load_iregs:
 	.prologue 0
 gc_raw:
 .set noat
-	stq	$26, 8*26(THREADPTR_SYMREG)	# note that this is return address of gc_raw
+	stq	$26, RA_DISP(THREADPTR_SYMREG)	# note that this is return address of gc_raw
 	bsr	save_regs
 	br	$gp, gc_raw_getgp
 gc_raw_getgp:	
@@ -202,7 +206,7 @@ gc_raw_getgp:
 	ldgp	$gp, 0($26)			# compute correct gp for self	
 .set noat
 	bsr	load_regs                       # THREADPTR_SYMREG is a callee-save register
-	ldq	$26, 8*26(THREADPTR_SYMREG)	# note that this is return address of gc_raw
+	ldq	$26, RA_DISP(THREADPTR_SYMREG)	# note that this is return address of gc_raw
 	ret	$31, ($26), 1	
 .set at			
 	.end	gc_raw

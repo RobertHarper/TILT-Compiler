@@ -132,7 +132,7 @@ static void stop_copy(SysThread_t *sysThread)
   if (isFirst)
     {
       /* Since it's semispace, we must consider (all of) global_roots each time */
-      global_root_scan(global_roots,promoted_global_roots);
+      global_root_scan(global_roots,promoted_global_roots,fromheap);
       while (!(QueueIsEmpty(global_roots))) {
 	value_t *root = Dequeue(global_roots);
 	value_t temp = *root;
@@ -145,7 +145,7 @@ static void stop_copy(SysThread_t *sysThread)
     Thread_t *curThread = NULL;
     while ((curThread = NextJob()) != NULL) {
       /* Compute the roots from the stack and register set */
-      local_root_scan(curThread);
+      local_root_scan(curThread,fromheap);
       /* Also add in the locative roots */
       QueueClear(curThread->loc_roots);
       for (i=0; i<QueueLength(ScanQueue); i++)
@@ -315,15 +315,13 @@ void gc_para(Thread_t *curThread)
   int tid = curThread->tid;
   long *saveregs = curThread->saveregs;
   value_t *alloc = (value_t *) saveregs[ALLOCPTR_REG];
-  value_t *limit = (value_t *) sysThread->limit;
+  value_t *limit = (value_t *) saveregs[ALLOCPTR_REG];
   value_t *tmp1, *tmp2;
-  int req_size = saveregs[ALLOCLIMIT_REG];
-    
-  /* Check that alloc pointer has not passed the heap limit */
-  if ((value_t)limit != StartHeapLimit && (value_t)limit != StopHeapLimit && alloc > limit) {
-    printf("Thread %d: Overallocated!  alloc=%d > limit=%d\n",tid,alloc,limit);
-    assert(0);
-  }
+  int req_size = saveregs[ASMTMP_REG] - (int) alloc;
+
+  assert(alloc <= limit);    
+  assert(limit == sysThread->limit);
+
   
   /* See if we can grab another page from the fromspace; if not, then it's time to stop and copy */
   GetHeapArea(fromheap,pagesize,&tmp1,&tmp2);

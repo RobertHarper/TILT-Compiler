@@ -1036,9 +1036,9 @@ struct
 	      (case (!do_single_venv, pc_free) of
 		(true, [(v,v',tr,_,t)]) => let val venv = e_rewrite state (Var_e v)
 					       val venv = if (is_float tr) then box venv else venv
-					       val bnd = Exp_b(v',tr,if (is_float tr)
-									then unbox(Var_e venv_var)
-									else Var_e venv_var)
+					       val bnd = if (is_float tr)
+							      then Exp_b(v', tr, unbox(Var_e venv_var))
+							  else Exp_b(v',tr,Var_e venv_var)
 					       val (tr,t) = if (is_float tr) 
 								then (trace_pointer,boxfloat_type) 
 								else (tr,t)
@@ -1049,24 +1049,28 @@ struct
 			      let val env_e = e_rewrite state (Var_e v)
 				  val code_e = Prim_e(NilPrimOp(select l), [],
 						 [Var_e venv_var])
-				  val (env_e,env_tr,env_t,code_e,code_tr) = 
+				  val code_tr = trace_rewrite inner_state tr
+				  val (env_e,env_tr,env_t) =
 				      if (is_float tr) 
-					  then (box env_e, trace_pointer, boxfloat_type,
-						unbox code_e, trace_float)
-				      else (env_e, trace_rewrite state tr, t,
-					    code_e, trace_rewrite inner_state tr)
-				  val code_bnd = Exp_b(v',code_tr,code_e)
+					  then (box env_e, trace_pointer, boxfloat_type)
+				      else (env_e, trace_rewrite state tr, t)
+				  val code_bnds = if (is_float tr)
+						      then let val v'' = derived_var v'
+							   in  [Exp_b(v'',trace_pointer,code_e),
+								Exp_b(v',trace_float,unbox (Var_e v''))]
+							   end
+						  else [Exp_b(v',code_tr,code_e)]
 			      in  (case env_e of 
-				       Var_e _ => (env_e, NONE, env_t, code_bnd)
+				       Var_e _ => (env_e, NONE, env_t, code_bnds)
 				     | _ => let val v'' = derived_var v
-					    in  (Var_e v'', SOME(Exp_b(v'',env_tr,env_e)), env_t, code_bnd)
+					    in  (Var_e v'', SOME(Exp_b(v'',env_tr,env_e)), env_t, code_bnds)
 					    end)
 			      end
 			  val fields_bndopts_types_codebnds = map mapper pc_free
 			  val fields = map #1 fields_bndopts_types_codebnds
 			  val bnds = List.mapPartial #2 fields_bndopts_types_codebnds
 			  val types = map #3 fields_bndopts_types_codebnds
-			  val code_bnds = map #4 fields_bndopts_types_codebnds
+			  val code_bnds = Listops.flatten(map #4 fields_bndopts_types_codebnds)
 			  val venv = makeLetE Sequential bnds 
 			      (Prim_e(NilPrimOp(record labels),[], fields))
 			  val venv_type = Prim_c(Record_c (labels,NONE), types)

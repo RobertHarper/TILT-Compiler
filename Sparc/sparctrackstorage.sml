@@ -29,7 +29,6 @@ struct
                     {registers_used    : Machine.register list,
 		     stackframe_size   : int,
 		     callee_save_slots : (Machine.register * stacklocation) list,
-		     tailcallImpossible : unit -> bool,
 		     fixStackOffset    : Machine.stacklocation -> 
 		                         Machine.stacklocation}
 
@@ -73,7 +72,10 @@ struct
     |----------------|
     | Int Callee- $31| } Ditto, but does not include
     | Save Regs    : | } return address register!
-    | 8 bytes ea. $0 | }
+    | 4 bytes ea. $0 | }
+    |----------------|
+    | Return Address |
+    | stored here    |
     |----------------|
     | Additional     |
     | args, if any   |
@@ -82,7 +84,7 @@ struct
     | callee may     | 
     | store reg args |
     |----------------|
-    | 16 words to    | <--- Return address as stored in last position (as though there were windows)
+    | 16 words to    | 
     | save "in" and  |                 
     | "local" regs   |                 
     | of  window     | 
@@ -150,7 +152,11 @@ struct
 		      num_ints_spilled, num_fps_spilled,
 		      num_args}) = 
     let
-      val ra_offset = 4 * 15
+
+      fun stride4 cur [] = []
+	| stride4 cur (x::xs) = (x,ACTUAL4 cur) :: (stride4 (cur+4) xs)
+      fun stride8 cur [] = []
+	| stride8 cur (x::xs) = (x,ACTUAL8 cur) :: (stride8 (cur+8) xs)
 
       val saved_int_regs = 
 	Regset.listItems
@@ -160,36 +166,17 @@ struct
 	(Regset.listItems o Regset.intersection)
 	(Regset.intersection(listToSet fp_regs, callee_saves), ! regs_destroyed)
       val num_ints_saved = length saved_int_regs
-
       val num_fps_saved = length saved_fp_regs
 
-      val callee_save_int_offset = 4 * 16 + 4 * 6 + 4 * (!num_args)
-      val callee_save_fp_offset  = callee_save_int_offset + 
-	                           8 * num_ints_saved
-
-      fun stride4 cur [] = []
-	| stride4 cur (x::xs) = (x,ACTUAL4 cur) :: (stride4 (cur+4) xs)
-      fun stride8 cur [] = []
-	| stride8 cur (x::xs) = (x,ACTUAL8 cur) :: (stride8 (cur+8) xs)
-
+      val args_offset = 4 * 16
+      val ra_offset = args_offset + 4 * (6 + !num_args)
+      val callee_save_int_offset = ra_offset + 4
+      val callee_save_fp_offset  = callee_save_int_offset + 4 * num_ints_saved
       val callee_save_slots = 
-	(stride8 callee_save_int_offset saved_int_regs) @
+	(stride4 callee_save_int_offset saved_int_regs) @
 	(stride8 callee_save_fp_offset saved_fp_regs)
-
-
-      fun filterIRegs [] = []
-        | filterIRegs ((reg as R _, _) :: rest) = reg :: (filterIRegs rest)
-	| filterIRegs (_ :: rest) = filterIRegs rest
-
-      fun filterFRegs [] = []
-        | filterFRegs ((reg as F _, _) :: rest) = reg :: (filterFRegs rest)
-	| filterFRegs (_ :: rest) = filterFRegs rest
-
-      val spilled_int_regs = filterIRegs (Regmap.listItemsi (! stackmap))
-      val spilled_fp_regs = filterFRegs (Regmap.listItemsi (! stackmap))
  
-      val spilled_int_offset = callee_save_fp_offset + 
-	                       8 * num_fps_saved
+      val spilled_int_offset = callee_save_fp_offset + 8 * num_fps_saved
       val spilled_fp_offset  = doubleAlign(spilled_int_offset +
 					   4 * (! num_ints_spilled + 1))
 
@@ -203,7 +190,6 @@ struct
 							4 * i)
 	| fixStackOffset (RETADD_POS) = ACTUAL4 ra_offset
         | fixStackOffset x = x
-      fun tailcallImpossible () = (! num_args) > 0
 
       val registers_used = Regset.listItems (! regs_destroyed)
 
@@ -216,11 +202,9 @@ struct
 	   emitString "fps saved = ";
 	   print_list print_int [num_fps_saved];
 	   emitString "spilled_ints = ";
-	   print_list print_int [! num_ints_spilled + 1, 
-				 length (spilled_int_regs)];
+	   print_list print_int [! num_ints_spilled + 1];
 	   emitString "spilled_fps = ";
-	   print_list print_int [! num_fps_spilled + 1, 
-				 length (spilled_fp_regs)];
+	   print_list print_int [! num_fps_spilled + 1];
 	   emitString "offsets at ";
 	   print_list print_int [ra_offset, callee_save_int_offset,
 				 callee_save_fp_offset, spilled_int_offset,
@@ -233,7 +217,6 @@ struct
       SUMMARY {registers_used = registers_used,
 	       stackframe_size = stackframe_size,
 	       callee_save_slots = callee_save_slots,
-	       tailcallImpossible = tailcallImpossible,
 	       fixStackOffset = fixStackOffset}
     end
        handle e => (print "exception in summarize\n"; 

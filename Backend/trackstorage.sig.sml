@@ -28,7 +28,6 @@ sig
                     {registers_used    : Core.register list,
 		     stackframe_size   : int,
 		     callee_save_slots : (Core.register * Core.stacklocation) list,
-		     tailcallImpossible : unit -> bool,
 		     fixStackOffset    : Core.stacklocation -> 
 		                         Core.stacklocation}
 

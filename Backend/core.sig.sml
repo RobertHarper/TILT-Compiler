@@ -29,6 +29,7 @@ signature CORE =
     structure Regset   : ORD_SET where type Key.ord_key = register
 
     val eqRegs    : register -> register -> bool
+    val eqRegs'   : register * register -> bool
     val eqLabs    : label -> label -> bool
     val eqAssigns : assign -> assign -> bool
 

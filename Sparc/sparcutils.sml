@@ -85,7 +85,7 @@ struct
    val C_int_args = map ireg [8, 9, 10, 11, 12, 13]
    val C_fp_args  = map freg []
    val C_ra_reg   = Rra
-   val C_int_res  = [ireg 0]
+   val C_int_res  = [ireg 8]
    val C_fp_res   = [freg 0]
 
    local

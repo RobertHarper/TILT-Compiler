@@ -11,7 +11,7 @@
 #include "til-signal.h"
 #include <fcntl.h>
 
-#define SHOW_MMAP
+
 
 void my_mprotect(int which, caddr_t bottom, int size, int perm)
 {

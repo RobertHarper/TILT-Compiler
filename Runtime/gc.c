@@ -238,32 +238,41 @@ void paranoid_check_stack(Thread_t *thread, Heap_t *fromspace)
     for (count = 0; count < 32; count++)
       {
 	int data = saveregs[count];
-	if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
+	if (count == ALLOCPTR_REG)
+	  printf("Allocation Register %d has value %d\n", count, data);
+	else if (count == ALLOCLIMIT_REG)
+	  printf("Allocation Limit Register %d has value %d\n", count, data);
+	else if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
 	  {
 	    static int newval = 62000;
 	    printf("TRACE WARNING: register %d has from space value %d",
 		   count,data);
 	    printf("      changing to %d\n", newval);
-	    saveregs[count] = newval;
+	    saveregs[count] = newval; 
 	    newval++;
 	  }
 	else
 	  printf("Register %d has okay value %d\n", count, data);
       }
-    for (count = sp; count < stack_top; count += 4)
+
+    for (count = sp; count < stack_top - 64; count += 4)
       {
 	int *data_add = (int *)count;
-	int data = *data_add;
+	int data = *data_add; 
 	if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
 	  {
 	    static int newval = 42000;
+	    if (1 || (NumGC == 14  && count >= 268942980 && count <= 268943000))
+	      {
 	    printf("TRACE WARNING: stack loc %d has from space value %d",
 		   data_add,data);
 	    printf("      changing to %d\n", newval);
-	    *data_add = newval;
+	     *data_add = newval; 
+	    }
 	    newval++;
 	  }
       }
+
 }
 
 

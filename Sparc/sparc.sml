@@ -24,7 +24,7 @@ structure Machine =
 			      since exnarg is active only when about to raise
 			      an exception which means we are not normally returning *)
 
-    val Rat2    = R 16  (* Put our second temporary in a volatile *)
+    val Rat2    = R 17  (* Put our second temporary in a volatile *)
     val Rexnptr = R 1   (* non-volatile *)
     val Rhlimit = R 5   (* non-volatile *)
     val Rheap   = R 4   (* non-volatile *)
@@ -37,27 +37,26 @@ structure Machine =
     fun isPhysical (R i) = i<32
       | isPhysical (F i) = i<32
 
-  datatype storei_instruction = ST | STD
+  datatype storei_instruction = ST | STUB | STD
   datatype storef_instruction = STF | STDF
-  datatype loadi_instruction  = LD | LDD
+  datatype loadi_instruction  = LD | LDUB | LDD
   datatype loadf_instruction  = LDF | LDDF
   (* BCC = branch on carry-clear = BGEU;  BCS = branch on carry-set = BLU *)
   datatype cbri_instruction   = BE | BNE | BG | BGE | BL | BLE | BGU | BLEU | BCC | BCS 
   datatype cbrf_instruction   = FBE | FBNE | FBG | FBGE | FBL | FBLE 
   datatype trap_instruction   = TVS
-  datatype fpconv_instruction = FITOS | FITOD | FSTOI | FDTOI
   datatype int_instruction    =
     ADD | ADDCC | SUB | SUBCC
   | SMUL | SMULCC | UMUL | UMULCC 
   | SDIV | SDIVCC | UDIV | UDIVCC 
-  | AND | OR | XOR | ANDCC | ORCC | XORCC 
+  | AND | OR | XOR | ANDNOT | ORNOT | XORNOT
   | SRA | SRL | SLL
 
   datatype fp_instruction    = 
     FADDD | FSUBD | FMULD | FDIVD
 
   datatype fpmove_instruction = 
-    FABSD | FNEGD | FMOV
+    FABSD | FNEGD | FMOVD | FITOD | FDTOI
 
   datatype specific_instruction =
     IALIGN of align
@@ -73,7 +72,6 @@ structure Machine =
   | CBRANCHF of cbrf_instruction * label
   | INTOP  of int_instruction * register * operand * register
   | FPOP   of fp_instruction * register * register * register
-  | FPCONV of fpconv_instruction * register * register
   | FPMOVE  of fpmove_instruction * register * register
   | TRAP of trap_instruction
 
@@ -127,20 +125,21 @@ structure Machine =
   fun msLabel (LOCAL_CODE s) = makeAsmLabel s
     | msLabel (LOCAL_DATA s) = makeAsmLabel s
     | msLabel (ML_EXTERN_LABEL label)     = (makeAsmLabel label)
-    | msLabel (C_EXTERN_LABEL label)     = (makeAsmLabel label)
 
-
-  fun storei_to_ascii ST  = "st"
-    | storei_to_ascii STD = "std"
-
-  fun storef_to_ascii STF = "stf"
-    | storef_to_ascii STDF = "stdf"
 
   fun loadi_to_ascii LD  = "ld"
+    | loadi_to_ascii LDUB = "ldub"
     | loadi_to_ascii LDD = "ldd"
 
-  fun loadf_to_ascii LDF  = "ldf"
-    | loadf_to_ascii LDDF  = "lddf"
+  fun loadf_to_ascii LDF  = "ld"
+    | loadf_to_ascii LDDF  = "ldd"
+
+  fun storei_to_ascii ST  = "st"
+    | storei_to_ascii STUB = "stub"
+    | storei_to_ascii STD = "std"
+
+  fun storef_to_ascii STF = "st"
+    | storef_to_ascii STDF = "std"
 
   fun cbri_to_ascii BE   = "be"
     | cbri_to_ascii BNE  = "bne"
@@ -162,11 +161,6 @@ structure Machine =
     | cbrf_to_ascii FBL  = "fbl"
     | cbrf_to_ascii FBLE = "fble"
 
-  fun fpconv_to_ascii FITOS = "fitos"
-    | fpconv_to_ascii FITOD = "fitod"
-    | fpconv_to_ascii FSTOI = "fstoi"
-    | fpconv_to_ascii FDTOI = "fdtoi"
-
   fun int_to_ascii  ADD    = "add"
     | int_to_ascii  ADDCC  = "addcc"
     | int_to_ascii  SUB    = "sub"
@@ -182,9 +176,9 @@ structure Machine =
     | int_to_ascii  AND    = "and"  
     | int_to_ascii  OR     = "or"  
     | int_to_ascii  XOR    = "xor"  
-    | int_to_ascii  ANDCC  = "andcc"
-    | int_to_ascii  ORCC   = "orcc"
-    | int_to_ascii  XORCC  = "xorcc"
+    | int_to_ascii  ANDNOT = "andn"
+    | int_to_ascii  ORNOT  = "orn"
+    | int_to_ascii  XORNOT = "xnor"
     | int_to_ascii  SRA    = "sra"
     | int_to_ascii  SRL    = "srl"
     | int_to_ascii  SLL    = "sll"
@@ -195,9 +189,12 @@ structure Machine =
     | fp_to_ascii FMULD    = "fmuld"
     | fp_to_ascii FDIVD    = "fdivd"
 
-  fun fpmove_to_ascii FABSD    = "fabsd"
-    | fpmove_to_ascii FNEGD    = "fnegd"
-    | fpmove_to_ascii FMOVD    = "fmovd"
+  fun fpmove_to_ascii FABSD = "fabsd"
+    | fpmove_to_ascii FNEGD = "fnegd"
+    | fpmove_to_ascii FMOVD = "fmovd"
+    | fpmove_to_ascii FITOD = "fitod"
+    | fpmove_to_ascii FDTOI = "fdtoi"
+
 
   fun reglist_to_ascii [] = ""
     | reglist_to_ascii [r] = (msReg r)
@@ -258,7 +255,7 @@ structure Machine =
                                 (tab ^ "cmp" ^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msOperand op2))
     | msInstr' (FCMPD (Rsrc1, Rsrc2)) =
-                                (tab ^ "cmp" ^ tab ^
+                                (tab ^ "fcmpd" ^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msReg Rsrc2))
     | msInstr' (STOREI (instr, Rsrc, disp, Raddr)) =
                                 (tab ^ (storei_to_ascii instr) ^ tab ^
@@ -287,9 +284,6 @@ structure Machine =
     | msInstr' (FPMOVE(instr, Rsrc, Rdest)) =
                                 (tab ^ (fpmove_to_ascii instr)^ tab ^
 				 (msReg Rsrc) ^ comma ^ (msReg Rdest))
-    | msInstr' (FPCONV(instr, Rsrc, Rdest)) =
-                                (tab ^ (fpconv_to_ascii instr) ^ tab ^
-				 (msReg Rsrc) ^ comma ^ (msReg Rdest))
     | msInstr' (TRAP instr) = (tab ^ (trap_to_ascii instr))
 
 
@@ -297,7 +291,7 @@ structure Machine =
     | msInstr_base (BSR (label, SOME sra, _)) = (tab ^ "jmpl" ^ tab ^ (msLabel label) ^
 						     comma ^ (msReg sra) ^ "\n\tnop")
     | msInstr_base (TAILCALL label) = ("\tTAILCALL\t" ^ (msLabel label))
-    | msInstr_base (BR label) = (tab ^ "ba" ^ tab ^ (msLabel label))
+    | msInstr_base (BR label) = (tab ^ "ba" ^ tab ^ (msLabel label) ^ "\n\tnop")
     | msInstr_base (ILABEL label) = (msLabel label) ^ ":"
     | msInstr_base (ICOMMENT str) = (tab ^ "! " ^ str)
     | msInstr_base (Core.JSR(link, Raddr, hint, _)) =
@@ -389,7 +383,7 @@ structure Machine =
 	else
 	  (".ascii \"" ^ (fixupString s) ^ "\""))
     | msData (INT32 (w))  = single (".word " ^ (wms w))
-    | msData (FLOAT (f))  = single (".t_floating " ^ (fixupFloat f))
+    | msData (FLOAT (f))  = single (".double 0r" ^ (fixupFloat f))
     | msData (DATA (label)) = single (".long " ^ (msLabel label))
     | msData (ALIGN (LONG)) = single (".align 4")
     | msData (ALIGN (QUAD)) = single (".align 8")
@@ -452,7 +446,6 @@ structure Machine =
       | defUse (SPECIFIC(INTOP (opcode, Rsrc1, IMMop _, Rdest))) = ([Rdest], [Rsrc1])
       | defUse (SPECIFIC(FPOP (opcode, Fsrc1, Fsrc2, Fdest))) = ([Fdest],[Fsrc1,Fsrc2])
       | defUse (SPECIFIC(FPMOVE (opcode, Fsrc, Fdest))) = ([Fdest],[Fsrc])
-      | defUse (SPECIFIC(FPCONV (_, Fsrc, Fdest)))      = ([Fdest], [Fsrc])
       | defUse (BASE (Core.JSR (false, Raddr, _, _)))       = ([], [Raddr])
       | defUse (BASE (Core.JSR (true, Raddr, _, _)))       = ([Rra], [Raddr])
       | defUse (BASE (Core.RET (false, _)))              = ([], [Rra])
@@ -486,24 +479,24 @@ structure Machine =
       | defUse (BASE(ICOMMENT _))                  = ([], [])
 
 
-    (* SOME (fallthrough possible, other local labels this instr jumps to)
-        if this instruction ends basic block; NONE otherwise *)
-    fun cFlow (BASE (BR (label as LOCAL_CODE _)))    = SOME (false, [label])
-      | cFlow (BASE (BR (label as LOCAL_DATA _)))    = SOME (false, [label])
-      | cFlow (BASE (BR (label as _)))    = SOME (false, [])
-      | cFlow (BASE (BSR (label as LOCAL_CODE _,_,_)))    = SOME (true, [label])
-      | cFlow (BASE (BSR (label as LOCAL_DATA _,_,_)))    = SOME (true, [label])
-      | cFlow (BASE (BSR (label as _,_,_)))    = SOME (true, [])
-      | cFlow (SPECIFIC (CBRANCHI(_, label))) = SOME (true, [label])
-      | cFlow (SPECIFIC (CBRANCHF(_, label))) = SOME (true, [label])
-      | cFlow (BASE (Core.JSR(_,_,_,labels)))         = SOME (false, labels)
-      | cFlow (BASE (Core.RET(_,_)))  = SOME (false, [])
-      | cFlow (BASE(RTL(CALL {calltype=(Rtl.ML_TAIL _), ...})))  = SOME (true, []) (* why possible *)
-      | cFlow (BASE(RTL(CALL _))) = SOME (true, [])
-      | cFlow (BASE(RTL(RETURN _)))          = SOME (false, [])
-      | cFlow (BASE(RTL(SAVE_CS label))) = SOME (true, [label])
-      | cFlow (BASE(TAILCALL label))         = SOME (false, [])
-      | cFlow _ = NONE
+   datatype instr_flow = NOBRANCH | BRANCH of bool * label list | DELAY_BRANCH of bool * label list
+    (* BASE(BR/BSR/...) is not DELAY_BRANCH because we include the nop in the printing *)
+    fun cFlow (BASE (BR (label as LOCAL_CODE _)))      = BRANCH (false, [label])
+      | cFlow (BASE (BR (label as LOCAL_DATA _)))      = BRANCH (false, [label])
+      | cFlow (BASE (BR (label as _)))                 = BRANCH (false, [])
+      | cFlow (BASE (BSR (label as LOCAL_CODE _,_,_))) = BRANCH (true, [label])
+      | cFlow (BASE (BSR (label as LOCAL_DATA _,_,_))) = BRANCH (true, [label])
+      | cFlow (BASE (BSR (label as _,_,_)))            = BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHI(_, label))) = DELAY_BRANCH (true, [label])
+      | cFlow (SPECIFIC (CBRANCHF(_, label))) = DELAY_BRANCH (true, [label])
+      | cFlow (BASE (Core.JSR(_,_,_,labels))) = BRANCH (false, labels)
+      | cFlow (BASE (Core.RET(_,_)))  = BRANCH (false, [])
+      | cFlow (BASE(RTL(CALL {calltype=(Rtl.ML_TAIL _), ...})))  = BRANCH (true, []) (* why possible *)
+      | cFlow (BASE(RTL(CALL _))) = BRANCH (true, [])
+      | cFlow (BASE(RTL(RETURN _)))      = BRANCH (false, [])
+      | cFlow (BASE(RTL(SAVE_CS label))) = BRANCH (true, [label])
+      | cFlow (BASE(TAILCALL label))     = BRANCH (false, [])
+      | cFlow _ = NOBRANCH
 
 
    (* map src registers using fs and destination using fd and return mapped instruction *)
@@ -519,7 +512,6 @@ structure Machine =
 	 | xspec (INTOP(oper, Rsrc1, src2, Rdst) ) = INTOP(oper, fs Rsrc1,src2, fd Rdst)
 	 | xspec (FPOP(oper, Fsrc1, Fsrc2, Fdest)) = FPOP(oper, fs Fsrc1,fs Fsrc2,fd Fdest)
 	 | xspec (FPMOVE(oper, Fsrc, Fdest)) = FPMOVE(oper, fs Fsrc, fd Fdest)
-         | xspec (FPCONV(oper, Fsrc, Fdest)) = FPCONV(oper, fs Fsrc,fd Fdest)
 	 | xspec (TRAP oper) = TRAP oper
 	 | xspec (IALIGN ia) = IALIGN ia
 	 | xspec NOP = NOP

@@ -18,7 +18,6 @@
 #include "client.h"
 
 
-
 extern Queue_t *ScanQueue;
 extern value_t MUTABLE_TABLE_BEGIN_VAL;
 extern value_t MUTABLE_TABLE_END_VAL;
@@ -238,20 +237,24 @@ value_t *forward_mutables_gen(value_t *to_ptr,
 value_t *forward_writelist_major(value_t *more_roots, value_t *to_ptr, 
 				 range_t *from_range, range_t *from2_range, range_t *to_range)
 {
-  value_t *temp = 0;
-  while (temp = (value_t *)(*(more_roots++)))
-    if (((value_t)temp) - to_range->low >= to_range->diff)
-      forward_major(temp,to_ptr,from_range,from2_range,to_range);
+  value_t *slot = 0;
+  while (slot = (value_t *)(*(more_roots++))) {
+    value_t data = *slot;
+    if (data - to_range->low >= to_range->diff)
+      forward_major(slot,to_ptr,from_range,from2_range,to_range);
+  }
   return to_ptr;
 }
 
 value_t *forward_writelist_minor(value_t *more_roots, value_t *to_ptr, 
 				 range_t *from_range, range_t *to_range)
 {
-  value_t *temp = 0;
-  while (temp = (value_t *)(*(more_roots++)))
-    if (((value_t)temp) - to_range->low >= to_range->diff)
-      forward_minor(temp,to_ptr,from_range);
+  value_t *slot = 0;
+  while (slot = (value_t *)(*(more_roots++))) {
+    value_t data = *slot;
+    if (data - to_range->low >= to_range->diff)
+	forward_minor(slot,to_ptr,from_range);
+  }
   return to_ptr;
 }
 
@@ -315,37 +318,34 @@ value_t *forward_gen_locatives(value_t *to_ptr,
 void gc_gen(Thread_t *curThread, int isMajor)
 {
   int regmask = 0;
-  long *saveregs;
-  int allocptr, req_size;
+  SysThread_t *sysThread = curThread->sysThread;
+  long *saveregs = curThread->saveregs;
+  int allocptr = sysThread->alloc;
+  int alloclimit = sysThread->limit;
+  int req_size = saveregs[ASMTMP_REG] - allocptr;
+
   struct rusage start,finish;
   Queue_t *root_lists, *loc_roots;
   enum GCType GCtype = isMajor ? Major : Minor;
   value_t to_allocptr;
-  int limit = curThread->sysThread->limit;
+
+  /* Check for first time heap value needs to be initialized */
+  if (alloclimit == StartHeapLimit)
+    {
+      saveregs[ALLOCPTR_REG] = nursery->bottom;
+      saveregs[ALLOCLIMIT_REG] = nursery->top;
+      sysThread->alloc = nursery->bottom;
+      sysThread->limit = nursery->top;
+      return;
+    }
+
+  assert(allocptr <= alloclimit);
+  assert(req_size >= 0);
 
   /* start timer */
   root_lists = curThread->root_lists;
   loc_roots = curThread->loc_roots;
   start_timer(&curThread->gctime);
-  saveregs = curThread->saveregs;
-  allocptr = saveregs[ALLOCPTR_REG];
-  req_size = saveregs[ALLOCLIMIT_REG];
-
-
-  /* Check for first time heap value needs to be initialized */
-  if (curThread->saveregs[ALLOCLIMIT_REG] == StartHeapLimit)
-    {
-      curThread->saveregs[ALLOCPTR_REG] = nursery->bottom;
-      curThread->saveregs[ALLOCLIMIT_REG] = nursery->top;
-    }
-
-  if (!(allocptr <= limit)) {
-    printf("limit = %d,   allocptr = %d\n",limit,allocptr);
-    assert(0);
-  }
-
-
-
 
   /* these are debugging and stat-gatherting procedure */
 #ifdef DEBUG
@@ -354,8 +354,8 @@ void gc_gen(Thread_t *curThread, int isMajor)
 #endif
 
   /* Compute the roots from the stack and register set */
-  local_root_scan(curThread);
-  global_root_scan(global_roots,promoted_global_roots);
+  local_root_scan(curThread,nursery);
+  global_root_scan(global_roots,promoted_global_roots,nursery);
   Enqueue(root_lists,promoted_global_roots);
 
   /* -------------- the actual heap collection ---------------------- */
@@ -582,8 +582,8 @@ void gc_gen(Thread_t *curThread, int isMajor)
   /* More debugging and stat-gathering procedure */
   measure_semantic_garbage_after();    
 #ifdef PARANOID
-  paranoid_check_stack(curThread,old_fromheap);
-  paranoid_check_heap(nursery,old_fromheap);
+  paranoid_check_stack(curThread,nursery);
+  paranoid_check_heap(nursery,old_fromheap); 
 #endif
   /* stop timer */
   stop_timer(&curThread->gctime); 

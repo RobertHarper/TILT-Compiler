@@ -18,27 +18,26 @@ sig
   val in_imm_range : int -> bool
   val in_ea_disp_range : int -> bool
 
-  datatype storei_instruction = ST | STD
+  datatype storei_instruction = ST | STUB | STD
   datatype storef_instruction = STF | STDF
-  datatype loadi_instruction  = LD | LDD
+  datatype loadi_instruction  = LD | LDUB | LDD
   datatype loadf_instruction  = LDF | LDDF
   (* BCC = branch on carry-clear = BGEU;  BCS = branch on carry-set = BLU *)
   datatype cbri_instruction   = BE | BNE | BG | BGE | BL | BLE | BGU | BLEU | BCC | BCS 
   datatype cbrf_instruction   = FBE | FBNE | FBG | FBGE | FBL | FBLE 
   datatype trap_instruction   = TVS
-  datatype fpconv_instruction = FITOS | FITOD | FSTOI | FDTOI
   datatype int_instruction    =
     ADD | ADDCC | SUB | SUBCC
   | SMUL | SMULCC | UMUL | UMULCC 
   | SDIV | SDIVCC | UDIV | UDIVCC 
-  | AND | OR | XOR | ANDCC | ORCC | XORCC 
+  | AND | OR | XOR | ANDNOT | ORNOT | XORNOT
   | SRA | SRL | SLL
 
   datatype fp_instruction    = 
     FADDD | FSUBD | FMULD | FDIVD 
 
   datatype fpmove_instruction = 
-    FABSD | FNEGD | FMOV
+    FABSD | FNEGD | FMOVD | FITOD | FDTOI
 
 
   datatype specific_instruction =
@@ -56,7 +55,6 @@ sig
   | INTOP  of int_instruction * register * operand * register
   | FPOP   of fp_instruction * register * register * register
   | FPMOVE  of fpmove_instruction * register * register
-  | FPCONV of fpconv_instruction * register * register
   | TRAP of trap_instruction
 
   sharing type Machine.specific_instruction = specific_instruction

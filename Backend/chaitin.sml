@@ -76,6 +76,7 @@ struct
    val delete_moves = ref true
 
    fun msg (x : string) = if !msgs then print x else ()
+   fun print_reglist regs = app (fn r => (print(msReg r); print "  ")) regs
 
    (* time various phases *)
 
@@ -204,8 +205,29 @@ struct
 		     C_call = false}
 		 end
 
+	   | (CALL{calltype = ML_NORMAL,
+		   func = DIRECT (_, _), args, results,  
+				 argregs, resregs, destroys, ...}) =>
+		  let 
+		    val ACTUALS{args=arg_pos_default, results=res_pos_default} = 
+			unknown_ml false (FORMALS{args=args,results=results})
+		  in {regs_destroyed = (case destroys of
+					  NONE => indirect_caller_saved_regs
+					| SOME regs => regs),
+		      regs_modified = (case destroys of
+					   NONE => indirect_caller_saved_regs
+					 | SOME regs => regs),
+		      arg_pos = (case argregs of
+				     NONE => arg_pos_default
+				   | SOME regs => map IN_REG regs),
+		      res_pos = (case resregs of
+				     NONE => res_pos_default
+				   | SOME regs => map IN_REG regs),
+		      C_call = false}
+              end
+
 	   | (CALL{calltype = C_NORMAL,
-		   func = DIRECT (ML_EXTERN_LABEL _, _), args, results,  
+		   func = DIRECT (_, _), args, results,  
 				 argregs, resregs, destroys, ...}) =>
 		  let 
 		    val ACTUALS{args=arg_pos_default,
@@ -226,28 +248,6 @@ struct
 		  C_call = true}
               end
 
-	   | (CALL{calltype = C_NORMAL,
-		   func = DIRECT (C_EXTERN_LABEL _, _), 
-		   args, results,  
-		   argregs, resregs, destroys, ...}) =>
-		  let 
-		    val ACTUALS{args=arg_pos_default,
-				results=res_pos_default} = std_c false 
-		      (FORMALS{args=args,results=results})
-		  in {regs_destroyed = (case destroys of
-					  NONE => C_caller_saved_regs
-					| SOME regs => regs),
-		  regs_modified = (case destroys of
-				     NONE => C_caller_saved_regs
-				   | SOME regs => regs),
-		  arg_pos = (case argregs of
-			       NONE => arg_pos_default
-			     | SOME regs => map IN_REG regs),
-		  res_pos = (case resregs of
-			       NONE => res_pos_default
-			     | SOME regs => map IN_REG regs),
-		  C_call = true}
-              end
 	  | _ => error "getCallInstRegs: not a call")
 
     
@@ -399,10 +399,10 @@ struct
 		       val result_regs = sieve_regs res_pos
 		      (* update maximum num of args passed on stack *)
 		       val _ = app check_arg arg_pos
-		       val _ = (case func of
-				  DIRECT (C_EXTERN_LABEL _, _) => 
-				      max_C_args := Int.max(!max_C_args, length args)
-				| _ => ())
+		       val _ = (case calltype of
+				    C_NORMAL =>
+					max_C_args := Int.max(!max_C_args, length args)
+				  | _ => ())
 		      (* make sure to load address of called routine into
 		         Rpv if Rpv exists.   The caller may want to reset
 			 certain globals with it(like gp on the Alpha). *)
@@ -414,10 +414,6 @@ struct
 				  else []
 (* new code *)              | DIRECT (ML_EXTERN_LABEL label, _) => 
 				  if hasRpv then [BASE(LADDR(Rpv_virt,ML_EXTERN_LABEL label))] 
-				  else []
-			    | DIRECT (C_EXTERN_LABEL label, _) =>
-				  if hasRpv then [BASE(LADDR(Rpv_virt,
-							     C_EXTERN_LABEL label))]
 				  else []
 			    | INDIRECT reg => [mvregs(reg,Rpv_virt)]
 (*			    | _ => error "replace_calls: pv move") *)
@@ -642,7 +638,7 @@ struct
 
     (* rewrite a block to use physical registers *)
 
-   fun allocateBlock (mapping,stackframe_size,fixStackOffset,tailcallImpossible,name) callee_save_slots
+   fun allocateBlock (mapping,stackframe_size,fixStackOffset,name) callee_save_slots
                      (BLOCK{in_live, use, def, instrs,...}) =
 	   let
 	     val _ = if (! debug) then emitString "AllocateBlock\n" else ()
@@ -681,65 +677,60 @@ struct
 
 	     fun putInRegs src_regs dst_regs =
 	       let
-		 val temps = [Rat, Fat, Rat2, Fat2]
-		 val free_temps = Regset.listItems
-		   (Regset.difference(listToSet temps, 
-				      listToSet src_regs))
+		 val itemps = [Rat, Rat2]
+		 val ftemps = [Fat, Fat2]
+		 val temps = (itemps, ftemps)
+		 val free_itemps = Listops.list_diff_eq(eqRegs',itemps, src_regs)
+		 val free_ftemps = Listops.list_diff_eq(eqRegs',ftemps, src_regs)
+		 val free_temps = (free_itemps,free_ftemps)
 
-		 fun pickTemp _ [] = error "pickTemp"
-		   | pickTemp (R _) ((ireg as R _) :: rest) = (ireg, rest)
-		   | pickTemp (ireg as R _) (_ :: rest) = pickTemp ireg rest
-		   | pickTemp (F _) ((freg as F _) :: rest) = (freg, rest)
-		   | pickTemp (freg as F _) (_ :: rest) = pickTemp freg rest
+		 fun pickTemp r (itemps,ftemps) = 
+		     (case (r,itemps,ftemps) of
+			  (R _, [], _) => error "pickTemp"
+			| (R _, ir::rest, _) => (ir, (rest, ftemps))
+			| (F _, _, []) => error "pickTemp"
+			| (F _, _, fr::rest) => (fr, (itemps, rest))
+		     handle e => (print "pickTemp failed on "; print (msReg r); print " with candidates";
+				  print "itemps are "; print_reglist itemps; print "\n";
+				  print "ftemps are "; print_reglist ftemps; print "\n";
+				  print "src_regs are "; print_reglist src_regs; print "\n";
+				  print "free_itemps are "; print_reglist free_itemps; print "\n";
+				  print "free_ftemps are "; print_reglist free_ftemps; print "\n";
+				  raise e))
 
-		 fun allocSources _ [] precode localmap = (precode, localmap)
-                   | allocSources temps_left (src :: rest) precode localmap = 
+		 fun allocAny mover _ [] precode localmap = (precode, localmap)
+                   | allocAny mover temps (src :: rest) precode localmap = 
 		     (case getreg src of
 			IN_REG r => 
-			  allocSources temps_left rest precode
-			     (Regmap.insert(localmap, src, r))
+			    let val localmap = Regmap.insert(localmap, src, r)
+			    in  allocAny mover temps rest precode localmap
+			    end
 		      | ON_STACK offset =>
 			  let
-			    val (this_temp, temps_left) = 
-			      pickTemp src temps_left
+			    val (this_temp, temps) = pickTemp src temps
+			    val precode = mover(this_temp,offset) :: precode
+			    val localmap = Regmap.insert(localmap, src, this_temp)
 			  in
-			    allocSources temps_left rest
-			      (pop(this_temp,offset) :: precode)
-			      (Regmap.insert(localmap, src, this_temp))
+			    allocAny mover temps rest precode localmap
 			  end
-		      | _ => error "putInRegs: allocSources")
+		      | _ => error "putInRegs: allocAny")
 
-		 fun allocDests _ [] postcode localmap = (postcode, localmap)
-                   | allocDests temps_left (dst :: rest) postcode localmap = 
-		     ((case getreg_posdead dst
-		      of IN_REG r => 
-			  allocDests temps_left rest postcode
-			     (Regmap.insert(localmap, dst, r))
-		      | ON_STACK offset =>
-			  let
-			    val (this_temp, temps_left) = 
-			      pickTemp dst temps_left
-			  in
-			    allocDests temps_left rest
-			      ((push(this_temp, offset)) :: postcode)
-			      (Regmap.insert(localmap, dst, this_temp))
-			  end
-		      | _ => error "putInRegs: allocDests")
-			handle DEAD => (emitInstr "" (BASE (ICOMMENT ("allocdest: dead reg" ^
-   					   (msReg dst))));
-                                        (allocDests temps_left rest postcode localmap)))
 
 		 val (precode, srcmap) = 
-		   allocSources free_temps src_regs [] (Regmap.empty)
+		     allocAny pop free_temps src_regs [] (Regmap.empty)
 
 		 val (postcode, dstmap) = 
-		   allocDests temps dst_regs [] (Regmap.empty)
+		     allocAny push temps dst_regs [] (Regmap.empty)
 	       in
 		 {precode = precode,
 		  srcmap = srcmap,
 		  dstmap = dstmap,
 		  postcode = postcode}
 	       end
+	   handle e => (print "Error while calling putInRegs with\n";
+			print "src_regs = "; print_reglist src_regs; print "\n";
+			print "dst_regs = "; print_reglist dst_regs; print "\n";
+			raise e)
 
 	     fun allocateInstr (NO_ANN _) _ = error "allocateInstr: unannotated"
 	       | allocateInstr (LIVE (live,instr)) next_label =
@@ -763,7 +754,7 @@ struct
 					     | SOME l => l)
 			 (* Store live variables for GC *)
 		      val ra_sloc = fixStackOffset RETADD_POS
-		      val maybe_overflow_args = tailcallImpossible()
+
 		         (* the results are not live yet during the call *)
 (*
 		      val _ = (print "CHAITIN CALL: live(before) = ";
@@ -779,116 +770,65 @@ struct
 			       Regset.app (fn r => (print (msReg r); print "  ")) live;
 			       print "\n")
 *)
-		      val _ = 
-			case (maybe_overflow_args,func, calltype) of
-			  (true,_,_) =>
-			    add_info {label=return_label,live=live} 
-			| (_,DIRECT (C_EXTERN_LABEL _, _), _) => 
-			    add_info {label=return_label,live=live} 
-			| (_,_, ML_TAIL _) => ()
-			| _ => add_info {label=return_label,live=live}
 			    
 		      fun stack_fixup_code1 () = 
 			(map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots) 
 		      val stack_fixup_code2 = [increase_stackptr stackframe_size]
 			
-		      fun ld2reg (IN_REG r, r') = [mvregs(r, r')]
-			| ld2reg (ON_STACK offset, r') = [pop(r', offset)]
-			| ld2reg _ = error "allocateInstr/ld2reg: bad assignment"
-			
 		      val no_moddef_info = { regs_modified = [] : register list,
 					     regs_destroyed = [] : register list,
 					     args = [] : register list}
-		      (* Actual call *)
-		      val tailcall = (case calltype of
-					  ML_TAIL _ => true
-					| _ => false)
+
+		      val _ = 
+			  (case calltype of
+			       ML_TAIL _ => 
+				   (if (length args > length Machineutils.indirect_int_args)
+				       then error "too many args in tailcall: checked? in toalpha/tosparc"
+				    else ())
+					
+			     | _ => add_info {label=return_label,live=live})
+				  
 		      val br_instrs : instruction list = 
-			case (func, tailcall) of
-			  (DIRECT (LOCAL_CODE label,_), false) => 
-			    ([BASE(BSR (LOCAL_CODE label, NONE, no_moddef_info)),
-			      BASE(ILABEL return_label)] @
-			     (std_return_code NONE))
-			| (DIRECT (ML_EXTERN_LABEL label,_), false) => 
-			    ([BASE(BSR (ML_EXTERN_LABEL label, NONE, no_moddef_info)),
-			      BASE(ILABEL return_label)] @
-			     (std_return_code NONE))
-			| (DIRECT (C_EXTERN_LABEL label,NONE), false) => 
-			    ([BASE(BSR (C_EXTERN_LABEL label, NONE, no_moddef_info)),
-			      BASE(ILABEL return_label)] @
-			     (std_return_code NONE))
-			| (DIRECT (C_EXTERN_LABEL label,SOME sra), false) =>
-			    ([BASE(BSR (C_EXTERN_LABEL label, SOME sra, no_moddef_info)),
-			      BASE(ILABEL return_label)] @
-			     (std_return_code(SOME sra)))
-			| (INDIRECT _, false) =>
+			case (calltype, func) of
+
+			  (C_NORMAL, DIRECT (label as (ML_EXTERN_LABEL _), sraOpt)) => 
+			      [BASE(BSR (ML_EXTERN_LABEL "save_regs_forC", NONE, no_moddef_info)),
+			       BASE(BSR (label, sraOpt, no_moddef_info)),
+			       BASE(ILABEL return_label)] @
+			      (std_return_code sraOpt) @
+			      [BASE(BSR (ML_EXTERN_LABEL "load_regs_forC", NONE, no_moddef_info))] @
+			      (std_return_code sraOpt)
+
+			| (C_NORMAL, DIRECT (l, _)) => 
+			      (print "C_NORMAL call non-ML_EXTERN_LABEL"; print (msLabel l); print "\n";
+			       error "C_NORMAL call non-ML_EXTERN_LABEL")
+			| (C_NORMAL, _) => error "C_NORMAL call but not DIRECT"
+
+			| (ML_NORMAL, DIRECT (label, sraOpt)) =>
+			      ([BASE(BSR (label, sraOpt, no_moddef_info)),
+				BASE(ILABEL return_label)] @
+			       (std_return_code sraOpt))
+
+			| (ML_NORMAL, INDIRECT _) =>
 			    ([BASE (JSR(true, Rpv_virt, 1, [])),
 			      BASE(ILABEL return_label)] @
 			     (std_return_code NONE))
 			    
-			| (DIRECT (LOCAL_CODE label,_), true) =>
-			    if (not maybe_overflow_args)
-			      then
+			| (ML_TAIL _, DIRECT (label,_)) =>
 				(stack_fixup_code1 ()) @ 
 				[BASE(POP_RET(SOME(ra_sloc)))] @
 				stack_fixup_code2 @
-				[BASE(BR (LOCAL_CODE label))]
-			    else 
-			      [BASE(BSR (LOCAL_CODE label, NONE, no_moddef_info)),
-			       BASE(ILABEL return_label),
-			       BASE(POP_RET(SOME(ra_sloc)))] @
-			      (stack_fixup_code1 ()) @ 
-			      stack_fixup_code2 @
-			      [BASE(RET (false, 1))]
-			      
-			| (DIRECT (C_EXTERN_LABEL label,NONE), true) =>
-			      if (not maybe_overflow_args)
-				then
-				  (stack_fixup_code1 ()) @ 
-				  [BASE(POP_RET(SOME(ra_sloc)))] @
-				  stack_fixup_code2 @
-				  [BASE(BR (C_EXTERN_LABEL label))]
-			      else
-				[BASE(BSR(C_EXTERN_LABEL label, NONE, no_moddef_info)),
-				 BASE(ILABEL return_label),
-				 BASE(POP_RET(SOME(ra_sloc)))] @
-				(stack_fixup_code1 ()) @ 
-				stack_fixup_code2 @
-				[BASE(RET (false, 1))]
-				       
-				       
-			| (DIRECT (C_EXTERN_LABEL label,SOME sra), true) =>
-				if (not maybe_overflow_args)
-				  then
-				    (stack_fixup_code1 ()) @ 
-				    [BASE(POP(sra,ra_sloc))] @
-				    stack_fixup_code2 @
-				    [BASE(BR (C_EXTERN_LABEL label))]
-				else
-				  [BASE(BSR (C_EXTERN_LABEL label, SOME sra, no_moddef_info)),
-				   BASE(ILABEL return_label),
-				   BASE(POP_RET(SOME(ra_sloc)))] @
-				  (stack_fixup_code1 ()) @ 
-				  stack_fixup_code2 @
-				  [BASE(RET (false, 1))]
+				[BASE(BR label)]
 				  
-			| (INDIRECT _, true) => 
-				  if (not maybe_overflow_args)
-				    then
-				      (stack_fixup_code1 ()) @ 
-				      [BASE(POP_RET(SOME(ra_sloc)))] @
-				      stack_fixup_code2 @
-				      [BASE(JSR (false, Rpv_virt, 1, []))]
-				  else
-				    [BASE (JSR (true, Rpv_virt, 1, [])),
-				     BASE(ILABEL return_label),
-				     BASE(POP_RET(SOME(ra_sloc)))] @
+			| (ML_TAIL _, INDIRECT _) => 
 				    (stack_fixup_code1 ()) @ 
+				    [BASE(POP_RET(SOME(ra_sloc)))] @
 				    stack_fixup_code2 @
-				    [BASE(RET(false, 1))]
+				    [BASE (JSR (false, Rpv_virt, 1, []))]
 		     in br_instrs
 		     end) (* allocateCall *)
-				 | BASE(RTL(RETURN{results})) =>
+		  
+		  | BASE(RTL(RETURN{results})) =>
 		       let val callee_restore_code = 
 			 map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots
 			   val res : instruction list = callee_restore_code @ 
@@ -1366,7 +1306,6 @@ struct
 
        val summarize = summarize_time Trackstorage.summarize 
        val summary as (Trackstorage.SUMMARY{fixStackOffset,
-					    tailcallImpossible,
 					    stackframe_size,
 					    registers_used,
 					    callee_save_slots,...}) = 
@@ -1406,7 +1345,6 @@ struct
 		        allocateBlock (mapping,
 				       stackframe_size,
 				       fixStackOffset,
-				       tailcallImpossible,
 				       name) callee_save_slots bblock) (* ) *)
 		(Labelmap.listItems block_map)
 

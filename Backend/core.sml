@@ -95,6 +95,9 @@ struct
    fun eqRegs (R n) (R n') = n = n'
      | eqRegs (F n) (F n') = n = n'
      | eqRegs _ _ = false
+   fun eqRegs' (R n, R n') = n = n'
+     | eqRegs' (F n, F n') = n = n'
+     | eqRegs' _ = false
    fun eqLabs l1 l2 = Rtl.eq_label(l1,l2)
    fun eqAssigns (IN_REG a) (IN_REG b) = eqRegs a b
      | eqAssigns (ON_STACK a) (ON_STACK b) = (a = b)
@@ -108,14 +111,11 @@ struct
 	      type ord_key = Rtl.label
 	      fun compare (LOCAL_CODE s1, LOCAL_CODE s2) = String.compare(s1,s2)
 		| compare (LOCAL_DATA s1, LOCAL_DATA s2) = String.compare(s1,s2)
-		| compare (C_EXTERN_LABEL s1, C_EXTERN_LABEL s2) = String.compare(s1,s2)
 		| compare (ML_EXTERN_LABEL s1, ML_EXTERN_LABEL s2) = String.compare(s1,s2)
 		| compare (LOCAL_CODE _, _) = LESS
 		| compare (_, LOCAL_CODE _) = GREATER
 		| compare (LOCAL_DATA _, _) = LESS
 		| compare (_, LOCAL_DATA _) = GREATER
-		| compare (C_EXTERN_LABEL _, _) = LESS
-		| compare (_, C_EXTERN_LABEL _) = GREATER
 	  end
   in  structure Labelmap = BinaryMapFn(Labelkey)
   end

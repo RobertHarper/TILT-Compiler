@@ -24,7 +24,7 @@ int NumHeap       = 20;
 int NumStack      = 100;
 int NumStackChain = 100;
 int NumThread     = 100;
-int NumSysThread  = 3;
+int NumSysThread  = 1;
 
 int process_string(char *var, char *item, char *option)
 {
@@ -120,6 +120,7 @@ void process_option(int argc, char **argv)
       if (process_double(&TargetRatio,"TargetRatio",option)) continue;
       if (process_long(&MinHeap,"MinHeap",option))           continue;
       if (process_long(&MaxHeap,"MaxHeap",option))           continue;
+      if (process_long(&NumSysThread,"NumSysThread",option)) continue;
       {
 	long FixHeap = 0;
 	if (process_long(&FixHeap,"FixHeap",option))

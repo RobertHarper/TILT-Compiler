@@ -12,6 +12,7 @@
 #include "memobj.h"
 #include "client.h"
 
+
 int GCTableEntryIDFlag = 0;  /* let the user code set it if it thinks it's on */
 long save_rate = 70;
 long use_stack_gen = 0;
@@ -116,7 +117,7 @@ void stub_error()
 }
 
 
-#ifdef DEBUG
+#ifdef STACKDEBUG
 bot LookupStackBot(Callinfo_t *callinfo, int pos)
 {
   unsigned int v = ((int*)(callinfo->__rawdata))[pos >> 4];
@@ -192,7 +193,7 @@ void stack_init()
 
   ScanQueue = QueueCreate(0,100);
 
-#ifdef DEBUG
+#ifdef STACKDEBUG
 #ifdef GCTABLE_HASENTRYID
   assert(GCTableEntryIDFlag == 1);
 #else
@@ -205,13 +206,10 @@ void stack_init()
       int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
       int *endpos = (int *)(GCTABLE_END_ADDR[mi]);
       int *curpos = startpos; 
-#ifdef DEBUG
-      printf("%d:  start,end  %d %d\n",mi,startpos,endpos);
-#endif
       while (curpos <  endpos)
 	{
 	  count++;
-#ifdef STACK_DEBUG
+#ifdef STACKDEBUG
 	  printf("curpos=%d "
 #ifdef GCTABLE_HASENTRYID
 		 "id=%d, "
@@ -254,13 +252,13 @@ void stack_init()
 	  curpos += GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes);
 	}
     }
-#ifdef DEBUG
+#ifdef STACKDEBUG
   printf("Done callinfo insertion for all modules\n");
 #endif
   for (mi=0; mi<NUM_STACK_STUB; mi++)
     {
       e.key = (unsigned long)(GetStackStub(mi));
-#ifdef DEBUG
+#ifdef STACKDEBUG
       e.data = (void *)mi;
 #else
       e.data = NULL;
@@ -275,7 +273,7 @@ Callinfo_t *LookupCallinfo(value_t ret_add)
   unsigned int i;
   struct HashEntry *e;
   e = HashTableLookup(CallinfoHashTable,(unsigned long)ret_add,0);
-#ifdef DEBUG
+#ifdef STACKDEBUG
   if (e && ((value_t)(e->data) < NUM_STACK_STUB))
     { printf("stack_stub_%d lookup in stack trace\n",e->data); return NULL; }
   if (e)
@@ -338,7 +336,7 @@ int findretadd(value_t *sp_ptr, value_t *cur_retadd_ptr, value_t top,
 #ifdef solaris
       /* We add 8 because the return address actually contains the calling instruction and
 	 the calling instruction is followed by a dealy slot. */
-      cur_retadd = *((int *)(sp+ 4*GET_FRAMESIZE((value_t) callinfo->sizes) + 8 ));
+      cur_retadd = (*((int *)(sp+4*quad_offset)) + 8);
 #else
       error endian not defined
 #endif
@@ -348,7 +346,7 @@ int findretadd(value_t *sp_ptr, value_t *cur_retadd_ptr, value_t top,
       if (cur_retadd == (value_t)(&start_client_retadd_val) || (sp == top))
 	{
 	  done = 1;
-#ifdef DEBUG
+#ifdef STACKDEBUG
 	  if (sp == top) printf("******* sp==top\n");
 #endif	
 	  break;
@@ -381,13 +379,13 @@ int should_trace_big(unsigned long trace,
 		     Callinfo_t *callinfo, value_t cur_sp, int regstate,
 		     unsigned int *byte_offset, unsigned int *word_offset,
 		     value_t *data_add
-#ifdef DEBUG
+#ifdef STACKDEBUG
 		     ,int i
 #endif
 		     )
 {
   value_t data = *data_add;
-#ifdef DEBUG
+#ifdef STACKDEBUG
   if (IS_TRACE_YES(trace))
     {
       if (SHOW_GCDEBUG)
@@ -404,7 +402,7 @@ int should_trace_big(unsigned long trace,
     }
 #endif
    
-#ifdef DEBUG
+#ifdef STACKDEBUG
   if (IS_TRACE_CALLEE(trace))
     {
       int pos = LookupSpecialByte(callinfo,*byte_offset);
@@ -424,7 +422,7 @@ int should_trace_big(unsigned long trace,
       /* res is the type of the value */
       int res = 0;
       int special_type, special_data;
-#ifdef DEBUG
+#ifdef STACKDEBUG
       printf("TRACE_SPECIAL: data_add = %d\n",data_add);
 #endif
       LookupSpecialWordPair(callinfo,*word_offset,
@@ -434,7 +432,7 @@ int should_trace_big(unsigned long trace,
 	res = ((int *)cur_sp)[special_data/4];
       else if (IS_SPECIAL_UNSET(special_type))
 	{
-#ifdef DEBUG
+#ifdef STACKDEBUG
 	  printf("\n\nENCOUNTERED UNSET @ data_add = %d\n\n",data_add);
 #endif
 	  if (collector_type == Parallel)
@@ -495,7 +493,8 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
 			 value_t *bot_sp, Queue_t *retadd_queue,
 			 value_t top,
 			 Queue_t *roots, unsigned int *regstate_ptr, 
-			 unsigned int frame_to_trace)
+			 unsigned int frame_to_trace,
+			 Heap_t *fromspace)
 {
   value_t res = 0;
   unsigned int mi;
@@ -524,17 +523,16 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
 	  byte_offset = 1;
 	}
       res = (value_t)((int *)(cur_sp+4*quad_offset));
-#ifdef DEBUG
-      if (SHOW_GCDEBUG)
-	{
+#ifdef STACKDEBUG
+      printf("==========================================================\n");
 #ifdef GCTABLE_HASENTRYID
-	  printf("\nid=%d, ",callinfo->entryid);
+      printf("\nid=%d, ",callinfo->entryid);
 #endif
-	  printf("sp is %d cur_retadd is %d  regstate is %d  framesize = %d\n",
-		cur_sp,retadd,regstate,framesize_word<<2);
-	  printf("   regtrace_a is %x   regtrace_b is %x\n\n",
-		 callinfo->regtrace_a, callinfo->regtrace_b);
-	}
+      printf("SP = %d   RA = %d  regstate is %d  framesize = %d\n",
+	     cur_sp,retadd,regstate,framesize_word<<2);
+      printf("   regtrace_a is %x   regtrace_b is %x\n\n",
+	     callinfo->regtrace_a, callinfo->regtrace_b);
+
 #endif
 
       /* read one byte at a time for short-circuiting to work 
@@ -559,7 +557,7 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
 	  for (mj=3; mj>=0; mj--)
 	    {
 	      unsigned long trace =  v & 3;
-#ifdef DEBUG
+#ifdef STACKDEBUG
 	      int i = mi * 4 + (3 - mj);
 	      value_t *data_add = ((value_t *)cur_sp)+i;
 	      value_t data = *data_add;
@@ -568,7 +566,7 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
 		       mi,mj,v,cur_sp,((value_t *)cur_sp)+(mi*4+(3-mj)));
 #endif
 	      v >>= 2;
-#ifdef DEBUG
+#ifdef STACKDEBUG
 
 	      if (should_trace_big(trace,callinfo,cur_sp, regstate,
 				   &byte_offset, &word_offset,
@@ -586,16 +584,31 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
 		{
 		  /* better to recompute stack_pos as this case is relatively infrequent */
 		  value_t *slot = (value_t *)(cur_sp + (((mi << 2) + (3 - mj)) << 2));
-#ifdef STACK_DEBUG
-		  printf("Enqueueing stack slot %d: cur_sp=%d\n",
-			 slot,cur_sp);
+#ifdef STACKDEBUG
+		  printf("Enqueueing stack slot %d with value %d\n", slot, *slot);
 #endif
 		  if (*slot > 256)
 		    Enqueue(roots,(void *)slot);
 		}
-
-	      /*	      printf("------\n"); */
-
+	      
+#ifdef PARANOID
+	      else
+		  {
+		    value_t *slot = (value_t *)(cur_sp + (((mi << 2) + (3 - mj)) << 2));
+		    int data = *slot;
+		    if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top) {
+		      static int newval = 42000;
+		      if (1 || (NumGC == 14  && slot >= 268942980 && slot <= 268943000))
+			{
+			  printf("TRACE WARNING: stack loc %d has from space value %d",
+				 slot,data);
+			  printf("      changing to %d\n", newval);
+			  *slot = newval; 
+			}
+		      newval++;
+		    }
+		  }
+#endif
 	    }
 	}
 
@@ -620,7 +633,7 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
 #endif
 		if (!(needspecial & (1U << mi)))
 		  continue;
-#ifdef DEBUG
+#ifdef STACKDEBUG
 		printf("doing special for reg %d = %d -> %d\n",
 		       mi,data_add,*data_add);
 /*		printf("doing special for reg %d = %d -> %d -> %d\n",
@@ -653,7 +666,7 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
 
 unsigned int trace_stack_normal(Thread_t *th, unsigned long *saveregs,
 				value_t bot_sp, value_t cur_retadd, value_t top,
-				Queue_t *root_lists)
+				Queue_t *root_lists, Heap_t *fromspace)
 {
   Queue_t *retadd_queue = th->retadd_queue;
   Queue_t *roots = th->snapshots[0].roots;
@@ -670,7 +683,7 @@ unsigned int trace_stack_normal(Thread_t *th, unsigned long *saveregs,
       MaxStackDepth = QueueLength(retadd_queue);
     TotalStackSize += top - oldbot_sp;
   }
-#ifdef STACK_DEBUG
+#ifdef STACKDEBUG
   printf("done findretadd with retadd_queue length =  %d\n",
 	 QueueLength(retadd_queue));
 #endif
@@ -682,7 +695,7 @@ unsigned int trace_stack_normal(Thread_t *th, unsigned long *saveregs,
   while (not_done)
     {
       not_done = trace_stack_step(th, saveregs,&bot_sp, retadd_queue, top,
-				  roots, &regstate, MAXINT);
+				  roots, &regstate, MAXINT, fromspace);
     }
   Enqueue(root_lists,roots);
   return regstate;
@@ -695,7 +708,8 @@ unsigned int trace_stack_normal(Thread_t *th, unsigned long *saveregs,
 /* lastexptr is the value of exnptr after the last garbage collection */
 unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 			     value_t bot_sp, value_t cur_retadd, value_t top,
-			     Queue_t *root_lists, value_t last_exnptr, value_t this_exnptr)
+			     Queue_t *root_lists, value_t last_exnptr, value_t this_exnptr,
+			     Heap_t *fromspace)
 {
   Queue_t *retadd_queue = th->retadd_queue;
   value_t cur_sp;
@@ -709,7 +723,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
     int temp = -1;
     while (((temp+1) <= th->last_snapshot) &&
 	   (th->snapshots[temp+1].saved_ra != 0) &&
-#ifdef DEBUG
+#ifdef STACKDEBUG
 	   ((temp+1) < NUM_STACK_STUB) &&
 	   (th->snapshots[temp+1].saved_ra != (value_t)stub_error) &&
 #endif
@@ -719,7 +733,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
   }
 
 
-#ifdef DEBUG  
+#ifdef STACKDEBUG  
   printf("th->last_snapshot=%d,  top=%d  max_sp = %d\n",th->last_snapshot,top,max_sp);
 #endif
 
@@ -736,7 +750,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
     }
 
 
-#ifdef DEBUG
+#ifdef STACKDEBUG
   /* show root_lists and checksum */
 #endif
 
@@ -753,7 +767,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
     TotalStackDepth += curstack_depth;
     if (MaxStackDepth < curstack_depth) 
       MaxStackDepth = curstack_depth;
-#ifdef DEBUG
+#ifdef STACKDEBUG
     printf("predone/total  %d/%d/%d\n",predone,curstack_depth);
 #endif
   }
@@ -770,11 +784,12 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 
       QueueClear(r);
       not_done = trace_stack_step(th, saveregs, &bot_sp, retadd_queue, top,
-				  r, &regstate, inner_save_rate);
+				  r, &regstate, inner_save_rate,fromspace);
       Enqueue(root_lists,r);
 
       if (not_done)
 	{
+	  StackSnapshot_t *snapshots = th->snapshots;
 	  value_t next_retaddid = (value_t)QueuePopPeek(retadd_queue);
 	  Callinfo_t *callinfo  = LookupCallinfo(next_retaddid);
 	  value_t next_ra_add = bot_sp - (GET_FRAMESIZE(callinfo->sizes)<<2);
@@ -784,11 +799,11 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 	  next_ra_add += quad_offset << 2;
 
 	  th->last_snapshot++; 
-	  th->snapshots[th->last_snapshot].roots = r;
-	  th->snapshots[th->last_snapshot].saved_regstate = regstate;
-	  th->snapshots[th->last_snapshot].saved_sp = bot_sp;
-	  th->snapshots[th->last_snapshot].saved_ra = *((value_t *)next_ra_add);
-#ifdef DEBUG
+	  snapshots[th->last_snapshot].roots = r;
+	  snapshots[th->last_snapshot].saved_regstate = regstate;
+	  snapshots[th->last_snapshot].saved_sp = bot_sp;
+	  snapshots[th->last_snapshot].saved_ra = *((value_t *)next_ra_add);
+#ifdef STACKDEBUG
 	  printf("snapshots = %d, snapshots[th->last_snapshot]=%d"
 		 "s[c]->saved_ra=%d, s[c]->saved_sp=%d\n",
 		 snapshots,snapshots[th->last_snapshot],
@@ -804,7 +819,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
     }
 
 
-#ifdef DEBUG
+#ifdef STACKDEBUG
   printf("stack_trace_gen: th->last_snapshot=%d\n",th->last_snapshot);
 #endif
 
@@ -813,7 +828,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 
 
 unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
-			 value_t top, Queue_t *root_lists)
+			 value_t top, Queue_t *root_lists, Heap_t *fromspace)
 {
   unsigned int regstate = 0;
   static value_t last_exnptr = 0; 
@@ -833,14 +848,13 @@ unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
   
   if (use_stack_gen)
     regstate = trace_stack_gen( th, saveregs, sp,  ret_add, top, 
-				root_lists, last_exnptr, this_exnptr);
+				root_lists, last_exnptr, this_exnptr, fromspace);
   else
-    regstate = trace_stack_normal( th, saveregs, sp,  ret_add, top, root_lists);
+    regstate = trace_stack_normal( th, saveregs, sp,  ret_add, top, root_lists, fromspace);
 
   last_exnptr = this_exnptr;
 
-#ifdef DEBUG
-  if (SHOW_GCDEBUG)
+#ifdef STACKDEBUG
   { 
     int i, j, count=0;
     value_t sum = 0;
@@ -860,8 +874,8 @@ unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
   }
 #endif
 
-#ifdef STACK_DEBUG
-  printf("returning regstate = %x\n",regstate);
+#ifdef STACKDEBUG
+  printf("returning regstate = 0x%x\n",regstate);
 #endif
 
   return regstate;
@@ -870,9 +884,9 @@ unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
 
 
 void debug_after_rootscan(unsigned long *saveregs, int regmask, 
-			  Queue_t *root_lists, Heap_t *fromheap)
+			  Queue_t *root_lists)
 {
-#ifdef DEBUG
+#ifdef STACKDEBUG
   int allocptr = saveregs[ALLOCPTR_REG];
     if (SHOW_GCDEBUG && NumGC > LEAST_GC_TO_CHECK)
       {
@@ -890,62 +904,63 @@ void debug_after_rootscan(unsigned long *saveregs, int regmask,
 		     i,QueueAccess(roots,i),*((int *)QueueAccess(roots,i)));
 	  }
       }
+    /*
     if (SHOW_HEAPS)
       {
 	if (SHOW_HEAPS)
 	  memdump("From Heap Before collection:", (int *)fromheap->bottom,100,0);
 	show_heap("ORIG FROM",fromheap->bottom,allocptr,fromheap->top); 
-	memdump("OLD_FROMHEAP",(int *)old_fromheap->bottom,
+	memdump("OLD_FROMHEAP",(int *)fromheap->bottom,
 		((value_t)old_alloc_ptr - (value_t)old_fromheap->bottom)/4,0);
 	show_heap("OLD_FROMHEAP",old_fromheap->bottom,old_alloc_ptr,
 		  old_fromheap->top); 
-      }
+		  }
+		  
     else
       {
-	check_heap("ORIG FROM",fromheap->bottom,allocptr,fromheap->top); 
-	check_heap("OLD_FROMHEAP",old_fromheap->bottom,old_alloc_ptr,
-		   old_fromheap->top); 
+	check_heap("ORIG FROM",nursery->bottom,allocptr,nursery->top); 
+	check_heap("OLD_FROMHEAP",fromheap->bottom,alloc_ptr,fromheap->top); 
       }
+      */
 #endif
 }
 
-void local_root_scan(Thread_t *th)
+void local_root_scan(Thread_t *th, Heap_t *fromspace)
 {
   Queue_t *root_lists = th->root_lists;
   Queue_t *reg_roots = th->reg_roots;
   unsigned long *saveregs = (unsigned long *)(th->saveregs);
   unsigned long i;
-  
+  int regmask = 0;
+
   start_timer(&th->stacktime);
   QueueClear(root_lists);
   QueueClear(reg_roots);
   
-  if (saveregs[ALLOCLIMIT_REG] == StopHeapLimit) {  /* thread has not started */
-    if (th->num_add == 0)
-      Enqueue(reg_roots,&(th->start_address));
-    else 
-      for (i=0; i<th->num_add; i++)
-	Enqueue(reg_roots,&(((value_t *)th->start_address)[i]));
-  }
-  else {
-    long sp = saveregs[SP_REG];
-    Stack_t *stack = GetStack(sp);
-    int regmask = trace_stack(th, saveregs, stack->top, root_lists);
-    regmask |= 1 << EXNPTR_REG;
-    for (i=0; i<32; i++)
-      if ((regmask & (1 << i)) && (saveregs[i] > 256))
-	Enqueue(reg_roots,(int *)(&(saveregs[i])));
-  }
+
+  for (i=th->nextThunk; i<th->numThunk; i++)
+    Enqueue(reg_roots,&(((value_t *)th->thunks)[i]));
+
+  if (th->nextThunk != 0) {  /* thread has started */
+      long sp = saveregs[SP_REG];
+      Stack_t *stack = GetStack(sp);
+      regmask = trace_stack(th, saveregs, stack->top, root_lists, fromspace);
+      regmask |= 1 << EXNPTR_REG;
+      for (i=0; i<32; i++)
+	if ((regmask & (1 << i)) && (saveregs[i] > 256))
+	  Enqueue(reg_roots,(int *)(&(saveregs[i])));
+    }
   Enqueue(root_lists,reg_roots);
 
-#ifdef DEBUG
+#ifdef STACKDEBUG
   debug_after_rootscan(saveregs,regmask,root_lists);
 #endif
+
   stop_timer(&th->stacktime);
 
 }
 
-void global_root_scan(Queue_t *global_roots, Queue_t *promoted_global_roots)
+void global_root_scan(Queue_t *global_roots, Queue_t *promoted_global_roots, Heap_t *fromspace)
 {
   static Queue_t *uninit_global_roots;
   static Queue_t *temp;

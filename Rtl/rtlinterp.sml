@@ -101,16 +101,16 @@ functor Rtlinterp(structure Pprtl : PPRTL
 			   else pc := w2i w; pc_set_changed())
 
     val label_table = ref ([] : (label * int) list)
-    val init_label_table = [(C_EXTERN_LABEL "ml_output", 1000000),
-			    (C_EXTERN_LABEL "ml_input", 1000004),
-			    (C_EXTERN_LABEL "ml_lookahead", 1000008),
-			    (C_EXTERN_LABEL "ml_open_in", 1000012),
-			    (C_EXTERN_LABEL "ml_open_out", 1000016),
-			    (C_EXTERN_LABEL "ml_close_in", 1000020),
-			    (C_EXTERN_LABEL "ml_close_out", 1000024),
-			    (C_EXTERN_LABEL "ml_flush_out", 1000028),
-			    (C_EXTERN_LABEL "ml_end_of_stream", 1000032),
-			    (C_EXTERN_LABEL "ml_spill_vararg", 1000036)
+    val init_label_table = [(ML_EXTERN_LABEL "ml_output", 1000000),
+			    (ML_EXTERN_LABEL "ml_input", 1000004),
+			    (ML_EXTERN_LABEL "ml_lookahead", 1000008),
+			    (ML_EXTERN_LABEL "ml_open_in", 1000012),
+			    (ML_EXTERN_LABEL "ml_open_out", 1000016),
+			    (ML_EXTERN_LABEL "ml_close_in", 1000020),
+			    (ML_EXTERN_LABEL "ml_close_out", 1000024),
+			    (ML_EXTERN_LABEL "ml_flush_out", 1000028),
+			    (ML_EXTERN_LABEL "ml_end_of_stream", 1000032),
+			    (ML_EXTERN_LABEL "ml_spill_vararg", 1000036)
 			    ]
     fun reset_label_table() = label_table := init_label_table
 
@@ -382,7 +382,7 @@ fun trap() =
     end
 
 
-    fun metastep({func=(C_EXTERN_LABEL name),
+    fun metastep({func=(ML_EXTERN_LABEL name),
 		  return,args,results,tailcall,save}) = 
       (case (name,args,results) of
 	 ("ml_output",([ri,rj],[]),([dest],[])) =>

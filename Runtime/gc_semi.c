@@ -147,9 +147,12 @@ value_t alloc_bigfloatarray_semi(int log_len, double init_val, int ptag)
 
 void gc_semi(Thread_t *curThread)
 {
-  long *saveregs;
   int i;  
-  int req_size, allocptr;
+  SysThread_t *sysThread = curThread->sysThread;
+  long *saveregs = curThread->saveregs;
+  int allocptr = sysThread->alloc;
+  int alloclimit = sysThread->limit;
+  int req_size = saveregs[ASMTMP_REG] - allocptr;
   value_t *to_ptr = (value_t *)toheap->bottom;
   range_t from_range, to_range;
   Queue_t *root_lists, *loc_roots;
@@ -158,38 +161,31 @@ void gc_semi(Thread_t *curThread)
   assert(0); /* unimplemented */
 #endif
 
+  /* Check for first time heap value needs to be initialized */
+  if (sysThread->limit == StartHeapLimit)
+    {
+      saveregs[ALLOCPTR_REG] = fromheap->bottom;
+      saveregs[ALLOCLIMIT_REG] = fromheap->top;
+      sysThread->alloc = fromheap->bottom;
+      sysThread->limit = fromheap->top;
+      return;
+    }
+
+  assert(allocptr <= alloclimit);
+  assert(req_size >= 0);
+
   /* Start timing this collection */
   root_lists = curThread->root_lists;
   loc_roots = curThread->loc_roots;
   start_timer(&curThread->gctime);
-  saveregs = curThread->saveregs;
-  allocptr = saveregs[ALLOCPTR_REG];
-  req_size = saveregs[ALLOCLIMIT_REG];
-
-
-  /* Check for first time heap value needs to be initialized */
-  if (curThread->saveregs[ALLOCLIMIT_REG] == StartHeapLimit)
-    {
-      curThread->saveregs[ALLOCPTR_REG] = fromheap->bottom;
-      curThread->saveregs[ALLOCLIMIT_REG] = fromheap->top;
-    }
 
 #ifdef DEBUG
-  if (req_size == 0)
-      fprintf(stderr,"alloc_size = 0    means writelist_full.\n");
   debug_and_stat_before(saveregs, req_size);
 #endif
 
-  /* Check that alloc pointer has not passed the heap limit */
-  if (allocptr > curThread->sysThread->limit)
-    {
-      printf("allocptr=%d   limit=%d\n",allocptr,curThread->sysThread->limit);
-      assert(0);
-    }
-
   /* Compute the roots from the stack and register set */
-  local_root_scan(curThread);
-  global_root_scan(global_roots,promoted_global_roots);
+  local_root_scan(curThread,fromheap);
+  global_root_scan(global_roots,promoted_global_roots,fromheap);
   Enqueue(root_lists,global_roots);
   Enqueue(root_lists,promoted_global_roots);
 
@@ -214,7 +210,7 @@ void gc_semi(Thread_t *curThread)
   
     
   /* Get tospace and ranges ready for the collection */
-  Heap_Resize(toheap,allocptr - fromheap->bottom);
+  Heap_Resize(toheap, fromheap->top - fromheap->bottom);
   Heap_Unprotect(toheap);
   SetRange(&from_range, fromheap->bottom, fromheap->top);
   SetRange(&to_range, toheap->bottom, toheap->top);
@@ -243,8 +239,8 @@ void gc_semi(Thread_t *curThread)
 #ifdef DEBUG
     if (SHOW_HEAPS)
       {
-	memdump("From Heap After collection:", (int *)fromheap->bottom,40);
-        memdump("To Heap After collection:", (int *)toheap->bottom,40);
+	memdump("From Heap After collection:", (int *)fromheap->bottom,40,0);
+        memdump("To Heap After collection:", (int *)toheap->bottom,40,0);
 	show_heap("FINAL FROM",fromheap->bottom,allocptr,fromheap->top);
 	show_heap("FINAL TO",toheap->bottom,to_ptr,toheap->top);
       }
@@ -294,7 +290,8 @@ void gc_semi(Thread_t *curThread)
   /* Update thread's allocation variables */
   saveregs[ALLOCPTR_REG] = fromheap->alloc_start;
   saveregs[ALLOCLIMIT_REG] = fromheap->top;
-  curThread->sysThread->limit = fromheap->top;
+  sysThread->limit = fromheap->alloc_start;
+  sysThread->limit = fromheap->top;
 
   NumGC++;
 

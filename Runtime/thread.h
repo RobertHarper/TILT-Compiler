@@ -49,8 +49,10 @@ struct Thread__t
   int                id;               /* Structure ID */
   int                status;           /* Thread status */
   struct Thread__t   *parent;
-  value_t            start_address;    /* Array of num_add unit -> unit */
-  int                num_add;          /* IF zero, then start_address is a thunk */
+  value_t            oneThunk[1];      /* Avoid allocation by optimizing for common case */
+  value_t            thunks;           /* Array of num_add unit -> unit */
+  int                nextThunk;        /* Index of next unstarted thunk.  Initially zero. */
+  int                numThunk;         /* Number of thunks.  At least one. */
   Queue_t            *reg_roots;
   Queue_t            *root_lists;
   Queue_t            *loc_roots;

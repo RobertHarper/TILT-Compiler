@@ -20,9 +20,9 @@ sig
   val in_imm_range : int -> bool
   val in_ea_disp_range : int -> bool
 
-  datatype storei_instruction = STL | STQ 
+  datatype storei_instruction = STL | STQ  | STQ_U
   datatype storef_instruction = STT | STS
-  datatype loadi_instruction  = LDA | LDAH | LDL | LDQ | LDGP 
+  datatype loadi_instruction  = LDA | LDAH | LDL | LDQ | LDQ_U | LDGP 
   datatype loadf_instruction  = LDT | LDS
   datatype cbri_instruction   = BEQ | BGE | BGT | BLE | BLT | BNE | BLBC | BLBS
   datatype cbrf_instruction   = FBEQ | FBGE | FBGT | FBLE | FBLT | FBNE
@@ -33,7 +33,7 @@ sig
   | S4ADDL | S4ADDQ | S8ADDL | S8ADDQ
   | S4SUBL | S4SUBQ | S8SUBL | S8SUBQ
   | CMPEQ | CMPLE | CMPLT | CMPULE | CMPULT
-  | AND | OR | XOR | EQV | ANDNOT | ORNOT | SRA | SRL | SLL | ZAP
+  | AND | OR | XOR | EQV | ANDNOT | ORNOT | SRA | SRL | SLL | ZAP | EXTBL | INSBL | MSKBL
   | CMOVEQ | CMOVNE | CMOVLT | CMOVLE | CMOVGT | CMOVGE | CMOVLBC | CMOVLBS
   datatype fp_instruction    = 
     CPYS | CPYSN | CPYSE

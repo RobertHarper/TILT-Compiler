@@ -46,22 +46,12 @@ struct
 					    add_instr(LOAD32I(EA(addr,0),desti))
 					end);
 				 add_instr(ICOMMENT "int sub end"))
-	     | Prim.W8 => let val addr = alloc_regi LOCATIVE
-			      val offset = load_ireg_term(vl2,NONE) (* cannot reuse *)
-			      val subaddr = alloc_regi NOTRACE_INT
-			      val data = alloc_regi NOTRACE_INT
-			      val temp = alloc_regi NOTRACE_INT
-			      val _ = (add_instr(ICOMMENT "character sub start\n");
-				       add_instr(ANDB(offset,IMM 3, subaddr));
-				       add_instr(NOTB(subaddr,temp));
-				       add_instr(SLL(subaddr,IMM 3, subaddr));
-				       add_instr(ANDB(offset,REG temp, temp));
-				       add_instr(ADD(a',REG temp,addr));
-				       add_instr(LOAD32I(EA(addr,0),data));
-				       add_instr(SRL(data,REG subaddr,data));
-				       add_instr(ANDB(data,IMM 255, desti));
-				       add_instr(ICOMMENT "character sub end\n"))
-			  in ()
+	     | Prim.W8 => let val b' = load_ireg_term(vl2,NONE)
+			      val addr = alloc_regi (LOCATIVE)
+			  in  add_instr(ICOMMENT "character sub start\n");
+			      add_instr(ADD(b',REG a',addr));
+			      add_instr(LOAD8I(EA(addr,0),desti));
+			      add_instr(ICOMMENT "character sub end\n")
 			  end
 	     | _ => error "xintptrsub not done on all int sizes");
 	  (LOCATION(REGISTER(false,I desti)), state)
@@ -142,30 +132,12 @@ struct
 					in  add_instr(S4ADD(b',REG a',addr));
 					    add_instr(STORE32I(EA(addr,0),argi))
 					end)
-	     | Prim.W8 => let val addr = alloc_regi LOCATIVE
-			      val offset = load_ireg_term(vl2,NONE)
-			      val subaddr = alloc_regi NOTRACE_INT
-			      val temp = alloc_regi NOTRACE_INT
-			      val temp2 = alloc_regi NOTRACE_INT
-			      val data = alloc_regi NOTRACE_INT
-			      val ordata = alloc_regi NOTRACE_INT
-			      val mask = alloc_regi NOTRACE_INT
-			      val _ = (add_instr(ICOMMENT "character update start");
-				       add_instr(ANDB(offset,IMM 3, subaddr));
-				       add_instr(NOTB(subaddr,temp));
-				       add_instr(SLL(subaddr,IMM 3, subaddr));
-				       add_instr(ANDB(offset,REG temp, temp2));
-				       add_instr(ADD(a',REG temp2,addr));
-				       add_instr(LOAD32I(EA(addr,0),data));
-				       add_instr(LI(0w255, mask));
-				       add_instr(SLL(mask,REG subaddr, mask));
-				       add_instr(NOTB(mask,mask));
-				       add_instr(ANDB(data,REG mask, data));
-				       add_instr(SLL(argi,REG subaddr, ordata));
-				       add_instr(ORB(data,REG ordata, data));
-				       add_instr(STORE32I(EA(addr,0),data));
-				       add_instr(ICOMMENT "character update start"))
-			  in ()
+	     | Prim.W8 => let val b' = load_ireg_term(vl2,NONE)
+			      val addr = alloc_regi (LOCATIVE)
+			  in  add_instr(ICOMMENT "character update start");
+			      add_instr(ADD(b',REG a',addr));
+			      add_instr(STORE8I(EA(addr,0),argi));
+			      add_instr(ICOMMENT "character update end")
 			  end
 	     | _ => error "xintupdate not implemented on this size");
 	  (unit_term, state)
@@ -317,7 +289,7 @@ struct
 		add_instr(BCNDI(LE, len, REG tmp', fsmall_alloc, true))
 	    end;
 	    add_instr(CALL{call_type = C_NORMAL,
-			   func = LABEL' (C_EXTERN_LABEL "alloc_bigfloatarray"),
+			   func = LABEL' (ML_EXTERN_LABEL "alloc_bigfloatarray"),
 			   args = (case ptag_opt of 
 					NONE => [I len,F fr]
 				      | SOME ptag => [I len,I ptag,F fr]),
@@ -466,7 +438,7 @@ struct
 			 add_instr(BCNDI(LE, wordlen, REG tmp', ismall_alloc, true))
 		     end;
 		     add_instr(CALL{call_type = C_NORMAL,
-				    func = LABEL' (C_EXTERN_LABEL "alloc_bigintarray"),
+				    func = LABEL' (ML_EXTERN_LABEL "alloc_bigintarray"),
 				    args = (case ptag_opt of
 						 NONE => [I wordlen,I v]
 					       | SOME ptag => [I wordlen, I v, I ptag]),
@@ -526,7 +498,7 @@ struct
 		     add_instr(BCNDI(LE, len, REG tmp', psmall_alloc, true))
 		 end;
 		 add_instr(CALL{call_type = C_NORMAL,
-				func = LABEL' (C_EXTERN_LABEL "alloc_bigptrarray"),
+				func = LABEL' (ML_EXTERN_LABEL "alloc_bigptrarray"),
 				args = (case ptag_opt of
 					    NONE => [I len, I v]
 					  | SOME ptag => [I len, I v,I ptag]),

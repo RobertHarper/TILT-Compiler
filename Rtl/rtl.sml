@@ -13,7 +13,6 @@ struct
     val fresh_named_var = Name.fresh_named_var
 
     datatype label = ML_EXTERN_LABEL of string
-                   | C_EXTERN_LABEL of string
                    | LOCAL_DATA of string
                    | LOCAL_CODE of string
 
@@ -39,7 +38,6 @@ struct
   datatype reg = I of regi | F of regf
 
   fun eq_label (ML_EXTERN_LABEL s1, ML_EXTERN_LABEL s2) = s2 = s1
-    | eq_label (C_EXTERN_LABEL s1, C_EXTERN_LABEL s2) = s2 = s1
     | eq_label (LOCAL_DATA s1, LOCAL_DATA s2) = s1 = s2
     | eq_label (LOCAL_CODE s1, LOCAL_CODE s2) = s1 = s2
     | eq_label (_,_) = false
@@ -116,13 +114,15 @@ struct
     | CMPSI  of cmp * regi * sv * regi  (* c <- a signed-op b *)
     | CMPUI  of cmp * regi * sv * regi  (* c <- a unsigned-op b *)
 
-    | NOTB   of regi * regi
-    | ANDB   of regi * sv * regi
-    | ORB    of regi * sv * regi
-    | XORB   of regi * sv * regi 
-    | SRA   of regi * sv * regi (* shift right arithmetic:(value, shift)*)
-    | SRL   of regi * sv * regi (* shift right logical *)
-    | SLL   of regi * sv * regi (* shift left logical *)
+    | NOTB    of regi * regi
+    | ANDB    of regi * sv * regi
+    | ORB     of regi * sv * regi
+    | ANDNOTB of regi * sv * regi
+    | ORNOTB  of regi * sv * regi
+    | XORB    of regi * sv * regi 
+    | SRA     of regi * sv * regi (* shift right arithmetic:(value, shift)*)
+    | SRL     of regi * sv * regi (* shift right logical *)
+    | SLL     of regi * sv * regi (* shift left logical *)
 
     | CVT_REAL2INT  of regf * regi  (* does a floor with rounding towards neg inf *)
     | CVT_INT2REAL  of regi * regf  (* converts int to real format *)
@@ -167,8 +167,10 @@ struct
     | END_SAVE
     | RESTORE_CS
 
-    | LOAD32I    of ea * regi           (* address, data *)
+    | LOAD32I    of ea * regi          
     | STORE32I   of ea * regi
+    | LOAD8I  of ea * regi            
+    | STORE8I of ea * regi            
     | LOADQF     of ea * regf
     | STOREQF    of ea * regf
 

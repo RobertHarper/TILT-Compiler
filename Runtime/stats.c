@@ -42,8 +42,9 @@ static double time_diff (struct timeval *start,
 }
 
 
-void reset_timer(timer_mt *t)
+void reset_timer(char* name, timer_mt *t)
 {
+  t->name = name;
   t->user = t->sys = 0.0;
   t->on =  0;
 }
@@ -58,7 +59,7 @@ void start_timer(timer_mt *t)
 {
   if (t->on)
     {
-      printf("ERROR: Can't start a timer that is already started\n");
+      printf("ERROR: Can't start a timer that is already started: %s\n",t->name);
       exit(-1);
     }
   t->on = 1;
@@ -108,9 +109,9 @@ void stats_init()
 {   
   ftime(&start_tp);
   getrusage(RUSAGE_SELF,&start);
-  reset_timer(&stacktime);
-  reset_timer(&gctime);
-  reset_timer(&majorgctime);
+  reset_timer("Stacktime",&stacktime);
+  reset_timer("GCtime",&gctime);
+  reset_timer("MajorGCtime",&majorgctime);
 }
 
 void stats_finish_thread(timer_mt *stack, timer_mt *gc, timer_mt *majorgc)

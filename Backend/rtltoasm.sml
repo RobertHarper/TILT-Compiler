@@ -52,25 +52,23 @@ struct
        val {callee_map, rtl_scc, ...} = Recursion.procGroups prog
        local
 	   val recursive_components = rtl_scc
-	   val _ = if (!debug)
-		       then (print "***** There are ";
-			     print (Int.toString (length procs));
-			     print " procedures  and  ";
-			     print (Int.toString (length recursive_components));
-			     print " recursive components with the largest being ";
-			     print (Int.toString (foldr Int.max 0
-						  (map length recursive_components)));
-			     print "\n")
-		   else ()
+	   val _ = print (" There are " ^
+			 (Int.toString (length procs)) ^
+			 " procedures and  " ^
+			 (Int.toString (length recursive_components)) ^
+			 " recursive components with the largest being of size " ^
+			 (Int.toString (foldr Int.max 0
+					(map length recursive_components))) ^
+			 "\n")
 
 	   fun getComponent groups proc =
 	       let
 		   fun loop [] = error "getComponent: procedure not found"
 		     | loop (lst :: lsts) =
-	       if Listops.member_eq(Rtl.eq_label,proc,lst) then
-		   lst
-	       else
-		   loop lsts
+		       if Listops.member_eq(Rtl.eq_label,proc,lst) then
+			   lst
+		       else
+			   loop lsts
 	       in
 		   loop groups
 	       end
@@ -83,8 +81,7 @@ struct
 	   val component_names = recursive_components
        end
 
-       val Labelmap = ref (Labelmap.empty) : 
-	 procsig Labelmap.map ref
+       val Labelmap = ref (Labelmap.empty) : procsig Labelmap.map ref
 
        fun getSig proc_name = (case (Labelmap.find (!Labelmap, proc_name)) of
 				   SOME s => s
@@ -148,19 +145,12 @@ struct
 	     initSigs rest
 	   end
 
-       exception Lookup
-       fun lookup [] _ = raise Lookup
-	 | lookup ((x,y)::ls) x' = if (x = x') then y else lookup ls x'
-	   
        fun findRtlProc p [] = error "findRtlProc"
 	 | findRtlProc p ((p' as Rtl.PROC{name,...})::rest) =
 	 if (Rtl.eq_label (p, name)) then
 	   p'
 	 else
 	   findRtlProc p rest
-
-
-
 
        fun allocateProc1 (name : label) =
 	 let 

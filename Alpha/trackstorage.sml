@@ -28,7 +28,6 @@ struct
                     {registers_used    : Machine.register list,
 		     stackframe_size   : int,
 		     callee_save_slots : (Machine.register * stacklocation) list,
-		     tailcallImpossible : unit -> bool,
 		     fixStackOffset    : Machine.stacklocation -> 
 		                         Machine.stacklocation}
 
@@ -200,7 +199,6 @@ struct
 							8 * i)
 	| fixStackOffset (RETADD_POS) = ACTUAL8 ra_offset
         | fixStackOffset x = x
-      fun tailcallImpossible () = (! num_args) > 0
 
       val registers_used = Regset.listItems (! regs_destroyed)
 
@@ -230,7 +228,6 @@ struct
       SUMMARY {registers_used = registers_used,
 	       stackframe_size = stackframe_size,
 	       callee_save_slots = callee_save_slots,
-	       tailcallImpossible = tailcallImpossible,
 	       fixStackOffset = fixStackOffset}
     end
        handle e => (print "exception in summarize\n"; 

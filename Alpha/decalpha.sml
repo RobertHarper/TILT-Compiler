@@ -42,13 +42,13 @@ structure Machine =
       | isPhysical (F i) = i<32
 
     datatype storei_instruction =
-      STL | STQ 
+      STL | STQ | STQ_U
 
     datatype storef_instruction =
       STT | STS
 
     datatype loadi_instruction =
-      LDA | LDAH | LDL | LDQ | LDGP 
+      LDA | LDAH | LDL | LDQ | LDQ_U | LDGP 
 
     datatype loadf_instruction =
       LDT | LDS
@@ -65,7 +65,7 @@ structure Machine =
     | S4ADDL | S4ADDQ | S8ADDL | S8ADDQ
     | S4SUBL | S4SUBQ | S8SUBL | S8SUBQ
     | CMPEQ | CMPLE | CMPLT | CMPULE | CMPULT
-    | AND | OR | XOR | EQV | ANDNOT | ORNOT | SRA | SRL | SLL | ZAP
+    | AND | OR | XOR | EQV | ANDNOT | ORNOT | SRA | SRL | SLL | ZAP | EXTBL | INSBL | MSKBL
     | CMOVEQ | CMOVNE | CMOVLT | CMOVLE | CMOVGT | CMOVGE | CMOVLBC | CMOVLBS
 
     datatype fp_instruction = 
@@ -144,11 +144,11 @@ structure Machine =
   fun msLabel (LOCAL_CODE s) = makeAsmLabel s
     | msLabel (LOCAL_DATA s) = makeAsmLabel s
     | msLabel (ML_EXTERN_LABEL label)     = (makeAsmLabel label)
-    | msLabel (C_EXTERN_LABEL label)     = (makeAsmLabel label)
 
 
   fun storei_to_ascii STL = "stl"
     | storei_to_ascii STQ = "stq"
+    | storei_to_ascii STQ_U = "stq_u"
 
   fun storef_to_ascii STS = "sts"
     | storef_to_ascii STT = "stt"
@@ -156,6 +156,7 @@ structure Machine =
   fun loadi_to_ascii LDA  = "lda"
     | loadi_to_ascii LDAH = "ldah"
     | loadi_to_ascii LDL  = "ldl"
+    | loadi_to_ascii LDQ_U = "ldq_u"
     | loadi_to_ascii LDQ  = "ldq"
     | loadi_to_ascii LDGP = "ldgp"
 
@@ -214,6 +215,9 @@ structure Machine =
     | int_to_ascii  SRL    = "srl"
     | int_to_ascii  SLL    = "sll"
     | int_to_ascii  ZAP    = "zap"
+    | int_to_ascii  EXTBL  = "extbl"
+    | int_to_ascii  INSBL  = "insbl"
+    | int_to_ascii  MSKBL  = "mskbl"
     | int_to_ascii  CMOVEQ = "cmoveq"
     | int_to_ascii  CMOVNE = "cmovne"
     | int_to_ascii  CMOVLT = "cmovlt"
@@ -339,7 +343,8 @@ structure Machine =
     | msInstr_base (TAILCALL label) = ("\tTAILCALL\t" ^ (msLabel label))
     | msInstr_base (BR label) = (tab ^ "br" ^ tab ^
 				           (msReg Rzero) ^ comma ^ (msLabel label))
-    | msInstr_base (ILABEL label) = (msLabel label) ^ ":"
+    | msInstr_base (ILABEL label) = (".globl " ^ (msLabel label) ^ "\n" ^
+				     (msLabel label) ^ ":")
     | msInstr_base (ICOMMENT str) = (tab ^ "# " ^ str)
     | msInstr_base (Core.JSR(link, Raddr, hint, _)) =
                                 (tab ^ "jsr" ^ tab 
@@ -574,24 +579,23 @@ structure Machine =
       | defUse (BASE(ICOMMENT _))                   = ([], [])
 
 
-    (* SOME (fallthrough possible, other local labels this instr jumps to)
-        if this instruction ends basic block; NONE otherwise *)
-    fun cFlow (BASE (BR (label as LOCAL_CODE _)))    = SOME (false, [label])
-      | cFlow (BASE (BR (label as LOCAL_DATA _)))    = SOME (false, [label])
-      | cFlow (BASE (BR (label as _)))    = SOME (false, [])
-      | cFlow (BASE (BSR (label as LOCAL_CODE _,_,_)))    = SOME (true, [label])
-      | cFlow (BASE (BSR (label as LOCAL_DATA _,_,_)))    = SOME (true, [label])
-      | cFlow (BASE (BSR (label as _,_,_)))    = SOME (true, [])
-      | cFlow (SPECIFIC (CBRANCHI(_, _, label))) = SOME (true, [label])
-      | cFlow (SPECIFIC (CBRANCHF(_, _, label))) = SOME (true, [label])
-      | cFlow (BASE (Core.JSR(_,_,_,labels)))         = SOME (false, labels)
-      | cFlow (BASE (Core.RET(_,_)))  = SOME (false, [])
-      | cFlow (BASE(RTL(CALL {calltype=(Rtl.ML_TAIL _), ...})))  = SOME (true, []) (* why possible *)
-      | cFlow (BASE(RTL(CALL _))) = SOME (true, [])
-      | cFlow (BASE(RTL(RETURN _)))          = SOME (false, [])
-      | cFlow (BASE(RTL(SAVE_CS label))) = SOME (true, [label])
-      | cFlow (BASE(TAILCALL label))         = SOME (false, [])
-      | cFlow _ = NONE
+   datatype instr_flow = NOBRANCH | BRANCH of bool * label list | DELAY_BRANCH of bool * label list
+   fun cFlow (BASE (BR (label as LOCAL_CODE _)))    = BRANCH (false, [label])
+     | cFlow (BASE (BR (label as LOCAL_DATA _)))    = BRANCH (false, [label])
+     | cFlow (BASE (BR (label as _)))    = BRANCH (false, [])
+     | cFlow (BASE (BSR (label as LOCAL_CODE _,_,_)))    = BRANCH (true, [label])
+     | cFlow (BASE (BSR (label as LOCAL_DATA _,_,_)))    = BRANCH (true, [label])
+     | cFlow (BASE (BSR (label as _,_,_)))    = BRANCH (true, [])
+     | cFlow (SPECIFIC (CBRANCHI(_, _, label))) = BRANCH (true, [label])
+     | cFlow (SPECIFIC (CBRANCHF(_, _, label))) = BRANCH (true, [label])
+     | cFlow (BASE (Core.JSR(_,_,_,labels)))         = BRANCH (false, labels)
+     | cFlow (BASE (Core.RET(_,_)))  = BRANCH (false, [])
+     | cFlow (BASE(RTL(CALL {calltype=(Rtl.ML_TAIL _), ...})))  = BRANCH (false, [])
+     | cFlow (BASE(RTL(CALL _))) = BRANCH (true, [])
+     | cFlow (BASE(RTL(RETURN _)))          = BRANCH (false, [])
+     | cFlow (BASE(RTL(SAVE_CS label))) = BRANCH (true, [label])
+     | cFlow (BASE(TAILCALL label))         = BRANCH (false, [])
+     | cFlow _ = NOBRANCH
 
 
    (* map src registers using fs and destination using fd and return mapped instruction *)

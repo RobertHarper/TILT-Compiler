@@ -172,19 +172,24 @@ structure Toil
 
     fun reduce_to_remove (context, c, sbnds) = 
 	let 
-	    val mod_vars_remove = List.mapPartial 
-		                    (fn (SBND(_,BND_MOD(v,_,_))) => SOME v
-			              | _ => NONE) sbnds
+	    val boundModVars = (List.mapPartial 
+				(fn (SBND(_,BND_MOD(v,_,_))) => SOME v
+			          | _ => NONE) sbnds)
+	    val boundConVars = (List.mapPartial 
+				(fn (SBND(_,BND_CON(v,_))) => SOME v
+			          | _ => NONE) sbnds)
+
 	    fun loop con = 
-		let val (_,_,mod_vars_occur) = con_free con
-		in  if (null (Listops.list_inter_eq(eq_var,mod_vars_remove,mod_vars_occur)))
+		let val (_,occurConVars,occurModVars) = con_free con
+		in  if (null (Listops.list_inter_eq(eq_var,boundModVars,occurModVars)) andalso
+			null (Listops.list_inter_eq(eq_var,boundConVars,occurConVars)))
 			then con
 		    else (case (con_reduce_once(context,con)) of
 			      NONE => error "reduce_to_remove failed to remove"
 			    | SOME con => loop con)
 		end
-	in if (null mod_vars_remove)
-	    then c
+	in if (null boundModVars andalso null boundConVars)
+	       then c
 	   else loop c
 	end
 
@@ -991,7 +996,11 @@ val _ = print "plet0\n"
 				    else (error_region();
 					  print "function constraint does not match body type\n";
 					  print "Actual type: "; pp_con bodyc; print "\n";
-					  print "Constraint type: "; pp_con body_con; print "\n")
+					  print "Constraint type: "; pp_con body_con; print "\n";
+					  print "Actual reduced type: "; 
+					  pp_con (con_normalize(context'',bodyc)); print "\n";
+					  print "Constraint reduced type: "; 
+					  pp_con (con_normalize(context'',body_con)); print "\n")
 			    val _ = if eq_con(context'',fun_con,func)
 					then ()
 				    else (error_region();

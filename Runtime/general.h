@@ -14,9 +14,10 @@
 #undef GCTABLE_HASENTRYID
 #undef DIAG
 #undef PARANOID
-#undef DEBUG
+#undef STACKDEBUG
 #undef SUPPRESS
 #undef SEMANTIC_GARBAGE 
+#undef SHOW_MMAP
 #define WRITE
 #define OLD_ALLOC
 

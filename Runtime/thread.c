@@ -111,7 +111,14 @@ void ReleaseJob(SysThread_t *sth)
 {
   int i;
   Thread_t *th = sth->userThread;
+
+  assert(th->saveregs[ALLOCPTR_REG] <= th->saveregs[ALLOCLIMIT_REG]);
   sth->alloc = th->saveregs[ALLOCPTR_REG];
+  if (sth->limit != th->saveregs[ALLOCLIMIT_REG]) {
+    printf("sth->limit = %d",sth->limit);
+    printf("th->saveregs[LIMIT] = %d",th->saveregs[ALLOCLIMIT_REG]);
+  }
+  assert(sth->limit == th->saveregs[ALLOCLIMIT_REG]);
   if (diag)
     printf("SysThread %d: unmapping with %d (< %d)\n",sth->stid,sth->alloc,th->saveregs[ALLOCLIMIT_REG]);
   if (paranoid)
@@ -122,7 +129,7 @@ void ReleaseJob(SysThread_t *sth)
 	printf("   unmap WARNING: *%d = %d\n",addr,v);
     }
   th->saveregs[ALLOCPTR_REG] = 0;
-  th->saveregs[ALLOCLIMIT_REG] = 4;
+  th->saveregs[ALLOCLIMIT_REG] = 0;
   FetchAndAdd(&(th->status),-1);
   sth->userThread = NULL;
   th->sysThread = NULL;
@@ -192,14 +199,14 @@ void thread_init()
       Threads[i].status = ThreadDone;
       Threads[i].id = i;
       Threads[i].tid = -1;
-      reset_timer(&(Threads[i].stacktime));
-      reset_timer(&(Threads[i].gctime));
-      reset_timer(&(Threads[i].majorgctime));
+      reset_timer("stacktime",&(Threads[i].stacktime));
+      reset_timer("gctime",&(Threads[i].gctime));
+      reset_timer("majorgctime",&(Threads[i].majorgctime));
     }
   for (i=0; i<NumSysThread; i++) {
     SysThreads[i].stid = i;
-    SysThreads[i].alloc = StopHeapLimit;
-    SysThreads[i].limit = StopHeapLimit;
+    SysThreads[i].alloc = StartHeapLimit;
+    SysThreads[i].limit = StartHeapLimit;
   }
   pthread_cond_init(&EmptyCond,NULL);
   pthread_mutex_init(&EmptyLock,NULL);
@@ -217,6 +224,7 @@ int thread_max()
   return maxThread;
 }
 
+/* If num_add is zero, then start_adds is a thunk */
 Thread_t *thread_create(Thread_t *parent, value_t start_adds, int num_add)
 {
   int i;
@@ -246,13 +254,23 @@ Thread_t *thread_create(Thread_t *parent, value_t start_adds, int num_add)
       th->snapshots[i].saved_regstate = 0;
       th->snapshots[i].roots = (i == 0) ? QueueCreate(0,50) : NULL;
     }
-  th->saveregs[ALLOCLIMIT_REG] = StopHeapLimit;
+  th->saveregs[ALLOCLIMIT_REG] = 0;
   th->retadd_queue = QueueCreate(0,2000);
   th->tid = totalThread++;
   if (th->stackchain == NULL)
     th->stackchain = StackChain_Alloc();
-  th->start_address = start_adds;
-  th->num_add = num_add;
+  if (num_add == 0) {
+    th->thunks = &(th->oneThunk);
+    th->oneThunk[0] = start_adds;
+    th->nextThunk = 0;
+    th->numThunk = 1;
+  }
+  else 
+    { th->thunks = start_adds;
+      th->oneThunk[0] = 0;
+      th->nextThunk = 0;
+      th->numThunk = num_add;
+    }
   th->reg_roots = QueueCreate(0,32);
   th->root_lists = QueueCreate(0,200);
   th->loc_roots = QueueCreate(0,10);
@@ -289,15 +307,9 @@ void work(SysThread_t *sth)
 
 
   assert(th->status == 1);
-  if (th->saveregs[ALLOCLIMIT_REG] == StopHeapLimit)   /* Starting thread for the first time */
+  if (th->nextThunk == 0)  /* Starting thread for the first time */
     {
-int i;
       value_t stack_top = th->stackchain->stacks[0]->top;
-for (i=64; i<128; i+=4) {
-*((int *)(stack_top-i)) = 10000 + i;
-if ((*((int *)(stack_top-i))) != (10000 + i))
-printf ("Failed at i = %d\n",i);
-}
       th->saveregs[THREADPTR_REG] = (long)th;
       th->saveregs[SP_REG] = (long)stack_top - 64; /* Get some initial room so gdb won't freak */
       th->saveregs[ALLOCPTR_REG] = sth->alloc;
@@ -307,22 +319,12 @@ printf ("Failed at i = %d\n",i);
 	printf("SysThread %d: starting user thread %d (%d) with %d < %d\n",
 	     sth->stid, th->tid, th->id, 
 	     th->saveregs[ALLOCPTR_REG], th->saveregs[ALLOCLIMIT_REG]);
-      if (th->num_add == 0) 
-	  start_client(th,&(th->start_address), 1);
 
-      else
-	{
-	  value_t *u = ((value_t *)th->start_address);
-	  value_t *v = (value_t *)(*u);
-	  printf ("addr = %d\n",u);
-	  printf ("addr[0] = %d\n",v);
-	  printf ("addr[0] = %d\n",u[1]);
-	  printf ("addr[0] = %d\n",u[2]);
-	  printf ("addr[0][0] = %d\n",v[0]);
-	  printf ("addr[0][1] = %d\n",v[1]);
-	  printf ("addr[0][2] = %d\n",v[2]);
-	  start_client(th,(value_t *)th->start_address, th->num_add);
-	}
+      printf ("alloc_ptr = %d\n", sth->alloc);
+      printf ("limit_ptr = %d\n", sth->limit);
+      th->nextThunk = 1;
+      start_client(th,(value_t *)th->thunks, th->numThunk);
+
       assert(0);
     }
   else  /* Thread not starting for first time */
@@ -375,6 +377,7 @@ void Spawn(value_t thunk)
   SysThread_t *sth = getSysThread();
   Thread_t *parent = sth->userThread;
   Thread_t *child = thread_create(parent,thunk, 0);    /* zero indicates closure */
+
   if (collector_type != Parallel) {
     printf("!!! Spawn called in a sequential collector\n");
     assert(0);

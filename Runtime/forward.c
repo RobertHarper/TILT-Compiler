@@ -496,7 +496,13 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
 
 /* ------------ These forwarding routines/macros are the ones to use --------- */
 
-
+void check_ptr(value_t *ptr)
+{
+  if (*ptr >= 42000 && *ptr <= 70000) {
+    printf("A Paranoid value failed check_ptr %d\n", *ptr);
+    assert(0);
+  }
+}
 
 value_t *forward_root_lists_minor(Queue_t *root_lists, value_t *to_ptr, 
 				 range_t *from_range, range_t *to_range)
@@ -509,6 +515,9 @@ value_t *forward_root_lists_minor(Queue_t *root_lists, value_t *to_ptr,
       for (j=0; j<qlen; j++)
 	{
 	  value_t *temp = (value_t *)QueueAccess(roots,j);
+#ifdef PARANOID
+	  check_ptr(temp);
+#endif
 	  forward_minor(temp,to_ptr,from_range);
 	  NumRoots++;
 	}
@@ -528,6 +537,9 @@ value_t *forward_root_lists_major(Queue_t *root_lists, value_t *to_ptr,
       for (j=0; j<qlen; j++)
 	{
 	  value_t *temp = (value_t *)QueueAccess(roots,j);
+#ifdef PARANOID
+	  check_ptr(temp);
+#endif
 	  forward_major(temp,to_ptr,from_range,from2_range,to_range);
 	  NumRoots++;
 	}
@@ -671,8 +683,12 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
 	  unsigned mask = GET_RECMASK(tag);
 	  cur++;
 	  for (; cur<end; cur++, mask >>= 1)
-	    if (mask & 1)
+	    if (mask & 1) {
+#ifdef PARANOID
+	      check_ptr(cur);
+#endif	      
 	      forward_major(cur,alloc_ptr,from_range,from2_range,to_range);
+	    }
 	}
       else
 	{
@@ -700,8 +716,12 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
 	  for (i=0; i<fieldlen; i++)
 	    {
 	      unsigned int mask = GET_RECMASK(rawstart[i/RECLEN_MAX]);
-	      if (mask & 1 << (i % RECLEN_MAX))
+	      if (mask & 1 << (i % RECLEN_MAX)) {
+#ifdef PARANOID
+		check_ptr(cur);
+#endif	      
 		forward_major(objstart+i,alloc_ptr,from_range,from2_range,to_range);
+	      }
 	    }
 	  cur = objstart + fieldlen;
 	}
@@ -739,7 +759,10 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
 	    cur++;
 	    while (cur < end)
 	      {
-		forward_major((cur),alloc_ptr,from_range,from2_range,to_range);
+#ifdef PARANOID
+		check_ptr(cur);
+#endif	      
+		forward_major(cur,alloc_ptr,from_range,from2_range,to_range);
 		cur++;
 	      }
 	  }
@@ -782,8 +805,12 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
 	  unsigned mask = GET_RECMASK(tag);
 	  cur++;
 	  for (; cur<end; cur++, mask >>= 1)
-	    if (mask & 1)
+	    if (mask & 1) {
+#ifdef PARANOID
+	      check_ptr(cur);
+#endif	      
 	      forward_local_minor(cur,alloc_ptr);
+	    }
 	}
       else
 	{
@@ -811,8 +838,12 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
 	  for (i=0; i<fieldlen; i++)
 	    {
 	      unsigned int mask = GET_RECMASK(rawstart[i/RECLEN_MAX]);
-	      if (mask & 1 << (i % RECLEN_MAX))
+	      if (mask & 1 << (i % RECLEN_MAX)) {
+#ifdef PARANOID
+		check_ptr(cur);
+#endif	      
 		forward_local_minor(objstart+i,alloc_ptr);
+	      }
 	    }
 	  cur = objstart + fieldlen;
 	}
@@ -847,6 +878,9 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
 	    cur++;
 	    while (cur < end)
 	      {
+#ifdef PARANOID
+		check_ptr(cur);
+#endif	      
 		forward_local_minor(cur,alloc_ptr);
 		cur++;
 	      }
@@ -890,6 +924,10 @@ value_t* scan_major(value_t start_scan, value_t *alloc_ptr, value_t *stop,
 	{
 	  if (tag == TAG_REC_TRACETRACE)
 	    {
+#ifdef PARANOID
+	      check_ptr(cur+1);
+	      check_ptr(cur+2);
+#endif	      
 	      forward_major(cur+1,alloc_ptr,from_range,from2_range,to_range);
 	      forward_major(cur+2,alloc_ptr,from_range,from2_range,to_range);
 	      cur += 3;
@@ -959,7 +997,6 @@ value_t* scan_nostop_minor(value_t start_scan, value_t *alloc_ptr,
       value_t tag = cur[0];
       value_t type= GET_TYPE(tag);
       
-
 #ifdef HEAPPROFILE
       if (proftag == SKIP_TAG)
 	  continue; /* break; */
@@ -1005,6 +1042,7 @@ value_t* scan_nostop_minor(value_t start_scan, value_t *alloc_ptr,
       else
 	alloc_ptr = scan_oneobject_minor(&cur, alloc_ptr, from_range, to_range);
     }
+  assert(cur == alloc_ptr);
   return alloc_ptr;
 }
 

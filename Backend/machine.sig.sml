@@ -56,6 +56,7 @@ signature MACHINE =
     val fp_regs       : register list
 
    val eqRegs    : register -> register -> bool
+   val eqRegs'   : register * register -> bool
    val eqLabs    : label -> label -> bool
 
    (* these functions should be used with care since careless use
@@ -82,7 +83,11 @@ signature MACHINE =
    val push : register * stacklocation -> instruction
 
    val defUse : instruction -> register list * register list
-   val cFlow : instruction -> (bool * label list) option
+
+   (* bool indicates possible fallthrough *)
+   datatype instr_flow = NOBRANCH | BRANCH of bool * label list | DELAY_BRANCH of bool * label list
+   val cFlow : instruction -> instr_flow
+
    val extern_decl : string -> string
 
 
