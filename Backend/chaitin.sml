@@ -77,12 +77,7 @@ struct
 			  else f
 
 
-   val Rdiscard = Rat
-
-
 (* ------------------------------------------------------------ *)
-
-
 
    val error = fn s => Util.error "chaitin.sml" s
 
@@ -548,7 +543,7 @@ struct
 	   let
 	     val _ = if (! debug) then emitString "AllocateBlock\n" else ()
              val pop = fn (d,l) => pop(d,fixStackOffset l)
-	     val push = fn (s,l) => push(s,fixStackOffset l)
+	     val push = fn (s,l,t) => push(s,fixStackOffset l,t)
 	       
 	     (* track live variables at each call site *)
 
@@ -582,16 +577,20 @@ struct
 
 	     fun putInRegs src_regs dst_regs =
 	       let
-	         (* Prefer to use Rat2 because the alpha may try to use Rat.
-                    We catch this and compensate, but it's less efficient
-                    and should be avoided if possible.
-                    (See code generation for multiply-by-constant.) *)
+	         (* Prefer to use Rat2 because the translation to
+                    assembler may try to use Rat.  We catch this and
+                    compensate, but it's less efficient and should be
+                    avoided if possible.  *)
 		 val itemps = [Rat2, Rat]
 		 val ftemps = [Fat2, Fat]
-		 val temps = (itemps, ftemps)
-		 val free_itemps = Listops.list_diff_eq(eqRegs',itemps, src_regs)
-		 val free_ftemps = Listops.list_diff_eq(eqRegs',ftemps, src_regs)
-		 val free_temps = (free_itemps,free_ftemps)
+		 val pre_itemps = Listops.list_diff_eq(eqRegs',itemps, src_regs)
+		 val pre_ftemps = Listops.list_diff_eq(eqRegs',ftemps, src_regs)
+		 val pre_temps = (pre_itemps,pre_ftemps)
+		 val push_temp = hd itemps
+		 val post_itemps = tl itemps
+		 val post_ftemps = ftemps
+		 val post_temps = (post_itemps,post_ftemps)
+		 val push' = fn (s,l) => push(s,l,push_temp)
 
 		 fun pickTemp r (itemps,ftemps) = 
 		     (case (r,itemps,ftemps) of
@@ -603,11 +602,12 @@ struct
 				  print "itemps are "; print_reglist itemps; print "\n";
 				  print "ftemps are "; print_reglist ftemps; print "\n";
 				  print "src_regs are "; print_reglist src_regs; print "\n";
-				  print "free_itemps are "; print_reglist free_itemps; print "\n";
-				  print "free_ftemps are "; print_reglist free_ftemps; print "\n";
+				  print "pre_itemps are "; print_reglist pre_itemps; print "\n";
+				  print "pre_ftemps are "; print_reglist pre_ftemps; print "\n";
 				  raise e))
-
-		 fun allocAny mover _ [] precode localmap = (List.concat precode, localmap)
+		 fun nextItemp (nil,_) = NONE
+		   | nextItemp (r::_, _) = SOME r
+		 fun allocAny mover temps [] precode localmap = (List.concat precode, localmap, nextItemp temps)
                    | allocAny mover temps (src :: rest) precode localmap = 
 		     (case getreg src of
 			IN_REG r => 
@@ -624,15 +624,15 @@ struct
 			  end
 		      | _ => error "putInRegs: allocAny")
 
+		 val (precode, srcmap, srctmp) = 
+		     allocAny pop pre_temps src_regs [] (Regmap.empty)
 
-		 val (precode, srcmap) = 
-		     allocAny pop free_temps src_regs [] (Regmap.empty)
-
-		 val (postcode, dstmap) = 
-		     allocAny push temps dst_regs [] (Regmap.empty)
+		 val (postcode, dstmap, _) = 
+		     allocAny push' post_temps dst_regs [] (Regmap.empty)
 	       in
 		 {precode = precode,
 		  srcmap = srcmap,
+		  srctmp = srctmp,
 		  dstmap = dstmap,
 		  postcode = postcode}
 	       end
@@ -648,7 +648,7 @@ struct
 		| BASE(RTL (JMP(Raddr,rtllabs))) => 
 		      let val fixup_code = List.concat (map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots)
 			  val (def,use) = defUse instr
-			  val {precode, srcmap, dstmap, postcode} = putInRegs use def
+			  val {precode, srcmap, srctmp, dstmap, postcode} = putInRegs use def
 			  val jump_reg = (if isPhysical Raddr then Raddr else 
 					      (case Regmap.find(srcmap,Raddr) of
 						   SOME r => r
@@ -720,7 +720,7 @@ struct
 
 			| (ML_NORMAL, INDIRECT r) =>
 			      let val (def,use) = defUse instr
-				  val {precode, srcmap, dstmap, postcode} = putInRegs use def
+				  val {precode, srcmap, srctmp, dstmap, postcode} = putInRegs use def
 				  val reg = if isPhysical r then r else 
 				  (case Regmap.find(srcmap,r) of
 				       SOME r => r
@@ -738,7 +738,7 @@ struct
 				  
 			| (ML_TAIL _, INDIRECT r) => 
 			      let val (def,use) = defUse instr
-				  val {precode, srcmap, dstmap, postcode} = putInRegs use def
+				  val {precode, srcmap, srctmp, dstmap, postcode} = putInRegs use def
 				  val reg = if isPhysical r then r else 
 				  (case Regmap.find(srcmap,r) of
 				       SOME r => r
@@ -773,14 +773,14 @@ struct
 				       then []
 				   else [BASE(MOVE(r,r'))]
 			     | (ON_STACK l,IN_REG r') => pop(r',l)
-			     | (IN_REG r,ON_STACK l') => push(r,l')
+			     | (IN_REG r,ON_STACK l') => push(r,l',Rat)
 			     | (ON_STACK l,ON_STACK l') =>
-				       pop(Rat,l) @ push(Rat,l')
+				       pop(Rat,l) @ push(Rat,l',Rat2)
 			     | _ => error "allocateInstr: MOVE"
 		       end
                  | _ =>
 			let val (def,use) = defUse instr
-			    val {precode, srcmap, dstmap, postcode} = putInRegs use def
+			    val {precode, srcmap, srctmp, dstmap, postcode} = putInRegs use def
 			    (* fs: find source *)
 			    fun fs r = if isPhysical r then r else 
 				(case Regmap.find(srcmap,r) of
@@ -791,13 +791,17 @@ struct
 					(case (Regmap.find(dstmap,r)) of
 					  NONE => raise DEAD
                                         | (SOME r) => r)
-
 		            val instr' =
 			       case instr of
 				  BASE(JSR(link, Raddr, hint, labels)) =>
 					  [BASE(JSR(link, fs Raddr,hint, labels))]
 				| BASE(RET args) => [BASE(RET args)]
-				| BASE(PUSH(src,al)) => push(fs src,al)
+				| BASE(PUSH(src,al)) =>
+					  let val tmp = (case srctmp
+							   of NONE => error "no free temporary for PUSH"
+							    | SOME t => t)
+					  in  push(fs src,al,tmp)
+					  end
 				| BASE(POP(dst,al)) => pop(fd dst,al)
 				| i => [translate_to_real_reg(i,fs,fd)]
 
@@ -835,9 +839,10 @@ struct
 
 	     val instrs_out = 
 	       instructionLoop instrs_in
-	       handle e => (print "exception in allocateBlock ignored\n";
-			    print "No vblock code will be generated.\n";
-			    [])
+	       handle e => if !debug then raise e
+			   else (print "exception in allocateBlock ignored\n";
+				 print "No vblock code will be generated.\n";
+				 [])
 
 	     val _ = if (! debug) then
 	       (emitString "block out:\n";
@@ -1039,7 +1044,7 @@ struct
 	   val reversed_i = ((std_entry_code()) @
 			     (allocate_stack_frame (stackframe_size, prevframe_maxoffset)) @
 			     [BASE(PUSH_RET(SOME(fixStackOffset RETADD_POS)))] @
-			     (List.concat (map (fn (r, i) => push(r, i)) callee_save_slots)))
+			     (List.concat (map (fn (r, i) => push(r, i, Rat)) callee_save_slots)))
 	   val ordered_i = rev (map NO_ANN reversed_i)
        in instrs := !instrs @ ordered_i
        end

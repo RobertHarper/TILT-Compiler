@@ -133,6 +133,8 @@ structure Machine =
       | SPECIFIC of specific_instruction
 
     val maxImm = 4095
+    val maxImm8 = maxImm - (maxImm mod 8)
+
     fun in_imm_range i = (i >= ~4096) andalso (i <= maxImm)
     fun in_ea_disp_range i = (i >= ~4096) andalso (i <= 4095)
 
@@ -520,51 +522,48 @@ structure Machine =
    end
 
 
-   fun defUse (SPECIFIC(STOREI (_, Rsrc, _, Raddr)))   = ([], [Rsrc, Raddr])
-      | defUse (SPECIFIC(LOADI (_, Rdest, _, Raddr)))   = ([Rdest], [Raddr])
-      | defUse (SPECIFIC(STOREF (_, Rsrc, _, Raddr)))   = ([], [Raddr,Rsrc])
-      | defUse (SPECIFIC(LOADF (_, Rdest, _, Raddr)))   = ([Rdest], [Raddr])
-      | defUse (SPECIFIC(CBRANCHI (_, _, _)))       = ([], [])
-      | defUse (SPECIFIC(CBRANCHR (_, Rsrc, _, _))) = ([], [Rsrc])
-      | defUse (SPECIFIC(CBRANCHF (_, _)))          = ([], [])
-      | defUse (BASE(BR _))                         = ([], [])
-      | defUse (BASE(BSR (_,NONE,{regs_modified,regs_destroyed,args}))) = (Rra::regs_destroyed, args)
-      | defUse (BASE(BSR (_, SOME sra, {regs_modified,regs_destroyed,args}))) = (sra::regs_destroyed, args)
-      | defUse (SPECIFIC(INTOP (opcode, Rsrc1, REGop Rsrc2, Rdest))) = ([Rdest], [Rsrc1, Rsrc2])
-      | defUse (SPECIFIC(INTOP (opcode, Rsrc1, IMMop _, Rdest))) = ([Rdest], [Rsrc1])
-      | defUse (SPECIFIC(FPOP (opcode, Fsrc1, Fsrc2, Fdest))) = ([Fdest], [Fsrc1, Fsrc2])
-      | defUse (SPECIFIC(FPMOVE (opcode, Fsrc, Fdest))) = ([Fdest], [Fsrc])
-      | defUse (BASE (Core.JSR (false, Raddr, _, _)))       = ([], [Raddr])
-      | defUse (BASE (Core.JSR (true, Raddr, _, _)))       = ([Rra], [Raddr])
-      | defUse (BASE (Core.RET (false, _)))              = ([], [Rra])
-      | defUse (BASE (Core.RET (true, _)))               = ([Rra], [Rra])
-      | defUse (SPECIFIC (TRAP _))                        = ([], [])
-      | defUse (BASE (LADDR (Rdest,_)))             = ([Rdest], [])
-      | defUse (BASE (RTL (Core.JMP (Raddr, _))))        = ([], [Raddr])
-      | defUse (BASE (RTL (CALL {func=DIRECT (_,SOME sra),args,
-				 results, ...})))   = (results, sra :: args)
-      | defUse (BASE (RTL (CALL {func=DIRECT (_,NONE), args,
-				 results, ...})))   = (results, args)
-      | defUse (BASE (RTL (CALL {func=INDIRECT reg,
-				 args, results, ...})))  = (results, reg :: args)
-      | defUse (BASE (RTL (RETURN{results})))      = ([], Rra :: results)
-      | defUse (BASE (RTL _))                      = ([], [])
-      | defUse (BASE(MOVE (Rsrc,Rdest)))           = ([Rdest],[Rsrc])
-      | defUse (BASE(PUSH (Rsrc, _)))              = ([], [Rsrc, Rsp])
-      | defUse (BASE(POP (Rdest, _)))              = ([Rdest], [Rsp])
-      | defUse (BASE(PUSH_RET (_)))                = ([], [Rra, Rsp])
-      | defUse (BASE(POP_RET (_)))                 = ([Rra], [Rsp])
-      | defUse (BASE(TAILCALL _))                  = ([], [])
-      | defUse (BASE(GC_CALLSITE _))               = ([], [])
-      | defUse (SPECIFIC NOP)                      = ([], [])
-      | defUse (SPECIFIC (SETHI (_,Rdest)))        = ([Rdest], [])
-      | defUse (SPECIFIC (WRY Rsrc))               = ([RY], [Rsrc])
-      | defUse (SPECIFIC (RDY Rdest))              = ([Rdest], [RY])
-      | defUse (SPECIFIC (CMP (Rsrc1, REGop Rsrc2)))     = ([],[Rsrc1, Rsrc2])
-      | defUse (SPECIFIC (CMP (Rsrc1, IMMop _)))     = ([],[Rsrc1])
-      | defUse (SPECIFIC (FCMPD (Rsrc1, Rsrc2)))   = ([],[Rsrc1, Rsrc2])
-      | defUse (BASE(ILABEL _))                    = ([], [])
-      | defUse (BASE(ICOMMENT _))                  = ([], [])
+   fun defUse (SPECIFIC(STOREI (_, Rsrc, _, Raddr)))                         = ([], [Rsrc, Raddr])
+     | defUse (SPECIFIC(LOADI (_, Rdest, _, Raddr)))                        = ([Rdest], [Raddr])
+     | defUse (SPECIFIC(STOREF (_, Rsrc, _, Raddr)))                        = ([], [Raddr,Rsrc])
+     | defUse (SPECIFIC(LOADF (_, Rdest, _, Raddr)))                        = ([Rdest], [Raddr])
+     | defUse (SPECIFIC(CBRANCHI (_, _, _)))                                = ([], [])
+     | defUse (SPECIFIC(CBRANCHR (_, Rsrc, _, _)))                          = ([], [Rsrc])
+     | defUse (SPECIFIC(CBRANCHF (_, _)))                                   = ([], [])
+     | defUse (BASE(BR _))                                                  = ([], [])
+     | defUse (BASE(BSR (_,NONE,{regs_modified,regs_destroyed,args})))      = (Rra::regs_destroyed, args)
+     | defUse (BASE(BSR (_,SOME sra, {regs_modified,regs_destroyed,args}))) = (sra::regs_destroyed, args)
+     | defUse (SPECIFIC(INTOP (opcode, Rsrc1, REGop Rsrc2, Rdest)))         = ([Rdest], [Rsrc1, Rsrc2])
+     | defUse (SPECIFIC(INTOP (opcode, Rsrc1, IMMop _, Rdest)))             = ([Rdest], [Rsrc1])
+     | defUse (SPECIFIC(FPOP (opcode, Fsrc1, Fsrc2, Fdest)))                = ([Fdest], [Fsrc1, Fsrc2])
+     | defUse (SPECIFIC(FPMOVE (opcode, Fsrc, Fdest)))                      = ([Fdest], [Fsrc])
+     | defUse (BASE (Core.JSR (false, Raddr, _, _)))                        = ([], [Raddr])
+     | defUse (BASE (Core.JSR (true, Raddr, _, _)))                         = ([Rra], [Raddr])
+     | defUse (BASE (Core.RET (false, _)))                                  = ([], [Rra])
+     | defUse (BASE (Core.RET (true, _)))                                   = ([Rra], [Rra])
+     | defUse (SPECIFIC (TRAP _))                                           = ([], [])
+     | defUse (BASE (LADDR (Rdest,_)))                                      = ([Rdest], [])
+     | defUse (BASE (RTL (Core.JMP (Raddr, _))))                            = ([], [Raddr])
+     | defUse (BASE (RTL (CALL {func=DIRECT (_,SOME sra),args, results,...}))) = (results, sra :: args)
+     | defUse (BASE (RTL (CALL {func=DIRECT (_,NONE), args,results,...})))  = (results, args)
+     | defUse (BASE (RTL (CALL {func=INDIRECT reg,args,results,...})))      = (results, reg :: args)
+     | defUse (BASE (RTL (RETURN{results})))                                = ([], Rra :: results)
+     | defUse (BASE (RTL _))                                                = ([], [])
+     | defUse (BASE(MOVE (Rsrc,Rdest)))                                     = ([Rdest],[Rsrc])
+     | defUse (BASE(PUSH (Rsrc, _)))                                        = ([], [Rsrc, Rsp])
+     | defUse (BASE(POP (Rdest, _)))                                        = ([Rdest], [Rsp])
+     | defUse (BASE(PUSH_RET (_)))                                          = ([], [Rra, Rsp])
+     | defUse (BASE(POP_RET (_)))                                           = ([Rra], [Rsp])
+     | defUse (BASE(TAILCALL _))                                            = ([], [])
+     | defUse (BASE(GC_CALLSITE _))                                         = ([], [])
+     | defUse (SPECIFIC NOP)                                                = ([], [])
+     | defUse (SPECIFIC (SETHI (_,Rdest)))                                  = ([Rdest], [])
+     | defUse (SPECIFIC (WRY Rsrc))                                         = ([RY], [Rsrc])
+     | defUse (SPECIFIC (RDY Rdest))                                        = ([Rdest], [RY])
+     | defUse (SPECIFIC (CMP (Rsrc1, REGop Rsrc2)))                         = ([],[Rsrc1, Rsrc2])
+     | defUse (SPECIFIC (CMP (Rsrc1, IMMop _)))                             = ([],[Rsrc1])
+     | defUse (SPECIFIC (FCMPD (Rsrc1, Rsrc2)))                             = ([],[Rsrc1, Rsrc2])
+     | defUse (BASE(ILABEL _))                                              = ([], [])
+     | defUse (BASE(ICOMMENT _))                                            = ([], [])
 
 
    datatype instr_flow = NOBRANCH | BRANCH of bool * label list | DELAY_BRANCH of bool * label list
@@ -664,9 +663,28 @@ structure Machine =
       end
    fun extern_decl s = ""
 
+   (* On the SPARC, the OS can save some state to the top of the stack
+      when entering the kernel.  Since an interrupt can occur at any
+      time, we must maintain some invariants:
+
+      (1) SP must always be 8-byte aligned.
+
+      (2) SP must point into stack space and we must not depend on the
+          contents of the memory at the top of the stack (which can be
+          clobbered at any time).
+    *)
+
+   (* check_not_sp : register -> unit *)
+   fun check_not_sp r = if eqRegs'(r,Rsp)
+			    then error ("attempt to violate stack invariatns")
+			else ()
+
    (* load_imm' : word * register -> instruction list *)
+   (* Rdest may not be SP: Between SETHI and OR in the general case,
+      SP may violate invariant (2).  *)
    fun load_imm' (immed, Rdest) =
-       let 
+       let
+	   val _ = check_not_sp Rdest
 	   (* SETHI sets the upper 22 bits and zeroes the low 10 bits; 
 	      OR can take a 13-bit signed immediate *)
 	   val high20 = w2i(W.rshifta(immed, 12))
@@ -688,6 +706,12 @@ structure Machine =
 
    (* bumpReg : register * int * register -> instruction list *)
    (* r = r + offset (destroys rtemp), where offset can be large *)
+
+   (* In order to maintain the stack invariants, we assume that if r
+      is SP, then offset is aligned and it is safe to clobber the
+      memory between SP and SP+offset.  When bumpReg is used for stack
+      frame (de)allocation, this assumption is justified.  *)
+  
    fun bumpReg (_, 0, _) = nil
      | bumpReg (r, offset, rtemp) =
        let val (intop, sz) = if offset > 0
@@ -697,9 +721,11 @@ structure Machine =
 	   if in_imm_range sz then	(* one instruction *)
 	       [SPECIFIC(INTOP(intop, r, IMMop (INT sz), r))]
 	   else
-	       if sz <= 2 * maxImm then	(* two instructions *)
-		   [SPECIFIC(INTOP(intop, r, IMMop (INT maxImm), r)),
-		    SPECIFIC(INTOP(intop, r, IMMop (INT (sz - maxImm)), r))]
+	       if sz <= maxImm8 + maxImm then (* two instructions *)
+		   [SPECIFIC(INTOP(intop, r, IMMop (INT maxImm8), r)),
+		    (* If r is SP, then memory at SP `intop`
+		       maxImm8 can be clobbered.  *)
+		    SPECIFIC(INTOP(intop, r, IMMop (INT (sz - maxImm8)), r))]
 	       else			(* two or three instructions *)
 		   load_imm' (i2w sz, rtemp) @
 		   [SPECIFIC(INTOP(intop, r, REGop rtemp, r))]
@@ -739,146 +765,70 @@ structure Machine =
    fun std_return_code(NONE) = []
      | std_return_code(SOME sra) = []
 
-   (* Largest immediate value that is divisble by four.  We perform
-      loads and stores after advance_base_register so we need to worry
-      about alignment.  *)
-   val maxOffset = maxImm - (maxImm mod 4)
-
-   (* advance_base_register : register * int -> int * instruction list * instruction list *)
-   fun advance_base_register (Rbase, sz) =
-       let
-	   val max = IMMop (INT maxOffset)
-	   val add = SPECIFIC (INTOP (ADD, Rbase, max, Rbase))
-	   val sub = SPECIFIC (INTOP (SUB, Rbase, max, Rbase))
-	   fun loop (x as (sz, adds, subs)) =
-	       if in_ea_disp_range sz then x
-	       else loop (sz - maxOffset, add :: adds, sub :: subs)
-       in  loop (sz, nil, nil)
-       end
-
-   (* select : 'a list list -> 'a list *)
-   fun select nil = nil
-     | select (seq :: seqs) =
-       let
-	   fun loop (nil, _, bestSeq) = bestSeq
-	     | loop (seq :: seqs, bestLen, bestSeq) =
-	       let val len = length seq
-	       in  if len < bestLen then loop (seqs, len, seq)
-		   else loop (seqs, bestLen, bestSeq)
-	       end
-       in  loop (seqs, length seq, seq)
-       end
-
-   (* large_operation : ('a * register * imm * register -> specific_instruction)
-                      -> 'a * register * int * register
-                      -> instruction list
-   *)
-   (* 
+   (* reduce_offset : register * int * register * (register * int -> instruction list) -> instruction list *)
+   (*
       Generic support for integer and floating point loads and stores
       with effective addresses of the form base register + large
       offset.
+
+      Note that the code generated for large offsets is not optimal
+      because STOREI, LOADI, STOREF, and LOADF don't support using a
+      second source register.  (This is a legal addressing mode on the
+      SPARC.)  We should perhaps make the load and store instructions
+      take an "operand" rather than an "imm".
+	      
+      For example, we want to write
+
+	        sethi   %hi(offset),%rtmp       ! one- or two- instruction
+	        or      %rtmp,%lo(offset),%rtmp ! sequence to load 32-bit immediate
+	        stw     %r, [%sp + %rtmp]
+
+      we have written
+	      
+	        sethi   %hi(offset),%rtmp       ! one- or two- instruction
+	        or      %rtmp,%lo(offset),%rtmp ! sequence to load 32-bit immediate
+		add     %sp, %rtmp, %rtmp
+	        stw     %r, [%rtmp + 0]
    *)
-   fun large_operation inject (instr, Rdest, offset, Rbase) =
+   fun reduce_offset (base, offset, temp, f) =
        if in_ea_disp_range offset then
-	   [SPECIFIC (inject (instr, Rdest, INT offset, Rbase))]
+	   f(base, offset)
        else
-	   let val (remainder, advance, decline) = advance_base_register (Rbase, offset)
-	   in  advance @
-	       [SPECIFIC (inject (instr, Rdest, INT remainder, Rbase))] @
-	       decline
-	   end
+	   List.concat [load_imm' (i2w offset, temp),
+			[SPECIFIC(INTOP(ADD,base,REGop temp,temp))],
+			f(temp, 0)]
 
-   (* large_storei : storei_instruction * register * int * register -> instruction list *)
-   val large_storei = large_operation STOREI
-
-   (* large_storei_pair : storei_instruction * register * int * register -> instruction list *)
-   fun large_storei_pair (instr, Rdest as (R n), offset, Rbase) =
-       if in_ea_disp_range (offset + 4) then
-	   [SPECIFIC (STOREI (instr, Rdest,   INT offset,       Rbase)),
-	    SPECIFIC (STOREI (instr, R (n+1), INT (offset + 4), Rbase))]
-       else
-	   let val (remainder, advance, decline) = advance_base_register (Rbase, offset + 4)
-	   in  advance @
-	       [SPECIFIC (STOREI (instr, Rdest,   INT (remainder - 4), Rbase)),
-		SPECIFIC (STOREI (instr, R (n+1), INT remainder,       Rbase))] @
-	       decline
-	   end
-
-   (* large_loadi : loadi_instruction * register * int * register -> instruction list *)
-   (* We have a temporary register (Rdest) and can improve over large_operation. *)
-   fun large_loadi (instr, Rdest, offset, Rbase) =
-       if in_ea_disp_range offset then
-	   [SPECIFIC (LOADI (instr, Rdest, INT offset, Rbase))]
-       else
-	   let
-	       val (remainder, advance, decline) = advance_base_register (Rbase, offset)
-	       val sequence0 = (advance @
-				[SPECIFIC (LOADI (instr, Rdest, INT remainder, Rbase))] @
-				decline)
-		   
-	       val sequence1 = (load_imm' (i2w (offset - maxOffset), Rdest) @
-				[SPECIFIC (INTOP (ADD,   Rbase, REGop Rdest,    Rdest)),
-				 SPECIFIC (LOADI (instr, Rdest, INT maxOffset,  Rdest))])
-
-	       val (remainder, advance, _) = advance_base_register (Rdest, offset - maxOffset)
-	       val sequence2 = ([SPECIFIC (INTOP (ADD,   Rbase, IMMop (INT maxOffset), Rdest))] @
-				advance @
-				[SPECIFIC (LOADI (instr, Rdest, INT remainder,         Rdest))])
-	   in
-	       select [sequence0, sequence1, sequence2]
-	   end
-
-   (* large_loadi_pair : loadi_instruction * register * int * register -> instruction list *)
-   fun large_loadi_pair (instr, Rdest as (R n), offset, Rbase) =
-       if in_ea_disp_range (offset + 4) then
-	   [SPECIFIC (LOADI (instr, Rdest,   INT offset,       Rbase)),
-	    SPECIFIC (LOADI (instr, R (n+1), INT (offset + 4), Rbase))]
-       else
-	   let
-	       val Rdest' = R (n+1)
-	       val offset' = offset + 4
-		   
-	       val (remainder, advance, decline) = advance_base_register (Rbase, offset')
-	       val sequence0 = (advance @
-				[SPECIFIC (LOADI (instr, Rdest,  INT (remainder - 4), Rbase)),
-				 SPECIFIC (LOADI (instr, Rdest', INT remainder,       Rbase))] @
-				decline)
-
-	       val sequence1 = (load_imm' (i2w (offset' - maxOffset), Rdest') @
-				[SPECIFIC (INTOP (ADD,   Rbase,  REGop Rdest',        Rdest')),
-				 SPECIFIC (LOADI (instr, Rdest,  INT (maxOffset - 4), Rdest')),
-				 SPECIFIC (LOADI (instr, Rdest', INT maxOffset,       Rdest'))])
-
-	       val (remainder, advance, _) = advance_base_register (Rdest', offset' - maxOffset)
-	       val sequence2 = ([SPECIFIC (INTOP (ADD,   Rbase,  IMMop (INT maxOffset),  Rdest'))] @
-				advance @
-				[SPECIFIC (LOADI (instr, Rdest,  INT (remainder - 4),    Rdest')),
-				 SPECIFIC (LOADI (instr, Rdest', INT remainder,          Rdest'))])
-	   in
-	       select [sequence0, sequence1, sequence2]
-	   end
-
-   (* large_storef : storef_instruction * register * int * register -> instruction list *)
-   val large_storef = large_operation STOREF
-					   
-   (* large_loadf : loadf_instruction * register * int * register -> instruction list *)
-   val large_loadf = large_operation LOADF
-
-   fun push (src,actual_location) =
-       (case (src,actual_location)
-	  of (R n, ACTUAL8 offset) => large_storei_pair (ST,   src, offset, Rsp)
-	   | (R _, ACTUAL4 offset) => large_storei      (ST,   src, offset, Rsp)
-	   | (F _, ACTUAL8 offset) => large_storef      (STDF, src, offset, Rsp)
-	   | (F _, ACTUAL4 offset) => large_storef      (STF,  src, offset, Rsp)
-	   | _ => error "push")
-
-   fun pop (dst,actual_location) = 
-       (case (dst,actual_location)
-	  of (R n,ACTUAL8 offset) => large_loadi_pair (LD,   dst, offset, Rsp)
-	   | (R _,ACTUAL4 offset) => large_loadi      (LD,   dst, offset, Rsp)
-	   | (F _,ACTUAL8 offset) => large_loadf      (LDDF, dst, offset, Rsp)
-	   | (F _,ACTUAL4 offset) => large_loadf      (LDF,  dst, offset, Rsp)
-	   | _ => error "pop")
+   fun push (src,actual_location,tmp) =
+       let val reduce_offset = fn (offset, f) => reduce_offset (Rsp, offset, tmp, f)
+       in
+	   (case (src,actual_location)
+	      of (R n, ACTUAL8 offset) => reduce_offset (offset + 4, fn (base, offset) =>
+							 [SPECIFIC(STOREI(ST,   src,     INT (offset-4), base)),
+							  SPECIFIC(STOREI(ST,   R (n+1), INT offset,     base))])
+	       | (R _, ACTUAL4 offset) => reduce_offset (offset, fn (base, offset) =>
+							 [SPECIFIC(STOREI(ST,   src,     INT offset,     base))])
+	       | (F _, ACTUAL8 offset) => reduce_offset (offset, fn (base, offset) =>
+							 [SPECIFIC(STOREF(STDF, src,     INT offset,     base))])
+	       | (F _, ACTUAL4 offset) => reduce_offset (offset, fn (base, offset) =>
+							 [SPECIFIC(STOREF(STF,  src,     INT offset,     base))])
+	       | _ => error "push")
+       end
+   
+   fun pop (dst,actual_location) =
+       let val reduce_offset = fn (offset, f) => reduce_offset (Rsp, offset, dst, f)
+       in
+	   (case (dst,actual_location)
+	      of (R n,ACTUAL8 offset) => reduce_offset (offset + 4, fn (base, offset) =>
+							[SPECIFIC(LOADI(LD, R (n+1), INT offset,     base)),
+							 SPECIFIC(LOADI(LD, dst,     INT (offset-4), base))])
+	       | (R _,ACTUAL4 offset) => reduce_offset (offset, fn (base, offset) =>
+							[SPECIFIC(LOADI(LD,   dst,   INT offset,     base))])
+	       | (F _,ACTUAL8 offset) => reduce_offset (offset, fn (base, offset) =>
+							[SPECIFIC(LOADF(LDDF, dst,   INT offset,     base))])
+	       | (F _,ACTUAL4 offset) => reduce_offset (offset, fn (base, offset) =>
+							[SPECIFIC(LOADF(LDF,  dst,   INT offset,     base))])
+	       | _ => error "pop")
+       end
 
   fun assign2s (IN_REG r) = msReg r
     | assign2s (ON_STACK s) = "STACK:" ^ (msStackLocation s)

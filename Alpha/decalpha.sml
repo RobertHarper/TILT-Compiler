@@ -709,44 +709,43 @@ structure Machine =
    fun std_return_code(NONE) = [SPECIFIC(LOADI(LDGP, Rgp, 0, Rra))]
      | std_return_code(SOME sra) = [SPECIFIC(LOADI(LDGP, Rgp, 0, sra))]
 
-   (* load_addr : register * int * register -> instruction list *)
-   (* Rdest = Rsrc + offset *)
-   fun load_addr (Rsrc, offset, Rdest) =
-       load_imm' (i2w offset, Rdest) @
-       [SPECIFIC(INTOP(ADDL, Rsrc, REGop Rdest, Rdest))]
-       
-   (* large_offset : ('a * register * imm * register -> specific_instruction)
-                   -> 'a * register * int * register
-                   -> instruction list
-      Loads and stores with effective addresses of the form
-      register + large offset where a large offset can exceed
-      in_ea_disp_range (trashes Rat).
+   (* reduce_offset : register * int * register * (register * int -> instruction list) -> instruction list *)
+   (*
+      Generic support for integer and floating point loads and stores
+      with effective addresses of the form base register + large
+      offset.
    *)
-   fun large_offset inject (instr, Rsrc, offset, Rdest) =
+   fun reduce_offset (base, offset, temp, f) =
        if in_ea_disp_range offset then
-	   [SPECIFIC (inject (instr, Rsrc, offset, Rdest))]
+	   f(base, offset)
        else
-	   load_addr (Rsrc, offset, Rat) @
-	   [SPECIFIC (inject (instr, Rat, 0, Rdest))]
+	   List.concat [load_imm' (i2w offset, temp),
+			[SPECIFIC(INTOP(ADDL,base,REGop temp,temp))],
+			f(temp, 0)]
+       
+   fun push (src,actual_location,tmp) =
+       let val reduce_offset = fn (offset,f) => reduce_offset (Rsp, offset, tmp, f)
+       in
+	   case (src,actual_location)
+	     of (R _, ACTUAL8 offset) => reduce_offset(offset,fn (base,offset) => [SPECIFIC(STOREI(STQ, src, offset, base))])
+	      | (R _, ACTUAL4 offset) => reduce_offset(offset,fn (base,offset) => [SPECIFIC(STOREI(STL, src, offset, base))])
+	      | (F _, ACTUAL8 offset) => reduce_offset(offset,fn (base,offset) => [SPECIFIC(STOREF(STT, src, offset, base))])
+	      | _ => error "push"
+       end
 
-   val storei = large_offset STOREI
-   val storef = large_offset STOREF
-   val loadi = large_offset LOADI
-   val loadf = large_offset LOADF
-
-   fun push (src,actual_location) =
-       case (src,actual_location)
-       of (R _, ACTUAL8 offset) => storei(STQ, src, offset, Rsp)
-        | (R _, ACTUAL4 offset) => storei(STL, src, offset, Rsp)
-	| (F _, ACTUAL8 offset) => storef(STT, src, offset, Rsp)
-	| _ => error "push"
-
-   fun pop (dst,actual_location) = 
-       case (dst,actual_location)
-       of (R _,ACTUAL8 offset) => loadi(LDQ, dst, offset, Rsp)
-        | (R _,ACTUAL4 offset) => loadi(LDL, dst, offset, Rsp)
-	| (F _,ACTUAL8 offset) => loadf(LDT, dst, offset, Rsp)
-	| _ => error "allocateBlock: pop"
+   fun pop (dst,actual_location) =
+       let val reduce_offset = fn (offset,f) => reduce_offset (Rsp, offset, dst, f)
+       in
+	   (* XXX: Compare to the SPARC case analagous to LDQ: There,
+	      we are careful to load the dst+1 register before loading
+	      the dst register because base may be dst.  This
+	      sequence needs to be checked. *)
+	   case (dst,actual_location)
+	     of (R _,ACTUAL8 offset) => reduce_offset(offset,fn (base,offset) => [SPECIFIC(LOADI(LDQ, dst, offset, base))])
+	      | (R _,ACTUAL4 offset) => reduce_offset(offset,fn (base,offset) => [SPECIFIC(LOADI(LDL, dst, offset, base))])
+	      | (F _,ACTUAL8 offset) => reduce_offset(offset,fn (base,offset) => [SPECIFIC(LOADF(LDT, dst, offset, base))])
+	      | _ => error "pop"
+       end
 
 
   fun assign2s (IN_REG r) = msReg r

@@ -84,7 +84,7 @@ signature MACHINE =
    val std_entry_code : unit -> instruction list
 
    val pop  : register * stacklocation -> instruction list
-   val push : register * stacklocation -> instruction list
+   val push : register * stacklocation * register -> instruction list
 
    val defUse : instruction -> register list * register list
 
