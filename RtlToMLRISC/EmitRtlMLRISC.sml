@@ -28,7 +28,9 @@ functor EmitRtlMLRISC(
 	  structure StackFrame:		 STACK_FRAME
 	  structure TraceTable:		 TRACETABLE
 
-	  sharing type IntegerConvention.id =
+	  sharing type CallConventionBasis.assignment =
+		       ExternalConvention.assignment
+	      and type IntegerConvention.id =
 		       CallConventionBasis.id =
 		       ExternalConvention.id =
 		       FloatAllocation.id =
@@ -263,6 +265,11 @@ functor EmitRtlMLRISC(
        *)
       val integerMin = ref 0
       val floatMin   = ref 0
+
+      (*
+       * The assignment for the registers saved by the current procedure.
+       *)
+      val savesRef = ref(CallConventionBasis.assignNew [])
     in
       (*
        * Start a new procedure with a given stack frame.
@@ -303,6 +310,13 @@ functor EmitRtlMLRISC(
 	    in
 	      fn id => id>=min andalso id<max
 	    end
+
+      (*
+       * Change/return save assignment of the current procedure.
+       * saves -> the new save assignment
+       *)
+      fun setSaves saves = savesRef := saves
+      fun saves()	 = !savesRef
     end
 
   end
@@ -1149,9 +1163,11 @@ functor EmitRtlMLRISC(
     fun RETURN _ =
 	  raise InvalidRtl "should have been translated to a branch"
 
-    fun SAVE_CS _ = []
+    fun SAVE_CS _ =
+	  [MLTree.CODE(CallConventionBasis.setAssignment(Procedure.saves()))]
 
-    val RESTORE_CS = []
+    val RESTORE_CS =
+	  [MLTree.CODE(CallConventionBasis.getAssignment(Procedure.saves()))]
 
     val END_SAVE = []
 
@@ -1612,7 +1628,7 @@ functor EmitRtlMLRISC(
 	       (*
 		* Start translating a new procedure.
 		* stack frame must be created before any registers are mapped
-		* current frame must be set before any rtl is translated
+		* procedure must be opened before any rtl is translated
 		*)
 	       val frame = StackFrame.frame()
 
@@ -1633,6 +1649,15 @@ functor EmitRtlMLRISC(
 	       val saves'     = RegisterSet.translateCall saves
 
 	       (*
+		* assign callee-save registers to pseudo-registers
+		*)
+	       val saves'' = ExternalConvention.save saves'
+	       val live	   = ExternalConvention.integerSave saves''
+
+	       val _ = Procedure.setSaves saves''
+	       val _ = app assignCallee live
+
+	       (*
 		* translate the body of the procedure
 		*)
 	       val body = foldr (splice translateInstruction) [] instructions'
@@ -1640,11 +1665,6 @@ functor EmitRtlMLRISC(
 	       (*
 		* generate code to enter and exit the procedure
 		*)
-	       val saves'' = ExternalConvention.save saves'
-	       val live	   = ExternalConvention.integerSave saves''
-
-	       val _ = app assignCallee live
-
 	       val enter =
 		     [MLTree.PSEUDO_OP(MLRISCPseudo.ProcedureHeader label')]@
 		     ExternalConvention.enter frame (arguments', saves'', body)
