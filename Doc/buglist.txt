@@ -13,3 +13,6 @@ fun mem_assoc dummy =
   let fun mem_rec (x : bool) : bool = (mem_rec x) 
   in mem_rec
   end
+
+(4) need to do syntax datatype xxx = datatype yyy
+	then need to put it back in bool structure
