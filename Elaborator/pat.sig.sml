@@ -7,6 +7,7 @@ signature PAT =
     val debug : bool ref
     val do_result_type : bool ref
 
+    (* We avoid mutual dependencies by installing functions at run-time. *)
     val installHelpers: {typecompile : Il.context * Ast.ty -> Il.con,
 			 expcompile : Il.context * Ast.exp -> Il.exp * Il.con * bool,
 			 polyinst : Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list}

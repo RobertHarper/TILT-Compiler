@@ -3,6 +3,8 @@
 structure LinkIl :> LINKIL  = 
     struct
 
+	(* Resolve mutual dependencies by installing functions here *)
+
 	val _ = IlStatic.installHelpers {eq_compile = Toil.xeq}
 	val _ = IlContext.installHelpers {eq_con = IlStatic.eq_con}
 	val _ = Pat.installHelpers {typecompile = Toil.typecompile,
