@@ -186,11 +186,11 @@ struct
 	  (case module of
 	     MOD_VAR var => pp_var var
 	   | MOD_STRUCTURE sbnds => pp_list (pp_sbnd seen) sbnds ("STR[",", ","]", true)
-	   | MOD_FUNCTOR (v,s1,m,s2) => HOVbox[String "FUNC(",
+	   | MOD_FUNCTOR (a,v,s1,m,s2) => HOVbox[String "FUNC(",
 					       pp_var v,
-					       String ", ",
+					       String ": ",
 					       pp_signat seen s1,
-					       String ", ", Break,
+					       pp_arrow a, Break,
 					       pp_mod seen m, Break,
 					       String ": ", Break,
 					       pp_signat seen s2,

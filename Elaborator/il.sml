@@ -91,7 +91,7 @@ structure Il :> IL =
                  | KIND_INLINE of kind * con
     and      mod = MOD_VAR of var
                  | MOD_STRUCTURE of sbnd list
-                 | MOD_FUNCTOR of var * signat * mod * signat
+                 | MOD_FUNCTOR of arrow * var * signat * mod * signat
                  | MOD_APP of mod * mod
                  | MOD_PROJECT of mod * label
                  | MOD_SEAL of mod * signat

@@ -616,7 +616,8 @@ struct
 	    (case m of
 		 MOD_VAR v => (blastOutChoice 0; blastOutVar v)
 	       | MOD_STRUCTURE sbnds => (blastOutChoice 1; blastOutSbnds sbnds)
-	       | MOD_FUNCTOR (v,s1,m,s2) => (blastOutChoice 2; blastOutVar v; 
+	       | MOD_FUNCTOR (a,v,s1,m,s2) => (blastOutChoice 2; 
+					     blastOutArrow a; blastOutVar v; 
 					     blastOutSig s1; blastOutMod m;
 					     blastOutSig s2)
 	       | MOD_APP (m1,m2) => (blastOutChoice 3; blastOutMod m1; blastOutMod m2)
@@ -637,7 +638,8 @@ struct
 		     case (blastInChoice()) of
 		 0 => MOD_VAR(blastInVar ())
 	       | 1 => MOD_STRUCTURE(blastInSbnds ())
-	       | 2 => MOD_FUNCTOR(blastInVar (), blastInSig (), blastInMod (), blastInSig ())
+	       | 2 => MOD_FUNCTOR(blastInArrow(), blastInVar (), 
+				  blastInSig (), blastInMod (), blastInSig ())
 	       | 3 => MOD_APP (blastInMod (), blastInMod ())
 	       | 4 => MOD_PROJECT (blastInMod (), blastInLabel ())
 	       | 5 => MOD_SEAL (blastInMod (), blastInSig ())
@@ -879,7 +881,8 @@ struct
 	fun eq_mod' (vm,MOD_VAR v,MOD_VAR v') = VM.eq_var(vm,v,v')
 	  | eq_mod' (vm,MOD_PROJECT(m1,l1),MOD_PROJECT(m2,l2)) = 
 	    eq_mod(vm,m1,m2) andalso Name.eq_label(l1,l2)
-	  | eq_mod' (vm,MOD_FUNCTOR(v1,s1,m1,s1'),MOD_FUNCTOR(v2,s2,m2,s2')) = 
+	  | eq_mod' (vm,MOD_FUNCTOR(a1,v1,s1,m1,s1'),MOD_FUNCTOR(a2,v2,s2,m2,s2')) = 
+	    a1 = a2 andalso
 	    eq_signat (vm,s1,s2) andalso eq_mod(VM.add(v1,v2,vm),m1,m2) andalso
 	    eq_signat (vm,s1',s2')
 	  | eq_mod' (vm,MOD_STRUCTURE sbnds1,MOD_STRUCTURE sbnds2) = eq_sbnds(vm,sbnds1,sbnds2)

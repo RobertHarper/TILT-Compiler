@@ -201,11 +201,11 @@ fun show_state ({modunself,...}:state) =
        and SelfifyMod (state:state,selfify) (popt: path option, module : mod) : mod = 
 	   let val x = 5
 	   in (case module of
-		   MOD_FUNCTOR (v,s1,m,s2) => 
+		   MOD_FUNCTOR (a,v,s1,m,s2) => 
 		       let val s1' = SelfifySig (state,selfify) (NONE,s1)
 			   val s2' = SelfifySig (state,selfify) (NONE,s2)
 			   val m' = SelfifyMod (state,selfify) (NONE,m)
-		       in  MOD_FUNCTOR(v,s1',m',s2')
+		       in  MOD_FUNCTOR(a,v,s1',m',s2')
 		       end
 		 | (MOD_STRUCTURE sbnds) =>
 		       let val sbnds = do_sbnds (popt,selfify) (state, sbnds)
@@ -1461,12 +1461,16 @@ fun show_state ({modunself,...}:state) =
 	       val res = SIGNAT_STRUCTURE(NONE,sdecs)
 	   in (va,res)
 	   end
-     | MOD_FUNCTOR (v,s,m,s2) => 
+     | MOD_FUNCTOR (a,v,s,m,s2) => 
 	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,false,SelfifySig ctxt (PATH(v,[]), s)))
 	       val (va,signat) = GetModSig(m,ctxt')
+	       val a = 
+		case a of
+		 TOTAL => if va then TOTAL 
+			else error "TOTAL annotation on non-valuable functor"
+		| PARTIAL => a
 	       (* check equivalence of s2 and signat *)
-	   in  (true,SIGNAT_FUNCTOR(v,s,s2,
-				    (if va then TOTAL else PARTIAL)))
+	   in  (true,SIGNAT_FUNCTOR(v,s,s2,a))
 	   end
      | MOD_APP (a,b) => 
 	   let val _ = debugdo (fn () => (print "\n\nMOD_APP case in GetModSig\n";

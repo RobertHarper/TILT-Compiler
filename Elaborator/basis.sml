@@ -79,7 +79,7 @@ structure Basis
 					     IlStatic.SelfifyDec empty_context
 					       (DEC_MOD(argvar,false,argsig)))
 		  val inner_sig = IlStatic.GetModSig(ctxt,resmod)
-		  val m = MOD_FUNCTOR(argvar,argsig,resmod,inner_sig)
+		  val m = MOD_FUNCTOR(TOTAL,argvar,argsig,resmod,inner_sig)
 		  val s = SIGNAT_FUNCTOR(argvar,argsig,inner_sig,TOTAL)
 	      in result := add_context_inline(!result,mk_var_lab str, 
 					      fresh_named_var str, INLINE_MODSIG(true,m,s))

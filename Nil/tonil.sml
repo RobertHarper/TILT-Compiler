@@ -889,9 +889,12 @@ end (* local defining splitting context *)
 	    context  = context}
        end
 
-     | xmod' context (Il.MOD_FUNCTOR(var_arg, il_arg_signat, ilmod_body, ilmod_signat), 
+     | xmod' context (Il.MOD_FUNCTOR(arrow,var_arg, il_arg_signat, ilmod_body, ilmod_signat), 
 		    preferred_name) =
        let
+
+	   val effect = xeffect arrow
+
 	   (* Pick the name of the result *)
 	   val (var_fun, var_fun_c, var_fun_r, context) = 
 	       chooseName (preferred_name, context)
@@ -949,8 +952,6 @@ end (* local defining splitting context *)
 
 	   val cbnd_body_cat = APPEND[cbnd_preproject_cat, cbnd_body_cat]
 	   val ebnd_body_cat = APPEND[ebnd_preproject_cat, ebnd_body_cat]
-
-	   val (arrow, effect) = (Il.PARTIAL, Partial)
 
            val cbnds_body = flattenCatlist cbnd_body_cat
            val ebnds_body = flattenCatlist ebnd_body_cat
@@ -1179,7 +1180,7 @@ end (* local defining splitting context *)
 				Il.BND_MOD
 				(top_var, is_poly, m as 
 				 Il.MOD_FUNCTOR
-				 (poly_var, il_arg_signat, 
+				 (_, poly_var, il_arg_signat, 
 				  Il.MOD_STRUCTURE
 				  [Il.SBND(it_lbl,
 					   Il.BND_EXP

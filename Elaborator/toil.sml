@@ -452,7 +452,7 @@ structure Toil
 			  elab_error "Failed rule 24 Sig_IsSub")
 	    val exp = (case (mod_poly,module) of
 			   (MOD_STRUCTURE sbnds,
-			    MOD_FUNCTOR(v,SIGNAT_STRUCTURE sdecs,
+			    MOD_FUNCTOR(_,v,SIGNAT_STRUCTURE sdecs,
 					MOD_STRUCTURE[SBND(it_maybe,BND_EXP(_,e))],_)) =>
 			       if (eq_label(it_lab,it_maybe))
 				   then
@@ -1068,7 +1068,7 @@ structure Toil
 			     val sbnd = SBND(it_lab, BND_EXP(inner,exp))
 			     val sdec = SDEC(it_lab, DEC_EXP(inner,con))
 			     val inner_sig = SIGNAT_STRUCTURE(NONE, [sdec])
-			     val functor_mod = MOD_FUNCTOR(var_poly,sig_poly,
+			     val functor_mod = MOD_FUNCTOR(TOTAL,var_poly,sig_poly,
 							   MOD_STRUCTURE[sbnd],inner_sig)
 			     val functor_sig = 
 				 SIGNAT_FUNCTOR(var_poly,sig_poly,
@@ -1197,6 +1197,7 @@ structure Toil
 			    let val extra_dec = DEC_MOD(var_poly, false,SIGNAT_STRUCTURE (NONE,poly_sdecs))
 			    in  eq_table_pop extra_dec
 			    end
+		        val a = if is_irrefutable then TOTAL else PARTIAL
 		    in
 			(case poly_sdecs of
 			     [] => map2 (fn (sbnd,sdec) => (SOME sbnd, CONTEXT_SDEC sdec)) (sbnds,sdecs)
@@ -1216,21 +1217,19 @@ structure Toil
 					     val temp_sig = SIGNAT_STRUCTURE(NONE,
 									     [SDEC(it_lab,
 										   DEC_EXP(inner_var,c))])
-					     val bnd = BND_MOD(outer_var,true,MOD_FUNCTOR(var_poly,sig_poly,temp_mod,temp_sig))
+					     val bnd = BND_MOD(outer_var,true,
+								MOD_FUNCTOR(a,var_poly,sig_poly,
+									    temp_mod,temp_sig))
 					     val dec = DEC_MOD(outer_var,true,
 							       SIGNAT_FUNCTOR(var_poly,sig_poly,
-									      temp_sig,
-									      	   if is_irrefutable 
-										       then TOTAL else PARTIAL))
+									      temp_sig, a))
 					 in (SBND(l,bnd),SDEC(l,dec))
 					 end
-				     val temp_mod = MOD_FUNCTOR(var_poly,sig_poly,
+				     val temp_mod = MOD_FUNCTOR(a,var_poly,sig_poly,
 								MOD_STRUCTURE sbnds,
 								SIGNAT_STRUCTURE(NONE, sdecs))
 				     val temp_sig = SIGNAT_FUNCTOR(var_poly,sig_poly,
-								   SIGNAT_STRUCTURE(NONE, sdecs),
-								   if is_irrefutable 
-								       then TOTAL else PARTIAL)
+								   SIGNAT_STRUCTURE(NONE, sdecs), a)
 				     val rest_sbnds_sdecs = map2 mod_sig_help (labs,cons)
 				     val final_sbnds = ((SBND(lbl',BND_MOD(var',true,temp_mod)))::
 							(map #1 rest_sbnds_sdecs))
@@ -1428,7 +1427,7 @@ structure Toil
 								    [SDEC(it_lab,
 									  DEC_EXP(v2,eq_con))])
 					  val innermod =
-					      MOD_FUNCTOR(vp,sigpoly,
+					      MOD_FUNCTOR(TOTAL, vp,sigpoly,
 							  MOD_STRUCTURE[SBND(it_lab,
 									     BND_EXP(v2,eq_exp))],
 							  inner_innersig)
@@ -2043,7 +2042,7 @@ structure Toil
 				| addbool(SOME sbnd,ce) = (SOME(false,sbnd), ce)
 			      val sbnd_ce_list' = map addbool sbnd_ce_list
 			      val v = fresh_named_var "functor_var"
-			      val sbnd = SBND(funid,BND_MOD(v,false,MOD_FUNCTOR(argvar,signat,m',s')))
+			      val sbnd = SBND(funid,BND_MOD(v,false,MOD_FUNCTOR(PARTIAL, argvar,signat,m',s')))
 			      val sdec = SDEC(funid,DEC_MOD(v,false,SIGNAT_FUNCTOR(argvar,signat,s',
 									     PARTIAL)))
 			  in sbnd_ce_list' @ [(SOME(false,sbnd), CONTEXT_SDEC sdec)]

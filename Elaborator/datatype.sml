@@ -356,7 +356,7 @@ structure Datatype
 	    val expose_expdec = DEC_EXP(expose_var,con_expose_i)
 	    val expose_inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expose_expdec)])
 	    val expose_modbnd = BND_MOD(expose_modvar, true,
-					MOD_FUNCTOR(mpoly_var,sigpoly,
+					MOD_FUNCTOR(TOTAL, mpoly_var,sigpoly,
 						    MOD_STRUCTURE[SBND(it_lab,expose_expbnd)],
 						    expose_inner_sig))
 	    val expose_moddec = DEC_MOD(expose_modvar, true,
@@ -377,7 +377,7 @@ structure Datatype
 		  val dec = DEC_EXP(mk_var, con_mk_ij)
 		  val inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,dec)])
 		  val modbnd = BND_MOD(mkpoly_var, true,
-					   MOD_FUNCTOR(mpoly_var,sigpoly,
+					   MOD_FUNCTOR(TOTAL, mpoly_var,sigpoly,
 						       MOD_STRUCTURE[SBND(it_lab,bnd)],
 						       inner_sig))
 		  val moddec = DEC_MOD(mkpoly_var, true,
@@ -438,7 +438,7 @@ structure Datatype
 					   then eq_expbnd
 				       else
 					   BND_MOD(bnd_var, true,
-						   MOD_FUNCTOR(mpoly_var,sigpoly_eq,
+						   MOD_FUNCTOR(TOTAL, mpoly_var,sigpoly_eq,
 							   MOD_STRUCTURE[SBND(it_lab,eq_expbnd)],
 							       eq_inner_sig))))
 			     val eq_sdec = 
@@ -466,7 +466,7 @@ structure Datatype
 		    val expbnd = BND_EXP(equal_var, eq_exp)
 		    val expdec = DEC_EXP(equal_var, eq_con)
 		    val inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expdec)])
-		    val modbnd = BND_MOD(top_eq_var, true, MOD_FUNCTOR(mpoly_var,sigpoly_eq,
+		    val modbnd = BND_MOD(top_eq_var, true, MOD_FUNCTOR(TOTAL, mpoly_var,sigpoly_eq,
 							 MOD_STRUCTURE[SBND(it_lab,expbnd)],
 							 inner_sig))
 		    val moddec = DEC_MOD(top_eq_var, true, SIGNAT_FUNCTOR(mpoly_var,sigpoly_eq,
@@ -1041,7 +1041,7 @@ structure Datatype
 		(SOME(_,PHRASE_CLASS_EXP(e,_)),_) => e
 	      | (SOME(_,PHRASE_CLASS_MOD(m,true,_)),SOME(sbnds,_,_)) => 
 		    (case m of
-			 MOD_FUNCTOR(v,_,MOD_STRUCTURE[SBND(_,BND_EXP(_,e))],_) =>
+			 MOD_FUNCTOR(_,v,_,MOD_STRUCTURE[SBND(_,BND_EXP(_,e))],_) =>
 			     exp_subst_modvar(e,[(v,MOD_STRUCTURE sbnds)])
 		       | _ => MODULE_PROJECT(MOD_APP(m,MOD_STRUCTURE sbnds),it_lab))
 	      | _ => error "cannot construct expose_exp")

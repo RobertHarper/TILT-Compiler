@@ -24,7 +24,7 @@ structure Signature :> SIGNATURE =
     type labels = label list
 
     (* ----------------- Misc Helper Functions ----------------------- *)
-    fun eta_contract (m as (MOD_FUNCTOR(vsig,signat,MOD_APP(f,arg),_))) = 
+    fun eta_contract (m as (MOD_FUNCTOR(_,vsig,signat,MOD_APP(f,arg),_))) = 
 	let fun match (SBND(l1,BND_CON(_,c)),SDEC(l2,DEC_CON _)) =
 		(case con_deref c of
 		  CON_MODULE_PROJECT(MOD_VAR v,l3) =>
@@ -925,7 +925,7 @@ structure Signature :> SIGNATURE =
 		       val s2 = SIGNAT_FUNCTOR(v1,s1,inner_sig,TOTAL)
 		   in  if (sub_con(ctxt',con'',spec_con))
 			   then 
-			       let val (reduced,m) = eta_contract(MOD_FUNCTOR(v1,s1,mtemp,inner_sig))
+			       let val (reduced,m) = eta_contract(MOD_FUNCTOR(TOTAL,v1,s1,mtemp,inner_sig))
 			       in  (not reduced,
 				    SOME(BND_MOD(name, true, m), DEC_MOD(name, true, s2), ctxt))
 			       end
@@ -1301,7 +1301,7 @@ structure Signature :> SIGNATURE =
 			   val m4body = mod_subst_modvar(m4body,[(m4var,m4_arg)])
 			   val context' = add_context_mod'(context,v2,(SelfifySig context (p2,s2)))
 			   val s = GetModSig(context',m4body)
-			 in (MOD_FUNCTOR(v2,s2,m4body,s),
+			 in (MOD_FUNCTOR(a1,v2,s2,m4body,s),
 			     SIGNAT_FUNCTOR(v2,s2,s,a1))
 			 end
 		   | (SIGNAT_FUNCTOR _, _) =>

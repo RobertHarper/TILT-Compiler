@@ -366,7 +366,7 @@ structure IlUtil
 	(case m of
 	   MOD_VAR _ => m
 	 | MOD_STRUCTURE sbnds => MOD_STRUCTURE (map (f_sbnd state) sbnds)
-	 | MOD_FUNCTOR (v,s1,m,s2) => MOD_FUNCTOR (v, f_signat state s1, 
+	 | MOD_FUNCTOR (a,v,s1,m,s2) => MOD_FUNCTOR (a,v, f_signat state s1, 
 						   f_mod state m, f_signat state s2)
 	 | MOD_APP (m1,m2) => MOD_APP (f_mod state m1, f_mod state m2)
 	 | MOD_PROJECT (m,l) => MOD_PROJECT(f_mod state m,l)
@@ -1323,7 +1323,7 @@ structure IlUtil
 
     fun beta_reduce_mod(x : mod, y : mod) : mod option = 
 	(case (x,y) of
-	     (MOD_FUNCTOR(v,s,m,_), _) => SOME (MOD_LET(v,y,m))
+	     (MOD_FUNCTOR(_,v,s,m,_), _) => SOME (MOD_LET(v,y,m))
 	   | _ => NONE)
 
 
