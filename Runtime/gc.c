@@ -397,8 +397,10 @@ unsigned int a,b;
 	if (GET_TYPE(tag) == RARRAY_TAG)
 	  {
 	    int temp = (int) (alloc_ptr);
+    /*
 	    int oldage = GET_ARRAY_AGE(tag);
 	    int newage = (oldage>=3) ? oldage : (oldage+1);
+	    */
 /* odd/even-word align the pointer so data is even/odd-aligned */
 #ifdef HEAPPROFILE
 	    if ((temp & 7) == 4)  
@@ -409,8 +411,10 @@ unsigned int a,b;
 		*((int *)temp) = SKIP_TAG;
 		alloc_ptr = (value_t *)(temp+4);
 	      }
+   /*
 	    v[-1] &= ~(0x3 << 3);
 	    v[-1] |= (newage << 3);
+   */
 	  }
 #ifdef HEAPPROFILE
 	    *alloc_ptr = v[-2];

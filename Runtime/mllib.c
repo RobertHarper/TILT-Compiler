@@ -51,11 +51,7 @@ void mllib_init()
   mllib_inited = 1;
 }
 
-value_t ml_input1(value_t _des)
-{
-  printf("ml_input1 not implemented in runtime\n");
-  assert(0);
-}
+
 
 int ml_output(value_t _des, value_t mlstring)
 {
@@ -63,7 +59,7 @@ int ml_output(value_t _des, value_t mlstring)
   FILE *F = des2ptr(_des);
   char *str = (int *)mlstring;
   unsigned int tag = ((int *)mlstring)[-1];
-  int len = tag >> 3;
+  int len = tag >> POSSLEN_SHIFT;
 
   char *t;
 
@@ -86,9 +82,9 @@ static int ml_open(char *mode, value_t mlstring)
   int des = 0;
   FILE *f = 0;
   char buf[100];
-  int *obj = (int *)mlstring;
-  int len = obj[0];
-  char *raw = (char *)(obj[1]);
+  unsigned int tag = ((int *)mlstring)[-1];
+  int len = tag >> POSSLEN_SHIFT;
+  char *raw = (char *)mlstring;
   bcopy(raw,buf,len);
   buf[len] = 0;
 
@@ -148,14 +144,39 @@ int ml_end_of_stream(value_t des)
 value_t mla_lookahead(value_t _des)
 {
   int found = 0;
-  char buf[32];
-  peep(_des);
-  found = (lookahead_char[_des] >= 0) && (lookahead_char[_des] != EOF);
-  buf[0] = lookahead_char[_des];
-  buf[found] = 0;
-  return alloc_string(found,buf,&cur_alloc_pointer,cur_alloc_limit); 
+  char c;
+  
+  peep(_des); 
+  c = lookahead_char[_des];
+  found = (c >= 0) && (c != EOF);
+  if (found)
+    {return (value_t) c; }
+  else 
+    return (value_t) 255;
 }
 
+value_t ml_input1(value_t _des)
+{
+  /* XXX this treatment of descriptor is wrong */
+  FILE *F = des2ptr(_des);
+  char buf[4];
+  int buflen = 0;
+  if (lookahead_char[_des] >= 0)
+    {
+      value_t result = (value_t)(lookahead_char[_des]);
+      lookahead_char[_des] = -1;
+      return result;
+    }
+  else
+    {
+      buflen = fread(buf,1,1,F);
+      if (buflen == 1)
+	{ return (value_t)(buf[0]); }
+      else
+	{ return (value_t)255; }
+    }
+
+}
 
 value_t mla_input(value_t _des, value_t numtoread)
 {
