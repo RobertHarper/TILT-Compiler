@@ -362,7 +362,6 @@ int sizes, trap information, etc.)
   (* functions abstract both types and values. *)
 
 
-
 end
 (*
 The term formation rules are as follows, where D is a type context, and
