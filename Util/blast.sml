@@ -1,181 +1,213 @@
-(*$import BinIO Util TilWord64 Word8Vector Word8 Word32 Int String IntListMap Option HashTableFn HashString *)
+structure Blaster :> BLASTER =
+struct
 
-signature BLASTER = sig
-(*
-  type t
-  val blastOut : (string * t) -> unit
-  val blastIn  : string -> t
-*)
-  type 'a blastin = BinIO.instream -> 'a
-  type 'a blastout = BinIO.outstream -> 'a -> unit
+    val error = fn s => Util.error "blast.sml" s
+    val BlastDebug = Stats.ff "BlastDebug"
+    exception BadMagicNumber
 
-  val reset : unit -> unit
+    structure B = BinIO
+    structure W = TilWord64
 
-  val blastOutInt : BinIO.outstream -> int -> unit
-  val blastInInt : BinIO.instream -> int
-  val blastOutWord64 : BinIO.outstream -> TilWord64.word -> unit
-  val blastInWord64 : BinIO.instream -> TilWord64.word
-  val blastOutString : BinIO.outstream -> string -> unit
-  val blastInString : BinIO.instream -> string
-  val blastOutBool : BinIO.outstream -> bool -> unit
-  val blastInBool : BinIO.instream -> bool
-  val blastOutPair : 'a blastout -> 'b blastout -> BinIO.outstream -> ('a * 'b) -> unit
-  val blastInPair : 'a blastin -> 'b blastin -> BinIO.instream -> ('a * 'b)
-  val blastOutTriple : 'a blastout -> 'b blastout -> 'c blastout -> BinIO.outstream -> ('a * 'b * 'c) -> unit
-  val blastInTriple : 'a blastin -> 'b blastin -> 'c blastin -> BinIO.instream -> ('a * 'b * 'c)
-  val blastOutList : 'a blastout -> BinIO.outstream -> 'a list -> unit
-  val blastInList : 'a blastin -> BinIO.instream -> 'a list
-  val blastOutOption : 'a blastout -> BinIO.outstream -> 'a option -> unit
-  val blastInOption : 'a blastin -> BinIO.instream -> 'a option
-
-end
-
-
-
-structure Blaster : BLASTER = struct
-
-  val error = fn s => Util.error "blast.sml" s
-
-  type 'a blastin = BinIO.instream -> 'a
-  type 'a blastout = BinIO.outstream -> 'a -> unit
-
-
-  structure StringTable = HashTableFn (struct
-      type hash_key = string
-      val hashVal = HashString.hashString
-      val sameKey = (op = : string*string->bool)
-    end);
-
-    exception STab
-    val stab : int StringTable.hash_table ref = 
-             ref (StringTable.mkTable(100,STab))
-    val stab_count = ref 1
-
-
-    val itab : string IntListMap.map ref = ref IntListMap.empty
-    val itab_count = ref 1
-
-    fun reset() = (stab := StringTable.mkTable(100,STab);
-                   itab := IntListMap.empty;
-                   stab_count := 1;
-                   itab_count := 1)    
-
-    local
-	open BinIO
-    in
-	val input1 = fn is => (case input1 is of
-				   SOME c => c
-				 | NONE => error "premature end of file in input1")
-
-	fun string2vector str = 
-	    Word8Vector.tabulate(size str, 
-				 fn i => Word8.fromInt(ord(String.sub(str,i))))
-	fun vector2string vect = 
-	    let val chars = Word8Vector.foldr (fn (w,acc) => (chr(Word8.toInt w))::acc) [] vect
-	    in  implode chars
-	    end
-	    
-	fun blastOutWord32 os w = 
-	    let val a = Word8.fromInt(Word32.toInt (Word32.andb(w,0w127)))
-		val w = Word32.>>(w,0w7)
-            in
-                if (w = 0w0) then 
-		   output1(os, a)
-                else
-                   (output1(os, Word8.orb(a,0w128));
-                    blastOutWord32 os w)
-            end
-
-	fun blastInWord32 is =
-	    let fun loop shift base =
-                    let val a = input1 is
-                        val a' = Word8.andb(a, 0w127)
-                        val a32 = Word32.fromInt(Word8.toInt a')
-                        val base = Word32.orb(Word32.<<(a32,shift),base)
-                    in 
-                        if (a=a') then
-                           base
-                        else
-                           loop (shift+0w7) base
-                    end
-             in
-                loop 0w0 0w0
-             end
-	
-	fun blastOutInt'' os i = blastOutWord32 os (Word32.fromInt i)
-	fun blastInInt'' is = Word32.toInt(blastInWord32 is)
-
-	fun blastOutInt os i = blastOutInt'' os i
-	fun blastInInt is = blastInInt'' is
-
-	fun blastOutBool os true = output1(os, 0w1)
-	  | blastOutBool os false = output1(os, 0w0)
-
-	fun blastInBool is = (input1 is) <> (0w0)
-	    
-	fun blastOutString os str = 
-            (case (StringTable.find (!stab) str) of
-               NONE => (blastOutInt os 0;
-                        output1(os, Word8.fromInt (size str));
-	                output(os, string2vector str);
-			StringTable.insert (!stab) (str, !stab_count);
-                        stab_count := !stab_count + 1)
-             | SOME n => (blastOutInt os n))
-	    
-	fun blastInString is = 
-            let
-                val n = blastInInt is
-            in
-                if (n>0) then
-		   Option.valOf (IntListMap.find(!itab, n))
-                else
-                   let
-	              val sz = Word8.toInt(input1 is)
-    		      val str = vector2string(inputN(is, sz))
-		   in  
-                      itab := IntListMap.insert(!itab, !itab_count, str);
-		      itab_count := !itab_count + 1;
-	              str
-	           end
-            end
-
-	fun blastOutInt' os i = blastOutString os (Int.toString i)
-	fun blastInInt' is = (case Int.fromString(blastInString is) of
-				 NONE => error "blastInInt failed\n"
-			       | SOME n => n)
-
-	fun blastOutWord64 os i = blastOutString os (TilWord64.toDecimalString i)
-	fun blastInWord64 is = TilWord64.fromDecimalString(blastInString is) 
-	    
+    structure StringHashKey =
+    struct
+	type hash_key = string
+	val hashVal = HashString.hashString
+	val sameKey = (op= : string * string -> bool)
     end
+    structure StringTable = HashTableFn (StringHashKey)
+    exception STab
 
-    fun blastOutPair blaster1 blaster2 os (x,y) = (blaster1 os x; blaster2 os y)
-    fun blastInPair blaster1 blaster2 is = let val x = blaster1 is
-	                                       val y = blaster2 is
-					   in  (x,y)
-					   end
-    fun blastOutTriple blaster1 blaster2 blaster3 os (x,y,z) = (blaster1 os x; blaster2 os y; blaster3 os z)
-    fun blastInTriple blaster1 blaster2 blaster3 is = let val x = blaster1 is
-							val y = blaster2 is
-							val z = blaster3 is
-						    in  (x,y,z)
-						    end
+    type instream =
+	{is : B.instream,
+	 itab_count : int ref,
+	 itab : string IntListMap.map ref}
 
-    fun blastOutOption blaster os NONE = blastOutInt os 0
-      | blastOutOption blaster os (SOME x) = (blastOutInt os 1; blaster os x)
-    fun blastInOption blaster is = 
-	(case (blastInInt is) of
-	     0 => NONE
-	   | 1 => SOME(blaster is)
-	   | _ => error "bad blastInOption")
+    type outstream =
+	{os : B.outstream,
+	 stab_count : int ref,
+	 stab : int StringTable.hash_table ref}
 
+    type 'a blastin = instream -> 'a
+    type 'a blastout = outstream -> 'a -> unit
 
-    fun blastOutList blaster os ls = (blastOutInt os (length ls);
-				      app (blaster os) ls)
-    fun blastInList blaster is = let val len = blastInInt is
-				     fun loop 0 = []
-				       | loop n = (blaster is)::(loop (n-1))
-				 in  loop len
-				 end
+    fun instream (is : B.instream) : instream =
+	{is = is,
+	 itab_count = ref 1,
+	 itab = ref IntListMap.empty}
+
+    fun openIn (path : string) : instream = instream (B.openIn path)
+
+    fun outstream (os : B.outstream) : outstream =
+	{os = os,
+	 stab_count = ref 1,
+	 stab = ref (StringTable.mkTable (100,STab))}
+
+    fun openOut (path : string) : outstream =
+	outstream (B.openOut path)
+
+    fun openAppend (path : string) : outstream =
+	outstream (B.openAppend path)
+
+    fun resetIn ({itab_count, itab, ...} : instream) : unit =
+	(itab_count := 1;
+	 itab := IntListMap.empty)
+
+    fun resetOut ({stab_count, stab, ...} : outstream) : unit =
+	(stab_count := 1;
+	 stab := StringTable.mkTable (100,STab))
+
+    fun closeIn ({is, ...} : instream) : unit = B.closeIn is
+    fun closeOut ({os, ...} : outstream) : unit = B.closeOut os
+
+    fun checkMagic (magic : string) : unit =
+	if size magic < 256 then ()
+	else error ("magic number too large: " ^ magic)
+
+    fun writeMagic ({os,...} : outstream, magic : string) : unit =
+	(B.output1(os, Word8.fromInt (size magic));
+	 B.output(os, Byte.stringToBytes magic))
+
+    fun readMagic ({is,...} : instream, magic : string) : unit =
+	let val len = (case B.input1 is
+			 of SOME len => len
+			  | NONE => raise BadMagicNumber)
+	    val len = Word8.toInt len
+	    val _ = if len = size magic then ()
+		    else raise BadMagicNumber
+	    val s = Byte.bytesToString (B.inputN (is, len))
+	in  if s = magic then ()
+	    else raise BadMagicNumber
+	end
+
+    fun magic (aout : 'a blastout, ain : 'a blastin,
+	       magic : string) : ('a blastout * 'a blastin) =
+	(checkMagic magic;
+	 ((fn os => fn x => (writeMagic (os, magic); aout os x)),
+	  (fn is => (readMagic (is, magic); ain is))))
+
+    fun endOfStream ({is, ...} : instream) : bool = B.endOfStream is
+
+    fun blastOutWord8 ({os, ...} : outstream) (w : Word8.word) : unit =
+	B.output1 (os,w)
+
+    fun blastInWord8 ({is, ...} : instream) : Word8.word =
+	(case B.input1 is
+	   of SOME c => c
+	    | NONE => error "premature end of file in input1")
+
+    fun blastOutWord64 (os : outstream) (w : W.word) : unit =
+	let val a = Word8.fromInt(W.toInt (W.andb (w, W.fromInt 127)))
+	    val w = W.rshiftl (w, 7)
+	in
+	    if W.equal (w,W.zero) then
+		blastOutWord8 os a
+	    else
+		(blastOutWord8 os (Word8.orb(a,0w128));
+		 blastOutWord64 os w)
+	end
+    fun blastInWord64 (is : instream) : W.word =
+	let fun loop shift base =
+		let val a = blastInWord8 is
+		    val a' = Word8.andb(a, 0w127)
+		    val a64 = W.fromInt (Word8.toInt a')
+		    val base = W.orb(W.lshift(a64,shift),base)
+		in
+		    if (a=a') then
+			base
+		    else
+                        loop (shift+7) base
+                end
+	in
+	    loop 0 W.zero
+	end
+
+    fun blastOutWord32 (os : outstream) (w : Word32.word) : unit =
+	blastOutWord64 os (W.fromUnsignedHalf w)
+    fun blastInWord32 (is : instream) : Word32.word =
+	W.toUnsignedHalf (blastInWord64 is)
+
+    fun blastOutInt (os : outstream) (i : int) : unit =
+	blastOutWord64 os (W.fromInt i)
+    fun blastInInt (is : instream) : int =
+	W.toInt (blastInWord64 is)
+
+    fun blastOutBool (os : outstream) (b : bool) : unit =
+	(case b
+	   of true => blastOutWord8 os 0w1
+	    | false => blastOutWord8 os 0w0)
+    fun blastInBool (is : instream) : bool =
+	(case blastInWord8 is
+	   of 0w1 => true
+	    | 0w0 => false
+	    | _ => error "bad bool")
+
+    fun blastOutString (os : outstream) (s : string) : unit =
+	let val {os=os',stab,stab_count} = os
+	in
+	    (case StringTable.find (!stab) s
+	       of NONE =>
+		    (blastOutInt os 0;
+		     blastOutInt os (size s);
+		     B.output(os', Byte.stringToBytes s);
+		     StringTable.insert (!stab) (s, !stab_count);
+		     stab_count := !stab_count + 1)
+		| SOME n =>
+		     blastOutInt os n)
+	end
+    fun blastInString (is : instream) : string =
+	let val {is=is',itab,itab_count} = is
+	    val n = blastInInt is
+	in
+	    if n > 0 then
+		(case IntListMap.find(!itab,n)
+		   of SOME s => s
+		    | NONE => error "bad string")
+	    else
+		let val sz = blastInInt is
+		    val s = Byte.bytesToString (B.inputN (is',sz))
+		    val _ = if size s = sz then ()
+			    else error "short string"
+		in
+		    itab := IntListMap.insert(!itab, !itab_count, s);
+		    itab_count := !itab_count + 1;
+		    s
+		end
+	end
+
+    fun blastOutPair (a : 'a blastout)
+		     (b : 'b blastout) : ('a * 'b) blastout =
+	(fn os => fn (x,y) => (a os x; b os y))
+    fun blastInPair (a : 'a blastin) (b : 'b blastin) : ('a * 'b) blastin =
+	(fn is => (a is, b is))
+
+    fun blastOutTriple (a : 'a blastout) (b : 'b blastout)
+		       (c : 'c blastout) : ('a * 'b * 'c) blastout =
+	(fn os => fn (x,y,z) => (a os x; b os y; c os z))
+    fun blastInTriple (a : 'a blastin) (b : 'b blastin)
+		      (c : 'c blastin) : ('a * 'b * 'c) blastin =
+	(fn is => (a is, b is, c is))
+
+    fun blastOutOption (a : 'a blastout) : 'a option blastout =
+	(fn os => fn aopt =>
+	 (case aopt
+	    of NONE => blastOutInt os 0
+	     | SOME x => (blastOutInt os 1; a os x)))
+    fun blastInOption (a : 'a blastin) : 'a option blastin =
+	(fn is =>
+	 (case blastInInt is
+	    of 0 => NONE
+	     | 1 => SOME (a is)
+	     | _ => error "bad option"))
+
+    fun blastOutList (a : 'a blastout) : 'a list blastout =
+	(fn os => fn xs =>
+	 (blastOutInt os (length xs);
+	  app (a os) xs))
+    fun blastInList (a : 'a blastin) : 'a list blastin =
+	(fn is =>
+	 let val len = blastInInt is
+	     fun loop 0 = nil
+	       | loop n = (a is) :: (loop (n-1))
+	 in  loop len
+	 end)
 end
-
