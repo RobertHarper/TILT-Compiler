@@ -515,7 +515,117 @@ structure Toil
 		 in (LET(bnds,body), con, va)
 		 end
 	 end
-     
+
+     and xpath (context : context, path : Ast.path, do_coerce) : (exp * con * bool) =
+	 let
+	     fun unbound() = 
+		 let val _ = (error_region(); 
+			      print "unbound variable or constructor: ";
+			      AstHelp.pp_path path;
+			      print "\n")
+		 in dummy_exp'(context,"unbound_var")
+		 end
+	     fun eqcase iseq = 
+		 let val tyvar = fresh_named_tyvar (context,"teq")
+		     val _ = tyvar_use_equal tyvar
+		     val _ = add_eq_entry tyvar
+		     val con = CON_TYVAR tyvar
+		     val arg_con = con_tuple[con,con]
+		     val eq_con = con_eqfun con
+		     val exp_os = valOf (tyvar_eq_hole tyvar)
+		     val eqexp = OVEREXP(eq_con,true,exp_os)
+		     val res = if iseq
+				   then eqexp
+			       else let val v = fresh_named_var "neq_arg"
+				    in  #1(make_lambda(v,arg_con, con_bool,
+						       make_ifthenelse(APP(eqexp,VAR v),
+								       false_exp,true_exp,con_bool)))
+				    end
+		 in (res,eq_con,true)
+		 end
+	     val labs = map symbol_label path
+	     val ovld_option = (case labs of
+				    [lab] => Context_Lookup_Overload(context, lab)
+				  | _ => NONE)
+	     fun coerceArrow (c as (CON_ARROW (args, res, closed, comp))) =
+		 (case oneshot_deref comp
+		    of SOME TOTAL =>
+			let val comp' = oneshot()
+			    val _ = oneshot_set (comp', PARTIAL)
+			in  SOME (CON_ARROW (args, res, closed, comp'))
+			end
+		     | SOME PARTIAL => NONE
+		     | NONE => (error_region();
+				print "path has unresolved arrow type\n";
+				print "Path: "; AstHelp.pp_path path; print "\n";
+				print "Type: "; pp_con c; print "\n";
+				error "path has unresolved arrow type";
+				NONE))
+	       | coerceArrow _ = NONE
+	     fun coerce con =
+		 if do_coerce then
+		     let val con' = (case con
+				       of CON_ARROW _ => con
+					| _ => con_normalize (context, con))
+		     in  (case coerceArrow con'
+			    of SOME c => (debugdo (fn () =>
+						   (print "partializing "; AstHelp.pp_path path; print "\n";
+						    print "Given type: "; pp_con con; print "\n";
+						    print "Partial type: "; pp_con c; print "\n"));
+					  c)
+			     | NONE => con)
+		     end
+		 else con
+	 in  (case ovld_option of
+		  SOME (OVLD (_, NONE)) => (error_region();
+					    print "no default type for overloaded identifier: ";
+					    AstHelp.pp_path path; print "\n";
+					    error "no default type for overloaded identifier")
+		| SOME (OVLD (ce, SOME n)) => make_overload (context, ce, n)
+		| NONE => (* identifier is long or is not overloaded *)
+		      (case (Context_Lookup_Labels(context,labs)) of
+			   SOME(_,PHRASE_CLASS_EXP (_,c,SOME e,true)) => (e,coerce c,Exp_IsValuable(context,e))
+			 | SOME(_,PHRASE_CLASS_EXP (e,c,_,_)) => (e,coerce c,true)
+			 | SOME(_,PHRASE_CLASS_MOD (m, _, SIGNAT_SELF(_, _, s))) =>
+			       (case s of
+				    SIGNAT_FUNCTOR _ => 
+					let val (e,c) = polyfun_inst (context,m,s)
+					in  (e,coerce c,true)
+					end
+				  | SIGNAT_STRUCTURE sdecs =>
+					let
+					    fun dosdec (SDEC(l,DEC_EXP(_,c,_,_))) =
+						if (eq_label (l,mk_lab))
+						    then (MODULE_PROJECT(m,mk_lab),coerce c,true)
+						else unbound()
+					      | dosdec (SDEC(l,DEC_MOD(_,_,s))) =
+						    if (eq_label(l,mk_lab))
+							then 
+							    let val mk_mod = MOD_PROJECT(m,mk_lab)
+								val (e,c) = polyfun_inst(context,mk_mod,s)
+							    in  (e,coerce c,true)
+							    end
+						    else unbound()
+					      | dosdec _ = unbound()
+					in (case sdecs of
+						[sdec] => dosdec sdec
+					      | [_,sdec] => dosdec sdec
+					      | _ => unbound())
+					end)
+			 | SOME(_,PHRASE_CLASS_MOD (_, _, s)) =>
+				    (print "Context_lookup returned unexpected signature:\n"; 
+				     pp_signat s; print "\n";
+				     error "Context_lookup returned unexpected signature")
+			 | SOME (_, PHRASE_CLASS_CON _) => unbound()
+			 | SOME (_, PHRASE_CLASS_SIG _) => unbound()
+			 | NONE => if (length path = 1 andalso (Symbol.eq(hd path,Symbol.varSymbol "=")))
+				       then eqcase true
+				   else if (length path = 1 andalso 
+					    (Symbol.eq(hd path,Symbol.varSymbol "<>")))
+					    then eqcase false
+					else unbound()))
+	 end
+
      and xexp (context : context, exp : Ast.exp) : (exp * con * bool) = (* returns valuablilty *)
       (
 (*
@@ -552,84 +662,7 @@ structure Toil
 		 val _ = add_flex_entry(label,the_ref,fieldcon,eshot)
 	     in (exp,rescon,true)
 	     end
-       | Ast.VarExp path => 
-	     let fun unbound() = 
-		 let val _ = (error_region(); 
-			      print "unbound variable or constructor: ";
-			      AstHelp.pp_path path;
-			      print "\n")
-		 in dummy_exp'(context,"unbound_var")
-		 end
-		 fun eqcase iseq = 
-		     let val tyvar = fresh_named_tyvar (context,"teq")
-			 val _ = tyvar_use_equal tyvar
-			 val _ = add_eq_entry tyvar
-			 val con = CON_TYVAR tyvar
-			 val arg_con = con_tuple[con,con]
-			 val eq_con = con_eqfun con
-			 val exp_os = valOf (tyvar_eq_hole tyvar)
-			 val eqexp = OVEREXP(eq_con,true,exp_os)
-			 val res = if iseq
-				       then eqexp
-				   else let val v = fresh_named_var "neq_arg"
-					in  #1(make_lambda(v,arg_con, con_bool,
-							   make_ifthenelse(APP(eqexp,VAR v),
-									   false_exp,true_exp,con_bool)))
-					end
-		     in (res,eq_con,true)
-		     end
-		 val labs = map symbol_label path
-		 val ovld_option = 		
-		     (case labs of
-			  [lab] => Context_Lookup_Overload(context, lab)
-			| _ => NONE)
-	     in  (case ovld_option of
-		      SOME (OVLD (_, NONE)) => (error_region();
-						print "no default type for overloaded identifier: ";
-						AstHelp.pp_path path; print "\n";
-						error "no default type for overloaded identifier")
-		    | SOME (OVLD (ce, SOME n)) => make_overload (context, ce, n)
-		    | NONE => (* identifier is long or is not overloaded *)
-			  (case (Context_Lookup_Labels(context,labs)) of
-			       SOME(_,PHRASE_CLASS_EXP (_,c,SOME e,true)) => (e,c,Exp_IsValuable(context,e))
-			     | SOME(_,PHRASE_CLASS_EXP (e,c,_,_)) => (e,c,true)
-			     | SOME(_,PHRASE_CLASS_MOD (m, _, SIGNAT_SELF(_, _, s))) =>
-				   (case s of
-					SIGNAT_FUNCTOR _ => 
-					    let val (e,c) = polyfun_inst (context,m,s)
-					    in  (e,c,true)
-					    end
-				      | SIGNAT_STRUCTURE sdecs =>
-					    let fun dosdec (SDEC(l,DEC_EXP(_,c,_,_))) =
-						if (eq_label (l,mk_lab))
-						    then (MODULE_PROJECT(m,mk_lab),c,true)
-						else unbound()
-						  | dosdec (SDEC(l,DEC_MOD(_,_,s))) =
-						    if (eq_label(l,mk_lab))
-							then 
-							    let val mk_mod = MOD_PROJECT(m,mk_lab)
-								val (e,c) = polyfun_inst(context,mk_mod,s)
-							    in  (e,c,true)
-							    end
-						    else unbound()
-						  | dosdec _ = unbound()
-					    in (case sdecs of
-						    [sdec] => dosdec sdec
-						  | [_,sdec] => dosdec sdec
-						  | _ => unbound())
-					    end)
-			     | SOME(_,PHRASE_CLASS_MOD (_, _, s)) =>
-					    (print "Context_lookup returned unexpected signature:\n"; 
-					     pp_signat s; print "\n";
-					     error "Context_lookup returned unexpected signature")
-			     | SOME (_, PHRASE_CLASS_CON _) => unbound()
-			     | NONE => if (length path = 1 andalso (Symbol.eq(hd path,Symbol.varSymbol "=")))
-					   then eqcase true
-				       else if (length path = 1 andalso 
-						(Symbol.eq(hd path,Symbol.varSymbol "<>")))
-						then eqcase false
-					    else unbound()))
-	     end
+       | Ast.VarExp path => xpath (context, path, true)
        | Ast.LetExp {dec,expr} => 
 	     let val sbnd_ctxt_list = xdec true (context, dec)
 		 val (sbnds,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list)
@@ -688,7 +721,6 @@ structure Toil
 		 val set_expr = varsym ":="
 
 		 (* symbols and expressions *)
-val _ = print "plet0\n"
 		 val pats_exps = traverse dec
 		 val count = length pats_exps
 		 val fresh_str = Int.toString(var2int(fresh_var()))
@@ -768,7 +800,9 @@ val _ = print "plet0\n"
 	     end
 
        | Ast.AppExp {argument,function} => 
-	     let val (e1,con1,va1) = xexp(context,function)
+	     let val (e1,con1,va1) = (case AstHelp.exp_strip function
+					of Ast.VarExp path => xpath(context,path,false)
+					 | _ => xexp(context,function))
 		 val (e2,con2,va2) = xexp(context,argument)
 		 val arrow = oneshot()
 		 val rescon = fresh_con context
