@@ -123,35 +123,45 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 	    (* end case *)
 	  end
 
-    fun copy {src, si=si', len, dst, di} = let
-	  val (sstop', dstop') = 
-	      let val srcLen = length src
-	      in  case len
-		  of NONE => if ((si' < 0) orelse (srcLen < si'))
-				 then raise Subscript
-			     else (srcLen, di+srcLen-si')
-		| (SOME n) => if ((n < 0) orelse (si' < 0) orelse (srcLen < si'+n))
-				  then raise Subscript
-			      else (si'+n, di+n)
-	      (* end case *)
-	      end
-	  val sstop = int32touint32 sstop'
-	  val dstop = int32touint32 dstop'
-	  val si = int32touint32 si'
-	  fun copyUp (j, k) = if ult(j,sstop)
-		then (unsafe_update(dst, k, unsafe_sub(src, j));
-		      copyUp (uplus(j,0w1),uplus(k,0w1)))
-		else ()
-	  fun copyDown (j, k) = if ulte(si,j)
-				    then (unsafe_update(dst, k, unsafe_sub(src, j));
-					  copyDown (uminus(j,0w1), uminus(k,0w1)))
-				else ()
-	  in  if ((di < 0) orelse (length dst < dstop'))
-		  then raise Subscript
-	      else if (si' < di)
-		       then copyDown (uminus(sstop,0w1), uminus(dstop,0w1))
-		   else copyUp (si, int32touint32 di)
-	  end
+    fun copy {src, si=si', len, dst, di} = 
+				let
+
+						val (sstop', dstop') = 
+								let val srcLen = length src
+								in  case len
+										of NONE => if ((si' < 0) orelse (srcLen < si'))
+																	 then raise Subscript
+															 else (srcLen, di+srcLen-si')
+									| (SOME n) => if ((n < 0) orelse (si' < 0) orelse (srcLen < si'+n))
+																		then raise Subscript
+																else (si'+n, di+n)
+								(* end case *)
+								end
+
+						val sstop = int32touint32 sstop'
+						val dstop = int32touint32 dstop'
+						val si = int32touint32 si'
+						fun copyUp (j, k) = if ult(j,sstop)
+																		then (unsafe_update(dst, k, unsafe_sub(src, j));
+																					copyUp (uplus(j,0w1),uplus(k,0w1)))
+																else ()
+
+				(* check to continue *after* update; otherwise we might underflow j  - Tom 7 *)
+						fun copyDown (j, k) = 
+								let in
+										unsafe_update(dst, k, unsafe_sub(src, j));
+										if ult(si,j) then copyDown (uminus(j, 0w1),
+																								uminus(k, 0w1))
+										else ()
+								end
+
+				in  if ((di < 0) orelse (length dst < dstop'))
+								then raise Subscript
+						else if (si' < di) then
+								if (0w0 = sstop) then () 
+								else copyDown (uminus(sstop,0w1), uminus(dstop,0w1))
+							else copyUp (si, int32touint32 di)
+				end
 
     fun copyVec {src, si, len, dst, di} = let
 	  val (sstop', dstop') = let
@@ -291,6 +301,10 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 
 (*
  * $Log$
+# Revision 1.5  2001/07/08  21:29:26  tom7
+# fixed some underflow bugs in copy;
+# should check elsewhere for more...
+# 
 # Revision 1.4  2000/11/27  22:36:22  swasey
 # *** empty log message ***
 # 
