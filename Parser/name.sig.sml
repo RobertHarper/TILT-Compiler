@@ -34,6 +34,9 @@ signature NAME =
     val fresh_open_internal_label : string -> label      
     val derived_var : var -> var
 
+    (* non-generative; used for genarating entry labels in tortl.. - Martin *)
+    val non_generative_named_var : string -> var
+
     (* injective *)
     val tag2int : tag -> int
     val internal_label  : string -> label

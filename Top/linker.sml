@@ -1,8 +1,12 @@
 structure Linker : LINKER =
   struct
 
-    val ld_path = "/usr/ucb/cc"
-    val ld_libs = ""
+    val as_path = "as"
+    val ld_path = "ld"
+    val ld_libs = (*"/usr/lib/cmplrs/cc/crt0.o " ^ *)
+	          "/afs/cs.cmu.edu/project/fox-4/member/jgmorris/tilt/mael/ml96/Runtime/runtime.alpha_osf.a " ^
+		  "-lm -lc"
+                  (* runtime, etc *)
     val error = fn x => Util.error "Linker" x
 
     structure Crc = Crc
@@ -52,7 +56,8 @@ structure Linker : LINKER =
 	  in plus(ue1,ue2,[])
 	  end
 	fun plus_no_overlap(unitname,ue1,ue2) : UE =      (* used on export unit environments *)
-	  let fun plus ([],[],a) = rev a
+	  let val ue = ue1 @ ue2  (* maintain the order! *)
+              fun plus ([],[],a) = rev a
 		| plus ([],e::ue2,a) = plus([],ue2,e::a)
 		| plus (e::ue1,[],a) = plus(ue1,[],e::a)
 		| plus (ue1 as ((un1,crc1)::ue1'),ue2 as ((un2,crc2)::ue2'),a) =
@@ -61,7 +66,7 @@ structure Linker : LINKER =
 		else (* un1=un2 *)
 		  error ("Link Error: You are trying to link in the unit " ^ un1 ^ " more\n" ^
 			 "than once. This is not allowed.") 
-	  in plus(ue1,ue2,[])
+	  in plus(ue1,ue2,[]); ue
 	  end
       end
 
@@ -171,7 +176,7 @@ structure Linker : LINKER =
 	  fun pr_list [] = ""
 	    | pr_list [a] = a
 	    | pr_list (a::xs) = a ^ " " ^ pr_list xs
-      in if OS.Process.system (ld_path ^ " -r -o " ^ o_file ^ " " ^ pr_list o_files) 
+      in if OS.Process.system (ld_path ^ " -non_shared -r -o " ^ o_file ^ " " ^ pr_list o_files) 
 	    = OS.Process.success then 
 		mk_uo {imports=imports,exports=exports,uo_result=uo_result,
 		       emitter=emitter o_file}
@@ -190,9 +195,18 @@ structure Linker : LINKER =
 								o_file = o_temp}
       in case imports
 	   of nil => (* everything has been resolved *)
-	     (if OS.Process.system (ld_path ^ " " ^ o_temp ^ " -o " ^ exe_result ^ " " ^ ld_libs)
-		= OS.Process.success then ()
-		else error "mk_exe - ld failed")
+	       let val unitnames = map #1 exports
+		   val local_labels = map (fn un => Linkalpha.Rtl.LOCAL_CODE 
+					   (Name.non_generative_named_var ("main_" ^ un ^ "_doit"))) unitnames
+		   val _ = Linkalpha.mk_link_file ("link_clients.s", local_labels)
+		   val _ = if OS.Process.system (as_path ^ " -o link_clients.o link_clients.s") = OS.Process.success then ()
+			   else error "mk_exe - as failed"
+		   val _ = if OS.Process.system (ld_path ^ " -D 40000000 -T 20000000 -non_shared -o " ^ 
+						 exe_result ^ " " ^ o_temp ^ " link_clients.o " ^ ld_libs)
+		                 = OS.Process.success then ()
+			   else error "mk_exe - ld failed"
+	       in ()
+	       end
 	    | _ => let val units = map #1 imports
 	               fun pr_units [] = error "pr_units"
 			 | pr_units [a] = a

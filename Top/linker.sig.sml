@@ -6,8 +6,10 @@ signature LINKER =
     val link : {uo_args : string list,        (* Current directory, or *)
                 uo_result : string} -> unit   (* absolute path. Strings *)
                                               (* should contain extension. *)
-    val mk_exe : {uo_arg : string,
-                  exe_result : string} -> unit
+
+    val mk_exe : {uo_arg : string,                (* we create an executable by linking units *)
+                  exe_result : string} -> unit    (* to the runtime system. Also, we link to code *)
+	                                          (* for initializing clients; label client_entry *)
 
     val mk_uo : {imports : (string * Crc.crc) list,   (* the strings here are *)
                  exports : (string * Crc.crc) list,   (* unit names - no ext. *)

@@ -472,6 +472,30 @@ exception XXX
       fun Context_Lookup' (CONTEXT {var_list,...},v) = Name.VarMap.find(#1 var_list,v)
       fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = Name.TagMap.find(tag_list,t)
 
+      fun context_to_sdecs (CONTEXT {var_list,...}) =
+	  Name.VarMap.foldli (fn (v,(lab,phrase_class),sdecs) =>
+			      case phrase_class
+				of PHRASE_CLASS_EXP(exp,con) => SDEC(lab,DEC_EXP(v,con))::sdecs
+			         | PHRASE_CLASS_CON(con,kind) => SDEC(lab,DEC_CON(v,kind,SOME con))::sdecs
+				 | PHRASE_CLASS_MOD(m,signat) => SDEC(lab,DEC_MOD(v,signat))::sdecs
+				 | PHRASE_CLASS_SIG _ => sdecs
+				 | PHRASE_CLASS_OVEREXP _ => sdecs) [] (#1 var_list)
+
+      fun plus(ctxt, CONTEXT{flatlist, fixity_list, label_list, var_list, tag_list}) =
+	  let val ctxt = add_context_fixity(ctxt,fixity_list)
+	      val ctxt = Name.VarMap.foldli (fn (v,(lab,phrase_class),ctxt) =>
+		 case phrase_class
+		   of PHRASE_CLASS_EXP(exp,con) => add_context_sdec(ctxt,SDEC(lab,DEC_EXP(v,con)))
+		    | PHRASE_CLASS_CON(con,kind) => add_context_sdec(ctxt,SDEC(lab,DEC_CON(v,kind,SOME con)))
+		    | PHRASE_CLASS_MOD(m,signat) => add_context_sdec(ctxt,SDEC(lab,DEC_MOD(v,signat)))
+		    | PHRASE_CLASS_SIG _ => error "Not implemented"
+		    | PHRASE_CLASS_OVEREXP _ => error "plus.PHRASE_CLASS_OVEREXP") ctxt (#1 var_list)
+	  in ctxt
+	  end  (* MEMO: What about the tag_list ?? - Martin *)
+	  
+      fun plus_context [] = empty_context
+	| plus_context [context] = context
+	| plus_context (context::contexts) = plus(context,plus_context(contexts))
 
     fun pp_list doer objs (left,sep,right,break) = 
       let 

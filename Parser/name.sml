@@ -82,6 +82,7 @@ structure Name :> NAME =
     fun fresh_named_tag s = GTAG(tag_counter(),s)
     fun fresh_var   () = fresh_named_var "v"
     fun fresh_tag  () = fresh_named_tag "t"
+    fun non_generative_named_var s : var = (0, s)
     fun gen_var_from_symbol v : var = (var_counter(), Symbol.name v)
     fun internal_hash s = Symbol.number(Symbol.varSymbol s) + maxnamespace + 1
     fun internal_label s : label = (internal_hash s,s,false)

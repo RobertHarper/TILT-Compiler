@@ -15,6 +15,7 @@ signature LINKIL =
       val compiles : string -> (module list) option
       val test : string ->  module option
       val setdepth : int -> unit (* printing depth *)
+      val elaborate : Il.context * string -> (Il.sbnds * Il.context) option
   end
 
 structure LinkIl (* : LINKIL *) = 
@@ -254,6 +255,7 @@ structure LinkIl (* : LINKIL *) =
 			 val m = (ctxt_noninline,sbnds,sdecs)
 			 val _ = prelude_module := SOME m
 
+
 			 (* compute inlineprelude_quad *)
 			 val ctxt_inline = local_add_context_entries(ctxt_inline,entries)
 			 val ctxt_noninline = local_add_context_entries(ctxt_noninline,entries)
@@ -416,6 +418,38 @@ structure LinkIl (* : LINKIL *) =
 	    end
 
 	val test = (fn filename => SOME(ptest_res' filename) handle _ => NONE)
+
+	val elaborate = fn (ctxt,s) =>
+	    case elaborate (ctxt,s)
+	      of SOME (sbnds,entries) => 
+		  SOME(sbnds, IlContext.add_context_entries(IlContext.empty_context,entries))
+	       | NONE => NONE       (* maybe we should selfify entries *)
+
+	val plus_context = IlContext.plus_context
+
+	structure IlContextEq = IlContextEq(structure IlContext = IlContext)
+	val eq_context = IlContextEq.eq_context
+	val init_context = empty_context
+	type spec = Ast.spec and dec = Ast.dec
+
+	type filepos = SourceMap.charpos -> string * int * int
+	fun elab_specs (ctxt, fp, specs) = 
+	    case Toil.xspec(ctxt, fp, specs)
+		of SOME sdecs => SOME(IlContext.add_context_sdecs(empty_context, sdecs))
+	      | NONE => NONE
+
+	fun elab_dec (ctxt, fp, dec) = 
+	    case Toil.xdec(ctxt,fp,dec) 
+		of SOME sbnd_ctxt_list => 
+		    let val sbnds = List.mapPartial #1 sbnd_ctxt_list
+			val ctxts = map #2 sbnd_ctxt_list
+			val ctxt = local_add_context_entries(empty_context,ctxts) 
+		    in 
+			SOME(sbnds,ctxt)
+		    end
+	      | NONE => NONE
+
+	fun elab_dec_constrained (ctxt1, fp, dec, ctxt2) = error "elab_dec_constrained - not implemented"
 
     end (* struct *)
 

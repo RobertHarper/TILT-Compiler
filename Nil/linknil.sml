@@ -1,5 +1,6 @@
 signature LINKNIL = 
 sig
+    structure Il : IL
     structure Nil : NIL
     structure NilUtil : NILUTIL
     structure NilContext : NILCONTEXT
@@ -10,7 +11,7 @@ sig
     val compile : string -> Nil.module
     val compiles : string list -> Nil.module list
     val test : string -> Nil.module
-
+    val il_to_nil : Il.context * Il.sbnds * Il.sdecs -> Nil.module
 end
 
 structure Linknil (* : LINKNIL *) =
@@ -18,6 +19,8 @@ structure Linknil (* : LINKNIL *) =
     val typecheck = ref true
     val typecheck2 = ref true
     val error = fn s => Util.error "linknil.sml" s
+
+    structure Il = LinkIl.Il
 
     local
       val select_carries_types = Stats.bool "select_carries_types"
@@ -170,7 +173,7 @@ structure Linknil (* : LINKNIL *) =
 		
 	    fun mapper v =
 		let val (l,pc) = valOf (LinkIl.IlContext.Context_Lookup'(ctxt,v))
-		in
+		in                
 		    (case pc of
 			 PHRASE_CLASS_EXP _ => SOME(ImpExp,v,l)
 		       | PHRASE_CLASS_CON _ => SOME(ImpType,v,l)
@@ -370,7 +373,7 @@ structure Linknil (* : LINKNIL *) =
 					     let 
 						 val _ = print "exporting module\n" 
 						 val er = path2exp rpath
-				 val _ = (print "er = "; PpNil.pp_exp er; print "\n")
+						 val _ = (print "er = "; PpNil.pp_exp er; print "\n")
 						 val (_,cr) = nilstatic_exp_valid(nil_final_context,er)
 						 val _ = print "exporting module: type-checked exp\n" 
 						 val cc = path2con cpath
@@ -495,7 +498,7 @@ structure Linknil (* : LINKNIL *) =
     fun compile filename = hd(meta_compiles false [filename])
     fun tests filenames = meta_compiles true filenames
     fun test filename = hd(meta_compiles true [filename])
-
+    fun il_to_nil (context, sbnds, sdecs) = compile' false (context, sbnds, sdecs)
 
     val cached_prelude = ref (NONE : Nil.module option)
     fun compile_prelude (use_cache,filename) = 

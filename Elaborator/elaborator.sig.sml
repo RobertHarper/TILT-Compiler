@@ -5,8 +5,7 @@ signature ELABORATOR =
    type filepos = SourceMap.charpos -> string * int * int 
 
    (* Contexts *)
-   val empty_context : context
-   val init_context : context
+   structure Basis : BASIS where type Il.context = context
    val plus_context : context list -> context
    val eq_context : context * context -> bool
 

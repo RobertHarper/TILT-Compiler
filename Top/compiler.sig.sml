@@ -5,12 +5,14 @@ signature COMPILER =
  sig
    type sbnds and context
 
-   val compile : context * string * sbnds * context * string -> unit
+   val compile : context * string * sbnds * context -> unit
 
-   (* compile(ctxt, unitName, sbnds, ctxt', oFile)  compiles sbnds into
-    * an object file oFile. ctxt is the context in which the sbnds
+   (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds into an
+    * object file `unitName.o'. ctxt is the context in which the sbnds
     * were produced, and ctxt' contains the new bindings. unitName is
     * the name of the unit being compiled and can be used for
-    * generating unique identifiers. Also, oFile must contain a label
-    * for `initialization' with name `unitName_do'. *)
+    * generating unique identifiers. Also, `unitName.o' must contain a
+    * label for `initialization' with name `unitName_doit'. 
+    *)
+
  end

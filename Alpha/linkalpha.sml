@@ -4,9 +4,16 @@ sig
     val compile_prelude : bool * string -> string * Rtl.local_label
     (* add table info into corresponding asm file *)
     val link : string * (Rtl.local_label list) -> unit 
+    val mk_link_file : string * (Rtl.local_label list) -> unit
+	(* the string is the name of the asm-file to create *)
     val compile : string -> string * Rtl.local_label
     val compiles : string list -> (string * Rtl.local_label) list
     val test : string -> string * Rtl.local_label
+    val rtl_to_alpha : string * Rtl.module -> string * Rtl.local_label
+	(* rtl_to_alpha(s,m) returns a pair of the name of the
+	 * asm-file and a label for the entrance to the module. 
+	 * s is the source filename.
+	 *)
 end
 
 structure Linkalpha (* : LINKALPHA *) =
@@ -157,13 +164,11 @@ struct
   end
 *)
 
-  fun comp (srcfile,rtlmod) = 
-    let 
-      val asm_file = srcfile ^ (asm_suffix())
-      val _ = Printutils.openOutput asm_file
-      val _ = Rtltoalpha.allocateModule rtlmod
-      val _ = Printutils.closeOutput()
-      val _ = print "Generation of assembly files complete\n"
+  fun comp (asm_file,rtlmod) = 
+    let val _ = Printutils.openOutput asm_file
+	val _ = Rtltoalpha.allocateModule rtlmod
+	val _ = Printutils.closeOutput()
+	val _ = print "Generation of assembly files complete\n"
     in asm_file
     end
 
@@ -176,19 +181,32 @@ struct
     in ()
     end
 
+  fun mk_link_file (asm_file,local_labels) = 
+    let 
+      val _ = Printutils.openOutput asm_file
+      val _ = Rtltoalpha.dumpEntryTables local_labels 
+      val _ = Printutils.closeOutput()
+    in ()
+    end
+
   fun compiles filenames = 
       let val rtlmods = Linkrtl.compiles filenames
 	  fun doit (filename,rtlmod) = let val Rtl.MODULE{main,...} = rtlmod
-				       in  (comp(filename,rtlmod),main)
+				       in  (comp(filename ^ asm_suffix(),rtlmod),main)
 				       end
       in  Listops.map2 doit (filenames,rtlmods)
       end
   fun compile filename = hd(compiles [filename])
 
+  fun rtl_to_alpha (filename, rtlmod) : string * Rtl.local_label =
+      let val Rtl.MODULE{main,...} = rtlmod
+      in (comp(filename ^ ".s",rtlmod), main)
+      end
+
   fun test filename = 
       let val rtlmod = Linkrtl.test filename
 	  val Rtl.MODULE{main,...} = rtlmod
-      in  (comp(filename,rtlmod),main)
+      in  (comp(filename ^ asm_suffix(),rtlmod),main)
       end
 
   val cached_prelude = ref (NONE : (string * Rtl.local_label) option)
@@ -197,7 +215,7 @@ struct
 	  (true, SOME mlabel) => mlabel
 	| _ => let val rtlmod = Linkrtl.compile_prelude(use_cache,filename)
 		   val Rtl.MODULE{main=label,...} = rtlmod
-		   val mlabel = (comp(filename,rtlmod),label)
+		   val mlabel = (comp(filename ^ asm_suffix(),rtlmod),label)
 		   val _ = cached_prelude := SOME mlabel
 	       in  mlabel
 	       end

@@ -3231,7 +3231,10 @@ val debug = ref false
 	     | SOME (ConFunWork vvkck) => (doconfun false vvkck; worklist_loop()))
   end
 
-   fun translate trans_params (Nil.MODULE{bnds : bnd list,
+
+  (* unitname is the name of the unit; unit names are globally unique. *)
+
+   fun translate (unitname:string) trans_params (Nil.MODULE{bnds : bnd list,
 					  imports : import_entry list,
 					  exports : export_entry list}) =
          let 
@@ -3267,7 +3270,7 @@ val debug = ref false
 
 		 
 	    (* translate the expression as a function taking no arguments *)
-	     val mainName = fresh_named_var "main"
+	     val mainName = non_generative_named_var ("main_" ^ unitname ^ "_doit")
 	     fun folder (ImportValue(l,v,c),s) = 
 		 add_global s (v,(ML_EXTERN_LABEL(Name.label2string l),con2rep s c),c)
 	       | folder (ImportType(l,v,k),s) = 

@@ -8,6 +8,7 @@ sig
                              codeAlign : Rtl.align, FullConditionalBranch : bool, 
                              elim_tail_call : bool, recognize_constants : bool }
 
-   val translate : translate_params -> Nil.module -> Rtl.module
+   val translate : string -> translate_params -> Nil.module -> Rtl.module
+                   (* unit name *)
 
 end

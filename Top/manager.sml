@@ -8,15 +8,21 @@ functor Manager (structure Parser: LINK_PARSE
 		) : MANAGER = 
 struct
 
+  structure Basis = Elaborator.Basis
   structure UIBlast = mkBlast(type t = Elaborator.context)
 
   val error = fn x => Util.error "Manager" x
 
+  val chat_ref = ref true
+  fun chat s = if !chat_ref then print s
+	       else ()
+
   fun help() = print "This is TILT - no help available.\n"
 
   fun getContext imports = 
-      let val ctxts = List.map (fn file => UIBlast.blastIn (file^".ui")) imports
-      in Elaborator.plus_context ctxts
+      let val (_,_,_,ctxt_noninline) = Basis.initial_context()
+	  val ctxts = List.map (fn file => UIBlast.blastIn (file^".ui")) imports
+      in Elaborator.plus_context (ctxt_noninline :: ctxts)
       end
 
   fun emitter oFile outs = 
@@ -44,24 +50,38 @@ struct
          | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
 
   fun compileSML sourcefile = 
-      let val (fp, imports, dec) = Parser.parse_impl sourcefile
+      let val _ = chat ("  [Parsing " ^ sourcefile ^ "...")
+	  val (fp, imports, dec) = Parser.parse_impl sourcefile
+	  val _ = chat "]\n"
+	  val _ = chat "  [Creating context from imports..."
 	  val ctxt = getContext imports
+	  val _ = chat "]\n"
 	  val imports = List.map (fn x => (x, Linker.Crc.crc_of_file (x^".ui"))) imports
 	  val unitName = OS.Path.base(OS.Path.file sourcefile)
 	  val uiFile = unitName^".ui"
 	  val intFile = unitName^".int"
 	  val oFile = unitName^".o"
-	  val (sbnds, ctxt') = if OS.FileSys.access(intFile, []) then 
-	                         elab_constrained(ctxt,sourcefile,fp,dec,uiFile)
-			       else elab_nonconstrained(ctxt,sourcefile,fp,dec,uiFile)
-	  val _ = Compiler.compile(ctxt, unitName, sbnds, ctxt', oFile)
+	  val (sbnds, ctxt') = 
+	      if OS.FileSys.access(intFile, []) then 
+		  let val _ = chat "  [Elaborating with constraint..."  
+		  in elab_constrained(ctxt,sourcefile,fp,dec,uiFile)
+		  end
+	      else let val _ = chat "  [Elaborating non-constrained..."
+		   in elab_nonconstrained(ctxt,sourcefile,fp,dec,uiFile)
+		   end
+	  val _ = chat "]\n"
+	  val _ = chat ("  [Compiling into " ^ unitName ^ ".o ...")
+	  val _ = Compiler.compile(ctxt, unitName, sbnds, ctxt')  (* generates oFile *)
+	  val _ = chat "]\n"
 	  val crc = Linker.Crc.crc_of_file uiFile
 	  val exports = [(unitName, crc)]
-      in
-	  Linker.mk_uo {imports = imports,
-			exports = exports,
-			uo_result = (unitName^".uo"),
-			emitter = emitter oFile}
+	  val _ = chat ("  [Creating " ^ unitName ^ ".uo ...")
+	  val res = Linker.mk_uo {imports = imports,
+				  exports = exports,
+				  uo_result = (unitName^".uo"),
+				  emitter = emitter oFile}
+	  val _ = chat "]\n"
+      in res
       end
 
   fun compileINT sourcefile = 
@@ -134,7 +154,7 @@ struct
 
   fun compileThem(link, uo, exec, out, srcs) = let
     val _ = List.app compileFile srcs
-    val tmpFile = OS.FileSys.tmpName()
+    val tmp_uo = OS.FileSys.tmpName() ^ ".uo"
     val uo_args = List.mapPartial srcToUO srcs
   in
     case uo of
@@ -142,11 +162,11 @@ struct
 		    else ();
 		    if exec then Linker.mk_exe {uo_arg = f, exe_result = out}
 		    else ())
-       | NONE => (if link then Linker.link{uo_args = uo_args, uo_result = tmpFile}
+       | NONE => (if link then Linker.link{uo_args = uo_args, uo_result = tmp_uo}
 		  else ();
-		  if exec then Linker.mk_exe {uo_arg = tmpFile, exe_result = out}
+		  if exec then Linker.mk_exe {uo_arg = tmp_uo, exe_result = out}
 		  else ();
-		  OS.FileSys.remove(tmpFile))
+		  OS.FileSys.remove tmp_uo)
   end
        
        
@@ -174,3 +194,10 @@ struct
     
 
 end
+
+
+structure TM = Manager(structure Parser = LinkParse
+		       structure Elaborator = LinkIl
+		       structure Compiler = Compiler
+		       structure Linker = Linker
+		       structure Makedep = Makedep)

@@ -77,6 +77,10 @@ signature ILCONTEXT =
 	val Context_Exn_Lookup : context * tag        -> con option
 	val Context_Varlist    : context -> var list
 
+        (* -------- convert a context to sdecs -------- *)
+	val context_to_sdecs : context -> sdecs
+	val plus_context : context list -> context
+
         (* -------- if you get desperate enough to print the context, i feel sorry for you ----- *)
 	val print_context    : {pp_exp : exp -> Formatter.format,
 				pp_mod : mod -> Formatter.format,

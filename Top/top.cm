@@ -18,6 +18,7 @@ measure.sml
 distribute.sml
 *)
 compiler.sig.sml
+compiler.sml
 manager.sig.sml
 manager.sml
 linker.sig.sml
