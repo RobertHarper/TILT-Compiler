@@ -1,9 +1,9 @@
 (* Primitives pretty-printer. *)
-functor Ppprim(structure Prim : PRIM)
-	: PPPRIM =
+functor Ppprim(structure ArgPrim : PRIM)
+	: PPPRIM where structure Prim = ArgPrim =
   struct
 
-    structure Prim = Prim
+    structure Prim = ArgPrim
 
     open Prim Formatter Util
 

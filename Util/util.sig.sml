@@ -15,6 +15,8 @@ signature UTIL =
     (* Misc helpers *)
     val eq_opt : (('a * 'a -> bool) * 'a option * 'a option) -> bool
     val mapopt : ('a -> 'b) -> 'a option -> 'b option
+    val split_opt : ('a * 'b) option -> 'a option * 'b option
+
     val substring : string * string -> bool (* (look for) pattern * (in) target -> present *)
 (*
     (* Conversion: strings to/from int/word/char *)
@@ -51,6 +53,9 @@ signature UTIL =
     val set_lookup : ('a * 'a -> bool) -> ('a,'b) set -> 'a -> 'b option
     val sequence_lookup : ('a * 'a -> bool) -> ('a,'b) sequence -> 'a -> 'b option
     val allsequence : (('a *'b) -> bool) -> ('a,'b) sequence -> bool
+
+    val curry2 : ('a * 'b -> 'c) -> ('a -> 'b -> 'c)
+    val curry3 : ('a * 'b * 'c -> 'd) -> ('a -> 'b -> 'c -> 'd)
+
+    val all_pairs : ('a * 'a -> bool) -> 'a list -> bool
   end
-
-

@@ -148,9 +148,30 @@ structure Listops : LISTOPS =
 	loop (init,list,[])
       end
     
+    fun foldl2 f init (l1,l2) = 
+      let
+	fun loop ([],[],state) = state
+	  | loop (a::aa,b::bb,state) = loop(aa,bb,f (a,b,state))
+	  | loop _ = error "foldl2 given lists of different length"
+      in
+	loop (l1,l2,init)
+      end
+
     fun eq_len (l1,l2) = ((List.length l1) = (List.length l2))
 
     fun eq_len3 ([],[],[]) = true
       | eq_len3 (a::arest,b::brest,c::crest) = eq_len3 (arest,brest,crest)
       | eq_len3 _ = false
+
+
+    fun split ls = 
+      let fun split' _ [] = error "split given empty list"
+	    | split' acc [x] = (rev acc,x)
+	    | split' acc (a::rest) = split' (a::acc) rest
+      in split' [] ls
+      end
+
+    fun opt_cons a (SOME aa) = (a::aa)
+      | opt_cons a (NONE) = [a]
+
   end

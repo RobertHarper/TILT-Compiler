@@ -15,10 +15,14 @@ signature NAME =
 
     val eq_label : (label * label) -> bool
     val eq_var   : (var * var) -> bool
+    val eq_var2 : var -> var -> bool
+    val eq_label2 : label -> label -> bool
     val eq_tag   : (tag * tag) -> bool
     val compare_tag : (tag * tag) -> order
     val compare_var : (var * var) -> order
     val compare_label : (label * label) -> order
+
+    val labels_sorted_distinct : label list -> bool
 
     (* generative *)
     val fresh_named_var : string -> var

@@ -26,6 +26,10 @@ structure Name :> NAME =
 				(Bool.toString res)) () *)
 		in  res
 		end
+
+    val eq_var2 = curry2 eq_var
+    val eq_label2 = curry2 eq_label
+      
     fun eq_tag   (GTAG n1, GTAG n2)     = n1 = n2
     fun compare_var ((a,_) : var,(b,_) : var) = Int.compare(a,b)
     fun compare_tag (GTAG(a,_),GTAG(b,_)) = Int.compare(a,b)
@@ -40,6 +44,13 @@ structure Name :> NAME =
 			 | res => res)
 
 
+    fun lt_label (l1,l2) = 
+      (case compare_label (l1,l2)
+	 of LESS => true
+	  | _ => false)
+	 
+    val labels_sorted_distinct = all_pairs lt_label
+    
     fun make_counter() = 
       let
 	val counter = ref 0

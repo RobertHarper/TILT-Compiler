@@ -18,7 +18,8 @@ structure Util : UTIL =
     fun eq_opt (f, NONE, NONE) = true
       | eq_opt (f, SOME a, SOME b) = f(a,b)
       | eq_opt _ = false
-
+    fun split_opt (NONE) = (NONE,NONE)
+      | split_opt (SOME (a,b)) = (SOME a,SOME b)
 (*
     fun IntStr2word s = (case (Int.fromString s) of
 			SOME i => Word32.fromInt i
@@ -77,6 +78,18 @@ structure Util : UTIL =
 	      | match _ _ = false
 	in  (match pattern (explode target))
 	end
+
+    fun curry2 f = fn a => fn b => f (a,b)
+    fun curry3 f = fn a => fn b => fn c => f (a,b,c)
+
+    fun all_pairs p = 
+      let
+	fun loop ([] | [_]) = true
+	  | loop (fst::snd::rest) = 
+	  (p (fst,snd)) andalso (loop (snd::rest))
+      in
+	loop
+      end
 
     val error = real_error
   end

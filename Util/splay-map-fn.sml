@@ -86,6 +86,36 @@ functor LocalSplayMapFn (K : ORD_KEY) : ORD_MAP =
           apply (!root,[])
         end
 
+    local
+      fun next ((t as SplayObj{right, ...})::rest) = (t, left(right, rest))
+	| next _ = (SplayNil, [])
+      and left (SplayNil, rest) = rest
+	| left (t as SplayObj{left=l, ...}, rest) = left(l, t::rest)
+    in
+    fun collate cmpRng (EMPTY, EMPTY) = EQUAL
+      | collate cmpRng (EMPTY, _) = LESS
+      | collate cmpRng (_, EMPTY) = GREATER
+      | collate cmpRng (MAP{root=s1, ...}, MAP{root=s2, ...}) = let
+	  fun cmp (t1, t2) = (case (next t1, next t2)
+		 of ((SplayNil, _), (SplayNil, _)) => EQUAL
+		  | ((SplayNil, _), _) => LESS
+		  | (_, (SplayNil, _)) => GREATER
+		  | ((SplayObj{value=(x1, y1), ...}, r1),
+		     (SplayObj{value=(x2, y2), ...}, r2)
+		    ) => (
+		      case Key.compare(x1, x2)
+		       of EQUAL => (case cmpRng (y1, y2)
+			     of EQUAL => cmp (r1, r2)
+			      | order => order
+			    (* end case *))
+			| order => order
+		      (* end case *))
+		(* end case *))
+	  in
+	    cmp (left(!s1, []), left(!s2, []))
+	  end
+    end (* local *)
+
 	(* Apply a function to the entries of the dictionary *)
     fun appi af EMPTY = ()
       | appi af (MAP{root,...}) =

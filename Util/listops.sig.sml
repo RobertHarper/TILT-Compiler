@@ -75,6 +75,9 @@ signature LISTOPS =
       *)
     val foldl_acc : ('a * 'b -> 'c * 'b) -> 'b -> 'a list -> 'c list * 'b
 
+    val foldl2 : ('a * 'b * 'state -> 'state) -> 'state -> ('a list * 'b list) -> 'state
     val eq_len : 'a list * 'b list -> bool
     val eq_len3 : 'a list *'b list * 'c list -> bool
+    val split : 'a list -> 'a list * 'a
+    val opt_cons : 'a -> ('a list option) -> 'a list 
   end

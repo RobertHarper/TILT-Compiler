@@ -26,7 +26,7 @@ structure LinkIl (* : LINKIL *) =
 	structure IlContext = IlContext(structure Il = IlLeak);
 	structure Formatter = Formatter;
 	structure AstHelp = AstHelp;
-	structure Ppprim = Ppprim(structure Prim = Prim);
+	structure Ppprim = Ppprim(structure ArgPrim = Prim);
 	structure Ppil = Ppil(structure AstHelp = AstHelp
 			      structure Ppprim = Ppprim
 			      structure IlContext = IlContext
