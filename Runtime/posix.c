@@ -287,7 +287,7 @@ static int stringlen(ptr_t string)
 {
   tag_t tag = string[-1];
   int len;
-  if (IS_FORWARDPTR(tag))
+  while (IS_FORWARDPTR(tag))
     tag = ((ptr_t)tag) [-1];
   len = GET_ARRLEN(tag);
   return len;

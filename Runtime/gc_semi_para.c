@@ -21,6 +21,7 @@
 static mem_t alloc_big(int byteLen, int hasPointers)
 {
   Thread_t *curThread = getThread();
+  Proc_t *proc = curThread->proc;
   unsigned long *saveregs = curThread->saveregs;
   mem_t res = NULL;
   int request = RoundUp(byteLen, pagesize);
@@ -37,7 +38,7 @@ static mem_t alloc_big(int byteLen, int hasPointers)
   res = (mem_t) saveregs[ALLOCPTR];
   saveregs[ALLOCPTR] = (unsigned long) (res + (byteLen / (sizeof (val_t))));
 
-  gcstat_normal(byteLen, 0, 0);
+  gcstat_normal(proc, byteLen, 0, 0);
   return res;
 }
 
@@ -87,17 +88,22 @@ static long numGlobalThread = 0; /* threads completed local work; all work in sh
 static long numReadyThread = 0;  /* threads waiting for collection to complete */
 static long numDoneThread = 0;   /* threads waiting for heap resize/space flip to complete */
 
-static void stop_copy(SysThread_t *sysThread)
+void GCRelease_SemiPara(Proc_t *proc)
+{
+  int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
+  gcstat_normal(proc, alloc, 0, 0);
+}
+
+static void stop_copy(Proc_t *proc)
 {
   int i;
   int isFirst = 0;
   mem_t to_alloc_start;         /* Designated thread records this initially */
   Thread_t *curThread = NULL;
   static long req_size;            /* These are shared across processors. */
-  CopyRange_t copyRange;
+  int copied = 0, write = (proc->writelistCursor - proc->writelistStart) / 2;
   
-  /* start timer */
-  start_timer(&(sysThread->gctime));
+  /* start timer */ 
   GCStatus = GCOn;
 
   /* Using asynchronous version, we detect the first thread and permit
@@ -106,58 +112,59 @@ static void stop_copy(SysThread_t *sysThread)
      by counting the first thread twice in the barrier size. */
   isFirst = (asynchReachBarrier(&numWaitThread)) == 0;
   if (isFirst) {
-    Heap_Unprotect(toSpace,
-		((sizeof (val_t)) * (fromSpace->top - fromSpace->bottom)) + NumSysThread * pagesize);
+    Heap_Resize(toSpace,
+		((sizeof (val_t)) * (fromSpace->top - fromSpace->bottom)) + NumProc * pagesize, 1);
     ResetJob();                        /* Reset counter so all user threads are scanned */
     req_size = 0;
     asynchReachBarrier(&numWaitThread);
   }
-  while (!asynchCheckBarrier(&numWaitThread,  NumSysThread + 1, &numDoneThread))
+  while (!asynchCheckBarrier(&numWaitThread,  NumProc + 1, &numDoneThread))
     ;
   if (diag)
-    printf("Proc %d: mutators stopped; proceeding to collection\n", sysThread->stid);
+    printf("Proc %d: mutators stopped; proceeding to collection\n", proc->stid);
 
 
   /* All threads get local structures ready */
-  assert(sysThread->LocalCursor == 0);
-  QueueClear(sysThread->root_lists);
-  SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPad, dischargeWithPad);
+  assert(proc->localStack.cursor == 0);
+  QueueClear(proc->root_lists);
+  SetCopyRange(&proc->majorRange, proc, toSpace, expandWithPad, dischargeWithPad);
 
   /* Write list can be ignored */
-  discard_writelist(sysThread);
+  discard_writelist(proc);
 
   /* The "first" processor is in charge of the globals. */
   if (isFirst) {
-    major_global_scan(sysThread);
+    major_global_scan(proc);
     if (diag)
-      printf("Proc %d:    computed global roots\n", sysThread->stid);
+      printf("Proc %d:    computed global roots\n", proc->stid);
   }
   /* All other processors compute thread-specific roots in parallel */
   while ((curThread = NextJob()) != NULL) {
     assert(curThread->requestInfo >= 0);
     FetchAndAdd(&req_size, curThread->requestInfo);
-    local_root_scan(sysThread,curThread);
+    local_root_scan(proc,curThread);
     if (diag)
       printf("Proc %d:    computed roots of userThread %d\n",
-	     sysThread->stid,curThread->tid);      
+	     proc->stid,curThread->tid);      
   }
 
   /* Now forward all the roots which initializes the local work stacks */
-  while (!QueueIsEmpty(sysThread->root_lists)) {
+  while (!QueueIsEmpty(proc->root_lists)) {
     /* Cannot dequeue from roots since this may be a global queue */
-    Queue_t *roots = (Queue_t *) Dequeue(sysThread->root_lists);
+    Queue_t *roots = (Queue_t *) Dequeue(proc->root_lists);
     int i, len = QueueLength(roots);  
     for (i=0; i<len; i++) {
       ploc_t root = (ploc_t) QueueAccess(roots,i);
-      forward1_coarseParallel_stack(root,&copyRange,&fromSpace->range,sysThread);
+      copied += forward1_coarseParallel_stack(root,&proc->majorRange,&fromSpace->range,proc);
     }
+    proc->numRoot += len;
   }
 
   /* Move everything from local stack to global stack to balance work */
   SynchStart(workStack);
   SynchMid(workStack);
-  moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
-  SynchEnd(workStack);
+  moveToGlobalStack(workStack,&proc->localStack);
+  SynchEnd(workStack,NULL);
   
 
   /* Reaching this barrier indicates all work is now shared.  
@@ -166,37 +173,36 @@ static void stop_copy(SysThread_t *sysThread)
      We have to check that all procssors have reached this point before proceeding. */
   asynchReachBarrier(&numGlobalThread);
   if (diag)
-    printf("Proc %d: Entering global state\n",sysThread->stid);
+    printf("Proc %d: Entering global state\n",proc->stid);
   while (1) {
     int i, numToFetch = 10, numToWork = 20;
-    if (asynchCheckBarrier(&numGlobalThread, NumSysThread, &numWaitThread) &&
+    if (asynchCheckBarrier(&numGlobalThread, NumProc, &numWaitThread) &&
 	isEmptyGlobalStack(workStack))
       break;
     /* Stack may be empty at this point */
     SynchStart(workStack);
-    fetchFromGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor), numToFetch);
-    for (i=0; i < numToWork && sysThread->LocalCursor > 0; i++) {
-      loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
-	scan1_object_coarseParallel_stack(grayCell,&copyRange,&fromSpace->range,&toSpace->range,sysThread);
+    fetchFromGlobalStack(workStack,&proc->localStack, numToFetch);
+    for (i=0; i < numToWork && proc->localStack.cursor > 0; i++) {
+      loc_t grayCell = (loc_t)(proc->localStack.stack[--proc->localStack.cursor]);
+      (void) scan1_object_coarseParallel_stack(grayCell,&proc->majorRange,&fromSpace->range,&toSpace->range,proc,&copied);
     }
     SynchMid(workStack);
-    moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
-    SynchEnd(workStack);
+    moveToGlobalStack(workStack,&proc->localStack);
+    SynchEnd(workStack,NULL);
   }
   assert(isEmptyGlobalStack(workStack));
-  copyRange.discharge(&copyRange);
+  ClearCopyRange(&proc->majorRange);
 
   /* Wait for all active threads to reach this point so all forwarding is complete */
   if (diag)
-    printf("Proc %d: waiting for %d systhreads to finish collecting\n",sysThread->stid, 
-	 NumSysThread - numReadyThread);
-  synchBarrier(&numReadyThread, NumSysThread, &numGlobalThread);
-
+    printf("Proc %d: waiting for %d procs to finish collecting\n",proc->stid, 
+	 NumProc - numReadyThread);
+  synchBarrier(&numReadyThread, NumProc, &numGlobalThread);
+  gcstat_normal(proc, 0, copied, write);
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
     long alloc = (sizeof (val_t)) * (fromSpace->top - fromSpace->bottom);
-    long copied = (sizeof (val_t)) * (toSpace->cursor - toSpace->bottom);
     Heap_t *froms[2] = {NULL, NULL};
     froms[0] = fromSpace;
 
@@ -207,58 +213,52 @@ static void stop_copy(SysThread_t *sysThread)
     }
     
     /* Resize heaps and do stats */
-    gcstat_normal(alloc,copied,0);
     HeapAdjust(0,req_size,froms,toSpace);
-    Heap_Unprotect(toSpace, fromSpace->top - fromSpace->bottom + alloc); 
-    fromSpace->cursor = fromSpace->bottom;
+    Heap_Resize(toSpace, Heap_GetSize(fromSpace) + alloc, 0); 
     typed_swap(Heap_t *, fromSpace, toSpace);
     NumGC++;
   }
 
   /* All system threads need to reset their limit pointer */
-  sysThread->allocStart = StartHeapLimit;
-  sysThread->allocCursor = StartHeapLimit;
-  sysThread->allocLimit = StartHeapLimit;
-  assert(sysThread->writelistCursor == sysThread->writelistStart);
+  proc->allocStart = StartHeapLimit;
+  proc->allocCursor = StartHeapLimit;
+  proc->allocLimit = StartHeapLimit;
+  assert(proc->writelistCursor == proc->writelistStart);
 
   /* Resume normal scheduler work and start mutators */
   if (diag)
     printf("Proc %d: waiting for %d threads to sync on space flip\n",
-	   sysThread->stid, NumSysThread - numDoneThread);
-  synchBarrier(&numDoneThread, NumSysThread, &numReadyThread);
+	   proc->stid, NumProc - numDoneThread);
+  synchBarrier(&numDoneThread, NumProc, &numReadyThread);
 
   /* stop timer */
   GCStatus = GCOff;
-  stop_timer(&(sysThread->gctime));
 }
 
-void gc_poll_SemiPara(SysThread_t *sth)
+void gc_poll_SemiPara(Proc_t *sth)
 {
   if (numWaitThread) 
     stop_copy(sth);
 }
 
 
-int GCTry_SemiPara(SysThread_t *sysThread, Thread_t *th)
+int GCTry_SemiPara(Proc_t *proc, Thread_t *th)
 {
   int roundSize = RoundUp(th->requestInfo,pagesize);
-  mem_t tmp_alloc, tmp_limit;
+  int write = (proc->writelistCursor - proc->writelistStart) / 2;
 
-  discard_writelist(sysThread);
+  gcstat_normal(proc, 0, 0, write);
+  discard_writelist(proc);
   if (th->requestInfo > 0) {
-    GetHeapArea(fromSpace,roundSize,&tmp_alloc,&tmp_limit);
-    if (tmp_alloc) {
+    GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
+    if (proc->allocStart) {
       if (diag) 
-	printf("Proc %d: Grabbed %d page(s) at %d\n",sysThread->stid,roundSize/pagesize,tmp_alloc);
-      sysThread->allocStart = tmp_alloc;
-      sysThread->allocCursor = tmp_alloc;
-      sysThread->allocLimit = tmp_limit;
+	printf("Proc %d: Grabbed %d page(s) at %d\n",proc->stid,roundSize/pagesize,proc->allocStart);
       return 1;
     }
   }
   else if (th->requestInfo < 0) {
-    unsigned int bytesAvailable = (((unsigned int)sysThread->writelistEnd) - 
-				   ((unsigned int)sysThread->writelistCursor));
+    unsigned int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
     return ((-th->requestInfo) <= bytesAvailable);
   }
   else 
@@ -266,14 +266,14 @@ int GCTry_SemiPara(SysThread_t *sysThread, Thread_t *th)
   return 0;
 }
 
-void GCStop_SemiPara(SysThread_t *sysThread)
+void GCStop_SemiPara(Proc_t *proc)
 {
-  assert(sysThread->userThread == NULL);
-  assert(sysThread->writelistCursor <= sysThread->writelistEnd);
+  assert(proc->userThread == NULL);
+  assert(proc->writelistCursor <= proc->writelistEnd);
 
   if (diag)
-    printf("Proc %d: Invoking stop-and-copy\n",sysThread->stid);
-  stop_copy(sysThread);
+    printf("Proc %d: Invoking stop-and-copy\n",proc->stid);
+  stop_copy(proc);
 }
 
 
@@ -289,13 +289,7 @@ void gc_init_SemiPara()
   init_int(&MaxRatioSize, 50 * 1024);
   fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  workStack = SharedStack_Alloc();
+  workStack = SharedStack_Alloc(8192);
 }
 
 
-void gc_finish_SemiPara()
-{
-  Thread_t *th = getThread();
-  int allocsize = (unsigned int) th->saveregs[ALLOCPTR] - (unsigned int) fromSpace->cursor;
-  gcstat_normal(allocsize,0,0);
-}

@@ -24,7 +24,7 @@ static Bitmap_t  *largebitmap = NULL;
 Heap_t    *large = NULL;
 static Queue_t   *largeRoots = NULL;
 
-mem_t gc_large_alloc(int byteLen)
+mem_t gc_large_alloc(Proc_t *proc, int byteLen)
 {
   mem_t res = NULL;
   int bitmapPos;
@@ -37,7 +37,7 @@ mem_t gc_large_alloc(int byteLen)
   if (bitmapPos < 0)
     return NULL; /* allocation failed */
 
-  gcstat_normal(byteLenUp, 0 , 0);
+  gcstat_normal(proc, byteLenUp, 0 , 0);
   res = large->bottom + (largebitmapsize * bitmapPos) / (sizeof (val_t));
   return res;
 }

@@ -20,58 +20,55 @@ extern enum GCType GCType;
 /* Heaps and work stacks used by various collectors.  */
 extern Heap_t *fromSpace, *toSpace;
 extern Heap_t *nursery, *tenuredFrom, *tenuredTo;
-extern SharedStack_t *workStack, *majorWorkStack1, *majorWorkStack2;
+extern SharedStack_t *workStack, *majorWorkStack, *majorRegionWorkStack;
 
 /* GCFromML has a non-standard calling convention */
 void GCFromC(Thread_t *, int RequestSizeBytes, int isMajor);
 
 /* These are initialization and finalization routines. */
 void gc_init(void);
-void gc_finish(void);
 void gc_init_Semi(void);
 void gc_init_Gen(void);
 void gc_init_SemiPara(void);
 void gc_init_GenPara(void);
 void gc_init_SemiConc(void);
 void gc_init_GenConc(void);
-void gc_finish_Semi(void);
-void gc_finish_Gen(void);
-void gc_finish_SemiPara(void);
-void gc_finish_GenPara(void);
-void gc_finish_SemiConc(void);
-void gc_finish_GenConc(void);
 
 /* Idle (unmapped) processors call the poll function periodically in case there is GC work. */
-void gc_poll(SysThread_t *);              /* May return immediately or do some work */
-void gc_poll_SemiPara(SysThread_t *);
-void gc_poll_GenPara(SysThread_t *);
-void gc_poll_SemiConc(SysThread_t *);
-void gc_poll_GenConc(SysThread_t *);
+void gc_poll(Proc_t *);              /* May return immediately or do some work */
+void gc_poll_SemiPara(Proc_t *);
+void gc_poll_GenPara(Proc_t *);
+void gc_poll_SemiConc(Proc_t *);
+void gc_poll_GenConc(Proc_t *);
 
 /* Actual collection routines */
 
-int GCFromScheduler(SysThread_t *, Thread_t *);  /* Returns whether thread can be mapped */
+int GCFromScheduler(Proc_t *, Thread_t *);  /* Returns whether thread can be mapped */
 void GCFromMutator(Thread_t *);                  /* Does not return; goes to scheduler; argument may be NULL  */
-void GCRelease(SysThread_t *sysThread);          /* Called by scheduler when a thread is unmapped */
+void GCRelease(Proc_t *proc);          /* Called by scheduler when a thread is unmapped */
 
 /* Can we continue execution without a stop-and-copy */
-int GCTry_Semi(SysThread_t *, Thread_t *);
-int GCTry_Gen(SysThread_t *, Thread_t *);
-int GCTry_SemiPara(SysThread_t *, Thread_t *);
-int GCTry_GenPara(SysThread_t *, Thread_t *);
-int GCTry_SemiConc(SysThread_t *, Thread_t *);
-int GCTry_GenConc(SysThread_t *, Thread_t *);
+int GCTry_Semi(Proc_t *, Thread_t *);
+int GCTry_Gen(Proc_t *, Thread_t *);
+int GCTry_SemiPara(Proc_t *, Thread_t *);
+int GCTry_GenPara(Proc_t *, Thread_t *);
+int GCTry_SemiConc(Proc_t *, Thread_t *);
+int GCTry_GenConc(Proc_t *, Thread_t *);
 
 /* Perform a stop-and-copy collection */
-void GCStop_Semi(SysThread_t *);
-void GCStop_Gen(SysThread_t *);
-void GCStop_SemiPara(SysThread_t *);
-void GCStop_GenPara(SysThread_t *);
+void GCStop_Semi(Proc_t *);
+void GCStop_Gen(Proc_t *);
+void GCStop_SemiPara(Proc_t *);
+void GCStop_GenPara(Proc_t *);
 /* Concurrent collectors do not have a Stop version */
 
 /* Must be called each time a thread is released */
-void GCRelease_SemiConc(SysThread_t *sysThread);
-void GCRelease_GenConc(SysThread_t *sysThread);
+void GCRelease_Semi(Proc_t *proc);
+void GCRelease_Gen(Proc_t *proc);
+void GCRelease_SemiPara(Proc_t *proc);
+void GCRelease_GenPara(Proc_t *proc);
+void GCRelease_SemiConc(Proc_t *proc);
+void GCRelease_GenConc(Proc_t *proc);
 
 
 int returnFromGCFromC(Thread_t *);
@@ -105,8 +102,7 @@ ptr_t alloc_bigfloatarray_GenConc(int logLen, double value, int tag);
 
 extern double MinRatio, MaxRatio;
 extern int MinRatioSize, MaxRatioSize;
-extern int NumRoots, NumWrites, NumLocatives;
-extern int KBytesAllocated, KBytesCollected;
+extern long NumRoots, NumContentions, NumWrites, NumLocatives;
 extern int GenKBytesCollected;
 
 long ComputeHeapSize(long oldsize, double oldratio);
@@ -115,7 +111,7 @@ void HeapAdjust(int show, unsigned int reqSize, Heap_t **froms, Heap_t *to);
 /* Make sure all the pointer values in the stack/globals are in the legal heaps */
 void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bitmap_t **legalStarts);
 void paranoid_check_global(char *, Heap_t **legalHeaps, Bitmap_t **legalStarts);
-Bitmap_t *paranoid_check_heap_without_start(char *, Heap_t *space, Heap_t **legalHeaps);
+void paranoid_check_heap_without_start(char *, Heap_t *space, Heap_t **legalHeaps, Bitmap_t *makeStart);
 void paranoid_check_heap_with_start(char *, Heap_t *space, Heap_t **legalHeaps, Bitmap_t **legalStarts);
 void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
 			Heap_t *firstReplica, Heap_t *secondReplica);

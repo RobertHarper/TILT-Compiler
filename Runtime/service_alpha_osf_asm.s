@@ -126,7 +126,7 @@ after_loop:
 	addq	THREADPTR_REG, MLsaveregs_disp, $0
 	bsr	save_regs				# need to save register set to get 
 							#    alloction pointer into thread state
-	ldl	$at, sysThread_disp(THREADPTR_REG)	# get system thread pointer
+	ldl	$at, proc_disp(THREADPTR_REG)	# get system thread pointer
 	ldl	$sp, ($at)				# run on system thread stack	
 	jsr	Finish
 	lda	$16, $$errormsg				# should not return from Finish
@@ -146,7 +146,7 @@ Yield:
 	br	$gp, Yield_getgp
 Yield_getgp:	
 	ldgp	$gp, 0($gp)			# compute correct gp for self to we can jsr	
-	ldl	$at, sysThread_disp(THREADPTR_REG) # get system thread pointer
+	ldl	$at, proc_disp(THREADPTR_REG) # get system thread pointer
 	ldl	$sp, ($at)		        # run on system thread stack
 	jsr	$26, YieldRest			# no need to restore $gp after this call
 	br	$gp, Yield_getgp2
@@ -166,7 +166,7 @@ Spawn:
 	br	$gp, Spawn_getgp
 Spawn_getgp:	
 	ldgp	$gp, 0($gp)			# compute correct gp for self	
-	ldl	$at, sysThread_disp(THREADPTR_REG) # get system thread pointer
+	ldl	$at, proc_disp(THREADPTR_REG) # get system thread pointer
 	ldl	$sp, ($at)		        # run on system thread stack
 	jsr	$26, SpawnRest			# no need to restore $gp after this call
 	ldgp	$gp, 0($26)			# compute correct gp for self	

@@ -101,9 +101,8 @@ void toplevel_exnhandler(Thread_t *th)
   ptr_t exn = (ptr_t)saveregs[EXNARG];
 
   printf("Proc %d: Thread %d (%d): Uncaught exception ",
-	 getSysThread()->stid, th->tid, th->id);
+	 getProc()->stid, th->tid, th->id);
   printString(exnMessageRuntime(exn));
   printf("\n");
-  
   Finish();
 }

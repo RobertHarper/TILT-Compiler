@@ -128,7 +128,7 @@ start_client_retadd_val:					! used by stack.c
 								!   alloction pointer into thread state
 	nop
 	flushw
-	ld	[THREADPTR_REG + sysThread_disp], ASMTMP_REG	! get system thread pointer
+	ld	[THREADPTR_REG + proc_disp], ASMTMP_REG		! get system thread pointer
 	ld	[ASMTMP_REG], SP_REG				! run on system thread stack	
 	call	Finish
 	nop
@@ -148,7 +148,7 @@ start_client_retadd_val:					! used by stack.c
 	.align	4
 Yield:
 	flushw
-	ld	[THREADPTR_REG + sysThread_disp],ASMTMP_REG ! get system thread pointer into temp
+	ld	[THREADPTR_REG + proc_disp],ASMTMP_REG  ! get system thread pointer into temp
 	ld	[ASMTMP_REG], SP_REG			! run on system thread stack
 	call	YieldRest				
 	nop
@@ -166,7 +166,7 @@ Yield:
 Spawn:
 	flushw	
 	st	LINK_REG, [THREADPTR_REG + LINK_DISP]    ! note that this is return address of Spawn
-	ld	[THREADPTR_REG + sysThread_disp],ASMTMP_REG ! get system thread pointer into temp
+	ld	[THREADPTR_REG + proc_disp],ASMTMP_REG   ! get system thread pointer into temp
 	ld	[ASMTMP_REG], SP_REG			! run on system thread stack
 	call	SpawnRest
 	nop
@@ -178,7 +178,10 @@ Spawn:
 	nop
 	.size	Spawn,(.-Spawn)
 
-
+ ! -------------------------------------------------------------------------------
+ ! Scheduler is called by a C function with the Proc_t * pointer.
+ ! We switch to processor's stack and then call schedulerRest.
+ ! -------------------------------------------------------------------------------
 	.globl  scheduler
 	.proc	07
 	.align	4

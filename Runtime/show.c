@@ -12,6 +12,13 @@
 #define INT_FIELD 1
 #define DOUBLE_FIELD 2
 
+int traceError = 0;
+
+int inHeap(ptr_t v, Heap_t *heap)
+{
+  return ((v >= heap->bottom) && (v <= heap->top));
+}
+
 int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
   while (1) {
@@ -63,12 +70,14 @@ int show_field(int show, int fieldType, ptr_t primary, ptr_t replica, int i, Hea
 	  (inHeaps(primaryField,legalHeaps,legalStarts)))
 	;
       else {
+	traceError = 1;
 	printf("\n  !!!!TRACE ERROR: found bad pointer %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
 	return 0;
       }
       if (replica) {
 	if (isNonheapPointer) {
 	  if (primaryField != replicaField) {
+	    traceError = 1;
 	    printf("\n  !!!!TRACE ERROR at GC %2d: replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
 	    printf("\n                                              %d[%d] = *%d*\n",replica,i,replicaField);
 	    return 0;
@@ -77,6 +86,7 @@ int show_field(int show, int fieldType, ptr_t primary, ptr_t replica, int i, Hea
 	else {
 	  if (primaryField != replicaField &&               /* Primary and replica may share in a generational collector */
 	      (ptr_t) primaryField[-1] != replicaField) {
+	    traceError = 1;
 	    printf("\n  !!!!TRACE ERROR at GC %2d: ptr replica mismatch: %d[%d] = %d -> *%d*",NumGC,primary,i,primaryField,primaryField[-1]);
 	    printf("\n                                                  %d[%d] = *%d*\n",replica,i,replicaField);
 	    return 0;
@@ -88,9 +98,10 @@ int show_field(int show, int fieldType, ptr_t primary, ptr_t replica, int i, Hea
       if (show) 
 	printf("I(%5d)  ", primaryField); 
       if (verbose) 
-	if (inHeaps(primaryField,legalHeaps,legalStarts))
+	if (inHeaps(primaryField,legalHeaps,legalStarts)) 
 	  printf("\n !!!!TRACE WARNING at GC %2d: found suspicious int %d at %d[%d]\n",NumGC,primaryField,primary,i);
       if (replica && primaryField != replicaField) {
+	traceError = 1;
 	printf("\n  !!!!TRACE ERROR at GC %2d: int replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
 	printf("\n                                                  %d[%d] = *%d*\n",replica,i,replicaField);
 	return 0;
@@ -118,15 +129,24 @@ int show_field(int show, int fieldType, ptr_t primary, ptr_t replica, int i, Hea
 mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
   mem_t end = NULL;
-  ptr_t obj = start + 1, replica = 0;
+  ptr_t obj = start + 1, replica = obj; /* replica ultimately is 0 if equal to obj */
   tag_t tag = start[0];
   int i, type;
   int forwarded = IS_FORWARDPTR(tag);
 
-  if (forwarded) {
+  if (show && (GET_TYPE(tag) != SKIP_TAG))
+    printf("%ld:  %ld", start, obj);
+  while (IS_FORWARDPTR(tag)) {
+    assert(replica != (ptr_t) tag);
     replica = (ptr_t) tag;
     tag = replica[-1];
+    if (show)
+      printf( " -> %ld", replica);
   }
+  if (obj == replica)
+    replica = 0;
+  if (show)
+    printf (": ");
   type = GET_TYPE(tag);
 
   switch (type) {
@@ -139,10 +159,7 @@ mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStart
 	  assert(0);
 	}
 	if (show)
-	  if (replica)
-	    printf("%ld -> %ld: REC(%d)   %ld: ", start, replica, len, obj);
-	  else
-	    printf("%ld: REC(%d)   %ld: ", start, len, obj);
+	  printf("REC(%d)   %ld: ", len, obj);
 	for (i=0; i<len; i++) {
 	  val_t field = obj[i];
 	  int isPointer = 1 & (mask >> i);
@@ -179,13 +196,8 @@ mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStart
 	}
 	else 
 	  assert(0);
-	if (show) {
-	  if (replica)
-	    printf("%ld -> %ld: ", start, replica);
-	  else
-	    printf("%ld: ", start);
+	if (show) 
 	  printf("%s(%ld/%ld)  %ld: ",typeDesc,wordlen,loglen,obj);
-	}
 	
 	for (i=0; i<fieldlen; i++) {
 	  if (show && ((i) / 8 * 8) == (i) && (i != 0))
@@ -220,10 +232,8 @@ mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStart
       break;
     }
     default:
-      if (IS_FORWARDPTR(tag)) {
-	printf("\nshow_obj  double-forwarding tag = %d(%d) at address = %d\b",tag,GET_TYPE(tag),obj);
+      if (IS_FORWARDPTR(tag)) 
 	assert(0);
-      }
       else {
 	printf("\nshow_obj  tag = %d(%d) at address = %d\b",tag,GET_TYPE(tag),obj);
 	assert(0);
@@ -235,12 +245,13 @@ mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStart
 
 
 
-Bitmap_t *scan_heap(char *label, mem_t start, mem_t finish, mem_t top, 
-		    Heap_t **legalHeaps, Bitmap_t **legalStarts,
-		    int show, int makeBitmap)
+void scan_heap(char *label, mem_t start, mem_t finish, mem_t top, 
+	       Heap_t **legalHeaps, Bitmap_t **legalStarts,
+	       int show, Bitmap_t *startMap)
 {
   mem_t cur = start, next;
-  Bitmap_t *curStart = makeBitmap ? CreateBitmap(finish - start) : NULL;
+  if (startMap)
+    ClearBitmap(startMap);
   if (show) {
     printf("--------------HEAP CHECK at GC %d ------------------------------\n",NumGC);
     printf("%s %d <= %d < %d\n",label,start,finish,top);
@@ -248,9 +259,9 @@ Bitmap_t *scan_heap(char *label, mem_t start, mem_t finish, mem_t top,
   }
   while (cur < finish) {
     if (cur < finish) {
-      if (makeBitmap) {
+      if (startMap) {
 	int pos = (cur + 1) - start;
-	SetBitmapRange(curStart,pos,1);
+	SetBitmapRange(startMap,pos,1);
       }
       next = show_obj(cur,show,legalHeaps,legalStarts);
       assert(next > cur);
@@ -260,7 +271,6 @@ Bitmap_t *scan_heap(char *label, mem_t start, mem_t finish, mem_t top,
   if (show) {
     printf("-----------------------------------------------------------------\n\n");
   }
-  return curStart;
 }
 
 

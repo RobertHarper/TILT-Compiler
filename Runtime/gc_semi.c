@@ -21,6 +21,7 @@ static mem_t alloc_big(int byteLen, int hasPointers)
 {
   ptr_t res = 0;
   Thread_t *curThread = getThread();
+  Proc_t *proc = curThread->proc;
   unsigned long *saveregs = curThread->saveregs;
   mem_t alloc = (mem_t) saveregs[ALLOCPTR];
   mem_t limit = (mem_t) saveregs[ALLOCLIMIT];
@@ -43,7 +44,7 @@ static mem_t alloc_big(int byteLen, int hasPointers)
   saveregs[ALLOCPTR] = (unsigned long) alloc;
 
   /* Update statistics */
-  gcstat_normal(byteLen, 0, 0);
+  gcstat_normal(proc,byteLen, 0, 0);
 
   return res;
 }
@@ -88,25 +89,33 @@ ptr_t alloc_bigfloatarray_Semi(int elemLen, double initVal, int ptag)
 }
 
 /* --------------------- Semispace collector --------------------- */
-int GCTry_Semi(SysThread_t *sysThread, Thread_t *th)
+void GCRelease_Semi(Proc_t *proc)
 {
-  assert(sysThread->userThread == NULL);
-  assert(th->sysThread == NULL);
-  if (sysThread->allocLimit == StartHeapLimit) {
-    sysThread->allocStart = fromSpace->bottom;
-    sysThread->allocCursor = fromSpace->bottom;
-    sysThread->allocLimit = fromSpace->top;
+  int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
+  gcstat_normal(proc, alloc, 0, 0);
+}
+
+
+int GCTry_Semi(Proc_t *proc, Thread_t *th)
+{
+  int write = (proc->writelistCursor - proc->writelistStart) / 2;
+  assert(proc->userThread == NULL);
+  assert(th->proc == NULL);
+  if (proc->allocLimit == StartHeapLimit) {
+    proc->allocStart = fromSpace->bottom;
+    proc->allocCursor = fromSpace->bottom;
+    proc->allocLimit = fromSpace->top;
     fromSpace->cursor = fromSpace->top;
   }
-  discard_writelist(sysThread);
+  gcstat_normal(proc, 0, 0, write);
+  discard_writelist(proc);
   if (th->requestInfo > 0) {
-    unsigned int bytesAvailable = (val_t) sysThread->allocLimit - 
-				  (val_t) sysThread->allocCursor;
+    unsigned int bytesAvailable = (val_t) proc->allocLimit - 
+				  (val_t) proc->allocCursor;
     return (th->requestInfo <= bytesAvailable);
   }
   else if (th->requestInfo < 0) {
-    unsigned int bytesAvailable = (((unsigned int)sysThread->writelistEnd) - 
-				   ((unsigned int)sysThread->writelistCursor));
+    int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
     return ((-th->requestInfo) <= bytesAvailable);
   }
   else 
@@ -114,25 +123,24 @@ int GCTry_Semi(SysThread_t *sysThread, Thread_t *th)
   return 0;
 }
 
-void GCStop_Semi(SysThread_t *sysThread)
+void GCStop_Semi(Proc_t *proc)
 {
   int i;  
   Thread_t *oneThread;
   int bytesRequested;
-  mem_t allocCursor = sysThread->allocCursor;
-  mem_t allocLimit = sysThread->allocLimit;
+  mem_t allocCursor = proc->allocCursor;
+  mem_t allocLimit = proc->allocLimit;
   mem_t to_ptr = toSpace->bottom;
-  Queue_t *root_lists = sysThread->root_lists;
+  Queue_t *root_lists = proc->root_lists;
+  int write = (proc->writelistCursor - proc->writelistStart) / 2;
 
-  /* Start timing this collection */
-  start_timer(&sysThread->gctime);
   GCStatus = GCOn;
   oneThread = &(Threads[0]);             /* In a sequential collector, 
 					    there is only one user thread */
   bytesRequested = oneThread->requestInfo;
 
   /* Check that processor is unmapped, write list is not overflowed, allocation region intact */
-  assert(sysThread->userThread == NULL);
+  assert(proc->userThread == NULL);
   assert(allocCursor <= allocLimit);
   assert(bytesRequested >= 0);
 
@@ -142,21 +150,21 @@ void GCStop_Semi(SysThread_t *sysThread)
     paranoid_check_all(fromSpace, NULL, NULL, NULL);
 
   /* Write list can be ignored */
-  discard_writelist(sysThread);
+  discard_writelist(proc);
 
   /* Compute the roots from the stack and register set */
-  QueueClear(sysThread->root_lists);
-  local_root_scan(sysThread,oneThread);
-  major_global_scan(sysThread);
-    
+  QueueClear(proc->root_lists);
+  local_root_scan(proc,oneThread);
+  major_global_scan(proc);
+
   /* Get toSpace ready for the collection */
-  Heap_Unprotect(toSpace, fromSpace->top - fromSpace->bottom);
+  Heap_Resize(toSpace, Heap_GetSize(fromSpace), 1);
 
   /* forward the roots */
-  to_ptr = forward1_root_lists(root_lists, to_ptr, &fromSpace->range, &toSpace->range);
+  to_ptr = forward1_root_lists(proc,root_lists, to_ptr, &fromSpace->range, &toSpace->range);
 
   /* perform a Cheney scan */
-  to_ptr = scan1_until(toSpace->range.low, to_ptr, &fromSpace->range, &toSpace->range);
+  to_ptr = scan1_until(proc,toSpace->range.low, to_ptr, &fromSpace->range, &toSpace->range);
   toSpace->cursor = to_ptr;
 
   if (debug && SHOW_HEAPS) {
@@ -170,31 +178,27 @@ void GCStop_Semi(SysThread_t *sysThread)
   if (paranoid) 
     paranoid_check_all(fromSpace, NULL, toSpace, NULL);
 
-  gcstat_normal((sizeof (val_t)) * (allocCursor - fromSpace->cursor),
-		(sizeof (val_t)) * (to_ptr - toSpace->bottom),
-		0);
+  gcstat_normal(proc, 0, sizeof (val_t) * (toSpace->cursor - toSpace->bottom), write);
 
   /* Resize the tospace, discard old space, flip space */
   {
     Heap_t *froms[2] = {NULL, NULL};
     froms[0] = fromSpace;
     HeapAdjust(0, bytesRequested, froms, toSpace);
-    Heap_Protect(fromSpace);
+    Heap_Resize(fromSpace,0,1);
     typed_swap(Heap_t *, fromSpace, toSpace);
   }
 
-  /* Update systhread's allocation variables */
+  /* Update proc's allocation variables */
   fromSpace->cursor = to_ptr;
-  sysThread->allocStart = fromSpace->cursor;
-  sysThread->allocCursor = fromSpace->cursor;
-  sysThread->allocLimit = fromSpace->top;
-  assert(sysThread->writelistCursor == sysThread->writelistStart);
+  proc->allocStart = fromSpace->cursor;
+  proc->allocCursor = fromSpace->cursor;
+  proc->allocLimit = fromSpace->top;
+  assert(proc->writelistCursor == proc->writelistStart);
 
   NumGC++;
   GCStatus = GCOff;
 
-  /* Stop timer for collection */
-  stop_timer(&sysThread->gctime);
 }
 
 
@@ -213,9 +217,3 @@ void gc_init_Semi()
 }
 
 
-void gc_finish_Semi()
-{
-  Thread_t *th = getThread();
-  int allocsize = th->saveregs[ALLOCPTR] - (unsigned int)(fromSpace->cursor);
-  gcstat_normal(allocsize,0,0);
-}

@@ -10,7 +10,7 @@
 #include "general.h"
 #include "til-signal.h"
 #include <fcntl.h>
-
+#include "stats.h"
 
 static Stack_t *Stacks;
 static StackChain_t *StackChains;
@@ -48,16 +48,14 @@ static const int Heapbitmap_bits = 8192;
 void my_mprotect(int which, caddr_t bottom, int size, int perm)
 {
   int status = mprotect(bottom, size, perm);
-  if (status)
-    {
-      fprintf (stderr, "mprotect %d failed (%d,%d,%d) with %d\n",which,bottom,size,perm,errno);
-      assert(0);
-    }
-  /*
+  if (status) {
+    fprintf (stderr, "mprotect %d failed (%d,%d,%d) with %d\n",which,bottom,size,perm,errno);
+    assert(0);
+  }
   if (paranoid)
     fprintf (stderr, "mprotect %d succeeded (%d,%d,%d)\n",which,bottom,size,perm);
-    */
 }
+
 
 mem_t my_mmap(caddr_t start, int size, int prot)
 {
@@ -87,26 +85,9 @@ mem_t my_mmap(caddr_t start, int size, int prot)
 	      start, size, mapped);
       assert(0);
   }
-  if (paranoid)
+  if (diag)
     fprintf(stderr,"mmap succeeded with start = %d, size = %d, prot = %d\n",
 	    start, size, prot);
-  /*
-  if (paranoid) {
-    if (prot == (PROT_READ | PROT_WRITE)) {
-      int a,b;
-      caddr_t end = start + size - 4;
-      *((int *)(start)) = 666;
-      *((int *)(end)) = 666;
-      a = *((int *)(start));
-      b = *((int *)(end));
-      if (a != 666 || b != 666) {
-	fprintf(stderr,"mmap (%d,%d,%d)\n",start,size,prot);
-	fprintf(stderr,"written 666 to %u: read back %d\n",start,*((int *)(start)));
-	fprintf(stderr,"written 666 to %u: read back %d\n",end,*((int *)(end)));
-      }
-    }
-  }
-  */
   return mapped;
 }
 
@@ -191,25 +172,17 @@ Stack_t* Stack_Alloc(StackChain_t *parent)
   res->safety = 2 * pagesize;
   res->parent = parent;
   res->rawbottom = my_mmap((caddr_t) start,size,PROT_READ | PROT_WRITE);
-  if (res->rawbottom == (mem_t) -1)
-      exit(-1);
   res->rawtop = res->rawbottom + size / (sizeof (val_t));
   res->bottom = res->rawbottom + res->safety / (sizeof (val_t));
   res->top    = res->rawtop    - res->safety / (sizeof (val_t));
   res->valid  = 1;
-
-  if (!(res->rawtop < heapstart))
-    fprintf(stderr,"count = %d, res->rawtop , heapstart = %d  %d\n", count,res->rawtop, heapstart);
+  assert(res->rawbottom != (mem_t) -1);
   assert(res->rawtop < heapstart);
 
-  my_mprotect(0,(caddr_t) res->bottom, (res->top - res->bottom)/ (sizeof (val_t)), PROT_READ | PROT_WRITE);
-  my_mprotect(1,(caddr_t) res->rawbottom,         res->safety / (sizeof (val_t)),PROT_NONE);
-  my_mprotect(2,(caddr_t) res->rawtop-res->safety,res->safety / (sizeof (val_t)), PROT_NONE);
+  my_mprotect(0, (caddr_t) res->rawbottom, res->safety,              PROT_NONE);
+  my_mprotect(1, (caddr_t) res->bottom,    size - 2 * res->safety,   PROT_READ | PROT_WRITE);
+  my_mprotect(2, (caddr_t) res->top,       res->safety,              PROT_NONE);
 
-#ifdef DEBUG
-  fprintf(stderr,"Stack Object: bottom = %d,    top = %d\n",res->bottom,res->top);
-  fprintf(stderr,"           rawbottom = %d, rawtop = %d\n\n",res->rawbottom,res->rawtop);
-#endif
   return res;
 }
 
@@ -226,7 +199,8 @@ void HeapInitialize(void)
     heap->top = 0;
     heap->bottom = 0;
     heap->cursor = 0;
-    heap->physicalTop = 0;
+    heap->mappedTop = 0;
+    heap->writeableTop = 0;
     heap->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(heap->lock,NULL);
   }
@@ -240,24 +214,21 @@ void PadHeapArea(mem_t bottom, mem_t top)
     *bottom = SKIP_TAG | ((top - bottom) << SKIPLEN_OFFSET);
 }
 
-void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *top)
+void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *top)
 {
-  mem_t start, end;
-  pthread_mutex_lock(heap->lock);
-  start = heap->cursor;
-  end = start + size / (sizeof (val_t));
-  if (end > heap->top) {
-    start = 0;
-    end = 0;
+  mem_t region = (mem_t) FetchAndAdd((long *)(&heap->cursor), size);
+  mem_t newHeapCursor = region + size / sizeof(val_t);
+  if (newHeapCursor > heap->top) {
+    FetchAndAdd((long *)(&heap->cursor), -size);
+    *bottom = *cursor = *top = 0;
   }
   else {
-    PadHeapArea(start,end);
-    heap->cursor = end;
+    val_t forceRead = *newHeapCursor;     /* Do most machines have non-blockig read? */
+    *bottom = region;
+    *cursor = region;
+    *top = newHeapCursor;
+    PadHeapArea(*bottom,*top);
   }
-  *bottom = start;
-  *top = end;
-  flushStore();
-  pthread_mutex_unlock(heap->lock);
 }
 
 Heap_t* GetHeap(mem_t add)
@@ -277,13 +248,6 @@ int inSomeHeap(ptr_t v)
   return (v >= heapstart && v < heapstart + (totalHeapSize / sizeof (val_t)));
 }
 
-void Heap_Check(Heap_t *h)
-{
-  assert(h->bottom <= h->cursor);
-  assert(h->cursor <= h->top);
-  assert(h->top <= h->physicalTop);
-}
-
 void SetRange(range_t *range, mem_t low, mem_t high)
 {
   range->low = low;
@@ -294,7 +258,7 @@ void SetRange(range_t *range, mem_t low, mem_t high)
 Heap_t* Heap_Alloc(int MinSize, int MaxSize)
 {
   static int heap_count = 0;
-
+  mem_t cursor;
   Heap_t *res = &(Heaps[heap_count++]);
   int maxsize_pageround = RoundUp(MaxSize,pagesize);
   int maxsize_chunkround = RoundUp(MaxSize,chunksize);
@@ -304,25 +268,30 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   res->bottom = (mem_t) my_mmap((caddr_t) start, maxsize_pageround, PROT_READ | PROT_WRITE);
   res->cursor = res->bottom;
   res->top    = res->bottom + MinSize / (sizeof (val_t));
-  res->physicalTop = res->bottom + maxsize_pageround / (sizeof (val_t));
-  SetRange(&(res->range), res->bottom, res->physicalTop);
+  res->writeableTop = res->bottom + maxsize_pageround / (sizeof (val_t));
+  res->mappedTop = res->writeableTop;
+  SetRange(&(res->range), res->bottom, res->mappedTop);
   res->valid  = 1;
-
+  res->bitmap = paranoid ? CreateBitmap(maxsize_pageround / 4) : NULL;
   assert(res->bottom != (mem_t) -1);
   assert(chunkstart >= 0);
   assert(heap_count < NumHeap);
   assert(MaxSize >= MinSize);
-
+  /* Lock down pages and force page-table to be initialized; otherwise, PadHeapArea can often take 0.1 - 0.2 ms. 
+     Even with this, there are occasional (but far fewer) page table misses.
+   */
+  /*
+  mlock((caddr_t) res->bottom, maxsize_pageround); 
+  for (cursor = res->bottom; cursor < res->mappedTop; cursor += pagesize / sizeof(val_t))
+    *cursor = 0;
+    */
   return res;
 }
 
 
-void Heap_Protect(Heap_t* res)
+int Heap_GetMaximumSize(Heap_t *h)
 {
-  long size = res->physicalTop - res->bottom;
-  assert((size / pagesize * pagesize) == size);
-  my_mprotect(6,(caddr_t) res->bottom, size, PROT_NONE);
-
+  return (sizeof (val_t)) * (h->mappedTop - h->bottom);
 }
 
 int Heap_GetSize(Heap_t *h)
@@ -335,25 +304,38 @@ int Heap_GetAvail(Heap_t *h)
   return (sizeof (val_t)) * (h->top - h->cursor);
 }
 
-void Heap_Resize(Heap_t *h, long newsize)
+/* Semantically, expand the area in the heap */
+void Heap_Resize(Heap_t *h, long newSize, int het)
 {
-  int actualSize = (val_t) h->physicalTop - (val_t) h->bottom;
-  if (newsize > actualSize) {
-    fprintf(stderr,"FATAL ERROR in Heap_Resize at GC %d.  Heap size = %d.  Trying to resize to %d\n",
-	    NumGC, actualSize, newsize);
+  long maxSize = (h->mappedTop - h->bottom) * sizeof(val_t);
+  long oldSize = (h->top - h->bottom) * sizeof(val_t);
+  long oldSizeRound = RoundUp(oldSize, pagesize);
+  long newSizeRound = RoundUp(newSize, pagesize);
+  if (newSize > maxSize) {
+    fprintf(stderr,"FATAL ERROR in Heap_Hize at GC %d.  Heap size = %d.  Trying to hize to %d\n",
+	    NumGC, maxSize, newSize);
     assert(0);
   }
-  h->top = h->bottom + (newsize / (sizeof (val_t))); 
-  Heap_Check(h);
+  if (het)
+    h->cursor = h->bottom;
+  h->top = h->bottom + (newSize / sizeof(val_t));
+  if (newSizeRound > oldSizeRound) {
+    if (h->top > h->writeableTop) {
+      printf("!!!!!!expanding\n");
+      my_mprotect(6,(caddr_t) h->writeableTop, (h->top - h->writeableTop) * sizeof(val_t), PROT_READ | PROT_WRITE);
+      h->writeableTop = h->top;
+    }
+  }
+  else if (paranoid) {
+    my_mprotect(7,(caddr_t) (h->bottom + newSizeRound / sizeof(val_t)), oldSizeRound - newSizeRound, PROT_NONE);
+    h->writeableTop = h->top;
+  }
+  assert(h->bottom <= h->cursor);
+  assert(h->cursor <= h->top);
+  assert(h->top <= h->writeableTop);
+  assert(h->writeableTop <= h->mappedTop);
 }
 
-void Heap_Unprotect(Heap_t *res, long newsize)
-{
-  long size = res->physicalTop - res->bottom;
-  assert((size / pagesize * pagesize) == size);
-  my_mprotect(7,(caddr_t) res->bottom, size, PROT_READ | PROT_WRITE);
-  Heap_Resize(res, newsize);
-}
 
 mem_t StackError(struct ucontext *ucontext, mem_t badadd)
 {

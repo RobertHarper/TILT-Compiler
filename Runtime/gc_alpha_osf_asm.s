@@ -233,7 +233,7 @@ GCFromMLgetgp1:
 	stl	$at, requestInfo_disp(THREADPTR_REG)	# record bytes needed
 	lda	$at, GCRequestFromML($31)
 	stl	$at, request_disp(THREADPTR_REG)	# record that this is an MLtoGC request
-	ldl	$at, sysThread_disp(THREADPTR_REG)	# get system thread pointer
+	ldl	$at, proc_disp(THREADPTR_REG)		# get system thread pointer
 	ldl	$sp, ($at)				# run on system thread stack
 	mov	THREADPTR_REG, $16			# pass user thread pointer as arg
 	jsr	$26, GCFromMutator
@@ -296,7 +296,7 @@ GCFromCgetgp1:
 	mov	MajorGCRequestFromC, ASMTMP_REG
 	stq	ASMTMP_REG, request_disp(THREADPTR_REG)		# record that this is an CtoGC request	
 MinorGCFromC:	
-	ldq	ASMTMP_REG, sysThread_disp(THREADPTR_REG)	# must use temp so SP always correct
+	ldq	ASMTMP_REG, proc_disp(THREADPTR_REG)		# must use temp so SP always correct
 	ldq	$sp, (ASMTMP_REG)				# run on system thread stack
 	mov	THREADPTR_REG, CFIRSTARG_REG			# pass user thread pointer as arg
 	jsr	GCFromMutator					# call runtime GC

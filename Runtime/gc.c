@@ -38,13 +38,10 @@ enum GCType GCType = Minor;
 
 Heap_t *fromSpace = NULL, *toSpace = NULL;
 Heap_t *nursery = NULL, *tenuredFrom = NULL, *tenuredTo = NULL;
-SharedStack_t *workStack = NULL, *majorWorkStack1 = NULL, *majorWorkStack2 = NULL;
+SharedStack_t *workStack = NULL, *majorWorkStack = NULL, *majorRegionWorkStack = NULL;
 
 int NumGC = 0;
 int NumMajorGC = 0;
-int NumLocatives = 0;
-int NumRoots = 0;
-int NumWrites = 0;
 
 extern int module_count;
 extern val_t GLOBALS_BEGIN_VAL;
@@ -96,7 +93,7 @@ void HeapAdjust(int show, unsigned int bytesRequested, Heap_t **froms, Heap_t *t
   live = copied + bytesRequested;
   liveRatio = (double) live / (double) occupied;
   newSize = ComputeHeapSize(occupied, liveRatio);
-  Heap_Resize(to, newSize);
+  Heap_Resize(to, newSize, 0);
   if (newSize - copied < bytesRequested) {
     printf("Error: newSize - copied < bytesRequested\n");
     printf("       %d - %d <= %d\n\n",
@@ -146,16 +143,16 @@ void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalSta
     mem_t stop = (mem_t) (&GLOBALS_END_VAL)[mi];
     sprintf(buffer, "globals of module %d: %s", mi, label);
     scan_heap(buffer,start,stop,stop, legalHeaps, legalStarts, 
-	      SHOW_GLOBALS && (NumGC >= LEAST_GC_TO_CHECK), 0);
+	      SHOW_GLOBALS && (NumGC >= LEAST_GC_TO_CHECK), NULL);
   }
 }
 
-Bitmap_t *paranoid_check_heap_without_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps)
+void paranoid_check_heap_without_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t *start)
 {
   int count = 0, mi, i;
-  return scan_heap(label,curSpace->bottom, curSpace->cursor, 
-		   curSpace->top, legalHeaps, NULL,
-		   0, 1);
+  scan_heap(label,curSpace->bottom, curSpace->cursor, 
+	    curSpace->top, legalHeaps, NULL,
+	    0, start);
 }
 
 void paranoid_check_heap_with_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t **legalStarts)
@@ -163,7 +160,7 @@ void paranoid_check_heap_with_start(char *label, Heap_t *curSpace, Heap_t **lega
   int count = 0, mi, i;
   scan_heap(label,curSpace->bottom, curSpace->cursor, 
 	    curSpace->top, legalHeaps, legalStarts,
-	    SHOW_HEAPS && (NumGC >= LEAST_GC_TO_CHECK), 0);
+	    SHOW_HEAPS && (NumGC >= LEAST_GC_TO_CHECK), NULL);
 }
 
 void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bitmap_t **legalStarts)
@@ -199,8 +196,9 @@ void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bi
 	}
 	else if (!inHeaps((ptr_t)data,legalHeaps,legalStarts) && inSomeHeap((ptr_t)data)) {
 	  static int newval = 62000;
-	  printf("TRACE WARNING GC %d: register %d has from space value %d --> changing to %d\n",
-		 NumGC,count,data,newval);
+	  if (diag)
+	    printf("TRACE WARNING GC %d: register %d has from space value %d --> changing to %d\n",
+		   NumGC,count,data,newval);
 	  saveregs[count] = newval; 
 	  newval++;
 	}
@@ -212,8 +210,9 @@ void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bi
       val_t data = *cursor;
       if (!inHeaps((ptr_t)data,legalHeaps,legalStarts) && inSomeHeap((ptr_t)data)) {
 	static int newval = 42000;
-	printf("TRACE WARNING: stack location %d has illegal heap address %d changing to %d\n",
-	       cursor,data,newval);
+	if (diag)
+	  printf("TRACE WARNING: stack location %d has illegal heap address %d changing to %d\n",
+		 cursor,data,newval);
 	*cursor = newval; 
 	newval++;
       }
@@ -239,20 +238,24 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
   legalPrimaryHeaps[1] = secondPrimary;
   legalReplicaHeaps[0] = firstReplica;
   legalReplicaHeaps[1] = secondReplica;
+  legalPrimaryStarts[0] = firstPrimary->bitmap;
+  legalPrimaryStarts[1] = secondPrimary ? secondPrimary->bitmap : NULL;
+  legalReplicaStarts[0] = firstReplica ? firstReplica->bitmap : NULL;
+  legalReplicaStarts[1] = secondReplica ? secondReplica->bitmap : NULL;
 
   sprintf(msg, "%s: first primary heap", when);
-  legalPrimaryStarts[0] = paranoid_check_heap_without_start(msg,firstPrimary,legalPrimaryHeaps);
+  paranoid_check_heap_without_start(msg,firstPrimary,legalPrimaryHeaps, legalPrimaryStarts[0]);
   if (secondPrimary != NULL) {
     sprintf(msg, "%s: second primary heap", when);
-    legalPrimaryStarts[1] = paranoid_check_heap_without_start(msg,secondPrimary,legalPrimaryHeaps);
+    paranoid_check_heap_without_start(msg,secondPrimary,legalPrimaryHeaps, legalPrimaryStarts[1]);
   }
   if (firstReplica != NULL) {
     sprintf(msg, "%s: first replica heap", when);
-    legalReplicaStarts[0] = paranoid_check_heap_without_start(msg,firstReplica,legalReplicaHeaps);
+    paranoid_check_heap_without_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts[0]);
   }
   if (secondReplica != NULL) {
     sprintf(msg, "%s: second replica heap", when);
-    legalReplicaStarts[1] = paranoid_check_heap_without_start(msg,secondReplica,legalReplicaHeaps);
+    paranoid_check_heap_without_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts[1]);
   }
 
   if (firstReplica == NULL) {
@@ -287,13 +290,10 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
     paranoid_check_heap_with_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts);
   }
 
-  DestroyBitmap(legalPrimaryStarts[0]);
-  if (legalPrimaryStarts[1])
-    DestroyBitmap(legalPrimaryStarts[1]);
-  if (legalReplicaStarts[0])
-    DestroyBitmap(legalReplicaStarts[0]);
-  if (legalReplicaStarts[1])
-    DestroyBitmap(legalReplicaStarts[1]);
+  if (traceError) {
+    printf("\n\nProgram halted due to TRACE ERROR(s)\n\n");
+    assert(0);
+  }
 }
 
 
@@ -341,7 +341,7 @@ ptr_t alloc_bigfloatarray(int loglen, double value, int ptag)
   }
 }
 
-void gc_poll(SysThread_t *sth)
+void gc_poll(Proc_t *sth)
 {
   switch (collector_type) {
     case Semispace:               return;
@@ -357,7 +357,7 @@ void gc_poll(SysThread_t *sth)
 
 
 /* Is there enough room in sth to satisfy mapping th onto it */
-int GCSatisfied(SysThread_t *sth, Thread_t *th)
+int GCSatisfied(Proc_t *sth, Thread_t *th)
 {
   /* requestInfo < 0 means that many butes in write buffer is requested 
      requestInfo > 0 means that many bytes of allocation is requested */
@@ -378,10 +378,11 @@ int GCSatisfied(SysThread_t *sth, Thread_t *th)
    If not, try to allocate more and return 2 if succeeded.
    If there is still not room, perform a GC and return 3 if the th is satisfied by sth. 
    Otherwise, return 0. */
-int GCFromScheduler(SysThread_t *sth, Thread_t *th)
+int GCFromScheduler(Proc_t *sth, Thread_t *th)
 {  
   assert(sth->userThread == NULL);
-  assert(th->sysThread == NULL);
+  assert(th->proc == NULL);
+  procChangeState(sth, GC);
   if (GCSatisfied(sth,th))
     return 1;
   switch (collector_type) {
@@ -402,8 +403,9 @@ int GCFromScheduler(SysThread_t *sth, Thread_t *th)
 	return 2;
       break;
     case SemispaceConcurrent:
-      if (GCTry_SemiConc(sth,th))
+      if (GCTry_SemiConc(sth,th)) {
 	return 2;
+      }
       break;
     case GenerationalConcurrent:
       if (GCTry_GenConc(sth,th))
@@ -447,15 +449,16 @@ int GCFromScheduler(SysThread_t *sth, Thread_t *th)
   return 0;
 }
 
-void GCRelease(SysThread_t *sth)
+void GCRelease(Proc_t *proc)
 {  
+  procChangeState(proc, GC);
   switch (collector_type) {
-    case Semispace:            return;
-    case Generational:         return;
-    case SemispaceParallel:    return;
-    case GenerationalParallel: return;
-    case SemispaceConcurrent:  GCRelease_SemiConc(sth); return;
-    case GenerationalConcurrent:  GCRelease_GenConc(sth); return;
+    case Semispace:              GCRelease_Semi(proc); return;
+    case Generational:           GCRelease_Gen(proc); return;
+    case SemispaceParallel:      GCRelease_SemiPara(proc); return;
+    case GenerationalParallel:   GCRelease_GenPara(proc); return;
+    case SemispaceConcurrent:    GCRelease_SemiConc(proc); return;
+    case GenerationalConcurrent: GCRelease_GenConc(proc); return;
     default: assert(0);
   }
 }
@@ -463,14 +466,14 @@ void GCRelease(SysThread_t *sth)
 /* Does not return - goes to scheduler */
 void GCFromMutator(Thread_t *curThread)
 {
-  SysThread_t *self = getSysThread();
+  Proc_t *self = getProc();
   mem_t alloc = (mem_t) curThread->saveregs[ALLOCPTR];
   mem_t limit = (mem_t) curThread->saveregs[ALLOCLIMIT];
   mem_t sysAllocCursor = self->allocCursor;
   mem_t sysAllocLimit = self->allocLimit;
 
   /* Check that we are running on own stack and allocation pointers consistent */
-  assert(self == curThread->sysThread);
+  assert(self == curThread->proc);
   assert(self->userThread == curThread);
   assert((self->stack - (int) (&self)) < 1024) ;
   assert((limit == sysAllocLimit) || (limit == StopHeapLimit));
@@ -481,27 +484,12 @@ void GCFromMutator(Thread_t *curThread)
 
   /* For now, always unmap the job and run the scheduler which will invoke GC if necessary */
   ReleaseJob(self);
-  if (limit == StopHeapLimit) {   /* If limit pointer set to StopHeapLimit, then not a real GC */
-    scheduler(self);
-    assert(0);
-  }
   scheduler(self);
+  assert(0);
 }
 
   
-void gc_finish()
-{
-  switch (collector_type) 
-    {
-    case Semispace: { gc_finish_Semi(); break; }
-    case Generational: { gc_finish_Gen(); break; }
-    case SemispaceParallel: { gc_finish_SemiPara(); break; }
-    case GenerationalParallel: { gc_finish_GenPara(); break; }
-    case SemispaceConcurrent: { gc_finish_SemiConc(); break; }
-    case GenerationalConcurrent: { gc_finish_GenConc(); break; }
-    default: assert(0);
-    }
-}
+
 
 
   

@@ -16,7 +16,7 @@
 #define MLsaveregs_disp     0
 #define maxsp_disp          longSz*32+8*32
 #define snapshot_disp       longSz*32+8*32+longSz
-#define sysThread_disp      longSz*32+8*32+longSz+CptrSz
+#define proc_disp           longSz*32+8*32+longSz+CptrSz
 #define notinml_disp        longSz*32+8*32+longSz+CptrSz+CptrSz
 #define scratch_disp        longSz*32+8*32+longSz+CptrSz+CptrSz+longSz
 #define thunk_disp          longSz*32+8*32+longSz+CptrSz+CptrSz+longSz+doubleSz
@@ -35,20 +35,46 @@
 #define GCRequestFromC 4
 #define MajorGCRequestFromC 5
 
-#ifndef _inside_stack_h
-#ifndef _asm_
-#include "stack.h"
-#endif
-#endif
-
 #ifndef _thread_h
 #define _thread_h
 #ifndef _asm_
 
 #include "memobj.h"
 #include "stats.h"
+#include "queue.h"
 #include <signal.h>
 
+
+/* These types should be in stack.h but mutually recusrive headers are broken. */
+struct StackSnapshot           /* the size and layout of this structure affects the code in stack_asm.s */
+{
+  val_t saved_ra;              /* Real return address for this stub */
+  val_t saved_sp;              /* Stack pointer position where stub was inserted */
+  unsigned int saved_regstate; /* Register state (mask) at this point */
+  Queue_t *roots;              /* Roots between this stub and the one above it */
+};
+
+typedef struct StackSnapshot StackSnapshot_t;
+
+
+/* These types should be in forward.h but mutually recusrive headers are broken. */
+struct Proc__t;
+struct CopyRange__t;
+typedef void discharge_t(struct CopyRange__t *);
+typedef void expand_t(struct CopyRange__t *, int size);
+typedef struct CopyRange__t   /* This is essentially an object clumsily expressed in C */
+{
+  mem_t start;
+  mem_t cursor;
+  mem_t stop;
+  Heap_t *heap;
+  expand_t *expand;
+  discharge_t *discharge; 
+  struct Proc__t *sth;
+} CopyRange_t;
+
+
+/* Finally, these types actually do belong here */
 /* Thread Status:
      -1 : Thread is done
      0 : Thread is ready to be scheduled
@@ -65,7 +91,7 @@ struct Thread__t
   double             fregs[32];        /* Register set; compiler relied on this being second */
   long               maxSP;            /* Used by mutator exn handler; compiler relies on this third */
   StackSnapshot_t    *snapshots;       /* Used by stack.c and stack_asm.s */
-  struct SysThread__t *sysThread;      /* of type SysThread_t * - relied on by service_alpha_osf.s  */
+  struct Proc__t     *proc;            /* of type Proc_t * - relied on by service_alpha_osf.s  */
   long               notInML;          /* set to true whenever mutator calls a normal external function */
   double             scratch;
   ptr_t              *thunks;          /* Array of num_add unit -> unit */
@@ -84,9 +110,9 @@ struct Thread__t
   long               last_snapshot;    /* Index of last used snapshot */
   StackChain_t       *stackchain;      /* Stack */
   Queue_t            *retadd_queue;
-  long                tid;              /* Thread ID */
-  long                id;               /* Structure ID */
-  long                status;           /* Thread status */
+  long                tid;             /* Thread ID */
+  long                id;              /* Structure ID */
+  long                status;          /* Thread status */
   struct Thread__t   *parent;
   ptr_t              oneThunk;         /* Avoid allocation by optimizing for common case */
   Queue_t            *reg_roots;
@@ -94,7 +120,17 @@ struct Thread__t
 
 typedef struct Thread__t Thread_t;
 
-struct SysThread__t
+typedef struct LocalStack__t
+{
+  ptr_t stack[1024];       /* stack contains gray objects */
+  long cursor;
+} LocalStack_t;
+
+
+/* Note that Scheduler, Mutator, and GC are disjoint whereas GCStack, GCGlobal, and GCMajor are all within GC */
+enum ProcessorState {Scheduler, Mutator, GC, GCStack, GCGlobal, GCMajor};
+
+struct Proc__t
 {
   int                stack;        /* address of system thread stack that can be used to enter scheduler */
   int                stid;         /* sys thread id */
@@ -108,21 +144,48 @@ struct SysThread__t
   int                processor;    /* processor id that this pthread is bound to */
   pthread_t          pthread;      /* pthread that this system thread is implemented as */
   Thread_t           *userThread;  /* current user thread mapped to this system thread */
-  ptr_t              LocalStack[1024];  /* Used by parallel collector */
-  int                LocalCursor;
+  LocalStack_t       localStack;   /* Used by parallel collector */
   int temp;
-  timer_mt           gctime;
-  timer_mt           stacktime;
-  timer_mt           majorgctime;
+
+  Timer_t            totalTimer;     /* Time spent in entire processor */
+  Timer_t            currentTimer;   /* Time spent running any subtask */
+  int                lastGCStatus;   /* Needed to distinguish between gcOff and gcOn */
+  double             lastGCdiff;     /* Needed to remember time in one GC across substates like GCStack, GCGlobal, GCMajor */
+  enum ProcessorState state;         /* What the processor is working on */
+  Statistic_t        schedulerStatistic;
+  Statistic_t        mutatorStatistic;
+  Statistic_t        gcOffStatistic;
+  History_t          gcOnHistory;
+  Histogram_t        gcOnHistogram;
+  Statistic_t        gcStackStatistic;
+  Statistic_t        gcGlobalStatistic;
+  Statistic_t        gcMajorStatistic;
 
   Queue_t            *root_lists;
-  Queue_t            *largeRoots; /* contains pointers into large-pointerless-object area */
+  Queue_t            *largeRoots;  /* contains pointers into large-pointerless-object area */
+
+  CopyRange_t        minorRange;   /* Used only by generational collector */
+  CopyRange_t        majorRange;
+
+  long               numCopied;        /* Number of objects copied */
+  long               numShared;        /* Number of times an object is reached after it's already been forwarded */
+  long               numContention;    /* Number of failed (simultaneous) attempts to copy an object */
+  long               numWrite;
+  long               numRoot;
+  long               numLocative;
+  long               bytesAllocated;
+  long               kbytesAllocated;
+  long               bytesCopied;
+  long               kbytesCopied;
 };
 
-typedef struct SysThread__t SysThread_t;
+typedef struct Proc__t Proc_t;
+
+void procChangeState(Proc_t *, enum ProcessorState);
 
 Thread_t *getThread(void);
-SysThread_t *getSysThread(void);
+Proc_t *getProc(void);
+Proc_t *getNthProc(int);
 
 extern pthread_mutex_t ScheduleLock;       /* locks (de)scheduling of sys threads */
 void ResetJob(void);                       /* For iterating over all jobs in work list */
@@ -132,10 +195,10 @@ void StopAllThreads(void);                 /* Change all user thread's limit to 
 void thread_init(void);
 void thread_go(ptr_t *thunks, int numThunk);
 void Interrupt(struct ucontext *);
-void scheduler(SysThread_t *); /* Unmap systhread if mapped */
+void scheduler(Proc_t *);                  /* Unmap user thread of Proc if mapped */
 void Finish(void);
 Thread_t *YieldRest(void);
-void ReleaseJob(SysThread_t *sth);
+void ReleaseJob(Proc_t *sth);
 
 int thread_total(void);
 int thread_max(void);

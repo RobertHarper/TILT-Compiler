@@ -5,6 +5,8 @@ structure LinkParse :> LINK_PARSE =
 struct
   exception Parse of FrontEnd.parseResult
 
+  val doNamedForm = Stats.tt "DoNamedForm"
+
   local
     fun make_source s = 
 	let val instream = TextIO.openIn s
@@ -25,7 +27,7 @@ struct
       case parse s of 
 	(ins,fp,FrontEnd.PARSE_IMPL (lines,imports,dec)) => 
 	  let val dec = tvscope_dec dec
-	      val dec = named_form_dec dec
+	      val dec = if (!doNamedForm) then named_form_dec dec else dec
 	      val _ = TextIO.closeIn ins
 	  in (lines,fp,imports,dec)
 	  end

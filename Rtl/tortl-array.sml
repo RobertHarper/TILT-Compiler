@@ -235,17 +235,21 @@ struct
       let val obj = load_ireg_term(vl,NONE)
 	  val tag = alloc_regi NOTRACE_INT
 	  val low2 = alloc_regi NOTRACE_INT
-	  val reload = fresh_code_label "reload_tag"
-	  val noforward = fresh_code_label "noforward"
-	  val _ = add_instr(ILABEL reload)
+	  val load_nonstall = fresh_code_label "load_nonstall_tag"
+	  val load_tag = fresh_code_label "load_true_tag"
+	  val done = fresh_code_label "loaded_tag"
+	  val _ = add_instr(ILABEL load_nonstall)
 	  val _ = add_instr(LOAD32I(REA(obj,~4),tag))
-	  val _ = add_instr(BCNDI(EQ,tag,IMM (TilWord32.toInt stall),reload,true))
+	  val _ = add_instr(BCNDI(EQ,tag,IMM (TilWord32.toInt stall),load_nonstall,true))
+	  val _ = add_instr(ILABEL load_tag)
 	  val _ = add_instr(ANDB(tag, IMM 3, low2))
-	  val _ = add_instr(BCNDI(NE,low2,IMM 0,noforward,true));  (* if low 2 bits is not zero, then  not a forwarding pointer *)
+	  val _ = add_instr(BCNDI(NE,low2,IMM 0,done,true))        (* if low 2 bits not zero, then not a forwarding pointer *)
 	  val _ = add_instr(LOAD32I(REA(tag,~4),tag))              (* tag is actually a forwarding pointer so load true tag *)
-	  val _ = add_instr(ILABEL noforward)
+	  val _ = add_instr(BR load_tag)                           (* must branch back in case of multiple forwarding as in gen. collector *)
+	  val _ = add_instr(ILABEL done)
       in  tag
       end
+
   (* -------------------- Length operations ------------------ *)
   fun xlen_float (state,fs) (vl : term) : term * state =
       let val tag = get_tag vl

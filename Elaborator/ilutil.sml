@@ -3,8 +3,7 @@
 structure IlPrimUtil :> PRIMUTIL where type con = Il.con
                                  where type exp = Il.exp = PrimUtil(structure PrimUtilParam = IlPrimUtilParam)
 
-structure IlUtil
-  :> ILUTIL =
+structure IlUtil :> ILUTIL =
   struct
 
     open Il Ppil 
@@ -403,7 +402,9 @@ structure IlUtil
 	   | SIGNAT_OF p => (case mod2path (f_mod state (path2mod p)) of
 				 NONE => error "f_signat transformed path to non-path with SIGNAT_OF"
 			       | SOME p => SIGNAT_OF p)
-	   | SIGNAT_STRUCTURE (popt,sdecs) => SIGNAT_STRUCTURE (popt,map (f_sdec state) sdecs)
+	   | SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE (map (f_sdec state) sdecs)
+	   | SIGNAT_SELF (p, unselfOpt, self) => SIGNAT_SELF(p, Util.mapopt (f_signat state) unselfOpt,
+							     f_signat state self)
 	   | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1, 
 							   f_signat state s2, a)))
 
@@ -542,7 +543,7 @@ structure IlUtil
 			   else search [l] rest
 		     | ([l],_::rest) => search [l] rest
 		     | (l::ls,[]) => raise DEPENDENT
-		     | (l::ls,(SDEC(curl,DEC_MOD(v,_,(SIGNAT_STRUCTURE (_,sdecs)))))::rest) =>
+		     | (l::ls,(SDEC(curl,DEC_MOD(v,_,(SIGNAT_STRUCTURE sdecs))))::rest) =>
 			   if (eq_label(l,curl))
 			       then search ls sdecs
 			   else search (l::ls) rest

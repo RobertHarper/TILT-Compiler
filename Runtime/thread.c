@@ -1,6 +1,7 @@
 #include "general.h"
 #include "tag.h"
 #include "thread.h"
+#include "stack.h"
 #include "stats.h"
 #include "memobj.h"
 #include <assert.h>
@@ -14,16 +15,19 @@
 #include "gc.h"
 
 
+int    threadDiag = 0;
 
 Thread_t    *Threads;                         /* array of NumUserThread user threads */
-static SysThread_t *SysThreads;               /* array of NumSystemThread system threads */
+static Proc_t *Procs;                         /* array of NumSystemThread system threads */
 
 static long totalThread = 0;                  /* Number of create user threads */
 static long maxThread = 0;                    /* Maximum number of threads in work queue */
 
 static Thread_t **JobQueue;                   /* Work list for user threads: array of pointers to user threads */
+static long NumActiveProc = 0;                 /* Number of processor threads active */
+static int EmptyPlain = 0;                    /* Normal shared variable set to true when there are no more jobs */
 static pthread_cond_t EmptyCond;              /* Signals no more jobs */
-static pthread_mutex_t EmptyLock;             /*   Lock associated with EmptyCond */
+static pthread_mutex_t EmptyLock;             /* Lock associated with EmptyCond */
 static int topThread = 0;                     /* points just beyond last job on work list */
 static int curThread = 0;                     /* cursor for iterating over all jobs */
 static const int ThreadDone = -1;
@@ -117,29 +121,32 @@ Thread_t *FetchJob(void)
   return 0;
 }
 
-void ReleaseJob(SysThread_t *sth)
+void ReleaseJob(Proc_t *proc)
 {
   int i;
-  Thread_t *th = sth->userThread;
-  mem_t sth_allocCursor = sth->allocCursor;
-  mem_t sth_allocLimit = sth->allocLimit;
-  mem_t sth_writelistCursor = (mem_t) sth->writelistCursor;
+  Thread_t *th = proc->userThread;
+  mem_t proc_allocCursor = proc->allocCursor;
+  mem_t proc_allocLimit = proc->allocLimit;
+  mem_t proc_writelistCursor = (mem_t) proc->writelistCursor;
+
+  procChangeState(proc, Scheduler);
 
   /* Check that thread's allocation pointers are consistent and update processor's version */
-  if (((mem_t) th->saveregs[ALLOCLIMIT] != sth_allocLimit &&
+  if (((mem_t) th->saveregs[ALLOCLIMIT] != proc_allocLimit &&
        (mem_t) th->saveregs[ALLOCLIMIT] != StopHeapLimit) ||
-      (mem_t) th->saveregs[ALLOCPTR] > sth_allocLimit) {
-    printf("sth->allocCursor = %d\n",sth_allocCursor);
-    printf("sth->allocLimit = %d\n",sth_allocLimit);
+      (mem_t) th->saveregs[ALLOCPTR] > proc_allocLimit) {
+    printf("proc->allocCursor = %d\n",proc_allocCursor);
+    printf("proc->allocLimit = %d\n",proc_allocLimit);
     printf("th->saveregs[ALLOC] = %d\n",th->saveregs[ALLOCPTR]);
     printf("th->saveregs[LIMIT] = %d\n",th->saveregs[ALLOCLIMIT]);
     assert(0);
   }
 
   /* Update processor's version of allocation range and write list and process */
-  sth->allocCursor = (mem_t) th->saveregs[ALLOCPTR];
-  sth->writelistCursor = th->writelistAlloc;
-  GCRelease(sth);
+  proc->allocCursor = (mem_t) th->saveregs[ALLOCPTR];
+  proc->writelistCursor = th->writelistAlloc;
+  GCRelease(proc);
+  procChangeState(proc, Scheduler);
 
   /* Null out thread's version of allocation and write-list */
   th->saveregs[ALLOCPTR] = 0;
@@ -148,27 +155,27 @@ void ReleaseJob(SysThread_t *sth)
   th->writelistLimit = 0;
 
   /* Break association between thread and processor */
-  sth->userThread = NULL;
-  th->sysThread = NULL;
+  proc->userThread = NULL;
+  th->proc = NULL;
   
   flushStore();                          /* make sure thread info is flushed to memory */
   assert(th->status >= 1);               /* Thread was mapped and running so could not be ready or done */
   FetchAndAdd(&(th->status),-1);         /* Release after flush; note that FA always goes to mem */
 
-  if (diag)
+  if (threadDiag)
     printf("Proc %d: Released thread %d (status = %d) with request = %d.  Used %d to %d and %d to %d.\n",
-	   sth->stid,th->tid,th->status,th->requestInfo, sth_allocCursor,sth->allocCursor,
-	   sth_writelistCursor, sth->writelistCursor);
+	   proc->stid,th->tid,th->status,th->requestInfo, proc_allocCursor,proc->allocCursor,
+	   proc_writelistCursor, proc->writelistCursor);
 }
 
 
-void DeleteJob(SysThread_t *sth)
+void DeleteJob(Proc_t *proc)
 {
   int i, j;
-  Thread_t *th = sth->userThread;
-  assert(th->sysThread == sth);
+  Thread_t *th = proc->userThread;
+  assert(th->proc == proc);
   FetchAndAdd(&(th->status),1);  /* We increment status so it doesn't get scheduled when released */
-  ReleaseJob(sth);
+  ReleaseJob(proc);
   LocalLock();
   for (i=0; i<NumThread; i++) {
     if (JobQueue[i] == th) {
@@ -179,12 +186,14 @@ void DeleteJob(SysThread_t *sth)
       for (j=i; j<NumThread-1; j++)
 	JobQueue[j] = JobQueue[j+1];
       topThread--;
-      if (diag)
+      if (threadDiag)
 	printf("DeleteJob: topThread = %d.  Signalling EmptyCond.\n", topThread); 
       th->status = ThreadDone;            /* Now, we put it back in the free pool */
       LocalUnlock();
-      if (topThread == 0)
+      if (topThread == 0) {
+	EmptyPlain = 1;                   /* Causes all worker processors to terminate */
 	pthread_cond_signal(&EmptyCond);  /* Wake up main thread if there are no more jobs */
+      }
       return;
     }
   }
@@ -196,6 +205,7 @@ void DeleteJob(SysThread_t *sth)
 void StopAllThreads()
 {
   int i;
+
   LocalLock();
   for (i=0; i<NumThread; i++) {
     Thread_t *th = JobQueue[i];
@@ -207,7 +217,7 @@ void StopAllThreads()
 
 
 /* --------------------- Helpers ---------------------- */
-void check(char *str, SysThread_t *sth)
+void check(char *str, Proc_t *proc)
 {
   int i, j;
   return;
@@ -217,23 +227,28 @@ void check(char *str, SysThread_t *sth)
     for (j=Threads[i].nextThunk; j<Threads[i].numThunk; j++) {
       ptr_t t = Threads[i].thunks[j];
       if (t != 0 && *t > 1000000) {
-	printf("Proc %d: check at %s failed: Threads[%d].oneThunk = %d mapped to sysThread %d\n",
-	       (sth == 0) ? -1 : sth->stid,
-	       str,i,*t,Threads[i].sysThread);
+	printf("Proc %d: check at %s failed: Threads[%d].oneThunk = %d mapped to proc %d\n",
+	       (proc == 0) ? -1 : proc->stid,
+	       str,i,*t,Threads[i].proc);
 	assert(0);
       }
     }
   }
 }
 
+Proc_t *getNthProc(int i)
+{
+  assert(i < NumProc);
+  return &(Procs[i]);
+}
 
-SysThread_t *getSysThread()
+Proc_t *getProc()
 {
   int i;
   pthread_t sys = pthread_self();
-  for (i=0; i<NumSysThread; i++) {
-    if (SysThreads[i].pthread == sys) 
-      return &(SysThreads[i]);
+  for (i=0; i<NumProc; i++) {
+    if (Procs[i].pthread == sys) 
+      return &(Procs[i]);
   }
   return NULL;
 }
@@ -241,10 +256,10 @@ SysThread_t *getSysThread()
 
 Thread_t *getThread()
 {
-  SysThread_t *sth = getSysThread();
-  if (sth == NULL) 
+  Proc_t *proc = getProc();
+  if (proc == NULL) 
     return NULL;
-  return sth->userThread;
+  return proc->userThread;
 }
 
 
@@ -258,13 +273,12 @@ void fillThread(Thread_t *th, int i)
   th->maxSP = 0;
   th->last_snapshot = -1;
   th->snapshots = (StackSnapshot_t *)malloc(NUM_STACK_STUB * sizeof(StackSnapshot_t));
-  for (i=0; i<NUM_STACK_STUB; i++)
-    {
-      th->snapshots[i].saved_ra = (val_t) stub_error;
-      th->snapshots[i].saved_sp = (val_t) 0;
-      th->snapshots[i].saved_regstate = 0;
-      th->snapshots[i].roots = (i == 0) ? QueueCreate(0,50) : NULL;
-    }
+  for (i=0; i<NUM_STACK_STUB; i++) {
+    th->snapshots[i].saved_ra = (val_t) stub_error;
+    th->snapshots[i].saved_sp = (val_t) 0;
+    th->snapshots[i].saved_regstate = 0;
+    th->snapshots[i].roots = (i == 0) ? QueueCreate(0,50) : NULL;
+  }
   th->saveregs[THREADPTR] = (long) th;
   th->saveregs[ALLOCLIMIT] = 0;
   th->retadd_queue = QueueCreate(0,2000);
@@ -295,7 +309,7 @@ void resetThread(Thread_t *th, Thread_t *parent, ptr_t *thunks, int numThunk)
       th->nextThunk = 0;
       th->numThunk = numThunk;
     }
-  check("threadcreate_mid",getSysThread());
+  check("threadcreate_mid",getProc());
   if (th->stackchain == NULL)
     th->stackchain = StackChain_Alloc(); 
   QueueClear(th->snapshots[0].roots);
@@ -318,38 +332,112 @@ void thread_init()
   assert(sizeof(mem_t) == 4);
 
   Threads = (Thread_t *)malloc(sizeof(Thread_t) * NumThread);
-  SysThreads = (SysThread_t *)malloc(sizeof(SysThread_t) * NumSysThread);
+  Procs = (Proc_t *)malloc(sizeof(Proc_t) * NumProc);
   JobQueue = (Thread_t **)malloc(sizeof(Thread_t *) * NumThread);
   for (i=0; i<NumThread; i++) 
     JobQueue[i] = NULL; 
   for (i=0; i<NumThread; i++)
     fillThread(&Threads[i], i);
-  for (i=0; i<NumSysThread; i++) {
-    char temp[40];
-    SysThread_t *sth = &(SysThreads[i]); /* Structures are by-value in C */
-    sth->stid = i;
-    sth->LocalCursor = 0;
-    sth->allocStart = StartHeapLimit;
-    sth->allocCursor = StartHeapLimit;
-    sth->allocLimit = StartHeapLimit;
-    reset_timer(temp,&(sth->majorgctime));
-    sth->writelistStart = &(sth->writelist[0]);
-    sth->writelistCursor = sth->writelistStart;
-    sth->writelistEnd = &(sth->writelist[(sizeof(sth->writelist) / sizeof(ptr_t)) - 2]);
-    for (j=0; j<(sizeof(sth->writelist) / sizeof(ptr_t)); j++)
-      sth->writelist[j] = 0;
-    sth->root_lists = QueueCreate(0,50);
-    sth->largeRoots = QueueCreate(0,50);
-    sprintf(temp, "stacktime_%d", i);
-    reset_timer(temp,&(sth->stacktime));
-    sprintf(temp, "gctime_%d", i);
-    reset_timer(temp,&(sth->gctime));
-    sprintf(temp, "majorgcime_%d", i);
+  for (i=0; i<NumProc; i++) {
+    Proc_t *proc = &(Procs[i]); /* Structures are by-value in C */
+    proc->stid = i;
+    proc->localStack.cursor = 0;
+    proc->allocStart = StartHeapLimit;
+    proc->allocCursor = StartHeapLimit;
+    proc->allocLimit = StartHeapLimit;
+    proc->writelistStart = &(proc->writelist[0]);
+    proc->writelistCursor = proc->writelistStart;
+    proc->writelistEnd = &(proc->writelist[(sizeof(proc->writelist) / sizeof(ptr_t)) - 2]);
+    for (j=0; j<(sizeof(proc->writelist) / sizeof(ptr_t)); j++)
+      proc->writelist[j] = 0;
+    proc->root_lists = QueueCreate(0,50);
+    proc->largeRoots = QueueCreate(0,50);
+    reset_timer(&(proc->totalTimer));
+    reset_timer(&(proc->currentTimer));
+    proc->state = Scheduler;
+    proc->lastGCStatus = GCOff;
+    proc->lastGCdiff = 0.0;
+    reset_statistic(&proc->schedulerStatistic);
+    reset_statistic(&proc->mutatorStatistic);
+    reset_statistic(&proc->gcOffStatistic);
+    reset_history(&proc->gcOnHistory);
+    reset_histogram(&proc->gcOnHistogram);
+    reset_statistic(&proc->gcStackStatistic);
+    reset_statistic(&proc->gcGlobalStatistic);
+    reset_statistic(&proc->gcMajorStatistic);
+    SetCopyRange(&proc->minorRange, proc->stid, NULL, NULL, NULL);
+    SetCopyRange(&proc->majorRange, proc->stid, NULL, NULL, NULL);
+    proc->numCopied = proc->numShared = proc->numContention = 0;
+    proc->bytesAllocated = proc->kbytesAllocated = 0;
+    proc->bytesCopied = proc->kbytesCopied = 0;
+    proc->numWrite = 0;
+    proc->numRoot = 0;
+    proc->numLocative = 0;
   }
   pthread_cond_init(&EmptyCond,NULL);
   pthread_mutex_init(&EmptyLock,NULL);
   setbuf(stdout,NULL);
   setbuf(stderr,NULL);
+}
+
+static char* state2str(enum ProcessorState procState)
+{
+  switch (procState) {
+  case Scheduler : return "Scheduler";
+  case Mutator : return "Mutator";
+  case GC : return "GC";
+  case GCStack : return "GCStack";
+  case GCGlobal : return "GCGlboal";
+  case GCMajor: return "GCMajor";
+  default : return "unknownProcState";
+  }
+}
+
+void procChangeState(Proc_t *proc, enum ProcessorState procState)
+{
+  double diff;
+  restart_timer(&proc->currentTimer);
+  diff = proc->currentTimer.last;
+  switch (proc->state) {
+  case Scheduler:
+    add_statistic(&proc->schedulerStatistic, diff);
+    break;
+  case Mutator:
+    add_statistic(&proc->mutatorStatistic, diff);
+    break;
+  case GC:
+    if (procState == Scheduler || procState == Mutator) {
+      /* Actually leaving GC entirely */
+      proc->lastGCdiff += diff;
+      if (proc->lastGCStatus == GCOff && GCStatus == GCOff) 
+	add_statistic(&proc->gcOffStatistic, proc->lastGCdiff);
+      else {
+	add_history(&proc->gcOnHistory, proc->lastGCdiff);
+	add_histogram(&proc->gcOnHistogram, proc->lastGCdiff);
+      }
+      proc->lastGCdiff = 0;
+    }
+    else /* Entering sub-state */
+      proc->lastGCdiff += diff;
+    break;
+  case GCStack:
+    add_statistic(&proc->gcStackStatistic, diff);
+    proc->lastGCdiff += diff;
+    assert(procState != Mutator && procState != Scheduler);
+    break;
+  case GCGlobal:
+    add_statistic(&proc->gcGlobalStatistic, diff);
+    proc->lastGCdiff += diff;
+    assert(procState != Mutator && procState != Scheduler);
+    break;
+  case GCMajor:
+    add_statistic(&proc->gcMajorStatistic, diff);
+    proc->lastGCdiff += diff;
+    assert(procState != Mutator && procState != Scheduler);
+    break;
+  }
+  proc->state = procState;
+  proc->lastGCStatus = GCStatus;
 }
 
 int thread_total() 
@@ -420,29 +508,30 @@ void save_regs_fail(int memValue, int regValue)
 }
 
 
-static void mapThread(SysThread_t *sth, Thread_t *th)
+static void mapThread(Proc_t *proc, Thread_t *th)
 {
-  assert(sth->userThread == NULL);
-  assert(th->sysThread == NULL);
-  sth->userThread = th;
-  th->sysThread = sth;
-  th->saveregs[ALLOCPTR] = (reg_t) sth->allocCursor;
-  th->saveregs[ALLOCLIMIT] = (reg_t) sth->allocLimit;
-  th->writelistAlloc = sth->writelistCursor;
-  th->writelistLimit = sth->writelistEnd;
+  assert(proc->userThread == NULL);
+  assert(th->proc == NULL);
+  proc->userThread = th;
+  th->proc = proc;
+  th->saveregs[ALLOCPTR] = (reg_t) proc->allocCursor;
+  th->saveregs[ALLOCLIMIT] = (reg_t) proc->allocLimit;
+  th->writelistAlloc = proc->writelistCursor;
+  th->writelistLimit = proc->writelistEnd;
 }
 
-static void work(SysThread_t *sth)
+/* Processor should not be mapped to any user thread */
+static void work(Proc_t *proc)
 {
-  Thread_t *th = sth->userThread;
+  Thread_t *th = NULL;
 
-  /* To make visible changes other processors have made */
+  /* To get changes other processors have made */
   flushStore();
 
-  /* System thread should not be mapped */
-  assert(th == NULL);
+  /* Processor should not be mapped */
+  assert(proc->userThread == NULL);
 
-  /* Wait for next user thread and remove from queue. Map system thread. */
+  /* Wait for next user thread and remove from queue. Map processor. */
   while (th == NULL) {
     if (NumReadyJob() == 0)
 #ifdef alpha_osf
@@ -452,37 +541,43 @@ static void work(SysThread_t *sth)
       thr_yield();
 #endif
     th = FetchJob();  /* Provisionally grab thread but don't map onto processor yet */
-    if (th == NULL)
-      gc_poll(sth);
+    if (th == NULL) {
+      gc_poll(proc);
+      procChangeState(proc, Scheduler);
+    }
+    if (EmptyPlain) {
+      stop_timer(&proc->totalTimer);
+      FetchAndAdd(&NumActiveProc, -1);
+      pthread_exit(NULL);
+    }
   }
 
-  if (th->status != 1)
-    printf("Proc %d: thread %d  has status = %d\n", sth->stid,th->tid,th->status);
   assert(th->status == 1); /* FetchJob increments status from 0 to 1 */
-  switch (th->request) {
-  
-    case NoRequest : assert(0);
 
-    case YieldRequest : {
+  switch (th->request) {
+
+    case NoRequest: 
+      assert(0);
+    case YieldRequest: {
 #ifdef solaris
       th->saveregs[16] = (long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
 #endif	
-      mapThread(sth,th);
+      mapThread(proc,th);
       returnFromYield(th);
     }
-
-    case StartRequest : {              /* Starting thread for the first time */
+    case StartRequest: {              /* Starting thread for the first time */
       mem_t stack_top = th->stackchain->stacks[0]->top;
       assert(th->nextThunk == 0);
       th->saveregs[THREADPTR] = (long)th;
       th->saveregs[SP] = (long)stack_top - 128;       /* Get some initial room; Sparc requires at least 68 byte for the save area */
-      mapThread(sth,th);
-      if (diag) {
+      mapThread(proc,th);
+      if (threadDiag) {
 	printf("Proc %d: starting user thread %d (%d) with %d <= %d\n",
-	       sth->stid, th->tid, th->id, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
+	       proc->stid, th->tid, th->id, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
 	assert(th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
       }
       flushStore();  /* make visible changes to other processors */
+      procChangeState(proc, Mutator);
       start_client(th,th->thunks, th->numThunk);
       assert(0);
     }
@@ -491,37 +586,41 @@ static void work(SysThread_t *sth)
     case GCRequestFromC: 
     case MajorGCRequestFromC: {
       /* Allocate space or check write buffer to see if we have enough space */
-      int satisfied = GCFromScheduler(sth, th);
+      int satisfied = GCFromScheduler(proc, th);
+      procChangeState(proc, Scheduler);
       while (!satisfied) {
 	printf("Warning: Proc %d: could not resume thread %d after calling GCFromScheduler.  Retrying...\n",
-	       sth->stid, th->tid);
-	satisfied = GCFromScheduler(sth, th);
+	       proc->stid, th->tid);
+	satisfied = GCFromScheduler(proc, th);
+	procChangeState(proc, Scheduler);
       }
       /* Note that another processor can change th->saveregs[ALLOCLIMIT] to Stop at any point */
       if (th->requestInfo > 0)
-	assert(th->requestInfo + (val_t) sth->allocCursor <= (val_t) sth->allocLimit);
+	assert(th->requestInfo + (val_t) proc->allocCursor <= (val_t) proc->allocLimit);
       else if (th->requestInfo < 0)
-	assert((-th->requestInfo) + (val_t) sth->writelistCursor <= (val_t) sth->writelistEnd);
+	assert((-th->requestInfo) + (val_t) proc->writelistCursor <= (val_t) proc->writelistEnd);
       else 
 	assert(0);
-      mapThread(sth,th);
+      mapThread(proc,th);
       if (th->request == GCRequestFromML) {
-	if (diag)
+	if (threadDiag)
 	  printf("Proc %d: Resuming thread %d from GCRequestFromML of %d bytes with allocation region %d < %d and writelist %d < %d\n",
-		 sth->stid, th->tid, th->requestInfo, 
+		 proc->stid, th->tid, th->requestInfo, 
 		 th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT],
 		 th->writelistAlloc, th->writelistLimit);
 	flushStore();  /* make visible changes to other processors */
+	procChangeState(proc, Mutator);
 	returnFromGCFromML(th);	
 	assert(0);
       }
       else if (th->request == GCRequestFromC ||
 	       th->request == MajorGCRequestFromC) {
-	if (diag)
+	if (threadDiag)
 	  printf("Proc %d: Resuming thread %d from GCRequestFromML of %d bytes with allocation region %d < %d and writelist %d < %d\n",
-		 sth->stid, th->tid, th->requestInfo, sth->allocCursor, sth->allocLimit,
+		 proc->stid, th->tid, th->requestInfo, proc->allocCursor, proc->allocLimit,
 		 th->writelistAlloc, th->writelistLimit);
 	flushStore();  /* make visible changes to other processors */
+	procChangeState(proc, Mutator);
 	returnFromGCFromC(th);	
 	assert(0);
       }
@@ -537,20 +636,23 @@ static void work(SysThread_t *sth)
 }
 
 
-static void* systhread_go(void* unused)
+static void* proc_go(void* unused)
 {
-  SysThread_t *st = getSysThread();
+  Proc_t *proc = getProc();
 #ifdef solaris
-  int status = processor_bind(P_LWPID, P_MYID, st->processor, NULL);
+  int status = processor_bind(P_LWPID, P_MYID, proc->processor, NULL);
   if (status != 0)
     printf("processor_bind failed with %d\n",status);
 #else
-  if (diag)
+  if (threadDiag)
     printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
 #endif
   install_signal_handlers(0);
-  st->stack = (int)(&st) & (~255);
-  work(st);
+  proc->stack = (int)(&proc) & (~255);
+  FetchAndAdd(&NumActiveProc, 1);
+  start_timer(&proc->totalTimer);
+  start_timer(&proc->currentTimer);
+  work(proc);
   assert(0);
   return 0;
 }
@@ -559,20 +661,21 @@ static void* systhread_go(void* unused)
 void thread_go(ptr_t *thunks, int numThunk)
 {
   int curproc = -1;
-  int i;
+  int i, status;
 
   Thread_t *th = thread_create(NULL,thunks,numThunk);
   AddJob(th);
 
   /* Create system threads that run off the user thread queue */
-  for (i=0; i<NumSysThread; i++) {
+  for (i=0; i<NumProc; i++) {
     pthread_attr_t attr;
+    struct sched_param schedParam;
 #ifdef solaris
     processor_info_t infop;
     while (1) {
       int status = processor_info(++curproc,&infop);
       if (status == 0 && infop.pi_state == P_ONLINE) {
-	SysThreads[i].processor = curproc;
+	Procs[i].processor = curproc;
 	break;
       }
       if (curproc > 1024) {
@@ -581,29 +684,35 @@ void thread_go(ptr_t *thunks, int numThunk)
       }
     }
 #else
-    if (diag)
+    if (threadDiag)
       printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
 #endif
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr,256 * 1024);
     pthread_attr_setscope(&attr,PTHREAD_SCOPE_SYSTEM); 
-    pthread_create(&(SysThreads[i].pthread),&attr,systhread_go,NULL);
-    if (diag)
+    /* Only the SCHED_OTHER scheduling policy is supported on Solaris. */
+    /* Scheduling priority seems to work with pthread_attr_setschedparam. */
+    schedParam.sched_priority = 30;
+    status = pthread_attr_setschedparam(&attr,&schedParam);
+    if (status)
+      printf("pthread_attr_setschedparam returned status = %d\n", status);
+    pthread_create(&(Procs[i].pthread),&attr,proc_go,NULL);
+    if (threadDiag)
       printf("Proc %d:  processor %d and pthread = %d\n",
-	     SysThreads[i].stid, SysThreads[i].processor, SysThreads[i].pthread);
+	     Procs[i].stid, Procs[i].processor, Procs[i].pthread);
   }
   install_signal_handlers(1);
   /* Wait until the work stack is empty;  work stack contains running jobs too */
   while ((i = NumTotalJob()) > 0) {
-    if (diag)
+    if (threadDiag)
       printf("Main thread found %d jobs.\n", i);
     pthread_cond_wait(&EmptyCond,&EmptyLock);
   }
-  /* Now collect the GC times of the system threads */
-  for (i=0; i<NumSysThread; i++) {
-    SysThread_t *sth = &(SysThreads[i]);
-    stats_finish_thread(&sth->stacktime,&sth->gctime,&sth->majorgctime);
-  }
+  
+  /* Wait until all the processors have stopped */
+  while (NumActiveProc > 0)
+    ;
+
 }
 
 
@@ -628,9 +737,9 @@ int showIntRef(ptr_t v)
 
 int threadID()
 {
-  SysThread_t *sth = getSysThread();
-  Thread_t *th = sth->userThread;
-  int temp = sth->stid;
+  Proc_t *proc = getProc();
+  Thread_t *th = proc->userThread;
+  int temp = proc->stid;
   temp = 1000 * temp + th->tid;
   temp = 1000 * temp + th->id;
   return temp;
@@ -638,19 +747,19 @@ int threadID()
 
 Thread_t *SpawnRest(ptr_t thunk)
 {
-  SysThread_t *sth = getSysThread();
-  Thread_t *parent = sth->userThread;
+  Proc_t *proc = getProc();
+  Thread_t *parent = proc->userThread;
   Thread_t *child = NULL;
 
-  assert(sth->stack - ((int) &sth) < 1024);   /* stack frame for this function should be < 1K */
-  assert(parent->sysThread == sth);
-  check("Spawnstart",sth);
+  assert(proc->stack - ((int) &proc) < 1024);   /* stack frame for this function should be < 1K */
+  assert(parent->proc == proc);
+  check("Spawnstart",proc);
   if (thunk < (mem_t) 1000000) {
     printf("Proc %d: Thread %d: Spawn given bad thunk %d\n",
-	   sth->stid, parent->tid, thunk);
+	   proc->stid, parent->tid, thunk);
   }
   child = thread_create(parent,(ptr_t *)thunk, 0);    /* zero indicates passing one actual thunk */
-  check("Spawnmid",sth);
+  check("Spawnmid",proc);
 
   if (collector_type != SemispaceParallel &&
       collector_type != GenerationalParallel &&
@@ -660,10 +769,10 @@ Thread_t *SpawnRest(ptr_t thunk)
     assert(0);
   }
   AddJob(child);
-  if (diag)
+  if (threadDiag)
     printf("Proc %d: user thread %d spawned user thread %d (status = %d)\n",
-	   sth->stid,parent->tid,child->tid,child->status);
-  check("Spawnend",sth);
+	   proc->stid,parent->tid,child->tid,child->status);
+  check("Spawnend",proc);
   return parent;
 }
 
@@ -671,30 +780,27 @@ Thread_t *SpawnRest(ptr_t thunk)
    Rather start_client returns here after swithcing to system thread stack. */
 void Finish()
 {
-  SysThread_t *sth = getSysThread();
-  Thread_t *th = sth->userThread;
-  assert(((int)sth->stack - (int)(&sth)) < 1024); /* THis function's frame should not be more than 1K. */
-  check("Finishstart",sth);
-  if (diag) printf("Proc %d: finished user thread %d\n",sth->stid,th->tid);
-  /*
-  gc_finish();
-  */
-  DeleteJob(sth);
-  check("Finishend",sth);
-  work(sth);
+  Proc_t *proc = getProc();
+  Thread_t *th = proc->userThread;
+  assert(((int)proc->stack - (int)(&proc)) < 1024); /* THis function's frame should not be more than 1K. */
+  check("Finishstart",proc);
+  if (threadDiag) printf("Proc %d: finished user thread %d\n",proc->stid,th->tid);
+  DeleteJob(proc);
+  check("Finishend",proc);
+  work(proc);
   assert(0);
 }
 
 /* Mutator calls Yield which is defined in the service_platform_asm.s assembly file */
 Thread_t *YieldRest()
 {
-  SysThread_t *sth = getSysThread();
-  check("YieldReststart",sth);
-  sth->userThread->request = YieldRequest;  /* Record why this thread pre-empted */
-  sth->userThread->saveregs[RESULT] = 256;  /* ML representation of unit */
-  ReleaseJob(sth);
-  check("YieldRestend",sth);
-  work(sth);
+  Proc_t *proc = getProc();
+  check("YieldReststart",proc);
+  proc->userThread->request = YieldRequest;  /* Record why this thread pre-empted */
+  proc->userThread->saveregs[RESULT] = 256;  /* ML representation of unit */
+  ReleaseJob(proc);
+  check("YieldRestend",proc);
+  work(proc);
   assert(0);
   return 0;
 }
@@ -712,16 +818,13 @@ void Interrupt(struct ucontext *uctxt)
   return;
 }
 
-/* Releases current user thread if mapped */
-void schedulerRest(SysThread_t *sth)
+/* Processor must be unmapped */
+void schedulerRest(Proc_t *proc)
 {
-  SysThread_t *self = getSysThread();
-  Thread_t *th = self->userThread;
-  assert((self->stack - (int) (&self)) < 1024); /* Check that we are running on own stack */
-  assert(sth == self);
-  if (th != NULL)
-    ReleaseJob(sth);
-  work(sth);
+  int local;
+  assert((proc->stack - (int) (&local)) < 1024); /* Check that we are running on own stack */
+  assert(proc->userThread == NULL);
+  work(proc);
   assert(0);
 }
 

@@ -103,10 +103,11 @@ structure Il :> IL =
                  | BND_CON of var * con
                  | BND_MOD of var * bool * mod
 
-    and   signat = SIGNAT_STRUCTURE of path option * sdec list
+    and   signat = SIGNAT_STRUCTURE of sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * arrow
 		 | SIGNAT_VAR of var
 	         | SIGNAT_OF of path
+                 | SIGNAT_SELF of path * signat option * signat  (* self, optional unselfified sig, selfified sig *)
 
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con * exp option  * bool (* true indicates should inline *)

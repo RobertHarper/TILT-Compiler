@@ -79,8 +79,7 @@ structure Basis
 	  fun poly_entry (str,c2exp) = 
 	      let val argvar = fresh_var()
 		  val l = internal_label str
-		  val argsig = SIGNAT_STRUCTURE(NONE,
-						[SDEC(l,DEC_CON(fresh_var(),
+		  val argsig = SIGNAT_STRUCTURE([SDEC(l,DEC_CON(fresh_var(),
 								KIND,
 								NONE, false))])
 		  val inner_ctxt = add_context_dec(empty_context,
@@ -91,7 +90,7 @@ structure Basis
 		  val con = IlStatic.GetExpCon(inner_ctxt,exp)
 		  val inner_var = fresh_named_var str
 		  val body = MOD_STRUCTURE([SBND(it_lab,BND_EXP(inner_var, exp))])
-		  val ressig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,DEC_EXP(inner_var,con, SOME exp, true))])
+		  val ressig = SIGNAT_STRUCTURE [SDEC(it_lab,DEC_EXP(inner_var,con, SOME exp, true))]
 		  val module = MOD_FUNCTOR(TOTAL,argvar,argsig,body,ressig)
 		  val signat = SIGNAT_FUNCTOR(argvar,argsig,ressig,TOTAL)
 		  val lab = mk_var_lab str

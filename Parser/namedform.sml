@@ -74,6 +74,8 @@ struct
     fun flatten_seqdec Unaltered = Unaltered
       | flatten_seqdec (Altered (SeqDec decs)) =
           Altered (SeqDec (List.concat (map extract decs)))
+      | flatten_seqdec (Altered (LocalDec (SeqDec decs, dec))) = 
+          Altered (LocalDec (SeqDec (List.concat (map extract decs)), dec))
       | flatten_seqdec (Declare (strbs, SeqDec decs)) =
 	  Declare (strbs, SeqDec (List.concat (map extract decs)))
       | flatten_seqdec _ = impossible "flatten_seqdec"
@@ -139,7 +141,7 @@ struct
 
   and dec_declare (Declare (strbs, dec)) =
         flatten_seqdec
-	(Altered (SeqDec (rev (map (fn strb => StrDec [strb]) strbs) @ [dec])))
+	(Altered (LocalDec (SeqDec (rev (map (fn strb => StrDec [strb]) strbs)), dec)))
     | dec_declare arg = arg
 
   and name_dec (StrDec strbs) =

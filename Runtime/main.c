@@ -26,7 +26,7 @@ int NumHeap       = 20;
 int NumStack      = 100;
 int NumStackChain = 100;
 int NumThread     = 100;
-int NumSysThread  = 1;
+int NumProc       = 1;
 
 void setCommandLine(char* cmd, char** argv);
 
@@ -112,6 +112,7 @@ struct option_entry table[] =
    0, "paranoid", &paranoid, "Run in paranoid mode",
    0, "verbose", &verbose, "Be verbose when paranoid",
    0, "diag", &diag, "Run in diagnostic mode",
+   0, "threadDiag", &threadDiag, "Show thread-related diagnostic messages",
    0, "debugStack", &debugStack, "Show scanning of stack frames",
    0, "gcstats", &SHOW_GCSTATS, "Show GC statistics during execution",
    0, "gcdebug", &SHOW_GCDEBUG, "Show GC debugging information during execution",
@@ -121,7 +122,7 @@ struct option_entry table[] =
    0, "showglobals", &SHOW_GLOBALS, "Show globals before and after each GC",
    1, "showatgc", &LEAST_GC_TO_CHECK, "Check/show heaps starting at this GC",
    1, "stacksize", &StackSize, "Stack size of threads measured in Kbytes",
-   1, "proc", &NumSysThread, "Use this many processors",
+   1, "proc", &NumProc, "Use this many processors",
    1, "minheap", &MinHeap, "Set minimum size of heap in Kbytes",
    1, "maxheap", &MaxHeap, "Set maximum size of heap in Kbytes",
    1, "fixheap", &fixheap, "Set the size of heap in Kbytes",

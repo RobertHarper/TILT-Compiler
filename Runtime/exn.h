@@ -3,6 +3,8 @@
 #ifndef _exn_h
 #define _exn_h
 
+#include "tag.h"
+
 void exn_init(void);
 
 void raise_exception(struct ucontext *, ptr_t);

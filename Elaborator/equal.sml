@@ -27,8 +27,7 @@ struct
 	    (name : con, con : con) : exp * con = 
       let
 	  val _ = debugdo (fn () => (print "CALLED xeq with con = ";
-				     pp_con con; print "\nand ctxt = \n";
-				     pp_context ctxt))
+				     pp_con con; print "\n"))
 (*
 	  val con = con_normalize(ctxt,con) 
 	  val _ = debugdo (fn () => (print "NORMALIZE to con = ";
@@ -48,7 +47,8 @@ struct
 				| _ => (case pc of
 					    PHRASE_CLASS_CON(_,_,SOME c,_) => self(con,c)
 					  | _ => (print "No eq expression available for CON_VAR "; pp_var v;
-						  print " .  Perhaps due to shadowing\n";
+						  print " at label "; pp_label eq_label;
+						  print ".  Perhaps due to shadowing\n";
 						  raise NoEqExp)))
 			  end)
 	  | CON_OVAR ocon => self (name,CON_TYVAR (ocon_deref ocon))
@@ -170,10 +170,10 @@ struct
 		let val meq = 
 		    (case c of
 			 CON_MODULE_PROJECT(m,l) => 
-			     let val s = GetModSig(ctxt,m)
+			     let val SIGNAT_SELF(_,_,s) = GetModSig(ctxt,m)
 				 val eql = to_eq l
 			     in  case s of
-				 SIGNAT_STRUCTURE(_,sdecs) =>
+				 SIGNAT_STRUCTURE sdecs =>
 				     if (List.exists (fn (SDEC(l,_)) => eq_label(l,eql)) sdecs)
 					 then MOD_PROJECT(m,to_eq l)
 				     else raise NoEqExp
@@ -187,9 +187,10 @@ struct
 				    | _ => raise NoEqExp)
 			      end)
 		       | _ => raise NoEqExp)
-		in case (GetModSig(ctxt,meq)) of
-		    SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE (NONE, sdecs),
-				   SIGNAT_STRUCTURE(NONE, [res_sdec]),_) => 
+		    val SIGNAT_SELF(_,_,s) = GetModSig(ctxt,meq)
+		in case s of
+		    SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE sdecs,
+				   SIGNAT_STRUCTURE [res_sdec], _) => 
 			let 
 			    fun translucentfy [] [] = []
 			      | translucentfy [] _ = elab_error "arity mismatch in eq compiler"
@@ -256,7 +257,7 @@ struct
 		 | _ => error "xeq_mu given confun which is not CON_FUN returning CON_TUPLE")
 	  val expanded_cons_vars = map0count (fn i => fresh_named_var ("expanded_con_" ^ (Int.toString i))) arity
 	  val vars_eq = map0count (fn i => fresh_named_var ("vars_eq_" ^ (Int.toString i))) arity
-	  val type_lbls = map0count (fn i => internal_label("type" ^ (Int.toString i))) arity
+	  val type_lbls = map0count (fn i => fresh_internal_label("type" ^ (Int.toString i))) arity
 	  val evars = map0count (fn i => fresh_named_var ("evar" ^ (Int.toString i))) arity
 	  val cvars = map0count (fn i => fresh_named_var ("cvar" ^ (Int.toString i))) arity
 	  val eq_lbls = map to_eq type_lbls
@@ -311,7 +312,10 @@ struct
 		  vector_eq : context -> exp * con,
 		  context : IlContext.context,
 		  con : con}) : (exp * con) option = 
-	let val eqexp_con = xeq (polyinst_opt,vector_eq) context (con,con)
+	let val _ = debugdo (fn () => (print "equality compile called with con = ";
+				       pp_con con; print "\nand ctxt = \n";
+				       pp_context context))
+	    val eqexp_con = xeq (polyinst_opt,vector_eq) context (con,con)
 	in  SOME eqexp_con
 	end
 	handle NoEqExp => NONE

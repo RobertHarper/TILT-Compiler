@@ -126,9 +126,9 @@ structure Datatype
 		end
 	in
 	    val sdecs_eq = sdecs_eq
-	  val sigpoly = SIGNAT_STRUCTURE (NONE, sdecs)
-	  val sigpoly_eq = SIGNAT_STRUCTURE (NONE, sdecs_eq)
-	  val context' = foldl folder ctxt (Listops.zip type_labs type_vars)
+	    val sigpoly = SIGNAT_STRUCTURE sdecs
+	    val sigpoly_eq = SIGNAT_STRUCTURE sdecs_eq
+	    val context' = foldl folder ctxt (Listops.zip type_labs type_vars)
 	end
 
 	(* ------ compute 3 versions of all the types carried by the constructors 
@@ -326,7 +326,7 @@ structure Datatype
 	    val expose_modvar = fresh_named_var "exposer_mod"
 	    val expose_expbnd = BND_EXP(expose_var,exp_expose_i)
 	    val expose_expdec = DEC_EXP(expose_var,con_expose_i,SOME exp_expose_i, true)
-	    val expose_inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expose_expdec)])
+	    val expose_inner_sig = SIGNAT_STRUCTURE [SDEC(it_lab,expose_expdec)]
 	    val expose_modbnd = BND_MOD(expose_modvar, true,
 					MOD_FUNCTOR(TOTAL, mpoly_var,sigpoly,
 						    MOD_STRUCTURE[SBND(it_lab,expose_expbnd)],
@@ -347,7 +347,7 @@ structure Datatype
 		  val mkpoly_var = fresh_var()
 		  val bnd = BND_EXP(mk_var, exp_mk_ij)
 		  val dec = DEC_EXP(mk_var, con_mk_ij, SOME exp_mk_ij, true)
-		  val inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,dec)])
+		  val inner_sig = SIGNAT_STRUCTURE [SDEC(it_lab,dec)]
 		  val modbnd = BND_MOD(mkpoly_var, true,
 					   MOD_FUNCTOR(TOTAL, mpoly_var,sigpoly,
 						       MOD_STRUCTURE[SBND(it_lab,bnd)],
@@ -365,7 +365,7 @@ structure Datatype
 	    val sdecs = type_sdec::expose_sdec::sdecs
 
 	    val inner_mod = MOD_STRUCTURE sbnds
-	    val inner_sig = SIGNAT_STRUCTURE(NONE,sdecs)
+	    val inner_sig = SIGNAT_STRUCTURE sdecs
 
 	  in (SBND(module_lab,BND_MOD(module_var,false,inner_mod)),
 	      SDEC(module_lab,DEC_MOD(module_var,false,inner_sig)))
@@ -395,8 +395,7 @@ structure Datatype
 					   else CON_APP (CON_VAR type_var_i, tyvar_mprojs))
 		    val eq_expbnd = BND_EXP(equal_var,exp_eq)
 		    val eq_expdec = DEC_EXP(equal_var,con_eq,NONE,false)
-		    val eq_inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,
-								   eq_expdec)])
+		    val eq_inner_sig = SIGNAT_STRUCTURE [SDEC(it_lab,eq_expdec)]
 		    val eq_sbnd = 
 			SBND((eq_lab,
 			      if (is_monomorphic)
@@ -430,7 +429,7 @@ structure Datatype
 				    else fresh_named_var "top_eq"
 		    val expbnd = BND_EXP(equal_var, eq_exp)
 		    val expdec = DEC_EXP(equal_var, eq_con, NONE,false)
-		    val inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expdec)])
+		    val inner_sig = SIGNAT_STRUCTURE [SDEC(it_lab,expdec)]
 		    val modbnd = BND_MOD(top_eq_var, true, MOD_FUNCTOR(TOTAL, mpoly_var,sigpoly_eq,
 							 MOD_STRUCTURE[SBND(it_lab,expbnd)],
 							 inner_sig))
@@ -583,10 +582,10 @@ structure Datatype
 		   | _ => [])
 	    val (all_constr_labs,carrying_constr_labs,constr_sbndsdec) = 
 		(case (Context_Lookup_Labels(context,dt_labs)) of
-		     SOME(_,PHRASE_CLASS_MOD (m,b,s)) => 
+		     SOME(_,PHRASE_CLASS_MOD (m,b,SIGNAT_SELF(_,_,s))) => 
 			 let val bnd = BND_MOD(dt_var,b,m)
 			     val dec = DEC_MOD(dt_var,b,s)
-			     val SIGNAT_STRUCTURE(_, _::_::sdecs) = s
+			     val SIGNAT_STRUCTURE (_::_::sdecs) = s
 			     (* need to keep only labs of value-carrying constructors *)
 			     fun mapper (SDEC(l,dec)) = 
 				 let fun is_arrow (CON_ARROW _) = SOME l
@@ -594,7 +593,7 @@ structure Datatype
 				 in  case dec of
 				     DEC_EXP(_,c,_,_) => is_arrow c
 				   | DEC_MOD (_,true,SIGNAT_FUNCTOR(_,_,
-						  SIGNAT_STRUCTURE(_,[SDEC(_,DEC_EXP(_,c,_,_))]),_)) => is_arrow c
+						  SIGNAT_STRUCTURE([SDEC(_,DEC_EXP(_,c,_,_))]),_)) => is_arrow c
 				   | _ => NONE
 				 end
 			     val all_labs = map (fn (SDEC(l,_)) => l) sdecs
@@ -691,9 +690,9 @@ structure Datatype
     fun pc_is_const pc = 
 	let val innercon =
 	    (case pc of
-		 PHRASE_CLASS_MOD(_,true,SIGNAT_FUNCTOR(_,_,s,_)) =>
+		 PHRASE_CLASS_MOD(_,true,SIGNAT_SELF(_, _, SIGNAT_FUNCTOR(_,_,s,_))) =>
 		     (case s of
-			  SIGNAT_STRUCTURE(_,[SDEC(itlabel,
+			  SIGNAT_STRUCTURE([SDEC(itlabel,
 						   DEC_EXP(_,con,_,_))]) => con
 			| _ => (Ppil.pp_phrase_class pc;
                               error "ill-formed constructor mod phrase_class"))
@@ -725,37 +724,28 @@ structure Datatype
 					print "\nand with context = ";
 					pp_context context;
 					print "\n")))
-	    val (constr_path,pc) = 
+	    val (v,ls,pc) = 
 		(case (Context_Lookup_Labels(context,map symbol_label p)) of
-		     NONE=> (debugdo (fn () => print "constr_lookup modsig_lookup got NONE\n");
+		     NONE=> (debugdo (fn () => print "constr_lookup found no phrase class\n");
 			     raise NotConstructor)
-		   | SOME lookup_result => lookup_result)
-		
-            val _ = (debugdo (fn () => (print "constr_lookup found phrase class:\n";
-                                        pp_phrase_class pc;
-                                        print "\n")))
+		   | SOME (constr_path, pc) =>
+		      (case constr_path of
+			   PATH (_,[]) => (debugdo (fn() => print "path was too short\n"); raise NotConstructor)
+			 | PATH (v,ls) => (v,ls,pc)))
 
-            (* ls is non-empty *)
-	    val (v,ls) =
-		(case constr_path of
-		     PATH(v,[]) => raise NotConstructor
-		   | PATH v_ls => v_ls)
+	    val _ = debugdo (fn () => (print "constr_lookup found v, ls, pc\n"))
+
 	    val datatype_path = PATH(v,butlast ls)  
-
-	    val data_sig = GetModSig(context,path2mod datatype_path)
+	    val SIGNAT_SELF(_, _, data_sig) = GetModSig(context,path2mod datatype_path)
 	    val sdecs = (case data_sig of
-			     (SIGNAT_STRUCTURE(_,sdecs)) => sdecs
-			   | _ => raise NotConstructor)
+			     SIGNAT_STRUCTURE sdecs => sdecs
+			   | _ => error "shortened path did not lead to a structure signature")
 
-
-(*
-	    val _ = case sdecs of
-		(SDEC(internal_type_lab,DEC_CON(_,_,SOME c)))::_ => ()
-	      | _ => (print "datatype_constr_lookup failed with sdecs = \n";
-		      pp_sdecs sdecs; print "\n")
-*)
 	    val _ = if (length sdecs < 2) then raise NotConstructor else ()
 	    val internal_type_sdec:: expose_sdec :: _ = sdecs
+
+	    val _ = debugdo (fn() => print "constr_lookup found internal_type_sdec and expose_sdec\n")
+
 	    val (internal_type_lab,type_path) = 
 		(case internal_type_sdec of
 		     (SDEC(internal_type_lab,DEC_CON(_,_,SOME c,_))) =>
@@ -763,58 +753,27 @@ structure Datatype
 						  NONE => CON c
 						| SOME p => APATH p))
 		   | _ => raise NotConstructor)
+
+	    val _ = debugdo (fn() => print "constr_lookup found internal_type_label and type_path\n")
+
 	    val sum_path =
 		(case expose_sdec of
 		     SDEC(_,DEC_EXP(_,CON_ARROW(_,c,_,_),_,_)) => (case con2path c of
 								   SOME p => APATH p
 								 | NONE => CON c)
-		   | SDEC(_,DEC_MOD(_,true,SIGNAT_FUNCTOR(_,_,SIGNAT_STRUCTURE(_,sdecs),_))) =>
+		   | SDEC(_,DEC_MOD(_,true,SIGNAT_SELF(_, _, SIGNAT_FUNCTOR(_,_,SIGNAT_STRUCTURE sdecs,_)))) =>
 			 (case sdecs of
 			      [SDEC(_,DEC_EXP(_,CON_ARROW(_,CON_APP(c,_),_,_),_,_))] => 
 				  (case con2path c of
 				       SOME p => APATH p
 				     | NONE => CON c)
 			    | _ => raise NotConstructor)
-		   | _ => raise NotConstructor)
+		   | _ => (debugdo (fn() => (print "constr_lookup got bad expose_sdec\n";
+					     pp_sdec expose_sdec; print "\n")); raise NotConstructor))
 
-
-
+	    val _ = debugdo (fn() => print "constr_lookup got sum_path\n")
 	    val type_lab = symbol_label(Symbol.tycSymbol (Name.label2name internal_type_lab))
 	    val num_constr = (length sdecs) - 2
-
-	    local
-		val sum_lab = internal_label((Name.label2name type_lab) ^ "_sum")
-(*		val ssum_lab = map0count (fn n => 
-					   internal_label(Name.label2name type_lab ^ "_sum"
-							   ^ (Int.toString n))) num_constr
-*)
-		fun get_path lab = 
-		    let val _ = if (!debug)
-				    then (print "get_path working on lab = "; 
-					  Ppil.pp_label lab; print "\n")
-				else ()
-			val p = (case ls of
-			 [_] => 
-			     (case (Context_Lookup_Label(context,lab)) of
-				  SOME (p,_) => p
-				| NONE => ((* print "constr_lookup failed to find path: ";
-					   pp_label lab; print "\n"; *)
-					   raise NotConstructor))
-		       | _ => PATH(v,(butlast(butlast ls)) @ [lab]))
-			val _ = if (!debug)
-				    then (print "get_path retrurning: ";
-					  pp_path p; print "\n")
-				else ()
-		    in  p
-		    end
-	    in  
-(* this path could get shadowed so we can't get the type_path this way *)
-(*		val type_path = get_path type_lab *)
-(*		val sum_path = get_path sum_lab *)
-(*		val ssum_path = map get_path ssum_lab *)
-	    end
-
-
 
 	in (case sdecs of
 		(SDEC(type_lab,_)) :: 
@@ -823,7 +782,6 @@ structure Datatype
 			then {name = type_lab,
 			      is_const = pc_is_const pc,
 			      datatype_path = datatype_path,
-(*			      ssum_path = ssum_path, *)
 			      sum_path = sum_path,
 			      type_path = type_path,
 			      datatype_sig = data_sig}
@@ -843,8 +801,8 @@ structure Datatype
 
      fun des_dec (d : dec) : ((Il.var * Il.sdecs) option * Il.con) = 
        (case d of
-	  DEC_MOD(_,true,SIGNAT_FUNCTOR(v,SIGNAT_STRUCTURE (_,sdecs),
-		    SIGNAT_STRUCTURE(_,[SDEC(_,DEC_EXP(_,c,_,_))]),_)) => (SOME (v, sdecs), c)
+	  DEC_MOD(_,true,SIGNAT_SELF(_, _, SIGNAT_FUNCTOR(v,SIGNAT_STRUCTURE sdecs,
+							  SIGNAT_STRUCTURE([SDEC(_,DEC_EXP(_,c,_,_))]),_))) => (SOME (v, sdecs), c)
 	| DEC_EXP(_,c,_,_) => (NONE, c)
 	| _ => error "des_dec")
 
@@ -873,7 +831,7 @@ structure Datatype
 	       end
 	   val sdecs = 
 	   (case s of 
-		SIGNAT_STRUCTURE(_,sdecs) => sdecs
+		SIGNAT_STRUCTURE sdecs => sdecs
 	      | _ => bad())
        in
 		    (case sdecs of
@@ -930,12 +888,13 @@ structure Datatype
 	   (case 
 		(Context_Lookup_Path_Open(context,expose_path), sbnds_sdecs_cons_opt) of 
 		(SOME(_,PHRASE_CLASS_EXP(_,_,SOME e,_)),_) => e
-	      | (SOME(_,PHRASE_CLASS_MOD(_,true,s)),SOME(sbnds,_,_)) =>
+	      | (SOME(_,PHRASE_CLASS_MOD(_,true,SIGNAT_SELF(_, _, s))),SOME(sbnds,_,_)) =>
 		    (case s of
-			 SIGNAT_FUNCTOR(v,argsig,SIGNAT_STRUCTURE(_,[SDEC(_,DEC_EXP(_,_,SOME e,_))]),_) =>
+			 SIGNAT_FUNCTOR(v,argsig,SIGNAT_STRUCTURE [SDEC(_,DEC_EXP(_,_,SOME e,_))],_) =>
 			     exp_subst(e,subst_add_modvar(empty_subst, v, MOD_STRUCTURE sbnds))
-		       | _ => error "cannot construct expose_exp - weird signature")
-	      | _ => error "cannot construct expose_exp")
+		       | _ => error "cannot construct exposeExp - weird signature")
+	      | _ => (Ppil.pp_path expose_path;
+			 error "cannot construct exposeExp - could not find path"))
 
 
 
@@ -961,8 +920,9 @@ structure Datatype
 				  carried_type : Il.con option} option =
        (case (Context_Lookup_Labels(context,map symbol_label path)) of
 	  NONE=> NONE
-	| SOME (path_mod,PHRASE_CLASS_MOD(m,_,exn_sig as 
-		SIGNAT_STRUCTURE (_,[SDEC(lab1,DEC_EXP(_,ctag,_,_)),SDEC(lab2,DEC_EXP(_,cmk,_,_))]))) =>
+	| SOME (path_mod,PHRASE_CLASS_MOD(m,_,SIGNAT_SELF(_,_,exn_sig as 
+					  SIGNAT_STRUCTURE ([SDEC(lab1,DEC_EXP(_,ctag,_,_)),
+							     SDEC(lab2,DEC_EXP(_,cmk,_,_))])))) =>
 	      if (eq_label(lab1,stamp_lab) andalso eq_label(lab2,mk_lab))
 		  then 
 		      (case (ctag,cmk) of 

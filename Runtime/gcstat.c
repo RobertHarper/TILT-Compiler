@@ -135,17 +135,15 @@ void gc_sanity_stackreg_check(unsigned long *saveregs, Heap_t *fromspace,
 
 
 
-void gcstat_normal(unsigned allocsize, unsigned copied, unsigned writes)
+void gcstat_normal(Proc_t *proc, unsigned int allocsize, unsigned int copied, unsigned int writes)
 {
-  static int bytesAllocated = 0;
-  static int bytesCollected = 0;
-  bytesAllocated += allocsize;
-  bytesCollected += copied;
-  KBytesAllocated += (bytesAllocated / 1024);
-  KBytesCollected += (bytesCollected / 1024);
-  bytesAllocated %= 1024;
-  bytesCollected %= 1024;
-  NumWrites += writes;
+  proc->bytesAllocated += allocsize;
+  proc->bytesCopied += copied;
+  proc->kbytesAllocated += (proc->bytesAllocated / 1024);
+  proc->kbytesCopied += (proc->bytesCopied / 1024);
+  proc->bytesAllocated %= 1024;
+  proc->bytesCopied %= 1024;
+  proc->numWrite += writes;
 }
 
 

@@ -608,16 +608,15 @@ structure IlStatic
 					     error "got CON_TUPLE_PROJECT in GetConKind"))
      | (CON_MODULE_PROJECT (m,l)) => 
 	   let val (_,signat) = GetModSig(m,ctxt)
-	       val (self,sdecs) = 
-		   (case (reduce_signat ctxt signat) of
-			SIGNAT_STRUCTURE (self,sdecs) => (self,sdecs)
-		      | SIGNAT_FUNCTOR _ => error "cannot project from functor"
-		      | _ => error "signat_var or signat_of not reduce")
+	       val signat = reduce_signat ctxt signat
+	       val sdecs = 
+		   (case signat of
+			SIGNAT_SELF(_, _, SIGNAT_STRUCTURE sdecs) => sdecs
+		      | _ => error "cannot project from unselfified sig_structure")
 	   in  (case Sdecs_Lookup ctxt (MOD_VAR (fresh_var()),sdecs,[l]) of
 		    NONE => (print "no such label = ";
 			     pp_label l; print " in sig \n";
-			     Ppil.pp_signat (SIGNAT_STRUCTURE(self,sdecs));
-			     print "\n";
+			     Ppil.pp_signat signat; print "\n";
 			     error "no such label in sig")
 		  | SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
 		  | _ => error "label in sig not a DEC_CON")
@@ -682,15 +681,15 @@ structure IlStatic
 					     error "got CON_TUPLE_PROJECT in GetConKindFast"))
      | (CON_MODULE_PROJECT (m,l)) => 
 	   let val (_,signat) = GetModSig(m,ctxt)
-	       val (self,sdecs) = 
-		   (case (reduce_signat ctxt signat) of
-			SIGNAT_STRUCTURE (self,sdecs) => (self,sdecs)
-		      | SIGNAT_FUNCTOR _ => error "cannot project from functor"
-		      | _ => error "signat_var or signat_of not reduced")
+	       val signat = reduce_signat ctxt signat
+	       val sdecs = 
+		   (case signat of
+			SIGNAT_SELF(_, _, SIGNAT_STRUCTURE sdecs) => sdecs
+		      | _ => error "cannot project from unselfified sig_structure")
 	   in  (case Sdecs_Lookup ctxt (MOD_VAR (fresh_var()),sdecs,[l]) of
 		    NONE => (print "no such label = ";
 			     pp_label l; print " in sig \n";
-			     Ppil.pp_signat (SIGNAT_STRUCTURE(self,sdecs));
+			     Ppil.pp_signat signat;
 			     print "\n";
 			     error "no such label in sig")
 		  | SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
@@ -1072,8 +1071,8 @@ structure IlStatic
 			   error "Trying to obtain reduce type of invaluable unselfed term projection"
 		   end
 	   in case (reduce_signat ctxt signat) of
-	       SIGNAT_STRUCTURE(SOME p,sdecs) => self_case(p,sdecs)
-	     | SIGNAT_STRUCTURE(NONE,sdecs) => notself_case sdecs
+	       SIGNAT_SELF(self, _, SIGNAT_STRUCTURE sdecs) => self_case(self,sdecs)
+	     | SIGNAT_STRUCTURE sdecs => notself_case sdecs
 	     | SIGNAT_FUNCTOR _ => error "cannot project from module with functor signature"
 	     | _ => error "signat_var of signat_of is not reduced"
 	   end
@@ -1132,12 +1131,16 @@ structure IlStatic
 		else 
 		    (case (doOpen andalso is_open l, d) of
 			 (true, (DEC_MOD(_,_,s))) =>
-			     (case (reduce_signat ctxt s) of
-				  SIGNAT_STRUCTURE (_,sdecs) =>
-				      (case (loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
-					   SOME (lbls',pc) => SOME(l::lbls',pc)
-					 | NONE => loop m lbl rest)
-				| _ => loop m lbl rest)
+			     let val s = (case (reduce_signat ctxt s) of
+					      SIGNAT_SELF(_,_,s) => s
+					    | s => s)
+			     in  (case s of
+				      SIGNAT_STRUCTURE sdecs =>
+					  (case (loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
+					       SOME (lbls',pc) => SOME(l::lbls',pc)
+					     | NONE => loop m lbl rest)
+				    | _ => loop m lbl rest)
+			     end
 		       | _ => loop m lbl rest)
 
 	in
@@ -1148,13 +1151,17 @@ structure IlStatic
 		     case (loop om lbl (rev sdecs)) of
 		       SOME(labs,phrase_class) =>
 			 let fun doit(m',s) =
-			     (case s of
-				  SIGNAT_STRUCTURE (_,sdecs') =>
+			     let val s = (case s of
+					      SIGNAT_SELF(_,_,s) => s
+					    | _ => s)
+			     in  (case s of
+				  SIGNAT_STRUCTURE sdecs' =>
 				      (case (Sdecs_Lookup_Help doOpen ctxt(m',sdecs',lbls)) of
 					   SOME(labs2,pc2) => 
 					       SOME(labs @ labs2, pc2)
 					 | NONE => NONE)
 				| _ => NONE)
+			     end
 			 in  (case phrase_class of
 				  PHRASE_CLASS_MOD (m,_,s) => 
 				      doit(m,reduce_signat ctxt s)
@@ -1197,7 +1204,7 @@ structure IlStatic
 		   in loop (va andalso lva) sbs (sdec::acc) (add_context_dec(ctxt,SelfifyDec ctxt dec))
 		   end
 	       val (va,sdecs) = (loop true sbnds [] ctxt)
-	       val res = SIGNAT_STRUCTURE(NONE,sdecs)
+	       val res = SIGNAT_STRUCTURE sdecs
 	   in (va,res)
 	   end
      | MOD_FUNCTOR (a,v,s,m,s2) => 
@@ -1227,7 +1234,7 @@ structure IlStatic
 			     sig_subst_modvar(dsignat,[(v,b)]))
 			    else error ("Module Application where" ^ 
 					" argument and parameter signature mismatch")
-	     | (SIGNAT_STRUCTURE _) => error "Can't apply a structure"
+	     | SIGNAT_STRUCTURE _ => error "Can't apply a structure"
 	     | _ => error "signat_var or signat_of is not reduced"
 	   end
      | MOD_LET (v,m1,m2) => 
@@ -1264,8 +1271,8 @@ structure IlStatic
 			   error "Trying to obtain signature of invaluable unselfed projection"
 		   end
 	   in case (reduce_signat ctxt signat) of
-	       SIGNAT_STRUCTURE (SOME p,sdecs) => self_case(p,sdecs)
-	     | SIGNAT_STRUCTURE (NONE,sdecs) => notself_case sdecs
+	       SIGNAT_STRUCTURE sdecs => notself_case sdecs
+	     | SIGNAT_SELF(self, _, SIGNAT_STRUCTURE sdecs) => self_case(self, sdecs)
 	     | SIGNAT_FUNCTOR _ => error "cannot project from functor"
 	     | _ => error "signat_var or signat_of is not reduced"
 	   end
@@ -1455,8 +1462,8 @@ structure IlStatic
 				    end)
 		       end
 	       in (case (reduce_signat ctxt s) of 
-		       SIGNAT_STRUCTURE(NONE,sdecs) => notself_case sdecs
-		     | SIGNAT_STRUCTURE (SOME p,sdecs) => self_case(p,sdecs)
+		       SIGNAT_STRUCTURE sdecs => notself_case sdecs
+		     | SIGNAT_SELF(self, _, SIGNAT_STRUCTURE sdecs) => self_case(self,sdecs)
 		     | SIGNAT_FUNCTOR _ => (print "CON_MODULE_PROJECT from a functor = \n";
 					    pp_mod m;
 					    error "CON_MODULE_PROJECT from a functor")
@@ -1500,7 +1507,8 @@ structure IlStatic
 	  (not (List.exists (fn l => eq_label(label,l))
 		(Sdecs_Domain rest))))
 
-     and Sig_Valid (ctxt : context, SIGNAT_STRUCTURE (_, sdecs)) = Sdecs_Valid(ctxt,sdecs)
+     and Sig_Valid (ctxt : context, SIGNAT_STRUCTURE sdecs) = Sdecs_Valid(ctxt,sdecs)
+       | Sig_Valid (ctxt : context, SIGNAT_SELF(_, _, unselfSig)) = Sig_Valid(ctxt, unselfSig)
        | Sig_Valid (ctxt, SIGNAT_FUNCTOR(v,s_arg,s_res,arrow)) = 
 	 (Sig_Valid(ctxt,s_arg) andalso 
 	  Sig_Valid(add_context_mod'(ctxt,v,SelfifySig ctxt (PATH(v,[]),s_arg)),s_res))
@@ -1637,21 +1645,16 @@ structure IlStatic
 	 let fun help(ctxt,sdecs1,sdecs2) = Sdecs_IsSub' isSub (ctxt,sdecs1,sdecs2)
 	 in
 	     (case (reduce_signat ctxt sig1,reduce_signat ctxt sig2) of
-		  (SIGNAT_STRUCTURE (NONE,sdecs1), 
-		   SIGNAT_STRUCTURE (NONE,sdecs2)) => 
-		  let val v = fresh_named_var "selfvar"
-		      val p = PATH(v,[])
-		      val sdecs1 = SelfifySdecs ctxt (p,sdecs1)
-		      val sdecs2 = SelfifySdecs ctxt (p,sdecs2)
-		      val ctxt = add_context_mod'(ctxt,v,SIGNAT_STRUCTURE(SOME p,sdecs1))
-		  in help(ctxt,sdecs1,sdecs2)
-		  end
-		| (SIGNAT_STRUCTURE (NONE,sdecs1), 
-		   SIGNAT_STRUCTURE (SOME p,sdecs2)) => help(ctxt,SelfifySdecs ctxt (p,sdecs1),sdecs2)
-		| (SIGNAT_STRUCTURE (SOME p,sdecs1), 
-		   SIGNAT_STRUCTURE (NONE, sdecs2)) => help(ctxt,sdecs1,SelfifySdecs ctxt (p,sdecs2))
-		| (SIGNAT_STRUCTURE (SOME p1,sdecs1), 
-		   SIGNAT_STRUCTURE (SOME p2,sdecs2)) => (* eq_path(p1,p2) orelse *) help(ctxt,sdecs1,sdecs2)
+		  (SIGNAT_STRUCTURE sdecs1, SIGNAT_STRUCTURE sdecs2) => 
+		      let val v = fresh_named_var "selfvar"
+			  val p = PATH(v,[])
+			  val sdecs1self = SelfifySdecs ctxt (p,sdecs1)
+			  val sdecs2self = SelfifySdecs ctxt (p,sdecs2)
+			  val ctxt = add_context_mod'(ctxt,v,SIGNAT_SELF(p,NONE, SIGNAT_STRUCTURE sdecs1self))
+		      in help(ctxt,sdecs1self,sdecs2self)
+		      end
+		| (SIGNAT_SELF(_, _, s1), _) => Sig_IsSub' isSub (ctxt, s1, sig2)
+		| (_, SIGNAT_SELF(_, _, s2)) => Sig_IsSub' isSub (ctxt, sig1, s2)
 		| (SIGNAT_FUNCTOR(v1,s1_arg,s1_res,a1), 
 		   SIGNAT_FUNCTOR(v2,s2_arg,s2_res,a2)) =>
 		  ((eq_arrow(a1,a2,isSub)) andalso 
@@ -1673,16 +1676,21 @@ structure IlStatic
 
 
   local
-      fun LookupHelp (ctxt, labs, path, (PHRASE_CLASS_MOD(_,_,s))) =
-		   (case (reduce_signat ctxt s) of
-			SIGNAT_STRUCTURE (_,sdecs) =>
-			    (case (Sdecs_Lookup_Open ctxt (path2mod path,sdecs,labs)) of
-				 SOME(labels,pc) =>
-				     let val p = join_path_labels(path,labels)
-				     in  SOME (p,pc)
-				     end
-			       | _ => NONE)
-		      | _ => NONE)
+      fun LookupHelp (ctxt, labs, path, (PHRASE_CLASS_MOD(_,_,signat))) =
+	  let val signat = reduce_signat ctxt signat
+	      val signat = (case signat of
+				SIGNAT_SELF(_, _, selfSig) => selfSig
+			      | _ => signat)
+	  in (case signat of
+		  SIGNAT_STRUCTURE sdecs =>
+		      (case (Sdecs_Lookup_Open ctxt (path2mod path,sdecs,labs)) of
+			   SOME(labels,pc) =>
+			       let val p = join_path_labels(path,labels)
+			       in  SOME (p,pc)
+			       end
+			 | _ => NONE)
+		| _ => NONE)
+	  end
 	| LookupHelp _ = NONE
   in
       fun Context_Lookup_Labels (ctxt, [] : label list) : (path * phrase_class) option = NONE

@@ -214,7 +214,7 @@ void memfault_handler(int signum,
 #endif
 		      struct ucontext *uctxt)
 {
-  SysThread_t *sth = getSysThread();
+  Proc_t *sth = getProc();
 #if (defined alpha_osf) || (defined solaris)
   int code = siginfo->si_code;
 #elif (defined rs_aix)
@@ -228,7 +228,7 @@ void memfault_handler(int signum,
   assert(signum == (siginfo->si_signo));
 #endif
 
-  printf("SysThread %d:  Memory error at %d with PC = %d\n",sth->stid, badaddr, badpc);
+  printf("Proc %d:  Memory error at %d with PC = %d\n",sth->stid, badaddr, badpc);
   switch (signum)
     {
     case SIGILL:

@@ -177,6 +177,8 @@ val_t GetStackStub(unsigned int n)
   assert(0);
 }
 
+void global_root_init();
+
 void stack_init()
 {
   struct HashEntry e;
@@ -236,6 +238,7 @@ void stack_init()
     e.data = (void *)mi;
     HashTableInsert(CallinfoHashTable,&e);
   }
+  global_root_init();
 }
 
 
@@ -581,7 +584,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 			     mem_t bot_sp, mem_t cur_retadd, mem_t top,
 			     Queue_t *root_lists, ptr_t last_exnptr, ptr_t this_exnptr)
 {
-  SysThread_t *sth = th->sysThread;
+  Proc_t *sth = th->proc;
   Queue_t *retadd_queue = th->retadd_queue;
   mem_t cur_sp;
   mem_t max_sp = (mem_t) th->maxSP;
@@ -753,7 +756,7 @@ void debug_after_rootscan(unsigned long *saveregs, int regmask,
   }
 }
 
-void local_root_scan(SysThread_t *sth, Thread_t *th)
+void local_root_scan(Proc_t *sth, Thread_t *th)
 {
   Queue_t *root_lists = sth->root_lists;
   Queue_t *reg_roots = th->reg_roots;
@@ -761,7 +764,7 @@ void local_root_scan(SysThread_t *sth, Thread_t *th)
   unsigned long i;
   int regmask = 0;
 
-  start_timer(&sth->stacktime);
+  procChangeState(sth, GCStack);
   QueueClear(reg_roots);
 
   for (i=th->nextThunk; i<th->numThunk; i++) {
@@ -793,7 +796,7 @@ void local_root_scan(SysThread_t *sth, Thread_t *th)
   if (debugStack)
     debug_after_rootscan(saveregs,regmask,root_lists);
 
-  stop_timer(&sth->stacktime);
+  procChangeState(sth, GC);
 
 }
 
@@ -805,47 +808,45 @@ static Queue_t *promotedGlobalLoc = NULL;  /* check each potential global to see
 					      and move all its pointers fields 
 					      into promotedGlobalLoc */
 static Queue_t *tenuredGlobalLoc = NULL;   /* accumulates the contents of promotedGlobalLoc
-					      across all previous minor scans */
+					      across all previous calls to minor_global_promote */
 
 
-void minor_global_scan(SysThread_t *sth)
+void global_root_init()
 {
-  /* First time, get all the globalsinto the potential list */
-  if (potentialGlobal == NULL) {
-    unsigned long mi;
-    int estimatedGlobal = 0;  /* Estimate based on one ptr loc per global */
-    for (mi=0; mi<module_count; mi++) {
-      mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
-      mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
-      estimatedGlobal += stop - start;
-    }
-    potentialGlobal   = QueueCreate(1, estimatedGlobal);
-    potentialTemp     = QueueCreate(1, estimatedGlobal);
-    promotedGlobalLoc = QueueCreate(1, estimatedGlobal);
-    tenuredGlobalLoc  = QueueCreate(1, estimatedGlobal);
-    for (mi=0; mi<module_count; mi++) {
-      mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
-      mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
-      for ( ; start < stop; start++) {
-	mem_t global = (mem_t) (*start);
-	Enqueue(potentialGlobal, global);
-	if (debugStack)
-	  printf("Unit %d: Enqueueing potential global %d\n", mi, global);
-      }
+  unsigned long mi;
+  int estimatedGlobal = 0;  /* Estimate based on one ptr loc per global */
+  for (mi=0; mi<module_count; mi++) {
+    mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
+    mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
+    estimatedGlobal += stop - start;
+  }
+  potentialGlobal   = QueueCreate(1, estimatedGlobal);
+  potentialTemp     = QueueCreate(1, estimatedGlobal);
+  promotedGlobalLoc = QueueCreate(1, estimatedGlobal);
+  tenuredGlobalLoc  = QueueCreate(1, estimatedGlobal);
+  for (mi=0; mi<module_count; mi++) {
+    mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
+    mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
+    for ( ; start < stop; start++) {
+      mem_t global = (mem_t) (*start);
+      Enqueue(potentialGlobal, global);
+      if (debugStack)
+	printf("Unit %d: Enqueueing potential global %d\n", mi, global);
     }
   }
-  
-  /* Transfer all the promotedGlobalLoc from the previous call to the tenuredGlobalLoc */
-  while (!QueueIsEmpty(promotedGlobalLoc)) {
-    loc_t globalLoc = Dequeue(promotedGlobalLoc);
-    Enqueue(tenuredGlobalLoc, globalLoc);
-  }
+}
 
+int minor_global_scan(Proc_t *proc)
+{  
   /* For each root of potentialGlobal
        (1) move to potentialTemp if it is uninitialized 
        (2) move to promotedGlobalLoc all its pointer fields if it is initialized
      Swap potentialGlobal and potentialTemp
   */
+  int workDone;
+  procChangeState(proc, GCGlobal);
+  workDone = QueueLength(potentialGlobal);
+  workDone -= 2 * QueueLength(promotedGlobalLoc);
   while (!QueueIsEmpty(potentialGlobal)) {
     ptr_t global = Dequeue(potentialGlobal);
     tag_t tag = global[-1];
@@ -854,17 +855,27 @@ void minor_global_scan(SysThread_t *sth)
     else 
       getNontagNonglobalPointerLocations(global, promotedGlobalLoc);
   }
+  workDone += 2 * QueueLength(promotedGlobalLoc);
   typed_swap(Queue_t *, potentialTemp, potentialGlobal);
-  Enqueue(sth->root_lists, promotedGlobalLoc);
+  Enqueue(proc->root_lists, promotedGlobalLoc);
+  procChangeState(proc, GC);
+  return workDone;
 }
 
-void major_global_scan(SysThread_t *sth)
+/* Transfers items from promotedGlobalLoc to tenuredGlobalLoc */
+void minor_global_promote()
 {
-  /* We need to transfer the contents of promotedGlobalLoc here again */
-  minor_global_scan(sth);
   while (!QueueIsEmpty(promotedGlobalLoc)) {
     loc_t globalLoc = Dequeue(promotedGlobalLoc);
     Enqueue(tenuredGlobalLoc, globalLoc);
   }
-  Enqueue(sth->root_lists, tenuredGlobalLoc);
 }
+
+int major_global_scan(Proc_t *proc)
+{
+  int workDone = minor_global_scan(proc);
+  Enqueue(proc->root_lists, promotedGlobalLoc);  /* This is empty only caller called minor_global_promote. */
+  Enqueue(proc->root_lists, tenuredGlobalLoc);
+  return workDone;
+}
+

@@ -426,11 +426,16 @@ struct
        | SIGNAT_OF p =>  HOVbox[String "SIGS_OF(",
 				pp_path p,
 				String ")"]
-       | SIGNAT_STRUCTURE (NONE,sdecs) => pp_sdecs seen sdecs
-       | SIGNAT_STRUCTURE (SOME p,sdecs) => HOVbox[String "SIGS_NORM(",
-						   pp_path p, String ", ", Break,
-						   pp_sdecs seen sdecs,
-						   String ")"]
+       | SIGNAT_STRUCTURE sdecs => pp_sdecs seen sdecs
+       | SIGNAT_SELF (p, unselfSigOpt, selfSig) => HOVbox[String "SIGS_SELF(",
+							  pp_path p, String ", ", Break,
+							  String "UNSELF_SIG = ", 
+							  (case unselfSigOpt of
+							       NONE => String "NONE"
+							     | SOME s => pp_signat seen s), 
+							  Break,
+							  String "SELF_SIG = ", pp_signat seen selfSig, Break,
+							  String ")"]
        | SIGNAT_FUNCTOR (v,s1,s2,a) => HOVbox0 1 8 1 
 	                                        [String "SIGF(",
 						 pp_var v,

@@ -166,13 +166,15 @@
 
 */
 
-
+static double scanWeight = 1.0 / 3.0;
+static double copyWeight = 2.0 / 3.0;
+static double rootWeight = 8.0;
 static int reducedNurserySize = 0, expandedNurserySize = 0;
 static int reducedTenuredSize = 0, expandedTenuredSize = 0;
 static int minorCollectionRate = 4;   /* Ratio of minor coll rate to minor alloc rate */
 static int majorCollectionRate = 2;   /* Ratio of major coll rate to major alloc rate(minor coll rate) */
-static int fetchSize = 20;            /* Number of objects to fetch from global pool */
-static int localWorkSize = 40;        /* Number of objects to work on from local pool */
+static int fetchSize     = 25;        /* Number of objects to fetch from global pool */
+static int localWorkSize = 50;        /* Number of objects to work on from local pool */
 static Queue_t *modifiedTenuredPtrLoc = NULL;
 
 
@@ -315,6 +317,7 @@ static void CollectorOn(Proc_t *proc)
 {
   int isFirst = 0;
   Thread_t *curThread;
+  int bytesCopied = 0, rootWork = 0;
 
   if (diag)
     printf("Proc %d: CollectorOn\n", proc->stid); 
@@ -401,7 +404,7 @@ static void CollectorOn(Proc_t *proc)
       ;
     if (paranoid) /* Check heaps before starting GC */
       paranoid_check_all(nursery, tenuredFrom, NULL, NULL);
-    minor_global_scan(proc);           /* Even if major GC */
+    rootWork += minor_global_scan(proc);           /* Even if major GC */
     Heap_Resize(nursery,expandedNurserySize,0);
     if (GCType == BeginMajor) {
       Heap_Resize(tenuredFrom,expandedTenuredSize,0);
@@ -421,11 +424,11 @@ static void CollectorOn(Proc_t *proc)
     for (i=0; i<len; i++) {
       ploc_t root = (ploc_t) QueueAccess(roots,i);
       ptr_t obj = *root;
-      forward1_concurrent_stack(obj,&proc->minorRange,&nursery->range,proc);
+      bytesCopied += forward1_concurrent_stack(obj,&proc->minorRange,&nursery->range,proc);
       if (verbose)
 	printf("GC %d: collector on %d root = %d   primary = %d, replica = %d\n",NumGC,++rootCount,root,obj,obj[-1]);
     }
-    FetchAndAdd(&NumRoots, len);
+    proc->numRoot += len;
   }
 
   /* Move to global stack */
@@ -434,9 +437,10 @@ static void CollectorOn(Proc_t *proc)
   moveToGlobalStack(workStack, &proc->localStack);
   SynchEnd(workStack,NULL);
 
-  assert(proc->localStack.cursor == 0);
   GCStatus = GCOn;
   synchBarrier(&numOn3, NumProc, &numOn2);
+  gcstat_normal(proc, 0, bytesCopied, 0);
+  assert(proc->localStack.cursor == 0);
   flushStore();
 }
 
@@ -539,7 +543,7 @@ static void CollectorOff(Proc_t *proc)
       }
       *root = replica;
     }
-    FetchAndAdd(&NumRoots, len);
+    proc->numRoot += len;
   }
   synchBarrier(&numOff2, NumProc, &numOff1);
 
@@ -562,10 +566,7 @@ static void CollectorOff(Proc_t *proc)
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
-    long alloc = (sizeof (val_t)) * (nursery->top - nursery->bottom); 
-
     nursery->cursor = nursery->bottom;        /* Always reset nursery */
-    gcstat_normal(proc,alloc,0,0);       /* Is this right? XXX */
     if (paranoid && GCType != EndMajor)
       paranoid_check_all(nursery, tenuredFrom, tenuredFrom, NULL);  /* At the end of a minor collection, tenuerdFrom should be intact */
     Heap_Resize(nursery,reducedNurserySize,1);  /* Collection Off now */
@@ -620,14 +621,21 @@ static void CollectorOff(Proc_t *proc)
   synchBarrier(&numOff4, NumProc, &numOff3);
 }
 
-static void do_local_minor_work(Proc_t *proc, int bytesToCopy)
+static void do_local_minor_work(Proc_t *proc, int workToDo)
 {
-  int bytesCopied = 0;
-  while (bytesCopied < bytesToCopy && proc->localStack.cursor > 0) {
+  int bytesCopied = 0, bytesScanned = 0;
+  int counter = localWorkSize;
+  while (proc->localStack.cursor > 0) {
     loc_t grayCell = (loc_t)(proc->localStack.stack[--proc->localStack.cursor]);
-    int bytesScanned = scan1_object_coarseParallel_stack(grayCell,&proc->majorRange,&nursery->range,&tenuredFrom->range,proc);
-    bytesCopied += bytesScanned;
+    bytesScanned += scan1_object_coarseParallel_stack(grayCell,&proc->majorRange,&nursery->range,&tenuredFrom->range,proc,&bytesCopied);
+    counter--;
+    if (!counter) {
+	if (bytesCopied * copyWeight + bytesScanned * scanWeight >= workToDo)
+	  break;
+	else counter = localWorkSize;
+    }
   }
+  gcstat_normal(proc, 0, bytesCopied, 0);
   assert(proc->localStack.cursor == 0);    /* local stack must be empty when we exit */ 
 }
 
@@ -646,11 +654,14 @@ void GCRelease_GenConc(Proc_t *proc)
   mem_t allocStop = proc->allocCursor;
   ploc_t writelistCurrent = proc->writelistStart;
   ploc_t writelistStop = proc->writelistCursor;
+  int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
+  int write = (proc->writelistCursor - proc->writelistStart) / 2;
   int bytesCopied = 0;
 
   assert(proc->localStack.cursor == 0);    /* local stack must be empty between calls to GCReleas and do_minor_work */
   proc->allocStart = proc->allocCursor;  /* allocation area is NOT reused */
   proc->writelistCursor = proc->writelistStart;  /* write list reused once processed */
+  gcstat_normal(proc, alloc, bytesCopied, write);
 
   switch (GCStatus) {
   case GCOff:
@@ -752,45 +763,46 @@ void GCRelease_GenConc(Proc_t *proc)
     moveToGlobalStack(workStack, &proc->localStack);
     SynchEnd(workStack, &signalCollectorOff);  
   }
-  flushStore();
 
+  flushStore();
   assert(proc->localStack.cursor == 0);    /* local stack must be empty between calls to GCReleas and do_minor_work */
 }
 
-static void do_minor_work(Proc_t *proc, int bytesToCopy)
+static void do_minor_work(Proc_t *proc, int workToDo)
 {
-  int i, bytesCopied = 0;
+  int i, bytesCopied = 0, bytesScanned = 0;
 
   assert(proc->localStack.cursor == 0); 
   while ((!(isEmptyGlobalStack(workStack)) || (proc->localStack.cursor>0)) && 
-	 bytesCopied < bytesToCopy) {
+	 (bytesCopied * copyWeight + bytesScanned * scanWeight < workToDo)) {
     SynchStart(workStack);
     if (GCStatus == GCPendingOff) {
       SynchMid(workStack);
       SynchEnd(workStack, NULL);
-      do_local_minor_work(proc, bytesToCopy);
+      do_local_minor_work(proc, workToDo);
     }
     else {
       fetchFromGlobalStack(workStack, &proc->localStack, fetchSize);
       for (i=0; i < localWorkSize && proc->localStack.cursor > 0; i++) {
 	loc_t grayCell = (loc_t)(proc->localStack.stack[--proc->localStack.cursor]);
-	int bytesScanned = scan1_object_coarseParallel_stack(grayCell,&proc->minorRange,&nursery->range,&tenuredFrom->range,proc);
-	bytesCopied += bytesScanned;
+	bytesScanned += scan1_object_coarseParallel_stack(grayCell,&proc->minorRange,&nursery->range,&tenuredFrom->range,proc,&bytesCopied);
       }
       SynchMid(workStack);
       moveToGlobalStack(workStack, &proc->localStack);
       SynchEnd(workStack, &signalCollectorOff);
     }
   }
+  gcstat_normal(proc, 0, bytesCopied, 0);
   assert(proc->localStack.cursor == 0); 
 }
 
-static void do_major_work(Proc_t *proc, int bytesToCopy)
+static void do_major_work(Proc_t *proc, int workToDo)
 {
-  int i, bytesCopied = 0, lastAndEmpty = 0;
+  int i, bytesCopied = 0, bytesScanned = 0, lastAndEmpty = 0;
 
   assert(proc->localStack.cursor == 0);                                        /* local stack must be empty */ 
-  while (!(isEmptyGlobalStack(majorRegionWorkStack)) && bytesCopied < bytesToCopy) {
+  while (!(isEmptyGlobalStack(majorRegionWorkStack)) && 
+	 (bytesCopied * copyWeight + bytesScanned * scanWeight < workToDo)) {
     /* the stack in LocalStack_t is way too bug */
     LocalStack_t stack;
     mem_t allocCurrent, allocStop;
@@ -828,20 +840,21 @@ static void do_major_work(Proc_t *proc, int bytesToCopy)
     SynchEnd(majorWorkStack,NULL);
   }
   assert(proc->localStack.cursor == 0);                                        /* local stack must be empty */ 
-  while (!(isEmptyGlobalStack(majorWorkStack)) && bytesCopied < bytesToCopy) {
+  while (!(isEmptyGlobalStack(majorWorkStack)) &&
+	 (bytesCopied * copyWeight + bytesScanned * scanWeight < workToDo)) {
     SynchStart(majorWorkStack);
     fetchFromGlobalStack(majorWorkStack, &proc->localStack, fetchSize);
     for (i=0; i < localWorkSize && proc->localStack.cursor > 0; i++) {
       loc_t grayCell = (loc_t)(proc->localStack.stack[--proc->localStack.cursor]);
       /* The gray objects can have mostly pointers to tenuredFrom but also to nursery.  We skip pointers to the nursery
 	 as these indicate primary-replica back-pointer mutations which are handled later. */
-      int bytesScanned = scan1_object_coarseParallel_stack(grayCell,&proc->majorRange,&tenuredFrom->range,&tenuredTo->range,proc);
-      bytesCopied += bytesScanned;
+      bytesScanned += scan1_object_coarseParallel_stack(grayCell,&proc->majorRange,&tenuredFrom->range,&tenuredTo->range,proc,&bytesCopied);
     }
     SynchMid(majorWorkStack);
     moveToGlobalStack(majorWorkStack, &proc->localStack);
     SynchEnd(majorWorkStack,NULL);
   }
+  gcstat_normal(proc, 0, bytesCopied, 0);
   flushStore();
   assert(proc->localStack.cursor == 0);                                        /* local stack must be empty */ 
   if (diag)
@@ -851,12 +864,8 @@ static void do_major_work(Proc_t *proc, int bytesToCopy)
 
 static int GCTry_GenConcHelp(Proc_t *proc, int roundSize)
 {
-  mem_t tmp_alloc, tmp_limit;
-  GetHeapArea(nursery,roundSize,&tmp_alloc,&tmp_limit);
-  proc->allocStart = tmp_alloc;
-  proc->allocCursor = tmp_alloc;
-  proc->allocLimit = tmp_limit;
-  if (tmp_alloc)
+  GetHeapArea(nursery,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
+  if (proc->allocStart)
     return 1;
   return 0;
 }
@@ -864,7 +873,7 @@ static int GCTry_GenConcHelp(Proc_t *proc, int roundSize)
 /* Try to obatain space in proc to run th.  If th is NULL, an idle processor is signified */
 int GCTry_GenConc(Proc_t *proc, Thread_t *th)
 {
-  int satisfied = 0;
+  int satisfied = 0;  /* satisfied = 1 means GC stayed off; 2 means it turned on or was on */
   int roundSize = pagesize;                              /* default work amount for idle processor */
   assert(proc->writelistCursor + 2 <= proc->writelistEnd);
   flushStore();
@@ -881,7 +890,6 @@ int GCTry_GenConc(Proc_t *proc, Thread_t *th)
     roundSize = RoundUp(th->requestInfo,pagesize);
   }
 
-  start_timer(&proc->gctime);
   while (!satisfied) {
     switch (GCStatus) {
     case GCOff:                                          /* Possible GC states: before; after */
@@ -889,7 +897,8 @@ int GCTry_GenConc(Proc_t *proc, Thread_t *th)
       if (GCStatus == GCOff) {                           /* Off, PendingOn; same */
 	if (th == NULL ||                                /* Don't allocate/return if not really a thread */
 	    GCTry_GenConcHelp(proc,roundSize)) {
-	  satisfied = 1;
+	  if (!satisfied)
+	    satisfied = 1;
 	  break;
 	}
       }
@@ -900,8 +909,8 @@ int GCTry_GenConc(Proc_t *proc, Thread_t *th)
 	do_major_work(proc, majorCollectionRate * minorCollectionRate * roundSize);
       if ((th == NULL) ||                                /* Idle processor done some work */
 	  (th != NULL && GCStatus == GCOn &&             /* Don't allocate/return if not really a thread */
-	   GCTry_GenConcHelp(proc,roundSize))) {    /* On, PendingOff; same */
-	satisfied = 1;
+	   GCTry_GenConcHelp(proc,roundSize))) {         /* On, PendingOff; same */
+	satisfied = 2;
 	break;
       }
       if (GCStatus == GCPendingOff)                      /* If PendingOff, must loop */
@@ -918,12 +927,12 @@ int GCTry_GenConc(Proc_t *proc, Thread_t *th)
       if (GCStatus == GCOn &&                           /* On, PendingOff; same */
 	  th != NULL &&                                 /* Don't allocate/return if not really a thread */
 	  GCTry_GenConcHelp(proc,roundSize)) {
-	satisfied = 1;
+	satisfied = 2;
 	break;
       }
       if (GCStatus == GCOn) {                           
 	if (th == NULL) {                               /* Idle processor has done some work */
-	 satisfied = 1;
+	 satisfied = 2;
 	 break;
 	}
 	printf("Proc %d: Conc coll fell behind.  GCStatus = %d. Could not allocate %d bytes for %d\n", proc->stid, GCStatus, roundSize, th);
@@ -944,7 +953,7 @@ int GCTry_GenConc(Proc_t *proc, Thread_t *th)
       assert(0);
     }
   }
-  stop_timer(&proc->gctime);
+
   return 1;
 }
 
@@ -989,10 +998,3 @@ void gc_init_GenConc()
   majorRegionWorkStack = SharedStack_Alloc(1024);
 }
 
-void gc_finish_GenConc()
-{
-  Thread_t *th = getThread();
-  Proc_t *sth = th->proc;
-  int allocsize = (unsigned int) th->saveregs[ALLOCPTR] - (unsigned int) nursery->cursor;
-  gcstat_normal(sth,allocsize,0,0);
-}

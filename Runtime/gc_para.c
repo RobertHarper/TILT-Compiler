@@ -8,9 +8,11 @@
 #include "gc_para.h"
 
 
-SharedStack_t *SharedStack_Alloc()
+SharedStack_t *SharedStack_Alloc(int size)
 {
   SharedStack_t *ss = (SharedStack_t *) malloc(sizeof(SharedStack_t));
+  ss->size = size;
+  ss->stack = (ptr_t *) malloc(sizeof(ptr_t) * size);
   ss->cursor = 0;
   ss->Gate = ss->Turn1 = ss->Turn2 = 0;
   return ss;
@@ -46,29 +48,36 @@ int isEmptyGlobalStack(SharedStack_t *ss)
 }
 
 /* Returns 1 if gate was closed and global stack empty; i.e. global stack can not become non-empty */
-int SynchEnd(SharedStack_t *ss)
+int SynchEnd(SharedStack_t *ss, Thunk_t *thunk)
 {
   int i = FetchAndAdd(&ss->Turn2, -1);
-  if (i==1) {
+  if (i==1) {     /* Last one to decrement */
+    int empty = isEmptyGlobalStack(ss);
+    if (empty && (thunk != NULL))
+      (*thunk)();
     ss->Gate = 0;
     flushStore(); /* for updating ss->Gate */
-    return isEmptyGlobalStack(ss);
+    return empty;
   }
   return 0;
 }
 
-void moveToGlobalStack(SharedStack_t *ss, ptr_t *localStack, int *localCursorPtr)
+void moveToGlobalStack(SharedStack_t *ss, LocalStack_t *localStack)
 {
   int i;
-  int oldCursor = FetchAndAdd(&ss->cursor,*localCursorPtr);
-  for (i=0; i<*localCursorPtr; i++) 
-    ss->stack[oldCursor+i] = localStack[i];
-  *localCursorPtr = 0;
+  int oldCursor = FetchAndAdd(&ss->cursor,localStack->cursor);
+  for (i=0; i<localStack->cursor; i++) 
+    ss->stack[oldCursor+i] = localStack->stack[i];
+  localStack->cursor = 0;
+  if (ss->cursor >= ss->size) {
+    printf("Shared stack overflowed with %d items\n", ss->cursor);
+    assert(0);
+  }
 }
 
-void fetchFromGlobalStack(SharedStack_t *ss, ptr_t *localStack, int *localCursorPtr, int numToFetch)
+void fetchFromGlobalStack(SharedStack_t *ss, LocalStack_t *localStack, int numToFetch)
 {
-  int i, localCursor = *localCursorPtr;
+  int i, localCursor = localStack->cursor;
   int oldCursor = FetchAndAdd(&ss->cursor,-numToFetch);
   /* Handle overreach */
   if (oldCursor < numToFetch) {  
@@ -76,8 +85,8 @@ void fetchFromGlobalStack(SharedStack_t *ss, ptr_t *localStack, int *localCursor
     ss->cursor = 0;
   }
   for (i=0; i<numToFetch; i++)
-    localStack[localCursor++] = ss->stack[oldCursor - (i + 1)];
-  *localCursorPtr = localCursor;
+    localStack->stack[localCursor++] = ss->stack[oldCursor - (i + 1)];
+  localStack->cursor = localCursor;
 }
 
 long synchBarrier(long *counter, long barrierSize, long*prevCounter)

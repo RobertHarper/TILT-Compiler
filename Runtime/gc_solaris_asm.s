@@ -224,7 +224,7 @@ GCFromML:
 	stw	ASMTMP_REG, [THREADPTR_REG + requestInfo_disp]	! record bytes needed
 	mov	GCRequestFromML, ASMTMP_REG
 	stw	ASMTMP_REG, [THREADPTR_REG + request_disp]	! record that this is an MLtoGC request
-	ld	[THREADPTR_REG + sysThread_disp], ASMTMP_REG	! must use temp so SP always correct
+	ld	[THREADPTR_REG + proc_disp], ASMTMP_REG		! must use temp so SP always correct
 	ld	[ASMTMP_REG], SP_REG				! run on system thread stack
 	mov	THREADPTR_REG, CFIRSTARG_REG			! pass user thread pointer as arg
 	call	GCFromMutator					! call runtime GC
@@ -280,7 +280,7 @@ GCFromC:
 	mov	MajorGCRequestFromC, ASMTMP_REG
 	stw	ASMTMP_REG, [THREADPTR_REG + request_disp]	! record that this is an CtoGC request	
 MinorGCFromC:	
-	ld	[THREADPTR_REG + sysThread_disp], ASMTMP_REG	! must use temp so SP always correct
+	ld	[THREADPTR_REG + proc_disp], ASMTMP_REG		! must use temp so SP always correct
 	ld	[ASMTMP_REG], SP_REG				! run on system thread stack
 	mov	THREADPTR_REG, CFIRSTARG_REG			! pass user thread pointer as arg
 	call	GCFromMutator					! call runtime GC

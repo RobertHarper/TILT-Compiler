@@ -3,6 +3,7 @@
 
 #include "tag.h"
 #include "queue.h"
+#include "thread.h"
 
 #define TRACE_NO              0
 #define TRACE_YES             1
@@ -30,28 +31,15 @@
 #define GET_SPECIAL_STACK_GLOBAL_POS3(type) GET_SPECIAL_STACK_REC_POS3(type)
 #define GET_SPECIAL_STACK_GLOBAL_POS4(type) GET_SPECIAL_STACK_REC_POS4(type) 
 
-
-/* the size and layout of this structure affects the code in stack_asm.s */
-struct StackSnapshot
-{
-  val_t saved_ra;            /* Real return address for this stub */
-  val_t saved_sp;            /* Stack pointer position where stub was inserted */
-  unsigned int saved_regstate; /* Register state (mask) at this point */
-  Queue_t *roots;              /* Roots between this stub and the one above it */
-};
-
-typedef struct StackSnapshot StackSnapshot_t;
-
 #define NUM_STACK_STUB 200
-#define _inside_stack_h
-#include "thread.h"
 
 void show_stack(mem_t sp, mem_t cur_retadd, mem_t top);
 
 void stack_init(void);
-void minor_global_scan(SysThread_t *);
-void major_global_scan(SysThread_t *);
-void local_root_scan(SysThread_t *, Thread_t *);
+int minor_global_scan(Proc_t *);    /* Return all initialized global locs not in the tenured list */
+void minor_global_promote();         /* Move initialized global locs into the tenured list */
+int major_global_scan(Proc_t *);
+void local_root_scan(Proc_t *, Thread_t *);
 void stub_error(void);
 
 extern long GlobalTableSize;
@@ -60,5 +48,5 @@ extern long CodeSize;
 extern long GCTableSize;
 extern long SMLGlobalSize;
 extern long TotalStackDepth, MaxStackDepth, TotalStackSize, TotalNewStackDepth;
-#endif
 
+#endif

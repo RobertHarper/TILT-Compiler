@@ -65,18 +65,19 @@ struct
 	   | _ => error "reduce_sigvar found unbound sigvar")
 
     fun reduce_signat ctxt (SIGNAT_VAR v) = reduce_signat ctxt (reduce_sigvar ctxt v)
+      | reduce_signat ctxt (SIGNAT_SELF (p, unself, self)) = reduce_signat ctxt self
       | reduce_signat ctxt (SIGNAT_OF (PATH(v,labs))) = 
 	  let val s = (case Context_Lookup_Var(ctxt,v) of
 			   SOME(_,PHRASE_CLASS_MOD(_,_,s)) => s
 			 | _ => error ("SIGNAT_OF(" ^ (Name.var2string v) ^ ",...) unbound"))
-	      fun find l [] = error "cannot find label in SIGNAT_OF"
-		| find l ((SDEC(l',DEC_MOD(_,_,s)))::rest) = if eq_label(l,l') then s else find l rest
-		| find l (_::rest) = find l rest
 	      fun project (l, s) = 
-		  (case (reduce_signat ctxt s) of
-		       SIGNAT_STRUCTURE(SOME _, sdecs) => find l sdecs
-		     | SIGNAT_STRUCTURE _ => error "unselfified signatture in context"
-		     | _ => error "ill-formed SIGNAT_OF")
+		  let fun find l [] = error "cannot find label in SIGNAT_OF"
+			| find l ((SDEC(l',DEC_MOD(_,_,s)))::rest) = if eq_label(l,l') then s else find l rest
+			| find l (_::rest) = find l rest
+		  in  (case (reduce_signat ctxt s) of
+			   SIGNAT_STRUCTURE sdecs => find l sdecs
+			 | _ => error "ill-formed SIGNAT_OF")
+		  end
 	  in  reduce_signat ctxt (foldl project s labs)
 	  end
       | reduce_signat ctxt s = s
@@ -128,19 +129,17 @@ struct
 	  | DEC_CON(v,k,copt,inline) => help(ctxt, v, path2con, 
 					     fn obj => PHRASE_CLASS_CON(obj, k, copt, inline))
 	  | DEC_MOD (v,b,s as SIGNAT_FUNCTOR _) => help(ctxt,v, path2mod, 
-							fn obj => (PHRASE_CLASS_MOD(obj,b,s)))
-	  | DEC_MOD (v,_,(SIGNAT_STRUCTURE(NONE,_))) => 
-	    (print "adding non-selfified signature to context: "; pp_sdec sdec; print "\n";
-	     error "adding non-selfified signature to context")
-	  | DEC_MOD(v,b,s) =>
-		  let val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, b,s)))
+						   fn obj => (PHRASE_CLASS_MOD(obj,b,s)))
+	  | DEC_MOD (v,b,s) =>
+		  let val _ = (case s of
+				   SIGNAT_SELF _ => ()
+				 | _ => (print "adding non-selfified signature to context: "; pp_sdec sdec; print "\n";
+					 error "adding non-selfified signature to context"))
+		      val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, b,s)))
 		  in  if (is_open l) 
-			  then let val sdecs = 
-			      (case s of
-				   SIGNAT_STRUCTURE(SOME p, sdecs) => sdecs
-				 | _ => (case (reduce_signat ctxt s) of
-					     SIGNAT_STRUCTURE(SOME p, sdecs) => sdecs
-					   | _ => error "open label - not self, struct sig"))
+			  then let val sdecs = (case (reduce_signat ctxt s) of
+						    SIGNAT_STRUCTURE sdecs => sdecs
+						  | _ => error "open label - not struct sig")
 			       in  foldl (sdec_help (v,l)) ctxt sdecs
 			       end
 		      else ctxt
@@ -574,17 +573,18 @@ struct
 			then subst_add_convar(subst, v, path2con p)
 		    else subst_add_conpath(subst, p, CON_VAR v)}
 	   
-       fun add_mod (state, _, NONE) = state
-	 | add_mod ({ctxt, selfify, subst}, v, SOME p) = 
-	   {ctxt = ctxt, selfify = selfify,
-	    subst = if selfify 
-			then subst_add_modvar(subst, v, path2mod p)
-		    else subst_add_modpath(subst, p, MOD_VAR v)}
+       fun add_mod ({ctxt, selfify, subst}, v, s, pathOpt) = 
+	   {ctxt = if selfify then add_context_mod'(ctxt, v, s) else ctxt,
+	    selfify = selfify,
+	    subst = (case pathOpt of
+			 NONE => subst
+		       | SOME p => if selfify 
+				       then subst_add_modvar(subst, v, path2mod p)
+				   else subst_add_modpath(subst, p, MOD_VAR v))}
 
        fun sdec_folder popt (sdec as (SDEC(l,dec)), state as {selfify,subst,...} : state) =
 	   let val popt = mapopt (fn p => join_path_labels(p,[l])) popt
-	   in 
-	       (case dec of
+	   val res = (case dec of
 		    DEC_EXP(v,c,eopt,inline) => 
 			let val c = con_subst(c,subst)
 			    val eopt = (case eopt of
@@ -593,7 +593,6 @@ struct
 			    val dec = DEC_EXP(v,c,eopt,inline)
 			in  (SDEC(l,dec), state)
 			end
-
 		  | DEC_CON(v,k,copt,inline) => 
 		     let 
 			 val copt = 
@@ -614,63 +613,87 @@ struct
 		     in (SDEC(l,dec), state)
 		     end
 		  | DEC_MOD(v,b,s) => 
-		     let val dec = DEC_MOD(v,b,TransformSig state (popt,s))
-			 val state = add_mod(state,v,popt)
+		     let val s' = TransformSig state (popt,s)
+			 val dec = DEC_MOD(v,b,s')
+			 val state = add_mod(state,v,s',popt)
 		     in (SDEC(l,dec), state)
 		     end)
+	   in  res
 	   end
 		    
-
-       and TransformSig (state as {selfify,subst,ctxt}) (popt: path option, signat : signat) : signat = 
-	   (case signat of
-		SIGNAT_FUNCTOR (v,s1,s2,a) => 
-		    if (selfify andalso isempty_state state)
+       and TransformSig (state as {selfify,subst,ctxt}) (self: path option, signat : signat) : signat = 
+	   (case (selfify, signat) of
+		(true, SIGNAT_SELF (p, unselfSigOpt, selfSig)) => 
+		    if (case self of
+			    SOME self => eq_path(p,self)
+			  | _ => false)
 			then signat
-		    else let val s1' = TransformSig state (NONE,s1)
-			     val s2' = TransformSig state (NONE,s2)
-			 in  SIGNAT_FUNCTOR(v,s1',s2',a)
-			 end
-	      | SIGNAT_STRUCTURE (popt', sdecs) =>
-			 (case (selfify, popt, popt') of
-			      (* ---- re-selfifying old paths; but what about other components *)
-			      (true,SOME p, SOME p') => if (eq_path(p,p'))
-							    then signat
-							else TransformSig state
-							    (popt, SIGNAT_STRUCTURE(NONE,sdecs))
-			    (* ---- selfifying unselfified sig  or  unselfifying a sig *)
-			    | _ => let val (sdecs',_) = foldl_acc (sdec_folder popt) state sdecs
-				       val popt = if selfify then popt else NONE
-				   in  SIGNAT_STRUCTURE(popt,sdecs')
-				   end)
-	      | SIGNAT_VAR v => if selfify
-				    then TransformSig state (popt, reduce_sigvar ctxt v)
-				else signat
-	      | SIGNAT_OF p => let val m = path2mod p
-				   val m = mod_subst(m, subst)
-			       in  (case mod2path m of
-					NONE => error "selfify_mpath got non-path result"
-				      | SOME p => SIGNAT_OF p)
-			       end)
+		    else (* We must traverse selfSig to perform the rest of the substitution even
+			    though there are already no internal variable use from within selfSig.
+			  *)
+			let val selfSig = TransformSig state (NONE, selfSig)
+			in  SIGNAT_SELF(p, NONE, selfSig)
+			end
+	      | (false, SIGNAT_SELF(_, SOME unselfSig, _)) => unselfSig
+	      | (false, SIGNAT_SELF(_, NONE, selfSig)) => TransformSig state (self, selfSig)
+	      | (true, SIGNAT_VAR v) => let val expanded = reduce_sigvar ctxt v
+					    val SIGNAT_SELF(p, _, selfSig) = TransformSig state (self, expanded)
+					in  SIGNAT_SELF(p, SOME signat, selfSig)
+					end
+	      | (false, SIGNAT_VAR v) => signat
+	      | (_, SIGNAT_OF p) => let val m = path2mod p
+					val m = mod_subst(m, subst)
+				    in  (case (selfify, mod2path m) of
+					     (false, NONE) => signat
+					   | (false, SOME p) => SIGNAT_OF p
+					   | (true, NONE) => error "SelfifySig got non-path from SIGNAT_OF"
+					   | (true, SOME p) => let val s = SIGNAT_OF p
+								   val sFull = reduce_signat ctxt signat
+								   val SIGNAT_SELF(_,_,sFull) = TransformSig state (self, sFull)
+							       in  (case self of
+									NONE => s 
+								      | SOME self => SIGNAT_SELF(self, SOME s, sFull))
+							       end)
+				    end
+	      | (_, SIGNAT_FUNCTOR (v,s1,s2,a)) => 
+				    let val s1 = if (isempty_state state) then s1 else TransformSig state (NONE,s1)
+					val s2 = if (isempty_state state) then s2 else TransformSig state (NONE,s2)
+					val s = SIGNAT_FUNCTOR(v,s1,s2,a)
+					val res = (case (selfify,self) of
+					     (true, SOME self) => SIGNAT_SELF(self, NONE, s)
+					   | _ => s)
+				    in  res
+				    end
+	      | (_, SIGNAT_STRUCTURE sdecs) =>
+				    let val (sdecs,_) = foldl_acc (sdec_folder self) state sdecs
+					val s = SIGNAT_STRUCTURE sdecs
+				    in  (case (selfify, self) of
+					     (true, SOME self) => SIGNAT_SELF(self, NONE, s)
+					   | _ => s)
+				    end)
+
+
    in
 
        fun UnselfifySig ctxt (p : path, signat : signat) = 
 	   TransformSig (initial_state (false, ctxt)) (SOME p,signat)
 	   
        fun SelfifySig ctxt (p : path, signat : signat) = 
-	   let val res = TransformSig (initial_state (true, ctxt)) (SOME p,signat)
-	       val _ = debugdo 
-		   (fn () => (print "SelfifySig': p is "; pp_path p;
-			      print "\nsignat is\n";
-			  pp_signat signat; print "\n\nand returning res:\n";
-			      pp_signat res; print "\n\n"))
-	   in res
-	   end
+	   TransformSig (initial_state (true, ctxt)) (SOME p,signat)
+	   handle exn =>
+	       (print "SelfifySig encountered error while selfifying with p = "; pp_path p;
+		print " and signat =\n";
+		pp_signat signat; print "\n\n";
+(*		print " and ctxt =\n";
+		pp_context ctxt; print "\n\n"; *)
+		raise exn)
+
        fun SelfifyDec ctxt (DEC_MOD (v,b,s)) = DEC_MOD(v,b,SelfifySig ctxt (PATH(v,[]),s))
 	 | SelfifyDec ctxt dec = dec
        fun SelfifySdec ctxt (SDEC (l,dec)) = SDEC(l,SelfifyDec ctxt dec)
        fun SelfifySdecs ctxt (p : path, sdecs : sdecs) =
-	   case (SelfifySig ctxt (p,SIGNAT_STRUCTURE(NONE,sdecs))) of
-	       SIGNAT_STRUCTURE (SOME _,sdecs) => sdecs
+	   case (SelfifySig ctxt (p,SIGNAT_STRUCTURE sdecs)) of
+	       SIGNAT_SELF(_, _, SIGNAT_STRUCTURE sdecs) => sdecs
 	     | _ => error "SelfifySdecs: SelfifySig returned non-normal structure"
        fun SelfifyEntry ctxt (CONTEXT_SDEC sdec) = CONTEXT_SDEC(SelfifySdec ctxt sdec)
 	 | SelfifyEntry ctxt ce = ce

@@ -1,3 +1,6 @@
+#ifndef _global_h
+#define _global_h
+
 /*  global_init should be called once; the rest are thread-safe */
 
 void global_init(void);
@@ -14,3 +17,5 @@ extern ptr_t OverflowExn;
 
 extern mem_t RuntimeGlobalData_Cur;
 extern mem_t RuntimeGlobalData_End;
+
+#endif

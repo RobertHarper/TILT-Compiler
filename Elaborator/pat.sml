@@ -315,7 +315,8 @@ structure Pat
 			      else (case Datatype.exn_lookup context p of
 				    NONE => (case p of
 						 [s] => ([s], [], Wild)
-					       | _ => error "non-constructor path pattern")
+					       | _ => (AstHelp.pp_path' p;
+						       error "non-constructor path pattern"))
 				  | SOME {stamp, carried_type=NONE} => ([], [], Exception(p, stamp, NONE))
 				  | SOME {stamp, carried_type} => error "exception constructoris missing pattern")
 		| IntPat lit => ([], [], Int lit)
@@ -345,11 +346,11 @@ structure Pat
 			       if (Datatype.is_constr context p)
 				   then ([], [], Constructor(p, SOME (pat2Pattern argument)))
 			       else (case Datatype.exn_lookup context p of
-					 NONE => (case p of
-						      [s] => if ((Symbol.name s )= "ref")
-								 then ([], [], Ref (pat2Pattern argument))
-							     else error "non-constructor path pattern"
-						    | _ => error "non-constructor path pattern")
+					 NONE => if (case p of
+						      [s] => Symbol.name s = "ref"
+						    | _ => false)
+						     then ([], [], Ref (pat2Pattern argument))
+						 else (AstHelp.pp_path p; error "non-constructor path pattern")
 				       | SOME {stamp, carried_type=NONE} => error "exception constris not value-carrying"
 				       | SOME {stamp, carried_type=SOME c} => 
 					     ([], [], Exception(p, stamp, SOME (c, pat2Pattern argument))))
@@ -973,6 +974,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 					 end
 	    | (_, []) => (error_region();
 			  print "Redundant matches.\n";
+			  Ppil.pp_context context;
 			  #1(Error.dummy_exp (context,"RedundantMatch")))
 	    | _ =>
 		  let

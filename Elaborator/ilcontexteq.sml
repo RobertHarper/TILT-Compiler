@@ -709,8 +709,9 @@ struct
 	and blastOutSig s = 
 		 (tab "    blastInSig\n"; 
 		  case s of
-		 SIGNAT_STRUCTURE (NONE, sdecs) => (blastOutChoice 0; blastOutSdecs sdecs)
-	       | SIGNAT_STRUCTURE (SOME p, sdecs) => (blastOutChoice 1; blastOutPath p; blastOutSdecs sdecs)
+		 SIGNAT_STRUCTURE sdecs => (blastOutChoice 0; blastOutSdecs sdecs)
+	       | SIGNAT_SELF(self, unselfSigOpt, selfSig) => (blastOutChoice 1; blastOutPath self; 
+							      blastOutOption blastOutSig unselfSigOpt; blastOutSig selfSig)
 	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutChoice 2; blastOutVar v;
 						      blastOutSig s1; blastOutSig s2; blastOutArrow arrow)
 	       | SIGNAT_VAR v => (blastOutChoice 5; blastOutVar v)
@@ -718,8 +719,8 @@ struct
 
 	and blastInSig () =
 	    (case (blastInChoice()) of
-		 0 => SIGNAT_STRUCTURE (NONE, blastInSdecs ())
-	       | 1 => SIGNAT_STRUCTURE (SOME (blastInPath ()), blastInSdecs ())
+		 0 => SIGNAT_STRUCTURE (blastInSdecs ())
+	       | 1 => SIGNAT_SELF (blastInPath (), blastInOption blastInSig, blastInSig ())
 	       | 2 => SIGNAT_FUNCTOR(blastInVar (), blastInSig (), blastInSig (), blastInArrow ())
 	       | 5 => SIGNAT_VAR(blastInVar ())
 	       | 6 => SIGNAT_OF(blastInPath ())
@@ -1086,8 +1087,10 @@ struct
 	and eq_signat(vm,signat,signat') =
 	  let val res = 
 	    case (signat,signat') of
-	         (SIGNAT_STRUCTURE(pathopt, sdecs), SIGNAT_STRUCTURE(pathopt', sdecs')) =>
-		  eq_pathopt(vm,pathopt,pathopt') andalso eq_sdecs(vm,sdecs,sdecs')
+	         (SIGNAT_STRUCTURE sdecs, SIGNAT_STRUCTURE sdecs') =>
+		     eq_sdecs(vm,sdecs,sdecs')
+	       | (SIGNAT_SELF (p1, uso1, s1), SIGNAT_SELF(p2, uso2, s2)) =>
+		  eq_path(vm,p1,p2) andalso eq_opt (fn(a,b) => eq_signat(vm,a,b)) (uso1,uso2) andalso eq_signat(vm,s1,s2)
 	       | (SIGNAT_FUNCTOR(v,signat1,signat2,a), SIGNAT_FUNCTOR(v',signat1',signat2',a')) =>
 		  eq_signat(vm,signat1,signat1') andalso a=a' andalso
 		  eq_signat(VM.add(v,v',vm),signat2,signat2')

@@ -1,6 +1,8 @@
 #ifndef _create_h
 #define _create_h
 
+#include "tag.h"
+
 /* Uses the alloc_ptr and alloc_limit of the current thread.
    Not thread-safe if differnt threads share alloc_ptr. */
 
