@@ -150,8 +150,11 @@ struct
           | (CON_FLEXRECORD _, _) => raise Incomparable
           | (_, CON_FLEXRECORD _) => raise Incomparable
 
-          | (CON_COERCION _,_) => raise Incomparable
-          | (_,CON_COERCION _) => raise Incomparable
+	  | (CON_COERCION(vs,c1,c2), CON_COERCION(vs',c1',c2')) => 
+		     cmp_orders [cmp_list Name.compare_var (vs,vs'),
+				 cmp_con(c1,c1'), cmp_con(c2,c2')]
+          | (CON_COERCION _,_) => GREATER
+          | (_,CON_COERCION _) => LESS
 
 
           | (CON_VAR v1, CON_VAR v2) => Name.compare_var(v1,v2)

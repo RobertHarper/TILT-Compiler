@@ -339,8 +339,8 @@ struct
 		    val expv' = exp_subst(expv,subst)
 		    val e1 = RECORD_PROJECT(VAR var,generate_tuple_label 1,var_con)
 		    val e2 = RECORD_PROJECT(VAR var,generate_tuple_label 2,var_con)
-		    val e1' = UNROLL(name_con, CON_VAR expanded_con_var, e1)
-		    val e2' = UNROLL(name_con, CON_VAR expanded_con_var, e2)
+		    val e1' = COERCE(UNFOLD([], name_con, CON_VAR expanded_con_var), [], e1)
+		    val e2' = COERCE(UNFOLD([], name_con, CON_VAR expanded_con_var), [], e2)
 		    val exp = APP(expv',exp_tuple[e1',e2'])
 		    val exp = (case exp_reduce exp of
 				   NONE => exp

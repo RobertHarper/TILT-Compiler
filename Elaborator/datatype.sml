@@ -41,7 +41,9 @@ structure Datatype
     fun driver (xty : Il.context * Ast.ty -> Il.con,
 		context : context, 
 		std_list : def list,
-		eqcomp : Il.context * Il.con -> (Il.exp * Il.con) option) : (sbnd * sdec) list = 
+		eqcomp : Il.context * Il.con -> (Il.exp * Il.con) option,
+		is_transparent : bool) 
+	: (sbnd * sdec) list = 
       let 
         (* ---- tyvar_vars are the polymorphic type arguments for constructor functions
 	   ---- tyvar_labs name the type components when they are structure components
@@ -67,6 +69,9 @@ structure Datatype
 	val mpoly_var = fresh_named_var "mpoly_var"
 	val is_monomorphic = num_tyvar = 0
 	val num_datatype = length std_list
+	val _ = if is_transparent andalso num_datatype > 1 
+		    then error "transparent datatype compilation invoked for recursive type"
+		else ()
 
 	(* ----- create names for overall recursive type, datatype types,
 	         argument to sum types, sum types, special sums, and modules *)
@@ -82,8 +87,13 @@ structure Datatype
 				      end) type_syms
 	val top_type_string = foldl (fn (s,acc) => acc ^ "_" ^ (Symbol.name s)) "" type_syms
 	val top_eq_string = top_type_string ^ "_eq"
-	val top_type_var = if (num_datatype = 1) then (hd type_vars) else fresh_named_var top_type_string
-	val top_type_lab = to_questionable (internal_label top_type_string)
+	val private_var = fresh_named_var "private"
+	val top_type_var = fresh_named_var top_type_string
+	(* Could datatypes_var be defined to be the same as top_type_var,
+           or is there an invariant about fresh variable names?? *)
+	val datatypes_var = fresh_named_var top_type_string
+	val top_type_lab = internal_label top_type_string
+	val datatypes_lab = to_open top_type_lab
 	val top_eq_var = fresh_named_var top_eq_string
 	val top_eq_lab = symbol_label (Symbol.tycSymbol top_eq_string)
 	val module_labvars = map (fn s => let val str = Symbol.name s
@@ -113,6 +123,13 @@ structure Datatype
 	                         (type_syms,constr_syms,constr_tys)
 	val constr_con_vars = mapmap (Util.mapopt fresh_named_var) constr_con_strings
 	val constr_con_labs = mapmap (Util.mapopt internal_label) constr_con_strings
+
+	val in_coercion_strings = map (fn s => (Symbol.name s) ^ "_in") type_syms
+	val in_coercion_vars = map fresh_named_var in_coercion_strings
+	val in_coercion_labs = map (to_coercion o internal_label) in_coercion_strings
+	val out_coercion_strings = map (fn s => (Symbol.name s) ^ "_out") type_syms
+	val out_coercion_vars = map fresh_named_var out_coercion_strings
+	val out_coercion_labs = map (to_coercion o internal_label) out_coercion_strings
 
 
         (* -- we name the variables representing the instantited fixpoints in CON_MU *)
@@ -209,7 +226,7 @@ structure Datatype
 	    CON_MU(CON_FUN(vardt_list,con_tuple_inject constr_fullsum_vdt))
 
         (* ------------ create the polymorphic type arguments --------------------- 
-	   ------------- and instanitated versions of datatypes ------------------- *)
+	   ------------- and instanitated versions of datatypes and sum types ------------------- *)
 	val tyvar_mprojs = map (fn l => CON_MODULE_PROJECT (MOD_VAR mpoly_var, l)) tyvar_labs
 	val type_cinsts = map (fn tv => if (is_monomorphic) 
 					    then (CON_VAR tv)
@@ -217,87 +234,96 @@ structure Datatype
 	val type_minsts = map (fn tv => if (is_monomorphic) 
 					    then (CON_VAR tv)
 					else CON_APP(CON_VAR tv, tyvar_mprojs)) type_vars
+        val sumtype_cinsts = map (fn tv => if (is_monomorphic) 
+					    then (CON_VAR tv)
+					else CON_APP(CON_VAR tv, tyvar_cons)) constr_sum_vars
+	val sumtype_minsts = map (fn tv => if (is_monomorphic) 
+					    then (CON_VAR tv)
+					else CON_APP(CON_VAR tv, tyvar_mprojs)) constr_sum_vars
 
 
+	(* ----------------- compute the in_coercions ------------- *)
+	local 
+	    fun in_help (mutype, sumtype) =
+		make_fold_coercion(tyvar_vars,sumtype,mutype)
+	in val exp_con_in = map2 in_help (type_cinsts, sumtype_cinsts)
+	end
+
+	(* ----------------- compute the out_coercions ------------- *)
+	local 
+	    fun out_help (mutype, sumtype) =
+		make_unfold_coercion(tyvar_vars,mutype,sumtype)
+	in val exp_con_out = map2 out_help (type_cinsts, sumtype_cinsts)
+	end
 
 	(* ----------------- compute the constructors ------------- *)
 	local 
-	    fun mk_help (type_var_i : var,
-			 constr_sum_var_i : var,
+	    fun mk_help (in_coercion, mutype, sumtype,
 			 constr_mproj_type_i : con option list) =
 		let 
-		    val mutype = if is_monomorphic
-				     then CON_VAR type_var_i
-				 else ConApply(true, CON_VAR type_var_i, tyvar_mprojs)
-		    val sumtype = if (is_monomorphic)
-				      then CON_VAR constr_sum_var_i
-				  else ConApply(true, CON_VAR constr_sum_var_i, tyvar_mprojs)
 		    fun help (j, constr_mproj_type_ij_opt) =
 			let val var = fresh_named_var "injectee"
 			in  case constr_mproj_type_ij_opt of
-			    NONE => (ROLL(mutype, INJ{sumtype = sumtype,
-						      field = j,
-						      inject = NONE}), mutype)
+			    NONE => (COERCE(VAR in_coercion,
+					    tyvar_mprojs,
+					    INJ{sumtype = sumtype,
+						field = j,
+						inject = NONE}),
+				     mutype)
 			  | SOME constr_mproj_type_ij =>
 				(make_total_lambda
 				 (var, constr_mproj_type_ij, mutype,
-				  ROLL(mutype,
-				       INJ{sumtype = sumtype,
-					   field = j,
-					   inject = SOME (VAR var)})))
+				  COERCE(VAR in_coercion,
+					 tyvar_mprojs,
+					 INJ{sumtype = sumtype,
+					     field = j,
+					     inject = SOME (VAR var)})))
 			end
 		in mapcount help constr_mproj_type_i
 		end
-	in val exp_con_mk = map3 mk_help (type_vars, constr_sum_vars, constr_mproj_type)
+	in val exp_con_mk = map4 mk_help (in_coercion_vars, type_minsts, sumtype_minsts, constr_mproj_type)
 	end
 
 	
 	(* ----------------- compute the exposes ------------------- *)
 	local 
-	    fun expose_help (type_minst,constr_sum_var_i) =
+	    fun expose_help (out_coercion, mutype, sumtype) =
 		let val expose_var = fresh_named_var "exposee"
-		    val sumtype = CON_VAR constr_sum_var_i
-		    val sumtype = if is_monomorphic
-				      then sumtype
-				  else ConApply(true ,sumtype, tyvar_mprojs)
-		in  make_total_lambda(expose_var,type_minst,sumtype,
-				      UNROLL(type_minst,sumtype,VAR expose_var))
+		in  make_total_lambda(expose_var,mutype,sumtype,
+				      COERCE(VAR out_coercion,
+					     tyvar_mprojs,
+					     VAR expose_var))
 		end
-	in val exp_con_expose = map2 expose_help (type_minsts, constr_sum_vars)
+	in val exp_con_expose = map3 expose_help (out_coercion_vars, type_minsts, sumtype_minsts)
 	end
 
 	(* ----------------- compute the type bindings ------------------- *)		
-	val top_type_sbnd_sdec = 
+	val top_type_sbnd_sdec =
 		let val (c,base_kind) = 
 		    if is_monomorphic
 			then (top_type_tyvar, KIND_TUPLE num_datatype)
 		    else (con_fun(tyvar_vars, top_type_tyvar), 
 			  KIND_ARROW(num_tyvar, KIND_TUPLE num_datatype))
-		in  if num_datatype = 1 
-			then []
-		     else [(SBND(top_type_lab, BND_CON(top_type_var, c)),
-		            SDEC(top_type_lab, DEC_CON(top_type_var, base_kind, SOME c, false)))]
+		in  [(SBND(top_type_lab, BND_CON(top_type_var, c)),
+		      SDEC(top_type_lab, DEC_CON(top_type_var, base_kind, SOME c, false)))]
 		end
 
-
-	val type_sbnd_sdecs = 
+	val type_sbnd_sdecs =
 		let val kind = KIND
 		    val kind = if is_monomorphic 
 				   then kind
 			       else KIND_ARROW(num_tyvar,kind)
 		    fun mapper(i,l,v) =
-			let val c = if num_datatype = 1 
-					then CON_TUPLE_PROJECT(0,top_type_tyvar)
-				    else 
-			              let val c = CON_VAR top_type_var
-					  val c = if is_monomorphic then c
-						  else CON_APP(c, tyvar_cons)
-				      in  CON_TUPLE_PROJECT(i,c)
-				      end
+			let val c = if is_transparent then top_type_tyvar
+				    else CON_MODULE_PROJECT(MOD_VAR private_var, top_type_lab)
+			    val c = if is_monomorphic then c
+				    else CON_APP(c, tyvar_cons)
+			    val c = CON_TUPLE_PROJECT(i,c)
 			    val c = if is_monomorphic then c 
 				      else con_fun(tyvar_vars, c)
 			in  (SBND(l,BND_CON(v,c)), 
-			     SDEC(l,DEC_CON(v,kind,SOME c, false)))
+			     if is_transparent then SDEC(l,DEC_CON(v,kind,SOME c,true))
+			     else SDEC(l,DEC_CON(v,kind,NONE,false)))
 			end
 		in  map2count mapper (type_labs,type_vars)
 		end
@@ -409,12 +435,11 @@ structure Datatype
 		    val bnd_var = fresh_named_var ("poly" ^ (label2string eq_lab))
 		    val short_top_eq_exp = 
 			if (is_monomorphic)
-			    then VAR top_eq_var
-			else MODULE_PROJECT(MOD_APP(MOD_VAR top_eq_var, MOD_VAR mpoly_var), it_lab)
-		    val exp_eq = if num_datatype = 1
-				     then top_eq_exp
-				 else RECORD_PROJECT(short_top_eq_exp,
-						     generate_tuple_label(i+1), top_eq_con)
+			    then MODULE_PROJECT(MOD_VAR private_var, top_eq_lab)
+			else MODULE_PROJECT(MOD_APP(MOD_PROJECT(MOD_VAR private_var, top_eq_lab),
+						    MOD_VAR mpoly_var), it_lab)
+		    val exp_eq = if num_datatype = 1 then short_top_eq_exp 
+				 else RECORD_PROJECT(short_top_eq_exp, generate_tuple_label(i+1), top_eq_con)
 		    val con_eq = con_eqfun(if is_monomorphic 
 					       then CON_VAR type_var_i
 					   else CON_APP (CON_VAR type_var_i, tyvar_mprojs))
@@ -448,7 +473,6 @@ structure Datatype
 	val top_eq_sbnd_sdec = 
 	    (case (eq_exp_con, num_datatype) of
 		(NONE,_) => []
-	      | (_, 1) => []
 	      | (SOME (eq_exp, eq_con),_) =>
 		let val equal_var = if is_monomorphic then top_eq_var 
 				    else fresh_named_var "top_eq"
@@ -491,13 +515,40 @@ structure Datatype
 
 	val constr_sum_sbnd_sdecs = map3 mapper (constr_sum_labs,constr_sum_vars, constr_sum)
 
-	val final_sbnd_sdecs = (top_type_sbnd_sdec
-				@ top_eq_sbnd_sdec
-				@ type_sbnd_sdecs 
-				@ constr_sumarg_sbnd_sdecs
-				@ constr_sum_sbnd_sdecs
-				@ eq_sbnd_sdecs 
-				@ components)
+	fun mapper(in_coercion_lab_i, in_coercion_var_i, (in_coercion_exp_i,in_coercion_con_i)) =
+	    (SBND(in_coercion_lab_i,BND_EXP(in_coercion_var_i,in_coercion_exp_i)),
+	     SDEC(in_coercion_lab_i,DEC_EXP(in_coercion_var_i,in_coercion_con_i,NONE,false)))
+
+	val in_coercion_sbnd_sdecs = map3 mapper (in_coercion_labs,in_coercion_vars,exp_con_in)
+
+	fun mapper(out_coercion_lab_i, out_coercion_var_i, (out_coercion_exp_i,out_coercion_con_i)) =
+	    (SBND(out_coercion_lab_i,BND_EXP(out_coercion_var_i,out_coercion_exp_i)),
+	     SDEC(out_coercion_lab_i,DEC_EXP(out_coercion_var_i,out_coercion_con_i,NONE,false)))
+
+	val out_coercion_sbnd_sdecs = map3 mapper (out_coercion_labs,out_coercion_vars,exp_con_out)
+
+	val (public_sbnds, public_sdecs) =
+	    unzip (type_sbnd_sdecs 
+		   @ constr_sumarg_sbnd_sdecs
+		   @ constr_sum_sbnd_sdecs
+		   @ in_coercion_sbnd_sdecs
+		   @ out_coercion_sbnd_sdecs
+		   @ eq_sbnd_sdecs 
+		   @ components)
+
+        val public_mod = MOD_STRUCTURE(public_sbnds)
+	val public_sig = SIGNAT_STRUCTURE(public_sdecs)
+
+	val (private_sbnds, _) = unzip (top_type_sbnd_sdec @ top_eq_sbnd_sdec)
+
+        val private_mod = MOD_STRUCTURE(private_sbnds)
+
+	val main_mod = MOD_SEAL(MOD_LET(private_var, private_mod, public_mod), public_sig)
+
+	val final_sbnd_sdecs = 
+	    [(SBND(datatypes_lab,BND_MOD(datatypes_var,false,main_mod)),
+	      SDEC(datatypes_lab,DEC_MOD(datatypes_var,false,public_sig)))]
+
       in  final_sbnd_sdecs
       end
  
@@ -656,7 +707,7 @@ structure Datatype
 	end
 
     fun compile' (context, typecompile,
-		  datatycs : Ast.db list, eq_compile) : (sbnd * sdec) list =
+		  datatycs : Ast.db list, eq_compile, is_transparent : bool) : (sbnd * sdec) list =
       let 
         (* ---- call the main routine for each sorted list of datatypes 
 	   and retain the accumulated context *)
@@ -672,7 +723,7 @@ structure Datatype
 		fun geq_std((s1,_,_),(s2,_,_)) = geq_sym(s1,s2)
 		val std_list = ListMergeSort.sort geq_std std_list
 		val sbnd_sdecs = driver(typecompile,context,
-					std_list, eq_compile)
+					std_list, eq_compile, is_transparent)
 		val _ = if (!debug)
 			    then (print "DRIVER returned SBNDS = ";
 				  map (fn (sb,_) => (Ppil.pp_sbnd sb; print "\n")) sbnd_sdecs;
@@ -706,6 +757,17 @@ structure Datatype
 	    val constr_sumarg_lab = internal_label constr_sumarg_string
 	    val old_constr_sumarg_string = (Symbol.name old_type_sym) ^ "_sumarg"
 	    val old_constr_sumarg_lab = internal_label old_constr_sumarg_string
+	    val in_coercion_string = (Symbol.name type_sym) ^ "_in"
+	    val in_coercion_var = fresh_named_var in_coercion_string
+	    val in_coercion_lab = to_coercion (internal_label in_coercion_string)
+	    val old_in_coercion_string = (Symbol.name old_type_sym) ^ "_in"
+	    val old_in_coercion_lab = to_coercion (internal_label old_in_coercion_string)
+	    val out_coercion_string = (Symbol.name type_sym) ^ "_out"
+	    val out_coercion_var = fresh_named_var out_coercion_string
+	    val out_coercion_lab = to_coercion (internal_label out_coercion_string)
+	    val old_out_coercion_string = (Symbol.name old_type_sym) ^ "_out"
+	    val old_out_coercion_lab = to_coercion (internal_label old_out_coercion_string)
+
 
 	    val eq_lab = to_eq type_lab 
 	    val eq_var = fresh_named_var "eqfun"
@@ -722,6 +784,9 @@ structure Datatype
 	    val dt_labs = change_path to_dt
 	    val constr_sum_labs = change_path (fn _ => old_constr_sum_lab)
 	    val constr_sumarg_labs = change_path (fn _ => old_constr_sumarg_lab)
+	    val in_coercion_labs = change_path (fn _ => old_in_coercion_lab)
+	    val out_coercion_labs = change_path (fn _ => old_out_coercion_lab)
+
 
 	    val eq_sbndsdec = 
 		(case (Context_Lookup_Labels(context,eq_labs)) of
@@ -786,21 +851,39 @@ structure Datatype
 		   | _ => (print "lookup_labs: "; app Ppil.pp_label lookup_labs; print "\n";
 			   error ("unbound datatype - copy type " ^ str))
 
+	    fun copy_coercion str (lookup_labs, lab, var) =
+		case (Context_Lookup_Labels(context,lookup_labs)) of
+		    SOME(_,PHRASE_CLASS_EXP(e,c,_,_)) =>
+			let
+			    val bnd = BND_EXP(var,e)
+			    val dec = DEC_EXP(var,c,NONE,false)
+			in
+			    (SBND(lab,bnd),SDEC(lab,dec))
+			end
+		  | _ => (print "lookup_labs: "; app Ppil.pp_label lookup_labs; print "\n";
+			   error ("unbound datatype - copy coercion " ^ str))
+
 	    val type_sbndsdec = copy_type "type" (type_labs,type_lab,type_var)
 	    val constr_sum_sbndsdec = copy_type "constr_sum" 
 		(constr_sum_labs,constr_sum_lab,constr_sum_var)
 	    val constr_sumarg_sbndsdec = copy_type "constr_sumarg" 
 		(constr_sumarg_labs,constr_sumarg_lab,constr_sumarg_var)
+	    val in_coercion_sbndsdec = copy_coercion "in_coercion"
+		(in_coercion_labs,in_coercion_lab,in_coercion_var)
+	    val out_coercion_sbndsdec = copy_coercion "out_coercion" 
+		(out_coercion_labs,out_coercion_lab,out_coercion_var)
+
 	in [type_sbndsdec] 
 	    @ [constr_sumarg_sbndsdec,constr_sum_sbndsdec]
+	    @ [in_coercion_sbndsdec,out_coercion_sbndsdec]
 	    @ eq_sbndsdec @ constr_sbndsdec
 	end
     
 
     fun compile {context, typecompile,
-		 datatycs : Ast.db list, eq_compile} : (sbnd * sdec) list =
+		 datatycs : Ast.db list, eq_compile, is_transparent : bool} : (sbnd * sdec) list =
 	let
-	    fun calldriver() = compile'(context,typecompile,datatycs,eq_compile)
+	    fun calldriver() = compile'(context,typecompile,datatycs,eq_compile,is_transparent)
 	in 
 	    case datatycs of
 		[db] => 

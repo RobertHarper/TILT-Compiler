@@ -938,7 +938,8 @@ val _ = print "plet0\n"
         Datatype.compile{context=context,
 			 typecompile=xty,
 			 datatycs=datatycs,
-			 eq_compile=xeq}
+			 eq_compile=xeq,
+			 is_transparent=false}
 
      and xfundec islocal (context : context, dec_list, tyvar_stamp, sdecs1, var_poly, open_lbl) =
 	 let
@@ -2121,7 +2122,11 @@ val _ = print "plet0\n"
 	   | (Ast.DataSpec {datatycs, withtycs = []}) =>
 	        let val sbnd_sdecs = xdatatype(context,datatycs)
 		    val sdecs = map #2 sbnd_sdecs
-		in  ADDITIONAL sdecs
+		in
+		    (case sdecs of
+			[SDEC(lab,DEC_MOD(_,_,SIGNAT_STRUCTURE sdecs'))] =>
+			    if is_open lab then ADDITIONAL sdecs' else ADDITIONAL sdecs
+		      | _ => ADDITIONAL sdecs)
 		end
 	   | (Ast.DataSpec {datatycs, withtycs}) => parse_error "withtype specs not supported"
 	   | (Ast.ShareTycSpec paths) => ALL_NEW(Signature.xsig_sharing_types

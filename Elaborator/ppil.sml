@@ -208,6 +208,10 @@ struct
 	       String (Int.toString noncarriers),
 	       String ";", Break,
 	       pp_con seen carrier]
+       | CON_COERCION (tyvars,con1,con2) => pp_region "CON_COERCION(" ")"
+	      [pp_list pp_var tyvars ("[", ",","]", false), String ",", Break,
+	       pp_con seen con1, String ",", Break,
+	       pp_con seen con2]
        | CON_TUPLE_INJECT conlist => pp_list (pp_con seen) conlist ("(", ",",")",false)
        | CON_TUPLE_PROJECT (i,c) => HOVbox[pp_con seen c, String ("#" ^ (Int.toString i))]
        | CON_MODULE_PROJECT (module,label) => 
@@ -367,6 +371,18 @@ struct
        | NEW_STAMP con => pp_region "NEW_STAMP(" ")" [pp_con con]
        | EXN_INJECT (s,e1,e2) => pp_region "EXN_INJECT(" ")" [String s, String ",",
 							      pp_exp e1, String ",", pp_exp e2]
+       | COERCE (coercion,tycons,e) => pp_region "COERCE(" ")"
+			  [pp_exp coercion, String ",", Break,
+			   pp_list pp_con tycons ("[", ",","]", false), String ",", Break,
+			   pp_exp e]
+       | FOLD (tyvars, con1, con2) => pp_region "FOLD(" ")"
+			  [pp_list pp_var tyvars ("[", ",","]", false), String ",", Break,
+			   pp_con con1, String ",", Break,
+			   pp_con con2]
+       | UNFOLD (tyvars, con1, con2) => pp_region "UNFOLD(" ")"
+			  [pp_list pp_var tyvars ("[", ",","]", false), String ",", Break,
+			   pp_con con1, String ",", Break,
+			   pp_con con2]
        | ROLL (con,e) => pp_region "ROLL(" ")"
 			  [pp_con con, String ",", Break, pp_exp e]
        | UNROLL (con1,con2,e) => pp_region "UNROLL(" ")"

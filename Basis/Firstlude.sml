@@ -37,7 +37,7 @@ infix  0 before
 (* eqtype string -- provided later *)
 (* type substring -- provided by TopLevel *)
 (* exn, 'a array, 'a vector, 'a ref -- primitive *)
-datatype bool = false | true
+(* datatype bool = false | true *)
 datatype 'a option = NONE | SOME of 'a
 datatype order = LESS | EQUAL | GREATER
 datatype 'a list = nil | :: of 'a * 'a list

@@ -70,6 +70,8 @@ structure IlStatic
       | FIX _ => true
       | INJ {inject=NONE,...} => true
       | INJ {inject=SOME e,...} => Exp_IsSyntacticValue e
+      | FOLD _ => true
+      | UNFOLD _ => true
       | _ => false)
    and Module_IsSyntacticValue module = 
       (case module of
@@ -572,6 +574,16 @@ structure IlStatic
 		    val c2' = con_subst(c2,subst)
 		in self(c1,c2',ctxt')
 		end
+	  | (CON_COERCION (tyvars,c1,c2), CON_COERCION(tyvars',c1',c2')) =>
+		(length tyvars = length tyvars') andalso
+		let fun folder ((v1,v2),(ctxt,subst)) = (add_context_con'(ctxt,v1,KIND, NONE),
+							 subst_add_convar(subst,v2,CON_VAR v1))
+		    val (ctxt',subst) = foldl folder (ctxt,empty_subst) (zip tyvars tyvars')
+		    val c1'' = con_subst(c1',subst)
+		    val c2'' = con_subst(c2',subst)
+		in 
+		    self(c1,c1'',ctxt') andalso self(c2,c2'',ctxt')
+		end
 	  | (CON_SUM {names=n1,noncarriers=nc1,carrier=c1,special=i1},
 	     CON_SUM {names=n2,noncarriers=nc2,carrier=c2,special=i2}) =>
 		let val special = (i1=i2) orelse (i2=NONE andalso is_sub)
@@ -639,7 +651,7 @@ structure IlStatic
      (case exp of
 	MODULE_PROJECT (m,l) => Module_IsValuable m ctxt
       | APP(e1,e2) => let val (va1,e1_con) = GetExpCon(e1,ctxt)
-			  val (va2,e2_con) = GetExpCon(e1,ctxt)
+			  val (va2,e2_con) = GetExpCon(e2,ctxt)
 			  val _ = debugdo (fn () =>
 					   (print "exp_isvaluable: app case: e1_con is: \n";
 					    Ppil.pp_con e1_con; print "\n"))
@@ -666,6 +678,7 @@ structure IlStatic
      | LET (bnds,e) => (case (Bnds_IsValuable' bnds ctxt) of 
 			  NONE => false
 			| SOME ctxt' => Exp_IsValuable(ctxt',e))
+     | COERCE(coercion,cons,e) => Exp_IsValuable(ctxt,coercion) andalso Exp_IsValuable(ctxt,e)
      | ROLL (c,e) => Exp_IsValuable(ctxt,e)
      | UNROLL (c1,c2,e) => Exp_IsValuable(ctxt,e)
      | OVEREXP (_,v,os) => v orelse (case (oneshot_deref os) of
@@ -747,6 +760,7 @@ structure IlStatic
      | (CON_VECTOR _) => KIND
      | (CON_TAG _) => KIND
      | (CON_ARROW _) => KIND
+     | (CON_COERCION _) => KIND             (* XXX Is this correct? XXX *)
      | (CON_APP (c1,cargs)) => 
 	   let val k1 = GetConKind(c1,ctxt)
 	       val kargs = map (fn c => GetConKind(c,ctxt)) cargs
@@ -840,6 +854,7 @@ structure IlStatic
      | (CON_VECTOR _) => KIND
      | (CON_TAG _) => KIND
      | (CON_ARROW _) => KIND
+     | (CON_COERCION _) => KIND             (* XXX Is this correct? XXX *)
      | (CON_APP (c1,_)) => 
 	   let val k = GetConKindFast(c1,ctxt)
 	   in (case k of
@@ -1000,7 +1015,7 @@ structure IlStatic
 		     else error "projected decoration has the wrong KIND_ARROW")
 	      | _ => error "projected decoration has the wrong kind"))
        end
-   
+
    and GetExpCon' (exparg,ctxt) : bool * con = 
        (case exparg of
        SCON scon => (true,GetSconCon(ctxt,scon))
@@ -1135,6 +1150,40 @@ structure IlStatic
 	   in if (eq_con(ctxt,c1,CON_TAG c2))
 		  then (va1 andalso va2, CON_ANY)
 	      else error "EXN_INJECT tag type and value: type mismatch"
+	   end
+     | COERCE(coercion,cons,e) => 
+	   let
+	       val (va1,ctyp) = GetExpCon(coercion,ctxt)
+	       val (tyvars,c1,c2) = (case ctyp of CON_COERCION info => info
+	                             | _ => error "COERCE: coercion doesn't have coercion type")
+	       val _ = if length cons = length tyvars then () else
+		   error "COERCE: wrong number of type arguments"
+	       val subst = foldl (fn ((v,c),subst) => subst_add_convar(subst,v,c))
+		   empty_subst (zip tyvars cons)
+	       val (va2,econ) = GetExpCon(e,ctxt)
+	       val tau1 = con_subst(c1,subst)
+	       val (_,tau2,_) = HeadNormalize(con_subst(c2,subst),ctxt)
+	   in
+	       if sub_con(ctxt,econ,tau1) then (va1 andalso va2, tau2)
+	       else error "COERCE: term argument has wrong type"
+	   end
+     | FOLD(tyvars,cUnroll,cRoll) =>
+	   let
+	       val ctxt' = foldl (fn (v,ctxt) => add_context_con'(ctxt,v,KIND,NONE)) ctxt tyvars
+	       val _ = debugdo (fn () => print "Typechecking a FOLD:\n")
+	       val cRollUnrolled = ConUnroll cRoll
+	   in
+	       if eq_con(ctxt', cUnroll, cRollUnrolled) then (true,CON_COERCION(tyvars,cUnroll,cRoll))
+	       else error "FOLD: unrolled type is not unrolling of rolled type"
+	   end
+     | UNFOLD(tyvars,cRoll,cUnroll) =>
+	   let
+	       val ctxt' = foldl (fn (v,ctxt) => add_context_con'(ctxt,v,KIND,NONE)) ctxt tyvars
+	       val _ = debugdo (fn () => print "Typechecking an UNFOLD:\n")
+	       val cRollUnrolled = ConUnroll cRoll
+	   in
+	       if eq_con(ctxt', cUnroll, cRollUnrolled) then (true,CON_COERCION(tyvars,cRoll,cUnroll))
+	       else error "UNFOLD: unrolled type is not unrolling of rolled type"
 	   end
      | ROLL(c,e) => GetExpRollCon'(ctxt,true,e,c)
      | UNROLL(c,_,e) => GetExpRollCon'(ctxt,false,e,c)
@@ -1574,6 +1623,18 @@ structure IlStatic
 					     special=special}
 		  in  help constr carrier
 		  end
+	    | CON_COERCION ([],c1,c2) => 
+		  let fun constr [c1,c2] = CON_COERCION([],c1,c2)
+		  in helplist constr [c1,c2]
+		  end
+	    | CON_COERCION (tyvars,c1,c2) => 
+		  let fun folder (v,ctxt) = add_context_con'(ctxt,v,KIND,NONE)
+		      val ctxt' = foldl folder ctxt tyvars
+		  in (case Reduce how (CON_COERCION([],c1,c2),ctxt') of
+		      NONE => NONE
+	            | SOME (CON_COERCION([],c1,c2),[]) => SOME (CON_COERCION(tyvars,c1,c2),[])
+		    | _ => error "CON_COERCION mishandled in Reduce function")
+		  end
 	    | CON_ARROW (cargs,cres,closed,comp) =>
 		  let fun constr [] = error "CON_ARROW must have at least one domain type"
 			| constr (cres :: cargs) = CON_ARROW(cargs, cres, closed, comp)
@@ -1764,6 +1825,9 @@ structure IlStatic
 		  andalso inline1=inline2
 	    | _ => false)
 
+     (* XXX We should get rid of eq_exp if Perry approves of the change to signature.sml
+            to assume that inlined expressions match inlined specs.  No one else calls this function. XXX *)
+
      and eq_exp(ctxt,exp1,exp2) = 
 	 let fun find subst v = (case Listops.assoc_eq(eq_var,v,subst) of
 				     NONE => v
@@ -1786,6 +1850,9 @@ structure IlStatic
 			     end
 		     in  b1 = b2 andalso a1 = a2 andalso eq_list(eq_fbnd,fbnds1,fbnds2)
 		     end
+	       | (COERCE (coercion,cs,e), COERCE (coercion',cs',e')) => 
+		     eq(coercion,coercion',subst) andalso eq(e,e',subst) andalso
+		     andfold (fn (c1,c2) => eq_con(ctxt,c1,c2)) (zip cs cs')
 	       | (UNROLL (c1,d1,e1), UNROLL(c2,d2,e2)) =>
 		     eq_con(ctxt,c1,c2) andalso  eq_con(ctxt,d1,d2) andalso eq(e1,e2,subst)
 	       | (ROLL (c1,e1), ROLL(c2,e2)) =>

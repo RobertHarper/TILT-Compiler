@@ -275,7 +275,10 @@ struct
 		      blastOutInt i)
 	       | CON_TUPLE_INJECT clist => (blastOutInt 16; blastOutList blastOutCon clist)
 	       | CON_TUPLE_PROJECT (i,c) => (blastOutInt 17; blastOutInt i; blastOutCon c)
-	       | CON_MODULE_PROJECT (m,l) => (blastOutInt 18; blastOutMod m; blastOutLabel l))
+	       | CON_MODULE_PROJECT (m,l) => (blastOutInt 18; blastOutMod m; blastOutLabel l)
+	       | CON_COERCION (vs,c1,c2) => 
+		     (blastOutInt 19; blastOutList blastOutVar vs; blastOutCon c1; blastOutCon c2))
+
 
         and blastInCon () = 
 	    let val _ = push()
@@ -345,6 +348,7 @@ struct
 	       | 16 => CON_TUPLE_INJECT (blastInList blastInCon)
 	       | 17 => CON_TUPLE_PROJECT (blastInInt(), blastInCon ())
 	       | 18 => CON_MODULE_PROJECT (blastInMod (), blastInLabel ())
+	       | 19 => CON_COERCION (blastInList blastInVar, blastInCon (), blastInCon ())
 	       | _ => error "bad blastInCon")
 
 	and blastOutValue v = 
@@ -638,6 +642,12 @@ struct
 	       | LET(bnds,e) => (blastOutInt 13; blastOutList blastOutBnd bnds; blastOutExp e)
 	       | NEW_STAMP c => (blastOutInt 14; blastOutCon c)
 	       | EXN_INJECT (str,e1,e2) => (blastOutInt 15; blastOutString str; blastOutExp e1; blastOutExp e2)
+	       | COERCE (coercion,cs,e) => 
+		     (blastOutInt 24; blastOutExp coercion; blastOutList blastOutCon cs; blastOutExp e)
+	       | FOLD (vs,c1,c2) => (blastOutInt 25; blastOutList blastOutVar vs;
+				     blastOutCon c1; blastOutCon c2)
+	       | UNFOLD (vs,c1,c2) => (blastOutInt 26; blastOutList blastOutVar vs;
+				       blastOutCon c1; blastOutCon c2)
 	       | ROLL (c,e) => (blastOutInt 16; blastOutCon c; blastOutExp e)
 	       | UNROLL (c1,c2,e) => (blastOutInt 17; blastOutCon c1; blastOutCon c2;
 				      blastOutExp e)
@@ -691,9 +701,6 @@ struct
 		      in  VAR v
 		      end
 	       | 6 => APP (blastInExp (), blastInExp ())
-	       | 23 => EXTERN_APP (blastInCon (),
-				   blastInExp (), 
-				   blastInList blastInExp)
 	       | 7 => FIX (blastInBool (), blastInArrow (), blastInList blastInFbnd)
 	       | 8 => RECORD (blastInList (fn () => blastInPair blastInLabel blastInExp))
 	       | 9 => RECORD_PROJECT (blastInExp (), blastInLabel (), blastInCon ())
@@ -726,6 +733,12 @@ struct
 				 tipe = blastInCon ()})
 	       | 21 => MODULE_PROJECT (blastInMod (), blastInLabel ())
 	       | 22 => SEAL(blastInExp (), blastInCon ())
+	       | 23 => EXTERN_APP (blastInCon (),
+				   blastInExp (), 
+				   blastInList blastInExp)
+	       | 24 => COERCE (blastInExp (), blastInList blastInCon, blastInExp ())
+	       | 25 => FOLD (blastInList blastInVar, blastInCon (), blastInCon ())
+	       | 26 => UNFOLD (blastInList blastInVar, blastInCon (), blastInCon ())
 	       | _ => error "bad blastInExp")
 
 	and blastOutFbnd (FBND(v1,v2,c1,c2,e)) = (blastOutVar v1;
@@ -1126,6 +1139,10 @@ struct
 		     (case eq_vars(vm,vars,vars') of
 			  NONE => false
 			| SOME vm => eq_con(vm,con,con'))
+	       | (CON_COERCION(vars,c1,c2), CON_COERCION (vars',c1',c2')) => 
+		     (case eq_vars(vm,vars,vars') of
+			  NONE => false
+			| SOME vm => eq_con(vm,c1,c1') andalso eq_con(vm,c2,c2'))
 	       | (CON_SUM{names,noncarriers,carrier,special}, 
 		  CON_SUM{names=names',noncarriers=noncarriers',carrier=carrier',special=special'}) =>
 		     Listops.eq_list(Name.eq_label,names,names') andalso
@@ -1276,6 +1293,10 @@ struct
 		   INJ{sumtype=c2,field=f2, inject=eopt2}) = 
 	       eq_con(vm,c1,c2) andalso f1=f2 andalso
 	       eq_opt (fn (e1,e2) => eq_exp(vm,e1,e2)) (eopt1,eopt2)
+	  | eq_exp (vm,COERCE(coercion,cs,e),COERCE(coercion',cs',e')) =
+	       eq_exp(vm,coercion,coercion') andalso
+	       eq_cons(vm,cs,cs') andalso
+	       eq_exp(vm,e,e')
 	  | eq_exp(vm,ROLL(c1,e1),ROLL(c2,e2)) = eq_con(vm,c1,c2) andalso eq_exp(vm,e1,e2)
 	  | eq_exp(vm,UNROLL(c11,c12,e1),UNROLL(c21,c22,e2)) = 
 	       eq_con(vm,c11,c21) 

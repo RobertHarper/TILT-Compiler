@@ -1466,6 +1466,7 @@ struct
 	 | (Prim_c _)            => (state,constructor,false)
 	 | (Mu_c _)              => (state,constructor,false)
 	 | (AllArrow_c _)        => (state,constructor,false)
+	 | (Coercion_c _)        => (state,constructor,false)
 	 | (ExternArrow_c _)     => (state,constructor,false)
 	 | (Crecord_c _)         => (state,constructor,false)
 	 | (Var_c var)           => (state,constructor,true)

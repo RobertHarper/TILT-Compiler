@@ -38,8 +38,11 @@ structure IlPrimUtilParam
 	val con_bool = bool_help NONE
 	val con_false = bool_help (SOME 0)
 	val con_true = bool_help (SOME 1)
-	val false_exp = ROLL(con_bool,INJ{sumtype=con_sumbool,field=0,inject=NONE})
-	val true_exp = ROLL(con_bool,INJ{sumtype=con_sumbool,field=1,inject=NONE})
+	val false_exp = COERCE(FOLD([],con_sumbool,con_bool),[],
+			       INJ{sumtype=con_sumbool,field=0,inject=NONE})
+	val true_exp = COERCE(FOLD([],con_sumbool,con_bool),[],
+			      INJ{sumtype=con_sumbool,field=1,inject=NONE})
+
 	    
 	fun con_tuple conlist = CON_RECORD(Listops.mapcount (fn (i,c) => 
 							     (generate_tuple_label (i+1),c)) conlist)

@@ -163,7 +163,7 @@ structure Basis :> BASIS =
 					   end),
 				  ("vector",let val v = fresh_var()
 					    in CON_FUN([v],CON_VECTOR (CON_VAR v))
-					    end)				  
+					    end)
 				  ]
 	      val basetype_list = [("float64", float64),
 				   ("int32", int32),
@@ -179,7 +179,8 @@ structure Basis :> BASIS =
 					    end),
 				   ("vector",let val v = fresh_var()
 					     in CON_FUN([v],CON_VECTOR (CON_VAR v))
-					     end)]
+					     end)
+				   ]
 	  in
 	      val _ = (app (add_top o type_entry) toptype_list;
 		       app (add     o type_entry) basetype_list)
@@ -392,6 +393,21 @@ structure Basis :> BASIS =
 	  in  val _ = (app (add_top o poly_entry) toppolyvalue_list;
 		       app (add     o poly_entry) basepolyvalue_list)
 	  end
+
+	  local
+	      val datatycs = [Ast.Db {tyc = Symbol.tycSymbol "bool",
+				      tyvars = [],
+				      rhs = Ast.Constrs [(Symbol.varSymbol "false", NONE),
+							 (Symbol.varSymbol "true", NONE)]}]
+	      val bool_sbnds_sdecs = 
+		  Datatype.compile {context = empty_context,
+				    typecompile = Toil.typecompile,
+				    datatycs = datatycs,
+				    eq_compile = Toil.xeq,
+				    is_transparent = true}
+	  in
+	      val _ = app add_top bool_sbnds_sdecs
+	  end     
       
       in  Bind.finish (!bindings)
       end

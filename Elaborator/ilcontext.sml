@@ -647,6 +647,12 @@ struct
 
        fun isempty_state ({subst,...}:state) = subst_is_empty subst
 
+       fun add_exp (state, _, NONE) = state
+	 | add_exp ({ctxt, selfify, subst}, v, SOME p) =
+	   {ctxt = ctxt, selfify = selfify,
+	    subst = if selfify then subst_add_expvar(subst, v, path2exp p)
+		    else subst_add_exppath(subst, p, VAR v)}
+
        fun add_con (state, _, NONE) = state
 	 | add_con ({ctxt, selfify, subst}, v, SOME p) = 
 	   {ctxt = ctxt, selfify = selfify,
@@ -672,6 +678,7 @@ struct
 					    NONE => NONE
 					  | SOME e => SOME(exp_subst(e,subst)))
 			    val dec = DEC_EXP(v,c,eopt,inline)
+			    val state = if is_coercion l then add_exp(state,v,popt) else state
 			in  (SDEC(l,dec), state)
 			end
 		  | DEC_CON(v,k,copt,inline) => 

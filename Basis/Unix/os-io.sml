@@ -53,8 +53,8 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
 	  end
 
     type poll_flags = {rd : bool, wr : bool, pri : bool}
-    datatype poll_desc = PollDesc of (iodesc * poll_flags)
-    datatype poll_info = PollInfo of (iodesc * poll_flags)
+    datatype poll_desc = datatype PreOS.IO.poll_desc       (* PollDesc of (iodesc * poll_flags) *)
+    datatype poll_info = datatype PreOS.IO.poll_info       (* PollInfo of (iodesc * poll_flags) *)
 
   (* create a polling operation on the given descriptor; note that
    * not all I/O devices support polling, but for the time being, we
@@ -116,9 +116,12 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
 (*
 
  * $Log$
-# Revision 1.4  2000/11/27  22:36:42  swasey
-# *** empty log message ***
+# Revision 1.5  2001/08/30  07:09:12  dreyer
+# Elaborator now implements opaque interpretation of datatypes with coercions.
 # 
+ * Revision 1.4  2000/11/27 22:36:42  swasey
+ * *** empty log message ***
+ *
  * Revision 1.3  2000/09/21 01:08:38  pscheng
  * *** empty log message ***
  *

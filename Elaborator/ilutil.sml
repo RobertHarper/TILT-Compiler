@@ -89,6 +89,7 @@ structure IlUtil :> ILUTIL =
     val eq_str = "+E"
     val dt_str = "+O+D"
     val cluster_str = "+C"
+    val coercion_str = "+N"
 
     fun is_questionable lab =  isSome(substring (questionable_str,label2name lab))
     fun is_open lab = isSome(substring (open_str,label2name lab))
@@ -96,6 +97,7 @@ structure IlUtil :> ILUTIL =
     fun is_eq lab = isSome(substring (eq_str,label2name lab))
     fun is_dt lab = isSome(substring (dt_str,label2name lab))
     fun is_cluster lab = isSome(substring (cluster_str,label2name lab))
+    fun is_coercion lab = isSome(substring (coercion_str,label2name lab))
 
     local
 	fun to_meta_lab meta_str lab =
@@ -109,6 +111,7 @@ structure IlUtil :> ILUTIL =
 	val to_eq = to_meta_lab eq_str
 	val to_dt = to_meta_lab dt_str
 	val to_cluster = to_meta_lab cluster_str
+	val to_coercion = to_meta_lab coercion_str
     end
 
     local 
@@ -180,8 +183,11 @@ structure IlUtil :> ILUTIL =
     fun con_eqfun c = CON_ARROW([con_tuple[c,c]],
 				con_bool,false, oneshot_init PARTIAL)
 
-    val false_exp = ROLL(con_bool,INJ{sumtype=con_sumbool,field=0,inject=NONE})
-    val true_exp = ROLL(con_bool,INJ{sumtype=con_sumbool,field=1,inject=NONE})
+    val false_exp = COERCE(FOLD([],con_sumbool,con_bool),[],
+			   INJ{sumtype=con_sumbool,field=0,inject=NONE})
+    val true_exp = COERCE(FOLD([],con_sumbool,con_bool),[],
+			   INJ{sumtype=con_sumbool,field=1,inject=NONE})
+
     fun make_lambda_help totality (var,con,rescon,e) 
       : exp * con = let val funvar = fresh_named_var "anonfun"
 			val fbnd = FBND(funvar,var,con,rescon,e)
@@ -189,9 +195,16 @@ structure IlUtil :> ILUTIL =
 		    end
     val make_total_lambda = make_lambda_help TOTAL
     val make_lambda  = make_lambda_help PARTIAL
+
+    fun make_fold_coercion (vars,unrolltype,rolltype) : exp * con =
+	(FOLD(vars,unrolltype,rolltype),CON_COERCION(vars,unrolltype,rolltype))
+
+    fun make_unfold_coercion (vars,rolltype,unrolltype) : exp * con =
+        (UNFOLD(vars,rolltype,unrolltype),CON_COERCION(vars,rolltype,unrolltype))
+
     fun make_ifthenelse(e1,e2,e3,c) : exp = 
 	CASE{sumtype=con_sumbool,
-	     arg=UNROLL(con_bool,con_sumbool,e1),
+	     arg=COERCE(UNFOLD([],con_bool,con_sumbool),[],e1),
 	     bound=fresh_named_var "unused",
 	     arms=[SOME e3,SOME e2],default=NONE,tipe=c}
     fun make_seq eclist =
@@ -367,6 +380,15 @@ structure IlUtil :> ILUTIL =
 			     end
 	   | NEW_STAMP con => NEW_STAMP(f_con state con)
 	   | EXN_INJECT (s,e1,e2) => EXN_INJECT(s,self e1, self e2)
+	   | COERCE (coercion,cons,e) => COERCE(self coercion, map (f_con state) cons, self e)
+	   | FOLD (tyvars,con1,con2) => 
+			     let val state' = add_convars(state,tyvars)
+			     in FOLD(tyvars, f_con state' con1, f_con state' con2)
+			     end
+	   | UNFOLD (tyvars,con1,con2) => 
+			     let val state' = add_convars(state,tyvars)
+			     in UNFOLD(tyvars, f_con state' con1, f_con state' con2)
+			     end
 	   | ROLL (c,e) => ROLL(f_con state c, self e)
 	   | UNROLL (c1,c2,e) => UNROLL(f_con state c1, f_con state c2, self e)
 	   | INJ {sumtype,field,inject} => INJ{sumtype = f_con state sumtype,
@@ -434,6 +456,10 @@ structure IlUtil :> ILUTIL =
 		     | CON_SUM {names,noncarriers,special,carrier} =>
 			   CON_SUM{names=names,special=special,noncarriers=noncarriers,
 				   carrier = self carrier}
+		     | CON_COERCION (tyvars,con1,con2) => 
+			   let val state' = add_convars(state,tyvars)
+			   in CON_COERCION(tyvars, f_con state' con1, f_con state' con2)
+			   end
 		     | CON_TUPLE_INJECT clist => CON_TUPLE_INJECT (map self clist)
 		     | CON_TUPLE_PROJECT (i,c) =>  CON_TUPLE_PROJECT (i, self c)
 		     | CON_MODULE_PROJECT (m,l) => CON_MODULE_PROJECT(f_mod state m, l)))

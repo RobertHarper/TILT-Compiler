@@ -51,6 +51,8 @@ signature ILUTIL =
     (* derived forms *)
     val make_lambda : var * con * con * exp -> (exp * con)        (* PARTIAL *)
     val make_total_lambda : var * con * con * exp -> (exp * con)  (* TOTAL *)
+    val make_fold_coercion : var list * con * con -> (exp * con)
+    val make_unfold_coercion : var list * con * con -> (exp * con)
     val make_let  : (bnd list * exp) -> exp
     val make_catch : exp * con * exp * con * exp -> exp
     val make_ifthenelse : exp * exp * exp * con -> exp
@@ -87,12 +89,16 @@ signature ILUTIL =
        Some internal labels are non-exported 
        Eq labels are internal, non-exported, and identifiable as eq labels 
     *)
+
+   (* XXX to_questionable should be removed. XXX *)
+
     val to_questionable : label -> label
     val to_open : label -> label
     val to_nonexport : label -> label
     val to_eq: label -> label       
     val to_dt: label -> label       
     val to_cluster: label -> label       
+    val to_coercion : label -> label
 
     val is_questionable : label -> bool
     val is_open : label -> bool
@@ -100,7 +106,7 @@ signature ILUTIL =
     val is_eq : label -> bool
     val is_dt : label -> bool
     val is_cluster : label -> bool
-
+    val is_coercion : label -> bool
 
     val prependToInternalLabel : string * label -> label   (* Keeps characteristics *)
     val label2name : label -> string                       (* Lose all characteristics *)
