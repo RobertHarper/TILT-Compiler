@@ -1,22 +1,39 @@
 (*
-	The master builds a dependency graph with a node for each
-	unit, interface, and command in the group and an arrow a -> b
-	when a depends on b; that is, whenever b must be up to date
-	before a can be compiled.  The master uses this graph to bring
-	the units and interfaces needed by group commands up to date.
+	The master maintains three DAGs, called the compilation graph,
+	the unit graph, and the interface graph.  The master could get
+	by with a single graph, of course, but it is hoped that a
+	clear separation makes the code easier to follow.
 
-	The master sets up by deleting all channels and then takes
-	master steps which are:
+	The compilation graph has an initial node, a node for every
+	entry in the group, an arrow initial -> b for every executable
+	and library b in the group, and an arrow a -> b when neither a
+	nor b is initial and b must be up to date before a can be
+	compiled.  The compilation graph determines what units,
+	interfaces, libraries, and executables need to be brought up
+	to date and in what order.  Compilation stops when every node
+	reachable from the initial node is up to date.  In contrast to
+	the unit and interface graphs, the compilation graph may have
+	several nodes for each compilation unit because of
+	Group.CHECKU.
 
-	While there are available jobs
-		Look for available slave channels and process their
-		acknowledgements by marking compilation jobs as done.
-		Ready messages require no action.
+	The unit graph has a node for every unit and an arrow a -> b
+	when the implementation of a depends on b.  This dependency
+	information comes from the group, not from examining compiler
+	output so that side effects are not lost.  The unit graph is
+	used to link executables and to pack implemented units into
+	libraries.
 
-		Issue available jobs to available slaves.
+	The interface graph has a node for every unit and an arrow a
+	-> b when the interface of a depends on b.  This dependency
+	information comes from examining compiler output, not the
+	group so it is not cluttered with implementation dependencies.
+	The interface graph is used to build elaboration contexts and
+	to pack imported units into libraries.
 
-	XXX: Actual dependencies should be used to build elaboration
-	contexts; we probably want to build a dependency graph for this.
+	Other state maintained by the master includes an equivalence
+	relation on compiled interface CRCs, group file order
+	information, and a list of slaves that have announced
+	themselves.
 *)
 functor Master (val basis :
 		    {group : unit -> string,
@@ -29,7 +46,6 @@ struct
     structure VarMap = Name.VarMap
     structure StringSet = Util.StringSet
     structure StringMap = Util.StringMap
-    structure StringOrderedSet = Util.StringOrderedSet
     structure VarSet = Name.VarSet
 
     val MasterDiag = Stats.ff("MasterDiag")
@@ -58,7 +74,7 @@ struct
     val reject = fn s => raise (Compiler.Reject s)
 
     (*
-	WAITING: prerequisite interfaces not up to date
+	WAITING: prerequisites not up to date
 	READY: waiting for planning
 	PENDING: out of date, waiting for compilation
 	WORKING: out of date, slave working
@@ -74,7 +90,6 @@ struct
 	total time:  time to go from READY to DONE
 	slave time:  time spent in WORKING and PROCEEDING
 	master time: time spent in WORKING'
-
      *)
     type time = Time.time
     type plan = Update.plan
@@ -114,32 +129,37 @@ struct
 
     datatype unit_node =
 	SRCU of Paths.compunit * var option * Update.imports
-      | COMPU of Paths.compunit
+      | COMPU of Paths.compunit * var
       | PRIMU of Paths.compunit * Update.imports
-      | IMPORTU of Paths.compunit
+      | IMPORTU of Paths.compunit * var
       | CHECKU of var * Paths.compunit * Paths.iface
 
     fun unit_paths (unit : unit_node) : Paths.compunit =
 	(case unit
 	   of SRCU (p,_,_) => p
-	    | COMPU p => p
+	    | COMPU (p,_) => p
 	    | PRIMU (p,_) => p
-	    | IMPORTU p => p
+	    | IMPORTU (p,_) => p
 	    | CHECKU (_,p,_) => p)
 
     fun unit_id (n : unit_node) : string =
 	(case n
 	   of SRCU (p,_,_) => "source unit " ^ Paths.unitName p
-	    | COMPU p => "compiled unit " ^ Paths.unitName p
+	    | COMPU (p,_) => "compiled unit " ^ Paths.unitName p
 	    | PRIMU (p,_) => "primitive unit " ^ Paths.unitName p
-	    | IMPORTU p => "imported unit " ^ Paths.unitName p
+	    | IMPORTU (p,_) => "imported unit " ^ Paths.unitName p
 	    | CHECKU (_,p,_) => "checked unit " ^ Paths.unitName p)
 
     datatype node =
 	UNIT of unit_node
       | IFACE of iface_node
       | LINK of Paths.exe
-      | PACK of Paths.lib * VarSet.set * (E.id * E.exp) list
+      | PACK of
+	{lib:Paths.lib,
+	 imports:VarSet.set,
+	 units:VarSet.set,
+	 ifaces:VarSet.set,
+	 values: (E.id * E.exp) list}
       | INITIAL
 
     fun node_id (n : node) : string =
@@ -147,33 +167,10 @@ struct
 	   of UNIT n' => unit_id n'
 	    | IFACE n' => iface_id n'
 	    | LINK p => "executable " ^ Paths.exeFile p
-	    | PACK (p,_,_) => "library " ^ Paths.libDir p
+	    | PACK {lib,...} => "library " ^ Paths.libDir lib
 	    | INITIAL => "end of compilation")
 
     local
-	structure VarNode :> NODE where type node = var =
-	struct
-	    structure HashKey =
-	    struct
-		type hash_key = Name.var
-		val hashVal = Word.fromInt
-		val sameKey = (op= : var * var -> bool)
-	    end
-	    structure HashTable = HashTableFn (HashKey)
-	    type node = var
-	    open HashTable
-	    exception HashUnknownNode
-	    fun make i = HashTable.mkTable(i,HashUnknownNode)
-	end
-	structure VarOrderedSet = OrderedSet(VarSet)
-
-	structure Dag :> DAG where type node = var =
-	    Dag (structure Node = VarNode
-		 val dummy = Name.fresh_var()
-		 val toString = Name.var2string
-		 structure Map = VarMap
-		 structure OrderedSet = VarOrderedSet)
-
 	structure Equiv :> EQUIV where type elem = Crc.crc =
 	struct
 	    structure StringEquiv = Equiv(StringMap)
@@ -191,25 +188,58 @@ struct
 		end
 	end
 
+	structure VarKey =
+	struct
+	    type hash_key = Name.var
+	    val hashVal = Word.fromInt
+	    val sameKey = (op= : var * var -> bool)
+	end
+	structure VarNode = Node(structure Key = VarKey
+				 val toString = Name.var2string)
+	structure Graph = Graph(VarNode)
+	structure Agraph = LabelGraph(SpeedUpGraph(Graph))
+
 	type attr = {status : status ref,
 		     node : node}
 
-	type graph = attr Dag.graph
+	type cgraph = attr Agraph.graph
+	type ugraph = Graph.graph
+	type igraph = Graph.graph
 
+	datatype order =
+	    REV of var list	(* backwards *)
+	  | BOTH of var list * var list	(* backwards, forwards *)
+
+	val dummy : var = Name.fresh_var()
 	val equiv : Equiv.equiv ref = ref (Equiv.empty)
-	val graph : graph ref = ref (Dag.empty())
-	val order : var list ref = ref nil	(* backwards *)
+	val cgraph : cgraph ref = ref (Agraph.empty dummy)
+	val ugraph : ugraph ref = ref (Graph.empty dummy)
+	val igraph : igraph ref = ref (Graph.empty dummy)
+	val order : order ref = ref (REV nil)
 	val pos_ref : (var -> Group.pos) option ref = ref NONE
 
-	fun wrap (f : graph * 'a -> 'b) (arg : 'a) : 'b =
-	    (f (!graph,arg) handle Dag.UnknownNode node =>
-		error ("node " ^ Name.var2string node ^ " missing"))
+	(* These ! at each invocation. *)
+	fun cwrap (f : cgraph -> 'a -> 'b) : 'a -> 'b = fn x => f (!cgraph) x
+	fun uwrap (f : ugraph -> 'a -> 'b) : 'a -> 'b = fn x => f (!ugraph) x
+	fun iwrap (f : igraph -> 'a -> 'b) : 'a -> 'b = fn x => f (!igraph) x
 
-	val lookup_node : var -> attr = wrap Dag.nodeAttribute
+	val lookup_node : var -> attr = cwrap Agraph.attribute
+
+	fun unit_var (v : var) : var option =
+	    let val {node,...} = lookup_node v
+	    in  (case node
+		   of UNIT (CHECKU (U,_,_)) => unit_var U
+		    | UNIT _ => SOME v
+		    | _ => NONE)
+	    end
+
     in
 	fun reset_graph() : unit =
 	    (equiv := Equiv.empty;
-	     graph := Dag.empty();
+	     cgraph := Agraph.empty dummy;
+	     ugraph := Graph.empty dummy;
+	     igraph := Graph.empty dummy;
+	     order := REV nil;
 	     pos_ref := NONE)
 
 	fun add_eq (crc : Crc.crc, crc' : Crc.crc) : unit =
@@ -218,36 +248,107 @@ struct
 	fun eq (crcs : Crc.crc * Crc.crc) : bool =
 	    Equiv.equiv (!equiv) crcs
 
-	fun set_pos (f : var -> Group.pos) : unit = pos_ref := SOME f
-	fun get_pos (node : var) : Group.pos = valOf (!pos_ref) node
-
-	fun add_node(v : var, n : node) : unit =
-	    let val attr = {status=ref WAITING, node=n}
-		val _ = order := (v :: (!order))
-	    in  Dag.insert_node(!graph,v,attr)
+	fun sort (nodes : var list) : var list =
+	    let val set = VarSet.addList(VarSet.empty, nodes)
+		val order =
+		    (case !order
+		       of REV vars => rev vars
+			| BOTH (_,vars) => vars)
+	    in  List.filter (fn v => VarSet.member (set,v)) order
 	    end
 
-	fun add_edge(src : var) (dest : var) : unit =
-	    Dag.insert_edge(!graph,src,dest)
+	fun add_node (v : var, node : node) : unit =
+	    let val revOrder =
+		    (case !order
+		       of REV vars => vars
+			| BOTH (vars,_) => vars)
+		val _ = order := REV(v :: revOrder)
+		val _ =
+		    (case node
+		       of UNIT (CHECKU _) => ()
+			| UNIT _ =>
+			    (Graph.insert_node (!ugraph) v;
+			     Graph.insert_node (!igraph) v)
+			| _ => ())
+		val attr = {status=ref WAITING, node=node}
+		val _ = Agraph.insert_node (!cgraph) (v,attr)
+	    in  ()
+	    end
+
+	fun add_edge (src : var) (dest : var) : unit =
+	    (Agraph.insert_edge (!cgraph) (src,dest);
+	     (case (unit_var src, unit_var dest)
+		of (SOME src', SOME dest') =>
+		    Graph.insert_edge (!ugraph) (src',dest')
+		 | _ => ()))
+
+	fun add_interface_edge (src : var) (dest : var) : unit =
+	    Graph.insert_edge (!igraph) (src,dest)
+
+	fun has_interface_edges (src : var) : bool =
+	    not (null (Graph.edges (!igraph) src))
 
 	val get_node : var -> node = #node o lookup_node
 
 	fun get_status (node : var) : status = !(#status(lookup_node node))
+
 	fun set_status (node : var, s : status) : unit =
 	    (#status(lookup_node node)) := s
 
-	val get_dependent : var -> var list = wrap Dag.parents
-	val get_import_direct : var -> var list = wrap Dag.children
-	val get_import_transitive : var -> var list =
-	    rev o (wrap Dag.descendants)
+	val get_dependents : var -> var list = cwrap Agraph.edgesRev
+
+	val get_prerequisites : var -> var list = cwrap Agraph.edges
+
+	val units_only : var list -> var list =
+	    List.mapPartial unit_var
+
+	fun get_units () : var list =
+	    Graph.nodes (!ugraph)
+
+	val get_unit_edges : var -> var list =
+	    uwrap Graph.edges
+
+	val get_interface_edges : var -> var list =
+	    iwrap Graph.edges
+
+	val get_reachable : var list -> var list =
+	    cwrap Agraph.reachable
+
+	val get_unit_reachable : var list -> var list =
+	    uwrap Graph.reachable
+
+	val get_interface_reachable : var list -> var list =
+	    iwrap Graph.reachable
+
 	fun graphSize () : int * int =
-	    (Dag.numNodes (!graph), Dag.numEdges (!graph))
-	fun sort (nodes : var list) : var list =
-	    let val set = VarSet.addList(VarSet.empty, nodes)
-		val order = rev (!order)
-	    in  List.filter (fn v => VarSet.member (set,v)) order
-	    end
+	    (Agraph.nodecount (!cgraph), Agraph.edgecount (!cgraph))
+
+	fun set_pos (f : var -> Group.pos) : unit = pos_ref := SOME f
+
+	fun get_pos (node : var) : Group.pos = valOf (!pos_ref) node
+
     end
+
+    fun has_ascribed_iface (iface : var) (v : var) : bool =
+	(case get_node v
+	   of UNIT unit_node =>
+		(case unit_node
+		   of SRCU (_,SOME i,_) => i = iface
+		    | COMPU (_,i) => i = iface
+		    | IMPORTU (_,i) => i = iface
+		    | _ => false)
+	    | _ => false)
+
+    fun ascribed_iface (v : var) : var =
+	(case get_node v
+	   of UNIT unit_node =>
+		(case unit_node
+		   of SRCU (_,SOME i,_) => i
+		    | COMPU (_,i) => i
+		    | IMPORTU (_,i) => i
+		    | CHECKU (u,_,_) => ascribed_iface u
+		    | _ => error "ascribed_iface saw unit with inferred iface")
+	    | _ => error "ascribed_iface saw non-unit")
 
     fun get_iface_paths' (iface : var) : Paths.iface option =
 	(case get_node iface
@@ -258,11 +359,6 @@ struct
 	(case get_node iface
 	   of IFACE iface_node => iface_paths iface_node
 	    | _ => error "get_iface_paths given non-interface")
-
-    fun get_unit_paths' (unit : var) : Paths.compunit option =
-	(case get_node unit
-	   of UNIT unit_node => SOME (unit_paths unit_node)
-	    | _ => NONE)
 
     fun get_unit_paths (unit : var) : Paths.compunit =
 	(case get_node unit
@@ -307,12 +403,6 @@ struct
     val make_imports : var list -> Update.imports =
 	map (Paths.unitName o get_unit_paths)
 
-    fun make_transitive_imports (imports : VarSet.set) : var list =
-	let fun add (v,s) = VarSet.addList (s,get_import_transitive v)
-	    val set = VarSet.foldl add imports imports
-	in  VarSet.listItems set
-	end
-
     fun graphInfo (entry : Group.entry) : node * var list =
 	(case entry
 	   of Group.IFACE iface =>
@@ -342,7 +432,8 @@ struct
 			let val p' = get_iface_paths iface
 			    val p = Paths.compu {id=id,file=obj,
 						 uefile=ue,iface=p'}
-			in  (UNIT (COMPU p), iface :: (VarSet.listItems parms))
+			in  (UNIT (COMPU (p,iface)),
+			     iface :: (VarSet.listItems parms))
 			end
 		    | Group.PRIMU (id,group,imports) =>
 			let val p = Paths.primu {id=id, group=group}
@@ -352,7 +443,7 @@ struct
 		    | Group.IMPORTU (id,iface) =>
 			let val p' = get_iface_paths iface
 			    val p = Paths.importu {id=id, iface=p'}
-			in  (UNIT (IMPORTU p), [iface])
+			in  (UNIT (IMPORTU (p,iface)), [iface])
 			end
 		    | Group.CHECKU {U,I} =>
 			let val pU = get_unit_paths U
@@ -363,10 +454,17 @@ struct
 		(case cmd
 		   of Group.LINK (group,exe,targets) =>
 			(LINK (Paths.exe {group=group, exe=exe}),
-			 make_transitive_imports targets)
-		    | Group.PACK {lib, imports, exports, values} =>
-			(PACK (Paths.lib {dir=lib}, imports, values),
-			 make_transitive_imports exports)))
+			 get_reachable (VarSet.listItems targets))
+		    | Group.PACK {lib, imports, units, ifaces, values} =>
+			let val lib = Paths.lib {dir=lib}
+			    val pack = PACK {lib=lib, imports=imports,
+					     units=units, ifaces=ifaces,
+					     values=values}
+			    val exports = VarSet.union(units,ifaces)
+			    val exports = VarSet.listItems exports
+			    val edges = get_reachable exports
+			in  (pack,edges)
+			end))
 
     fun read_graph (groupfile : string) : var =
 	let val group = read_group groupfile
@@ -678,14 +776,58 @@ struct
 	    | status => badStatus (node, status, "making working'"))
 
     (*
+	We only need to add edges for the compiled interface's
+	parameters.  We go beyond this because (a) reading
+	parameterized interfaces is a lot slower than reading unit
+	environments and (b) the master does not use FileCache.tick so
+	whatever gets read into the cache stays there.
+    *)
+    fun interface_ready (node : var) : unit =
+	let fun edges (iface : Paths.iface) : var list =
+		let val possible : var list = get_units()
+		    val ifaceue = Paths.ifaceUeFile iface
+		    val ue = FileCache.read_ue ifaceue
+		    fun inUe (v:var) : bool =
+			let val U = get_unit_paths v
+			    val name = Paths.unitName U
+			in  isSome (Ue.find (ue,name))
+			end
+		    val arrows : var list = List.filter inUe possible
+		in  arrows
+		end
+	    fun add_edges (iface : Paths.iface, units : var list) : unit =
+		let val edges : unit -> var list =
+			Util.memoize (fn () => edges iface)
+		    fun add (u : var) : unit =
+			if has_interface_edges u then ()
+			else app (add_interface_edge u) (edges())
+		in  app add units
+		end
+	in  (case get_node node
+	       of IFACE iface_node =>
+		    let val iface = iface_paths iface_node
+			val dependent = get_dependents node
+			val units =
+			    List.filter (has_ascribed_iface node) dependent
+		    in	add_edges (iface,units)
+		    end
+		| UNIT (CHECKU _) => ()
+		| UNIT unit_node =>
+		    let val iface = Paths.unitIface (unit_paths unit_node)
+		    in  add_edges (iface,[node])
+		    end
+		| _ => ())
+	end
+
+    (*
 	Find every ready node a such that a -> b.  An interface or
 	unit node a is ready if for every node c with a -> c, c has an
 	up to date interface.  A LINK, PACK, or INITIAL node a is
 	ready if for every node c with a -> c, c is done.
     *)
     fun enable (b : var) : unit =
-	let
-	    fun hasInterface (c : var) : bool =
+	let val _ = interface_ready b
+	    fun hasInterface' (c : var) : bool =
 	        (case get_status c
 		   of PENDING (_, p) => Update.isReady p
 		    | WORKING (_, p) => Update.isReady p
@@ -694,26 +836,31 @@ struct
 		    | WORKING' _ => true
 		    | DONE _ => true
 		    | _ => false)
+	    fun interfaceVar (c : var) : var =
+		(case get_node c
+		   of UNIT (SRCU (_,SOME I,_)) => I
+		    | _ => c)
+	    val hasInterface : var -> bool = hasInterface' o interfaceVar
 	    fun isDone (c : var) : bool =
 		(case get_status c
 		   of DONE _ => true
 		    | _ => false)
 	    fun isReady (a : var) : bool =
-		let val imports = get_import_direct a
+		let val prereqs = get_prerequisites a
 		    val predicate =
 			(case get_node a
 			   of LINK _ => isDone
 			    | PACK _ => isDone
 			    | INITIAL => isDone
 			    | _ => hasInterface)
-		in  Listops.andfold predicate imports
+		in  Listops.andfold predicate prereqs
 		end
 	    fun enableReady (a : var) : bool =
-		(isReady a andalso
-		 (case get_status a
-		    of WAITING => (markReady a; true)
-		     | _ => false)) (* eg, second enable call *)
-	    val enabled = List.filter enableReady (get_dependent b)
+		(case get_status a
+		   of WAITING =>
+			isReady a andalso (markReady a; true)
+		    | _ => false)
+	    val enabled = List.filter enableReady (get_dependents b)
 	in  if (!ShowEnable andalso (not (null enabled)))
 	    then
 		(print (get_id b ^ " enabled: ");
@@ -770,20 +917,17 @@ struct
 	end
 
     fun get_context' (exclude : VarSet.set, v : var) : Update.context =
-	let val reachable = get_import_transitive v
+	let val prereqs = units_only(get_prerequisites v)
+	    val reachable = get_interface_reachable prereqs
+	    val reachable = sort reachable
 	    fun mapper (v : var) : (string * Paths.iface) option =
 		if VarSet.member (exclude,v) then NONE
 		else
-		    (case get_node v
-		       of UNIT (CHECKU _) => NONE
-			| UNIT unit_node =>
-			    let val U = unit_paths unit_node
-				val name = Paths.unitName U
-				val iface = Paths.unitIface U
-			    in	SOME (name,iface)
-			    end
-			| IFACE _ => NONE
-			| node => error ("get_context saw " ^ (node_id node)))
+		    let val U = get_unit_paths v
+			val name = Paths.unitName U
+			val iface = Paths.unitIface U
+		    in	SOME (name,iface)
+		    end
 	in  List.mapPartial mapper reachable
 	end
 
@@ -793,17 +937,16 @@ struct
 	N.B.  COMPU and COMPI nodes have arrows to every unit named in
 	their unit environment files.
     *)
-    fun get_ue (node : var) : Ue.ue =
-	let val nodes = get_import_direct node
-	    fun mapone (U : Paths.compunit) : string * Crc.crc =
-		let val name = Paths.unitName U
+    fun get_ue (v : var) : Ue.ue =
+	let val prereqs = units_only(get_prerequisites v)
+	    fun folder (u:var, ue:Ue.ue) : Ue.ue =
+		let val U = get_unit_paths u
+		    val name = Paths.unitName U
 		    val iface = Paths.ifaceFile (Paths.unitIface U)
 		    val crc = FileCache.crc iface
-		in  (name, crc)
+		in  Ue.insert(ue,name,crc)
 		end
-	    val mapper = Option.compose (mapone, get_unit_paths')
-	    val ue = List.mapPartial mapper nodes
-	in  (foldl (fn ((u,crc),acc) => Ue.insert (acc,u,crc)) Ue.empty ue)
+	in  foldl folder Ue.empty prereqs
 	end
 
     (*
@@ -888,52 +1031,58 @@ struct
 	in  make_iface
 	end
 
-    type packlist = Update.pack list
+    type packparms =
+	{importOnly : var -> bool,
+	 named_iface : var -> Paths.iface,
+	 inferred_iface : Paths.compunit -> Paths.iface}
 
-    fun pack_node (importOnly : var -> bool, named_iface : var -> Paths.iface,
-		   inferred_iface : Paths.compunit -> Paths.iface)
-		  (v : var, packlist : packlist) : packlist =
-	(case get_node v
-	   of IFACE _ =>
-		let val iface = named_iface v
-		    val pack = Update.PACKI (iface,nil)
-		in  pack :: packlist
+    type packinfo = Update.pack list VarMap.map
+
+    fun packed (info : packinfo, v : var) : bool =
+	isSome (VarMap.find (info,v))
+
+    fun pack_unit (parms : packparms) (v : var, info : packinfo) : packinfo =
+	if packed(info,v) then info
+	else
+	    let val U = get_unit_paths v
+		val I = Paths.unitIface U
+		val import =
+		    Paths.isImportUnit U orelse
+		    #importOnly parms v
+		val get_edges =
+		    if import then get_interface_edges else get_unit_edges
+		val info = pack_units parms (get_edges v,info)
+		val inferred = Paths.isUnitIface I
+		val info = if inferred then info
+			   else pack_iface parms (ascribed_iface v, info)
+		val I' = if inferred then #inferred_iface parms U else I
+		val name = Paths.unitName U
+		val U' =
+		    if import
+		    then Paths.importu {id=name, iface=I'}
+		    else Paths.compu {id=name, file=Paths.objFile U,
+				      uefile=Paths.ueFile U, iface=I'}
+		val packlist = [Update.PACKU (U',nil)]
+		val packlist =
+		    if inferred
+		    then (Update.PACKI(I',nil)) :: packlist
+		    else packlist
+		in  VarMap.insert (info,v,packlist)
 		end
-	    | UNIT (CHECKU _) => packlist
-	    | UNIT unit_node =>
-		let val (unit, inferred, import) =
-			(case unit_node
-			   of SRCU (unit,ifaceopt,_) =>
-				(unit,not(isSome ifaceopt),importOnly v)
-			    | COMPU unit =>
-				(unit,false,importOnly v)
-			    | PRIMU (unit,_) =>
-				(unit,true,importOnly v)
-			    | IMPORTU unit =>
-				(unit,false,true)
-			    | CHECKU _ => error "impossible CHECKU")
-		    val (iface,packlist) =
-			if inferred then
-			    let val iface = inferred_iface unit
-				val pack = Update.PACKI (iface,nil)
-				val packlist = pack :: packlist
-			    in  (iface,packlist)
-			    end
-			else (Paths.unitIface unit, packlist)
-		    val name = Paths.unitName unit
-		    val unit' =
-			if import then
-			    Paths.importu {id=name, iface=iface}
-			else
-			    let val file = Paths.objFile unit
-				val uefile = Paths.ueFile unit
-			    in  Paths.compu {id=name, file=file, uefile=uefile,
-					     iface=iface}
-			    end
-		    val pack = Update.PACKU (unit',nil)
-		in  pack :: packlist
-		end
-	    | _ => error "pack_node saw an unexepected node")
+
+    and pack_units (parms : packparms)
+		   (vs : var list, info : packinfo) : packinfo =
+	foldl (pack_unit parms) info vs
+
+    and pack_iface (parms : packparms) (v : var, info : packinfo) : packinfo =
+	if packed(info,v) then info
+	else
+	    let val prereqs = units_only(get_prerequisites v)
+		val info = pack_units parms (prereqs,info)
+		val iface = #named_iface parms v
+		val pack = Update.PACKI (iface,nil)
+	    in	VarMap.insert(info,v,[pack])
+	    end
 
     fun plan (node : var) : Update.plan =
 	(case get_node node
@@ -946,27 +1095,22 @@ struct
 		let val context = get_context node
 		in  Update.plan_compile (eq,context,imports,unit)
 		end
-	    | UNIT (COMPU unit) => Update.plan_compu (eq,get_ue node,unit)
+	    | UNIT (COMPU (unit,_)) => Update.plan_compu (eq,get_ue node,unit)
 	    | UNIT (PRIMU (unit,imports)) =>
 		let val context = get_context node
 		in  Update.plan_compile (eq,context,imports,unit)
 		end
-	    | UNIT (IMPORTU unit) => Update.empty_plan
+	    | UNIT (IMPORTU (unit,_)) => Update.empty_plan
 	    | UNIT (CHECKU (U,unit,iface)) =>
 		let val exclude = VarSet.singleton U
 		    val context = get_context' (exclude, node)
 		in  Update.plan_checku (eq,context,unit,iface)
 		end
 	    | LINK exe =>
-		let val reachable = get_import_direct node
+		let val prereqs = units_only(get_prerequisites node)
+		    val reachable = get_unit_reachable prereqs
 		    val reachable = sort reachable (* fix order of effects *)
-		    fun mapper (v : var) : Paths.compunit option =
-			(case get_node v
-			   of UNIT (CHECKU _) => NONE
-			    | UNIT unit_node => SOME (unit_paths unit_node)
-			    | IFACE _ => NONE
-			    | node => error ("link saw " ^ node_id node))
-		    val units = List.mapPartial mapper reachable
+		    val units = map get_unit_paths reachable
 		    val (imports,units) = List.partition Paths.isImportUnit units
 		in  if null imports then Update.plan_link (eq,units,exe)
 		    else
@@ -977,20 +1121,28 @@ struct
 			 print "\n";
 			 Update.empty_plan)
 		end
-	    | PACK (lib,importOnly,values) =>
-		let val reachable = get_import_direct node
-		    val reachable = sort reachable (* fix order of effects *)
-		    val importOnly =
+	    | PACK {lib,imports,units,ifaces,values} =>
+		let val importOnly =
 			if !Update.UptoElaborate orelse !Update.UptoAsm then
 			    fn v => true
 			else
-			    fn v => VarSet.member (importOnly, v)
-		    val renaming = iface_renaming reachable
+			    fn v => VarSet.member (imports, v)
+		    val renaming = iface_renaming (get_prerequisites node)
 		    val named_iface = named_iface renaming
 		    val inferred_iface = inferred_iface renaming
-		    val parms = (importOnly, named_iface, inferred_iface)
-		    val packlist = foldl (pack_node parms) nil reachable
-		    val packlist = rev packlist
+		    val parms = {importOnly=importOnly, named_iface=named_iface,
+				 inferred_iface=inferred_iface}
+		    val units = units_only (VarSet.listItems units)
+		    val ifaces = VarSet.listItems ifaces
+		    val info : packinfo = VarMap.empty
+		    val info = foldl (pack_iface parms) info ifaces
+		    val info = pack_units parms (units,info)
+		    val packlist : var list =
+			map #1 (VarMap.listItemsi info)
+		    val packlist = sort packlist (* fix order of effects *)
+		    val packlist : Update.pack list list =
+			map (fn v => valOf (VarMap.find (info,v))) packlist
+		    val packlist = List.concat packlist
 		in  Update.plan_pack (eq,packlist,lib)
 		end
 	    | INITIAL => error "plan saw initial")
@@ -1008,7 +1160,12 @@ struct
 	in  ()
 	end
 
-    (* waiting, pending, working, proceeding, pending', working' - ready and done not included *)
+    (*
+	(waiting, pending, working, proceeding, pending', working')
+	Units that are ready and done are not included.  Waiting,
+	pending, and pending' are kept sorted so that analysis and
+	compilation happens in an order determined by the group.
+    *)
     type state = var list * var list * var list * var list * var list * var list
     datatype result = PROCESSING of time * state  (* All slaves utilized *)
                     | IDLE of time * state * int  (* Num slaves idle and there are waiting jobs *)
@@ -1076,7 +1233,7 @@ struct
 	    val proceeding = proceeding @ newProceeding
 	    val working = working @ newWorking
 	    val pending = pending @ newPending
-	in  (waiting, pending, working, proceeding, pending', working')
+	in  (waiting, sort pending, working, proceeding, sort pending', working')
 	end
     fun waitForSlaves () : int * int =
 	let
@@ -1285,16 +1442,17 @@ struct
 		    else ()
 	    val _ = resetSlaves()
 	    val initial = read_graph groupfile
-	    val nodes = get_import_transitive initial
+	    val targets = get_reachable (get_prerequisites initial)
+	    val targets = sort targets	(* make master more deterministic *)
 	    val _ = startTime ("Started compiling files")
-	    val initialState : state = (nodes, [], [], [], [], [])
+	    val initialState : state = (targets, [], [], [], [], [])
 	in  {setup = fn _ => initialState,
 	     step = step,
 	     complete = (fn _ =>
 			 let val _ = showTime (true,"Finished compiling files")
 			     val _ = closeSlaves()
 			     val _ = if !ShowFinalReport
-					 then finalReport nodes
+					 then finalReport targets
 				     else ()
 			     val _ = reshowTimes()
 			 in  ()
@@ -1327,7 +1485,7 @@ struct
 					 NONE => ()
 				       | SOME (IDLE _) => ()
 				       | _ => msg (Int.toString n ^
-						   " idle slaves."))
+						   " idle slaves.\n"))
 			in  Platform.sleep 1.0;
 			    loop (lastCpTime,SOME cur,state)
 			end)
@@ -1358,8 +1516,10 @@ struct
 		   (groupfile : string) : unit =
 	let val (ifacePaths,unitPaths,exePaths) = targets
 	    val initial = read_graph groupfile
-	    val _ = msg ("Purging " ^ groupfile ^ " (" ^ what ^ ").\n")
-	    val nodes = get_import_transitive initial
+	    val _ = if !Update.UpdateDiag then
+			print ("Purging " ^ groupfile ^ " (" ^ what ^ ").\n")
+		    else ()
+	    val nodes = get_reachable(get_prerequisites initial)
 	    fun remove (paths : ('a -> string) list) (x : 'a) : unit =
 		app (fn f => FileCache.remove (f x)) paths
 	    fun remove_node (v : var) : unit =
