@@ -246,3 +246,21 @@ m0101	reals
 m0102	reals
 m0103	modules
 m0104	special constants
+m0105	semicolon parsing
+m0106	sharing
+m0107	binary io
+m0108	date and time
+m0109	file system
+m110	strings
+m0111	signatures
+m0112	strings
+m0113	strings
+m0114	string conversion
+m0115	substring overflow
+m0116	take
+m0117	matrices
+m0118	basic dynamic tests of primitives
+m0119	text io
+m0120	time
+m0121	time
+m0122	time
