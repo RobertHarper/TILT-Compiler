@@ -1,0 +1,33 @@
+import group "../Basis/Library/mapfile"
+include group "../Util/mapfile-util"
+include group "../Parser/mapfile-parse"
+include group "../Rtl/mapfile-rtl"
+include group "../Backend/mapfile"
+
+source unit SPARC = "sparc.sig.sml" {
+	Word32 Rtl MACHINE Core
+}
+source unit Sparc = "sparc.sml" {
+	TilWord32 Int Name Word32 Core SPARC String Rtl Util Char Listops
+	Stats List
+}
+source unit SparcUtils = "sparcutils.sml" {
+	String Core MACHINEUTILS Sparc Int Util
+}
+source unit SparcCallConv = "sparccallconv.sml" {
+	Listops Core Sparc SparcUtils CALLCONV Util
+}
+source unit SparcTrackStorage = "sparctrackstorage.sml" {
+	Core Int ORD_KEY Sparc PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET
+	TRACKSTORAGE SplaySetFn Util Stats
+}
+source unit ToSparc = "tosparc.sml" {
+	TilWord32 Core Name Rtl Int Array Sparc MACHINEUTILS TRACETABLE
+	BBLOCK TOASM Util Pprtl
+}
+source unit Linksparc = "linksparc.sml" {
+	Util Rtl Stats LINKASM Linkrtl Sparc Labelgraph SparcUtils
+	IfGraph SparcCallConv Bblock Tracetable ToSparc PrintUtils
+	VarGraph SparcTrackStorage Color Chaitin RtlToAsm Recursion
+	Tortl
+}
