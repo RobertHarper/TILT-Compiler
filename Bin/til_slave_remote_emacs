@@ -3,10 +3,8 @@
 # usage: til_slave n count host commdir
 #
 # Create count slaves on host.  n is used to set window geometry.
-# We create a remote emacs process displaying the slaves locally.
-# Advantage: You have a full transcript of the slave output and you
-# can interrupt the slave to get to the SML/NJ top-level loop.
-# Drawback: emacs (heh) and all the X11 traffic.
+# We create hte slaves in a remote emacs whose X interface
+# displays locally.  Advantage: X interface.
 #
 # As a hack, the host "localhost" is treated specially.
 #
