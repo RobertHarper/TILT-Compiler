@@ -725,6 +725,12 @@ functor EmitRtlMLRISC(
        *)
       fun translate(Rtl.LOCAL_DATA label) = lookup(Name.var2int label)
 	| translate(Rtl.LOCAL_CODE label) = lookup(Name.var2int label)
+	    (* ??? let
+	      val label' = lookup(Name.var2int label)
+	    in
+	      print(Name.var2string label^" -> "^Label.nameOf label'^"\n");
+	      label'
+	    end *)
 
       (*
        * Return the string of a given Rtl local label.
@@ -865,7 +871,7 @@ functor EmitRtlMLRISC(
      * <- the MLRISC conditional expression
      *)
     fun translateZero(operand, expression) =
-	  translate(operand, expression, MLTree.LI 0)
+	  translate(operand, expression, MLTree.REG IntegerConvention.zero)
 
     (*
      * Return an MLRISC condition and conditional expression for a given
@@ -876,7 +882,7 @@ functor EmitRtlMLRISC(
      * <- the MLRISC conditional expression
      *)
     fun translateZeroFloat(operand, expression) =
-	  translateFloat(operand, expression, MLTree.CVTI2D(MLTree.LI 0))
+	  translateFloat(operand, expression, MLTree.FREG FloatConvention.zero)
 
   end
 
@@ -1000,9 +1006,11 @@ functor EmitRtlMLRISC(
        * of Rtl doesn't cause any traps
        *)
       val SUB  = code MLTree.SUB
-      val DIV  = code MLTree.DIVT
+      (* val DIV  = code MLTree.DIVT
+	 broken in MLRISC--see CVTI2D ??? *)
       val SUBT = code MLTree.SUBT
-      val DIVT = code MLTree.DIVT
+      (* val DIVT = code MLTree.DIVT
+	 broken in MLRISC--see CVTI2D ??? *)
     end
 
     local
@@ -1029,6 +1037,7 @@ functor EmitRtlMLRISC(
       val S8SUB = code 3
     end
 
+    (* DIVT broken in MLRISC--see CVTI2D ???
     fun MODT(left, right, dest) =
 	  let
 	    val quotient  = MLTree.DIVT(left, right, MLTree.LR)
@@ -1043,6 +1052,33 @@ functor EmitRtlMLRISC(
      * of Rtl doesn't cause any traps
      *)
     val MOD = MODT
+    *)
+
+    (*
+     * replace MLRISC stack-using instructions with library functions
+     * until fixed ???
+     *)
+    local
+      fun code procedure (left, right, dest) =
+	    let
+	      val left'	 = Cells.newReg()
+	      val right' = Cells.newReg()
+	    in
+	      [MLTree.CODE[
+		 mv(left', left),
+		 mv(right', right)
+	       ]]@
+	      callC(externalExp procedure,
+		    [ExternalConvention.integer left',
+		     ExternalConvention.integer right'],
+		    [ExternalConvention.integer dest])
+	    end
+    in
+      val DIV  = code "til_div"
+      val DIVT = code "til_divt"
+      val MOD  = code "til_mod"
+      val MODT = code "til_modt"
+    end
 
     local
       fun code((testCondition, testExp), dest) =
@@ -1097,7 +1133,12 @@ functor EmitRtlMLRISC(
 		[ExternalConvention.integer dest])
 
     fun CVT_INT2REAL(src, dest) =
-	  [MLTree.CODE[MLTree.FMV(dest, MLTree.CVTI2D src)]]
+	  callC(externalExp "cvt_int2real",
+		[ExternalConvention.integer src],
+		[ExternalConvention.float dest])
+	  (* [MLTree.CODE[MLTree.FMV(dest, MLTree.CVTI2D src)]]
+	     CVTI2D is currently broken in MLRISC/Alpha: it allocates on
+	     the stack, which messes up spill offsets ??? *)
 
     local
       fun code operator (left, right, dest) =
@@ -1390,7 +1431,7 @@ functor EmitRtlMLRISC(
       | translateInstruction(Rtl.CVT_REAL2INT(src, dest)) =
 	  CVT_REAL2INT(destFloatReg src, destReg dest)
       | translateInstruction(Rtl.CVT_INT2REAL(src, dest)) =
-	  CVT_INT2REAL(srcReg src, destFloatReg dest)
+	  CVT_INT2REAL(destReg src, destFloatReg dest)
 
       | translateInstruction(Rtl.FADDD(left, right, dest)) =
 	  FADDD(srcFloatReg left, srcFloatReg right, destFloatReg dest)
@@ -1921,7 +1962,7 @@ functor EmitRtlMLRISC(
 
     fun resetBody() = ()
 
-    fun emitTables(prefix, infos, objects, variables) =
+    fun emitTables(prefix, infos, variables, objects) =
 	  let
 	    val header = [
 		  MLTree.BEGINCLUSTER,
@@ -1936,22 +1977,22 @@ functor EmitRtlMLRISC(
 	    fun translateVariable(label, represent) =
 		  (label, RegisterTraceMap.traceGlobalRepresent represent)
 
-	    val objects' = objects
-
 	    val variables' = map translateVariable variables
+
+	    val objects' = objects
 
 	    val calls = TraceTable.MakeTableHeader prefix@
 			TraceTable.MakeTable infos@
 			TraceTable.MakeTableTrailer prefix
 
-	    val mutables = TraceTable.MakeMutableTable(prefix, objects')
-
 	    val globals = TraceTable.MakeGlobalTable(prefix, variables')
+
+	    val mutables = TraceTable.MakeMutableTable(prefix, objects')
 	  in
 	    emitMLTree header;
 	    emitData calls;
-	    emitData mutables;
 	    emitData globals;
+	    emitData mutables;
 	    emitMLTree trailer
 	  end
 
@@ -1961,8 +2002,8 @@ functor EmitRtlMLRISC(
     fun emit(Rtl.MODULE{main		  = main,
 			procs		  = procedures,
 			data		  = data,
-			mutable_objects	  = objects,
-			mutable_variables = variables}) =
+			mutable_variables = variables,
+			mutable_objects	  = objects}) =
 	  let
 	    val name = LocalLabel.string main
 
@@ -1971,7 +2012,7 @@ functor EmitRtlMLRISC(
 	    val infos =
 		  (emitBody' protect resetBody)(name, main, procedures, data)
 	  in
-	    (emitTables protect resetTables)(name, infos, objects, variables)
+	    (emitTables protect resetTables)(name, infos, variables, objects)
 	  end
   in
     fun emitModule operand = (Module.open_();
