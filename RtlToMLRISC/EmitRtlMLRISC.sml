@@ -115,6 +115,38 @@ functor EmitRtlMLRISC(
   (* -- surrogate functions ------------------------------------------------ *)
 
   (*
+   * Return an MLRISC statement for moving the value of a given expression
+   * into a given pseudo-register.
+   * target -> the id of the pseudo-register to move the value into
+   * source -> the expression to move the value of
+   * <- the statement
+   * replace with MLTreeExtra.(f)mv when MLRISC is fixed to recognize
+   * dedicated spills in call graph ???
+   *)
+  local
+    fun member list id = List.exists (fn id' => id'=id) list
+
+    val dedicatedInteger = member IntegerConvention.dedicated
+    val dedicatedFloat	 = member FloatConvention.dedicated
+  in
+    fun mv(target, MLTree.REG source) =
+	  if dedicatedInteger target orelse dedicatedInteger source then
+	    MLTree.MV(target, MLTree.REG source)
+	  else
+	    MLTree.COPY([target], [source])
+      | mv(target, source) =
+	  MLTree.MV(target, source)
+
+    fun fmv(target, MLTree.FREG source) =
+	  if dedicatedFloat target orelse dedicatedFloat source then
+	    MLTree.FMV(target, MLTree.FREG source)
+	  else
+	    MLTree.FCOPY([target], [source])
+      | fmv(target, source) =
+	  MLTree.FMV(target, source)
+  end
+
+  (*
    * Return a new MLRISC label.
    * <- the new label
    *)
@@ -882,10 +914,10 @@ functor EmitRtlMLRISC(
 	   ]]
 
     fun LEA(address, dest) =
-	  [MLTree.CODE[MLTreeExtra.mv(dest, address)]]
+	  [MLTree.CODE[mv(dest, address)]]
 
     fun MV(src, dest) =
-	  [MLTree.CODE[MLTreeExtra.mv(dest, src)]]
+	  [MLTree.CODE[mv(dest, src)]]
 
     fun CMV(compare, test, src, dest) =
 	  let
@@ -896,13 +928,13 @@ functor EmitRtlMLRISC(
 	  in
 	    [MLTree.CODE[
 	       MLTree.BCC(testCondition, testExp, skipLabel),
-	       MLTreeExtra.mv(dest, src)
+	       mv(dest, src)
 	     ],
 	     MLTree.DEFINELABEL skipLabel]
 	  end
 
     fun FMV(src, dest) =
-	  [MLTree.CODE[MLTreeExtra.fmv(dest, src)]]
+	  [MLTree.CODE[fmv(dest, src)]]
 
     local
       fun code operator (left, right, dest) =
@@ -1193,13 +1225,13 @@ functor EmitRtlMLRISC(
 	    end
     in
       fun INT_ALLOC(size, value, dest) =
-	    code(size, MLTree.MV(IntegerConvention.temporary2, value),
+	    code(size, mv(IntegerConvention.temporary2, value),
 		 dest, "int_alloc_raw")
       fun FLOAT_ALLOC(size, value, dest) =
 	    code(size, MLTree.FMV(FloatConvention.temporary1, value),
 		 dest, "float_alloc_raw")
       fun PTR_ALLOC(size, value, dest) =
-	    code(size, MLTree.MV(IntegerConvention.temporary2, value),
+	    code(size, mv(IntegerConvention.temporary2, value),
 		 dest, "ptr_alloc_raw")
     end
 
