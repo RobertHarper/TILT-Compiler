@@ -189,7 +189,7 @@ structure DenseIntSet
 	    SOME word' => let
 			    val word'' = word orb word'
 			  in
-			    if word''<>word then
+			    if word''<>word' then
 			      (IntMap.insert(map, index, word''),
 			       countWord(count, word'' xorb word'))
 			    else
