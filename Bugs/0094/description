@@ -31,5 +31,10 @@ Comments:
 	During the TILT work week, Daniel Spoonhower and Perry Cheng
 	worked on a plan to fix this problem.
 Fix:
+
+	Dan fixed this by using MMAP_NORESERVE on the sparc.  The alpha
+	still maps a lot of (virtual) memory on startup but TILT now
+	respects getrusage(2) limits if that is a problem.
+
 Owner:
-Status: open
+Status: closed

@@ -88,7 +88,7 @@
 0091 [closed]	Unresolved equality expressions breaking elaborator
 0092 [closed]	There are too many steps to reporting bugs.
 0093 [closed]	TILT does not support separate compilation.
-0094 [open]	The Runtime uses too much virtual memory.
+0094 [closed]	The Runtime uses too much virtual memory.
 0095 [open]	Errno is sometimes clobbered.
 0098 [closed]	does not parse type variables properly
 0099 [closed]	exceptions as values
