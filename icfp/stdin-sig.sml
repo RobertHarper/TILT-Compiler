@@ -2,6 +2,6 @@
 signature STDIN =
 sig
 
-    val stdintostring = unit -> string
+    val stdintostring : unit -> string
 
 end

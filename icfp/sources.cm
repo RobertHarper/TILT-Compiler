@@ -1,7 +1,21 @@
 group is
 
 (* Note: MLton doesn't do dependency analysis,
-   so try to keep sources.cm in dependency order. *)
+   so try to keep sources.cm in dependency order. 
+
+   Also don't reference other CM files, just put
+   everything here with relative paths.
+*)
+
+library/lib-base-sig.sml
+library/lib-base.sml
+library/ord-key-sig.sml
+library/ord-map-sig.sml
+library/ord-set-sig.sml
+library/splaytree-sig.sml
+library/splaytree.sml
+library/splay-map-fn.sml
+library/splay-set-fn.sml
 
 stdin-sig.sml
 stdin.sml
@@ -17,9 +31,6 @@ parsing/utils.sml
 parsing/tokens-sig.sml
 parsing/tokens.sml
 parsing/stostream.sml
-
-compstamp-sig.sml
-compstamp.sml
 
 gml-sig.sml
 gml.sml
