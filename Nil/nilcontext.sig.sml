@@ -31,6 +31,7 @@ signature NILCONTEXT =
     val insert_kind : context*var*kind -> unit
     val find_kind : context*var -> kind option
     val remove_kind : context*var -> unit
+    val appi_kind : ((var * kind) -> unit) -> context -> unit
 
     val c_insert_con : context*var*con*(context->'a) -> 'a
     val c_remove_con : context*var*(context -> 'a) -> 'a

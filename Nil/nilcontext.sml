@@ -44,6 +44,7 @@ struct
     
   fun remove_con ({conmap,...}:context,var) = ignore (remove conmap var)
 
+  fun appi_kind f ({kindmap,...} : context) = HashTable.appi f kindmap
 
   local
     open Nil

@@ -1,10 +1,11 @@
 functor NilStaticFn(structure Annotation : ANNOTATION
 		    structure Prim : PRIM
 		    structure ArgNil : NIL
+		    structure Ppnil : PPNIL
 		    structure Alpha : ALPHA
 		    structure NilUtil : NILUTIL 
 		    structure NilContext : NILCONTEXT
-		    sharing NilUtil.Nil = NilContext.Nil = Alpha.Nil = ArgNil
+		    sharing NilUtil.Nil = NilContext.Nil = Alpha.Nil = Ppnil.Nil = ArgNil
 		    and Annotation = ArgNil.Annotation
 		    and Prim = ArgNil.Prim
 		    and type NilUtil.alpha_context = Alpha.alpha_context) :> 
@@ -79,6 +80,16 @@ struct
 
 
   (* Local helpers *)
+  fun error s = Util.error "nilstatic.sml" s
+  fun split ls = 
+      let fun split' _ [] = error "split given empty list"
+	    | split' acc [x] = (rev acc,x)
+	    | split' acc (a::rest) = split' (a::acc) rest
+      in split' [] ls
+      end
+  fun strip_singleton (Singleton_k(_,k,_)) = strip_singleton k
+    | strip_singleton k = k
+
   fun eq_var2 var1 var2 = eq_var (var1,var2)
     
   fun first (fst,_) = fst
@@ -95,15 +106,13 @@ struct
     
   fun sorted_unique p ([] | [_]) = true
     | sorted_unique p (fst::snd::rest) = 
-    (p (fst,snd)) andalso sorted_unique p (snd::rest)
+    (not (p (fst,snd))) andalso sorted_unique p (snd::rest)
     
   fun gt_label (l1,l2) = 
     (case Name.compare_label (l1,l2)
        of GREATER => true
 	| _ => false)
 
-  fun error s = Util.error "reduce.sml" s
-    
   fun subst_fn var1 con = 
     (fn var2 => 
      (if eq_var (var1,var2) then 
@@ -117,13 +126,12 @@ struct
     
     
   fun primKind ((Int_c W64) | 
-		(Float_c F64) |
-		(Sum_c _)) = Type_k Runtime
+		(Float_c F32) |
+		(Float_c F64)) = Type_k Runtime
     
-    | primKind ((Int_c W32) | (Int_c W16) | 
-		(Int_c W8) | (Float_c F32) | 
+    | primKind ((Int_c W32) | (Int_c W16) | (Int_c W8) | 
 		(BoxFloat_c F64) | (BoxFloat_c F32) |
-		(Exn_c) | (Array_c) | (Vector_c) | (Ref_c) | (Exntag_c) |
+		(Exn_c) | (Array_c) | (Vector_c) | (Ref_c) | (Exntag_c) | (Sum_c _) |
 		(Record_c _) | (Vararg_c _)) = Word_k Runtime
     
 
@@ -140,6 +148,8 @@ struct
       end
     else
       NONE
+    | do_beta_fun (Closure_c (code,env), actuals) = 
+      do_beta_fun(code,actuals @ [env])
     | do_beta_fun (Annotate_c (an,con),actuals) = 
     (case do_beta_fun (con,actuals)
        of SOME con => SOME (Annotate_c (an,con))
@@ -263,8 +273,21 @@ struct
 	 end)
 
 
-  and con_valid (D : context, constructor : con) = 
-    (case constructor 
+  and con_valid (D : context, constructor : con) : con * kind = 
+      let val _ = (print "con_valid called with constructor =\n";
+		   Ppnil.pp_con constructor; print "\n\n")
+	  val res as (c,k) = con_valid'(D,constructor)
+	  val _ = (print "con_valid called with constructor =\n";
+		   Ppnil.pp_con constructor; print "\n";
+		   print "returning k = \n";
+		   Ppnil.pp_kind k; print "\n";
+		   print "returning c = \n";
+		   Ppnil.pp_con c; print "\n")
+      in  res
+      end
+
+  and con_valid' (D : context, constructor : con) : con * kind = 
+     (case constructor 
        of (Prim_c (pcon,args)) =>
 	 let
 	   val kind = primKind pcon
@@ -308,10 +331,11 @@ struct
 	   val (cons,kinds) = c_insert_kind_list (D,var_kinds,cont)
 	 in
 	   (*ASSERT*)
-	   if List.all is_word kinds then
+	   if List.all is_word (map strip_singleton kinds) then
 	     (Mu_c (Util.list2sequence cons,var),Word_k Runtime)
 	   else
-	     error "Invalid kind for recursive constructor"
+	       (app (fn k => (print "kind = "; Ppnil.pp_kind k; print "\n\n")) (map strip_singleton kinds);
+		error "Invalid kind for recursive constructor")
 	 end
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>
 	 let
@@ -358,39 +382,41 @@ struct
 	 end  
        
 	| (v as (Var_c var)) => 
-	 let
-	   val kind = 
-	     (case find_kind (D,var)
-		of SOME k => k
-		 | NONE => 
-		  error "Encountered undefined variable in con_valid")
-	 in
-	   (v,kind)
-	 end
+	     (case find_kind (D,var) of
+		 SOME (Singleton_k (_,k,c)) => con_valid(D,c)
+	       | SOME k => (v,k)
+	       | NONE => 
+		     error ("Encountered undefined variable " ^ (Name.var2string var) 
+			    ^ "in con_valid"))
 
         (* This is a lambda.  No, really. *)
 	| (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
 				((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
 	 let
-	   fun base (D,formals) = 
+	   fun base (D,rev_formals) = 
 	     let
+	       val _ = (print "formals1 are ";
+			app (fn (v,k) => (Ppnil.pp_var v; print " :: "; Ppnil.pp_kind k; print "\n")) rev_formals;
+			print "\n")
 	       (*replace v::S(c) with c in formals and body*)
-	       fun substSingleton ((var,Singleton_k(p,kind,scon)),(rev_formals,conmap)) =
+	       fun substSingleton ((var,Singleton_k(p,kind,scon)),(formals,conmap)) =
 		 let 
 		   val scon' = substConInCon (list2cmap conmap) scon
 		   val kind' = substConInKind (list2cmap conmap) kind
 		 in
-		   ((var,Singleton_k(p,kind',scon'))::rev_formals,(var,scon')::conmap)
+		   ((var,Singleton_k(p,kind',scon'))::formals,(var,scon')::conmap)
 		 end
-		 | substSingleton ((var,kind),(rev_formals,conmap)) = 
+		 | substSingleton ((var,kind),(formals,conmap)) = 
 		 let 
 		   val kind' = substConInKind (list2cmap conmap) kind
 		 in
-		   ((var,kind')::rev_formals,conmap)
+		   ((var,kind')::formals,conmap)
 		 end
-	       val (rev_formals,conmap) = List.foldl substSingleton ([],[]) formals
+	       val (formals',conmap) = List.foldl substSingleton ([],[]) rev_formals
 	       val body' = substConInCon (list2cmap conmap) body
-	       val formals' = List.rev rev_formals
+	       val _ = (print "formals' are ";
+			app (fn (v,k) => (Ppnil.pp_var v; print " :: "; Ppnil.pp_kind k; print "\n")) formals';
+			print "\n\n")
 	       val (body'',body_kind') = con_valid (D,body')
 	       val _ = (alpha_sub_kind (body_kind',body_kind)) orelse 
 		 (error "invalid return kind for constructor function")
@@ -400,7 +426,7 @@ struct
 		    | _ => (Code_cb,Code)
 	       val bndkind = Arrow_k(openness,formals',body_kind')
 	       val replace = 
-		 case (do_eta_fun (formals,body))
+		 case (do_eta_fun (rev rev_formals,body))
 		   of SOME con => con
 		    | NONE => (Let_c (sort,[Con (var,formals',body'',body_kind')],Var_c var))
 	       fun reduce (Annotate_c (annote,c)) =
@@ -445,18 +471,26 @@ struct
 	     else
 	       error "Kind error in constructor declaration"
 	   end
-	| (Let_c (sort,[],body)) => error "Got empty letcon"
+	| (Let_c (sort,[],body)) => con_valid (D,body)
 	| (Closure_c (code,env)) => 
 	   let
 	     val (env',env_kind) = con_valid (D,env)
 	   in
-	     case (con_valid (D,code))
-	       of (code',code_kind as Arrow_k(Code,(v,k1)::rest,body_kind)) => 
-		 if alpha_sub_kind (env_kind,k1) then
-		   (Closure_c (code',env'), Arrow_k(Closure,rest,body_kind))
-		 else
-		   error "Invalid kind for closure environment"
-		| _ => error "Invalid kind for closure constructor"
+	     case (con_valid (D,code)) of
+		 (code',code_kind as Arrow_k(Code,vklist,body_kind)) => 
+		     let val (first,(v,klast)) = split vklist
+		     in
+			 if alpha_sub_kind (env_kind,klast) then
+			     (Closure_c (code',env'), Arrow_k(Closure,first,body_kind))
+			 else
+			     (print "Invalid kind for closure environment:";
+			      print " env_kind < klast failed\n";
+			      print "env_kind is "; Ppnil.pp_kind env_kind; print "\n";
+			      print "klast is "; Ppnil.pp_kind klast; print "\n";
+			      print "code_kind is "; Ppnil.pp_kind code_kind; print "\n";
+			      error "Invalid kind for closure environment")
+		     end
+		| _ => error "Invalid closure: code component does not have code kind"
 	   end
 	 
 	(* Sort records.  Useful later?*)
@@ -516,10 +550,18 @@ struct
 	| (App_c (cfun,actuals)) => 
 	 let
 	   val (cfun',cfun_kind) = con_valid (D,cfun)
+	   val _ = (print "cfun is "; Ppnil.pp_con cfun; print "\n";
+		    print "cfun' is "; Ppnil.pp_con cfun'; print "\n")
 	   val (formals,body_kind) = 
-	     case cfun_kind 
-	       of (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
-		| _ => error "Invalid kind for constructor application"
+	     case (strip_singleton cfun_kind) of
+	         (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
+		| _ => (print "Invalid kind for constructor application\n";
+			Ppnil.pp_kind cfun_kind; print "\n";
+			error "Invalid kind for constructor application")
+
+	   val _ = (print "actuals are:\n";
+		    app (fn c => (Ppnil.pp_con c; print "\n")) actuals;
+		    print "\n")
 
 	   val (actuals',actual_kinds) = 
 	     ListPair.unzip (List.map (fn c => (con_valid (D,c))) actuals)
@@ -529,19 +571,29 @@ struct
 	   fun match_params ((formal,fkind),actual_kind) = 
 	     alpha_sub_kind (actual_kind,fkind)
 
+	   val _ = if eq_len (actual_kinds,formal_kinds) then ()
+		   else error "Constructor function applied to wrong number of arguments"
 	   val apps = 
 	     if ListPair.all alpha_sub_kind (actual_kinds,formal_kinds) 
-	       andalso eq_len (actual_kinds,formal_kinds) then
-	       ListPair.zip (formal_vars,actuals')
+		 then ListPair.zip (formal_vars,actuals')
 	     else
-	       error "Constructor function applied to illegal value"
+	       (print "actual_kinds are:\n";
+		app (fn k => (Ppnil.pp_kind k; print "\n")) actual_kinds;
+		print "\n\n";
+		print "formal_kinds are:\n";
+		app (fn k => (Ppnil.pp_kind k; print "\n")) formal_kinds;
+		print "\n";
+		error "Constructor function failed: argument not subkind of expected kind")
 	       
 	   fun lookup v = assoc_eq (eq_var,v,apps)
 	 in
-	   case (do_beta_fun (cfun,actuals))
-	     of SOME c => con_valid (D,c)
-	      | NONE => (App_c (cfun,actuals),
-			 substConInKind lookup body_kind)
+	   case (do_beta_fun (cfun',actuals))
+	     of SOME c => (print "beta-reduced to\n";
+			   Ppnil.pp_con c; print "\n";
+			   con_valid (D,c))
+	      | NONE => (print "failed to beta-reduce!\n";
+			 (App_c (cfun,actuals),
+			 substConInKind lookup body_kind))
 	 end
 	| (Typecase_c {arg,arms,default,kind}) => 
 	 let

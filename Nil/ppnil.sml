@@ -84,7 +84,7 @@ functor Ppnil(structure Nil : NIL
 	       | Type_k Runtime => String "TYPE_R"
 	       | Word_k Compiletime => String "WORD_C"
 	       | Word_k Runtime => String "WORD_R"
-	       | Record_k lvk_seq => (pp_list (fn ((l,v),k) => HOVbox[pp_label l, String " = ",
+	       | Record_k lvk_seq => (pp_list (fn ((l,v),k) => HOVbox[pp_label l, String " > ",
 								      pp_var v, String " : ",
 								  pp_kind k])
 				      (sequence2list lvk_seq) ("REC_K{", ",","}", false))
@@ -97,7 +97,8 @@ functor Ppnil(structure Nil : NIL
 						      pp_kind k])
 			    ks ("", ",","", false),
 			    String "; ",
-			    pp_kind k]
+			    pp_kind k,
+			    String ")"]
 	       | Singleton_k (p,k,c) => (pp_region 
 					 (case p of 
 					      Compiletime => "SINGLE_KC(" 
@@ -125,13 +126,12 @@ functor Ppnil(structure Nil : NIL
 							   pp_con c]
 		     | do_cbnd (Open_cb(v,vklist,c,k)) = 
 		       HOVbox[pp_var v, String " = ",
-			      String "FUN_C",
-			      (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
-			       vklist),
-			      Break0 0 5,
-			      pp_con c,
-			      Break0 0 5,
-			      pp_kind k]
+			      HOVbox[String "FUN_C",
+				     (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", pp_kind k])
+				      vklist),
+				     Break0 0 5,
+				     String " : ", pp_kind k, String " = ",
+				     pp_con c]]
 		     | do_cbnd (Code_cb(v,vklist,c,k)) = 
 		       HOVbox[pp_var v, String " = ",
 			      String "CODE_CB", Break,
@@ -173,7 +173,7 @@ functor Ppnil(structure Nil : NIL
 					       String ",",
 *)
 					       pp_con con,
-					       String ",",
+					       String ";",
 					       pp_list' pp_con conlist,
 					       String ")"]
 	 | Mu_c (vcset,var) => HOVbox[String "MU_C(",
@@ -212,8 +212,9 @@ functor Ppnil(structure Nil : NIL
       | pp_primcon Ref_c = String "REF"
       | pp_primcon Exn_c = String "EXN"
       | pp_primcon Exntag_c = String "EXNTAG"
-      | pp_primcon (Sum_c {known = NONE,...}) = String "SUM"
-      | pp_primcon (Sum_c {known = SOME i,...}) = String ("SUM_" ^ (TilWord32.toDecimalString i))
+      | pp_primcon (Sum_c {known = opt,tagcount,...}) = 
+	String ("SUM" ^ (case opt of NONE => "" | SOME i => "_" ^ (TilWord32.toDecimalString i)) ^
+		"(" ^ (TilWord32.toDecimalString tagcount) ^ ")")
       | pp_primcon (Record_c labels) = String "RECORD"
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "RECORD", pp_openness oness, pp_effect e]
 
@@ -238,6 +239,9 @@ functor Ppnil(structure Nil : NIL
 		    record labels => "record"
 		  | select label => raise (BUG "pp_nilprimop: control should not reach here")
 		  | inject {field,...} => "inject_" ^ (TilWord32.toDecimalString field)
+		  | inject_record {field,...} => "inject_record_" ^ (TilWord32.toDecimalString field)
+		  | project_sum {sumtype,...} => "project_sum_" ^ (TilWord32.toDecimalString sumtype)
+		  | project_sum_record {sumtype,...} => "project_sum_rec__" ^ (TilWord32.toDecimalString sumtype)
 		  | roll => "roll"
 		  | unroll  => "unroll"
 		  | make_exntag => "make_exntag"
@@ -245,7 +249,7 @@ functor Ppnil(structure Nil : NIL
 		  | peq => "peq"
 		  | make_vararg (openness,effect) => "make_vararg" 
 		  | make_onearg (openness,effect) => "make_onearg"
-		  | get_tag => "get_tag")
+		  | _ => "nilprim_notdone")
 
     and pp_exp exp = 
 	(case exp of
@@ -383,14 +387,14 @@ functor Ppnil(structure Nil : NIL
     fun pp_bnds bnds = pp_list pp_bnd bnds ("[",",","]",true)
 
     fun pp_module (MODULE{bnds,imports,exports}) = 
-	Vbox[pp_bnds bnds,
-	     Break,
-	     String "IMPORTS:", Break,
-	     pp_list (fn (v,l) => (Hbox[pp_label l, String " = ", pp_var v])) 
-	     (Name.VarMap.listItemsi imports) ("","","",true),
-	     String "EXPORTS:", Break,
-	     pp_list (fn (v,l) => (Hbox[pp_label l, String " = ", pp_var v])) 
-	     (Name.VarMap.listItemsi exports) ("","","",true)]
+	Vbox0 0 1 [pp_bnds bnds,
+		   Break,
+		   String "IMPORTS:", Break,
+		   pp_list (fn (v,l) => (Hbox[pp_label l, String " = ", pp_var v])) 
+		   (Name.VarMap.listItemsi imports) ("","","",true), Break,
+		   String "EXPORTS:", Break,
+		   pp_list (fn (v,l) => (Hbox[pp_label l, String " = ", pp_var v])) 
+		   (Name.VarMap.listItemsi exports) ("","","",true)]
 
     fun help pp = pp
     fun help' pp obj = (wrapper pp TextIO.stdOut obj; ())

@@ -211,18 +211,24 @@ struct
 
     fun remove_free(s as (STATE{boundevars,boundcvars,...}),
 		    {freeevars,freecvars}) = 
-	let val _ = (print "\nfreeevars has ";
+	let 
+(*
+	    val _ = (print "\nfreeevars has ";
 		     VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print ", ")) freeevars;
 		     print "\nboundevars has ";
 		     VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print ", ")) boundevars;
 		     print "\n")
-	    val freeevars' = VarMap.foldli (fn (v,_,map) => if (is_boundevar(s,v)) 
-								then #1(VarMap.remove(map,v)) else map) freeevars freeevars
-	    val freecvars' = VarMap.foldli (fn (v,_,map) => if (is_boundcvar(s,v)) 
-								then #1(VarMap.remove(map,v)) else map) freecvars freecvars
+*)
+
+	    fun efolder (v,_,map) = if (is_boundevar(s,v)) then #1(VarMap.remove(map,v)) else map
+	    fun cfolder (v,_,map) = if (is_boundcvar(s,v)) then #1(VarMap.remove(map,v)) else map
+	    val freeevars' = VarMap.foldli efolder freeevars freeevars
+	    val freecvars' = VarMap.foldli cfolder freecvars freecvars
+(*
 	    val _ = (print "\nfreeevars' has ";
 		     VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print ", ")) freeevars';
 		     print "\n")
+*)
 	in  {freeevars = freeevars',
 	     freecvars = freecvars'}
 	end
@@ -256,12 +262,19 @@ struct
 				    empty_frees (set2list var_arm_set))
 		    in  (add_boundfids(state, local_fids_types), free)
 		    end
+		val _ = print "bind_find_fv called\n"
 		val (state,frees) = 
 		    (case bnd of
 			 Con_b(v,k,c) => let val f = c_find_fv state c
+					     val f = join_free(f,k_find_fv state k)
+					     val _ = (print "add_boundcvar ";
+						      Ppnil.pp_var v; print "\n")
 					 in (add_boundcvar(state,v,k), f)
 					 end
 		       | Exp_b(v,c,e) => let val f = e_find_fv state e
+					     val f = join_free(f,c_find_fv state c)
+					     val _ = (print "add_boundevar ";
+						      Ppnil.pp_var v; print "\n")
 					 in (add_boundevar(state,v,c), f)
 					 end
 		       | Fixopen_b var_fun_set =>
@@ -285,7 +298,9 @@ struct
 	    end
 	
     and e_find_fv (state : state) exp : freevars =
-	(case exp of
+	(print "exp_find_fv called on\n";
+	 Ppnil.pp_exp exp; print "\n\n";
+	 case exp of
 	     Var_e v => (if (is_boundfid(state,v)) then add_escape v else ();
 			     free_evar(state,v))
 	   | Const_e v => 
@@ -305,8 +320,9 @@ struct
 		 in  join_free(funfree,bodyfree)
 		 end
 	   | Prim_e (ap,clist,elist) =>
-		 let fun cfold(c,f) = join_free(f,c_find_fv state c)
-		     fun efold(e,f) = join_free(f,e_find_fv state e)
+		 let val _ = print "exp_find_fc found primitive\n"
+		     fun cfold(c,f) = join_free(f,c_find_fv state c)
+		     fun efold(e,f) = (print "efold\n"; join_free(f,e_find_fv state e))
 		     val free = foldl cfold empty_frees clist
 		     val free = foldl efold free elist
 		 in  free
@@ -374,7 +390,9 @@ struct
 
 		 
 	and c_find_fv (state : state) con : freevars =
-	    (case con of
+	    (	print "c_find_fv called on\n";
+		 Ppnil.pp_con con; print "\n\n";
+		 case con of
 		 Prim_c (pc,clist) => foldl (fn (c,f)=> join_free(f,(c_find_fv state c))) empty_frees clist
 	       | Mu_c (vcset,v) =>
 		     let val vclist = set2list vcset
@@ -407,7 +425,7 @@ struct
 	       | Let_c(_,cbnds,c) => 
 		     let 
 			 fun cb_folder (Con_cb(v,k,c),(f,s)) = 
-			     let val f' = c_find_fv state c
+			     let val f' = c_find_fv s c
 			     in (join_free(f, f'), add_boundcvar(s,v,k))
 			     end
 			   | cb_folder (Code_cb(v,vklist,c,k), _) = error "code_cb during closure conversion"
@@ -498,7 +516,9 @@ struct
 
 
    and fun_rewrite(v,Function(effect,recur,vklist,vclist,vflist,body,tipe)) = 
-       let val {code_var, unpack_var, ...} = get_static v
+       let 
+	   val _ = (print "fun_rewrite v = "; Ppnil.pp_var v; print "\n")
+	   val {code_var, unpack_var, ...} = get_static v
 	   val {freeevars,freecvars} = get_frees v
 	   val vklist = map (fn (v,k) => (v,k_rewrite k)) vklist
 	   val vclist = map (fn (v,c) => (v,c_rewrite c)) vclist
@@ -625,7 +645,8 @@ struct
 
    and cbnd_rewrite (Con_cb(v,k,c)) = [Con_cb(v,k_rewrite k, c_rewrite c)]
      | cbnd_rewrite (Open_cb(v,vklist,c,k)) = 
-       let val {code_var, unpack_var, ...} = get_static v
+       let val _ = (print "cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
+	   val {code_var, unpack_var, ...} = get_static v
 	   val {freeevars,freecvars} = get_frees v (* freeevars must be empty *)
 	   val vk_free = (VarMap.listItemsi freecvars)
 	   val cfv_var = fresh_named_var "free_cons"
@@ -675,12 +696,8 @@ struct
 	    ((Type_k _) | (Word_k _) | 
 	     (Singleton_k _) | (Record_k _)) => NOCHANGE
 	  | Arrow_k (Open,vklist,k) => 
-		let val _ = print "arrow_k case 1\n"
-		    val vklist' = map (fn (v,k) => (print "arrow_k case 1.5\n";
-						    (v,k_rewrite k))) vklist
-		    val _ = print "arrow_k case 2\n"
+		let val vklist' = map (fn (v,k) => (v,k_rewrite k)) vklist
 		    val k' = Arrow_k(Closure, vklist', k_rewrite k)
-		    val _ = print "arrow_k case 3\n"
 		in CHANGE_NORECURSE k'
 		end
 	  | Arrow_k _ => error "cannot encounter arrow_k(Code/Closure,...) during closure-conversion")
