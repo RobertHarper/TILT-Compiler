@@ -60,9 +60,10 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize);
 Heap_t* GetHeap(ptr_t);
 int inSomeHeap(ptr_t v);
 void Heap_Protect(Heap_t*);
-void Heap_Unprotect(Heap_t*);
 void Heap_Resize(Heap_t *res, long newsize);
-int Heap_Getsize(Heap_t *res);
+void Heap_Unprotect(Heap_t *, long newsize);
+int Heap_GetSize(Heap_t *res);
+int Heap_GetAvail(Heap_t *res);
 void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *top);
 
 extern mem_t StartHeapLimit; /* When we don't have a real initial heap limit, use this one */

@@ -113,18 +113,24 @@ int GCTry_Gen(SysThread_t *sysThread, Thread_t *th)
 {
   assert(sysThread->userThread == NULL);
   assert(th->sysThread == NULL);
-  if (th->requestInfo == 0)  /* write list request */
-    return 0;
   if (sysThread->allocLimit == StartHeapLimit) {
-    unsigned int bytesAvailable;
     sysThread->allocStart = nurseryGen->bottom;
     sysThread->allocCursor = nurseryGen->bottom;
     sysThread->allocLimit = nurseryGen->top;
     nurseryGen->alloc_start = nurseryGen->top;
-    bytesAvailable = (((unsigned int)sysThread->allocLimit) - 
-		      ((unsigned int)sysThread->allocStart));
+  }
+  if (th->requestInfo > 0) {
+    unsigned int bytesAvailable = (val_t) sysThread->allocLimit - 
+				  (val_t) sysThread->allocCursor;
     return (th->requestInfo <= bytesAvailable);
   }
+  else if (th->requestInfo < 0) {
+    unsigned int bytesAvailable = (val_t) sysThread->writelistEnd - 
+                                  (val_t) sysThread->writelistCursor;
+    return ((-th->requestInfo) <= bytesAvailable);
+  }
+  else 
+    assert(0);
   return 0;
 }
 
@@ -132,15 +138,16 @@ void GCStop_Gen(SysThread_t *sysThread)
 {
   Thread_t *oneThread = &(Threads[0]);     /* In a sequential collector, 
 					      there is only one user thread */
-  int req_size = oneThread->requestInfo;
+  int req_size = 0;
   Queue_t *root_lists = sysThread->root_lists;
   Queue_t *largeRoots = sysThread->largeRoots;
   unsigned int allocated = (sizeof (val_t)) * (nurseryGen->top - nurseryGen->alloc_start);
   unsigned int copied = 0;
-  unsigned int writes = (sysThread->writelistCursor - 
-			 sysThread->writelistStart);
   range_t nurseryGenRange, tenuredFromGenRange, tenuredToGenRange, largeRange;
 
+  if (oneThread->requestInfo > 0)
+    req_size = oneThread->requestInfo;
+    
   /* A Major GC is forced if the tenured space is potentially too small.  Start timer. */
   GCType = Minor;
   if (oneThread->request == MajorGCRequestFromC)
@@ -180,7 +187,6 @@ void GCStop_Gen(SysThread_t *sysThread)
   if (GCType == Minor) {
 
     /* --- forward the roots and the writelist; then Cheney-scan until no gray objects */
-
     mem_t tenuredFromGenAlloc = tenuredFromGen->alloc_start;
     tenuredFromGenAlloc = forward1_root_lists(root_lists, tenuredFromGenAlloc,
 					      &nurseryGenRange, &tenuredFromGenRange);
@@ -195,7 +201,7 @@ void GCStop_Gen(SysThread_t *sysThread)
   
   else if (GCType == Major) {
 
-    int tenuredToGenSize = Heap_Getsize(tenuredToGen);
+    int tenuredToGenSize = Heap_GetSize(tenuredToGen);
     int maxLive = (sizeof (val_t)) * (tenuredFromGen->alloc_start - tenuredFromGen->bottom) +
                   (sizeof (val_t)) * (nurseryGen->top - nurseryGen->bottom);
     mem_t tenuredToGenAlloc = tenuredToGen->bottom;
@@ -203,24 +209,26 @@ void GCStop_Gen(SysThread_t *sysThread)
     fromHeaps[0] = nurseryGen;
     fromHeaps[1] = tenuredFromGen;
 
+    /* Write list can be ignored */
+    discard_writelist(sysThread);
+
     /* Resize tospace so live data fits, if possible */
     if (maxLive >= tenuredToGenSize) {
       printf("WARNING: GC failure possible since maxPossibleLive = %d > toSpaceSize = %d\n",
 	     maxLive, tenuredToGenSize);
-      Heap_Resize(tenuredToGen, tenuredToGenSize);
+      Heap_Unprotect(tenuredToGen, tenuredToGenSize);
     }    
     else
-      Heap_Resize(tenuredToGen, maxLive);
-    Heap_Unprotect(tenuredToGen); 	  
+      Heap_Unprotect(tenuredToGen, maxLive);
 
     /* do the normal roots; writelist can be skipped on a major GC;
        then the usual Cheney scan followed by sweeping the large-object region */
     tenuredToGenAlloc = forward2_root_lists(root_lists, tenuredToGenAlloc, 
-					 &nurseryGenRange, &tenuredFromGenRange, &tenuredToGenRange,
-					 &largeRange, largeRoots);
+					    &nurseryGenRange, &tenuredFromGenRange, &tenuredToGenRange,
+					    &largeRange, largeRoots);
     tenuredToGenAlloc = scan2_region(tenuredToGen->bottom,tenuredToGenAlloc,tenuredToGenRange.high,
-				  &nurseryGenRange,&tenuredFromGenRange,&tenuredToGenRange,
-				  &largeRange, largeRoots);
+				     &nurseryGenRange,&tenuredFromGenRange,&tenuredToGenRange,
+				     &largeRange, largeRoots);
     gc_large_addRoots(largeRoots);
     gc_large_flush();
     copied = (sizeof (val_t)) * (tenuredToGenAlloc - tenuredToGen->bottom),
@@ -240,7 +248,7 @@ void GCStop_Gen(SysThread_t *sysThread)
   sysThread->allocStart = nurseryGen->bottom;
   sysThread->allocCursor = nurseryGen->bottom;
   sysThread->allocLimit = nurseryGen->top;
-  sysThread->writelistCursor = sysThread->writelistStart;
+  assert(sysThread->writelistCursor == sysThread->writelistStart);
 
   /* Sanity checks afterwards */
   assert(nurseryGen->alloc_start     <= nurseryGen->top);
@@ -252,7 +260,7 @@ void GCStop_Gen(SysThread_t *sysThread)
   }
 
   /* stop timer and update counts */
-  gcstat_normal(allocated, copied, writes);
+  gcstat_normal(allocated, copied, 0);
   if (GCType != Minor) {
     NumMajorGC++;
     stop_timer(&sysThread->majorgctime);

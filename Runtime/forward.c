@@ -521,12 +521,19 @@ mem_t forward2_root_lists(Queue_t *root_lists, mem_t to_ptr,
   return to_ptr;
 }
 
+void discard_writelist(SysThread_t *sysThread)
+{
+  gcstat_normal(0, 0, (sysThread->writelistCursor - sysThread->writelistStart) / 2);
+  sysThread->writelistCursor = sysThread->writelistStart;
+}
+
 /* We consider back pointers */
 mem_t forward1_writelist(SysThread_t *sysThread, mem_t alloc,
 			 range_t *from, range_t *to)
 {
   ploc_t curLoc = sysThread->writelistStart;
   ploc_t end = sysThread->writelistCursor;
+  gcstat_normal(0, 0, (sysThread->writelistCursor - sysThread->writelistStart) / 2);
   while (curLoc < end) {
     ptr_t obj = (ptr_t) (*(curLoc++)), data;
     int byteOffset = (int) (*(curLoc++));  /* in bytes */
@@ -539,6 +546,7 @@ mem_t forward1_writelist(SysThread_t *sysThread, mem_t alloc,
     if (NotInRange(data,to)) 
       alloc = forward1(field,alloc,from);
   }
+  sysThread->writelistCursor = sysThread->writelistStart;
   return alloc;
 }
 
@@ -548,6 +556,7 @@ void forward1_writelist_coarseParallel_stack(mem_t *alloc, mem_t *limit,
 {
   ploc_t curLoc = sysThread->writelistStart;
   ploc_t end = sysThread->writelistCursor;
+  gcstat_normal(0, 0, (sysThread->writelistCursor - sysThread->writelistStart) / 2);
   while (curLoc < end) {
     ptr_t obj = (ptr_t) (*(curLoc++)), data;
     int byteOffset = (int) (*(curLoc++)); 
@@ -560,6 +569,7 @@ void forward1_writelist_coarseParallel_stack(mem_t *alloc, mem_t *limit,
     if (NotInRange(data,to))
       forward1_coarseParallel_stack(field,alloc,limit,toheap,from,sysThread);
   }
+  sysThread->writelistCursor = sysThread->writelistStart;
 }
 
 

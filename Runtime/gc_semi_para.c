@@ -111,9 +111,8 @@ static void stop_copy(SysThread_t *sysThread)
      by counting the first thread twice in the barrier size. */
   isFirst = (asynchReachBarrier(&numWaitThread)) == 0;
   if (isFirst) {
-    Heap_Resize(toheap,
+    Heap_Unprotect(toheap,
 		((sizeof (val_t)) * (fromheap->top - fromheap->bottom)) + NumSysThread * pagesize);
-    Heap_Unprotect(toheap);    
     ResetJob();                        /* Reset counter so all user threads are scanned */
     req_size = 0;
     asynchReachBarrier(&numWaitThread);
@@ -129,6 +128,9 @@ static void stop_copy(SysThread_t *sysThread)
   SetRange(&to_range, toheap->bottom, toheap->top);
   sysThread->LocalCursor = 0;
   QueueClear(sysThread->root_lists);
+
+  /* Write list can be ignored */
+  discard_writelist(sysThread);
 
   /* The "first" processor is in charge of the globals. */
   if (isFirst) {
@@ -214,21 +216,17 @@ static void stop_copy(SysThread_t *sysThread)
     /* Resize heaps and do stats */
     gcstat_normal(alloc,copied,0);
     HeapAdjust(0,req_size,froms,toheap);
-    Heap_Unprotect(toheap); 
-    Heap_Protect(fromheap);
+    Heap_Unprotect(toheap, fromheap->top - fromheap->bottom + alloc); 
     fromheap->alloc_start = fromheap->bottom;
     typed_swap(Heap_t *, fromheap, toheap);
     NumGC++;
   }
 
-  /* Each thread has a separate write list */
-  gcstat_normal(0,0, sysThread->writelistCursor - sysThread->writelistStart);
-
   /* All system threads need to reset their limit pointer */
   sysThread->allocStart = StartHeapLimit;
   sysThread->allocCursor = StartHeapLimit;
   sysThread->allocLimit = StartHeapLimit;
-  sysThread->writelistCursor = sysThread->writelistStart;
+  assert(sysThread->writelistCursor == sysThread->writelistStart);
 
   /* Resume normal scheduler work and start mutators */
   if (diag)
@@ -253,17 +251,25 @@ int GCTry_SemiPara(SysThread_t *sysThread, Thread_t *th)
   int roundSize = RoundUp(th->requestInfo,pagesize);
   mem_t tmp_alloc, tmp_limit;
 
-  if (th->requestInfo == 0)
-    return 0;
-  GetHeapArea(fromheap,roundSize,&tmp_alloc,&tmp_limit);
-  if (tmp_alloc) {
-    if (diag) 
-      printf("Proc %d: Grabbed %d page(s) at %d\n",sysThread->stid,roundSize/pagesize,tmp_alloc);
-    sysThread->allocStart = tmp_alloc;
-    sysThread->allocCursor = tmp_alloc;
-    sysThread->allocLimit = tmp_limit;
-    return 1;
+  discard_writelist(sysThread);
+  if (th->requestInfo > 0) {
+    GetHeapArea(fromheap,roundSize,&tmp_alloc,&tmp_limit);
+    if (tmp_alloc) {
+      if (diag) 
+	printf("Proc %d: Grabbed %d page(s) at %d\n",sysThread->stid,roundSize/pagesize,tmp_alloc);
+      sysThread->allocStart = tmp_alloc;
+      sysThread->allocCursor = tmp_alloc;
+      sysThread->allocLimit = tmp_limit;
+      return 1;
+    }
   }
+  else if (th->requestInfo < 0) {
+    unsigned int bytesAvailable = (((unsigned int)sysThread->writelistEnd) - 
+				   ((unsigned int)sysThread->writelistCursor));
+    return ((-th->requestInfo) <= bytesAvailable);
+  }
+  else 
+    assert(0);
   return 0;
 }
 

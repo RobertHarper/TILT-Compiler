@@ -310,21 +310,19 @@ void Heap_Protect(Heap_t* res)
 
 }
 
-void Heap_Unprotect(Heap_t *res)
+int Heap_GetSize(Heap_t *h)
 {
-  long size = res->actualTop - res->bottom;
-  assert((size / pagesize * pagesize) == size);
-  my_mprotect(7,(caddr_t) res->bottom, size, PROT_READ | PROT_WRITE);
+  return (sizeof (val_t)) * (h->top - h->bottom);
 }
 
-int Heap_Getsize(Heap_t *h)
+int Heap_GetAvail(Heap_t *h)
 {
-  return (sizeof (val_t)) * (h->actualTop - h->bottom);
+  return (sizeof (val_t)) * (h->top - h->alloc_start);
 }
 
 void Heap_Resize(Heap_t *h, long newsize)
 {
-  int actualSize = Heap_Getsize(h);
+  int actualSize = h->actualTop - h->bottom;
   if (newsize > actualSize) {
       fprintf(stderr,"FATAL ERROR in Heap_Resize at GC %d.  Heap size = %d.  Trying to resize to %d\n",
 	      NumGC, actualSize, newsize);
@@ -332,6 +330,14 @@ void Heap_Resize(Heap_t *h, long newsize)
     }
   h->top = h->bottom + (newsize / (sizeof (val_t))); 
   assert(h->top <= h->actualTop);
+}
+
+void Heap_Unprotect(Heap_t *res, long newsize)
+{
+  long size = res->actualTop - res->bottom;
+  assert((size / pagesize * pagesize) == size);
+  my_mprotect(7,(caddr_t) res->bottom, size, PROT_READ | PROT_WRITE);
+  Heap_Resize(res, newsize);
 }
 
 mem_t StackError(struct ucontext *ucontext, mem_t badadd)

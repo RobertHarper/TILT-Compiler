@@ -190,6 +190,9 @@ ${objdir}/gc_gen_para.o: gc_gen_para.c tag.h general.h platform.h forward.h gc.h
 ${objdir}/gc_semi_conc.o: gc_semi_conc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_semi_conc.c
 
+${objdir}/gc_gen_conc.o: gc_semi_conc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
+	${CC} -o $@ ${CFLAGS} gc_gen_conc.c
+
 ${objdir}/gc.o: gc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc.c
 

@@ -156,8 +156,8 @@ void ReleaseJob(SysThread_t *sth)
   FetchAndAdd(&(th->status),-1);         /* Release after flush; note that FA always goes to mem */
 
   if (diag)
-    printf("Proc %d: Released thread %d with status = %d.  Used %d to %d and %d to %d.\n",
-	   sth->stid,th->tid,th->status,sth_allocCursor,sth->allocCursor,
+    printf("Proc %d: Released thread %d (status = %d) with request = %d.  Used %d to %d and %d to %d.\n",
+	   sth->stid,th->tid,th->status,th->requestInfo, sth_allocCursor,sth->allocCursor,
 	   sth_writelistCursor, sth->writelistCursor);
 }
 
@@ -502,8 +502,10 @@ static void work(SysThread_t *sth)
       /* Note that another processor can change th->saveregs[ALLOCLIMIT] to Stop at any point */
       if (th->requestInfo > 0)
 	assert(th->requestInfo + (val_t) sth->allocCursor <= (val_t) sth->allocLimit);
-      else
-	assert(sth->writelistCursor + 2 <= sth->writelistEnd);
+      else if (th->requestInfo < 0)
+	assert((-th->requestInfo) + (val_t) sth->writelistCursor <= (val_t) sth->writelistEnd);
+      else 
+	assert(0);
       mapThread(sth,th);
       if (th->request == GCRequestFromML) {
 	if (diag)

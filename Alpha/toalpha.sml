@@ -1023,7 +1023,7 @@ struct
 	   emit (SPECIFIC(LOADI (LDL, translateIReg writeLimit, writelistLimit_disp, Rth)));
 	   translate (Rtl.ADD(writeAlloc, Rtl.IMM (8 * n), writeAllocTemp));
 	   translate (Rtl.BCNDI(Rtl.LE, writeAllocTemp, Rtl.REG writeLimit, afterLabel, true));
-	   emit (BASE (MOVE (Rheap, Rat)));
+	   emit (SPECIFIC (INTOP(SUBL, Rheap, IMMop(8 * n), Rat)));
 	   emit (BASE (GC_CALLSITE afterLabel));
 	   emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
 			    {regs_modified=[Rat], regs_destroyed=[Rat],

@@ -239,8 +239,9 @@ mem_t forward2_root_lists(Queue_t *root_lists, mem_t alloc,
    (2) the writelist is terminated by a NULL 
    (3) The updated allocation pointer is returned. 
 */
+void discard_writelist(SysThread_t *sysThread);
 void forward1_writelist_coarseParallel_stack(mem_t *alloc, mem_t *limit,
-				     Heap_t *toheap, range_t *from, range_t *to, SysThread_t *sysThread);
+					     Heap_t *toheap, range_t *from, range_t *to, SysThread_t *sysThread);
 
 mem_t forward1_writelist(SysThread_t *sysThread, mem_t alloc,
 			 range_t *from, range_t *to);

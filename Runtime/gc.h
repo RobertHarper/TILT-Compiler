@@ -5,9 +5,13 @@
 extern int NumGC;
 extern int pagesize;
 
-/* State the mutator/collector is in */
+/* State the mutator/collector is in.
+   The *Pending* states are used to interrupt all processors for the parallel and concurrent collectors.
+   The Major type is used for generational collectors.
+   The BeginMajor type is used for the generational, concurrent collector.
+ */
 enum GCStatus { GCOff, GCPendingOn, GCOn, GCPendingOff };
-enum GCType { Unknown, Minor, Major };
+enum GCType { Minor, Major, BeginMajor };  
 
 extern enum GCStatus GCStatus;
 extern enum GCType GCType;

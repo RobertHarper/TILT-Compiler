@@ -97,18 +97,25 @@ int GCTry_Semi(SysThread_t *sysThread, Thread_t *th)
 {
   assert(sysThread->userThread == NULL);
   assert(th->sysThread == NULL);
-  if (th->requestInfo == 0)  /* write list request */
-    return 0;
-  assert(th->requestInfo > 0);
   if (sysThread->allocLimit == StartHeapLimit) {
-    unsigned int bytesAvailable;
     sysThread->allocStart = fromheap->bottom;
     sysThread->allocCursor = fromheap->bottom;
     sysThread->allocLimit = fromheap->top;
-    bytesAvailable = (((unsigned int)sysThread->allocLimit) - 
-		      ((unsigned int)sysThread->allocStart));
+    fromheap->alloc_start = fromheap->top;
+  }
+  discard_writelist(sysThread);
+  if (th->requestInfo > 0) {
+    unsigned int bytesAvailable = (val_t) sysThread->allocLimit - 
+				  (val_t) sysThread->allocCursor;
     return (th->requestInfo <= bytesAvailable);
   }
+  else if (th->requestInfo < 0) {
+    unsigned int bytesAvailable = (((unsigned int)sysThread->writelistEnd) - 
+				   ((unsigned int)sysThread->writelistCursor));
+    return ((-th->requestInfo) <= bytesAvailable);
+  }
+  else 
+    assert(0);
   return 0;
 }
 
@@ -140,14 +147,16 @@ void GCStop_Semi(SysThread_t *sysThread)
   if (paranoid) 
     paranoid_check_all(fromheap, NULL, NULL, NULL);
 
+  /* Write list can be ignored */
+  discard_writelist(sysThread);
+
   /* Compute the roots from the stack and register set */
   QueueClear(sysThread->root_lists);
   local_root_scan(sysThread,oneThread,fromheap);
   major_global_scan(sysThread);
     
   /* Get tospace and ranges ready for the collection */
-  Heap_Resize(toheap, fromheap->top - fromheap->bottom);
-  Heap_Unprotect(toheap);
+  Heap_Unprotect(toheap, fromheap->top - fromheap->bottom);
   SetRange(&from_range, fromheap->bottom, fromheap->top);
   SetRange(&to_range, toheap->bottom, toheap->top);
 
@@ -173,7 +182,7 @@ void GCStop_Semi(SysThread_t *sysThread)
 
   gcstat_normal((sizeof (val_t)) * (allocCursor - fromheap->alloc_start),
 		(sizeof (val_t)) * (to_ptr - toheap->bottom),
-		(sysThread->writelistCursor - sysThread->writelistStart));
+		0);
 
   /* Resize the tospace, discard old space, flip space */
   {
@@ -189,7 +198,7 @@ void GCStop_Semi(SysThread_t *sysThread)
   sysThread->allocStart = fromheap->alloc_start;
   sysThread->allocCursor = fromheap->alloc_start;
   sysThread->allocLimit = fromheap->top;
-  sysThread->writelistCursor = sysThread->writelistStart;
+  assert(sysThread->writelistCursor == sysThread->writelistStart);
 
   NumGC++;
   GCStatus = GCOff;

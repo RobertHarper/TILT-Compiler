@@ -116,17 +116,24 @@ int GCTry_GenPara(SysThread_t *sysThread, Thread_t *th)
   int roundSize = RoundUp(th->requestInfo,pagesize);
   mem_t tmp_alloc, tmp_limit;
 
-  if (th->requestInfo == 0)
-    return 0;
-  GetHeapArea(nursery,roundSize,&tmp_alloc,&tmp_limit);
-  if (tmp_alloc) {
-    if (diag) 
-      printf("Proc %d: Grabbed %d page(s) at %d\n",sysThread->stid,roundSize/pagesize,tmp_alloc);
-    sysThread->allocStart = tmp_alloc;
-    sysThread->allocCursor = tmp_alloc;
-    sysThread->allocLimit = tmp_limit;
-    return 1;
+  if (th->requestInfo > 0) {
+    GetHeapArea(nursery,roundSize,&tmp_alloc,&tmp_limit);
+    if (tmp_alloc) {
+      if (diag) 
+	printf("Proc %d: Grabbed %d page(s) at %d\n",sysThread->stid,roundSize/pagesize,tmp_alloc);
+      sysThread->allocStart = tmp_alloc;
+      sysThread->allocCursor = tmp_alloc;
+      sysThread->allocLimit = tmp_limit;
+      return 1;
+    }
   }
+  else if (th->requestInfo < 0) {
+    unsigned int bytesAvailable = (((unsigned int)sysThread->writelistEnd) - 
+				   ((unsigned int)sysThread->writelistCursor));
+    return ((-th->requestInfo) <= bytesAvailable);
+  }
+  else 
+    assert(0);
   return 0;
 }
 
@@ -149,8 +156,6 @@ void GCStop_GenPara(SysThread_t *sysThread)
   mem_t to_alloc_start = NULL;        /* Used only by "first" thread */
   unsigned int allocated = 0;
   unsigned int copied = 0;
-  unsigned int writes = (sizeof (val_t)) * (sysThread->writelistCursor - 
-					    sysThread->writelistStart);
   range_t nurseryRange, tenuredFromRange, tenuredToRange, largeRange;
   static long req_size;            /* These are shared across processors. */
   Thread_t *curThread = NULL;
@@ -220,11 +225,10 @@ void GCStop_GenPara(SysThread_t *sysThread)
       if (maxLive >= tenuredToSize) {
 	printf("WARNING at GC %d: failure possible since maxPossibleLive = %d > toSpaceSize = %d\n",
 	       NumGC, maxLive, tenuredToSize);
-	Heap_Resize(tenuredTo, tenuredToSize);
+	Heap_Unprotect(tenuredTo, tenuredToSize);
       }    
       else
-	Heap_Resize(tenuredTo, maxLive);
-      Heap_Unprotect(tenuredTo);
+	Heap_Unprotect(tenuredTo, maxLive);
       major_global_scan(sysThread);
     }
     asynchReachBarrier(&synch2);            /* First processor is counted twice */
@@ -248,6 +252,8 @@ void GCStop_GenPara(SysThread_t *sysThread)
     if (GCType == Minor) 
       forward1_writelist_coarseParallel_stack(&to_alloc, &to_limit,
 				      tenuredFrom, &nurseryRange, &tenuredFromRange, sysThread);
+    else
+      discard_writelist(sysThread);
   }
 
   /* Move everything from local stack to global stack to balance work */
@@ -331,15 +337,11 @@ void GCStop_GenPara(SysThread_t *sysThread)
     NumGC++;
   }
 
-
-  /* Each thread has a separate write list */
-  gcstat_normal(0,0, sysThread->writelistCursor - sysThread->writelistStart);
-
   /* All system threads need to reset their limit pointer */
   sysThread->allocStart = StartHeapLimit;
   sysThread->allocCursor = StartHeapLimit;
   sysThread->allocLimit = StartHeapLimit;
-  sysThread->writelistCursor = sysThread->writelistStart;
+  assert(sysThread->writelistCursor == sysThread->writelistStart);
 
   /* Resume normal scheduler work and start mutators */
   if (diag)

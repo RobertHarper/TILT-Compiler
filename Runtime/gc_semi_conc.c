@@ -180,14 +180,11 @@ static void CollectorOff(SysThread_t *sysThread)
     GCStatus = GCOff;
   }
 
-  /* Each thread has a separate write list */
-  gcstat_normal(0,0, sysThread->writelistCursor - sysThread->writelistStart);
-
   /* All system threads need to reset their limit pointer */
   sysThread->allocStart = StartHeapLimit;
   sysThread->allocCursor = StartHeapLimit;
   sysThread->allocLimit = StartHeapLimit;
-  sysThread->writelistCursor = sysThread->writelistStart;
+  assert(sysThread->writelistCursor == sysThread->writelistStart);
 
   /* Resume normal scheduler work and start mutators */
   if (diag)
@@ -206,8 +203,9 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
   range_t from_range, to_range;
   int bytesCopied = 0;
 
-  sysThread->allocStart = sysThread->allocCursor;  /* allocation area is NOT reused */
+  sysThread->allocStart = sysThread->allocCursor;  /* allocation area is NOT reused */  
   sysThread->writelistCursor = sysThread->writelistStart;  /* write list reused once processed */
+  gcstat_normal(0, 0, (sysThread->writelistCursor - sysThread->writelistStart) / 2);
 
   switch (GCStatus) {
   case GCOff:
@@ -344,9 +342,7 @@ static int GCTry_SemiConcHelp(SysThread_t *sysThread, int roundSize)
     sysThread->allocLimit = tmp_limit;
     return 1;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static long numOn1 = 0;
@@ -398,8 +394,7 @@ static void CollectorOn(SysThread_t *sysThread)
     int neededSize = (sizeof(val_t)) * (fromheap->top - fromheap->bottom);
     neededSize += neededSize / collectionRate;
     Heap_Resize(fromheap,neededSize);
-    Heap_Unprotect(toheap); 
-    Heap_Resize(toheap,neededSize);
+    Heap_Unprotect(toheap,neededSize);
     major_global_scan(sysThread);
   }
   while ((curThread = NextJob()) != NULL) {
@@ -443,6 +438,13 @@ int GCTry_SemiConc(SysThread_t *sysThread, Thread_t *th)
   assert(sysThread->writelistCursor + 2 <= sysThread->writelistEnd);
   flushStore();
 
+  if (th->requestInfo < 0) {
+    unsigned int bytesAvailable = (((unsigned int)sysThread->writelistEnd) - 
+				   ((unsigned int)sysThread->writelistCursor));
+    assert((-th->requestInfo) <= bytesAvailable);
+    return 1;
+  }
+  assert(th->requestInfo > 0);
   switch (GCStatus) {
   case GCOff:
     if (GCTry_SemiConcHelp(sysThread,roundSize))

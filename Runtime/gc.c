@@ -351,10 +351,10 @@ void gc_poll(SysThread_t *sth)
 /* Is there enough room in sth to satisfy mapping th onto it */
 int GCSatisfied(SysThread_t *sth, Thread_t *th)
 {
-  /* requestInfo = 0 means one write buffer slot was requested 
+  /* requestInfo < 0 means that many butes in write buffer is requested 
      requestInfo > 0 means that many bytes of allocation is requested */
-  if (th->requestInfo == 0) {
-    if (sth->writelistCursor + 2 <= sth->writelistEnd)
+  if (th->requestInfo < 0) {
+    if ((val_t)sth->writelistCursor - th->requestInfo <= (val_t)sth->writelistEnd)
       return 1;
   } 
   else if (th->requestInfo > 0) {
@@ -401,12 +401,14 @@ int GCFromScheduler(SysThread_t *sth, Thread_t *th)
       assert(0);
   }
   if (diag) {
-    if (th->requestInfo)
+    if (th->requestInfo > 0)
       printf("Proc %d: cannot resume user thread %d; need %d, only have %d; proceeding to stop-copy GC\n",
 	     sth->stid, th->tid, th->requestInfo, sth->allocLimit - sth->allocCursor);
+    else if (th->requestInfo < 0)
+      printf("Proc %d: cannot resume user thread %d; need %d bytes from write list; %d available; proceeding to stop-copy GC\n",
+	     sth->stid, th->tid, -(th->requestInfo), (sth->writelistEnd - sth->writelistCursor) * sizeof(val_t));
     else 
-      printf("Proc %d: cannot resume user thread %d; write list full; proceeding to stop-copy GC\n",
-	     sth->stid, th->tid);
+      assert(0);
   }
   switch (collector_type) {
     case Semispace:            
@@ -453,9 +455,9 @@ void GCFromMutator(Thread_t *curThread)
   mem_t sysAllocLimit = self->allocLimit;
 
   /* Check that we are running on own stack and allocation pointers consistent */
-  assert((self->stack - (int) (&self)) < 1024) ;
   assert(self == curThread->sysThread);
   assert(self->userThread == curThread);
+  assert((self->stack - (int) (&self)) < 1024) ;
   assert((limit == sysAllocLimit) || (limit == StopHeapLimit));
   assert(alloc <= sysAllocLimit);
 

@@ -72,7 +72,8 @@ struct Thread__t
   long               nextThunk;        /* Index of next unstarted thunk.  Initially zero. */
   long               numThunk;         /* Number of thunks.  At least one. */
   long               request;          /* Why were we stoppped and how do we resume? */
-  long               requestInfo;      /* If GC, how many bytes do we want? */
+  long               requestInfo;      /* If positive, how many bytes needed for allocation.
+					  If negative, how many bytes of write buffer needed. */
   long               filler;           /* must double align here */
   long               Csaveregs[32];    /* C register saved when we need to de-schedule while in a C function */
   double             Cfregs[32];        
@@ -103,7 +104,7 @@ struct SysThread__t
   ploc_t             writelistStart;  /* write list range */
   ploc_t             writelistCursor;
   ploc_t             writelistEnd;
-  ptr_t              writelist[1024];
+  ptr_t              writelist[4096];
   int                processor;    /* processor id that this pthread is bound to */
   pthread_t          pthread;      /* pthread that this system thread is implemented as */
   Thread_t           *userThread;  /* current user thread mapped to this system thread */
