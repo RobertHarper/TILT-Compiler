@@ -15,6 +15,9 @@ fun markexp (e as MarkExp _, _, _) = e
 fun markdec(d as MarkDec _, _,_) = d
   | markdec(d,a,b) = MarkDec(d,(a,b))
 
+fun marktop(t as MarkTop _, _,_) = t
+  | marktop(t,a,b) = MarkTop(t,(a,b))
+
   val asteriskHash = StrgHash.hashString "*"
   val asteriskString = "*"
   val equalHash = StrgHash.hashString "="
@@ -38,7 +41,8 @@ fun markdec(d as MarkDec _, _,_) = d
     | ABSTRACTION | ABSTYPE | AND
     | ARROW | AS | BAR | CASE | DATATYPE | DOTDOTDOT | ELSE | END | EQUALOP
     | EQTYPE | EXCEPTION | DO | DOT | DARROW | FN | FUN | FUNCTOR | HANDLE 
-    | HASH | IF | IN | INCLUDE | INFIX | INFIXR | LET | LOCAL | NONFIX | OF 
+    | HASH | IF | IMPORT | IN | INCLUDE | INFIX | INFIXR | LET | LOCAL 
+    | NONFIX | OF 
     | OP | OPEN | OVERLOAD | RAISE | REC | SHARING | SIG | SIGNATURE | STRUCT
     | STRUCTURE | THEN | TYPE | VAL | WHERE | WHILE | WILD | WITH | WITHTYPE 
     | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE 
@@ -118,7 +122,7 @@ fun markdec(d as MarkDec _, _,_) = d
        | str of  strexp
        | arg_fct of  (strexp * bool) list
        | sdecs of  dec
-       | sdecs' of  dec
+(*       | sdecs' of  dec   *)
        | sdec of  dec
        | strb of  strb list
        | fparam of  symbol option * sigexp
@@ -126,11 +130,15 @@ fun markdec(d as MarkDec _, _,_) = d
        | fctb of  fctb list
        | fct_exp of fsigexp sigConst -> fctexp
        | interdec of  dec
+       | strlist of string list
+       | imple of string list
+       | inter of string list
+       | top of top 
 
 %verbose
 %pos int
 %arg (error) : pos * pos -> ErrorMsg.complainer
-%start interdec
+%start top
 %eop EOF SEMICOLON
 %noshift EOF
 
@@ -505,6 +513,7 @@ spec	: STRUCTURE strspec	([StrSpec strspec])
 	| EQTYPE tyspec		([TycSpec(tyspec,true)])
 	| VAL valspec		([ValSpec valspec])
 	| EXCEPTION exnspec	([ExceSpec exnspec])
+        | SIGNATURE sigb        ([SigSpec sigb])
 	| fixity ops		([FixSpec {fixity=fixity, ops=ops}])
 	| SHARING sharespec	(sharespec)
 	| INCLUDE idents	(idents)
@@ -586,14 +595,17 @@ arg_fct : LPAREN sdecs RPAREN arg_fct   ((MarkStr(StructStr sdecs,
 						   (sdecsleft,sdecsright)),
 					   false)])
 
+
 sdecs	: sdec sdecs		(makeSEQdec (markdec(sdec,sdecleft,sdecright),
 					     sdecs))
 	| SEMICOLON sdecs	(sdecs)
 	|			(SeqDec[])
 
-sdecs'	: sdec sdecs'		(makeSEQdec (markdec(sdec,sdecleft,sdecright),
+(*
+ sdecs'	: sdec sdecs'		(makeSEQdec (markdec(sdec,sdecleft,sdecright),
 					     sdecs'))
-	| sdec			(markdec(sdec, sdecleft,sdecright))
+	 | sdec			(markdec(sdec, sdecleft,sdecright))
+*)
 
 sdec	: STRUCTURE strb	(StrDec strb)
 	| ABSTRACTION strb	(AbsDec strb)
@@ -642,13 +654,38 @@ fct_exp: qid	(fn constraint => VarFct(qid fctSymbol,constraint))
 		   MarkFct(LetFct(sdecs, fct_exp constraint),
 		   (LETleft,ENDright)))
 
-interdec: sdecs'	(markdec(sdecs',sdecs'left,sdecs'right))
+(* interdec: sdecs'	(markdec(sdecs',sdecs'left,sdecs'right))
 
 	| exp		(markdec(ValDec([Vb{exp=exp,pat=VarPat itsym}],ref []),
 				 expleft,expright))
+*)
+
+strlist: STRING strlist (STRING :: strlist)
+        |               ([])
+
+imple: IMPORT strlist   (strlist)
+
+inter: INCLUDE strlist  (strlist) 
+
+top: sdecs              (marktop(ImplTop([], sdecs), sdecsleft, sdecsright)) 
+   | imple sdecs        (marktop(ImplTop(imple, sdecs),
+				    impleleft, sdecsright))
+   | inter spec_s       (marktop(InterTop(inter, spec_s),
+				    interleft, spec_sright))
 
 (*
  * $Log$
+# Revision 1.4  97/07/02  22:03:06  jgmorris
+# Modified syntax to allow for interfaces and implementations.
+# 
+ * Revision 1.2  1997/05/30 14:12:32  zdance
+ * Added support for (*$import...*) and (*$include...*) directives.
+ * Also changed the grammar to allow for (possibly) semicolon-separated sequences
+ * at the top level declarations.
+ *
+ * Revision 1.1.1.1  1997/05/23 14:53:51  til
+ * Imported Sources
+ *
 # Revision 1.3  97/04/10  15:04:59  cokasaki
 # Added DelayExp and DelayPat to ast.  Added lexical token DOLLAR.
 # 

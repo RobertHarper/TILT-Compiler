@@ -3,6 +3,17 @@
  * Copyright 1989 by AT&T Bell Laboratories
  *
  * $Log$
+# Revision 1.2  97/07/02  22:03:18  jgmorris
+# Modified syntax to allow for interfaces and implementations.
+# 
+ * Revision 1.2  1997/05/30 14:12:41  zdance
+ * Added support for (*$import...*) and (*$include...*) directives.
+ * Also changed the grammar to allow for (possibly) semicolon-separated sequences
+ * at the top level declarations.
+ *
+ * Revision 1.1.1.1  1997/05/23 14:53:52  til
+ * Imported Sources
+ *
 # Revision 1.1  97/04/10  15:05:11  cokasaki
 # Added DelayExp and DelayPat to ast.  Added lexical token DOLLAR.
 # 
@@ -70,7 +81,7 @@ fun inc (ri as ref i) = (ri := i+1)
 fun dec (ri as ref i) = (ri := i-1)
 %% 
 %reject
-%s A S F Q AQ L LL LLC LLCQ;
+%s A S F Q AQ L LL LLC LLCQ IMP;
 %header (functor MLLexFun(structure Tokens : ML_TOKENS));
 %arg ({comLevel,sourceMap,err,charlist,stringstart,stringtype,brack_stack});
 idchars=[A-Za-z'_0-9];
@@ -143,6 +154,10 @@ hexnum=[0-9a-fA-F]+;
                     stringtype := false; YYBEGIN S; continue());
 <INITIAL>"(*#line"{nrws}  => 
                    (YYBEGIN L; stringstart := yypos; comLevel := 1; continue());
+<INITIAL>"(*$import"{nrws} =>
+		   (YYBEGIN IMP; comLevel := 1; Tokens.IMPORT(yypos, yypos+9));
+<INITIAL>"(*$include"{nrws} =>
+ 		   (YYBEGIN IMP; comLevel := 1; Tokens.INCLUDE(yypos, yypos+10));
 <INITIAL>"(*"	=> (YYBEGIN A; stringstart := yypos; comLevel := 1; continue());
 <INITIAL>"*)"	=> (err (yypos,yypos+1) COMPLAIN "unmatched close comment"
 		        nullErrorBody;
@@ -152,6 +167,13 @@ hexnum=[0-9a-fA-F]+;
 		    continue());
 <INITIAL>.	=> (err (yypos,yypos) COMPLAIN "illegal token" nullErrorBody;
 		    continue());
+<IMP>{id}                 => (Tokens.STRING(yytext, yypos, yypos+size yytext));
+<IMP>{ws}                 => (continue());
+<IMP>\n                   => (SourceMap.newline sourceMap yypos; continue());
+<IMP>"*)"                 => (YYBEGIN INITIAL; comLevel := 0; continue());
+<IMP>.			  => (err (yypos, yypos+1) COMPLAIN
+			      "ill-formed (*$import...*) or (*$include...*)" nullErrorBody
+		              ; YYBEGIN INITIAL; comLevel := 0; continue());
 <L>[0-9]+                 => (YYBEGIN LL; charlist := [yytext]; continue());
 <LL>\.                    => ((* cheat: take n > 0 dots *) continue());
 <LL>[0-9]+                => (YYBEGIN LLC; addString(charlist, yytext); continue());

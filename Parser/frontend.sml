@@ -7,9 +7,10 @@ sig
       = EOF   
       | ERROR 
       | ABORT 
-      | PARSE of Ast.dec
+      | PARSE_IMPL of string list * Ast.dec
+      | PARSE_INTER of string list * Ast.spec list
 
-    val parse : Source.inputSource -> unit -> parseResult
+    val parse : Source.inputSource -> parseResult
 end (* signature FRONT_END *)
 
 structure FrontEnd : FRONT_END =
@@ -37,7 +38,8 @@ datatype parseResult
   = EOF   (* end of file reached *)
   | ERROR (* parsed successfully, but with syntactic or semantic errors *)
   | ABORT (* could not even parse to end of declaration *)
-  | PARSE of Ast.dec
+  | PARSE_IMPL of string list * Ast.dec
+  | PARSE_INTER of string list * Ast.spec list
 
 val dummyEOF = MLLrVals.Tokens.EOF(0,0)
 val dummySEMI = MLLrVals.Tokens.SEMICOLON(0,0)
@@ -104,12 +106,17 @@ fun parse (source as {sourceStream,errConsumer,interactive,
                             MLP.parse(lookahead,!lexer',parseerror,err)
 (*                        val _ = addLines(linesRead()) *)
                           val _ = lexer' := lexer''
-                       in if !anyErrors then ERROR else PARSE result
+			  val Ast.MarkTop(top, _) = result
+		      in if !anyErrors then ERROR
+			 else case top 
+				of Ast.ImplTop res => PARSE_IMPL res
+				 | Ast.InterTop res => PARSE_INTER res
+				 | _ => ERROR 
                       end 
         end handle LrParser.ParseError => ABORT
                  | AbortLex => ABORT
             (* oneparse *)
-   in fn () => (anyErrors := false; oneparse ())
+   in anyErrors := false; oneparse ()
   end
 
 end (* structure FrontEnd *)
@@ -117,6 +124,20 @@ end (* structure FrontEnd *)
 
 (*
  * $Log$
+# Revision 1.2  97/07/02  22:03:04  jgmorris
+# Modified syntax to allow for interfaces and implementations.
+# 
+ * Revision 1.3  1997/06/09 15:37:31  mael
+ * Added parsing of interfaces
+ *
+ * Revision 1.2  1997/05/30 14:12:31  zdance
+ * Added support for (*$import...*) and (*$include...*) directives.
+ * Also changed the grammar to allow for (possibly) semicolon-separated sequences
+ * at the top level declarations.
+ *
+ * Revision 1.1.1.1  1997/05/23 14:53:50  til
+ * Imported Sources
+ *
 # Revision 1.1  97/03/24  13:02:18  pscheng
 # added frontend
 # 

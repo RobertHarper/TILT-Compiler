@@ -29,7 +29,12 @@ datatype 'a sigConst
 
 (* EXPRESSIONS *)
 
-datatype exp
+datatype top 
+  = ImplTop of string list * dec (* top level implementation file *)
+  | InterTop of string list * spec list (* top level interface file *)
+  | MarkTop of top * region     (* mark a top level file *)
+
+and exp
   = VarExp of path		(* variable *)
   | FnExp of rule list		(* abstraction *)
   | FlatAppExp of exp fixitem list (* expressions before fixity parsing *)
@@ -131,6 +136,7 @@ and spec = StrSpec of (symbol * sigexp) list			(* structure *)
 	 | ShareSpec of path list			(* structure sharing *)
 	 | ShatycSpec of path list			(* type sharing *)
 	 | IncludeSpec of symbol			(* include specif *)
+         | SigSpec of sigb list                         (* signature *)
 	 | MarkSpec of spec * region		(* mark a spec *)
 
 (* DECLARATIONS (let and structure) *)
@@ -219,6 +225,17 @@ end (* structure Ast *)
 
 (*
  * $Log$
+# Revision 1.3  97/07/02  22:03:03  jgmorris
+# Modified syntax to allow for interfaces and implementations.
+# 
+ * Revision 1.2  1997/05/30 14:12:30  zdance
+ * Added support for (*$import...*) and (*$include...*) directives.
+ * Also changed the grammar to allow for (possibly) semicolon-separated sequences
+ * at the top level declarations.
+ *
+ * Revision 1.1.1.1  1997/05/23 14:53:49  til
+ * Imported Sources
+ *
 # Revision 1.2  97/04/10  15:04:55  cokasaki
 # Added DelayExp and DelayPat to ast.  Added lexical token DOLLAR.
 # 

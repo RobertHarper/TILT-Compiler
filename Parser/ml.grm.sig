@@ -47,6 +47,7 @@ val INFIXR:  'a * 'a -> (svalue,'a) token
 val INFIX:  'a * 'a -> (svalue,'a) token
 val INCLUDE:  'a * 'a -> (svalue,'a) token
 val IN:  'a * 'a -> (svalue,'a) token
+val IMPORT:  'a * 'a -> (svalue,'a) token
 val IF:  'a * 'a -> (svalue,'a) token
 val HASH:  'a * 'a -> (svalue,'a) token
 val HANDLE:  'a * 'a -> (svalue,'a) token
