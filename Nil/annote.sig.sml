@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Name *)
+(*$import Name *)
 signature ANNOTATION = 
     sig
       datatype 'a annotation = 
