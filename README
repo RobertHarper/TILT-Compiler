@@ -75,22 +75,6 @@ PARALLEL MAKE
 	compilation jobs that make starts.
 
 
-CVS ACCESS
-
-	For faster access to bugs (and bug fixes), you can pull TILT from
-	our CVS server:
-
-		cvs -d :pserver:guest_tilt@cvs.concert.cs.cmu.edu:/cvsroot login
-		# Use an empty password
-
-		cvs -d :pserver:guest_tilt@cvs.concert.cs.cmu.edu:/cvsroot checkout ml96
-
-	The CVS repository contains a few things that are not in the
-	release: an old MLRISC backend, some experimental code, regression
-	tests, benchmarks, a bugs database, and additional (but outdated)
-	documentation.
-
-
 SUPPORT
 
 	This research was supported by the Defense Advanced Research
