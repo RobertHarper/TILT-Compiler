@@ -355,7 +355,7 @@ fun show_state ({modunself,...}:state) =
 			       pp_signat res; print "\n\n"))
 	    in res
 	    end
-	fun SelfifyDec ctxt (DEC_MOD (v,s)) = DEC_MOD(v,SelfifySig ctxt (SIMPLE_PATH v,s))
+	fun SelfifyDec ctxt (DEC_MOD (v,s)) = DEC_MOD(v,SelfifySig ctxt (PATH(v,[]),s))
 	  | SelfifyDec ctxt dec = dec
 	fun SelfifySdecs ctxt (p : path, sdecs : sdecs) =
 	    case (SelfifySig ctxt (p,SIGNAT_STRUCTURE(NONE,sdecs))) of
@@ -739,7 +739,7 @@ fun show_state ({modunself,...}:state) =
 				     then self (add_context_exp'(ctxt,v,#2 (GetExpCon(e,ctxt))))
 				 else NONE
 	      | BND_MOD (v,m) => let val (va,s) = GetModSig(m,ctxt)
-				     val s' = SelfifySig ctxt (SIMPLE_PATH v,s)
+				     val s' = SelfifySig ctxt (PATH(v,[]),s)
 				 in if va then self (add_context_mod'(ctxt,v,s'))
 				    else NONE
 				 end
@@ -760,7 +760,7 @@ fun show_state ({modunself,...}:state) =
      | MOD_LET (v,m1,m2) => let val (va1,s1) = GetModSig(m1,ctxt)
 			    in va1 andalso
 				(Module_IsValuable m2 (add_context_mod'(ctxt,v,
-									   SelfifySig ctxt (SIMPLE_PATH v,s1))))
+									   SelfifySig ctxt (PATH(v,[]),s1))))
 			    end
      | MOD_PROJECT (m,l) => Module_IsValuable m ctxt
      | MOD_APP (m1,m2) => let val (va1,s1) = GetModSig(m1,ctxt)
@@ -1463,7 +1463,7 @@ fun show_state ({modunself,...}:state) =
 	   in (va,res)
 	   end
      | MOD_FUNCTOR (v,s,m,s2) => 
-	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,SelfifySig ctxt (SIMPLE_PATH v, s)))
+	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,SelfifySig ctxt (PATH(v,[]), s)))
 	       val (va,signat) = GetModSig(m,ctxt')
 	       (* check equivalence of s2 and signat *)
 	   in  (true,SIGNAT_FUNCTOR(v,s,s2,
@@ -1491,7 +1491,7 @@ fun show_state ({modunself,...}:state) =
 	   end
      | MOD_LET (v,m1,m2) => 
 	   let val (va1,s1) = GetModSig(m1,ctxt)
-	       val s1' = SelfifySig ctxt (SIMPLE_PATH v,s1)
+	       val s1' = SelfifySig ctxt (PATH(v,[]),s1)
 	       val ctxt' = add_context_mod'(ctxt,v,s1')
 	       val (va2,s2) = GetModSig(m2,ctxt')
 	   in (va1 andalso va2,sig_subst_modvar(s2,[(v,m1)]))
@@ -1781,7 +1781,7 @@ fun show_state ({modunself,...}:state) =
        | Sig_Valid (ctxt : context, SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,...}) = Sdecs_Valid(ctxt,sdecs)
        | Sig_Valid (ctxt, SIGNAT_FUNCTOR(v,s_arg,s_res,arrow)) = 
 	 (Sig_Valid(ctxt,s_arg) andalso 
-	  Sig_Valid(add_context_mod'(ctxt,v,SelfifySig ctxt (SIMPLE_PATH v,s_arg)),s_res))
+	  Sig_Valid(add_context_mod'(ctxt,v,SelfifySig ctxt (PATH(v,[]),s_arg)),s_res))
        | Sig_Valid (ctxt : context, SIGNAT_VAR v) = Sig_Valid(ctxt,reduce_sigvar(ctxt,v))
 
      and Dec_IsSub (ctxt,d1,d2) = Dec_IsSub' true (ctxt,d1,d2) 
@@ -1862,7 +1862,7 @@ fun show_state ({modunself,...}:state) =
 		  (SIGNAT_STRUCTURE (NONE,sdecs1), 
 		   SIGNAT_STRUCTURE (NONE,sdecs2)) => 
 		  let val v = fresh_named_var "selfvar"
-		      val p = SIMPLE_PATH v
+		      val p = PATH(v,[])
 		      val sdecs1 = SelfifySdecs ctxt (p,sdecs1)
 		      val sdecs2 = SelfifySdecs ctxt (p,sdecs2)
 		      val ctxt = add_context_mod'(ctxt,v,SIGNAT_STRUCTURE(SOME p,sdecs1))
@@ -1883,7 +1883,7 @@ fun show_state ({modunself,...}:state) =
 		  ((eq_arrow(a1,a2,true)) andalso 
 		   let val s1_res = if (eq_var(v1,v2)) then s1_res
 				    else sig_subst_modvar(s1_res,[(v1,MOD_VAR v2)])
-		       val s2_arg = SelfifySig ctxt (SIMPLE_PATH v2, s2_arg)
+		       val s2_arg = SelfifySig ctxt (PATH (v2,[]), s2_arg)
 		       val ctxt' = add_context_dec(ctxt,DEC_MOD(v2,s2_arg))
 		   in  Sig_IsSub' isSub (ctxt',s2_arg,s1_arg) andalso 
 		       Sig_IsSub' isSub (ctxt',s1_res,s2_res)
@@ -1931,15 +1931,11 @@ fun show_state ({modunself,...}:state) =
 	    (_,NONE) => NONE
 	  | ([],SOME (path,pc)) => SOME(path,pc)
 	  | (_,SOME (path,pc)) => LookupHelp(ctxt,labrest,path,pc))
-      fun Context_Lookup_Path (CONTEXT{var_list,...}, p as SIMPLE_PATH v) = 
-	  (case Name.VarMap.find(#1 var_list, v) of
-	      NONE => NONE
-	    | SOME (_,pc) => SOME(p,pc))
-	| Context_Lookup_Path (_, COMPOUND_PATH(v,[])) = error "ill-formed compound path"
-	| Context_Lookup_Path (ctxt as CONTEXT{var_list, ...}, COMPOUND_PATH(v,labs)) =
-	(case (Name.VarMap.find(#1 var_list,v)) of
-	    NONE => NONE
-	  | SOME (_,pc) => LookupHelp(ctxt,labs,SIMPLE_PATH v,pc))
+      fun Context_Lookup_Path (ctxt as CONTEXT{var_list,...}, p as PATH (v,labs)) = 
+	  (case (Name.VarMap.find(#1 var_list, v),labs) of
+	      (NONE,_) => NONE
+	    | (SOME (_,pc),[]) => SOME(p,pc)
+	    | (SOME (_,pc),_) => LookupHelp(ctxt,labs,PATH(v,[]), pc))
   end
 
     val eq_con = fn (ctxt,c1,c2) => eq_con(c1,c2,ctxt)

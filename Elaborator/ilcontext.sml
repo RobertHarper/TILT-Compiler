@@ -1,4 +1,4 @@
-(*$import ILCONTEXT Util Listops Name Ppil Stats *)
+(*$import ILCONTEXT Util Listops Name Ppil Stats IlUtil *)
 structure IlContext :> ILCONTEXT =
 struct
 
@@ -19,30 +19,13 @@ struct
     type inline = Il.inline
     type context_entry = Il.context_entry
 	
-    open Il Util Name Listops Ppil
+    open Il Util Name Listops Ppil IlUtil
 	
     val error = fn s => error "ilcontext.sml" s
 	
     val debug = Stats.ff("IlcontextDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
-    fun join_path_labels (SIMPLE_PATH v, l) = COMPOUND_PATH(v,l)
-      | join_path_labels (COMPOUND_PATH (v,ls), l) = COMPOUND_PATH(v,ls @ l)
-    fun print_path (SIMPLE_PATH v) = print (var2string v)
-      | print_path (COMPOUND_PATH(v,lbls)) = (print (var2string v);
-					      app (fn lbl => (print ".";
-							      print (label2string lbl)))
-					      lbls)
-    fun path2obj (var_maker : var -> 'a, mod_maker : mod * label -> 'a) p = 
-      (case p of
-	 (SIMPLE_PATH v) => var_maker v
-       | (COMPOUND_PATH (v,ls)) => let fun loop [] _ = var_maker v
-					 | loop [l] acc = mod_maker(acc,l)
-					 | loop (l::rest) acc = loop rest (MOD_PROJECT(acc,l))
-				   in loop ls (MOD_VAR v)
-				   end)
-    val path2mod = path2obj (MOD_VAR,MOD_PROJECT)
-    val path2con = path2obj (CON_VAR, CON_MODULE_PROJECT)
-    val path2exp = path2obj (VAR, MODULE_PROJECT)
+
 
     (* --------------------- EXTENDERS ---------------------------------------- *)
     type var_seq_map = (label * phrase_class) VarMap.map * var list
@@ -82,7 +65,7 @@ struct
 	    let 
 	        val label_list = Name.LabelMap.insert(label_list,lbl,(path,pc))
 	        val var_list = (case path of
-				    SIMPLE_PATH v => var_seq_insert(var_list,v,(lbl,pc))
+				    PATH(v,[]) => var_seq_insert(var_list,v,(lbl,pc))
 				  | _ => var_list)
             in CONTEXT({alias_list = alias_list,
 			flatlist = flatlist,
@@ -123,13 +106,13 @@ struct
 			 end)
     in
 	fun add_context_inline (ctxt, l, v, inline) = 
-	    do_inline (add_context_flat(ctxt, CONTEXT_INLINE(l,v,inline)), SIMPLE_PATH v, l, inline)
+	    do_inline (add_context_flat(ctxt, CONTEXT_INLINE(l,v,inline)), PATH(v,[]), l, inline)
 	fun add_context_inline_signature (ctxt, l, v, quad as {self, code, abs_sig}) = 
 	    let val s = SIGNAT_INLINE_STRUCTURE quad
 		val ctxt = add_context_flat(ctxt, CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))
-		val ctxt = help (ctxt,SIMPLE_PATH v,l,PHRASE_CLASS_MOD (MOD_STRUCTURE code,s))
+		val ctxt = help (ctxt,PATH(v,[]),l,PHRASE_CLASS_MOD (MOD_STRUCTURE code,s))
 	    in  if (is_label_open l) 
-		    then foldl (sbnd_sdec_help (SIMPLE_PATH v)) ctxt (zip code abs_sig)
+		    then foldl (sbnd_sdec_help (PATH(v,[]))) ctxt (zip code abs_sig)
 		else ctxt
 	    end
     end
@@ -148,7 +131,7 @@ struct
 	let (* val _ = (print "add_context_sdec':\n ";
 		     stat_context ctxt; print "\n\n\n") *)
 	    fun mk_path v = (case pathopt of
-				 NONE => SIMPLE_PATH v
+				 NONE => PATH(v,[])
 			       | SOME p => join_path_labels(p,[l]))
 	    fun help(CONTEXT {alias_list, flatlist,fixity_list,
 			      label_list,var_list,tag_list}, 
@@ -158,7 +141,7 @@ struct
 		    val pc = pc_maker obj
 		    val label_list = Name.LabelMap.insert(label_list,l,(path,pc))
 		    val var_list = (case path of
-					SIMPLE_PATH v => var_seq_insert(var_list,v,(l,pc))
+					PATH(v,[]) => var_seq_insert(var_list,v,(l,pc))
 				      | _ => var_list)
 		in CONTEXT{alias_list = alias_list,
 			   flatlist = flatlist,
@@ -215,7 +198,7 @@ struct
 		 flatlist = (CONTEXT_SDEC(SDEC(l,DEC_MOD(v,signat))))::flatlist,
 		 fixity_list = fixity_list,
 		 label_list = Name.LabelMap.insert(label_list,l,
-						   (SIMPLE_PATH v, PHRASE_CLASS_SIG(v,signat))),
+						   (PATH(v,[]), PHRASE_CLASS_SIG(v,signat))),
 		 var_list = var_seq_insert(var_list,v,(l, PHRASE_CLASS_SIG (v,signat))),
 		 tag_list = tag_list})
 
@@ -290,18 +273,6 @@ struct
     fun name_bound(CONTEXT{tag_list,...},t) = (case Name.TagMap.find(tag_list,t) of
 						   NONE => false
 						 | SOME _ => true)
-
-    fun path2obj (var_maker : var -> 'a, mod_maker : mod * label -> 'a) p = 
-      (case p of
-	 (SIMPLE_PATH v) => var_maker v
-       | (COMPOUND_PATH (v,ls)) => let fun loop [] _ = var_maker v
-					 | loop [l] acc = mod_maker(acc,l)
-					 | loop (l::rest) acc = loop rest (MOD_PROJECT(acc,l))
-				   in loop ls (MOD_VAR v)
-				   end)
-    val path2mod = path2obj (MOD_VAR,MOD_PROJECT)
-    val path2con = path2obj (CON_VAR, CON_MODULE_PROJECT)
-    val path2exp = path2obj (VAR, MODULE_PROJECT)
 
 (*    fun combine_pc (PHRASE_EXP e, CLASS_EXP c) = PHRASE_CLASS_EXP (e,c)
       | combine_pc (PHRASE_CON c, CLASS_CON k) = PHRASE_CLASS_CON (c,k)

@@ -407,11 +407,11 @@ struct
 						 pp_signat seen s2,
 						 String ")"])
 	     
-    and pp_path path = 
-	  (case path of
-	     SIMPLE_PATH v => pp_var v
-	   | COMPOUND_PATH (v,ls) => HOVbox[Hbox[pp_var v, String "."], 
-					    pp_list pp_label ls ("",".","",false)])
+    and pp_path (PATH (v,ls)) = 
+	  (case ls of
+	     [] => pp_var v
+	   | _ => HOVbox[Hbox[pp_var v, String "."], 
+			 pp_list pp_label ls ("",".","",false)])
 
     and pp_fixity_list lf_list = pp_list (fn (l,f) => HOVbox[pp_label l, String " : ", pp_fixity f])
                                          lf_list ("(",", ",")", false)
@@ -490,11 +490,6 @@ struct
 
     fun pp_context' (CONTEXT{label_list,...}) = 
 	let val label_pathpc_list = Name.LabelMap.listItemsi label_list
-	    fun pp_path path = 
-		(case path of
-		     SIMPLE_PATH v => pp_var v
-		   | COMPOUND_PATH (v,ls) => HOVbox[Hbox[pp_var v, String "."], 
-						    pp_list pp_label ls ("",".","",false)])
 	    fun pp_xpc (PHRASE_CLASS_EXP (e,c)) = HOVbox[pp_exp [] e, String " : ", pp_con [] c]
 	      | pp_xpc (PHRASE_CLASS_CON (c,k)) = HOVbox[pp_con [] c, String " : ", pp_kind [] k]
 	      | pp_xpc (PHRASE_CLASS_MOD (m,s)) = HOVbox[pp_mod [] m, String " : ", pp_signat [] s]

@@ -69,25 +69,8 @@ struct
 						NONE => error "blastInChoice failed"
 					      | SOME w => w)
 
-    fun blastOutPath (SIMPLE_PATH v) = (blastOutChoice 0; blastOutVar v)
-      | blastOutPath (COMPOUND_PATH (v,ls)) = (blastOutChoice 1; blastOutVar v; 
-					       blastOutList blastOutLabel ls)
-
-    fun blastInPath () = let val _ = tab "blastInPath:" 
-			     val which = blastInChoice()
-			     val v = blastInVar()
-			     val res = if (which = 0)
-					   then SIMPLE_PATH v
-				       else COMPOUND_PATH(v, blastInList blastInLabel)
-			     val _ = (case res of
-					  SIMPLE_PATH v => (say (Name.var2string v))
-					| COMPOUND_PATH (v,ls) => (say (Name.var2string v);
-								   app (fn l => (say ".";
-										 say (Name.label2string l)))
-								   ls))
-			     val _ = say "\n"
-			 in res
-			 end
+    fun blastOutPath (PATH (v,ls)) = (blastOutVar v;  blastOutList blastOutLabel ls)
+    fun blastInPath () = PATH(blastInVar(), blastInList blastInLabel)
 
 	fun blastOutArrow TOTAL = blastOutChoice 0
 	  | blastOutArrow PARTIAL = blastOutChoice 1
@@ -825,8 +808,7 @@ struct
 			else ()
 		fun folder ((l,v), vm) =
 		      case Context_Lookup(c',l) of
-			   SOME(SIMPLE_PATH v',_) => VM.add(v,v',vm)
-		         | SOME(COMPOUND_PATH (v',_),_) => VM.add(v,v',vm)
+			   SOME(PATH (v',_),_) => VM.add(v,v',vm)
 			 | NONE => (print "label not found in c'\n"; 
 				    raise NOT_EQUAL)
 	    in (foldr folder vm lvlist, map #2 lvlist)
@@ -886,12 +868,7 @@ struct
 	      | (SOME c1, SOME c2) => equal(c1,c2)
 	      | _ => false
 
-	fun eq_path(vm,path,path') =
-	    case (path, path')
-	      of (SIMPLE_PATH v, SIMPLE_PATH v') => VM.eq_var(vm,v,v')
-               | (COMPOUND_PATH(v,lbls), COMPOUND_PATH(v',lbls')) =>
-		     VM.eq_var(vm,v,v') andalso eq_labels(lbls,lbls')
-	       | _ => false
+	fun eq_path(vm,PATH(v,lbls), PATH(v',lbls')) = VM.eq_var(vm,v,v') andalso eq_labels(lbls,lbls')
 
 	fun eq_pathopt (vm,pathopt,pathopt') = 
 	    eq_opt (fn (p1,p2) => eq_path(vm,p1,p2)) (pathopt,pathopt')

@@ -310,7 +310,7 @@ structure Datatype
 		
 	(* ----------------- compute the equality function  ------------------- *)
 	local
-	    val var_poly_dec = DEC_MOD(mpoly_var,SelfifySig context (SIMPLE_PATH mpoly_var,sigpoly_eq))
+	    val var_poly_dec = DEC_MOD(mpoly_var,SelfifySig context (PATH(mpoly_var,[]),sigpoly_eq))
 	    val temp_ctxt = add_context_dec(context,var_poly_dec)
 	    val eq_con = if (is_noncarrying)
 				then con_eqfun top_type_mproj
@@ -799,7 +799,7 @@ structure Datatype
      --------------------------------------------------------- *)
     type lookup = (Il.context * Il.label list -> (Il.mod * Il.signat) option) 
     exception NotConstructor
-    datatype path_or_con = PATH of path | CON of con
+    datatype path_or_con = APATH of path | CON of con
 
     fun constr_lookup context (p : Ast.path) =
 	(SOME
@@ -815,16 +815,12 @@ structure Datatype
 			     raise NotConstructor)
 		   | SOME lookup_result => lookup_result)
 		
-	    val (v,ls) = (* well-formed compound path *)
+            (* ls is non-empty *)
+	    val (v,ls) =
 		(case constr_path of
-		     SIMPLE_PATH v => raise NotConstructor
-		   | COMPOUND_PATH (v,[]) => error "constr_lookup: empty COMPOUND PATH"
-		   | COMPOUND_PATH v_ls => v_ls)
-
-
-	    val datatype_path = (case ls of 
-				     [_] => SIMPLE_PATH v
-				   | _ => COMPOUND_PATH(v,butlast ls))
+		     PATH(v,[]) => raise NotConstructor
+		   | PATH v_ls => v_ls)
+	    val datatype_path = PATH(v,butlast ls)  
 
 	    val data_sig = GetModSig(context,path2mod datatype_path)
 	    val sdecs = (case data_sig of
@@ -846,18 +842,18 @@ structure Datatype
 		     (SDEC(internal_type_lab,DEC_CON(_,_,SOME c))) =>
 			 (internal_type_lab, (case (con2path c) of
 						  NONE => CON c
-						| SOME p => PATH p))
+						| SOME p => APATH p))
 		   | _ => raise NotConstructor)
 	    val sum_path =
 		(case expose_sdec of
 		     SDEC(_,DEC_EXP(_,CON_ARROW(_,c,_,_))) => (case con2path c of
-								   SOME p => PATH p
+								   SOME p => APATH p
 								 | NONE => CON c)
 		   | SDEC(_,DEC_MOD(_,SIGNAT_FUNCTOR(_,_,SIGNAT_STRUCTURE(_,sdecs),_))) =>
 			 (case sdecs of
 			      [SDEC(_,DEC_EXP(_,CON_ARROW(_,CON_APP(c,_),_,_)))] => 
 				  (case con2path c of
-				       SOME p => PATH p
+				       SOME p => APATH p
 				     | NONE => CON c)
 			    | _ => raise NotConstructor)
 		   | _ => raise NotConstructor)
@@ -885,7 +881,7 @@ structure Datatype
 				| NONE => ((* print "constr_lookup failed to find path: ";
 					   pp_label lab; print "\n"; *)
 					   raise NotConstructor))
-		       | _ => COMPOUND_PATH(v,(butlast(butlast ls)) @ [lab]))
+		       | _ => PATH(v,(butlast(butlast ls)) @ [lab]))
 			val _ = if (!debug)
 				    then (print "get_path retrurning: ";
 					  pp_path p; print "\n")
@@ -998,8 +994,7 @@ structure Datatype
        fun help path = 
 	   let val is_inline = 
 	       (case path of 
-		    (SIMPLE_PATH v) => Util.substring("inline",Name.var2name v)
-		  | (COMPOUND_PATH (v,ls)) => (Util.substring("inline",Name.var2name v) orelse
+		   (PATH (v,ls)) => (Util.substring("inline",Name.var2name v) orelse
 					       orfold IlUtil.is_datatype_lab ls))
 	   in  if is_inline
 		   then (case (Context_Lookup_Path(context,path)) of
@@ -1009,10 +1004,10 @@ structure Datatype
 	   end
        
        val tycon = (case type_path of
-			PATH p => help p
+			APATH p => help p
 		      | CON c => c)
        val sumtycon = (case sum_path of
-			   PATH p => help p
+			   APATH p => help p
 			 | CON c => c)
 (*       val ssumtycon = map help ssum_path *)
        val ((* ssumcon, *)sumcon,datacon) = (case sbnds_sdecs_cons_opt of

@@ -16,14 +16,12 @@ structure Il :> IL =
     type prim = Prim.prim
     type ilprim = Prim.ilprim
 
-    datatype path = SIMPLE_PATH   of var 
-                  | COMPOUND_PATH of var * labels
+    datatype path = PATH of var * labels
+    datatype arrow = TOTAL | PARTIAL
 
     type fixity_table = (label * Fixity.fixity) list 
     type prim = Prim.prim
     type ilprim = Prim.ilprim
-
-    datatype arrow = TOTAL | PARTIAL
 
     datatype exp = OVEREXP of con * bool * exp Util.oneshot
                  | SCON    of value

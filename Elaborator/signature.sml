@@ -2,15 +2,13 @@
 
 (* Need to improve where_structure to use SIGNAT_OF *)
 
-structure Signature
-    :> SIGNATURE =
-
+structure Signature :> SIGNATURE =
   struct
 
 
     open Il IlUtil Ppil 
     open IlStatic 
-    open Util Listops Name (* IlLookup *) Tyvar
+    open Util Listops Name Tyvar
     open IlContext Error
 
 
@@ -68,8 +66,6 @@ structure Signature
   datatype typeslot = ABSTRACT of label list
 		    | CONCRETE of label list
 
-  fun splitPath (SIMPLE_PATH v) = (v,[])
-    | splitPath (COMPOUND_PATH (v,ls)) = (v,ls)
 
   (* this function is staged to reduce repeated selfification *)
   fun follow_labels (pathopt,sdecs,ctxt) =
@@ -77,17 +73,17 @@ structure Signature
 	  val (v,path,ctxt) = 
 	      (case pathopt of
 		   NONE => let val v = fresh_named_var "modtemp"
-			       val path = SIMPLE_PATH v
+			       val path = PATH(v,[])
 			       val signat = SelfifySig ctxt (path, signat)
 			       val ctxt = add_context_mod'(ctxt,v,signat)
 			   in  (v,path,ctxt)
 			   end
-		 | SOME path => (#1(splitPath path),path,ctxt))
+		 | SOME (path as PATH(v,_)) => (v,path,ctxt))
       in  fn labels =>
 	  let val c = path2con(join_path_labels(path,labels))
 	      val c' = con_normalize(ctxt,c)
 	  in  case (con2path c') of
-	      SOME p => let val (v',lbls) = splitPath p
+	      SOME p => let val PATH(v',lbls) = p
 			in  if (eq_var(v,v')) 
 				then ABSTRACT lbls
 			    else CONCRETE labels
@@ -161,14 +157,12 @@ structure Signature
 
 	fun chandle (cmap,_) c =
 	    (case IlUtil.con2path c of
-		 SOME (SIMPLE_PATH v) => Name.PathMap.find(cmap,(v,[]))
-	       | SOME (COMPOUND_PATH (v,labs)) => Name.PathMap.find(cmap,(v,labs))
+	         SOME (PATH (v,labs)) => Name.PathMap.find(cmap,(v,labs))
 	       | NONE => NONE)
 
 	fun mhandle (_,mmap) m =
 	    (case IlUtil.mod2path m of
-		 SOME (SIMPLE_PATH v) => Name.PathMap.find(mmap,(v,[]))
-	       | SOME (COMPOUND_PATH (v,labs)) => Name.PathMap.find(mmap,(v,labs))
+	         SOME (PATH (v,labs)) => Name.PathMap.find(mmap,(v,labs))
 	       | NONE => NONE)
 
 	fun sdechandle mapping (SDEC(l,DEC_CON(v,k,SOME c))) =
@@ -201,8 +195,7 @@ structure Signature
     in
 	type mapping = mapping
 	val empty_mapping = (Name.PathMap.empty, Name.PathMap.empty)
-	fun path2vpath (SIMPLE_PATH v) = (v,[])
-	  | path2vpath (COMPOUND_PATH vlabs) = vlabs
+	fun path2vpath (PATH vlabs) = vlabs
 	fun con_addmap((cmap,mmap),path,c) = (Name.PathMap.insert(cmap,path2vpath path,c), mmap)
 	fun mod_addmap((cmap,mmap),path,m) = (cmap, Name.PathMap.insert(mmap,path2vpath path,m))
 	val kind_substconmod = kind_substconmod
@@ -234,7 +227,7 @@ structure Signature
 
     fun vlpath2lpath (vlpath : vlpath) = map #2 vlpath
     fun vlpath2path [] = elab_error "vlpath2path got empty path"
-      | vlpath2path ((v,_)::vlrest) = COMPOUND_PATH(v,map #2 vlrest)
+      | vlpath2path ((v,_)::vlrest) = PATH(v,map #2 vlrest)
 
 
       (* labels is a list of typeslot paths (relative to the sdecs) to type components;
@@ -284,7 +277,7 @@ structure Signature
 				       end
 				 | _ => error "prematched sig not reducing to sig_struct")
 			      else s
-			val ctxt = add_context_mod'(ctxt,v,SelfifySig ctxt(SIMPLE_PATH v,s))
+			val ctxt = add_context_mod'(ctxt,v,SelfifySig ctxt(PATH (v,[]),s))
 		  in (SDEC(l,DEC_MOD(v,s))) :: (traverse ctxt cur_path rest)
 		  end
                 | traverse ctxt cur_path (sdec::rest) = sdec :: (traverse ctxt cur_path rest)
@@ -295,7 +288,7 @@ structure Signature
       fun xsig_sharing_rewrite (ctxt,sdecs) = 
         let val v = fresh_named_var "modtemp"
 	    val s = SIGNAT_STRUCTURE(NONE, sdecs)
-	    val ctxt = add_context_mod'(ctxt,v,SelfifySig ctxt (SIMPLE_PATH v, s))
+	    val ctxt = add_context_mod'(ctxt,v,SelfifySig ctxt (PATH (v,[]), s))
 	    fun combine_path first [] = path2con(vlpath2path first)
 	      | combine_path [] _ = error "bad paths"
 	      | combine_path (first as ((v,_)::firstrest))
@@ -449,11 +442,11 @@ structure Signature
 	    val mjunk_var = fresh_named_var "mjunk_where_structure_slow"
 	    val mjunk = MOD_VAR mjunk_var
 	    val context = add_context_mod'(context,mjunk_var,
-					   SelfifySig context (SIMPLE_PATH mjunk_var,
+					   SelfifySig context (PATH (mjunk_var,[]),
 							       SIGNAT_STRUCTURE(NONE,sdecs)))
 	    val (labels1,s1) = 
-		(case Context_Lookup_Path(context,COMPOUND_PATH(mjunk_var,labs1)) of
-		     SOME(COMPOUND_PATH(_,labels1),PHRASE_CLASS_MOD(_,s1)) => (labels1,s1)
+		(case Context_Lookup_Path(context,PATH(mjunk_var,labs1)) of
+		     SOME(PATH(_,labels1 as _::_),PHRASE_CLASS_MOD(_,s1)) => (labels1,s1)
 		   | _ => (error_region();
 			   print "can't where non-existent or non-structure component\n";
 			   raise WhereError))
@@ -515,7 +508,7 @@ structure Signature
       let
 	  val _ = print "xsig_sharing_structre called\n"
 	  val mjunk = fresh_named_var "mjunk_sharing_structure"
-	  val mpath = SIMPLE_PATH mjunk
+	  val mpath = PATH (mjunk,[])
 	  val s = SelfifySig ctxt (mpath, SIGNAT_STRUCTURE(NONE, sdecs))
 	  val SIGNAT_STRUCTURE(_,sdecs') = s
 	  val ctxt' = add_context_mod'(ctxt,mjunk,s)
@@ -548,7 +541,7 @@ structure Signature
 		   app (fn (_,s,_) => (print "STRUCTURE_SHARING succeeded with s = ";
 				       pp_signat s; 
 				       print "  which selfified to = \n";
-				       pp_signat (SelfifySig ctxt (SIMPLE_PATH mjunk2, s));
+				       pp_signat (SelfifySig ctxt (PATH (mjunk2,[]), s));
 				       print "\n\n\n")) lpath_var_sdecs_list;
 *)
 		      val sdecs = xsig_sharing_rewrite_structure(ctxt,sdecs,
@@ -687,11 +680,11 @@ structure Signature
 		in  sdecs
 		end
 
-	    val internal_sig = traverse (SIMPLE_PATH var_actual, empty_mapping) orig_sig
+	    val internal_sig = traverse (PATH (var_actual,[]), empty_mapping) orig_sig
 
 	    (* Now we compute the remaining paths and replace them *)
 	    val neededpaths = ref ([] : (label list * path) list)
-	    fun labels2path_local labs = join_path_labels(SIMPLE_PATH var_local, labs)
+	    fun labels2path_local labs = PATH (var_local,labs)
 	    fun add_path p = (case (assoc_eq(eq_labs, p, !neededpaths)) of
 				  SOME p' => p'
 				| NONE => let val p' = (labels2path_local p)
@@ -708,11 +701,7 @@ structure Signature
 		in  loop [l] m
 		end
 	      | chandle _ = NONE
-	    fun sdec_help p = (case p of 
-				   SIMPLE_PATH v => if (eq_var(v,var_actual))
-							then add_path [] else p
-				 | COMPOUND_PATH(v,labs) => if (eq_var(v,var_actual))
-								then add_path labs else p)
+	    fun sdec_help (p as PATH(v,labs)) = if (eq_var(v,var_actual)) then add_path labs else p
 	    fun sdec_handle (SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE(SOME p,sdecs)))) = 
 		let val s = SIGNAT_STRUCTURE(SOME (sdec_help p), sdecs)
 		in  SOME(SDEC(l,DEC_MOD(v,do_sig s)))
@@ -748,7 +737,7 @@ structure Signature
 	let 
 	    val var_local = fresh_named_var "hidden_module"
 	    val label_local = internal_label "hidden_module"
-	    fun labels2path_actual labs = join_path_labels(SIMPLE_PATH var_actual, labs)
+	    fun labels2path_actual labs = PATH(var_actual, labs)
 	    val (coerced_sig, neededpaths) = internalize(coerced_sig, var_actual, 
 							 var_local, label_local)
 
@@ -767,7 +756,7 @@ structure Signature
 			    val copt' = Util.mapopt (fn c => con_substconmod(c,mapping)) copt
 			    val p' = labels2path_actual(rev(l::p))
 			    val c' = path2con p'
-			    val mapping = con_addmap(mapping,SIMPLE_PATH v,CON_VAR v')
+			    val mapping = con_addmap(mapping,PATH (v,[]),CON_VAR v')
 			    val mapping = (case p of
 					       [] => con_addmap(mapping,p',CON_VAR v')
 					     | _ => mapping)
@@ -789,7 +778,7 @@ structure Signature
 		  | SDEC(l,DEC_MOD(v,s)) => 
 			(case dosig(l::p, mapping, s) of
 			     SOME(_,m,s) => let val v' = derived_var v
-					      val mapping = mod_addmap(mapping, SIMPLE_PATH v, MOD_VAR v')
+					      val mapping = mod_addmap(mapping, PATH(v,[]), MOD_VAR v')
 					      val p' = labels2path_actual[l]
 					      val mapping = 
 						  (case p of
@@ -892,12 +881,12 @@ structure Signature
 							      DEC_EXP(vp,con'))]), _) = actual_sig
 		   
 	       val ctxt' =  add_context_mod'(ctxt,var_poly,
-					     SelfifySig ctxt (SIMPLE_PATH var_poly,sig_poly))
+					     SelfifySig ctxt (PATH (var_poly,[]), sig_poly))
 	       val ctxt' = 
 		   (case varsig_option of
 			NONE => ctxt'
 		      | SOME(v1,s1) => add_context_mod'(ctxt',v1,
-							SelfifySig ctxt' (SIMPLE_PATH v1, s1)))
+							SelfifySig ctxt' (PATH (v1,[]), s1)))
 
 	       val (sbnds_poly,sdecs_poly,_) = 
 		   polyinst(ctxt',sig_poly_sdecs)
@@ -1297,18 +1286,20 @@ structure Signature
 				    coerced := true)
 			   val _ = if (a1 = a2) then () 
 				   else raise (FAILURE "arrow mismatch in xcoerce")
+			   val p2 = PATH(v2,[])
 			   val (_,m3body,_) = xcoerce_help(polyinst,
 							   add_context_mod'(context,v2,
-									    SelfifySig context (SIMPLE_PATH v2, s2)),
-							   SIMPLE_PATH v2,s2,s1)
+									    SelfifySig context (p2, s2)),
+							   p2,s2,s1)
 			   val m4_arg = MOD_APP(path2mod path_actual, m3body)
 			   val m4var = fresh_named_var "var_actual_xcoerce"
+			   val p4 = PATH(m4var,[])
 			   val (_,m4body,_) = xcoerce_help(polyinst,
 							   add_context_mod'(context,m4var,
-									    SelfifySig context (SIMPLE_PATH m4var,s1')),
-							   SIMPLE_PATH m4var,s1',s2')
+									    SelfifySig context (p4,s1')),
+							   p4,s1',s2')
 			   val m4body = mod_subst_modvar(m4body,[(m4var,m4_arg)])
-			   val context' = add_context_mod'(context,v2,(SelfifySig context (SIMPLE_PATH v2,s2)))
+			   val context' = add_context_mod'(context,v2,(SelfifySig context (p2,s2)))
 			   val s = GetModSig(context',m4body)
 			 in (MOD_FUNCTOR(v2,s2,m4body,s),
 			     SIGNAT_FUNCTOR(v2,s2,s,a1))
@@ -1409,8 +1400,8 @@ structure Signature
 	    let val (_,m,s) = 
 		xcoerce_help(polyinst,
 			     add_context_mod'(context,var_actual,
-					      SelfifySig context (SIMPLE_PATH var_actual, sig_actual)),
-			     SIMPLE_PATH var_actual,
+					      SelfifySig context (PATH (var_actual,[]), sig_actual)),
+			     PATH (var_actual,[]),
 			     sig_actual,sig_target)
 	    in  (m,s)
 	    end
@@ -1432,10 +1423,10 @@ structure Signature
 		    else ()
 	    (* first call perform an opaque sealing for type-checking reasons *)
 	    val context' = add_context_mod'(context,var_actual,
-					    SelfifySig context (SIMPLE_PATH var_actual, sig_actual))
+					    SelfifySig context (PATH (var_actual,[]), sig_actual))
 	    val (coerced,coerced_mod,coerced_sig) = 
 		xcoerce_help(polyinst,context',		
-			     SIMPLE_PATH var_actual,
+			     PATH (var_actual,[]),
 			     sig_actual,sig_target)
 
 

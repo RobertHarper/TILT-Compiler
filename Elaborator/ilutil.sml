@@ -1,4 +1,4 @@
-(*$import IL Ppil IlContext PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats *)
+(*$import IL Ppil PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats *)
 (* Il Utility *)
 structure IlPrimUtil :> PRIMUTIL where type con = Il.con
                                  where type exp = Il.exp = PrimUtil(structure PrimUtilParam = IlPrimUtilParam)
@@ -7,7 +7,7 @@ structure IlUtil
   :> ILUTIL =
   struct
 
-    open Il IlContext Ppil 
+    open Il Ppil 
     open Util Listops Name 
     open Prim Tyvar
 
@@ -179,44 +179,37 @@ structure IlUtil
 
     (* -------------------------------------------------------- *)
     (* ------------ Path manipulation functions ------------ *)
-    fun join_path_labels (SIMPLE_PATH v, l) = COMPOUND_PATH(v,l)
-      | join_path_labels (COMPOUND_PATH (v,ls), l) = COMPOUND_PATH(v,ls @ l)
-    fun path2obj (var_maker : var -> 'a, mod_maker : mod * label -> 'a) p = 
-      (case p of
-	 (SIMPLE_PATH v) => var_maker v
-       | (COMPOUND_PATH (v,ls)) => let fun loop [] _ = var_maker v
-					 | loop [l] acc = mod_maker(acc,l)
-					 | loop (l::rest) acc = loop rest (MOD_PROJECT(acc,l))
-				   in loop ls (MOD_VAR v)
-				   end)
+    fun join_path_labels (PATH (v,ls), l) = PATH(v,ls @ l)
+    fun path2obj (var_maker : var -> 'a, mod_maker : mod * label -> 'a) (PATH(v,ls)) = 
+	 let fun loop [] _ = var_maker v
+	       | loop [l] acc = mod_maker(acc,l)
+	       | loop (l::rest) acc = loop rest (MOD_PROJECT(acc,l))
+         in loop ls (MOD_VAR v)
+	 end
     val path2mod = path2obj (MOD_VAR,MOD_PROJECT)
     val path2con = path2obj (CON_VAR, CON_MODULE_PROJECT)
     val path2exp = path2obj (VAR, MODULE_PROJECT)
 
 
-    local fun loop (MOD_VAR v) [] = SOME(SIMPLE_PATH v)
-	    | loop (MOD_VAR v) acc = SOME(COMPOUND_PATH(v,acc))
+    local fun loop (MOD_VAR v) acc = SOME(PATH(v,acc))
 	    | loop (MOD_PROJECT (m,l)) acc = loop m (l::acc)
 	    | loop m _ = NONE
     in    
 	fun mod2path (m : mod) = loop m []
 	fun exp2path (e : exp) = 
 	    (case e of
-		 VAR v => SOME(SIMPLE_PATH v)
+		 VAR v => SOME(PATH (v,[]))
 	       | MODULE_PROJECT (m,l) => mod2path (MOD_PROJECT(m,l))
 	       | _ => NONE)
 	fun con2path (c : con) =
 	    (case c of
-		CON_VAR v => SOME(SIMPLE_PATH v)
+		CON_VAR v => SOME(PATH(v,[]))
 	      | CON_MODULE_PROJECT (m,l) => mod2path(MOD_PROJECT(m,l))
 	      | _ => NONE)
     end
 
 
-    fun eq_path(SIMPLE_PATH v1, SIMPLE_PATH v2) = eq_var(v1,v2)
-      | eq_path(COMPOUND_PATH (v1,l1), COMPOUND_PATH(v2,l2)) = 
-	eq_var(v1,v2) andalso eq_list(eq_label,l1,l2)
-      | eq_path _ = false
+   fun eq_path(PATH (v1,l1), PATH(v2,l2)) = eq_var(v1,v2) andalso eq_list(eq_label,l1,l2)
 
     fun eq_mpath (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
       | eq_mpath (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
@@ -224,7 +217,6 @@ structure IlUtil
     fun eq_epath (VAR v, VAR v') = eq_var (v,v')
       | eq_epath (MODULE_PROJECT (m,l), MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
       | eq_epath _ = false
-	
     fun eq_cpath (CON_VAR v, CON_VAR v') = eq_var (v,v')
       | eq_cpath (CON_MODULE_PROJECT (m,l), 
 		  CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
@@ -233,8 +225,6 @@ structure IlUtil
 
       (* -------------------------------------------------------- *)
       (* ------------ Context manipulation functions ------------ *)
-
-
 
     local
       datatype state = STATE of ({bound_convar : var list,
@@ -732,9 +722,7 @@ structure IlUtil
 					   else assoc_eq count (eq_var,var,table)
 	    | mod_handler _ _ _ = NONE
 	  fun sig_handler count handler_thunk table (SIGNAT_STRUCTURE (SOME p,sdecs)) = 
-	      let val v = (case p of
-			       SIMPLE_PATH v => v
-			     | COMPOUND_PATH (v,_) => v)
+	      let val PATH(v,_) = p
 		  val popt = (case (assoc_eq count (eq_var,v,table)) of
 				  NONE => SOME p
 				| SOME _ => NONE)
@@ -813,9 +801,7 @@ structure IlUtil
 						      else assoc_eq(eq_var,var,table)
 	    | con_handler _ _ = NONE
 	  fun sig_handler ctable mtable (SIGNAT_STRUCTURE (SOME p,sdecs)) = 
-	      let val v = (case p of
-			       SIMPLE_PATH v => v
-			     | COMPOUND_PATH (v,_) => v)
+	      let val PATH(v,_) = p
 		  val popt = (case (assoc_eq(eq_var,v,mtable)) of
 				  NONE => SOME p
 				| SOME _ => NONE)
@@ -1082,9 +1068,7 @@ structure IlUtil
 						then NONE else assoc_eq(eq_var,var,mtable)
 		| mod_handler _ = NONE
 	      fun sig_handler (SIGNAT_STRUCTURE (SOME p,sdecs)) = 
-		  let val v = (case p of
-				   SIMPLE_PATH v => v
-				 | COMPOUND_PATH (v,_) => v)
+		  let val PATH(v,_) = p
 		      val popt = (case (assoc_eq(eq_var,v,mtable)) of
 				      NONE => SOME p
 				    | SOME _ => NONE)

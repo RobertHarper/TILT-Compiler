@@ -190,10 +190,10 @@ structure Toil
 			      pp_mod norm_mod;
 			      print "\n")
 		     val signat = GetModSig(context,norm_mod)
-		     val inline = INLINE_MODSIG(norm_mod, SelfifySig context (SIMPLE_PATH var,signat))
+		     val inline = INLINE_MODSIG(norm_mod, SelfifySig context (PATH (var,[]),signat))
 		 in  add_context_inline(context,label,var,inline)
 		 end
-	   | NONE => add_context_mod(context,label,var,SelfifySig context (SIMPLE_PATH var, signat))
+	   | NONE => add_context_mod(context,label,var,SelfifySig context (PATH(var,[]), signat))
 
 
      fun sbnd_ctxt_list2modsig (sbnd_ctxt_list : (sbnd option * context_entry) list) 
@@ -242,7 +242,7 @@ structure Toil
 				      (true,BND_MOD(v,m),DEC_MOD(v',s)) => 
 					  if (eq_label(l,l') andalso (eq_var(v,v')))
 					      then add_inline_module(ctxt,l,v,m,
-								     SelfifySig ctxt (SIMPLE_PATH v,s))
+								     SelfifySig ctxt (PATH (v,[]),s))
 					  else elab_error "add_context_boolsbnd_ctxts: inconsistent sbnd_sdeclist"
 				    | _ => add_context_sdec(ctxt,SDEC(l',SelfifyDec ctxt dec)))
 			 in
@@ -969,7 +969,7 @@ structure Toil
 		 end
 	     
 	     val context'' = add_context_mod(context_fun_ids,open_lbl,var_poly,
-					     SelfifySig context (SIMPLE_PATH var_poly,
+					     SelfifySig context (PATH (var_poly,[]),
 								 SIGNAT_STRUCTURE(NONE, sdecs1)))
 		 
 		 
@@ -1146,7 +1146,7 @@ structure Toil
 		in  val temp_sdecs = make_typearg_sdec temp
 		end
 		val context' = add_context_mod(context,lbl,var_poly,
-						  SelfifySig context (SIMPLE_PATH var_poly,
+						  SelfifySig context (PATH (var_poly,[]),
 							     SIGNAT_STRUCTURE (NONE,temp_sdecs)))
 		val _ = eq_table_push()
 		val lbl = fresh_internal_label "bindarg"
@@ -1261,7 +1261,7 @@ structure Toil
 		val var_poly = fresh_named_var "var_poly"
 		val open_lbl = fresh_open_internal_label "lbl"
 		val context' = add_context_mod(context,open_lbl,var_poly,
-					       SelfifySig context (SIMPLE_PATH var_poly,
+					       SelfifySig context (PATH (var_poly,[]),
 								   SIGNAT_STRUCTURE(NONE, sdecs1)))
 
 		fun rvb_help {var:Ast.symbol, fixity: (Ast.symbol * 'a) option,
@@ -1313,7 +1313,7 @@ structure Toil
 		val var_poly = fresh_named_var "var_poly"
 		val open_lbl = fresh_open_internal_label "lbl"
 		val context' = add_context_mod(context,open_lbl,var_poly,
-					       SelfifySig context (SIMPLE_PATH var_poly,
+					       SelfifySig context (PATH (var_poly,[]),
 								   SIGNAT_STRUCTURE(NONE, sdecs1)))
 
 		fun fb_help clause_list =
@@ -1633,8 +1633,7 @@ structure Toil
 		      SOME(path,PHRASE_CLASS_CON(inline_con,k)) =>
 			let val inline =
 			    (case path of
-				(SIMPLE_PATH v) => Util.substring("inline",Name.var2name v)
-			      | (COMPOUND_PATH (v,labs)) =>
+			       PATH (v,labs) =>
 			          Util.substring("inline",Name.var2name v) orelse 
 				  Listops.orfold IlUtil.is_datatype_lab labs)
 			    val con = if inline then inline_con 
@@ -1885,7 +1884,7 @@ structure Toil
 			    val context' = add_context_mod(context,
 							      fresh_open_internal_label "lbl",
 							      varpoly, 
-							      SelfifySig context (SIMPLE_PATH varpoly,sigpoly))
+							      SelfifySig context (PATH (varpoly,[]),sigpoly))
 			    val con = xty(context',ty)
 			    val fsig = SIGNAT_FUNCTOR(varpoly,sigpoly,
 						      SIGNAT_STRUCTURE(NONE,
@@ -1931,7 +1930,7 @@ structure Toil
 			       val sigexp = Ast.SigSig[Ast.StrSpec sym_sigexp_path_list]
 			       val signat = xsigexp(context,sigexp)
 			       val context' = add_context_mod(context,strid,var,
-								 SelfifySig context (SIMPLE_PATH var,signat))
+								 SelfifySig context (PATH (var,[]),signat))
 			       val signat' = xsigexp(context',sigexp')
 			     in SIGNAT_FUNCTOR(var,signat,signat',PARTIAL)
 			     end
@@ -2036,7 +2035,7 @@ structure Toil
 
 			      val _ = print "FCTFCT 2\n"
 			      val context' = add_context_mod(context,arglabel,argvar,
-							     SelfifySig context (SIMPLE_PATH argvar, signat))
+							     SelfifySig context (PATH (argvar,[]), signat))
 			      val (sbnd_ce_list,m',s') = xstrexp(context',body,constraint)
 			      val _ = print "FCTFCT 3\n"
 			      fun addbool(NONE,ce) = (NONE,ce)
@@ -2159,7 +2158,7 @@ structure Toil
 			      val fsig = SIGNAT_FUNCTOR(var1,sig1',sig2,PARTIAL)
 			      val fsig' = SIGNAT_FUNCTOR(var1,sig1',sig2',PARTIAL)
 			      val context' = add_context_mod'(context,newvar,
-							      SelfifySig context (SIMPLE_PATH newvar, sig1'))
+							      SelfifySig context (PATH (newvar,[]), sig1'))
 
 			      val temp = mod_subst_modvar(modc_body,
 							  [(modc_v0,argmod)])
@@ -2186,7 +2185,7 @@ structure Toil
 		   print "\n";
 		   print "sig2 < sig2' is ";
 		   print (Bool.toString (Sig_IsSub(add_context_mod'(context',var1,
-								   SelfifySig context (SIMPLE_PATH var1, sig1')),
+								   SelfifySig context (PATH (var1,[]), sig1')),
 						   sig2,sig2')));
 		   print "\n";
 *)
@@ -2210,7 +2209,7 @@ structure Toil
 		     val boolsbnd_sdec_list = xdec' true (context,dec)
 		     val (mod1,sig1) = boolsbnd_ctxt_list2modsig boolsbnd_sdec_list
 		     val context' = add_context_mod(context,lbl1,var1,
-						    SelfifySig context (SIMPLE_PATH var1, sig1)) (* <-- inline ? *)
+						    SelfifySig context (PATH (var1,[]), sig1)) (* <-- inline ? *)
 		     val (sbnd_ce_list,mod2,sig2) = xstrexp(context',strexp,Ast.NoSig)
 		     val final_mod = MOD_STRUCTURE [SBND(lbl1,BND_MOD(var1,mod1)),
 						    SBND(lbl2,BND_MOD(var2,mod2))]
