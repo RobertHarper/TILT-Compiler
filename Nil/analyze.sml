@@ -53,7 +53,7 @@ struct
   open Nil Name NilUtil
 
   val error = fn s => Util.error "analyze.sml" s
-  val debug = ref false
+  val debug = Stats.ff("DebugAnalyze")
 
   type funinfo = {size : int,
 		  definition : function,
@@ -131,8 +131,9 @@ struct
          | Closure_c(c1,c2) => doCons [c1,c2]
          | App_c(c,cs) => doCons (c::cs)
          | Typecase_c{arg,arms,default,kind} =>
-	       (doCon arg) + (doKind kind) + (doCon default) + 
-	       (doList (fn (pc,vks,c) => (doVklist vks) + (doCon c)) arms)
+	       (doKind kind;
+	        (doCon arg) + (doCon default) + 
+	       (doList (fn (pc,vks,c) => (doVklist vks) + (doCon c)) arms))
          | Annotate_c (ka,c) => doCon c)
 
   and doCbnd (conbnd:conbnd):int = 
@@ -156,7 +157,12 @@ struct
                | _ => 0 (* small constants *)
            end
          | Let_e(ls,bnds,e) => (doBnds bnds) + (doExp e)
-         | Prim_e(ap,cs,es) => (doCons cs) + (doExps es)
+         | Prim_e(ap,cs,es) => 
+	     (if (NilUtil.allprim_uses_carg ap) then
+                 doCons cs
+	      else
+	         (doCons cs; 0)) 
+             + (doExps es)
          | Switch_e sw => doSwitch sw
          | App_e(ot,e,cs,es1,es2) => (doCons cs) + (doExps (e :: (es1 @ es2))) 
          | ExternApp_e(e,es) => doExps (e::es)
@@ -189,14 +195,27 @@ struct
       and doBnd (bnd: bnd) : int = 
         1 + 
 	(case bnd of
-	   Con_b(p,cb) => doCbnd cb
+	   Con_b(Runtime,cb) => doCbnd cb
+         | Con_b(Compiletime,cb) => (doCbnd cb; 0)
          | Exp_b(v,nt,e) => doExp e
          | Fixopen_b vfSeq => 
 	     let val vf = Sequence.toList vfSeq
 		 fun doFunction(v,f as Function{tFormals,eFormals,fFormals,body,body_type,...}) = 
-		     (v, (doVklist tFormals) + (doCons (map #3 eFormals)) + (length fFormals) +
-		      (doExp body)  + (doCon body_type),
-		      f)
+	            let 
+	              val _ = (doVklist tFormals)
+	              val _ = (doCons (map #3 eFormals))
+	              val _ = (doCon body_type)
+	              val size = doExp body
+	              val _ = if (!debug) then 
+	                         (print "size of ";
+	                          Ppnil.pp_var v;
+	                          print " is ";
+	                          print (Int.toString size);
+	                          print "\n")
+	                      else ()
+	            in
+		      (v, size, f)
+                    end
 		 val vsizedef = map doFunction vf
 		 val _ = map addFunction vsizedef
 	     in  doList #2 vsizedef
