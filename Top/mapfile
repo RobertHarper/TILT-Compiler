@@ -8,6 +8,8 @@ include group "../Backend/mapfile"
 include group "../Alpha/mapfile"
 include group "../Sparc/mapfile"
 
+source unit Version = "version.sml" {}
+
 source unit ExtSyn = "extsyn.sml" {}
 source unit Group_TOKENS = "group.grm.sig" {YaccBase}
 source unit GroupLrValsFun = "group.grm.sml" {
@@ -96,7 +98,7 @@ source unit Master = "master.sml" {
 	Int Listops SplayMapFn ListMergeSort MASTER Communication
 	Background List Platform Target Paths Statistics
 	ExtSyn UnitEnvironment Name Word HashTableFn EQUIV Equiv Crc
-	Group Option Formatter Date
+	Group Option Formatter Date Version
 }
 source unit SLAVE = "slave.sig.sml" {Communication}
 source unit Slave = "slave.sml" {
@@ -118,7 +120,7 @@ source unit Getopt = "getopt.sml" {
 source unit MAIN = "main.sig.sml" {OS}
 source unit Main = "main.sml" {
 	List String Int OS MAIN Manager Stats Getopt Dirs Target
-	Compiler ExnHandler
+	Compiler ExnHandler Version
 }
 source unit RUN = "run.sig.sml" {OS}
 source unit Run = "run.sml" {Posix Word8 OS RUN CommandLine}

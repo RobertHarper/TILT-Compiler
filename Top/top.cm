@@ -11,6 +11,8 @@ Group is
 (*../RtlToMLRISC/Alpha/Alpha.cm*)
 (*../RtlToMLRISC/Sparc/Sparc.cm*)
 
+version.sml
+
 extsyn.sml
 group.grm.sig group.grm.sml (* group.grm *)
 group.lex.sml (* group.lex *)

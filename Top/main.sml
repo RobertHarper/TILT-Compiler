@@ -4,7 +4,6 @@ struct
     fun reject s = raise Compiler.Reject s
 
     val usage = "usage: tilt [-vVps] [-t platform] [-fr flag] [-cCmMbB groupfile] [-S [num/]host]"
-    val version = "TILT version 0.1 (alpha8)\n"
 
     datatype cmd =
         Make of string			(* -m groupfile *)
@@ -30,7 +29,7 @@ struct
       | isSlave _ = false
 
     fun printVersion () : unit =
-	(print version;
+	(print "TILT version "; print Version.version; print "\n";
 	 print "(Using basis from ";
 	 print (Dirs.libDir());
 	 print ")\n")
