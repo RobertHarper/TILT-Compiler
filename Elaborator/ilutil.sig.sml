@@ -74,6 +74,7 @@ signature ILUTIL =
     val con_record : (Symbol.symbol * con) list -> con
     val exp_tuple : exp list -> exp
     val generate_tuple_label  : int -> label
+    val generate_tuple_labels : int -> label list (* generate labels 1..n *)
     val generate_tuple_symbol : int -> Symbol.symbol
     val true_exp : context -> exp
     val false_exp : context -> exp

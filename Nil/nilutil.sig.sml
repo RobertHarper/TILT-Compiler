@@ -39,6 +39,12 @@ signature NILUTIL =
     val flattenCbnds : Nil.conbnd list -> Nil.conbnd list
     val extractCbnd : Nil.conbnd -> Nil.var * Nil.con
 
+    val makeConb    : Nil.conbnd -> Nil.bnd  (* Annotated as Runtime *)
+
+  (* Given a record expression r and a list lbls 
+     of labels, produce the term corresponding to r.lbls *)
+    val makeSelect  : Nil.exp -> Nil.label list -> Nil.exp
+
 
 
     val same_openness : Nil.openness * Nil.openness -> bool

@@ -64,6 +64,7 @@ struct
 		 Var_c v'))
     end
 
+  fun makeConb cbnd = Con_b (Runtime,cbnd)
 
   (* Loses Parallel information *)
   fun flattenCbnds cbnds = 
@@ -85,6 +86,7 @@ struct
 		  tFormals = tFormals, 
 		  eFormals = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c)) eFormals,
 		  fFormals = TilWord32.fromInt(length fFormals), body_type = body_type}
+
 
   fun project_from_kind(lvk_seq,con,label) = 	     
     let
@@ -145,6 +147,7 @@ struct
 	| _ => Proj_c(carrier,generate_tuple_label (which + 1))
       end
       | sum_project_carrier_type _ = error "projecting carrier from non-sum"
+
 
 
     (* Functions for dealing with annotations
@@ -326,7 +329,6 @@ struct
     val eq_var2 = Name.eq_var2
   end
   (**)
-    
 
 
     type bound = {isConstr : bool,
@@ -1268,8 +1270,6 @@ struct
 	  else (map (fn (v,c) => (lookup v, substcon c)) vclist)
       end
 
-	
-
    (* makeLetC.
          Creates a constructor-level sequential let given bindings and
          a body.  Optimizes the let when the bindings or the body are
@@ -1392,5 +1392,13 @@ struct
 	end
       | makeAppE fn_exp cargs eargs fargs = 
             App_e(Open, fn_exp, cargs, eargs, fargs)
+
+
+    (* makeSelect.  Given a record expression r and a list lbls 
+                    of labels, produce the term corresponding to r.lbls
+		      *)
+    fun makeSelect exp [] = exp
+      | makeSelect exp (lbl::lbls) = 
+            makeSelect (Prim_e(NilPrimOp(select lbl), [], [], [exp])) lbls
 
 end

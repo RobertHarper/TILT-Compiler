@@ -98,6 +98,11 @@ structure IlUtil :> ILUTIL =
 	  | generate_tuple_label i = #2(if (i<size)
 					    then Array.sub(table,i)
 					else make i)
+
+        (* Returns a list of labels for a tuple of length n. *)
+	fun generate_tuple_labels n = Listops.map0count 
+	                               (fn n => generate_tuple_label(n+1)) n
+
     end
       
     val mk_lab = internal_label "mk"
