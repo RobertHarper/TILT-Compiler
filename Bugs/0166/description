@@ -6,9 +6,52 @@ Date:        05/23/03
 Version:     CVS
 System:      any
 Severity:    major
-Problem:     IlcontextChecks signals an error while compiling the SML/NJ redblack-set-fn.sml.
-Code:        
+Problem:
+	IlcontextChecks signals an error while compiling the SML/NJ
+	redblack-set-fn.sml.
+Code:
+	signature ORD_KEY =
+	  sig
+	  end
+	
+	signature ORD_SET =
+	  sig
+	
+	    structure Key : ORD_KEY
+	
+	    type item
+	
+	    val foldl : item -> 'b -> unit
+	
+	  end
+	
+	functor RedBlackSetFn (K : ORD_KEY) :> ORD_SET where Key = K =
+	  struct
+	
+	    structure Key = K
+	
+	    type item = int
+	
+	    fun foldl f x = ()
+	  end;
 Transcript:  
+	term% tilt-nj -fIlcontextDebug -mmapfile
+	unbound variable item_5940 detected while adding:
+	anon_292_INT > unused_5946 :           PC_MOD(unused_5946 : SIGF(var_poly_5942, ['b_TYV > _5943 : TYPE] =>
+	*                                      [it_INT > _5945 : 
+	**                                         (item_5940 ->
+	**                                         (CON_PATH(var_poly_5942.'b_TYV) -> UNIT))]))
+	Error: ilcontext.sml: unbound variable detected
+	
+	sig2 = []
+	sdecs=           [Key_STR > _5939 : ORD_KEY_5937, 
+	*          item_TYC > item_5940 : TYPE, 
+	*          foldl > unused_5946 : 
+	**             $POLY$ SIGF(var_poly_5942, ['b_TYV > _5943 : TYPE] =>
+	**                            [it_INT > _5945 : 
+	***                               (item_5940 -> (CON_PATH(var_poly_5942.'b_TYV) -> UNIT))])]
+	slave cuff.link.10981 signalled an error during job source unit RedBlackSetFn
+	tilt: internal error: ilcontext.sml: unbound variable detected
 Comments:    
 Fix:         
 Test: bug166
