@@ -973,6 +973,16 @@ functor IlUtil(structure Ppil : PPIL
 	  in f_con handlers argcon
 	  end
 
+       fun bnd_all_handle (argbnd : bnd, exp_handler, con_handler, mod_handler, sdec_handler) : bnd =
+	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
+	  in f_bnd handlers argbnd
+	  end
+
+       fun dec_all_handle (argdec : dec, exp_handler, con_handler, mod_handler, sdec_handler) : dec =
+	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
+	  in f_dec handlers argdec
+	  end
+
        fun mod_all_handle (argmod : mod, exp_handler, con_handler, mod_handler, sdec_handler) : mod =
 	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
 	  in f_mod handlers argmod

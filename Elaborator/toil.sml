@@ -253,10 +253,18 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 
 	and kind_substconmod(KIND_INLINE(k,c),mapping) = KIND_INLINE(k,con_substconmod(c,mapping))
 	  | kind_substconmod(k,_) = k
-	and con_substconmod(c,mapping) = con_all_handle(c, fn _ => NONE, chandle mapping, mhandle mapping,
-							sdechandle mapping)
-	and sig_substconmod(s,mapping) = sig_all_handle(s, fn _ => NONE, chandle mapping, mhandle mapping,
-							sdechandle mapping)
+	and con_substconmod(c,mapping) = 
+		con_all_handle(c, fn _ => NONE, chandle mapping, mhandle mapping,
+					sdechandle mapping)
+	and sig_substconmod(s,mapping) = 
+		sig_all_handle(s, fn _ => NONE, chandle mapping, mhandle mapping,
+					sdechandle mapping)
+	and bnd_substconmod(bnd,mapping) = 
+		bnd_all_handle(bnd, fn _ => NONE, chandle mapping, mhandle mapping,
+					sdechandle mapping)
+	and dec_substconmod(dec,mapping) = 
+		dec_all_handle(dec, fn _ => NONE, chandle mapping, mhandle mapping,
+					sdechandle mapping)
     in
 	type mapping = mapping
 	val empty_mapping = ([],[],Name.LabelMap.empty,Name.VarMap.empty,
@@ -303,6 +311,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	val kind_substconmod = kind_substconmod
 	val con_substconmod = con_substconmod
 	val sig_substconmod = sig_substconmod
+	val dec_substconmod = dec_substconmod
+	val bnd_substconmod = bnd_substconmod
     end
 
      (* ----------------- Helper Functions ----------------------- *)
@@ -1516,7 +1526,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	      let fun help (i,path) = 
 		  (case (Context_Lookup(context,map symbol_label path)) of
 		       SOME(_,PHRASE_CLASS_MOD(m,s)) => 
-			   let val l = fresh_open_internal_label ("openlbl" ^ (Int.toString i))
+			   let 
+(* val l = fresh_open_internal_label ("openlbl" ^ (Int.toString i)) *)
+			       val str = foldl (fn (s,acc) => acc ^ (Symbol.name s))
+				            "openlbl" path
+                               val l = open_internal_label str
 			       val v = fresh_named_var "openvar"
 			   in  SOME(SOME (SBND(l,BND_MOD(v,m))), CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))
 			   end
@@ -2643,32 +2657,50 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
     and extract_hidden(coerced_mod, coerced_sig, var_actual, sig_actual) : mod * signat = 
 	let 
 	    val var_local = Name.fresh_named_var "hidden_module"
-	    val label_local = Name.fresh_internal_label "hidden_module"
+	    val label_local = Name.internal_label "hidden_module"
 	    fun labels2path_local labs = join_path_labels(SIMPLE_PATH var_local, labs)
 	    fun labels2path_actual labs = join_path_labels(SIMPLE_PATH var_actual, labs)
 	    (* first, we compute the components that we need to extract
 	      as a result of coerced_sig and 
 		convert the projections to use var_local instead of var_actual *)
 	    local 
-		val neededpaths = ref ([] : (label list * con) list)
+		val neededpaths = ref ([] : (label list * path) list)
 		fun eq_labs(labs1,labs2) = Listops.eq_list(eq_label,labs1,labs2)
 		fun add_path p = (case (assoc_eq(eq_labs, p, !neededpaths)) of
-				      SOME c => c
-				    | NONE => let val c = path2con(labels2path_local p)
-					      in neededpaths := (p,c) :: (!neededpaths); c
+				      SOME p' => p'
+				    | NONE => let val p' = (labels2path_local p)
+					      in neededpaths := (p,p') :: (!neededpaths); p'
 					      end)
 		fun chandle (CON_MODULE_PROJECT (m,l)) = 
 		    let fun loop labs (MOD_VAR v) = if (eq_var(v,var_actual))
-							then SOME(add_path labs)
+							then SOME(path2con(add_path labs))
 						    else NONE
 			  | loop labs (MOD_PROJECT(m,l)) = loop (l::labs) m 
 			  | loop labs _ = NONE
 		    in  loop [l] m
 		    end
 		  | chandle _ = NONE
+		fun sdec_help p = (case p of 
+				       SIMPLE_PATH v => if (eq_var(v,var_actual))
+							    then add_path [] else p
+				     | COMPOUND_PATH(v,labs) => if (eq_var(v,var_actual))
+								    then add_path labs else p)
+		fun sdec_handle (SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE(SOME p,sdecs)))) = 
+		    let val s = SIGNAT_STRUCTURE(SOME (sdec_help p), sdecs)
+		    in  SOME(SDEC(l,DEC_MOD(v,do_sig s)))
+		    end
+		  | sdec_handle (SDEC(l,DEC_MOD(v,SIGNAT_INLINE_STRUCTURE{self=SOME p,code,
+									  imp_sig,abs_sig}))) = 
+		    let 
+			val s = SIGNAT_INLINE_STRUCTURE{self=SOME (sdec_help p),code=code,
+							imp_sig=imp_sig,abs_sig=abs_sig}
+		    in  SOME(SDEC(l,DEC_MOD(v,do_sig s)))
+		    end
+		  | sdec_handle _ = NONE
+		and do_sig s = sig_all_handle(s, fn _ => NONE, chandle, 
+						 fn _ => NONE, sdec_handle)
 	    in
-		val coerced_sig = sig_all_handle(coerced_sig, fn _ => NONE, chandle, 
-						 fn _ => NONE, fn _ => NONE)
+		val coerced_sig = do_sig coerced_sig
 	        val neededpaths = !neededpaths
 		val _ = (print "extract_hidden: there are ";
 			 print (Int.toString (length neededpaths)); 
@@ -2754,13 +2786,23 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		     val res as (m,s) = case (coerced_mod, coerced_sig) of
 			 (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE (popt,sdecs)) =>
 			     (MOD_STRUCTURE (sbnd_augment::sbnds), 
-			      SIGNAT_STRUCTURE (popt,sdec_augment::sdecs))
-		       | _ => error "extract_hidden given coerced_mod/sig not strutures"
+			      SIGNAT_STRUCTURE (popt,
+						sdec_augment::sdecs))
+		       | _ => 
+			  let val _ = print "WARN: extract_hidden given coerced_mod/sig not strutures\n"
+			      val l = Name.fresh_open_internal_label "internal_mod"
+			      val v = Name.fresh_named_var "internal_mod"
+			      val sbnd = SBND(l,BND_MOD(v,coerced_mod))
+			      val sdec = SDEC(l,DEC_MOD(v,coerced_sig))
+			  in  (MOD_STRUCTURE [sbnd_augment,sbnd],
+			       SIGNAT_STRUCTURE(NONE,[sdec_augment,sdec]))
+			  end
 			     
 		 in  res
 		 end
 	end
 
+    (* resulting signature should not contain references to var_actual *)
     and xcoerce_transparent (context : context,
 			     var_actual : var,
 			     sig_actual : signat,
@@ -3216,11 +3258,13 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	fun sbnds_loop lbls (mapping,ctxt,sdecs) (sbnds_code,sdecs_imp) = 
 	    let val (sbnds,sdecs,mapping) = sdecs_loop lbls (mapping,ctxt,sdecs)
 		fun sbnd_find lbl [] = error "sbnd_find failed"
-		  | sbnd_find lbl ((sbnd as SBND(l,_))::rest) = if (Name.eq_label(l,lbl)) then sbnd 
-								else sbnd_find lbl rest
+		  | sbnd_find lbl ((sbnd as SBND(l,bnd))::rest) 
+				= if (Name.eq_label(l,lbl)) then SBND(l,bnd_substconmod(bnd,mapping))
+					else sbnd_find lbl rest
 		fun sdec_find lbl [] = error "sdec_find failed"
-		  | sdec_find lbl ((sdec as SDEC(l,_))::rest) = if (Name.eq_label(l,lbl)) then sdec
-								else sdec_find lbl rest
+		  | sdec_find lbl ((sdec as SDEC(l,dec))::rest) = 
+				if (Name.eq_label(l,lbl)) then SDEC(l,dec_substconmod(dec,mapping))
+					else sdec_find lbl rest
 		val sbnds_code = map (fn (SDEC(l,_)) => sbnd_find l sbnds_code) sdecs
 		val sdecs_imp = map (fn (SDEC(l,_)) => sdec_find l sdecs_imp) sdecs
 	    in  (sbnds,sbnds_code,sdecs_imp,sdecs,mapping)
