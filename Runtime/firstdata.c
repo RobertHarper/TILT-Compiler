@@ -1,4 +1,10 @@
 /* Used only for solaris */
 
-int firstdata = 1;
+void dummyFirstFunction()
+{
+}
+
+unsigned long firsttext = (unsigned long) &dummyFirstFunction;
+unsigned long firstdata = (unsigned long) &firsttext;
+
 

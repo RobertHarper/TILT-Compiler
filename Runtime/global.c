@@ -62,7 +62,8 @@ int IsGlobalData(ptr_t addr)
 
 
 #ifdef solaris
-extern int firstdata;
+extern unsigned long firstdata;
+extern unsigned long firsttext;
 #endif
 
 void global_init()
@@ -94,9 +95,9 @@ void global_init()
 #endif
 
 #ifdef solaris
-  datastart = (mem_t) &firstdata;
+  datastart = (mem_t) firstdata;
   dataend   = (mem_t) &_edata;
-  textstart = (mem_t) 0;	/*&_ftext*/
+  textstart = (mem_t) firsttext;
   textend   = (mem_t) &_etext;  
 #endif
 
