@@ -87,33 +87,33 @@ static void (*GCPollFun)(Proc_t *) = NULL;
 /* 0.0 <= reserve < 1.0 is not mapped in */
 long ComputeHeapSize(long oldsize, double oldratio, int withhold, double reserve)
 {
-  long oldlive = DivideUp(oldsize * oldratio, 1024);  /* must round up here */
-  double rawWhere = (oldlive - MinRatioSize) / (double)(MaxRatioSize - MinRatioSize);
+  long oldlive = oldsize * oldratio;
+  double rawWhere = (oldlive - (1024 * MinRatioSize)) / (1024.0 * (MaxRatioSize - MinRatioSize));
   double where = (rawWhere > 1.0) ? 1.0 : ((rawWhere < 0.0) ? 0.0 : rawWhere);
   double newratio = MinRatio + where * (MaxRatio - MinRatio);
-  long newSize = RoundUp(oldlive / newratio + withhold, 32);
-  long unreservedSize = RoundUp(newSize / (1.0 - reserve), 32);
-  if (oldlive > MaxHeap) {
+  long newSize = RoundUp(oldlive / newratio + withhold, 1024);
+  long unreservedSize = RoundUp(newSize / (1.0 - reserve), 1024);
+  if (oldlive > 1024 * MaxHeap) {
     fprintf(stderr,"GC error: livedata = %d but maxheap constrained to %d\n", oldlive, MaxHeap);
     assert(0);
   }
-  if (unreservedSize > MaxHeap) {
-    double constrainedRatio = ((double)oldlive) / MaxHeap;
+  if (unreservedSize > 1024 * MaxHeap) {
+    double constrainedRatio = ((double)oldlive) / (1024 * MaxHeap);
     if (collectDiag >= 1 || constrainedRatio > 0.95)
-      printf("GC warning: Would like to make newheap %d but constrained to <= %d\n",unreservedSize, MaxHeap);
+      printf("GC warning: Would like to make newheap %d kb but constrained to <= %d kb\n",unreservedSize / 1024, MaxHeap);
     if (constrainedRatio > 0.95)
       printf("GC warning: Ratio is dangerously high %lf.\n", constrainedRatio);
-    unreservedSize = MaxHeap;
-    newSize = RoundDown(unreservedSize * (1.0 - reserve), 32);
+    unreservedSize = 1024 * MaxHeap;
+    newSize = RoundDown(unreservedSize * (1.0 - reserve), 1024);
   }
-  if (unreservedSize < MinHeap) {
+  if (unreservedSize < 1024 * MinHeap) {
     if (collectDiag >= 1)
-      printf("GC warning: Would like to make newheap %d but constrained to >= %d\n",unreservedSize, MinHeap);
-    unreservedSize = MinHeap;
-    newSize = RoundDown(unreservedSize * (1.0 - reserve), 32);
+      printf("GC warning: Would like to make newheap %d kb but constrained to >= %d kb\n",unreservedSize / 1024, MinHeap);
+    unreservedSize = 1024 * MinHeap;
+    newSize = RoundDown(unreservedSize * (1.0 - reserve), 1024);
   }
   assert(newSize > oldlive);
-  return 1024 * newSize;
+  return newSize;
 }
 
 double HeapAdjust(int request, int withhold, double reserve, Heap_t **froms, Heap_t *to)

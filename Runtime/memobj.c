@@ -263,6 +263,7 @@ StackChain_t* StackChain_BaseAlloc(void)
   assert(0);
 }
 
+
 StackChain_t* StackChain_Copy(StackChain_t *src)
 {
   int i;
@@ -528,9 +529,12 @@ void memobj_init()
   HeapInitialize();
   primaryStackletOffset = 0;
   replicaStackletOffset = StackletSize * kilobyte;
-  /* So we don't pay mmap for first thread - general case? */
-  s1 = Stacklet_Alloc(NULL);
-  s2 = Stacklet_Alloc(NULL);
-  Stacklet_Dealloc(s1);
-  Stacklet_Dealloc(s2);
+  /* So we don't pay mmap for first thread - general case? XXXX */
+  { int i;
+    Stacklet_t *temp[5];
+    for (i=0; i<5; i++)
+      temp[i] = Stacklet_Alloc(NULL);
+    for (i=0; i<5; i++)
+      Stacklet_Dealloc(temp[i]);
+  }
 }

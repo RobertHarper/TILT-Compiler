@@ -917,7 +917,7 @@ void GCInit_GenConc()
   Heap_Resize(toSpace, reducedTenuredSize, 0);
 
   gc_large_init();
-  workStack = SharedStack_Alloc(100, 16 * 1024, 2 * 1024, 64 * 1024, 4 * 1024);
+  workStack = SharedStack_Alloc(100, 16 * 1024, 8 * 1024, 64 * 1024, 8 * 1024);
   barriers = createBarriers(NumProc, 9);
   arraySegmentSize = 2 * 1024;
   mirrorGlobal = 1;

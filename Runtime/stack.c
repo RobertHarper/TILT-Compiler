@@ -507,7 +507,6 @@ Thread_t *initial_root_scan(Proc_t *proc, Thread_t *th)
     }
     return NULL;   /* Thunk not yet started and so no more roots */
   }
-
   assert(stack->cursor > 0);
   assert(th->snapshot == NULL);
   snapshot = StackChain_Copy(stack);        /* New stack chain and copy stacklet from primary to replica area */
@@ -517,7 +516,6 @@ Thread_t *initial_root_scan(Proc_t *proc, Thread_t *th)
   for (i=0; i<32; i++)
     th->snapshotRegs[i] = th->saveregs[i];  
 
-
   /* Do the uptrace to initialize stacklet starting with most recent stacklet */
   for (i=snapshot->cursor-1; i>=0; i--) {
     Stacklet_t *stacklet = snapshot->stacklets[i];
@@ -525,13 +523,11 @@ Thread_t *initial_root_scan(Proc_t *proc, Thread_t *th)
     numFrames += lengthStack(stacklet->callinfoStack);
     numWords += stacklet->baseTop - stacklet->baseCursor;
   }
-
   TotalStackDepth += numFrames;
   MaxStackDepth = (numFrames < MaxStackDepth) ? MaxStackDepth : numFrames;
   TotalStackSize += numWords * sizeof(val_t);
 
   assert(snapshot->cursor > 0);
-
   return th;
 }
 
@@ -597,6 +593,7 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   StackChain_t *stack= th->stack;
   int firstActive = stack->cursor;
 
+
   /* Thread might not be really be live but was pinned to preserve liveness so 
      that snapshot, snapshotThunk, and snapshotRegs can be used */
   Thread_Unpin(th);   /* Might not have been pinned if thread created after start of GC */
@@ -623,7 +620,6 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   }
   assert(firstActive <= stack->cursor);  /* Could equal if collection finished in first segment */
 
-
   for (i=stack->cursor-1; i>=firstActive; i--) {
     stkSize = stack->stacklets[i]->baseTop - stack->stacklets[i]->baseCursor;
     uptrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset);
@@ -633,7 +629,6 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
     downtrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset, th->saveregs);
   regMask = (CurrentStacklet(stack)->bottomRegstate) | (1 << EXNPTR);
   addRegRoots(proc, (unsigned long *)(th->saveregs), regMask);
-
 }
 
 /* ----------------------------------------------------- 
