@@ -803,7 +803,7 @@ struct
 	   val con = Var_c var
 	   val (SOME kind) = Nilcontext.find_kind (NILctx_of context, var)
        in
-	   (con, Singleton_k (Runtime, kind, con))
+	   (con, kind)
        end
 
      | xcon context (Il.CON_TYVAR tv) = xcon context (derefTyvar tv)
@@ -818,14 +818,14 @@ struct
        in
            (* XXX *)
 	   (* BUG---SHOULD CALL ISWORD SINCE INTSIZE CAN BE >= 64!  *)
-	   (con, Singleton_k(Runtime, Word_k Runtime, con))
+	   (con, Word_k Runtime)
        end
 
      | xcon context (Il.CON_FLOAT floatsize) = 
        let
 	   val con = Prim_c (BoxFloat_c floatsize, [])
        in
-	   (con, Singleton_k(Runtime, Word_k Runtime, con))
+	   (con, Word_k Runtime)
        end
 
      | xcon context (Il.CON_ARRAY il_con) = 
@@ -833,7 +833,7 @@ struct
 	   val (con', knd') = xcon context il_con 
 	   val con = Prim_c (Array_c, [con'])
        in
-	   (con, Singleton_k(Runtime, Word_k Runtime, con))
+	   (con, Word_k Runtime)
        end
 
      | xcon context (Il.CON_VECTOR il_con) = 
@@ -841,14 +841,14 @@ struct
 	   val (con', knd') = xcon context il_con 
 	   val con = Prim_c (Vector_c, [con'])
        in
-	   (con, Singleton_k(Runtime, Word_k Runtime, con))
+	   (con, Word_k Runtime)
        end
 
      | xcon context (Il.CON_ANY) = 
        let
 	   val con = Prim_c(Exn_c, [])
        in
-	   (con, Singleton_k(Runtime, Word_k Runtime, con))
+	   (con, Word_k Runtime)
        end
 
      | xcon context (Il.CON_REF il_con) = 
@@ -856,7 +856,7 @@ struct
 	   val (con', knd') = xcon context il_con
 	   val con = Prim_c (Ref_c, [con'])
        in
-	   (con, Singleton_k(Runtime, Word_k Runtime, con))
+	   (con, Word_k Runtime)
        end
 
      | xcon context (Il.CON_TAG il_con) = 
@@ -864,7 +864,7 @@ struct
 	   val (con', knd') = xcon context il_con
 	   val con = Prim_c (Exntag_c, [con'])
        in
-	   (con, Singleton_k(Runtime, Word_k Runtime, con))
+	   (con, Word_k Runtime)
        end
 
      | xcon context (Il.CON_ARROW (il_con1, il_con2, arr)) =
@@ -874,7 +874,7 @@ struct
 	   val eff = xeffect (derefOneshot arr)
 	   val con = AllArrow_c(Open, eff, [], [con1], w0, con2)
        in
-	   (con, Singleton_k(Runtime, Word_k Runtime, con))
+	   (con, Word_k Runtime)
        end
 
      | xcon context (il_con as Il.CON_APP (il_con1, il_con2)) = 
@@ -885,7 +885,7 @@ struct
 	   val il_knd = Ilstatic.GetConKind (HILctx_of context, il_con)
 	   val knd = xkind il_knd
        in
-	   (con, Singleton_k(Runtime, knd, con))
+	   (con, knd)
        end
 
      | xcon context (Il.CON_MUPROJECT(i, Il.CON_FUN(vars, 
@@ -906,7 +906,7 @@ struct
 		   val con = Mu_c (Util.list2set (Listops.zip vars cons'), 
 				   List.nth (vars, i-1))
 	       in
-		   (con, Singleton_k(Runtime, Word_k Runtime, con))
+		   (con, Word_k Runtime)
 	       end
        in
 	   Nilcontext.c_insert_kind_list(NILctx_of context,
@@ -929,7 +929,7 @@ struct
 		   val (con',_) = xcon context' con
 		   val con = Mu_c (Util.list2set [(var, con')], var)
 	       in
-		   (con, Singleton_k(Runtime, Word_k Runtime, con))
+		   (con, Word_k Runtime)
 	       end
        in
 	   Nilcontext.c_insert_kind(NILctx_of context, var, Word_k Runtime, cont1)
@@ -940,7 +940,7 @@ struct
 	   val (lbls, cons) = xrdecs context rdecs
 	   val con = Prim_c (Record_c lbls, cons)
        in
-	   (con, Singleton_k(Runtime, Word_k Runtime, con))
+	   (con, Word_k Runtime)
        end
 
      | xcon context (Il.CON_FUN (vars, il_con1)) = 
@@ -963,7 +963,7 @@ struct
 				   [Open_cb(fun_name, args, con1, knd1)],
 				   Var_c fun_name)
 	       in
-		   (con, Singleton_k(Runtime, Arrow_k(Open, args, knd1), con))
+		   (con, Arrow_k(Open, args, knd1))
 	       end
        in
 	   Nilcontext.c_insert_kind_list(NILctx_of context, 
@@ -980,7 +980,7 @@ struct
 	   val con = Prim_c (Sum_c {tagcount = Word32.fromInt noncarriers,
 				    known = known}, cons)
        in
-	   (con, Singleton_k(Runtime, Word_k Runtime, con))
+	   (con, Word_k Runtime)
        end
 
      | xcon context (il_con as (Il.CON_TUPLE_INJECT il_cons)) = 
@@ -993,12 +993,12 @@ struct
 	   val knd = Record_k (Util.list2sequence 
 			       (Listops.zip (Listops.zip labels vars) knds))
        in
-	   (con, Singleton_k(Runtime, knd, con))
+	   (con, knd)
        end
 
      | xcon context (il_con as (Il.CON_TUPLE_PROJECT (i, il_con1))) = 
        let
-	   val (con1, Singleton_k(_,Record_k seq,_)) = 
+	   val (con1, Record_k seq) = 
 	       xcon context il_con1
 	   val lbl = Ilutil.generate_tuple_label i
 	   val con = Proj_c(con1, lbl)
@@ -1012,7 +1012,7 @@ struct
 			     Ppil.pp_label lbl;
 			     error "(xcon) CON_TUPLE_PROJECT"))
        in
-	   (con, Singleton_k(Runtime, knd, con))
+	   (con, knd)
        end
 
      | xcon context (il_con as (Il.CON_MODULE_PROJECT (modv, lbl))) = 
@@ -1030,7 +1030,7 @@ struct
 	                      (Proj_c (name_c, lbl))
 	   val knd = xkind il_knd
        in
-	   (con, Singleton_k(Runtime, knd, con))
+	   (con, knd)
        end
     
      | xcon _ c = (print "Error:  Unrecognized constructor:\n";
@@ -1235,6 +1235,7 @@ struct
      | xexp context (Il.SUM_TAIL (_, il_exp)) =
        let
 	   val (exp, Prim_c(Sum_c {known = SOME i, tagcount}, cons), valuable) = xexp context il_exp
+
        in
 	   (Prim_e (NilPrimOp (project_sum {sumtype = i, tagcount = tagcount}), 
 		    cons, [exp]),
@@ -1657,7 +1658,7 @@ struct
 	       in
 		   {crdecs = ((lbl, var_c), knd) :: crdecs,
 		    erlabs = lbl :: erlabs,
-		    ercons = con :: ercons}
+		    ercons = (Nilutil.substConInCon subst con) :: ercons}
 	       end
        in
 	   Nilcontext.c_insert_kind(NILctx_of context, var_c, knd, cont1)
@@ -1680,7 +1681,7 @@ struct
 	       in
 		   {crdecs = crdecs,
 		    erlabs = lbl :: erlabs,
-		    ercons = con' :: ercons}
+		    ercons = (Nilutil.substConInCon subst con') :: ercons}
 	       end
        in
 	   Nilcontext.c_insert_con(NILctx_of context, var, con', cont1)
