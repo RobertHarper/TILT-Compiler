@@ -703,19 +703,27 @@ structure IlUtil
       fun find_tyvars_flexes con = 
 	  let val tyvars = ref []
 	      val flexes = ref []
+	      (* opt is not in acc *)
+	      fun compress tv acc opt = 
+		  (case tyvar_deref tv of
+		       NONE => ((case opt of 
+				     NONE => ()
+				   | SOME c => app (fn tv => tyvar_reset(tv,c)) acc);
+				false)
+		     | SOME (c as CON_TYVAR tv2) => compress tv2 (tv::acc) (SOME c)
+		     | SOME c => (app (fn tv => tyvar_reset(tv,c)) acc; true))
 	      fun help in_array_ref argcon = 
 		  let
 		      fun con_handler (c : con,bound : var list) = 
 			  (case c of
 			       CON_TYVAR tyvar =>
-				   if (member_eq(eq_tyvar,tyvar,map #2 (!tyvars))
-				       orelse (case tyvar_deref tyvar of
-						   NONE => false
-						 | SOME _ => true))
-					then NONE
-				      else 
-					  (tyvars := (in_array_ref,tyvar) :: (!tyvars);
-					  NONE)
+				   let val seen = member_eq(eq_tyvar,tyvar,map #2 (!tyvars))
+				       val set =  compress tyvar [] NONE
+				       val _ = if (seen orelse set)
+						   then ()
+					       else (tyvars := (in_array_ref,tyvar) :: (!tyvars))
+				   in  NONE
+				   end
 			      | CON_FLEXRECORD r => (flexes := r :: (!flexes); NONE)
 			      | CON_ARRAY c => (help true c; SOME c)
 			      | CON_REF c => (help true c; SOME c)

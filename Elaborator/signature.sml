@@ -152,10 +152,16 @@ structure Signature :> SIGNATURE =
 				      Name.is_label_internal(List.last labs))
 			               orelse eq_con(ctxt,c,c')
 			   val _ = if res then () 
-				   else (print "both concrete failed\n";
-					 print "c = "; pp_con c; print "\n";
-					 print "c' = "; pp_con c'; print "\n";
-					 print "\n\n")
+				   else 
+				     let val reduced_c = con_normalize(ctxt,c)
+					 val reduced_c' = con_normalize(ctxt,c')
+				     in  (print "both concrete but unequal failed\n";
+					  print "c = "; pp_con c; print "\n";
+					  print "c' = "; pp_con c'; print "\n";
+					  print "reduced c = "; pp_con reduced_c; print "\n";
+					 print "reduced c' = "; pp_con reduced_c'; print "\n";
+					  print "\n\n")
+				     end
 		       in  res
 		       end
 		 | _ => (print "one concrete one absract failed\n"; false))
@@ -1100,6 +1106,14 @@ structure Signature :> SIGNATURE =
 	    else  (mod_actual, sig_actual)
 	end
 
+    val xsig_where_type = Stats.subtimer("Elab-Signature",xsig_where_type)
+    val xsig_where_structure = Stats.subtimer("Elab-Signature",xsig_where_structure)
+    val xsig_sharing_type = Stats.subtimer("Elab-Signature",xsig_sharing_type)
+    val xsig_sharing_structure = Stats.subtimer("Elab-Signature",xsig_sharing_structure)
+
+    val xcoerce_seal = Stats.subtimer("Elab-Signature",xcoerce_seal)
+    val xcoerce_transparent = Stats.subtimer("Elab-Signature",xcoerce_transparent)
+    val xcoerce_functor = Stats.subtimer("Elab-Signature",xcoerce_functor)
 
 end
 

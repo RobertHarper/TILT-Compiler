@@ -32,6 +32,7 @@ signature TYVAR =
     val tyvar2string        : ('ctxt,'con) tyvar -> string    (* for printing purposes only *)
     val tyvar_deref         : ('ctxt,'con) tyvar -> 'con option
     val tyvar_set           : ('ctxt,'con) tyvar * 'con -> unit
+    val tyvar_reset         : ('ctxt,'con) tyvar * 'con -> unit
     val tyvar_constrain     : ('ctxt,'con) tyvar -> unit
     val tyvar_isconstrained : ('ctxt,'con) tyvar -> bool
     val tyvar_use_equal     : ('ctxt,'con) tyvar -> unit

@@ -166,6 +166,7 @@ signature ILUTIL =
        find_tyvars_flexes : given a con, return a list of all unset tyvars with a flag
                             indicating whether it occurred inside a CON_REF or CON_ARRAY
                             and a list of flexinfo refs
+			    also performs path compression on chains of CON_TYVARs
     *)
     val find_tyvars_flexes : con -> (bool * tyvar) list * Il.flexinfo ref list
 

@@ -1336,32 +1336,37 @@ val _ = print "plet0\n"
 		    let 
 			val fun_con = fresh_named_con (context',"fun_con")
 			val body_con = fresh_named_con (context',"body_con")
-			fun help (Ast.Clause{pats, resultty, exp}) = 
-		            ((case resultty of
-	                        SOME ty => if (eq_con(context',xty(context',ty),body_con)) then ()
-			                   else (error_region();
-						 print "conflicting result type constraints\n")
-			      | NONE => ());
-			     (case pats of
-				{item=Ast.VarPat[s],fixity=NONE,...}::rest =>
-				    (symbol_label s, (parse_pats context' (map #item rest),exp))
-			      | _ => 
-			         (case (parse_pats context' (map #item pats)) of
-				 (Ast.VarPat[s])::rest => (symbol_label s, (rest, exp))
-				     | (Ast.AppPat{constr = Ast.VarPat[s], argument}::rest) => 
-					(symbol_label s, (argument::rest,exp))
-				     | _ => error "illegal pattern for function declaraion")))
-			fun getid [] = parse_error "no ids"
-			  | getid [a] = a
-			  | getid (a::(rest as b::_)) = 
-			    (if eq_label(a,b) 
-				 then ()
-				   else (error_region();
-					 print "clauses don't all have same function name\n");
-				       getid rest)
-			val temp = map help clause_list
-			val id = getid (map #1 temp)
-			val matches = map #2 temp
+			fun help (Ast.Clause{pats, resultty, exp}, nameopt) = 
+			    let val _ = 
+				(case resultty of
+				     SOME ty => if (eq_con(context',xty(context',ty),body_con)) 
+						    then ()
+						else (error_region();
+						      print "conflicting result type constraints\n")
+				   | NONE => ())
+				val (name, (p, e)) = 
+				    (case pats of
+					 {item=Ast.VarPat[s],fixity=NONE,...}::rest =>
+					     (symbol_label s, 
+					      (parse_pats context' (map #item rest),exp))
+				       | _ => 
+					 (case (parse_pats context' (map #item pats)) of
+					      (Ast.VarPat[s])::rest => 
+						  (symbol_label s, (rest, exp))
+					    | (Ast.AppPat{constr = Ast.VarPat[s], argument}::rest) => 
+						  (symbol_label s, (argument::rest,exp))
+					    | _ => error "illegal pattern for function declaraion"))
+				val _ = 
+				    (case nameopt of
+					 NONE => ()
+				       | SOME curName => 
+					     if eq_label(name,curName)
+						 then ()
+					     else (error_region();
+						   print "clauses don't all have same name\n"))
+			    in  ((p,e), SOME name)
+			    end
+			val (matches, SOME id) = foldl_acc help NONE clause_list
 		    in (id, (fun_con,body_con), matches)
 		    end
 		val dec_list : (label * 
@@ -1642,8 +1647,6 @@ val _ = print "plet0\n"
 				      end
        | Ast.ConTy (syms,ty_list) => 
 	     let 
-		 val _ = debugdo (fn () => (print "xty: Ast.Conty(["; 
-					    pp_list AstHelp.pp_sym' syms ("","",".",false); print "])"))
 		 val con_list = map (fn t => xty(context,t)) ty_list
 	     in
 		 (case (Context_Lookup_Labels(context, map symbol_label syms)) of
@@ -2090,10 +2093,8 @@ val _ = print "plet0\n"
 	    val (sbnd_ce_list,module,signat) = xstrexp(context,strb,Ast.NoSig)
 	    val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	    val sig' = xsigexp(context,sigexp)
-	    val _ = print "SIGTRANS 1\n" 
 	    val (mod_result,sig_result) =
 		Signature.xcoerce_transparent (polyinst,context',module,signat,sig')
-	    val _ = print "SIGTRANS 2\n" 
 	in  (sbnd_ce_list, mod_result, sig_result)
 	end
 
@@ -2249,11 +2250,11 @@ val _ = print "plet0\n"
 	  end
 
 	fun tyvar_help tv = 
-	(case (Tyvar.tyvar_deref tv) of
-			SOME _ => ()
-		      | NONE => (print "Warning: top-level unresolved tyvar -- setting to type unit\n"; 
-				 Stats.counter "toil.unresolved_tyvar" ();
-				 Tyvar.tyvar_set(tv,con_unit)))
+	    (case (Tyvar.tyvar_deref tv) of
+		 SOME _ => ()
+	       | NONE => (print "Warning: top-level unresolved tyvar -- setting to type unit\n"; 
+			  Stats.counter "toil.unresolved_tyvar" ();
+			  Tyvar.tyvar_set(tv,con_unit)))
 			
 	fun overload_loop warn overload_table = 
 	    let fun folder (entry,(rest,change)) = 

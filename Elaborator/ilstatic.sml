@@ -257,55 +257,80 @@ structure IlStatic
    fun unify_maker () = 
      let 
        val table = ref ([] : {saved : (context,con) tyvar, active : (context,con) tyvar} list)
-       fun fetch tv = tyvar_deref tv
        fun set (tyvar,c) = 
 	   let 
-
-	       val _ = (case (fetch tyvar) of
+	       val _ = (case (tyvar_deref tyvar) of
 			    NONE => ()
 			  | (SOME c') => error "cannot set an already set tyvar")
-	       val same_tyvar = (case c of
-				     CON_TYVAR tv => eq_tyvar(tv,tyvar)
-				   | _ => false)
-	   in if (same_tyvar)
-		  then ()
-	      else 
-		  let 
-		      val (tyvars,flexes) = find_tyvars_flexes c
+	       fun follow_tyvar (c as (CON_TYVAR tv)) = 
+		         (case tyvar_deref tv of
+			      NONE => c
+			    | SOME c => follow_tyvar c)
+		 | follow_tyvar c = c
+	       val c = follow_tyvar c
 
-		      val _ =  if (!showing)
-				   then (print "setting "; 
-					 pp_con (CON_TYVAR tyvar); print "\n  to "; 
-					 pp_con c; print "\n";
-					 print "  tyvars are "; 
-					 app (fn (_,tv) => (pp_con (CON_TYVAR tv); 
-							    print "  ")) tyvars;
-					 print "\n\n")
-			       else ()
+	       val (tyvars,flexes) = find_tyvars_flexes c
 
-		  in  if (Listops.member_eq(eq_tyvar,tyvar,map #2 tyvars)) (* occurs check *)
-			  then print "Fails occurs check\n"
-		      else 
-			  let 
-			      val tyvar_ctxts = tyvar_getctxts tyvar
-			  in  if (map (fn ctxt => GetConKind(c,ctxt)) tyvar_ctxts; false
-				  handle _ => true)
-				  then print "Fails well-formed in tyvar contexts"
-			      else 
-				  let val _ = constrain_tyvars_flexes
-					         (tyvars,flexes,
-						  {gen_constrain = tyvar_isconstrained tyvar,
-						   eq_constrain = tyvar_is_use_equal tyvar,
-						   stamp = tyvar_stamp tyvar,
-						   constrain_ctxts = tyvar_ctxts})
-				      val entry = {saved = tyvar_copy tyvar, active = tyvar}
-				      val _ = table := (entry::(!table))
-				  in  tyvar_set(tyvar,c)
-				  end
-			  end	     
-		  end;
-               true
+	       val _ =  if (!showing)
+			    then (print "setting "; 
+				  pp_con (CON_TYVAR tyvar); print "\n  to "; 
+				  pp_con c; print "\n";
+				  print "  tyvars are "; 
+				  app (fn (_,tv) => (pp_con (CON_TYVAR tv); 
+						     print "  ")) tyvars;
+				  print "\n\n")
+			else ()
+
+	       val tyvar_ctxts = tyvar_getctxts tyvar
+	       val (ev,cv,mv) = con_free c
+	       fun var_bound ctxt v = (case Context_Lookup'(ctxt,v) of
+					   SOME _ => true
+					 | _ => false)
+	       fun bounded ctxt = 
+		   (Listops.andfold (var_bound ctxt) ev) andalso
+		   (Listops.andfold (var_bound ctxt) cv) andalso
+		   (Listops.andfold (var_bound ctxt) mv)
+
+	       val occurs = Listops.member_eq(eq_tyvar,tyvar,map #2 tyvars) (* occurs check *)
+	       val well_formed = Listops.andfold bounded tyvar_ctxts
+
+	   in  if occurs
+		   then (if (!debug)
+			     then (print "Fails occurs check\n";
+				   print "tyvar = "; pp_con (CON_TYVAR tyvar);
+				   print "\ncon = "; pp_con c;
+				   print "\n")
+			 else ();
+			 false)
+	       else if well_formed
+			then 
+			    let val _ = constrain_tyvars_flexes
+				(tyvars,flexes,
+				 {gen_constrain = tyvar_isconstrained tyvar,
+				  eq_constrain = tyvar_is_use_equal tyvar,
+				  stamp = tyvar_stamp tyvar,
+				  constrain_ctxts = tyvar_ctxts})
+				val entry = {saved = tyvar_copy tyvar, active = tyvar}
+				val _ = table := (entry::(!table))
+			    in  tyvar_set(tyvar,c); true
+			    end
+		    else (if (!debug)
+			      then print "Fails well-formed in tyvar contexts"
+			  else ();
+			  false)
 	   end
+
+       val set = fn (arg as (_,c)) => 
+	   let val islong_before = (Stats.fetch_timer_max "Elab-set") > 0.5
+	       val res = Stats.subtimer("Elab-set",set) arg
+	       val islong_after = (Stats.fetch_timer_max "Elab-set") > 0.5
+	       val _ = if (not islong_before andalso islong_after)
+			   then (print "set took more than 0.5s with c = ";
+				 pp_con c; print "\n\n")
+		       else ()
+	   in  res
+	   end
+
        (* Undo is not undoing effects of constrain operations *)
        fun undo() = app (fn {saved,active} => tyvar_update(active,saved)) (!table)
      in  (set, undo)
@@ -313,7 +338,8 @@ structure IlStatic
 
    and eq_con (ctxt, con1, con2) = 
        let val (setter,undo) = unify_maker()
-       in  meta_eq_con (setter,false) (con1, con2, ctxt)
+       in  Stats.subtimer("Elab-subeq_con",meta_eq_con (setter,false))
+	   (con1, con2, ctxt)
        end
 
    and sub_con (arg as (ctxt, con1, con2)) = 
@@ -321,7 +347,8 @@ structure IlStatic
 			pp_con con1; print "\nand con2 = \n";
 			pp_con con2; print "\n")
 	   val (setter,undo) = unify_maker()
-       in  meta_eq_con (setter,true) (con1, con2, ctxt)
+       in  Stats.subtimer("Elab-subeq_con",meta_eq_con (setter,true))
+	   (con1, con2, ctxt)
        end
 
    and soft_eq_con (ctxt,con1,con2) = 
@@ -345,13 +372,15 @@ structure IlStatic
 			     print "con1 = "; pp_con con1; print "\n";
 			     print "con2 = "; pp_con con2; print "\n")
 		   else ()
+	   fun path_match p1 p2 = not(null(Listops.list_inter_eq(eq_path, p1, p2)))
        in
 	   case (con1,con2) of
 	       (CON_TYVAR tv1, CON_TYVAR tv2) => 
 		   (eq_tyvar(tv1,tv2) orelse
-		    (case tyvar_deref tv1 of
-			 NONE => setter(tv1,con2)
-		       | SOME c => self (c,con2,ctxt)))
+		    (case (tyvar_deref tv1, tyvar_deref tv2) of
+			 (NONE, NONE) => setter(tv1,con2)
+		       | (NONE, SOME c2) => self(con1,c2,ctxt)
+		       | (SOME c1,_) => self (c1,con2,ctxt)))
 	     | (CON_TYVAR tv1, _) => 
 		   (case tyvar_deref tv1 of
 			NONE => setter(tv1,con2)
@@ -370,7 +399,8 @@ structure IlStatic
 		   in  same orelse
 		       let val (_, con1, path1) = HeadNormalize(con1,ctxt)
 			   val (_, con2, path2) = HeadNormalize(con2,ctxt)
-		       in  meta_eq_con_hidden (setter,is_sub) (con1,con2,ctxt)
+		       in  (path_match path1 path2) orelse
+			   (meta_eq_con_hidden (setter,is_sub) (con1,con2,ctxt))
 		       end
 		   end
        end
@@ -429,11 +459,13 @@ structure IlStatic
 		      | follow c = c
 		in (case (follow con1, follow con2) of
 			(CON_RECORD r1, CON_RECORD r2) => match r1 r2
-		      | (CON_RECORD rdecs, CON_FLEXRECORD(r as ref(FLEXINFO(stamp,false,flex_rdecs)))) =>
+		      | (CON_RECORD rdecs, 
+			    CON_FLEXRECORD(r as ref(FLEXINFO(stamp,false,flex_rdecs)))) =>
 			((subset flex_rdecs rdecs) andalso (stamp_constrain stamp rdecs;
 							    r := FLEXINFO(stamp,true,rdecs);
 							    true))
-		      | (CON_FLEXRECORD(r as ref(FLEXINFO(stamp,false,flex_rdecs))),CON_RECORD rdecs) =>
+		      | (CON_FLEXRECORD(r as ref(FLEXINFO(stamp,false,flex_rdecs))),
+			   CON_RECORD rdecs) =>
 			((subset flex_rdecs rdecs) andalso (stamp_constrain stamp rdecs;
 							    r := FLEXINFO(stamp,true,rdecs);
 							    true))

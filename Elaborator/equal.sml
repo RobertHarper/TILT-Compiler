@@ -29,13 +29,15 @@ struct
 	  val _ = debugdo (fn () => (print "CALLED xeq with con = ";
 				     pp_con con; print "\nand ctxt = \n";
 				     pp_context ctxt))
-	  val con' = con_normalize(ctxt,con) 
+(*
+	  val con = con_normalize(ctxt,con) 
 	  val _ = debugdo (fn () => (print "NORMALIZE to con = ";
 				     pp_con con'; print "\n"))
+*)
 	  val xeq = xeq(polyinst_opt,vector_eq)
 	  val self = xeq ctxt
 	  open Prim
-      in case con' of
+      in case con of
 	    CON_TYVAR tyvar => (case (tyvar_deref tyvar) of
 				NONE => elab_error "unresolved type does not permit equailty"
 			      | SOME c => self (name,c))
@@ -46,26 +48,26 @@ struct
 			  in (case (Context_Lookup(ctxt,eq_label)) of
 				  SOME(_,PHRASE_CLASS_EXP(e,_,_,_)) => (e, con_eqfun name)
 				| _ => (case pc of
-					    PHRASE_CLASS_CON(_,_,SOME c,_) => self(con',c)
+					    PHRASE_CLASS_CON(_,_,SOME c,_) => self(con,c)
 					  | _ => raise NoEqExp))
 			  end)
 	  | CON_OVAR ocon => self (name,CON_TYVAR (ocon_deref ocon))
-	  | CON_INT is => (ETAPRIM(eq_int is,[]), con_eqfun con')
-	  | CON_UINT is => (ETAILPRIM(eq_uint is,[]), con_eqfun con')
+	  | CON_INT is => (ETAPRIM(eq_int is,[]), con_eqfun con)
+	  | CON_UINT is => (ETAILPRIM(eq_uint is,[]), con_eqfun con)
 	  | CON_FLOAT fs => raise NoEqExp
 	  | CON_RECORD fields => 
 		let 
 		    val v = fresh_var()
 		    val v1 = fresh_var()
 		    val v2 = fresh_var()
-		    val paircon = con_tuple[con',con']
+		    val paircon = con_tuple[con,con]
 		    val e1 = RECORD_PROJECT(VAR v,generate_tuple_label 1,paircon)
 		    val e2 = RECORD_PROJECT(VAR v,generate_tuple_label 2,paircon)
 		    fun help (lbl,fieldcon) = 
 			let 
 			    val (eqexp,_) = self (fieldcon,fieldcon)
-			    val e1 = RECORD_PROJECT(VAR v1,lbl,con')
-			    val e2 = RECORD_PROJECT(VAR v2,lbl,con')
+			    val e1 = RECORD_PROJECT(VAR v1,lbl,con)
+			    val e2 = RECORD_PROJECT(VAR v2,lbl,con)
 			    val exp = APP(eqexp,exp_tuple[e1,e2])
 			in  (case exp_reduce exp of
 				 NONE => exp
@@ -83,7 +85,7 @@ struct
 		end
 	  | CON_SUM {names,carrier,noncarriers,special = SOME _} => 
 		error "xeq called on special sum type"
-	  | (CON_SUM {names,carrier,noncarriers,special = NONE}) =>
+	  | CON_SUM {names,carrier,noncarriers,special = NONE} =>
 		let 
 		    val v = fresh_named_var "eqargpair"
 		    val v1 = fresh_named_var "eqarg1"
@@ -141,7 +143,7 @@ struct
 				      make_let([BND_EXP(v1,e1),BND_EXP(v2,e2)],body)))
 		end
 	  | CON_ARRAY c => (ETAPRIM(equal_table (OtherArray false),[c]),
-			    con_eqfun con')
+			    con_eqfun con)
 	  | CON_VECTOR c => 
 		let val (e,vc) = vector_eq ctxt
 		    val ac = CON_ARROW([con_eqfun c], 
@@ -154,14 +156,14 @@ struct
 		in  ((case exp_reduce exp of
 			  NONE => exp
 			| SOME e => e),
-		     con_eqfun con')
+		     con_eqfun con)
 		end
-	  | CON_REF c => (ETAILPRIM(eq_ref,[c]), con_eqfun con')
+	  | CON_REF c => (ETAILPRIM(eq_ref,[c]), con_eqfun con)
 	  | CON_MODULE_PROJECT(m,l) => 
 		let val e = MODULE_PROJECT(m,to_eq l)
 		in (GetExpCon(ctxt,e) 
 			handle _ => raise NoEqExp);
-		  	(e, con_eqfun con')
+		  	(e, con_eqfun con)
 	       end
 	  | CON_APP(c,tuple) => 
 		let val meq = 
@@ -207,14 +209,14 @@ struct
 								       NONE => raise NoEqExp
 								     | SOME triple => triple)
 			in (MODULE_PROJECT(MOD_APP(meq,MOD_STRUCTURE new_sbnds),it_lab),
-			    con_eqfun con')
+			    con_eqfun con)
 			end
 		  | _ => raise NoEqExp
 		end
 	  | CON_MU confun => xeq_mu(polyinst_opt,vector_eq) ctxt (name,confun)
 	  | CON_TUPLE_PROJECT (j,CON_MU confun) => 
 		let val (fix_exp,fix_con) = xeq_mu(polyinst_opt,vector_eq) ctxt (CON_MU confun,confun)
-		in  (RECORD_PROJECT(fix_exp, generate_tuple_label (j+1), fix_con), con_eqfun con')
+		in  (RECORD_PROJECT(fix_exp, generate_tuple_label (j+1), fix_con), con_eqfun con)
 		end
 	  | _ => raise NoEqExp
       end

@@ -21,7 +21,7 @@ structure Tyvar :> TYVAR =
 				     name : var,
 				     constrained : bool,
 				     use_equal : bool,
-				     body : 'con Util.oneshot,
+				     body : 'con option ref,
 				     ctxts : 'ctxt list} ref
     datatype ('ctxt,'con) tyvar = TYVAR of ('ctxt,'con) tyvar_info
 
@@ -37,15 +37,15 @@ structure Tyvar :> TYVAR =
     fun stamp_join(a : stamp,b) = if (a<b) then a else b
     fun tyvar_copy(TYVAR (ref {stampref, name, constrained, use_equal, body, ctxts})) =
 	TYVAR(ref{stampref = stampref, name = name, constrained = constrained,
-		  use_equal = use_equal, body = (case oneshot_deref body of
+		  use_equal = use_equal, body = (case !body of
 						     SOME _ => body
-						   | _ => oneshot()), ctxts = ctxts})
+						   | _ => ref NONE), ctxts = ctxts})
     fun tyvar_update(TYVAR r, TYVAR(ref info)) = r := info
     fun fresh_stamped_tyvar (ctxts,name,stamp) = TYVAR(ref{stampref = stamp,
 							   name = fresh_named_var name, 
 							   constrained = false, 
 							   use_equal = false,
-							   body = oneshot(),
+							   body = ref NONE,
 							   ctxts = [ctxts]})
     fun fresh_named_tyvar (ctxts,s) = fresh_stamped_tyvar(ctxts,s,inc())
     fun fresh_tyvar ctxts = fresh_named_tyvar (ctxts,"tv")
@@ -65,11 +65,12 @@ structure Tyvar :> TYVAR =
     fun eq_tyvar(TYVAR(ref{name=v1,...}),TYVAR(ref{name=v2,...})) = eq_var(v1,v2)
     fun tyvar_getvar(TYVAR(ref {name,...})) = name
     fun tyvar2string tv = var2string(tyvar_getvar tv)
-    fun tyvar_deref(TYVAR(ref {body,...})) = oneshot_deref body
+    fun tyvar_deref(TYVAR(ref {body,...})) = !body
     fun tyvar_set(TYVAR(ref {body,...}),c) = 
-		 (case (oneshot_deref body) of
-		      NONE => oneshot_set(body,c)
-		    |(SOME _)  => error "cannot set tyvar more than once")
+	          (case !body of
+		      NONE => body := (SOME c)
+		    | SOME _  => error "cannot set tyvar more than once")
+    fun tyvar_reset(TYVAR(ref {body,...}),c) = body := SOME c
     fun tyvar_isconstrained(TYVAR(ref {constrained,...})) = constrained 
     fun tyvar_constrain(TYVAR(r as ref ({stampref,name,constrained,use_equal,body,ctxts}))) =
 	  r := {stampref = stampref,
