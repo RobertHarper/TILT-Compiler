@@ -7,6 +7,8 @@ struct
 
   val error = fn s => error "nil.sml" s
 
+  val flattenThreshold = ref 6
+
   type var = Name.var
   type label = Name.label
   datatype annotation = datatype Annotation.annotation

@@ -1193,6 +1193,13 @@ struct
 			      | (SOME w1, NONE, true) => true
 			      | _ => false)
 		     )
+		  | (Vararg_c(o1,eff1),Vararg_c(o2,eff2)) => 
+		    o1 = o1 andalso (sub_effect(st,eff1,eff2)) andalso
+		    (case (args1,args2)
+		       of ([argc1,resc1],[argc2,resc2]) =>
+			 alpha_subequiv_con' st context (argc2,argc1) andalso
+			 alpha_subequiv_con' st context (resc1,resc2)
+			| _ => false)
 		  | (_,_) => primequiv(pcon1,pcon2))
 	       val st' = st andalso (covariant_prim pcon1)
 	     in res1 andalso alpha_subequiv_con_list st' context (args1,args2)
@@ -1218,7 +1225,7 @@ struct
 		 andalso (List.length t1 = List.length t2) 
 		 andalso
 		 let val (context,equal) = alpha_equiv_vk_list context (t1,t2)
-		 in (alpha_subequiv_con_list st context (map #2 e1, map #2 e2) 
+		 in (alpha_subequiv_con_list st context (map #2 e2, map #2 e1) 
 		     andalso alpha_subequiv_con' st context (b1,b2))
 		 end )
 

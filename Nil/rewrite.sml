@@ -607,7 +607,29 @@ structure NilRewrite :> NILREWRITE =
 				     result_type = result_type}))
 		 else NONE
 	       end
-	   | Typecase_e {arg,arms,default, result_type} => error "typecase not handled")    
+	   | Typecase_e {arg,arms,default, result_type} => 		     
+	       let 
+		 val changed = ref false
+		 fun doarm(pc,vklist,body) =   
+		   let 
+		     val (vklist,state) = tformals_helper changed state vklist
+		     val body = recur_e changed state body
+		   in  (pc, vklist, body)
+		   end
+		 val arg = recur_c changed state arg
+		 val arms = map doarm arms
+		 val default = recur_e changed state default
+		 val result_type = recur_c changed state result_type
+	       in  
+		 if !changed then
+		   SOME (Switch_e
+			 (Typecase_e{arg = arg,
+				     arms = arms,
+				     default = default,
+				     result_type = result_type}))
+		 else NONE
+	       end
+	     )
 
 	and rewrite_exp (state : 'state) (exp : exp) : exp option =
 	  let 

@@ -12,6 +12,8 @@ sig
                           (* An ('a,'b) sequence is conceptually equivalent to an ('a*'b) list.
 			     Additionally, it has fast access using 'a as a key *)
 
+  val flattenThreshold : int ref
+
   datatype annotation = datatype Annotation.annotation
 
   (* In general, we want to distinguish between different function-like terms.

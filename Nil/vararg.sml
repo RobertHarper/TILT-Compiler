@@ -8,7 +8,8 @@ struct
     open Name
     open Util Listops
 
-    val flattenThreshold = 6
+    val flattenThreshold = !Nil.flattenThreshold
+
     val debug = Stats.ff("vararg_debug")
     val error = fn s => Util.error "vararg.sml" s
 

@@ -1,4 +1,4 @@
-(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg *)
+(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Dummy *)
 
 (* Reorder *)
 
@@ -30,10 +30,15 @@ structure Linknil :> LINKNIL  =
 (*  val reorder     = makeEntry (false, "Reorder") *)
 
     val typecheck_after_phasesplit = makeEntry(false,"TypecheckAfterPhasesplit")
-    val typecheck_after_opt = makeEntry(false,"TypecheckAfterOpt")
-    val typecheck_after_opt2 = makeEntry(false,"TypecheckAfterOpt2")
-    val typecheck_after_cc = makeEntry(false,"TypecheckAfterCC")
+    val typecheck_between_opts     = makeEntry(false,"TypecheckBetweenOpts")
+    val typecheck_after_opt        = makeEntry(false,"TypecheckAfterOpt")
+    val typecheck_after_opt2       = makeEntry(false,"TypecheckAfterOpt2")
+    val typecheck_after_cc         = makeEntry(false,"TypecheckAfterCC")
 
+    val wtypecheck_after_phasesplit = makeEntry(false,"WTypecheckAfterPhasesplit")
+    val wtypecheck_after_opt        = makeEntry(false,"WTypecheckAfterOpt")
+    val wtypecheck_after_opt2       = makeEntry(false,"WTypecheckAfterOpt2")
+    val wtypecheck_after_cc         = makeEntry(false,"WTypecheckAfterCC")
 
     val error = fn s => Util.error "linknil.sml" s
 
@@ -58,10 +63,8 @@ structure Linknil :> LINKNIL  =
     structure Specialize = Specialize
     structure Linearize = Linearize
     structure ToClosure = ToClosure
-(*
-    val number_flatten = 6
-    val _ = Stats.int("number_flatten") := number_flatten
-    structure Flatten = Flatten(structure PrimUtil = NilPrimUtil) 
+
+(*    structure Flatten = Flatten(structure PrimUtil = NilPrimUtil) 
     structure Reduce = Reduce 
 *)
 
@@ -106,6 +109,11 @@ structure Linknil :> LINKNIL  =
 
     fun typecheck nilmod = (NilStatic.module_valid (NilContext.empty (), nilmod); nilmod)
 
+    (*Note that these get redirected in the self-compile, 
+     * since TIL can't handle the Wizard.  (Datatype bug)
+     *)
+    fun wtypecheck nilmod = (WNilStatic.module_valid (WNilContext.empty (), NilToWizard.nil_to_wizard nilmod); nilmod)
+
     exception Stop of Nil.module
 
     (* (1) Rename must precede everything.
@@ -122,27 +130,41 @@ structure Linknil :> LINKNIL  =
 	    val D = NilContext.empty()
 
 	    val nilmod = pass phasesplit (Tonil.phasesplit, (ctxt,sbnd_entries))
-	    val nilmod = transform typecheck_after_phasesplit (typecheck, nilmod)
+
+	    val nilmod = transform typecheck_after_phasesplit  (typecheck, nilmod)
+	    val nilmod = transform wtypecheck_after_phasesplit (wtypecheck, nilmod)
+
 	    val _ = if !(Stats.bool("UptoPhasesplit"))
 			then raise (Stop nilmod)
 		    else ()
 	    val nilmod = transform rename (Linearize.linearize_mod, nilmod)
- 	    val nilmod = transform measure (Measure.measureMod, nilmod)
 	    val nilmod = transform optimize1 
 				   (Optimize.optimize {doDead = true, 
 						       doProjection = SOME 50,
 						       doCse = false, 
 						       doUncurry = false},
 				    nilmod)
+
+ 	    val nilmod = transform typecheck_between_opts (typecheck,nilmod)
+
 	    val nilmod = transform vararg (Vararg.optimize, nilmod)
+
 (*	    val nilmod = transform reduce1 (Reduce.doModule, nilmod)  *)
 (*	    val nilmod = transform flatten (Flatten.doModule, nilmod) *)
+
+ 	    val nilmod = transform typecheck_between_opts (typecheck,nilmod)
+
 	    val nilmod = transform inline1
 		                   (Inline.inline {sizeThreshold = 50, 
 						   occurThreshold = 5},
 				    nilmod)
+
+ 	    val nilmod = transform typecheck_between_opts (typecheck,nilmod)
+
             val nilmod = transform reify1 (Reify.reify_mod, nilmod)
+
  	    val nilmod = transform typecheck_after_opt (typecheck,nilmod)
+ 	    val nilmod = transform wtypecheck_after_opt (wtypecheck,nilmod)
 
 	    val nilmod = transform specialize (Specialize.optimize, nilmod)
 	    val nilmod = transform hoist (Hoist.optimize, nilmod)
@@ -158,10 +180,13 @@ structure Linknil :> LINKNIL  =
 				    nilmod)
             val nilmod = transform reify2 (Reify.reify_mod, nilmod)
  	    val nilmod = transform typecheck_after_opt2 (typecheck, nilmod)
+
+ 	    val nilmod = transform wtypecheck_after_opt2 (wtypecheck, nilmod)
+
 	    val nilmod = transform cc (ToClosure.close_mod, nilmod)
 (*	    val nilmod = transform reorder (Reorder.optimize, nilmod) *)
  	    val nilmod = transform typecheck_after_cc (typecheck, nilmod)
- 	    val nilmod = transform measure (Measure.measureMod, nilmod)
+ 	    val nilmod = transform wtypecheck_after_cc (wtypecheck, nilmod)
 
 	in  nilmod
 	end

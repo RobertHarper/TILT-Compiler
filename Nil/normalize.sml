@@ -6,7 +6,7 @@ struct
   structure NilContext = NilContextPre
 
 
-  val number_flatten = Stats.int("number_flatten")
+  val number_flatten = Nil.flattenThreshold
 
   val profile       = Stats.ff "nil_profile"
   val local_profile = Stats.ff "normalize_profile"
@@ -929,8 +929,29 @@ struct
 	    end
 
   and con_reduce state (constructor : con) : progress * con_subst * con  = 
-    (case constructor of
-          (Prim_c _) => (HNF, #2 state, constructor)
+    (case constructor 
+       of (Prim_c (Vararg_c (openness,effect),[argc,resc])) => 
+	 let 
+	   val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
+	   val no_flatten = AllArrow_c{openness=openness,effect=effect,isDependent=false,
+				       tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,
+				       body_type=resc}
+	 in
+	   (case con_reduce state argc of
+	      (PROGRESS,subst,argc) => (PROGRESS,subst,Prim_c (Vararg_c (openness,effect),[argc,resc]))
+	    | (HNF,_,Prim_c(Record_c (labs,_),cons)) =>
+		(HNF,#2 state,
+		 if (length labs > !number_flatten) then no_flatten 
+		 else AllArrow_c{openness=openness,effect=effect,isDependent=false,
+				 tFormals=[], eFormals=map (fn c => (NONE,c)) cons,
+				 fFormals=0w0, body_type=resc})
+	    | (HNF,_,c)         => (HNF,#2 state,no_flatten)
+	    | (IRREDUCIBLE,_,c) => 
+		(case find_kind_equation(#1 state,argc)
+		   of SOME argc => (PROGRESS,#2 state,Prim_c (Vararg_c (openness,effect),[argc,resc]))
+		    | NONE      => (HNF,#2 state,irreducible)))
+	 end
+	| (Prim_c _) => (HNF, #2 state, constructor)
 	| (Mu_c _) => (HNF, #2 state, constructor)
 	| (AllArrow_c _) => (HNF, #2 state, constructor)
 	| (ExternArrow_c _) => (HNF, #2 state, constructor)
@@ -1363,35 +1384,4 @@ struct
 
 
 
-   
-  fun strip_singleton (D : context,kind : kind) : kind = 
-    let 
-      val _ = if (!show_calls)
-		then (print "strip_singleton called with kind =\n";
-		      Ppnil.pp_kind kind; 
-		      print "\n\n")
-	      else ()
-
-      val res = 
-	(case kind
-	   of Single_k con => 
-	     (case (kind_of (D,con))
-		of SingleType_k con => Type_k
-		 | kind => kind)
-	    | SingleType_k con => Type_k
-	    | _ => kind)
-
-      val _ = if !show_calls 
-		then (printl "strip_singleton returned")
-	      else ()
-		
-       val _ = 
-	 if !debug then
-	   assert (locate "strip_singleton") 
-	   [
-	    ]
-	 else ()
-
-    in res
-    end
 end

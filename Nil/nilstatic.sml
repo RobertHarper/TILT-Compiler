@@ -8,6 +8,8 @@ struct
   open Nil 
   open Prim
 
+  val number_flatten = Nil.flattenThreshold
+
   (* Stats ******************************************************)
 
   val trace               = Stats.ff "nilstatic_trace"
@@ -37,6 +39,8 @@ struct
   val alpha_equiv_fails      = Stats.counter "Alpha Equiv Checks Failed"
   val kind_standardize_calls = Stats.counter "Kind Standardize Calls"
 
+
+
 (*  
 
 val timer = Stats.subtimer'
@@ -48,7 +52,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 
   fun subtimer (_,f) args = f args
-  fun flagtimer (flag,name,f) args = f args
+  fun flagtimer (flag,name,f) args = (f args ) (*handle e => (print name;print "\n";raise e)*)
 
 
 
@@ -815,8 +819,17 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     end
   and con_analyze_vk_list (D,cons,vks) = 
     let
-      fun folder (c,(v,k),D) = (con_analyze(D,c,k);insert_kind(D,v,k))
-    in foldl2 folder D (cons,vks)
+      val origD = D
+      fun folder (c,(v,k),(D,subst)) = 
+	let val k = substConInKind subst k
+	    val _ = con_analyze(origD,c,k)
+	    val subst = Subst.C.sim_add subst (v,c)
+	    val D = insert_kind_equation(D,v,c,k)
+	in(D,subst)
+	end
+      val (D,_) = (foldl2 folder (D,Subst.C.empty()) (cons,vks)
+		   handle e => (print "Problem with analyzing vk_list\n";raise e))
+    in D
     end
   and type_analyze(D,c) = con_analyze(D,c,Type_k)
   and con_valid (D : context, constructor : con) : kind = 
@@ -1043,7 +1056,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       end
 	     val _ = (app doarm arms;
 		      type_analyze (D,arg);
-		      con_analyze (D,default,given_kind))
+		      con_analyze (D,default,given_kind)) 
+	       handle e => (print "Problem with Typecase arms\n";raise e)
 	   in
 	     given_kind
 	   end
@@ -1234,8 +1248,27 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    end
 	  
 	  and con_reduce (state : (context * Alpha.alpha_context),constructor : con) : ((context * Alpha.alpha_context) * con * bool)  = 
-	    (case constructor of
-	       (Prim_c _)            => (state,constructor,false)
+	    (case constructor of 
+	       (Prim_c (Vararg_c (openness,effect),[argc,resc])) =>       
+		 let 
+		   val (state,argc,path) = reduce_hnf''(state,argc)
+	       
+		   val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
+		   val no_flatten  = AllArrow_c{openness=openness,effect=effect,isDependent=false,
+					       tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,
+					       body_type=resc}
+		   val res = 
+		     (case argc of
+			Prim_c(Record_c (labs,_),cons) => 
+			  if (length labs > !number_flatten) then no_flatten 
+			  else AllArrow_c{openness=openness,effect=effect,isDependent=false,
+					  tFormals=[], eFormals=map (fn c => (NONE,c)) cons,
+					  fFormals=0w0, body_type=resc}
+		      | _ => if path then irreducible
+				 else no_flatten)
+		 in (state,res,false)
+		 end
+	     | (Prim_c _)            => (state,constructor,false)
 	     | (Mu_c _)              => (state,constructor,false)
 	     | (AllArrow_c _)        => (state,constructor,false)
 	     | (ExternArrow_c _)     => (state,constructor,false)
@@ -1332,18 +1365,23 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		       | _ => (state,Typecase_c{arg=arg,arms=arms,default=default,kind=kind},false))
 		 end
 	     | (Annotate_c (annot,con)) => con_reduce (state,con))
-	  and reduce_hnf'(state,constructor) =
+	  and reduce_hnf'' (state,constructor) =
 	    let val ((D,alpha),con,path) = con_reduce (state,constructor)
 	    in
 	      if path then
 		let val con = alphaCRenameCon alpha con
 		in
 		  (case find_kind_equation (D,con)
-		     of SOME con => reduce_hnf' ((D,Alpha.empty_context()),con)
-		      | NONE => ((D,Alpha.empty_context()),strip_annotate con))
+		     of SOME con => reduce_hnf'' ((D,Alpha.empty_context()),con)
+		      | NONE => ((D,Alpha.empty_context()),con,true))
 		end
 	      else
-		((D,alpha),strip_annotate con)
+		((D,alpha),con,false)
+	    end
+
+	  and reduce_hnf' args = 
+	    let val (state,con,path) = reduce_hnf'' args
+	    in (state,con)
 	    end
 	  fun reduce_hnf(D,constructor) = 
 	    let val ((D,alpha),con) = reduce_hnf'((D,Alpha.empty_context()),constructor)
@@ -1564,6 +1602,11 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   eq_list(fn (c1,c2) => con_equiv(D,c1,c2,k,sk),
 					  clist1,clist2)
 		 end
+	       | (Prim_c(Vararg_c(o1,eff1),[argc1,resc1]),
+		  Prim_c(Vararg_c(o2,eff2),[argc2,resc2])) => 
+		 o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso
+		 type_equiv(D,argc2,argc1,sk) andalso
+		 type_equiv(D,resc1,resc2,sk)
 	       | (Prim_c(pcon1,clist1), Prim_c(pcon2,clist2)) => 
 		 let
 		   val sk' = sk andalso (NilUtil.covariant_prim pcon1)
@@ -1900,7 +1943,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  val {openness = openness', tFormals, eFormals, fFormals, body_type, isDependent,...} = 
 	    (case strip_arrow (con_head_normalize(D,con)) of
 	       SOME c => c
-	     | NONE => (perr_e_c (app,con); error (locate "exp_valid") "Application of non-arrow expression" ))
+	     | NONE => (perr_c (con_head_normalize(D,con));
+			e_error(D,exp,"Application of non-arrow expression" )))
 
 	  val _ = 
 	    if same_openness (openness,openness') then
@@ -1955,8 +1999,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		  val _ = exp_analyze(D,exp,con)
 		in (case var_opt of SOME var => SOME (var,con) | NONE => NONE)
 		end
+	    val pairs = ((zip eFormals texps)
+			 handle _ => e_error(D,exp,"Mismatched formal/actual lengths"))
 	  in
-	    val types = List.mapPartial do_one (zip eFormals texps)
+	    val types = List.mapPartial do_one pairs
 	  end
 
 
@@ -2254,11 +2300,22 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		if subtimer("Tchk:Exp:Prim:IExn:st",subtype)(D,exp_valid (D,exp2),strip_exntag(D,exp_valid (D,exp1))) then
 		  Prim_c (Exn_c,[])
 		else e_error(D,orig_exp,"Type mismatch in exception injection")
-
-	    | (make_vararg (openness,effect),cons,exps) =>
-		  (error (locate "prim_valid") "make_vararg unimplemented....punting" handle e => raise e)
-	    | (make_onearg (openness,effect),cons,exps) =>  
-		    (error (locate "prim_valid") "make_onearg unimplemented....punting" handle e => raise e)
+	    | (make_vararg (openness,effect),[argc,resc],[e]) =>
+	       let
+		 val etype = AllArrow_c{openness=openness,effect=effect,isDependent=false,
+					tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,body_type=resc}
+		 val _ = type_analyze(D,etype)
+		 val _ = exp_analyze (D,e,etype)
+	       in  Prim_c(Vararg_c(openness,effect),[argc,resc])
+	       end
+	    | (make_onearg (openness,effect),[argc,resc],[e]) =>  
+	       let
+		 val etype = Prim_c(Vararg_c(openness,effect),[argc,resc])
+		 val _ = type_analyze(D,etype)
+		 val _ = exp_analyze (D,e,etype)
+	       in AllArrow_c{openness=openness,effect=effect,isDependent=false,
+			     tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,body_type=resc}
+	       end
 	    | (peq,cons,exps) => 
 		      (error (locate "prim_valid") "Polymorphic equality should not appear at this level" handle e => raise e)
 	    | (prim,cons,exps) => 
