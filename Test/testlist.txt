@@ -35,6 +35,17 @@ m0030	Word8 vector
 m0031	List
 m0032	List pair
 m0033	Math
+m0034	Local ref's.
+m0035	Lists and ref's
+m0037	abstype
+m0038	arrays
+m0039	two-dimensional arrays
+m0040	arrays
+m0041	arrays
+m0042	two-dimensional arrays
+m0043	arrays
+m0044	arrays
+m0045	asterisk parsing
 n0      Denmark Core-SML failure test
 n1      Denmark Core-SML failure test
 n2      Denmark Core-SML failure test
