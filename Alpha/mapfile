@@ -1,0 +1,35 @@
+import group "../Basis/Library/mapfile"
+include group "../Util/mapfile-util"
+include group "../Parser/mapfile-parse"
+include group "../Rtl/mapfile-rtl"
+include group "../Backend/mapfile"
+
+source unit DECALPHA = "decalpha.sig.sml" {Core Rtl MACHINE}
+source unit DecAlpha = "decalpha.sml" {
+	TilWord32 Name Int Core RTL DECALPHA String Rtl Util Char
+	List Stats
+}
+source unit DecAlphaUtils = "decalphautils.sml" {
+	Core MACHINEUTILS DecAlpha Int Util
+}
+source unit CallConv = "callconv.sml" {
+	Core DecAlpha DecAlphaUtils Util CALLCONV
+}
+source unit DIVMULT = "divmult.sig.sml" {DECALPHA Word32}
+source unit DivMult = "divmult.sml" {
+	Core TilWord32 DecAlpha DecAlphaUtils Util TilWord64 DIVMULT
+}
+source unit ToAlpha = "toalpha.sml" {
+	TilWord32 Core Name Rtl Int Array Pprtl DecAlpha MACHINEUTILS
+	TRACETABLE BBLOCK DIVMULT TOASM Util
+}
+source unit TrackStorage = "trackstorage.sml" {
+	Core Int ORD_KEY DecAlpha PRINTUTILS MACHINEUTILS TRACKSTORAGE
+	SplaySetFn Util
+}
+source interface Linkalpha = "linkalpha.int" {LINKASM}
+source unit Linkalpha : Linkalpha = "linkalpha.sml" {
+	Util Rtl Stats LINKASM Linkrtl DecAlpha Labelgraph DecAlphaUtils
+	IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils
+	VarGraph TrackStorage Color Chaitin RtlToAsm Recursion Tortl
+}
