@@ -56,24 +56,43 @@ Linksparc     Sparc/linksparc
 
 
 // ----------------- Top directory -----------------
+TARGET Top/target.sig
+Target Top/target
+TopHelp Top/tophelp
+PATHS Top/paths.sig
+Paths Top/paths
+BACKGROUND Top/background.sig
+Background Top/background
 DELAY Top/delay.sig
 Delay Top/delay
 POPEN Top/popen.sig
 Popen Top/popen
 DIRS Top/dirs.sig
 Dirs Top/dirs
-COMPILER Top/compiler.sig
-Compiler Top/compiler
-// distribute.sml
-LINKER Top/linker.sig
-Linker Top/linker
-MAKEDEP Top/makedep.sig
-MakeDep Top/makedep
-TopHelp Top/tophelp
-COMMUNICATION Top/communication.sig
-Communication Top/communication
 FILECACHE Top/filecache.sig
 FileCache Top/filecache
+TOOLS Top/tools.sig
+Tools Top/tools
+COMPILER Top/compiler.sig
+Compiler Top/compiler
+UNIT_ENVIRONMENT Top/ue.sig
+UnitEnvironment Top/ue
+PRELINK Top/prelink.sig
+Prelink Top/prelink
+INFO Top/info.sig
+Info Top/info
+// DEPENDENT_FILE Top/dependentfile.sig
+// FileHelp Top/filehelp
+// SourceFile Top/sourcefile
+// IlFile Top/ilfile
+// AsmFile Top/asmfile
+// ObjFile Top/objfile
+UPDATE_HELP Top/updatehelp.sig
+UpdateHelp Top/updatehelp
+UPDATE Top/update.sig
+Update Top/update
+COMMUNICATION Top/communication.sig
+Communication Top/communication
 MASTER Top/master.sig
 Master Top/master
 SLAVE Top/slave.sig

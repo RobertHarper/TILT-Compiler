@@ -12,6 +12,10 @@ struct
     structure TortlSum = TortlSum
     structure Tortl = Tortl
 
+    val ptrWriteBarrier = Rtltags.ptrWriteBarrier
+    val fullWriteBarrier = Rtltags.fullWriteBarrier
+    val mirrorGlobal = Rtltags.mirrorGlobal
+    val mirrorPtrArray = Rtltags.mirrorPtrArray
 
 (*
     structure TortlVararg = TortlVararg

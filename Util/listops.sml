@@ -1,4 +1,4 @@
-(*$import LISTOPS List Util ListPair TopLevel *)
+(*$import LISTOPS List Util ListPair TopLevel Substring StringCvt Int *)
 
 structure Listops :> LISTOPS = 
   struct
@@ -305,4 +305,57 @@ structure Listops :> LISTOPS =
    fun join s [] = []
      | join s [a] = [a]
      | join s (a::aa) = a::s::(join s aa)
+       
+   (* toString : ('a -> string) -> 'a list -> string *)
+   fun toString f L =
+       let
+	   fun int i = Int.toString i ^ "."
+	   fun string s = int (size s) ^ s
+       in
+	   foldl (fn (v, acc) => acc ^ string (f v)) (int (length L)) L
+       end
+   
+   (* fromString' : (string -> 'a option) -> string -> ('a list * substring) option *)
+   fun fromString' f s =
+       let
+	   fun int ss = case Int.scan StringCvt.DEC Substring.getc ss
+			  of NONE => NONE
+			   | SOME (i, ss') =>
+			      if (Substring.isEmpty ss' orelse i < 0 orelse
+				  Substring.sub (ss', 0) <> #".")
+				  then NONE
+			      else SOME (i, Substring.triml 1 ss')
+				  
+	   fun string ss = case int ss
+			     of NONE => NONE
+			      | SOME (size, ss') =>
+				 SOME (Substring.string (Substring.slice (ss', 0, SOME size)),
+				       Substring.triml size ss')
+				 
+	   fun value ss = case string ss
+			    of NONE => NONE
+			     | SOME (s, ss') =>
+				(case f s
+				   of NONE => NONE
+				    | SOME v => SOME (v, ss'))
+				     
+	   fun values (ss, 0, acc) = SOME (rev acc, ss)
+	     | values (ss, i, acc) = case value ss
+				       of NONE => NONE
+					| SOME (v, ss') =>
+					   values (ss', i-1, v::acc)
+					   
+	   fun list ss = case int ss
+			   of NONE => NONE
+			    | SOME (length, ss') => values (ss', length, nil)
+       in  list (Substring.all s)
+       end
+   
+   (* fromString : (string -> 'a option) -> string -> 'a list option *)
+   fun fromString f s = case fromString' f s
+			  of NONE => NONE
+			   | SOME (result, ss) =>
+			      if Substring.isEmpty ss then SOME result
+			      else NONE
+
   end

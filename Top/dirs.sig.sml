@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude OS *)
 
 signature DIRS =
 sig
@@ -39,6 +39,16 @@ sig
     val getRuntimeDir : dirs -> string
     val getBinDir     : dirs -> string
     val getCommDir    : dirs -> string
+
+    (* Create intermediate directories.  Dirs in the dir_cache are
+     * assumed to exist.  Existing or created dirs are added to the
+     * dir_cache.  *)
+    
+    type dir_cache
+
+    val emptyCache : dir_cache
+    val createDir : string * dir_cache -> dir_cache
+    val createDirs : string list * dir_cache -> dir_cache
 
 end
 

@@ -1,82 +1,123 @@
-(*$import Stats COMMUNICATION OS List SplayMapFn SplaySetFn Platform Dirs Delay *)
+(*$import Stats COMMUNICATION OS List Platform Dirs Delay Listops *)
 
 functor Comm(val slaveTidOpt : int option) :> COMMUNICATION =
 struct
 
-    val error = fn s => Util.error "manager.sml" s
+    val error = fn s => Util.error "communication.sml" s
 
-    type job = string list
-    datatype message = READY                 (* Slave signals readiness *)
-		     | ACK_INTERFACE of job  (* Slave signals that interface has compiled *)
-		     | ACK_ASSEMBLY of job   (* Slave signals that asm file has compiled but cannot assemble *)
-		     | ACK_OBJECT of job     (* Slave signals that object has compiled *)
-		     | ACK_ERROR of job      (* Slave signals that an error occurred during given job *)
-                     | FLUSH of job          (* Master signals that slaves should flush file cache and set boolean flags -
-					        each flag is a pair of the flag name and "true" or "false" *)
-	             | REQUEST of job        (* Master requests slave to compile file *)
-    val delimiter = #"|"
+    datatype message =
+	READY					(* Slave signals readiness. *)
+      | ACK_INTERFACE of string			(* Slave signals that interface has been compiled.  The job
+						   is still in progress.  This message can be skipped. *)
+      | ACK_DONE of string * Update.plan	(* Slave gives up on job, informing master what steps are left. *)
+      | ACK_ERROR of string			(* Slave signals that an error occurred during job. *)
+      | FLUSH of (Target.platform *		(* Master signals that slave should flush file cache and set boolean flags - *)
+		  (string * bool) list)		(* each flag is a pair of the flag name and value.  Currently skipped when
+						   master and slave are the same. *)
+      | REQUEST of (Paths.unit_paths *		(* Master request slave to compile. *)
+		    Paths.unit_paths list *
+		    Update.plan)
     val ready = "READY"
     val ack_interface= "ACK_INTERFACE"
-    val ack_assembly = "ACK_ASSEMBLY"
-    val ack_object = "ACK_OBJECT"
+    val ack_done = "ACK_DONE"
     val ack_error = "ACK_ERROR"
     val flush = "FLUSH"
     val request = "REQUEST"
 
-    fun changeFiles f (platform::unit::absBase::absImportBases) =
-	(platform::unit::(f absBase)::(map f absImportBases))
-      | changeFiles f _ = error "wrong number of words - bad msg"
+    val wordsToWord = Listops.toString (fn s => s)
+    val wordToWords = fn word => case Listops.fromString SOME word
+				   of NONE => error "not a list of words - bad msg"
+				    | SOME words => words
+
+    val planToWord = wordsToWord o (map Update.toString)
+    val wordToPlan = (map Update.fromString) o wordToWords
+
+    fun ackInterfaceToWords unit = [unit]
+    fun wordsToAckInterface (unit :: nil) = unit
+      | wordsToAckInterface _ = error "expected unit name - bad msg"
+
+    fun ackDoneToWords (unit, plan) = [unit, planToWord plan]
+    fun wordsToAckDone (unit :: plan :: nil) = (unit, wordToPlan plan)
+      | wordsToAckDone _ = error ("expected unit name and plan - bad msg")
+
+    val ackErrorToWords = ackInterfaceToWords
+    val wordsToAckError = wordsToAckInterface
 	
-    fun jobToWords job = changeFiles (Dirs.encode (Dirs.getDirs())) job
-    fun wordsToJob words = 
-         let 
-             val result = changeFiles (Dirs.decode (Dirs.getDirs())) words
-         in
-             result
-         end
+    fun flushToWords (platform, flags) =
+	let fun convert (name, value) = [name, Bool.toString value]
+	    val flag_words = List.concat (map convert flags)
+	in  (Target.platformName platform) :: flag_words
+	end
+    fun wordsToFlush (platform::flagWords) =
+	let fun fromString s = case Bool.fromString s
+				 of NONE => error "funny boolean value string - bad msg"
+				  | SOME b => b
+	    fun convert (nil, acc) = rev acc
+	      | convert (name::value::rest, acc) = convert (rest, (name, fromString value) :: acc)
+	      | convert _ = error "wrong number of words in encoded flag - bad msg"
+	in  (Target.platformFromName platform,
+	     convert (flagWords, nil))
+	end
+      | wordsToFlush _ = error "expected platform - bad msg"
+
+    fun requestToWords (target, imports, plan) =
+	let
+	    fun pathsToWords paths = [Paths.unitName paths, Paths.sourceFile paths]
+	in
+	    (planToWord plan) :: (List.concat (map pathsToWords (target :: imports)))
+	end
+    fun wordsToReqeust (plan :: rest) =
+	let fun mkunit (unit, file) = Paths.sourceUnitPaths {unit=unit, file=file}
+	    fun convert (nil, acc) = rev acc
+	      | convert (unit::file::rest, acc) = convert (rest, (mkunit (unit, file)) :: acc)
+	      | convert (_, _) = error "wrong number of words in encoded unit_paths - bad msg"
+	in
+	    case convert (rest, nil)
+	      of (target::imports) => (target, imports, wordToPlan plan)
+	       | _ => error "expected target - bad msg"
+	end
+      | wordsToReqeust _ = error "expected plan - bad msg"
 	
     fun messageToWords READY = [ready]
-      | messageToWords (ACK_INTERFACE job) = ack_interface :: (jobToWords job)
-      | messageToWords (ACK_ASSEMBLY job) = ack_assembly :: (jobToWords job)
-      | messageToWords (ACK_OBJECT job) = ack_object :: (jobToWords job)
-      | messageToWords (ACK_ERROR job) = ack_error :: (jobToWords job)
-      | messageToWords (FLUSH job) = flush :: job
-      | messageToWords (REQUEST job) = request :: (jobToWords job)
+      | messageToWords (ACK_INTERFACE arg) = ack_interface :: (ackInterfaceToWords arg)
+      | messageToWords (ACK_DONE arg) = ack_done :: (ackDoneToWords arg)
+      | messageToWords (ACK_ERROR arg) = ack_error :: (ackErrorToWords arg)
+      | messageToWords (FLUSH arg) = flush :: (flushToWords arg)
+      | messageToWords (REQUEST arg) = request :: (requestToWords arg)
     fun wordsToMessage [] = error "no words - bad msg"
       | wordsToMessage (first::rest) = 
 	if (first = ready andalso null rest)
 	    then READY
-	else if (first = flush)
-	    then FLUSH rest
 	else if (first = ack_interface)
-		 then ACK_INTERFACE (wordsToJob rest)
-	else if (first = ack_assembly)
-		 then ACK_ASSEMBLY (wordsToJob rest)
-	else if (first = ack_object)
-		 then ACK_OBJECT (wordsToJob rest)
+		 then ACK_INTERFACE (wordsToAckInterface rest)
+	else if (first = ack_done)
+		 then ACK_DONE (wordsToAckDone rest)
 	else if (first = ack_error)
-		 then ACK_ERROR (wordsToJob rest)
-        else if (first = request)
-		 then REQUEST (wordsToJob rest)
+		 then ACK_ERROR (wordsToAckError rest)
+	else if (first = flush)
+	    then FLUSH (wordsToFlush rest)
+	else if (first = request)
+		 then REQUEST (wordsToReqeust rest)
 	else error ("strange header word " ^ first ^ " - bad msg")
 
-    local
-	val flags = ["PtrWriteBarrier", "FullWriteBarrier", "MirrorGlobal", "MirrorPtrArray"]
-	fun getFlag (flag,rest) = let val flagRef = Stats.bool flag
-				      val truthValue = Bool.toString (!flagRef)
-				  in  rest @ [flag, truthValue]
-				  end
-    in  fun getFlags() = foldl getFlag [] flags 
-    end
+    val flagNames =
+	Target.flagNames @
+	["UptoElaborate","UptoPhasesplit","UptoClosureConvert","UptoRtl","UptoAsm",
+	 "debug_asm","keep_asm","compress_asm"] @
+	["ManagerChat","ManagerVerbose",
+	 "ShowStale","ShowEnable",
+	 "TimeFinal","ResetStats","TimeEachFile",
+	 "doConsistent",
+	 "makeBackups",
+	 "ShowWrittenContext","WriteUnselfContext",
+	 "ShowTools"]
+    fun getFlags () = map (fn flag => (flag, !(Stats.bool flag))) flagNames
 
     fun doFlags [] = ()
-      | doFlags [_] = error "doFlags got list of odd length"
-      | doFlags (flagName::truthValue::rest) = 
-	let val _ = (print "Setting "; print flagName; print " to "; print truthValue; print "\n")
+      | doFlags ((flagName, truthValue)::rest) = 
+	let val _ = (print "Setting "; print flagName; print " to "; print (Bool.toString truthValue); print "\n")
 	    val flagRef = Stats.bool flagName
-	    val _ = flagRef := (case (Bool.fromString truthValue) of
-				 SOME b => b
-			       | _ => error ("doFlags got funny truth value string " ^ truthValue))
+	    val _ = flagRef := truthValue
 	in  doFlags rest
 	end
 
@@ -160,10 +201,7 @@ struct
 
     fun send (channel, message) = 
 	let val filename = channelToName channel
-	    fun loop [] = ""
-	      | loop [str] = str
-	      | loop (str::rest) = str ^ (String.str delimiter) ^ (loop rest)
-	    val message = loop (messageToWords message)
+	    val message = Listops.toString (fn s => s) (messageToWords message)
 	    val temp = filename ^ "!"
 	    val _ = remove temp
             (* CS: was openAppend, but NT can't do this if file doesn't exist*)
@@ -196,7 +234,9 @@ struct
 		     val _ = TextIO.closeIn fd
 			 handle e => (print "close failed\n"; raise e)
 		     val _ = remove temp
-		     val words = String.fields (fn c => c = delimiter) string
+		     val words = case Listops.fromString SOME string
+				   of NONE => error "not a list of strings - bad msg"
+				    | SOME L => L
 		 in  SOME (wordsToMessage words)
 		 end
 	else NONE

@@ -172,7 +172,7 @@ static void runtime_error_fmt(const char* fmt, ...);
 
 static void unimplemented(int lineno)
 {
-  runtime_error_fmt("function not implemented at %s:%d", __FILE__, lineno);
+  runtime_error_fmt("function not implemented at %s:%d\n", __FILE__, lineno);
 }
 #define UNIMP() unimplemented(__LINE__); assert(0); return 0
 
@@ -233,18 +233,19 @@ static void runtime_error_msg(char* msg)
 
 static void runtime_error_fmt(const char* fmt, ...)
 {
+  /* This must not return */
+  /*
   va_list ap;
   va_start(ap, fmt);
   (void) vfprintf(stderr, fmt, ap);
   va_end(ap);
-   /*
-   char buf[1024];
-   va_list args;
-   va_start(args, fmt);
-   vsprintf(buf, fmt, args);
-   va_end(args);
-   runtime_error_msg(buf);
-   */
+  */
+  char buf[1024];
+  va_list args;
+  va_start(args, fmt);
+  vsprintf(buf, fmt, args);
+  va_end(args);
+  runtime_error_msg(buf);
 }
 
 double ln(double arg)
@@ -386,6 +387,21 @@ mltm ctm2mltm_alloc(struct tm *tm)
   return ((mltm) result);
 }
 
+struct tm* mltm2ctm(mltm mltm, struct tm* tm)
+{
+  ptr_t source = (ptr_t) mltm;
+  tm->tm_sec   = source[0];
+  tm->tm_min   = source[1];
+  tm->tm_hour  = source[2];
+  tm->tm_mday  = source[3];
+  tm->tm_mon   = source[4];
+  tm->tm_year  = source[5];
+  tm->tm_wday  = source[6];
+  tm->tm_yday  = source[7];
+  tm->tm_isdst = source[8];
+  return tm;
+}
+
 string posix_ascTime (mltm mltm)
 {
   char *result = asctime((struct tm *) mltm);
@@ -393,30 +409,39 @@ string posix_ascTime (mltm mltm)
   return (word8vector) res;
 }
 
-mltm posix_localTime (intpair sec_musec)
+mltm posix_localTime (int time)
 {
-  time_t t = *((int *)sec_musec);
+  time_t t = (time_t) time;
   struct tm *tm;
   tm = localtime (&t);
   return ctm2mltm_alloc(tm);
 }
 
-mltm posix_gmTime (intpair sec_musec)
+mltm posix_gmTime (int time)
 {
-  time_t t = *((int *)sec_musec);
+  time_t t = (time_t) time;
   struct tm *tm;
   tm = gmtime (&t);
   return ctm2mltm_alloc(tm);
 }
 
-intpair posix_mkTime(mltm unused)
+int posix_mkTime(mltm mltm)
 {
-  UNIMP();
+  struct tm tm;
+  time_t time = mktime (mltm2ctm(mltm, &tm));
+  if (time == (time_t)-1) {
+    runtime_error_msg("invalid date");
+  }
+  return (int) time;
 }
 
-string posix_strfTime(string_mltm unused)
+string posix_strfTime(string_mltm arg)
 {
-  UNIMP();
+  char buf[1024];		/* Have to use a fixed buffer size since strftime fails to */
+				/* indicate when the buffer is too small. */
+  struct tm tm;
+  strftime (buf, sizeof buf, arg->a, mltm2ctm(arg->b, &tm));
+  return cstring2mlstring_alloc(buf);
 }
 
 string posix_error_msg(int unused)

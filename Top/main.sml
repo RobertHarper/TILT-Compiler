@@ -1,13 +1,14 @@
-(*$import MAIN TopLevel Manager Stats Getopt UtilError Dirs *)
+(*$import MAIN TopLevel Manager Stats Getopt UtilError Dirs Target *)
 
 structure Main : MAIN =
 struct
 
-    val usage = "usage: tilt [-?vs] [-fr flag] [-cm mapfile] [-S [num/]host] [mapfile ...]"
+    val usage = "usage: tilt [-?vs] [-t platform] [-fr flag] [-cm mapfile] [-S [num/]host] [mapfile ...]"
     val version = "TILT version 0.1 (alpha8)\n"
 
     datatype cmd =
         Make of string list		(* [mapfile ...] *)
+      | SetTarget of Target.platform	(* -t platform *)
       | SetFlag of string		(* -f flag *)
       | ResetFlag of string		(* -r flag *)
       | Clean of string			(* -c mapfile *)
@@ -25,6 +26,7 @@ struct
 	
     (* runCmd : cmd -> unit *)
     fun runCmd (Make mapfiles) = List.app Manager.make mapfiles
+      | runCmd (SetTarget target) = Target.setTargetPlatform target
       | runCmd (SetFlag flag) = Stats.bool flag := true
       | runCmd (ResetFlag flag) = Stats.bool flag := false
       | runCmd (Clean mapfile) = Manager.purge mapfile
@@ -75,7 +77,8 @@ struct
     (* cmdline : string list -> cmd list.  May raise ArgErr *)
     fun cmdline args =
 	let
-	    val options = [Getopt.Arg   (#"f", SetFlag),
+	    val options = [Getopt.Arg   (#"t", SetTarget o Target.platformFromName),
+			   Getopt.Arg   (#"f", SetFlag),
 			   Getopt.Arg   (#"r", ResetFlag),
 			   Getopt.Arg   (#"c", Clean),
 			   Getopt.Arg   (#"m", Master),
@@ -103,13 +106,13 @@ struct
 
     (* main : string * string list -> OS.Process.status *)
     fun main (_, args) =
-	let val _ = UtilError.showErrors := false
-	    val cmds = cmdline args
-	in
-	    (run cmds; OS.Process.success)
-	    handle e => (print "tilt: ";
-			 print (errorMsg e);
-			 print "\n";
-			 OS.Process.failure)
-	end
+	(let val _ = UtilError.showErrors := false
+	     val cmds = cmdline args
+	 in
+	     run cmds; OS.Process.success
+	 end)
+	     handle e => (print "tilt: ";
+			  print (errorMsg e);
+			  print "\n";
+			  OS.Process.failure)
 end

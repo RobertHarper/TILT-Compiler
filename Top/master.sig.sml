@@ -3,19 +3,19 @@
 
 signature MASTER = 
 sig
+    val showEnable : bool ref		(* Chat when units become enabled for compilation. *)
+	
     type state
-    datatype result = PROCESSING of state        (* All slaves utilized *)
-                    | IDLE of state * int * string list * string list  
-                                                 (* Number of idle slaves, waiting jobs, and pending jobs *)
-	            | COMPLETE
-    (* Takes the mapfile, a list of units that are desired,
-       and a name of the executable.  Generates the executable
-       and compiles the necessary units. *)
-    val once : string * string list * string option -> 
-	{setup : unit -> state,
-	 step : state -> result,
-	 complete : unit -> unit}
-    val run : string * string list * string option -> unit 
+    datatype result = PROCESSING of Time.time * state  (* All slaves utilized *)
+                    | IDLE of Time.time * state * int  (* Num slaves idle and there are waiting jobs *)
+	            | COMPLETE of Time.time
+	
+    (* Compile units in mapfile, generating object files and
+     * executable targets if we're running native. *)
+    val once : string -> {setup : unit -> state,
+			  step : state -> result,
+			  complete : unit -> unit}
+    val run : string -> unit 
     val purge : string -> unit
 
     type collapse = {maxWeight : int, maxParents : int, maxChildren : int}

@@ -13,9 +13,9 @@ type termio_rep = (word *       	(* iflags *)
 		   )
 
 extern posix_ascTime :  (int * int * int * int * int * int * int * int * int, string) -->
-extern posix_localTime :  (int * int, int * int * int * int * int * int * int * int * int) -->
-extern posix_gmTime :  (int * int, int * int * int * int * int * int * int * int * int) -->
-extern posix_mkTime : (int * int * int * int * int * int * int * int * int, int * int) -->
+extern posix_localTime :  (int, int * int * int * int * int * int * int * int * int) -->
+extern posix_gmTime :  (int, int * int * int * int * int * int * int * int * int) -->
+extern posix_mkTime : (int * int * int * int * int * int * int * int * int, int) -->
 extern posix_strfTime : (string * (int * int * int * int * int * int * int * int * int), string) -->
 extern posix_error_msg : (int, string) -->
 extern posix_error_name : (int, string) -->

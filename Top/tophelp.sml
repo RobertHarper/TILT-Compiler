@@ -1,33 +1,63 @@
-(*$import Time String Util Stats TextIO Date Compiler *)
+(*$import Time String Util Stats TextIO Date SplayMapFn SplaySetFn *)
 
 signature HELP = 
     sig
-	val ui2base : string -> string
-	val base2int : string -> string
-	val base2o : string -> string
-	val base2s : string -> string
-	val base2sml : string -> string
-	val base2ui : string -> string
-	val base2uo : string -> string
-	val chat : string -> unit
-	val chat_ref : bool ref
-	val chat_verbose : bool ref
-	val chat_strings : int -> string list -> int
+	val chat_ref : bool ref			(* Chat? *)
+	val chatVerbose : bool ref		(* Chat more? *)
+
+	val uptoElaborate : bool ref		(* .il and .info files are generated *)
+	val uptoPhasesplit : bool ref
+	val uptoClosureConvert : bool ref
+	val uptoRtl : bool ref
+	val uptoAsm : bool ref			(* .s and .s.gz files are generated *)
+						(* all false: .o and .exe files are generated *)
 	    
+	val keepAsm : bool ref			(* Keep assembler files. *)
+
+	structure StringMap : ORD_MAP
+	    where type Key.ord_key = string
+
+	structure StringSet : ORD_SET
+	    where type Key.ord_key = string
+
+	(* A set with an ordering maintained by a list *)
+	structure StringOrderedSet :
+	sig
+	    type set
+	    val empty : set
+	    val member : string * set -> bool
+	    val cons : string * set -> set
+	    val toList : set -> string list (* respects ordering of cons() calls *)
+	end
+
+	val chat : string -> unit
+	val chat_strings : int -> string list -> int
+
 	val startTime : string -> unit
 	val showTime : bool * string -> unit  (* if false, show only elapsed time since StartTime *)
 	val reshowTimes : unit -> unit
+
+	val wantAssembler : unit -> bool
+	val wantBinaries : unit -> bool
     end
 
 
 structure Help :> HELP = 
 struct
-    val error = fn s => Util.error "manager.sml" s
-    val eager = ref true
+    val error = fn s => Util.error "tophelp.sml" s
 
+    val chat_ref           = Stats.tt "ManagerChat"
+    val chatVerbose        = Stats.tt "ManagerVerbose"
+	
+    val uptoElaborate      = Stats.ff "UptoElaborate"
+    val uptoPhasesplit     = Stats.ff "UptoPhasesplit"
+    val uptoClosureConvert = Stats.ff "UptoClosureConvert"
+    val uptoRtl            = Stats.ff "UptoRtl"
+    val uptoAsm            = Stats.ff "UptoAsm"
+	
+    val keepAsm            = Stats.tt "keep_asm"
+	    
     (* ---- Some diagnostic message helper functions ---- *)
-    val chat_ref = Stats.tt("ManagerChat")
-    val chat_verbose = Stats.ff("ManagerVerbose")
     fun chat s = if !chat_ref then (print s; TextIO.flushOut TextIO.stdOut)
 		 else ()
     fun chat_strings skip imports =
@@ -39,16 +69,6 @@ struct
 	    end
 	in  if (!chat_ref) then foldl f skip imports else 0
 	end
-
-    type unitname = string
-    type filebase = string
-    fun base2sml (f : string) = f ^ ".sml"
-    fun base2int (f : string) = f ^ ".int"
-    val ui2base = Til.ui2base
-    val base2ui = Til.base2ui
-    val base2s = Til.base2s
-    val base2o = Til.base2o
-    val base2uo = Til.base2uo
 
     val start = ref (NONE : Time.time option)
     val msgs = ref ([] : string list)
@@ -72,12 +92,42 @@ struct
 	    val msg = (str ^ padding ^ ": " ^ curString ^ "   " ^ 
 		       (Real.toString diff) ^ " sec\n")
 	in  msgs := msg :: (!msgs); 
-	    if (!chat_verbose) then chat msg else ()
+	    if (!chatVerbose) then chat msg else ()
 	end
     fun startTime str = (msgs := []; 
 			 start := SOME(Time.now()); 
 			 showTime (true,str))
     fun reshowTimes() = (chat "\n\n"; app chat (rev (!msgs)); msgs := []; start := NONE)
+
+    structure StringKey = 
+	struct
+	    type ord_key = string
+	    val compare = String.compare
+	end
+
+    structure StringMap = SplayMapFn(StringKey)
+    
+    structure StringSet = SplaySetFn(StringKey)
+    
+    structure StringOrderedSet = 
+	struct
+	    type set = StringSet.set * string list
+	    val empty = (StringSet.empty, [])
+	    fun member (str,(set,_) : set) = StringSet.member(set,str)
+	    fun cons (str,(set,list) : set) : set = if (StringSet.member(set,str))
+							then (set,list)
+						    else (StringSet.add(set,str), str::list)
+	    fun toList ((set,list) : set) = list
+	end
+
+    fun wantAssembler () = not (!uptoElaborate orelse
+				!uptoPhasesplit orelse
+				!uptoClosureConvert orelse
+				!uptoRtl)
+
+    fun wantBinaries () = not (!uptoElaborate orelse
+			       !uptoPhasesplit orelse
+			       !uptoClosureConvert orelse
+			       !uptoRtl orelse
+			       !uptoAsm)
 end
-
-

@@ -1,41 +1,37 @@
-(*$import Prelude Il *)
-(* Abstract view of the compiler - from HIL and down; to be used by
- * the separate compilation system. *)
+(*$import Prelude FILECACHE *)
 
 signature COMPILER =
- sig
+sig
 
-   datatype platform = TIL_ALPHA | TIL_SPARC | MLRISC_ALPHA | MLRISC_SPARC
-   val setTargetPlatform : platform -> unit  (* also sets endian-ness *)
-   val getTargetPlatform : unit -> platform 
+    val showWrittenContext : bool ref	(* Print contexts as they are written to disk. *)
+    val writeUnselfContext : bool ref	(* Write out unselfified context too. *)
 
-   type sbnd and context_entry and context
+    (* Contains only ilFiles *)
+    structure IlCache : FILECACHE
+	
+    type il_module
+    type nil_module
+    type rtl_module
 
-   val debug_asm : bool ref (* use the -g flag in call to assembler *)
-   val keep_asm : bool ref  (* don't erase the asm *)
-   val uptoElaborate : bool ref
-   val uptoPhasesplit : bool ref
-   val uptoRtl : bool ref
+    (* In all compiler phases, unit names may be used to generate
+     * unique identifiers.  We assume that unit names are globally
+     * unique.  *)
+	
+    (* Elaborate source file (against interface file if constrained)
+     * in the context of imports.  May write a new targetIlFile and
+     * modify Cache.
+     *)
+    val elaborate : {unit : string, smlFile : string, intFile : string option,
+		     targetIlFile : string, importIlFiles : string list}
+	-> il_module * bool					(* true if ilFile written to disk  *)
+	
+    val il_to_nil : string * il_module -> nil_module		(* unit name *)
+	
+    val nil_to_rtl : string * nil_module -> rtl_module		(* unit name *)
+	
+    val rtl_to_asm : string * rtl_module -> unit		(* assembler target *)
 
-   (* compile(ctxt, unitName, sbnds, ctxt') 
-      compiles sbnds to an asm file `unitName.platform.s'. 
-    * ctxt is the context in which the sbnds
-    * were produced, and ctxt' contains the new bindings. unitName is
-    * the name of the unit being compiled and can be used for
-    * generating unique identifiers. Also, `unitName.o' must contain a
-    * label for `initialization' with name `unitName_doit'. 
-    *)
-   val native : unit -> bool                              (* can we invoke assembler *)
-   val checkNative : unit -> unit
-   val il_to_asm : string * string * Il.module -> string  (* unitName, fileBase -> .s *)
-   val assemble  : string -> string                       (* fileBase -> .o, if platform matches *)
-   val assemble_start : string -> string                  (* fileBase -> .o, if platform matches *)
-   val assemble_done  : string -> bool                    (* fileBase -> done?, if platform matches *)
-
-   val ui2base : string -> string  (* Convert a platform-dependent .ui filename to a filebase *)
-   val base2ui : string -> string  (* Convert a filebase to a platform-dependent .ui filename *)
-   val base2s  : string -> string  (* Convert a filebase to a platform-dependent .s filename *)
-   val base2o  : string -> string  (* Convert a filebase to a platform-dependent .o filename *)
-   val base2uo : string -> string  (* Convert a filebase to a platform-dependent .uo filename *)
-
- end
+    (* Create an initialization module for the given units. *)
+    val link : string * string list -> unit			(* assembler target, units *)
+			 
+end

@@ -1222,9 +1222,6 @@ struct
 		    in  if res then res else (diag "eq_cntxt got false\n"; false)
 		    end
 		val res = Listops.andfold folder vars
-		val _ = (print "eq_cntxt returning "; 
-			 print (Bool.toString res);
-			 print "\n")
 	    in  res
 	    end	    
 

@@ -64,31 +64,27 @@ struct
   val prelude_modules : ((Rtl.label list * string list) option) ref = ref NONE
   val prelude_modules_hprof : ((Rtl.label list * string list) option) ref = ref NONE
 
-  fun base2ui base = base ^ ".sparc.ui"
-  fun base2s base = base ^ ".sparc.s"
-  fun base2o base = base ^ ".sparc.o"
-  fun base2uo base = base ^ ".sparc.uo"
-
-  fun comp (base_file,rtlmod) = 
-    let val asm_file = base2s base_file
-	val _ = print "\n===== Translating to TIL-Sparc assembly      =====\n"
+  fun comp (asm_file,rtlmod) = 
+    let val _ = print "\n===== Translating to TIL-Sparc assembly      =====\n"
 	val _ = Printutils.openOutput asm_file
 	val _ = Rtltosparc.allocateModule rtlmod
 	val _ = Printutils.closeOutput()
-    in asm_file
+    in	()
     end
 
   fun wrapper string command = Stats.timer(string,command)
   val comp = wrapper "To Sparc ASM" comp
 
-  fun rtl_to_asm (base_file, rtlmod) : string * Rtl.label =
+  fun rtl_to_asm (asm_file,rtlmod) : Rtl.label =
       let val Rtl.MODULE{main,...} = rtlmod
-      in (comp(base_file, rtlmod), main)
+	  val _ = comp(asm_file, rtlmod)
+      in  main
       end
 
-  fun link (base_file,labels) = 
+  fun link (asm_file,labels) = 
     let val rtlmod = Tortl.entryTables labels
-    in  #1(rtl_to_asm(base_file,rtlmod))
+	val _ = rtl_to_asm(asm_file,rtlmod)
+    in  ()
     end
 
 end

@@ -58,9 +58,13 @@ structure Substring :> SUBSTRING where type substring = substring =
 	    then raise General.Subscript
 	    else unsafe_vsub(s, i2w(i+j))
     fun size (PreString.SS(_, _, n)) = n
-    fun slice (PreString.SS(s, i, n), j, m) =
+    fun slice (PreString.SS(s, i, n), j, SOME m) =
 	  if ((0 <= j) andalso (0 <= m) andalso (j+m <= n))
 	    then PreString.SS(s, i+j, m)
+	    else raise Subscript
+      | slice (PreString.SS(s, i, n), j, NONE) =
+	  if (0 <= j) andalso (j <= n)
+	    then PreString.SS(s, i+j, n-j)
 	    else raise Subscript
 
   (* concatenate a list of substrings together *)

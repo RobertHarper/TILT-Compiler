@@ -1,4 +1,4 @@
-(*$import TopLevel DIRS Delay Util Platform *)
+(*$import DIRS Delay Util Platform String Option List SplaySetFn Paths *)
 
 structure Dirs :> DIRS =
 struct
@@ -146,12 +146,12 @@ struct
 	    val sys = sysDir dir
 	    fun system file = sys andalso inDir (dir, file)
 	    val curDir = Delay.force cwd
-	    val commDir = relative (curDir, "TempCommunication")
+	    val commDirs = Paths.commDirs curDir
 	    fun join file = relative (dir, file)		
 	in
 	    DIRS {system=system, libDir=dir,
 		  runtimeDir=join "Runtime", binDir=join "Bin",
-		  commDir=Delay.delay (fn () => (mkdir commDir; commDir))}
+		  commDir=Delay.delay (fn () => (app mkdir commDirs; List.last commDirs))}
 	end
 
     val dirs : dirs Delay.value = (* Memoize - not strictly necessary *)
@@ -189,5 +189,20 @@ struct
     fun getRuntimeDir (DIRS {runtimeDir,...}) = runtimeDir
     fun getBinDir     (DIRS {binDir,...})     = binDir
     fun getCommDir    (DIRS {commDir,...})    = Delay.force commDir
+	
+    structure StringSet = SplaySetFn (type ord_key = string
+				      val compare = String.compare)
+	
+    type dir_cache = StringSet.set
+
+    val emptyCache = StringSet.empty
+
+    (* createDir : string * dir_cache -> dir_cache *)
+    fun createDir (dir, set) =
+	if StringSet.member (set, dir) then set
+	else (mkdir dir; StringSet.add (set, dir))
+
+    (* createDirs : string list * dir_cache -> dir_cache *)
+    fun createDirs (dirs, set) = foldl createDir set dirs
 	
 end

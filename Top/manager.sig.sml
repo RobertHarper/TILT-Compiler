@@ -3,8 +3,10 @@
 signature MANAGER = 
 sig
 
-  (* buildRuntime   build the runtime; if true, rebuild from scratch
-     purge          takes a mapfile and removes all generated files of units named in mapfile
+  val statFinal : bool ref		(* Dump statistics at end of compilation. *)
+  val resetStats : bool ref		(* Reset stats before compilation. *)
+	    
+  (* purge          takes a mapfile and removes all generated files of units named in mapfile
      slave          run a slave
      slaves	    run some slaves on the given machines
      master         run a master on the given mapfile
@@ -12,7 +14,6 @@ sig
                     also interleave slave work in the same process
   *)
 
-  val buildRuntime : bool -> unit
   val purge : string -> unit
   val slave : unit -> unit
   val slaves : (int * string) list -> unit

@@ -1,24 +1,4 @@
-(*$import FILECACHE OS List SplayMapFn SplaySetFn Platform Dirs Delay Stats *)
-
-structure StringKey = 
-    struct
-	type ord_key = string
-	val compare = String.compare
-    end
-structure StringMap = SplayMapFn(StringKey)
-structure StringSet = SplaySetFn(StringKey)
-(* A set with an ordering maintained by a list *)
-structure StringOrderedSet = 
-struct
-    type set = StringSet.set * string list
-    val empty = (StringSet.empty, [])
-    fun member (str,(set,_) : set) = StringSet.member(set,str)
-    fun cons (str,(set,list) : set) : set = if (StringSet.member(set,str))
-				    then (set,list)
-				else (StringSet.add(set,str), str::list)
-    fun toList ((set,list) : set) = list
-end
-
+(*$import FILECACHE OS List TopHelp Stats Paths *)
 
 functor FileCache(type internal
 		  val equaler : internal * internal -> bool
@@ -27,20 +7,20 @@ functor FileCache(type internal
     FILECACHE where type internal = internal =
 struct
 
-  val backupCtx = Stats.ff "CacheBackupCtx"
+  val makeBackups = Stats.ff "makeBackups"
   type internal = internal
   val cache = ref 5  (* Number of ticks before an unused entry is discarded *)
-  val error = fn s => Util.error "manager.sml" s
+  val error = fn s => Util.error "filecache.sml" s
   datatype stat = ABSENT 
                 | PRESENT of int * Time.time                            (* file size + mod time *)
                 | CRC     of int * Time.time * Crc.crc                  (* + CRC *)
                 | CACHED  of int * Time.time * Crc.crc * int * internal (* + ticks + cached result *)
 
-  val stats = ref (StringMap.empty : stat StringMap.map)
+  val stats = ref (Help.StringMap.empty : stat Help.StringMap.map)
 	    
-  fun set (file,stat) = stats := (StringMap.insert(!stats,file,stat))
+  fun set (file,stat) = stats := (Help.StringMap.insert(!stats,file,stat))
   fun get file = 
-      (case StringMap.find(!stats,file) of
+      (case Help.StringMap.find(!stats,file) of
 	   NONE => let val stat = ABSENT
 		       val _ = set (file, stat)
 		   in  stat
@@ -62,9 +42,9 @@ struct
       end
 	
   (* This two functions totally or partially flushes the cache *)
-  fun flushAll() = (stats := StringMap.empty)
+  fun flushAll() = (stats := Help.StringMap.empty)
   fun flushSome files = 
-      let fun remove file = (stats := #1 (StringMap.remove(!stats, file))
+      let fun remove file = (stats := #1 (Help.StringMap.remove(!stats, file))
 			     handle _ => ())
       in  app remove files
       end
@@ -88,7 +68,7 @@ struct
 		       NONE => error ("size on non-existent file " ^ file)
 		     | SOME (s,t) => s)
 
-  (* ----- Compute the latest mod time of a list of exiting files --------- *)
+  (* ----- Compute the latest mod time of a list of existing files --------- *)
     fun lastModTime [] = (NONE, Time.zeroTime)
       | lastModTime (f::fs) = 
 	let
@@ -101,7 +81,7 @@ struct
       let fun mapper (CACHED (s, t, crc, tick, r)) = if (tick <= 1) then PRESENT (s,t)
 						     else CACHED(s, t, crc, tick-1, r)
 	    | mapper entry = entry
-      in  stats := (StringMap.map mapper (!stats))
+      in  stats := (Help.StringMap.map mapper (!stats))
       end
 
   fun updateCache (file, newValue) : bool = 
@@ -145,7 +125,7 @@ struct
 			      end)
 
   fun backup file =
-      let val backup = file ^ ".BACKUP"
+      let val backup = Paths.fileToBackup file
       in
 	  (OS.FileSys.remove backup handle _ => ());
 	  OS.FileSys.rename {old=file, new=backup}
@@ -160,7 +140,7 @@ struct
       in  if same
 	      then false
 	  else
-	      let val _ = if exists andalso (!backupCtx)
+	      let val _ = if exists andalso (!makeBackups)
 			      then backup file
 			  else ()
 		  val _ = writer(file,result)

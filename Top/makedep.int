@@ -1,3 +1,0 @@
-(*$include MAKEDEP *)
-
-structure Makedep : MAKEDEP

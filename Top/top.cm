@@ -10,10 +10,38 @@ Group is
 (*../RtlToMLRISC/Alpha/Alpha.cm*)
 (*../RtlToMLRISC/Sparc/Sparc.cm*)
 
+tophelp.sml
+target.sig.sml
+target.sml
+paths.sig.sml
+paths.sml
 
+background.sig.sml
+background.sml
+tools.sig.sml
+tools.sml
+
+filecache.sig.sml
+filecache.sml
+compiler.sig.sml
+compiler.sml
+ue.sig.sml
+ue.sml
+prelink.sig.sml
+prelink.sml
+info.sig.sml
+info.sml
+updatehelp.sig.sml
+updatehelp.sml
+update.sig.sml
+update.sml
 (*
-../Ppc/ppc.cm
-../C/c.cm
+   dependentfile.sig.sml
+   filehelp.sml
+   sourcefile.sml
+   ilfile.sml
+   asmfile.sml
+   objfile.sml
 *)
 delay.sig.sml
 delay.sml
@@ -21,30 +49,14 @@ popen.sig.sml
 popen.sml
 dirs.sig.sml
 dirs.sml
-(*
-linkall.sml
-toplevel.sml
-measure.sig.sml
-measure.sml
-distribute.sml
-*)
-compiler.sig.sml
-compiler.sml
-tophelp.sml
 communication.sig.sml
 communication.sml
-filecache.sig.sml
-filecache.sml
 master.sig.sml
 master.sml
 slave.sig.sml
 slave.sml
 manager.sig.sml
 manager.sml
-linker.sig.sml
-linker.sml
-makedep.sig.sml
-makedep.sml
 getopt.sig.sml
 getopt.sml
 main.sig.sml

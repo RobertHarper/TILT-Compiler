@@ -1,4 +1,4 @@
-(*$import Time Crc *)
+(*$import Paths Target Update *)
 
 (* ---- Provides an abstraction for communication between master and slave processes ---- *)
 signature COMMUNICATION = 
@@ -11,16 +11,18 @@ sig
     val source : channel -> string   (* Gives name to sender of channel. *)
     val destination : channel -> string   (* Gives name to sender of channel. *)
 
-    type job = string list
-    datatype message = READY                 (* Slave signals readiness *)
-		     | ACK_INTERFACE of job  (* Slave signals that interface has compiled *)
-		     | ACK_ASSEMBLY of job   (* Slave signals that asm file has compiled but cannot assemble *)
-		     | ACK_OBJECT of job     (* Slave signals that object has compiled *)
-		     | ACK_ERROR of job      (* Slave signals that an error occurred during given job *)
-                     | FLUSH of job          (* Master signals that slaves should flush file cache and set boolean flags -
-					        each flag is a pair of the flag name and "true" or "false" *)
-	             | REQUEST of job        (* Master requests slave to compile file *)
-
+    datatype message =
+	READY					(* Slave signals readiness. *)
+      | ACK_INTERFACE of string			(* Slave signals that interface has been compiled.  The job
+						   is still in progress.  This message can be skipped. *)
+      | ACK_DONE of string * Update.plan	(* Slave gives up on job, informing master what steps are left. *)
+      | ACK_ERROR of string			(* Slave signals that an error occurred during job. *)
+      | FLUSH of (Target.platform *		(* Master signals that slave should flush file cache and set boolean flags - *)
+		  (string * bool) list)		(* each flag is a pair of the flag name and value.  Currently skipped when
+						   master and slave are the same. *)
+      | REQUEST of (Paths.unit_paths *		(* Master request slave to compile. *)
+		    Paths.unit_paths list *
+		    Update.plan)
     (* These are all non-blocking. *)
     val erase : channel -> unit             (* Delete given channel. *)
     val exists : channel -> bool            (* Does a channel have a message. *)
@@ -29,7 +31,7 @@ sig
     val findToMasterChannels : unit -> channel list  (* Find all ready channels to master. *)
     val findFromMasterChannels : unit -> channel list  (* Find all ready channels from master. *)
 
-    val getFlags : unit -> string list
-    val doFlags : string list -> unit
+    val getFlags : unit -> (string * bool) list
+    val doFlags : (string * bool) list -> unit
 end
 

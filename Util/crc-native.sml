@@ -146,13 +146,33 @@ crc_append arr (Word8.toInt e)) () v
 
     type crc = string
     val output_crc = BinIO_Util.output_string
-    fun toString (crc : crc) = crc : string
 
     exception InputCrc
     fun input_crc is = 
       case BinIO_Util.input_string (is,20)
 	of SOME s => s
 	 | NONE => raise InputCrc
+	    
+    fun toString (crc : crc) =
+	let val w15 = Word8.fromInt 15
+	    fun w2s w = if w > w15 then Word8.toString w
+			else "0" ^ Word8.toString w
+	in  String.translate (fn c => (w2s (Byte.charToByte c))) crc
+	end
+
+    fun fromString s =
+	if size s = 40 then
+	    let fun char i = Option.map Byte.byteToChar (Word8.fromString (String.extract (s, i, SOME 2)))
+		val result = CharArray.array (20, #"*")
+		fun loop (20, _) = SOME (CharArray.extract (result, 0, NONE))
+		  | loop (i, i2) = (case char i2
+				      of NONE => NONE
+				       | SOME c => (CharArray.update (result, i, c);
+						    loop (i+1, i2+2)))
+	    in  loop (0,0)
+	    end
+	else NONE
+	    
 (*
     structure Test =
      struct

@@ -1,168 +1,175 @@
-(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha Linksparc OS Stats Platform *)
-structure Til :> COMPILER =
-  struct
+(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay *)
+
+structure Compiler
+    :> COMPILER
+        where type il_module = LinkIl.module
+	where type nil_module = Nil.module
+	where type rtl_module = Rtl.module =
+struct
 
     val error = fn x => Util.error "compiler.sml" x
-    val littleEndian = Stats.tt("littleEndian")
 
-    datatype platform = TIL_ALPHA | TIL_SPARC | MLRISC_ALPHA | MLRISC_SPARC
+    val showWrittenContext = Stats.ff("ShowWrittenContext")
+    val writeUnselfContext = Stats.ff("WriteUnselfContext")
 
-    val uptoElaborate = Stats.ff("UptoElaborate")
-    val uptoPhasesplit = Stats.ff("UptoPhasesplit")
-    val uptoClosureConvert = Stats.ff("UptoClosureConvert")
-    val uptoRtl = Stats.ff("UptoRtl")
-    val uptoAsm = Stats.ff("UptoAsm")
+    type il_module = LinkIl.module
+    type nil_module = Nil.module
+    type rtl_module = Rtl.module
 
-
-    (* defaultPlatform () -> platform *)
-    fun defaultPlatform () =
-	(case Platform.platform()
-	   of Platform.SOLARIS => (print "Sun detected.  Using Til-Sparc.\n";
-				   TIL_SPARC)
-	    | Platform.DUNIX => (print "Alpha detected.  Using Til-Alpha.\n";
-				 TIL_ALPHA)
-	    | _ => (print "Unsupported platform detected.  Using Til-Alpha.\n";
-		    TIL_ALPHA))
-	      
-    val targetPlatform = ref (defaultPlatform ())
-    fun getTargetPlatform() = !targetPlatform
-    fun setTargetPlatform p = 
-	let val little = (case p of
-			      TIL_ALPHA => true
-			    | TIL_SPARC => false
-			    | MLRISC_ALPHA => true
-			    | MLRISC_SPARC => false)
-	in  targetPlatform := p;
-	    littleEndian := little
+    fun readPartialContextRaw file = 
+	let 
+(*	    val _ = print ("XXX reading context file " ^ file ^ "\n") *)
+	    val is = BinIO.openIn file
+	    val res = LinkIl.IlContextEq.blastInPartialContext is
+	    val _ = BinIO.closeIn is
+(*	    val _ = print ("XXX done reading context file " ^ file ^ "\n") *)
+	in  res
 	end
-    fun native() = 
-	(case (getTargetPlatform(), Platform.platform()) of
-	     (TIL_ALPHA, Platform.DUNIX) => true
-	   | (TIL_ALPHA, _) => false
-	   | (TIL_SPARC, Platform.SOLARIS) => true
-	   | (TIL_SPARC, _) => false
-	   | _ => error "MLRISC not supported")
-	     
-    fun checkNative () = if native() orelse (!uptoAsm) then ()
-			 else error "No backend exists for this platform."
+    val readPartialContextRaw = Stats.timer("ReadingContext",readPartialContextRaw)
 
-    type sbnd = Il.sbnd
-    type context_entry = Il.context_entry
-    type context = Il.context
-	
-    val as_path = "as"
-	
-    val debug_asm = Stats.ff("debug_asm")
-    val keep_asm = Stats.tt("keep_asm")
-    val compress_asm = Stats.tt("compress_asm")
-    fun as_flag() = 
-	(case (getTargetPlatform()) of
-	     TIL_ALPHA => if (!debug_asm) then " -g " else ""
-	   | TIL_SPARC => if (!debug_asm) then " -xarch=v8plus" else "-xarch=v8plus"
-	   | MLRISC_ALPHA => if (!debug_asm) then " -g " else ""
-	   | MLRISC_SPARC => if (!debug_asm) then " -xarch=v8plus" else "-xarch=v8plus")
-    fun ui2base uiFile = String.substring(uiFile, 0, size uiFile - 3)
-    fun base2ui base = base ^ ".ui"
-(*
-	(case (getTargetPlatform()) of
-	     TIL_ALPHA => Linkalpha.base2ui
-	   | TIL_SPARC => Linksparc.base2ui
-	   | _ => error "No MLRISC"
-(*	   | MLRISC_ALPHA => AlphaLink.base2ui
-	   | MLRISC_SPARC => SparcLink.base2ui *) ) base
-*)
-    fun base2s base = 
-	(case (getTargetPlatform()) of
-	     TIL_ALPHA => Linkalpha.base2s
-	   | TIL_SPARC => Linksparc.base2s
-	   | _ => error "No MLRISC"
-(*	   | MLRISC_ALPHA => AlphaLink.base2s
-	   | MLRISC_SPARC => SparcLink.base2s *) ) base
-    fun base2o base = 
-	(case (getTargetPlatform()) of
-	     TIL_ALPHA => Linkalpha.base2o
-	   | TIL_SPARC => Linksparc.base2o
-	   | _ => error "No MLRISC"
-(*	   | MLRISC_ALPHA => AlphaLink.base2o
-	   | MLRISC_SPARC => SparcLink.base2o *) ) base
-    fun base2uo base = 
-	(case (getTargetPlatform()) of
-	     TIL_ALPHA => Linkalpha.base2uo
-	   | TIL_SPARC => Linksparc.base2uo
-	   | _ => error "No MLRISC"
-(*	   | MLRISC_ALPHA => AlphaLink.base2uo
-	   | MLRISC_SPARC => SparcLink.base2uo *) ) base
+    fun writePartialContextRaw' (file,pctxt) =
+	let val os = BinIO.openOut file
+	    val _ = LinkIl.IlContextEq.blastOutPartialContext os pctxt
+	    val _ = BinIO.closeOut os
+	in
+	    ()
+	end
+    
+    fun writePartialContextRaw (file,pctxt) = 
+	let val _ = writePartialContextRaw' (file,pctxt)
+	    val shortpctxt = Delay.delay (fn () => IlContext.UnselfifyPartialContext pctxt)
+	    val _ = if (!writeUnselfContext)
+			then (let val shortfile = Paths.ilToUnself file ^ ".unself"
+			      in  writePartialContextRaw' (shortfile, Delay.force shortpctxt)
+			      end)
+		    else ()
+	    val _ = if (!showWrittenContext)
+			then (print "Selfified context:\n"; 
+			      Ppil.pp_pcontext pctxt;
+			      print "\n\n\nUnselfified context:\n";
+			      Ppil.pp_pcontext (Delay.force shortpctxt))
+		    else ()
+	in  () 
+	end
+    
+    val writePartialContextRaw = Stats.timer("WritingContext",writePartialContextRaw)
+    structure IlCache = FileCache(type internal = Il.partial_context
+				  val equaler = LinkIl.IlContextEq.eq_partial_context
+				  val reader = readPartialContextRaw
+				  val writer = writePartialContextRaw)
+    fun getContext uifiles =
+	let val _ = Name.reset_varmap()
+	    val _ = IlCache.tick()
+	    val start = Time.now()
+	    val isCached_ctxts = map IlCache.read uifiles
+	    val diff = Time.toReal(Time.-(Time.now(), start))
+	    val diff = (Real.realFloor(diff * 100.0)) / 100.0
+	    val partial_ctxts = map #2 isCached_ctxts
+	    val (cached_temp,uncached_temp) = (List.partition (fn (imp,(isCached,_)) => isCached)
+					       (Listops.zip uifiles isCached_ctxts))
+	    val cached = map #1 cached_temp
+	    val uncached = map #1 uncached_temp
+	    val cached_size = foldl (fn (uifile,acc) => acc + (IlCache.size uifile)) 0 cached
+	    val uncached_size = foldl (fn (uifile,acc) => acc + (IlCache.size uifile)) 0 uncached
+	    val _ = (Help.chat "  ["; Help.chat (Int.toString (length cached)); 
+		     Help.chat " imports of total size "; Help.chat (Int.toString cached_size);
+		     Help.chat " were cached.\n";
+		     Help.chat "   "; Help.chat (Int.toString (length uncached));
+		     Help.chat " imports of total size "; Help.chat (Int.toString uncached_size);
+		     Help.chat " were uncached and took ";
+		     Help.chat (Real.toString diff); Help.chat " seconds.";
+(*		     Help.chat "\n\nCACHED: "; Help.chat_strings 20 cached;
+		     Help.chat "\n\nUNCACHED: "; Help.chat_strings 20 uncached;
+*)		     Help.chat "]\n")
+	    val initial_ctxt = LinkIl.initial_context()
+	    val addContext = Stats.timer("AddingContext",LinkIl.plus_context)
+	    val (partial_context_opts, context) = addContext (initial_ctxt, partial_ctxts)
+	    val _ = Listops.map2 (fn (NONE,_) => false
+	                           | (SOME new, file) => IlCache.updateCache(file,new))
+		        (partial_context_opts, uifiles)
+	    val _ = Help.chat ("  [Added contexts.]\n")
+	in  context
+	end
 
 
-
-    fun assemble_help background base =
-	let val s_file = base2s base
-	    val o_file = base2o base
-	in  if (!uptoAsm orelse !uptoPhasesplit orelse !uptoClosureConvert orelse !uptoRtl) 
-		then let val os = TextIO.openOut o_file
-			 val _ = TextIO.output(os,"Dummy .o file\n")
-		     in  TextIO.closeOut os; o_file
-		     end
-	    else
-		let val as_command = as_path ^ " " ^ (as_flag()) ^ " -o " ^ o_file 
-		                       ^ " " ^ s_file
-		    val rm_command = "rm " ^ s_file
-		    val compress_command = "gzip -q -f " ^ s_file
-		    val command = 
-			(case (!keep_asm, !compress_asm) of
-			     (false, _) => as_command ^ "; " ^ rm_command
-			   | (true, false) => as_command
-			   | (true, true) => as_command ^ "; " ^ compress_command)
-		    val command = if background
-				      then "(" ^ command ^ ") &"
-				  else command
-		    val success = (Stats.timer("Assemble",Util.system) command)
-		    val success = success andalso
-			(background orelse
-			 ((OS.FileSys.fileSize o_file > 0) handle _ => false))
-		in if success
-		       then o_file
-		   else error ("System command as failed:\n" ^ command ^ "\n")
+    fun elab_constrained(unit,ctxt,sourcefile,fp,dec,fp2,specs,uiFile,least_new_time) =
+	(case LinkIl.elab_dec_constrained(ctxt, fp, dec, fp2,specs) of
+	     SOME (il_module as (ctxt, partial_ctxt, binds)) =>
+		 let val partial_ctxt_export = IlContext.removeNonExport partial_ctxt
+		     val _ = Help.chat ("  [writing " ^ uiFile)
+		     val written = IlCache.write (uiFile, partial_ctxt_export)
+		     val _ = Help.chat "]\n"
+		     val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module 
+		     val il_module = (reduced_ctxt, partial_ctxt, binds)
+		 in  (il_module, written)
+		 end
+	   | NONE => error("File " ^ sourcefile ^ " failed to elaborate."))
+    
+    fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
+	case LinkIl.elab_dec(pre_ctxt, fp, dec) of
+	    SOME (il_module as (ctxt, partial_ctxt, binds)) =>
+		let val partial_ctxt_export = IlContext.removeNonExport partial_ctxt
+		    val _ = Help.chat ("  [writing " ^ uiFile)
+		    val written = IlCache.write (uiFile, partial_ctxt_export)
+		    val _ = if written then ()
+			    else Help.chat " - unnecessary"
+		    val _ = Help.chat "]\n"
+		    val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module 
+		    val il_module = (reduced_ctxt, partial_ctxt, binds)
+		in  (il_module, written)
 		end
-	end
-    val assemble = assemble_help false
-    val assemble_start = assemble_help true
-    fun assemble_done base = OS.FileSys.access(base2o base, [OS.FileSys.A_READ])
+	  | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
 
-    (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds into an
-     * object file `unitName.o'. ctxt is the context in which the sbnds
-     * were produced, and ctxt' contains the new bindings. unitName is
-     * the name of the unit being compiled and can be used for
-     * generating unique identifiers. Also, `unitName.o' must contain a
-     * label for `initialization' with name `unitName_doit'. 
-     *)
-    exception Stop
-    fun il_to_asm (unitName : string,
-		   fileBase: string, 
-		   il_module) : string = 
-	let val _ = if (!uptoElaborate) then raise Stop else ()
-	    val nilmod = Linknil.il_to_nil(unitName, il_module)
-	    val _ = if (!uptoPhasesplit orelse !uptoClosureConvert)
-			then raise Stop else ()
-	    val rtlmod = Linkrtl.nil_to_rtl (unitName,nilmod)
-	    val _ = if (!uptoRtl) then raise Stop else ()
-		
-		
-	    (* rtl_to_asm creates fileBase.s file with main label * `fileName_doit' *)
-	    val rtl_to_asm = 
-		case (getTargetPlatform()) of
-		    TIL_ALPHA => Linkalpha.rtl_to_asm
-		  | TIL_SPARC => Linksparc.rtl_to_asm
-		  | _ => error "No MLRISC"
-	    (*		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm *)
-	    (*		       | MLRISC_SPARC => SparcLink.rtl_to_asm*)
-	    val (sFile,_) = rtl_to_asm(fileBase, rtlmod)    
-	in  sFile
+    (* elaborate : {...} -> il_module * bool *)
+    fun elaborate {unit, smlFile, intFile, targetIlFile, importIlFiles} =
+	let val ctxt = getContext importIlFiles
+	    val _ = Help.chat ("  [Parsing " ^ smlFile ^ "]\n")
+	    val (lines,fp, _, dec) = LinkParse.parse_impl smlFile
+	    val _ = if (lines > 3000) (* XXX: reconsider *)
+			then (Help.chat "  [Large file: ";
+			      Help.chat (Int.toString lines);
+			      Help.chat " lines.   Flushing file cache.]\n";
+			      IlCache.flushAll())
+		    else ()
+	    (* Elaborate the source file, generating a .ui file *)
+	    val _ = IlCache.flushSome [targetIlFile]
+	in  case intFile
+	      of SOME intFile' =>
+		  let val (_,fp2, _, specs) = LinkParse.parse_inter intFile'
+		      val _ = Help.chat ("  [Warning: constraints currently coerce.  ")
+		      val _ = Help.chat ("Not compatiable with our notion of freshness.]\n")
+		      val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " with constraint]\n"  )
+		  in elab_constrained(unit,ctxt,smlFile,fp,dec,fp2,specs,targetIlFile,Time.zeroTime)
+		  end
+	       | NONE => 
+		  let val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " non-constrained]\n")
+		  in elab_nonconstrained(unit,ctxt,smlFile,fp,dec,targetIlFile,Time.zeroTime)
+		  end
 	end
-    handle Stop => (let val sFile = base2s fileBase
-			val os = TextIO.openOut sFile
-			val _ = TextIO.output(os,"Dummy .s file\n")
-		    in  TextIO.closeOut os; sFile
-		    end)
+    
+    (* il_to_nil : string * il_module -> nil_module *)
+    val il_to_nil = Linknil.il_to_nil
+
+    (* nil_to_rtl : string * nil_module -> rtl_module *)
+    val nil_to_rtl = Linkrtl.nil_to_rtl
+
+    (* rtl_to_asm : string * rtl_module -> unit *)
+    fun rtl_to_asm arg =
+	let val rtl_to_asm = case Target.getTargetPlatform ()
+			       of Target.TIL_ALPHA => Linkalpha.rtl_to_asm
+				| Target.TIL_SPARC => Linksparc.rtl_to_asm
+	    val mainLabel = rtl_to_asm arg
+	in  ()
+	end
+
+    (* link : string * string list -> unit *)
+    fun link (asmFile, units) =
+	let val link = (case Target.getTargetPlatform()
+			  of Target.TIL_ALPHA => Linkalpha.link
+			   | Target.TIL_SPARC => Linksparc.link)
+	    val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL (un ^ "_unit")) units
+	    val ignoredLabel = link (asmFile, local_labels)
+	in  ()
+	end
 	
-    end
+end

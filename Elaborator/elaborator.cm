@@ -46,7 +46,7 @@ ileval.sml
 *)
 linkil.sig.sml 
 linkil.sml 
-elaborator.sig.sml
+(* elaborator.sig.sml *)
 ilcontexteq.sig.sml
 ilcontexteq.sml 
 

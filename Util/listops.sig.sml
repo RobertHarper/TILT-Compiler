@@ -115,4 +115,9 @@ signature LISTOPS =
    (*Intersperse the elements of the list with a separator
     *)
    val join : 'a -> 'a list -> 'a list
+
+   val toString : ('a -> string) -> 'a list -> string
+   val fromString' : (string -> 'a option) -> string -> ('a list * substring) option
+   val fromString : (string -> 'a option) -> string -> 'a list option
+       
   end

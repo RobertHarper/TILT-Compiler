@@ -2,6 +2,7 @@
 
 signature FILECACHE = 
     sig
+	val makeBackups : bool ref	(* Write foo.BACKUP before overwriting file foo. *)
 	type internal
 	val flushAll : unit -> unit
 	val flushSome : string list -> unit

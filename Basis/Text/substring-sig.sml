@@ -23,7 +23,7 @@ signature SUBSTRING =
     val triml : int -> substring -> substring
     val trimr : int -> substring -> substring
 
-    val slice   : (substring * int * int) -> substring
+    val slice   : (substring * int * int option) -> substring
     val sub     : (substring * int) -> char
     val size    : substring -> int
     val concat  : substring list -> string
@@ -59,6 +59,9 @@ signature SUBSTRING =
 
 (*
  * $Log$
+# Revision 1.2  2000/08/21  20:29:20  swasey
+# Changes for the new Manager.
+# 
 # Revision 1.1  98/03/09  19:54:01  pscheng
 # added basis
 # 
