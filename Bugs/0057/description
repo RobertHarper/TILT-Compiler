@@ -50,6 +50,8 @@ Code:
 	structure MLP = JoinWithArg(structure X = MLLrVals)
 Transcript:
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	Derek and I determined that the problem is that xcoerce in
 	signature.sml generates new names for bound variables without
 	doing the substitutions necessary for alpha-varying.  Thus we

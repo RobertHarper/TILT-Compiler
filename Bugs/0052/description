@@ -12,6 +12,8 @@ Problem:
 Code:
 Transcript:
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	Comparing modified equal.sml with previous version (CVS 1.26).
 	Measure lines of code generated for triv.sml.
 			before	after
@@ -31,4 +33,4 @@ Fix:
 	Made minor improvements to the HIL pretty-printer.
 Test: 
 Owner: swasey
-Status: open
+Status: closed

@@ -18,6 +18,8 @@ Code:
 	tilt -fcheckReify1 mapfile-bug
 Transcript:
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	The reifier was generating trace annotations with free
 	variables.  The problem was with the annotations on the arms
 	of exception and sum switches when the carried constructors

@@ -11,6 +11,8 @@ Problem:
 	which compile fine in isolation but fail to compile when concatenated.
 	The phase splitter raises an exception.
 Code:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	See PhasesplitBug.tar.gz
 Transcript:
 Comments:

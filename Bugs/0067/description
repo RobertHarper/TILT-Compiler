@@ -35,6 +35,8 @@ Transcript:
 	  4 procedures.  4 recursive components.   Largest component has size 1.
 	tilt: tracetable.sml: index too large
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	Description of the Problem
 	--------------------------
 

@@ -33,6 +33,8 @@ Transcript:
 	  Initial context is phase-split
 	tilt: tonil.sml: use of datatype labels detected
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	The translation of JoinWithArg mentions
 		CON_PATH(funct_arg_993.Arg_STR. A_STR. B_STR. +O+Dterm_INT. term_INT)
 	rather than

@@ -21,6 +21,8 @@ Problem:
 Code:
 Transcript:
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	To see what's going wrong, I printed the NIL code after
 	specialization and hoisting.  Compare the files
 	specialized.nil and hoisted.nil.  In particular, study what

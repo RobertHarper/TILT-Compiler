@@ -10,6 +10,8 @@ Problem:
 	Compilation of the code below fails during Optimize2 phase when compiling EqualBug.  This came up while testing some
 	changes to the equality compiler.
 Code:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	This has been simplified further.  See ./mapfile.
 	
 	EqualBugSetup:

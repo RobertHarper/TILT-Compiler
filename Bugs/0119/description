@@ -8,6 +8,8 @@ System:      any
 Severity:    minor
 Problem:     test reports "wrong" answers
 
+	[Supporting files in CVS prior to 1/6/04.]
+
 	m0054's subtests numbered 37, 38, 39, 40, 42, and 43 fail because
 	of deficiencies in various string <-> char functions.  The project
 	descriptions bug37, bug38, bug39, bug40, bug42, and bug43 print

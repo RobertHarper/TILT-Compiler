@@ -16,6 +16,8 @@ Code:
 	tilt -fcheckOptimize2 mapfile-bug
 Transcript:
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	To see the problem, I printed the NIL code after Hoist and
 	before Optimize2.  Compare the files hoist.nil and
 	optimize2.nil.

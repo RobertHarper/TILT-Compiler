@@ -1,6 +1,0 @@
-#include mapfile-basis
-Bug bug TARGET
-
-BugSimple bug_simple TARGET
-
-BugOrig bug_orig TARGET

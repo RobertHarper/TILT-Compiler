@@ -17,6 +17,8 @@ Transcript:
 	abort
 	status=sigabrt
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	When I re-compile his compiler from scratch I didn't see the bug.
 	It looks like his Runtime is up to date. (gmake runtime is happy)
 

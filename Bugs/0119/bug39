@@ -1,1 +1,0 @@
-unit bug39 = "bug39.sml" {Int Char}

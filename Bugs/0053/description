@@ -8,6 +8,8 @@ System:	     any
 Severity:    major
 Problem:
 	The compiler fails to compile ``val test2 = fn () => (1, 2) = (1, 2)''.
+
+	[Supporting files in CVS prior to 1/6/04.]
 Code:
 Transcript:
 	cd /usr0/swasey/ml96/Local/Bugs/0053/

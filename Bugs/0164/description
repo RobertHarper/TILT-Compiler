@@ -41,6 +41,8 @@ Comments:
 	to have this bug.  Second, I might have saved a lot of time if
 	I had thought to turn on the runtime's @paranoid flag.
 
+	[Supporting files in CVS prior to 1/6/04.]
+
 	Other files:
 		notes
 		stack-code__2205739

@@ -21,6 +21,8 @@ Problem:
 Code:
 Transcript:
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	First, I set up an experiment for measuring memory use.  I
 	instrumented the compiler to print out (total CPU) timestamps.
 	The plan is to sample the compiler's memory use while

@@ -21,6 +21,8 @@ Code:
 	tilt -fcheckPhasesplit mapfile-bug
 Transcript:
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	You'll find some compiler output in the file `dump'.
 	Constructor equivalence was failing to equate
 
