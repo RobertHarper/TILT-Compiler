@@ -1,5 +1,11 @@
 group is
 
+(* Note: MLton doesn't do dependency analysis,
+   so try to keep sources.cm in dependency order. *)
+
+stdin-sig.sml
+stdin.sml
+
 parsing/stream-sig.sml
 parsing/stream-std.sml
 parsing/pos-sig.sml
