@@ -40,7 +40,7 @@ struct
   val alpha_equiv_con = NilUtil.alpha_equiv_con
   val alpha_equiv_kind = NilUtil.alpha_equiv_kind
   val primequiv = NilUtil.primequiv
-  val pull = NilUtil.pull
+
   val singletonize = NilUtil.singletonize 
 
   val mapsequence = Util.mapsequence
@@ -197,8 +197,12 @@ val show_context = ref false
 	 end)
 
   fun get_shape' (D : context) (constructor : con) : kind = 
-    (case constructor 
-       of (Prim_c (pcon,args)) =>  
+      let fun letcase() = 
+	  error "Warning: get_shape' got un-normalized constructor Let_c\n"
+	   
+      in
+      (case constructor of
+	 (Prim_c (pcon,args)) =>  
 	 let
 	   val kind = 
 	     (case pcon
@@ -218,18 +222,20 @@ val show_context = ref false
 	       error ("variable "^(var2string var)^" not in context")))
         | (Let_c (sort,(([cbnd as Open_cb (var,formals,body,body_kind)]) | 
 			([cbnd as Code_cb (var,formals,body,body_kind)])),con)) => 
-	 (if is_var_c con then
-	    let
-	      val openness = 
-		(case cbnd 
-		   of Open_cb _ => Open
-		    | _ => Code)
-	      val bndkind = Arrow_k(openness,formals,body_kind)
-	    in bndkind
-	    end
-	  else
-	    error "get_shape' called on un-normalized constructor")
-	| (Let_c _) => error "get_shape' called on un-normalized constructor"
+	      (case con of
+		   (Var_c v) => if (eq_var(var,v))
+				    then Arrow_k((case cbnd of
+						      Open_cb _ => Open
+						    | _ => Code),formals,body_kind)
+				else letcase()
+		 | (Closure_c(Var_c v,_)) =>
+				if (eq_var(var,v))
+				    then Arrow_k(Closure,Listops.butlast formals,body_kind)
+				else letcase()
+	         | _ => letcase())
+        | (Let_c _) => letcase()
+	      (error "Warning: get_shape' got un-normalized constructor Let_c\n";
+	       get_shape' D (con_normalize' (D,Subst.empty()) constructor))
 	| (Closure_c (code,env)) => 
 	    (case (strip_singleton (get_shape' D code))
 	       of Arrow_k ((Code | ExternCode),vklist,body_kind) => 
@@ -277,8 +283,9 @@ val show_context = ref false
 	    end
 	| (Typecase_c {arg,arms,default,kind}) => kind
 	| (Annotate_c (annot,con)) => get_shape' D con)
+      end
 
-  fun eta_confun lambda = 
+  and eta_confun lambda = 
     let
       fun eta_confun' 
 	(Let_c (sort,(([Open_cb (var,formals,body,body_kind)]) |
@@ -306,7 +313,7 @@ val show_context = ref false
       map_annotate eta_confun' lambda
     end
 
-  fun eta_conrecord D record_c = 
+  and eta_conrecord D record_c = 
     let
       fun eta_conrecord' (Crecord_c []) = record_c
 	| eta_conrecord' (Crecord_c (fields as (label,con)::rest)) = 
@@ -331,8 +338,9 @@ val show_context = ref false
 	| eta_conrecord' _ = 
 	   (PpNil.pp_con record_c;
 	    (error "eta_conrecord passed non record" handle e => raise e))
-    in
-      map_annotate eta_conrecord' record_c
+    in  (map_annotate eta_conrecord' record_c)
+	handle e => (print "eta_conrecord called on record_c = \n";
+		     PpNil.pp_con record_c; print "\n"; raise e)
     end
  
   and beta_typecase D typecase = 
@@ -361,10 +369,7 @@ val show_context = ref false
     let
       fun beta_confun' (app as (App_c (con,actuals))) = 
 	let
-	  fun beta_confun'' actuals
-	    (Let_c (sort,(([Open_cb (var,formals,body,body_kind)]) |
-			  ([Code_cb (var,formals,body,body_kind)])),con)) = 
-	    (if eq_opt(eq_var,SOME var,strip_var con) then
+	  fun reduce actuals (formals,body,body_kind) = 
 	       let
 		 val (vars,_) = unzip formals
 		 val subst = fromList (zip vars actuals)
@@ -372,12 +377,23 @@ val show_context = ref false
 		      then substConInCon subst body
 		  else con_normalize' (D,subst) body
 	       end
-	     else app)
-	    | beta_confun'' actuals (Closure_c (code,env)) = 
-	       beta_confun'' (actuals @ [env]) code
-	    | beta_confun'' _ _ = app
-	in    
-	  map_annotate (beta_confun'' actuals) con
+	  fun beta_confun'' actuals confun = 
+	      (case confun of
+		   Let_c (_,(([Open_cb (var,formals,body,body_kind)]) |
+				([Code_cb (var,formals,body,body_kind)])),Var_c v) =>
+		   if eq_var(var,v)
+		       then reduce actuals (formals,body,body_kind) 
+		   else app
+	         | Let_c (_,[Code_cb (var,formals,body,body_kind)],Closure_c(Var_c v,env)) =>
+		   if eq_var(var,v)
+		       then reduce (actuals @ [env]) (formals,body,body_kind) 
+		   else app
+		 | Closure_c(Let_c (_,[Code_cb (var,formals,body,body_kind)],Var_c v), env) =>
+		       if eq_var(var,v)
+			   then reduce (actuals @ [env]) (formals,body,body_kind) 
+		       else app
+		 | _ => app)
+	in map_annotate (beta_confun'' actuals) con
 	end
 	| beta_confun' con = 
 	(PpNil.pp_con con;
@@ -597,13 +613,17 @@ val show_context = ref false
 	      val code =  con_normalize' state code
 	    in Closure_c (code,env)
 	    end
-	| (Crecord_c entries) => 
+	| (Crecord_c (entries as orig_entries)) => 
 	    let
 	      val (labels,cons) = unzip entries
 	      val cons = map (con_normalize' state) cons
 	      val entries = zip labels cons
 	      val con = Crecord_c entries
-	      val con = eta_conrecord (#1 state) con
+	      val con = eta_conrecord (#1 state) con 
+		  handle e => (print "eta_conrecord in con_normalize failed.\noriginal con = \n";
+			       PpNil.pp_con (Crecord_c orig_entries);
+			       print "\n eta_conrecord in con_normalized reduced to \n";
+			       PpNil.pp_con con; print "\n"; raise e)
 	    in con
 	    end
 	| (Proj_c (rvals,label)) => 

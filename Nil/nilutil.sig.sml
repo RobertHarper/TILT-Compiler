@@ -96,14 +96,16 @@ signature NILUTIL =
     val strip_prim : Nil.con -> (Nil.primcon*Nil.con list) option
     val strip_app : Nil.con -> (Nil.con*Nil.con list) option
 
+    val alpha_mu : (Nil.var -> bool) -> (Nil.var * Nil.con) list * Nil.var -> (Nil.var * Nil.con) list * Nil.var
     val is_exn_con : Nil.con -> bool
     val is_var_c : Nil.con -> bool
     val is_float_c : Nil.con -> bool
     val is_unit_c : Nil.con -> bool
     val strip_singleton : Nil.kind -> Nil.kind
+    val kill_singleton : Nil.kind -> Nil.kind
     val singletonize : (Nil.kind * Nil.con) -> Nil.kind
     val selfify : (Nil.con * Nil.kind) -> Nil.kind
-    val pull: (Nil.con * Nil.kind) -> Nil.con
+
     val get_arrow_return : Nil.con -> Nil.con option
     val get_function_type : Nil.openness -> Nil.function -> Nil.con
     

@@ -5,7 +5,6 @@ sig
     structure NilUtil : NILUTIL
     structure NilContext : NILCONTEXT
     structure NilStatic : NILSTATIC
-    structure Normalize : NORMALIZE
     structure PpNil : PPNIL
 
     val compile_prelude : bool * string -> Nil.module
@@ -28,7 +27,9 @@ structure Linknil (* : LINKNIL *) =
     val do_opt = ref false
     val show_size = ref false
     val show_hil = ref false
+    val show_phasesplit = ref false
     val show_renamed = ref false
+    val show_cc = ref false
     val show_before_rtl = ref false
 
 
@@ -77,6 +78,9 @@ structure Linknil (* : LINKNIL *) =
 				  structure Subst = NilSubst
 				  structure PpNil = PpNil)
 
+    structure NilError = NilErrorFn(structure ArgNil = Nil
+				    structure PpNil = PpNil)
+
     structure NilContext' = NilContextFn'(structure NilUtil = NilUtil
 					structure ArgNil = Nil
 					structure PpNil = PpNil
@@ -91,9 +95,6 @@ structure Linknil (* : LINKNIL *) =
 
     structure NilContext = NilContextFn(structure NilContext' = NilContext'
 					structure Normalize = Normalize)
-
-    structure NilError = NilErrorFn(structure ArgNil = Nil
-				    structure PpNil = PpNil)
 
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
 				      structure Prim = LinkIl.Prim
@@ -142,6 +143,8 @@ structure Linknil (* : LINKNIL *) =
 				structure Subst = NilSubst)
 
     structure ToClosure = ToClosure(structure Nil = Nil
+				    structure NilContext = NilContext
+				    structure NilStatic = NilStatic
 				    structure Ppnil = PpNil
 				    structure NilUtil = NilUtil
 				    structure Subst = NilSubst)
@@ -153,8 +156,7 @@ structure Linknil (* : LINKNIL *) =
 				    structure PrimUtil = NilPrimUtil
 				    structure Subst = NilSubst)
 
-    structure DoOpts = DoOpts (structure Normalize = Normalize
-                               structure Nil = Nil
+    structure DoOpts = DoOpts (structure Nil = Nil
 			       structure NilPrimUtil = NilPrimUtil 
 			       structure PpNil = PpNil
 			       structure Linearize = Linearize
@@ -403,7 +405,7 @@ val _ = (print "Nil final context is:\n";
 			    end
 		    else ()
 	    val nilmod = (Stats.timer("Phase-splitting",Tonil.phasesplit)) (ctxt,sbnd_entries)
-	    val _ = showmod (debug,!show_size) "Phase-split" (filename, nilmod)
+	    val _ = showmod (!show_phasesplit orelse debug,!show_size) "Phase-split" (filename, nilmod)
 
 	    val nilmod = if (!do_cleanup)
 			     then (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
@@ -447,7 +449,7 @@ val _ = (print "Nil final context is:\n";
 *)
 
 	    val nilmod = (Stats.timer("Closure-conversion",ToClosure.close_mod)) nilmod
-	    val _ = showmod (debug,!show_size) "Closure-conversion" (filename, nilmod)
+	    val _ = showmod (debug orelse !show_cc,!show_size) "Closure-conversion" (filename, nilmod)
 
 	    val nilmod = (Stats.timer("Linearization2",Linearize.linearize_mod)) nilmod
 	    val _ = showmod (debug orelse !show_before_rtl,!show_size) "Renaming2" (filename, nilmod)

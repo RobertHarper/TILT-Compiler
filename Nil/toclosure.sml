@@ -1,15 +1,20 @@
-(* Closure conversion is accomplished in two phases.  The first phase scans the program
-   for free type and term variables of all type and term functions and also notes whether
-   a function escapes or not.  The second phase then rewrites the functions into codes
-   and closures.  Thus, before closure conversion, there are Fixopen_b and App_e(Open,...).
-   After closure conversion, there are Fixcode_b, Fixclosure_b, App_e(Closure,...), and App_e(Code,...).
+(* Closure conversion is accomplished in two phases.  
+   The first phase scans the program for free type and term variables of 
+   all type and term functions and also notes whether a function escapes or not.  
+   The second phase then rewrites the functions into codes and closures.  
+   Thus, before closure conversion, there are Fixopen_b and App_e(Open,...).
+   After closure conversion, there are Fixcode_b, Fixclosure_b, 
+   App_e(Closure,...), and App_e(Code,...).
 *)
 
 functor ToClosure(structure Nil : NIL
+		  structure NilStatic : NILSTATIC
+		  structure NilContext : NILCONTEXT
 		  structure NilUtil : NILUTIL
 		  structure Ppnil : PPNIL
 		  structure Subst : NILSUBST
-		  sharing NilUtil.Nil = Ppnil.Nil = Nil
+		  sharing NilUtil.Nil = Ppnil.Nil = NilStatic.Nil = NilContext.Nil = Nil
+		      and type NilContext.context = NilStatic.context
 			 and type Subst.con = Nil.con
 		         and type Subst.exp = Nil.exp
 			 and type Subst.kind = Nil.kind)
@@ -17,6 +22,7 @@ functor ToClosure(structure Nil : NIL
 struct
 
 
+    val use_kind_at_bind = ref false
 
     val select_carries_types = Stats.bool "select_carries_types"
     val select_has_con = select_carries_types
@@ -28,7 +34,6 @@ struct
     val error = fn s => error "toclosure.sml" s
     val debug = ref false
     val debug_full = ref false
-    val liftCode = ref false (* current lifting is wrong - things go out of scope when lifted *)
     val float64 = Prim_c(Float_c Prim.F64,[])
     structure FidSet = VarSet
     structure FidMap = VarMap
@@ -36,67 +41,56 @@ struct
     fun chat s = print s
 
     (* -------------- types and values manipulating free variables ------------- *)
-    (* kept in reverse order *)
-    type frees = {freecvars : (var * kind) list,
+    (* lists are kept in reverse order; set allow fast membership  *)
+    type frees = {freecvars_set : VarSet.set,
+		  freeevars_set : VarSet.set,
+		  freecvars : (var * kind) list,
 		  freeevars : (var * con) list}
-    val empty_frees = {freeevars = [],
+    val empty_frees = {freecvars_set = VarSet.empty,
+		       freeevars_set = VarSet.empty,
+		       freeevars = [],
 		       freecvars = []}
-    fun map_member(m,v) = (case (VarMap.find(m,v)) of
-			       NONE => false
-			     | SOME _ => true)
 
-    (* returns m1 + (m2 - s) *)
-    fun map_union_diff(m1,m2,s) = 
-	let fun folder(k,d,m) = if (VarSet.member(s,k))
-				    then m
-				else VarMap.insert(m,k,d)
-	in  VarMap.foldli folder m1 m2
-	end
-    fun map_union(m1,m2) = 
-	let fun folder(k,d,m) = VarMap.insert(m,k,d)
-	in  VarMap.foldli folder m1 m2
-	end
-    val set_union = VarSet.union
-    fun map_set_remove(m,s) = VarMap.foldli (fn (k,d,m) => if VarSet.member(s,k) 
-						then m else VarMap.insert(m,k,d)) VarMap.empty m
-    fun varlist_union(old,new) = 
-	let fun folder((v,x),old) = (case (Listops.assoc_eq(Name.eq_var,v,old)) of
-					 NONE => (v,x)::old
-				       | SOME _ => old)
-	in  foldr folder old new
+    fun listset_union(oldlist,newlist,oldset) = 
+	let fun folder((v,x),acc as (changed,curlist,curset)) =
+	    if (VarSet.member(curset,v)) 
+		then acc
+	    else (false, (v,x)::curlist, VarSet.add(curset,v))
+	in  foldr folder (true,oldlist,oldset) newlist (* use foldr since lists are reversed *)
 	end
 
-    (* returns a bool indicating whether the result is same as the first fv set *)
-    fun join_free'({freeevars=e1,freecvars=c1},
-		   {freeevars=e2,freecvars=c2}) = 
-	let val fe = varlist_union(e1,e2)
-	    val fc = varlist_union(c1,c2)
-	    val same = (((length fe) = (length e1)) andalso
-			((length fc) = (length c1)))
-	in  (same, {freeevars = fe, freecvars = fc})
+    (* returns a bool indicating whether the result is same as the first fv set;
+      adds to the first free, in order, all the items only found in the second *)
+    fun join_free'({freeevars=e1,freecvars=c1,freeevars_set=em1,freecvars_set=cm1} : frees,
+		   {freeevars=e2,freecvars=c2,...} : frees) =
+	let val (samee,e3,em3) = listset_union(e1,e2,em1)
+	    val (samec,c3,cm3) = listset_union(c1,c2,cm1)
+	in  (samee andalso samec, {freeevars = e3, freecvars = c3,
+				   freeevars_set = em3, freecvars_set = cm3})
 	end
 
-    fun join_free args = #2(join_free' args)
+    fun join_free args : frees = #2(join_free' args)
 
 
 
-    fun show_free({freeevars, freecvars} : frees) =
+    fun show_free({freeevars, freecvars,...} : frees) =
 	(print "freeevars are: "; app (fn (v,_) => (Ppnil.pp_var v; print " ")) freeevars; print "\n";
 	 print "freecvars are: "; app (fn (v,_) => (Ppnil.pp_var v; print " ")) freecvars; print "\n")
 
 
 
 
-    (* -------------- types and values manipulating functions and related information ------- *)
+    (* -------- types and values manipulating functions and related information ------ *)
 
 
 
-    (* ---------------- code to perform the initial free-variable computation ------------- *)
+    (* -------- code to perform the initial free-variable computation ---------------- *)
     local
-	datatype expentry = GLOBALe | LOCALe of con | SHADOWe of con
-	datatype conentry = GLOBALc | LOCALc of kind | SHADOWc of kind
+	datatype expentry = GLOBALe | LOCALe of con * frees option ref | SHADOWe of con * frees option ref
+	datatype conentry = GLOBALc | LOCALc of kind * frees option ref | SHADOWc of kind * frees option ref
 	datatype state = STATE of {curfid : fid,
 				   is_top : bool,
+				   ctxt : NilStatic.context,
 				   boundevars : expentry VarMap.map,
 				   boundcvars : conentry VarMap.map,
 				   boundfids : FidSet.set}
@@ -107,27 +101,38 @@ struct
 		     escape : bool,
 		     callee : (fid * state) list,
 		     frees : frees}
-	fun add_gboundevar (STATE{is_top,curfid,boundevars,boundcvars,boundfids},v) = 
+	fun add_gboundevar (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},v) = 
 	    let val boundevars' = VarMap.insert(boundevars,v,GLOBALe)
 	    in  STATE{is_top = is_top,
 		      curfid = curfid,
+		      ctxt = ctxt,
 		      boundevars = boundevars',
 		      boundcvars = boundcvars,
 		      boundfids = boundfids}
 	    end
-	fun add_gboundcvar (STATE{is_top,curfid,boundevars,boundcvars,boundfids},v) = 
+	fun add_gboundcvar (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},v,k) = 
 	    let val boundcvars' = VarMap.insert(boundcvars,v,GLOBALc)
-	    in  STATE{is_top = is_top,
+		val ctxt' = if (!use_kind_at_bind) then ctxt 
+			    else Stats.subtimer("toclosure_add_cvar",
+					     NilContext.insert_kind)
+				(ctxt,v,
+				 Stats.subtimer("toclosure_kindreduce",
+					     NilStatic.kind_reduce)(ctxt,k))
+	    in  STATE{ctxt = ctxt',
+		      is_top = is_top,
 		      curfid = curfid,
 		      boundevars = boundevars,
 		      boundcvars = boundcvars',
 		      boundfids = boundfids}
 	    end
 
-	fun add_boundevars' shadow (STATE{is_top,curfid,boundevars,boundcvars,boundfids},vc_list) = 
-	    let val wrap = if shadow then SHADOWe else (if is_top then (fn _ => GLOBALe) else LOCALe)
+	fun add_boundevars' shadow (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},vc_list) = 
+	    let val wrap = if shadow then (fn c => SHADOWe(c,ref NONE))
+			   else (if is_top then (fn _ => GLOBALe) 
+				 else (fn c => LOCALe(c,ref NONE)))
 		val boundevars' = foldl (fn ((v,c),m) => VarMap.insert(m,v,wrap c)) boundevars vc_list
-	    in  STATE{is_top = is_top,
+	    in  STATE{ctxt = ctxt,
+		      is_top = is_top,
 		      curfid = curfid,
 		      boundevars = boundevars',
 		      boundcvars = boundcvars,
@@ -135,18 +140,32 @@ struct
 	    end
 	val add_boundevars = add_boundevars' false
 
-	fun add_boundcvars(STATE{is_top,curfid,boundevars,boundcvars,boundfids},vk_list) = 
-	    let val wrap = (if is_top then (fn _ => GLOBALc) else LOCALc)
+	fun add_boundcvars reduced (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},vk_list) = 
+	    let val wrap = (if is_top then (fn _ => GLOBALc) 
+			    else (fn k => LOCALc(k,ref NONE)))
 		val boundcvars' = foldl (fn ((v,k),m) => VarMap.insert(m,v,wrap k)) boundcvars vk_list
-	    in  STATE{is_top = is_top,
+		val ctxt' =  if (!use_kind_at_bind) then ctxt 
+		              else foldl (fn((v,k),c) => 
+					  case (NilContext.find_kind(c,v)) of
+					      NONE => Stats.subtimer("toclosure_add_cvar",
+								  NilContext.insert_kind)
+						  (c,v,
+						   if reduced then k
+						   else Stats.subtimer("toclosure_kindreduce",
+								    NilStatic.kind_reduce)(c,k))
+					    | SOME _ => c)
+				  ctxt vk_list
+	    in  STATE{ctxt = ctxt',
+		      is_top = is_top,
 		      curfid = curfid,
 		      boundevars = boundevars,
 		      boundcvars = boundcvars',
 		      boundfids = boundfids}
 	    end
 
-	fun add_boundfids shadow (STATE{is_top,curfid,boundevars,boundcvars,boundfids},fid_types) = 
-	    let val state = STATE{curfid = curfid,
+	fun add_boundfids shadow (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},fid_types) = 
+	    let val state = STATE{ctxt=ctxt,
+				  curfid = curfid,
 				  is_top = is_top,
 				  boundevars = boundevars,
 				  boundcvars = boundcvars,
@@ -155,7 +174,8 @@ struct
 	    end
 
 	fun add_boundevar(s,v,c) = add_boundevars(s,[(v,c)])
-	fun add_boundcvar(s,v,k) = add_boundcvars(s,[(v,k)])
+	fun add_boundcvar(s,v,k) = add_boundcvars false (s,[(v,k)])
+	fun add_boundcvar'(s,v,k) = add_boundcvars true (s,[(v,k)])
 	    
 	fun is_boundevar(STATE{boundevars,...},evar) = 
 	    (case (VarMap.find(boundevars,evar)) of
@@ -170,48 +190,45 @@ struct
 	fun is_boundfid(STATE{boundfids,...}, f) = VarSet.member(boundfids,f)
 
 
-	fun locale_map2set m = (VarMap.foldli (fn (v,LOCALe _,s) => VarSet.add(s,v) | (_,_,s) => s) 
-				VarSet.empty m)
-	fun localc_map2set m = (VarMap.foldli (fn (v,LOCALc _,s) => VarSet.add(s,v) | (_,_,s) => s) 
-				VarSet.empty m)
+	fun cvar_isfree (STATE{boundcvars,boundevars,...},{freecvars_set,...}:frees,cvar) = 
+	    if (VarSet.member(freecvars_set,cvar))
+		then NONE
+	    else (case (VarMap.find(boundcvars,cvar)) of
+			  SOME (GLOBALc | (LOCALc _)) => NONE
+			| SOME (SHADOWc k) => SOME k
+			| NONE => error ("cvar_isfree: variable " ^
+					 (var2string cvar) ^ " not bound"))
 
-	fun cvar_getkind(STATE{boundcvars,boundevars,...},cvar) = 
-	    (case (VarMap.find(boundcvars,cvar)) of
-		 SOME GLOBALc => NONE
-	       | SOME (LOCALc k) => SOME k
-	       | SOME (SHADOWc k) => SOME k
-	       | NONE => error ("free_cvar: variable " ^
-				(var2string cvar) ^ " not bound"))
+	fun evar_isfree (STATE{boundcvars,boundevars,...},{freeevars_set,...}:frees,evar) = 
+	    if (VarSet.member(freeevars_set,evar))
+		then NONE
+	    else 
+		(case (VarMap.find(boundevars,evar)) of
+		     SOME (GLOBALe | (LOCALe _)) => NONE
+		   | SOME (SHADOWe cf) => SOME cf
+		   | NONE => error ("evar_isfree: variable " ^
+				    (var2string evar) ^ " not bound"))
+			    
 
-	fun evar_getcon(STATE{boundcvars,boundevars,...},evar) = 
-	    (case (VarMap.find(boundevars,evar)) of
-		 SOME GLOBALe => NONE
-	       | SOME (LOCALe c) => SOME c
-	       | SOME (SHADOWe c) => SOME c
-	       | NONE => error ("free_evar: variable " ^
-				(var2string evar) ^ " not bound"))
+	fun free_cvar_add ({freecvars,freecvars_set,freeevars,freeevars_set}:frees,cvar,k) = 
+	    let val freecvars = (cvar,k)::freecvars
+		val freecvars_set = 
+		    if (VarSet.member(freecvars_set,cvar))
+			then error "free_cvar_add given variable already in free set"
+		    else VarSet.add(freecvars_set,cvar)
+	    in  {freeevars = freeevars, freeevars_set = freeevars_set,
+		 freecvars = freecvars, freecvars_set = freecvars_set}
+	    end
 
-	fun cvar_isfree (STATE{boundcvars,boundevars,...},cvar) = 
-	    (case (VarMap.find(boundcvars,cvar)) of
-		 SOME (GLOBALc | (LOCALc _)) => NONE
-	       | SOME (SHADOWc k) => SOME k
-	       | NONE => error ("free_cvar: variable " ^
-				(var2string cvar) ^ " not bound"))
-
-	fun free_cvar (STATE{boundcvars,boundevars,...},cvar,k) = 
-	    {freeevars = [],
-	     freecvars = [(cvar,k)]}
-
-	fun free_evar (STATE{boundcvars,boundevars,...},evar,c) = 
-	    {freeevars = [(evar,c)],
-	     freecvars = []}
-
-	fun evar_isfree (STATE{boundcvars,boundevars,...},evar) = 
-	     (case (VarMap.find(boundevars,evar)) of
-		  SOME (GLOBALe | (LOCALe _)) => NONE
-		| SOME (SHADOWe c) => SOME c
-		| NONE => error ("free_evar: variable " ^
-					     (var2string evar) ^ " not bound"))
+	fun free_evar_add ({freecvars,freecvars_set,freeevars,freeevars_set}:frees,evar,c) = 
+	    let val freeevars = (evar,c)::freeevars
+		val freeevars_set = 
+		    if (VarSet.member(freeevars_set,evar))
+			then error "free_evar_add given variable already in free set"
+		    else VarSet.add(freeevars_set,evar)
+	    in  {freeevars = freeevars, freeevars_set = freeevars_set,
+		 freecvars = freecvars, freecvars_set = freecvars_set}
+	    end
 
 
 
@@ -241,20 +258,25 @@ struct
 	      | show_centry (LOCALc _) = print "LOCALc"
 	      | show_centry (SHADOWc _) = print "SHADOWc"
 	in
-	    (print "boundevars are: "; VarMap.appi (fn (v,e) => (print "  "; Ppnil.pp_var v; print " "; show_eentry e; print "\n")) boundevars; print "\n";
-	     print "boundcvars are: "; VarMap.appi (fn (v,e) => (print "  "; Ppnil.pp_var v; print " "; show_centry e; print "\n")) boundcvars; print "\n")
+	    (print "boundevars are: "; 
+	     VarMap.appi (fn (v,e) => (print "  "; Ppnil.pp_var v; 
+				       print " "; show_eentry e; print "\n")) boundevars; print "\n";
+	     print "boundcvars are: "; 
+	     VarMap.appi (fn (v,e) => (print "  "; Ppnil.pp_var v; 
+				       print " "; show_centry e; print "\n")) boundcvars; print "\n")
 	end
 
 
-	fun copy_state (STATE{boundevars,boundcvars,boundfids,...}) fid = 
-	    let fun epromote (LOCALe c) = SHADOWe c
+	fun copy_state (STATE{ctxt,boundevars,boundcvars,boundfids,...}) fid = 
+	    let fun epromote (LOCALe cf) = SHADOWe cf
 		  | epromote x = x
-		fun cpromote (LOCALc k) = SHADOWc k
+		fun cpromote (LOCALc kf) = SHADOWc kf
 		  | cpromote x = x
 		val boundevars' = VarMap.map epromote boundevars
 		val boundcvars' = VarMap.map cpromote boundcvars
 	    in  STATE{is_top = false,
 		      curfid=fid,
+		      ctxt = ctxt,
 		      boundfids=boundfids,
 		      boundevars = boundevars',
 		      boundcvars = boundcvars'}
@@ -263,7 +285,7 @@ struct
 	fun get_curfid(STATE{curfid,...}) = curfid
 
     fun remove_free(s as (STATE{boundevars,boundcvars,...}),
-		    {freeevars,freecvars}) : frees = 
+		    {freeevars,freecvars,freeevars_set,freecvars_set}) : frees = 
 	let 
 (*
 	    val _ = (print "\n\nremove_free...\n";
@@ -278,32 +300,39 @@ struct
 	    fun cfilter (v,_) = not (is_boundcvar(s,v))
 	    val freeevars' = List.filter efilter freeevars
 	    val freecvars' = List.filter cfilter freecvars
+	    fun efilter v = not (is_boundevar(s,v))
+	    fun cfilter v = not (is_boundcvar(s,v))
+	    val freeevars_set' = VarSet.filter efilter freeevars_set
+	    val freecvars_set' = VarSet.filter cfilter freecvars_set
 (*
 	    val _ = (print "\nfreeevars' has ";
 		     VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print ", ")) freeevars';
 		     print "\n")
 *)
 	in  {freeevars = freeevars',
-	     freecvars = freecvars'}
+	     freecvars = freecvars',
+	     freeevars_set = freeevars_set',
+	     freecvars_set = freecvars_set'}
 	end
 
     in  type state = state
+	fun get_ctxt (STATE{ctxt,...}) = ctxt
 	type funentry = funentry
 	val copy_state = copy_state
 	val show_state = show_state
-	val free_cvar = free_cvar
-	val free_evar = free_evar
+	val free_cvar_add = free_cvar_add
+	val free_evar_add = free_evar_add
 	val cvar_isfree = cvar_isfree
 	val evar_isfree = evar_isfree
-	val cvar_getkind = cvar_getkind
-	val evar_getcon = evar_getcon
 	val is_boundfid = is_boundfid
 	val add_gboundevar = add_gboundevar
 	val add_gboundcvar = add_gboundcvar
 	val add_boundevar = add_boundevar
 	val add_boundcvar = add_boundcvar
+	val add_boundcvar' = add_boundcvar'
 	val add_boundevars = add_boundevars
-	val add_boundcvars = add_boundcvars
+	val add_boundcvars' = add_boundcvars true
+	val add_boundcvars = add_boundcvars false
 	val add_boundfids = add_boundfids
 	val get_curfid = get_curfid
 	val remove_free = remove_free
@@ -311,19 +340,20 @@ struct
 	val is_boundcvar = is_boundcvar
 
 
-    (* ---------------- Global data structure to keep track of function information ----------------- *)
+    (* ----- Global data structure to keep track of function information ------------ *)
 
 	fun reset_table escapes = (fids := empty_table;
 				   global_escapes := VarSet.addList(VarSet.empty,escapes))
 	fun get_fids() = VarMap.foldli (fn (fid,_,acc) => VarSet.add(acc,fid)) VarSet.empty (!fids)
-	fun is_fid f = map_member(!fids,f)
+	fun is_fid f = (case (VarMap.find(!fids,f)) of NONE => false | _ => true)
 	fun add_fun new_fid = 
 	    (let val escape = VarSet.member(!global_escapes,new_fid)
 	     in  fids := (VarMap.insert(!fids,new_fid,ref (empty_fun escape new_fid)))
 	     end)
 	    
 	fun initial_state topfid = let val _ = add_fun topfid
-				   in   STATE{is_top = true,
+				   in   STATE{ctxt = NilContext.empty(),
+					      is_top = true,
 					      curfid=topfid,boundfids=VarSet.empty,
 					      boundevars = VarMap.empty,
 					      boundcvars = VarMap.empty}
@@ -361,13 +391,13 @@ struct
 	fun add_frees (fid,f) =
 	    (case (VarMap.find(!fids,fid)) of
 		 NONE => error ((Name.var2string fid) ^ "fid not found for add_frees")
-	       | SOME (r as (ref{static,escape,callee,frees})) =>
+	       | SOME (r as (ref{static,escape,callee,frees : frees})) =>
 		     r := {static = static,
 			   escape = escape,
 			   callee = callee,
-			   frees = join_free(frees,f)})
+			   frees = join_free(frees,f) : frees})
 
-	fun augment_frees (fid,evars,cvars) =
+	fun augment_frees (fid,f) =
 	    (case (VarMap.find(!fids,fid)) of
 		 NONE => error ((Name.var2string fid) ^ "fid not found for aug_frees")
 	       | SOME (r as (ref{static,escape,callee,frees})) =>
@@ -378,8 +408,6 @@ struct
 				  print "cvars are: "; 
 				  VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) cvars; 
 				  print "\n")  *)
-			 val f = {freeevars=evars,
-				  freecvars=cvars}
 			 val (same,frees) = join_free'(frees,f)
 		     in  if same 
 			     then false
@@ -394,39 +422,48 @@ struct
 
 
 
-(* --------------------------------------------------------------------------------------------------------
+(* ----------------------------------------------------------------------------
    Free variable computation.
-   -------------------------------------------------------------------------------------------------------- *)
+   ---------------------------------------------------------------------------- *)
 
-    fun bnd_find_fv (state : state) bnd : state * frees =
+    fun bnd_find_fv (state : state, frees : frees) bnd : state * frees =
 	    let
-		fun vkfolder((v,k),(f,s)) = (join_free(f,k_find_fv s k), 
+		fun vkfolder((v,k),(f,s)) = (k_find_fv (s,f) k, 
 					     add_boundcvar(s,v,k))
-		fun vcfolder((v,c),(f,s)) = (join_free(f,c_find_fv s c), 
+		fun vcfolder((v,c),(f,s)) = (c_find_fv (s,f) c, 
 					     add_boundevar(s,v,c))
 		fun fun_type(Function(effect,recur,vklist,vclist,vflist,body,c)) = 
 		    AllArrow_c(Open,effect,vklist,(map #2 vclist),TilWord32.fromInt(length vflist),c)
-		fun do_fix var_arm_set do_arm do_add get_type =
+		fun do_fix f var_arm_set do_arm do_add get_type =
 		    let val var_arm_list = set2list var_arm_set
 			val _ = app (fn (fid,_) => do_add fid) var_arm_list
 			val local_fids_types = map (fn (v,pf) => (v,get_type pf)) var_arm_list
-			val free = (foldl (fn (a,f) => join_free(f,do_arm local_fids_types a))
-				    empty_frees (set2list var_arm_set))
+			val free = (foldl (fn (a,f) => do_arm f local_fids_types a)
+				    f (set2list var_arm_set))
 		    in  (add_boundfids false (state, local_fids_types), free)
 		    end
 		val (state,frees) = 
 		    (case bnd of
-			 Con_b(v,k,c) => let val f = c_find_fv state c
-					     val f = join_free(f,k_find_fv state k)
-					     val _ = if (!debug)
-							 then (print "add_boundcvar ";
-							       Ppnil.pp_var v; print "\n")
-						     else ()
-					     val k' = NilUtil.singletonize(k,c)
-					 in (add_boundcvar(state,v,k'), f)
-					 end
-		       | Exp_b(v,c,e) => let val f = e_find_fv state e
-					     val f = join_free(f,c_find_fv state c)
+			 Con_b(v,k,c) => 
+			     let val f = c_find_fv (state,frees) c
+				 val (k',f) = 
+				     if (!use_kind_at_bind)
+					 then (NilUtil.singletonize(NilUtil.kill_singleton k,c),
+					       k_find_fv (state,f) k)
+				     else let val (_,pk) = NilStatic.con_valid(get_ctxt state, c)
+					  in  (pk, f)
+					       (* by not adding the FV's of k,
+						we are not closed WRT types
+						(pk, k_find_fv (state,f) k) *)
+					  end
+				 val _ = if (!debug)
+					     then (print "add_boundcvar ";
+						   Ppnil.pp_var v; print "\n")
+					 else ()
+			     in (add_boundcvar'(state,v,k'), f)
+			     end
+		       | Exp_b(v,c,e) => let val f = c_find_fv (state,frees) c
+					     val f = e_find_fv (state,f) e
 					     val _ = if (!debug)
 							 then (print "add_boundevar ";
 							       Ppnil.pp_var v; print "\n")
@@ -435,11 +472,11 @@ struct
 					 end
 		       | Fixopen_b var_fun_set =>
 			     let val outer_curfid = get_curfid state
-				 fun do_arm fids_types (v,Function(_,_,vklist,vclist,vflist,body,tipe)) =
+				 fun do_arm frees fids_types (v,Function(_,_,vklist,vclist,vflist,body,tipe)) =
 				 let val outer_state = add_boundfids false (state,fids_types) 
 				     val local_state = copy_state state v
 				     val local_state = add_boundfids true (local_state,fids_types) 
-				     val fs = (empty_frees, local_state)
+				     val fs = (frees, local_state)
 				     val _ = if (!debug)
 						 then (print "state before vkfolder to ";
 						       Ppnil.pp_var v; print "\n";
@@ -458,13 +495,13 @@ struct
 						       Ppnil.pp_var v; print "\n";
 						       show_free f; print "\n")
 					     else ()
-				     val f = join_free(f,e_find_fv s body)
+				     val f = e_find_fv (s,f) body
 				     val _ = if (!debug)
 						 then (print "the following (after body) frees to ";
 						       Ppnil.pp_var v; print "\n";
 						       show_free f; print "\n")
 					     else ()
-				     val f = join_free(f,c_find_fv s tipe)
+				     val f = c_find_fv (s,f) tipe
 				     val _ = if (!debug)
 						 then (print "adding the following frees to ";
 						       Ppnil.pp_var v; print "\n";
@@ -474,7 +511,7 @@ struct
 				     val _ = add_callee(outer_curfid,v,outer_state)
 				 in  f
 				 end
-				 val (s,f) = do_fix var_fun_set do_arm add_fun fun_type
+				 val (s,f) = do_fix frees var_fun_set do_arm add_fun fun_type
 			     in  (s, remove_free(s,f))
 			     end
 		       | Fixcode_b _ => error "there can't be codes while closure-converting"
@@ -482,54 +519,10 @@ struct
 	    in  (state, frees)
 	    end
 	
-    and e_find_fv (state : state) exp : frees =
-	let val _ = if (!debug)
-			 then (print "exp_find_fv called on\n";
-			       if (!debug_full)
-				   then Ppnil.pp_exp exp
-			       else (); 
-				   print "\n\n")
-		     else ()
-	    val res = e_find_fv' state exp
-	    val _ = if (!debug)
-			 then (print "exp_find_fv called returning:\n";
-			       show_free res; print "\n\n")
-		     else ()
 
-	in  res 
-	end
-
-    and e_find_fv' (state : state) exp : frees =
-	(if (!debug)
-	     then (print "exp_find_fv called on\n";
-		   if (!debug_full)
-		       then Ppnil.pp_exp exp
-		   else (); print "\n\n")
-	 else ();
-	 case exp of
-	     Var_e v => (if (is_boundfid(state,v)) then add_escape v else ();
-		     (case (evar_isfree(state,v)) of
-			  NONE => empty_frees
-			| SOME c => 
-			      let val free = free_evar(state,v,c)
-			      in  (case evar_getcon(state,v) of
-				       NONE => free
-				     | SOME c => join_free(free,c_find_fv state c))
-			      end))
-	   | Const_e v => 
-		 (case v of
-		      ((Prim.int _) | (Prim.uint _) | (Prim.float _)) => empty_frees
-		    | ((Prim.array (c,array)) | (Prim.vector (c,array))) => 
-			  let fun folder(e,f) = join_free(f,(e_find_fv state e))
-			      val f = Array.foldl folder empty_frees array
-			  in  join_free(f,(c_find_fv state c))
-			  end
-		    | Prim.refcell (ref e) => (e_find_fv state e)
-		    | Prim.tag (_,c) => (c_find_fv state c))
-	   | Let_e (_,bnds,e) => (* treat as though a sequential let *)
-		      let fun folder (bnd,(state,frees)) = 
-			  let val (state,frees') = bnd_find_fv state bnd
-			      val newfree = join_free(frees,frees')
+    and bnds_find_fv (state : state, frees : frees) bnds : state * frees = 
+	let fun folder (bnd,(state,frees)) = 
+	    let val (state,frees') = bnd_find_fv (state,frees) bnd
 (*
 			      val _ = (print "=================\nLet_e bnd: processed  ";
 				       Ppnil.pp_bnd bnd;
@@ -541,69 +534,107 @@ struct
 				       show_free newfree;
 				       print "\n\n\n")
 *)
-			  in  (state,newfree)
+	    in  (state,frees')
+	    end
+	in  foldl folder (state,frees) bnds
+	end
+
+
+
+
+
+
+    and e_find_fv arg exp : frees =
+	let val res = e_find_fv' arg exp
+	    handle e => (print "exp_find_fv called on\n";
+			 Ppnil.pp_exp exp;
+			 print "\n\n"; raise e)
+	in  res 
+	end
+
+    and e_find_fv' (state : state, frees : frees) exp : frees =
+	(if (!debug)
+	     then (print "exp_find_fv called on\n";
+		   if (!debug_full)
+		       then Ppnil.pp_exp exp
+		   else (); print "\n\n")
+	 else ();
+	 case exp of
+	     Var_e v => (if (is_boundfid(state,v)) then add_escape v else ();
+		     (case (evar_isfree(state,frees,v)) of
+			  NONE => frees
+			| SOME (c,r) =>
+			      let val frees = free_evar_add(frees,v,c)
+				  val f = remove_free(state,
+							 (case !r of
+							      SOME f => f
+							    | NONE => let val f = c_find_fv (state,empty_frees) c
+									  val _ = r := SOME f
+								      in  f
+								      end))
+			      in join_free(frees,f)
+			      end))
+	   | Const_e v => 
+		 (case v of
+		      ((Prim.int _) | (Prim.uint _) | (Prim.float _)) => frees
+		    | ((Prim.array (c,array)) | (Prim.vector (c,array))) => 
+			  let fun folder(e,f) = e_find_fv (state,f) e
+			      val f = Array.foldl folder frees array
+			  in  c_find_fv (state,f) c
 			  end
-			  val (state',funfree) = foldl folder (state,empty_frees) bnds
-			  val bodyfree = e_find_fv state' e
-			  val almost_free = join_free(funfree,bodyfree)
-			  val result = remove_free(state',almost_free)
-(*
-			  val _ = (print "=================\nLet_e bnd: processed  ";
-				   print "funfree is\n";
-				   show_free funfree;
-				   print "almost_free is\n";
-				   show_free almost_free; print "\n";
-				   print "result is\n";
-				   show_free result; print "\n")
-*)
-		      in  result
+		    | Prim.refcell (ref e) => e_find_fv(state,frees) e
+		    | Prim.tag (_,c) => c_find_fv (state,frees) c)
+	   | Let_e (_,bnds,e) => (* treat as though a sequential let *)
+		      let val (state',bndfree) = bnds_find_fv (state,frees) bnds
+		      in  e_find_fv (state',bndfree) e
 		      end
 	   | Prim_e (ap,clist,elist) =>
-		 let fun cfold(c,f) = join_free(f,c_find_fv state c)
-		     fun efold(e,f) = join_free(f,e_find_fv state e)
-		     val free = foldl cfold empty_frees clist
-		     val free = foldl efold free elist
-		 in  free
+		 let fun cfold(c,f) = c_find_fv (state,f) c
+		     fun efold(e,f) = e_find_fv (state,f) e
+		     val frees = foldl cfold frees clist
+		     val frees = foldl efold frees elist
+		 in  frees
 		 end
 	   | Switch_e switch => 
 		 let
 		     fun do_sw {info, arg, arms, default} do_info do_arg do_prearm =
-			 let val f1 = do_info info
-			     val f2 = do_arg arg
-			     fun do_arm(pre,Function(_,_,vklist,vclist,vflist,body,tipe)) =
+			 let val f = do_info (info,frees)
+			     val f = do_arg (arg,f)
+			     fun do_arm((pre,Function(_,_,vklist,vclist,vflist,body,tipe)),f) =
 				 let 
-				     fun vkfolder((v,k),(f,s)) = (join_free(f,k_find_fv s k),
+				     fun vkfolder((v,k),(f,s)) = (k_find_fv (s,f) k,
 								  add_boundcvar(s,v,k))
 				     fun vcfolder((v,c),(f,s)) =
-					 let val f' = c_find_fv s c
-					 in (join_free(f,f'), add_boundevar(s,v,c))
+					 let val f = c_find_fv (s,f) c
+					 in (f, add_boundevar(s,v,c))
 					 end
-				     val (f,s) = (do_prearm pre, state)
+				     val (f,s) = (do_prearm (pre,f), state)
 				     val (f,s) = foldl vkfolder (f,s) vklist
 				     val (f,s) = foldl vcfolder (f,s) 
 					 (vclist @ (map (fn v => (v,float64)) vflist))
-				     val f = join_free(f,e_find_fv s body)
-				     val f = join_free(f,c_find_fv s tipe)
+				     val f = e_find_fv (s,f) body
+				     val f = c_find_fv (s,f) tipe
 				 in  f
 				 end
-			     val f3 = map do_arm arms
-			     val f4 = (case default of
-					   NONE => empty_frees
-					 | SOME e => e_find_fv state e)
-			 in foldl join_free f4 (f1::f2::f3)
+			     val f = foldl do_arm f arms
+			     val f = (case default of
+					   NONE => f
+					 | SOME e => e_find_fv (state,f) e)
+			 in f
 			 end
-		     fun nothing _ = empty_frees
+		     fun nothing (s,f) = f
 		 in	 case switch of
-		     Intsw_e sw => do_sw sw nothing (e_find_fv state) nothing
-		   | Sumsw_e sw => (do_sw sw (fn (tagcount,clist) =>
-					      foldl (fn (c,f) => join_free(f,c_find_fv state c)) 
-					      empty_frees clist)
-				    (e_find_fv state) nothing)
-		   | Exncase_e sw => do_sw sw nothing (e_find_fv state) (e_find_fv state)
-		   | Typecase_e sw => do_sw sw nothing (c_find_fv state) nothing
+		     Intsw_e sw => do_sw sw nothing (fn (e,f) => e_find_fv (state,f) e ) nothing
+		   | Sumsw_e sw => (do_sw sw (fn ((tagcount,clist),f) =>
+					      foldl (fn (c,f) => c_find_fv (state,f) c)
+					      f clist)
+				    (fn (e,f) => e_find_fv (state,f) e) nothing)
+		   | Exncase_e sw => do_sw sw nothing (fn (e,f) => e_find_fv (state,f) e) 
+		     (fn (e,f) => e_find_fv (state,f) e)
+		   | Typecase_e sw => do_sw sw nothing (fn (c,f) => c_find_fv (state,f) c) nothing
 		 end
 	   | App_e (_, e, clist, elist, eflist) =>
-		 let val free1 = (case e of
+		 let val f = (case e of
 				      Var_e v => if (is_fid v)
 						     then (
 (*							   print "***** adding callee ";
@@ -611,129 +642,166 @@ struct
 							   Ppnil.pp_var (get_curfid state); print "\n";
 *)
 							   add_callee(get_curfid state,v,state);
-							   empty_frees)
-						 else (e_find_fv state e)
-				    | _ => (e_find_fv state e))
-		     val free2 = map (c_find_fv state) clist
-		     val free3 = map (e_find_fv state) elist
-		     val free4 = map (e_find_fv state) eflist
-		     val joiner = foldl join_free
-		 in joiner (joiner (joiner free1 free2) free3) free4
+							   frees)
+						 else (e_find_fv (state,frees) e)
+				    | _ => (e_find_fv (state,frees) e))
+		     val f = foldl (fn (c,f) => c_find_fv (state,f) c) f clist
+		     val f = foldl (fn (e,f) => e_find_fv (state,f) e) f elist
+		     val f = foldl (fn (e,f) => e_find_fv (state,f) e) f eflist
+		 in  f
 		 end
-	   | Raise_e (e,c) => join_free(e_find_fv state e, c_find_fv state c)
+	   | Raise_e (e,c) => e_find_fv (state, c_find_fv (state,frees) c) e
 	   | Handle_e (e,Function(_,_,[],[(v,c)],[],body,tipe)) =>
-		 let val f = e_find_fv state e
-		 in  (foldl join_free empty_frees
-		      [f, (c_find_fv state c),
-		       (e_find_fv (add_boundevar(state,v,c)) body),
-		       (c_find_fv state tipe)])
+		 let val f = e_find_fv (state,frees) e
+		     val f = c_find_fv (state,f) c
+		     val f = e_find_fv (add_boundevar(state,v,c),f) body
+		     val f = c_find_fv (state,f) tipe
+		 in  f
 		 end
 	   | Handle_e _ => error "ill-typed Handle_e")
 
-		 
-	and c_find_fv (state : state) con : frees =
-	    (if (!debug)
-		 then (print "c_find_fv called on\n";
-		       if (!debug_full)
-			   then Ppnil.pp_con con
-		       else (); print "\n\n")
-	     else ();
-		 case con of
-		 Prim_c (pc,clist) => foldl (fn (c,f)=> join_free(f,(c_find_fv state c))) empty_frees clist
+
+	and c_find_fv (state : state, frees : frees) con : frees =
+	    let 
+(*
+		val _ = (print "c_find_fv called with frees\n";
+			 show_free frees; print "\n")
+*)
+		val res = c_find_fv' (state,frees) con 
+		handle e => 
+		  (print "c_find_fv called on\n";
+		   Ppnil.pp_con con; print "\n and with ctxt = ";
+		   show_state state; print "\n\n"; raise e)
+	    in res
+	    end	 
+
+	and k_find_fv (state : state,frees : frees) kind : frees =
+	    let val res = k_find_fv' (state,frees) kind 
+		handle e => 
+		  (print "k_find_fv called on\n";
+		   Ppnil.pp_kind kind; print "\n and with ctxt = ";
+		   show_state state; print "\n\n"; raise e)
+	    in res
+	    end	 
+
+
+	
+	and c_find_fv' (state : state, frees : frees) con : frees =
+	    (case con of
+		 Prim_c (pc,clist) => foldl (fn (c,f)=> (c_find_fv (state,f) c)) frees clist
 	       | Mu_c (_,vcset,v) =>
 		     let val vclist = set2list vcset
-			 val state' = add_boundcvars(state,map (fn (v,_) => (v,Word_k Runtime)) vclist)
-		     in  foldl (fn ((v,c),f) => join_free(f,c_find_fv state' c))
-			 empty_frees (set2list vcset)
+			 (* we need to alpha-vary since reductions may lead to duplication
+			    of bound variables despite A-normal linearization *)
+			 val (vclist,v) = alpha_mu (fn v => is_boundcvar(state,v)) (vclist,v)
+			 val state' = add_boundcvars'(state,map (fn (v,_) => (v,Word_k Runtime)) vclist)
+		     in  foldl (fn ((v,c),f) => c_find_fv (state',f) c) frees (set2list vcset)
 		     end
 	       (* the types of some primitives like integer equality are Code arrow *)
 	       | AllArrow_c((ExternCode | Code | Open | Closure),_,vklist,clist,numfloats,c) =>
-		     let fun vkfolder((v,k),(f,s)) = (join_free(f,k_find_fv s k),
+		     let fun vkfolder((v,k),(f,s)) = (k_find_fv (s,f) k,
 						      add_boundcvar(s,v,k))
-			 fun cfolder (c,(f,s)) = (join_free(f, (c_find_fv s c)),s)
-			 val fs = foldl vkfolder (empty_frees,state) vklist
+			 fun cfolder (c,(f,s)) = (c_find_fv (s,f) c,s)
+			 val fs = foldl vkfolder (frees,state) vklist
 			 val (f,s) = foldl cfolder fs clist
-		     in  join_free(f, c_find_fv s c)
+		     in  c_find_fv (s,f) c
 		     end
 	       | Var_c v => 
-		     (case (cvar_isfree(state,v)) of
-			  NONE => empty_frees
-			| SOME k => 
-			      let val free = free_cvar(state,v,k)
-			      in  (case cvar_getkind(state,v) of
-				       NONE => free  (* classifier before freevar! *)
-				     | SOME k => join_free(k_find_fv state k,free))
+		     (case (cvar_isfree(state,frees,v)) of
+			  NONE => frees
+			| SOME (k,r) => 
+			      let val f = remove_free(state,
+						       case !r of
+							   SOME f => f
+							 | NONE => let val f = k_find_fv (state,empty_frees) k
+								       val _ = r := SOME f
+								   in  f
+								   end)
+(* xxxxxxxxxxxx let's not addd classifiers and be not closed WRT types *)
+(*				  val frees = join_free(frees,f) *)
+				  (* add classifier first *)
+			      in  free_cvar_add(frees,v,k)
 			      end)
 	       | Typecase_c {arg, arms, default, kind} => 
-		     let val f = c_find_fv state arg
-			 val f = join_free(f,c_find_fv state default)
-			 val f = join_free(f,k_find_fv state kind)
+		     let val f = c_find_fv (state,frees) arg
+			 val f = c_find_fv (state,f) default
+			 val f = k_find_fv (state,f) kind
 			 fun armfolder ((pc,vklist,c),f) = 
-			     let fun folder((v,k),(f,s)) = (join_free(f,k_find_fv s k),
+			     let fun folder((v,k),(f,s)) = (k_find_fv (s,f) k,
 							    add_boundcvar(s,v,k))
 				 val (f,_) = foldl folder (f,state) vklist
-			     in join_free(f,c_find_fv state c)
+			     in  c_find_fv (state,f) c
 			     end
 		     in  foldl armfolder f arms
 		     end
 	       | Let_c(_,cbnds,c) => 
 		     let 
 			 fun cb_folder (Con_cb(v,k,c),(f,s)) =
-			     let val f' = c_find_fv s c
-				 val f' = join_free(f', k_find_fv s k)
-			     in (join_free(f, f'), add_boundcvar(s,v,k))
+			     let val f' = c_find_fv (s,f) c
+				 val (k,f') = if (!use_kind_at_bind)
+						      then (NilStatic.kind_reduce(get_ctxt s, k),
+							    k_find_fv (s,f') k)
+						  else let val (_,k) = 
+						      (Stats.subtimer("toclosure_convalid",
+						      NilStatic.con_valid)) (get_ctxt s, c)
+							  val _ = case k of
+							      Arrow_k((Code | Closure), _,_) =>
+								  (print "Got arrow_k(code/closure) from c = ";
+								   Ppnil.pp_con c; print "\nk = \n";
+								   Ppnil.pp_kind k; print "\n\n")
+							    | _ => ()
+						       in  (k, Stats.subtimer("toclosure_kfind",
+									    k_find_fv (s,f')) k)
+						       end
+				 val k' = NilStatic.kind_reduce(get_ctxt s, k)
+(*
+				 val _ = (print "TOCLOSURE: c = \n ";
+					  Ppnil.pp_con c; print "\n\nk = ";
+					  Ppnil.pp_kind k; print "\n\n k' = \n";
+					  Ppnil.pp_kind k'; print "\n\n\n")
+*)
+			     in (f', add_boundcvar'(s,v,k))
 			     end
-			   | cb_folder (Code_cb(v,vklist,c,k), _) = error "code_cb during closure conversion"
+			   | cb_folder (Code_cb(v,vklist,c,k), (f,s)) = (f,s)
 			   | cb_folder (Open_cb(v,vklist,c,k), (f,s)) =
 			     let val _ = add_fun v
 				 fun folder((v,k),(f,s)) = 
-				     (join_free(f,k_find_fv s k),
+				     (k_find_fv (s,f) k,
 				      add_boundcvar(s,v,k))
 				 val ls = copy_state s v
-				 val (f,ls) = foldl folder (empty_frees,ls) vklist
-				 val f' = c_find_fv ls c
-				 val f'' = k_find_fv ls k
-				 val f''' = join_free(join_free(f, f'), f'')
-				 val _ = add_frees(v,f''')
-			     in  (remove_free(s,f'''), add_boundcvar(s,v,k))
+				 val (f,ls) = foldl folder (f,ls) vklist
+				 val f' = k_find_fv (ls,f) k
+				 val f'' = c_find_fv (ls,f') c
+				 val _ = add_frees(v,f'')
+				 val ak = Arrow_k(Open,vklist,k)
+			     in  (remove_free(s,f''), add_boundcvar(s,v,ak))
 			     end
-			 val (f,s) = foldl cb_folder (empty_frees,state) cbnds
-			 val f' = remove_free(s,c_find_fv s c)
-		     in  join_free(f, f')
+			 val (f,s) = foldl cb_folder (frees,state) cbnds
+			 val f' = c_find_fv (s,f) c
+(*			 val f' = remove_free(s,f') *)
+		     in  f'
 		     end
-	       | Crecord_c lclist => let val flist = map (fn (_,c) => c_find_fv state c) lclist
-				     in foldl join_free empty_frees flist
-				     end
-	       | Proj_c (c,l) => c_find_fv state c
-	       | Closure_c _ => error "can't have closure_c during closure-conversion"
-	       | App_c(c,clist) => let val f = c_find_fv state c
-				   in foldl (fn (c,f) => join_free(f,c_find_fv state c))
-				       f clist
+	       | Crecord_c lclist => foldl (fn ((_,c),f) => c_find_fv (state,f) c) frees lclist
+	       | Proj_c (c,l) => c_find_fv (state,frees) c
+	       | Closure_c (c1,c2) => c_find_fv (state, c_find_fv (state,frees) c1) c2
+	       | App_c(c,clist) => let val f = c_find_fv (state,frees) c
+				   in foldl (fn (c,f) => c_find_fv (state,f) c) f clist
 				   end
-	       | Annotate_c (_,c) => c_find_fv state c)
+	       | Annotate_c (_,c) => c_find_fv (state,frees) c)
 		 
-	and k_find_fv state kind : frees =
-	    (if (!debug)
-		 then (print "k_find_fv called on\n";
-		       if (!debug_full)
-			   then Ppnil.pp_kind kind
-			       else ();
-		       print "\n\n")
-	     else ();
-	     case kind of
-	    ((Type_k _) | (Word_k _)) => empty_frees
-	  | (Singleton_k (p,k,c)) => (k_find_fv state k; (c_find_fv state c))
+	and k_find_fv' (state,frees) kind : frees =
+	    (case kind of
+	    ((Type_k _) | (Word_k _)) => frees
+	  | (Singleton_k (p,k,c)) => (k_find_fv (state,frees) k; (c_find_fv (state,frees) c))
 	  | (Record_k lv_kind_seq) =>
-		 let fun folder (((l,v),k),(f,s)) = (join_free(f,k_find_fv s k), add_boundcvar(s,v,k))
-		 in  #1(foldsequence folder (empty_frees,state) lv_kind_seq)
+		 let fun folder (((l,v),k),(f,s)) = (k_find_fv (s,f) k, add_boundcvar(s,v,k))
+		 in  #1(foldsequence folder (frees,state) lv_kind_seq)
 		 end
-	  | (Arrow_k (Open,vklist,k)) =>
-		let fun folder ((v,k),s) = (k_find_fv s k; add_boundcvar(s,v,k))
-		    val state' = foldl folder state vklist
-		in  k_find_fv state' k
-		end
-	  | (Arrow_k _) => error "can't have arrow_k(code|closure,...) during closure-conversion") 
-
+	  | (Arrow_k (_,vklist,k)) =>
+		let fun folder ((v,k),(f,s)) = (k_find_fv (s,f) k, add_boundcvar(s,v,k))
+		    val (f,s) = foldl folder (frees,state) vklist
+		in  k_find_fv (s,f) k
+		end)
 
 
 
@@ -742,16 +810,16 @@ struct
    local
        fun close_fun (curfid,nextset) = 
 	   let val callees = get_callee curfid
-(*	       val _ = VarSet.app (fn x => (print "\n    callee_fvs is: "; 
+(* val _ = VarSet.app (fn x => (print "\n    callee_fvs is: "; 
                                    show_free (get_frees x); print "\n")) callees *)
-(*	       val callee_fvs = VarSet.foldl (fn (f,fv) => join_free(get_frees f, fv)) empty_frees callees *)
+(* val callee_fvs = VarSet.foldl 
+ (fn (f,fv) => join_free(get_frees f, fv)) empty_frees callees *)
 	       val callee_fvs = foldl (fn ((fid,s),fv) => let val f = get_frees fid
 							       val f = remove_free(s,f)
 							   in  join_free(f, fv)
 							   end) empty_frees callees 
-	       val {freeevars=fe,freecvars=fc} = callee_fvs
-(*	       val _ = (print "\n\nfinal callee_fvs is: "; show_free callee_fvs; print "\n") *)
-	       val changed = augment_frees(curfid,fe,fc)
+(* val _ = (print "\n\nfinal callee_fvs is: "; show_free callee_fvs; print "\n") *)
+	       val changed = augment_frees(curfid,callee_fvs)
 	   in if changed
 		  then VarSet.add(nextset,curfid)
 	      else nextset
@@ -785,17 +853,18 @@ struct
 						     show_free(get_frees fid))) (get_fids());
 			      print "\n\n")
 		    else ()
-	    val _ = VarSet.app (fn fid => let val {freeevars,freecvars} = get_frees fid
-					  in  
-					    if !closure_print_free then
-					      (print ("fid = ");
-					       Ppnil.pp_var fid; print "  (#free-cvars , #free-evars) =   ";
-					       print (Int.toString (length freecvars));
-					       print ", ";
-					       print (Int.toString (length freeevars));
-					       print "\n")
-					    else ()
-					  end) (get_fids())
+	    val _ = if !closure_print_free 
+			then VarSet.app 
+			    (fn fid => 
+			     let val {freeevars,freecvars,...} = get_frees fid
+			     in  (print ("fid = ");
+				  Ppnil.pp_var fid; print "  (#free-cvars , #free-evars) =   ";
+				  print (Int.toString (length freecvars));
+				  print ", ";
+				  print (Int.toString (length freeevars));
+				  print "\n")
+			     end) (get_fids())
+		    else ()
        in  ()
        end
    
@@ -826,17 +895,6 @@ struct
 				       [Var_e evar])
 
 
-   local
-       val ebnds = ref ([] : bnd list)
-       val cbnds = ref ([] : conbnd list)
-   in
-       fun reset_bnds() = (ebnds := []; cbnds := [])
-       fun get_bnds() = (!ebnds,!cbnds)
-       fun eadder eb = ((* print "adding ebnd\n";  *)
-			ebnds := (eb :: (!ebnds)))
-       fun cadder cb = ((* print "adding cbnd\n"; Ppnil.pp_conbnd cb; print " end of cbnd\n"; *)
-			cbnds := (cb :: (!cbnds)))
-   end
 
    (* If there is one free variable, then don't bother tupling it up.
       Notice that we must do this consistently at the definition and call sites. 
@@ -847,7 +905,7 @@ struct
       free variables are zero or one in number.
     *)
 
-   fun fun_rewrite lift (v,Function(effect,recur,vklist,vclist,vflist,body,tipe)) = 
+   fun fun_rewrite (v,Function(effect,recur,vklist,vclist,vflist,body,tipe)) = 
        let 
 	   val _ = if (!debug)
 		       then (print "\nfun_rewrite v = "; Ppnil.pp_var v; print "\n")
@@ -857,10 +915,10 @@ struct
 	   (* was kept in reverse order *)
 	   val vk_free = rev vk_free
 	   val vklist = map (fn (v,k) => (v,k_rewrite k)) vklist
-	   val vclist = map (fn (v,c) => (v,c_rewrite lift c)) vclist
+	   val vclist = map (fn (v,c) => (v,c_rewrite c)) vclist
 	   val escape = get_escape v
 	   val vk_free = map (fn (v,k) => (v,k_rewrite k)) vk_free
-	   val vc_free = map (fn (v,c) => (v,c_rewrite lift c)) vc_free
+	   val vc_free = map (fn (v,c) => (v,c_rewrite c)) vc_free
 	   val doopt = ((length vk_free) < 2) andalso ((length vc_free) < 2)
 	   val vk_free = (case (doopt,vk_free) of
 			     (true,[]) => [(Name.fresh_named_var "nofreecvar", Record_k[])]
@@ -913,14 +971,14 @@ struct
 	   val vklist_unpack = vklist_unpack_almost @ [(cenv_var,cenv_kind)]
 	   val vclist_unpack_almost = vclist @ [(venv_var,venv_type)]
 	   val vclist_unpack = map (fn (v,c) => (v,Subst.substConInCon subst c)) vclist_unpack_almost
-	   val codebody_tipe = c_rewrite lift tipe
+	   val codebody_tipe = c_rewrite tipe
 	   val unpackbody_tipe = Subst.substConInCon subst codebody_tipe
 	   val closure_tipe = AllArrow_c(Closure,effect,
 					 vklist,map #2 vclist,
 					 TilWord32.fromInt(length vflist),codebody_tipe)
 	   val code_fun = Function(effect,recur,
 				   vklist_code,vclist_code,vflist,
-				   e_rewrite lift body, codebody_tipe)
+				   e_rewrite body, codebody_tipe)
 	   (*val vc_free_types = map (Subst.substConInCon subst) vc_free_types  (*Maybe??*)*)
 	   val unpack_body = 
 	       App_e(Code,Var_e code_var,
@@ -955,7 +1013,9 @@ struct
 	  else (false,[(code_var,code_fun)],[])
        end
 
-   and bnd_rewrite' lift (bound,bnd) : bnd list changeopt = 
+
+
+   and bnd_rewrite bnd : bnd list =
        let
 	   fun funthing_helper rewriter var_thing_set =
 	       let 
@@ -968,60 +1028,73 @@ struct
 		       (case (List.concat(map #3 pfun_close)) of
 			    [] => []
 			  | close_list => [Fixclosure_b(is_recur,list2set close_list)])
-	       in  if lift
-		       then ((* print "calling adder in bnd_rewrite'\n"; *)
-			     eadder pfun_bnd;
-			     closure_bnd_list)
-		   else pfun_bnd :: closure_bnd_list
+	       in  pfun_bnd :: closure_bnd_list
 	       end
-       in CHANGE_NORECURSE
-	   (case bnd of
-		(Con_b(v,k,c)) => [Con_b(v,k_rewrite k, c_rewrite lift c)]
-	      | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite lift c, e_rewrite lift e)]
+       in (case bnd of
+		(Con_b(v,k,c)) => if (!use_kind_at_bind)
+				      then [Con_b(v,k_rewrite k, c_rewrite c)]
+				  else let val kk = NilUtil.kill_singleton k
+					   val k = (k_rewrite kk)
+					       handle e => 
+						   (print "k_rewrite failed on k = !\n";
+						    Ppnil.pp_kind k; print "\n";
+						    print "k_rewrite failed on singletonless = !\n";
+						    Ppnil.pp_kind kk; print "\n";
+						    raise e)
+				       in  [Con_b(v,k, c_rewrite c)]
+				       end
+	      | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite c, e_rewrite e)]
 	      | (Fixclosure_b _) => error "there can't be closures while closure-converting"
 	      | (Fixcode_b _) => error "there can't be codes while closure-converting"
-	      | (Fixopen_b var_fun_set) => funthing_helper (fun_rewrite lift) var_fun_set)
+	      | (Fixopen_b var_fun_set) => funthing_helper fun_rewrite var_fun_set)
        end
 
-   and make_handlers lift = 
-	    (e_rewrite' lift, 
-	     bnd_rewrite' lift,
-	     c_rewrite' lift,
-	     fn (_,cb : conbnd) => NOCHANGE,
-	     k_rewrite')
 
 
-   and bnd_rewrite lift (arg_bnd : bnd) : bnd list =
-       let val handlers = make_handlers lift
-	   val bnds = NilUtil.bnd_rewrite handlers arg_bnd
-       in  bnds
-       end
-
-   and e_rewrite lift (arg_exp : exp) : exp  = 
-       let val handlers = make_handlers lift
-	   val e = NilUtil.exp_rewrite handlers arg_exp
-       in  e
-       end
-
-   and e_rewrite' lift (bound,arg_exp) : exp changeopt =
+   and e_rewrite arg_exp : exp =
+       let fun armfun_rewrite (Function(ef,re,vklist,vclist,vflist,e,c)) =
+	   Function(ef,re,map (fn (v,k) => (v, k_rewrite k)) vklist,
+		    map (fn (v,c) => (v, c_rewrite c)) vclist,
+		    vflist, e_rewrite e, c_rewrite c)
+       in
        (case arg_exp of
-	    Var_e v => NOCHANGE (* closures retain their name *)
-	  | Const_e v => NOCHANGE
-	  | Prim_e(p,clist,elist) => NOCHANGE
-	  | Switch_e switch => NOCHANGE
-	  | Let_e(letsort,bnds,e) => NOCHANGE
+	    Var_e v => arg_exp (* closures retain their name *)
+	  | Const_e v => arg_exp
+	  | Prim_e(p,clist,elist) => Prim_e(p,map c_rewrite clist, map e_rewrite elist)
+	  | Switch_e switch => 
+		Switch_e(case switch of 
+		     Intsw_e{info,arg,arms,default} => 
+			 Intsw_e{info=info, arg=e_rewrite arg,
+				 arms=map (fn (w,f) => (w,armfun_rewrite f)) arms,
+				 default=Util.mapopt e_rewrite default}
+		   | Sumsw_e{info=(w,clist),arg,arms,default} => 
+			 Sumsw_e{info=(w,map c_rewrite clist), arg=e_rewrite arg,
+				 arms=map (fn (w,f) => (w,armfun_rewrite f)) arms,
+				 default=Util.mapopt e_rewrite default}
+		   | Exncase_e{info=info,arg,arms,default} => 
+			 Exncase_e{info=info, arg=e_rewrite arg,
+				 arms=map (fn (e,f) => (e_rewrite e,armfun_rewrite f)) arms,
+				 default=Util.mapopt e_rewrite default}
+		   | Typecase_e{info=info,arg,arms,default} => 
+			 Typecase_e{info=info, arg=c_rewrite arg,
+				 arms=map (fn (pc,f) => (pc,armfun_rewrite f)) arms,
+				 default=Util.mapopt e_rewrite default})
+			 
+	  | Let_e(letsort,bnds,e) => let val bnds_list = map bnd_rewrite bnds
+				     in Let_e(letsort, List.concat bnds_list, e_rewrite e)
+				     end
 	  | App_e (Closure, _,_,_,_) => error "App_e(Code|Closure,...) during closure conversion"
 	  | App_e (ar as (ExternCode | Code), e, clist, elist, eflist) => 
-		let val clist' = map (c_rewrite lift) clist
-		    val elist' = map (e_rewrite lift) elist
-		    val eflist' = map (e_rewrite lift) eflist
-		    val e' = e_rewrite lift e
-		in  CHANGE_NORECURSE(App_e(ar, e', clist', elist', eflist'))
+		let val clist' = map c_rewrite  clist
+		    val elist' = map e_rewrite  elist
+		    val eflist' = map e_rewrite eflist
+		    val e' = e_rewrite e
+		in  App_e(ar, e', clist', elist', eflist')
 		end
 	  | App_e (Open, e, clist, elist, eflist) => 
-		let val clist' = map (c_rewrite lift) clist
-		    val elist' = map (e_rewrite lift) elist
-		    val eflist' = map (e_rewrite lift) eflist
+		let val clist' = map c_rewrite  clist
+		    val elist' = map e_rewrite  elist
+		    val eflist' = map e_rewrite eflist
 		    fun docall (cv,{freeevars=vc_free, freecvars=vk_free,...} : frees) = 
 			let val vk_free = rev vk_free
 			    val doopt = ((length vk_free) < 2) andalso ((length vc_free) < 2)
@@ -1033,9 +1106,8 @@ struct
 					     | _ => map (fn (v,_) => Var_e v) vc_free)
 			in App_e(Code, Var_e cv, clist' @ clist'', elist' @ elist'', eflist')
 			end
-		    fun default() = App_e(Closure,e_rewrite lift e, clist', elist', eflist')
-		in CHANGE_NORECURSE
-		    (case e of
+		    fun default() = App_e(Closure,e_rewrite e, clist', elist', eflist')
+		in  (case e of
 			 Var_e v => if (is_fid v)
 					then let val {code_var,...} = get_static v
 					     in  docall(code_var,get_frees v)
@@ -1043,11 +1115,16 @@ struct
 				    else default()
 		       | _ => default())
 		end
-	  | Raise_e (e,c) => NOCHANGE
-	  | Handle_e _ => NOCHANGE)
+	  | Raise_e (e,c) => Raise_e(e_rewrite e, c_rewrite c)
+	  | Handle_e (e,f) => Handle_e(e_rewrite e, armfun_rewrite f))
+       end
 
-   and cbnd_rewrite lift (Con_cb(v,k,c)) = [Con_cb(v,k_rewrite k, c_rewrite lift c)]
-     | cbnd_rewrite lift (Open_cb(v,vklist,c,k)) = 
+   and cbnd_rewrite (Con_cb(v,k,c)) : conbnd list = 
+           if (!use_kind_at_bind)
+	       then [Con_cb(v,k_rewrite k, c_rewrite c)]
+	   else [Con_cb(v,k_rewrite(NilUtil.kill_singleton k),
+			c_rewrite c)]
+     | cbnd_rewrite (Open_cb(v,vklist,c,k)) = 
        let val _ = if (!debug)
 		       then (print "cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
 		   else ()
@@ -1066,21 +1143,20 @@ struct
 	   val cbnds = Listops.mapcount get_cbnd vk_free
 	   val vklist' = vklist @ [(cfv_var, vk_free_kind)]
 	   val code_cb = Code_cb(code_var, vklist',
-				letc(cbnds,(c_rewrite lift c)), k)
+				letc(cbnds,(c_rewrite c)), k)
 	   val con_env = con_tuple_inject(map (fn (v,k) => Var_c v) vk_free)
 	   val closure_cb = Con_cb(v,Arrow_k(Closure,vklist,k),
 				   Closure_c (Var_c code_var, con_env))
-       in  if lift
-	       then (cadder code_cb; [closure_cb])
-	   else [code_cb, closure_cb]
+       in  [code_cb, closure_cb]
        end			
-     | cbnd_rewrite _ (Code_cb _) = error "found Code_cb during closure-conversion"
+     | cbnd_rewrite (Code_cb _) = error "found Code_cb during closure-conversion"
 
-   and c_rewrite' lift (bound, arg_con) : con changeopt = 
+   and c_rewrite arg_con : con = 
        (case arg_con of
-	    Prim_c (primcon,clist) => NOCHANGE
-	  | Mu_c (_,vc_set,v) =>  NOCHANGE
-	  | Var_c v => NOCHANGE
+	    Prim_c (primcon,clist) => Prim_c(primcon, map c_rewrite clist)
+	  | Mu_c (ir,vc_set,v) => Mu_c(ir,Util.list2set 
+					(map (fn (v,c) => (v,c_rewrite c)) (Util.set2list vc_set)), v)
+	  | Var_c v => arg_con
 	  | AllArrow_c (ar as (Open | ExternCode | Code),effect,vklist,clist,numfloats,c) => 
 		let val vklist' = map (fn(v,k) => (v,k_rewrite k)) vklist
 		    val ar' = (case ar of
@@ -1088,156 +1164,85 @@ struct
 				 | Code => Code
 				 | ExternCode => ExternCode
 				 | Closure => error "control can't reach here")
-		in  CHANGE_NORECURSE(AllArrow_c(ar',effect,vklist',
-						map (c_rewrite lift) clist,
-						numfloats,c_rewrite lift c))
+		in  AllArrow_c(ar',effect,vklist',
+			       map c_rewrite clist,
+			       numfloats,c_rewrite c)
 		end
-	  | AllArrow_c (Closure,_,_,_,_,_) => error "AllArrow_c(Closure,...) during closure-conversion"
+	  | AllArrow_c (Closure,_,_,_,_,_) => error ("AllArrow_c(Closure,...) " ^ 
+						     "during closure-conversion")
 	  | Let_c (letsort,cbnds,c) => 
-		let val cbnds' = List.concat(map (cbnd_rewrite lift) cbnds)
-		    val c = c_rewrite lift c
-		in  CHANGE_NORECURSE(case (c,cbnds') of
-					 (_,[]) => c
-				       | (Var_c v, [Con_cb(v',_,c')]) => if (eq_var(v,v'))
-									    then c'
-									else Let_c(letsort,cbnds',c)
-				       | _ => Let_c(letsort,cbnds',c))
+		let val cbnds' = List.concat(map cbnd_rewrite cbnds)
+		    val c = c_rewrite c
+		in  (case (c,cbnds') of
+			 (_,[]) => c
+		       | (Var_c v, [Con_cb(v',_,c')]) => if (eq_var(v,v'))
+							     then c'
+							 else Let_c(letsort,cbnds',c)
+		       | _ => Let_c(letsort,cbnds',c))
 		end
-	  | Typecase_c {arg,arms,default,kind} => NOCHANGE
-	  | Crecord_c lclist => NOCHANGE
-	  | Proj_c (c,l) => NOCHANGE
+	  | Typecase_c {arg,arms,default,kind} => 
+		Typecase_c{arg = c_rewrite arg,
+			   arms = map (fn (pc,vklist,c) => (pc,map (fn (v,k) => (v,k_rewrite k)) vklist,
+							    c_rewrite c)) arms,
+			   default = c_rewrite default,
+			   kind = k_rewrite kind}
+	  | Crecord_c lclist => Crecord_c(map (fn (l,c) => (l,c_rewrite c)) lclist)
+	  | Proj_c (c,l) => Proj_c(c_rewrite c, l)
 	  | Closure_c (c1,c2) => error "should not encounter Closure_c during closure-conversion"
-	  | App_c (c,clist) => NOCHANGE
-	  | Annotate_c (annot,c) => NOCHANGE)
+	  | App_c (c,clist) => App_c(c_rewrite c, map c_rewrite clist)
+	  | Annotate_c (annot,c) => Annotate_c(annot,c_rewrite c))
 
-   and k_rewrite arg_kind : kind = 
-       let val handlers = make_handlers(false)
-	   val k = NilUtil.kind_rewrite handlers arg_kind
-(*
-	       val _ = (print "k_rewrite called with:\n";
-			Ppnil.pp_kind arg_kind; print "\n";
-			print "returning with:\n";
-			Ppnil.pp_kind k; print "\n\n")
-*)
-       in  k
-       end
 
-   and c_rewrite lift arg_con : con =
-       let val handlers = make_handlers lift
-	   val c = NilUtil.con_rewrite handlers arg_con
-       in  c
-       end
 
-   and k_rewrite' (bound,arg_kind) : kind changeopt = 
-       (
-	(* print "***k_rewrite' called with:\n";
-	 Ppnil.pp_kind arg_kind; print "\n\n"; *)
-case arg_kind of 
-	    ((Type_k _) | (Word_k _) | 
-	     (Singleton_k _) | (Record_k _)) => NOCHANGE
+
+  and k_rewrite arg_kind : kind =
+       (case arg_kind of 
+	    ((Type_k _) | (Word_k _)) => arg_kind
+	  | (Singleton_k (p,k,c)) =>  Singleton_k (p,k_rewrite k, c_rewrite c)
+	  | (Record_k lvkseq) => let val lvklist = Util.sequence2list lvkseq
+				     val lvklist = map (fn ((l,v),k) => ((l,v),k_rewrite k)) lvklist
+				 in  Record_k(Util.list2sequence lvklist)
+				 end
 	  | Arrow_k (Open,vklist,k) => 
 		let val vklist' = map (fn (v,k) => (v,k_rewrite k)) vklist
 		    val k' = Arrow_k(Closure, vklist', k_rewrite k)
-		in CHANGE_NORECURSE k'
+		in  k'
 		end
-	  | Arrow_k _ => error "cannot encounter arrow_k(Code/Closure,...) during closure-conversion")
+	  | Arrow_k _ => error ("cannot encounter arrow_k(Code/Closure,...) " ^ 
+				"during closure-conversion"))
 
-(*
-   fun close_exp arg_exp = 
-       let val _ = reset_table []
-	   val top_fid = fresh_named_var "top_fid"
-	   val state = initial_state top_fid
-	   val {freeevars,freecvars,...} = e_find_fv state arg_exp
-	   val _ = if (!debug)
-		       then (print "Done with e_find_fv\n";
-			     print "free is empty: ";
-			     print (Bool.toString (VarMap.numItems freeevars = 0
-						   andalso VarMap.numItems freecvars = 0));
-			     print "\n")
-		   else ()
-	   val _ = close_funs(get_fids())
-	   val _ = if (!debug)
-		       then print "Done with close_funs\n"
-		   else ()
-	   val result = e_rewrite lift arg_exp
-       in  result
-       end	   
-*)
-   fun close_con' state arg_con = 
-       let 
-	   val {freeevars,freecvars,...} = c_find_fv state arg_con
-	   val _ = if (!debug)
-		       then (print "Done with c_find_fv\n";
-			     print "free is empty: ";
-			     print (Bool.toString (length freeevars = 0
-						   andalso length freecvars = 0));
-			     print "\n")
-		   else ()
-	   val _ = close_funs(get_fids())
-	   val _ = if (!debug)
-		       then print "con_close': Done with close_funs\n"
-		   else ()
-	   val _ = reset_bnds()
-	   val result = c_rewrite true arg_con
-	   val (bnds,cbnds) = get_bnds()
-       in  (case (bnds,cbnds) of
-		([],cbnds) => letc(rev cbnds, result)
-	      | _ => error "c_rewrite has bnds")
-       end	   
 
-   fun close_kind' state arg_kind = 
-       let 
-	   val {freeevars,freecvars,...} = k_find_fv state arg_kind
-	   val _ = if (!debug)
-		       then 
-			   (print "Done with k_find_fv\n";
-			   print "free is empty: ";
-			   print (Bool.toString (length freeevars = 0
-						 andalso length freecvars = 0));
-			   print "\n")
-		   else ()
-	   val _ = close_funs(get_fids())
-	   val _ = if (!debug)
-		       then print "close_kind': Done with close_funs\n"
-		   else ()
-	   val _ = reset_bnds()
-	   val result = k_rewrite arg_kind
-       in  result
-       end	   
 
-   fun close_con con = 
-       let val _ = reset_table []
-       in close_con' (initial_state (fresh_named_var "top_fid")) con
-       end 
-   fun close_kind kind = 
-       let val _ = reset_table []
-       in  close_kind' (initial_state (fresh_named_var "top_fid")) kind 
-       end
+
    fun close_mod (MODULE{bnds, imports, exports}) = 
        let val _ = reset_table []
 	   val top_fid = fresh_named_var "top_fid"
 	   val state = initial_state top_fid
-	   fun import_mapper (ImportValue(l,v,c),(imports,state)) = 
-	       let 
-		   val c' = close_con' state c
-		   val state = add_gboundevar(state,v)
-	       in   ((ImportValue(l,v,c'))::imports,state)
+
+	   (* Scan module for free variables *)
+	   fun import_folder (ImportValue(l,v,c),state) = 
+	       let val f = c_find_fv (state,empty_frees) c
+	       in  add_gboundevar(state,v)
 	       end
-	     | import_mapper (ImportType(l,v,k),(imports,state)) = 
-	       let val k' = close_kind' state k
-		   val state = add_gboundcvar(state,v)
-	       in  ((ImportType(l,v,k'))::imports,state)
+	     | import_folder (ImportType(l,v,k),state) = 
+	       let val f = k_find_fv (state,empty_frees) k
+	       in  add_gboundcvar(state,v,k)
 	       end
-	   val (rev_imports,state) = foldl import_mapper ([],state) imports
-	   val imports = rev rev_imports
-	   val _ = chat "Closure conversion: Computed imports\n"
-	   fun export_mapper (ExportValue(l,e,c)) = Exp_b(fresh_var(),c,e)
-	     | export_mapper (ExportType(l,c,k)) = Con_b(fresh_var(),k,c)
-	   val export_bnds = map export_mapper exports
-	   val arg_exp = Let_e(Sequential, bnds, 
-			       Let_e(Sequential, export_bnds, true_exp))
-	   val {freeevars,freecvars,...} = e_find_fv state arg_exp
-	   val _ = chat "Closure conversion: Computed free vars of bindings\n"
+	   val state = foldl import_folder state imports
+	   val _ = chat "Closure conversion: Scanned imports\n"
+
+	   val (state,{freeevars,freecvars,...}) = bnds_find_fv (state,empty_frees) bnds
+	   val _ = chat "Closure conversion: Scanned bnds\n"
+
+	   fun export_mapper state (ExportValue(l,e,c)) = (e_find_fv (state, empty_frees) e; 
+							   c_find_fv (state, empty_frees) c)
+	     | export_mapper state (ExportType(l,c,k)) = (c_find_fv (state, empty_frees) c; 
+							  k_find_fv (state, empty_frees) k)
+	   val _ = map (export_mapper state) exports
+	   val _ = chat "Closure conversion: Scanned exports\n"
+
+
+           (* Perform transitive closure computation *)
 	   val _ = if (!debug)
 		       then (print "Done with e_find_fv\n";
 			     print "free is empty: ";
@@ -1252,23 +1257,37 @@ case arg_kind of
 
 	   val _ = chat "Closure conversion: Performed transitive closure of close funs\n"
 
-	   fun folder (bnd,acc) = 
-	       let val _ = reset_bnds()
-		   val bnds = bnd_rewrite (!liftCode) bnd
-		   val (ebnds,cbnds) = get_bnds()
-		   val bnds' = (map cbnd2bnd (rev cbnds)) @ (rev ebnds) @ bnds
-	       in  acc @ bnds'
-	       end
-	   val bnds' = foldl folder [] bnds
 
+	   (* Rewrite module *)
+	   fun import_mapper (ImportValue(l,v,c)) =
+	       let val c = c_rewrite c
+	       in  ImportValue(l,v,c)
+	       end
+	     | import_mapper (ImportType(l,v,k)) =
+	       let val k = k_rewrite k
+	       in  ImportType(l,v,k)
+	       end
+	   val imports' = map import_mapper imports
+	   val _ = chat "Closure conversion: Rewritten imports\n"
+
+
+	   fun folder (bnd,acc) = 
+	       let val bnds = bnd_rewrite bnd
+	       in  acc @ bnds
+	       end
+	   val bnds' = (Stats.subtimer("toclosure_rewrite_bnds",foldl folder [])) bnds
 	   val _ = chat "Closure conversion: Rewritten bindings\n"
 
-	   fun export_rewrite (ExportValue(l,e,c)) = ExportValue(l,e_rewrite false e,c_rewrite false c)
-	     | export_rewrite (ExportType(l,c,k)) = ExportType(l,c_rewrite false c,k_rewrite k)
+	   fun export_rewrite (ExportValue(l,e,c)) = ExportValue(l,e_rewrite e,c_rewrite c)
+	     | export_rewrite (ExportType(l,c,k)) = ExportType(l,c_rewrite c,k_rewrite k)
 	   val exports' = map export_rewrite exports
 	   val _ = chat "Closure conversion: Rewritten exports\n"
-       in  MODULE{bnds = bnds', imports = imports, exports = exports'}
+
+       in  MODULE{bnds = bnds', imports = imports', exports = exports'}
        end	   
 
 
 end
+
+
+

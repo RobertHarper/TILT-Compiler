@@ -179,41 +179,7 @@ struct
 
   val fresh_named_var = Name.fresh_named_var
 
-  fun pull (c,kind) = 
-    (case kind
-       of Type_k p => c
-	| Word_k p => c
-	| Singleton_k (p,k,c2) => c2
-	| Record_k elts => 
-	 let
-	   fun folder (((label,var),kind),subst) = 
-	     let
-	       val kind = Subst.substConInKind subst kind
-	       val con = pull (Proj_c (c,label),kind)
-	       val subst = Subst.add subst (var,con)
-	     in
-	       ((label,con),subst)
-	     end
-	   val (entries,subst) = foldl_acc folder (Subst.empty()) (sequence2list elts)
-	 in
-	   (Crecord_c entries)
-	 end
-	| Arrow_k (openness, formals, return) => 
-	 let
-	   val vars = map (fn (v,_) => (Var_c v)) formals
-	   val c = pull (App_c (c,vars),return)
-	   val var = fresh_named_var "pull_arrow"
-	 in
-	   (*Closures?  *)
-	   case openness
-	     of Open => Let_c (Parallel,[Open_cb (var,formals,c,return)],Var_c var)
-	      | (Code | ExternCode) => Let_c (Parallel,[Code_cb (var,formals,c,return)],Var_c var)
-	      | Closure => let val cenv = (fresh_named_var "pull_closure", Record_k (list2sequence []))
-			   in  Let_c (Parallel,[Code_cb (var,formals @ [cenv] ,c,return)],
-				      Closure_c(Var_c var, Crecord_c []))
-			   end
-	 end)
-	 
+
   fun selfify (con,kind) =
     (case kind 
        of Type_k phase => Singleton_k(phase,Type_k phase,con)
@@ -700,6 +666,20 @@ struct
     in
       List.exists (fn v => eq_var (v,var)) free_vars
     end
+
+  fun kill_singleton k = 
+      let fun remove_single (Singleton_k(_,k,_)) = remove_single k
+	    | remove_single k = CHANGE_RECURSE k
+	  fun kind_handler (_,Singleton_k(_,k,_)) = remove_single k
+	    | kind_handler _ = NOCHANGE
+	  val handlers = STATE{bound = default_bound,
+			       bndhandler = default_bnd_handler,
+			       cbndhandler = default_cbnd_handler,
+			       exphandler = default_exp_handler,
+			       conhandler = default_con_handler,
+			       kindhandler = kind_handler}
+      in  f_kind handlers k
+      end
 
   local
       fun count_handler() = 
@@ -1469,5 +1449,19 @@ struct
   fun get_function_type openness (Function(effect, recur, vklist, vclist, vlist, _, con)) =
       AllArrow_c(openness, effect, vklist, map #2 vclist, 
 		 Word32.fromInt (List.length vlist), con)
+
+  fun alpha_mu is_bound (vclist, var) = 
+      let fun folder((v,_),subst) = if (is_bound v)
+				       then Subst.add subst (v,Var_c(Name.derived_var v))
+				    else subst
+	  val subst = foldl folder (Subst.empty()) vclist
+	  fun substcon c = Subst.substConInCon subst c
+	  fun lookup var = (case (substcon (Var_c var)) of
+				(Var_c v) => v
+			      | _ => error "substcon returned non Var_c")
+      in  if (Subst.is_empty subst)
+	      then (vclist, var)
+	  else (map (fn (v,c) => (lookup v, substcon c)) vclist, lookup var)
+      end
 
 end

@@ -176,8 +176,7 @@ struct
   val is_var_e = NilUtil.is_var_e
 
   val map_annotate = NilUtil.map_annotate
-  val singletonize = NilUtil.singletonize
-  val pull = NilUtil.pull
+(*   val singletonize = NilUtil.singletonize *)
   val get_arrow_return = NilUtil.get_arrow_return
 
   val strip_var = NilUtil.strip_var
@@ -358,7 +357,9 @@ struct
 	  val _ = pop()
       in  res
       end
-  and kind_reduce(D,kind) = kind_valid (D,kind)
+
+  and kind_reduce(D,kind) = kind_normalize D kind
+
   and kind_valid' (D : context, kind : kind) : kind = 
     (case kind 
        of Type_k p => (Type_k p)
@@ -366,11 +367,11 @@ struct
 	| Singleton_k (p,kind,con) => 
 	 let
 	   val (con,kind') = (con_valid (D,con))
-	   val kind = kind_valid (D,kind)
+	   val kind = NilUtil.kill_singleton(kind_valid (D,kind))
 	   val phase = get_phase kind
 	 in
 	   if sub_phase (p,phase) andalso sub_kind' (D,kind',kind) then
-	     (singletonize (kind,con))
+	     (singletonize D (kind,con))
 	   else
 	     (perr_c_k_k (con,kind,kind');
 	      error "Invalid singleton kind" handle e => raise e)
@@ -396,6 +397,7 @@ struct
 	 in
 	   (Arrow_k (openness, formals,return))
 	 end)
+
 
   and con_valid (D : context, constructor : con) : con * kind = 
       let val _ = push_con(constructor,D)
@@ -455,6 +457,27 @@ struct
 		  else 
 		    (error "Vararg has non-word component" handle e => raise e)))
     end
+
+  (* obtain all information from con; kind only gives shape *)
+  and singletonize D (kind,con) = 
+    (case kind 
+       of Type_k phase => Singleton_k(phase,Type_k phase,con)
+	| Word_k phase => Singleton_k(phase,Word_k phase,con)
+	| Singleton_k(_,k,_) => singletonize D (k,con)
+	| Record_k entries => 
+	   Record_k (mapsequence (fn ((l,v),k) => ((l,v),singletonize D
+						   (k,Normalize.beta_conrecord(Proj_c (con,l))))) entries)
+	| Arrow_k (openness,args,return) => 
+	 let
+	   val (D,var_kinds,subst) = bind_kind_list(D,args)
+	   val (formal_vars,_) = ListPair.unzip args
+	   val actuals = List.map Var_c formal_vars
+	   val return = Subst.substConInKind subst return
+	 in
+	   Arrow_k (openness,args,singletonize D (return,Normalize.beta_confun D (App_c (con,actuals))))
+	 end)
+
+
   and con_valid' (D : context, constructor : con) : con * kind = 
     (case constructor 
        of (Prim_c (pcon,args)) =>
@@ -462,7 +485,7 @@ struct
 	   val (pcon,kind,args,kinds) = pcon_valid (D,pcon,args)
 	   val con = (Prim_c (pcon,args))
 	 in
-	     (con,singletonize (kind,con))
+	     (con,singletonize D (kind,con))
 	 end
 	| (Mu_c (is_recur,defs,var)) =>
 	 let
@@ -488,7 +511,7 @@ struct
 	   val (cons,kinds) = unzip (map (curry2 con_valid checkD) cons)
 	   val defs = list2sequence (zip vars cons)
 	   val con = Mu_c (is_recur,defs,var)
-	   val kind = singletonize (Word_k Runtime,con)
+	   val kind = singletonize D (Word_k Runtime,con)
 	 in
 	   if c_all (is_word_kind D) b_perr_k kinds then
 	     (con,kind)
@@ -505,8 +528,7 @@ struct
 	   val (formals,formal_kinds) = 
 	     unzip (map (curry2 con_valid D) formals)
 	   val con = AllArrow_c (openness,effect,tformals,formals,numfloats,body)
-	   val kind = Word_k Runtime
-	   val kind = singletonize (kind,con)
+	   val kind = Singleton_k(Runtime,Word_k Runtime,con)
 	 in
 	   (*ASSERT*)
 	   if (c_all (is_type_or_word_kind D) b_perr_k formal_kinds) andalso 
@@ -540,6 +562,7 @@ struct
 		   else ()
 	   val body = substConInCon subst body
 	   val body_kind = substConInKind subst body_kind
+	   val body_kind = kind_valid(D,body_kind)
 	   val (body,body_kind') = con_valid (D,body)
 	   val return_kind = if !bnds_made_precise then body_kind' else body_kind
 	   val _ = if (sub_kind' (D,body_kind',body_kind)) then ()
@@ -549,7 +572,7 @@ struct
 	   val lambda = (Let_c (sort,[constructor (var,formals,body,return_kind)],Var_c var))
 	   val lambda = eta_confun lambda
 	   val bndkind = Arrow_k(openness,formals,return_kind)
-	   val bndkind = singletonize(bndkind,lambda)
+	   val bndkind = singletonize D (bndkind,lambda)
 	   val lambda = mark_as_checked (lambda,bndkind)
 	 in
 	   if (null rest) andalso (is_var_c con) andalso 
@@ -587,7 +610,7 @@ struct
 		   val con = Closure_c (code,env)
 		   val body_kind = varConKindSubst v env body_kind
 		   val kind = Arrow_k(Closure,first,body_kind)
-		   val kind = singletonize (kind,con)
+		   val kind = singletonize D (kind,con)
 		 in
 		   if sub_kind' (D,env_kind,klast) then
 		     (con,kind)
@@ -610,7 +633,7 @@ struct
 	     val entries = zip labels cons
 	     val con = Crecord_c entries
 	     val con = eta_conrecord D con
-	     val kind = singletonize (Record_k (list2sequence k_entries),con)
+	     val kind = singletonize D (Record_k (list2sequence k_entries),con)
 	   in 
 	     if distinct then
 	       (con,kind)
@@ -645,7 +668,7 @@ struct
 
 	   val con = Proj_c (rvals,label)
 	   val con = beta_conrecord con
-	   val kind = singletonize (kind,con)
+	   val kind = singletonize D (kind,con)
 	   val con = mark_as_checked (con,kind)
 	 in
 	   (con,kind)
@@ -680,7 +703,7 @@ struct
 			   Var_c v => unpull_convar(D,v)
 			 | _ => D)
 	   val con = beta_confun D con
-	   val kind = singletonize (body_kind,con)
+	   val kind = singletonize D (body_kind,con)
 	 in
 	   (con,kind)
 	 end
@@ -710,7 +733,7 @@ struct
 	   val con = Typecase_c {arg=arg,arms=arms,
 				 default=default,kind=given_kind}
 	   val con = beta_typecase D con
-	   val kind = singletonize (given_kind,con)
+	   val kind = singletonize D (given_kind,con)
 	 in
 	   if sub_kind' (D,def_kind,kind) andalso
 	     is_type_or_word_kind D arg_kind then
@@ -1892,6 +1915,7 @@ struct
 	end
 
       fun con_reduce_once (D,c) = Normalize.con_reduce_once D c
+      val get_shape = Normalize.get_shape
       val module_valid = wrap "module_valid" module_valid
 
 end

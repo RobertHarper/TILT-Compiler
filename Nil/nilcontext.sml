@@ -21,7 +21,7 @@ struct
   val mapsequence = Util.mapsequence
   val get_phase = NilUtil.get_phase
   val selfify = NilUtil.selfify    
-  val pull = NilUtil.pull
+
 
   val Var_c = Nil.Var_c
 
@@ -146,11 +146,105 @@ struct
    * Trying to normalize and pull on demand in this will cause a loop.
   *)
 
+  fun pull (c,kind) = 
+    let open Nil NilUtil Name Util
+    in  (case kind
+       of Type_k p => c
+	| Word_k p => c
+	| Singleton_k (p,k,c2) => c2
+	| Record_k elts => 
+	 let
+	   fun folder (((label,var),kind),subst) = 
+	     let
+	       val kind = Subst.substConInKind subst kind
+	       val con = pull (Proj_c (c,label),kind)
+	       val subst = Subst.add subst (var,con)
+	     in
+	       ((label,con),subst)
+	     end
+	   val (entries,subst) = Listops.foldl_acc folder (Subst.empty()) (sequence2list elts)
+	 in
+	   (Crecord_c entries)
+	 end
+	| Arrow_k (openness, formals, return) => 
+	 let
+	   val vars = map (fn (v,_) => (Var_c v)) formals
+	   val c = pull (App_c (c,vars),return)
+	   val var = fresh_named_var "pull_arrow"
+	 in
+	   (*Closures?  *)
+	   case openness
+	     of Open => Let_c (Sequential,[Open_cb (var,formals,c,return)],Var_c var)
+	      | (Code | ExternCode) => Let_c (Sequential,[Code_cb (var,formals,c,return)],Var_c var)
+	      | Closure => let val cenv = (fresh_named_var "pull_closure", Record_k (list2sequence []))
+			   in  Let_c (Sequential,[Code_cb (var,formals @ [cenv] ,c,return)],
+				      Closure_c(Var_c var, Crecord_c []))
+			   end
+	 end)
+    end
+
+  fun pull_normal normalizer D (v,kind) =
+      let open Nil Name Util 
+	  (* by construction, the domain of subst and the FV of c are disjoint;
+	     also, c is a path or application of a path *)
+	  fun pull' (D,subst,c,kind) = 
+	  (case kind of
+	       Type_k p => c 
+	     | Word_k p => c 
+	     | Singleton_k (p,k,c2) => 
+		   if (Subst.is_empty subst)
+		       then c2
+		   else normalizer D (Subst.substConInCon subst c2)
+	     | Record_k elts => 
+		   let
+		       fun folder (((label,var),kind),subst) = 
+			   let val con = pull' (D,subst,Proj_c (c,label),kind)
+			       val subst = Subst.add subst (var,con)
+			   in ((label,con),subst)
+			   end
+		       val (entries,subst) = Listops.foldl_acc folder subst (sequence2list elts)
+		   in  (Crecord_c entries)
+		   end
+	     | Arrow_k (openness, formals, return) => 
+	      let
+		  val return = Subst.substConInKind subst return
+		  val vars = map (fn (v,_) => (Var_c v)) formals
+		  val D = foldl (fn ((v,k),D) => insert_kind normalizer (D,v,k)) D formals
+		  val c = pull' (D,subst,App_c (c,vars),return)
+		  val var = fresh_named_var "pull_arrow"
+	      in  (case openness
+		      of Open => Let_c (Sequential,[Open_cb (var,formals,c,return)],Var_c var)
+		    | (Code | ExternCode) => Let_c (Sequential,[Code_cb (var,formals,c,return)],Var_c var)
+		    | Closure => let val cenv = (fresh_named_var "pull_closure", Record_k (list2sequence []))
+				 in  Let_c (Sequential,[Code_cb (var,formals @ [cenv] ,c,return)],
+					    Closure_c(Var_c var, Crecord_c []))
+				 end)
+	      end)
+      in pull'(D,Subst.empty(),Var_c v,kind)
+      end
+	      
+
+  and insert_kind normalizer (D as {kindmap,...}:context,var,kind) = 
+    (case V.find (kindmap, var)
+       of NONE => 
+	 let
+	   val var_con = Var_c var
+	   val kind = selfify(var_con,kind)
+	   val D' = inject_kind (D,var,var_con,kind)
+(*	   val con = normalizer D' (pull(var_con,kind))  *)
+
+	   val con = pull_normal normalizer D' (var,kind)
+(*	   val con = if substed then normalizer D' con else con *)
+
+	 in
+	   inject_kind(D,var,con,kind)
+	 end
+	| _ => error ("Constructor variable "^(var2string var)^" already in context"))
 
   fun bind_kind normalizer (D:context,var,kind) =
     let
       val _ = if !profile then (nilcontext_kinds_renamed();
-				nilcontext_kinds_bound ()) else ()
+				nilcontext_kinds_bound (); ()) else ()
       val (var',subst) = (case V.find(#kindmap D,var) 
 			    of NONE => (var,Subst.empty())
 			     | SOME _ => 
@@ -174,18 +268,6 @@ struct
 	| NONE => error ("unpull_convar: variable " ^ (Name.var2string var) ^ " not found"))
 
 
-  fun insert_kind normalizer (D as {kindmap,...}:context,var,kind) = 
-    (case V.find (kindmap, var)
-       of NONE => 
-	 let
-	   val var_con = Var_c var
-	   val kind = selfify(var_con,kind)
-	   val D' = inject_kind (D,var,var_con,kind)
-	   val con = normalizer D' (pull(var_con,kind))
-	 in
-	   inject_kind(D,var,con,kind)
-	 end
-	| _ => error ("Constructor variable "^(var2string var)^" already in context"))
 
   fun insert_kind_list normalizer = 
     let 
@@ -239,19 +321,6 @@ struct
       bind_kind_list
     end
 
-  fun c_insert_con (context,var,con,k) = 
-      k (insert_con(context,var,con))
-
-  fun c_insert_kind normalizer (context,var,kind,k) = 
-      k (insert_kind normalizer (context,var,kind))
-
-  fun c_insert_con_list (context,nil,k) = k context
-    | c_insert_con_list (context,(v,c)::cs,k) = 
-      c_insert_con_list(insert_con(context, v, c), cs, k)
-
-  fun c_insert_kind_list normalizer (context,nil,k) = k context
-    | c_insert_kind_list normalizer (context,(v,knd)::cs,k) = 
-      c_insert_kind_list normalizer (insert_kind normalizer (context, v, knd), cs, k)
 
   fun foldli_kind f acc ({kindmap,...} : context) = 
     let
@@ -304,10 +373,11 @@ functor NilContextFn(structure NilContext' : NILCONTEXT'
 struct
   open NilContext'
   val con_norm = Normalize.con_normalize
-  val insert_kind = insert_kind con_norm
+  fun insert_kind (D,v,k) = let val k' = Normalize.kind_normalize D k
+			    in  NilContext'.insert_kind con_norm (D,v,k')
+			    end
   val insert_kind_list = insert_kind_list con_norm
   val bind_kind = bind_kind con_norm
   val bind_kind_list = bind_kind_list con_norm
-  fun c_insert_kind args = NilContext'.c_insert_kind con_norm args
-  fun c_insert_kind_list args = NilContext'.c_insert_kind_list con_norm args
+
 end

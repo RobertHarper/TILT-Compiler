@@ -103,14 +103,6 @@ signature NILCONTEXT' =
       
     val print_cons : context -> unit
 
-    (* CPS interface.  Use is deprecated. *)
-    val c_insert_con : context*var*con*(context->'a) -> 'a
-
-    val c_insert_kind : (context -> con -> con) -> context*var*kind*(context->'a) -> 'a
-
-    val c_insert_con_list : context * (var*con) list * (context -> 'a) -> 'a
-    val c_insert_kind_list : (context -> con -> con) -> context * (var*kind) list * (context -> 'a) -> 'a
-
   end 
 
 
@@ -211,13 +203,5 @@ signature NILCONTEXT =
     val print_kinds : context -> unit
       
     val print_cons : context -> unit
-
-    (* CPS interface.  Use is deprecated. *)
-    val c_insert_con : context*var*con*(context->'a) -> 'a
-
-    val c_insert_kind : context*var*kind*(context->'a) -> 'a
-
-    val c_insert_con_list : context * (var*con) list * (context -> 'a) -> 'a
-    val c_insert_kind_list : context * (var*kind) list * (context -> 'a) -> 'a
 
   end 

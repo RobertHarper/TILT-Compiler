@@ -122,6 +122,7 @@ functor Ppnil(structure ArgNil : NIL
 		       vklist),
 		      Break0 0 5,
 		      String " : ", pp_kind k, String " = ",
+		      Break0 0 5,
 		      pp_con c]]
       | pp_conbnd (Code_cb(v,vklist,c,k)) = 
 	HOVbox[pp_var v, String " = ",
