@@ -73,7 +73,7 @@ structure Array : ARRAY =
 
     fun extract (v, base : int, optLen : int option) = let
 	  val len = length v
-	  fun newVec (n : int) : 'a vector = let
+	  fun newVec (n : int) = let
 		fun tab (~1, l) = unsafe_array2vector(fromList'(n,l))
 		  | tab (i, l) = tab(i-1, (unsafe_sub(v, int32touint32(base+i)))::l)
 		in  tab (n-1, [])
@@ -265,9 +265,12 @@ structure Array : ARRAY =
 
 (*
  * $Log$
-# Revision 1.2  98/03/11  20:08:14  pscheng
-# bug in foldr
+# Revision 1.3  98/05/14  16:38:56  pscheng
+# result types on sme functions were wrong
 # 
+# Revision 1.2  1998/03/11  20:08:14  pscheng
+# bug in foldr
+#
 # Revision 1.1  1998/03/09  19:50:09  pscheng
 # added basis
 #

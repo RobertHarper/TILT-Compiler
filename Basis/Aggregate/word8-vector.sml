@@ -34,7 +34,7 @@ structure Word8Vector : MONO_VECTOR =
     fun tabulate(n,f) = unsafe_array2vector(Array.tabulate(n,f))
 
     fun length (a : vector) : int = uint32toint32(vector_length a)
-    fun sub (a : vector, index :int) : 'a =
+    fun sub (a : vector, index :int) =
 	let val index = int32touint32 index
 	in  if (ugte(index, vector_length a))
 		then raise Subscript
@@ -118,9 +118,12 @@ structure Word8Vector : MONO_VECTOR =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:50:22  pscheng
-# added basis
+# Revision 1.2  98/05/14  16:38:59  pscheng
+# result types on sme functions were wrong
 # 
+# Revision 1.1  1998/03/09  19:50:22  pscheng
+# added basis
+#
  * Revision 1.3  1997/05/29  14:44:30  jhr
  *   SML'97 Basis Library changes (phase 1)
  *

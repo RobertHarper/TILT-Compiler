@@ -62,7 +62,7 @@ structure Word8Array : MONO_ARRAY where type elem = char
           end
 
     fun length (ar : array) : int = uint32toint32(array_length ar)
-    fun sub (a : array, index :int) : 'a =
+    fun sub (a : array, index :int) =
 	let val index = int32touint32 index
 	in  if (ugte(index, array_length a))
 		then raise Subscript
@@ -268,9 +268,12 @@ structure Word8Array : MONO_ARRAY where type elem = char
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:50:21  pscheng
-# added basis
+# Revision 1.2  98/05/14  16:38:58  pscheng
+# result types on sme functions were wrong
 # 
+# Revision 1.1  1998/03/09  19:50:21  pscheng
+# added basis
+#
  * Revision 1.3  1997/05/05  19:59:57  george
  *   Change the term language into the quasi-A-normal form. Added a new round
  *   of lambda contraction before and after type specialization and
