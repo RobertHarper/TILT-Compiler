@@ -441,6 +441,12 @@ Nil Nil/nil
 PPNIL Nil/ppnil.sig
 Ppnil Nil/ppnil
 
+NILERROR Nil/nilerror.sig
+NilError Nil/nilerror
+
+NILREWRITE Nil/rewrite.sig
+NilRewrite Nil/rewrite
+
 NILSUBST Nil/subst.sig
 NilSubst Nil/subst
 
@@ -452,14 +458,8 @@ NilPrimUtilParam Nil/nilprimutilparam
 NILUTIL Nil/nilutil.sig
 NilUtil Nil/nilutil
 
-NILERROR Nil/nilerror.sig
-NilError Nil/nilerror
-
 NILCONTEXT Nil/nilcontext.sig
 NilContext Nil/nilcontext
-
-#NILSTATIC Nil/nilstatic.sig
-#NilStatic Nil/nilstatic
 
 NORMALIZE Nil/normalize.sig
 Normalize Nil/normalize
@@ -467,7 +467,8 @@ Normalize Nil/normalize
 TRACEOPS Nil/traceops.sig
 TraceOps Nil/traceops
 
-
+NILSTATIC Nil/nilstatic.sig
+NilStatic Nil/nilstatic
 
 LINEARIZE Nil/linearize.sig
 Linearize Nil/linearize
