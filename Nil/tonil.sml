@@ -2420,16 +2420,13 @@ end (* local defining splitting context *)
 	    erdecs = erdecs}
        end
 
-   (* Returns a singleton-full (thick) kind and a singleton-less (thick) kind *)
    and xkind context (Il.KIND_TUPLE n) = 
        let val k = makeKindTuple n
        in (k,k,k)
        end
      | xkind context (Il.KIND_ARROW (n,m)) =
-       let val k = Arrow_k (Open, 
-			    [(Name.fresh_var(), 
-			      if n = 1 then Type_k else makeKindTuple n)], 
-			    makeKindTuple m)
+       let val args = map0count (fn _ => (Name.fresh_var(), Type_k)) n
+           val k = Arrow_k (Open, args, makeKindTuple m)
        in  (k, k, k)
        end
      | xkind context (Il.KIND_INLINE (k,c)) = 
