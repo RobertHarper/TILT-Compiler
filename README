@@ -1,81 +1,23 @@
-Conventions:
-(1) All functors are closed except for references to structures in pervasive
-	or those in the Util directory.  We let CM track those for us.
-	This helps to cut down on having too functor parameters.
+This file collects examples demonstrating the use of "load.sml" to run
+the compiler.
 
-========================================================================================
+Set the environment variable TILT_LIBDIR to the root of the ml96
+hierarchy:
 
+	csh% setenv TILT_LIBDIR `pwd`
+	sh$ TILT_LIBDIR=`pwd`; export TILT_LIBDIR
 
-todo:
-	too many things are made PARTIAL right now so that unification works
+Run SML/NJ with "sml"; all of the examples below should be entered at
+the SML/NJ prompt "-".
 
-========================================================================================
-formatter.sig.sml 
-formatter.sml
+use "load.sml";	(* compile TILT and the Load interface with NJ *)
+Load.toExe();	(* arrange for TILT to generate executables *)
+		(* see load.sml for other options *)
+Boot.boot();	(* compile Basis with TILT *)
+Manager.make "mapfile-all";
+		(* compile TILT with TILT *)
+Manager.make "Bench/mapfile-timings";
+		(* compile benchmarks with TILT *)
 
-	These 2 files represent the ForML pretty-printer found in /afs/cs/user/er/pub/.
-Minor modifications were made so that it compiles with SML/NJ 1.09 and so that
-it can handle bailouts with an indication of the nesting.
-These changes are documented at the beginning of formatter.sml.
-
-========================================================================================
-util.sig.sml
-util.sml
-
-	Miscellaneous helper and debugging functions are placed here.
-
-========================================================================================
-il.sig.sml
-il.sml
-
-	Contains the datatype for the IL.
-
-========================================================================================
-ppil.sig.sml
-ppil.sml
-
-	Pretty-printing routines for IL datatypes.
-
-========================================================================================
-ilutil.sig.sml
-ilutil.sml
-
-   Contains helper functions like equality, gensyms, setting type variables, conversions among 
-(symbols, varaibles, labels), special labels(it,mk,km,case), path2(mod,con,exp),
-(ifthenelse , let, and lambda) makers, basic derived types, basic derived expressions,
-type (variable, application) substution, occurs_check.
-
-========================================================================================
-ilstatic.sig.sml
-ilstatic.sml
-
-  Contains the operational versions of static semantics.
-
-========================================================================================
-basis.sig.sml
-basis.sml
-
-   Contains the initial basis to compile against.
-
-========================================================================================
-infixparse.sig.sml
-infixparse.sml
-
-	Performs infix parsing of Ast expressions and Ast patterns.
-Note that Asts are obtainable from the SML/NJ visible compiler.
-
-========================================================================================
-pat.sig.sml
-pat.sml
-	
-	Pattern compiler.
-
-========================================================================================
-toil.sig.sml
-toil.sml
-
-	Actual translation that takes AST to IL.
-
-========================================================================================
-
-	
+A brief introduction to TILT's compilation manager is Doc/tilt.1 (a
+manual page).  More details can be found in Doc/TM.txt.
