@@ -10,6 +10,10 @@ Problem:     mutually recursive datatypes have to have the same arguments in til
 Code:        
 Transcript:  
 Comments:    
+	HS does not support non-uniform datatypes.
+
+	TILT should be rejecting this code, not failing raising an internal error.
+
 Fix:         
 Test: m0082
 Owner: 
