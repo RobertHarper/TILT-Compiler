@@ -1,12 +1,10 @@
-(*$import BinIO TopHelp Int Name Time ListPair Real Listops Paths COMPILER LinkParse Il LinkIl Nil Linknil Rtl Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay Paths Timestamp *)
+(*$import BinIO TopHelp Int Name Time ListPair Real Listops Paths COMPILER LinkParse Il LinkIl Nil Linknil Rtl Linkrtl Linkalpha Linksparc Target FileCache Stats Delay Paths Timestamp *)
 
 structure Compiler :> COMPILER =
 struct
 
     exception Reject of string
     
-    val error = fn x => Util.error "compiler.sml" x
-
     val showWrittenContext = Stats.ff("ShowWrittenContext")
     val writeUnselfContext = Stats.ff("WriteUnselfContext")
     val showImports = Stats.ff("ShowImports")
