@@ -403,11 +403,11 @@ structure IlUtil :> ILUTIL =
 				 NONE => error "f_signat transformed path to non-path with SIGNAT_OF"
 			       | SOME p => SIGNAT_OF p)
 	   | SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE (map (f_sdec state) sdecs)
-	   | SIGNAT_SELF (p, unselfOpt, self) => SIGNAT_SELF(case mod2path (f_mod state (path2mod p)) of
-								 NONE => error "f_signat transformed path to non-path with SIGNAT_OF"
-							       | SOME p => p,
-							     Util.mapopt (f_signat state) unselfOpt,
-							     f_signat state self)
+	   | SIGNAT_SELF (p, unselfOpt, self) => (case mod2path (f_mod state (path2mod p)) of
+						      NONE => error "f_signat transformed path to non-path with SIGNAT_SELF"
+						    | SOME p => SIGNAT_SELF (p,
+									     Util.mapopt (f_signat state) unselfOpt,
+									     f_signat state self))
 	   | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1, 
 							   f_signat state s2, a)))
 
