@@ -6,7 +6,7 @@
 
 (* this should parse as infix 0 x0 l.
    See the Definition, page 6.
-   But many parser treat it as a hexadecimal number
+   But many parsers treat it as a hexadecimal number
    and compile a completely different program...
    *)
 local 
@@ -24,6 +24,7 @@ end
 (* ditto with infixr. *)
 local
     infixr 0x0 l
+
     val op x0 = 0
     fun f _ _ = 2
     fun f x0 0 = 1
