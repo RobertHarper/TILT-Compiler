@@ -1273,7 +1273,7 @@ struct
 
      | xexp context (Il.LET (bnds, il_exp)) = 
        let
-	   val (context', bnds', valuable) = xbnds context bnds
+	   val (context', bnds', valuable) = xbnds context true bnds
 	   val (exp, con, valuable') = xexp context' il_exp
        in
 	   (Let_e (Sequential, flattenCatlist bnds', exp), 
@@ -1508,78 +1508,74 @@ struct
 	    valuable andalso valuable')
        end
 
-   and xbnds context [] = (context, LIST nil, true)
-     | xbnds context (il_bnd :: rest) = 
+
+
+   and xbnds context _ [] = (context, LIST nil, true)
+     | xbnds context optimize_fun (Il.BND_EXP(var,il_exp) :: rest) =
+       let 
+	   val il_con = Ilstatic.GetExpCon (HILctx_of context, il_exp)
+           val il_dec = Il.DEC_EXP(var, il_con)
+	   val (exp, con, valuable) = xexp context il_exp
+
+           val context' = 
+	       update_HILctx
+	       (update_NILctx(context,
+			      Nilcontext.insert_con(NILctx_of context, var, con)),
+		Ilcontext.add_context_exp'(HILctx_of context, var, il_con))
+
+	   val (rest_context, rest_bnds, rest_valuable) = 
+	       xbnds context' optimize_fun rest
+       in
+	   (rest_context,
+	    APP[LIST [Exp_b(var, con, exp)], rest_bnds],
+	    valuable andalso rest_valuable)
+       end
+
+     | xbnds context optimize_fun (Il.BND_CON(var,il_con) :: rest) =
        let
-	   val (bnds, il_dec, valuable, vmap, expdecs, condecs) = 
-	       (case il_bnd of
-		    (Il.BND_EXP(var, il_exp)) => 
-			let 
-			    val il_con = Ilstatic.GetExpCon (HILctx_of context, il_exp)
-			    val (exp, con, valuable) = xexp context il_exp
-			in
-			    (LIST [Exp_b(var, con, exp)], 
-			     Il.DEC_EXP(var, il_con),
-			     valuable,
-			     vmap_of context,
-			     [(var,con)],
-			     [])
-			end
+	   val il_knd = Ilstatic.GetConKind (HILctx_of context, il_con) 
+	   val (con, knd) = xcon context il_con
 
-		  | (Il.BND_MOD(var, il_module)) => 
-			let
-			    val (var_c, var_r, vmap) = splitVar (var, vmap_of context)
-			    val {ebnd_cat, cbnd_cat, il_signat, valuable,
-				 knd_c, type_r,...} = 
-				xmod context (il_module, SOME (var, var_c, var_r))
- 			in
-			   (APP [LIST (map Con_b (flattenCatlist cbnd_cat)),
-				 ebnd_cat],
-			    Ilstatic.SelfifyDec (Il.DEC_MOD(var, il_signat)),
-			    valuable,
-			    vmap,
-			    [(var_r, type_r)],
-			    [(var_c, knd_c)])
-			end
+           val context' = 
+	       update_HILctx
+	       (update_NILctx(context,
+			      Nilcontext.insert_con(NILctx_of context, var, con)),
+		Ilcontext.add_context_con'(HILctx_of context, var, il_knd, SOME il_con))
 
-		  | (Il.BND_CON(var,il_con)) =>
-			let
-			    val il_knd = Ilstatic.GetConKind (HILctx_of context, il_con) 
-			    val (con, knd) = xcon context il_con
-			in
-			    (LIST [Con_b(var, knd, con)],
-			     Il.DEC_CON(var, il_knd, SOME il_con),
-			     true,
-			     vmap_of context,
-			     [],
-			     [(var, knd)])
-			end)
+	   val (rest_context, rest_bnds, rest_valuable) = 
+	       xbnds context' optimize_fun rest
+       in
+	   (rest_context,
+	    APP [LIST [Con_b(var, knd, con)], rest_bnds],
+	    rest_valuable)
+       end
 
-	   val (decs', bnds'', valuable') =
-	       let
-		   fun cont1 NILctx' =
-		       Nilcontext.c_insert_con_list(NILctx', expdecs, cont2)
+     | xbnds context optimize_fun (Il.BND_MOD(var,il_module) :: rest) =
 
-		   and cont2 NILctx'' =
-		       let 
-			   val context' = 
-			       update_NILctx
-			       (update_vmap
-				(update_HILctx(context,
-					       Ilcontext.add_context_dec 
-					       (HILctx_of context, il_dec)),
-				 vmap),
-				NILctx'')
-		       in
-			   xbnds context' rest
-		       end
-	       in
-		   Nilcontext.c_insert_kind_list(NILctx_of context,
-						 condecs, cont1)
-	       end
+       let
+	   val (var_c, var_r, vmap') = splitVar (var, vmap_of context)
+	   val {ebnd_cat, cbnd_cat, il_signat, valuable,
+		knd_c, type_r,...} = 
+	       xmod context (il_module, SOME (var, var_c, var_r))
+
+	   val il_dec = Ilstatic.SelfifyDec (Il.DEC_MOD(var, il_signat))
+
+           val context' = 
+	       update_HILctx
+	       (update_NILctx
+		(update_vmap(context, vmap'),
+		 Nilcontext.insert_kind
+		 (Nilcontext.insert_con(NILctx_of context, var_r, type_r), var_c, knd_c)),
+		Ilcontext.add_context_dec(HILctx_of context, il_dec))
+
+	   val (rest_context, rest_bnds, rest_valuable) = 
+	       xbnds context' optimize_fun rest
 
        in
-	   (decs', APP[bnds, bnds''], valuable' andalso valuable)
+	   (rest_context,
+	    APP [LIST (map Con_b (flattenCatlist cbnd_cat)),
+		 ebnd_cat, rest_bnds],
+	    valuable andalso rest_valuable)
        end
 
    and xsig' context (con0,Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=

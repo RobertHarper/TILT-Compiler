@@ -24,12 +24,12 @@ struct
       sig 
 	type context = NilContext.context
 	val empty : unit -> context
-	val insert_con : context*var*con -> unit
+	val insert_con : context*var*con -> context
 	val find_con : context*var -> con option
-	val remove_con : context*var -> unit
-	val insert_kind : context*var*kind -> unit
+	val remove_con : context*var -> context
+	val insert_kind : context*var*kind -> context
 	val find_kind : context*var -> kind option
-	val remove_kind : context*var -> unit
+	val remove_kind : context*var -> context
 	val c_insert_con : context*var*con*(context->'a) -> 'a
 	val c_remove_con : context*var*(context -> 'a) -> 'a
 	val c_insert_kind : context*var*kind*(context->'a) -> 'a

@@ -12,9 +12,9 @@ signature NILCONTEXT =
 
     val empty : unit -> context
 
-    val insert_con : context*var*con -> unit
+    val insert_con : context*var*con -> context
     val find_con : context*var -> con option
-    val remove_con : context*var -> unit
+    val remove_con : context*var -> context
 
 
     (*Note that insertion of a kind automatically selfifies*)
@@ -28,9 +28,9 @@ signature NILCONTEXT =
       * parse trees, since otherwise scoping will cause
       * an attempt to rebind a variable.
       *)
-    val insert_kind : context*var*kind -> unit
+    val insert_kind : context*var*kind -> context
     val find_kind : context*var -> kind option
-    val remove_kind : context*var -> unit
+    val remove_kind : context*var -> context
     val appi_kind : ((var * kind) -> unit) -> context -> unit
 
     val c_insert_con : context*var*con*(context->'a) -> 'a

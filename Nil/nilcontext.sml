@@ -9,42 +9,35 @@ struct
   type kind = Nil.kind
   type con = Nil.con
   type var = Nil.var
-  val find = HashTable.find
-  val remove = HashTable.remove
-  val insert = HashTable.insert
-  val lookup = HashTable.lookup
-  val appi = HashTable.appi
   val var2string = Name.var2string
-  val c_insert = Cont.c_insert
-  val c_remove = Cont.c_remove
-  val c_foldl = Cont.c_foldl
-  val c_insert_list = Cont.c_insert_list
   val mapsequence = Util.mapsequence
 
   fun error s = Util.error "nilcontext.sml" s
 
   exception NotFound
 
+  structure V = Name.VarMap
 
-  type 'a map = (Nil.var,'a) HashTable.hash_table
+  type 'a map = 'a V.map
 
   type context = {kindmap : kind map,
 		  conmap : con map}
 
   fun empty ():context = 
-    {kindmap = Name.mk_var_hash_table (1000,NotFound),
-     conmap = Name.mk_var_hash_table (1000,NotFound)}
+    {kindmap = V.empty,
+     conmap = V.empty}
 
-  fun insert_con ({conmap,...}:context,var,con) = 
-    (case find conmap var
-       of NONE => insert conmap (var,con)
+  fun insert_con ({conmap,kindmap}:context,var,con) = 
+    (case V.find (conmap, var)
+       of NONE => {conmap = V.insert (conmap, var, con), kindmap = kindmap}
 	| _ => error ("Expression variable "^(var2string var)^"already in context"))
 
-  fun find_con ({conmap,...}:context,var) = find conmap var
+  fun find_con ({conmap,...}:context,var) = V.find (conmap, var)
     
-  fun remove_con ({conmap,...}:context,var) = ignore (remove conmap var)
+  fun remove_con ({conmap,kindmap}:context,var) = 
+      {conmap = #1 (V.remove (conmap, var)), kindmap = kindmap}
 
-  fun appi_kind f ({kindmap,...} : context) = HashTable.appi f kindmap
+  fun appi_kind f ({kindmap,...} : context) = V.appi f kindmap
 
   local
     open Nil
@@ -64,33 +57,46 @@ struct
 	     Arrow_k (openness,args,selfify(App_c (con,actuals),return))
 	   end)
 
-    fun insert_kind ({kindmap,...}:context,var,kind) = 
-      (case find kindmap var
-	 of NONE => insert kindmap (var,selfify(Var_c var,kind))
+    fun insert_kind ({kindmap,conmap}:context,var,kind) = 
+      (case V.find (kindmap, var)
+	 of NONE => {kindmap = V.insert (kindmap, var, selfify(Var_c var,kind)),
+		     conmap = conmap}
 	  | _ => error ("Constructor variable "^(var2string var)^"already in context"))
   end
        
-  fun find_kind ({kindmap,...}:context,var) = find kindmap var
+  fun find_kind ({kindmap,...}:context,var) = V.find (kindmap, var)
     
-  fun remove_kind ({kindmap,...}:context,var) = ignore (remove kindmap var)
+  fun remove_kind ({kindmap,conmap}:context,var) = 
+      {kindmap = #1 (V.remove (kindmap, var)), conmap = conmap}
 
-  fun c_insert_con ({conmap,kindmap}:context,var,con,k) = 
-    c_insert (conmap,var,con,fn conmap => k {conmap=conmap,kindmap=kindmap})
+  fun c_insert_con (context,var,con,k) = 
+      k (insert_con(context,var,con))
 
-  fun c_remove_con ({conmap,kindmap}:context,var,k) = 
-    c_remove (conmap,var,fn conmap => k {conmap=conmap,kindmap=kindmap})
+  fun c_remove_con (context,var,k) = 
+      k (remove_con(context,var))
 
-  fun c_insert_kind ({kindmap,conmap}:context,var,kind,k) = 
-    c_insert (kindmap,var,kind,fn kindmap => k {conmap=conmap,kindmap=kindmap})
+  fun c_insert_kind (context,var,kind,k) = 
+      k (insert_kind(context,var,kind))
 
-  fun c_remove_kind ({kindmap,conmap}:context,var,k) = 
-    c_remove (kindmap,var,fn kindmap => k {conmap=conmap,kindmap=kindmap})
+  fun c_remove_kind (context,var,k) = 
+      k (remove_kind(context,var))
 
-  fun c_insert_con_list ({conmap,kindmap}:context,cons,k) = 
-    c_insert_list (conmap,cons,fn conmap => k {conmap=conmap,kindmap=kindmap})
+  fun c_insert_con_list (context,nil,k) = k context
+    | c_insert_con_list (context,(v,c)::cs,k) = 
+      c_insert_con_list(insert_con(context, v, c), cs, k)
 
-  fun c_insert_kind_list ({kindmap,conmap}:context,kinds,k) = 
-    c_insert_list (kindmap,kinds,fn kindmap => k {conmap=conmap,kindmap=kindmap})
+  fun c_insert_kind_list (context,nil,k) = k context
+    | c_insert_kind_list (context,(v,knd)::cs,k) = 
+      c_insert_kind_list(insert_kind(context, v, knd), cs, k)
+
+  fun c_foldl fbase fcont init list = 
+      let 
+	  fun iterate ([],state) = fbase state
+	    | iterate ((fst::rest),state) = 
+	      fcont (fst,state,(fn state => iterate (rest,state)))
+      in
+	  iterate(list,init)
+      end
 
   fun c_fold_acc ins_fun fbase fsplit tbl = 
     let
@@ -122,16 +128,16 @@ struct
 
   fun print_context ({kindmap,conmap}:context) = 
     (print "\n Constructor variables and kinds are :\n";
-     appi print_kind kindmap;
+     V.appi print_kind kindmap;
      print "\n Expression variables and constructors are :\n";
-     appi print_con conmap)
+     V.appi print_con conmap)
 
   fun print_kinds ({kindmap,...}:context) = 
     (print "\n Constructor variables and kinds are :\n";
-     appi print_kind kindmap)
+     V.appi print_kind kindmap)
 
   fun print_cons ({conmap,...}:context) = 
     (print "\n Expression variables and constructors are :\n";
-     appi print_con conmap)
+     V.appi print_con conmap)
 
 end 

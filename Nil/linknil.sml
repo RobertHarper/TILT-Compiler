@@ -92,8 +92,9 @@ struct
 				   in  VarMap.insert(map,v,(vc,vr))
 				   end
 	    val import_varmap = VarMap.foldli folder VarMap.empty import_modmap
+            val _ = print "\nAbout to do Phase-split\n"
 	    val {cu_bnds = bnds, vmap = total_varmap} = Tonil.xcompunit ctxt import_varmap sbnds
-	    val _ = print "\nPhase-splitting done.\n";
+	    val _ = print "\nPhase-splitting done.\n"
 
 	    fun folder (v,l,map) = let val lc = internal_label((label2string l) ^ "_c")
 					 val lr = internal_label((label2string l) ^ "_r")
