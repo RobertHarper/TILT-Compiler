@@ -187,7 +187,7 @@ functor Tracetable(val little_endian    : bool
 	val factor = 64
 	val maxindices = 4
 	fun folder (i,(curfactor,acc)) = 
-	    let val i = if (factor = 1) then i else i + 1
+	    let val i = if (curfactor = 1) then i else i + 1
 	    in  if (i < factor) then (factor*curfactor, acc + i * curfactor)
 		else error "projection too big"
 	    end
