@@ -9,9 +9,6 @@
 structure Toil :> TOIL =
   struct
 
-    (* See ../Bugs/0050/description *)
-    val EqPayAsYouGo = Stats.tt "EqPayAsYouGo"
-
     open AstHelp Il IlStatic IlUtil Ppil Pat
     open Util Listops Name IlContext Tyvar
     open Prim Error
@@ -1380,100 +1377,7 @@ structure Toil :> TOIL =
 			     NONE))
 	      in List.mapPartial (fn x => x) (mapcount help pathlist)
 	      end
-	| Ast.TypeDec tblist =>		(* XXX *)
-	      let val typeresult = xtybind(context,tblist)
-		  fun make_eq_bnddec(l,c,k) =
-		      let
-			  datatype tvdec = EQ of sdec * Name.vpath * sdec
-			                 | NOEQ of sdec
-			  fun sigPoly tvs =
-			      let
-				  fun folder (EQ (sdec1, _, sdec2), acc) = (sdec2 :: sdec1 :: acc)
-				    | folder (NOEQ sdec, acc) = sdec :: acc
-				  val sdecs = rev (foldl folder nil tvs)
-			      in  SIGNAT_STRUCTURE sdecs
-			      end
-			  val vp = fresh_named_var "varpoly"
-			  val (tvs, c', c'') =
-			      (case k
-				 of KIND_ARROW(m,_) =>
-				     let val lbls = Listops.map0count (canonical_tyvar_label true) m
-					 fun mapper l =
-					     let
-						 val v = fresh_var()
-						 val sdec1 = SDEC(l,DEC_CON(v,KIND, NONE, false))
-						 val eql = to_eq l
-						 val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
-									      con_eqfun context (CON_VAR v),
-									      NONE, false))
-					     in  EQ (sdec1, (vp, [eql]), sdec2)
-					     end
-					 val tvs = map mapper lbls
-					 val arg_cons = map (fn l => CON_MODULE_PROJECT(MOD_VAR vp,l)) lbls
-					 val c' = CON_APP(c,arg_cons)
-					 val c'' = ConApply(true,c,arg_cons)
-				     in  (tvs, c', c'')
-				     end
-				  | _ => ([], c, c))
-			  val eqlab = to_eq l
-			  val eq_con = con_eqfun context c''
-			  val sigpoly = sigPoly tvs
-			  val ctxt' = add_context_dec(context,DEC_MOD(vp,false,sigpoly))
-		      in
-			  case xeq(ctxt', c')
-			    of NONE => []
-			     | SOME (eq_exp, _) =>
-				let
-				    val _ = debugdo(fn() =>
-						    (print "type dec equality : ";
-						     pp_con c'; print " = ";
-						     pp_exp eq_exp;
-						     print "\n"))
-				    val v1 = fresh_var()
-				    val (bnd,dec) =
-					if null tvs then
-					    (BND_EXP(v1, eq_exp),
-					     DEC_EXP(v1, eq_con, NONE, false))
-					else
-					    let
-						(* XXX *)
-						val freePaths = findPathsInExp eq_exp
-						fun mapper (tv as (EQ (tvdec, vpath, _))) =
-						    if Name.PathSet.member (freePaths, vpath) then tv
-						    else NOEQ tvdec
-						  | mapper (tv as NOEQ _) = tv
-						val tvs' = map mapper tvs
-						val sigpoly' = sigPoly tvs'
-						val _ = debugdo(fn () =>
-								(print "polymorphic eqtype requires reduced signature: ";
-								 pp_signat sigpoly';
-								 print "\n"))
-						val v2 = fresh_var()
-						val inner_innersig = SIGNAT_STRUCTURE
-								          [SDEC(it_lab,
-										DEC_EXP(v2,eq_con,
-											NONE, false))]
-						val innermod = MOD_FUNCTOR(TOTAL, vp,sigpoly',
-									   MOD_STRUCTURE[SBND(it_lab,
-											      BND_EXP(v2,eq_exp))],
-									   inner_innersig)
-						val innersig = SIGNAT_FUNCTOR(vp,sigpoly',
-									      inner_innersig,TOTAL)
-					    in
-						(BND_MOD(v1,true,innermod),
-						 DEC_MOD(v1,true,innersig))
-					    end
-				in
-				    [(SOME(SBND(eqlab,bnd)), CONTEXT_SDEC(SDEC(eqlab,dec)))]
-				end
-		      end
-		  fun mapper (SOME(SBND(l,BND_CON(_,c))), CONTEXT_SDEC(SDEC(_,DEC_CON(_,k,_,_)))) = make_eq_bnddec(l,c,k)
-		    | mapper _ = []
-		  val eqresult =
-		      if !EqPayAsYouGo then []
-		      else List.concat(map mapper typeresult)
-	      in  typeresult @ eqresult
-	      end
+	| Ast.TypeDec tblist => xtybind(context,tblist)
 	| Ast.DatatypeDec {datatycs,withtycs=[]} =>
 	      let val sbnd_sdecs = xdatatype(context,datatycs)
 	      in  map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdecs
