@@ -1,4 +1,4 @@
-let
+local
   val tests = 
     ["checked-cube.gml",
      "reflect.gml",
@@ -14,8 +14,15 @@ let
      "spotlight.gml",
      "golf.gml",
      "scene3.gml",
-     "scene7.gml"
+     "scene7.gml",
+     "cone2.gml",
+     "cylinder.gml",
+     "cylinders.gml"
      ]
+  val failed = ref []
 in
-  app (fn s => (ignore (Top.runFile s) handle _ => print ("Failed test "^s^"\n"))) tests
+  fun test () = 
+    (app (fn s => (ignore (Top.runFile s) handle _ => failed := (s :: !failed))) tests;
+     app (fn s => print ("Failed test "^s^"\n")) (!failed);
+     failed := [])
 end

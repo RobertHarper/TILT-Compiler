@@ -94,8 +94,8 @@ structure Intersect : INTERSECT =
       let
 	val disc = b*b - 4.0*a* c
 	val roots = 
-	  if disc < 0.0 then []
-	  else if iszero disc then [~b / (2.0*a)]
+	  if iszero disc then [~b / (2.0*a)]
+	  else if disc < 0.0 then []
 	  else 
 	    let
 	      val d = Math.sqrt disc
@@ -105,7 +105,195 @@ structure Intersect : INTERSECT =
 	    end
       in (disc,roots)
       end
+    
 
+
+    fun cylinder (M: m4,orig:v3,dir:v3) : result = 
+      let
+
+	val M' = invert M
+	val orig_oc as (x,y,z) = Matrix.applyPoint (M',orig)
+	val dir_oc  as (xd,yd,zd) = Matrix.applyVector (M',dir)
+
+	val ttop = (1.0-y)/yd
+	val tbot = ~y/yd
+
+	fun intersect t = (x + t*xd, 
+			   y + t*yd,
+			   z + t*zd)
+
+	fun compute (below,above,t,p as (x,y,z)) = 
+	  let
+	    val (t,hit' as (hitx',hity',hitz'),face,u,v) = 
+	      if below then
+		 (tbot,intersect tbot,2,x,z)
+	      else if above then (ttop,intersect ttop,1,x,z)
+	      else (t,p,0,(Math.atan2(x,z)) / (2.0 * Math.pi),y)
+		     
+	    val hit  = Matrix.applyPoint (M,hit')
+	    val dist = (if t < 0.0 then ~1.0 else 1.0)  * (distance (orig,hit))
+	    val N    = (hitx',hitz',~hity')
+	    val N    = Matrix.applyVector(M, N)
+	  in
+	    {u = u,v= v,face = face,
+	     N = N,
+	     hit = hit,
+	     dist = dist
+	     }   
+	  end
+
+	
+	val a = xd*xd + zd*zd  
+	val b = 2.0*(x*xd + z*zd)
+	val c = x*x + z*z - 1.0
+	val (disc,roots) = quad(a,b,c)	  
+
+	fun l2' (l3 : unit -> l3) = memoize (fn () => 
+			      let fun f ({hit,dist,...} : l3info) = {hit = hit,dist = dist} 
+			      in map f (l3()) 
+			      end)
+
+      in
+	case roots
+	  of []  => 
+	    if iszero xd  andalso iszero zd then  (*Parallel to axis*)
+	      if (Vect.magnitude (x,0.0,z)) < 1.0 then   (*Within the circle*)
+		let
+		  val l3 = memoize (fn () =>  [compute(false,true,ttop,(x,1.0,z)),
+					       compute(true,false,tbot,(x,0.0,z))])
+		in (true,l2' l3,l3)
+		end
+	      else noIntersect
+	    else noIntersect
+	   | [t] => 
+	    let 
+	      val p as (x0,y0,z0) = intersect t
+	      val below = y0 < 0.0
+	      val above = y0 > 1.0
+	    in 
+	      if below orelse above then noIntersect
+	      else
+		let val l3 = memoize (fn () => [compute(below,above,t,p)])
+		in (true,l2' l3,l3)
+		end
+	    end
+	   | [t0,t1] => 
+	    let
+	      val p0 as (_,y0,_) = intersect t0
+	      val p1 as (_,y1,_) = intersect t1
+
+	      val below0 = y0 < 0.0
+	      val below1 = y1 < 0.0
+	      val above0 = y0 > 1.0
+	      val above1 = y1 > 1.0
+	    in
+	      if (below0 andalso below1) orelse (above0 andalso above1) then noIntersect
+	      else
+		let
+		  fun l3 () = [compute (below0,above0,t0,p0), 
+			       compute (below1,above1,t1,p1)]
+		  val l3 = memoize l3
+		in (true,l2' l3,l3)
+		end
+	    end
+      end
+	
+
+(*   fun cylinder (M: m4,orig:v3,dir:v3) : result = 
+      let
+	  val top = Matrix.translateM(0.0,1.0,0.0,Matrix.ident)
+	  val top = Matrix.combine(M, top)
+	  val bot = Matrix.translateM(0.0,0.0,0.0,Matrix.ident)
+	  val bot = Matrix.combine(M, bot)
+
+	  fun l3() = 
+	      let val topResult = 
+		  let val (hit, _, l3) = plane(top, orig, dir)
+		  in  if hit
+			  then
+			      let val [{u,v,face=_,N,hit,dist}] = l3()
+			      in  if (u*u+v*v > 1.0)
+				      then []
+				  else let val u' = (u + 1.0) / 2.0
+					   val v' = (v + 1.0) / 2.0
+(*
+					   val _ = (print "u  = "; printR u;  print "v  = "; printR v; print "\n")
+					   val _ = (print "u' = "; printR u';  print "v' = "; printR v'; print "\n")
+*)
+				       in  [{u=u',v=v',face=1,N=N,hit=hit,dist=dist}]
+				       end
+			      end
+		      else []
+		  end
+		  val botResult = 
+		  let val (hit, _, l3) = plane(bot, orig, dir)
+		  in  if hit
+			  then
+			      let val [{u,v,face=_,N,hit,dist}] = l3()
+			      in  if (u*u+v*v > 1.0)
+				      then []
+				  else let val u' = (u + 1.0) / 2.0
+					   val v' = (v + 1.0) / 2.0
+(*
+					   val _ = (print "u  = "; printR u;  print "v  = "; printR v; print "\n")
+					   val _ = (print "u' = "; printR u';  print "v' = "; printR v'; print "\n")
+*)
+				       in  [{u=u',v=v',face=2,N=N,hit=hit,dist=dist}]
+				       end
+			      end
+		      else []
+		  end
+		  val sideResult = 
+		    let 
+		      val M' = invert M
+		      val orig_oc as (x,y,z) = Matrix.applyPoint (M',orig)
+		      val dir_oc  as (xd,yd,zd) = Matrix.applyVector (M',dir)
+
+		      val a = xd*xd + zd*zd  
+		      val b = 2.0*(x*xd + z*zd)
+		      val c = x*x + z*z - 1.0
+		      val (disc,roots) = quad(a,b,c)	  
+
+		      fun compute t =   
+			let 
+			  val hit' = add(orig_oc, scale(t, dir_oc))
+			  val (hitx', hity', hitz') = hit'
+			  val v = hity'
+			in  if (v <= 0.0 orelse v >= 1.0)
+			      then NONE
+			    else 
+			      let
+				val u = (Math.atan2(x,z)) / (2.0 * Math.pi)
+				val v = y
+				val face = 0
+				   
+				val hit  = Matrix.applyPoint (M,hit')
+				val dist = (if t > 0.0 then 1.0 else ~1.0) * (distance (orig,hit))
+				val N    = (hitx',hitz',~hity')
+				val N    = Matrix.applyVector(M, N)
+			      in
+				SOME {u = u,v= v,face = face,
+				      N = N,
+				      hit = hit,
+				      dist = dist
+				      }   
+			      end
+			end
+
+		    in List.mapPartial compute roots
+		    end
+	      in  topResult @ botResult @ sideResult
+	      end
+	  val l3 = memoize l3
+	  fun l2() = let fun get{hit,dist,u,v,face,N} = {hit=hit,dist=dist}
+		     in  map get (l3())
+		     end
+	  val res = l3()
+      in  if (null res)
+	    then noIntersect
+	  else (true, l2, l3)
+      end
+*)
    fun cone (M: m4,orig:v3,dir:v3) : result = 
       let
 	  val top = Matrix.translateM(0.0,1.0,0.0,Matrix.ident)
@@ -175,41 +363,34 @@ structure Intersect : INTERSECT =
 
     fun sphere (M: m4,orig:v3,dir:v3) : result = 
       let
-	local
-
-	  fun l2info (p,hits) = 
-	    let 
-	      val hit = Matrix.applyPoint (M,p)
-	      val dist = distance (orig,hit)
-	    in {hit = hit,dist = if hits then dist else ~dist}
-	    end
-	  
-	  fun l3info ({hit,dist},((x,y,z),hits)) = 
-	    let
-	      val v = (y+1.0)/2.0
-	      val u = if iszero v orelse iszero (v-1.0) then 0.0  (* What to do here?*)
-		      else (Math.atan2(x,z)) / (2.0 * Math.pi)     (*180/pi * (atan (x/z))/360 *)
-	      val face = 0
-	      val N' = if hits then (x,y,z) else (~x,~y,~z) 
-	      val N = Matrix.applyVector(M, N')
-(*	      val _ = (print "sphere N = "; printV3 N; print "\n") *)
-	    in {u = u,v = v,face = face,
-		hit = hit,
-		dist = dist,
-		N = N}
-	    end
-	  
-	in
-	  fun NO () = (false,fn () => [],fn () => [])
+	
+	fun l2info (p,d,_) = 
+	  let 
+	    val hit = Matrix.applyPoint (M,p)
+	    val dist = distance (orig,hit)
+	  in {hit = hit,dist = d * dist}
+	  end
+	
+	fun l3info ({hit,dist},((x,y,z),_,n)) = 
+	  let
+	    val v = (y+1.0)/2.0
+	    val u = if iszero v orelse iszero (v-1.0) then 0.0  (* What to do here?*)
+		    else (Math.atan2(x,z)) / (2.0 * Math.pi)     (*180/pi * (atan (x/z))/360 *)
+	    val N' = (n*x,n*y,n*z) 
+	    val N = Matrix.applyVector(M, N')
+	  in {u = u,v = v,face = 0,
+	      hit = hit,
+	      dist = dist,
+	      N = N}
+	  end
 	    
-	  fun YES ps = 
-	    let
-	      val l2 = memoize (fn () => map l2info ps)
-	      val l3 = memoize (fn () => ListPair.map l3info (l2 (),ps))
-	    in (true,l2,l3)
-	    end
-	end
-
+	fun YES ps = 
+	  let
+	    val l2 = memoize (fn () => map l2info ps)
+	    val l3 = memoize (fn () => ListPair.map l3info (l2 (),ps))
+	  in (true,l2,l3)
+	  end
+	
 	val M' = invert M
 	val orig_oc as (x0,y0,z0) = Matrix.applyPoint (M',orig)
 	val dir_oc  as (xd,yd,zd) = Matrix.applyVector (M',dir)
@@ -221,28 +402,24 @@ structure Intersect : INTERSECT =
 	val a = dot (dir_oc,dir_oc)                (*dx*dx + dy*dy + dz*dz*)              (*If unit length, this could be 1*)
 	val b = 2.0 * (dot (orig_oc,dir_oc))       (*(x0*dx + y0*dy + z0*dz)*)
 	val c = dot (orig_oc,orig_oc) - 1.0        (*x0*x0 + y0*y0 + z0*z0 - 1.0*)
-	val disc = b*b - 4.0*a* c
+	val (disc,roots) = quad(a,b,c)
       in
-	if iszero disc then              (* ray is tangent *)
-	  let 
-	    val t = ~b / (2.0*a)
-	    val p = intersect t
-	  in if t < 0.0 then YES [(p,false)]
-	     else YES [(p,true)]
-	  end
-	else if disc < 0.0 then NO ()    (* ray does not hit sphere *)
-	else 
-	  let
-	    val d = Math.sqrt disc
-	    val t0 = (~b + d) / (2.0*a)
-	    val t1 = (~b - d) / (2.0*a)
-	    val p0 = intersect t0
-	    val p1 = intersect t1
-	  in
-	    if t0 < 0.0 then YES[(p1,false),(p0,false)]       (* both points behind us *)
-	    else if t1 < 0.0 then YES [(p1,false),(p0,true)]  (* inside sphere *)
-	    else YES [(p1,true),(p0,true)]                        (* both points in front of us *)
-	  end
+	case roots
+	  of []      => (false,fn () => [],fn () => [])
+	   | [t]     => 
+	    let 
+	      val p = intersect t
+	    in YES [(p,1.0,if t < 0.0 then ~1.0 else 1.0)]
+	    end
+	   | [t0,t1] => 
+	    let
+	      val p0 = intersect t0
+	      val p1 = intersect t1
+	    in
+	      if t0 < 0.0 then YES[(p1,~1.0,~1.0),(p0,~1.0,1.0)]          (* both points behind us *)
+	      else if t1 < 0.0 then YES [(p1,~1.0,~1.0),(p0,1.0,~1.0)]    (* inside sphere *)
+	      else YES [(p1,1.0,1.0),(p0,1.0,~1.0)]                       (* both points in front of us *)
+	    end
       end
 
 
@@ -302,7 +479,5 @@ structure Intersect : INTERSECT =
 	  else (true, l2, l3)
       end
 
-
-    fun cylinder _ = raise (Base.Unimplemented "no cylinder")
 
   end
