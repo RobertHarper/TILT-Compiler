@@ -1,0 +1,16 @@
+Number: 0177
+Title:       nonexhaustive match warning is overly pessimistic
+Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Submitter:   tom7
+Date:        02/09/04
+Version:     <TILT version number>
+System:      <e.g. solaris,alpha,linux>
+Severity:    <critical, major, minor, cosmetic>
+Problem:     <description of problem>
+Code:        <SML source code to reproduce the bug>
+Transcript:  <transcript of execution demonstating the bug>
+Comments:    <additional comments>
+Fix:         <optional - but you get extra credit>
+Test: *
+Owner: *
+Status: open
