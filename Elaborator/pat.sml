@@ -571,15 +571,18 @@ functor Pat(structure Il : IL
 		    (Ast.FlatAppPat _)    => error "no FlatAppPat should be here"
 		  | (Ast.MarkPat (p,_))   => error "no MarkPat should be here"
 		  | (Ast.ConstraintPat _) => error "no ConstaintPat should be here"
-		  | (Ast.WordPat ws)   => constant_dispatch(CON_UINT W32,   
-							    ILPRIM (eq_uint W32), 
-							    uint (W32,TilWord64.fromWordStringLiteral ws))
-		  | (Ast.IntPat is)    => constant_dispatch(CON_INT W32,   
-							    PRIM (eq_int W32, []), 
-							    int (W32,TilWord64.fromDecimalString is))
-		  | (Ast.RealPat rs)   => constant_dispatch(CON_FLOAT F64, 
-							    PRIM (eq_float F64,[]), 
-							    float (F64,rs))
+		  | (Ast.WordPat lit) => 
+			let val ds = IntInf.toString lit
+			in constant_dispatch(CON_UINT W32,   
+					     ILPRIM (eq_uint W32), 
+					     uint (W32,TilWord64.fromDecimalString ds))
+			end
+		  | (Ast.IntPat lit)  => 
+			let val ds = IntInf.toString lit
+			in constant_dispatch(CON_INT W32,   
+					     PRIM (eq_int W32, []), 
+					     int (W32,TilWord64.fromDecimalString ds))
+			end
 		  | (Ast.StringPat ss) => constant_dispatch(CON_VECTOR (CON_UINT W8),
 							    PRIM (raise UNIMP),
 							    vector(CON_UINT W8,

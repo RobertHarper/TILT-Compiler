@@ -8,7 +8,6 @@ functor InfixParse(structure Il : IL
 
     structure Il = Il
 
-    structure Ast = Compiler.Ast
     structure Symbol = Compiler.Symbol
     structure Fixity = Fixity
 
@@ -152,7 +151,7 @@ functor InfixParse(structure Il : IL
          and calls collapse repeatedlty 
 	  ------------------------------------------------------------- *)
 	val (normed_list,preclist) = normalize objlist
-	val descending_prec_list = Sort.sort (op <) preclist
+	val descending_prec_list = ListMergeSort.sort (op <) preclist
 	val res = foldl (fn (n,acc) => collapse n acc) normed_list descending_prec_list 
       in map convert res
       end
@@ -210,7 +209,7 @@ functor InfixParse(structure Il : IL
 	fun help (pat : Ast.pat) : Ast.pat = 
 	    (case pat of
 		 (Ast.WildPat | Ast.VarPat _ | Ast.IntPat _ | Ast.WordPat _ | 
-		  Ast.RealPat _ | Ast.StringPat _ | Ast.CharPat _) => pat
+		  Ast.StringPat _ | Ast.CharPat _) => pat
 		| Ast.RecordPat {def,flexibility} => Ast.RecordPat{def=map (fn (s,p) => (s,self_one p)) def,
 								   flexibility=flexibility}
 	      | Ast.ListPat pats => Ast.ListPat (map self_one pats)

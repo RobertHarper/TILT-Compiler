@@ -928,8 +928,7 @@ functor IlUtil(structure Ppil : PPIL
 			 SBND(l,case bnd of
 			      BND_EXP(v,e) => BND_EXP(v, ee e)
 			    | BND_CON(v,c) => BND_CON(v, cc c)
-			    | BND_MOD(v,m) => BND_MOD(v, mm m)
-			    | _ => bnd)
+			    | BND_MOD(v,m) => BND_MOD(v, mm m))
 		     fun loop [] : sbnd list = []
 		       | loop ((sbnd as SBND(l,bnd))::rest) =
 			 case bnd of

@@ -191,17 +191,18 @@ functor IlStatic(structure Il : IL
 				    | SOME m => (eh m, ch m, mh m))
 		fun externalize (et,ct,mt) dec =
 		    case dec of
-			(DEC_MOD(_,s)) => CLASS_MOD(sig_all_handle(s,eh et,ch ct,mh mt))
-		      | (DEC_EXP(_,c)) => CLASS_EXP(con_all_handle(c,eh et,ch ct,mh mt))
-		      | (DEC_CON(_,k,SOME c)) => CLASS_CON k
-		      | (DEC_CON(_,k,NONE)) => CLASS_CON k
+			(DEC_MOD(_,s)) => SOME(CLASS_MOD(sig_all_handle(s,eh et,ch ct,mh mt)))
+		      | (DEC_EXP(_,c)) => SOME(CLASS_EXP(con_all_handle(c,eh et,ch ct,mh mt)))
+		      | (DEC_CON(_,k,SOME c)) => SOME(CLASS_CON k)
+		      | (DEC_CON(_,k,NONE)) => SOME(CLASS_CON k)
+		      | (DEC_EXCEPTION _) => NONE
 		fun extend (et,ct,mt) (l,DEC_MOD(v,_)) = (et,ct,(v,l)::mt)
 		  | extend (et,ct,mt) (l,DEC_EXP(v,_)) = ((v,l)::et,ct,mt)
 		  | extend (et,ct,mt) (l,DEC_CON(v,_,_)) = (et,(v,l)::ct,mt)
 		  | extend tables _ = tables
 		fun loop t [] = NONE
 		  | loop t ((SDEC(l',dec))::rest) = if (eq_label(l,l')) 
-							then SOME(externalize t dec)
+							then externalize t dec
 						    else loop (extend t (l',dec)) rest
 	    in loop ([],[],[]) sdecs
 	    end
@@ -304,10 +305,16 @@ functor IlStatic(structure Il : IL
 			       (case (fetch tv) of
 				    SOME c' => self(constrained,tyvar,c',decs,is_sub)
 				  | NONE => (set(constrained,tyvar,c); true))
-			 | _ => not (con_occurs(c,tyvar))
+			 | _ => 
+			       (print "unifying tyvar with non-tyvar "; pp_con c;
+				print "\ntyvar has "; print (Int.toString (length tyvar_ctxts));
+				print " contexts and they are:\n";
+				app (fn ctxt => pp_context ctxt) tyvar_ctxts;
+				print "\n\n";
+			       not (con_occurs(c,tyvar))
 			       andalso (map (fn ctxt => GetConKind(c,ctxt)) tyvar_ctxts; true
 					handle _ => false)
-			       andalso (set(constrained,tyvar,c); true))
+			       andalso (set(constrained,tyvar,c); true)))
 		   end
 	 | (SOME c') => meta_eq_con (is_hard,self) constrained (c',c,decs,is_sub))
      end

@@ -105,10 +105,7 @@ structure LinkIl (* : LINKIL *) =
 	val _ = Pagewidth := 100;
 
 	fun setdepth d = Compiler.Control.Print.printDepth := d
-	fun make_source s = Compiler.Source.newSource(s,0,TextIO.openIn s,true,
-						      Compiler.ErrorMsg.defaultConsumer())
-	fun parse s = Compiler.Compile.parse (make_source s)
-
+	val parse = LinkParse.parse_one
 	    
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 	    

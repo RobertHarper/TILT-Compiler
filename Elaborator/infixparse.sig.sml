@@ -2,6 +2,7 @@
 signature INFIXPARSE = 
   sig
 
+
     (* parse_exp takes a fixity_table encoding infix information
                   and a list of expressions that may contain infix operators
        and returns a single exp in which these infix operators are no

@@ -1,6 +1,7 @@
 Group is
 
 smlnj-lib.cm            (* ------ SML/NJ library ------ *)
+Parser/parser.cm        (* ------ Our own parser ------ *)
 Util/util.cm            (* ------ Our own utilities --- *)
 
 (* ------ Elaborator Stuff ----- *)

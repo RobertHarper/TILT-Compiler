@@ -413,8 +413,12 @@ functor Toil(structure Il : IL
 	  
      and xexp (context : context, exp : Ast.exp) : (exp * con) = 
       (case exp of
-	 Ast.IntExp is =>   (SCON(int(W32,TilWord64.fromDecimalString is)), CON_INT W32)
-       | Ast.WordExp ws =>  (SCON(uint(W32,TilWord64.fromWordStringLiteral ws)), CON_UINT W32)
+	 Ast.IntExp lit =>  let val ds = IntInf.toString lit
+			    in (SCON(int(W32,TilWord64.fromDecimalString ds)), CON_INT W32)
+			    end
+       | Ast.WordExp lit => let val ds = IntInf.toString lit
+			    in (SCON(uint(W32,TilWord64.fromDecimalString ds)), CON_UINT W32)
+			    end
        | Ast.RealExp s =>   (SCON(float(F64,s)), CON_FLOAT F64)
        | Ast.StringExp s => (SCON(vector (CON_UINT W8,
 					  Array.fromList
@@ -650,7 +654,7 @@ functor Toil(structure Il : IL
              ---     well-formed type. 
              --- (3) Note that until pattern matching is done, metavariables that seem to be generalizable
              ---     may not be yet. *)
-	  Ast.ValDec vblist => (* non-recursive bindings *)
+	  Ast.ValDec (vblist,ref tyvars) => (* non-recursive bindings *)
 	    let local
 		  val pe_list = map vb_strip vblist
 		in
@@ -660,13 +664,14 @@ functor Toil(structure Il : IL
 				    | _ => (Ast.TuplePat(map #1 pe_list),
 					    Ast.TupleExp(map #2 pe_list)))
 		end
-	        (* it would be more efficient to figure this out ahead of time,
-		   instead of recomputing this over and over again .... *)
-		local fun is_sym_bound s = (case (Context_Lookup(context,[symbol_label s])) of
+	        (* ---- we used to compute this here but Ast has been changed to compute it ----- *)
+		(* local fun is_sym_bound s = (case (Context_Lookup(context,[symbol_label s])) of
 						PHRASE_CLASS_CON _ => true
 					      | _ => error "tyvar symbol bound to a non-type")
-		in val tyvars = free_tyvar_exp(expr, is_sym_bound)
-		end
+	           in val tyvars = free_tyvar_exp(expr, is_sym_bound)
+		   end 
+                   ------------------------------------------------------------------------------ *)
+		val tyvars = map tyvar_strip tyvars
 		val tyvar_stamp = get_stamp()
 		val lbl = fresh_open_internal_label "lbl"
 		val lbl' = fresh_internal_label "lbl'"
@@ -754,7 +759,8 @@ functor Toil(structure Il : IL
 		then irrefutable_case()
 	       else refutable_case()
 	    end
-	| binddec as ((Ast.ValrecDec _) | (Ast.FunDec _)) => (* recursive value declarations: i.e. functions *)
+	| binddec as ((Ast.ValrecDec (_,ref tyvars)) | 
+		      (Ast.FunDec (_,ref tyvars))) => (* recursive value declarations: i.e. functions *)
 	      let
                   (* We must discover all the variables to generalize over.  For the user-level variables,
 		     we must also compile in a context with these user-level variables bound.  As a first
@@ -762,13 +768,15 @@ functor Toil(structure Il : IL
 		     At some future point when the syntax includes explicit scoping, 
 		     we must include those too *)
 		  val tyvar_stamp = get_stamp()
-		  val tyvars = 
+		(* ---------- we used to compute this before change to Ast -------- *)
+                (*  val tyvars = 
 		      let fun sym_is_bound s = ((case (Context_Lookup(context,[symbol_label s])) of
 						    PHRASE_CLASS_CON _ => true
 						  | _ => error "tyvar symbol bound to a non-type")
 						handle (NOTFOUND _) => false)
 		      in free_tyvar_dec(binddec,sym_is_bound)
-		      end
+		      end *)
+		val tyvars = map tyvar_strip tyvars
 		  local
 		      fun help tyvar = 
 			  let val type_str = Symbol.name tyvar
@@ -853,8 +861,8 @@ functor Toil(structure Il : IL
 				      (con * con) *
 				      (Ast.pat list * Ast.exp) list) list =
 			  (case d of
-			       Ast.ValrecDec rvblist => map (rvb_help o rvb_strip) rvblist
-			     | Ast.FunDec fblist => map (fb_help o fb_strip) fblist
+			       Ast.ValrecDec (rvblist,_) => map (rvb_help o rvb_strip) rvblist
+			     | Ast.FunDec (fblist,_) => map (fb_help o fb_strip) fblist
 			     | _ => error "must have ValrecDec or FunDec here")
 		  end (* local ------ ValRecDec and FunDec are assimilated now ---- *)
 
@@ -1104,10 +1112,11 @@ functor Toil(structure Il : IL
       --------------------------------------------------------- *)
     and xty (context, ty) : con = 
       (case ty of
-	 Ast.VarTy(Ast.Tyv sym) => (case (Context_Lookup(context,[symbol_label sym])) of
-				      PHRASE_CLASS_CON (c,k) => c
-				    | _ => error "tyvar lookup did not yield a PHRASE_CLASS_CON")
-       | Ast.VarTy(Ast.MarkTyv (tv,r)) => xty(context,Ast.VarTy tv)
+	 Ast.VarTy tyvar => let val sym = AstHelp.tyvar_strip tyvar
+			    in (case (Context_Lookup(context,[symbol_label sym])) of
+				    PHRASE_CLASS_CON (c,k) => c
+				  | _ => error "tyvar lookup did not yield a PHRASE_CLASS_CON")
+			    end
        | Ast.MarkTy (ty,r) => xty(context,ty)
        | Ast.TupleTy(tys) => let fun loop _ [] = []
 				   | loop n (a::rest) = (generate_tuple_symbol n,a)::(loop (n+1) rest)
@@ -1227,7 +1236,8 @@ functor Toil(structure Il : IL
 					  PHRASE_CLASS_SIG(s) => s
 					| _ => error "lookup of sigexp yielded wrong flavor")
 	| Ast.SigSig speclist => SIGNAT_STRUCTURE(NONE,xspec(context,speclist))
-	| Ast.MarkSig (s,r) => xsigexp(context,s))
+	| Ast.MarkSig (s,r) => xsigexp(context,s)
+	| Ast.AugSig _ => raise UNIMP)
 
      and xsigb(context,Ast.MarkSigb(sigb,_)) : context_entry = xsigb(context,sigb)
        | xsigb(context,Ast.Sigb{name,def}) = 
@@ -1367,8 +1377,6 @@ functor Toil(structure Il : IL
 		 end
 	   | (Ast.FixSpec _) => error "Ast.FixitySpec not implemented"
 	   | (Ast.ShareSpec _) => error "Ast.ShareSpec (structure sharing) not implemented"
-	   | (Ast.LocalSpec _) => error "Ast.LocalSpec not implemented"
-	   | (Ast.OpenSpec _) => error "Ast.OpenSpec not implemented"
 	   | (Ast.MarkSpec (s,r)) => xspec1 context prev_sdecs s
          fun loop ctxt prev_sdecs [] = prev_sdecs
            | loop ctxt prev_sdecs (spec::specrest) =
@@ -1422,9 +1430,10 @@ functor Toil(structure Il : IL
     (* --------------------------------------------------------- 
       ------------------ STRUCTURE EXPRESSION -----------------
       --------------------------------------------------------- *)
-     and xstrexp (context : context, strb : Ast.strexp, constr : Ast.sigexp option) : (mod * signat) = 
+     and xstrexp (context : context, strb : Ast.strexp, 
+		  constr : Ast.sigexp Ast.sigConst) : (mod * signat) = 
        (case constr of
-	  NONE => (case strb of
+	  Ast.NoSig => (case strb of
 		     Ast.VarStr path => 
 			 (case modsig_lookup(context,map symbol_label path) of
 			      SOME (path,m,s) => (m,s)
@@ -1437,7 +1446,7 @@ functor Toil(structure Il : IL
 				 PHRASE_CLASS_MOD(m,s) => 
 				   (case s of
 				      (SIGNAT_FUNCTOR(var1,sig1,sig2,_)) => 
-					let val (module,signat) = xstrexp(context,strexp,NONE)
+					let val (module,signat) = xstrexp(context,strexp,Ast.NoSig)
 					    val (modc_v0,modc_body,temp_sig1') = 
 						xcoerce(context,signat,sig1)
 					    val sig1' = least_super_sig(modc_v0,signat,temp_sig1')
@@ -1474,7 +1483,7 @@ functor Toil(structure Il : IL
 			      val (mod1,sig1) = boolsbnd_ctxt_list2modsig boolsbnd_sdec_list
 			      val context' = add_context_mod(context,lbl1,var1,
 								SelfifySig(SIMPLE_PATH var1, sig1)) (* <-- inline ? *)
-			      val (mod2,sig2) = xstrexp(context',strexp,NONE)
+			      val (mod2,sig2) = xstrexp(context',strexp,Ast.NoSig)
 			      val sig2' = sig2
 			      val final_mod = MOD_PROJECT(MOD_STRUCTURE [SBND(lbl1,BND_MOD(var1,mod1)),
 									 SBND(lbl2,BND_MOD(var2,mod2))],
@@ -1492,12 +1501,12 @@ functor Toil(structure Il : IL
 							   | _ => NONE) sbnd_ctxt_list
 			 in (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE(NONE, sdecs))
 			 end
-		   | Ast.MarkStr (strexp,r) => xstrexp(context,strexp,NONE))
+		   | Ast.MarkStr (strexp,r) => xstrexp(context,strexp,Ast.NoSig))
 
-
-	| SOME sigexp => (* Rule 252 *)
+(* XXXXXXXXXXXXXXXXXXXXXXXXXX --------- pretending : is also :> XXXXXXXXXXXXXX *)
+	| ((Ast.Transparent sigexp | Ast.Opaque sigexp)) =>
 	    let 
-		val (module,signat) = xstrexp(context,strb,NONE)
+		val (module,signat) = xstrexp(context,strb,Ast.NoSig)
 		val sig' = xsigexp(context,sigexp)
 		val (mod'_var,mod'_body,sig_ret') = xcoerce(context,signat,sig')
 		val v = fresh_var()
