@@ -1,4 +1,4 @@
-(*$import Nil NilUtil Ppnil PrimUtil NilSubst *) 
+(*$import Nil NilUtil Ppnil PrimUtil NilSubst REDUCE *) 
 
 (* This doesn't handle Fixclosure, Fixcode or Parallel lets *)
 
@@ -25,12 +25,18 @@ structure Reduce
 
     fun nilprim_isval(np,clist,elist) = 
       (case np of
-	 ((record _) | (inject _) | (box_float _) | roll | (inj_exn _)) =>
-	   Listops.andfold exp_isval elist
+	 record _ => Listops.andfold exp_isval elist
+       | inject _ => Listops.andfold exp_isval elist
+       | box_float _ => Listops.andfold exp_isval elist
+       | roll => Listops.andfold exp_isval elist
+       | inj_exn _ => Listops.andfold exp_isval elist
+       | _ => false)
+(*
 	 | ((make_vararg _) | (make_onearg _) | 
 	    (select _) | (inject_nonrecord _) | (inject_record _) | (project_sum _) | 
 	    (project_sum_nonrecord _ )| (project_sum_record _) | (unbox_float _) 
        | unroll | make_exntag) => false)
+*)
 	 
     and exp_isval (Var_e v) = false
       | exp_isval (Const_e v) = true
@@ -357,12 +363,11 @@ structure Reduce
 	fun inc x =  x:= (!x) + (!delta)
 	    
 	(* b is true for lets, false for fun args *)
-	fun declare b x =  if not ( isSome (HashTable.find count_table x ))
-			     then 
-				 HashTable.insert 
-				 count_table(x,
-					     (ref 0, ref 0, ref 0, ref 0, ref b))
-			 else () 
+	fun declare b x =  
+            (case (HashTable.find count_table x ) of
+	      NONE => HashTable.insert 
+			 count_table (x,(ref 0, ref 0, ref 0, ref 0, ref b))
+               | _ => ())
 			     
 	fun insesc fset x = 
 	    let  val y = s(x)
@@ -562,13 +567,8 @@ structure Reduce
 		    end 
 
 	and scan_bnd fset bnd = 
-	    
-	    case bnd of
-		(Con_b (phase, conbnd) ) => scan_conbnd fset conbnd
-	      | (Exp_b (v, nt, exp)) => 
-		    ( declare false v; 
-		     scan_exp fset exp)
-	      | (Fixopen_b vcset | Fixcode_b vcset) => 
+	    let
+	      fun dofix vcset =
 		    let 
 			val newfset = VarSet.addList 
 			    (fset, Sequence.maptolist #1 vcset) 
@@ -584,7 +584,17 @@ structure Reduce
 				  scan_function newfset function)) vcset
 			
 		    end 
-	      |  Fixclosure_b vcset => raise UNIMP 
+	    in
+	      case bnd of
+		(Con_b (phase, conbnd) ) => scan_conbnd fset conbnd
+	      | (Exp_b (v, nt, exp)) => 
+		    ( declare false v; 
+		     scan_exp fset exp)
+	      | Fixopen_b vcset => dofix vcset
+              | Fixcode_b vcset => dofix vcset
+
+	      |  Fixclosure_b vcset => raise UNIMP
+            end
     in 
 	fun census_exp fset ( x , exp ) = 
 	    ( delta := x ;
@@ -688,8 +698,14 @@ structure Reduce
 		(*	( mk_ref | setref | deref ) => false  *)
 	      (*  | input | input1 | lookahead |open_in | open_out |close_in
 	      | output | flush_out | close_out | end_of_stream ) => false *)
-		( update _  | create_table _ | create_empty_table _ ) => false
-	      | ( soft_vtrap _ | soft_ztrap _ | hard_vtrap _ | hard_ztrap _ ) => false
+
+		update _ => false
+              | create_table _ => false
+              | create_empty_table _  => false
+	      | soft_vtrap _ => false
+              | soft_ztrap _ => false
+              | hard_vtrap _ => false
+              | hard_ztrap _  => false
 	      | ( sub _ ) => true
 	      | _ => true
 		   
@@ -1010,7 +1026,8 @@ structure Reduce
 			    end
 			end
 		    
-	  | (Fixclosure_b _ |  Fixcode_b _) => raise UNIMP
+	  | Fixclosure_b _ => raise UNIMP
+          | Fixcode_b _ => raise UNIMP
 	      
 	  (* ----------- Other expression bindings ---------------------------- *)
 	  | Exp_b (x, nt, exp)=> 

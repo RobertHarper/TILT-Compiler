@@ -1,4 +1,4 @@
-(*$import Nil NilUtil Ppnil PrimUtil NilSubst Reduce *)
+(*$import Nil NilUtil Ppnil PrimUtil NilSubst Reduce PASS PRIMUTIL *)
 
 (* 
 

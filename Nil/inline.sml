@@ -344,7 +344,8 @@ e))
 	  Con_b (p, cbnd) => [(Con_b (p, rcbnd cbnd))]
 	| Exp_b(v,nt,e) => 
 	    (case e of
-	       (Switch_e _ | Handle_e _) => [Exp_b(v,nt,rexp e)]
+	       Switch_e _ => [Exp_b(v,nt,rexp e)]
+             | Handle_e _ => [Exp_b(v,nt,rexp e)]
 	     | App_e(Open,Var_e f,cs,es1,es2) =>
 		 (case find_fun f of
 		    SOME{definition=ref(SOME(func)),already_inlined,...} =>
