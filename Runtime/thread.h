@@ -402,7 +402,6 @@ double segmentTime(Proc_t *);           /* Time of current GC segment */
 
 void thread_init(void);
 void thread_go(ptr_t thunk);
-void Interrupt(ucontext_t *);
 void scheduler(Proc_t *);                  /* Unmap user thread of Proc if mapped */
 void Finish(void);
 Thread_t *YieldRest(void);

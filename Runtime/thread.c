@@ -1306,18 +1306,6 @@ Thread_t *YieldRest(void)
   return 0;
 }
 
-/* Should be called from the timer handler.  Causes the current user thread to GC soon. */ 
-void Interrupt(ucontext_t *uctxt)
-{
-  Thread_t *th = getThread();
-  if (!th->notInML) {
-    mem_t pc = GetPc(uctxt);
-    SetIReg(uctxt, ALLOCLIMIT, (reg_t) StopHeapLimit);
-    printf("      setting heap limit to %d while at %d\n",StopHeapLimit, pc);
-  }
-  return;
-}
-
 /* Processor might be mapped but is at least up-to-date */
 void schedulerRest(Proc_t *proc)
 {

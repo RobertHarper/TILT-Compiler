@@ -103,11 +103,6 @@ void GetIRegs(ucontext_t *uctxt, unsigned long *dest)
     dest[i] = GetIReg(uctxt,i);
 }
 
-int zero(void)
-{
-  return 0;
-}
-
 #ifdef alpha_osf
 void float_exn_on(void)
 {
@@ -153,39 +148,14 @@ void buserror_on(void)
 #define NSIG __sys_nsig
 #endif
 
-static void printmask(const char* what, int error, sigset_t* set)
-{
-  if (error == -1) {
-    perror(what);
-  } else {
-    int i;
-    printf("%s [", what);
-    for (i=0; i<NSIG; i++) {
-      if (sigismember(set, i)) {
-	printf(" %d", i);
-      }
-    }
-    printf(" ]\n");
-  }
-}
-
 static void unblock_signals(void)
 {
   sigset_t oset;
   sigset_t set;
-  if (0) {
-    printf("XXX unblocking signals\n");
-    printmask("sigprocmask", sigprocmask(0, NULL, &oset), &oset);
-    printmask("pthread_sigmask", pthread_sigmask(0, NULL, &oset), &oset);
-  }
   if (sigfillset(&set) == -1 ||
       sigprocmask(SIG_UNBLOCK, &set, &oset) == -1) {
     perror("can't clear signal mask");
     exit(-1);
-  }
-  if (0) {
-    printmask("new sigprocmask", sigprocmask(0, NULL, &oset), &oset);
-    printmask("new pthread_sigmask", pthread_sigmask(0, NULL, &oset), &oset);
   }
 }
 
@@ -404,27 +374,6 @@ void fpe_handler(int signum,
       break;
     }
   exit(-1);
-  /*
-      printf("Unknown FPE signal in non-alpha not implemented\n");
-      */
-}
-
-
-
-void alarm_handler(int signum, 
-#ifdef alpha_osf
-		   siginfo_t *siginfo, 
-#endif
-#ifdef rs_aix
-		   int always_zero,
-#endif
-		   ucontext_t *uctxt)
-{
-#ifdef alpha_osf
-  if (siginfo != 0)
-    printf("siginfo for alarm_handler is not nil\n");
-#endif
-  Interrupt(uctxt);
 }
 
 void signal_init(void)
@@ -463,24 +412,4 @@ void install_signal_handlers(int isMain)
     sigaddset(&sigset, SIGBUS);
     pthread_sigmask(isMain ? SIG_BLOCK : SIG_UNBLOCK,  &sigset, NULL);
   }
-
-if (0)
-  {
-    struct itimerval newtimer,oldtimer;
-    newact.sa_sigaction = (sa_sigaction_t) alarm_handler;
-    my_sigaction(SIGVTALRM,&newact,NULL); 
-    newtimer.it_interval.tv_sec = 0;
-    newtimer.it_interval.tv_usec = 20000;
-    newtimer.it_value.tv_sec = 0;
-    newtimer.it_value.tv_usec = 20000;
-    setitimer(ITIMER_VIRTUAL,&newtimer,&oldtimer); 
-/*  setitimer(ITIMER_PROF,&newtimer,&oldtimer); */
-  }
-
-}
-
-void float_tester (double arg)
-{
-  /*  printf("float_tester = address = %d\n",arg); */
-  printf("float_tester = %lf\n",arg);
 }
