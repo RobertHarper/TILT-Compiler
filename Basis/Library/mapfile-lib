@@ -32,8 +32,8 @@ HashTable       hash-table
 //BSearchFn       bsearch-fn
 //CHAR_MAP        char-map-sig
 //CharMap         char-map
-//FIFO            fifo-sig
-//Fifo            fifo
+FIFO            fifo-sig
+Fifo            fifo
 //FmtFields       fmt-fields
 //FORMAT          format-sig
 //LibRealFormat   real-format
@@ -73,8 +73,8 @@ SplaySetFn     splay-set-fn
 // TIME           time-limit <--- can't do this file, it uses SMLofNJ.IntervalTimer
 // RANDOM         random-sig <--- useless since we are skipping Random
 // Random         random     <--- needs Pack32Big
-//QUEUE          queue-sig
-//Queue          queue
+QUEUE          queue-sig
+Queue          queue
 IO_UTIL        io-util-sig
 IOUtil         io-util
 //DynamicArrayFn dynamic-array-fn
