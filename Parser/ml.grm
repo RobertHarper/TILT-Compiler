@@ -521,6 +521,9 @@ spec_s	: 			([])
 	| SEMICOLON spec_s	(spec_s)
 
 spec	: STRUCTURE strspec	([StrSpec strspec])
+	| DATATYPE ID EQUALOP DATATYPE tycon 
+				([DataSpec{datatycs=[Db{tyc=tycSymbol ID,tyvars=[],rhs=Repl tycon}],
+					     withtycs=[]}])
 	| DATATYPE db		([DataSpec{datatycs=db,withtycs=nil}])
 	| DATATYPE db WITHTYPE tb ([DataSpec{datatycs=db,withtycs=tb}])
 	| TYPE tyspec		([TycSpec(tyspec,false)])
