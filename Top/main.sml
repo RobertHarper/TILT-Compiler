@@ -7,10 +7,10 @@ struct
 
     fun usage () : 'a =
 	let val msg =
-		"usage: tilt project\n\
-		\       tilt -o exe project\n\
-		\       tilt -l lib project\n\
-		\       tilt -p project\n\
+		"usage: tilt project ...\n\
+		\       tilt -o exe project ...\n\
+		\       tilt -l lib project ...\n\
+		\       tilt -p project ...\n\
 		\       tilt -s [[num/]host ...]\n\
 		\general options:\n\
 		\       -v       increase diagnostics level\n\
@@ -125,22 +125,20 @@ struct
     fun run (args : string list, options : options) : unit =
 	let val _ = check options
 	    val {action,master,targets} = options
-	    fun project () : string =
+	    fun projects () : string list =
 		(case args
-		   of [filename] => filename
-		    | _ => usage())
-	    fun compile (without_slave : 'a -> unit,
-			 with_slave : 'a -> unit) : 'a -> unit =
-		if master then without_slave else with_slave
+		   of nil => usage()
+		    | _ => args)
+	    val with_slave = not master
 	in
 	    (case action
-	       of MAKE => compile (M.make',M.make) (project(), targets)
+	       of MAKE => M.make' with_slave (projects(), targets)
 		| MAKE_EXE exe =>
-		    compile (M.make_exe',M.make_exe) (project(), exe, targets)
+		    M.make_exe' with_slave (projects(), exe, targets)
 		| MAKE_LIB lib =>
-		    compile (M.make_lib',M.make_lib) (project(), lib, targets)
-		| PURGE => M.purge (project(), targets)
-		| PURGE_ALL => M.purgeAll (project(), targets)
+		    M.make_lib' with_slave (projects(), lib, targets)
+		| PURGE => M.purge (projects(), targets)
+		| PURGE_ALL => M.purgeAll (projects(), targets)
 		| RUN_SLAVES =>
 		    (case args
 		       of [] => M.slave()

@@ -6,9 +6,9 @@ sig
 
     type targets = Name.label list
 
-    val make : string * targets -> unit
-    val make_exe : string * string * targets -> unit	(* project, exe *)
-    val make_lib : string * string * targets -> unit	(* project, lib *)
-    val purge : string * targets -> unit
-    val purgeAll : string * targets -> unit
+    val make : string list * targets -> unit
+    val make_exe : string list * string * targets -> unit	(* project, exe *)
+    val make_lib : string list * string * targets -> unit	(* project, lib *)
+    val purge : string list * targets -> unit
+    val purgeAll : string list * targets -> unit
 end

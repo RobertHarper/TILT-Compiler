@@ -202,10 +202,10 @@ struct
 	end
 
     in
-	fun set_desc (descfile:string, targets:targets,
+	fun set_desc (descfiles:string list, targets:targets,
 		      linking:bool, files:string list) : unit =
 	    let val d = Project.empty {linking=linking}
-		val d = Project.add_include(d,descfile)
+		val d = foldl (fn (descfile,d) => Project.add_include (d, descfile)) d descfiles
 		val d = Project.finish d
 		val _ = app (fn f => check_file(d,f)) files
 		val numEntries = length d
@@ -926,8 +926,8 @@ struct
 	in  ()
 	end
 
-    fun make (project : string, targets : targets) : unit =
-	let val _ = set_desc(project,targets,false,nil)
+    fun make (projects : string list, targets : targets) : unit =
+	let val _ = set_desc(projects,targets,false,nil)
 	    val _ = compile ()
 	in  ()
 	end
@@ -938,17 +938,17 @@ struct
 	    else reject (dir ^ ": does not exist")
 	end
 
-    fun make_exe (project : string, exe : string,
+    fun make_exe (projects : string list, exe : string,
 		  targets : targets) : unit =
 	let val _ = check_dir exe
-	    val _ = set_desc(project,targets,true,[exe])
+	    val _ = set_desc(projects,targets,true,[exe])
 	    val desc = get_desc()
 	    fun mapper (pdec : I.pdec) : label option =
 		(case pdec
 		   of I.SCDEC (U,_,_) => SOME U
 		    | _ => NONE)
 	    val sc = List.mapPartial mapper desc
-	    val link = I.F.link (project,exe)
+	    val link = I.F.link (hd projects,exe)
 	    val _ = compile()
 	in  if null sc then
 		Compiler.link(desc,link)
@@ -960,10 +960,10 @@ struct
 		 reject "unable to link")
 	end
 
-    fun make_lib (project : string, lib : string,
+    fun make_lib (projects : string list, lib : string,
 		  targets : targets) : unit =
 	let val _ = check_dir lib
-	    val _ = set_desc(project,targets,false,[lib])
+	    val _ = set_desc(projects,targets,false,[lib])
 	    val desc = get_desc()
 	    fun mapper (pdec:I.pdec) : label option =
 		(case pdec
@@ -999,8 +999,8 @@ struct
 	    foldl append empty
 
 	fun purge_help (what : string, droppings : droppings)
-		       (project : string, targets : targets) : unit =
-	    let val _ = set_desc(project,targets,false,nil)
+		       (projects : string list, targets : targets) : unit =
+	    let val _ = set_desc(projects,targets,false,nil)
 		val desc = get_desc()
 		val (iFiles,uFiles) = droppings
 		val _ = if !Compiler.CompilerDiag then
@@ -1035,10 +1035,10 @@ struct
 	      I.P.U.asmz',
 	      SOME o I.P.U.parm])
     in
-	val purge : string * targets -> unit =
+	val purge : string list * targets -> unit =
 	    purge_help ("binaries", obj)
 
-	val purgeAll : string * targets -> unit =
+	val purgeAll : string list * targets -> unit =
 	    purge_help ("binaries and interfaces",
 			concat [meta,iface,obj])
     end

@@ -13,14 +13,16 @@ struct
     val unit : string -> label = Name.unit_label
     val interface : string -> label = Name.interface_label
 
-    fun Slave (f : 'a -> 'b) (x : 'a) : 'b =
-	let fun run_slave () =
-		(Slave.Standalone := false; Slave.slave())
-	    val kill_slave = Util.background' run_slave
-	    val r = Util.apply(f,x)
-	    val _ = kill_slave()
-	in  r()
-	end
+    fun Slave (f : 'a -> 'b) (with_slave : bool) (x : 'a) : 'b =
+	if with_slave then
+	    let fun run_slave () = (Slave.Standalone := false; Slave.slave())
+		val kill_slave = Util.background' run_slave
+		val r = Util.apply(f,x)
+		val _ = kill_slave()
+	    in  r()
+	    end
+	else
+	    f x
 
     fun Stats (f : 'a -> 'b) (x : 'a) : 'b =
 	let val _ = if !ResetStats then Stats.clear_measurements() else ()
@@ -68,13 +70,13 @@ struct
 	    else
 		raise e)
 
-    val make' = Exn (Diag (Stats Master.make))
-    val make_exe' = Exn (Diag (Stats Master.make_exe))
-    val make_lib' = Exn (Diag (Stats Master.make_lib))
+    val make' = Exn (Diag (Stats (Slave Master.make)))
+    val make_exe' = Exn (Diag (Stats (Slave Master.make_exe)))
+    val make_lib' = Exn (Diag (Stats (Slave Master.make_lib)))
 
-    val make = Exn (Diag (Stats (Slave Master.make)))
-    val make_exe = Exn (Diag (Stats (Slave Master.make_exe)))
-    val make_lib = Exn (Diag (Stats (Slave Master.make_lib)))
+    val make = Exn (Diag (Stats (Slave Master.make true)))
+    val make_exe = Exn (Diag (Stats (Slave Master.make_exe true)))
+    val make_lib = Exn (Diag (Stats (Slave Master.make_lib true)))
     val purge = Exn (Diag Master.purge)
     val purgeAll = Exn (Diag Master.purgeAll)
 

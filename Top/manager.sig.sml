@@ -16,20 +16,20 @@ sig
     val interface : string -> label
 
     (*
-	These run a master only.
+	These run a master and, if boolean is true, a slave.
     *)
-    val make' : string * targets -> unit
-    val make_exe' : string * string * targets -> unit	(* project, exe *)
-    val make_lib' : string * string * targets -> unit	(* project, lib *)
+    val make' : bool -> string list * targets -> unit
+    val make_exe' : bool -> string list * string * targets -> unit	(* projects, exe *)
+    val make_lib' : bool -> string list * string * targets -> unit	(* projects, lib *)
 
     (*
 	These run a master and a slave together.
     *)
-    val make : string * targets -> unit
-    val make_exe : string * string * targets -> unit	(* project, exe *)
-    val make_lib : string * string * targets -> unit	(* project, lib *)
-    val purge : string * targets -> unit
-    val purgeAll : string * targets -> unit
+    val make : string list * targets -> unit
+    val make_exe : string list * string * targets -> unit	(* projects, exe *)
+    val make_lib : string list * string * targets -> unit	(* projects, lib *)
+    val purge : string list * targets -> unit
+    val purgeAll : string list * targets -> unit
 
     (*
 	Slave makes the current process act as a slave.  Slaves
