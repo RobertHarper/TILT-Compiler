@@ -1,5 +1,6 @@
 import group $libdir ^ "/smlnj-lib/group"
 import group $libdir ^ "/ml-yacc-lib/group"
+import group $libdir ^ "/arg/group"
 include group "../Util/mapfile-util"
 include group "../Parser/mapfile-parse"
 include group "../Elaborator/mapfile-elaborate"
@@ -117,24 +118,20 @@ source unit Manager : Manager = "manager.sml" {
 	NilStatic Inline Hoist IlContext ToNil LinkIl Update Linkalpha
 	Linksparc Linkrtl Linknil LinkParse List ExtSyn
 }
-source unit GETOPT = "getopt.sig.sml" {}
-source unit Getopt = "getopt.sml" {
-	GETOPT String Char List
-}
 source unit RUN = "run.sig.sml" {OS}
 source unit Run = "run.sml" {Posix Word8 OS RUN CommandLine}
 source unit MAIN = "main.sig.sml" {OS}
 source unit Main = "main.sml" {
-	List String Int OS MAIN Manager Stats Getopt Dirs Target
-	Compiler ExnHandler Version
+	List String Int OS MAIN Manager Stats Arg Dirs Target Compiler
+	ExnHandler Version TextIO
 }
 source unit Top = "top.sml" {Run Main}
 make executable "../Bin/" ^ $target ^ "/tilt" {Top}
 
 source unit Dump = "dump.sml" {
-	MAIN Util Blaster Formatter List Char String Ppil IlBlast
-	Getopt Compiler Communication Info UnitEnvironment Update
-	ExnHandler OS Crc
+	MAIN Util Blaster Formatter List Char String Ppil IlBlast Arg
+	Compiler Communication Info UnitEnvironment Update ExnHandler
+	OS Crc TextIO
 }
 source unit DumpTop = "dumptop.sml" {Run Dump}
 make executable "../Bin/" ^ $target ^ "/dump" {DumpTop}

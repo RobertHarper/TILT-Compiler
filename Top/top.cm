@@ -2,6 +2,7 @@ Group is
 ../Parser/parser.cm
 ../Elaborator/elaborator.cm
 ../Util/util.cm
+../Util/arg.cm
 ../smlnj-lib.cm
 ../ml-yacc-lib.cm
 ../Nil/nil.cm
@@ -60,8 +61,6 @@ slave.sig.sml
 slave.sml
 manager.sig.sml
 manager.sml
-getopt.sig.sml
-getopt.sml
 main.sig.sml
 main.sml
 dump.sml
