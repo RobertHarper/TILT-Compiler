@@ -87,10 +87,10 @@ m0020	pass	Empty structure.
 m0021	pass	Explicit polymorphism and recursion.
 m0022	pass	Null tuple.
 m0024	pass	Merge sort.
-m0025	fail	[Bug# 0169] Word value ranges.
+m0025	pass	Word value ranges.
 m0026	pass	Word32 checks.
 m0027	pass	Word sub checks.
-m0028	fail	[Bug #0103] Word stuff.
+m0028	pass	Word stuff.
 m0029	fail	Word8 array
 m0030	pass	Word8 vector
 m0031	pass	List
@@ -191,7 +191,7 @@ m0125	pass	unary constructors
 m0126	pass	unary arithmetic
 m0127	pass	non-generalized type variables
 m0128	pass	unix paths
-m0129	fail	[Bug #0150] where-and
+m0129	skip	where-and [conflicts with the popular where strid=strid extension]
 m0130	pass	where
 m0131	pass	list checks
 m0132	pass	fib 35
