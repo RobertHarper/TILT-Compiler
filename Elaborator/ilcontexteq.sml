@@ -524,7 +524,7 @@ struct
 	       | RECORD_PROJECT (e,l,c) => (blastOutChoice 9; blastOutExp e; blastOutLabel l; blastOutCon c)
 	       | SUM_TAIL (i,c,e) => (blastOutChoice 10; blastOutChoice i;
 				      blastOutCon c; blastOutExp e)
-	       | HANDLE (e1,e2) => (blastOutChoice 11; blastOutExp e1; blastOutExp e2)
+	       | HANDLE (c,e1,e2) => (blastOutChoice 11; blastOutCon c; blastOutExp e1; blastOutExp e2)
 	       | RAISE (c,e) => (blastOutChoice 12; blastOutCon c; blastOutExp e)
 	       | LET(bnds,e) => (blastOutChoice 13; blastOutList blastOutBnd bnds; blastOutExp e)
 	       | NEW_STAMP c => (blastOutChoice 14; blastOutCon c)
@@ -589,7 +589,7 @@ struct
 	       | 8 => RECORD (blastInList (fn () => blastInPair blastInLabel blastInExp))
 	       | 9 => RECORD_PROJECT (blastInExp (), blastInLabel (), blastInCon ())
 	       | 10 => SUM_TAIL (blastInChoice(), blastInCon (), blastInExp ())
-	       | 11 => HANDLE (blastInExp (), blastInExp ())
+	       | 11 => HANDLE (blastInCon(), blastInExp (), blastInExp ())
 	       | 12 => RAISE (blastInCon (), blastInExp ())
 	       | 13 => LET(blastInList blastInBnd, blastInExp ())
 	       | 14 => NEW_STAMP (blastInCon ())

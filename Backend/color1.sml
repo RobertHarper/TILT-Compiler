@@ -101,13 +101,17 @@ struct
 			print (Int.toString (length random_nodes)); print "\n")
 *)
 
-	   in app delete_node good_nodes;
-	      app delete_node bad_nodes;
-	      app delete_node random_nodes;
+	   in Stats.subtimer("color: delete_nodes",fn()=>
+			     (app delete_node good_nodes;
+			      app delete_node bad_nodes;
+			      app delete_node random_nodes)) ();
 	      simplify  (random_nodes @ bad_nodes @ good_nodes @ node_stack)
 	   end
        end
        val simplify = simplify_graph_time simplify 
+
+       val general_iregs_set = listToSet general_iregs
+       val general_fregs_set = listToSet general_fregs
 
        fun select mapping [] = mapping
 	 | select mapping (node :: nodes) =
@@ -157,13 +161,10 @@ struct
 		   val neighborcolors = Regset.foldl folder Regset.empty neighbors
 
 	           val regs_available = 
+		       Regset.listItems
 		       (case node of 
-			  (R _) => 
-			    Regset.listItems
-			    (Regset.difference(listToSet general_iregs, neighborcolors))
-			| (F _) =>
-			    Regset.listItems
-			    (Regset.difference(listToSet general_fregs, neighborcolors)))
+			    (R _) => Regset.difference(general_iregs_set, neighborcolors)
+			  | (F _) => Regset.difference(general_fregs_set, neighborcolors))
 
 		 in
 	           if (length regs_available = 0) then NONE

@@ -978,13 +978,12 @@ structure IlStatic
 			  | _ => error "adornment of SUM_TAIL not a CON_SUM(SOME _,...)")
 	      else error "SUM_TAIL: adornment mismatches type of expression"
 	   end
-     | (HANDLE (body,handler)) => 
+     | (HANDLE (con,body,handler)) => 
 	   let val (_,bcon) = GetExpCon(body,ctxt)
 	       val (_,hcon) = GetExpCon(handler,ctxt)
-	       val res_con = fresh_con ctxt
-	       val hcon' = CON_ARROW ([CON_ANY],res_con,false,oneshot())
-	   in  if (eq_con(ctxt,hcon,hcon')) 
-		   then (false,bcon)
+	       val con' = CON_ARROW ([CON_ANY],con,false,oneshot())
+	   in  if (sub_con(ctxt,bcon,con) andalso sub_con(ctxt,hcon,con'))
+		   then (false,con)
 	       else error "Type mismatch between handler and body of HANDLE"
 	   end
      | (RAISE (c,e)) => 
@@ -1790,6 +1789,20 @@ structure IlStatic
 	    | (SOME (_,pc),[]) => SOME(p,pc)
 	    | (SOME (_,pc),_) => LookupHelp(ctxt,labs,PATH(v,[]), pc))
   end
+
+    fun supertype (arg_con : con) : con = 
+	let fun exp_handler (e : exp) : exp option = NONE
+	    fun mod_handler (m : mod) : mod option = NONE
+	    fun con_handler (c : con) : con option = 
+		(case c of
+		   CON_SUM {names,noncarriers,carrier,special} =>
+		       SOME(CON_SUM{names = names,
+				    noncarriers = noncarriers,
+				    special = NONE,
+				    carrier = supertype carrier})
+		| _ => NONE)
+	in  con_handle(exp_handler,con_handler,mod_handler, fn _ => NONE) arg_con
+	end
 
     fun con_reduce_once (context,c) = NormOnce(c,context)
     fun con_normalize (context,c) = #2(Normalize(c,context))

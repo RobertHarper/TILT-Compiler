@@ -29,7 +29,7 @@ signature IL =
                  | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
                  | SUM_TAIL of int * con * exp
-                 | HANDLE  of exp * exp      
+                 | HANDLE  of con * exp * exp      
                  | RAISE   of con * exp       (* annotate with the type of the raised expression *)
                  | LET     of bnd list * exp
                  | NEW_STAMP of con

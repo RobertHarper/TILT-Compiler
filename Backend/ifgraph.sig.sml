@@ -18,10 +18,13 @@ sig
    val edges : graph -> node -> Core.Regset.set
    val degree : graph -> node -> int
    val insert_node : graph -> node -> unit
-   val delete_node : graph -> node -> unit
    val insert_edge : graph -> node * node -> unit
-   val insert_edges : graph -> node * Core.Regset.set -> unit
+   val insert_edges : graph -> node list * Core.Regset.set -> unit (* add pairwise edges *)
+   val delete_node : graph -> node -> unit
    val print_stats : graph-> unit
 
+
 end
+
+
 

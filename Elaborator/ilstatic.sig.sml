@@ -71,5 +71,6 @@ signature ILSTATIC =
     val SelfifySdec : Il.context -> Il.sdec -> Il.sdec
     val SelfifyEntry : Il.context -> Il.context_entry -> Il.context_entry
     val reduce_signat : Il.context -> Il.signat -> Il.signat
+    val supertype : Il.con -> Il.con  (* compute supertype by removing total arrows and special sum types *)
 
   end

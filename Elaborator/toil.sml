@@ -875,10 +875,14 @@ val _ = print "plet0\n"
 					     arg = (v,CON_ANY)}
 		 val (he,hc) = make_lambda(v,CON_ANY,hbc,hbe)
 	     in if (eq_con(context,rescon,hbc))
-		    then (HANDLE(exp',he),rescon,va)
-		else (error_region();
-		      print "mismatch between handle body and handler\n";
-		      dummy_exp'(context,"bad_handle"))
+		    then (HANDLE(rescon,exp',he),rescon,va)
+		else let val rescon = supertype rescon
+		     in  if sub_con(context,hbc,rescon)
+			     then (HANDLE(rescon,exp',he),rescon,va)
+			 else (error_region();
+			       print "mismatch between handle body and handler\n";
+			       dummy_exp'(context,"bad_handle"))
+		     end
 	     end
        | Ast.RaiseExp e => 
 	     let val (exp,con,_) = xexp(context,e)

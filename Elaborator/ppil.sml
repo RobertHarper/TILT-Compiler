@@ -342,11 +342,10 @@ struct
 			  end
        | RECORD_PROJECT (e,l,_) => HOVbox[pp_region "(" ")" [pp_exp e], String "#", pp_label l]
        | SUM_TAIL (i,c,e) => pp_region "SUM_TAIL(" ")" [pp_con c, String ",", pp_exp e]
-       | HANDLE (body,handler) => Vbox[HOVbox[String "HANDLE ",
-					      pp_exp body],
-				       Break0 0 0,
-				       HOVbox[String "WITH ",
-					      pp_exp handler]]
+       | HANDLE (con,body,handler) => HOVbox[String "HANDLE ",
+					     pp_con con, Break0 0 0,
+					     pp_exp body, Break0 0 0,
+					     String "WITH ", pp_exp handler]
        | RAISE (c,e) =>  pp_region "RAISE(" ")" [pp_con c, String ", ", pp_exp e]
        | LET (bs,e) => Vbox0 0 1 [String "LET ",
 				  Vbox(separate (map pp_bnd bs) (Break0 0 0)),

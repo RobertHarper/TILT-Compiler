@@ -1909,7 +1909,7 @@ end (* local defining splitting context *)
 			    raise e)
 *)
 
-     | xexp' context (Il.HANDLE (il_exp1, il_exp2)) = 
+     | xexp' context (Il.HANDLE (il_con, il_exp1, il_exp2)) = 
        let
 	   val exp1 = xexp context il_exp1
 	   val (bound, _, handler) = toFunction context il_exp2

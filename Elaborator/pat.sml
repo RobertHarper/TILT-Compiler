@@ -41,19 +41,7 @@ structure Pat
       | compress_expression exp = SOME exp
 
 
-    fun supertype (arg_con : con) : con = 
-	let fun exp_handler (e : exp) : exp option = NONE
-	    fun mod_handler (m : mod) : mod option = NONE
-	    fun con_handler (c : con) : con option = 
-		(case c of
-		   CON_SUM {names,noncarriers,carrier,special} =>
-		       SOME(CON_SUM{names = names,
-				    noncarriers = noncarriers,
-				    special = NONE,
-				    carrier = supertype carrier})
-		| _ => NONE)
-	in  con_handle(exp_handler,con_handler,mod_handler, fn _ => NONE) arg_con
-	end
+
 
     (* ---------- auxilliary types, datatypes, and functions -------------- 
      A case_exp is the argument to the case statement.  It distinguishes
@@ -800,15 +788,21 @@ structure Pat
 		     val (e1,c1) = match(context, argrest, yes, SOME thunk)
 		     val (e2,c2) = match(context, args, maybe_no, def)
 			 
-		     val _ = if (eq_con(context,c1,c2))
-				 then ()
-			     else (error_region();
-				   print "different result type in different arms\n")
+		     val c3 = if (eq_con(context,c1,c2))
+				 then c1
+			      else 
+				  let val c3 = supertype c1
+				  in  if (sub_con(context,c2,c3))
+					  then c3
+				      else (error_region(); print "different result type in different arms\n";
+					    tab_region(); print "First type: "; pp_con c3; print "\n";
+					    tab_region(); print "Second type: "; pp_con c2; print "\n"; c3)
+				  end
 		     val ite_exp = make_ifthenelse(eq var,e1,e2,
 						   case result_type_var of
-						       NONE => c1
+						       NONE => c3
 						     | SOME v => CON_VAR v)
-		   in (ite_exp,c1)
+		   in (ite_exp,c3)
 		   end
 
 

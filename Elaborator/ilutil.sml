@@ -142,7 +142,7 @@ structure IlUtil
 	   val efail' = #1(make_lambda(fresh_named_var "dummy",tag_con,con,efail))
 	   val outer = EXN_CASE{arg = VAR v, arms = [(tag_exp, tag_con,efail')],
 				default = NONE, tipe = con}
-       in HANDLE(e,#1 (make_lambda(v,CON_ANY,con,outer)))
+       in HANDLE(con,e,#1 (make_lambda(v,CON_ANY,con,outer)))
        end
 
     (* etaprims takes a record of their argument
@@ -285,7 +285,7 @@ structure IlUtil
 	   | RECORD (rbnds) => RECORD(map (f_rbnd state) rbnds)
 	   | RECORD_PROJECT (e,l,c) => RECORD_PROJECT(self e,l,f_con state c)
 	   | SUM_TAIL (i,c,e) => SUM_TAIL(i,f_con state c, self e)
-	   | HANDLE (e1,e2) => HANDLE(self e1, self e2)
+	   | HANDLE (c,e1,e2) => HANDLE(f_con state c, self e1, self e2)
 	   | RAISE (c,e) =>  RAISE(f_con state c, self e)
 	   | LET (bnds,e) => let fun loop [] h = h
 				   | loop ((BND_EXP(v,_))::rest) h = loop rest (add_var(h,v))
