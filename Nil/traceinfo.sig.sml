@@ -1,4 +1,6 @@
-(*$import Prelude Name *)
+(*$import Name *)
+
+(* Trace information for the garbage collector *)
 
 signature TRACEINFO = 
 sig

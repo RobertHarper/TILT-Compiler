@@ -1,4 +1,4 @@
-(*$import Prelude Name Nil *)
+(*$import Name Nil *)
 
 (*Abstract substitutions used in NILSUBST*)
 signature SUBST = 
@@ -71,7 +71,9 @@ signature SUBST =
      *)
     val toList   : item_subst -> (var * item) list 
 
+    (* Print every mapping in the substitution using the given item printing function *)
     val printf : (item -> unit) -> item_subst -> unit
+    (* Print every mapping in the substitution using the default item printing function *)
     val print : item_subst -> unit
   end
 
@@ -97,6 +99,7 @@ signature NILSUBST =
 			  and type item_subst = exp_subst
       
 
+    (* Different ways of substituting *)
     val substConInExp : con_subst -> exp -> exp
     val substConInCon : con_subst -> con -> con
     val substConInKind : con_subst -> kind -> kind
@@ -110,10 +113,12 @@ signature NILSUBST =
     val substExpConInCon : (exp_subst * con_subst) -> con -> con
     val substExpConInKind : (exp_subst * con_subst) -> kind -> kind
 
+    (* Substitute for a single constructor variable *)
     val varConKindSubst : var -> con -> kind -> kind
     val varConConSubst : var -> con -> con -> con
     val varConExpSubst : var -> con -> exp -> exp
 
+    (* Substitute for a single term variable *)
     val varExpExpSubst : var -> exp -> exp -> exp
     val varExpConSubst : var -> exp -> con -> con
     val varExpKindSubst : var -> exp -> kind -> kind

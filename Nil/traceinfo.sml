@@ -1,4 +1,6 @@
-(*$import Prelude Name TRACEINFO *)
+(*$import Name TRACEINFO *)
+
+(* Trace information for the garbage collector *)
 
 structure TraceInfo :> TRACEINFO = 
 struct
