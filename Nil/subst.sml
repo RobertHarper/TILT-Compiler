@@ -17,6 +17,8 @@ functor NilSubstFn(structure Nil : NIL
     val debug = ref false
     val profile = Stats.bool "nil_profile"
     val short_circuit = Stats.bool "subst_short_circuit"
+
+    (*Preliminary results suggest that this is a bad idea.*)
     val subst_use_hash = Stats.bool "subst_use_hash"
 
     val (subst_counter,

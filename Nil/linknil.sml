@@ -21,9 +21,10 @@ structure Linknil (* : LINKNIL *) =
     val typecheck = ref true
     val typecheck_before_opt = ref true
     val typecheck_after_cc = ref true
-    val error = fn s => Util.error "linknil.sml" s
 
-    structure Il = LinkIl.Il
+    val do_opt = ref true
+
+    val error = fn s => Util.error "linknil.sml" s
 
     val select_carries_types = Stats.bool "select_carries_types"
     val profile = Stats.bool "nil_profile"
@@ -36,6 +37,7 @@ structure Linknil (* : LINKNIL *) =
 	     hash := false;
 	     bnds_made_precise := true)
 
+    structure Il = LinkIl.Il
     structure Stats = Stats
     structure Name = Name
     structure LinkIl = LinkIl
@@ -140,9 +142,7 @@ structure Linknil (* : LINKNIL *) =
 			       structure NilSubst = NilSubst
 			       structure NilUtil = NilUtil)
 
-    val do_opt = ref true
-
-    fun phasesplit debug (ctxt,sbnds,sdecs) : Nil.module = 
+    fun phasesplit (ctxt,sbnds,sdecs) : Nil.module = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    fun make_cr_labels l = (internal_label((label2string l) ^ "_c"),
@@ -389,23 +389,22 @@ structure Linknil (* : LINKNIL *) =
 	    val nilmod = MODULE{bnds = bnds, 
 				imports = imports,
 				exports = exports}
-	    val _ = if debug
-			then (print "\n\n=======================================\n\n";
-			      print "phase-split results:\n";
-			      PpNil.pp_module nilmod;
-			      print "\n")
-		    else print "Phase-splitting complete\n"
+
 	in  nilmod
 	end
-    val phasesplit = Stats.timer("Phase-splitting",phasesplit)
-
 
     fun compile' debug (ctxt,sbnds,sdecs) = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
-	    val nilmod = phasesplit debug (ctxt,sbnds,sdecs)
+	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnds,sdecs)	    
+	    val _ = if debug
+		      then (print "\n\n=======================================\n\n";
+			    print "phase-split results:\n";
+			    PpNil.pp_module nilmod;
+			    print "\n")
+		    else print "Phase-splitting complete\n"
 	    val nilmod = (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
 	    val _ = if debug 
 			then (print "\n\n=======================================\n\n";

@@ -574,9 +574,10 @@ struct
 	 let
 	   val D = leave_top_level D
 	   val (D,tformals,subst1) = foldKSR (D,tformals)
-	   val (tformals,subst2) = foldSubstSingleton tformals
+(*	   val (tformals,subst2) = foldSubstSingleton tformals
 	   val tformals = map_second (curry2 kind_reduce D) tformals
-	   val subst = Subst.con_subst_compose (subst2,subst1)
+	   val subst = Subst.con_subst_compose (subst2,subst1)*)
+	   val subst = subst1
 	   val formals = map (substConInCon subst) formals
 	   val body = substConInCon subst body
 	   val (body,body_kind) = con_valid (D,body)
@@ -621,15 +622,15 @@ struct
 					     PpNil.pp_kind k; print "\n")) formals;
 			   print "\n")
 		   else ()
-	   val (formals,subst2) = foldSubstSingleton formals
+(*	   val (formals,subst2) = foldSubstSingleton formals
 	   val formals = map_second (curry2 kind_reduce D) formals
 	   val _ = if !debug
 		     then (print "formals' are ";
 			   app (fn (v,k) => (PpNil.pp_var v; print " :: "; 
 					     PpNil.pp_kind k; print "\n")) formals;
 			   print "\n\n")
-		   else ()
-	   val subst = Subst.con_subst_compose(subst2,subst1)
+		   else ()*)
+	   val subst = subst1 (*Subst.con_subst_compose(subst2,subst1)*)
 	   val body = substConInCon subst body
 	   val body_kind = substConInKind subst body_kind
 	   val body_kind = kind_valid(D,body_kind)
@@ -776,9 +777,9 @@ struct
 	       val argcons = map Var_c vars
 	       val args = zip vars kinds
 	       val (D,args,subst1) = bind_kind_list (D,args)
-	       val (args,subst2) = foldSubstSingleton args
-	       val args = map_second (curry2 kind_reduce D) args
-	       val subst = Subst.con_subst_compose (subst2,subst1)
+(*	       val (args,subst2) = foldSubstSingleton args
+	       val args = map_second (curry2 kind_reduce D) args*)
+	       val subst = subst1 (*Subst.con_subst_compose (subst2,subst1)*)
 	       val argcons = map (substConInCon subst) argcons
 	       val body = substConInCon subst body
 	       val (pcon,pkind,argcons,kinds) = pcon_valid (D,pcon,argcons)
@@ -1459,9 +1460,9 @@ struct
     let
       val origD = D
       val (D,tformals,subst1) = foldKSR(D,tformals)
-      val (tformals,subst2) = foldSubstSingleton tformals
-      val tformals = map_second (curry2 kind_reduce D) tformals
-      val subst = Subst.con_subst_compose (subst2,subst1)
+(*      val (tformals,subst2) = foldSubstSingleton tformals
+      val tformals = map_second (curry2 kind_reduce D) tformals*)
+      val subst = subst1 (*Subst.con_subst_compose (subst2,subst1)*)
       fun check_c ((var,con),D) = 
 	let
 	  val con = substConInCon subst con
