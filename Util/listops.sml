@@ -174,4 +174,12 @@ structure Listops : LISTOPS =
     fun opt_cons a (SOME aa) = (a::aa)
       | opt_cons a (NONE) = [a]
 
+    fun find2 p listpair = 
+      let
+	fun find_one (a,b,NONE) = if p(a,b) then SOME (a,b) else NONE
+	  | find_one (_,_,state) = state
+      in
+	ListPair.foldl find_one NONE listpair
+      end
+
   end
