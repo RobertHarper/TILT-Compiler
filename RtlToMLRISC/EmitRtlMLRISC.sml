@@ -18,6 +18,7 @@ functor EmitRtlMLRISC(
 					   where type Key.ord_key = int
 	  structure MLRISCConstant:	 MLRISC_CONSTANT
 	  structure MLRISCPseudo:	 MLRISC_PSEUDO
+	  structure MLRISCRegion:	 MLRISC_REGION
 	  structure MLTreeComp:		 MLTREECOMP
 	  structure MLTreeExtra:	 MLTREE_EXTRA
 	  structure RegisterMap:	 REGISTER_MAP
@@ -51,6 +52,8 @@ functor EmitRtlMLRISC(
 		       StackFrame.offset
 	      and type MLRISCPseudo.pseudo_op =
 		       MLTreeExtra.MLTree.PseudoOp.pseudo_op
+	      and type MLRISCRegion.region =
+		       MLTreeExtra.MLTree.Region.region
 	      and type MLTreeExtra.MLTree.mltree =
 		       BasicBlock.mltree =
 		       ExternalConvention.mltree =
@@ -100,6 +103,10 @@ functor EmitRtlMLRISC(
   (* -- exceptions --------------------------------------------------------- *)
 
   exception InvalidRtl of string
+
+  (* -- values ------------------------------------------------------------- *)
+
+  val memory = MLRISCRegion.memory
 
   (* -- utility functions -------------------------------------------------- *)
 
@@ -551,9 +558,11 @@ functor EmitRtlMLRISC(
        * <- an integer expression for the value of the pseudo-register
        *)
       fun spill id  = MLTree.LOAD32(
-			  CallConventionBasis.addStack(lookupSpill id))
+			  CallConventionBasis.addStack(lookupSpill id),
+			  memory)
       fun reload id = MLTree.LOAD32(
-			  CallConventionBasis.addStack(lookupReload id))
+			  CallConventionBasis.addStack(lookupReload id),
+			  memory)
 
       (*
        * Reset the source-based mappings of the integer register translation.
@@ -641,9 +650,11 @@ functor EmitRtlMLRISC(
        * <- an floating-point expression for the value of the pseudo-register
        *)
       fun spill id  = MLTree.LOADD(
-			  CallConventionBasis.addStack(lookupSpill id))
+			  CallConventionBasis.addStack(lookupSpill id),
+			  memory)
       fun reload id = MLTree.LOADD(
-			  CallConventionBasis.addStack(lookupReload id))
+			  CallConventionBasis.addStack(lookupReload id),
+			  memory)
 
       (*
        * Reset the source-based mappings of the floating-point register
@@ -913,7 +924,7 @@ functor EmitRtlMLRISC(
      *)
     fun mlWrapper live _ =
 	  let
-	    val label = Machine.freshCodeLabel()
+	    val label = Rtl.fresh_code_label()
 	    val site  = (ref live, Register.callSite label)
 	  in
 	    ([MLTree.PSEUDO_OP(MLRISCPseudo.CallSite site)],
@@ -1255,13 +1266,17 @@ functor EmitRtlMLRISC(
 	    val heapLimit	  = IntegerConvention.heapLimit
 	  in
 	    [MLTree.CODE[
-	       MLTree.STORE32(cur_alloc_pointer, MLTree.REG heapPointer),
-	       MLTree.STORE32(cur_alloc_limit, MLTree.REG heapLimit)
+	       MLTree.STORE32(cur_alloc_pointer, MLTree.REG heapPointer,
+			      memory),
+	       MLTree.STORE32(cur_alloc_limit, MLTree.REG heapLimit,
+			      memory)
 	     ]]@
 	    CALL operand@
 	    [MLTree.CODE[
-	       MLTree.MV(heapPointer, MLTree.LOAD32 cur_alloc_pointer),
-	       MLTree.MV(heapLimit, MLTree.LOAD32 cur_alloc_limit)
+	       MLTree.MV(heapPointer,
+			 MLTree.LOAD32(cur_alloc_pointer, memory)),
+	       MLTree.MV(heapLimit,
+			 MLTree.LOAD32(cur_alloc_limit, memory))
 	     ]]
 	  end
 
@@ -1276,16 +1291,16 @@ functor EmitRtlMLRISC(
     val END_SAVE = []
 
     fun LOAD32I(address, dest) =
-	  [MLTree.CODE[MLTree.MV(dest, MLTree.LOAD32 address)]]
+	  [MLTree.CODE[MLTree.MV(dest, MLTree.LOAD32(address, memory))]]
 
     fun STORE32I(address, src) =
-	  [MLTree.CODE[MLTree.STORE32(address, src)]]
+	  [MLTree.CODE[MLTree.STORE32(address, src, memory)]]
 
     fun LOADQF(address, dest) =
-	  [MLTree.CODE[MLTree.FMV(dest, MLTree.LOADD address)]]
+	  [MLTree.CODE[MLTree.FMV(dest, MLTree.LOADD(address, memory))]]
 
     fun STOREQF(address, src) =
-	  [MLTree.CODE[MLTree.STORED(address, src)]]
+	  [MLTree.CODE[MLTree.STORED(address, src, memory)]]
 
     fun NEEDMUTATE dest =
 	  let
@@ -1295,9 +1310,9 @@ functor EmitRtlMLRISC(
 	    [MLTree.CODE[
 	       MLTree.MV(heapLimit, MLTree.SUB(MLTree.REG heapLimit,
 					       MLTree.LI 8, MLTree.LR)),
-	       MLTree.MV(dest, MLTree.LOAD32 writelist_cursor),
+	       MLTree.MV(dest, MLTree.LOAD32(writelist_cursor, memory)),
 	       MLTree.STORE32(writelist_cursor,
-			      MLTree.ADD(MLTree.REG dest, MLTree.LI 4))
+			      MLTree.ADD(MLTree.REG dest, MLTree.LI 4), memory)
 	     ]]
 	      (* alpha-specific sizes? ??? *)
 	  end
@@ -1321,7 +1336,7 @@ functor EmitRtlMLRISC(
 		    MLTree.LR)
 	  in
 	    [MLTree.CODE[
-	       MLTree.BCC(MLTree.LEU, compare, skipLabel),
+	       MLTree.BCC(MLTree.LE, compare, skipLabel),
 	       MLTree.MV(IntegerConvention.heapLimit, size)
 	     ]]@
 	    callRaw [] (externalExp "gc_raw")@ (* need liveness ??? *)
@@ -1961,7 +1976,7 @@ functor EmitRtlMLRISC(
 	    emitMLTree [MLTree.BEGINCLUSTER];
 	    emitMLTree textTrailer;
 	    emitMLTree dataHeader;
-	    Array.app (emitMLTree o translateData) data;
+	    app (emitMLTree o translateData) data;
 	    emitMLTree dataTrailer;
 	    emitMLTree trailer
 	  end
