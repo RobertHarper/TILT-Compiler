@@ -13,7 +13,7 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
     val & = Word.andb
     infix ++ &
 
-    fun w_osval (str : string) : int = Ccall(posix_filesys_num,str)
+    fun w_osval (str : string) : word = Ccall(posix_filesys_num,str)
 
     datatype uid = UID of word
     datatype gid = GID of word
