@@ -631,6 +631,9 @@ end)
      | xmod' context (Il.MOD_APP(ilmod_fun, ilmod_arg), preferred_name) =
        let
 
+
+val _ = print "MOD_APP start\n"
+
 	   val _ = 
 	     if (!trace) then
 	       (lprintl "MOD IS";
@@ -697,11 +700,8 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 			    error "Expected arrow constructor with one arg")
 	   in
 
-	     val knd_c = Nilstatic.kind_reduce 
-	       (NILctx_of context,
-		Subst.varConKindSubst v_c reduced_argument_c con_body_kind)
-
-
+	     val knd_c = Subst.varConKindSubst v_c reduced_argument_c con_body_kind
+(* inf loop with text-io.sml     val knd_c = Nilstatic.kind_reduce(NILctx_of context, knd_c) *)
 
 	     val cbnd_cat = 
 		 APP[cbnd_cat_fun, 
@@ -766,6 +766,8 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 					      []
 					   else [name_arg_r])
 					  [])]]
+val _ = print "MOD_APP finished\n"
+
        in
 	   {cbnd_cat  = cbnd_cat,
 	    ebnd_cat  = ebnd_cat,
@@ -858,6 +860,9 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
      | xmod' context (Il.MOD_FUNCTOR(var_arg, il_arg_signat, ilmod_body), 
 		    preferred_name) =
        let
+
+val _ = print "MOD_FUNCTOR start\n"
+
 	   (* Split the argument parameter *)
 	   val (var_arg_c, var_arg_r, vmap') = splitVar (var_arg, vmap_of context)
 	   val (knd_arg, con_arg) = xsig context (Var_c var_arg_c, il_arg_signat)
@@ -968,7 +973,7 @@ val _ = (print "knd_body_c is ";
 					  name_body_r,
 					 type_body_r'))])]
 
-
+val _ = print "MOD_FUNCTOR finished\n"
        in
 	   {cbnd_cat = cbnd_fun_cat,
             ebnd_cat = ebnd_fun_cat,
@@ -2533,7 +2538,7 @@ val _ = (print "knd_body_c is ";
 			NILctx'')
 		       
 		   val (knd', con') = 
-		       xsig context' (App_c(con0, [Var_c var]), sig_rng)
+		       xsig context' (App_c(con0, [Var_c var_c]), sig_rng)
 
 		   val is_con_unit = is_unit_c con
 	       in
@@ -2574,7 +2579,7 @@ val _ = (print "knd_body_c is ";
 	   val s = Il.SIGNAT_STRUCTURE(SOME p,sdecs)
 	   val sig' = IlStatic.UnselfifySig(p,s)
 (*
-	   val _ = print "returned from unselfify\n"
+	   val _ = print "**** Returned from unselfify ***\n"
 	   val _ = (print "original selfifed signture:\n";
 		    Ppil.pp_signat s; print "\n\n";
 		    print "new unselfifed signture:\n";
