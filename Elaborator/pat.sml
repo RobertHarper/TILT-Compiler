@@ -107,7 +107,7 @@ struct
     structure N = Name
 
     val do_result_type = Stats.tt("PatResultType")
-    val debug = Stats.ff("Pattern_debug")
+    val debug = Stats.ff("PatDebug")
 
     (* Use error to signal a compiler error.  Print an error message
        and then abort() to signal an error in the source program.
