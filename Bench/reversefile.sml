@@ -2,7 +2,7 @@
 
 (* This program reverses the lines it receives from stdin,
    like the UNIX utility "tac". It assumes that no two
-	 consecutive lines have a total length >4096 bytes.
+   consecutive lines have a total length >4096 bytes.
 
    It is tuned for speed for the Programming Languages Shootout Page;
    it is interesting to compare it with the natural solution using
@@ -82,8 +82,8 @@ fun rd (start, len, count, b) =
               ir := 0;
               rd(start + len + 1, 0, count, MORE(ref (bufsize - l), na, b))
             end
-				else rd (start, len + 1, count, b)
-						
+        else rd (start, len + 1, count, b)
+            
 fun loop (b, s) =
   let 
     val count = Posix.IO.readArr (stdin, 
