@@ -311,19 +311,7 @@ fun pp_alias UNKNOWN = print "unknown"
 				    #2 avail)}
 	      else state
 
-	  fun lookup_proj(state,v,labs) = 
-	      let fun loop e [] = SOME e
-		    | loop (Prim_e(NilPrimOp(record labs),_,elist)) (l::rest) = 
-		         let val SOME e = assoc_eq(Name.eq_label,l,zip labs elist)
-			 in  loop e rest
-			 end
-		    | loop (Var_e v) labs = lookup_proj(state,v,labs)
-		    | loop _ _ = NONE
-	      in  (case lookup_alias(state,v) of
-		       OPTIONALe e => loop e labs
-		     | MUSTe e => loop e labs
-		     | _ => NONE)
-	      end
+	
 	  fun lookup_cproj(state,v,labs) = 
 	      let fun loop c [] = SOME c
 		    | loop (Crecord_c lclist) (l::rest) =
@@ -850,16 +838,16 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	     fun help (e as Var_e v) = 
 		 (case lookup_alias(state,v) of
-		      MUSTe e => e
+		      MUSTe e =>  e
 		    | OPTIONALe e => e
 		    | _ => e)
 	       | help e = e
 
 	 in  case (prim,map help elist) of
-		 (NilPrimOp(select l),[e as Var_e v]) => 
-		     (case (lookup_proj(state,v,[l])) of
-			  NONE => Prim_e(prim,[], [do_exp state e])
-			| SOME e => do_exp state e)
+		 (NilPrimOp(select l),[Prim_e(NilPrimOp(record labs),_,elist)]) => 
+		     let val SOME e = assoc_eq(Name.eq_label,l,zip labs elist)
+                     in do_exp state e
+		     end
 	       | (NilPrimOp (inject k),_) => do_inject state (k, clist, elist)
 	       | (PrimOp(create_table t), _) => do_aggregate state (SOME (local_array,local_vector)) 
 							(create_table,t,clist,elist)
