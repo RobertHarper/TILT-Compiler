@@ -6,7 +6,7 @@
  *
  *)
 
-structure Fifo : FIFO =
+structure Fifo :> FIFO =
   struct
     datatype 'a fifo = Q of {front: 'a list, rear: 'a list}
 
@@ -26,11 +26,11 @@ structure Fifo : FIFO =
     fun delete (Q{front, rear}, pred) = let
 	  fun doFront [] = {front = doRear(rev rear), rear = []}
 	    | doFront (x::r) = if (pred x)
-		then {front = r, rear = rear}
+		then doFront r
 		else let val {front, rear} = doFront r
 		  in {front =  x :: front, rear = rear} end
 	  and doRear [] = []
-	    | doRear (x::r) = if (pred x) then r else x :: (doRear r)
+	    | doRear (x::r) = if (pred x) then doRear r else x :: (doRear r)
 	  in
 	    Q(doFront front)
 	  end
