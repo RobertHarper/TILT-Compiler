@@ -92,3 +92,4 @@
 0092 [closed]	There are too many steps to reporting bugs.
 0093 [open]	TILT does not support separate compilation.
 0094 [open]	The Runtime uses too much virtual memory.
+0095 [open]	Errno is sometimes clobbered.
