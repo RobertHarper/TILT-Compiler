@@ -96,6 +96,8 @@ Analyze Nil/analyze
 INLINE Nil/inline.sig
 Inline Nil/inline
 
+Reorder Nil/reorder
+
 LINKNIL Nil/linknil.sig
 Linknil Nil/linknil
 
