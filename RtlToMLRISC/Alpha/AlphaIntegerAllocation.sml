@@ -8,6 +8,7 @@ functor AlphaIntegerAllocation(
 	  structure Cells:	       CELLS
 	  structure FlowGraph:	       FLOWGRAPH
 	  structure IntegerConvention: INTEGER_CONVENTION where type id = int
+	  structure MLRISCRegion:      MLRISC_REGION
 
 	  structure AlphaRewrite: sig
 
@@ -31,6 +32,8 @@ functor AlphaIntegerAllocation(
 
 	  sharing type AlphaInstructions.instruction =
 		       AlphaRewrite.I.instruction
+	      and type MLRISCRegion.region =
+		       AlphaInstructions.Region.region
 	) :> REGISTER_ALLOCATION
 	       where type id	  = int
 		 and type offset  = AlphaInstructions.Constant.const
@@ -50,6 +53,8 @@ functor AlphaIntegerAllocation(
   exception NoLookup
 
   (* -- values ------------------------------------------------------------- *)
+
+  val stack = MLRISCRegion.stack
 
   fun noLookup _ = raise NoLookup
 
@@ -90,7 +95,8 @@ functor AlphaIntegerAllocation(
 	      stOp = AlphaInstructions.STL,
 	      r	   = id,
 	      b	   = IntegerConvention.stackPointer,
-	      d	   = AlphaInstructions.CONSTop offset
+	      d	   = AlphaInstructions.CONSTop offset,
+	      mem  = stack
 	    }::nil
     in
       fun spill{instr = instruction, reg = target} =
@@ -116,7 +122,8 @@ functor AlphaIntegerAllocation(
 	      ldOp = AlphaInstructions.LDL,
 	      r	   = id,
 	      b	   = IntegerConvention.stackPointer,
-	      d	   = AlphaInstructions.CONSTop offset
+	      d	   = AlphaInstructions.CONSTop offset,
+	      mem  = stack
 	    }::tail
     in
       fun reload{instr = instruction, reg = source} =
