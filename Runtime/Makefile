@@ -15,7 +15,7 @@ all:
 	echo "Try gmake runtime"
 
 purge:
-	rm -rf obj*/*.o obj*/*.d *~ *.i
+	rm -rf obj*/*.o obj*/*.d obj*/*.i *~
 
 test:
 	echo ${asm_name}
@@ -158,14 +158,14 @@ endif
 
 # Note C compilers usually assume .i means already preprocessed.
 ${objdir}/%.o: %.c
-	${CPP} ${CPPFLAGS} $< | ${M4} ${M4FLAGS} - > $(<:.c=.i)
-	${CC} -o $@ ${CFLAGS} $(<:.c=.i)
-	rm $(<:.c=.i)
+	${CPP} ${CPPFLAGS} $< | ${M4} ${M4FLAGS} - > $(@:.o=.i)
+	${CC} -o $@ ${CFLAGS} $(@:.o=.i)
+	rm $(@:.o=.i)
 
 ${objdir}/%.hprof.o: %.c
-	${CPP} ${CPPFLAGS} -DHEAPPROFILE $< | ${M4} ${M4FLAGS} - > $(<:.c=.i)
-	${CC} -o $@ ${CFLAGS} $(<:.c=.i)
-	rm $(<:.c=.i)
+	${CPP} ${CPPFLAGS} -DHEAPPROFILE $< | ${M4} ${M4FLAGS} - > $(@:.o=.i)
+	${CC} -o $@ ${CFLAGS} $(@:.o=.i)
+	rm $(@:.o=.i)
 
 ${objdir}/%.o: %.s
 	$(AS) -o $@ ${ASFLAGS} $<
