@@ -389,43 +389,47 @@ struct
 		val dest  = alloc_regi TRACE
 		val gctemp  = alloc_regi(NOTRACE_INT)
 		val i       = alloc_regi(NOTRACE_INT)
-		val tmp     = alloc_regi(LOCATIVE)
 		val vtemp = load_ireg_term(vl2,NONE)
 		val loglen = load_ireg_term(vl1,NONE)
 		val ptag_opt = make_ptag_opt()
 
 		val _ = add_instr(ICOMMENT "initializing int/ptr array start")
-		val (wordlen,v,afteropt) = 
+		val (wordlen,v) = 
 		    (case is of
+		         (* Byte arrays and vectors have the same format.  Since they are word aligned,
+			    there can 1 to 3 extra bytes left over.  These should not be used by
+			    the mutator and cannot be relied on by the mutator to contain anything.
+			    Specifically, they are not necessarily zero.  Consequentaly, ML strings
+			    which are byte vectors are not the same as C strings. To make ML strings
+			    compatiable with C strings, we would not only have to null-terminate but also
+			    to introduce an extra word when the logical string length is a multiple of 4. *)
 			 Prim.W8 => 
 			     let val fullres = alloc_regi NOTRACE_INT
 				 val endres = alloc_regi NOTRACE_INT
-				 val wordlen = alloc_regi(NOTRACE_INT)
-				 val shift = alloc_regi(NOTRACE_INT)
+				 val wordlen = alloc_regi NOTRACE_INT
+				 val tmp     = alloc_regi NOTRACE_INT
+				 val tmp2    = alloc_regi NOTRACE_INT
 				 val _ = (add_instr(ICOMMENT "about to make tag");
 					  mk_intarraytag(loglen,tag);
 					  add_instr(ICOMMENT "done making tag");
 					  add_instr(ADD(loglen,IMM 3,tmp));      
 					  add_instr(SRL(tmp,IMM 2,wordlen));     (* wordlen = (loglen + 3)/4 *)
 					  add_instr(ANDB(loglen,IMM 3,tmp));     (* tmp = loglen % 4 *)
-					  add_instr(LI(0w4,shift));              (* use shift as a temp *)
-					  add_instr(SUB(shift,REG tmp,tmp));
+					  add_instr(LI(0w4,tmp2));              
+					  add_instr(SUB(tmp2,REG tmp,tmp));
 					  add_instr(ANDB(tmp,IMM 3,tmp));        (* tmp = (4 - tmp) % 4 *)
-					  add_instr(SLL(tmp, IMM 3,shift));  (* shift = # of zero bits in end res *)
-					  
 					  add_instr(SLL(vtemp,IMM 8,fullres));
 					  add_instr(ORB(fullres,REG vtemp,vtemp));
 					  add_instr(SLL(vtemp,IMM 16,fullres));    
-					  add_instr(ORB(fullres,REG vtemp,fullres)); (* fullres = array word *)
-					  add_instr(SRL(fullres,REG shift, endres))) (* endres = last array word *)
-				     
-			     in  (wordlen,fullres, SOME endres)
+					  add_instr(ORB(fullres,REG vtemp,fullres))) (* fullres = bbbb where
+										            b is the byte *)
+			     in  (wordlen,fullres)
 			     end
 		       | Prim.W16 => error "someday"
 		       | Prim.W32 => (let val bytelen = alloc_regi NOTRACE_INT
 				      in  add_instr(SLL(loglen,IMM 2, bytelen));
 					  mk_intarraytag(bytelen,tag);
-					  (loglen,vtemp,NONE)
+					  (loglen,vtemp)
 				      end)
 		       | Prim.W64 => error "someday")
 		val gafter = fresh_code_label "array_int_after"
@@ -466,16 +470,11 @@ struct
 		       | _ => check())
 *)
 		val _ = check()
-		val state = (general_init_case(ptag_opt,tag,dest,
-					       LOCATION(REGISTER(false,I gctemp)),
-					       wordlen,v,gafter,false);
-			     (case afteropt of
-				  NONE => ()
-				| SOME ir => (add_instr(SUB(wordlen,IMM 1,i));
-					      add_instr(S4ADD(i,REG dest,tmp));
-					      add_instr(STORE32I(EA(tmp,0),ir))));
-				  add_instr(ICOMMENT "initializing int/ptr array end");
-				  new_gcstate state)   (* after all this allocation, we cannot merge *)
+		val _ = general_init_case(ptag_opt,tag,dest,
+					  LOCATION(REGISTER(false,I gctemp)),
+					  wordlen,v,gafter,false)
+		val _ = add_instr(ICOMMENT "initializing int/ptr array end")
+		val state = new_gcstate state   (* after all this allocation, we cannot merge *)
 	    in  (LOCATION(REGISTER(false, I dest)), state)
 	    end
 

@@ -171,8 +171,8 @@ value_t show_obj(value_t s, int checkonly, Heap_t **legalHeaps)
       end = obj;
       break;
     default:
-      printf("\ntag = %d(%d)  at add = %d\b",tag,GET_TYPE(tag),s);
-      BUG("IMPOSSIBLE\n");
+      printf("\nshow.c:show_obj  tag = %d(%d) at address = %d\b",tag,GET_TYPE(tag),s);
+      assert(0);
       break;
     }
   return (value_t)end;

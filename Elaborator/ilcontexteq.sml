@@ -795,6 +795,9 @@ struct
 		   val eq_var = wrap' ("eq_var",fn(_,v,v') =>
 				       (Ppil.pp_var v; print ", "; Ppil.pp_var v'; print "\n"))
 				       eq_var
+		   fun show_vm vm = 
+		       Name.VarMap.appi (fn (v,v') => (Ppil.pp_var v; print " -> ";
+						       Ppil.pp_var v'; print "\n")) vm
 	    end
 
 
@@ -906,10 +909,16 @@ struct
 	and eq_mod arg = wrap "eq_mod" eq_mod' arg
 
 	and eq_con(vm,con,con') =
-	    case (con,con')
-	      of (CON_VAR v, CON_VAR v') => VM.eq_var(vm,v,v')           
-	       | (CON_TYVAR tv, CON_TYVAR tv') => eq_tyvar(vm,tv,tv')
-	       | (CON_OVAR ov, CON_OVAR ov') => eq_ovar(vm,ov,ov')
+	    let val res = case (con,con') of
+	         (CON_VAR v, CON_VAR v') => VM.eq_var(vm,v,v')           
+	       | (CON_TYVAR tv, _) => (case Tyvar.tyvar_deref tv of
+					   NONE => error "eq_con on unresolved CON_TYVAR"
+					 | SOME c => eq_con(vm, c, con'))
+	       | (_, CON_TYVAR tv') => (case Tyvar.tyvar_deref tv' of
+					   NONE => error "eq_con on unresolved CON_TYVAR"
+					 | SOME c' => eq_con(vm, con, c'))
+	       | (CON_OVAR ov, _) => eq_con(vm, CON_TYVAR (Tyvar.ocon_deref ov), con')
+	       | (_, CON_OVAR ov') => eq_con(vm, con, CON_TYVAR (Tyvar.ocon_deref ov'))
 	       | (CON_FLEXRECORD fr, CON_FLEXRECORD fr') => eq_flexinforef(vm,fr,fr')
 	       | (CON_INT intsize, CON_INT intsize') => intsize=intsize'
 	       | (CON_UINT intsize, CON_UINT intsize') => intsize=intsize'
@@ -943,6 +952,13 @@ struct
 	       | (CON_MODULE_PROJECT(mod,lab), CON_MODULE_PROJECT(mod',lab')) =>
 		     eq_mod(vm,mod,mod') andalso Name.eq_label(lab,lab')
 	       | _ => false
+		val _ = if res then () 
+		    else (print "XXX eq_con false - \ncon = ";
+			  Ppil.pp_con con;
+			  print "\ncon' = ";
+			  Ppil.pp_con con'; print "\n")
+	    in res
+	    end
  
 
 	and eq_cons(vm,[],[]) = true
@@ -968,8 +984,6 @@ struct
 	      of (SOME con, SOME con') => eq_con(vm,con,con')
 	       | _ => false
 
-	and eq_ovar(vm,ov,ov') = eq_tyvar(vm, Tyvar.ocon_deref ov, Tyvar.ocon_deref ov')
-
 	and eq_labcons(vm,[],[]) = true
 	  | eq_labcons(vm,(l,con)::labcons,(l',con')::labcons') =
 	    Name.eq_label(l,l') andalso eq_con(vm,con,con') 
@@ -988,7 +1002,8 @@ struct
                | _ => false
 
 
-	and eq_signat'(vm,signat,signat') =
+	and eq_signat(vm,signat,signat') =
+	  let val res = 
 	    case (signat,signat') of
 	         (SIGNAT_STRUCTURE(pathopt, sdecs), SIGNAT_STRUCTURE(pathopt', sdecs')) =>
 		  eq_pathopt(vm,pathopt,pathopt') andalso eq_sdecs(vm,sdecs,sdecs')
@@ -996,9 +1011,15 @@ struct
 		  eq_signat(vm,signat1,signat1') andalso a=a' andalso
 		  eq_signat(VM.add(v,v',vm),signat2,signat2')
                | (SIGNAT_VAR v1, SIGNAT_VAR v2) => VM.eq_var(vm,v1,v2)
+               | (SIGNAT_OF p1, SIGNAT_OF p2) => eq_path(vm,p1,p2)
                | _ => false
-
-	and eq_signat arg = wrap "eq_signat" eq_signat' arg
+		val _ = if res then () 
+		    else (print "XXX eq_signat false - \nsignat = ";
+			  Ppil.pp_signat signat;
+			  print "\nsignat' = ";
+			  Ppil.pp_signat signat'; print "\n")
+	  in  res
+	  end
 
 	and eq_sdecs'(vm,sdecs,sdecs') =
 	    let	val vm = extend_vm_sdecs(sdecs,sdecs',vm)
@@ -1134,9 +1155,7 @@ struct
 			 print "\n")
 *)
 		val (vm,vlist) = extend_vm_context(c,c',VM.empty)
-(*
-		val _ = print "done extend_vm_context\n"
-*)
+(*		val _ = (print "vm = "; VM.show_vm vm; print "\n") *)
 	    in eq_cntxt(vm,c,c',vlist)
 	    end handle NOT_EQUAL => false
 

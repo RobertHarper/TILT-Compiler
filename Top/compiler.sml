@@ -5,7 +5,21 @@ structure Til : COMPILER =
     val littleEndian = Stats.tt("littleEndian")
 
     datatype platform = TIL_ALPHA | TIL_SPARC | MLRISC_ALPHA | MLRISC_SPARC
-    val platform = ref TIL_ALPHA
+    val platform = 
+	ref (case OS.Process.getEnv "SYS_TYPE" of
+		 NONE => (print "Environtment variable SYS_TYPE unset. Defaulting to Alpha.\n";  
+			  littleEndian := true; TIL_ALPHA)
+	       | SOME sysType => 
+		     if (String.substring(sysType,0,3)) = "sun"
+			 then (print "Sun detected. Using Til-Sparc\n"; 
+			       littleEndian := false; TIL_SPARC)
+		     else if (String.substring(sysType,0,5)) = "alpha"
+			 then (print "Alpha detected. Using Til-Alpha\n"; 
+			       littleEndian := true; TIL_ALPHA)
+		     else (print "Environment variable SYS_TYPE's value ";
+			   print sysType; 
+			   print " is unrecognized. Defaulting to Alpha.\n";  
+			   littleEndian := true; TIL_ALPHA))
 
     type sbnd = Il.sbnd
     type context_entry = Il.context_entry
@@ -27,24 +41,28 @@ structure Til : COMPILER =
 	(case !platform of
 	     TIL_ALPHA => Linkalpha.base2ui
 	   | TIL_SPARC => Linksparc.base2ui
+	   | _ => error "No MLRISC"
 (*	   | MLRISC_ALPHA => AlphaLink.base2ui
 	   | MLRISC_SPARC => SparcLink.base2ui *) ) base
     fun base2s base = 
 	(case !platform of
 	     TIL_ALPHA => Linkalpha.base2s
 	   | TIL_SPARC => Linksparc.base2s
+	   | _ => error "No MLRISC"
 (*	   | MLRISC_ALPHA => AlphaLink.base2s
 	   | MLRISC_SPARC => SparcLink.base2s *) ) base
     fun base2o base = 
 	(case !platform of
 	     TIL_ALPHA => Linkalpha.base2o
 	   | TIL_SPARC => Linksparc.base2o
+	   | _ => error "No MLRISC"
 (*	   | MLRISC_ALPHA => AlphaLink.base2o
 	   | MLRISC_SPARC => SparcLink.base2o *) ) base
     fun base2uo base = 
 	(case !platform of
 	     TIL_ALPHA => Linkalpha.base2uo
 	   | TIL_SPARC => Linksparc.base2uo
+	   | _ => error "No MLRISC"
 (*	   | MLRISC_ALPHA => AlphaLink.base2uo
 	   | MLRISC_SPARC => SparcLink.base2uo *) ) base
 
@@ -93,6 +111,7 @@ structure Til : COMPILER =
 		    case !platform of
 			 TIL_ALPHA => Linkalpha.rtl_to_asm
 		       | TIL_SPARC => Linksparc.rtl_to_asm
+		       | _ => error "No MLRISC"
 (*		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm *)
 (*		       | MLRISC_SPARC => SparcLink.rtl_to_asm*)
 		val (sFile,_) = rtl_to_asm(unitName, rtlmod)    

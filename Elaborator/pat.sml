@@ -1017,9 +1017,12 @@ structure Pat
 			       raise CannotFlatten)
 	    fun irrefutable_case (bnds,vlist) = 
 		let (* val table = Listops.zip vlist boundsyms *)
-		    fun mapper(v,s) = SBND(symbol_label s, BND_EXP(gen_var_from_symbol s, VAR v))
-		    val sbnds_second = map2 mapper (vlist,boundsyms)
-		    val sbnds_first = map (fn b => SBND(fresh_internal_label "lblx", b)) bnds
+		    fun mapper1(i,b) = SBND(internal_label 
+					    ("!irref_" ^ (Int.toString i)), b)
+		    fun mapper2(v,s) = SBND(symbol_label s, 
+					    BND_EXP(gen_var_from_symbol s, VAR v))
+		    val sbnds_first = mapcount mapper1 bnds
+		    val sbnds_second = map2 mapper2 (vlist,boundsyms)
 		    val sbnds = sbnds_first @ sbnds_second
 		    val sdecs = IlStatic.GetSbndsSdecs(context,sbnds)
 		in  Listops.zip sbnds sdecs

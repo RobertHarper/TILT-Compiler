@@ -12,7 +12,7 @@ struct
   structure Sparcutils = Sparcutils
   structure Callconv = SparcCallconv
   structure Ifgraph = Ifgraph(structure Machine = Machine)
-  structure Tracetable = Tracetable(val little_endian = true
+  structure Tracetable = Tracetable(val little_endian = false
 				    structure ArgMachine = Sparc.Machine)
 
   structure Bblock = Bblock(structure Machine = Machine

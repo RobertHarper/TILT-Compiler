@@ -18,7 +18,7 @@
 #include "client.h"
 
 int ThreadedVersion = THREADED_VERSION;
-int LEAST_GC_TO_CHECK = -1;
+int LEAST_GC_TO_CHECK = 1 << 30;
 
 int NumHeap       = 20;
 int NumStack      = 100;
@@ -110,6 +110,7 @@ struct option_entry table[] =
    0, "gcforward", &SHOW_GCFORWARD, "Show object forwarding infomation during GC",
    0, "gcerror", &SHOW_GCERROR, "Show GC errors",
    0, "gcheaps", &SHOW_HEAPS, "Show heaps before and after each GC",
+   0, "showatgc", &LEAST_GC_TO_CHECK, "Check/show heaps starting at this GC",
    1, "stacksize", &StackSize, "Stack size of threads measured in Kbytes",
    1, "proc", &NumSysThread, "Use this many processors",
    1, "minheap", &MinHeap, "Set minimum size of heap in Kbytes",

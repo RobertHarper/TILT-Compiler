@@ -244,9 +244,17 @@ value_t alloc_uninit_string(int strlen, char **raw)
 /* this is dangerous .... */
 void adjust_stringlen(value_t str, int newlen)
 {
-  int newtag = IARRAY_TAG | (newlen << ARRLEN_OFFSET);
   value_t *obj = (value_t *)str;
+  int oldtag = obj[-1];
+  int newtag = IARRAY_TAG | (newlen << ARRLEN_OFFSET);
+  int oldlen = GET_ARRLEN(oldtag);
+  int oldword = (oldlen + 3) / 4;
+  int newword = (newlen + 3) / 4;
+  int i;
+  assert(newlen <= oldlen);
   obj[-1] = newtag;
+  for (i=newword+1; i<=oldword; i++)
+    obj[i] = SKIP_TAG;
 }
 
 

@@ -268,7 +268,8 @@ structure Toil
                                    else if (!r < 0)
                                             then elab_error "maxmap count inconsistency"
                                         else (* rename case *)
-                                            let val l' = fresh_internal_label "hidden"
+                                            let val name = Name.label2name l
+						val l' = fresh_internal_label ("hidden_" ^ name)
                                             in (SOME (SBND(l',bnd)), 
                                                 CONTEXT_SDEC(SDEC(l',dec)))
                                                 :: (uniquify rest)
@@ -1031,8 +1032,10 @@ val _ = print "plet0\n"
 		 
 	     val fbnds = map #1 fbnd_con_list
 	     val fbnd_cons : con list = map #2 fbnd_con_list
-	     val top_label = to_nonexport(fresh_internal_label "polyfun!")
-	     val top_var = fresh_named_var "polyfun!"
+	     (* Use symbols cannot have a bang andalphnumeric characters *)
+	     val top_name = foldl (fn (l,s) => (Name.label2name l) ^ "_" ^ s) "!polyfun" fun_ids
+	     val top_label = to_nonexport(internal_label top_name)
+	     val top_var = fresh_named_var "polyfun"
 	     val top_exp_con = (FIX(true,PARTIAL,fbnds),
 				case fbnd_cons of
 				    [c] => c
@@ -1143,9 +1146,9 @@ val _ = print "plet0\n"
 		end
 
 		val tyvar_stamp = get_stamp()
-		val lbl = to_open(fresh_internal_label "varpoly")
+		val lbl = to_open(internal_label ("!varpoly"))
 		val var_poly = fresh_named_var "varpoly"
-		val lbl' = to_nonexport (fresh_internal_label "valbind")
+		val lbl' = to_nonexport (internal_label "!valbind")
 		val var' = fresh_named_var "valbind"
 		val tyvars = map tyvar_strip tyvars
 		local
@@ -1163,7 +1166,7 @@ val _ = print "plet0\n"
 						  SelfifySig context (PATH (var_poly,[]),
 							     SIGNAT_STRUCTURE (NONE,temp_sdecs)))
 		val _ = eq_table_push()
-		val lbl = fresh_internal_label "bindarg"
+		val lbl = internal_label "!bindarg"
 		val v = fresh_named_var "bindarg"
 		val (e,con,va) = xexp(context',expr)
 		val sbnd_sdec = (SBND(lbl,BND_EXP(v,e)),SDEC(lbl,DEC_EXP(v,con,NONE,false)))
@@ -1271,7 +1274,7 @@ val _ = print "plet0\n"
 		end
 	 
 		val var_poly = fresh_named_var "var_poly"
-		val open_lbl = to_open(fresh_internal_label "lbl")
+		val open_lbl = to_open(internal_label "!opened")
 		val context' = add_context_mod(context,open_lbl,var_poly,
 					       SelfifySig context (PATH (var_poly,[]),
 								   SIGNAT_STRUCTURE(NONE, sdecs1)))
@@ -1324,7 +1327,7 @@ val _ = print "plet0\n"
 		end
 	 
 		val var_poly = fresh_named_var "var_poly"
-		val open_lbl = to_open(fresh_internal_label "lbl")
+		val open_lbl = to_open(internal_label "!opened")
 		val context' = add_context_mod(context,open_lbl,var_poly,
 					       SelfifySig context (PATH (var_poly,[]),
 								   SIGNAT_STRUCTURE(NONE, sdecs1)))
@@ -1551,7 +1554,7 @@ val _ = print "plet0\n"
 		  val (_,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list1)
 		  val sbnd_ctxt_list2 = xdec false (context',dec2)
 		  fun rename(opt,CONTEXT_SDEC(SDEC(l,dec))) = 
-		      let val lbl = fresh_internal_label ("local_" ^ (IlUtil.label2name l))
+		      let val lbl = internal_label ("local_" ^ (IlUtil.label2name l))
 			  val lbl = to_nonexport lbl
 			  val ce' = CONTEXT_SDEC(SDEC(lbl,dec))
 		      in case opt of
@@ -1899,7 +1902,7 @@ val _ = print "plet0\n"
 				end
 			    val sigpoly = SIGNAT_STRUCTURE(NONE,flatten(mapcount help ftv_sym))
 			    val context' = add_context_mod(context,
-							      to_open(fresh_internal_label "lbl"),
+							      to_open(internal_label "opened"),
 							      varpoly, 
 							      SelfifySig context (PATH (varpoly,[]),sigpoly))
 			    val con = xty(context',ty)
@@ -2044,7 +2047,7 @@ val _ = print "plet0\n"
 		    | (Ast.FctFct {params=[(argnameopt,sigexp)],body,constraint}) =>
 			  let 
 			      val arglabel = (case argnameopt of
-						  NONE => to_open(fresh_internal_label "FunctorArg")
+						  NONE => to_open(internal_label "FunctorArg")
 						| SOME s => symbol_label s)
 			      val funid = symbol_label name
 			      val argvar = fresh_named_var "funct_arg"
@@ -2126,7 +2129,7 @@ val _ = print "plet0\n"
 				  (case (mod2path argmod) of
 				       SOME p => p
 				     | _ => elab_error "xstrexp: functor argument became non-variable")
-			      val coerced_lbl = fresh_internal_label "coerced"
+			      val coerced_lbl = internal_label "!coerced"
 			      val coerced_var = fresh_named_var "coerced_structure"
 
 			      val (modc_body,sig1') = 
@@ -2156,8 +2159,8 @@ val _ = print "plet0\n"
 	   | Ast.LetStr (dec,strexp) => (* rule 254 *) 
 		 let val var1 = fresh_var()
 		     val var2 = fresh_var()
-		     val lbl1 = to_open(fresh_internal_label "lbl1")
-		     val lbl2 = to_open(fresh_internal_label "lbl2")
+		     val lbl1 = to_open(internal_label "LetStr1")
+		     val lbl2 = to_open(internal_label "LetStr2")
 		     val sbnd_sdec_list = xdec true (context,dec)
 		     val (mod1,sig1) = sbnd_ctxt_list2modsig sbnd_sdec_list
 		     val context' = add_context_mod(context,lbl1,var1,

@@ -333,7 +333,7 @@ int findretadd(value_t *sp_ptr, value_t *cur_retadd_ptr, value_t top,
 	 the calling instruction is followed by a dealy slot. */
       cur_retadd = (*((int *)(sp+4*quad_offset)) + 8);
 #else
-      error endian not defined
+      error platform not defined
 #endif
 #endif
 

@@ -256,7 +256,7 @@ struct
 		 | _ => error "xeq_mu given confun which is not CON_FUN")
 	  val expanded_cons_vars = map0count (fn i => fresh_named_var ("expanded_con_" ^ (Int.toString i))) arity
 	  val vars_eq = map0count (fn i => fresh_named_var ("vars_eq_" ^ (Int.toString i))) arity
-	  val type_lbls = map0count (fn i => fresh_internal_label("lbl" ^ (Int.toString i))) arity
+	  val type_lbls = map0count (fn i => internal_label("type" ^ (Int.toString i))) arity
 	  val evars = map0count (fn i => fresh_named_var ("evar" ^ (Int.toString i))) arity
 	  val cvars = map0count (fn i => fresh_named_var ("cvar" ^ (Int.toString i))) arity
 	  val eq_lbls = map to_eq type_lbls

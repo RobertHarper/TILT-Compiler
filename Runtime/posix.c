@@ -143,6 +143,7 @@ static char* mlstring2cstring(string mlstring)
   unsigned int tag = ((int *)mlstring)[-1];
   int bytelen = GET_ARRLEN(tag);
   char *raw = (char *)mlstring;
+  assert((bytelen+1) < sizeof(buf));
   bcopy(raw,buf,bytelen);
   buf[bytelen] = 0;
   return (char *)buf;
@@ -427,6 +428,8 @@ word8vector posix_io_read(int fd, int size)
       printf("POSIX function read failed with errno = %d\n", errno);
       assert(0);
     }
+  else 
+    assert(bytes_read <= size);
   adjust_stringlen(res,bytes_read);
   return (word8vector) res;
 }
@@ -694,10 +697,12 @@ int_int_int_int_int posix_procenv_times(unit unused)
   assert(0);
 }
 
-string_option posix_procenv_getenv(string unused)
+string_option posix_procenv_getenv(string mlname)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  char *cname = mlstring2cstring(mlname);  /* Don't need to free this */
+  char *cvalue = getenv(cname);            /* Don't need to free this and cannot modify it */
+  value_t mlvalue = alloc_string(strlen(cvalue),cvalue);
+  return mlvalue;
 }
 
 string_list posix_procenv_environ(unit unused)

@@ -296,7 +296,7 @@ void paranoid_check_heap_global(Heap_t *curSpace, Heap_t **legalHeaps)
 {
     int count = 0, mi, i;
     scan_heap("Paranoid check heap",curSpace->bottom, curSpace->alloc_start, 
-	      curSpace->top, legalHeaps, SHOW_HEAPS);
+	      curSpace->top, legalHeaps, SHOW_HEAPS && (NumGC >= LEAST_GC_TO_CHECK));
     /* check globals */
     for (mi=0; mi<module_count; mi++) {
       value_t start = (&GLOBALS_BEGIN_VAL)[mi];
