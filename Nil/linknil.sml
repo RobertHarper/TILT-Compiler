@@ -36,8 +36,11 @@ structure Linknil :> LINKNIL  =
     val show_typecheck2 = Stats.ff("showTypecheck2")
     val show_typecheck3 = Stats.ff("showTypecheck3")
     val show_reduce = Stats.ff("showReduce")
+    val show_reduce2 = Stats.ff("showReduce2")
     val show_flatten = Stats.ff("showFlatten")
+    val show_flatten2 = Stats.ff("showFlatten2")
     val show_inline = Stats.ff("showInline")
+    val show_inline2 = Stats.ff("showInline2")
     val show_html = Stats.tt("showHTML")
 
     val typecheck_after_phasesplit = Stats.ff("TypecheckAfterPhasesplit")
@@ -226,11 +229,11 @@ structure Linknil :> LINKNIL  =
 				 filename, nilmod) 
 
 
-	    val nilmod = transform(do_reduce, ref false,
-				   "Reduce", Reduce.doModule, 
+	    val nilmod = transform(do_reduce, show_reduce2,
+				   "Reduce2", Reduce.doModule, 
 				   filename, nilmod)
 
-	    val nilmod = transform(do_flatten, ref false,
+	    val nilmod = transform(do_flatten, show_flatten2,
 				   "Flatten", Flatten.doModule, 
 				   filename, nilmod)
 
@@ -241,7 +244,7 @@ structure Linknil :> LINKNIL  =
                       print "\n";
                       result
                    end
-	    val nilmod = transform(do_inline, ref false,
+	    val nilmod = transform(do_inline, show_inline2,
 				   "Inline", 
 				   inline_domod, filename, nilmod)
 
@@ -264,10 +267,6 @@ structure Linknil :> LINKNIL  =
 				    "Nil_typecheck_post-cc",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
-
-	    val _ = if !(Stats.bool("UptoClosureConvert"))
-			then raise (Stop nilmod)
-		    else ()
 
 	in  nilmod
 	end
