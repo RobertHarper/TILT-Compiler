@@ -456,6 +456,7 @@ Nil Nil/nil
 
 PPNIL Nil/ppnil.sig
 Ppnil Nil/ppnil
+Ppnil-Html Nil/ppnil-html
 
 NILERROR Nil/nilerror.sig
 NilError Nil/nilerror
