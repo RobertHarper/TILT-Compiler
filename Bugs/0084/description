@@ -1,0 +1,51 @@
+Number: 0084
+Title:       Shadowing :: or nil makes list patterns fail to compile
+Keywords:    pattern compiler shadowing pathological
+Submitter:   tom7
+Date:        8/12/02
+Version:     CVS 8/12/02
+System:	     any
+Severity:    minor
+Problem:     
+
+	The pattern compiler elaborates a list pattern by emitting
+	the symbols :: and nil. This is no good, since they may
+	have been rebound. 
+
+Code:	     
+
+	let
+	    val empty = nil (* list *)
+	    datatype shadow_list = :: of int | nil of unit
+	    fun f [a, b, c] = 0
+	      | f _ = 1
+	in
+	    f empty
+	end
+
+Transcript:
+
+  [Elaborating tomtests/pattern.sml non-constrained]
+tomtests/pattern.sml:41.2-42.13 Error: tuple/record pattern used on a non-record argument
+Actual type: INT32
+Pattern type:           {metavar_53807_178 *
+*          metavar_53808_179}
+tomtests/pattern.sml:41.2-42.13 Error: tuple/record pattern used on a non-record argument
+Actual type: INT32
+Pattern type:           {metavar_53815_181 *
+*          metavar_53816_182}
+tomtests/pattern.sml:41.2-42.13 Error: tuple/record pattern used on a non-record argument
+Actual type: INT32
+Pattern type:           {metavar_53823_184 *
+*          metavar_53824_185}
+Error: pat.sml: value-carrying vs non-value-carrying mismatch
+
+uncaught exception BUG
+
+Comments:    This is pretty pathological, but we should
+             be careful about this kind of thing because it
+             can easily lead to unsoundness.
+Fix:
+Test: *
+Owner: *
+Status: open
