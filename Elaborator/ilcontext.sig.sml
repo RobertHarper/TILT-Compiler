@@ -47,8 +47,8 @@ signature ILCONTEXT =
 	  | PHRASE_CON of con
 	  | PHRASE_MOD of mod
 	  | PHRASE_SIG of signat
-	  | PHRASE_OVEREXP of unit -> exp * (context,con) Il.Tyvar.ocon
-	    
+	  | PHRASE_OVEREXP of (con * exp) list
+
 	datatype class = 
 	    CLASS_EXP of con
 	  | CLASS_CON of kind
@@ -61,8 +61,7 @@ signature ILCONTEXT =
 	  | PHRASE_CLASS_CON  of con * kind
 	  | PHRASE_CLASS_MOD  of mod * signat
 	  | PHRASE_CLASS_SIG  of signat
-	  | PHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Il.Tyvar.ocon
-
+	  | PHRASE_CLASS_OVEREXP of (con * exp) list
 
         (* ----- Useful structure-related helper functions ------- *)	    
         (* ----- Sdecs_Lookup' looks inside starred structure --------- *)
@@ -94,5 +93,7 @@ signature ILCONTEXT =
 				pp_signat : signat -> Formatter.format} *
 	    context -> Formatter.format
 
+	val blastOutContext : TextIO.outstream -> context -> unit
+	val blastInContext : TextIO.instream -> context
 
     end

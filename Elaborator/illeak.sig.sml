@@ -119,7 +119,7 @@ signature ILLEAK =
     and inline = INLINE_MODSIG of mod * signat
                | INLINE_EXPCON of exp * con
                | INLINE_CONKIND of con * kind
-	       | INLINE_OVER   of unit -> exp * (context,con) Tyvar.ocon
+	       | INLINE_OVER   of  (con * exp) list
 
     and context_entry = 
 		CONTEXT_INLINE of label * var * inline
@@ -137,7 +137,7 @@ signature ILLEAK =
 	  | PHRASE_CLASS_CON  of con * kind
 	  | PHRASE_CLASS_MOD  of mod * signat
 	  | PHRASE_CLASS_SIG  of signat
-	  | PHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Tyvar.ocon
+	  | PHRASE_CLASS_OVEREXP of (con * exp) list
 
     withtype value = (con,exp) Prim.value
     and decs = dec list

@@ -174,7 +174,7 @@ functor Toil(structure Il : IL
 	    Ppil.pp_con (CON_TYVAR (ocon_deref ocon));
 	    print "\n";
 *)
-	    case (ocon_constrain(ocon,helpers)) of
+	    case (ocon_constrain ocon) of
 		[] => (error_region();
 		       print "overloaded type: none of the constraints are satisfied\n";
 		       true)
@@ -596,11 +596,37 @@ functor Toil(structure Il : IL
 		 else 
 		     (case (Context_Lookup(context,map symbol_label path)) of
 			  SOME(_,PHRASE_CLASS_EXP (e,c)) => (e,c,Exp_IsValuable(context,e))
-			| SOME(_,PHRASE_CLASS_OVEREXP thunk) =>
-			      let val (exp,ocon) = thunk()
+			| SOME (_, PHRASE_CLASS_OVEREXP constraint_result) =>
+			      let 
+				  fun mk_constraint (c,res) (tyvar, is_hard) = 
+				      let val c' = CON_TYVAR tyvar
+					  val match = if is_hard 
+							then eq_con(context,c,CON_TYVAR tyvar)
+						    else soft_eq_con(context,c,CON_TYVAR tyvar)
+					  val res = if match
+							then Tyvar.MATCH res
+						    else Tyvar.FAIL
+				      in res
+				      end
+				  val constraints = Listops.mapcount (fn (n,(con,_)) => mk_constraint (con,n)) constraint_result
+				  val results = map #2 constraint_result
+				  fun con_thunk exp_oneshot results (index : int) = 
+				      let val result : exp = List.nth(results,index)
+				      in  (case (oneshot_deref exp_oneshot) of
+					       (SOME _) => ()
+					     | NONE => oneshot_set(exp_oneshot,result))
+				      end
+				  val eshot = oneshot()
+				  val ocon = Tyvar.uocon_inst (empty_context,
+							       Tyvar.fresh_uocon constraints, 
+							       con_thunk eshot results)
+				  val con = CON_OVAR ocon
+				  val exp = OVEREXP(con,true,eshot)
 				  val _ = add_overload_entry ocon
 			      in (exp,CON_OVAR ocon,Exp_IsValuable(context,exp))
 			      end
+
+  
 			| SOME(_,PHRASE_CLASS_MOD (m,s as SIGNAT_FUNCTOR _)) => 
 			      let val (e,c) = polyfun_inst (context,m,s)
 			      in  (e,c,true)

@@ -120,7 +120,7 @@ signature IL =
     and inline = INLINE_MODSIG of mod * signat
 	  | INLINE_EXPCON  of exp * con
 	  | INLINE_CONKIND of con * kind
-	  | INLINE_OVER    of unit -> exp * (context,con) Tyvar.ocon
+	  | INLINE_OVER    of (con * exp) list
 
     and context_entry = 
 		CONTEXT_INLINE of label * var * inline

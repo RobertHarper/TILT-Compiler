@@ -22,13 +22,12 @@ functor Tyvar()
 					     use_equal : bool ref,
 					     body : '1con Util.oneshot,
 					     ctxts : 'ctxt list ref}
-    type '1con con_helpers = {hard : '1con * '1con -> bool,
-			      soft : '1con * '1con -> bool}
+
     datatype 'a status = FAIL | MAYBE | MATCH of 'a
-    type ('ctxt,'1con,'a) constraint = ('ctxt,'1con) tyvar * '1con con_helpers * bool -> 'a status (* bool represents hardness *)
+    type ('ctxt,'1con,'a) constraint = ('ctxt,'1con) tyvar * bool -> 'a status (* bool represents hardness *)
 	
     datatype ('ctxt,'1con,'a) uocon  = UOCON of {constraints : ('ctxt,'1con,'a) constraint list}
-    datatype ('ctxt,'1con) ocon = OCON of {constrainer : '1con con_helpers -> (int * bool) list,
+    datatype ('ctxt,'1con) ocon = OCON of {constrainer : unit -> (int * bool) list,
 					   name : var,
 					   body : ('ctxt,'1con) tyvar}
     fun get_stamp() = inc()
@@ -81,17 +80,16 @@ functor Tyvar()
 	    val body = fresh_named_tyvar (ctxts,"ocon")
 	    val name = fresh_named_var "ocon"
 	    val constraints = ref(mapcount (fn (i,c) => (i,c)) constraints)
-	    fun constrainer (helpers as {hard : '1con * '1con -> bool,
-					 soft : '1con * '1con -> bool}) : (int * bool) list =
+	    fun constrainer () : (int * bool) list =
 		let
-		    fun filter(i,c) = (case (c(body,helpers,false)) of
+		    fun filter(i,c) = (case (c(body,false)) of
 					   (MAYBE | MATCH _) => SOME(i,c)
 					 | FAIL => NONE)
 		    val constraints' = List.mapPartial filter (!constraints)
 		    val _ = (constraints := constraints')
 		    val result =
 			(case constraints' of
-			     [(i,c)] => (case (c(body,helpers,true)) of
+			     [(i,c)] => (case (c(body,true)) of
 					      FAIL => error "softeq succeeded but hardeq failed!!!"
 					    | MAYBE => [(i,false)]
 					    | MATCH thunk_arg => (thunk thunk_arg;
@@ -105,6 +103,6 @@ functor Tyvar()
 		 body = body}
 	end
 
-    fun ocon_constrain(OCON{constrainer,...},helpers) = constrainer helpers
+    fun ocon_constrain(OCON{constrainer,...}) = constrainer() 
 
   end

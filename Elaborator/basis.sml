@@ -86,19 +86,11 @@ functor Basis(structure Il : IL
 		  val s = IlStatic.GetModSig(empty_context,m)
 	      in result := add_context_inline(!result,mk_var_lab str, fresh_named_var str, INLINE_MODSIG(m,s))
 	      end
-	  fun over_entry str con_thunker constraints =
+	  fun over_entry str con_exp =
 	      result := add_context_inline(!result,
 					   mk_var_lab str, 
 					   fresh_named_var str,
-					   INLINE_OVER(fn _ => 
-						       let val eshot = oneshot()
-							   val ocon = uocon_inst (empty_context,
-										  fresh_uocon constraints, 
-										  con_thunker eshot)
-					       val con = CON_OVAR ocon
-						       in (OVEREXP(con,true,eshot),ocon)
-						       end))
-	    
+					   INLINE_OVER con_exp)
 
 
 	 (* -------------- add the base tags ------------------------- *)
@@ -186,28 +178,28 @@ functor Basis(structure Il : IL
 					 float64, false, oneshot_init PARTIAL), FLOAT_CASE)
 	       val floatpred = (CON_ARROW([con_tuple[float64, float64]], 
 					  con_bool, false, oneshot_init PARTIAL), FLOAT_CASE)
-	       fun add_uni_entry (str,thunk) = over_entry str thunk (map constraints [intuni,floatuni])
-	       fun add_bin_entry (str,thunk) = over_entry str thunk (map constraints [intbin,floatbin])
-	       fun add_pred_entry (str,thunk) = over_entry str thunk (map constraints [intpred,floatpred])
-	       val uni_table = [("~", con_thunk(ETAPRIM (neg_int W32,[]),
-						ETAPRIM (neg_float F64,[])))]
-	       val bin_table = [("+", con_thunk(ETAPRIM (plus_int W32,[]),
-						ETAPRIM (plus_float F64,[]))),
-				("-", con_thunk(ETAPRIM (minus_int W32,[]),
-						ETAPRIM (minus_float F64,[]))),
-				("*", con_thunk(ETAPRIM (mul_int W32,[]),
-						ETAPRIM (mul_float F64,[])))]
-	       val pred_table = [("<", con_thunk(ETAPRIM (less_int W32,[]),
-						 ETAPRIM (less_float F64,[]))),
-				 (">", con_thunk(ETAPRIM (greater_int W32,[]),
-						 ETAPRIM (greater_float F64,[]))),
-				 ("<=", con_thunk(ETAPRIM (lesseq_int W32,[]),
-						  ETAPRIM (lesseq_float F64,[]))),
-				 (">=", con_thunk(ETAPRIM (greatereq_int W32,[]),
-						  ETAPRIM (greatereq_float F64,[])))]
+	       fun add_uni_entry (str,ei,ef) = over_entry str [(#1 intuni, ei), (#1 floatuni, ef)]
+	       fun add_bin_entry (str,ei,ef) = over_entry str [(#1 intbin, ei), (#1 floatbin, ef)]
+	       fun add_pred_entry (str,ei,ef) = over_entry str [(#1 intpred, ei), (#1 floatpred, ef)]
+	       val uni_table = [("~", ETAPRIM (neg_int W32,[]),
+						ETAPRIM (neg_float F64,[]))]
+	       val bin_table = [("+", ETAPRIM (plus_int W32,[]),
+						ETAPRIM (plus_float F64,[])),
+				("-", ETAPRIM (minus_int W32,[]),
+						ETAPRIM (minus_float F64,[])),
+				("*", ETAPRIM (mul_int W32,[]),
+						ETAPRIM (mul_float F64,[]))]
+	       val pred_table = [("<", ETAPRIM (less_int W32,[]),
+						 ETAPRIM (less_float F64,[])),
+				 (">", ETAPRIM (greater_int W32,[]),
+						 ETAPRIM (greater_float F64,[])),
+				 ("<=", ETAPRIM (lesseq_int W32,[]),
+						  ETAPRIM (lesseq_float F64,[])),
+				 (">=", ETAPRIM (greatereq_int W32,[]),
+						  ETAPRIM (greatereq_float F64,[]))]
 	   in  app add_uni_entry uni_table; 
 	       app add_bin_entry bin_table; 
-	       app add_pred_entry pred_table
+	       app add_pred_entry pred_table 
 	   end
 
 

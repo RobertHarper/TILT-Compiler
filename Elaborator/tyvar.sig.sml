@@ -6,12 +6,9 @@ signature TYVAR =
     type ('ctxt,'1con) tyvar           (* type meta-variable used for type inference *)
     type stamp
 
-    type '1con con_helpers = {hard : '1con * '1con -> bool,
-			      soft : '1con * '1con -> bool}
-
     (* bool represents hardness *)
     datatype 'a status = FAIL | MAYBE | MATCH of 'a
-    type ('ctxt,'1con,'a) constraint = ('ctxt,'1con) tyvar * '1con con_helpers * bool -> 'a status
+    type ('ctxt,'1con,'a) constraint = ('ctxt,'1con) tyvar * bool -> 'a status
     type ('ctxt,'1con,'a) uocon   (* uninstantiated overloaded type with constraints *)
     type ('ctxt,'1con) ocon         (* uninstantiated overloaded type with constraints *)
 
@@ -52,7 +49,7 @@ signature TYVAR =
 	  if the number of constraints left is one, it will try to eagerly use the side-effecting
 	  version of the unifier to unify the constraint against the internal variable;
 	  and call the 'a -> unit function *)
-    val ocon_constrain  : ('ctxt,'1con) ocon * '1con con_helpers -> (int * bool) list
+    val ocon_constrain  : ('ctxt,'1con) ocon -> (int * bool) list
 
   end
       

@@ -241,7 +241,7 @@ exception XXX
                     | PHRASE_CON of con
                     | PHRASE_MOD of mod
                     | PHRASE_SIG of signat
-                    | PHRASE_OVEREXP of unit -> exp * (context,con) Tyvar.ocon
+                    | PHRASE_OVEREXP of (con * exp) list
 
     datatype class = CLASS_EXP of con
                    | CLASS_CON of kind
@@ -278,7 +278,7 @@ exception XXX
       | combine_pc (PHRASE_CON c, CLASS_CON k) = PHRASE_CLASS_CON (c,k)
       | combine_pc (PHRASE_MOD m, CLASS_MOD s) = PHRASE_CLASS_MOD (m,s)
       | combine_pc (PHRASE_SIG s, CLASS_SIG) = PHRASE_CLASS_SIG s
-      | combine_pc (PHRASE_OVEREXP oe, CLASS_OVEREXP) = PHRASE_CLASS_OVEREXP oe
+      | combine_pc (PHRASE_OVEREXP oe, CLASS_OVEREXP) = PHRASE_CLASS_OVEREXP oe 
       | combine_pc _ = error "combine_pc got a phrase and a class of conflicting flavors"
     fun pc2class (PHRASE_CLASS_EXP (e,c)) = CLASS_EXP c
       | pc2class (PHRASE_CLASS_CON (c,k)) = CLASS_CON k
@@ -531,4 +531,728 @@ exception XXX
 	end
 
 
-    end
+
+    local structure Blast = mkBlast(type t = int)
+	open Blast
+	val indent = ref 0 
+	fun push() = indent := (!indent) + 2
+	fun pop() = indent := (!indent) - 2
+	fun tab s = let fun loop 0 = print s
+			  | loop n = (print " "; loop (n-1))
+		    in  loop (!indent)
+		    end
+    in
+
+	fun blastOutPath os (SIMPLE_PATH v) = (blastOutInt os 0; blastOutVar os v)
+	  | blastOutPath os (COMPOUND_PATH (v,ls)) = (blastOutInt os 1; blastOutVar os v; 
+						      blastOutList blastOutLabel os ls)
+	fun blastInPath is = let val _ = print "blastInPath:"
+				 val which = blastInInt is
+				 val v = blastInVar is
+				 val res = if (which = 0)
+					       then SIMPLE_PATH v
+					   else COMPOUND_PATH(v, blastInList blastInLabel is)
+				 val _ = (case res of
+					      SIMPLE_PATH v => (print (Name.var2string v))
+					    | COMPOUND_PATH (v,ls) => (print (Name.var2string v);
+								       app (fn l => (print ".";
+										     print (Name.label2string l)))
+								       ls))
+				 val _ = print "\n"
+			     in res
+			     end
+
+	fun blastOutArrow os TOTAL = blastOutInt os 0
+	  | blastOutArrow os PARTIAL = blastOutInt os 1
+	fun blastInArrow is =
+	    (case (blastInInt is) of
+		 0 => TOTAL
+	       | 1 => PARTIAL
+	       | _ => error "bad blastInArrow")
+
+	fun blastOutIS os Prim.W8 = blastOutInt os 0
+	  | blastOutIS os Prim.W16 = blastOutInt os 1
+	  | blastOutIS os Prim.W32 = blastOutInt os 2
+	  | blastOutIS os Prim.W64 = blastOutInt os 3
+	fun blastInIS is =
+	    (case blastInInt is of
+		 0 => Prim.W8
+	       | 1 => Prim.W16
+	       | 2 => Prim.W32
+	       | 3 => Prim.W64
+	       | _ => (error "bad blastInIS" handle e => raise e))
+	fun blastOutFS os Prim.F32 = blastOutInt os 0
+	  | blastOutFS os Prim.F64 = blastOutInt os 1
+	fun blastInFS is =
+	    (case blastInInt is of
+		 0 => Prim.F32
+	       | 1 => Prim.F64
+	       | _ => error "bad blastInFS")
+
+	fun blastOutDec os dec = 
+	    (case dec of
+		 DEC_EXP (v,c) => (blastOutInt os 0; blastOutVar os v; blastOutCon os c)
+	       | DEC_CON (v,k,NONE) => (blastOutInt os 1; blastOutVar os v; blastOutKind os k)
+	       | DEC_CON (v,k,SOME c) => (blastOutInt os 2; blastOutVar os v; blastOutKind os k; blastOutCon os c)
+	       | DEC_MOD (v,s) => (blastOutInt os 3; blastOutVar os v; blastOutSig os s)
+	       | DEC_EXCEPTION (t,c) =>  (blastOutInt os 4; blastOutTag os t; blastOutCon os c))
+	and blastInDec is =
+	    (case (blastInInt is) of
+		 0 => DEC_EXP (blastInVar is, blastInCon is)
+	       | 1 => DEC_CON (blastInVar is, blastInKind is, NONE)
+	       | 2 => DEC_CON (blastInVar is, blastInKind is, SOME (blastInCon is))
+	       | 3 => DEC_MOD (blastInVar is, blastInSig is)
+	       | 4 => DEC_EXCEPTION (blastInTag is, blastInCon is)
+	       | _ => error "bad blastInDec")
+	and blastOutBnd os bnd = 
+	    (case bnd of
+		 BND_EXP (v,e) => (blastOutInt os 0; blastOutVar os v; blastOutExp os e)
+	       | BND_CON (v,c) => (blastOutInt os 1; blastOutVar os v; blastOutCon os c)
+	       | BND_MOD (v,m) => (blastOutInt os 2; blastOutVar os v; blastOutMod os m))
+	and blastInBnd is =
+	    (case (blastInInt is) of
+		 0 => BND_EXP(blastInVar is, blastInExp is)
+	       | 1 => BND_CON(blastInVar is, blastInCon is)
+	       | 2 => BND_MOD(blastInVar is, blastInMod is)
+	       | _ => error "bad blastInBnd")
+	and blastOutSdec os (SDEC(l,dec)) = (blastOutLabel os l; blastOutDec os dec)
+	and blastInSdec is = SDEC(blastInLabel is, blastInDec is)
+	and blastOutSbnd os (SBND(l,bnd)) = (blastOutLabel os l; blastOutBnd os bnd)
+	and blastInSbnd is = SBND(blastInLabel is, blastInBnd is)
+
+	and blastOutSdecs os sdecs = blastOutList blastOutSdec os sdecs
+	and blastInSdecs is = blastInList blastInSdec is
+	and blastOutSbnds os sbnds = blastOutList blastOutSbnd os sbnds
+	and blastInSbnds is = blastInList blastInSbnd is
+
+	and blastOutKind os k = 
+	    (case k of
+		KIND_TUPLE n => (blastOutInt os 0; blastOutInt os n)
+	      | KIND_ARROW (m,n) => (blastOutInt os 1; blastOutInt os m;  blastOutInt os n)
+	      | KIND_INLINE (k,c) => (blastOutInt os 2; blastOutKind os k; blastOutCon os c))
+		    
+	and blastInKind is = 
+	    (case blastInInt is of
+		0 => KIND_TUPLE(blastInInt is)
+	      | 1 => KIND_ARROW(blastInInt is, blastInInt is)
+	      | 2 => KIND_INLINE(blastInKind is, blastInCon is)
+	      | _ => error "bad blastInKind")
+
+	and blastOutCon os c = 
+	    (case c of
+		 CON_VAR v => (blastOutInt os 0; blastOutVar os v)
+	       | CON_TYVAR tv => (case Tyvar.tyvar_deref tv of
+				      SOME c => blastOutCon os c
+				    | NONE => error "cannot blastOut unresolved CON_TYVAR")
+	       | CON_OVAR oc => blastOutCon os (CON_TYVAR (Tyvar.ocon_deref oc))
+	       | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r)) => blastOutCon os (CON_FLEXRECORD r)
+	       | CON_FLEXRECORD (ref (FLEXINFO (_, true, lclist))) => blastOutCon os (CON_RECORD lclist)
+	       | CON_FLEXRECORD (ref (FLEXINFO (_, false, _))) => error "cannot blastOut flex record type"
+	       | CON_INT is => (blastOutInt os 1; blastOutIS os is)
+	       | CON_UINT is => (blastOutInt os 2; blastOutIS os is)
+	       | CON_FLOAT fs => (blastOutInt os 3; blastOutFS os fs)
+	       | CON_ARRAY c => (blastOutInt os 4; blastOutCon os c)
+	       | CON_VECTOR c => (blastOutInt os 5; blastOutCon os c)
+	       | CON_ANY => (blastOutInt os 6)
+	       | CON_REF c => (blastOutInt os 7; blastOutCon os c)
+	       | CON_TAG c => (blastOutInt os 8; blastOutCon os c)
+	       | CON_ARROW (cs,c,f,oa) => (blastOutInt os 9; blastOutList blastOutCon os cs;
+					   blastOutCon os c; blastOutBool os f;
+					   blastOutArrow os (case (oneshot_deref oa) of
+								 SOME a => a
+							       | _ => error "unresolved CON_ARROW"))
+	       | CON_APP (c1,c2) => (blastOutInt os 10; blastOutCon os c1; blastOutCon os c2)
+	       | CON_MUPROJECT (i,c) => (blastOutInt os 11; blastOutInt os i; blastOutCon os c)
+	       | CON_RECORD lclist => (blastOutInt os 12; blastOutList (blastOutPair blastOutLabel blastOutCon) os lclist)
+	       | CON_FUN (vlist, c) => (blastOutInt os 13; blastOutList blastOutVar os vlist; blastOutCon os c)
+	       | CON_SUM {noncarriers, carriers, special = NONE} => 
+		     (blastOutInt os 14; blastOutInt os noncarriers; 
+		      blastOutList blastOutCon os carriers)
+	       | CON_SUM {noncarriers, carriers, special = SOME i} => 
+		     (blastOutInt os 15; blastOutInt os noncarriers; 
+		      blastOutList blastOutCon os carriers; blastOutInt os i)
+	       | CON_TUPLE_INJECT clist => (blastOutInt os 16; blastOutList blastOutCon os clist)
+	       | CON_TUPLE_PROJECT (i,c) => (blastOutInt os 17; blastOutInt os i; blastOutCon os c)
+	       | CON_MODULE_PROJECT (m,l) => (blastOutInt os 18; blastOutMod os m; blastOutLabel os l))
+
+        and blastInCon is = 
+	    let val _ = push()
+		val _ = tab "blastInCon\n"
+		val res = blastInCon' is
+		val _ = pop()
+	    in  res
+	    end
+
+	and blastInCon' is = 
+	    (case (blastInInt is) of
+		 0 => CON_VAR (blastInVar is)
+	       | 1 => CON_INT (blastInIS is)
+	       | 2 => CON_UINT (blastInIS is)
+	       | 3 => CON_FLOAT (blastInFS is)
+	       | 4 => CON_ARRAY (blastInCon is)
+	       | 5 => CON_VECTOR (blastInCon is)
+	       | 6 => CON_ANY
+	       | 7 => CON_REF (blastInCon is)
+	       | 8 => CON_TAG (blastInCon is)
+	       | 9 => let val _ = tab "  ARROW case\n"
+			  val cs = blastInList blastInCon is
+			  val _ = tab "  ARROW done cs\n"
+			  val c = blastInCon is
+			  val _ = tab " ARROW done c\n"
+			  val f = blastInBool is
+			  val _ = tab "  ARROW done f\n"
+			  val a = oneshot_init (blastInArrow is)
+			  val _ = tab "  ARROW done a\n"
+		      in 
+			  CON_ARROW (cs,c,f,a) (* (blastInList blastInCon is,
+				     blastInCon is, blastInBool is,
+				     oneshot_init (blastInArrow is))) *)
+		      end
+	       | 10 => CON_APP (blastInCon is, blastInCon is)
+	       | 11 => CON_MUPROJECT (blastInInt is, blastInCon is)
+	       | 12 => CON_RECORD(blastInList (blastInPair blastInLabel blastInCon) is)
+	       | 13 => CON_FUN (blastInList blastInVar is, blastInCon is)
+	       | 14 => CON_SUM {noncarriers = blastInInt is,
+				carriers = blastInList blastInCon is,
+				special = NONE} 
+	       | 15 => CON_SUM {noncarriers = blastInInt is,
+				carriers = blastInList blastInCon is,
+				special = SOME (blastInInt is)}
+	       | 16 => CON_TUPLE_INJECT (blastInList blastInCon is)
+	       | 17 => CON_TUPLE_PROJECT (blastInInt is, blastInCon is)
+	       | 18 => CON_MODULE_PROJECT (blastInMod is, blastInLabel is)
+	       | _ => error "bad blastInCon")
+
+	and blastOutValue os v = 
+	    (case v of
+		 (Prim.int (is,w64)) => (blastOutInt os 0; blastOutIS os is; blastOutWord64 os w64)
+	       | (Prim.uint (is,w64)) => (blastOutInt os 1; blastOutIS os is; blastOutWord64 os w64)
+	       | (Prim.float (fs,str)) => (blastOutInt os 2; blastOutFS os fs; blastOutString os str)
+	       | (Prim.tag (t,c)) => (blastOutInt os 3; blastOutTag os t; blastOutCon os c)
+	       | _ => error "blasting of array/vector/refcell not supported")
+
+	and blastInValue is =
+	    (case (blastInInt is) of
+		 0 => Prim.int (blastInIS is, blastInWord64 is)
+	       | 1 => Prim.uint (blastInIS is, blastInWord64 is)
+	       | 2 => Prim.float (blastInFS is, blastInString is)
+	       | 3 => Prim.tag (blastInTag is, blastInCon is)
+	       | _ => error "bad blastInValue")
+
+	and blastOutIlPrim os ilprim = 
+	    let open Prim
+	    in  (case ilprim of
+		     eq_uint is => (blastOutInt os 0; blastOutIS os is)
+		   | neq_uint is => (blastOutInt os 1; blastOutIS os is)
+		   | not_uint is => (blastOutInt os 2; blastOutIS os is)
+		   | and_uint is => (blastOutInt os 3; blastOutIS os is)
+		   | or_uint is => (blastOutInt os 4; blastOutIS os is)
+		   | lshift_uint is => (blastOutInt os 5; blastOutIS os is))
+	    end
+
+	and blastInIlPrim is = 
+	    let open Prim
+	    in  (case (blastInInt is) of
+		     0 => eq_uint(blastInIS is)
+		   | 1 => neq_uint(blastInIS is)
+		   | 2 => not_uint(blastInIS is)
+		   | 3 => and_uint(blastInIS is)
+		   | 4 => or_uint(blastInIS is)
+		   | 5 => lshift_uint(blastInIS is)
+		   | _ => error "bad blastInIlPrim")
+	    end
+
+
+	and blastOutTT os tt =
+	    let open Prim 
+	    in  (case tt of
+		     int_tt => blastOutInt os 0
+		   | real_tt => blastOutInt os 1
+		   | both_tt => blastOutInt os 2)
+	    end
+
+
+	and blastInTT is =
+	    let open Prim 
+	    in  (case (blastInInt is) of
+		     0 => int_tt
+		   | 1 => real_tt
+		   | 2 => both_tt
+		   | _ => error "bad blastInTT")
+	    end
+			 
+	and blastOutTable os table = 
+	    let open Prim 
+	    in  (case table of
+		     IntArray is => (blastOutInt os 0; blastOutIS os is)
+		   | IntVector is => (blastOutInt os 1; blastOutIS os is)
+		   | FloatArray fs => (blastOutInt os 2; blastOutFS os fs)
+		   | FloatVector fs => (blastOutInt os 3; blastOutFS os fs)
+		   | PtrArray => (blastOutInt os 4)
+		   | PtrVector => (blastOutInt os 5)
+		   | WordArray => (blastOutInt os 6)
+		   | WordVector => (blastOutInt os 7))
+	    end
+
+	and blastInTable is =
+	    let open Prim 
+	    in  (case (blastInInt is) of
+		     0 => IntArray (blastInIS is)
+		   | 1 => IntVector (blastInIS is)
+		   | 2 => FloatArray (blastInFS is)
+		   | 3 => FloatVector (blastInFS is)
+		   | 4 => PtrArray
+		   | 5 => PtrVector
+		   | 6 => WordArray
+		   | 7 => WordVector
+		   | _ => error "bad blastInTable")
+	    end
+
+	and blastOutPrim os prim = 
+	    let open Prim
+	    in  (case prim of
+		     soft_vtrap tt => (blastOutInt os 0; blastOutTT os tt)
+		   | soft_ztrap tt => (blastOutInt os 1; blastOutTT os tt)
+		   | hard_vtrap tt => (blastOutInt os 2; blastOutTT os tt)
+		   | hard_ztrap tt => (blastOutInt os 3; blastOutTT os tt)
+			 
+		   | mk_ref => (blastOutInt os 4)
+		   | deref => (blastOutInt os 5)
+
+		       (* conversions amongst floats, ints, uints with w32 and f64 *)
+		   | float2int (* floor *) => (blastOutInt os 6)
+		   | int2float (* real  *) => (blastOutInt os 7)
+		   | int2uint (is1,is2) => (blastOutInt os 8; blastOutIS os is1; blastOutIS os is2)
+		   | uint2int (is1,is2) => (blastOutInt os 9; blastOutIS os is1; blastOutIS os is2)
+		   | uinta2uinta (is1,is2) => (blastOutInt os 10; blastOutIS os is1; blastOutIS os is2)
+		   | uintv2uintv (is1,is2) => (blastOutInt os 11; blastOutIS os is1; blastOutIS os is2)
+
+		   (* ref operation *)
+		   | eq_ref => (blastOutInt os 12)
+		   | setref => (blastOutInt os 13)
+
+		   (* floatint-point operations *)	
+		   | neg_float fs  => (blastOutInt os 14; blastOutFS os fs)
+		   | abs_float fs  => (blastOutInt os 15; blastOutFS os fs)
+		   | plus_float fs  => (blastOutInt os 16; blastOutFS os fs)
+		   | minus_float fs  => (blastOutInt os 17; blastOutFS os fs)
+		   | mul_float fs  => (blastOutInt os 18; blastOutFS os fs)
+		   | div_float fs  => (blastOutInt os 19; blastOutFS os fs)
+		   | less_float fs  => (blastOutInt os 20; blastOutFS os fs)
+		   | greater_float fs  => (blastOutInt os 21; blastOutFS os fs)
+		   | lesseq_float fs  => (blastOutInt os 22; blastOutFS os fs)
+		   | greatereq_float  fs  => (blastOutInt os 23; blastOutFS os fs)
+		   | eq_float  fs  => (blastOutInt os 24; blastOutFS os fs)
+		   | neq_float fs  => (blastOutInt os 25; blastOutFS os fs)
+
+		   (* int operations *)
+		   | plus_int is  => (blastOutInt os 26; blastOutIS os is)
+		   | minus_int is  => (blastOutInt os 27; blastOutIS os is)
+		   | mul_int is  => (blastOutInt os 28; blastOutIS os is)
+		   | div_int is  => (blastOutInt os 29; blastOutIS os is)
+		   | mod_int is  => (blastOutInt os 30; blastOutIS os is)
+		   | quot_int is  => (blastOutInt os 31; blastOutIS os is)
+		   | rem_int is  => (blastOutInt os 32; blastOutIS os is)
+		   | plus_uint is  => (blastOutInt os 33; blastOutIS os is)
+		   | minus_uint is  => (blastOutInt os 34; blastOutIS os is)
+		   | mul_uint is  => (blastOutInt os 35; blastOutIS os is)
+		   | div_uint is  => (blastOutInt os 36; blastOutIS os is)
+		   | mod_uint is  => (blastOutInt os 37; blastOutIS os is)
+		   | less_int is  => (blastOutInt os 38; blastOutIS os is)
+		   | greater_int is  => (blastOutInt os 39; blastOutIS os is)
+		   | lesseq_int is  => (blastOutInt os 40; blastOutIS os is)
+		   | greatereq_int is  => (blastOutInt os 41; blastOutIS os is)
+		   | less_uint is  => (blastOutInt os 42; blastOutIS os is)
+		   | greater_uint is  => (blastOutInt os 43; blastOutIS os is)
+		   | lesseq_uint is  => (blastOutInt os 44; blastOutIS os is)
+		   | greatereq_uint is  => (blastOutInt os 45; blastOutIS os is)
+		   | eq_int is  => (blastOutInt os 46; blastOutIS os is)
+		   | neq_int is  => (blastOutInt os 47; blastOutIS os is)
+		   | neg_int is  => (blastOutInt os 48; blastOutIS os is)
+		   | abs_int is  => (blastOutInt os 49; blastOutIS os is)
+
+		   (* bit-pattern manipulation *)
+		   | not_int is  => (blastOutInt os 50; blastOutIS os is)
+		   | and_int is  => (blastOutInt os 51; blastOutIS os is)
+		   | or_int is  => (blastOutInt os 52; blastOutIS os is)
+		   | lshift_int is  => (blastOutInt os 53; blastOutIS os is)
+		   | rshift_int is  => (blastOutInt os 54; blastOutIS os is)
+		   | rshift_uint is  => (blastOutInt os 55; blastOutIS os is)
+			 
+		   (* array and vectors *)
+		   | array2vector t => (blastOutInt os 56; blastOutTable os t)
+		   | create_table t => (blastOutInt os 57; blastOutTable os t)
+		   | sub t => (blastOutInt os 58; blastOutTable os t)
+		   | update t => (blastOutInt os 59; blastOutTable os t)
+		   | length_table t => (blastOutInt os 60; blastOutTable os t)
+		   | equal_table t => (blastOutInt os 61; blastOutTable os t)
+
+		   (* IO operations *)
+		   | open_in => (blastOutInt os 62)
+		   | input => (blastOutInt os 63)
+		   | input1 => (blastOutInt os 64)
+		   | lookahead => (blastOutInt os 65)
+		   | open_out => (blastOutInt os 66)
+		   | close_in => (blastOutInt os 67)
+		   | output => (blastOutInt os 68)
+		   | flush_out => (blastOutInt os 69)
+		   | close_out => (blastOutInt os 70)
+		   | end_of_stream => (blastOutInt os 71))
+
+	    end
+
+	and blastInPrim is =
+	    let open Prim
+	    in  (case (blastInInt is) of
+		     0 => soft_vtrap(blastInTT is)
+		   | 1 => soft_ztrap(blastInTT is)
+		   | 2 => hard_vtrap(blastInTT is)
+		   | 3 => hard_ztrap(blastInTT is)
+			 
+		   | 4 => mk_ref
+		   | 5 => deref
+
+		       (* conversions amongst floats, ints, uints with w32 and f64 *)
+		   | 6 => float2int (* floor *)
+		   | 7 => int2float (* real  *)
+		   | 8 => int2uint (blastInIS is, blastInIS is)
+		   | 9 => uint2int(blastInIS is, blastInIS is)
+		   | 10 => uinta2uinta(blastInIS is, blastInIS is)
+		   | 11 => uintv2uintv(blastInIS is, blastInIS is)
+
+		   (* ref operation *)
+		   | 12 => eq_ref
+		   | 13 => setref
+
+		   (* floatint-point operations *)	
+		   | 14 => neg_float(blastInFS is)
+		   | 15 => abs_float(blastInFS is)
+		   | 16 => plus_float(blastInFS is)
+		   | 17 => minus_float(blastInFS is)
+		   | 18 => mul_float(blastInFS is)
+		   | 19 => div_float(blastInFS is)
+		   | 20 => less_float(blastInFS is)
+		   | 21 => greater_float(blastInFS is)
+		   | 22 => lesseq_float(blastInFS is)
+		   | 23 => greatereq_float (blastInFS is)
+		   | 24 => eq_float (blastInFS is)
+		   | 25 => neq_float(blastInFS is)
+
+		   (* int operations *)
+		   | 26 => plus_int(blastInIS is)
+		   | 27 => minus_int(blastInIS is)
+		   | 28 => mul_int(blastInIS is)
+		   | 29 => div_int(blastInIS is)
+		   | 30 => mod_int(blastInIS is)
+		   | 31 => quot_int(blastInIS is)
+		   | 32 => rem_int(blastInIS is)
+		   | 33 => plus_uint(blastInIS is)
+		   | 34 => minus_uint(blastInIS is)
+		   | 35 => mul_uint(blastInIS is)
+		   | 36 => div_uint(blastInIS is)
+		   | 37 => mod_uint(blastInIS is)
+		   | 38 => less_int(blastInIS is)
+		   | 39 => greater_int(blastInIS is)
+		   | 40 => lesseq_int(blastInIS is)
+		   | 41 => greatereq_int(blastInIS is)
+		   | 42 => less_uint(blastInIS is)
+		   | 43 => greater_uint(blastInIS is)
+		   | 44 => lesseq_uint(blastInIS is)
+		   | 45 => greatereq_uint(blastInIS is)
+		   | 46 => eq_int(blastInIS is)
+		   | 47 => neq_int(blastInIS is)
+		   | 48 => neg_int(blastInIS is)
+		   | 49 => abs_int(blastInIS is)
+
+		   (* bit-pattern manipulation *)
+		   | 50 => not_int(blastInIS is)
+		   | 51 => and_int(blastInIS is)
+		   | 52 => or_int(blastInIS is)
+		   | 53 => lshift_int(blastInIS is)
+		   | 54 => rshift_int(blastInIS is)
+		   | 55 => rshift_uint(blastInIS is)
+			 
+		   (* array and vectors *)
+		   | 56 => array2vector (blastInTable is)
+		   | 57 => create_table (blastInTable is)
+		   | 58 => sub (blastInTable is)
+		   | 59 => update (blastInTable is)
+		   | 60 => length_table (blastInTable is)
+		   | 61 => equal_table (blastInTable is)
+
+		   (* IO operations *)
+		   | 62 => open_in
+		   | 63 => input
+		   | 64 => input1
+		   | 65 => lookahead
+		   | 66 => open_out
+		   | 67 => close_in
+		   | 68 => output
+		   | 69 => flush_out
+		   | 70 => close_out
+		   | 71 => end_of_stream
+		   | _ => error "bad blastInPrim")
+
+	    end
+
+	and blastOutExp os exp = 
+	    (case exp of
+		 OVEREXP (_,_,oe) => (case oneshot_deref oe of
+					  SOME e => blastOutExp os e
+					| NONE => error "cannot blastOut unresolved OVEREXP")
+	       | SCON v => (blastOutInt os 0; blastOutValue os v)
+	       | PRIM (p,clist,elist) => (blastOutInt os 1; blastOutPrim os p;
+					  blastOutList blastOutCon os clist;
+					  blastOutList blastOutExp os elist)
+	       | ILPRIM (p,clist,elist) => (blastOutInt os 2; blastOutIlPrim os p;
+					    blastOutList blastOutCon os clist;
+					    blastOutList blastOutExp os elist)
+	       | ETAPRIM (p,clist) => (blastOutInt os 3; blastOutPrim os p;
+				       blastOutList blastOutCon os clist)
+	       | ETAILPRIM (p,clist) => (blastOutInt os 4; blastOutIlPrim os p;
+					 blastOutList blastOutCon os clist)
+	       | VAR v => (blastOutInt os 5; blastOutVar os v)
+	       | APP (e,elist) => (blastOutInt os 6; blastOutExp os e; blastOutList blastOutExp os elist)
+	       | FIX (b,a,fbnds) => (blastOutInt os 7; blastOutBool os b; blastOutArrow os a;
+				     blastOutList blastOutFbnd os fbnds)
+	       | RECORD lelist => (blastOutInt os 8; blastOutList (blastOutPair blastOutLabel blastOutExp) os lelist)
+	       | RECORD_PROJECT (e,l,c) => (blastOutInt os 9; blastOutExp os e; blastOutLabel os l; blastOutCon os c)
+	       | SUM_TAIL (c,e) => (blastOutInt os 10; blastOutCon os c; blastOutExp os e)
+	       | HANDLE (e1,e2) => (blastOutInt os 11; blastOutExp os e1; blastOutExp os e2)
+	       | RAISE (c,e) => (blastOutInt os 12; blastOutCon os c; blastOutExp os e)
+	       | LET(bnds,e) => (blastOutInt os 13; blastOutList blastOutBnd os bnds; blastOutExp os e)
+	       | NEW_STAMP c => (blastOutInt os 14; blastOutCon os c)
+	       | EXN_INJECT (str,e1,e2) => (blastOutInt os 15; blastOutString os str; blastOutExp os e1; blastOutExp os e2)
+	       | ROLL (c,e) => (blastOutInt os 16; blastOutCon os c; blastOutExp os e)
+	       | UNROLL (c,e) => (blastOutInt os 17; blastOutCon os c; blastOutExp os e)
+	       | INJ {noncarriers, carriers, special, inject} =>
+		     (blastOutInt os 18; blastOutInt os noncarriers; blastOutList blastOutCon os carriers;
+		      blastOutInt os special; blastOutOption blastOutExp os inject)
+	       | CASE {noncarriers, carriers, arg, arms, tipe, default} => 
+		      (blastOutInt os 19;
+		       blastOutInt os noncarriers; 
+		       blastOutList blastOutCon os carriers;
+		       blastOutExp os arg;
+		       blastOutList (blastOutOption blastOutExp) os arms;
+		       blastOutCon os tipe;
+		       blastOutOption blastOutExp os default)
+	       | EXN_CASE {arg, arms, default, tipe} => 
+		      (blastOutInt os 20;
+		       blastOutExp os arg;
+		       blastOutList (blastOutTriple blastOutExp blastOutCon blastOutExp) os arms;
+		       blastOutOption blastOutExp os default;
+		       blastOutCon os tipe)
+	       | MODULE_PROJECT (m,l) => (blastOutInt os 21; blastOutMod os m; blastOutLabel os l)
+	       | SEAL(e,c) => (blastOutInt os 22; blastOutExp os e; blastOutCon os c))
+
+        and blastInExp is = 
+	    let val _ = push()
+		val _ = tab "blastInExp\n"
+		val res = blastInExp' is
+		val _ = pop()
+	    in  res
+	    end
+
+	and blastInExp' is =
+	     (case (blastInInt is) of
+	         0 => (tab "  SCON\n";
+		       SCON(blastInValue is))
+	       | 1 => (tab "  PRIM\n";
+		       PRIM (blastInPrim is,
+			    blastInList blastInCon is,
+			    blastInList blastInExp is))
+	       | 2 => ILPRIM (blastInIlPrim is,
+			      blastInList blastInCon is,
+			      blastInList blastInExp is)
+	       | 3 => ETAPRIM (blastInPrim is,
+			       blastInList blastInCon is)
+	       | 4 => ETAILPRIM (blastInIlPrim is,
+				 blastInList blastInCon is)
+	       | 5 => let val _ = tab "  VAR"
+			  val v = blastInVar is
+			  val _ = (print (Name.var2string v); print "\n")
+		      in  VAR v
+		      end
+	       | 6 => APP (blastInExp is, blastInList blastInExp is)
+	       | 7 => FIX (blastInBool is, blastInArrow is, blastInList blastInFbnd is)
+	       | 8 => RECORD (blastInList (blastInPair blastInLabel blastInExp) is)
+	       | 9 => RECORD_PROJECT (blastInExp is, blastInLabel is, blastInCon is)
+	       | 10 => SUM_TAIL (blastInCon is, blastInExp is)
+	       | 11 => HANDLE (blastInExp is, blastInExp is)
+	       | 12 => RAISE (blastInCon is, blastInExp is)
+	       | 13 => LET(blastInList blastInBnd is, blastInExp is)
+	       | 14 => NEW_STAMP (blastInCon is)
+	       | 15 => EXN_INJECT (blastInString is, blastInExp is, blastInExp is)
+	       | 16 => ROLL (blastInCon is, blastInExp is)
+	       | 17 => UNROLL (blastInCon is, blastInExp is)
+	       | 18 => let val _ = tab "  INJ\n"
+			   val noncarriers = blastInInt is
+			   val _ = tab "  done noncarriers\n"
+			   val carriers = blastInList blastInCon is
+			   val _ = tab "  done carriers\n"
+			   val special = blastInInt is
+			   val _ = tab "  done special\n"
+			   val inject = blastInOption blastInExp is
+			   val _ = tab "  done inject\n"
+		       in  INJ {noncarriers = noncarriers,
+				carriers = carriers,
+				special = special,
+				inject = inject}
+		       end
+	       | 19 => (tab "  CASE\n";
+			CASE {noncarriers = blastInInt is,
+			     carriers = blastInList blastInCon is,
+			     arg = blastInExp is, 
+			     arms = blastInList (blastInOption blastInExp) is,
+			     tipe = blastInCon is, 
+			     default = blastInOption blastInExp is})
+	       | 20 => (tab "  EXN_CASE\n";
+			EXN_CASE {arg = blastInExp is, 
+				 arms = blastInList (blastInTriple blastInExp blastInCon blastInExp) is,
+				 default = blastInOption blastInExp is, 
+				 tipe = blastInCon is})
+	       | 21 => MODULE_PROJECT (blastInMod is, blastInLabel is)
+	       | 22 => SEAL(blastInExp is, blastInCon is)
+	       | _ => error "bad blastInExp")
+
+	and blastOutFbnd os (FBND(v1,v2,c1,c2,e)) = (blastOutVar os v1;
+						     blastOutVar os v2;
+						     blastOutCon os c1;
+						     blastOutCon os c2;
+						     blastOutExp os e)
+	and blastInFbnd is = let val _ = tab "blastInFbnd"
+				 val v = blastInVar is
+				 val _ = (print (Name.var2string v); print "\n")    
+				 val _ = push()
+				 val res = FBND(v, blastInVar is,
+						blastInCon is, blastInCon is, blastInExp is)
+				 val _ = pop()
+			     in  res
+			     end
+				  
+
+	and blastOutMod os m = 
+	    (case m of
+		 MOD_VAR v => (blastOutInt os 0; blastOutVar os v)
+	       | MOD_STRUCTURE sbnds => (blastOutInt os 1; blastOutSbnds os sbnds)
+	       | MOD_FUNCTOR (v,s,m) => (blastOutInt os 2; blastOutVar os v; blastOutSig os s; blastOutMod os m)
+	       | MOD_APP (m1,m2) => (blastOutInt os 3; blastOutMod os m1; blastOutMod os m2)
+	       | MOD_PROJECT (m,l) => (blastOutInt os 4; blastOutMod os m; blastOutLabel os l)
+	       | MOD_SEAL (m,s) => (blastOutInt os 5; blastOutMod os m; blastOutSig os s)
+	       | MOD_LET (v,m1,m2) => (blastOutInt os 6; blastOutVar os v; blastOutMod os m1; blastOutMod os m2))
+
+        and blastInMod is = 
+	    let val _ = push()
+		val _ = tab "blastInMod\n"
+		val res = blastInMod' is
+		val _ = pop()
+	    in  res
+	    end
+
+	and blastInMod' is =
+	    (
+		     case (blastInInt is) of
+		 0 => MOD_VAR(blastInVar is)
+	       | 1 => MOD_STRUCTURE(blastInSbnds is)
+	       | 2 => MOD_FUNCTOR(blastInVar is, blastInSig is, blastInMod is)
+	       | 3 => MOD_APP (blastInMod is, blastInMod is)
+	       | 4 => MOD_PROJECT (blastInMod is, blastInLabel is)
+	       | 5 => MOD_SEAL (blastInMod is, blastInSig is)
+	       | 6 => MOD_LET (blastInVar is, blastInMod is, blastInMod is)
+	       | _ => error "bad blastInMod")
+
+	and blastOutSig os s = 
+		 (print "    blastInSig\n";
+		  case s of
+		 SIGNAT_STRUCTURE (NONE, sdecs) => (blastOutInt os 0; blastOutSdecs os sdecs)
+	       | SIGNAT_STRUCTURE (SOME p, sdecs) => (blastOutInt os 1; blastOutPath os p; blastOutSdecs os sdecs)
+	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutInt os 2; blastOutVar os v;
+						      blastOutSig os s1; blastOutSig os s2; blastOutArrow os arrow)
+	       | SIGNAT_INLINE_STRUCTURE {self=NONE,code,imp_sig,abs_sig} => 
+		     (blastOutInt os 3; blastOutSbnds os code; blastOutSdecs os imp_sig; blastOutSdecs os abs_sig)
+	       | SIGNAT_INLINE_STRUCTURE {self=SOME p,code,imp_sig,abs_sig} => 
+		     (blastOutInt os 4; blastOutPath os p;
+		      blastOutSbnds os code; blastOutSdecs os imp_sig; blastOutSdecs os abs_sig))
+
+	and blastInSig is =
+	    (case (blastInInt is) of
+		 0 => SIGNAT_STRUCTURE (NONE, blastInSdecs is)
+	       | 1 => SIGNAT_STRUCTURE (SOME (blastInPath is), blastInSdecs is)
+	       | 2 => SIGNAT_FUNCTOR(blastInVar is, blastInSig is, blastInSig is, blastInArrow is)
+	       | 3 => SIGNAT_INLINE_STRUCTURE {self=NONE, code = blastInSbnds is, 
+					       imp_sig = blastInSdecs is, abs_sig = blastInSdecs is}
+	       | 4 => SIGNAT_INLINE_STRUCTURE {self=SOME(blastInPath is), code = blastInSbnds is, 
+					       imp_sig = blastInSdecs is, abs_sig = blastInSdecs is}
+	       | _ => error "bad blastInSig")
+				     
+	fun blastOutPC os pc = 
+	    case pc of
+		PHRASE_CLASS_EXP (e,c) => (blastOutInt os 0; blastOutExp os e; blastOutCon os c)
+	      | PHRASE_CLASS_CON (c,k) => (blastOutInt os 1; blastOutCon os c; blastOutKind os k)
+	      | PHRASE_CLASS_MOD (m,s) => (blastOutInt os 2; blastOutMod os m; blastOutSig os s)
+	      | PHRASE_CLASS_SIG s => (blastOutInt os 3; blastOutSig os s)
+	      | PHRASE_CLASS_OVEREXP celist => (blastOutInt os 4; 
+						blastOutList (blastOutPair blastOutCon blastOutExp) os celist)
+
+	fun blastInPC is = 
+	    (print "  blastInPC\n";
+	    case (blastInInt is) of
+		0 => PHRASE_CLASS_EXP(blastInExp is, blastInCon is)
+	      | 1 => PHRASE_CLASS_CON(blastInCon is, blastInKind is)
+	      | 2 => PHRASE_CLASS_MOD(blastInMod is, blastInSig is)
+	      | 3 => PHRASE_CLASS_SIG(blastInSig is)
+	      | 4 => PHRASE_CLASS_OVEREXP(blastInList (blastInPair blastInCon blastInExp) is)
+	      | _ => error "bad blastInPC")
+
+	fun blastOutFixity os Fixity.NONfix = blastOutInt os 0
+	  | blastOutFixity os (Fixity.INfix (m,n)) = (blastOutInt os 1; blastOutInt os m; blastOutInt os n)
+	fun blastInFixity is =
+	    if (blastInInt is = 0) 
+		then Fixity.NONfix 
+	    else let val m = blastInInt is
+		     val n = blastInInt is
+		 in  Fixity.INfix (m,n)
+		 end
+
+	fun blastOutFixityTable os ft = blastOutList (blastOutPair Name.blastOutLabel blastOutFixity) os ft
+	fun blastInFixityTable is = blastInList (blastInPair Name.blastInLabel blastInFixity) is 
+
+
+	fun blastOutLabelList os label_list = 
+	    blastOutLabelmap os (blastOutPair blastOutPath blastOutPC) label_list
+	fun blastInLabelList is = 
+	    (print "blastLabelList\n";
+	    blastInLabelmap is (blastInPair blastInPath blastInPC) )
+
+	fun blastOutVarList os (vmap,vlist) = 
+	    (blastOutVarmap os (blastOutPair blastOutLabel blastOutPC) vmap;
+	     blastOutList blastOutVar os vlist)
+
+	fun blastInVarList is = 
+	    let val _ = print "blastInVarList\n";
+		val vmap = blastInVarmap is (blastInPair blastInLabel blastInPC) 
+		val vlist = blastInList blastInVar is
+	    in  (vmap, vlist)
+	    end
+
+	fun blastOutTagList os tag_list = blastOutTagmap os blastOutCon tag_list
+	fun blastInTagList is = blastInTagmap is blastInCon 
+
+    fun blastOutContext os (CONTEXT {flatlist, fixity_list, label_list, var_list, tag_list}) = 
+	(blastOutFixityTable os fixity_list;
+	 blastOutLabelList os label_list;
+	 blastOutVarList os var_list;
+	 blastOutTagList os tag_list)
+
+    fun blastInContext is = 
+	let val fixity_list = blastInFixityTable is
+	    val label_list = blastInLabelList is
+	    val var_list = blastInVarList is
+	    val tag_list = blastInTagList is
+	in CONTEXT {flatlist = [], fixity_list = fixity_list, label_list = label_list, 
+		    var_list = var_list, tag_list = tag_list}
+	end
+
+    end (* local *)
+
+end

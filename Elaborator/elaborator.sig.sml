@@ -6,6 +6,7 @@ signature ELABORATOR =
 
    (* Contexts *)
    structure Basis : BASIS where type Il.context = context
+   structure IlContext : ILCONTEXT where type Il.context = context
    val plus_context : context list -> context
    val eq_context : context * context -> bool
 
