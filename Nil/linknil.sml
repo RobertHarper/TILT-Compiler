@@ -6,10 +6,10 @@ structure Linknil :> LINKNIL  =
 
     val do_cleanup = ref false
     val do_opt = ref false
-    val do_one_optimize = ref true
+    val do_one_optimize = Stats.tt("doOptimize1")
     val do_vararg = Stats.ff("do_vararg")
-    val do_specialize = ref true
-    val do_two_optimize = ref true
+    val do_specialize = Stats.tt("doSpecialize")
+    val do_two_optimize = Stats.tt("doOptimize2")
     val do_rename = Stats.tt("doRename")
     val do_hoist = Stats.tt("doHoist")
     val do_reify = Stats.tt("doReify")

@@ -148,11 +148,11 @@ struct
 	  val base = load_ireg_term(vl1,NONE)
 	  val newval = load_ireg_term(vl3,NONE)
       in  (case (in_imm_range_vl vl2) of
-	       SOME offset => add_instr(MUTATE(EA(base,offset),newval,NONE))
-	     | NONE => let val addr = alloc_regi (LOCATIVE)
-			   val offset = load_ireg_term(vl2,NONE)
-		       in  add_instr(S4ADD(offset,REG base,addr));
-			   add_instr(MUTATE(EA(addr,0),newval,NONE))
+	       SOME offset => add_instr(MUTATE(base,IMM (4 * offset),newval,NONE))
+	     | NONE => let val offset = load_ireg_term(vl2,NONE)
+			   val word_offset = alloc_regi NOTRACE_INT
+		       in  add_instr(SLL(offset,IMM 2, word_offset));
+			   add_instr(MUTATE(base, REG word_offset,newval,NONE))
 		       end);
 	  (unit_term, state)
       end
@@ -376,7 +376,7 @@ struct
 	    add_instr(ILABEL gtop);        (* top of loop *)
 	    add_instr(S4ADD(i,REG dest,tmp));
 	    if isptr
-		then add_instr(MUTATE(EA(tmp,0),v,NONE))
+		then add_instr(MUTATE(tmp,IMM 0,v,NONE))
 	    else add_instr(STORE32I(EA(tmp,0),v)); (* allocation *)
 	    add_instr(SUB(i,IMM 1,i));
 	    add_instr(ILABEL gbottom);

@@ -15,9 +15,11 @@
 #define ASMTMP2_SYMREG   $25
 #define ZERO_REG         31
 #define EXNARG_REG       26
+#define EXNARG_SYMREG    $26
 #define RA_REG           26
 #define SP_REG           30
 #define SP_DISP          (8 * SP_REG)
+#define EXNARG_DISP      (8 * EXNARG_REG)
 #define RA_DISP          (8 * RA_REG)
 #define ALLOCSIZE_REG    ASMTMP_REG
 

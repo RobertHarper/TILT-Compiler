@@ -838,6 +838,17 @@ structure Pat
 			let fun eqpat (Ast.StringPat ss') = if ss = ss' then MATCH else FAIL
 			      | eqpat _ = UNKNOWN
 			    fun equaler v = 
+				let fun mapper c = SCON(uint(W8,TilWord64.fromInt (ord c)))
+				    val str = SCON(vector (CON_UINT W8,
+							   Array.fromList(map mapper (explode ss))))
+				    val string_eq_label = to_eq(symbol_label (Symbol.tycSymbol "string"))
+				    val string_eq = (case (Context_Lookup(context,string_eq_label)) of
+							 SOME(_,PHRASE_CLASS_EXP(e,_,_,_)) => e
+						       | _ => error "string-equality undefined")
+				in  APP(string_eq, exp_tuple[VAR v, str])
+				end
+(*
+			    fun equaler v = 
 			    let val len = size ss
 				val lenbool = ILPRIM(eq_uint W32,[],
 						   [PRIM(length_table (IntVector W8),[],[VAR v]),
@@ -870,6 +881,7 @@ structure Pat
 					loop 0 (explode ss))
 			    in  make_ifthenelse(lenbool,content_bool,false_exp,con_bool)
 			    end
+*)
 			in  constant_dispatch(CON_VECTOR (CON_UINT W8),equaler,eqpat)
 			end
 		 | (Ast.CharPat cs)   => 

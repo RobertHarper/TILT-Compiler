@@ -1008,11 +1008,11 @@ struct
 			  trace information.*)
  
  		       fun stack_trace_location x =
-			   case x
-			     of TRACE_STACK loc => TRACE_STACK (fixStackOffset loc)
-			   | TRACE_STACK_REC (loc,i) =>
-			       TRACE_STACK_REC (fixStackOffset loc,i)
-			   | _ => x
+			   case x of
+			       TRACE_STACK loc => TRACE_STACK (fixStackOffset loc)
+			     | TRACE_STACK_REC (loc,i) =>
+				   TRACE_STACK_REC (fixStackOffset loc,i)
+			     | _ => x
 			   
 
 		       val physical_locations = 
@@ -1026,7 +1026,10 @@ struct
 				     case (Regmap.find(mapping,h),
 					   Regmap.find(tracemap,h)) of
 				       (SOME loc,SOME (_,trace)) => 
-					 let val trace = stack_trace_location trace
+					 let  
+					 (* val _ = (print  (msReg h); print " ==> "; 
+						      print (msAssign loc); print "\n") *)
+					     val trace = stack_trace_location trace
 					 in  (loc,trace) :: loop t
 					 end
 				     | (SOME _,NONE) => fail "missing trace info"
@@ -1037,8 +1040,8 @@ struct
 			  end
 
 		       fun split ((loc,trace) :: t,regs,stack) =
-			    (case loc
-			     of IN_REG x =>    split(t,(x,trace)::regs,stack)
+			    (case loc of
+				IN_REG x =>    split(t,(x,trace)::regs,stack)
 			      | ON_STACK loc => split(t,regs,(get_stackloc loc,
 							      trace)::stack)
 			      | _ => error "getCallInfo: split")
@@ -1048,20 +1051,13 @@ struct
 			              split (physical_locations,nil,nil)
 
 		       val regtrace = regtrace @ callee_save_regs_info
+
 (*
-		       fun tr2s TRACE_NO                  = "no"
-			 | tr2s TRACE_YES                 = "yes"
-			 | tr2s TRACE_UNSET               = "unset"
-			 | tr2s (TRACE_CALLEE  r)         = "callee"
-			 | tr2s (TRACE_STACK sloc) = "stack"
-			 | tr2s (TRACE_STACK_REC (sloc,i)) = "stack_rec"
-			 | tr2s _          = 	"<ignoring trace>"
-			   
 		       val _ = (print "chaitin.sml processing label = ";
-				print (Machineutils.Machine.msLabel label); print "\n";
+				print (msLabel label); print "\n";
 				print "regtrace:\n";
 				app (fn (v,t) => (print (msReg v); print " => ";
-						  print (tr2s t); print "\n")) regtrace;
+						  print (msTrace t); print "\n")) regtrace;
 				print "\n\n")
 *)
 		       val stacktrace = stacktrace @ callee_save_spilled_info

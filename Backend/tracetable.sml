@@ -266,15 +266,13 @@ functor Tracetable(val little_endian    : bool)
       | regtr2bits _ TRACE_IMPOSSIBLE          = 
 	error "cannot get a trace impossible while making table"
 
-    fun tr2s TRACE_NO                  = "no"
-      | tr2s TRACE_YES                 = "yes"
-      | tr2s TRACE_UNSET               = "unset"
-      | tr2s (TRACE_CALLEE  r)         = "callee"
-      | tr2s (TRACE_STACK sloc) = "stack"
-      | tr2s (TRACE_STACK_REC (sloc,i)) = "stack_rec"
-      | tr2s _          = 	"<ignoring trace>"
-
-    val trace2string = tr2s	
+    fun msTrace TRACE_NO                  = "no"
+      | msTrace TRACE_YES                 = "yes"
+      | msTrace TRACE_UNSET               = "unset"
+      | msTrace (TRACE_CALLEE  r)         = "callee"
+      | msTrace (TRACE_STACK sloc) = "stack"
+      | msTrace (TRACE_STACK_REC (sloc,i)) = "stack_rec"
+      | msTrace _          = 	"<ignoring trace>"
 
     fun do_callinfo (CALLINFO {calllabel=CALLLABEL lab,framesize,retaddpos,
 			       regtrace,stacktrace}) =
@@ -294,12 +292,12 @@ functor Tracetable(val little_endian    : bool)
 		in  (case matches of
 			 [] => TRACE_NO
 		       | [t] => ((* print "trace for reg "; print (Int.toString n);
-				 print " = "; print (tr2s t); *)
+				 print " = "; print (msTrace t); *)
 				 t)
 		       | _ => (print "multiple traces found for register";
 			       print (Int.toString n);
 			       print ":: ";
-			       app (fn t => (print (tr2s t); print "  ")) matches;
+			       app (fn t => (print (msTrace t); print "  ")) matches;
 			       print "\n"; hd matches))
 		end
 (*
@@ -316,7 +314,7 @@ functor Tracetable(val little_endian    : bool)
 		    else
 		      (if (!ShowDiag) then
 			 print ("Stack  " ^ (Int.toString n) ^ ":" ^
-				(tr2s (stacklookup n)) ^ "\n")
+				(msTrace (stacklookup n)) ^ "\n")
 		       else ();
 			 (tr2bot (stacklookup n)) :: (stackloop (n+4)))
 		fun regloop n = 
@@ -354,7 +352,7 @@ functor Tracetable(val little_endian    : bool)
 		    (print "\n------------------------\n"; 
 		     print (Pprtl.label2s lab); print ":\n";
 		     app (fn (v,t) => (print (Int.toString v);
-				       print (tr2s t); 
+				       print (msTrace t); 
 				       print "\n")) stacktrace;
 		     print "------------------------\n")
 		    else ()

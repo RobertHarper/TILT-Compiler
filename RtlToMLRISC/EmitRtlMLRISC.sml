@@ -1250,11 +1250,12 @@ functor EmitRtlMLRISC(
     fun STOREQF(address, src) =
 	  [MLTree.CODE[MLTree.STORED(address, src, memory)]]
 
-    fun MUTATE (address, src : MLTree.rexp, isptr_option) =
+    fun MUTATE (base, offset, src : MLTree.rexp, isptr_option) =
 	  let
 	    val writelist_cursor = externalExp "writelist_cursor"
 	    val heapLimit	 = IntegerConvention.heapLimit
 	    val temp     = Cells.newReg()
+	    val address = MLTree.ADD(base, offset)
 	    val logwrite = [MLTree.MV(heapLimit, MLTree.SUB(MLTree.REG heapLimit,
 							    MLTree.LI 8, MLTree.LR)),
 			    MLTree.MV(temp, MLTree.LOAD32(writelist_cursor, memory)),
@@ -1456,10 +1457,10 @@ functor EmitRtlMLRISC(
 
       | translateInstruction(Rtl.INIT(address, src, _)) =
 	  STORE32I(ea address, srcReg src)
-      | translateInstruction(Rtl.MUTATE(address, src, NONE)) = 
-	  MUTATE(ea address, srcReg src, NONE)
-      | translateInstruction(Rtl.MUTATE(address, src, SOME src2)) = 
-	  MUTATE(ea address, srcReg src, SOME(srcReg src2))
+      | translateInstruction(Rtl.MUTATE(base, offset, src, NONE)) = 
+	  MUTATE(srcReg base, value offset, srcReg src, NONE)
+      | translateInstruction(Rtl.MUTATE(base, offset, src, SOME src2)) = 
+	  MUTATE(srcReg base, value offset, srcReg src, SOME(srcReg src2))
       | translateInstruction(Rtl.NEEDGC src) =
 	  NEEDGC(value src)
 

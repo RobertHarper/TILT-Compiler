@@ -9,7 +9,6 @@ structure Ppnil	:> PPNIL =
 
     val error = fn s => error "ppnil.sml" s
     val elide_prim = ref false
-    val elide_record = ref false
 
     fun pp_region s1 s2 fmt = HOVbox((String s1) :: (fmt @ [String s2]))
     fun separate [] sep = []
@@ -274,11 +273,8 @@ structure Ppnil	:> PPNIL =
 		     HOVbox
 		     [String "record", 
 		      if (length labels = length exps)
-			  then (if !elide_record
-				    then pp_list pp_le (Listops.zip labels exps) 
-					("(",",",")",false)
-				else pp_list pp_lce (Listops.zip3 labels cons exps) 
-				    ("(",",",")",false))
+			  then (pp_list pp_le (Listops.zip labels exps) 
+					("(",",",")",false))
 		       else HOVbox[pp_list pp_label labels ("",",","", false),
 				   String " :LENGTH_MISMATCH: ",
 				   pp_list pp_exp exps ("",",","", false)]]

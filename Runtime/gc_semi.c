@@ -253,7 +253,7 @@ void gc_semi(Thread_t *curThread)
   /* Resize the tospace by using the oldspace size and liveness ratio */
     {
       long alloc = allocptr - fromheap->alloc_start;
-      long old = allocptr - fromheap->bottom;
+      long old = fromheap->top - fromheap->bottom;
       long copied = ((value_t)to_ptr) - toheap->bottom;
       double oldratio = (double)(copied) / old;
       long cur = copied + req_size;

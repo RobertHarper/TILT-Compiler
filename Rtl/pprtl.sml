@@ -255,8 +255,8 @@ struct
               | LOADQF (ea,r)   => plain ["ldt ",regf2s r,", ",ea2s ea]
               | STOREQF (ea,r)  => plain ["stt ",regf2s r,", ",ea2s ea]
 
-	      | MUTATE (ea,r,NONE) => op2si "mutate" (ea,r)
-	      | MUTATE (ea,r,SOME r2) => plain ["mutate_dyn ",regi2s r,", ", regi2s r2, ", ", ea2s ea]
+	      | MUTATE (r1,sv,r2,NONE) => plain ["mutate ",regi2s r1,", ", sv2s sv, ", ", regi2s r2]
+	      | MUTATE (r1,sv,r2,SOME r3) => plain ["mutate_dyn ",regi2s r1,", ", sv2s sv, ", ", regi2s r2, ", ", regi2s r3]
 	      | INIT (ea,r,NONE) => op2si "init" (ea,r)
 	      | INIT (ea,r,SOME r2) => plain ["init_dyn ",regi2s r,", ", regi2s r2, ", ", ea2s ea]
 

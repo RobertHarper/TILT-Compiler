@@ -90,6 +90,11 @@ signature CORE =
 		 res    : register list}  (* formals *)
 
 
+   val msReg : register -> string
+   val makeAsmLabel : string -> string
+   val msStackLocation : stacklocation -> string
+   val msAssign : assign -> string
+
   end
 
 

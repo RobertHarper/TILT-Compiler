@@ -1274,7 +1274,7 @@ struct
     let val orig_exp = Prim_e(NilPrimOp prim,cons,exps)
     in
     (case (prim,cons,exps) of
-       (record labels,_,exps) =>
+       (record labels,[],exps) =>
 	 let
 	   fun check_one exp = exp_valid (D,exp)
 	   val cons = map check_one exps

@@ -818,28 +818,46 @@ struct
 
      | translate (Rtl.ICOMMENT str) = emit (BASE(ICOMMENT str))
 
-     | translate (Rtl.MUTATE (Rtl.EA(base,disp),newval,isptr_opt)) =
+     | translate (Rtl.MUTATE (base,disp,newval,isptr_opt)) =
 	 let 
 	     fun logwrite() = 
 		 let val writelist_cursor = Rtl.ML_EXTERN_LABEL "writelist_cursor"
+		     val writelist_end = Rtl.ML_EXTERN_LABEL "writelist_end"
 		     val cursor_addr = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
+		     val cursor_addr2 = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
+		     val end_addr = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
 		     val cursor_val = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+		     val cursor_val2 = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+		     val end_val = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 		     val store_loc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 		     val Rskip = Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
 		     val rtl_heap = Rtl.SREGI(Rtl.HEAPPTR)
-		 in  app translate [Rtl.LI(Rtltags.skiptag,Rskip),
-				    Rtl.STORE32I(Rtl.EA(rtl_heap,0), Rskip),
-				    Rtl.STORE32I(Rtl.EA(rtl_heap,4), Rskip),
-				    Rtl.ADD(rtl_heap,Rtl.IMM 8,rtl_heap),
-				    Rtl.LADDR(writelist_cursor,0,cursor_addr),
+		     val afterLabel = Rtl.fresh_code_label "afterMutateCheck"
+		 in  app translate [Rtl.LADDR(writelist_cursor,0,cursor_addr),
 				    Rtl.LOAD32I(Rtl.EA(cursor_addr,0),cursor_val),
-				    Rtl.ADD(base, Rtl.IMM disp,store_loc),
-				    Rtl.STORE32I(Rtl.EA(cursor_val,0),store_loc),
-				    Rtl.ADD(cursor_val, Rtl.IMM 4, cursor_val),
-				    Rtl.STORE32I(Rtl.EA(cursor_addr,0),cursor_val)]
+				    Rtl.LADDR(writelist_end,0,end_addr),
+				    Rtl.LOAD32I(Rtl.EA(end_addr,0),end_val),
+				    Rtl.BCNDI(Rtl.LT, cursor_val, Rtl.REG end_val, afterLabel, true)];
+		     emit (BASE (MOVI (Rheap, Rat)));
+		     emit (BASE (GC_CALLSITE afterLabel));
+		     emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("gc_raw"), NONE,
+				      {regs_modified=[Rat], regs_destroyed=[Rat],
+				       args=[Rat]})));
+		     app translate [Rtl.ILABEL afterLabel,
+				    Rtl.LADDR(writelist_cursor,0,cursor_addr2),
+				    Rtl.LOAD32I(Rtl.EA(cursor_addr2,0),cursor_val2),
+				    Rtl.ADD(base, disp, store_loc),
+				    Rtl.STORE32I(Rtl.EA(cursor_val2,0),store_loc),
+				    Rtl.ADD(cursor_val2, Rtl.IMM 4, cursor_val2),
+				    Rtl.STORE32I(Rtl.EA(cursor_addr2,0),cursor_val2)]
 		 end
 	 in
-	   translate (Rtl.STORE32I(Rtl.EA(base,disp),newval));
+	   (case disp of
+		Rtl.IMM disp => translate (Rtl.STORE32I(Rtl.EA(base,disp),newval))
+	      | Rtl.REG _ => let val addr = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+				in  translate (Rtl.ADD(base, disp, addr));
+				    translate (Rtl.STORE32I(Rtl.EA(addr,0),newval))
+				end);
 	   (case isptr_opt of
 		NONE => logwrite()
 	      | SOME isptr =>

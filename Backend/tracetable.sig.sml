@@ -41,7 +41,7 @@ signature TRACETABLE =
 
     val MakeMutableTable  : string * (Rtl.label * trace) list -> Rtl.data list
 
-    val trace2string : trace -> string
+    val msTrace : trace -> string
   end;
 
 

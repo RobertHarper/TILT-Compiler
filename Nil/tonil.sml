@@ -1998,7 +1998,8 @@ end (* local defining splitting context *)
 	   val result_type = xcon context tipe
 	   val (bounds, tags, bodies) = 
 		Listops.unzip3
-		  (map (fn (tag,_,Il.FIX(false,_,[Il.FBND(_,var,_,_,e)])) => (var,tag,e)) il_arms)
+		  (map (fn (tag,_,Il.FIX(false,_,[Il.FBND(_,var,_,_,e)])) => (var,tag,e)
+			| (_,_,il_arm) => (print "EXN_CASE MATCHn"; Ppil.pp_exp il_arm; raise Match)) il_arms)
 	   val (bound :: rest) = bounds
 	   val _ = if (List.all (fn v => Name.eq_var(v,bound)) rest)
 		       then () else error "exn_case did not get same var in all arms"

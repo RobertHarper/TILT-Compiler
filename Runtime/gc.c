@@ -300,11 +300,15 @@ void paranoid_check_heap(Heap_t *fromspace, Heap_t *tospace)
       value_t *stop = (value_t *)((&SML_GLOBALS_END_VAL)[mi]);
       for ( ; current < stop; current++)
 	{
+	  static int newval = 72000;
 	  value_t data = *current;
 	  if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
 	    {
 	      printf("TRACE WARNING: global has a from space value after collection");
-	      printf("   cursor = %d   data = %d\n",current,data);
+	      printf("   cursor = %d   data = %d",current,data);
+	      printf("      changing to %d\n", newval);
+	      *current = newval;
+	      newval++;
 	    }
 	}
     }

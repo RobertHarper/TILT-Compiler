@@ -42,8 +42,6 @@ struct
     val w2i = W.toInt
     fun ms n = if n<0 then ("-"^(Int.toString (~n))) else Int.toString n
 
-  fun msReg (R n) = "$" ^ (ms n)
-    | msReg (F n) = "$f" ^ (ms n)
       
   val makeAsmLabel =
     let 
@@ -73,9 +71,9 @@ struct
     in
       loop o explode
     end
+  fun msReg (R n) = "$" ^ (ms n)
+    | msReg (F n) = "$f" ^ (ms n)
 
-
-  fun ms n = if n<0 then ("-"^(Int.toString (~n))) else Int.toString n
   fun msStackLocation (CALLER_FRAME_ARG i) = "CallerFrameArg["^(ms i)^"]"
     | msStackLocation (THIS_FRAME_ARG i) = "ThisFrameArg["^(ms i)^"]"
     | msStackLocation (SPILLED_INT i) = "Spill-I["^(ms i)^"]"
@@ -83,6 +81,11 @@ struct
     | msStackLocation (ACTUAL4 i) = "4@" ^ (ms i)
     | msStackLocation (ACTUAL8 i) = "8@" ^ (ms i)
     | msStackLocation (RETADD_POS) = "RETADD_POS"
+
+  fun msAssign (IN_REG r) = msReg r
+    | msAssign (ON_STACK sl) = msStackLocation sl
+    | msAssign (HINT r) = "HINT(" ^ (msReg r) ^ ")"
+    | msAssign UNKNOWN = "UNKNOWN"
 
   fun sloc2int (ACTUAL4 x) = x
     | sloc2int (ACTUAL8 x) = x

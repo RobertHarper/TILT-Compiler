@@ -59,8 +59,9 @@ int process_long(long *var, char *item, char *option)
 int process_int(int *var, char *item, char *option)
 {
   long temp = *var;
-  process_long(&temp,item,option);
+  int status = process_long(&temp,item,option);
   *var = (int) temp;
+  return status;
 }
 
 int process_double(double *var, char *item, char *option)
@@ -110,7 +111,6 @@ void process_option(int argc, char **argv)
 	}
       if (process_long(&paranoid,"paranoid",option))  continue;
       if (process_long(&diag,"diag",option))  continue;
-      if (process_int(&NumSysThread,"NumSysThread",option))  continue;
       if (process_long(&SHOW_GCSTATS,"SHOW_GCSTATS",option))  continue;
       if (process_long(&SHOW_GCDEBUG,"SHOW_GCDEBUG",option))  continue;
       if (process_long(&SHOW_GCFORWARD,"SHOW_GCFORWARD",option))  continue;
@@ -120,7 +120,7 @@ void process_option(int argc, char **argv)
       if (process_double(&TargetRatio,"TargetRatio",option)) continue;
       if (process_long(&MinHeap,"MinHeap",option))           continue;
       if (process_long(&MaxHeap,"MaxHeap",option))           continue;
-      if (process_long(&NumSysThread,"NumSysThread",option)) continue;
+      if (process_int(&NumSysThread,"NumSysThread",option)) continue;
       {
 	long FixHeap = 0;
 	if (process_long(&FixHeap,"FixHeap",option))

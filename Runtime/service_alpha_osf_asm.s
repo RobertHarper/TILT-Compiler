@@ -166,6 +166,7 @@ global_exnhandler:
 global_exn_handler_dummy:	
 	ldgp	$gp, 0($gp)
 	lda	$sp, -320($sp)
+	stq	EXNARG_SYMREG, EXNARG_DISP(THREADPTR_SYMREG)
 	bsr	save_regs
 	mov	THREADPTR_SYMREG, $16
 	bsr	toplevel_exnhandler

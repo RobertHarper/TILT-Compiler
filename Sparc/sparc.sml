@@ -20,7 +20,7 @@ structure Machine =
     val Rsp     = R 14  (* Standard Sparc convention *)
     val Rat     = R 16  (* Standard Sparc convention *)
     val Rra     = R 15  (* Standard Sparc convention *)
-    val Rexnarg = R 16  (* Rexnarg and Rra are never simultaneously live
+    val Rexnarg = R 15  (* Rexnarg and Rra are never simultaneously live
 			      since exnarg is active only when about to raise
 			      an exception which means we are not normally returning *)
 

@@ -67,10 +67,8 @@ struct
   (* First, we assume that datatypes have already been translated by 
      rearranging the non value-carrying components to the beginning.
      To support efficient representations, we let m and n denote
-     the length of the maximal initial segment of non value-carrying components 
-     and n the rest of the components.  Note that this m is
-     NOT the number(k) of non-value-carrying constructors in the datatype.
-     It is possible for m > k. There are then 6 cases to consider:
+     the number of non value-carrying components and n the number of
+     value-carrying components.  There are then 6 cases to consider:
 
          1. m=0, n=0    we use a tag to represent the datatype
          2. m<>0, n=0   we use tags to represent the datatype

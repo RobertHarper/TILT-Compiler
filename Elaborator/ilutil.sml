@@ -114,15 +114,13 @@ structure IlUtil
 
     val false_exp = INJ{sumtype=con_bool,field=0,inject=NONE}
     val true_exp = INJ{sumtype=con_bool,field=1,inject=NONE}
-    fun make_lambda_help (funvar_opt,a,var,con,rescon,e) 
-      : exp * con = let val funvar = (case funvar_opt of
-					  NONE => fresh_named_var "anonfun"
-					| SOME v => v)
+    fun make_lambda_help totality (var,con,rescon,e) 
+      : exp * con = let val funvar = fresh_named_var "anonfun"
 			val fbnd = FBND(funvar,var,con,rescon,e)
-		    in (FIX(false,a,[fbnd]), CON_ARROW([con],rescon,false,oneshot_init a))
+		    in (FIX(false,totality,[fbnd]), CON_ARROW([con],rescon,false,oneshot_init totality))
 		    end
-    fun make_total_lambda (var,con,rescon,e) = make_lambda_help(NONE,TOTAL,var,con,rescon,e)
-    fun make_lambda (var,con,rescon,e) = make_lambda_help(NONE,PARTIAL,var,con,rescon,e)
+    val make_total_lambda = make_lambda_help TOTAL
+    val make_lambda  = make_lambda_help PARTIAL
     fun make_ifthenelse(e1,e2,e3,c) : exp = 
 	CASE{sumtype=con_bool,arg=e1,bound=fresh_named_var "unused",
 	     arms=[SOME e3,SOME e2],default=NONE,tipe=c}
@@ -914,7 +912,7 @@ structure IlUtil
 		       | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), VAR argvar) => 
 				   SOME(exp_subst(body, subst_add_expvar(empty_subst, arg, VAR argvar)))
 		       | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), y) => 
-				   SOME(LET([BND_EXP(arg,y)],body))
+				   SOME(make_let([BND_EXP(arg,y)],body))
 		       | _ => def)
 		 end
 	   | _ => NONE)

@@ -111,8 +111,9 @@ struct
 						       then 
 							   let val c = List.nth(carriers,i-noncarriers)
 							       val (eqexp,_) = self(c,c)
-							       val e = SUM_TAIL(i,sumc,VAR var')
-							       val exp = APP(eqexp,exp_tuple[e,e])
+							       val e' = SUM_TAIL(i,sumc,VAR var')
+							       val e'' = SUM_TAIL(i,sumc,VAR var'')
+							       val exp = APP(eqexp,exp_tuple[e',e''])
 							   in  (case exp_reduce exp of
 								    SOME e => e
 								  | NONE => exp)
@@ -244,15 +245,16 @@ struct
 	  val mu_cons = 
 	      (case confun of
 		   CON_FUN(vdts,CON_TUPLE_INJECT cons) => 
-		       map0count (fn i => CON_TUPLE_PROJECT(i,CON_MU confun)) arity
-		 | CON_FUN([vdt], con) => [CON_MU confun]
+		       map0count (fn i => CON_TUPLE_PROJECT(i,name)) arity
+		 | CON_FUN([vdt], con) => [name]
 		 | _ => error "xeq_mu given confun which is not CON_FUN")
 	  val expanded_cons = 
 	      (case confun of
 		   CON_FUN(vdts,CON_TUPLE_INJECT cons) => 
-		       map (fn c => con_subst(c,list2subst([], zip vdts mu_cons,[]))) cons
-		 | CON_FUN([vdt], con) => [con_subst(con,list2subst([], zip [vdt] mu_cons, []))]
+		       map (fn c => con_subst(c,list2subst([], zip vdts name_cons,[]))) cons
+		 | CON_FUN([vdt], con) => [con_subst(con,list2subst([], zip [vdt] name_cons, []))]
 		 | _ => error "xeq_mu given confun which is not CON_FUN")
+	  val expanded_cons_vars = map0count (fn i => fresh_named_var ("expanded_con_" ^ (Int.toString i))) arity
 	  val vars_eq = map0count (fn i => fresh_named_var ("vars_eq_" ^ (Int.toString i))) arity
 	  val type_lbls = map0count (fn i => fresh_internal_label("lbl" ^ (Int.toString i))) arity
 	  val evars = map0count (fn i => fresh_named_var ("evar" ^ (Int.toString i))) arity
@@ -280,25 +282,28 @@ struct
 				      CON_TUPLE_INJECT conlist => conlist
 				    | c => [c])
 	  end
-	  val exps_v = map (fn c => #1(xeq ctxt (c,c))) reduced_cons
 	      
-	  fun make_fbnd (name_con,expanded_con,expv,var_eq) = 
+	  fun make_fbnd (name_con,expanded_con_var,expanded_con,expv,var_eq) = 
 	      let
 		  val var = fresh_named_var "arg_pair"
 		  val var_con = con_tuple[name_con,name_con]
 		  val expv' = exp_subst(expv,subst)
 		  val e1 = RECORD_PROJECT(VAR var,generate_tuple_label 1,var_con)
 		  val e2 = RECORD_PROJECT(VAR var,generate_tuple_label 2,var_con)
-		  val e1' = UNROLL(name_con,expanded_con,e1)
-		  val e2' = UNROLL(name_con,expanded_con,e2)
+		  val e1' = UNROLL(name_con, CON_VAR expanded_con_var, e1)
+		  val e2' = UNROLL(name_con, CON_VAR expanded_con_var, e2)
 		  val exp = APP(expv',exp_tuple[e1',e2'])
 		  val exp = (case exp_reduce exp of
 				 NONE => exp
 			       | SOME e => e)
+		  val exp = make_let([BND_CON(expanded_con_var,expanded_con)],exp)
 		  val fbnd = FBND(var_eq,var,var_con,con_bool,exp)
 	      in  (fbnd, con_eqfun name_con)
 	      end
-	  val (fbnds,cons) = Listops.unzip(map4 make_fbnd (name_cons,expanded_cons,exps_v,vars_eq))
+
+	  val exps_v = map2 (fn (v,c) => #1(xeq ctxt (CON_VAR v,c))) (expanded_cons_vars,reduced_cons)
+	  val (fbnds,cons) = Listops.unzip(map5 make_fbnd (name_cons,expanded_cons_vars,expanded_cons,exps_v,vars_eq))
+
       in  (FIX(true,TOTAL,fbnds), con_tuple cons)
       end
 

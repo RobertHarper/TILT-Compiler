@@ -216,7 +216,8 @@ sig
     | LOADQF   of ea * regf
     | STOREQF  of ea * regf
 
-    | MUTATE of ea * regi * regi option   (* if option is present, a nonzero value indicates pointer *)
+    | MUTATE of regi * sv * regi * regi option   (* if option is present, a nonzero value indicates pointer;
+						   *(regi1 + sv) = regi2 *)
     | INIT of ea * regi * regi option     (* if option is present, a nonzero value indicates pointer *)
 
     | NEEDGC of sv          (* needgc(sv) calls garbage collector if that

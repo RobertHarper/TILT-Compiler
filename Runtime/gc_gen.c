@@ -322,7 +322,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
   long *saveregs = curThread->saveregs;
   int allocptr = sysThread->alloc;
   int alloclimit = sysThread->limit;
-  int req_size = saveregs[ASMTMP_REG] - allocptr;
+  int req_size = saveregs[ASMTMP_REG] - saveregs[ALLOCPTR_REG];
 
   struct rusage start,finish;
   Queue_t *root_lists, *loc_roots;
@@ -339,8 +339,10 @@ void gc_gen(Thread_t *curThread, int isMajor)
       return;
     }
 
+  assert(saveregs[ALLOCPTR_REG] <= saveregs[ALLOCLIMIT_REG]);
   assert(allocptr <= alloclimit);
   assert(req_size >= 0);
+  assert(writelist_cursor <= writelist_end);
 
   /* start timer */
   root_lists = curThread->root_lists;

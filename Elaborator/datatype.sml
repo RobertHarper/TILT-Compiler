@@ -121,6 +121,7 @@ structure Datatype
 		in  add_context_con(ctxt,tc,vty,k,NONE)
 		end
 	in
+	    val sdecs_eq = sdecs_eq
 	  val sigpoly = SIGNAT_STRUCTURE (NONE, sdecs)
 	  val sigpoly_eq = SIGNAT_STRUCTURE (NONE, sdecs_eq)
 	  val context' = foldl folder ctxt (Listops.zip type_labs type_vars)
@@ -282,10 +283,15 @@ structure Datatype
 
 	(* ----------------- compute the equality function  ------------------- *)
 	local
-	    val var_poly_dec = DEC_MOD(mpoly_var,false,SelfifySig context (PATH(mpoly_var,[]),sigpoly_eq))
-	    val temp_ctxt = add_context_entries(context, map (CONTEXT_SDEC o #2) 
+	    val var_poly_dec = DEC_MOD(mpoly_var,false,
+				       SelfifySig context (PATH(mpoly_var,[]),sigpoly_eq))
+	    val ctxt = add_context_dec(context, var_poly_dec)
+	    val ctxt = add_context_entries(ctxt, map (CONTEXT_SDEC o #2) 
 						(top_type_sbnd_sdec @ type_sbnd_sdecs))
-	in  val eq_exp_con = eqcomp(temp_ctxt, CON_VAR top_type_var)
+	in  val eq_exp_con = eqcomp(ctxt, if is_monomorphic 
+					      then CON_VAR top_type_var
+					  else CON_APP(CON_VAR top_type_var, tyvar_mproj))
+				    (*  top_type_tyvar *)
 	end
 
 
