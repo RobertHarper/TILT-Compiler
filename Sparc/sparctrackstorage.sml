@@ -23,7 +23,7 @@ struct
   val debug = Stats.ff("SparcTrackstorage")
   fun inc x = x := (!x + 1)
 
-  val error = fn s => Util.error "Alpha/trackstorage.sml" s
+  val error = fn s => Util.error "sparctrackstorage.sml" s
 
   datatype summary = SUMMARY of 
                     {registers_used    : Machine.register list,

@@ -53,10 +53,12 @@ typedef struct Callinfo__t  /* This structure must match the GC table entry form
 #ifdef GCTABLE_HASENTRYID
   int     entryid;
 #endif
-  int     sizes;             /* low   9 bits = entry size in words; 
-                                next  9 bits = frame size in words;
-                                next  9 bits = byte section size in words 
-				upper 5 bits = word offset of return address
+  int     size0;             /* low   16 bits = entry size in words; 
+                                next  16 bits = frame size in words;
+			     */
+  int     size1;             /* low  16 bits = byte section size in words;
+				next 5 bits = word offset of return address;
+				upper 11 bits = zero
 			     */
   int     regtrace_a;        /* ab=10: YES      ab=00:NO  */
   int     regtrace_b;        /* ab=11 CALLEE    ab=01:SPEC */

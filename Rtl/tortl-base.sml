@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Real Sequence Array TraceInfo Name TilWord32 TilWord64 Int Rtl Pprtl Rtltags Nil NilContext NilUtil Ppnil Normalize TORTLBASE Listops Stats Bool *)
+(*$import Util Real Sequence Array TraceInfo Name TilWord32 TilWord64 Int Rtl Pprtl Rtltags Nil NilContext NilUtil Ppnil Normalize TORTLBASE Listops Stats Bool List *)
 
 structure TortlBase
     :> TORTL_BASE 
@@ -30,6 +30,8 @@ struct
     val debug_bound = ref false
     val maxAllocRequest = 2048   (* Measured in words *)
     val maxMutateRequest = 2048  (* Measured in writes *)
+
+    fun debugdo t = if (!debug) then (t(); ()) else ()
 
    (* ------------------ RTL statistics ------------------------------ *)
        fun makeStat() = let val r = ref 0
@@ -344,18 +346,33 @@ struct
       end
 
 
+  val maxRtlRecord = Rtltags.maxRecordLength - 1      (* We reserve one slot from Rtl-generated record so that sums can be handled *)
+
+  (* project_indices : int -> int list *)
+  fun project_indices index =
+      let val n = maxRtlRecord - 1	(* pds: this second "- 1" seems odd *)
+	  fun loop (index, acc) =
+	      if index >= 0 andalso index < n
+		  then rev (index :: acc)
+	      else
+		  loop (index - n, n :: acc)
+      in  loop (index, nil)
+      end
+
   (* Takes a constructor and returns the RTL representation.
      The head-normal form must be statically known. That is, this constructor
      must not involve any computation to determine the RTL representation. *)
 
   fun cpath2indices (state : state) k labs = 
-      let fun loop acc _ [] = rev acc
+      let
+	  fun loop acc _ [] = rev acc
 	    | loop acc (k as Record_k fields_seq) (label::rest) = 
-	      let fun extract acc [] = (print "could not find label "; Ppnil.pp_label label; 
+	      let
+		  fun extract acc [] = (print "could not find label "; Ppnil.pp_label label; 
 					print " in the fields of "; Ppnil.pp_kind k; print "\n";
 					error "bad Proj_c")
 		    | extract acc (((l,_),fc)::rest) = 
-		  if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
+		      if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
 		  val fields_list = (Sequence.toList fields_seq)
 		  val (con,index) = extract 0 fields_list 
 		  val acc = if (!do_single_crecord andalso length fields_list = 1)
@@ -370,7 +387,15 @@ struct
 	    | loop acc (SingleType_k c) labs = 
 	      loop acc Type_k labs
 	    | loop acc _ labs = error "expect record kind"
-      in  loop [] k labs
+	  val indices = loop [] k labs
+	  val indices = List.concat (map project_indices indices)
+	  val _ = debugdo (fn () =>
+			   (print "cpath2indices ";
+			    Ppnil.pp_kind k;
+			    print " = [ ";
+			    app (fn i => print (Int.toString i ^ " ")) indices;
+			    print "]\n"))
+      in  indices
       end
 
 
@@ -778,31 +803,35 @@ struct
 	  else instr::[(LOAD32I(REA(addr,0),global))]
       end
 
-  (* pds: The second "- 1" in record_project seems odd. *)
+  (* record_project : regi * int list * regi -> unit *)
+  fun record_project' (src, nil, dest) = raise Match
+    | record_project' (src, index :: nil, dest) = add_instr(LOAD32I(REA(src,4*index), dest))
+    | record_project' (src, index :: indices, dest) =
+      let val tmp = alloc_regi TRACE
+	  val _ = add_instr(LOAD32I(REA(src,4*index), tmp))
+      in  record_project'(tmp,indices,dest)
+      end
 
-  val maxRtlRecord = Rtltags.maxRecordLength - 1      (* We reserve one slot from Rtl-generated record so that sums can be handled *)
-  
-  fun record_project (src, index, dest) = 
-      if (index >= 0 andalso index < (maxRtlRecord-1))
-	  then add_instr(LOAD32I(REA(src,4*index), dest))
-      else let val tmp = alloc_regi TRACE
-	       val _ = add_instr(LOAD32I(REA(src,4*(maxRtlRecord-1)), tmp))
-	   in  record_project(tmp,index-(maxRtlRecord-1),dest)
-	   end
+  (* record_project : regi * int * regi -> unit *)
+  fun record_project (src, index, dest) = record_project' (src, project_indices index, dest)
 
   fun repPathIsPointer repPath = 
-      let
-	  fun loop (r,[]) = let 
+      let fun loop (r,[]) = let 
 				val result = alloc_regi NOTRACE_INT
 				val _ = add_instr(CMPUI(GT,r,IMM 3,result))
 			    in  result
 			    end
 	    | loop (r,index::rest) = let val s = alloc_regi TRACE
-					 val _ = record_project (r,index,s)
+	                                 (* record_project (r,index,s) is overkill
+					    because index ultimately comes from project_indices *)
+					 val _ = if (index < maxRtlRecord)
+						     then ()
+						 else error ("rep_path index too big: " ^ Int.toString index)
+					 val _ = add_instr(LOAD32I(REA(r,4*index),s))
 				     in  loop(s,rest)
 				     end
       in  (case repPath of
-	       Notneeded_p => error "load_repPath called on Notneeded_p"
+	       Notneeded_p => error "repPathIsPointer called on Notneeded_p"
 	     | Projvar_p (r,ind) => loop(r,ind)
 	     | Projlabel_p (lab,ind) => let val addr = alloc_regi NOTRACE_LABEL
 					    val _ = add_instr(LADDR(LEA(lab,0),addr))

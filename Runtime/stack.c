@@ -35,10 +35,10 @@ long TotalStackSize  = 0;
 
 extern mem_t start_client_retadd_val;
 
-#define GET_ENTRYSIZE(x)      ( x        & 511)
-#define GET_FRAMESIZE(x)      ((x >> 9)  & 511)
-#define GET_BYTESTUFFSIZE(x)  ((x >> 18) & 511)
-#define GET_QUAD_RA_OFFSET(x) ((x >> 27) & 31)
+#define GET_ENTRYSIZE(x)      ((x)         & 65535)
+#define GET_FRAMESIZE(x)      (((x) >> 16) & 65535)
+#define GET_BYTESTUFFSIZE(x)  ((x)         & 65535)
+#define GET_QUAD_RA_OFFSET(x) (((x) >> 16) & 31)
 
 
 typedef unsigned int bot;
@@ -75,6 +75,13 @@ void LookupSpecialWordPair(CallinfoCursor_t *cursor, int *a, int *b)
 	      (int *) cursor->callinfo + cursor->entrySize);
 }
 
+INLINE(LookupSpecialWord)
+void LookupSpecialWord(CallinfoCursor_t *cursor, int *a)
+{
+  *a = cursor->wordData[cursor->wordOffset++];
+  fastAssert (&(cursor->wordData[cursor->wordOffset]) <=
+	      (int *) cursor->callinfo + cursor->entrySize);
+}
 HashTable_t *CallinfoHashTable = NULL;
 long GCTableSize = 0;
 long SMLGlobalSize = 0;
@@ -101,7 +108,7 @@ void stack_init(void)
     if (debugStack) 
       printf("Scanning GC tables of module %d: %d to %d\n", mi, startpos, endpos);
     while (curpos < endpos) {
-      int entrySize = GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes);
+      int entrySize = GET_ENTRYSIZE(((Callinfo_t *)curpos)->size0);
       count++;
       assert(entrySize != 0);
       curpos += entrySize;
@@ -127,7 +134,7 @@ void stack_init(void)
       e.data = (void *)curpos;
       assert(IsText((ptr_t) e.key));
       HashTableInsert(CallinfoHashTable,&e);
-      curpos += GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes);
+      curpos += GET_ENTRYSIZE(((Callinfo_t *)curpos)->size0);
     }
   }
   /*
@@ -179,11 +186,12 @@ CallinfoCursor_t *getCursor(Proc_t *proc, Callinfo_t *callinfo)
   if (cursor->callinfo != callinfo) {
     unsigned int ra = callinfo->regtrace_a;
     unsigned int rb = callinfo->regtrace_b;
-    int sizes = callinfo->sizes;
-    int offset = GET_QUAD_RA_OFFSET(sizes);
+    int size0 = callinfo->size0;
+    int size1 = callinfo->size1;
+    int offset = GET_QUAD_RA_OFFSET(size1);
     cursor->callinfo = callinfo;
-    cursor->frameSize = GET_FRAMESIZE(sizes);
-    cursor->entrySize = GET_ENTRYSIZE(sizes);
+    cursor->frameSize = GET_FRAMESIZE(size0);
+    cursor->entrySize = GET_ENTRYSIZE(size0);
     if (offset == 31) 
       offset = LookupSpecialByte(cursor);
     cursor->RAQuadOffset = offset;
@@ -194,7 +202,7 @@ CallinfoCursor_t *getCursor(Proc_t *proc, Callinfo_t *callinfo)
     {
       int stacktrace_rawbytesize = cursor->frameSize >> 2;
       int stacktrace_bytesize = (stacktrace_rawbytesize + 3) & (~3);
-      int bytedata_bytesize = GET_BYTESTUFFSIZE(cursor->callinfo->sizes) << 2;
+      int bytedata_bytesize = GET_BYTESTUFFSIZE(cursor->callinfo->size1) << 2;
       cursor->byteData = callinfo->__rawdata + stacktrace_bytesize;
       cursor->wordData = (int *) (cursor->byteData + bytedata_bytesize);
     }
@@ -229,26 +237,37 @@ int CacheCursor(CallinfoCursor_t *cursor)
   return 0;
 }
 
-INLINE(PathProject)
-ptr_t PathProject(ptr_t base, int index)
+
+INLINE(PathProjectStep)
+ptr_t PathProjectStep(ptr_t base, int indices, int* stop)
 {
-  ptr_t res = base;
-  int rec_pos1 = GET_SPECIAL_REC_POS(index);
-  if (rec_pos1 > 0) {
-    int rec_pos2 = GET_SPECIAL_REC_POS2(index);
-    res = (ptr_t) res[rec_pos1-1];
-    if (rec_pos2 > 0) {
-      int rec_pos3 = GET_SPECIAL_REC_POS3(index);
-      res = (ptr_t) res[rec_pos2-1];
-      if (rec_pos3 > 0) {
-	int rec_pos4 = GET_SPECIAL_REC_POS4(index);
-	res = (ptr_t) res[rec_pos3-1];
-	if (rec_pos4 > 0) 
-	  res = (ptr_t) res[rec_pos4-1];
-      }
+  int index;
+  /* These numbers must match up with tracetable.sml. */
+  #define BITS_PER_INDEX 5
+  #define INDEX_MASK 31
+  #define STEP                           \
+    index = indices & INDEX_MASK;        \
+    if (index == 0) {                    \
+      *stop = 1;                         \
+      return base;                       \
+    } else {                             \
+      indices >>= BITS_PER_INDEX;        \
+      base = (ptr_t) base[index - 1];    \
     }
+  /* The number of STEPs must match up with tracetable.sml. */
+  STEP; STEP; STEP; STEP; STEP; STEP;
+  return base;
+}
+
+INLINE(PathProject)
+ptr_t PathProject(CallinfoCursor_t* cursor, ptr_t base, int indices)
+{
+  int stop = 0;
+  for (;;) {
+    base = PathProjectStep(base,indices,&stop);
+    if (stop) return base;
+    LookupSpecialWord(cursor,&indices);
   }
-  return res;
 }
 
 int should_trace_special(CallinfoCursor_t *cursor, mem_t cur_sp, int regstate,
@@ -256,30 +275,26 @@ int should_trace_special(CallinfoCursor_t *cursor, mem_t cur_sp, int regstate,
 {
   val_t data = *data_add;
   ptr_t res = 0;  /* res is the type of the value */
-  int special_type, special_data;
+  int special_type, special_data, type;
   int shouldTrace = 0;
+  ptr_t base;
 
-  LookupSpecialWordPair(cursor, &special_type,&special_data);
+  LookupSpecialWordPair(cursor, &special_type, &special_data);
+  type = GET_SPECIAL_TYPE(special_type);
 
-  if (IS_SPECIAL_STACK_REC(special_type)) {
-    ptr_t base = (ptr_t)(cur_sp[special_data/4]);
-    res = PathProject(base, special_type);
-  }
-  else if (IS_SPECIAL_LABEL_REC(special_type)) {
-    ptr_t base = (ptr_t) special_data; 
-    res = PathProject(base, special_type);
-  }
-  else if (IS_SPECIAL_GLOBAL_REC(special_type)) {
+  if (IS_SPECIAL_STACK_REC(type)) {
+    base = (ptr_t)(cur_sp[special_data/4]);
+  } else if (IS_SPECIAL_LABEL_REC(type)) {
+    base = (ptr_t) special_data; 
+  } else if (IS_SPECIAL_GLOBAL_REC(type)) {
     ptr_t global = (ptr_t) special_data;  /* just global address */
-    ptr_t base = (ptr_t) global[primaryGlobalOffset / sizeof(val_t)];
-    res = PathProject(base, special_type);
-  }
-  else if (IS_SPECIAL_UNSET(special_type)) {
-    printf("Registers/Stack locatiobs of type UNSET is not supported\n");
+    base = (ptr_t) global[primaryGlobalOffset / sizeof(val_t)];
+  } else if (IS_SPECIAL_UNSET(type)) {
+    printf("Registers/Stack locations of type UNSET are not supported\n");
     assert(0);
-  }
-  else
+  } else
     assert(0);
+  res = PathProject(cursor, base, special_type);
   shouldTrace = (((val_t) res) > 3);   /* Types 0 to 3 represent integral/non-pointer types */
   return shouldTrace;
 }

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List YaccBase Stream LrTable TextIO Int *)
+(*$import List YaccBase Stream LrTable TextIO Int *)
 
 
 (* parser.sml:  This is a parser driver for LR tables with an error-recovery

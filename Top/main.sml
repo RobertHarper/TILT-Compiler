@@ -3,20 +3,21 @@
 structure Main : MAIN =
 struct
 
-    val usage = "usage: tilt [-?vs] [-t platform] [-fr flag] [-cCm mapfile] [-S [num/]host] [mapfile ...]"
+    val usage = "usage: tilt [-?vsbB] [-t platform] [-fr flag] [-cCmM mapfile] [-S [num/]host]"
     val version = "TILT version 0.1 (alpha8)\n"
 
     datatype cmd =
-        Make of string list		(* [mapfile ...] *)
+        Make of string			(* -m mapfile *)
       | SetTarget of Target.platform	(* -t platform *)
       | SetFlag of string		(* -f flag *)
       | ResetFlag of string		(* -r flag *)
       | Clean of string			(* -c mapfile *)
       | CleanAll of string		(* -C mapfile *)
-      | Master of string		(* -m mapfile *)
+      | Master of string		(* -M mapfile *)
       | Slave				(* -s *)
       | Slaves of int * string		(* -S [num/]host *)
       | Boot				(* -b *)
+      | BootMaster			(* -B *)
       | PrintUsage			(* -? *)
       | PrintVersion			(* -v *)
 
@@ -27,7 +28,7 @@ struct
       | isSlave _ = false
 	
     (* runCmd : cmd -> unit *)
-    fun runCmd (Make mapfiles) = List.app Manager.make mapfiles
+    fun runCmd (Make mapfile) = Manager.make mapfile
       | runCmd (SetTarget target) = Target.setTargetPlatform target
       | runCmd (SetFlag flag) = Stats.bool flag := true
       | runCmd (ResetFlag flag) = Stats.bool flag := false
@@ -37,6 +38,7 @@ struct
       | runCmd (Slave) = Manager.slave ()
       | runCmd (Slaves arg) = Manager.slaves [arg]
       | runCmd (Boot) = Boot.boot ()
+      | runCmd (BootMaster) = Boot.bootMaster ()
       | runCmd (PrintUsage) = (print usage; print "\n")
       | runCmd (PrintVersion) = (print version;
 				 print "(Using basis from ";
@@ -86,21 +88,23 @@ struct
 			   Getopt.Arg   (#"r", ResetFlag),
 			   Getopt.Arg   (#"c", Clean),
 			   Getopt.Arg   (#"C", CleanAll),
-			   Getopt.Arg   (#"m", Master),
+			   Getopt.Arg   (#"m", Make),
+			   Getopt.Arg   (#"M", Master),
 			   Getopt.Noarg (#"s", Slave),
 			   Getopt.Arg   (#"S", Slaves o slavesArg),
 			   Getopt.Noarg (#"b", Boot),
+			   Getopt.Noarg (#"B", BootMaster),
 			   Getopt.Noarg (#"?", PrintUsage),
 			   Getopt.Noarg (#"v", PrintVersion)]
 	in
 	    case Getopt.getopt (options, args)
 	      of Getopt.Error msg => raise ArgErr (msg ^ "\n" ^ usage)
-	       | Getopt.Success (cmds, mapfiles) =>
+	       | Getopt.Success (cmds, args) =>
 		  let 
-		      val _ = if List.null cmds andalso List.null mapfiles
+		      val _ = if List.null cmds orelse not (List.null args)
 				  then raise ArgErr usage
 			      else ()
-		  in  cmds @ [Make mapfiles]
+		  in  cmds
 		  end
 	end
 

@@ -23,6 +23,7 @@ sig
   val master : string -> unit  
   val make : string -> unit
   val boot : unit -> unit
+  val bootMaster : unit -> unit
       
 end
 

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Name Prim Tyvar Symbol Fixity Ast Il IlContext IlStatic Ppil IlUtil Toil BASIS Stats *)
+(*$import Prelude TopLevel Util Name Prim Tyvar Symbol Fixity Ast Il IlContext IlStatic Ppil IlUtil Toil BASIS Stats TilWord64 *)
 
 (* Everything provided here is inlined.  There is no corresponding
    object code.  Most primitives are in structure TiltPrim.  We

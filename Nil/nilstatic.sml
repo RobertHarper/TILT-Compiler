@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Annotation Prim NilRename Name Listops Sequence List Array Option Int TilWord32 Word32 Bool Util NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha Trail BoundCheck *)
+(*$import Annotation Prim NilRename Name Listops Sequence List Array Option Int TilWord32 Word32 Bool Util NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha Trail BoundCheck NilPrimUtil *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
 

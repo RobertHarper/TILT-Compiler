@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord32 Int Name Word32 Core SPARC String Rtl Util Char Listops Stats *)
+(*$import Prelude TopLevel TilWord32 Int Name Word32 Core SPARC String Rtl Util Char Listops Stats List *)
 
 structure  Sparc :> SPARC =
 struct
@@ -132,7 +132,8 @@ structure Machine =
 	BASE     of base_instruction
       | SPECIFIC of specific_instruction
 
-    fun in_imm_range i = (i >= ~4096) andalso (i <= 4095)
+    val maxImm = 4095
+    fun in_imm_range i = (i >= ~4096) andalso (i <= maxImm)
     fun in_ea_disp_range i = (i >= ~4096) andalso (i <= 4095)
 
     structure W = TilWord32
@@ -663,52 +664,216 @@ structure Machine =
       end
    fun extern_decl s = ""
 
+   (* load_imm' : word * register -> instruction list *)
+   fun load_imm' (immed, Rdest) =
+       let 
+	   (* SETHI sets the upper 22 bits and zeroes the low 10 bits; 
+	      OR can take a 13-bit signed immediate *)
+	   val high20 = w2i(W.rshifta(immed, 12))
+	   val high22  = w2i(W.rshifta(immed, 10))
+	   val low10   = w2i(W.andb(immed, 0w1023))
+	   val high22op = HIGHINT immed
+	   val low10op = LOWINT immed
+       in
+	   if (high20 = 0 orelse high20 = ~1)
+	       then let val low13op = INT (w2i immed) (* assumes upper 22 bits all set or all clear *)
+		    in  [SPECIFIC(INTOP(OR,Rzero,IMMop low13op, Rdest))]
+		    end
+	   else let val setlowbits = if (low10 = 0)
+					 then nil
+				     else [SPECIFIC(INTOP(OR,Rdest,IMMop low10op, Rdest))]
+		in  SPECIFIC(SETHI(high22op,Rdest)) :: setlowbits
+		end
+       end
 
+   (* bumpReg : register * int * register -> instruction list *)
+   (* r = r + offset (destroys rtemp), where offset can be large *)
+   fun bumpReg (_, 0, _) = nil
+     | bumpReg (r, offset, rtemp) =
+       let val (intop, sz) = if offset > 0
+				 then (ADD, offset)
+			     else (SUB, ~offset)
+       in
+	   if in_imm_range sz then	(* one instruction *)
+	       [SPECIFIC(INTOP(intop, r, IMMop (INT sz), r))]
+	   else
+	       if sz <= 2 * maxImm then	(* two instructions *)
+		   [SPECIFIC(INTOP(intop, r, IMMop (INT maxImm), r)),
+		    SPECIFIC(INTOP(intop, r, IMMop (INT (sz - maxImm)), r))]
+	       else			(* two or three instructions *)
+		   load_imm' (i2w sz, rtemp) @
+		   [SPECIFIC(INTOP(intop, r, REGop rtemp, r))]
+       end
+       
    fun allocate_stack_frame (sz, prevframe_maxoffset) = 
-       let val after = freshCodeLabel()
-	   val _ = if (sz < 0 orelse sz >= 0x1000)
-		       then error "allocate_stackptr given bad stack size"
-		   else ()
-       in [BASE(MOVE(Rsp, Rframe)),   (* Frame pointer always gets old stack pointer value - Is this right with stacklets? *)
-	   SPECIFIC(INTOP(SUB, Rsp, IMMop (INT sz), Rsp)),
-	   SPECIFIC(LOADI(LD, Rat, INT stackLimit_disp, Rth)),
-	   SPECIFIC(CMP (Rsp, REGop Rat)),
-	   SPECIFIC(CBRANCHI(BG, after, true)),
-	   BASE(MOVE(Rsp, Rframe)),
-	   SPECIFIC(INTOP(ADD, Rsp, IMMop (INT sz), Rsp)),   (* Restore stack pointer to original value *)
-	   SPECIFIC(INTOP(OR, Rzero, IMMop (INT prevframe_maxoffset), Rat)),
-	   BASE (MOVE(Rra, Rat2)),
-	   BASE (BSR (Rtl.ML_EXTERN_LABEL ("NewStackletFromML"), NONE,
-		      {regs_modified=[Rat], regs_destroyed=[Rat],
-		       args=[Rat]})),
-	   SPECIFIC(INTOP(SUB, Rsp, IMMop (INT sz), Rsp)),   (* Reallocate frame on new stacklet *)
-	   BASE(ILABEL after)]
+       let val _ = if sz < 0 then error "allocate_stack_frame given negative size" else ()
+	   val after = freshCodeLabel()
+	   (* On procedure entry, Rat is not in use. *)
+	   val bumpSp = fn offset => bumpReg (Rsp, offset, Rat)
+       in
+	   List.concat
+	   [[BASE(MOVE(Rsp, Rframe))],	(* Frame pointer always gets old stack pointer value - Is this right with stacklets? *)
+	    bumpSp (~sz),		(* Try to allocate frame on current stacklet *)
+	    [SPECIFIC(LOADI(LD, Rat, INT stackLimit_disp, Rth)),
+	     SPECIFIC(CMP (Rsp, REGop Rat)),
+	     SPECIFIC(CBRANCHI(BG, after, true)),
+	     BASE(MOVE(Rsp, Rframe))],
+	    bumpSp sz,			(* Restore stack pointer to original value *)
+	    [SPECIFIC(INTOP(OR, Rzero, IMMop (INT prevframe_maxoffset), Rat)),
+	     BASE (MOVE(Rra, Rat2)),
+	     BASE (BSR (Rtl.ML_EXTERN_LABEL ("NewStackletFromML"), NONE,
+			{regs_modified=[Rat], regs_destroyed=[Rat],
+			 args=[Rat]}))],
+	    bumpSp (~sz),		(* Allocate frame on new stacklet *)
+	    [BASE(ILABEL after)]]
        end
 				
-   fun deallocate_stack_frame sz = if (sz >= 0)
-				    then [SPECIFIC(INTOP(ADD, Rsp, IMMop (INT sz), Rsp))]
-				else error "deallocate_stackptr given negative stack size"
+   fun deallocate_stack_frame sz =
+       let val _ = if (sz >= 0) then ()
+		   else error "deallocate_stack_frame given negative stack size"
+	   (* Prior to a RET or tail call, Rat is not in use. *)
+       in  bumpReg (Rsp, sz, Rat)
+       end
+
    fun std_entry_code() = []
    fun std_return_code(NONE) = []
      | std_return_code(SOME sra) = []
+
+   (* advance_base_register : register * int -> int * instruction list * instruction list *)
+   fun advance_base_register (Rbase, sz) =
+       let
+	   val max = IMMop (INT maxImm)
+	   val add = SPECIFIC (INTOP (ADD, Rbase, max, Rbase))
+	   val sub = SPECIFIC (INTOP (SUB, Rbase, max, Rbase))
+	   fun loop (x as (sz, adds, subs)) =
+	       if in_ea_disp_range sz then x
+	       else loop (sz - maxImm, add :: adds, sub :: subs)
+       in  loop (sz, nil, nil)
+       end
+
+   (* select : 'a list list -> 'a list *)
+   fun select nil = nil
+     | select (seq :: seqs) =
+       let
+	   fun loop (nil, _, bestSeq) = bestSeq
+	     | loop (seq :: seqs, bestLen, bestSeq) =
+	       let val len = length seq
+	       in  if len < bestLen then loop (seqs, len, seq)
+		   else loop (seqs, bestLen, bestSeq)
+	       end
+       in  loop (seqs, length seq, seq)
+       end
+
+   (* large_operation : ('a * register * imm * register -> specific_instruction)
+                      -> 'a * register * int * register
+                      -> instruction list
+   *)
+   (* 
+      Generic support for integer and floating point loads and stores
+      with effective addresses of the form base register + large
+      offset.
+   *)
+   fun large_operation inject (instr, Rdest, offset, Rbase) =
+       if in_ea_disp_range offset then
+	   [SPECIFIC (inject (instr, Rdest, INT offset, Rbase))]
+       else
+	   let val (remainder, advance, decline) = advance_base_register (Rbase, offset)
+	   in  advance @
+	       [SPECIFIC (inject (instr, Rdest, INT remainder, Rbase))] @
+	       decline
+	   end
+
+   (* large_storei : storei_instruction * register * int * register -> instruction list *)
+   val large_storei = large_operation STOREI
+
+   (* large_storei_pair : storei_instruction * register * int * register -> instruction list *)
+   fun large_storei_pair (instr, Rdest as (R n), offset, Rbase) =
+       if in_ea_disp_range (offset + 4) then
+	   [SPECIFIC (STOREI (instr, Rdest,   INT offset,       Rbase)),
+	    SPECIFIC (STOREI (instr, R (n+1), INT (offset + 4), Rbase))]
+       else
+	   let val (remainder, advance, decline) = advance_base_register (Rbase, offset + 4)
+	   in  advance @
+	       [SPECIFIC (STOREI (instr, Rdest,   INT (remainder - 4), Rbase)),
+		SPECIFIC (STOREI (instr, R (n+1), INT remainder,       Rbase))] @
+	       decline
+	   end
+
+   (* large_loadi : loadi_instruction * register * int * register -> instruction list *)
+   (* We have a temporary register (Rdest) and can improve over large_operation. *)
+   fun large_loadi (instr, Rdest, offset, Rbase) =
+       if in_ea_disp_range offset then
+	   [SPECIFIC (LOADI (instr, Rdest, INT offset, Rbase))]
+       else
+	   let
+	       val (remainder, advance, decline) = advance_base_register (Rbase, offset)
+	       val sequence0 = (advance @
+				[SPECIFIC (LOADI (instr, Rdest, INT remainder, Rbase))] @
+				decline)
+		   
+	       val sequence1 = (load_imm' (i2w (offset - maxImm), Rdest) @
+				[SPECIFIC (INTOP (ADD,   Rbase, REGop Rdest, Rdest)),
+				 SPECIFIC (LOADI (instr, Rdest, INT maxImm,  Rdest))])
+
+	       val (remainder, advance, _) = advance_base_register (Rdest, offset - maxImm)
+	       val sequence2 = ([SPECIFIC (INTOP (ADD,   Rbase, IMMop (INT maxImm), Rdest))] @
+				advance @
+				[SPECIFIC (LOADI (instr, Rdest, INT remainder,      Rdest))])
+	   in
+	       select [sequence0, sequence1, sequence2]
+	   end
+
+   (* large_loadi_pair : loadi_instruction * register * int * register -> instruction list *)
+   fun large_loadi_pair (instr, Rdest as (R n), offset, Rbase) =
+       if in_ea_disp_range (offset + 4) then
+	   [SPECIFIC (LOADI (instr, Rdest,   INT offset,       Rbase)),
+	    SPECIFIC (LOADI (instr, R (n+1), INT (offset + 4), Rbase))]
+       else
+	   let
+	       val Rdest' = R (n+1)
+	       val offset' = offset + 4
+		   
+	       val (remainder, advance, decline) = advance_base_register (Rbase, offset')
+	       val sequence0 = (advance @
+				[SPECIFIC (LOADI (instr, Rdest,  INT (remainder - 4), Rbase)),
+				 SPECIFIC (LOADI (instr, Rdest', INT remainder,       Rbase))] @
+				decline)
+
+	       val sequence1 = (load_imm' (i2w (offset' - maxImm), Rdest') @
+				[SPECIFIC (INTOP (ADD,   Rbase,  REGop Rdest',     Rdest')),
+				 SPECIFIC (LOADI (instr, Rdest,  INT (maxImm - 4), Rdest')),
+				 SPECIFIC (LOADI (instr, Rdest', INT maxImm,       Rdest'))])
+
+	       val (remainder, advance, _) = advance_base_register (Rdest', offset' - maxImm)
+	       val sequence2 = ([SPECIFIC (INTOP (ADD,   Rbase,  IMMop (INT maxImm),  Rdest'))] @
+				advance @
+				[SPECIFIC (LOADI (instr, Rdest,  INT (remainder - 4), Rdest')),
+				 SPECIFIC (LOADI (instr, Rdest', INT remainder,       Rdest'))])
+	   in
+	       select [sequence0, sequence1, sequence2]
+	   end
+
+   (* large_storef : storef_instruction * register * int * register -> instruction list *)
+   val large_storef = large_operation STOREF
+					   
+   (* large_loadf : loadf_instruction * register * int * register -> instruction list *)
+   val large_loadf = large_operation LOADF
+
    fun push (src,actual_location) =
-       case (src,actual_location) of
-          (R n, ACTUAL8 offset) => [SPECIFIC(STOREI(ST,   src,     INT offset,     Rsp)),
-				    SPECIFIC(STOREI(ST,   R (n+1), INT (offset+4), Rsp))]
-        | (R _, ACTUAL4 offset) => [SPECIFIC(STOREI(ST,   src,     INT offset,     Rsp))]
-	| (F _, ACTUAL8 offset) => [SPECIFIC(STOREF(STDF, src,     INT offset,     Rsp))]
-	| (F _, ACTUAL4 offset) => [SPECIFIC(STOREF(STF,  src,     INT offset,     Rsp))]
-	| _ => error "push"
+       (case (src,actual_location)
+	  of (R n, ACTUAL8 offset) => large_storei_pair (ST,   src, offset, Rsp)
+	   | (R _, ACTUAL4 offset) => large_storei      (ST,   src, offset, Rsp)
+	   | (F _, ACTUAL8 offset) => large_storef      (STDF, src, offset, Rsp)
+	   | (F _, ACTUAL4 offset) => large_storef      (STF,  src, offset, Rsp)
+	   | _ => error "push")
 
    fun pop (dst,actual_location) = 
-       case (dst,actual_location) of
-          (R n,ACTUAL8 offset) => [SPECIFIC(LOADI(LD, dst,     INT offset,     Rsp)),
-				   SPECIFIC(LOADI(LD, R (n+1), INT (offset+4), Rsp))]
-        | (R _,ACTUAL4 offset) => [SPECIFIC(LOADI(LD,   dst,   INT offset,     Rsp))]
-	| (F _,ACTUAL8 offset) => [SPECIFIC(LOADF(LDDF, dst,   INT offset,     Rsp))]
-	| (F _,ACTUAL4 offset) => [SPECIFIC(LOADF(LDF,  dst,   INT offset,     Rsp))]
-	| _ => error "pop"
-
+       (case (dst,actual_location)
+	  of (R n,ACTUAL8 offset) => large_loadi_pair (LD,   dst, offset, Rsp)
+	   | (R _,ACTUAL4 offset) => large_loadi      (LD,   dst, offset, Rsp)
+	   | (F _,ACTUAL8 offset) => large_loadf      (LDDF, dst, offset, Rsp)
+	   | (F _,ACTUAL4 offset) => large_loadf      (LDF,  dst, offset, Rsp)
+	   | _ => error "pop")
 
   fun assign2s (IN_REG r) = msReg r
     | assign2s (ON_STACK s) = "STACK:" ^ (msStackLocation s)

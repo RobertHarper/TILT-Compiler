@@ -129,12 +129,12 @@ struct
    fun translateReg (Rtl.I ir) = translateIReg ir
      | translateReg (Rtl.F fr) = translateFReg fr
 
-   (* Translate an RTL register option into a DECALPHA register option *)
+   (* Translate an RTL register option into a SPARC register option *)
    fun translateIRegOpt NONE = NONE
      | translateIRegOpt (SOME Reg) = SOME (translateIReg Reg)
 
    (* Translate the register-or-immediate value found as the second 
-      source operand in many alpha instructions *)
+      source operand in many instructions *)
    fun translateOp (Rtl.REG rtl_reg) = 
          REGop (translateIReg rtl_reg)
      | translateOp (Rtl.IMM src2) =
@@ -163,7 +163,7 @@ struct
    val current_proc   = ref (freshCodeLabel ()) : label ref
 
    (* The current procedure's formal return variables; accessible
-      here so that we can add them to DecAlpha's RETURN assembly op *)
+      here so that we can add them to Core RETURN assembly op *)
    val current_res    = ref []              : Rtl.reg list ref
 
    (* Name/Label of the block currently being allocated *)
@@ -277,25 +277,8 @@ struct
        end
 
 
-   (* Translate an RTL instruction into one or more Alpha instructions *)
-   fun load_imm (immed, Rdest) =
-          let  (* SETHI sets the upper 22 bits and zeroes the low 10 bits; 
-		  OR can take a 13-bit signed immediate *)
-	      val high20 = w2i(W.rshifta(immed, 12))
-	      val high22  = w2i(W.rshifta(immed, 10))
-	      val low10   = w2i(W.andb(immed, 0w1023))
-	      val high22op = HIGHINT immed
-	      val low10op = LOWINT immed
-	  in
-	      if (high20 = 0 orelse high20 = ~1)
-		 then let val low13op = INT (w2i immed)  (* assumes upper 22 bits all set or all clear *)
-		      in  emit(SPECIFIC(INTOP(OR,Rzero,IMMop low13op, Rdest)))
-		      end
-	      else (emit(SPECIFIC(SETHI(high22op,Rdest)));
-		    if (low10 = 0)
-			 then ()
-	 	     else (emit(SPECIFIC(INTOP(OR,Rdest,IMMop low10op, Rdest)))))
-	  end
+   (* Translate an RTL instruction into one or more Sparc instructions *)
+   val load_imm = (app emit) o load_imm'
 
    fun translate_icmp Rtl.EQ = BE
      | translate_icmp Rtl.NE = BNE

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Stats TopHelp Dirs String Int MANAGER Master Slave Compiler OS *)
+(*$import Prelude TopLevel Util Stats TopHelp Dirs String Int MANAGER Slave Compiler OS Master MASTER Option *)
 
 functor Manager (val bootMapfile : unit -> string option
 		 structure Master : MASTER)
@@ -63,9 +63,11 @@ struct
   fun purgeAll mapfile = Master.purgeAll mapfile
   fun purge mapfile = Master.purge mapfile
 
-  fun boot () = (case bootMapfile()
-		   of NONE => ()
-		    | SOME mapfile => make mapfile)
+  fun lift f = fn () => (case bootMapfile()
+			   of NONE => ()
+			    | SOME mapfile => f mapfile)
+  val boot = lift make
+  val bootMaster = lift master
 end
 
 local

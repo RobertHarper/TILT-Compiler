@@ -202,7 +202,7 @@ ptr_t genericScan(Proc_t *proc,
 
       fastAssert(IS_SKIP_TAG(tag) ||
 		 (TYPE_IS_ARRAY(type) && (GET_ANY_ARRAY_LEN(tag) == 0)) ||
-		 (primaryGray[-1] == replicaGray));   /* Does forwarding pointer agree? */
+		 ((ptr_t) primaryGray[-1] == replicaGray));   /* Does forwarding pointer agree? */
       break;
   }
 

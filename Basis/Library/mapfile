@@ -1,5 +1,3 @@
-#include    ../mapfile
-
 // ---------------- NJ Library ----------------------
 
 LIB_BASE       lib-base-sig

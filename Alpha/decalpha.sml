@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord32 Name Int Core RTL DECALPHA String Rtl Util Char *)
+(*$import Prelude TopLevel TilWord32 Name Int Core RTL DECALPHA String Rtl Util Char List *)
 
 structure Decalpha :> DECALPHA =
 
@@ -645,43 +645,107 @@ structure Machine =
 		 NONE => error "no Rpv for Alpha"
 	       | SOME x => x)
 
-   fun allocate_stack_frame (sz, prevframe_maxoffset) =
-       if (sz >= 0) then
-	   let
-	       val after = freshCodeLabel()
-	   in [SPECIFIC (LOADI (LDA, Rsp, ~sz, Rsp)),
-	       SPECIFIC (LOADI (LDL, Rat, stackLimit_disp, Rth)),
-	       SPECIFIC (INTOP (CMPULT, Rsp, REGop Rat, Rat)),
-	       SPECIFIC (CBRANCHI (BEQ, Rat, after)),
-	       SPECIFIC (LOADI (LDA, Rsp, sz, Rsp)),	(* Restore stack pointer to original value *)
-	       SPECIFIC (LOADI (LDA, Rat, prevframe_maxoffset, Rzero)),
-	       BASE (MOVE (Rra, Rat2)),
-	       BASE (BSR (Rtl.ML_EXTERN_LABEL ("NewStackletFromML"), NONE,
-			  {regs_modified=[Rat], regs_destroyed=[Rat],
-			   args=[Rat]})),
-	       SPECIFIC (LOADI (LDA, Rsp, ~sz, Rsp)),	(* Reallocate frame on new stacklet *)
-	       BASE (ILABEL after)]
-	   end
-       else error "allocate_stackptr given negative stack size"
+   (* load_imm' : word * register -> instruction list *)
+   fun load_imm' (immed, Rdest) =
+       let  
+	   val w65535 = i2w 65535
+	   val low    = w2i (W.andb(immed, w65535))
+	   val high   = w2i (W.rshiftl(immed, 16))
+	   val low'   = if (low > 32767) then low - 65536 else low
+	   val high'  = if (high > 32767) then high - 65536 else high
+	   val (setTemp, Rtemp) =
+	       if ((high' <> 0) andalso (low' = 0)) then (nil, Rzero)
+	       else ([SPECIFIC (LOADI (LDA, Rdest, low', Rzero))], Rdest)
+       in
+	   setTemp @
+	   (if (low' >= 0) then
+		if (high' <> 0) then [SPECIFIC(LOADI(LDAH,Rdest,high',Rtemp))] else nil
+	    else 
+		if (high' = ~1) then 
+		    nil
+		else 
+		    if (high' <> 32767) then
+			[SPECIFIC(LOADI (LDAH, Rdest, high' + 1, Rtemp))]
+		    else
+			[SPECIFIC(LOADI (LDAH, Rdest, ~32768, Rtemp))])
+       end
+
+   (* bumpSp : int -> instruction list *)
+   (* sp = sp + offset (destroys Rat) *)
+   fun bumpSp 0 = nil
+     | bumpSp offset =
+       if in_ea_disp_range offset then
+	   [SPECIFIC (LOADI (LDA, Rsp, offset, Rsp))]
+       else
+	   load_imm' (i2w offset, Rat) @
+	   [SPECIFIC (INTOP (ADDL, Rsp, REGop Rat, Rsp))]
 	   
-   fun deallocate_stack_frame sz = if (sz >= 0)
-				    then [SPECIFIC(LOADI(LDA, Rsp, sz, Rsp))]
-				else error "deallocate_stackptr given negative stack size"
+   fun allocate_stack_frame (sz, prevframe_maxoffset) =
+       let val _ = if sz < 0 then error "allocate_stack_frame given negative size" else ()
+	   val after = freshCodeLabel()
+       in
+	   List.concat
+	   [bumpSp (~sz),		(* Try to allocate frame on current stacklet *)
+	    [SPECIFIC (LOADI (LDL, Rat, stackLimit_disp, Rth)),
+	     SPECIFIC (INTOP (CMPULT, Rsp, REGop Rat, Rat)),
+	     SPECIFIC (CBRANCHI (BEQ, Rat, after))],
+	    bumpSp sz,			(* Restore stack pointer to original value *)
+	    [SPECIFIC (LOADI (LDA, Rat, prevframe_maxoffset, Rzero)),
+	     BASE (MOVE (Rra, Rat2)),
+	     BASE (BSR (Rtl.ML_EXTERN_LABEL ("NewStackletFromML"), NONE,
+			{regs_modified=[Rat], regs_destroyed=[Rat],
+			 args=[Rat]}))],
+	    bumpSp (~sz),		(* Reallocate frame on new stacklet *)
+	    [BASE (ILABEL after)]]
+       end
+	   
+   fun deallocate_stack_frame sz =
+       let val _ = if (sz >= 0) then ()
+		   else error "deallocate_stack_frame given negative stack size"
+       in  bumpSp sz
+       end
+
    fun std_entry_code() = [SPECIFIC(LOADI(LDGP, Rgp, 0, pv))]
    fun std_return_code(NONE) = [SPECIFIC(LOADI(LDGP, Rgp, 0, Rra))]
      | std_return_code(SOME sra) = [SPECIFIC(LOADI(LDGP, Rgp, 0, sra))]
+
+   (* load_addr : register * int * register -> instruction list *)
+   (* Rdest = Rsrc + offset *)
+   fun load_addr (Rsrc, offset, Rdest) =
+       load_imm' (i2w offset, Rdest) @
+       [SPECIFIC(INTOP(ADDL, Rsrc, REGop Rdest, Rdest))]
+       
+   (* large_offset : ('a * register * imm * register -> specific_instruction)
+                   -> 'a * register * int * register
+                   -> instruction list
+      Loads and stores with effective addresses of the form
+      register + large offset where a large offset can exceed
+      in_ea_disp_range (trashes Rat).
+   *)
+   fun large_offset inject (instr, Rsrc, offset, Rdest) =
+       if in_ea_disp_range offset then
+	   [SPECIFIC (inject (instr, Rsrc, offset, Rdest))]
+       else
+	   load_addr (Rsrc, offset, Rat) @
+	   [SPECIFIC (inject (instr, Rat, 0, Rdest))]
+
+   val storei = large_offset STOREI
+   val storef = large_offset STOREF
+   val loadi = large_offset LOADI
+   val loadf = large_offset LOADF
+
    fun push (src,actual_location) =
        case (src,actual_location)
-       of (R _, ACTUAL8 offset) => [SPECIFIC(STOREI(STQ, src, offset, Rsp))]
-        | (R _, ACTUAL4 offset) => [SPECIFIC(STOREI(STL, src, offset, Rsp))]
-	| (F _, ACTUAL8 offset) => [SPECIFIC(STOREF(STT, src, offset, Rsp))]
+       of (R _, ACTUAL8 offset) => storei(STQ, src, offset, Rsp)
+        | (R _, ACTUAL4 offset) => storei(STL, src, offset, Rsp)
+	| (F _, ACTUAL8 offset) => storef(STT, src, offset, Rsp)
 	| _ => error "push"
 
    fun pop (dst,actual_location) = 
        case (dst,actual_location)
-       of (R _,ACTUAL8 offset) => [SPECIFIC(LOADI(LDQ, dst, offset, Rsp))]
-        | (R _,ACTUAL4 offset) => [SPECIFIC(LOADI(LDL, dst, offset, Rsp))]
-	| (F _,ACTUAL8 offset) => [SPECIFIC(LOADF(LDT, dst, offset, Rsp))]
+       of (R _,ACTUAL8 offset) => loadi(LDQ, dst, offset, Rsp)
+        | (R _,ACTUAL4 offset) => loadi(LDL, dst, offset, Rsp)
+	| (F _,ACTUAL8 offset) => loadf(LDT, dst, offset, Rsp)
 	| _ => error "allocateBlock: pop"
 
 

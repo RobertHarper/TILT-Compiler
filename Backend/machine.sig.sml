@@ -76,7 +76,8 @@ signature MACHINE =
    val translate_to_real_reg : 
        instruction * (register -> register)
                            * (register -> register) -> instruction
-    
+
+   val load_imm' : TilWord32.word * register -> instruction list
    val allocate_stack_frame : int * int -> instruction list  (* Frame size in bytes, Max offset of previous frame used *)
    val deallocate_stack_frame : int -> instruction list  (* Frame size in bytes *)
    val std_return_code : register option -> instruction list (* register contains pv for gp reload *)

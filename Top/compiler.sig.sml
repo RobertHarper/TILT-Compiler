@@ -1,4 +1,4 @@
-(*$import Prelude FILECACHE *)
+(*$import Prelude FILECACHE Paths *)
 
 signature COMPILER =
 sig

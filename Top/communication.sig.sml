@@ -1,4 +1,4 @@
-(*$import Prelude Paths Target Update *)
+(*$import Paths Target Update Compiler *)
 
 (* ---- Provides an abstraction for communication between master and slave processes ---- *)
 signature COMMUNICATION = 

@@ -388,7 +388,7 @@ struct
 				  | Code => "direct call "
 				  | Closure => (if (length elist = 0 andalso length eflist = 0)
 						    then "closure polycall"
-						else "closure call "))
+						else "closure call"))
 
 		      local 
 			  fun cfolder (c,state) = xcon(state,fresh_named_var "call_carg", c)

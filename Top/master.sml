@@ -237,7 +237,7 @@ struct
 			    end
 	    fun compunit (unitname, filebase, isTarget) =
 		UNIT {paths = mkPaths (unitname, filebase),
-		      isTarget = isTarget,
+		      isTarget = bootstrap orelse isTarget,
 		      isBasis = isBasis}
 	    fun fail (n,line,msg) = error ("Line " ^ (Int.toString n) ^ " of " ^ mapfile ^
 					   " " ^ msg ^ ": " ^ line ^ "\n")

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Substring Paths Update String Char Bool TextIO Posix Int Word32 Stats COMMUNICATION OS List Platform Dirs Delay Listops Target TopHelp UpdateHelp Compiler Tools Queue Linknil *)
+(*$import Util Substring Paths Update String Char Bool TextIO Posix Int Word32 Stats COMMUNICATION OS List Platform Dirs Delay Listops Target TopHelp UpdateHelp Compiler Tools Queue Linknil *)
 
 structure Comm :> COMMUNICATION =
 struct

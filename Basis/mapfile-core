@@ -1,68 +1,68 @@
 // This forms the association between the logical unit names and the filenames of the standard basis.
-Firstlude   Firstlude			TARGET
+Firstlude   Firstlude
 TiltPrim
-Prelude     Prelude			TARGET
+Prelude     Prelude
 
-GENERAL     General/general.sig		TARGET
-General_extern General/extern		TARGET
-General     General/general		TARGET
-OPTION      General/option-sig		TARGET
-Option      General/option		TARGET
+GENERAL     General/general.sig
+General_extern General/extern
+General     General/general
+OPTION      General/option-sig
+Option      General/option
 PreString   Text/pre-string
-STRING_CVT  Text/string-cvt-sig		TARGET
-StringCvt   Text/string-cvt		TARGET
-BOOL        General/bool-sig		TARGET
-Bool        General/bool		TARGET
-LIST        Aggregate/list-sig		TARGET
-List        Aggregate/list		TARGET
-NumFormat   Text/num-format		TARGET
-CHAR        Text/char-sig		TARGET
-Char        Text/char			TARGET
-STRING      Text/string-sig		TARGET
-String      Text/string			TARGET
-SUBSTRING   Text/substring-sig		TARGET
-Substring   Text/substring		TARGET
+STRING_CVT  Text/string-cvt-sig
+StringCvt   Text/string-cvt
+BOOL        General/bool-sig
+Bool        General/bool
+LIST        Aggregate/list-sig
+List        Aggregate/list
+NumFormat   Text/num-format
+CHAR        Text/char-sig
+Char        Text/char
+STRING      Text/string-sig
+String      Text/string
+SUBSTRING   Text/substring-sig
+Substring   Text/substring
 PreInt      Numeric/pre-int
 PreReal     Numeric/pre-real
 PreWord     Numeric/pre-word
-NumScan     Text/num-scan		TARGET
-INTEGER     Numeric/integer-sig		TARGET
-Int32       Numeric/int32		TARGET
-Int	    Numeric/int			TARGET
-Position    Numeric/position		TARGET
-LargeInt    Numeric/large-int		TARGET
-SysInt	    Numeric/sys-int		TARGET
-MATH        Numeric/math-sig		TARGET
-Math64      Numeric/math64c		TARGET
-Math	    Numeric/math		TARGET
-IEEE_REAL   Numeric/ieee-real-sig	TARGET
-IEEEReal    Numeric/ieee-real 		TARGET
-REAL        Numeric/real-sig		TARGET
-RealFormat  Numeric/real-format		TARGET
-Real64      Numeric/real64		TARGET
-Real	    Numeric/real		TARGET
-LargeReal   Numeric/large-real		TARGET
-WORD        Numeric/word-sig		TARGET
-Word8       Numeric/word8		TARGET
-Word32      Numeric/word32		TARGET
-Word	    Numeric/word		TARGET
-LargeWord   Numeric/large-word		TARGET
-SysWord	    Numeric/sys-word		TARGET
-Word31      Numeric/word31		TARGET
-ARRAY       Aggregate/array-sig		TARGET
-Array       Aggregate/array		TARGET
-VECTOR      Aggregate/vector-sig	TARGET
-Vector      Aggregate/vector		TARGET
-MONO_VECTOR Aggregate/mono-vector-sig	TARGET
-MONO_ARRAY  Aggregate/mono-array-sig	TARGET
-Word8Vector Aggregate/word8-vector	TARGET
-Word8Array  Aggregate/word8-array	TARGET
-PACK_WORD   Aggregate/pack-word-sig	TARGET
-Pack32Big   Aggregate/pack-word-b32	TARGET
-// Pack32Little Aggregate/pack-word-l32	TARGET
-BYTE        Numeric/byte-sig		TARGET
-Byte        Numeric/byte		TARGET
-CharVector  Aggregate/char-vector	TARGET
-CharArray   Aggregate/char-array	TARGET
-LIST_PAIR   Aggregate/list-pair-sig	TARGET
-ListPair    Aggregate/list-pair		TARGET
+NumScan     Text/num-scan
+INTEGER     Numeric/integer-sig
+Int32       Numeric/int32
+Int	    Numeric/int
+Position    Numeric/position
+LargeInt    Numeric/large-int
+SysInt	    Numeric/sys-int
+MATH        Numeric/math-sig
+Math64      Numeric/math64c
+Math	    Numeric/math
+IEEE_REAL   Numeric/ieee-real-sig
+IEEEReal    Numeric/ieee-real
+REAL        Numeric/real-sig
+RealFormat  Numeric/real-format
+Real64      Numeric/real64
+Real	    Numeric/real
+LargeReal   Numeric/large-real
+WORD        Numeric/word-sig
+Word8       Numeric/word8
+Word32      Numeric/word32
+Word	    Numeric/word
+LargeWord   Numeric/large-word
+SysWord	    Numeric/sys-word
+Word31      Numeric/word31
+ARRAY       Aggregate/array-sig
+Array       Aggregate/array
+VECTOR      Aggregate/vector-sig
+Vector      Aggregate/vector
+MONO_VECTOR Aggregate/mono-vector-sig
+MONO_ARRAY  Aggregate/mono-array-sig
+Word8Vector Aggregate/word8-vector
+Word8Array  Aggregate/word8-array
+PACK_WORD   Aggregate/pack-word-sig
+Pack32Big   Aggregate/pack-word-b32
+// Pack32Little Aggregate/pack-word-l32
+BYTE        Numeric/byte-sig
+Byte        Numeric/byte
+CharVector  Aggregate/char-vector
+CharArray   Aggregate/char-array
+LIST_PAIR   Aggregate/list-pair-sig
+ListPair    Aggregate/list-pair

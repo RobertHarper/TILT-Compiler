@@ -48,11 +48,11 @@ or perform partial compiles (see
 on any platform for which TILT has been compiled.
 .SH OPTIONS
 .TP
-.RI [ mapfile " .\|.\|.\|]"
+.BI "\-m " mapfile
 This is the primary method for building SML source files.
-Each
+Any sources listed in
 .I mapfile
-is recompiled in turn.
+are recompiled, as necessary.
 See
 .B MAKE SYSTEM
 below for information on what a mapfile is and how to set up sources
@@ -69,7 +69,7 @@ or
 .BR "\-S" )
 ignore this option and generate code for whatever platforms are
 required by their masters
-.RB ( "-m" ).
+.RB ( "-M" ).
 .TP
 .BI "\-c " mapfile
 Remove platform-specific object files (and other compiler-generated files)
@@ -79,7 +79,7 @@ associated with
 .BI "\-C " mapfile
 Also remove platform-independent files.
 .TP
-.BI "\-m " mapfile
+.BI "\-M " mapfile
 Perform a parallel make of
 .IR mapfile ,
 using the current host as master.
@@ -118,6 +118,10 @@ to false.
 .TP
 .B \-b
 Compile the basis library (for bootstrapping the compiler).
+.TP
+.B \-B
+Perform a parallel make of the basis library (see
+.BR \-M ).
 .TP
 .B \-?
 Print usage summary.

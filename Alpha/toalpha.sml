@@ -280,29 +280,9 @@ struct
 		NONE => error "no Rpv for Alpha"
 	      | SOME x => x)
 
+   val load_imm = (app emit) o load_imm'
    (* Translate an RTL instruction into one or more 
       Alpha instructions *)
-   fun load_imm (immed, Rdest) =
-          let  
-            val w65535 = i2w 65535
-	    val low    = w2i (W.andb(immed, w65535))
-            val high   = w2i (W.rshiftl(immed, 16))
-            val low'   = if (low > 32767) then low - 65536 else low
-            val high'  = if (high > 32767) then high - 65536 else high
-	    val Rtemp  = if ((high' <> 0) andalso (low' = 0)) then Rzero
-			 else (emit (SPECIFIC (LOADI (LDA, Rdest, low', Rzero))); Rdest)
-	  in
-	      if (low' >= 0) then
-		  if (high' <> 0) then emit (SPECIFIC(LOADI(LDAH,Rdest,high',Rtemp))) else ()
-	      else 
-		  if (high' = ~1) then 
-		      ()
-		  else 
-		      if (high' <> 32767) then
-			  emit(SPECIFIC(LOADI (LDAH, Rdest, high' + 1, Rtemp)))
-		      else
-			  emit(SPECIFIC(LOADI (LDAH, Rdest, ~32768, Rtemp)))
-	  end
 
    fun translate_cmp Rtl.EQ  = BEQ
      | translate_cmp Rtl.LE  = BLE
@@ -1107,7 +1087,7 @@ struct
 		  end
 	    | Rtl.IMM words =>
 		  let val size = 4 * words
-		  in  if (in_ea_disp_range size)
+		  in  if (in_ea_disp_range size) (* XXX: in_imm_range? *)
 			  then emit (SPECIFIC (INTOP (ADDL, Rheap, IMMop size, Rat)))
 		      else
 			  (load_imm(i2w size, Rat);

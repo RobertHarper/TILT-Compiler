@@ -161,6 +161,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 	fun clearbytes() = bytes := []
 	fun addword_int(q) = words := ((INT32 q) :: (!words))
 	fun addword_label(q) = words := ((DATA q) :: (!words))
+	fun addword_data(d) = words := (d :: (!words))
 	fun getwords() = let val x = rev(!words)
 			 in case x of
 			     [] => []
@@ -180,45 +181,102 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
     val Count_global_rec = ref 0;
     fun inc x = x := (!x + 1)
 
-    (* these number must match up with the macros in stack.h *)
-    (* the lower 2 bits are used for other things so we only have 30 bits *)
+    (*
+       A special trace with indices [a0, ..., a_{n-1}] is encoded in
+       2+floor(n/6) words as follows
+       
+     		 3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1
+		 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
+		+---------------------------------------------------------------+
+	0	|typ|   b5    |   b4    |   b3    |   b2    |   b1    |   b0    |
+		+---------------------------------------------------------------+
+	1	|                             data				|
+		+---------------------------------------------------------------+
+	2	|0 0|   b11   |   b10   |   b9    |   b8    |   b7    |   b6    |
+		+---------------------------------------------------------------+
+	...	|			      ...				|
+		+---------------------------------------------------------------+
+	k/6	|0 0| b_{k-1} | b_{k-2} | b_{k-3} | b_{k-4} | b_{k-5} | b_{k-6} |
+		+---------------------------------------------------------------+
+       
+       where
+       		typ encodes the type of the special trace
+
+		data is used to calculate the base address (type-specific)
+		
+		k = 6(1 + floor (n/6))
+
+		b_i = 1 + a_i	if 0 <= i < n
+		    = 0		if n <= i < k
+
+       This encoding allows 5 bits for each index, using 0 as a
+       sentinal for the last index.  Trace indices are made small
+       during the translation to RTL.
+
+       This information is decoded by the runtime in stack.h and stack.c.
+     *)
     local
-(*
-	val bits = [6,8,8,8] (* must sum to <= 30 *)
-	val pows = [1,64,64*256,64*256*256]
-	val maxes  = [63,255,255,255]
-*)
-	val bits = [14,8,8] (* must sum to <= 30 *)
-	val pows = [1,16384,16384*256]
-	val maxes  = [16383,255,255]
 	fun local_error indices = 
 	     (print ("indices2int: ");
 	      app (fn m => (print (Int.toString m);
 			    print "  ")) indices;
 	      print "\n")
-	fun loop [] _ _ _ = 0
-	  | loop (index::indexRest) (pow::powRest) (max::maxRest) error = 
-	    if (index + 1 > max)
-		then error "index too large"
-	    else (index + 1) * pow + (loop indexRest powRest maxRest error)
-	  | loop _ _ _ error = error "too many indices"
 
-	(* indices2int : int list -> int.  Uses low 30 bits. *)
-	fun indices2int indices =
-	    (loop indices pows maxes
-	     (fn s => (local_error indices; error s)))
+	(* these number must match up with the macros in stack.h *)
+	val bitsPerIndex = 5
+	val indexMax = 30		(* 2^{bitsPerIndex} - 2 *)
+	val indicesPerWord = 6
+
+	(* indexBits : (string -> 'a) -> int -> TilWord32.word *)
+	fun indexBits error index = if index < 0 orelse index > indexMax
+					then error "index out of range"
+				    else i2w (index + 1)
+
+	(* pack : TilWord32.word * (int * TilWord32.word * TilWord32.word list)
+	        -> int * TilWord32.word * TilWord32.word list
+	*)
+	fun pack (bits, (count, w, acc)) =
+	    if count = indicesPerWord then (1, bits, w :: acc)
+	    else (count + 1, W.orb (W.lshift (w, bitsPerIndex), bits), acc)
+
+	(* indices2words int list -> TilWord32.word * TilWord32.word list *)
+	fun indices2words indices =
+	    let
+		val zero = i2w 0
+		val error = fn s => (local_error indices; error s)
+		val bits = (map (indexBits error) indices) @ [zero]
+	    in  
+		case foldr pack (0,zero,nil) bits
+		  of (0, _, acc) => (hd acc, tl acc) (* Gauranteed non-empty *)
+		   | (_, w, acc) => (w, acc)
+	    end
+	
+	datatype special_type =
+	    STACK of Core.stacklocation
+	  | LABEL of Core.label
+	  | GLOBAL of Core.label
+
+	(* typeInt : special_type -> int *)
+	(* these number must match up with the macros in stack.h *)
+	fun typeInt (STACK _) = 0
+	  | typeInt (LABEL _) = 1
+	  | typeInt (GLOBAL _) = 2
+
+	(* typeData : special_type -> data *)
+	fun typeData (STACK sloc) = INT32 (i2w (Core.sloc2int sloc))
+	  | typeData (LABEL lab) = DATA lab
+	  | typeData (GLOBAL lab) = DATA lab
     in
-	datatype special_type = STACK | LABEL | GLOBAL | UNSET
-
-	(* indices2word : int list -> W.word.  Uses 32 bits.  *)
-	fun indices2word (ty,indices) =
-	    let val tbits = i2w (case ty of
-				     STACK => 0
-				   | LABEL => 1
-				   | GLOBAL => 2
-				   | UNSET => 3)
-		val ibits = i2w (indices2int indices)
-	    in  W.orb (W.lshift (ibits, 2), tbits)
+	datatype special_type = datatype special_type
+	    
+	(* add_special : special_type * int list -> unit *)
+	fun add_special (ty, indices) =
+	    let val tybits = W.lshift (i2w (typeInt ty), bitsPerIndex * indicesPerWord)
+		val (w0, ws) = indices2words indices
+		val _ = addword_int (W.orb (tybits, w0))
+		val _ = addword_data (typeData ty)
+		val _ = app addword_int ws
+	    in  ()
 	    end
     end
 
@@ -233,20 +291,11 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
       | tr2bot (TRACE_LABEL lab) = tr2bot (TRACE_LABEL_REC (lab, []))
       | tr2bot (TRACE_GLOBAL lab) = tr2bot (TRACE_GLOBAL_REC (lab, []))
       | tr2bot (TRACE_STACK_REC (sloc,indices)) =
-	(inc Count_stack_rec; 
-	 addword_int (indices2word (STACK, indices));
-	 addword_int (i2w (Core.sloc2int sloc));
-	 3)
+	(inc Count_stack_rec; add_special (STACK sloc, indices); 3)
       | tr2bot (TRACE_LABEL_REC (lab,indices)) =
-	(inc Count_label_rec; 
-	 addword_int (indices2word (LABEL, indices));
-	 addword_label lab;
-	 3)
+	(inc Count_label_rec; add_special (LABEL lab, indices); 3)
       | tr2bot (TRACE_GLOBAL_REC (lab,indices)) =
-	(inc Count_label_rec; 
-	 addword_int (indices2word (GLOBAL, indices));
-	 addword_label lab;
-	 3)
+	(inc Count_label_rec; add_special (GLOBAL lab, indices); 3)
       | tr2bot TRACE_IMPOSSIBLE          = 
 	error "cannot get a trace impossible while making table"
 
@@ -424,29 +473,30 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		   | _ => error "datalength") arg)
 
 	    val framesizeword =  (i2w (framesize div 4))
-	    val entrysizeword = if (!TagEntry) then (i2w (3 + (datalength calldata)))
-				else (i2w (2 + (datalength calldata)))
+	    (* Must match size of Callinfo__t structure (excluding regtrace and rawdata fields) in threads.h *)
+	    val entrysizeword = if (!TagEntry) then (i2w (4 + (datalength calldata)))
+				else (i2w (3 + (datalength calldata)))
 	    val bytestuffsizeword = (i2w (datalength bytedata))
 	    val sizedata = 
 		let
-		    fun local_error (what, v) =
-			(print what; print " = "; print (W.toDecimalString v); print "\n";
-			 error ("giant frame: " ^ what ^ " too big"))
-		    val _ = if (W.ugte(entrysizeword,i2w 5124))
-				then local_error ("entrysizeword", entrysizeword) else ()
-		    val _ = if (W.ugte(framesizeword,i2w 512))
-				then local_error ("framesizeword", framesizeword) else ()
-		    val _ = if (W.ugte(bytestuffsizeword,i2w 512))
-				then local_error ("bytestuffsizeword", bytestuffsizeword) else ()
+		    fun check (what, v, limit) =
+			if W.ugte(v,i2w limit) then
+			    (print what; print " = "; print (W.toDecimalString v); print "\n";
+			     error ("giant frame: " ^ what ^ " too big"))
+			else ()
+		    val _ = check ("entrysizeword", entrysizeword, 65536)
+		    val _ = check ("framesizeword", framesizeword, 65536)
+		    val _ = check ("bytestuffsizeword", bytestuffsizeword, 65536)
+		    val _ = check ("quad_ra_offset_word", quad_ra_offset_word, 32)
 		    val t1 = bitshift(entrysizeword,0)
-		    val t2 = bitshift(framesizeword,9)
-		    val t3 = bitshift(bytestuffsizeword,18)
-		    val t4 = bitshift(quad_ra_offset_word,27)
+		    val t2 = bitshift(framesizeword,16)
+		    val t3 = bitshift(bytestuffsizeword,0)
+		    val t4 = bitshift(quad_ra_offset_word,16)
 		in
-		    INT32 (W.orb(W.orb(t1,t2),W.orb(t3,t4)))
+		    [INT32 (W.orb(t1, t2)), INT32 (W.orb(t3, t4))]
 		end
 
-	    val templist = sizedata :: calldata
+	    val templist = sizedata @ calldata
 	in
 	    if (!TagEntry) then
 		((COMMENT "-------- label,id,sizes,reg")::
