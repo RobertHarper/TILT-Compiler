@@ -338,6 +338,10 @@ struct
 	     | Code_cb arg => lconfun Code_cb arg)
        end
 
+   and lcon' state arg_con : con = let val (cbnds,c) = lcon state arg_con
+				   in  Let_c(Sequential,cbnds,c)
+				   end
+
    and lcon state arg_con : conbnd list * con = 
        (
 (*
@@ -469,6 +473,18 @@ struct
        in  (rev rev_cbnds, rev rev_vclist, state)
        end
 
+   and lkind' state arg_kind : kind = 
+       let val (cbnds,k) = lkind state arg_kind
+       in  case (cbnds,k) of
+	   (_,Type_k _) => k
+	 | (_,Word_k _) => k
+	 | (_,Singleton_k(p,k,c)) => Singleton_k(p,k,Let_c(Sequential,cbnds,c))
+	 | ([],Record_k _) => k
+	 | ([],Arrow_k _) => k
+	 | (_,Record_k _) => error "lkind' with non-empty cbnds and record_k"
+	 | (_,Arrow_k _) => error "lkind' with non-empty cbnds and arrow_k"
+       end
+
    and lkind state arg_kind : conbnd list * kind = 
        (case arg_kind of
 	    Type_k _ => ([],arg_kind)
@@ -504,10 +520,26 @@ struct
        in  ExportType(l,letc(cbnds_c,c), k)
        end
 
+   fun limport (ImportValue(l,v,c),s) =
+       let val (s,v) = add_var(s,v)
+       in  (ImportValue(l,v,lcon' s c),s)
+       end
+     | limport (ImportType(l,v,k),s) =
+       let val (s,v) = add_var(s,v)
+       in  (ImportType(l,v,lkind' s k),s)
+       end
+
+   fun limports (imports,s) = 
+       let fun folder(imp,(acc,s)) = let val (imp,s) = limport(imp,s)
+				     in  (imp::acc,s)
+				     end
+	   val (rev_imps,s) = foldl folder ([],s) imports
+       in  (rev rev_imps, s)
+       end
+       
    fun linearize_mod (MODULE{bnds,imports,exports}) = 
        let val state = reset_state()
-	   fun import_folder (((ImportValue(_,v,_)) | (ImportType(_,v,_))),s) = pop_var(#1(add_var(s,v)))
-	   val state = foldl import_folder state imports
+	   val (imports,state) = limports(imports,state)
 	   fun folder (bnd,(acc,state)) = let val (state,bnds) = lbnd state bnd
 					  in  (rev bnds @ acc, state)
 					  end
