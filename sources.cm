@@ -11,6 +11,3 @@ Backend/backend.cm
 Alpha/alpha.cm
 Top/top.cm
 
-(* RtlToMLRISC/Alpha/Alpha.cm *)
-(* MLRISC/MLRISC.cm *)
-
