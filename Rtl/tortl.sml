@@ -122,7 +122,7 @@ struct
 	    | Fixopen_b var_fun_seq => error "no open functions permitted"
 	    | Fixcode_b var_fun_seq =>
 		  let 
-		      val _ = msg "working on fixopen_b\n"
+		      val _ = msg "working on fixcode_b\n"
 		      fun folder ((v,function),s) =
 			  let val funcon = NilUtil.function_type Code function
 			      val _ = add_global v

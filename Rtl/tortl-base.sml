@@ -456,9 +456,12 @@ struct
 	      | SOME(SOME(REGISTER (_,I r)),_) => (COMPUTE(Projvar_p (r,labs)))
 	      | SOME(SOME(REGISTER (_,F _)),_) => error "constructor in float reg"
 	      | SOME(SOME(GLOBAL (l,_)),_) => (COMPUTE(Projglobal_p(l,labs)))
-	      | _ => (print "niltrace2rep convar = ";
-		      print (var2string v); print "\n";
-		      error "no information on this convar!!"))
+	      | SOME _ => (print "niltrace2rep convar = ";
+			   print (var2string v); print "\n";
+			   error "inappropriate information for this convar!!")
+	      | NONE => (print "niltrace2rep convar = ";
+			 print (var2string v); print "\n";
+			 error "no information on this convar!!"))
 
        in  
 	   (case niltrace of
