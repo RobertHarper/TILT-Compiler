@@ -6,10 +6,17 @@ Date:        04/15/03
 Version:     CVS
 System:      any
 Severity:    critical
-Problem:     
+Problem:
+	The elaborator bombs on the following code.
 Code:        
+	    fun seal (i : {main : unit * unit}) : unit =
+		let val {main=(v,sig_target),...} = i
+		in  ()
+		end
 Transcript:  
 Comments:    
+	It looks like the pattern compiler is calling GetExpCon
+	on a variable it has not bound into context.
 Fix:         
 Test: ../../Test/bug163
 Owner: swasey
