@@ -1,10 +1,10 @@
-(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist Reify NilStatic Inline Flatten Reduce Ppnil-Html *)
+(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist Reify NilStatic Inline Flatten Reduce PpnilHtml *)
 
 
 structure Linknil (* :> LINKNIL  *) =
   struct
-    val typecheck_before_opt = ref true
-    val typecheck_after_opt = ref true
+    val typecheck_before_opt = ref false
+    val typecheck_after_opt = ref false
     val typecheck_after_cc = ref false
 
 
