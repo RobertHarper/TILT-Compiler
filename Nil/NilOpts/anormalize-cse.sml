@@ -36,8 +36,7 @@ struct
     open Nil Name Util Nil.Prim
 
     exception FnNotFound
-    exception UNIMP
-    exception BUG
+    val error = fn s => error "anormalize-cse.sml" s
 
     val print_bind = ref false
 
@@ -158,9 +157,16 @@ val insert_kind_list = NilContext.insert_kind_list*)
 		  Prim_c (Record_c labels,cons)
 	    | (select label,_,[exp]) =>
 		  let val con = exp_type (D, exp)
-		      (* val _ = ( Ppnil.pp_con con ; print " : nil prim type \n" ) *)
+(*                    val _ = ( Ppnil.pp_con con ; print " : nil prim type \n" )  *)
 		      val Prim_c (Record_c labels, cons) = con
-		      val SOME con =  Listops.find2 (fn (l,c) => eq_label (l,label)) (labels,cons)
+(*		      val SOME con =  Listops.find2 (fn (l,c) => eq_label (l,label)) (labels,cons) *)
+		      val con = 
+case  Listops.find2 (fn (l,c) => eq_label (l,label)) (labels,cons) of
+	 SOME c => c
+      | NONE =>  ( Ppnil.pp_label label; print " : label of select\n";
+		  Ppnil.pp_con con ; print " : nil prim type \n";
+		  Ppnil.pp_exp exp; print " : nil exp\n";
+		  error "bad select\n")
 		  in #2 con
 		  end 
 	    | (inject {tagcount,sumtype},cons,exps as ([] | [_])) => 
@@ -184,10 +190,10 @@ val insert_kind_list = NilContext.insert_kind_list*)
 		  Prim_c (Float_c floatsize,[])
 	    | (roll,[argcon],[exp]) => argcon      
 	    | (unroll,[argcon],[exp]) =>
-		  let val  SOME (set,var) =  NilUtil.strip_recursive argcon 
+		  let val  SOME (flag,set,var) =  NilUtil.strip_recursive argcon 
 		      val def_list = set2list set
 		      val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
-		      val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
+		      val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (flag,set,v))) def_list)
 		      val con' = Subst.substConInCon cmap con'
 		  in con'
 		  end       
@@ -219,7 +225,7 @@ val insert_kind_list = NilContext.insert_kind_list*)
  	 case exp of 
 	     Var_e v => ( case find_con (D, v) of 
 			 SOME c => c 
-		       | NONE => raise BUG)
+		       | NONE => error "variable should be bound")
 	   | Const_e v => value_type (D, v)
 	   | Let_e (sort, bnds, exp ) => 
 		  exp_type( (extend_bnds D bnds), exp)
@@ -347,7 +353,7 @@ val insert_kind_list = NilContext.insert_kind_list*)
 	case bnd of 
 	    Con_b (v, knd, c) => k ([ bnd ], insert_kind (D, v, knd), ae)
 	  | Exp_b(var, con, exp) => let val exp' = normalize_exp exp D ae (fn (x, D,ae) => x)
-					val con = exp_type (D, exp')
+(* con of binding precise enough	val con = exp_type (D, exp') *)
 					val ae = if !do_cse andalso (is_elim_exp exp') then 
 					    Expmap.insert (ae, exp', (var, con))
 						 else 

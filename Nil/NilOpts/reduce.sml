@@ -8,17 +8,17 @@ functor Reduce  (
 		  structure NilEval : NILEVAL
 		  structure NilUtil : NILUTIL
 		  structure NilSubst : NILSUBST
-		      structure Squish : SQUISH 
-		      sharing type Squish.Nil.exp = Nil.exp
-		  sharing type Nil.exp = NilEval.Nil.exp
-			  sharing type PrimUtil.con = Nil.con
-				  sharing type PrimUtil.exp = Nil.exp
-		    sharing type Nil.exp = Ppnil.Nil.exp
-		    sharing type Nil.Prim.prim = PrimUtil.Prim.prim
-			    sharing type Nil.exp = NilUtil.Nil.exp
-			    sharing type Nil.con = NilUtil.Nil.con
-			     sharing type Nil.exp = NilSubst.exp
-				     sharing type Nil.con = NilSubst.con
+		  structure Squish : SQUISH 
+		  sharing NilUtil.Nil = Ppnil.Nil = NilEval.Nil = Nil
+		  sharing type Squish.Nil.exp = Nil.exp
+		  sharing type PrimUtil.con = Nil.con
+		  sharing type PrimUtil.exp = Nil.exp
+		  sharing type Nil.exp = Ppnil.Nil.exp
+		  sharing type Nil.Prim.prim = PrimUtil.Prim.prim
+
+		  sharing type Nil.exp = NilSubst.exp
+	          sharing type Nil.con = NilSubst.con
+	          sharing type Nil.kind = NilSubst.kind
 			) : PASS =
 
 struct 
@@ -525,8 +525,14 @@ struct
 		  | Let_e(Sequential, [], N) => xexp N
 
 		  | Let_e(Sequential, ( Con_b (x, kind, con) :: bnds ), N) =>
-			Let_e ( Sequential, [ Con_b (x, kind, con)] , 
-			       xexp (Let_e (Sequential, bnds, N)))
+			let val con = (case (NilUtil.strip_singleton kind) of
+					   Record_k seq => if (null (sequence2list seq))
+							       then Crecord_c []
+							   else con
+					 | _ => con)
+			in  Let_e (Sequential, [ Con_b (x, kind, con)] , 
+				   xexp (Let_e (Sequential, bnds, N)))
+			end
 		  | Let_e(Sequential, _ , _ ) => raise UNIMP (* Fixcode and Fixclosure *)
 			
 		  | Let_e (Parallel, _ , _) => raise UNIMP (* Try to get it from the old version, if we have to *)

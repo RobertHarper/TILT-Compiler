@@ -12,6 +12,7 @@ functor DoOpts (structure PpNil : PPNIL
 		sharing Nil.Prim = NilPrimUtil.Prim
 		sharing type Nil.con = NilSubst.con = NilPrimUtil.con 
 		sharing type Nil.exp = NilSubst.exp = NilPrimUtil.exp 
+		sharing type Nil.kind = NilSubst.kind
 	        sharing type NilContext.context = NilStatic.context
 		    ) = 
 			 
