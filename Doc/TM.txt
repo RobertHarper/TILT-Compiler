@@ -1,5 +1,9 @@
 -*- outline -*-
 
+ ------------------------------------------------------------------- 
+|Separate Compilation and Cut-off Recompilation in the TILT Compiler|
+ ------------------------------------------------------------------- 
+
 We describe the compilation management system used by the TILT
 compiler. Ours is one of many designs capable of supporting separate
 compilation as well as cut-off recompilation. In contrast to systems
