@@ -27,8 +27,7 @@ if ./Test/tilt-nj -b ; then echo "Compiled basis" ; else echo "Basis didn't comp
 # build the test harness
 if (cd Test ; ./tilt-nj -m mapfile) ; then echo "Compiled test harness" ; else echo "Harness didn't compile" ; exit 1; fi
 
-# is this actually used right now?
-ln -s ./Bin/til_slave_local_xterm ./Bin/til_slave
+if test -f ./Bin/til_slave; then :; else ln -s ./Bin/til_slave_local_xterm ./Bin/til_slave; fi
 
 if [ $# -lt 1 ] ; then arg=nj ; else arg=$1 ; fi
 
