@@ -993,16 +993,8 @@ struct
        let
 	 val destlabel = translateLabel l
 	 val c_call = extern_call (* case destlabel of (CE _) => true | _ => false *)
+	 val tailcall = tailcall andalso (not c_call) andalso (! do_tailcalls)
        in
-         (* Sanity check:  do tailcall & return agree? *)
-	 (case return of
-	    SOME _ => 
-	      if tailcall then ()
-	      else error "translate: (direct): return w/o tailcall"
-	  | NONE => 
-	      if tailcall then 
-		error "translate: (direct) tailcall w/o return" 
-	      else ());
 	    
 	 if (c_call) then
 	     let val r1 = Rtl.REGI(Name.fresh_var(),Rtl.LABEL)
@@ -1017,9 +1009,8 @@ struct
 	     end
 	 else ();
 
-	 if (tailcall andalso (not c_call) andalso (! do_tailcalls)) then
-
-	     emit (BASE(RTL (CALL{extern_call = extern_call,
+	
+	 emit (BASE(RTL (CALL{extern_call = extern_call,
 				  func     = DIRECT destlabel,
 				  args     = (map translateIReg argI) @
 				  (map translateFReg argF),
@@ -1028,24 +1019,9 @@ struct
 				  argregs  = NONE,
 				  resregs  = NONE,
 				  destroys = NONE,
-				  tailcall = tailcall})))
+				  tailcall = tailcall})));
 
-	 else
-	   (emit (BASE( RTL (CALL{extern_call = extern_call,
-				  func     = DIRECT destlabel, 
-				  args     = (map translateIReg argI) @
-				  (map translateFReg argF),
-				  results  = (map translateIReg resI) @
-				  (map translateFReg resF),
-				  argregs  = NONE,
-				  resregs  = NONE,
-				  destroys = NONE,
-				  tailcall = false})));
-	    (case (translateIRegOpt return) of 
-	       NONE => ()
-	     | SOME ra => emit (BASE (RTL (RETURN {results = !current_res})))));
-	   
-	   if (c_call) then
+	 (if (c_call) then
 	     let
 	       val r1 = Rtl.REGI(Name.fresh_var(),Rtl.LABEL)
 	       val r2 = Rtl.REGI(Name.fresh_var(),Rtl.LABEL)
@@ -1057,7 +1033,14 @@ struct
 	       translate (Rtl.LOAD32I(Rtl.EA(r1,0),Rtl.SREGI Rtl.HEAPPTR));
 	       translate (Rtl.LOAD32I(Rtl.EA(r2,0),Rtl.SREGI Rtl.HEAPLIMIT))
 	     end
-	   else ()
+	   else ());
+
+	 if (tailcall)
+	     then (case (translateIRegOpt return) of 
+		       NONE => ()
+		     | SOME ra => emit (BASE (RTL (RETURN {results = !current_res}))))
+	 else ()
+
        end
 
      | translate (Rtl.RETURN rtl_Raddr) =
