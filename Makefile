@@ -41,7 +41,7 @@ heap:
 purge_runtime:
 	(cd Runtime && gmake purge)
 purge_tilt:
-	$(TILT_NEW) -vc $(MAPFILE)
+	$(TILT_NEW) -vC $(MAPFILE)
 purge: purge_runtime purge_tilt
 
 # Run a slave using the new compiler.
