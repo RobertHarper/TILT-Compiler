@@ -230,8 +230,9 @@ struct
      structure HashKey =
        struct
          type hash_key = register
+	 val highbit = Word.<<(0w1, Word.fromInt(Word.wordSize - 1))
          fun hashVal (R v) = Word.fromInt v
-           | hashVal (F v) = Word.fromInt v
+           | hashVal (F v) = Word.orb(highbit, Word.fromInt v)
 	 val sameKey = eqReg
        end
      structure A : MONO_HASH_TABLE = HashTableFn(HashKey)
@@ -240,7 +241,8 @@ struct
           size is the total number of nodes
 	    all is the list of all nodes
 	  graph is a hash table with one entry for each of the nodes
-	    each entry contains a set of neighbors *)
+	    each entry contains a set of neighbors
+	Invariant: A graph contains no physical nodes. *)
 
      type node = register
      datatype graph = GRAPH of {size : int ref,
@@ -267,21 +269,13 @@ struct
 
      fun nodes (GRAPH {all,...}) = !all
      fun nodes_excluding_physical (GRAPH {all,...}) = !all
-     
-     val num_general_iregs = length general_iregs
-     val num_general_fregs = length general_fregs
-     val general_iregs = Regset.addList(Regset.empty,general_iregs)
-     val general_fregs = Regset.addList(Regset.empty,general_fregs)
 
      fun edges (GRAPH {graph,...}) n =
 	 case A.find graph n of
 	     NONE => error "node is not in graph"
 	   | SOME l => l
 
-     fun degree (GRAPH {graph,...}) n =
-	 case A.find graph n of
-	     NONE => error "node is not in graph"
-	   | SOME neighbors => (Regset.numItems neighbors) 
+     val degree = fn g => Regset.numItems o (edges g)
 
      fun insert_node (GRAPH {all,graph,size}) n =
 	   if ((isPhysical n) orelse (hash_member(n,graph))) 
@@ -310,16 +304,16 @@ struct
 	  size := !size - 1;
 	  all := delete(n,!all))
 
+     fun copy (GRAPH {all,size,graph}) = 
+	 GRAPH{graph = A.copy graph,
+	       size = ref (!size),
+	       all = ref (!all)}
+
      (* add an interference edge between 2 registers:
               . two registers interfere only if they're the same type
               . don't keep edge lists for physical registers
               . don't add an edge from a register to itself
       *)
-
-     fun copy (GRAPH {all,size,graph}) = 
-	 GRAPH{graph = A.copy graph,
-	       size = ref (!size),
-	       all = ref (!all)}
 
      (* assumes a and b are different and are of the same type
         does not assume either are in the graph already *)
@@ -345,20 +339,11 @@ struct
 	     app (fn b => add_edge_direct graph b node) nodeList
 	 end
        | insert_edges (g as GRAPH{all,size,graph}) (nodeList,nodeSet) =
-	 let fun split [] (iRegs,fRegs) = (iRegs,fRegs)
-	       | split (r::rest) (iRegs,fRegs) = split rest (case r of
-								 R _ => (r::iRegs,fRegs)
-							       | F _ => (iRegs,r::fRegs))
+	 let
 	     fun folder (r as R _, (iRegs, fRegs)) = (r::iRegs,fRegs)
 	       | folder (r as F _, (iRegs, fRegs)) = (iRegs,r::fRegs)
-	     val (inodeList1,fnodeList1) = split nodeList ([],[])
+	     val (inodeList1,fnodeList1) = List.partition isInt nodeList
 	     val (inodeList2,fnodeList2) = Regset.foldl folder ([],[]) nodeSet
-(*
-	     val _ = (print "potential edges from insert_edges: ";
-		      print (Int.toString ((length inodeList1) * (length inodeList2) +
-					   (length fnodeList1) * (length fnodeList2)));
-		      print "\n")
-*)
 	 in  if (null inodeList2)
 		 then () 
 	     else (app (fn n => add_edges_direct graph n inodeList1) inodeList2;
