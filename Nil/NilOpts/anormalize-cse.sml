@@ -363,17 +363,7 @@ struct
     fun con2bnd conbnd = Con_b(Runtime, conbnd)
 
 
-    fun contype  (D, con) =
-(*	let val (con, kind) = NilStatic.con_valid (D, con)
-	    val kind = NilUtil.strip_singleton kind 
-*)
-	let (* val con =  NilStatic.con_reduce(D,con) *)
-	    val kind = Normalize.get_shape D con
-	    val kind = rename_kind VarMap.empty kind
-	    val _ =  if !debug then ( print "Kinding " ; Ppnil.pp_con con ; print " to be " ; Ppnil.pp_kind kind ; print "\n" ) else ()
-	in 
-	    kind 
-	end 
+
     (* --------- Code to get the type of expressions -----------*)
 
     (* Unfortunately when we do this we have to alpha convert the code as well. *)
@@ -597,9 +587,7 @@ struct
 		  let 
 		      val _ = HashTable.insert env (t,con)
 		      val _ = if !debug then (print "Kinding "; Ppnil.pp_con con ) else ();
-		      val kind =  contype (D, con) 
-			  handle e => (print "contype failed with con = \n";
-				       Ppnil.pp_con con; print "\n\n"; raise e)
+		      val kind =  Single_k con
 		      val kind =  normalize_kind kind D (ae,ac)
 		      val _ = if !debug then (print " with kind "; Ppnil.pp_kind kind ; print "\n") else ();
 		      val _ = NilOpts.inc_click normalize_click

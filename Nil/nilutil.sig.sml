@@ -105,7 +105,6 @@ signature NILUTIL =
     val selfify : (Nil.con * Nil.kind) -> Nil.kind
 
     val get_arrow_return : Nil.con -> Nil.con option
-    val is_shape : Nil.kind -> bool
 
     (*Get the kind of a projection*)
     val project_from_kind : ((Nil.label * Nil.var), Nil.kind) Nil.sequence * Nil.con * Nil.label -> Nil.kind

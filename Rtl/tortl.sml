@@ -1637,8 +1637,6 @@ struct
 				in  (const, VAR_LOC vl,k)
 				end
 			  | (NONE,NONE,_) => error "no info on convar")
-(* XXX should  precompute shape-only kind *)
-(*		       val k = make_shape state k *)
 		   in  (vl,vv,k,state)
 		   end
 	     | Let_c (letsort, cbnds, c) => 

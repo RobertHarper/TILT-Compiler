@@ -1202,7 +1202,7 @@ struct
 	   val {code_var, fidtype_var, unpack_var, cenv_var, venv_var, ...} = get_static v
 	   val {freecpaths,freecpaths_map,freeepaths_map=pc_free,...} = get_frees v
 	   (* was kept in reverse order *)
-	   val vkl_free = map (fn p => let (* XXX the k is shape only *)
+	   val vkl_free = map (fn p => let 
 					   val SOME(v,_,k) = PathMap.find(freecpaths_map,p)
 					   val k = Single_k(path2con p)
 					   val l = Name.internal_label(Name.var2string v)

@@ -1060,19 +1060,6 @@ struct
 	  else (map (fn (v,c) => (lookup v, substcon c)) vclist)
       end
 
-  (* Returns true if the kind is a shape 
-   *)
-  fun is_shape kind = 
-    (case kind 
-       of Type_k => true
-        | SingleType_k con => false
-        | Single_k con => false
-        | Record_k elts => Sequence.all (fn (_,k) => is_shape k) elts
-        | Arrow_k (openness, formals, return) => 
-(****
-            (List.all (fn (_,k) => is_shape k) formals) andalso 
-****)
-            (is_shape return))
 
    (* makeLetC.
          Creates a constructor-level sequential let given bindings and

@@ -638,6 +638,15 @@ struct
       val return = con_normalize' state return
     in Function (effect,recursive,tformals,dep,formals,fformals,body,return)
     end
+
+  and cfunction_normalize' state (tformals,body,return) = 
+    let
+      val (tformals,state) = bind_at_kinds state tformals
+      val body = con_normalize' state body
+      val return = kind_normalize' state return
+    in (tformals,body,return)
+    end
+
   and bnds_normalize' state bnds = 
     let
       fun norm_bnd (bnd,state) = bnd_normalize' state bnd
@@ -646,19 +655,29 @@ struct
     end
 
   and bnd_normalize' state (bnd : bnd) =
-(*
-    (case bnd
-       of Con_b (var, con) =>
-	 let
-	   val con = con_normalize' state con
-	   val bnd = Con_b (var,con)
-	   val kind = shape_of (#1 state, con)
-	   val (state,var,kind) = bind_at_kind state (var,kind)
+    (case bnd of
+          Con_b (p, cbnd) =>
+	 let	
+	   val (cbnd,var,kind) =
+	   (case cbnd of
+		Con_cb (v,c) => 
+		let val con = con_normalize' state c
+		in  (Con_cb(v,con), v, Single_k con)
+		end
+	      | Open_cb(v,vklist,c,k) => 
+		let val (vklist,c,k) = cfunction_normalize' state (vklist,c,k)
+		    val cbnd = Open_cb(v,vklist,c,k)
+		in  (cbnd, v, Single_k(Let_c(Sequential,[cbnd],Var_c v)))
+		end
+	      | Code_cb(v,vklist,c,k) =>
+		let val (vklist,c,k) = cfunction_normalize' state (vklist,c,k)
+		    val cbnd = Code_cb(v,vklist,c,k)
+		in  (cbnd, v, Single_k(Let_c(Sequential,[cbnd],Var_c v)))
+		end)
+	   val bnd = Con_b (p,cbnd)
+	   val ((var,kind),state) = bind_at_kind ((var,kind), state)
 	 in (bnd,state)
 	 end
-*)
-    (case bnd of
-          Con_b (p, cb) => error "sorry not handled"
 	| Exp_b (var, tinfo, exp) =>
 	 let
 	   val exp = exp_normalize' state exp
