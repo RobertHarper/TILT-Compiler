@@ -22,4 +22,10 @@ struct
 	in loop set
 	end
 
+    fun find pred set =
+	let fun loop [] = NONE
+	      | loop ((a,b)::rest) = if (pred a) then SOME b else loop rest
+	in loop set
+	end
+
 end
