@@ -6,9 +6,9 @@ struct
     exception Reject of string
     
     val showWrittenContext = Stats.ff("ShowWrittenContext")
-    val writeUnselfContext = Stats.ff("WriteUnselfContext")
     val showImports = Stats.ff("ShowImports")
     val ShowUnitmap = Stats.ff("ShowUnitmap")
+    val ShowContext = Stats.ff("ShowContext")
     val timestamp = Timestamp.timestamp
     fun wrap f arg = (timestamp(); f arg)
 
@@ -59,17 +59,9 @@ struct
     
     fun writePartialContextRaw (ilFile,pctxt) = 
 	let val _ = writePartialContextRaw' (ilFile,pctxt)
-	    val shortpctxt = Delay.delay (fn () => LinkIl.IlContext.UnselfifyPartialContext pctxt)
-	    val _ = if (!writeUnselfContext)
-			then (let val shortfile = Paths.ilToUnself ilFile ^ ".unself"
-			      in  writePartialContextRaw' (shortfile, Delay.force shortpctxt)
-			      end)
-		    else ()
 	    val _ = if (!showWrittenContext)
-			then (print "Selfified context:\n"; 
-			      LinkIl.Ppil.pp_pcontext pctxt;
-			      print "\n\n\nUnselfified context:\n";
-			      LinkIl.Ppil.pp_pcontext (Delay.force shortpctxt))
+			then (print "Written context:\n"; 
+			      LinkIl.Ppil.pp_pcontext pctxt)
 		    else ()
 	in  () 
 	end
@@ -128,6 +120,11 @@ struct
 		let val ilFile = Paths.ilFile p
 		    val unitname = Paths.unitName p
 		    val (iscached,pctxt) = IlCache.read ilFile
+		    val _ = if (!ShowContext)
+				then (print ("\n\npartial context for " ^ unitname ^ ":\n");
+				      LinkIl.Ppil.pp_pcontext pctxt;
+				      print "\n")
+			    else ()
 		    val unitmap = extend(unitmap,unitname,pctxt)
 		    val (cached,uncached) = if iscached then (ilFile :: cached, uncached)
 					    else (cached, ilFile :: uncached)
@@ -143,6 +140,11 @@ struct
 		end
 	      | folder (PRIM k, (cached, uncached, unitmap, context, label_info)) =
 		let val pctxt = tiltprim context
+		    val _ = if (!ShowContext)
+				then (print "\n\npartial context for TiltPrim:\n";
+				      LinkIl.Ppil.pp_pcontext pctxt;
+				      print "\n")
+			    else ()
 (* 		    val unitmap = extend(unitmap,"TiltPrim",pctxt) *)
 		    val (pctxtopt, context) = plus_context (context, pctxt)
 		    val _ = (case pctxtopt
@@ -155,6 +157,11 @@ struct
 		end
 	    val init = (nil, nil, Linkrtl.empty, LinkIl.empty_context, LinkIl.IlContext.empty_label_info)
 	    val (cached, uncached, unitmap, context, indirect_labels) = foldl folder init imports
+	    val _ = if (!ShowContext)
+			then (print "\n\nfinal context:\n";
+			      LinkIl.Ppil.pp_context context;
+			      print "\n")
+		    else ()
 	    val context = LinkIl.IlContext.obscure_labels (context, indirect_labels)
 	    val totalSize = foldl (fn (ilFile,acc) => acc + (IlCache.size ilFile)) 0
 	    val chatInt = Help.chat o Int.toString
