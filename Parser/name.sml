@@ -173,7 +173,9 @@ structure Name :> NAME =
     in
 	fun blastOutVar os (n,str) = 
 	    (blastOutInt os n;
-	     blastOutString os str)
+	     if (!useOldBlast)
+		 then blastOutString os str
+	     else blastOutString os "")
 	    
 	fun blastInVar is = 
 	    let val n = blastInInt is
