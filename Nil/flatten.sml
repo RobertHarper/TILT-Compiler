@@ -115,10 +115,10 @@ functor Flatten( structure PrimUtil : PRIMUTIL
 		   (fnVar,(newFnVar, labels, (map #1 vklist), newcons))
 		 val newbody = 
 		   Let_e (Sequential, 
-			  [Exp_b ( recordArg, 
+			  [Exp_b (recordArg, 
 				  TraceUnknown,
-				  Prim_e (NilPrimOp (record labels),
-					  newcons, exps))], 
+				  Prim_e (NilPrimOp (record labels), 
+					  map NilRename.renameCon newcons, exps))],
 			  body)
 		   
 		 (* We'll on the body later *)

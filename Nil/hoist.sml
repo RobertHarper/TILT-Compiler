@@ -959,7 +959,7 @@ struct
 	  val (evars, nts, etypes) = Listops.unzip3 eformals
 	  val (etypes', arg_top_bnds, arg_hoists) = 
 	         rcons' (etypes, top_set, hoist_set)
-	  val eFormals' = Listops.zip3 evars nts etypes'
+	  val eformals' = Listops.zip3 evars nts etypes'
           val boundvar_set = list2set (cvars @ evars @ fformals)
 	  val body_hoist_set = Set.union (hoist_set, boundvar_set)
 
@@ -984,7 +984,7 @@ struct
 *)
       in
 	  (Function{effect=eff,recursive=isrec,isDependent=isdep,
-		    tFormals=typelist,eFormals=eformals, fFormals=fformals,
+		    tFormals=typelist,eFormals=eformals', fFormals=fformals,
 		    body=newbod,body_type=newret},
 	   top_bnds, hoists, ARROW_EFFS(eff, effs)) 
       end
