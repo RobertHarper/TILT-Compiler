@@ -1,9 +1,13 @@
 Group 
+        signature NIL
 	signature NILUTIL
 	signature NILSTATIC
+	signature PPNIL
 
-	structure NilUtil
-	structure NilStatic
+        functor   Nil
+        functor   Ppnil
+(*	structure NilUtil   *)
+(*	structure NilStatic *)
 is
 
 smlnj-lib.cm             		(* ------ SML/NJ library ------ *)
@@ -19,16 +23,14 @@ nil.sig.sml
 nil.sml
 ppnil.sig.sml
 ppnil.sml
-tonil.sml
+(*tonil.sml*)
 nilutil.sig.sml
-nilutil2.sml
+nilutil.sml
 (*linknil.sml*)
-linkstatic.sml
+(*linkstatic.sml*)
 nilstatic.sig.sml
-nilstatic.sml
+(* nilstatic.sml *)
 cont.sig.sml
 cont.sml
-(*
 typecheck.sig.sml
-typecheck.sml
-*)
+(*typecheck.sml*)
