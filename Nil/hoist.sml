@@ -51,6 +51,9 @@ struct
 
     fun msg str = if (!HoistDiag) then print str else ()
 
+    (*Record inferred totality information in the types of functions *)
+    val infer_totality = Stats.tt "infer_totality"
+
     (************************************************************************
      Tracing effects:
      It seems too expensive --- and unnecessary --- to maintain a full
@@ -1148,6 +1151,14 @@ struct
 		   handler = handler, result_type = result_type},
 	 state, levels, eff, valuable)
       end
+    | rexp' (ForgetKnown_e (sumcon,field), env, state) =
+      let
+	val (sumcon,state,levels) = rtype(sumcon,env,state)
+	val valuable = true
+	val eff = UNKNOWN_EFF
+      in 
+	(ForgetKnown_e (sumcon,field),state,levels,eff,valuable)
+      end
 
     | rexp' (Fold_e (vars,from,to), env, state) =
       let
@@ -1533,7 +1544,7 @@ struct
 	      case effect of
                   Total => (con, Total, env, state)
 		| Partial =>
-		      if body_valuable then
+		      if body_valuable andalso !infer_totality then
 			  let
 			      (* We must create a new variable binding for a Total version of this function's type *)
 			      val cv = Name.fresh_named_var (Name.var2string fnvar ^ "_type")

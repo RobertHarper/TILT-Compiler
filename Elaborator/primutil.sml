@@ -175,18 +175,18 @@ struct
 
   fun get_iltype context ilprim cons =
       (case (ilprim,cons) of
-	   (not_uint is, []) => (false,[con_uint is], con_uint is)
-	 | (and_uint is, []) => (false,[con_uint is, con_uint is], con_uint is)
-	 | (or_uint is, []) => (false,[con_uint is, con_uint is], con_uint is)
-	 | (xor_uint is, []) => (false,[con_uint is, con_uint is], con_uint is)
-	 | (lshift_uint is, []) => (false,[con_uint is, con_int W32], con_uint is)
-	 | (eq_uint is, []) => (false, [con_uint is, con_uint is], con_bool context)
-	 | (neq_uint is, []) => (false, [con_uint is, con_uint is], con_bool context)
+	   (not_uint is, []) => (true,[con_uint is], con_uint is)
+	 | (and_uint is, []) => (true,[con_uint is, con_uint is], con_uint is)
+	 | (or_uint is, []) => (true,[con_uint is, con_uint is], con_uint is)
+	 | (xor_uint is, []) => (true,[con_uint is, con_uint is], con_uint is)
+	 | (lshift_uint is, []) => (true,[con_uint is, con_int W32], con_uint is)
+	 | (eq_uint is, []) => (true, [con_uint is, con_uint is], con_bool context)
+	 | (neq_uint is, []) => (true, [con_uint is, con_uint is], con_bool context)
 
-	 | (mk_ref, [instance]) => (true,[instance],con_ref instance)
-	 | (deref, [instance]) => (true,[con_ref instance], instance)
-	 | (setref, [instance]) => (true,[con_ref instance,instance],con_unit)
-	 | (eq_ref, [instance]) => (false, [con_ref instance, con_ref instance],con_bool context)
+	 | (mk_ref, [instance]) => (false,[instance],con_ref instance)
+	 | (deref, [instance]) => (false,[con_ref instance], instance)
+	 | (setref, [instance]) => (false,[con_ref instance,instance],con_unit)
+	 | (eq_ref, [instance]) => (true, [con_ref instance, con_ref instance],con_bool context)
 	 | _ => error "get_iltype is ill-formed")
 
 

@@ -254,7 +254,8 @@ struct
 
       | reify_exp ctxt (Switch_e (Ifthenelse_e _), pset) = error "Ifthenelse_e not implemented yet"
 
-      | reify_exp ctxt (e_and_pset as (Fold_e (vars,from,to),_)) = e_and_pset
+      | reify_exp ctxt (e_and_pset as (ForgetKnown_e _,_))         = e_and_pset
+      | reify_exp ctxt (e_and_pset as (Fold_e (vars,from,to),_))   = e_and_pset
       | reify_exp ctxt (e_and_pset as (Unfold_e (vars,from,to),_)) = e_and_pset
       | reify_exp ctxt (Coerce_e (coercion,cargs,exp),pset) =
 	let

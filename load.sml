@@ -21,10 +21,6 @@ signature LOAD =
      *)
     val make : unit -> unit
 
-    (*
-     * Stop compiling after translation to Rtl.
-     *)
-    val toRtl : unit -> unit
 
     (*
      * Stop compiling after translation to assembly.
@@ -118,7 +114,6 @@ structure LoadVars =
 
     val show_hil = ref false
 
-    val toRtl = ref false;
     val toAsm = ref false;
     val toExe = ref false;
   end;

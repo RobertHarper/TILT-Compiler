@@ -64,6 +64,4 @@ signature ILSTATIC =
     val Sdecs_Lookup : Il.context -> Il.mod * Il.sdecs * Il.label list ->
 	                            (Il.label list * Il.phrase_class) option
 
-    val supertype : Il.con -> Il.con  (* compute supertype by removing total arrows and special sum types *)
-
   end

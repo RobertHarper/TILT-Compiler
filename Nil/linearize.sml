@@ -435,6 +435,13 @@ struct
 		    bnds',
 		    Coerce_e (ccn,cons,exp))
 		end
+	  | ForgetKnown_e (sumcon,which) =>
+	    let
+	      val (cbnds,sumcon) = lcon lift state sumcon
+	      val bnds = map (fn cb => (Con_b(Runtime,cb))) cbnds
+	    in
+	      (bnds, ForgetKnown_e (sumcon,which))
+	    end
 	  | Fold_e (vars,from,to) =>
 	    let
 		fun folder (v,s) = let val (s,v) = add_var (s,v) in s end

@@ -13,9 +13,9 @@ signature LIL =
 
     datatype size = B1 | B2 | B4 | B8
 
-    type size = int
 
     val flattenThreshold : int ref
+
 
 
     (*  A leaf procedure makes no function calls.
@@ -41,10 +41,11 @@ signature LIL =
     | All_k of var * kind
 
     withtype kind = { k : kind_ }
+      
 
-    datatype primcon =                        (* classifies term-level ... *)
+    datatype primcon =                             (* classifies term-level ... *)
       Int_c of size                           (* register integers *)
-    | Float_c of size                         (* register floating-points *)
+    | Float_c                          (* register floating-points *)
     | Boxed_c of size                         (* boxed values *)
     | Void_c
     | Star_c
@@ -54,98 +55,102 @@ signature LIL =
     | Array_c of size                         (* arrays *)
     | Vector_c of size                        (* vectors *)
     | Tag_c
-    | GCTag_c
-    | Sum_c
+    | Sum_c 
     | KSum_c
     | Exists_c
     | Forall_c
     | Rec_c
     | Arrow_c
+    | ExternArrow_c 
+    | Coercion_c
 
-    datatype scon_ =
+    datatype con_ = 
       Var_c of var
-    | Nat_c of int
-    | App_c of scon * acon
-    | APP_c of scon * kind
-    | Pi1_c of scon
-    | Pi2_c of scon
+    | Nat_c of w32
+    | App_c of con * con
+    | APP_c of con * kind
+    | Pi1_c of con
+    | Pi2_c of con
     | Prim_c of primcon
-    | Pr_c of var * (var * kind) * kind * var * scon
-    | Case_c of scon * (var * acon) * (var * acon)
-    | AtoS_c of acon * kind
+    | Pr_c of var * (var * kind) * kind * var * con
+    | Case_c of kind * con * ((var * kind) * con) * ((var * kind) * con)
+    | LAM_c of var * con
+    | Lam_c of (var * kind) * con
+    | Pair_c of con * con
+    | Inr_c of kind * con 
+    | Inl_c of kind * con 
+    | Fold_c of kind * con
 
-    and acon_      =
-      LAM_c of var * acon
-      | Lam_c of var * acon
-      | Pair_c of acon * acon
-      | Inr_c of con
-      | Inl_c of con
-      | Fold_c of con
-      | StoA_c of scon
+    withtype con = {c : con_}
 
-    withtype cbnd = (var * kind * acon)
-    and scon = {c : scon_ }
-    and acon = {c : acon_ }
+    datatype coercion = 
+      Roll 
+    | Unroll 
+    | Pack 
+    | ForgetKnown 
+    | InjUnion
 
-    datatype sv64 = Var_64 of var | Const_64 of (con,exp) Prim.value
-    and sv32 =
-      Var of var
-      | Const of (con,exp) Prim.value
-    and v32 =
-      Box of sv64
-      | Tuple of sv32 list
-      | Inj_tag of int * ( int * con) * sv32
-      | Inj of int * (int * con) * sv32
-      | Inj_dyn of con * sv32 * sv32
-      | Roll of con * sv32
-      | Pack of sv32 * con * con
+    and primarg = arg32 of sv32 | arg64 of sv64
+    and sv64 = 
+      Var_64 of var 
+      | Const_64 of (con,exp) Prim.value
+    and sv32 = 
+      Var_32 of var 
+      | Coercion of coercion * con list  (* Coercion and decorations*)
+      | Coerce of sv32 * sv32 
+      | Tabs of (var * kind) * sv32
       | TApp of sv32 * con
-      | ForgetKnown of sv32
-      | Tag of int
-    and op64 = Val_64 of sv64 | Sub_64 of con * sv32 * sv32
-    and op32 =
-      Val of sv32
-      | Unroll of con * sv32
-      | Select of int * sv32
-      | Case of sv32 * (var * exp) list
-      | Proj of int * sv32
-      | Dyncase of sv32 * (sv32 * exp) list * exp
-      | Dyntag of con
-      | Raise of con * sv32
-      | Handle of con * sv32 * (var * sv32)
+      | Const_32 of (con,sv32) Prim.value
+    and op64 = 
+      Val_64 of sv64 
       | Unbox of sv32
+      | Prim64 of Prim.prim * con list * primarg list
+    and lilprimop32 = 
+      Box 			(*  sv64 *)
+      | Tuple 			(*  sv32 list *)
+      | Inj_dyn 		(*  con * sv32 * sv32 *)
+      | Tag of w32		(*  w32 *)
+      | Select of w32		(*  w32 * sv32 *)
+      | Proj of w32		(*  w32 * sv32 *)
+      | Dyntag 			(*  con *)
+    and op32 = 
+      Val of sv32 
+      | Prim32 of Prim.prim * con list * primarg list
+      | LilPrimOp32 of lilprimop32 * con list * sv32 list * sv64 list
+      | ExternApp of sv32 * sv32 list
       | App of sv32 * sv32 list * sv64 list
-      | Vcase of con * (con * (var * sv32) * (var * exp))
-      | Array_32 of sv32 * sv32
-      | Array_64 of sv64 * sv64
-      | Sub of sv32 * sv32
-      | Upd_32 of sv32 * sv32 * sv32
-      | Upd_64 of sv32 * sv32 * sv64
-    and exp_ =
-      Val_e of sv32
+      | Switch of switch
+      | Raise of con * sv32 
+      | Handle of exp * (var * exp)
+      | Vcasel of con * (con * ((var * kind) * exp)  * ((var * kind) * sv32))
+      | Vcaser of con * (con * ((var * kind) * sv32) * ((var * kind) * exp))
+    and exp_ = 
+      Val32_e of sv32
       | Let_e of bnd list * exp
     and bnd =
       Fixcode_b of (var * con) list  * function list
-      | Exp32_b of var * op32
-      | Exp64_b of var * op64
-      | Unpack_b of var * var * sv32
-      | Split_b of var * var * con
-      | Unfold_b of var * con
-    and function = Function of {effect      : effect,
-				recursive   : recursive,
-				tFormals    : var list,
-				eFormals    : var list,
-				fFormals    : var list,
+      | Exp32_b of (var * con) * op32
+      | Exp64_b of (var * con) * op64
+      | Unpack_b of (var * kind) * (var * con) * sv32
+      | Split_b of (var * kind) * (var * kind) * con
+      | Unfold_b of (var * kind) * con
+    and function = Function of {tFormals    : (var * kind) list,
+				eFormals    : (var * con) list,
+				fFormals    : (var * con) list,
 				body        : exp}
-
+    and switch = 
+      Sumcase of   {arg : sv32,arms :(w32  * (var * con) * exp) list, default: exp option, tipe : con}
+      | Dyncase of {arg : sv32,arms :(sv32 * (var * con) * exp) list, default: exp,        tipe : con}
+      | Intcase of {arg : sv32,arms :(w32 * exp) list,        default: exp,        tipe : con}
+      
     withtype exp = { e: exp_ }
 
     datatype import_entry =
       ImportValue of label * var * con
       | ImportType  of label * var * kind
-      | ImportBnd of var * con
 
-    datatype export_entry =
+      
+    datatype export_entry = 
       ExportValue of label * var
       | ExportType  of label * var
 
@@ -153,4 +158,12 @@ signature LIL =
 			         imports : import_entry list,
 				 exports : export_entry list}
 
+
+    val mk_kind : kind_ -> kind
+    val mk_con  : con_  -> con
+    val mk_exp  : exp_  -> exp
+
+    val mk_pcon     : primcon -> con
+
 end
+

@@ -45,6 +45,8 @@ structure Listops :> LISTOPS =
 	in unzip5_loop abcde_list ([],[],[],[],[])
 	end
 
+    fun map_unzip f ls = unzip(map f ls)
+
     val all = List.all
 
     (* nb. NOT the same as ListPair.all, because
@@ -106,6 +108,9 @@ structure Listops :> LISTOPS =
       end
 
     fun flatten arg = foldr (op @) [] arg
+
+    fun rev_flatten arg = foldl (op @) [] arg
+
     fun transpose [] = []
       | transpose ([]::_) = []
       | transpose lists = let fun split [] = error "transpose failed"
@@ -266,7 +271,15 @@ structure Listops :> LISTOPS =
 	loop
       end
 
-    fun no_dups compare list =
+
+    fun index_of p l = 
+      let
+	fun loop (n,[]) = error "index_of: item not in list"
+	  | loop (n,a::aa) = if p a then n else loop (n+1,aa)
+      in loop (0,l)
+      end
+
+    fun no_dups compare list = 
       let
 	val list = insertion_sort compare list
 	fun eq (a,b) = case compare (a,b) of EQUAL => true | _ => false

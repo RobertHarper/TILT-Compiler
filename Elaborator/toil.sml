@@ -844,7 +844,7 @@ structure Toil
 		 val (he,hc) = make_lambda(v,CON_ANY,hbc,hbe)
 	     in if (eq_con(context,rescon,hbc))
 		    then (HANDLE(rescon,exp',he),rescon,va)
-		else let val rescon = supertype rescon
+		else let val rescon = rescon
 		     in  if sub_con(context,hbc,rescon)
 			     then (HANDLE(rescon,exp',he),rescon,va)
 			 else (error_region();

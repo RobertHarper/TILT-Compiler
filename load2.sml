@@ -10,22 +10,20 @@ val sticky = LoadVars.sticky
 
 fun make () = use "load2.sml";
 
-fun toRtl () = (Stats.bool "UptoAsm" := false;Stats.bool "UptoRtl" := true;
-		LoadVars.toRtl := true;LoadVars.toAsm := false;LoadVars.toExe := false)
-fun toAsm () = (Stats.bool "UptoAsm" := true ;Stats.bool "UptoRtl" := false;
-		LoadVars.toRtl := false;LoadVars.toAsm := true;LoadVars.toExe := false)
-fun toExe () = (Stats.bool "UptoAsm" := false ;Stats.bool "UptoRtl" := false;
-		LoadVars.toRtl := false;LoadVars.toAsm := false;LoadVars.toExe := true)
+fun toAsm () = (Stats.bool "UptoAsm" := true ;
+		LoadVars.toAsm := true;LoadVars.toExe := false)
+fun toExe () = (Stats.bool "UptoAsm" := false ;
+		LoadVars.toAsm := false;LoadVars.toExe := true)
 
 fun show b = 
   let in
     LoadVars.show := b;
-    LinkIl.show_hil := b;
-    Linkrtl.show_rtl := b;
+    LinkIl.ShowHIL := b;
+    Linkrtl.ShowRtl := b;
     Stats.bool "ShowNil" := b
   end;
 
-fun show_hil b = (LoadVars.show_hil := b;LinkIl.show_hil := b)
+fun show_hil b = (LoadVars.show_hil := b;LinkIl.ShowHIL := b)
 
 
 fun typecheck b = (LoadVars.typecheck := b;
@@ -77,8 +75,7 @@ val _ =
      if !LoadVars.show_hil then show_hil true else ();
      if !LoadVars.show then show true else ();
      if !LoadVars.show_some then show_some true else ();
-     if !LoadVars.toRtl then toRtl()
-     else if !LoadVars.toAsm then toAsm()
+     if !LoadVars.toAsm then toAsm()
      else if !LoadVars.toExe then toExe() else ()
        ) else ()
 

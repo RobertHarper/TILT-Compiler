@@ -58,10 +58,15 @@ source unit NilRename = "nilrename.sml" {
 	NilError NilRewrite Option
 }
 
-source unit NILSUBST = "subst.sig.sml" {Name Nil}
-source unit NilSubst = "subst.sml" {
-	Listops Util Name Nil List TextIO Ppnil NILSUBST Stats NilError
-	NilRewrite NilRename Option
+source unit SUBST = "subst.sig.sml" {Name}
+source unit Subst = "subst.sml" {
+	Listops Util Name List SUBST 
+}
+
+source unit NILSUBST = "nilsubst.sig.sml" {Nil SUBST}
+source unit NilSubst = "nilsubst.sml" {
+	Listops Util Name Nil List Ppnil NILSUBST Stats NilError
+	NilRewrite NilRename Option Subst
 }
 
 source unit NILDEFS = "nildefs.sig.sml" {Nil}
@@ -241,3 +246,4 @@ source unit Linknil : Linknil = "linknil.sml" {
 	Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic
 	Inline PpnilHtml Measure Vararg Real Timestamp CoerceElim
 }
+

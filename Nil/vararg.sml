@@ -435,6 +435,7 @@ struct
 		| Coerce_e (coercion,cargs,exp) =>
 		  Coerce_e (do_exp state coercion, map (do_con state) cargs,
 			    do_exp state exp)
+		| ForgetKnown_e (sumcon,which) => ForgetKnown_e (do_con state sumcon,which)
 		| Fold_e (vars,from,to) =>
 		  let
 		      fun folder (v,st) = add_kind (st,v,Type_k)

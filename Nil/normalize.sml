@@ -576,283 +576,13 @@ struct
 *)
 	    ) (*before print "/con_normalize\n"*))
 
-
-
-
-
-  fun value_normalize' state value =
-    (case value of
-          (int _) => value
-	| (uint _) => value
-	| (float _) => value
-	| array (con,arr) =>
-	 let
-	   val con = con_normalize' state con
-	   val _ = Array.modify (exp_normalize' state) arr
-	 in array (con,arr)
-	 end
-	| vector (con,vec) =>
-	 let
-	   val con = con_normalize' state con
-	   val _ = Array.modify (exp_normalize' state) vec
-	 in vector (con,vec)
-	 end
-	| refcell expref =>
-	 (expref := exp_normalize' state (!expref);
-	  refcell expref)
-	| tag (atag,con) =>
-	 let
-	   val con = con_normalize' state con
-	 in tag (atag,con)
-	 end)
-  and switch_normalize' state switch = error' "switch_normalize not handled"
-(*
-    (case switch of
-          Intsw_e {size,arg,arms,default} =>
-	 let
-	   val arg = exp_normalize' state arg
-	   val arms = map_second (function_normalize' state) arms
-	   val default = map_opt (exp_normalize' state) default
-	 in
-	   Intsw_e {size=size,
-		    arg=arg,arms=arms,default=default}
-	 end
-	| Sumsw_e {info,arg,arms,default} =>
-	 let
-	   val arg = exp_normalize' state arg
-	   val arms = map_second (function_normalize' state) arms
-	   val info = con_normalize' state info
-	   val default = map_opt (exp_normalize' state) default
-	 in
-	   Sumsw_e {info=info,arg=arg,
-		    arms=arms,default=default}
-	 end
-	| Exncase_e {info=_,arg,arms,default} =>
-	 let
-	   val arg = exp_normalize' state arg
-	   val (vars,arm_fns) = unzip arms
-	   val arm_fns = map (function_normalize' state) arm_fns
-	   val vars = map (exp_normalize' state) vars
-	   val arms = zip vars arm_fns
-	   val default = map_opt (exp_normalize' state) default
-	 in
-	   Exncase_e {info=(),arg=arg,
-		      arms=arms,default=default}
-	 end
-	| Typecase_e {info,arg,arms,default} =>
-	 let
-	   val arg = con_normalize' state arg
-	   val arms = map_second (function_normalize' state) arms
-	   val default = map_opt (exp_normalize' state) default
-	 in
-	   Typecase_e {info=(),arg=arg,
-		       arms=arms,default=default}
-	 end)
-*)
-
-  and function_normalize' state (Function {effect,recursive,
-					   tFormals,eFormals,fFormals,
-					   body}) =
-    let
-      (*val (tFormals,state) = bind_at_kinds state tFormals
-      val (eFormals,state) = bind_at_tracecons state eFormals*)
-      val body = exp_normalize' state body
-    in Function{effect = effect , recursive = recursive,
-		tFormals = tFormals, eFormals = eFormals, fFormals = fFormals,
-		body = body}
-    end
-
-  and cfunction_normalize' state (tformals,body) =
-    let
-      val (tformals,state) = bind_at_kinds state tformals
-      val body = con_normalize' state body
-    in (tformals,body)
-    end
-
-  and bnds_normalize' state bnds =
-    let
-      fun norm_bnd (bnd,state) = bnd_normalize' state bnd
-    in
-      foldl_acc norm_bnd state bnds
-    end
-
-  and bnd_normalize' state (bnd : bnd) =
-    (case bnd of
-          Con_b (p, cbnd) =>
-	 let
-	   val (cbnd,var,kind) =
-	   (case cbnd of
-		Con_cb (v,c) =>
-		let val con = con_normalize' state c
-		in  (Con_cb(v,con), v, Single_k con)
-		end
-	      | Open_cb(v,vklist,c) =>
-		let val (vklist,c) = cfunction_normalize' state (vklist,c)
-		    val cbnd = Open_cb(v,vklist,c)
-		in  (cbnd, v, Single_k(Let_c(Sequential,[cbnd],Var_c v)))
-		end
-	      | Code_cb(v,vklist,c) =>
-		let val (vklist,c) = cfunction_normalize' state (vklist,c)
-		    val cbnd = Code_cb(v,vklist,c)
-		in  (cbnd, v, Single_k(Let_c(Sequential,[cbnd],Var_c v)))
-		end)
-	   val bnd = Con_b (p,cbnd)
-	   val ((var,kind),state) = bind_at_kind ((var,kind), state)
-	 in (bnd,state)
-	 end
-	| Exp_b (var, tinfo, exp) =>
-	 let
-	   val exp = exp_normalize' state exp
-	   val bnd = Exp_b (var,tinfo,exp)
-	 in (bnd,state)
-	 end
-	| (Fixopen_b defs) =>
-	 let val defs = Sequence.map (fn (x,f) => (x,function_normalize' state f)) defs
-	 in  (Fixopen_b defs,state)
-	 end
-	| (Fixcode_b defs) =>
-	 let val defs = Sequence.map (fn (x,f) => (x,function_normalize' state f)) defs
-	 in  (Fixcode_b defs,state)
-	 end
-	| Fixclosure_b (is_recur,defs) =>
-	 let
-	   fun do_closure {code,cenv,venv} =
-	     let
-	       val cenv = con_normalize' state cenv
-	       val venv = exp_normalize' state venv
-	     in {code=code,cenv=cenv,venv=venv}
-	     end
-	   val defs = Sequence.map (fn (v,c) => (v,do_closure c)) defs
-	   val bnd = Fixclosure_b (is_recur,defs)
-	 in (bnd,state)
-	 end)
-  and exp_normalize' (state as (D,subst)) (exp : exp) : exp =
-    if !debug then
-      let
-	val _ = push_exp(exp,state)
-	val _ = if (!show_calls)
-		  then (print "exp_normalize called with expression =\n";
-			Ppnil.pp_exp exp;
-			print "\nand context"; NilContext.print_context D;
-			print "\n and subst";  printConSubst subst;
-			print "\n\n")
-		else ()
-	val res = exp_normalize state exp
-	val _ = pop()
-      in  res
-      end
-    else
-      exp_normalize state exp
-  and exp_normalize state (exp : exp) : exp =
-    (case exp
-       of Var_e var => exp
-	| Const_e value => Const_e (value_normalize' state value)
-	| Let_e (letsort,bnds,exp) =>
-	 let
-	   val (bnds,state) = bnds_normalize' state bnds
-	   val exp = exp_normalize' state exp
-	 in
-	   Let_e (letsort,bnds,exp)
-	 end
-	| Prim_e (prim,trs,cons,exps) =>
-	 let
-	   val cons = map (con_normalize' state) cons
-	   val exps = map (exp_normalize' state) exps
-	 in Prim_e (prim,trs,cons,exps)
-	 end
-	| Switch_e switch => Switch_e (switch_normalize' state switch)
-	| (App_e (openness,app,cons,texps,fexps)) =>
-	 let
-	   val app = exp_normalize' state app
-	   val cons = map (con_normalize' state) cons
-	   val texps = map (exp_normalize' state) texps
-	   val fexps = map (exp_normalize' state) fexps
-	 in App_e (openness,app,cons,texps,fexps)
-	 end
-	| ExternApp_e (app,args) =>
-	 let
-	   val app = exp_normalize' state app
-	   val args = map (exp_normalize' state) args
-	 in ExternApp_e (app,args)
-	 end
-
-	| Raise_e (exp, con) =>
-	 let
-	   val exp = exp_normalize' state exp
-	   val con = con_normalize' state con
-	 in Raise_e (exp, con)
-	 end
-	| Handle_e {body,bound,handler,result_type} =>
-	 let
-	   val body = exp_normalize' state body
-	       (* XXX need to bind bound *)
-	   val handler = exp_normalize' state handler
-	   val result_type = con_normalize' state result_type
-	 in Handle_e {body = body, bound = bound,
-		      handler = handler, result_type = result_type}
-	 end
-	| Fold_e (vlist, from, to) =>
-	 let
-	     val from = con_normalize' state from
-	     val to = con_normalize' state to
-	 in
-	     Fold_e (vlist, from, to)
-	 end
-	| Unfold_e (vlist, from, to) =>
-	 let
-	     val from = con_normalize' state from
-	     val to = con_normalize' state to
-	 in
-	     Unfold_e (vlist, from, to)
-	 end
-	| Coerce_e (coer, cons, e) =>
-	 let
-	     val coer = exp_normalize' state coer
-	     val cons = map (con_normalize' state) cons
-	     val e = exp_normalize' state e
-	 in
-	     Coerce_e (coer, cons, e)
-	 end)
   fun insert_label ((D,subst),l,v) =
       let val D = NilContext.insert_label (D,l,v)
       in  (D,subst)
       end
-  fun import_normalize' state (ImportValue (label,var,tr,con)) =
-    let
-      val con = con_normalize' state con
-      val state = insert_label (state,label,var)
-    in
-      (ImportValue (label,var,tr,con),state)
-    end
-    | import_normalize' state (ImportType (label,var,kind)) =
-    let
-      val ((var,kind),state) = bind_at_kind ((var,kind),state)
-      val state = insert_label (state,label,var)
-    in
-      (ImportType (label,var,kind),state)
-    end
-    | import_normalize' _ _ = raise Fail "Don't think this will be reached...."
-
-  fun export_normalize' state (ExportValue (label,v)) = ExportValue (label,v)
-    | export_normalize' state (ExportType (label,v)) = ExportType (label,v)
-
-
-  fun module_normalize' state (MODULE {bnds,imports,exports}) =
-    let
-      fun folder (import,state) = import_normalize' state import
-      val (imports,state) = foldl_acc folder state imports
-      val (bnds,state) = bnds_normalize' state bnds
-      val exports = map (export_normalize' state) exports
-    in
-      MODULE {bnds=bnds,imports=imports,exports=exports}
-    end
-
 
   fun kind_normalize D = kind_normalize' (D,empty())
   fun con_normalize D = con_normalize' (D,empty())
-  fun exp_normalize D = exp_normalize' (D,empty())
-
-  fun module_normalize D = module_normalize' (D,empty())
 
   val beta_confun = beta_confun false
 
@@ -1139,6 +869,23 @@ struct
 
 
     and reduce(D,con) = con_normalize D con
+    and reduce_beta_hnf con = 
+        let 
+	  fun loop n (subst,c) = 
+	    let 
+	      val (progress,subst,c) = con_reduce(NilContext.empty(),subst) c  
+	    in  
+	      case progress of
+		PROGRESS => loop (n+1) (subst,c) 
+	      | HNF => (true, substConInCon subst c)  (*HNF is invariant under substitution*)
+	      | IRREDUCIBLE => 
+		  if NilSubst.C.is_empty subst then                  (*No subst, no further progress is possible*)
+		    (false,c)
+		  else                                          (*Carrying out subst may enable reductions *)
+		    loop (n+1) (empty(),  substConInCon subst c)          (*Try to beta reduce further before giving up*)
+	    end
+        in  loop 0 (empty(),con)
+        end
 
 
     and projectTuple(D:context, c:con, l:label) =
@@ -1426,6 +1173,13 @@ struct
 
 	   | Raise_e (exp,con) => con
 	   | Handle_e {result_type,...} => result_type
+	   | ForgetKnown_e (sumcon,field) => 
+	     let
+	       val (_,sumcon_hnf) = reduce_hnf(D,sumcon)
+	       val ksumcon = NilUtil.convert_sum_to_special(sumcon_hnf,field)
+	     in
+	       Coercion_c {vars = [],from = ksumcon,to = sumcon}
+	     end
 	   | Fold_e (vars,from,to) => Coercion_c {vars=vars,from=from,to=to}
 	   | Unfold_e (vars,from,to) => Coercion_c {vars=vars,from=from,to=to}
 	   | (exp as (Coerce_e (coercion,cargs,_))) =>
@@ -1638,12 +1392,9 @@ struct
 
   val kind_normalize = wrap2 "kind_normalize" kind_normalize
   val con_normalize = wrap2 "con_normalize"  con_normalize
-  val exp_normalize = wrap2 "exp_normalize" exp_normalize
-  val module_normalize = wrap2 "mod_normalize" module_normalize
 
   val kind_normalize' = wrap2 "kind_normalize'" kind_normalize'
   val con_normalize' = wrap2 "con_normalize'"  con_normalize'
-  val exp_normalize' = wrap2 "exp_normalize'" exp_normalize'
 
   val reduce_hnf = wrap1 "reduce_hnf" reduce_hnf
   val reduce_once = wrap1 "reduce_once" reduce_once

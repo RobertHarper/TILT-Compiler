@@ -716,6 +716,7 @@ struct
 
 	  | Coerce_e (coercion,cargs,exp) =>
 	      (scan_exp ctxt coercion; scan_exp ctxt exp)
+	  | ForgetKnown_e _ => ()
 	  | Fold_e _ => ()
 	  | Unfold_e _ => ())
 
@@ -943,8 +944,8 @@ struct
 	    | Coerce_e (coercion,cargs,exp) =>
 		Coerce_e (do_exp coercion, cargs, do_exp exp)
 
+	    | ForgetKnown_e _ => exp
 	    | Fold_e _ => exp
-
 	    | Unfold_e _ => exp)
 
 	and do_explist (explist : exp list) = map do_exp explist

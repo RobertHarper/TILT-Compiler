@@ -24,8 +24,6 @@ signature NORMALIZE =
      *)
     val kind_normalize : context -> kind -> kind
     val con_normalize : context -> con -> con
-    val exp_normalize : context -> exp -> exp
-    val module_normalize : context -> module -> module
     val strip_arrow_norm: context -> con -> {openness : Nil.openness, effect : Nil.effect,
 					     tFormals : (Nil.var*Nil.kind) list,
 					     eFormals : Nil.con list,
@@ -43,7 +41,6 @@ signature NORMALIZE =
     datatype progress = PROGRESS | HNF | IRREDUCIBLE
     val kind_normalize' : (context * (con_subst)) -> kind -> kind
     val con_normalize' : (context * (con_subst)) -> con -> con
-    val exp_normalize' : (context * (con_subst)) -> exp -> exp
 
     val is_hnf          : con -> bool
     val reduce_hnf      : context * con -> bool * con   (* bool indicates whether HNF was reached *)
@@ -55,6 +52,7 @@ signature NORMALIZE =
     val reduce_hnf'     : context * con * NilSubst.con_subst -> NilSubst.con_subst * con
     val reduce_once     : context * con -> con
     val reduce          : context * con -> con
+    val reduce_beta_hnf : con -> (bool * con)    (*Beta short form only *)
     val con_reduce      : context * con_subst -> con -> progress * con_subst * con
     datatype 'a ReduceResult = REDUCED of 'a | UNREDUCED of con
     val reduce_until : context * (con -> 'a option) * con -> 'a ReduceResult

@@ -788,7 +788,7 @@ struct
 	 * The important thing we must ensure is that that we do not accidentally
 	 * move switches with the same pattern into the same switch, since we
 	 * do not have a well-defined semantics for this.
-	 * We accomplish this by doing a very simple form of redudant comparison
+	 * We accomplish this by doing a very simple form of redundant comparison
 	 * elimination.  Any comparison of x to i1 in the default switch continuation
 	 * is dead.  Therefore, we simply always drop arms which have the same
 	 * tag as an arm we've already found.
@@ -1427,6 +1427,11 @@ struct
 		(*Cancel fold/unfold if possible.
 		 *)
 		| Coerce_e args => do_coercion state args
+		| ForgetKnown_e (sumcon, field) =>
+		  let 
+		      val sumcon = do_con state sumcon
+		  in ForgetKnown_e (sumcon,field)
+		  end
 		| Fold_e (vars,from,to) =>
 		  let val state = add_vars(state,vars)
 		      val from = do_con state from
@@ -1480,8 +1485,11 @@ struct
 	  in  res
 	  end
 
-	and do_switch (state : state) (switch : switch) : exp =
-	    let fun sum_switch {sumtype,arg,bound,arms,default,result_type} =
+
+	and do_switch (state : state) (switch : switch) : exp = 
+	    let 
+
+	      fun sum_switch {sumtype,arg,bound,arms,default,result_type} =
 		let val arg = do_exp state arg
 		    val (tagcount,_,carrier) = reduceToSumtype(state,sumtype)
 		    val totalcount = TilWord32.uplus(tagcount,TilWord32.fromInt(length carrier))
@@ -1498,6 +1506,18 @@ struct
 			in  (n,tr,do_exp state body)
 			end
 
+		    val tag_value =
+			(case unalias(state,arg) 
+			   of Coerce_e(q,_,inj) => 
+			     (case unalias (state,q)
+				of ForgetKnown_e (sumcon,w) => SOME (w,inj)
+				 | _ => 			       
+				  (case (unalias(state,inj))   (*The prior case should always catch it, but...*)
+				     of Prim_e(NilPrimOp (inject w), _, _, _) => SOME (w,inj)
+				      | Prim_e(NilPrimOp (inject_known w), _, _, _) => SOME (w,inj)
+				      | _ => NONE))
+			    | _ => NONE)
+
 		    val known_tag =
 			(case arg of
 			     Prim_e(NilPrimOp (inject w), _, _, _) => SOME w
@@ -1508,40 +1528,35 @@ struct
 				| Prim_e(NilPrimOp (inject_known w), _, _, _) => SOME w
 				| _ => NONE))
 		in
-		    case known_tag of
-			SOME w =>
+
+		    case tag_value of
+			SOME (w,inj) => 
 			  let
 			    val _ = inc switches_reduced
-			    val (bnds,tr) = con2trace' result_type
 			  in
 			    (* Reduce known switch *)
 			    (case List.find (fn (w',_,_) => w = w') arms of
-				 SOME (_,_,arm_body) =>
-				     do_exp state
-				     (Let_e(Sequential,
-					    bnds@[Exp_b(bound,tr,
-						   arg)],
-					    arm_body))
-			       | NONE =>
-				     do_exp state
-				     (Let_e(Sequential,
-					    bnds@[Exp_b(bound,tr,arg)],
-					    Option.valOf default)))
-				 (* A switch which does not either cover all of
-				  * the possibilities, or have a default, is
-				  * ill-formed.  We are in the case where a possibility
-				  * was not covered, therefore default must be SOME.
-				  *)
+			       SOME (_,tr,arm_body) =>
+				 do_exp state (NilUtil.makeLetE Sequential 
+					       [Exp_b(bound,tr,inj)]
+					       arm_body)
+			     | NONE =>
+				 do_exp state (Option.valOf default))
+			     (* A switch which does not either cover all of
+			      * the possibilities, or have a default, is 
+			      * ill-formed.  We are in the case where a possibility
+			      * was not covered, therefore default must be SOME.
+			      *)
 			  end
 		      | _ => let
-				 val sumtype = do_con state sumtype
-				 val result_type = do_con state result_type
-				 val arms = map do_arm arms
-				 val default = Util.mapopt (do_exp state) default
-			     in
-				 Switch_e(Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,
-						   arms=arms,default=default,
-						   result_type = result_type})
+			       val sumtype = do_con state sumtype
+			       val result_type = do_con state result_type
+			       val arms = map do_arm arms
+			       val default = Util.mapopt (do_exp state) default
+			     in  
+			       Switch_e(Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,
+						 arms=arms,default=default,
+						 result_type = result_type})
 			     end
 		end
 		fun int_switch int_sw =

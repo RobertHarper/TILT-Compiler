@@ -35,6 +35,8 @@ alpha_context.sig.sml
 alpha_context.sml
 subst.sig.sml
 subst.sml
+nilsubst.sig.sml
+nilsubst.sml
 nilrename.sml
 nilrename.sig.sml
 

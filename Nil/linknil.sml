@@ -112,7 +112,7 @@ structure Linknil :> LINKNIL  =
 		      print "\n")
 		    else ()
 	    val _ = if !checkphase orelse !typecheck then
-		      NilStatic.module_valid (NilContext.empty (), nilmod)
+		      Stats.timer(phasename^"_Typecheck",NilStatic.module_valid) (NilContext.empty (), nilmod)
 		    else ()
 	    (* Note that these get redirected in the self-compile,
 	     * since TIL can't handle the Wizard.  (Datatype bug)

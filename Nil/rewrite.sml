@@ -582,6 +582,15 @@ structure NilRewrite :> NILREWRITE =
 		         SOME (Coerce_e (coercion,cargs,e))
 		       else NONE
 		    end
+		 | ForgetKnown_e (sumcon,which) => 
+		    let
+		      val changed = ref false
+		      val sumcon = recur_c changed state sumcon
+		    in 
+		      if !changed then
+			SOME (ForgetKnown_e (sumcon,which))
+		      else NONE
+		    end
 		 | Fold_e stuff => coercion_helper Fold_e stuff
 		 | Unfold_e stuff => coercion_helper Unfold_e stuff)
 

@@ -213,6 +213,7 @@ struct
          | Handle_e{body,bound,handler,result_type} => doExps [body,handler] + doType result_type
 	 | Coerce_e (coercion,cargs,exp) =>
 	   (doTypes cargs) + (doExp coercion) + (doExp exp)
+	 | ForgetKnown_e (sumcon,field) => doType sumcon
 	 | Fold_e (vars,from,to) => (doType from) + (doType to)
 	 | Unfold_e (vars,from,to) => (doType from) + (doType to))
 

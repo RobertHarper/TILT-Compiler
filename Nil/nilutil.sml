@@ -721,6 +721,9 @@ struct
 				   handler = f_exp state' handler,
 				   result_type = f_type state result_type}
 		      end
+		| ForgetKnown_e (sumcon,which) =>
+		    ForgetKnown_e (f_con state sumcon,which)
+
 		| Fold_e (vars,from,to) =>
 		  let
 		      val state' = foldl (fn (v,s) => add_var (s,v)) state vars
@@ -951,18 +954,6 @@ struct
 	    gv (bnds,[])
 	end
 
-  fun muExpand (flag,vcseq,v) =
-      let val vc_list = Sequence.toList vcseq
-	  val mu_con = Mu_c(flag,vcseq)
-	  fun mapper (which,(v,_)) = (v,if (length vc_list = 1)
-					    then mu_con
-					else Proj_c(mu_con,generate_tuple_label(which+1)))
-	  val vc_list' = Listops.mapcount mapper vc_list
-	  val conmap = NilSubst.C.simFromList vc_list'
-	  val c = (case (Listops.assoc_eq(eq_var,v,vc_list)) of
-		     SOME c => c | NONE => error "bad mu type")
-      in  NilSubst.substConInCon conmap c
-      end
 
   fun same_openness (Open,Open) = true
     | same_openness (Closure,Closure) = true
@@ -1080,13 +1071,9 @@ struct
 		     Sum_c{tagcount=tagcount2,totalcount=totalcount2,
 			   known=known2}) =>
 		    (
-		     (tagcount1 = tagcount2)
-		     andalso (totalcount1 = totalcount2)
-		     andalso (case (known1,known2,st) of
-				(NONE,NONE,_) => true
-			      | (SOME w1, SOME w2,_) => (w1=w2)
-			      | (SOME w1, NONE, true) => true
-			      | _ => false)
+		     (tagcount1 = tagcount2)     
+		     andalso (totalcount1 = totalcount2) 
+		     andalso (known1 = known2)
 		     )
 		  | (Vararg_c(o1,eff1),Vararg_c(o2,eff2)) =>
 		    o1 = o1 andalso (sub_effect(st,eff1,eff2)) andalso

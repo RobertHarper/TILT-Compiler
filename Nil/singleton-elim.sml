@@ -211,6 +211,7 @@ structure SingletonElim :> SINGLETONELIM =
 	     Handle_e{body = R_e env body, bound = bound,
 		      handler = R_e env handler, result_type = R_c env result_type}
 	 | Coerce_e (ccn,cons,exp) => Coerce_e (R_e env ccn,R_clist env cons,R_e env exp)
+	 | ForgetKnown_e (sumcon,which) => ForgetKnown_e (R_c env sumcon,which)
 	 | Fold_e (vars,from,to) => Fold_e (vars,R_c env from,R_c env to)
 	 | Unfold_e (vars,from,to) => Unfold_e (vars,R_c env from,R_c env to)
 
@@ -292,4 +293,7 @@ structure SingletonElim :> SINGLETONELIM =
        val bnds = (map (fn cb => Con_b(Runtime,cb)) cbnds)@bnds
      in MODULE{bnds=bnds,imports=imports,exports=exports}
      end
+
+   val erasek = fn (D : NilContext.context) => fn (k : kind) => erasek (Env {ctxt = D}) k
+
   end

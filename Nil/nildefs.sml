@@ -44,9 +44,13 @@ structure NilDefs :> NILDEFS =
       | is_closed_value (App_e _) = false
       | is_closed_value (ExternApp_e _ ) = false
       | is_closed_value (Raise_e _) = false
-      | is_closed_value (Handle_e _) = false
-
-    and nilprim_is_closed_value(np,clist,elist) =
+      | is_closed_value (Handle_e _) = false  
+      | is_closed_value (Coerce_e(q,_,e)) = (is_closed_value q) andalso (is_closed_value e)
+      | is_closed_value (ForgetKnown_e _) = true
+      | is_closed_value (Fold_e _)        = true
+      | is_closed_value (Unfold_e _)      = true
+      
+    and nilprim_is_closed_value(np,clist,elist) = 
       (case np of
 	 record _ => Listops.andfold is_closed_value elist
        | inject _ => Listops.andfold is_closed_value elist
@@ -68,6 +72,7 @@ structure NilDefs :> NILDEFS =
 	  case e
 	    of (Var_e _)     => false
 	     | (Const_e _)   => false
+	     | (ForgetKnown_e _) => false
 	     | (Unfold_e _)  => false
 	     | (Fold_e _)    => false
 	     | (Coerce_e _)  => false

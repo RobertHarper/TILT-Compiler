@@ -5,8 +5,25 @@ is
 ../Util/util.cm             	(* ------ Our own utilities --- *)
 ../Parser/parser.cm   		(* ------ Parsing, name utils 	*)
 ../Elaborator/elaborator.cm	(* ------ Elaborator Stuff ---- *)
+../Nil/nil.cm
 
-(* ------ Nil stuff ------ *)
+(* ------ Lil stuff ------ *)
 
 lil.sml
 lil.sig.sml
+niltolil.sml
+niltolil.sig.sml
+lildefs.sig.sml
+lildefs.sml
+translationdefs.sig.sml
+translationdefs.sml
+rewrite.sig.sml
+rewrite.sml
+lilsubst.sml
+lilsubst.sig.sml
+lilrename.sig.sml
+lilrename.sml
+lilcontext.sml
+lilcontext.sig.sml
+
+template.sml

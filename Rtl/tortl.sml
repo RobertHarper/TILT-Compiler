@@ -551,6 +551,7 @@ struct
 				 new_gcstate state)))
 		  end
 
+	    | ForgetKnown_e (sumcon,which) => (coercion_term,state)
 	    | Fold_e (vars,from,to) => (coercion_term,state)
 	    | Unfold_e (vars,from,to) => (coercion_term,state)
 	    | Coerce_e (coercion,cargs,exp) =>
@@ -563,8 +564,10 @@ struct
 		  (* case (a) we're sure that it's a value, and (b) it might be   *)
                   (* missing due to the optimization that leaves coercions out of *)
                   (* closure environments.                               joev     *)
-		  val state =
-		    case coercion of
+		  (* A-normal form should guarantee that this is always a variable*)
+		  (*             -leaf                                            *)
+		  val state = 
+		    case coercion of 
 		      (Var_e _) => state
 		    | _ => #2 (xexp (state,fresh_named_var "coercion_app",coercion,
 				     Nil.TraceKnown TraceInfo.Notrace_Int,NOTID))

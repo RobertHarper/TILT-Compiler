@@ -700,6 +700,12 @@ struct
 		| r => r)
        | (Raise_e _, _) => GREATER
        | (_, Raise_e _) => LESS
+	     
+       | (ForgetKnown_e (sumcon1,which1),ForgetKnown_e (sumcon2,which2)) =>
+         cmp_orders[Word32.compare(which1, which2), cmp_con(sumcon1,sumcon2)]
+
+       | (ForgetKnown_e _, _)  => GREATER
+       | (_, ForgetKnown_e _)  => LESS
 
        | (Fold_e (vs1,from1,to1),Fold_e (vs2,from2,to2)) =>
          cmp_orders[cvar_list_equate (vs1,vs2), cmp_con(from1,from2),cmp_con(to1,to2)]

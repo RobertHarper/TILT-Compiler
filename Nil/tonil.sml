@@ -3152,8 +3152,15 @@ end (* local defining splitting context *)
 	 val elist  = (case eopt of
 			 NONE => []
 		       | SOME il_exp => [xexp context il_exp])
-       in
-	 Prim_e(NilPrimOp (inject field),[],[sumcon],elist)
+
+	 val svar = Name.fresh_named_var "inj_sumcon"
+	 val inj_var = Name.fresh_named_var "inj_var"
+
+	 val cbnd = Con_b(Runtime,Con_cb (svar,sumcon))
+	 val bnd = Exp_b (inj_var,TraceUnknown,Prim_e(NilPrimOp (inject field),[],[Var_c svar],elist))
+	 val coercion = ForgetKnown_e (Var_c svar,field)
+	 val body = Coerce_e(coercion,[],Var_e inj_var)
+       in Let_e (Sequential,[cbnd,bnd],body)
        end
 
      | xexp' context (Il.CASE {sumtype, arg=il_arg, arms=il_arms, bound,

@@ -24,8 +24,9 @@
      INVARIANT: Values of sum type always look like pointers or tags, but not an int.
 
          1. n=0         we use a tag to represent the datatype
-	 3. m>0, n=1    we use a tag for the non-carriers;
-	                the carrier is boxed only if the carried type might look like a tag
+
+	 3. m>=0, n=1   we use a tag for the non-carriers;
+	                the carrier is boxed only if the carried type might look like a tag 
 			(e.g., ints, sums, mu's)
          4. n>1         we use tags for the non-carriers and box all carriers
 

@@ -48,6 +48,8 @@ structure NilPrimUtilParam
 		    val mod_var = Name.fresh_named_var "bool_mod"
 		    val coercion_var = Name.fresh_named_var "bool_in"
 		    val inject_var = Name.fresh_named_var "inject"
+		    val forget_var = Name.fresh_named_var "forget_bool"
+		    val forgotten_var = Name.fresh_named_var "forgotten_bool"
 		    val bool_var = Name.fresh_named_var (if b then "true" else "false")
 
 		    val mod_exp = Prim_e (NilPrimOp (select bool_mod),[],[],[Var_e rv])
@@ -57,15 +59,20 @@ structure NilPrimUtilParam
 		    val arm = TilWord32.fromInt (case b of false => 0 | true => 1)
 
 		    val inject_exp = Prim_e (NilPrimOp (inject_known arm), [],[Var_c sum_var], [])
+		    val forget_exp = ForgetKnown_e (Var_c sum_var,arm)
 
-		    val bool_exp = Coerce_e (Var_e coercion_var, [], Var_e inject_var)
+		    val forgotten_exp  = Coerce_e(Var_e forget_var,[],Var_e inject_var)
 
+		    val bool_exp = Coerce_e (Var_e coercion_var, [], Var_e forgotten_var)
+		      
 		in  Let_e (Sequential,
 			   [
 			    Con_b(Runtime,Con_cb(sum_var,sum)),
 			    Exp_b(mod_var,TraceKnown TraceInfo.Trace,mod_exp),
 			    Exp_b(coercion_var,TraceKnown TraceInfo.Notrace_Int,coercion_exp),
 			    Exp_b(inject_var,TraceKnown TraceInfo.Trace,inject_exp),
+			    Exp_b(forget_var,TraceKnown TraceInfo.Notrace_Int,forget_exp),
+			    Exp_b(forgotten_var,TraceKnown TraceInfo.Trace,forgotten_exp),
 			    Exp_b(bool_var,TraceCompute cv,bool_exp)
 			    ],
 			   Var_e bool_var)

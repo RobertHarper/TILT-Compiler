@@ -453,13 +453,10 @@ struct
 	end
 
     (* checks that con <: fullCon,
-       otherwise promote fullCon to its supertype
-        (makes total arrows partial, removes special sum info)
-       and try again...
        *)
-    fun check_rescon (context, {fullCon, ...} : resCon, con) =
-	if IlStatic.sub_con(context ,con, !fullCon) orelse
-	   IlStatic.sub_con(context, con, (fullCon := IlStatic.supertype (!fullCon); !fullCon)) then ()
+
+    fun check_rescon (context, {fullCon, ...} : resCon, con) = 
+	if IlStatic.sub_con(context ,con, !fullCon) then ()
 	else let in
 		Error.error_region();
 		print "Result type mismatch.\n  Expected type: "; Ppil.pp_con (!fullCon);

@@ -568,7 +568,7 @@ structure IlStatic
 		end
 	  | (CON_SUM {names=n1,noncarriers=nc1,carrier=c1,special=i1},
 	     CON_SUM {names=n2,noncarriers=nc2,carrier=c2,special=i2}) =>
-		let val special = (i1=i2) orelse (i2=NONE andalso is_sub)
+		let val special = (i1=i2) 
 		    val res = special andalso (eq_list(eq_label,n1,n2)) andalso
 		              (nc1=nc2) andalso self(c1,c2,ctxt)
 		in  res
@@ -1850,19 +1850,6 @@ structure IlStatic
 		  of NONE => NONE
 		   | SOME (PATH(v,labs2)) => Context_Lookup_Path (ctxt, PATH(v,labs2 @ labs1))))
 
-    fun supertype (arg_con : con) : con =
-	let fun exp_handler (e : exp) : exp option = NONE
-	    fun mod_handler (m : mod) : mod option = NONE
-	    fun con_handler (c : con) : con option =
-		(case c of
-		   CON_SUM {names,noncarriers,carrier,special} =>
-		       SOME(CON_SUM{names = names,
-				    noncarriers = noncarriers,
-				    special = NONE,
-				    carrier = supertype carrier})
-		| _ => NONE)
-	in  con_handle(exp_handler,con_handler,mod_handler, fn _ => NONE) arg_con
-	end
 
     fun con_reduce_once (context,c) = NormOnce(c,context)
     fun con_normalize (context,c) = #2(Normalize(c,context))

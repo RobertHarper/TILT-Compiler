@@ -343,6 +343,8 @@ structure PpnilHtml :> PPNIL =
 			 String "[",pp_list'' pp_con cargs,String "],",
 			 pp_exp exp,
 			 String " )"]
+	   | ForgetKnown_e (sumcon,field) =>
+		 HOVbox [String "FORGETKNOWN_",pp_word field,String " (",pp_con sumcon,String " )"]
 	   | Fold_e (cvars,from,to) =>
 		 HOVbox [String "FOLD ",
 			 pp_list pp_var cvars ("{",",","}",false),

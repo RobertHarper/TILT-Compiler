@@ -16,6 +16,8 @@ signature LISTOPS =
     val unzip4 : ('a * 'b * 'c * 'd) list -> ('a list * 'b list * 'c list * 'd list)
     val unzip5 : ('a * 'b * 'c * 'd * 'e) list -> ('a list * 'b list * 'c list * 'd list * 'e list)
 
+    val map_unzip : ('a -> 'b * 'c) -> 'a list -> 'b list * 'c list
+
     (* checks that the lists are the same length, when applicable *)
     val all : ('a -> bool) -> 'a list -> bool
     val all2 : (('a * 'b) -> bool) -> ('a list * 'b list) -> bool
@@ -90,6 +92,13 @@ signature LISTOPS =
     val orfold' : ('a * 'b -> (bool * 'b)) -> 'b -> 'a list -> bool
 
     val flatten : 'a list list -> 'a list
+
+    (*rev_flatten [l1,...,ln] == flatten (rev [l1,...,ln]) == ln @ ... @ l1 
+     * Useful to take an in order list of reversed lists, and turn it into
+     * a reversed list.
+     *)
+    val rev_flatten : 'a list list -> 'a list
+
     val transpose : 'a list list -> 'a list list
 
     val map_first : ('a -> 'b) -> ('a * 'c) list -> ('b * 'c) list
@@ -118,6 +127,10 @@ signature LISTOPS =
     val insertion_sort : ('a * 'a -> order) -> 'a list -> 'a list
     val no_dups : ('a * 'a -> order) -> 'a list -> bool
 
+    (*index_of p l 
+     * Return the 0 based index of the first element of l for which p return true.
+     *)
+    val index_of : ('a -> bool) -> 'a list -> int
    (* catenable lists *)
    datatype 'a catlist =
        LIST of 'a list

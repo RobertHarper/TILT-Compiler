@@ -163,6 +163,7 @@ struct
 			handler = rexp handler, result_type = rcon result_type}
 	 | Raise_e (exp, con) =>
 		    Raise_e (rexp exp, rcon con)
+	 | ForgetKnown_e (sumcon,which) => ForgetKnown_e (rcon sumcon,which)
 	 | Fold_e (vars,from,to) => Fold_e (vars,rcon from,rcon to)
 	 | Unfold_e (vars,from,to) => Unfold_e (vars,rcon from, rcon to)
 	 | Coerce_e (coercion,cargs,exp) =>
@@ -302,6 +303,7 @@ struct
 
       fun loop (nilmod,n) =
 	let
+	  val _ = print ("  Pass "^(Int.toString n)^"....")
 	  val _ = hasCandidates := false
 	  val _ = functionList := []
 	  val _ = analyzeTable := Analyze.analyze nilmod

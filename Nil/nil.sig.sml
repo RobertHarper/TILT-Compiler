@@ -147,7 +147,6 @@ sig
     | project_known of TilWord32.word  (* corresponds to inject_known *)
       (* Params: Known sum term *)
 
-
     | box_float of Prim.floatsize   (* boxing floating-points *)
       (* Params: Float term to box *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
@@ -220,6 +219,7 @@ sig
 	           bound : var,
                    handler : exp,
                    result_type : con}
+    | ForgetKnown_e of con * w32                       (* Coercion mapping known sum to unknown sum *)
     (* Beginning of coercions for opaque datatypes *)
     | Fold_e of var list * con * con           (* Fold_e and Unfold_e are coercions*)
     | Unfold_e of var list * con * con
@@ -229,7 +229,7 @@ sig
     (* End of coercions *)
 
 
-  and conditionCode =                          (* Usd by Ifthenelse_e *)
+  and conditionCode =                          (* Used by Ifthenelse_e *)
       Exp_cc of exp
     | And_cc  of conditionCode * conditionCode (* Short-circuiting *)
     | Or_cc   of conditionCode * conditionCode (* Short-circuiting *)

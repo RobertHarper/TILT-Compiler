@@ -622,13 +622,15 @@ struct
 			       Ppnil.pp_var v; print "\n";
 			       show_state s; print "\n")
 		       else ()
-	       val s = convlist_process (tFormals, s)
+	       val s = add_boundcvars (s,tFormals)
 	       val _ = if (!debug)
 			 then (print "the following (after vkfolder) frees to ";
 			       Ppnil.pp_var v; print "\n";
 			       show_free f; print "\n")
 		       else ()
 	       val (f,s) = vtrlist_find_fv (eFormals, (f, s))
+
+	       val s = add_boundevars (s,map (fn v => (v,TraceKnown (TraceInfo.Notrace_Real))) tFormals)
 
 	       val _ = if (!debug)
 			 then (print "the following (after vcfolder) frees to ";
@@ -842,6 +844,11 @@ struct
 		     val f = t_find_fv (state,f) result_type
 		 in  f
 		 end
+	   | ForgetKnown_e (sumcon,which) =>
+	     let
+		 val f = t_find_fv (state,frees) sumcon
+	     in f
+	     end
 	   | Fold_e (vars,from,to) =>
 	     let
 		 val state = foldl (fn (v,s) => add_boundcvar (s,v)) state vars
@@ -899,14 +906,6 @@ struct
 		   show_state state; print "\n\n"; raise e)
 	    in res
 	    end
-
-    (* Used for processing constructor variable parameter lists for functions *)
-
-    and convlist_process (convlist, state) : state =
-	let fun folder(v,s) =
-	    add_boundcvar (s, v)
-	in  foldl folder state convlist
-	end
 
     (* The following three functions ([vk|vtrt|vopttrt]list_find_fv) are used for *)
     (* processing argument lists, so they add the variables they see to the state as *)
@@ -1229,20 +1228,6 @@ struct
 
 	   (* Now we can put together the type of the closure.*)
 	   val (vklist_cl, clist_cl, codebody_tipe, closure_tipe) =
-	       (*if doConTrans then
-		   let
-		       val vklist_cl = vklist_rewrite state tFormals
-		       val clist_cl = map (c_rewrite state) etypes
-		       val codebody_tipe = c_rewrite state body_type
-		       val closure_tipe = AllArrow_c{openness=Closure, effect=effect,
-						     tFormals=vklist_cl,
-						     eFormals=clist_cl,
-						     fFormals=numf,
-						     body_type=codebody_tipe}
-		   in
-		       (vklist_cl, clist_cl, codebody_tipe, closure_tipe)
-		   end
-	       else*)
 		   (tFormals, etypes, body_type, c)
 
 	   (* We will reuse parts of this type below, so we must rename
@@ -1339,9 +1324,6 @@ struct
 	   (* Now we can rewrite the formal parameters and build the code of the function. *)
 	   val vklist_code = (cenv_var,Single_k cenv) :: vklist_cl
 	   val c_mapper =
-	       (*if doConTrans then
-		   (fn c => c_rewrite state (NilSubst.substConInCon internal_subst c))
-	       else*)
 		   (fn c => NilSubst.substConInCon internal_subst c)
 
 	   val code_type = AllArrow_c {effect = effect, openness = Code,
@@ -1547,21 +1529,16 @@ struct
 		let val clist' = map c_rewrite  clist
 		    val elist' = map e_recur  elist
 		    val eflist' = map e_recur eflist
-		    fun docall (cv,{free_cvars, free_evars} : frees) =
-			let val vk_free = map #1 (VarMap.listItemsi free_cvars)
-			    val vc_free = VarMap.listItemsi free_evars
-			    val {free_evars,...} = get_frees(current_fid state)
-			    val {cenv_var,venv_var,...} = get_static (current_fid state)
-			    val clist'' = (Var_c cenv_var) :: clist'
-			    val elist'' = (Var_e venv_var) :: elist'
-			in App_e(Code, Var_e cv, clist'', elist'', eflist')
+		    fun docall v = 
+			let 
+			  val {cenv_var,venv_var,code_var,...} = get_static v
+			  val clist'' = (Var_c cenv_var) :: clist'
+			  val elist'' = (Var_e venv_var) :: elist'
+			in App_e(Code, Var_e code_var, clist'', elist'', eflist')
 			end
 		    fun default() = App_e(Closure,e_recur e, clist', elist', eflist')
 		in  (case e of
-			 Var_e v => if (Name.eq_var(v,current_fid state))
-					then let val {code_var,...} = get_static v
-					     in  docall(code_var,get_frees v)
-					     end
+			 Var_e v => if (Name.eq_var(v,current_fid state)) then docall v
 				    else default()
 		       | _ => default())
 		end
@@ -1570,6 +1547,7 @@ struct
 		Handle_e{body = e_recur body, bound = bound,
 			 handler = e_rewrite (insert_con(D,bound,Prim_c(Exn_c,[]))) state handler,
 			 result_type = c_rewrite result_type}
+	  | ForgetKnown_e (sumcon,which) => ForgetKnown_e (c_rewrite sumcon, which)
 	  | Fold_e (vars,from,to) => Fold_e (vars,c_rewrite from,c_rewrite to)
 	  | Unfold_e (vars,from,to) => Unfold_e (vars,c_rewrite from,c_rewrite to)
 	  | Coerce_e (coercion,cargs,exp) =>

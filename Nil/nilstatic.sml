@@ -867,11 +867,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   val k = kind_type_tuple (TilWord32.toInt carriers)
 		   val res1 = (tagcount1 = tagcount2) andalso
 		     (totalcount1 = totalcount2) andalso
-		     (case (known1,known2,sk) of
-			(NONE,NONE,_) => true
-		      | (SOME w1, SOME w2,_) => (w1=w2)
-		      | (SOME w1, NONE, true) => true
-		      | _ => false)
+		     (known1 = known2)
 		   val _ = sum_equiv_count()
 		 in
 		   res1 andalso
@@ -2303,12 +2299,19 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     in result_type
 	     end
 	 | Coerce_e stuff => do_coerce stuff
+         | ForgetKnown_e (sumcon,field) => 
+	     let
+	       val _ = type_analyze (D,sumcon)
+	       val ksumcon = convert_sum_to_special(con_head_normalize(D,sumcon),field)
+	     in
+	       Coercion_c {vars = [],from = ksumcon,to = sumcon}
+	     end
 	 | Fold_e (vars,from,to) =>
 	     let
-	       (* Should we check whether v is already in D and do *)
-	       (* renaming? *)
 	       fun folder (v,D) = insert_stdkind (D,v,Type_k)
 	       val D = foldl folder D vars
+	       val _ = type_analyze (D,from)
+	       val _ = type_analyze (D,to)
 
 	       val expanded = expandMuType (D,to)
 	     in
@@ -2319,11 +2322,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     end
 	 | Unfold_e (vars,from,to) =>
 	     let
-	       (* Should we check whether v is already in D and do *)
-	       (* renaming? *)
 	       fun folder (v,D) = insert_stdkind (D,v,Type_k)
 	       val D = foldl folder D vars
-
+	       val _ = type_analyze (D,from)
+	       val _ = type_analyze (D,to)
 	       val expanded = expandMuType (D,from)
 	     in
 	       if con_equiv (D,to,expanded,Type_k,false) then
