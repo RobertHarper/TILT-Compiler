@@ -14,9 +14,9 @@ Problem:     unresolved overloading
 	was printing the first then bombing.  The compiler should
 	print all the errors then reject the user program.
 
-	Second, the code should elaborate; that is, the overloaded
-	special constants appear in a context that constrains their
-	type to Word8.word.
+	Second, the code below should elaborate; that is, the
+	overloaded special constant appears in a context that
+	constrains its type to Word8.word.
 
 Code:
 
@@ -35,7 +35,7 @@ Comments:
 	code in bugs.sml and bugf.sml.  Using FIFO order fixed the
 	bug.
 
-Fix:         
+Fix:
 Test: m0030
 Owner: swasey
 Status: open
