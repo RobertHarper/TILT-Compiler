@@ -21,6 +21,7 @@ struct
 
    open Nil
    val debug = ref false
+   val full_debug = ref false
 (*
    val debug = ref (Prim_c (Record_c nil, nil))
    val il_debug = ref (Il.CON_ANY)
@@ -229,8 +230,6 @@ struct
        in
 	   loop (rev lbls)
        end
-
-
 
    fun chooseName (NONE, vmap) = splitFreshVar vmap
      | chooseName (SOME (var,var_c,var_r), vmap) = (var, var_c, var_r, vmap)
@@ -535,7 +534,7 @@ struct
 	   val (knd_arg, con_arg) = xsig context (Var_c var_arg_c, il_arg_signat)
 
            val context' = update_vmap(context, vmap')
-     
+
            (* Split the functor body *)
 		
 	   val {cbnd_cat = cbnd_body_cat, 
@@ -626,19 +625,32 @@ struct
            val name_str_c = Var_c var_str_c
 	   val name_str_r = Var_e var_str_r
 
-	   val knd_str_c = Record_k (Util.list2sequence record_c_knd_items)
-           val type_str_r = Prim_c(Record_c record_r_labels, record_r_field_types)
 
+	   val knd_str_c = Record_k (Util.list2sequence record_c_knd_items)
            val cbnd_str_cat = 
 	       APP[cbnd_cat,
 		   LIST [(var_str_c, knd_str_c, Crecord_c record_c_con_items)]]
 
-	   val ebnd_str_cat = 
-	       APP[ebnd_cat,
-		   LIST[Exp_b (var_str_r, type_str_r,
-			       Prim_e (NilPrimOp (record record_r_labels),
-				       record_r_field_types, record_r_exp_items))]]
+           val specialize =
+	       (case (!elaborator_specific_optimizations, sbnds) of
+		    (true, [Il.SBND(lab, Il.BND_EXP _)]) => Name.eq_label (lab, Ilutil.it_lab)
+		  | _ => false)
 
+	   val type_str_r = 
+	       if specialize then
+		   hd record_r_field_types
+	       else
+		   Prim_c(Record_c record_r_labels, record_r_field_types)
+
+	   val ebnd_str_cat = 
+	       if specialize then
+		   APP[ebnd_cat,
+		       LIST[Exp_b (var_str_r, type_str_r, hd record_r_exp_items)]]
+	       else
+		   APP[ebnd_cat,
+		       LIST[Exp_b (var_str_r, type_str_r,
+				   Prim_e (NilPrimOp (record record_r_labels),
+					   record_r_field_types, record_r_exp_items))]]
 
        in
 	   {cbnd_cat = cbnd_str_cat,
@@ -704,7 +716,7 @@ struct
        let
 	   val this_call = ! xcon_count
 	   val _ = 
-	       if (!debug) then
+	       if (!debug andalso !full_debug) then
 		   (xcon_count := this_call + 1;
 		    print ("Call " ^ (Int.toString this_call) ^ " to xsbnds, optimize= ");
                     print (Bool.toString flag1);
@@ -721,7 +733,8 @@ struct
 			    raise e)
 
 	in
-	    if (!debug) then print ("Return " ^ (Int.toString this_call) ^ " from xsbnds\n") else ();
+	    if (!debug andalso !full_debug) then 
+               print ("Return " ^ (Int.toString this_call) ^ " from xsbnds\n") else ();
 	    result
         end
 
@@ -1331,6 +1344,12 @@ struct
 
      | xexp' context (Il.SCON il_scon) = xvalue context il_scon
 
+     | xexp' context (Il.ETAPRIM (prim, il_cons)) = 
+       xexp context (Ilutil.prim_etaexpand(prim,il_cons))
+
+     | xexp' context (Il.ETAILPRIM (ilprim, il_cons)) = 
+       xexp context (Ilutil.ilprim_etaexpand(ilprim,il_cons))
+
 (* XXX need to handler floats *)
      | xexp' context (il_exp as (Il.PRIM (prim, il_cons, il_args))) = 
        let
@@ -1405,7 +1424,19 @@ struct
 		    val (exp1, con1, valuable1) = xexp context il_exp1
 		    val (exp2, con2, valuable2) = xexp context il_exp2
 			
-		    val (AllArrow_c(_,effect,_,_,_,con)) = Nilstatic.con_reduce(NILctx_of context, con1)
+		    val (effect,con) = 
+			(case (Nilstatic.con_reduce(NILctx_of context, con1)) of
+			     AllArrow_c(_,effect,_,_,_,con) => (effect, con)
+			   | nonarrow => (print "Error: could not reduce function type to arrow!\n";
+					  print "Expression was :\n";
+					  Ppil.pp_exp il_exp;
+					  print "\nFunction type was :\n";
+					  Ppnil.pp_con con1;
+					  print "\nWhich reduces to :\n";
+					  Ppnil.pp_con nonarrow;
+					  print "\n";
+					  error "xexp:  could not reduce function type to arrow!\n"))
+					  
 			
 		    val valuable = (effect = Total) andalso valuable1 andalso valuable2
 		in
@@ -1629,17 +1660,17 @@ struct
 			     type_r 
 			 else
 			     projectFromRecord type_r [label])
-
+(*
            val _ = (print "unnormalized con = ";
 		    Ppnil.pp_con unnormalized_con;
 		    print "\n")
-
+*)
            val con = Nilstatic.con_reduce(NILctx_of context, unnormalized_con)
-
+(*
            val _ = (print "normalized con = ";
 		    Ppnil.pp_con con;
 		    print "\n")
-
+*)
 	   val let_body = 
 	       if specialize then 
 		   name_r
