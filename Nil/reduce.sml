@@ -956,10 +956,24 @@ structure Reduce
 		end
 		    (* ----------------- Variables --------- *)
 	  | Exp_b (x, nt, Var_e v) =>
-		( inc_click var_click ;
-		 replace x (Var_e v) fset;
-		 update_count ESC (s(v)) ~1 fset;
-		 xbnds fset rest body )
+		 let
+		     val _ = inc_click var_click ;
+		     val _ = replace x (Var_e v) fset;
+		     val _ = update_count ESC (s(v)) ~1 fset;
+		     val nx = Name.var2name x
+		     val _ = (case s(v) of
+				  Var_e v' => 
+				      let
+					  val nv' = Name.var2name v'
+				      in
+					  if (String.size(nv') = 0) then
+					      Name.rename_var (v', nx)
+					  else ()
+				      end
+				| _ => ())
+		 in
+		     xbnds fset rest body
+		 end
 		
 	  (* ----------------- Constants  ----------------- *)
 	  | Exp_b (x, nt, Const_e c)  =>

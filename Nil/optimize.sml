@@ -1,8 +1,10 @@
 (*$import Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps *)
 (* A one-pass optimizer with the following goals:
 	Convert project_sum to project_sum_record.
+        Fold constant expressions
+        Propagate constants
 	Eliminate dead code.
-	Not explode code size through anormalization.
+	Not anormalize (old fear of classifier sizes) 
 	Recognize certain patterns of Sumsw and convert to Intsw
 *)	
 
@@ -771,22 +773,59 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 
 	and do_prim (state : state) (prim, clist, elist) = 
 	 let open Prim
-	 in  (case (prim,elist) of
+	     val elist = map (do_exp state) elist
+
+	     fun getVals [] = SOME []
+	       | getVals ((Var_e v)::rest) =
+		 (case lookup_alias(state,v) of
+		      OPTIONALe e => getVals (e::rest)
+		    | _ => NONE)
+	       | getVals (e::rest) = 
+		      if (NilUtil.is_closed_value e) then
+			  (case (getVals rest) of
+			       NONE => NONE
+			     | SOME es => SOME (e :: es))
+		      else
+			  NONE
+
+             fun default() = Prim_e(prim,
+				    map ((if Normalize_allprim_uses_carg prim 
+					      then do_con else do_type)
+					 state) clist, 
+				    elist)
+	 in  case (prim,elist) of
 		 (NilPrimOp(select l),[e as Var_e v]) => 
 		     (case (lookup_proj(state,v,[l])) of
 			  NONE => Prim_e(prim,[], [do_exp state e])
 			| SOME e => do_exp state e)
 	       | (NilPrimOp (inject k),_) => do_inject state (k, clist, elist)
 	       | (PrimOp(create_table t), _) => do_aggregate state (SOME (local_array,local_vector)) (create_table,t,clist,elist)
-	       | (PrimOp(create_empty_table t), _) => do_aggregate state NONE
-			                                  (create_empty_table,t,clist,elist)
-	       | (PrimOp(sub t), _) => do_aggregate state (SOME (local_sub,local_vsub)) (sub,t,clist,elist)
-	       | (PrimOp(update t), _) => do_aggregate state (SOME (local_update,local_update)) (update,t,clist,elist)
-	       | (PrimOp(length_table t), _) => do_aggregate state (SOME (local_len,local_vlen)) (length_table,t,clist,elist)
-	       | _ => Prim_e(prim,map ((if Normalize_allprim_uses_carg prim 
-					    then do_con else do_type)
-				       state) clist, 
-			     map (do_exp state) elist))
+	       | (PrimOp(create_empty_table t), _) => 
+		   do_aggregate state NONE (create_empty_table,t,clist,elist)
+	       | (PrimOp(sub t), _) => 
+		   do_aggregate state 
+		      (SOME (local_sub,local_vsub)) (sub,t,clist,elist)
+	       | (PrimOp(update t), _) => 
+		   do_aggregate state (SOME (local_update,local_update)) 
+		      (update,t,clist,elist)
+	       | (PrimOp(length_table t), _) => 
+		   do_aggregate state (SOME (local_len,local_vlen)) 
+		      (length_table,t,clist,elist)
+	       | (NilPrimOp unroll, _) => 
+		      (case (getVals elist) of
+			   SOME [Prim_e(NilPrimOp roll,_,[e])] => e
+			 | _ => default ())
+	       | (NilPrimOp (unbox_float _), _) => 
+		      (case (getVals elist) of
+			   SOME [Prim_e(NilPrimOp (box_float _),_,[e])] => e
+			 | _ => default ())
+               | (PrimOp p, _) => 
+		      (case (getVals elist) of
+			   NONE => default ()
+			 | SOME elist => 
+			       (NilPrimUtil.apply p clist elist) 
+			       handle _ => default())
+               | _ => default()
 	 end
 
 
@@ -814,14 +853,22 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 			    | Prim.refcell _ => exp
 			    | Prim.tag _ => exp)
 		| Prim_e(p,clist,elist) => do_prim state (p,clist,elist)
-		| Switch_e sw => Switch_e(do_switch state sw)
+		| Switch_e sw => do_switch state sw
 		| Let_e (letsort,bnds,e) => 
 			let (* we must put a wrapper in order to perform the filter *)
 			    val state = retain_state state
 			    val (bnds,state) = do_bnds(bnds,state)
 			    val e = do_exp state e
 			    val bnds = List.mapPartial (bnd_used state) bnds
-		        in  NilUtil.makeLetE letsort bnds e
+		        in  
+			    (case (bnds,e) of
+				 ([Exp_b(v,_,e')], Var_e v') =>
+				     if Name.eq_var(v,v') then
+					 e'
+				     else
+					 NilUtil.makeLetE letsort bnds e
+			       | _ => 
+					 NilUtil.makeLetE letsort bnds e)
 			end
 		| ExternApp_e(f,elist) =>
 			ExternApp_e(do_exp state f, map (do_exp state) elist)
@@ -854,15 +901,25 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 			in  Handle_e(do_exp state e, v, do_exp state handler)
 			end)
 
-	and do_switch (state : state) (switch : switch) : switch = 
+	and do_switch (state : state) (switch : switch) : exp = 
 	    (case switch of
 		 Intsw_e {size,arg,arms,default} =>
-		     let val arg = do_exp state arg
-			 val arms = map_second (do_exp state) arms
-			 val default = Util.mapopt (do_exp state) default
-		     in  Intsw_e {size=size,arg=arg,
-				  arms=arms,default=default}
-		     end
+		     (case (do_exp state arg) of
+			  Const_e (Prim.int(_,n)) => 
+			      let val n32 = TilWord64.toSignedHalf n
+				  val arm = case Listops.assoc (n32, arms) of
+				      SOME arm => arm 
+				    | NONE => Option.valOf default
+			      in
+				  do_exp state arm
+			      end
+			| arg => 
+			      let 
+				  val arms = map_second (do_exp state) arms
+				  val default = Util.mapopt (do_exp state) default
+			      in  Switch_e(Intsw_e {size=size,arg=arg, arms=arms,default=default})
+			      end)
+
 	       | Sumsw_e {sumtype,arg,bound,arms,default} =>
 		     let val arg = do_exp state arg
 			 val sumtype = do_type state sumtype
@@ -879,10 +936,40 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 				 val (_,state) = do_vclist state[(bound,ssumtype)]
 			     in  (n,do_exp state body)
 			     end
-			 val arms = map do_arm arms
-			 val default = Util.mapopt (do_exp state) default
-		     in  Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,
-				  arms=arms,default=default}
+
+			 val known_tag =
+			     (case arg of 
+				  Prim_e(NilPrimOp (inject w), _, _) => SOME w
+                                | Var_e v => 
+				      (case (lookup_alias(state,v)) of
+					   OPTIONALe(Prim_e(NilPrimOp (inject w), _, _)) =>
+					       SOME w
+					 | _ => NONE)
+				| _ => NONE)
+		     in
+			 case known_tag of
+			     SOME w => 
+				 (* Reduce known switch *)
+				 (case Listops.assoc (w, arms) of
+				      SOME arm =>
+					  do_exp state
+					  (Let_e(Sequential,
+						   [Exp_b(bound,TraceUnknown,
+							  arg)],
+						   arm))
+				    | NONE =>
+					  do_exp state
+					    (Let_e(Sequential,
+						   [Exp_b(bound,TraceUnknown,
+							  arg)],
+						   Option.valOf default)))
+			   | _ => let
+				      val arms = map do_arm arms
+				      val default = Util.mapopt (do_exp state) default
+				  in  
+				      Switch_e(Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,
+							arms=arms,default=default})
+				  end
 		     end
 	       | Exncase_e {arg,bound,arms,default} =>
 		     let val arg = do_exp state arg
@@ -895,8 +982,8 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 			     end
 			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
-		     in  Exncase_e {bound=bound,arg=arg,
-				     arms=arms,default=default}
+		     in  Switch_e(Exncase_e {bound=bound,arg=arg,
+				     arms=arms,default=default})
 		     end
 	       | Typecase_e _ => error "typecase not done")
 
@@ -937,10 +1024,21 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 			       | check _ = error "record argument is not a variable"
 			 in  NONE
 			 end
+
+		     | Prim_e(NilPrimOp roll, _, [Var_e _]) => NONE
+		     | Prim_e(NilPrimOp roll, _, [Const_e _]) => NONE
+		     | Prim_e(NilPrimOp roll, clist,[injectee]) =>
+			 error "roll argument is not a value"
+
+		     | Prim_e(NilPrimOp (box_float _), _, [Var_e _]) => NONE
+		     | Prim_e(NilPrimOp (box_float _), _, [Const_e _]) => NONE
+		     | Prim_e(NilPrimOp (box_float _), _, _ ) => 
+			 error "box_float argument is not a value"
+
 		     | Prim_e(NilPrimOp (inject _), _, [Var_e _]) => NONE
 		     | Prim_e(NilPrimOp (inject _), _, [Const_e _]) => NONE
 		     | Prim_e(NilPrimOp (inject k), clist,[injectee]) =>
-			 error "inject argument is not a var"
+			 error "inject argument is not a value"
 		     | Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv]) =>
 			 let val c = type_of(state,e)
 			     val sv_con = find_con(state,sv)
@@ -994,7 +1092,25 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 				      val eff = (NilUtil.effect e) 
 				      val (effect,alias) = 
 					  (case e of
-					       Var_e _ => (false,MUSTe e)
+					       
+					       Var_e v' => 
+						   let
+						       val n = Name.var2name v
+						       val n' = Name.var2name v'
+						       val _ = if (String.size(n') = 0) then
+							          Name.rename_var (v', n)
+							       else ()
+						   in
+						       (false,MUSTe e)
+						   end
+
+					     (* Constant Propagation *)
+					     | Const_e(Prim.int _) => (false, MUSTe e)
+					     | Prim_e(NilPrimOp (box_float _), _, _) =>
+						   (false, OPTIONALe e)
+					     | Prim_e(NilPrimOp roll, _, _) =>
+						   (false, OPTIONALe e)
+
 					     | App_e(openness,Var_e v,clist,elist,eflist) => 
 						   (
 (* xxx						    print "trying etabnd\n";
@@ -1068,18 +1184,19 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_kind(state,v,k))
 
-	fun do_export(ExportValue(l,v),state) = 
+	fun do_export state (ExportValue(l,v)) = 
 	    let val e = do_exp state (Var_e v)
-	    in  (case e of
-		     Var_e v => ((NONE,ExportValue(l,v)), state)
-		   | _ => error "exported term is not a variable")
+		val _ = use_var(state,v)
+	    in
+		(NONE, ExportValue(l,v))
 	    end
-	  | do_export(ExportType(l,v),state) =
+	  | do_export state (ExportType(l,v)) =
 	    let val c = do_con state (Var_c v)
-	    in  (case c of
-		     Var_c v => ((NONE,ExportType(l,v)), state)
-		   | _ => error "exported type result is not a variable")
+		val _ = use_var(state,v)
+	    in  
+		(NONE, ExportType(l,v))
 	    end
+
 	fun optimize {lift_array, dead, projection, uncurry, cse} 
 	              (MODULE{imports, exports, bnds}) =
 	  let 
@@ -1100,8 +1217,9 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 
 	      (* we "retain" the state so that no exports are optimized away *)
 	      val state = retain_state state
-	      val (temp,state) = foldl_acc do_export state exports
+	      val temp = map (do_export state) exports
 	      val export_bnds = List.mapPartial #1 temp
+              val _ = Ppnil.pp_bnds export_bnds
 	      val exports = map #2 temp
 
 	      val bnds = local_bnds @ bnds @ export_bnds

@@ -217,7 +217,7 @@ struct
        let val (bnds,e) = lexp' lift state arg_exp
        in  if (small_exp e orelse not (!linearize) orelse not lift)
 	       then (bnds, e)
-	   else let val v = Name.fresh_named_var "tmpexp"
+	   else let val v = Name.fresh_named_var "" (* "tmpexp" *)
 		in  (bnds @ [Exp_b(v,TraceUnknown,e)], Var_e v)
 		end
        end

@@ -80,6 +80,7 @@ signature NILUTIL =
 
     val is_var_e : Nil.exp -> bool
     val is_mu_c : Nil.con -> bool
+    val is_closed_value : Nil.exp -> bool
 
     val map_annotate : (Nil.con -> Nil.con) -> Nil.con -> Nil.con 
 

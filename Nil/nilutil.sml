@@ -136,6 +136,28 @@ struct
 
     fun is_mu_c' (Mu_c _) = true
       | is_mu_c' _ = false
+
+    fun is_closed_value (Var_e v) = false
+      | is_closed_value (Const_e v) = true
+      | is_closed_value (Let_e _) = false
+      | is_closed_value (Prim_e (NilPrimOp np,clist,elist)) = 
+	nilprim_is_closed_value(np,clist,elist)
+      | is_closed_value (Prim_e (PrimOp _,_,_)) = false
+      | is_closed_value (Switch_e _) = false
+      | is_closed_value (App_e _) = false
+      | is_closed_value (ExternApp_e _ ) = false
+      | is_closed_value (Raise_e _) = false
+      | is_closed_value (Handle_e _) = false  
+
+    and nilprim_is_closed_value(np,clist,elist) = 
+	(case np of
+	     record _ => Listops.andfold is_closed_value elist
+	   | inject _ => Listops.andfold is_closed_value elist
+	   | box_float _ => Listops.andfold is_closed_value elist
+	   | roll => Listops.andfold is_closed_value elist
+	   | inj_exn _ => Listops.andfold is_closed_value elist
+	   | _ => false)
+
   in
     val strip_var = strip_annotate strip_var'
     val strip_exntag = strip_annotate strip_exntag'
@@ -157,8 +179,8 @@ struct
     val is_var_c = Option.isSome o strip_var
     val is_float_c = Option.isSome o strip_float
     val is_mu_c = strip_annotate is_mu_c'
+    val is_closed_value = is_closed_value
   end
-
 
   fun get_arrow_return con = 
     case strip_arrow con

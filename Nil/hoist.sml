@@ -370,12 +370,8 @@ struct
 *)
       val (e',bvl') = rexp(e,cvs)
 
-      (* XXX hack, can't have floats at top-level (bug in tortl) *)
-      val (up,fv) = if ((NilUtil.effect e) orelse
-			(case e of
-			     Prim_e(NilPrimOp(unbox_float _),_,_) => true
-			   | _ => false))
-			then (false, NONE)
+      val (up,fv) = if (NilUtil.effect e) then 
+	               (false, NONE)
 		    else let val fv = freeExpVars e
 			 in  (subset(fv,cvs), SOME fv)
 			 end

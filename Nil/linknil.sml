@@ -1,4 +1,4 @@
-(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist Reify NilStatic Inline Flatten Reduce PpnilHtml *)
+(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline Flatten Reduce PpnilHtml *)
 
 
 structure Linknil :> LINKNIL  =
@@ -9,6 +9,7 @@ structure Linknil :> LINKNIL  =
     val do_vararg = Stats.ff("do_vararg")
     val do_specialize = ref true
     val do_two_optimize = ref true
+    val do_rename = Stats.tt("doRename")
     val do_hoist = Stats.tt("doHoist")
     val do_reify = Stats.tt("doReify")
     val do_cse = Stats.tt("doCSE")
@@ -21,16 +22,19 @@ structure Linknil :> LINKNIL  =
     val show_phasesplit = Stats.ff("showPhaseSplit")
     val show_renamed = Stats.ff("showRenaming1")
     val show_opt = ref false
-    val show_one_optimize = ref false
+    val show_one_optimize = Stats.ff("showOptimize1")
     val show_vararg = ref false
     val show_two_optimize = Stats.ff("showOptimize2")
     val show_hoist = Stats.ff("showHoist")
     val show_reify = Stats.ff("showReify")
+    val show_reify2 = Stats.ff("showReify2")
     val show_cse = Stats.ff("showCSE")
     val show_specialize = Stats.ff("showSpecialize")
-    val show_cc = ref false
-    val show_before_rtl = ref false
-    val show_typecheck = ref false
+    val show_cc = Stats.ff("showCC")
+    val show_before_rtl = Stats.ff("showBeforeRtl")
+    val show_typecheck1 = Stats.ff("showTypecheck1")
+    val show_typecheck2 = Stats.ff("showTypecheck2")
+    val show_typecheck3 = Stats.ff("showTypecheck3")
     val show_reduce = Stats.ff("showReduce")
     val show_flatten = Stats.ff("showFlatten")
     val show_inline = Stats.ff("showInline")
@@ -76,12 +80,8 @@ structure Linknil :> LINKNIL  =
     structure Specialize = Specialize
     structure Linearize = Linearize
     structure ToClosure = ToClosure
-    structure NilPrimUtilParam = NilPrimUtilParam
-    structure NilPrimUtil = PrimUtil(structure PrimUtilParam = NilPrimUtilParam)
     structure Flatten = Flatten(structure PrimUtil = NilPrimUtil)
     structure Reduce = Reduce 
-
-(*    structure Flatten = Flatten *)
 
 (*
     structure NilEval = NilEvaluate(structure Nil = Nil
@@ -89,21 +89,7 @@ structure Linknil :> LINKNIL  =
 				    structure Ppnil = Ppnil
 				    structure PrimUtil = NilPrimUtil
 				    structure Subst = NilSubst)
-
-
-    structure DoOpts = DoOpts (structure Nil = Nil
-			       structure NilPrimUtil = NilPrimUtil 
-			       structure Ppnil = Ppnil
-			       structure Linearize = Linearize
-			       structure NilContext = NilContext
-			       structure NilEval = NilEval
-			       structure NilStatic = NilStatic
-			       structure NilSubst = NilSubst
-			       structure NilUtil = NilUtil
-                          structure Linearize = Linearize)
-
 *)
-
 
     fun pass (showphase,phasename,phase,filename,nilmod) = 
 	let val _ = print "\n\n=======================================\n"
@@ -140,7 +126,6 @@ structure Linknil :> LINKNIL  =
 
     exception Stop of Nil.module
 
-
     fun compile' debug (filename,(ctxt,sbnd_entries)) =
 	let
 	    open Nil LinkIl.IlContext Name
@@ -154,17 +139,17 @@ structure Linknil :> LINKNIL  =
 			then raise (Stop nilmod)
 		    else ()
 
-
+(*
 	    val nilmod = check (ref true,ref false,
 				    "Nil_typecheck_post_phase-split",
 				    (Util.curry2 NilStatic.module_valid (NilContext.empty ())) o (NilRename.renameMod),
 				    filename, nilmod)
-
-	    val nilmod = transform(ref true, show_renamed,
+*)
+	    val nilmod = transform(do_rename, show_renamed,
 				 "Renaming1",Linearize.linearize_mod,
 				 filename, nilmod)
 
- 	    val nilmod = check (typecheck_before_opt,show_typecheck,
+ 	    val nilmod = check (typecheck_before_opt,show_typecheck1,
 				    "Nil_typecheck_pre-opt",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
@@ -195,6 +180,12 @@ structure Linknil :> LINKNIL  =
 				    dead = true, projection = true, 
 				    cse = false, uncurry = false},
 				 filename, nilmod)
+
+ 	    val nilmod = check (typecheck_after_opt,show_typecheck2,
+				    "Nil_typecheck_post-opt",
+				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
+				    filename, nilmod)
+	
 
 	    val _ = if (!do_vararg) then error "no vararg" else ()
 (*
@@ -231,20 +222,18 @@ structure Linknil :> LINKNIL  =
 				    cse = !do_cse, uncurry = !do_uncurry},
 				 filename, nilmod) 
 
+            val nilmod = transform(do_reify, show_reify2,
+                                   "Reification2",
+                                   Reify.reify_mod,
+                                   filename, nilmod)
 
 
- 	    val nilmod = check (typecheck_after_opt,show_typecheck,
-				    "Nil_typecheck_post-opt",
-				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
-				    filename, nilmod)
-	
 	    val nilmod = transform(ref true, show_cc,
 				 "Closure-conversion", 
 				 ToClosure.close_mod,
 				 filename, nilmod)
 
-
- 	    val nilmod = check (typecheck_after_cc,show_typecheck,
+ 	    val nilmod = check (typecheck_after_cc,show_typecheck3,
 				    "Nil_typecheck_post-cc",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
@@ -259,18 +248,4 @@ structure Linknil :> LINKNIL  =
 
     val il_to_nil = compile' false
 
-
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
