@@ -1,0 +1,4 @@
+(1)  The elaborator erroneously generalizes x in the code below:
+
+	fun id x = id x
+	val x = id 3
