@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Array Int INTSYN GLOBAL *)
+(*$import Array Int INTSYN GLOBAL *)
 (* Internal Syntax *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

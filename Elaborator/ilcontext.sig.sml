@@ -1,4 +1,4 @@
-(*$import Prelude IL Il Fixity Name *)
+(*$import IL Il Fixity Name *)
 
 signature ILCONTEXT =
   sig

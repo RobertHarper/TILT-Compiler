@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List String Char TextIO Int TRACE INTSYN NAMES WHNF ABSTRACT PRINT *)
+(*$import List String Char TextIO Int TRACE INTSYN NAMES WHNF ABSTRACT PRINT *)
 functor Trace (structure IntSyn' : INTSYN
 	       structure Names : NAMES
 		 sharing Names.IntSyn = IntSyn'

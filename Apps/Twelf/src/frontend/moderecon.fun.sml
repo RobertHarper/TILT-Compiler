@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel MODE_RECON GLOBAL MODESYN WHNF PATHS MODEPRINT MODEDEC TP_RECON NamesStructs *)
+(*$import MODE_RECON GLOBAL MODESYN WHNF PATHS MODEPRINT MODEDEC TP_RECON NamesStructs *)
 (* Reconstructing Mode Declarations *)
 (* Author: Carsten Schuermann *)
 

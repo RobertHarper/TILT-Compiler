@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Array ORIGINS GLOBAL INTSYN PATHS *)
+(*$import Array ORIGINS GLOBAL INTSYN PATHS *)
 (* Origins of Declarations *)
 (* Author: Frank Pfenning *)
 

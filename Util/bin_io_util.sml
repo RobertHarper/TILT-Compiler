@@ -1,4 +1,4 @@
-(*$import Prelude Word8 Word8Vector BINIOUTIL BinIO TopLevel Char *)
+(*$import Word8 Word8Vector BINIOUTIL BinIO Char *)
 
 structure BinIO_Util : BIN_IO_UTIL =
   struct

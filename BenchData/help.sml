@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import *)
 
 (* ------ Looping constructs ------ *)
 fun stride(start,stop,stride,f) = 

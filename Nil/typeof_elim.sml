@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Nil TypedNilRewrite Stats TYPEOF_ELIM NilContext Normalize Ppnil NilStatic NilRename NilUtil List Int Real Measure *)
+(*$import Nil TypedNilRewrite Stats TYPEOF_ELIM NilContext Normalize Ppnil NilStatic NilRename NilUtil List Int Real Measure *)
 
 
 structure Typeof_Elim :> TYPEOF_ELIM = 

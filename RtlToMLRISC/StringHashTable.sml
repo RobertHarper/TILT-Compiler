@@ -1,4 +1,4 @@
-(*$import TopLevel HashTableFn HashString *)
+(*$import HashTableFn HashString *)
 
 (* =========================================================================
  * StringHashTable.sml

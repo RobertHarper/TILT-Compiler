@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Name List Sequence Listops Int Util NilError NilRename Stats Prim Array TilWord32 Alpha Nil Ppnil NilUtil NilContextPre NilSubst NORMALIZE NilPrimUtil NilDefs *)
+(*$import Name List Sequence Listops Int Util NilError NilRename Stats Prim Array TilWord32 Alpha Nil Ppnil NilUtil NilContextPre NilSubst NORMALIZE NilPrimUtil NilDefs *)
 
 structure Normalize :> NORMALIZE =
 struct	

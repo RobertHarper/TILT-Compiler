@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel METASYN *)
+(*$import METASYN *)
 (* Recursion *)
 (* Author: Carsten Schuermann *)
 

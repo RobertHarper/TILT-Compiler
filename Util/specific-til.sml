@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel *)
+(*$import *)
 structure Specific = 
 struct
     fun doGC (n : int) = ()

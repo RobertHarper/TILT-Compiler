@@ -1,4 +1,4 @@
-(*$import TopLevel ALPHA32INSTR ALPHA32_PSEUDO_INSTR *)
+(*$import ALPHA32INSTR ALPHA32_PSEUDO_INSTR *)
 
 (* =========================================================================
  * AlphaPseudoInstr.sml

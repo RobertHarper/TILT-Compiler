@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel STATESYN INTSYN FUNSYN WHNF CONV *)
+(*$import STATESYN INTSYN FUNSYN WHNF CONV *)
 (* State for Proof Search *)
 (* Author: Carsten Schuermann *)
 

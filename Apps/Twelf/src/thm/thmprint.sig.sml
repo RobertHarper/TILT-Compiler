@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel THMSYN *)
+(*$import THMSYN *)
 (* Printer for Meta Theorems *)
 (* Author: Carsten Schuermann *)
 

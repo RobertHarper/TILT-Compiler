@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord64 TextIO ASTHELP Ast Util Listops Symbol Formatter *)
+(*$import TilWord64 TextIO ASTHELP Ast Util Listops Symbol Formatter *)
 
 (* Helper routines on the EL syntax tree AST *)
 structure AstHelp : ASTHELP = 

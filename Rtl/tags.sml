@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Word32 TilWord32 Stats Rtl RTLTAGS Util *)
+(*$import Word32 TilWord32 Stats Rtl RTLTAGS Util *)
 
 (* It is crucial that the layout of tags here matches that of the runtime.
    Compare with file Runtime/tag.h

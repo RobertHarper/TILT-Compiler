@@ -1,4 +1,4 @@
-(*$import YaccBase TopLevel *)
+(*$import YaccBase *)
 
 
 (* functor Join creates a user parser by putting together a Lexer structure,

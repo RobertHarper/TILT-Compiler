@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel PATHNAMES String *)
+(*$import PATHNAMES String *)
 
 (* Copyright 1989 by AT&T Bell Laboratories *)
 

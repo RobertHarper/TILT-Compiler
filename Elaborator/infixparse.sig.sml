@@ -1,4 +1,4 @@
-(*$import Prelude Fixity Name Ast Il *)
+(*$import Fixity Name Ast Il *)
 (* Handles infix parsing of pattern and expressions. *)
 signature INFIXPARSE = 
   sig

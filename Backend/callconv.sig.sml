@@ -1,4 +1,4 @@
-(*$import Prelude MACHINE *)
+(*$import MACHINE *)
 
 signature CALLCONV =
 sig

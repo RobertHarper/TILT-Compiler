@@ -1,4 +1,4 @@
-(*$import Prelude TilWord64 Array Name *)
+(*$import TilWord64 Array Name *)
 
 signature PRIM = 
   sig

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel FUNWEAKEN FUNSYN WEAKEN *)
+(*$import FUNWEAKEN FUNSYN WEAKEN *)
 (* Weakening substitutions for meta substitutions *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel MODESYN *)
+(*$import MODESYN *)
 (* Printing Mode Declarations *)
 (* Author: Carsten Schuermann *)
 

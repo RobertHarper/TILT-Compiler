@@ -1,4 +1,4 @@
-(*$import TopLevel MLTREE *)
+(*$import MLTREE *)
 
 (* =========================================================================
  * MLTREE_EXTRA.sig.sml

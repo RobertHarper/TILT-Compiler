@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel FUNSYN STATESYN *)
+(*$import FUNSYN STATESYN *)
 (* Type checking for functional proof term calculus *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import Prelude SourceMap PrettyPrint TextIO *)
+(*$import SourceMap PrettyPrint TextIO *)
 
 (* <source.sig>=                                                            *)
 (* source.sig

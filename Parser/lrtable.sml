@@ -1,4 +1,4 @@
-(*$import Prelude Array List YaccBase *)
+(*$import Array List YaccBase *)
 
 
 structure LrTable : LR_TABLE = 

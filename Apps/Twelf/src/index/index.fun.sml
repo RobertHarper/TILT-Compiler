@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Array INDEX GLOBAL INTSYN QueueStructs *)
+(*$import Array INDEX GLOBAL INTSYN QueueStructs *)
 (* Indexing *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

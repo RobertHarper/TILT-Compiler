@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord32 ORD_KEY RTL CORE String Rtl Stats Util Char Int BinarySetFn SplayMapFn SplaySetFn *)
+(*$import TilWord32 ORD_KEY RTL CORE String Rtl Stats Util Char Int BinarySetFn SplayMapFn SplaySetFn *)
 
 structure Core :> CORE =
 struct

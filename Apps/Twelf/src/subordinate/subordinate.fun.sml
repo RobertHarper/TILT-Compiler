@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Array List SUBORDINATE GLOBAL INTSYN WHNF *)
+(*$import Array List SUBORDINATE GLOBAL INTSYN WHNF *)
 (* Subordination a la Virga [Technical Report 96] *)
 (* Author: Carsten Schuermann *)
 

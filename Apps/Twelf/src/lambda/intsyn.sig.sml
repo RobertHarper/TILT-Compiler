@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel *)
+(*$import *)
 (* Internal Syntax *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

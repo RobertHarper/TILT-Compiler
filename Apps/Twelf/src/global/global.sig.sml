@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel *)
+(*$import *)
 (* Global parameters *)
 (* Author: Frank Pfenning *)
 

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel ErrorMsg TextIO SourceMap FRONTEND Join MLLrValsFun MLLexFun Ast Source Control LrParser Stats *)
+(*$import ErrorMsg TextIO SourceMap FRONTEND Join MLLrValsFun MLLexFun Ast Source Control LrParser Stats *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* frontend.sml *)

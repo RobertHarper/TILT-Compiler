@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Real Math TextIO String *)
+(*$import Real Math TextIO String *)
 
 fun runSomePia dataFile = 
 let

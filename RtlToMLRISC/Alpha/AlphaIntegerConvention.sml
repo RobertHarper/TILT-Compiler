@@ -1,4 +1,4 @@
-(*$import TopLevel INTEGER_CONVENTION AlphaMLTreeExtra *)
+(*$import INTEGER_CONVENTION AlphaMLTreeExtra *)
 
 
 (* =========================================================================

@@ -1,4 +1,4 @@
-(*$import Prelude TextIO CONTROL *)
+(*$import TextIO CONTROL *)
 
 (* control.sml
  *

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int Array CharVector *)
+(*$import Int Array CharVector *)
 
 (* This benchmark runs a randomized search for solutions to the n-queens
    problem. (for n = 256, 1024, 8192)

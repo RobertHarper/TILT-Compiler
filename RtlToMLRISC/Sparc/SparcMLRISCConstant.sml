@@ -1,4 +1,4 @@
-(*$import TopLevel MLRISC_CONSTANT *)
+(*$import MLRISC_CONSTANT *)
 
 
 (* =========================================================================

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel *)
+(*$import *)
 (* Heuristics : Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

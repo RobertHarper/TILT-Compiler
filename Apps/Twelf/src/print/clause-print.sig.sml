@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel INTSYN FORMATTER *)
+(*$import INTSYN FORMATTER *)
 (* Clause Printing *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

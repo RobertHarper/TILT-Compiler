@@ -1,4 +1,4 @@
-(*$import Prelude Word32 Rtl MACHINE Core *)
+(*$import Word32 Rtl MACHINE Core *)
 signature SPARC =
 sig
 

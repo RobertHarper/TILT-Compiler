@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int StringCvt Time Timer *)
+(*$import Int StringCvt Time Timer *)
 (* Timing utilities based on SML'97 Standard Library *)
 (* Author: Frank Pfenning *)
 

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Rtl Array Pprtl GRAPH PRINTUTILS RECURSION Util Labelgraph *)
+(*$import Rtl Array Pprtl GRAPH PRINTUTILS RECURSION Util Labelgraph *)
 
 functor Recursion(structure Printutils : PRINTUTILS)
     :> RECURSION =

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel PATHS INTSYN *)
+(*$import PATHS INTSYN *)
 (* External Syntax and Type Reconstruction *)
 (* Author: Frank Pfenning *)
 

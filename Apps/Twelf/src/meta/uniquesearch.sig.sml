@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel INTSYN FUNSYN STATESYN *)
+(*$import INTSYN FUNSYN STATESYN *)
 (* Basic search engine: Version 1.3*)
 (* Author: Carsten Schuermann *)
 

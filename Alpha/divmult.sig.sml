@@ -1,4 +1,4 @@
-(*$import Prelude DECALPHA Word32 *)
+(*$import DECALPHA Word32 *)
 signature DIVMULT =
   sig
     structure DA : DECALPHA

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel METASYN *)
+(*$import METASYN *)
 (* Basic search engine *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel General List Control Array Vector PpQueue PRETTYPRINT String *)
+(*$import General List Control Array Vector PpQueue PRETTYPRINT String *)
 
 (* pp.sml
  *

@@ -1,4 +1,4 @@
-(*$import Prelude Int Time TopLevel List *)
+(*$import Int Time List *)
 
 signature TRACE = sig
   type trace

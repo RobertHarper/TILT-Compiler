@@ -1,4 +1,4 @@
-(*$import Prelude IFGRAPH TRACKSTORAGE MACHINEUTILS Core *)
+(*$import IFGRAPH TRACKSTORAGE MACHINEUTILS Core *)
 
 signature COLOR =
 sig

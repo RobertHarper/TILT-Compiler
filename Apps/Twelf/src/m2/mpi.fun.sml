@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List Int MPI METAGLOBAL METASYN INIT FILLING SPLITTING RECURSION LEMMA STRATEGY QED METAPRINT NAMES TIMERS RingStructs OrderStructs *)
+(*$import List Int MPI METAGLOBAL METASYN INIT FILLING SPLITTING RECURSION LEMMA STRATEGY QED METAPRINT NAMES TIMERS RingStructs OrderStructs *)
 (* Meta Prover Interface *)
 (* Author: Carsten Schuermann *)
 

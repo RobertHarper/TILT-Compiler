@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Rtl Core PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM Int Util Listops List *)
+(*$import Rtl Core PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM Int Util Listops List *)
 functor Rtltoasm (val commentHeader : string
 		  structure Machineutils : MACHINEUTILS
 		  structure Callconv : CALLCONV

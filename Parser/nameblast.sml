@@ -1,4 +1,4 @@
-(*$import TopLevel Name NAMEBLAST Blaster Util Symbol Int Word31 *)
+(*$import Name NAMEBLAST Blaster Util Symbol Int Word31 *)
 
 structure NameBlast :> NAMEBLAST =
   struct

@@ -1,4 +1,4 @@
-(*$import Prelude ErrorMsg Symbol Ast *)
+(*$import ErrorMsg Symbol Ast *)
 
 (* Copyright 1992 by AT&T Bell Laboratories 
  *

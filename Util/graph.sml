@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel GRAPH Int TextIO String List Array Util HashString HashTableFn *)
+(*$import GRAPH Int TextIO String List Array Util HashString HashTableFn *)
 
 functor Graph(A : NODE) : DIRECTEDGRAPH =
 struct

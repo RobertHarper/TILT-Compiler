@@ -1,4 +1,4 @@
-(*$import TopLevel IREGISTER_MAP intBinaryMap Array Word *)
+(*$import IREGISTER_MAP intBinaryMap Array Word *)
 
 
 (* =========================================================================

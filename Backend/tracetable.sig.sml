@@ -1,4 +1,4 @@
-(*$import Prelude Rtl Core *)
+(*$import Rtl Core *)
 
 signature TRACETABLE =
   sig

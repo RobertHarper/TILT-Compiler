@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel INTSYN *)
+(*$import INTSYN *)
 (* Indexing *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

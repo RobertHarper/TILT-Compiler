@@ -1,4 +1,4 @@
-(*$import Prelude Word32 TilWord32 Name Annotation TraceInfo Prim NIL Sequence Util Listops *)
+(*$import Word32 TilWord32 Name Annotation TraceInfo Prim NIL Sequence Util Listops *)
 
 structure Nil :> NIL =
 struct	

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List TWELF_ORDER INTSYN TABLE *)
+(*$import List TWELF_ORDER INTSYN TABLE *)
 (* Terminiation Order *)
 (* Author: Carsten Schuermann *)
 

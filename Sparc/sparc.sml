@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord32 Int Name Word32 Core SPARC String Rtl Util Char Listops Stats List *)
+(*$import TilWord32 Int Name Word32 Core SPARC String Rtl Util Char Listops Stats List *)
 
 structure  Sparc :> SPARC =
 struct

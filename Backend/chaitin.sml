@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core Int Rtl PRINTUTILS BBLOCK CALLCONV TRACKSTORAGE IFGRAPH COLOR TRACETABLE MACHINEUTILS INTRAPROC Stats TextIO Util Listops List UtilError *)
+(*$import Core Int Rtl PRINTUTILS BBLOCK CALLCONV TRACKSTORAGE IFGRAPH COLOR TRACETABLE MACHINEUTILS INTRAPROC Stats TextIO Util Listops List UtilError *)
 (* Graph-coloring register allocator.
        Notes on constructing the interference graph for procedures.
        

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core Int ORD_KEY Sparc PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE SplaySetFn Util Stats *)
+(*$import Core Int ORD_KEY Sparc PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE SplaySetFn Util Stats *)
 
 functor SparcTrackstorage(structure Printutils : PRINTUTILS 
 			      where type Machine.specific_instruction = Sparc.specific_instruction

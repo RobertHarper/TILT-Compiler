@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel INTSYN FUNSYN *)
+(*$import INTSYN FUNSYN *)
 (* State definition for Proof Search *)
 (* Author: Carsten Schuermann *)
 

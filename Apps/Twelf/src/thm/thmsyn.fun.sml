@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel THMSYN MODESYN ABSTRACT WHNF PATHS *)
+(*$import THMSYN MODESYN ABSTRACT WHNF PATHS *)
 (* Theorems *)
 (* Author: Carsten Schuermann *)
 

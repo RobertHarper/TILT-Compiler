@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Listops Int List Rtl Rtltags TortlBase TORTLRECORD Stats *)
+(*$import Util Listops Int List Rtl Rtltags TortlBase TORTLRECORD Stats *)
 
 structure TortlRecord :> TORTL_RECORD =
 struct

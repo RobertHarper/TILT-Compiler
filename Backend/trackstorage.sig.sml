@@ -1,4 +1,4 @@
-(*$import Prelude Core *)
+(*$import Core *)
 
 signature TRACKSTORAGE =
 sig

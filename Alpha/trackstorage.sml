@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core Int ORD_KEY DecAlpha PRINTUTILS MACHINEUTILS TRACKSTORAGE SplaySetFn Util *)
+(*$import Core Int ORD_KEY DecAlpha PRINTUTILS MACHINEUTILS TRACKSTORAGE SplaySetFn Util *)
 
 functor AlphaTrackstorage(structure Printutils : PRINTUTILS 
 			      where type Machine.specific_instruction = Decalpha.specific_instruction

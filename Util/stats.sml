@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List Int Real Bool String StringCvt Time Util STATS Timer Listops Date ListMergeSort *)
+(*$import List Int Real Bool String StringCvt Time Util STATS Timer Listops Date ListMergeSort *)
 
 structure Stats :> STATS =
    struct

@@ -1,4 +1,4 @@
-(*$import LINK TopLevel Linkrtl TextIO AsmStream AlphaEmitRtlMLRISC *)
+(*$import LINK Linkrtl TextIO AsmStream AlphaEmitRtlMLRISC *)
 
 (* =========================================================================
  * AlphaLink.sml

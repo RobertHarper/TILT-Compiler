@@ -1,4 +1,4 @@
-(*$import Prelude INTSTRMAP Array List Word Int Control *)
+(*$import INTSTRMAP Array List Word Int Control *)
 
 (* Copyright 1989 by AT&T Bell Laboratories *)
 structure IntStrMap : INTSTRMAP =

@@ -1,4 +1,4 @@
-(*$import Prelude Il Ast *)
+(*$import Il Ast *)
 (* Pattern compiler.  
    Handles pattern bindings, case statements, and function declarations. *)
 signature PAT = 

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel CLAUSEPRINT INTSYN WHNF NAMES FORMATTER PRINT SYMBOL *)
+(*$import CLAUSEPRINT INTSYN WHNF NAMES FORMATTER PRINT SYMBOL *)
 (* Clause Printing *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 (* This is like printing of expressions, except that

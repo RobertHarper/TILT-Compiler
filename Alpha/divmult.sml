@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core TilWord32 DecAlpha DecAlphaUtils Util TilWord64 DIVMULT *)
+(*$import Core TilWord32 DecAlpha DecAlphaUtils Util TilWord64 DIVMULT *)
 
 structure Divmult
   :> DIVMULT where DA = Decalpha = 

@@ -1,4 +1,4 @@
-(*$import TopLevel INTEGER_CONVENTION SparcMLTreeExtra *)
+(*$import INTEGER_CONVENTION SparcMLTreeExtra *)
 
 (* =========================================================================
  * SparcIntegerConvention.sml

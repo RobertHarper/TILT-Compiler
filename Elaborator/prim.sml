@@ -1,4 +1,4 @@
-(*$import Prelude TilWord64 Array PRIM Name *)
+(*$import TilWord64 Array PRIM Name *)
 
 structure Prim :> PRIM = 
   struct

@@ -1,4 +1,4 @@
-(*$import Prelude YaccBase *)
+(*$import YaccBase *)
 
 
 (* Stream: a structure implementing a lazy stream.  The signature STREAM

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel PARSE_QUERY PARSING TP_RECON PARSE_TERM *)
+(*$import PARSE_QUERY PARSING TP_RECON PARSE_TERM *)
 (* Parsing Queries *) 
 (* Author: Frank Pfenning *)
 

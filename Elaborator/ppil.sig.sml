@@ -1,4 +1,4 @@
-(*$import Prelude Name Il Formatter *)
+(*$import Name Il Formatter *)
 (* Pretty-printing routines for the internal language. *)
 signature PPIL =
   sig

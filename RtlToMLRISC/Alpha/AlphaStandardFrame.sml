@@ -1,4 +1,4 @@
-(*$import TopLevel STACK_FRAME AlphaMLRISCConstant *)
+(*$import STACK_FRAME AlphaMLRISCConstant *)
 
 
 (* =========================================================================

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List MTPGlobal MTPGLOBAL PROVER INTSYN FUNSYN STATESYN TWELF_ORDER MTPINIT MTPSTRATEGY RELFUN MTPGlobal M2Structs *)
+(*$import List MTPGlobal MTPGLOBAL PROVER INTSYN FUNSYN STATESYN TWELF_ORDER MTPINIT MTPSTRATEGY RELFUN MTPGlobal M2Structs *)
 (* Meta Theorem Prover Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

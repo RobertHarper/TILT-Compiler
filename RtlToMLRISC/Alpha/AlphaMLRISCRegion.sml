@@ -1,4 +1,4 @@
-(*$import TopLevel MLRISC_REGION *)
+(*$import MLRISC_REGION *)
 
 
 (* =========================================================================

@@ -1,4 +1,4 @@
-(*$import Prelude Fixity Symbol TilWord64 *)
+(*$import Fixity Symbol TilWord64 *)
 
 (* Copyright 1992 by AT&T Bell Laboratories 
  *

@@ -1,4 +1,4 @@
-(*$import Prelude Rtl *)
+(*$import Rtl *)
 
 signature RECURSION =
 sig

@@ -1,4 +1,4 @@
-(*$import Prelude SourceMap PrettyPrint IO SOURCE TextIO PathNames Control *)
+(*$import SourceMap PrettyPrint IO SOURCE TextIO PathNames Control *)
 
 (* <source.sml>=                                                            *)
 (* source.sml

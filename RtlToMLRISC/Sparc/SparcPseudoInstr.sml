@@ -1,4 +1,4 @@
-(*$import TopLevel SPARC32INSTR SPARC32_PSEUDO_INSTR *)
+(*$import SPARC32INSTR SPARC32_PSEUDO_INSTR *)
 
 (* =========================================================================
  * SparcPseudoInstr.sml

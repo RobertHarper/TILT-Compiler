@@ -1,4 +1,4 @@
-(*$import LINK TopLevel Linkrtl TextIO AsmStream SparcEmitRtlMLRISC *)
+(*$import LINK Linkrtl TextIO AsmStream SparcEmitRtlMLRISC *)
 
 (* =========================================================================
  * SparcLink.sml

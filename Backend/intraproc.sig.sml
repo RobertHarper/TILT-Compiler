@@ -1,4 +1,4 @@
-(*$import Prelude Core BBLOCK TRACETABLE *)
+(*$import Core BBLOCK TRACETABLE *)
 
 signature PROCALLOC =
 sig

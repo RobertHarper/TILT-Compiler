@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel ENV String Int List StrgHash Array Vector Control ErrorMsg *)
+(*$import ENV String Int List StrgHash Array Vector Control ErrorMsg *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* env.sml *)

@@ -1,4 +1,4 @@
-(*$import Prelude LIL *)
+(*$import LIL *)
 
 (* The main LIL datatype
  * Leaf Petersen 

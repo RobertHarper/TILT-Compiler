@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util SEQUENCE Listops List *)
+(*$import Util SEQUENCE Listops List *)
 
 structure Sequence :> SEQUENCE =
 struct

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord32 Core Name Rtl Int Array Pprtl DecAlpha MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM Util *)
+(*$import TilWord32 Core Name Rtl Int Array Pprtl DecAlpha MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM Util *)
 
 (* WARNING: Use Rat or Rat2 only if sure that no spills (or at most one if one of Rat/Rat2 is used)
               will cause usage of Rat/Rat2 during the live range of Rat/Rat2.

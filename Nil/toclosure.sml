@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Name Nil Prim TraceInfo Sequence List Array Int TilWord32 NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool NilDefs NilRename NilContext NilStatic *)
+(*$import Util Name Nil Prim TraceInfo Sequence List Array Int TilWord32 NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool NilDefs NilRename NilContext NilStatic *)
 
 (* XXX Are argument traces being properly closure converted? *)
 

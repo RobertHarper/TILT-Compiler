@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel MODESYN PATHS LambdaStructs *)
+(*$import MODESYN PATHS LambdaStructs *)
 (* Modes: short and long forms *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

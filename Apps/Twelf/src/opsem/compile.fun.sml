@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel COMPILE INTSYN COMPSYN WHNF TYPECHECK NAMES *)
+(*$import COMPILE INTSYN COMPSYN WHNF TYPECHECK NAMES *)
 (* Compiler *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)

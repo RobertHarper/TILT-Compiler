@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Array Char String TABLE *)
+(*$import Array Char String TABLE *)
 (* Hash Tables *)
 (* Author: Frank Pfenning *)
 

@@ -1,4 +1,4 @@
-(*$import Prelude Rtl TilWord32 *)
+(*$import Rtl TilWord32 *)
 signature RTLTAGS =
 sig
 

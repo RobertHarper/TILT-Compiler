@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel FUNSYN FORMATTER *)
+(*$import FUNSYN FORMATTER *)
 (* Printing of functional proof terms *)
 (* Author: Carsten Schuermann *)
 

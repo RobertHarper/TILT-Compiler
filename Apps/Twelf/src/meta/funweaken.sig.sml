@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel FUNSYN *)
+(*$import FUNSYN *)
 (* Weakening substitutions for meta substitutions *)
 (* Author: Carsten Schuermann *)
 

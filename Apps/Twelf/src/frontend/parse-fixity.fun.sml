@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int PARSE_FIXITY PARSING NAMES *)
+(*$import Int PARSE_FIXITY PARSING NAMES *)
 (* Parsing Fixity and Name Preference Declarations *)
 (* Author: Frank Pfenning *)
 

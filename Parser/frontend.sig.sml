@@ -1,4 +1,4 @@
-(*$import Prelude Ast Source *)
+(*$import Ast Source *)
 
 signature FRONT_END = 
 sig

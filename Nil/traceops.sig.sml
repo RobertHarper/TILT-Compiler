@@ -1,4 +1,4 @@
-(*$import Prelude TraceInfo Nil NilContext Name *)
+(*$import TraceInfo Nil NilContext Name *)
 
 signature TRACEOPS = 
 sig

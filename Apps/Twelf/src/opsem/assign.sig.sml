@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel INTSYN *)
+(*$import INTSYN *)
 (* Assignment *)
 (* Author: Larry Greenfield *)
 

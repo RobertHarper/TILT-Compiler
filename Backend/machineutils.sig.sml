@@ -1,4 +1,4 @@
-(*$import Prelude Core ORD_MAP ORD_SET *)
+(*$import Core ORD_MAP ORD_SET *)
 
 signature MACHINEUTILS =
 sig

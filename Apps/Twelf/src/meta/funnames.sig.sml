@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel FUNSYN *)
+(*$import FUNSYN *)
 (* Names of Constants and Variables *)
 (* Author: Carsten Schuermann *)
 

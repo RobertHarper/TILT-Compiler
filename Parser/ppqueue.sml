@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Array *)
+(*$import Array *)
 
 (* ppqueue.sml
  *

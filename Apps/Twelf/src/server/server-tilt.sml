@@ -1,2 +1,2 @@
-(*$import Prelude TopLevel Server *)
+(*$import Server *)
 val _ = Server.server ("twelf-server", []);

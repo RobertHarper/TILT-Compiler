@@ -1,4 +1,4 @@
-(*$import TopLevel MLRISC_PSEUDO DenseIntSet Label Word32 *)
+(*$import MLRISC_PSEUDO DenseIntSet Label Word32 *)
 
 
 (* =========================================================================

@@ -1,4 +1,4 @@
-(*$import TopLevel MONO_HASH_TABLE REGISTER_MAP *)
+(*$import MONO_HASH_TABLE REGISTER_MAP *)
 
 (* =========================================================================
  * RegisterMap.sml

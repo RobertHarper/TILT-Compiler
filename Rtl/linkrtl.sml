@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Stats Nil LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32 Rtl Rtltags Pprtl TortlArray *)
+(*$import Stats Nil LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32 Rtl Rtltags Pprtl TortlArray *)
 
 structure Linkrtl :> LINKRTL =
 struct

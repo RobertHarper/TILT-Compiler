@@ -1,4 +1,4 @@
-(*$import Name Nil Listops ALPHA TopLevel Option ListPair *)
+(*$import Name Nil Listops ALPHA Option ListPair *)
 
 (*
  Contexts and routines for alpha-renaming of variables

@@ -1,4 +1,4 @@
-(*$import TextIO TopLevel LinkParse Stats *)
+(*$import TextIO LinkParse Stats *)
 
 
 val _ = print "Test entered\n"

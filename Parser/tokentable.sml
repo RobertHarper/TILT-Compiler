@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel ML_TOKENS Symbol StrgHash IntStrMap *)
+(*$import ML_TOKENS Symbol StrgHash IntStrMap *)
 (* tokentable.sml
  *
  * COPYRIGHT (c) 1996 Bell Laboratories.

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int Word8Array Posix *)
+(*$import Int Word8Array Posix *)
 
 (* This program reverses the lines it receives from stdin,
    like the UNIX utility "tac". It assumes that no two

@@ -1,4 +1,4 @@
-(*$import TextIO TopLevel LinkParse  Tyvar Prim Il Ppprim Ppil IlContext LinkIl Linknil Linkrtl *)
+(*$import TextIO LinkParse  Tyvar Prim Il Ppprim Ppil IlContext LinkIl Linknil Linkrtl *)
 
 exception End
 

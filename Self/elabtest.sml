@@ -1,4 +1,4 @@
-(*$import TextIO TopLevel LinkParse  Tyvar Prim Il Ppprim Ppil IlContext LinkIl Stats *)
+(*$import TextIO LinkParse  Tyvar Prim Il Ppprim Ppil IlContext LinkIl Stats *)
 
 (*
 val xxx = Il.CON_SUM{noncarriers=2,carrier=Il.CON_TUPLE_INJECT[],special=NONE}

@@ -1,4 +1,4 @@
-(*$import TopLevel Util Name Nil NilContext NilRewrite BOUNDCHECK *)
+(*$import Util Name Nil NilContext NilRewrite BOUNDCHECK *)
 
 (*
  Verification that a module contains no unbound variables.

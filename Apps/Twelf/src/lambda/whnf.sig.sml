@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel INTSYN *)
+(*$import INTSYN *)
 (* Weak Head-Normal Forms *)
 (* Authors: Frank Pfenning, Carsten Schuermann *)
 

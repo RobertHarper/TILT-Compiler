@@ -1,4 +1,4 @@
-(*$import Prelude SourceMap PrettyPrint Source *)
+(*$import SourceMap PrettyPrint Source *)
 
 (* <errormsg.sig>=                                                          *)
 (* Copyright 1989 by AT&T Bell Laboratories *)

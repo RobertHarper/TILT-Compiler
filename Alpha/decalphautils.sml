@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core MACHINEUTILS DecAlpha Int Util *)
+(*$import Core MACHINEUTILS DecAlpha Int Util *)
 
 structure Decalphautils :> MACHINEUTILS =
 struct

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Name List Sequence Prim Array TraceInfo Listops Util Nil *)
+(*$import Name List Sequence Prim Array TraceInfo Listops Util Nil *)
 
 (*
  * A simple rewriter that does not try to synthesize types.

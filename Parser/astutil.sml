@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Fixity ErrorMsg Ast Util Listops Symbol Formatter ASTUTIL PrintUtil *)
+(*$import Fixity ErrorMsg Ast Util Listops Symbol Formatter ASTUTIL PrintUtil *)
 
 (* Copyright 1992 by AT&T Bell Laboratories 
  *)

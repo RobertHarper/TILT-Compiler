@@ -1,4 +1,4 @@
-(*$import TopLevel CELLS Core TRACETABLE REGISTER_TRACE_MAP DenseIntSet DenseRegisterMap *)
+(*$import CELLS Core TRACETABLE REGISTER_TRACE_MAP DenseIntSet DenseRegisterMap *)
 
 
 (* =========================================================================

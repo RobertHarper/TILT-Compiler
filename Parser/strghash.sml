@@ -1,4 +1,4 @@
-(*$import Prelude Char TopLevel Int String *)
+(*$import Char Int String *)
 
 (* stringhash.sml
  *

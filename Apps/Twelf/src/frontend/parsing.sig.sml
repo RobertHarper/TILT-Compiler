@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel StreamStructs LEXER *)
+(*$import StreamStructs LEXER *)
 (* General basis for parsing modules *)
 (* Author: Frank Pfenning *)
 

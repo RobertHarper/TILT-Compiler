@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel PLATFORM List Real Int Time Word32 UtilError String OS Posix *)
+(*$import PLATFORM List Real Int Time Word32 UtilError String OS Posix *)
 
 structure Platform :> PLATFORM = 
 

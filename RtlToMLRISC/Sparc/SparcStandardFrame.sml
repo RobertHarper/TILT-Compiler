@@ -1,4 +1,4 @@
-(*$import TopLevel STACK_FRAME SparcMLRISCConstant *)
+(*$import STACK_FRAME SparcMLRISCConstant *)
 
 (* =========================================================================
  * SparcStandardFrame.sml

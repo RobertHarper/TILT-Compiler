@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel SEARCH INTSYN METAGLOBAL METASYN COMPSYN WHNF UNIFY INDEX COMPILE TRAIL CPRINT PRINT NAMES GlobalStructs *)
+(*$import SEARCH INTSYN METAGLOBAL METASYN COMPSYN WHNF UNIFY INDEX COMPILE TRAIL CPRINT PRINT NAMES GlobalStructs *)
 (* Search (based on abstract machine ) *)
 (* Author: Carsten Schuermann *)
 

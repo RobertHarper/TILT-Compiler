@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Ast Int Symbol *)
+(*$import Ast Int Symbol *)
 (*
    tvclose
 

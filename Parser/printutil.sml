@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel PRINTUTIL Symbol SYMBOL Control Char TextIO Int String *)
+(*$import PRINTUTIL Symbol SYMBOL Control Char TextIO Int String *)
 (* Copyright 1989 by AT&T Bell Laboratories *)
 (* printutil.sml *)
 

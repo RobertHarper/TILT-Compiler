@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int Symbol Ast ListPair List *)
+(*$import Int Symbol Ast ListPair List *)
 (*
   Rewrite declarations so all functor applications are in named form
   (i.e. all arguments are structure ids).

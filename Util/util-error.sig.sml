@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import *)
 
 (*Pulled out of Util so that Platform can use Error while Util uses Platform.*)
 signature UTIL_ERROR =

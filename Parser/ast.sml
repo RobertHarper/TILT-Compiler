@@ -1,4 +1,4 @@
-(*$import Prelude Symbol AST Fixity TilWord64 *)
+(*$import Symbol AST Fixity TilWord64 *)
 
 (* Copyright 1992 by AT&T Bell Laboratories 
  *

@@ -1,4 +1,4 @@
-(*$import Prelude TextIO *)
+(*$import TextIO *)
 
 signature NODE =
 sig

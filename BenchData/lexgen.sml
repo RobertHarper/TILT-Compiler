@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int String TextIO Array List *)
+(*$import Int String TextIO Array List *)
 
 
 local

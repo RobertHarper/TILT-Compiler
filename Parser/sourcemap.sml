@@ -1,4 +1,4 @@
-(*$import Prelude SOURCEMAP TopLevel *)
+(*$import SOURCEMAP *)
 
 (* I can imagine at least three implementations: one that doesn't           *)
 (* support resynchronization, one that supports resynchronization only at   *)

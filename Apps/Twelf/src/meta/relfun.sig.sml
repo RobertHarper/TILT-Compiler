@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel FUNSYN *)
+(*$import FUNSYN *)
 (* Converter from relational representation to a functional
    representation of proof terms *)
 (* Author: Carsten Schuermann *)

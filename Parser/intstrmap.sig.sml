@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import *)
 
 (* Copyright 1989 by AT&T Bell Laboratories *)
 signature INTSTRMAP =

@@ -1,4 +1,4 @@
-(*$import Prelude Formatter Rtl Rtltags *)
+(*$import Formatter Rtl Rtltags *)
 
 signature PPRTL =
 sig

@@ -1,4 +1,4 @@
-(*$import Nil Listops ALPHA TopLevel Option ListPair *)
+(*$import Nil Listops ALPHA Option ListPair *)
 
 structure Alpha
     :> ALPHA =

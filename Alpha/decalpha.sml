@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord32 Name Int Core RTL DECALPHA String Rtl Util Char List Stats *)
+(*$import TilWord32 Name Int Core RTL DECALPHA String Rtl Util Char List Stats *)
 
 structure Decalpha :> DECALPHA =
 

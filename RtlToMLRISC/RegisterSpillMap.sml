@@ -1,4 +1,4 @@
-(*$import TopLevel MLRISC_CONSTANT REGISTER_SPILL_MAP DenseRegisterMap *)
+(*$import MLRISC_CONSTANT REGISTER_SPILL_MAP DenseRegisterMap *)
 
 
 (* =========================================================================

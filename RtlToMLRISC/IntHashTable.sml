@@ -1,4 +1,4 @@
-(*$import TopLevel HashTableFn Word *)
+(*$import HashTableFn Word *)
 
 
 (* =========================================================================

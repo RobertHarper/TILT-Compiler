@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import *)
 
 
 (* base.sig: Base signature file for SML-Yacc.  This file contains signatures

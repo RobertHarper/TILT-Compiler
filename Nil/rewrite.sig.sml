@@ -1,4 +1,4 @@
-(*$import Prelude Nil *)
+(*$import Nil *)
 
 signature NILREWRITE = 
   sig

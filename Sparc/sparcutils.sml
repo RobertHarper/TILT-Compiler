@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel String Core MACHINEUTILS Sparc Int Util *)
+(*$import String Core MACHINEUTILS Sparc Int Util *)
 
 structure Sparcutils
     :> MACHINEUTILS =

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TILWORD TilWord32 Util Char String *)
+(*$import TILWORD TilWord32 Util Char String *)
 
 structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
  struct

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List Int PRINT INTSYN WHNF ABSTRACT CONSTRAINTS NAMES FORMATTER SYMBOL *)
+(*$import List Int PRINT INTSYN WHNF ABSTRACT CONSTRAINTS NAMES FORMATTER SYMBOL *)
 (* Printing *)
 (* Author: Frank Pfenning *)
 (* Modified: Jeff Polakow *)

@@ -1,4 +1,4 @@
-(*$import Prelude BinIO *)
+(*$import BinIO *)
 
 signature CRC =
   sig

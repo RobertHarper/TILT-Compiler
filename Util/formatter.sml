@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Int TextIO FORMATTER Listops Stats *)
+(*$import Util Int TextIO FORMATTER Listops Stats *)
 
 (* Perry's modifications:
     (1) added fold and changed implode to concat 

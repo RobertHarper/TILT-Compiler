@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord32 Rtl Core TRACETABLE Int Util List Pprtl Stats *)
+(*$import TilWord32 Rtl Core TRACETABLE Int Util List Pprtl Stats *)
 
 (* This is how the compiler tells the runtime about how to determine all roots
    from the registers and from the stack.  The runtime, at GC, will walk the 

@@ -1,4 +1,4 @@
-(*$import TopLevel MLRISC_BLOCKNAME *)
+(*$import MLRISC_BLOCKNAME *)
 
 
 (* =========================================================================

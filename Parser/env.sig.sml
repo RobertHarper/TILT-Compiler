@@ -1,4 +1,4 @@
-(*$import Prelude SYMBOL *)
+(*$import SYMBOL *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* env.sig *)

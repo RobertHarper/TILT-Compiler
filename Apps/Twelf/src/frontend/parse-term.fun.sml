@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel PARSE_TERM PARSING TP_RECON NAMES *)
+(*$import PARSE_TERM PARSING TP_RECON NAMES *)
 (* Parsing Terms and Variable Declarations *)
 (* Author: Frank Pfenning *)
 

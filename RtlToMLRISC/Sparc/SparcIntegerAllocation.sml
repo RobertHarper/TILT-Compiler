@@ -1,4 +1,4 @@
-(*$import TopLevel SPARCINSTR CELLS FlowGraph INTEGER_CONVENTION MLRISC_REGION RA REGISTER_ALLOCATION *)
+(*$import SPARCINSTR CELLS FlowGraph INTEGER_CONVENTION MLRISC_REGION RA REGISTER_ALLOCATION *)
 
 (* =========================================================================
  * SparcIntegerAllocation.sml

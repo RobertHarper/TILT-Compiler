@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TRAIL INTSYN *)
+(*$import TRAIL INTSYN *)
 (* Trailing EVar Instantiations *)
 (* Author: Carsten Schuermann *)
 

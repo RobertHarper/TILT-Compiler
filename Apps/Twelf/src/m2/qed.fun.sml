@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel QED GLOBAL METASYN *)
+(*$import QED GLOBAL METASYN *)
 (* QED *)
 (* Author: Carsten Schuermann *)
 

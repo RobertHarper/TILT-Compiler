@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Array COMPSYN GLOBAL INTSYN NAMES *)
+(*$import Array COMPSYN GLOBAL INTSYN NAMES *)
 (* Compiled Syntax *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)

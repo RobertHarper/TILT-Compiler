@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import *)
 
 (* Chris Okasaki
    School of Computer Science
