@@ -3,12 +3,6 @@
 signature PPIL =
   sig
 
-    (* type variables can be displayed in different ways *)
-    datatype display = VAR_ONLY | VALUE_ONLY | VAR_VALUE
-    val convar_display : display ref
-
-
-
     (* these don't do actual output *)
     val pp_bnd'     : Il.bnd -> Formatter.format
     val pp_bnds'    : Il.bnds -> Formatter.format

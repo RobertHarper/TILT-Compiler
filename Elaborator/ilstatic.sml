@@ -1046,8 +1046,7 @@ structure IlStatic
 	   in if (eq_con(ctxt,eargCon,sumcon))
 		  then (loop 0 va arms)
 	      else 
-		  (Ppil.convar_display := Ppil.VAR_VALUE;
-		   print "CASE: expression's type and decoration type are unequal\n";
+		  (print "CASE: expression's type and decoration type are unequal\n";
 		   print "  eargCon = "; pp_con eargCon; print "\n";
 		   print "  sumcon = "; pp_con sumcon; print "\n";
 		   print "  CASE exp = "; pp_exp exparg; print "\n";

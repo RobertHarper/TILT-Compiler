@@ -29,8 +29,6 @@ structure LinkIl :> LINKIL  =
 	open Il IlUtil Ppil IlStatic Formatter
 	val error = fn s => Util.error "linkil.sml" s
 
-	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
-
 	fun local_add_context_entries (acc_ctxt,entries) = 
 	    let fun folder (CONTEXT_SDEC sdec,acc_ctxt) = 
 		    let val sdec = IlContext.SelfifySdec acc_ctxt sdec

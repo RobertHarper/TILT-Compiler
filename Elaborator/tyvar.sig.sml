@@ -3,8 +3,6 @@
 signature TYVAR = 
   sig
 
-    val debug : bool ref (* the usual debug flag *)
-
     type stamp
 
     (* type meta-variable used for type inference *)
@@ -17,7 +15,7 @@ signature TYVAR =
     type ('ctxt,'con) constraint = (unit -> unit) * (('ctxt,'con) tyvar * bool -> bool)
     type ('ctxt,'con) ocon
 
-    val get_stamp           : unit   -> stamp
+    val new_stamp           : unit   -> stamp
     val fresh_tyvar         : 'ctxt  -> ('ctxt,'con) tyvar (* create a new initially unset tyvar *)
     val fresh_named_tyvar   : 'ctxt * string -> ('ctxt,'con) tyvar (* create a new initially unset tyvar *)
     val fresh_stamped_tyvar : 'ctxt * string * stamp -> ('ctxt,'con) tyvar

@@ -1,5 +1,7 @@
 (*$import TYVAR Listops Name Util List Stats Int *)
 
+(* XXXX thread-unsafe: new_stamp *)
+
 (* Type variables parameterized over types *)
 structure Tyvar :> TYVAR =
   struct
@@ -8,14 +10,13 @@ structure Tyvar :> TYVAR =
 
     val error = fn s => error "tyvar.sml" s
     val debug = Stats.ff("TyvarDebug")
-    fun debugdo t = if (!debug) then (t(); ()) else ()
 
-    val stamp = ref 0
-    fun inc() = let val res = !stamp
-		    val _ = stamp := (res + 1)
-		in res
-		end
     type stamp = int
+    local
+	val stamp = ref 0
+    in
+	fun new_stamp() = (stamp := (!stamp) + 1; !stamp)
+    end
 
     type ('ctxt,'con) tyvar_info = {stampref : int,
 				     name : var,
@@ -23,6 +24,7 @@ structure Tyvar :> TYVAR =
 				     use_equal : bool,
 				     body : 'con option ref,
 				     ctxts : 'ctxt list} ref
+
     datatype ('ctxt,'con) tyvar = TYVAR of ('ctxt,'con) tyvar_info
 
     (* input bool represents hardness *)
@@ -32,7 +34,6 @@ structure Tyvar :> TYVAR =
 					  name : var,
 					  body : ('ctxt,'con) tyvar}
 
-    fun get_stamp() = inc()
     fun stamp2int stamp = (stamp : int)
     fun stamp_join(a : stamp,b) = if (a<b) then a else b
     fun tyvar_copy(TYVAR (ref {stampref, name, constrained, use_equal, body, ctxts})) =
@@ -48,7 +49,7 @@ structure Tyvar :> TYVAR =
 							   body = ref NONE,
 							   ctxts = [ctxts]})
     val tyvar_counter = ref (Stats.counter "Elab-NumTyvars")
-    fun fresh_named_tyvar (ctxts,s) = ((!tyvar_counter)(); fresh_stamped_tyvar(ctxts,s,inc()))
+    fun fresh_named_tyvar (ctxts,s) = ((!tyvar_counter)(); fresh_stamped_tyvar(ctxts,s,new_stamp()))
     fun fresh_tyvar ctxts = fresh_named_tyvar (ctxts,"tv")
     fun tyvar_after stamp (TYVAR(ref {stampref,...})) = stamp < stampref
     fun tyvar_stamp (TYVAR(ref {stampref,...})) = stampref

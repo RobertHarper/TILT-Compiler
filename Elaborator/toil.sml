@@ -487,7 +487,7 @@ structure Toil
      (* for the record, i'd like to say that this construct is a pain in the butt - Perry *)
 	     let 
 		 val label = symbol_label s
-		 val stamp = get_stamp()
+		 val stamp = new_stamp()
 		 val fieldcon = fresh_con context
 		 val the_ref = ref(FLEXINFO(stamp,false,[(label,fieldcon)]))
 		 val rescon = CON_ARROW([CON_FLEXRECORD the_ref],
@@ -1131,7 +1131,7 @@ val _ = print "plet0\n"
 					    Ast.TupleExp(map #2 pe_list)))
 		end
 
-		val tyvar_stamp = get_stamp()
+		val tyvar_stamp = new_stamp()
 		val tyvars = map tyvar_strip tyvars
 		local
 		     fun help tyvar = 
@@ -1243,7 +1243,7 @@ val _ = print "plet0\n"
 	    end
         (* recursive value dec: i.e. functions *)
 	| Ast.ValrecDec (rvblist,ref tyvars) => 
-	    let val tyvar_stamp = get_stamp()
+	    let val tyvar_stamp = new_stamp()
 		val tyvars = map tyvar_strip tyvars
 		local fun help tyvar = 
 		    let val type_str = Symbol.name tyvar
@@ -1362,7 +1362,7 @@ val _ = print "plet0\n"
 	    end
 
 	| Ast.FunDec (fblist,ref tyvars) => 
-	    let val tyvar_stamp = get_stamp()
+	    let val tyvar_stamp = new_stamp()
 		val tyvars = map tyvar_strip tyvars
 		local fun help tyvar = 
 		    let val type_str = Symbol.name tyvar

@@ -2,7 +2,6 @@
 structure IlContext :> ILCONTEXT =
 struct
 
-    structure Il = Il
     open Il Util Name Listops Ppil IlUtil
 	
     val error = fn s => error "ilcontext.sml" s
