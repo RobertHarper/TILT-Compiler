@@ -99,6 +99,8 @@ functor Ppnil(structure Nil : NIL
     and pp_con arg_con : format = 
       (case arg_con of
 	   Var_c v => pp_var v
+         | Prim_c (Record_c nil, nil) => HOVbox[String "UNIT"]
+         | Prim_c (primcon, nil) => HOVbox[pp_primcon primcon]
 	 | Prim_c (primcon, conlist) => HOVbox[pp_primcon primcon,
 					       pp_list' pp_con conlist]
 	 | Crecord_c lc_list => (pp_list (fn (l,c) => HOVbox[pp_label l, String " = ", pp_con c])
@@ -253,7 +255,7 @@ functor Ppnil(structure Nil : NIL
 	let fun help {info : 'info, arg: 'arg, 
 		      arms : ('t * function) list, default : exp option}
 	    tstr pp_arg pp_info pp_index =
-	    HOVbox[String ("SWITCH_" ^ tstr),
+	    HOVbox[String ("SWITCH_" ^ tstr ^ " "),
 		   pp_info info,
 		   Break0 0 5,
 		   pp_arg arg,
@@ -277,7 +279,7 @@ functor Ppnil(structure Nil : NIL
 		                   (fn (v,k,c) => Hbox[pp_var v, String ":", pp_kind k,
 						       String "=", pp_con c]) pp_listcon
 *)
-	      | Exncase_e sw => help sw "EXN" pp_exp (fn () => String "") pp_var
+	      | Exncase_e sw => help sw "EXN" pp_exp (fn () => String "") pp_exp
 	end
 
     and pp_bnd bnd =
@@ -299,8 +301,23 @@ functor Ppnil(structure Nil : NIL
 				       end)
 	end
 
-    and pp_fix (v,Function(openness,effect,recursive,vklist,vclist,e,c)) : format = raise UNIMP
-
+    and pp_fix (v,Function(openness,effect,
+			   recursive,vklist,vclist,e,c)) : format = 
+	HOVbox([String (case openness of Open => "/\\ "| Closed => "/CLOSED\\"),
+		pp_var v,
+		String " ["] @
+	       (foldr (op @) nil 
+	          (map (fn (v,k) => [pp_var v, String " : ", pp_kind k]) 
+		       vklist)) @
+	       [String "] ("] @
+	       (foldr (op @) nil 
+	          (map (fn (v,c) => [pp_var v, String " : ", pp_con c]) 
+		       vclist)) @
+	       [String ")", 
+		String (case effect of Total => "->" | Partial => "-`"),
+		pp_con c, 
+		String " =", Break,
+		pp_exp e])
 
     fun pp_bnds  bnds = pp_list pp_bnd bnds ("[",",","]",true)
 
