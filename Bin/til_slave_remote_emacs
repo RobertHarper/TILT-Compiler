@@ -34,7 +34,7 @@ argdir="$4"
 # At CMU, scp will print diagnostics on some systems unless -q is
 # specified.  On other systems, scp -q causes a usage error.
 
-case `sys` in
+case `sys 2>/dev/null` in
 i386_linux3|i386_rh60)
 	scp="scp -q"
 	;;
