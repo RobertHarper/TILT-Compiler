@@ -4,6 +4,7 @@ signature NILCONTEXT =
       
     type kind = Nil.kind
     type con = Nil.con
+    type exp = Nil.exp
     type var = Nil.var
     type 'a subst
     type context
@@ -38,16 +39,16 @@ signature NILCONTEXT =
     val insert_kind_shape : context * var * kind * kind -> context
     val insert_kind_shape_equation : context * var * con * kind * kind -> context
     val insert_kind_equation : context * var * con * kind -> context
+    val insert_equation : context * var * con -> context
     val insert_kind_list : context* (var * kind) list -> context
 
     val make_shape : context * Nil.kind -> Nil.kind
+
 
     (*Given a constructor, returns the most imprecise kind for that
      * con - i.e, merely the shape info
      *)
     val shape_of : context * Nil.con -> Nil.kind
-    val kind_of : context * Nil.con -> Nil.kind
-    val kind_of_bnds : context * Nil.conbnd list -> context
 
     (*find_kind_project returns the kind, and the most precise constructor
      * that can be created based on the transparent information in the
@@ -65,4 +66,15 @@ signature NILCONTEXT =
     val print_kinds : context -> unit
     val print_cons : context -> unit
 
+    val is_well_formed : 
+      (context * Nil.kind -> unit) 
+      * (context * Nil.con -> Nil.kind)
+      * (context * Nil.kind * Nil.kind -> bool) -> context -> bool
+
+    (*These functions return true if all binding sites in the item are distinct,
+     * and also are not already bound in the context.
+     *)
+    val isRenamedExp : context -> Nil.exp -> bool
+    val isRenamedCon : context -> Nil.con -> bool
+    val isRenamedKind : context -> Nil.kind -> bool
   end 

@@ -208,7 +208,7 @@ struct
 			   (if is_top 
 				then GLOBALc
 			    else LOCALc(memoize (fn() => Stats.subtimer("toclosure_make_shape",
-						 Normalize.make_shape ctxt) k),
+						 (Util.curry2 NilContext.make_shape) ctxt) k),
 						 ref NONE))
 		       val boundcvars = VarMap.insert(boundcvars,v,entry)
 		   in  (ctxt,boundcvars)
@@ -1210,6 +1210,8 @@ struct
 	                     (rev freecpaths)
 
 	   val inner_state = copy_state(state,v)
+	   val vklist_outer = map (fn (v,k) => (v,k_rewrite state k)) vklist
+	   val vclist_outer = map (fn (v,c) => (v,c_rewrite state c)) vclist
 	   val vklist = map (fn (v,k) => (v,k_rewrite inner_state k)) vklist
 	   val vclist = map (fn (v,c) => (v,c_rewrite inner_state c)) vclist
 	   val escape = get_escape v
@@ -1278,9 +1280,9 @@ struct
 	   val codebody_tipe = c_rewrite state tipe
 
 	   val closure_tipe = AllArrow_c(Closure,effect,
-					 vklist,
+					 vklist_outer,
 					 if dep then SOME(map #1 vclist) else NONE,
-					 map #2 vclist,
+					 map #2 vclist_outer,
 					 TilWord32.fromInt(length vflist),codebody_tipe)
 	   val codebody_tipe = substConPathInCon(external_subst,codebody_tipe)
 
@@ -1521,7 +1523,7 @@ struct
 				c_rewrite (copy_state(state ,v)) c, k)
 	     val con_env = Crecord_c(map (fn (p,_,_,l) => (l,c_rewrite state (path2con p))) vkl_free)
 	     val k' = NilSubst.substConInKind 
-			(NilSubst.fromList [(cenv_var,con_env)]) k
+			(NilSubst.fromList [(cenv_var,NilSubst.renameCon con_env)]) (NilSubst.renameKind k)
 	     val closure_cb = Con_cb(v,Closure_c (Var_c code_var, con_env))
 	 in  [code_cb, closure_cb]
 	 end			

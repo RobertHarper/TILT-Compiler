@@ -6,6 +6,24 @@ structure NilError :> NILERROR =
     val lprintl = Util.lprintl
 
 
+    type location = string 
+
+    exception FailedAssert of string 
+    
+    fun assert location checkl = 
+      let
+	val loc_string = "\nAssertion violated in "^location^": "
+	  
+	fun check (b,f) = if b then () 
+			  else (f() handle any => ();
+				printl loc_string;
+				raise FailedAssert location)
+      in
+	List.app check checkl
+      end
+    
+    fun locate file function = file^"::"^function
+      
     fun c_all pred fc = 
       let
 	fun all [] = true

@@ -123,9 +123,9 @@ struct
 
   (* Intswitch should be apparent.
    * The con list in the Sumswitch tells us the sum type and the w32
-   *    is used to index the different cases for the sum type.
+   *    is used to index the different cases for the sum type.   
    * Exncase's arms are indexed by expressions that must have type Exntag_c(c) and
-   *    the arms must be functions from [c]->tau for some fixed result type tau.  
+   *    the arms must have type tau for some fixed result type tau, assuming bound has type c
    *)
   and switch =                                 (* Switching on / Elim Form *)
       Intsw_e of {arg  : exp, 

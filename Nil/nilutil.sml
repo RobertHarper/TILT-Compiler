@@ -3,7 +3,7 @@
 structure NilPrimUtil :> PRIMUTIL where type con = Nil.con
                                  where type exp = Nil.exp = PrimUtil(structure PrimUtilParam = NilPrimUtilParam)
 structure NilUtil
-  :> NILUTIL where type alpha_context = Alpha.alpha_context =
+  :> NILUTIL =
 struct
 
   open Nil Util 
@@ -50,6 +50,7 @@ struct
 			     val lvk_list = Listops.mapcount doer klist
 			 in  Record_k(Sequence.fromList lvk_list)
 			 end
+
   val unit_con = con_tuple []
   val unit_exp = exp_tuple []
   val bool_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[con_tuple_inject[]])
@@ -71,7 +72,6 @@ struct
     | effect (Const_e _) = false
     | effect (Prim_e (NilPrimOp _, _, _)) = false
     | effect _ = true
-
 
   fun is_var_e (Var_e v) = true
     | is_var_e _ = false
@@ -106,11 +106,14 @@ struct
     fun strip_int' (Prim_c (Int_c intsize,[])) = SOME intsize
       | strip_int' _ = NONE
     fun strip_sum' (Prim_c (Sum_c {tagcount,totalcount,known},cons)) = 
-	if (length cons = 1) then SOME (tagcount,totalcount,known,hd cons)
-	    else error "strip_sum given sum not carrying exactly one type argument"
+      (case cons
+	 of [con] => SOME (tagcount,totalcount,known,hd cons)
+	  | _ => error "strip_sum given sum not carrying exactly one type argument")
       | strip_sum' _ = NONE
     fun strip_arrow' (AllArrow_c arg) = SOME arg
       | strip_arrow' _ = NONE
+    fun strip_externarrow' (ExternArrow_c arg) = SOME arg
+      | strip_externarrow' _ = NONE
     fun strip_record' (Prim_c (Record_c (labs,vars),cons)) = SOME (labs,vars,cons)
       | strip_record' _ = NONE
     fun strip_crecord' (Crecord_c entries) = SOME entries
@@ -136,6 +139,7 @@ struct
     val strip_int = strip_annotate strip_int'
     val strip_sum = strip_annotate strip_sum'
     val strip_arrow = strip_annotate strip_arrow'
+    val strip_externarrow = strip_annotate strip_externarrow'
     val strip_record = strip_annotate strip_record'
     val strip_crecord = strip_annotate strip_crecord'
     val strip_proj = strip_annotate strip_proj'
@@ -149,7 +153,10 @@ struct
   end
 
 
-
+  fun get_arrow_return con = 
+    case strip_arrow con
+      of SOME (_,_,_,_,_,_,body_c) => SOME body_c
+       | NONE => NONE
   (* Local rebindings from imported structures *)
 
 
@@ -411,11 +418,9 @@ struct
       val self = f_kind state
       val (STATE{bound,kindhandler,...}) = state
       fun dokind kind = 
-	  (case kind of
-	       Type_k => kind
-
+	  (case kind 
+	     of Type_k => kind
 	     | (Singleton_k con) => Singleton_k(f_con state con)
-
 	     | (Record_k fieldseq) =>
 	      let
 		fun fold_one (((lbl,var),kind),state) = 
@@ -757,11 +762,13 @@ struct
 	in  f_exp handler e;
 	    (!evars_ref, !cvars_ref)
 	end
+
     fun freeConVarInCon(look_in_kind,c) =
 	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
 	in  f_con handler c;
 	    !cvars_ref
 	end
+
     fun freeConVarInKind k =
 	let val (evars_ref,cvars_ref,handler) = free_handler true
 	in  f_kind handler k;
@@ -832,407 +839,208 @@ struct
   fun same_phase (Compiletime, Compiletime) = true
     | same_phase (Runtime, Runtime) = true
     | same_phase _ = false
+(*
+  fun alpha_equiv_kind' (context) (kind1,kind2) = 
+    let
+      val recur = alpha_equiv_kind' context
+    in
+      (case (kind1,kind2) of
+	    (Type_k, Type_k) => true
+	  | (Singleton_k con1,Singleton_k con2) => alpha_equiv_con' context (con1,con2)
+	  | (Record_k elts1,Record_k elts2) => 
+	   let
+	     val conref = ref context
+	     fun equiv_one (((lbl1,var1),kind1),((lbl2,var2),kind2)) = 
+	       let
+		 val kind_equiv = alpha_equiv_kind' (!conref) (kind1,kind2)
+		 val _ = conref := alpha_equate_pair (!conref,(var1,var2))
+	       in
+		 eq_label (lbl1,lbl2) andalso kind_equiv
+	       end
+	   in
+	     eq_len (elts1,elts2) andalso 
+	     (ListPair.all equiv_one (elts1,elts2))
+	   end
+
+	  | (Arrow_k (openness1, formals1, return1),
+	     (Arrow_k (openness2, formals2, return2))) =>
+	   let
+	     val conref = ref context
+	     fun equiv_one ((var1,kind1),(var2,kind2)) = 
+	       (alpha_equiv_kind' (!conref) (kind1,kind2))
+	       before (conref := alpha_equate_pair (!conref,(var1,var2)))
+	   in
+	     same_openness (openness1,openness2) andalso 
+	     eq_len (formals1,formals2) andalso 
+	     (ListPair.all equiv_one (formals1,formals2)) andalso 
+	     alpha_equiv_kind' (!conref) (return1,return2)
+	   end
+	  | _ => false)
+    end
+  and alpha_equiv_con' context (con1,con2) = 
+    let
+      val recur = alpha_equiv_con' context
+    in
+      (case (con1,con2)
+	 of (Prim_c (pcon1,args1),Prim_c (pcon2,args2)) => 
+	   primequiv (pcon1,pcon2) andalso
+	   alpha_equiv_con_list context (args1,args2)
+	   
+	  (*Assume - sets must maintain ordering!  We only judge*)
+	  (* mus with the same ordering to be equiv *) 
+	  | (Mu_c (flag1,defs1),Mu_c (flag2,defs2)) =>
+	   let
+	     val def_list1 = Sequence.toList defs1
+	     val def_list2 = Sequence.toList defs2
+	     val (var_list1,con_list1) = ListPair.unzip def_list1
+	     val (var_list2,con_list2) = ListPair.unzip def_list2
+	     val context' = alpha_equate_pairs (context,(var_list1,var_list2))
+	   in
+	     flag1 = flag2 andalso
+	     alpha_equiv_con_list context' (con_list1,con_list2)
+	   end
+	  | (AllArrow_c (openness1,effect1,tformals1,formals1,flength1,return1),
+	     AllArrow_c (openness2,effect2,tformals2,formals2,flength2,return2)) =>
+	   let
+	     val conref = ref context
+	     fun tformal_equiv ((var1,kind1),(var2,kind2)) = 
+	       (alpha_equiv_kind' (!conref) (kind1,kind2))
+	       before (conref :=  alpha_equate_pair (!conref,(var1,var2)))
+	   in
+	     same_openness(openness1,openness2) andalso
+	     (flength1 = flength2) andalso
+	     eq_len (tformals1,tformals2) andalso 
+	     ListPair.all tformal_equiv (tformals1,tformals2) andalso 
+	     alpha_equiv_con_list (!conref) (formals1,formals2) andalso
+	     alpha_equiv_con' (!conref) (return1,return2)
+	   end 
+
+
+          (* XXXX should be threading e_context here too *)
+	  | (Typeof_c exp1, Typeof_c exp2) => alpha_equiv_exp' context (exp1,exp2)
+	  | (Var_c var1,Var_c var2) => 
+	   alpha_pair_eq(context,(var1,var2))
+
+	  | (Let_c (sort1, binds1,con1),Let_c (sort2, binds2,con2)) => 
+	   let 
+	     val conref = ref context
+	     fun equiv_one (Con_cb(var1,con1),Con_cb(var2,con2)) = 
+	       (alpha_equiv_con' (!conref) (con1,con2))
+	       before (conref := alpha_equate_pair(!conref,(var1,var2)))
+	       
+	       | equiv_one (Open_cb(var1,formals1,con1,k1),
+			     Open_cb(var2,formals2,con2,k2)) =
+	       let
+		 val conref' = ref (!conref)
+		 fun equiv_one ((var1,kind1),(var2,kind2))= 
+		   (alpha_equiv_kind' (!conref') (kind1,kind2))
+		   before (conref' := alpha_equate_pair(!conref',(var1,var2)))
+	       in
+		 ((ListPair.all equiv_one (formals1,formals2))
+		  andalso alpha_equiv_con' (!conref') (con1,con2))
+		 before (conref := alpha_equate_pair(!conref,(var1,var2)))
+	       end
+	       | equiv_one (Code_cb(var1,formals1,con1,k1),
+			    Code_cb(var2,formals2,con2,k2)) =
+	       let
+		 val conref' = ref (!conref)
+		 fun equiv_one ((var1,kind1),(var2,kind2))= 
+		   (alpha_equiv_kind' (!conref') (kind1,kind2))
+		   before (conref' := alpha_equate_pair(!conref',(var1,var2)))
+	       in
+		 ((ListPair.all equiv_one (formals1,formals2))
+		  andalso alpha_equiv_con' (!conref') (con1,con2))
+		 before (conref := alpha_equate_pair(!conref,(var1,var2)))
+	       end
+	       | equiv_one _ = false
+	   in
+	     (ListPair.all equiv_one (binds1,binds2))
+	     andalso alpha_equiv_con' (!conref) (con1,con2)
+	   end
+	  | (Closure_c (code1,env1),Closure_c (code2,env2)) => 
+	   recur (code1,code2) andalso recur (env1,env2)
+	  
+	  (* Cannot be dependent.  Note Precondition is sorted labels*)
+	  | (Crecord_c entries1,Crecord_c entries2) => 
+	   let
+	     fun equiv_each ((lbl1,con1),(lbl2,con2)) = 
+	       (eq_label (lbl1,lbl2) andalso
+		recur (con1,con2))
+	   in
+	     eq_len (entries1,entries2) andalso 
+	     (ListPair.all equiv_each (entries1,entries2))
+	   end
+	  | (Proj_c (crec1,label1),Proj_c (crec2,label2)) => 
+	   eq_label (label1,label2) andalso
+	   recur (crec1,crec2)
+	   
+	  | (App_c (cfun1,actuals1),App_c (cfun2,actuals2)) => 
+	   recur (cfun1,cfun2) andalso
+	   (ListPair.all recur (actuals1,actuals2))
+	   
+	  | (Annotate_c (annot1,con1),con2) => 
+	   recur (con1,con2)
+	  | (con1,Annotate_c (annot1,con2)) => 
+	   recur (con1,con2)
+	  | _ => false)
+	 orelse (if !debug then
+		   (lprintl "alpha_equiv_con failed!";
+		    printl "Constructor:";
+		    PpNil.pp_con con1;
+		    lprintl "Not equivalent to :";
+		    PpNil.pp_con con2;
+		    printl "")
+		 else ();
+		   false)
+		   
+    end
+  
+  and alpha_equiv_con_list context list_pair = 
+    eq_len list_pair andalso
+    ListPair.all (alpha_equiv_con' context) list_pair
+
+  fun alpha_sub_kind' context (k1,k2) = 
+    (case (k1,k2) of
+	  (Type_k, Type_k) => true
+	| (Singleton_k c1,Singleton_k c2) => alpha_equiv_con' context (c1,c2)
+	| (Singleton_k c1,k2) => false
+	| (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
+	 let
+	   val conref = ref context
+	   fun sub_one ((var1,kind1),(var2,kind2)) = 
+	     (alpha_sub_kind' (!conref) (kind1,kind2))
+	     before (conref := alpha_equate_pair (!conref,(var1,var2)))
+	 in
+	   (same_openness (openness1,openness2) andalso 
+	    eq_len (formals1,formals2) andalso 
+	    ListPair.all sub_one (formals1,formals2) andalso
+	    alpha_sub_kind' (!conref) (return1,return2))
+	 end
+       
+	| (Record_k elts1,Record_k elts2) => 
+	 let
+	   val conref = ref context
+	   fun sub_one (((lbl1,var1),kind1),((lbl2,var2),kind2)) = 
+	     (eq_label (lbl1,lbl2) andalso
+	      alpha_sub_kind' (!conref) (kind1,kind2))
+	     before (conref := (alpha_equate_pair (!conref,(var1,var2))))
+	 in
+	   eq_len (elts1,elts2) andalso 
+	   (ListPair.all sub_one (elts1,elts2))
+	 end
+	| (_,_) => false)
+       
+  val alpha_equiv_con = alpha_equiv_con' (empty_context (),empty_context ())
+
+  val alpha_equiv_kind = alpha_equiv_kind' (empty_context (),empty_context ())
+
+  val alpha_sub_kind = alpha_sub_kind' (empty_context (),empty_context ())
+
+  val alpha_sub_kind = alpha_sub_kind' (empty_context (),empty_context ())
 
 (* End exported functions *)
 
-  fun alpha_normalize_vk ((var,kind),context) =
-      let
-	  val (context',var') = alpha_bind (context,var)
-	  val kind' = alpha_normalize_kind' context' kind
-      in
-	  ((var',kind'),context')
-      end
-
-  and alpha_normalize_vc ((var,con),context) =
-      let
-	  val (context',var') = alpha_bind (context,var)
-	  val con' = alpha_normalize_con' context' con
-      in
-	  ((var',con'),context')
-      end
-
-  and alpha_normalize_cbnd' (context:alpha_context) cbnd =
-	let
-	    fun do_confun Con (var,formals,body,kind) = 
-		let
-		    val (formals',context') = foldl_acc alpha_normalize_vk context formals
-		    val body' = alpha_normalize_con' context' body
-		    val kind' = alpha_normalize_kind' context' kind
-		    val (context'',var') = alpha_bind (context,var) (*Not context'!!*)
-		in
-		    (Con (var',formals',body',kind'),context'')
-		end
-	in
-	    case cbnd of
-		 Con_cb (var,con) =>
-		     let 
-			 val con' = alpha_normalize_con' context con
-			 val (context',var') = alpha_bind (context,var)
-			 val cbnd' = Con_cb (var',con')
-		     in  
-			 (cbnd',context')
-		     end
-	       | Open_cb body => do_confun Open_cb body
-	       | Code_cb body => do_confun Code_cb body
-	end
-
-    and alpha_normalize_con' (context:alpha_context) (con:con) = 
-      (case con 
-	 of (Prim_c (pcon,args)) => 
-	   (Prim_c (pcon,map (alpha_normalize_con' context) args))
-	  | (Mu_c (flag, defs)) =>
-	   let
-	     val (con_vars,cons) = ListPair.unzip (Sequence.toList defs)
-	     val (context',con_vars') = alpha_bind_list (context,con_vars)
-	     val cons' = List.map (alpha_normalize_con' context') cons
-	     val defs' = Sequence.fromList (ListPair.zip (con_vars',cons'))
-	   in
-	     (Mu_c (flag, defs'))
-	   end
-	 
-	  | (AllArrow_c (openness,effect,tformals,vlist,clist,flength,return)) =>
-	   let
-	     val (tformals,context) = foldl_acc alpha_normalize_vk context tformals
-	     val (vlist,clist,context) = 
-	     case vlist of
-		 SOME vars => let val (vclist,context) = foldl_acc alpha_normalize_vc context (Listops.zip vars clist)
-			      in  (SOME(map #1 vclist), map #2 vclist, context)
-			      end
-	       | NONE => (NONE, map (alpha_normalize_con' context) clist, context)
-	     val return = alpha_normalize_con' context return
-	   in
-	     AllArrow_c (openness,effect,tformals,vlist,clist,flength,return)
-	   end
-
-	  | (Var_c var) => Var_c (substitute (context,var))
-
-	  | (Let_c (letsort, cbnds, body)) => 
-	   let
-	     fun folder (cbnd,context) = alpha_normalize_cbnd' context cbnd
-	     val (cbnds',context') = foldl_acc folder context cbnds
-	     val body' = alpha_normalize_con' context' body
-	   in
-	     Let_c (letsort, cbnds', body')
-	   end
-	 
-	  | (Closure_c (code,env)) =>
-	   let
-	     val code' = alpha_normalize_con' context code
-	     val env' = alpha_normalize_con' context env
-	   in
-	     Closure_c(code', env')
-	   end
-	 
-	  | (Crecord_c entries) =>
-	   Crecord_c (map (fn (l,c) => (l,alpha_normalize_con' context c)) entries)
-	   
-	  | (Proj_c (con,lbl)) =>
-	   let
-	     val con' = alpha_normalize_con' context con
-	   in
-	     Proj_c (con', lbl)
-	   end
-
-          (* XXXX should be threading e_context here too *)
-	  | (Typeof_c exp) => Typeof_c (alpha_normalize_exp' (empty_context(),context) exp)
-	 
-	  | (App_c (cfun,actuals)) =>
-	   let
-	     val cfun' = alpha_normalize_con' context cfun
-	     val actuals' = map (alpha_normalize_con' context) actuals
-	   in
-	     App_c (cfun', actuals')
-	   end
-	 
-	  | Typecase_c {arg, arms, default, kind} => 
-	   let 
-	     val arg' = alpha_normalize_con' context arg
-	     fun doarm ((pcon,args,body),arms) = 
-	       let
-		 val (vars,kinds) = ListPair.unzip args
-		 val kinds' = map (alpha_normalize_kind' context) kinds
-		 val (context',vars') = alpha_bind_list (context,vars)
-		 val body' = alpha_normalize_con' context' body
-		 val args' = ListPair.zip (vars',kinds')
-	       in
-		 (pcon,args',body')::arms
-	       end
-	     val arms' =  List.foldr doarm [] arms
-	   in  Typecase_c{arg = arg',
-			  arms = arms',
-			  default = alpha_normalize_con' context default,
-			  kind = alpha_normalize_kind' context kind}
-	   end
-
-	  | (Annotate_c (annot,con)) => 
-	   let
-	     val con' = alpha_normalize_con' context con
-	   in
-	     Annotate_c (annot, con')
-	   end)
-    and alpha_normalize_kind' (context:alpha_context) (kind:kind) : kind =
-      (case kind of
-	 Type_k => kind
-       | (Singleton_k con) => Singleton_k(alpha_normalize_con' context con)
-       | (Record_k fieldseq) =>
-	   let
-	     fun fold_one (((lbl,var),kind),context) = 
-	       let
-		 val kind'  = alpha_normalize_kind' context kind
-		 val (context',var') = alpha_bind (context,var)
-	       in
-		 (((lbl, var'), kind'),context')
-	       end
-	     val (fieldseq',context') = Sequence.foldl_acc fold_one context fieldseq
-	   in
-	     Record_k fieldseq'
-	   end
-
-       | (Arrow_k (openness, args, result)) =>
-	   let
-	     val (args',context') = foldl_acc alpha_normalize_vk context args
-	     val result' = alpha_normalize_kind' context' result
-	   in
-	     Arrow_k (openness,args', result')
-	   end)
-
-    and alpha_normalize_exp' 
-      (contexts as (e_context : alpha_context, c_context : alpha_context))
-      (exp : exp) : exp = 
-      (case exp
-	 of Var_e var => Var_e (substitute (e_context,var))
-	  | Const_e value => 
-	   Const_e (alpha_normalize_value' contexts value)
-	  | Let_e (letsort,bnds,exp) => 
-	   let
-	     val (bnds',contexts') = 
-	       alpha_normalize_bnds' contexts bnds
-	     val exp' = alpha_normalize_exp' contexts' exp
-	   in
-	     (Let_e (letsort,bnds',exp'))
-	   end
-	  | Prim_e (allprim,cons,exps) => 
-	   let
-	     val cons' = map (alpha_normalize_con' c_context) cons
-	     val exps' = map (alpha_normalize_exp' contexts) exps
-	   in
-	     (Prim_e (allprim,cons',exps'))
-	   end
-	  | Switch_e switch => Switch_e (alpha_normalize_switch' contexts switch)
-	  | App_e (openness,exp,cons,exps,floats) =>
-	   let
-	     val exp' = alpha_normalize_exp' contexts exp
-	     val cons' = map (alpha_normalize_con' c_context) cons
-	     val exps' = map (alpha_normalize_exp' contexts) exps
-	     val floats' = map (alpha_normalize_exp' contexts) floats
-	   in
-	     App_e (openness,exp',cons',exps',floats')
-	   end
-	  | Raise_e (exp,con) =>
-	   let 
-	     val con' = alpha_normalize_con' c_context con
-	     val exp' = alpha_normalize_exp' contexts exp
-	   in
-	     Raise_e (exp',con')
-	   end
-	  | Handle_e (exp,v,handler) =>
-	   let
-	       val exp' = alpha_normalize_exp' contexts exp
-	       val (e_context', v') = alpha_bind(e_context,v)
-	       val contexts' = (e_context',c_context)
-	       val handler' = alpha_normalize_exp' contexts' handler
-	   in  Handle_e (exp',v',handler')
-	   end)
-    and alpha_normalize_value' 
-      (contexts as (e_context : alpha_context, c_context : alpha_context)) value = 
-      (case value of
-	    (Prim.int _) => value
-          | (Prim.uint _) => value
-          | (Prim.float _) => value
-	  | Prim.array (con,arr) => 
-	   let
-	     val con' = alpha_normalize_con' c_context con
-	   in
-	     Array.modify (alpha_normalize_exp' contexts) arr;
-	     Prim.array (con',arr)
-	   end
-	| Prim.vector (con,vec) => 
-	   let
-	     val con' = alpha_normalize_con' c_context con
-	   in
-	     Array.modify (alpha_normalize_exp' contexts) vec;
-	     Prim.vector (con',vec)
-	   end
-	| Prim.refcell expref =>
-	 let
-	   val exp' = alpha_normalize_exp' contexts (!expref)
-	 in
-	   expref := exp';
-	   Prim.refcell expref
-	 end
-	| Prim.tag (atag,con) => 
-	 let
-	   val con' = alpha_normalize_con' c_context con
-	 in
-	   Prim.tag (atag,con')
-	 end)
-    and alpha_normalize_bnds' contexts bnds =
-      foldl_acc alpha_normalize_bnd' contexts bnds
-    and alpha_normalize_bnd' (bnd,(e_context,c_context)) = 
-	let fun do_funs (wrapper,defs) = 
-	    let
-		val (vars,functions) = unzip (Sequence.toList defs)
-		val (e_context',vars') = alpha_bind_list (e_context,vars)
-		val functions' = 
-		    map (alpha_normalize_function' (e_context',c_context)) functions
-		val defs' = Sequence.fromList (zip (vars',functions'))
-	     in (wrapper defs',(e_context',c_context))
-	     end
-	in
-	    (case bnd of
-		 Con_b (phase, cb) => 
-		     let val (cbnd,c_context') = alpha_normalize_cbnd' c_context cb
-		     in  (Con_b(phase, cbnd), (e_context, c_context'))
-		     end
-	       | Exp_b (var, niltrace, exp) =>
-		     let
-			 val exp' = alpha_normalize_exp' (e_context,c_context) exp
-			 val (e_context',var') = alpha_bind (e_context,var)
-                         val niltrace' = 
-			     (case niltrace of
-				  TraceKnown (TraceInfo.Compute (v,ls)) =>
-				      TraceKnown 
-				       (TraceInfo.Compute(substitute(c_context,v),ls))
-				| TraceCompute v =>
-				      TraceCompute (substitute(c_context,v))
-				| _ => niltrace)
-
-			 val bnd' = (Exp_b (var',niltrace',exp'))
-		     in
-			 (bnd',(e_context',c_context))
-		     end
-	  | (Fixopen_b defs) => do_funs(Fixopen_b,defs)
-	  | (Fixcode_b defs) => do_funs(Fixcode_b,defs)
-
-	 | Fixclosure_b (is_recur,defs) => 
-	     let
-	       val (vars,closures) = unzip (Sequence.toList defs)
-	       val (e_context',vars') = alpha_bind_list (e_context,vars)
-	       val closures' = map (alpha_normalize_closure' (e_context',c_context)) closures
-	       val defs' = Sequence.fromList (zip (vars',closures'))
-	       val bnd' = Fixclosure_b (is_recur, defs)
-	     in
-	       (bnd',(e_context',c_context))
-	     end)
-	end
-
-    and alpha_normalize_switch'
-      (contexts as (e_context : alpha_context, c_context : alpha_context)) switch = 
-      (case switch
-	 of Intsw_e {size,arg,arms,default} =>
-	   let
-	     val arg' = alpha_normalize_exp' contexts arg
-	     val arms' = map_second (alpha_normalize_exp' contexts) arms
-	     val default' = alpha_normalize_exp_opt' contexts default
-	   in
-	     Intsw_e {size=size,arg=arg',
-		      arms=arms',default=default'}
-	   end
-	  | Sumsw_e {sumtype,arg,bound,arms,default} => 
-	   let
-	     val arg' = alpha_normalize_exp' contexts arg
-	     val sumtype' = alpha_normalize_con' c_context sumtype
-	     val default' = alpha_normalize_exp_opt' contexts default
-	     val (e_context', bound') = alpha_bind(e_context,bound)
-	     val contexts' = (e_context,c_context)
-	     val arms' = map_second (alpha_normalize_exp' contexts') arms
-	   in
-	     Sumsw_e {sumtype=sumtype',arg=arg',bound=bound',
-		      arms=arms',default=default'}
-	   end
-	  | Exncase_e {arg,bound,arms,default} =>
-	   let
-	     val arg' = alpha_normalize_exp' contexts arg
-	     val default' = alpha_normalize_exp_opt' contexts default
-	     val (e_context', bound') = alpha_bind(e_context,bound)
-	     val contexts' = (e_context,c_context)
-	     val arms' = map (fn (e1,e2) => (alpha_normalize_exp' contexts' e1,
-					     alpha_normalize_exp' contexts' e2)) arms
-	   in Exncase_e {arg=arg',
-			 bound=bound',
-			 arms=arms',default=default'}
-	   end
-	  | Typecase_e _ => error "typecase not handled")
-
-    and alpha_normalize_function'
-      (contexts as (e_context : alpha_context, c_context : alpha_context)) 
-      (Function (effect,recursive,tformals,dependent,formals,fformals,body,return)) = 
-      let
-	fun folder f ((var,elt),context) = 
-	  let
-	    val elt' = f context elt
-	    val (context',var') = alpha_bind (context,var)
-	  in
-	    ((var',elt'),context')
-	  end
-	val (tformals',c_context') = 
-	  foldl_acc (folder alpha_normalize_kind') c_context tformals
-	val (formals',e_context') = 
-	  foldl_acc (folder alpha_normalize_con') e_context formals
-	val (e_context'',fformals') = alpha_bind_list (e_context,fformals)
-	val body' = alpha_normalize_exp' (e_context',c_context') body
-	val return' = alpha_normalize_con' c_context' return
-      in
-	Function (effect,recursive,tformals',dependent,formals',fformals',body',return')
-      end
-    and alpha_normalize_closure'
-      (contexts as (e_context : alpha_context, c_context : alpha_context)) 
-      {code:var, cenv:con, venv:exp, tipe:con} = 
-      let
-	val code' = substitute (e_context,code)
-	val cenv' = alpha_normalize_con' c_context cenv
-	val venv' = alpha_normalize_exp' (c_context,e_context) venv
-	val tipe' = alpha_normalize_con' c_context tipe
-      in
-	{code=code',cenv=cenv',venv=venv',tipe=tipe'}
-      end
-
-    and alpha_normalize_exp_opt' contexts opt = 
-      mapopt (alpha_normalize_exp' contexts) opt
-
-
-
-    val alpha_normalize_con = 
-	 alpha_normalize_con' (empty_context()) 
-
-    val alpha_normalize_kind = 
-	 alpha_normalize_kind' (empty_context()) 
-
-    val alpha_normalize_exp = 
-	 alpha_normalize_exp' (empty_context(),empty_context())
-(*
-    fun rename_mu (is_bound,defs,var) = 
-	let
-	    val defs = sequence2list defs
-	    fun make_entry (v,_) = if (is_bound v)
-				       then SOME(v,Var_c(Name.derived_var v))
-				   else NONE
-	    val table = List.mapPartial make_entry defs
-	    fun subster v = Listops.assoc_eq(eq_var,v,table)
-	    fun find_var v = (case Listops.assoc_eq(eq_var,v,table) of
-				  SOME (Var_c v) => v 
-				| SOME _ => error "table has only Var_c's"
-				| NONE => v)
-	    fun rebind [] pair = pair
-	      | rebind table (v,c) = (find_var v,substConInCon subster c)
-	    val defs' = list2sequence (map (rebind table) defs)
-	    val var' = find_var var
-	in  Mu_c(defs',var')
-	end
-
 *)
-
-
 
   fun alpha_mu is_bound (vclist) = 
       let fun folder((v,_),subst) = if (is_bound v)
@@ -1248,7 +1056,6 @@ struct
 	  else (map (fn (v,c) => (lookup v, substcon c)) vclist)
       end
 
-
   (* Returns true if the kind is a shape 
    *)
   fun is_shape kind = 
@@ -1259,8 +1066,6 @@ struct
         | Arrow_k (openness, formals, return) => 
          (List.all (fn (_,k) => is_shape k) formals) 
          andalso (is_shape return))
-
-
 
    (* makeLetC.
          Creates a constructor-level sequential let given bindings and
@@ -1386,6 +1191,16 @@ struct
       | makeAppE fn_exp cargs eargs fargs = 
             App_e(Open, fn_exp, cargs, eargs, fargs)
 
-
+	    
+    fun project_from_kind(lvk_seq,con,label) = 	     
+      let
+	val lvk_list = Sequence.toList lvk_seq
+	fun loop (subst,[]) = error "project_kind: Missing label in record, kind.  "
+	  | loop (subst,((l,v),k)::rest) = 
+	  if (Name.eq_label(label,l))
+	    then NilSubst.substConInKind subst k
+	  else loop (NilSubst.add subst (v,Proj_c(con,l)),rest)
+      in  loop (NilSubst.empty(),lvk_list)
+      end
 
 end

@@ -1,6 +1,18 @@
 (*$import Nil *)
 signature NILERROR = 
   sig
+    exception FailedAssert of string
+
+    type location = string
+    (*Create a location from a filenam and a function name*)
+    val locate : string -> string -> location
+
+    (*Given a location and a list of pairs of flags and error
+     * reporting functions, call the first error function in the
+     * list for which the flag is true, and raise FailedAssert with the
+     * location information.
+     *)
+    val assert : location -> (bool * (unit -> unit)) list -> unit
 
     (*c_all pred fc list
      *       => true if forall(x in list), pred x => true

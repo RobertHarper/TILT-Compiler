@@ -6,15 +6,15 @@ signature NILUTIL =
     (* if flag is true, will look inside kinds *)
     val freeExpConVarInExp : bool * Nil.exp -> Nil.var list * Nil.var list (* free term and type level vars *)
     val freeConVarInCon    : bool * Nil.con -> Nil.var list (* free type level vars *)
-    val freeConVarInKind   : Nil.kind -> Nil.var list (* free type level vars *)
+    val freeConVarInKind   : Nil.kind -> Nil.var list (* free type level vars in kind*)
 
-    val is_shape : Nil.kind -> bool
     val muExpand : bool * (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
     val generate_tuple_label : int -> Name.label
     val exp_tuple : Nil.exp list -> Nil.exp
     val con_tuple : Nil.con list -> Nil.con
     val con_tuple_inject : Nil.con list -> Nil.con
     val kind_tuple : Nil.kind list -> Nil.kind
+
     val unit_con : Nil.con
     val unit_exp : Nil.exp
     val match_exn : Nil.exp
@@ -60,17 +60,16 @@ signature NILUTIL =
     val module_size : Nil.module -> int
 
     val primequiv : Nil.primcon * Nil.primcon -> bool
-    type alpha_context
+(*    type alpha_context
 
-    val alpha_normalize_exp : Nil.exp -> Nil.exp
-    val alpha_normalize_exp' : (alpha_context * alpha_context) -> Nil.exp -> Nil.exp
+    val alpha_equiv_con' : (alpha_context*alpha_context) -> Nil.con * Nil.con -> bool
+    val alpha_equiv_con : Nil.con * Nil.con -> bool
 
-    val alpha_normalize_con : Nil.con -> Nil.con
-    val alpha_normalize_con' : alpha_context -> Nil.con -> Nil.con
+    val alpha_equiv_kind' : (alpha_context*alpha_context) -> Nil.kind * Nil.kind -> bool
+    val alpha_equiv_kind : Nil.kind * Nil.kind -> bool
 
-    val alpha_normalize_kind : Nil.kind -> Nil.kind
-    val alpha_normalize_kind' : alpha_context -> Nil.kind -> Nil.kind
-
+    val alpha_sub_kind : Nil.kind * Nil.kind -> bool
+*)
     val sub_phase : Nil.phase * Nil.phase -> bool
 
     val is_var_e : Nil.exp -> bool
@@ -87,6 +86,7 @@ signature NILUTIL =
     val strip_arrow : Nil.con -> 
       (Nil.openness*Nil.effect*(Nil.var*Nil.kind) list*
        (Nil.var list option) * Nil.con list*Nil.w32*Nil.con) option
+    val strip_externarrow : Nil.con -> (Nil.con list * Nil.con) option
     val strip_record : Nil.con -> (Nil.label list * Nil.var list option * Nil.con list) option
     val strip_crecord : Nil.con -> (Nil.label*Nil.con) list option
     val strip_proj : Nil.con -> (Nil.con*Nil.label) option
@@ -102,5 +102,10 @@ signature NILUTIL =
     val singletonize : (Nil.kind * Nil.con) -> Nil.kind
     val selfify : (Nil.con * Nil.kind) -> Nil.kind
 
-    
+    val get_arrow_return : Nil.con -> Nil.con option
+    val is_shape : Nil.kind -> bool
+
+    (*Get the kind of a projection*)
+    val project_from_kind : ((Nil.label * Nil.var), Nil.kind) Nil.sequence * Nil.con * Nil.label -> Nil.kind
+
   end

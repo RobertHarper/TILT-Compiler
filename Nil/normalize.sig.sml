@@ -17,12 +17,6 @@ signature NORMALIZE =
     val show_calls : bool ref
     val show_context : bool ref
 
-    (*Given a constructor, returns the most imprecise kind for that
-     * con - i.e, merely the shape info
-     *)
-    val get_shape : context -> con -> kind
-    val make_shape : context -> kind -> kind
-
     (*Normalizing functions:
      * PRE: context is well formed!
      * POST: result is the normal form version of the argument, with
@@ -52,7 +46,9 @@ signature NORMALIZE =
     val reduce       : context * con -> con
     datatype 'a ReduceResult = REDUCED of 'a | UNREDUCED of con
     val reduce_until : context * (con -> 'a option) * con -> 'a ReduceResult
-
+    val expandMuType : context * con -> con
+    val projectRecordType : context * con * Nil.label -> con
+    val projectSumType : context * con * Nil.w32 -> con
     (*Perform the given reduction, renormalizing the result if necessary*)
 
     (*PRE: argument is a well kinded normalized record projection, c.l
@@ -91,4 +87,8 @@ signature NORMALIZE =
 
     val allprim_uses_carg : Nil.allprim -> bool
 
+    val get_shape : context * Nil.con -> Nil.kind
+    val make_shape : context * Nil.kind -> Nil.kind
+    val push_singleton : context * Nil.con -> Nil.kind
+    val strip_singleton : context * Nil.kind -> Nil.kind
   end

@@ -4,7 +4,7 @@ structure Linknil (* :> LINKNIL  *) =
   struct
     val typecheck_before_opt = ref true
     val typecheck_after_opt = ref true
-    val typecheck_after_cc = ref true
+    val typecheck_after_cc = ref false
 
 
     val do_cleanup = ref false
@@ -31,17 +31,21 @@ structure Linknil (* :> LINKNIL  *) =
     val show_specialize = Stats.ff("showSpecialize")
     val show_cc = ref false
     val show_before_rtl = ref false
-
+    val show_typecheck = ref false
+(*    val type_check_before_opt = Stats.ff("TypecheckBeforeOpt")
+    val type_check_after_opt = Stats.ff("TypecheckAfterOpt")
+    val type_check_after_cc = Stats.ff("TypecheckAfterCC")
+*)
     val number_flatten = 6
     val _ = Stats.int("number_flatten") := number_flatten
     val error = fn s => Util.error "linknil.sml" s
 
+    val debug = Stats.ff "nil_debug"
     val profile = Stats.ff "nil_profile"
     val short_circuit = Stats.tt "subst_short_circuit"
     val hash = Stats.ff "subst_use_hash"
     val bnds_made_precise = Stats.tt "bnds_made_precise"
     val closure_print_free = Stats.ff "closure_print_free"
-
 
     structure Ppnil = Ppnil
     structure Alpha = Alpha
@@ -51,19 +55,9 @@ structure Linknil (* :> LINKNIL  *) =
     structure NilContext = NilContext
     structure Normalize = Normalize
 
+    structure NilStatic = NilStatic
 
 (*
-    structure NilStatic = NilStaticFn(structure Annotation = Annotation
-				      structure PrimUtil = NilPrimUtil
-				      structure NilUtil = NilUtil
-				      structure NilContext = NilContext
-				      structure Ppnil = Ppnil
-				      structure Alpha = Alpha
-				      structure NilError = NilError
-				      structure Subst = NilSubst
-				      structure Normalize = Normalize)
-
-
     structure Vararg = Vararg(val number_flatten = number_flatten
 			      structure Subst = NilSubst			
 			      structure NilUtil = NilUtil
@@ -78,7 +72,6 @@ structure Linknil (* :> LINKNIL  *) =
     structure Specialize = Specialize
     structure Linearize = Linearize
     structure ToClosure = ToClosure
-
 	
 (*
     structure NilEval = NilEvaluate(structure Nil = Nil
@@ -123,7 +116,10 @@ structure Linknil (* :> LINKNIL  *) =
 	(print "\n===== SKIPPING "; print phasename; print "  =======\n"; nilmod)
       | transform (ref true,showphase,phasename,phase,filename,nilmod) = 
 	pass (showphase,phasename,phase,filename,nilmod)
-	    
+
+    fun check (doit,showphase,phasename,phase,filename,nilmod) = 
+      transform (doit,showphase,phasename,(fn nilmod => (phase nilmod;nilmod)),filename,nilmod)
+
     fun pcompile' debug (filename,(ctxt,sbnd_entries)) =
 	let
 	    open Nil Il LinkIl.IlContext Name
@@ -206,17 +202,10 @@ structure Linknil (* :> LINKNIL  *) =
 *)
 
 
-(*
- 	    val nilmod' = 
-	      if (!typecheck_before_opt) then
-		(Stats.timer("Nil typechecking - pre opt",NilStatic.module_valid)) (D,nilmod)
-	      else
-		nilmod
-	    val _ = 
-	      if (!typecheck_before_opt) then 
-		  transform (debug,!show_size) "Pre-opt typecheck" (filename, nilmod')
-	      else ()
-*)
+ 	    val nilmod = check (typecheck_before_opt,show_typecheck,
+				    "Nil typechecking - pre opt",
+				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
+				    filename, nilmod)
 
 (*
 	    val nilmod = if (!do_opt) 
@@ -228,17 +217,12 @@ structure Linknil (* :> LINKNIL  *) =
 		    else ()
 *)
 
-(*
- 	    val nilmod' = 
-	      if (!typecheck_after_opt andalso !do_opt) then
-		(Stats.timer("Nil typechecking",NilStatic.module_valid)) (D,nilmod)
-	      else
-		nilmod
-	    val _ = 
-	      if (!typecheck_after_opt andalso !do_opt) then 
-		  transform (debug,!show_size) "Post-opt typecheck" (filename, nilmod')
-	      else ()
-*)
+
+
+ 	    val nilmod = check (typecheck_after_opt,show_typecheck,
+				    "Nil typechecking - post opt",
+				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
+				    filename, nilmod)
 	
 (*
 	    val _ = print "starting beta-reduction\n"	  
@@ -257,23 +241,17 @@ structure Linknil (* :> LINKNIL  *) =
                                    Reify.reify_mod,
                                    filename, nilmod)
 *)
+
 	    val nilmod = transform(ref true, show_cc,
 				 "Closure-conversion", 
 				 ToClosure.close_mod,
 				 filename, nilmod)
 
-(*
- 	    val nilmod' = 
-	      if (!typecheck_after_cc) then
-		(Stats.timer("Nil typechecking (post cc)",NilStatic.module_valid)) (D,nilmod)
-	      else
-		nilmod
-	    val _ = 
-	      if (!typecheck_after_cc) then 
-		  transform (debug,!show_size) "Post-cc Typecheck" (filename, nilmod')
-	      else ()
-*)
 
+ 	    val nilmod = check (typecheck_after_cc,show_typecheck,
+				    "Nil typechecking - post cc",
+				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
+				    filename, nilmod)
 	in  nilmod
 	end
 

@@ -10,6 +10,7 @@ structure NilContext
 
    type 'a subst = 'a NilSubst.subst
 
+   (* IMPORTS *)
    val substConInKind = NilSubst.substConInKind
 
    val var2string = Name.var2string
@@ -25,12 +26,20 @@ structure NilContext
    val map_second = Listops.map_second
 
    val curry2 = Util.curry2
-
+   val printl = Util.printl
+   val lprintl = Util.lprintl
 
    val is_shape = NilUtil.is_shape  
    val strip_arrow = NilUtil.strip_arrow
 
    val error = Util.error
+   val locate = NilError.locate  "nilcontext.sml"
+   val assert = NilError.assert
+   val c_all = NilError.c_all
+   val perr_k_k = NilError.perr_k_k
+   val perr_c_k_k = NilError.perr_c_k_k
+
+   (*END OF IMPORTS     *)
 
    val profile = Stats.ff "nil_profile"
    val debug = Stats.ff "nil_debug"
@@ -47,8 +56,6 @@ structure NilContext
 
    exception Unbound
 
-   fun locate fn_name = "nilcontext.sml::"^fn_name
-
    (*Possibly uncomputed data.*)
    datatype 'a thunk = FROZEN of (unit -> 'a) | THAWED of 'a
    type 'a delay = 'a thunk ref
@@ -56,7 +63,7 @@ structure NilContext
    fun delay thunk = ref(if (!eager)
 			 then THAWED (thunk())
 			 else FROZEN thunk)
-  fun immediate value = ref (THAWED value)
+   fun immediate value = ref (THAWED value)
    fun thaw (ref (THAWED v)) = v
      | thaw (r as ref(FROZEN t)) = let val v = t()
 				       val _ = r := (THAWED v)
@@ -72,7 +79,7 @@ structure NilContext
 
 
    type k_entry = {eqn: con option,
-		   kind : kind delay,
+		   kind : kind,
 		   shape : kind delay,
 		   index : int}
 
@@ -100,21 +107,6 @@ structure NilContext
 
    fun contains map var = Option.isSome (V.find (map,var))
 
-
-   exception Assert of string 
-
-   fun assert location checkl = 
-     let
-       val loc_string = "\nAssertion violated in "^location^": "
-
-       fun check (b,f) = if b then () 
-			 else (f() handle any => ();
-			       print loc_string;
-			       raise Assert location)
-     in
-       List.app check checkl
-     end
-
    (**** Printing functions *****)
 
    fun print_con (var,con) =
@@ -130,10 +122,7 @@ structure NilContext
 		       Ppnil.pp_con c)
 	  | NONE => ());
       print "::";
-      (if delayed kind then
-	 print "Delayed"
-       else
-	 Ppnil.pp_kind (thaw kind));
+      Ppnil.pp_kind kind;
       print "\n")
 
    fun print_kinds ({kindmap,...}:context) = 
@@ -152,15 +141,28 @@ structure NilContext
      (print_kinds context;
       print_cons context)
 
+   local
+     type 'item renamer = (var -> bool) * (var -> bool) -> 'item -> bool
+     fun isRenamedXXX (isRenamedXXXWRT : 'item renamer) ({kindmap,conmap,counter} : context) (item : 'item) = 
+       isRenamedXXXWRT (contains conmap,contains kindmap) item
+   in
+     val isRenamedExp  = isRenamedXXX NilSubst.isRenamedExpWRT
+     val isRenamedCon  = isRenamedXXX NilSubst.isRenamedConWRT
+     val isRenamedKind = isRenamedXXX NilSubst.isRenamedKindWRT
+   end
    (*****Term level context functions. ******)
 
-   fun insert_con ({conmap,kindmap,counter}:context,var,con) = 
+   fun insert_con (ctx as {conmap,kindmap,counter}:context,var,con) = 
      let
        val _ = 
 	 if !debug then
 	   assert (locate "insert_con")
 	   [
-	    (not (contains conmap var),fn () => print ("Term variable already occurs in context: "^(Name.var2string var)))
+	    (not (contains conmap var),
+	     fn () => print ("Term variable already occurs in context: "^(Name.var2string var))),
+	    (isRenamedCon ctx con, 
+	     fn () => (Ppnil.pp_con con;
+		       print ("Type not properly renamed when inserted into context")))
 	    ]
 	 else ()
      in
@@ -180,12 +182,13 @@ structure NilContext
 
    (*****Constructor level context functions. ******)
 
-   fun allBound_c kindmap con = List.all (contains kindmap) (NilUtil.freeConVarInCon (true,con))
-   fun allBound_k kindmap kind = List.all (contains kindmap) (NilUtil.freeConVarInKind kind)
+   fun vprint v = (lprintl (var2string v);false)
+   fun allBound_c kindmap con = c_all (contains kindmap) vprint  (NilUtil.freeConVarInCon (true,con))
+   fun allBound_k kindmap kind = c_all (contains kindmap) vprint (NilUtil.freeConVarInKind kind)
 
    fun var_error v () = error (locate "var_error") ("Constructor variable already occurs in context: "^(Name.var2string v))
 
-   fun insert_shape ({conmap,kindmap,counter}:context,var,shape:kind) = 
+   fun insert_shape (ctx as {conmap,kindmap,counter}:context,var,shape:kind) = 
      let
        val _ =  
 	 if !debug then
@@ -198,12 +201,15 @@ structure NilContext
 				 print "Kind contains variables not found in context")),
 		   (is_shape shape, 
 		       fn () => (Ppnil.pp_kind shape;
-				 print "Kind is not a shape"))
+				 print "Kind is not a shape")),
+		   (isRenamedKind ctx shape, 
+		    fn () => (Ppnil.pp_kind shape;
+			      print ("Kind not properly renamed when inserted into context")))
 		   ]
 	 else ();
 
        val entry = {eqn = NONE,
-		    kind = immediate shape,  (*can never get better info*)
+		    kind = shape,  (*can never get better info*)
 		    shape = immediate shape,
 		    index = counter}
      in
@@ -241,6 +247,9 @@ structure NilContext
 	 if !debug then
 	   assert (locate "shape_of") 
 		  [
+		   (isRenamedCon D constructor, 
+		    fn () => (Ppnil.pp_con constructor;
+			      print ("Type not properly renamed when passed to shape_of")))
 		   ]
 	 else ()
      in
@@ -259,6 +268,8 @@ structure NilContext
 
 	 | (AllArrow_c _) => Type_k
 
+	 | ExternArrow_c _ => Type_k
+
 	 | (v as (Var_c var)) => 
 	    (find_shape (D,var)
 	     handle Unbound =>
@@ -267,11 +278,11 @@ structure NilContext
 
 	 | Let_c (sort,bnds,body) => 
 	    let
-	      val D = kind_of_bnds (D,bnds)
+	      val D = shape_of_bnds (D,bnds) 
 	    in
 	      shape_of (D,body)
 	    end
-
+	 | Typeof_c _ => Type_k
 	 | (Closure_c (code,env)) => 
 	    let 
 	      val (vklist,body_kind) = 
@@ -305,7 +316,7 @@ structure NilContext
 
 	    (*No dependencies, since shape is all we get*)
 	  in kind
-	  end
+	  end	 
 	 | (App_c (cfun,actuals)) => 
 	     let
 	       val (formals,body_kind) = 
@@ -319,7 +330,7 @@ structure NilContext
 	 | (Typecase_c {arg,arms,default,kind}) => make_shape (D,kind)
 	 | (Annotate_c (annot,con)) => shape_of (D,con))
        end 
-   and kind_of_bnds (D : context, bnds : conbnd list) : context = 
+   and shape_of_bnds (D : context, bnds : conbnd list) : context = 
      let
        fun folder (bnd,D) = 
 	 (case bnd 
@@ -349,12 +360,15 @@ structure NilContext
 		 var_error var),
 	    (allBound_k kindmap kind,
 		 fn () => (Ppnil.pp_kind kind;
-			   print "Kind contains variables not found in context"))
+			   lprintl "Kind contains variables not found in context")),
+	    (isRenamedKind context kind, 
+	     fn () => (Ppnil.pp_kind kind;
+		       lprintl ("Kind not properly renamed when inserted into context")))
 	    ]
 	 else (); 
        fun thunk() = make_shape (context,kind)
        val entry = {eqn = NONE,
-		    kind = immediate kind,
+		    kind = kind,
 		    shape = delay thunk,
 		    index = counter}
      in
@@ -367,7 +381,7 @@ structure NilContext
      let
        val _ =  
 	 if !debug then
-	   assert (locate "insert_kind")
+	   assert (locate "insert_kind_shape")
 	   [
 	    (not (contains kindmap var),
 		 var_error var),
@@ -379,12 +393,18 @@ structure NilContext
 			   print "Shape kind contains variables not found in context")),
 	    (is_shape shape, 
 	     fn () => (Ppnil.pp_kind shape;
-		       print "Shape kind is not a shape"))
+		       print "Shape kind is not a shape")),
+	    (isRenamedKind context kind, 
+	     fn () => (Ppnil.pp_kind kind;
+		       print ("Kind not properly renamed when inserted into context"))),
+	    (isRenamedKind context shape, 
+	     fn () => (Ppnil.pp_kind shape;
+		       print ("Shape not properly renamed when inserted into context")))
 	    ]
 	 else ();
 
        val entry = {eqn = NONE,
-		    kind = immediate kind,
+		    kind = kind,
 		    shape = immediate shape,
 		    index = counter}
      in
@@ -393,11 +413,11 @@ structure NilContext
 	kindmap = V.insert (kindmap, var, entry)}
      end
 
-   fun insert_kind_shape_equation ({conmap,kindmap,counter}:context,var,con,kind,shape) = 
+   fun insert_kind_shape_equation (ctx as {conmap,kindmap,counter}:context,var,con,kind,shape) = 
      let
        val _ =  
 	 if !debug then
-	   assert (locate "insert_kind")
+	   assert (locate "insert_kind_shape_equation")
 	   [
 	    (not (contains kindmap var),
 		 var_error var),
@@ -412,12 +432,21 @@ structure NilContext
 			   print "Shape kind contains variables not found in context")),
 	    (is_shape shape, 
 	     fn () => (Ppnil.pp_kind shape;
-		       print "Shape kind is not a shape"))
+		       print "Shape kind is not a shape")),
+	    (isRenamedKind ctx kind, 
+	     fn () => (Ppnil.pp_kind kind;
+		       print ("Kind not properly renamed when inserted into context"))),
+	    (isRenamedKind ctx shape, 
+	     fn () => (Ppnil.pp_kind shape;
+		       print ("Shape not properly renamed when inserted into context"))),
+	    (isRenamedCon ctx con, 
+	     fn () => (Ppnil.pp_con con;
+		       print ("Type not properly renamed when inserted into context")))
 	    ]
 	 else ();
 
        val entry = {eqn = SOME con,
-		    kind = immediate kind,
+		    kind = kind,
 		    shape = immediate shape,
 		    index = counter}
      in
@@ -426,7 +455,7 @@ structure NilContext
 	kindmap = V.insert (kindmap, var, entry)}
      end
 
-   fun insert_kind_equation (context as {conmap,kindmap,counter}:context,var,con,kind) = 
+  fun insert_kind_equation (context as {conmap,kindmap,counter}:context,var,con,kind) = 
      let
        val _ =  
 	 if !debug then
@@ -439,12 +468,15 @@ structure NilContext
 			   print "Constructor contains variables not found in context")),
 	    (allBound_k kindmap kind,
 		 fn () => (Ppnil.pp_kind kind;
-			   print "Kind contains variables not found in context"))
+			   print "Kind contains variables not found in context")),
+	    (isRenamedCon context con, 
+	     fn () => (Ppnil.pp_con con;
+		       print ("Type not properly renamed when inserted into context")))
 	    ]
 	 else ();
        fun thunk() = make_shape (context,kind)
        val entry = {eqn = SOME con,
-		    kind = immediate kind,
+		    kind = kind,
 		    shape = delay thunk,
 		    index = counter}
      in
@@ -452,8 +484,7 @@ structure NilContext
 	counter = counter+1,
 	kindmap = V.insert (kindmap, var, entry)}
      end
-
-   fun insert_equation (context as {conmap,kindmap,counter}:context,var,con) =  
+  fun insert_equation (context as {conmap,kindmap,counter}:context,var,con) =  
      let
        val _ =  
 	 if !debug then
@@ -463,12 +494,14 @@ structure NilContext
 			var_error var),
 		   (allBound_c kindmap con,
 			fn () => (Ppnil.pp_con con;
-				  print "Constructor contains variables not found in context"))
+				  print "Constructor contains variables not found in context")),
+		   (isRenamedCon context con, 
+		    fn () => (Ppnil.pp_con con;
+			      print ("Type not properly renamed when inserted into context")))
 		   ]
 	 else ();
-       fun kthunk() = kind_of (context,con)
-       val kind = delay kthunk
-       fun sthunk() = make_shape (context,thaw kind)
+       val kind = Singleton_k (con)
+       fun sthunk() = make_shape (context,kind)
        val entry = {eqn = SOME con,
 		    kind = kind,
 		    shape = delay sthunk,
@@ -482,120 +515,9 @@ structure NilContext
    and insert_kind_list (C:context,vklist) = 
      foldl (fn ((v,k),C) => insert_kind (C,v,k)) C vklist
 
-
-   and strip_singleton (D : context,kind : kind) : kind = 
-     (case kind
-	of Singleton_k con => kind_of (D,con)
-	 | _ => kind)
-   and kind_of (D : context,constructor : con) : kind = 
-     let 
-       val _ = 
-	 if !debug then
-	   assert (locate "kind_of") 
-		  [
-		   ]
-	 else ()
-     in 
-       (case constructor 
-	  of Prim_c (Int_c W64,_) => Type_k
-	   | Prim_c (Float_c F32,_) => Type_k (* error? *)
-	   | Prim_c (Float_c F64,_) => Type_k (* error? *)
-	   | Prim_c _ => Type_k
-
-	   | (Mu_c (recur,defs)) => 
-	    let val len = Sequence.length defs
-	    in  if len = 1
-		  then Type_k
-		else NilUtil.kind_tuple(Listops.copy(len,Type_k))
-	    end
-
-	 | (AllArrow_c _) => Type_k
-
-	 | (v as (Var_c var)) => 
-	    (find_kind (D,var)
-	     handle Unbound =>
-	       (print_context D;
-		error (locate "kind_of") ("variable "^(var2string var)^" not in context")))
-
-	 | Let_c (sort,bnds,body) => 
-	    let
-	      fun folder (bnd,D) = 
-		(case bnd 
-		   of Open_cb (var,formals,body,body_kind) => 
-		     insert_shape (D,var,Arrow_k(Open,formals,body_kind))
-		    | Code_cb (var,formals,body,body_kind) => 
-		     insert_shape (D,var,Arrow_k(Code,formals,body_kind))
-		    | Con_cb (var,con) =>
-		     insert_shape (D,var,kind_of (D,con)))
-	      val D = List.foldl folder D bnds
-	    in
-	      kind_of (D,body)
-	    end
-
-	 | (Closure_c (code,env)) => 
-	    let 
-	      val (vklist,body_kind) = 
-		(case strip_singleton (D,kind_of (D,code))
-		   of Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
-		    | Arrow_k (ExternCode,vklist,body_kind) => (vklist,body_kind)
-		    | _ => (error (locate "kind_of") "Invalid closure: code component does not have code kind" ))
-	    in 
-	      Arrow_k(Closure,Listops.butlast vklist,body_kind)
-	    end
-
-	 | (Crecord_c entries) => 
-	  let
-	    val (labels,cons) = unzip entries
-	    val kinds = (map (curry2 kind_of D) cons)
-	    val k_entries = 
-		   map2 (fn (l,k) => ((l,fresh_named_var "crec_norm"),k)) (labels,kinds)
-	    val entries = zip labels cons
-	  in Record_k (Sequence.fromList k_entries)
-	  end
-
-	 | (Proj_c (rvals,label)) => 
-	  let
-	    val kind = 
-	      (case strip_singleton (D,kind_of (D,rvals))
-		 of Record_k lvk_seq => 
-		   let 
-		     val lvk_list = Sequence.toList lvk_seq
-		     fun loop (subst,[]) = error (locate "kind_of") "missing label"
-		       | loop (subst,((l,v),k)::rest) = 
-		       if (Name.eq_label(label,l))
-			 then substConInKind subst k
-		       else loop (NilSubst.add subst (v,Proj_c(rvals,l)),rest)
-		   in  loop (NilSubst.empty(),lvk_list)
-		   end
-		  | other => 
-		   (print "Non-record kind returned from shape_of in projection:\n";
-		    Ppnil.pp_kind other; print "\n";
-		    error (locate "kind_of") "Non-record kind returned from shape_of in projection"))
-
-	  in kind
-	  end
-	 | (App_c (cfun,actuals)) => 
-	     let
-	       val body_kind = 
-		 (case strip_singleton (D,kind_of (D,cfun)) of
-		    (Arrow_k (_,formals,body_kind)) => 
-		      let 
-			fun folder ((v,k),c,subst) = NilSubst.add subst (v,c)
-			val subst = Listops.foldl2 folder (NilSubst.empty()) (formals,actuals)
-		      in  
-			substConInKind subst body_kind
-		      end
-		  | cfun_kind => (print "Invalid kind for constructor application\n";
-				  Ppnil.pp_kind cfun_kind; print "\n";
-				  error (locate "kind_of") "Invalid kind for constructor application"))
-	     in body_kind
-	     end
-	 | (Typecase_c {arg,arms,default,kind}) => kind
-	 | (Annotate_c (annot,con)) => kind_of (D,con))
-     end
    and find_kind (context as {kindmap,...}:context,var) = 
      (case (V.find (kindmap, var)) of
-	   SOME {eqn,kind,shape,index} => thaw kind
+	   SOME {eqn,kind,shape,index} => kind
 	 | NONE => raise Unbound)
 
    (*PRE:  con :: T or W *)
@@ -608,6 +530,9 @@ structure NilContext
 	   if !debug then 
 	     assert (locate "find_kind_equation")
 		    [
+		     (isRenamedCon s con,
+		      fn () => (Ppnil.pp_con con;
+				print ("Type not properly renamed passed to function")))
 		     ]
 	   else
 	     ()
@@ -650,10 +575,7 @@ structure NilContext
 		     (case eqn
 			of SOME c => (CON c, NilSubst.empty())
 			 | NONE => 
-			  if delayed kind then
-			    raise Opaque
-			  else
-			    (KIND (thaw kind), NilSubst.empty()))
+			  (KIND kind, NilSubst.empty()))
 		    | NONE => raise Unbound)
 	       | (Proj_c (c,l)) => 
 		   let 
@@ -687,4 +609,56 @@ structure NilContext
      end
 
 
-end
+   fun is_well_formed (kind_valid : context * kind -> unit,
+		       con_valid : context * con -> kind,
+		       subkind : context * kind * kind -> bool) ({kindmap,...}:context) : bool =
+     let
+       fun compare ((_,a):var*k_entry,(_,b):var*k_entry) = (#index a) > (#index b)
+       val entries = V.listItemsi kindmap
+       val entries =ListMergeSort.sort compare entries
+       val error : string -> bool = error (locate "is_well_formed") 
+	     
+       fun folder ((var,entry as {eqn,kind,shape,index}),D as {kindmap,conmap,counter}) = 
+	 let
+	   val shape = thaw shape
+	   val _ = 
+	     (
+	      kind_valid (D,kind);
+	      kind_valid (D,shape);
+
+	      (case eqn
+		 of SOME con => 
+		   let val kind' = con_valid (D,con)
+		   in
+		     (
+		      (subkind(D,kind',kind)) orelse
+		      (perr_c_k_k (con,kind,kind');
+		       error ("Invalid equation/kind for entry: "^(var2string var)));
+
+		      (subkind(D,kind',shape)) orelse
+		      (perr_c_k_k (con,shape,kind');
+		       error ("Invalid equation/shape for entry: "^(var2string var)));
+		      ()
+		     )
+		   end
+		  | _ => ());
+		 
+	      ((subkind(D,kind,shape)) orelse
+	       (perr_k_k (shape,kind);
+		error ("Kind not a subkind of shape in entry: "^(var2string var))));
+
+	      ((index = counter) orelse
+	       (error "Indexing error"))
+	      )
+	   val D = 
+	     {kindmap = V.insert (kindmap,var,entry),
+	      conmap = conmap,
+	      counter = counter+1}
+	 in
+	   D
+	 end
+       val _ = List.foldl folder (empty()) entries
+     in
+       true
+     end
+ end

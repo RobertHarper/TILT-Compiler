@@ -134,6 +134,15 @@ struct
        end
 
 
+   fun substConInCon subst con = NilSubst.substConInCon subst (NilSubst.renameCVarsCon con)
+
+   (*con_a will be renamed when it is substituted*)
+   fun varConConSubst var con_a con_b = NilSubst.varConConSubst var con_a (NilSubst.renameCVarsCon con_b) 
+     
+   fun varConKindSubst var con kind = NilSubst.varConKindSubst var con (NilSubst.renameCVarsKind kind) 
+
+   (*This will work as long as you don't do any composing of substitutions*)
+   val addToConSubst = NilSubst.add
 
    (* extractPathLabels.  Splits a module "mod.lbls" into
         the "mod" and a list of labels.
@@ -774,7 +783,7 @@ end (* local defining splitting context *)
 	   val name_r = Var_e var_r
 	       
 	   val Arrow_k(_, [_], con_body_kind_context) = knd_fun_c_context 
-	   val knd_c_context = NilSubst.varConKindSubst var_c name_arg_c con_body_kind_context
+	   val knd_c_context = varConKindSubst var_c name_arg_c con_body_kind_context
 		   
 	   val cbnd_cat_new =
 	       if (killArrowKind "1" context knd_fun_c_context)
@@ -929,7 +938,12 @@ end (* local defining splitting context *)
            val cbnds_body = flattenCatlist cbnd_body_cat
            val ebnds_body = flattenCatlist ebnd_body_cat
 
-           val local_name_fun_c = Name.fresh_var ()
+	   val cbnds_body_subst = 
+	       let fun folder (cbnd,s) = let val (v,c) = NilUtil.extractCbnd cbnd
+					 in  addToConSubst s (v, substConInCon s c)
+					 end
+	       in  foldl folder (NilSubst.empty()) cbnds_body
+	       end
 
 	   val con_res' = NilUtil.makeLetC cbnds_body con_res
 
@@ -2339,7 +2353,7 @@ end (* local defining splitting context *)
 	   val context' = update_NILctx_insert_kind(context', var_c, knd_context, NONE)
 
 	   val {crdecs_context, crdecs_shape, crdecs_use, erdecs} =
-	       xsdecs' context' (con0, NilSubst.add subst (var_c, Proj_c(con0, lbl)), rest)
+	       xsdecs' context' (con0, addToConSubst subst (var_c, Proj_c(con0, lbl)), rest)
 
 	   val kill_con = killArrowKind "4" context knd_shape
 
@@ -2347,7 +2361,7 @@ end (* local defining splitting context *)
 	    crdecs_shape = ((lbl, var_c), knd_shape) :: crdecs_shape,
 	    crdecs_use = if kill_con then crdecs_use
 			 else ((lbl, var_c), knd_use) :: crdecs_use,
-	    erdecs = (lbl,var_r,NilSubst.substConInCon subst con) :: erdecs}
+	    erdecs = (lbl,var_r,substConInCon subst con) :: erdecs}
        end
 
      | xsdecs' context(con0, subst, Il.SDEC(lbl, d as Il.DEC_EXP(var,il_con)) :: rest) =
@@ -2358,7 +2372,7 @@ end (* local defining splitting context *)
 	   {crdecs_context = crdecs_context,
 	    crdecs_shape = crdecs_shape,
 	    crdecs_use = crdecs_use,
-	    erdecs = (lbl,var,NilSubst.substConInCon subst con) :: erdecs}
+	    erdecs = (lbl,var,substConInCon subst con) :: erdecs}
        end
 
      | xsdecs' context (con0, subst, sdecs as Il.SDEC(lbl, d as Il.DEC_CON(var, knd, 
@@ -2376,7 +2390,7 @@ end (* local defining splitting context *)
 	   val context' = update_NILctx_insert_kind(context, var, knd_context, 
 						    SOME knd_shape)
 	   val {crdecs_context, crdecs_shape, crdecs_use, erdecs} = 
-	       xsdecs' context' (con0, NilSubst.add subst (var, Proj_c(con0, lbl)),rest)
+	       xsdecs' context' (con0, addToConSubst subst (var, Proj_c(con0, lbl)),rest)
 
  	   val kill_con = killArrowKind "5" context knd_shape
 

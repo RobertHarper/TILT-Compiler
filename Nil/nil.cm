@@ -46,11 +46,11 @@ linearize.sig.sml
 linearize.sml
 normalize.sig.sml
 normalize.sml
+rewrite.sig.sml
+rewrite.sml
 
-(*
 nilstatic.sig.sml
 nilstatic.sml 
-*)
 
 optimize.sig.sml  
 optimize.sml  
