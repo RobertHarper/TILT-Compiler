@@ -58,8 +58,6 @@ normalize.sml
 rewrite.sig.sml
 rewrite.sml
 
-nilhnf.sml
-nilhnf.sig.sml
 nilstatic.sig.sml
 nilstatic.sml 
 
