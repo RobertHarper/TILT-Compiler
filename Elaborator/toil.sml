@@ -1913,14 +1913,13 @@ structure Toil
 							     val _ = pop_region ()
 							 in res
 							 end
-			  | help (Ast.FsigFsig {param,def=sigexp'}) =
+			  | help (Ast.BaseFsig {param,result=sigexp'}) =
 			     let (* this is a derived form *)
-			       val strid = functor_arg_lab
-			       val sym_sigexp_path_list =
-				   (map (fn (SOME s,se) => (s,se,NONE)
-				          | (NONE, _) => elab_error "functor arg unnamed")
-				    param)
-			       val sigexp = Ast.BaseSig[Ast.StrSpec sym_sigexp_path_list]
+			       val (strid,sigexp) =
+				   (case param
+				      of [(SOME s,se)] => (symbol_label s,se)
+				       | [(NONE,se)] => (functor_arg_lab, se)
+				       | _ => elab_error "higher-order functors not supported")
 			       val signat = xsigexp(context,sigexp)
 			       val context' = add_context_mod(context,strid,var,signat)
 			       val signat' = xsigexp(context',sigexp')
@@ -2123,8 +2122,7 @@ structure Toil
 				     | _ => elab_error "xstrexp: functor argument became non-variable")
 			      val varName = Symbol.name var
 			      val coerced_var = fresh_named_var ("coerced_" ^ varName)
-			      val (mod_coerced,sig_coerced) = Signature.xcoerce_functor(context,argpath,signat,sig1)
-			      val mod_sealed = MOD_SEAL(mod_coerced,sig_coerced)
+			      val mod_coerced = Signature.xcoerce_functor(context,argpath,signat,sig1)
 			      val mod_result = MOD_LET(coerced_var,mod_coerced, MOD_APP(m, MOD_VAR coerced_var))
 			      val sig_result = sig_subst(sig2,subst_add_modvar(empty_subst,var1,argmod))
 			      val sig_result' = sig_elim_open (context, sig_result)
@@ -2135,8 +2133,6 @@ structure Toil
 			               print "XXX signat = "; pp_signat signat; print "\n";
 			               print "XXX argpath = "; pp_path argpath; print "\n";
 			               print "XXX mod_coerced = "; pp_mod mod_coerced; print "\n";
-			               print "XXX sig_coerced = "; pp_signat sig_coerced; print "\n";
-			               print "XXX mod_sealed = "; pp_mod mod_sealed; print "\n";
 			               print "XXX mod_result = "; pp_mod mod_result; print "\n";
 			               print "XXX sig_result = "; pp_signat sig_result; print "\n";
 			               print "XXX sig_result' = "; pp_signat sig_result'; print "\n")
