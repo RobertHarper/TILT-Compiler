@@ -1,5 +1,9 @@
 (*$import List Prim Int Il IlStatic IlUtil Ppil Util Listops Name IlContext Tyvar EQUAL Stats *)
-(* Equality compiler *)
+
+(* Equality compiler: Generate an equality function, if possible, for a constructor.
+   This is basically just a recursive crawl of the constructor, though we may need to
+   intersperse reductions in order to be able to proceed.
+   *)
 
 structure Equal :> EQUAL =
 struct
@@ -13,7 +17,7 @@ struct
 
     fun elab_error s = Util.error "equal.sml: elaborator impossibility" s
     fun error s = Util.error "equal.sml" s
-    val debug = Stats.tt("EqualDebug")
+    val debug = Stats.ff("EqualDebug")
     val num = Stats.int("eqtimes")
        
     fun debugdo t = if (!debug) then ignore (t()) else ()
@@ -85,7 +89,7 @@ struct
 		  vector_eq : context -> exp * con,
 		  con_bool : con, true_exp : exp, false_exp : exp}
 
-    (* XXX 
+    (* XXX - Tom
        I think this idiom used to have (possibly) exponentially-bad
        performance. Note that each recursive call has its own handler
        for NoEqExp, which will not ever leave until con_reduce_once of
@@ -196,9 +200,7 @@ struct
 			      val e1 = RECORD_PROJECT(VAR v1,lbl,con)
 			      val e2 = RECORD_PROJECT(VAR v2,lbl,con)
 			      val exp = APP(eqexp,U.exp_tuple[e1,e2])
-			  in  case U.exp_reduce (ctxt,exp) of
-			           NONE => exp
-				 | SOME e => e
+			  in U.exp_try_reduce (ctxt,exp)
 			  end
 		      fun folder (rdec,exp) = 
 			  let val exp' = help rdec
@@ -278,9 +280,7 @@ struct
 					      val e'' = SUM_TAIL(i, sumc, VAR var'')
 					      val exp = U.make_let ([sumbnd],APP(eqexp,
 										 U.exp_tuple[e',e'']))
-					  in  (case U.exp_reduce (ctxt,exp) of
-						   SOME e => e
-						 | NONE => exp)
+					  in U.exp_try_reduce (ctxt,exp)
 					  end
 				  else true_exp
 			      val arms2 = L.map0count
@@ -325,17 +325,17 @@ struct
 
 		      val exp = APP(e, #1 (self (NONE,c)))
 
-		  in  ((case U.exp_reduce (ctxt,exp) of
-			    NONE => exp
-			  | SOME e => e),
+		  in  (U.exp_try_reduce (ctxt,exp),
 		       U.con_eqfun ctxt con)
 		  end
+	       (* if it's from a module, look for the equality function in that module *)
 	       | CON_MODULE_PROJECT(m,l) => 
 		  let val e = MODULE_PROJECT(m,N.to_eq l)
 		  in (IlStatic.GetExpCon(ctxt,e) 
 		      handle _ => raise NoEqExp);
 		      (e, U.con_eqfun ctxt con)
 		  end
+	       (* XXX doc *)
 	       | CON_APP(c,types) => 
 		  let val meq = 
 		      (case c of
@@ -381,8 +381,10 @@ struct
 		      | _ => raise NoEqExp
 		  end
 	       | CON_MU confun => xeq_mu state ctxt (SOME name,confun)
+	       (* if a tuple of mutually recursive types, generate the tuple of equality functions,
+	          then project out of that. *)
 	       | CON_TUPLE_PROJECT (j, con_mu as CON_MU confun) => 
-		  let val (fix_exp,fix_con) = xeq_mu state ctxt (NONE,confun)
+		  let val (fix_exp, fix_con) = xeq_mu state ctxt (NONE,confun)
 		      val con_res = U.con_eqfun ctxt con
 		      val exp_res = 
 			  (case confun of
@@ -397,6 +399,8 @@ struct
 	maybe_bind_con (munameopt, CON_MU confun,
 			fn muname => xeq_mu_step state ctxt (muname, confun))
 
+    (* All this, just to make a mutually-recursive tuple of functions that unfold the
+       recursive type and call the appropriate equality function on it. *)
     and xeq_mu_step (state as {polyinst_opt, vector_eq, con_bool, true_exp, false_exp})
 	            (ctxt : C.context)
 		    (name : con, confun : con) : exp * con =
@@ -423,11 +427,14 @@ struct
 			 (L.map0count (fn i => CON_TUPLE_PROJECT(i,CON_MU confun)) arity,
 			  map (fn c => U.con_subst(c,U.list2subst([], L.zip vdts name_cons,[]))) cons)
 		       | _ => error "xeq_mu given confun which is not CON_FUN returning CON_TUPLE")
-	    val expanded_cons_vars = L.map0count (fn i => N.fresh_named_var ("expanded_con_" ^ (Int.toString i))) arity
-	    val vars_eq = L.map0count (fn i => N.fresh_named_var ("vars_eq_" ^ (Int.toString i))) arity
-	    val type_lbls = L.map0count (fn i => N.fresh_internal_label("type" ^ (Int.toString i))) arity
-	    val evars = L.map0count (fn i => N.fresh_named_var ("evar" ^ (Int.toString i))) arity
-	    val cvars = L.map0count (fn i => N.fresh_named_var ("cvar" ^ (Int.toString i))) arity
+
+	    fun mkvar s i = N.fresh_named_var (s ^ Int.toString i)
+
+	    val expanded_cons_vars = L.map0count (mkvar "expanded_con") arity
+	    val vars_eq = L.map0count (mkvar "vars_eq") arity
+	    val evars = L.map0count (mkvar "evar") arity
+	    val cvars = L.map0count (mkvar "cvar") arity
+	    val type_lbls = L.map0count (fn i => N.fresh_internal_label ("type" ^ Int.toString i)) arity
 	    val eq_lbls = map N.to_eq type_lbls
 	    val subst = U.list2subst(L.zip evars (map VAR vars_eq),
 				     L.zip cvars name_cons, [])
@@ -451,18 +458,16 @@ struct
 	    fun make_fbnd (name_con,mu_con,expanded_con_var,expanded_con,expv,var_eq) = 
 		let
 		    val var = N.fresh_named_var "arg_pair"
-		    val var_con = U.con_tuple[name_con,name_con]
+		    val var_con = U.con_tuple[name_con, name_con]
 		    val expv' = U.exp_subst(expv,subst)
-		    val e1 = RECORD_PROJECT(VAR var,U.generate_tuple_label 1,var_con)
-		    val e2 = RECORD_PROJECT(VAR var,U.generate_tuple_label 2,var_con)
+		    val e1 = RECORD_PROJECT(VAR var, U.generate_tuple_label 1, var_con)
+		    val e2 = RECORD_PROJECT(VAR var, U.generate_tuple_label 2, var_con)
 		    val e1' = COERCE(UNFOLD([], name_con, CON_VAR expanded_con_var), [], e1)
 		    val e2' = COERCE(UNFOLD([], name_con, CON_VAR expanded_con_var), [], e2)
-		    val exp = APP(expv',U.exp_tuple[e1',e2'])
-		    val exp = (case U.exp_reduce (ctxt,exp) of
-				   NONE => exp
-				 | SOME e => e)
-		    val exp = U.make_let([BND_CON(expanded_con_var,expanded_con)],exp)
-		    val fbnd = FBND(var_eq,var,var_con,con_bool,exp)
+		    val exp = APP(expv', U.exp_tuple[e1',e2'])
+		    val exp = U.exp_try_reduce (ctxt,exp)
+		    val exp = U.make_let([BND_CON(expanded_con_var, expanded_con)],exp)
+		    val fbnd = FBND(var_eq, var,var_con, con_bool,exp)
 		in  (fbnd, U.con_eqfun ctxt mu_con)
 		end
 
@@ -489,7 +494,7 @@ struct
 				       print "context = "; (* Ppil.pp_context context; *) print "\n"))
 
 	    val _ = num := 0
-	    (* XXX 0090 - We can't just look up bool like this, because it may have been rebound.
+	    (* FIXME Bug 0090 - We can't just look up bool like this, because it may have been rebound.
 	       (same goes for true and false, but we plan to put syntactic restrictions preventing
 	       the programmer from rebinding those as per the definition) *)
 	    val (cbool, truee, falsee) =
