@@ -26,11 +26,6 @@
 
          All such checks can be found by looking for uses of the
          elaborator_specific_optimizations ref.
-
-     (3) The generated code contains Typeof_c; it doesn't seem possible
-         to eliminate this without at least having the translations of
-         sdecs, exps, etc. return types as well.  This would be a global
-         revision of the code.
  *)
 
 structure Tonil :> TONIL =
@@ -3536,31 +3531,6 @@ end (* local defining splitting context *)
      | xsig' context (con0, Il.SIGNAT_STRUCTURE sdecs) = 
            xsig_struct context (con0,sdecs)
 
-     | xsig' context (con0, Il.SIGNAT_SELF(_, SOME unselfSig, _)) = 
-	    xsig' context (con0, unselfSig)
-
-     (* XXX: How is it possible that the following case can happen
-             --- and it does; I added a print statement to verify ---
-             since the imports are unselfified before we get there,
-             and the elaborator should never need to translates a
-             user-written signature into SIGNAT_SELF.  But
-             nevertheless, the pqueens benchmark does trigger this
-             case; it appears to be the only benchmark that translates
-             a SIGNAT_SELF. 
-      *)
-
-     (* the self signature has no self-references; 
-        but rather has no internal variable uses 
-        
-        XXX: What does this comment mean?
-      *) 
-
-     | xsig' context (con0, Il.SIGNAT_SELF(_, NONE, selfSig)) = 
-	   (* XXX:  Why don't we call unselfify here, since the previous
-                    case goes to the selfified version.
-            *)
-	   (xsig' context (con0, selfSig))
-
 
    (* xsig_struct.  Helper function used by xsig' to translate 
                     structure signatures.
@@ -3838,9 +3808,9 @@ end (* local defining splitting context *)
     *)
    fun xHILctx HILctx =
        let 
-	   fun dopc(v, l, pc, (imports, context : splitting_context)) = 
-	       (case pc of
-		    Il.PHRASE_CLASS_EXP (_,il_type, il_expopt, _) => 
+	   fun dodec(l,dec,(imports, context : splitting_context)) =
+	       (case dec of
+		    Il.DEC_EXP(v, il_type, il_expopt, _) =>
 			let
 			    val nil_type = xcon context il_type
 			    val (v',context') = insert_rename_var(v,context)
@@ -3853,7 +3823,7 @@ end (* local defining splitting context *)
 			in  (ImportValue(l,v',TraceUnknown,nil_type)::imports,
 			     context')
 			end
-		  | Il.PHRASE_CLASS_CON (il_con, il_kind, il_conopt, _) => 
+		  | Il.DEC_CON(v, il_kind, il_conopt, _) => 
 			let
 			  val kind = xkind context il_kind
 			  val nil_con = 
@@ -3884,17 +3854,10 @@ end (* local defining splitting context *)
 			in  (it::imports, context''')
 			end
 
-		  | Il.PHRASE_CLASS_MOD (_,is_polyfun,il_sig) => 
+		  | Il.DEC_MOD (v, is_polyfun, il_sig) =>
 			let
 			  val (l_c,l_r) = N.make_cr_labels l
 			  val ((v_c, v_r),context) = splitNewVar (v,context)
-
-                          (* Make sure the signature is unselfified
-                             (so that it is a valid signature)
-                           *)
-			  val il_sig = IlContext.UnselfifySig 
-			                 IlContext.empty_context 
-					 (Il.PATH(v,[]), il_sig)
 
 			  val (knd, type_r) = xsig context (Var_c v_c, il_sig)
 				
@@ -3914,32 +3877,28 @@ end (* local defining splitting context *)
 			    (iv::imports, update_polyfuns(context, v_r))
 			  else
 			    (iv::it::imports, context)
-			end
+			end)
 
-		  | Il.PHRASE_CLASS_SIG(v,il_sig) => 
-			(* Just store any signature definition we come
-			   across.
-                         *)
-			(imports,
-			 update_insert_sig(context,v,il_sig)))
-
-           (* Process each HIL context entries *)
-	   fun folder (p,acc) =
-	       let 
-		 val SOME(l,pc) = IlContext.Context_Lookup_Path(HILctx,p)
-	       in  
-		 (* Skip the datatype labels 
-		  *)
-		 (case ((!elaborator_specific_optimizations) andalso 
-			(N.is_dt l), 
-			N.is_nonexport l, p) of
-			(false, false, Il.PATH(v,[])) => dopc(v,l,pc,acc)
-		      | _ => acc)
-	       end
+	   fun dosig(v,il_sig,(imports, context : splitting_context)) =
+	       (* Just store any signature definition we come across.
+		*)
+	       (imports,update_insert_sig(context,v,il_sig))
+	       
+           (* Process each HIL context entry *)
+	   fun folder (ent,acc) =
+	       (case ent of
+		    Il.CONTEXT_SDEC (Il.SDEC (l,dec)) =>
+			if ((!elaborator_specific_optimizations) andalso (N.is_dt l)
+			    orelse N.is_nonexport l) then
+			    acc
+			else dodec(l,dec,acc)
+		  | Il.CONTEXT_SIGNAT (_,v,il_sig) => dosig(v,il_sig,acc)
+		  | Il.CONTEXT_FIXITY _ => acc
+		  | Il.CONTEXT_OVEREXP _ => acc)
 
 	   val (rev_imports,context) = 
 	     foldl folder ([], make_initial_splitting_context HILctx)
-	                  (IlContext.Context_Ordering HILctx)
+	                  (IlContext.list_entries HILctx)
        in  (rev rev_imports, context)
        end
 
@@ -3959,13 +3918,7 @@ end (* local defining splitting context *)
 	    fun folder((SOME sbnd,Il.CONTEXT_SDEC sdec),(ctxt,sbnds)) = 
 		  (ctxt, (sbnd,sdec)::sbnds)
 	      | folder((NONE, ce),(ctxt,sbnds)) = 
-		  (IlContext.add_context_entries
-		    (ctxt, [case ce of
-			      Il.CONTEXT_SDEC(Il.SDEC(l,dec)) => 
-				Il.CONTEXT_SDEC
-				    (Il.SDEC(l,IlContext.SelfifyDec ctxt dec))
-			    | _ => ce]),
-		    sbnds)
+		  (IlContext.add_context_entries (ctxt, [ce]),sbnds)
 
 	    val (HILctx,rev_sbnd_sdecs) = foldl folder (HILctx,[]) sbnd_entries
 	    val sbnds_sdecs = rev rev_sbnd_sdecs
@@ -3976,7 +3929,7 @@ end (* local defining splitting context *)
 	    val _ = 
 		if (!full_debug) then
 		    (print "\nInitial HIL context varlist:\n";
-		     app (fn p => (print "  "; Ppil.pp_path p; print "\n")) 
+		     app (fn v => (print "  "; Ppil.pp_var v; print "\n")) 
 		     (IlContext.Context_Ordering HILctx);
 		     print "\n";
 		     print "\nInitial HIL context:\n";
