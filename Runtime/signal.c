@@ -9,12 +9,14 @@
 #include "thread.h"
 #include "exn.h"
 #include "til-signal.h"
-#include <signal.h>
 #include "thread.h"
 
 #ifdef alpha_osf
 #include <siginfo.h>
 #include <machine/fpu.h>
+#endif
+#ifdef solaris
+#include <siginfo.h>
 #endif
 #ifdef rs_aix
 #include <fptrap.h> 
@@ -409,11 +411,14 @@ extern int ThreadedVersion;
 
 void signal_init()
 {
-  typedef void (*voidhandler_t)();
-  struct sigaction newact, oldact;
-
   buserror_on();
   float_exn_on();
+}
+
+void install_signal_handlers(int isMain)
+{
+  typedef void (*voidhandler_t)();
+  struct sigaction newact;
 
   sigfillset(&newact.sa_mask);
 #ifdef alpha_osf
@@ -423,16 +428,23 @@ void signal_init()
   newact.sa_flags = 0;
 #endif
 
-  newact.sa_handler = (voidhandler_t) fpe_handler;
-  sigaction(SIGFPE,&newact,&oldact);
-
-  newact.sa_handler = (voidhandler_t) memfault_handler;
-  sigaction(SIGSEGV,&newact,&oldact);
-  sigaction(SIGBUS,&newact,&oldact); 
-  sigaction(SIGILL,&newact,&oldact);
-
-  newact.sa_handler = (voidhandler_t) alarm_handler;
-  sigaction(SIGVTALRM,&newact,&oldact); 
+  if (!isMain) {
+    newact.sa_handler = (voidhandler_t) fpe_handler;
+    sigaction(SIGFPE,&newact,NULL);
+    newact.sa_handler = (voidhandler_t) memfault_handler;
+    sigaction(SIGSEGV,&newact,NULL);
+    sigaction(SIGBUS,&newact,NULL); 
+    sigaction(SIGILL,&newact,NULL);
+  }
+  { /* Main thread is asleep so we don't want it to handle signals */
+    sigset_t sigset;
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGINT);
+    sigaddset(&sigset, SIGILL);
+    sigaddset(&sigset, SIGSEGV);
+    sigaddset(&sigset, SIGBUS);
+    pthread_sigmask(isMain ? SIG_BLOCK : SIG_UNBLOCK,  &sigset, NULL);
+  }
 
   /* install a stack for signal handlers */
 #ifdef alpha_osf
@@ -449,16 +461,16 @@ void signal_init()
   if (ThreadedVersion)
   {
     struct itimerval newtimer,oldtimer;
+    newact.sa_handler = (voidhandler_t) alarm_handler;
+    sigaction(SIGVTALRM,&newact,NULL); 
     newtimer.it_interval.tv_sec = 0;
     newtimer.it_interval.tv_usec = 20000;
     newtimer.it_value.tv_sec = 0;
     newtimer.it_value.tv_usec = 20000;
     setitimer(ITIMER_VIRTUAL,&newtimer,&oldtimer); 
-/*    setitimer(ITIMER_PROF,&newtimer,&oldtimer); */
+/*  setitimer(ITIMER_PROF,&newtimer,&oldtimer); */
   }
 
-
-  /*     signaltest();   */
 }
 
 

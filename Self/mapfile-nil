@@ -477,14 +477,14 @@ NilHNF	Nil/nilhnf
 NILCONTEXT Nil/nilcontext.sig
 NilContext Nil/nilcontext
 
+TRACEOPS Nil/traceops.sig
+TraceOps Nil/traceops
+
 NILSTATIC Nil/nilstatic.sig
 NilStatic Nil/nilstatic
 
 LINEARIZE Nil/linearize.sig
 Linearize Nil/linearize
-
-TRACEOPS Nil/traceops.sig
-TraceOps Nil/traceops
 
 REIFY Nil/reify.sig
 Reify Nil/reify
@@ -520,3 +520,4 @@ Inline Nil/inline
 LINKNIL Nil/linknil.sig
 Linknil Nil/linknil
 
+niltest Self/niltest

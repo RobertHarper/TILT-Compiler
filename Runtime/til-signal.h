@@ -6,6 +6,7 @@
 #include <ucontext.h>
 
 void signal_init(void);
+void install_signal_handlers(int isMain);
 long GetSp(struct ucontext *);
 long GetPc(struct ucontext *);
 long GetIReg(struct ucontext *, int);

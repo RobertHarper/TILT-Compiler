@@ -367,9 +367,14 @@ void work(SysThread_t *sth)
 static void* systhread_go(void* unused)
 {
   SysThread_t *st = getSysThread();
+#ifdef solaris
   int status = processor_bind(P_LWPID, P_MYID, st->processor, NULL);
   if (status != 0)
     printf("processor_bind failed with %d\n",status);
+#else
+    printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
+#endif
+  install_signal_handlers(0);
   st->stack = (int)(&st) & (~255);
   if (diag)
     printf("SysThread %d: has stack %d\n", st->stid, st->stack);
@@ -381,13 +386,14 @@ void thread_go(value_t start_adds, int num_add)
 {
   int curproc = -1;
   int i;
-  sigset_t sigset;
+
   Thread_t *th = thread_create(0,start_adds,num_add);
   AddJob(th);
 
   /* Create system threads that run off the user thread queue */
   for (i=0; i<NumSysThread; i++) {
     pthread_attr_t attr;
+#ifdef solaris
     processor_info_t infop;
     while (1) {
       int status = processor_info(++curproc,&infop);
@@ -400,16 +406,16 @@ void thread_go(value_t start_adds, int num_add)
 	assert(0);
       }
     }
+#else
+    printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
+#endif
     pthread_attr_init(&attr);
     pthread_attr_setscope(&attr,PTHREAD_SCOPE_SYSTEM); 
     pthread_create(&(SysThreads[i].pthread),&attr,systhread_go,NULL);
     printf("Systhread %d:  processor %d and pthread = %d\n",
 	   SysThreads[i].stid, SysThreads[i].processor, SysThreads[i].pthread);
   }
-  /* Don't deliver CTRL-C to main thread as that is asleep */
-  sigemptyset(&sigset);
-  sigaddset(&sigset, SIGINT);
-  pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+  install_signal_handlers(1);
   /* Wait until the work stack is empty;  work stack contains running jobs too */
   while ((i = NumTotalJob()) > 0) {
       printf("Main thread found %d jobs.\n", i);
