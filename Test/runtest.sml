@@ -362,7 +362,8 @@ struct
 	end
 
     local
-	val op/ = P.joinDirFile
+	val op/ : string * string -> string =
+	    fn (dir,file) => P.joinDirFile {dir=dir, file=file}
     in
 	fun bindir (name : string) : string =
 	    P.dir (CommandLine.name())/".."/"Bin"/name
