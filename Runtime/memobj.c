@@ -86,6 +86,15 @@ mem_t my_mmap(int size, int prot)
 #else
   flags = MAP_ANONYMOUS;
 #endif
+#ifdef solaris
+  // We'd like to use on-demand allocation if the OS supports it.  Currently,
+  // MAP_NORESERVE is not POSIX, so on the Alpha we will still use up a lot of
+  // swap space, but we hope that by the time we get to other OSs, they
+  // support on-demand allocation.  If not, then we should think about
+  // implementing a scheme where Heap_t structures are reallocated to allow
+  // for growth.
+  flags |= MAP_NORESERVE;
+#endif
   mapped = (mem_t) mmap(start, size, prot, flags, fd, 0);
   if (mapped == (mem_t) -1) {
     fprintf(stderr,"mmap failed with size = %d: %s\n", size, strerror(errno));
@@ -619,7 +628,7 @@ extern mem_t datastart;
 void memobj_init(void)
 {
   Stacklet_t *s1, *s2;
-  unsigned long mem_bytes = GetPhysicalPages() * 0.30 * TILT_PAGESIZE;
+  unsigned long mem_bytes = GetPhysicalPages() * 0.90 * TILT_PAGESIZE;
   unsigned long heap_bytes;
   int max_heap_byte;
   heap_bytes = (unsigned long)INT_MAX;
