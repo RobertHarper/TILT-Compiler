@@ -104,12 +104,12 @@ structure Listops :> LISTOPS =
 			  end
     fun member (elem,[]) = false
       | member (elem,a::rest) = (elem = a) orelse member(elem,rest)
-    fun member_eq (eq,elem,[]) = false
+    fun member_eq (eq,elem:'a,[]:'a list) = false
       | member_eq (eq,elem,a::rest) = eq(elem,a) orelse member_eq(eq,elem,rest)
     fun assoc (aa,[]) = NONE
       | assoc (aa,(a,b)::rest) = if (a = aa) then SOME b else assoc(aa,rest)
-    fun assoc_eq (eq,aa,[]) = NONE
-      | assoc_eq (eq,aa,((a,b)::rest)) = if eq(a,aa) then SOME b else assoc_eq(eq,aa,rest)
+    fun assoc_eq (eq:'a*'a->bool, aa,[]) = NONE
+      | assoc_eq (eq,aa,((a:'a,b:'b)::rest)) = if eq(a,aa) then SOME b else assoc_eq(eq,aa,rest)
     fun list_diff ([],_) = []
       | list_diff (a::rest,b) = if (member(a,b)) then list_diff(rest,b) else a::(list_diff (rest,b))
     fun list_diff_eq (_,[],_) = []
@@ -121,7 +121,7 @@ structure Listops :> LISTOPS =
       | list_inter_eq (p,a::rest,b) = if (member_eq(p,a,b)) then a::(list_inter_eq(p,rest,b)) else list_inter_eq(p,rest,b) 
 
 
-    fun eq_list (f, [], []) = true
+    fun eq_list (f, [] : 'a list, [] : 'a list) = true
       | eq_list (f, a::arest, b::brest) = f(a,b) andalso eq_list(f,arest,brest)
       | eq_list (f, _, _) = false
     fun eq_listlist  (f, a, b) = eq_list(fn (x,y) => eq_list(f,x,y), a,b)
