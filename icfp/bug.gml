@@ -48,7 +48,7 @@
   }
 } /const-surface
 
-0.0 4.0 0.0 point 0.9 0.9 0.9 point pointlight /light1
+0.0 4.0 0.0 point 0.7 0.7 0.7 point pointlight /light1
 
 1.0 12.0 divf /one12
 1.0 6.0 divf /one6
@@ -58,7 +58,7 @@ white 0.1 1.0 1.0 const-surface apply plane /mirror
 magenta 0.5 0.5 2.0 const-surface apply sphere one12 uscale /pip
 
 blue 0.6 0.5 3.0 const-surface apply cube
--0.5 -0.5 -0.5 translate			% center cube
+-0.5 -0.5 -0.5 translate /baseDie baseDie		% center cube
 % front is five pips
   pip 0.0 0.0 -0.5 translate difference
   pip one6 -2.0 mulf one6 -2.0 mulf -0.5 translate difference
@@ -88,24 +88,22 @@ blue 0.6 0.5 3.0 const-surface apply cube
   pip 0.5 one6 -2.0 mulf one6 -2.0 mulf translate difference
 /die
 
-%die 15.0 rotatey 15.0 rotatex
-%  -1.5 -1.0 4.0 translate
-%die -25.0 rotatez -20.0 rotatex
+baseDie 15.0 rotatey 15.0 rotatex
+  -1.5 -1.0 4.0 translate
+% baseDie -25.0 rotatez -20.0 rotatex
 %   2.0 0.5 3.5 translate
-%union
-mirror -90.0 rotatex 0.0 0.0 10.0 translate 
-%union
-0.5 grey apply matte apply plane 0.0 -2.0 0.0 translate 
-union
+% union
+mirror -90.0 rotatex 0.0 0.0 10.0 translate
+0.5 grey apply matte apply plane 0.0 -2.0 0.0 translate union
 
-/scene
+union /scene
 
-0.4 0.4	0.4 point	% ambient
+0.0 0.0	0.0 point	% ambient
 [light1] 		% lights
 scene			% object
-3			% depth
+1			% depth
 90.0			% fov
 160 100			% wid ht
-"bug.ppm"		% output file
+"dice.ppm"		% output file
 render
 

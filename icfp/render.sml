@@ -15,10 +15,10 @@ structure Render : RENDER =
 	in  (x+x2, y+y2)
 	end
     fun say s = (print s; TextIO.flushOut TextIO.stdOut)
-    fun weakAttenuate d = 100.0 / (99.0 + Math.pow(d, 0.25))
+    fun weakAttenuate d = 100.0 / (99.0 + Math.pow(d, 0.5))
 
     (* bump depends on how far we are from the source *)
-    fun bump (hit, dir, dist) = let val f = (Real.abs dist) / 1e7
+    fun bump (hit, dir, dist) = let val f = (Real.abs dist) / 1e2
 				in  add(hit, scale(f, dir))
 				end
 
@@ -115,7 +115,7 @@ structure Render : RENDER =
 
     fun getIntersect viewerPos dir scene = 
 	 let val intersects = getIntersects viewerPos dir scene 
-(*	     val _ = (showIntervals intersects; print "\n") *)
+(*	     val _ = (print "intersects: "; showIntervals intersects; print "\n")  *)
              fun loop [] = NONE
                | loop ((i1 as (_,_,{dist=d1,...}:l3info),
 			i2 as (_,_,{dist=d2,...}:l3info)) :: rest) = 
@@ -127,15 +127,15 @@ structure Render : RENDER =
 	 in  loop intersects
 	 end						 
 
-    fun hasIntersect src dir obj : bool = case (getIntersect src dir obj) of
-				       NONE => false
-				     | _ => true
+    fun shadowed src dir obj Ldist : bool = case (getIntersect src dir obj) of
+	                                        NONE => false
+					      | SOME(_,_,{dist,...}) => dist < Ldist
 
     (* Diffuse intensity and Specular intensity *)
     fun castShadow (hit, scene, incident, N, n) light : v3 * v3 = 
 	let val (Lj, Ldist) = Light.toLight (hit, light)  
-	    val shadowed = hasIntersect hit Lj scene
-	in  if shadowed
+(*	    val _ = (print "castShadow with hit = "; printV3 hit; print "  Lj = "; printV3 Lj; print "\n") *)
+	in  if shadowed hit Lj scene Ldist
 		then (black, black)
 	    else let 
 		     val Ij = Light.illuminate(light, hit, Lj)
@@ -183,16 +183,21 @@ structure Render : RENDER =
 		     val diffuse = foldl add black diffuses
 		     val finalDiffuse = mult(scale(kd, diffuse),C)
 		     val specular = foldl add black speculars 
+		     val finalSpecular = mult(scale(ks,specular),C)
 		     (* Recursive reflection *)
 		     val S = reverseHalfway (incident, N)
 		     val Is = cast(apply, Ia, hit, S, scene, lights, depth - 1)
+		     val finalRecursive = mult(scale(ks, Is), C)
 		     (* Combine terms *)
 		     val finalIntensity = add(mult(scale(kd, Ia), C),
 					      add(finalDiffuse, 
-						  add(mult(scale(ks,specular),C),
-						      mult(scale(ks, Is), C))))
+						  add(finalSpecular,
+						      finalRecursive)))
+
 (*
 		     val _ = (print "finalDiffuse is "; printV3 finalDiffuse; print "\n")
+		     val _ = (print "finalSpecular is "; printV3 finalSpecular; print "\n")
+		     val _ = (print "finalRecirsive is "; printV3 finalRecursive; print "\n")
 		     val _ = (print "finalIntensity is "; printV3 finalIntensity; print "\n")
 *)
 		 in  scale(weakAttenuate dist, finalIntensity)
