@@ -2,10 +2,10 @@ signature RENDER =
   sig
 
     val render : (* closure, face, u, v -> surface property *)
-	         (Eval.closure * real * real * real -> Eval.color * real * real * real) *
-	         {amb    : Eval.color,
-		  lights : Eval.light list,
-		  scene  : Eval.obj,
+	         (Base.closure * int * real * real -> Base.color * real * real * real) ->
+	         {amb    : Base.color,
+		  lights : Base.light list,
+		  scene  : Base.obj,
 		  depth  : int,
 		  hfov   : real,
 		  hres   : int,

@@ -1,7 +1,7 @@
-structure Render = 
+structure Render : RENDER = 
   struct
 
-    open Eval
+    open Base
     open Intersect
     open Vect
     exception Error of string
@@ -20,9 +20,9 @@ structure Render =
 	in  (x+x2, y+y2)
 	end
 
-    type scene = Eval.obj list   (* Our notion of a scene is a union of objects represented by a list *)
+    type scene = obj list   (* Our notion of a scene is a union of objects represented by a list *)
 
-    fun obj2scene (obj : Eval.obj) : scene = (* Reduce union(s) to list of primitive objects *)
+    fun obj2scene (obj : obj) : scene = (* Reduce union(s) to list of primitive objects *)
 	(case obj of
 	     Sphere _ => [obj]
 	   | Plane _ => [obj]
@@ -79,7 +79,7 @@ structure Render =
 		then black
 	    else let val (t, {u,v,face,N,hit,dist}) = hd intersects
 		     (* Surface properties *)
-		     val (C, kd, ks, n) = apply(t,(face,u,v))
+		     val (C : Base.color, kd, ks, n) = apply(t,face,u,v)
 		     (* Recursive reflection *)
 		     val incident = negate dir
 		     val S = reverseHalfway (incident, N)

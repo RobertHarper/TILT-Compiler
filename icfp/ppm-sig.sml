@@ -10,7 +10,7 @@ sig
 
     exception Ppm of string
 
-    val colortorgb : Eval.color -> rgb
+    val colortorgb : Base.color -> rgb
 	
 (* height, width *)
     val ppm : int * int -> ppm

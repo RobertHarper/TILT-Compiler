@@ -54,14 +54,10 @@ parsestring.sml
 ppm-sig.sml
 ppm.sml
 
-(*toplevel-sig.sml
-toplevel.sml
-*)
 vector-sig.sml
 vector.sml
 
-(* commented out; not added or don't compile 
-	(sorry that I keep doing this ;) *)
+base.sml
 
 intersect.sig.sml
 intersect.sml
@@ -71,4 +67,7 @@ light.sml
 
 render.sig.sml
 render.sml
+
+(* toplevel-sig.sml *)
+(* toplevel.sml *)
 
