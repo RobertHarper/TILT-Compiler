@@ -6,11 +6,15 @@
  * structures.
  *)
 
-functor MonoArrayFn (type elem) :> MONO_ARRAY where type elem = elem
-  = struct
+functor MonoArrayFn (type elem) :> MONO_ARRAY where type elem = elem =
+struct
     open Array
-    type elem = elem
     type array = elem Array.array
-    type vector = elem Vector.vector
-  end
-
+    type elem = elem
+    structure Vector =
+    struct
+	open Vector
+	type vector = elem Vector.vector
+	type elem = elem
+    end
+end

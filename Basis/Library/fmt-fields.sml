@@ -228,7 +228,7 @@ structure FmtFields : sig
 	  end (* scanFieldSpec *)
 
     fun scanField fmtStr = (case SS.getc fmtStr
-	   of (SOME(#"%", fmtStr')) => (Raw(SS.slice(fmtStr, 0, 1)), fmtStr')
+	   of (SOME(#"%", fmtStr')) => (Raw(SS.slice(fmtStr, 0, SOME 1)), fmtStr')
 	    | _ => scanFieldSpec fmtStr
 	  (* end case *))
 
