@@ -97,12 +97,12 @@ void GCCollect_Gen(Proc_t *proc)
   proc->segmentType |= (FlipOn | FlipOff | ((GCType == Minor) ? MinorWork : MajorWork));
 
   if (GCType == Minor) {            
-    minor_global_scan(proc);
     process_writelist(proc, nursery, fromSpace); /* Get globals and backpointers */
+    minor_global_scan(proc);
   }
   else {
-    major_global_scan(proc);
     process_writelist(proc, NULL, NULL);  /* Get globals; Backpointers can be ignored on major GC */
+    major_global_scan(proc);
   }
 
   procChangeState(proc, GCWork, 304);
