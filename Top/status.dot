@@ -1,0 +1,29 @@
+digraph Status {
+	// ellipse: unit is waiting around
+	// box: unit is being worked on
+
+	READY [shape=box]			// master making plan
+	WORKING [shape=box]			// slave compiling
+	PROCEEDING [shape=box]			// slave compiling, interface done
+	WORKING2 [label="WORKING'", shape=box]	// master finishing up
+	
+	PENDING2 [label="PENDING'"]
+
+	WAITING -> READY
+	
+	READY -> PENDING
+	
+	READY -> PENDING2
+	WORKING -> PENDING2
+	PROCEEDING -> PENDING2
+
+	PENDING -> WORKING
+	WORKING -> PROCEEDING
+	
+	PENDING2 -> WORKING2
+		
+	READY -> DONE
+	WORKING -> DONE
+	PROCEEDING -> DONE
+	WORKING2 -> DONE
+}
