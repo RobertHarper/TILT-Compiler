@@ -50,14 +50,14 @@ slave:
 	$(TILT_NEW) -vs
 
 # Build runtime, basis libraries, and tilt binaries for current platform.
-.PHONY: tilt tilt_runtime tilt_tilt
-tilt_runtime:
+.PHONY: tilt runtime tilt_tilt
+runtime:
 	(cd Runtime && gmake runtime)
 tilt_basis:
 	$(TILT_NEW) -vb
 tilt_tilt:
 	$(TILT_NEW) -vm $(MAPFILE)
-tilt: tilt_runtime tilt_basis tilt_tilt
+tilt: tilt tilt_basis tilt_tilt
 
 # Update misc collection's source tree from CVS.
 .PHONY: misc_src
