@@ -152,3 +152,4 @@
 0156 [closed]	datatypes and scope
 0157 [open]	Memory leak: continuous slow heap growth
 0158 [open]	pattern compiler rejecting valid code
+0159 [open]	Phase splitter bombing on datatype replication.
