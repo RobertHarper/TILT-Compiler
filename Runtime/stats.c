@@ -557,7 +557,6 @@ const char *orderString(void)
 void stats_finish(void)
 { 
   int i;
-  FILE *fd;
   double elapsed;
   double AvgStackDepth = TotalStackDepth/((double)NumGC+eps);
   double AvgNewStackDepth = TotalNewStackDepth/((double)NumGC+eps);
@@ -711,10 +710,11 @@ void stats_finish(void)
 	 GlobalTableSize,    MutableTableSize);
   */
 
-
-  fd = fopen("runStats", "w");
-  i = fwrite(statString,1,statStringCursor,fd);
-  assert(statStringCursor == i);
-  fclose(fd);
+  if (statStringCursor > 0) {
+    FILE* fd = fopen("runStats", "w");
+    i = fwrite(statString,1,statStringCursor,fd);
+    assert(statStringCursor == i);
+    fclose(fd);
+  }
 }
 
