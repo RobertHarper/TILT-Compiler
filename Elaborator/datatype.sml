@@ -516,7 +516,9 @@ structure Datatype
 		   constr_sumarg_var_i, 
 		   constr_sumarg_i,
 		   constr_sumarg_kind_i) = 
-	    let val k = constr_sumarg_kind_i
+	    let val k = if is_monomorphic 
+			    then constr_sumarg_kind_i 
+			else KIND_ARROW(num_tyvar,constr_sumarg_kind_i)
 		val c = if is_monomorphic
 			    then constr_sumarg_i
 			else con_fun(tyvar_vars, constr_sumarg_i)
