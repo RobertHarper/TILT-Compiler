@@ -965,6 +965,7 @@ struct
 	     fun loop nil = nil
 	       | loop (CALLSITE{label,live} :: rest)  =
 		   let
+
 		       fun get_stackloc spos =
 			 sloc2int (fixStackOffset spos)
 
@@ -1053,7 +1054,22 @@ struct
 			              split (physical_locations,nil,nil)
 
 		       val regtrace = regtrace @ callee_save_regs_info
-
+(*
+		       fun tr2s TRACE_NO                  = "no"
+			 | tr2s TRACE_YES                 = "yes"
+			 | tr2s TRACE_UNSET               = "unset"
+			 | tr2s (TRACE_CALLEE  r)         = "callee"
+			 | tr2s (TRACE_STACK sloc) = "stack"
+			 | tr2s (TRACE_STACK_REC (sloc,i)) = "stack_rec"
+			 | tr2s _          = 	"<ignoring trace>"
+			   
+		       val _ = (print "chaitin.sml processing label = ";
+				print (Machineutils.Machine.msLoclabel label); print "\n";
+				print "regtrace:\n";
+				app (fn (v,t) => (print (msReg v); print " => ";
+						  print (tr2s t); print "\n")) regtrace;
+				print "\n\n")
+*)
 		       val stacktrace = stacktrace @ callee_save_spilled_info
 		   in
 		       (Tracetable.CALLINFO
@@ -1135,7 +1151,8 @@ struct
 		
    fun allocateProc1 (blah as
 		      {getSignature : loclabel -> procsig,
-		      name         : loclabel,
+		       external_name : Rtl.label option,
+		       name         : loclabel,
 		      block_map    : bblock Labelmap.map,
 		      procsig = procsig as PROCSIG{arg_ra_pos=orig_args,
 						   res_ra_pos,
@@ -1167,7 +1184,7 @@ struct
       val _ = if !debug then
 	           (emitString commentHeader;
 		    emitString " before precoloring procedure\n";
-	            dumpProc(name,procsig,
+	            dumpProc(name,external_name,procsig,
 			     block_map,blocklabels, true))
             else ()
 
@@ -1178,7 +1195,7 @@ struct
       val _ = if !debug then
 	           (emitString commentHeader;
 		    emitString " result of precoloring procedure\n";
-	            dumpProc(name,procsig,
+	            dumpProc(name,external_name,procsig,
 			     block_map,block_labels, true))
             else ()
 
@@ -1189,7 +1206,7 @@ struct
        val _ = if !debug then
 	           (emitString commentHeader;
 		    emitString " dumping procedure after expanding calls\n";
-		    dumpProc (name,procsig, block_map, block_labels, !debug);
+		    dumpProc (name,external_name,procsig, block_map, block_labels, !debug);
 		    emitString commentHeader;
 		    emitString " done expanding\n")
 	       else ()
@@ -1201,7 +1218,7 @@ struct
 	   if (! debug) then 
 	       (emitString commentHeader;
 		emitString " dumping procedure after annotation\n";
-		dumpProc (name, procsig, block_map, block_labels, !debug);
+		dumpProc (name, external_name,procsig, block_map, block_labels, !debug);
 		emitString commentHeader;
 		emitString " done annotation\n")
 	   else ()
@@ -1209,6 +1226,7 @@ struct
      in
 	 ({getSignature = getSignature,
 	   name = name,
+	   external_name = external_name,
 	   block_map = block_map,
 	   procsig = PROCSIG{arg_ra_pos=orig_args,
 			     res_ra_pos = res_ra_pos,
@@ -1228,6 +1246,7 @@ struct
 
 
    fun allocateProc2 ({getSignature : loclabel -> procsig,
+		       external_name : Rtl.label option,
 		       name         : loclabel,
 		       block_map    : bblock Labelmap.map,
 		       procsig as PROCSIG{arg_ra_pos=orig_args,

@@ -43,6 +43,14 @@ struct
 					  mutable_objects,
 					  mutable_variables}) =
      let
+      
+       local 
+	   val table = map (fn PROC{name,external_name,...} => (name,external_name)) procs
+       in  fun name2external name = 
+	   (case (Listops.assoc_eq(fn(x,y) => eqLLabs x y,name,table)) of
+		NONE => error "bad name"
+	      | SOME res => res)
+       end
        val {callee_map, rtl_scc, ...} = Recursion.procGroups prog
        local
 	   val recursive_components =
@@ -78,8 +86,8 @@ struct
 	       memberLabel (getComponent groups proc1) proc2
        in
 	   val is_mutual_recursive = sameComponent recursive_components
-	   val names = map (fn (Rtl.PROC{name,...}) => 
-			    Toasm.translateLocalLabel name) procs
+	   val names = map (fn (Rtl.PROC{name,external_name,...}) => 
+			    (Toasm.translateLocalLabel name,external_name)) procs
 	   val component_names = recursive_components
        end
 
@@ -246,13 +254,14 @@ struct
 		     if !debug
 		     then (emitString commentHeader;
 			   emitString (" dumping initial version of procedure");
-			   dumpProc(name,psig, block_map, blocklabels, true))
+			   dumpProc(name,name2external name,psig, block_map, blocklabels, true))
 		     else ()
 
 		 val _ = msg "\tallocating\n"
 
 		 val temp = Procalloc.allocateProc1
 		     {getSignature = getSig,
+		      external_name = name2external name,
 		      name      = name,
 		      block_map = block_map,
 		      tracemap  = tracemap,
@@ -291,8 +300,9 @@ struct
 		   (emitString commentHeader;
 		    emitString(" dumping final version of procedure "))
 	       else ();
-		dumpProc (name, new_sig, new_block_map, 
-			     new_block_labels, !debug);
+		dumpProc (name, name2external name,
+			  new_sig, new_block_map, 
+			  new_block_labels, !debug);
 		dumpDatalist gc_data;
 		if !debug then
 		    (emitString commentHeader;
@@ -308,7 +318,7 @@ struct
 		 fun helper (PROCSIG{regs_modified,...}) = regs_modified
 	     in
 		 fun get_modsetref (SOME psig,NONE,_) = helper psig
-		   | get_modsetref (NONE,SOME(_,({getSignature,name,block_map,
+		   | get_modsetref (NONE,SOME(_,({getSignature,external_name,name,block_map,
 						  procsig,stack_resident,tracemap},
 						  _,_,_,_)),_) = helper procsig
 		   | get_modsetref _ = error "allocateproc in allocatecomponent"

@@ -36,7 +36,7 @@ sig
 
   val makeAsmHeader : Machine.procsig -> string
   val programHeader : string list
-  val procedureHeader : string -> string list
+  val procedureHeader : Machine.Rtl.label -> string list
   val procedureTrailer : string -> string list
   val textStart : string list
   val dataStart : string list

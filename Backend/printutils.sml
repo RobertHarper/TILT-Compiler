@@ -176,7 +176,7 @@ struct
        app (emitString o CodeLabelDecl) ucls
      end
 
-   fun dumpProc (name, 
+   fun dumpProc (name, external_name : Rtl.label option,
 		 psig as PROCSIG{args, res, regs_destroyed, regs_modified,
 				 arg_ra_pos, res_ra_pos, ...}, 
 		 
@@ -184,7 +184,9 @@ struct
 		 block_labels,
 		 debug) =
      (app emitString textStart; 
-      app emitString (procedureHeader (msLoclabel name));
+      app emitString (procedureHeader (case external_name of
+					   NONE => Rtl.LOCAL_LABEL name
+					 | SOME label => label));
       emitString commentHeader;
 
       emitString " arguments : ";

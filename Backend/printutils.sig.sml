@@ -39,7 +39,8 @@ sig
 			    Bblock.bblock Machineutils.Labelmap.map -> 
 			    Machine.loclabel list -> unit
 
-   val dumpProc : Machine.loclabel * Machine.procsig *
+   val dumpProc : Machine.loclabel * Machine.Rtl.label option *
+                 Machine.procsig *
                  Bblock.bblock Machineutils.Labelmap.map * 
 	         Machine.loclabel list *
 		 bool -> unit

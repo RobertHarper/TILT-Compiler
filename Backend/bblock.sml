@@ -89,6 +89,9 @@ struct
       the blocks' def and use values. *)
    fun findLiveTemps block_map first_label =
      let
+
+       val all_labels = map #1 (Labelmap.listItemsi block_map)
+
        fun getInLive (BLOCK{in_live,...}) = ! in_live
 
        fun getBlock blk =
@@ -97,56 +100,69 @@ struct
 	     | NONE => error ("findLiveTemps: getblock" ^
 			      (msLoclabel blk))
 
-       fun memberLabel [] _ = false
-         | memberLabel (l::rest) l' = 
-	   if (eqLLabs l l') then true else memberLabel rest l'
+       fun memberLabel labs l = Listops.member_eq(fn (l1,l2) => eqLLabs l1 l2, l,labs)
 
        (* Aho/Sethi/Ullman suggests traversing the blocks in the
           OPPOSITE order from a depth-first-search through the
 	  control-flow graph. *)
-       val blocklabel_list =
-	 let 
+       local
 	   fun revDFS [] block_names = block_names
 	     | revDFS (blk :: rest) block_names =
 	       if (memberLabel block_names blk) then
-		 revDFS rest block_names
+		   revDFS rest block_names
 	       else
-		 let val (BLOCK{succs,...}) = getBlock blk
-		 in
-		   revDFS (!succs @ rest) (blk :: block_names)
-		 end
-	 in
-(*	   revDFS (first_label :: 
-		   (map (fn (l,_) => l) (Labelmap.listItems block_map))) [] *)
-	   revDFS [first_label] []
-	 end
+		   let val (BLOCK{succs,...}) = getBlock blk
+		   in
+		       revDFS (!succs @ rest) (blk :: block_names)
+		   end
+       in
+	   val almost_rev_blocklabel_list = revDFS [first_label] []
+	   fun filter l = if (memberLabel almost_rev_blocklabel_list l)
+			      then NONE
+			  else SOME l
+	   val rest = List.mapPartial filter all_labels
+	   val rev_blocklabel_list = almost_rev_blocklabel_list @ rest
+	   val blocklabel_list = rev rev_blocklabel_list
+       end
 
        (* Flag: have we gone an entire pass through the function
 	        without changing any block's live-variable values? *)
        val unchanged = ref true
 
        (* Make one pass through the entire function *)
-       fun loop [] = ()
-         | loop (blk :: rest) =
+       fun reverse_step blk = 
 	   let 
-	     val (BLOCK{def, use, in_live, out_live, succs, ...}) = 
-	       getBlock blk
+	     val (BLOCK{def, use, in_live, out_live, succs, ...}) = getBlock blk
 	     val block_liveins = map (fn l => getInLive (getBlock l)) (!succs)
              val out_live' = unionLists block_liveins
-	     val in_live'  = 
-	       Regset.union (use, Regset.difference(out_live', def))
+	     val in_live'  =  
+		 if (eqLLabs blk first_label) (* the in_live of the first block never changes *)
+		     then (!in_live)
+		 else Regset.union (use, Regset.difference(out_live', def))
+	     val _ = (print "reverse_step call on: ";
+		      print (msLoclabel blk); 
+		      print "     and first_label = ";
+		      print (msLoclabel first_label);
+		      print "\nuse = ";
+		      Regset.app (fn r => (print (msReg r); print ", ")) use;
+		      print "\nin_live' = ";
+		      Regset.app (fn r => (print (msReg r); print ", ")) use;
+		      print "\n\n")
 	   in
-	     unchanged := ((!unchanged) andalso 
-			   (Regset.equal(!in_live, in_live')));
-	     out_live := out_live';
-	     in_live  := in_live';
-	     loop rest
+	       unchanged := ((!unchanged) andalso 
+			     (Regset.equal(!in_live, in_live')));
+	       out_live := out_live';
+	       in_live  := in_live'
 	   end
+(*
+       fun forward_step blk = 
+*)
 
        (* Repeat loop() until a fixpoint is reached *)
        fun outerLoop () =      
 	 (unchanged := true;
-	  loop blocklabel_list;
+	  app reverse_step rev_blocklabel_list; 
+(*	  app forward_step blocklabel_list; *)
 	  if (not (! unchanged)) then outerLoop () else ())
      in
        outerLoop ()

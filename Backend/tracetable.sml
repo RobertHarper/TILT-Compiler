@@ -265,9 +265,25 @@ functor Tracetable(val little_endian    : bool
 		    NONE => TRACE_NO
 		  | (SOME (v,t)) => t
 	    fun reglookup n = 
+		let fun mapper (v,t) = if (n = MU.Machine.regNum v)
+					   then SOME t
+				       else NONE
+		    val matches = List.mapPartial mapper regtrace
+		in  (case matches of
+			 [] => TRACE_NO
+		       | [t] => ((* print "trace for reg "; print (Int.toString n);
+				 print " = "; print (tr2s t); *)
+				 t)
+		       | _ => (print "multiple traces found for register: ";
+			       app (fn t => (print (tr2s t); print "  ")) matches;
+			       print "\n"; hd matches))
+		end
+(*
+	    fun reglookup n = 
 		case (List.find (fn (v,t) => (n = MU.Machine.regNum v)) regtrace) of
 		    NONE => TRACE_NO
 		  | (SOME (v,t)) => t
+*)
 	    val _ = clearwords()
 	    val _ = clearbytes()
 	    local
