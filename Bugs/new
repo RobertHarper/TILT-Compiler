@@ -4,18 +4,18 @@
 # new -i
 
 # run program -- run program, aborting on non-zero exit status
-fn run { s=(){
+fn run {
 	echo running $*
 	$*
-	s=$status
-	if(!~ $s 0){
+	if(!~ $status 0){
 		echo >[1=2] program exitted with non-zero status, aborting
 		exit 1
 	}
-}}
+}
 nl='
 '
 # read prompt var -- read a line of text into $var
+# Var can not be x.
 fn read { x=() {
 	echo >[1=2] -n $1
 	x=``($nl) {
