@@ -68,7 +68,7 @@ int GCTry_GenPara(Proc_t *proc, Thread_t *th)
 {
   int roundSize = RoundUp(th->requestInfo, minOffRequest);
 
-  if (th->requestInfo > 0) {
+  if ((th->request != MajorGCRequestFromC) && th->requestInfo > 0) {
     GetHeapArea(nursery,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
     if (proc->allocStart) {
       if (diag) 
@@ -80,8 +80,6 @@ int GCTry_GenPara(Proc_t *proc, Thread_t *th)
     unsigned int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
     return ((-th->requestInfo) <= bytesAvailable);
   }
-  else 
-    assert(0);
   return 0;
 }
 

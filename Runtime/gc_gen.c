@@ -74,17 +74,15 @@ int GCTry_Gen(Proc_t *proc, Thread_t *th)
     proc->allocLimit = nursery->top;
     nursery->cursor = nursery->top;
   }
-  if (th->requestInfo > 0) {
+  if (th->requestInfo < 0) {
+    unsigned int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
+    return ((-th->requestInfo) <= bytesAvailable);
+  }
+  else if ((th->request != MajorGCRequestFromC) && th->requestInfo > 0) {
     unsigned int bytesAvailable = (val_t) proc->allocLimit - 
 				  (val_t) proc->allocCursor;
     return (th->requestInfo <= bytesAvailable);
   }
-  else if (th->requestInfo < 0) {
-    unsigned int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
-    return ((-th->requestInfo) <= bytesAvailable);
-  }
-  else 
-    assert(0);
   return 0;
 }
 

@@ -494,7 +494,7 @@ void GCPoll(Proc_t *proc)
 /* Is there enough room in proc to satisfy mapping th onto it */
 int GCSatisfied(Proc_t *proc, Thread_t *th)
 {
-  /* requestInfo < 0 means that many butes in write buffer is requested 
+  /* requestInfo < 0 means that many bytes in write buffer is requested 
      requestInfo > 0 means that many bytes of allocation is requested */
   if (th->requestInfo < 0) {
     if ((val_t)proc->writelistCursor - th->requestInfo <= (val_t)proc->writelistEnd)
