@@ -1,15 +1,35 @@
 Number: 0094
 Title:       The Runtime uses too much virtual memory.
-Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Keywords:    Runtime
 Submitter:   swasey
 Date:        08/16/02
-Version:     <TILT version number>
-System:      <e.g. solaris,alpha,linux>
-Severity:    <critical, major, minor, cosmetic>
-Problem:     <description of problem>
-Code:        <SML source code to reproduce the bug>
-Transcript:  <transcript of exectution demonstating the bug>
-Comments:    <additional comments>
-Fix:         <optional - but you get extra credit>
+Version:     CVS
+System:      solaris,alpha
+Severity:    major
+Problem:
+	Our technique of grabbing as much virtual memory as there is
+	physical memory can cause TILT-generated binaries to fail on
+	startup or on fork().
+
+	On Solaris, fork1() fails with ENOMEM if there is not enough
+	virtual memory to accomodate parent and child.
+
+	Example: Fill up /tmp on cuff with a copy of TILT or some
+	other large files.  This consumes swap space.  Then run the
+	program below under truss.  You will see that the call to
+	fork1() in fails with ENOMEM.
+
+Code:
+	(*$import Prelude TopLevel POSIX_Process *)
+
+	structure test =
+	struct
+	    val _ = POSIX_Process.fork ()
+	end
+Transcript:
+Comments:
+	During the TILT work week, Daniel Spoonhower and Perry Cheng
+	worked on a plan to fix this problem.
+Fix:
 Owner:
 Status: open
