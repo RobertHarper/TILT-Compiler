@@ -146,3 +146,4 @@
 0150 [open]	parsing problem on non-corner case
 0151 [open]	name clash problem in ld
 0152 [open]	Incorrect matching of eqtype specs.
+0153 [open]	Sharing abstract type and eqtype specs is broken.
