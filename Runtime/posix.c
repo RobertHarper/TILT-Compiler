@@ -189,16 +189,21 @@ char* exnMessageRuntime(void *unused)
 /* extract the exponent */
 int real_logb(double arg)
 {
-#ifdef alpha_osf
-  unsigned long temp;
-  *((double *)(&temp)) = arg;
-  temp >>= 52;
-  temp &= (1<<11 - 1);
-  temp -= 1023;
-  return temp;
-#endif
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  int biasedExp = 0;
+  if (sizeof(unsigned long) ==  sizeof(double)) {
+    unsigned long temp;
+    *((double *)(&temp)) = arg;
+    biasedExp = (int)(temp >> 52);
+  }
+  else if ((2 * (sizeof(unsigned int))) == sizeof(double)) {
+    int temp[2];
+    *((double *)temp) = arg;
+    biasedExp = (int)(temp[1]);
+  }
+  else
+    assert(0);
+  biasedExp -= 1023;
+  return biasedExp;
 }
 
 

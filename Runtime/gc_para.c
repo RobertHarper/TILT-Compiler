@@ -64,9 +64,10 @@ static value_t SharedStack[4096];
 static int SharedCursor;
 static int Gate = 0, Turn1 = 0, Turn2 = 0;
 
-static void SynchStart(void)
+static void SynchStart(SysThread_t *sth)
 {
   while (Gate);
+  sth->temp = &Turn1;
   FetchAndAdd(&Turn1, 1);
   while (Gate)
     {
@@ -186,7 +187,7 @@ static void stop_copy(SysThread_t *sysThread)
   /* Move everything from local stack to global stack to balance work */
   {
     int i,cursor;
-    SynchStart();
+    SynchStart(sysThread);
     SynchMid();
     cursor = FetchAndAdd(&SharedCursor,sysThread->LocalCursor);
     for (i=0; i<sysThread->LocalCursor; i++)
@@ -205,7 +206,7 @@ static void stop_copy(SysThread_t *sysThread)
   while (numGlobalThread < NumSysThread || (SharedCursor != 0)) {
     int num = 10;
     int i, cursor;
-    SynchStart();
+    SynchStart(sysThread);
     /* Try to grab 10 items; might have to fix cursor */
     cursor = FetchAndAdd(&SharedCursor,-num);
     if (cursor < num) {     /* check for overreach; SharedCursor is unreliable */
@@ -248,6 +249,7 @@ static void stop_copy(SysThread_t *sysThread)
   numWaitThread = 0;
 
   /* All system threads need to reset their limit pointer */
+  sysThread->alloc = StartHeapLimit;
   sysThread->limit = StartHeapLimit;
 
   /* Only the designated thread needs to perform the following */
@@ -314,11 +316,12 @@ void gc_para(Thread_t *curThread)
   int tid = curThread->tid;
   long *saveregs = curThread->saveregs;
   value_t *alloc = (value_t *) saveregs[ALLOCPTR_REG];
-  value_t *limit = (value_t *) saveregs[ALLOCPTR_REG];
+  value_t *limit = (value_t *) saveregs[ALLOCLIMIT_REG];
   value_t *tmp1, *tmp2;
   int req_size = saveregs[ASMTMP_REG] - (int) alloc;
 
-  assert(saveregs[ALLOCPTR_REG] <= saveregs[ALLOCLIMIT_REG]);
+  if (!(alloc <= limit)) 
+    printf("alloc = %d   limit = %d\n",alloc,limit);
   assert(alloc <= limit);    
   assert(writelist_cursor <= writelist_end); /* XXX writelist is not synchronized */
   

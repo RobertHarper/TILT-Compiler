@@ -13,7 +13,7 @@ all:
 	echo "Try gmake runtime"
 
 purge:
-	rm -rf *\.o *~
+	rm -rf obj*/*\.o *~
 
 test:
 	echo ${asm_name}
@@ -167,16 +167,16 @@ ${objdir}/signal.o: signal.c tag.h
 ${objdir}/forward.o: forward.c tag.h general.h platform.h forward.h thread.h
 	${CC} -o $@ ${CFLAGS} forward.c
 
-${objdir}/gc_semi.o: gc_semi.c tag.h general.h platform.h forward.h gc.h stack.h
+${objdir}/gc_semi.o: gc_semi.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_semi.c
 
-${objdir}/gc_gen.o: gc_gen.c tag.h general.h platform.h forward.h gc.h stack.h
+${objdir}/gc_gen.o: gc_gen.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_gen.c
 
-${objdir}/gc_para.o: gc_para.c tag.h general.h platform.h forward.h gc.h stack.h
+${objdir}/gc_para.o: gc_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_para.c
 
-${objdir}/gc.o: gc.c tag.h general.h platform.h forward.h gc.h stack.h
+${objdir}/gc.o: gc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc.c
 
 ${objdir}/gcstat.o: gcstat.c tag.h general.h

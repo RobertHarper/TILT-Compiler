@@ -965,8 +965,8 @@ void global_root_scan(Queue_t *global_roots, Heap_t *fromspace)
   for (mi=0; mi<module_count; mi++) {
     value_t *start = (value_t *)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
     value_t *stop = (value_t *)((&TRACE_GLOBALS_END_VAL)[mi]);
-    for ( ; start < stop; start += 4) {
-      Enqueue(global_roots,start); 
+    for ( ; start < stop; start++) {
+      Enqueue(global_roots,(void *)(*start)); 
     }
   }
 }

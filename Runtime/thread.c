@@ -6,6 +6,10 @@
 #include <assert.h>
 #include <stdio.h>
 #include "til-signal.h"
+#include <sys/types.h>
+#include <sys/procset.h>
+#include <sys/processor.h>
+#include <unistd.h>
 #include <pthread.h>
 #include "gc.h"
 
@@ -144,19 +148,24 @@ void DeleteJob(SysThread_t *sth)
   FetchAndAdd(&(th->status),1);  /* We increment status so it doesn't get scheduled when released */
   ReleaseJob(sth);
   LocalLock();
-  for (i=0; i<NumThread; i++) 
+  printf("DeleteJob entered with topThread = %d\n",topThread);
+  for (i=0; i<NumThread; i++) {
+    printf("DeleteJob i = %d\n",i);
     if (JobQueue[i] == th) {
       if (th->parent)
 	FetchAndAdd(&(th->parent->status),-1);
       for (j=i; j<NumThread-1; j++)
 	JobQueue[j] = JobQueue[j+1];
       topThread--;
-      /*      printf("topThread = %d.  Signalling EmptyCond.\n", topThread); */
+      if (diag)
+	printf("DeleteJob: topThread = %d.  Signalling EmptyCond.\n", topThread); 
       pthread_cond_signal(&EmptyCond);
       LocalUnlock();
       th->status = ThreadDone;  /* Now, we put it back in the free pool */
+      printf("DeleteJob returning with topThread = %d\n",topThread);
       return;
     }
+  }
   printf("Error deleteing user thread %d (%d)\n",th->tid,th->id);
   assert(0);
 }
@@ -319,13 +328,13 @@ void work(SysThread_t *sth)
       th->saveregs[ALLOCPTR_REG] = sth->alloc;
       th->saveregs[ALLOCLIMIT_REG] = sth->limit;
 
-      if (diag)
-	printf("SysThread %d: starting user thread %d (%d) with %d < %d\n",
+      if (diag) {
+	printf("SysThread %d: starting user thread %d (%d) with %d <= %d\n",
 	     sth->stid, th->tid, th->id, 
 	     th->saveregs[ALLOCPTR_REG], th->saveregs[ALLOCLIMIT_REG]);
+	assert(th->saveregs[ALLOCPTR_REG] <= th->saveregs[ALLOCLIMIT_REG]);
+      }
 
-      printf ("alloc_ptr = %d\n", sth->alloc);
-      printf ("limit_ptr = %d\n", sth->limit);
       th->nextThunk = 1;
       start_client(th,(value_t *)th->thunks, th->numThunk);
 
@@ -355,23 +364,52 @@ void work(SysThread_t *sth)
 }
 
 
-static void* systhread_go(void* addr)
+static void* systhread_go(void* unused)
 {
   SysThread_t *st = getSysThread();
+  int status = processor_bind(P_LWPID, P_MYID, st->processor, NULL);
+  if (status != 0)
+    printf("processor_bind failed with %d\n",status);
   st->stack = (int)(&st) & (~255);
+  if (diag)
+    printf("SysThread %d: has stack %d\n", st->stid, st->stack);
   work(st);
   assert(0);
 }
 
 void thread_go(value_t start_adds, int num_add)
 {
+  int curproc = -1;
   int i;
+  sigset_t sigset;
   Thread_t *th = thread_create(0,start_adds,num_add);
   AddJob(th);
 
   /* Create system threads that run off the user thread queue */
-  for (i=0; i<NumSysThread; i++)
-    pthread_create(&(SysThreads[i].pthread),NULL,systhread_go,(void *)i);
+  for (i=0; i<NumSysThread; i++) {
+    pthread_attr_t attr;
+    processor_info_t infop;
+    while (1) {
+      int status = processor_info(++curproc,&infop);
+      if (status == 0 && infop.pi_state == P_ONLINE) {
+	SysThreads[i].processor = curproc;
+	break;
+      }
+      if (curproc > 1024) {
+	printf("Cannot find enough online processors: curproc = %d\n",curproc);
+	assert(0);
+      }
+    }
+    pthread_attr_init(&attr);
+    pthread_attr_setscope(&attr,PTHREAD_SCOPE_SYSTEM); 
+    pthread_create(&(SysThreads[i].pthread),&attr,systhread_go,NULL);
+    printf("Systhread %d:  processor %d and pthread = %d\n",
+	   SysThreads[i].stid, SysThreads[i].processor, SysThreads[i].pthread);
+  }
+  /* Don't deliver CTRL-C to main thread as that is asleep */
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGINT);
+  pthread_sigmask(SIG_BLOCK, &sigset, NULL);
   /* Wait until the work stack is empty;  work stack contains running jobs too */
   while ((i = NumTotalJob()) > 0) {
       printf("Main thread found %d jobs.\n", i);

@@ -208,48 +208,45 @@ void signaltest()
 */
 
 void memfault_handler(int signum, 
-#ifdef alpha_osf
+#if (defined alpha_osf) || (defined solaris)
 		      siginfo_t *siginfo, 
-#endif
-#ifdef solaris
-		      siginfo_t *siginfo, 
-#endif
-#ifdef rs_aix
+#elif (defined rs_aix)
 		      int always_zero,
 #endif
 		      struct ucontext *uctxt)
 {
   SysThread_t *sth = getSysThread();
-  int badaddr = 0;
-#ifdef alpha_osf
-  int signo = siginfo->si_signo;
-  int errno = siginfo->si_errno;
+#if (defined alpha_osf) || (defined solaris)
   int code = siginfo->si_code;
-  if (signum != signo)
-    printf("BUG: signum != signo\n");
-#endif
-#ifdef rs_aix
-  int siginfo = 0;
+#elif (defined rs_aix)
+  siginfo_t *siginfo = NULL;
   int code = 0;
 #endif
-  badaddr = GetBadAddr(uctxt,siginfo);
+  int badaddr = GetBadAddr(uctxt,siginfo);
+  int badpc = GetPc(uctxt);
+
+#if (defined alpha_osf) || (defined solaris)
+  assert(signum == (siginfo->si_signo));
+#endif
+
+  printf("SysThread %d:  Memory error at %d with PC = %d\n",sth->stid, badaddr, badpc);
   switch (signum)
     {
     case SIGILL:
       {
-	printf("SysThread %d: illegal instruction at address %d",sth->stid,badaddr);
+	printf("Illegal instruction\n");
 	exit(-1);
       }
     case SIGSEGV:
       {
-#ifdef alpha_osf
+#if (defined alpha_osf) || (defined solaris)
       switch (code)
 	{ 
 	case SEGV_MAPERR:
-	  printf("SysThread %d: SEGV_MAPERR  address %d not mapped\n",sth->stid,badaddr);
+	  printf("SEGV_MAPERR  address %d not mapped\n",sth->stid,badaddr);
 	  break;
 	case SEGV_ACCERR:
-	  printf("SysThread %d: SEGV_ACCERR  invalid permissions for address %d\n",
+	  printf("SEGV_ACCERR  invalid permissions for address %d\n",
 		 sth->stid,badaddr);
 	  if (StackError(uctxt,badaddr))
 	    printf("Stackrelink/overflow not implemented\n");
@@ -258,32 +255,38 @@ void memfault_handler(int signum,
 	  printf("UNKNOWN      ");
 	  break;
 	}
-#else
+#elif (defined rs_aix)
       if (StackError(uctxt,badaddr))
 	printf("Stackrelink/overflow not implemented\n");
+#else
+      printf("AIX NOT DONE\n");
 #endif
+      break;
       }
     case SIGBUS:  /* BUS ERROR */
       {
-	printf("BUS   ");
-#ifdef alpha_osf
+	printf("Bus Error\n");
+#if (defined alpha_osf || defined solaris)
 	switch (code)
 	  {
 	  case BUS_ADRALN:
-	    printf("SysThread %d:  BUS_ADRALN invalid address alignment\n",sth->stid);
+	    printf("BUS_ADRALN invalid address alignment\n",sth->stid);
 	    break;
 	  case BUS_ADRERR:
-	    printf("BUS_ADRERR      non-existent physical address\n");
+	    printf("BUS_ADRERR non-existent physical address\n");
 	    break;
 	  case BUS_OBJERR:
-	    printf("BUS_OBJERR      object specific hardware error\n");
+	    printf("BUS_OBJERR object specific hardware error\n");
 	  default:
-	  printf("UNKNOWN      \n");
+	    printf("UNKNOWN\n");
 	  break;
 	  }
+#elif (defined rs_aix)
+	printf("AIX NOT DONE\n");
 #else
-	  printf("UNKNOWN      \n");
+	printf("UNKNOWN PLATFORM\n");
 #endif
+	break;
       }
     }
 

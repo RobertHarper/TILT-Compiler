@@ -72,10 +72,12 @@ struct SysThread__t
   int                stid;         /* sys thread id */
   int                alloc;        /* allocation pointer */
   int                limit;        /* allocation limit */
+  int                processor;    /* processor id that this pthread is bound to */
   pthread_t          pthread;      /* pthread that this system thread is implemented as */
   Thread_t           *userThread;  /* current user thread mapped to this system thread */
   value_t            LocalStack[1024];  /* Used by parallel collector */
   int                LocalCursor;
+  int temp;
 };
 
 typedef struct SysThread__t SysThread_t;
