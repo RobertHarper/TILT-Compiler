@@ -81,13 +81,8 @@ structure AlphaMLRISCPseudo
 	  let
 	    fun fixSign #"~" = #"-"
 	      | fixSign char = char
-
-	    val string' = implode(map fixSign (explode string))
 	  in
-	    if Char.contains string #"e" orelse Char.contains string #"E" then
-	      string'^"e0"
-	    else
-	      string'
+	    implode(map fixSign (explode string))
 	  end
 
     fun fixString string = foldr op^ "" (map Char.toString (explode string))
