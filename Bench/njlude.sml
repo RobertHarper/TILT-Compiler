@@ -33,3 +33,5 @@ val op div = (op div) : int * int -> int
 fun inc x = x := (!x + 1)
 val vsub1 = String.sub
 type instream = TextIO.instream
+
+val notb = fn (x : int) => ~x - 1
