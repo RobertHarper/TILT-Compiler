@@ -357,15 +357,15 @@ struct
 	      | is_open_internal_path (pathmap,PATH(v,labs)) = 
 		(case labs of
 		     [lab] => (case PathMap.find(pathmap,(v,[])) of
-				   NONE => false
+				   NONE => raise Div
 				 | SOME (l,_) => is_open l andalso is_label_internal lab)
 		   | _ => let val len = length labs
 			  in is_open (List.nth(labs, len - 2)) andalso is_label_internal (List.nth(labs, len - 1))
 			  end)
 	    val labelMap = LabelMap.unionWithi 
 		            (fn (l,(p1,pc1),second as (p2,pc2)) => 
-			     if (is_open_internal_path(pm1,p1) orelse 
-				 is_open_internal_path(pm2,p2))
+			     if (is_open_internal_path(pm1,p1) handle e => (print "first\n"; false) orelse 
+				 is_open_internal_path(pm2,p2) handle e => (print "second\n"; false))
 				 then second
 			     else (print "p1 = "; pp_path p1; print " :\n";
 				   pp_phrase_class pc1; print "\n\n";
