@@ -623,16 +623,16 @@ end (* local defining splitting context *)
    and preproject (var_arg, il_signat, context) = 
 	let 
 	    fun find_structure_paths m acc 
-		(Il.SIGNAT_STRUCTURE(popt,(Il.SDEC(l,Il.DEC_MOD(_,false,s)))::rest)) = 
+		(Il.SIGNAT_STRUCTURE((Il.SDEC(l,Il.DEC_MOD(_,false,s)))::rest)) = 
   		   if (IlUtil.is_dt l) then
-		       find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,rest))
+		       find_structure_paths m acc (Il.SIGNAT_STRUCTURE(rest))
 		   else	
 		       let val acc = (Il.MOD_PROJECT(m,l))::acc
 			   val acc = find_structure_paths (Il.MOD_PROJECT(m,l)) acc s
-		       in  find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,rest))
+		       in  find_structure_paths m acc (Il.SIGNAT_STRUCTURE(rest))
 		       end
-	      | find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,_::rest)) =
-		   find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,rest))
+	      | find_structure_paths m acc (Il.SIGNAT_STRUCTURE(_::rest)) =
+		   find_structure_paths m acc (Il.SIGNAT_STRUCTURE(rest))
 	      | find_structure_paths m acc _ = acc
 
 	    val rev_paths : Il.mod list = find_structure_paths (Il.MOD_VAR var_arg) [] il_signat
@@ -2120,7 +2120,7 @@ end (* local defining splitting context *)
 
 	   val is_polyfun_sig = 
 	       (case sig_rng of
-		    Il.SIGNAT_STRUCTURE(_,[Il.SDEC(it_lbl,Il.DEC_EXP _)]) => Name.eq_label(it_lbl,IlUtil.it_lab)
+		    Il.SIGNAT_STRUCTURE([Il.SDEC(it_lbl,Il.DEC_EXP _)]) => Name.eq_label(it_lbl,IlUtil.it_lab)
 		  | _ => false)
 
 	   val ((var_c, var_r), context) = newSplitVar (var, context)
@@ -2140,11 +2140,11 @@ end (* local defining splitting context *)
 			body_type = con'})
        end
 
-     | xsig' context (con0, Il.SIGNAT_STRUCTURE (NONE,sdecs)) = xsig_struct context (con0,sdecs)
-     | xsig' context (con0, Il.SIGNAT_STRUCTURE (SOME p,sdecs)) = 
-       let val signat = Il.SIGNAT_STRUCTURE(NONE,sdecs)
-       in  xsig' context (con0, signat)
-       end
+     | xsig' context (con0, Il.SIGNAT_STRUCTURE sdecs) = xsig_struct context (con0,sdecs)
+     | xsig' context (con0, Il.SIGNAT_SELF(_, SOME unselfSig, _)) = xsig' context (con0, unselfSig)
+     (* the self signature has no self-references; but rather just has no internal variable uses *)
+     | xsig' context (con0, Il.SIGNAT_SELF(_, NONE, selfSig)) = xsig' context (con0, selfSig)
+
 
    and xsig_struct context (con0,sdecs) = 
        let
@@ -2246,7 +2246,7 @@ end (* local defining splitting context *)
 			     Il.DEC_MOD
 			     (top_var, true, s as
 			      Il.SIGNAT_FUNCTOR(poly_var, il_arg_signat,
-						Il.SIGNAT_STRUCTURE(_,[Il.SDEC(them_lbl,
+						Il.SIGNAT_STRUCTURE([Il.SDEC(them_lbl,
 									    Il.DEC_EXP(_,il_con,_,_))]),
 						arrow))))
 		     :: rest) = 

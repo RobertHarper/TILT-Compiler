@@ -373,7 +373,27 @@ structure Ppnil	:> PPNIL =
 			   Break0 0 5,
 			   pp_default (SOME default),
 			   String ")",String" : ",pp_con result_type]
+	      | Ifthenelse_e {arg, result_type, thenArm, elseArm} =>
+		    HOVbox[String "IF (", 
+			   pp_conditionCode arg,
+			   String ") ",
+			   Break0 0 5,
+			   String "THEN ", pp_exp thenArm, 
+			   String " ",
+			   Break0 0 5,
+			   String "ELSE ", pp_exp elseArm, 
+			   String " ",
+			   Break0 0 5,
+			   String" : ", pp_con result_type]
 	end
+
+    and pp_conditionCode cc = 
+	(case cc of
+	     Exp_cc exp => pp_exp exp
+	   | Prim_cc (prim, ccList) => HOVbox[pp_prim' prim, String "(", pp_list pp_conditionCode ccList ("", ",", "", true), String ")"]
+	   | And_cc (cc1,cc2) => HOVbox[String "AND(", pp_conditionCode cc1, String ", ", pp_conditionCode cc2, String ")"]
+	   | Or_cc  (cc1,cc2) => HOVbox[String "OR(", pp_conditionCode cc1, String ", ", pp_conditionCode cc2, String ")"]
+	   | Not_cc  cc => HOVbox[String "NOT(", pp_conditionCode cc, String ")"])
 
     and pp_trace TraceUnknown = String "Unknown"
       | pp_trace (TraceCompute v) = Hbox[String "Compute(", pp_var v, String ")"]

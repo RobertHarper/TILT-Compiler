@@ -1921,6 +1921,17 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 in
 		   sum_exn (mk_sum,check_arg) (D,arg,bound,arms,default,result_type)
 		 end
+
+	      | Ifthenelse_e {arg,thenArm,elseArm,result_type} => 
+		 let
+		     (* things to check:
+		      (1) arg is well-formed (entails writing wellFormedConditionCode)
+		      (2) result_type is well-formed
+		      (3) thenArm and elseArm are well-typed with result_type
+		      *)
+		 in
+		   error "nilstatic.sml" "Ifthenelse_e not done"
+		 end
 	       
 		| Exncase_e {arg,bound,arms,default,result_type} =>
 		 let

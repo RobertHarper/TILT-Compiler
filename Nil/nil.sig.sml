@@ -167,6 +167,10 @@ sig
 		     result_type : con,
 		     arms : (primcon * (var * kind) list * exp) list,
 		     default : exp}                 (* typecase *)
+    | Ifthenelse_e of {arg : conditionCode,             
+		       thenArm : exp,
+		       elseArm : exp,
+		       result_type : con}
 
   and exp =                                          (* Term-level constructs *)
       Var_e of var                                   (* Term-level variables *)
@@ -183,6 +187,12 @@ sig
                    handler : exp,
                    result_type : con}
 
+  and conditionCode =                          (* Usd by Ifthenelse_e *)
+      Exp_cc of exp
+    | Prim_cc of prim * conditionCode list     (* Only comparison primitives of numeric types are permitted *)
+    | And_cc  of conditionCode * conditionCode (* Short-circuiting *)
+    | Or_cc   of conditionCode * conditionCode (* Short-circuiting *)
+    | Not_cc  of conditionCode 
 
   (* result types are needed for recursive definitions in order to make
    * type-checking syntax directed.  Also note that I've forced all functions
