@@ -1076,7 +1076,10 @@ struct
   fun make_record (state, destopt, reps, vl) = 
       let fun is_varval (VALUE vv) = true 
 	    | is_varval _ = false
-	  val const = (!do_constant_records andalso ((istoplevel()) orelse (andfold is_varval vl)))
+	  fun is_static (COMPUTE _) = false
+	    | is_static _ = true
+	  val const = (istoplevel() orelse (andfold is_varval vl)) andalso (andfold is_static reps)
+	  val const = const andalso (!do_constant_records)
       in  make_record_help(const,state,destopt,reps,vl,NONE)
       end
 
