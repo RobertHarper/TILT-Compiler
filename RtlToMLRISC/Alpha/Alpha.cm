@@ -7,7 +7,7 @@ group is
 
 ../../Alpha/alpha.cm
 ../../Backend/backend.cm
-../../MLRISC/MLRISC.cm
+../../MLRISC.cm
 ../../smlnj-lib.cm
 
 ../RtlToMLRISC.cm

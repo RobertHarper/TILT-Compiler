@@ -7,8 +7,8 @@ group is
 
 ../Backend/backend.cm
 ../Parser/parser.cm
-../MLRISC/MLRISC.cm
 ../Rtl/rtl.cm
+../MLRISC.cm
 ../smlnj-lib.cm
 
 BASIC_BLOCK.sig.sml
