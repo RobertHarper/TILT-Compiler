@@ -131,3 +131,4 @@
 0135 [open]	discrepancies on real numbers
 0136 [open]	more real number discrepancies and unimplemented functions
 0137 [open]	syntax of special constants
+0138 [open]	date failure
