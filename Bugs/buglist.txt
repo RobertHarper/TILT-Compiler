@@ -147,3 +147,4 @@
 0151 [open]	name clash problem in ld
 0152 [open]	Incorrect matching of eqtype specs.
 0153 [open]	Sharing abstract type and eqtype specs is broken.
+0154 [open]	Equality allowed on non-eqtypes by elaborator.
