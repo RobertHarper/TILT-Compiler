@@ -98,6 +98,7 @@ struct
     | pass1_exp (WhileExp {test, expr}) =
 	TVSet.merge (pass1_exp test, pass1_exp expr)
     | pass1_exp (MarkExp (exp, region)) = pass1_exp exp
+    | pass1_exp (DelayExp expr) = pass1_exp expr
 
   and pass1_rule (Rule {pat, exp}) = TVSet.merge (pass1_pat pat, pass1_exp exp)
 
@@ -122,6 +123,7 @@ struct
     | pass1_pat (VectorPat pats) = TVSet.union (map pass1_pat pats)
     | pass1_pat (MarkPat (pat, region)) = pass1_pat pat
     | pass1_pat (OrPat pats) = TVSet.union (map pass1_pat pats)
+    | pass1_pat (DelayPat pat) = pass1_pat pat
 
   and pass1_strexp (VarStr path) = ()
     | pass1_strexp (StructStr dec) = (pass1_dec dec; ())
@@ -255,6 +257,7 @@ struct
     | pass2_exp env (WhileExp {test, expr}) =
 	(pass2_exp env test; pass2_exp env expr)
     | pass2_exp env (MarkExp (exp, region)) = pass2_exp env exp
+    | pass2_exp env (DelayExp expr) = pass2_exp env expr
 
   and pass2_rule env (Rule {pat, exp}) = pass2_exp env exp
 

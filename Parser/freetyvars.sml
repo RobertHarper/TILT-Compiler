@@ -48,6 +48,7 @@ struct
     | fv_exp env (WhileExp {test, expr}) =
 	union [fv_exp env test, fv_exp env expr]
     | fv_exp env (MarkExp (exp, region)) = fv_exp env exp
+    | fv_exp env (Delay expr) = fv_exp env expr
 
   and fv_rule env (Rule {pat, exp}) = union [fv_pat env pat, fv_exp env exp]
 
@@ -72,6 +73,7 @@ struct
     | fv_pat env (MarkPat (pat, region)) = fv_pat env pat
     | fv_pat env (VectorPat pats) = union (map (fv_pat env) pats)
     | fv_pat env (OrPat pats) = union (map (fv_pat env) pats)
+    | fv_pat env (DelayPat pat) = fv_pat env pat
 
   and fv_strexp env (VarStr path) = []
     | fv_strexp env (StructStr dec) = fv_dec env dec

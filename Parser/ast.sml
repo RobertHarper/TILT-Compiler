@@ -61,6 +61,7 @@ datatype exp
 				(* while (derived form) *)
   | MarkExp of exp * region	(* mark an expression *)
   | VectorExp of exp list       (* vector *)
+  | DelayExp of exp             (* create suspension *)
 
 (* RULE for case functions and exception handler *)
 and rule = Rule of {pat:pat,exp:exp}
@@ -84,6 +85,7 @@ and pat = WildPat				(* empty pattern *)
 	| MarkPat of pat * region	(* mark a pattern *)
         | VectorPat of pat list                 (* vector pattern *)
 	| OrPat of pat list			(* or-pattern *)
+        | DelayPat of pat                       (* match suspension *)
 
 (* STRUCTURE EXPRESSION *)
 and strexp = VarStr of path			(* variable structure *)
@@ -217,6 +219,9 @@ end (* structure Ast *)
 
 (*
  * $Log$
+# Revision 1.2  97/04/10  15:04:55  cokasaki
+# Added DelayExp and DelayPat to ast.  Added lexical token DOLLAR.
+# 
 # Revision 1.1  97/03/21  15:24:18  pscheng
 # added our local version of the parser
 # asthelp.* and name* migrated from Util directory

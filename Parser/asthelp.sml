@@ -89,7 +89,8 @@ structure AstHelp : ASTHELP =
 							     elseCase=self elseCase}
 	 | (Ast.WhileExp {test,expr}) => Ast.WhileExp{test=self test,
 						      expr=self expr}
-	 | (Ast.MarkExp (e,r)) => Ast.MarkExp(self e,r))
+	 | (Ast.MarkExp (e,r)) => Ast.MarkExp(self e,r)
+	 | (Ast.DelayExp e) => Ast.DelayExp (self e))
 	end
       and f_rule state (Ast.Rule {pat,exp}) = Ast.Rule{pat=f_pat state pat, exp=f_exp state exp}
       and f_pat state pat = 
@@ -111,7 +112,9 @@ structure AstHelp : ASTHELP =
 								  expPat=f_pat state expPat}
 	 | (Ast.ConstraintPat {pattern,constraint}) => Ast.ConstraintPat{pattern=f_pat state pattern,
 									     constraint=f_ty state constraint}
-	 | (Ast.MarkPat (p,r)) => Ast.MarkPat(f_pat state p,r))
+	 | (Ast.MarkPat (p,r)) => Ast.MarkPat(f_pat state p,r)
+	 | (Ast.DelayPat p) => Ast.DelayPat (f_pat state p))
+       
       and f_dec (state as (doconstr, constrbound,
 			   doty, tybound,
 			   dovar, varbound : symbol list)) dec = 
@@ -375,6 +378,7 @@ structure AstHelp : ASTHELP =
        | Ast.LayeredPat _ => String "LayeredPatUNIMPED"
        | Ast.VectorPat pats => String "VectorPatUNIMPED"
        | Ast.MarkPat (p,r) => pp_pat p
+       | Ast.DelayPat p => pp_region "(" ")" [String "$", pp_pat p]
        | Ast.OrPat _ => String "OrPatUNIMPED")
 
     fun pp_strexp strexp = 
@@ -396,6 +400,7 @@ structure AstHelp : ASTHELP =
        | Ast.AppExp{function,argument} => pp_region "App(" ")" 
 	     [pp_exp function, String ",", Break, pp_exp argument]
        | Ast.MarkExp (e,r) => pp_exp e
+       | Ast.DelayExp e => pp_region "(" ")" [String "$",pp_exp e]
        | _ => String "Asthelp.pp_exp UNIMPED")
 
 

@@ -44,6 +44,7 @@ fun markdec(d as MarkDec _, _,_) = d
     | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE 
     | RBRACKET | RPAREN | ORELSE | ANDALSO | FUNSIG | VECTORSTART | BEGINQ 
     | ENDQ of string | OBJL of string | AQID of FastSymbol.raw_symbol
+    | DOLLAR
 
 %nonterm ident of FastSymbol.raw_symbol
        | id of FastSymbol.raw_symbol
@@ -155,6 +156,7 @@ fun markdec(d as MarkDec _, _,_) = d
   OPEN OVERLOAD  RAISE  REC  SHARING  SIG  SIGNATURE  STRUCT
   STRUCTURE THEN TYPE VAL WHILE WHERE WITH WITHTYPE
   ORELSE ANDALSO 
+  DOLLAR
 
 %change -> VAL | -> THEN | -> ELSE | -> LPAREN | -> SEMICOLON | 
         DARROW -> EQUALOP | EQUALOP -> DARROW | AND -> ANDALSO | COLON -> OF |
@@ -256,6 +258,7 @@ exp	: exp HANDLE match	(HandleExp{expr=exp,rules=match})
 				   elseCase=markexp(exp3,exp3left,exp3right)})
 	 | RAISE exp	     (markexp(markexp(RaiseExp exp, expleft,expright),
 				      RAISEleft,expright))
+         | DOLLAR exp           (DelayExp exp)
 
 app_exp	: aexp	        ([{item=markexp(aexp,aexpleft,aexpright),
 			   region=(aexpleft,aexpright), fixity=NONE}])
@@ -316,6 +319,7 @@ exp_list : exp			([exp])
 pat	: pat AS pat		(layered(pat1, pat2, 
 					 error(pat1left,pat2right)))
 	| pat COLON ty		(ConstraintPat{pattern=pat, constraint=ty})
+        | DOLLAR pat            (DelayPat pat)
 	| apats			(FlatAppPat apats)
 
 apat	: apat'		({item=apat', region=(apat'left,apat'right),
@@ -645,6 +649,9 @@ interdec: sdecs'	(markdec(sdecs',sdecs'left,sdecs'right))
 
 (*
  * $Log$
+# Revision 1.3  97/04/10  15:04:59  cokasaki
+# Added DelayExp and DelayPat to ast.  Added lexical token DOLLAR.
+# 
 # Revision 1.2  97/03/21  16:34:34  pscheng
 # changed to work with new Parser directory
 # ml.grm.sig and ml.grm.sml cannot be created with 109.25 for some reason
