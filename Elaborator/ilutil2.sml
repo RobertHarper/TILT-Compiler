@@ -75,6 +75,7 @@ structure IlUtil :> ILUTIL =
 
     fun eq_mpath (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
       | eq_mpath (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
+      | eq_mpath (MOD_APP(m1,m2), MOD_APP(m1',m2')) = eq_mpath(m1,m1') andalso eq_mpath(m2,m2')
       | eq_mpath _ = false
     fun eq_epath (VAR v, VAR v') = eq_var (v,v')
       | eq_epath (MODULE_PROJECT (m,l), MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
@@ -120,7 +121,10 @@ structure IlUtil :> ILUTIL =
     val expose_lab = internal_label "expose"
     val eq_lab = internal_label "eq"
     val functor_arg_lab = to_open(internal_label "functor_arg")
-
+    val ident_lab = internal_label "ident"
+    val unseen_lab = internal_label "unseen"
+    val open_unseen_lab = to_open (unseen_lab)
+    val visible_lab = to_open(internal_label "visible")
 
     (* We can use Name.compare_label since it does respect the ordering of
        numeric labels that arise from tuples.  *)
@@ -369,6 +373,17 @@ structure IlUtil :> ILUTIL =
     val prim_etaexpand = etaexpand_help (PRIM,IlPrimUtil.get_type')
     val ilprim_etaexpand = etaexpand_help (ILPRIM,IlPrimUtil.get_iltype')
 
+    fun is_existential_sig (s : signat) : (signat * signat) option = (
+      case s of
+	  SIGNAT_STRUCTURE[SDEC(maybe_unseen,DEC_MOD(_,_,sig_unseen)),
+			   SDEC(maybe_visible,DEC_MOD(_,_,sig_visible))] =>
+	    if eq_label(maybe_unseen,unseen_lab) andalso
+               eq_label(maybe_visible,visible_lab)
+            then SOME(sig_unseen,sig_visible)
+	    else NONE
+        | _ => NONE
+    )
+
 
     fun con_deref (c : con) : con =
 	(case c
@@ -393,6 +408,10 @@ structure IlUtil :> ILUTIL =
     (* XXX The implementation of substitutions doesn't seem to worry about variable capture.
            Perhaps this is not a problem, but I'd like to know why. *)
 
+    (*
+	We should deal with variable capture and delete the debugging
+	code.   -dave
+     *)
     local
       datatype state = STATE of ({bound_convar : var list,
 				  bound_var : var list,
@@ -878,6 +897,16 @@ structure IlUtil :> ILUTIL =
       fun subst_add_conpath(subst, PATH p, c) = subst_add_con(subst, p, c)
       fun subst_add_modpath(subst, PATH p, m) = subst_add_mod(subst, p, m)
 
+      fun subst_expvar(v, e) = subst_add_expvar(empty_subst, v, e)
+      fun subst_convar(v, c) = subst_add_convar(empty_subst, v, c)
+      fun subst_modvar(v, m) = subst_add_modvar(empty_subst, v, m)
+      fun subst_sigvar(v, signat) = subst_add_sigvar(empty_subst, v, signat)
+
+      fun subst_exppath(p, e) = subst_add_exppath(empty_subst, p, e)
+      fun subst_conpath(p, c) = subst_add_conpath(empty_subst, p, c)
+      fun subst_modpath(p, m) = subst_add_modpath(empty_subst, p, m)
+
+
     local
 	fun efolder ((v,e),s) = subst_add_expvar(s,v,e)
 	fun cfolder ((v,c),s) = subst_add_convar(s,v,c)
@@ -1089,6 +1118,7 @@ structure IlUtil :> ILUTIL =
 *)
 	  val con_subst' = wrap' f_con
 	  val sig_subst' = wrap' f_signat
+	  val sdec_subst = wrap (fn state => fn sdec => #1(f_sdec(sdec,state)))
 	  val sdecs_subst = wrap f_sdecs
 	  val sbnds_subst = wrap f_sbnds
 	  val entry_subst = wrap f_entry'

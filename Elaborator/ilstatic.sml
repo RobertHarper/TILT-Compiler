@@ -398,20 +398,12 @@ structure IlStatic
 			NONE => setter(ctxt,tv2,con1)
 		      | SOME c => self (con1,c,ctxt))
 	     | _ =>
-		   let val same =
-		       (case (con1,con2) of
-			    (CON_APP(c1,a1),CON_APP(c2,a2)) =>
-				(self (c2,c1,ctxt)
-				 andalso (andfold (fn (c1,c2) => self (c1,c2,ctxt)) (zip a1 a2)))
-			  | _ => eq_cpath(con1,con2))
-		   in  same orelse
 		       let
 			   val (_, con1, path1) = HeadNormalize(con1,ctxt)
 			   val (_, con2, path2) = HeadNormalize(con2,ctxt)
 		       in  (path_match path1 path2) orelse
 			   (meta_eq_con_hidden (setter,constrain,is_sub,equations) (con1,con2,ctxt))
 		       end
-		   end
        end
 
 

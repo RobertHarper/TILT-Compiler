@@ -68,7 +68,9 @@ unit IlContext = "ilcontext2.sml" {
 	List Int ILCONTEXT Il Util Name Listops Ppil Stats IlUtil
 	Fixity Option
 }
+(*
 unit IlEq = "ileq2.sml" {Il Util Stats Name Ppil Listops Tyvar}
+*)
 interface IlBlast = "ilblast.int" {Blaster Il}
 unit IlBlast : IlBlast = "ilblast2.sml" {
 	Il Blaster Util Int SplayMapFn Ppil IlTable Name Prim
@@ -93,7 +95,7 @@ unit InfixParse = "infixparse2.sml" {
 unit ILSTATIC = "ilstatic2.sig.sml" {Util Il}
 interface IlStatic = "ilstatic.int" {ILSTATIC}
 unit IlStatic : IlStatic = "ilstatic2.sml" {
-	Prim Tyvar Name Int List Il IlContext IlEq PrimUtil Ppil
+	Prim Tyvar Name Int List Il IlContext PrimUtil Ppil
 	IlUtil Util Listops ILSTATIC Stats Option UtilError
 }
 
@@ -192,7 +194,9 @@ unit IlContext = "ilcontext.sml" {
 	List Int ILCONTEXT Il Util Name Listops Ppil Stats IlUtil
 	Fixity Option
 }
+(*
 unit IlEq = "ileq.sml" {Il Util Stats Name Ppil Listops Tyvar}
+*)
 interface IlBlast = "ilblast.int" {Blaster Il}
 unit IlBlast : IlBlast = "ilblast.sml" {
 	Il Blaster Util Int SplayMapFn Ppil IlTable Name Prim
@@ -217,7 +221,7 @@ unit InfixParse = "infixparse.sml" {
 unit ILSTATIC = "ilstatic.sig.sml" {Util Il}
 interface IlStatic = "ilstatic.int" {ILSTATIC}
 unit IlStatic : IlStatic = "ilstatic.sml" {
-	Prim Tyvar Name Int List Il IlContext IlEq PrimUtil Ppil
+	Prim Tyvar Name Int List Il IlContext PrimUtil Ppil
 	IlUtil Util Listops ILSTATIC Stats Option UtilError
 }
 

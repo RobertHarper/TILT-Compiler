@@ -71,7 +71,7 @@ structure Signature :> SIGNATURE =
 
     fun make_polyval_sig (var_poly,sig_poly,v,c,eopt,i) =
 	SIGNAT_FUNCTOR(var_poly,sig_poly,SIGNAT_STRUCTURE
-		       [SDEC(it_lab,DEC_EXP(v,c,eopt,i))],PARTIAL)
+		       [SDEC(it_lab,DEC_EXP(v,c,eopt,i))],TOTAL)
 
     fun deep_reduce_signat path ctxt signat =
 	let val signat' = reduce_signat ctxt signat

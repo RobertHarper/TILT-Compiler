@@ -62,6 +62,8 @@ signature ILUTIL =
     val prim_etaexpand : (context * Prim.prim * con list) -> exp
     val ilprim_etaexpand : (context * Prim.ilprim * con list) -> exp
 
+    val is_existential_sig : signat -> (signat * signat) option
+
     (* some simple local reductions *)
     val exp_reduce : context * exp -> exp option
     (* just return the original expression if exp_reduce returns NONE *)
@@ -112,6 +114,10 @@ signature ILUTIL =
     val case_lab : label
     val expose_lab : label
     val functor_arg_lab : label
+    val ident_lab : label
+    val unseen_lab : label
+    val open_unseen_lab : label
+    val visible_lab : label
 
     val canonical_tyvar_label : bool (*is_eq*) -> int -> label
 
@@ -159,10 +165,21 @@ signature ILUTIL =
     val subst_add_conpath : subst * path * con -> subst
     val subst_add_modpath : subst * path * mod -> subst
 
+    (* These are the same as the preceding functions, where the input subst is assumed to
+       be the empty_subst. *)
+    val subst_expvar : var * exp -> subst
+    val subst_convar : var * con -> subst
+    val subst_modvar : var * mod -> subst
+    val subst_sigvar : var * signat -> subst
+    val subst_exppath : path * exp -> subst
+    val subst_conpath : path * con -> subst
+    val subst_modpath : path * mod -> subst
+
     val exp_subst : exp * subst -> exp
     val con_subst : con * subst -> con
     val mod_subst : mod * subst -> mod
     val sig_subst : signat * subst -> signat
+    val sdec_subst : Il.sdec * subst -> Il.sdec
     val sdecs_subst : Il.sdecs * subst -> Il.sdecs
     val sbnds_subst : Il.sbnds * subst -> Il.sbnds
     val entry_subst : Il.context_entry * subst -> Il.context_entry

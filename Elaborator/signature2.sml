@@ -71,30 +71,7 @@ structure Signature :> SIGNATURE =
 
     fun make_polyval_sig (var_poly,sig_poly,v,c,eopt,i) =
 	SIGNAT_FUNCTOR(var_poly,sig_poly,SIGNAT_STRUCTURE
-		       [SDEC(it_lab,DEC_EXP(v,c,eopt,i))],PARTIAL)
-
-    fun deep_reduce_signat path ctxt signat =
-	let val signat' = reduce_signat ctxt signat
-	in  (case signat' of
-	     SIGNAT_STRUCTURE sdecs =>
-		 let val (sdecs',_) = foldl_acc (deep_reduce_sdec path) ctxt sdecs
-		 in  SIGNAT_STRUCTURE sdecs'
-		 end
-	   | s => s)
-	end
-
-    and deep_reduce_sdec path (sdec,ctxt) : sdec * context =
-	let val SDEC(l,dec) = sdec
-	    val ctxt' = add_context_dec(ctxt,dec)
-	    val sdec' = (case dec
-			   of DEC_MOD(v,b,s) =>
-			       let val this_path = join_path_labels(path,[l])
-				   val s = deep_reduce_signat this_path ctxt s
-			       in  SDEC(l,DEC_MOD(v,b,s))
-			       end
-			    | _ => sdec)
-	in  (sdec',ctxt')
-	end
+		       [SDEC(it_lab,DEC_EXP(v,c,eopt,i))],TOTAL)
 
     (* ---------------- helpers ---------------- *)
 
@@ -795,7 +772,7 @@ structure Signature :> SIGNATURE =
 		 sig_actual : signat,
 		 sig_target : signat) : (bool * Il.mod * Il.signat) =
 	let val sig_actual = reduce_signat context sig_actual
-	    val sig_target = deep_reduce_signat path_actual context sig_target
+	    val sig_target = deep_reduce_signat context sig_target
 	in  (case (sig_actual,sig_target) of
 		 (SIGNAT_FUNCTOR(v1,s1,s1',a1),
 		  SIGNAT_FUNCTOR(v2,s2,s2',a2)) =>
@@ -860,6 +837,10 @@ structure Signature :> SIGNATURE =
 	      val self = path2mod path_actual
 	  in  fun actual_self_lookup lbl = Sdecs_Lookup ctxt (self, sdecs_actual_self, [lbl])
 	  end
+
+        val xcoerce_error = ref false
+
+        val error_region_with = fn str => (xcoerce_error := true; Error.error_region_with str)
 
 	fun eqtype_error (eqlab:label) =
 	    (error_region_with "type component does not admit equality: ";
@@ -1121,6 +1102,8 @@ structure Signature :> SIGNATURE =
 
         val (sbnds_coerced, sdecs_coerced) = loop ctxt sdecs_target
 
+        val _ = if (!xcoerce_error) then reject "signature matching failed" else ()
+
 	val res = if !coerced
 		      then (true, MOD_STRUCTURE sbnds_coerced,
 			    SIGNAT_STRUCTURE sdecs_coerced)
@@ -1185,7 +1168,7 @@ structure Signature :> SIGNATURE =
     val track_coerce = Stats.ff("IlstaticTrackCoerce")
 
     fun generateModFromSig (ctxt, path : path, signat : signat, typeOnly : bool) =
-	let val signat = deep_reduce_signat path ctxt signat
+	let val signat = deep_reduce_signat ctxt signat
 	    fun generateSdec m (sdec as (SDEC(l,dec))) =
 		(case dec of
 		     DEC_MOD(v,b,s) =>
