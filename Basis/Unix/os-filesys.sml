@@ -1,4 +1,4 @@
-(*$import Prelude SysWord List General OS_FILE_SYS OS_Path Posix POSIX_extern *)
+(*$import Firstlude TiltPrim Prelude SysWord List General OS_FILE_SYS OS_Path Posix POSIX_extern *)
 (* os-filesys.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

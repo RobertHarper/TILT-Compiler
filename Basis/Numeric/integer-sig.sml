@@ -1,4 +1,4 @@
-(*$import Prelude PreInt StringCvt *)
+(*$import Firstlude TiltPrim Prelude PreInt StringCvt *)
 (* integer-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

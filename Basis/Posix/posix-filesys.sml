@@ -1,4 +1,4 @@
-(*$import Prelude PrePosix Position Word SysWord PreOS POSIX_extern List Time POSIX_FILE_SYS String *)
+(*$import Firstlude TiltPrim Prelude PrePosix Position Word SysWord PreOS POSIX_extern List Time POSIX_FILE_SYS String *)
 (* posix-filesys.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

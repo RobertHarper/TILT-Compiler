@@ -25,7 +25,7 @@ struct
     type import = Compiler.import
     type notes = {unit : string,
 		  target : Paths.unit_paths,
-		  imports : (Paths.unit_paths * import) list,
+		  imports : import list,
 		  ilFile : string,
 		  infoFile : string,
 		  asmFile : string,
@@ -41,7 +41,7 @@ struct
 	   | (true, false) => UNCOMPRESSED
 	   | (false, _) => NEITHER
 	
-    (* notes : unit_paths * (unit_paths * import) list -> notes *)
+    (* notes : unit_paths * import list -> notes *)
     fun notes (target, imports) =
 	{unit = Paths.unitName target,
 	 target = target,
@@ -52,7 +52,7 @@ struct
 	 asmzFile = Paths.asmzFile target,
 	 objFile = Paths.objFile target}
 	
-    (* init : unit_paths * (unit_paths list * unit_paths list) -> state *)
+    (* init : unit_paths * import list -> state *)
     fun init arg : state = (notes arg, NONE)
 
     (* mkUe : unit_paths list -> ue *)
@@ -75,10 +75,10 @@ struct
 						   then SOME interfaceFile
 					       else NONE),
 				    targetIlFile = ilFile,
-				    imports = map (fn (paths,ty) => (Paths.ilFile paths, ty)) imports}
-	    fun isdirect (_, Compiler.DIRECT) = true
-	      | isdirect _ = false
-	    val directImports = map #1 (List.filter isdirect imports)
+				    imports = imports}
+	    fun direct (Compiler.FILE (p, Compiler.DIRECT)) = SOME p
+	      | direct _ = NONE
+	    val directImports = List.mapPartial direct imports
 	    val info' = {unit = unit,
 			 lastWritten = IlCache.modTime ilFile,
 			 lastChecked = Time.now(),

@@ -437,9 +437,9 @@ struct
 	reify_exports ctxt (exports, pset)
 	
     fun reify_imports ([], ctxt, is') = (ctxt, rev is')
-      | reify_imports ((imp as ImportType (_, v, k)) :: is,
+      | reify_imports ((imp as ImportType (l, v, k)) :: is,
 		       ctxt, is') =
-	reify_imports (is, NilContext.insert_kind(ctxt, v, k), imp :: is')
+	reify_imports (is, NilContext.insert_label(NilContext.insert_kind(ctxt, v, k),l,v), imp :: is')
       | reify_imports (ImportValue (l, v, nt, c) :: is, ctxt, is') = 
 	let
 	    val nt' = 
@@ -451,9 +451,10 @@ struct
 		       | NONE => TraceUnknown)
 
 	    val imp' = ImportValue(l, v, nt', c)
-	    val ctxt' = NilContext.insert_con(ctxt, v, c)
+	    val ctxt = NilContext.insert_con(ctxt, v, c)
+	    val ctxt = NilContext.insert_label(ctxt, l, v)
 	in
-	    reify_imports (is, ctxt', imp' :: is')
+	    reify_imports (is, ctxt, imp' :: is')
 	end
 
 	

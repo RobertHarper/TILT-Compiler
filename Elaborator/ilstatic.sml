@@ -920,7 +920,7 @@ structure IlStatic
    (* --------- Rules 69 to 96 ----------- *)
    and GetExpCon (exparg,ctxt) : bool * con = 
      let fun msg() = (print "GetExpCon called with exp = \n";
-			 pp_exp exparg; print "\n")
+		      pp_exp exparg; print "\n")
 	val _ = debugdo msg
      in GetExpCon'(exparg,ctxt) 
 	  handle e => (if !trace then msg() else (); raise e)
@@ -936,8 +936,8 @@ structure IlStatic
 	       (case exparg of
 		    APP(e1,e2) => (GetExpCon(e1,ctxt),[e2])
 		  | EXTERN_APP(_,e1,es2) => (GetExpCon(e1,ctxt),es2)
-		  | PRIM(p,cs,es) => ((true, IlPrimUtil.get_type' p cs), es)
-		  | ILPRIM(ip,cs,es) => ((true, IlPrimUtil.get_iltype' ip cs),es)
+		  | PRIM(p,cs,es) => ((true, IlPrimUtil.get_type' ctxt p cs), es)
+		  | ILPRIM(ip,cs,es) => ((true, IlPrimUtil.get_iltype' ctxt ip cs),es)
 		  | _ => error "GetExpAppCon' got unexpected argument")
 	       val (_,con1,_) = HeadNormalize(con1,ctxt)
 	       val vacon2 = map (fn e => GetExpCon(e,ctxt)) es2
@@ -1024,8 +1024,8 @@ structure IlStatic
 				     SOME e => if va then (va,con)
 					       else GetExpCon(e,ctxt)
 				   | NONE => (va,con))
-     | ETAPRIM (p,cs) => (true, etaize (IlPrimUtil.get_type' p cs))
-     | ETAILPRIM (ip,cs) => (true, etaize(IlPrimUtil.get_iltype' ip cs))
+     | ETAPRIM (p,cs) => (true, etaize (IlPrimUtil.get_type' ctxt p cs))
+     | ETAILPRIM (ip,cs) => (true, etaize(IlPrimUtil.get_iltype' ctxt ip cs))
      | VAR v => (case Context_Lookup_Var(ctxt,v) of
 		     SOME(_,PHRASE_CLASS_EXP(_,c,_,_)) => (true,c)
 		   | SOME _ => let val str = Name.var2string v

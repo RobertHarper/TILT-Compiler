@@ -1,4 +1,4 @@
-(*$import Prelude General SML90_SIG Math Real Char CharVector String TextIO *)
+(*$import Firstlude TiltPrim Prelude General SML90_SIG Math Real Char CharVector String TextIO *)
 (* sml90.sig
  *
  * COPYRIGHT (c) 1997 Bell Labs, Lucent Technologies.

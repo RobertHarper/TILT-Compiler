@@ -41,7 +41,7 @@ structure Datatype
     fun driver (xty : Il.context * Ast.ty -> Il.con,
 		context : context, 
 		std_list : def list,
-		eqcomp : Il.context * Il.con -> (Il.exp * Il.con) option,
+		eqcomp : Il.context * (Il.con * Il.exp * Il.exp) option * Il.con -> (Il.exp * Il.con) option,
 		is_transparent : bool) 
 	: (sbnd * sdec) list = 
       let 
@@ -72,6 +72,14 @@ structure Datatype
 	val _ = if is_transparent andalso num_datatype > 1 
 		    then error "transparent datatype compilation invoked for recursive type"
 		else ()
+	val is_boolean = (case std_list
+			    of [(b, [(f,NONE), (t,NONE)])] =>
+				let fun eq (s, l) = Name.eq_label (Name.symbol_label s, l)
+				in  eq (b, lab_bool) andalso
+				    eq (t, lab_true) andalso
+				    eq (f, lab_false)
+				end
+			     | _ => false)
 
 	(* ----- create names for overall recursive type, datatype types,
 	         argument to sum types, sum types, special sums, and modules *)
@@ -95,9 +103,9 @@ structure Datatype
 	val top_type_lab = internal_label top_type_string
 	val datatypes_lab = to_open top_type_lab
 	val top_eq_var = fresh_named_var top_eq_string
-	val top_eq_lab = symbol_label (Symbol.tycSymbol top_eq_string)
+	val top_eq_lab = Name.internal_label top_eq_string (* symbol_label (Symbol.tycSymbol top_eq_string) *)
 	val module_labvars = map (fn s => let val str = Symbol.name s
-					  in  (IlUtil.to_dt (symbol_label s),
+					  in  (Name.to_dt (symbol_label s),
 					       fresh_named_var str)
 					  end) type_syms
 	val constr_sumarg_strings = map (fn s => (Symbol.name s) ^ "_sumarg") type_syms
@@ -141,7 +149,7 @@ structure Datatype
 	local
 	    fun folder ((tv,v), (sdecs, sdecs_eq, ctxt)) = 
 		let val eq_label = to_eq tv
-		    val eq_con = con_eqfun(CON_VAR v)
+		    val eq_con = con_eqfun context (CON_VAR v)
 		    val sdec = SDEC(tv,DEC_CON(v,KIND,NONE,false))
 		    val sdec_eq = SDEC(eq_label,DEC_EXP(fresh_var(),eq_con,NONE,false))
 		    val ctxt = add_context_con(ctxt,tv,v,KIND,NONE)
@@ -340,7 +348,20 @@ structure Datatype
 			 else CON_APP(CON_VAR top_type_var, tyvar_mprojs)
 				       (*  top_type_tyvar *)
 	in
-	    val eq_exp_con = eqcomp(ctxt, eq_con)
+	    val bool =
+		if is_boolean then
+		    let
+			val con_bool = CON_TUPLE_PROJECT (0, CON_VAR top_type_var)
+			val sumtype = hd constr_fullsum_vdt
+			val fold = FOLD ([], sumtype, con_bool)
+			fun field i = COERCE(fold,[],INJ{sumtype=sumtype,field=i,inject=NONE})
+			val false_exp = field 0
+			val true_exp = field 1
+		    in
+			SOME (con_bool, true_exp, false_exp)
+		    end
+		else NONE
+	    val eq_exp_con = eqcomp(ctxt, bool, eq_con)
 	    val (sdecs_eq, sigpoly_eq) =
 		if is_monomorphic orelse not (isSome eq_exp_con)
 		    then (sdecs_eq, sigpoly_eq)
@@ -352,7 +373,6 @@ structure Datatype
 		    in  (sdecs_eq', sigpoly_eq')
 		    end
 	end
-
 
 
 	(* --------- create the inner modules ------------- *)
@@ -418,7 +438,6 @@ structure Datatype
 	      SDEC(module_lab,DEC_MOD(module_var,false,inner_sig)))
 	  end
 
-
 	val components = map6 help (inner_type_labvars, 
 				    type_vars,
 				    module_labvars,
@@ -440,9 +459,14 @@ structure Datatype
 						    MOD_VAR mpoly_var), it_lab)
 		    val exp_eq = if num_datatype = 1 then short_top_eq_exp 
 				 else RECORD_PROJECT(short_top_eq_exp, generate_tuple_label(i+1), top_eq_con)
-		    val con_eq = con_eqfun(if is_monomorphic 
-					       then CON_VAR type_var_i
-					   else CON_APP (CON_VAR type_var_i, tyvar_mprojs))
+		    val con_eq =
+			if is_boolean then
+			    CON_ARROW([con_tuple[CON_VAR type_var_i, CON_VAR type_var_i]],
+				       CON_VAR type_var_i, false, oneshot_init PARTIAL)
+			else
+			    con_eqfun context (if is_monomorphic 
+						   then CON_VAR type_var_i
+					       else CON_APP (CON_VAR type_var_i, tyvar_mprojs))
 		    val eq_expbnd = BND_EXP(equal_var,exp_eq)
 		    val eq_expdec = DEC_EXP(equal_var,con_eq,NONE,false)
 		    val eq_inner_sig = SIGNAT_STRUCTURE [SDEC(it_lab,eq_expdec)]
@@ -468,7 +492,6 @@ structure Datatype
 				    NONE => []
 				  | SOME ec => map2count (help ec) (type_labs,type_vars))
 	end
-
 
 	val top_eq_sbnd_sdec = 
 	    (case (eq_exp_con, num_datatype) of
@@ -548,7 +571,6 @@ structure Datatype
 	val final_sbnd_sdecs = 
 	    [(SBND(datatypes_lab,BND_MOD(datatypes_var,false,main_mod)),
 	      SDEC(datatypes_lab,DEC_MOD(datatypes_var,false,public_sig)))]
-
       in  final_sbnd_sdecs
       end
  

@@ -1,4 +1,4 @@
-(*$import WORD Prelude PreWord StringCvt General NumFormat NumScan *)
+(*$import WORD Firstlude TiltPrim Prelude PreWord StringCvt General NumFormat NumScan *)
 (* word8.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

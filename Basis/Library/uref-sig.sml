@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Firstlude TiltPrim Prelude *)
 (* uref-sig.sml
  *
  * Interface to UnionFind package.

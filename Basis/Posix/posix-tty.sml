@@ -1,4 +1,4 @@
-(*$import Prelude List Word8Vector Word8Array SysInt POSIX_FileSys POSIX_Process SysWord Byte POSIX_TTY POSIX_extern *)
+(*$import Firstlude TiltPrim Prelude List Word8Vector Word8Array SysInt POSIX_FileSys POSIX_Process SysWord Byte POSIX_TTY POSIX_extern *)
 (* posix-tty.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

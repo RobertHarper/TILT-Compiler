@@ -1,4 +1,4 @@
-(*$import Prelude ARRAY General List *)
+(*$import Firstlude TiltPrim Prelude ARRAY General List *)
 (* array.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.

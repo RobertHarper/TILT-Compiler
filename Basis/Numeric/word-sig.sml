@@ -1,4 +1,4 @@
-(*$import Prelude StringCvt PreInt PreWord *)
+(*$import Firstlude TiltPrim Prelude StringCvt PreInt PreWord *)
 (* word-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

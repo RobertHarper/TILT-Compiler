@@ -1,4 +1,4 @@
-(*$import Prelude PrePosix SysWord POSIX_SYS_DB POSIX_extern *)
+(*$import Firstlude TiltPrim Prelude PrePosix SysWord POSIX_SYS_DB POSIX_extern *)
 (* posix-sysdb.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

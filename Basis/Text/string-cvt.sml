@@ -1,4 +1,4 @@
-(*$import Prelude STRING_CVT PreString *)
+(*$import Firstlude TiltPrim Prelude STRING_CVT PreString *)
 (* string-cvt.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

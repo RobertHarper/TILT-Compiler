@@ -53,9 +53,11 @@ slave:
 .PHONY: tilt tilt_runtime tilt_tilt
 tilt_runtime:
 	(cd Runtime && gmake runtime)
+tilt_basis:
+	$(TILT_NEW) -vb
 tilt_tilt:
 	$(TILT_NEW) -vm $(MAPFILE)
-tilt: tilt_runtime tilt_tilt
+tilt: tilt_runtime tilt_basis tilt_tilt
 
 # Update misc collection's source tree from CVS.
 .PHONY: misc_src

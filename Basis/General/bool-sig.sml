@@ -1,4 +1,4 @@
-(*$import Prelude StringCvt *)
+(*$import Firstlude TiltPrim Prelude StringCvt *)
 (* bool-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -258,6 +258,7 @@ struct
 local
    datatype splitting_context = 
        CONTEXT of {NILctx : NilContext.context,
+		   HILctx : Il.context,
 		   sigmap : Il.signat Name.VarMap.map,
 		   used   : Name.VarSet.set ref,
 		   vmap   : (var * var) Name.VarMap.map,
@@ -270,8 +271,10 @@ local
 in
     type splitting_context = splitting_context
     fun get_nilctxt (CONTEXT{NILctx,...}) = NILctx
-    fun empty_splitting_context() = 
+    fun get_hilctxt (CONTEXT{HILctx,...}) = HILctx
+    fun empty_splitting_context HILctx = 
           CONTEXT{NILctx = NilContext.empty(),
+		  HILctx = HILctx,
 		  sigmap = Name.VarMap.empty,
 		  used = ref Name.VarSet.empty,
 		  vmap = Name.VarMap.empty,
@@ -320,21 +323,23 @@ in
    fun NilContext_kind_standardize(CONTEXT{NILctx,...},k) = NilContext.kind_standardize(NILctx, k)
    fun NilContext_kind_of(CONTEXT{NILctx,...},c) = NilContext.kind_of(NILctx, c)
 
-   val splitVar = fn (var,CONTEXT{NILctx,sigmap,
+   val splitVar = fn (var,CONTEXT{NILctx,HILctx,sigmap,
 			     used,vmap,rmap,alias,memoized_mpath,polyfuns}) =>
                   let val (var_c,var_r,vmap') = splitVar(var,vmap)
 		  in  ((var_c,var_r),
-		       CONTEXT{NILctx=NILctx, sigmap=sigmap,
+		       CONTEXT{NILctx=NILctx, HILctx=HILctx,
+			       sigmap=sigmap,
 			       used=used, vmap=vmap', rmap=rmap,
 			       memoized_mpath=memoized_mpath,
 			       alias=alias,polyfuns=polyfuns})
 		  end
 
-   val newSplitVar = fn (var,CONTEXT{NILctx,sigmap,
+   val newSplitVar = fn (var,CONTEXT{NILctx,HILctx,sigmap,
 				     used,vmap,rmap,alias,memoized_mpath,polyfuns}) =>
        let val (var_c,var_r,vmap') = newSplitVar(var,vmap)
        in  ((var_c,var_r),
-	    CONTEXT{NILctx=NILctx, sigmap=sigmap,
+	    CONTEXT{NILctx=NILctx, HILctx=HILctx,
+		    sigmap=sigmap,
 		    used=used, vmap=vmap', rmap=rmap,
 		    memoized_mpath=memoized_mpath,
 		    alias=alias,polyfuns=polyfuns})
@@ -348,35 +353,39 @@ in
 
    val lookupVmap = fn (var, CONTEXT{vmap,...}) => lookupVmap (var,vmap)
 
-   val insert_rename_var = fn (v, CONTEXT{NILctx,sigmap,
+   val insert_rename_var = fn (v, CONTEXT{NILctx,HILctx,sigmap,
 					  used,vmap,rmap,alias,memoized_mpath,polyfuns}) =>
        let
 	   val (v',rmap') = insert_rename_var(v,rmap)
        in
-	   (v', CONTEXT{NILctx=NILctx, sigmap=sigmap,
-		   used=used, vmap=vmap, rmap=rmap',
-		   memoized_mpath=memoized_mpath,alias=alias,polyfuns=polyfuns})
+	   (v', CONTEXT{NILctx=NILctx, HILctx=HILctx,
+			sigmap=sigmap,
+			used=used, vmap=vmap, rmap=rmap',
+			memoized_mpath=memoized_mpath,
+			alias=alias,polyfuns=polyfuns})
        end
 
    val insert_rename_vars = 
-       fn (vs, CONTEXT{NILctx,sigmap,
+       fn (vs, CONTEXT{NILctx,HILctx,sigmap,
 		       used,vmap,rmap,alias,memoized_mpath,polyfuns}) =>
        let
 	   val (vs',rmap') = insert_rename_vars(vs,rmap)
        in
-	   (vs', CONTEXT{NILctx=NILctx, sigmap=sigmap,
-		   used=used, vmap=vmap, rmap=rmap',
-		   memoized_mpath=memoized_mpath,alias=alias,polyfuns=polyfuns})
+	   (vs', CONTEXT{NILctx=NILctx, HILctx=HILctx,
+			 sigmap=sigmap,
+			 used=used, vmap=vmap, rmap=rmap',
+			 memoized_mpath=memoized_mpath,
+			 alias=alias,polyfuns=polyfuns})
        end
 
 
    val insert_given_vars =
-       fn (vs, vs', CONTEXT{NILctx,sigmap,
+       fn (vs, vs', CONTEXT{NILctx,HILctx,sigmap,
 			    used,vmap,rmap,alias,memoized_mpath,polyfuns}) =>
        let
 	   val rmap' = insert_given_vars(vs,vs',rmap)
        in
-	   CONTEXT{NILctx=NILctx, sigmap=sigmap,
+	   CONTEXT{NILctx=NILctx, HILctx=HILctx, sigmap=sigmap,
 		   used=used, vmap=vmap, rmap=rmap',
 		   memoized_mpath=memoized_mpath,alias=alias,polyfuns=polyfuns}
        end
@@ -385,25 +394,26 @@ in
    val rename_vars = fn (vs, CONTEXT{rmap,...}) => rename_vars(vs, rmap)
 
 
-   fun update_insert_sig  (CONTEXT{NILctx,sigmap,
+   fun update_insert_sig  (CONTEXT{NILctx,HILctx,sigmap,
 			     used,vmap,rmap,alias,memoized_mpath,polyfuns}, 
 			   v, hilsig) = 
-       CONTEXT{NILctx=NILctx, sigmap=Name.VarMap.insert(sigmap,v,hilsig),
+       CONTEXT{NILctx=NILctx, HILctx=HILctx,
+	       sigmap=Name.VarMap.insert(sigmap,v,hilsig),
 	       used=used, vmap=vmap, rmap=rmap,
 	       memoized_mpath=memoized_mpath,alias=alias,polyfuns=polyfuns}
 
-   fun update_polyfuns  (CONTEXT{NILctx,sigmap,
+   fun update_polyfuns  (CONTEXT{NILctx,HILctx,sigmap,
 			     used,vmap,rmap,alias,memoized_mpath,polyfuns}, 
 			   v) = 
-       CONTEXT{NILctx=NILctx, sigmap=sigmap,
+       CONTEXT{NILctx=NILctx, HILctx=HILctx, sigmap=sigmap,
 	       used=used, vmap=vmap, rmap=rmap,
 	       memoized_mpath=memoized_mpath,alias=alias,
 	       polyfuns=Name.VarSet.add(polyfuns,v)}
 
-   fun update_polyfuns_list(CONTEXT{NILctx,sigmap,
+   fun update_polyfuns_list(CONTEXT{NILctx,HILctx,sigmap,
 			     used,rmap,vmap,alias,memoized_mpath,polyfuns}, 
 			   vs) = 
-       CONTEXT{NILctx=NILctx, sigmap=sigmap,
+       CONTEXT{NILctx=NILctx, HILctx=HILctx, sigmap=sigmap,
 	       used=used, vmap=vmap, rmap=rmap,
 	       memoized_mpath=memoized_mpath,alias=alias,
 	       polyfuns=Name.VarSet.addList(polyfuns,vs)}
@@ -411,46 +421,56 @@ in
    fun var_is_polyfun (CONTEXT{polyfuns,...}, v) = 
        Name.VarSet.member(polyfuns,v)
 
-   fun update_NILctx_insert_kind(CONTEXT{NILctx,sigmap,vmap,rmap, used,
+   fun update_NILctx_insert_kind(CONTEXT{NILctx,HILctx,sigmap,vmap,rmap, used,
 					 memoized_mpath,alias,polyfuns},v,k) = 
        let 
 	   val NILctx' = NilContext.insert_kind(NILctx,v,k)
-       in  CONTEXT{NILctx=NILctx', sigmap=sigmap, vmap=vmap, rmap=rmap, used = used, 
+       in  CONTEXT{NILctx=NILctx', HILctx=HILctx,
+		   sigmap=sigmap, vmap=vmap, rmap=rmap, used = used, 
 		   memoized_mpath=memoized_mpath, alias=alias,
 		   polyfuns=polyfuns}
        end
 
-   fun update_NILctx_insert_kind_equation(CONTEXT{NILctx,sigmap,vmap,rmap, used,
+   fun update_NILctx_insert_kind_equation(CONTEXT{NILctx,HILctx,sigmap,vmap,rmap, used,
 						memoized_mpath,alias,polyfuns},
 					  v,c) = 
        let val k = Single_k c
 	   val NILctx' = NilContext.insert_kind(NILctx,v,k)
-       in  CONTEXT{NILctx=NILctx', sigmap=sigmap, vmap=vmap, rmap=rmap, used = used, 
+       in  CONTEXT{NILctx=NILctx', HILctx=HILctx,
+		   sigmap=sigmap, vmap=vmap, rmap=rmap, used = used, 
 		   memoized_mpath=memoized_mpath, alias=alias,
 		   polyfuns=polyfuns}
        end
 
-
    fun update_NILctx_insert_kind_list(ctxt,vklist) = 
        foldl (fn ((v,k),ctxt) => update_NILctx_insert_kind (ctxt,v,k)) ctxt vklist
 
+   fun update_NILctx_insert_label(CONTEXT{NILctx,HILctx,sigmap,vmap,rmap,used,
+					  memoized_mpath,alias,polyfuns},
+				  l,v) =
+       let val NILctx' = NilContext.insert_label(NILctx,l,v)
+       in  CONTEXT{NILctx=NILctx', HILctx=HILctx,
+		   sigmap=sigmap, vmap=vmap, rmap=rmap, used = used, 
+		   memoized_mpath=memoized_mpath, alias=alias,
+		   polyfuns=polyfuns}
+       end
 
-
-    fun add_modvar_alias(CONTEXT{NILctx,sigmap,vmap,rmap,used,
+    fun add_modvar_alias(CONTEXT{NILctx,HILctx,sigmap,vmap,rmap,used,
 				 memoized_mpath,alias,polyfuns},var,path) =
 	let val alias' = Name.VarMap.insert(alias,var,path)
-	in  CONTEXT{NILctx=NILctx, sigmap=sigmap, vmap=vmap, rmap=rmap,  
+	in  CONTEXT{NILctx=NILctx, HILctx=HILctx, sigmap=sigmap, vmap=vmap, rmap=rmap,  
 		    used=used,alias=alias',  memoized_mpath=memoized_mpath,
 		    polyfuns=polyfuns}
 	end
 
-    fun add_module_alias(CONTEXT{NILctx,sigmap,vmap,rmap,used,alias,
+    fun add_module_alias(CONTEXT{NILctx,HILctx,sigmap,vmap,rmap,used,alias,
 				 memoized_mpath,polyfuns},m,name_c,name_r(*,k1*)) = 
 	case (extractPathLabels m) of
 		  (Il.MOD_VAR v, labs) => 
 		      let val p = (v,labs)
 			  val memoized_mpath' = Name.PathMap.insert(memoized_mpath,p,(name_c,name_r(*,k1*)))
-		      in  CONTEXT{NILctx=NILctx, sigmap=sigmap, vmap=vmap, rmap=rmap,
+		      in  CONTEXT{NILctx=NILctx, HILctx=HILctx,
+				  sigmap=sigmap, vmap=vmap, rmap=rmap,
 				  used=used,alias=alias,  
 				  memoized_mpath=memoized_mpath',
 				  polyfuns = polyfuns}
@@ -626,7 +646,7 @@ end (* local defining splitting context *)
 	let 
 	    fun find_structure_paths m acc 
 		(Il.SIGNAT_STRUCTURE((Il.SDEC(l,Il.DEC_MOD(_,false,s)))::rest)) = 
-  		   if (IlUtil.is_dt l) then
+  		   if (Name.is_dt l) then
 		       find_structure_paths m acc (Il.SIGNAT_STRUCTURE(rest))
 		   else	
 		       let val acc = (Il.MOD_PROJECT(m,l))::acc
@@ -775,9 +795,9 @@ end (* local defining splitting context *)
            val Il.MOD_PROJECT(il_module, lbl) = initial_mod
 	   val lbls = [lbl]
 
-	   val _ = app (fn l => if (IlUtil.is_dt l)
-					     then error "use of datatype labels detected"
-					 else ()) lbls
+	   val _ = app (fn l => if (Name.is_dt l)
+				    then error "use of datatype labels detected"
+				else ()) lbls
 
 	   val {cbnd_cat = cbnd_mod_cat, 
 		ebnd_cat = ebnd_mod_cat,
@@ -1027,7 +1047,7 @@ end (* local defining splitting context *)
 	record_r_exp_items = nil}
 
      | xsbnds_rewrite_1 context (il_sbnds as (Il.SBND(lab, Il.BND_MOD(var,_, _)))::rest_il_sbnds) =
-        if (IlUtil.is_dt lab) then
+        if (Name.is_dt lab) then
 	    xsbnds context rest_il_sbnds
         else
 	    xsbnds_rewrite_2 context il_sbnds
@@ -1043,7 +1063,7 @@ end (* local defining splitting context *)
 				 Il.BND_EXP(top_var, 
 					    il_exp as Il.FIX(_, _, fbnds)))
 			 ::rest_il_sbnds) =
-       (if (IlUtil.is_cluster lbl) then
+       (if (Name.is_cluster lbl) then
 	   let
 	       (* external_labels = Exported labels for these functions.
                   external_vars = Variables to which the functions should be bound
@@ -1109,7 +1129,7 @@ end (* local defining splitting context *)
 	   andalso (Name.is_label_internal lbl) 
            andalso (not (Name.eq_label (lbl, IlUtil.expose_lab)))
 	   andalso (Name.eq_label (them_lbl, IlUtil.them_lab))
-	   andalso (not (IlUtil.is_eq lbl))
+	   andalso (not (Name.is_eq lbl))
            ) then
 				  
 	   let
@@ -1766,10 +1786,10 @@ end (* local defining splitting context *)
      | xexp' context (Il.SCON il_scon) = xvalue context il_scon
 
      | xexp' context (Il.ETAPRIM (prim, il_cons)) = 
-       xexp context (IlUtil.prim_etaexpand(prim,il_cons))
+       xexp context (IlUtil.prim_etaexpand(get_hilctxt context,prim,il_cons))
 
      | xexp' context (Il.ETAILPRIM (ilprim, il_cons)) = 
-       xexp context (IlUtil.ilprim_etaexpand(ilprim,il_cons))
+       xexp context (IlUtil.ilprim_etaexpand(get_hilctxt context,ilprim,il_cons))
 
      | xexp' context (il_exp as (Il.PRIM (prim, il_cons, il_args))) = 
        let
@@ -1777,9 +1797,9 @@ end (* local defining splitting context *)
 	   val cons = map (xcon context) il_cons
 	   val args = map (xexp context) il_args
            val (effect,con) = 
-	     case strip_arrow (NilPrimUtil.get_type' prim cons) of
+	     case strip_arrow (NilPrimUtil.get_type' (get_nilctxt context)  prim cons) of
 		 SOME {effect,body_type,...} => (effect,body_type)
-		| _ => (perr_c (NilPrimUtil.get_type' prim cons);
+		| _ => (perr_c (NilPrimUtil.get_type' (get_nilctxt context) prim cons);
 			error "Expected arrow constructor")
 
 	   val con : con = (case con of
@@ -1856,7 +1876,7 @@ end (* local defining splitting context *)
 
            
      | xexp' context (il_exp as (Il.APP (il_exp1, il_exp2))) = 
-         (case IlUtil.exp_reduce il_exp of
+         (case IlUtil.exp_reduce (get_hilctxt context,il_exp) of
 	      NONE => 
 		  let
 		      val exp1 = xexp context il_exp1
@@ -2353,13 +2373,13 @@ end (* local defining splitting context *)
 
   and rewrite_sdecs sdecs =
        let 
-	   fun filter (Il.SDEC(lab,Il.DEC_MOD(var,_,_))) = not (IlUtil.is_dt lab)
+	   fun filter (Il.SDEC(lab,Il.DEC_MOD(var,_,_))) = not (Name.is_dt lab)
              | filter _ = true
 
 	   fun loop [] = []
 	     | loop ((sdec as 
 		     Il.SDEC(lab,Il.DEC_EXP(top_var,il_con, _, _))) :: rest) = 
-	        if (IlUtil.is_cluster lab) then
+	        if (Name.is_cluster lab) then
 		   let
 (*		       val _ = print "entered mono optimization case\n" *)
 		       val clist = (case il_con of
@@ -2471,9 +2491,6 @@ end (* local defining splitting context *)
        end
 
 
-  fun make_cr_labels l = (Name.internal_label((Name.label2string l) ^ "_c"),
-			  Name.internal_label((Name.label2string l) ^ "_r"))
-
    fun xHILctx HILctx =
        let open Il
 	   fun dopc(v,l,pc,(imports,context)) = 
@@ -2498,16 +2515,19 @@ end (* local defining splitting context *)
 				(case nil_con of 
 				     NONE => update_NILctx_insert_kind(context', v', kind)
 				   | SOME c => update_NILctx_insert_kind_equation(context', v', c))
-			in  (it::imports, context'')
+			    val context''' = update_NILctx_insert_label(context'',l,v')
+			in  (it::imports, context''')
 			end
 		  | Il.PHRASE_CLASS_MOD (_,is_polyfun,il_sig) => 
 			let
-			    val (l_c,l_r) = make_cr_labels l
+			    val (l_c,l_r) = Name.make_cr_labels l
 			    val ((v_c, v_r),context) = newSplitVar (v, context)
 			    val il_sig = IlContext.UnselfifySig IlContext.empty_context (PATH(v,[]), il_sig)
 			    val (knd, type_r) = xsig context (Var_c v_c, il_sig)
 				
 			    val context = update_NILctx_insert_kind(context, v_c, knd)
+			    val context = update_NILctx_insert_label(context, l_c, v_c)
+				
 			    val iv = ImportValue(l_r,v_r,TraceUnknown,type_r)
 			    val it = ImportType(l_c,v_c,knd)
 			in
@@ -2520,11 +2540,11 @@ end (* local defining splitting context *)
 			(imports,update_insert_sig(context,v,il_sig)))
 	   fun folder (p,acc) =
 	       let val SOME(l,pc) = IlContext.Context_Lookup_Path(HILctx,p)
-	       in  (case (IlUtil.is_dt l, IlUtil.is_nonexport l, p) of
+	       in  (case (Name.is_dt l, Name.is_nonexport l, p) of
 			(false, false, PATH(v,[])) => dopc(v,l,pc,acc)
 		      | _ => acc)
 	       end
-	   val (rev_imports,context) = foldl folder ([],empty_splitting_context()) 
+	   val (rev_imports,context) = foldl folder ([],empty_splitting_context HILctx)
 	                                  (IlContext.Context_Ordering HILctx)
        in  (rev rev_imports, context)
        end
@@ -2593,29 +2613,33 @@ end (* local defining splitting context *)
 	    val (nil_final_context,_) = filter_NILctx final_context
 	    val _ = msg "  Bindings are phase-split\n" 
 
+	    fun filtering l = if !debug
+				  then print ("filtering import " ^ Name.label2string l ^ "\n")
+			      else ()
+		
 	     (* Filter out the unused imports *)
 	    fun filter_imports [] = ([], used)
               | filter_imports ((iv as ImportValue(l,v,_,c)) :: rest) =
 		   let
 		       val result as (imports, used) = filter_imports rest
 		   in
-		       if (VarSet.member(used, v)) then
+		       if (VarSet.member(used, v) orelse Name.keep_import l) then
 			   (iv :: imports, 
 			    let val (fvTerm,fvType) = NilUtil.freeExpConVarInCon(true,0,c)
 			    in  VarSet.union(used, VarSet.union(fvTerm, fvType))
 			    end)
 		       else
-			   result
+			   (filtering l; result)
 		   end
               | filter_imports ((it as ImportType(l,v,k)) :: rest) =
 		   let
 		       val result as (imports, used) = filter_imports rest
 		   in
-		       if (VarSet.member(used, v)) then
+		       if (VarSet.member(used, v) orelse Name.keep_import l) then
 			   (it :: imports, 
 			    VarSet.union(used, NilUtil.freeVarInKind (0,k)))
 		       else
-			   result
+			   (filtering l; result)
 		   end
 	    val imports = if (!killDeadImport) then #1 (filter_imports imports) else imports
 
@@ -2624,8 +2648,8 @@ end (* local defining splitting context *)
 
 	    (* create the exports *)
 	    fun folder ((Il.SDEC(l,dec)),exports) = 
-		    (case (not (IlUtil.is_nonexport l) andalso
-			   not (IlUtil.is_dt l), dec) of
+		    (case (not (Name.is_nonexport l) andalso
+			   not (Name.is_dt l), dec) of
 			 (false,_) => exports
 		       | (true,Il.DEC_EXP (v,_,_,_)) => 
 			     let val v' = rename_var (v, final_context)
@@ -2640,7 +2664,7 @@ end (* local defining splitting context *)
 			     in  (ExportType(l,v')::exports)
 			     end
 		       | (true,Il.DEC_MOD (v,is_polyfun,s)) => 
-			     let val (lc,lr) = make_cr_labels l
+			     let val (lc,lr) = Name.make_cr_labels l
 				 (* Already bound *)
 				 val ((vc,vr),_) = splitVar (v,final_context)
 				 val exports = 

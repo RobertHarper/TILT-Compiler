@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Firstlude TiltPrim Prelude *)
 (* char-map-sig.sml
  *
  * COPYRIGHT (c) 1994 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

@@ -1,4 +1,4 @@
-(*$import Prelude TextIO IO UNIX Posix Substring String PosixTextPrimIO OS *)
+(*$import Firstlude TiltPrim Prelude TextIO IO UNIX Posix Substring String PosixTextPrimIO OS *)
 (* unix.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

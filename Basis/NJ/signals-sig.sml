@@ -1,4 +1,4 @@
-(*$import Prelude SMLofNJ *)
+(*$import Firstlude TiltPrim Prelude SMLofNJ *)
 
 (* signals-sig.sml
  *

@@ -1,4 +1,4 @@
-(*$import Prelude GENERAL General_extern *)
+(*$import Firstlude TiltPrim Prelude GENERAL General_extern *)
 (* general.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -9,43 +9,46 @@ struct
     val writeUnselfContext = Stats.ff("WriteUnselfContext")
     val showImports = Stats.ff("ShowImports")
 
+    type unit_paths = Paths.unit_paths
     type il_module = LinkIl.module
     type nil_module = Nil.module
     type rtl_module = Rtl.module
 
-    datatype import = DIRECT | INDIRECT
+    datatype kind =
+	DIRECT				(* direct import; labels available *)
+      | INDIRECT			(* indirect import; labels hidden *)
 
-    fun importName DIRECT = "direct"
-      | importName INDIRECT = "indirect"
+    datatype import =
+	FILE of unit_paths * kind
+      | PRIM of kind
 
-    fun importFromName "direct" = DIRECT
-      | importFromName "indirect" = INDIRECT
-      | importFromName name = error ("unknown import name " ^ name)
+    fun ilFile (FILE (p,_)) = SOME (Paths.ilFile p)
+      | ilFile _ = NONE
 	
-    fun readPartialContextRaw file = 
+    fun readPartialContextRaw ilFile = 
 	let 
-(*	    val _ = print ("XXX reading context file " ^ file ^ "\n") *)
-	    val is = BinIO.openIn file
+(*	    val _ = print ("XXX reading context file " ^ ilFile ^ "\n") *)
+	    val is = BinIO.openIn ilFile
 	    val res = LinkIl.IlContextEq.blastInPartialContext is
 	    val _ = BinIO.closeIn is
-(*	    val _ = print ("XXX done reading context file " ^ file ^ "\n") *)
+(*	    val _ = print ("XXX done reading context file " ^ ilFile ^ "\n") *)
 	in  res
 	end
     val readPartialContextRaw = Stats.timer("ReadingContext",readPartialContextRaw)
 
-    fun writePartialContextRaw' (file,pctxt) =
-	let val os = BinIO.openOut file
+    fun writePartialContextRaw' (ilFile,pctxt) =
+	let val os = BinIO.openOut ilFile
 	    val _ = LinkIl.IlContextEq.blastOutPartialContext os pctxt
 	    val _ = BinIO.closeOut os
 	in
 	    ()
 	end
     
-    fun writePartialContextRaw (file,pctxt) = 
-	let val _ = writePartialContextRaw' (file,pctxt)
+    fun writePartialContextRaw (ilFile,pctxt) = 
+	let val _ = writePartialContextRaw' (ilFile,pctxt)
 	    val shortpctxt = Delay.delay (fn () => LinkIl.IlContext.UnselfifyPartialContext pctxt)
 	    val _ = if (!writeUnselfContext)
-			then (let val shortfile = Paths.ilToUnself file ^ ".unself"
+			then (let val shortfile = Paths.ilToUnself ilFile ^ ".unself"
 			      in  writePartialContextRaw' (shortfile, Delay.force shortpctxt)
 			      end)
 		    else ()
@@ -65,57 +68,86 @@ struct
 				  val writer = writePartialContextRaw)
 
     fun chatImports imports =
-	let fun isdirect (_, DIRECT) = true
-	      | isdirect (_, INDIRECT) = false
-	    val direct = map #1 (List.filter isdirect imports)
-	    val indirect = map #1 (List.filter (not o isdirect) imports)
+	let
+	    fun kind (DIRECT, name) = name
+	      | kind (INDIRECT, name) = "-" ^ name
+		
+	    fun toString (FILE (p,k)) = kind (k, Paths.unitName p)
+	      | toString (PRIM k) = kind (k, "(PRIM)")
 	in
-	    Help.chat ("  [" ^ Int.toString (length direct) ^ " direct imports: ");
-	    Help.chat_strings 20 direct;
-	    Help.chat ("\n   " ^ Int.toString (length indirect) ^ " indirect imports: ");
-	    Help.chat_strings 20 indirect;
+	    Help.chat ("  [" ^ Int.toString (length imports) ^ " imports: ");
+	    Help.chat_strings 20 (map toString imports);
 	    Help.chat "]\n"
 	end
-	
+
+	local
+	    val saved = ref (NONE : Il.partial_context option)
+	in
+	    fun tiltprim context =
+		(case !saved
+		   of NONE =>
+		       let val pctxt = LinkIl.tiltprim context
+			   val _ = saved := SOME pctxt
+		       in  pctxt
+		       end
+		    | SOME pctxt => pctxt)
+	    fun updateTiltprim pctxt = saved := SOME pctxt
+	end
+    
     fun getContext imports =
 	let val _ = if (!showImports) then chatImports imports else ()
 	    val _ = Name.reset_varmap()
 	    val _ = IlCache.tick()
 	    val start = Time.now()
-	    val (iscached,partial_ctxts) = ListPair.unzip (map (IlCache.read o #1) imports)
-	    val diff = Time.toReal(Time.-(Time.now(), start))
-	    val diff = (Real.realFloor(diff * 100.0)) / 100.0
-	    fun folder ((_, INDIRECT), pctxt, acc) = LinkIl.IlContext.get_labels (pctxt, acc)
-	      | folder (_, _, acc) = acc
-	    val indirect_labels = Listops.foldl2 folder LinkIl.IlContext.empty_label_info (imports, partial_ctxts)
-	    fun folder ((file, _), true, (c,u)) = (file::c, u)
-	      | folder ((file, _), false, (c,u)) = (c,file::u)
-	    val (cached, uncached) = Listops.foldl2 folder (nil,nil) (imports, iscached)
-	    val cached_size = foldl (fn (ilFile,acc) => acc + (IlCache.size ilFile)) 0 cached
-	    val uncached_size = foldl (fn (ilFile,acc) => acc + (IlCache.size ilFile)) 0 uncached
-	    val _ = (Help.chat "  ["; Help.chat (Int.toString (length cached)); 
-		     Help.chat " imports of total size "; Help.chat (Int.toString cached_size);
+	    val plus_context = Stats.timer("AddingContext",LinkIl.plus_context)
+	    fun folder (FILE (p,k), (cached, uncached, context, label_info)) =
+		let val ilFile = Paths.ilFile p
+		    val (iscached,pctxt) = IlCache.read ilFile
+		    val (cached,uncached) = if iscached then (ilFile :: cached, uncached)
+					    else (cached, ilFile :: uncached)
+		    val (pctxtopt, context) = plus_context (context, pctxt)
+		    val _ = (case pctxtopt
+			       of SOME new => ignore (IlCache.updateCache (ilFile, new))
+				| NONE => ())
+		    val label_info = (case k
+					of INDIRECT => LinkIl.IlContext.get_labels (pctxt, label_info)
+					 | DIRECT => label_info)
+		in  (cached, uncached, context, label_info)
+		end
+	      | folder (PRIM k, (cached, uncached, context, label_info)) =
+		let val pctxt = tiltprim context
+		    val (pctxtopt, context) = plus_context (context, pctxt)
+		    val _ = (case pctxtopt
+			       of SOME new => updateTiltprim new
+				| NONE => ())
+		    val label_info = (case k
+					of INDIRECT => LinkIl.IlContext.get_labels (pctxt, label_info)
+					 | DIRECT => label_info)
+		in  (cached, uncached, context, label_info)
+		end
+	    val init = (nil, nil, LinkIl.empty_context, LinkIl.IlContext.empty_label_info)
+	    val (cached, uncached, context, indirect_labels) = foldl folder init imports
+	    val context = LinkIl.IlContext.obscure_labels (context, indirect_labels)
+	    val totalSize = foldl (fn (ilFile,acc) => acc + (IlCache.size ilFile)) 0
+	    val chatInt = Help.chat o Int.toString
+	    val _ = (Help.chat "  ["; chatInt (length cached); 
+		     Help.chat " imports of total size "; chatInt (totalSize cached);
 		     Help.chat " were cached.\n";
-		     Help.chat "   "; Help.chat (Int.toString (length uncached));
-		     Help.chat " imports of total size "; Help.chat (Int.toString uncached_size);
-		     Help.chat " were uncached and took ";
-		     Help.chat (Real.toString diff); Help.chat " seconds.";
+		     Help.chat "   "; chatInt (length uncached);
+		     Help.chat " imports of total size "; chatInt (totalSize uncached);
+		     Help.chat " were uncached.";
 		     if (!showImports) then (Help.chat "\n\nCACHED: "; Help.chat_strings 20 cached;
 					     Help.chat "\n\nUNCACHED: "; Help.chat_strings 20 uncached;
 					     Help.chat "\n\n")
 		     else ();
 		     Help.chat "]\n")
-	    val initial_ctxt = LinkIl.initial_context()
-	    val addContext = Stats.timer("AddingContext",LinkIl.plus_context)
-	    val (partial_context_opts, context) = addContext (initial_ctxt, partial_ctxts)
-	    val _ = Listops.app2 (fn (NONE,_) => false
-	                           | (SOME new, (file,_)) => IlCache.updateCache(file,new))
-		                 (partial_context_opts, imports)
-	    val context = LinkIl.IlContext.obscure_labels (context, indirect_labels)
-	    val _ = Help.chat ("  [Added contexts.]\n")
+	    val diff = Time.toReal(Time.-(Time.now(), start))
+	    val diff = (Real.realFloor(diff * 100.0)) / 100.0
+	    val _ = (Help.chat "  [Elaboration context took ";
+		     Help.chat (Real.toString diff);
+		     Help.chat " seconds.]\n")
 	in  (context, indirect_labels)
 	end
-
 
     (* elaborate : {...} -> il_module * bool *)
     fun elaborate {unit, smlFile, intFile, targetIlFile, imports} =

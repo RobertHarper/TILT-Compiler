@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Firstlude TiltPrim Prelude *)
 (* listsort-sig.sml
  *
  * COPYRIGHT (c) 1989 by AT&T Bell Laboratories

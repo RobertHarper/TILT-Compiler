@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Firstlude Prelude TiltPrim *)
 (* clean-io.sml
  *
  * COPYRIGHT (c) 1996 AT&T Research.

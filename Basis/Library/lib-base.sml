@@ -1,4 +1,4 @@
-(*$import Prelude LIB_BASE Int TopLevel General *)
+(*$import Firstlude TiltPrim Prelude LIB_BASE Int TopLevel General *)
 (* lib-base.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

@@ -1,4 +1,4 @@
-(*$import Prelude MONO_VECTOR *)
+(*$import Firstlude TiltPrim Prelude MONO_VECTOR *)
 (* mono-array-sig.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.

@@ -1,11 +1,8 @@
-(*$import Prelude TopLevel Name Util TilWord32 Sequence Prim Array PRIMUTIL Listops Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam TraceInfo Stats NilRewrite *)
+(*$import Prelude TopLevel Name Util TilWord32 Sequence Prim Array PRIMUTIL Listops Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List TraceInfo Stats NilRewrite *)
 
 (* This structure contains a miscellaneous collection of functions
  * for dealing with the NIL that have no other natural place.
  *)
-
-structure NilPrimUtil :> PRIMUTIL where type con = Nil.con
-                                 where type exp = Nil.exp = PrimUtil(structure PrimUtilParam = NilPrimUtilParam)
 
 structure NilUtil
   :> NILUTIL =
@@ -299,7 +296,8 @@ struct
 	       con_var_define = null_binder,
 	       exp_var_bind   = null_binder,
 	       exp_var_define = null_binder,
-	       sum_var_bind   = null_binder
+	       sum_var_bind   = null_binder,
+	       labelled_var   = null_label_binder
 	       }
     val {rewrite_con  = strip_con,
 	 ...} = rewriters all_handlers
@@ -383,8 +381,8 @@ struct
     val foldl_acc = Listops.foldl_acc
     val eq_len = Listops.eq_len
     val member_eq = Listops.member_eq
-    val same_intsize = NilPrimUtil.same_intsize
-    val same_floatsize = NilPrimUtil.same_floatsize
+    val same_intsize = Prim.same_intsize
+    val same_floatsize = Prim.same_floatsize
     val eq_var2 = Name.eq_var2
   end
   (**)

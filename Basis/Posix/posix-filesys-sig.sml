@@ -1,4 +1,4 @@
-(*$import Prelude Position PreOS SysWord POSIX_FLAGS Time *)
+(*$import Firstlude TiltPrim Prelude Position PreOS SysWord POSIX_FLAGS Time *)
 (* posix-filesys-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -11,6 +11,7 @@ signature EQUAL =
 		     Il.context * Il.sdecs -> 
 		       (Il.sbnd list * Il.sdecs * Il.con list) option,
 		   vector_eq : Il.context -> Il.exp * Il.con,
+		   bool : (Il.con * Il.exp * Il.exp) option,
 		   context : Il.context,
 		   con : Il.con} -> (Il.exp * Il.con) option
 

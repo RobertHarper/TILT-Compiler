@@ -1,4 +1,4 @@
-(*$import Prelude WORD Word32 *)
+(*$import Firstlude TiltPrim Prelude WORD Word32 *)
 
 (* Word31.word is kept abstract.  It would be bad if
  *    val x : Word31.word = 0wxFFFFFFFF;

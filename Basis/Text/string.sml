@@ -1,4 +1,4 @@
-(*$import Prelude STRING General PreString Char *)
+(*$import Firstlude TiltPrim Prelude STRING General PreString Char *)
 (* string.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

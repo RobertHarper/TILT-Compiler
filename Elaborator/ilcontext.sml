@@ -103,7 +103,7 @@ struct
 	in  (case (LabelMap.find(labelMap,lab)) of
 		   NONE => (overloadMap, labelMap, pathMap)
 		 | SOME (PATH p,_) => 
-		       let val newlab = fresh_internal_label(label2name lab)
+		       let val newlab = fresh_internal_label(label2name' lab)
 		       in  (case PathMap.find(pathMap,p) of
 				NONE => error "inconsistent context"
 			      | SOME (_, pc) => 
@@ -334,7 +334,7 @@ struct
 	(case pc of
 	     PHRASE_CLASS_EXP (e,c,eopt,_) => 
 		 let val set = VarSet.union(set, exp_free e)
-		     val set = VarSet.union(set ,con_free c) 
+		     val set = VarSet.union(set, con_free c) 
 		 in  (case eopt of
 			  NONE => set
 			| SOME e => VarSet.union(set, exp_free e))
@@ -353,9 +353,9 @@ struct
 
 
     (* adding the partial context to the context *)
-    fun plus (orig_pctxt : partial_context,
-	      ctxt as CONTEXT{fixityMap = fm1, overloadMap = om1,
-			      labelMap = lm1, pathMap = pm1, ordering = ord1})
+    fun plus_context (ctxt as CONTEXT{fixityMap = fm1, overloadMap = om1,
+				      labelMap = lm1, pathMap = pm1, ordering = ord1},
+		      orig_pctxt : partial_context)
 	: partial_context option * context = 
 	let
 	    val _ = debugdo (fn () => (print "plus PARTIAL CONTEXT:\n";
@@ -430,14 +430,14 @@ struct
 		     pathMap = pathMap,
 		     ordering = ordering})
 	end 
-
+(*
     fun plus_context (ctxt, partial_ctxts) 
 	: partial_context option list * context = 
 	(debugdo (fn() => (print "plus CONTEXT:\n";
 			   pp_context ctxt;
 			   print "\n\n"));
 	 foldl_list plus ctxt partial_ctxts)
-    
+*)  
     fun show_varset str set = 
 	(print str; print ": ";
 	 VarSet.app (fn v => (Ppil.pp_var v; print "  ")) set;
@@ -539,6 +539,12 @@ struct
 	    val roots = foldl folder roots sbndopt_entry
 	    val roots = VarSet.difference(roots, exclude)
 	    val CONTEXT{pathMap, labelMap, ordering, overloadMap, fixityMap} = context
+	    val roots = PathMap.foldli
+		          (fn ((v,[]),(l,_),s) => if Name.keep_import l
+						      then VarSet.add(s,v)
+						  else s
+			    | (_,_,s) => s)
+			  roots pathMap
 	    val reachable = reachableVars(pathMap, VarSet.empty, roots)
 	    fun isReachable (v,_) = Name.VarSet.member(reachable,v)
 	    val pathMap_orig = pathMap (* used for the print statements below *)

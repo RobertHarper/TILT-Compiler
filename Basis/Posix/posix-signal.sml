@@ -1,4 +1,4 @@
-(*$import Word32 SysInt SysWord POSIX_extern POSIX_SIGNAL *)
+(*$import Firstlude Word32 SysInt SysWord POSIX_extern POSIX_SIGNAL *)
 (* posix-signal.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -285,8 +285,8 @@ struct
 		   | Fixclosure_b _ => error "sorry: Fixclosure not handled")
 
 
-	fun scan_import(ImportValue(l,v,tr,c),ctxt) = insert_con(ctxt,v,c)
-	  | scan_import(ImportType(l,v,k),ctxt)  = insert_kind(ctxt,v,k)
+	fun scan_import(ImportValue(l,v,tr,c),ctxt) = insert_label(insert_con(ctxt,v,c),l,v)
+	  | scan_import(ImportType(l,v,k),ctxt)  = insert_label(insert_kind(ctxt,v,k),l,v)
 
 	fun scan_export (ExportValue(l,v),ctxt) = (scan_exp ctxt (Var_e v); ctxt)
 	  | scan_export (ExportType(l,v),ctxt) = ctxt

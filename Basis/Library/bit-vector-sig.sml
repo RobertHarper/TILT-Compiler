@@ -1,4 +1,4 @@
-(*$import MONO_VECTOR Prelude *)
+(*$import MONO_VECTOR Firstlude TiltPrim Prelude *)
 (* bit-vector-sig.sml
  *
  * COPYRIGHT (c) 1995 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

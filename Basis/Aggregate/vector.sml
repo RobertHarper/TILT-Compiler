@@ -1,4 +1,4 @@
-(*$import Prelude VECTOR General List Array *)
+(*$import Firstlude TiltPrim Prelude VECTOR General List Array *)
 (* vector.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.

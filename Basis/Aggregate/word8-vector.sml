@@ -1,4 +1,4 @@
-(*$import Prelude General Array MONO_VECTOR Vector List *)
+(*$import Firstlude TiltPrim Prelude General Array MONO_VECTOR Vector List *)
 (* word8-vector.sml specialized copy of vector.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.

@@ -1,4 +1,4 @@
-(*$import Prelude STREAM_IO *)
+(*$import Firstlude TiltPrim Prelude STREAM_IO *)
 (* imperative-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

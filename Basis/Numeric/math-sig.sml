@@ -1,4 +1,4 @@
-(*$import *)
+(*$import Firstlude TiltPrim *)
 signature MATH =
   sig
     type real

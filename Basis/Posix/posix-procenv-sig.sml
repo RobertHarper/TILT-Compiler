@@ -1,4 +1,4 @@
-(*$import Prelude SysWord Time *)
+(*$import Firstlude TiltPrim Prelude SysWord Time *)
 (* posix-procenv-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

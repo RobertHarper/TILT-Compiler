@@ -1,4 +1,4 @@
-(*$import Prelude TextIO OS *)
+(*$import Firstlude TiltPrim Prelude TextIO OS *)
 (* unix-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

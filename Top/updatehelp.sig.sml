@@ -15,7 +15,7 @@ sig
     datatype asmfiles = COMPRESSED | UNCOMPRESSED | BOTH | NEITHER
     val goalAsmFiles : unit -> asmfiles
 	
-    val init : unit_paths * (unit_paths * import) list -> state
+    val init : unit_paths * import list -> state
     val elaborate : state -> state
     val generate : state -> state
     val prepare : state -> state

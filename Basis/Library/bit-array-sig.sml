@@ -1,4 +1,4 @@
-(*$import MONO_ARRAY Prelude *)
+(*$import MONO_ARRAY Firstlude TiltPrim Prelude *)
 (* bit-array-sig.sml
  *
  * COPYRIGHT (c) 1995 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

@@ -1,4 +1,4 @@
-(*$import MATH Prelude PreReal PreInt *)
+(*$import Firstlude TiltPrim Prelude MATH PreReal PreInt *)
 
 structure Math64 :> MATH where type real = real =
   struct

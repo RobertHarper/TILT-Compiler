@@ -21,7 +21,6 @@ is
 ../Util/util.cm             	(* ------ Our own utilities --- *)
 ../Parser/parser.cm   		(* ------ Parsing, name utils 	*)
 ../Elaborator/elaborator.cm	(* ------ Elaborator Stuff ---- *)
-../Wizard/Nil/nil.cm
 
 (* ------ Nil stuff ------ *)
 
@@ -51,6 +50,7 @@ nilcontext.sml
 nilcontextpre.sml
 nilcontextpre.sig.sml
 nilprimutilparam.sml
+nilprimutil.sml
 linearize.sig.sml
 linearize.sml
 normalize.sig.sml
@@ -147,36 +147,9 @@ NilOpts/inline.sml
 NilOpts/linkopt.sml
 *)
 
-nil_to_wizard.sml
-
+(* ----- Killed the wizard ----- *)
 (*
-(* ------ Wizard Stuff --------- *)
-../Wizard/Nil/nil.sig.sml
-../Wizard/Nil/nil.sml
-../Wizard/Nil/curtain.sig.sml
-../Wizard/Nil/curtain.sml
-../Wizard/Nil/curtain-impl.sml
-../Wizard/Nil/ppnil.sig.sml
-../Wizard/Nil/ppnil.sml
-../Wizard/Nil/nilerror.sig.sml
-../Wizard/Nil/nilerror.sml
-../Wizard/Nil/rewrite.sig.sml
-../Wizard/Nil/rewrite.sml
-../Wizard/Nil/subst.sig.sml
-../Wizard/Nil/subst.sml
-../Wizard/Nil/nilrename.sig.sml
-../Wizard/Nil/nilrename.sml
-../Wizard/Nil/nilprimutilparam.sml
-../Wizard/Nil/nilutil.sig.sml
-../Wizard/Nil/nilutil.sml
-../Wizard/Nil/nilcontextpre.sig.sml
-../Wizard/Nil/nilcontextpre.sml
-../Wizard/Nil/nilcontext.sig.sml
-../Wizard/Nil/nilcontext.sml
-../Wizard/Nil/normalize.sig.sml
-../Wizard/Nil/normalize.sml
-../Wizard/Nil/traceops.sig.sml
-../Wizard/Nil/traceops.sml
-../Wizard/Nil/nilstatic.sig.sml
-../Wizard/Nil/nilstatic.sml
+../Wizard/Nil/nil.cm
+nil_to_wizard.sml
 *)
+dummy.sml

@@ -1,6 +1,8 @@
 (*$import Prelude TopLevel Util Stats TopHelp Dirs String Int MANAGER Master Slave Compiler OS *)
 
-structure Manager :> MANAGER = 
+functor Manager (val bootMapfile : unit -> string option
+		 structure Master : MASTER)
+    :> MANAGER = 
 struct
 
   val error = fn s => Util.error "manager.sml" s
@@ -60,5 +62,34 @@ struct
 
   fun purgeAll mapfile = Master.purgeAll mapfile
   fun purge mapfile = Master.purge mapfile
+
+  fun boot () = (case bootMapfile()
+		   of NONE => ()
+		    | SOME mapfile => make mapfile)
 end
 
+local
+    fun noMapfile () = NONE
+    fun basisMapfile () =
+	Option.map
+	(fn dir => OS.Path.joinDirFile {dir=dir,file="mapfile-basis"})
+	(OS.Process.getEnv "TILT_LIBDIR")
+
+    structure BootMaster =
+	Master (val bootstrap  = true
+		val basisMapfile = noMapfile
+		val basisImports = nil)
+	
+    structure Master =
+	Master (val bootstrap = false
+		val basisMapfile = basisMapfile
+		val basisImports = ["Firstlude", "TiltPrim", "Prelude", "TopLevel"])
+in
+    structure Boot =
+	Manager (val bootMapfile = basisMapfile
+		 structure Master = BootMaster)
+
+    structure Manager =
+	Manager (val bootMapfile = noMapfile
+		 structure Master = Master)
+end

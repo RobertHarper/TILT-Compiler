@@ -1,4 +1,4 @@
-(*$import Prelude OPTION *)
+(*$import Firstlude TiltPrim Prelude OPTION *)
 (* option.sml
  *
  * COPYRIGHT (c) 1997 AT&T Labs Research.

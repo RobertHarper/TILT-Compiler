@@ -1,4 +1,4 @@
-(*$import Prelude HASH_KEY *)
+(*$import Firstlude TiltPrim Prelude HASH_KEY *)
 (* mono-hash2-table-sig.sml
  *
  * COPYRIGHT (c) 1996 by AT&T Research.

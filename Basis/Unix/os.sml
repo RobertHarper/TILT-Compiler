@@ -1,4 +1,4 @@
-(*$import Prelude OS_PROCESS Posix PreOS OS_FileSys OS_Path OS_Process OS_IO_Str OS_SIG *)
+(*$import Firstlude TiltPrim Prelude OS_PROCESS Posix PreOS OS_FileSys OS_Path OS_Process OS_IO_Str OS_SIG *)
 (* os.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

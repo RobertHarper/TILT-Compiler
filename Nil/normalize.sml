@@ -90,7 +90,7 @@ struct
   val insert_kind          = NilContext.insert_kind
   val insert_kind_equation = NilContext.insert_kind_equation
   val insert_equation      = NilContext.insert_equation
-
+      
   fun error' s = Util.error "normalize.sml" s
   fun error s s' = Util.error s s'
 
@@ -822,15 +822,21 @@ struct
 	 in Handle_e {body = body, bound = bound,
 		      handler = handler, result_type = result_type}
 	 end)
+  fun insert_label ((D,subst),l,v) =
+      let val D = NilContext.insert_label (D,l,v)
+      in  (D,subst)
+      end
   fun import_normalize' state (ImportValue (label,var,tr,con)) =
     let
       val con = con_normalize' state con
+      val state = insert_label (state,label,var)
     in
       (ImportValue (label,var,tr,con),state)
     end
     | import_normalize' state (ImportType (label,var,kind)) = 
     let
       val ((var,kind),state) = bind_at_kind ((var,kind),state)
+      val state = insert_label (state,label,var)
     in
       (ImportType (label,var,kind),state)
     end
@@ -1318,9 +1324,15 @@ struct
 	  of Var_e var => 
 	    (NilContext.find_con (D,var)
 	     handle NilContext.Unbound =>
-	       error' 
-	       ("Encountered undefined variable " ^ (Name.var2string var) 
-		^ "in type_of"))
+		 let val _ = if (!debug)
+				 then (print "XXX type_of context:\n";
+				       NilContext.print_context D;
+				       print "\n")
+			     else ()
+		 in
+		     error' ("Encountered undefined variable " ^
+			     (Name.var2string var) ^ " in type_of")
+		 end)
 	   | Const_e value => type_of_value (D,value)
 	   | Let_e (letsort,bnds,exp) => 
 	    let
@@ -1332,7 +1344,7 @@ struct
 	   | Prim_e (NilPrimOp prim,cons,exps) => type_of_prim (D,prim,cons,exps)
 	   | Prim_e (PrimOp prim,cons,exps) =>   
 	    let 
-	      val (total,arg_types,return_type) = NilPrimUtil.get_type prim cons
+	      val (total,arg_types,return_type) = NilPrimUtil.get_type D prim cons
 	    in
 	      return_type
 	    end
@@ -1604,7 +1616,8 @@ struct
   val reduceToSumtype = wrap1 "reduceToSumType" reduceToSumtype
   val type_of = fn arg => (wrap1 "type_of" type_of arg
 			   handle e => (print "type_of failed on ";
-					Ppnil.pp_exp (#2 arg); raise e))
+					Ppnil.pp_exp (#2 arg);
+					print "\n"; raise e))
 
 
 

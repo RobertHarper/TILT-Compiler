@@ -1,4 +1,4 @@
-(*$import Prelude IMPERATIVE_IO Word8Vector Word8 *)
+(*$import Firstlude TiltPrim Prelude IMPERATIVE_IO Word8Vector Word8 *)
 (* bin-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

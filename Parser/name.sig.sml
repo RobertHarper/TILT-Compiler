@@ -28,7 +28,7 @@ signature NAME =
     val fresh_var : unit -> var
     val fresh_tag : unit -> tag
     val gen_var_from_symbol : Symbol.symbol -> var  (* conveniently extracts string for you *)
-    val fresh_internal_label  : string -> label          
+    val fresh_internal_label  : string -> label
     val derived_var : var -> var
     val rename_var : var * string -> unit
 
@@ -54,28 +54,64 @@ signature NAME =
     val deconstruct_tag : tag -> int * string
     val construct_tag : int * string -> tag
 
+    (*
+       There are HIL- and NIl-level conventions for internal labels.
+       We collect the label-mangling functions here to simplify the
+       interface and definition of keep_import.
+    *)
+    val to_open      : label -> label	(* module that is open for lookup *)
+    val to_dt        : label -> label	(* module that implements a datatype *)
+    val to_nonexport : label -> label	(* nonexport, top-level labels *)
+    val to_cluster   : label -> label	(* cluster of mutually recursive functions *)
+    val to_eq        : label -> label	(* equality function *)
+    val to_coercion  : label -> label	(* coercion function *)
+
+    val is_open      : label -> bool
+    val is_dt        : label -> bool
+    val is_nonexport : label -> bool
+    val is_cluster   : label -> bool
+    val is_eq        : label -> bool
+    val is_coercion  : label -> bool
+
+    val prependToInternalLabel : string * label -> label   (* Keeps characteristics *)
+    val label2name' : label -> string	(* Discards characteristics *)
+
+    val make_cr_labels  : label -> label * label (* for use after phase splitting *)
+
+    (*
+       The compiler should never discard data associated with
+       top-level labels satisfying keep_import.
+
+       A HIL context can be (and is) garbage collected to eliminate
+       unused bindings prior to phase splitting.  The phase splitter
+       (optionally) filters out unused imports.  These operations, for
+       example, must respect keep_import.
+
+       The problem is that certain imports, while not necessarily
+       mentioned in a module's interface or code, may be used by the
+       module.  For example, the module may use a primitive which the
+       optimizer evaluates to a boolean.
+
+       Our solution is to use keep_import to identify such imports
+       (via their labels) and to prevent marked imports from being
+       GC'ed, filtered, etc.
+     *)
+    val keep_import : label -> bool
+	
     (* Hash tables *)
     val mk_var_hash_table : (int * exn) -> (var, 'val) HashTable.hash_table
 
     structure VarSet : ORD_SET where type Key.ord_key = var
+    structure VarMap : ORD_MAP where type Key.ord_key = var
 
-    structure VarMap : ORD_MAP
-    where type Key.ord_key = var
+    structure LabelMap : ORD_MAP where type Key.ord_key = label
+    structure LabelSet : ORD_SET where type Key.ord_key = label
 
-    structure LabelMap : ORD_MAP
-    where type Key.ord_key = label
-
-    structure TagMap : ORD_MAP
-    where type Key.ord_key = tag
+    structure TagMap : ORD_MAP where type Key.ord_key = tag
 
     type vpath = var * label list
 
-    structure PathMap : ORD_MAP
-    where type Key.ord_key = vpath
-
-    structure PathSet : ORD_SET
-    where type Key.ord_key = vpath
-
-
+    structure PathMap : ORD_MAP where type Key.ord_key = vpath
+    structure PathSet : ORD_SET  where type Key.ord_key = vpath
    
   end

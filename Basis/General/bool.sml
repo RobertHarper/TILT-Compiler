@@ -1,4 +1,4 @@
-(*$import Prelude PreString StringCvt BOOL *)
+(*$import Firstlude TiltPrim Prelude PreString StringCvt BOOL *)
 (* bool.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

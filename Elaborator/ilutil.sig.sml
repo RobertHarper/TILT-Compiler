@@ -3,6 +3,9 @@
 signature ILUTIL =
   sig
 
+    val installHelpers : {lookup : Il.context * Il.label -> (Il.path * Il.phrase_class) option
+			  } -> unit
+
     val debug : bool ref
     exception FAILURE of string
 
@@ -55,22 +58,25 @@ signature ILUTIL =
     val make_unfold_coercion : var list * con * con -> (exp * con)
     val make_let  : (bnd list * exp) -> exp
     val make_catch : exp * con * exp * con * exp -> exp
-    val make_ifthenelse : exp * exp * exp * con -> exp
+    val make_ifthenelse : context -> exp * exp * exp * con -> exp
     val make_seq : (exp * con) list -> exp * con
-    val prim_etaexpand : (Prim.prim * con list) -> exp
-    val ilprim_etaexpand : (Prim.ilprim * con list) -> exp
-    val exp_reduce : exp -> exp option
+    val prim_etaexpand : (context * Prim.prim * con list) -> exp
+    val ilprim_etaexpand : (context * Prim.ilprim * con list) -> exp
+    val exp_reduce : context * exp -> exp option
 
-    val con_bool : con
-    val con_eqfun : con -> con
+    val lab_bool : label
+    val lab_true : label
+    val lab_false : label
+    val con_bool : context -> con
+    val con_eqfun : context -> con -> con
     val con_tuple : con list -> con                 (* the type of tuple values *)
     val con_tuple_inject : Il.con list -> Il.con    (* makes a tuple of types   *)
     val con_record : (Symbol.symbol * con) list -> con
     val exp_tuple : exp list -> exp
     val generate_tuple_label  : int -> label
     val generate_tuple_symbol : int -> Symbol.symbol
-    val true_exp : exp
-    val false_exp : exp
+    val true_exp : context -> exp
+    val false_exp : context -> exp
 
 
     (* special labels *)
@@ -82,28 +88,6 @@ signature ILUTIL =
     val case_lab : label
     val expose_lab : label
     val functor_arg_lab : label
-
-    (* Some internal labels are opened for lookup 
-       Some internal labels are non-exported 
-       Eq labels are internal, non-exported, and identifiable as eq labels 
-    *)
-
-    val to_open : label -> label
-    val to_nonexport : label -> label
-    val to_eq: label -> label       
-    val to_dt: label -> label       
-    val to_cluster: label -> label       
-    val to_coercion : label -> label
-
-    val is_open : label -> bool
-    val is_nonexport : label -> bool
-    val is_eq : label -> bool
-    val is_dt : label -> bool
-    val is_cluster : label -> bool
-    val is_coercion : label -> bool
-
-    val prependToInternalLabel : string * label -> label   (* Keeps characteristics *)
-    val label2name : label -> string                       (* Lose all characteristics *)
 
     val canonical_tyvar_label : bool (*is_eq*) -> int -> label
 	
@@ -248,7 +232,7 @@ signature ILUTIL =
     val ovld_collapse : (con * exp * bool) list -> Il.ovld
 
     (* Help creating type/eqtype sigs *)
-    val make_typearg_sdecs : (label * bool) list -> Il.sdecs
+    val make_typearg_sdecs : context -> (label * bool) list -> Il.sdecs
     val reduce_typearg_sdecs : exp * Name.vpath * Il.sdecs -> Il.sdecs
 	
   end;

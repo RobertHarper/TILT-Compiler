@@ -8,6 +8,9 @@ structure Name :> NAME =
 
     val error = fn s => error "Name.sml" s
 
+    val debug = Stats.ff("NameDebug")
+    fun debugdo t = if (!debug) then (t(); ()) else ()
+
     type var   = int
     type label = int * string
     type labels = label list
@@ -118,7 +121,6 @@ structure Name :> NAME =
     fun internal_label s : label = (internal_hash s,s)
     fun is_label_internal ((num,str) : label) = internal_hash str = num
 
-
     fun symbol_label sym : label = 
 	let val str = Symbol.name sym
 	    val numOpt = Int.fromString str
@@ -158,6 +160,70 @@ structure Name :> NAME =
     fun tag2string (i,s) = ("NAME_" ^ s ^ "_" ^ (Int.toString i))
     fun tag2int (i,s) = i
 
+
+    local
+	(* Internal labels follow special conventions *)
+	(* Some internal labels are opened for lookup *)
+	(* Some internal labels are non-exported *)
+	(* Eq and coerction labels are identifiable as such *)
+	 
+	val open_str      = "+O"
+	val dt_str        = "+O+D"
+	val nonexport_str = "-X"
+	val cluster_str   = "+C"
+	val eq_str        = "+E"
+	val coercion_str  = "+N"
+
+	fun to_meta_lab meta_str lab =
+	    let val str = label2name lab
+		val final_str = meta_str ^ str
+	    in  internal_label final_str
+	    end
+	
+	fun is_meta_lab meta_str lab = isSome (substring (meta_str, label2name lab))
+	    
+	fun split str = 
+	    let val len = size str
+		fun loop n = if ((n+1) < len andalso 
+				 (String.sub(str,n) = #"+" orelse
+				  String.sub(str,n) = #"-"))
+				 then loop (n+2) else n
+		val start = loop 0
+	    in  (String.substring(str,0, start),
+		 String.substring(str,start,len - start))
+	    end
+    in
+	val to_open      = to_meta_lab open_str 
+	val to_dt        = to_meta_lab dt_str
+	val to_nonexport = to_meta_lab nonexport_str
+	val to_cluster   = to_meta_lab cluster_str
+	val to_eq        = to_meta_lab eq_str
+	val to_coercion  = to_meta_lab coercion_str
+
+	val is_open      = is_meta_lab open_str
+	val is_dt        = is_meta_lab dt_str
+	val is_nonexport = is_meta_lab nonexport_str
+	val is_cluster   = is_meta_lab cluster_str
+	val is_eq        = is_meta_lab eq_str
+	val is_coercion  = is_meta_lab coercion_str
+
+	fun prependToInternalLabel (prefix, lab) = 
+	    let val str = label2name lab
+		val (attributes, name) = split str
+		val name = prefix ^ name
+	    in  internal_label(attributes ^ name)
+	    end
+	
+	fun label2name' lab = 
+	    let val str = label2name lab
+		val (attributes, name) = split str
+	    in  name
+	    end
+    end
+	
+    fun make_cr_labels l = (internal_label(label2string l ^ "_c"),
+			    internal_label(label2string l ^ "_r"))
+	
     fun mk_var_hash_table (size,notfound_exn) = 
 	let
 	    val b : word = 0wx3141592
@@ -194,13 +260,45 @@ structure Name :> NAME =
 					 type ord_key = tag
 					 val compare = compare_tag
 				     end
-      structure LabelMap = SplayMapFn(LabelKey) 
-      structure TagMap   = SplayMapFn(TagKey) 
-      structure PathMap  = SplayMapFn(PathKey) 
-      structure PathSet  = SplaySetFn(PathKey) 
+      structure LabelMap = SplayMapFn(LabelKey)
+      structure LabelSet = SplaySetFn(LabelKey)
+      structure TagMap   = SplayMapFn(TagKey)
+      structure PathMap  = SplayMapFn(PathKey)
+      structure PathSet  = SplaySetFn(PathKey)
 
 
+    local
+	(* keep_dataty : string * LabelSet.set -> LabelSet.set *)
+	fun keep_dataty (name, set) =
+	    let
+		val import = to_open (internal_label ("_" ^ name))
+		val (c,r) = make_cr_labels import
+	    in
+		LabelSet.addList (set, [import, c, r])
+	    end
 
+	val keepers = LabelSet.empty
+	val keepers = foldl keep_dataty keepers ["bool"]
+	    
+	val once = ref false
+    in
+	(* keep_import : label -> bool *)
+	fun keep_import l =
+	    let val r = LabelSet.member (keepers, l)
+		val _ = debugdo (fn () =>
+				 let val _ = if !once then ()
+					     else (print "keepers = ";
+						   LabelSet.app (fn l => print (" " ^ label2string l)) keepers;
+						   print "\n";
+						   once := true)
+				 in
+				     if r then print ("keeping import " ^ label2string l ^ "\n")
+				     else ()
+				 end)
+	    in  r
+	    end 
+    end
+	
 
     val derived_var      = (*Stats.subtimer("Name:derived_var",*)(derived_var)
     val fresh_named_var  = (*Stats.subtimer("Name:fresh_named_var",*)(fresh_named_var)

@@ -16,6 +16,7 @@ struct
       | Master of string		(* -m mapfile *)
       | Slave				(* -s *)
       | Slaves of int * string		(* -S [num/]host *)
+      | Boot				(* -b *)
       | PrintUsage			(* -? *)
       | PrintVersion			(* -v *)
 
@@ -35,6 +36,7 @@ struct
       | runCmd (Master mapfile) = Manager.master mapfile
       | runCmd (Slave) = Manager.slave ()
       | runCmd (Slaves arg) = Manager.slaves [arg]
+      | runCmd (Boot) = Boot.boot ()
       | runCmd (PrintUsage) = (print usage; print "\n")
       | runCmd (PrintVersion) = (print version;
 				 print "(Using basis from ";
@@ -87,6 +89,7 @@ struct
 			   Getopt.Arg   (#"m", Master),
 			   Getopt.Noarg (#"s", Slave),
 			   Getopt.Arg   (#"S", Slaves o slavesArg),
+			   Getopt.Noarg (#"b", Boot),
 			   Getopt.Noarg (#"?", PrintUsage),
 			   Getopt.Noarg (#"v", PrintVersion)]
 	in

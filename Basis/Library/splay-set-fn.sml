@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel ORD_KEY ORD_SET List SplayTree LibBase *)
+(*$import Firstlude TiltPrim Prelude TopLevel ORD_KEY ORD_SET List SplayTree LibBase *)
 (* splay-set-fn.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

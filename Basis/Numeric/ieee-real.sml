@@ -1,4 +1,4 @@
-(*$import Prelude IEEE_REAL String Int PreReal *)
+(*$import Firstlude TiltPrim Prelude IEEE_REAL String Int PreReal *)
 (* ieee-real.sml
  *
  * COPYRIGHT (c) 1996 AT&T Bell Laboratories.

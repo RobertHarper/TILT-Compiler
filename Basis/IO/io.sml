@@ -1,4 +1,4 @@
-(*$import Prelude IO_SIG *)
+(*$import Firstlude TiltPrim Prelude IO_SIG *)
 (* io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

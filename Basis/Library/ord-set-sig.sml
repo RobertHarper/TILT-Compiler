@@ -1,4 +1,4 @@
-(*$import ORD_KEY Prelude *)
+(*$import ORD_KEY Firstlude TiltPrim Prelude *)
 (* ordset-sig.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

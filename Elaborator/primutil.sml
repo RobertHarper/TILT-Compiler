@@ -3,6 +3,7 @@
 functor PrimUtil(structure PrimUtilParam : PRIMUTILPARAM)
     :> PRIMUTIL where type con = PrimUtilParam.con
 		where type exp = PrimUtilParam.exp
+		where type context = PrimUtilParam.context
 		=
 
 struct
@@ -12,6 +13,8 @@ struct
     open PrimUtilParam Prim
     type con = con
     type exp = PrimUtilParam.exp
+    type context = PrimUtilParam.context
+
     type value = (con,exp) Prim.value
     val error = fn s => error "primutil.sml" s
     structure Float = Real
@@ -27,7 +30,7 @@ struct
 	   | (refcell (ref e)) => con_ref (exp_typer e)
 	   | (tag (_,c)) => con_tag c)
 
-    fun get_aggregate_type (prim,aggregate,cons) = 
+    fun get_aggregate_type (context,prim,aggregate,cons) = 
 	let      
 	    fun help (arg,res) = (false,[arg],res)
 	    fun help' (args,res) = (false,args,res)
@@ -43,10 +46,10 @@ struct
 	    fun sub_array instance = help'([con_array instance, con_uint W32], instance)
 	    fun sub_vector instance = thelp'([con_vector instance, con_uint W32], instance)
 	    fun update_array instance =  help'([con_array instance, con_uint W32, instance], con_unit)
-	    fun eq_array instance = help'([con_array instance, con_array instance],con_bool)
-	    fun eq_vector instance = help(partial_arrow([instance, instance],con_bool),
+	    fun eq_array instance = help'([con_array instance, con_array instance],con_bool context)
+	    fun eq_vector instance = help(partial_arrow([instance, instance],con_bool context),
 					  partial_arrow([con_vector instance, 
-							 con_vector instance],con_bool))
+							 con_vector instance],con_bool context))
 	    fun array2vector_array instance = thelp(con_array instance, con_vector instance)
 	    fun vector2array_vector instance = thelp(con_vector instance, con_array instance)
 	    fun do_array instance = 
@@ -83,7 +86,7 @@ struct
 	end
 
 
-  fun get_type prim cons =
+  fun get_type context prim cons =
      let 
 	 fun help (arg,res) = (false,[arg],res)
 	 fun help' (args,res) = (false,args,res)
@@ -116,12 +119,12 @@ struct
        | (mul_float fs,[]) =>  help'([con_float fs, con_float fs], con_float fs)
        | (div_float fs,[]) => help'([con_float fs, con_float fs], con_float fs)
 
-       | (less_float fs,[]) => help'([con_float fs, con_float fs], con_bool)
-       | (greater_float fs,[]) => help'([con_float fs, con_float fs], con_bool)
-       | (lesseq_float fs,[]) => help'([con_float fs, con_float fs], con_bool)
-       | (greatereq_float fs,[]) => help'([con_float fs, con_float fs], con_bool)
-       | (eq_float fs,[]) => help'([con_float fs, con_float fs], con_bool)
-       | (neq_float fs,[])  => help'([con_float fs, con_float fs], con_bool)
+       | (less_float fs,[]) => help'([con_float fs, con_float fs], con_bool context)
+       | (greater_float fs,[]) => help'([con_float fs, con_float fs], con_bool context)
+       | (lesseq_float fs,[]) => help'([con_float fs, con_float fs], con_bool context)
+       | (greatereq_float fs,[]) => help'([con_float fs, con_float fs], con_bool context)
+       | (eq_float fs,[]) => help'([con_float fs, con_float fs], con_bool context)
+       | (neq_float fs,[])  => help'([con_float fs, con_float fs], con_bool context)
 
        | (plus_int is,[]) =>  help'([con_int is, con_int is], con_int is)
        | (minus_int is,[]) =>  help'([con_int is, con_int is], con_int is)
@@ -137,12 +140,12 @@ struct
        | (div_uint is,[]) => help'([con_uint is, con_uint is], con_uint is)
        | (mod_uint is,[]) =>  help'([con_uint is, con_uint is], con_uint is)
 
-       | (less_int is,[])      => help'([con_int is, con_int is], con_bool)
-       | (greater_int is,[])   => help'([con_int is, con_int is], con_bool)
-       | (lesseq_int is,[])    => help'([con_int is, con_int is], con_bool)
-       | (greatereq_int is,[]) => help'([con_int is, con_int is], con_bool)
-       | (eq_int is,[])        => help'([con_int is, con_int is], con_bool)
-       | (neq_int is,[])        => help'([con_int is, con_int is], con_bool)
+       | (less_int is,[])      => help'([con_int is, con_int is], con_bool context)
+       | (greater_int is,[])   => help'([con_int is, con_int is], con_bool context)
+       | (lesseq_int is,[])    => help'([con_int is, con_int is], con_bool context)
+       | (greatereq_int is,[]) => help'([con_int is, con_int is], con_bool context)
+       | (eq_int is,[])        => help'([con_int is, con_int is], con_bool context)
+       | (neq_int is,[])        => help'([con_int is, con_int is], con_bool context)
 
        | (lshift_int is,[])  => help'([con_int is, con_int W32], con_int is)
        | (rshift_int is,[])  => help'([con_int is, con_int W32], con_int is)
@@ -151,20 +154,20 @@ struct
        | (or_int is,[])      => help'([con_int is, con_int is], con_int is)
        | (xor_int is,[])     => help'([con_int is, con_int is], con_int is)
 
-       | (less_uint is,[]) => help'([con_uint is, con_uint is], con_bool)
-       | (greater_uint is,[]) => help'([con_uint is, con_uint is], con_bool)
-       | (lesseq_uint is,[]) => help'([con_uint is, con_uint is], con_bool)
-       | (greatereq_uint is,[]) => help'([con_uint is, con_uint is], con_bool)
+       | (less_uint is,[]) => help'([con_uint is, con_uint is], con_bool context)
+       | (greater_uint is,[]) => help'([con_uint is, con_uint is], con_bool context)
+       | (lesseq_uint is,[]) => help'([con_uint is, con_uint is], con_bool context)
+       | (greatereq_uint is,[]) => help'([con_uint is, con_uint is], con_bool context)
 
 
-       | (array2vector aggregate,cons) => get_aggregate_type(prim,aggregate,cons)
-       | (vector2array aggregate,cons) => get_aggregate_type(prim,aggregate,cons)
-       | (create_table aggregate,cons)  => get_aggregate_type(prim,aggregate,cons)
-       | (create_empty_table aggregate,cons)  => get_aggregate_type(prim,aggregate,cons)
-       | (length_table aggregate,cons)  => get_aggregate_type(prim,aggregate,cons)
-       | (sub aggregate,cons)  => get_aggregate_type(prim,aggregate,cons)
-       | (update aggregate,cons)  => get_aggregate_type(prim,aggregate,cons)
-       | (equal_table aggregate,cons) => get_aggregate_type(prim,aggregate,cons)
+       | (array2vector aggregate,cons) => get_aggregate_type(context,prim,aggregate,cons)
+       | (vector2array aggregate,cons) => get_aggregate_type(context,prim,aggregate,cons)
+       | (create_table aggregate,cons)  => get_aggregate_type(context,prim,aggregate,cons)
+       | (create_empty_table aggregate,cons)  => get_aggregate_type(context,prim,aggregate,cons)
+       | (length_table aggregate,cons)  => get_aggregate_type(context,prim,aggregate,cons)
+       | (sub aggregate,cons)  => get_aggregate_type(context,prim,aggregate,cons)
+       | (update aggregate,cons)  => get_aggregate_type(context,prim,aggregate,cons)
+       | (equal_table aggregate,cons) => get_aggregate_type(context,prim,aggregate,cons)
 
 	     
        | _ => (Ppprim.pp_prim prim;
@@ -172,36 +175,36 @@ struct
 
      end
 
-  fun get_iltype ilprim cons =
+  fun get_iltype context ilprim cons =
       (case (ilprim,cons) of
 	   (not_uint is, []) => (false,[con_uint is], con_uint is)
 	 | (and_uint is, []) => (false,[con_uint is, con_uint is], con_uint is)
 	 | (or_uint is, []) => (false,[con_uint is, con_uint is], con_uint is)
 	 | (xor_uint is, []) => (false,[con_uint is, con_uint is], con_uint is)
 	 | (lshift_uint is, []) => (false,[con_uint is, con_int W32], con_uint is)
-	 | (eq_uint is, []) => (false, [con_uint is, con_uint is], con_bool)
-	 | (neq_uint is, []) => (false, [con_uint is, con_uint is], con_bool)
+	 | (eq_uint is, []) => (false, [con_uint is, con_uint is], con_bool context)
+	 | (neq_uint is, []) => (false, [con_uint is, con_uint is], con_bool context)
 
 	 | (mk_ref, [instance]) => (true,[instance],con_ref instance)
 	 | (deref, [instance]) => (true,[con_ref instance], instance)
 	 | (setref, [instance]) => (true,[con_ref instance,instance],con_unit)
-	 | (eq_ref, [instance]) => (false, [con_ref instance, con_ref instance],con_bool)
+	 | (eq_ref, [instance]) => (false, [con_ref instance, con_ref instance],con_bool context)
 	 | _ => error "get_iltype is ill-formed")
 
 	   
-  fun get_type' prim args = 
-      let val (total,incons,outcon) = get_type prim args
+  fun get_type' context prim args = 
+      let val (total,incons,outcon) = get_type context prim args
 	  val arrow = if total then total_arrow else partial_arrow
       in  arrow(incons,outcon)
       end
 
-  fun get_iltype' ilprim arg = 
-      let val (total,incons,outcon) = get_iltype ilprim arg
+  fun get_iltype' context ilprim arg = 
+      let val (total,incons,outcon) = get_iltype context ilprim arg
 	  val arrow = if total then total_arrow else partial_arrow
       in  arrow(incons,outcon)
       end
 
-    fun apply prim cons vals = (* instance arg *)
+    fun apply context prim cons vals = (* instance arg *)
 	let 
 	    fun bad s = (print "Error "; print s; print " while applying ";
 			 Ppprim.pp_prim prim;
@@ -265,7 +268,7 @@ struct
 		(case vals of
 		     [a,b] => let val obj1 = value2obj(exp2value a)
 				  val obj2 = value2obj(exp2value b)
-			      in bool2exp(op2 (obj1,obj2))
+			      in bool2exp context (op2 (obj1,obj2))
 			      end
 		   | x => (print ("x has length " ^ (Int.toString (length x)) ^ "\n");
 			   bad "objpred"))
@@ -356,20 +359,6 @@ struct
 	  | _ => bad "general"())
 	end
 
-  fun same_intsize (size1,size2) = 
-    (case (size1,size2)
-       of (Prim.W8,Prim.W8) => true
-	| (Prim.W16,Prim.W16) => true
-	| (Prim.W32,Prim.W32) => true
-	| (Prim.W64,Prim.W64) => true
-	| _ => false)
-
-  fun same_floatsize (size1,size2) =
-    (case (size1,size2)
-       of (Prim.F32,Prim.F32) => true
-	| (Prim.F64,Prim.F64) => true
-	| _ => false)
-    
 (*
 	  | (mk_ref, [c], [a]) => value2exp(refcell(ref a))
 	  | (deref, [c], [a]) => !(value2ref(exp2value a))

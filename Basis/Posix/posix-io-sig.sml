@@ -1,4 +1,4 @@
-(*$import Prelude POSIX_FLAGS Word8Vector Word8Array Position *)
+(*$import Firstlude TiltPrim Prelude POSIX_FLAGS Word8Vector Word8Array Position *)
 (* posix-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

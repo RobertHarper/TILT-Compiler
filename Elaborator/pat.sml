@@ -850,7 +850,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
       val exhaustive = List.all (fn NONE => false | SOME _ => true) expopt_list
 
       val arg = APP(expose_exp,casearg)
-      val arg = (case IlUtil.exp_reduce arg of
+      val arg = (case IlUtil.exp_reduce (context, arg) of
 		     NONE => arg
 		   | SOME e => e)
 
@@ -903,7 +903,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	    val pat_e_list = matchAll [] info_arms
 	    val resultType = !(#shortCon resCon)
 	    fun folder((pat,e), rest) = 
-		make_ifthenelse(equalerLiteral(context,var,pat), e, rest, resultType)
+		make_ifthenelse context (equalerLiteral(context,var,pat), e, rest, resultType)
 
 	in  foldr folder (def()) pat_e_list
 	end

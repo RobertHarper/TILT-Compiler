@@ -20,7 +20,8 @@ signature NILREWRITE =
 		  con_var_define : 'state * Nil.var * Nil.con -> ('state * Nil.var option),
 		  exp_var_bind   : 'state * Nil.var * Nil.con -> ('state * Nil.var option),
 		  exp_var_define : 'state * Nil.var * Nil.exp -> ('state * Nil.var option),
-		  sum_var_bind   : 'state * Nil.var * (Nil.con * Nil.w32) -> ('state * Nil.var option)
+		  sum_var_bind   : 'state * Nil.var * (Nil.con * Nil.w32) -> ('state * Nil.var option),
+		  labelled_var : 'state * Nil.label * Nil.var -> 'state
 		  }
 
     val rewriters : 'state handler -> {
@@ -36,6 +37,8 @@ signature NILREWRITE =
 
     val null_binder         : 'state * Nil.var * 'a -> ('state * Nil.var option)
 
+    val null_label_binder   : 'state * Nil.label * Nil.var -> 'state
+
     val default_handler     : 'state handler
     val set_kindhandler     : 'state handler -> ('state * Nil.kind -> ('state * Nil.kind) changeopt) -> 'state handler
     val set_conhandler      : 'state handler -> ('state * Nil.con  -> ('state * Nil.con) changeopt)  -> 'state handler
@@ -49,4 +52,5 @@ signature NILREWRITE =
 
     val set_sum_binder      : 'state handler -> ('state * Nil.var * (Nil.con * Nil.w32) -> ('state * Nil.var option)) -> 'state handler
 
+    val set_label_binder    : 'state handler -> ('state * Nil.label * Nil.var -> 'state) -> 'state handler
   end

@@ -1,4 +1,4 @@
-(*$import Prelude Time *)
+(*$import Firstlude TiltPrim Prelude Time *)
 
 (* timer-sig.sml
  *

@@ -1,4 +1,4 @@
-(*$import Prelude PRIM_IO PrimIOFn Position CharVector CharArray *)
+(*$import Firstlude TiltPrim Prelude PRIM_IO PrimIOFn Position CharVector CharArray *)
 (* text-prim-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

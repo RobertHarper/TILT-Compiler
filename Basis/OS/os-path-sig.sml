@@ -1,4 +1,4 @@
-(*$import Prelude Substring *)
+(*$import Firstlude TiltPrim Prelude Substring *)
 (* os-path-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

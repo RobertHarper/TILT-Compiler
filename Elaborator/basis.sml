@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Name Prim Tyvar Symbol Fixity Ast Il IlContext IlStatic Ppil IlUtil Datatype Toil BASIS Stats *)
+(*$import Prelude TopLevel Util Name Prim Tyvar Symbol Fixity Ast Il IlContext IlStatic Ppil IlUtil Toil BASIS Stats *)
 
 (* Everything provided here is inlined.  There is no corresponding
    object code.  Most primitives are in structure TiltPrim.  We
@@ -70,7 +70,7 @@ structure Basis :> BASIS =
   struct
 
     structure Bind = Bind
-    open Il IlUtil Datatype Ppil
+    open Il IlUtil Ppil
     open Util Name Prim Tyvar
     open IlContext
 
@@ -87,10 +87,10 @@ structure Basis :> BASIS =
     fun mk_var str = fresh_named_var str
 *)
 	
-    fun exp_entry (str,e) = 
+    fun exp_entry context (str,e) = 
 	let val var = fresh_named_var str
 	    val lab = mk_var_lab str
-	    val c = IlStatic.GetExpCon(empty_context,e)
+	    val c = IlStatic.GetExpCon(context,e)
 	    val bnd = BND_EXP(var, e)
 	    val dec = DEC_EXP(var, c, SOME e, true)
 	    val sbnd = SBND(lab, bnd)
@@ -98,18 +98,18 @@ structure Basis :> BASIS =
 	in  (sbnd,sdec)
 	end
 
-    fun mono_entry (str,prim) = exp_entry(str, ETAPRIM (prim,[]))
-    fun ilmono_entry (str,prim) = exp_entry(str, ETAILPRIM (prim,[]))
-    fun scon_entry (str,scon) = exp_entry(str, SCON scon)
+    fun mono_entry context (str,prim) = exp_entry context (str, ETAPRIM (prim,[]))
+    fun ilmono_entry context (str,prim) = exp_entry context (str, ETAILPRIM (prim,[]))
+    fun scon_entry context (str,scon) = exp_entry context (str, SCON scon)
 
-    fun poly_entry (str,c2exp) = 
+    fun poly_entry context (str,c2exp) = 
 	let val argvar = fresh_var()
 	    val l = internal_label str
 	    val argsig = SIGNAT_STRUCTURE([SDEC(l,DEC_CON(fresh_var(),
 							  KIND,
 							  NONE, false))])
-	    val inner_ctxt = add_context_dec(empty_context,
-					     IlContext.SelfifyDec empty_context
+	    val inner_ctxt = add_context_dec(context,
+					     IlContext.SelfifyDec context
 					     (DEC_MOD(argvar,false,argsig)))
 	    val instcon = CON_MODULE_PROJECT(MOD_VAR argvar,l)
 	    val exp = c2exp instcon
@@ -126,18 +126,25 @@ structure Basis :> BASIS =
 	in  (sbnd,sdec)
 	end
 
-    fun type_entry (s,c) =
+    fun type_entry context (s,c) =
 	let val lab = symbol_label (Symbol.tycSymbol s)
 	    val var = fresh_named_var s
-	    val k = IlStatic.GetConKind(empty_context,c)
+	    val k = IlStatic.GetConKind(context,c)
 	    val sdec = SDEC(lab, DEC_CON(var,k, SOME c, true))
 	    val sbnd = SBND(lab, BND_CON(var, c))
 	in  (sbnd,sdec)
 	end
 
-    fun initial_context () : Il.context =
+    fun tiltprim context : Il.partial_context =
       let
-	  val bindings = ref (Bind.start empty_context)
+	  val exp_entry = exp_entry context
+	  val mono_entry = mono_entry context
+	  val poly_entry = poly_entry context
+	  val ilmono_entry = ilmono_entry context
+	  val scon_entry = scon_entry context
+	  val type_entry = type_entry context
+	      
+	  val bindings = ref (Bind.start context)
 	  fun wrap binder x = bindings := binder (x, !bindings)
 	  val add_top = wrap Bind.add_sbnd_top
 	  val add     = wrap Bind.add_sbnd
@@ -189,14 +196,14 @@ structure Basis :> BASIS =
 	  (* ----------------- add base monomorphic values -------------- *)
 	  local
 	      val topvalue_list =
-		  [("not", let
-			       val arg_var = fresh_named_var "not_arg"
-			       val not_body = make_ifthenelse(VAR arg_var,false_exp,true_exp,con_bool)
-			   in  #1(make_lambda(arg_var, con_bool, con_bool, not_body))
-			   end)]
+		  []
 	      val basevalue_list = 
-		  [("littleEndian", if (!(Stats.bool "littleEndian"))
-					then true_exp else false_exp)]
+		  [("littleEndian",	(* has type int; bool defined in prelude *)
+		    let val v = (if (!(Stats.bool "littleEndian"))
+				     then 1
+				 else 0)
+		    in  SCON (int (W32, TilWord64.fromInt v))
+		    end)]
 		  
 	      val baseilprimvalue_list = 
 		  [("<<", (lshift_uint W32)),
@@ -393,23 +400,7 @@ structure Basis :> BASIS =
 	  in  val _ = (app (add_top o poly_entry) toppolyvalue_list;
 		       app (add     o poly_entry) basepolyvalue_list)
 	  end
-
-	  local
-	      val datatycs = [Ast.Db {tyc = Symbol.tycSymbol "bool",
-				      tyvars = [],
-				      rhs = Ast.Constrs [(Symbol.varSymbol "false", NONE),
-							 (Symbol.varSymbol "true", NONE)]}]
-	      val bool_sbnds_sdecs = 
-		  Datatype.compile {context = empty_context,
-				    typecompile = Toil.typecompile,
-				    datatycs = datatycs,
-				    eq_compile = Toil.xeq,
-				    is_transparent = true}
-	  in
-	      val _ = app add_top bool_sbnds_sdecs
-	  end     
-      
-      in  Bind.finish (!bindings)
+      in  IlContext.sub_context (Bind.finish (!bindings), context)
       end
 
   end

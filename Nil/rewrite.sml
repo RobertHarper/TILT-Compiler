@@ -28,7 +28,8 @@ structure NilRewrite :> NILREWRITE =
 		  con_var_define : 'state * var * con -> ('state * var option),
 		  exp_var_bind : 'state * var * con -> ('state * var option),
 		  exp_var_define : 'state * var * exp -> ('state * var option),
-		  sum_var_bind   : 'state * Nil.var * (Nil.con * Nil.w32) -> ('state * var option)
+		  sum_var_bind   : 'state * Nil.var * (Nil.con * Nil.w32) -> ('state * var option),
+		  labelled_var : 'state * Nil.label * Nil.var -> 'state
 		  }
 
     fun rewriters (handler : 'state handler) 
@@ -54,7 +55,8 @@ structure NilRewrite :> NILREWRITE =
 		     con_var_define,
 		     exp_var_bind,
 		     exp_var_define,
-		     sum_var_bind}) = handler
+		     sum_var_bind,
+		     labelled_var}) = handler
 
 	fun ensure (NONE,item) = SOME item
 	  | ensure (opt,_)     = opt
@@ -878,6 +880,7 @@ structure NilRewrite :> NILREWRITE =
 	    val trace = recur_trace changed state trace 
 	    val con = recur_c changed state con
 	    val (state,var) = bind_e changed (state,var,con)
+	    val state = labelled_var (state,label,var)
 	    val _ = flag := (!changed orelse !flag)
 	  in (if !changed then ImportValue (label,var,trace,con) else import,state)
 	  end
@@ -886,6 +889,7 @@ structure NilRewrite :> NILREWRITE =
 	    val changed = ref false
 	    val kind = recur_k changed state kind
 	    val (state,var) = bind_c changed (state,var,kind)
+	    val state = labelled_var (state,label,var)
 	    val _ = flag := (!changed orelse !flag)
 	  in (if !changed then ImportType (label,var,kind) else import,state)
 	  end
@@ -956,10 +960,11 @@ structure NilRewrite :> NILREWRITE =
 	 }
       end
 
-
       fun null_binder (state,_,_) = (state,NONE)
 
       fun null_handler _ = NOCHANGE
+
+      fun null_label_binder (state,_,_) = state
 
       val default_handler =  
 	HANDLER {
@@ -973,13 +978,15 @@ structure NilRewrite :> NILREWRITE =
 		 exp_var_bind   = null_binder,
 		 con_var_define = null_binder,
 		 exp_var_define = null_binder,
-		 sum_var_bind   = null_binder
+		 sum_var_bind   = null_binder,
+		 labelled_var   = null_label_binder
 		 }
 
       fun set_kindhandler (HANDLER {bndhandler,cbndhandler,
-				   conhandler,exphandler,kindhandler,tracehandler,
-				   con_var_bind,exp_var_bind,
-				   con_var_define,exp_var_define,sum_var_bind }) new_kindhandler = 
+				    conhandler,exphandler,kindhandler,tracehandler,
+				    con_var_bind,exp_var_bind,
+				    con_var_define,exp_var_define,sum_var_bind,
+				    labelled_var}) new_kindhandler = 
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -991,13 +998,15 @@ structure NilRewrite :> NILREWRITE =
 		 exp_var_bind   = exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = exp_var_define,
-		 sum_var_bind   = sum_var_bind
+		 sum_var_bind   = sum_var_bind,
+		 labelled_var   = labelled_var
 		 }
 
       fun set_conhandler (HANDLER {bndhandler,cbndhandler,
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
-				   con_var_define,exp_var_define,sum_var_bind }) new_conhandler = 
+				   con_var_define,exp_var_define,
+				   sum_var_bind,labelled_var}) new_conhandler = 
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1009,13 +1018,15 @@ structure NilRewrite :> NILREWRITE =
 		 exp_var_bind   = exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = exp_var_define,
-		 sum_var_bind   = sum_var_bind
+		 sum_var_bind   = sum_var_bind,
+		 labelled_var   = labelled_var
 		 }
 
       fun set_exphandler (HANDLER {bndhandler,cbndhandler,
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
-				   con_var_define,exp_var_define,sum_var_bind }) new_exphandler = 
+				   con_var_define,exp_var_define,
+				   sum_var_bind,labelled_var}) new_exphandler = 
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1027,13 +1038,15 @@ structure NilRewrite :> NILREWRITE =
 		 exp_var_bind   = exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = exp_var_define,
-		 sum_var_bind   = sum_var_bind
+		 sum_var_bind   = sum_var_bind,
+		 labelled_var   = labelled_var
 		 }
 
       fun set_exp_binder (HANDLER {bndhandler,cbndhandler,
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
-				   con_var_define,exp_var_define,sum_var_bind }) new_exp_var_bind = 
+				   con_var_define,exp_var_define,
+				   sum_var_bind,labelled_var}) new_exp_var_bind = 
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1045,13 +1058,15 @@ structure NilRewrite :> NILREWRITE =
 		 exp_var_bind   = new_exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = exp_var_define,
-		 sum_var_bind   = sum_var_bind
+		 sum_var_bind   = sum_var_bind,
+		 labelled_var   = labelled_var
 		 }
 
       fun set_exp_definer (HANDLER {bndhandler,cbndhandler,
-				   conhandler,exphandler,kindhandler,tracehandler,
-				   con_var_bind,exp_var_bind,
-				   con_var_define,exp_var_define,sum_var_bind }) new_exp_var_define = 
+				    conhandler,exphandler,kindhandler,tracehandler,
+				    con_var_bind,exp_var_bind,
+				    con_var_define,exp_var_define,
+				    sum_var_bind,labelled_var}) new_exp_var_define = 
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1063,13 +1078,15 @@ structure NilRewrite :> NILREWRITE =
 		 exp_var_bind   = exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = new_exp_var_define,
-		 sum_var_bind   = sum_var_bind
+		 sum_var_bind   = sum_var_bind,
+		 labelled_var   = labelled_var
 		 }
 
       fun set_con_binder (HANDLER {bndhandler,cbndhandler,
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
-				   con_var_define,exp_var_define,sum_var_bind }) new_con_var_bind = 
+				   con_var_define,exp_var_define,
+				   sum_var_bind,labelled_var}) new_con_var_bind = 
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1081,13 +1098,15 @@ structure NilRewrite :> NILREWRITE =
 		 exp_var_bind   = exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = exp_var_define,
-		 sum_var_bind   = sum_var_bind
+		 sum_var_bind   = sum_var_bind,
+		 labelled_var   = labelled_var
 		 }
 
       fun set_con_definer (HANDLER {bndhandler,cbndhandler,
-				   conhandler,exphandler,kindhandler,tracehandler,
-				   con_var_bind,exp_var_bind,
-				   con_var_define,exp_var_define,sum_var_bind }) new_con_var_define = 
+				    conhandler,exphandler,kindhandler,tracehandler,
+				    con_var_bind,exp_var_bind,
+				    con_var_define,exp_var_define,
+				    sum_var_bind,labelled_var}) new_con_var_define = 
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1099,13 +1118,15 @@ structure NilRewrite :> NILREWRITE =
 		 exp_var_bind   = exp_var_bind,
 		 con_var_define = new_con_var_define,
 		 exp_var_define = exp_var_define,
-		 sum_var_bind   = sum_var_bind
+		 sum_var_bind   = sum_var_bind,
+		 labelled_var   = labelled_var
 		 }
 
       fun set_sum_binder (HANDLER {bndhandler,cbndhandler,
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
-				   con_var_define,exp_var_define,sum_var_bind }) new_sum_var_bind = 
+				   con_var_define,exp_var_define,sum_var_bind,
+				   labelled_var}) new_sum_var_bind = 
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1117,7 +1138,27 @@ structure NilRewrite :> NILREWRITE =
 		 exp_var_bind   = exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = exp_var_define,
-		 sum_var_bind   = new_sum_var_bind
+		 sum_var_bind   = new_sum_var_bind,
+		 labelled_var   = labelled_var
 		 }
-
+	
+      fun set_label_binder (HANDLER {bndhandler,cbndhandler,
+				     conhandler,exphandler,kindhandler,tracehandler,
+				     con_var_bind,exp_var_bind,
+				     con_var_define,exp_var_define,sum_var_bind,
+				     labelled_var}) new_label_binder = 
+	HANDLER {
+		 bndhandler     = bndhandler,
+		 cbndhandler    = cbndhandler,
+		 conhandler     = conhandler,
+		 exphandler     = exphandler,
+		 kindhandler    = kindhandler,
+		 tracehandler   = tracehandler,
+		 con_var_bind   = con_var_bind,
+		 exp_var_bind   = exp_var_bind,
+		 con_var_define = con_var_define,
+		 exp_var_define = exp_var_define,
+		 sum_var_bind   = sum_var_bind,
+		 labelled_var   = new_label_binder
+		 }
   end

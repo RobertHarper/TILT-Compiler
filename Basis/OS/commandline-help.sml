@@ -1,3 +1,3 @@
-(*$import Prelude *)
+(*$import Firstlude TiltPrim Prelude *)
 extern commandline_name : (unit, string) -->
 extern commandline_arguments : (unit, string list) -->

@@ -1,4 +1,4 @@
-(*$import Prelude COMMAND_LINE CommandLineHelp *)
+(*$import Firstlude TiltPrim Prelude COMMAND_LINE CommandLineHelp *)
 
 structure CommandLine :> COMMAND_LINE =
 struct

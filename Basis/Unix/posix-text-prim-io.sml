@@ -1,4 +1,4 @@
-(*$import Prelude String Int IO PosixPrimIOFn PosixBinPrimIO TextPrimIO CharArray *)
+(*$import Firstlude TiltPrim Prelude String Int IO PosixPrimIOFn PosixBinPrimIO TextPrimIO CharArray *)
 (* posix-text-prim-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

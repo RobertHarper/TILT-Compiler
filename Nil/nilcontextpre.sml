@@ -52,6 +52,7 @@ structure NilContextPre
    val derived_var     = Name.derived_var
 
    structure V = Name.VarMap
+   structure L = Name.LabelMap
 
    (* Listops ********************************************) 
    val zip          = Listops.zip
@@ -128,11 +129,14 @@ structure NilContextPre
      
    type c_entry = con delay   (* Make it a delay to allow on demand synthesis.  Speeds up *)
 			      (* later compiler phases. *)
-     
+
+   type v_entry = var
+       
    type context = 
-     {kindmap : k_entry map,  (* Kinds*)
-      conmap  : c_entry map,  (* Constructors *)
-      counter : int}          (* Index of next variable to be inserted *)
+     {kindmap : k_entry map,    (* Kinds*)
+      conmap  : c_entry map,    (* Constructors *)
+      varmap  : v_entry L.map,  (* Labelled vars *)
+      counter : int}            (* Index of next variable to be inserted *)
      
 
    (**** Printing functions on contexts ***********************)
@@ -152,7 +156,13 @@ structure NilContextPre
 	   print "::";
 	   Ppnil.pp_kind kind;
 	   print "\n")
-       
+
+     fun print_var_entry (label,var:v_entry) =
+	 (print (Name.label2string label);
+	  print " = ";
+	  print (Name.var2string var);
+	  print "\n")
+	 
      fun lt ((_,{index=a,...}:k_entry),(_,{index=b,...}:k_entry)) = a < b
 
    in
@@ -164,9 +174,14 @@ structure NilContextPre
 	(print "\n Expression variables and constructors are :\n";
 	 V.appi print_con conmap)
 
+     fun print_labelled_vars ({varmap,...}:context) =
+	 (print "\n Labelled variables are :\n";
+	  L.appi print_var_entry varmap)
+	 
      fun print_context (context:context) = 
 	 (print_kinds context;
-	  print_cons context)
+	  print_cons context;
+	  print_labelled_vars context)
    end
 
 
@@ -190,12 +205,25 @@ structure NilContextPre
    val Vfind   = fn args => subtimer("Ctx:Vfind",Vfind) args
 
 
+   (* LabelMap utilities *****************)
+   fun Lfind (map,l) = L.find(map,l)
+
+   fun Lcontains map label = Option.isSome (Lfind (map,label))
+
+   fun Linsert (map,l,v) =
+       if Lcontains map l then
+	 error (locate "Linsert") ("Label already occurs in context: "^(Name.label2string l))
+       else L.insert (map,l,v)
+
+   val Linsert = fn args => subtimer("Ctx:Linsert",Linsert) args
+   val Lfind   = fn args => subtimer("Ctx:Lfind",Lfind) args
+       
    (********** Main Functions ********************************)
 
    (* Empty context 
     *)
    fun empty () : context = 
-     {kindmap = V.empty, conmap = V.empty, counter = 0}
+     {kindmap = V.empty, conmap = V.empty, counter = 0, varmap = L.empty}
 
 
    (* Is a given variable already bound? 
@@ -205,7 +233,7 @@ structure NilContextPre
 
    (*****Term level functions. ******)
 
-   fun insert_con (ctx as {conmap,kindmap,counter}:context,var,con:con) :context= 
+   fun insert_con (ctx as {conmap,kindmap,varmap,counter}:context,var,con:con) :context= 
      let
        val _ = 
 	 if !debug then
@@ -215,10 +243,11 @@ structure NilContextPre
      in
        {conmap = Vinsert (conmap, var, c_entry), 
 	kindmap = kindmap,
+	varmap = varmap,
 	counter = counter}
      end
 
-   fun insert_exp_pre (typeof : context*exp -> con) (ctx as {conmap,kindmap,counter}:context,var,exp:exp) :context = 
+   fun insert_exp_pre (typeof : context*exp -> con) (ctx as {conmap,kindmap,varmap,counter}:context,var,exp:exp) :context = 
      let
        val _ = 
 	 if !debug then
@@ -229,6 +258,7 @@ structure NilContextPre
      in
        {conmap = Vinsert (conmap, var, c_entry), 
 	kindmap = kindmap,
+	varmap = varmap,
 	counter = counter}
      end
 
@@ -310,7 +340,7 @@ structure NilContextPre
 
    (* Insert a kind which is known to be standard.
     *)
-   fun insert_stdkind (context as {conmap,kindmap,counter}: context,var,std_kind) = 
+   fun insert_stdkind (context as {conmap,kindmap,varmap,counter}: context,var,std_kind) = 
      let
        val entry = {eqn = ref NONE,
 		    kind = std_kind,
@@ -320,12 +350,13 @@ structure NilContextPre
      in
        {conmap = conmap, 
 	counter = counter+1,
+	varmap = varmap,
 	kindmap = Vinsert (kindmap, var, entry)}
      end
 
    (* Insert a standard kind, with an equation
     *)
-   fun insert_stdkind_equation (context as {conmap,kindmap,counter}: context,var,con,std_kind) = 
+   fun insert_stdkind_equation (context as {conmap,kindmap,varmap,counter}: context,var,con,std_kind) = 
      let
        val entry = {eqn = ref (SOME con),
 		    kind = std_kind,
@@ -335,6 +366,7 @@ structure NilContextPre
      in
        {conmap = conmap, 
 	counter = counter+1,
+	varmap = varmap,
 	kindmap = Vinsert (kindmap, var, entry)}
      end
 
@@ -525,7 +557,7 @@ structure NilContextPre
 	    | (Annotate_c (annot,con)) => kind_of'(D,con,name))
      in res
      end
-   and insert_kind (context as {conmap,kindmap,counter}:context,var,kind) = 
+   and insert_kind (context as {conmap,kindmap,varmap,counter}:context,var,kind) = 
      let
        val _ =  
 	   if !debug then
@@ -549,11 +581,12 @@ structure NilContextPre
        in
 	 {conmap = conmap, 
 	  counter = counter+1,
+	  varmap = varmap,
 	  kindmap = Vinsert (kindmap, var, entry)}
        end     
 
 
-  fun insert_kind_equation (context as {conmap,kindmap,counter}:context,var,con,kind) = 
+  fun insert_kind_equation (context as {conmap,kindmap,varmap,counter}:context,var,con,kind) = 
      let
        val _ =  
 	 if !debug then
@@ -578,6 +611,7 @@ structure NilContextPre
 		    max_kind = max_kind,
 		    index = counter}
      in {conmap = conmap, 
+	 varmap = varmap,
 	 counter = counter+1,
 	 kindmap = Vinsert (kindmap, var, entry)}
      end
@@ -696,6 +730,41 @@ structure NilContextPre
 
     val find_kind_equation = subtimer("Ctx:find_kind_equation",find_kind_equation)
 
+   (*****Labelled variable context functions. ******)
+
+    fun insert_label (context as {kindmap,conmap,counter,varmap}:context,label,var) : context =
+      let
+	val _ =
+	  if !debug then
+	    assert (locate "insert_label")
+	    [
+	     (bound_con (context,var) orelse bound_exp (context,var),
+	      fn () => (print (Name.var2string var);
+			print " Variable not found in context"))
+	     ]
+	  else ()
+	val _ =
+	    if !debug then
+		print (" insert_label "^Name.label2string label^" -> "^Name.var2string var^"\n")
+	    else ()
+		
+	val entry = var
+      in {kindmap = kindmap,
+	  conmap = conmap,
+	  counter = counter,
+	  varmap = Linsert (varmap,label,var)}
+      end
+
+    fun find_labelled_var (D as {varmap,...}:context,label) =
+	(case Lfind (varmap,label)
+	   of SOME var => var
+	    | NONE =>
+	       (if (!debug) then
+		    (print ("label " ^ Name.label2string label ^ " not bound\n");
+		     print_labelled_vars D)
+		else ();
+		raise Unbound))
+
     fun is_well_formed (kind_valid : context * kind -> kind,
 			con_valid : context * con -> kind,
 			subkind : context * kind * kind -> bool) ({kindmap,...}:context) : bool =
@@ -705,7 +774,7 @@ structure NilContextPre
 	val entries =ListMergeSort.sort compare entries
 	val error : string -> bool = error (locate "is_well_formed") 
 	 
-	fun folder ((var,entry as {eqn,kind,std_kind,max_kind,index}),D as {kindmap,conmap,counter}) = 
+	fun folder ((var,entry as {eqn,kind,std_kind,max_kind,index}),D as {kindmap,conmap,varmap,counter}) = 
 	  let
 	    val kind = kind_valid (D,kind)
 	    val _ = 
@@ -729,13 +798,14 @@ structure NilContextPre
 	    val D = 
 	      {kindmap = Vinsert (kindmap,var,entry),
 	       conmap = conmap,
+	       varmap = varmap,
 	       counter = counter+1}
 	  in D
 	  end
 	val _ = List.foldl folder (empty()) entries
+	(* XXX: Does not check conmap or varmap. *)
       in true
       end
-
 
     fun filt cc = List.mapPartial (fn x => x) cc
 

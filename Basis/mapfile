@@ -2,73 +2,73 @@
 
 #include mapfile-core
 
-COMMAND_LINE        OS/commandline.sig
+COMMAND_LINE        OS/commandline.sig		TARGET
 CommandLineHelp     OS/commandline-help
-CommandLine         OS/commandline
-TIME                OS/time-sig
+CommandLine         OS/commandline		TARGET
+TIME                OS/time-sig			TARGET
 PreTime             OS/pre-time
-Time                OS/time
-OS_FILE_SYS         OS/os-filesys-sig
-OS_IO               OS/os-io-sig
-OS_PATH             OS/os-path-sig
-OS_PathFn           OS/os-path-fn   
-OS_PROCESS          OS/os-process-sig
-OS_SIG              OS/os-sig
+Time                OS/time			TARGET
+OS_FILE_SYS         OS/os-filesys-sig		TARGET
+OS_IO               OS/os-io-sig		TARGET
+OS_PATH             OS/os-path-sig		TARGET
+OS_PathFn           OS/os-path-fn
+OS_PROCESS          OS/os-process-sig		TARGET
+OS_SIG              OS/os-sig			TARGET
 PreOS               Unix/pre-os
-IO_SIG              IO/io-sig
-IO                  IO/io
-STREAM_IO           IO/stream-io-sig
-TEXT_STREAM_IO      IO/text-stream-io-sig
-TEXT_IO             IO/text-io-sig
-IMPERATIVE_IO       IO/imperative-io-sig
-BIN_IO              IO/bin-io-sig
-PRIM_IO             IO/prim-io-sig
-OS_PRIM_IO          IO/os-prim-io-sig
+IO_SIG              IO/io-sig			TARGET
+IO                  IO/io			TARGET
+STREAM_IO           IO/stream-io-sig		TARGET
+TEXT_STREAM_IO      IO/text-stream-io-sig	TARGET
+TEXT_IO             IO/text-io-sig		TARGET
+IMPERATIVE_IO       IO/imperative-io-sig	TARGET
+BIN_IO              IO/bin-io-sig		TARGET
+PRIM_IO             IO/prim-io-sig		TARGET
+OS_PRIM_IO          IO/os-prim-io-sig		TARGET
 PrimIOFn            IO/prim-io-fn
-TextPrimIO          IO/text-prim-io
+TextPrimIO          IO/text-prim-io		TARGET
 CLEAN_UP            NJ/cleanup-sig
 CleanUp             NJ/cleanup
 CleanIO             IO/clean-io
-BinPrimIO           IO/bin-prim-io
+BinPrimIO           IO/bin-prim-io		TARGET
 BinIOFn             IO/bin-io-fn
-TIMER	            timer-sig
-Timer	            useless-timer
+TIMER	            timer-sig			TARGET
+Timer	            useless-timer		TARGET
 POSIX_extern        extern
 PrePosix	    Posix/pre-posix
-DATE	            date-sig
-Date	            date
-POSIX_ERROR         Posix/posix-error.sig
+DATE	            date-sig			TARGET
+Date	            date			TARGET
+POSIX_ERROR         Posix/posix-error.sig	TARGET
 POSIX_Error         Posix/posix-error
-POSIX_FLAGS         Posix/posix-flags-sig
+POSIX_FLAGS         Posix/posix-flags-sig	TARGET
 POSIX_IO            Posix/posix-io-sig
-POSIX_FILE_SYS      Posix/posix-filesys-sig
+POSIX_FILE_SYS      Posix/posix-filesys-sig	TARGET
 POSIX_FileSys       Posix/posix-filesys
-POSIX_PROCESS       Posix/posix-process-sig
-POSIX_SIGNAL        Posix/posix-signal-sig
+POSIX_PROCESS       Posix/posix-process-sig	TARGET
+POSIX_SIGNAL        Posix/posix-signal-sig	TARGET
 POSIX_Signal        Posix/posix-signal
 POSIX_Process       Posix/posix-process
 POSIX_IO_Str        Posix/posix-io
-POSIX_PROC_ENV      Posix/posix-procenv-sig
+POSIX_PROC_ENV      Posix/posix-procenv-sig	TARGET
 POSIX_ProcEnv       Posix/posix-procenv
-POSIX_TTY           Posix/posix-tty-sig
+POSIX_TTY           Posix/posix-tty-sig		TARGET
 POSIX_Tty           Posix/posix-tty
-POSIX_SYS_DB        Posix/posix-sysdb-sig
+POSIX_SYS_DB        Posix/posix-sysdb-sig	TARGET
 POSIX_Sys_DB        Posix/posix-sysdb
-POSIX               Posix/posix-sig
-Posix               Posix/posix
+POSIX               Posix/posix-sig		TARGET
+Posix               Posix/posix			TARGET
 OS_Path             Unix/os-path
 OS_FileSys          Unix/os-filesys
 OS_Process          Unix/os-process
 OS_IO_Str           Unix/os-io
-OS                  Unix/os
+OS                  Unix/os			TARGET
 TextIOFn            IO/text-io-fn
 PosixPrimIOFn       Unix/posix-prim-io-fn
 PosixBinPrimIO      Unix/posix-bin-prim-io
 PosixTextPrimIO     Unix/posix-text-prim-io
-TextIO              Unix/posix-text-io
-BinIO               Unix/posix-bin-io
-UNIX                Unix/unix-sig
-Unix                Unix/unix
-TopLevel            toplevel
-SML90_SIG	    General/sml90.sig
-SML90		    General/sml90
+TextIO              Unix/posix-text-io		TARGET
+BinIO               Unix/posix-bin-io		TARGET
+UNIX                Unix/unix-sig		TARGET
+Unix                Unix/unix			TARGET
+TopLevel            toplevel			TARGET
+SML90_SIG	    General/sml90.sig		TARGET
+SML90		    General/sml90		TARGET

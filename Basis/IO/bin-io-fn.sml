@@ -1,4 +1,4 @@
-(*$import Prelude Word8 Int Position IO BIN_IO OS_PRIM_IO Word8Array Word8Vector BinPrimIO Option CleanIO *)
+(*$import Firstlude TiltPrim Prelude Word8 Int Position IO BIN_IO OS_PRIM_IO Word8Array Word8Vector BinPrimIO Option CleanIO *)
 (* bin-io-fn.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -120,4 +120,17 @@ structure Prim :> PRIM =
       | eq_ref
       | setref
 
+    fun same_intsize (size1,size2) = 
+	(case (size1,size2)
+	   of (W8,W8) => true
+	    | (W16,W16) => true
+	    | (W32,W32) => true
+	    | (W64,W64) => true
+	    | _ => false)
+
+    fun same_floatsize (size1,size2) =
+	(case (size1,size2)
+	   of (F32,F32) => true
+	    | (F64,F64) => true
+	    | _ => false)
   end

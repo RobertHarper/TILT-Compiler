@@ -1,4 +1,4 @@
-(*$import Prelude CharVector Char Word *)
+(*$import Firstlude TiltPrim Prelude CharVector Char Word *)
 (* hash-string.sml
  *
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories

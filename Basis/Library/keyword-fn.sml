@@ -1,4 +1,4 @@
-(*$import Atom Prelude AtomTable *)
+(*$import Atom Firstlude TiltPrim Prelude AtomTable *)
 (* keyword-fn.sml
  *
  * COPYRIGHT (c) 1997 AT&T Labs Research.

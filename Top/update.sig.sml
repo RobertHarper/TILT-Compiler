@@ -19,7 +19,7 @@ sig
     val interfaceUptodate : status -> bool
 
     type state
-    val init : unit_paths * (unit_paths * import) list -> state
+    val init : unit_paths * import list -> state
     val execute : todo * state -> state
     val flush : unit_paths * plan -> unit	(* Flush files in anticipation of other processor executing plan *)
     val flushAll : unit -> unit

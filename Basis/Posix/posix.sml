@@ -1,4 +1,4 @@
-(*$import Prelude POSIX_Error POSIX_Signal POSIX_Process POSIX_FileSys POSIX_IO_Str POSIX_Sys_DB POSIX_Tty POSIX_ProcEnv POSIX *)
+(*$import Firstlude TiltPrim Prelude POSIX_Error POSIX_Signal POSIX_Process POSIX_FileSys POSIX_IO_Str POSIX_Sys_DB POSIX_Tty POSIX_ProcEnv POSIX *)
 (* posix.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

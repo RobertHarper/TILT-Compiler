@@ -1,4 +1,4 @@
-(*$import Prelude ARRAY2 Array *)
+(*$import Firstlude TiltPrim Prelude ARRAY2 Array *)
 (* array2.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

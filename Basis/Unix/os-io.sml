@@ -1,4 +1,4 @@
-(*$import Prelude PreTime List Word SysWord Int OS_IO PreOS Posix POSIX_extern *)
+(*$import Firstlude TiltPrim Prelude PreTime List Word SysWord Int OS_IO PreOS Posix POSIX_extern *)
 (* os-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

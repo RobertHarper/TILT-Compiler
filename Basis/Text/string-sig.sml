@@ -1,4 +1,4 @@
-(*$import Prelude CHAR *)
+(*$import Firstlude TiltPrim Prelude CHAR *)
 (* string-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Firstlude TiltPrim Prelude *)
 
 extern ml_timeofday : (unit, (int * int)) -->
 

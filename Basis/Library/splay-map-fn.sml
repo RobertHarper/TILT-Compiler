@@ -1,4 +1,4 @@
-(*$import ORD_KEY ORD_MAP Prelude TopLevel SplayTree LibBase *)
+(*$import ORD_KEY ORD_MAP Firstlude TiltPrim Prelude TopLevel SplayTree LibBase *)
 (* splay-map-fn.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

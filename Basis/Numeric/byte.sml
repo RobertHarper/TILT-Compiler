@@ -1,4 +1,4 @@
-(*$import Prelude Word8 Word8Array Word8Vector Substring Array BYTE PreString *)
+(*$import Firstlude TiltPrim Prelude Word8 Word8Array Word8Vector Substring Array BYTE PreString *)
 (* byte.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

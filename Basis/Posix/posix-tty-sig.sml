@@ -1,4 +1,4 @@
-(*$import Prelude SysWord POSIX_FLAGS General *)
+(*$import Firstlude TiltPrim Prelude SysWord POSIX_FLAGS General *)
 (* posix-tty-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

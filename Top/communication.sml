@@ -21,7 +21,7 @@ struct
       | FLUSH of (Paths.unit_paths *		(* Master signals that slave should flush files related to plan *)
 		  Update.plan)			(* in anticipation of some other processor doing work. *)
       | REQUEST of (Paths.unit_paths *		(* Master request slave to compile. *)
-		    (Paths.unit_paths * Update.import) list *
+		    Compiler.import list *
 		    Update.plan)
     val ready = "READY"
     val ack_interface= "ACK_INTERFACE"
@@ -103,19 +103,32 @@ struct
     fun wordsToPaths [unit,file] = Paths.sourceUnitPaths {unit=unit, file=file}
       | wordsToPaths _ = error ("expected unit_paths - bad msg")
 
-    (* (Paths.unit_paths * import) list <-> string list *)
-    fun pathsImportListToWords pathsImportList =
-	let fun toWords (paths, import) = [Paths.unitName paths, Paths.sourceFile paths, Compiler.importName import]
+    (* Compiler.kind <-> string *)
+    fun kindName Compiler.DIRECT = "direct"
+      | kindName Compiler.INDIRECT = "indirect"
+    fun kindFromName "direct" = Compiler.DIRECT
+      | kindFromName "indirect" = Compiler.INDIRECT
+      | kindFromName name = error ("unknown kind name " ^ name)
+
+    (* Compiler.import list <-> string list *)
+    fun importListToWords pathsImportList =
+	let fun toWords (Compiler.FILE (paths, kind)) = ["FILE", Paths.unitName paths,
+							 Paths.sourceFile paths, kindName kind]
+	      | toWords (Compiler.PRIM kind) = ["PRIM", kindName kind]
 	in  List.concat (map toWords pathsImportList)
 	end
-    fun wordsToPathsImportList words =
+    fun wordsToImportList words =
 	let fun conv (nil, acc) = rev acc
-	      | conv (unit::file::import::rest, acc) =
+	      | conv ("FILE"::unit::file::kind::rest,acc) =
 		let val paths = Paths.sourceUnitPaths {unit=unit, file=file}
-		    val import = Compiler.importFromName import
-		in  conv (rest, (paths, import)::acc)
+		    val kind = kindFromName kind
+		in  conv (rest, Compiler.FILE (paths, kind)::acc)
 		end
-	      | conv (_, acc) = error "expected (unit_paths * import) list - bad msg"
+	      | conv ("PRIM"::kind::rest,acc) =
+		let val kind = kindFromName kind
+		in  conv (rest, Compiler.PRIM kind::acc)
+		end
+	      | conv (_, acc) = error "expected import list - bad msg"
 	in  conv (words, nil)
 	end
 
@@ -152,11 +165,11 @@ struct
       | decodeFlush _ = error ("bad flush msg")
 
     fun encodeRequest (target, imports, plan) = [pathsToWords target,
-						 pathsImportListToWords imports,
+						 importListToWords imports,
 						 planToWords plan]
     fun decodeRequest [target, imports, plan] =
 	let val target = wordsToPaths target
-	    val imports = wordsToPathsImportList imports
+	    val imports = wordsToImportList imports
 	    val plan = wordsToPlan plan
 	in  (target, imports, plan)
 	end

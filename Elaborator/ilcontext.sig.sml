@@ -44,8 +44,8 @@ signature ILCONTEXT =
     (* Subtract the second context from the first one.  *)
     val sub_context  : Il.context * Il.context -> Il.partial_context  
     (* Returns alpha-varied partial contexts if alpha-varying was needed. *)
-    val plus_context : Il.context * Il.partial_context list -> Il.partial_context option list * Il.context
-    (* GC the given context by using the partial context and bindings as roots *)
+    val plus_context : Il.context * Il.partial_context -> Il.partial_context option * Il.context
+    (* GC the given context by using the partial context, bindings, and "kept imports" as roots *)
     val gc_context : Il.module -> Il.context
 
     (* Support for hiding top-level labels. *)

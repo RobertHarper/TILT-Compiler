@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Firstlude TiltPrim Prelude *)
 
 extern real_logb : (real, int) -->
 extern real_scalb : (real * int, real) -->

@@ -34,8 +34,6 @@ NilRename	nilrename
 NILSUBST subst.sig
 NilSubst subst
 
-NilPrimUtilParam nilprimutilparam
-
 NILUTIL nilutil.sig
 NilUtil nilutil
 
@@ -44,6 +42,9 @@ Trail trail
 
 NILCONTEXTPRE	nilcontextpre.sig
 NilContextPre nilcontextpre
+
+NilPrimUtilParam nilprimutilparam
+NilPrimUtil nilprimutil
 
 NORMALIZE normalize.sig
 Normalize normalize

@@ -1,4 +1,4 @@
-(*$import Prelude Word8Vector Position Word8Array Word8 *)
+(*$import Firstlude TiltPrim Prelude Word8Vector Position Word8Array Word8 *)
 type statrep = (int * word * word * word * word * word * 
 		word * int * int * int * int)
 type flock_rep = int * int * Position.int * Position.int * int

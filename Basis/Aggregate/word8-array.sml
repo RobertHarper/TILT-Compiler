@@ -1,4 +1,4 @@
-(*$import Prelude General MONO_ARRAY Array List Word8Vector *)
+(*$import Firstlude TiltPrim Prelude General MONO_ARRAY Array List Word8Vector *)
 (* array.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.

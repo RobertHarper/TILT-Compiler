@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Byte RANDOM Array Int Word8 Word32 Word8Array Word8Vector LibBase Pack32Big *)
+(*$import Firstlude TiltPrim Prelude TopLevel Byte RANDOM Array Int Word8 Word32 Word8Array Word8Vector LibBase Pack32Big *)
 (* random.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

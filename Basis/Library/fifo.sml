@@ -1,4 +1,4 @@
-(*$import FIFO Prelude List TopLevel *)
+(*$import FIFO Firstlude TiltPrim Prelude List TopLevel *)
 (* fifo.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

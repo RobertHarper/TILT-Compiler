@@ -1,18 +1,54 @@
-(*$import Prelude TopLevel Symbol Listops Int IL PRIMUTILPARAM Il Util Prim Name *)
-structure IlPrimUtilParam
-    :> PRIMUTILPARAM where type con = Il.con 
-                     where type exp = Il.exp
-    =
+(*$import Prelude TopLevel Symbol Listops Int IL PRIMUTILPARAM Il Util Prim Name Stats *)
+
+signature ILPRIMUTILPARAM =
+sig
+    include PRIMUTILPARAM
+      where type con = Il.con
+      where type exp = Il.exp
+      where type context = Il.context
+
+    val installHelpers : {con_bool  : Il.context -> Il.con,
+			  true_exp  : Il.context -> Il.exp,
+			  false_exp : Il.context -> Il.exp
+			  } -> unit
+end
+
+structure IlPrimUtilParam :> ILPRIMUTILPARAM =
     struct
 
 	open Il
 	open Util
 	open Prim
 
+	type context = context
 	type con = con
 	type exp = exp
 	type ('con,'exp) value = ('con,'exp) Prim.value
 	val error = fn s => error "ilprimutilparam.sml" s
+
+	val debug = Stats.tt("IlPrimUtilParamDebug") (* XXX *)
+	fun debugdo t = if (!debug) then (t(); ()) else ()
+	    
+	local
+	    val Cbool = ref (NONE : (Il.context -> Il.con) option)
+	    val Ctrue = ref (NONE : (Il.context -> Il.exp) option)
+	    val Cfalse = ref (NONE : (Il.context -> Il.exp) option)
+	in
+	    fun installHelpers {con_bool,true_exp,false_exp} =
+		let val _ = (case !Cbool
+			       of NONE => ()
+				| SOME _ =>
+				   (print "WARNING: installHelpers called more than once.\n";
+				    print "         Possibly because CM.make does not have the semantics of a fresh make\n"))
+		in
+		    Cbool := SOME con_bool;
+		    Ctrue := SOME true_exp;
+		    Cfalse := SOME false_exp
+		end
+	    fun con_bool arg = (valOf (!Cbool)) arg
+	    fun true_exp arg = (valOf (!Ctrue)) arg
+	    fun false_exp arg = (valOf (!Ctrue)) arg
+	end
 
 	fun partial_arrow (cons,c2) = CON_ARROW(cons,c2,false,oneshot_init PARTIAL)
 	fun total_arrow (cons,c2) = CON_ARROW(cons,c2,false,oneshot_init TOTAL)
@@ -21,29 +57,9 @@ structure IlPrimUtilParam
 	val unit_exp : exp = RECORD[]
 	val con_unit = CON_RECORD[]
 
-        local val names = [Name.symbol_label(Symbol.varSymbol "false"), 
-			   Name.symbol_label(Symbol.varSymbol "true")]
-	in  fun sumbool_help special = CON_SUM{names = names,
-					       noncarriers = 2,
-					       carrier = CON_TUPLE_INJECT[],
-					       special = special}
-	    fun bool_help special = 
-		let val con_sum = sumbool_help special
-		in  CON_TUPLE_PROJECT(0,CON_MU(CON_FUN([Name.fresh_var()],
-						       CON_TUPLE_INJECT [con_sum])))
-		end
-	end
+	fun bool2exp context false = false_exp context
+	  | bool2exp context true = true_exp context
 
-	val con_sumbool = sumbool_help NONE
-	val con_bool = bool_help NONE
-	val con_false = bool_help (SOME 0)
-	val con_true = bool_help (SOME 1)
-	val false_exp = COERCE(FOLD([],con_sumbool,con_bool),[],
-			       INJ{sumtype=con_sumbool,field=0,inject=NONE})
-	val true_exp = COERCE(FOLD([],con_sumbool,con_bool),[],
-			      INJ{sumtype=con_sumbool,field=1,inject=NONE})
-
-	    
 	fun con_tuple conlist = CON_RECORD(Listops.mapcount (fn (i,c) => 
 							     (generate_tuple_label (i+1),c)) conlist)
 
@@ -60,8 +76,5 @@ structure IlPrimUtilParam
 	  | exp2value _ = NONE
 
 	val value2exp = SCON
-
-	fun bool2exp false = false_exp
-	  | bool2exp true = true_exp
 
     end

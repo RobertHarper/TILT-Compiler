@@ -120,4 +120,6 @@ signature PRIM =
       | eq_ref
       | setref
 
+    val same_intsize : intsize * intsize -> bool
+    val same_floatsize : floatsize * floatsize -> bool
   end

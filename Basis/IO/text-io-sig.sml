@@ -1,4 +1,4 @@
-(*$import Prelude PreString StringCvt TEXT_STREAM_IO *)
+(*$import Firstlude TiltPrim Prelude PreString StringCvt TEXT_STREAM_IO *)
 (* text-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

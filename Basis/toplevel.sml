@@ -1,4 +1,4 @@
-(*$import Prelude PreString PreInt Real Char String Option List General TextIO Vector Word31 *)
+(*$import Firstlude TiltPrim Prelude PreString PreInt Real Char String Option List General TextIO Vector Word31 *)
 (* see http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
 
 (* The interface provided by TopLevel should not be assumed by users
@@ -33,7 +33,7 @@ val getOpt = Option.getOpt
 val isSome = Option.isSome
 val valOf = Option.valOf
     
-(* not -- primitive *)
+(* not -- Prelude *)
 
 (* real -- primitive *)
 val trunc = Real.trunc

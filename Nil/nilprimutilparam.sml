@@ -1,13 +1,15 @@
-(*$import Prelude TopLevel Sequence Name Symbol Listops NIL PRIMUTILPARAM Prim Int Nil IlUtil *)
+(*$import Prelude TopLevel Sequence Name Symbol Listops NIL PRIMUTILPARAM Prim Int Nil IlUtil NilContextPre *)
 
 structure NilPrimUtilParam
     :> PRIMUTILPARAM where type con = Nil.con 
-		       and type exp = Nil.exp =
+		       and type exp = Nil.exp
+		       and type context = NilContextPre.context =
     struct
 
 	open Nil
 	open Prim
 
+	type context = NilContextPre.context
 	type con = con
 	type exp = exp
 	type ('con,'exp) value = ('con,'exp) Prim.value
@@ -30,12 +32,30 @@ structure NilPrimUtilParam
 	fun con_vector c = Prim_c(Vector_c,[c])
 	fun con_tag c = Prim_c(Exntag_c,[c])
 	val con_sumbool = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]])
- 	val con_bool = 
- 	    Proj_c(Mu_c(false,
- 			Sequence.fromList
- 			[(Name.fresh_named_var "nil_con_bool",
- 			  con_sumbool)]),
- 		   IlUtil.generate_tuple_label 1)
+	local
+	    val bool_import = Name.to_open (Name.internal_label "_bool")
+	    val (bool_import_c,bool_import_r) = Name.make_cr_labels bool_import
+		
+	    val bool_lab = Name.symbol_label (Symbol.tycSymbol "bool")
+	    val bool_sum_lab = Name.symbol_label (Symbol.tycSymbol "bool_sum")
+	    val bool_in_lab = Name.to_coercion (Name.internal_label ("bool_in"))
+	    val true_lab = Name.symbol_label (Symbol.varSymbol "true")
+	    val false_lab = Name.symbol_label (Symbol.varSymbol "false")
+	in
+	    fun con_bool context =
+		let val v = NilContextPre.find_labelled_var (context,bool_import_c)
+		in  Proj_c (Var_c v, bool_lab)
+		end
+	    fun bool2exp context b =
+		let val rv = NilContextPre.find_labelled_var (context,bool_import_r)
+		    val coercion_exp = Prim_e (NilPrimOp (select bool_in_lab),[Var_c rv],[])
+		    val cv = NilContextPre.find_labelled_var (context,bool_import_c)
+		    val sum = Proj_c (Var_c cv, bool_sum_lab)
+		    val arm = TilWord32.fromInt (case b of false => 0 | true => 1)
+		    val inject_exp = Prim_e (NilPrimOp (inject arm), [sum], [])
+		in  Coerce_e (coercion_exp, [], inject_exp)
+		end
+	end
 	val con_unit = Prim_c(Record_c ([],NONE), [])
 	val unit_value = Prim_e(NilPrimOp(record []),[],[])
 
@@ -51,19 +71,4 @@ structure NilPrimUtilParam
 		val labs = Listops.mapcount mapper clist
 	    in Prim_c(Record_c (labs,NONE),clist)
 	    end
-
-	(* We may only apply ROLL to values (hence the LET).  To help
-	   maintain the invariant that bound variables are unique, we
-	   require that no two applications of bool2exp use the same
-	   bound variable name. *)
-	fun bool_help w =
-	    let val var = Name.fresh_var()
-	    in  Let_e(Sequential,
-		      [Exp_b (var, TraceUnknown,
-			      Prim_e(NilPrimOp (inject_known w), [con_sumbool], []))],
-		      Prim_e(NilPrimOp roll, [con_bool], [Var_e var]))
-	    end
-	fun bool2exp false = bool_help 0w0
-	  | bool2exp true = bool_help 0w1
-
     end

@@ -1,4 +1,4 @@
-(*$import Prelude StringCvt PreInt General NumScan NumFormat INTEGER *)
+(*$import Firstlude TiltPrim Prelude StringCvt PreInt General NumScan NumFormat INTEGER *)
 (* int32.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

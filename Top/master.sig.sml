@@ -23,6 +23,4 @@ sig
     type collapse = {maxWeight : int, maxParents : int, maxChildren : int}
     val makeGraph     : string * collapse option -> string  (* Creates a .dot file *)
     val makeGraphShow : string * collapse option -> string  (* Creates a .ps file and invokes gv on it *)
-
 end
-

@@ -1,4 +1,4 @@
-(*$import Prelude PRIM_IO *)
+(*$import Firstlude TiltPrim Prelude PRIM_IO *)
 (* os-prim-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

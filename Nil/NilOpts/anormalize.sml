@@ -337,8 +337,8 @@ struct
 	 let val baseEnvFn = (fn env => 
 			( foldr ( fn (entry, env) => 
 			    case entry of 
-				ImportValue (l, v, c) => insert_con (env, v, c)
-			      | ImportType (l , v, k) => insert_kind (env, v, k))
+				ImportValue (l, v, c) => NilContext.insert_label (insert_con (env, v, c), l, v)
+			      | ImportType (l , v, k) => NilContext.insert_label (insert_kind (env, v, k), l, v)
 			 env imports  ))
 	     val env = (baseEnvFn (empty()))
 	     val (bnds, newenv) =  normalize_bnds bnds env

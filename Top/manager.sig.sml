@@ -22,6 +22,7 @@ sig
   val slaves : (int * string) list -> unit
   val master : string -> unit  
   val make : string -> unit
-
+  val boot : unit -> unit
+      
 end
 

@@ -1,4 +1,4 @@
-(*$import Prelude PrePosix List POSIX_Signal SysWord SysInt Time Word8 POSIX_extern POSIX_PROCESS *)
+(*$import Firstlude TiltPrim Prelude PrePosix List POSIX_Signal SysWord SysInt Time Word8 POSIX_extern POSIX_PROCESS *)
 (* posix-process.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

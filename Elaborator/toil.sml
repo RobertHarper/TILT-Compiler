@@ -366,14 +366,14 @@ structure Toil
 						 val _ = tyvar_use_equal tyvar
 						 val con = CON_TYVAR tyvar
 						 val exp_os = valOf (tyvar_eq_hole tyvar)
-						 val eq_con = con_eqfun con
+						 val eq_con = con_eqfun ctxt con
 						 val e2 = OVEREXP(eq_con,true,exp_os)
 					     in (con,eq_con,e2)
 					     end
 				   | SOME con => let val e2 = (case xeq(ctxt,con) of
 								   SOME (e,c) => e
 								 | NONE => raise NoEqExp)
-						     val eq_con = con_eqfun con
+						     val eq_con = con_eqfun ctxt con
 						 in (con,eq_con,e2)
 						 end)
 
@@ -449,7 +449,7 @@ structure Toil
 			val _ = tyvar_use_equal tyvar
 			val _ = add_eq_entry tyvar
 			val con = CON_TYVAR tyvar
-			val eq_con = con_eqfun con
+			val eq_con = con_eqfun context con
 			val exp_os = valOf (tyvar_eq_hole tyvar)
 			val eqexp = OVEREXP(eq_con,true,exp_os)
 			val sbnd2 = SBND(l2,BND_EXP(v2,eqexp))
@@ -531,15 +531,18 @@ structure Toil
 		     val _ = add_eq_entry tyvar
 		     val con = CON_TYVAR tyvar
 		     val arg_con = con_tuple[con,con]
-		     val eq_con = con_eqfun con
+		     val eq_con = con_eqfun context con
 		     val exp_os = valOf (tyvar_eq_hole tyvar)
 		     val eqexp = OVEREXP(eq_con,true,exp_os)
 		     val res = if iseq
 				   then eqexp
 			       else let val v = fresh_named_var "neq_arg"
-				    in  #1(make_lambda(v,arg_con, con_bool,
-						       make_ifthenelse(APP(eqexp,VAR v),
-								       false_exp,true_exp,con_bool)))
+					val con_bool = con_bool context
+					val true_exp = true_exp context
+					val false_exp = false_exp context
+				    in  #1(make_lambda(v,arg_con,con_bool,
+						       make_ifthenelse context (APP(eqexp,VAR v),
+										false_exp,true_exp,con_bool)))
 				    end
 		 in (res,eq_con,true)
 		 end
@@ -818,7 +821,7 @@ structure Toil
 			       val _ = constrain e1
 			       val _ = constrain e2
 			       val exp = APP(e1,e2)
-			   in  ((case exp_reduce exp of
+			   in  ((case exp_reduce (context,exp) of
 				     NONE => exp
 				   | SOME e => e),
 				con_deref rescon,
@@ -882,14 +885,14 @@ structure Toil
 		 val (teste,testc,_) = xexp(context,test)
 		 val (be,bc,_) = xexp(context,expr)
 		 val body_ec = (be,bc)
-	     in  if (eq_con(context,testc,con_bool)) 
+	     in  if (eq_con(context,testc,con_bool context)) 
 		     then 
 			 let val loop_var = fresh_named_var "loop"
 			     val arg_var = fresh_named_var "loop_arg"
 			     val (then_exp,_) = make_seq[body_ec, 
 							 (APP(VAR loop_var, unit_exp),
 							  con_unit)]
-			     val loop_body = make_ifthenelse(teste,then_exp,unit_exp,con_unit)
+			     val loop_body = make_ifthenelse context (teste,then_exp,unit_exp,con_unit)
 			     val loop_fun = FIX(true,PARTIAL,[FBND(loop_var,arg_var,con_unit,con_unit,loop_body)])
 			 in (LET([BND_EXP(loop_var,loop_fun)],APP(VAR loop_var, unit_exp)),
 			     con_unit, false)
@@ -972,7 +975,7 @@ structure Toil
         Datatype.compile{context=context,
 			 typecompile=xty,
 			 datatycs=datatycs,
-			 eq_compile=xeq,
+			 eq_compile=xeq',
 			 is_transparent=false}
 
      and xfundec islocal (context : context, dec_list, tyvar_stamp, sdecs1, var_poly, open_lbl) =
@@ -1034,7 +1037,7 @@ structure Toil
 	     val fbnds = map #1 fbnd_con_list
 	     val fbnd_cons : con list = map #2 fbnd_con_list
 	     (* Use symbols cannot have a bang andalphnumeric characters *)
-	     val top_name = foldl (fn (l,s) => (Name.label2name l) ^ "_" ^ s) "" fun_ids
+	     val top_name = foldl (fn (l,s) => (Name.label2name' l) ^ "_" ^ s) "" fun_ids
 	     val top_label = to_nonexport(to_cluster (internal_label top_name))
 	     val top_var = fresh_named_var "cluster"
 	     val top_exp_con = (FIX(true,PARTIAL,fbnds),
@@ -1050,7 +1053,7 @@ structure Toil
 					  context_fun_ids,var_poly)
 		 fun help(_,tlab,iseq) = (tlab,iseq)
 		 val temp = map help tyvar_lbls'_useeq
-		 val sdecs2 = make_typearg_sdecs temp
+		 val sdecs2 = make_typearg_sdecs context temp
 	     in
 		 val sdecs = sdecs1 @ sdecs2
 		 val sdecs = reduce_typearg_sdecs (top_exp, (var_poly,[]), sdecs)
@@ -1152,7 +1155,7 @@ structure Toil
 			  in  (type_lab,is_eq)
 			  end
 		     val temp = map help tyvars
-		in  val temp_sdecs = make_typearg_sdecs temp
+		in  val temp_sdecs = make_typearg_sdecs context temp
 		end
 		val lbl_poly = to_open(internal_label ("!varpoly"))
 		val var_poly = fresh_named_var "varpoly"
@@ -1168,7 +1171,7 @@ structure Toil
 		val bind_sbnd_sdec = (bindCompile{context = context',
 						  bindpat = parsed_pat,
 						  arg = (v,con)})
-		val varsBound = String.concat(map (fn (SBND(l,_),_) => label2name l) bind_sbnd_sdec)
+		val varsBound = String.concat(map (fn (SBND(l,_),_) => label2name' l) bind_sbnd_sdec)
 		val valbind_string = "valbind" ^ varsBound
 		val lbl_valbind = to_nonexport (internal_label ("!" ^ valbind_string))
 		val var_valbind = fresh_named_var valbind_string
@@ -1188,7 +1191,7 @@ structure Toil
 								    tyvar_stamp,con,
 								    context,var_poly)
 			val lbls_useeq = (map (fn (_,l,f) => (l,f)) tyvar_lbls_useeq)
-			val poly_sdecs = temp_sdecs @ (make_typearg_sdecs lbls_useeq)
+			val poly_sdecs = temp_sdecs @ (make_typearg_sdecs context lbls_useeq)
 			val (sbnds,sdecs) = (map #1 sbnd_sdec_list, map #2 sbnd_sdec_list)
 			val poly_sdecs = reduce_typearg_sdecs (e, (var_poly,[]), poly_sdecs)
 		        val a = if is_irrefutable then TOTAL else PARTIAL
@@ -1247,7 +1250,7 @@ structure Toil
 		    in  (type_lab,is_eq)
 		    end
 		    val temp = map help tyvars
-		in  val sdecs1 = make_typearg_sdecs temp
+		in  val sdecs1 = make_typearg_sdecs context temp
 		end
 	 
 		val var_poly = fresh_named_var "var_poly"
@@ -1366,7 +1369,7 @@ structure Toil
 		    in  (type_lab,is_eq)
 		    end
 		    val temp = map help tyvars
-		in  val sdecs1 = make_typearg_sdecs temp
+		in  val sdecs1 = make_typearg_sdecs context temp
 		end
 	 
 		val var_poly = fresh_named_var "var_poly"
@@ -1472,7 +1475,7 @@ structure Toil
 						 val sdec1 = SDEC(l,DEC_CON(v,KIND, NONE, false))
 						 val eql = to_eq l
 						 val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
-									      con_eqfun(CON_VAR v),
+									      con_eqfun context (CON_VAR v),
 									      NONE, false))
 					     in  EQ (sdec1, (vp, [eql]), sdec2)
 					     end
@@ -1484,7 +1487,7 @@ structure Toil
 				     end
 				  | _ => ([], c, c))
 			  val eqlab = to_eq l
-			  val eq_con = con_eqfun c''
+			  val eq_con = con_eqfun context c''
 			  val sigpoly = sigPoly tvs
 			  val ctxt' = add_context_dec(context,SelfifyDec context (DEC_MOD(vp,false,sigpoly)))
 		      in
@@ -1719,7 +1722,7 @@ structure Toil
 		  fun renameSbndCtxt (SOME (SBND(l,bnd)),ctxtEntry as CONTEXT_SDEC(SDEC(_,dec))) =
 		      let val v = getVarFromDec dec
 			  val hide = not(Name.VarSet.member(ctxtFrees, v))
-			  val lbl = internal_label ("local_" ^ (get_unit_name()) ^ "_" ^ (IlUtil.label2name l))
+			  val lbl = internal_label ("local_" ^ (get_unit_name()) ^ "_" ^ (Name.label2name' l))
 			  val lbl = if hide then to_nonexport lbl else lbl
 		      in  (SOME (SBND(lbl,bnd)), CONTEXT_SDEC(SDEC(lbl,dec)))
 		      end
@@ -1924,7 +1927,7 @@ structure Toil
 		       val type_sdec = SDEC(type_label, DEC_CON(type_var,kind,conopt,false))
 		       val eq_dec = 
 			   (case tyvars of
-				[] => DEC_EXP(eq_var,con_eqfun(CON_VAR type_var),NONE,false)
+				[] => DEC_EXP(eq_var,con_eqfun context (CON_VAR type_var),NONE,false)
 			      | _ => 
 				let val vpoly = fresh_named_var "vpoly"
 				    val lbls = Listops.map0count (canonical_tyvar_label true) (length tyvars)
@@ -1933,15 +1936,15 @@ structure Toil
 					    val v = fresh_var()
 					    val sdec1 = SDEC(l,DEC_CON(v,KIND, NONE,false))
 					    val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
-									 con_eqfun(CON_VAR v),
+									 con_eqfun context(CON_VAR v),
 									 NONE, false))
 					in  [sdec1,sdec2]
 					end
 				    val sdecs = List.concat (map mapper lbls)
 				    val sigpoly = SIGNAT_STRUCTURE sdecs
 				    val args = map (fn l => CON_MODULE_PROJECT(MOD_VAR vpoly,l)) lbls
-				    val eq_con = con_eqfun(CON_APP(CON_VAR type_var, 
-								   args))
+				    val eq_con = con_eqfun context(CON_APP(CON_VAR type_var, 
+									   args))
 				    val innersig = SIGNAT_STRUCTURE [SDEC(it_lab,
 									  DEC_EXP(fresh_var(),
 										  eq_con,NONE,false))]
@@ -2070,7 +2073,7 @@ structure Toil
 				    val type_str = Symbol.name tv_sym
 				    val is_eq =  ((size type_str >= 2) andalso 
 						  (String.substring(type_str,0,2) = "''"))
-				    val eq_con = con_eqfun(CON_VAR type_var)
+				    val eq_con = con_eqfun context (CON_VAR type_var)
 				    val type_sdec = SDEC(type_lab,DEC_CON(type_var,KIND,
 									  NONE,false))
 				    val eq_sdec = SDEC(eq_lab, DEC_EXP(eq_var,eq_con,NONE,false))
@@ -2417,8 +2420,8 @@ structure Toil
        end
 
 
-
-    and xeq (ctxt : context, argcon : con) : (exp * con) option = 
+    and xeq' (ctxt : context, bool : (con * exp * exp) option, argcon : con)
+	: (exp * con) option =
 	let 
 	    fun vector_eq ctxt = 
 		let val (e,vc,_) = xexp(ctxt,Ast.VarExp[Symbol.strSymbol "TiltVectorEq",
@@ -2427,9 +2430,12 @@ structure Toil
 		end
 	in  Equal.compile{polyinst_opt = polyinst_opt,
 			  vector_eq = vector_eq,
+			  bool = bool,
 			  context = ctxt,
 			  con = argcon}
 	end
+	
+    and xeq (ctxt : context, argcon : con) : (exp * con) option = xeq' (ctxt, NONE, argcon)
 
 
     fun xdecspec (base_ctxt, decresult, specs) = 

@@ -42,12 +42,14 @@ structure Typeof_Elim :> TYPEOF_ELIM =
       val all_handlers =  
 	let
 	  fun none f = fn ((D,i) : state,v : Nil.var ,item : 'item) => ((f (D,v,item),i), NONE)
+	  fun label_binder ((D,i) : state,l : Nil.label,v : Nil.var) = (NilContext.insert_label (D,l,v),i)
 	  val h = set_conhandler default_handler conhandler
 	  val h = set_con_binder h (none NilContext.insert_kind)
 	  val h = set_con_definer h (none NilContext.insert_equation)
 	  val h = set_exp_binder h (none NilContext.insert_con)
 	  val h = set_exp_definer h (none exp_definer)
           val h = set_sum_binder h (none sum_binder)
+	  val h = set_label_binder h label_binder
 	in
 	  h
 	end

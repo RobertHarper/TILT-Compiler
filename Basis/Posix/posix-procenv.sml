@@ -1,4 +1,4 @@
-(*$import Prelude PrePosix Time Real SysInt List POSIX_FileSys POSIX_Process SysWord POSIX_PROC_ENV POSIX_Process POSIX_extern *)
+(*$import Firstlude TiltPrim Prelude PrePosix Time Real SysInt List POSIX_FileSys POSIX_Process SysWord POSIX_PROC_ENV POSIX_Process POSIX_extern *)
 (* posix-procenv.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Firstlude TiltPrim Prelude *)
 (* pre-os.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

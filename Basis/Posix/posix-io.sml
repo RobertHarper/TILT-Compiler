@@ -1,4 +1,4 @@
-(*$import Prelude PrePosix SysInt Int Position Word8Vector Word8Array List POSIX_IO POSIX_FileSys POSIX_Process SysWord POSIX_extern String *)
+(*$import Firstlude TiltPrim Prelude PrePosix SysInt Int Position Word8Vector Word8Array List POSIX_IO POSIX_FileSys POSIX_Process SysWord POSIX_extern String *)
 (* posix-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -19,8 +19,9 @@ signature LINKIL =
       val show_hil : bool ref		(* Show HIL from elaboration. *)
       val show_hilcontext : bool ref	(* Show elaboration contexts. *)
 
-      val initial_context : unit -> context
-      val plus_context : context * Il.partial_context list -> Il.partial_context option list * context
+      val empty_context : context
+      val tiltprim : context -> Il.partial_context
+      val plus_context : context * Il.partial_context -> Il.partial_context option * context
 
       (* The elab??? functions take
       	   (1) the unit name for making unique labels

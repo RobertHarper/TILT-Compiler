@@ -13,7 +13,10 @@
 *)
 
 
-structure Master :> MASTER =
+functor Master (val bootstrap : bool
+                val basisMapfile : unit -> string option
+		val basisImports : string list)
+    :> MASTER =
 struct
     val error = fn s => Util.error "master.sml" s
 
@@ -45,13 +48,26 @@ struct
       | PENDING' of (Time.time * Time.time) * Update.plan	(* Pending work on master.  Ready time, slave time. *)
       | WORKING' of (Time.time * Time.time * Time.time) * Update.plan	(* Master working.  Ready time, slave time, working' time. *)
       | DONE of Time.time * Time.time * Time.time		(* Total time, slave time, master time. *)
-	
+
+    datatype compunit =
+	UNIT of {paths : Paths.unit_paths,
+		 isTarget : bool,
+		 isBasis : bool}
+      | PRIM
+
+    val primImports = ["Firstlude"]	(* No source code for TiltPrim; we must hard code the imports. *)
+    val primUnitName = "TiltPrim"
+    fun unitName (UNIT {paths, ...}) = Paths.unitName paths
+      | unitName PRIM = primUnitName
+
+    fun unitSize (UNIT {paths, ...}) = Cache.size (Paths.sourceFile paths)
+      | unitSize PRIM = 0
+
     local
 
 	val graph = ref (Dag.empty() : {position : int,
-					paths : Paths.unit_paths,
 					status : status ref,
-					isTarget : bool} Dag.graph)
+					unit : compunit} Dag.graph)
         val units = ref (true, ([] : string list)) (* kept in reverse order if bool is true *)
 
 	fun lookup unitname =
@@ -82,8 +98,13 @@ struct
 				    end)
 
 	fun get_position unit = #position(lookup unit)
-	fun get_paths unit = #paths(lookup unit)
-	fun get_isTarget unit = #isTarget(lookup unit)
+	fun get_unit unit = #unit(lookup unit)
+	fun get_paths unit = (case get_unit unit
+				of UNIT {paths, ...} => SOME paths
+				 | PRIM => NONE)
+	fun get_isTarget unit = (case get_unit unit
+				   of UNIT {isTarget, isBasis, ...} => (not isBasis) andalso isTarget
+				    | PRIM => false)
 	fun get_status unit = !(#status(lookup unit))
 	fun set_status (unit,s) = (#status(lookup unit)) := s
 
@@ -98,7 +119,10 @@ struct
 					  then Compiler.DIRECT
 				      else Compiler.INDIRECT
 		val imports = get_import_transitive unit
-	    in  map (fn import => (get_paths import, isDirect import)) imports
+	    in  map (fn import =>
+		     (case get_unit import
+			of UNIT {paths, ...} => Compiler.FILE (paths, isDirect import)
+			 | PRIM => Compiler.PRIM (isDirect import))) imports
 	    end
 	fun get_dependent_direct unit = 
 	    (Dag.children(!graph,unit)
@@ -176,7 +200,7 @@ struct
     (* createDirectories : unit -> unit *)
     fun createDirectories () =
 	let val unit_names = list_units()
-	    val unit_paths = map get_paths unit_names
+	    val unit_paths = List.mapPartial get_paths unit_names
 	    val unit_dirs = map Paths.tiltDirs unit_paths
 	    val _ = chat "Creating directories.\n"
 	    val _ = foldl Dirs.createDirs Dirs.emptyCache unit_dirs
@@ -199,8 +223,8 @@ struct
     (* mapfilePath : string -> string list *)
     fun mapfilePath currentDir = [currentDir, getLibDir()]
 
-    (* readAssociation : string -> (unit_paths * bool) list *)
-    fun readAssociation mapfile = 
+    (* readAssociation : bool * string -> compunit list *)
+    fun readAssociation (isBasis, mapfile) = 
 	let
 	    val dir = Dirs.dir mapfile
 	    val findMapfile = Dirs.accessPath (mapfilePath dir, [OS.FileSys.A_READ])
@@ -211,6 +235,12 @@ struct
 			    in  String.sub(s,0) = #";" orelse
 				(len >= 2 andalso String.substring(s,0,2) = "//")
 			    end
+	    fun compunit (unitname, filebase, isTarget) =
+		UNIT {paths = mkPaths (unitname, filebase),
+		      isTarget = isTarget,
+		      isBasis = isBasis}
+	    fun fail (n,line,msg) = error ("Line " ^ (Int.toString n) ^ " of " ^ mapfile ^
+					   " " ^ msg ^ ": " ^ line ^ "\n")
 	    fun loop (n, acc) = 
 		if (TextIO.endOfStream is)
 		    then rev acc
@@ -219,20 +249,27 @@ struct
 		    in  (case (split_line dropper line) of
 			     ["#include", innerMapfile] => 
 				 (case findMapfile innerMapfile
-				    of NONE => error ("Line " ^ (Int.toString n) ^ " of " ^ mapfile ^
-						      " includes an unreadable or non-existent file: " ^
-						      line ^ "\n")
+				    of NONE => fail (n,line,"includes an unreadable or non-existent file")
 				     | SOME innerMapfile =>
 					let
-					    val innerAssociation = readAssociation innerMapfile
+					    val innerAssociation = readAssociation (isBasis, innerMapfile)
 					in
 					    loop (n+1, (rev innerAssociation) @ acc)
 					end)
-			   | [unitname, filebase] => loop (n+1, (mkPaths (unitname, filebase), false) :: acc)
-			   | [unitname, filebase, "TARGET"] => loop (n+1, (mkPaths (unitname, filebase), true) :: acc)
+			   | [unitname] =>
+			         if unitname = primUnitName
+				     then loop (n+1, PRIM :: acc)
+				 else fail (n,line,"specfies no source for a unit other than " ^ primUnitName)
+			   | [unitname, filebase] =>
+				 if unitname <> primUnitName
+				     then loop (n+1, compunit (unitname, filebase, false) :: acc)
+				 else fail (n,line,"uses the special unit name " ^ primUnitName)
+			   | [unitname, filebase, "TARGET"] =>
+				 if unitname <> primUnitName
+				     then loop (n+1, compunit (unitname, filebase, true) :: acc)
+				 else fail (n,line,"uses the special unit name " ^ primUnitName)
 			   | [] => loop (n, acc)
-			   | _ => error ("Line " ^ (Int.toString n) ^ 
-					 " of " ^ mapfile ^ " is ill-formed: " ^ line ^ "\n"))
+			   | _ => fail (n,line,"is ill-formed"))
 		    end
 	    val result = loop (0, [])
 	    val _ = TextIO.closeIn is
@@ -270,36 +307,46 @@ struct
     end
 
     (* setMapping : string * bool -> unit *)
-    (* Build graph from mapFile.  If getImports is true, add (*$import *) edges. *)
-    fun setMapping (mapFile, getImports) =
+    (* Build graph from mapFile.  If getImportsAndBasis is true, add (*$import *) edges and
+     * basis vertices and edges. *)
+    fun setMapping (mapFile, getImportsAndBasis) =
 	let val _ = Update.flushAll()
 	    val _ = reset_graph()
-	    val association = readAssociation mapFile
-	    fun mapper (n, (paths, isTarg)) = 
+	    val association = readAssociation (false, mapFile)
+	    val association = (case (getImportsAndBasis, basisMapfile())
+				 of (true, SOME mapfile) =>
+				     readAssociation (true, mapfile) @ association
+				  | _ => association)
+	    fun mapper (n, compunit) =
 		let 
-		    val nodeWeight = Cache.size(Paths.sourceFile paths)
+		    val nodeWeight = unitSize compunit
 		    val info = 
 			{position = n,
-			 paths = paths,
-			 status = ref WAITING,
-			 isTarget = isTarg}
-		in  add_node(Paths.unitName paths, nodeWeight, info)
+			 unit = compunit,
+			 status = ref WAITING}
+		in  add_node(unitName compunit, nodeWeight, info)
 		end
 	    val _ = Listops.mapcount mapper association
 	    val _ = chat ("Mapfile " ^ mapFile ^ " with " ^ (Int.toString (length association)) 
 			  ^ " units processed.\n")
-	    fun read_import unit = 
-		let val paths = get_paths unit
-		    val imports = parse_impl_import(Paths.sourceFile paths)
-		    val interfaceFile = Paths.interfaceFile paths
-		    val includes = if Cache.exists interfaceFile
-				       then parse_inter_include interfaceFile
-				   else nil
-		    val _ = app (fn import => add_edge(import,unit)) (imports @ includes)
+	    fun read_import unit =
+		let
+		    val imports =
+			(case get_unit unit
+			   of UNIT {paths, isBasis, ...} =>
+			       let val imports = parse_impl_import(Paths.sourceFile paths)
+				   val interfaceFile = Paths.interfaceFile paths
+				   val includes = if Cache.exists interfaceFile
+						      then parse_inter_include interfaceFile
+						  else nil
+				   val extra = if isBasis then nil else basisImports
+			       in  imports @ includes @ extra
+			       end
+			    | PRIM => primImports)
+		    val _ = app (fn import => add_edge(import,unit)) imports
 		    val _ = set_status(unit, if (null imports) then READY (Time.now()) else WAITING)
 		in  ()
 		end
-	    
 	    fun check_import unit =
 		let val import_tr = get_import_transitive unit
 		    val next_pos = get_position unit
@@ -311,7 +358,7 @@ struct
 		end
 	    
 	in
-	    if getImports then
+	    if getImportsAndBasis then
 		let val units = list_units()
 		    val _ = app read_import units
 		    val _ = chat ("Imports read.\n")
@@ -690,24 +737,26 @@ struct
 	end
 
     fun analyzeReady unit =		(* Unit is ready so its imports exist *)
-	let
-	    val paths = get_paths unit
-	    val imports = get_import_direct unit (* no need to check transitively *)
-	    val import_paths = map get_paths imports
-	    val (status, plan) = Update.plan (paths, import_paths)
-	    val _ = if Update.interfaceUptodate status
-			then enableChildren unit
-		    else ()
-	    val _ =
-		if null plan then
-		    markDone unit
-		else
-		    if sendToSlave plan then
-			markPending (unit, plan)
-		    else
-			markPending' (unit, plan)
-	in  ()
-	end
+	(case get_unit unit
+	   of UNIT {paths, ...} =>
+	       let
+		   val imports = get_import_direct unit (* no need to check transitively *)
+		   val import_paths = List.mapPartial get_paths imports
+		   val (status, plan) = Update.plan (paths, import_paths)
+		   val _ = if Update.interfaceUptodate status
+			       then enableChildren unit
+			   else ()
+		   val _ =
+		       if null plan then
+			   markDone unit
+		       else
+			   if sendToSlave plan then
+			       markPending (unit, plan)
+			   else
+			       markPending' (unit, plan)
+	       in  ()
+	       end
+	    | PRIM => (enableChildren unit; markDone unit))
     
     (* waiting, pending, working, proceeding, pending', working' - ready and done not included *)
     type state = string list * string list * string list * string list * string list * string list
@@ -864,11 +913,11 @@ struct
 	in  ()
 	end
     fun execute (target, imports, plan) = ignore (foldl Update.execute (Update.init (target, imports)) plan)
-    (* Assumes that all units in state's pending' list are PENDING'. *)
+    (* Assumes that all units in state's pending' list are PENDING' and not PRIM. *)
     fun useLocals (localsLeft, state : state) : int =
 	let
 	    fun useOne unit =
-		let val target = get_paths unit
+		let val target = valOf (get_paths unit)	(* not PRIM unit *)
 		    val imports = get_import unit
 		    val plan = getPlan unit
 		    val _ = markWorking' unit
@@ -882,13 +931,13 @@ struct
 	    val (_, _, _, _, pending', _) = state
 	in  useSome (localsLeft, pending')
 	end
-    (* Assumes that all units in state's pending list are PENDING. *)
+    (* Assumes that all units in state's pending list are PENDING and not PRIM. *)
     fun useSlaves (slavesLeft, state : state) : int =
 	let
 	    fun useOne unit =
 		let fun showSlave name = chat ("  [Calling " ^ name ^ 
 					       " to compile " ^ unit ^ "]\n")
-		    val target = get_paths unit
+		    val target = valOf (get_paths unit)	(* not PRIM unit *)
 		    val imports = get_import unit
 		    val plan = getPlan unit
 		    val _ = markWorking unit
@@ -958,9 +1007,10 @@ struct
 			      chat_strings 20 units; print "\n")
 		    else ()
 	    val _ = Help.showTime (true,"Start compiling files")
-            (* make_package : string -> Prelink.package *)
+		
+            (* make_package : string -> Prelink.package.  Assumes unit is not PRIM. *)
             fun make_package unit =
-		let val paths = get_paths unit
+		let val paths = valOf (get_paths unit) (* not PRIM unit *)
 		    val infoFile = Paths.infoFile paths
 		    val (_, info) = InfoCache.read infoFile
 		in
@@ -971,9 +1021,10 @@ struct
 	    
 	    (* makeExe : string -> unit *)
 	    exception Stop
-	    fun makeExe unit =
+	    fun makeExe unit =		(* Assumes unit is not PRIM *)
 		let val _ = Help.showTime (true, "Start linking on " ^ unit)
 		    val requiredUnits = (get_import_transitive unit) @ [unit]
+		    val requiredUnits = List.filter (fn u => u <> primUnitName) requiredUnits
 
 		    (* Check unit environments *)
 		    val _ = chat ("  [Checking that unit environments match up.]\n")
@@ -981,9 +1032,9 @@ struct
 		    val _ = Prelink.checkTarget (unit, requiredPackages)
 
 		    (* Generate startup code *)
-		    val _ = if Help.wantAssembler() then () else raise Stop
+		    val _ = if (not bootstrap) andalso Help.wantAssembler() then () else raise Stop
 		    val _ = chat ("  [Generating startup code.]\n")
-		    val paths = get_paths unit
+		    val paths = valOf (get_paths unit) (* not PRIM unit *)
 		    val linkAsmFile = Paths.linkAsmFile paths
 		    val _ = Compiler.link (linkAsmFile, requiredUnits)
 
@@ -997,7 +1048,7 @@ struct
 		    val linkExeFile = if (!Tools.profile)
 					  then Paths.linkProfExeFile paths
 				      else Paths.linkExeFile paths
-		    val objectFiles = (map (Paths.objFile o get_paths) requiredUnits) @ [linkObjFile]
+		    val objectFiles = (map (Paths.objFile o valOf o get_paths) requiredUnits) @ [linkObjFile]
 		    val _ = (chat "Manager calling linker with: ";
 			     if (!chat_verbose)
 				 then chat_strings 30 requiredUnits
@@ -1118,11 +1169,12 @@ struct
 				OS.FileSys.access (file, [OS.FileSys.A_WRITE]))
 				then OS.FileSys.remove file
 			    else ()
-	    fun remove unit =
-		let val paths = get_paths unit
-		    val files = map (fn f => f paths) unitFiles
-		in  app kill files
-		end
+	    fun remove unit = (case get_paths unit
+				 of SOME paths =>
+				     let val files = map (fn f => f paths) unitFiles
+				     in  app kill files
+				     end
+				  | NONE => ())
 	    val files' = map (fn f => f mapfile) mapfileFiles
 	in
 	    app remove units;

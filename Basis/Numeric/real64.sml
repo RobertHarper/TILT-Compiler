@@ -1,4 +1,4 @@
-(*$import Prelude REAL IEEEReal StringCvt Math64 General Bool Int32 RealFormat NumScan PreReal *)
+(*$import Firstlude TiltPrim Prelude REAL IEEEReal StringCvt Math64 General Bool Int32 RealFormat NumScan PreReal *)
 (* real64.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

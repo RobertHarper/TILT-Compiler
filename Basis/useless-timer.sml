@@ -1,4 +1,4 @@
-(*$import Prelude TIMER PreTime Time *)
+(*$import Firstlude TiltPrim Prelude TIMER PreTime Time *)
 
 structure Timer :> TIMER =
   struct

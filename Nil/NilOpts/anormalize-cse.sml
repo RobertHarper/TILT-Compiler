@@ -928,8 +928,8 @@ struct
 	     val baseDFn = (fn D => 
 			( foldl ( fn (entry, D) => 
 			    case entry of 
-				ImportValue (l, v, c) => insert_con (D, v, c)
-			      | ImportType (l , v, k) => insert_kind (D, v, k))
+				ImportValue (l, v, c) => NilContext.insert_label (insert_con (D, v, c), l, v)
+			      | ImportType (l , v, k) => NilContext.insert_label (insert_kind (D, v, k), l, v)
 			 D imports  ))
 	     val D = (baseDFn (empty))
 	     val temp =  Let_e(Sequential,bnds, NilUtil.true_exp)

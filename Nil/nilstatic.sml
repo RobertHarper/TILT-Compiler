@@ -115,6 +115,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val insert_kind_list        = flagtimer (import_profile,"Tchk:insert_kind_list",NilContext.insert_kind_list)
   val insert_stdkind          = flagtimer (import_profile,"Tchk:insert_stdkind",NilContext.insert_stdkind)
   val insert_stdkind_equation = flagtimer (import_profile,"Tchk:insert_stdkind_equation",NilContext.insert_stdkind_equation)
+  val insert_label            = flagtimer (import_profile,"Tchk:insert_label",NilContext.insert_label)
 
   val find_con      = flagtimer (import_profile,"Tchk:find_con",NilContext.find_con)
   val find_max_kind = flagtimer (import_profile,"Tchk:find_max_kind",NilContext.find_max_kind)           
@@ -246,8 +247,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val no_dups         = Sequence.no_dups
 
   (*From PrimUtil*)
-  val same_intsize   = NilPrimUtil.same_intsize
-  val same_floatsize = NilPrimUtil.same_floatsize
+  val same_intsize   = Prim.same_intsize
+  val same_floatsize = Prim.same_floatsize
 
   (*From Util *)
   val eq_opt    = Util.eq_opt
@@ -2290,7 +2291,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 | Prim_e (PrimOp prim,cons,exps) =>   
 	     let 
 	       val _ = app (curry2 type_analyze D) cons
-	       val (total,arg_types,return_type) = NilPrimUtil.get_type prim cons
+	       val (total,arg_types,return_type) = NilPrimUtil.get_type D prim cons
 	       val _ = do_args (D,arg_types,exps)
 	     in  return_type
 	     end
@@ -2396,6 +2397,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		    else ()
 	  val _ = type_analyze(D,con)
 	  val D = insert_con(D,var,con)
+	  val D = insert_label(D,label,var)
 	    val _ = if (!trace)
 			then (print "Done processing ImportValue with var = ";
 			      pp_var var; print "}\n")
@@ -2411,6 +2413,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		    else ()
 	  val kind = kind_valid (D,kind)
 	  val D = insert_stdkind(D,var,kind)
+	  val D = insert_label(D,label,var)
 	    val _ = if (!trace)
 			then (print "Done processing ImportType with var = ";
 			      pp_var var; print "}\n")

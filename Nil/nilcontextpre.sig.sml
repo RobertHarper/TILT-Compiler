@@ -13,6 +13,7 @@ signature NILCONTEXTPRE =
     type con = Nil.con
     type exp = Nil.exp
     type var = Nil.var
+    type label = Nil.label
     type context
 
     exception Unbound
@@ -78,10 +79,18 @@ signature NILCONTEXTPRE =
      *)
     val kind_of            : context * con -> kind
 
+    (* Insert a label into a context.  If the label is already bound,
+     * raises an exception.
+     *)
+    val insert_label : context * label * var -> context
+
+    val find_labelled_var : context * label -> var
+	
     (* Print functions*)
     val print_context : context -> unit
     val print_kinds : context -> unit
     val print_cons : context -> unit
+    val print_labelled_vars : context -> unit
 
     (* is_well_formed (kind_valid,con_valid,subkind) D 
      * Check whether or not a given context is well-formed.

@@ -1,4 +1,4 @@
-(*$import Prelude String Substring OS_PATH OS_PathFn *)
+(*$import Firstlude TiltPrim Prelude String Substring OS_PATH OS_PathFn *)
 (* os-path.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

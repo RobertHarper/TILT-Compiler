@@ -1,6 +1,7 @@
 (*$import Prelude Prim *)
 signature PRIMUTILPARAM = 
     sig
+	type context
 	type con
 	type exp
 
@@ -8,7 +9,7 @@ signature PRIMUTILPARAM =
 	val partial_arrow : con list * con -> con
 	val total_arrow : con list * con -> con
 	val con_tuple : con list -> con
-	val con_bool : con
+	val con_bool : context -> con
 	val con_unit : con
 	val con_int : Prim.intsize -> con
 	val con_uint : Prim.intsize -> con
@@ -20,5 +21,5 @@ signature PRIMUTILPARAM =
 	val unit_value : exp
 	val exp2value : exp -> (con,exp) Prim.value option
 	val value2exp : (con,exp) Prim.value -> exp
-	val bool2exp : bool -> exp
+	val bool2exp : context -> bool -> exp
     end

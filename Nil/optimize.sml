@@ -393,6 +393,9 @@ fun pp_alias UNKNOWN = print "unknown"
 	  fun add_exp(state as STATE{equation,...},v,e) = 
 	      updateContext(state,NilContext.insert_exp(equation,v,e))
 
+	  fun add_label(state as STATE{equation,...},l,v) =
+	      updateContext(state,NilContext.insert_label(equation,l,v))
+
 	  fun add_curry_processed(STATE{avail,equation,mapping,curry_processed,current,params},v) =
 	       STATE{equation=equation,
 		     avail=avail,
@@ -907,7 +910,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		      (case (getVals elist) of
 			   NONE => default ()
 			 | SOME elist => 
-			       (NilPrimUtil.apply p clist elist) 
+			       (NilPrimUtil.apply (get_env state) p clist elist) 
 			       handle _ => default())
                | _ => default()
 	 end
@@ -1325,9 +1328,9 @@ fun pp_alias UNKNOWN = print "unknown"
 				end)
 	  end
 	fun do_import(ImportValue(l,v,tr,c),state) = (ImportValue(l,v,do_niltrace state tr,do_con state c), 
-						      add_con(state,v,c))
+						      add_label(add_con(state,v,c),l,v))
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
-						   add_kind(state,v,k))
+						   add_label(add_kind(state,v,k),l,v))
 
 	fun do_export state (ExportValue(l,v)) = 
 	    let val v = (case lookup_alias(state,v) of

@@ -240,6 +240,8 @@ struct
 	    STATE{ctxt=NilContext.insert_kind(ctxt,v,k), count=count}
 	fun add_con(STATE{ctxt,count},v,c) = 
 	    STATE{ctxt=NilContext.insert_con(ctxt,v,c), count=count}
+	fun add_label(STATE{ctxt,count},l,v) =
+	    STATE{ctxt=NilContext.insert_label(ctxt,l,v), count=count}
 	fun get_count(STATE{count,...}) = count
 	fun type_of(STATE{ctxt,...},e) = Normalize.type_of(ctxt,e)
 	fun reduce (STATE{ctxt,...}) (pred : con -> 'a option) (con : con) = Normalize.reduce_until(ctxt,pred,con)
@@ -658,9 +660,9 @@ struct
 	  end
 
 	fun do_import(ImportValue(l,v,tr,c),state) = (ImportValue(l,v,tr,do_con state c), 
-						   add_con(state,v,c))
+						      add_label(add_con(state,v,c),l,v))
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
-						   add_kind(state,v,k))
+						   add_label(add_kind(state,v,k),l,v))
 
 	fun do_export(ExportValue(l,v),state) = (ExportValue(l,v),state)
 	  | do_export(ExportType(l,v),state)  = (ExportType(l,v),state)

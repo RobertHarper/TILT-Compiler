@@ -1,4 +1,4 @@
-(*$import Prelude StringCvt Time *)
+(*$import Firstlude TiltPrim Prelude StringCvt Time *)
 (* date-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

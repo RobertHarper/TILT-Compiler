@@ -1,4 +1,4 @@
-(*$import Prelude Int String StringCvt TIME PreTime Real Bool NumFormat Char *)
+(*$import Firstlude TiltPrim Prelude Int String StringCvt TIME PreTime Real Bool NumFormat Char *)
 (* time.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

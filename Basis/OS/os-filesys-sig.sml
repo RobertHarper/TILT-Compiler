@@ -1,4 +1,4 @@
-(*$import Position Prelude Time *)
+(*$import Position Firstlude TiltPrim Prelude Time *)
 (* os-filesys-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,4 @@
-(*$import Prelude LIST *)
+(*$import Firstlude TiltPrim Prelude LIST *)
 (* list.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

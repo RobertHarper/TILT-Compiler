@@ -17,12 +17,12 @@ structure CoerceElim :> COERCEELIM =
 	     let 
 	       val tformals = map (fn v => (v,N.Type_k)) vars
 	       val arrow = N.AllArrow_c {openness    = N.Open,
-					   effect      = N.Total,
-					   isDependent = false,
-					   tFormals    = tformals,
-					   eFormals    = [(NONE,from_con)],
-					   fFormals    = 0w0,
-					   body_type   = to_con}
+					 effect      = N.Total,
+					 isDependent = false,
+					 tFormals    = tformals,
+					 eFormals    = [(NONE,from_con)],
+					 fFormals    = 0w0,
+					 body_type   = to_con}
 	       val _ = 
 		 if !debug then (
 		   print "\nRewrote ";

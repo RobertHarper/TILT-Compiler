@@ -1,7 +1,6 @@
 (*$import Prelude TopLevel PRIMUTIL IL Il Symbol Int Array String Prim Ppil Util Listops Name Tyvar PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats List *)
 (* Il Utility *)
-structure IlPrimUtil :> PRIMUTIL where type con = Il.con
-                                 where type exp = Il.exp = PrimUtil(structure PrimUtilParam = IlPrimUtilParam)
+structure IlPrimUtil = PrimUtil(structure PrimUtilParam = IlPrimUtilParam)
 
 structure IlUtil :> ILUTIL =
   struct
@@ -19,6 +18,66 @@ structure IlUtil :> ILUTIL =
 
     exception FAILURE of string
 
+
+    local
+	val Clook = ref (NONE : (Il.context * Il.label -> (Il.path * Il.phrase_class) option) option)
+    in
+	fun installHelpers {lookup} =
+	    let val _ = (case !Clook
+			   of NONE => ()
+			    | SOME _ =>
+			       (print "WARNING: installHelpers called more than once.\n";
+				print "         Possibly because CM.make does not have the semantics of a fresh make\n"))
+	    in
+		Clook := SOME lookup
+	    end
+	fun lookup arg = (valOf (!Clook)) arg
+    end
+
+    (* -------------------------------------------------------- *)
+    (* ------------ Path manipulation functions ------------ *)
+    fun join_path_labels (PATH (v,ls), l) = PATH(v,ls @ l)
+    fun path2obj (var_maker : var -> 'a, mod_maker : mod * label -> 'a) (PATH(v,ls)) = 
+	 let fun loop [] _ = var_maker v
+	       | loop [l] acc = mod_maker(acc,l)
+	       | loop (l::rest) acc = loop rest (MOD_PROJECT(acc,l))
+         in loop ls (MOD_VAR v)
+	 end
+    val path2mod = path2obj (MOD_VAR,MOD_PROJECT)
+    val path2con = path2obj (CON_VAR, CON_MODULE_PROJECT)
+    val path2exp = path2obj (VAR, MODULE_PROJECT)
+
+
+    local fun loop (MOD_VAR v) acc = SOME(PATH(v,acc))
+	    | loop (MOD_PROJECT (m,l)) acc = loop m (l::acc)
+	    | loop m _ = NONE
+    in    
+	fun mod2path (m : mod) = loop m []
+	fun exp2path (e : exp) = 
+	    (case e of
+		 VAR v => SOME(PATH (v,[]))
+	       | MODULE_PROJECT (m,l) => mod2path (MOD_PROJECT(m,l))
+	       | _ => NONE)
+	fun con2path (c : con) =
+	    (case c of
+		CON_VAR v => SOME(PATH(v,[]))
+	      | CON_MODULE_PROJECT (m,l) => mod2path(MOD_PROJECT(m,l))
+	      | _ => NONE)
+    end
+
+
+   fun eq_path(PATH (v1,l1), PATH(v2,l2)) = eq_var(v1,v2) andalso eq_list(eq_label,l1,l2)
+
+    fun eq_mpath (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
+      | eq_mpath (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
+      | eq_mpath _ = false
+    fun eq_epath (VAR v, VAR v') = eq_var (v,v')
+      | eq_epath (MODULE_PROJECT (m,l), MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
+      | eq_epath _ = false
+    fun eq_cpath (CON_VAR v, CON_VAR v') = eq_var (v,v')
+      | eq_cpath (CON_MODULE_PROJECT (m,l), 
+		  CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
+      | eq_cpath _ = false
 
     (* -------------------------------------------------------- *)
     (* --------------------- Misc helper functions ------------ *)
@@ -77,68 +136,6 @@ structure IlUtil :> ILUTIL =
 	else symbol_label(Symbol.tyvSymbol ((if is_equal then "''" else "'")
 					    ^ (String.str (chr (ord #"a" + n)))))
 
-
-    (* Internal labels follow special conventions *)
-    (* Some internal labels are opened for lookup *)
-    (* Some internal labels are non-exported *)
-    (* Eq labels are identifiable as eq labels *)
-	 
-    val open_str = "+O"
-    val nonexport_str = "-X"
-    val eq_str = "+E"
-    val dt_str = "+O+D"
-    val cluster_str = "+C"
-    val coercion_str = "+N"
-
-    fun is_open lab = isSome(substring (open_str,label2name lab))
-    fun is_nonexport lab =  isSome(substring (nonexport_str,label2name lab))
-    fun is_eq lab = isSome(substring (eq_str,label2name lab))
-    fun is_dt lab = isSome(substring (dt_str,label2name lab))
-    fun is_cluster lab = isSome(substring (cluster_str,label2name lab))
-    fun is_coercion lab = isSome(substring (coercion_str,label2name lab))
-
-    local
-	fun to_meta_lab meta_str lab =
-	  let val str = label2name lab
-	      val final_str = meta_str ^ str
-	  in  internal_label final_str
-	  end
-    in  val to_open = to_meta_lab open_str 
-	val to_nonexport = to_meta_lab nonexport_str
-	val to_eq = to_meta_lab eq_str
-	val to_dt = to_meta_lab dt_str
-	val to_cluster = to_meta_lab cluster_str
-	val to_coercion = to_meta_lab coercion_str
-    end
-
-    local 
-	fun split str = 
-	    let val len = size str
-		fun loop n = if ((n+1) < len andalso 
-				 (String.sub(str,n) = #"+" orelse
-				  String.sub(str,n) = #"-"))
-				 then loop (n+2) else n
-		val start = loop 0
-	    in  (String.substring(str,0, start),
-		 String.substring(str,start,len - start))
-	    end
-
-    in
-	fun prependToInternalLabel (prefix, lab) = 
-	    let val str = Name.label2name lab
-		val (attributes, name) = split str
-		val name = prefix ^ name
-	    in  internal_label(attributes ^ name)
-	    end
-	
-	fun label2name lab = 
-	    let val str = Name.label2name lab
-		val (attributes, name) = split str
-	    in  name
-	    end
-    end
-
-
     val unit_exp : exp = RECORD[]
     val fail_tag = fresh_named_tag "fail"
     val bind_tag = fresh_named_tag "bind"
@@ -160,30 +157,44 @@ structure IlUtil :> ILUTIL =
 			    in  RECORD(mapcount help explist)
 			    end
     val con_string = CON_VECTOR (CON_UINT W8)
-    local val names = [Name.symbol_label(Symbol.varSymbol "false"), 
-		       Name.symbol_label(Symbol.varSymbol "true")]
-    in  fun sumbool_help special = CON_SUM{names = names,
-					   noncarriers = 2,
-					   carrier = CON_TUPLE_INJECT[],
-					   special = special}
-	fun bool_help special = 
-	    let val con_sum = sumbool_help special
-	    in  CON_TUPLE_PROJECT(0,CON_MU(CON_FUN([fresh_var()],
-						   CON_TUPLE_INJECT [con_sum])))
+
+    local
+	fun errorMsg (context, msg, label) =
+	    let
+		val _ = (print msg; print ": "; print (Name.label2name label); print "\n";
+			 print "Booleans are defined in the standard prelude; is your import list correct?\n")
+		val _ = debugdo (fn () =>
+				 (print "context = ";
+				  Ppil.pp_context context; print "\n"))
+	    in  error msg
 	    end
+	fun lookup_con label context =
+	    (case lookup (context, label)
+	       of SOME (_, PHRASE_CLASS_CON (_,_,SOME inline_con,true)) => inline_con
+		| SOME (p, PHRASE_CLASS_CON _) => path2con p
+		| _ => errorMsg (context,"unbound type",label))
+	fun lookup_exp label context =
+	    (case lookup (context, label)
+	       of SOME (_, PHRASE_CLASS_EXP (_,_,SOME inline_exp,true)) => inline_exp
+		| SOME (p, PHRASE_CLASS_EXP _) => path2exp p
+		| _ => errorMsg (context,"unbound type constructor",label))
+	val lab_bool_sum = Name.internal_label "bool_sum"
+	val lab_bool_out = Name.to_coercion (Name.internal_label "bool_out")
+    in
+	val lab_bool = Name.symbol_label (Symbol.tycSymbol "bool")
+	val lab_true = Name.symbol_label (Symbol.varSymbol "true")
+	val lab_false = Name.symbol_label (Symbol.varSymbol "false")
+
+	val con_bool     = lookup_con lab_bool
+	val con_bool_sum = lookup_con lab_bool_sum
+	val true_exp  = lookup_exp lab_true
+	val false_exp = lookup_exp lab_false
+	val bool_out  = lookup_exp lab_bool_out
     end
 
-    val con_sumbool = sumbool_help NONE
-    val con_bool = bool_help NONE
-    val con_false = bool_help (SOME 0)
-    val con_true = bool_help (SOME 1)
-    fun con_eqfun c = CON_ARROW([con_tuple[c,c]],
-				con_bool,false, oneshot_init PARTIAL)
-
-    val false_exp = COERCE(FOLD([],con_sumbool,con_bool),[],
-			   INJ{sumtype=con_sumbool,field=0,inject=NONE})
-    val true_exp = COERCE(FOLD([],con_sumbool,con_bool),[],
-			   INJ{sumtype=con_sumbool,field=1,inject=NONE})
+    fun con_eqfun context c = CON_ARROW([con_tuple[c,c]],
+					con_bool context,
+					false, oneshot_init PARTIAL)
 
     fun make_lambda_help totality (var,con,rescon,e) 
       : exp * con = let val funvar = fresh_named_var "anonfun"
@@ -199,9 +210,9 @@ structure IlUtil :> ILUTIL =
     fun make_unfold_coercion (vars,rolltype,unrolltype) : exp * con =
         (UNFOLD(vars,rolltype,unrolltype),CON_COERCION(vars,rolltype,unrolltype))
 
-    fun make_ifthenelse(e1,e2,e3,c) : exp = 
-	CASE{sumtype=con_sumbool,
-	     arg=COERCE(UNFOLD([],con_bool,con_sumbool),[],e1),
+    fun make_ifthenelse context (e1,e2,e3,c) : exp = 
+	CASE{sumtype=con_bool_sum context,
+	     arg=COERCE(bool_out context,[],e1),
 	     bound=fresh_named_var "unused",
 	     arms=[SOME e3,SOME e2],default=NONE,tipe=c}
     fun make_seq eclist =
@@ -227,8 +238,8 @@ structure IlUtil :> ILUTIL =
 
     (* etaprims takes a record of their argument
        but expanded primitives takes their multiple arguments "flattened" *)
-    fun etaexpand_help (primer,typer) (prim,cargs) = 
-	let val prim_tipe = typer prim cargs
+    fun etaexpand_help (primer,typer) (context,prim,cargs) = 
+	let val prim_tipe = typer context prim cargs
 	    val (res_tipe,args_tipes) = 
 		(case prim_tipe of
 		     CON_ARROW([c],res_tipe,false,_) => (res_tipe,[c])
@@ -266,53 +277,6 @@ structure IlUtil :> ILUTIL =
       fun find_sbnd ([],_) = NONE
 	| find_sbnd((sbnd as SBND(l,_))::rest,l') = if (eq_label(l,l')) 
 						      then SOME sbnd else find_sbnd(rest,l')
-
-
-    (* -------------------------------------------------------- *)
-    (* ------------ Path manipulation functions ------------ *)
-    fun join_path_labels (PATH (v,ls), l) = PATH(v,ls @ l)
-    fun path2obj (var_maker : var -> 'a, mod_maker : mod * label -> 'a) (PATH(v,ls)) = 
-	 let fun loop [] _ = var_maker v
-	       | loop [l] acc = mod_maker(acc,l)
-	       | loop (l::rest) acc = loop rest (MOD_PROJECT(acc,l))
-         in loop ls (MOD_VAR v)
-	 end
-    val path2mod = path2obj (MOD_VAR,MOD_PROJECT)
-    val path2con = path2obj (CON_VAR, CON_MODULE_PROJECT)
-    val path2exp = path2obj (VAR, MODULE_PROJECT)
-
-
-    local fun loop (MOD_VAR v) acc = SOME(PATH(v,acc))
-	    | loop (MOD_PROJECT (m,l)) acc = loop m (l::acc)
-	    | loop m _ = NONE
-    in    
-	fun mod2path (m : mod) = loop m []
-	fun exp2path (e : exp) = 
-	    (case e of
-		 VAR v => SOME(PATH (v,[]))
-	       | MODULE_PROJECT (m,l) => mod2path (MOD_PROJECT(m,l))
-	       | _ => NONE)
-	fun con2path (c : con) =
-	    (case c of
-		CON_VAR v => SOME(PATH(v,[]))
-	      | CON_MODULE_PROJECT (m,l) => mod2path(MOD_PROJECT(m,l))
-	      | _ => NONE)
-    end
-
-
-   fun eq_path(PATH (v1,l1), PATH(v2,l2)) = eq_var(v1,v2) andalso eq_list(eq_label,l1,l2)
-
-    fun eq_mpath (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
-      | eq_mpath (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
-      | eq_mpath _ = false
-    fun eq_epath (VAR v, VAR v') = eq_var (v,v')
-      | eq_epath (MODULE_PROJECT (m,l), MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
-      | eq_epath _ = false
-    fun eq_cpath (CON_VAR v, CON_VAR v') = eq_var (v,v')
-      | eq_cpath (CON_MODULE_PROJECT (m,l), 
-		  CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
-      | eq_cpath _ = false
-
 
       (* -------------------------------------------------------- *)
       (* ------------ Context manipulation functions ------------ *)
@@ -951,19 +915,19 @@ structure IlUtil :> ILUTIL =
     val error_sig = fn sg => fn s => error_obj pp_signat "signature" sg s
 
 
-    fun exp_reduce e : exp option = 
+    fun exp_reduce (context,e) : exp option = 
 	(case e of
 	     OVEREXP(_,_,oe) =>
 		 (case (oneshot_deref oe) of
-		      SOME exp => (case exp_reduce exp of
+		      SOME exp => (case exp_reduce (context,exp) of
 				       NONE => SOME exp
 				     | SOME e => SOME e)
 		    | NONE => NONE)
 	   | APP(e1, e2) => 
-		 let val (ch1,e1) = (case exp_reduce e1 of
+		 let val (ch1,e1) = (case exp_reduce (context,e1) of
 					 NONE => (false,e1)
 				       | SOME e => (true,e))
-		     val (ch2,e2) = (case exp_reduce e2 of
+		     val (ch2,e2) = (case exp_reduce (context,e2) of
 					 NONE => (false,e2)
 				       | SOME e => (true,e))
 		     val def = if (ch1 orelse ch2) then SOME(APP(e1,e2)) else NONE
@@ -971,11 +935,11 @@ structure IlUtil :> ILUTIL =
 			 (ETAPRIM(p,cs),RECORD rbnds) => SOME(PRIM(p,cs,map #2 rbnds))
 		       | (ETAILPRIM(ip,cs),RECORD rbnds) => SOME(ILPRIM(ip,cs,map #2 rbnds))
 		       | (ETAPRIM(p,cs),y) =>
-			     (case (IlPrimUtil.get_type' p cs) of
+			     (case (IlPrimUtil.get_type' context p cs) of
 				  CON_ARROW([_],_,_,_) => SOME(PRIM(p,cs,[y]))
 				| _ => def)
 		       | (ETAILPRIM(ip,cs),y) =>
-			      (case (IlPrimUtil.get_iltype' ip cs) of
+			      (case (IlPrimUtil.get_iltype' context ip cs) of
 				   CON_ARROW([_],_,_,_) => SOME(ILPRIM(ip,cs,[y]))
 				 | _ => def)
 		       | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), VAR argvar) => 
@@ -1002,22 +966,22 @@ structure IlUtil :> ILUTIL =
 		   pp_con con; print "\n";
 		   error "Bad con to ConUnroll"))
 
-    fun make_typearg_sdecs' [] = []
-      | make_typearg_sdecs' ((type_lab,is_eq) :: more) = 
+    fun make_typearg_sdecs' _ [] = []
+      | make_typearg_sdecs' context ((type_lab,is_eq) :: more) = 
 	let 
-	    val rest = make_typearg_sdecs' more
+	    val rest = make_typearg_sdecs' context more
 	    val type_str = label2string type_lab
 	    val type_var = fresh_named_var type_str 
 	    val type_sdec = SDEC(type_lab,DEC_CON(type_var, KIND, NONE, false))
 	    val eq_lab = to_eq type_lab
 	    val eq_str = label2string eq_lab
 	    val eq_var = fresh_named_var eq_str
-	    val eq_con =  con_eqfun (CON_VAR type_var)
-	    val eq_sdec = SDEC(eq_lab,DEC_EXP(eq_var, eq_con,NONE,false))
+	    val eq_con =  con_eqfun context (CON_VAR type_var)
+	    val eq_sdec = SDEC(eq_lab,DEC_EXP(eq_var,eq_con,NONE,false))
 	in  if (is_eq) then (type_sdec :: eq_sdec :: rest) else type_sdec :: rest
 	end
-    fun make_typearg_sdecs arg =
-	let val sdecs = make_typearg_sdecs' arg
+    fun make_typearg_sdecs context arg =
+	let val sdecs = make_typearg_sdecs' context arg
 	    val _ = debugdo (fn () =>
 			     (print "make_typearg_sdecs made: "; pp_sdecs sdecs; print "\n"))
 	in  sdecs

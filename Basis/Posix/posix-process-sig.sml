@@ -1,4 +1,4 @@
-(*$import SysWord Prelude POSIX_FLAGS Word8 Time *)
+(*$import SysWord Firstlude TiltPrim Prelude POSIX_FLAGS Word8 Time *)
 (* posix-process-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

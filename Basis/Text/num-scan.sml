@@ -1,4 +1,4 @@
-(*$import Prelude StringCvt String Option PreInt PreWord PreReal *)
+(*$import Firstlude TiltPrim Prelude StringCvt String Option PreInt PreWord PreReal *)
 (* num-scan.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

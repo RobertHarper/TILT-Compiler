@@ -1,4 +1,4 @@
-(*$import Prelude Int CharArray CharVector TextPrimIO CleanIO Substring IO OS_PRIM_IO TEXT_IO OS Option *)
+(*$import Firstlude TiltPrim Prelude Int CharArray CharVector TextPrimIO CleanIO Substring IO OS_PRIM_IO TEXT_IO OS Option *)
 (* text-io-fn.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

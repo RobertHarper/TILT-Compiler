@@ -1,4 +1,4 @@
-(*$import Prelude List PreTime DATE Time POSIX_extern Vector StringCvt Int *)
+(*$import Firstlude TiltPrim Prelude List PreTime DATE Time POSIX_extern Vector StringCvt Int *)
 (* date.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

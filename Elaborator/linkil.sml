@@ -9,6 +9,10 @@ structure LinkIl :> LINKIL  =
 				    expcompile = Toil.expcompile,
 				    polyinst = Toil.polyinst}
 	val _ = Signature.installHelpers {polyinst = Toil.polyinst}
+	val _ = IlUtil.installHelpers {lookup = IlContext.Context_Lookup_Label}
+	val _ = IlPrimUtilParam.installHelpers {con_bool = IlUtil.con_bool,
+						true_exp = IlUtil.true_exp,
+						false_exp = IlUtil.false_exp}
 	structure Ppprim = Ppprim
 	structure Ppil = Ppil
 	structure IlContext = IlContext
@@ -39,9 +43,6 @@ structure LinkIl :> LINKIL  =
 		        IlContext.add_context_entries(acc_ctxt,[ce])
 	    in  foldl folder acc_ctxt entries
 	    end
-
-	val empty_context = IlContext.empty_context
-
 
 	(* Given a context GAMMA and a filename, returns then translation of
 	   the file using GAMMA as the translation context.  The augmented
@@ -132,19 +133,11 @@ structure LinkIl :> LINKIL  =
 	    in  (context,sbnd_entries)
 	    end
 
-
+	val empty_context = Basis.empty_context
+	val tiltprim = Basis.tiltprim
 	val plus_context = IlContext.plus_context
 
 	structure IlContextEq = IlContextEq
-
-	val cached_initial_context = ref (NONE : context option)
-	fun initial_context() = 
-	  (case (!cached_initial_context) of
-	       SOME ctxt => ctxt
-	     | _ => let val initial_context = Basis.initial_context()
-			val _ = cached_initial_context := (SOME initial_context)
-		    in  initial_context
-		    end)
 
 	type filepos = SourceMap.charpos -> string * int * int
 	fun elab_specs (unitName, base_ctxt, fp, specs) = 

@@ -83,18 +83,18 @@ struct
 	      of CON_TYVAR tyvar => (case (tyvar_deref tyvar, tyvar_eq_hole tyvar)
 				       of (NONE, NONE) => elab_error "unresolved type does not permit equailty"
 					| (NONE, SOME os) => (* hole is empty since tyvar is unset *)
-					   let val eq_con = con_eqfun con
+					   let val eq_con = con_eqfun ctxt con
 					       val exp = OVEREXP(eq_con,true,os)
 					   in  (exp,eq_con)
 					   end
-					| (SOME c, SOME os) => (valOf (oneshot_deref os), con_eqfun c)
+					| (SOME c, SOME os) => (valOf (oneshot_deref os), con_eqfun ctxt c)
 					| (SOME c, NONE) => self(SOME name,c))
 				        (* In the last case, we aren't filling the hole since the side
 					 * effect can't be undone and isn't always appropriate. *)
 	       | CON_VAR v => (let val SOME(type_label,pc) = Context_Lookup_Var(ctxt,v) 
 				   val eq_label = to_eq type_label
 			       in (case (Context_Lookup_Label(ctxt,eq_label)) of
-				       SOME(_,PHRASE_CLASS_EXP(e,_,_,_)) => (e, con_eqfun con)
+				       SOME(_,PHRASE_CLASS_EXP(e,_,_,_)) => (e, con_eqfun ctxt con)
 				     | _ => (case pc of
 						 PHRASE_CLASS_CON(_,_,SOME c,_) => self(SOME name,c)
 					       | _ => (debugdo (fn () =>
@@ -104,8 +104,8 @@ struct
 						       raise NoEqExp)))
 			       end)
 	       | CON_OVAR ocon => self (SOME name,CON_TYVAR (ocon_deref ocon))
-	       | CON_INT is => (ETAPRIM(eq_int is,[]), con_eqfun con)
-	       | CON_UINT is => (ETAILPRIM(eq_uint is,[]), con_eqfun con)
+	       | CON_INT is => (ETAPRIM(eq_int is,[]), con_eqfun ctxt con)
+	       | CON_UINT is => (ETAILPRIM(eq_uint is,[]), con_eqfun ctxt con)
 	       | CON_FLOAT fs => raise NoEqExp
 	       | CON_RECORD fields => 
 		  let 
@@ -121,13 +121,13 @@ struct
 			      val e1 = RECORD_PROJECT(VAR v1,lbl,con)
 			      val e2 = RECORD_PROJECT(VAR v2,lbl,con)
 			      val exp = APP(eqexp,exp_tuple[e1,e2])
-			  in  (case exp_reduce exp of
+			  in  (case exp_reduce (ctxt,exp) of
 				   NONE => exp
 				 | SOME e => e)
 			  end
 		      fun folder (rdec,exp) = 
 			  let val exp' = help rdec
-			  in make_ifthenelse(exp,exp',false_exp,con_bool)
+			  in make_ifthenelse ctxt (exp,exp',false_exp,con_bool)
 			  end
 		      val body = (case fields of
 				      [] => true_exp
@@ -168,7 +168,7 @@ struct
 								 val e' = SUM_TAIL(i,sumc,VAR var')
 								 val e'' = SUM_TAIL(i,sumc,VAR var'')
 								 val exp = make_let ([sumbnd],APP(eqexp,exp_tuple[e',e'']))
-							     in  (case exp_reduce exp of
+							     in  (case exp_reduce (ctxt,exp) of
 								      SOME e => e
 								    | NONE => exp)
 							     end
@@ -198,27 +198,27 @@ struct
 					make_let([BND_EXP(v1,e1),BND_EXP(v2,e2)],body)))
 		  end
 	       | CON_ARRAY c => (ETAPRIM(equal_table (OtherArray false),[c]),
-				 con_eqfun con)
+				 con_eqfun ctxt con)
 	       | CON_VECTOR c => 
 		  let val (e,vc) = vector_eq ctxt
-		      val ac = CON_ARROW([con_eqfun c], 
-					 con_eqfun (CON_VECTOR c),
+		      val ac = CON_ARROW([con_eqfun ctxt c], 
+					 con_eqfun ctxt (CON_VECTOR c),
 					 false, oneshot())
 		      val _ = if (eq_con(ctxt,vc,ac))
 				  then ()
 			      else (elab_error "Prelude vector_eq is bad")
 		      val exp = APP(e, #1 (self (NONE,c)))
-		  in  ((case exp_reduce exp of
+		  in  ((case exp_reduce (ctxt,exp) of
 			    NONE => exp
 			  | SOME e => e),
-		       con_eqfun con)
+		       con_eqfun ctxt con)
 		  end
-	       | CON_REF c => (ETAILPRIM(eq_ref,[c]), con_eqfun con)
+	       | CON_REF c => (ETAILPRIM(eq_ref,[c]), con_eqfun ctxt con)
 	       | CON_MODULE_PROJECT(m,l) => 
 		  let val e = MODULE_PROJECT(m,to_eq l)
 		  in (GetExpCon(ctxt,e) 
 		      handle _ => raise NoEqExp);
-		      (e, con_eqfun con)
+		      (e, con_eqfun ctxt con)
 		  end
 	       | CON_APP(c,types) => 
 		  let val meq = 
@@ -260,14 +260,14 @@ struct
 									 NONE => raise NoEqExp
 								       | SOME triple => triple)
 			  in (MODULE_PROJECT(MOD_APP(meq,MOD_STRUCTURE new_sbnds),it_lab),
-			      con_eqfun con)
+			      con_eqfun ctxt con)
 			  end
 		      | _ => raise NoEqExp
 		  end
 	       | CON_MU confun => xeq_mu state ctxt (SOME name,confun)
 	       | CON_TUPLE_PROJECT (j, con_mu as CON_MU confun) => 
 		  let val (fix_exp,fix_con) = xeq_mu state ctxt (NONE,confun)
-		      val con_res = con_eqfun con
+		      val con_res = con_eqfun ctxt con
 		      val exp_res = 
 			  (case confun of
 			       CON_FUN ([_],_) => fix_exp
@@ -321,7 +321,7 @@ struct
 		end
 	    fun efolder ((evar,cvar,el),ctxt) = 
 		let 
-		    val con = con_eqfun (CON_VAR cvar)
+		    val con = con_eqfun ctxt (CON_VAR cvar)
 		    val dec = DEC_EXP(evar,con,NONE,false)
 		in add_context_sdec(ctxt,SDEC(el,SelfifyDec ctxt dec))
 		end
@@ -342,12 +342,12 @@ struct
 		    val e1' = COERCE(UNFOLD([], name_con, CON_VAR expanded_con_var), [], e1)
 		    val e2' = COERCE(UNFOLD([], name_con, CON_VAR expanded_con_var), [], e2)
 		    val exp = APP(expv',exp_tuple[e1',e2'])
-		    val exp = (case exp_reduce exp of
+		    val exp = (case exp_reduce (ctxt,exp) of
 				   NONE => exp
 				 | SOME e => e)
 		    val exp = make_let([BND_CON(expanded_con_var,expanded_con)],exp)
 		    val fbnd = FBND(var_eq,var,var_con,con_bool,exp)
-		in  (fbnd, con_eqfun mu_con)
+		in  (fbnd, con_eqfun ctxt mu_con)
 		end
 
 	    val exps_v = map2 (fn (v,c) => #1(xeq ctxt (SOME (CON_VAR v),c))) (expanded_cons_vars,reduced_cons)
@@ -362,10 +362,16 @@ struct
 
     fun compile ({polyinst_opt : context * sdecs -> (sbnd list * sdecs * con list) option,
 		  vector_eq : context -> exp * con,
+		  bool : (Il.con * Il.exp * Il.exp) option,		  
 		  context : IlContext.context,
 		  con : con}) : (exp * con) option = 
 	let val _ = debugdo (fn () => (print "equality compile called with con = ";
-				       pp_con con; print "\n"))
+				       pp_con con; print "\n";
+				       print "context = "; pp_context context; print "\n"))
+	    val (con_bool, true_exp, false_exp) =
+		(case bool
+		   of NONE => (con_bool context, true_exp context, false_exp context)
+		    | SOME x => x)
 	in
 	    SOME (bind_con "bool" con_bool
 		  (fn b => bind_exp "true" true_exp

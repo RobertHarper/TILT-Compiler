@@ -1,4 +1,4 @@
-(*$import Prelude POSIX_extern String SysWord *)
+(*$import Firstlude TiltPrim Prelude POSIX_extern String SysWord *)
 
 signature PRE_POSIX =
 sig
