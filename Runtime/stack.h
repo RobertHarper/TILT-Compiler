@@ -21,10 +21,16 @@
 #define IS_SPECIAL_UNSET(type)      ((type & 3) == 3)
 
 /* A pos of zero indicates end of projection; otherwise, subtract one to get true word offset */
+/*
 #define GET_SPECIAL_REC_POS(type) ((type >> 2) & 63)
 #define GET_SPECIAL_REC_POS2(type) ((type >> (2 + 6)) & 255)
 #define GET_SPECIAL_REC_POS3(type) ((type >> (2 + 6 + 8)) & 255)
 #define GET_SPECIAL_REC_POS4(type) ((type >> (2 + 6 + 8 + 8)) & 255)
+*/
+#define GET_SPECIAL_REC_POS(type) ((type >> 2) & 16383)
+#define GET_SPECIAL_REC_POS2(type) ((type >> (2 + 14)) & 255)
+#define GET_SPECIAL_REC_POS3(type) ((type >> (2 + 14 + 8)) & 255)
+#define GET_SPECIAL_REC_POS4(index) (0)
 
 void show_stack(mem_t sp, mem_t cur_retadd, mem_t top);
 void stack_init(void);
