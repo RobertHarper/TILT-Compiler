@@ -280,39 +280,41 @@ struct
 
    val xmod_count = ref 0
 
-   fun xmod ctx (args as (il_mod, vmap, preferred_name)) =
+   datatype state = STATE of {ILctx : Il.context, 
+			      vmap   : (var * var) Name.VarMap.map}
+
+   fun ILctx_of (STATE{ILctx,...}) = ILctx
+   fun vmap_of   (STATE{vmap,...}) = vmap
+
+   fun update_ILctx (STATE{ILctx,vmap}, ILctx') = STATE{ILctx=ILctx', vmap=vmap}
+   fun update_vmap  (STATE{ILctx,vmap}, vmap') = STATE{ILctx=ILctx, vmap=vmap'}
+
+   fun xmod state (args as (il_mod, preferred_name)) =
        let
 	   val this_call = ! xmod_count
 	   val _ = (xmod_count := this_call + 1;
 		    print ("Call " ^ (Int.toString this_call) ^ " to xmod\n");
 		    Ppil.pp_mod il_mod)
-	   val result = xmod' ctx args
+	   val result = xmod' state args
 	in
 	    print ("Return " ^ (Int.toString this_call) ^ " from xmod\n");
 	    result
        end
 
 
-   and xmod' ctx (il_mod as (Il.MOD_VAR var_mod), vmap, preferred_name) = 
+   and xmod' state (il_mod as (Il.MOD_VAR var_mod), preferred_name) = 
        let
-	   val (var_mod_c, var_mod_r, vmap) = splitVar (var_mod, vmap)
-
-           val _ = print "A"
+	   val (var_mod_c, var_mod_r, vmap') = splitVar (var_mod, vmap_of state)
 
 	   val (name_c, name_r) = 
 	       (case preferred_name of
 		    NONE => (Var_c var_mod_c, Var_e var_mod_r)
 		  | SOME (_, name_c, name_r) => (Var_c name_c, Var_e name_r))
 
-           val _ = print "B"
+	   val il_signat = gms (ILctx_of state, il_mod)
 
-	   val il_signat = gms (ctx, il_mod)
-
-           val _ = print "C"
-
-           val (knd_c, type_r) = xsig ctx (name_c, vmap, il_signat)
-
-           val _ = print "D"
+           (* XXX *** BUGGY, and slow too *)
+           val (knd_c, type_r) = xsig state (name_c, il_signat)
 
 	   val (cbnd_cat, ebnd_cat) =
 	       (case preferred_name of
@@ -320,8 +322,6 @@ struct
 		  | SOME (_, name_c, name_r) => 
 			(LIST [(name_c, knd_c, Var_c var_mod_c)], 
 			 LIST [Exp_b (name_r, type_r, Var_e var_mod_r)]))
-
-           val _ = print "E"
        in
 	   {cbnd_cat = cbnd_cat,
 	    ebnd_cat = ebnd_cat,
@@ -330,13 +330,12 @@ struct
 	    knd_c    = knd_c,
 	    type_r   = type_r,
 	    il_signat = il_signat,
-	    valuable = true,
-	    vmap = vmap}
+	    valuable = true}
        end
 
-     | xmod' ctx (Il.MOD_APP(ilmod_fun, ilmod_arg), vmap, preferred_name) =
+     | xmod' state (Il.MOD_APP(ilmod_fun, ilmod_arg), preferred_name) =
        let
-	   val (var, var_c, var_r, vmap) = chooseName (preferred_name, vmap)
+	   val (var, var_c, var_r, vmap) = chooseName (preferred_name, vmap_of state)
 
 	   val {cbnd_cat = cbnd_cat_fun,
 		ebnd_cat = ebnd_cat_fun,
@@ -345,9 +344,8 @@ struct
 		knd_c = knd_fun_c,
 		type_r = type_fun_r,
 		il_signat = Il.SIGNAT_FUNCTOR(var_funarg,ilsig_funarg,ilsig_funrng,fun_arrow),
-		valuable = valuable_fun,
-		vmap = vmap
-		} = xmod ctx (ilmod_fun, vmap, NONE)
+		valuable = valuable_fun
+		} = xmod state (ilmod_fun, NONE)
 
 	   val {cbnd_cat = cbnd_cat_arg,
 		ebnd_cat = ebnd_cat_arg,
@@ -356,14 +354,13 @@ struct
 		knd_c = knd_arg_c,
 		type_r = type_arg_r,
 		il_signat = Il.SIGNAT_STRUCTURE(_,arg_sdecs),
-		valuable = valuable_arg,
-		vmap = vmap
-		} = xmod ctx (ilmod_arg, vmap, NONE)
+		valuable = valuable_arg
+		} = xmod state (ilmod_arg, NONE)
 
            val name_c = Var_c var_c
 	   val name_r = Var_e var_r
 	   val il_signat = Ilutil.remove_modvar_signat(ilsig_funrng,var_funarg,arg_sdecs)
-	   val (knd_c, type_r) = xsig ctx (name_c, vmap, il_signat)
+	   val (knd_c, type_r) = xsig state (name_c, il_signat)
 
 	   val cbnd_cat = APP[cbnd_cat_fun, 
 			      cbnd_cat_arg,
@@ -384,15 +381,14 @@ struct
 	    knd_c     = knd_c,
 	    type_r    = type_r,
 	    il_signat = il_signat,
-	    valuable = valuable_fun andalso valuable_arg andalso (fun_arrow = Il.TOTAL),
-	    vmap = vmap}
+	    valuable = valuable_fun andalso valuable_arg andalso (fun_arrow = Il.TOTAL)}
        end
    
-     | xmod' ctx (Il.MOD_SEAL(il_mod,_), vmap, preferred_name) = 
+     | xmod' state (Il.MOD_SEAL(il_mod,_), preferred_name) = 
        (* The phase-splitting breaks abstraction *)
-       xmod ctx (il_mod, vmap, preferred_name)
+       xmod state (il_mod, preferred_name)
     
-     | xmod' ctx (initial_mod as (Il.MOD_PROJECT _), vmap, preferred_name) =
+     | xmod' state (initial_mod as (Il.MOD_PROJECT _), preferred_name) =
        let
            val (il_module, lbls) = extractPathLabels initial_mod
 
@@ -402,10 +398,10 @@ struct
 		name_r   = name_mod_r,
 		il_signat = il_mod_signat,
 		valuable = mod_valuable, 
-		...} = xmod ctx (il_module, vmap, NONE)
+		...} = xmod state (il_module, NONE)
 
 	   val (var_proj, var_proj_c, var_proj_r, vmap) = 
-	       chooseName (preferred_name, vmap)
+	       chooseName (preferred_name, vmap_of state)
 
            val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
 	       Ilstatic.SelfifySig(Il.SIMPLE_PATH var_proj, il_mod_signat)
@@ -415,7 +411,7 @@ struct
 	   val name_proj_c = Var_c var_proj_c
 	   val name_proj_r = Var_e var_proj_r
 
-           val (knd_proj_c, type_proj_r) = xsig ctx (name_proj_c, vmap, il_proj_signat)
+           val (knd_proj_c, type_proj_r) = xsig state (name_proj_c, il_proj_signat)
 
            val cbnd_proj_cat = APP[cbnd_mod_cat,
 				   LIST [(var_proj_c, knd_proj_c,
@@ -432,20 +428,20 @@ struct
 	    knd_c    = knd_proj_c,
 	    type_r   = type_proj_r,
 	    il_signat = il_proj_signat,
-	    valuable = mod_valuable,
-	    vmap = vmap}
+	    valuable = mod_valuable}
        end
 
-     | xmod' ctx (Il.MOD_FUNCTOR(var_arg, il_arg_signat, ilmod_body), 
-		  vmap, preferred_name) =
+     | xmod' state (Il.MOD_FUNCTOR(var_arg, il_arg_signat, ilmod_body), 
+		    preferred_name) =
        let
 	   (* Split the argument parameter *)
-	   val (var_arg_c, var_arg_r, vmap') = splitVar (var_arg, vmap)
-	   val (knd_arg, con_arg) = xsig ctx (Var_c var_arg_c, vmap, il_arg_signat)
+	   val (var_arg_c, var_arg_r, vmap') = splitVar (var_arg, vmap_of state)
+	   val (knd_arg, con_arg) = xsig state (Var_c var_arg_c, il_arg_signat)
      
            (* Split the functor body *)
            val d = Il.DEC_MOD(var_arg, il_arg_signat)
-	   val ctx' = Ilcontext.add_context_dec (ctx, Ilstatic.SelfifyDec d)
+	   val state' = update_ILctx
+	       (state, Ilcontext.add_context_dec (ILctx_of state, Ilstatic.SelfifyDec d))
 	   val {cbnd_cat = cbnd_body_cat, 
 		ebnd_cat = ebnd_body_cat, 
 		name_c = name_body_c,
@@ -453,9 +449,8 @@ struct
 		knd_c = knd_body_c,
 		type_r = type_body_r,
 		il_signat = il_body_signat,
-		valuable = body_valuable,
-		vmap = _
-		} = xmod ctx' (ilmod_body, vmap, NONE)
+		valuable = body_valuable
+		} = xmod state' (ilmod_body, NONE)
 
 	   val (arrow, effect) = 
 	       if body_valuable then
@@ -463,8 +458,8 @@ struct
 	       else 
 		   (Il.PARTIAL, Partial)
 
-	   val (var_fun, var_fun_c, var_fun_r, vmap) = 
-	       chooseName (preferred_name, vmap)
+	   val (var_fun, var_fun_c, var_fun_r, _) = 
+	       chooseName (preferred_name, vmap_of state)
 
            val name_fun_c = Var_c var_fun_c
 	   val name_fun_r = Var_e var_fun_r
@@ -475,7 +470,7 @@ struct
            val il_fun_signat = 
 	       Il.SIGNAT_FUNCTOR(var_arg, il_arg_signat, il_body_signat, arrow)
 
-	   val (knd_fun_c, type_fun_r) = xsig ctx (name_fun_c, vmap, il_fun_signat)
+	   val (knd_fun_c, type_fun_r) = xsig state (name_fun_c, il_fun_signat)
 
            val cbnd_fun_cat = 
 	       LIST[(var_fun_c, knd_fun_c,
@@ -505,23 +500,23 @@ struct
 	    knd_c = knd_fun_c,
 	    type_r = type_fun_r,
 	    il_signat = il_fun_signat,
-	    valuable = true,
-	    vmap = vmap}
+	    valuable = true}
        end
    
-     | xmod' ctx (Il.MOD_STRUCTURE sbnds, vmap, preferred_name) =
+     | xmod' state (Il.MOD_STRUCTURE sbnds, preferred_name) =
        let
-	   val (var_str, var_str_c, var_str_r, vmap') = chooseName (preferred_name, vmap)
+	   val (var_str, var_str_c, var_str_r, _) = 
+	       chooseName (preferred_name, vmap_of state)
 
 	   val {cbnd_cat, crbnds, ebnd_cat, erlabels, erfields, ercons,
-		il_sdecs, valuable} = xsbnds ctx (vmap, sbnds)
+		il_sdecs, valuable} = xsbnds (ILctx_of state) (vmap_of state, sbnds)
 
            val name_str_c = Var_c var_str_c
 	   val name_str_r = Var_e var_str_r
 
            val il_str_signat = Il.SIGNAT_STRUCTURE(NONE, il_sdecs)
 
-           val (knd_str_c, type_str_r) = xsig ctx (name_str_c, vmap, il_str_signat)
+           val (knd_str_c, type_str_r) = xsig state (name_str_c, il_str_signat)
 
            val cbnd_str_cat = 
 	       APP[cbnd_cat,
@@ -541,25 +536,24 @@ struct
 	    knd_c = knd_str_c,
 	    type_r = type_str_r,
 	    il_signat = il_str_signat,
-	    valuable = valuable,
-	    vmap = vmap'}
+	    valuable = valuable}
        end
 
-    | xmod' ctx (il_let_mod as (Il.MOD_LET (var_loc, il_loc_mod, il_body_mod)),
-		 vmap, preferred_name) =
+    | xmod' state (il_let_mod as (Il.MOD_LET (var_loc, il_loc_mod, il_body_mod)),
+		   preferred_name) =
        let
-	   val (var_loc_c, var_loc_r, vmap') = splitVar (var_loc, vmap)
+	   val (var_loc_c, var_loc_r,_) = splitVar (var_loc, vmap_of state)
 
 	   val {cbnd_cat = cbnd_loc_cat,
 		ebnd_cat = ebnd_loc_cat,
 		il_signat = il_loc_signat,
 		valuable = loc_valuable,
-		vmap = loc_vmap,
-	        ...} = xmod ctx (il_loc_mod, vmap, 
-				 SOME (var_loc, var_loc_c, var_loc_r))
+	        ...} = xmod state (il_loc_mod, 
+				   SOME (var_loc, var_loc_c, var_loc_r))
 
            val d = Il.DEC_MOD(var_loc, il_loc_signat)
-	   val ctx' = Ilcontext.add_context_dec (ctx, Ilstatic.SelfifyDec d)
+	   val state' = update_ILctx
+	       (state, Ilcontext.add_context_dec (ILctx_of state, Ilstatic.SelfifyDec d))
 
 	   val {cbnd_cat = cbnd_body_cat,
 		ebnd_cat = ebnd_body_cat,
@@ -569,15 +563,13 @@ struct
 		type_r = type_let_r,
 		il_signat = il_body_signat,
 		valuable = body_valuable,
-		vmap = vmap_out, (* oddly, includes loc_vmap;
-				    this shouldn't cause a problem *)
-                ...} = xmod ctx' (il_body_mod, loc_vmap, preferred_name)
+                ...} = xmod state' (il_body_mod, preferred_name)
 
            val cbnd_let_cat = APP[cbnd_loc_cat, cbnd_body_cat]
            val ebnd_let_cat = APP[ebnd_loc_cat, ebnd_body_cat]
 
            (* SLOW! *)
-	   val il_let_signat = gms (ctx, il_let_mod)
+	   val il_let_signat = gms (ILctx_of state, il_let_mod)
 
        in
 	   {cbnd_cat = cbnd_let_cat,
@@ -587,8 +579,7 @@ struct
 	    knd_c = knd_let_c,
 	    type_r = type_let_r,
 	    il_signat = il_let_signat,
-	    valuable = loc_valuable andalso body_valuable,
-	    vmap = vmap_out}
+	    valuable = loc_valuable andalso body_valuable}
        end
 
    and xsbnds decs (vmap, []) =  
@@ -640,13 +631,13 @@ struct
       let
 	  val (var'_c, var'_r, vmap) = splitVar (var', vmap)
 	  val {cbnd_cat, ebnd_cat, il_signat, valuable = valuable', ...} = 
-	      xmod decs (il_mod, vmap, SOME (var', var'_c, var'_r))
+	      xmod (STATE{ILctx=decs,vmap=vmap}) (il_mod, SOME (var', var'_c, var'_r))
 	  val il_dec = Il.DEC_MOD(var', il_signat)
 	  val decs' = Ilcontext.add_context_dec(decs, Ilstatic.SelfifyDec il_dec)
 	  val {cbnd_cat = cbnd_cat', crbnds, ebnd_cat = ebnd_cat', erlabels, 
 	       erfields, ercons, il_sdecs, valuable} = xsbnds decs' (vmap, rest)
 	  
-	  val (knd, con) = xsig decs (Var_c var'_c, vmap, il_signat)
+	  val (knd, con) = xsig (STATE{ILctx=decs,vmap=vmap}) (Var_c var'_c, il_signat)
       in
 	  {cbnd_cat = APP[cbnd_cat, cbnd_cat'],
 	   crbnds = (lab, Var_c var'_c) :: crbnds,
@@ -865,7 +856,8 @@ struct
 
      | xcon decs vmap (il_con as (Il.CON_MODULE_PROJECT (modv, lbl))) = 
        let
-	   val {cbnd_cat,name_c,il_signat,...} = xmod decs (modv, vmap, NONE)
+	   val {cbnd_cat,name_c,il_signat,...} = 
+	       xmod (STATE{ILctx=decs,vmap=vmap}) (modv, NONE)
 
 	   val var = Name.fresh_var ()
            val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
@@ -1188,8 +1180,17 @@ struct
 	       
 	   fun xarms (n, []) = []
              | xarms (n, NONE :: rest) = xarms (n+1, rest)
-	     | xarms (n, SOME e :: rest) = 
-	       (Word32.fromInt n, toFunction decs vmap e) :: (xarms (n+1, rest))
+	     | xarms (n, SOME ilexp :: rest) = 
+	       (if (n < noncarriers) then
+		    let
+			val (exp, con, valuable) = xexp decs vmap ilexp
+			val effect = if valuable then Total else Partial
+		    in
+			(Word32.fromInt n, Function(effect, Leaf, [], [], [], exp, con))
+		    end
+		else
+		    (Word32.fromInt n, toFunction decs vmap ilexp)) 
+		:: (xarms (n+1, rest))
 
 	   val (arms as ((_,Function(_,_,_,_,_,_,con))::_)) = xarms (0, il_arms)
 
@@ -1229,8 +1230,7 @@ struct
 	   val {cbnd_cat, ebnd_cat, 
 		name_c, name_r, 
 		knd_c, type_r,
-		il_signat, valuable,
-		vmap} = xmod decs (module, vmap, NONE)
+		il_signat, valuable} = xmod (STATE{ILctx=decs,vmap=vmap}) (module, NONE)
 
 	   val var = Name.fresh_var ()
            val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
@@ -1318,8 +1318,9 @@ struct
 		  | (Il.BND_MOD(var, il_module)) => 
 			let
 			    val (var_c, var_r, vmap) = splitVar (var, vmap)
-			    val {ebnd_cat, cbnd_cat, il_signat, valuable, vmap,...} = 
-				xmod decs (il_module, vmap, SOME (var, var_c, var_r))
+			    val {ebnd_cat, cbnd_cat, il_signat, valuable,...} = 
+				xmod (STATE{ILctx=decs, vmap=vmap})
+				      (il_module, SOME (var, var_c, var_r))
  			in
 			   (APP [LIST (map Con_b (flattenCatlist cbnd_cat)),
 				 ebnd_cat],
@@ -1345,24 +1346,25 @@ struct
 	   (decs', APP[bnds, bnds''], valuable' andalso valuable)
        end
 
-   and xsig decs (con0, vmap, Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
+   and xsig state (con0,Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
        let
-	   val (var_c, var_r, _) = splitVar (var, vmap)
-	   val (knd, con) = xsig decs (Var_c var, vmap, sig_dom)
+	   val (var_c, var_r, _) = splitVar (var, vmap_of state)
+	   val (knd, con) = xsig state (Var_c var, sig_dom)
            val d = Il.DEC_MOD(var, sig_dom)
+	   val state' = update_ILctx
+	       (state, Ilcontext.add_context_dec (ILctx_of state, Ilstatic.SelfifyDec d))
            val (knd', con') = 
-	       xsig (Ilcontext.add_context_dec (decs, Ilstatic.SelfifyDec d))
-	            (App_c(con0, [Var_c var]), vmap, sig_rng)
+	       xsig state' (App_c(con0, [Var_c var]), sig_rng)
        in
 	   (Arrow_k (Open, [(var_c, knd)], knd'),
 	    AllArrow_c (Open, xeffect arrow, [(var_c, knd)],
 			[con], w0, con'))
        end
 
-     | xsig decs (con0, vmap, Il.SIGNAT_STRUCTURE (_,sdecs)) =
+     | xsig state (con0, Il.SIGNAT_STRUCTURE (_,sdecs)) =
        let
 	   val {crdecs, erlabs, ercons} = 
-	       xsdecs decs (con0, fn _ => NONE, vmap, sdecs)
+	       xsdecs (ILctx_of state) (con0, fn _ => NONE, vmap_of state, sdecs)
        in
 	   (Record_k (Util.list2sequence crdecs),
 	    Prim_c(Record_c erlabs, ercons))
@@ -1385,7 +1387,7 @@ struct
 		    Il.SDEC(lbl, d as Il.DEC_MOD(var,signat)) :: rest) =
        let
 	   val (var_c, var_r, vmap') = splitVar (var, vmap)
-	   val (knd, con) = xsig decs (Proj_c(con0, lbl), vmap, signat)
+	   val (knd, con) = xsig (STATE{ILctx=decs,vmap=vmap}) (Proj_c(con0, lbl), signat)
            val decs' = Ilcontext.add_context_dec(decs, Ilstatic.SelfifyDec d)
 	   val {crdecs, erlabs, ercons} =
 	       xsdecs decs' (con0, extendmap (subst, var_c, Proj_c(con0, lbl)),
@@ -1445,8 +1447,8 @@ struct
 	   val (cuvar, cuvar_c, cuvar_r, vmap') = splitFreshVar vmap
 
 	   val {name_c, name_r, knd_c, type_r, cbnd_cat, ebnd_cat, ...} =
-		xmod decs (Il.MOD_STRUCTURE il_sbnds, vmap',
-			   SOME (cuvar, cuvar_c, cuvar_r))
+		xmod (STATE{ILctx=decs,vmap=vmap'}) 
+		(Il.MOD_STRUCTURE il_sbnds, SOME (cuvar, cuvar_c, cuvar_r))
 	   val cu_c = Let_c (Sequential,
 			     map Con_cb (flattenCatlist cbnd_cat),
 			     name_c)
