@@ -2,7 +2,7 @@
 
 
 (* =========================================================================
- * AlphaCallConventionBasis.sml
+ * AlphaCallConvBasis.sml
  * ========================================================================= *)
 
 structure AlphaCallConventionBasis =

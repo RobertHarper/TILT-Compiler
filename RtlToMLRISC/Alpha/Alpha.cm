@@ -12,7 +12,7 @@ is
 ../../smlnj-lib.cm
 ../RtlToMLRISC.cm
 
-AlphaCallConventionBasis.sml
+AlphaCallConvBasis.sml
 AlphaEmitRtlMLRISC.sml
 AlphaFloatAllocation.sml
 AlphaFloatConvention.sml

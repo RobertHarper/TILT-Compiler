@@ -2,7 +2,7 @@
 
 
 (* =========================================================================
- * SparcCallConventionBasis.sml
+ * SparcCallConvBasis.sml
  * ========================================================================= *)
 
 structure SparcCallConventionBasis =

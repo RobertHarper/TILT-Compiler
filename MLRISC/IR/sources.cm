@@ -50,5 +50,5 @@ is
 	mlrisc-liveness.sml
 	mlrisc-reshape-branches.sig
 	mlrisc-reshape-branches.sml
-	static-branch-prediction.sig
-	static-branch-prediction.sml
+	static-br-prediction.sig
+	static-br-prediction.sml

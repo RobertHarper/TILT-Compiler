@@ -105,8 +105,8 @@ IR/mlrisc-ir.sml
 IR/mlrisc-liveness.sml
 IR/mlrisc-reshape-branches.sig
 IR/mlrisc-reshape-branches.sml
-IR/static-branch-prediction.sig
-IR/static-branch-prediction.sml
+IR/static-br-prediction.sig
+IR/static-br-prediction.sml
 
 alpha32/backpatch/alpha32Jumps.sml
 alpha32/emit/alpha32Asm.sml
