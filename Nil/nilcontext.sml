@@ -82,6 +82,8 @@ struct
   fun print_context ({kindmap,conmap,equation}:context) = 
     (print "\n Constructor variables and kinds are :\n";
      V.appi print_kind kindmap;
+     print "\n Equations are :\n";
+     V.appi print_con equation;
      print "\n Expression variables and constructors are :\n";
      V.appi print_con conmap)
 
@@ -200,9 +202,9 @@ struct
 		      CON c => (CON(App_c(c,clist)), subst)
 		    | KIND k => app_kind(k,c1,clist,subst)
 		end
-          | _ => (print "traverse given non-path = \n";
-		  PpNil.pp_con c; print "\n";
-		  error "traverse given non-path")
+          | _ => ((* print "traverse given non-path = \n";
+		     PpNil.pp_con c; print "\n"; *)
+		  raise Opaque)
      in (case traverse con of
 	   (CON c, _) => SOME c
 	 | (KIND (Singleton_k(_,_,c)),subst) => SOME (Subst.substConInCon subst c)

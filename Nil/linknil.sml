@@ -15,6 +15,8 @@ sig
 
     val do_opt : bool ref
     val do_one_optimize : bool ref
+    val do_two_optimize : bool ref
+    val do_specialize : bool ref
 end
 
 structure Linknil (* : LINKNIL *) =
@@ -27,12 +29,16 @@ structure Linknil (* : LINKNIL *) =
     val do_cleanup = ref false
     val do_opt = ref false
     val do_one_optimize = ref true
+    val do_specialize = ref true
+    val do_two_optimize = ref true
     val show_size = ref false
     val show_hil = ref false
     val show_phasesplit = ref false
     val show_renamed = ref false
     val show_opt = ref false
     val show_one_optimize = ref false
+    val show_two_optimize = ref false
+    val show_specialize = ref false
     val show_cc = ref false
     val show_before_rtl = ref false
 
@@ -130,6 +136,10 @@ structure Linknil (* : LINKNIL *) =
 				    structure NilUtil = NilUtil
 				    structure Ppnil = PpNil)
 
+    structure Specialize = Specialize(structure Nil = Nil
+				    structure NilUtil = NilUtil
+				    structure Ppnil = PpNil)
+
     structure Linearize = Linearize(structure Nil = Nil
 				    structure NilUtil = NilUtil
 				    structure Ppnil = PpNil)
@@ -156,11 +166,13 @@ structure Linknil (* : LINKNIL *) =
 				    structure Subst = NilSubst)
 
 	
+(*
     structure NilEval = NilEvaluate(structure Nil = Nil
 				    structure NilUtil = NilUtil
 				    structure Ppnil = PpNil
 				    structure PrimUtil = NilPrimUtil
 				    structure Subst = NilSubst)
+
 
     structure DoOpts = DoOpts (structure Nil = Nil
 			       structure NilPrimUtil = NilPrimUtil 
@@ -171,8 +183,10 @@ structure Linknil (* : LINKNIL *) =
 			       structure NilStatic = NilStatic
 			       structure NilSubst = NilSubst
 			       structure NilUtil = NilUtil
-				   structure Linearize = Linearize
-)
+                          structure Linearize = Linearize)
+
+*)
+
 val phasesplit = Tonil.phasesplit
 (*
     fun phasesplit (ctxt : LinkIl.Il.context, 
@@ -410,6 +424,7 @@ val _ = (print "Nil final context is:\n";
 			    in  LinkIl.Ppil.pp_sbnds sbnds
 			    end
 		    else ()
+
 	    val nilmod = (Stats.timer("Phase-splitting",Tonil.phasesplit)) (ctxt,sbnd_entries)
 	    val _ = showmod (!show_phasesplit orelse debug,!show_size) "Phase-split" (filename, nilmod)
 
@@ -428,8 +443,27 @@ val _ = (print "Nil final context is:\n";
 			     then (Stats.timer("OneOptimize",Optimize.optimize)) nilmod
 			 else nilmod
 	    val _ = if (!do_one_optimize)
-			then showmod (!show_one_optimize orelse debug,!show_size) "OneOptimize" (filename, nilmod)
+			then showmod (!show_one_optimize orelse debug,!show_size) 
+			        "OneOptimize" (filename, nilmod)
 		    else ()
+
+	    val nilmod = if (!do_specialize)
+			     then (Stats.timer("Specialize",Specialize.optimize)) nilmod
+			 else nilmod
+	    val _ = if (!do_specialize)
+			then showmod (!show_specialize orelse debug,!show_size) 
+			        "Specialize" (filename, nilmod)
+		    else ()
+
+
+	    val nilmod = if (!do_two_optimize)
+			     then (Stats.timer("TwoOptimize",Optimize.optimize)) nilmod
+			 else nilmod
+	    val _ = if (!do_two_optimize)
+			then showmod (!show_two_optimize orelse debug,!show_size) 
+			        "TwoOptimize" (filename, nilmod)
+		    else ()
+
 
  	    val nilmod' = 
 	      if (!typecheck_before_opt) then
@@ -441,10 +475,15 @@ val _ = (print "Nil final context is:\n";
 		  showmod (debug,!show_size) "Pre-opt typecheck" (filename, nilmod')
 	      else ()
 
-	    val nilmod = if (!do_opt) then (Stats.timer("Nil Optimization", DoOpts.do_opts debug)) nilmod else nilmod
+(*
+	    val nilmod = if (!do_opt) 
+			    then (Stats.timer("Nil Optimization", 
+					      DoOpts.do_opts debug)) nilmod else nilmod
 	    val _ = if (!do_opt)
-			then showmod (!show_opt orelse debug,!show_size) "Optimization" (filename,nilmod)
+			then showmod (!show_opt orelse debug,!show_size) 
+			    "Optimization" (filename,nilmod)
 		    else ()
+*)
 
  	    val nilmod' = 
 	      if (!typecheck_after_opt andalso !do_opt) then

@@ -23,11 +23,13 @@ struct
 
 
     val use_kind_at_bind = ref false
+    val do_close_path = ref true
+    val do_single_venv = ref true
 
     val select_carries_types = Stats.bool "select_carries_types"
     val select_has_con = select_carries_types
     val closure_print_free = Stats.bool "closure_print_free"
-val do_close_path = ref true
+
 
     open Util NilUtil Name Nil
     structure Nil = Nil
@@ -42,27 +44,26 @@ val do_close_path = ref true
     fun chat s = print s
 
     (* -------------- types and values manipulating free variables ------------- *)
-    (* lists are kept in reverse order; set allow fast membership  *)
-    type frees = {freecvars_set : VarSet.set,
-		  freeevars_set : VarSet.set,
-		  freeepaths_map : (var * con) PathMap.map,
-		  freecvars : (var * kind) list,
-		  freeevars : (var * con) list}
-    val empty_frees = {freecvars_set = VarSet.empty,
-		       freeevars_set = VarSet.empty,
-		       freeepaths_map = PathMap.empty,
-		       freeevars = [],
-		       freecvars = []}
+    (* lists are kept in reverse order; map allow fast lookup/membership  *)
+    type frees = {freecpaths : (var * label list) list,
+		  freecpaths_map : (var * (var -> con) * kind) PathMap.map,
+		  freeepaths_map : (var * (int * var -> exp) * con) PathMap.map}
 
-    fun listset_union(oldlist,newlist,oldset) = 
-	let fun folder((v,x),acc as (changed,curlist,curset)) =
-	    if (VarSet.member(curset,v)) 
-		then acc
-	    else (false, (v,x)::curlist, VarSet.add(curset,v))
+    val empty_frees = {freecpaths = [],
+		       freecpaths_map = PathMap.empty,
+		       freeepaths_map = PathMap.empty}
+
+
+    fun path_listmap_union(oldlist,oldset,newlist,newset) = 
+	let fun folder(p,acc as (changed,curlist,curset)) =
+	    case (PathMap.find(curset,p)) of
+		SOME _ => acc
+	      | NONE => (false, p::curlist, PathMap.insert(curset,p,valOf(PathMap.find(newset,p))))
 	in  foldr folder (true,oldlist,oldset) newlist (* use foldr since lists are reversed *)
 	end
 
-    fun path_listmap_union(oldmap,newmap) = 
+
+    fun path_map_union(oldmap,newmap) = 
 	let fun folder(path,item,acc as (changed,curmap)) =
 	    case (PathMap.find(curmap,path)) of
 		  SOME _ => acc
@@ -72,24 +73,28 @@ val do_close_path = ref true
 
     (* returns a bool indicating whether the result is same as the first fv set;
       adds to the first free, in order, all the items only found in the second *)
-    fun join_free'({freeevars=e1,freecvars=c1,freeepaths_map=ep1,
-		    freeevars_set=em1,freecvars_set=cm1} : frees,
-		   {freeevars=e2,freecvars=c2,freeepaths_map=ep2,...} : frees) =
-	let val (samee,e3,em3) = listset_union(e1,e2,em1)
-	    val (sameep,ep3) = path_listmap_union(ep1,ep2)
-	    val (samec,c3,cm3) = listset_union(c1,c2,cm1)
-	in  (samee andalso samec andalso sameep, 
-		{freeevars = e3, freecvars = c3, freeepaths_map = ep3,
-		 freeevars_set = em3, freecvars_set = cm3})
+    fun join_free'({freeepaths_map=ep1, freecpaths=c1, freecpaths_map=cp1} : frees,
+		   {freeepaths_map=ep2, freecpaths=c2, freecpaths_map=cp2} : frees) = 
+	let val (sameep,ep3) = path_map_union(ep1,ep2)
+	    val (samec,c3,cp3) = path_listmap_union(c1,cp1,c2,cp2)
+	in  (samec andalso sameep, 
+		{freeepaths_map = ep3,
+		 freecpaths = c3, 
+		 freecpaths_map = cp3})
 	end
 
     fun join_free args : frees = #2(join_free' args)
 
 
-
-    fun show_free({freeevars, freecvars,...} : frees) =
-	(print "freeevars are: "; app (fn (v,_) => (Ppnil.pp_var v; print " ")) freeevars; print "\n";
-	 print "freecvars are: "; app (fn (v,_) => (Ppnil.pp_var v; print " ")) freecvars; print "\n")
+    fun show_path (v,labs) = (Ppnil.pp_var v;
+			      app (fn l => (print "."; Ppnil.pp_label l)) labs)
+	
+    fun show_free({freeepaths_map, freecpaths, freecpaths_map, ...} : frees) =
+	(print "freeepaths are: "; 
+	 PathMap.appi (fn (p,_) => (show_path p; print "; ")) freeepaths_map; print "\n";
+	 print "freecpaths are: "; app (fn p => (show_path p; print "; ")) freecpaths; print "\n";
+	 print "freecpaths_map are: "; 
+	 PathMap.appi (fn (p,_) => (show_path p; print "; ")) freecpaths_map; print "\n")
 
 
     (* labels are passed backwards *)
@@ -121,12 +126,13 @@ val do_close_path = ref true
 				   boundcvars : conentry VarMap.map,
 				   boundfids : FidSet.set}
 	type funentry = {static : {fid : fid, 
-			       code_var : fid,
-			       unpack_var : fid,
-			       unpack_type_var : fid},
-		     escape : bool,
-		     callee : (fid * state) list,
-		     frees : frees}
+				   code_var : fid,
+				   unpack_var : fid,
+				   cenv_var : var,
+				   venv_var : var},
+			 escape : bool,
+			 callee : (fid * state) list,
+			 frees : frees}
 	fun add_gboundevar (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},v) = 
 	    let val boundevars' = VarMap.insert(boundevars,v,GLOBALe)
 	    in  STATE{is_top = is_top,
@@ -228,8 +234,10 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	fun is_boundfid(STATE{boundfids,...}, f) = VarSet.member(boundfids,f)
 
 
-	fun cvar_isfree (STATE{boundcvars,boundevars,...},{freecvars_set,...}:frees,cvar) = 
-	    if (VarSet.member(freecvars_set,cvar))
+	fun cvar_isfree (STATE{boundcvars,boundevars,...},{freecpaths_map,...}:frees,cvar) = 
+	    if (case (PathMap.find(freecpaths_map,(cvar,[]))) of
+		      NONE => false
+		    | _ => true)
 		then NONE
 	    else (case (VarMap.find(boundcvars,cvar)) of
 			  SOME (GLOBALc | (LOCALc _)) => NONE
@@ -260,8 +268,10 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 			| NONE => error ("evar_isfree: variable " ^
 					 (var2string evar) ^ " not bound"))
 
-	fun evar_isfree (STATE{boundcvars,boundevars,...},{freeevars_set,...}:frees,evar) = 
-	    if (VarSet.member(freeevars_set,evar))
+	fun evar_isfree (STATE{boundcvars,boundevars,...},{freeepaths_map,...}:frees,evar) = 
+	    if (case PathMap.find(freeepaths_map,(evar,[])) of
+		    NONE => false
+		  | _ => true)
 		then NONE
 	    else 
 		(case (VarMap.find(boundevars,evar)) of
@@ -271,54 +281,64 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 				    (var2string evar) ^ " not bound"))
 			    
 
-	fun free_cvar_add ({freecvars,freecvars_set,freeevars,freeevars_set,
-			       freeepaths_map}:frees,cvar,k) = 
-	    let (* val freecvars = (cvar,k)::freecvars *)
+	fun free_cvar_add (f as {freecpaths,freecpaths_map,freeepaths_map}:frees,cvar,k) = 
+	    let 
 		val _ = if (!debug)
-			    then (print "free_cvar_add-ing "; Ppnil.pp_var cvar; print "\n")
+			    then (print "free_cvar_add-ing "; Ppnil.pp_var cvar; print " to\n";
+				  show_free f; print "\n\n")
 			else ()
-		fun bubble (cvar,k) [] = [(cvar,k)]
-		  | bubble (cvar,k) ((first as (_,k'))::rest) = 
+		fun bubble cvar [] = [(cvar,[])]
+		  | bubble cvar (first::rest) = 
 		    let val v = Name.fresh_named_var "dummy"
+			val SOME (_,_,k') = PathMap.find(freecpaths_map,first)
 			val c = AllArrow_c(Open,Total,[(v,k')],[],0w0,Var_c v)
 		    in  if (NilUtil.convar_occurs_free(cvar,c))
-			    then (cvar,k)::first::rest
-			else first::(bubble (cvar,k) rest)
+			    then (cvar,[])::first::rest
+			else first::(bubble cvar rest)
 		    end
-		val freecvars = rev(bubble (cvar,k) (rev freecvars))
-		val freecvars_set = 
-		    if (VarSet.member(freecvars_set,cvar))
-			then error "free_cvar_add given variable already in free set"
-		    else VarSet.add(freecvars_set,cvar)
-	    in  {freeevars = freeevars, freeevars_set = freeevars_set,
-	         freeepaths_map = freeepaths_map,
-		 freecvars = freecvars, freecvars_set = freecvars_set}
+		val freecpaths = rev(bubble cvar (rev freecpaths))
+		val freecpaths_map = 
+		    case PathMap.find(freecpaths_map,(cvar,[])) of
+			SOME _ => error "free_cvar_add given variable already in free set"
+		      | _ => 
+			    let val l = Name.internal_label(Name.var2string cvar)
+				fun cthunk cenv_var = Proj_c(Var_c cenv_var,l)
+			    in PathMap.insert(freecpaths_map,(cvar,[]),
+					      (cvar,cthunk,k))
+			    end
+		val res = {freeepaths_map = freeepaths_map,
+			   freecpaths = freecpaths, 
+			   freecpaths_map = freecpaths_map}
+		val _ = if (!debug)
+			    then (print "free_cvar_add done "; Ppnil.pp_var cvar; print " to\n";
+				  show_free f; print "\n\n\n")
+			else ()
+	    in  res
 	    end
 
-	fun free_evar_add ({freecvars,freecvars_set,freeevars,freeevars_set,
-			    freeepaths_map}:frees,evar,c) = 
-	    let val freeevars = (evar,c)::freeevars
-		val freeevars_set = 
-		    if (VarSet.member(freeevars_set,evar))
-			then error "free_evar_add given variable already in free set"
-		    else VarSet.add(freeevars_set,evar)
-	    in  {freeevars = freeevars, freeevars_set = freeevars_set,
-	         freeepaths_map = freeepaths_map,
-		 freecvars = freecvars, freecvars_set = freecvars_set}
-	    end
-
-	fun free_epath_add ({freecvars,freecvars_set,freeevars,freeevars_set,
-			     freeepaths_map}:frees,epath,v,c) = 
-	    let val freeepaths_map = 
+	fun free_epath_add ({freecpaths,freecpaths_map,
+			     freeepaths_map}:frees,epath,c) = 
+	    let val str = foldl (fn (l,acc) => acc ^ "_" ^ (Name.label2string l))
+		(Name.var2name (#1 epath)) (#2 epath)
+		val v = Name.fresh_named_var str
+		val freeepaths_map = 
 		(case (PathMap.find(freeepaths_map,epath)) of
 		     SOME _ => error "free_epath_add given variable already in free set"
-		   | NONE => PathMap.insert(freeepaths_map,epath,(v,c)))
-	    in  {freeevars = freeevars, freeevars_set = freeevars_set,
-	         freeepaths_map = freeepaths_map,
-		 freecvars = freecvars, freecvars_set = freecvars_set}
+		   | NONE => let val l = Name.internal_label(Name.var2string v)
+				 fun ethunk(num_efree,venv_var) = 
+				     if (!do_single_venv andalso num_efree = 1)
+					 then Var_e venv_var
+				     else
+					 Prim_e(NilPrimOp(select l), [], [Var_e venv_var])
+			     in  PathMap.insert(freeepaths_map,epath,(v,ethunk,c))
+			     end)
+	    in  {freeepaths_map = freeepaths_map,
+		 freecpaths = freecpaths, freecpaths_map = freecpaths_map}
 	    end
 
 
+	fun free_evar_add (frees,evar,c) = 
+	    free_epath_add(frees,(evar,[]),c)
 
 	val empty_table = VarMap.empty : (funentry ref) VarMap.map
 	val fids = ref empty_table
@@ -328,8 +348,8 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 						  ^ "_code"),
 		       unpack_var = fresh_named_var((var2string new_fid)
 						    ^ "_unpack"),
-		       unpack_type_var = fresh_named_var((var2string new_fid)
-							 ^ "_unpacktype")},
+		       cenv_var = fresh_named_var("free_cons"),
+		       venv_var = fresh_named_var("free_exps")},
 	     escape = escape,
 	     callee = [],
 	     frees = empty_frees}
@@ -373,8 +393,8 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	fun get_curfid(STATE{curfid,...}) = curfid
 
     fun remove_free(s as (STATE{boundevars,boundcvars,...}),
-		    {freeevars,freecvars,
-		freeepaths_map,freeevars_set,freecvars_set}) : frees = 
+		    {freecpaths_map,freecpaths,
+		     freeepaths_map}) : frees = 
 	let 
 (*
 	    val _ = (print "\n\nremove_free...\n";
@@ -385,26 +405,20 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		     print "\n")
 *)
 
-	    fun efilter (v,_) = not (is_boundevar(s,v))
 	    fun cfilter (v,_) = not (is_boundcvar(s,v))
-	    val freeevars' = List.filter efilter freeevars
-	    val freecvars' = List.filter cfilter freecvars
-	    fun efilter v = not (is_boundevar(s,v))
+	    val freecpaths' = List.filter cfilter freecpaths
 	    fun epathfilter ((v,_),_) = not (is_boundevar(s,v))
-	    fun cfilter v = not (is_boundcvar(s,v))
-	    val freeevars_set' = VarSet.filter efilter freeevars_set
+	    fun cpathfilter ((v,_),_) = not (is_boundcvar(s,v))
 	    val freeepaths_map' = PathMap.filteri epathfilter freeepaths_map
-	    val freecvars_set' = VarSet.filter cfilter freecvars_set
+	    val freecpaths_map' = PathMap.filteri cpathfilter freecpaths_map
 (*
 	    val _ = (print "\nfreeevars' has ";
 		     VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print ", ")) freeevars';
 		     print "\n")
 *)
-	in  {freeevars = freeevars',
-	     freecvars = freecvars',
-	     freeevars_set = freeevars_set',
+	in  {freecpaths = freecpaths',
 	     freeepaths_map = freeepaths_map',
-	     freecvars_set = freecvars_set'}
+	     freecpaths_map = freecpaths_map'}
 	end
 
     in  type state = state
@@ -686,8 +700,9 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		       in  (case (epath_isfree(state,frees,(v,labels))) of (* labels are backwards *)
 				NONE => frees
 			      | SOME (c,r) =>
-				    let val nv = Name.fresh_named_var(Name.label2string (hd labels))
-					val frees = free_epath_add(frees,(v,labels),nv,c)
+				    let val fid = (get_curfid state)
+					val venv_var = #venv_var(get_static fid)
+					val frees = free_epath_add(frees,(v,labels),c)
 					val f = (case !r of
 						     SOME f => f
 						   | NONE => let val f = c_find_fv (state,empty_frees) c
@@ -715,8 +730,10 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 				      val which_con = TilWord32.toInt (TilWord32.uminus(sumtype,tagcount))
 				      val field_con = List.nth(clist, which_con)
 				      val irreducible = not(istype_reducible(state,field_con))
-				      val _ = (print "project_sum - irreducible = ";
-					       print (Bool.toString irreducible); print "\n")
+				      val _ = if irreducible
+					  then (Stats.counter
+					       ("toclosure.irreducible-project_sum")(); ())
+					      else ()
 				  in  irreducible
 				  end
 			    | _ => true)
@@ -852,10 +869,11 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
          and istype c = 
 	     (case c of
 		  Prim_c _ => true
-		| Mu_c(_,vcset,v) => 
+		| Mu_c(_,vcset) => 
 		      let val vclist = set2list vcset
-			  val SOME c = Listops.assoc_eq(Name.eq_var,v,vclist)
-		      in  istype c
+		      in  (case vclist of
+			       [(_,c)] => istype c
+			     | _ => false)
 		      end
 		| AllArrow_c _ => true
 		| Var_c _ => false
@@ -890,11 +908,11 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	and c_find_fv' (state : state, frees : frees) con : frees =
 	    (case con of
 		 Prim_c (pc,clist) => foldl (fn (c,f)=> (c_find_fv (state,f) c)) frees clist
-	       | Mu_c (_,vcset,v) =>
+	       | Mu_c (_,vcset) =>
 		     let val vclist = set2list vcset
 			 (* we need to alpha-vary since reductions may lead to duplication
 			    of bound variables despite A-normal linearization *)
-			 val (vclist,v) = alpha_mu (fn v => is_boundcvar(state,v)) (vclist,v)
+			 val (vclist) = alpha_mu (fn v => is_boundcvar(state,v)) (vclist)
 			 val state' = add_boundcvars(state,map (fn (v,_) => (v,NONE,SOME(Word_k Runtime))) vclist)
 		     in  foldl (fn ((v,c),f) => c_find_fv (state',f) c) frees (set2list vcset)
 		     end
@@ -1047,12 +1065,12 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	    val _ = if !closure_print_free 
 			then VarSet.app 
 			    (fn fid => 
-			     let val {freeevars,freecvars,...} = get_frees fid
+			     let val {freeepaths_map,freecpaths,...} = get_frees fid
 			     in  (print ("fid = ");
 				  Ppnil.pp_var fid; print "  (#free-cvars , #free-evars) =   ";
-				  print (Int.toString (length freecvars));
+				  print (Int.toString (length freecpaths));
 				  print ", ";
-				  print (Int.toString (length freeevars));
+				  print (Int.toString (PathMap.numItems freeepaths_map));
 				  print "\n")
 			     end) (get_fids())
 		    else ()
@@ -1082,7 +1100,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 
    fun cproj cvar i = Proj_c(Var_c cvar, generate_tuple_label(i+1))
    fun eproj (evar,rectype) i = Prim_e(NilPrimOp(select (generate_tuple_label(i+1))),
-				       if (!select_has_con) then rectype else [],
+				       if (!select_has_con) then [rectype] else [],
 				       [Var_e evar])
 
 
@@ -1110,154 +1128,117 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	   val _ = if (!debug)
 		       then (print "\nfun_rewrite v = "; Ppnil.pp_var v; print "\n")
 		   else ()
-	   val {code_var, unpack_var, ...} = get_static v
-	   val {freeevars=vc_free,freecvars=vk_free,freeepaths_map=pc_free,...} = get_frees v
+	   val {code_var, unpack_var, cenv_var, venv_var, ...} = get_static v
+	   val {freecpaths,freecpaths_map,freeepaths_map=pc_free,...} = get_frees v
 	   (* was kept in reverse order *)
-	   val vk_free = rev vk_free
-	   val vklist = map (fn (v,k) => (v,k_rewrite k)) vklist
-	   val vclist = map (fn (v,c) => (v,c_rewrite c)) vclist
+	   val vkl_free = map (fn p => let val SOME(v,_,k) = PathMap.find(freecpaths_map,p)
+					  val l = Name.internal_label(Name.var2string v)
+				      in  (v,k,l)
+				      end)
+	                     (rev freecpaths)
+	   val vklist = map (fn (v,k) => (v,k_rewrite state k)) vklist
+	   val vclist = map (fn (v,c) => (v,c_rewrite state c)) vclist
 	   val escape = get_escape v
-	   val vk_free = map (fn (v,k) => (v,k_rewrite k)) vk_free
-	   val vc_free = map (fn (v,c) => (v,c_rewrite c)) vc_free
+	   val vkl_free = map (fn (v,k,l) => (v,k_rewrite state k,l)) vkl_free
 	   val pc_free = let val temp = PathMap.listItemsi pc_free
-			     fun mapper((v,labs),(v',c)) = ((v,labs,v'), c_rewrite c)
+			     fun mapper((v,labs),(v',ethunk,c)) = 
+				 let val l = Name.internal_label(Name.var2string v')
+				 in ((v,labs), v', l, c_rewrite state c)
+				 end
 			 in  map mapper temp
 			 end
+	   val is_recur = Listops.orfold 
+	                    (fn v => Listops.orfold (fn ((v',_),_,_,_) => Name.eq_var(v,v')) pc_free) vars
 
-	   val doopt = ((length vk_free) < 2) andalso ((length vc_free + length pc_free) < 2)
-	   val vk_free = (case (doopt,vk_free) of
-			     (true,[]) => [(Name.fresh_named_var "nofreecvar", Record_k[])]
-			   | _ => vk_free)
-	   val (vc_free,pc_free) = 
-			(case (doopt,vc_free,pc_free) of
-			     (true,[],[]) => ([(Name.fresh_named_var "nofreeevar", Prim_c(Record_c[],[]))],[])
-			   | _ => (vc_free,pc_free))
 	   val _ = if (!debug)
 		       then (print "fun_rewrite v = "; Ppnil.pp_var v;
-			     print "\nvk_free are "; 
-			     app (fn (v,_) => (Ppnil.pp_var v; print ", ")) vk_free;
+			     print "\nvkl_free are "; 
+			     app (fn (v,_,_) => (Ppnil.pp_var v; print ", ")) vkl_free;
 			     print "\nvc_free are "; 
-			     app (fn (v,_) => (Ppnil.pp_var v; print ", ")) vc_free;
+			     app (fn ((v,labs),_,_,_) => (Ppnil.pp_var v; app Ppnil.pp_label labs;
+							print ", ")) pc_free;
 			     print "\n")
 		   else ()
-	   val num_vk_free = length vk_free
-	   val num_vc_free = length vc_free
+	   val num_vkl_free = length vkl_free
 	   val num_pc_free = length pc_free
-	   val cenv_var = fresh_named_var "free_cons"
-	   val venv_var = fresh_named_var "free_exp"
-	   val cenv_kind = kind_tuple(map #2 vk_free)
-	   val vc_free_types = map #2 vc_free
-	   val pc_free_types = map #2 pc_free
-	   val venv_type = con_tuple (vc_free_types @ pc_free_types)
-	   val vklist_code = vklist @ vk_free
-	   val vclist_code = vclist @ vc_free @ (map (fn ((_,_,v'),c) => (v',c)) pc_free)
-(*
-	   fun wrap_path body = 
-		let fun split v [] match nomatch = (match,nomatch)
-		      | split v ((cur as ((v',_,_),_)) :: rest) match nomatch = 
-				if (eq_var(v,v')) then split v rest (cur::match) nomatch
-				else split v rest match (cur::nomatch)
-		    fun combine v fields = 
-			let fun geq(((_,[l1],_),_),((_,[l2],_),_)) = 
-					(Name.compare_label(l1,l2) <> LESS)
-		  	    val fields = ListMergeSort.sort geq fields
-(* only doing short paths *)
-			    val labs = map (fn ((_,[l],_),_) => l) fields
-			    val cons = map #2 fields
-			    val exps = map (fn ((_,_,v),_) => Var_e v) fields
-			    val e = Prim_e(NilPrimOp(record labs),cons,exps)
-			    val c = Prim_c(Record_c labs,cons)
-			in  Exp_b(v,c,e)
-			end
-		    fun loop [] = []
-		      | loop (((v,[l],v'),c)::rest) = 
-			let val (current,rest) = split v rest [] []
-			    val current = ((v,[l],v'),c)::current
-			in  (combine v current)::(loop rest)
-			end
-		in  case (loop pc_free) of
-			[] => body
-			| bnds => Let_e(Sequential,bnds,body)
-		end
-*)
+	   val cenv_kind = let fun mapper(v,k,l) = ((l,Name.derived_var v),k)
+			       val lvk_list = map mapper vkl_free
+			   in  Record_k(Util.list2sequence lvk_list)
+			   end
+	   val venv_type = let val types = map #4 pc_free
+			       val labs = map #3 pc_free
+			   in  if (!do_single_venv andalso length labs = 1)
+				   then hd types
+			       else Prim_c(Record_c labs, types)
+			   end
+	   val vklist_code = vklist @ (map (fn (v,k,l) => (v,k)) vkl_free)
+	   val vclist_code = vclist @ (map (fn (path,v',_,c) => (v',c)) pc_free)
 	   val cenv_kind = 
 	       let 
 		   fun loop _ acc [] = Record_k (list2set (rev acc))
-		     | loop subst acc (((v',_),((l,v),k))::rest) = 
+		     | loop subst acc (((v',_,_),((l,v),k))::rest) = 
 		       let val k' = Subst.substConInKind (Subst.fromList subst) k
 			   val acc' = ((l,v),k')::acc
 			   val subst' = (v',Var_c v)::subst
 		       in  loop subst' acc' rest
 		       end
 	       in  (case cenv_kind of
-			Record_k lvk_set => loop [] [] (Listops.zip vk_free (set2list lvk_set))
+			Record_k lvk_set => loop [] [] (Listops.zip vkl_free (set2list lvk_set))
 		      | _ => error "cenb_kind not a record_k")
 	       end
 	   val subst_list = 
 	     let 
 		 fun loop n acc [] = rev acc
-		   | loop n acc ((v',_)::rest) =
-		     let val new = (v',Proj_c(Var_c cenv_var, generate_tuple_label n))
+		   | loop n acc ((v',_,l)::rest) =
+		     let val new = (v',Proj_c(Var_c cenv_var, l))
 		     in  loop (n+1) (new::acc) rest 
 		     end
-	     in  loop 1 [] vk_free
+	     in  loop 1 [] vkl_free
 	     end
 	   val subst = Subst.fromList subst_list
 	   val vklist_unpack_almost = map (fn (v,k) => (v,Subst.substConInKind subst k)) vklist
 	   val vklist_unpack = vklist_unpack_almost @ [(cenv_var,cenv_kind)]
 	   val vclist_unpack_almost = vclist @ [(venv_var,venv_type)]
 	   val vclist_unpack = map (fn (v,c) => (v,Subst.substConInCon subst c)) vclist_unpack_almost
-	   val codebody_tipe = c_rewrite tipe
-	   val unpackbody_tipe = Subst.substConInCon subst codebody_tipe
+	   val codebody_tipe = c_rewrite state tipe
 	   val closure_tipe = AllArrow_c(Closure,effect,
 					 vklist,map #2 vclist,
 					 TilWord32.fromInt(length vflist),codebody_tipe)
-(*	  val _ = (print "Function: "; show_state state; print "\n") *)
-	  val code_fun = Function(effect,recur,
-				   vklist_code,vclist_code,vflist,
-				   (* wrap_path *)
-				   (e_rewrite (copy_state(state,v)) body), codebody_tipe)
-	   (*val vc_free_types = map (Subst.substConInCon subst) vc_free_types  (*Maybe??*)*)
-	   val unpack_body = 
-	       App_e(Code,Var_e code_var,
-		     (map (Var_c o #1) vklist) @ 
-		     (Listops.map0count (cproj cenv_var) num_vk_free),
-		     (map (Var_e o #1) vclist) @ 
-		     (Listops.map0count (eproj (venv_var,vc_free_types)) 
-			(num_vc_free + num_pc_free)),
-		     map Var_e vflist)
-	   val unpack_fun = Function(effect,recur,
-				     vklist_unpack,vclist_unpack,vflist,
-				     unpack_body, unpackbody_tipe)
-	   val is_recur = Listops.orfold (fn v => Listops.member_eq(Name.eq_var, v, map #1 vc_free)) vars
-	   fun pc_mapper((v,l,_),c) = let 
-(*					  val _ = show_state state *) 
-					  val e = path2exp (v,l)
-(*					  val _ = (print "original e is: "; Ppnil.pp_exp e; print "\n") *)
-					  val e = e_rewrite state e
-(*					  val _ = (print "new e is: "; Ppnil.pp_exp e; print "\n") *)
-				      in  (e,c)
-				      end
-	   val closure = {code = if doopt then code_var else unpack_var,
-			  cenv = (case (doopt,vk_free) of
-				      (true,[]) => error "cannot occur"
-				    | (true,[(v,Record_k [])]) => Crecord_c []
-				    | (true,[(v,_)]) => Var_c v
-				    | _ => con_tuple_inject(map (Var_c o #1) vk_free)),
-			  venv = (case (doopt,vc_free,pc_free) of
-				      (true,[],[]) => error "cannot occur"
-				    | (true,[(v,Prim_c(Record_c[],[]))],[]) => 
-					  Prim_e(NilPrimOp (record[]), [], [])
-				    | (true,[(v,_)],[]) => Var_e v
-				    | (true,[],[pc]) => #1(pc_mapper pc)
-				    | _ => exp_tuple((map (fn (v,c) => (Var_e v, c)) vc_free)
-						@ (map pc_mapper pc_free))),
+	   val codebody_tipe = Subst.substConInCon subst codebody_tipe
+
+	   val code_body = (e_rewrite (copy_state(state,v)) body)
+
+	   fun pc_mapper((v,l,_),c) = 
+	       let 
+		   val e = path2exp (v,l)
+		   val e = e_rewrite state e
+	       in  (e,c)
+	       end
+	   val cenv = let val lc_list = map (fn (v,_,l) => 
+					     let val c = c_rewrite state (Var_c v)
+					     in  (l,c)
+					     end) vkl_free
+		      in  Crecord_c lc_list
+		      end
+	   val venv = let val labels = map #3 pc_free
+			  val clist = map #4 pc_free
+			  val elist = map (fn (p,_,_,_) => e_rewrite state (path2exp p)) pc_free
+		      in  if (!do_single_venv andalso length labels = 1)
+			      then hd elist
+			  else Prim_e(NilPrimOp(record labels),clist,elist)
+		      end
+
+	   val code_fun = Function(effect,recur,
+				   vklist_unpack,vclist_unpack,vflist,
+				   code_body, codebody_tipe)
+
+	   val closure = {code = code_var,
+			  cenv = cenv,
+			  venv = venv,
 			  tipe = closure_tipe}
+
        in if escape then (is_recur,
-			  if doopt
-			      then [(code_var,code_fun)]
-			  else [(code_var,code_fun),
-				(unpack_var,unpack_fun)],
+			  [(code_var,code_fun)],
 			  [(v,closure)])
 	  else (false,[(code_var,code_fun)],[])
        end
@@ -1282,18 +1263,18 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	       end
        in (case bnd of
 		(Con_b(v,k,c)) => if (!use_kind_at_bind)
-				      then [Con_b(v,k_rewrite k, c_rewrite c)]
+				      then [Con_b(v,k_rewrite state k, c_rewrite state c)]
 				  else let val kk = NilUtil.kill_singleton k
-					   val k = (k_rewrite kk)
+					   val k = (k_rewrite state kk)
 					       handle e => 
 						   (print "k_rewrite failed on k = !\n";
 						    Ppnil.pp_kind k; print "\n";
 						    print "k_rewrite failed on singletonless = !\n";
 						    Ppnil.pp_kind kk; print "\n";
 						    raise e)
-				       in  [Con_b(v,k, c_rewrite c)]
+				       in  [Con_b(v,k, c_rewrite state c)]
 				       end
-	      | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite c, e_rewrite state e)]
+	      | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite state c, e_rewrite state e)]
 	      | (Fixclosure_b _) => error "there can't be closures while closure-converting"
 	      | (Fixcode_b _) => error "there can't be codes while closure-converting"
 	      | (Fixopen_b var_fun_set) => funthing_helper (fun_rewrite state) var_fun_set)
@@ -1304,15 +1285,26 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
    and e_rewrite state arg_exp : exp =
        let (* we do not copy_state for arms since they are not first-class *)
 	   fun armfun_rewrite (Function(ef,re,vklist,vclist,vflist,e,c)) =
-	   Function(ef,re,map (fn (v,k) => (v, k_rewrite k)) vklist,
-		    map (fn (v,c) => (v, c_rewrite c)) vclist,
-		    vflist, e_rewrite state e, c_rewrite c)
+	   Function(ef,re,map (fn (v,k) => (v, k_rewrite state k)) vklist,
+		    map (fn (v,c) => (v, c_rewrite state c)) vclist,
+		    vflist, e_rewrite state e, c_rewrite state c)
 	   (* there are no function definitions within e_rewrite so we use same state *)
 	   val e_rewrite = e_rewrite state
+	   val c_rewrite = c_rewrite state
+	   fun path_case (v,labels) = 
+	       let val fid = current_fid state
+(*		   val _ = (print "path_case: "; Ppnil.pp_var fid; print "\n") *)
+		   val {freeepaths_map,...} = get_frees fid
+		   val {venv_var,...} = get_static fid
+	       in  (case PathMap.find(freeepaths_map,(v,labels)) of
+			NONE => arg_exp (* was not free *)
+		      | SOME (_,ethunk,_) => ethunk(PathMap.numItems freeepaths_map,venv_var))
+	       end
+
        in
        (case arg_exp of
-	    Var_e v => arg_exp (* closures retain their name *)
-           | Prim_e(NilPrimOp(select l), _, _) =>
+	    Var_e v => path_case(v,[])
+	  | Prim_e(NilPrimOp(select l), _, _) =>
 	       let (* labels are returned backwards *)
 		   val (base,labels) = extract_path arg_exp
 		   val do_path = (!do_close_path) andalso (case base of Var_e _ => true | _ => false)
@@ -1320,11 +1312,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		       then project(e_rewrite base, labels)
 		   else
 		       let val (Var_e v) = base
-			   val fid = current_fid state
-			   val {freeepaths_map,...} = get_frees fid
-		       in  (case PathMap.find(freeepaths_map,(v,labels)) of
-				  NONE => arg_exp (* was not free *)
-				| SOME (v,_) => Var_e v)
+		       in  path_case(v,labels)
 		       end
 	       end
 	  | Prim_e(p,clist,elist) => Prim_e(p,map c_rewrite clist, map e_rewrite elist)
@@ -1364,23 +1352,14 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		let val clist' = map c_rewrite  clist
 		    val elist' = map e_rewrite  elist
 		    val eflist' = map e_rewrite eflist
-		    fun docall (cv,{freeevars=vc_free, freecvars=vk_free, freeepaths_map=pc_free, ...} : frees) = 
+		    fun docall (cv,{freecpaths=vk_free, freeepaths_map=pc_free, ...} : frees) = 
 			let val vk_free = rev vk_free
 			    val pc_free = PathMap.listItemsi pc_free
-			    val doopt = ((length vk_free) < 2) andalso ((length vc_free + length pc_free) < 2)
-			    val clist'' = (case (doopt,vk_free) of
-					       (true,[]) => [Crecord_c[]]
-					     | _ => map (fn (v,_) => Var_c v) vk_free)
 			    val {freeepaths_map,...} = get_frees(current_fid state)
-			    fun pc_mapper(path,_) = 
-				 (case PathMap.find(freeepaths_map,path) of
-				  NONE => path2exp path
-				| SOME (v,_) => Var_e v)
-			    val elist'' = (case (doopt,vc_free,pc_free) of
-					       (true,[],[]) => [Prim_e(NilPrimOp (record[]), [], [])]
-					     | _ => (map (fn (v,_) => Var_e v) vc_free) @
-						(map pc_mapper pc_free))
-			in App_e(Code, Var_e cv, clist' @ clist'', elist' @ elist'', eflist')
+			    val {cenv_var,venv_var,...} = get_static (current_fid state)
+			    val clist'' = clist' @ [Var_c cenv_var] 
+			    val elist'' = elist' @ [Var_e venv_var] 
+			in App_e(Code, Var_e cv, clist'', elist'', eflist')
 			end
 		    fun default() = App_e(Closure,e_rewrite e, clist', elist', eflist')
 		in  (case e of
@@ -1395,68 +1374,87 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	  | Handle_e (e,f) => Handle_e(e_rewrite e, armfun_rewrite f))
        end
 
-   and cbnd_rewrite (Con_cb(v,k,c)) : conbnd list = 
+   and cbnd_rewrite state (Con_cb(v,k,c)) : conbnd list = 
            if (!use_kind_at_bind)
-	       then [Con_cb(v,k_rewrite k, c_rewrite c)]
-	   else [Con_cb(v,k_rewrite(NilUtil.kill_singleton k),
-			c_rewrite c)]
-     | cbnd_rewrite (Open_cb(v,vklist,c,k)) = 
+	       then [Con_cb(v,k_rewrite state k, c_rewrite state c)]
+	   else [Con_cb(v,k_rewrite state (NilUtil.kill_singleton k),
+			c_rewrite state c)]
+     | cbnd_rewrite state (Open_cb(v,vklist,c,k)) = 
          let val _ = if (!debug)
 			 then (print "cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
 		     else ()
-	     val (code_var,vk_free) = 
+	     val (code_var,vkl_free) = 
 		 if (is_fid v)
 		     then let val {code_var, ...} = get_static v
 			      (* freeevars/freeepaths must be empty *)
-			      val {freecvars=vk_free,...} = get_frees v 
-			  in  (code_var, vk_free)
+			      val {freecpaths,freecpaths_map,...} = get_frees v 
+			      val vkl_free = 
+				  map (fn p => let val SOME(v,_,k) = PathMap.find(freecpaths_map,p)
+						   val l = Name.internal_label(Name.var2string v)
+					       in  (v,k,l)
+					       end)
+				  freecpaths
+			  in  (code_var, vkl_free)
 			  end
 		 else  (Name.fresh_named_var "unclosed_open_cb",[])
-	     val vk_free = rev vk_free
+	     val vkl_free = rev vkl_free
 	     val cfv_var = fresh_named_var "free_cons"
 
-	     val k = k_rewrite k
+	     val k = k_rewrite state k
 	     val subst_list = 
 	       let 
 		 fun loop n acc [] = rev acc
-		   | loop n acc ((v',_)::rest) =
-		     let val new = (v',Proj_c(Var_c cfv_var, generate_tuple_label n))
+		   | loop n acc ((v',_,l)::rest) =
+		     let val new = (v',Proj_c(Var_c cfv_var, l))
 		     in  loop (n+1) (new::acc) rest 
 		     end
-	       in  loop 1 [] vk_free
+	       in  loop 1 [] vkl_free
 	       end
 	     val subst = Subst.fromList subst_list
 	     val k = Subst.substConInKind subst k
 
 
-	     fun get_cbnd (i,(v,k)) = Con_cb(v,k, Proj_c(Var_c cfv_var,
-							 generate_tuple_label(i+1)))
-	     val vklist = map (fn (v,k) => (v,k_rewrite k)) vklist
-	     val vk_free = map (fn (v,k) => (v,k_rewrite k)) vk_free
-	     val vk_free_kind = Record_k(Listops.mapcount
-					 (fn (n,(v,k)) => ((generate_tuple_label(n+1), v), k))
-					 vk_free)
-	     val cbnds = Listops.mapcount get_cbnd vk_free
-	     val vklist' = vklist @ [(cfv_var, vk_free_kind)]
+	     fun get_cbnd (v,k,l) = Con_cb(v,k, Proj_c(Var_c cfv_var,l))
+	     val vklist = map (fn (v,k) => (v,k_rewrite state k)) vklist
+	     val vkl_free = map (fn (v,k,l) => (v,k_rewrite state k,l)) vkl_free
+	     val vkl_free_kind = Record_k(map
+					  (fn (v,k,l) => ((l, v), k))
+					  vkl_free)
+	     val cbnds = map get_cbnd vkl_free
+	     val vklist' = vklist @ [(cfv_var, vkl_free_kind)]
 	     val code_cb = Code_cb(code_var, vklist',
-				   letc(cbnds,(c_rewrite c)), k)
-	     val con_env = con_tuple_inject(map (fn (v,k) => Var_c v) vk_free)
+				   letc(cbnds,(c_rewrite state c)), k)
+	     val con_env = Crecord_c(map (fn (v,_,l) => (l,Var_c v)) vkl_free)
 	     val k' = Subst.substConInKind 
 			(Subst.fromList [(cfv_var,con_env)]) k
 	     val closure_cb = Con_cb(v,Arrow_k(Closure,vklist,k'),
 				   Closure_c (Var_c code_var, con_env))
 	 in  [code_cb, closure_cb]
 	 end			
-     | cbnd_rewrite (Code_cb _) = error "found Code_cb during closure-conversion"
+     | cbnd_rewrite state (Code_cb _) = error "found Code_cb during closure-conversion"
 
-   and c_rewrite arg_con : con = 
-       (case arg_con of
-	    Prim_c (primcon,clist) => Prim_c(primcon, map c_rewrite clist)
-	  | Mu_c (ir,vc_set,v) => Mu_c(ir,Util.list2set 
-					(map (fn (v,c) => (v,c_rewrite c)) (Util.set2list vc_set)), v)
-	  | Var_c v => arg_con
+   and c_rewrite state arg_con : con = 
+       let val c_rewrite = c_rewrite state
+	   fun path_case (v,labels) = 
+	   let val fid = current_fid state
+(*	       val _ = (print "Var_c: path_case: "; Ppnil.pp_var fid; print ":  ") *)
+	       val {freecpaths_map,...} = get_frees fid
+	       val {cenv_var,...} = get_static fid
+	       val res = (case PathMap.find(freecpaths_map,(v,labels)) of
+			      NONE => arg_con
+			    | SOME (_,cthunk,_) => cthunk cenv_var)
+(*	       val _ = (show_path (v,labels); print " --> "; 
+			Ppnil.pp_con res; print "\n") *)
+	   in  res
+	   end
+       in
+	(case arg_con of
+            Prim_c (primcon,clist) => Prim_c(primcon, map c_rewrite clist)
+	  | Mu_c (ir,vc_set) => Mu_c(ir,Util.list2set 
+					(map (fn (v,c) => (v,c_rewrite c)) (Util.set2list vc_set)))
+	  | Var_c v => path_case(v,[])
 	  | AllArrow_c (ar as (Open | ExternCode | Code),effect,vklist,clist,numfloats,c) => 
-		let val vklist' = map (fn(v,k) => (v,k_rewrite k)) vklist
+		let val vklist' = map (fn(v,k) => (v,k_rewrite state k)) vklist
 		    val ar' = (case ar of
 				   Open => Closure
 				 | Code => Code
@@ -1469,7 +1467,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	  | AllArrow_c (Closure,_,_,_,_,_) => error ("AllArrow_c(Closure,...) " ^ 
 						     "during closure-conversion")
 	  | Let_c (letsort,cbnds,c) => 
-		let val cbnds' = List.concat(map cbnd_rewrite cbnds)
+		let val cbnds' = List.concat(map (cbnd_rewrite state) cbnds)
 		    val c = c_rewrite c
 		in  (case (c,cbnds') of
 			 (_,[]) => c
@@ -1480,30 +1478,30 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		end
 	  | Typecase_c {arg,arms,default,kind} => 
 		Typecase_c{arg = c_rewrite arg,
-			   arms = map (fn (pc,vklist,c) => (pc,map (fn (v,k) => (v,k_rewrite k)) vklist,
+			   arms = map (fn (pc,vklist,c) => (pc,map (fn (v,k) => (v,k_rewrite state k)) vklist,
 							    c_rewrite c)) arms,
 			   default = c_rewrite default,
-			   kind = k_rewrite kind}
+			   kind = k_rewrite state kind}
 	  | Crecord_c lclist => Crecord_c(map (fn (l,c) => (l,c_rewrite c)) lclist)
 	  | Proj_c (c,l) => Proj_c(c_rewrite c, l)
 	  | Closure_c (c1,c2) => error "should not encounter Closure_c during closure-conversion"
 	  | App_c (c,clist) => App_c(c_rewrite c, map c_rewrite clist)
 	  | Annotate_c (annot,c) => Annotate_c(annot,c_rewrite c))
+       end
 
 
 
-
-  and k_rewrite arg_kind : kind =
+  and k_rewrite state arg_kind : kind =
        (case arg_kind of 
 	    ((Type_k _) | (Word_k _)) => arg_kind
-	  | (Singleton_k (p,k,c)) =>  Singleton_k (p,k_rewrite k, c_rewrite c)
+	  | (Singleton_k (p,k,c)) =>  Singleton_k (p,k_rewrite state k, c_rewrite state c)
 	  | (Record_k lvkseq) => let val lvklist = Util.sequence2list lvkseq
-				     val lvklist = map (fn ((l,v),k) => ((l,v),k_rewrite k)) lvklist
+				     val lvklist = map (fn ((l,v),k) => ((l,v),k_rewrite state k)) lvklist
 				 in  Record_k(Util.list2sequence lvklist)
 				 end
 	  | Arrow_k (Open,vklist,k) => 
-		let val vklist' = map (fn (v,k) => (v,k_rewrite k)) vklist
-		    val k' = Arrow_k(Closure, vklist', k_rewrite k)
+		let val vklist' = map (fn (v,k) => (v,k_rewrite state k)) vklist
+		    val k' = Arrow_k(Closure, vklist', k_rewrite state k)
 		in  k'
 		end
 	  | Arrow_k _ => error ("cannot encounter arrow_k(Code/Closure,...) " ^ 
@@ -1529,7 +1527,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	   val state = foldl import_folder state imports
 	   val _ = chat "Closure conversion: Scanned imports\n"
 
-	   val (state,{freeevars,freecvars,...}) = bnds_find_fv (state,empty_frees) bnds
+	   val (state,{freeepaths_map,freecpaths,...}) = bnds_find_fv (state,empty_frees) bnds
 	   val _ = chat "Closure conversion: Scanned bnds\n"
 
 	   fun export_mapper state (ExportValue(l,e,c)) = (e_find_fv (state, empty_frees) e; 
@@ -1544,8 +1542,8 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	   val _ = if (!debug)
 		       then (print "Done with e_find_fv\n";
 			     print "free is empty: ";
-			     print (Bool.toString (length freeevars = 0
-						   andalso length freecvars = 0));
+			     print (Bool.toString (PathMap.numItems freeepaths_map = 0
+						   andalso length freecpaths = 0));
 			     print "\n")
 		   else ()
 	   val _ = close_funs(get_fids())
@@ -1557,19 +1555,20 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 
 
 	   (* Rewrite module *)
+	   val initial_state = new_state top_fid
+
 	   fun import_mapper (ImportValue(l,v,c)) =
-	       let val c = c_rewrite c
+	       let val c = c_rewrite initial_state c
 	       in  ImportValue(l,v,c)
 	       end
 	     | import_mapper (ImportType(l,v,k)) =
-	       let val k = k_rewrite k
+	       let val k = k_rewrite initial_state k
 	       in  ImportType(l,v,k)
 	       end
 	   val imports' = map import_mapper imports
 	   val _ = chat "Closure conversion: Rewritten imports\n"
 
 
-	   val initial_state = new_state top_fid
 	   fun folder (bnd,acc) = 
 	       let val bnds = bnd_rewrite initial_state bnd
 	       in  acc @ bnds
@@ -1577,8 +1576,10 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	   val bnds' = (Stats.subtimer("toclosure_rewrite_bnds",foldl folder [])) bnds
 	   val _ = chat "Closure conversion: Rewritten bindings\n"
 
-	   fun export_rewrite (ExportValue(l,e,c)) = ExportValue(l,e_rewrite initial_state e,c_rewrite c)
-	     | export_rewrite (ExportType(l,c,k)) = ExportType(l,c_rewrite c,k_rewrite k)
+	   fun export_rewrite (ExportValue(l,e,c)) = ExportValue(l,e_rewrite initial_state e,
+								 c_rewrite initial_state c)
+	     | export_rewrite (ExportType(l,c,k)) = ExportType(l,c_rewrite initial_state c,
+							       k_rewrite initial_state k)
 	   val exports' = map export_rewrite exports
 	   val _ = chat "Closure conversion: Rewritten exports\n"
 

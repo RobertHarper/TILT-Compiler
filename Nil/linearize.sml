@@ -26,12 +26,24 @@ struct
 	val num_lexp = ref 0
 	val num_lcon = ref 0
 	val num_lkind = ref 0
+	val num_lcon_sum = ref 0
+	val num_lcon_inj = ref 0
+	val num_lcon_case = ref 0
+	val sum_depth_case = ref 0
+	val sum_depth_inj = ref 0
+	val sum_depth_sum = ref 0
 	fun reset_state() : state = (seen := VarSet.empty; 
 				     num_renamed := 0;
 				     num_var := 0;
 				     num_lexp := 0;
 				     num_lcon := 0;
 				     num_lkind := 0;
+				     num_lcon_sum := 0;
+				     num_lcon_inj := 0;
+				     num_lcon_case := 0;
+				     sum_depth_inj := 0;
+				     sum_depth_case := 0;
+				     sum_depth_sum := 0;
 				     VarMap.empty)
 
 	fun state_stat str (m : state) : unit = 
@@ -167,7 +179,15 @@ struct
 		in  (lete(bnds, e))
 		end
 	  | Prim_e (ap,clist,elist) =>
-		let val clist' = map (lcon state) clist
+		let val _ = (case ap of
+				 NilPrimOp (inject _) => sum_depth_inj := !sum_depth_inj + 1
+			       | NilPrimOp (inject_record _) => sum_depth_inj := !sum_depth_inj + 1
+			       | _ => ())
+		    val clist' = map (lcon state) clist
+		    val _ = (case ap of
+				 NilPrimOp (inject _) => sum_depth_inj := !sum_depth_inj - 1
+			       | NilPrimOp (inject_record _) => sum_depth_inj := !sum_depth_inj - 1
+			       | _ => ())
 		    val elist' = map (lexp state) elist
 		in  Prim_e(ap,clist',elist')
 		end
@@ -190,7 +210,9 @@ struct
 			in  Switch_e(pack sw')
 			end
 		    fun nada arg = arg
-		    fun sumhelp (w,cons) = let val cons = map (lcon state) cons
+		    fun sumhelp (w,cons) = let val _ = sum_depth_case := !sum_depth_case + 1
+					       val cons = map (lcon state) cons
+					       val _ = sum_depth_case := !sum_depth_case - 1
 					   in  (w,cons)
 					   end
 		in  (case switch of
@@ -232,21 +254,32 @@ struct
 
    and lcon state arg_con : con = 
        (num_lcon := !num_lcon + 1;
+	if (!sum_depth_inj > 0)
+	    then num_lcon_inj := !num_lcon_inj + 1
+	else ();
+	if (!sum_depth_sum > 0)
+	    then num_lcon_sum := !num_lcon_sum + 1
+	else ();
+	if (!sum_depth_case > 0)
+	    then num_lcon_case := !num_lcon_case + 1
+	else ();
 	case arg_con of
 	    Var_c v => (num_var := !num_var + 1; Var_c(find_var(state,v)))
 	  | Prim_c (pc,cons) => 
-		let val cons = map (lcon state) cons
+		let val _ = case pc of Sum_c _ => sum_depth_sum := !sum_depth_sum + 1 | _ => ()
+		    val cons = map (lcon state) cons
+		    val _ = case pc of Sum_c _ => sum_depth_sum := !sum_depth_sum - 1 | _ => ()
 		in  Prim_c(pc,cons)
 		end
-	  | Mu_c (flag,vc_seq,v) => (* cannot just use lvclist here: not sequential bindings *)
+	  | Mu_c (flag,vc_seq) => (* cannot just use lvclist here: 
+				   not sequential bindings *)
 		let val vclist = sequence2list vc_seq
 		    val state = foldl (fn ((v,_),s) => #1(add_var(s,v))) state vclist
 		    val vclist' = map (fn (v,c) => (derived_var v, c)) vclist
 		    val (vclist',state) = lvclist state vclist'
 		    val vclist = Listops.map2 (fn ((v,_),(_,c)) => (find_var(state,v),c)) 
 			(vclist,vclist')
-		    val v = find_var(state,v)
-		in  Mu_c(flag,list2sequence vclist, v)
+		in  Mu_c(flag,list2sequence vclist)
 		end
 	  | AllArrow_c (openness,effect,vklist,clist,w32,c) =>
 		let 
@@ -383,6 +416,12 @@ struct
 		    print (Int.toString (!num_lexp)); print "\n";
 		    print "Number of lcon calls: ";
 		    print (Int.toString (!num_lcon)); print "\n";
+		    print "Number of lcon calls with sums: ";
+		    print (Int.toString (!num_lcon_sum)); print "\n";
+		    print "Number of lcon calls with case: ";
+		    print (Int.toString (!num_lcon_case)); print "\n";
+		    print "Number of lcon calls with inj: ";
+		    print (Int.toString (!num_lcon_inj)); print "\n";
 		    print "Number of lkind calls: ";
 		    print (Int.toString (!num_lkind)); print "\n")
 

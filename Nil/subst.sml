@@ -276,15 +276,14 @@ functor NilSubstFn(structure Nil : NIL
       (case con 
 	 of (Prim_c (pcon,args)) => 
 	   (Prim_c (pcon,map (substConInCon' conmap) args))
-	  | (Mu_c (flag,defs,var)) =>
+	  | (Mu_c (flag,defs)) =>
 	   let
 	     val (vars,cons) = unzip (set2list defs)
 	     val (vars,conmap) = con_rebind_list (vars,conmap)
 	     val cons = List.map (substConInCon' conmap) cons
-	     val var = con_var_replace (conmap,var)
 	     val defs = Util.list2set (zip vars cons)
 	   in
-	     (Mu_c (flag,defs,var))
+	     (Mu_c (flag,defs))
 	   end
 	  | (AllArrow_c (openness,effect,tformals,formals,flength,return)) =>
 	   let

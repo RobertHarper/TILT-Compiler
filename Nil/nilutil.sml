@@ -99,7 +99,7 @@ struct
       | strip_var' _ = NONE
     fun strip_exntag' (Prim_c (Exntag_c,[con])) = SOME con
       | strip_exntag' _ = NONE
-    fun strip_recursive' (Mu_c (flag,set,var)) = SOME (flag,set,var)
+    fun strip_recursive' (Mu_c (flag,set)) = SOME (flag,set)
       | strip_recursive' _ = NONE
     fun strip_boxfloat' (Prim_c (BoxFloat_c floatsize,[])) = SOME floatsize
       | strip_boxfloat' _ = NONE
@@ -320,14 +320,13 @@ struct
 	  (case con of
 	       (Prim_c (pcon,args)) => (Prim_c (pcon,map self args))
 	       
-	     | (Mu_c (flag,defs,var)) =>
+	     | (Mu_c (flag,defs)) =>
 		   let
 		       val (con_vars,cons) = ListPair.unzip (Util.set2list defs)
 		       val state' = add_convars (state,map (fn v => (v, Word_k Runtime)) con_vars)
 		       val cons' = List.map (f_con state') cons
 		       val defs' = Util.list2set (ListPair.zip (con_vars,cons'))
-		   in
-		       (Mu_c (flag,defs',var))
+		   in  Mu_c (flag,defs')
 		   end
 	       
 	     | (AllArrow_c confun) => AllArrow_c (f_arrow state confun)
@@ -791,7 +790,11 @@ struct
 
   fun muExpand (flag,vcseq,v) = 
       let val vc_list = sequence2list vcseq
-	  val vc_list' = map (fn (v,_) => (v,Mu_c(flag,vcseq,v))) vc_list
+	  val mu_con = Mu_c(flag,vcseq)
+	  fun mapper (which,(v,_)) = (v,if (length vc_list = 1)
+					    then mu_con
+					else Proj_c(mu_con,generate_tuple_label(which+1)))
+	  val vc_list' = Listops.mapcount mapper vc_list
 	  val conmap = Subst.fromList vc_list'
 	  val c = (case (Listops.assoc_eq(eq_var,v,vc_list)) of
 		     SOME c => c | NONE => error "bad mu type")
@@ -891,7 +894,7 @@ struct
 	   
 	  (*Assume - sets must maintain ordering!  We only judge*)
 	  (* mus with the same ordering to be equiv *) 
-	  | (Mu_c (flag1,defs1,var1),Mu_c (flag2,defs2,var2)) =>
+	  | (Mu_c (flag1,defs1),Mu_c (flag2,defs2)) =>
 	   let
 	     val def_list1 = Util.set2list defs1
 	     val def_list2 = Util.set2list defs2
@@ -900,7 +903,6 @@ struct
 	     val context' = alpha_equate_pairs (context,(var_list1,var_list2))
 	   in
 	     flag1 = flag2 andalso
-	     alpha_pair_eq (context',(var1,var2)) andalso
 	     alpha_equiv_con_list context' (con_list1,con_list2)
 	   end
 
@@ -1042,14 +1044,14 @@ struct
       (case con 
 	 of (Prim_c (pcon,args)) => 
 	   (Prim_c (pcon,map (alpha_normalize_con' context) args))
-	  | (Mu_c (flag, defs,var)) =>
+	  | (Mu_c (flag, defs)) =>
 	   let
 	     val (con_vars,cons) = ListPair.unzip (Util.set2list defs)
 	     val (context',con_vars') = alpha_bind_list (context,con_vars)
 	     val cons' = List.map (alpha_normalize_con' context') cons
 	     val defs' = Util.list2set (ListPair.zip (con_vars',cons'))
 	   in
-	     (Mu_c (flag, defs',substitute (context',var)))
+	     (Mu_c (flag, defs'))
 	   end
 	 
 	  | (AllArrow_c (openness,effect,tformals,formals,flength,return)) =>
@@ -1450,7 +1452,7 @@ struct
       AllArrow_c(openness, effect, vklist, map #2 vclist, 
 		 Word32.fromInt (List.length vlist), con)
 
-  fun alpha_mu is_bound (vclist, var) = 
+  fun alpha_mu is_bound (vclist) = 
       let fun folder((v,_),subst) = if (is_bound v)
 				       then Subst.add subst (v,Var_c(Name.derived_var v))
 				    else subst
@@ -1460,8 +1462,8 @@ struct
 				(Var_c v) => v
 			      | _ => error "substcon returned non Var_c")
       in  if (Subst.is_empty subst)
-	      then (vclist, var)
-	  else (map (fn (v,c) => (lookup v, substcon c)) vclist, lookup var)
+	      then (vclist)
+	  else (map (fn (v,c) => (lookup v, substcon c)) vclist)
       end
 
 end

@@ -74,7 +74,7 @@ struct
   and con = 
       Prim_c of primcon * con list                (* Classify term-level values 
                                                        of primitive types *)
-    | Mu_c of bool * (var,con) sequence * var            (* Constructors that classify values of
+    | Mu_c of bool * (var,con) sequence           (* Constructors that classify values of
 						       a recursive type *)
     | AllArrow_c of openness * effect *           (* open functions, code functions, and closures *)
                     (var * kind) list * con list * w32 * con

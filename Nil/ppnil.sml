@@ -181,11 +181,9 @@ functor Ppnil(structure ArgNil : NIL
 					       String ";",
 					       pp_list' pp_con conlist,
 					       String ")"]
-	 | Mu_c (flag,vcset,var) => HOVbox[if flag then String "MU_C(" else String "MU_C_NR(",
+	 | Mu_c (flag,vcset) => HOVbox[if flag then String "MU_C(" else String "MU_C_NR(",
 					   (pp_list' (fn (v,c) => HOVbox[pp_var v, String "=", pp_con c])
 					    (sequence2list vcset)),
-					   String ",",
-					   pp_var var,
 					   String ")"]
 (*	 | Listcase_c {arg,arms,default} =>HOVbox[String "LISTCASE_C ",
 						  pp_con arg,

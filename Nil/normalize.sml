@@ -203,22 +203,19 @@ val show_context = ref false
        of (Record_k entries) => List.length (sequence2list entries)
 	| _ => error "Expected record_kind")
 
-  fun beta_conrecord proj = 
-    let
-      fun beta_conrecord' (Proj_c (con,label)) = 
+  fun beta_conrecord' (proj as Proj_c (con,label)) = 
 	(case strip_crecord con
 	   of SOME entries =>
 	     (case (List.find (fn ((l,_)) => eq_label (l,label))
 		    entries )
-		of SOME (l,c) => c
+		of SOME (l,c) => (true,c)
 		 | NONE => (error "Field not in record" handle e => raise e))
-	    | NONE => proj)
-	| beta_conrecord' _ = 
+	    | NONE => (false,proj))
+    | beta_conrecord' proj = 
 	   (PpNil.pp_con proj;
 	    (error "beta_conrecord called on non-projection" handle e => raise e))
-    in
-      map_annotate beta_conrecord' proj
-    end
+
+  fun beta_conrecord proj = #2(beta_conrecord' proj)
 
   fun make_shape kind = 
     (case kind 
@@ -253,7 +250,7 @@ val show_context = ref false
 		  | _ => (Word_k Runtime))
 	 in kind
 	 end
-	| (Mu_c (recur,defs,var)) => (singletonize (Word_k Runtime,constructor))
+	| (Mu_c (recur,defs)) => (singletonize (Word_k Runtime,constructor))
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>Word_k Runtime
 	| (v as (Var_c var)) => 
 	 ((make_shape(find_kind (D,var))
@@ -405,42 +402,42 @@ val show_context = ref false
       map_annotate beta_typecase' typecase
     end
 
-  and beta_confun once D app = 
+
+  and beta_confun once D app = #2(beta_confun' once D app)
+
+  and beta_confun' once D (app as (App_c (con,actuals))) =
     let
-      fun beta_confun' (app as (App_c (con,actuals))) = 
-	let
 	  fun reduce actuals (formals,body,body_kind) = 
-	       let
+	       (true,
+		let
 		 val (vars,_) = unzip formals
 		 val subst = fromList (zip vars actuals)
 	       in if once
 		      then substConInCon subst body
-		  else con_normalize' (D,subst) body
-	       end
+		  else (con_normalize' (D,subst) body)
+	       end)
 	  fun beta_confun'' actuals confun = 
 	      (case confun of
 		   Let_c (_,(([Open_cb (var,formals,body,body_kind)]) |
 				([Code_cb (var,formals,body,body_kind)])),Var_c v) =>
 		   if eq_var(var,v)
 		       then reduce actuals (formals,body,body_kind) 
-		   else app
+		   else (false,app)
 	         | Let_c (_,[Code_cb (var,formals,body,body_kind)],Closure_c(Var_c v,env)) =>
 		   if eq_var(var,v)
 		       then reduce (actuals @ [env]) (formals,body,body_kind) 
-		   else app
+		   else (false,app)
 		 | Closure_c(Let_c (_,[Code_cb (var,formals,body,body_kind)],Var_c v), env) =>
 		       if eq_var(var,v)
 			   then reduce (actuals @ [env]) (formals,body,body_kind) 
-		       else app
-		 | _ => app)
-	in map_annotate (beta_confun'' actuals) con
+		       else (false,app)
+		 | _ => (false,app))
+	in  beta_confun'' actuals con
 	end
-	| beta_confun' con = 
+      | beta_confun' _ _ con =
 	(PpNil.pp_con con;
 	 (error "beta_confun called on non-application" handle e => raise e))
-    in
-      map_annotate beta_confun' app
-    end
+
 
   and insert_kind (D,var,kind) = NilContext.insert_kind (D,var,kind)
   and bind_at_kind (D,subst) (var,kind) = 
@@ -537,249 +534,6 @@ val show_context = ref false
     else
       con_normalize state con
 
-  and con_reduce_once state (constructor : con) : con  = 
-    (case constructor of
-	 (App_c (cfun,actuals)) => 
-	    let
-	      val (D,subst) = state
-	      val cfun = con_normalize' state cfun
-	      val actuals = map (con_normalize' state) actuals
-	      val con = App_c (cfun,actuals)
-	      val con = beta_confun true D con
-	    in con
-	    end
-	| (Proj_c (rvals,label)) => 
-	    let
-	      val rvals = con_normalize' state rvals
-	      val con = Proj_c (rvals,label)
-	      val con = beta_conrecord con
-	    in con
-	    end
-	| _ => constructor)
-
-(*
-  and con_normalize state (constructor : con) : con  = 
-    let (* there are two kinds of substitutions:
-	       equations arising from the context : 
-	          these are selfified and arise from non-equational conbinds
-		equations arising from equational let-bindings
-	   we always eagerly perform the first to avoid loops
-	   the second is delayed for efficiency *)
-
-	val _ = (print "new con_normalized entered with \n";
-		 PpNil.pp_con constructor; print "\n" )
-	fun vchandle state var =
-	    let val (D,subst) = state
-		val con = (case (substitute subst var) of
-			       SOME c => c
-			     | _ => constructor)
-		val res = 
-		    (case strip_var con of
-			 SOME v => 
-			     (case find_kind' (D,v) of
-				  SOME (c,_) => c
-				| _ => 
-				      (NilContext.print_context D;
-				       error ("Variable not found in context: "^(var2string v))))
-		       | _ => con)
-	    in  NilUtil.CHANGE_NORECURSE res
-	    end
-	val con = NilUtil.con_rewrite(fn _ => NilUtil.NOCHANGE,
-				      fn _ => NilUtil.NOCHANGE,
-				      fn ({boundcvars,...},Var_c v) => 
-				            (case Name.VarMap.find(boundcvars,v) of
-						 NONE => vchandle state v
-					       | _ => NilUtil.NOCHANGE)
-				       | _ => NilUtil.NOCHANGE,
-				      fn _ => NilUtil.NOCHANGE,
-				      fn _ => NilUtil.NOCHANGE) constructor
-	val _ = (print "new con_normalized - performed initial substitution = \n";
-		 PpNil.pp_con con; print "\n" )
-
-	(* then, we perform reductions without looking up variables in context *)
-	fun creduce' esubst subst con = if (Subst.is_empty esubst)
-					    then creduce subst con
-					else creduce subst (substConInCon esubst con)
-	and creduce subst con = 
-	  (
-(*
-	   print "creduce entered with con = ";
-	   PpNil.pp_con con; print "\nand subst = ";
-
-	   app (fn (v,c) => (PpNil.pp_var v; print " --> "; PpNil.pp_con c; print "\n"))
-	   (Subst.toList subst);
-*)
-
-	   case con of
-	       (Prim_c (pcon,args)) =>
-		   let val args = map (creduce subst) args
-		   in (Prim_c (pcon,args))
-		   end
-	     | (Mu_c (recur,defs,var)) =>
-		 let val def_list = sequence2list defs
-		     val (vars,cons) = unzip def_list
-		     val cons = map (creduce subst) cons
-		     val defs = list2sequence (zip vars cons)
-		 in Mu_c (recur,defs,var)
-		 end
-	     | (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>
-		 let
-		     val (esubst,tformals) = bind_at_kinds subst tformals
-		     val formals = map (creduce' esubst subst) formals
-		     val body = creduce' esubst subst body
-		 in  AllArrow_c (openness,effect,tformals,formals,numfloats,body)
-		 end
-	     | (Var_c var) => (case (substitute subst var) of
-				   SOME c => c
-				 | _ => con)
-	     | (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
-			       ((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
-		 let
-		     val constructor = (case cbnd of
-					    Open_cb _ => Open_cb
-					  | _ => Code_cb)
-			 
-		 in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
-			then
-			    let val (esubst,formals) = bind_at_kinds subst formals
-				val body = creduce' esubst subst body
-				val body_kind = kreduce' esubst subst body_kind
-				val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
-						     Var_c var))
-				val lambda = eta_confun lambda
-			    in  lambda
-			    end
-		    else
-			let 
-			    val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
-						 Var_c var))
-			    val lambda = substConInCon subst lambda 
-			    val res = creduce subst (Let_c (sort,rest,con))
-			in  res
-			end
-		 end
-         | (Let_c (sort,cbnd as (Con_cb(var,kind,con)::rest),body)) =>
-		 let val con = creduce subst con
-		     val subst = add subst (var,con)
-		 in creduce subst (Let_c (sort,rest,body))
-		 end
-	| (Let_c (sort,[],body)) => creduce subst body
-	| (Closure_c (code,env)) => 
-	    let val env = creduce subst env 
-	        val code = creduce subst code
-	    in Closure_c (code,env)
-	    end
-	| (Crecord_c (entries as orig_entries)) => 
-	    let val (labels,cons) = unzip entries
-		val cons = map (creduce subst) cons
-		val entries = zip labels cons
-		val con = Crecord_c entries
-	    in con
-	    end
-	| (Proj_c (rvals,label)) => 
-	    let val rvals = creduce subst rvals
-		val con = Proj_c (rvals,label)
-		val con = beta_conrecord con
-	    in  con
-	    end
-	| (App_c (cfun,actuals)) => 
-	    let val cfun = creduce subst cfun
-		val actuals = map (creduce subst) actuals
-	    in beta_confun subst (cfun,actuals)
-	    end
-	| (Typecase_c {arg,arms,default,kind}) => 
-	    let val kind = kreduce subst kind
-		fun doarm (pcon,args,body) = 
-		    let
-			val (esubst,args) = bind_at_kinds subst args
-			val body = creduce' esubst subst body
-		    in (pcon,args,body)
-		    end
-	      val arg = creduce subst arg
-	      val default = creduce subst default
-	      val arms = map doarm arms
-	      val con = Typecase_c {arg=arg,arms=arms,
-				    default=default,kind=kind}
-	      val  _ = error "no typecase"
-(*	      val con = beta_typecase (#1 state) con *)
-	    in con
-	    end
-	| (Annotate_c (annot,con)) => Annotate_c (annot,creduce subst con))
-
-	and kreduce' esubst subst kind = if (Subst.is_empty esubst)
-					     then kreduce subst kind
-					 else kreduce subst (substConInKind esubst kind)
-	and kreduce subst kind = 
-	    (case kind of
-		 Type_k p => (Type_k p)
-	       | Word_k p => (Word_k p)
-	       | Singleton_k (p,kind,con) => 
-		     let val con = creduce subst con
-			 val kind = kreduce subst kind
-		     in  singletonize(kind,con)
-		     end
-	       | Record_k elts => 
-		     let
-			 val elt_list = sequence2list elts
-			 val (labels,vars_and_kinds) = unzip (map (fn ((l,v),k) => (l,(v,k))) elt_list)
-			 val (_,vars_and_kinds) =  bind_at_kinds subst vars_and_kinds
-			 val elts = map2 (fn (l,(v,k)) => ((l,v),k)) (labels,vars_and_kinds)
-		     in  Record_k elts
-		     end
-	       | Arrow_k (openness, formals, return) => 
-		     let val (esubst,formals) = bind_at_kinds subst formals
-			 val return = kreduce' esubst subst return
-		     in	 (Arrow_k (openness, formals,return))
-		     end)
-
-	and beta_confun subst (confun,actuals) = 
-	    let fun reduce actuals (formals,body,body_kind) = 
-		let val (vars,_) = unzip formals
-		    val subst = foldl (fn ((v,c),s) => add  subst(v,c)) subst (zip vars actuals)
-		in  creduce subst body
-		end
-		val app = App_c(confun,actuals)
-	    in  (case confun of
-		     Let_c (_,(([Open_cb (var,formals,body,body_kind)]) |
-			       ([Code_cb (var,formals,body,body_kind)])),Var_c v) =>
-		     if eq_var(var,v)
-			 then reduce actuals (formals,body,body_kind) 
-		     else app
-		   | Let_c (_,[Code_cb (var,formals,body,body_kind)],
-			    Closure_c(Var_c v,env)) =>
-			 if eq_var(var,v)
-			     then reduce (actuals @ [env]) (formals,body,body_kind) 
-			 else app
-		   | Closure_c(Let_c (_,
-					      [Code_cb (var,formals,body,body_kind)],Var_c v), env) =>
-			     if eq_var(var,v)
-				 then reduce (actuals @ [env]) (formals,body,body_kind) 
-			     else app
-		   | _ => app)
-	    end
-
-
-	and bind_at_kind esubst subst (var,kind) = 
-	    let val kind = kreduce' esubst subst kind
-		val con = pull(Var_c var, kind)
-		val esubst = add esubst (var,con)
-	    in (esubst,var,kind)
-	    end
-  
-	and bind_at_kinds subst kinds = 
-	    let	fun folder ((v,k),esubst) = 
-		    let val (esubst,v,k) = bind_at_kind esubst subst (v,k)
-		    in	((v,k),esubst)
-		    end
-		val (kinds,esubst) = foldl_acc folder (Subst.empty()) kinds
-	    in	(esubst,kinds)
-	    end
-	val res = creduce (Subst.empty()) con
-	val _ = print "new con_normalized - done\n"
-    in  res
-    end
-
-*)
   and con_normalize state (constructor : con) : con  = 
     (case constructor 
        of (Prim_c (pcon,args)) =>
@@ -787,21 +541,17 @@ val show_context = ref false
 	   val args = map (con_normalize' state) args
 	 in (Prim_c (pcon,args))
 	 end
-	| (Mu_c (recur,defs,var)) =>
+	| (Mu_c (recur,defs)) =>
 	 let
 	   val def_list = sequence2list defs
 	   val (vars,cons) = unzip def_list
 	   val (state',vars_kinds) = 
 	     bind_at_kinds state (map (fn v => (v,Word_k Runtime)) vars)
 	   val (vars,_) = unzip vars_kinds
-	   val var = 
-	     case substitute (#2 state') var
-	       of SOME(Var_c var) => var
-		| _ => var
 	   val cons = if recur then map (con_normalize' state') cons
 		      else map (con_normalize' state) cons
 	   val defs = list2sequence (zip vars cons)
-	 in Mu_c (recur,defs,var)
+	 in Mu_c (recur,defs)
 	 end
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>
 	 let
@@ -925,6 +675,82 @@ val show_context = ref false
 	    in con
 	    end
 	| (Annotate_c (annot,con)) => Annotate_c (annot,con_normalize' state con))
+
+  (* ------ Reduce one step if not in head-normal-form; return whether progress was made  ------ *)
+  fun con_reduce state (constructor : con) : bool * con subst * con  = 
+    (case constructor of
+          (Prim_c (pcon,args)) => (false,#2 state, constructor)
+	| (Mu_c (recur,defs)) => (false,#2 state, constructor)
+	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) => (false,#2 state, constructor)
+	| (Var_c var) => 
+	 let val (D,subst) = state
+	 in  (case (substitute subst var) of
+		   SOME c => (true, subst, c)
+		 | NONE =>
+	           (case NilContext.find_kind_equation(D,Var_c var) of
+			SOME c => (true, subst, c)
+		      | NONE => (false, subst, Var_c var)))
+	 end
+        | (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
+			((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
+	    let
+	      val (D,subst) = state
+	      val coder = (case cbnd of
+				     Open_cb _ => Open_cb
+				   | _ => Code_cb)
+
+	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
+		   then (false, subst, constructor)
+	       else
+		   let 
+		       val lambda = (Let_c (sort,[coder (var,formals,body,body_kind)],
+					    Var_c var))
+		       val _ = 
+			   (case (substitute subst var)  of
+				SOME c => error "XXX var already in subst"
+			      | _ => ())
+		       val subst = add subst (var,lambda)
+		   in  (true,subst,Let_c(sort,rest,con))
+		   end
+	    end
+	| (Let_c (sort,cbnd as (Con_cb(var,kind,con)::rest),body)) =>
+	    let val (D,subst) = state
+		val con = Subst.substConInCon subst con
+		val subst = add subst (var,con)
+	    in  (true,subst,Let_c(sort,rest,body))
+	    end
+	| (Let_c (sort,[],body)) => (true,#2 state,body)
+	| (Closure_c (c1,c2)) => (case con_reduce state c1 of
+				      (true,subst,c) => (true,subst,Closure_c(c,c2))
+				    | _ => (false,#2 state,constructor))
+	| (Crecord_c _) => (false,#2 state,constructor)
+	| (Proj_c (c,lab)) => 
+	      (case con_reduce state c of
+		   (true,subst,c) => (true,subst,Proj_c(c,lab))
+		 | (false,_,c) => 
+		       let val (D,subst) = state
+			   val (progress,con) = beta_conrecord' (Proj_c (c,lab))
+		       in  if progress
+			       then (true,subst,con)
+			   else case (NilContext.find_kind_equation(D,con)) of
+			       NONE => (false,subst,con)
+			     | SOME c => (true,subst,c)
+		       end)
+	| (App_c (cfun,actuals)) => 
+	       (case con_reduce state cfun of
+		    (true,subst,c) => (true,subst,App_c(c,actuals))
+		  | (false,_,c) => 
+			let val (D,subst) = state
+			    val (progress,con) = beta_confun' true D (App_c(c,actuals))
+			in  if progress
+				then (true,subst,con)
+			    else case (NilContext.find_kind_equation(D,con)) of
+				NONE => (false,subst,con)
+			      | SOME c => (true,subst,c)
+			end)
+	| (Typecase_c {arg,arms,default,kind}) => error "typecase not done yet"
+	| (Annotate_c (annot,con)) => con_reduce state con)
+
 
   fun value_normalize' state value = 
     (case value
@@ -1142,7 +968,6 @@ val show_context = ref false
   
   fun kind_normalize D = kind_normalize' (D,empty())
   fun con_normalize D = con_normalize' (D,empty())
-  fun con_reduce_once D = con_normalize' (D,empty())
   fun exp_normalize D = exp_normalize' (D,empty())
 
   fun module_normalize D = module_normalize' (D,empty())
@@ -1153,7 +978,7 @@ val show_context = ref false
   val get_shape = wrap "get_shape" get_shape
   val kind_normalize = wrap "kind_normalize" kind_normalize
   val con_normalize = wrap "con_normalize"  con_normalize
-  val con_reduce_once = wrap "con_reduce_once"  con_reduce_once
+  val con_reduce_once = wrap "con_reduce_once" con_reduce
   val exp_normalize = wrap "exp_normalize" exp_normalize
   val module_normalize = wrap "mod_normalize" module_normalize
 

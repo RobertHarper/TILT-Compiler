@@ -83,7 +83,7 @@ signature NILUTIL =
 
     val strip_var : Nil.con -> Nil.var option
     val strip_exntag : Nil.con -> Nil.con option
-    val strip_recursive : Nil.con -> (bool * (Nil.var,Nil.con) Util.set * Nil.var) option
+    val strip_recursive : Nil.con -> (bool * (Nil.var,Nil.con) Util.set) option
     val strip_boxfloat : Nil.con -> Nil.Prim.floatsize option
     val strip_float : Nil.con -> Nil.Prim.floatsize option
     val strip_int : Nil.con -> Nil.Prim.intsize option
@@ -96,7 +96,7 @@ signature NILUTIL =
     val strip_prim : Nil.con -> (Nil.primcon*Nil.con list) option
     val strip_app : Nil.con -> (Nil.con*Nil.con list) option
 
-    val alpha_mu : (Nil.var -> bool) -> (Nil.var * Nil.con) list * Nil.var -> (Nil.var * Nil.con) list * Nil.var
+    val alpha_mu : (Nil.var -> bool) -> (Nil.var * Nil.con) list -> (Nil.var * Nil.con) list
     val is_exn_con : Nil.con -> bool
     val is_var_c : Nil.con -> bool
     val is_float_c : Nil.con -> bool

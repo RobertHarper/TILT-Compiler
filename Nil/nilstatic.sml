@@ -155,6 +155,7 @@ struct
   val varConKindSubst = Subst.varConKindSubst
   val empty_subst = Subst.empty
   val con_subst_compose = Subst.con_subst_compose
+  val generate_tuple_label = NilUtil.generate_tuple_label
 
   val exp_tuple = NilUtil.exp_tuple
   val con_tuple = NilUtil.con_tuple
@@ -229,7 +230,7 @@ struct
   val split = Listops.split
   val opt_cons = Listops.opt_cons
   val find2 = Listops.find2
-  val labels_distinct = Listops.no_dups Name.compare_label
+  val labels_distinct = Listops.no_dups Name.compare_label_name
 
   (*From PrimUtil*)
   val same_intsize = PrimUtil.same_intsize
@@ -455,7 +456,7 @@ struct
 	   val con = (Prim_c (pcon,args))
 	 in (con,kind)
 	 end
-	| (Mu_c (is_recur,defs,var)) =>
+	| (Mu_c (is_recur,defs)) =>
 	 let
 	   val def_list = sequence2list defs
 	     
@@ -467,17 +468,18 @@ struct
            val D = if is_recur then D' else D
 
 	   val (vars,_) = unzip var_kinds
-	   val var = 
-	     case Subst.substitute subst var
-	       of SOME(Var_c var) => var
-		| _ => var
 
 	   val cons = map (substConInCon subst) cons
 
 	   val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
 	   val defs = list2sequence (zip vars cons)
-	   val con = Mu_c (is_recur,defs,var)
-	   val kind = Word_k Runtime
+	   val con = Mu_c (is_recur,defs)
+	   val word_kind = Word_k Runtime
+	   val kind = if (length def_list = 1)
+			  then word_kind
+		      else Record_k(Listops.mapcount 
+				    (fn (n,_) => ((generate_tuple_label(n+1), 
+						   fresh_named_var "mu"), word_kind)) def_list)
 	 in
 	   if c_all (is_word_kind D) b_perr_k kinds then
 	     (con,kind)
@@ -898,7 +900,7 @@ struct
 		(length clist1 = length clist2) andalso
 		cons_equiv(D,map (fn (c1,c2) => (c1,c2,Type_k Runtime)) (Listops.zip clist1 clist2))
         | (Prim_c _, _) => false
-	| (Mu_c(ir1,defs1,var1), Mu_c(ir2,defs2,var2)) => 
+	| (Mu_c(ir1,defs1), Mu_c(ir2,defs2)) => 
 		let val vc1 = Util.sequence2list defs1
 		    val vc2 = Util.sequence2list defs2
 		    val v1 = map #1 vc1
@@ -908,16 +910,13 @@ struct
 				       then NONE else SOME(v2,Var_c v1)
 			val vc =  (Listops.zip v1 v2)
 			val subst = Subst.fromList (List.mapPartial mapper vc)
-			val Var_c v1 = Subst.substConInCon subst (Var_c var1)
-			val Var_c v2 = Subst.substConInCon subst (Var_c var2)
 			val D = foldl (fn ((v,_),D) => 
 			NilContext.insert_kind(D,v,Word_k Runtime)) D vc
 			fun pred ((_,c1),(_,c2)) = 
 				con_equiv(D,Subst.substConInCon subst c1,
 					    Subst.substConInCon subst c2,
 					  Word_k Runtime)
-		    in  eq_var(v1,v2) andalso 
-			Listops.andfold pred (Listops.zip vc1 vc2)
+		    in  Listops.andfold pred (Listops.zip vc1 vc2)
 		    end
 		end
 
@@ -988,6 +987,33 @@ struct
     in
       con
     end
+
+  fun expand_mucon argcon : (con * con * (var * con) list) option = 
+      (case argcon of 
+	   Mu_c (is_recur,set) =>
+	       (case (set2list set) of
+		    [(v,c)] => let val con_open = c
+				   val binds = [(v,argcon)]
+				   val con_close = Subst.substConInCon (Subst.fromList binds) con_open
+			       in SOME(con_open, con_close, binds)
+			       end
+		  | _ => NONE)
+	 | Proj_c(mu_con as Mu_c (is_recur,set), lab) => 
+		    let val def_list = set2list set
+			fun mapper (n,(v,c)) = 
+			    let val l = generate_tuple_label(n+1)
+			    in  ((v,Proj_c(mu_con,l)),(l, c))
+			    end
+			val temp = Listops.mapcount mapper def_list
+		    in  (case Listops.assoc_eq(eq_label,lab,map #2 temp) of
+			     NONE => NONE
+			   | SOME con_open => 
+				 let val binds = map #1 temp
+				     val con_close = Subst.substConInCon (Subst.fromList binds) con_open
+				 in  SOME(con_open, con_close, binds)
+				 end)
+		    end
+	 | _ => NONE)
 
   fun value_valid (D,value) = 
     (case value
@@ -1266,54 +1292,47 @@ struct
 	| (roll,[argcon],[exp]) => 
 	 let
 	   val (argcon,argkind) = con_valid (D,argcon)
+	   val argcon = (case argcon of
+			     Mu_c _ => argcon
+			   | Proj_c(Mu_c _, _) => argcon
+			   | _ => con_reduce(D,argcon))
 	   val (exp,con) = exp_valid (D,exp)
+	   val (expanded_con_open, expanded_con_close, vc_binds) = 
+	       (case expand_mucon argcon of
+		    SOME pair => pair
+		  | NONE => (print "cannot expand reduced argcon of ROLL: ";
+			     PpNil.pp_con argcon; print "\n";
+			     error "cannot expand reduced argcon of ROLL"))
+
+	   fun folder ((v,c),D) = NilContext.insert_kind_equation(D,v,c,Word_k Runtime)
+	   val D = foldl folder D vc_binds
+
 	 in
-	   case strip_recursive argcon 
-	     of SOME (is_recur,set,var) =>
-	       let
-		 val def_list = set2list set
- 	  	 fun folder ((v,_),D) = let val c = Mu_c(is_recur,set,v)
-					in  NilContext.insert_kind_equation(D,v,c,Word_k Runtime)
-					end
-		 val D = foldl folder D def_list
-		 val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
-	       in
-		 if type_equiv (D,con,con') then
-		   ((roll,[argcon],[exp]),argcon)
-		 else
-		   (perr_e_c_c (exp,con',con);
-		    (error "Error in roll" handle e => raise e))
-	       end
-	      | NONE => 
-	       (printl "Roll primitive given argument of type";
-		PpNil.pp_con argcon;
-		lprintl " not a recursive type";
-		(error "Illegal constructor argument in roll" handle e => raise e))
+	     if type_equiv (D,con,expanded_con_open) then
+		 ((roll,[argcon],[exp]),argcon)
+	     else
+		 (perr_e_c_c (exp,expanded_con_open,con);
+		  (error "Error in roll" handle e => raise e))
 	 end
+
+
 	| (unroll,[con],[exp]) =>
 	 let
 	   val (argcon,argkind) = con_valid (D,con)
 	   val (exp,con) = exp_valid (D,exp)
+	   val (expanded_con_open, expanded_con_close, vc_binds) = 
+	       (case expand_mucon argcon of
+		    SOME pair => pair
+		  | NONE => (print "cannot expand reduced argcon of UNROLL: ";
+			     PpNil.pp_con argcon; print "\n";
+			     error "cannot expand reduced argcon of UNROLL"))
+
 	 in
-	   (case strip_recursive argcon 
-	      of SOME (is_recur,set,var) =>
-		(if type_equiv (D,argcon,con) then
-		   let
-		     val def_list = set2list set
-		     val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
-		     val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (is_recur,set,v))) def_list)
-		     val con' = Subst.substConInCon cmap con'
-		   in
-		     ((unroll,[argcon],[exp]),con')
-		   end
-		 else
-		   (perr_e_c_c (exp,argcon,con);
-		    (error "Error in unroll" handle e => raise e)))
-	       | NONE => 
-		   (printl "Urnoll primitive given argument of type";
-		    PpNil.pp_con argcon;
-		    lprintl " not a recursive type";
-		    (error "Illegal constructor argument in unroll" handle e => raise e)))
+	     (if type_equiv (D,argcon,con) then
+		  ((unroll,[argcon],[exp]),expanded_con_close)
+	      else
+		  (perr_e_c_c (exp,argcon,con);
+		   (error "Error in unroll" handle e => raise e)))
 	 end
 	| (make_exntag,[argcon],[]) => 
 	 let
@@ -1995,8 +2014,11 @@ struct
 	  val _ = pop()
 	in  res
 	end
-
-      fun con_reduce_once (D,c) = Normalize.con_reduce_once D c
+    
+      type con_subst = con Subst.subst
+      val empty_subst = Subst.empty() : con_subst
+      fun con_subst (subst,c) = Subst.substConInCon subst c
+      fun con_reduce_once context_subst c = Normalize.con_reduce_once context_subst c
       val get_shape = Normalize.get_shape
       val module_valid = wrap "module_valid" module_valid
 

@@ -69,9 +69,9 @@ sig
   and con = 
       Prim_c of primcon * con list                (* Classify term-level values 
                                                        of primitive types *)
-    | Mu_c of bool * (var,con) sequence * var            (* Constructors that classify values of
-							    a recursive type; bool indicates if it
-							    is really recursive *)
+    | Mu_c of bool * (var,con) sequence           (* Constructors that classify values of
+						    a recursive type; bool indicates if it
+						    is really recursive *)
     | AllArrow_c of openness * effect *           (* open functions, code functions, and closures *)
                     (var * kind) list * con list * w32 * con
     | Var_c of var

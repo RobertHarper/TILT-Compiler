@@ -12,7 +12,7 @@ Group
 
         structure Linknil
 	structure LinkIl
-	structure NilOpts
+(*	structure NilOpts *)
 is
 
 ../smlnj-lib.cm         	(* ------ SML/NJ library ------ *)
@@ -44,8 +44,10 @@ nilstatic.sml
 vararg.sig.sml
 vararg.sml
 nilprimutilparam.sml
+(*
 nileval.sig.sml
 nileval.sml 
+*)
 toclosure.sig.sml
 toclosure.sml
 linknil.sml
@@ -62,7 +64,10 @@ subst.sig.sml
 normalize.sml
 normalize.sig.sml
 optimize.sml  
+specialize.sml
+
 (* ----- Optimizer Stuff ------- *)
+(*
 NilOpts/nilopts.sig.sml
 NilOpts/nilopts.sml
 NilOpts/squish.sig.sml
@@ -77,4 +82,4 @@ NilOpts/flattenargs.sml
 NilOpts/uncurry.sml
 NilOpts/inline.sml
 NilOpts/linkopt.sml
-
+*)

@@ -26,7 +26,6 @@ signature NORMALIZE =
      *)
     val kind_normalize : context -> kind -> kind
     val con_normalize : context -> con -> con
-    val con_reduce_once : context -> con -> con
     val exp_normalize : context -> exp -> exp
     val module_normalize : context -> module -> module
 
@@ -41,6 +40,7 @@ signature NORMALIZE =
     val kind_normalize' : (context * (con subst)) -> kind -> kind
     val con_normalize' : (context * (con subst)) -> con -> con
     val exp_normalize' : (context * (con subst)) -> exp -> exp
+    val con_reduce_once : context * con subst -> con -> bool * con subst * con
 
     (*Perform the given reduction, renormalizing the result if necessary*)
 
