@@ -71,7 +71,7 @@ AlreadySet:
 CompareAndSwap:	
 .set noat
 	ldl_l	$0, ($16)
-	cmp	$0, $17, $at
+	cmpeq	$0, $17, $at
 	bne	$at, NotEqual
 	mov	$18, $19		# need temp $19 since stl_c modifies register
 	stl_c	$19, ($16)		# try to set
