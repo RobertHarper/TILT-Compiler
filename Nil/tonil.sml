@@ -3,6 +3,7 @@
    Also note that all record fields must be sorted by their labels. *)
 
 functor Tonil(structure ArgIl : IL
+	      structure ArgNil : NIL
               structure Ilutil : ILUTIL
               structure Nilutil : NILUTIL
 	      structure NilError : NILERROR
@@ -13,19 +14,24 @@ functor Tonil(structure ArgIl : IL
               structure Nilprimutil : PRIMUTIL
               structure Ppnil : PPNIL
               structure Ppil : PPIL
+	      structure Subst : NILSUBST
                  sharing ArgIl = Ilutil.Il = Ppil.Il = Ilcontext.Il = IlStatic.Il
 		 sharing Nilutil.Nil.Prim = Nilprimutil.Prim = ArgIl.Prim
-                 sharing Nilutil.Nil = ArgNilcontext.Nil = Ppnil.Nil = 
+                 sharing ArgNil = Nilutil.Nil = ArgNilcontext.Nil = Ppnil.Nil = 
                          Nilstatic.Nil = NilError.Nil
                  sharing type Nilstatic.context = ArgNilcontext.context
 		 sharing type Nilprimutil.exp = Nilutil.Nil.exp
                      and type Nilprimutil.con = Nilutil.Nil.con
+		 sharing type Subst.con = ArgNil.con
+		     and type Subst.exp = ArgNil.exp
+		     and type Subst.kind = ArgNil.kind
+		     and type Subst.subst = ArgNilcontext.subst
              ) :(*>*) TONIL where structure Il = ArgIl and structure NilContext = ArgNilcontext =
 struct
    structure Il = ArgIl
    structure NilContext = ArgNilcontext
    structure Nilcontext = ArgNilcontext
-   structure Nil = NilContext.Nil
+   structure Nil = ArgNil
 
    open Nil
    val debug = ref false
@@ -263,9 +269,6 @@ struct
 
    fun chooseName (NONE, vmap) = splitFreshVar vmap
      | chooseName (SOME (var,var_c,var_r), vmap) = (var, var_c, var_r, vmap)
-
-   fun extendmap (map, key, value) key' =
-       if (Name.eq_var (key, key')) then SOME value else map key'
        
    val count = ref 0
 
@@ -485,26 +488,15 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 		     (effect,var_body_arg_c,exp_body_type)
 		    | _ => (perr_c type_fun_r;
 			    error "Expected arrow constructor with one arg")
-
-               fun subst v = 
-		   if (Name.eq_var(v_c,v)) then 
-		       SOME reduced_argument_c
-		   else
-		       NONE
-
-	       fun subst2 v =
-		   if (Name.eq_var(var_body_arg_c,v)) then 
-		       SOME name_arg_c
-		   else
-		       NONE
 	   in
 
-	       val knd_c = Nilstatic.kind_reduce (NILctx_of context,
-						  Nilutil.substConInKind subst con_body_kind)
+	     val knd_c = Nilstatic.kind_reduce 
+	       (NILctx_of context,
+		Subst.varConKindSubst v_c reduced_argument_c con_body_kind)
 
-	       val cbnd_cat = APP[cbnd_cat_fun, 
-				  cbnd_cat_arg,
-				  LIST[(var_c, knd_c, App_c(name_fun_c,[name_arg_c]))]]
+	     val cbnd_cat = APP[cbnd_cat_fun, 
+				cbnd_cat_arg,
+				LIST[(var_c, knd_c, App_c(name_fun_c,[name_arg_c]))]]
 		   
 (*
                val _ = (print "ZZZ\n";
@@ -539,7 +531,8 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	 Nilcontext.print_context NILctx'';
 	 print "\n\n")
 *)
-	       val type_r = Nilstatic.con_reduce (NILctx'', Nilutil.substConInCon subst2 exp_body_type)
+	       val type_r = Nilstatic.con_reduce 
+		 (NILctx'', Subst.varConConSubst var_body_arg_c name_arg_c exp_body_type)
 	       val valuable = (effect = Total) andalso valuable_fun andalso valuable_arg 
 	   end  
 
@@ -597,12 +590,12 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		   (case (strip_singleton knd_mod_c) of
 			Record_k lvk_seq => List.mapPartial mapper (Util.sequence2list lvk_seq)
 		      | _ => [])
-	       fun subst v = Listops.assoc_eq(Name.eq_var,v,table)
+	       val subst = Subst.fromList table
 (*
 	       val _ = (print "knd_mod_c is "; Ppnil.pp_kind knd_mod_c; print "\n")
 	       val _ = (print "type_mod_r before is "; Ppnil.pp_con type_mod_r; print "\n")
 *)
-	       val type_mod_r = Nilutil.substConInCon subst type_mod_r
+	       val type_mod_r = Subst.substConInCon subst type_mod_r
 (*	       val _ = (print "type_mod_r after is "; Ppnil.pp_con type_mod_r; print "\n") *)
 (*	       val type_mod_r' = Nilstatic.con_reduce(NILctx_of context, type_mod_r) *)
 	       val type_mod_r' = type_mod_r
@@ -747,8 +740,8 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	     | mapper (Il.SBND(l,Il.BND_MOD(v,_))) = SOME(v,Proj_c(Var_c var_str_c,l))
 	     | mapper _ = NONE
 	   val table = List.mapPartial mapper sbnds
-	   fun subst v = Listops.assoc_eq(Name.eq_var,v,table)
-	   val record_r_field_types = map (Nilutil.substConInCon subst) record_r_field_types
+	   val subst = Subst.fromList table
+	   val record_r_field_types = map (Subst.substConInCon subst) record_r_field_types
 	   val (record_r_labels,record_r_field_types,record_r_exp_items) = 
 	       let 
 		   val temp = (ListMergeSort.sort gt_label_triple
@@ -904,21 +897,13 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
                val (internal_vars, functions) = myunzip (Util.set2list set)
 
-               fun subst v =
-		   let fun loop (nil,nil) = NONE
-			 | loop (v'::vs, n::ns) =
-			   if (Name.eq_var (v,v'))
-			       then SOME (Var_e n)
-			   else
-			       loop (vs,ns)
-		   in
-		       loop (internal_vars, external_vars)
-		   end
+	       val subst = Subst.fromList (Listops.map2 (fn (iv,ev) => (iv,Var_e ev)) 
+					   (internal_vars,external_vars))
 
                fun reviseFunction (external_var,
 				   Function(effect,recursive,[],
 					    vclist,[],body,body_con)) =
-		   let val body' = Nilutil.substExpInExp subst body
+		   let val body' = Subst.substExpInExp subst body
 		   in  (external_var,
 		       Function(effect,recursive,[],
                        	        vclist,	[], body', body_con))
@@ -1073,30 +1058,32 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
                val (internal_vars, functions) = myunzip (Util.set2list set)
 	       val inner_vars = map (fn v => Name.fresh_named_var((Name.var2name v) ^ "_inner")) external_vars_r
-
-               fun subst self v =
-		   let fun loop (nil,nil,nil) = NONE
-			 | loop (v'::vs, n::ns, iv::ivs) = 
-		       if (Name.eq_var (v,v')) then 
-			   (if (Name.eq_var(v,self))
-				then SOME (Var_e iv)
+               fun subst self =
+		   let 
+		     fun loop (nil,nil,nil) = []
+		       | loop (v'::vs, n::ns, iv::ivs) = 
+		       let
+			 val exp = 
+			   (if (Name.eq_var(v',self))
+			      then (Var_e iv)
 			    else
-				SOME (App_e(Open, Var_e n, 
-					    [Var_c poly_var_c], 
-					    if (is_con_arg_unit andalso !optimize_empty_structure)
-						then []
-					    else [Var_e poly_var_r], 
-						[])))
-		       else
-			   loop (vs,ns,ivs)
-		   in loop (internal_vars, external_vars_r, inner_vars)
+			      (App_e(Open, Var_e n, 
+				     [Var_c poly_var_c], 
+				     if (is_con_arg_unit andalso !optimize_empty_structure)
+				       then []
+				     else [Var_e poly_var_r], 
+				       [])))
+		       in
+			 (v',exp)::loop (vs,ns,ivs)
+		       end
+		   in Subst.fromList (loop (internal_vars, external_vars_r, inner_vars))
 		   end
 
                fun reviseFunction (internal_var,
 				   external_var_r, inner_var,
 				   Function(effect,recursive,[],
 					    [(arg_var,arg_con)],[],body,body_con)) =
-		   let val body' = Nilutil.substExpInExp (subst internal_var) body
+		   let val body' = Subst.substExpInExp (subst internal_var) body
 		   in  (external_var_r,
 		       Function(Total, Leaf, 
 				[(poly_var_c, knd_arg)],
@@ -1547,7 +1534,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val exps = map (#1 o (xexp context)) il_exps
        in
 	   (Const_e (Prim.vector (con, Array.fromList exps)), 
-	    Prim_c(Array_c, [con]), true)
+	    Prim_c(Vector_c, [con]), true)
        end
 
      | xvalue context (Prim.refcell (ref il_exp)) = 
@@ -1862,7 +1849,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val tagcount = Word32.fromInt noncarriers
 	   val cons = map (#1 o (xcon context)) carriers
 	   val con = Prim_c(Sum_c{tagcount = tagcount,
-				  known = SOME field},
+				  known = NONE},
 			    cons)
        in
 	   (Prim_e(NilPrimOp (inject {tagcount = tagcount,
@@ -1878,7 +1865,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val tagcount = Word32.fromInt noncarriers
 	   val cons = map (#1 o (xcon context)) carriers
 	   val con = Prim_c(Sum_c{tagcount = tagcount,
-				  known = SOME field},
+				  known = NONE},
 			    cons)
 	   val (exp, _, valuable) = xexp context il_exp
        in
@@ -2139,7 +2126,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 			     (Il.SIGNAT_INLINE_STRUCTURE {self=NONE,abs_sig=sdecs,...}))) =
        let
 	   val {crdecs, erlabs, ercons} = 
-	       xsdecs context (!elaborator_specific_optimizations,true,con0, fn _ => NONE, sdecs)
+	       xsdecs context (!elaborator_specific_optimizations,true,con0, Subst.empty(), sdecs)
 	   val crdecs = ListMergeSort.sort gt_label_pairpair crdecs
 	   val kind = Record_k (Util.list2sequence crdecs)
 	   val (erlabs,ercons) = 
@@ -2297,12 +2284,12 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 			NILctx'')
 		       
 		   val {crdecs, erlabs, ercons} =
-		       xsdecs context' (elab_spec,false,con0, extendmap (subst, var_c, Proj_c(con0, lbl)),
+		       xsdecs context' (elab_spec,false,con0, Subst.add subst (var_c, Proj_c(con0, lbl)),
 					rest)
 	       in
 		   {crdecs = ((lbl, var_c), knd) :: crdecs,
 		    erlabs = lbl :: erlabs,
-		    ercons = (Nilutil.substConInCon subst con) :: ercons}
+		    ercons = (Subst.substConInCon subst con) :: ercons}
 	       end
        in
 	   Nilcontext.c_insert_kind(NILctx_of context, var_c, knd, cont1)
@@ -2322,7 +2309,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	       in
 		   {crdecs = crdecs,
 		    erlabs = lbl :: erlabs,
-		    ercons = (Nilutil.substConInCon subst con') :: ercons}
+		    ercons = (Subst.substConInCon subst con') :: ercons}
 	       end
        in
 	   Nilcontext.c_insert_con(NILctx_of context, var, con', cont1)
@@ -2346,7 +2333,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		       (context, NILctx')
 		       
 		   val {crdecs, erlabs, ercons} = 
-		       xsdecs context' (elab_spec,false,con0, extendmap (subst, var, Proj_c(con0, lbl)),
+		       xsdecs context' (elab_spec,false,con0, Subst.add subst (var, Proj_c(con0, lbl)),
 					rest)
 	       in
 		   {crdecs = ((lbl, var), knd'') :: crdecs,

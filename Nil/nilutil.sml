@@ -4,8 +4,12 @@ functor NilUtilFn(structure ArgNil : NIL
 		  structure ArgPrim : PRIM
 		  structure IlUtil : ILUTIL
 		  structure Alpha : ALPHA
+		  structure Subst : NILSUBST
 		  sharing ArgNil = Alpha.Nil
-		  and ArgPrim = PrimUtil.Prim = ArgNil.Prim) 
+		  and ArgPrim = PrimUtil.Prim = ArgNil.Prim
+		  and type ArgNil.exp = Subst.exp
+		  and type ArgNil.con = Subst.con
+		  and type ArgNil.kind = Subst.kind) 
   :(*>*) NILUTIL where structure Nil = ArgNil 
 		   and type alpha_context = Alpha.alpha_context =
 struct
@@ -133,6 +137,7 @@ struct
 
     val is_exn_con = strip_annotate is_exn_con'
     val is_var_c = isSome o strip_var
+    val is_float_c = isSome o strip_float
   end
 
   fun strip_singleton (Singleton_k(_,k,_)) = strip_singleton k
@@ -144,6 +149,33 @@ struct
        | NONE => NONE
 
   (* Local rebindings from imported structures *)
+
+
+  fun sub_phase (Compiletime, Runtime) = false
+    | sub_phase _ = true
+
+  fun get_phase kind = 
+    (case kind 
+       of (Type_k p | Word_k p | Singleton_k (p,_,_)) => p
+	| Record_k entries => 
+	 if allsequence (fn ((l,v),k) => sub_phase (get_phase k,Runtime)) entries then
+	   Runtime
+	 else
+	   Compiletime
+       | Arrow_k (openness,args,result) => 
+	   if List.all (fn (v,k) => sub_phase (get_phase k,Runtime)) args 
+	     andalso sub_phase(get_phase result,Runtime) then
+	     Runtime
+	   else
+	     Compiletime)
+
+  fun singletonize (phase,kind as Singleton_k _,con) = kind
+    | singletonize (phase,kind,con) = 
+      case phase
+	of SOME p => 
+	  Singleton_k (p,kind,con)
+	 | NONE => Singleton_k (get_phase kind,kind,con)
+
 
   local
     structure A : 
@@ -170,6 +202,7 @@ struct
     val member_eq = Listops.member_eq
     val same_intsize = PrimUtil.same_intsize
     val same_floatsize = PrimUtil.same_floatsize
+    val eq_var2 = Name.eq_var2
   end
   (**)
     
@@ -613,15 +646,16 @@ struct
       List.exists (fn v => eq_var (v,var)) free_vars
     end
 
+
   local 
     fun con_handler conmap ({boundcvars,boundevars},Var_c var) = 
-      if (collMember(boundcvars,var)) 
-	then NOCHANGE
-      else (case (conmap var) of
-		NONE => NOCHANGE
-	      | SOME c => CHANGE_NORECURSE c)
+	 if (collMember(boundcvars,var)) 
+	   then NOCHANGE
+	 else (case (conmap var) of
+		 NONE => NOCHANGE
+	       | SOME c => CHANGE_NORECURSE c)
       | con_handler _ _ = NOCHANGE
-
+	   
     fun exp_handler expmap ({boundevars,boundcvars},Var_e var) = 
       if (collMember(boundevars,var)) 
 	then NOCHANGE
@@ -629,22 +663,6 @@ struct
 		NONE => NOCHANGE
 	      | SOME e => CHANGE_NORECURSE e)
       | exp_handler _ _ = NOCHANGE
-
-    fun cstate conmap = 
-      (STATE{bound = default_bound,
-	     bndhandler = default_bnd_handler,
-	     cbndhandler = default_cbnd_handler,
-	     exphandler = default_exp_handler,
-	     conhandler = con_handler conmap,
-	     kindhandler = default_kind_handler})
-
-    fun estate expmap = 
-      (STATE{bound = default_bound,
-	     bndhandler = default_bnd_handler,
-	     cbndhandler = default_cbnd_handler,
-	     exphandler = exp_handler expmap,
-	     conhandler = default_con_handler,
-	     kindhandler = default_kind_handler})
 
     fun free_handler() =
 	let val free_evars : (var list ref) = ref []
@@ -671,12 +689,9 @@ struct
 		    conhandler = con_handler,
 		    kindhandler = default_kind_handler}))
 	end
-  in	  
-    (*PRE:  alpha normalization has taken place *)
-    fun substConInCon conmap = f_con (cstate conmap) 
-    fun substConInKind conmap = f_kind (cstate conmap)
-    fun substConInExp conmap = f_exp (cstate conmap)
-    fun substExpInExp expmap = f_exp (estate expmap)
+      
+  in
+
     fun freeExpConVarInExp e = 
 	let val (evars_ref,cvars_ref,handler) = free_handler()
 	in  f_exp handler e;
@@ -692,12 +707,11 @@ struct
   fun muExpand (vcseq,v) = 
       let val vc_list = sequence2list vcseq
 	  val vc_list' = map (fn (v,_) => (v,Mu_c(vcseq,v))) vc_list
-	  fun lookup v = Listops.assoc_eq(eq_var,v,vc_list')
+	  val conmap = Subst.fromList vc_list'
 	  val c = (case (Listops.assoc_eq(eq_var,v,vc_list)) of
-		       SOME c => c | NONE => error "bad mu type")
-      in  substConInCon lookup c
+		     SOME c => c | NONE => error "bad mu type")
+      in  Subst.substConInCon conmap c
       end
-
 
   fun same_openness (Open,Open) = true
     | same_openness (Closure,Closure) = true
@@ -872,7 +886,9 @@ struct
 	   recur (cfun1,cfun2) andalso
 	   (ListPair.all recur (actuals1,actuals2))
 	   
-	  | (Annotate_c (annot1,con1),Annotate_c (annot2,con2)) => 
+	  | (Annotate_c (annot1,con1),con2) => 
+	   recur (con1,con2)
+	  | (con1,Annotate_c (annot1,con2)) => 
 	   recur (con1,con2)
 	  | _ => false)
     end
@@ -880,28 +896,6 @@ struct
   and alpha_equiv_con_list context list_pair = 
     eq_len list_pair andalso
     ListPair.all (alpha_equiv_con' context) list_pair
-
-  fun is_word (Word_k _) = true
-    | is_word (Type_k _) = false
-    | is_word _ = error "Invalid kind for constructor in Singleton kind"
-
-  fun sub_phase (Compiletime, Runtime) = false
-    | sub_phase _ = true
-
-  fun get_phase kind = 
-    (case kind 
-       of (Type_k p | Word_k p | Singleton_k (p,_,_)) => p
-	| Record_k entries => 
-	 if allsequence (fn ((l,v),k) => sub_phase (get_phase k,Runtime)) entries then
-	   Runtime
-	 else
-	   Compiletime
-       | Arrow_k (openness,args,result) => 
-	   if List.all (fn (v,k) => sub_phase (get_phase k,Runtime)) args 
-	     andalso sub_phase(get_phase result,Runtime) then
-	     Runtime
-	   else
-	     Compiletime)
 
   fun alpha_sub_kind' context (k1,k2) = 
     (case (k1,k2)
@@ -1330,7 +1324,7 @@ struct
 
     val alpha_normalize_exp = 
 	 alpha_normalize_exp' (empty_context(),empty_context())
-
+(*
     fun rename_mu (is_bound,defs,var) = 
 	let
 	    val defs = sequence2list defs
@@ -1350,5 +1344,9 @@ struct
 	in  Mu_c(defs',var')
 	end
 
+*)
+
+  fun type_or_word T = alpha_sub_kind (T,Type_k Runtime)
+  fun is_word T = alpha_sub_kind (T,Word_k Runtime)
 
 end;

@@ -6,13 +6,16 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 		    structure NilUtil : NILUTIL 
 		    structure NilContext : NILCONTEXT
 		    structure NilError : NILERROR 
+		    structure Subst : NILSUBST
 		         sharing NilUtil.Nil = NilContext.Nil = Alpha.Nil 
 			       = PpNil.Nil = NilError.Nil = ArgNil
 			 and Annotation = ArgNil.Annotation
 			 and ArgNil.Prim = PrimUtil.Prim
 			 and type NilUtil.alpha_context = Alpha.alpha_context
-			 and type PrimUtil.con = ArgNil.con
-		         and type PrimUtil.exp = ArgNil.exp) :(*>*) NILSTATIC 
+			 and type PrimUtil.con = Subst.con = ArgNil.con
+		         and type PrimUtil.exp = Subst.exp = ArgNil.exp
+			 and type Subst.kind = ArgNil.kind
+			 and type Subst.subst = NilContext.subst) :(*>*) NILSTATIC 
   where structure Nil = ArgNil 
 	and type context = NilContext.context = 
 struct	
@@ -26,27 +29,36 @@ struct
   
 
   local
-      datatype entry = CON of con * NilContext.context | KIND of kind * NilContext.context
+      datatype entry = 
+	EXP of exp * NilContext.context 
+      | CON of con * NilContext.context 
+      | KIND of kind * NilContext.context
       val stack = ref ([] : entry list)
       fun push e = stack := (e :: (!stack))
   in
-      fun push_con(c,context) = push(CON(c,context))
-      fun push_kind(k,context) = push(KIND(k,context))
-      fun pop() = stack := (tl (!stack))
-      fun show_stack() = let val st = !stack
-			     val _ = stack := []
-			     fun show (CON(c,context)) =
-				 (print "con_valid called with constructor =\n";
-				  PpNil.pp_con c;
-				  print "\nand context"; NilContext.print_context context;
-				  print "\n\n")
-			       | show (KIND(k,context)) =
-				 (print "kind_valid called with constructor =\n";
-				  PpNil.pp_kind k;
-				  print "\nand context"; NilContext.print_context context;
-				  print "\n\n")
-			 in  app show (rev st)
-			 end
+    fun push_exp (e,context) = push (EXP(e,context))
+    fun push_con(c,context) = push(CON(c,context))
+    fun push_kind(k,context) = push(KIND(k,context))
+    fun pop() = stack := (tl (!stack))
+    fun show_stack() = let val st = !stack
+			   val _ = stack := []
+			   fun show (EXP(e,context)) = 
+				     (print "exp_valid called with expression =\n";
+				      PpNil.pp_exp e;
+				      print "\nand context"; NilContext.print_context context;
+				      print "\n\n")
+			     | show (CON(c,context)) =
+				     (print "con_valid called with constructor =\n";
+				      PpNil.pp_con c;
+				      print "\nand context"; NilContext.print_context context;
+				      print "\n\n")
+			     | show (KIND(k,context)) =
+				     (print "kind_valid called with constructor =\n";
+				      PpNil.pp_kind k;
+				      print "\nand context"; NilContext.print_context context;
+				      print "\n\n")
+		       in  app show (rev st)
+		       end
   end
 
   (* Local rebindings from imported structures *)
@@ -58,8 +70,8 @@ struct
   val insert_con_list = NilContext.insert_con_list
   val find_con = NilContext.find_con
   val remove_con = NilContext.remove_con
-  val insert_kind = NilContext.insert_kind
-  val insert_kind_list = NilContext.insert_kind_list
+  val bind_kind = NilContext.bind_kind
+  val bind_kind_list = NilContext.bind_kind_list
   val find_kind = NilContext.find_kind
   val remove_kind = NilContext.remove_kind
 
@@ -67,10 +79,15 @@ struct
   type alpha_context = Alpha.alpha_context
 
   (*From NilUtil*)
-  val substConInExp = NilUtil.substConInExp
-  val substConInCon = NilUtil.substConInCon
-  val substConInKind = NilUtil.substConInKind
-  val substExpInExp = NilUtil.substExpInExp
+  val substConInExp = Subst.substConInExp
+  val substConInCon = Subst.substConInCon
+  val substConInKind = Subst.substConInKind
+  val substExpInExp = Subst.substExpInExp
+  val varConConSubst = Subst.varConConSubst
+  val varConKindSubst = Subst.varConKindSubst
+
+  val exp_tuple = NilUtil.exp_tuple
+  val con_tuple = NilUtil.con_tuple
   val convar_occurs_free = NilUtil.convar_occurs_free
   val con_free_convar = NilUtil.con_free_convar
   val same_openness = NilUtil.same_openness
@@ -87,6 +104,7 @@ struct
   val is_var_e = NilUtil.is_var_e
 
   val map_annotate = NilUtil.map_annotate
+  val singletonize = NilUtil.singletonize
   val get_arrow_return = NilUtil.get_arrow_return
 
   val strip_var = NilUtil.strip_var
@@ -104,14 +122,19 @@ struct
   val strip_app = NilUtil.strip_app
   val is_exn_con = NilUtil.is_exn_con
   val is_var_c = NilUtil.is_var_c
+  val is_float_c = NilUtil.is_float_c 
   val strip_singleton = NilUtil.strip_singleton
+  val type_or_word = NilUtil.type_or_word
+  val is_word = NilUtil.is_word
 
   (*From Name*)
   val eq_var = Name.eq_var
+  val eq_var2 = Name.eq_var2
   val eq_label = Name.eq_label
   val var2string = Name.var2string
   val label2string = Name.label2string
   val fresh_var = Name.fresh_var
+  val labels_sorted_distinct = Name.labels_sorted_distinct
 
   (*From Listops*)
   val assoc_eq = Listops.assoc_eq
@@ -119,9 +142,11 @@ struct
   val eq_len3 = Listops.eq_len3
   val map_second = Listops.map_second
   val foldl_acc = Listops.foldl_acc
+  val foldl2 = Listops.foldl2
   val map = Listops.map
   val map2 = Listops.map2
   val map3 = Listops.map3
+  val map0count = Listops.map0count
   val app2 = Listops.app2
   val app3 = Listops.app3
   val zip = Listops.zip
@@ -132,6 +157,8 @@ struct
   val all = Listops.all
   val all2 = Listops.all2
   val all3 = Listops.all3
+  val split = Listops.split
+  val opt_cons = Listops.opt_cons
 
   (*From PrimUtil*)
   val same_intsize = PrimUtil.same_intsize
@@ -144,8 +171,12 @@ struct
   val sequence2list = Util.sequence2list
   val list2sequence = Util.list2sequence
   val eq_opt = Util.eq_opt
+  val map_opt = Util.mapopt
+  val split_opt = Util.split_opt
   val printl = Util.printl
   val lprintl = Util.lprintl
+  val curry2 = Util.curry2
+  val curry3 = Util.curry3
 
   (*From NilError*)
   val c_all = NilError.c_all
@@ -180,19 +211,6 @@ struct
 
   fun error s = Util.error "nilstatic.sml" s
 
-  fun split ls = 
-      let fun split' _ [] = error "split given empty list"
-	    | split' acc [x] = (rev acc,x)
-	    | split' acc (a::rest) = split' (a::acc) rest
-      in split' [] ls
-      end
-
-  fun curry2 f = fn a => fn b => f (a,b)
-  fun curry3 f = fn a => fn b => fn c => f (a,b,c)
-
-  val eq_var2 = curry2 eq_var
-  val eq_label2 = curry2 eq_label
-
   fun find2 p listpair = 
     let
       fun find_one (a,b,NONE) = if p(a,b) then SOME (a,b) else NONE
@@ -201,69 +219,26 @@ struct
       ListPair.foldl find_one NONE listpair
     end
 
-  fun first (fst,_) = fst
-
-  fun eq_var_pair var = (eq_var2 var) o first
-    
-  fun list2cmap list = 
-    (fn var => 
-     case List.find (eq_var_pair var) list
-       of SOME (v,c) => SOME c
-	| NONE => NONE)
-    
-  fun sorted_unique p ([] | [_]) = true
-    | sorted_unique p (fst::snd::rest) = 
-    (not (p (fst,snd))) andalso sorted_unique p (snd::rest)
-    
-  fun gt_label (l1,l2) = 
-	(case Name.compare_label (l1,l2) of
-	     GREATER => true
-	   | _ => false)
-
-  fun subst_fn var1 con = 
-    (fn var2 => 
-     (if eq_var (var1,var2) then 
-	SOME con
-      else
-	NONE))
-    
-  fun varConKindSubst var con = substConInKind (subst_fn var con)
-    
-  fun varConConSubst var con = substConInCon (subst_fn var con)
-
-  fun type_or_word T = alpha_sub_kind (T,Type_k Runtime)
-  fun is_word T = alpha_sub_kind (T,Word_k Runtime)
-
-  fun singletonize (phase,kind as Singleton_k _,con) = kind
-    | singletonize (phase,kind,con) = 
-(*    if type_or_word kind then*)
-      case phase
-	of SOME p => 
-	  Singleton_k (p,kind,con)
-	 | NONE => Singleton_k (get_phase kind,kind,con)
-(*    else*)
-(*      kind*)
-
   (*replace v::S(c) with c in formals and body*)
-  fun substSingleton ((var,Singleton_k(p,kind,scon)),(rev_formals,conmap)) =
+  fun substSingleton ((var,Singleton_k(p,kind,scon)),(rev_formals,subst)) =
     let 
-      val scon' = substConInCon (list2cmap conmap) scon
-      val kind' = substConInKind (list2cmap conmap) kind
+      val scon = substConInCon subst scon
+      val kind = substConInKind subst kind
     in
-      ((var,Singleton_k(p,kind',scon'))::rev_formals,(var,scon')::conmap)
+      ((var,Singleton_k(p,kind,scon))::rev_formals,Subst.add subst (var,scon))
     end
-    | substSingleton ((var,kind),(rev_formals,conmap)) = 
+    | substSingleton ((var,kind),(rev_formals,subst)) = 
     let 
-      val kind' = substConInKind (list2cmap conmap) kind
+      val kind = substConInKind subst kind
     in
-      ((var,kind')::rev_formals,conmap)
+      ((var,kind)::rev_formals,subst)
     end
 
   fun foldSubstSingleton var_kind_list = 
     let
-      val (rev_list,conmap) = List.foldl substSingleton ([],[]) var_kind_list
+      val (rev_list,subst) = List.foldl substSingleton ([],Subst.empty()) var_kind_list
     in
-      (rev rev_list,list2cmap conmap)
+      (rev rev_list,subst)
     end
 
   fun eta_reduce_fun lambda = 
@@ -323,32 +298,6 @@ struct
       map_annotate eta_reduce_record' record_c
     end
   
-  fun beta_reduce_typecase typecase = 
-    let 
-      fun beta_reduce_typecase' 
-	(Typecase_c {arg,arms,default,kind}) = 
-	(case strip_prim arg
-	   of SOME (pcon,args) =>
-	     (case List.find (fn (pcon',formals,body) => primequiv (pcon,pcon')) arms
-		of SOME (pcon',formals,body) => 
-		  let
-		    val (vars,_) = unzip formals
-		    val conmap = list2cmap (zip vars args)
-		  in
-		    if eq_len (vars,args) then
-		      substConInCon conmap body
-		    else
-		      (error "Mismatch between formal and actual params in Typecase" handle e => raise e)
-		  end
-		 | NONE => default)
-	    | _ => typecase)
-	| beta_reduce_typecase' _ = 
-	   (perr_c typecase;
-	    (error "beta_reduce_typecase called on non type case" handle e => raise e))
-    in
-      map_annotate beta_reduce_typecase' typecase
-    end
-
   fun beta_reduce_record proj = 
     let
       fun beta_reduce_record' (Proj_c (con,label)) = 
@@ -371,28 +320,61 @@ struct
 	fun loop (state,[]) = ([],state)
 	  | loop (state,fst::rest) =
 	  let
-	    val (fst',state') = ffun (fst,state)
-	    val (rest',state'') = loop (state',rest)
+	    val (fst,state) = ffun (fst,state)
+	    val (rest,state) = loop (state,rest)
 	  in
-	    (fst'::rest',state'')
+	    (fst::rest,state)
 	  end
       in
 	loop (init,list)
       end
     
+  (*POST: kinds are in normal form*)
   fun foldKSR (D,kinds) = 
     let
-	fun loop (D,[],kmap) = (D,rev kmap)
-	  | loop (D,(var,kind)::rest,kmap) =
+	fun loop (D,[],kmap,subst) = (D,rev kmap,subst)
+	  | loop (D,(var,kind)::rest,kmap,subst) =
 	  let
-	    val kind' = kindSubstReduce (D,kmap,kind)
+	    val kind = substConInKind subst kind
+	    val kind = kindSubstReduce (D,kmap,kind)
+	    val (D,var,subst_one) = bind_kind (D,var,kind)
+	    val subst = Subst.con_subst_compose(subst,subst_one)
+	    val kmap = (var,kind)::kmap
 	  in
-	    loop (insert_kind (D,var,kind'),rest,(var,kind')::kmap)
+	    loop (D,rest,kmap,subst)
 	  end
     in
-      loop (D,kinds,[])
+      loop (D,kinds,[],Subst.empty())
     end
  
+  and beta_reduce_typecase (D,typecase) = 
+    let 
+      fun beta_reduce_typecase' 
+	(Typecase_c {arg,arms,default,kind}) = 
+	(case strip_prim arg
+	   of SOME (pcon,args) =>
+	     (case List.find (fn (pcon',formals,body) => primequiv (pcon,pcon')) arms
+		of SOME (_,formals,body) => 
+		  let
+		    val (vars,_) = unzip formals
+		    val conmap = Subst.fromList (zip vars args)
+		    val body = substConInCon conmap body
+		    val (body,kind) = con_valid (D,body)
+		  in
+		    if eq_len (vars,args) then
+		      body
+		    else
+		      (error "Mismatch between formal and actual params in Typecase" handle e => raise e)
+		  end
+		 | NONE => default)
+	    | _ => typecase)
+	| beta_reduce_typecase' _ = 
+	   (perr_c typecase;
+	    (error "beta_reduce_typecase called on non type case" handle e => raise e))
+    in
+      map_annotate beta_reduce_typecase' typecase
+    end
+
   and beta_reduce_fun (D,app) = 
     let
       fun beta_reduce_fun' (app as (App_c (con,actuals))) = 
@@ -406,11 +388,11 @@ struct
 				 if eq_var (var,var2) then
 				   let
 				     val (vars,_) = unzip formals
-				     val conmap = list2cmap (zip vars actuals)
-				     val body' = substConInCon conmap body
-				     val (body'',_) = con_valid(D,body')
+				     val conmap = Subst.fromList (zip vars actuals)
+				     val body = substConInCon conmap body
+				     val (body,_) = con_valid(D,body)
 				   in
-				     body''
+				     body
 				   end
 				 else app
 			| NONE => app)
@@ -458,18 +440,23 @@ struct
 	 end
 	| Record_k elts => 
 	 let
-	   fun entry_sort (((l1,_),_),((l2,_),_)) = gt_label(l1,l2)
-	   val elt_list = ListMergeSort.sort entry_sort (sequence2list elts)
-	   val vars_and_kinds = map (fn ((l,v),k) => (v,k)) elt_list
+	   val elt_list = sequence2list elts
+	   val (labels,vars_and_kinds) = unzip (map (fn ((l,v),k) => (l,(v,k))) elt_list)
 
-	   val (D',vars_and_kinds') = foldKSR (D,vars_and_kinds)
+	   val (D,vars_and_kinds,subst_fn) = foldKSR (D,vars_and_kinds)
 	   val entries = 
-	     map2 (fn (((l,_),_),(v,k)) => ((l,v),k)) (elt_list,vars_and_kinds')
-	 in  (Record_k (list2sequence entries))
+	     map2 (fn (l,(v,k)) => ((l,v),k)) (labels,vars_and_kinds)
+	 in  
+	   if labels_sorted_distinct labels then
+	     (Record_k (list2sequence entries))
+	   else 
+	     (perr_k kind;
+	      error "Labels in record kind not sorted/distinct")
 	 end
 	| Arrow_k (openness, formals, return) => 
 	 let
-	   val (D,formals) = foldKSR (D,formals)
+	   val (D,formals,subst) = foldKSR (D,formals)
+	   val return = substConInKind subst return
 	   val return = kindSubstReduce (D,formals,return)
 	 in
 	   (Arrow_k (openness, formals,return))
@@ -503,8 +490,8 @@ struct
 	    (Exn_c) | (Array_c) | (Vector_c) | (Ref_c) | (Exntag_c)) 
 	   => (pcon,Word_k Runtime,args,kinds)
 	 | (Record_c labels) => 
-	   (if c_all is_word b_perr_k kinds then
-	      (Record_c (ListMergeSort.sort gt_label labels),Word_k Runtime,args,kinds)
+	   (if c_all is_word b_perr_k kinds andalso labels_sorted_distinct labels then
+	      (Record_c labels,Word_k Runtime,args,kinds)
 	    else
 	      (error "Record contains field of non-word kind" handle e => raise e))
 	 | (Sum_c {known,tagcount}) => 
@@ -514,7 +501,7 @@ struct
 		     (case known 
 			of SOME i => 
 			  (Word32.<=(Word32.fromInt 0,i) andalso 
-			   Word32.<(i,tagcount))
+			   Word32.<(i,tagcount+Word32.fromInt(length args)))
 			 | NONE => true) 
 		 in
 		   if valid then
@@ -541,28 +528,21 @@ struct
 	 end
 	| (Mu_c (defs,var)) =>
 	 let
-	   (* Assumes that set implementation guarantees entries are 
-	    * all distinct - i.e., no duplicates
-	    *)
-
-	   fun is_bound var = (case find_kind(D,var) of
-				     SOME _ => true
-				   | NONE => false)
-	   val Mu_c(def_list,var) = NilUtil.rename_mu(is_bound,defs,var)
-
-	   val var_kinds = map (fn (var,con) => (var,Word_k Runtime)) def_list
-
-	   fun check_one D ((var,con),(cons,kinds)) =
-	     let
-	       val (con,kind) = (con_valid (D,con))
-	     in
-	       ((var,con)::cons,kind::kinds)
-	     end
-
+	   val def_list = sequence2list defs
+	     
 	   val (vars,cons) = unzip def_list
 
-	   val D = insert_kind_list (D,var_kinds)
-	     
+	   val var_kinds = map (fn var => (var,Word_k Runtime)) vars
+
+	   val (D,var_kinds,subst) = bind_kind_list (D,var_kinds)
+
+	   val (vars,_) = unzip var_kinds
+	   val var = 
+	     case Subst.substitute subst var
+	       of SOME(Var_c var) => var
+		| _ => var
+	   val cons = map (substConInCon subst) cons
+
 	   val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
 	   val defs = list2sequence (zip vars cons)
 	   val con = Mu_c (defs,var)
@@ -575,9 +555,11 @@ struct
 	 end
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>
 	 let
-	   val (D,tformals) = foldKSR (D,tformals)
-	   val (tformals,conmap) = foldSubstSingleton tformals
-	   val body = substConInCon conmap body
+	   val (D,tformals,subst1) = foldKSR (D,tformals)
+	   val (tformals,subst2) = foldSubstSingleton tformals
+	   val subst = Subst.con_subst_compose (subst2,subst1)
+	   val formals = map (substConInCon subst) formals
+	   val body = substConInCon subst body
 	   val (body,body_kind) = con_valid (D,body)
 	   val (formals,formal_kinds) = 
 	     unzip (map (curry2 con_valid D) formals)
@@ -607,37 +589,25 @@ struct
 	| (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
 			((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
 	 let
-	   val (formals,body,body_kind) = 
-				let fun mapper (v,_) = (case NilContext.find_kind(D,v) of
-								NONE => NONE
-							      | SOME _ => SOME(v,Var_c (Name.derived_var v)))
-				    val table = List.mapPartial mapper formals
-				    fun subst v  = Listops.assoc_eq(eq_var,v,table)
-				in  case table of
-					[] => (formals,body,body_kind)
-				      | _ => (map (fn (v,k) => ((case subst v of
-								        SOME (Var_c v') => v'
-								      | _ => v),
-								NilUtil.substConInKind subst k)) formals,
-						substConInCon subst body,
-						substConInKind subst body_kind)
-				end
 	   val origD = D
-	   val (D,formals) = foldKSR (D,formals)
+	   val (D,formals,subst1) = foldKSR (D,formals)
 	   val _ = if (!debug)
 		     then (print "formals1 are ";
 			   app (fn (v,k) => (PpNil.pp_var v; print " :: "; 
 					     PpNil.pp_kind k; print "\n")) formals;
 			   print "\n")
 		   else ()
-	   val (formals,conmap) = foldSubstSingleton formals
-	   val body = substConInCon conmap body
+	   val (formals,subst2) = foldSubstSingleton formals
 	   val _ = if !debug
 		     then (print "formals' are ";
 			   app (fn (v,k) => (PpNil.pp_var v; print " :: "; 
 					     PpNil.pp_kind k; print "\n")) formals;
 			   print "\n\n")
 		   else ()
+	   val subst = Subst.con_subst_compose(subst2,subst1)
+	   val body = substConInCon subst body
+	   val body_kind = substConInKind subst body_kind
+	   val body_kind = kind_valid(D,body_kind)
 	   val (body,body_kind') = con_valid (D,body)
 	   val _ = if (alpha_sub_kind (body_kind',body_kind)) then ()
 		   else (perr_k_k (body_kind,body_kind');
@@ -648,7 +618,7 @@ struct
 		| _ => (Code_cb,Code)
 	   val lambda = (Let_c (sort,[Con (var,formals,body,body_kind')],Var_c var))
 	   val lambda = eta_reduce_fun lambda
-	   val bndkind = Arrow_k(openness,formals,body_kind)
+	   val bndkind = Arrow_k(openness,formals,body_kind')
 	   val bndkind = singletonize(NONE,bndkind,lambda)
 	 in
 	   if (null rest) andalso (is_var_c con) andalso 
@@ -679,7 +649,7 @@ struct
 	     val (code,code_kind) =  con_valid (D,code)
 	   in
 	     case (strip_singleton code_kind)
-	       of Arrow_k (Code,vklist,body_kind) => 
+	       of Arrow_k ((Code | ExternCode),vklist,body_kind) => 
 		 let 
 		   val (first,(v,klast)) = split vklist
 		   val con = Closure_c (code,env)
@@ -701,7 +671,7 @@ struct
 	| (Crecord_c entries) => 
 	   let
 	     val (labels,cons) = unzip entries
-	     val distinct = sorted_unique eq_label labels
+	     val distinct = labels_sorted_distinct labels
 	     val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
 	     val k_entries = map2 (fn (l,k) => ((l,fresh_var()),k)) (labels,kinds)
 	     val entries = zip labels cons
@@ -737,7 +707,8 @@ struct
 
 	   val con = Proj_c (rvals,label)
 	   val con = beta_reduce_record con
-	   val kind = singletonize (NONE,propogate entry_kinds,con)
+	   val kind = kind_valid(D,propogate entry_kinds)  (*must renormalize!!*)
+	   val kind = singletonize (NONE,kind,con)
 	 in
 	   (con,kind)
 	 end
@@ -762,39 +733,45 @@ struct
 	     else
 		(error "Constructor function failed: argument not subkind of expected kind" handle e => raise e)
 
-	   val conmap = list2cmap apps
+	   val conmap = Subst.fromList apps
 	   val con = App_c (cfun,actuals)
 	   val con = beta_reduce_fun (D,con)
-	   val kind = singletonize (NONE,substConInKind conmap body_kind,con)
+	   val kind = substConInKind conmap body_kind
+	   val kind = kind_valid(D,kind) (*Must renormalize!!*)
+	   val kind = singletonize (NONE,kind,con)
 	 in
 	   (con,kind)
 	 end
-	| (Typecase_c {arg,arms,default,kind}) => 
+	| (Typecase_c {arg,arms,default,kind=given_kind}) => 
 	 let
-	   val kind = kind_valid (D,kind)
+	   val given_kind = kind_valid (D,given_kind)
 	   fun doarm (pcon,args,body) = 
 	     let
 	       val (vars,kinds) = unzip args
 	       val kinds = map (curry2 kind_valid D) kinds
 	       val argcons = map Var_c vars
 	       val args = zip vars kinds
-	       val D = insert_kind_list (D,args)
+	       val (D,args,subst1) = bind_kind_list (D,args)
+	       val (args,subst2) = foldSubstSingleton args
+	       val subst = Subst.con_subst_compose (subst2,subst1)
+	       val argcons = map (substConInCon subst) argcons
+	       val body = substConInCon subst body
 	       val (pcon,pkind,argcons,kinds) = pcon_valid (D,pcon,argcons)
 	       val (body,body_kind) = con_valid(D,body)
 	     in
-	       if alpha_sub_kind (body_kind,kind) then
+	       if alpha_sub_kind (body_kind,given_kind) then
 		 (pcon,args,body)
 	       else
-		 (perr_k_k (kind,body_kind);
+		 (perr_k_k (given_kind,body_kind);
 		  (error "Illegal kind in typecase" handle e => raise e))
 	     end
 	   val (arg,arg_kind) = con_valid (D,arg)
 	   val (default,def_kind) = con_valid (D,default)
 	   val arms = map doarm arms
 	   val con = Typecase_c {arg=arg,arms=arms,
-				 default=default,kind=kind}
-	   val con = beta_reduce_typecase con
-	   val kind = singletonize (NONE,kind,con)
+				 default=default,kind=given_kind}
+	   val con = beta_reduce_typecase (D,con)
+	   val kind = singletonize (NONE,given_kind,con)
 	 in
 	   if alpha_sub_kind (def_kind,kind) andalso
 	     type_or_word arg_kind then
@@ -835,17 +812,13 @@ struct
 	       (*Closures?  *)
 	       case openness
 		 of Open => Let_c (Parallel,[Open_cb (var,formals,c,return)],Var_c var)
-		  | Code => Let_c (Parallel,[Code_cb (var,formals,c,return)],Var_c var)
+		  | (Code | ExternCode) => Let_c (Parallel,[Code_cb (var,formals,c,return)],Var_c var)
 		  | Closure => 
 		   (error "Got closure in pullout - expected open or code" handle e => raise e)
 	     end)
 	   
-      fun cmap var = 
-	(case List.find (eq_var_pair var) kmap
-	   of SOME (v,k) => SOME (pull (Var_c var,k))
-	    | NONE => NONE)
-
-      val k = substConInKind cmap k
+      val subst = Subst.fromList (map (fn (v,k) => (v,pull (Var_c v,k))) kmap)
+      val k = substConInKind subst k
     in
       kind_valid (D,k)
     end
@@ -906,16 +879,16 @@ struct
 			of W64 => Type_k Runtime
 			 | _ => Word_k Runtime
 	 in
-	   (value,Prim_c (Int_c intsize,[]),kind)
+	   (value,Prim_c (Int_c intsize,[]))
 	 end
 	| float (floatsize,string) => 
-	 (value,Prim_c (Float_c floatsize,[]),Type_k Runtime)
+	 (value,Prim_c (Float_c floatsize,[]))
 	| array (con,arr) => 
 	 let
 	   val (con,kind) = con_valid (D,con)
 	   fun check exp = 
 	     let
-	       val (exp',con',kind) = exp_valid (D,exp)
+	       val (exp',con') = exp_valid (D,exp)
 	     in
 	       if alpha_equiv_con (con,con') then
 		 exp'
@@ -924,14 +897,14 @@ struct
 	     end
 	 in
 	   Array.modify check arr;
-	   (array (con,arr),Prim_c (Array_c,[con]),Word_k Runtime)
+	   (array (con,arr),Prim_c (Array_c,[con]))
 	 end
 	| vector (con,vec) => 
 	 let
 	   val (con,kind) = con_valid (D,con)
 	   fun check exp = 
 	     let
-	       val (exp',con',kind) = exp_valid (D,exp)
+	       val (exp',con') = exp_valid (D,exp)
 	     in
 	       if alpha_equiv_con (con,con') then
 		 exp'
@@ -940,33 +913,31 @@ struct
 	     end
 	 in
 	   Array.modify check vec;
-	   (vector (con,vec),Prim_c (Vector_c,[con]),Word_k Runtime)
+	   (vector (con,vec),Prim_c (Vector_c,[con]))
 	 end
 	| refcell expref =>
 	 let
-	   val (exp,con,kind) = exp_valid (D,!expref)
+	   val (exp,con) = exp_valid (D,!expref)
 	 in
 	   expref := exp;
-	   (refcell expref,Prim_c (Ref_c,[con]),Word_k Runtime)
+	   (refcell expref,Prim_c (Ref_c,[con]))
 	 end
 	| tag (atag,con) => 
 	 let
 	   val (con,kind) = con_valid (D,con)
 	 in
 	   (tag (atag,con),
-	    Prim_c (Exntag_c,[con]),Word_k Runtime)
+	    Prim_c (Exntag_c,[con]))
 	 end)
   and prim_valid (D,prim,cons,exps) = 
     (case (prim,cons,exps)
        of (record labels,cons,exps) =>
 	 let
 	   val fields = zip3 labels exps cons
-	   fun field_eq ((l1,_,_),(l2,_,_)) = eq_label(l1,l2)
-	   val distinct = sorted_unique field_eq fields
 	   fun check_one (label,exp,con) = 
 	     let
 	       val (con,kind) = con_valid (D,con)
-	       val (exp,con',kind') = exp_valid (D,exp)
+	       val (exp,con') = exp_valid (D,exp)
 	     in
 	       if alpha_equiv_con (con,con') then
 		 (label,exp,con)
@@ -980,14 +951,14 @@ struct
 	   val con = Prim_c (Record_c labels,cons)
 	   val (con,kind) = con_valid (D,con)
 	 in
-	   if distinct then
-	     (exp,con,kind)
+	   if labels_sorted_distinct labels then
+	     (exp,con)
 	   else
 	     (error "Fields not distinct or not sorted" handle e => raise e)
 	 end
 	| (select label,[],[exp]) =>
 	 let
-	   val (exp,con,kind) = exp_valid (D,exp)
+	   val (exp,con) = exp_valid (D,exp)
 	   val (labels,cons) = 
 	     (case strip_record con 
 		of SOME x => x
@@ -997,8 +968,7 @@ struct
 	 in
 	   case find2 (fn (l,c) => eq_label (l,label)) (labels,cons)
 	     of SOME (_,con) => 
-	       ((select label,[],[exp]),
-		con,singletonize (SOME Runtime,Word_k Runtime,con))
+	       ((select label,[],[exp]),con)
 	      | NONE => 
 	       (perr_e_c (exp,con);
 		printl ("Label "^(label2string label)^" projected from expression");
@@ -1008,13 +978,12 @@ struct
 	 let
 	   val (cons,kinds) = 
 	     unzip (map (curry2 con_valid D) cons)
-	   val con = Prim_c (Sum_c {tagcount=tagcount,known=SOME field},cons)
-	   val kind = singletonize (SOME Runtime,Word_k Runtime,con)
+	   val con = Prim_c (Sum_c {tagcount=tagcount,known=NONE},cons) (*Can't propogate field*)
 	 in
 	   case exps 
 	     of [] => 
 	       if (field < tagcount) then
-		 ((inject {tagcount=tagcount,field=field},cons,[]),con,kind)
+		 ((inject {tagcount=tagcount,field=field},cons,[]),con)
 	       else
 		 (perr_e (Prim_e (NilPrimOp prim,cons,[]));
 		  (error "Illegal injection - field out of range" handle e => raise e))
@@ -1022,11 +991,11 @@ struct
 		 if (tagcount <= field) andalso 
 		   ((Word32.toInt field) < ((Word32.toInt tagcount) + (List.length cons))) then
 		   let
-		     val (argexp,argcon,argkind) = exp_valid (D,argexp)
+		     val (argexp,argcon) = exp_valid (D,argexp)
 		     val con_k = List.nth (cons,Word32.toInt (field-tagcount))
 		   in
 		     if alpha_equiv_con (argcon,con_k) then 
-		       ((inject {tagcount=tagcount,field=field},cons,[argexp]),con,kind)
+		       ((inject {tagcount=tagcount,field=field},cons,[argexp]),con)
 		     else
 		       (perr_e_c_c (argexp,con_k,argcon);
 			(error "Illegal injection - type mismatch in args" handle e => raise e))
@@ -1039,10 +1008,9 @@ struct
 	 let
 	   val (argcons,argkinds) = 
 	     unzip (map (curry2 con_valid D) argcons)
-	   val (argexps,expcons,expkinds) = 
-	     unzip3 (map (curry2 exp_valid D) exps)
-	   val con = Prim_c (Sum_c {tagcount=tagcount,known=SOME field},argcons)
-	   val kind = singletonize (SOME Runtime,Word_k Runtime,con)
+	   val (argexps,expcons) = 
+	     unzip (map (curry2 exp_valid D) exps)
+	   val con = Prim_c (Sum_c {tagcount=tagcount,known=NONE},argcons) (*can't propogate field*)
 	 in
 	   if (tagcount <= field) andalso 
 	     ((Word32.toInt field) < ((Word32.toInt tagcount) + (List.length argcons))) then
@@ -1056,8 +1024,8 @@ struct
 			       (error "Record injection on illegal field" handle e => raise e))
 	     in
 	       if c_all2 alpha_equiv_con 
-		 (o_perr_c_c "Length mismatch") (expcons,cons) then 
-		 ((inject_record {tagcount=tagcount,field=field},argcons,argexps),con,kind)
+		 (o_perr_c_c "Length mismatch in record") (expcons,cons) then 
+		 ((inject_record {tagcount=tagcount,field=field},argcons,argexps),con)
 	       else
 		  (error "Illegal record injection - type mismatch in args" handle e => raise e)
 	     end
@@ -1068,20 +1036,20 @@ struct
 	 end
 	| (project_sum {tagcount,sumtype},argcons,[argexp]) => 
 	 let
-	   val (argexp,argcon,argkind) = exp_valid (D,argexp)
+	   val (argexp,argcon) = exp_valid (D,argexp)
 	   val (argcons,argkinds) = unzip (map (curry2 con_valid D) argcons)
 	 in
 	   case strip_sum argcon
 	     of SOME (tagcount',SOME field,cons) =>
 	       if tagcount' = tagcount andalso
 		 field = sumtype andalso
-		 field < tagcount then
+		 (field >= tagcount) andalso
+		 (Word32.toInt field) < ((Word32.toInt tagcount) + List.length argcons) then
 		 let
-		   val con_i = List.nth (argcons,Word32.toInt sumtype)
-		   val kind = singletonize (SOME Runtime,Word_k Runtime,con_i)
+		   val con_i = List.nth (argcons,Word32.toInt (field - tagcount))
 		 in
-		   if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch") (cons,argcons) then
-		     ((prim,argcons,[argexp]),con_i,kind)
+		   if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch in project") (cons,argcons) then
+		     ((prim,argcons,[argexp]),con_i)
 		   else
 		      (error "Arguments to project_sum don't match" handle e => raise e)
 		 end
@@ -1096,32 +1064,33 @@ struct
 	 end
 	| (project_sum_record {tagcount,sumtype,field},argcons,[argexp]) => 
 	 let
-	   val (argexp,argcon,argkind) = exp_valid (D,argexp)
+	   val (argexp,argcon) = exp_valid (D,argexp)
 	   val (argcons,argkinds) = unzip (map (curry2 con_valid D) argcons)
 	 in
 	   case strip_sum argcon
-	     of SOME (tagcount',SOME sumtype,cons) =>
+	     of SOME (tagcount',SOME sumtype',cons) =>
 	       (if tagcount' = tagcount andalso
-		  sumtype = sumtype andalso
-		  sumtype < tagcount then
-		  if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch") (cons,argcons) then
-		    let
-		      val con_i = List.nth (argcons,Word32.toInt sumtype)
-		    in
-		      case strip_record con_i
-			of SOME (labels,cons) =>
-			  if (Word32.toInt field) < List.length labels then
-			    let 
-			      val con_j = List.nth (cons,Word32.toInt field) 
-			      val kind = singletonize (SOME Runtime,Word_k Runtime,con_j)
-			    in
-			      ((prim,argcons,[argexp]),con_j,kind)
-			    end
-			  else (error "Project_sum_record field out of range" handle e => raise e)
-			 | NONE => 
-			    (perr_c con_i;
-			     (error "Non recrod type in sum record projection" handle e => raise e))
-		    end
+		  sumtype = sumtype' andalso
+		  tagcount >= sumtype andalso
+		  (Word32.toInt sumtype) < ((Word32.toInt tagcount) + List.length argcons) then
+		  if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch in project sum") (cons,argcons) 
+		    then
+		      let
+			val con_i = List.nth (argcons,Word32.toInt (sumtype - tagcount))
+		      in
+			case strip_record con_i
+			  of SOME (labels,cons) =>
+			    if (Word32.toInt field) < List.length labels then
+			      let 
+				val con_j = List.nth (cons,Word32.toInt field) 
+			      in
+				((prim,argcons,[argexp]),con_j)
+			      end
+			    else (error "Project_sum_record field out of range" handle e => raise e)
+			   | NONE => 
+			      (perr_c con_i;
+			       (error "Non recrod type in sum record projection" handle e => raise e))
+		      end
 		  else
 		    (error "Arguments to project_sum don't match" handle e => raise e)
 		else 
@@ -1133,30 +1102,27 @@ struct
 	 end
 	| (box_float floatsize,[],[exp]) => 
 	 let
-	   val (exp,con,kind) = exp_valid (D,exp)
+	   val (exp,con) = exp_valid (D,exp)
 	   val box_con = Prim_c (BoxFloat_c floatsize,[])
 	 in
 	   case strip_float con
 	     of SOME floatsize' => 
 	       if same_floatsize (floatsize,floatsize') then
 		 ((box_float floatsize,[],[exp]),
-		  box_con,
-		  singletonize (SOME Runtime,Word_k Runtime,box_con))
+		  box_con)
 	       else
 		 (error "Mismatched float size in box float" handle e => raise e)
 	      | NONE => (error "Box float called on non-float" handle e => raise e)
 	 end
 	| (unbox_float floatsize,[],[exp]) => 
 	 let
-	   val (exp,con,kind) = exp_valid (D,exp)
+	   val (exp,con) = exp_valid (D,exp)
 	   val unbox_con = Prim_c (Float_c floatsize,[])
 	 in
 	   case strip_boxfloat con
 	     of SOME floatsize' => 
 	       if same_floatsize (floatsize,floatsize') then
-		 ((unbox_float floatsize,[],[exp]),
-		  unbox_con,
-		  singletonize (SOME Runtime,Type_k Runtime,unbox_con))
+		 ((unbox_float floatsize,[],[exp]),unbox_con)
 	       else
 		 (error "Mismatched float size in box float" handle e => raise e)
 	      | NONE => (error "Unbox float called on non-boxfloat" handle e => raise e)
@@ -1164,18 +1130,19 @@ struct
 	| (roll,[argcon],[exp]) => 
 	 let
 	   val (argcon,argkind) = con_valid (D,argcon)
-	   val (exp,con,kind) = exp_valid (D,exp)
+	   val (exp,con) = exp_valid (D,exp)
 	 in
 	   case strip_recursive argcon 
 	     of SOME (set,var) =>
 	       let
 		 val def_list = set2list set
 		 val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
-		 val cmap = list2cmap (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
+		 val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
 		 val con' = substConInCon cmap con'
+		 val (con',_) = con_valid(D,con') (*Must renormalize*)
 	       in
 		 if alpha_equiv_con (con,con') then
-		   ((roll,[argcon],[exp]),argcon,argkind)
+		   ((roll,[argcon],[exp]),argcon)
 		 else
 		   (perr_e_c_c (exp,con',con);
 		    (error "Error in roll" handle e => raise e))
@@ -1189,7 +1156,7 @@ struct
 	| (unroll,[con],[exp]) =>
 	 let
 	   val (argcon,argkind) = con_valid (D,con)
-	   val (exp,con,kind) = exp_valid (D,exp)
+	   val (exp,con) = exp_valid (D,exp)
 	 in
 	   (case strip_recursive argcon 
 	      of SOME (set,var) =>
@@ -1197,11 +1164,11 @@ struct
 		   let
 		     val def_list = set2list set
 		     val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
-		     val cmap = list2cmap (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
+		     val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
 		     val con' = substConInCon cmap con'
+		     val (con',_) = con_valid(D,con')
 		   in
-		     ((roll,[argcon],[exp]),con',
-		      singletonize(SOME Runtime,Word_k Runtime,con'))
+		     ((unroll,[argcon],[exp]),con')
 		   end
 		 else
 		   (perr_e_c_c (exp,argcon,con);
@@ -1217,36 +1184,35 @@ struct
 	   val (argcon,argkind) = con_valid (D,argcon)
 	   val exp = (make_exntag,[argcon],[])
 	   val con = Prim_c (Exntag_c,[argcon])
-	   val kind = singletonize (SOME Runtime,Word_k Runtime,con)
 	 in
-	   (exp,con,kind)
+	   (exp,con)
 	 end
 	| (inj_exn name,[],[exp1,exp2]) => 
 	 let
-	   val (exp1,con1,kind1) = exp_valid (D,exp1)
-	   val (exp2,con2,kind2) = exp_valid (D,exp2)
+	   val (exp1,con1) = exp_valid (D,exp1)
+	   val (exp2,con2) = exp_valid (D,exp2)
 	 in
-	   case strip_exntag con2
+	   case strip_exntag con1
 	     of SOME con => 
-	       if alpha_equiv_con (con1,con) then
+	       if alpha_equiv_con (con2,con) then
 		 let
 		   val exp = (inj_exn name,[],[exp1,exp2])
 		   val con = Prim_c (Exn_c,[])
-		   val kind = singletonize (SOME Runtime,Word_k Runtime,con)
 		 in
-		   (exp,con,kind)
+		   (exp,con)
 		 end
 	       else
 		 (error "Type mismatch in exception injection" handle e => raise e)
 	      | NONE =>  
-		 (perr_e_c (exp2,con2);
+		 (perr_e_c (exp1,con1);
 		  (error "Illegal argument to exception injection - not a tag" handle e => raise e))
 	 end
 	| (make_vararg (openness,effect),cons,exps) =>
 	 (error "make_vararg unimplemented....punting" handle e => raise e)
 	| (make_onearg (openness,effect),cons,exps) =>  
 	 (error "make_onearg unimplemented....punting" handle e => raise e)
-	| (peq,cons,exps) => (error "Polymorphic equality should not appear at this level" handle e => raise e)
+	| (peq,cons,exps) => 
+	   (error "Polymorphic equality should not appear at this level" handle e => raise e)
 	| (prim,cons,exps) => 
 	 (perr_e (Prim_e (NilPrimOp prim,cons,exps));
 	  lprintl "No matching case in exp_valid";
@@ -1256,10 +1222,10 @@ struct
     (case switch
        of Intsw_e {info=intsize,arg,arms,default} =>
 	 let
-	   val (arg,argcon,argkind) = exp_valid (D,arg)
+	   val (arg,argcon) = exp_valid (D,arg)
 	   val (ns,arm_exps) = unzip arms
-	   val (arm_exps,arm_cons,arm_kinds) =
-	     unzip3 (map (curry2 function_valid D) arm_exps)
+	   val (arm_exps,arm_cons) =
+	     unzip (map (curry2 function_valid D) arm_exps)
 	   val arms = zip ns arm_exps
 	   val _ = 
 	     case strip_int argcon
@@ -1270,267 +1236,330 @@ struct
 		 (perr_e_c (arg,argcon);
 		  (error "Branch argument not an int" handle e => raise e))
 
-	   fun check_one con arm_con = 
-	     case strip_arrow arm_con
-	       of SOME (_,_,[],[],_,body_c) => 
-		 if alpha_equiv_con (con,body_c) then ()
-		 else
-		   (perr_c_c (con,body_c);
-		    (error "Branch arm types don't match" handle e => raise e))
-		| SOME _ => (error "IntSwitch has illegal function type - arguments present" handle e => raise e)
-		| NONE => (error "IntSwitch has non-function type" handle e => raise e)
-
-	   val (default,rep_opt) = opt_arrow_con (D,default,arm_cons)
-	   val (rep_con,rep_kind) = 
-	     case rep_opt
-	       of SOME v => v
-		| NONE => (error "No valid arms in int branch" handle e => raise e)
-	   val _ = List.app (check_one rep_con) arm_cons
+	   fun check_arms (NONE,[]) = error "Int case must be non-empty"
+	     | check_arms (SOME rep_con,[]) = rep_con
+	     | check_arms (NONE,arm_con::rest) = 
+	     (case strip_arrow arm_con
+		of SOME (_,_,[],[],_,body_c) => check_arms (SOME body_c,rest)
+		 | _ => (error "IntSwitch has non-function type" handle e => raise e))
+	     | check_arms (SOME rep_con,arm_con::rest) =  
+		(case strip_arrow arm_con
+		   of SOME (_,_,[],[],_,body_c) => 
+		     if alpha_equiv_con (rep_con,body_c) then 
+		       check_arms (SOME rep_con,rest)
+		     else
+		       (perr_c_c (rep_con,body_c);
+			(error "Branch arm types don't match" handle e => raise e))
+		    | SOME _ => 
+		       (error "IntSwitch has illegal function type - arguments present" handle e => raise e)
+		    | NONE => (error "IntSwitch has non-function type" handle e => raise e))
+		   
+	   val (default,default_con) = split_opt (map_opt (curry2 exp_valid D) default)
+	   val rep_con = check_arms (default_con,arm_cons)
 	 in
 	   (Intsw_e {info=intsize,arg=arg,
 		     arms=arms,default=default},
-	    rep_con,rep_kind)
+	    rep_con)
 	 end
-	| Sumsw_e {info=(tagcount,decl_cons),arg,arms,default} => 
+	| Sumsw_e {info=(non_val,val_cons),arg,arms,default} => 
 	 let
-	   val (arg,argcon,argkind) = exp_valid (D,arg)
+	   val (arg,argcon) = exp_valid (D,arg)
 	   val (ns,arm_exps) = unzip arms
-	   val (arm_exps,arm_cons,arm_kinds) =
-	     unzip3 (map (curry2 function_valid D) arm_exps)
-	   val arms = zip ns arm_exps
-	   val (decl_cons,decl_kinds) = unzip (map (curry2 con_valid D) decl_cons)
-	   val sum_cons = 
-	     case strip_sum argcon
-	       of SOME (tagcount,NONE,cons) => cons
+	   val (arm_exps,arm_cons) =
+	     unzip (map (curry2 function_valid D) arm_exps)
+	   val (val_cons,_) = unzip (map (curry2 con_valid D) val_cons)
 
-		| SOME (tagcount,SOME _,cons) =>
-		   (error "Sum case called on known sum type constructor" handle e => raise e)
-		| NONE => 
+	   local
+	     val (sum_decl,_) = con_valid(D,Prim_c (Sum_c {tagcount=non_val,known=NONE},val_cons))
+	     val cons = 
+	       if alpha_equiv_con(sum_decl,argcon) then
+		 case strip_sum argcon
+		   of SOME (_,_,cons) => cons
+		    | _ => 
+		     (perr_e_c (arg,argcon);
+		      (error "Branch argument not of sum type" handle e => raise e))
+	       else
 		 (perr_e_c (arg,argcon);
-		  (error "Branch argument not of sum type" handle e => raise e))
-	   fun check_one con (arm_con,sum_con,decl_con) = 
-	     case strip_arrow arm_con
-	       of SOME (_,_,[],[arg_con],_,body_c) => 
-		 if (alpha_equiv_con (con,body_c) andalso
-		     alpha_equiv_con (arg_con,sum_con) andalso
-		     alpha_equiv_con (decl_con,sum_con)) then ()
-		 else
-		   (printl "Argmument type :";
-		    perr_c_c (sum_con,argcon);
-		    printl "Return type";
-		    perr_c_c (con,body_c);
-		    (error "Sum Branch arm types don't match" handle e => raise e))
-		| SOME _ => (error "SumSwitch has illegal function type - wrong arguments" handle e => raise e)
-		| NONE => (error "SumSwitch has non-function type" handle e => raise e)
-	   val (default,rep_opt) = opt_arrow_con (D,default,arm_cons)
-	   val (rep_con,rep_kind) = 
-	     case rep_opt
-	       of SOME v => v
-		| NONE => (error "No valid arms in sum branch" handle e => raise e)
-	   val _ = 
-	     if eq_len3 (arm_cons,sum_cons,decl_cons)  then
-	       app3 (check_one rep_con) (arm_cons,sum_cons,decl_cons)
-	     else
-	       (error "Argument/sum/branch lists of different lengths in sum switch" handle e => raise e)
+		  error "Type given for sum switch argument does not match found type")
+
+	     fun mk_sum field = 
+	       Prim_c (Sum_c {tagcount=non_val,
+			      known=SOME ((Word32.fromInt field)+non_val)},cons)
+
+	     val known_sums = map0count mk_sum (List.length cons)
+
+	     fun check_arms (rep_con,known_sums) = 
+	       let
+		 fun check_loop [] = ()
+		   | check_loop ((index,arm_con)::arm_cons) = 
+		   if index < non_val then
+		     (case strip_arrow arm_con
+			of SOME (_,_,[],[],_,body_c) => 
+			  if alpha_equiv_con (rep_con,body_c) then
+			    check_loop arm_cons
+			  else 
+			    (perr_c_c (rep_con,body_c);
+			     (error "non val Sum Branch arm types don't match" handle e => raise e))
+			 | _ => (perr_c arm_con;
+				 error "SumSwitch has non-function or illegal type 2" handle e => raise e))
+		   else
+		     let 
+		       val sum_con = List.nth (known_sums,Word32.toInt(index-non_val))
+		     in
+		       (case strip_arrow arm_con
+			  of SOME (_,_,[],[arg_con],_,body_c) =>  
+			    if (alpha_equiv_con (rep_con,body_c)) andalso
+			      alpha_equiv_con (arg_con,sum_con) then 
+			      check_loop arm_cons
+			    else
+			      (printl "Argument type :";
+			       perr_c_c (sum_con,argcon);
+			       printl "Return type";
+			       perr_c_c (rep_con,body_c);
+			       (error "Sum Branch arm types don't match" handle e => raise e))
+			   | _ => (perr_c arm_con;
+				   error "SumSwitch has non-function or illegal type 4" handle e => raise e))
+		     end
+	       in
+		 check_loop
+	       end
+	     val arm_list = zip ns arm_cons		   
+	     val (default,default_con) = split_opt (map_opt (curry2 exp_valid D) default)
+	     val rep_con = 
+	       (case (default_con,arm_cons)
+		  of (SOME con,_) => con
+		   | (NONE,fst::_) => (case get_arrow_return fst
+					 of SOME con => con
+					  | NONE => error "Non function type for switch branch!")
+		   | (NONE,[]) => error "Illegal sum switch - empty!")
+	     val _ = check_arms (rep_con,known_sums) arm_list
+	   in
+	     val default = default
+	     val rep_con = rep_con
+	   end
+
+	   val arms = zip ns arm_exps
 	 in
-	   (Sumsw_e {info=(tagcount,decl_cons),arg=arg,
+	   (Sumsw_e {info=(non_val,val_cons),arg=arg,
 		     arms=arms,default=default},
-	    rep_con,rep_kind)
+	    rep_con)
 	 end
      | Exncase_e {info=_,arg,arms,default} =>
 	 let
-	   val (arg,argcon,argkind) = exp_valid (D,arg)
+	   val (arg,argcon) = exp_valid (D,arg)
 	   val (vars,arm_exps) = unzip arms
-	   val (arm_exps,arm_cons,arm_kinds) =
-	     unzip3 (map (curry2 function_valid D) arm_exps)
-	   val (vars,var_cons,var_kinds) = 
-	     unzip3 (map (curry2 exp_valid D) vars)
-
-	   val _ = if c_all is_var_e (fn e => (perr_e e;false)) vars then ()
-		   else (error "Non-variable index in exncase" handle e => raise e)
+	   val (arm_exps,arm_cons) =
+	     unzip (map (curry2 function_valid D) arm_exps)
+	   val (vars,var_cons) = 
+	     unzip (map (curry2 exp_valid D) vars)
 
 	   val arms = zip vars arm_exps
 
-	   fun check_one con (var_con,arm_con) = 
-	     case strip_arrow arm_con
-	       of SOME (_,_,[],[arg_con],_,body_c) => 
-		 (case strip_exntag var_con
-		    of SOME exn_con =>
-		      if (alpha_equiv_con (con,body_c) andalso
-			  alpha_equiv_con (arg_con,var_con)) then 
-			()
-		      else
-			(printl "Argument type :";
-			 perr_c_c (var_con,arg_con);
-			 printl "Return type";
-			 perr_c_c (con,body_c);
-			 (error "Exn Branch arm types don't match" handle e => raise e))
-		     | NONE => (error ("Variable has wrong type" handle e => raise e)))
-		| SOME _ => (error "Exncase has illegal function type - wrong arguments" handle e => raise e)
-		| NONE => (error "SumSwitch has non-function type" handle e => raise e)
+	   fun check_arms (NONE,[],_) = error "Exn case must be non-empty"
+	     | check_arms (SOME rep_con,[],_) = rep_con
+	     | check_arms (NONE,arm_con::rest,var_con::var_cons) = 
+	     (case strip_arrow arm_con
+		of SOME (_,_,[],[arg_con],_,body_c) => 
+		  (case strip_exntag var_con
+		     of SOME exn_con =>
+		       if alpha_equiv_con (arg_con,exn_con) then 
+			 check_arms(SOME body_c,rest,var_cons)
+		       else
+			 (printl "Argument type :";
+			  perr_c_c (exn_con,arg_con);
+			  (error "Exn Branch arm types don't match" handle e => raise e))
+		      | NONE => (error ("Variable has wrong type" handle e => raise e)))
+		 | _ => (error "ExnSwitch has non-function type" handle e => raise e))
+	     | check_arms (SOME rep_con,arm_con::arm_cons,var_con::var_cons) = 
+		(case strip_arrow arm_con
+		   of SOME (_,_,[],[arg_con],_,body_c) => 
+		     (case strip_exntag var_con
+			of SOME exn_con =>
+			  if (alpha_equiv_con (rep_con,body_c)) andalso
+			    alpha_equiv_con (arg_con,exn_con) then 
+			    check_arms(SOME body_c,arm_cons,var_cons)
+			  else
+			    (printl "Argument type :";
+			     perr_c_c (exn_con,arg_con);
+			     printl "Return type";
+			     perr_c_c (rep_con,body_c);
+			     (error "Exn Branch arm types don't match" handle e => raise e))
+			 | NONE => (error ("Variable has wrong type" handle e => raise e)))
+		    | _ => (error "ExnSwitch has non-function type" handle e => raise e))
+	     | check_arms _ = error "More arms in switch than arms in exncase!"
 
-	   val (default,rep_opt) = opt_arrow_con (D,default,arm_cons)
-	   val (rep_con,rep_kind) = 
-	     case rep_opt
-	       of SOME v => v
-		| NONE => (error "No valid arms in exn case" handle e => raise e)
-	   val _ = 
-	     if eq_len (var_cons,arm_cons)  then
-	       app2 (check_one rep_con) (var_cons,arm_cons)
-	     else
-	       (error "Argument/branch lists of different lengths in exncase" handle e => raise e)
+	   val (default,default_con) = split_opt (map_opt (curry2 exp_valid D) default)
+	   val rep_con = check_arms (default_con,arm_cons,var_cons)
 	 in
 	   (Exncase_e {info=(),arg=arg,
 		       arms=arms,default=default},
-	    rep_con,rep_kind)
+	    rep_con)
 	 end
      | Typecase_e {info,arg=argcon,arms,default} =>
 	 let
 	   val (argcon,argkind) = con_valid (D,argcon)
 	   val (pcons,arm_fns) = unzip arms
-	   val (arm_fns,arm_cons,arm_kinds) = 
-	     unzip3 (map (curry2 function_valid D) arm_fns)
+	   val (arm_fns,arm_cons) = 
+	     unzip (map (curry2 function_valid D) arm_fns)
 
-	   fun check_one con (pcon,arm_con) = 
-	     case strip_arrow arm_con
-	       of SOME (_,_,[],args,_,body_c) => 
-		 let
-		   val (pcon,pkind,args,argkinds) = pcon_valid(D,pcon,args)
-		 in
-		   if alpha_equiv_con (body_c,con) andalso 
-		     alpha_sub_kind (argkind,pkind) then
-		     pcon
-		   else
-		     (perr_c_c (con,body_c);
-		      perr_k_k (pkind,argkind);
-		      (error "Typecase expression arm has wrong type" handle e => raise e))
-		 end
-		| _ => (perr_c arm_con;
-			   (error "Typecase expression has illegal arm type" handle e => raise e))
-	   val (default,rep_opt) = opt_arrow_con (D,default,arm_cons)
-	   val (rep_con,rep_kind) = 
-	     case rep_opt
-	       of SOME v => v
-		| NONE => (error "No valid arms in type case" handle e => raise e)
-	   val pcons = map2 (check_one rep_con) (pcons,arm_cons)
+	   fun check_arms (NONE,[],_) = error "Type case must be non-empty"
+	     | check_arms (SOME rep_con,[],_) = rep_con
+	     | check_arms (NONE,arm_con::rest,pcon::pcons) = 
+	     (case strip_arrow arm_con
+		of SOME (_,_,[],args,_,body_c) => 
+		  let
+		    val (pcon,pkind,args,argkinds) = pcon_valid(D,pcon,args)
+		  in
+		    if alpha_sub_kind (argkind,pkind) then
+		      check_arms(SOME body_c,rest,pcons)
+		    else
+		      (perr_k_k (pkind,argkind);
+		       (error "Typecase expression arm has wrong type" handle e => raise e))
+		  end
+		 | _ => (error "TypeSwitch has non-function type" handle e => raise e))
+	     | check_arms (SOME rep_con,arm_con::arm_cons,pcon::pcons) = 
+		(case strip_arrow arm_con
+		   of SOME (_,_,[],args,_,body_c) => 
+		     let
+		       val (pcon,pkind,args,argkinds) = pcon_valid(D,pcon,args)
+		     in
+		       if alpha_equiv_con (body_c,rep_con) andalso 
+			 alpha_sub_kind (argkind,pkind) then
+			 check_arms(SOME rep_con,arm_cons,pcons)
+		       else
+			 (perr_c_c (rep_con,body_c);
+			  perr_k_k (pkind,argkind);
+			  (error "Typecase expression arm has wrong type" handle e => raise e))
+		     end
+		    | _ => (perr_c arm_con;
+			    (error "Typecase expression has illegal arm type" handle e => raise e)))
+	     | check_arms _ = error "More arms in typecase than there are types!"
+
+	   val (default,default_con) = split_opt (map_opt (curry2 exp_valid D) default)
+	   val rep_con = check_arms (default_con,arm_cons,pcons)
 	   val arms = zip pcons arm_fns
 	 in
 	   (Typecase_e {info=(),arg=argcon,
 			arms=arms,default=default},
-	    rep_con,rep_kind)
+	    rep_con)
 	 end)
        
-  and opt_arrow_con (D,SOME def,_) =
+  and function_valid (D,function) = function_valid' ((D,Subst.empty()),function)
+  and function_valid' ((D,subst),Function (effect,recursive,tformals,
+					   formals,fformals,body,return)) = 
     let
-      val (def,defcon,defkind) = exp_valid (D,def)
-    in
-      (SOME def,SOME (defcon,defkind))
-    end
-    | opt_arrow_con (D,NONE,fst::_) =
-    (case get_arrow_return fst
-       of SOME con => (NONE,SOME (con_valid (D,con)))
-	| NONE => (NONE,NONE))
-    | opt_arrow_con _ = (NONE,NONE)
-  and function_valid (D,Function (effect,recursive,tformals,
-				  formals,fformals,body,return)) = 
-    let
-      fun check_k ((var,kind),D) =
-	let
-	  val kind = kind_valid (D,kind)
-	in
-	  ((var,kind),insert_kind (D,var,kind))
-	end
-      val (tformals,D') = foldl_acc check_k D tformals
+      val origD = D
+      val (D,tformals,subst1) = foldKSR(D,tformals)
+      val (tformals,subst2) = foldSubstSingleton tformals
+      val subst = Subst.con_subst_compose (subst1,subst)
+      val subst = Subst.con_subst_compose (subst2,subst)
       fun check_c ((var,con),D) = 
 	let
+	  val con = substConInCon subst con
 	  val (con,kind) = con_valid (D,con)
 	in
 	  ((var,con),insert_con (D,var,con))
 	end
-      val (formals,D') = foldl_acc check_c D' formals
-      val D' = 
+      val (formals,D) = foldl_acc check_c D formals
+      val body = substConInExp subst body
+      val return = substConInCon subst return
+      val D = 
 	foldl (fn (v,D) => 
-	       insert_con (D,v,Prim_c (Float_c F64,[]))) D' fformals
-      val (body,body_c,body_kind) = exp_valid (D',body)
-      val (return,return_kind) = con_valid (D',return)
+	       insert_con (D,v,Prim_c (Float_c F64,[]))) D fformals
+      val (body,body_c) = exp_valid (D,body)
+      val (return,return_kind) = con_valid (D,return)
       val function = Function (effect,recursive,tformals,formals,fformals,body,return)
-      val (con,kind) = get_function_type (D,Open,function)
+      val (con,kind) = get_function_type (origD,Open,function)
     in
       if alpha_equiv_con (body_c,return) then
-	(function,con,kind)
+	(function,con)
       else
 	(perr_e_c_c (body,return,body_c);
 	 (error "Return expression has wrong type" handle e => raise e))
     end
-  and bnds_valid (D,bnds) = foldl_acc bnd_valid' D bnds
-  and bnd_valid (D,bnd) = bnd_valid' (bnd,D)
-  and bnd_valid' (bnd,D) = 
+  and bnds_valid (D,bnds) = bnds_valid' (bnds,(D,Subst.empty()))
+  and bnd_valid (D,bnd) = bnd_valid' (bnd,(D,Subst.empty()))
+  and bnds_valid' (bnds,(D,subst)) = foldl_acc bnd_valid' (D,subst) bnds
+  and bnd_valid' (bnd,(D,subst)) = 
     (case bnd 
-       of Con_b (var, kind, con) =>
+       of Con_b (var, given_kind, con) =>
 	 let
-	   val kind' = kind_valid (D,kind)
-	   val (con',kind'') = con_valid (D,con)
-	   val D' = insert_kind (D,var,kind'')
-	   val bnd' = Con_b (var,kind'',con')
+	   val given_kind = substConInKind subst given_kind
+	   val con = substConInCon subst con
+	   val given_kind = kind_valid (D,given_kind)
+	   val (con,found_kind) = con_valid (D,con)
+	   val (D,var,subst_one) = bind_kind (D,var,found_kind)
+	   val subst = Subst.con_subst_compose (subst,subst_one)
+	   val bnd = Con_b (var,found_kind,con)
 	 in
-	   if alpha_sub_kind (kind'',kind') then
-	     (bnd',D')
+	   if alpha_sub_kind (found_kind,given_kind) then
+	     (bnd,(D,subst))
 	   else
-	     (perr_c_k_k (con',kind',kind'');
+	     (perr_c_k_k (con,given_kind,found_kind);
 	      (error ("kind mismatch in constructor binding of "^(var2string var)) handle e => raise e))
 	 end
 	| Exp_b (var, con, exp) =>
 	 let
-	   val (con',kind) = con_valid (D,con)
-	   val (exp',con'',kind'') = exp_valid (D,exp)
-	   val D' = insert_con (D,var,con'')
-	   val bnd' = Exp_b (var,con'',exp')
+	   val con = substConInCon subst con
+	   val exp = substConInExp subst exp
+	   val (given_con,kind) = con_valid (D,con)
+	   val (exp,found_con) = exp_valid (D,exp)
+	   val D = insert_con (D,var,found_con)
+	   val bnd = Exp_b (var,found_con,exp)
 	 in
-	   if alpha_equiv_con (con',con'') then
-	     (bnd',D')
+	   if alpha_equiv_con (given_con,found_con) then
+	     (bnd,(D,subst))
 	   else
-	     (perr_e_c_c (exp',con',con'');
+	     (perr_e_c_c (exp,given_con,found_con);
 	      (error ("type mismatch in expression binding of "^(var2string var)) handle e => raise e))
 	 end
 	| ((Fixopen_b defs) | (Fixcode_b defs)) =>
 	 let
+	   val origD = D
 	   val def_list = set2list defs
 	   val (vars,functions) = unzip def_list
 	   val (openness,constructor) = 
 	     (case bnd 
 		of Fixopen_b _ => (Open,Fixopen_b)
 		 | _ => (Code,Fixcode_b))
-	   val (declared_c,declared_k) = 
+	   val (declared_c,_) = 
 	     (unzip (map (curry3 get_function_type D openness) functions))
-	   val D' = insert_con_list (D,zip vars declared_c)
-	   val (functions',found_c,found_k) = 
-	     unzip3 (map (curry2 function_valid D') functions)
-	   val defs' = list2set (zip vars functions')
-	   val bnd' = constructor defs'
+	   val declared_c = map (substConInCon subst) declared_c
+	   val (declared_c,_) = unzip (map (curry2 con_valid D) declared_c)  (*Must renormalize!!*)
+	   val D = insert_con_list (D,zip vars declared_c)
+	   val (functions,found_c) = 
+	     unzip (map (curry2 function_valid D) functions)
+	   val D = insert_con_list (origD,zip vars found_c)  (*May be more precise?*)
+	   val defs = list2set (zip vars functions)
+	   val bnd = constructor defs
 	 in
-	   if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch") (declared_c,found_c) then
-	     (bnd',D')
+	   if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch in fixopen") (declared_c,found_c) then
+	     (bnd,(D,subst))
 	   else
 	     (error "Declared type for function binding doesn't match found type" handle e => raise e)
 	 end
 	| Fixclosure_b defs => 
 	 let
 	   val (vars,closures) = unzip (set2list defs)
-	   val tipes = map (fn cl => #1 (con_valid (D,#tipe cl))) closures
-	   val D' = insert_con_list (D,zip vars tipes)
-	   fun do_closure ({code,cenv,venv,tipe},tipe') = 
+	   val tipes = map (fn cl => #tipe cl) closures
+	   val tipes = map (substConInCon subst) tipes
+	   val (tipes,_) = unzip (map (curry2 con_valid D) tipes)
+	   val D = insert_con_list (D,zip vars tipes)
+	   fun do_closure ({code,cenv,venv,tipe=_},tipe) = 
 	     let
-	       val (cenv',ckind) = con_valid (D',cenv)
-	       val (venv',vcon,vkind) = exp_valid (D',venv)
+	       val cenv = substConInCon subst cenv
+	       val venv = substConInExp subst venv
+	       val (cenv,ckind) = con_valid (D,cenv)
+	       val (venv,vcon) = exp_valid (D,venv)
 	       val (code_type) = 
-		 (case find_con (D',code)
+		 (case find_con (D,code)
 		    of SOME k => k
 		     | NONE => (printl ("Code pointer "^(var2string code));
 				print " not defined in context";
 				(error "Invalid closure" handle e => raise e)))
 	       val con = 
 		 (case strip_arrow code_type
-		    of SOME (Code,effect,tformals,formals,numfloats,body_c) => 
+		    of SOME ((Code | ExternCode),effect,tformals,formals,numfloats,body_c) => 
 		      let
 			val (tformals',(v,last_k)) = split tformals
 			val (formals',last_c) = split formals
@@ -1547,21 +1576,34 @@ struct
 		     | _ => (perr_e_c (Var_e code,code_type);
 			     (error "Code pointer in closure of illegal type" handle e => raise e)))
 	     in
-	       if alpha_equiv_con (con,tipe') then
-		 {code=code,cenv=cenv',venv=venv',tipe=tipe'}
+	       if alpha_equiv_con (con,tipe) then
+		 {code=code,cenv=cenv,venv=venv,tipe=tipe}
 	       else
-		 (perr_c_c (tipe',con);
+		 (perr_c_c (tipe,con);
 		  (error "Type error in closure" handle e => raise e))
 	     end
 	   
-	   val closures' = map2 do_closure (closures,tipes)
-	   val defs' = list2set (zip vars closures')
-	   val bnd' = Fixclosure_b defs
+	   val closures = map2 do_closure (closures,tipes)
+	   val defs = list2set (zip vars closures)
+	   val bnd = Fixclosure_b defs
 	 in
-	   (bnd',D')
+	   (bnd,(D,subst))
 	 end)
 
-  and exp_valid (D : context,exp : exp) : (exp * con * kind) = 
+  and exp_valid (D : context, exp : exp) : exp * con = 
+      let val _ = push_exp(exp,D)
+	  val _ = if (!debug)
+		      then (print "exp_valid called with expression =\n";
+			    PpNil.pp_exp exp; 
+			    print "\nand context"; NilContext.print_context D;
+			    print "\n\n")
+		  else ()
+	  val res as (e,c) = exp_valid'(D,exp)
+	  val _ = pop()
+      in  res
+      end
+
+  and exp_valid' (D : context,exp : exp) : (exp * con) = 
     (case exp 
        of Var_e var => 
 	 (case find_con (D,var)
@@ -1569,121 +1611,147 @@ struct
 	      let
 		val (con',kind) = con_valid (D,con)
 	      in
-		(exp,con,kind)
+		(exp,con)
 	      end
 	     | NONE => 
 	      (error ("Encountered undefined variable " ^ (Name.var2string var) 
 		     ^ "in exp_valid") handle e => raise e))
 	| Const_e value => 
 	    let
-	      val (value',con,kind) = value_valid (D,value)
+	      val (value,con) = value_valid (D,value)
 	    in
-	      (Const_e value',con,singletonize (NONE,kind,con))
+	      (Const_e value,con)
 	    end
 	| Let_e (letsort,bnds,exp) => 
 	    let
-	      val (bnds',D') = bnds_valid (D,bnds)
-	      val (exp',con,kind) = exp_valid (D',exp)
+	      val (bnds,(D,subst)) = bnds_valid (D,bnds)
+	      val exp = substConInExp subst exp
+	      val (exp,con) = exp_valid (D,exp)
 	    in
-	      (Let_e (letsort,bnds',exp'),con,singletonize (NONE,kind,con))
+	      (Let_e (letsort,bnds,exp),con)
 	    end
 	| Prim_e (NilPrimOp prim,cons,exps) =>   
 	    let
-	      val ((prim',cons',exps'),con,kind) = prim_valid (D,prim,cons,exps)
+	      val ((prim,cons,exps),con) = prim_valid (D,prim,cons,exps)
 	    in
-	      (Prim_e (NilPrimOp prim',cons',exps'),con,kind)
+	      (Prim_e (NilPrimOp prim,cons,exps),con)
 	    end
 	| Prim_e (PrimOp prim,cons,exps) =>   
 	    let 
-	      val (cons',kinds) = unzip (map (curry2 con_valid D) cons)
-	      val con = PrimUtil.get_type prim cons'
-	      val (con',kind) = con_valid (D,con)
-	      val (exps',expcons,expkinds) = 
-		unzip3 (map (curry2 exp_valid D) exps)
-	      val exp' = Prim_e (PrimOp prim,cons',exps')
+	      val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
+	      val app_con = PrimUtil.get_type prim cons
+	      val (app_con,kind) = con_valid (D,app_con)
+	      val exps_and_cons = (map (curry2 exp_valid D) exps)
+	      val (exps,exp_cons) = unzip exps_and_cons
+	      val exp_arg = 
+		(case exps_and_cons 
+		   of [] => []
+		    | [arg] => [#1 arg]
+		    | list => [exp_tuple list])
+	      val var = fresh_var();
+	      val D = insert_con(D,var,app_con)
+	      val openness = 
+		(case strip_arrow app_con
+		   of SOME (openness,_,_,_,_,_) => openness
+		    | NONE => error "Invalid type for primop")
+	      val app = App_e(openness,Var_e var,[],exp_arg,[])
+	      val (app,con) = (exp_valid(D,app)
+			       handle any => error "Error in primop")
+	      val exp = Prim_e (PrimOp prim,cons,exps)
 	    in
-	      if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch") (cons',expcons) then
-		(exp',con',kind)
-	      else
-		(map3 perr_e_c_c (exps',cons',expcons);
-		 (error "Argument type mismatch in primop" handle e => raise e))
+	      (exp,con)
 	    end
 	| Switch_e switch =>
 	    let
-	      val (switch',con,kind) = switch_valid (D,switch)
+	      val (switch,con) = switch_valid (D,switch)
 	    in
-	      (Switch_e switch,con,kind)
+	      (Switch_e switch,con)
 	    end
-	| ((App_e (openness as Code,exp as (Var_e _),cons,texps,fexps)) |  
+	| ((App_e (openness as (Code | ExternCode),exp as (Var_e _),cons,texps,fexps)) |  
 	   (App_e (openness as (Closure | Open),exp,cons,texps,fexps))) =>
-	let
-	  val (cons',kinds) = unzip (map (curry2 con_valid D) cons)
-	  val actuals_t = map (curry2 exp_valid D) texps
-	  val actuals_f = map (curry2 exp_valid D) fexps
-	  val (exp',con,kind) = exp_valid (D,exp)
-	  val (openness',_,tformals,formals,numfloats,body) = 
-	    (case strip_arrow con
-	       of SOME c => c
-		| NONE => (perr_e_c (exp',con);
-			   (error "Application of non-arrow expression" handle e => raise e)))
-
-	      fun check_cons ([],[],[],D) = true
-		| check_cons ([],(exp,con,kind)::actuals_f,con'::formals,D) = 
-		if alpha_equiv_con (con,con') then
-		  check_cons ([],actuals_f,formals,D)
-		else
-		  (perr_e_c_c (exp,con',con);
-		   (error "Formal/actual parameter type mismatch" handle e => raise e))
-		| check_cons ((exp,con,kind)::actuals_t,actuals_f,con'::formals,D) = 
-		  if alpha_equiv_con (con,con') then
-		    check_cons (actuals_t,actuals_f,formals,D)
+	    let
+	      val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
+	      val actuals_t = map (curry2 exp_valid D) texps
+	      val actuals_f = map (curry2 exp_valid D) fexps
+	      val (exp,con) = exp_valid (D,exp)
+	      val (openness',_,tformals,formals,numfloats,body) = 
+		(case strip_arrow con
+		   of SOME c => c
+		    | NONE => (perr_e_c (exp,con);
+			       (error "Application of non-arrow expression" handle e => raise e)))
+		   
+	      fun check_one_kind ((var,formal_kind),actual_kind,(D,subst)) = 
+		let
+		  val origD = D
+		  val formal_kind = substConInKind subst formal_kind
+		  val formal_kind = kind_valid(D,formal_kind) (*Must renormalize*)
+		  val actual_kind = substConInKind subst actual_kind
+		  val actual_kind = kind_valid(D,actual_kind) (*Must renormalize*)
+		  val (D,var,subst_one) = bind_kind (D,var,actual_kind)
+		  val subst = Subst.con_subst_compose(subst,subst_one)
+		in
+		  if sub_kind (origD,actual_kind,formal_kind) then
+		    (D,subst_one)
 		  else
-		  (perr_e_c_c (exp,con',con);
-		   (error "Formal/actual parameter type mismatch" handle e => raise e))
-		| check_cons _ = (error "exp_valid: Too few formals in parameter list" handle e => raise e)
-
-	      fun check_kinds ([],[],D) = SOME D
-		| check_kinds ((var,kind)::tformals,kind'::actuals,D) = 
-		if alpha_sub_kind (kind',kind) then
-		  check_kinds (tformals,actuals,insert_kind (D,var,kind))
+		    (perr_k_k (formal_kind,actual_kind);
+		     (error "Constructor parameter kind mismatch" handle e => raise e))
+		end
+	      val (D,subst1) = 
+		if eq_len (tformals,kinds) then
+		  foldl2 check_one_kind (D,Subst.empty()) (tformals,kinds)
 		else
-		  (perr_k_k (kind,kind');
-		   (error "Constructor parameter kind mismatch" handle e => raise e))
-		| check_kinds (_,_,D) = NONE
+		  (PpNil.pp_list (fn (v,k) => PpNil.pp_kind' k) tformals 
+		   ("\nFormal param kinds are: ",",","\n",false);
+		   PpNil.pp_list PpNil.pp_con' cons ("\nActuals are: ",",","\n",false);
+		   error "Length mismatch between formal and actual constructor parameter lists" 
+		   handle e => raise e)
 
+	      fun check_one_con (actual_con,formal_con) = 
+		alpha_equiv_con (actual_con,formal_con)
+
+	      val (t_exps,t_cons) = unzip actuals_t
+	      val (f_exps,f_cons) = unzip actuals_f
+
+	      val err = o_perr_c_c "Length mismatch in exp actuals"
+
+	      val formals = map (substConInCon subst1) formals
+	      val (formals,_) = unzip (map (curry2 con_valid D) formals)
 	      val params_match = 
-		case check_kinds (tformals,kinds,D)
-		  of SOME D' =>
-		    check_cons (actuals_t,actuals_f,formals,D')
-		   | NONE => 
-		    (error "Mismatch between formal and actual constructor parameter lists" handle e => raise e)
-	      val texps' = #1 (unzip3 actuals_t)
-	      val fexps' = #1 (unzip3 actuals_f)
-	      val body_kind = 
-		case openness 
-		  of Open => singletonize (SOME Runtime,Type_k Runtime,body)
-		   | _ => singletonize (SOME Runtime,Word_k Runtime,body)
+		if c_all2 check_one_con err (t_cons,formals) then
+		  if c_all is_float_c (fn c => (perr_c c;false)) f_cons then
+		    true
+		  else
+		    (error "Expected float for float parameter" handle e => raise e)
+		else
+		  (PpNil.pp_list PpNil.pp_con' formals ("\nFormal Types: ",", ","\n",false);
+		   PpNil.pp_list PpNil.pp_exp' t_exps ("\nActuals: ",", ","\n",false);
+		   PpNil.pp_list PpNil.pp_con' t_cons ("\nActual Types: ",", ","\n",false);
+		   error "Formal/actual parameter type mismatch" handle e => raise e)
+
+	      val exp = App_e (openness,exp,cons,t_exps,f_exps)
+	      val subst2 = Subst.fromList (zip (#1 (unzip tformals)) cons)
+	      val subst = Subst.con_subst_compose (subst2,subst1)
+	      val con = substConInCon subst body
+	      val (con,_) = con_valid(D,con) (*Must renormalize*)
 	    in
 	      if same_openness (openness,openness') andalso
-		((Word32.toInt numfloats) = (List.length fexps)) andalso
-		eq_len (tformals,cons') andalso params_match 
+		((Word32.toInt numfloats) = (List.length fexps))
 		then
-		  (App_e (openness,exp',cons',texps',fexps'),
-		   body,body_kind)
+		  (exp,con)
 	      else
 		(error "Error in application - different openness" handle e => raise e)
 	    end
-	| App_e _ => 
+	 | App_e _ => 
 	    (printl "Application expression ";
 	     PpNil.pp_exp exp;
 	     (error "Illegal application.  Closure with non-var?" handle e => raise e))
 	| Raise_e (exp,con) => 
 	    let
 	      val (con',kind) = con_valid (D,con)
-	      val (exp',con'',kind') = exp_valid (D,exp)
+	      val (exp',con'') = exp_valid (D,exp)
 	    in
 	      if is_exn_con (con'') then
-		(exp',con',singletonize (NONE,kind',con'))
+		(exp',con')
 	      else
 		(perr_e_c (exp',con');
 		 (error "Non exception raised - Ill formed expression" handle e => raise e))
@@ -1694,14 +1762,14 @@ struct
 			    [],body,con) =>
 		 let
 		   val (con',kind) = con_valid (D,con)
-		   val (exp',con'',kind') = exp_valid (D,exp)
-		   val (body',con''',kind'') = exp_valid (insert_con (D,var,c),body)
+		   val (exp',con'') = exp_valid (D,exp)
+		   val (body',con''') = exp_valid (insert_con (D,var,c),body)
 		   val function' = Function (effect,recursive,[],
 					     [(var,c)],[],body',con')
 		 in
 		   if alpha_equiv_con (con',con'') andalso
 		     alpha_equiv_con (con'',con''') then
-		     (Handle_e (exp',function'),con'',singletonize (NONE,kind',con''))
+		     (Handle_e (exp',function'),con'')
 		   else
 		     (print "Declared as : \n";
 		      PpNil.pp_con con';
@@ -1719,59 +1787,69 @@ struct
 
       fun wrap f arg = (f arg) 
 	  handle e => (show_stack(); raise e)
+      val exp_valid = wrap exp_valid
       val con_valid = wrap con_valid
       val kind_valid = wrap kind_valid
       val con_reduce = wrap con_reduce
       val kind_reduce = wrap kind_reduce
 
 
-      fun import_valid' (ImportValue (label,var,con),D) =
+      fun import_valid' (ImportValue (label,var,con),(D,subst)) =
 	let
-	  val (con',kind) = con_valid(D,con)
-	  val D' = insert_con(D,var,con')
+	  val con = substConInCon subst con
+	  val (con,kind) = con_valid(D,con)
+	  val D = insert_con(D,var,con)
 	in
-	  (ImportValue (label,var,con'),D')
+	  (ImportValue (label,var,con),(D,subst))
 	end
-	| import_valid' (ImportType (label,var,kind),D) = 
+	| import_valid' (ImportType (label,var,kind),(D,subst)) = 
 	let
-	  val kind' = kind_valid(D,kind)
-	  val D' = insert_kind(D,var,kind')
+	  val kind = substConInKind subst kind
+	  val kind = kind_valid(D,kind)
+	  val (D,var,subst_one) = bind_kind(D,var,kind)
+	  val subst = Subst.con_subst_compose(subst,subst_one)
 	in
-	  (ImportType (label,var,kind'),D')
+	  (ImportType (label,var,kind),(D,subst))
 	end
 
-      fun import_valid (D,import) = import_valid' (import,D)
+      fun import_valid (D,import) = import_valid' (import,(D,Subst.empty()))
 
-      fun export_valid (D,ExportValue (label,exp,con)) = 
+      fun export_valid' ((D,subst),ExportValue (label,exp,con)) = 
 	let
-	  val (exp',found_con,kind) = exp_valid(D,exp)
-	  val (con',kind) = con_valid(D,con)
+	  val exp = substConInExp subst exp
+	  val con = substConInCon subst con
+	  val (exp,found_con) = exp_valid(D,exp)
+	  val (con,kind) = con_valid(D,con)
 	in
-	  if alpha_equiv_con (found_con,con') then
-	    ExportValue (label,exp',found_con)
+	  if alpha_equiv_con (found_con,con) then
+	    ExportValue (label,exp,found_con)
 	  else
-	    (perr_e_c_c (exp',con',found_con);
+	    (perr_e_c_c (exp,con,found_con);
 	     (error "Type error in value exports of module" handle e => raise e))
 	end
-	| export_valid (D,ExportType (label,con,kind)) = 
+	| export_valid' ((D,subst),ExportType (label,con,kind)) = 
 	let
-	  val (con',found_kind) = con_valid(D,con)
-	  val kind' = kind_valid(D,kind)
+	  val con = substConInCon subst con
+	  val kind = substConInKind subst kind
+	  val (con,found_kind) = con_valid(D,con)
+	  val kind = kind_valid(D,kind)
 	in
-	  if alpha_sub_kind (found_kind,kind') then
-	    ExportType (label,con',found_kind)
+	  if alpha_sub_kind (found_kind,kind) then
+	    ExportType (label,con,found_kind)
 	  else
-	    (perr_c_k_k (con',kind',found_kind);
+	    (perr_c_k_k (con,kind,found_kind);
 	     (error "Type error in type exports of module" handle e => raise e))
 	end
 
+      fun export_valid (D,export) = export_valid' ((D,Subst.empty()),export)
+
       fun module_valid (D,MODULE {bnds,imports,exports}) = 
 	let
-	  val (imports',D') = foldl_acc import_valid' D imports
-	  val (bnds',D'') = bnds_valid(D',bnds)
-	  val exports' = map (curry2 export_valid D'') exports
+	  val (imports,(D,subst)) = foldl_acc import_valid' (D,Subst.empty()) imports
+	  val (bnds,(D,subst)) = bnds_valid'(bnds,(D,subst))
+	  val exports = map (curry2 export_valid' (D,subst)) exports
 	in
-	  MODULE {bnds=bnds',imports=imports',exports=exports'}
+	  MODULE {bnds=bnds,imports=imports,exports=exports}
 	end
 
       val module_valid = wrap module_valid

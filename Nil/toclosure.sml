@@ -8,7 +8,11 @@
 functor ToClosure(structure Nil : NIL
 		  structure NilUtil : NILUTIL
 		  structure Ppnil : PPNIL
-		  sharing NilUtil.Nil = Ppnil.Nil = Nil)
+		  structure Subst : NILSUBST
+		  sharing NilUtil.Nil = Ppnil.Nil = Nil
+			 and type Subst.con = Nil.con
+		         and type Subst.exp = Nil.exp
+			 and type Subst.kind = Nil.kind)
     : TOCLOSURE =
 struct
 
@@ -759,17 +763,19 @@ struct
 	   val vclist_code = vclist @ vc_free
 	   val vklist_unpack_almost = vklist @ [(cenv_var,cenv_kind)]
 	   val vclist_unpack_almost = vclist @ [(venv_var,venv_type)]
-	   fun subst v = 
-	       let fun loop n [] = NONE
-		     | loop n ((v',_)::rest) = if (Name.eq_var(v,v'))
-					       then SOME(Proj_c(Var_c cenv_var, generate_tuple_label n))
-					   else loop (n+1) rest
-	       in  loop 1 vk_free
-	       end
-	   val vklist_unpack = map (fn (v,k) => (v,NilUtil.substConInKind subst k)) vklist_unpack_almost
-	   val vclist_unpack = map (fn (v,c) => (v,NilUtil.substConInCon subst c)) vclist_unpack_almost
+
+	   val subst_list = 
+	     let 
+	       fun loop n [] = []
+		 | loop n ((v',_)::rest) = 
+		 (v',Proj_c(Var_c cenv_var, generate_tuple_label n))::(loop (n+1) rest)
+	     in  loop 1 vk_free
+	     end
+	   val subst = Subst.fromList subst_list
+	   val vklist_unpack = map (fn (v,k) => (v,Subst.substConInKind subst k)) vklist_unpack_almost
+	   val vclist_unpack = map (fn (v,c) => (v,Subst.substConInCon subst c)) vclist_unpack_almost
 	   val codebody_tipe = c_rewrite lift tipe
-	   val unpackbody_tipe = NilUtil.substConInCon subst codebody_tipe
+	   val unpackbody_tipe = Subst.substConInCon subst codebody_tipe
 	   val closure_tipe = AllArrow_c(Closure,effect,
 					 vklist,map #2 vclist,
 					 TilWord32.fromInt(length vflist),codebody_tipe)

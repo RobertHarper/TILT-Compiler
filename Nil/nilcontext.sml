@@ -2,21 +2,33 @@ functor NilContextFn(structure ArgNil : NIL
 		     structure PpNil : PPNIL
 		     structure Cont : CONT_SIG
 		     structure NilUtil : NILUTIL
-		     sharing PpNil.Nil = NilUtil.Nil = ArgNil) :(*>*)
-   NILCONTEXT where structure Nil = ArgNil = 
+		     structure Subst : NILSUBST
+		       sharing PpNil.Nil = NilUtil.Nil = ArgNil
+		       and type Subst.con = ArgNil.con
+		       and type Subst.exp = ArgNil.exp
+		       and type Subst.kind = ArgNil.kind) :(*>*)
+   NILCONTEXT where structure Nil = ArgNil 
+	      and type 'a subst = 'a Subst.subst = 
 struct
   structure Nil = ArgNil
 
   type kind = Nil.kind
   type con = Nil.con
   type var = Nil.var
+  type 'a subst = 'a Subst.subst
+
   val var2string = Name.var2string
   val mapsequence = Util.mapsequence
   val get_phase = NilUtil.get_phase
-
+    
   fun error s = Util.error "nilcontext.sml" s
 
-  exception NotFound
+
+  val bound = ref 0
+  val renamed = ref 0
+
+  fun reset_counter () = (bound := 0;renamed := 0)
+  fun get_counter () = (!bound,!renamed)
 
   structure V = Name.VarMap
 
@@ -30,9 +42,10 @@ struct
      conmap = V.empty}
 
   fun insert_con ({conmap,kindmap}:context,var,con) = 
-    (case V.find (conmap, var)
+    {conmap = V.insert (conmap, var, con), kindmap = kindmap}
+(*    (case V.find (conmap, var)
        of NONE => {conmap = V.insert (conmap, var, con), kindmap = kindmap}
-	| _ => error ("Expression variable "^(var2string var)^" already in context"))
+	| _ => error ("Expression variable "^(var2string var)^" already in context"))*)
 
   fun insert_con_list (C:context,defs : (var * con) list) =
     List.foldl (fn ((v,c),C) => insert_con (C,v,c)) C defs
@@ -53,31 +66,74 @@ struct
 	  | Word_k phase => Singleton_k(phase,Word_k phase,con)
 	  | Singleton_k(_) => kind
 	  | Record_k entries => Singleton_k(get_phase kind,kind,con)
-(*	   Record_k (mapsequence (fn ((l,v),k) => ((l,v),selfify (Proj_c (con,l),k))) entries)*)
 	  | Arrow_k (openness,args,return) => 
-	   Singleton_k(get_phase kind,kind,con)
-    (*	   let
-	     val (formal_vars,_) = ListPair.unzip args
-	     val actuals = List.map Var_c formal_vars
-	   in
-	     Arrow_k (openness,args,selfify(App_c (con,actuals),return))
-	   end
-*))
+	   Singleton_k(get_phase kind,kind,con))
+  end
 
-    fun insert_kind ({kindmap,conmap}:context,var,kind) = 
+  fun inc int_ref = int_ref := !int_ref + 1
+
+  fun insert_kind ({kindmap,conmap}:context,var,kind) = 
+    let
+      val _ = (Util.lprintl "Insert kind used";
+	       inc bound)
+    in
       (case V.find (kindmap, var)
-	 of NONE => {kindmap = V.insert (kindmap, var, selfify(Var_c var,kind)),
+	 of NONE => {kindmap = V.insert (kindmap, var, selfify(Nil.Var_c var,kind)),
 		     conmap = conmap}
 	  | _ => error ("Constructor variable "^(var2string var)^" already in context"))
-  end
-       
+    end
+
   fun insert_kind_list (C:context,defs : (var * kind) list) =
-    List.foldl (fn ((v,k),C) => insert_kind (C,v,k)) C defs
+    let
+      val _ = (Util.lprintl "Insert kind list used")
+    in
+      List.foldl (fn ((v,k),C) => insert_kind (C,v,k)) C defs
+    end
 
   fun find_kind ({kindmap,...}:context,var) = V.find (kindmap, var)
     
   fun remove_kind ({kindmap,conmap}:context,var) = 
       {kindmap = #1 (V.remove (kindmap, var)), conmap = conmap}
+
+  val empty_subst = Subst.empty
+  val subst_compose = Subst.con_subst_compose
+  val subst_add = Subst.add
+  fun bind_kind ({kindmap,conmap}:context,var,kind) =
+    (case V.find (kindmap, var)
+       of NONE => 
+	 let
+	   val _ = inc bound 
+	   val kindmap = V.insert (kindmap, var, selfify(Nil.Var_c var,kind))
+	 in
+	   ({kindmap = kindmap, conmap = conmap},var,empty_subst())
+	 end
+	| SOME k => 
+	 let
+	   val var' = Name.derived_var var
+	   val _ = (inc bound;inc renamed)
+	   val kindmap = V.insert (kindmap, var', selfify(Nil.Var_c var',kind))
+	 in
+	   ({kindmap = kindmap, conmap = conmap},
+	    var',
+	    subst_add (empty_subst ()) (var,Nil.Var_c var'))
+	 end)
+
+  fun bind_kind_list (C:context,defs : (var * kind) list) 
+    : (context * ((var * kind) list) * con subst) =
+    let
+      fun folder ((var,kind),(C,rev_acc,subst)) = 
+	let
+	  val kind = Subst.substConInKind subst kind
+	  val (C,var,subst_one) = bind_kind (C,var,kind)
+	in
+	  (C,(var,kind)::rev_acc,subst_compose(subst,subst_one))
+	end
+
+      val (C,rev_acc,subst) = 
+	List.foldl folder (C,[],empty_subst()) defs
+    in
+      (C,rev rev_acc,subst)
+    end
 
   fun c_insert_con (context,var,con,k) = 
       k (insert_con(context,var,con))

@@ -304,7 +304,9 @@ functor Ppnil(structure ArgNil : NIL
 	       (pp_list' (fn v => Hbox[pp_var v,String ": Float"])
 		vflist),
 	       Break0 0 5,
-	       pp_exp exp]
+	       pp_exp exp,
+	       String " : ",
+	       pp_con c]
 
     and pp_switch sw =
 	let fun help {info : 'info, arg: 'arg, 

@@ -14,7 +14,7 @@ end
 
 structure Linknil (* : LINKNIL *) =
 struct
-
+  val typecheck = ref true
     val error = fn s => Util.error "linknil.sml" s
 
     structure Name = Name
@@ -34,16 +34,21 @@ struct
 				     structure Ppprim = LinkIl.Ppprim
 				     structure PrimUtilParam = NilPrimUtilParam)
 
+    structure NilSubst = NilSubstFn(structure Nil = Nil
+				    structure PpNil = PpNil)
+
     structure NilUtil = NilUtilFn(structure ArgNil = Nil
 				  structure IlUtil = LinkIl.IlUtil
 				  structure ArgPrim = LinkIl.Prim
 				  structure PrimUtil = NilPrimUtil
-				  structure Alpha = Alpha)
+				  structure Alpha = Alpha
+				  structure Subst = NilSubst)
 
     structure NilContext = NilContextFn(structure NilUtil = NilUtil
 					structure ArgNil = Nil
 					structure PpNil = PpNil
-					structure Cont = Cont)
+					structure Cont = Cont
+					structure Subst = NilSubst)
 
     structure NilError = NilErrorFn(structure ArgNil = Nil
 				    structure PpNil = PpNil)
@@ -56,10 +61,11 @@ struct
 				      structure NilContext = NilContext
 				      structure PpNil = PpNil
 				      structure Alpha = Alpha
-				      structure NilError = NilError)
+				      structure NilError = NilError
+				      structure Subst = NilSubst)
 
     fun nilstatic_exp_valid (nilctxt : NilContext.context ,nilexp : Nil.exp) : Nil.exp * Nil.con = 
-	let val (e,c,k) = NilStatic.exp_valid(nilctxt,nilexp) in (e,c) end
+	let val (e,c) = NilStatic.exp_valid(nilctxt,nilexp) in (e,c) end
 (*
 	let open Nil
 (*	    val _ = (print "nilstatic_exp_valid called on:\n"; PpNil.pp_exp nilexp; print "\n") *)
@@ -104,7 +110,9 @@ struct
 			    structure ArgNilcontext = NilContext
 			    structure Nilutil = NilUtil
 			    structure Ppnil = PpNil
-			    structure Ppil = LinkIl.Ppil)
+			    structure Ppil = LinkIl.Ppil
+			    structure ArgNil = Nil
+			    structure Subst = NilSubst)
 
     structure Linearize = Linearize(structure Nil = Nil
 				    structure NilUtil = NilUtil
@@ -114,23 +122,27 @@ struct
 				      structure Nil = Nil
 				      structure NilUtil = NilUtil
 				      structure Ppnil = PpNil
-				      structure IlUtil = LinkIl.IlUtil)
+				      structure IlUtil = LinkIl.IlUtil
+				      structure Subst = NilSubst)
 
     structure Cleanup = Cleanup(structure Prim = LinkIl.Prim
 				structure Nil = Nil
 				structure NilUtil = NilUtil
 				structure Ppnil = PpNil
-				structure IlUtil = LinkIl.IlUtil)
+				structure IlUtil = LinkIl.IlUtil
+				structure Subst = NilSubst)
 
     structure ToClosure = ToClosure(structure Nil = Nil
 				    structure Ppnil = PpNil
-				    structure NilUtil = NilUtil)
+				    structure NilUtil = NilUtil
+				    structure Subst = NilSubst)
 
 	
     structure NilEval = NilEvaluate(structure Nil = Nil
 				    structure NilUtil = NilUtil
 				    structure Ppnil = PpNil
-				    structure PrimUtil = NilPrimUtil)
+				    structure PrimUtil = NilPrimUtil
+				    structure Subst = NilSubst)
 
     fun phasesplit debug (ctxt,sbnds,sdecs) : Nil.module = 
 	let
@@ -407,15 +419,20 @@ struct
 			      print "\n")
 		    else print "Renaming complete\n"
 	    val D = NilContext.empty()
-(*
-	    val nilmod = (Stats.timer("Nil typechecking",NilStatic.module_valid)) (D,nilmod)
-	    val _ = if debug 
-			then (print "\n\n=======================================\n\n";
-			      print "nil typechecking results:\n";
-			      PpNil.pp_module nilmod;
-			      print "\n")
-		    else print "Nil typechecking complete\n"
-*)
+ 	    val nilmod = 
+	      if (!typecheck) then
+		(Stats.timer("Nil typechecking",NilStatic.module_valid)) (D,nilmod)
+	      else
+		nilmod
+	    val _ = 
+	      if (!typecheck) then 
+		if debug 
+		  then (print "\n\n=======================================\n\n";
+			print "nil typechecking results:\n";
+			PpNil.pp_module nilmod;
+			print "\n")
+		else print "Nil typechecking complete\n"
+	      else ()
 	    val nilmod = (Stats.timer("Beta-reduction",BetaReduce.reduceModule)) nilmod
 	    val _ = if debug 
 			then (print "\n\n=======================================\n\n";

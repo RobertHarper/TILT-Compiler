@@ -35,7 +35,11 @@ functor Cleanup(structure Nil : NIL
 		structure Ppnil : PPNIL
 		structure NilUtil : NILUTIL
 		structure IlUtil : ILUTIL
-		sharing NilUtil.Nil = Ppnil.Nil = Nil)
+		structure Subst : NILSUBST
+		sharing NilUtil.Nil = Ppnil.Nil = Nil
+			 and type Subst.con = Nil.con
+		         and type Subst.exp = Nil.exp
+			 and type Subst.kind = Nil.kind)
     : CLEANUP = 
 struct
 
@@ -47,6 +51,10 @@ struct
     val set2list = Util.set2list
     val list2sequence = Util.list2sequence
     val sequence2list = Util.sequence2list
+
+    val substConInExp = Subst.substConInExp
+    val substConInCon = Subst.substConInCon
+    val substExpInExp = Subst.substExpInExp
 
     val debug = ref false
 
@@ -69,8 +77,8 @@ struct
 		val (exp_table,rev_ebnds) = foldl earg_folder etab_rebnds (Listops.zip 
 									  (map (fn v => (v,float_con)) flist) fargs)
 		val (con_table,rev_cbnds) = foldl carg_folder ([],[]) (Listops.zip vklist cargs)
-		fun con_subster v = Listops.assoc_eq(eq_var, v, con_table)
-		fun exp_subster v = Listops.assoc_eq(eq_var, v, exp_table)
+		val con_subster = Subst.fromList con_table
+		val exp_subster = Subst.fromList exp_table
 		val body = substConInExp con_subster body
 		val body = substExpInExp exp_subster body
 		val body = (case rev_ebnds of
@@ -84,7 +92,7 @@ struct
 
 	fun creduce(vklist,c,cargs) =
 		let val (table,rev_cbnds) = foldl carg_folder ([],[]) (Listops.zip vklist cargs)
-		    fun subster v = Listops.assoc_eq(eq_var, v, table)
+		    val subster = Subst.fromList table
 		    val body = substConInCon subster c
 		    val result = (case rev_cbnds of
 				      [] => body

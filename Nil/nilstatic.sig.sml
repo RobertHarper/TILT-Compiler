@@ -8,7 +8,7 @@ signature NILSTATIC =
     (* removes the top-level singleton kind *)
     val strip_singleton : Nil.kind -> Nil.kind
 
-    val exp_valid : context * Nil.exp -> Nil.exp * Nil.con * Nil.kind 
+    val exp_valid : context * Nil.exp -> Nil.exp * Nil.con
 
     val con_valid : context * Nil.con -> Nil.con * Nil.kind
     (* con_valid (context,con) => (con',kind)
@@ -71,5 +71,7 @@ signature NILSTATIC =
     * POST: kind is fully normalized, and is guaranteed 
     * to be valid.
     *)
+
+    val module_valid : context * Nil.module -> Nil.module
 
   end

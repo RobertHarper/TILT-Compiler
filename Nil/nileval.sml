@@ -3,10 +3,11 @@ functor NilEvaluate (structure Nil : NIL
 		     structure NilUtil : NILUTIL
 		     structure PrimUtil : PRIMUTIL
 		     structure Ppnil : PPNIL
+		     structure Subst : NILSUBST
 		     sharing PrimUtil.Prim = Nil.Prim
 		     sharing NilUtil.Nil = Nil = Ppnil.Nil
-		     sharing type PrimUtil.con = Nil.con
-		     sharing type PrimUtil.exp = Nil.exp)
+		     sharing type PrimUtil.con = Subst.con = Nil.con
+		     sharing type PrimUtil.exp = Subst.exp = Nil.exp)
      : NILEVAL = 
 
   struct
@@ -26,11 +27,11 @@ functor NilEvaluate (structure Nil : NIL
       val member_eq = Listops.member_eq
       val assoc_eq = Listops.assoc_eq
       val map2 = Listops.map2
-      local fun map2fun map v = assoc_eq(eq_var,v,map)
+      local open Subst
       in    
-	  fun substConInCon(c,cmap) : con = NilUtil.substConInCon (map2fun cmap) c 
-	  fun substConInExp(e,cmap) : exp = NilUtil.substConInExp (map2fun cmap) e
-	  fun substExpInExp(e,emap) : exp = NilUtil.substExpInExp (map2fun emap) e
+	  fun substConInCon(c,cmap) : con = Subst.substConInCon (fromList cmap) c 
+	  fun substConInExp(e,cmap) : exp = Subst.substConInExp (fromList cmap) e
+	  fun substExpInExp(e,emap) : exp = Subst.substExpInExp (fromList emap) e
       end
 
     

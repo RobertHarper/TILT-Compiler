@@ -50,3 +50,5 @@ betareduce.sig.sml
 betareduce.sml
 nilerror.sig.sml
 nilerror.sml
+subst.sml
+subst.sig.sml

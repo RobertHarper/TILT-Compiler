@@ -5,12 +5,13 @@ signature NILCONTEXT =
     type kind = Nil.kind
     type con = Nil.con
     type var = Nil.var
-
-    exception NotFound
-
+    type 'a subst
     type context
 
     val empty : unit -> context
+
+    val reset_counter : unit -> unit
+    val get_counter : unit -> int * int
 
     val insert_con : context*var*con -> context
     val find_con : context*var -> con option
@@ -34,6 +35,9 @@ signature NILCONTEXT =
     val remove_kind : context*var -> context
     val foldli_kind : ((var * kind * 'a) -> 'a) -> 'a -> context -> 'a
     val insert_kind_list : context* (var * kind) list -> context
+
+    val bind_kind : context * var * kind -> context * var * con subst
+    val bind_kind_list : context * (var * kind) list -> context * (var * kind) list * con subst
 
     val c_insert_con : context*var*con*(context->'a) -> 'a
     val c_remove_con : context*var*(context -> 'a) -> 'a

@@ -1,10 +1,6 @@
 signature NILUTIL =
   sig
     structure Nil : NIL
-    val substConInExp : (Nil.var -> Nil.con option) -> Nil.exp -> Nil.exp
-    val substConInCon : (Nil.var -> Nil.con option) -> Nil.con -> Nil.con
-    val substConInKind : (Nil.var -> Nil.con option) -> Nil.kind -> Nil.kind
-    val substExpInExp : (Nil.var -> Nil.exp option) -> Nil.exp -> Nil.exp
 
     val freeExpConVarInExp : Nil.exp -> Nil.var list * Nil.var list (* free term and type level vars *)
     val freeConVarInCon    : Nil.con -> Nil.var list (* free type level vars *)
@@ -28,7 +24,7 @@ signature NILUTIL =
     val letc : Nil.conbnd list * Nil.con -> Nil.con
     val lete : Nil.bnd list * Nil.exp -> Nil.exp
     val cbnd2bnd : Nil.conbnd -> Nil.bnd
-    val rename_mu : (Nil.var -> bool) * (Nil.var, Nil.con) Util.sequence * Nil.var -> Nil.con
+(*    val rename_mu : (Nil.var -> bool) * (Nil.var, Nil.con) Util.sequence * Nil.var -> Nil.con*)
 
     val effect : Nil.exp -> bool (* could the expression have an effect *)
 
@@ -96,8 +92,12 @@ signature NILUTIL =
 
     val is_exn_con : Nil.con -> bool
     val is_var_c : Nil.con -> bool
-
+    val is_float_c : Nil.con -> bool
     val strip_singleton : Nil.kind -> Nil.kind
-
+    val singletonize : (Nil.phase option * Nil.kind * Nil.con) -> Nil.kind
     val get_arrow_return : Nil.con -> Nil.con option
+    
+    val type_or_word : Nil.kind -> bool
+    val is_word : Nil.kind -> bool
+
   end
