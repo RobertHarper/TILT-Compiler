@@ -632,7 +632,8 @@ fun pp_alias UNKNOWN = print "unknown"
 							    | SOME v => add_con(state,v,c))
 					 in  ((vopt,c),state)
 					 end
-	and do_vtrc ((v,tr,c),state) =  let val c = do_con state c
+	and do_vtrc ((v,tr,c),state) =  let val tr = do_niltrace state tr
+					    val c = do_con state c
 					    val state = add_con(state,v,c)
 					in  ((v,tr,c),state)
 					end
@@ -1323,7 +1324,7 @@ fun pp_alias UNKNOWN = print "unknown"
 				in  ([Fixclosure_b(recur,Sequence.fromList vcllist)], state)
 				end)
 	  end
-	fun do_import(ImportValue(l,v,tr,c),state) = (ImportValue(l,v,tr,do_con state c), 
+	fun do_import(ImportValue(l,v,tr,c),state) = (ImportValue(l,v,do_niltrace state tr,do_con state c), 
 						      add_con(state,v,c))
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_kind(state,v,k))
