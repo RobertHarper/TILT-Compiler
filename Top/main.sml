@@ -1,79 +1,45 @@
-structure Main : MAIN =
+structure Main :> MAIN =
 struct
 
     fun reject s = raise Compiler.Reject s
 
-    val usage = "usage: tilt [-vVps] [-t platform] [-fr flag] [-cCmMbB groupfile] [-S [num/]host]"
-
-    datatype cmd =
-        Make of string			(* -m groupfile *)
-      | Boot of string			(* -b groupfile *)
-      | SetTarget of Target.platform	(* -t platform *)
-      | SetFlag of string		(* -f flag *)
-      | ResetFlag of string		(* -r flag *)
-      | Clean of string			(* -c groupfile *)
-      | CleanAll of string		(* -C groupfile *)
-      | Master of string		(* -M groupfile *)
-      | BootMaster of string		(* -B groupfile *)
-      | Slave				(* -s *)
-      | Slaves of int * string		(* -S [num/]host *)
-      | Verbose				(* -v *)
-      | PrintUsage			(* -? *)
-      | PrintVersion			(* -V *)
-      | PrintStats			(* -p *)
-
-    (* isSlaves, isSlave : cmd -> bool *)
-    fun isSlaves (Slaves _) = true
-      | isSlaves _ = false
-    fun isSlave (Slave) = true
-      | isSlave _ = false
-
-    fun printVersion () : unit =
-	(print "TILT version "; print Version.version; print "\n";
-	 print "(Using basis from ";
-	 print (Dirs.libDir());
-	 print ")\n")
-
-    (* runCmd : cmd -> unit *)
-    fun runCmd (Make groupfile) = Manager.make groupfile
-      | runCmd (Boot groupfile) = Boot.make groupfile
-      | runCmd (SetTarget target) = Target.setTargetPlatform target
-      | runCmd (SetFlag flag) = Stats.bool flag := true
-      | runCmd (ResetFlag flag) = Stats.bool flag := false
-      | runCmd (Clean groupfile) = Manager.purge groupfile
-      | runCmd (CleanAll groupfile) = Manager.purgeAll groupfile
-      | runCmd (Master groupfile) = Manager.master groupfile
-      | runCmd (BootMaster groupfile) = Boot.master groupfile
-      | runCmd (Slave) = Manager.slave ()
-      | runCmd (Slaves arg) = Manager.slaves [arg]
-      | runCmd (Verbose) = (Manager.DiagLevel := !Manager.DiagLevel + 1;
-			    Boot.DiagLevel := !Boot.DiagLevel + 1;
-			    if !Manager.DiagLevel = 1 then
-				printVersion()
-			    else ())
-      | runCmd (PrintUsage) = (print usage; print "\n")
-      | runCmd (PrintVersion) = printVersion()
-      | runCmd (PrintStats) = Stats.print_stats()
-
-    (* run : cmd list -> unit.
-     * As a hack, we launch any remote slaves first since they operate in the
-     * background and any local slave last since it won't terminate.
-     *)
-    fun run cmds =
-	let
-	    val (remoteSlaves, cmds) = List.partition isSlaves cmds
-	    val remoteSlaves = List.map (fn (Slaves arg) => arg) remoteSlaves
-	    val (localSlave, cmds) = List.partition isSlave cmds
-	in
-	    if List.null remoteSlaves then () else Manager.slaves remoteSlaves;
-	    List.app runCmd cmds;
-	    if List.null localSlave then () else Manager.slave()
+    fun usage () : 'a =
+	let val msg = concat
+		["usage: tilt [-bmpv] [-a arch] [-fr flag] groupfile ...\n\
+		 \       tilt [-v] -s [[num/]host ...]\n\
+		 \       tilt [-bv] [-a arch] -c groupfile ...\n"]
+	in  TextIO.output (TextIO.stdErr, msg);
+	    OS.Process.exit (OS.Process.failure)
 	end
 
-    (* slavesArg : string -> int * string *)
-    fun slavesArg arg =
+    fun setdiaglevel (boot : bool, level : int) : unit =
+	let val diaglevel = if boot then Boot.DiagLevel else Manager.DiagLevel
+	in  diaglevel := level
+	end
+
+    fun setarch (arch : Target.platform option) : unit =
+	(case arch
+	   of NONE => ()
+	    | SOME p => Target.setTargetPlatform p)
+
+    fun make (boot : bool, master : bool, stats : bool, verbose : int,
+	      arch : Target.platform option, flags : (bool ref * bool) list,
+	      groupfiles : string list) : unit =
+	let val _ = setdiaglevel (boot, verbose)
+	    val _ = setarch arch
+	    val _ = app (fn (r,v) => r := v) flags
+	    val f : string -> unit =
+		(case (boot,master)
+		   of (false,false) => Manager.make
+		    | (true,false) => Boot.make
+		    | (false,true) => Manager.master
+		    | (true,true) => Boot.master)
+	    val f = if stats then (fn s => (f s; Stats.print_stats())) else f
+	in  app f groupfiles
+	end
+
+    fun slaveSpec (arg : string) : int * string =
 	let fun isslash c = c = #"/"
-	    val args = String.fields isslash arg
 	    fun error() = reject ("argument must have form [num/]host -- " ^ arg)
 	    fun nonempty "" = error()
 	      | nonempty s = s
@@ -81,50 +47,148 @@ struct
 			     of NONE => error()
 			      | SOME n => if n > 0 then n
 					  else error())
-	in
-	    case args
-	      of [host] => (1, nonempty host)
-	       | [num, host] => (nat num, nonempty host)
-	       | _ => error()
+	in  (case String.fields isslash arg
+	       of [host] => (1, nonempty host)
+		| [num, host] => (nat num, nonempty host)
+		| _ => error())
 	end
 
-    fun platform (target : string) : Target.platform =
-	(case Target.platformFromName target
-	   of SOME platform => platform
-	    | NONE => reject ("invalid target platform: " ^ target))
+    fun slave (verbose : int, args : string list) : unit =
+	let val _ = Manager.DiagLevel := verbose
+	in  (case args
+	       of nil => Manager.slave()
+		| _ => Manager.slaves (map slaveSpec args))
+	end
 
-    fun cmdline (args : string list) : cmd list =
-	let
-	    val options = [Getopt.Arg   (#"t", SetTarget o platform),
-			   Getopt.Arg   (#"f", SetFlag),
-			   Getopt.Arg   (#"r", ResetFlag),
-			   Getopt.Arg   (#"c", Clean),
-			   Getopt.Arg   (#"C", CleanAll),
-			   Getopt.Arg   (#"m", Make),
-			   Getopt.Arg   (#"b", Boot),
-			   Getopt.Arg   (#"M", Master),
-			   Getopt.Arg   (#"B", BootMaster),
-			   Getopt.Noarg (#"s", Slave),
-			   Getopt.Arg   (#"S", Slaves o slavesArg),
-			   Getopt.Noarg (#"v", Verbose),
-			   Getopt.Noarg (#"?", PrintUsage),
-			   Getopt.Noarg (#"V", PrintVersion),
-			   Getopt.Noarg (#"p", PrintStats)]
+    fun purge (boot : bool, verbose : int, arch : Target.platform option,
+	       purgeall : bool, groupfiles : string list) : unit =
+	let val _ = setdiaglevel (boot, verbose)
+	    val _ = setarch arch
+	    val f : string -> unit =
+		(case (boot,purgeall)
+		   of (false,false) => Manager.purge
+		    | (true,false) => Boot.purge
+		    | (false,true) => Manager.purgeAll
+		    | (true,true) => Boot.purgeAll)
+	in  app f groupfiles
+	end
+
+    datatype options =
+	MAKE of {boot:bool ref,
+		 master:bool ref,
+		 stats:bool ref,
+		 verbose:int ref,
+		 arch:Target.platform option ref,
+		 flags:(bool ref * bool) list ref}
+      | SLAVE of {verbose : int ref}
+      | PURGE of {boot:bool ref,
+		  verbose:int ref,
+		  arch:Target.platform option ref,
+		  purgeall:bool ref}
+
+    fun run (opts : options, args : string list) : unit =
+	(case opts
+	   of MAKE {boot,master,stats,verbose,arch,flags} =>
+		make (!boot,!master,!stats,!verbose,!arch,!flags,args)
+	    | SLAVE {verbose} => slave (!verbose,args)
+	    | PURGE {boot,verbose,arch,purgeall} =>
+		purge (!boot,!verbose,!arch,!purgeall,args))
+
+    fun bootstrap (opts : options) : unit =
+	(case opts
+	   of MAKE {boot,...} => boot
+	    | SLAVE _ => usage()
+	    | PURGE {boot,...} => boot) := true
+
+    fun master (opts : options) : unit =
+	(case opts
+	   of MAKE {master,...} => master
+	    | _ => usage()) := true
+
+    fun printstats (opts : options) : unit =
+	(case opts
+	   of MAKE {stats,...} => stats
+	    | _ => usage()) := true
+
+    fun verbose (opts : options) : unit =
+	let val counter =
+		(case opts
+		   of MAKE {verbose,...} => verbose
+		    | SLAVE {verbose,...} => verbose
+		    | PURGE {verbose,...} => verbose)
+	    val n = !counter + 1
+	    val _ = counter := n
+	    val _ =
+		if n = 1 then
+		    print (concat ["TILT version ", Version.version, "\n\
+				   \(Using basis from ", Dirs.libDir(), ")\n"])
+		else ()
+	in  ()
+	end
+
+    fun setarch (opts : options, arch : string) : unit =
+	let val r =
+		(case opts
+		   of MAKE {arch,...} => arch
+		    | SLAVE _ => usage()
+		    | PURGE {arch,...} => arch)
+	    val p =
+		(case Target.platformFromName arch
+		   of SOME p => p
+		    | NONE => reject ("invalid architecture: "  ^ arch))
+	in  r := SOME p
+	end
+
+    fun setflag (opts : options, flag : string, value : bool) : unit =
+	(case opts
+	   of MAKE {flags,...} =>
+		let val flag = (Stats.bool flag
+				handle _ => reject ("invalid flag: " ^ flag))
+		in  flags := (flag,value) :: !flags
+		end
+	    | _ => usage())
+
+    fun slave_mode (opts : options) : options =
+	(case opts
+	   of MAKE {boot=ref false, master=ref false, stats=ref false,
+		    verbose=ref n, arch=ref NONE, flags=ref nil} =>
+		SLAVE {verbose=ref n}
+	    | _ => usage())
+
+    fun purge_mode (opts : options) : options =
+	(case opts
+	   of MAKE {boot=ref b, master=ref false, stats=ref false,
+		    verbose=ref n, arch=ref a, flags=ref nil} =>
+		PURGE {boot=ref b, verbose=ref n, arch=ref a, purgeall=ref false}
+	    | PURGE {purgeall,...} => (purgeall := true; opts)
+	    | _ => usage())
+
+    fun option (r : options ref) (arg : Arg.arg) : unit =
+	let val opts = !r
+	    val {argc, eargf, ...} = arg
 	in
-	    case Getopt.getopt (options, args)
-	      of Getopt.Error msg => reject (msg ^ "\n" ^ usage)
-	       | Getopt.Success (cmds, args) =>
-		  let
-		      val _ = if List.null cmds orelse not (List.null args)
-				  then reject usage
-			      else ()
-		  in  cmds
-		  end
+	    (case argc
+	       of #"b" => bootstrap opts
+		| #"m" => master opts
+		| #"p" => printstats opts
+		| #"v" => verbose opts
+		| #"a" => setarch (opts, eargf usage)
+		| #"f" => setflag (opts,eargf usage,true)
+		| #"r" => setflag (opts,eargf usage,false)
+		| #"s" => r := slave_mode opts
+		| #"c" => r := purge_mode opts
+		| _ => usage())
 	end
 
     fun main (_ : string, args : string list) : OS.Process.status =
-	(ExnHandler.Interactive := false;
-	 run (cmdline args);
-	 OS.Process.success) handle e => ExnHandler.printAndExit e
+	let val _ = ExnHandler.Interactive := false
+	    val opts : options =
+		MAKE {boot=ref false,master=ref false,stats=ref false,
+		      verbose=ref 0,arch=ref NONE,flags=ref nil}
+	    val r = ref opts
+	    val args = Arg.args (option r) args
+	in  run (!r, args);
+	    OS.Process.success
+	end handle e => ExnHandler.printAndExit e
 
 end
