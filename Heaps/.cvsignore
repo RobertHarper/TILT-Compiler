@@ -1,3 +1,6 @@
 tilt.alpha32-dunix
 tilt.sparc-solaris
 tilt.x86-linux
+dump.alpha32-dunix
+dump.sparc-solaris
+dump.x86-linux

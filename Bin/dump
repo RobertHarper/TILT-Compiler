@@ -1,0 +1,5 @@
+#!/usr/local/bin/rc
+bindir=`{dirname $0}
+top=`{cd $bindir/..; pwd}
+. $top/Test/platform
+exec $top/Bin/$objtype/dump $*

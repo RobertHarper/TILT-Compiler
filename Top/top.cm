@@ -44,14 +44,6 @@ info.sig.sml
 info.sml
 update.sig.sml
 update.sml
-(*
-   dependentfile.sig.sml
-   filehelp.sml
-   sourcefile.sml
-   ilfile.sml
-   asmfile.sml
-   objfile.sml
-*)
 popen.sig.sml
 popen.sml
 dirs.sig.sml
@@ -72,3 +64,4 @@ getopt.sig.sml
 getopt.sml
 main.sig.sml
 main.sml
+dump.sml
