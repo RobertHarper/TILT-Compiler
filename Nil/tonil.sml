@@ -238,7 +238,7 @@ struct
 
    (* xmod:  Translation of an IL module.
 
-      {name_c, name_r, cbnd_cat, ebnd_cat, knd_c} =
+      {name_c, name_r, cbnd_cat, ebnd_cat} =
          xmod ctx (il_mod, vmap_0, SOME var)
 
       Preconditions:  
@@ -250,7 +250,6 @@ struct
         Let cbnds = flatten_catlist cbnd_cat, ebnds = flatten_catlist ebnd_cat
 
         (1) the compile-time part of mod is LET_C cbnds IN name_c END
-        (2) the compile-time part has kind knd_c
         (3) the run-time part of mod is LET_E cbnds, ebnds IN name_r END
         (4) ctx |- il_signat == il_signat' : Sig
     *)
@@ -269,7 +268,7 @@ local
 		   used   : Name.VarSet.set ref,
 		   vmap   : (var * var) Name.VarMap.map,
 		   alias  : (var * label list) Name.VarMap.map,
-		   memoized_mpath : (con * exp * kind) Name.PathMap.map,
+		   memoized_mpath : (con * exp (* * kind*)) Name.PathMap.map,
                    polyfuns : Name.VarSet.set}
        
 
@@ -307,8 +306,7 @@ in
        (used := Name.VarSet.empty)
 
    fun NilContext_find_kind(ctxt as CONTEXT{NILctx,used,...},v) = 
-       (let val _ = NilContext_use_var(ctxt,v)
-	    val k = NilContext.find_kind(NILctx,v)
+       (let val k = NilContext.find_kind(NILctx,v)
 	in  SOME ((*NilSubst.renameCVarsKind*) k)
 	end
 	handle NilContext.Unbound => NONE)
@@ -319,6 +317,7 @@ in
    fun NilContext_print(CONTEXT{NILctx,...}) = NilContext.print_context NILctx
 
    fun NilContext_kind_standardize(CONTEXT{NILctx,...},k) = NilContext.kind_standardize(NILctx, k)
+   fun NilContext_kind_of(CONTEXT{NILctx,...},c) = NilContext.kind_of(NILctx, c)
 
    val splitVar = fn (var,CONTEXT{NILctx,sigmap,
 			     used,vmap,alias,memoized_mpath,polyfuns}) =>
@@ -396,11 +395,11 @@ in
 		    polyfuns=polyfuns}
 	end
     fun add_module_alias(CONTEXT{NILctx,sigmap,vmap,used,alias,
-				 memoized_mpath,polyfuns},m,name_c,name_r,k1) = 
+				 memoized_mpath,polyfuns},m,name_c,name_r(*,k1*)) = 
 	case (extractPathLabels m) of
 		  (Il.MOD_VAR v, labs) => 
 		      let val p = (v,labs)
-			  val memoized_mpath' = Name.PathMap.insert(memoized_mpath,p,(name_c,name_r,k1))
+			  val memoized_mpath' = Name.PathMap.insert(memoized_mpath,p,(name_c,name_r(*,k1*)))
 		      in  CONTEXT{NILctx=NILctx, sigmap=sigmap, vmap=vmap, 
 				  used=used,alias=alias,  
 				  memoized_mpath=memoized_mpath',
@@ -428,12 +427,12 @@ end (* local defining splitting context *)
 
 
 
-       type con_result = con * kind
+       type con_result = con 
        type mod_result = {cbnd_cat : conbnd catlist,
 			  ebnd_cat : bnd catlist,
 			  name_c : con,
 			  name_r : exp,
-			  knd_c : kind,
+(*			  knd_c : kind,*)
 			  context : splitting_context}
    local
        val con_memo = ref (Name.VarMap.empty : con_result Name.PathMap.map Name.VarMap.map)
@@ -469,7 +468,7 @@ end (* local defining splitting context *)
 	      | SOME pathmap =>
 		   (case Name.PathMap.find(pathmap,path) of
 			SOME result => 
-			    let val {name_c,name_r,knd_c,
+			    let val {name_c,name_r,(*knd_c,*)
 				     ebnd_cat,cbnd_cat,context=_} = result
 			 	val (name_c,name_r,cbnd_cat,ebnd_cat,context) = 
 				    (case (name_c,name_r,preferred_name) of
@@ -487,11 +486,11 @@ end (* local defining splitting context *)
 
 				val _ = (print "\nlookup_mod_memo of "; Ppnil.pp_var v;
 				Ppnil.pp_list Ppnil.pp_label' lbls ("",".","",false);
-				print " returning memoized result\n  knd_c = \n";
-				Ppnil.pp_kind knd_c; print "\n\n")
+(*				print " returning memoized result\n  knd_c = \n";
+				Ppnil.pp_kind knd_c; *) print "\n\n")
 			    in  {cbnd_cat = cbnd_cat, ebnd_cat = ebnd_cat,
 				 name_c = name_c, name_r = name_r,
-				 knd_c = knd_c,
+				(* knd_c = knd_c, *)
 				 
 				 (* these fields are not cached *)
 				 context = context} : mod_result
@@ -501,11 +500,11 @@ end (* local defining splitting context *)
 					then mod_memo := Name.VarMap.insert
 					(!mod_memo,v,Name.PathMap.insert(pathmap,path,res))
 					else ()
-				val {knd_c,...} = res
+				(*val {knd_c,...} = res *)
 				val _ = (print "\nlookup_mod_memo of "; Ppnil.pp_var v;
 				Ppnil.pp_list Ppnil.pp_label' lbls ("",".","",false);
-				print " returning first-time result\n  knd_c = \n";
-				Ppnil.pp_kind knd_c; print "\n\n")
+				(*print " returning first-time result\n  knd_c = \n";
+				Ppnil.pp_kind knd_c; *)print "\n\n")
 				in  res
 				end)
 			handle e => 
@@ -536,7 +535,7 @@ end (* local defining splitting context *)
 					   Ppil.pp_mod il_mod; print "\n")
 				 else ();
 				xmod' context args)
-		      | SOME(name_c,name_r,knd_c) =>
+		      | SOME(name_c,name_r(*,knd_c*)) =>
 			let val (name_c,name_r,cbnd_cat,ebnd_cat,context) = 
 				(case preferred_name of 
 				  NONE => (name_c,name_r,LIST[],LIST[],context)
@@ -548,7 +547,7 @@ end (* local defining splitting context *)
 						context)
 					end)
 			in {cbnd_cat=cbnd_cat, ebnd_cat=ebnd_cat, name_c=name_c, name_r=name_r,
-				context = context, knd_c=knd_c}
+				context = context(*, knd_c=knd_c*)}
 
 			end)
 	     | check_proj(Il.MOD_PROJECT(m,l),ls) = check_proj(m,l::ls)
@@ -602,11 +601,11 @@ end (* local defining splitting context *)
 		    val ((var_c, var_r), context) = splitVar (var, context)
 		    val {cbnd_cat : conbnd catlist,
 			 ebnd_cat,name_c,name_r,
-			 knd_c,context} =
+			 (*knd_c,*)context} =
 			  xmod context (mpath,SOME(var,var_c,var_r))
 		    val cbnds = cbnd_cat::cbnds
 		    val ebnds = ebnd_cat::ebnds
-		    val context = add_module_alias(context,mpath,name_c,name_r,knd_c)
+		    val context = add_module_alias(context,mpath,name_c,name_r(*,knd_c*))
 		in  (cbnds,ebnds,context)
 		end
 
@@ -631,9 +630,9 @@ end (* local defining splitting context *)
 			     Ppnil.pp_con (Var_c var_mod_c);
 			     print "\n")
 		   else ()
-
+(*
            val knd_c = Single_k(Var_c var_mod_c)
-
+*)
 	   val (var_mod_c,cbnds,context) = (var_mod_c,[],context)
 	       
 
@@ -649,15 +648,16 @@ end (* local defining splitting context *)
 			(APPEND[LIST cbnds, LIST[Con_cb(name_c, Var_c var_mod_c)]],
 			 LIST [Exp_b (name_r, TraceUnknown, Var_e var_mod_r)],
 			 update_NILctx_insert_kind_equation
-			  (context,
-			   name_c, Var_c var_mod_c)))
+			  (context, name_c, Var_c var_mod_c)))
 
        in
 	   {cbnd_cat = cbnd_cat,
 	    ebnd_cat = ebnd_cat,
             name_c   = name_c,
             name_r   = name_r,
+(*
 	    knd_c = knd_c,
+*)
 	    context  = context}
        end
 
@@ -668,7 +668,7 @@ end (* local defining splitting context *)
 		ebnd_cat = ebnd_cat_fun,
 		name_c = name_fun_c,
                 name_r = name_fun_r,
-		knd_c = knd_fun_c,
+(*		knd_c = knd_fun_c,*)
 		context = context
 		} = xmod context (ilmod_fun, NONE)
 
@@ -676,21 +676,25 @@ end (* local defining splitting context *)
 		ebnd_cat = ebnd_cat_arg,
 		name_c = name_arg_c,
 		name_r = name_arg_r,
-		knd_c = knd_arg_c,
+(*		knd_c = knd_arg_c, *)
 		context = context
 		} = xmod context (ilmod_arg, NONE)
 	       
 	   val (var, var_c, var_r, context) = chooseName (preferred_name, context)
 	   val name_c = Var_c var_c
 	   val name_r = Var_e var_r
-	       
+(*	       
 	   val Arrow_k(_, [_], con_body_kind) = NilContext_kind_standardize(context, knd_fun_c)
 	   val knd_c = varConKindSubst var_c name_arg_c con_body_kind
-		   
-	   val cbnd_cat_new = LIST[Con_cb(var_c, App_c(name_fun_c,[name_arg_c]))]
-	   val cbnd_cat = APPEND[cbnd_cat_fun, cbnd_cat_arg, cbnd_cat_new]
-	   val context = update_NILctx_insert_kind(context,var_c,knd_c)
+*)
 
+           val con_new = App_c(name_fun_c,[name_arg_c])
+	   val cbnd_cat_new = LIST[Con_cb(var_c, con_new)]
+	   val cbnd_cat = APPEND[cbnd_cat_fun, cbnd_cat_arg, cbnd_cat_new]
+(*
+	   val context = update_NILctx_insert_kind(context,var_c,knd_c)
+*)
+	   val context = update_NILctx_insert_kind_equation(context, var_c, con_new)
        
 	   val ebnd_cat_new = LIST[Exp_b(var_r, TraceUnknown,
 					 NilUtil.makeAppE
@@ -707,7 +711,7 @@ end (* local defining splitting context *)
 	    ebnd_cat  = ebnd_cat,
 	    name_c    = name_c,
 	    name_r    = name_r,
-	    knd_c = knd_c,
+(*	    knd_c = knd_c,*)
 	    context  = context}
        end
 
@@ -730,7 +734,7 @@ end (* local defining splitting context *)
 		ebnd_cat = ebnd_mod_cat,
 		name_c   = name_mod_c, 
 		name_r   = name_mod_r,
-		knd_c = knd_mod_c,
+(*		knd_c = knd_mod_c, *)
 		context  = context,
 		...} = xmod context (il_module, NONE)
 
@@ -742,8 +746,9 @@ end (* local defining splitting context *)
 	   val name_proj_r = Var_e var_proj_r
 
 	   val con_proj_c = selectFromCon(name_mod_c, lbls)
-	   val knd_proj_c = Single_k(con_proj_c)
-
+(*
+	   val knd_proj_c = Single_k(NilUtil.makeLetC (flattenCatlist cbnd_mod_cat) con_proj_c)
+*)
 	   val context = update_NILctx_insert_kind_equation(context,var_proj_c,con_proj_c)
 	   val cbnd_cat_new = LIST [Con_cb(var_proj_c, con_proj_c)]
            val cbnd_proj_cat = APPEND[cbnd_mod_cat,cbnd_cat_new]
@@ -762,7 +767,7 @@ end (* local defining splitting context *)
 	    ebnd_cat = ebnd_proj_cat,
             name_c   = name_proj_c,
 	    name_r   = name_proj_r,
-	    knd_c = knd_proj_c,
+(*	    knd_c = knd_proj_c, *)
 	    context  = context}
        end
 
@@ -774,7 +779,6 @@ end (* local defining splitting context *)
 	       chooseName (preferred_name, context)
            val name_fun_c = Var_c var_fun_c
 	   val name_fun_r = Var_e var_fun_r
-
 
 	   (* Split the argument parameter *)
 	   val ((var_arg_c, var_arg_r), context') = splitVar (var_arg, context)
@@ -794,12 +798,10 @@ end (* local defining splitting context *)
 	   val (knd_arg, con_arg) = 
 	         xsig context' (Var_c var_arg_c, il_arg_signat)
 
-	   val context' = update_NILctx_insert_kind(context', var_arg_c, 
-						    knd_arg)
+	   val context' = update_NILctx_insert_kind(context', var_arg_c, knd_arg)
 
-	   val (_,con_res) = 
-	         xsig context' (App_c(name_fun_c, [Var_c var_arg_c]), 
-				ilmod_signat)
+	   val (_,con_res) = xsig context' (App_c(name_fun_c, [Var_c var_arg_c]), 
+					    ilmod_signat)
 
            val (cbnd_preproject_cat,ebnd_preproject_cat,context') = 
 	       if (!do_preproject)
@@ -817,10 +819,9 @@ end (* local defining splitting context *)
 		ebnd_cat = ebnd_body_cat, 
 		name_c = name_body_c,
 		name_r = name_body_r,
-		knd_c = knd_body_c,
+(*		knd_c = knd_body_c, *)
 		context = _
 		} = xmod context' (ilmod_body, NONE)
-
 
 	   val cbnd_body_cat = APPEND[cbnd_preproject_cat, cbnd_body_cat]
 	   val ebnd_body_cat = APPEND[ebnd_preproject_cat, ebnd_body_cat]
@@ -831,13 +832,14 @@ end (* local defining splitting context *)
            val ebnds_body = flattenCatlist ebnd_body_cat
 
 	   val con_res' = NilUtil.makeLetC cbnds_body con_res
-
+(*
 	   val knd_fun_c = Arrow_k(Open, [(var_arg_c, knd_arg)], knd_body_c)
-
+*)
+           val con_body = NilUtil.makeLetC cbnds_body name_body_c
            val cbnd_fun_cat = 
 	       LIST[Open_cb(var_fun_c, [(var_arg_c, knd_arg)],
-			    NilUtil.makeLetC cbnds_body name_body_c,
-			    knd_body_c)]
+			    con_body,
+			    Single_k(con_body))]
 
 	   val ebnd_fun_cat =  
 	       LIST[Fixopen_b (Sequence.fromList
@@ -852,20 +854,22 @@ end (* local defining splitting context *)
 					  name_body_r,
 					 con_res'))])]
 
-	   val context = update_NILctx_insert_kind(context, var_fun_c, knd_fun_c)
+	   val context = update_NILctx_insert_kind(context, var_fun_c, 
+                           Arrow_k(Open, [(var_arg_c, knd_arg)], Single_k(con_body)))
 
        in
 	   {cbnd_cat = cbnd_fun_cat,
             ebnd_cat = ebnd_fun_cat,
 	    name_c = name_fun_c,
 	    name_r = name_fun_r,
-	    knd_c = knd_fun_c,
+	    (* knd_c = knd_fun_c, *)
 	    context = context}
        end
    
      | xmod' context (Il.MOD_STRUCTURE sbnds, preferred_name) =
        let
-	   val {final_context = _, 
+           (* XXX is final_context =context ok, or should it be thrown away? *)
+	   val {final_context = context, 
 		cbnd_cat, ebnd_cat, record_c_con_items,
 		record_c_knd_items, 
 		record_r_exp_items : (label * exp) list} = 
@@ -876,9 +880,9 @@ end (* local defining splitting context *)
 
            val name_str_c = Var_c var_str_c
 	   val name_str_r = Var_e var_str_r
-
+(*
 	   val knd_str_c = Record_k (Sequence.fromList record_c_knd_items)
-
+*)
 	   val con_str_c = Crecord_c record_c_con_items
 	   val cbnd_cat_new = LIST [Con_cb(var_str_c, con_str_c)]
            val cbnd_str_cat = APPEND[cbnd_cat,cbnd_cat_new]
@@ -897,15 +901,14 @@ end (* local defining splitting context *)
 	   val ebnd_str_cat = APPEND[ebnd_cat,ebnd_cat_new]
 
 
-	   val context = update_NILctx_insert_kind(context, var_str_c, 
-						   knd_str_c)
+	   val context = update_NILctx_insert_kind_equation(context, var_str_c, con_str_c)
 
        in
 	   {cbnd_cat = cbnd_str_cat,
 	    ebnd_cat = ebnd_str_cat,
             name_c = name_str_c,
 	    name_r = name_str_r,
-	    knd_c = knd_str_c,
+(* 	    knd_c = knd_str_c, *)
 	    context = context}
        end
 
@@ -919,27 +922,31 @@ end (* local defining splitting context *)
 
 	   val {cbnd_cat = cbnd_loc_cat,
 		ebnd_cat = ebnd_loc_cat,
-		knd_c = knd_loc_c,
+(*		knd_c = knd_loc_c, *)
 		context = context,
 		...} = xmod context (il_loc_mod, SOME (var_loc, var_loc_c, var_loc_r))
-
+(*
+           val _ = print "BETWEEN MOD_LET: Context =\n"
+           val _ = print_splitting_context context
+*)
 	   val {cbnd_cat = cbnd_body_cat,
 		ebnd_cat = ebnd_body_cat,
 		name_c = name_let_c,
 		name_r = name_let_r,
-		knd_c = knd_let_c,
+(*		knd_c = knd_let_c, *)
 		context = context} =  
 	       xmod context (il_body_mod, preferred_name)
 
            val cbnd_let_cat = APPEND[cbnd_loc_cat, cbnd_body_cat]
            val ebnd_let_cat = APPEND[ebnd_loc_cat, ebnd_body_cat]
 
+
        in
 	   {cbnd_cat = cbnd_let_cat,
 	    ebnd_cat = ebnd_let_cat,
             name_c = name_let_c,
 	    name_r = name_let_r,
-	    knd_c = knd_let_c,
+(*	    knd_c = knd_let_c, *)
 	    context = context}
        end
 
@@ -1217,9 +1224,9 @@ end (* local defining splitting context *)
 			      in (v,rest')
 			      end)
 
-	   val (con, knd) = xcon context il_con
+	   val con = xcon context il_con
 
-           val context' = update_NILctx_insert_kind(context, var, knd) 
+           val context' = update_NILctx_insert_kind_equation(context, var, con) 
 
 	   val {final_context, cbnd_cat, ebnd_cat, record_c_con_items,
 		record_c_knd_items,
@@ -1229,7 +1236,7 @@ end (* local defining splitting context *)
 	    cbnd_cat = CONS (Con_cb(var, con), cbnd_cat),
 	    ebnd_cat = ebnd_cat,
 	    record_c_con_items = (lbl, Var_c var) :: record_c_con_items,
-	    record_c_knd_items = ((lbl, var), knd) :: record_c_knd_items, 
+	    record_c_knd_items = ((lbl, var), Single_k con) :: record_c_knd_items, 
 	    record_r_exp_items = record_r_exp_items}
        end
 
@@ -1262,7 +1269,7 @@ end (* local defining splitting context *)
 	       
 	   val {cbnd_cat = cbnd_mod_cat, 
 		ebnd_cat = ebnd_mod_cat,
-		knd_c = knd_mod_c,
+(*		knd_c = knd_mod_c, *)
 		context = context,
 		name_c, name_r,
 		...} = xmod context (il_module, SOME(var, var_c, var_r))
@@ -1281,7 +1288,7 @@ end (* local defining splitting context *)
 	    cbnd_cat = APPEND[cbnd_mod_cat, cbnd_cat],
 	    ebnd_cat = APPEND[ebnd_mod_cat, ebnd_cat],
 	    record_c_con_items = (lbl, name_c) :: record_c_con_items,
-	    record_c_knd_items = ((lbl, var_c), knd_mod_c) :: record_c_knd_items, 
+	    record_c_knd_items = ((lbl, var_c), Single_k(name_c)) :: record_c_knd_items, 
 	    record_r_exp_items = (lbl,name_r) :: record_r_exp_items}
        end
 
@@ -1362,22 +1369,21 @@ end (* local defining splitting context *)
        let
 	   val (lbls, cons) = xrdecs context recs
 	   val con = Prim_c(Record_c(lbls,NONE), cons) (* already sorted *)
-	   val knd = Type_k
        in
-	   (con, knd)
+	   con
        end
 
    and xrdecs context [] = ([], [])
      | xrdecs context ((lab, il_con) :: rest) = 
        let
 	   val (labs, cons) = xrdecs context rest
-	   val (con, _) = xcon context il_con
+	   val con = xcon context il_con
        in
 	   (lab :: labs, con :: cons)
        end
 
    (* Returns the translated NIL con and a singleton-less (thick) kind *)
-   and xcon context il_con : con * kind =
+   and xcon context il_con : con  =
        let
 	   val this_call = ! xcon_count
 	   val _ = 
@@ -1408,9 +1414,11 @@ end (* local defining splitting context *)
 	    result
         end
 
-   and xcon' context (il_con as (Il.CON_VAR var)) : con * kind = 
+   and xcon' context (il_con as (Il.CON_VAR var)) : con (* * kind *) = 
        let
 	   val con = Var_c var
+           val _ = NilContext_use_var (context, var)
+(*
 	   val kind = 
 	       (case NilContext_find_kind (context, var) of
 		    SOME kinds => kinds
@@ -1420,8 +1428,9 @@ end (* local defining splitting context *)
 				 then (print "in context:\n"; NilContext_print context)
 			     else ();
 				 error "xcon: CON_VAR\n"))
+*)
        in
-	   (con, kind)
+	   (con (*, kind *))
        end
 
      | xcon' context (Il.CON_TYVAR tv) = xcon context (derefTyvar tv)
@@ -1439,9 +1448,8 @@ end (* local defining splitting context *)
      | xcon' context (Il.CON_INT intsize) =
        let
            val con = Prim_c (Int_c intsize, [])
-           val knd = Type_k
        in
-	   (con, knd)
+	   con
        end
 
     (* there is no type distinction between signed/unsigned ints from NIL onwards *)
@@ -1450,65 +1458,58 @@ end (* local defining splitting context *)
      | xcon' context (Il.CON_FLOAT floatsize) = 
        let
 	   val con = Prim_c (BoxFloat_c floatsize, [])
-	   val knd = Type_k
        in
-	   (con, knd)
+	   con
        end
 
      | xcon' context (Il.CON_ARRAY il_con) = 
        let
-	   val (con', _) = xcon context il_con 
+	   val con' = xcon context il_con 
 	   val con = Prim_c (Array_c, [con'])
-	   val knd = Type_k
-       in  (con, knd)
+       in  con
        end
 
      | xcon' context (Il.CON_VECTOR il_con) = 
        let
-	   val (con', _) = xcon context il_con 
+	   val con' = xcon context il_con 
 	   val con = Prim_c (Vector_c, [con'])
-	   val knd = Type_k
-       in  (con, knd)
+       in  con
        end
 
      | xcon' context (Il.CON_ANY) = 
        let
 	   val con = Prim_c(Exn_c, [])
-	   val knd = Type_k
        in
-	   (con, knd)
+	   con
        end
 
      | xcon' context (Il.CON_REF il_con) = 
        let
-	   val (con', _) = xcon context il_con
+	   val con' = xcon context il_con
 	   val con = Prim_c (Array_c, [con'])
-	   val knd = Type_k
        in
-	   (con, knd)
+	   con
        end
 
      | xcon' context (Il.CON_TAG il_con) = 
        let
-	   val (con', _) = xcon context il_con
+	   val con' = xcon context il_con
 	   val con = Prim_c (Exntag_c, [con'])
-	   val knd = Type_k
-       in  (con, knd)
+       in  con
        end
 
      | xcon' context (Il.CON_ARROW (il_cons1, il_con2, closed, arr)) =
        let
            fun translate il_con = (case (closed,il_con) of
 				       (true,Il.CON_FLOAT Prim.F64) => Prim_c (Float_c Prim.F64, [])
-				     | _ => #1(xcon context il_con))
+				     | _ => xcon context il_con)
 	   val cons1 = map translate il_cons1
            val con2 = translate il_con2
 	   val eff = xeffect (derefOneshot arr)
 	   val con = if closed
 			 then ExternArrow_c(cons1, con2)
 		     else AllArrow_c(Open, eff, [], NONE, cons1,0w0,con2)
-	   val knd = Type_k
-       in  (con, knd)
+       in  con
        end
 
      | xcon' context (il_con as Il.CON_APP (il_con1, il_con2)) = 
@@ -1516,11 +1517,10 @@ end (* local defining splitting context *)
            (* XXX Does not handle the case where il_con1 has a
               dependent kind.  Fortunately, the CON_FUN case of
               xcon' always returns a non-dependent kind. *)
-	   val (con1, knd_1) = xcon context il_con1
-           val (Arrow_k(_,vklist,body_context)) = NilContext_kind_standardize(context,knd_1)
-           val (con2, knd_2) = xcon context il_con2
+	   val con1 = xcon context il_con1
+           val con2 = xcon context il_con2
 	   val con = 
-	       (case NilContext_kind_standardize(context,knd_2) of
+	       (case NilContext_kind_of(context,con2) of
 		    Record_k lvk_seq => 
 			let 
 			    val arg_var = Name.fresh_var()
@@ -1534,7 +1534,7 @@ end (* local defining splitting context *)
 			       (App_c(con1, args))
 			end
 		  | _ => App_c(con1, [con2]))
-       in  (con, body_context)
+       in  con
        end
 
      | xcon' context (Il.CON_MU(Il.CON_FUN(vars, 
@@ -1548,16 +1548,15 @@ end (* local defining splitting context *)
 
 	   val context' = update_NILctx_insert_kind_list(context,map (fn v => (v,Type_k)) vars)
 	       
-	   val cons'= map (#1 o (xcon context')) cons
+	   val cons'= map (xcon context') cons
 	   val freevars = Listops.flatten (map IlUtil.con_free_convar cons)
 	   val is_recur = Listops.orfold (fn v => Listops.member_eq(Name.eq_var,v,freevars)) vars
 
 	   val con = Mu_c (is_recur,
 			   Sequence.fromList (Listops.zip vars cons'))
 
-	   val knd = NilUtil.kind_tuple(map (fn _ => Type_k) vars)
        in
-	   (con, knd)
+	   con
        end
 
      | xcon' context (Il.CON_MU(Il.CON_FUN([var], con))) =
@@ -1568,22 +1567,20 @@ end (* local defining splitting context *)
 
 	   val context' = update_NILctx_insert_kind(context, var, Type_k)
 	       
-	   val (con',_) = xcon context' con
+	   val con' = xcon context' con
 	   val freevars = IlUtil.con_free_convar con
 	   val is_recur = Listops.member_eq(Name.eq_var,var,freevars)
 	   val con = Mu_c (is_recur,Sequence.fromList [(var, con')])
-	   val knd = Type_k
        in
-	   (con, knd)
+	   con
        end
 
      | xcon' context (Il.CON_RECORD rdecs) = 
        let
 	   val (lbls, cons) = xrdecs context rdecs
 	   val con = Prim_c (Record_c(lbls,NONE), cons)
-	   val knd = Type_k
        in
-	   (con, knd)
+	   con
        end
 
 
@@ -1593,13 +1590,12 @@ end (* local defining splitting context *)
 
 	   val context' = update_NILctx_insert_kind_list(context,args)
 
-	   val (con1, knd1) = xcon context' il_con1
+	   val con1 = xcon context' il_con1
 
 	   val fun_name = Name.fresh_var ()
-	   val con = NilUtil.makeLetC ([Open_cb(fun_name, args, con1, knd1)])
+	   val con = NilUtil.makeLetC ([Open_cb(fun_name, args, con1, Single_k(con1))])
 	       (Var_c fun_name)
-	   val knd = Arrow_k(Open, args, knd1)
-       in  (con, knd)
+       in  con
        end
 
      | xcon' context (Il.CON_SUM {carrier, noncarriers, special}) =
@@ -1607,8 +1603,8 @@ end (* local defining splitting context *)
 	   val known = (case special of
 			       NONE => NONE
 			     | SOME i => SOME (Word32.fromInt i))
-	   val (carrier_con,knd) = xcon' context carrier
-	   val num_carriers = (case NilContext_kind_standardize(context, knd) of
+	   val carrier_con = xcon' context carrier
+	   val num_carriers = (case NilContext_kind_of(context, carrier_con) of
 				   (Record_k seq) => length(Sequence.toList seq)
 				 | Type_k => 1
                                  | SingleType_k _ => 1
@@ -1616,60 +1612,42 @@ end (* local defining splitting context *)
 	   val con = Prim_c (Sum_c {tagcount = Word32.fromInt noncarriers,
 				    totalcount = Word32.fromInt(noncarriers + num_carriers),
 				    known = known}, [carrier_con])
-	   val knd = Type_k
        in
-	   (con, knd)
+	   con
        end
 
      | xcon' context (il_con as (Il.CON_TUPLE_INJECT il_cons)) = 
        let
-	   val (cons, knds) = Listops.unzip (map (xcon context) il_cons)
+	   val cons = map (xcon context) il_cons
 	   val tuple_length = List.length cons
 	   val labels = makeLabels tuple_length
 	   val vars = makeVars tuple_length
 	   val con = Crecord_c(Listops.zip labels cons)
-	   val knd = Record_k (Sequence.fromList 
-			       (Listops.zip (Listops.zip labels vars) knds))
        in
-	   (con, knd)
+	   con
        end
 
      | xcon' context (il_con as (Il.CON_TUPLE_PROJECT (i, il_con1))) = 
        let
-	   val (con1, knd) = xcon context il_con1
-	
-	   val Record_k seq_context = knd
-
+	   val con1 = xcon context il_con1
 	   val lbl = IlUtil.generate_tuple_label(i+1)
 	   val con = Proj_c(con1, lbl)
-	   fun equal((l,_),(l',_)) = Name.eq_label (l,l')
-	   val SOME knd = Sequence.lookup equal seq_context (lbl,Name.fresh_var())
-		
-       in (con, knd)
+       in con
        end
 
      | xcon' context (il_con as (Il.CON_MODULE_PROJECT (modv, lbl))) = 
        let
-	   val {cbnd_cat,name_c,knd_c,context,...} = 
+	   val {cbnd_cat,name_c,(*knd_c,*)context,...} = 
 	       xmod context (modv, NONE)
            val cbnd_list = flattenCatlist cbnd_cat
 
 	   val proj_con = Proj_c (name_c, lbl)
 	   val con = NilUtil.makeLetC cbnd_list proj_con
 
-	   val knd = Single_k(con)
        in
-	   (con, knd)
+	   con
        end
     
-(*
-     | xcon' _ c = (print "Error:  Unrecognized constructor:\n";
-		    Ppil.pp_con c;
-		    print "\n";
-		    error "(xcon):  Unrecognized constructor")
-*)
-
-   
    and toFunction context (exp as Il.FIX _) =
        let
 	   val Let_e (_, [Fixopen_b fns], Var_e var) = xexp context exp
@@ -1693,7 +1671,7 @@ end (* local defining splitting context *)
      | xvalue context (Prim.array (il_con, a)) = 
        let
 	   val il_exps = Array.foldr (op ::) nil a
-           val (con,_) = xcon context il_con
+           val con = xcon context il_con
            val exps = map (xexp context) il_exps
        in  Const_e (Prim.array (con, Array.fromList exps))
        end
@@ -1701,7 +1679,7 @@ end (* local defining splitting context *)
      | xvalue context (Prim.vector (il_con, v)) = 
        let
 	   val il_exps = Array.foldr (op ::) nil v
-           val (con, _) = xcon context il_con
+           val con = xcon context il_con
 	   val exps = map (xexp context) il_exps
        in
 	   Const_e (Prim.vector (con, Array.fromList exps))
@@ -1718,7 +1696,7 @@ end (* local defining splitting context *)
 
      | xvalue context (Prim.tag(tag, il_con))  =
        let
-	   val (con, _) = xcon context il_con
+	   val con = xcon context il_con
        in
 	   Const_e (Prim.tag (tag, con))
        end
@@ -1766,7 +1744,7 @@ end (* local defining splitting context *)
      | xexp' context (il_exp as (Il.PRIM (prim, il_cons, il_args))) = 
        let
 	   open Prim
-	   val cons = map (#1 o (xcon context)) il_cons
+	   val cons = map (xcon context) il_cons
 	   val args = map (xexp context) il_args
            val (effect,con) = 
 	     case strip_arrow (NilPrimUtil.get_type' prim cons)
@@ -1805,7 +1783,7 @@ end (* local defining splitting context *)
        end
      | xexp' context (il_exp as (Il.ILPRIM (ilprim, il_cons, il_args))) = 
        let
-	   val cons = map (#1 o (xcon context)) il_cons
+	   val cons = map (xcon context) il_cons
 	   val args = map (xexp context) il_args
 	   val zero = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 0))
 	   val one = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 1))
@@ -1880,7 +1858,7 @@ end (* local defining splitting context *)
      | xexp' context (Il.SUM_TAIL (i,il_con, il_exp)) =
        let
 	   val exp = xexp context il_exp
-	   val (sumcon,_) = xcon context il_con
+	   val sumcon = xcon context il_con
        in  Prim_e (NilPrimOp (project_sum (TilWord32.fromInt i)), [sumcon], [exp])
        end
 (*
@@ -1904,7 +1882,7 @@ end (* local defining splitting context *)
      | xexp' context (Il.RAISE (il_con, il_exp)) = 
        let
 	   val exp = xexp context il_exp
-	   val (con, _) = xcon context il_con
+	   val con = xcon context il_con
        in  Raise_e (exp, con)
        end
 
@@ -1918,7 +1896,7 @@ end (* local defining splitting context *)
        end
 
      | xexp' context (Il.NEW_STAMP il_con) = 
-       let val (con, _) = xcon context il_con
+       let val con = xcon context il_con
        in  Prim_e(NilPrimOp make_exntag, [con], [])
        end
 
@@ -1932,7 +1910,7 @@ end (* local defining splitting context *)
 
      | xexp' context (Il.ROLL (il_con, il_exp)) = 
        let
-	   val (con, _) = xcon context il_con
+	   val con = xcon context il_con
 	   val exp = xexp context il_exp
        in
 	   Prim_e(NilPrimOp roll, [con], [exp])
@@ -1940,14 +1918,14 @@ end (* local defining splitting context *)
 
      | xexp' context (il_exp as (Il.UNROLL (il_mu_con, il_expanded_con, il_exp1))) = 
        let
-	   val (mu_con, _) = xcon context il_mu_con
+	   val mu_con = xcon context il_mu_con
 	   val exp = xexp context il_exp1
        in  Prim_e(NilPrimOp unroll, [mu_con], [exp])
        end
 
      | xexp' context (Il.INJ {sumtype, field, inject = eopt}) =
        let
-	   val (sumcon,_) = xcon context sumtype
+	   val sumcon = xcon context sumtype
 	   val elist = (case eopt of
 			    NONE => []
 			  | SOME il_exp => [xexp context il_exp])
@@ -1960,7 +1938,7 @@ end (* local defining splitting context *)
 			       tipe,default=il_default}) =
        let
 	   (* We want to use the result type given to avoid type blowup *)
-	   val (sumcon,_) = xcon context sumtype
+	   val sumcon = xcon context sumtype
 	   val exp = xexp context il_arg
 	   fun xarm (n, NONE ) = NONE
 	     | xarm (n, SOME ilexp) = SOME(Word32.fromInt n, xexp context ilexp)
@@ -2054,8 +2032,8 @@ end (* local defining splitting context *)
 	   val totality = xeffect il_arrow
 	   fun mapper (Il.FBND(var, var', il_con1, il_con2, body)) = 
 	       let
-		   val (con1,_) = xcon context il_con1
-		   val (con2,_) = xcon context il_con2
+		   val con1 = xcon context il_con1
+		   val con2 = xcon context il_con2
 		   val body' = xexp context body
 	       in  (var, Function(totality, recursive, [],
 				  false, [(var', con1)], [], body', con2))
@@ -2094,7 +2072,7 @@ end (* local defining splitting context *)
 		   name_c   = name_mod_c, 
 		   name_r   = name_mod_r,
 		   context  = context,
-		   knd_c = knd,
+(*		   knd_c = knd, *)
 		   ...} = xmod context (il_module, NONE)
 
 	      val cbnds = flattenCatlist cbnd_mod_cat
@@ -2105,7 +2083,7 @@ end (* local defining splitting context *)
 		      (cbnds' @ ebnds)
 		      name_mod_r
 
-	  in  (knd, Typeof_c e)
+	  in  (Single_k(con_mod), Typeof_c e)
 	  end
 
      | xsig' context (con0,Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
@@ -2124,8 +2102,7 @@ end (* local defining splitting context *)
 	       
 	   val (knd', con') = xsig context (App_c(con0, [Var_c var_c]), sig_rng)
 
-           (* XXX overly conservative, but must match xmod of functors *)
-           val effect = Partial
+           val effect = xeffect arrow
 	       
        in
 		 (Arrow_k (Open, [(var_c, knd)], knd'),
@@ -2312,7 +2289,7 @@ end (* local defining splitting context *)
 
      | xsdecs' context(con0, subst, Il.SDEC(lbl, d as Il.DEC_EXP(var,il_con)) :: rest) =
        let
-	   val (con,_) = xcon context il_con
+	   val con = xcon context il_con
 	   val {crdecs, erdecs} = xsdecs' context (con0, subst, rest)
        in
 	   {crdecs = crdecs,
@@ -2327,7 +2304,7 @@ end (* local defining splitting context *)
 		    ( Il.KIND_INLINE _, _) => xkind context il_knd
 		  | (_,NONE) => xkind context il_knd
 		  | (_,SOME il_con) => 
-			(let val (c,_) = xcon context il_con
+			(let val c = xcon context il_con
 			 in  Single_k c
 			 end))
 
@@ -2348,9 +2325,11 @@ end (* local defining splitting context *)
            val k = Arrow_k (Open, args, makeKindTuple m)
        in  k
        end
-     | xkind context (Il.KIND_INLINE (k,c)) = 
-	 let val (con,_) = xcon context c
-	 in  Single_k con
+     | xkind context (Il.KIND_INLINE (il_kind,c)) = 
+	 let val con = xcon context c
+	 in  (case il_kind of 
+		  Il.KIND_TUPLE 1 => SingleType_k con
+                | _ => Single_k con)
 	 end
 
   fun make_cr_labels l = (Name.internal_label((Name.label2string l) ^ "_c"),
@@ -2361,7 +2340,7 @@ end (* local defining splitting context *)
 	   fun dopc(v,l,pc,(imports,context)) = 
 	       (case pc of
 		    Il.PHRASE_CLASS_EXP (_,il_type) => 
-			let val (nil_type,_) = xcon context il_type
+			let val nil_type = xcon context il_type
 			in  (ImportValue(l,v,nil_type)::imports, context)
 			end
 		  | Il.PHRASE_CLASS_CON (il_con, il_kind) => 
@@ -2372,8 +2351,8 @@ end (* local defining splitting context *)
 				     Il.CON_VAR v' => 
 					 if (Name.eq_var(v,v'))
 					     then NONE
-					 else ((SOME (#1 (xcon context il_con))) handle _ => NONE)
-				   | _ => ((SOME (#1 (xcon context il_con))) handle _ => NONE))
+					 else ((SOME (xcon context il_con)) handle _ => NONE)
+				   | _ => ((SOME (xcon context il_con)) handle _ => NONE))
 			    val it = ImportType(l,v,(case nil_con of
 						 NONE => kind
 					       | SOME c => Single_k c))

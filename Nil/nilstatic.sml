@@ -824,6 +824,8 @@ struct
       (case (kind1,kind2) 
 	 of (Type_k, Type_k) => true
 	  | (Type_k,_) => false
+	  | (Single_k _,_) => subeq_kind is_eq (D, kind_standardize(D,kind1), kind2)
+	  | (_,Single_k _) => subeq_kind is_eq (D, kind1, kind_standardize(D,kind2))
 	  | (SingleType_k _ ,Type_k) => true
 	  | (SingleType_k (c1),SingleType_k (c2)) => 
 	     type_equiv(D,c1,c2)
@@ -839,8 +841,6 @@ struct
 	  | (k1,Single_k (c2)) => (* k1 must be a higher kind *)
 	   subeq_kind is_eq (D,k1,push_singleton (D,c2))
 *)
-	  | (Single_k _,_) => error (locate "subeq_kind") "Non-standard kind encountered"
-	  | (_,Single_k _) => error (locate "subeq_kind") "Non-standard kind encountered"
 	  | (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
 	   (if eq_len (formals1,formals2) then
 	      let
@@ -1565,7 +1565,6 @@ struct
       fun function_valid openness D (var,Function (effect,recursive,tformals,dependent,
 						   formals,fformals,body,return)) = 
 	let
-	  val _ = trace := true
 	  val _ = if (!trace)
 			then (print "{Processing function_valid with var = ";
 			      pp_var var; print "\n")
@@ -1600,7 +1599,6 @@ struct
 			then (print "Done processing function_valid with var = ";
 			      pp_var var; print "}\n")
 		    else ()
-	  val _ = trace := false
 	in
 	  (var,con)
 	end
