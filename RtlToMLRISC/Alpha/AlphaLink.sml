@@ -164,10 +164,9 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 
   val asm_suffix = ".alpha.s"
 
-  fun comp(srcfile, rtlmod) = 
+  fun comp(asmfile, rtlmod) = 
 	let
-	  val asmfile = srcfile^asm_suffix
-	  val stream  = TextIO.openOut asmfile
+	  val stream = TextIO.openOut asmfile
 	in
 	  AsmStream.asmOutStream := stream;
 	  EmitRtlMLRISC.emitModule rtlmod;
@@ -177,7 +176,7 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 	end
 
   fun link(srcfile, labels) = 
-	let 
+	let
 	  val asmfile = srcfile^asm_suffix
 	  val stream  = TextIO.openAppend asmfile
 	in
@@ -187,15 +186,34 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 	  ()
 	end
 
-  fun compile filename = 
-      let val rtlmod = Linkrtl.compile filename
-	  val Rtl.MODULE{main,...} = rtlmod
-      in  (comp(filename,rtlmod),main)
+  fun mk_link_file(asmfile, labels) = 
+	let
+	  val stream = TextIO.openOut asmfile
+	in
+	  AsmStream.asmOutStream := stream;
+	  EmitRtlMLRISC.emitEntryTable labels;
+	  TextIO.closeOut stream;
+	  ()
+	end
+
+  fun compiles filenames = 
+      let val rtlmods = Linkrtl.compiles filenames
+	  fun doit (filename,rtlmod) = let val Rtl.MODULE{main,...} = rtlmod
+				       in  (comp(filename ^ asm_suffix,rtlmod),main)
+				       end
+      in  Listops.map2 doit (filenames,rtlmods)
       end
+  fun compile filename = hd(compiles [filename])
+
+  fun rtl_to_alpha (filename, rtlmod) : string * Rtl.local_label =
+      let val Rtl.MODULE{main,...} = rtlmod
+      in (comp(filename ^ ".s",rtlmod), main)
+      end
+
   fun test filename = 
       let val rtlmod = Linkrtl.test filename
 	  val Rtl.MODULE{main,...} = rtlmod
-      in  (comp(filename,rtlmod),main)
+      in  (comp(filename ^ asm_suffix,rtlmod),main)
       end
 
   val cached_prelude = ref (NONE : (string * Rtl.local_label) option)
@@ -204,7 +222,7 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 	  (true, SOME mlabel) => mlabel
 	| _ => let val rtlmod = Linkrtl.compile_prelude(use_cache,filename)
 		   val Rtl.MODULE{main=label,...} = rtlmod
-		   val mlabel = (comp(filename,rtlmod),label)
+		   val mlabel = (comp(filename ^ asm_suffix,rtlmod),label)
 		   val _ = cached_prelude := SOME mlabel
 	       in  mlabel
 	       end
