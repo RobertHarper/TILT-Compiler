@@ -102,3 +102,4 @@
 0102 [open]	word test fails
 0103 [open]	word8 problems
 0104 [open]	hidden hidden name clash
+0105 [open]	overloading with words
