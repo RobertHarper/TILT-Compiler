@@ -38,6 +38,7 @@ struct
   val strip_singleton = NilUtil.strip_singleton
   val con_free_convar = NilUtil.con_free_convar
   val alpha_equiv_con = NilUtil.alpha_equiv_con
+  val alpha_equiv_kind = NilUtil.alpha_equiv_kind
   val primequiv = NilUtil.primequiv
   val pull = NilUtil.pull
   val singletonize = NilUtil.singletonize 

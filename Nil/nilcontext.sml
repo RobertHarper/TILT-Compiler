@@ -151,7 +151,7 @@ struct
     let
       val _ = if !profile then (nilcontext_kinds_renamed();
 				nilcontext_kinds_bound ()) else ()
-      val (var',subst) = (case V.find(D,var) 
+      val (var',subst) = (case V.find(#kindmap D,var) 
 			    of NONE => (var,Subst.empty())
 			     | SOME _ => 
 			      let
@@ -221,7 +221,7 @@ struct
 	      val kind = Subst.substConInKind subst kind
 	      val (C,var,subst_one) = bind_kind (C,var,kind)
 	    in
-	      (C,(var,kind)::rev_acc,con_subst_compose(subst_one,subst))
+	      (C,(var,kind)::rev_acc,Subst.con_subst_compose(subst_one,subst))
 	    end
 	  
 	  val (C,rev_acc,subst) = 
