@@ -26,12 +26,12 @@ struct
 	in  OS.Path.joinDirFile{dir=runtimedir, file=path}
 	end
 
-    (* chop : string -> string *)
-    fun chop "" = ""
-      | chop s = String.extract (s, 0, SOME (size s - 1))
+    fun chop (s:string) : string =
+	if size s = 0 then s
+	else String.extract (s, 0, SOME (size s - 1))
 
-    (* gccFile : string -> string *)
-    fun gccFile file = chop (Util.outputOf ["gcc","--print-file-name="^file])
+    fun gccFile (file:string) : string =
+	chop (Util.outputOf ["gcc","--print-file-name="^file])
 
     val sparcConfig : unit -> config =
 	Util.memoize(fn () =>
@@ -80,19 +80,20 @@ struct
 				       "-lc", "-lrt"]}
 		     end)
 
-    val talx86Config : unit -> config = fn () => error "No tools for talx85 yet"
+    val talx86Config : unit -> config =
+	fn () => error "No tools for talx86 yet"
 
-    (* targetConfig : unit -> config *)
-    fun targetConfig () =
+    fun targetConfig () : config =
 	(case Target.getTarget()
 	   of Platform.ALPHA => alphaConfig()
 	    | Platform.SPARC => sparcConfig()
 	    | Platform.TALx86 => talx86Config())
 
-    val run' : string list -> unit = Util.run
+    fun run' (command:string list) : unit =
+	Util.run {command=command, stdin=NONE, stdout=NONE, wait=true}
 
-    (* run : string list list -> unit *)
-    val run = run' o List.concat
+    val run : string list list -> unit =
+	run' o List.concat
 
     fun assemble (asmFile : string, objFile : string) : unit =
 	let val _ = msg "  Assembling\n"
@@ -115,13 +116,23 @@ struct
 
     fun compress {src : string, dest : string} : unit =
 	let val _ = msg "  Compressing\n"
-	    fun writer tmp = run' ["gzip","-cq9","<" ^ src,">" ^ tmp]
+	    fun writer (tmp:string) : unit =
+		Util.run
+		    {command = ["gzip","-cq9"],
+		     stdin = SOME src,
+		     stdout = SOME tmp,
+		     wait = true}
 	in  Fs.write' writer dest
 	end
 
     fun uncompress {src : string, dest : string} : unit =
 	let val _ = msg "  Uncompressing\n"
-	    fun writer tmp = run' ["gunzip","-cq","<" ^ src,">" ^ tmp]
+	    fun writer (tmp:string) : unit =
+		Util.run
+		    {command = ["gunzip", "-cq"],
+		     stdin = SOME src,
+		     stdout = SOME tmp,
+		     wait = true}
 	in  Fs.write' writer dest
 	end
 
