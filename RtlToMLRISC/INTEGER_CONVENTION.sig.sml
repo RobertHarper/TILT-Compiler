@@ -12,6 +12,11 @@ signature INTEGER_CONVENTION = sig
    *)
   type id
 
+  (*
+   * An integer expression.
+   *)
+  type rexp
+
   (* -- values ------------------------------------------------------------- *)
 
   (*
@@ -80,6 +85,15 @@ signature INTEGER_CONVENTION = sig
    * Always escape from procedures.
    *)
   val escape: id list
+
+  (* -- values ------------------------------------------------------------- *)
+
+  (*
+   * Return an integer expression for a given register id.
+   * id -> the id of the register to return the expression for
+   * <- an expression representing register id
+   *)
+  val expression: id -> rexp
 
 end
 

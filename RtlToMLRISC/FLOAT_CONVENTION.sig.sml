@@ -12,6 +12,11 @@ signature FLOAT_CONVENTION = sig
    *)
   type id
 
+  (*
+   * A floating-point expression.
+   *)
+  type fexp
+
   (* -- values ------------------------------------------------------------- *)
 
   (*
@@ -47,6 +52,15 @@ signature FLOAT_CONVENTION = sig
    * Always escape from procedures.
    *)
   val escape: id list
+
+  (* -- values ------------------------------------------------------------- *)
+
+  (*
+   * Return a floating-point expression for a given register id.
+   * id -> the id of the register to return the expression for
+   * <- an expression representing register id
+   *)
+  val expression: id -> fexp
 
 end
 
