@@ -5,17 +5,14 @@ structure TortlBase
    =
 struct
 
-val do_constant_records = ref true
-val do_forced_constant_records = ref true
-
-val do_gcmerge = ref true
-val do_single_crecord = ref true
+    val do_constant_records = ref true
+    val do_forced_constant_records = ref true
+    val do_gcmerge = ref true
+    val do_single_crecord = ref true
 
 
 val diag = ref true
 val debug = Stats.ff("TortlBaseDebug")
-val debug_full = ref false
-val debug_full_env = ref false
 val debug_simp = Stats.ff("tortl_base_debug_simp")
 
 val debug_bound = ref false
@@ -23,8 +20,6 @@ val debug_bound = ref false
 
    (* Module-level declarations *)
 
-    structure Rtl = Rtl
-    structure Nil = Nil
     open Util Listops
     open Nil
     open NilUtil
@@ -34,7 +29,6 @@ val debug_bound = ref false
     open Pprtl 
     type label = Rtl.label
 
-    val exncounter_label = ML_EXTERN_LABEL "exncounter"
     val error = fn s => (Util.error "tortl-base.sml" s)
     structure TW32 = TilWord32
     structure TW64 = TilWord64

@@ -24,38 +24,20 @@
 structure Tortl :> TORTL =
 struct
 
-val do_constant_records = ref true
-val do_gcmerge = ref true
-val do_single_crecord = ref true
-
-
-val diag = ref false
-val debug = ref false
-val debug_full_when = ref 99999
-val curfun = ref 0
-fun debug_full() = !debug_full_when <= !curfun
-val debug_full_return = ref false
-val debug_full_env = ref false
-val debug_simp = ref false
-val debug_bound = ref false
-
-   (* Module-level declarations *)
-
-    structure Rtl = Rtl
-    structure Nil = Nil
-    open Util Listops
-    open Nil
-    open NilUtil
-    open Rtl
-    open Name
-    open Rtltags 
-    open Pprtl 
-    open TortlBase
-
-(*
-val simplify_type = fn state => 
-	Stats.subtimer("tortl_MAIN_simplify_type",simplify_type state)
-*)
+  val diag = ref false
+  val debug = ref false
+  val debug_full_when = ref 99999
+  val curfun = ref 0
+  fun debug_full() = !debug_full_when <= !curfun
+  val debug_full_return = ref false
+  val debug_full_env = ref false
+  val debug_simp = ref false
+  val debug_bound = ref false
+      
+  (* Module-level declarations *)
+  open Util Listops Name
+  open Nil NilUtil
+  open Rtl Rtltags Pprtl TortlBase
 
     val do_vararg = Stats.bool("do_vararg") (* initialized elsewhere *)
     val show_cbnd = Stats.ff("show_cbnd")
@@ -1011,18 +993,12 @@ val simplify_type = fn state =>
 	 | select label => 
 	       let val [e] = elist 
 		   val (I addr,reccon,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
+		   val (_,Prim_c(Record_c (labels,_),fieldcons)) = simplify_type state reccon
 		   fun loop [] _ n = error' "bad select 1"
 		     | loop _ [] n = error' "bad select 2"
-		     | loop (l1::lrest) (c1::crest) n = if (eq_label(l1,label))
+		     | loop (l1::lrest) (c1::crest) n = if (Name.eq_label(l1,label))
 							    then (n,c1)
 							else loop lrest crest (n+1)
-		   val (labels,fieldcons) = 
-		       (case (#2(simplify_type state reccon)) of
-			    Prim_c(Record_c (labels,_),cons) => (labels,cons)
-			  | c => (print "selecting from exp of type: ";
-				  Ppnil.pp_con reccon; print "\nwhich reduces to\n";
-				  Ppnil.pp_con c; print "\n";
-				  error' "selecting from a non-record"))
 		   val (which,con) = loop labels fieldcons 0
 		   val con = (case copt of 
 				  NONE => con 
@@ -1694,13 +1670,11 @@ val simplify_type = fn state =>
 	     | Proj_c (c, l) => 
 		   let val (const,lv,k,state) = xcon'(state,fresh_named_var "proj_c",
 								   c,NONE)
-
-		       val lvk_seq = (case k of 
-					  Record_k lvk_seq => lvk_seq
-					| _ => error "proj_c got non-record kind")
+		       
+		       val Record_k lvk_seq = k
 		       fun default() = 
 			   let fun loop [] _ = error "ill-formed projection"
-				 | loop (((l',_),k)::vrest) n = if (eq_label(l,l')) 
+				 | loop (((l',_),k)::vrest) n = if (Name.eq_label(l,l')) 
 							    then (n,k) else loop vrest (n+1)
 		       (* fieldk won't have have dependencies *)			
 			       val (which,fieldk) = loop (Sequence.toList lvk_seq) 0

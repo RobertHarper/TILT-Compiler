@@ -10,7 +10,7 @@
 		(e) type argument(s)
 		      if there are no type arguments, then this will be an empty crecord
 		      if there is one type argument, then this will be the type argument
-		      if there are more than one type argument, then this will be a pointer 
+		      if there are more than one type arguments, then this will be a pointer 
 			  to the tuple of the summand types
 	(3) Mu types are represented by a record whose first field is 8.	
 		There are currently no other fields since mu's are not fully represented.  
@@ -18,72 +18,30 @@
 	        though that might include small tag values.
 *)
 	
-(* xtagsum_dynamic record case is fragile *)
+(* PROBLEMS:
+        (1) dynamic code does not work for multi-records
+ *)
 
 
 structure TortlSum :> TORTL_SUM =
 
 struct
 
-structure TortlBase = TortlBase
-open Nil
-open TortlBase
+    open Util Listops Name
+    open Nil NilUtil
+    open Rtl TortlBase Rtltags Pprtl 
 
-val do_constant_records = ref true
-val do_gcmerge = ref true
-val do_single_crecord = ref true
-
-
-val diag = ref true
-val debug = ref false
-val debug_full = ref false
-val debug_full_env = ref false
-val debug_simp = ref false
-val debug_bound = ref false
-
-   (* Module-level declarations *)
-
-    structure Rtl = Rtl
-    structure Nil = Nil
-    open Util Listops
-    open Nil
-    open NilUtil
-    open Rtl
-    open Name
-    open Rtltags 
-    open Pprtl 
-    open TortlBase
-
-    val exncounter_label = ML_EXTERN_LABEL "exncounter"
+    val diag = ref true
+    val debug = ref false
     val error = fn s => (Util.error "tortl.sml" s)
+
     structure TW32 = TilWord32
     structure TW64 = TilWord64
     val w2i = TW32.toInt
     val i2w = TW32.fromInt
+
     type typearg = state * TilWord32.word * con
-
-
-  (* First, we assume that datatypes have already been translated by 
-     rearranging the non value-carrying components to the beginning.
-     To support efficient representations, we let m and n denote
-     the length of the maximal initial segment of non value-carrying components 
-     and n the rest of the components.  Note that this m is
-     NOT the number(k) of non-value-carrying constructors in the datatype.
-     It is possible for m > k. There are then 6 cases to consider:
-
-         1. m=0, n=0    we use the unit representation
-         2. m<>0, n=0   we use tags to represent the datatype
-         3. m=0, n=1    we use the argument type to represent the datatype
-         4. m<>0, n=1   we use tag or pointer to represent the datatype
-         5. m<>0, n>1   we use tag or tagged sum to represent the datatype
-         6. m=0, n>1    we use tagged sum to represent the datatype
-
-     Tag sums are flat if the carrier is a record type.
-     
-     is_record indicates that the injectee is of a record type and the 
-       that the term arguments are passed in separately as record components
-  *)
-    fun help(state,known,sumcon) = 
+    fun help ((state,known,sumcon) : typearg) = 
 	let
 	  val (tagcount,_,sumtypes) = reduce_to_sum "xsum_???" state sumcon
 	  val field_sub = TW32.uminus(known,tagcount)
@@ -95,66 +53,111 @@ val debug_bound = ref false
 	     sumtypes,field_sub)
 	end
 
+    fun needs_boxing state field_type = 
+	(case simplify_type state field_type of
+	     (true,Prim_c(Int_c _, _)) => true
+	   | (true,Mu_c _) => true
+	   | (true,Proj_c(Mu_c _,_)) => true
+	   | (true,Prim_c(Sum_c _,_)) => true
+	   | (true,Prim_c(Exntag_c, _)) => true
+	   | (true,_) => false
+	   | _ => error "needs_boxing: field type cannot be determined")
+
+  (* First, we assume that datatypes have already been translated by 
+     rearranging the non value-carrying components to the beginning.
+     To support efficient representations, we let m and n denote
+     the length of the maximal initial segment of non value-carrying components 
+     and n the rest of the components.  Note that this m is
+     NOT the number(k) of non-value-carrying constructors in the datatype.
+     It is possible for m > k. There are then 6 cases to consider:
+
+         1. m=0, n=0    we use a tag to represent the datatype
+         2. m<>0, n=0   we use tags to represent the datatype
+         3. m=0, n=1    we use the argument type to represent the datatype
+         4. m<>0, n=1   we use tag or pointer to represent the datatype
+         5. m<>0, n>1   we use tag or tagged sum to represent the datatype
+         6. m=0, n>1    we use tagged sum to represent the datatype
+
+     Tagged sums are flattened if the carried type is a record type.
+
+  *)
+
+    (* (1) Falls through to nobox case 
+       (2) con_ir must be a sum-type with one carrier 
+     *)
+    fun needs_boxing_dynamic str con_ir = 
+	let
+	  val tmp = alloc_regi NOTRACE_INT
+	  val tag = alloc_regi NOTRACE_INT		  
+	  val field_con_ir = alloc_regi TRACE
+		
+	  val boxl = fresh_code_label (str ^ "_box")
+	  val noboxl = fresh_code_label (str ^ "_nobox")
+	  val _ = 
+	      (add_instr(LOAD32I(EA(con_ir,4*4),field_con_ir));
+	       add_instr(CMPUI(LE, field_con_ir, IMM 4, tmp)); (* check ints *)
+	       add_instr(BCNDI(NE, tmp, boxl, false));
+	       add_instr(CMPUI(LE, field_con_ir, IMM 255, tmp)); (* check for other small types *)
+	       add_instr(BCNDI(NE, tmp, noboxl, false));
+	       add_instr(LOAD32I(EA(field_con_ir,0),tag));
+	       add_instr(CMPUI(EQ, tag, IMM 4, tmp)); (* check for sums *)
+	       add_instr(BCNDI(NE, tmp, boxl, false));
+	       add_instr(CMPUI(EQ, tag, IMM 8, tmp)); (* check mus *)
+	       add_instr(BCNDI(NE, tmp, boxl, false)))
+	in  (boxl, noboxl)
+	end
+
+    (* Falls through to non-record case *)
+    fun isrecord_dynamic str field_con_ir = 
+	let
+	  val tmp = alloc_regi NOTRACE_INT
+	  val tag = alloc_regi NOTRACE_INT
+	  val recordl = fresh_code_label (str ^ "_box")
+	  val nonrecordl = fresh_code_label (str ^ "_nobox")
+	  val _ = (add_instr(CMPUI(GE, field_con_ir, IMM 255, tmp));
+		   add_instr(BCNDI(EQ, tmp, nonrecordl, false));
+		   add_instr(LOAD32I(EA(field_con_ir,0),tag));
+		   add_instr(CMPUI(EQ, tag, IMM 5, tmp));
+		   add_instr(BCNDI(NE, tmp, recordl, false)))
+	in  (recordl,nonrecordl)
+	end
+
     fun xsum_dynamic_single (info,
 			     con_varloc,
 			     exp_varloc) : loc_or_val * con * state = 
-	let val _ = Stats.counter("RTLinjsum") ()
-	    
+      let val _ = Stats.counter("RTLxsum_dyn_single") ()
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
 		sumtypes,field_sub) = help info
 
-	  val numfields = alloc_regi NOTRACE_INT
-	  val gctemp = alloc_regi NOTRACE_INT
-	  val tmp = alloc_regi NOTRACE_INT
-	  val tagi = alloc_regi NOTRACE_INT
-	  val desti = alloc_regi(con2rep state sumcon)
-	      
-	  val boxl = fresh_code_label "xsum_dyn_single_box"
-	  val noboxl = fresh_code_label "xsum_dyn_single_nobox"
-	  val afterl = fresh_code_label "dyntagsum_after"
-	      
+	  val desti = alloc_regi TRACE
+	  val afterl = fresh_code_label "xsum_dyn_after"
 	  val con_ir = load_ireg_locval(con_varloc,NONE)
-	  (* the 5 fields of the sum are: tag, known, tagcount, total, type args *)
-	  val summand_con_ir = alloc_regi TRACE
-	  val _ = add_instr(LOAD32I(EA(con_ir,4*4),summand_con_ir))
-	  (* if there is more than one type arg, it is stored in a record *)
-	  val field_con_ir = alloc_regi TRACE
 	  val exp_ir = load_ireg_locval(exp_varloc,NONE)
-	  val _ = add_instr(MV(summand_con_ir,field_con_ir)) 
-	      
-	  val _ = (add_instr(CMPUI(LE, summand_con_ir, IMM 4, tmp)); (* check ints *)
-		   add_instr(BCNDI(NE, tmp, boxl, false));
-		   add_instr(CMPUI(LE, summand_con_ir, IMM 255, tmp)); (* check for other small types *)
-		   add_instr(BCNDI(NE, tmp, noboxl, false));
-		   add_instr(LOAD32I(EA(summand_con_ir,0),tagi));
-		   add_instr(CMPUI(EQ, tagi, IMM 4, tmp)); (* check for sums *)
-		   add_instr(BCNDI(NE, tmp, boxl, false));
-		   add_instr(CMPUI(EQ, tagi, IMM 8, tmp)); (* check mus *)
-		   add_instr(BCNDI(NE, tmp, boxl, false)))
+	  
+	  (* Perform the branching with fall-through to nobox case *)
+	  val (boxl,noboxl) = needs_boxing_dynamic "xsum_dyn_single" con_ir
 
-	  (* no box case *)
+	  (* nobox case *)
 	  val _ = (add_instr(ILABEL noboxl);
 		   add_instr(MV(exp_ir,desti));
 		   add_instr(BR afterl))
 	  (* box case *)
-	  val _ = (add_instr(ILABEL boxl);
-		   let val vls = [VAR_VAL(VINT field_sub),exp_varloc]
-		       val (lv,state) = make_record(state,NONE,map valloc2rep vls,vls)
-		       val rec_ir = load_ireg_locval(lv,NONE)
-		   in  add_instr(MV(rec_ir,desti))
-		   end;
-		   add_instr(ILABEL afterl))
+	  val _ = add_instr(ILABEL boxl)
+	  val (lv,state) = make_record(state,NONE,[valloc2rep exp_varloc],[exp_varloc])
+	  val rec_ir = load_ireg_locval(lv,NONE)
+	  val _ = add_instr(MV(rec_ir,desti))
 
+	  (* afterwards *)
+	  val _ = add_instr(ILABEL afterl)
+	      
       in  (VAR_LOC(VREGISTER(false, I desti)),sumcon,state)
       end
-
-
 
     fun xsum_dynamic_multi (info,
 			    con_varloc,
 			    exp_varloc) : loc_or_val * con * state = 
-	let val _ = Stats.counter("RTLinjsum") ()
+	let val _ = Stats.counter("RTLxsum_dyn_multi") ()
 	    
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -186,11 +189,16 @@ val debug_bound = ref false
 	  val field_con_ir = alloc_regi TRACE
 	  val _ = add_instr(LOAD32I(EA(summand_con_ir,4*(w2i field_sub)),field_con_ir))
 
-	  val _ = (add_instr(CMPUI(LE, field_con_ir, IMM 255, tmp)); (* check for small types *)
-		   add_instr(BCNDI(NE, tmp, nonrecordl, false));
-		   add_instr(LOAD32I(EA(field_con_ir,0),tagi));  (* load tag of the type *)
-		   add_instr(CMPUI(NE, tagi, IMM 5, tmp)); (* check for record *)
-		   add_instr(BCNDI(NE, tmp, nonrecordl, false)))
+	  (* is it a record type?  fall-through to non-record case *)
+	  val (recordl,nonrecordl) = isrecord_dynamic "xprojsum_multi" field_con_ir
+	      
+	  (* easier non-record case *)
+	  val _ = add_instr(ILABEL nonrecordl) 
+	  val vls = [VAR_VAL(VINT field_sub),exp_varloc]
+	  val (lv,state) = make_record(state,NONE,map valloc2rep vls,vls)
+	  val ir = load_ireg_locval(lv,NONE)
+	  val _ = add_instr(MV(ir,desti))
+	  val _ = add_instr(BR afterl)
 	      
 	  (* difficult record case *)
 	  val _ = add_instr(ILABEL recordl) 
@@ -227,14 +235,6 @@ val debug_bound = ref false
 	      
 	  val _ = add_instr(ADD(heapptr,IMM 4, desti))
 	  val _ = add_instr(S4ADD(gctemp, REG heapptr, heapptr))
-	  val _ = add_instr(BR afterl)
-	      
-	  (* easier non-record case *)
-	  val _ = add_instr(ILABEL nonrecordl) 
-	  val vls = [VAR_VAL(VINT field_sub),exp_varloc]
-	  val (lv,state) = make_record(state,NONE,map valloc2rep vls,vls)
-	  val ir = load_ireg_locval(lv,NONE)
-	  val _ = add_instr(MV(ir,desti))
 
 	  (* result is in desti at this point *)
 	  val _ = add_instr(ILABEL afterl) 
@@ -267,20 +267,14 @@ val debug_bound = ref false
 		  val SOME varloc = varloc_opt
 		  val field_type = List.nth(sumtypes, TW32.toInt field_sub)
 		  val desti = alloc_regi(con2rep state sumcon)
-		  fun box_case_vl state = 
+	      in  if (needs_boxing state field_type)
+		  then 
 		      let val rep = valloc2rep varloc
 			  val (vl,state) = make_record(state,NONE,[rep],[varloc])
 		      in  (vl,sumcon,state)
 		      end
-		  fun nobox_case_vl state = (varloc,sumcon,state)
-	      in  (case simplify_type state field_type of
-			  (true,Prim_c(Int_c _, _)) => box_case_vl state
-			| (true,Mu_c _) => box_case_vl state
-			| (true,Proj_c(Mu_c _,_)) => box_case_vl state
-			| (true,Prim_c(Sum_c _,_)) => box_case_vl state
-			| (true,Prim_c(Exntag_c, _)) => box_case_vl state
-			| (true,_) => nobox_case_vl state
-			| _ => error "xsum_nonrecord hnf of field type cannot be determined")
+		  else 
+		      (varloc,sumcon,state)
 	      end
 
 	  fun multi () =
@@ -329,38 +323,23 @@ val debug_bound = ref false
 	  fun single_case() = 
 	      let val desti = alloc_regi(con2rep state summand_type)
 		  val afterl = fresh_code_label "projsum_single_after"
-		  val boxl = fresh_code_label "projsum_single_box"
-		  val noboxl = fresh_code_label "projsum_single_nobox"
-		  (* the 5 fields of the sum are: tag, known, tagcount, total, type args *)
-		  (* since there is exactly one type arg, it is directly stored *)
-		  val summand_con_ir = alloc_regi TRACE
-		  val _ = add_instr(LOAD32I(EA(con_ir,4*4),summand_con_ir))
-		  val tmp = alloc_regi NOTRACE_INT
-		  val tagi = alloc_regi NOTRACE_INT
-		  val _ = (add_instr(CMPUI(LE, summand_con_ir, IMM 4, tmp)); (* check ints *)
-			   add_instr(BCNDI(NE, tmp, boxl, false));
-			   add_instr(CMPUI(LE, summand_con_ir, IMM 255, tmp)); (* check for other small types *)
-			   add_instr(BCNDI(NE, tmp, noboxl, false));
-			   add_instr(LOAD32I(EA(summand_con_ir,0),tagi));
-			   add_instr(CMPUI(EQ, tagi, IMM 4, tmp)); (* check for sums *)
-			   add_instr(BCNDI(NE, tmp, boxl, false));
-			   add_instr(CMPUI(EQ, tagi, IMM 8, tmp)); (* check mus *)
-			   add_instr(BCNDI(NE, tmp, boxl, false)))
+
+		  (* Perform the branching with fall-through to nobox case *)
+		  val (boxl,noboxl) = needs_boxing_dynamic "xprojsum_dyn_single" con_ir
 		  (* no box case *)
 		  val _ = (add_instr(ILABEL noboxl);
 			   add_instr(MV(exp_ir,desti));
 			   add_instr(BR afterl))
 		  (* box case *)
 		  val _ = (add_instr(ILABEL boxl);
-			   add_instr(LOAD32I(EA(exp_ir,0),desti));
-			   add_instr(ILABEL afterl))
+			   add_instr(LOAD32I(EA(exp_ir,0),desti)))
+		  (* afterwards *)
+		  val _ = add_instr(ILABEL afterl)
 	      in  (desti, state)
 	      end
 
 	  fun multi_case() = 
 	      let val afterl = fresh_code_label "projsum_multi_after"
-		  val nonrecordl = fresh_code_label "projsum_multi_nonrecord"
-		  val recordl = fresh_code_label "projsum_multi_record"
 		  val loopl = fresh_code_label "projsum_multi_loop"
 		  val tag = alloc_regi NOTRACE_INT
 		  val rectag = alloc_regi NOTRACE_INT
@@ -381,11 +360,9 @@ val debug_bound = ref false
 		  (* since there is more than one type arg, it is stored in a record *)
 		  val _ = add_instr(LOAD32I(EA(summand_con_ir,4*w2i field_sub),field_con_ir))
 
-		  val _ = (add_instr(CMPUI(GE, field_con_ir, IMM 255, tmp));
-			   add_instr(BCNDI(EQ, tmp, nonrecordl, false));
-			   add_instr(LOAD32I(EA(field_con_ir,0),tag));
-			   add_instr(CMPUI(EQ, tag, IMM 5, tmp));
-			   add_instr(BCNDI(NE, tmp, recordl, false)))
+		  (* is it a record type?  fall-through to non-record case *)
+		  val (recordl,nonrecordl) = isrecord_dynamic "xprojsum_multi" field_con_ir
+
 		  (* non-record case *)
 		  val _ = (add_instr(ILABEL nonrecordl);
 			   add_instr(LOAD32I(EA(exp_ir,4),desti));
@@ -421,8 +398,10 @@ val debug_bound = ref false
 			   add_instr(CMPUI(EQ,destcursor,REG heapptr, tmp));
 			   add_instr(BCNDI(EQ, tmp, loopl,false)); (* loop will copy record fields *)
 			   add_instr(ADD(heapptr,IMM 4, desti));
-			   add_instr(S4ADD(gctemp, REG heapptr,heapptr));
-			   add_instr(ILABEL afterl))
+			   add_instr(S4ADD(gctemp, REG heapptr,heapptr)))
+
+		  (* afterwards *)
+		  val _ = add_instr(ILABEL afterl)
 	      in  (desti,state)
 	      end
 	  val (ir,state) = if single_carrier then single_case() 
@@ -439,15 +418,10 @@ val debug_bound = ref false
 		tagcount,nontagcount,single_carrier,is_tag,
 		sumtypes,field_sub) = help info
 
-	  
 	  val fieldcon = (List.nth(sumtypes,w2i field_sub) 
 			  handle _ => error "list.nth 2")
-	  val labs_cons = (case #2(simplify_type state fieldcon) of
-			       (Prim_c(Record_c (labs,_), cons)) => Listops.zip labs cons
-			     | c => (print "bad project_sum_record: not record\n";
-				     Ppnil.pp_con c;
-				     error "bad project_sum_record: not record\n"))
-
+	  val (_, Prim_c(Record_c (labs,_), cons)) = simplify_type state fieldcon
+	  val labs_cons = Listops.zip labs cons
 	  val (recfield_index, recfield_con) = 
 	      let fun loop n [] = 
 		  (print "bad project_sum_record: missing field ";
@@ -467,7 +441,7 @@ val debug_bound = ref false
 
   fun xproject_sum_nonrecord (info,
 			      base, ssumcon) : loc_or_val * con * state = 
-      let val v_lv = VAR_LOC(VREGISTER(false, I base))
+      let val lv = VAR_LOC(VREGISTER(false, I base))
 	  val v = fresh_named_var "named_project_sumee"
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -476,17 +450,8 @@ val debug_bound = ref false
 	  val summand_type = (List.nth(sumtypes,w2i field_sub)
 				     handle _ => error "bad project_sum: record_con")
 	      
-	  val need_unbox = 
-	      single_carrier andalso
-	      (case simplify_type state summand_type of
-		   (_,Prim_c(Int_c _,_)) => true
-		 | (_,Prim_c(Sum_c _,_)) => true
-		 | (_,Mu_c _) => true
-		 | (_,Proj_c(Mu_c _,_)) => true
-		 | (true,c) => false
-		 | _ => error "project_sum not fully done")
+	  val need_unbox = single_carrier andalso (needs_boxing state summand_type)
 
-	  val lv = v_lv
 	  fun unbox offset =
 	      let val ir = load_ireg_locval(lv,NONE)
 		  val desti = alloc_regi(con2rep state summand_type)
