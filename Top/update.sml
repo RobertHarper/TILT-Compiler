@@ -153,7 +153,10 @@ struct
 	    val _ = if not (!showStale) then ()
 		    else
 			let
-			    val _ = if interface_same then ()
+			    val info_exists = isSome info
+			    val _ = if info_exists then ()
+				    else stale (infoFile, Missing)
+			    val _ = if interface_same orelse (not info_exists) then ()
 				    else stale (sourceFile, Because "interface file has been created or removed")
 			    val _ = if all_v_units orelse StringSet.isEmpty old_units then ()
 				    else stale (sourceFile, Because "set of imported units have changed")
