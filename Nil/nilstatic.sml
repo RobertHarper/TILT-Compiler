@@ -2102,7 +2102,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     | (inject_known sumtype,[sumcon],[]) => inject_sum_tag (D,sumtype,sumcon)
 	     | (inject_known sumtype,[sumcon],exps as [_]) => 
 		 let fun check (D,c) = if is_known(D,c) then (D,[c])
-				       else e_error(D,orig_exp,"inject_known injects into unkown type")
+				       else e_error(D,orig_exp,"inject_known injects into unknown type")
 		 in				     
 		   inject_sum_nontag check (D,sumtype,sumcon,exps)
 		 end
