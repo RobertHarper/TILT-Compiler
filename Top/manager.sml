@@ -18,8 +18,6 @@ struct
   val stop_early_compiling_sml_to_ui = ref false
   val eager = ref true
 
-  structure Basis = Elaborator.Basis
-(*  structure UIBlast = mkBlast(type t = Elaborator.context) *)
 
   val error = fn x => Util.error "Manager" x
 
@@ -292,7 +290,7 @@ struct
   fun getContext (lines, imports) = 
       let val _ = Name.reset_varmap()
 	  val _ = tick_cache()
-	  val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
+	  val (ctxt_inline,_,_,ctxt_noninline) = Elaborator.Basis.initial_context()
 	  val _ = (chat "  [Creating context from imports: ";
 	           chat_imports 4 imports;
 	           chat "]\n")
@@ -779,6 +777,10 @@ struct
                List.foldl 
                  (fn (next, set) => 
                      let val import_tr = getImportTr_link next
+			 fun check import = if (StringSet.member(set,import)) then ()
+			                    else error ("Mapfile file ordering is inconsistent because " ^
+							next ^ " imports " ^ import ^ " but precedes it.")
+			 val _ = app check import_tr
 			 val _ = if (!diag_ref)
 				     then (print "Imports for ";
 					   print next;
