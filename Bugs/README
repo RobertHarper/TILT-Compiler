@@ -1,0 +1,33 @@
+This is a good place to document and track known bugs.  For example,
+you can get a rough idea of the current bugs with:
+
+        grep open buglist.txt
+
+You can get more details for bug number n by looking at n/description.
+
+This directory contains files buglist.txt and bug-report-form and a
+four-digit directory for each bug.  Each bug directory has a file
+called description which describes the bug and provides a road-map to
+any additional files.  Buglist.txt provides a synopsis and is used to
+assign bug numbers (see below).  Bug-report-form is a template
+description file.
+
+To carve out a new bug report:
+        1. Add a one-line description to buglist.txt, using the next
+           available bug number, and check that file in.  If someone has
+           already claimed that bug number, CVS will report a conflict.
+           Resolve the conflict (pick another bug number) and retry.
+
+        2. Create the numbered directory (please use leading zeros)
+           and description file for your bug, using bug-report-form as
+           a template.  Commit this directory to CVS when appropriate.
+
+The Number, Status, and Title fields in a bug's description file should
+match buglist.txt.
+
+I borrowed the template from SML/NJ.  Filling it out is straight-forward.
+I have not written any tools that parse these files, so there are no hard
+formatting conventions.  I try to indent the contents of each field.
+I have been ignoring the Test field, setting the Owner field to the CS
+userid of whoever should work on the bug, and setting the Status field
+to either open or closed.
