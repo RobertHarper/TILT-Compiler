@@ -390,7 +390,6 @@ functor Datatype(structure IlStatic : ILSTATIC
 	    val inner_sig = if (!do_inline)
 				then SIGNAT_INLINE_STRUCTURE{self = NONE,
 							     abs_sig = sdecs,
-							     imp_sig = sdecs,
 							     code = sbnds}
 			    else SIGNAT_STRUCTURE(NONE,sdecs)
 

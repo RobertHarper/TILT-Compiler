@@ -126,7 +126,7 @@ struct
     in
 	fun add_context_inline (ctxt, l, v, inline) = 
 	    do_inline (add_context_flat(ctxt, CONTEXT_INLINE(l,v,inline)), SIMPLE_PATH v, l, inline)
-	fun add_context_inline_signature (ctxt, l, v, quad as {self, code, imp_sig, abs_sig}) = 
+	fun add_context_inline_signature (ctxt, l, v, quad as {self, code, abs_sig}) = 
 	    let val s = SIGNAT_INLINE_STRUCTURE quad
 		val ctxt = add_context_flat(ctxt, CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))
 		val ctxt = help (ctxt,SIMPLE_PATH v,l,PHRASE_CLASS_MOD (MOD_STRUCTURE code,s))

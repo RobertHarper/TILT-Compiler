@@ -256,21 +256,19 @@ fun show_state ({modunself,...}:state) =
 				val s2' = SelfifySig (state,selfify) (NONE,s2)
 			    in  SIGNAT_FUNCTOR(v,s1',s2',a)
 			    end
-		 | (true,SIGNAT_INLINE_STRUCTURE {self=_,code,abs_sig,imp_sig}) =>
+		 | (true,SIGNAT_INLINE_STRUCTURE {self=_,code,abs_sig}) =>
 		       let val abs_sig = do_sdecs (popt,selfify) (state, abs_sig)
-			   val imp_sig = do_sdecs (popt,selfify) (state, imp_sig)
 			   val code = do_sbnds (popt,selfify) (state, code)
 			   val popt = if selfify then popt else NONE
 		       in  SIGNAT_INLINE_STRUCTURE{self=popt,
-						   code=code, abs_sig=abs_sig, imp_sig=imp_sig}
+						   code=code, abs_sig=abs_sig}
 		       end
-		 | (false,SIGNAT_INLINE_STRUCTURE {self=SOME _,code,abs_sig,imp_sig}) =>
+		 | (false,SIGNAT_INLINE_STRUCTURE {self=SOME _,code,abs_sig}) =>
 		       let val abs_sig = do_sdecs (popt,selfify) (state, abs_sig)
-			   val imp_sig = do_sdecs (popt,selfify) (state, imp_sig)
 			   val code = do_sbnds (popt,selfify) (state, code)
 			   val popt = if selfify then popt else NONE
 		       in  SIGNAT_INLINE_STRUCTURE{self=popt,
-						   code=code, abs_sig=abs_sig, imp_sig=imp_sig}
+						   code=code, abs_sig=abs_sig}
 		       end
 		 | (_,SIGNAT_STRUCTURE (NONE,sdecs)) =>
 		       let val sdecs' = do_sdecs (popt,selfify) (state, sdecs)
@@ -444,8 +442,6 @@ fun show_state ({modunself,...}:state) =
    fun eq_onearrow (a1,a2) = eq_comp(a1,a2,false)
 
 
-   val hardset_targets = ref ([] : con list);
-       
    (* ------------------------------------------------------------ 
       type (sub)-equality:
 	 First, normalize argument types:
@@ -516,9 +512,7 @@ fun show_state ({modunself,...}:state) =
 					    eq_constrain = (tyvar_is_use_equal tv),
 					    stamp = SOME(tyvar_stamp tv)},tyvar_ctxts);
 
-	   in
-	       (hardset_targets := c::(!hardset_targets);
-		tyvar_set(tv,c))
+	   in  tyvar_set(tv,c)
 	   end
      in  unify_maker true hard_fetch hard_set arg
      end
@@ -853,7 +847,7 @@ end
 		SOME(_,PHRASE_CLASS_CON(_,k)) => k
 	      | SOME _ => error ("CON_VAR " ^ (var2string v) ^ " not bound to a con")
 	      | NONE => error ("CON_VAR " ^ (var2string v) ^ " not bound"))
-     | (CON_OVAR ocon) => raise UNIMP
+     | (CON_OVAR ocon) => KIND_TUPLE 1
      | (CON_INT _) => KIND_TUPLE 1
      | (CON_FLOAT _) => KIND_TUPLE 1
      | (CON_UINT _) => KIND_TUPLE 1
@@ -1294,8 +1288,6 @@ end
 	     | SIGNAT_STRUCTURE (NONE,sdecs) => notself_case sdecs
 	     | SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...} => notself_case sdecs
 
-(* 	(print "MODULE_PROJECT with m = ";
-	pp_mod m; raise UNIMP) *)
 	   end
 
      | (SEAL (e,c)) => let val (va,c') = GetExpCon(e,ctxt)
@@ -1813,10 +1805,9 @@ end
 		   | (MOD_STRUCTURE sbnds, SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...}) => 
 			 notself_case(sbnds,sdecs)
 		   | _ => (print "Normalize: CON_MODULE_PROJECT with m = ";
-			    pp_mod m;
-			    print "and context = ";
-			    pp_context ctxt;
-			    raise UNIMP)
+			   pp_mod m;
+			   (* print "and context = "; pp_context ctxt; print "\n"; *)
+			   error "Normalize encountered ill-formed module projection")
 	     end)
       | (CON_VAR v) => (case #2(HeadNormalize(arg,ctxt)) of
 			    CON_VAR v' => if (eq_var(v,v')) 

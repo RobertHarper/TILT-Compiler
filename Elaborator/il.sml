@@ -106,7 +106,6 @@ structure Il :> IL =
                  | SIGNAT_FUNCTOR of var * signat * signat * arrow
                  | SIGNAT_INLINE_STRUCTURE  of {self : path option,
 						code : sbnd list, (* may be selfified *)
-						imp_sig : sdec list,
 						abs_sig : sdec list}
 		 | SIGNAT_VAR of var
 	         | SIGNAT_OF of mod

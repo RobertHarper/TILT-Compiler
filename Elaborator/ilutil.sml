@@ -365,11 +365,10 @@ functor IlUtil(structure Ppil : PPIL
 	     SIGNAT_VAR v => s
 	   | SIGNAT_OF m => SIGNAT_OF(f_mod state m)
 	   | SIGNAT_STRUCTURE (popt,sdecs) => SIGNAT_STRUCTURE (popt,map (f_sdec state) sdecs)
-	   | SIGNAT_INLINE_STRUCTURE {self,code,abs_sig,imp_sig} =>
-		 let val imp_sig = map (f_sdec state) imp_sig
-		     val abs_sig = map (f_sdec state) abs_sig
+	   | SIGNAT_INLINE_STRUCTURE {self,code,abs_sig} =>
+		 let val abs_sig = map (f_sdec state) abs_sig
 		     val code = map (f_sbnd state) code
-		 in  SIGNAT_INLINE_STRUCTURE {self=self,code=code,abs_sig=abs_sig,imp_sig=imp_sig}
+		 in  SIGNAT_INLINE_STRUCTURE {self=self,code=code,abs_sig=abs_sig}
 		 end
 	   | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1, 
 							   f_signat state s2, a)))

@@ -1088,11 +1088,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				   end
 			     | (BND_MOD(v,MOD_STRUCTURE sbnds),
 				   DEC_MOD(_,SIGNAT_STRUCTURE(_,sdecs))) =>
-				   let val imp_sdecs = IlStatic.GetSbndsSdecs(context,sbnds)
-				       val s' = SIGNAT_INLINE_STRUCTURE{self = NONE,
+				   let val s' = SIGNAT_INLINE_STRUCTURE{self = NONE,
 									code = sbnds,
-									abs_sig = sdecs,
-									imp_sig = imp_sdecs}
+									abs_sig = sdecs}
 				   in  (DEC_MOD(v,s'), DEC_MOD(v,s'))
 				   end
 				 | _ => (dec,dec))
@@ -2547,10 +2545,12 @@ val exp_con_list = map2count
 		     end
 	    end
 	val _ = eq_loop 1
-      in (case (get_error()) of
-	      NoError => SOME res
-	    | Warn => SOME res
-	    | Error => NONE)
+	val result = (case (get_error()) of
+			  NoError => SOME res
+			| Warn => SOME res
+			| Error => NONE)
+	val _ = reset_elaboration fp
+      in result
       end
     
     val xdec = fn (ctxt,fp,dec) => let val _ = print "calling to xdec\n"

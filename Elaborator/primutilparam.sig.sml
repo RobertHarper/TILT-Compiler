@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Prelude Prim *)
 signature PRIMUTILPARAM = 
     sig
 	type con

@@ -705,10 +705,9 @@ val _ = print "DONE FINDING LABELS\n"
 		     (SIGNAT_FUNCTOR _) => sig_substconmod(arg_sig,mapping)
 		   | (SIGNAT_STRUCTURE(popt,sdecs)) => 
 			 SIGNAT_STRUCTURE(popt,traverse_sdecs (path,mapping) sdecs)
-		   | (SIGNAT_INLINE_STRUCTURE{code,imp_sig,abs_sig,self}) =>
+		   | (SIGNAT_INLINE_STRUCTURE{code,abs_sig,self}) =>
 			 let val MOD_STRUCTURE code = mod_substconmod(MOD_STRUCTURE code,mapping)
 			 in  SIGNAT_INLINE_STRUCTURE{code=code,
-						     imp_sig=traverse_sdecs (path,mapping) imp_sig,
 						     abs_sig=traverse_sdecs (path,mapping) abs_sig,
 						     self=self}
 			 end)
@@ -764,10 +763,10 @@ val _ = print "DONE FINDING LABELS\n"
 		in  SOME(SDEC(l,DEC_MOD(v,do_sig s)))
 		end
 	      | sdec_handle (SDEC(l,DEC_MOD(v,SIGNAT_INLINE_STRUCTURE{self=SOME p,code,
-								      imp_sig,abs_sig}))) = 
+								      abs_sig}))) = 
 		let 
 		    val s = SIGNAT_INLINE_STRUCTURE{self=SOME (sdec_help p),code=code,
-						    imp_sig=imp_sig,abs_sig=abs_sig}
+						    abs_sig=abs_sig}
 		in  SOME(SDEC(l,DEC_MOD(v,do_sig s)))
 		end
 	      | sdec_handle _ = NONE
@@ -862,7 +861,7 @@ val _ = print "DONE FINDING LABELS\n"
 			 let val (mapping,sbnds,sdecs) = dosdecs(p,mapping,sdecs)
 			 in  SOME(mapping,MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE(NONE,sdecs))
 			 end
-		   | SIGNAT_INLINE_STRUCTURE{imp_sig=sdecs,...} =>
+		   | SIGNAT_INLINE_STRUCTURE{abs_sig=sdecs,...} =>
 			 let val (mapping,sbnds,sdecs) = dosdecs(p,mapping,sdecs)
 			 in  SOME(mapping,MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE(NONE,sdecs))
 			 end
@@ -1311,7 +1310,7 @@ val _ = print "DONE FINDING LABELS\n"
 	    in  loop (ctxt,sdecs)
 	    end
 
-	fun sbnds_loop lbls (ctxt,sdecs) (sbnds_code,sdecs_imp) = 
+	fun sbnds_loop lbls (ctxt,sdecs) sbnds_code =
 	    let val (sbnds,sdecs) = sdecs_loop lbls (ctxt,sdecs)
 
 		fun help lbl bnd = 
@@ -1331,8 +1330,7 @@ val _ = print "DONE FINDING LABELS\n"
 				if (eq_label(l,lbl)) then SDEC(l,dec)
 					else sdec_find lbl rest
 		val sbnds_code = map (fn (SDEC(l,_)) => sbnd_find l sbnds_code) sdecs
-		val sdecs_imp = map (fn (SDEC(l,_)) => sdec_find l sdecs_imp) sdecs
-	    in  (sbnds,sbnds_code,sdecs_imp,sdecs)
+	    in  (sbnds,sbnds_code,sdecs)
 	    end
 
 			
@@ -1375,23 +1373,21 @@ val _ = print "DONE FINDING LABELS\n"
 			     SIGNAT_STRUCTURE (NONE, sdecs))
 			 end
 		   | (SIGNAT_STRUCTURE (NONE,sdecs),
-			 SIGNAT_INLINE_STRUCTURE {self,code,imp_sig,abs_sig}) =>
-			 let val (sbnds,sbnds_code,imp_sdecs,abs_sdecs) =
-			     sbnds_loop [] (context,sdecs) (code,imp_sig)
+			 SIGNAT_INLINE_STRUCTURE {self,code,abs_sig}) =>
+			 let val (sbnds,sbnds_code,abs_sdecs) =
+			     sbnds_loop [] (context,sdecs) code
 			 in (MOD_STRUCTURE sbnds,
 			     SIGNAT_INLINE_STRUCTURE {self = self,
 						      code = sbnds_code,
-						      imp_sig = imp_sdecs,
 						      abs_sig = abs_sdecs})
 			 end
 		   | (SIGNAT_INLINE_STRUCTURE{abs_sig=sdecs,...},
-			 SIGNAT_INLINE_STRUCTURE {self,code,imp_sig,abs_sig}) =>
-			 let val (sbnds,sbnds_code,imp_sdecs,abs_sdecs) =
-			     sbnds_loop [] (context,sdecs) (code,imp_sig)
+			 SIGNAT_INLINE_STRUCTURE {self,code,abs_sig}) =>
+			 let val (sbnds,sbnds_code,abs_sdecs) =
+			     sbnds_loop [] (context,sdecs) code
 			 in (MOD_STRUCTURE sbnds,
 			     SIGNAT_INLINE_STRUCTURE {self = self,
 						      code = sbnds_code,
-						      imp_sig = imp_sdecs,
 						      abs_sig = abs_sdecs})
 			 end)
 

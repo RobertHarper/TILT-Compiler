@@ -664,11 +664,11 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	       | SIGNAT_STRUCTURE (SOME p, sdecs) => (blastOutChoice os 1; blastOutPath os p; blastOutSdecs os sdecs)
 	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutChoice os 2; blastOutVar os v;
 						      blastOutSig os s1; blastOutSig os s2; blastOutArrow os arrow)
-	       | SIGNAT_INLINE_STRUCTURE {self=NONE,code,imp_sig,abs_sig} => 
-		     (blastOutChoice os 3; blastOutSbnds os code; blastOutSdecs os imp_sig; blastOutSdecs os abs_sig)
-	       | SIGNAT_INLINE_STRUCTURE {self=SOME p,code,imp_sig,abs_sig} => 
+	       | SIGNAT_INLINE_STRUCTURE {self=NONE,code,abs_sig} => 
+		     (blastOutChoice os 3; blastOutSbnds os code; blastOutSdecs os abs_sig)
+	       | SIGNAT_INLINE_STRUCTURE {self=SOME p,code,abs_sig} => 
 		     (blastOutChoice os 4; blastOutPath os p;
-		      blastOutSbnds os code; blastOutSdecs os imp_sig; blastOutSdecs os abs_sig)
+		      blastOutSbnds os code; blastOutSdecs os abs_sig)
 	       | SIGNAT_VAR v => (blastOutChoice os 5; blastOutVar os v)
 	       | SIGNAT_OF m => (blastOutChoice os 6; blastOutMod os m))
 
@@ -678,9 +678,9 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	       | 1 => SIGNAT_STRUCTURE (SOME (blastInPath is), blastInSdecs is)
 	       | 2 => SIGNAT_FUNCTOR(blastInVar is, blastInSig is, blastInSig is, blastInArrow is)
 	       | 3 => SIGNAT_INLINE_STRUCTURE {self=NONE, code = blastInSbnds is, 
-					       imp_sig = blastInSdecs is, abs_sig = blastInSdecs is}
+					       abs_sig = blastInSdecs is}
 	       | 4 => SIGNAT_INLINE_STRUCTURE {self=SOME(blastInPath is), code = blastInSbnds is, 
-					       imp_sig = blastInSdecs is, abs_sig = blastInSdecs is}
+					       abs_sig = blastInSdecs is}
 	       | 5 => SIGNAT_VAR(blastInVar is)
 	       | 6 => SIGNAT_OF(blastInMod is)
 	       | _ => error "bad blastInSig")
@@ -989,11 +989,10 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	       | (SIGNAT_FUNCTOR(v,signat1,signat2,a), SIGNAT_FUNCTOR(v',signat1',signat2',a')) =>
 		  eq_signat(vm,signat1,signat1') andalso a=a' andalso
 		  eq_signat(VM.add(v,v',vm),signat2,signat2')
-	       | (SIGNAT_INLINE_STRUCTURE{self=s1,code=c1,imp_sig=i1,abs_sig=a1},
-		  SIGNAT_INLINE_STRUCTURE{self=s2,code=c2,imp_sig=i2,abs_sig=a2}) =>
+	       | (SIGNAT_INLINE_STRUCTURE{self=s1,code=c1,abs_sig=a1},
+		  SIGNAT_INLINE_STRUCTURE{self=s2,code=c2,abs_sig=a2}) =>
 		  eq_pathopt(vm,s1,s2) andalso
 		  eq_sbnds(vm,c1,c2) andalso
-		  eq_sdecs(vm,i1,i2) andalso
 		  eq_sdecs(vm,a1,a2)
                | (SIGNAT_VAR v1, SIGNAT_VAR v2) => VM.eq_var(vm,v1,v2)
                | _ => false
