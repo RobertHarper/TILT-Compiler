@@ -13,7 +13,7 @@ functor Manager (structure Parser: LINK_PARSE
 struct
 
 
-  val stat_each_file = ref false
+  val stat_each_file = Stats.ff("TimeEachFile")
   val cache_context = ref 5
   val stop_early_compiling_sml_to_ui = ref false
   val eager = ref true
@@ -293,20 +293,21 @@ struct
            writeContextRaw(uifile,ctxt)
        end
 
+
   fun getContext (lines, imports) = 
       let val _ = Name.reset_varmap()
 	  val _ = tick_cache()
-	  val (ctxt_inline,_,_,ctxt_noninline) = Elaborator.Basis.initial_context()
 	  val _ = (chat "  [Creating context from imports: ";
 	           chat_imports 4 imports;
 	           chat "]\n")
           val ctxts = List.map readContext imports
 	  val _ = if (lines > 1000) then flush_cache() else ()
 	  val _ = chat ("  [Adding contexts now]\n")
-	  val context_basis = addContext (ctxt_inline :: ctxts)
-	  val context = addContext ctxts
-      in (context_basis, context)
+	  val initial_ctxt = Elaborator.initial_context()
+	  val context = addContext (initial_ctxt :: ctxts)
+      in  context
       end
+
 
 (*
     fun bincopy (is,os) = 
@@ -587,7 +588,7 @@ struct
 	  val smlfile = base2sml srcBase
 	  val _ = chat ("  [Parsing " ^ smlfile ^ "]\n")
 	  val (lines,fp, _, dec) = Parser.parse_impl smlfile
-	  val (ctxt_for_elab,ctxt) = getContext(lines, imports)
+	  val ctxt = getContext(lines, imports)
 	  val import_bases = map get_base imports
 	  val import_uis = List.map (fn x => (x, Linker.Crc.crc_of_file (x^".ui"))) import_bases
 	  val uiFile = srcBase ^ ".ui"
@@ -601,10 +602,10 @@ struct
 		  let val _ = compileINT unit 
 		      val (_,fp2, _, specs) = Parser.parse_inter intFile
 		      val _ = chat ("  [Elaborating " ^ smlfile ^ " with constraint]\n"  )
-		  in elab_constrained(ctxt_for_elab,smlfile,fp,dec,fp2,specs,Time.zeroTime)
+		  in elab_constrained(ctxt,smlfile,fp,dec,fp2,specs,Time.zeroTime)
 		  end
 	      else let val _ = chat ("  [Elaborating " ^ smlfile ^ " non-constrained]\n")
-		   in elab_nonconstrained(unit,ctxt_for_elab,smlfile,fp,dec,uiFile,Time.zeroTime)
+		   in elab_nonconstrained(unit,ctxt,smlfile,fp,dec,uiFile,Time.zeroTime)
 		   end
 
 (*
@@ -689,11 +690,11 @@ struct
 
                 val all_includes = getImportTr false unitname
 
-                val (ctxt_for_elab,ctxt) = getContext(0,all_includes)
+                val ctxt = getContext(0,all_includes)
 
 	        val (_,fp, _, specs) = Parser.parse_inter sourcefile
 
-	      in  (case Elaborator.elab_specs(ctxt_for_elab, fp, specs) of
+	      in  (case Elaborator.elab_specs(ctxt, fp, specs) of
 		       SOME ctxt' => (chat ("  [writing " ^ uifile);
                                       writeContext (unitname, ctxt');
                                       chat "]\n")
