@@ -1,4 +1,5 @@
-structure Substring : SUBSTRING where type substring = PreString.substring
-				  and type String.string = string
-				  and type String.Char.char = char
-				  and type String.Char.string = string
+structure Substring : SUBSTRING
+	where type substring = PreString.substring
+	where type String.string = string
+	where type String.Char.char = char
+	where type String.Char.string = string

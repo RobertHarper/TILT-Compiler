@@ -41,7 +41,7 @@
  *  Altered to work as a geneal intmap - Emden Gansner
  *)
 
-structure IntBinaryMap :> ORD_MAP where type Key.ord_key = Int.int =
+structure IntBinaryMap :> ORD_MAP where type Key.ord_key = int =
   struct
 
     structure Key =

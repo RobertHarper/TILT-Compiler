@@ -12,7 +12,7 @@
  * Note: The Random structure provides a better generator.
  *)
 
-structure Rand : RAND =
+structure Rand :> RAND =
   struct
 
   (* real number version for systems with 46-bit mantissas *)

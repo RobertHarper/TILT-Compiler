@@ -5,7 +5,7 @@
  *)
 
 structure Word8Vector :> MONO_VECTOR where type elem = char
-				       and type vector = char vector =
+				       and type vector = string =
   struct
 
     val int32touint32 = TiltPrim.int32touint32

@@ -1,2 +1,3 @@
-structure Char : CHAR where type char = char
-                        and type string = string
+structure Char : CHAR
+	where type char = char
+	where type string = string

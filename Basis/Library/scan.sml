@@ -9,7 +9,7 @@
  *	    jhr@research.att.com
  *)
 
-structure Scan : SCAN =
+structure Scan :> SCAN =
   struct
 
     structure SS = Substring

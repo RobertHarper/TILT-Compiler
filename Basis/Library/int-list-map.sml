@@ -6,7 +6,7 @@
  * representation.
  *)
 
-structure IntListMap :> ORD_MAP where type Key.ord_key = Int.int =
+structure IntListMap :> ORD_MAP where type Key.ord_key = int =
   struct
 
     structure Key =

@@ -4,7 +4,7 @@
  *
  *)
 
-structure ListFormat : LIST_FORMAT =
+structure ListFormat :> LIST_FORMAT =
   struct
 
   (* given an initial string (init), a separator (sep), a terminating

@@ -40,7 +40,7 @@
  *
  *)
 
-functor BinaryMapFn (K : ORD_KEY) : ORD_MAP =
+functor BinaryMapFn (K : ORD_KEY) :> ORD_MAP where Key = K =
   struct
 
     structure Key = K

@@ -6,7 +6,7 @@
  *
  *)
 
-functor DynamicArrayFn (A : MONO_ARRAY) : MONO_DYNAMIC_ARRAY =
+functor DynamicArrayFn (A : MONO_ARRAY) :> MONO_DYNAMIC_ARRAY where type elem = A.elem =
   struct
 
     type elem = A.elem

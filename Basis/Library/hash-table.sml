@@ -10,7 +10,7 @@
  *	    jhr@research.att.com
  *)
 
-structure HashTable : HASH_TABLE =
+structure HashTable :> HASH_TABLE =
   struct
 
     structure HTRep = HashTableRep

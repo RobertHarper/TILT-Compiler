@@ -1,3 +1,4 @@
-structure String : STRING where type string = string
-                            and type Char.char = char
-                            and type Char.string = string
+structure String : STRING
+	where type string = string
+	where type Char.char = char
+	where type Char.string = string

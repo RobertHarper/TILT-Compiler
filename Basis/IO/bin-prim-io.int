@@ -1,4 +1,5 @@
-structure BinPrimIO : PRIM_IO where type array = char array
-				and type vector = char vector
-				and type elem =  char
-				and type pos = int
+structure BinPrimIO : PRIM_IO
+	where type array = char array
+	where type vector = char vector
+	where type elem =  char
+	where type pos = int

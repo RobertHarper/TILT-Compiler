@@ -6,7 +6,7 @@
 
 structure Word8Array :> MONO_ARRAY where type elem = char
 				     and type array = char array
-				     and type Vector.vector = char vector
+				     and type Vector.vector = string
 				     and type Vector.elem = char =
   struct
 

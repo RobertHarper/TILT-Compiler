@@ -60,7 +60,7 @@
  *   Modified to functor to support general ordered values
  *)
 
-functor BinarySetFn (K : ORD_KEY) : ORD_SET =
+functor BinarySetFn (K : ORD_KEY) :> ORD_SET where Key = K =
   struct
 
     structure Key = K

@@ -5,7 +5,7 @@
  * Functions for computing with the cross product of two lists.
  *)
 
-structure ListXProd : LIST_XPROD =
+structure ListXProd :> LIST_XPROD =
   struct
 
   (* apply a function to the cross product of two lists *)

@@ -6,7 +6,7 @@
  *
  *)
 
-structure SplayTree : SPLAY_TREE =
+structure SplayTree :> SPLAY_TREE =
   struct
 
     datatype 'a splay =

@@ -5,7 +5,7 @@
  * Two-dimensional arrays.
  *)
 
-structure Array2 : ARRAY2 =
+structure Array2 :> ARRAY2 =
   struct
     datatype 'a array2 = A2 of {
 	nrows : int,

@@ -8,7 +8,7 @@
  *
  *)
 
-structure ArrayQSort : ARRAY_SORT =
+structure ArrayQSort :> ARRAY_SORT where type 'a array = 'a array =
   struct
 
     structure A = Array

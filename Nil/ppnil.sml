@@ -1,6 +1,6 @@
 (* Nil pretty-printer *)
 
-structure Ppnil	:> PPNIL =
+structure Ppnil :> PPNIL =
   struct
 
     open Nil Formatter

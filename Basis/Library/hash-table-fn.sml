@@ -11,7 +11,7 @@
  *	    jhr@research.att.com
  *)
 
-functor HashTableFn (Key : HASH_KEY) : MONO_HASH_TABLE =
+functor HashTableFn (Key : HASH_KEY) :> MONO_HASH_TABLE where Key = Key =
   struct
 
     structure Key = Key

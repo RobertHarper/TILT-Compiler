@@ -61,7 +61,7 @@
  *       registers before the massive save.
  *)
 
-structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
+structure IntBinarySet :> ORD_SET where type Key.ord_key = int =
   struct
 
     structure Key =

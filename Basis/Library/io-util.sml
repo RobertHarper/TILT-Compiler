@@ -3,7 +3,9 @@
  * COPYRIGHT (c) 1997 AT&T Labs Research.
  *)
 
-structure IOUtil : IO_UTIL =
+structure IOUtil :> IO_UTIL
+	where type instream = TextIO.instream
+	where type outstream = TextIO.outstream =
   struct
 
     type instream = TextIO.instream

@@ -6,7 +6,7 @@
  * Taken from, ML for the Working Programmer, LCPaulson. pg 99-100
  *)
 
-structure ListMergeSort : LIST_SORT =
+structure ListMergeSort :> LIST_SORT =
   struct
 
     fun sort (op > : 'a * 'a -> bool) ls = let

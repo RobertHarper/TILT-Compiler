@@ -4,7 +4,7 @@
  *
  *)
 
-structure Iterate : ITERATE =
+structure Iterate :> ITERATE =
   struct
 
     fun badArg (f,msg) = LibBase.failure {module="Iterate",func=f,msg=msg}

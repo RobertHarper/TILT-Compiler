@@ -16,7 +16,7 @@ functor BSearchFn (A : MONO_ARRAY) : sig
 	 * type.
 	 *)
 
-  end = struct
+  end where A = A = struct
 
     structure A = A
 

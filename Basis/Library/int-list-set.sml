@@ -6,7 +6,7 @@
  * representation.
  *)
 
-structure IntListSet :> ORD_SET where type Key.ord_key = Int.int =
+structure IntListSet :> ORD_SET where type Key.ord_key = int =
   struct
 
     structure Key =

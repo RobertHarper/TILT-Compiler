@@ -8,7 +8,7 @@
  *    henglein@diku.dk
  *)
 
-structure URef : UREF =
+structure URef :> UREF =
   struct
 
     datatype 'a urefC

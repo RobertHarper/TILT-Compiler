@@ -1,4 +1,5 @@
-structure TextPrimIO : PRIM_IO where type array = char array
-				 and type vector = string
-				 and type elem =  char
-				 and type pos = int
+structure TextPrimIO : PRIM_IO
+	where type array = char array
+	where type vector = string
+	where type elem =  char
+	where type pos = int

@@ -3,7 +3,7 @@
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories
  *)
 
-structure HashString : sig
+structure HashString :> sig
 
     val hashString : string -> word
 

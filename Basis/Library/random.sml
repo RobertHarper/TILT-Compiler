@@ -20,7 +20,7 @@
  * numbers have to be modified.
  *)
 
-structure Random : RANDOM =
+structure Random :> RANDOM =
   struct
     structure A   = Array
     structure LW  = LargeWord

@@ -13,7 +13,9 @@
 functor Hash2TableFn (
     structure Key1 : HASH_KEY
     structure Key2 : HASH_KEY
-  ) : MONO_HASH2_TABLE = struct
+  ) :> MONO_HASH2_TABLE
+	where Key1 = Key1
+	where Key2 = Key2 = struct
 
     structure Key1 = Key1
     structure Key2 = Key2

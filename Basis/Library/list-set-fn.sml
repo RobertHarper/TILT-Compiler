@@ -6,7 +6,7 @@
  * representation.
  *)
 
-functor ListSetFn (K : ORD_KEY) : ORD_SET =
+functor ListSetFn (K : ORD_KEY) :> ORD_SET where Key = K =
   struct
 
     structure Key = K

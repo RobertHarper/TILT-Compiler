@@ -11,7 +11,7 @@
  * use ML-Yacc and/or ML-Lex.
  *)
 
-structure ParserComb : PARSER_COMB =
+structure ParserComb :> PARSER_COMB =
   struct
     structure SC = StringCvt
 

@@ -12,9 +12,9 @@ functor KeywordFn (KW : sig
     type pos
     val ident : (Atom.atom * pos * pos) -> token
     val keywords : (string * ((pos * pos) -> token)) list
-  end) : sig
-    type token
-    type pos
+  end) :> sig
+    type token = KW.token
+    type pos = KW.pos
     val keyword : (string * pos * pos) -> token
   end = struct
 

@@ -8,7 +8,7 @@
  *    henglein@diku.dk
  *)
 
-structure SimpleURef : UREF =
+structure SimpleURef :> UREF =
   struct
 
     exception UnionFind of string

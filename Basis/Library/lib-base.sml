@@ -3,7 +3,7 @@
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
  *)
 
-structure LibBase : LIB_BASE =
+structure LibBase :> LIB_BASE =
   struct
 
   (* raised to report unimplemented features *)

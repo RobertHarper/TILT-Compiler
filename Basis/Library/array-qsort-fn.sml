@@ -8,7 +8,7 @@
  *
  *)
 
-functor ArrayQSortFn (A : MONO_ARRAY) : MONO_ARRAY_SORT =
+functor ArrayQSortFn (A : MONO_ARRAY) :> MONO_ARRAY_SORT where A = A =
   struct
 
     structure A = A

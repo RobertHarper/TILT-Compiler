@@ -6,7 +6,7 @@
  *
  *)
 
-functor SplayMapFn (K : ORD_KEY) : ORD_MAP =
+functor SplayMapFn (K : ORD_KEY) :> ORD_MAP where Key = K =
   struct
     structure Key = K
     open SplayTree

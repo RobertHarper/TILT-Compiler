@@ -6,7 +6,7 @@
  * representation.
  *)
 
-functor ListMapFn (K : ORD_KEY) : ORD_MAP =
+functor ListMapFn (K : ORD_KEY) :> ORD_MAP where Key = K =
   struct
 
     structure Key = K
