@@ -292,7 +292,6 @@ struct
     fun eprint (s : string) : unit =
 	TextIO.output(TextIO.stdErr, s)
 
-    fun fixup (path : string) : string = path
     fun run_test {tilt : string,
 		  clean : bool,
 		  platform : string,
@@ -301,7 +300,7 @@ struct
 	    val _ = print ("running test " ^ testdir ^ "\n")
 	    val mapfile = P.joinDirFile{dir=testdir, file="mapfile"}
 	    val result = P.joinDirFile{dir=testdir, file="result"}
-	    val binary = fixup(P.joinDirFile{dir=testdir, file="Test."^platform^".exe"})
+	    val binary = P.joinDirFile{dir=testdir, file="Test."^platform^".exe"}
 	    val arg = {tilt=tilt,
 		       clean=clean,
 		       mapfile=mapfile,
