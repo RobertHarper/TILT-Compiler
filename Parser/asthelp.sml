@@ -252,9 +252,9 @@ structure AstHelp : ASTHELP =
 	| f_sigexp state (Ast.MarkSig (se,r)) = Ast.MarkSig(f_sigexp state se,r)
 	| f_sigexp state (Ast.AugSig (se,_)) = raise UNIMP
       and f_fsigexp state (Ast.VarFsig s) = Ast.VarFsig s
-	| f_fsigexp state (Ast.FsigFsig {param,def}) =
-	        Ast.FsigFsig{param=map (fn(so,se) => (so,f_sigexp state se)) param,
-			     def=f_sigexp state def}
+	| f_fsigexp state (Ast.BaseFsig {param,result}) =
+	        Ast.BaseFsig{param=map (fn(so,se) => (so,f_sigexp state se)) param,
+			     result=f_sigexp state result}
 	| f_fsigexp state (Ast.MarkFsig (fse,r)) = Ast.MarkFsig(f_fsigexp state fse,r)
       and f_spec (state as (doconstr,constrbound,
 			    doty,tybound,

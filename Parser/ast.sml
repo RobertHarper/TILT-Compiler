@@ -123,7 +123,7 @@ and sigexp = VarSig of symbol			(* signature variable *)
 
 (* FUNCTOR SIGNATURE EXPRESSION *)
 and fsigexp = VarFsig of symbol			(* funsig variable *)
-	    | FsigFsig of {param: (symbol option * sigexp) list, def:sigexp}
+	    | BaseFsig of {param: (symbol option * sigexp) list, result:sigexp}
 						(* defined funsig *)
 	    | MarkFsig of fsigexp * region	(* mark a funsig *)
 
