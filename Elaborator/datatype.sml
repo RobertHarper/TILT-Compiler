@@ -1,6 +1,7 @@
 (*$import Prelude TopLevel String Symbol Int List Util Listops Tyvar Il IlStatic IlUtil IlContext Ppil Name Ast GraphUtil ListMergeSort AstHelp DATATYPE Stats *)
 
 (* Datatype compiler and destructures of datatype signatures. *)
+
 structure Datatype
     :> DATATYPE =
   struct
@@ -17,7 +18,6 @@ structure Datatype
     val error_sig = fn signat => fn s => error_sig "datatype.sml" signat s 
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
-	
     fun geq_string (s1,s2) = 
 	(case (String.compare(s1,s2)) of
 	     GREATER => true
@@ -35,22 +35,34 @@ structure Datatype
 	end
 
     (* ------------------------------------------------------------------
-      The datatype compiler for compiling a single strongly-connected type.
-      ------------------------------------------------------------------ *)
+       The datatype compiler for compiling a single strongly-connected type.
+       ------------------------------------------------------------------ *)
+    type def = Symbol.symbol * Ast.tyvar list * (Symbol.symbol * Ast.ty option) list
     fun driver (xty : Il.context * Ast.ty -> Il.con,
 		context : context, 
-		std_list : (Symbol.symbol * Ast.tyvar list * (Symbol.symbol * Ast.ty option) list) list,
+		std_list : def list,
 		eqcomp : Il.context * Il.con -> (Il.exp * Il.con) option) : (sbnd * sdec) list = 
       let 
         (* ---- tyvar_vars are the polymorphic type arguments for constructor functions
-	   ---- tyvar_labs name the type components when they are strucutre components
+	   ---- tyvar_labs name the type components when they are structure components
 	 *)
-	val tyvar_labs = flatten(map (fn (_,tyvars,_) => 
-				      map (symbol_label o AstHelp.tyvar_strip) tyvars) std_list)
-	val tyvar_labs = foldr (fn (l,acc) => if (Listops.member_eq(eq_label,l,acc))
-						  then acc else l::acc) [] tyvar_labs
-	val num_tyvar = length tyvar_labs
-	val tyvar_vars = map (fn lab => fresh_named_var "poly") tyvar_labs
+	val tyvars = (case std_list
+		        of nil => nil
+		         | ((_, tyvars, _) :: _) => tyvars)
+	val tyvar_syms = map AstHelp.tyvar_strip tyvars
+	val tyvars = map Ast.Tyv tyvar_syms	(* no marks *)
+	fun rename (tyc, tyv, constrs) =
+	    let val vars = map AstHelp.tyvar_strip tyv
+	        val subst = Listops.zip vars tyvars
+		val constrs' = (map (fn (s,SOME ty) => (s,SOME(AstHelp.subst_vars_ty (subst, ty)))
+				      | x => x) constrs)
+	    in  (tyc, constrs')
+	    end
+	val std_list = map rename std_list
+	val num_tyvar = length tyvars
+	val tyvar_labs = map symbol_label tyvar_syms
+	val tyvar_vars = map gen_var_from_symbol tyvar_syms
+	(* gratuitous change from val tyvar_vars = map (fn lab => fresh_named_var "poly") tyvar_labs *)
 	val tyvar_cons = map CON_VAR tyvar_vars
 	val mpoly_var = fresh_named_var "mpoly_var"
 	val is_monomorphic = num_tyvar = 0
@@ -64,15 +76,12 @@ structure Datatype
 	val eq_labs = map (fn s => symbol_label(Symbol.varSymbol(Symbol.name s ^ "_eq"))) type_syms
 	val eq_vars = map (fn s => fresh_named_var (Symbol.name s ^ "_eq")) type_syms
 	val inner_type_labvars = map (fn s => 
-				   let val str = Symbol.name s
-				   in  (internal_label str,
-					fresh_named_var ("copy_" ^ str))
-				   end) type_syms
+				      let val str = Symbol.name s
+				      in  (internal_label str,
+					   fresh_named_var ("copy_" ^ str))
+				      end) type_syms
 	val top_type_string = foldl (fn (s,acc) => acc ^ "_" ^ (Symbol.name s)) "" type_syms
 	val top_eq_string = top_type_string ^ "_eq"
-(* XXX
-	val top_type_var = fresh_named_var top_type_string
-*)
 	val top_type_var = if (num_datatype = 1) then (hd type_vars) else fresh_named_var top_type_string
 	val top_type_lab = to_questionable (internal_label top_type_string)
 	val top_eq_var = fresh_named_var top_eq_string
@@ -89,17 +98,17 @@ structure Datatype
 	val constr_sum_labs = map internal_label constr_sum_strings
 	val constr_ssum_strings = 
 	    let fun mapper type_sym (n,_) = ((Symbol.name type_sym) ^ "_sum" ^ (Int.toString n))
-	    in  map2 (fn (type_sym, (_,_,tys)) => mapcount (mapper type_sym) tys) (type_syms, std_list)
+	    in  map2 (fn (type_sym, (_,tys)) => mapcount (mapper type_sym) tys) (type_syms, std_list)
 	    end
 	val constr_ssum_vars = mapmap fresh_named_var constr_ssum_strings
 	val constr_ssum_labs = mapmap internal_label constr_ssum_strings
-	val constr_tys : Ast.ty option list list = map (fn (_,_,def) => map #2 def) std_list
-        val constr_syms = map (fn (_,_,def) => map #1 def) std_list
+	val constr_tys : Ast.ty option list list = map (fn (_,def) => map #2 def) std_list
+        val constr_syms = map (fn (_,def) => map #1 def) std_list
 	val constr_labs = mapmap symbol_label constr_syms
 	val constr_con_strings = map3 (fn (ty_sym,con_syms,con_tys) => 
 				       map2 (fn (s,NONE) => NONE
 					      | (s,SOME _) => SOME((Symbol.name ty_sym) ^ "_" ^ 
-							       (Symbol.name s)))
+							           (Symbol.name s)))
 				       (con_syms, con_tys))
 	                         (type_syms,constr_syms,constr_tys)
 	val constr_con_vars = mapmap (Util.mapopt fresh_named_var) constr_con_strings
@@ -122,10 +131,8 @@ structure Datatype
 		in  (sdec :: sdecs, sdec :: sdec_eq :: sdecs_eq, ctxt)
 		end
 	    val (sdecs, sdecs_eq, ctxt) = foldr folder ([],[],context) (Listops.zip tyvar_labs tyvar_vars)
-	    fun folder ((tc,vty),ctxt) = 
-		let val k = if (num_tyvar = 0) then KIND else KIND_ARROW(num_tyvar,KIND)
-		in  add_context_con(ctxt,tc,vty,k,NONE)
-		end
+	    val k = if (num_tyvar = 0) then KIND else KIND_ARROW(num_tyvar,KIND)
+	    fun folder ((tc,vty),ctxt) = add_context_con(ctxt,tc,vty,k,NONE)
 	in
 	    val sdecs_eq = sdecs_eq
 	    val sigpoly = SIGNAT_STRUCTURE sdecs
@@ -266,11 +273,6 @@ structure Datatype
 			then (top_type_tyvar, KIND_TUPLE num_datatype)
 		    else (con_fun(tyvar_vars, top_type_tyvar), 
 			  KIND_ARROW(num_tyvar, KIND_TUPLE num_datatype))
-(* XXX
-		in  [(SBND(top_type_lab, BND_CON(top_type_var, c)),
-		      SDEC(top_type_lab, DEC_CON(top_type_var, base_kind, SOME c, false)))]
-		end
-*)
 		in  if num_datatype = 1 
 			then []
 		     else [(SBND(top_type_lab, BND_CON(top_type_var, c)),
@@ -284,13 +286,6 @@ structure Datatype
 				   then kind
 			       else KIND_ARROW(num_tyvar,kind)
 		    fun mapper(i,l,v) =
-(* XXX
-			let val c = let val c = CON_VAR top_type_var
-					val c = if is_monomorphic then c
-						else CON_APP(c, tyvar_cons)
-				    in  CON_TUPLE_PROJECT(i,c)
-				    end
-*)
 			let val c = if num_datatype = 1 
 					then CON_TUPLE_PROJECT(0,top_type_tyvar)
 				    else 
@@ -505,36 +500,164 @@ structure Datatype
 				@ components)
       in  final_sbnd_sdecs
       end
-
  
     (* ------------------------------------------------------------------
-      The datatype compiler for compiling a single datatype statement.
-      ------------------------------------------------------------------ *)
-    type node = int * (Symbol.symbol * Ast.tyvar list * (Ast.symbol * Ast.ty option) list)
+       Syntactic checks
+       ------------------------------------------------------------------ *)
+    (* Given a strongly-connected datatype binding of the form
+	    tyvarseq1 tycon1 = conbind1
+	    tyvarseq2 tycon2 = conbind2
+		    ...
+	    tyvarseqn tyconn = conbindn
+       we require
+	    (a) No tyvarseq contains duplicates.
+	    (b) There exists k s.t. every tyvarseq has length k.
+	    (c) For each application tyseq tyconi occuring in conbindj, we have tyseq = tyvarseqj.
+       Note that (a) is required by the definition but (b) and (c), which reject non-uniform dataytpes, are
+       imposed by TILT.
+    *)
+
+    (* with_mark : ('a -> 'b) -> 'a * Error.region -> 'b *)
+    fun with_mark f (a, region) = let val _ = Error.push_region region
+				      val res = f a
+				      val _ = Error.pop_region()
+				  in  res
+				  end
+
+    (* non_uniform : string -> unit *)
+    fun non_uniform s = (Error.error_region(); print "non-uniform datatype: "; print s; print "\n")
+
+    (* checkTyvar : Symbol.symbol list -> Ast.tyvar -> Symbol.symbol list *)
+    fun checkTyvar B (Ast.Tyv s) =
+	if Listops.member_eq(Symbol.eq, s, B)
+        then (Error.error_region(); print "duplicate bound tyvar"; print "\n";
+	      B)
+        else s :: B
+      | checkTyvar B (Ast.TempTyv _) = error "temporary tyvar has not been eliminated"
+      | checkTyvar B (Ast.MarkTyv mark) = with_mark (checkTyvar B) mark
+
+    (* checkTyvars : Ast.tyvar list -> bool *)
+    (* Determine if tyvars are distinct, issuing errors if not. *)
+    fun checkTyvars tyvars = 
+	let val distinct = foldl (fn (tv, B) => checkTyvar B tv) nil tyvars
+	in  length distinct = length tyvars
+	end
+
+    (* checkDbVars : string * int -> Ast.db -> bool *)
+    fun checkDbVars (kname, k) (Ast.Db {tyc, tyvars, rhs}) =
+	let val varsOk = checkTyvars tyvars
+	    val lenOk = (length tyvars = k orelse
+	                 (non_uniform (Symbol.name tyc ^ " must bind the same number of tyvars as " ^ kname);
+			  false))
+	in  varsOk andalso lenOk
+	end
+      | checkDbVars G (Ast.MarkDb mark) = with_mark (checkDbVars G) mark
+
+    (* checkArg : Symbol.symbol * Ast.ty -> bool *)
+    fun checkArg (tyvarsym, ty) =
+	let fun fail() = (non_uniform ("expected " ^ Symbol.name tyvarsym); false)
+	    fun sameTyvar (Ast.Tyv s) = Symbol.eq (s, tyvarsym) orelse fail()
+	      | sameTyvar (Ast.MarkTyv mark) = with_mark sameTyvar mark
+	      | sameTyvar _ = fail()
+	    fun sameTy (Ast.VarTy tyvar) = sameTyvar tyvar
+	      | sameTy (Ast.MarkTy mark) = with_mark sameTy mark
+	      | sameTy _ = fail()
+	in  sameTy ty
+	end
+
+    (* AND : bool * bool -> bool.  Doesn't short-circuit. *)
+    fun AND (a, b) = a andalso b
+
+    (* ALL : ('a -> bool) -> 'a list -> bool.  Doesn't short-circuit. *)
+    fun ALL f L = foldl (fn (x, acc) => f x andalso acc) true L
+
+    (* checkArgs : Symbol.symbol list * Ast.ty list -> unit *)
+    fun checkArgs (nil, nil) = true
+      | checkArgs (_, nil) = (non_uniform "type constructor given too few arguments"; false)
+      | checkArgs (nil, _) = (non_uniform "type constructor given too many arguments"; false)
+      | checkArgs (tyvar :: tvs, ty :: tys) = AND(checkArg (tyvar, ty), checkArgs (tvs, tys))
+
+    (* checkTy : int * Symbol.symbol list * Symbol.symbol list -> ty -> bool *)
+    fun checkTy G (Ast.VarTy _) = true
+      | checkTy G (Ast.ConTy (path, args)) =
+	let val argsOk = ALL (checkTy G) args
+	    val (tycons, tyvars) = G
+	    val appOk = 
+		if length path = 1 andalso Listops.member_eq(Symbol.eq, hd path, tycons)
+		then checkArgs (tyvars, args)
+		else true
+	in  AND(argsOk, appOk)
+	end
+      | checkTy G (Ast.RecordTy tyrow) = ALL (fn (_, ty) => checkTy G ty) tyrow
+      | checkTy G (Ast.TupleTy tys) = ALL (checkTy G) tys
+      | checkTy G (Ast.MarkTy mark) = with_mark (checkTy G) mark
+
+    (* constrs : Ast.dbrhs -> (Symbol.symbol * Ast.ty option) list *)
+    fun constrs (Ast.Constrs cs) = cs
+      | constrs (Ast.Repl _) = error "datatype replication has not been eliminated"
+
+    (* checkDbRhs : Symbol.symbol list -> Ast.db -> bool *)
+    fun checkDbRhs tycons (Ast.Db {tyc, tyvars, rhs}) =
+	let val tyvars = map AstHelp.tyvar_strip tyvars
+	    val tys = List.mapPartial #2 (constrs rhs)
+	in  ALL (checkTy (tycons, tyvars)) tys
+	end
+      | checkDbRhs tycons (Ast.MarkDb mark) = with_mark (checkDbRhs tycons) mark
+    
+    val arity : Ast.db -> int           = length o #2 o AstHelp.db_strip
+    val tycon : Ast.db -> Symbol.symbol = #1 o AstHelp.db_strip
+    val name  : Ast.db -> string        = Symbol.name o tycon
+
+    (* checkDbs : Ast.db list -> bool *)
+    fun checkDbs nil = true
+      | checkDbs (dbs as (db :: _)) = (ALL (checkDbVars (name db, arity db)) dbs andalso
+      				       ALL (checkDbRhs (map tycon dbs)) dbs)
+
+    (* checkSCCs : Ast.db list list -> bool *)
+    fun checkSCCs db_list_list = ALL checkDbs db_list_list
+
+    (* ------------------------------------------------------------------
+       The datatype compiler for compiling a single datatype statement.
+       ------------------------------------------------------------------ *)
+
+    (* def : Ast.db -> def *)
+    fun def db =
+	let val (tyc,tyv,rhs) = AstHelp.db_strip db
+	in  (tyc, tyv, constrs rhs)
+	end
+
+    (* splitScc : Ast.db list -> def list list option *)
+    (* Split datatype bindings into strongly-connected components and
+       perform syntactic checks, returning NONE if the bindings are
+       rejected.  *)
+    fun splitScc dbs =
+	let
+	    val nodes = Listops.mapcount (fn (i,db) => (i,def db)) dbs
+	    val numnodes = length nodes
+	    val syms = map (fn (_,(s,_,_)) => s) nodes
+	    fun help (_,NONE) = []
+	      | help (_,SOME ty) = let val s = AstHelp.free_tyc_ty(ty,fn _ => false)
+				   in list_inter_eq(Symbol.eq,s,syms)
+				   end
+	    fun lookup tars = case List.find (fn (_,(s,_,_)) => Symbol.eq(s,tars)) nodes
+	    			of NONE => error "lookup should not fail"
+				 | SOME (i,_) => i
+	    fun get_edges (i, (_,_,rhs)) = (map (fn s => (i, lookup s))
+	    			            (Listops.flatten (map help rhs)))
+	    val edges = flatten (map get_edges nodes)
+	    val comps = rev(GraphUtil.scc numnodes edges)
+
+	    fun lookupDb tari = List.nth(dbs, tari)
+	    fun lookupDef tari = #2(List.nth(nodes, tari))
+	in
+	    if checkSCCs (Listops.mapmap lookupDb comps)
+	    then SOME (Listops.mapmap lookupDef comps)
+	    else NONE
+	end
+
     fun compile' (context, typecompile,
-		  nodes : node list, eq_compile) : (sbnd * sdec) list =
+		  datatycs : Ast.db list, eq_compile) : (sbnd * sdec) list =
       let 
-	(* ---- Find the strongly-connected components of datatypes. *)
-	local
-	  val syms = map (fn (_,(s,_,_)) => s) nodes
-	  fun help (_,NONE) = []
-	    | help (_,SOME ty) = let val s = AstHelp.free_tyc_ty(ty,fn _ => false)
-				 in list_inter_eq(Symbol.eq,s,syms)
-				 end
-	  fun lookupint [] tari = error "lookupint should not fail"
-	    | lookupint ((i,info)::rest) tari = if (i = tari) then info
-						else lookupint rest tari
-	  fun lookup [] tars = error "lookup should not fail"
-	    | lookup ((i,(s,tv,def))::rest) tars = if (Symbol.eq(s,tars)) then i
-						   else lookup rest tars
-	in 
-	  val numnodes = length nodes
-	  fun get_edges (i,(s,tyvars,def)) = (map (fn x => (i,x))
-					      (map (lookup nodes) (flatten (map help def))))
-	  val edges = flatten (map get_edges nodes)
-	  val comps = rev(GraphUtil.scc numnodes edges)
-	  val sym_tyvar_def_listlist = mapmap (lookupint nodes) comps
-	end (* local *)
         (* ---- call the main routine for each sorted list of datatypes 
 	   and retain the accumulated context *)
 	fun loop context acc [] = rev acc
@@ -562,8 +685,9 @@ structure Datatype
 		val acc' = (rev sbnd_sdecs) @ acc
 	    in loop context' acc' rest
 	    end
-	val res = loop context [] sym_tyvar_def_listlist
-      in res
+      in case splitScc datatycs
+	   of NONE => []
+	    | SOME sym_tyvar_def_listlist => loop context [] sym_tyvar_def_listlist
       end
 
     fun copy_datatype(context,path,tyc) = 
@@ -676,17 +800,7 @@ structure Datatype
     fun compile {context, typecompile,
 		 datatycs : Ast.db list, eq_compile} : (sbnd * sdec) list =
 	let
-	    fun calldriver() = 
-		let fun mapper (i,arg) = 
-		    let val (tyc,tyv,rhs) = AstHelp.db_strip arg
-			val def = (case rhs of
-				       Ast.Constrs def => def
-				     | _ => error "bad datbind")
-		    in (i,(tyc,tyv,def))
-		    end
-		    val nodes = mapcount mapper datatycs
-		in  compile'(context,typecompile,nodes,eq_compile)
-		end
+	    fun calldriver() = compile'(context,typecompile,datatycs,eq_compile)
 	in 
 	    case datatycs of
 		[db] => 
@@ -724,7 +838,7 @@ structure Datatype
 	end
 
     (* ---------------- constructor LOOKUP RULES --------------------------- 
-     --------------------------------------------------------- *)
+       --------------------------------------------------------- *)
     type lookup = (Il.context * Il.label list -> (Il.mod * Il.signat) option) 
     exception NotConstructor
     datatype path_or_con = APATH of path | CON of con
