@@ -23,9 +23,8 @@ functor EmitRtlMLRISC(
 	  structure MLTreeExtra:	 MLTREE_EXTRA
 	  structure RegisterSpillMap:	 REGISTER_SPILL_MAP
 	  structure RegisterTraceMap:	 REGISTER_TRACE_MAP
-					   where type var = Name.var
 					   where type rep = Rtl.rep
-
+					     and type var = Name.var
 	  structure SpillReload:	 SPILL_RELOAD
 	  structure StackFrame:		 STACK_FRAME
 	  structure TraceTable:		 TRACETABLE
@@ -2118,7 +2117,7 @@ functor EmitRtlMLRISC(
 
 	    fun translateProcedure'(procedure as Rtl.PROC{name = label, ...}) =
 		  (if Rtl.eq_label(label, main) then
-		     define "" (* "_client_entry" *)
+		     define "_client_entry"
 		   else
 		     [])@
 		  translateProcedure procedure
