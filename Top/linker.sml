@@ -27,7 +27,7 @@ structure Linker : LINKER =
 	(* confine(UE1,UE2)=UE3 : UE3 holds those components of UE1,
 	 * that does not occur in UE2. Components that do also occur
 	 * in UE2, must match up; otherwise confinement fails. *)
-   
+(*   
 	fun confine (unitname,ue1,ue2) : UE =
 	  let fun conf ([],ue2,a) = rev a
 		| conf (e::ue1,[],a) = conf(ue1,[],e::a)
@@ -35,12 +35,29 @@ structure Linker : LINKER =
 	        if un1 < un2 then conf(ue1',ue2,a)
 		else if un2 < un1 then conf(ue1,ue2',a)
 		else (* un1=un2 *)
-		  if crc1=crc2 then conf(ue1',ue2',(un1,crc1)::a)
+		    if crc1=crc2 then conf(ue1',ue2',(un1,crc1)::a) 
 		  else error ("Link Error: The unit object " ^ unitname ^ " builds\n" ^
 			      "on a version of " ^ un1 ^ " which is inconcistent\n" ^
 			      "with which it is linked.") 
 	  in conf(ue1,ue2,[])
 	  end
+*)
+
+	fun confine (unitname,ue1 : UE, ue2 : UE) : UE =
+	    let fun find name = Listops.assoc_eq((op =) : string * string -> bool, name, ue2)
+		fun folder ((name,crc),acc) = 
+		    (case find name of
+			 NONE => (name,crc)::acc
+		       | SOME crc2 => 
+			     if (crc = crc2)
+				 then acc
+			     else error ("Link Error: The unit object " ^ unitname ^ " builds\n" ^
+					 "on a version of " ^ name ^ " which is inconcistent\n" ^
+					 "with which it is linked."))
+		val rev_ue = foldl folder [] ue1
+	  in rev rev_ue
+	  end
+
 	fun plus_overlap(unitname,ue1,ue2) : UE =      (* used on import unit environments *)
 	  let fun plus ([],[],a) = rev a
 		| plus ([],e::ue2,a) = plus([],ue2,e::a)

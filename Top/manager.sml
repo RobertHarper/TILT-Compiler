@@ -19,6 +19,13 @@ struct
 
   fun help() = print "This is TILT - no help available.\n"
 
+  fun addPath fileWithPath fileWithoutPath =
+      let val path = OS.Path.dir fileWithPath
+      in  (case path of
+	       "" => fileWithoutPath
+	     | _ => path ^ "/" ^ fileWithoutPath)
+      end
+
   fun readContext file = let val is = TextIO.openIn file
 			     val res = Elaborator.IlContext.blastInContext is
 			     val _ = TextIO.closeIn is
@@ -34,7 +41,8 @@ struct
       let val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
 (*	  val ctxts = List.map (fn file => UIBlast.blastIn (file^".ui")) imports *)
 	  val ctxts = List.map (fn file => readContext (file ^ ".ui")) imports
-      in Elaborator.plus_context (ctxt_inline :: ctxts)
+      in (Elaborator.plus_context (ctxt_inline :: ctxts), 
+	  Elaborator.plus_context ctxts)
       end
 
     fun bincopy (is,os) = 
@@ -73,9 +81,10 @@ struct
   fun compileSML sourcefile = 
       let val _ = chat ("  [Parsing " ^ sourcefile ^ "...")
 	  val (fp, imports, dec) = Parser.parse_impl sourcefile
+	  val imports = map (addPath sourcefile) imports
 	  val _ = chat "]\n"
 	  val _ = chat "  [Creating context from imports..."
-	  val ctxt = getContext imports
+	  val (ctxt_for_elab,ctxt) = getContext imports
 	  val _ = chat "]\n"
 	  val imports = List.map (fn x => (x, Linker.Crc.crc_of_file (x^".ui"))) imports
 	  val unitBase = OS.Path.base sourcefile
@@ -87,10 +96,10 @@ struct
 	  val (sbnds, ctxt') = 
 	      if OS.FileSys.access(intFile, []) then 
 		  let val _ = chat "  [Elaborating with constraint..."  
-		  in elab_constrained(ctxt,sourcefile,fp,dec,uiFile)
+		  in elab_constrained(ctxt_for_elab,sourcefile,fp,dec,uiFile)
 		  end
 	      else let val _ = chat "  [Elaborating non-constrained..."
-		   in elab_nonconstrained(ctxt,sourcefile,fp,dec,uiFile)
+		   in elab_nonconstrained(ctxt_for_elab,sourcefile,fp,dec,uiFile)
 		   end
 	  val _ = chat "]\n"
 	  val _ = chat ("  [Compiling into " ^ oFile ^ " ...")
@@ -109,10 +118,11 @@ struct
 
   fun compileINT sourcefile = 
       let val (fp, includes, specs) = Parser.parse_inter sourcefile
-	  val ctxt = getContext includes
+	  val includes = map (addPath sourcefile) includes
+	  val (ctxt_for_elab,ctxt) = getContext includes
 	  val unitName = OS.Path.base(OS.Path.file sourcefile)
 	  val uiFile = (OS.Path.base sourcefile) ^ ".ui"
-      in case Elaborator.elab_specs(ctxt, fp, specs) of
+      in case Elaborator.elab_specs(ctxt_for_elab, fp, specs) of
 	  SOME ctxt' => writeContext(uiFile, ctxt')
 	| NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
       end
