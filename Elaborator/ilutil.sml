@@ -9,8 +9,7 @@ structure IlUtil :> ILUTIL =
     open Prim Tyvar
 
     type tyvar = (context,con,exp) Tyvar.tyvar
-    exception BUG
-    exception UNIMP
+
     val debug = Stats.ff("IlutilDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
     val error = fn s => error "ilutil.sml" s

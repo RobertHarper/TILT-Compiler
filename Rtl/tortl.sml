@@ -1506,7 +1506,7 @@ struct
              | _ => (print "primitive: ";
                        Ppnil.pp_prim prim;
                        print "not implemented\n";
-                       raise Util.UNIMP))
+                       error "primitive not implemented"))
       end
 
 

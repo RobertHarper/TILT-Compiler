@@ -7,7 +7,6 @@ struct
     open Il Prim
 
     exception NotValue
-    exception UNIMP
 
     fun error s = Util.error "exptable.sml" s
 

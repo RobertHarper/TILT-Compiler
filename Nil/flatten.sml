@@ -29,7 +29,6 @@ functor Flatten( structure PrimUtil : PRIMUTIL
     structure Subst = NilSubst
     open Nil Name
 
-    exception UNIMP
     val error = fn s => Util.error "flattenedargs" s
 
 
@@ -218,7 +217,7 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
 		in
 		  (inc_click fold_click; newexp )
 		end
-	       handle Util.UNIMP => Prim_e (PrimOp p, trs,map xcon cons, map (xexp ) exps) )
+	       handle _ => Prim_e (PrimOp p, trs,map xcon cons, map (xexp ) exps) )
 	  else Prim_e (PrimOp p, trs,map xcon cons, map (xexp ) exps))
       | Prim_e (allp, trs,cons, exps) =>
 	  Prim_e (allp, trs,map xcon cons, map( xexp ) exps)

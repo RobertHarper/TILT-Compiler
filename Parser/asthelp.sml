@@ -241,7 +241,7 @@ structure AstHelp : ASTHELP =
       and f_sigexp state (Ast.VarSig s) = Ast.VarSig s
 	| f_sigexp state (Ast.BaseSig speclist) = Ast.BaseSig(map (f_spec state) speclist)
 	| f_sigexp state (Ast.MarkSig (se,r)) = Ast.MarkSig(f_sigexp state se,r)
-	| f_sigexp state (Ast.AugSig (se,_)) = raise UNIMP
+	| f_sigexp state (Ast.AugSig (se,_)) = error "f_sigexp AugSig unimplemented"
       and f_fsigexp state (Ast.VarFsig s) = Ast.VarFsig s
 	| f_fsigexp state (Ast.BaseFsig {param,result}) =
 	        Ast.BaseFsig{param=map (fn(so,se) => (so,f_sigexp state se)) param,

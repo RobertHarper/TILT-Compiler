@@ -3,8 +3,6 @@
 signature UTIL =
 sig
 
-    exception UNIMP
-
     (* takes filename and then error msg *)
     val error : string -> string -> 'a
 

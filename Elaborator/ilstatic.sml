@@ -1569,7 +1569,7 @@ structure IlStatic
        | Kind_Valid (KIND_TUPLE n,_)     = n >= 0
        | Kind_Valid (KIND_ARROW (m,kres),ctxt) = (m >= 0) andalso Kind_Valid(kres,ctxt)
 
-     and Context_Valid ctxt = raise Util.UNIMP
+     and Context_Valid ctxt = error "Context_Valid unimplemented"
 
      and Decs_Valid (ctxt,[]) = true
        | Decs_Valid (ctxt,a::rest) = (Dec_Valid(ctxt,a) andalso

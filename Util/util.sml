@@ -4,8 +4,6 @@ struct
     val error = UtilError.error
     val reject = UtilError.reject
 
-    exception UNIMP
-
     (* avoid shadowing error since we export it at a different type! *)
     fun localerror s = error "util.sml" s
 

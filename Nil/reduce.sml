@@ -21,7 +21,6 @@ structure Reduce
     structure Nil = Nil
 
     exception FnNotFound
-    exception UNIMP
 
     val exportbnds = ref [] : bnd list ref
 
@@ -464,7 +463,7 @@ structure Reduce
 	    | Crecord_c (lclist) =>
 		(app ((scan_con fset) o #2) lclist)
 	    | Proj_c (con, label) => (scan_con fset) con
-	    | Closure_c _ => raise UNIMP
+	    | Closure_c _ => error "scan_con Closure_c unimplemented"
 	    | App_c (con, cons) =>
 		( scan_con fset con ; app (scan_con fset) cons)
 (*	    | Typecase_c { arg=arg, arms = arms, default = default, kind = kind} =>
@@ -481,7 +480,7 @@ structure Reduce
 	  | Open_cb (var, vklist, con) =>
 	      (app (fn (v,k) => (scan_kind fset k)) vklist;
 	       scan_con fset con)
-	  | Code_cb _ =>raise UNIMP
+	  | Code_cb _ => error "scan_conbnd Code_cb unimplemented"
 
 	(* Scan expressions, counting the number of times a variable is used
 	 (escapes), or is applied *)
@@ -619,7 +618,7 @@ structure Reduce
 	      | Fixopen_b vcset => dofix vcset
               | Fixcode_b vcset => dofix vcset
 
-	      |  Fixclosure_b vcset => raise UNIMP
+	      |  Fixclosure_b vcset => error "scan_bnd Fixclosure_b unimplemented"
             end
     in
 	fun census_exp fset ( x , exp ) =
@@ -782,7 +781,7 @@ structure Reduce
 		 Open_cb (v,
 			  map (fn (v,k) => (v, xkind fset k)) vklist,
 			  xcon fset con)
-	    | Code_cb _ => raise UNIMP
+	    | Code_cb _ => error "xconbnd Code_cb unimplemented"
 
 	  and xcon fset c =
 	    case c of
@@ -810,7 +809,7 @@ structure Reduce
 	    | Crecord_c (lclist) =>
 		Crecord_c ( map (fn  (l,c) => (l, xcon fset c) ) lclist)
 	    | Proj_c (con, label) => Proj_c (xcon fset con, label)
-	    | Closure_c _ => raise UNIMP
+	    | Closure_c _ => error "xcon Closure_c unimplemented"
 	    (*| Typecase_c { arg=arg, arms=arms, default=default, kind= kind} =>
 		Typecase_c { arg=xcon fset arg,
 			    default = xcon fset default,
@@ -1071,8 +1070,8 @@ structure Reduce
 			    end
 			end
 
-	  | Fixclosure_b _ => raise UNIMP
-          | Fixcode_b _ => raise UNIMP
+	  | Fixclosure_b _ => error "xsbnds Fixclosure_b unimplemented"
+           | Fixcode_b _ => error "xsbnds Fixcode_b unimplemented"
 
 	  (* ----------- Other expression bindings ---------------------------- *)
 	  | Exp_b (x, nt, exp)=>
@@ -1131,7 +1130,7 @@ structure Reduce
 			  in NilUtil.makeLetE Sequential bnds body
 			  end
 
-		    | Let_e (Parallel, _ , _) => raise UNIMP
+		    | Let_e (Parallel, _ , _) => error "xexp Let_e Parallel unimplemented"
 
 		    | Prim_e ( ap , trlist,clist, elist ) =>
 			  let val clist' = map (xcon fset) clist

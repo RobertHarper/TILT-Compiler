@@ -420,8 +420,8 @@ struct
 	  | (uint2int(is1,is2), [], _) => objunary (value2uint is1) (int2value is2)
 	  | (int2int(is1,is2), [], _) => objunary (value2int is1) (int2value is2)
 	  | (uint2uint(is1,is2), [], _) => objunary (value2uint is1) (uint2value is2)
-	  | (uinta2uinta(is1,is2),_,_) => raise UNIMP
-	  | (uintv2uintv(is1,is2),_,_) => raise UNIMP
+	  | (uinta2uinta(is1,is2),_,_) => error "uinta2uinta unimplemented"
+	  | (uintv2uintv(is1,is2),_,_) => error "uintv2uintv unimplemented"
 
 	  | (neg_float fs, [], _) => funary fs (op ~)
 	  | (plus_float fs, [], _) => fbinary fs (op +)
@@ -469,17 +469,17 @@ struct
 	  | (lesseq_uint is, [], _) => upred is (TilWord64.ulte)
 	  | (greatereq_uint is, [], _) => upred is (TilWord64.ugte)
 
-	  | (length_table _, _, _) => raise UNIMP
-	  | (sub _,_,_)  => raise UNIMP
-	  | (create_table _,_,_)  => raise UNIMP
-	  | (create_empty_table _,_,_)  => raise UNIMP
-	  | (update _, _, _) => raise UNIMP
-	  | (equal_table _, _,_)  => raise UNIMP
+	  | (length_table _, _, _) => error "length_table unimplemented"
+	  | (sub _,_,_)  => error "sub unimplemented"
+	  | (create_table _,_,_)  => error "create_table unimplemented"
+	  | (create_empty_table _,_,_)  => error "create_empty_table unimplemented"
+	  | (update _, _, _) => error "update unimplemented"
+	  | (equal_table _, _,_)  => error "equal_table unimplemented"
 					
-	  | (mk_ref, _,_) => raise UNIMP
-	  | (deref, _,_ ) => raise UNIMP
-	  | (eq_ref, _,_) => raise UNIMP
-	  | (setref, _,_) => raise UNIMP
+	  | (mk_ref, _,_) => error "mk_ref unimplemented"
+	  | (deref, _,_ ) => error "deref unimplemented"
+	  | (eq_ref, _,_) => error "eq_ref unimplemented"
+	  | (setref, _,_) => error "setref unimplemented"
 
 
 	  | _ => bad "general"())
