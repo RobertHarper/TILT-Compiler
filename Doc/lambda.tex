@@ -8,6 +8,16 @@
               #2
           \end{array}}
   \end{equation}}
+\newcommand{\labelledinfrule}[3]{
+  \begin{equation}
+    \label{#1}
+    \frac{\begin{array}{c}
+              #2
+          \end{array}}
+         {\begin{array}{c}
+              #3
+          \end{array}}
+  \end{equation}}
 
 \newcommand{\expression}{e}
 \newcommand{\evalue}{e^v}
@@ -95,14 +105,14 @@
 \newcommand{\validexpression}[3]{#1\vdash #2 : #3}
 \newcommand{\validmodule}[3]{#1\vdash #2 : #3}
 \newcommand{\validconstructor}[3]{#1\vdash #2 : #3}
-\newcommand{\validtype}[2]{#1\vdash #2\mbox{\ type}}
-\newcommand{\validkind}[2]{#1\vdash #2\mbox{\ ok}}
+\newcommand{\validtype}[2]{#1\vdash #2}
+\newcommand{\validkind}[2]{#1\vdash #2}
 \newcommand{\validsignature}[3]{\mbox{$#1\vdash #2 : #3$}}
 \newcommand{\validmbinding}[3]{#1\vdash #2 : #3}
 \newcommand{\validmbindings}[3]{#1\vdash #2 : #3}
 \newcommand{\equivconstructor}[4]{#1\vdash #2 \equiv #3 : #4}
 \newcommand{\equivkind}[3]{#1\vdash #2 \equiv #3}
-\newcommand{\equivtype}[3]{#1\vdash #2 \equiv #3\mbox{\ type}}
+\newcommand{\equivtype}[3]{#1\vdash #2 \equiv #3}
 \newcommand{\equivsignature}[4]{#1\vdash #2 \equiv #3 : #4}
 \newcommand{\equivsbinding}[3]{#1\vdash #2 \equiv #3}
 \newcommand{\equivsbindings}[3]{#1\vdash #2 \equiv #3}

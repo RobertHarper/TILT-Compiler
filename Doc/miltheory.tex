@@ -1,5 +1,5 @@
-\documentclass[]{article}
-\usepackage{code,latexsym,fullpage,fleqn}
+\documentclass{article}
+\usepackage{code,latexsym,fullpage,fleqn,theorem}
 \include{lambda}
 
 \title{Typechecking a Simplified MIL}
@@ -13,6 +13,16 @@
 
 \newtheorem{definition}{Definition}
 \newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newcommand{\qed}{\mbox{QED}}
+\newcommand{\dom}{\mathop{dom}}
+\newcommand{\env}{\gamma}
+
+\raggedright
+
+
+\newenvironment{proof}{\noindent{\bf Proof:}\hspace*{0.5em}}{\hspace*{\fill}\qed}
+\theoremstyle{break}
 
 \begin{document}
 
@@ -27,8 +37,11 @@
 \newcommand{\cpi}[2]{\capply{\pi_{#1}}{#2}}
 \newcommand{\cpair}[2]{\langle{#1},{#2}\rangle}
 \renewcommand{\kind}{A}
+\newcommand{\otherkind}{B}
 \renewcommand{\cvar}{x}
+\newcommand{\othercvar}{y}
 \renewcommand{\constructor}{M}
+\newcommand{\otherconstructor}{N}
 \renewcommand{\substitute}[2]{\{#1{\mapsto}#2\}}
 
 
@@ -37,7 +50,7 @@
 \kind ::= &\ktype&\mbox{kind of types}\\
     |&\ksingleton{\constructor}&\mbox{singleton kind}\\
     |&\kpi{\cvar}{\kind_1}{\kind_2}&\mbox{function kind}\\
-    |&\ksigma{\cvar}{\kind_1}{\kind_2}&\mbox{dependent pair kind}\\[10pt]
+    |&\ksigma{\cvar}{\kind_1}{\kind_2}&\mbox{dependent pair kind}\\[7pt]
 
 \constructor ::= &\basetype&\mbox{base type}\\
     |&\cvar&\mbox{constructor variable}\\
@@ -57,7 +70,8 @@
   {}
   {\validcontext{\emptycontext}}
 
-\infrule
+\labelledinfrule
+  {wfctx:extend}
   {\validkind{\context}{\kind}\qquad
      \cvar\not\in\BV{\context}}
   {\validcontext{\emptycontext,\sbindconstructor{\cvar}{\kind}}}
@@ -65,39 +79,50 @@
 
 \sectionrule{Well-Formed Kind}{\validkind{\context}{\kind}}
 
-\infrule
+\labelledinfrule
+  {wfk:ktype}
   {\validcontext{\context}}
   {\validkind{\context}{\ktype}}
 
-\infrule
+\labelledinfrule
+  {wfk:ksingleton}
   {\validconstructor{\context}{\constructor}{\ktype}}
   {\validkind{\context}{\ksingleton{\constructor}}}
 
-\infrule
-  {\validkind{\context,\sbindconstructor{\cvar}{\kind_1}}{\kind_2}}
+\labelledinfrule
+  {wfk:kpi}
+  {\validkind{\context}{\kind_1}\qquad
+   \validkind{\context,\sbindconstructor{\cvar}{\kind_1}}{\kind_2}}
   {\validkind{\context}{\kpi{\cvar}{\kind_1}{\kind_2}}}
 
-\infrule
-  {\validkind{\context,\sbindconstructor{\cvar}{\kind_1}}{\kind_2}}
+\labelledinfrule
+  {wfk:ksigma}
+  {\validkind{\context}{\kind_1}\qquad
+   \validkind{\context,\sbindconstructor{\cvar}{\kind_1}}{\kind_2}}
   {\validkind{\context}
      {\ksigma{\cvar}{\kind_1}{\kind_2}}}
 
 \sectionrule{Subkinding}{\subkind{\context}{\kind}{\kind'}}
 
-\infrule
-  {\validkind{\context}{\kind}}
-  {\subkind{\context}{\kind}{\kind}}
+\labelledinfrule
+  {sk:ktype}
+  {\validcontext{\context}}
+  {\subkind{\context}{\ktype}{\ktype}}
 
-\infrule
-  {\subkind{\context}{\kind_1}{\kind_2}\qquad
-   \subkind{\context}{\kind_2}{\kind_3}}
-  {\subkind{\context}{\kind_1}{\kind_3}}
+\labelledinfrule
+  {sk:ksingleton}
+  {\equivconstructor{\context}{\constructor_1}{\constructor_2}{\ktype}}
+  {\subkind{\context}{\ksingleton{\constructor_1}}
+     {\ksingleton{\constructor_2}}}
 
-\infrule
+
+\labelledinfrule
+  {sk:forget}
   {\validkind{\context}{\ksingleton{\constructor}}}
   {\subkind{\context}{\ksingleton{\constructor}}{\ktype}}
 
-\infrule
+\labelledinfrule
+  {sk:pi}
   {\subkind{\context}{\kind'_1}{\kind_1}\qquad
       \subkind{\context,\sbindconstructor{\cvar}{\kind'_1}}
                 {\kind_2}{\kind'_2}}
@@ -149,8 +174,8 @@
 
 \infrule
   {\validconstructor{\context}{\constructor_1}{\kind_1}\qquad
-   \validconstructor{\context}{\constructor_2}{\kind_2}\qquad
-   \cvar\not\in\BV{\context}}
+   \validconstructor{\context}{\constructor_2}
+    {\substitute{\cvar}{\constructor_1}{\kind_2}}}
   {\validconstructor{\context}{\cpair{\constructor_1}{\constructor_2}}
       {\ksigma{\cvar}{\kind_1}{\kind_2}}}
 
@@ -274,6 +299,12 @@
      {\cpi{2}{\cpair{\constructor}{\constructor'}}}
      {\constructor'}{\substitute{\cvar}{\constructor}{\kind'}}}
 
+\infrule
+  {\equivconstructor{\context}{\constructor_1}{\constructor_2}{\kind_1}
+   \qquad
+   \subkind{\context}{\kind_1}{\kind_2}}
+  {\equivconstructor{\context}{\constructor_1}{\constructor_2}{\kind_2}}
+
 \section{Algorithm for Constructor Equivalence}
 
 \subsection{Elimination Contexts}
@@ -292,96 +323,115 @@ E ::= &\hole\\
 \subsection{Equivalence algorithm}
 
 \newcommand{\weakconequiv}[4]{#1\vdash #2 \sim #3 : #4}
-\newcommand{\conequiv}[4]{#1\vdash #2 \iff #3 : #4}
-\newcommand{\headnormto}[4]{#1\vdash #2 : #3 \Rightarrow #4}
-\newcommand{\headnormsto}[4]{#1\vdash #2 : #3 \Rightarrow^{*} #4}
-\newcommand{\reconstruct}[3]{#1\vdash #2 \uparrow #3}
+\newcommand{\conequiv}[4]{#1\vdash #2 \Join #3 : #4}
+\newcommand{\aconequiv}[4]{#1\vdash #2 \iff #3 : #4}
+\newcommand{\akindequiv}[3]{#1\vdash #2 \iff #3}
+\newcommand{\headnormsto}[4]{#1\vdash #2 \Downarrow #4}
+\newcommand{\reconstruct}[3]{#1\vdash #2 \Uparrow #3}
+\newcommand{\isvalue}[3]{#1\vdash #2\mbox{\ value } #3}
+\newcommand{\cvalue}{V}
 \[
-\!\!\!\!\!\!\!\begin{array}{ll}
-\headnormto{\context}
+\!\!\!\!\!\!\!\begin{array}{lp{4.5truein}}
+\headnormsto{\context}
    {E[\capply{(\cfunction{\cvar}{\kind}{\constructor})}
              {\constructor'}]}
-   {\kind}
-   {E[\substitute{\cvar}{\constructor'}{\constructor}]}\hidewidth\\
-\headnormto{\context}
+   {\ktype}
+   {\cvalue}&
+   if 
+   $\headnormsto{\context}
+     {E[\substitute{\cvar}{\constructor'}{\constructor}]}{\ktype}{\cvalue}$\\
+
+\headnormsto{\context}
    {E[\cpi{1}{\cpair{\constructor_1}{\constructor_2}}]}
-   {\kind}
-   {\constructor_1}\\
-\headnormto{\context}
+   {\ktype}
+   {\cvalue}&
+   if
+   $\headnormsto{\context}{E[\constructor_1]}{\ktype}{\cvalue}$\\
+\headnormsto{\context}
    {E[\cpi{2}{\cpair{\constructor_1}{\constructor_2}}]}
-   {\kind}
-   {\constructor_2}\\
-\headnormto{\context}{E[\cvar]}{\ktype}{\constructor}&
-   \mbox{if}\ 
-   \reconstruct{\context}{E[\cvar]}{\ksingleton{\constructor}}\\[10pt]
+   {\ktype}
+   {\cvalue}&
+   if
+   $\headnormsto{\context}{E[\constructor_2]}{\ktype}{\cvalue}$\\
+\headnormsto{\context}{E[\cvar]}{\ktype}{\cvalue}&
+   if
+   $\reconstruct{\context}{E[\cvar]}{\ksingleton{\constructor}}$ and
+   $\headnormsto{\context}{\constructor}{\ktype}{\cvalue}$\\
+\headnormsto{\context}{\cvalue}{\ktype}{\cvalue}\\[7pt]
 
 \reconstruct{\context}{\cvar}{\context(\cvar)}\\
 \reconstruct{\context}{\cpi{1}{E[\cvar]}}{\kind_1}&
-  \mbox{if}\
-  \reconstruct{\context}{E[\cvar]}{\ksigma{\beta}{\kind_1}{\kind_2}}\\
+  if
+  $\reconstruct{\context}{E[\cvar]}{\ksigma{\othercvar}{\kind_1}{\kind_2}}$\\
 \reconstruct{\context}{\cpi{2}{E[\cvar]}}
-  {\substitute{\beta}{\cpi{1}{E[\cvar]}}\kind_2}&
-  \mbox{if}\
-  \reconstruct{\context}{E[\cvar]}{\ksigma{\beta}{\kind_1}{\kind_2}}\\
+  {\substitute{\othercvar}{\cpi{1}{E[\cvar]}}\kind_2}&
+  if
+  $\reconstruct{\context}{E[\cvar]}{\ksigma{\othercvar}{\kind_1}{\kind_2}}$\\
 \reconstruct{\context}{\capply{E[\cvar]}{\constructor}}
-  {\substitute{\beta}{\constructor}{\kind_2}}&
-  \mbox{if}\ 
-  \reconstruct{\context}{E[\cvar]}{\kpi{\beta}{\kind_1}{\kind_2}}\\[10pt]
+  {\substitute{\othercvar}{\constructor}{\kind_2}}&
+  if
+  $\reconstruct{\context}{E[\cvar]}{\kpi{\othercvar}{\kind_1}{\kind_2}}$\\[7pt]
 
-\conequiv{\context}{\constructor}{\constructor'}{\kind}&
-  \mbox{if}\ 
-    \validconstructor{\context}{\constructor}{\kind},\
-    \validconstructor{\context}{\constructor'}{\kind},\
-    \headnormsto{\context}{\constructor}{\kind}{\constructor_1},\
-    \headnormsto{\context}{\constructor'}{\kind}{\constructor'_1}\
-    \weakconequiv{\context}{\constructor_1}{\constructor'_1}{\kind}\\[10pt]
-
-\weakconequiv{\context}{\basetype}{\basetype}{\ktype}\\
-\weakconequiv{\context}{\constructor}{\constructor'}{\ksingleton{\constructor''}}\\
-\weakconequiv{\context}{E[\alpha]}{E'[\beta]}{\ktype}&
-  \mbox{if}\ \alpha = \beta,\ \context(\alpha) = \kind,\
-  \weakconequiv{\context}{E}{E'}{\kind}\\
-\weakconequiv{\context}{\constructor}{\constructor'}
-  {\kpi{\cvar}{\kind_1}{\kind_2}}&
-  \mbox{if}\ \weakconequiv{\context,\cvar{:}\kind_1}
-  {\capply{\constructor}{\cvar}}{\capply{\constructor'}{\cvar}}
-  {\kind_2}\\
-\weakconequiv{\context}{\constructor}{\constructor'}
+\aconequiv{\context}{\constructor}{\constructor'}{\ktype}&
+  if
+    $\headnormsto{\context}{\constructor}{\kind}{\cvalue}$,
+    $\headnormsto{\context}{\constructor'}{\kind}{\cvalue'}$, and
+    $\weakconequiv{\context}{\cvalue}{\cvalue'}{\ktype}$\\
+\aconequiv{\context}{\constructor}{\constructor'}{\ksingleton{\constructor''}}&
+  always\\
+\aconequiv{\context}{\constructor}{\constructor'}
+  {\kpi{\cvar}{\kind}{\kind'}}&
+  if
+  $\aconequiv{\context,\cvar{:}\kind}{\capply{\constructor}{\cvar}}
+           {\capply{\constructor'}{\cvar}}{\kind'}$\\ %$
+\aconequiv{\context}{\constructor}{\constructor'}
   {\ksigma{\cvar}{\kind_1}{\kind_2}}&
-  \mbox{if}\ 
-  \weakconequiv{\context}{\cpi{1}{\constructor}}{\cpi{1}{\constructor}}
-   {\kind_1},\
-  \weakconequiv{\context}{\cpi{1}{\constructor}}{\cpi{1}{\constructor}}
-     {\substitute{\cvar}{\cpi{1}{\constructor}}{\kind_2}}\\[10pt]
+  if
+  $\aconequiv{\context}{\cpi{1}{\constructor}}
+     {\cpi{1}{\constructor'}}{\kind_1}$, %$
+  $\aconequiv{\context}{\cpi{2}{\constructor}}
+           {\cpi{2}{\constructor'}}
+           {\substitute{\cvar}{\cpi{1}{\constructor}}\kind_2}$\\[7pt]
 
-\weakconequiv{\context}{\hole}{\hole}{\ktype}\\
-\weakconequiv{\context}{\hole}{\hole}{\ksingleton{\constructor}}\\
-\weakconequiv{\context}{E[\cpi{1}{\hole}]}{E'[\cpi{1}{\hole}]}
-   {\ksigma{\cvar}{\kind_1}{\kind_2}}&
-   \mbox{if}\ 
-   \weakconequiv{\context}{E}{E'}{\kind_1}\\
-\weakconequiv{\context}{E[\cpi{2}{\hole}]}{E'[\cpi{2}{\hole}]}
-   {\ksigma{\cvar}{\kind_1}{\kind_2}}&
-   \mbox{if}\ 
-   \weakconequiv{\context}{E}{E'}{\substitute{\cvar}{\cpi{1}{\hole}}\kind_2}\\
-\weakconequiv{\context}{E[\capply{\hole}{\constructor}]}
-   {E'[\capply{\hole}{\constructor'}]}{\kpi{\cvar}{\kind_1}{\kind_2}}&
-   \mbox{if}\
-   \conequiv{\context}{\constructor}{\constructor'}{\kind_1},\
-   \weakconequiv{\context}{E}{E'}{\kind_2}\\
+\weakconequiv{\context}{\basetype}{\basetype}{\kind}&
+  if $\kind=\ktype$\\
+\weakconequiv{\context}{\othercvar}{\othercvar}{\kind}&
+  if $\kind=\context(\cvar)$\\
+\weakconequiv{\context}{\capply{(E_1[\othercvar])}{\constructor_1}}
+  {\capply{(E_2[\othercvar])}{\constructor_2}}{\kind}&
+  if 
+  $\weakconequiv{\context}{E_1[\othercvar]}{E_2[\othercvar]}
+    {\kpi{\cvar}{\kind_1}{\kind_2}}$,
+  andalso
+  $\aconequiv{\context}{\constructor_1}{\constructor_2}{\kind_1}$ and
+  $\kind = \substitute{\cvar}{\constructor_1}{\kind_2}$\\
+\weakconequiv{\context}{\cpi{1}{(E_1[\othercvar])}}
+  {\cpi{1}{(E_2[\othercvar])}}{\kind}&
+  if $\weakconequiv{\context}{E_1[\othercvar]}{E_2[\othercvar]}
+    {\ksigma{\cvar}{\kind_1}{\kind_2}}$,
+  and
+  $\kind = \kind_1$\\
+\weakconequiv{\context}{\cpi{2}{(E_1[\othercvar])}}
+  {\cpi{2}{(E_2[\othercvar])}}{\kind}&
+  if $\weakconequiv{\context}{E_1[\othercvar]}{E_2[\othercvar]}
+    {\ksigma{\cvar}{\kind_1}{\kind_2}}$,
+  and
+  $\kind = \substitute{\cvar}{\cpi{1}{(E_1[\othercvar])}}{\kind_2}$\\[7pt]
+
+\akindequiv{\context}{\ktype}{\ktype}&always\\
+\akindequiv{\context}{\ksingleton{\constructor_1}}
+   {\ksingleton{\constructor_2}}&
+  if $\aconequiv{\context}{\constructor_1}{\constructor_2}{\ktype}$\\
+\akindequiv{\context}{\kpi{\cvar}{\kind_1}{\otherkind_1}} 
+   {\kpi{\cvar}{\kind_2}{\otherkind_2}}&
+  if $\akindequiv{\context}{\kind_1}{\kind_2}$ and
+  $\akindequiv{\context,\cvar{:}\kind_1}{\otherkind_1}{\otherkind_2}$\\
+\akindequiv{\context}{\ksigma{\cvar}{\kind_1}{\otherkind_1}} 
+   {\ksigma{\cvar}{\kind_2}{\otherkind_2}}&
+  if $\akindequiv{\context}{\kind_1}{\kind_2}$ and
+  $\akindequiv{\context,\cvar{:}\kind_1}{\otherkind_1}{\otherkind_2}$\\
 \end{array}
 \]
-
-\section{Claims}
-
-\newtheorem{claim}{Claim}
-
-\begin{claim}
-We have $\equivconstructor{\context}{\constructor}{\constructor'}{\kind}$ if
-and only if $\validconstructor{\context}{\constructor}{\kind}$, 
-$\validconstructor{\context}{\constructor'}{\kind}$, and 
-$\conequiv{\context}{\constructor}{\constructor'}{\kind}$.
-\end{claim}
 
 \section{Correctness}
 
@@ -393,22 +443,24 @@ $\conequiv{\context}{\constructor}{\constructor'}{\kind}$.
 \newcommand{\world}{\Delta}
 \newcommand{\semanticcontext}[1]{{#1}\,\mbox{ctxt}}
 \newcommand{\normterm}[3]{{#1}\vdash{#2}\mbox{\ norm\ }{#3}}
-\newcommand{\normtype}[2]{{#1}\vdash{#2}\mbox{\ norm\ }}
-\newcommand{\normE}[4]{{#1}\vdash({#2}:{#3})\ #4\ \mbox{norm}}
+\newcommand{\normtype}[2]{{#1}\vdash{#2}\mbox{\ norm}}
+\newcommand{\bisim}[4]{{#1}\vdash{#2}\mbox{\ bisim\ }{#3} : #4}
+\newcommand{\normE}[3]{{#1}\vdash{#2}\mbox{\ norm}^*\ {#3}}
 \newcommand{\algorithmicequivterm}[4]{#1\vdash #2 \iff #3 : #4}
 \newcommand{\algorithmicequivtype}[3]{#1\vdash #2 \iff #3}
-\newcommand{\algorithmicwhnf}[4]{#1\vdash #2 : #3 \Rightarrow^{*} #4\mbox{\ whnf}}
-
-
+\newcommand{\algorithmicwhnf}{\headnormsto}
+\newcommand{\semanticE}[3]{#2\mbox{\ compute\ }#3\ [#1]}
 
 \begin{itemize}
+
+
 \item
 $\semanticcontext{\world}$ iff
-%\begin{list}{}
+%\begin{itemize}{}
 %\item $\world = \emptysequence$
 %\item Or, $\world = \world',\cvar{:}\kind$ and $\semanticcontext{\world'}$ and
 %$\normtype{\world'}{\kind}$.
-%\end{list}
+%\end{itemize}
 $\validcontext{\world}$.
 
 \item
@@ -417,10 +469,9 @@ $\semanticvalidtype{\world}{\kind}$ iff
 \item $\semanticcontext{\world}$
 \item $\validkind{\world}{\kind}$
 \item
-\begin{list}{}
+\begin{itemize}{}
 \item $\kind = \ktype$
 \item Or, $\kind = \ksingleton{\constructor}$ and 
-$\semanticvalidterm{\world}{\constructor}{\ktype}$ and
 $\normterm{\world}{\constructor}{\ktype}$
 \item Or, $\kind = \kpi{\evar}{\kind_1}{\kind_2}$ and
 $\semanticvalidtype{\world}{\kind_1}$ and
@@ -434,7 +485,7 @@ $\forall \world'\supseteq\world$ if $\semanticvalidterm{\world'}{\constructor}{\
 then $\semanticvalidtype{\world'}{\substitute{\cvar}{\constructor}{\kind_2}}$ and
 if $\semanticequivterm{\world'}{\constructor}{\constructor'}{\kind_1}$ then
 $\semanticsubtype{\world'}{\substitute{\cvar}{\constructor}{\kind_2}}{\substitute{\cvar}{\constructor'}{\kind_2}}$.
-\end{list}
+\end{itemize}
 \end{enumerate}
 
 \item $\semanticsubtype{\world}{\kind_1}{\kind_2}$ iff
@@ -454,10 +505,10 @@ $\semanticequivterm{\world}{\constructor}{\constructor'}{\kind_2}$.
 \item $\semanticvalidtype{\world}{\kind}$
 \item $\validconstructor{\world}{\constructor}{\kind}$
 \item 
-\begin{list}{}
+\begin{itemize}{}
 \item $\kind = \ktype$ and $\normterm{\world}{\constructor}{\ktype}$
 \item Or, $\kind = \ksingleton{\constructor'}$ and 
-$\algorithmicequivterm{\world}{\constructor}{\constructor'}{\ktype}$ and
+$\aconequiv{\world}{\constructor}{\constructor'}{\ktype}$ and
 $\normterm{\world}{\constructor}{\ktype}$ and $\normterm{\world}{\constructor'}{\ktype}$.
 \item Or, $\kind = \kpi{\cvar}{\kind_1}{\kind_2}$ and
 $\forall \world'\supseteq\world$ if $\semanticvalidterm{\world'}{\constructor'}{\kind_1}$
@@ -467,89 +518,370 @@ $\semanticequivterm{\world'}{\capply{\constructor}{\constructor'}}{\capply{\cons
 \item Or, $\kind = \ksigma{\cvar}{\kind_1}{\kind_2}$ and
 $\semanticvalidterm{\world}{\cpi{1}{\constructor}}{\kind_1}$ and
 $\semanticvalidterm{\world}{\cpi{2}{\constructor}}{\substitute{\cvar}{\cpi{1}{\constructor}}{\kind_2}}$.
-\end{list}
+\end{itemize}
 \end{enumerate}
 
 \item $\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\kind}$ iff
 \begin{enumerate}
 \item $\semanticcontext{\world}$
 \item $\semanticvalidtype{\world}{\kind}$
+\item $\semanticvalidterm{\world}{\constructor_1}{\kind}$
+\item $\semanticvalidterm{\world}{\constructor_2}{\kind}$
 \item $\equivconstructor{\world}{\constructor_1}{\constructor_2}{\kind}$
 \item
-\begin{list}{}
-\item $\kind = \ktype$ and $\normterm{\world}{\constructor_1}{\ktype}$ and
-$\normterm{\world}{\constructor_2}{\ktype}$ and
-$\algorithmicequivterm{\world}{\constructor_1}{\constructor_2}{\ktype}$.
-\item Or, $\kind = \ksingleton{\constructor''}$
+\begin{itemize}{}
+\item $\kind = \ktype$ and 
+$\aconequiv{\world}{\constructor_1}{\constructor_2}{\ktype}$.
+\item Or, $\kind = \ksingleton{\constructor''}$ and 
+$\aconequiv{\world}{\constructor_1}{\constructor_2}{\ktype}$.
 \item Or, $\kind = \kpi{\cvar}{\kind_1}{\kind_2}$ and
 $\forall \world'\supseteq\world$ if $\semanticvalidterm{\world'}{\constructor}{\kind_1}$
 then $\semanticequivterm{\world'}{\capply{\constructor_1}{\constructor}}{\capply{\constructor_2}{\constructor}}{\substitute{\cvar}{\constructor}{\kind_2}}$.
 \item Or, $\kind = \ksigma{\cvar}{\kind_1}{\kind_2}$ and
 $\semanticequivterm{\world}{\cpi{1}{\constructor_1}}{\cpi{1}{\constructor_2}}{\kind_1}$ and
 $\semanticequivterm{\world}{\cpi{2}{\constructor_1}}{\cpi{2}{\constructor_2}}{\substitute{\cvar}{\cpi{1}{\constructor_1}}{\kind_2}}$.
-\end{list}
+\end{itemize}
 \end{enumerate}
 
 \item $\normtype{\context}{\kind}$ iff
-\begin{list}{}
-\item $\kind = \ktype$
-\item Or, $\kind = \ksingleton{\constructor}$ and $\normterm{\context}{\constructor}{\ktype}$
-\item Or, $\kind = \kpi{\cvar}{\kind_1}{\kind_2}$ and
-$\normtype{\context}{\kind_1}$ and $\normtype{\context,\cvar{:}\kind_1}{\kind_2}$.
-\item Or, $\kind = \ksigma{\cvar}{\kind_1}{\kind_2}$ and
-$\normtype{\context}{\kind_1}$ and $\normtype{\context}{\kind_2}$.
-\end{list}
+\begin{enumerate}{}
+\item $\validkind{\context}{\kind}$
+\item $\akindequiv{\context}{\kind}{\kind}$
+\end{enumerate}
 
 \item $\normterm{\context}{\constructor}{\kind}$ iff
 \begin{enumerate}
 \item $\validconstructor{\context}{\constructor}{\kind}$
-\item $\algorithmicwhnf{\context}{\constructor}{\kind}{\constructor'}$
-\item
-\begin{list}{}
-\item $\kind = \ktype$ and $\constructor' = \basetype$
-\item Or, $\kind = \ktype$ and $\constructor' = E[\cvar]$ and
-$\normE{\context}{E}{\context(\cvar)}{\cvar}$
-\item Or, $\kind = \ksingleton{\constructor''}$
-\item Or, $\kind = \kpi{\cvar}{\kind_1}{\kind_2}$ and
-$\normtype{\context}{\kind_1}$ and 
-$\normterm{\context,\cvar{:}\kind_1}{\capply{\constructor'}{\cvar}}{\kind_2}$.
-\item Or, $\kind = \ksigma{\cvar}{\kind_1}{\kind_2}$ and
-$\normterm{\context}{\cpi{1}{\constructor'}}{\kind_1}$ and 
-$\normtype{\context}{\cpi{2}{\constructor'}}{\kind_2}$.
-\end{list}
+\item $\aconequiv{\context}{\constructor}{\constructor}{\kind}$
 \end{enumerate}
 
-\item $\normE{\context}{E}{\kind}{\constructor}$ iff
+\item $\normE{\context}{\constructor}{\kind}$ iff
 \begin{enumerate}
 \item $\validconstructor{\context}{\constructor}{\kind}$
-\item $\validconstructor{\context}{E[\constructor]}{\ktype}$
-\item 
-\begin{list}{}
-\item $E = \emptysequence$
-\item Or, $E=E'[\cpi{1}{\hole}]$ and $\kind=\ksigma{\cvar}{\kind_1}{\kind_2}$ and
-$\normE{\context}{E'}{\kind_1}{(\cpi{1}{\constructor})}$
-\item Or, $E=E'[\cpi{2}{\hole}]$ and $\kind=\ksigma{\cvar}{\kind_1}{\kind_2}$ and
-$\normE{\context}{E'}{\substitute{\cvar}{\cpi{1}{\constructor}}}{(\cpi{2}{\constructor})}$
-\item Or, $E=E'[\capply{\hole}{\constructor'}]$ and 
-$\kind = \kpi{\cvar}{\kind_1}{\kind_2}$ and
-$\normterm{\context}{\constructor'}{\kind_1}$ and
-$\normE{\context}{E'}{\substitute{\cvar}{\constructor'}{\constructor}}{(\capply{\constructor}{\constructor'})}$.
-\end{list}
+\item $\weakconequiv{\context}{\constructor}{\constructor}{\kind}$
 \end{enumerate}
 
 \end{itemize}
 
+
+
+\section{Proofs}
+
 \begin{theorem}
+If $\validkind{\world}{\kind}$ and $\semanticvalidtype{\world}{\kind}$ then
 \begin{enumerate}
-\item If $\validkind{\world}{\kind}$ then $\semanticvalidtype{\world}{\kind}$.
-\item If $\subkind{\world}{\kind_1}{\kind_2}$ then
-$\semanticsubtype{\world}{\kind_1}{\kind_2}$.
-\item If $\validconstructor{\world}{\constructor}{\kind}$ then
-$\semanticvalidterm{\world}{\constructor}{\kind}$.
-\item If $\equivconstructor{\world}{\constructor_1}{\constructor_2}{\kind}$
-then $\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\kind}$.
+\item 
+\label{ih-1}
+$\normtype{\world}{\kind}$
+\item
+\label{ih-2}
+If $\reconstruct{\world}{E[\othercvar]}{\kind}$
+and $\normE{\world}{E[\othercvar]}{\kind}$ then
+$\semanticvalidterm{\world}{E[\othercvar]}{\kind}$.
+\item
+\label{ih-3}
+If $\reconstruct{\world}{E[\othercvar]}{\kind}$,
+$\reconstruct{\world}{E'[\othercvar]}{\kind'}$,
+$\equivkind{\world}{\kind}{\kind'}$,
+$\normE{\world}{E[\othercvar]}{\kind}$, $\normE{\world}{E'[\othercvar]}{\kind'}$,
+$\equivconstructor{\world}{E[\othercvar]}{E'[\othercvar]}{\kind}$, and
+$\weakconequiv{\world}{E[\othercvar]}{E'[\othercvar]}{\kind}$ then
+$\semanticequivterm{\world}{E[\othercvar]}{E'[\othercvar]}{\kind}$.
+\item
+\label{ih-4}
+If $\semanticvalidterm{\world}{\constructor}{\kind}$ then
+$\normterm{\world}{\constructor}{\kind}$.
+\item
+\label{ih-5}
+If $\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\kind}$ then
+$\aconequiv{\world}{\constructor_1}{\constructor_2}{\kind}$.
 \end{enumerate}
 \end{theorem}
+
+\begin{proof}[By induction on $\kind$]
+Assume $\validkind{\world}{\kind}$ and $\semanticvalidtype{\world}{\kind}$.
+\begin{itemize}
+\item Case: $\kind = \ktype$.
+\begin{enumerate}
+\item $\normtype{\world}{\ktype}$ by definition.
+\item $\headnormsto{\world}{E[\othercvar]}{\ktype}{E[\othercvar]}$ because
+$\reconstruct{\world}{E[\othercvar]}{\ktype}$.  Thus
+$\normE{\world}{E[\othercvar]}{\ktype}$ implies
+$\normterm{\world}{E[\othercvar]}{\ktype}$.
+Finally, because
+$\validkind{\world}{\kind}$ implies $\validcontext{\world}$, we also
+have $\validconstructor{\world}{E[\othercvar]}{\ktype}$.  Therefore
+$\semanticvalidterm{\world}{E[\othercvar]}{\ktype}$.
+\item By the same argument, $\semanticvalidterm{\world}{E[\othercvar]}{\ktype}$ and 
+$\semanticvalidterm{\world}{E'[\othercvar]}{\ktype}$. 
+Further, since both terms are in weak head-normal form, we
+have $\aconequiv{\world}{E[\othercvar]}{E'[\othercvar]}{\ktype}$.
+Therefore, we have
+$\semanticequivterm{\world}{E[\othercvar]}{E'[\othercvar]}{\ktype}$.
+\item Follows directly from the definition of 
+$\semanticvalidterm{\world}{\constructor}{\ktype}$.
+\item Follows directly from the definition of 
+$\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\ktype}$.
+\end{enumerate}
+
+\item Case: $\kind=\ksingleton{\otherconstructor}$.
+\begin{enumerate}
+\item Because $\semanticvalidtype{\world}{\ksingleton{\otherconstructor}}$ we have
+$\normterm{\world}{\otherconstructor}{\ktype}$ and therefore
+$\normtype{\world}{\ksingleton{\otherconstructor}}$.
+\item Because $\reconstruct{\world}{E[\othercvar]}{\ksingleton{\otherconstructor}}$, we
+know that $\headnormsto{\world}{E[\othercvar]}{\ktype}{\cvalue}$ if
+and only if
+$\headnormsto{\world}{\otherconstructor}{\ktype}{\cvalue}$, and
+furthermore such a $\cvalue$ would be unique.  But because
+$\normtype{\world}{\ksingleton{\otherconstructor}}$, we know that
+$\otherconstructor$ is normalizing, so this $\cvalue$ exists and
+satisfies $\normterm{\world}{\cvalue}{\ktype}$.  This implies
+$\normterm{\world}{\otherconstructor}{\ktype}$,
+$\normterm{\world}{E[\othercvar]}{\ktype}$,
+$\aconequiv{\world}{E[\othercvar]}{\otherconstructor}{\ktype}$, and
+therefore $\semanticvalidterm{\world}{E[\othercvar]}{\ksingleton{\otherconstructor}}$.
+\item By the same argument,
+$\semanticvalidterm{\world}{E[\othercvar]}{\ktype}$ and
+$\semanticvalidterm{\world}{E'[\othercvar]}{\ktype}$, so
+the conclusion follows.
+\item Trivial by the definition of 
+$\normterm{\world}{\constructor}{\ksingleton{\otherconstructor}}$.
+\item Direct from definition of
+$\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\ksingleton{\otherconstructor}}$.
+\end{enumerate}
+
+\item Case: $\kind=\kpi{\cvar}{\kind_1}{\kind_2}$.
+\begin{enumerate}
+\item 
+$\semanticvalidtype{\world}{\kpi{\cvar}{\kind_1}{\kind_2}}$ implies
+$\semanticvalidtype{\world}{\kind_1}$.  This further implies that
+$\validkind{\world}{\kind_1}$, that $\validcontext{\world,\cvar{:}\kind_1}$, and
+by IH(\ref{ih-1}) that $\normtype{\world}{\kind_1}$.
+Clearly $\reconstruct{\world,\cvar{:}\kind_1}{\cvar}{\kind_1}$ and 
+$\normE{\world,\cvar{:}\kind_1}{\cvar}{\kind_1}$.  By
+IH(\ref{ih-2}), $\semanticvalidterm{\world,\cvar{:}\kind_1}{\cvar}{\kind_1}$.
+Thus $\semanticvalidtype{\world}{\kind}$ gives us
+$\semanticvalidtype{\world,\cvar{:}\kind_1}{\kind_2}$.  By IH(\ref{ih-1}),
+$\normtype{\world,\cvar{:}\kind_1}{\kind_2}$.  Therefore
+$\normtype{\world}{\kpi{\cvar}{\kind_1}{\kind_2}}$.
+\item By LEMMA, $\reconstruct{\world}{E[\othercvar]}{\kind}$ implies
+$\validconstructor{\world}{E[\othercvar]}{\kind}$.
+Let $\world'\supseteq\world$ be given with $\validcontext{\world'}$.
+By MONOTONICITY LEMMA, we have $\reconstruct{\world'}{E[\othercvar]}{\kind}$ and
+$\normE{\world'}{E[\othercvar]}{\kind}$.
+\begin{itemize}
+\item Assume $\semanticvalidterm{\world'}{\constructor}{\kind_1}$.
+By IH(\ref{ih-4}) $\normterm{\world'}{\constructor}{\kind_1}$, which
+in conjunction with $\normE{\world'}{E[\othercvar]}{\kind}$ yields
+$\normE{\world'}{\capply{E[\othercvar]}{\constructor}}{\substitute{\cvar}{\constructor}{\kind_2}}$.
+By IH(\ref{ih-2}), 
+$\semanticvalidterm{\world'}{\capply{(E[\othercvar])}{\constructor}}{\substitute{\cvar}{\constructor}{\kind_2}}$.
+\item Assume $\semanticequivterm{\world'}{\constructor_1}{\constructor_2}{\kind_1}$.
+By a similar argument,
+$\reconstruct{\world'}{\capply{E[\othercvar]}{\constructor_1}}{\substitute{\cvar}{\constructor_1}{\kind_2}}$
+and
+$\reconstruct{\world'}{\capply{E[\othercvar]}{\constructor_2}}{\substitute{\cvar}{\constructor_2}{\kind_2}}$.
+By SUBSTITUTION LEMMA, the equivalence
+$\equivconstructor{\world'}{\constructor_1}{\constructor_2}{\kind_1}$ yields
+$\equivkind{\world'}{\substitute{\cvar}{\constructor_1}{\kind_2}}{\substitute{\cvar}{\constructor_2}{\kind_2}}$.
+By IH(\ref{ih-5}), $\aconequiv{\world'}{\constructor_1}{\constructor_2}{\kind_1}$, so 
+from $\normE{\world'}{E[\othercvar]}{\kind}$ we have
+$\weakconequiv{\world'}{{\capply{E[\othercvar]}{\constructor_1}}}{{\capply{E[\othercvar]}{\constructor_2}}}
+{\substitute{\cvar}{\constructor_1}{\kind_2}}$. %$
+By IH(\ref{ih-3}) we have
+$\semanticequivterm{\world'}{\capply{(E[\othercvar])}{\constructor_1}}{\capply{(E[\othercvar])}{\constructor_2}}
+{\substitute{\cvar}{\constructor_1}{\kind_2}}$. %$
+\end{itemize}
+Therefore, $\semanticvalidterm{\world}{E[\othercvar]}{\kind}$.
+\iffalse
+\item
+Assume 
+$\reconstruct{\world}{E[\othercvar]}{\kind}$,
+$\reconstruct{\world}{E'[\othercvar]}{\kind'}$,
+$\equivkind{\world}{\kind}{\kind'}$,
+$\normE{\world}{E}{\kind}$, $\normE{\world}{E'}{\kind'}$,
+$\equivconstructor{\world}{E[\othercvar]}{E'[\othercvar]}{\kind}$, and
+$\conequiv{\world}{E}{E'}{\kind}$ 
+Let $\world'\supseteq\world$ with $\validcontext{\world'}$ be given, and assume
+$\semanticvalidterm{\world'}{\constructor}{\kind_1}$.  (Note that by
+MONOTONICITY all the assumptions hold with $\world$ replaced by
+$\world'$.)
+Now
+$\normE{\world'}{\capply{E}{\constructor}}{\substitute{\cvar}{\constructor}{\kind_2}}$
+and
+$\normE{\world'}{\capply{E}{\constructor}}{\substitute{\cvar}{\constructor}{\kind_2}}$
+because $\normterm{\world'}{\constructor}{\kind_1}$ follows from
+IH(\ref{ih-4}).
+By LEMMA,
+$\conequiv{\world'}{\capply{E}{\constructor}}{\capply{E'}{\constructor}}
+{\substitute{\cvar}{\constructor}{\kind_2}}$. %$
+Therefore by IH(\ref{ih-3})
+$\semanticequivterm{\world'}{(\capply{E}{\constructor})[\othercvar]}{(\capply{E'}{\constructor})[\othercvar]}
+{\substitute{\cvar}{\constructor}{\kind_2}}$. %$
+Therefore
+$\semanticequivterm{\world'}{E[\othercvar]}{E'[\othercvar]}{\kind}$.
+
+\item Assume
+$\semanticvalidterm{\world}{\constructor}{\kpi{\cvar}{\kind_1}{\kind_2}}$.
+Then $\validconstructor{\world}{\constructor}{\kpi{\cvar}{\kind_1}{\kind_2}}$ and
+$\semanticvalidtype{\world}{\kpi{\cvar}{\kind_1}{\kind_2}}$, so
+$\semanticvalidtype{\world}{\kind_1}$.
+By IH(\ref{ih-2}), $\semanticvalidterm{\constructor,\cvar{:}\kind_1}{\cvar}{\kind_1}$.
+By MONOTONICITY
+$\semanticvalidterm{\world'}{\constructor}{\kind}$, and hence
+$\semanticvalidterm{\constructor,\cvar{:}\kind_1}{\capply{\constructor}{\cvar}}{\kind_2}$.
+By IH(\ref{ih-4}), $\normterm{\constructor,\cvar{:}\kind_1}{\capply{\constructor}{\cvar}}{\kind_2}$.
+Therefore $\normterm{\world}{\constructor}{\kind}$.
+\item Assume $\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\kpi{\cvar}{\kind_1}{\kind_2}}$.
+Again we have 
+$\normterm{\world}{\constructor_1}{\kind}$ and $\normterm{\world}{\constructor_2}{\kind}$.
+and we have $\semanticvalidterm{\constructor,\cvar{:}\kind_1}{\cvar}{\kind_1}$.
+Then $\semanticequivterm{\world,\cvar{:}\kind_1}{\capply{\constructor_1}{\cvar}}
+{\capply{\constructor_2}{\cvar}}{\kind_2}$.  %$
+By IH(\ref{ih-5}), 
+we have $\conequiv{\world,\cvar{:}\kind_1}{\capply{\constructor_1}{\cvar}}
+{\capply{\constructor_2}{\cvar}}{\kind_2}$.  %$
+Therefore, $\conequiv{\world}{\constructor_1}{\constructor_2}{\kind}$.
+\fi
+\end{enumerate}
+
+\iffalse
+
+\item Case: $\kind=\ksigma{\cvar}{\kind_1}{\kind_2}$.
+\begin{enumerate}
+\item If $\semanticvalidtype{\world}{\kind}$ then
+$\semanticvalidtype{\world}{\kind_1}$, so by IH(\ref{ih-1}) we
+have $\normtype{\world}{\kind_1}$.  By IH(\ref{ih-2}) we know
+that $\semanticvalidterm{\world,\cvar{:}{\kind_1}}{\cvar}{\kind_1}$
+and hence $\semanticvalidtype{\world,\cvar{:}\kind_1}{\kind_2}$.
+Again by IH(\ref{ih-1}) we have
+$\normtype{\world,\cvar{:}\kind_1}{\kind_2}$.  Therefore 
+$\normtype{\world}{\kind}$.
+
+\item Assume $\reconstruct{\world}{E[\othercvar]}{\kind}$
+and $\normE{\world}{E}{\kind}$.  Then
+$\reconstruct{\world}{\cpi{1}{E[\othercvar]}}{\kind_1}$,
+$\reconstruct{\world}{\cpi{2}{E[\othercvar]}}{\substitute{\cvar}{\cpi{1}{E[\othercvar]}}\kind_2}$,
+$\normE{\world}{\cpi{1}{E}}{\kind_1}$, and
+$\normE{\world}{\cpi{2}{E}}{\substitute{\cvar}{\cpi{1}{E}}\kind_2}$.
+[OOPS...IH DOESN'T QUITE APPLY FOR PI-2 CASE BECAUSE OF HOLE IN TYPE!].
+By IH(\ref{ih-2}) we have
+$\normterm{\world}{\cpi{1}{E[\othercvar]}}{\kind_1}$ and
+$\normterm{\world}{\cpi{2}{E[\othercvar]}}{\substitute{\cvar}{\cpi{1}{E[\othercvar]}}{\kind_2}}$.
+Therefore, $\normterm{\world}{E[\othercvar]}{\kind}$.
+
+\item Assume
+$\reconstruct{\world}{E[\othercvar]}{\kind}$,
+$\reconstruct{\world}{E'[\othercvar]}{\kind'}$,
+$\equivkind{\world}{\kind}{\kind'}$,
+$\normE{\world}{E}{\kind}$, $\normE{\world}{E'}{\kind'}$,
+$\equivconstructor{\world}{E[\othercvar]}{E'[\othercvar]}{\kind}$, and
+$\conequiv{\world}{E}{E'}{\kind}$.
+The desired conclusion follows from IH(\ref{ih-3}).
+
+\item $\ldots$
+
+\item $\ldots$
+\end{enumerate}
+\fi
+\end{itemize}
+
+
+\end{proof}
+
+
+\begin{theorem}
+\item If $\normterm{\context}{\constructor}{\kind}$ and
+$\normterm{\context}{\constructor'}{\kind}$ then 
+$\aconequiv{\context}{\constructor}{\constructor'}{\kind}$
+is decidable.
+\end{theorem}
+
+\begin{theorem}
+Assume that $\validcontext{\world}$ and that
+$\forall\cvar\in\dom\context.\ \semanticvalidterm{\world}{\env\cvar}{\hat\env(\context\cvar)}$.
+\begin{enumerate}
+\item If $\validkind{\context}{\kind}$ then $\semanticvalidtype{\world}{\hat\env\kind}$.
+\item If $\subkind{\context}{\kind_1}{\kind_2}$ then
+$\semanticsubtype{\world}{\hat\env\kind_1}{\hat\env\kind_2}$.
+\item If $\validconstructor{\context}{\constructor}{\kind}$ then
+$\semanticvalidterm{\world}{\hat\env\constructor}{\hat\env\kind}$.
+\item If $\equivconstructor{\context}{\constructor_1}{\constructor_2}{\kind}$
+then $\semanticequivterm{\world}{\hat\env\constructor_1}{\hat\env\constructor_2}{\hat\env\kind}$.
+\end{enumerate}
+\end{theorem}
+
+\iffalse
+\begin{proof}
+\begin{itemize}
+\item Rule~\ref{wfk:ktype}.  Follows from $\hat\env\ktype = \ktype$ and 
+$\validcontext{\world}$.
+\item Rule~\ref{wfk:ksingleton}.  By IH, 
+$\semanticvalidterm{\world}{\hat\env\constructor}{\ktype}$.  By the previous theorem,
+$\normterm{\world}{\hat\env\constructor}{\ktype}$.  Thus 
+$\semanticvalidtype{\world}{\ksingleton{\hat\env\constructor}}$ with
+$\ksingleton{\hat\env\constructor} = \hat\env\ksingleton{\constructor}$.
+
+\item Rules~\ref{wfk:kpi} or \ref{wfk:ksigma}.  Without loss we may
+assume 
+$\cvar\not\in\dom\world$.  
+By IH, $\semanticvalidtype{\world}{\hat\env\kind_1}$, and so $\validkind{\world}{\hat\env\kind_1}$.
+Let the valid context $\world'\supseteq\world$ be given, and assume that
+$\semanticvalidterm{\world'}{\constructor}{\hat\env\kind_1}$.
+Let $\env'$ be the extension of $\env$ which maps $\cvar$ to $\constructor$.
+By monotonicity results, the IH applies, and 
+$\semanticvalidtype{\world,\cvar{:}\hat\env\kind_1}{\hat{\env'}\kind_2}$.
+From $\cvar\not\in\dom\world$ we have that 
+$\hat{\env'}\kind_2 = \substitute{\cvar}{\constructor}{(\hat\env\kind_2)}$, 
+and the desired conclusion follows.
+
+\item Rule~\ref{sk:ktype}.  Follows from
+$\semanticvalidtype{\world}{\ktype}$.
+The remaining conditions to be checked are tautologies.
+
+\item Rule~\ref{sk:ksingleton}.  By IH,
+$\semanticequivtype{\world}{\hat\env\constructor_1}{\hat\env\constructor_2}{\ktype}$
+and so 
+$\conequiv{\world}{\hat\env\constructor_1}{\hat\env\constructor_2}{\ktype}$.
+If
+$\semanticvalidterm{\world}{\constructor}{\ksingleton{\hat\env\constructor_1}}$
+then
+$\normterm{\world}{\constructor}{\ktype}$,
+$\conequiv{\world}{\constructor}{\hat\env\constructor_1}{\ktype}$;
+by a TRANSITIVITY LEMMA we have
+$\conequiv{\world}{\constructor}{\hat\env\constructor_2}{\ktype}$
+which gives us
+$\semanticvalidterm{\world}{\constructor}{\ksingleton{\hat\env\constructor_1}}$.
+Similarly, if
+$\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\ksingleton{\hat\env\constructor_1}}$
+then 
+$\conequiv{\world}{\constructor_1}{\constructor_2}{\ktype}$ and hence
+$\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\ksingleton{\hat\env\constructor_2}}$.
+
+$\semanticsubtype{\world}{\hat\env\kind_1}{\hat\env\kind_2}$ and
+$\semanticsubtype{\world}{\hat\env\kind_2}{\hat\env\kind_3}$.  The
+desired conclusion obviously follows.
+
+\item Rule~\ref{sk:forget}.  By IH,
+$\semanticvalidtype{\world}{\hat\env\ksingleton{\constructor}}$ and
+hence $\validkind{\world}{\hat\env\ksingleton{\constructor}}$.
+$\semanticvalidtype{\world}{\ktype}$ by definition, and 
+by Rule~\ref{sk:forget} we have
+$\subkind{\world}{\hat\env\ksingleton{\constructor}}{\ktype}$.
+If
+$\semanticvalidterm{\world}{\constructor}{\ksingleton{\hat\env\constructor}}$
+then clearly
+$\semanticvalidterm{\world}{\constructor}{\ktype}$.
+Similarly,
+$\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\ksingleton{\hat\env\constructor}}$
+if and only if
+$\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\ktype}$.
+
+\item etc.
+\end{itemize} 
+\end{proof}
+\fi
 
 %\bibliographystyle{plain}
 %\bibliography{bib}
