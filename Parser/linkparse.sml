@@ -1,3 +1,5 @@
+(*$import FrontEnd TVClose NamedForm *)
+
 signature LINK_PARSE =
  sig 
    exception Parse of FrontEnd.parseResult
@@ -6,7 +8,7 @@ signature LINK_PARSE =
    val parse_inter : string -> filepos * string list * Ast.spec list
  end
 
-structure LinkParse : LINK_PARSE =
+structure LinkParse :> LINK_PARSE =
 struct
   exception Parse of FrontEnd.parseResult
 

@@ -5,12 +5,12 @@
 signature ERRORMSG =
  sig
     datatype severity = WARN | COMPLAIN
-    type complainer (*  = severity -> string -> (PrettyPrint.ppstream -> unit)
-                          -> unit *)
+    type complainer = severity -> string -> (PrettyPrint.ppstream -> unit)
+                          -> unit 
     type errorFn = SourceMap.region -> complainer
-    type errors (* = {error: errorFn,
-                      errorMatch: region->string,
-                      anyErrors : bool ref} *)
+    type errors = {error: errorFn,
+                   errorMatch: SourceMap.region->string,
+                   anyErrors : bool ref} 
     val anyErrors : errors -> bool
     exception Error
     val defaultConsumer : unit -> PrettyPrint.ppconsumer
@@ -29,9 +29,14 @@ signature ERRORMSG =
 
 (*
  * $Log$
-# Revision 1.1  98/01/21  20:40:13  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.2  98/02/01  01:27:57  pscheng
+# Changes to facilitate bootstrapping:
+#   Added ascription in various places
+#   Split up files into signature and code
 # 
+# Revision 1.1  1998/01/21  20:40:13  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.1  97/03/26  18:16:03  pscheng
 # added the sig file
 # 

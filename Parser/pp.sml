@@ -1,4 +1,4 @@
-(*$import TopLevel Control Array Vector PpQueue *)
+(*$import TopLevel Control Array Vector PpQueue PRETTYPRINT *)
 
 (* pp.sml
  *
@@ -38,33 +38,9 @@
    only a local entity and is left to be garbage collected.
 *)
 
-signature PRETTYPRINT =
-sig
-  type ppstream
-  type ppconsumer (* = {consumer : string -> unit,
-		        linewidth : int,
-			flush : unit -> unit} *)
-  datatype break_style
-    = CONSISTENT
-    | INCONSISTENT
-
-  exception PP_FAIL of string
-
-  val mk_ppstream    : ppconsumer -> ppstream
-  val dest_ppstream  : ppstream -> ppconsumer
-  val add_break      : ppstream -> int * int -> unit
-  val add_newline    : ppstream -> unit
-  val add_string     : ppstream -> string -> unit
-  val begin_block    : ppstream -> break_style -> int -> unit
-  val end_block      : ppstream -> unit
-  val clear_ppstream : ppstream -> unit
-  val flush_ppstream : ppstream -> unit
-  val with_pp : ppconsumer -> (ppstream -> unit) -> unit
-  val pp_to_string : int -> (ppstream -> 'a -> unit) -> 'a -> string
-end
 
 
-structure PrettyPrint : PRETTYPRINT =
+structure PrettyPrint :> PRETTYPRINT =
 struct
 (* the functions and data for actually doing printing. *)
 
@@ -573,9 +549,14 @@ end (* PrettyPrint *)
 
 (*
  * $Log$
-# Revision 1.2  98/01/21  20:40:41  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.3  98/02/01  01:28:11  pscheng
+# Changes to facilitate bootstrapping:
+#   Added ascription in various places
+#   Split up files into signature and code
 # 
+# Revision 1.2  1998/01/21  20:40:41  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.1  97/03/26  14:12:33  pscheng
 # added copy of SMLNJ parser files
 # 

@@ -42,19 +42,27 @@ structure AstHelp : ASTHELP =
 							      exp = exp, resultty = resultty}
       | rvb_strip (MarkRvb (rvb,_)) = rvb_strip rvb
 	
+    fun eq_tyvar(Tyv s1, Tyv s2) = Symbol.eq(s1,s2)
+      | eq_tyvar(TempTyv s1, TempTyv s2) = Symbol.eq(s1,s2)
+      | eq_tyvar(MarkTyv(tv1,_), tv2) = eq_tyvar(tv1,tv2)
+      | eq_tyvar(tv1,MarkTyv(tv2,_)) = eq_tyvar(tv1,tv2)
+
+    fun tyvar_member(elem : Ast.tyvar, list) = member_eq(eq_tyvar, elem, list)
+
     local
-      fun is_tyvar_bound (tyvar,symlist) = member(tyvar_strip tyvar,symlist)
-      fun is_var_bound ([sym],symlist) = member(sym,symlist)
+      fun is_tyvar_bound (tyvar,symlist) = member_eq(Symbol.eq,tyvar_strip tyvar,symlist)
+      fun is_var_bound ([sym],symlist) = member_eq(Symbol.eq,sym,symlist)
 	| is_var_bound _ = false
       fun f_ty (state as (doconstr, constrbound : symbol list,
 			  doty, tybound : symbol list,
 			  dovar, varbound : symbol list)) (ty : Ast.ty) : Ast.ty = 
 	(case ty of
 	   Ast.VarTy tyvar => if (is_tyvar_bound(tyvar,tybound)) then ty else doty tyvar
-	 | Ast.ConTy (symlist,tylist) => let val newsyms = map (fn s => if (member(s,constrbound))
-									  then s else doconstr s) symlist
-					 in Ast.ConTy(newsyms,map (f_ty state) tylist)
-					 end
+	 | Ast.ConTy (symlist,tylist) => 
+	       let val newsyms = map (fn s => if (member_eq(Symbol.eq,s,constrbound))
+						  then s else doconstr s) symlist
+	       in Ast.ConTy(newsyms,map (f_ty state) tylist)
+	       end
 	 | Ast.RecordTy (symty_list) => Ast.RecordTy(map (fn (s,ty) => (s, f_ty state ty)) symty_list)
 	 | Ast.TupleTy tylist => Ast.TupleTy(map (f_ty state) tylist)
 	 | Ast.MarkTy (ty,r) => f_ty state ty)
@@ -278,16 +286,18 @@ structure AstHelp : ASTHELP =
       fun subst_vars_exp (subst : (Symbol.symbol * Ast.path) list, e : Ast.exp) : Ast.exp = 
 	let 
 	  fun do_tyvar tyvar = Ast.VarTy tyvar
-	  fun do_var var = 
-	    let fun loop [] = Ast.VarExp var
-		  | loop ((p,s)::rest) = if ([p] = var) then Ast.VarExp(s) else loop rest
+	  fun do_var [sym] = 
+	    let fun loop [] = Ast.VarExp[sym]
+		  | loop ((p,s)::rest) = if (Symbol.eq(p,sym)) 
+					     then Ast.VarExp(s) else loop rest
 	    in loop subst
 	    end
+	    | do_var syms = Ast.VarExp syms
 	  val e = f_exp (fn s => s, [],do_tyvar,[],do_var,[]) e
 	in e
 	end
 
-      fun tyvar_member(elem : Ast.tyvar, list) = member_eq(fn(a,b) => a = b, elem, list)
+
       fun ty2sym (Ast.Tyv s) = s
 	| ty2sym (Ast.TempTyv _) = error "should not see this after parsing"
 	| ty2sym (Ast.MarkTyv(ty,_)) = ty2sym ty

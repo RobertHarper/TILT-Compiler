@@ -1,4 +1,4 @@
-(*$import TopLevel SourceMap PrettyPrint *)
+(*$import TopLevel SourceMap PrettyPrint TextIO *)
 
 (* <source.sig>=                                                            *)
 (* source.sig
@@ -47,9 +47,14 @@ signature SOURCE =
 
 (*
  * $Log$
-# Revision 1.1  98/01/21  20:40:47  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.2  98/02/01  01:28:15  pscheng
+# Changes to facilitate bootstrapping:
+#   Added ascription in various places
+#   Split up files into signature and code
 # 
+# Revision 1.1  1998/01/21  20:40:47  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.1  97/03/26  18:16:05  pscheng
 # added the sig file
 # 

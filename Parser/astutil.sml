@@ -19,7 +19,7 @@ val bogusID = varSymbol "BOGUS"
 val symArg = strSymbol "<Parameter>"
 val itsym = [varSymbol "it"]
 
-fun checkFix (i, err) =
+fun checkFix (i, err : ErrorMsg.complainer) =
       if (i < 0) orelse (9 < i)
 	then (
 	  err COMPLAIN "fixity precedence must be between 0 and 9" nullErrorBody;
@@ -83,9 +83,14 @@ end (* structure *)
 
 (*
  * $Log$
-# Revision 1.2  98/01/21  20:40:09  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.3  98/02/01  01:27:54  pscheng
+# Changes to facilitate bootstrapping:
+#   Added ascription in various places
+#   Split up files into signature and code
 # 
+# Revision 1.2  1998/01/21  20:40:09  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.1  97/03/26  14:12:23  pscheng
 # added copy of SMLNJ parser files
 # 

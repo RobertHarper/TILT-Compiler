@@ -1,3 +1,5 @@
+(*$import Env HashTable ORD_SET ORD_MAP *)
+
 signature NAME = 
   sig
 
@@ -54,6 +56,18 @@ signature NAME =
     val label2string : label -> string
     val tag2string   : tag  -> string
 
+    (* These should be used by NameBlast only *)
+    val deconstruct_label : label -> int * string * bool
+    val construct_label : int * string * bool -> label
+    val deconstruct_var : var -> int * string
+    val construct_var : int * string -> var
+    val deconstruct_loc : loc -> int
+    val construct_loc : int -> loc
+    val deconstruct_tag : tag -> int * string
+    val construct_tag : int * string -> tag
+    val update_var_counter : int -> unit
+    val update_label_counter : int -> unit
+
     (* Hash tables *)
     val mk_var_hash_table : (int * exn) -> (var, 'val) HashTable.hash_table
 
@@ -77,20 +91,5 @@ signature NAME =
     where type Key.ord_key = vpath
 
 
-    (* blasting routines *)
-    val blastInVar    : BinIO.instream -> var
-    val blastOutVar   : BinIO.outstream -> var -> unit
-    val blastInLabel  : BinIO.instream -> label
-    val blastOutLabel : BinIO.outstream -> label -> unit
-    val blastInTag    : BinIO.instream -> tag
-    val blastOutTag   : BinIO.outstream -> tag -> unit
-
-    val blastOutVarmap   : BinIO.outstream -> 'a Blaster.blastout -> 'a VarMap.map -> unit
-    val blastInVarmap    : BinIO.instream -> 'a Blaster.blastin -> 'a VarMap.map
-    val blastOutLabelmap   : BinIO.outstream -> 'a Blaster.blastout -> 'a LabelMap.map -> unit
-    val blastInLabelmap    : BinIO.instream -> 'a Blaster.blastin -> 'a LabelMap.map
-    val blastOutTagmap   : BinIO.outstream -> 'a Blaster.blastout -> 'a TagMap.map -> unit
-    val blastInTagmap    : BinIO.instream -> 'a Blaster.blastin -> 'a TagMap.map
-
-
+   
   end

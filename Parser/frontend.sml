@@ -1,21 +1,10 @@
-(*$import Join MLLrValsFun MLLexFun Ast Source Control *)
+(*$import FRONT_END Join MLLrValsFun MLLexFun Ast Source Control LrParser Stats *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* frontend.sml *)
 
-signature FRONT_END = 
-sig
-    datatype parseResult
-      = EOF   
-      | ERROR 
-      | ABORT 
-      | PARSE_IMPL of string list * Ast.dec
-      | PARSE_INTER of string list * Ast.spec list
 
-    val parse : Source.inputSource -> parseResult
-end (* signature FRONT_END *)
-
-structure FrontEnd : FRONT_END =
+structure FrontEnd :> FRONT_END =
 struct 
 
 structure MLLrVals = MLLrValsFun(structure Token = LrParser.Token)
@@ -25,7 +14,6 @@ structure MLP = JoinWithArg(structure ParserData = MLLrVals.ParserData
                             structure LrParser = LrParser)
 
 open ErrorMsg
-structure T = Time
 
 (* the following two functions are also defined in build/computil.sml *)
 fun debugmsg  (msg : string) =
@@ -128,9 +116,14 @@ end (* structure FrontEnd *)
 
 (*
  * $Log$
-# Revision 1.5  98/01/21  20:40:18  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.6  98/02/01  01:27:59  pscheng
+# Changes to facilitate bootstrapping:
+#   Added ascription in various places
+#   Split up files into signature and code
 # 
+# Revision 1.5  1998/01/21  20:40:18  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.4  1997/11/19  16:48:48  pscheng
 # changed timers to subtimers
 #

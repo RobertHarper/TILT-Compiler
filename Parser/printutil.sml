@@ -1,8 +1,8 @@
-(*$import PRINTUTIL Env Control Char *)
+(*$import PRINTUTIL Env Control Char TextIO Int32 *)
 (* Copyright 1989 by AT&T Bell Laboratories *)
 (* printutil.sml *)
 
-structure PrintUtil : PRINTUTIL = 
+structure PrintUtil :> PRINTUTIL where Symbol = Symbol = 
 struct
 
   val say = Control.Print.say
@@ -80,9 +80,14 @@ end (* structure PrintUtil *)
 
 (*
  * $Log$
-# Revision 1.2  98/01/21  20:40:43  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.3  98/02/01  01:28:14  pscheng
+# Changes to facilitate bootstrapping:
+#   Added ascription in various places
+#   Split up files into signature and code
 # 
+# Revision 1.2  1998/01/21  20:40:43  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.1  97/03/26  14:12:34  pscheng
 # added copy of SMLNJ parser files
 # 

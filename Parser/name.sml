@@ -1,3 +1,5 @@
+(*$import NAME Util Env Int32 Word31 SplaySetFn SplayMapFn *)
+
 structure Name :> NAME =
   struct
 
@@ -9,16 +11,20 @@ structure Name :> NAME =
     type var   = int * string
 
     type label = int * string * bool
-    type   labels = label list
-    datatype path = SIMPLE_PATH   of var 
-                  | COMPOUND_PATH of var * labels
-    datatype loc  = GLOC of int
-    datatype tag  = GTAG of int * string
+    type labels = label list
+    type loc  = int
+    type tag  = int * string
+
+    fun construct_label x = x
+    fun deconstruct_label x = x
+    fun construct_var x = x
+    fun deconstruct_var x = x
+    fun construct_tag x = x
+    fun deconstruct_tag x = x
+    fun construct_loc x = x
+    fun deconstruct_loc x = x
 
     fun is_label_open ((_,_,flag) : label) = flag
-
-
-
 
     (* equality and generation functions on Nameitive types *)
     fun eq_var   (v1 : var, v2)     = v1 = v2
@@ -32,9 +38,9 @@ structure Name :> NAME =
     val eq_var2 = curry2 eq_var
     val eq_label2 = curry2 eq_label
       
-    fun eq_tag   (GTAG n1, GTAG n2)     = n1 = n2
+    fun eq_tag   (n1, n2)     = n1 = n2
     fun compare_var ((a,_) : var,(b,_) : var) = Int.compare(a,b)
-    fun compare_tag (GTAG(a,_),GTAG(b,_)) = Int.compare(a,b)
+    fun compare_tag ((a,_),(b,_)) = Int.compare(a,b)
     fun compare_label_name((a,sa,oa) : label, (b,sb,ob) : label) = 
 	let val is_num_a = (size sa > 0) andalso Char.isDigit(String.sub(sa,0))
 	    val is_num_b = (size sb > 0) andalso Char.isDigit(String.sub(sb,0))
@@ -70,7 +76,8 @@ structure Name :> NAME =
       in res
       end
     fun update_counter counter n = counter := (Int.max(!counter,n + 1))
-
+    val update_var_counter = update_counter var_counter
+    val update_label_counter = update_counter label_counter
 
     (* these values copied from NJ source env/env.sml *)
     val varInt = 0 and sigInt = 1 and strInt = 2 and fsigInt = 3 and 
@@ -89,7 +96,7 @@ structure Name :> NAME =
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
 
     fun fresh_named_var s : var = (inc_counter var_counter,s)
-    fun fresh_named_tag s = GTAG(inc_counter tag_counter,s)
+    fun fresh_named_tag s = (inc_counter tag_counter,s)
     fun fresh_var   () = fresh_named_var "v"
     fun fresh_tag  () = fresh_named_tag "t"
     fun non_generative_named_var s : var = (0, s)
@@ -126,9 +133,9 @@ structure Name :> NAME =
 					   0 => ""
 					 | x => "_" ^ (Int.toString x))))
       end
-    fun loc2string (GLOC i) = ("LOC_" ^ (Int.toString i))
-    fun tag2string (GTAG (i,s)) = ("NAME_" ^ s ^ "_" ^ (Int.toString i))
-    fun tag2int (GTAG (i,s)) = i
+    fun loc2string (i) = ("LOC_" ^ (Int.toString i))
+    fun tag2string (i,s) = ("NAME_" ^ s ^ "_" ^ (Int.toString i))
+    fun tag2int (i,s) = i
 
     fun mk_var_hash_table (size,notfound_exn) = 
 	let
@@ -170,74 +177,11 @@ structure Name :> NAME =
 					 val compare = compare_tag
 				     end
       structure VarSet = SplaySetFn(VarKey) 
-      structure VarMap = LocalSplayMapFn(VarKey) 
-      structure LabelMap = LocalSplayMapFn(LabelKey) 
-      structure TagMap = LocalSplayMapFn(TagKey) 
-      structure PathMap = LocalSplayMapFn(PathKey) 
+      structure VarMap = SplayMapFn(VarKey) 
+      structure LabelMap = SplayMapFn(LabelKey) 
+      structure TagMap = SplayMapFn(TagKey) 
+      structure PathMap = SplayMapFn(PathKey) 
       structure PathSet = SplaySetFn(PathKey) 
 
 
-    local 
-	open Blaster
-    in
-	fun blastOutVar os (n,str) = 
-	    (blastOutInt os n;
-	     if (!useOldBlast)
-		 then blastOutString os str
-	     else blastOutString os "")
-	    
-	fun blastInVar is = 
-	    let val n = blastInInt is
-		val _ = update_counter var_counter n
-		val str = blastInString is
-	    in  (n, str)
-	    end
-	
-	fun blastOutTag os (GTAG num_str) = blastOutVar os num_str
-	fun blastInTag is = 
-	    let val n = blastInInt is
-		val _ = update_counter label_counter n
-		val str = blastInString is
-	    in  GTAG(n, str)
-	    end
-
-	fun blastOutLabel os (n,str,b) = 
-	    (blastOutInt os n;
-	     blastOutString os str;
-	     blastOutBool os b)
-	    
-	fun blastInLabel is = 
-	    let val n = blastInInt is
-		val _ = update_counter label_counter n
-		val str = blastInString is
-		val b = blastInBool is
-	    in  (n, str, b)
-	    end
-
-	fun blastOutVarmap os blaster vmap = blastOutList (blastOutPair blastOutVar blaster) os (VarMap.listItemsi vmap)
-	fun blastInVarmap is blaster =
-	    let val ls = blastInList (blastInPair blastInVar blaster)  is
-		fun folder((v,item),acc) = VarMap.insert(acc,v,item)
-	    in  foldl folder VarMap.empty ls
-	    end
-
-	fun blastOutLabelmap os blaster vmap = blastOutList (blastOutPair blastOutLabel blaster) os (LabelMap.listItemsi vmap)
-	fun blastInLabelmap is blaster =
-	    let val ls = blastInList (blastInPair blastInLabel blaster)  is
-		fun folder((v,item),acc) = LabelMap.insert(acc,v,item)
-	    in  foldl folder LabelMap.empty ls
-	    end
-
-
-	fun blastOutTagmap os blaster vmap = blastOutList (blastOutPair blastOutTag blaster) os (TagMap.listItemsi vmap)
-	fun blastInTagmap is blaster =
-	    let val ls = blastInList (blastInPair blastInTag blaster)  is
-		fun folder((v,item),acc) = TagMap.insert(acc,v,item)
-	    in  foldl folder TagMap.empty ls
-	    end
-
-    end
-
-
-
-  end
+end

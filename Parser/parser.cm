@@ -10,7 +10,9 @@ printutil.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj
 printutil.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sml *)
 strghash.sml    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/strghash.sml *)
 ppqueue.sml     (* mod  of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/ppqueue.sml  *)
-control.sml     (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/build/control.sml *)
+control.sig.sml     (* partial copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/build/control.sml *)
+control.sml     (* partial copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/build/control.sml *)
+pp.sig.sml
 pp.sml          (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/pp.sml *)
 sourcemap.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sourcemap.sig *)
 sourcemap.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sourcemap.sml *)
@@ -48,6 +50,7 @@ stream.sml       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-ya
 ml.grm.sig
 ml.grm.sml
 
+frontend.sig.sml   (* modificication of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/frontend.sml *)
 frontend.sml   (* modificication of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/frontend.sml *)
 tvclose.sml
 linkparse.sml
@@ -55,5 +58,7 @@ asthelp.sig.sml
 asthelp.sml
 name.sig.sml
 name.sml
+nameblast.sig.sml
+nameblast.sml
 namedform.sml
 

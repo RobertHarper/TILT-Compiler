@@ -3,12 +3,8 @@
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* env.sig *)
 
-signature ENV =
+signature FASTSYMBOL = 
 sig
-  structure Symbol : SYMBOL
-
-  structure FastSymbol :
-    sig
       type raw_symbol
       type symbol
       val rawSymbol: int * string -> raw_symbol
@@ -23,7 +19,12 @@ sig
       val tyvSymbol: raw_symbol -> symbol
       val fsigSymbol: raw_symbol -> symbol
       val var'n'fix : raw_symbol -> symbol * symbol
-    end
+end
+
+signature ENV =
+sig
+  structure Symbol : SYMBOL
+  structure FastSymbol : FASTSYMBOL
 
   type 'b env
 
@@ -52,9 +53,14 @@ end (* signature ENV *)
 
 (*
  * $Log$
-# Revision 1.1  98/01/21  20:40:12  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.2  98/02/01  01:27:57  pscheng
+# Changes to facilitate bootstrapping:
+#   Added ascription in various places
+#   Split up files into signature and code
 # 
+# Revision 1.1  1998/01/21  20:40:12  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.1  97/03/26  18:16:03  pscheng
 # added the sig file
 # 
