@@ -36,31 +36,32 @@ struct
       end
 
   fun help() = print "This is TILT - no help available.\n"
-  fun readContext file = let val is = BinIO.openIn file
+  fun readContextRaw file = let val is = BinIO.openIn file
 			     val res = Elaborator.IlContext.blastInContext is
 			     val _ = BinIO.closeIn is
 			 in  res
 			 end
-  fun writeContext (file,ctxt) = let val os = BinIO.openOut file
+  fun writeContextRaw (file,ctxt) = let val os = BinIO.openOut file
 				     val _ = Elaborator.IlContext.blastOutContext os ctxt
 				     val _ = BinIO.closeOut os
 				 in  ()
 				 end
-  val readContext = Stats.timer("ReadingContext",readContext)
-  val writeContext = Stats.timer("WritingContext",writeContext)
+  val readContextRaw = Stats.timer("ReadingContext",readContextRaw)
+  val writeContextRaw = Stats.timer("WritingContext",writeContextRaw)
   val addContext = Stats.timer("AddingContext",Elaborator.plus_context)
 
   type unitname = string
   type filebase = string
   local
       datatype mapping = Map of ((unitname * (filebase * unitname list option ref * 
-					      unitname list option ref * bool ref)) list) ref
+					      unitname list option ref * bool ref *
+					      Elaborator.context option ref)) list) ref
       fun find_unit (Map (ref entries)) unitname = Listops.assoc(unitname,entries)
   in  type mapping = mapping
       fun make_mapping() = Map(ref [])
       fun add_unit (m as Map (r as (ref entries))) (unitname,filebase) = 
 	  case (find_unit m  unitname) of
-	      NONE => r := (unitname,(filebase,ref NONE, ref NONE, ref false))::entries
+	      NONE => r := (unitname,(filebase,ref NONE, ref NONE, ref false, ref NONE))::entries
 	    | SOME _ => error ("unit " ^ unitname ^ " already present")
       fun lookup_unit m unitname =
 	  (case (find_unit m  unitname) of
@@ -77,11 +78,27 @@ struct
   fun base2sml (f : string) = f ^ ".sml"
   fun base2int (f : string) = f ^ ".int"
 
+  fun readContext mapping unit = 
+      let val r = #5(lookup_unit mapping unit) 
+      in  (case !r of
+	       SOME ctxt => ctxt
+	     | NONE => let val uifile = base2ui (name2base mapping unit)
+			   val ctxt = readContextRaw uifile
+		       in  (r := SOME ctxt; ctxt)
+		       end)
+      end
+  fun writeContext mapping (unit,ctxt) = 
+       let val r = #5(lookup_unit mapping unit)
+	   val _ = r := SOME ctxt
+	   val uifile = base2ui (name2base mapping unit)
+       in  writeContextRaw(uifile,ctxt)
+       end
 
-  fun getContext imports = 
+
+
+  fun getContext mapping imports = 
       let val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
-(*	  val ctxts = List.map (fn file => UIBlast.blastIn (base2ui file)) imports *)
-	  val ctxts = List.map (fn file => readContext (base2ui file)) imports
+	  val ctxts = List.map (readContext mapping) imports
 	  val _ = chat ("  [Adding contexts now]\n")
 	  val context_basis = addContext (ctxt_inline :: ctxts)
 	  val context = addContext ctxts
@@ -105,12 +122,12 @@ struct
             | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
       end
 
-  fun elab_nonconstrained(pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
+  fun elab_nonconstrained(mapping,unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
       case Elaborator.elab_dec(pre_ctxt, fp, dec)
 	of SOME(sbnd_entries, new_ctxt) => 
 	    let	val same = 
 		(access(uiFile, [OS.FileSys.A_READ]) andalso
-		 Elaborator.eq_context(new_ctxt, readContext uiFile))
+		 Elaborator.eq_context(new_ctxt, readContext mapping unit))
 		val _ = if same 
 			    then (if Time.<(OS.FileSys.modTime uiFile, least_new_time)
 				      then 
@@ -119,7 +136,7 @@ struct
 (* OS.FileSys.setTime(uiFile, SOME least_new_time) *)
 				  else ())
 			else (chat ("[writing " ^ uiFile);
-			      writeContext(uiFile, new_ctxt);
+			      writeContext mapping (unit, new_ctxt);
 			      chat "]\n")
 	    in (sbnd_entries, new_ctxt)
 	    end
@@ -163,9 +180,9 @@ struct
    if the interface file is absent, search the imports *)
   fun getImport use_imp mapping unitname seenunits : unitname list =
       (case (use_imp,lookup_unit mapping unitname) of
-	  (true,(_,ref (SOME result),_,_)) => result  (* cached implementation imports *)
-	| (false,(_,_,ref (SOME result),_)) => result (* cached interface includes *)
-	| (_,(sourcebase,r_imp,r_int,_)) =>
+	  (true,(_,ref (SOME result),_,_,_)) => result  (* cached implementation imports *)
+	| (false,(_,_,ref (SOME result),_,_)) => result (* cached interface includes *)
+	| (_,(sourcebase,r_imp,r_int,_,_)) =>
 	      let val smlfile = base2sml sourcebase
 		  val intfile = base2int sourcebase
 		  fun folder(import,acc) = 
@@ -284,7 +301,7 @@ struct
 		   chat_imports 4 imports;
 		   chat "]\n")
 	  val import_bases = map (name2base mapping) imports
-	  val (ctxt_for_elab,ctxt) = getContext import_bases
+	  val (ctxt_for_elab,ctxt) = getContext mapping imports
 	  val import_uis = List.map (fn x => (x, Linker.Crc.crc_of_file (x^".ui"))) import_bases
 	  val uiFile = srcBase ^ ".ui"
 	  val intFile = srcBase ^ ".int"
@@ -298,7 +315,7 @@ struct
 		  in elab_constrained(ctxt_for_elab,smlfile,fp,dec,fp2,specs,least_new_time)
 		  end
 	      else let val _ = chat ("  [Elaborating " ^ smlfile ^ " non-constrained]\n")
-		   in elab_nonconstrained(ctxt_for_elab,smlfile,fp,dec,uiFile,least_new_time)
+		   in elab_nonconstrained(mapping,unit,ctxt_for_elab,smlfile,fp,dec,uiFile,least_new_time)
 		   end
 	  val _ = if (!up_to_elaborate)
 		      then ()
@@ -326,6 +343,7 @@ struct
 			  end
 		  else ()
 	  val _ = chat "]\n"
+	  val _ = OS.Process.system ("size " ^ oFile)
 	  val _ = if (!stat_each_file)
 		      then Stats.print_stats()
 		  else ()
@@ -346,11 +364,11 @@ struct
       in if (access(uiFile, [OS.FileSys.A_READ]) andalso
 	     is_fresh includes_uo (OS.FileSys.modTime uiFile, uiFile))
 	     then ()
-	 else let val (ctxt_for_elab,ctxt) = getContext includes_base
+	 else let val (ctxt_for_elab,ctxt) = getContext mapping includes
 		  val _ = (chat "[Compiling specification file: ";
 			   chat sourcefile; chat "\n")
 	      in  (case Elaborator.elab_specs(ctxt_for_elab, fp, specs) of
-		       SOME ctxt' => writeContext(uiFile, ctxt')
+		       SOME ctxt' => writeContext mapping (unit, ctxt')
 		     | NONE => error("File " ^ sourcefile ^ " failed to elaborate."))
 	      end
       end

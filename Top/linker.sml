@@ -4,7 +4,7 @@ structure Linker : LINKER =
     val as_path = "as"
     val ld_path = "ld"
     val startup_lib = "/usr/lib/cmplrs/cc/crt0.o "
-    val ld_libs = "/afs/cs.cmu.edu/project/fox-4/member/jgmorris/tilt/mael/ml96/Runtime/runtime.alpha_osf.a " ^
+    val ld_libs = "/afs/cs.cmu.edu/project/fox/member/pscheng/ml96/Runtime/runtime.alpha_osf.a " ^
 		  "-lm -lc"
                   (* runtime, etc *)
     val error = fn x => Util.error "Linker" x
@@ -234,6 +234,7 @@ structure Linker : LINKER =
 			   else error "mk_exe - as failed"
 		   val command = (ld_path ^ " -D 40000000 -T 20000000 -non_shared -o " ^ 
 				  exe_result ^ " " ^ startup_lib ^ " " ^ o_temp ^ " link_clients.o " ^ ld_libs)
+		   val _ = (print "Running: "; print command; print "\n")
 		   val _ = if OS.Process.system command = OS.Process.success then ()
 			   else (print "load failed: "; print command; print "\n";
 				 error "mk_exe - ld failed")
