@@ -98,6 +98,15 @@ struct
 
 	  | (array1, [instance]) => help'([con_int W32, instance], con_array instance)
 	  | (sub1, [instance]) => help'([con_array instance, con_int W32], instance)
+	  | (array_eq, [instance]) => help'([con_array instance, con_array instance],con_bool)
+
+	  | (vector1, [instance]) => help'([con_int W32, instance], con_vector instance)
+	  | (vlength1, [instance]) => help(con_vector instance, con_int W32)
+	  | (vsub1, [instance]) => help'([con_vector instance, con_int W32], instance)
+	  | (vector_eq, [instance]) => help'([help'([instance, instance],con_bool)],
+					     help'([con_vector instance, 
+						    con_vector instance],con_bool))
+		
 (*	  | output => help'([con_int, con_string], con_unit) *)
 	      
 	  | (update1, [instance]) => help'([con_array instance, con_int W32, instance], con_unit)
@@ -264,7 +273,13 @@ struct
 	  | (sub1,_,_)  => raise UNIMP
 	  | (array1,_,_)  => raise UNIMP
 	  | (update1, _, _) => raise UNIMP
-					
+	  | (array_eq,_,_)  => raise UNIMP
+
+	  | (vlength1, [instance], _) => raise UNIMP
+	  | (vsub1,_,_)  => raise UNIMP
+	  | (vector1,_,_)  => raise UNIMP
+	  | (vector_eq,_,_)  => raise UNIMP
+
 	  | _ => bad())
 	end
     

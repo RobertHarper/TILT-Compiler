@@ -21,7 +21,7 @@ functor IlUtil(structure Ppil : PPIL
     
     (* -------------------------------------------------------- *)
     (* --------------------- Misc helper functions ------------ *)
-    fun fresh_named_con s = CON_TYVAR (fresh_tyvar s)
+    fun fresh_named_con s = CON_TYVAR (fresh_named_tyvar s)
     fun fresh_con () = fresh_named_con "c"
     fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
     fun generate_tuple_label (i : int) = symbol2label(generate_tuple_symbol i)
@@ -234,7 +234,7 @@ functor IlUtil(structure Ppil : PPIL
 	   | RECORD_PROJECT (e,l,c) => RECORD_PROJECT(self e,l,f_con state c)
 	   | SUM_TAIL (c,e) => SUM_TAIL(f_con state c, self e)
 	   | HANDLE (e1,e2) => HANDLE(self e1, self e2)
-	   | RAISE e =>  RAISE(self e)
+	   | RAISE (c,e) =>  RAISE(f_con state c, self e)
 	   | LET (bnds,e) => let fun loop [] h = h
 				   | loop ((BND_EXP(v,_))::rest) h = loop rest (add_var(h,v))
 				   | loop ((BND_CON(v,_))::rest) h = loop rest (add_convar(h,v))
@@ -286,7 +286,7 @@ functor IlUtil(structure Ppil : PPIL
 	   | (CON_VAR var) => (case convar_handler(var,bound_convar) of
 				   NONE => con
 				 | SOME c => c)
-	   | (CON_OVAR ocon) => (self (ocon_deref ocon); con)
+	   | (CON_OVAR ocon) => (self (CON_TYVAR (ocon_deref ocon)); con)
 	   | (CON_INT _ | CON_FLOAT _ | CON_UINT _ | CON_ANY) => con
 	   | CON_ARRAY c => CON_ARRAY (self c)
 	   | CON_VECTOR c => CON_VECTOR (self c)
@@ -381,15 +381,15 @@ functor IlUtil(structure Ppil : PPIL
 
     in
 
-      fun con_occurs(argcon : con, origv : var) : bool =
+      fun con_occurs(argcon : con, origtv : con tyvar) : bool =
 	let 
 	  val occurs = ref false
-	  fun convar_handler(v,bound) = (if eq_var(v,origv) 
-					     then occurs := true else (); 
-						 NONE)
+	  fun tyvar_handler tv = (if eq_tyvar(tv,origtv) 
+				      then occurs := true else (); 
+					  NONE)
 	  val handlers = STATE(default_bound,
-			       {convar_handler = convar_handler,
-				tyvar_handler = default_tyvar_handler,
+			       {convar_handler = default_convar_handler,
+				tyvar_handler = tyvar_handler,
 				var_handler = default_var_handler,
 				sdec_handler = default_sdec_handler,
 				modvar_handler = default_modvar_handler,
@@ -399,17 +399,17 @@ functor IlUtil(structure Ppil : PPIL
 	in (f_con handlers argcon; !occurs)
 	end
 
-      fun con_free_tyvar (argcon : con) : con tyvar list = 
+      fun con_free_convar (argcon : con) : var list = 
 	let 
 	  val free = ref []
-	  fun tyvar_handler tv = (if (not (tyvar_isconstrained tv) andalso
-				      member_eq(eq_tyvar,tv,!free))
-				      then free := (tv::(!free))
-				  else ();
-				      NONE)
+	  fun convar_handler (v,bound) = (if (member_eq(eq_var,v,bound) orelse
+					      member_eq(eq_var,v,!free))
+					      then ()
+					  else free := (v::(!free));
+					      NONE)
 	  val handlers = STATE(default_bound,
-			       {convar_handler = default_convar_handler,
-				tyvar_handler = tyvar_handler,
+			       {convar_handler = convar_handler,
+				tyvar_handler = default_tyvar_handler,
 				var_handler = default_var_handler,
 				sdec_handler = default_sdec_handler,
 				modvar_handler = default_modvar_handler,
@@ -423,6 +423,9 @@ functor IlUtil(structure Ppil : PPIL
 
       fun rebind_free_type_var(argcon : con, context, targetv : var) : (label * bool) list = 
 	let 
+	    val _ = (print "rebind_free_type_var called on argcon = ";
+		     pp_con argcon;
+		     print "\n")
 	  val bound_convar = Context_Get_BoundConvars(context)
 	  val free_tyvar = ref ([] : con Tyvar.tyvar list)
 	  fun tyvar_handler tv = ((case (tyvar_deref tv) of
@@ -460,15 +463,17 @@ functor IlUtil(structure Ppil : PPIL
 	  fun tyvar_handler tyvar =
 	    (case (tyvar_deref tyvar) of
 	       (SOME _) => NONE
-	     | NONE =>
-		   let 
+	     | NONE => NONE
+(*		   let 
 		       val v = tyvar_getvar tyvar
 		       fun loop [] = CON_TYVAR tyvar
 			 | loop ((SDEC(cur_label,DEC_CON(curv,k,SOME c)))::rest) = 
 			   if eq_var(v,curv) then c else loop rest
 			 | loop (_::rest) = loop rest
 		   in SOME(loop arg_sdecs)
-		   end)
+		   end
+*)
+)
 	  fun con_proj_handler (m,argl) : con option = 
 	    let 
 		fun help (MOD_VAR v) acc = SOME(v,rev(argl::acc))
@@ -735,7 +740,10 @@ functor IlUtil(structure Ppil : PPIL
 	     (CON_FUN([var],c),CON_TUPLE_INJECT[arg_con]) => con_subst_var(c, [(var,arg_con)])
 	   | (CON_FUN([var],c),arg_con) => con_subst_var(c, [(var,arg_con)])
 	   | (CON_FUN(vars,c),CON_TUPLE_INJECT(arg_cons)) => con_subst_var(c, zip vars arg_cons)
-	   | _ => error "ConApply got bad arguments")
+	   | _ => (print "ConApply got bad arguments\nc1 = ";
+		   pp_con c1; print "\nc2 = "; 
+		   pp_con c2; print "\n";
+		   error "ConApply got bad arguments"))
 
       fun mod_free_expvar module : var list = 
 	  let

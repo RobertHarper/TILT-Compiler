@@ -146,7 +146,7 @@ functor IlEval(structure Il : IL
 				      print " during eval_con";
 				      error "encountered unresolved CON_TYVAR during eval_con"))
 	  | (CON_VAR v) => con_lookup env v
-	  | (CON_OVAR oc) => if (ocon_is_inst oc) then (ocon_deref oc) else error "uninst overloaded ovar"
+	  | (CON_OVAR oc) => eval_con env (CON_TYVAR (ocon_deref oc))
 	  | CON_ARRAY c => CON_ARRAY (eval_con env c)
 	  | CON_VECTOR c => CON_VECTOR (eval_con env c)
 	  | CON_REF c => CON_REF (eval_con env c)
@@ -185,7 +185,7 @@ functor IlEval(structure Il : IL
 				| NONE => (print "encountered unresolved "; Ppil.pp_con con;
 					   print " during reduce_con";
 					   error "encountered unresolved CON_TYVAR during reduce_con"))
-	  | (CON_OVAR oc) => if (ocon_is_inst oc) then (ocon_deref oc) else error "uninst overloaded ovar"
+	  | (CON_OVAR oc) => reduce_con env (CON_TYVAR (ocon_deref oc))
 	  | CON_ARRAY c => CON_ARRAY (reduce_con env c)
 	  | CON_VECTOR c => CON_VECTOR (reduce_con env c)
 	  | CON_REF c => CON_REF (reduce_con env c)
@@ -276,7 +276,7 @@ functor IlEval(structure Il : IL
 						   | SOME e => SOME(reduce_exp env e)))
 	  | LET (bnds,body) => LET(map (reduce_bnd env) bnds, reduce_exp env body)
 	  | HANDLE(e1,e2) => HANDLE(reduce_exp env e1, reduce_exp env e2)
-	  | RAISE e => RAISE(reduce_exp env e)
+	  | RAISE (c,e) => RAISE(reduce_con env c, reduce_exp env e)
 	  | SUM_TAIL(c,e) => SUM_TAIL(reduce_con env c, reduce_exp env e)
 	  | ROLL(c,e) => ROLL(reduce_con env c, reduce_exp env e)
 	  | UNROLL(c,e) => UNROLL(reduce_con env c, reduce_exp env e)
@@ -341,7 +341,7 @@ functor IlEval(structure Il : IL
 							       "SUM_TAIL: unexpected val/types")
 	   | HANDLE (body,handler) => (eval_exp env body 
 					 handle (exn_packet e) => eval_exp env (APP(handler,e)))
-	   | RAISE e => raise (exn_packet e)
+	   | RAISE (c,e) => raise (exn_packet e)
 	   | LET ([],body) => eval_exp env body
 	   | LET (bnd::bnds,body) => let val env' = env_bndextend(env,eval_bnd env bnd)
 				     in eval_exp env' (LET(bnds,body))

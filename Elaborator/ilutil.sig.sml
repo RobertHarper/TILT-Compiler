@@ -128,7 +128,7 @@ signature ILUTIL =
 
     (*  con_constrain: given a con, constrain all free tyvars 
        con_useeq: given a con, use_eq all free tyvars
-       con_free_tyvar: given a con, return all free tyvars
+       con_free_convar: given a con, return all free convars
        con_free_modvar: given a con, return all free modvars
        con_occurs: given a con and a tyvar, returns whether tyvar occurs in con
        con_subst_var: given a con and a (variable,con) assoc list,
@@ -140,9 +140,9 @@ signature ILUTIL =
 
     val con_constrain  : con -> unit
     val con_useeq      : con -> unit
-    val con_free_tyvar : con -> con Il.Tyvar.tyvar list
+    val con_free_convar : con -> var list
     val con_free_modvar : con -> var list
-    val con_occurs     : con * var -> bool
+    val con_occurs     : con * con Il.Tyvar.tyvar -> bool
     val con_subst_var  : (con * (var * con) list) -> con 
     val ConApply       : con * con -> con
 

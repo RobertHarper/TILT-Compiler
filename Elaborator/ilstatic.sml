@@ -173,15 +173,18 @@ functor IlStatic(structure Il : IL
    fun unify_maker fetch set (constrained,tyvar,c,decs,is_sub) = 
      let 
        val self = unify_maker fetch set
-       val origv = tyvar_getvar tyvar
+(* XXX       val origv = tyvar_getvar tyvar *)
      in (case (fetch tyvar) of
 	   NONE => (case c of
 		      CON_TYVAR tv =>
-			eq_var(tyvar_getvar tv,origv) orelse
+(*			eq_var(tyvar_getvar tv,origv) orelse *)
+			  eq_tyvar(tv,tyvar) orelse 
 			(case (fetch tv) of
 			   SOME c' => self(constrained,tyvar,c',decs,is_sub)
 			 | NONE => (set(constrained,tyvar,c); true))
-		    | _ => (not (con_occurs(c,origv))) andalso (set(constrained,tyvar,c); true))
+		    | _ => not (con_occurs(c,tyvar))
+(*			  not (con_occurs(c,origv)))  *)
+			  andalso (set(constrained,tyvar,c); true))
 	 | (SOME c') => meta_eq_con self constrained (c',c,decs,is_sub))
      end
 
@@ -189,7 +192,7 @@ functor IlStatic(structure Il : IL
      let 
        fun hard_fetch tv = tyvar_deref tv
        fun hard_set (constr,tv,c) = (debugdo (fn () => (print "now hard-setting ";
-							pp_var (tyvar_getvar tv); print " to ";
+							print (tyvar2string tv); print " to ";
 							pp_con c; print "\n"));
 				     if constr then con_constrain c else ();
 				     if (tyvar_is_use_equal tv) then con_useeq c else ();
@@ -201,18 +204,21 @@ functor IlStatic(structure Il : IL
        val table = ref ([] : (con tyvar * con) list)
        val constr_con = ref ([] : con list)
        val useeq_con = ref ([] : con list)
-       fun soft_fetch tyvar = let val v = tyvar_getvar tyvar
+       fun soft_fetch tyvar = let 
+(*				  val v = tyvar_getvar tyvar *)
 				  fun loop [] = NONE
-				    | loop ((tv,c)::rest) = if (eq_var(v,tyvar_getvar tv))
-							      then SOME c
-							    else NONE
+				    | loop ((tv,c)::rest) = 
+(*				      if (eq_var(v,tyvar_getvar tv)) *)
+				      if (eq_tyvar(tyvar,tv))
+					  then SOME c
+				      else NONE
 			      in (case (tyvar_deref tyvar) of
 				    SOME c' => SOME c'
 				  | NONE => loop (!table))
 			      end
        fun soft_set (constr,tv,c) = let val _ = debugdo (fn () => 
 							 (print "now soft-setting ";
-							  pp_var (tyvar_getvar tv); print " to ";
+							  print (tyvar2string tv); print " to ";
 							  pp_con c; print "\n"))
 					val _ = if constr then constr_con := c::(!constr_con) else ()
 					val _ = if (tyvar_is_use_equal tv) 
@@ -278,7 +284,11 @@ functor IlStatic(structure Il : IL
 	  | _ => (false,c))
 *)
 
-       val _ = debugdo (fn () => (print "\nUnifying: "; pp_con con1;
+       val _ = debugdo (fn () => (print "\nUnifying"; 
+				  if constrained then
+				      print " CONSTRAINED: "
+				  else print " not constrained: ";
+				  pp_con con1;
 				  print "\nwith:     "; pp_con con2;
 				  print "\nusing decs = \n"; pp_decs decs;
 				  print "\n"))
@@ -286,6 +296,12 @@ functor IlStatic(structure Il : IL
        val (isocon2, con2) = normalize con2
        val _ = debugdo (fn () => (print "\nHeadNormalized to: "; pp_con con1;
 				  print "\nand:     "; pp_con con2;
+				  if isocon1 then
+				      print " isocon1 is CONSTRAINED: "
+				  else print " isocon1 is not constrained: ";
+				  if isocon2 then
+				      print " isocon2 is CONSTRAINED: "
+				  else print " isocon2 is not constrained: ";
 				  print "\n"))
        val constrained = constrained orelse isocon1 orelse isocon2
        val self = meta_eq_con unifier constrained
@@ -293,7 +309,8 @@ functor IlStatic(structure Il : IL
        val res =  
 	 (case (con1,con2) of
 	    (CON_TYVAR tv1, CON_TYVAR tv2) => 
-		(eq_var(tyvar_getvar tv1, tyvar_getvar tv2) 
+(*		(eq_var(tyvar_getvar tv1,tyvar_getvar tv2) *)
+		(eq_tyvar(tv1,tv2) 
 		 orelse (unifier(constrained,tv1,con2,decs,is_sub)))
 	  | (CON_TYVAR tv1, _) => unifier(constrained,tv1,con2,decs,is_sub)
 	  | (_, CON_TYVAR tv2) => unifier(constrained,tv2,con1,decs,is_sub)
@@ -306,6 +323,12 @@ functor IlStatic(structure Il : IL
 				   MOD_PROJECT(m',l')) = eq_modval(m,m') andalso eq_label(l,l')
 		      | eq_modval (MOD_SEAL(m,s),m') = eq_modval(m,m')
 		      | eq_modval (m',MOD_SEAL(m,s)) = eq_modval(m,m')
+		      | eq_modval((MOD_VAR _ | MOD_PROJECT _),
+				  (MOD_VAR _ | MOD_PROJECT _)) = false
+		      | eq_modval(m1,m2) = (print "eq_modval for a non value\nm1 = \n";
+					    pp_mod m1; print "\nm2 = \n";
+					    pp_mod m2; print "\n";
+					    error "eq_modval for a non value")
 		in eq_modval(m1,m2) andalso eq_label(l1,l2)
 		end
 	  | ((CON_INT is1, CON_INT is2) | (CON_UINT is1, CON_UINT is2)) => is1 = is2
@@ -581,10 +604,10 @@ functor IlStatic(structure Il : IL
 		       else error "Type mismatch between handler and body of HANDLE"
 		 | _ => error "Handler not of type Any -> con")
 	   end
-     | (RAISE e) => let val econ = GetExpCon(e,decs)
-		    in (case econ of
-			  CON_ANY => fresh_con()
-			| _ => error "type of expression raised is not ANY")
+     | (RAISE (c,e)) => let val econ = GetExpCon(e,decs)
+			in (case econ of
+				CON_ANY => c
+			      | _ => error "type of expression raised is not ANY")
 		    end
      | (LET (bnds,e)) => let 
 			    val decs' = GetBndsDecs(decs,bnds) @ decs
@@ -871,7 +894,7 @@ functor IlStatic(structure Il : IL
 
     and HeadNormalize (arg,decs) : (bool * con) = 
 	 (case arg of
-	      CON_OVAR ocon => (true, ocon_deref ocon)
+	      CON_OVAR ocon => (true, #2(HeadNormalize(CON_TYVAR (ocon_deref ocon),decs)))
 	    | (CON_TYVAR tv) => (tyvar_isconstrained tv,
 				 case tyvar_deref tv of
 				     NONE => arg
@@ -921,10 +944,10 @@ functor IlStatic(structure Il : IL
 	       in (case s of 
 		       (SIGNAT_DATATYPE (_,_,sdecs)) => loop sdecs
 		     | SIGNAT_STRUCTURE sdecs => 
-			   (print "HeadNormalize: CON_MODULE_PROJECT case: l = "; pp_label l;
-			    print "\n and sdecs = ";
-			    pp_sdecs sdecs;
-			    print "\n";
+			   (debugdo (fn () => (print "HeadNormalize: CON_MODULE_PROJECT case: l = "; pp_label l;
+					       print "\n and sdecs = ";
+					       pp_sdecs sdecs;
+					       print "\n"));
 			    loop sdecs)
 		     | _ => (false,arg))
 	       end

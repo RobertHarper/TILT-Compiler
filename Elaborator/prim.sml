@@ -89,6 +89,13 @@ functor Prim()
       | array1
       | update1
       | length1
+      | array_eq (* pointer equality *)
+
+      (* vector ops *)
+      | vector1
+      | vsub1
+      | vlength1
+      | vector_eq (* element-wise equality *)
 
       (* super hacky IO stuff for now *)
       | input

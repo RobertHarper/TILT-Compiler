@@ -36,7 +36,7 @@ functor Il(structure Prim : PRIM
                  | RECORD_PROJECT of exp * label * con
                  | SUM_TAIL of con * exp
                  | HANDLE  of exp * exp      (* body and handler: type ANY  *)
-                 | RAISE   of exp            (*                   type ANY  *)
+                 | RAISE   of con * exp
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
                  | EXN_INJECT of exp * exp (* tag and value *)
@@ -111,7 +111,7 @@ functor Il(structure Prim : PRIM
     datatype inline = INLINE_MODSIG of mod * signat
                     | INLINE_EXPCON of exp * con
                     | INLINE_CONKIND of con * kind
-                    | INLINE_OVER   of unit -> (int list -> exp) * con Tyvar.ocon
+                    | INLINE_OVER   of unit -> (int -> exp) * con Tyvar.ocon
 
     datatype context_entry = CONTEXT_INLINE of label * var * inline    
                            | CONTEXT_SDEC   of sdec

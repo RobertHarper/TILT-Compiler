@@ -32,7 +32,7 @@ functor Toil(structure Il : IL
     (*  ------------------ OVERLOAD ENTRIES ---------------------
       --------------------------------------------------------- *)
     local 
-      val overload_table = ref ([] : (con Tyvar.ocon * exp Util.oneshot * (int list -> exp)) list)
+      val overload_table = ref ([] : (con Tyvar.ocon * exp Util.oneshot * (int -> exp)) list)
       val eq_table = ref ([] : (decs * con * exp Util.oneshot) list)
     in
       fun clear_overload_table () = overload_table := []
@@ -60,7 +60,7 @@ functor Toil(structure Il : IL
 	       end
 	     | help (SDEC(l,DEC_MOD(vs,SIGNAT_STRUCTURE([SDEC(l1,DEC_CON(v1,k1,NONE)),
 							 SDEC(l2,DEC_EXP(v2,c2))])))) = 
-	       let val tyvar = fresh_tyvar "eq_tyvar"
+	       let val tyvar = fresh_named_tyvar "eq_tyvar"
 		   val _ = tyvar_use_equal tyvar
 		   val con = CON_TYVAR tyvar
 		   val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
@@ -111,20 +111,20 @@ val decs1 = ref ([] : Il.dec list)
 	      fun help (SDEC(l,dec)) =
 		let 
 		  fun dotype l v = let 
-				     val tv = fresh_tyvar "tv"
+				     val tv = fresh_tyvar ()
 				     val c = CON_TYVAR tv
 				 in (tv,(SBND(l,BND_CON(v,c)),
-					 SDEC(l,DEC_CON(v,KIND_TUPLE 1, SOME c)), 
+					 SDEC(l,DEC_CON(v,KIND_TUPLE 1, SOME c)))
 (*					 SDEC(l,DEC_CON(v,KIND_TUPLE 1, NONE)), *)
-					 DEC_CON(tyvar_getvar tv,KIND_TUPLE 1,NONE)))
+					 )
 				 end
 		in
 		  (case dec of
 		       (DEC_CON(v,_,_)) => #2(dotype l v)
 		     | (DEC_MOD(v,SIGNAT_STRUCTURE[SDEC(l1,DEC_CON(v1,_,_)),
-						   SDEC(l2,DEC_EXP(v2,c2))])) => 
+						       SDEC(l2,DEC_EXP(v2,c2))])) => 
 		       let 
-			 val (tyvar,(sbnd1,sdec1,dec1)) = dotype l1 v1
+			 val (tyvar,(sbnd1,sdec1)) = dotype l1 v1
 			 val _ = tyvar_use_equal tyvar
 			 val con = CON_TYVAR tyvar
 			 val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
@@ -134,8 +134,7 @@ val decs1 = ref ([] : Il.dec list)
 			 val sbnd2 = SBND(l2,BND_EXP(v2,eqexp))
 			 val sdec2 = SDEC(l2,DEC_EXP(v2,c2))
 		       in (SBND(l,BND_MOD(v,MOD_STRUCTURE[sbnd1,sbnd2])),
-			   SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE[sdec1,sdec2])),
-			   dec1)
+			   SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE[sdec1,sdec2])))
 		       end
 		     | _ => error "unexpected sig to arg struct of polymorphic fun")
 		end
@@ -145,7 +144,6 @@ val decs1 = ref ([] : Il.dec list)
 	      val mod_poly = MOD_STRUCTURE(map #1 temp)
 	      val signat_poly_sdecs = map #2 temp
 	      val signat_poly = SIGNAT_STRUCTURE signat_poly_sdecs
-	      val decs = (map #3 temp) @ decs
 	    end
 	    val new_rescon : con = remove_modvar_type(resc,v,signat_poly_sdecs)
 
@@ -348,7 +346,7 @@ val decs1 = ref ([] : Il.dec list)
      fun xexp (context : context, exp : Ast.exp) : (exp * con) = 
       (case exp of
 	 Ast.IntExp is =>   (SCON(int(W32,TilWord64.fromDecimalString is)), CON_INT W32)
-       | Ast.WordExp ws =>  (SCON(uint(W32,TilWord64.fromHexString ws)), CON_UINT W32)
+       | Ast.WordExp ws =>  (SCON(uint(W32,TilWord64.fromWordStringLiteral ws)), CON_UINT W32)
        | Ast.RealExp s =>   (SCON(float(F64,s)), CON_FLOAT F64)
        | Ast.StringExp s => (SCON(vector (Array.fromList
 					  (map (fn c => SCON(uint(W8,TilWord64.fromInt (ord c))))
@@ -391,7 +389,7 @@ then (print "got CREDIT: context is:";
 else ();
 	   if (path = [Symbol.varSymbol "="]) 
 	     then let val exp_os = oneshot()
-		      val tyvar = fresh_tyvar "teq"
+		      val tyvar = fresh_named_tyvar "teq"
 		      val _ = tyvar_use_equal tyvar
 		      val con = CON_TYVAR tyvar
 		      val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
@@ -499,7 +497,8 @@ else ();
 		       end
        | Ast.RaiseExp e => let val (exp,con) = xexp(context,e)
 			       val _ = con_unify'(context,"raise",("ANY",CON_ANY),("con",con),nada)
-			   in (RAISE exp,fresh_con())
+			       val c = fresh_con()
+			   in (RAISE (c,exp),c)
 			   end
        | Ast.SeqExp elist => let fun loop [] = error "Ast.SeqExp with empty list"
 				   | loop [e] = xexp(context,e)
@@ -1217,7 +1216,7 @@ else ();
       --------------------------------------------------------- *)
     and xsig_wheretype(signat : signat, lbls : label list, con : con, kind : kind) : signat = 
       let 
-	val fv = map tyvar_getvar(con_free_tyvar con)
+	val fv = con_free_convar con
 	fun bound v = if (member_eq(eq_var,v,fv)) 
 			then error "xsig_wheretype: FV(con) ^ BV(sdecs) != nil"
 		      else ()
@@ -1453,7 +1452,7 @@ else ();
 				NONE => error "resolved type does not permit equailty"
 			      | SOME c => self c)
 	  | CON_VAR _ => error "cannot compile equality on CON_VAR _"
-	  | CON_OVAR ocon => self (ocon_deref ocon)
+	  | CON_OVAR ocon => self (CON_TYVAR (ocon_deref ocon))
 	  | CON_INT is => PRIM(eq_int is,[])
 	  | CON_UINT is => ILPRIM(eq_uint is)
 	  | CON_FLOAT fs => PRIM(eq_float fs,[])
@@ -1513,8 +1512,8 @@ else ();
 			       in #1(make_lambda(v,paircon,con_bool,
 						 make_let([(v1,e1),(v2,e2)],body)))
 			       end
-	  | CON_ARRAY c => raise UNIMP
-	  | CON_VECTOR c => raise UNIMP
+	  | CON_ARRAY c => PRIM(array_eq,[c])
+	  | CON_VECTOR c => APP(PRIM(vector_eq,[c]),xeq(decs,c))
 	  | CON_REF c => PRIM(eq_ref,[c])
 	  | CON_MODULE_PROJECT(m,l) => MODULE_PROJECT(m,eq_lab)
 	  | CON_MUPROJECT (j,con') => 
@@ -1534,7 +1533,7 @@ else ();
 				      local
 					val temp = (map2 (fn (v',l) => CON_MODULE_PROJECT(MOD_VAR v',l))
 						    (vars',lbls))
-					val applied = ConApply(con,(case temp of
+					val applied = ConApply(con',(case temp of
 									[c] => c
 								      | _ => CON_TUPLE_INJECT temp))
 				      in
@@ -1582,11 +1581,17 @@ else ();
 	val overload_table = get_overload_table()
 	val eq_table = get_eq_table()
 	fun overload_help (ocon,exp_oneshot,exp_maker) = 
-	  (case (ocon_check(ocon,fn (c1,c2) => soft_eq_con([],c1,c2))) of
-	     NONE => error "overloaded type: constraints not satisfied"
-	   | SOME poslist => let val rexp = exp_maker poslist
-			     in oneshot_set(exp_oneshot,rexp)
-			     end)
+	  (case (ocon_constrain(ocon,{hard = fn (c1,c2) => eq_con([],c1,c2),
+				      soft = fn (c1,c2) => soft_eq_con([],c1,c2)})) of
+		 [] => error "overloaded type: none of the constraints are satisfied"
+	       | [pos] => let val rexp = exp_maker pos
+			  in oneshot_set(exp_oneshot,rexp)
+			  end
+	       | pos::_ => let 
+			       val _ = print "Warning: more than one constraint satisfied by overloaded type"
+			       val rexp = exp_maker pos
+			   in  oneshot_set(exp_oneshot,rexp)
+			   end)
 	fun eq_help (decs,con,exp_oneshot) = 
 	  let
 	    val eq_exp = xeq(decs,con)

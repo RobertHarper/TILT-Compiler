@@ -65,17 +65,13 @@ functor Basis(structure Il : IL
 				       val s = mod2sig m
 				   in CONTEXT_INLINE(mk_var_lab str, fresh_named_var str, INLINE_MODSIG(m,s))
 				   end
-	fun over_entry str exp bvc = 
+	fun over_entry str exp_thunk constraints =
 	  CONTEXT_INLINE(mk_var_lab str, 
 			 fresh_named_var str,
 			 INLINE_OVER(fn _ => 
-				       let 
-					 fun subst(c,v_tv) = let fun help (v,tv) = (v,CON_TYVAR tv)
-							     in con_subst_var(c,map help v_tv)
-							     end
-					 val oc = ocon_inst (fresh_ocon bvc) subst
-				       in (exp,oc)
-				       end))
+				     let val ocon = uocon_inst (fresh_uocon constraints)
+				     in (exp_thunk,ocon)
+				     end))
 
 	val fixity_entries = 
 	    [CONTEXT_SDEC(SDEC(fresh_int_label(),DEC_FIXITY default_fixity_table))]
@@ -154,6 +150,7 @@ functor Basis(structure Il : IL
 				 ("real", CON_FLOAT F64), 
 				 ("char", CON_UINT W8), 
 				 ("string", con_string),
+				 ("exn",CON_ANY),
 				 ("unit", con_unit)]
 	    fun entry_maker (s,c) = CONTEXT_INLINE(symbol2label (Symbol.tycSymbol s),
 						   fresh_named_var s,
@@ -165,18 +162,11 @@ functor Basis(structure Il : IL
 	val val_entries = 
 	  [
 	   over_entry "over" 
-	   (fn [i] => if (i=0) then PRIM (plus_int W32,[])
-		     else if (i=1) then PRIM (plus_float F64,[])
-			  else error "over receieved int not 0 or 1"
-	     | _ => error "over did not receiev 1 int")
-
-	    let val tv = fresh_tyvar "ir"
-	      val c = CON_TYVAR tv
-	      val v = tyvar_getvar tv
-	      val body = CON_ARROW(con_tuple[c,c],c,oneshot_init TOTAL)
-	      val var_constraint = [(v,[CON_INT W32, CON_FLOAT F64])]
-	    in  (body,var_constraint)
-	    end,
+	   (fn i => if (i=0) then PRIM (plus_int W32,[])
+		    else if (i=1) then PRIM (plus_float F64,[])
+			 else error "over receieved int not 0 or 1")
+	   [CON_ARROW(con_tuple[CON_INT W32, CON_INT W32], CON_INT W32, oneshot_init PARTIAL),
+	    CON_ARROW(con_tuple[CON_FLOAT F64, CON_FLOAT F64], CON_FLOAT F64, oneshot_init PARTIAL)],
 	   
 	   exp_entry "true" true_exp,
 	   exp_entry "false" false_exp,

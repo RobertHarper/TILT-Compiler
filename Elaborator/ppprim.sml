@@ -148,9 +148,14 @@ functor Ppprim(structure Prim : PRIM)
 *)
 	  | array1  => String "array1"
 	  | sub1     => String "sub1"
+	  | update1  => String "update1"
+	  | array_eq => String "array_eq"
 
+	  | vector1  => String "vector1"
+	  | vsub1     => String "vsub1"
+	  | vlength1  => String "vlength1"
+	  | vector_eq => String "vector_eq"
 
-	   |  update1  => String "update1"
 (*	   | ARRAY2  {instance} => String "array2"
 	   | SUB2    {instance} => String "sub2" *)
 		 )

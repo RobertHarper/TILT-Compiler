@@ -91,33 +91,34 @@ functor Ppil(structure Il : IL
 
 
 
-    fun pp_con seen arg_con : format = 
+    fun pp_con (seen : con tyvar list) (arg_con : con) : format = 
       (case arg_con of
-	 CON_OVAR ocon => pp_con seen (ocon_deref ocon) 
+	 CON_OVAR ocon => pp_con seen (CON_TYVAR (ocon_deref ocon))
        | CON_VAR var => pp_var var
        | CON_TYVAR tyvar =>
-	   (case (tyvar_deref tyvar) of
-	      NONE => if (tyvar_isconstrained tyvar)
-			then Hbox [String "!", pp_var (tyvar_getvar tyvar)]
-		      else pp_var (tyvar_getvar tyvar)
-	    | (SOME con) => let val var = tyvar_getvar tyvar
-			    in if (member_eq(eq_tyvar,tyvar,seen)) then
-			      (print "var is "; (wrapper pp_var) TextIO.stdOut var; print "\n";
-			       print "seen_refs("; print (Int.toString (length seen));
-			       print ")var is: ";
-			       map (fn v => (wrapper pp_var) TextIO.stdOut (tyvar_getvar v)) seen;
-			       print "\n\n";
-			       error "circular";
-			       Hbox0 0 [String "KNOT_", pp_var var])
-			       else
-				 let val seen = tyvar :: seen
-				 in (case (!convar_display) of
-				       VALUE_ONLY => pp_con seen con
-				     | VAR_ONLY => Hbox0 0 [String "C", pp_var var]
-				     | VAR_VALUE => (pp_region "(" ")"
-						     [pp_var var, String "==", pp_con seen con]))
-				 end
-			    end)
+	     let val varname = if (tyvar_isconstrained tyvar)
+				   then ("C" ^ tyvar2string tyvar)
+			       else tyvar2string tyvar
+	     in (case (tyvar_deref tyvar) of
+		     NONE => Hbox[String varname]
+		   | (SOME con) => (if (member_eq(eq_tyvar,tyvar,seen)) then
+					(print "tyvar is "; print varname; print "\n";
+					 print "seen_refs("; print (Int.toString (length seen));
+					 print ")var is: ";
+					 map (fn tv => print (tyvar2string tv)) seen;
+					 print "\n\n";
+					 error "circular";
+					 Hbox0 0 [String ("KNOT_" ^ varname)])
+				    else
+					let val seen = tyvar :: seen
+					in (case (!convar_display) of
+						VALUE_ONLY => pp_con seen con
+					      | VAR_ONLY => Hbox0 0 [String varname]
+					      | VAR_VALUE => (pp_region "(" ")"
+							      [String varname,
+							       String "==", pp_con seen con]))
+					end))
+	     end
        | CON_INT is    => Hbox[String "INT", pp_is' is]
        | CON_UINT is   => Hbox[String "UINT", pp_is' is]
        | CON_FLOAT fs  => Hbox[String "FLOAT", pp_fs' fs]
@@ -297,7 +298,7 @@ functor Ppil(structure Il : IL
 				       Break0 0 0,
 				       HOVbox[String "WITH ",
 					      pp_exp seen handler]]
-       | RAISE e =>  pp_region "RAISE(" ")" [pp_exp seen e]
+       | RAISE (c,e) =>  pp_region "RAISE(" ")" [pp_con seen c, String ", ", pp_exp seen e]
        | LET (bs,e) => Vbox0 0 1 [String "LET ",
 				  Vbox(separate (map (pp_bnd seen) bs) (Break0 0 0)),
 				  Break,

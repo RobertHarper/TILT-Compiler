@@ -88,6 +88,13 @@ signature PRIM =
       | array1
       | update1
       | length1
+      | array_eq (* pointer equality *)
+
+      (* vector ops *)
+      | vector1
+      | vsub1
+      | vlength1
+      | vector_eq (* element-wise equality *)
 
       (* IO operations - a hack so we can see our results for now - takes from stdin - puts to stdout *)
       | output

@@ -326,7 +326,9 @@ functor Pat(structure Il : IL
      case (arms,args) of
        ([],_) => (case def of
 		    SOME ec => ([] : bound list, ec)
-		  | NONE => ([], (Il.RAISE(bindexn_exp),fresh_con())))
+		  | NONE => let val c = fresh_con()
+			    in ([], (Il.RAISE(c,bindexn_exp),c))
+			    end)
      | ((_,[bound1 as (_,v,c)],NONE)::_,[]) => ([[bound1]],(VAR v,c))
      | ((_,bound,NONE)::_,[]) => (let val (vars,cons) = (map #2 bound, map #3 bound)
 				  in ([bound],(exp_tuple (map VAR vars), con_tuple cons))
@@ -431,6 +433,7 @@ functor Pat(structure Il : IL
 	       fun var_dispatch() = 
 		 let 
 		   fun varpred (Ast.VarPat [v]) = if (is_constr [v]) then NONE else SOME v
+		     | varpred (Ast.VarPat _) = error "A variable pattern that is a path is illegal"
 		     | varpred _ = NONE
 		   val (accs,vc_ll2,def) = find_maxseq varpred arms
 		   val (vc_ll,ec) = var_case(arg1,argrest,accs,def)
@@ -563,7 +566,7 @@ functor Pat(structure Il : IL
 		  | (Ast.ConstraintPat _) => error "no ConstaintPat should be here"
 		  | (Ast.WordPat ws)   => constant_dispatch(CON_UINT W32,   
 							    ILPRIM (eq_uint W32), 
-							    uint (W32,TilWord64.fromHexString ws))
+							    uint (W32,TilWord64.fromWordStringLiteral ws))
 		  | (Ast.IntPat is)    => constant_dispatch(CON_INT W32,   
 							    PRIM (eq_int W32, []), 
 							    int (W32,TilWord64.fromDecimalString is))
@@ -635,7 +638,8 @@ functor Pat(structure Il : IL
 	val pat = parse_pat(patarg,bindpat)
 	val args = [CASE_NONVAR (fresh_named_var "bindComp",arge,argc)]
 	val arms = [([pat],[],NONE)]
-	val def = SOME (Il.RAISE(bindexn_exp),fresh_con())
+	val res_con = fresh_con()
+	val def = SOME (Il.RAISE(res_con,bindexn_exp),res_con)
 	val (e,c,bindings_list) = compile(patarg,args,arms,def)
 	val sbnd_sdecs =
 	    (case bindings_list of
@@ -682,7 +686,8 @@ functor Pat(structure Il : IL
       let 
 	val args = [CASE_NONVAR (fresh_named_var "caseComp", arge,argc)]
 	val arms : arm list = map (fn (pat,body) => ([parse_pat(patarg,pat)],[], SOME body)) cases
-	val def = SOME (Il.RAISE(matchexn_exp),fresh_con())
+	val res_con = fresh_con()
+	val def = SOME (Il.RAISE(res_con,matchexn_exp),res_con)
 	val (e,c,_) = compile (patarg,args,arms,def)
       in (e,c)
       end
@@ -722,7 +727,8 @@ functor Pat(structure Il : IL
 	val default = if (reraise) 
 			then let val (v,c) = (hd argvars, hd argcons)
 				 val _ = con_unify'(context,"funCompile",("ANY",CON_ANY),("c",c),nada)
-			     in SOME(RAISE (VAR v),fresh_con())
+				 val res_con = fresh_con()
+			     in SOME(RAISE (res_con,VAR v),res_con)
 			     end
 		      else NONE
 	val (e,c,_) = compile (patarg,args,arms,default)
