@@ -94,20 +94,20 @@ structure Intersect : INTERSECT =
       let
 	local
 
-	  fun l2info p = 
+	  fun l2info (p,hits) = 
 	    let 
 	      val hit = Matrix.applyPoint (M,p)
 	      val dist = distance (orig,hit)
-	    in {hit = hit,dist = dist}
+	    in {hit = hit,dist = if hits then dist else ~dist}
 	    end
 	  
-	  fun l3info ({hit,dist},(x,y,z)) = 
+	  fun l3info ({hit,dist},((x,y,z),hits)) = 
 	    let
 	      val v = (y+1.0)/2.0
 	      val u = if iszero v orelse iszero (v-1.0) then 0.0  (* What to do here?*)
 		      else (Math.atan2(x,z)) / (2.0 * Math.pi)     (*180/pi * (atan (x/z))/360 *)
 	      val face = 0
-	      val N' = (x,y,z)  (* BUG might have to negate if inside sphere *)
+	      val N' = if hits then (x,y,z) else (~x,~y,~z) 
 	      val N = Matrix.applyVector(M, N')
 (*	      val _ = (print "sphere N = "; printV3 N; print "\n") *)
 	    in {u = u,v = v,face = face,
@@ -116,21 +116,14 @@ structure Intersect : INTERSECT =
 		N = N}
 	    end
 	  
-	  fun level2 (l1,ps) () = 
-	    (case !l1
-	       of [] => (l1 := (map l2info ps);
-			 !l1)
-		| is => is)
-	       
-	  fun level3 (level2,ps) () = ListPair.map l3info (level2 (),ps)
 	in
 	  fun NO () = (false,fn () => [],fn () => [])
 	    
 	  fun YES ps = 
 	    let
-	      val get2 = level2 (ref [],ps)
-	      val get3 = level3 (get2,ps)
-	    in (true,get2,get3)
+	      val l2 = memoize (fn () => map l2info ps)
+	      val l3 = memoize (fn () => ListPair.map l3info (l2 (),ps))
+	    in (true,l2,l3)
 	    end
 	end
 
@@ -148,9 +141,11 @@ structure Intersect : INTERSECT =
 	val disc = b*b - 4.0*a* c
       in
 	if iszero disc then              (* ray is tangent *)
-	  let val t = ~b / (2.0*a)
-	  in if t < 0.0 then NO ()
-	     else YES [intersect t]
+	  let 
+	    val t = ~b / (2.0*a)
+	    val p = intersect t
+	  in if t < 0.0 then YES [(p,false)]
+	     else YES [(p,true)]
 	  end
 	else if disc < 0.0 then NO ()    (* ray does not hit sphere *)
 	else 
@@ -158,10 +153,12 @@ structure Intersect : INTERSECT =
 	    val d = Math.sqrt disc
 	    val t0 = (~b + d) / (2.0*a)
 	    val t1 = (~b - d) / (2.0*a)
+	    val p0 = intersect t0
+	    val p1 = intersect t1
 	  in
-	    if t0 < 0.0 then NO ()     (* t0 is always larger then t1*) (* both points behind us *)
-	    else if t1 < 0.0 then YES [intersect t0]                    (* inside sphere *)
-	    else YES [intersect t1,intersect t0]                        (* both points in front of us *)
+	    if t0 < 0.0 then YES[(p1,false),(p0,false)]       (* both points behind us *)
+	    else if t1 < 0.0 then YES [(p1,false),(p0,true)]  (* inside sphere *)
+	    else YES [(p1,true),(p0,true)]                        (* both points in front of us *)
 	  end
       end
 
