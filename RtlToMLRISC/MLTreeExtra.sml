@@ -29,10 +29,6 @@ functor MLTreeExtra(
   val gpr = MLTree.GPR o MLTree.REG
   val fpr = MLTree.FPR o MLTree.FREG
 
-  (*
-   * check that registers are not dedicated when optimizing to copy? ???
-   *)
-
   fun copy(target, source) = MLTree.COPY([target], [source])
 
   fun fcopy(target, source) = MLTree.FCOPY([target], [source])
