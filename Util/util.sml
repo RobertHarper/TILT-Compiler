@@ -259,8 +259,14 @@ struct
 	(TextIO.flushOut (TextIO.stdOut);
 	 TextIO.flushOut (TextIO.stdErr))
 
+    fun errorMsg (e : exn) : string =
+	(case e of
+	    UtilError.BUG {file,msg} => file ^ ": " ^ msg
+	|   UtilError.Reject {msg} => msg
+	|   e => "uncaught exception: " ^ exnMessage e)
+
     fun uncaught (e:exn) : 'a =
-	(output(FS.stderr,"child uncaught exn: " ^ exnMessage e);
+	(output(FS.stderr,"child uncaught exn: " ^ errorMsg e);
 	 P.exit 0w1)
 
     fun background (f : unit -> 'a) : unit -> bool =
