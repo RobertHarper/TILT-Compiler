@@ -3,9 +3,12 @@
 (* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
  *
  * $Log$
-# Revision 1.4  98/02/15  22:44:04  pscheng
-# bootstrapping changes
+# Revision 1.5  98/03/09  15:39:30  pscheng
+# added debugs
 # 
+# Revision 1.4  1998/02/15  22:44:04  pscheng
+# bootstrapping changes
+#
 # Revision 1.3  1998/01/21  20:40:38  pscheng
 # moved the .sig files to .sig.sml file
 #
@@ -565,7 +568,8 @@ fun mkFixError({is_keyword,terms,errtermvalue,
 		 in loop (distanceParse(lexPair,stack,queue,distance))
 		 end
 	      | loop _ = let exception ParseInternal
-			 in raise ParseInternal
+			 in (print "parser2 raising ParseInternal\n";
+			     raise ParseInternal)
 			 end
 	in loop (distanceParse(lexPair,startStack,startQueue,distance))
 	end
