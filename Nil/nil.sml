@@ -67,8 +67,8 @@ struct
     | Vector_c                                (* vectors *)
     | Ref_c                                   (* references *)
     | Exntag_c                                (* exception tags *)
-    | Sum_c of {tagcount : int,
-                known : int option}           (* sum types *)
+    | Sum_c of {tagcount : w32,
+                known : w32 option}           (* sum types *)
     | Record_c of label list                  (* records *)
     | Vararg_c of openness * effect           (* helps classify make_vararg and make_onearg *)
 
@@ -99,9 +99,10 @@ struct
   datatype nilprim = 
       record of label list       (* record intro *)
     | select of label            (* record field selection *)
-    | inject of w32              (* slow; sum intro *)
-    | inject_record of w32       (* fast; sum intro where argument is a record
-					  whose components are individually passed in *)
+    | inject of {field : w32,
+                 tagcount : w32} (* slow; sum intro *)
+    | inject_record of {field : w32,       (* fast; sum intro where argument is a record  *)
+			tagcount : w32}    (* whose components are individually passed in *)
     | project_sum of w32         (* slow; given a special sum type, return carried value *)
     | project_sum_record of w32 * w32 (* fast; given a special sum type of record type, 
 				               return the specified field *)
