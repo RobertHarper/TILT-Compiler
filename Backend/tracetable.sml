@@ -274,7 +274,9 @@ functor Tracetable(val little_endian    : bool
 		       | [t] => ((* print "trace for reg "; print (Int.toString n);
 				 print " = "; print (tr2s t); *)
 				 t)
-		       | _ => (print "multiple traces found for register: ";
+		       | _ => (print "multiple traces found for register";
+			       print (Int.toString n);
+			       print ":: ";
 			       app (fn t => (print (tr2s t); print "  ")) matches;
 			       print "\n"; hd matches))
 		end

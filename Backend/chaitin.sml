@@ -409,7 +409,7 @@ struct
 			   mvlist(map IN_REG args,arg_pos) @
 			   (case func of
 			      DIRECT (I label) => if hasRpv then [BASE(LADDR(Rpv_virt,I label))] else []
-(* new code *)           | DIRECT (MLE label) => 
+(* new code *)              | DIRECT (MLE label) => 
 				  if hasRpv then [BASE(LADDR(Rpv_virt,MLE label))] 
 				  else []
 			    | DIRECT (CE (label,NONE)) =>  
@@ -418,7 +418,8 @@ struct
 			    | DIRECT (CE (label,SOME sra)) => 
 				if hasRpv then [BASE(LADDR(Rpv_virt,CE (label,SOME sra)))] else []
 			    | INDIRECT reg => [mvregs(reg,Rpv_virt)]
-			    | _ => error "replace_calls: pv move")
+(*			    | _ => error "replace_calls: pv move") *)
+				)
 			      @ (BASE(RTL(CALL{extern_call = extern_call,
 					       func=func,
 					       args=arg_regs,
@@ -428,6 +429,7 @@ struct
 					       destroys=destroys,
 					       tailcall=tailcall})) ::
 				 mvlist(res_pos,map IN_REG results))
+				 
 
 		       (* if it is a C call, save/restore dedicated registers
 			  that fall into the C caller save set.*)

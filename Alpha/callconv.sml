@@ -1,7 +1,10 @@
 functor DecalphaCallconv(structure Decalpha : DECALPHA
-			 structure Machineutils : MACHINEUTILS where structure Machine = Decalpha) 
+			 structure Machineutils : MACHINEUTILS 	
+			 (* where Machine = Decalpha  this break 109.30 so we must use sharing *)
+			 sharing Machineutils.Machine = Decalpha)
     : CALLCONV =
 struct
+
   structure Machine = Machineutils.Machine
   structure Machineutils = Machineutils
   
@@ -92,6 +95,8 @@ struct
       in ACTUALS{args=actual_args,
 		 results=actual_results}
       end
+
+
 end
 
 

@@ -1,7 +1,8 @@
 functor AlphaTrackstorage(structure Decalpha : DECALPHA
 			  structure Regmap : ORD_MAP where type Key.ord_key = Decalpha.register
 			  structure Regset : ORD_SET where type Key.ord_key = Decalpha.register
-			  structure Printutils : PRINTUTILS where structure Machineutils.Machine = Decalpha)
+			  structure Printutils : PRINTUTILS (*where Machineutils.Machine = Decalpha *)
+			  sharing Printutils.Machineutils.Machine = Decalpha)
     : TRACKSTORAGE =
 struct
 

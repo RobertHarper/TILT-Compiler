@@ -1,10 +1,8 @@
-(*$DIVMULT: MACHINEUTILS DECALPHA*)
 signature DIVMULT =
   sig
-    structure MU : MACHINEUTILS
+
     structure DA : DECALPHA
 
-    sharing MU.Machine = DA
     val debug : bool ref
 
     (* this emulates a MULQ or MULL assuming the argument in the register fits 

@@ -1,12 +1,14 @@
 (* Translation from Rtl to DecAlpha pseudoregister-assembly. *)
 functor Toalpha(val do_tailcalls : bool ref
                 structure Pprtl: PPRTL
-                structure Decalpha: DECALPHA where structure Rtl = Pprtl.Rtl
-                structure Machineutils : MACHINEUTILS where structure Machine = Decalpha
-                structure Tracetable : TRACETABLE where structure Machine = Decalpha
+                structure Decalpha: DECALPHA (* where Rtl = Pprtl.Rtl *)
+                structure Machineutils : MACHINEUTILS (* where Machine = Decalpha *)
+                structure Tracetable : TRACETABLE (* where Machine = Decalpha *)
                 structure Bblock : BBLOCK
                 structure DM : DIVMULT
-                sharing Machineutils = Bblock.Machineutils = DM.MU)
+		sharing Decalpha.Rtl = Pprtl.Rtl
+		sharing Machineutils.Machine = Tracetable.Machine = DM.DA = Decalpha 
+                sharing Machineutils = Bblock.Machineutils)
   : TOASM =
 struct
 

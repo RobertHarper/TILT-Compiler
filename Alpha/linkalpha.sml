@@ -32,13 +32,16 @@ struct
   structure Labelmap   = Labelmap  (structure Machine = Decalpha)
   structure Ifgraph   = Ifgraph    (structure Machine = Decalpha)
 
+
   structure Decalphautils = Decalphautils(structure Decalpha = Decalpha
 					  structure Labelmap = Labelmap
 					  structure Regmap = Regmap
 					  structure Regset = Regset)
  
+
   structure Callconv   = DecalphaCallconv (structure Machineutils = Decalphautils
 					   structure Decalpha = Decalpha)
+
 
   structure Bblock = Bblock(structure Machineutils = Decalphautils)
 
@@ -46,8 +49,9 @@ struct
 				    structure MU = Decalphautils
 				    structure R = Rtl)
 
+
   structure Divmult = Divmult(structure MU = Decalphautils
-			      structure DA = Decalpha)
+			      structure Decalpha = Decalpha)
 
   structure Toalpha = Toalpha(structure Bblock = Bblock
 			      structure Decalpha = Decalpha
@@ -63,6 +67,7 @@ struct
 				    structure Bblock = Bblock
 				    structure Machineutils = Decalphautils
 				    structure Tracetable = Tracetable)
+
 
   structure Graph = Vargraph()
 
@@ -80,6 +85,7 @@ struct
 			    structure Trackstorage = Trackstorage
 			    structure MU = Decalphautils
 			    structure Printutils = Printutils)
+
 
   structure Chaitin = Chaitin(val commentHeader = " #"
 			      structure Bblock = Bblock
