@@ -40,11 +40,9 @@ struct
 	
     fun readPartialContextRaw ilFile = 
 	let 
-(*	    val _ = print ("XXX reading context file " ^ ilFile ^ "\n") *)
 	    val is = BinIO.openIn ilFile
 	    val res = LinkIl.IlContextEq.blastInPartialContext is
 	    val _ = BinIO.closeIn is
-(*	    val _ = print ("XXX done reading context file " ^ ilFile ^ "\n") *)
 	in  res
 	end
     val readPartialContextRaw = Stats.timer("ReadingContext",readPartialContextRaw)

@@ -47,6 +47,6 @@ sig
     val rtl_to_asm : string * rtl_module -> unit		(* assembler target *)
 
     (* Create initialization code for the given units. *)
-    val link : string * string list -> unit			(* assembler target, units *)
+    val link : string * string list -> unit			(* assembler target, unit names *)
 			 
 end
