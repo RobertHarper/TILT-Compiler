@@ -575,11 +575,6 @@ struct
 	in  fixityMap
 	end
 
-    fun find (ctxt : context, v : var) : (label * phrase_class) option =
-	let val CONTEXT {varMap, ...} = ctxt
-	in  VarMap.find (varMap, v)
-	end
-    
     fun Context_Lookup_Var (ctxt : context, v : var) : (label * phrase_class) option =
 	(case Context_Lookup_Var_Raw (ctxt,v)
 	   of SOME (l,PHRASE_CLASS_MOD(m,poly,s)) =>
