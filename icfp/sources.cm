@@ -17,6 +17,9 @@ library/splaytree.sml
 library/splay-map-fn.sml
 library/splay-set-fn.sml
 
+library/listsort-sig.sml
+library/list-mergesort.sml
+
 stdin-sig.sml
 stdin.sml
 

@@ -175,6 +175,7 @@ struct
 					 a41,         a42,         a43,         a44        )
 			end
 					
+	fun invert _ = raise notdone
 
 	fun m4toString (a11, a12, a13, a14,
 									a21, a22, a23, a24,

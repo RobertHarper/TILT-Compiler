@@ -25,9 +25,10 @@ sig
   val rotyM: real * m4 -> m4
   val rotzM: real * m4 -> m4
 
+	val invert: m4 -> m4
+
 	val m4toString: m4 -> string
   val v4toString: v4 -> string
   val v3toString: v3 -> string
-
 
 end
