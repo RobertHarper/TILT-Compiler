@@ -1,4 +1,5 @@
-A	a.sml
-B	b.sml
-C	c.sml
-Test	test.sml
+source unit A = "a.sml" {}
+source unit B = "b.sml" {A}
+source unit C = "c.sml" {}
+source unit Test = "test.sml" {B C}
+make executable "Test." ^ $target ^ ".exe" {Test}

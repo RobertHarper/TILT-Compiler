@@ -1,4 +1,3 @@
-(*$import *)
 (* Lexing tyvars *)
 
 type ('_a, 

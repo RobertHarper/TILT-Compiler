@@ -1,5 +1,3 @@
-(*$import *)
-
 val arg: { v: IntInf.int, b: string, oc: string, d: string, x: string} list = [
 	{v = 0, b = "0", oc = "0", d = "0", x = "0"},
 	{v = ~0, b = "~0", oc = "~0", d = "~0", x = "~0"},

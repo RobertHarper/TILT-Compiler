@@ -4,9 +4,9 @@
  *
  * This package is derived from Andrzej Filinski's bignum package.  It is versy
  * close to the definition of the optional IntInf structure in the SML'97 basis.
- * 
+ *
  * It is implemented almost totally on the abstraction presented by
- * the BigNat structure. The only concrete type information it assumes 
+ * the BigNat structure. The only concrete type information it assumes
  * is that BigNat.bignat = 'a list and that BigNat.zero = [].
  * Some trivial additional efficiency could be obtained by assuming that
  * type bignat is really int list, and that if (v : bignat) = [d], then
@@ -18,8 +18,8 @@
  * Also, for booting, this module could be broken into one that has
  * all the types and arithmetic functions, but doesn't use NumScan,
  * constructing values from strings using bignum arithmetic. Various
- * integer and word scanning, such as NumScan, could then be constructed 
- * from IntInf. Finally, a user-level IntInf could be built by 
+ * integer and word scanning, such as NumScan, could then be constructed
+ * from IntInf. Finally, a user-level IntInf could be built by
  * importing the basic IntInf, but replacing the scanning functions
  * by more efficient ones based on the functions in NumScan.
  *
@@ -48,20 +48,20 @@ structure IntInf :> INT_INF =
 
         structure W = Word32
         structure I = Int31
-    
+
         val op <  = W.<
         val op >= = W.>=
         val op +  = W.+
         val op -  = W.-
         val op *  = W.*
-    
+
         val largestWordDiv10 : Word32.word = 0w429496729(* 2^32-1 divided by 10 *)
         val largestWordMod10 : Word32.word = 0w5	(* remainder *)
         val largestNegInt : Word32.word = 0w1073741824	(* absolute value of ~2^30 *)
         val largestPosInt : Word32.word = 0w1073741823	(* 2^30-1 *)
-    
+
         type 'a chr_strm = {getc : (char, 'a) StringCvt.reader}
-    
+
       (* A table for mapping digits to values.  Whitespace characters map to
        * 128, "+" maps to 129, "-","~" map to 130, "." maps to 131, and the
        * characters 0-9,A-Z,a-z map to their * base-36 value.  All other
@@ -93,7 +93,7 @@ structure IntInf :> INT_INF =
         val plusCode : Word32.word = 0w129
         val minusCode : Word32.word = 0w130
         end (* local *)
-    
+
         fun skipWS (getc : (char, 'a) StringCvt.reader) cs = let
               fun skip cs = (case (getc cs)
 		     of NONE => cs
@@ -102,7 +102,7 @@ structure IntInf :> INT_INF =
               in
                 skip cs
               end
-    
+
       (* skip leading whitespace and any sign (+, -, or ~) *)
         fun scanPrefix (getc : (char, 'a) StringCvt.reader) cs = let
     	  fun skipWS cs = (case (getc cs)
@@ -125,13 +125,13 @@ structure IntInf :> INT_INF =
     		  else SOME{neg=false, next=c, rest=cs'}
     	    (* end case *)
     	  end
-    
+
       (* for power of 2 bases (2, 8 & 16), we can check for overflow by looking
        * at the hi (1, 3 or 4) bits.
        *)
         fun chkOverflow mask w =
     	  if (W.andb(mask, w) = 0w0) then () else raise Overflow
-    
+
         fun scanBin (getc : (char, 'a) StringCvt.reader) cs = (case (scanPrefix getc cs)
     	   of NONE => NONE
     	    | (SOME{neg, next, rest}) => let
@@ -154,7 +154,7 @@ structure IntInf :> INT_INF =
     		    else NONE
     		end
     	  (* end case *))
-    
+
         fun scanOct getc cs = (case (scanPrefix getc cs)
     	   of NONE => NONE
     	    | (SOME{neg, next, rest}) => let
@@ -177,7 +177,7 @@ structure IntInf :> INT_INF =
     		    else NONE
     		end
     	  (* end case *))
-    
+
         fun scanDec getc cs = (case (scanPrefix getc cs)
     	   of NONE => NONE
     	    | (SOME{neg, next, rest}) => let
@@ -203,7 +203,7 @@ structure IntInf :> INT_INF =
     		    else NONE
     		end
     	  (* end case *))
-    
+
         fun scanHex getc cs = (case (scanPrefix getc cs)
     	   of NONE => NONE
     	    | (SOME{neg, next, rest}) => let
@@ -226,18 +226,18 @@ structure IntInf :> INT_INF =
     		    else NONE
     		end
     	  (* end case *))
-    
+
         fun finalWord scanFn getc cs = (case (scanFn getc cs)
     	   of NONE => NONE
     	    | (SOME{neg=true, ...}) => NONE
     	    | (SOME{neg=false, word, rest}) => SOME(word, rest)
     	  (* end case *))
-    
+
         fun scanWord StringCvt.BIN = finalWord scanBin
           | scanWord StringCvt.OCT = finalWord scanOct
           | scanWord StringCvt.DEC = finalWord scanDec
           | scanWord StringCvt.HEX = finalWord scanHex
-    
+
         fun finalInt scanFn getc cs = (case (scanFn getc cs)
     	   of NONE => NONE
     	    | (SOME{neg=true, word, rest}) =>
@@ -249,12 +249,12 @@ structure IntInf :> INT_INF =
     		  then raise Overflow
     		  else SOME(W.toInt word, rest)
     	  (* end case *))
-    
+
         fun scanInt StringCvt.BIN = finalInt scanBin
           | scanInt StringCvt.OCT = finalInt scanOct
           | scanInt StringCvt.DEC = finalInt scanDec
           | scanInt StringCvt.HEX = finalInt scanHex
-    
+
       end (* structure NumScan *)
 
     structure NumFormat : sig
@@ -266,15 +266,15 @@ structure IntInf :> INT_INF =
 
         structure W = Word32
         structure I = Int
-    
+
         val op < = W.<
         val op - = W.-
         val op * = W.*
         val op div = W.div
-    
+
         fun mkDigit (w : Word32.word) =
     	  CharVector.sub("0123456789abcdef", W.toInt w)
-    
+
         fun wordToBin w = let
     	  fun mkBit w = if (W.andb(w, 0w1) = 0w0) then #"0" else #"1"
     	  fun f (0w0, n, l) = (I.+(n, 1), #"0" :: l)
@@ -307,14 +307,14 @@ structure IntInf :> INT_INF =
     	  in
     	    f (w, 0, [])
     	  end
-    
+
         fun fmtW StringCvt.BIN = #2 o wordToBin
           | fmtW StringCvt.OCT = #2 o wordToOct
           | fmtW StringCvt.DEC = #2 o wordToDec
           | fmtW StringCvt.HEX = #2 o wordToHex
-    
+
         fun fmtWord radix = String.implode o (fmtW radix)
-    
+
     (** NOTE: this currently uses 31-bit integers, but really should use 32-bit
      ** ints (once they are supported).
      **)
@@ -337,7 +337,7 @@ structure IntInf :> INT_INF =
     	  in
     	    fmt
     	  end
-    
+
       end (* structure NumFormat *)
 
     structure BigNat =
@@ -371,14 +371,14 @@ structure IntInf :> INT_INF =
 	      val notNbase = Word.notb(itow nbase)
               fun bn 0w0 = []
         	| bn i = let
-		    fun dmbase n = 
+		    fun dmbase n =
 		      (Word.>> (n, itow lgBase), Word.andb (n, notNbase))
 		    val (q,r) = dmbase i
 		  in
 		    (wtoi r)::(bn q)
 		  end
               in
-        	if i > 0 
+        	if i > 0
         	  then if i <= maxDigit then [i] else bn (itow i)
         	  else raise Negative
               end
@@ -410,7 +410,7 @@ structure IntInf :> INT_INF =
 	fun add ([], digits) = digits
 	  | add (digits, []) = digits
 	  | add (dm::rm, dn::rn) = addd (nbase+dm+dn, rm, rn)
-	and addd (s, m, n) = 
+	and addd (s, m, n) =
               if s < 0 then (s-nbase) :: add (m, n) else (s :: addc (m, n))
 	and addc (m, []) = addOne m
 	  | addc ([], n) = addOne n
@@ -427,11 +427,11 @@ structure IntInf :> INT_INF =
 	and subb ([], n) = raise Negative
 	  | subb (dm::rm, []) = subd (dm-1, rm, [])
 	  | subb (dm::rm, dn::rn) = subd (dm-dn-1, rm, rn)
-	and subd (d, m, n) = 
+	and subd (d, m, n) =
               if d >= 0 then consd(d, subt (m, n)) else consd(d-nbase, subb (m, n))
 
                (* multiply 2 digits *)
-	fun mul2 (m, n) = let 
+	fun mul2 (m, n) = let
               val (mh, ml) = hl m
               val (nh, nl) = hl n
               val x = mh*nh
@@ -450,17 +450,17 @@ structure IntInf :> INT_INF =
         	| muldc (d::r, c) = let
                     val (h, l) = mul2 (d, i)
                     val l1 = l+nbase+c
-                    in 
-                      if l1 >= 0 
+                    in
+                      if l1 >= 0
                 	then l1::muldc (r, h+1)
-                	else (l1-nbase)::muldc (r, h) 
+                	else (l1-nbase)::muldc (r, h)
                     end
               in muldc (m, 0) end
 
 	fun mult (m, []) = []
 	  | mult (m, [d]) = muld (m, d) (* speedup *)
 	  | mult (m, 0::r) = consd (0, mult (m, r)) (* speedup *)
-	  | mult (m, n) = let 
+	  | mult (m, n) = let
               fun muln [] = []
         	| muln (d::r) = add (muld (n, d), consd (0, muln r))
               in muln m end
@@ -483,7 +483,7 @@ structure IntInf :> INT_INF =
               val i' = i * scale
               val m' = muld (m, scale)
               fun dmi [] = ([], 0)
-        	| dmi (d::r) = let 
+        	| dmi (d::r) = let
                     val (qt,rm) = dmi r
                     val (q1,r1) = divmod2 ((rm,d), i')
                     in (consd (q1,qt), r1) end
@@ -493,10 +493,10 @@ structure IntInf :> INT_INF =
             (* From Knuth Vol II, 4.3.1, but without opt. in step D3 *)
 	fun divmod (m, []) = raise Div
 	  | divmod ([], n) = ([], []) (* speedup *)
-	  | divmod (d::r, 0::s) = let 
+	  | divmod (d::r, 0::s) = let
               val (qt,rm) = divmod (r,s)
               in (qt, consd (d, rm)) end (* speedup *)
-	  | divmod (m, [d]) = let 
+	  | divmod (m, [d]) = let
               val (qt, rm) = divmodd (m, d)
               in (qt, if rm=0 then [] else [rm]) end
 	  | divmod (m, n) = let
@@ -529,14 +529,14 @@ structure IntInf :> INT_INF =
 	  | cmp ([],_) = LESS
 	  | cmp ((i : int)::ri,j::rj) =
               case cmp (ri,rj) of
-        	EQUAL => if i = j then EQUAL 
-                         else if i < j then LESS 
+        	EQUAL => if i = j then EQUAL
+                         else if i < j then LESS
                          else GREATER
               | c => c
 
 	fun exp (_, 0) = one
 	  | exp ([], n) = if n > 0 then zero else raise Div
-	  | exp (m, n) = 
+	  | exp (m, n) =
               if n < 0 then zero
               else let
         	fun expm 0 = [1]
@@ -549,14 +549,14 @@ structure IntInf :> INT_INF =
                       end
         	in expm n end
 
-        local 
+        local
           fun try n = if n >= lgHBase then n else try (2*n)
           val pow2lgHBase = try 1
         in
         fun log2 [] = raise Domain
           | log2 (h::t) = let
               fun qlog (x,0) = 0
-                | qlog (x,b) = 
+                | qlog (x,b) =
 		  if x >= wtoi(Word.<< (0w1, itow b)) then
 		    b+qlog (wtoi(Word.>> (itow x, itow b)), b div 2)
                                  else qlog (x, b div 2)
@@ -567,7 +567,7 @@ structure IntInf :> INT_INF =
             end
         end (* local *)
 
-            (* find maximal maxpow s.t. radix^maxpow < base 
+            (* find maximal maxpow s.t. radix^maxpow < base
              * basepow = radix^maxpow
              *)
         fun mkPowers radix = let
@@ -587,16 +587,16 @@ structure IntInf :> INT_INF =
         val powers10 = mkPowers 10
         val powers16 = mkPowers 16
 
-	fun fmt (pow, radpow, puti) n = let 
+	fun fmt (pow, radpow, puti) n = let
               val pad = StringCvt.padLeft #"0" pow
               fun ms0 (0,a) = (pad "")::a
         	| ms0 (i,a) = (pad (puti i))::a
               fun ml (n,a) =
                     case divmodd (n, radpow) of
                       ([],d) => (puti d)::a
-                    | (q,d) => ml (q, ms0 (d, a)) 
-              in 
-                concat (ml (n,[])) 
+                    | (q,d) => ml (q, ms0 (d, a))
+              in
+                concat (ml (n,[]))
               end
 
         val fmt2 = fmt (#1 powers2, #2 powers2, NumFormat.fmtInt StringCvt.BIN)
@@ -612,9 +612,9 @@ structure IntInf :> INT_INF =
               fun loop (acc,cs) =
                     case geti get (0,cs) of
                       NONE => (acc,cs)
-                    | SOME(0,(sh,cs')) => 
+                    | SOME(0,(sh,cs')) =>
                         loop(add(muld(acc,Vector.sub(powers,sh)),[]),cs')
-                    | SOME(i,(sh,cs')) => 
+                    | SOME(i,(sh,cs')) =>
                         loop(add(muld(acc,Vector.sub(powers,sh)),[i]),cs')
               in
                 case geti get (0,cs) of
@@ -809,7 +809,7 @@ structure IntInf :> INT_INF =
 
     local
       fun fmt' fmtFn i =
-            case i of 
+            case i of
               (BI{digits=[],...}) => "0"
             | (BI{sign=NEG,digits}) => "~"^(fmtFn digits)
             | (BI{sign=POS,digits}) => fmtFn digits
@@ -846,7 +846,7 @@ structure IntInf :> INT_INF =
 
     fun pow (_, 0) = one
       | pow (BI{sign=POS,digits}, n) = posi(BN.exp(digits,n))
-      | pow (BI{sign=NEG,digits}, n) = 
+      | pow (BI{sign=NEG,digits}, n) =
           if Int.mod (n, 2) = 0
             then posi(BN.exp(digits,n))
             else zneg(BN.exp(digits,n))

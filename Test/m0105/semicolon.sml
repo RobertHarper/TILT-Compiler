@@ -1,5 +1,3 @@
-(*$import *)
-
 (* semicolon.sml *)
 
 (* Checks parsing of semicolons. *)

@@ -1,5 +1,3 @@
-(*$import Int *)
-
 local
    val c = ref 0
 in

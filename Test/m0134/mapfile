@@ -1,1 +1,2 @@
-Test	kitqsort.sml
+source unit Test = "kitqsort.sml" {}
+make executable "Test." ^ $target ^ ".exe" {Test}

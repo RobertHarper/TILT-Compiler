@@ -1,5 +1,3 @@
-(*$import Array2 Int *)
-
 open Array2
 
 fun printa a =

@@ -1,5 +1,3 @@
-(*$import Int List Word8 Word8Vector BinIO OS *)
-
 val file = "testBinIO.txt"
 
 fun testRange (start, length) =

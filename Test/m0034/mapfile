@@ -1,2 +1,3 @@
-Test	local-ref.sml
+source unit Test = "local-ref.sml" {Int}
 
+make executable "Test." ^ $target ^ ".exe" {Test}

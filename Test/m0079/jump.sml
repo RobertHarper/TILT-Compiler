@@ -1,6 +1,3 @@
-(*$import List *)
-
-
 fun doit 2 = "zero"
   | doit 6 = "one" 
   | doit 10 = "two"

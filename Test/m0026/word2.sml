@@ -1,4 +1,3 @@
-(*$import Int Word32 *)
 (* word32 check *)
   
 fun wc hi lo = Word32.orb (Word32.<< (hi, 0w16),  lo)

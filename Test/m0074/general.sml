@@ -1,5 +1,3 @@
-(*$import Int List Vector Array Math Char TextIO *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

@@ -1,5 +1,3 @@
-(*$import Int *)
-
 val _ =
    (Int.fromString "12345678901234567890"
     ; print "ERROR\n")

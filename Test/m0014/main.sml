@@ -1,4 +1,3 @@
-(*$import *)
 (* datatype equality *)
 datatype t = A | B
 datatype u = C of t

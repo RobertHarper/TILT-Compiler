@@ -9,7 +9,7 @@ fun printArg arg = print ("<<" ^ arg ^ ">> ");
 fun printArgs args = (print "arguments: "; app printArg args; print "\n");
 
 fun printErr msg = print ("error: " ^ msg ^ "\n");
-    
+
 fun test (cmd, nil) = (print ("usage: " ^ cmd ^ ": optstring parameters");
 		       OS.Process.failure)
   | test (cmd, optstring::args) =

@@ -1,5 +1,3 @@
-(*$import *)
-
 (* TILT was failing to compile this code at one point.  See bug 159. *)
 
 datatype t = A

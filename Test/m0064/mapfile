@@ -1,1 +1,2 @@
-Test	exn.sml
+source unit Test = "exn.sml" {}
+make executable "Test." ^ $target ^ ".exe" {Test}

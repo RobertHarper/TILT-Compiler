@@ -1,4 +1,3 @@
-(*$import *)
 datatype t = A | B
 
 val f =

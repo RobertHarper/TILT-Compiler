@@ -1,5 +1,3 @@
-
-
 signature TERNARYTREE =
   sig
     (* This exception used in exactSearchExn prefixSearchExn. *)

@@ -1,1 +1,2 @@
-Test	fast.sml
+source unit Test = "fast.sml" {Int}
+make executable "Test." ^ $target ^ ".exe" {Test}

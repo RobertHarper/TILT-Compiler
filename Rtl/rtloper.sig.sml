@@ -1,5 +1,5 @@
 (*$OPERATIONS: *)
-signature OPERATIONS = 
+signature OPERATIONS =
   sig
     type cmp
 

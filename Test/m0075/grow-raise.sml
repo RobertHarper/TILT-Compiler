@@ -1,5 +1,3 @@
-(*$import *)
-
 exception E
 val rec loop =
    fn 0 => raise E

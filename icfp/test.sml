@@ -8,7 +8,7 @@ fun distance ((x1,y1,z1),(x2,y2,z2) : v3) = magnitude(x1-x2,y1-y2,z1-z2)
 
 fun diff ((a,b,c),(a',b',c')) : v3 = (a-a',b-b',c-c')
 
-   fun sphere (orig:v3,dir:v3) : result = 
+   fun sphere (orig:v3,dir:v3) : result =
       let
 	val p0 as (x0,y0,z0) = orig
 	val p1 as (x1,y1,z1) = dir
@@ -22,18 +22,18 @@ fun diff ((a,b,c),(a',b',c')) : v3 = (a-a',b-b',c-c')
 	val disc = b*b - 4.0*a* c
 	val _ = print ("disc is:"^(Real.toString disc)^"\n")
 
-	fun intersect t = (x0 + t*dx, 
+	fun intersect t = (x0 + t*dx,
 			   y0 + t*dy,
 			   z0 + t*dz)
 
-	fun l2info p = 
-	  let 
+	fun l2info p =
+	  let
 	    val hit = apply (M,p)
 	    val dist = distance (orig,hit)
 	  in {hit = hit,dist = dist}
 	  end
 
-	fun l3info ({hit,dist}) = 
+	fun l3info ({hit,dist}) =
 	  let
 	    val u = 0.0
 	    val v = 0.0
@@ -45,7 +45,7 @@ fun diff ((a,b,c),(a',b',c')) : v3 = (a-a',b-b',c-c')
 	      N = N}
 	  end
 
-	fun level2 (l1,ps) () = 
+	fun level2 (l1,ps) () =
 	  (case !l1
 	     of [] => (l1 := (map l2info ps);
 		       !l1)
@@ -55,7 +55,7 @@ fun diff ((a,b,c),(a',b',c')) : v3 = (a-a',b-b',c-c')
 
 	fun NO () = (false,fn () => [],fn () => [])
 
-	fun YES ps = 
+	fun YES ps =
 	  let
 	    val get2 = level2 (ref [],ps)
 	    val get3 = level3 get2
@@ -70,7 +70,7 @@ fun diff ((a,b,c),(a',b',c')) : v3 = (a-a',b-b',c-c')
 	  in if t < 0 then NO ()
 	     else YES [intersect t]
 	  end
-	else 
+	else
 	  let
 	    val d = Math.sqrt disc
 	    val t0 = (~b + d) / (2.0*a)
@@ -86,7 +86,7 @@ fun diff ((a,b,c),(a',b',c')) : v3 = (a-a',b-b',c-c')
 	  end
       end
 (*
-fun sphere (p0 as (x0,y0,z0):v3,p1 as (x1,y1,z1):v3) : result = 
+fun sphere (p0 as (x0,y0,z0):v3,p1 as (x1,y1,z1):v3) : result =
       let
 	val pd as (dx,dy,dz) = diff (p1,p0)
 	val a = dx*dx + dy*dy + dz*dz (*If unit length, this could be 1*)
@@ -97,7 +97,7 @@ fun sphere (p0 as (x0,y0,z0):v3,p1 as (x1,y1,z1):v3) : result =
 	val _ = print ("c is:"^(Real.toString c)^"\n")
 	val disc = b*b - 4.0*a* c
 	val _ = print ("disc is:"^(Real.toString disc)^"\n")
-	fun hit t = (x0 + t*dx, 
+	fun hit t = (x0 + t*dx,
 		     y0 + t*dy,
 		     z0 + t*dz)
       in
@@ -109,7 +109,7 @@ fun sphere (p0 as (x0,y0,z0):v3,p1 as (x1,y1,z1):v3) : result =
 	  in if t < 0 then ZERO
 	     else ONE (hit t)
 	  end
-	else 
+	else
 	  let
 	    val d = Math.sqrt disc
 	    val t0 = (~b + d) / (2.0*a)
@@ -125,7 +125,7 @@ fun sphere (p0 as (x0,y0,z0):v3,p1 as (x1,y1,z1):v3) : result =
 	  end
       end
 
-fun sphere2 (p0 as (x0,y0,z0):v3,p1 as (x1,y1,z1):v3) : result = 
+fun sphere2 (p0 as (x0,y0,z0):v3,p1 as (x1,y1,z1):v3) : result =
   let
     val l_oc = Math.sqrt(x0*x0 + y0*y0 + z0*z0)
     val t_ca = ~x0*(x1-x0) - y0*(y1-y0) - z0*(z1-z0)

@@ -1,1 +1,4 @@
-Test	general.sml
+source unit Test = "general.sml" {
+	Int List Vector Array Math Char TextIO
+}
+make executable "Test." ^ $target ^ ".exe" {Test}

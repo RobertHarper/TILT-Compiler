@@ -593,7 +593,7 @@ void memobj_init(void)
 {
   Stacklet_t *s1, *s2;
   unsigned long min_bytes, max_bytes;
-  unsigned long mem_bytes = GetPhysicalPages() * 0.30 * TILT_PAGESIZE;
+  unsigned long mem_bytes = GetPhysicalPages() * 0.90 * TILT_PAGESIZE;
   unsigned long cache_bytes = GetBcacheSize() * 2;
 
   min_bytes = 2048 * 1024;

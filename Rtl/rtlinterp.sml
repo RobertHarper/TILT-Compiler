@@ -9,10 +9,10 @@ functor Rtlinterp(structure Pprtl : PPRTL
 		  sharing type Heap.iword = Registerset.iword
 		  sharing type Heap.quad_val = Registerset.quad_val
 		  sharing type Heap.instr = Rtl.instr = Registerset.instr
- 		) 
- : RTLINTERP  = 
+ 		)
+ : RTLINTERP  =
   struct
-    
+
     open Rtl Pprtl;
     open Registerset
     structure O = Operations
@@ -52,7 +52,7 @@ functor Rtlinterp(structure Pprtl : PPRTL
 
     fun crash (msg : string) =
 	(print "*** CRASHED ***\n";
-	 print msg; 
+	 print msg;
 	 print "\n";
 	 print "pc = ";
 	 print (Int.toString (!pc));
@@ -63,31 +63,31 @@ functor Rtlinterp(structure Pprtl : PPRTL
 	 R.showreg_nonzero();
 	 Heap.showheap (i2w (!pc - 4 * !window),!window*2);
 	 error msg)
-	 
+
     val cur_module = ref ([MODULE{procs=[],
 			     data=[],
 			     main=(named_code_label ""),
 			     mutable_objects = nil,
 			     mutable_variables = nil}]);
-    fun ea_to_val(EA(ri,disp),sc) = 
-      let 
+    fun ea_to_val(EA(ri,disp),sc) =
+      let
 	val _ = if (sc = 0) then crash "ea_to_val(_,0)" else ()
 	val res = W.uplus(getlowival(ri),i2w(disp))
 	val check = if ((W.umod(res,i2w sc)) = wzero) then ()
 	  else crash
-	    ("Unaligned effective address " ^ 
+	    ("Unaligned effective address " ^
 	     (W.toDecimalString res) ^ " " ^ (Int.toString sc))
       in res
       end
-    fun label_to_address [] label = 
+    fun label_to_address [] label =
       crash ("label_to_address" ^ (label2s label))
-      | label_to_address ((l,location)::rest) label = 
-	if (eq_label(l,label)) 
+      | label_to_address ((l,location)::rest) label =
+	if (eq_label(l,label))
 	  then location else (label_to_address rest label)
     fun address_to_label [] add = crash ("address_to_label" ^ (Int.toString add))
-      | address_to_label ((l,location)::rest) add = 
+      | address_to_label ((l,location)::rest) add =
 	if (location = add) then l else (address_to_label rest add)
-    local 
+    local
       val flag = ref false
     in
       fun pc_unset_changed() = flag := false
@@ -114,10 +114,10 @@ functor Rtlinterp(structure Pprtl : PPRTL
 			    ]
     fun reset_label_table() = label_table := init_label_table
 
-    fun pc_label_change label = 
+    fun pc_label_change label =
       (pc := (label_to_address (!label_table) label); pc_set_changed())
 
-    fun find_proc(label) = 
+    fun find_proc(label) =
       let fun loop ([],t) = loop2 t
 	    | loop ((p as PROC({name,...})) :: rest,t) =
 	      if (eq_label(LOCAL_LABEL name,label)) then p else loop(rest,t)
@@ -128,7 +128,7 @@ functor Rtlinterp(structure Pprtl : PPRTL
 
 (* -------------- normal call stack and exn stack ------------------ *)
     type callblob = {extern_call : bool,
-		     func : reg_or_label, return : regi option, 
+		     func : reg_or_label, return : regi option,
 		     args : regi list * regf list,
 		     results : regi list * regf list,
 		     tailcall : bool,
@@ -154,24 +154,24 @@ fun replace_all_stack(arg) = stack := arg
 
     fun push_exn_stack(s) = exn_stack := (s:: (!exn_stack))
 
-    fun pop_exn_stack() = 
+    fun pop_exn_stack() =
 	case (!exn_stack)
 	of a::b => (exn_stack := b; a)
           | _ => crash "pop_exn_stack"
-	
+
 (* --------------------- code and data layout ----------------- *)
-   
+
 (* Since these functions are laying out code using a ref cell for current location *)
 (* it is imperative that their execution is sequentialized explicitly *)
     fun RTL_layout modules =
-      let 
+      let
 	val _ = reset_label_table()
 	val location = ref 0 : int ref;
 	fun inc_location() = location := (!location + 4)
 	fun add_location(delta) = location := (!location + delta)
 	fun inst_layout pos code =
 	  let val codesize = Array.length code
-	  in if (pos >= codesize) 
+	  in if (pos >= codesize)
 		then ()
 	     else let val i = Array.sub(code,pos)
 		  in  (H.storeinstr(i2w(!location),i);
@@ -191,72 +191,72 @@ fun replace_all_stack(arg) = stack := arg
            should be two separate tables. *)
 
 	fun proc_layout (PROC {name,code,...}) =
-	  let 
+	  let
 	    val curlocation = !location
 	  in  inst_layout 0 code;
 	      label_table := (LOCAL_LABEL name,curlocation) :: (!label_table)
 	  end
 	fun code_layout [] = ()
-	  | code_layout (p::procs) = 
+	  | code_layout (p::procs) =
 		let val _ = proc_layout p
 		in  (code_layout procs)
 		end
 	fun dataitem_layout wh (COMMENT _) _ = 0
 	  | dataitem_layout wh (INT32(w)) _ = (H.storelong(i2w wh,w); 4)
-	  | dataitem_layout wh (FLOAT(strf)) _ = 
+	  | dataitem_layout wh (FLOAT(strf)) _ =
 	    (H.storefloat(i2w wh,O.str_to_real strf); 8)
-	  | dataitem_layout wh (DATA(l)) false = 4 
-	  | dataitem_layout wh (DATA(l)) true = 
-	    dataitem_layout wh 
+	  | dataitem_layout wh (DATA(l)) false = 4
+	  | dataitem_layout wh (DATA(l)) true =
+	    dataitem_layout wh
 	    (INT32 (i2w(label_to_address (!label_table) l))) true
 	  | dataitem_layout wh (DLABEL _) _ = 0
 	  | dataitem_layout wh (ALIGN (LONG)) _ = (4 - (wh mod 4)) mod 4
 	  | dataitem_layout wh (ALIGN (QUAD)) _ = (8 - (wh mod 8)) mod 8
 	  | dataitem_layout wh (ALIGN (OCTA)) _ = (16 - (wh mod 16)) mod 16
-	  | dataitem_layout wh (ALIGN (ODDLONG)) _ = 
+	  | dataitem_layout wh (ALIGN (ODDLONG)) _ =
 	      let val t = wh mod 8
 	      in if t=4 then 0
 		 else if t<4 then 4-t
 		 else 12-t  (* (8-t)+4 --- align to quadword, add 4*)
 	      end
-	  | dataitem_layout wh (ALIGN (ODDOCTA)) _ = 
+	  | dataitem_layout wh (ALIGN (ODDOCTA)) _ =
 	      let val t = wh mod 16
               in if t=12 then 0
                  else if t<12 then 12-t
                  else 12+(16-t)   (* align to octaword, add 12 *)
               end
-	  | dataitem_layout wh (STRING (s)) _ = 
-		let 
+	  | dataitem_layout wh (STRING (s)) _ =
+		let
 		  val moresize = (4 - (size s) mod 4) mod 4;
 		  val more = String.substring("\000\000\000",0,moresize);
 		  fun loop wh [] = 0
-		    | loop wh (a::more) = 
-		      (H.storebyte(i2w wh,ord a); 
+		    | loop wh (a::more) =
+		      (H.storebyte(i2w wh,ord a);
 		       1 + (loop (wh+1) more))
 		in loop wh (explode (s ^ more))
                 end
-	fun data_layout pos dataarray finalFlag = 
+	fun data_layout pos dataarray finalFlag =
 	  let val sz = Array.length dataarray
-	  in if (pos >= sz) 
+	  in if (pos >= sz)
 		then ()
-	     else let 
+	     else let
 		    val d = Array.sub(dataarray,pos)
 		    val curlocation = !location
 		    val size = dataitem_layout curlocation d finalFlag
 		    val _ = add_location(size)
-		  in 
+		  in
 		    ((case d of
-			(DLABEL (l)) => 
+			(DLABEL (l)) =>
 			  if (finalFlag) then ()
-			    else (label_table := 
+			    else (label_table :=
 				  (l,curlocation)::(!label_table))
 		      | _  	     => ());
 			data_layout (pos + 1) dataarray finalFlag)
 		  end
 	  end
-	fun read [] = () 
-	  | read ((a,aa)::b) = 
-	     (print ((label2s a) ^ " " 
+	fun read [] = ()
+	  | read ((a,aa)::b) =
+	     (print ((label2s a) ^ " "
 		     ^ (Int.toString aa) ^ "\n"); read b);
 
 	val _ = location := actualstart
@@ -277,7 +277,7 @@ fun replace_all_stack(arg) = stack := arg
 	val _ = location := savelocation
 	val _ = if (!print_dump)
 		  then (print "*****************ALL LABELS LAID OUT -- START ********\n";
-			read (!label_table);	
+			read (!label_table);
 			print "*****************ALL LABELS LAID OUT -- END **********\n")
 		else ()
       in  !location
@@ -287,7 +287,7 @@ fun replace_all_stack(arg) = stack := arg
 fun sv2val(IMM i) = (wzero,i2w i)
   | sv2val(REG ri) = lookupval_ireg(ri);
 
-fun trap() = 
+fun trap() =
     if O.get_exn() = O.OKAY then () else error "hardware traps unimplemented"
 
 
@@ -298,9 +298,9 @@ fun trap() =
 
 (* ----------------- the big enchilada  --------------------------- *)
 
-    (* ------ metastep handles call to predefine C code in a single step ---------- *)    
+    (* ------ metastep handles call to predefine C code in a single step ---------- *)
     val instream_table : (int * TextIO.instream) list ref = ref([(0,TextIO.stdIn)])
-    val outstream_table : (int * TextIO.outstream) list ref = 
+    val outstream_table : (int * TextIO.outstream) list ref =
       ref([(2,TextIO.stdErr),(1,TextIO.stdOut)])
     val stream_counter = ref 3
     fun new_stream_id() = (stream_counter := !stream_counter + 1;
@@ -308,28 +308,28 @@ fun trap() =
     fun add_in (i,s) = instream_table := (i,s) :: (!instream_table)
     fun add_out (i,s) = outstream_table := (i,s) :: (!outstream_table)
     exception FindInt
-    fun find_int(i:int,args) = 
+    fun find_int(i:int,args) =
       let fun f((j,x)::rest) = if (i=j) then x else f rest
 	    | f [] = raise FindInt
       in
 	f args
       end
-    fun find_in i = (find_int(w2i i,!instream_table) 
+    fun find_in i = (find_int(w2i i,!instream_table)
 		     handle FindInt =>
 		       crash "bad instream")
-    fun find_out i = (find_int(w2i i,!outstream_table) 
+    fun find_out i = (find_int(w2i i,!outstream_table)
 		      handle FindInt =>
-			  (print "bad outstream: "; 
+			  (print "bad outstream: ";
 			   print (W.toDecimalString i);
 			   crash "bad outstream"))
 
     fun destring (r) :string =
-      let 
+      let
 	val tag = H.lookuplong(W.uminus(r,0w4))
 	val size = w2i(W.rshiftl(tag,3))
 	val numword = (size+3) div 4;
 	fun loop i = if (i >= numword) then ""
-	  else 
+	  else
 	    let val lon = H.lookuplong(W.uplus(r,i2w(4*i)))
 		val disps = [0,8,16,24]
 		fun doer disp = chr(w2i(W.andb(W.rshiftl(lon,disp),i2w 255)))
@@ -340,8 +340,8 @@ fun trap() =
 	String.substring(loop 0,0,size)
       end
     val heapptr = SREGI HEAPPTR
-    fun alloc_string(str : string) = 
-      let 
+    fun alloc_string(str : string) =
+      let
 	val len = size str
 	val s = str ^ "\000\000\000\000";
 	val numword = (len+3) div 4;
@@ -383,7 +383,7 @@ fun trap() =
 
 
     fun metastep({func=(xML_EXTERN_LABEL name),
-		  return,args,results,tailcall,save}) = 
+		  return,args,results,tailcall,save}) =
       (case (name,args,results) of
 	 ("ml_output",([ri,rj],[]),([dest],[])) =>
 	   let
@@ -396,42 +396,42 @@ fun trap() =
 	   in TextIO.output(stream,msg);
 	      setireg(dest,unit)
 	   end
-       | ("ml_input",([ri,rj],[]),([dest],[])) => 
+       | ("ml_input",([ri,rj],[]),([dest],[])) =>
 	   let val (rival,rjval) = (getlowival(ri),getlowival(rj))
 	     val res = alloc_string(TextIO.inputN(find_in rival,w2i rjval))
 	   in setireg(dest,lpack(wzero,res))
 	   end
-       | ("ml_lookahead",([ri],[]),([dest],[])) => 
+       | ("ml_lookahead",([ri],[]),([dest],[])) =>
 	   let val rival = getlowival(ri)
 	       val res = alloc_string(case (TextIO.lookahead (find_in rival)) of
 					  SOME c => implode[c]
 					| NONE => "")
 	   in setireg(dest,lpack(wzero,res))
 	   end
-       | ("ml_open_in",([ri],[]),([ret],[])) => 
+       | ("ml_open_in",([ri],[]),([ret],[])) =>
 	   let val rival = getlowival(ri)
 	     val i = new_stream_id()
 	     val st = TextIO.openIn(destring rival)
 	   in add_in(i,st);
 	     setireg(ret,lpack(wzero,i2w i))
 	   end
-       | ("ml_open_out",([ri],[]),([ret],[])) => 
+       | ("ml_open_out",([ri],[]),([ret],[])) =>
 	   let val rival = getlowival(ri)
 	     val i = new_stream_id()
 	     val st = TextIO.openOut(destring rival)
 	   in add_out(i,st);
 	     setireg(ret,lpack(wzero,i2w i))
 	   end
-       | ("ml_close_in",([ri],[]),([dest],[])) => 
+       | ("ml_close_in",([ri],[]),([dest],[])) =>
 	        (TextIO.closeIn (find_in (getlowival ri));
 		 setireg(dest,unit))
-       | ("ml_close_out",([ri],[]),([dest],[])) => 
+       | ("ml_close_out",([ri],[]),([dest],[])) =>
 	        (TextIO.closeOut (find_out (getlowival ri));
 		 setireg(dest,unit))
-       | ("ml_flush_out",([ri],[]),([dest],[])) => 
+       | ("ml_flush_out",([ri],[]),([dest],[])) =>
 	         (TextIO.flushOut (find_out (getlowival ri));
 		  setireg(dest,unit))
-       | ("ml_end_of_stream",([ri],[]),([ret],[])) => 
+       | ("ml_end_of_stream",([ri],[]),([ret],[])) =>
 	   let val id = find_in (getlowival ri)
 	     val res = if (TextIO.endOfStream id) then 1 else 0
 	   in  setireg(ret,lpack(wzero,i2w res))
@@ -441,16 +441,16 @@ fun trap() =
       | metastep _ = error "no such metastep"
 
     fun step (LI(v,ri)) =  setireg(ri,LONGS(WORD wzero, WORD v))
-      | step (LADDR(lab,offset,ri)) = 
+      | step (LADDR(lab,offset,ri)) =
           setireg(ri,lpack(wzero,i2w(offset + (label_to_address (!label_table) lab))))
       | step (LEA(ea,ri)) = setireg(ri,lpack(wzero,ea_to_val(ea,1)))
-      | step (CMV(cmp,a,b,dest)) = 
-	let 
+      | step (CMV(cmp,a,b,dest)) =
+	let
 	  val lowa = getlowival a;
 	  val res = (O.cmpis_to_fun cmp)(lowa,wzero)
 	in  if res then setireg(dest,lpack(sv2val(b))) else ()
 	end
-      | step (MV(rsrc,rdest)) = 
+      | step (MV(rsrc,rdest)) =
 	(setireg(rdest,getireg(rsrc))
 	 handle Div => (print "MV caused a div\n"; raise Div))
       | step (FMV(rsrc,rdest)) = update_freg(rdest,getfreg(rsrc))
@@ -458,7 +458,7 @@ fun trap() =
       | step (SUB(a,b,dest)) = setireg(dest,lpack(O.minusop(getival(a),sv2val(b),false)))
       | step (MUL(a,b,dest)) = setireg(dest,lpack(O.multop(getival(a),sv2val(b),false)))
       | step (DIV(a,b,dest)) = setireg(dest,lpack(O.divop(getival(a),sv2val(b),false)))
-      | step (MOD(a,b,dest)) = 
+      | step (MOD(a,b,dest)) =
 	let val q = O.divop(getival(a),sv2val(b),false)
 	  val res = O.minusop(getival(a),O.multop(q,sv2val(b),false),false)
 	in setireg(dest,lpack(res))
@@ -467,7 +467,7 @@ fun trap() =
       | step (SUBT(a,b,dest)) = setireg(dest,lpack(O.minusop(getival(a),sv2val(b),true)))
       | step (MULT(a,b,dest)) = setireg(dest,lpack(O.multop(getival(a),sv2val(b),true)))
       | step (DIVT(a,b,dest)) = setireg(dest,lpack(O.divop(getival(a),sv2val(b),true)))
-      | step (MODT(a,b,dest)) = 
+      | step (MODT(a,b,dest)) =
 	let val q = O.divop(getival(a),sv2val(b),true)
 	  val res = O.minusop(getival(a),O.multop(q,sv2val(b),true),true)
 	in setireg(dest,lpack(res))
@@ -480,15 +480,15 @@ fun trap() =
 							     sv2val(b),false)))
       | step (S8SUB(a,b,dest)) = setireg(dest,lpack(O.minusop(O.multop(getival(a),eight,false),
 							     sv2val(b),false)))
-      | step (CMPUI(cmp,a,b,dest)) = 
-	let 
+      | step (CMPUI(cmp,a,b,dest)) =
+	let
 	  val lowa = getlowival a;
 	  val lowb = case (sv2val(b)) of (x,y) => y
 	  val res = (O.cmpiu_to_fun cmp)(lowa,lowb)
 	in  setireg(dest,lpack(O.bool_to_ireg_val(res)))
 	end
-      | step (CMPSI(cmp,a,b,dest)) = 
-	let 
+      | step (CMPSI(cmp,a,b,dest)) =
+	let
 	  val lowa = getlowival a;
 	  val lowb = case (sv2val(b)) of (x,y) => y
 	  val res = (O.cmpis_to_fun cmp)(lowa,lowb)
@@ -508,8 +508,8 @@ fun trap() =
 
       | step (FABSD(a,dest)) = update_freg(dest,QFLOAT(abs(getfval(a))))
       | step (FNEGD(a,dest)) = update_freg(dest,QFLOAT(~(getfval(a))))
-      | step (CVT_INT2REAL(rf,dest)) = 
-	let val lons = 
+      | step (CVT_INT2REAL(rf,dest)) =
+	let val lons =
 	    case lookup_ireg(rf) of
 		LONGS(WORD a, WORD b) => (a,b)
 	      | _ => error "step: FCVTI"
@@ -517,26 +517,26 @@ fun trap() =
 	end
       | step (CVT_REAL2INT(a,dest)) = update_ireg(dest,lpack(wzero,i2w(floor(getfval(a)))))
 
-      | step (CMPF(cmp,a,b,dest)) = 
+      | step (CMPF(cmp,a,b,dest)) =
 	let val res = (O.cmpf_to_fun cmp)(getfval(a),getfval(b))
 	in  update_ireg(dest,lpack (O.bool_to_freg_val(res)))
 	end
       | step (BR(label)) = pc_label_change (LOCAL_LABEL label)
 (*
-      | step (BCNDI(cmp,ri,label,predict)) = 
+      | step (BCNDI(cmp,ri,label,predict)) =
 	let val (a,b) = (getlowival(ri),wzero)
         in
 	if ((O.cmpis_to_fun cmp) (a,b))
 	  then pc_label_change (LOCAL_LABEL label)
 	else ()
 	end
-      | step (BCNDF(cmp,ri,label,predict)) = 
+      | step (BCNDF(cmp,ri,label,predict)) =
 	if ((O.cmpf_to_fun cmp) (getfval(ri),0.0))
 	  then pc_label_change (LOCAL_LABEL label)
 	else ()
 *)
       | step (JMP(ri,_)) = pc_abs_change (getlowival ri)
-      | step (LOAD32I(ea,ri)) = 
+      | step (LOAD32I(ea,ri)) =
 	setireg(ri,LONGS(WORD wzero,WORD (H.lookuplong(ea_to_val(ea,4)))))
       | step (STORE32I(ea,ri)) = H.storelong(ea_to_val(ea,4),getlowival(ri))
       | step (STORENEW32I(ea,ri)) = H.storelong(ea_to_val(ea,4),getlowival(ri))
@@ -546,22 +546,22 @@ fun trap() =
       | step (NEEDGC(sz)) = ()
       | step (IALIGN _) = error "alignment not done for rtlinterp"
       | step (ILABEL _) = ()
-      
-(* we can ignore tail calls for now, they have branches to the right place 
+
+(* we can ignore tail calls for now, they have branches to the right place
  except the old return address was overwritten so we have to restore it *)
       | step (CALL (blob as {extern_call, func,return=local_return,args,
-		results,tailcall,save=SAVE save_caller_without})) = 
-	let 
+		results,tailcall,save=SAVE save_caller_without})) =
+	let
 	  val call_add = (case func of
 			      REG' r => getlowival(r)
 			    | LABEL' l => i2w(label_to_address (!label_table) (l)))
 	  fun regular_call () =
-	      let 
-		  val call_label = 
+	      let
+		  val call_label =
 		  case func of
 		      REG' r => address_to_label (!label_table) (w2i call_add)
 		    | LABEL' l => l
-		  val callee as PROC{args=formal,return,save=SAVE save_callee,...} = 
+		  val callee as PROC{args=formal,return,save=SAVE save_callee,...} =
 		      find_proc(call_label)
 		  val save_caller = save_caller_without
 		  val newblob = blob
@@ -590,8 +590,8 @@ fun trap() =
 		    end
 	   else regular_call()
 	end
-      | step (RETURN ret_reg) = 
-	let 
+      | step (RETURN ret_reg) =
+	let
 	  val ret_add = getlowival(ret_reg)
           val (caller,self,saved_val,save_callee') = pop_stack()
 	  val {save=save_abs,results=result_formal,...} = caller
@@ -619,9 +619,9 @@ fun trap() =
      | step HANDLER_ENTRY = ()
       | step (SAVE_CS _) =
 	      (push_exn_stack (copy_all_stack()))
-      | step END_SAVE = 
+      | step END_SAVE =
 	      (pop_exn_stack(); ())
-      | step RESTORE_CS = 
+      | step RESTORE_CS =
 	      (replace_all_stack (pop_exn_stack()))
       | step HALT = raise RTL_HALTED
 
@@ -630,23 +630,23 @@ fun trap() =
     val heapstart = ref 0;
     fun showheap() =
       let
-	fun foo(cur,limit) = 
+	fun foo(cur,limit) =
 	  H.showheap(i2w cur,(limit-cur+4)div 8);
-      in 
+      in
 	(foo(!heapstart,(w2i(getlowival(heapptr))) + 20);
 	 print("\n");
 	 foo(actualstart,!codebegin))
       end
-    
-    fun run() = 
-      let 
+
+    fun run() =
+      let
 	val curpc = !pc
 	val instr = H.lookupinstr(i2w curpc);
 	val iscallret =  (case instr of
 			      CALL _ => true
 			    | RETURN _ => true
 			    | _ => false)
-	val dumpregs = (!print_dump andalso !instrcount >= !bp) 
+	val dumpregs = (!print_dump andalso !instrcount >= !bp)
 	    orelse (!print_dump_callret andalso iscallret)
 	(* NOTE that step assumes that the pc had not been advanced yet in CALL *)
 	val isexn = case instr of
@@ -657,9 +657,9 @@ fun trap() =
 	val _ = if (!print_trace)
 		    (*	  orelse isexn orelse iscallret) *)
 		    then
-			(print ("\n" ^ (Int.toString (!instrcount)) ^ 
-				"  PC=" ^ (Int.toString (curpc)) ^ "  " ^ 
-				(R.iword2str (INSTR instr)) ^ 
+			(print ("\n" ^ (Int.toString (!instrcount)) ^
+				"  PC=" ^ (Int.toString (curpc)) ^ "  " ^
+				(R.iword2str (INSTR instr)) ^
 				(if isexn then "EXN instr" else "") ^ "\n"))
 		else ()
         val stop = ((step instr; instrcount := (!instrcount) + 1; false)
@@ -669,7 +669,7 @@ fun trap() =
 	val _ = if (dumpregs)
 (* orelse isexn orelse iscallret) *)
 (*	               (iscallret andalso (!instrcount > 1000))) *)
-then 
+then
 	  (print "-----------------------------------\n";
 	   R.showreg_nonzero();
 	   print "-----------------------------------\n"
@@ -678,14 +678,14 @@ then
 		else ()
 	val _ = if (pc_look_changed()) then () else (pc := curpc + 4)
 	val _ = pc_unset_changed()
-	val _ = if ((!instrcount mod 10000) = 0) 
+	val _ = if ((!instrcount mod 10000) = 0)
 		  then print (Int.toString(!instrcount) ^ " instructions executed.\n") else ()
       in if stop then (raise RTL_HALTED) else run()
       end;
-      
+
     val badvar = Name.fresh_named_var "rtlinterp_badvar"
-    fun do_module (callval,tf) ((name : string,MODULE{procs,data,main,...})) = 
-      let 
+    fun do_module (callval,tf) ((name : string,MODULE{procs,data,main,...})) =
+      let
 	val proc as PROC({args,results,return=main_return,...}) = find_proc(LOCAL_LABEL main)
 	val _ = setireg(main_return,lpack(wzero,i2w haltpc))
 	val _ = R.register_restore args callval;
@@ -695,7 +695,7 @@ then
 			 func=((REG' badreg) : reg_or_label),
 			 return=NONE,
 			 args=(nil,nil),results=(nil,nil),
-			 tailcall=false,save=((SAVE(nil,nil)) : save)} 
+			 tailcall=false,save=((SAVE(nil,nil)) : save)}
 	    : callblob
 	  val stopframe = (badcall,proc,(nil,nil),(nil,nil));
 	in
@@ -705,12 +705,12 @@ then
 	val _ = clear_output()
         val answer = run()
 		handle RTL_HALTED => R.register_save results;
-      in  
+      in
         answer
       end;
 
-    fun RTL_interp (modules, callval, tf) = 
-      let 
+    fun RTL_interp (modules, callval, tf) =
+      let
         val _ = (H.reset_heap(); R.reset_register(); cur_module := map #2 modules;
 		 instrcount := 0; O.reset_exn())
         val heapbase = RTL_layout (map #2 modules)
@@ -727,18 +727,18 @@ then
 	  then (print "INITIAL STATE\n"; R.showreg())
 		else ()
 	val answers = map (do_module (callval,tf)) modules
-	val _ = print ("\nRtl interpreter: " ^ (Int.toString (!instrcount)) ^ 
+	val _ = print ("\nRtl interpreter: " ^ (Int.toString (!instrcount)) ^
 		       " instructions executed\n")
 
         val _ = print "\nOutput was:-------------BEGIN--------------\n"
 	val _ = print (get_output())
-	val _ = 
+	val _ =
 	  case (!outstream) of
 	    NONE => ()
 	  | SOME s => TextIO.output(s,get_output())
         val _ = print "Output was:-----------END------------------\n\n"
 	val _ = cur_module := nil
-      in  
+      in
         answers
       end;
 

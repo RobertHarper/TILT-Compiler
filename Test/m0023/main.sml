@@ -1,4 +1,3 @@
-(*$import *)
 (* infinite loop *)
 fun f l =
    case l of

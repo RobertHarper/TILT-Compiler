@@ -1,4 +1,3 @@
-(*$import *)
 (* check ref's and polymorphism *)
 local
 

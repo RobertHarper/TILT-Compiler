@@ -1,5 +1,3 @@
-(*$import *)
-
 (* This tests an easy-to-make bug regarding infix
    declarations in an SML parser.  - tom7
 *)

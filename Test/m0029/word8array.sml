@@ -1,6 +1,3 @@
-(*$import Word8 Int Word8Array Word8Vector *)
-
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

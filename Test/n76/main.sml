@@ -1,4 +1,3 @@
-(*$import *)
 (* TestProgram: D-001-A-ACCEPT
 
    TestSuite for Standard ML

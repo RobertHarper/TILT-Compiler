@@ -1,1 +1,2 @@
-Test	jump.sml
+source unit Test = "jump.sml" {List}
+make executable "Test." ^ $target ^ ".exe" {Test}

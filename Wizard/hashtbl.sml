@@ -1,4 +1,3 @@
-
 functor WeakHashTableFun (structure Key : HASH_KEY) (* :> HASH_TABLE where type Key.key = Key.key *) =
     struct
 	open Array

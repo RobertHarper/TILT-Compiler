@@ -1,4 +1,3 @@
-(*$import *)
 (* TestProgram: S-004-E-FAIL
 
    TestSuite for Standard ML

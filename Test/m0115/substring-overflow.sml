@@ -1,5 +1,3 @@
-(*$import Int Substring *)
-
 open Substring
 
 val _ =

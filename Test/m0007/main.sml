@@ -1,4 +1,3 @@
-(*$import *)
 (* polymorphic type inference and ref's *)
 fun h f = f 13
    

@@ -1,4 +1,3 @@
-(*$import *)
 (* Verifies that signature constraints change status *)
 structure S:
    sig

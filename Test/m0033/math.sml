@@ -1,5 +1,3 @@
-(*$import Int Real Math *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

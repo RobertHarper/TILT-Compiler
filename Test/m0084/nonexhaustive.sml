@@ -1,5 +1,3 @@
-(*$import *)
-
 (* exhaustive.sml *)
 
 (* Checks for non-exhaustive pattern matches (compiler should warn). *)

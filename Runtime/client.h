@@ -11,9 +11,7 @@ extern val_t link_traceglobalstart;
 extern val_t link_traceglobalend;
 
 /* Access these like val = GetGlobal(&label) */
-extern val_t ml_Prelude_DOTDiv__r__INT;
-extern val_t ml_Prelude_DOTOverflow__r__INT;
-extern val_t ml_Prelude_DOTTiltExn__STR__r__INT;
+extern val_t ml__PLUSUTiltExn__INT__r__INT;
 extern val_t link_LINKUNIT_DOTmain;
 
 #endif

@@ -1,5 +1,3 @@
-(*$import Time *)
-
 open Time
 
 val _ =

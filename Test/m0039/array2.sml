@@ -1,5 +1,3 @@
-(*$import Array2 Int *)
-
 open Array2
 
 val x = ref 0

@@ -1,5 +1,3 @@
-(*$import Int String Substring TextIO OS *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

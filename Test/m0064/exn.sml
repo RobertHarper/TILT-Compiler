@@ -1,5 +1,3 @@
-(*$import *)
-
 exception E
 
 fun loop n =

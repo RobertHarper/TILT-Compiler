@@ -1,4 +1,3 @@
-(*$import Word8Vector *)
 functor F () =
     struct
 	val b : Word8Vector.vector = Word8Vector.fromList []

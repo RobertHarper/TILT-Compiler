@@ -1,5 +1,3 @@
-(*$import *)
-
 (* flexrecord.sml *)
 
 (* Checks type inference for flexible records. *)

@@ -1,5 +1,3 @@
-(*$import WORD ARITH ArithHelp Int LargeInt *)
-
 (* Check for exceptions. *)
 (* Does not check for bogus values. *)
 

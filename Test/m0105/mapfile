@@ -1,1 +1,2 @@
-Test	semicolon.sml
+source unit Test = "semicolon.sml" {}
+make executable "Test." ^ $target ^ ".exe" {Test}

@@ -1,5 +1,3 @@
-(*$import *)
-
 (*kitloop2.sml*)
 
 (* A tail-recursive loop which gives stack overflow, unless one

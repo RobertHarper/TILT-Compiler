@@ -1,5 +1,3 @@
-(*$import ARITH ArithHelp *)
-
 (* Check for exceptions. *)
 (* Does not check for bogus values. *)
 

@@ -1,5 +1,3 @@
-(*$import Word Word8 *)
-
 fun test (f, a, r) =
    if f a = r
       then ()

@@ -1,4 +1,3 @@
-
 structure Wizard (* :> WIZARD *) =
     struct
 	exception Impossible

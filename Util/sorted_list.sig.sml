@@ -1,7 +1,7 @@
-signature SLIST = 
+signature SLIST =
   sig
     type key
-      
+
     val compare : key * key -> order
 
     type 'a slist

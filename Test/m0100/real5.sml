@@ -1,5 +1,3 @@
-(*$import Real StringCvt Int *)
-
 fun p (s: string): unit = (print s; print "\n")
 fun pi (i: int): unit = p (Int.toString i)
 fun pr (r: real, fmt): unit = p (Real.fmt fmt r)

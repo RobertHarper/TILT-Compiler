@@ -1,5 +1,3 @@
-(*$import *)
-
 fun f x = x
 fun toy () =
    let

@@ -1,1 +1,2 @@
-Test	ring.sml
+source unit Test = "ring.sml" {Int}
+make executable "Test." ^ $target ^ ".exe" {Test}

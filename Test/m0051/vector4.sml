@@ -1,5 +1,3 @@
-(*$import Vector Array *)
-
 open Vector
 
 fun assert(msg,b) =

@@ -1,5 +1,3 @@
-(*$import *)
-
 fun die(): 'a =
    let exception Die
    in raise Die

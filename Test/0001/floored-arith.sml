@@ -1,5 +1,3 @@
-(*$import ARITH Real Int *)
-
 (* Check that rounding operations do the right thing on negative inputs. *)
 
 structure FlooredArith :> ARITH =

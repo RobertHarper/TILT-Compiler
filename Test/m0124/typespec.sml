@@ -1,5 +1,3 @@
-(*$import *)
-
 (* typespec.sml *)
 
 (* Checks scoping of definitional type specifications. *)

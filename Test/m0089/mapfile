@@ -1,1 +1,2 @@
-Test	overloading.sml
+source unit Test = "overloading.sml" {}
+make executable "Test." ^ $target ^ ".exe" {Test}

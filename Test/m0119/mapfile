@@ -1,1 +1,4 @@
-Test	textio.sml
+source unit Test = "textio.sml" {
+	Int String Substring TextIO OS
+}
+make executable "Test." ^ $target ^ ".exe" {Test}

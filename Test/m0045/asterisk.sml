@@ -1,5 +1,3 @@
-(*$import *)
-
 (* asterisk.sml *)
 
 (* Checks parsing of "* )". *)

@@ -1,5 +1,3 @@
-(*$import *)
-
 (* with abstype *)
 
 structure S =

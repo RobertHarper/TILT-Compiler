@@ -1,5 +1,3 @@
-(*$import *)
-
 (* Other variations on parsing of
    infix declarations. These should
    all be accepted. - tom7 *)

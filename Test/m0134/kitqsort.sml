@@ -1,5 +1,3 @@
-(*$import *)
-
 (*kitknuth_bendix36c.sml*)
 
 (* quicksort-random.sml

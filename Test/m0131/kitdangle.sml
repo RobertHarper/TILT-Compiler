@@ -1,5 +1,3 @@
-(*$import *)
-
 (*kitdangle.sml*)
 
 infix - + :: =

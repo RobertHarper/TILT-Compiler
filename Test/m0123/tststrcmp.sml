@@ -1,5 +1,3 @@
-(*$import *)
-
 (*tststrcmp.sml  27/06/1997 17:21. tho.*)
 (*test <, etc. on strings*)
 

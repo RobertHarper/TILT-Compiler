@@ -1,5 +1,3 @@
-(*$import Word8 Word8Vector Word8Array Byte Int Char List String *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

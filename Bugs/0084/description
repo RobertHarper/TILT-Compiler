@@ -50,17 +50,12 @@ Comments:    This is pretty pathological, but we should
 	disallow bindings for :: and nil (except in the Basis) and
 	document the resulting small deviation from the standard.
 
-	[pds] If you take over this bug, then you should search the
-	elaborator for other derived forms and symbols which should
-	not be rebound.  For example, I think SOME and NONE are used
-	to translate pval declarations.
-
-        [tom7] My mistake, disallowing bindings of :: and nil is
+       [tom7] My mistake, disallowing bindings of :: and nil is
         consistent with the def. Page 12:
 
 	"No datdesc, valdesc, or exdesc may describe true, false,
 	 nil, ::, or ref."
 Fix:
-Test: *
-Owner: *
+Test: bug84 bug84b
+Owner: swasey
 Status: open

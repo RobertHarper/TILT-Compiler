@@ -1,1 +1,4 @@
-Test	filesys.sml
+source unit Test = "filesys.sml" {
+	Int List Time OS Posix TextIO
+}
+make executable "Test." ^ $target ^ ".exe" {Test}

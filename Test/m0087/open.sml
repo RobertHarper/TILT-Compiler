@@ -1,5 +1,3 @@
-(*$import *)
-
 (* open.sml *)
 
 (* Checks scoping rules of open. *)

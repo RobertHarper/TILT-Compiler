@@ -1,5 +1,3 @@
-(*$import Int Bool Char StringCvt List TextIO OS *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

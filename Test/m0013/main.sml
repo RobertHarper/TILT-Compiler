@@ -1,4 +1,3 @@
-(*$import *)
 (* rudimentary functor instantiation *)
 
 fun plus (a, b) = a

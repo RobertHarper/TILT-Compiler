@@ -1,5 +1,3 @@
-(*$import *)
-
 (* undetermined.sml *)
 
 (* Checks inference for non-generalised types (aka "free type variables"). *)

@@ -1,5 +1,3 @@
-(*$import Array *)
-
 (* This program tests the implementation of arrays whose length is
    important but whose elements aren't.
  *)

@@ -1,5 +1,3 @@
-(*$import Int *)
-
 fun loop (left: Int.int): unit =
 	if left = 0
 	   then ()

@@ -1,1 +1,2 @@
-Test	nonexhaustive.sml
+source unit Test = "nonexhaustive.sml" {}
+make executable "Test." ^ $target ^ ".exe" {Test}

@@ -1,1 +1,2 @@
-Test	posix-exit.sml
+source unit Test = "posix-exit.sml" {TextIO Posix}
+make executable "Test." ^ $target ^ ".exe" {Test}

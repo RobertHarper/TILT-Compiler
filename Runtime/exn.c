@@ -27,27 +27,33 @@ extern ptr_t cstring2mlstring_alloc(const char *);
 #define GET_PTR(p, i) GET_RECORD(ptr_t,p,i)
 #define GET_INT(p, i) GET_RECORD(int,p,i)
 
+/* The declarations in ../Basis/tiltexn.sml. */
+#define DIV 0
+#define OVERFLOW 1
+#define TILTEXN 2
+
 /* The components of an exception module.
-   N.B. must agree with Elaborator/toil.sml. */
+   N.B. must agree with ../Elaborator/toil.sml. */
 #define MOD_STAMP 0
 #define MOD_MK    1
 
-/* Find canonical exception packet for a global, non-value-carrying
-   exception. */
-static ptr_t exn_lookup(ptr_t global)
+/* Find canonical exception packet for a top-level, non-value-carrying
+   exception declared in unit TiltExn; see ../Basis/tiltexn.sml. */
+static ptr_t exn_lookup(int n)
 {
-  ptr_t exnmod = (ptr_t) GetGlobal(global);
+  ptr_t compunit = (ptr_t) GetGlobal(&ml__PLUSUTiltExn__INT__r__INT);
+  ptr_t exnmod = (ptr_t) GET_PTR(compunit,n);
   return GET_PTR(exnmod, MOD_MK);
 }
 
 ptr_t getOverflowExn(void)
 {
-  return exn_lookup(&ml_Prelude_DOTOverflow__r__INT);
+  return exn_lookup(OVERFLOW);
 }
 
 ptr_t getDivExn(void)
 {
-  return exn_lookup(&ml_Prelude_DOTDiv__r__INT);
+  return exn_lookup(DIV);
 }
 
 /* The components of an exception packet. */
@@ -73,16 +79,15 @@ static ptr_t mkExn(ptr_t exnname, int exnstamp, val_t exnarg, int argPointer)
  * isn't early enough).
  */
 
-/* The components of the TiltExn structure.
-   N.B. must aree with Basis/Prelude.sml. */
+/* The components of the TiltExn structure; see ../Basis/tiltexn.sml. */
 #define SYSERR  0
 #define LIBFAIL 1
 
 /* Get the exception stamp for the ith TiltExn componenet. */
 static int getTiltExnStamp(int i)
 {
-  ptr_t global = &ml_Prelude_DOTTiltExn__STR__r__INT;
-  ptr_t tiltexn = (ptr_t) GetGlobal(global);
+  ptr_t compunit = (ptr_t) GetGlobal(&ml__PLUSUTiltExn__INT__r__INT);
+  ptr_t tiltexn = GET_PTR(compunit,TILTEXN);
   ptr_t exnmod = GET_PTR(tiltexn, i);
   int stamp = GET_INT(exnmod, MOD_STAMP);
   return stamp;

@@ -1,6 +1,3 @@
-(*$import Real Bool *)
-
-
 local
   val isNormal = Real.isNormal
   val isFinite = Real.isFinite

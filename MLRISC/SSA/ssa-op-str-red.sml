@@ -1,4 +1,3 @@
-
 (*
  * Operator strength reduction, Simpson/Cooper's algorithm
  *)

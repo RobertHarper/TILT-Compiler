@@ -1,1 +1,2 @@
-Test	int-overflow.sml
+source unit Test = "int-overflow.sml" {Int}
+make executable "Test." ^ $target ^ ".exe" {Test}

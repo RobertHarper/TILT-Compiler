@@ -1,1 +1,4 @@
-Test	real.sml
+source unit Test = "real.sml" {
+	Int Real List StringCvt
+}
+make executable "Test." ^ $target ^ ".exe" {Test}

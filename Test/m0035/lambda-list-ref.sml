@@ -1,5 +1,3 @@
-(*$import *)
-
 val r : (int -> int) list ref = ref []
 
 val _ = r := (fn x => x + 1) :: ! r

@@ -1,5 +1,3 @@
-(*$import *)
-
 (* exhaustive.sml *)
 
 (* Checks for correct treatment of exhaustiveness for basic types

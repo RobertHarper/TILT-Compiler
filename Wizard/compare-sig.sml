@@ -1,4 +1,3 @@
-
 signature COMPARE =
   sig
     type t

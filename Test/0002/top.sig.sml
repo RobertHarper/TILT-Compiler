@@ -1,5 +1,3 @@
-(*$import Word8 Int32 Position SysWord Real64 Word32 Word31 *)
-
 (* Top-level types and values. *)
 
 (* See the Top-Level Environment chapter of the basis library spec. *)

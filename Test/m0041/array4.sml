@@ -1,5 +1,3 @@
-(*$import Array *)
-
 fun f n =
    if 0 = Array.sub (Array.tabulate (n, fn i => i), 0)
       then ()

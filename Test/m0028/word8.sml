@@ -1,5 +1,3 @@
-(*$import Word8 Int Word List StringCvt *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

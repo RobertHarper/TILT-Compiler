@@ -1,5 +1,3 @@
-(*$import Math *)
-
 (*fft.sml*)
 
 (*by Torben Mogensen (torbenm@diku.dk)*)

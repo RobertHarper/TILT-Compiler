@@ -1,4 +1,3 @@
-(*$import *)
 (* TestProgram: R-020-B-FAIL
 
    TestSuite for Standard ML

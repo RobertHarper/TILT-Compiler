@@ -1,4 +1,3 @@
-(*$import *)
 (* hello world in three lines *)
 val _ = print "Hello,";
 val _ = print " ";

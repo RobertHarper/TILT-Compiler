@@ -1,5 +1,3 @@
-(*$import *)
-
 signature S = sig end
 
 functor f () =

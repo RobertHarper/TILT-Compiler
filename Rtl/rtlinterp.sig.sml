@@ -10,5 +10,5 @@ signature RTLINTERP =
     val print_dump : bool ref
     val print_dump_callret : bool ref
     val outstream : (TextIO.outstream option) ref
-	
+
   end

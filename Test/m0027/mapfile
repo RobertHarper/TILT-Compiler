@@ -1,1 +1,2 @@
-Test	word.sub.sml
+source unit Test = "word.sub.sml" {Int Word32 Word8}
+make executable "Test." ^ $target ^ ".exe" {Test}

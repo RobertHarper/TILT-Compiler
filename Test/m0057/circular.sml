@@ -1,5 +1,3 @@
-(*$import Vector *)
-
 open Vector
 
 datatype t = T of t vector

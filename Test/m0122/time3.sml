@@ -1,5 +1,3 @@
-(*$import Time *)
-
 open Time
 
 fun pt t = (print(toString t) ; print "\n")

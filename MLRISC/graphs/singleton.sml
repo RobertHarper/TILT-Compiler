@@ -1,4 +1,3 @@
-
 (*
  *  Make a singleton graph 
  *)

@@ -1,5 +1,3 @@
-(*$import *)
-
 fun assert (msg,b) =
    if b then ()
    else print ("assertion failed: " ^ msg ^ "\n")

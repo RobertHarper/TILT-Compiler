@@ -1,6 +1,3 @@
-(*$import Real *)
-
-
 exception Error
 
 fun translateXYZ (translateX : real, translateY : real, translateZ : real) =

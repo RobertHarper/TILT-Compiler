@@ -1,5 +1,3 @@
-(*$import Array *)
-
 open Array
 
 val a = array (1000, 0)

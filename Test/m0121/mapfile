@@ -1,1 +1,2 @@
-Test	time2.sml
+source unit Test = "time2.sml" {Time}
+make executable "Test." ^ $target ^ ".exe" {Test}

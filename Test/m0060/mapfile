@@ -1,1 +1,2 @@
-Test	conv.sml
+source unit Test = "conv.sml" {Int IntInf}
+make executable "Test." ^ $target ^ ".exe" {Test}

@@ -1,1 +1,2 @@
-Test	circular.sml
+source unit Test = "circular.sml" {Vector}
+make executable "Test." ^ $target ^ ".exe" {Test}

@@ -1,5 +1,3 @@
-(*$import Int *)
-
 (* From Chapter 5 of Elsman's PhD thesis; these examples should
  * elaborate. *)
 

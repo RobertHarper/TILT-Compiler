@@ -1,1 +1,2 @@
-Test	math.sml
+source unit Test = "math.sml" {Int Real Math}
+make executable "Test." ^ $target ^ ".exe" {Test}

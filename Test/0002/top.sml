@@ -1,5 +1,3 @@
-(*$import TOP Word8 Int Int32 Position SysWord Real64 Word32 Word31 *)
-
 (* Top-level types and values. *)
 
 (* See the Top-Level Environment chapter of the basis library spec. *)
@@ -19,9 +17,9 @@ struct
     type 'a vector = 'a vector
     type 'a ref = 'a ref
     datatype bool = datatype bool
-    datatype 'a option = datatype option
+    datatype option = datatype option
     datatype order = datatype order
-    datatype 'a list = datatype list
+    datatype list = datatype list
 
     exception Bind = Bind
     exception Chr = Chr

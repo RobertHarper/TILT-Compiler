@@ -1,5 +1,3 @@
-(*$import *)
-
 (*kitreynolds3.sml*)
 
 local

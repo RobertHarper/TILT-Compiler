@@ -1,11 +1,23 @@
-ARITH		arith.sig.sml
-ArithHelp	arith-help.sml
-PrimArith	prim-arith.sml
-IntArith	int-arith.sml
-WordArith	word-arith.sml
-RealArith	real-arith.sml
-OrdArith	ord-arith.sml
-FlooredArith	floored-arith.sml
-Arith		arith.sml
+source unit ARITH = "arith.sig.sml" {}
+source unit ArithHelp = "arith-help.sml" {IEEEReal}
+source unit PrimArith = "prim-arith.sml" {ARITH ArithHelp}
+source unit IntArith = "int-arith.sml" {
+	INTEGER ARITH ArithHelp
+}
+source unit WordArith = "word-arith.sml" {
+	WORD ARITH ArithHelp Int LargeInt
+}
+source unit RealArith = "real-arith.sml" {
+	REAL ARITH ArithHelp Int
+}
+source unit OrdArith = "ord-arith.sml" {
+	CHAR ARITH ArithHelp
+}
+source unit FlooredArith = "floored-arith.sml" {ARITH Real Int}
+source unit Arith = "arith.sml" {
+	ARITH PrimArith IntArith WordArith RealArith OrdArith FlooredArith
+	Int32 Word8 Word31 Word32 Real Char
+}
 
-Test		main.sml
+source unit Test = "main.sml" {Arith}
+make executable "Test." ^ $target ^ ".exe" {Test}

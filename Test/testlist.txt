@@ -17,7 +17,7 @@
 # Please keep the status bits up to date.
 
 0001	pass	Arithmetic exceptions.
-0002	fail	Top-level types and values, basis structures and sharing.
+0002	pass	Top-level types and values, basis structures and sharing.
 0003	pass	Overloading.
 0004	pass	Hello world.
 0005	fail	Picky infix decl parsing bug.
@@ -25,18 +25,25 @@
 0007	pass	overload resolution order (top-level)
 0008	pass	overload resolution order (in structures)
 0009	pass	overload resolution order (in functors)
+0010	pass	Pattern compiler overloading.
+0011	pass	Patterns with out of scope constructors.
+0012	pass	Pattern compiler's Match and Bind exceptions.
+0013	pass	Separate compilation and fixity declarations.
 bug55a	fail	Unresolved tyvar breaking elaborator.
 bug55b	fail	Unresolved tyvar breaking phase-splitter.
-bug80	fail	Phase splitter and signatures.
+bug80	pass	Phase splitter and signatures.
 bug82	fail	Type of thunk prematurely made a rigid record.
+bug84	pass	Shadowing :: or nil breaks pattern compiler.
+bug84b	fail	Shadowing :: or nil should be disallowed.
 bug151a	pass	name-mangling test [x] <- [x]
-bug151b	fail	name-mangling test [x] <- * -> [x]
-bug151c	fail	name-mangling test [+] <- * -> [+] (overloaded vs. normal identifier)
-bug151d	fail	name-mangling test [x] <- * <- * -> [x]
+bug151b	pass	order of imports and effects are correct
+bug151c	pass	implicit imports do not conflict with explicit imports
+bug151d	pass	name-mangling test [x] <- * <- * -> [x]
 bug154	pass	Equality allowed on non-eqtypes by elaborator.
 bug155	fail	Type sharing fails on corner case.
 bug159	fail	Datatype replication.
 bug163	fail	Pattern compiler causing elaborator to bomb.
+bug165	fail	Elaborator shadowing variables.
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
 m0003	pass	[Bug# 0098] Type variable syntax.
@@ -120,7 +127,7 @@ m0081	pass	known case
 m0082	fail	[Bug #0128] llv?
 m0083	pass	nested loops
 m0084	pass	non-exhaustive match
-m0085	fail	[Bug #0080] generativity
+m0085	pass	generativity
 m0086	pass	opaque types
 m0087	pass	open scoping
 m0088	fail	[Bug #0129] exit status

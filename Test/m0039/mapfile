@@ -1,1 +1,2 @@
-Test	array2.sml
+source unit Test = "array2.sml" {Array2 Int}
+make executable "Test." ^ $target ^ ".exe" {Test}

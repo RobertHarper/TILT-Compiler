@@ -1,5 +1,3 @@
-(*$import Real Int List IEEEReal Math StringCvt *)
-
 local
    val c = ref 0
 in

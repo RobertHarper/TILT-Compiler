@@ -1,10 +1,34 @@
-TOP		top.sig.sml
-Top		top.sml		TARGET
+source unit TOP = "top.sig.sml" {
+	Word8 Int32 Position SysWord Real64 Word32 Word31
+}
+source unit Top = "top.sml" {
+	TOP Word8 Int Int32 Position SysWord Real64 Word32 Word31
+}
 
-REQUIRED	required.sig.sml
-Required	required.sml	TARGET
+source unit REQUIRED = "required.sig.sml" {
+	CHAR INTEGER MATH IMPERATIVE_IO MONO_ARRAY MONO_VECTOR PRIM_IO
+	REAL STREAM_IO STRING SUBSTRING TEXT_IO TEXT_STREAM_IO WORD
+	ARRAY BIN_IO BOOL BYTE COMMAND_LINE DATE GENERAL IEEE_REAL
+	IO_SIG LIST LIST_PAIR OPTION OS_SIG OS_FILE_SYS OS_IO OS_PATH
+	OS_PROCESS SML90_SIG STRING_CVT TIME TIMER VECTOR TOP
+}
+source unit Required = "required.sml" {
+	Array BinIO BinPrimIO Bool Byte Char CharArray CharVector
+	CommandLine Date General IEEEReal Int IO LargeInt LargeReal
+	LargeWord List ListPair Math Option OS Position Real SML90
+	String StringCvt Substring TextIO TextPrimIO Time Timer Vector
+	Word Word8 Word8Array Word8Vector REQUIRED Top
+}
 
-OPTIONAL	optional.sig.sml
-Optional	optional.sml	TARGET
+source unit OPTIONAL = "optional.sig.sml" {
+	PACK_WORD POSIX POSIX_ERROR POSIX_FILE_SYS POSIX_FLAGS
+	POSIX_IO POSIX_PROC_ENV POSIX_PROCESS POSIX_SIGNAL
+	POSIX_SYS_DB POSIX_TTY UNIX REQUIRED INTEGER WORD MONO_ARRAY
+	MONO_VECTOR
+}
+source unit Optional = "optional.sml" {
+	Int32 Word31 Word32 Real64 Pack32Big Unix SysWord Posix
+	OPTIONAL
+}
 
-Test		test.sml	TARGET
+make executable "Test." ^ $target ^ ".exe" {Top Required Optional}

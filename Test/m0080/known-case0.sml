@@ -1,6 +1,3 @@
-(*$import Int *)
-
-
 fun nlist 0 = 0::nil
   | nlist n = n::(nlist (n-1))
 

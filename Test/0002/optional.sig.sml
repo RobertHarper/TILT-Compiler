@@ -1,5 +1,3 @@
-(*$import PACK_WORD POSIX POSIX_ERROR POSIX_FILE_SYS POSIX_FLAGS POSIX_IO POSIX_PROC_ENV POSIX_PROCESS POSIX_SIGNAL POSIX_SYS_DB POSIX_TTY UNIX REQUIRED INTEGER WORD MONO_ARRAY MONO_VECTOR *)
-
 (* Optional basis modules. *)
 (* See the introductory chapter of the basis library spec. *)
 

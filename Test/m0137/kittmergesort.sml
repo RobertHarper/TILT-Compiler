@@ -1,5 +1,3 @@
-(*$import *)
-
 (*kittmergesort.sml*)
 
 (* This is tmergesort taken from Paulson's book , page 99 *)

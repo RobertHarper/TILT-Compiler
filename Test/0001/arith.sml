@@ -1,5 +1,3 @@
-(*$import ARITH PrimArith IntArith WordArith RealArith OrdArith FlooredArith Int32 Word8 Word31 Word32 Real Char *)
-
 structure Arith :> ARITH =
 struct
     structure P = PrimArith

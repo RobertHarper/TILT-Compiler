@@ -1,1 +1,2 @@
-Test	nested-loop.sml
+source unit Test = "nested-loop.sml" {}
+make executable "Test." ^ $target ^ ".exe" {Test}

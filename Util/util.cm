@@ -2,6 +2,8 @@ Group is
 (* ------ SML/NJ library ------ *)
 ../smlnj-lib.cm
 (* ------ Our own utilities --- *)
+equiv.sig.sml
+equiv.sml
 util-error.sig.sml
 util-error.sml
 util.sig.sml
@@ -31,6 +33,7 @@ graph.sig.sml
 graph.sml
 crc.sig.sml
 crc.sml
+blast.sig.sml
 blast.sml
 bin_io_util.sig.sml
 bin_io_util.sml

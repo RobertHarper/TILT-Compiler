@@ -1,5 +1,3 @@
-(*$import Int32 Word31 Word32 Real64 Pack32Big Unix SysWord Posix OPTIONAL *)
-
 (* Optional basis modules. *)
 (* See the introductory chapter of the basis library spec. *)
 

@@ -1,5 +1,3 @@
-(*$import Int Real List Time *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

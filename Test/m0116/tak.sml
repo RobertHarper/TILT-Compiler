@@ -1,5 +1,3 @@
-(*$import Int *)
-
 fun tak(x,y,z) =
    if y >= x
       then z

@@ -1,2 +1,3 @@
-Plus plus.sml
-Test test.sml
+source unit Plus = "plus.sml" {}
+source unit Test = "test.sml" {Plus}
+make executable "Test." ^ $target ^ ".exe" {Test}

@@ -1,1 +1,2 @@
-Test	os-exit.sml
+source unit Test = "os-exit.sml" {TextIO OS}
+make executable "Test." ^ $target ^ ".exe" {Test}

@@ -1,5 +1,3 @@
-(*$import Int Word8 Word8Vector List *)
-
 type word8 = Word8.word
    
 (* Auxiliary functions for test cases *)

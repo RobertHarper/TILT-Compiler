@@ -1,8 +1,8 @@
-signature DOOPTS = 
-    sig 
+signature DOOPTS =
+    sig
 	structure Nil : NIL
 	structure Anormalize : ANORMALIZE
-    end 
+    end
 
 
 functor DoOpts (structure PpNil : PPNIL
@@ -15,16 +15,16 @@ functor DoOpts (structure PpNil : PPNIL
 		structure NilUtil : NILUTIL
 		structure Linearize : LINEARIZE
 
-		sharing PpNil.Nil = Nil = NilContext.Nil = NilEval.Nil = NilStatic.Nil 
+		sharing PpNil.Nil = Nil = NilContext.Nil = NilEval.Nil = NilStatic.Nil
 		     = NilUtil.Nil = Linearize.Nil
 
 		sharing Nil.Prim = NilPrimUtil.Prim
                 sharing type Nil.kind = NilSubst.kind
-		sharing type Nil.con = NilSubst.con = NilPrimUtil.con 
-		sharing type Nil.exp = NilSubst.exp = NilPrimUtil.exp 
-	        sharing type NilContext.context = NilStatic.context 
-		    ) = 
-			 
+		sharing type Nil.con = NilSubst.con = NilPrimUtil.con
+		sharing type Nil.exp = NilSubst.exp = NilPrimUtil.exp
+	        sharing type NilContext.context = NilStatic.context
+		    ) =
+
 struct
     structure Nil = Nil
 
@@ -34,7 +34,7 @@ struct
     val do_uncurry = NilOpts.do_uncurry
 
     structure Squish = Squish(structure Nil = Nil )
-	
+
     structure Reduce = Reduce (
 			       structure Nil = Nil
 			       structure Squish = Squish
@@ -44,18 +44,18 @@ struct
 			       structure NilUtil = NilUtil
 			       structure NilSubst = NilSubst
 					   )
-	
+
     structure FlattenArgs = FlattenArgs(
 					structure Nil  = Nil
 					structure Ppnil = PpNil
 					structure Subst = NilSubst
 					structure Squish = Squish)
-   
+
     structure Uncurry = Uncurry (structure Nil = Nil
 				 structure Ppnil = PpNil)
 
     structure ExpTable = ExpTable(structure Nil = Nil
-				  structure NilUtil = NilUtil 
+				  structure NilUtil = NilUtil
 				  structure Ppnil = PpNil
 				      )
 
@@ -75,21 +75,21 @@ struct
 				    )
 
 
-    fun do_opts debug nilmod = 
+    fun do_opts debug nilmod =
 	let val debug = debug orelse (!NilOpts.debug)
-	   
+
 	    val _ = ( NilOpts.init_clicks() )
 
-	    val _ = if (!NilOpts.print_pre) 
+	    val _ = if (!NilOpts.print_pre)
 		      then (print "\n\n=======================================\n\n";
 			    print "Pre Optimization:\n";
 			    PpNil.pp_module nilmod;
 			    print "\n")
 		  else () ;
-		      
-	    val nilmod =  
+
+	    val nilmod =
 		if !NilOpts.do_anormalize
-		 then 
+		 then
 		  let val nilmod = (Stats.subtimer("Anormalize", Anormalize.doModule debug)) nilmod
 		      val _ =  if !NilOpts.print_anormalize
 			     then (print "\n\n=======================================\n\n";
@@ -101,9 +101,9 @@ struct
 		  end
 		else nilmod
 
-	    val nilmod = if !NilOpts.do_anormalize2 then 
+	    val nilmod = if !NilOpts.do_anormalize2 then
 		let val nilmod = (Stats.subtimer("Anormalize2", Anormalize.doModule true)) nilmod;
-		    val _ =  if debug 
+		    val _ =  if debug
 				 then (print "\n\n=======================================\n\n";
 				       print "A-normal form2:\n";
 				       PpNil.pp_module nilmod;
@@ -112,46 +112,46 @@ struct
 		in nilmod end
 			 else nilmod
 
-			 
+
 	    (* val _ = PpNil.elide_bnd := true; *)
 
- 
+
 	   val nilmod =
-		if (!do_flatten) then 
+		if (!do_flatten) then
 		    (let val nilmod = (Stats.subtimer("Flatten args", FlattenArgs.doModule debug)) nilmod
-		     in (  if !NilOpts.print_flatten andalso !do_flatten 
+		     in (  if !NilOpts.print_flatten andalso !do_flatten
 			       then (print "\n\n=======================================\n\n";
 				     print "Flattened args:\n";
 				     PpNil.pp_module nilmod;
-				     print "\n") 
+				     print "\n")
 			   else print "Flatten args complete\n"; nilmod )
 		     end)
 		else nilmod
 
-	  	    
-	    val nilmod = if !do_uncurry then 
+
+	    val nilmod = if !do_uncurry then
 		let val nilmod = (Stats.subtimer("Uncurry args", Uncurry.doModule debug)) nilmod
-		in (  if !NilOpts.print_uncurry andalso !do_uncurry 
+		in (  if !NilOpts.print_uncurry andalso !do_uncurry
 			 then (print "\n\n=======================================\n\n";
 			       print "Uncurried args:\n";
 			       PpNil.pp_module nilmod;
-			       print "\n") 
+			       print "\n")
 		     else print "Uncurry args complete\n"; nilmod )
-		end 
+		end
 			 else nilmod
-	    
-	    val nilmod = if !do_inline then 
+
+	    val nilmod = if !do_inline then
 		(Stats.subtimer("Inline General", Inline.doModule debug)) nilmod
 		else nilmod
-	    val _ =  if !NilOpts.print_inline andalso !do_inline 
+	    val _ =  if !NilOpts.print_inline andalso !do_inline
 			 then (print "\n\n=======================================\n\n";
 			       print "Inlined functions:\n";
 			       PpNil.pp_module nilmod;
-			       print "\n") 
+			       print "\n")
 		     else if !do_inline then print "Functions inlined\n" else ();
 
 	    (* As I'm not doing renaming during the general inlining, should do it now.... *)
-	    val nilmod = if !do_inline then 
+	    val nilmod = if !do_inline then
 		(Stats.subtimer("Linearization2",Linearize.linearize_mod)) nilmod
 		else nilmod
 	    val _ = if !NilOpts.print_inline andalso !do_inline
@@ -160,34 +160,34 @@ struct
 			      PpNil.pp_module nilmod;
 			      print "\n")
 		    else if !do_inline then print "Renaming complete\n" else ()
-			
+
 	    val nilmod = if !do_reduce then
 		let val nilmod = (Stats.subtimer("Reduce", Reduce.doModule debug)) nilmod
-		in ( if !NilOpts.print_reduce 
+		in ( if !NilOpts.print_reduce
 			 then (print "\n\n=======================================\n\n";
 			       print "Reduced:\n";
 			       PpNil.pp_module nilmod;
-			       print "\n") 
+			       print "\n")
 		     else print "Reduction complete\n"; nilmod )
-		end 
+		end
 			 else nilmod
-			
+
 	    val nilmod = if !do_reduce then
 		let val nilmod = (Stats.subtimer("Reduce", Reduce.doModule debug)) nilmod
-		in ( if !NilOpts.print_reduce 
+		in ( if !NilOpts.print_reduce
 			 then (print "\n\n=======================================\n\n";
 			       print "Reduced:\n";
 			       PpNil.pp_module nilmod;
-			       print "\n") 
+			       print "\n")
 		     else print "Reduction complete\n"; nilmod )
-		end 
+		end
 			 else nilmod
 
 	    val _ = ( NilOpts.print_clicks() )
 	in
 	    nilmod
-	end 
-end 
+	end
+end
 
 
 

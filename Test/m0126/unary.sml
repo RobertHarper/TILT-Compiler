@@ -1,5 +1,3 @@
-(*$import *)
-
 datatype num = Z | S of num
 
 val rec plus =

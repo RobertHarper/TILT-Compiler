@@ -1,1 +1,4 @@
-Test	word8array.sml
+source unit Test = "word8array.sml" {
+	Word8 Int Word8Array Word8Vector
+}
+make executable "Test." ^ $target ^ ".exe" {Test}

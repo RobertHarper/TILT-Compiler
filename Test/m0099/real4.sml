@@ -1,5 +1,3 @@
-(*$import Real List Bool *)
-
 val x = 1.0/0.0 + ~1.0/0.0
 val y = ~1.0/0.0
 val z = 1.0/0.0

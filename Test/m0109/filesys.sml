@@ -1,5 +1,3 @@
-(*$import Int List Time OS Posix TextIO *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

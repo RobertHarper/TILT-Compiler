@@ -1,4 +1,4 @@
 signature PASS =
-    sig 
+    sig
 	val doModule : bool -> Nil.module -> Nil.module
     end

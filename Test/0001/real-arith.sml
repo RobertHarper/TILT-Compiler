@@ -1,5 +1,3 @@
-(*$import REAL ARITH ArithHelp Int *)
-
 (* Check for exceptions. *)
 (* Does not check for bogus values. *)
 

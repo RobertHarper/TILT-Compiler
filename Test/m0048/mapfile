@@ -1,1 +1,2 @@
-Test	vector.sml
+source unit Test = "vector.sml" {Int Vector}
+make executable "Test." ^ $target ^ ".exe" {Test}

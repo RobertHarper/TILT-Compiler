@@ -1,4 +1,3 @@
-(*$import Int List StringCvt Word *)
 (* Word ranges. *)
 
 (* Auxiliary functions for test cases *)

@@ -1,5 +1,3 @@
-(*$import *)
-
 (* Default types at overloaded special constants and operators. *)
 
 (* See the Top-Level Environment chapter of the basis library spec and

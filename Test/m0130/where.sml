@@ -1,5 +1,3 @@
-(*$import *)
-
 (* where.sml *)
 
 (* Checks treatment of type realisations. *)

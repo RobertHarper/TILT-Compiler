@@ -1,1 +1,4 @@
-Test	real6.sml
+source unit Test = "real6.sml" {
+	Real Int List IEEEReal Math StringCvt
+}
+make executable "Test." ^ $target ^ ".exe" {Test}

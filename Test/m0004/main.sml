@@ -1,4 +1,3 @@
-(*$import *)
 (* This code has a handler which is provably unreachable. *)
 
 fun f(n: int): int list =

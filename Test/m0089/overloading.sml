@@ -1,5 +1,3 @@
-(*$import *)
-
 (* overloading.sml *)
 
 (* Checks overloading resolution. *)

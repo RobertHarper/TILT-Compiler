@@ -1,5 +1,3 @@
-(*$import Int CommandLine *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

@@ -1,5 +1,3 @@
-(*$import Int Word32 Word8 *)
-
 val _ =
    if Word32.- (0w0, 0w1) = 0wxFFFFFFFF
       then ()

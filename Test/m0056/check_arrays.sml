@@ -1,5 +1,3 @@
-(*$import Int Word8 Word8Array CharArray Array *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

@@ -1,5 +1,3 @@
-(*$import *)
-
 fun loop1 x =
    if x = 0
       then ()

@@ -3,9 +3,9 @@ of regression tests for the TILT compiler.  See the comment in
 runtest.sml for a high-level description of the test harness.  This
 file documents the file layout and syntax of individual tests.
 
-We put each test in its own numbered subdirectory of ml96/Test.
+We put each test in its own subdirectory of ml96/Test.
 
-The file testlist.txt lists each test by number and provies a brief
+The file testlist.txt lists each test by directory and provies a brief
 description.  Each line in the file describes one test.
 
 Each test directory has at least the following files:
@@ -24,10 +24,11 @@ In the case of Exit, subsequent lines contain the output expected from
 the test code.  (The test code's exit status is ignored.  See
 runtest.sml for more information.)
 
-The mapfile is a TILT manager mapfile.  The harness will use TILT to build
-it.  If the expected result is not Reject, then the mapfile must define
-a target unit named Test.  The unit name is important because the harness
-has to find the generated executable (eg, ml96/Test/n/Test.sparc.exe).
+The mapfile is a TILT manager group file.  The harness will use TILT
+to build it.  If the expected result is not Reject, then the mapfile
+must make an executable named "Test." ^ $objtype ^ ".exe".  The name
+is important because the harness has to find the generated executable
+(eg, ml96/Test/n/Test.sparc.exe).
 
 Each test directory should also contain ML source files (referenced by
 the mapfile) and documentation, but there are as yet no conventions

@@ -1,5 +1,3 @@
-(*$import *)
-
 (* where-and.sml *)
 
 (* Checks parsing of where type ... and derived form. *)

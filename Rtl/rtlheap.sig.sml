@@ -1,11 +1,11 @@
 (*$RTLHEAP: *)
 
 (* heap will be stored in quadwords which are (highword * lowword) *)
-signature RTLHEAP = 
+signature RTLHEAP =
   sig
-    type w32 = Word32.word 
+    type w32 = Word32.word
     type instr
-    datatype iword    = WORD of Word32.word | INSTR of instr 
+    datatype iword    = WORD of Word32.word | INSTR of instr
     datatype quad_val = LONGS of (iword * iword) | QFLOAT of real
 
     val heapsize    : int;

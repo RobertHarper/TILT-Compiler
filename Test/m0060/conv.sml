@@ -1,5 +1,3 @@
-(*$import Int IntInf *)
-
 val big: IntInf.int = 0x80000000
 
 fun try (barg: IntInf.int): unit =

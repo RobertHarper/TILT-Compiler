@@ -1,5 +1,3 @@
-(*$import *)
-
 fun f c =
    case c of
       #"a" => ()

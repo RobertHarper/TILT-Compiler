@@ -1,1 +1,2 @@
-Test	testMatrix.sml
+source unit Test = "testMatrix.sml" {Real}
+make executable "Test." ^ $target ^ ".exe" {Test}

@@ -1,5 +1,3 @@
-(*$import Array List Vector *)
-
 (*
  Test various basis library functions.  Quite incomplete.
  

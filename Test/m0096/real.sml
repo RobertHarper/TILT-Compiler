@@ -1,5 +1,3 @@
-(*$import Int Real List StringCvt *)
-
 (* Auxiliary functions for test cases *)
 
 infix 1 seq

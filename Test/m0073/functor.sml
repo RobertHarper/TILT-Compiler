@@ -1,5 +1,3 @@
-(*$import *)
-
 signature A = sig type t val a : t end
 
 functor F(A : sig type t val pr : t -> string end) = 

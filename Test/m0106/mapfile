@@ -1,1 +1,2 @@
-Test	sharing.sml
+source unit Test = "sharing.sml" {}
+make executable "Test." ^ $target ^ ".exe" {Test}

@@ -1,5 +1,3 @@
-(*$import *)
-
 (* id.sml *)
 
 (* Checks parsing of identifiers. *)

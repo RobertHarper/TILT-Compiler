@@ -1,5 +1,3 @@
-(*$import Int Word Word8 Word31 Real Char String *)
-
 (* Overloaded special constants and operators. *)
 
 (* See the Top-Level Environment chapter of the basis library spec and

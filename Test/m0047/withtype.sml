@@ -1,4 +1,3 @@
-(*$import *)
 (* withtype.sml *)
 
 (* Checks scoping rules of withtype *)

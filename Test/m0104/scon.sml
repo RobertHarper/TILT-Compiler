@@ -1,5 +1,3 @@
-(*$import *)
-
 (* scon *)
 
 (* Checks parsing of special constants. *)

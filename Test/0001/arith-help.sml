@@ -1,5 +1,3 @@
-(*$import IEEEReal *)
-
 structure ArithHelp :>
     sig
 	val CHR : ('a -> 'b) -> 'a -> string -> unit (* Expects Chr *)

@@ -1,1 +1,4 @@
-Test	date.sml
+source unit Test = "date.sml" {
+	Int List Time Date
+}
+make executable "Test." ^ $target ^ ".exe" {Test}

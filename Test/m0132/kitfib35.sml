@@ -1,5 +1,3 @@
-(*$import *)
-
 (*kitfib35.sml*)
 
 val _ = 

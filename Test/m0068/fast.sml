@@ -1,5 +1,3 @@
-(*$import Int *)
-
 fun loop (left: Int.int): unit =
 	case Int.compare (left, 0) of
 	LESS => ()

@@ -1,5 +1,3 @@
-(*$import Int *)
-
 (*
  * This is based on
  *   Functional Unparsing

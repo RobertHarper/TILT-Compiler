@@ -1,5 +1,3 @@
-(*$import Int *)
-
 signature RING =
    sig
       type ring

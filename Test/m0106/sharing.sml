@@ -1,5 +1,3 @@
-(*$import *)
-
 (* sharing.sml *)
 
 (* Checks treatment of sharing constraints. *)
