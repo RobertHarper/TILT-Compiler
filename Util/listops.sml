@@ -191,6 +191,15 @@ structure Listops :> LISTOPS =
 	loop (l1,l2,l3,init)
       end
 
+    fun foldl4 f init (l1,l2,l3,l4) = 
+      let
+	fun loop ([],[],[],[],state) = state
+	  | loop (a::aa,b::bb,c::cc,d::dd,state) = loop(aa,bb,cc,dd,f (a,b,c,d,state))
+	  | loop _ = error "foldl4 given lists of different length"
+      in
+	loop (l1,l2,l3,l4,init)
+      end
+
     fun eq_len (l1,l2) = ((List.length l1) = (List.length l2))
 
     fun eq_len3 ([],[],[]) = true

@@ -84,6 +84,7 @@ signature LISTOPS =
 
     val foldl2 : ('a * 'b * 'state -> 'state) -> 'state -> ('a list * 'b list) -> 'state
     val foldl3 : ('a * 'b * 'c * 'state -> 'state) -> 'state -> ('a list * 'b list * 'c list) -> 'state
+    val foldl4 : ('a * 'b * 'c * 'd  * 'state -> 'state) -> 'state -> ('a list * 'b list * 'c list * 'd list) -> 'state
 
     val foldl_list : ('a * 'b -> 'c * 'b) -> 'b -> 'a list -> 'c list * 'b
     val eq_len : 'a list * 'b list -> bool
