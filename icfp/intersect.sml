@@ -90,6 +90,23 @@ structure Intersect : INTERSECT =
     val eps = 1.0e~10
     fun iszero r = (Real.abs r) < eps
 
+    fun quad (a,b,c) = 
+      let
+	val disc = b*b - 4.0*a* c
+	val roots = 
+	  if disc < 0.0 then []
+	  else if iszero disc then [~b / (2.0*a)]
+	  else 
+	    let
+	      val d = Math.sqrt disc
+	      val t0 = (~b + d) / (2.0*a)
+	      val t1 = (~b - d) / (2.0*a)
+	    in [t0,t1]
+	    end
+      in (disc,roots)
+      end
+
+
     fun sphere (M: m4,orig:v3,dir:v3) : result = 
       let
 	local
