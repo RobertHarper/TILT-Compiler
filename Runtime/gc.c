@@ -244,7 +244,40 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
 	  else if (IS_TRACE_CALLEE(trace))
 	    { printf("cannot have trace_callee for globals\n"); exit(-1); }
 	  else if (IS_TRACE_SPECIAL(trace))
-	    { printf("cannot have trace_special for globals\n"); exit(-1); }
+	    { 
+	      int special_type = ((value_t *)i)[2];
+	      int special_data = ((value_t *)i)[3];
+	      int res;
+
+	      if (IS_SPECIAL_STACK(special_type))
+		{ printf("cannot have trace_special_stack for globals\n"); exit(-1); }
+	      else if (IS_SPECIAL_UNSET(special_type))
+		{ printf("cannot have trace_special_unset for globals\n"); exit(-1); }
+	      else if (IS_SPECIAL_STACK_REC(special_type))
+		{ printf("cannot have trace_special_stackrec for globals\n"); exit(-1); }
+	      else if (IS_SPECIAL_GLOBAL(special_type))
+		res = *((int *)special_data);
+	      else if (IS_SPECIAL_GLOBAL_REC(special_type))
+		{
+		  int rec_pos = GET_SPECIAL_STACK_GLOBAL_POS(special_type);
+		  int rec_pos2 = GET_SPECIAL_STACK_GLOBAL_POS2(special_type);
+		  int rec_pos3 = GET_SPECIAL_STACK_GLOBAL_POS3(special_type);
+		  int rec_pos4 = GET_SPECIAL_STACK_GLOBAL_POS4(special_type);
+		  res = ((int *)(*((int *)special_data)))[rec_pos];
+		  if (rec_pos2 > 0)
+		    res = ((int *)res)[rec_pos2-1];
+		  if (rec_pos3 > 0)
+		    res = ((int *)res)[rec_pos3-1];
+		  if (rec_pos4 > 0)
+		    res = ((int *)res)[rec_pos4-1];
+		}
+	      else
+		{ printf("impossible trace_special wordpair entry: %d %d\n",
+			 special_type,special_data);
+		  exit(-1);
+		}
+	      should_trace = (res >= 3);
+	    }
 	}
   }
   QueueClear(promoted_global_roots);
