@@ -42,7 +42,7 @@ struct
   val bool_con = Prim_c(Sum_c{tagcount=0w2,known=NONE},[])
   val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
   val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
-  val match_exn = Prim_e(NilPrimOp inj_exn,[unit_con],[match_tag,unit_exp])
+  val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[unit_con],[match_tag,unit_exp])
   val false_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w0}),[],[])
   val true_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w1}),[],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
@@ -691,7 +691,8 @@ struct
 
   fun muExpand (vcseq,v) = 
       let val vc_list = sequence2list vcseq
-	  fun lookup v = Listops.assoc_eq(eq_var,v,vc_list)
+	  val vc_list' = map (fn (v,_) => (v,Mu_c(vcseq,v))) vc_list
+	  fun lookup v = Listops.assoc_eq(eq_var,v,vc_list')
 	  val c = (case (Listops.assoc_eq(eq_var,v,vc_list)) of
 		       SOME c => c | NONE => error "bad mu type")
       in  substConInCon lookup c
