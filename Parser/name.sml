@@ -17,6 +17,7 @@ structure Name :> NAME =
 
     fun is_label_open ((_,_,flag) : label) = flag
 
+
     (* equality and generation functions on Nameitive types *)
     fun eq_var   (v1 : var, v2)     = v1 = v2
     fun eq_label (l1 as (h1,_,_) : label, l2 as (h2,_,_)) = 
@@ -68,6 +69,8 @@ structure Name :> NAME =
     fun internal_hash s = Symbol.number(Symbol.varSymbol s) + maxnamespace + 1
     fun internal_label s : label = (internal_hash s,s,false)
     fun open_internal_label s : label = (internal_hash s,s,true)
+    fun derived_var(_,s) = fresh_named_var s
+    fun is_label_internal ((num,str,flag) : label) = internal_hash str = num
 
     fun symbol_label s = (Symbol.number s, Symbol.name s, false)
     fun open_symbol_label s = (Symbol.number s, Symbol.name s, true)

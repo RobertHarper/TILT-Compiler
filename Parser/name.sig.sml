@@ -10,8 +10,9 @@ signature NAME =
     val is_label_open     : label -> bool
 (*
     val is_label_barred   : label -> bool
-    val is_label_internal : label -> bool
 *)
+    val is_label_internal : label -> bool
+
     val eq_label : (label * label) -> bool
     val eq_var   : (var * var) -> bool
     val eq_tag   : (tag * tag) -> bool
@@ -27,6 +28,7 @@ signature NAME =
     val gen_var_from_symbol : Symbol.symbol -> var  (* conveniently extracts string for you *)
     val fresh_internal_label  : string -> label          
     val fresh_open_internal_label : string -> label      
+    val derived_var : var -> var
 
     (* injective *)
     val tag2int : tag -> int
