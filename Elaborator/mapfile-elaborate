@@ -20,6 +20,7 @@ PrimUtil primutil
 ILUTIL ilutil.sig
 IlUtil ilutil
 
+IlTable   iltable
 ILCONTEXT ilcontext.sig
 IlContext ilcontext
 ILCONTEXTEQ ilcontexteq.sig

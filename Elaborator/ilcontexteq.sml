@@ -1,15 +1,22 @@
-(*$import Prelude TopLevel Int Name Il SplayMapFn Prim Tyvar Fixity List Listops IlContext IlUtil Ppil Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool Stats Util *)
+(*$import Prelude TopLevel Int Name Il SplayMapFn Prim Tyvar Fixity List Listops IlContext IlUtil Ppil Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool Stats Util IlTable IntListMap Option *)
 (* Equality of contexts *)
 
 structure IlContextEq 
     :> ILCONTEXTEQ =
 struct
 
+    open Util
+    open IlContext
+    open Il
+
+    fun error s = Util.error "IlContextEq" s
+    nonfix mod
+
+
     val error = fn str => Util.error "ilcontexteq.sml" str
     val showUnequal = Stats.ff("IlcontexteqShowUnequal")
     val debug = Stats.ff("IlcontexteqDebug")
     val blast_debug = Stats.ff("BlastDebug")
-    val useOldBlast = ref false
 
     (* --- State is kept in this module so avoid excessive parameter passing --- *)
     val cur_out = ref (NONE : BinIO.outstream option)
@@ -55,12 +62,21 @@ struct
 	in  res
 	end
 
-    open Util
-    open IlContext
-    open Il
 
-    fun error s = Util.error "IlContextEq" s
-    nonfix mod
+
+        structure CTab = IlTable.Conmap
+        val ctab : int CTab.map ref = ref CTab.empty 
+        val initial_tab_count = 25  (* must be > any encoding
+                                        tag for a constructor! *)
+        val ctab_count = ref initial_tab_count
+        val itab : con IntListMap.map ref = ref IntListMap.empty
+        val itab_count = ref initial_tab_count
+
+        fun local_reset() = (ctab := CTab.empty;
+                             itab := IntListMap.empty;
+                             ctab_count := initial_tab_count; 
+                             itab_count := initial_tab_count)
+
 
     (* debugging stuff *)
     val indent = ref 0 
@@ -100,60 +116,50 @@ struct
     fun blastOutTag t = NameBlast.blastOutTag (curOut()) t
     fun blastInTag () = NameBlast.blastInTag (curIn())
 
-
-    fun blastOutChoice i = if (!useOldBlast)
-				  then blastOutInt i
-			      else BinIO.output1(curOut(),Word8.fromInt i)
-    fun blastInChoice is = if (!useOldBlast)
-			          then blastInInt ()
-			   else Word8.toInt(case BinIO.input1 (curIn()) of
-						NONE => error "blastInChoice failed"
-					      | SOME w => w)
-
     fun blastOutPath (PATH (v,ls)) = (blastOutVar v;  blastOutList blastOutLabel ls)
     fun blastInPath () = PATH(blastInVar(), blastInList blastInLabel)
 
-	fun blastOutArrow TOTAL = blastOutChoice 0
-	  | blastOutArrow PARTIAL = blastOutChoice 1
+	fun blastOutArrow TOTAL = blastOutInt 0
+	  | blastOutArrow PARTIAL = blastOutInt 1
 	fun blastInArrow () =
-	    (case (blastInChoice()) of
+	    (case (blastInInt()) of
 		 0 => TOTAL
 	       | 1 => PARTIAL
 	       | _ => error "bad blastInArrow")
 
-	fun blastOutIS Prim.W8 = blastOutChoice 0
-	  | blastOutIS Prim.W16 = blastOutChoice 1
-	  | blastOutIS Prim.W32 = blastOutChoice 2
-	  | blastOutIS Prim.W64 = blastOutChoice 3
+	fun blastOutIS Prim.W8 = blastOutInt 0
+	  | blastOutIS Prim.W16 = blastOutInt 1
+	  | blastOutIS Prim.W32 = blastOutInt 2
+	  | blastOutIS Prim.W64 = blastOutInt 3
 	fun blastInIS () =
-	    (case blastInChoice() of
+	    (case blastInInt() of
 		 0 => Prim.W8
 	       | 1 => Prim.W16
 	       | 2 => Prim.W32
 	       | 3 => Prim.W64
 	       | _ => (error "bad blastInIS" handle e => raise e))
-	fun blastOutFS Prim.F32 = blastOutChoice 0
-	  | blastOutFS Prim.F64 = blastOutChoice 1
+	fun blastOutFS Prim.F32 = blastOutInt 0
+	  | blastOutFS Prim.F64 = blastOutInt 1
 	fun blastInFS () =
-	    (case blastInChoice() of
+	    (case blastInInt() of
 		 0 => Prim.F32
 	       | 1 => Prim.F64
 	       | _ => error "bad blastInFS")
 
 	fun blastOutDec dec = 
 	    (case dec of
-		 DEC_EXP (v,c,NONE, inline)   => (blastOutChoice 0; blastOutVar v; blastOutCon c;
+		 DEC_EXP (v,c,NONE, inline)   => (blastOutInt 0; blastOutVar v; blastOutCon c;
 						  blastOutBool inline)
-	       | DEC_EXP (v,c,SOME e, inline) => (blastOutChoice 1; blastOutVar v; blastOutCon c;
+	       | DEC_EXP (v,c,SOME e, inline) => (blastOutInt 1; blastOutVar v; blastOutCon c;
 						  blastOutExp e; blastOutBool inline)
-	       | DEC_CON (v,k,NONE, inline)   => (blastOutChoice 2; blastOutVar v; blastOutKind k;
+	       | DEC_CON (v,k,NONE, inline)   => (blastOutInt 2; blastOutVar v; blastOutKind k;
 						  blastOutBool inline)
-	       | DEC_CON (v,k,SOME c, inline) => (blastOutChoice 3; blastOutVar v; blastOutKind k; 
+	       | DEC_CON (v,k,SOME c, inline) => (blastOutInt 3; blastOutVar v; blastOutKind k; 
 						 blastOutCon c; blastOutBool inline)
-	       | DEC_MOD (v,b,s)      => (blastOutChoice 4; blastOutVar v; blastOutBool b; 
+	       | DEC_MOD (v,b,s)      => (blastOutInt 4; blastOutVar v; blastOutBool b; 
 					  blastOutSig s))
 	and blastInDec () =
-	    (case (blastInChoice()) of
+	    (case (blastInInt()) of
 		 0 => DEC_EXP (blastInVar (), blastInCon (), NONE, blastInBool())
 	       | 1 => DEC_EXP (blastInVar (), blastInCon (), SOME (blastInExp()), blastInBool())
 	       | 2 => DEC_CON (blastInVar (), blastInKind (), NONE, blastInBool())
@@ -162,11 +168,11 @@ struct
 	       | _ => error "bad blastInDec")
 	and blastOutBnd bnd = 
 	    (case bnd of
-		 BND_EXP (v,e) => (blastOutChoice 0; blastOutVar v; blastOutExp e)
-	       | BND_CON (v,c) => (blastOutChoice 1; blastOutVar v; blastOutCon c)
-	       | BND_MOD (v,b,m) => (blastOutChoice 2; blastOutVar v; blastOutBool b; blastOutMod m))
+		 BND_EXP (v,e) => (blastOutInt 0; blastOutVar v; blastOutExp e)
+	       | BND_CON (v,c) => (blastOutInt 1; blastOutVar v; blastOutCon c)
+	       | BND_MOD (v,b,m) => (blastOutInt 2; blastOutVar v; blastOutBool b; blastOutMod m))
 	and blastInBnd () =
-	    (case (blastInChoice()) of
+	    (case (blastInInt()) of
 		 0 => BND_EXP(blastInVar (), blastInExp ())
 	       | 1 => BND_CON(blastInVar (), blastInCon ())
 	       | 2 => BND_MOD(blastInVar (), blastInBool (), blastInMod ())
@@ -183,61 +189,93 @@ struct
 
 	and blastOutKind k = 
 	    (case k of
-		 KIND => blastOutChoice 0
-	       | KIND_TUPLE n => (blastOutChoice 1; blastOutChoice n)
-	       | KIND_ARROW (m,kres) => (blastOutChoice 2; blastOutChoice m;  blastOutKind kres))
-
+		 KIND => blastOutInt 0
+	       | KIND_TUPLE n => (blastOutInt 1; blastOutInt n)
+	       | KIND_ARROW (m,kres) => (blastOutInt 2; blastOutInt m;  blastOutKind kres))
 		    
 	and blastInKind () = 
-	    (case blastInChoice() of
+	    (case blastInInt() of
 		 0 => KIND
-	       | 1 => KIND_TUPLE(blastInChoice())
-	       | 2 => KIND_ARROW(blastInChoice(), blastInKind())
+	       | 1 => KIND_TUPLE(blastInInt())
+	       | 2 => KIND_ARROW(blastInInt(), blastInKind())
 	       | _ => error "bad blastInKind")
-		 
-	and blastOutCon c = 
-	    (case c of
-		 CON_VAR v => (blastOutChoice 0; blastOutVar v)
+
+        and simplifyCon c = 
+            (case c of
+	         CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r)) => simplifyCon (CON_FLEXRECORD r)
+	       | CON_FLEXRECORD (ref (FLEXINFO (_, true, lclist))) => CON_RECORD lclist
+	       | CON_FLEXRECORD (ref (FLEXINFO (_, false, _))) => error "cannot simplify flex record type"
+	       | CON_OVAR oc => simplifyCon (CON_TYVAR (Tyvar.ocon_deref oc))
 	       | CON_TYVAR tv => (case Tyvar.tyvar_deref tv of
-				      SOME c => blastOutCon c
-				    | NONE => error "cannot blastOut unresolved CON_TYVAR")
-	       | CON_OVAR oc => blastOutCon (CON_TYVAR (Tyvar.ocon_deref oc))
-	       | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r)) => blastOutCon (CON_FLEXRECORD r)
-	       | CON_FLEXRECORD (ref (FLEXINFO (_, true, lclist))) => blastOutCon (CON_RECORD lclist)
-	       | CON_FLEXRECORD (ref (FLEXINFO (_, false, _))) => error "cannot blastOut flex record type"
-	       | CON_INT is => (blastOutChoice 1; blastOutIS is)
-	       | CON_UINT is => (blastOutChoice 2; blastOutIS is)
-	       | CON_FLOAT fs => (blastOutChoice 3; blastOutFS fs)
-	       | CON_ARRAY c => (blastOutChoice 4; blastOutCon c)
-	       | CON_VECTOR c => (blastOutChoice 5; blastOutCon c)
-	       | CON_ANY => (blastOutChoice 6)
-	       | CON_REF c => (blastOutChoice 7; blastOutCon c)
-	       | CON_TAG c => (blastOutChoice 8; blastOutCon c)
-	       | CON_ARROW (cs,c,f,oa) => (blastOutChoice 9; 
+				      SOME c => simplifyCon c
+				    | NONE => error "cannot simplify unresolved CON_TYVAR")
+               | _ => c)
+     
+		 
+        and blastOutCon c = 
+            let
+               val c = simplifyCon c
+            in
+	     case CTab.find(!ctab, c) of
+               NONE => (blastOutCon' c;
+                        ctab := CTab.insert(!ctab, c, !ctab_count);
+(*
+                        print "Wrote ";
+                        Ppil.pp_con c;
+                        print " as # ";
+                        print (Int.toString (!ctab_count));
+                        print "\n";
+*)
+			ctab_count := !ctab_count + 1)
+             | SOME n => (
+(*
+                          print "Remembering ";
+                          Ppil.pp_con c;
+                          print " was # ";
+                          print (Int.toString n);
+                          print "\n";
+*)
+                          blastOutInt n)
+            end
+
+        and blastOutCon' c' =
+            (case c' of
+		 CON_VAR v => (blastOutInt 0; blastOutVar v)
+
+	       | CON_INT is => (blastOutInt 1; blastOutIS is)
+	       | CON_UINT is => (blastOutInt 2; blastOutIS is)
+	       | CON_FLOAT fs => (blastOutInt 3; blastOutFS fs)
+
+	       | CON_ARRAY c => (blastOutInt 4; blastOutCon c)
+	       | CON_VECTOR c => (blastOutInt 5; blastOutCon c)
+	       | CON_ANY => (blastOutInt 6)
+	       | CON_REF c => (blastOutInt 7; blastOutCon c)
+	       | CON_TAG c => (blastOutInt 8; blastOutCon c)
+	       | CON_ARROW (cs,c,f,oa) => (blastOutInt 9; 
 					   blastOutList blastOutCon cs;
 					   blastOutCon c; blastOutBool f;
 					   blastOutArrow (case (oneshot_deref oa) of
 								 SOME a => a
 							       | _ => error "unresolved CON_ARROW"))
-	       | CON_APP (c1,cargs) => (blastOutChoice 10; blastOutCon c1; 
+	       | CON_APP (c1,cargs) => (blastOutInt 10; blastOutCon c1; 
 					blastOutList blastOutCon cargs)
-	       | CON_MU c => (blastOutChoice 11; blastOutCon c)
-	       | CON_RECORD lclist => (blastOutChoice 12; blastOutList (blastOutPair blastOutLabel blastOutCon) lclist)
-	       | CON_FUN (vlist, c) => (blastOutChoice 13; blastOutList blastOutVar vlist; blastOutCon c)
+	       | CON_MU c => (blastOutInt 11; blastOutCon c)
+	       | CON_RECORD lclist => (blastOutInt 12; blastOutList (blastOutPair blastOutLabel blastOutCon) lclist)
+	       | CON_FUN (vlist, c) => (blastOutInt 13; blastOutList blastOutVar vlist; blastOutCon c)
 	       | CON_SUM {names, noncarriers, carrier, special = NONE} => 
-		     (blastOutChoice 14; 
+		     (blastOutInt 14; 
 		      blastOutList blastOutLabel names;
-		      blastOutChoice noncarriers; 
+		      blastOutInt noncarriers; 
 		      blastOutCon carrier)
 	       | CON_SUM {names, noncarriers, carrier, special = SOME i} => 
-		     (blastOutChoice 15; 
+		     (blastOutInt 15; 
 		      blastOutList blastOutLabel names;
-		      blastOutChoice noncarriers; 
+		      blastOutInt noncarriers; 
 		      blastOutCon carrier; 
-		      blastOutChoice i)
-	       | CON_TUPLE_INJECT clist => (blastOutChoice 16; blastOutList blastOutCon clist)
-	       | CON_TUPLE_PROJECT (i,c) => (blastOutChoice 17; blastOutChoice i; blastOutCon c)
-	       | CON_MODULE_PROJECT (m,l) => (blastOutChoice 18; blastOutMod m; blastOutLabel l))
+		      blastOutInt i)
+	       | CON_TUPLE_INJECT clist => (blastOutInt 16; blastOutList blastOutCon clist)
+	       | CON_TUPLE_PROJECT (i,c) => (blastOutInt 17; blastOutInt i; blastOutCon c)
+	       | CON_MODULE_PROJECT (m,l) => (blastOutInt 18; blastOutMod m; blastOutLabel l))
 
         and blastInCon () = 
 	    let val _ = push()
@@ -247,8 +285,35 @@ struct
 	    in  res
 	    end
 
-	and blastInCon' () = 
-	    (case (blastInChoice()) of
+	and blastInCon' () =
+            let val n = blastInInt() 
+            in  
+               if (n >= initial_tab_count) then
+                  (
+(*
+                   print "Re-using # ";
+                   print (Int.toString n);
+                   print "\n";
+*)
+                   Option.valOf (IntListMap.find(!itab, n)))
+               else
+                  let val c = blastInCon'' n
+                  in
+                      itab := IntListMap.insert(!itab, !itab_count, c);
+(*
+                        print "Read ";
+                        Ppil.pp_con c;
+                        print " as # ";
+                        print (Int.toString (!itab_count));
+                        print "\n";
+*)
+		      itab_count := !itab_count + 1;
+	              c
+                  end
+            end
+
+        and blastInCon'' n =
+	    (case n of
 		 0 => CON_VAR (blastInVar ())
 	       | 1 => CON_INT (blastInIS ())
 	       | 2 => CON_UINT (blastInIS ())
@@ -270,28 +335,28 @@ struct
 	       | 12 => CON_RECORD(blastInList (fn () => blastInPair blastInLabel blastInCon))
 	       | 13 => CON_FUN (blastInList blastInVar, blastInCon ())
 	       | 14 => CON_SUM {names = blastInList blastInLabel,
-				noncarriers = blastInChoice(),
+				noncarriers = blastInInt(),
 				carrier = blastInCon (),
 				special = NONE} 
 	       | 15 => CON_SUM {names = blastInList blastInLabel,
-				noncarriers = blastInChoice(),
+				noncarriers = blastInInt(),
 				carrier = blastInCon (),
-				special = SOME (blastInChoice())}
+				special = SOME (blastInInt())}
 	       | 16 => CON_TUPLE_INJECT (blastInList blastInCon)
-	       | 17 => CON_TUPLE_PROJECT (blastInChoice(), blastInCon ())
+	       | 17 => CON_TUPLE_PROJECT (blastInInt(), blastInCon ())
 	       | 18 => CON_MODULE_PROJECT (blastInMod (), blastInLabel ())
 	       | _ => error "bad blastInCon")
 
 	and blastOutValue v = 
 	    (case v of
-		 (Prim.int (is,w64)) => (blastOutChoice 0; blastOutIS is; blastOutWord64 w64)
-	       | (Prim.uint (is,w64)) => (blastOutChoice 1; blastOutIS is; blastOutWord64 w64)
-	       | (Prim.float (fs,str)) => (blastOutChoice 2; blastOutFS fs; blastOutString str)
-	       | (Prim.tag (t,c)) => (blastOutChoice 3; blastOutTag t; blastOutCon c)
+		 (Prim.int (is,w64)) => (blastOutInt 0; blastOutIS is; blastOutWord64 w64)
+	       | (Prim.uint (is,w64)) => (blastOutInt 1; blastOutIS is; blastOutWord64 w64)
+	       | (Prim.float (fs,str)) => (blastOutInt 2; blastOutFS fs; blastOutString str)
+	       | (Prim.tag (t,c)) => (blastOutInt 3; blastOutTag t; blastOutCon c)
 	       | _ => error "blasting of array/vector/refcell not supported")
 
 	and blastInValue () =
-	    (case (blastInChoice()) of
+	    (case (blastInInt()) of
 		 0 => Prim.int (blastInIS (), blastInWord64 ())
 	       | 1 => Prim.uint (blastInIS (), blastInWord64 ())
 	       | 2 => Prim.float (blastInFS (), blastInString ())
@@ -301,23 +366,23 @@ struct
 	and blastOutIlPrim ilprim = 
 	    let open Prim
 	    in  (case ilprim of
-		     eq_uint is => (blastOutChoice 0; blastOutIS is)
-		   | neq_uint is => (blastOutChoice 1; blastOutIS is)
-		   | not_uint is => (blastOutChoice 2; blastOutIS is)
-		   | and_uint is => (blastOutChoice 3; blastOutIS is)
-		   | or_uint is => (blastOutChoice 4; blastOutIS is)
-		   | xor_uint is => (blastOutChoice 5; blastOutIS is)
-		   | lshift_uint is => (blastOutChoice 6; blastOutIS is)
+		     eq_uint is => (blastOutInt 0; blastOutIS is)
+		   | neq_uint is => (blastOutInt 1; blastOutIS is)
+		   | not_uint is => (blastOutInt 2; blastOutIS is)
+		   | and_uint is => (blastOutInt 3; blastOutIS is)
+		   | or_uint is => (blastOutInt 4; blastOutIS is)
+		   | xor_uint is => (blastOutInt 5; blastOutIS is)
+		   | lshift_uint is => (blastOutInt 6; blastOutIS is)
 
-		   | mk_ref => (blastOutChoice 7)
-		   | deref => (blastOutChoice 8)
-		   | eq_ref => (blastOutChoice 9)
-		   | setref => (blastOutChoice 10))
+		   | mk_ref => (blastOutInt 7)
+		   | deref => (blastOutInt 8)
+		   | eq_ref => (blastOutInt 9)
+		   | setref => (blastOutInt 10))
 	    end
 
 	and blastInIlPrim () = 
 	    let open Prim
-	    in  (case (blastInChoice()) of
+	    in  (case (blastInInt()) of
 		     0 => eq_uint(blastInIS ())
 		   | 1 => neq_uint(blastInIS ())
 		   | 2 => not_uint(blastInIS ())
@@ -337,15 +402,15 @@ struct
 	and blastOutTT tt =
 	    let open Prim 
 	    in  (case tt of
-		     int_tt => blastOutChoice 0
-		   | real_tt => blastOutChoice 1
-		   | both_tt => blastOutChoice 2)
+		     int_tt => blastOutInt 0
+		   | real_tt => blastOutInt 1
+		   | both_tt => blastOutInt 2)
 	    end
 
 
 	and blastInTT () =
 	    let open Prim 
-	    in  (case (blastInChoice()) of
+	    in  (case (blastInInt()) of
 		     0 => int_tt
 		   | 1 => real_tt
 		   | 2 => both_tt
@@ -355,17 +420,17 @@ struct
 	and blastOutTable table = 
 	    let open Prim 
 	    in  (case table of
-		     IntArray is => (blastOutChoice 0; blastOutIS is)
-		   | IntVector is => (blastOutChoice 1; blastOutIS is)
-		   | FloatArray fs => (blastOutChoice 2; blastOutFS fs)
-		   | FloatVector fs => (blastOutChoice 3; blastOutFS fs)
-		   | OtherArray hnf => (blastOutChoice 4; blastOutBool hnf)
-		   | OtherVector hnf => (blastOutChoice 5; blastOutBool hnf))
+		     IntArray is => (blastOutInt 0; blastOutIS is)
+		   | IntVector is => (blastOutInt 1; blastOutIS is)
+		   | FloatArray fs => (blastOutInt 2; blastOutFS fs)
+		   | FloatVector fs => (blastOutInt 3; blastOutFS fs)
+		   | OtherArray hnf => (blastOutInt 4; blastOutBool hnf)
+		   | OtherVector hnf => (blastOutInt 5; blastOutBool hnf))
 	    end
 
 	and blastInTable () =
 	    let open Prim 
-	    in  (case (blastInChoice()) of
+	    in  (case (blastInInt()) of
 		     0 => IntArray (blastInIS ())
 		   | 1 => IntVector (blastInIS ())
 		   | 2 => FloatArray (blastInFS ())
@@ -378,80 +443,80 @@ struct
 	and blastOutPrim prim = 
 	    let open Prim
 	    in  (case prim of
-		     soft_vtrap tt => (blastOutChoice 0; blastOutTT tt)
-		   | soft_ztrap tt => (blastOutChoice 1; blastOutTT tt)
-		   | hard_vtrap tt => (blastOutChoice 2; blastOutTT tt)
-		   | hard_ztrap tt => (blastOutChoice 3; blastOutTT tt)
+		     soft_vtrap tt => (blastOutInt 0; blastOutTT tt)
+		   | soft_ztrap tt => (blastOutInt 1; blastOutTT tt)
+		   | hard_vtrap tt => (blastOutInt 2; blastOutTT tt)
+		   | hard_ztrap tt => (blastOutInt 3; blastOutTT tt)
 			 
 
 		       (* conversions amongst floats, ints, uints with w32 and f64 *)
-		   | float2int (* floor *) => (blastOutChoice 6)
-		   | int2float (* real  *) => (blastOutChoice 7)
-		   | int2uint (is1,is2) => (blastOutChoice 8; blastOutIS is1; blastOutIS is2)
-		   | uint2int (is1,is2) => (blastOutChoice 9; blastOutIS is1; blastOutIS is2)
-		   | uinta2uinta (is1,is2) => (blastOutChoice 10; blastOutIS is1; blastOutIS is2)
-		   | uintv2uintv (is1,is2) => (blastOutChoice 11; blastOutIS is1; blastOutIS is2)
-		   | int2int (is1,is2) => (blastOutChoice 12; blastOutIS is1; blastOutIS is2)
-		   | uint2uint (is1,is2) => (blastOutChoice 13; blastOutIS is1; blastOutIS is2)
+		   | float2int (* floor *) => (blastOutInt 6)
+		   | int2float (* real  *) => (blastOutInt 7)
+		   | int2uint (is1,is2) => (blastOutInt 8; blastOutIS is1; blastOutIS is2)
+		   | uint2int (is1,is2) => (blastOutInt 9; blastOutIS is1; blastOutIS is2)
+		   | uinta2uinta (is1,is2) => (blastOutInt 10; blastOutIS is1; blastOutIS is2)
+		   | uintv2uintv (is1,is2) => (blastOutInt 11; blastOutIS is1; blastOutIS is2)
+		   | int2int (is1,is2) => (blastOutInt 12; blastOutIS is1; blastOutIS is2)
+		   | uint2uint (is1,is2) => (blastOutInt 13; blastOutIS is1; blastOutIS is2)
 
 		   (* floatint-point operations *)	
-		   | neg_float fs  => (blastOutChoice 14; blastOutFS fs)
-		   | abs_float fs  => (blastOutChoice 15; blastOutFS fs)
-		   | plus_float fs  => (blastOutChoice 16; blastOutFS fs)
-		   | minus_float fs  => (blastOutChoice 17; blastOutFS fs)
-		   | mul_float fs  => (blastOutChoice 18; blastOutFS fs)
-		   | div_float fs  => (blastOutChoice 19; blastOutFS fs)
-		   | less_float fs  => (blastOutChoice 20; blastOutFS fs)
-		   | greater_float fs  => (blastOutChoice 21; blastOutFS fs)
-		   | lesseq_float fs  => (blastOutChoice 22; blastOutFS fs)
-		   | greatereq_float  fs  => (blastOutChoice 23; blastOutFS fs)
-		   | eq_float  fs  => (blastOutChoice 24; blastOutFS fs)
-		   | neq_float fs  => (blastOutChoice 25; blastOutFS fs)
+		   | neg_float fs  => (blastOutInt 14; blastOutFS fs)
+		   | abs_float fs  => (blastOutInt 15; blastOutFS fs)
+		   | plus_float fs  => (blastOutInt 16; blastOutFS fs)
+		   | minus_float fs  => (blastOutInt 17; blastOutFS fs)
+		   | mul_float fs  => (blastOutInt 18; blastOutFS fs)
+		   | div_float fs  => (blastOutInt 19; blastOutFS fs)
+		   | less_float fs  => (blastOutInt 20; blastOutFS fs)
+		   | greater_float fs  => (blastOutInt 21; blastOutFS fs)
+		   | lesseq_float fs  => (blastOutInt 22; blastOutFS fs)
+		   | greatereq_float  fs  => (blastOutInt 23; blastOutFS fs)
+		   | eq_float  fs  => (blastOutInt 24; blastOutFS fs)
+		   | neq_float fs  => (blastOutInt 25; blastOutFS fs)
 
 		   (* int operations *)
-		   | plus_int is  => (blastOutChoice 26; blastOutIS is)
-		   | minus_int is  => (blastOutChoice 27; blastOutIS is)
-		   | mul_int is  => (blastOutChoice 28; blastOutIS is)
-		   | div_int is  => (blastOutChoice 29; blastOutIS is)
-		   | mod_int is  => (blastOutChoice 30; blastOutIS is)
-		   | quot_int is  => (blastOutChoice 31; blastOutIS is)
-		   | rem_int is  => (blastOutChoice 32; blastOutIS is)
-		   | plus_uint is  => (blastOutChoice 33; blastOutIS is)
-		   | minus_uint is  => (blastOutChoice 34; blastOutIS is)
-		   | mul_uint is  => (blastOutChoice 35; blastOutIS is)
-		   | div_uint is  => (blastOutChoice 36; blastOutIS is)
-		   | mod_uint is  => (blastOutChoice 37; blastOutIS is)
-		   | less_int is  => (blastOutChoice 38; blastOutIS is)
-		   | greater_int is  => (blastOutChoice 39; blastOutIS is)
-		   | lesseq_int is  => (blastOutChoice 40; blastOutIS is)
-		   | greatereq_int is  => (blastOutChoice 41; blastOutIS is)
-		   | less_uint is  => (blastOutChoice 42; blastOutIS is)
-		   | greater_uint is  => (blastOutChoice 43; blastOutIS is)
-		   | lesseq_uint is  => (blastOutChoice 44; blastOutIS is)
-		   | greatereq_uint is  => (blastOutChoice 45; blastOutIS is)
-		   | eq_int is  => (blastOutChoice 46; blastOutIS is)
-		   | neq_int is  => (blastOutChoice 47; blastOutIS is)
-		   | neg_int is  => (blastOutChoice 48; blastOutIS is)
-		   | abs_int is  => (blastOutChoice 49; blastOutIS is)
+		   | plus_int is  => (blastOutInt 26; blastOutIS is)
+		   | minus_int is  => (blastOutInt 27; blastOutIS is)
+		   | mul_int is  => (blastOutInt 28; blastOutIS is)
+		   | div_int is  => (blastOutInt 29; blastOutIS is)
+		   | mod_int is  => (blastOutInt 30; blastOutIS is)
+		   | quot_int is  => (blastOutInt 31; blastOutIS is)
+		   | rem_int is  => (blastOutInt 32; blastOutIS is)
+		   | plus_uint is  => (blastOutInt 33; blastOutIS is)
+		   | minus_uint is  => (blastOutInt 34; blastOutIS is)
+		   | mul_uint is  => (blastOutInt 35; blastOutIS is)
+		   | div_uint is  => (blastOutInt 36; blastOutIS is)
+		   | mod_uint is  => (blastOutInt 37; blastOutIS is)
+		   | less_int is  => (blastOutInt 38; blastOutIS is)
+		   | greater_int is  => (blastOutInt 39; blastOutIS is)
+		   | lesseq_int is  => (blastOutInt 40; blastOutIS is)
+		   | greatereq_int is  => (blastOutInt 41; blastOutIS is)
+		   | less_uint is  => (blastOutInt 42; blastOutIS is)
+		   | greater_uint is  => (blastOutInt 43; blastOutIS is)
+		   | lesseq_uint is  => (blastOutInt 44; blastOutIS is)
+		   | greatereq_uint is  => (blastOutInt 45; blastOutIS is)
+		   | eq_int is  => (blastOutInt 46; blastOutIS is)
+		   | neq_int is  => (blastOutInt 47; blastOutIS is)
+		   | neg_int is  => (blastOutInt 48; blastOutIS is)
+		   | abs_int is  => (blastOutInt 49; blastOutIS is)
 
 		   (* bit-pattern manipulation *)
-		   | not_int is  => (blastOutChoice 50; blastOutIS is)
-		   | and_int is  => (blastOutChoice 51; blastOutIS is)
-		   | or_int is  => (blastOutChoice 52; blastOutIS is)
-		   | xor_int is  => (blastOutChoice 53; blastOutIS is)
-		   | lshift_int is  => (blastOutChoice 54; blastOutIS is)
-		   | rshift_int is  => (blastOutChoice 55; blastOutIS is)
-		   | rshift_uint is  => (blastOutChoice 56; blastOutIS is)
+		   | not_int is  => (blastOutInt 50; blastOutIS is)
+		   | and_int is  => (blastOutInt 51; blastOutIS is)
+		   | or_int is  => (blastOutInt 52; blastOutIS is)
+		   | xor_int is  => (blastOutInt 53; blastOutIS is)
+		   | lshift_int is  => (blastOutInt 54; blastOutIS is)
+		   | rshift_int is  => (blastOutInt 55; blastOutIS is)
+		   | rshift_uint is  => (blastOutInt 56; blastOutIS is)
 			 
 		   (* array and vectors *)
-		   | array2vector t => (blastOutChoice 57; blastOutTable t)
-		   | vector2array t => (blastOutChoice 58; blastOutTable t)
-		   | create_table t => (blastOutChoice 59; blastOutTable t)
-		   | create_empty_table t => (blastOutChoice 60; blastOutTable t)
-		   | sub t => (blastOutChoice 61; blastOutTable t)
-		   | update t => (blastOutChoice 62; blastOutTable t)
-		   | length_table t => (blastOutChoice 63; blastOutTable t)
-		   | equal_table t => (blastOutChoice 64; blastOutTable t))
+		   | array2vector t => (blastOutInt 57; blastOutTable t)
+		   | vector2array t => (blastOutInt 58; blastOutTable t)
+		   | create_table t => (blastOutInt 59; blastOutTable t)
+		   | create_empty_table t => (blastOutInt 60; blastOutTable t)
+		   | sub t => (blastOutInt 61; blastOutTable t)
+		   | update t => (blastOutInt 62; blastOutTable t)
+		   | length_table t => (blastOutInt 63; blastOutTable t)
+		   | equal_table t => (blastOutInt 64; blastOutTable t))
 
 
 
@@ -459,7 +524,7 @@ struct
 
 	and blastInPrim () =
 	    let open Prim
-	    in  (case (blastInChoice()) of
+	    in  (case (blastInInt()) of
 		     0 => soft_vtrap(blastInTT ())
 		   | 1 => soft_ztrap(blastInTT ())
 		   | 2 => hard_vtrap(blastInTT ())
@@ -544,44 +609,44 @@ struct
 		 OVEREXP (_,_,oe) => (case oneshot_deref oe of
 					  SOME e => blastOutExp e
 					| NONE => error "cannot blastOut unresolved OVEREXP")
-	       | SCON v => (blastOutChoice 0; blastOutValue v)
-	       | PRIM (p,clist,elist) => (blastOutChoice 1; blastOutPrim p;
+	       | SCON v => (blastOutInt 0; blastOutValue v)
+	       | PRIM (p,clist,elist) => (blastOutInt 1; blastOutPrim p;
 					  blastOutList blastOutCon clist;
 					  blastOutList blastOutExp elist)
-	       | ILPRIM (p,clist,elist) => (blastOutChoice 2; blastOutIlPrim p;
+	       | ILPRIM (p,clist,elist) => (blastOutInt 2; blastOutIlPrim p;
 					    blastOutList blastOutCon clist;
 					    blastOutList blastOutExp elist)
-	       | ETAPRIM (p,clist) => (blastOutChoice 3; blastOutPrim p;
+	       | ETAPRIM (p,clist) => (blastOutInt 3; blastOutPrim p;
 				       blastOutList blastOutCon clist)
-	       | ETAILPRIM (p,clist) => (blastOutChoice 4; blastOutIlPrim p;
+	       | ETAILPRIM (p,clist) => (blastOutInt 4; blastOutIlPrim p;
 					 blastOutList blastOutCon clist)
-	       | VAR v => (blastOutChoice 5; blastOutVar v)
-	       | APP (e1,e2) => (blastOutChoice 6; blastOutExp e1; 
+	       | VAR v => (blastOutInt 5; blastOutVar v)
+	       | APP (e1,e2) => (blastOutInt 6; blastOutExp e1; 
 				 blastOutExp e2)
-	       | EXTERN_APP (c,e,elist) => (blastOutChoice 23; 
+	       | EXTERN_APP (c,e,elist) => (blastOutInt 23; 
 					    blastOutCon c;
 					    blastOutExp e; 
 					    blastOutList blastOutExp elist)
-	       | FIX (b,a,fbnds) => (blastOutChoice 7; blastOutBool b; blastOutArrow a;
+	       | FIX (b,a,fbnds) => (blastOutInt 7; blastOutBool b; blastOutArrow a;
 				     blastOutList blastOutFbnd fbnds)
-	       | RECORD lelist => (blastOutChoice 8; blastOutList (blastOutPair blastOutLabel blastOutExp) lelist)
-	       | RECORD_PROJECT (e,l,c) => (blastOutChoice 9; blastOutExp e; blastOutLabel l; blastOutCon c)
-	       | SUM_TAIL (i,c,e) => (blastOutChoice 10; blastOutChoice i;
+	       | RECORD lelist => (blastOutInt 8; blastOutList (blastOutPair blastOutLabel blastOutExp) lelist)
+	       | RECORD_PROJECT (e,l,c) => (blastOutInt 9; blastOutExp e; blastOutLabel l; blastOutCon c)
+	       | SUM_TAIL (i,c,e) => (blastOutInt 10; blastOutInt i;
 				      blastOutCon c; blastOutExp e)
-	       | HANDLE (c,e1,e2) => (blastOutChoice 11; blastOutCon c; blastOutExp e1; blastOutExp e2)
-	       | RAISE (c,e) => (blastOutChoice 12; blastOutCon c; blastOutExp e)
-	       | LET(bnds,e) => (blastOutChoice 13; blastOutList blastOutBnd bnds; blastOutExp e)
-	       | NEW_STAMP c => (blastOutChoice 14; blastOutCon c)
-	       | EXN_INJECT (str,e1,e2) => (blastOutChoice 15; blastOutString str; blastOutExp e1; blastOutExp e2)
-	       | ROLL (c,e) => (blastOutChoice 16; blastOutCon c; blastOutExp e)
-	       | UNROLL (c1,c2,e) => (blastOutChoice 17; blastOutCon c1; blastOutCon c2;
+	       | HANDLE (c,e1,e2) => (blastOutInt 11; blastOutCon c; blastOutExp e1; blastOutExp e2)
+	       | RAISE (c,e) => (blastOutInt 12; blastOutCon c; blastOutExp e)
+	       | LET(bnds,e) => (blastOutInt 13; blastOutList blastOutBnd bnds; blastOutExp e)
+	       | NEW_STAMP c => (blastOutInt 14; blastOutCon c)
+	       | EXN_INJECT (str,e1,e2) => (blastOutInt 15; blastOutString str; blastOutExp e1; blastOutExp e2)
+	       | ROLL (c,e) => (blastOutInt 16; blastOutCon c; blastOutExp e)
+	       | UNROLL (c1,c2,e) => (blastOutInt 17; blastOutCon c1; blastOutCon c2;
 				      blastOutExp e)
 	       | INJ {sumtype, field, inject} =>
-		     (blastOutChoice 18; blastOutCon sumtype; 
-		      blastOutChoice field;
+		     (blastOutInt 18; blastOutCon sumtype; 
+		      blastOutInt field;
 		      blastOutOption blastOutExp inject)
 	       | CASE {sumtype, arg, bound, arms, tipe, default} => 
-		      (blastOutChoice 19;
+		      (blastOutInt 19;
 		       blastOutCon sumtype;
 		       blastOutExp arg;
 		       blastOutVar bound;
@@ -589,13 +654,13 @@ struct
 		       blastOutCon tipe;
 		       blastOutOption blastOutExp default)
 	       | EXN_CASE {arg, arms, default, tipe} => 
-		      (blastOutChoice 20;
+		      (blastOutInt 20;
 		       blastOutExp arg;
 		       blastOutList (blastOutTriple blastOutExp blastOutCon blastOutExp) arms;
 		       blastOutOption blastOutExp default;
 		       blastOutCon tipe)
-	       | MODULE_PROJECT (m,l) => (blastOutChoice 21; blastOutMod m; blastOutLabel l)
-	       | SEAL(e,c) => (blastOutChoice 22; blastOutExp e; blastOutCon c))
+	       | MODULE_PROJECT (m,l) => (blastOutInt 21; blastOutMod m; blastOutLabel l)
+	       | SEAL(e,c) => (blastOutInt 22; blastOutExp e; blastOutCon c))
 
         and blastInExp () = 
 	    let val _ = push()
@@ -606,7 +671,7 @@ struct
 	    end
 
 	and blastInExp' () =
-	     (case (blastInChoice()) of
+	     (case (blastInInt()) of
 	         0 => (tab "  SCON\n"; 
 		       SCON(blastInValue ()))
 	       | 1 => (tab "  PRIM\n"; 
@@ -632,7 +697,7 @@ struct
 	       | 7 => FIX (blastInBool (), blastInArrow (), blastInList blastInFbnd)
 	       | 8 => RECORD (blastInList (fn () => blastInPair blastInLabel blastInExp))
 	       | 9 => RECORD_PROJECT (blastInExp (), blastInLabel (), blastInCon ())
-	       | 10 => SUM_TAIL (blastInChoice(), blastInCon (), blastInExp ())
+	       | 10 => SUM_TAIL (blastInInt(), blastInCon (), blastInExp ())
 	       | 11 => HANDLE (blastInCon(), blastInExp (), blastInExp ())
 	       | 12 => RAISE (blastInCon (), blastInExp ())
 	       | 13 => LET(blastInList blastInBnd, blastInExp ())
@@ -641,7 +706,7 @@ struct
 	       | 16 => ROLL (blastInCon (), blastInExp ())
 	       | 17 => UNROLL (blastInCon (), blastInCon (), blastInExp ())
 	       | 18 => let val sumtype = blastInCon ()
-			   val field = blastInChoice()
+			   val field = blastInInt()
 			   val inject = blastInOption blastInExp
 		       in  INJ {sumtype = sumtype,
 				field = field,
@@ -681,16 +746,16 @@ struct
 
 	and blastOutMod m = 
 	    (case m of
-		 MOD_VAR v => (blastOutChoice 0; blastOutVar v)
-	       | MOD_STRUCTURE sbnds => (blastOutChoice 1; blastOutSbnds sbnds)
-	       | MOD_FUNCTOR (a,v,s1,m,s2) => (blastOutChoice 2; 
+		 MOD_VAR v => (blastOutInt 0; blastOutVar v)
+	       | MOD_STRUCTURE sbnds => (blastOutInt 1; blastOutSbnds sbnds)
+	       | MOD_FUNCTOR (a,v,s1,m,s2) => (blastOutInt 2; 
 					     blastOutArrow a; blastOutVar v; 
 					     blastOutSig s1; blastOutMod m;
 					     blastOutSig s2)
-	       | MOD_APP (m1,m2) => (blastOutChoice 3; blastOutMod m1; blastOutMod m2)
-	       | MOD_PROJECT (m,l) => (blastOutChoice 4; blastOutMod m; blastOutLabel l)
-	       | MOD_SEAL (m,s) => (blastOutChoice 5; blastOutMod m; blastOutSig s)
-	       | MOD_LET (v,m1,m2) => (blastOutChoice 6; blastOutVar v; blastOutMod m1; blastOutMod m2))
+	       | MOD_APP (m1,m2) => (blastOutInt 3; blastOutMod m1; blastOutMod m2)
+	       | MOD_PROJECT (m,l) => (blastOutInt 4; blastOutMod m; blastOutLabel l)
+	       | MOD_SEAL (m,s) => (blastOutInt 5; blastOutMod m; blastOutSig s)
+	       | MOD_LET (v,m1,m2) => (blastOutInt 6; blastOutVar v; blastOutMod m1; blastOutMod m2))
 
         and blastInMod () = 
 	    let val _ = push()
@@ -702,7 +767,7 @@ struct
 
 	and blastInMod' () =
 	    (
-		     case (blastInChoice()) of
+		     case (blastInInt()) of
 		 0 => MOD_VAR(blastInVar ())
 	       | 1 => MOD_STRUCTURE(blastInSbnds ())
 	       | 2 => MOD_FUNCTOR(blastInArrow(), blastInVar (), 
@@ -716,16 +781,16 @@ struct
 	and blastOutSig s = 
 		 (tab "    blastInSig\n"; 
 		  case s of
-		 SIGNAT_STRUCTURE sdecs => (blastOutChoice 0; blastOutSdecs sdecs)
-	       | SIGNAT_SELF(self, unselfSigOpt, selfSig) => (blastOutChoice 1; blastOutPath self; 
+		 SIGNAT_STRUCTURE sdecs => (blastOutInt 0; blastOutSdecs sdecs)
+	       | SIGNAT_SELF(self, unselfSigOpt, selfSig) => (blastOutInt 1; blastOutPath self; 
 							      blastOutOption blastOutSig unselfSigOpt; blastOutSig selfSig)
-	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutChoice 2; blastOutVar v;
+	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutInt 2; blastOutVar v;
 						      blastOutSig s1; blastOutSig s2; blastOutArrow arrow)
-	       | SIGNAT_VAR v => (blastOutChoice 5; blastOutVar v)
-	       | SIGNAT_OF m => (blastOutChoice 6; blastOutPath m))
+	       | SIGNAT_VAR v => (blastOutInt 5; blastOutVar v)
+	       | SIGNAT_OF m => (blastOutInt 6; blastOutPath m))
 
 	and blastInSig () =
-	    (case (blastInChoice()) of
+	    (case (blastInInt()) of
 		 0 => SIGNAT_STRUCTURE (blastInSdecs ())
 	       | 1 => SIGNAT_SELF (blastInPath (), blastInOption blastInSig, blastInSig ())
 	       | 2 => SIGNAT_FUNCTOR(blastInVar (), blastInSig (), blastInSig (), blastInArrow ())
@@ -734,13 +799,13 @@ struct
 	       | _ => error "bad blastInSig")
 
 	fun blastOutOvld (OVLD (celist,default)) =
-	    let val _ = blastOutChoice (case default
+	    let val _ = blastOutInt (case default
 					  of NONE => 0
 					   | SOME n => n+1)
 	    in  blastOutList (blastOutPair blastOutCon blastOutExp) celist
 	    end
 	fun blastInOvld () =
-	    let val default = case blastInChoice()
+	    let val default = case blastInInt()
 				of 0 => NONE
 				 | n => SOME (n-1)
 		val celist = blastInList (fn () => blastInPair blastInCon blastInExp)
@@ -749,33 +814,33 @@ struct
 
 	fun blastOutPC pc = 
 	    case pc of
-		PHRASE_CLASS_EXP (e,c,eopt,inline) => (blastOutChoice 0; blastOutExp e; 
+		PHRASE_CLASS_EXP (e,c,eopt,inline) => (blastOutInt 0; blastOutExp e; 
 						       blastOutCon c; blastOutOption blastOutExp eopt;
 						       blastOutBool inline)
-	      | PHRASE_CLASS_CON (c,k,copt,inline) => (blastOutChoice 1; blastOutCon c; blastOutKind k; 
+	      | PHRASE_CLASS_CON (c,k,copt,inline) => (blastOutInt 1; blastOutCon c; blastOutKind k; 
 						       blastOutOption blastOutCon copt; 
 						       blastOutBool inline)
-	      | PHRASE_CLASS_MOD (m,b,s) => (blastOutChoice 2; blastOutMod m; blastOutBool b; 
+	      | PHRASE_CLASS_MOD (m,b,s) => (blastOutInt 2; blastOutMod m; blastOutBool b; 
 					     blastOutSig s)
-	      | PHRASE_CLASS_SIG (v,s) => (blastOutChoice 3; blastOutVar v; blastOutSig s)
+	      | PHRASE_CLASS_SIG (v,s) => (blastOutInt 3; blastOutVar v; blastOutSig s)
 
 	fun blastInPC () = 
 	    (tab "  blastInPC\n"; 
-	    case (blastInChoice()) of
+	    case (blastInInt()) of
 		0 => PHRASE_CLASS_EXP(blastInExp (), blastInCon (), blastInOption blastInExp, blastInBool())
 	      | 1 => PHRASE_CLASS_CON(blastInCon (), blastInKind (), blastInOption blastInCon, blastInBool())
 	      | 2 => PHRASE_CLASS_MOD(blastInMod (), blastInBool (), blastInSig ())
 	      | 3 => PHRASE_CLASS_SIG(blastInVar (), blastInSig ())
 	      | _ => error "bad blastInPC")
 
-	fun blastOutFixity Fixity.NONfix = blastOutChoice 0
-	  | blastOutFixity (Fixity.INfix (m,n)) = (blastOutChoice 1; 
-						      blastOutChoice m; blastOutChoice n)
+	fun blastOutFixity Fixity.NONfix = blastOutInt 0
+	  | blastOutFixity (Fixity.INfix (m,n)) = (blastOutInt 1; 
+						      blastOutInt m; blastOutInt n)
 	fun blastInFixity () =
-	    if (blastInChoice() = 0) 
+	    if (blastInInt() = 0) 
 		then Fixity.NONfix 
-	    else let val m = blastInChoice()
-		     val n = blastInChoice()
+	    else let val m = blastInInt()
+		     val n = blastInInt()
 		 in  Fixity.INfix (m,n)
 		 end
 
@@ -807,13 +872,17 @@ struct
 	    NameBlast.blastInVarmap int2var (curIn()) (fn _ => blastInLabel())
 
     fun blastOutContext (CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering}) = 
-	(blastOutFixityMap fixityMap;
+	(Blaster.reset();
+         local_reset();
+         blastOutFixityMap fixityMap;
          blastOutOverloadMap overloadMap;
 	 blastOutPathMap pathMap;
 	 blastOutList blastOutPath ordering)
 
     fun blastInContext () = 
-	let val fixityMap = blastInFixityMap ()
+	let val _ = Blaster.reset();
+            val _ = local_reset();
+	    val fixityMap = blastInFixityMap ()
 	    val overloadMap = blastInOverloadMap()	 
 	    val pathMap = blastInPathMap ()
 	    val ordering = blastInList blastInPath

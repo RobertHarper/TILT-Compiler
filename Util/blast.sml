@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel BinIO Util TilWord64 Word8Vector Word8 Word32 Int String *)
+(*$import Prelude TopLevel BinIO Util TilWord64 Word8Vector Word8 Word32 Int String IntListMap Option HashTableFn HashString *)
 
 signature BLASTER = sig
 (*
@@ -8,6 +8,8 @@ signature BLASTER = sig
 *)
   type 'a blastin = BinIO.instream -> 'a
   type 'a blastout = BinIO.outstream -> 'a -> unit
+
+  val reset : unit -> unit
 
   val blastOutInt : BinIO.outstream -> int -> unit
   val blastInInt : BinIO.instream -> int
@@ -37,6 +39,27 @@ structure Blaster : BLASTER = struct
   type 'a blastin = BinIO.instream -> 'a
   type 'a blastout = BinIO.outstream -> 'a -> unit
 
+
+  structure StringTable = HashTableFn (struct
+      type hash_key = string
+      val hashVal = HashString.hashString
+      val sameKey = (op = : string*string->bool)
+    end);
+
+    exception STab
+    val stab : int StringTable.hash_table ref = 
+             ref (StringTable.mkTable(100,STab))
+    val stab_count = ref 1
+
+
+    val itab : string IntListMap.map ref = ref IntListMap.empty
+    val itab_count = ref 1
+
+    fun reset() = (stab := StringTable.mkTable(100,STab);
+                   itab := IntListMap.empty;
+                   stab_count := 1;
+                   itab_count := 1)    
+
     local
 	open BinIO
     in
@@ -52,62 +75,78 @@ structure Blaster : BLASTER = struct
 	    in  implode chars
 	    end
 	    
-	fun blastOutString os str = 
-	    (output1(os, Word8.fromInt (size str));
-	     output(os, string2vector str))
-	    
-	fun blastInString is = 
-	    let val sz = Word8.toInt(input1 is)
-		val str = vector2string(inputN(is, sz))
-	    in  str
-	    end
-
 	fun blastOutWord32 os w = 
-	    let val a = Word32.andb(w,0w255)
-		val w = Word32.>>(w,0w8)
-		val b = Word32.andb(w,0w255)
-		val w = Word32.>>(w,0w8)
-		val c = Word32.andb(w,0w255)
-		val w = Word32.>>(w,0w8)
-		val d = w
-		val a = Word8.fromInt(Word32.toInt a)
-		val b = Word8.fromInt(Word32.toInt b)
-		val c = Word8.fromInt(Word32.toInt c)
-		val d = Word8.fromInt(Word32.toInt d)
-	    in  output1(os, a);
-		output1(os, b);
-		output1(os, c);
-		output1(os, d)
-	    end
+	    let val a = Word8.fromInt(Word32.toInt (Word32.andb(w,0w127)))
+		val w = Word32.>>(w,0w7)
+            in
+                if (w = 0w0) then 
+		   output1(os, a)
+                else
+                   (output1(os, Word8.orb(a,0w128));
+                    blastOutWord32 os w)
+            end
 
 	fun blastInWord32 is =
-	    let val a' = Word32.fromInt(Word8.toInt(input1 is))
-		val b' = Word32.fromInt(Word8.toInt(input1 is))
-		val c' = Word32.fromInt(Word8.toInt(input1 is))
-		val d' = Word32.fromInt(Word8.toInt(input1 is))
-		val w = Word32.orb(c',Word32.<<(d',0w8))
-	    in  Word32.orb(a',Word32.<<(Word32.orb(b',Word32.<<(w,0w8)),0w8))
-	    end
+	    let fun loop shift base =
+                    let val a = input1 is
+                        val a' = Word8.andb(a, 0w127)
+                        val a32 = Word32.fromInt(Word8.toInt a')
+                        val base = Word32.orb(Word32.<<(a32,shift),base)
+                    in 
+                        if (a=a') then
+                           base
+                        else
+                           loop (shift+0w7) base
+                    end
+             in
+                loop 0w0 0w0
+             end
 	
-	fun blastOutInt' os i = blastOutString os (Int.toString i)
-	fun blastInInt' is = (case Int.fromString(blastInString is) of
-				 NONE => error "blastInInt failed\n"
-			       | SOME n => n)
-
 	fun blastOutInt'' os i = blastOutWord32 os (Word32.fromInt i)
 	fun blastInInt'' is = Word32.toInt(blastInWord32 is)
 
 	fun blastOutInt os i = blastOutInt'' os i
 	fun blastInInt is = blastInInt'' is
 
+	fun blastOutBool os true = output1(os, 0w1)
+	  | blastOutBool os false = output1(os, 0w0)
+
+	fun blastInBool is = (input1 is) <> (0w0)
+	    
+	fun blastOutString os str = 
+            (case (StringTable.find (!stab) str) of
+               NONE => (blastOutInt os 0;
+                        output1(os, Word8.fromInt (size str));
+	                output(os, string2vector str);
+			StringTable.insert (!stab) (str, !stab_count);
+                        stab_count := !stab_count + 1)
+             | SOME n => (blastOutInt os n))
+	    
+	fun blastInString is = 
+            let
+                val n = blastInInt is
+            in
+                if (n>0) then
+		   Option.valOf (IntListMap.find(!itab, n))
+                else
+                   let
+	              val sz = Word8.toInt(input1 is)
+    		      val str = vector2string(inputN(is, sz))
+		   in  
+                      itab := IntListMap.insert(!itab, !itab_count, str);
+		      itab_count := !itab_count + 1;
+	              str
+	           end
+            end
+
+	fun blastOutInt' os i = blastOutString os (Int.toString i)
+	fun blastInInt' is = (case Int.fromString(blastInString is) of
+				 NONE => error "blastInInt failed\n"
+			       | SOME n => n)
 
 	fun blastOutWord64 os i = blastOutString os (TilWord64.toDecimalString i)
 	fun blastInWord64 is = TilWord64.fromDecimalString(blastInString is) 
 	    
-	fun blastOutBool os true = output1(os, Word8.fromInt 1)
-	  | blastOutBool os false = output1(os, Word8.fromInt 0)
-	    
-	fun blastInBool is = (input1 is) = (Word8.fromInt 1)
     end
 
     fun blastOutPair blaster1 blaster2 os (x,y) = (blaster1 os x; blaster2 os y)

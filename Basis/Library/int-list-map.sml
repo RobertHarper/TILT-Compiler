@@ -1,4 +1,4 @@
-(*$import ORD_MAP LibBase List *)
+(*$import Prelude ORD_MAP LibBase List Int *)
 (* int-list-map.sml
  *
  * COPYRIGHT (c) 1996 by AT&T Research.  See COPYRIGHT file for details.

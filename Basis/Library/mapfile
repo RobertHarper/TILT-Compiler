@@ -40,7 +40,7 @@ Fifo            fifo
 //Format          format
 IntBinaryMap    int-binary-map
 IntBinarySet    int-binary-set
-// IntListMap      int-list-map
+IntListMap      int-list-map
 // IntListSet      int-list-set
 //ITERATE         iterate-sig
 //Iterate         iterate
