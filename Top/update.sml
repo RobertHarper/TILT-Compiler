@@ -560,6 +560,15 @@ struct
 		 nil)
 	end
 
+    fun unitPackage' (name : string, iface : Paths.iface) : Prelink.package =
+	let val ueFile = Paths.ifaceUeFile iface
+	    val imports = FileCache.read_ue ueFile
+	    val ifaceFile = Paths.ifaceFile iface
+	    val crc = FileCache.crc ifaceFile
+	    val exports = Ue.insert (Ue.empty, name, crc)
+	in  {unit=name, imports=imports, exports=exports}
+	end
+
     fun unitPackage (unit : Paths.compunit) : Prelink.package =
 	let val name = Paths.unitName unit
 	    val iface = Paths.unitIface unit
@@ -726,14 +735,15 @@ struct
 	    val _ = msg ("[checking " ^ what ^ "]\n")
 	    val packs = packlist (unit_help, iface_help, import, what, roots)
 	    (* XXX: Check interfaces unit environments too. *)
-	    val units = (List.mapPartial
-			 (fn pack =>
-			  (case pack
-			     of PACKU (Paths.IMPORTU _,_) => NONE
-			      | PACKU (u,_) => SOME u
-			      | _ => NONE))
-			 packs)
-	    val _ = Prelink.checkTarget eq (what, map unitPackage units)
+	    val packages =
+		(List.mapPartial
+		 (fn pack =>
+		  (case pack
+		     of PACKU (Paths.IMPORTU ui,_) => SOME (unitPackage' ui)
+		      | PACKU (u,_) => SOME (unitPackage u)
+		      | _ => NONE))
+		 packs)
+	    val _ = Prelink.checkTarget eq (what, packages)
 	    val plan =
 		if null packs then EMPTY_PLAN
 		else PACK (lib, packs)
