@@ -102,6 +102,7 @@ struct
 
     val print_bind = ref false
     val debug = ref false
+    val error = fn s => Util.error "anormalize-cse" s
    
     (* ----------- CSE aux fns ------------ *)
 
@@ -535,14 +536,27 @@ struct
 		     (k (con, D, avail))
 		 end ))
 	  | Mu_c (bool,vcseq, var) => 
-		let val var_kinds = mapsequence (fn (var,con) => (var, Word_k Runtime)) vcseq
+		let val vclist = sequence2list vcseq
+		    fun folder((v,_),subst) = (case find_kind(D, v) of
+						   NONE => subst
+						 | SOME _ => Subst.add subst (v,Var_c(Name.derived_var v)))
+		    val subst = foldl folder (Subst.empty()) vclist
+		    fun substcon c = if (Subst.is_empty subst)
+					 then c
+				     else Subst.substConInCon subst c
+		    fun lookup var = (case (substcon (Var_c var)) of
+					  (Var_c v) => v
+					| _ => error "substcon returned non Var_c")
+		    val var_kinds = map (fn (var,con) => (lookup var, Word_k Runtime)) vclist
 		    val newD = insert_kind_list (D, var_kinds)
 		    fun do_con (var, con) = 
-			let val CON con = normalize_con con newD avail (TOCON, CONk)
+			let val var = lookup var
+			    val con = substcon con
+			    val CON con = normalize_con con newD avail (TOCON, CONk)
 			in (var, con)
 			end 
 		in 
-		    k ( Mu_c (bool,Util.mapsequence do_con vcseq, var), D, avail)
+		    k ( Mu_c (bool,map do_con vclist, lookup var), D, avail)
 		end 
 	  | AllArrow_c ( openness, effect, vklist, clist, w32, con) => 
 	        if null vklist then

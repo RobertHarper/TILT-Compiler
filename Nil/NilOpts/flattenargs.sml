@@ -16,7 +16,8 @@ struct
     exception FnNotFound
     exception BUG
     exception UNIMP
-	
+    val error = fn s => Util.error "flattenedargs" s	
+
     val maxFnArgs = 6  (* For flattening record arguments to functions. Should be close to the 
 			number of machine registers or something *)
 	 
@@ -351,8 +352,13 @@ struct
 		
 	    (* Clear out the hash table *)
 	    val _ = HashTable.appi ( fn (key, item) => ignore (HashTable.remove  flattened key)) flattened
-	    val temp =  Let_e(Sequential,bnds, Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w1}),[],[])  ) (* true! *)
-	    val Let_e(Sequential,bnds,_) = Squish.squish (xexp VarMap.empty temp)
+	    val dummy = Const_e(Prim.int(Prim.W32,TilWord64.fromInt 0))
+	    val temp =  Let_e(Sequential,bnds, dummy)
+	    val result = Squish.squish (xexp VarMap.empty temp) 
+	    val bnds = (case result of
+			    Let_e(Sequential,bnds,_) => bnds
+			  | Const_e(Prim.int _) => []
+			  | _ => error "flattenedarg got non-let")
 	    val imports = imports
 	    val exports = map reduceExport exports
 	in  MODULE{bnds = bnds,

@@ -49,6 +49,7 @@ struct
 
     exception FnNotFound
     exception BUG
+    val error = fn s => Util.error "flattenedargs" s	
     
     val float_con = Prim_c (Float_c Prim.F32, [])
     val inline_click = NilOpts.make_click "Functions inlined: (general fcns)"
@@ -191,11 +192,15 @@ struct
 	end
     
 	fun doModule  debug (MODULE{bnds=bnds, imports=imports, exports=exports}) = 
-	    let 	 
-		val temp =  Let_e(Sequential,bnds, Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w1}),[],[])  ) (* true! *)	    
+	    let 
+		val dummy = Const_e(Prim.int(Prim.W32,TilWord64.fromInt 0))	 
+		val temp =  Let_e(Sequential,bnds, dummy)
 		val (exp, size) = (xexp temp)
 		val _ = if debug then print ( "Size is " ^ (Int.toString size) ^ "\n") else ()
-		val Let_e(Sequential,bnds,_) = Squish.squish exp
+		val bnds = (case (Squish.squish exp) of
+			    Let_e(Sequential,bnds,_) => bnds
+			  | Const_e(Prim.int _) => []
+			  | _ => error "inline got non-let")
 	    in
 		MODULE {bnds=bnds, imports=imports, exports=exports}
 	    end
