@@ -1,0 +1,16 @@
+Number: 0163
+Title:       Elaborator bombing.
+Keywords:    Pattern compiler, records and tuples
+Submitter:   swasey
+Date:        04/15/03
+Version:     CVS
+System:      any
+Severity:    critical
+Problem:     
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: ../../Test/bug163
+Owner: swasey
+Status: open
