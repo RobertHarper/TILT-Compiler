@@ -70,4 +70,6 @@ value_t* scan_stop_minor(value_t start_scan, value_t *alloc, value_t *stop,
 void scan_minor_stack(value_t *gray_obj, value_t **alloc_ptr, value_t **limit_ptr, Heap_t *toheap,
 		      range_t *from_range, range_t *to_range, SysThread_t *sysThread);
 
+void scan_oneobject_for_pointers(value_t *gray, Queue_t *queue);
+
 #endif

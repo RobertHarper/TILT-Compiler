@@ -176,6 +176,7 @@ global_exn_handler_dummy:
 	stq	EXNARG_SYMREG, EXNARG_DISP(THREADPTR_SYMREG)
 	bsr	save_regs
 	mov	THREADPTR_SYMREG, $16
+	lda	$27, toplevel_exnhandler
 	bsr	toplevel_exnhandler
 	jsr	abort
 	.end	global_exnhandler

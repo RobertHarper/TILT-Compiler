@@ -1257,3 +1257,72 @@ void scan_minor_stack(value_t *gray, value_t **alloc_ptr, value_t **limit_ptr, H
 }
 
 
+
+void scan_oneobject_for_pointers(value_t *gray, Queue_t *queue)
+{
+  value_t tag = gray[-1];
+  value_t type= GET_TYPE(tag);
+
+  if (tag == SKIP_TAG)
+    assert(0);
+
+  while (tag == stall)
+    tag = gray[-1];
+
+  switch (type)
+    {
+    case RECORD_TAG:
+    case RECORD_SUB_TAG:
+      if (GET_RECLEN(tag) <= RECLEN_MAX)
+	{
+	  int i, fieldlen = GET_RECLEN(tag);
+	  value_t *end = gray + fieldlen;
+	  unsigned mask = GET_RECMASK(tag);
+	  for (; gray<end; gray++, mask >>= 1)
+	    if (mask & 1)
+	      Enqueue(queue, gray);
+	}
+      else
+	{
+	  value_t *rawstart = gray-1;
+	  int i, fieldlen = 0;
+	  
+	  while (1)
+	    {
+	      int curlen = GET_RECLEN(*rawstart);
+	      if (curlen <= RECLEN_MAX)
+		fieldlen += curlen;
+	      else
+		fieldlen += RECLEN_MAX;
+	      if (IS_RECORD(*rawstart))
+		break;
+	      rawstart--;
+	  }
+	  for (i=0; i<fieldlen; i++)
+	    {
+	      unsigned int mask = GET_RECMASK(rawstart[i/RECLEN_MAX]);
+	      if (mask & 1 << (i % RECLEN_MAX))
+		Enqueue(queue,gray + i);
+	    }
+	}
+      break;
+    case IARRAY_TAG:
+      break;
+    case RARRAY_TAG:
+      break;
+    case PARRAY_TAG:
+      {
+	unsigned int len = GET_ARRLEN(tag) / 4, i;
+	for (i=0; i<len; i++) {
+	  Enqueue(queue,gray);
+	  gray++;
+	}
+	break;
+      }
+    case SKIP_TAG:
+    case FORWARD_TAG:
+    default:
+      printf("\n\nScan_oneobject_forpointers impossible: tag = %d at gray=%d\n",tag,gray);
+      assert(0);
+    }
+}
