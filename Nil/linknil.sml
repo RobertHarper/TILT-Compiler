@@ -14,9 +14,22 @@ sig
 end
 
 structure Linknil (* : LINKNIL *) =
-struct
-  val typecheck = ref true
+  struct
+    val typecheck = ref true
+    val typecheck2 = ref true
     val error = fn s => Util.error "linknil.sml" s
+
+    local
+      val select_carries_types = Stats.bool "select_carries_types"
+      val profile = Stats.bool "nil_profile"
+      val short_circuit = Stats.bool "subst_short_circuit"
+      val hash = Stats.bool "subst_use_hash"
+    in
+      val _ = (select_carries_types:=false;
+	       profile := false;
+	       short_circuit := true;
+	       hash := false)
+    end
 
     structure Name = Name
 
@@ -457,12 +470,12 @@ struct
 			      print "\n")
 		    else print "Renaming complete\n"
  	    val nilmod = 
-	      if (!typecheck) then
+	      if (!typecheck2) then
 		(Stats.timer("Nil typechecking2",NilStatic.module_valid)) (D,nilmod)
 	      else
 		nilmod
 	    val _ = 
-	      if (!typecheck) then 
+	      if (!typecheck2) then 
 		if debug 
 		  then (print "\n\n=======================================\n\n";
 			print "nil typechecking2 results:\n";

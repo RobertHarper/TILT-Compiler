@@ -276,14 +276,14 @@ functor Ppnil(structure ArgNil : NIL
 							pp_list pp_exp exps ("",",","",false), String "; ",
 							pp_list pp_exp fexps (" ",",","",false)])
 	   | Let_e (letsort,bnds,e) => Vbox0 0 1 [String (case letsort of
-							      Sequential => "LET  "
-							    | Parallel => "LETP "),
+							      Sequential => "Let  "
+							    | Parallel => "LetP "),
 						  Vbox(separate (map pp_bnd bnds) (Break0 0 0)),
 						  Break,
-						  String "IN   ",
+						  String "In   ",
 						  pp_exp e,
 						  Break,
-						  String "END"]
+						  String "End"]
 
 	   | Raise_e (e,c) => pp_region "RAISE(" ")" [pp_exp e, String ",", pp_con c]
 	   | Handle_e (body,handler) => Vbox[HOVbox[String "HANDLE ",

@@ -44,7 +44,7 @@ struct
 
    val elaborator_specific_optimizations = ref true
    val optimize_empty_structure = ref true
-   val select_carries_types = ref false
+   val select_carries_types = Stats.bool "select_carries_types"
    fun error msg = Util.error "tonil.sml" msg
 
    val printl = Util.printl

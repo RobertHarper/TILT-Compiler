@@ -15,22 +15,24 @@ functor NilSubstFn(structure Nil : NIL
     open Nil
 
     val debug = ref false
-    val stats = ref false
+    val profile = Stats.bool "nil_profile"
+    val short_circuit = Stats.bool "subst_short_circuit"
+    val subst_use_hash = Stats.bool "subst_use_hash"
 
-    val substituted = ref 0
-    val short_circuited = ref 0
-    val total_size = ref 0
-    val total_sc_size = ref 0
-    fun inc int_ref = int_ref := !int_ref + 1
-
-    fun get_stats () = {substituted=(!substituted),
-			short_circuited=(!short_circuited),
-			average_size = !total_size div !substituted,
-			average_sc_size = !total_sc_size div !short_circuited}
-    fun reset_stats () = (substituted := 0;
-			  short_circuited := 0;
-			  total_size := 0;
-			  total_sc_size := 0)
+    val (subst_counter,
+	 subst_total_size) = 
+      if !profile then
+	(SOME (Stats.counter "subst_counter"),
+	 SOME (Stats.int "subst_total_size"))
+      else
+	(NONE,NONE)
+    val (subst_short_circuited_counter,
+	 subst_short_circuited_size) = 
+      if !profile andalso !short_circuit then 
+	(SOME (Stats.counter "subst_short_circuited_counter"),
+	 SOME (Stats.int "subst_short_circuited_size"))
+      else
+	(NONE,NONE)
 
     val foldl_acc = Listops.foldl_acc
     val map_second = Listops.map_second
@@ -50,18 +52,26 @@ functor NilSubstFn(structure Nil : NIL
       val notb = W.notb
       val xorb = W.xorb
     in
-      val var2word = fromInt o Name.var2int
+      val b : word = 0wx3141592
 
+      fun hash i = W.>>(W.*(fromInt i,b),0wx12)
+
+      val var2word = 
+	if !subst_use_hash then 
+	  hash o Name.var2int
+	else 
+	  fromInt o Name.var2int
+	  
       val zero = fromInt 0
       structure VarMap = Name.VarMap
 
       type 'a subst = {test:word,
 		       subst : 'a VarMap.map}
-      (* test -> the bitwise or of the integer version of the elements
-       *   invariant -> test = VarMap.foldli (fn (v,_,a) => orb (var2int v,a)) zero subst
-       *      that is, test is the union of the set bits in the domain of the map
-       *    Note that if is non zero, then
-       *      there is a bit set in test that is not set in any element of the domain of
+      (* test -> the negation of the bitwise or of the integer version of the elements
+       *   invariant -> test = notb (VarMap.foldli (fn (v,_,a) => orb (var2int v,a)) zero subst)
+       *      that is, test is the negation of the union of the set bits in the domain of the map
+       *    Note that if (andb (test,var2word var)) is not zero, then
+       *      there is a bit set in var that is not set in any element of the domain of
        *      the map, and hence v is not in the domain of the map.
        *    This is a simple optimization for the common case when the map is small.
        * subst -> the mapping from variables to values
@@ -70,19 +80,58 @@ functor NilSubstFn(structure Nil : NIL
       fun empty () : 'a subst = 
 	{test = notb zero,
 	 subst = VarMap.empty}
-	
-      fun fromList list : 'a subst = 
-	let
-	  fun fold ((var,value),(test,subst)) = 
-	    (orb (test,(var2word var)),VarMap.insert(subst,var,value))
-	  val (test',subst) = List.foldl fold (zero,VarMap.empty) list
-	  val test = notb test'
-	in
-	  {test = test,
-	   subst = subst}
-	end
 
-      fun add {test,subst} (var,value) : 'a subst = 
+(*      val fromList =
+	let	*)
+	  fun fromList1 (list : (var * 'a) list) : 'a subst = 
+	    let
+	      fun fold ((var,value),(test,subst)) = 
+		(orb (test,(var2word var)),VarMap.insert(subst,var,value))
+	      val (test',subst) = List.foldl fold (zero,VarMap.empty) list
+	      val test = notb test'
+	    in
+		{test = test,
+		 subst = subst}
+	    end
+(*	  fun fromList2 (list : (var * 'a) list) : 'a subst = 
+	    let
+	      fun fold ((var,value),subst) = VarMap.insert(subst,var,value)
+	      val subst = List.foldl fold VarMap.empty list
+	    in
+	      {test = zero,
+	       subst = subst}
+	    end
+	in
+	  if !profile then 
+	    fromList1
+	  else
+	    fromList2
+	end
+*)
+	  val fromList = fromList1
+(*
+      val add : 'a subst -> (var * 'a) -> 'a subst = 
+	if !short_circuit then
+	  let
+	    fun add {test,subst} (var,value) : 'a subst = 
+	      let
+		val test = (andb (test,notb (var2word var)))
+		val subst = VarMap.insert (subst,var,value)
+	      in
+		{test = test,
+		 subst = subst}
+	      end
+	  in add
+	  end
+	else
+	  let
+	    fun add {test,subst} (var,value) : 'a subst = 
+	      {test = zero,
+	       subst = VarMap.insert (subst,var,value)}
+	  in add
+	  end
+*)
+      fun add {test,subst} (var,value) : 'a subst =
 	let
 	  val test = (andb (test,notb (var2word var)))
 	  val subst = VarMap.insert (subst,var,value)
@@ -91,32 +140,91 @@ functor NilSubstFn(structure Nil : NIL
 	   subst = subst}
 	end
 
-      fun substitute {test,subst} var = 
+      val subst_counter = getOpt(subst_counter,fn () => ())
+      val subst_total_size = getOpt(subst_total_size,ref 0)
+      val subst_short_circuited_counter = getOpt(subst_short_circuited_counter,fn () => ())
+      val subst_short_circuited_size = getOpt(subst_short_circuited_size,ref 0)
+      fun substitute {test,subst} var =
 	let
 	  val _ = 
-	    if !stats then
-	      if (andb (test,var2word var)) = zero then
-		(inc substituted;
-		 total_size := !total_size + (VarMap.numItems subst))
-	      else 
-		(inc substituted;
-		 total_size := !total_size + (VarMap.numItems subst);
-		 inc short_circuited;
-		 total_sc_size := !total_sc_size + (VarMap.numItems subst))
-	    else ()
+	    (subst_counter();
+	     subst_total_size := !subst_total_size + (VarMap.numItems subst);
+	     if (andb (test,var2word var)) = zero then
+	       ()
+	     else 
+	       (subst_short_circuited_counter();
+		subst_short_circuited_size := 
+		!subst_short_circuited_size + (VarMap.numItems subst)))
 	in
 	  if (andb (test,var2word var)) = zero then
 	    VarMap.find (subst,var)
 	  else 
 	    NONE
 	end
-
+(*
+      val substitute = 
+	case (!profile,!short_circuit)
+	  of (true,true) =>
+	    let
+	      val subst_counter = valOf subst_counter
+	      val subst_total_size = valOf subst_total_size
+	      val subst_short_circuited_counter = valOf subst_short_circuited_counter
+	      val subst_short_circuited_size = valOf subst_short_circuited_size
+	      fun profile_subst {test,subst} var =
+		let
+		  val _ = 
+		    (subst_counter();
+		     subst_total_size := !subst_total_size + (VarMap.numItems subst);
+		     if (andb (test,var2word var)) = zero then
+		       ()
+		     else 
+		       (subst_short_circuited_counter();
+			subst_short_circuited_size := 
+			!subst_short_circuited_size + (VarMap.numItems subst)))
+		in
+		  if (andb (test,var2word var)) = zero then
+		    VarMap.find (subst,var)
+		  else 
+		    NONE
+		end
+	    in
+	      profile_subst
+	    end
+	   | (true,false) =>
+	    let
+	      val subst_counter = valOf subst_counter
+	      val subst_total_size = valOf subst_total_size
+	      fun profile_subst {test,subst} var =
+		(subst_counter();
+		 subst_total_size := !subst_total_size + (VarMap.numItems subst);
+		 VarMap.find (subst,var))
+	    in
+	      profile_subst
+	    end
+	  | (false,true) =>
+	    let 
+	      fun subst {test,subst} var =
+		if (andb (test,var2word var)) = zero then
+		  VarMap.find (subst,var)
+		else 
+		  NONE
+	    in
+	      subst
+	    end
+	  | (false,false) => 
+	    let 
+	      fun subst {test,subst} var = VarMap.find (subst,var)
+	    in
+	      subst
+	    end
+*)
       fun is_empty {test,subst} = (VarMap.numItems subst) = 0
 
-      (* val compose : ('a subst -> 'a -> 'a) -> ('a subst * 'a subst) -> 'a subst *
+      (* val compose : ('a subst -> 'a -> 'a) -> ('a subst * 'a subst) -> 'a subst
        *  subst_fn (compose subst_fn (subst2,subst1))
        *  is equivalent to (subst_fn subst2) o (subst_fn subst1)
        *)
+
       fun compose subst_fn (map1 as {test = test1,subst = subst1},
 			    map2 as {test = test2,subst = subst2}) = 
 	let
@@ -127,8 +235,39 @@ functor NilSubstFn(structure Nil : NIL
 	in
 	  {test = test, subst = subst}
 	end
+    (*
+      val compose : ('a subst -> 'a -> 'a) -> ('a subst * 'a subst) -> 'a subst =
+	if !short_circuit then
+	  let
+	    fun compose subst_fn (map1 as {test = test1,subst = subst1},
+				  map2 as {test = test2,subst = subst2}) = 
+	      let
+		val subst2 = VarMap.map (subst_fn map1) subst2
+		fun combine (value1,value2) = value2
+		val subst = VarMap.unionWith combine (subst1,subst2)
+		val test = andb (test1,test2)
+	      in
+		{test = test, subst = subst}
+	      end
+	  in
+	    compose
+	  end
+	else
+	  let
+	    fun compose subst_fn (map1 as {subst = subst1,test = _},
+				  map2 as {subst = subst2,test = _}) = 
+	      let
+		val subst2 = VarMap.map (subst_fn map1) subst2
+		fun combine (value1,value2) = value2
+		val subst = VarMap.unionWith combine (subst1,subst2)
+	      in
+		{test = zero, subst = subst}
+	      end
+	  in
+	    compose
+	  end
+*)
     end
-
 
     fun rebind Con (var,subst) = 
       if is_empty subst then

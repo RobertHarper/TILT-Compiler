@@ -27,7 +27,7 @@ struct
   open Prim
 
   val debug = ref false
-  val select_carries_types = ref false
+  val select_carries_types = Stats.bool "select_carries_types"
 
   local
       datatype entry = 
@@ -431,7 +431,7 @@ struct
 	  val _ = pop()
       in  res
       end
-
+  and kind_reduce(D,kind) = kind_valid (D,kind)
   and kind_valid' (D : context, kind : kind) : kind = 
     (case kind 
        of Type_k p => (Type_k p)
@@ -566,6 +566,7 @@ struct
 	 let
 	   val (D,tformals,subst1) = foldKSR (D,tformals)
 	   val (tformals,subst2) = foldSubstSingleton tformals
+	   val tformals = map_second (curry2 kind_reduce D) tformals
 	   val subst = Subst.con_subst_compose (subst2,subst1)
 	   val formals = map (substConInCon subst) formals
 	   val body = substConInCon subst body
@@ -607,6 +608,7 @@ struct
 			   print "\n")
 		   else ()
 	   val (formals,subst2) = foldSubstSingleton formals
+	   val formals = map_second (curry2 kind_reduce D) formals
 	   val _ = if !debug
 		     then (print "formals' are ";
 			   app (fn (v,k) => (PpNil.pp_var v; print " :: "; 
@@ -716,7 +718,7 @@ struct
 
 	   val con = Proj_c (rvals,label)
 	   val con = beta_reduce_record con
-	   val kind = kind_valid(D,propogate entry_kinds)  (*must renormalize!!*)
+	   val kind = kind_reduce(D,propogate entry_kinds)  (*must renormalize!!*)
 	   val kind = singletonize (NONE,kind,con)
 	 in
 	   (con,kind)
@@ -746,7 +748,7 @@ struct
 	   val con = App_c (cfun,actuals)
 	   val con = beta_reduce_fun (D,con)
 	   val kind = substConInKind conmap body_kind
-	   val kind = kind_valid(D,kind) (*Must renormalize!!*)
+	   val kind = kind_reduce(D,kind) (*Must renormalize!!*)
 	   val kind = singletonize (NONE,kind,con)
 	 in
 	   (con,kind)
@@ -762,6 +764,7 @@ struct
 	       val args = zip vars kinds
 	       val (D,args,subst1) = bind_kind_list (D,args)
 	       val (args,subst2) = foldSubstSingleton args
+	       val args = map_second (curry2 kind_reduce D) args
 	       val subst = Subst.con_subst_compose (subst2,subst1)
 	       val argcons = map (substConInCon subst) argcons
 	       val body = substConInCon subst body
@@ -826,7 +829,6 @@ struct
 			       in  Let_c (Parallel,[Code_cb (var,formals @ [cenv] ,c,return)],
 					  Closure_c(Var_c var, Crecord_c []))
 			       end
-(*		   (error "Got closure in pullout - expected open or code" handle e => raise e) *)
 	     end)
 	   
       val subst = Subst.fromList (map (fn (v,k) => (v,pull (Var_c v,k))) kmap)
@@ -851,8 +853,6 @@ struct
     in
       alpha_equiv_con (c1,c2)
     end
-
-  val kind_reduce = kind_valid
 
   fun con_reduce (D,con) = 
     let
@@ -1168,7 +1168,7 @@ struct
 		 val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
 		 val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
 		 val con' = substConInCon cmap con'
-		 val (con',_) = con_valid(D,con') (*Must renormalize*)
+		 val con' = con_reduce(D,con') (*Must renormalize*)
 	       in
 		 if alpha_equiv_con (con,con') then
 		   ((roll,[argcon],[exp]),argcon)
@@ -1451,22 +1451,23 @@ struct
       val origD = D
       val (D,tformals,subst1) = foldKSR(D,tformals)
       val (tformals,subst2) = foldSubstSingleton tformals
+      val tformals = map_second (curry2 kind_reduce D) tformals
       val subst = Subst.con_subst_compose (subst2,subst1)
       fun check_c ((var,con),D) = 
 	let
 	  val con = substConInCon subst con
-	  val (con,kind) = con_valid (D,con)
+	  val con = con_reduce(D,con)
 	in
 	  ((var,con),insert_con (D,var,con))
 	end
       val (formals,D) = foldl_acc check_c D formals
-      val body = substConInExp subst body
-      val return = substConInCon subst return
       val D = 
 	foldl (fn (v,D) => 
 	       insert_con (D,v,Prim_c (Float_c F64,[]))) D fformals
+      val body = substConInExp subst body
       val (body,body_c) = exp_valid (D,body)
-      val (return,return_kind) = con_valid (D,return)
+      val return = substConInCon subst return
+      val return = con_reduce (D,return)
       val function = Function (effect,recursive,tformals,formals,fformals,body,return)
     in
       if alpha_equiv_con (body_c,return) then
@@ -1551,19 +1552,18 @@ struct
 		      of SOME ((Code | ExternCode),effect,tformals,formals,numfloats,body_c) => 
 			let
 			  val (tformals,(v,last_k)) = split tformals
+			  val tformals = map (fn (tv,k) => (tv,varConKindSubst v cenv k)) tformals
+			  val formals = map (varConConSubst v cenv) formals
 			  val (formals,last_c) = split formals
-			  val last_c = varConConSubst v cenv last_c
-			  val (last_c,_) = con_valid(D,last_c)
+			  val last_c = con_reduce(D,last_c)
+			  val body_c = varConConSubst v cenv body_c
+			  val closure_type = AllArrow_c (Closure,effect,tformals,formals,numfloats,body_c)
+			  val closure_type = con_reduce(D,closure_type)
 			in
 			  if alpha_sub_kind (ckind,last_k) andalso
 			    alpha_equiv_con (vcon,last_c) 
 			    then
-				let val tformals = map (fn (tv,c) => (tv,varConKindSubst v cenv c)) tformals
-				    val formals = map (varConConSubst v cenv) formals
-				    val body_c = varConConSubst v cenv body_c
-				    val almost_c = AllArrow_c (Closure,effect,tformals,formals,numfloats,body_c)
-				in  #1(con_valid(D,almost_c))
-				end
+			      closure_type
 			  else
 			    (perr_k_k (last_k,ckind);
 			     perr_c_c (last_c,vcon);
@@ -1607,7 +1607,7 @@ struct
 	 (case find_con (D,var)
 	    of SOME con => 
 	      let
-		val (con',kind) = con_valid (D,con)
+		val (con,kind) = con_valid (D,con)
 	      in
 		(exp,con)
 	      end
@@ -1676,9 +1676,9 @@ struct
 		let
 		  val origD = D
 		  val formal_kind = substConInKind subst formal_kind
-		  val formal_kind = kind_valid(D,formal_kind) (*Must renormalize*)
+		  val formal_kind = kind_reduce(D,formal_kind) (*Must renormalize*)
 		  val actual_kind = substConInKind subst actual_kind
-		  val actual_kind = kind_valid(D,actual_kind) (*Must renormalize*)
+		  val actual_kind = kind_reduce(D,actual_kind) (*Must renormalize*)
 		  val (D,var,subst_one) = bind_kind (D,var,actual_kind)
 		  val subst = Subst.con_subst_compose(subst,subst_one)
 		in
@@ -1707,7 +1707,7 @@ struct
 	      val err = o_perr_c_c "Length mismatch in exp actuals"
 
 	      val formals = map (substConInCon subst1) formals
-	      val (formals,_) = unzip (map (curry2 con_valid D) formals)
+	      val formals = map (curry2 con_reduce D) formals
 	      val params_match = 
 		if c_all2 check_one_con err (t_cons,formals) then
 		  if c_all is_float_c (fn c => (perr_c c;false)) f_cons then
@@ -1725,7 +1725,7 @@ struct
 	      val subst2 = Subst.fromList (zip (#1 (unzip tformals)) cons)
 	      val subst = Subst.con_subst_compose (subst2,subst1)
 	      val con = substConInCon subst body
-	      val (con,_) = con_valid(D,con) (*Must renormalize*)
+	      val con = con_reduce(D,con) (*Must renormalize*)
 	    in
 	      if same_openness (openness,openness') andalso
 		((Word32.toInt numfloats) = (List.length fexps))
@@ -1740,13 +1740,13 @@ struct
 	     (error "Illegal application.  Closure with non-var?" handle e => raise e))
 	| Raise_e (exp,con) => 
 	    let
-	      val (con',kind) = con_valid (D,con)
-	      val (exp',con'') = exp_valid (D,exp)
+	      val (con,kind) = con_valid (D,con)
+	      val (exp,exn_con) = exp_valid (D,exp)
 	    in
-	      if is_exn_con (con'') then
-		(Raise_e(exp',con'),con')
+	      if is_exn_con (exn_con) then
+		(Raise_e (exp,con),con)
 	      else
-		(perr_e_c (exp',con');
+		(perr_e_c (exp,con);
 		 (error "Non exception raised - Ill formed expression" handle e => raise e))
 	    end
 	| Handle_e (exp,function) =>
