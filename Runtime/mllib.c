@@ -6,12 +6,12 @@
 #include <errno.h>
 #include <assert.h>
 #include "tag.h"
+#include "create.h"
 #include "mllib.h"
 
 int exncounter = 4200;
 
-long cur_alloc_pointer;
-long cur_alloc_limit;
+
 
 static FILE *des2ptr_table[100];
 static int lookahead_char[100];
@@ -57,19 +57,19 @@ int ml_output(value_t _des, value_t mlstring)
 {
 /* XXX this treatment of descriptor is wrong */
   FILE *F = des2ptr(_des);
-  char *str = (int *)mlstring;
+  char *str = (char *)mlstring;
   unsigned int tag = ((int *)mlstring)[-1];
-  int len = tag >> POSSLEN_SHIFT;
+  int bytelen = tag >> ARRLEN_OFFSET;
 
   char *t;
 
 #ifdef DEBUG
   if (_des <= 2)
     {
-      printf("tag = %d, length=%d first char=%d *%s*\n",tag, len,str[0],str);    
+      printf("tag = %d, byte length=%d first char=%d *%s*\n",tag, bytelen,str[0],str);    
     }
 #endif
-  for (t= str + len; str < t; str++)
+  for (t= str + bytelen; str < t; str++)
     putc(*str,F);
   return 0;
 }
@@ -83,10 +83,10 @@ static int ml_open(char *mode, value_t mlstring)
   FILE *f = 0;
   char buf[100];
   unsigned int tag = ((int *)mlstring)[-1];
-  int len = tag >> POSSLEN_SHIFT;
+  int bytelen = tag >> ARRLEN_OFFSET;
   char *raw = (char *)mlstring;
-  bcopy(raw,buf,len);
-  buf[len] = 0;
+  bcopy(raw,buf,bytelen);
+  buf[bytelen] = 0;
 
   f = fopen(buf,mode);
   if (f == NULL)
@@ -180,33 +180,22 @@ value_t ml_input1(value_t _des)
 
 value_t mla_input(value_t _des, value_t numtoread)
 {
-  if (cur_alloc_pointer + numtoread >= cur_alloc_limit)
+  /* XXX this treatment of descriptor is wrong */
+  FILE *F = des2ptr(_des);
+  char *buf = NULL;
+  value_t res = alloc_uninit_string(numtoread,&buf);
+  int buflen = 0;
+  if (lookahead_char[_des] >= 0)
     {
-      printf("Caller of input did not provide enough space.\n");
-      printf("%d + %d >= %d\n",cur_alloc_pointer,numtoread,cur_alloc_limit);
-      assert(0);
+      buf[0] = (char)lookahead_char[_des];
+      buflen = 1 + fread(buf+1,1,numtoread-1,F);
+      lookahead_char[_des] = -1;
     }
   else
-    {
-      /* XXX this treatment of descriptor is wrong */
-      FILE *F = des2ptr(_des);
-      char *buf = NULL;
-      value_t res = alloc_uninit_string(numtoread,&buf,
-					&cur_alloc_pointer,cur_alloc_limit);
-      int buflen = 0;
-      if (lookahead_char[_des] >= 0)
-	{
-	  buf[0] = (char)lookahead_char[_des];
-	  buflen = 1 + fread(buf+1,1,numtoread-1,F);
-	  lookahead_char[_des] = -1;
-	}
-      else
-	buflen = fread(buf,1,numtoread,F);
-      /*      buf[buflen] = 0; ML strings not null terminated */
-      adjust_stringlen(res,buflen);
-      return res;
-    }
-  assert(0);
+    buflen = fread(buf,1,numtoread,F);
+  /*      buf[buflen] = 0; ML strings not null terminated */
+  adjust_stringlen(res,buflen);
+  return res;
 }
 
 value_t til_div(value_t n1, value_t n2)

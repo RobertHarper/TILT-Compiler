@@ -1,6 +1,5 @@
 #include "tag.h"
 #include "memobj.h"
-#include "mlclient.h"
 #include "thread.h"
 #include <sys/resource.h>
 #include <sys/user.h>
@@ -131,7 +130,7 @@ void process_option(int argc, char **argv)
 int main(int argc, char **argv)
 {
   int i;
-  ThreadObj_t *th, *th2;
+  Thread_t *th, *th2;
 
 #ifdef
   printf("Entered main\n");
@@ -144,16 +143,18 @@ int main(int argc, char **argv)
   stack_init();
   mllib_init();
   signal_init();
+  thread_init();
   global_init(); 
   exn_init();
-  thread_init();
   gc_init();
 
   th = thread_create((value_t)(&client_entry),module_count);
   thread_insert(th);
   thread_go();
+  /*
   assert(FALSE);
   return -1;
+  */
 }
 
 

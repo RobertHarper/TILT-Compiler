@@ -59,7 +59,7 @@ int SetBitmapRange(Bitmap_t *bmp, int start, int size)
   int i;
   for (i=0; i<size; i++)
     {
-            if (1 || !(GetBit(bmp->data,start+i)))
+      if (1 || !(GetBit(bmp->data,start+i)))
 	{
 	  SetBit(bmp->data,start+i);
 	  bmp->used++;
@@ -74,7 +74,7 @@ int BitmapSize(Bitmap_t *b)
 }
 
 /* XXX this is crummy code */
-int AllocRange(Bitmap_t *bmp, int req_size)
+int AllocBitmapRange(Bitmap_t *bmp, int req_size)
 {
   int cur = bmp->pos;
   int dist = 0;
@@ -113,26 +113,3 @@ int AllocRange(Bitmap_t *bmp, int req_size)
   return -1;
 }
 
-void DeallocRange2(Bitmap_t *bmp, int start, int size)
-{
-  int i;
-  for (i=0; i<size; i++)
-    ClearBit(bmp->data,start+i);
-  bmp->used -= size;
-}
-
-void DeallocRange3(Bitmap_t *bmp, int start, int size)
-{
-  int i;
-  for (i=0; i<size; i++)
-    ClearBit(bmp->data,start+i);
-  bmp->used -= size;
-}
-
-void DeallocRange5(Bitmap_t *bmp, int start, int size)
-{
-  int i;
-  for (i=0; i<size; i++)
-    ClearBit(bmp->data,start+i);
-  bmp->used -= size;
-}

@@ -4,7 +4,7 @@
 
 /* XXX is not dynamic */
 
-/* will actually increase size to next highest power of 2 */
+/* Will actually raise table size to next higher power of 2 */
 HashTable_t *CreateHashTable(int size)
 {
   HashTable_t *res = (HashTable_t *)malloc(sizeof(HashTable_t));
@@ -30,6 +30,18 @@ void DestroyHashTable(HashTable_t *h)
   free(h);
 }
 
+void HashTableInsert(HashTable_t *h, HashEntry_t *e)
+{
+  HashEntry_t *slot = HashTableLookup(h,e->key,1);
+
+  if (slot->key != 0xffffffff)
+    {
+      printf("Slot already used\n");
+      exit(-1);
+    }
+  slot->key = e->key;
+  slot->data = e->data;
+}
 HashEntry_t * HashTableLookup(HashTable_t *h, unsigned long key, int insert)
 {
   /* delta and h->size must be rel prime; assuming h->size if a power of 2
@@ -65,22 +77,7 @@ HashEntry_t * HashTableLookup(HashTable_t *h, unsigned long key, int insert)
   return NULL;
 }
 
-void HashTableInsert(HashTable_t *h, HashEntry_t *e)
-{
-  HashEntry_t *slot = HashTableLookup(h,e->key,&slot);
 
-  if (slot->key != 0xffffffff)
-    {
-      printf("Slot already used\n");
-      exit(-1);
-    }
-  slot->key = e->key;
-  slot->data = e->data;
-}
 
-int HashTableDelete(HashTable_t *h, unsigned long key)
-{
-  printf("HashTableDelete not imped\n");
-  exit(-1);
-}
+
 

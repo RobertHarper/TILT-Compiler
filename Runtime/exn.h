@@ -1,3 +1,5 @@
+/* exn_init should be called once; raise_exception is thread-safe */
+
 #ifndef _exn_h
 #define _exn_h
 

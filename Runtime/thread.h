@@ -5,24 +5,47 @@
 #include "memobj.h"
 #include <signal.h>
 
-struct ThreadObj__t
+#ifdef alpha_osf
+#include "interface_osf.h"
+#endif
+#ifdef rs_aix
+#include "interface_aix.h"
+#endif
+
+extern char RuntimeGlobalData[];
+
+
+struct Thread__t
 {
-  int                running;
-  int                done;
-  int                valid;
-  int                tid;
-  StackChainObj_t   *stackchain;
-  value_t            start_address;
-  int                num_add;
-  long               saveregs[32];
-  long               ret_add;
+  long               saveregs[32];     /* Register set; compiler relied on this being first */
+  double             fregs[32];        /* Register set; compiler relied on this being second */
+  long               savedHeapLimit;   /* Contains real heap limit when hap limit is used for preemption */
+  StackChainObj_t   *stackchain;       /* Stack */
+  int                tid;              /* Thread ID */
+  int                status;           /* Thread status */
+  value_t            start_address;    /* Array of num_add unit -> unit */
+  int                num_add;          /* IF zero, then start_address is a thunk */
 };
 
-typedef struct ThreadObj__t ThreadObj_t;
+typedef struct Thread__t Thread_t;
 
-ThreadObj_t *thread_create(value_t start_adds, int num_add);
-void thread_insert(ThreadObj_t *th);
+struct SysThread__t
+{
+  pthread_t          pthread;      /* pthread that this system thread is implemented as */
+  Thread_t           *userThread;  /* current user thread mapped to this system thread */
+  int                stid;         /* sys thread id */
+};
+
+typedef struct SysThread__t SysThread_t;
+
+
+Thread_t *thread_create(value_t start_adds, int num_add);
+Thread_t *getThread();
+void thread_insert(Thread_t *th);
 void thread_go();
+
+void thread_scheduler(struct sigcontext *scp);
+void thread_scheduler_clean();
 
 
 

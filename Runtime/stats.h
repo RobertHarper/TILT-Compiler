@@ -1,3 +1,5 @@
+/* Not thread-safe */
+
 #ifndef _stats_h
 #define _stats_h
 

@@ -6,8 +6,6 @@
 	.globl	ml_lookahead
 	.globl  ml_lookahead_gcentry
 
-#define R_heap_limit	$10
-#define R_heap_ptr	$11
 
  # ---------------------------------------
  # first C arg = integer descriptor
@@ -23,18 +21,16 @@ ml_input:
 	stq	$at, 8($sp)	#
 	stq	$16, 16($sp)	# save 1st arg
 	stq	$17, 24($sp)	# save 2ndt arg
-	lda	$at, 36(R_heap_ptr)    # heap pointer + min string size -> $at
+	lda	$at, 36(ALLOCPTR_SYMREG)    # heap pointer + min string size -> $at
 	addlv	$at, $17, $at   # $at + variable string size     -> $at
-	cmpule	R_heap_limit, $at, $at
+	cmpule	ALLOCLIMIT_SYMREG, $at, $at
 	beq	$at, ml_input_gcret
 ml_input_dogc:
-	lda	R_heap_limit, 36($17)    # req size into hlimit
+	lda	ALLOCLIMIT_SYMREG, 36($17)    # req size into hlimit
 	bsr	$26, gc_raw
 ml_input_gcret:
-	lda	$at, cur_alloc_pointer
-	stl	R_heap_ptr, ($at)
-	lda	$at, cur_alloc_limit
-	stl	R_heap_limit, ($at)
+	stl	ALLOCLIMIT_SYMREG, ALLOCLIMIT_DISP(THREADPTR_SYMREG)
+	stl	ALLOCPTR_SYMREG, ALLOCPTR_DISP(THREADPTR_SYMREG)
 	ldq	$16, 16($sp)	# restore 1st arg
 	ldq	$17, 24($sp)	# restore 2nd arg
 	lda     $27, mla_input	# call mla_input with 2 args in $16, $17 preserved from entry
@@ -76,17 +72,15 @@ ml_lookahead:
 	lda	$at, 32($31)    # put stack frame size
 	stq	$at, 8($sp)	#     in stack
 	stq	$16, 16($sp)	# save 1st arg
-	lda	$at, 36(R_heap_ptr)    # room to store a 0 or 1 char string
-	cmpule	R_heap_limit, $at, $at
+	lda	$at, 36(ALLOCPTR_SYMREG)    # room to store a 0 or 1 char string
+	cmpule	ALLOCLIMIT_SYMREG, $at, $at
 	beq	$at, ml_lookahead_gcret
 ml_lookahead_dogc:
-	lda	R_heap_limit, 36($31)
+	lda	ALLOCLIMIT_SYMREG, 36($31)
 	bsr	$26, gc_raw
 ml_lookahead_gcret:
-	lda	$at, cur_alloc_pointer
-	stl	R_heap_ptr, ($at)
-	lda	$at, cur_alloc_limit
-	stl	R_heap_limit, ($at)
+	stl	ALLOCLIMIT_SYMREG, ALLOCLIMIT_DISP(THREADPTR_SYMREG)
+	stl	ALLOCPTR_SYMREG, ALLOCPTR_DISP(THREADPTR_SYMREG)
 	lda     $27, mla_lookahead
 	ldq	$16, 16($sp)	# restore 1st arg
 	bsr     mla_lookahead	# call C routine with one argument in $16 preserved from entry

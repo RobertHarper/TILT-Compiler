@@ -1,8 +1,11 @@
+/* Not thread-safe */
+
 #include "tag.h"
 #include "queue.h"
 #include "show.h"
 #include "gc.h"
 #include "memobj.h"
+#include "thread.h"
 
 #define LEAST_GC_TO_CHECK -1
 
@@ -24,8 +27,6 @@
 #include "stats.h"
 #include "gcstat.h"
 #include "general.h"
-
-
 
 
 enum GCType { Minor, Major, ForcedMajor, Complete };
@@ -112,15 +113,12 @@ HeapObj_t *toheap = NULL;
 
 extern int InScheduler;
 extern int module_count;
-long CurHeapLimit = 0;
-/*
-extern int GLOBAL_TABLE_BEGIN_VAL;
-extern int GLOBAL_TABLE_END_VAL;
-*/
-extern int MUTABLE_TABLE_BEGIN_VAL;
-extern int MUTABLE_TABLE_END_VAL;
-extern int SML_GLOBALS_BEGIN_VAL;
-extern int SML_GLOBALS_END_VAL;
+
+
+extern value_t MUTABLE_TABLE_BEGIN_VAL;
+extern value_t MUTABLE_TABLE_END_VAL;
+extern value_t SML_GLOBALS_BEGIN_VAL;
+extern value_t SML_GLOBALS_END_VAL;
 
 
 typedef void (forwarder_t)(value_t *, value_t *);
@@ -217,8 +215,8 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
 
   if (uninit_global_roots == 0)
     { 
-      uninit_global_roots = QueueCreate(100); 
-      temp = QueueCreate(100); 
+      uninit_global_roots = QueueCreate(0,100); 
+      temp = QueueCreate(0,100); 
     }
 
   stack_top = stack->top;
@@ -231,7 +229,7 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
   stop_timer(&stacktime);
   regmask |= 1 << EXNPTR_REG;
   if (first_time)
-    reg_roots = QueueCreate(32);
+    reg_roots = QueueCreate(0,32);
   else
     QueueClear(reg_roots);
   for (i=0; i<32; i++)
@@ -251,12 +249,12 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
 
 
   if (first_time)
-  {
-    for (mi=0; mi<module_count; mi++)
-      for (i=(value_t)*((&MUTABLE_TABLE_BEGIN_VAL)+mi);
-	   i<(value_t)*((&MUTABLE_TABLE_END_VAL)+mi); i+=16)
-	{ Enqueue2(uninit_global_roots,(value_t *)i); }
-  }
+    for (mi=0; mi<module_count; mi++) {
+      value_t *start = (value_t *)((&MUTABLE_TABLE_BEGIN_VAL)[mi]);
+      value_t *stop = (value_t *)((&MUTABLE_TABLE_END_VAL)[mi]);
+      for ( ; start < stop; start += 4)
+	{ Enqueue(uninit_global_roots,start); }
+    }
 
 
   QueueClear(promoted_global_roots);
@@ -272,7 +270,7 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
       int resolved = (data != 258);
 
       if (!resolved)
-	{ Enqueue2(temp,e); }
+	{ Enqueue(temp,e); }
       else if (IS_TRACE_YES(trace))
 	should_trace = 1;
       else if (IS_TRACE_NO(trace))
@@ -315,8 +313,8 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
 	  should_trace = (res >= 3);
 	} /* TRACE_SPECIAL */ 
 
-      Enqueue2(global_roots,table_entry); /* this is accumulated */
-      Enqueue2(promoted_global_roots,table_entry); /* this is reset each time */
+      Enqueue(global_roots,(void *)table_entry); /* this is accumulated */
+      Enqueue(promoted_global_roots,(void *)table_entry); /* this is reset each time */
     }
 
 
@@ -330,6 +328,9 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
 void debug_and_stat_before(unsigned long *saveregs, long sp, 
 			    long ret_add, long req_size)
 {
+
+  Thread_t *curThread = getThread();
+
   /* -------- print some debugging info and gather write statistics ---------- */
   int i;
   int allocptr = saveregs[ALLOCPTR_REG];
@@ -345,7 +346,7 @@ void debug_and_stat_before(unsigned long *saveregs, long sp,
       printf("\n\n");
       printf("--------gc_handler entered---------\n");
       printf("ret_add = %d   *ret_add = %d\n",ret_add,*((int *)ret_add));
-      printf("alloc/curheaplimit: %d %d\n",allocptr,CurHeapLimit);
+      printf("alloc/curheaplimit: %d %d\n",allocptr,curThread->savedHeapLimit);
       printf("sp of first ML frame is %ld\n",sp);
       printf("REGISTERS SAVED AT: %ld\n",saveregs);
       printf("\n\n");
@@ -358,7 +359,7 @@ void debug_and_stat_before(unsigned long *saveregs, long sp,
 	    printf("    alloclimit");
 	  printf("\n");
 	}
-      printf("CurHeapLimit  = %d\n",CurHeapLimit);
+      printf("CurHeapLimit  = %d\n",curThread->savedHeapLimit);
       printf("LowHeapLimit  = %d\n",LowHeapLimit);
       printf("-----------------------------------\n");
     }
@@ -437,11 +438,11 @@ unsigned int a,b;
   switch (GET_TYPE(tag))
     {
     case IARRAY_TAG:
-    case ARRAY_TAG:
+    case PARRAY_TAG:
     case RARRAY_TAG:
       {
 	value_t *rawstart = v-1;
-	int i,upper = GET_POSSLEN(tag), newadd = 0;
+	int i,upper = GET_ARRLEN(tag), newadd = 0;
 	upper = (upper + 3) / 4;
 
 	if (floatheap &&
@@ -483,6 +484,7 @@ unsigned int a,b;
 	if (upper == 0)
 	  upper = 1;
 
+
 	bcopy((char *)rawstart,(char *)(alloc_ptr),4*(1+upper));
 	newadd = ((int)(alloc_ptr)) + 4;
 	alloc_ptr += (1 + upper);
@@ -502,8 +504,14 @@ unsigned int a,b;
         if (IS_RECORD(rawstart[0]))
 	  {
 	    int curlen = GET_RECLEN(rawstart[0]);
-	    if (curlen > MAX_RECORDLEN)
-	      curlen = MAX_RECORDLEN;
+	    if (curlen > RECLEN_MAX)
+	      curlen = RECLEN_MAX;
+#ifdef PARANOID
+	    if ((GET_RECMASK(rawstart[0]) >> curlen) != 0) {
+	      printf("BAD RECORD TAG\n");
+	      assert(0);
+	    }
+#endif
 	    upper += curlen + 1;
 	  }
 	else
@@ -511,16 +519,28 @@ unsigned int a,b;
 	    while (IS_RECORD_SUB(rawstart[0]))
 	      {
 		int curlen = GET_RECLEN(rawstart[0]);
-		if (curlen > MAX_RECORDLEN)
-		  curlen = MAX_RECORDLEN;
+		if (curlen > RECLEN_MAX)
+		  curlen = RECLEN_MAX;
+#ifdef PARANOID
+	    if ((GET_RECMASK(rawstart[0]) >> curlen) != 0) {
+	      printf("BAD RECORD TAG\n");
+	      assert(0);
+	    }
+#endif
 		rawstart--;
 		upper += curlen + 1;
 	      }
 	    if (IS_RECORD(rawstart[0]))
 	      {
 		int curlen = GET_RECLEN(rawstart[0]);
-		if (curlen > MAX_RECORDLEN)
-		  curlen = MAX_RECORDLEN;
+		if (curlen > RECLEN_MAX)
+		  curlen = RECLEN_MAX;
+#ifdef PARANOID
+	    if ((GET_RECMASK(rawstart[0]) >> curlen) != 0) {
+	      printf("BAD RECORD TAG\n");
+	      assert(0);
+	    }
+#endif
 		upper += curlen + 1;
 	      }
 	    else
@@ -582,6 +602,7 @@ unsigned int a,b;
 	    }
 	    return alloc_ptr;
 	  default:
+
 	    bcopy((char *)rawstart,(char *)(alloc_ptr),4*(1+upper));
 	    v[-1] = FORWARD_TAG;
 	    v[0] = (int)(((value_t)alloc_ptr) + ((value_t)v-(value_t)rawstart));
@@ -598,10 +619,12 @@ unsigned int a,b;
       *vpp = v[0];
       return alloc_ptr;
     case SKIP_TAG:
-
+      printf("\n\nv = %d\n",v);
+      printf("tag = %d\n",tag);
       BUG("gc_forward_gen: IMPOSSIBLE to get SKIP_TAG");
     default:
-      printf("\n\ntag = %d\n",tag);
+      printf("\n\nv = %d\n",v);
+      printf("tag = %d\n",tag);
       BUG("gc_forward_gen: IMPOSSIBLE TAG");
     }
   foobar++;
@@ -689,15 +712,15 @@ void update_object_profile(Object_Profile_t *prof, value_t *objstart)
     {
     case IARRAY_TAG:
       prof->IArray++;
-      prof->IArrayWord += ((GET_POSSLEN(tag) + 3) / 4) + 1;
+      prof->IArrayWord += ((GET_ARRLEN(tag) + 3) / 4) + 1;
       break;
     case RARRAY_TAG:
       prof->RArray++;
-      prof->RArrayWord += GET_POSSLEN(tag) / 4 + 1;
+      prof->RArrayWord += GET_ARRLEN(tag) / 4 + 1;
       break;
-    case ARRAY_TAG:
+    case PARRAY_TAG:
       prof->PArray++;
-      prof->PArrayWord += GET_POSSLEN(tag) / 4 + 1;
+      prof->PArrayWord += GET_ARRLEN(tag) / 4 + 1;
       break;
     case RECORD_TAG:
     case RECORD_SUB_TAG:
@@ -707,8 +730,8 @@ void update_object_profile(Object_Profile_t *prof, value_t *objstart)
 	  {
 	    int tag = *tagstart;
 	    int temp = GET_RECLEN(tag);
-	    if (temp > MAX_RECORDLEN)
-	      len += MAX_RECORDLEN;
+	    if (temp > RECLEN_MAX)
+	      len += RECLEN_MAX;
 	    else 
 	      len += temp;
 	    if (GET_TYPE(tag) == RECORD_TAG)
@@ -834,7 +857,8 @@ value_t *forward_mutables_semi(value_t *to_ptr,
 	table_entry --;
 	while (GET_TYPE(*table_entry) == RECORD_SUB_TAG)
 	  table_entry--;
-	to_ptr = scan_stop_minor(table_entry,to_ptr,table_entry+1,
+	to_ptr = scan_stop_minor((value_t)table_entry,
+				 to_ptr,table_entry+1,
 				 from_range,to_range);
       }
   return to_ptr;
@@ -891,7 +915,7 @@ value_t *forward_gen_locatives(value_t *to_ptr,
   long i;
     static Queue_t *LastScanQueue = 0;
     if (LastScanQueue == 0)
-      LastScanQueue = QueueCreate(100);
+      LastScanQueue = QueueCreate(0,100);
 
   /* --------- forward objects with unset and update unset from scanqueue --------- */
   NumLocatives += QueueLength(ScanQueue);
@@ -986,7 +1010,7 @@ void gc_init()
       old_toheap = HeapObj_Alloc(MinHeap * 1024, MaxHeap * 1024);  
       floatheap = HeapObj_Alloc(floatheapsize,floatheapsize);
       floatbitmap = CreateBitmap(floatheapsize / floatbitmapsize);
-      float_roots = QueueCreate(100);
+      float_roots = QueueCreate(0,100);
 #ifdef OLD_ALLOC
       old_alloc_ptr = old_fromheap->alloc_start;
       old_alloc_limit = old_fromheap->top;
@@ -1026,19 +1050,14 @@ void gc_init()
 }
 
 
-#ifdef HEAPPROFILE
-value_t int_alloc(unsigned long *saveregs, long sp, long ret_add, 
-		  long req_wordsize, int init_val, int profiletag)
+void int_alloc()
 {
-  printf("no profiletag for int_alloc yet\n");
-  exit(-1);
-}
-#else
-value_t int_alloc(unsigned long *saveregs, long sp, long ret_add, 
-		    long word_len, int init_val)
-{
+  Thread_t *curThread = getThread();
+  long *saveregs = curThread->saveregs;
+  long word_len = saveregs[ASMTMP_REG];
+  int init_val = saveregs[ASMTMP2_REG];
   value_t *res = 0;
-  int i, tag = IARRAY_TAG | word_len << (2 + POSSLEN_SHIFT);
+  int i, tag = IARRAY_TAG | word_len << (2 + ARRLEN_OFFSET);
 
 #ifdef DEBUG
   printf("\nint_alloc called with word_len = %d   init_val = %d\n",
@@ -1055,7 +1074,8 @@ value_t int_alloc(unsigned long *saveregs, long sp, long ret_add,
 #ifdef DEBUG
 	  printf("DOING GC inside int_alloc with a semispace collector\n");
 #endif
-	  gc_handler(saveregs,sp,ret_add, word_len + 1, 0);
+	  saveregs[ALLOCLIMIT_REG] = 4 * (word_len + 1);
+	  gc_handler(0);
 	}
       alloc_ptr = saveregs[ALLOCPTR_REG];
       alloc_limit = saveregs[ALLOCLIMIT_REG];
@@ -1067,17 +1087,26 @@ value_t int_alloc(unsigned long *saveregs, long sp, long ret_add,
       res = (value_t *)(alloc_ptr + 4);
       alloc_ptr += 4 * (word_len + 1);
       saveregs[ALLOCPTR_REG] = alloc_ptr;
+      saveregs[ASMTMP_REG] = (long) res;
     }
   else
     {
-      if (old_fromheap->alloc_start + (word_len + 1) >= old_fromheap->top)
-	gc_handler(saveregs,sp,ret_add,4,0);
-      assert(old_fromheap->alloc_start + (word_len + 1) < old_fromheap->top);
+      if (old_fromheap->alloc_start + (word_len + 1) >= old_fromheap->top) {
+	saveregs[ALLOCLIMIT_REG] = 4;
+	gc_handler(0);
+      }
+     if (old_fromheap->alloc_start + (word_len + 1) >= old_fromheap->top)
+       {
+	 printf("old_fromheap->alloc_start + (word_len + 1) < old_fromheap->top\n%d + %d < %d\n",
+		old_fromheap->alloc_start, (word_len + 1), old_fromheap->top);
+	 assert(0);
+       }
 #ifdef HEAPPROFILE
       *(value_t *)(old_fromheap->alloc_start) = 30007;
       old_fromheap->alloc_start += 4;
 #endif
       res = (value_t *)(old_fromheap->alloc_start + 4);
+      saveregs[ASMTMP_REG] = (long)res;
       old_fromheap->alloc_start = (value_t)(res + word_len);
       old_alloc_ptr = old_fromheap->alloc_start;
       assert(old_fromheap->alloc_start < old_fromheap->top);
@@ -1088,25 +1117,20 @@ value_t int_alloc(unsigned long *saveregs, long sp, long ret_add,
 printf("TotalBytesAllocated 1: %ld\n",TotalBytesAllocated);
   TotalBytesAllocated += 4*(word_len+1);
 printf("TotalBytesAllocated 1: %ld\n",TotalBytesAllocated);
-  return (value_t)res;
 }
-#endif
 
 
 
-#ifdef HEAPPROFILE
-value_t ptr_alloc(unsigned long *saveregs, long sp, long ret_add, 
-		  long req_size, int init_val, int profiletag)
+
+
+value_t ptr_alloc()
 {
-  printf("no profiletag for ptr_alloc yet\n");
-  exit(-1);
-}
-#else
-value_t ptr_alloc(unsigned long *saveregs, long sp, long ret_add, 
-		    long log_len, int init_val)
-{
+  Thread_t *curThread = getThread();
+  long *saveregs = curThread->saveregs;
+  long log_len = saveregs[ASMTMP_REG];
+  int init_val = saveregs[ASMTMP2_REG];
   value_t *res = 0;
-  int i, tag = ARRAY_TAG | log_len << (2+POSSLEN_SHIFT);
+  int i, tag = PARRAY_TAG | log_len << (2 + ARRLEN_OFFSET);
 
 #ifdef DEBUG
   printf("\nptr_alloc called with log_len = %d   init_val = %d\n",
@@ -1123,7 +1147,8 @@ value_t ptr_alloc(unsigned long *saveregs, long sp, long ret_add,
 #ifdef DEBUG
 	  printf("DOING GC inside ptr_alloc with a semispace collector\n");
 #endif
-	  gc_handler(saveregs,sp,ret_add,4 * (log_len + 2),0);
+	  saveregs[ALLOCLIMIT_REG] = 4 * (log_len + 2);
+	  gc_handler(0);
 	}
       alloc_ptr = saveregs[ALLOCPTR_REG];
       alloc_limit = saveregs[ALLOCLIMIT_REG];
@@ -1133,6 +1158,7 @@ value_t ptr_alloc(unsigned long *saveregs, long sp, long ret_add,
       alloc_ptr += 4;
 #endif
       res = (value_t *)(alloc_ptr + 4);
+      saveregs[ASMTMP_REG] = (long) res;
       alloc_ptr += 4 * (log_len + 1);
       saveregs[ALLOCPTR_REG] = alloc_ptr;
     }
@@ -1140,14 +1166,17 @@ value_t ptr_alloc(unsigned long *saveregs, long sp, long ret_add,
     {
       /* we collect if init_val is from young area */
       if ((old_fromheap->alloc_start + 4 * (log_len + 2) >= old_fromheap->top) ||
-	  (init_val >= fromheap->bottom && init_val < fromheap->top))
-	gc_handler(saveregs,sp,ret_add,4,0);
+	  (init_val >= fromheap->bottom && init_val < fromheap->top)) {
+	saveregs[ALLOCLIMIT_REG] = 4;
+	gc_handler(0);
+      }
       assert(old_fromheap->alloc_start + 4 * (log_len + 2) < old_fromheap->top);
 #ifdef HEAPPROFILE
       *(value_t *)(old_fromheap->alloc_start) = 30009;
       old_fromheap->alloc_start += 4;
 #endif
       res = (value_t *)(old_fromheap->alloc_start + 4);
+      saveregs[ASMTMP_REG] = (long) res;
       old_fromheap->alloc_start = (value_t)(res + log_len);
       assert(old_fromheap->alloc_start < old_fromheap->top);
       old_alloc_ptr = old_fromheap->alloc_start;
@@ -1155,24 +1184,20 @@ value_t ptr_alloc(unsigned long *saveregs, long sp, long ret_add,
   res[-1] = tag;
   for (i=0; i<log_len; i++)
     res[i] = init_val;
-  return (value_t)res;
 }
-#endif
 
 
 
-#ifdef HEAPPROFILE
-value_t float_alloc(unsigned long *saveregs, long sp, long ret_add, 
-		    long log_len, double init_val, int profiletag)
-#else
-value_t float_alloc(unsigned long *saveregs, long sp, long ret_add, 
-		    long log_len, double init_val)
-#endif
+void float_alloc()
 {
   double *rawstart = NULL;
   value_t *res = NULL;
   long i;
-  int pos, tag = RARRAY_TAG + (2 * log_len) << (2 + POSSLEN_SHIFT);
+  Thread_t *curThread = getThread();
+  long *saveregs = curThread->saveregs;
+  long log_len = saveregs[ASMTMP_REG];
+  double init_val = curThread->fregs[FTMP_REG];
+  int pos, tag = RARRAY_TAG | (log_len << (3 + ARRLEN_OFFSET));
 
 #ifdef DEBUG
   printf("(log_len,init_val)  is  (%d, %lf)\n",log_len,init_val);
@@ -1185,10 +1210,12 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
       
       if (alloc_ptr + 8 * (log_len + 3) >= alloc_limit)
 	{
+	  long req_size = 8 * (log_len + 3);
 #ifdef DEBUG
 	  printf("DOING GC inside float_alloc with a semispace collector\n");
 #endif
-	  gc_handler(saveregs,sp,ret_add,8 * (log_len + 3),1);
+	  saveregs[ALLOCLIMIT_REG] = req_size;
+	  gc_handler(1);
 	  alloc_ptr = saveregs[ALLOCPTR_REG];
 	  alloc_limit = saveregs[ALLOCLIMIT_REG];
 	}
@@ -1212,12 +1239,13 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
       assert ((value_t)res % 8 == 0);
       alloc_ptr = (((value_t) res) + (8 * log_len));
       saveregs[ALLOCPTR_REG] = alloc_ptr;
+      saveregs[ASMTMP_REG] = (long) res;
     }
   else
     {
       assert(log_len >= 4096);
       assert(4*(2*log_len+2) < floatheapsize);
-      pos = AllocRange(floatbitmap,DivideUp(4*(2*log_len+2),floatbitmapsize));
+      pos = AllocBitmapRange(floatbitmap,DivideUp(4*(2*log_len+2),floatbitmapsize));
 
       if (pos < 0)
 	{
@@ -1226,7 +1254,8 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
 	  printf("Have to do a GC while doing a float_alloc.  Hope this works.\n");
 #endif
 	  QueueClear(float_roots);    
-	  gc_handler(saveregs,sp,ret_add,4,1);
+	  saveregs[ALLOCLIMIT_REG] = 4;
+	  gc_handler(1);
 #ifdef DEBUG
 	  printf("float_roots has %d items\n",QueueLength(float_roots));
 #endif
@@ -1237,7 +1266,7 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
 	    {
 	      value_t far_val = (value_t) QueueAccess(float_roots,i);
 	      value_t tag = ((int *)far_val)[-1];
-	      int word_len = GET_POSSLEN(tag)/4;
+	      int word_len = GET_ARRLEN(tag)/4;
 	      value_t start = RoundDown(far_val, floatbitmapsize);
 	      value_t end   = RoundUp(far_val+4*word_len, floatbitmapsize);
 	      int bitmap_start = (start - floatheap->bottom) / floatbitmapsize;
@@ -1257,7 +1286,7 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
 		     bitmap_start,bitmap_end,bitmap_size,word_len);
 #endif
 	    }
-	  pos = AllocRange(floatbitmap,DivideUp(4*(2*log_len+2),floatbitmapsize));
+	  pos = AllocBitmapRange(floatbitmap,DivideUp(4*(2*log_len+2),floatbitmapsize));
 #ifdef DEBUG
 	  printf("pos = %d, size = %d start = %d, safeend = %d\n",
 		 pos,DivideUp(4*(2*log_len+2),floatbitmapsize),
@@ -1269,12 +1298,13 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
       
       rawstart = (double *)(floatheap->bottom + floatbitmapsize * pos);
       res = (value_t *)(rawstart + 1);
+      saveregs[ASMTMP_REG] = (long)res;
       TotalBytesAllocated += RoundUp(4*(2*log_len+2),floatbitmapsize);
     }
 #ifdef HEAPPROFILE
   ((int *)res)[-2] = 30011;
 #endif
-  ((int *)res)[-1] = RARRAY_TAG | ((2 * log_len) << (2+POSSLEN_SHIFT));
+  ((int *)res)[-1] = RARRAY_TAG | (log_len << (3 + ARRLEN_OFFSET));
   for (i=0; i<log_len; i++)
     ((double *)res)[i] = init_val;
 
@@ -1284,7 +1314,6 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
   printf("\n--- float_alloc %d returning [%d(-8) to %d)\n",++count,res,res+2*log_len);
 }
 #endif
-  return (value_t)(res);
 }
 
 
@@ -1296,7 +1325,7 @@ void paranoid_check(long sp, int stack_top)
       {
 	int *data_add = (int *)count;
 	int data = *data_add;
-	if (data >= fromheap->bottom && data < fromheap->top)
+	if ((data & 3) == 0 && data >= fromheap->bottom && data < fromheap->top)
 	  {
 	    static int newval = 42000;
 	    printf("TRACE WARNING: stack loc %d has fromheap value %d",
@@ -1311,7 +1340,7 @@ void paranoid_check(long sp, int stack_top)
 	int *data_add = (int *)count;
 	int data = *data_add;
 	static int newval = 52000;
-	if (data >= fromheap->bottom && data < fromheap->top)
+	if ((data & 3) == 0 && data >= fromheap->bottom && data < fromheap->top)
 	  {
 	    printf("TRACE WARNING: old_fromheap has a fromheap value after collection");
 	    printf("   data_add = %d   data = %d",data_add,data);
@@ -1320,19 +1349,20 @@ void paranoid_check(long sp, int stack_top)
 	    newval++;
 	  }
       }
-    for (mi=0; mi<module_count; mi++)
-      for (i=(value_t)*((&GLOBAL_TABLE_BEGIN_VAL)+mi);
-	   i<(value_t)*((&GLOBAL_TABLE_END_VAL)+mi); i+=16)
+    for (mi=0; mi<module_count; mi++) {
+      value_t *current = (value_t *)((&SML_GLOBALS_BEGIN_VAL)[mi]);
+      value_t *stop = (value_t *)((&SML_GLOBALS_END_VAL)[mi]);
+      for ( ; current < stop; current++)
 	{
-	  value_t table_entry = ((value_t *)i)[0];
-	  int *data_add = (int *)table_entry;
-	  int data = *data_add;
-	  if (data >= fromheap->bottom && data < fromheap->top)
+	  value_t data = *current;
+	  if ((data & 3) == 0 && data >= fromheap->bottom && data < fromheap->top)
 	    {
 	      printf("TRACE WARNING: global has a fromheap value after collection");
-	      printf("   data_add = %d   data = %d\n",data_add,data);
+	      printf("   cursor = %d   data = %d\n",current,data);
 	    }
 	}
+    }
+
 #endif
 }
 
@@ -1404,13 +1434,14 @@ void debug_after_collect()
 
 
 
-void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_size)
+void gc_handler_semi()
 {
   long i;
   int mi;  
   int regmask = 0;
   int stack_top;
-  int allocsize, allocptr;
+  int req_size, allocptr;
+  long sp, ret_add;
   struct rusage start,finish;
   static Queue_t *root_lists = 0;
   static Queue_t *global_roots = 0;
@@ -1422,20 +1453,29 @@ void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_si
   assert(0); /* unimplemented */
 #endif
 
+  Thread_t *curThread;
+  long *saveregs;
+
   InScheduler = 1;
   start_timer(&gctime);
+  curThread = getThread();
+  saveregs = curThread->saveregs;
+  allocptr = saveregs[ALLOCPTR_REG];
+  req_size = saveregs[ALLOCLIMIT_REG];
+  sp = saveregs[SP_REG];
+  ret_add = saveregs[RA_REG];
 
   if (root_lists == 0)
     {
-      root_lists = QueueCreate(200);
-      global_roots = QueueCreate(100);
-      promoted_global_roots = QueueCreate(100);
+      root_lists = QueueCreate(0,200);
+      global_roots = QueueCreate(0,100);
+      promoted_global_roots = QueueCreate(0,100);
     }
 
-  if (CurHeapLimit == LowHeapLimit)
+  if (curThread->savedHeapLimit == LowHeapLimit)
     {
-      fprintf(stderr,"Cur/Low %d %d\n",CurHeapLimit,LowHeapLimit);
-      thread_scheduler_clean(saveregs,sp,ret_add);
+      fprintf(stderr,"Cur/Low %d %d\n",curThread->savedHeapLimit,LowHeapLimit);
+      thread_scheduler_clean();
       return;
     }
 
@@ -1444,16 +1484,13 @@ void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_si
       fprintf(stderr,"alloc_size = 0    means writelist_full.\n");
     }
 
-  allocsize = saveregs[CSECONDARG_REG];
-  allocptr = saveregs[ALLOCPTR_REG];
-
   debug_and_stat_before(saveregs, sp, ret_add, req_size);
 
-  if (CurHeapLimit != LowHeapLimit)
+  if (curThread->savedHeapLimit != LowHeapLimit)
     {
-      if (!(allocptr <= CurHeapLimit))
+      if (!(allocptr <= curThread->savedHeapLimit))
 	{
-	  printf("allocptr=%d   CurHeapLimit=%d\n",allocptr,CurHeapLimit);
+	  printf("allocptr=%d   curThread->savedHeapLimit=%d\n",allocptr,curThread->savedHeapLimit);
 	  assert(0);
 	}
     }
@@ -1472,7 +1509,7 @@ void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_si
     {
       static Queue_t *loc_roots = 0;
       if (loc_roots == 0)
-	loc_roots = QueueCreate(200);
+	loc_roots = QueueCreate(0,200);
       else 
 	QueueClear(loc_roots);
  
@@ -1592,7 +1629,7 @@ void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_si
 
     typed_swap(HeapObj_t *, fromheap, toheap);
 
-    CurHeapLimit = fromheap->top;
+    curThread->savedHeapLimit = fromheap->top;
 
 
 
@@ -1604,13 +1641,13 @@ void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_si
 
 }
 
-void gc_handler_gen(unsigned long *saveregs, long sp, 
-		    long ret_add, long req_size, int isMajor)
+void gc_handler_gen(int isMajor)
 {
   int regmask = 0;
   int stack_top = 0;
-  int allocsize = saveregs[CSECONDARG_REG];
-  int allocptr = saveregs[ALLOCPTR_REG];
+  long *saveregs;
+  int allocptr, req_size;
+  long sp, ret_add;
   struct rusage start,finish;
   static Queue_t *root_lists = 0;
   static Queue_t *global_roots = 0;
@@ -1619,30 +1656,39 @@ void gc_handler_gen(unsigned long *saveregs, long sp,
   value_t to_allocptr;
 
   /* start timer */
+  Thread_t *curThread;
+
   InScheduler = 1;
   start_timer(&gctime);
+  curThread = getThread();
+  saveregs = curThread->saveregs;
+  allocptr = saveregs[ALLOCPTR_REG];
+  req_size = saveregs[ALLOCLIMIT_REG];
+  sp = saveregs[SP_REG];
+  ret_add = saveregs[RA_REG];
+
+  /* If limit pointer is "low", then this is really a preemption, not a GC */
+  if (saveregs[ALLOCLIMIT_REG] == LowHeapLimit)
+    {
+      fprintf(stderr,"Cur/Low %d %d\n",curThread->savedHeapLimit,LowHeapLimit);
+      thread_scheduler_clean();
+      return;
+    }
+
+  if (!(allocptr <= curThread->savedHeapLimit)) {
+    printf("curThread->savedHeapLimit = %d,   allocptr = %d\n",curThread->savedHeapLimit,allocptr);
+    assert(allocptr <= curThread->savedHeapLimit);
+  }
+
 
   /* Initialize the global lists for holdings roots */
   if (root_lists == 0)
     {
-      root_lists = QueueCreate(200);
-      global_roots = QueueCreate(100);
-      promoted_global_roots = QueueCreate(100);
+      root_lists = QueueCreate(0,200);
+      global_roots = QueueCreate(0,100);
+      promoted_global_roots = QueueCreate(0,100);
     }
 
-  /* Thread stuff and sanity check */
-  if (CurHeapLimit == LowHeapLimit)
-    {
-      fprintf(stderr,"Cur/Low %d %d\n",CurHeapLimit,LowHeapLimit);
-      thread_scheduler_clean(saveregs,sp,ret_add,req_size);
-      return;
-    }
-  else
-    {
-      if (!(allocptr <= CurHeapLimit))
-	printf("CurHeapLimit = %d,   allocptr = %d\n",CurHeapLimit,allocptr);
-      assert(allocptr <= CurHeapLimit);
-    }
 
   /* these are debugging and stat-gatherting procedure that are ifdef-ed */
   measure_semantic_garbage_before();
@@ -1755,7 +1801,7 @@ void gc_handler_gen(unsigned long *saveregs, long sp,
       if (GCtype != Minor)
 	{
 	  range_t from_range, from2_range, to_range;
-	  value_t *to_ptr = old_toheap->bottom;
+	  value_t *to_ptr = (value_t *)old_toheap->bottom;
 
 	  int i, newsize;
 	  start_timer(&majorgctime);
@@ -1807,7 +1853,8 @@ void gc_handler_gen(unsigned long *saveregs, long sp,
 	  
 	  to_ptr = forward_gen_locatives(to_ptr,&from_range,&from2_range,&to_range); 
 /*	  to_ptr = forward_mutables_gen(to_ptr,&from_range,&from2_range,&to_range);  */
-	  to_ptr = scan_major(old_toheap->bottom,to_ptr,to_range.high,&from_range,&from2_range,&to_range);
+	  to_ptr = scan_major(old_toheap->bottom,to_ptr,(value_t *)to_range.high,
+			      &from_range,&from2_range,&to_range);
 
 
 #ifdef HEAPPROFILE
@@ -1869,7 +1916,7 @@ void gc_handler_gen(unsigned long *saveregs, long sp,
 
     saveregs[ALLOCPTR_REG] = fromheap->bottom;
     saveregs[ALLOCLIMIT_REG] = fromheap->top;
-    CurHeapLimit = fromheap->top;
+    curThread->savedHeapLimit = fromheap->top;
 
   if (GCtype != Minor)
     NumMajorGC++;
@@ -1884,15 +1931,15 @@ void gc_handler_gen(unsigned long *saveregs, long sp,
   InScheduler = 0;
 }
 
-void gc_handler(unsigned long *saveregs, long sp, long ret_add, long req_size, int isMajor)
+void gc_handler(int isMajor)
 {
 #ifdef DEBUG
   printf("NumGC = %d\n",NumGC);
 #endif
   if (generational_flag)
-     gc_handler_gen(saveregs, sp, ret_add, req_size, isMajor);
+     gc_handler_gen(isMajor);
   else
-     gc_handler_semi(saveregs, sp, ret_add, req_size);
+     gc_handler_semi();
 #ifdef DEBUG
   printf("NumGC = %d over\n",NumGC-1);
 #endif
@@ -1925,7 +1972,7 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
     {
     case RECORD_TAG:
     case RECORD_SUB_TAG:
-      if (GET_RECLEN(tag) <= MAX_RECORDLEN)
+      if (GET_RECLEN(tag) <= RECLEN_MAX)
 	{
 	  int i, fieldlen = GET_RECLEN(tag);
 	  value_t *end = cur + 1 + fieldlen;
@@ -1947,21 +1994,21 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
 	    while (1)
 	      {
 		int curlen = GET_RECLEN(*curtag);
-		if (curlen <= MAX_RECORDLEN)
+		if (curlen <= RECLEN_MAX)
 		  {
 		    fieldlen += curlen;
 		    break;
 		  }
 		else
-		  fieldlen += MAX_RECORDLEN;
+		  fieldlen += RECLEN_MAX;
 		curtag++;
 	      }
 	    objstart = curtag + 1;
 	  }
 	  for (i=0; i<fieldlen; i++)
 	    {
-	      unsigned int mask = GET_RECMASK(rawstart[i/MAX_RECORDLEN]);
-	      if (mask & 1 << (i % MAX_RECORDLEN))
+	      unsigned int mask = GET_RECMASK(rawstart[i/RECLEN_MAX]);
+	      if (mask & 1 << (i % RECLEN_MAX))
 		forward_mac_major(objstart+i,alloc_ptr,from_range,from2_range,to_range);
 	    }
 	  cur = objstart + fieldlen;
@@ -1972,7 +2019,7 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
       break;
     case IARRAY_TAG:
       {
-	unsigned int upper = GET_POSSLEN(tag);
+	unsigned int upper = GET_ARRLEN(tag);
 	upper = (upper + 3) / 4; /* round up to multiple of 4 first */
 	if (upper == 0)
 	  upper = 1;
@@ -1981,16 +2028,16 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
       }
     case RARRAY_TAG:
       {
-	unsigned int upper = GET_POSSLEN(tag);
+	unsigned int upper = GET_ARRLEN(tag);
 	upper /= 4;   /* already a multiple of 8 */
 	if (upper == 0)
 	  upper = 1;
 	cur += 1 + upper;
 	break;
       }
-    case ARRAY_TAG:
+    case PARRAY_TAG:
       {
-	unsigned int upper = GET_POSSLEN(tag);
+	unsigned int upper = GET_ARRLEN(tag);
 	upper /= 4;   /* already a multiple of 4 */
 	if (upper == 0)
 	  cur += 2;
@@ -2036,7 +2083,7 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
     {
     case RECORD_TAG:
     case RECORD_SUB_TAG:
-      if (GET_RECLEN(tag) <= MAX_RECORDLEN)
+      if (GET_RECLEN(tag) <= RECLEN_MAX)
 	{
 	  int i, fieldlen = GET_RECLEN(tag);
 	  value_t *end = cur + 1 + fieldlen;
@@ -2058,21 +2105,21 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
 	    while (1)
 	      {
 		int curlen = GET_RECLEN(*curtag);
-		if (curlen <= MAX_RECORDLEN)
+		if (curlen <= RECLEN_MAX)
 		  {
 		    fieldlen += curlen;
 		    break;
 		  }
 		else
-		  fieldlen += MAX_RECORDLEN;
+		  fieldlen += RECLEN_MAX;
 		curtag++;
 	      }
 	    objstart = curtag + 1;
 	  }
 	  for (i=0; i<fieldlen; i++)
 	    {
-	      unsigned int mask = GET_RECMASK(rawstart[i/MAX_RECORDLEN]);
-	      if (mask & 1 << (i % MAX_RECORDLEN))
+	      unsigned int mask = GET_RECMASK(rawstart[i/RECLEN_MAX]);
+	      if (mask & 1 << (i % RECLEN_MAX))
 		forward_mac_local_minor(objstart+i,alloc_ptr);
 	    }
 	  cur = objstart + fieldlen;
@@ -2083,7 +2130,7 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
       break;
     case IARRAY_TAG:
       {
-	unsigned int upper = (GET_POSSLEN(tag) + 3) / 4;
+	unsigned int upper = (GET_ARRLEN(tag) + 3) / 4;
 	if (upper == 0)
 	  upper = 1;
 	cur += 1 + upper;
@@ -2091,15 +2138,15 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
       }
     case RARRAY_TAG:
       {
-	unsigned int upper = GET_POSSLEN(tag) / 4;
+	unsigned int upper = GET_ARRLEN(tag) / 4;
 	if (upper == 0)
 	  upper = 1;
 	cur += 1 + upper;
 	break;
       }
-    case ARRAY_TAG:
+    case PARRAY_TAG:
       {
-	unsigned int upper = GET_POSSLEN(tag) / 4;
+	unsigned int upper = GET_ARRLEN(tag) / 4;
 	if (upper == 0)
 	  cur += 2;
 	else
@@ -2116,8 +2163,7 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
       }
     case FORWARD_TAG:
     default:
-      printf("\n\ntag = %d at cur=%d\n",tag,cur);
-      printf("scan_gen: IMPOSSIBLE TAG\n");
+      printf("\n\nscan_gen impossible: forward tag = %d at cur=%d\n",tag,cur);
       assert(0);
     }
   (*where) = cur;

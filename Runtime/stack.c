@@ -225,7 +225,8 @@ void LookupSpecialWordPair(Callinfo_t *callinfo, int pos, int *a, int *b)
   int *special_word_stuff = (int *) (special_byte + bytedata_bytesize);
   *a = special_word_stuff[2*pos];
   *b = special_word_stuff[2*pos+1];
-  if (&(special_word_stuff[2*pos+1]) >= ((int)callinfo) + (GET_ENTRYSIZE(callinfo->sizes) << 2))
+  if ((value_t)(&(special_word_stuff[2*pos+1])) >= 
+      ((value_t)callinfo) + (GET_ENTRYSIZE(callinfo->sizes) << 2))
     {
       printf("ERROR in lookupspecialwordpair\n");
       printf("stacktrace_bytesize = %d\n",stacktrace_bytesize);
@@ -262,7 +263,7 @@ void stack_init()
   struct HashEntry e;
   unsigned int mi = 0, count=NUM_STACK_STUB, i,j;
 
-  ScanQueue = QueueCreate(100);
+  ScanQueue = QueueCreate(0,100);
 
 #ifdef DEBUG
 #ifdef GCTABLE_HASENTRYID
@@ -469,7 +470,7 @@ void show_stack(value_t sp, value_t cur_retadd, value_t top)
   static Queue_t *retadd_queue = 0;
   int i;
   if (retadd_queue == 0)
-    retadd_queue = QueueCreate(200);
+    retadd_queue = QueueCreate(0,200);
   (void) findretadd(&sp,&cur_retadd,top,retadd_queue,MAXINT);
   for (i=0; i<QueueLength(retadd_queue); i++)
     if (SHOW_GCDEBUG) printf("%d: %d\n",i,QueueAccess(retadd_queue,i));
@@ -603,7 +604,7 @@ value_t trace_stack_step(unsigned long *saveregs,
 
   cur_sp = *bot_sp;
 
-  while (!IsEmpty(retadd_queue) && ((frame_to_trace--)>0))
+  while (!QueueIsEmpty(retadd_queue) && ((frame_to_trace--)>0))
     {
       value_t     retadd    = (value_t)(QueuePop(retadd_queue));
       Callinfo_t *callinfo  = LookupCallinfo(retadd);
@@ -740,7 +741,7 @@ value_t trace_stack_step(unsigned long *saveregs,
     }
     *bot_sp = cur_sp;
     *regstate_ptr = regstate;
-    if (IsEmpty(retadd_queue))
+    if (QueueIsEmpty(retadd_queue))
       res = 0;
 
     return res;
@@ -758,9 +759,9 @@ unsigned int trace_stack_normal(unsigned long *saveregs,
   int not_done = 1;
 
   if (retadd_queue == 0)
-    retadd_queue = QueueCreate(2000);
+    retadd_queue = QueueCreate(0,2000);
   if (roots == 0)
-    roots = QueueCreate(200);
+    roots = QueueCreate(0,200);
   
   { 
     value_t oldbot_sp = bot_sp;
@@ -860,7 +861,7 @@ unsigned int trace_stack_gen(unsigned long *saveregs,
   max_sp = exnstub_maxsp;
 
   if (retadd_queue == 0)
-    retadd_queue = QueueCreate(2000);
+    retadd_queue = QueueCreate(0,2000);
 
   {
     int temp = -1;
@@ -923,7 +924,7 @@ unsigned int trace_stack_gen(unsigned long *saveregs,
       if (last_snapshot + 2 >= NUM_STACK_STUB)
 	inner_save_rate = MAXINT;
       if (r == NULL)
-	r = QueueCreate(50);
+	r = QueueCreate(0,50);
 
       QueueClear(r);
       not_done = trace_stack_step(saveregs, &bot_sp, retadd_queue, top,

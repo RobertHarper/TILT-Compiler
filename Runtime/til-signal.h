@@ -1,3 +1,5 @@
+/* Thread-safe */
+
 #include <signal.h>
 
 long *GetSp(struct sigcontext *scp);

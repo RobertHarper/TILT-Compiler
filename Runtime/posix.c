@@ -1,13 +1,12 @@
 #include "tag.h"
+#include "thread.h"
+#include "create.h"
 #include "posix.h"
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <math.h>
 #include <sys/wait.h>
 #include <stdio.h>
-
-long cur_alloc_pointer;
-long cur_alloc_limit;
 
 
 
@@ -135,10 +134,10 @@ static char* mlstring2cstring(string mlstring)
 {
   static char buf[1024];
   unsigned int tag = ((int *)mlstring)[-1];
-  int len = tag >> POSSLEN_SHIFT;
+  int bytelen = GET_ARRLEN(tag);
   char *raw = (char *)mlstring;
-  bcopy(raw,buf,len);
-  buf[len] = 0;
+  bcopy(raw,buf,bytelen);
+  buf[bytelen] = 0;
   return (char *)buf;
 }
 
@@ -146,11 +145,11 @@ static char* mlstring2cstring(string mlstring)
 static char* mlstring2cstring_malloc(string mlstring)
 {
   unsigned int tag = ((int *)mlstring)[-1];
-  int len = tag >> POSSLEN_SHIFT;
-  char *buf = malloc(len+1);
+  int bytelen = GET_ARRLEN(tag);
+  char *buf = malloc(bytelen+1);
   char *raw = (char *)mlstring;
-  bcopy(raw,buf,len);
-  buf[len] = 0;
+  bcopy(raw,buf,bytelen);
+  buf[bytelen] = 0;
   return (char *)buf;
 }
  
@@ -212,7 +211,7 @@ intpair ml_timeofday()
       printf("POSIX function gettimeofday failed with errno = %d\n", errno);
       assert(0);
     }
-  result = alloc_manyint(2,0,&cur_alloc_pointer,cur_alloc_limit);
+  result = alloc_manyint(2,0);
   ((value_t *) result)[0] = tp.tv_sec;
   ((value_t *) result)[1] = tp.tv_usec;
   return (intpair) result;
@@ -220,7 +219,7 @@ intpair ml_timeofday()
 
 mltm ctm2mltm(struct tm *tm)
 {
-  value_t result = alloc_manyint(9,0,&cur_alloc_pointer,cur_alloc_limit);
+  value_t result = alloc_manyint(9,0);
   ((value_t *) result)[0] = tm->tm_sec;
   ((value_t *) result)[1] = tm->tm_min;
   ((value_t *) result)[2] = tm->tm_hour;
@@ -236,7 +235,7 @@ mltm ctm2mltm(struct tm *tm)
 string posix_ascTime (mltm mltm)
 {
   char *result = asctime((struct tm *) mltm);
-  value_t res = alloc_string(strlen(result),result,&cur_alloc_pointer,cur_alloc_limit);
+  value_t res = alloc_string(strlen(result),result);
   return (word8vector) res;
 }
 
@@ -297,7 +296,7 @@ int posix_error_num(string arg)
 string posix_os_tmpname(unit unused)
 {
   char *buf = NULL;
-  value_t res = alloc_uninit_string(L_tmpnam,&buf,&cur_alloc_pointer,cur_alloc_limit);
+  value_t res = alloc_uninit_string(L_tmpnam,&buf);
   char *result = tmpnam(buf);
   assert(result == buf);
   adjust_stringlen(res,strlen(buf));
@@ -357,16 +356,19 @@ unit posix_io_close(int fd)
 /* ML strings are not null-terminated */
 word8vector posix_io_read(int fd, int size)
 {
+  value_t *alloc, *limit;
   char *buf = NULL;
-  int permitted = cur_alloc_limit - cur_alloc_pointer - 24;
+  int permitted;
   int bytes_read;
   value_t res;
 
+  get_alloc_limit(&alloc,&limit);
+  permitted = (value_t)limit - (value_t)alloc - 24;
   if (size > permitted)
     size = permitted;
   if (size < 0)
     size = 0;
-  res = alloc_uninit_string(size,&buf,&cur_alloc_pointer,cur_alloc_limit);
+  res = alloc_uninit_string(size,&buf);
   bytes_read = read(fd,buf,size);
   if (bytes_read == -1)
     { 
@@ -789,7 +791,7 @@ inttriple posix_process_waitpid(int argpid, word options)
        assert(0);
      }
 
-  result = alloc_manyint(3,0,&cur_alloc_pointer,cur_alloc_limit);
+  result = alloc_manyint(3,0);
   ((value_t *) result)[0] = pid;
   ((value_t *) result)[1] = how;
   ((value_t *) result)[2] = val;
@@ -970,7 +972,7 @@ unit posix_filesys_ftruncate(int unused1, int unused)
 
 statrep cstat2mlstat(struct stat *buffer)
 {
-  value_t record = alloc_manyint(11,0,&cur_alloc_pointer,cur_alloc_limit);
+  value_t record = alloc_manyint(11,0);
   statrep s = (statrep)record;
   s->ftype = buffer->st_mode & S_IFMT;
   s->mode = buffer->st_mode & MODE_BITS;

@@ -1,7 +1,8 @@
 #include "tag.h"
 #include "global.h"
 #include "memobj.h"
-
+#include "thread.h"
+#include "create.h"
 #ifdef alpha_osf
 #include "interface_osf.h"
 #endif
@@ -25,10 +26,11 @@ extern unsigned long _end;
 
 value_t DivideByZeroExn = 0;
 value_t OverflowExn = 0;
-#define RuntimeGlobalDataSize 4096
-static char RuntimeGlobalData[RuntimeGlobalDataSize];
 value_t datastart, dataend;
+double FPTOFROMINT;
+
 static value_t RuntimeGlobalData_Start;
+static value_t RuntimeGlobalData_Cur;
 static value_t RuntimeGlobalData_End;
 
 int IsCompileGlobalData(value_t addr)
@@ -59,29 +61,25 @@ int IsConstructorData(value_t addr)
 
 void global_init()
 {
-  value_t alloc = (value_t)((void *)RuntimeGlobalData);
-  value_t limit = alloc + RuntimeGlobalDataSize;
   value_t fields[3];
   int masks[1];
 
+  RuntimeGlobalData_Start = (value_t) RuntimeGlobalData;
+  RuntimeGlobalData_Cur = (value_t) RuntimeGlobalData;
+  RuntimeGlobalData_End = RuntimeGlobalData_Start + RuntimeGlobalDataSize;
 
   fields[0] = MLEXN_DIVZERO;
   fields[1] = 0;
   masks[0] = 0;
-  DivideByZeroExn = alloc_record(&alloc,limit,
-				 fields,masks,2);
+  DivideByZeroExn = alloc_record(fields,masks,2);
 
   fields[0] = MLEXN_OVERFLOW;
   fields[1] = 0;
   masks[0] = 0;
-  OverflowExn  = alloc_record(&alloc,limit,
-			      fields,masks,2);
+  OverflowExn  = alloc_record(fields,masks,2);
   
   datastart = (value_t) &_fdata;
   dataend   = (value_t) &_end;  
   /* _edata does not seem to work at all, in fact, it's less then _fdata */
-
-  RuntimeGlobalData_Start = (value_t) RuntimeGlobalData;
-  RuntimeGlobalData_End = RuntimeGlobalData_Start + RuntimeGlobalDataSize;
 
 }

@@ -53,7 +53,7 @@ static HeapObj_t Heaps[NumHeapObj];
 
 value_t LowHeapLimit = 0;
 
-long StackSize = 4096; /* mesaure in Kb */
+long StackSize = 2048; /* mesaure in Kb */
 static const int megabyte  = 1024 * 1024;
 static const int kilobyte  = 1024;
 #ifdef alpha_osf
@@ -87,30 +87,35 @@ void StackInitialize()
     }
 }
 
+
+
 StackObj_t* GetStack(value_t add)
 {
   int i;
   for (i=0; i<NumStackObj; i++)
     {
-      if (Stacks[i].valid && Stacks[i].id==i &&
-	  Stacks[i].bottom <= add &&
-	  Stacks[i].top    >= add)
-	return (Stacks+i);
+      StackObj_t *s = &Stacks[i];
+      if (s->valid && 
+	  s->id == i &&
+	  s->rawbottom <= add &&
+	  s->rawtop    >= add)
+	return s;
     }
   return NULL;
 }
 
-StackObj_t* GetRawStack(value_t add)
+int InStackChain(StackChainObj_t *sc, value_t addr) 
 {
   int i;
-  for (i=0; i<NumStackObj; i++)
-    {
-      if (Stacks[i].valid && Stacks[i].id==i &&
-	  Stacks[i].rawbottom <= add &&
-	  Stacks[i].rawtop    >= add)
-	return (Stacks+i);
-    }
-  return NULL;
+  for (i=0; i<sc->count; i++) {
+    printf("instackchain bottom = %d, addr = %d, top = %d\n",
+	  sc->stacks[i]->bottom, addr ,
+	   sc->stacks[i]->top);
+    if (sc->stacks[i]->bottom <= addr &&
+	sc->stacks[i]->top >= addr)
+      return 1;
+  }
+  return 0;
 }
 
 StackChainObj_t* StackChainObj_Alloc()
@@ -129,9 +134,8 @@ StackChainObj_t* StackChainObj_Alloc()
 StackObj_t* StackObj_Alloc(StackChainObj_t *parent)
 {
   int i;
-  static int count = 0;
-  StackObj_t *res = &(Stacks[count++]);
-
+  static int count = -1;
+  StackObj_t *res = &(Stacks[++count]);
   int size = StackSize * kilobyte;
   int start = stackstart + (count * size);
 
@@ -142,6 +146,8 @@ StackObj_t* StackObj_Alloc(StackChainObj_t *parent)
   if (res->rawbottom == -1)
       exit(-1);
   res->rawtop    = res->rawbottom + size;
+  if (!(res->rawtop < heapstart))
+    printf("count = %d, res->rawtop , heapstart = %d  %d\n", count,res->rawtop, heapstart);
   assert(res->rawtop < heapstart);
 #ifdef SEMANTIC_GARBAGE
   wordset((void *)(res->bottom+semantic_garbage_offset),1,
@@ -207,7 +213,7 @@ HeapObj_t* HeapObj_Alloc(int MinSize, int MaxSize)
   int fullsize_pageround = RoundUp(fullsize,pagesize);
   int fullsize_chunkround = RoundUp(fullsize,chunksize);
 
-  int chunkstart = AllocRange(bmp,fullsize_chunkround / chunksize);
+  int chunkstart = AllocBitmapRange(bmp,fullsize_chunkround / chunksize);
   int start = (chunkstart * chunksize) + heapstart;
   assert(chunkstart >= 0);
   assert (heap_count < NumHeapObj);
@@ -303,7 +309,7 @@ int StackError(long badadd, long sp)
   printf("\n------------------StackError---------------------\n");
   printf("sp, badreference:  %d   %d\n",sp,badadd);
 
-  faultstack = GetRawStack(badadd);
+  faultstack = GetStack(badadd);
   if (faultchain == 0)
     return 0;
   faultchain = faultstack->parent;

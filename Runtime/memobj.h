@@ -1,3 +1,5 @@
+/* Not thread-safe */
+
 #ifndef _memobj_h
 #define _memobj_h
 
@@ -22,9 +24,7 @@ typedef struct StackObj__t StackObj_t;
 
 void StackInitialize();
 StackObj_t* StackObj_Alloc();
-StackObj_t* GetStack();
-StackObj_t* GetRawStack();
-
+StackObj_t* GetStack(value_t);
 
 struct StackChainObj__t
 {
@@ -36,7 +36,7 @@ struct StackChainObj__t
 typedef struct StackChainObj__t StackChainObj_t;
 StackChainObj_t* StackChainObj_Alloc();
 void memobj_init();
-
+int InStackChain(StackChainObj_t*, value_t);
 
 struct HeapObj__t
 {

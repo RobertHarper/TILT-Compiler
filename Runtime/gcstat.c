@@ -250,10 +250,12 @@ unsigned long objlength(value_t *tagstart, value_t **result)
     case IARRAY_TAG:
     case RARRAY_TAG:
     case ARRAY_TAG:
-      if (GET_POSSLEN(tag))
-	return 2 + ((GET_POSSLEN(tag) + 3) / 4);
-      else
+    {
+      int bytelen = GET_ARRLEN(tag);
+      if (bytelen == 0)
 	return 3;
+      else
+	return 2 + ((bytelen + 3) / 4);
     case FORWARD_TAG:
       {
 	value_t *newdata = ((value_t *)tagstart[1]);

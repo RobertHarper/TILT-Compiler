@@ -97,9 +97,9 @@ value_t show_obj(value_t s, int checkonly)
 	    if (!(IS_RECORD(*objstart) ||
 		  (IS_RECORD_SUB(*objstart))))
 	      assert(0);
-	    fieldlen += (curlen > MAX_RECORDLEN) ? MAX_RECORDLEN : curlen;
+	    fieldlen += (curlen > RECLEN_MAX) ? RECLEN_MAX : curlen;
 	    objstart++;
-	    if (curlen <= MAX_RECORDLEN)
+	    if (curlen <= RECLEN_MAX)
 	      break;
 	  }
 #ifdef HEAPPROFILE
@@ -118,8 +118,8 @@ value_t show_obj(value_t s, int checkonly)
 	  }	  
 	for (i=0; i<fieldlen; i++)
 	  {
-	    unsigned int mask = GET_RECMASK(rawstart[i / MAX_RECORDLEN]);
-	    int trace = mask & (1 << i % MAX_RECORDLEN);
+	    unsigned int mask = GET_RECMASK(rawstart[i / RECLEN_MAX]);
+	    int trace = mask & (1 << i % RECLEN_MAX);
 	    if (trace)
 	      {
 		if (!checkonly)
@@ -158,10 +158,10 @@ value_t show_obj(value_t s, int checkonly)
       }
       break;
     case IARRAY_TAG:
-    case ARRAY_TAG:
+    case PARRAY_TAG:
     case RARRAY_TAG:
       {
-	unsigned int len = (GET_POSSLEN(start[0]) + 3) / 4;
+	unsigned int len = (GET_ARRLEN(start[0]) + 3) / 4;
 	unsigned int type = GET_TYPE(tag);
 	start++;
 	if (!checkonly)
@@ -192,7 +192,7 @@ value_t show_obj(value_t s, int checkonly)
 		  if (!checkonly)
 		    printf("I(%ld)  ",start[i]);
 		  break;
-		case ARRAY_TAG:
+		case PARRAY_TAG:
 		  if (!checkonly)
 		    printf("%ld     ",start[i]);
 		  ptr_check(start[i]);

@@ -1,3 +1,7 @@
+ # start_client makes assumption about how to invoke closures
+	
+#include "general.h"
+	
 	.text	
 	.align	4
  	.globl	start_client
@@ -24,99 +28,6 @@ GetRpcc:
         ret     $31, ($26), 1
         .end GetRpcc
 
- # ------------------------here comes thread_spawn_raw-------------------------
- # return address comes in temp register
- # rpv seems to hold parameter
- # need to check XXXX
- # ----------------------------------------------------------------------------
-	.ent	thread_spawn_raw
-thread_spawn_raw:	
-.set noat
-	lda	$sp, -320($sp)	# allocate big frame
-	stq	$at, 0($sp)	# save return address
-	stq	$gp, 272($sp)	# save caller's gp
-	stq	$27, 280($sp)	# save Rpv why?
-.set at
-	ldgp	$gp, 0($27)	# fix own gp
-
-.set noat
-				 # save int registers on the stack
-	stq	$0, 16($sp)
-	stq	$1, 24($sp)
-	stq	$2, 32($sp)
-	stq	$3, 40($sp)
-	stq	$4, 48($sp)
-	stq	$5, 56($sp)
-	stq	$6, 64($sp)
-	stq	$7, 72($sp)
-	stq	$8, 80($sp)
-	stq	$9, 88($sp)
-	stq	$10, 96($sp)
-	stq	$11, 104($sp)
-	stq	$12, 112($sp)
-	stq	$13, 120($sp)
-	stq	$14, 128($sp)
-	stq	$15, 136($sp)
-	stq	$16, 144($sp)
-	stq	$17, 152($sp)
-	stq	$18, 160($sp)
-	stq	$19, 168($sp)
-	stq	$20, 176($sp)
-	stq	$21, 184($sp)
-	stq	$22, 192($sp)
-	stq	$23, 200($sp)
-	stq	$24, 208($sp)
-	stq	$25, 216($sp)
-	stq	$26, 224($sp)
-	stq	$27, 232($sp)
-	stq	$28, 240($sp)
-	stq	$29, 248($sp)
-	stq	$30, 256($sp)
-.set at
-	lda	$16, 16($sp)		# pass address of saved int register as 1st arg
-	ldq	$17, 280($sp)		# pass saved Rpv as 2nd arg
-	lda     $27, thread_spawn
-	jsr	$26, thread_spawn	# jump to thread_spawn with Rpv set
-	stq	$0, 288($sp)		# save result
-	ldgp	$gp, 0($26)		# restore own gp
-.set noat
-					# restore int regs
-	ldq	$0, 16($sp)
-	ldq	$1, 24($sp)
-	ldq	$2, 32($sp)
-	ldq	$3, 40($sp)
-	ldq	$4, 48($sp)
-	ldq	$5, 56($sp)
-	ldq	$6, 64($sp)
-	ldq	$7, 72($sp)
-	ldq	$8, 80($sp)
-	ldq	$9, 88($sp)
-	ldq	$10, 96($sp)
-	ldq	$11, 104($sp)
-	ldq	$12, 112($sp)
-	ldq	$13, 120($sp)
-	ldq	$14, 128($sp)
-	ldq	$15, 136($sp)
-	ldq	$16, 144($sp)
-	ldq	$17, 152($sp)
-	ldq	$18, 160($sp)
-	ldq	$19, 168($sp)
-	ldq	$20, 176($sp)
-	ldq	$21, 184($sp)
-	ldq	$22, 192($sp)
-	ldq	$23, 200($sp)
-	ldq	$24, 208($sp)
-	ldq	$25, 216($sp)
-	ldq	$26, 224($sp)
-	ldq	$27, 232($sp)
-	ldq	$28, 240($sp)
-	ldq	$29, 248($sp)
-	ldq	$30, 256($sp)
-.set at
-	ldq	$27, 288($sp)		# put result in Rpv
-	lda	$sp, 320($sp)		# deallocate frame
-	ret	$31, ($27), 1		# jump to result of call to thread_spawn
-	.end	thread_spawn_raw
 
 	
  # ------------------------ start_client  -------------------------------------
@@ -125,6 +36,7 @@ thread_spawn_raw:
  # third C arg = alloc limit val
  # fourth C arg = client_entry (array of starting addresss)
  # fifth C arg = number of starting address in array client_entry
+ # sixth C arg = current thread pointer
  # ----------------------------------------------------------------------------
 	.ent	start_client 
  # gets 5 arguments:	new stack, alloc ptr val, alloc limit val, client_entry(start_adds), num_add
@@ -132,13 +44,14 @@ start_client:
  	ldgp	$gp, 0($27)	# get self gp
 	lda	$sp, -320($sp)	# allocate frame
 	stq	$26, 0($sp)	# save return address
-	stq	$16, 8($sp)	# save all 5 args
+	stq	$16, 8($sp)	# save first 5 args
 	stq	$17, 16($sp)
 	stq	$18, 24($sp)
 	stq	$19, 32($sp)
 	stq	$20, 40($sp)
-	ldq	$11, 16($sp)    # initialize heap ptr   outside loop
-	ldq	$10, 24($sp)	# initizlize heap limit outside loop
+	mov	$21,THREADPTR_SYMREG        # move arg 6 into thread pointer register
+	ldq	ALLOCPTR_SYMREG, 16($sp)    # initialize heap ptr   outside loop
+	ldq	ALLOCLIMIT_SYMREG, 24($sp)  # initizlize heap limit outside loop
 	stq	$31, 48($sp)	# initialize current thunk to run to 0
 thunk_loop:
  # nuke regs for debugging
@@ -155,6 +68,9 @@ thunk_loop:
 	ldq	$19, 48($sp)	# fetch current thunk counter
 	s4addq	$19, $27, $27	# compute array item address
 	ldl	$27, ($27)	# fetch current thunk address
+	ldl	$1, 8($27)	# fetch term env
+	ldl	$0, 4($27)	# fetch type env
+	ldl	$27, ($27)	# fetch code pointer
  # save self stack and switch to passed in stack, install global handler
 	ldq	$16, 8($sp)	# fetch stack argument
  	stq	$sp, -8($16)	# save own stack pointer on new stack

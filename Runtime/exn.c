@@ -1,3 +1,5 @@
+/* Assumes exceptions look a certain way in the creation of the divide and overflow exception */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
@@ -37,8 +39,8 @@ void exn_init()
       alloc = (value_t) buf;
       limit = alloc + 100 * sizeof(int);
     }
-  divide_exn = alloc_recrec(*(value_t *)Divide_exncon,0,&alloc,limit);
-  overflow_exn = alloc_recrec(*(value_t *)Overflow_exncon,0,&alloc,limit);
+  divide_exn = alloc_recrec(*(value_t *)Divide_exncon,0);
+  overflow_exn = alloc_recrec(*(value_t *)Overflow_exncon,0);
 }
 
 void raise_exception(struct sigcontext *scp, exn exn_arg)
@@ -80,9 +82,9 @@ void toplevel_exnhandler(long *saveregs)
     {
       value_t name = get_record(exn_arg,2);
       unsigned int tag = ((int *)name)[-1];
-      int len = tag >> POSSLEN_SHIFT;
-      bcopy((char *)name,buf,len);
-      buf[len] = 0;
+      int bytelen = GET_ARRLEN(tag);
+      bcopy((char *)name,buf,bytelen);
+      buf[bytelen] = 0;
       msg = buf;
     }
   
