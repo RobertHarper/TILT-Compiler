@@ -327,6 +327,14 @@ functor Tracetable(val little_endian    : bool
 			else (print "OOPS: framesize =  "; print (Int.toString framesize); 
 			print "  and  sum count = "; print (Int.toString sum); print "\n")
 		val _ = if (!ShowDiag) then
+		    (print "\n------------------------\n"; 
+		     print (msLoclabel lab); print ":\n";
+		     app (fn (v,t) => (print (Int.toString v);
+				       print (tr2s t); 
+				       print "\n")) stacktrace;
+		     print "------------------------\n")
+		    else ()
+		val _ = if (!ShowDiag) then
 		    (print ("no,yes,callee,spec: " ^
 			    (Int.toString (n_no - no)) ^ ", " ^
 			    (Int.toString (n_yes - yes)) ^ ", " ^
