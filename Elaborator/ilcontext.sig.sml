@@ -10,6 +10,8 @@ signature ILCONTEXT =
 	type signat = Il.signat
 	type label = Il.label
 	type var = Il.var
+	type dec = Il.dec
+	type decs = Il.decs
 	type sdec = Il.sdec
 	type sdecs = Il.sdecs
 	type fixity_table = Il.fixity_table
@@ -17,35 +19,28 @@ signature ILCONTEXT =
 	type inline = Il.inline
 	type context_entry = Il.context_entry
 	    
-	val context_entries : context -> context_entry list (* for printing *)
-	    
-	(* context extenders and extractors *)
+	(* ----------- context extenders ----------------------------  *)
 	val empty_context : context
-	val add_context_inline : context * label * var * inline -> context
-	val add_context_module : context * label * var * signat -> context
-	val add_context_signat : context * label * var * signat -> context
-	val add_context_var : context * label * var * con -> context
-	val add_context_convar : context * label * var 
-	    * kind * con option -> context
+
+	val add_context_dec   : context * dec -> context
+	val add_context_decs  : context * decs -> context
+	val add_context_sdec  : context * sdec -> context
 	val add_context_sdecs : context * sdecs -> context
-	val add_context_sdec : context * sdec -> context
-	    
-	val add_context_dec  : context * Il.dec -> context
-	val add_context_module' : context * var * signat -> context
-	val add_context_var' : context * var * con -> context
-	val add_context_convar' : context * var 
-	    * kind * con option -> context
-	    
+	val add_context_inline : context * label * var * inline -> context
 	val add_context_entries : context * context_entry list -> context
-	val Context_Get_FixityTable : context -> fixity_table
-	val Context_Get_BoundConvars : context -> var list
-		
-	val var_bound : context * var -> bool
-	val name_bound : context * Il.tag -> bool
-	    
+
+	val add_context_mod  : context * label * var * signat            -> context
+	val add_context_mod' : context *         var * signat            -> context
+	val add_context_sig  : context * label * var * signat            -> context
+	val add_context_sig' : context *         var * signat            -> context
+	val add_context_exp  : context * label * var * con               -> context
+	val add_context_exp' : context *         var * con               -> context
+	val add_context_con  : context * label * var * kind * con option -> context
+	val add_context_con' : context *         var * kind * con option -> context
+
+	(* ------------ Lookup routines ----------------- *)
+
 	exception NOTFOUND of string
-	
-	(* Lookup routines *)
 	datatype phrase = PHRASE_EXP of exp
 	  | PHRASE_CON of con
 	  | PHRASE_MOD of mod
@@ -65,6 +60,10 @@ signature ILCONTEXT =
 	  | PHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Il.Tyvar.ocon
 	    
 	(* ---- none of these lookup functions perform normalization ---- *)		
+	val context_entries : context -> context_entry list (* for printing *)
+	val Context_Get_FixityTable : context -> fixity_table
+	val var_bound : context * var -> bool
+	val name_bound : context * Il.tag -> bool
 	val Sdecs_Lookup' : mod * sdecs * label list -> bool * (label list * phrase_class)
 	val Sdecs_Lookup  : mod * sdecs * label list -> label list * phrase_class
 	val Sbnds_Lookup  : Il.sbnds * label list -> label list * phrase

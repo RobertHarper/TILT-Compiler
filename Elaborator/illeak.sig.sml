@@ -87,7 +87,7 @@ signature ILLEAK =
     and      bnd = BND_EXP of var * exp
                  | BND_MOD of var * mod
                  | BND_CON of var * con
-                 | BND_FIXITY    of fixity_table
+
     and   signat = SIGNAT_STRUCTURE         of path option * sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * (arrow Util.oneshot)
     and     sdec = SDEC of label * dec
@@ -95,16 +95,18 @@ signature ILLEAK =
                  | DEC_MOD       of var * signat
                  | DEC_CON       of var * kind * con option 
                  | DEC_EXCEPTION of tag * con
-                 | DEC_FIXITY    of fixity_table
+
 
     and inline = INLINE_MODSIG of mod * signat
 	      | INLINE_EXPCON of exp * con
 	      | INLINE_CONKIND of con * kind
 	      | INLINE_OVER   of unit -> exp * (context,con) Tyvar.ocon
+
     and context_entry = 
 		CONTEXT_INLINE of label * var * inline
 	      | CONTEXT_SDEC   of sdec
 	      | CONTEXT_SIGNAT of label * var * signat
+              | CONTEXT_FIXITY of fixity_table   (* tracks infix precedence *)
 
     and context = CONTEXT of context_entry list
 

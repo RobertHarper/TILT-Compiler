@@ -22,52 +22,36 @@ functor IlContext(structure Il : ILLEAK)
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
-	    val empty_context = CONTEXT[]
-	    fun context_entries (CONTEXT ce) = ce
-	    fun add_context_dec(CONTEXT c, l, dec) = CONTEXT((CONTEXT_SDEC(SDEC(l,dec)))::c)
-	    fun add_context_var(c, l, v, con) = add_context_dec(c,l,DEC_EXP(v,con))
-	    fun add_context_module(c, l, v, signat) = add_context_dec(c,l,DEC_MOD(v,signat))
-	    fun add_context_convar(c, l, v, kind, conopt) = add_context_dec(c,l,DEC_CON(v,kind,conopt))
-	    fun add_context_inline(CONTEXT c, l, v, inline) = CONTEXT((CONTEXT_INLINE(l,v,inline))::c)
-	    fun add_context_entries(CONTEXT c, e : context_entry list) : context = 
-		CONTEXT(e @ c)
-	    fun add_context_signat(c, l, v, signat) = add_context_entries(c,[CONTEXT_SIGNAT(l,v,signat)])
-	    fun add_context_sdecs(CONTEXT c, sdecs : sdecs) : context = CONTEXT((map CONTEXT_SDEC sdecs) @ c)
-	    fun add_context_sdec(CONTEXT c, sdec : sdec) : context = CONTEXT((CONTEXT_SDEC sdec) :: c)
-	    val add_context_dec = fn (ctxt,dec) => add_context_dec(ctxt,fresh_internal_label "anon",dec)
+    val empty_context = CONTEXT[]
+    fun context_entries (CONTEXT ce) = ce
+    fun add_context_sdecs(CONTEXT c, sdecs) = CONTEXT((map CONTEXT_SDEC sdecs) @ c)
+    fun add_context_sdec(CONTEXT c, sdec : sdec) = CONTEXT((CONTEXT_SDEC sdec) :: c)
+    fun anon_label () = fresh_internal_label "anon"
+    fun dec2sdec dec = SDEC(anon_label(),dec)
+    fun decs2sdecs decs = map dec2sdec decs
+    fun add_context_decs(ctxt, decs) = add_context_sdecs(ctxt, decs2sdecs decs)
+    fun add_context_dec(ctxt, dec) = add_context_decs(ctxt,[dec])
+    fun add_context_inline(CONTEXT c, l, v, inline) = CONTEXT((CONTEXT_INLINE(l,v,inline))::c)
+    fun add_context_entries(CONTEXT c, e : context_entry list) : context = 
+	CONTEXT(e @ c)
 
-	    fun add_context_module' (ctxt,v,s) = add_context_dec(ctxt,DEC_MOD(v,s))
-	    fun add_context_var' (ctxt,v,c) = add_context_dec(ctxt,DEC_EXP(v,c))
-	    fun add_context_convar' (ctxt,v,k,copt) = add_context_dec(ctxt,DEC_CON(v,k,copt))
+    fun add_context_exp(c, l, v, con) = add_context_sdec(c,SDEC(l,DEC_EXP(v,con)))
+    fun add_context_mod(c, l, v, signat) = add_context_sdec(c,SDEC(l,DEC_MOD(v,signat)))
+    fun add_context_con(c, l, v, kind, conopt) = add_context_sdec(c,SDEC(l,DEC_CON(v,kind,conopt)))
+    fun add_context_sig(c, l, v, signat) = add_context_entries(c,[CONTEXT_SIGNAT(l,v,signat)])
 
-
-	    fun Context_Get_FixityTable (CONTEXT c) : fixity_table = 
-		let 
-		    fun help (CONTEXT_SDEC(SDEC(_, DEC_FIXITY vflist))) = vflist
-		      | help _ = []
-		    val res = List.concat (map help c)
-		in  res 
-		end
-	    fun Context_Get_BoundConvars (CONTEXT c) : var list = 
-		let 
-		    fun sdechelp (SDEC(l,d)) = 
-			(case (is_label_open l, d) of
-			     (true,DEC_MOD(v,s)) => sighelp s
-			   | (_,DEC_CON (v,_,_)) => [v]
-			       | (_,(DEC_FIXITY _ | 
-				     DEC_EXCEPTION _ | DEC_EXP _ | DEC_MOD _)) => [])
-		    and sighelp (SIGNAT_STRUCTURE (_,sdecs)) = flatten(map sdechelp sdecs)
-		      | sighelp (SIGNAT_FUNCTOR _) = []
-		    fun loop [] = []
-		      | loop (CONTEXT_SDEC(SDEC(l,dec))::rest) = 
-			(case dec of 
-			     (DEC_CON(v,k,co)) => v :: (loop rest)
-			   | (DEC_MOD(v, s)) => if (is_label_open l) then (sighelp s) @ (loop rest) else loop rest
-			   | _ => loop rest)
-		      | loop ((CONTEXT_INLINE _ | 
-			       CONTEXT_SIGNAT _)::rest) = loop rest
-		in loop c
-		end
+    fun add_context_exp'(c, v, con) = add_context_exp(c,anon_label(), v, con)
+    fun add_context_mod'(c, v, signat) = add_context_mod(c,anon_label(), v, signat)
+    fun add_context_con'(c, v, kind, conopt) = add_context_con(c,anon_label(), v, kind, conopt)
+    fun add_context_sig'(c, v, signat) = add_context_sig(c,anon_label(), v, signat)
+	
+    fun Context_Get_FixityTable (CONTEXT c) : fixity_table = 
+	let 
+	    fun help (CONTEXT_FIXITY vflist) = vflist
+	      | help _ = []
+	    val res = List.concat (map help c)
+	in  res 
+	end
 	    
      (* ---------- Bound Rules from page 15 - 16 ----------------- *)
 	    datatype bound_name = BOUND_VAR of var | BOUND_NAME of tag
@@ -76,7 +60,6 @@ functor IlContext(structure Il : ILLEAK)
 		  | Dec_Bound (DEC_MOD (v,_)) = SOME(BOUND_VAR v)
 		  | Dec_Bound (DEC_CON (v,_,_)) = SOME(BOUND_VAR v)
 		  | Dec_Bound (DEC_EXCEPTION (n,_)) = SOME(BOUND_NAME n)
-		  | Dec_Bound (DEC_FIXITY _) = NONE
 		fun Ctxt_Bound (CONTEXT_INLINE (_,v,_)) = SOME(BOUND_VAR v)
 		  | Ctxt_Bound (CONTEXT_SDEC(SDEC(_,d))) = Dec_Bound d
 		  | Ctxt_Bound (CONTEXT_SIGNAT(_,v,_)) = SOME(BOUND_VAR v)
@@ -217,11 +200,12 @@ functor IlContext(structure Il : ILLEAK)
 							  handle NOTFOUND _ => context_search lab r)
 					       | _ => context_search lab r)
 				   else context_search lab r
-		        | ((DEC_EXCEPTION _) | (DEC_FIXITY _)) => context_search lab r)
+		        | ((DEC_EXCEPTION _)) => context_search lab r)
 	      | (CONTEXT_SIGNAT (l,v,s)::r) => if (eq_label(lab,l)) 
 							 then (SIMPLE_PATH v,PHRASE_CLASS_SIG s)
 						     else context_search lab r
-	      | _ => ((* debugdo (fn () => (print "Context_Lookup failed on ";
+	      | ((CONTEXT_FIXITY _)::r) => context_search lab r
+	      | [] => ((* debugdo (fn () => (print "Context_Lookup failed on ";
 					       print (label2string lab);
 					       print ".  Context was\n";
 					       pp_context context; print "\n")); *)
