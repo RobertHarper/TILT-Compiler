@@ -1,4 +1,17 @@
-structure Linknil =
+signature LINKNIL = 
+sig
+    structure Nil : NIL
+    structure NilUtil : NILUTIL
+    structure NilContext : NILCONTEXT
+    structure NilStatic : NILSTATIC
+    structure PpNil : PPNIL
+
+    val compile : string -> Nil.module
+    val test : string -> Nil.module
+
+end
+
+structure Linknil : LINKNIL =
 struct
 
     val error = fn s => Util.error "linknil.sml" s
@@ -6,7 +19,7 @@ struct
     structure Nil = Nil(structure ArgAnnotation = Annotation
 			structure ArgPrim = LinkIl.Prim)      
 	
-    structure Ppnil = Ppnil(structure Nil = Nil
+    structure PpNil = Ppnil(structure Nil = Nil
 			    structure Ppprim = LinkIl.Ppprim)
 
     structure Alpha = Alpha(structure ArgNil = Nil)
@@ -15,29 +28,32 @@ struct
 				  structure IlUtil = LinkIl.IlUtil
 				  structure Alpha = Alpha)
 
-    structure Nilcontext = NilContextFn(structure ArgNil = Nil
-					structure PPNil = Ppnil
+    structure NilContext = NilContextFn(structure ArgNil = Nil
+					structure PpNil = PpNil
 					structure Cont = Cont)
 
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
 				      structure Prim = LinkIl.Prim
 				      structure ArgNil = Nil
 				      structure NilUtil = NilUtil
-				      structure NilContext = Nilcontext
-				      structure Ppnil = Ppnil
+				      structure NilContext = NilContext
+				      structure PpNil = PpNil
 				      structure Alpha = Alpha)
 
 
     structure Tonil = Tonil(structure Ilstatic = LinkIl.IlStatic
 			    structure Ilutil = LinkIl.IlUtil
                             structure Ilcontext = LinkIl.IlContext
-			    structure Nilcontext = Nilcontext
+			    structure Nilcontext = NilContext
 			    structure Nilutil = NilUtil
-			    structure Ppnil = Ppnil
+			    structure Ppnil = PpNil
 			    structure Ppil = LinkIl.Ppil)
 
+    structure Linearize = Linearize(structure Nil = Nil
+				    structure NilUtil = NilUtil)
+
     structure ToClosure = ToClosure(structure Nil = Nil
-				    structure Ppnil = Ppnil
+				    structure Ppnil = PpNil
 				    structure NilUtil = NilUtil)
 
     structure NilPrimUtilParam = NilPrimUtilParam(structure NilUtil = NilUtil);
@@ -48,23 +64,13 @@ struct
 	
     structure NilEval = NilEvaluate(structure Nil = Nil
 				    structure NilUtil = NilUtil
-				    structure Ppnil = Ppnil
+				    structure Ppnil = PpNil
 				    structure PrimUtil = NilPrimUtil)
 
-    fun test s = 
+    fun phasesplit debug filename : Nil.module = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
-	    val SOME(sbnds, ctxt) = LinkIl.elaborate s
-	    val _ = print "\n\n\nELABORATION SUCESSFULLY COMPLETED\n\n\n"; 
-	    val _ = LinkIl.Ppil.pp_sbnds sbnds
-            val _ = print "\nSize of IL = ";
-	    val _ = print (Int.toString (LinkIl.IlUtil.mod_size 
-					 (LinkIl.MOD_STRUCTURE sbnds)));
-            val _ = print "\n\n========================================\n"
-            val _ = (print "\n\ninitial_context = ctxt = \n";
-		     LinkIl.Ppil.pp_context ctxt;
-		     print "\n")
-	    val _ = Compiler.Profile.reset () 
+	    val SOME(sbnds, _, ctxt) = LinkIl.compile filename
 	    fun folder (v,(l,pc),maps as (vmap,mmap)) = 
 		let fun addv () = (VarMap.insert(vmap,v,l),mmap)
 		    fun addm () = (vmap,VarMap.insert(mmap,v,l))
@@ -92,37 +98,54 @@ struct
 				   in  VarMap.insert(map,v,(vc,vr))
 				   end
 	    val import_varmap = VarMap.foldli folder VarMap.empty import_modmap
-            val _ = print "\nAbout to do Phase-split\n"
 	    val {cu_bnds = bnds, vmap = total_varmap} = Tonil.xcompunit ctxt import_varmap sbnds
-	    val _ = print "\nPhase-splitting done.\n"
 
-	    fun folder (v,l,map) = let val lc = internal_label((label2string l) ^ "_c")
-					 val lr = internal_label((label2string l) ^ "_r")
-					 val (vc,vr) = (case VarMap.find(total_varmap,v) of
-							    SOME vrc => vrc
-							  | NONE => error "total_varmap missing bindings")
-				     in  VarMap.insert(VarMap.insert(map,vr,lr),vc,lc)
-				     end
+	    fun folder (v,l,map) = 
+		let val lc = internal_label((label2string l) ^ "_c")
+		    val lr = internal_label((label2string l) ^ "_r")
+		    val (vc,vr) = (case VarMap.find(total_varmap,v) of
+				       SOME vrc => vrc
+				     | NONE => error "total_varmap missing bindings")
+		in  VarMap.insert(VarMap.insert(map,vr,lr),vc,lc)
+		end
 	    val imports = Name.VarMap.foldli folder import_valmap import_modmap
 	    val exports = Name.VarMap.foldli folder export_valmap export_modmap
 	    val nilmod = MODULE{bnds = bnds, 
 				imports = imports,
 				exports = exports}
-	    val _ = (print "\n\n=======================================\n\n";
-		     print "phase-split results:\n";
-		     Ppnil.pp_module nilmod;
-		     print "\n")
-		
-	    val nilmod' = ToClosure.close_mod nilmod
-
-	    val _ = (print "\n\n=======================================\n\n";
-		     print "closure-conversion results:\n";
-		     Ppnil.pp_module nilmod';
-		     print "\n")
-		
-	in  nilmod'
+	    val _ = if debug
+			then (print "\n\n=======================================\n\n";
+			      print "phase-split results:\n";
+			      PpNil.pp_module nilmod;
+			      print "\n")
+		    else print "Phase-splitting complete\n"
+	in  nilmod
 	end
-end
+    val phasesplit = Stats.timer("Phase-splitting",phasesplit)
 
-fun doit () = Linknil.test "test"
+    fun compile' debug filename =
+	let
+	    open Nil LinkIl.Il LinkIl.IlContext Name
+	    val nilmod = phasesplit debug filename
+	    val nilmod = (Stats.timer("Linearization",Linearize.linearize_mod)) nilmod
+	    val _ = if debug 
+			then (print "\n\n=======================================\n\n";
+			      print "renaming results:\n";
+			      PpNil.pp_module nilmod;
+			      print "\n")
+		    else print "Renaming complete\n"
+	    val nilmod = (Stats.timer("Closure-conversion",ToClosure.close_mod)) nilmod
+	    val _ = if debug
+			then (print "\n\n=======================================\n\n";
+			      print "closure-conversion results:\n";
+			      PpNil.pp_module nilmod;
+			      print "\n")
+		    else print "Closure-conversion complete\n"
+	in  nilmod
+	end
+
+    val test = compile' true
+    val compile = compile' false
+
+end
 

@@ -1,7 +1,7 @@
 functor NilContextFn(structure ArgNil : NIL
-		     structure PPNil : PPNIL
+		     structure PpNil : PPNIL
 		     structure Cont : CONT
-		     sharing PPNil.Nil = ArgNil) :> 
+		     sharing PpNil.Nil = ArgNil) :> 
   sig include NILCONTEXT sharing Nil = ArgNil end = 
 struct
   structure Nil = ArgNil
@@ -30,14 +30,14 @@ struct
   fun insert_con ({conmap,kindmap}:context,var,con) = 
     (case V.find (conmap, var)
        of NONE => {conmap = V.insert (conmap, var, con), kindmap = kindmap}
-	| _ => error ("Expression variable "^(var2string var)^"already in context"))
+	| _ => error ("Expression variable "^(var2string var)^" already in context"))
 
   fun find_con ({conmap,...}:context,var) = V.find (conmap, var)
     
   fun remove_con ({conmap,kindmap}:context,var) = 
       {conmap = #1 (V.remove (conmap, var)), kindmap = kindmap}
 
-  fun appi_kind f ({kindmap,...} : context) = V.appi f kindmap
+  fun foldli_kind f acc ({kindmap,...} : context) = V.foldli f acc kindmap
 
   local
     open Nil
@@ -61,7 +61,7 @@ struct
       (case V.find (kindmap, var)
 	 of NONE => {kindmap = V.insert (kindmap, var, selfify(Var_c var,kind)),
 		     conmap = conmap}
-	  | _ => error ("Constructor variable "^(var2string var)^"already in context"))
+	  | _ => error ("Constructor variable "^(var2string var)^" already in context"))
   end
        
   fun find_kind ({kindmap,...}:context,var) = V.find (kindmap, var)
@@ -117,13 +117,13 @@ struct
   fun print_kind (var,kind) =
     (print (Name.var2string var);
      print "::";
-     PPNil.pp_kind kind;
+     PpNil.pp_kind kind;
      print "\n")
 
   fun print_con (var,con) =
     (print (Name.var2string var);
      print ":";
-     PPNil.pp_con con;
+     PpNil.pp_con con;
      print "\n")
 
   fun print_context ({kindmap,conmap}:context) = 

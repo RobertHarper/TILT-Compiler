@@ -3,6 +3,7 @@ signature NILSTATIC =
     structure Nil : NIL
 
     type context 
+    val debug : bool ref
 
     val con_valid : context * Nil.con -> Nil.con * Nil.kind
     (* con_valid (context,con) => (con',kind)

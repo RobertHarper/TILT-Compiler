@@ -14,6 +14,7 @@ struct
    structure Nil = Nilutil.Nil
 
    open Nil
+   val debug = ref false
 (*
    val debug = ref (Prim_c (Record_c nil, nil))
    val il_debug = ref (Il.CON_ANY)
@@ -334,11 +335,13 @@ struct
 
 	   val il_signat = gms (HILctx_of context, il_mod)
 
-           val _ = (print "About to look up :\n";
-		    Ppnil.pp_exp (Var_e var_mod_r);
-		    print " and ";
-                    Ppnil.pp_con (Var_c var_mod_c);
-		    print "\n")
+           val _ = if (!debug)
+		       then (print "About to look up :\n";
+			     Ppnil.pp_exp (Var_e var_mod_r);
+			     print " and ";
+			     Ppnil.pp_con (Var_c var_mod_c);
+			     print "\n")
+		   else ()
 
            val (SOME knd_c) = Nilcontext.find_kind (NILctx_of context, var_mod_c)
            val (SOME type_r) = Nilcontext.find_con (NILctx_of context, var_mod_r)

@@ -49,5 +49,5 @@ toclosure.sig.sml
 toclosure.sml
 linknil.sml
 (*linkstatic.sml*)
-(*linearize.sig.sml*)
-(*linearize.sml*)
+linearize.sig.sml
+linearize.sml
