@@ -94,6 +94,8 @@ structure Name :> NAME =
     fun derived_var v = fresh_named_var(var2name v)
     fun deconstruct_var v = (v, var2name v)
 
+    fun rename_var (v : var, s : string) : unit =
+         (varmap := (VarMap.insert(!varmap,v,s)))
 
     fun fresh_named_tag s = (inc_counter tag_counter,s)
     fun fresh_tag  () = fresh_named_tag "t"
