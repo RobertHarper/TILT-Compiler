@@ -432,5 +432,5 @@ LINKIL Elaborator/linkil.sig
 LinkIl Elaborator/linkil
 
 
-elabtest elabtest
-#test Test/bug8
+elabtest Self/elabtest
+

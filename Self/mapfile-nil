@@ -503,5 +503,5 @@ ToNil Nil/tonil
 LINKNIL Nil/linknil.sig
 Linknil Nil/linknil
 
-niltest niltest
+niltest Self/niltest
 

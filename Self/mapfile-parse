@@ -384,4 +384,4 @@ FrontEnd Parser/frontend
 LINKPARSE Parser/linkparse.sig
 LinkParse Parser/linkparse
 
-parsetest parsetest
+parsetest Self/parsetest
