@@ -35,7 +35,6 @@ sig
     (* confine (UE1, UE2) =
      *	VALID (UE1 - UE2)	if for all u in Dom(UE1) intersect Dom(UE2), UE1(u) = UE2(u)
      *	WITNESS u		if UE1(u) <> UE2(u)
-     * Used on import unit environments.
      *)
     val confine : equiv -> ue * ue -> ue_result
 
