@@ -66,13 +66,16 @@ struct
     | traceflag (COMPUTE p) = "(COMPUTE "^reppath2s p^")"
 
    and reppath2s p =
-       case p
-       of Var_p v => regi2s v
-	| Projvar_p (v,i) => regi2s v^"."^i2s i
-        | Label_p l => label2s l
-        | Projlabel_p (l,i) => label2s l^"."^i2s i
-        | Notneeded_p => "Notneed"
- 
+       let fun loop [] = ""
+	   | loop (i::rest) = "." ^ (Int.toString i) ^ (loop rest)
+       in  case p of
+	   Var_p v => regi2s v
+	 | Projvar_p (v,indices) => regi2s v^(loop indices)
+	 | Label_p l => label2s l
+	 | Projlabel_p (l,indices) => label2s l^(loop indices)
+	 | Notneeded_p => "Notneed"
+       end
+
   and regi2s (REGI(v,tf)) = (if !symbolic_name then var2s v else i2s(Name.var2int v)) ^ (traceflag tf)
     | regi2s (SREGI HEAPPTR)  = "HEAPPTR"
     | regi2s (SREGI HEAPLIMIT)  = "HEAPLIMIT"

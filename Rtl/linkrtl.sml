@@ -35,8 +35,8 @@ struct
 				    structure Registerset = Registerset
 				    structure Operations = Operations)
     fun test s = 
-	let val nilmodule : Linknil.nilmodule = Linknil.test s
-	    val translate_params = { HeapProfile = NONE, do_write_list = true,
+	let val nilmodule : Linknil.Nil.module = Linknil.test s
+	    val translate_params = {HeapProfile = NONE, do_write_list = true,
 				    codeAlign = Rtl.QUAD, FullConditionalBranch = false,
 				    elim_tail_call = true, recognize_constants = true}
 	    val rtlmod = Tortl.translate translate_params nilmodule

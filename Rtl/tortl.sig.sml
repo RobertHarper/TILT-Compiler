@@ -7,10 +7,6 @@ sig
                              codeAlign : Rtl.align, FullConditionalBranch : bool, 
                              elim_tail_call : bool, recognize_constants : bool }
 
-   val translate : translate_params -> {bnds : Nil.bnd list,
-					name_c : Nil.var,
-					name_r : Nil.var,
-					knd_c : Nil.kind,
-					type_r : Nil.con} -> Rtl.module
+   val translate : translate_params -> Nil.module -> Rtl.module
 
 end

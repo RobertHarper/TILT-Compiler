@@ -14,7 +14,7 @@ struct
 val debug = ref false
 
     exception XXX
-fun simplify_type _ = raise XXX
+    
    (* Module-level declarations *)
 
     structure Rtl = Rtl
@@ -34,6 +34,22 @@ fun simplify_type _ = raise XXX
     structure W32 = TilWord32
     structure W64 = TilWord64
 
+
+
+    (* given a type returns true and a type in head-normal form
+       or false and a type not in head-normal form 
+       in either case, the returned type is possibly simpler than the argument type *)
+    fun simplify_type c : bool * con = 
+	(case c of
+	     Prim_c(pc,clist) => 
+		 let val clist' = map simplify_type clist
+		     val is_head_normal = Listops.andfold (fn (a,_) => a) clist'
+		 in  (is_head_normal,Prim_c(pc,map #2 clist'))
+		 end
+	   | _ => (print "simplify type not done on type\n";
+		   Ppnil.pp_con c;
+		   print "\n";
+		   raise XXX))
 
    (* ------------------ Overall Data Structures ------------------------------ *)
       
@@ -74,9 +90,8 @@ fun simplify_type _ = raise XXX
                        | VAR_VAL of var_val
    type varmap = (var,var_rep) HashTable.hash_table
    type convarmap = (var,convar_rep) HashTable.hash_table
-(* XXX add empty record to data segment *)
-   val unitlabel = LOCAL_LABEL(LOCAL_DATA(fresh_named_var "emptyrecord"))
-   val unitval = (VAR_VAL(VRECORD(unitlabel,[])), Prim_c(Record_c[],[]))
+   val unitval = VINT 0w256
+   val unit_vvc = (VAR_VAL unitval, Prim_c(Record_c[],[]))
 
   (* ----- Global data structures ------------------------------
    dl: list of data for module
@@ -91,6 +106,7 @@ fun simplify_type _ = raise XXX
    ------------------------------------------------------------- *)
 
    exception NotFound
+   val exports = ref (Name.VarMap.empty : Name.label Name.VarMap.map)
    val dl : Rtl.data list ref = ref nil
    val pl : Rtl.proc list ref = ref nil
    val gvarmap: varmap ref = ref (mk_var_hash_table(128,NotFound))
@@ -103,8 +119,7 @@ fun simplify_type _ = raise XXX
    datatype work = FunWork of (var * function)
                  | ConFunWork of (var * (var * kind) list * con * kind)
    val worklist : work list ref = ref nil
-   fun addWork more = (print "addwork called\n";
-		       worklist := (more :: (!worklist)))
+   fun addWork more = worklist := (more :: (!worklist))
    fun getWork() = (case (!worklist) of
 			 [] => NONE
 		       | (a::b) => (worklist := b; SOME a))
@@ -166,23 +181,33 @@ fun simplify_type _ = raise XXX
 			 | (VGLOBAL (l,r)) => COMPUTE(Label_p l)
 			 | (VLABEL l) => COMPUTE(Label_p l)
 			 | (VCODE _) => NOTRACE_CODE)
-	 | (Proj_c (Var_c v,l)) => 
-	       (case (getconvarrep v) of
-		    (vl,Record_k fields_seq) => 
-			let fun loop acc [] = error "bad Proj_c"
-			      | loop acc (((l',_),_)::rest) = 
-				if (eq_label(l,l')) then acc else loop (acc+1) rest
-			    val fields_list = sequence2list fields_seq
-			    val i = loop 0 fields_list
-			in  case vl of
-			    (VREGISTER (I ir)) => COMPUTE(Projvar_p(ir,i))
-			  | (VREGISTER (F _)) => error "constructor in float reg"
-			  | (VGLOBAL (l,r)) => COMPUTE(Projlabel_p(l,i))
-			  | (VLABEL l) => COMPUTE(Projlabel_p(l,i))
-			  | (VCODE _) => error "constructor is a code pointer"
-			end
-		  | _ => error "Proj_c from constructuctor of non-record kind")
-	 | (Proj_c _) => error "Proj_c from non-variable not in head-normal form"
+	 | (Proj_c _) =>
+	       let fun loop (Proj_c (c,l)) acc = loop c (l::acc)
+		     | loop (Var_c v) acc = (v,acc)
+		     | loop _ _ = error "projection is not a chain of projections from a variable"
+		   val (v,labels) = loop con []
+		   val (vl,kind) = getconvarrep v
+		   val _ = (Ppnil.pp_con con; print "\n";
+			    Ppnil.pp_kind kind; print "\n";
+			    app (fn l => (Ppnil.pp_label l; print ".")) labels; print "\n")
+		   fun loop acc _ [] = rev acc
+		     | loop acc (Record_k fields_seq) (label::rest) = 
+		       let fun extract acc [] = error "bad Proj_c"
+			     | extract acc (((l,_),fc)::rest) = 
+			       if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
+			   val _= print "calling extract\n"
+			   val (con,index) = extract 1 (sequence2list fields_seq)
+		       in  loop (index::acc) con rest
+		       end
+		   val indices = loop [] kind labels
+	       in
+		   case vl of
+		       (VREGISTER (I ir)) => COMPUTE(Projvar_p(ir,indices))
+		     | (VREGISTER (F _)) => error "constructor in float reg"
+		     | (VGLOBAL (l,r)) => COMPUTE(Projlabel_p(l,indices))
+		     | (VLABEL l) => COMPUTE(Projlabel_p(l,indices))
+		     | (VCODE _) => error "constructor is a code pointer"
+	       end
 	 | (Let_c _) => error "Let_c not in head-normal form"
 	 | (Crecord_c _) => error "Crecord_c not a type"
 	 | (Closure_c _) => error "Closure_c not a type"
@@ -275,33 +300,17 @@ fun simplify_type _ = raise XXX
 	       Nil.Prim_c(Float_c _,[]) => F(alloc_named_regf v)
 	     | _ => I(alloc_named_regi v (con2rep c))
 		   
-       fun insert map (key,v) = (case (HashTable.find (map) key) of
-				     NONE => HashTable.insert (map) (key,v)
-				   | SOME _ => error "hash table already contains entry")
+       fun insert map (key : var,v) = (case (HashTable.find (map) key) of
+					   NONE => HashTable.insert (map) (key,v)
+					 | SOME _ => error ("hash table already contains entry " ^ (Name.var2string key)))
 
        fun promote_maps() = 
 	   (print "promote maps called\n";
 	    HashTable.appi (fn (k,v) => (insert (!gvarmap) (k,v))) (!varmap);
 	    HashTable.appi (fn (k,v) => (insert (!gconvarmap) (k,v))) (!convarmap))
 
-       fun reset_state (is_top,name,(iargs,fargs),result,return) =
-	   (dl := nil; 
-	    pl := nil; 
-	    if (!istop)  (* if we were just in global state, promote its locals *)
-		then promote_maps()
-	    else ();
-	    varmap := mk_var_hash_table(128,NotFound); 
-	    convarmap := mk_var_hash_table(128,NotFound); 
-	    istop := is_top;
-	    mutable_objects := nil;
-	    mutable_variables := nil; 
-	    
-	    currentfun := LOCAL_CODE name;
-	    top := alloc_code_label();
-	    il := nil; 
-	    do_code_align();
-	    add_instr(ILABEL (!top));
-	    resultreg := result;
+       fun set_args_result ((iargs,fargs),result,return) = 
+	   (resultreg := result;
 	    argregi := iargs;
 	    argregf := fargs;
 	    localregi := (case result of
@@ -310,6 +319,27 @@ fun simplify_type _ = raise XXX
 	    localregf := (case result of
 			      F fr => fr :: fargs
 			    | _ => fargs))
+
+       fun reset_global_state exp =
+	   (exports := exp;
+            dl := nil;
+	    pl := nil;
+	    mutable_objects := nil;
+	    mutable_variables := nil)
+
+       fun reset_state (is_top,name) = 
+	   (if (!istop)  (* if we were just in global state, promote its locals *)
+		then promote_maps()
+	    else ();
+	    varmap := mk_var_hash_table(128,NotFound); 
+	    convarmap := mk_var_hash_table(128,NotFound); 
+	    istop := is_top;
+	    
+	    currentfun := LOCAL_CODE name;
+	    top := alloc_code_label();
+	    il := nil; 
+	    do_code_align();
+	    add_instr(ILABEL (!top)))
        fun get_state() = {name = !currentfun,
 			  revcode = !il}
    end
@@ -391,12 +421,17 @@ fun simplify_type _ = raise XXX
   (* functions for manipulating RTL representations of NIL variables *)
   fun add_var     (v,reg,con)       = insert (!varmap) (v,(VREGISTER reg, NONE, con))
   fun add_var_val (v,reg,con,value) = insert (!varmap) (v,(VREGISTER reg, SOME value, con))
-  fun add_convar  (v,regi,kind)     = insert (!convarmap) (v,(VREGISTER (I regi),kind))
+  fun add_convar  (v,regi,kind)     = (print "add_convar v = "; Ppnil.pp_var v;
+				       print " : "; Ppnil.pp_kind kind;
+				       print "\n";
+				       insert (!convarmap) (v,(VREGISTER (I regi),kind)))
   fun add_convar_label (v,l,kind)   = insert (!convarmap) (v,(VLABEL l,kind))
   fun gadd_convar_label (v,l,kind)   = insert (!gconvarmap) (v,(VLABEL l,kind))
 
   fun add_global     (v,p,con)        = insert (!varmap) (v,(VGLOBAL p, NONE,con))
   fun add_global_val (v,p,con,value)  = insert (!varmap) (v,(VGLOBAL p, SOME value,con))
+
+  fun add_conglobal  (v,l,kind)        = insert (!convarmap) (v,(VGLOBAL (l,TRACE), kind))
 
   fun add_label (v,lab, con) = insert (!varmap) (v,(VLABEL lab, NONE, con))
   fun add_loclabel (LOCAL_CODE v,lab, con) = insert (!varmap) (v,(VCODE lab, NONE, con))
@@ -706,12 +741,14 @@ fun simplify_type _ = raise XXX
               in add_instr(LI (i2w i,size));
 		  add_instr(ADD(reg,REG size,dest))
 	      end
-  
+
   fun alloc_global (v : var,
 		    con : con,
 		    lv : loc_or_val) =
     let 
-      val label = LOCAL_LABEL(alloc_named_data_label v)
+      val label = (case (Name.VarMap.find(!exports,v)) of
+		       SOME l => ML_EXTERN_LABEL(Name.label2string l)
+		     | NONE => LOCAL_LABEL(alloc_named_data_label v))
       val addr = alloc_regi LABEL
       val rtl_rep = con2rep con
       val _ = (case rtl_rep of
@@ -734,6 +771,23 @@ fun simplify_type _ = raise XXX
 	  | VAR_VAL (VINT w32) => add_data(INT32 w32)
 	  | VAR_VAL (VREAL s) => add_data(FLOAT s)
 	  | VAR_VAL (VRECORD (l,_)) => add_data(DATA l)
+    end
+
+  fun alloc_conglobal (v : var,
+		       ir : regi,
+		       kind : kind) = 
+    let 
+      val label = (case (Name.VarMap.find(!exports,v)) of
+		       SOME l => ML_EXTERN_LABEL(Name.label2string l)
+		     | NONE => LOCAL_LABEL(alloc_named_data_label v))
+      val addr = alloc_regi LABEL
+    in 
+	add_conglobal(v,label,kind);
+	add_data(ALIGN (QUAD));
+	add_data(DLABEL (label));
+	add_data(INT32(i2w 0));
+	add_instr(LADDR(label,0,addr));
+	add_instr(STORE32I(EA(addr,0),ir))
     end
 
   fun boxFloat regf : regi = 
@@ -858,7 +912,9 @@ fun simplify_type _ = raise XXX
       in
 	  case bnd of
 	      Con_b (v,k,c) => let val (ir,k) = xcon(v,c)
-			       in  add_convar(v,ir,k)
+			       in  if (istoplevel())
+				       then alloc_conglobal(v,ir,k)
+				   else add_convar(v,ir,k)
 			       end
 	    | Exp_b (v,c,e) => let val (loc_or_val,_) = xexp(v,e,SOME c,NOTID)
 			       in if istoplevel()
@@ -884,24 +940,26 @@ fun simplify_type _ = raise XXX
 		  in app adder (sequence2list var_fun_set)
 		  end
 	    | Fixclosure_b var_varconexpset => 
-		  let val var_vcelist = sequence2list var_varconexpset
-		      val cregsi = map (fn (v,{code,cenv,venv,tipe}) =>
-					let val (cregi,_) = xcon(fresh_named_var "cenv", cenv)
-					    val _ = add_var(v,I cregi,tipe)
-					in cregi 
-					end) var_vcelist
-		      fun loadcl (n,(v,_),cregi) = 
-			  let val code_lv = #1(xexp(fresh_named_var "codereg",Var_e v,NONE,NOTID))
+		  let 
+		      val var_vcelist = sequence2list var_varconexpset
+		      val cregsi = map (fn (_,{code=_,cenv,venv=_,tipe=_}) =>
+					#1(xcon(fresh_named_var "cenv", cenv))) var_vcelist
+		      fun loadcl ((v,{code,cenv=_,venv=_,tipe}),cregi) = 
+			  let val code_lv = #1(xexp(fresh_named_var "codereg",Var_e code,NONE,NOTID))
 			      val vls = [code_lv,
 					 VAR_LOC(VREGISTER (I cregi)),
 					 VAR_VAL(VINT 0w0)]
 			      val reps = [NOTRACE_CODE, TRACE, TRACE]
-			  in  make_record(NONE,reps,vls)
+			      val ir = make_record(NONE,reps,vls)
+			      val _ = (print "adding var ";
+				       pp_var v; print "\n")
+			      val _ = add_var(v,I ir,tipe)
+			  in  ir
 			  end
-		      val clregsi = Listops.map2count loadcl (var_vcelist, cregsi)
+		      val clregsi = Listops.map2 loadcl (var_vcelist, cregsi)
 		      val eregs = map (fn (_,{code,cenv,venv,tipe}) =>
 				       #1(xexp'(fresh_named_var "venv", venv, NONE, NOTID))) var_vcelist
-		      fun dowrite (clregi, I eregi) = STORE32I(EA(clregi,8), eregi)
+		      fun dowrite (clregi, I eregi) = add_instr(STORE32I(EA(clregi,8), eregi))
 			| dowrite _ = error "closure or venv not an int register"
 		      val _ = Listops.map2 dowrite (clregsi,eregs)
 		  in  ()
@@ -938,11 +996,13 @@ fun simplify_type _ = raise XXX
 		  val _ = add_data(INT32 tagword)
 		  val _ = add_data(DLABEL label)
 		  fun layout segsize packager = 
-		  let fun loop index 0 acc = (packager (rev acc); loop index segsize [])
+		  let fun pack [] = ()
+			| pack acc = packager(rev acc)
+		      fun loop index 0 acc = (pack acc; loop index segsize [])
 			| loop (index : int) remain acc =
 			  if (index < sz)
 			      then loop (index+1) (remain-1) ((Array.sub(a,index))::acc)
-			  else packager (rev acc)
+			  else pack acc
 		  in  loop 0 segsize []
 		  end
 		  fun char_packager vals = 
@@ -1051,8 +1111,8 @@ fun simplify_type _ = raise XXX
 		      in
 			  val selfcall = selfcall
 			  val fun_reglabel = fun_reglabel
-			  val cregsi = cregsi' @ cregsi
-			  val eregs = eregs' @ eregs
+			  val cregsi = cregsi @ cregsi'
+			  val eregs = eregs @ eregs'
 			  val efregs = efregs
 			  val rescon = (case (copt,funcon) of
 					    (SOME c,_) => c
@@ -1345,7 +1405,6 @@ fun simplify_type _ = raise XXX
 			      add_instr(BR afterl);
 			      scan(next,rest)
 			  end
-			| scan(lab,(i,_)::rest) = error "bad function for sum switch"
 		  in  scan(alloc_code_label(),arms);
 		      add_instr(ILABEL afterl);
 		      case (!dest,!rescon) of
@@ -1409,21 +1468,27 @@ fun simplify_type _ = raise XXX
 		   val desti = make_record(NONE,reps,vallocs)
 	       in  (VAR_LOC(VREGISTER(I desti)), c)
 	       end
-	 | select label => (case (clist,elist) of 
-				([Prim_c(Record_c labels,cons)],[e]) => 
-				    let fun loop [] _ n = error "bad select"
-					  | loop _ [] n = error "bad select"
+	 | select label => (case elist of 
+				[e] => 
+				    let 
+					val (I addr,reccon) = xexp'(fresh_var(),e,NONE,NOTID)
+					fun loop [] _ n = error "bad select 1"
+					  | loop _ [] n = error "bad select 2"
 					  | loop (l1::lrest) (c1::crest) n = if (eq_label(l1,label))
 										 then (n,c1)
 									     else loop lrest crest (n+1)
-					val (which,con) = loop labels cons 0
-					val (I addr,_) = xexp'(fresh_var(),e,NONE,NOTID)
+					val (labels,fieldcons) = (case reccon of
+								 Prim_c(Record_c labels,cons) => (labels,cons)
+							       | _ => error "selecting from a non-record")
+					val (which,con) = loop labels fieldcons 0
 					val desti = (case (alloc_reg con) of
 							 I ir => ir
 						       | _ => error "records cannot have floats")
 					val _ = add_instr(LOAD32I(EA(addr,which * 4), desti))
 				    in  (VAR_LOC(VREGISTER(I desti)), con)
-				    end)
+				    end
+			      | _ => (Ppnil.pp_exp (Prim_e(NilPrimOp nilprim,clist,elist));
+				      error "bad select 3"))
 	 | inject_record injinfo => xsum(injinfo,clist,elist,context)
 	 | inject (injinfo as {tagcount, field}) => 
 	       if (TilWord32.ult(field,tagcount))
@@ -1533,6 +1598,24 @@ fun simplify_type _ = raise XXX
 
 
   and xprim(prim,clist,elist,context) : loc_or_val * con = 
+      let open Prim
+	  fun makecall str tipe =
+	  let 
+	      val codevar = fresh_var()
+	      val label = C_EXTERN_LABEL str
+	      val _ = add_varloc(codevar,VCODE label, tipe)
+	      val exp = App_e(Code,Var_e codevar,[],elist,[])
+	  in xexp(fresh_var(),exp,NONE,context)
+	  end
+      in (case prim of
+	      output => makecall "ml_output" (AllArrow_c(Code,Partial,[],[Prim_c(Int_c W32,[]),string_con],
+							 0w0,unit_con))
+	    | input => makecall "ml_input" (AllArrow_c(Code,Partial,[],[Prim_c(Int_c W32,[])],
+						       0w0,string_con))
+	    | _ => xprim'(prim,clist,elist,context))
+      end
+
+  and xprim'(prim,clist,elist,context) : loc_or_val * con = 
       let 
 	  open Prim
 	  val vlcon_list = map (fn e => xexp(fresh_var(),e,NONE,NOTID)) elist
@@ -1637,10 +1720,10 @@ fun simplify_type _ = raise XXX
 		       end
 		 | _ => error "need exactly 2 arguments for this primitive")
       in (case prim of
-	      soft_vtrap tt => (add_instr(SOFT_VBARRIER(xtt tt)); unitval)
-	    | soft_ztrap tt => (add_instr(SOFT_ZBARRIER(xtt tt)); unitval)
-	    | hard_vtrap tt => (add_instr(HARD_VBARRIER(xtt tt)); unitval)
-	    | hard_ztrap tt => (add_instr(HARD_ZBARRIER(xtt tt)); unitval)
+	      soft_vtrap tt => (add_instr(SOFT_VBARRIER(xtt tt)); unit_vvc)
+	    | soft_ztrap tt => (add_instr(SOFT_ZBARRIER(xtt tt)); unit_vvc)
+	    | hard_vtrap tt => (add_instr(HARD_VBARRIER(xtt tt)); unit_vvc)
+	    | hard_ztrap tt => (add_instr(HARD_ZBARRIER(xtt tt)); unit_vvc)
 	       
 	    | mk_ref => (case (vl_list,clist) of
 			     ([vl],[c]) => xarray(c,VAR_VAL(VINT 0w1),vl)
@@ -1667,8 +1750,8 @@ fun simplify_type _ = raise XXX
 					    val _ = add_instr(CVT_INT2REAL(src,dest))
 					in (VAR_LOC(VREGISTER(F dest)), float64)
 					end)
-	    | int2uint => raise XXX
-	    | uint2int => raise XXX
+	    | int2uint _ => raise XXX
+	    | uint2int _ => raise XXX
 
 	    | neg_float fs => op1f FNEGD
 	    | abs_float fs => op1f FABSD
@@ -1764,22 +1847,7 @@ fun simplify_type _ = raise XXX
 				  ([c],[vl1,vl2]) => xeqarray(c,vl1,vl2)
 				| _ => error "array_eq given bad arguments")
 	     | array_eq false => raise XXX (* not the same as array equality *)
-	     | output =>
-		   let 
-		       val outvar = fresh_var()
-		       val argvar = fresh_var()
-		       val label = C_EXTERN_LABEL "ml_output"
-		       val ir_arg = load_ireg_locval((case vl_list of
-							  [vl] => vl
-							| _ => error "bad output"), NONE)
-		       val string_con = Prim_c(Vector_c,[Prim_c(Int_c W8,[])])
-		       val tipe = AllArrow_c(Code,Partial,[],[Prim_c(Int_c W32,[]),string_con],0w0,unit_con)
-		       val _ = add_varloc(outvar,VCODE label,tipe)
-		       val _ = add_var(argvar,I ir_arg, string_con)
-		       val elist' = [Const_e (Prim.int(Prim.W8,TilWord64.one)), Var_e argvar]
-		   in xexp(fresh_var(),App_e(Code,Var_e outvar,[],elist',[]),NONE,context)
-		   end
-	     | input => raise XXX)
+	     | _ => raise XXX)
       end
 
 
@@ -1850,7 +1918,7 @@ fun simplify_type _ = raise XXX
 		      in  add_instr(S8ADD(b',REG a',addr));
 			  add_instr(STOREQF(EA(addr,0),argf))
 		      end);
-	  unitval
+	  unit_vvc
       end
 
   and xintupdate(c, vl1 : loc_or_val, vl2 : loc_or_val, vl3 : loc_or_val) : loc_or_val * con =
@@ -1864,7 +1932,7 @@ fun simplify_type _ = raise XXX
 		       in  add_instr(S4ADD(b',REG a',addr));
 			   add_instr(STORE32I(EA(addr,0),argi))
 		       end);
-	  unitval
+	  unit_vvc
       end
 
   and xptrupdate(c, vl1 : loc_or_val, vl2 : loc_or_val, vl3 : loc_or_val) : loc_or_val * con =
@@ -1911,7 +1979,7 @@ fun simplify_type _ = raise XXX
 					 val _ = add_instr(ILABEL afterl)
 				     in  ()
 				     end)
-      in unitval
+      in unit_vvc
       end
 
   and xeqarray(c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
@@ -2152,22 +2220,18 @@ fun simplify_type _ = raise XXX
 	    arg_con : con     (* The expression being translated *)
 	    ) : regi * kind = 
       let fun mk_ptr i = (load_ireg_val(VINT (TilWord32.fromInt i), NONE), Type_k Runtime)
-	  fun mk_sum_help (isrec,indices,cons) = 
+	  fun mk_sum_help (kinderopt,indices,cons) = 
 	      let val indices' = map (fn i => VAR_VAL(VINT (TilWord32.fromInt i))) indices
 		  val con_kinds = map (fn c => xcon(fresh_named_var "xcon_sum",c)) cons
 		  val cons' = map (fn c => VAR_LOC(VREGISTER(I(#1(xcon(fresh_named_var "xcon_sum",c)))))) cons
 		  val reps = (map (fn _ => NOTRACE_INT) indices') @ (map (fn _ => TRACE) cons')
-		  val kind = if isrec
-				 then let fun help(n,(_,k)) = ((NilUtil.generate_tuple_label n,
-								fresh_var()),k)
-					  val temp = Listops.mapcount help con_kinds
-				      in  Record_k(list2sequence temp)
-				      end
-			     else Type_k Runtime
+		  val kind = (case kinderopt of
+				  NONE => Type_k Runtime
+				| SOME kinder => kinder con_kinds)
 	      in (make_record(NONE,reps, indices' @ cons'), kind)
 	      end
-	  fun mk_sum' (indices,cons) = mk_sum_help(false,indices,cons)
-	  fun mk_sum (index,cons) = mk_sum_help(false,[index],cons)
+	  fun mk_sum' (indices,cons) = mk_sum_help(NONE,indices,cons)
+	  fun mk_sum (index,cons) = mk_sum_help(NONE,[index],cons)
 	  open Prim
       in
 	  (case arg_con of
@@ -2188,7 +2252,12 @@ fun simplify_type _ = raise XXX
 								      NONE => ~1
 								    | SOME w => TilWord32.toInt w), 
 							       TilWord32.toInt tagcount],cons)
-	     | Prim_c(Record_c _,cons) => mk_sum_help(true,[5],cons)
+	     | Prim_c(Record_c _,cons) => 
+		   let fun help(n,(_,k)) = ((NilUtil.generate_tuple_label n,
+					     fresh_var()),k)
+		       fun kinder con_kinds = Record_k(list2sequence(Listops.mapcount help con_kinds))
+		   in  mk_sum_help(SOME kinder,[5],cons)
+		   end
 	     | Prim_c(Vararg_c _,cons) => mk_sum(6,cons)
 	     | Prim_c _ => error "ill-formed primitive type"
 	     | Mu_c (vcset,v) => let val vclist = sequence2list vcset
@@ -2201,9 +2270,9 @@ fun simplify_type _ = raise XXX
 				 end
 	     | AllArrow_c (Open,_,_,_,_,_) => error "open Arrow_c"
 	     | AllArrow_c (Closure,_,_,clist,numfloat,c) => 
-		   mk_sum_help(false,[9,TilWord32.toInt numfloat],c::clist)
+		   mk_sum_help(NONE,[9,TilWord32.toInt numfloat],c::clist)
 	     | AllArrow_c (Code,_,_,clist,numfloat,c) => 
-		   mk_sum_help(false,[10,TilWord32.toInt numfloat],c::clist)
+		   mk_sum_help(NONE,[10,TilWord32.toInt numfloat],c::clist)
 	     | Var_c v => let val (var_loc,k) = getconvarrep v
 			      val ir = load_ireg_loc(var_loc,NONE)
 			  in (ir,k)
@@ -2233,19 +2302,30 @@ fun simplify_type _ = raise XXX
 		       val _ = add_instr(LOAD32I(EA(ir,4 * which),dest))
 		   in (dest, fieldk)
 		   end
-	     | Closure_c (c1,c2) => mk_sum(8,[c1,c2])
+	     | Closure_c (c1,c2) => 
+		   let 
+		       fun kinder [(_,Arrow_k(_,vklist : (var * kind) list, k)),_] = 
+			   let val vklist' = Listops.butlast vklist
+			   in  Arrow_k(Closure,vklist',k)
+			   end
+			 | kinder _ = error "bad Closure_c"
+		   in  mk_sum_help(SOME kinder,[],[c1,c2])
+		   end
 	     | App_c (c,clist) => (* pass in env argument first *)
 		   let val (clregi,k) = xcon(fresh_named_var "closure",c)
 		       val resk = (case k of
 				       Arrow_k(_,_,resk) => resk
-				     | _ => error "bad kind to App_c")
+				     | _ => (Ppnil.pp_kind k; print "\n";
+					     error "bad kind to App_c"))
 		       val cregsi = map (fn c => #1(xcon(fresh_named_var "clos_arg",c))) clist
 		       val coderegi = alloc_regi NOTRACE_CODE
 		       val envregi = alloc_regi TRACE
+		       val _ = (add_instr(LOAD32I(EA(clregi,0),coderegi));
+				add_instr(LOAD32I(EA(clregi,4),envregi)))
 		       val desti = alloc_regi TRACE
 		       val _ = add_instr(CALL{func=REG' coderegi,
 					      return=NONE,
-					      args=(envregi :: cregsi,[]),
+					      args=(cregsi @ [envregi],[]),
 					      results=([desti],[]),
 					      tailcall=false,
 					      save=SAVE(getLocals())})
@@ -2260,7 +2340,7 @@ fun simplify_type _ = raise XXX
    the first n fields which are already in integer registers,
    and the rest of the fields, which are values *)
 
-  and make_record (destopt, _ , []) = load_ireg_val(VINT 0w256,NONE)
+  and make_record (destopt, _ , []) = load_ireg_val(unitval,NONE)
     | make_record (destopt, reps : rep list, vl : loc_or_val list) = 
     let 
 	val tagwords = mk_recordtag reps
@@ -2282,10 +2362,11 @@ fun simplify_type _ = raise XXX
 	    let val tipe = 
 		case path of
 		    Var_p regi => regi
-		  | Projvar_p (regi,i) =>
+		  | Projvar_p (regi,indices) =>
 			let val tipe = alloc_regi TRACE
-			in add_instr(LOAD32I(EA(regi,i*4),tipe));
-			    tipe
+			    fun loop src [] = ()
+			      | loop src (i::rest) = (add_instr(LOAD32I(EA(src,4*i),tipe)); loop tipe rest)
+			in  loop regi indices; tipe
 			end
 		  | Label_p label =>
 			let val addr = alloc_regi LABEL
@@ -2294,13 +2375,15 @@ fun simplify_type _ = raise XXX
 			    add_instr(LOAD32I(EA(addr,0),tipe));
 			    tipe
 			end
-		  | Projlabel_p(label,i) =>
+		  | Projlabel_p(label,indices) =>
 			let val addr = alloc_regi LABEL
 			    val addr' = alloc_regi LABEL
 			    val tipe = alloc_regi TRACE
-			in add_instr(LADDR(label,0,addr));
+			    fun loop src [] = ()
+			      | loop src (i::rest) = (add_instr(LOAD32I(EA(src,4*i),tipe)); loop tipe rest)
+			in  add_instr(LADDR(label,0,addr));
 			    add_instr(LOAD32I(EA(addr,0),addr'));
-			    add_instr(LOAD32I(EA(addr',i*4),tipe));
+			    loop addr' indices;
 			    tipe
 			end
 		  | Notneeded_p => error "record: Notneeded_p hit"
@@ -2335,15 +2418,16 @@ fun simplify_type _ = raise XXX
   local 
       fun doconfun is_top (name,vklist,body,kind) = 
 	  let 
-	      val iargs = map (fn (v,k) => let val r = alloc_named_regi v TRACE
-					   in  (add_convar(v,r,k); r)
-					   end) vklist
-	      val args = (iargs,[])
+	      val _ = reset_state(is_top,name)
+	      val _ = print "-----doconfun\n"
+              val cargs = map (fn (v,k) => let val r = alloc_named_regi v TRACE
+                                           in  (add_convar(v,r,k); r)
+                                           end) vklist
+	      val args = (cargs,[])
 	      val resulti = alloc_regi TRACE
 	      val results = ([resulti],[])
 	      val return = alloc_regi(LABEL)
-	      val _ = reset_state(is_top,name, args, I resulti,return)
-	      val {name,revcode} = get_state()
+	      val _ = set_args_result(args, I resulti, return)
 	      val {name,revcode} = get_state()
 	      val (ir,k) = xcon(fresh_named_var "result",body)
 	      val mvinstr = MV(ir,resulti)
@@ -2360,31 +2444,37 @@ fun simplify_type _ = raise XXX
 	  end
      fun dofun_help is_top (v,Function(effect,recur,vklist,vclist,vflist,body,con)) = 
 	  let 
-	      val cargs = map (fn (v,k) => 
-			       let val r = alloc_named_regi v TRACE
-				   val _ = add_convar(v,r,k)
-			       in  r
-			       end) vklist
-	      val eiargs = map (fn (v,c) => 
-				let val r = alloc_named_reg(c,v)
-				    val _ = add_var(v,r,c); 
-				in case r of
-				    I ir => ir
-				  | _ => error "can't have float register for general arguments"
-				end) vclist
-	      val efargs = map (fn v => let val fr = alloc_named_regf v
-					    val _ = add_var(v,F fr,Prim_c(Float_c Prim.F64,[]))
-					in  fr
-					end) vflist
+	      val _ = reset_state(is_top, v)
+	      val _ = (print "-----dofun_help : "; Ppnil.pp_var v; print "\n")
+              val cargs = map (fn (v,k) => 
+                               let val r = alloc_named_regi v TRACE
+                                   val _ = add_convar(v,r,k)
+                               in  r
+                               end) vklist
+	      val _ = print "-----dofun_help 1\n"
+              val eiargs = map (fn (v,c) => 
+                                let val r = alloc_named_reg(c,v)
+                                    val _ = add_var(v,r,c)
+                                in case r of
+                                    I ir => ir
+                                  | _ => error "can't have float register for general arguments"
+                                end) vclist
+	      val _ = print "-----dofun_help 2\n"
+              val efargs = map (fn v => let val fr = alloc_named_regf v
+                                            val _ = add_var(v,F fr,Prim_c(Float_c Prim.F64,[]))
+                                        in  fr
+                                        end) vflist
 	      val args = (cargs @ eiargs, efargs)
 	      val result = alloc_reg con
 	      val results = (case result of
 				 I ir => ([ir],[])
 			       | F fr => ([],[fr]))
+	      val _ = print "-----dofun_help 3\n"
 	      val return = alloc_regi(LABEL)
-	      val _ = reset_state(is_top, v, args, result,return)
+	      val _ = set_args_result(args, result, return)
 	      val (r,c) = xexp'(fresh_named_var "result",body,
 				SOME con, ID return)
+	      val _ = print "-----dofun_help 5\n"
 	      val {name,revcode} = get_state()
 	      val mvinstr = (case (r,result) of
 				 (I ir1,I ir2) => MV(ir1,ir2)
@@ -2413,18 +2503,17 @@ fun simplify_type _ = raise XXX
 					   doconfun false vvkck; worklist_loop()))
   end
 
-   fun translate trans_params ({bnds : bnd list,
-				name_c : var,
-				name_r : var,
-				type_r : con,
-				knd_c : kind}) = 
+   fun translate trans_params (Nil.MODULE{bnds : bnd list,
+					  imports : Name.label Name.VarMap.map,
+					  exports : Name.label Name.VarMap.map}) = 
          let 
-	     val exp = Let_e(Sequential,bnds,Var_e name_r)
-	     val con = type_r
+	     val _ = reset_global_state exports
+	     val exp = Let_e(Sequential,bnds,Const_e(Prim.int(Prim.W32,TilWord64.zero)))
+	     val con = Prim_c(Int_c Prim.W32,[])
 	     val _ = cur_params := trans_params
 	     val _ = (case trans_params of
-			  { HeapProfile = SOME c, ...} => (HeapProfile := true;
-							   SetHeapProfileCounter c)
+			  {HeapProfile = SOME c, ...} => (HeapProfile := true;
+							  SetHeapProfileCounter c)
 			| {HeapProfile = NONE, ...} => HeapProfile := false)
 
 		 
@@ -2446,11 +2535,11 @@ fun simplify_type _ = raise XXX
 	     val _ = add_proc p'
 	     val _ = worklist_loop()
 
-	     val module = MODULE {procs = rev (!pl),
-				  data = Array.fromList (rev(!dl)),
-				  main=LOCAL_CODE mainName,
-				  mutable_objects = !mutable_objects,
-				  mutable_variables = !mutable_variables}
+	     val module = Rtl.MODULE {procs = rev (!pl),
+				      data = Array.fromList (rev(!dl)),
+				      main=LOCAL_CODE mainName,
+				      mutable_objects = !mutable_objects,
+				      mutable_variables = !mutable_variables}
 	 in module
 	 end
 
