@@ -303,7 +303,7 @@ struct
 
       fun loop (nilmod,n) =
 	let
-	  val _ = print ("  Pass "^(Int.toString n)^"....")
+	  val _ = msg ("  Pass "^(Int.toString n)^"....")
 	  val _ = hasCandidates := false
 	  val _ = functionList := []
 	  val _ = analyzeTable := Analyze.analyze nilmod
