@@ -14,6 +14,8 @@ leroy		leroy
 ;boyer		boyer
 ;simple		simple
 
+; #include ../Basis/mapfile
+; pqueens pqueens
 
 ;; TESTING
 
