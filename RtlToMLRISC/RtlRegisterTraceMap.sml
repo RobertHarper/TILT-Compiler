@@ -66,8 +66,8 @@ functor RtlRegisterTraceMap(
    *)
   local
     val traceYes   = Trace TraceTable.TRACE_YES
-    val traceNo	   = Trace TraceTable.TRACE_YES
-    val traceUnset = Trace TraceTable.TRACE_YES
+    val traceNo	   = Trace TraceTable.TRACE_NO
+    val traceUnset = Trace TraceTable.TRACE_UNSET
 
     fun traceStack _ (Rtl.SREGI _) =
 	  raise InvalidSource "polymorphic special register"
