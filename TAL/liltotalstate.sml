@@ -18,13 +18,15 @@ structure LilToTalState :> LILTOTALSTATE =
 
     fun error s = Util.error "liltotalstate.sml" s    
 
-    fun warn s = (print "WARNING: ";print s;print "\n")
+    val LilToTalStateWarn = Stats.ff "LilToTalStateWarn"
+    fun warn s = if !LilToTalStateWarn then (print "WARNING: ";print s;print "\n") else ()
 
+    val LilToTalStateUseDual = Stats.ff "LilToTalStateUseDual"
     val debug = Stats.ff "LilToTalStateDebug"
 
-    val debuglev = ref 0
-    val chatlev = ref 0 
-    val commentlev = ref 1
+    val debuglev = Stats.int("LilToTalStateDebuglev",0)
+    val chatlev = Stats.int("LilToTalStateChatlev",0)
+    val commentlev = Stats.int("LilToTalStateCommentlev",1)
 
     fun obind opt f = 
       (case opt 
@@ -610,7 +612,12 @@ structure LilToTalState :> LILTOTALSTATE =
 	     val state = release_slot state slot
 	   in state
 	   end)
+(* XXX
+    fun release_locs state locs = List.foldl (fn (loc,state) => release_loc state loc) state locs
 
+    fun release_loc64 state loc = state	(* XXX: Just a placeholder *)
+    fun release_locs64 state locs = state (* XXX: Just a placeholder *)
+*)
     fun release_temp state gop = release_loc state (genop2loc state gop)
 
     fun release_temp64 state gop = 
@@ -1220,12 +1227,21 @@ structure LilToTalState :> LILTOTALSTATE =
       (case S.get_var32_loc' state x
 	 of SOME loc =>
 	   (case (loc,memok)
-	      of (Slot slot,false) => 
-		let
-		  val (state,r) = reserve_temp_reg' state (Full(c,x))
-		  val state = S.set_var32_loc state x (Dual (slot,r))
-		in (state,Reg r)
-		end
+	      of (Slot slot,false) =>
+		if !LilToTalStateUseDual then
+		  let
+		    val (state,r) = reserve_temp_reg' state (Full(c,x))
+		    val state = S.set_var32_loc state x (Dual (slot,r))
+		  in (state,Reg r)
+		  end
+		else
+		  let
+		    val (state,r) = reserve_temp_reg' state (Full(c,x))
+		    val state = set_loc_stat state loc (Avail Junk)
+		    val state = slot_reg_mov state slot r
+		    val state = S.set_var32_loc state x (Reg r)
+		  in (state,Reg r)
+		  end 
 	       | _ => 
 		(case get_loc_stat state loc
 		   of Avail rc => (set_loc_stat state loc (Reserved rc),loc)
@@ -1398,12 +1414,22 @@ structure LilToTalState :> LILTOTALSTATE =
 		    val state = S.set_var32_loc state x (Dual(slot,r))
 		  in state
 		  end
-	     | SOME (Slot slot) => 
-		  let
-		    val state = spill_and_set_reg state r (Full (c,x))
-		    val state = S.set_var32_loc state x (Dual(slot,r))
-		  in state
-		  end
+	     | SOME (Slot slot) =>
+		  if !LilToTalStateUseDual then
+		    let
+		      val state = spill_and_set_reg state r (Full (c,x))
+		      val state = S.set_var32_loc state x (Dual(slot,r))
+		    in state
+		    end
+		  else
+		    let
+		      val state = spill_and_set_reg state r (Full (c,x))
+		      val state = S.set_sstat state slot (Avail Junk)
+		      val state = slot_reg_mov state slot r
+		      val state = S.set_var32_loc state x (Reg r)
+		      val () = sanity_check' true state
+		    in state
+		    end
 	     | NONE =>
 		  let
 		    val state = spill_and_set_reg state r (Full (c,x))
@@ -1516,11 +1542,13 @@ structure LilToTalState :> LILTOTALSTATE =
 	       let
 		 val (state,newloc) = get_free_loc' true state Junk
 		 val state = mov_var_to_loc state x newloc
+(* XXX		 val state = release_loc state newloc *)
 	       in state
 	       end
 	      | [loc2] => mov_var_to_loc state x loc2
 	      | _ => error "Not possible: x is in loc, and |loc| <= 2")
 
+(* XXX: should mark_loc precede loop? *)
 	val state = List.foldl spill_var state (vars_in_loc state loc)
 	val state = mark_loc Reserved state loc
       in state 
@@ -1537,6 +1565,7 @@ structure LilToTalState :> LILTOTALSTATE =
 		    let
 		      val (state,newloc) = get_free_loc64 true state Junk
 		      val state = mov_var_to_loc64 state x newloc
+(* XXX		      val state = release_loc64 state newloc *)
 		    in state
 		    end
 		   | Avail Junk => state
@@ -1583,6 +1612,7 @@ structure LilToTalState :> LILTOTALSTATE =
 	     val status = get_loc_stat oldstate loc
 	     val state = S.set_var32_loc state x loc
 	     val state = set_loc_stat state loc status
+(* XXX	     val state = release_loc state loc *)
 	     val state = S.comment state 5 ("Compensating absent var "^(Name.var2string x))
 	   in (state,true)
 	   end
@@ -1600,6 +1630,7 @@ structure LilToTalState :> LILTOTALSTATE =
 	     val status = get_loc64_stat oldstate loc
 	     val state = S.set_var64_loc state x loc
 	     val state = set_loc64_stat state loc status
+(* XXX	     val state = release_loc64 state loc *)
 	     val state = S.comment state 5 ("Compensating absent fvar "^(Name.var2string x))
 	   in (state,true)
 	   end
@@ -1619,6 +1650,7 @@ structure LilToTalState :> LILTOTALSTATE =
 		  val state = empty_locs state locs
 		  val () = debugdo (8,fn () => (print "Emptied state is \n";S.print_state state;print "\n"))
 		  val state = mov_var_to_loc state x loc
+(* XXX		  val state = release_locs state locs *)
 		  val state = S.comment state 5 ("Compensating var "^(Name.var2string x))
 		  val () = debugdo (8,fn () => (print "Compensated state is \n";S.print_state state;print "\n"))
 		in (state,true)
@@ -1638,6 +1670,7 @@ structure LilToTalState :> LILTOTALSTATE =
 		  val () = debugdo (7,fn () => (print "Compensating fvar ";PpLil.pp_var x;print "\n"))
 		  val state = empty_loc64s state locs
 		  val state = mov_var_to_loc64 state x loc
+(* XXX		  val state = release_locs64 state locs *)
 		  val state = S.comment state 5 ("Compensating fvar "^(Name.var2string x))
 		in (state,true)
 		end))

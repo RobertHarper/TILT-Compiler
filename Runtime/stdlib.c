@@ -8,15 +8,16 @@
 #ifdef __linux__
 #include <errno.h> 	/* for errno */
 #endif
+#include "tal_ml_c_interface.h"
 
 extern void *GC_malloc(int size);
 extern void *GC_malloc_atomic(int size);
+
 /* #define DO_MALLOC_DEBUG */
 #ifdef DO_MALLOC_DEBUG
 extern void GC_generate_random_backtrace(void);
 #endif
 
-typedef struct arr_internal {int size; void *elts;} *array;
 typedef struct dyntag_internal {} *dyntag;
 typedef void *(*gen_fun)(void *,int);
 
@@ -81,35 +82,15 @@ int l__array__zero__INT_LAB[2] = {0,0};
 int l__wordarray__zero__INT_LAB[2] = {0,0};
 int l__floatarray__zero__INT_LAB[2] = {0,0};
 
-void l__raise__subscript__INT_LAB(void)
+void dead_exit(void)
 {
-  fprintf(stderr, "\nsubscript!\n");
+  fprintf(stderr, "Control shouldn't reach here. \n\n");
   exit(255);
 }
 
-void l__overflow__INT_LAB(void)
-{
-  fprintf(stderr, "\noverflow!\n");
-  exit(255);
-}
-
-void l__div__zero__INT_LAB(void)
-{
-  fprintf(stderr, "\ndivision by zero error!\n");
-  exit(255);
-}
-
-void pop_never_null()
-{
-  fprintf(stderr, "Null pointer exception. \n\n");
-  exit(255);
-}
-
-extern char *exnCNameRuntime(void* exn);
-void pop_exn_handler_verbose(void* exn)
+void exn_handler_exit(void* exn)
 {
   /*  string msg; */
-
  fprintf(stderr, "Uncaught exception: %s\n",exnCNameRuntime(exn));
 
  fflush(stderr);
@@ -117,17 +98,4 @@ void pop_exn_handler_verbose(void* exn)
  exit(255);
 }
 
-
-void array_bounds_error(void)
-{
-  fprintf(stderr, "\narray bounds error!\n");
-  exit(255);
-}
-
-
-void division_by_zero_error(void)
-{
-  fprintf(stderr, "\narray bounds error!\n");
-  exit(255);
-}
 

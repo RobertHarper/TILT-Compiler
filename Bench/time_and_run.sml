@@ -69,7 +69,7 @@ structure TimeAndRun :> TIMEANDRUN =
     fun print_summary (names,totals) = 
       let
 	val tstrings = map Real.toString totals
-	val _ = ListPair.app (fn (n,t) => (print (n^"="^t^"\t"))) (names,tstrings)
+	val _ = ListPair.app (fn (n,t) => (print (n^"="^t^"    "))) (names,tstrings)
       in print "\n"
       end
     

@@ -12,14 +12,9 @@
 
 	VAL	TiltMain__INT__r__INT_LAB,<?ab_327_INT>
 
-	VAL	_pop_never_null,<code{ ST0?, ST1?, ST2?, ST3?, ST4?, ST5?, ST6?, ST7?}>
+	VAL	dead_exit,<code{ ST0?, ST1?, ST2?, ST3?, ST4?, ST5?, ST6?, ST7?}>
 ; Default exception handler.
-	VAL 	_pop_exn_handler_verbose,<code{ST0?, ST1?, ST2?, ST3?, ST4?, ST5?, ST6?, ST7?, ESP: sptr (code{ESP: sptr exn::se})::exn::se}>
-; Array bounds error label.
-; JGM:  note that this was defined in tal.tali too
-	VAL	_array_bounds_error,<code{ ST0?, ST1?, ST2?, ST3?, ST4?, ST5?, ST6?, ST7? }>
-; Division by zero error label.
-	VAL 	_division_by_zero_error,<code{ ST0?, ST1?, ST2?, ST3?, ST4?, ST5?, ST6?, ST7? }>
+	VAL 	exn_handler_exit,<code{ST0?, ST1?, ST2?, ST3?, ST4?, ST5?, ST6?, ST7?, ESP: sptr (code{ESP: sptr exn::se})::exn::se}>
 
 	VAL	_tal_exit,<All[r:Ts].code{esp:sptr B4::r}>
 

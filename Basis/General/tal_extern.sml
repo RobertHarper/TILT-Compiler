@@ -3,6 +3,7 @@
  * Note that all that matters is the stamp: the values passed 
  * with SysErr and LibFail are ignored.
  *)
+extern registerSubExnRuntime : (exn,unit) -->
 extern registerDivExnRuntime : (exn,unit) -->
 extern registerOvflExnRuntime : (exn,unit) -->
 extern registerSysErrExnRuntime : (exn,unit) -->

@@ -319,15 +319,26 @@ struct
 			else bad "value2float"
 		|   _ => bad "value2float")
 
+	    (* Some IL uint prims get translated to NIL int prims with the
+	     * same semantics, so these prims should be prepared for uints.
+	     *)
+	    fun value2uintorint (is:intsize) (v:value) : TilWord64.word =
+		(case v of
+		    int (is',w) => if (is = is') then w else bad "value2int (size)"
+		  | uint (is',w) => if (is = is') then w else bad "value2int (size)"
+		  |   _ => bad "value2int")
+
 	    fun value2int (is:intsize) (v:value) : TilWord64.word =
 		(case v of
-		    int (is',w) => if (is = is') then w else bad "value2int"
-		|   _ => bad "value2int")
+		    int (is',w) => if (is = is') then w else bad "value2int (size)"
+		  | uint _ => bad "value2int (uint)"
+		  |   _ => bad "value2int")
 
 	    fun value2uint (is:intsize) (v:value) : TilWord64.word =
 		(case v of
-		    uint (is',w) => if (is = is') then w else bad "value2uint"
-		|   _ => bad "value2uint")
+		   uint (is',w) => if (is = is') then w else bad "value2uint (size)"
+		 | int _ => bad "value2uint (int)"
+		 |   _ => bad "value2uint")
 
 	    val value2shiftint : value -> int =
 		TilWord64.toInt o (value2int W32)
@@ -372,6 +383,11 @@ struct
 
 	    fun ipred (is:intsize) (pred:TilWord64.word * TilWord64.word -> bool) : exp =
 		objpred (value2int is) pred
+
+	    (* eq_int and others are defined on both signed and unsigned ints.
+	     *)
+	    fun uoripred (is:intsize) (pred:TilWord64.word * TilWord64.word -> bool) : exp =
+		objpred (value2uintorint is) pred
 
 	    fun uunary (is:intsize) (op1:TilWord64.word -> TilWord64.word) : exp =
 		objunary (value2uint is) ((uint2value is) o op1)
@@ -461,8 +477,8 @@ struct
 	  | (greater_int is, [], _) => ipred is TilWord64.sgt
 	  | (lesseq_int is, [], _) => ipred is TilWord64.slte
 	  | (greatereq_int is, [], _) => ipred is TilWord64.sgte
-	  | (eq_int is, [], _) => ipred is TilWord64.equal
-	  | (neq_int is, [], _) => ipred is TilWord64.nequal
+	  | (eq_int is, [], _) => uoripred is TilWord64.equal
+	  | (neq_int is, [], _) => uoripred is TilWord64.nequal
 
 	  | (less_uint is, [], _) => upred is (TilWord64.ult)
 	  | (greater_uint is, [], _) => upred is (TilWord64.ugt)

@@ -48,13 +48,13 @@ struct
   val warn = fn s => print ("WARNING: "^s^"\n")
 
   val debug = Stats.ff("LilOptimizeDebug")
-  val debuglev = ref 0
+  val debuglev = Stats.int("LilOptimizeDebuglev",0)
   fun debugdo (i,t) = if (!debug) andalso (i <= !debuglev) then (t(); ()) else ()
 
   fun inc r = r := !r + 1
   fun dec r = r := !r - 1
     
-  val chatlev = ref 0
+  val chatlev = Stats.int("LilOptimizeChatlev",0)
   val folds_reduced = ref 0
   val coercions_cancelled = ref 0
   val switches_flattened  = ref 0
@@ -191,7 +191,6 @@ struct
       STATE{ctxt=ctxt, subst = subst, avail=avail, cglobals = cglobals,
 	    current=ref (USED 1),mapping=mapping,
 	    params=params}
-			
 
     fun enter_var(STATE{ctxt, cglobals, subst, current, mapping, avail, params}, v) =
       STATE{ctxt=ctxt,
@@ -207,12 +206,27 @@ struct
 	       | SOME (us,_) => us)}
 
     fun add_vars(state as STATE{mapping,...},vars) =
-      let val r = ref UNUSED
+      let val r = ref UNUSED	(* deliberately sharing the ref *)
 	val mapping = foldl (fn (v,m) => Name.VarMap.insert(m,v,(r,UNKNOWN))) mapping vars
       in  update_mapping(state,mapping)
       end
 
     fun add_var(state,v) = add_vars(state,[v])
+
+    (* Ensure that a binding is kept (probably because it is effectful)
+     * without screwing up the count.  In the DEFER case, I don't know what 
+     * the right thing to do is: adding current is always safe, but maybe
+     * overly conservative.
+     *)
+    fun keep_var(STATE{mapping,current,...},v) =
+      (
+       case Name.VarMap.find(mapping,v) of
+	 NONE => ()
+       | SOME (r,_) =>
+	   (case !r of
+	      USED n => ()
+	    | UNUSED => r := USED 0
+	    | DEFER ls => r := DEFER (current::ls)))
 
     fun use_var(STATE{mapping,current,...},v) =
       (
@@ -734,16 +748,14 @@ struct
 	     fun default() = switch_opts2(state,bnds,acc)
 	   in
 	     (case get_varuse(state,x1)
-	       of USED n => 
-		 (if (n = 1) orelse ((n = 2) andalso (notvaluable32 oper)) then
-		    (case sink state (x1,oper,arg)
-		       of SOME arg => 
-			 let
-			   val bnd = Exp32_b(x2,Switch (Ifthenelse{arg=arg,thenArm = thenArm, elseArm = elseArm,rtype=rtype}))
-			 in switch_opts_backtrack(state,bnd::rest,acc)
-			 end
-			| _ => default())
-		  else default())
+	       of USED 1 => 
+		 (case sink state (x1,oper,arg)
+		    of SOME arg => 
+		      let
+			val bnd = Exp32_b(x2,Switch (Ifthenelse{arg=arg,thenArm = thenArm, elseArm = elseArm,rtype=rtype}))
+		      in switch_opts_backtrack(state,bnd::rest,acc)
+		      end
+		     | _ => default())
 		| _ => default())
 	   end
 	   | _ => switch_opts2(state,bnds,acc))
@@ -1013,7 +1025,6 @@ struct
 
     and do_sum_switch state sw = 
       let
-
 	fun reduce_known_switch {arg,arms,default,rtype} =
 	  let
 	    val tag_value = remember_forgotten state arg
@@ -1103,7 +1114,7 @@ struct
 	    
     and do_switch (state : state) (switch : switch) : (bnd list * op32) = 
       let 
-	
+
 	fun int_switch {arg,arms,size,default,rtype} =
 	  let
 	  in 
@@ -1279,7 +1290,7 @@ struct
 			   in  Val (Var_32 v')
 			   end)
 		    val eff = notvaluable32 oper
-		    val _ = if eff then use_var(state,v) else ()
+		    val _ = if eff then keep_var(state,v) else ()
 		    val state=
 		      (case oper
 			 of Val sv => 
@@ -1320,7 +1331,7 @@ struct
 		       in  Val_64 (Var_64 v')
 		       end)
 		val eff = notvaluable64 oper
-		val _ = if eff then use_var(state,v) else ()
+		val _ = if eff then keep_var(state,v) else ()
 		val state=
 		  (case oper
 		     of Val_64 sv => 
@@ -1473,7 +1484,7 @@ struct
 	 * in e will be deferred to current.  Therefore,
 	 * we retain_state to say that current is definitely used.  Otherwise,
 	 * all of the bnds will be marked as unused and discarded, since
-	 * we don't yet know the status if the binding that we are in.
+	 * we don't yet know the status of the binding that we are in.
 	 *)
 
 	val bnds = killbnds state bnds

@@ -252,16 +252,16 @@ structure LilToTalExp :> LILTOTALEXP =
       in state
       end
 
-    fun jmp_label' state l qs =
+    fun jmp_label' state env (l,qs) =
       let
 	val state = TS.emit state (Tal.Jmp (Tal.Addr l,qs))
 	val state = TS.comment_stack state 4
       in state
       end
 
-    fun jcc_label' state cond l qs = 
+    fun jcc_label' state env cond lqs = 
       let
-	val state = TS.emit state (Tal.Jcc (cond,(l,qs),NONE))
+	val state = TS.emit state (Tal.Jcc (cond,lqs,NONE))
 	val state = TS.comment_stack state 4
       in state
       end
@@ -309,8 +309,8 @@ structure LilToTalExp :> LILTOTALEXP =
 
     fun jmp_coercions state env = rev (cons2tapps (internal_label_cons state env))
 
-    fun jmp_label state env (l,cs) = jmp_label' state l (cons2tapps cs)
-    fun jcc_label state env cond (l,cs) = jcc_label' state cond l (cons2tapps cs)
+    fun jmp_label state env (l,cs) = jmp_label' state env (l,cons2tapps cs)
+    fun jcc_label state env cond (l,cs) = jcc_label' state env cond (l,cons2tapps cs)
 
     fun fallthru state env (l,cs) = 
       let
@@ -343,6 +343,25 @@ structure LilToTalExp :> LILTOTALEXP =
 	  | S   => state)
 
     fun b2i w = (LU.w2i w) div 4
+
+    fun exn_raise_coercions state env = 
+      let
+	val outargcount = TS.get_outarg_count state
+	val framecount = TS.get_frame_elt_count state
+
+	val over_handler = mk_s_con1 env
+	val handler_stack = mk_s_con2 env
+
+	val s1 = Tal.StackSlice (Tal.Esp,outargcount,outargcount + framecount,over_handler)
+	val s2 = Tal.Con (handler_stack)
+
+	val annotes = 
+	  List.rev
+	  [ s1
+	   ,s2]
+      in map Tal.Tapp annotes
+      end
+
     fun call_coercions state env = 
       let
 	val outargcount = TS.get_outarg_count state
@@ -436,6 +455,8 @@ structure LilToTalExp :> LILTOTALEXP =
     fun coercion_call_instantiate state env (gop,qs) = (gop,(coercion_call_coercions state env)@qs)
 
     fun extern_call_instantiate state env (gop,qs) = (gop,(extern_call_coercions state env)@qs)
+
+    fun exn_raise_instantiate state env (gop,qs) = (gop,(exn_raise_coercions state env)@qs)
 
     fun oper_returns_unit env oper = 
       let
@@ -1058,7 +1079,8 @@ structure LilToTalExp :> LILTOTALEXP =
 
     fun overflow32_check state env = 
       let
-	val state = jcc_label state env Tal.Overflow (TTD.E.l_overflow,[]) 
+	val dest = exn_raise_instantiate state env (TTD.E.l_overflow,[]) 
+	val state = jcc_label' state env Tal.Overflow dest
       in state
       end
 
@@ -1152,7 +1174,7 @@ structure LilToTalExp :> LILTOTALEXP =
 
     fun gen32d state env signed (sv1,sv2) = 
       let
-	val div_zero = TTD.E.l_div_zero
+	val div_zero = 	exn_raise_instantiate state env (TTD.E.l_div_zero,[]) 
 	val nm = Name.fresh_internal_label "nm"
 	val state = TS.reserve_reg state Tal.Eax
 	val state = TS.reserve_reg state Tal.Edx
@@ -1170,7 +1192,7 @@ structure LilToTalExp :> LILTOTALEXP =
 	      val state = TS.emit state (Tal.Mov(Tal.Reg Tal.Edx,(Tal.Immed 0w0,[])))
 	    in state
 	    end
-	val state = TS.emit state (Tal.Jcc(Tal.BelowEq,(div_zero,[]),NONE))
+	val state = TS.emit state (Tal.Jcc(Tal.BelowEq,div_zero,NONE))
 	val state = TS.emit state (Tal.Cmp((src,[]),(Tal.Immed 0w0,[])))
 	val state = sv32_unpack_rm state env src nm sv2
 	val state = sv32_trans_reg state env Tal.Eax sv1
@@ -1419,7 +1441,8 @@ structure LilToTalExp :> LILTOTALEXP =
 	val (state,arr) = allocate_goc_for state env arrsv
 	val (state,idx) = allocate_goc_for state env indexsv
 
-	val state = jcc_label state env Tal.AboveEq (TTD.E.l_raise_subscript,[]) 
+	val dest = exn_raise_instantiate state env (TTD.E.l_raise_subscript,[]) 
+	val state = jcc_label' state env Tal.AboveEq dest
 
 	val state = TS.emit state(Tal.Cmp((Tal.Reg ireg,[]),(Tal.Prjr((arreg,[]),0w0,NONE),[])))
 	val state = TS.emit state (Tal.Unpack(index_var,ireg, idx))

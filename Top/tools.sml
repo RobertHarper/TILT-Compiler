@@ -84,7 +84,9 @@ struct
 			  ldpre     = [],
 			  ldpost    = [runtimeFile "talx86runtime.to"
 				       , "--std-lib", runtimeFile "stdlib"
-				       , "--std-lib", runtimeFile "tal_posix"] 
+				       , "--std-lib", runtimeFile "tal_posix"
+				       , "--std-lib", runtimeFile "tal_ml_c_interface"
+				       , runtimeFile "support.talx86.to"] 
 			  }
 		     end)
 

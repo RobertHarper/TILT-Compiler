@@ -10,11 +10,11 @@
 
 	CODE
 
-_pop_exn_handler_wrapper:
+exn_handler_wrapper:
 LABELTYPE <wrapper_t>
 	PUSH	EAX
-	CALL	_pop_exn_handler_verbose
-	JMP	_pop_never_null
+	CALL	exn_handler_exit
+	JMP	dead_exit
 
 
 ; For doubles we need the stack fo be doubleword aligned.  Aligning the stack
@@ -30,7 +30,7 @@ LABELTYPE <code{ESP:sptr se}>
 ; Store the stack
 	MOV	[EAX+4],ESP
 ; Store the handler code
-	MOV	[EAX],_pop_exn_handler_wrapper 
+	MOV	[EAX],exn_handler_wrapper 
 	FORGETUNIQUE	htlen_1121_INT
 	COERCE	pack(<B4>,forgetname(EAX),<HndlrFrm se>)
 	MOV	EBP,EAX

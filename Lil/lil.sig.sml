@@ -93,7 +93,7 @@ signature LIL =
       | Coercion of coercion 
       | Coerce of sv32 * sv32 
       | Tabs of (var * kind) * sv32
-      | TApp of sv32 * con
+      | TApp of sv32 * con  (* This can be folded into the coercions, at the expense of extra type size *)
       | Const_32 of value
       | Tag of w32		(*  w32 *)
       | Unit

@@ -25,163 +25,8 @@
 #include <errno.h> 	/* for errno */
 #include <fenv.h>
 #include "tal_posix.h"
+#include "tal_ml_c_interface.h"
 
-/* Copied from tag.h */
-typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
-				 There is not necessarily a object at the location. */
-typedef unsigned int ui_t;
-typedef ui_t  val_t;        /* An ML value that may or may nor be a pointer. */
-typedef ui_t *ptr_t;        /* An ML value that has a pointer type.
-                                It might be a small-valued constructor (<= 256),
-			        points to global data (in the data segment),
-			        or is in the heap(s). */
-
-typedef struct arr_internal {int size; void *elts;} *array;
-
-#define arraysize(a) (sizeof(a)/sizeof(*(a)))
-
-#define PAIR(t,t1,t2,tlong,tstruct) struct tstruct { t1 first; t2 second; }; \
-                                    typedef struct tstruct *tlong; \
-                                    typedef ptr_t t;
-                           
-#define TRIPLE(t,t1,t2,t3,tlong,tstruct) struct tstruct { t1 first; t2 second; t3 third; }; \
-                                         typedef struct tstruct *tlong; \
-                                         typedef ptr_t t;
-
-#define LIST(t,tlist,tlong,tstruct) struct tstruct \
-                        { t car; \
-			  ptr_t cdr; \
-			}; \
-                        typedef struct tstruct *tlong; \
-                        typedef ptr_t tlist;
-
-typedef ptr_t unit;  /* The value 256 */
-typedef int bool;
-typedef int posint;
-typedef int word;
-typedef char word8;
-
-typedef struct str_internal {int size; char *elts;} *string;
-typedef string word8array;
-typedef const string word8vector;
-
-
-
-#define empty_record ((ptr_t)256)/* This is the ML unit. */
-
-extern mem_t GC_malloc(int size);
-extern void GC_free(mem_t dead);
-extern mem_t GC_malloc_atomic(int size);
-/* #define DO_MALLOC_DEBUG */
-#ifdef DO_MALLOC_DEBUG
-extern void GC_generate_random_backtrace(void);
-#endif
-
-
-void DIE(char* msg)
-{
-  fprintf(stderr,"tilt runtime error: %s\n",msg);
-  abort();
-}
-
-
-static mem_t alloc_space(int bytesNeeded) 
-{
-  return (mem_t) GC_malloc(bytesNeeded);
-}
-
-
-static ptr_t alloc_record(val_t *fields, int count)
-{
-  int i;
-  ptr_t rec;
-  
-  if (count == 0)
-    return empty_record;
-
-  rec = alloc_space(4 * count );
-
-  /* Initialize record fields */
-  for (i=0; i<count; i++)
-    rec[i] = fields[i];
-  return rec;
-}
-
-val_t get_record(ptr_t rec, int which)
-{
-  return rec[which];
-}
-
-string alloc_string(int strlen, char *str)
-{
-  string na= (string) GC_malloc(sizeof(struct arr_internal));
-  char *a= (char *) GC_malloc_atomic(strlen);
-  na->size = strlen;
-  na->elts = a;
-  memcpy(a,str,strlen);
-  return na;
-}
-
-
-string alloc_uninit_string(int strlen, char **raw)
-{
-  string na= (string) GC_malloc(sizeof(struct str_internal));
-  char *a= (char *) GC_malloc_atomic(strlen);
-  na->size = strlen;
-  na->elts = a;
-  *raw = a;
-  return na;
-}
-
-/* Shorten a string */
-void adjust_stringlen(string str, int newByteLen)
-{
-  assert(newByteLen <= str->size);
-  str->size=newByteLen;
-}
-
-ptr_t alloc_recrec(ptr_t rec1, ptr_t rec2)
-{
-  val_t fields[2];
-  fields[0] = (val_t) rec1;
-  fields[1] = (val_t) rec2;
-  return alloc_record(fields, 2);
-}
-
-ptr_t alloc_manyint(int count, int v)
-{
-  val_t fields[100];
-  int i;
-
-  if (count > arraysize(fields))
-    DIE("alloc_manyint not fully imped");
-
-  for (i=0; i<count; i++)
-    fields[i] = v;
-
-  return alloc_record(fields, count);
-}
-
-ptr_t alloc_intint(int a, int b)
-{
-  ptr_t result = alloc_manyint(2,a);
-  result[1] = b;
-  return result;
-}
-
-
-
-PAIR(intpair,int,int,intpair_long,intpair_struct)
-typedef intpair intpair_option;
-typedef string string_option;
-TRIPLE(inttriple,int,int,int,inttriple_long,inttriple_struct)
-PAIR(wordpair,word,word,wordpair_long,wordpair_struct)
-PAIR(intword,int,word,intword_long,intword_struct)
-LIST(intword,intword_list,intword_list_long,intword_list_struct)
-LIST(word,word_list,word_list_long,word_list_struct)
-LIST(string,string_list,string_list_long,string_list_struct)
-PAIR(string_stringlist,string,string_list,string_stringlist_long,string_stringlist_struct)
-TRIPLE(string_word_stringlist,string,word,string_list,string_word_stringlist_long,string_word_stringlist_struct)
 
 struct swwss
 { string a; word b; word c; string d; string e; };
@@ -266,218 +111,17 @@ struct termio_rep_struct
 };
 typedef struct termio_rep_struct *termio_rep;
 
-int stringlen(string na)
-{
-  return na->size;
-}
-
-char *string_get_elts(string na) 
-{
-  return na->elts;
-}
-
-static void runtime_error(int e);
-static void runtime_error_msg(char* msg);
-static void runtime_error_fmt(const char* fmt, ...);
-
-static void unimplemented(int lineno)
-{
-  runtime_error_fmt("function not implemented at %s:%d\n", __FILE__, lineno);
-}
-#define UNIMP() unimplemented(__LINE__); return 0
-
-
-
-static void* emalloc(size_t size)
-{
-  void* buf = GC_malloc(size);
-  if (buf == NULL)
-    runtime_error(errno);
-  return buf;
-}
-
-string cstring2mlstring_alloc(char *str)
-{
-  return alloc_string(strlen(str),str);
-}
-
-
-char* mlstring2cstring_buffer(string mlstring, int len, char *buf)
-{
-  int bytelen = stringlen(mlstring);
-  char *raw = string_get_elts(mlstring);
-  if ((bytelen+1) > len)
-     runtime_error_msg("fixed-length buffer too small");
-  memcpy(buf,raw,bytelen);
-  buf[bytelen] = 0;
-  return (char *)buf;
-}
-
-#define buffersize 1024
-static char buffer[buffersize];    
-
-static char* mlstring2cstring_static(string mlstring)
-{
-  return mlstring2cstring_buffer(mlstring, buffersize, buffer);
-}
-
-static char* mlstring2cstring_malloc(string mlstring)
-{
-  int bytelen = stringlen(mlstring);
-  char *buf = emalloc(bytelen+1);
-  return mlstring2cstring_buffer(mlstring, bytelen+1, buf);
-}
-
-
-/* Exn stuff */
-#define GET_RECORD(t, p, i) ((t)get_record((p),(i)))
-#define GET_PTR(p, i) GET_RECORD(ptr_t,p,i)
-#define GET_INT(p, i) GET_RECORD(int,p,i)
-
-/* The components of an exception packet. */
-#define PACKET_STAMP 0
-#define PACKET_ARG   1
-#define PACKET_NAME  2
-
-#define GET_STAMP(exn) GET_PTR((exn), PACKET_STAMP)
-#define GET_ARG(exn)   GET_PTR((exn), PACKET_ARG)
-#define GET_NAME(exn)  GET_PTR((exn), PACKET_NAME) 
-
-
-static ptr_t divStamp = NULL;
-static ptr_t ovflStamp = NULL;
-static ptr_t sysErrStamp = NULL;
-static ptr_t libFailStamp = NULL;
-
-unit registerDivExnRuntime(ptr_t exn) 
-{
-  divStamp = GET_STAMP(exn);
-  return empty_record;
-}
-unit registerOvflExnRuntime(ptr_t exn) 
-{
-  ovflStamp = GET_STAMP(exn);
-  return empty_record;
-}
-unit registerSysErrExnRuntime(ptr_t exn) 
-{
-  sysErrStamp = GET_STAMP(exn);
-  return empty_record;
-}
-unit registerLibFailExnRuntime(ptr_t exn) 
-{
-  libFailStamp = GET_STAMP(exn);
-  return empty_record;
-}
-
-ptr_t getDivStamp()
-{
-  if (divStamp == NULL) {
-    runtime_error_msg("DivStamp uninitialized");
-  }
-  return divStamp;
-}
-
-ptr_t getOvflStamp()
-{
-  if (ovflStamp == NULL) {
-    runtime_error_msg("OverflowStamp uninitialized");
-  }
-  return ovflStamp;
-}
-
-ptr_t getSysErrStamp()
-{
-  if (sysErrStamp == NULL) {
-    runtime_error_msg("SysErrStamp uninitialized");
-  }
-  return sysErrStamp;
-}
-
-ptr_t getLibFailStamp()
-{
-  if (libFailStamp == NULL) {
-    runtime_error_msg("libFailStamp uninitialized");
-  }
-  return libFailStamp;
-}
-
-static ptr_t mkExn(string exnname, ptr_t exnstamp, val_t exnarg, int argPointer)
-{
-  val_t fields[3];
-  ptr_t exn;
-  fields[PACKET_STAMP] = (val_t) exnstamp;
-  fields[PACKET_ARG]   = exnarg;
-  fields[PACKET_NAME]  = (val_t)exnname;
-  exn = alloc_record(fields, 3);
-  return exn;
-}
-
-ptr_t mkSysErrExn(string msg, int isSome, int e)
-{
-  string exnname = cstring2mlstring_alloc("SysErr");
-  ptr_t exnstamp = getSysErrStamp();
-  ptr_t errno_option = isSome ? alloc_manyint(1, e) : 0;
-  ptr_t exnarg = alloc_recrec((ptr_t) msg, errno_option);
-  ptr_t exn = mkExn(exnname, exnstamp, (val_t)exnarg, 1);
-  return exn;
-}
-
-string exnNameRuntime(ptr_t exn)
-{
-  return (string) GET_NAME(exn);
-}
-
-char *exnCNameRuntime(ptr_t exn)
-{
-  return mlstring2cstring_malloc(exnNameRuntime(exn));
-}
-
-string exnMessageRuntime(ptr_t exn)
-{
-  char buf[1024];
-  ptr_t exnstamp = GET_STAMP(exn);
-  
-  if (exnstamp == getDivStamp()) {
-    strcpy(buf, "divide by zero");
-  } else if (exnstamp == getOvflStamp()) {
-    strcpy(buf, "overflow");
-  } else if (exnstamp == getLibFailStamp()) {
-    const char* prefix = "LibFail: ";
-    string msg = (string) GET_ARG(exn);
-    int msg_len = stringlen(msg);
-    assert(sizeof(buf) > sizeof(prefix) + msg_len);
-    sprintf(buf, "%s%.*s", prefix, msg_len, string_get_elts(msg));
-  } else if (exnstamp == getSysErrStamp()) {
-    ptr_t exnarg = GET_ARG(exn);
-    const char* prefix = "SysErr: ";
-    string msg = (string) GET_PTR(exnarg, 0);
-    int msg_len = stringlen(msg);
-    ptr_t err_option = GET_PTR(exnarg, 1);
-    int isSome = err_option != 0;
-    int err = isSome ? GET_INT(err_option, 0) : 0;
-    char err_buf[40];
-    if (isSome) {
-      sprintf(err_buf, " (errno=%d)", err);
-    } else {
-      *err_buf = '\0';
-    }
-    assert(sizeof(buf) > sizeof(prefix) + msg_len + strlen(err_buf));
-    sprintf(buf, "%s%.*s%s", prefix, msg_len, string_get_elts(msg), err_buf);
-    } else {
-    string name = (string) GET_NAME(exn);
-    int name_len = stringlen(name);
-    assert(sizeof(buf) > name_len);
-    sprintf(buf, "%.*s", name_len, string_get_elts(name));
-  }
-  return cstring2mlstring_alloc(buf);
-}
-
 
 string posix_error_msg(int);
 
-void raise_exn(ptr_t exn) {
-  DIE ("raise_exn not implemented");
+/* Ugg.  This is really hard to implement, since we keep 
+ * the frame pointer in EPB, which the c compiler
+ * is likely to spill.
+ */
+static void raise_exn(ptr_t exn) 
+{
+  fprintf(stderr,"posix raise_exn from c not implemented");
+  abort();
 }
 
 static void runtime_error(int e)
@@ -510,6 +154,12 @@ static void runtime_error_fmt(const char* fmt, ...)
   va_end(args);
   runtime_error_msg(buf);
 }
+
+static void unimplemented(int lineno)
+{
+  runtime_error_fmt("function not implemented at %s:%d\n", __FILE__, lineno);
+}
+#define UNIMP() unimplemented(__LINE__); return 0
 
 double ln(double arg)
 {
@@ -725,18 +375,6 @@ string posix_os_tmpname(unit unused)
   return (word8vector) res;
 }
 
-static ptr_t cons_rec_alloc(ptr_t car, ptr_t list)
-{
-  return alloc_recrec(car, list);
-}
-
-static ptr_t cons_val_alloc(val_t val, ptr_t list)
-{
-  val_t fields[2];
-  fields[0] = val;
-  fields[1] = (val_t) list;
-  return alloc_record(fields, 2);
-}
 
 /* Negative values are infinite timeouts */
 #define INFTIM -1
@@ -1050,12 +688,6 @@ unit posix_procenv_setpgid(int pid, int pgid)
   return empty_record;
 }
 
-static ptr_t stringpair_ctoml_alloc(char* a, char* b)
-{
-  string ml_a = cstring2mlstring_alloc(a);
-  string ml_b = cstring2mlstring_alloc(b);
-  return alloc_recrec((ptr_t) ml_a, (ptr_t) ml_b);
-}
 
 string_stringlist posix_procenv_uname(unit unused)
 {
@@ -1180,53 +812,6 @@ unit posix_tty_tcsetpgrp(int fd, int pgid)
     runtime_error(errno);
   }
   return empty_record;
-}
-
-static int string_list_length(string_list_long list)
-{
-  int length = 0;
-  while (list) {
-    length++;
-    list = (string_list_long) list->cdr;
-  }
-  return length;
-}
-
-/* Translate a list of ml strings to an array of c strings */
-static char** string_list_to_array_malloc(string_list_long list)
-{
-  int i;
-  int length = string_list_length(list);
-  char** v = (char**)emalloc((length + 1)*sizeof(char*));
-  for (i=0; i<length; i++) {
-    v[i] = mlstring2cstring_malloc(list->car);
-    list = (string_list_long) list->cdr;
-  }
-  v[length] = 0;
-  return v;
-}
-
-static void free_string_array(char** arr)
-{
-  int i;
-  for (i=0; arr[i]; i++) {
-    GC_free((void *) arr[i]);
-  }
-  GC_free((void *) arr);
-}
-
-static string_list array_to_string_list(char** arr)
-{
-  /* Convert a NULL-terminated array of c strings into a value of type string list.
-   */
-  char* string = *arr;
-  char** next = arr+1;
-  if (string == NULL) return (ptr_t) 0;
-  else {
-    ptr_t car = (ptr_t) cstring2mlstring_alloc(string);
-    ptr_t cdr = array_to_string_list(next);
-    return cons_rec_alloc(car,cdr);
-  }
 }
 
 static string_word_stringlist cgroup2ml(struct group* group)
