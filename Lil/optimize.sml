@@ -935,26 +935,17 @@ struct
 	fun try_convert_cc state sv =
 	  obind (Dec.E.coerce' (unaliassv32 (state,sv)))
 	  (fn (q,potentialbool) =>
-	   (print "Got coercion: arg is\n";
-	    PpLil.pp_sv32 sv;
-	    print "\n";
-	    case unaliasop32 (state,potentialbool)
+	   (case unaliasop32 (state,potentialbool)
 	      of Switch (Ifthenelse {arg,thenArm,elseArm,rtype}) =>
-		(print "Got switch/switch\n";obind (get_exp_val thenArm)
 		(fn thensv => obind (get_exp_val elseArm)
 		 (fn elsesv => 
-		  (print "Got two arm values\n";
-		   PpLil.pp_sv32 thensv;
-		   print "\n";
-		   PpLil.pp_sv32 elsesv;
-		   print "\n";
-		   case (reduce_coercion state (q,thensv),reduce_coercion state (q,elsesv))
+		  (case (reduce_coercion state (q,thensv),reduce_coercion state (q,elsesv))
 		     of (SOME thensv,SOME elsesv) => 
 		       (case (lilbool2bool state thensv,lilbool2bool state elsesv)
 			  of (SOME true,SOME false) => SOME arg
 			   | (SOME false,SOME true) => SOME (Not_cc arg)
-			   | _ => (print "No bools\n";NONE))
-		      | _ => (print "No coercino reduction\n";NONE)))))
+			   | _ => NONE)
+		      | _ => NONE)))
 	       | _ => NONE))
 
       in

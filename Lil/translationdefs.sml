@@ -71,7 +71,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	in LD.C.lambda  (arg,Tmilr()) (interpr_case (mk_con (Var_c arg)))
 	end
 
-      val interpr_fn = mk_static interpr_fn
+      val interpr_fn = mkstatic interpr_fn
 
       fun interpr (c : Lil.con) : Lil.con = 
 	if !inline_interp then
@@ -89,9 +89,9 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	(SOME(LD.T.ptr (LD.C.sumcase c [ 
 					(Tupleidx,fn l => interpr l),
 					(BFloatidx,fn _ => LD.T.boxed_float ()),
-					(Ptridx,fn t => t)
+					(Ptridx,fn t => t),
 					(Otheridx,fn t => (LD.T.boxed B4 t))
-					])))
+					] NONE)))
 				      
 
 
@@ -100,7 +100,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  val arg = Name.fresh_named_var "interp_arg"
 	in LD.C.lambda  (arg,Tmil()) (interp_case (mk_con (Var_c arg)))
 	end
-      val interp_fn = mk_static interp_fn
+      val interp_fn = mkstatic interp_fn
 
       fun interp (c : Lil.con) : Lil.con = 
 	if !inline_interp then
@@ -113,7 +113,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
     in
       val Tmilr = Tmilr
       val Tmil = Tmil
-      val interpr = interpr
+      val interpr = fn c => LD.T.ptr (interpr c)
       val interp = interp
 
       fun Bigtuple l  = LD.C.inj (LU.i2w (!flattenThreshold + 1)) (Tmilr()) (LD.C.tlist l)
@@ -155,7 +155,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  val flatarm = fn i => (Flatidx i,fn l => (LD.COps.ntuple2tlist i l))
 	  val bigarm  = fn i => (Bigidx(),fn t => LD.C.tlist [LD.T.tupleptr t])
 	  val arms= countall flatarm bigarm
-	in LD.T.arrow (LD.C.sumcase arg arms NONE) (LD.C.nill (LD.L.T64())) rest
+	in LD.T.arrow (LD.C.sumcase arg arms NONE) (LD.C.nill (LD.K.T64())) rest
 	end
 
       fun VarargTuplecasefn' () = 
@@ -186,7 +186,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  val BFloata = fn _ => (LD.C.tlist [LD.T.ptr (LD.T.boxed_float ())])
 	  val Ptra = fn t => (LD.C.tlist [LD.T.ptr t])
 	  val Otherwisea = fn t => (LD.C.tlist [t])
-	  val Tuplea = fn t => (LD.C.app (VarargTuplearroargfn ()) t )
+	  val Tuplea = fn t => (LD.C.app (VarargTuplearrowargfn ()) t )
 	  val branch = LD.C.sumcase argc [(Tupleidx,Tuplea),(BFloatidx,BFloata),(Ptridx,Ptra),(Otheridx,Otherwisea)] NONE
 	in LD.T.arrow branch (LD.C.nill (LD.K.T64())) rest
 	end
