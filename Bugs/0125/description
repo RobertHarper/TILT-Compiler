@@ -1,0 +1,16 @@
+Number: 0125
+Title:       BUG in get_record
+Keywords:    get_record
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    critical
+Problem:       BUG in get_record: record 1696530540 has 2 fields.  No field 2.
+Code:        Assertion failed: 0, file create.c, line 112
+Transcript:  
+Comments:    
+Fix:         
+Test: 
+Owner: 
+Status: open
