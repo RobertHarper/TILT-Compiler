@@ -1056,6 +1056,13 @@ structure Toil
 	     val top_name = foldl (fn (l,s) => (Name.label2name' l) ^ "_" ^ s) "" fun_ids
 	     val top_label = to_nonexport(to_cluster (internal_label top_name))
 	     val top_var = fresh_named_var "cluster"
+
+	     (* Note: the phase-splitter will emit much better code if functions
+	      * are elaborated in the way that it expects (at least while do_polyrec
+	      * and elaborator_specific_optmizations are true).  Therefore, please
+	      * don't change this without changing the corresponding cases in 
+	      * tonil.  -leaf
+	      *)
 	     val top_exp_con = (FIX(true,PARTIAL,fbnds),
 				case fbnd_cons of
 				    [c] => c

@@ -283,9 +283,9 @@ in
     fun runPQueens () =
         let in
             Randgen.seed "SML";
-            solve 256;
-            solve 1024;
-(*            solve 8192;*)
+            Q.queen_search 256;
+            Q.queen_search 1024;
+(*           Q.queen_search 8192;*)
             ()
         end
     

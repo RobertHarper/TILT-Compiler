@@ -24,8 +24,6 @@
  *)
 
 (* Known problems:
-      Loses phase annotations on term-level constructor bindings.
-      So reifier must be re-run afterwards.
       
       Currently always marks switches and handles as non-valuable.
       In principle, switches with defaults where all the of the arms
@@ -234,6 +232,15 @@ struct
                            level numbers corresponding to the
                            free variables in these bindings.
 
+
+           choistmap     = Mapping from binding site numbers to 
+                           type-level bindings that we want to hoist to here,
+			   along with the phase of the binding.
+                           NB: Bindings are kept in reversed order!
+                           Each level also contains a sorted list of
+                           level numbers corresponding to the
+                           free variables in these bindings.
+
      ************************************************************************)
 
     local
@@ -271,14 +278,33 @@ struct
 		Ppnil.pp_bnds top_bnds;
 		print "\n"
 	    end
+        fun pp_choistmap (choistmap: ((phase * conbnd) list * levels) IntMap.map) =
+	    let
+		fun printLevel (level, (pcbnds, _)) =
+		  let
+		    val (_,cbnds) = Listops.unzip pcbnds
+		  in
+		    (print "level "; print (Int.toString level);
+		     print " cbnds: ";
+		     print (Int.toString (List.length cbnds));
+		     print "\n";
+		     Ppnil.pp_conbnds cbnds;
+		     print "\n")
+		  end
+	    in
+		IntMap.appi printLevel choistmap
+ 	    end
+
+
     in
 	type hoistmap = (bnd list * levels * bool) IntMap.map
+        type choistmap = ((phase * conbnd) list * levels) IntMap.map
 	datatype env = ENV of {currentlevel : level,
 			       context : NilContext.context,
 			       econtext : econtext,
 			       levelmap : level VarMap.map,
 			       lastfnlevel : level}
-	datatype state = STATE of {hoistmap : hoistmap}
+	datatype state = STATE of {hoistmap : hoistmap,choistmap : choistmap}
 
 	val empty_env = ENV{currentlevel = toplevel,
 			    context = NilContext.empty(),
@@ -286,11 +312,11 @@ struct
 			    levelmap = VarMap.empty,
 			    lastfnlevel = toplevel}
 
-	val empty_state = STATE{hoistmap = IntMap.empty}
+	val empty_state = STATE{hoistmap = IntMap.empty, choistmap = IntMap.empty}
 
 	fun pp_env (ENV{levelmap,...}) = pp_levelmap levelmap
 
-        fun pp_state (STATE{hoistmap}) = (pp_hoistmap hoistmap)
+        fun pp_state (STATE{hoistmap,choistmap}) = (pp_hoistmap hoistmap;pp_choistmap choistmap)
 
 	(* mergeLevels : levels * levels -> levels
 	     Merges two sorted (in decreasing order) lists of integers
@@ -340,8 +366,8 @@ struct
 	    
 
         (* mergeStates : state * state -> state *)
-        fun mergeStates (STATE{hoistmap = hoistmap1},
-                         STATE{hoistmap = hoistmap2}) =
+        fun mergeStates (STATE{hoistmap = hoistmap1, choistmap = choistmap1},
+                         STATE{hoistmap = hoistmap2, choistmap = choistmap2}) =
 	    let
 		fun folder (level, (bnds,levels,valuable), accum_map) =
 		    let val (newbnds, newlevels, newvaluable) = 
@@ -356,10 +382,23 @@ struct
 				      (newbnds, newlevels, newvaluable))
 		    end
 
+		fun cfolder (level, (bnds,levels), accum_map) =
+		    let val (newbnds, newlevels) = 
+                          (case IntMap.find (accum_map, level)
+			       of NONE => (bnds,levels)
+                                | SOME (bnds',levels') => 
+				   (bnds @ bnds',
+				    mergeLevels (levels,levels')))
+		    in
+			IntMap.insert(accum_map, level, (newbnds, newlevels))
+		    end
+
 		val hoistmap =
 		    IntMap.foldli folder hoistmap1 hoistmap2
+		val choistmap =
+		    IntMap.foldli cfolder choistmap1 choistmap2
 	    in
-		STATE{hoistmap = hoistmap}
+		STATE{hoistmap = hoistmap,choistmap = choistmap}
 	    end
 
         (* currentLevel : env -> level *)
@@ -445,12 +484,14 @@ struct
           | bindsEff _ = error "bindsEff: length mismatch"
 
         (* clearLevel : level * state -> state *)
-	fun clearLevel (levnum, STATE{hoistmap}) = 
+	fun clearLevel (levnum, STATE{hoistmap,choistmap}) = 
 	    let
 		val hoistmap' = 
 		    IntMap.insert(hoistmap, levnum, ([], emptyLevels, true))
+		val choistmap' = 
+		    IntMap.insert(choistmap, levnum, ([], emptyLevels))
 	    in
-		STATE{hoistmap = hoistmap'}
+		STATE{hoistmap = hoistmap', choistmap = choistmap'}
 	    end
 		
         (* bumpCurrentlevel : env * state -> env * state * level
@@ -507,7 +548,7 @@ struct
 	    bindsLevel(bindLevel(env, v, level), vs, level)
 
         (* Add a cbnd to the lowest possible hoisting level *)
-	fun hoistCbnd(STATE{hoistmap}, cbndlevels, cbnd) =
+	fun hoistCbnd phase (STATE{hoistmap, choistmap}, cbndlevels, cbnd) =
 	    let
 		val (hoistlevel, levels) = splitLevels cbndlevels
 (*
@@ -517,18 +558,18 @@ struct
 			 print (Int.toString hoistlevel);
 			 print "\n")
 *)
-		val (rev_cbnds, levels',valuable) = 
-                    lookup (hoistmap, hoistlevel, ([],[], true))
+		val (rev_cbnds, levels') = 
+                    lookup (choistmap, hoistlevel, ([],[]))
 		val levels = mergeLevels (levels, levels') 
-		val hoistmap =
-		    IntMap.insert(hoistmap, hoistlevel, 
-				  (Con_b(Runtime,cbnd) :: rev_cbnds, levels, valuable))
+		val choistmap =
+		    IntMap.insert(choistmap, hoistlevel, 
+				  ((phase,cbnd) :: rev_cbnds, levels))
 	    in
-		STATE{hoistmap = hoistmap}
+		STATE{hoistmap = hoistmap, choistmap = choistmap}
 	    end
 
         (* Add a bnd to the lowest possible hoisting level *)
-	fun hoistBnd(STATE{hoistmap}, bndlevels, bnd, bnds_valuable)=
+	fun hoistBnd(STATE{hoistmap,choistmap}, bndlevels, bnd, bnds_valuable)=
 	    let
 		val (hoistlevel, levels) = splitLevels bndlevels
 (*
@@ -546,43 +587,26 @@ struct
 		    IntMap.insert(hoistmap, hoistlevel, 
 				  (bnd :: rev_bnds, levels, bnds_valuable))
 	    in
-		STATE{hoistmap = hoistmap'}
+		STATE{hoistmap = hoistmap', choistmap = choistmap}
 	    end
 
         (* Extract constructor bindings at a specific hoisting level for final inclusion in the output code.
 	 * Returns those bindings, the levels of free variables at the given binding level, and a state with the extracted
-	 * bindings removed.
+	 * bindings removed.  
 	 *)
-        fun extractCbnds (STATE{hoistmap}, levnum) = 
+        fun extractCbnds (STATE{hoistmap,choistmap}, levnum) = 
 	    let
-		val (bnds, levels) = 
-		    (case IntMap.find(hoistmap, levnum) of
+		val (cbnds, levels) = 
+		    (case IntMap.find(choistmap, levnum) of
 			 NONE => ([], emptyLevels)
-		       | SOME (rev_choists, levels,_) => 
+		       | SOME (rev_choists, levels) => 
 			   (rev rev_choists, levels))
 
-                (* Sanity check: We're expecting a bunch of cbnds.  If
-                   we find we have hoisted term bindings to this site
-                   something went wrong --- especially since we don't
-                   hoist anything out of typeof's. *)
-		fun tocbnd b = 
-		  (case b
-		     of Con_b (p,cb) => cb 
-		      | _ => (print "ERROR:  found term binding:\n";
-			      Ppnil.pp_bnd b;
-			      print "\nat level ";
-			      print (Int.toString levnum);
-			      print "\nin cbnds:\n";
-			      Ppnil.pp_bnds bnds;
-			      print "\n";
-			      error "extractCbnds:found term bindings"))
 
-		val cbnds = map tocbnd bnds
-
-		val hoistmap = 
-		  IntMap.insert(hoistmap, levnum, ([], emptyLevels,true))
+		val choistmap = 
+		  IntMap.insert(choistmap, levnum, ([], emptyLevels))
 		  (* Empty out the level we've extracted *)
-		val state = STATE{hoistmap = hoistmap}
+		val state = STATE{hoistmap = hoistmap,choistmap = choistmap}
 	    in
 	      (cbnds, levels, state)
 	    end
@@ -591,19 +615,28 @@ struct
 	 * Returns those bindings, the levels of free variables at the given binding level, and a state with the extracted
 	 * bindings removed.
 	 *)
-        fun extractBnds (STATE{hoistmap}, level) = 
+        fun extractBnds (STATE{hoistmap,choistmap}, level) = 
 	    let
-		val (bnds, levels, bnds_valuable) = 
-		    (case IntMap.find(hoistmap, level) of
-			 NONE => ([], emptyLevels, true)
-		       | SOME (rev_hoists, levels, bnds_valuable) => 
-			     (rev rev_hoists, levels, bnds_valuable))
-		val hoistmap = 
-		    IntMap.insert(hoistmap, level, ([], emptyLevels, true))
-		    (* Empty out the level we've extracted *)
-		val state = STATE{hoistmap = hoistmap}
+	      val (cbnds, clevels) = 
+		(case IntMap.find(choistmap, level) of
+		   NONE => ([], emptyLevels)
+		 | SOME (rev_choists, clevels) => 
+		     (rev rev_choists, clevels))
+	      val (bnds, levels, bnds_valuable) = 
+		(case IntMap.find(hoistmap, level) of
+		   NONE => ([], emptyLevels, true)
+		 | SOME (rev_hoists, levels, bnds_valuable) => 
+		     (rev rev_hoists, levels, bnds_valuable))
+	      val choistmap = 
+		IntMap.insert(choistmap, level, ([], emptyLevels))
+	      val hoistmap = 
+		IntMap.insert(hoistmap, level, ([], emptyLevels, true))
+	      (* Empty out the level we've extracted *)
+	      val state = STATE{hoistmap = hoistmap, choistmap = choistmap}
+	      val bnds = (map Con_b cbnds) @ bnds
+	      val levels = mergeLevels (clevels, levels)
 	    in
-		(bnds, levels, state, bnds_valuable)
+	      (bnds, levels, state, bnds_valuable)
 	    end
 
 	(* limitLevels: level * levels -> levels
@@ -635,9 +668,10 @@ struct
 			    loop(levnum + 1, cbnds @ cbnds', levels::levelslist, state')
 			end
 		    
-		val (cbnds, levels', state') = 
+		val (pcbnds, levels', state') = 
 		    loop (limitlevel, [], [levels], state)
 		val levels'' = limitLevels (currentlevel, levels')
+		val cbnds = map #2 pcbnds
 		val con' = NilUtil.makeLetC cbnds con
 	    in
 		(con', state', levels'')
@@ -721,24 +755,26 @@ struct
 
     fun traceLevels env tr = case traceLevel env tr of SOME l => [l] | NONE => []
 
-  fun rcon (args as (con,env,_)) =
+    fun rtype args = rtc Compiletime args
+    and rcon args = rtc Runtime args
+    and rtc phase (args as (con,env,_)) =
       let
 	  val _ = if (! debug) then
 	              (print "rcon: "; Ppnil.pp_con con; print "\n")
 		  else
 		      ()
       in
-	  rcon' args before (if !debug then print "/rcon\n" else ())
+	  rtc' phase args before (if !debug then print "/rtc\n" else ())
       end
 
-  and rcon' (Prim_c (primcon,cons), env, state) =
+  and rtc' phase (Prim_c (primcon,cons), env, state) =
       let
-	  val (cons, state, levels) = rcons (cons, env, state)
+	  val (cons, state, levels) = rtcs phase (cons, env, state)
       in
 	  (Prim_c(primcon, cons), state, levels)
       end
 
-    | rcon' (Mu_c (isRecursive, vcseq), env, state) = 
+    | rtc' phase (Mu_c (isRecursive, vcseq), env, state) = 
       let
 	  val (vars, cons) = Listops.unzip (Sequence.toList vcseq)
 
@@ -746,14 +782,14 @@ struct
 	  val env = bindsLevel (env, vars, mulevel)
 	  val env = foldl (fn (v, env) => insertKind (env, v, Type_k)) env vars
 
-	  val (cons, state, levels) = rcons_limited mulevel (cons, env, state)
+	  val (cons, state, levels) = rtcs_limited phase mulevel (cons, env, state)
 
 	  val vcseq = Sequence.fromList (Listops.zip vars cons)
       in
 	  (Mu_c (isRecursive, vcseq), state, levels)
       end
 
-    | rcon' (con as AllArrow_c {openness, effect, tFormals,
+    | rtc' phase (con as AllArrow_c {openness, effect, tFormals,
 			       eFormals, fFormals, body_type}, 
 	    env, state) =
       let
@@ -765,7 +801,7 @@ struct
 	        reFormals_arrow(eFormals, env, state, arglevel)
 
           val (body_type, state, levels3) = 
-                rcon_limited arglevel (body_type, env, state)
+                rtc_limited phase arglevel (body_type, env, state)
 
 	  val levels = mergeMultiLevels[levels1, levels2, levels3]
 
@@ -779,117 +815,121 @@ struct
 	   state, levels)
       end
 
-    | rcon' (ExternArrow_c (cons, con), env, state) = 
+    | rtc' phase (ExternArrow_c (cons, con), env, state) = 
       let
-	  val (cons, state, levels1) = rcons(cons, env, state)
-	  val (con,  state, levels2) = rcon (con,  env, state)
+	  val (cons, state, levels1) = rtcs phase (cons, env, state)
+	  val (con,  state, levels2) = rtc phase (con,  env, state)
 	  val levels = mergeLevels(levels1,levels2)
       in
 	  (ExternArrow_c(cons, con), state, levels)
       end
 
-    | rcon' (c as Var_c v, env, state) = 
+    | rtc' phase (c as Var_c v, env, state) = 
       let
 	  val level = lookupLevel (env, v)
       in
 	  (c, state, [level])
       end
       
-    | rcon' (Let_c(Sequential,cbnds,cbody), env, state) = 
+    | rtc' phase (Let_c(Sequential,cbnds,cbody), env, state) = 
       let
-	  val (env, state) = rcbnds(cbnds, env, state)
+	  val (env, state) = rcbnds phase (cbnds, env, state)
       in  
-          rcon (cbody, env, state)
+          rtc phase (cbody, env, state)
       end
 
-    | rcon' (Let_c(Parallel,_,_),_,_) = error "rcon: Parallel Let_c found"
+    | rtc' phase (Let_c(Parallel,_,_),_,_) = error "rcon: Parallel Let_c found"
 
-    | rcon' (Crecord_c lclist, env, state) = 
+    | rtc' phase (Crecord_c lclist, env, state) = 
       let
 	  val (labels, cons) = Listops.unzip lclist
-	  val (cons, state, levels) = rcons(cons, env, state)
+	  val (cons, state, levels) = rtcs phase (cons, env, state)
 	  val lclist = Listops.zip labels cons
       in
 	  (Crecord_c lclist, state, levels)
       end
 
-    | rcon' (Proj_c (con,lab), env, state) = 
+    | rtc' phase (Proj_c (con,lab), env, state) = 
       let
-	  val (con, state, levels) = rcon(con, env, state)
+	  val (con, state, levels) = rtc phase (con, env, state)
       in
 	  (Proj_c(con,lab), state, levels)
       end
 
-    | rcon' (Closure_c(c1, c2), env, state) = 
+    | rtc' phase (Closure_c(c1, c2), env, state) = 
       let
-	  val (c1, state, levels1) = rcon (c1, env, state)
-	  val (c2, state, levels2) = rcon (c2, env, state)
+	  val (c1, state, levels1) = rtc phase (c1, env, state)
+	  val (c2, state, levels2) = rtc phase (c2, env, state)
 	  val levels = mergeLevels (levels1, levels2)
       in
 	  (Closure_c(c1,c2), state, levels)
       end
 
-    | rcon' (App_c(con,cons), env, state) = 
+    | rtc' phase (App_c(con,cons), env, state) = 
       let
-	  val (con,  state, levels1) = rcon (con,  env, state)
-	  val (cons, state, levels2) = rcons(cons, env, state)
+	  val (con,  state, levels1) = rtc phase (con,  env, state)
+	  val (cons, state, levels2) = rtcs phase (cons, env, state)
 	  val levels = mergeLevels (levels1, levels2)
       in
 	  (App_c(con,cons), state, levels)
       end
 
-    | rcon' (Coercion_c {vars,from,to}, env, state) =
+    | rtc' phase (Coercion_c {vars,from,to}, env, state) =
       let
 	val (env, state, arglevel) = bumpCurrentlevel (env, state)
 	val env = foldl (fn (v,e) => insertKind(bindLevel(e,v,arglevel),v,Type_k)) env vars
-	val (from,state,levels1) = rcon_limited arglevel (from,env,state)
-	val (to,state,levels2) = rcon_limited arglevel (to,env,state)
+	val (from,state,levels1) = rtc_limited phase arglevel (from,env,state)
+	val (to,state,levels2) = rtc_limited phase arglevel (to,env,state)
 	val levels = mergeLevels (levels1,levels2)
       in
 	(Coercion_c {vars=vars,from=from,to=to},state,levels)
       end
 
-  and rcons (cons, env, state) = 
+  and rtcs phase (cons, env, state) = 
       let 
 	  fun loop ([], rev_accum, state, levelslist) = 
                  (rev rev_accum, state, mergeMultiLevels levelslist)
             | loop (con::cons, rev_accum, state, levelslist) = 
 	      let
-		  val (con, state, new_levels) = rcon (con, env, state)
+		  val (con, state, new_levels) = rtc phase (con, env, state)
 	      in
 		  loop(cons, con::rev_accum, state, new_levels::levelslist)
 	      end
       in
 	  loop (cons, [], state, [])
       end
+    and rcons args = rtcs Runtime args
+    and rtypes args = rtcs Compiletime args
 
   (* Translation for constructors just below a binder, such that appropriate bindings are hoisted *)
-  and rcons_limited levnum (cons, env, state) = 
+  and rtcs_limited phase levnum (cons, env, state) = 
       let 
 	  fun loop ([], rev_accum, state, levelslist) = 
               (rev rev_accum, state, mergeMultiLevels levelslist)
             | loop (con::cons, rev_accum, state, levelslist) = 
 	      let
 		  val (con, state, new_levels) =
-                        rcon_limited levnum (con, env, state)
+                        rtc_limited phase levnum (con, env, state)
 	      in
 		  loop(cons, con::rev_accum, state, new_levels::levelslist)
 	      end
       in
 	  loop (cons, [], state, [])
       end
+    and rcon_limited args = rtc_limited Runtime args 
+    and rtype_limited args = rtc_limited Compiletime args
 
   (* Translation for a constructor just below a binder, such that appropriate bindings are hoisted *)
-  and rcon_limited levnum (con, env, state) = 
+  and rtc_limited phase levnum (con, env, state) = 
       let
-	  val (con, state, levels') = rcon (con, env, state)
+	  val (con, state, levels') = rtc phase (con, env, state)
       in
 	  limitCon (levnum, con, env, state, levels')
       end
 
-  and rcbnd (Con_cb(v,con), env, state) = 
+  and rcbnd phase (Con_cb(v,con), env, state) = 
       let
-	  val (con, state, levels) = rcon (con, env, state)
+	  val (con, state, levels) = rtc phase (con, env, state)
 	  val env = bindLevel (env, v, deepestLevel levels)
 	  (*val _ = (print "Bind ";
 		   Ppnil.pp_var v;
@@ -897,12 +937,12 @@ struct
 		   print (Int.toString (deepestLevel levels));
 		   print "\n")*)
 	  val env = insertEquation (env, v, con)
-	  val state = hoistCbnd (state, levels, Con_cb(v,con))
+	  val state = hoistCbnd phase (state, levels, Con_cb(v,con))
       in
 	  (env, state)
       end
 
-    | rcbnd (cbnd as Open_cb(v,tFormals,body), env, state) = 
+    | rcbnd phase (cbnd as Open_cb(v,tFormals,body), env, state) = 
 	let
 	    val inner_env = enterFunction env
 	    val (inner_env, state, arglevel) = 
@@ -912,7 +952,7 @@ struct
 		rtFormals_arrow(tFormals, inner_env, state, arglevel)
 
 	    val (body, state, levels2) = 
-	        rcon_limited arglevel (body, inner_env, state)
+	        rtc_limited phase arglevel (body, inner_env, state)
 
 	    val levels = mergeLevels(levels1, levels2)
 	    val env = bindLevel (env, v, deepestLevel(levels))
@@ -923,19 +963,19 @@ struct
 	    val env = insertEquation (env, v, Let_c (Sequential, [cbnd'], Var_c v'))
 
 	    val cbnd = Open_cb(v, tFormals, body)
-	    val state = hoistCbnd (state, levels, cbnd)
+	    val state = hoistCbnd phase (state, levels, cbnd)
 	in
 	    (env, state)
 	end
 
-    | rcbnd (Code_cb _, _, _) = error "rcbnd: found code_cb"
+    | rcbnd phase (Code_cb _, _, _) = error "rcbnd: found code_cb"
 
-  and rcbnds ([], env, state) = (env, state)
-    | rcbnds (cbnd::cbnds, env, state) = 
+  and rcbnds phase ([], env, state) = (env, state)
+    | rcbnds phase (cbnd::cbnds, env, state) = 
       let
-	  val (env,state) = rcbnd(cbnd, env, state)
+	  val (env,state) = rcbnd phase (cbnd, env, state)
       in
-	  rcbnds (cbnds, env, state)
+	  rcbnds phase (cbnds, env, state)
       end
 
   and rexp (args as (exp, env, state)) =
@@ -1001,23 +1041,24 @@ struct
 
     | rexp' (exp as Prim_e (prim,trs,cons,exps), env, state) =
       let
-	  val (cons, state, levels1) = rcons(cons, env, state)
-	  val (exps, state, levels2, eff_list, args_valuable) = 
-	         rexps(exps, env, state)
-
-	  val levels3 = List.mapPartial (traceLevel env) trs
- 
-	  (* we don't try very hard to track effect types through primops. *)
+	val phase = if NilDefs.allprim_uses_carg prim then Runtime else Compiletime
+	val (cons, state, levels1) = rtcs phase (cons, env, state)
+	val (exps, state, levels2, eff_list, args_valuable) = 
+	  rexps(exps, env, state)
+	  
+	val levels3 = List.mapPartial (traceLevel env) trs
+	  
+	(* we don't try very hard to track effect types through primops. *)
 	  val eff =
-	      (case (prim, eff_list) of
-		   (NilPrimOp (record lbls),  tageff::eff_list) =>
-		       REC_EFF(ListPair.zip (lbls, eff_list))
-                 | (NilPrimOp (select lbl), [eff]) =>
-		       ereclookup (eff, lbl)
-		 | _ => UNKNOWN_EFF)
-
+	    (case (prim, eff_list) of
+	       (NilPrimOp (record lbls),  tageff::eff_list) =>
+		 REC_EFF(ListPair.zip (lbls, eff_list))
+	     | (NilPrimOp (select lbl), [eff]) =>
+		 ereclookup (eff, lbl)
+	     | _ => UNKNOWN_EFF)
+	       
 	  val levels = mergeMultiLevels[levels1, levels2,levels3]
-
+	    
 	  val valuable = (not (NilDefs.anyEffect exp)) andalso args_valuable
       in
 	  (Prim_e (prim, trs,cons, exps), state, levels, eff, valuable)
@@ -1036,7 +1077,7 @@ struct
 	  val (exp, state, levels1, exp_effs, valuable1) = 
 	      rexp (exp, env, state)
 	  val (cons, state, levels2) = 
-              rcons(cons, env, state)
+              rcons (cons, env, state)
 	  val (exps1, state, levels3, _, valuable3) = 
 	      rexps(exps1, env, state)
 	  val (exps2, state, levels4, _, valuable4) = 
@@ -1070,7 +1111,7 @@ struct
     | rexp' (Raise_e(exp,con), env, state) = 
       let
 	  val (exp, state, levels1, _, _) = rexp(exp, env, state)
-	  val (con, state, levels2) = rcon(con, env, state)
+	  val (con, state, levels2) = rtype(con, env, state)
 	  val levels = mergeLevels(levels1,levels2)
 	  val effs = UNKNOWN_EFF
 	  val valuable = false
@@ -1087,7 +1128,7 @@ struct
 	val (body_env,state,body_level)   =  bumpCurrentlevel (env, state)
 	val (body, state, levels1, _, _)  =  rexp_limited body_level (body, body_env, state)
 
-	val (result_type, state, levels2) =  rcon (result_type, env, state)
+	val (result_type, state, levels2) =  rtype (result_type, env, state)
 	  
 	val (inner_env, state, handlerlevel) = bumpCurrentlevel (env, state)
 	val inner_env = bindLevel(inner_env, bound, handlerlevel)
@@ -1113,9 +1154,9 @@ struct
 	  fun folder (v,e) = bindLevel (e,v,ccnlevel)
 	  val inner_env = foldl folder inner_env vars
 	  val (from,state,levels1) = 
-	      rcon_limited ccnlevel (from,inner_env,state)
+	      rtype_limited ccnlevel (from,inner_env,state)
 	  val (to,state,levels2) = 
-	      rcon_limited ccnlevel (to,inner_env,state)
+	      rtype_limited ccnlevel (to,inner_env,state)
 	  val levels = mergeLevels (levels1,levels2)
 	  val valuable = true
 	  val eff = UNKNOWN_EFF
@@ -1128,9 +1169,9 @@ struct
 	  fun folder (v,e) = bindLevel (e,v,ccnlevel)
 	  val inner_env = foldl folder inner_env vars
 	  val (from,state,levels1) = 
-	      rcon_limited ccnlevel (from,inner_env,state)
+	      rtype_limited ccnlevel (from,inner_env,state)
 	  val (to,state,levels2) = 
-	      rcon_limited ccnlevel (to,inner_env,state)
+	      rtype_limited ccnlevel (to,inner_env,state)
 	  val levels = mergeLevels (levels1,levels2)
 	  val valuable = true
 	  val eff = UNKNOWN_EFF
@@ -1141,7 +1182,7 @@ struct
       let
 	  val (coercion,state,levels1,effs1,valuable1) = 
 	      rexp (coercion,env,state)
-	  val (cargs,state,levels2) = rcons (cargs,env,state)
+	  val (cargs,state,levels2) = rtypes (cargs,env,state)
 	  val (exp,state,levels3,effs3,valuable3) = rexp (exp,env,state)
 	  val levels = mergeMultiLevels[levels1, levels2,levels3]
 	  val valuable = valuable1 andalso valuable3
@@ -1193,9 +1234,8 @@ struct
       rexps' (SOME limit, exps, state, env)
 
   and rbnd (Con_b(p,cb), env, state) = 
-      (* Here's where we lose the phase information *)
       let
-	  val (env, state) = rcbnd(cb, env, state)
+	  val (env, state) = rcbnd p (cb, env, state)
 	  val valuable = true
       in
 	  (env, state, valuable)
@@ -1339,7 +1379,7 @@ struct
 		  rexpopt_limited limitlevel (default,env,empty_state)
           val state = mergeStates(state, default_leftover_state)
 
-	  val (result_type, state, levels4) = rcon(result_type, env, state)
+	  val (result_type, state, levels4) = rtype(result_type, env, state)
 
 	  val levels = mergeMultiLevels[levels1, levels2,levels3, levels4]
 
@@ -1376,7 +1416,7 @@ struct
 		  rexpopt_limited limitlevel (default, env, empty_state)
           val state = mergeStates(state, default_leftover_state)
 
-	  val (result_type, state, levels4) = rcon(result_type, env, state)
+	  val (result_type, state, levels4) = rtype(result_type, env, state)
 
 	  val levels = mergeMultiLevels[levels1, levels2,levels3, levels4]
 	      
@@ -1423,7 +1463,7 @@ struct
 		  rexpopt_limited limitlevel (default, env, empty_state)
           val state = mergeStates(state, default_leftover_state)
 
-	  val (result_type, state, levels5) = rcon(result_type, env, state)
+	  val (result_type, state, levels5) = rtype(result_type, env, state)
 
 	  val levels = mergeMultiLevels[levels0,levels1, levels2,levels3,levels4, levels5]
 	      
@@ -1505,10 +1545,10 @@ struct
 			      val newarrow = NilRename.renameCon newarrow
 			      val newbnd = Con_cb (cv, newarrow)
 
-			      val (_, _, levels) = rcon (con, env, state)
+			      val (_, _, levels) = rtype (con, env, state)
 
 			      val env = bindLevel (env, cv, deepestLevel levels)
-			      val state = hoistCbnd (state, levels, newbnd)
+			      val state = hoistCbnd Compiletime (state, levels, newbnd)
 
 			      (*val con' = Let_c (Sequential, [Con_cb (cv,
 								  AllArrow_c {openness = openness,
@@ -1524,7 +1564,7 @@ struct
 		      else
 			  (con, Partial, env, state)
 
-	  val (con, state, levels3) = rcon (con, env, state)
+	  val (con, state, levels3) = rtype (con, env, state)
 
 	  val levels = mergeMultiLevels[levels1,levels2,levels3]
 
@@ -1624,7 +1664,7 @@ struct
             | loop (c_orig::rest, rev_accum, env, state, levelslist) = 
 	      let
 		  val (c, state, new_levels) = 
-                        rcon_limited arglevel (c_orig, env, state)
+                        rtype_limited arglevel (c_orig, env, state)
 	      in
 		  loop(rest, c::rev_accum, env, state, new_levels::levelslist)
 	      end
@@ -1637,13 +1677,13 @@ struct
          (Type_k, state, emptyLevels)
     | rkind_limited limitlevel (Single_k c, env, state) = 
       let
-	  val (c, state, levels) = rcon_limited limitlevel (c, env, state)
+	  val (c, state, levels) = rtype_limited limitlevel (c, env, state)
       in
 	  (Single_k c, state, levels)
       end
     | rkind_limited limitlevel (SingleType_k c, env, state) = 
       let
-	  val (c, state, levels) = rcon_limited limitlevel (c, env, state)
+	  val (c, state, levels) = rtype_limited limitlevel (c, env, state)
       in
 	  (SingleType_k c, state, levels)
       end
@@ -1704,11 +1744,11 @@ struct
 		      bumpCurrentlevel (env, empty_state)*)
 
 		  val (inner_env, state) =
-		      rcbnd (cb, env, empty_state)
+		      rcbnd phase (cb, env, empty_state)
 
 		  val (bnds, _, _) = extractCbnds (state, toplevel)
 
-		  fun folder (cb, env) = 
+		  fun folder ((phase,cb), env) = 
 		      let
 			  val (v, k) = kind_of_cbnd (env, cb)
 			  val env = insertKind(env, v, k)

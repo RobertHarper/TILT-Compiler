@@ -246,7 +246,7 @@ struct
 	  | pp_alias (MUSTe e) = (print "MUSTe "; Ppnil.pp_exp e)
 	  | pp_alias (OPTIONALc c) = (print "OPTIONALc "; Ppnil.pp_con c)
 	  | pp_alias (MUSTc c) = (print "MUSTc "; Ppnil.pp_con c)
-	  | pp_alias (ETAe _) = print "ETAe ..."
+	  | pp_alias (ETAe (i,v,args)) = print ("ETAe (arity="^(Int.toString i)^",fun="^(Name.var2string v)^")")
 
         type params = {doDead : bool, 
 		       doProjection : int option,
@@ -1131,13 +1131,7 @@ struct
 
 		     val (_,temp_state) = do_vklist state vklist
 		     val return_con = wrap_get_body_type(List.last wraps)
-		     val (bnds,tinfo) = 
-			 (case get_trace (temp_state, return_con) of
-			      SOME tinfo => ([],TraceKnown tinfo)
-			    | NONE =>
-				  let val v' = Name.fresh_named_var "opt_reify"
-				  in  ([Con_b(Runtime,Con_cb (v', return_con))], TraceCompute v')
-				  end)
+		     val (bnds,tinfo) = con2trace' return_con
 		     val bnd = Exp_b(v,tinfo,call)
 		     val callbody = Let_e(Sequential,bnds @ [bnd],Var_e v)
 		     val curry = create_lambdas(wraps,callbody)
@@ -1250,12 +1244,8 @@ struct
 		        else
 			  NONE
 
-	     fun help (e as Var_e v) = 
-		 (case lookup_alias(state,v) of
-		      MUSTe e => help e
-		    | OPTIONALe e => e
-		    | _ => e)
-	       | help e = e
+	     fun help e = unalias (state,e)
+
              fun default() = Prim_e(prim,
 				    map (do_niltrace state) trlist,
 				    map (do_con state) clist, 
@@ -1312,8 +1302,8 @@ struct
 	    case exp of
 		  Var_e v =>
 			 (case lookup_alias(state,v) of
-				  MUSTe e => do_exp state e
-				| _ => (use_var(state,v); exp))
+			    MUSTe e => do_exp state e
+			  | _ => (use_var(state,v); exp))
 		| Const_e v => 
 		         (case v of
 			      Prim.int _ => exp
@@ -1408,19 +1398,21 @@ struct
 	                                    print "\n";
 	                                    error "do_onearg: found application of onearg'ed function not given a single variable argument!")
 
-		     in (case f of 
-			     Var_e v =>
-			         (case (lookup_alias(state,v)) of
-				      ETAe (1,uncurry,args)=> do_eta (uncurry,args)
-                                    | OPTIONALe(alias_exp as Prim_e(NilPrimOp (make_onearg _),[],
-						       [c1,_],[Var_e v'])) =>
-					  ((if !reduce_onearg_apps then do_onearg(c1, v, v', elist) else default())
-					      handle e => (print "Error detected from do_onearg on expression ";
-							   Ppnil.pp_exp exp; 
-							   print "\nwhere the function part has alias ";
-							   Ppnil.pp_exp alias_exp; print "\n"; raise e))
-						     | _ => default())
-			   | _ => default())
+			 fun doapp f = 
+			   (case f of 
+			      Var_e v =>
+				(case (lookup_alias(state,v)) 
+				   of ETAe (1,uncurry,args)=> do_eta (uncurry,args)
+				   | OPTIONALe(alias_exp as Prim_e(NilPrimOp (make_onearg _),[], [c1,_],[Var_e v'])) =>
+				     ((if !reduce_onearg_apps then do_onearg(c1, v, v', elist) else default())
+					 handle e => (print "Error detected from do_onearg on expression ";
+						      Ppnil.pp_exp exp; 
+						      print "\nwhere the function part has alias ";
+						      Ppnil.pp_exp alias_exp; print "\n"; raise e))
+				   | MUSTe f => doapp f
+				   | _ => default())
+			    | _ => default())
+		     in doapp f
 		     end
 		| Raise_e (e, c) => Raise_e(do_exp state e, do_con state c)
 		| Handle_e{body,bound,handler,result_type} =>
@@ -1512,12 +1504,11 @@ struct
 			(case arg of 
 			     Prim_e(NilPrimOp (inject w), _, _, _) => SOME w
 			   | Prim_e(NilPrimOp (inject_known w), _, _, _) => SOME w
-			   | Var_e v => 
-				 (case (lookup_alias(state,v)) of
-				      OPTIONALe(Prim_e(NilPrimOp (inject w), _, _, _)) => SOME w
-				    | OPTIONALe(Prim_e(NilPrimOp (inject_known w), _, _, _)) => SOME w
-				    | _ => NONE)
-			   | _ => NONE)
+			   | e => 
+			       (case (unalias(state,e)) of
+				  Prim_e(NilPrimOp (inject w), _, _, _) => SOME w
+				| Prim_e(NilPrimOp (inject_known w), _, _, _) => SOME w
+				| _ => NONE))
 		in
 		    case known_tag of
 			SOME w => 
@@ -1744,16 +1735,21 @@ struct
 						   (false, OPTIONALe e)
 
 					     | App_e(openness,Var_e v,clist,elist,eflist) => 
-						   (case (lookup_alias(state,v)) of
-							ETAe (depth,uncurry,args) => 
+						   let 
+						     fun uncurry v = 
+						       (case (lookup_alias(state,v)) of
+							  ETAe (depth,uncurry,args) => 
 							    (if (depth > 1) 
-								then
-								    let val new_info = (depth-1,uncurry,
-											args @ [(clist,elist,eflist)])
-								    in  (false,ETAe new_info)
-								    end
-							    else (eff,OPTIONALe e))
-					              | _ => (eff,OPTIONALe e))
+							       then
+								 let val new_info = (depth-1,uncurry,
+										     args @ [(clist,elist,eflist)])
+								 in  (false,ETAe new_info)
+								 end
+							     else (eff,OPTIONALe e))
+							| MUSTe (Var_e v) => uncurry v
+							| _ => (eff,OPTIONALe e))
+						   in uncurry v
+						   end
 					     | _ => (eff,OPTIONALe e))
 
 				      val _ = if effect then use_var(state,v) else ()
@@ -1775,9 +1771,8 @@ struct
 			 val (vflistlist,state) = foldl_acc rewrite_uncurry state vflist
 			 val vflist = Listops.flatten vflistlist
 			 val state = foldl folder state vflist
-			 val newbnd = Fixopen_b(Sequence.fromList vflist)
 			 val vflist = map (do_function state) vflist
-		     in  ([Fixopen_b(Sequence.fromList vflist)], state)
+		     in  ([Fixopen_b vflist], state)
 		     end
 		   | Fixcode_b vfset =>
 				let val vflist = Sequence.toList vfset

@@ -1,4 +1,4 @@
-(*$import Int Array Core BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO Util Listops *)
+(*$import Int Array Core BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO Util Listops IO OS *)
 functor Printutils(val commentHeader : string
 		   structure Machineutils : MACHINEUTILS
                    structure Tracetable : TRACETABLE
@@ -82,18 +82,31 @@ struct
      | print_trace (Tracetable.TRACE_IMPOSSIBLE) = emitString "*IMPOSSIBLE*"
 
        
+   fun abortIO (fileName, {cause = OS.SysErr (msg, _), function = f, name = n}) =
+	error ("IO Error on file " ^ fileName ^ ":\n" ^ msg ^ "\n")
+      | abortIO (fileName, {function = f, ...}) =
+	error ("IO Error on file " ^ fileName ^ " from function "
+	       ^ f ^ "\n")
+
+   fun io_error (msg,fileName,exn) =
+     (case exn
+	of IO.Io (ioError) => abortIO (fileName, ioError)
+	 | _ => (print ("problem in "^fileName);
+		 error msg))
+
+
    fun openOutput outfilename =
        (if (!debug) then (print "about to open_out "; print outfilename; print "\n") else ();
-	output_stream := SOME (TextIO.openOut outfilename))
+	output_stream := SOME (TextIO.openOut outfilename) handle exn => io_error ("openOutput", "error opening output stream",exn))
 
    fun openAppend outfilename =
        (if (!debug) then (print "about to open_append"; print outfilename; print "\n") else ();
-	output_stream := SOME (TextIO.openAppend outfilename))
+	output_stream := SOME (TextIO.openAppend outfilename) handle exn => io_error ("openAppend", "error opening append stream",exn))
 
    fun closeOutput () = 
      (case (! output_stream) of
 	NONE => error "Can't close output stream; it's not open."
-      | SOME s => ((TextIO.closeOut s) handle _ => error "error closing output stream"; 
+      | SOME s => ((TextIO.closeOut s) handle exn => io_error ("closeOutput", "error closing output stream",exn); 
 		   output_stream := NONE))
 
    (* OUTPUT PROGRAM *)

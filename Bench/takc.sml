@@ -19,6 +19,7 @@ fun tak x y z =
 
 fun repeat n = if n <= 0 then 0 else tak 18 12 6 + repeat(n-1)
 in
+  val takc = tak
   fun runTakc () = (print (Int.toString (repeat 500)); print "\n")
 (*val takcResult = (print (Int.toString (repeat 500)); print "\n")*)
 end

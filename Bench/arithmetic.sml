@@ -23,11 +23,11 @@ local
 in
   fun runArithmetic () = 
     let
-      val x = fib 40
-      val _ = print "This should be 165580141: "
+      val x = fib 38
+      val _ = print "This should be 63245986: "
       val _ = print (Int.toString x)
       val _ = print "\n"
-      val y = computePi 10000000
+      val y = computePi 100000000
       val _ = print "This should be an approximation of pi: "
       val _ = print (Real.toString y)
       val _ = print "\n"

@@ -62,6 +62,7 @@ struct
 
   fun purgeAll mapfile = Master.purgeAll mapfile
   fun purge mapfile = Master.purge mapfile
+  fun clean mapfile = Master.clean mapfile
 
   fun lift f = fn () => (case bootMapfile()
 			   of NONE => ()

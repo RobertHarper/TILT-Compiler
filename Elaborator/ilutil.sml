@@ -202,6 +202,12 @@ structure IlUtil :> ILUTIL =
 					con_bool context,
 					false, oneshot_init PARTIAL)
 
+    (* Note: the phase-splitter will emit much better code if functions
+     * are elaborated in the way that it expects (at least while do_polyrec
+     * and elaborator_specific_optmizations are true).  Therefore, please
+     * don't change this without changing the corresponding cases in 
+     * tonil.  -leaf
+     *)
     fun make_lambda_help totality (var,con,rescon,e) 
       : exp * con = let 
 		      val funvar = fresh_named_var "anonfun"

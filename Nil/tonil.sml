@@ -3845,13 +3845,6 @@ end (* local defining splitting context *)
 			    val nil_type = xcon context il_type
 			    val (v',context') = insert_rename_var(v,context)
 
-                            (* We rename this variable, but we don't need
-                               to add 
-			            v' : nil_type
-                               to the NIL context because we currently don't
-                               need term variables in this context.
-                            *)
-
 			    (* XXX: Why don't we need an insert_label
 			       in this case?  Ask Leaf or someone...
                              *)

@@ -17,6 +17,7 @@ sig
 			  step : state -> result,
 			  complete : unit -> unit}
     val run : string -> unit 
+    val clean : string -> unit
     val purge : string -> unit
     val purgeAll : string -> unit
 

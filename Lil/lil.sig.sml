@@ -15,6 +15,8 @@ signature LIL =
 
     datatype size = B1 | B2 | B4 | B8
 
+    type size = int 
+
     val flattenThreshold : int ref
 
 
@@ -29,6 +31,8 @@ signature LIL =
 
     datatype kind_ = 
       T of size
+    | TD
+    | TU
     | Unit_k
     | Nat_k 
     | Arrow_k of kind * kind 
@@ -79,7 +83,6 @@ signature LIL =
       | Inr_c of con 
       | Inl_c of con 
       | Fold_c of con
-      | Let_c of cbnd list * acon
       | StoA_c of scon
 
     withtype cbnd = (var * kind * acon)
@@ -146,8 +149,8 @@ signature LIL =
       
     datatype export_entry = 
       ExportValue of label * var
-    | ExportType  of label * var
-
+      | ExportType  of label * var
+      
     datatype module = MODULE of {bnds : bnd list,
 			         imports : import_entry list,
 				 exports : export_entry list}

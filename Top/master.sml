@@ -1190,14 +1190,18 @@ struct
 	       Paths.ilFile,
 	       Paths.ilToUnself o Paths.ilFile,
 	       Paths.fileToBackup o Paths.ilFile]
+
+    val objects = 
+      [Paths.objFile,
+       Paths.linkObjFile]
+
     val target = [Paths.asmFile,
 		  Paths.asmzFile,
-		  Paths.objFile,
 		  Paths.linkAsmFile,
-		  Paths.linkObjFile,
 		  Paths.linkExeFile,
 		  Paths.linkProfExeFile]
-    fun purge mapfile = purge_help (mapfile, " (binaries)", target)
-    fun purgeAll mapfile = purge_help (mapfile, " (binaries and interfaces)", any @ target)
+    fun clean mapfile = purge_help (mapfile, " (object files)", objects)
+    fun purge mapfile = purge_help (mapfile, " (binaries)", objects @ target)
+    fun purgeAll mapfile = purge_help (mapfile, " (binaries and interfaces)", any @ objects @ target)
 
 end
