@@ -144,8 +144,8 @@ n66	fail	duplicate constructor in multi-datatype declaration
 n67	fail	duplicate type argument in type definition
 n68	pass	duplicate type argument in datatype
 n69	pass	duplicate type argument in abstype
-n70	fail	unbound type variable in datatype
-n71	fail	unbound type variable in abstype
+n70	pass	unbound type variable in datatype
+n71	pass	unbound type variable in abstype
 n72	pass	illegal val rec
 n73	pass	illegal val rec
 n74	pass	illegal val rec
