@@ -35,10 +35,12 @@ functor Tortl(structure Rtl : RTL
 struct
 
 val do_constant_records = ref true
-val do_gcmerge = ref false
+val do_gcmerge = ref true
+
+val diag = ref true
 val debug = ref false
 val debug_full = ref false
-val debug_full_env = ref true
+val debug_full_env = ref false
 val debug_simp = ref false
 val debug_bound = ref false
 
@@ -222,37 +224,42 @@ val debug_bound = ref false
       end
   
   fun insert_kind(ctxt,v,k,copt : con option) = 
-      let 
-(*
-	  val _ = print "insert_kind start--------\n"
-	  val _ = (print "original kind = \n";
-		   Ppnil.pp_kind k; print "\n") 
-*)
-	  val k = NilStatic.kind_reduce(ctxt,k)
-(*
-	  val _ = (print "reduce kind = \n";
-		   Ppnil.pp_kind k; print "\n")
-*)
-	  val k = (case copt of 
-		       NONE => k
-		     | SOME c => 
-			   let (* val _ = (print "original con = \n";
-					Ppnil.pp_con c; print "\n") *)
-			       val c = NilStatic.con_reduce(ctxt, c)
-(*			       val _ = (print "final con = \n";
-					Ppnil.pp_con c; print "\n") *)
-			   in  NilUtil.singletonize(k, c)
-			   end)
-(*
-	  val _ = print "insert_kind middle--------\n"
-	  val _ = (print "final kind = \n";
-		   Ppnil.pp_kind k; print "\n";
-		   NilContext.print_context ctxt; print "\n")
-*)
-	  val ctxt =   NilContext.insert_kind(ctxt,v,k)
-(*	  val _ = print "insert_kind end--------\n"  *)
-      in ctxt
+      let fun default() = 
+	  let val _ = if (!debug)
+			  then (print "inserting kind with unreduced k = \n";
+				Ppnil.pp_kind k; print "\n")
+		      else ()
+	      val k = NilStatic.kind_reduce(ctxt,k) 
+	      val _ = if (!debug)
+			  then (print "inserting kind with reduced k = \n";
+				Ppnil.pp_kind k; print "\n")
+		      else ()
+	  in  Stats.subtimer("tortl_insert_kind_plain",
+			  NilContext.insert_kind)(ctxt,v,k) 
+	  end
+	  fun equation c =
+ 	   let val _ = if (!debug)
+			   then (print "inserting equation with c = \n";
+				 Ppnil.pp_con c; print "\n")
+		       else ()
+	   in  Stats.subtimer("tortl_insert_kind_equation",
+			   NilContext.insert_kind_equation)(ctxt,v,c)
+	   end
+      in
+	  (case (k,copt) of
+	       (Singleton_k(_,_,c'),SOME c) => 
+		   (print "insert_kind: c' = ";
+		    Ppnil.pp_con c'; print "\n c = \n";
+		    Ppnil.pp_con c'; print "\n";
+		    equation c)
+	     | (_,SOME c) => equation c
+	     | (Singleton_k(_,_,c),_) => equation c
+	     | _ => default())
+	       handle e => (print "Error in tortl_insert_kind\n"; raise e)
       end
+
+
+val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 
   fun env_insert' istop ({env,varmap,convarmap,gcstate} : state) (v,k,copt) : state = 
       let val _ = if (!debug_bound)
@@ -301,7 +308,7 @@ val debug_bound = ref false
   fun add_concode s (v,l,kind,copt) = 
       convarmap_insert s (v,(NONE, SOME(VCODE l),kind)) copt
 
-    
+  fun getconvarrep' ({convarmap=lm,...} : state) v : convar_rep option = VarMap.find (lm,v) 
    fun getconvarrep ({convarmap=lm,...} : state) v : convar_rep = 
        (case VarMap.find (lm,v) of
 	   NONE => error ("getconvarrep: variable "^(var2string v)^" not found")
@@ -393,24 +400,25 @@ val debug_bound = ref false
 	 | AllArrow_c(Closure,_,_,_,_,_) => SOME TRACE
 	 | AllArrow_c(Code,_,_,_,_,_) => SOME NOTRACE_CODE
 	 | AllArrow_c(ExternCode,_,_,_,_,_) => SOME NOTRACE_CODE
-	 | Var_c v => (case (getconvarrep state v) of
-			   (_,SOME(VINT _),_) => SOME NOTRACE_INT
-			 | (_,SOME(VREAL _),_) => error "constructor is a float"
-			 | (_,SOME(VRECORD _),_) => SOME TRACE
-			 | (_,SOME(VVOID rep),_) => SOME rep
-			 | (_,SOME(VLABEL l),_) => SOME(COMPUTE(Label_p l))
-			 | (_,SOME(VCODE _),_) => SOME NOTRACE_CODE
-			 | (SOME(VREGISTER (I r)),_,_) => SOME(COMPUTE(Var_p r))
-			 | (SOME(VREGISTER (F _)),_,_) => error "constructor in float reg"
-			 | (SOME(VGLOBAL (l,_)),_,_) => SOME(COMPUTE(Projlabel_p(l,[0])))
-			 | (NONE,NONE,_) => error "no information on this convar!!")
+	 | Var_c v => (case (getconvarrep' state v) of
+			   SOME(_,SOME(VINT _),_) => SOME NOTRACE_INT
+			 | SOME(_,SOME(VREAL _),_) => error "constructor is a float"
+			 | SOME(_,SOME(VRECORD _),_) => SOME TRACE
+			 | SOME(_,SOME(VVOID rep),_) => SOME rep
+			 | SOME(_,SOME(VLABEL l),_) => SOME(COMPUTE(Label_p l))
+			 | SOME(_,SOME(VCODE _),_) => SOME NOTRACE_CODE
+			 | SOME(SOME(VREGISTER (I r)),_,_) => SOME(COMPUTE(Var_p r))
+			 | SOME(SOME(VREGISTER (F _)),_,_) => error "constructor in float reg"
+			 | SOME(SOME(VGLOBAL (l,_)),_,_) => SOME(COMPUTE(Projlabel_p(l,[0])))
+			 | SOME(NONE,NONE,_) => error "no information on this convar!!"
+			 | NONE => NONE)
 
 	 | (Proj_c _) =>
 	       let fun loop (Proj_c (c,l)) acc = loop c (l::acc)
 		     | loop (Var_c v) acc = (v,acc)
 		     | loop _ _ = error "projection is not a chain of projections from a variable"
 		   val (v,labels) = loop con []
-		   val (vlopt,vvopt,kind) = getconvarrep state v
+
 (*
   val _ = if (!debug)
 		       then (Ppnil.pp_con con; print "\n";
@@ -428,19 +436,22 @@ val debug_bound = ref false
 		       end
 		     | loop acc (Singleton_k(_,k,c)) labs = loop acc k labs
 		     | loop acc _ labs = error "expect record kind"
-		   val indices = loop [] kind labels
-	       in
-		   case (vlopt,vvopt) of
-		       (_,SOME(VINT _)) => error "expect constr record: got int"
-		     | (_,SOME(VREAL _)) => error "expect constr record: got real"
-		     | (_,SOME(VRECORD _)) => error "expect constr record: got term record"
-		     | (_,SOME(VVOID _)) => error "expect constr record: got void"
-		     | (_,SOME(VLABEL l)) => SOME(COMPUTE(Projlabel_p(l,indices)))
-		     | (_,SOME(VCODE _)) => error "expect constr record: got code"
-		     | (SOME(VREGISTER (I ir)),_) => SOME(COMPUTE(Projvar_p(ir,indices)))
-		     | (SOME(VREGISTER (F _)),_) => error "constructor in float reg"
-		     | (SOME(VGLOBAL (l,_)),_) => SOME(COMPUTE(Projlabel_p(l,0::indices)))
-		     | (NONE,NONE) => NONE (* reduced to a free variable; must not reduce *)
+		   fun indices wrap kind = let val temp = loop [] kind labels
+					   in  if (length temp > 3)
+						then NONE else SOME(wrap temp)
+					   end
+	       in  case (getconvarrep' state v) of
+		       SOME(_,SOME(VINT _),_) => error "expect constr record: got int"
+		     | SOME(_,SOME(VREAL _),_) => error "expect constr record: got real"
+		     | SOME(_,SOME(VRECORD _),_) => error "expect constr record: got term record"
+		     | SOME(_,SOME(VVOID _),_) => error "expect constr record: got void"
+		     | SOME(_,SOME(VLABEL l),kind) => indices(fn x => COMPUTE(Projlabel_p(l,x))) kind
+		     | SOME(_,SOME(VCODE _),_) => error "expect constr record: got code"
+		     | SOME(SOME(VREGISTER (I ir)),_,kind) => indices (fn x => COMPUTE(Projvar_p(ir,x))) kind
+		     | SOME(SOME(VREGISTER (F _)),_,_) => error "constructor in float reg"
+		     | SOME(SOME(VGLOBAL (l,_)),_,kind) => indices (fn x => COMPUTE(Projlabel_p(l,0::x))) kind
+		     | SOME(NONE,NONE,_) => error "no info on convar"
+		     | NONE => NONE
 	       end
 	 | (Let_c _) => NONE
 	 | (App_c _) => NONE
@@ -457,29 +468,42 @@ val debug_bound = ref false
 				    SOME c => (print "reduced con = \n";
 					       Ppnil.pp_con c; print "\n")
 				  | _ => print "no reduced con\n"))
-	    fun simp c = (case c of
-	             (* since roll/unroll are no-ops *)
-                      	   Mu_c (is_recur,vc_seq,v) => 
-			     reduce(NilUtil.muExpand(is_recur,vc_seq,v))
-			 | _ => c)
-	   and reduce c = (case c of
-			     (Proj_c _) => simp(#2(simplify_type state c))
-			   | (Let_c _) => simp(#2(simplify_type state c))
-			   | (App_c _) => simp(#2(simplify_type state c))
-			   | (Var_c _) => simp(#2(simplify_type state c))
-			   | _ => simp c)
-	    val c = reduce con handle e => (print "reduce failed\n"; failure NONE; raise e)
-	in (case ((con2rep_raw state c) handle e => (failure (SOME c); raise e)) of
-		SOME rep => rep
-	      | NONE => (* we may have reduced the type to another type
-			   involving a variable not in scope *)
-		    (case ((con2rep_raw state con) handle e => (failure (SOME c); raise e)) of
-			 SOME rep => rep
-		       | NONE => (failure (SOME c); error "con2rep failed")))
+	    fun simp (Mu_c (is_recur,vc_seq,v)) = NilUtil.muExpand(is_recur,vc_seq,v)
+	      | simp c = c
+	    val con = simp con
+	    fun reduce c = 
+		let val c = (case c of
+			       (Proj_c _) => #2(simplify_type state c)
+			     | (Let_c _) => #2(simplify_type state c)
+			     | (App_c _) => #2(simplify_type state c)
+			     | (Var_c _) => #2(simplify_type state c)
+			     | _ => c)
+		in  case c of
+			Mu_c _ => reduce(simp c)
+		      | _ => c
+		end
+	in  (case (con2rep_raw state con) of
+		 NONE => 
+		     let val c = reduce con handle e => (print "reduce failed\n"; failure NONE; raise e)
+		     in  (case ((con2rep_raw state c) handle e => (failure (SOME c); raise e)) of
+			      SOME rep => rep
+			    | NONE => (print "con2rep failed on orig and reduced con; assuming TRACE\n";
+				     failure (SOME c); 
+					TRACE))
+				(* error "con2rep failed" *)
+		     end
+	       | SOME(rep as (COMPUTE _)) => (* a reduction here might be advantageous *)
+		     let val c = reduce con handle e => (print "reduce failed\n"; failure NONE; raise e)
+		     in  (case ((con2rep_raw state c) handle e => (failure (SOME c); raise e)) of
+			      SOME rep => rep
+			    | NONE => rep (* well, we default back to unreduced rep *))
+		     end
+	       | SOME rep => rep)
 	end)
 
-
-
+val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
+val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_type state)
+val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_type' state) 
 
    fun varloc2rep varloc =
        (case varloc of
@@ -538,12 +562,17 @@ val debug_bound = ref false
 
        fun add_data d = dl := d :: !dl
 
-       fun new_gcstate ({env,varmap,convarmap,gcstate} : state) : state =
-	   {env=env,varmap=varmap,convarmap=convarmap,gcstate=[GC_INF]}
        fun join_states ([] : state list) : state = error "join_states got []"
 	 | join_states (({env,varmap,convarmap,gcstate}) :: rest) = 
 	   let val gcstates = gcstate :: (map #gcstate rest)
-	       val gcstate = List.concat gcstates
+	       (* we must not have duplicates or else we get exponential blowup 
+		  and the updates will also be too large since they are duplicated *)
+		fun gcinfo_eq (GC_INF,GC_INF) = true
+		  | gcinfo_eq (GC_IMM r1, GC_IMM r2) = r1 = r2
+		  | gcinfo_eq _ = false
+		fun folder(info,infos) = if (Listops.member_eq(gcinfo_eq,info,infos))
+						then infos else info::infos
+		val gcstate = foldl (fn (infos,acc) => foldl folder acc infos) [] gcstates
 	   in   {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
 	   end
        fun add_instr i = 
@@ -578,6 +607,10 @@ val debug_bound = ref false
 		      end
 	      end
 
+       fun new_gcstate ({env,varmap,convarmap,gcstate} : state) : state =
+	   let val s = {env=env,varmap=varmap,convarmap=convarmap,gcstate=[GC_INF]}
+	   in  needgc(s,IMM 0)
+	   end
 
 
        fun alloc_regi (traceflag) = 
@@ -1583,12 +1616,12 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			    else ();
 			    print "\n")
 		  else ()  
+	  val res = xexp''(state,name,arg_e,copt,context)
 	  val _ = if (!debug)
 		      then (print "xexp ";  print (Int.toString (!exp_depth));
 			    print " returned\n")
 		  else ()
 	  val _ = exp_depth := !exp_depth - 1
-	  val res = xexp''(state,name,arg_e,copt,context)
 	      
       in  res
       end
@@ -1618,7 +1651,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		      val c' = Let_c(Sequential,cbnds,c)
 		  in  (lv,c',state)
 		  end
-	    | Prim_e (NilPrimOp nilprim, clist, elist) => xnilprim(state,nilprim,clist,elist,context)
+	    | Prim_e (NilPrimOp nilprim, clist, elist) => xnilprim(state,nilprim,clist,elist,context,copt)
 	    | Prim_e (PrimOp prim, clist, elist) => xprim(state,prim,clist,elist,context)
 	    | Switch_e sw => xswitch(state,name,sw,copt,context)
 	    | App_e (openness, f, clist, elist, eflist) => (* assume the environment is passed in first *)
@@ -1774,6 +1807,10 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 						    handler_body)
 			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp(false, handler_body')
 			  val evar_reps = map (fn v => #1(getrep state v)) free_evars
+			  val free_cvars = (List.filter 
+					    (fn v => (case (getconvarrep' state v) of
+							  NONE => false
+							| SOME _ => true)) free_cvars)
 			  val cvar_reps = map (fn v => #1(getconvarrep state v)) free_cvars
 			  val vlopts = cvar_reps @ evar_reps
 			  fun loop [] (irep,ir,fr) = (irep,ir,fr)
@@ -1895,7 +1932,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
       (* The trick is to notice that for certain args, the comparison and computation
          can be folded into one instruction. *)
       and zero_one (state : state, r : regi, copt : con option, zeroexp, oneexp, context) : loc_or_val * con * state = 
-	  let val thenl = alloc_code_label "zero_case"
+	  let 
+	      val thenl = alloc_code_label "zero_case"
 	      val elsel = alloc_code_label "one_case"
 	      val afterl = alloc_code_label "after_zeroone"
 	      val _ = add_instr(BCNDI(NE,r,elsel,false))
@@ -1948,7 +1986,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 				 | (F _,_,_) => error "intsw argument in float register")
 		  in  case (arms,default) of
 		      ([(0w0,z)],SOME e) => zero_one(state, r, arg_c, get_body z, e, context)
-		    | ([(0w0,z),(0w1,one)],NONE) => zero_one(state, r, arg_c, get_body z, get_body one, context)
+		    | ([(0w0,z),(0w1,one)],NONE) => zero_one(state, r, arg_c, 
+							     get_body z, get_body one, context)
 		    | _ => (* general case *)
 			  let 
 			      val afterl = alloc_code_label "after_intcase"
@@ -2039,6 +2078,13 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			| _ => error "no arms"
 		  end 
 	    | Typecase_e _ => error "typecase_e not implemented"
+	    | Sumsw_e {info = (0w2,[]), arg, arms = [(0w0,zerofun),(0w1,onefun)], default=NONE} => 
+		  let val (r,state) = (case (xexp'(state,fresh_named_var "intsw_arg",arg,
+					   SOME(Prim_c(Sum_c{tagcount=0w2,known=NONE},[])),NOTID)) of
+				   (I ireg,_,state) => (ireg,state)
+				 | (F _,_,_) => error "intsw argument in float register")
+		  in  zero_one(state,r, arg_c, get_body zerofun, get_body onefun, context)
+		  end
 	    | Sumsw_e {info = (tagcount,cons), arg, arms, default} => 
 		  let val (I r,_,state) = xexp'(state,fresh_named_var "sumsw_arg",arg,NONE,NOTID)
 		      val afterl = alloc_code_label "after_sum"
@@ -2153,8 +2199,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	      foldl_list (fn (e,s) => let val (vl,_,s) = xexp(s,fresh_var(),e,NONE,NOTID)
 				      in (vl,s)
 				      end) orig_state elist
-	  val clist = map (simplify_type' orig_state) clist
-	  val sumcon = Prim_c(Sum_c{tagcount=tagcount,known=NONE}, map #2 clist)
+(*	  val clist = map (simplify_type' orig_state) clist *)
+	  val sumcon = Prim_c(Sum_c{tagcount=tagcount,known=NONE}, clist)
 	  val nontagcount = length clist
 	  val single_carrier = (length clist) = 1
 
@@ -2165,14 +2211,17 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 
 	  fun xtagsum_single state =
 	      let 
-		  val (hnf,field_con) = List.nth(clist, TW32.toInt field_sub)
+		  val field_con = List.nth(clist, TW32.toInt field_sub)
 		  val desti = alloc_regi(con2rep state field_con)
-		  fun nobox_case_vl state = (hd varlocs, state)
 		  fun box_case_vl state = 
 		      let val reps = map valloc2rep varlocs
 		      in  make_record'(state,NONE,reps,varlocs)
 		      end
-	      in  (case (hnf,field_con) of
+		  fun nobox_case_vl state = 
+		      if is_record
+			  then box_case_vl state
+		      else (hd varlocs, state)
+	      in  (case simplify_type' orig_state field_con of
 			  (true,Prim_c(Int_c _, _)) => box_case_vl state
 			| (true,Prim_c(Sum_c _, _)) => box_case_vl state
 			| (true,_) => nobox_case_vl state
@@ -2218,7 +2267,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	      end
 
 	  fun xtagsum_dynamic (state,vl) =
-	      let val (hnf,field_con) = List.nth(clist, TW32.toInt field_sub)
+	      let val field_con = List.nth(clist, TW32.toInt field_sub)
 		  val numfields = alloc_regi NOTRACE_INT
 		  val gctemp = alloc_regi NOTRACE_INT
 		  val tmp = alloc_regi NOTRACE_INT
@@ -2292,26 +2341,28 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	      end
 
 	  fun xtagsum state = 
-	      let val (hnf,field_con) = List.nth(clist, TW32.toInt field_sub)
-		  fun decompose vl reccon cons = 
-		    let val bind = fresh_var()
+	      let val field_con = List.nth(clist, TW32.toInt field_sub)
+		  fun decompose vl reccon labs cons = 
+		    let val bind = fresh_named_var "xtagsum_var"
 			val ir = load_ireg_locval(vl,NONE)
 			val state = add_var state (bind, I ir, reccon)
-			fun folder(c,(n,state)) = 
-			    let val (vl,_,state) = xexp(state,fresh_var(),
-						  Prim_e(NilPrimOp(select (generate_tuple_label n)),
-							 [],[Var_e bind]),
+			fun folder((l,c),state) = 
+			    let val (vl,_,state) = 
+				xexp(state,fresh_var(),
+				 Prim_e(NilPrimOp(select (l)),
+						 [],[Var_e bind]),
 						  NONE, NOTID)
-			    in  (vl,(n+1,state))
+			    in  (vl,state)
 			    end
-			val (vls,(_,state)) = foldl_list folder (1,state) cons
-		    in  (vls,state)
+		    in  foldl_list folder state
+				(Listops.zip labs cons)
 		    end
+		  val (hnf,field_con') = simplify_type' orig_state field_con 
 		  val (vls,state) = 
-		      (case (is_record,hnf,field_con,varlocs) of
+		      (case (is_record,hnf,field_con',varlocs) of
 			   (true,_,_,_) => (SOME varlocs, state)
-			 | (_,_,reccon as Prim_c(Record_c _, cons),[vl]) => 
-			       let val (vls,state) = decompose vl reccon cons
+			 | (_,_,reccon as Prim_c(Record_c labs, cons),[vl]) => 
+			       let val (vls,state) = decompose vl reccon labs cons
 			       in  (SOME vls, state)
 			       end
 			 | (_,true,_,[vl]) => (SOME [vl], state)
@@ -2443,7 +2494,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 
 
 
-  and xnilprim(state : state, nilprim,clist,elist,context) : loc_or_val * con * state = 
+  and xnilprim(state : state, nilprim,clist,elist,context,copt) : loc_or_val * con * state = 
       let fun error' s = (print "NIL primexpression was:\n";
 			  Ppnil.pp_exp (Nil.Prim_e(Nil.NilPrimOp nilprim, clist,elist));
 			  print "\n";
@@ -2481,6 +2532,9 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 				  Ppnil.pp_con c; print "\n";
 				  error' "selecting from a non-record"))
 		   val (which,con) = loop labels fieldcons 0
+		   val con = (case copt of 
+				  NONE => con 
+				| SOME c => c)
 		   val desti = (case (alloc_reg state con) of
 				    I ir => ir
 				  | _ => error "records cannot have floats")
@@ -2505,8 +2559,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 				    | c => (print  "bad project_sum_record: bad econ not a record:\n";
 					    Ppnil.pp_con c;
 					    error' "bad project_sum_record: bad econ not a record")))
-		   val fieldcon = List.nth(summands,index)
-	      handle _ => error "list.nth 2"
+		   val fieldcon = List.nth(summands,index) handle _ => error "list.nth 2"
 		   val field' = 
 		        let fun loop n [] = 
 				     (print "bad project_sum_record: missing field ";
@@ -2524,18 +2577,22 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 						 error "bad project_sum_record: not record\n")))
 			end
 		   val single_carrier = (length clist) = 1
-		   val record_con = (List.nth(clist,index)
-				     handle _ => error' "bad project_sum_record: record_con")
-		   val field_con = 
-		       (case record_con of
-			    Prim_c(Record_c _,cons) => (List.nth(cons,field')
-							handle _ => error "list.nth 4")
-			  | _ => (case #2(simplify_type state record_con) of
-				      Prim_c(Record_c _,cons) => (List.nth(cons,field')
-								  handle _ => error "list.nth 5")
-				    | c => (print "bad project_sum_record: field_con";
-					    Ppnil.pp_con c;
+		   local
+		       val record_con = (List.nth(clist,index)
+					 handle _ => error' "bad project_sum_record: record_con")
+		   in
+		       val field_con = 
+			   (case (copt,record_con) of
+				(SOME c, _) => c
+			      | (_,Prim_c(Record_c _,cons)) => (List.nth(cons,field')
+							    handle _ => error "list.nth 4")
+			      | _ => (case #2(simplify_type state record_con) of
+					  Prim_c(Record_c _,cons) => (List.nth(cons,field')
+								      handle _ => error "list.nth 5")
+					| c => (print "bad project_sum_record: field_con";
+						Ppnil.pp_con c;
 					    error' "bad project_sum_record: field_con")))
+		   end
 		   val desti = alloc_regi (con2rep state field_con)
 		   val subscript = if single_carrier then field' else field' + 1
 		   val _ = add_instr(LOAD32I(EA(base,4*subscript),desti))
@@ -2552,7 +2609,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 								field = l}),
 						 clist,elist)
 			   val elist' = map make_e labels
-		       in  xnilprim(state,Nil.record labels,field_cons,elist',context)
+		       in  xnilprim(state,Nil.record labels,field_cons,elist',context,copt)
 		       end
 		   fun nonrecord_case() = 
 		       let 
@@ -2582,12 +2639,12 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		       end
 	       in  (case summand_con of
 			Prim_c(Record_c labs,cons) => record_case labs cons
-		      | _ => 
+		      | c => 
 			    (case (simplify_type' state summand_con,elist) of
 				 ((_,Prim_c(Record_c labs,cons)),_) => record_case labs cons
 			       | ((true,_),_) => nonrecord_case()
-			       | ((_,c),[e]) => xdynamic_project_sum(state,info,clist,
-								     c,e,context)))
+			       | (_,[e]) => xdynamic_project_sum(state,info,clist,
+								 c,e, context)))
 	       end
 	 | box_float Prim.F64 => 
 	       let val [e] = elist
@@ -3066,8 +3123,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		 | (true,Prim_c(BoxFloat_c Prim.F64,[])) => floatcase state
 		 | (true,Prim_c(Int_c Prim.W8,[])) => nonfloatcase(state, Prim.W8)
 		 | (true,_) => nonfloatcase(state, Prim.W32)
-		 | (false,c') => 
-		       let val (r,_,state) = xcon(state,fresh_var(),c', NONE)
+		 | (false,_) => 
+		       let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 			   val tmp = alloc_regi NOTRACE_INT
 			   val desti = alloc_regi(con2rep state c)
 			   val afterl = alloc_code_label "sub_after"
@@ -3183,8 +3240,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		 | (true,Prim_c(Float_c Prim.F32,[])) => error "32-bit floats not done"
 		 | (true,Prim_c(Int_c is,[])) => (xintupdate(is,vl1,vl2,vl3); ())
 		 | (true,_) => (xptrupdate(c,vl1,vl2,vl3); ())
-		 | (false,c') => 
-		       let val (r,_,state) = xcon(state,fresh_var(),c', NONE)
+		 | (false,_) => (* simplified type may involve variable not in scope *)
+		       let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 			   val tmp = alloc_regi NOTRACE_INT
 			   val afterl = alloc_code_label "update_after"
 			   val floatl = alloc_code_label "update_float"
@@ -3241,7 +3298,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			Ppnil.pp_con c; print "\n";
 			add_instr(SRL(dest,IMM (2+int_len_offset),dest));
 			state)
-		 | (false,c') => let val (r,_,state) = xcon(state,fresh_var(),c', NONE)
+		 | (false,_) => let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 				     val tmp = alloc_regi NOTRACE_INT
 				     val afterl = alloc_code_label "length_after"
 				     val floatl = alloc_code_label "length_float"
@@ -3497,8 +3554,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			       load_ireg_locval(vl1,NONE),
 			       unboxFloat(load_ireg_locval(vl2,NONE)))
 	       | (true,_) => ptrcase(state,dest,vl1,vl2)
-	       | (false,c') => 
-		     let val (r,_,state) = xcon(state,fresh_var(),c', NONE)
+	       | (false,_) => 
+		     let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 			 val tmp = alloc_regi NOTRACE_INT
 			 val afterl = alloc_code_label "array_after"
 			 val floatl = alloc_code_label "array_float"
@@ -3691,14 +3748,14 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			 | loop (((l',_),k)::vrest) n = if (eq_label(l,l')) 
 							    then (n,k) else loop vrest (n+1)
 		       (* fieldk may have dependencies *)			
-		       val (which,fieldk) = (case (NilUtil.strip_singleton k) of 
-						 Record_k lvk_seq => loop (sequence2list lvk_seq) 0
-					       | _ => error "bad kind to proj_c from")
+		       val (which,fieldk) = 
+			   (case (NilUtil.kill_singleton k) of 
+				Record_k lvk_seq => loop (sequence2list lvk_seq) 0
+			      | _ => error "bad kind to proj_c from")
 		       val {env=ctxt,...} = state
-		       val (_,fieldk') = NilStatic.con_valid(ctxt,arg_con)
 		       val dest = alloc_regi TRACE
 		       val _ = add_instr(LOAD32I(EA(ir,4 * which),dest))
-		   in (VAR_LOC(VREGISTER (I dest)), fieldk',state)
+		   in (VAR_LOC(VREGISTER (I dest)), fieldk, state)
 		   end
 	     | Closure_c (c1,c2) => 
 		   let 
@@ -3734,7 +3791,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 					      results=([desti],[]),
 					      tailcall=false,
 					      save=SAVE(getLocals())})
-		   in (VAR_LOC (VREGISTER (I desti)),resk,new_gcstate state)
+		       val state = new_gcstate state
+		   in (VAR_LOC (VREGISTER (I desti)),resk,state)
 		   end
 	     | Annotate_c (_,c) => xcon'(state,name,c,kopt))
       end
@@ -3762,6 +3820,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	      val results = ([resulti],[])
 	      val return = alloc_regi(LABEL)
 	      val _ = set_args_result(args, I resulti, return)
+	      val state = needgc(state,IMM 0)
 	      val (ir,k,state) = xcon(state,fresh_named_var "result",body,NONE)
 	      val _ = (add_instr(MV(ir,resulti));
 		       add_instr(RETURN return))
@@ -3810,6 +3869,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			       | F fr => ([],[fr]))
 	      val return = alloc_regi(LABEL)
 	      val _ = set_args_result(args, result, return)
+	      val state = needgc(state,IMM 0)
 	      val (r,c,state) = xexp'(state,fresh_named_var "result",body,
 				SOME con, ID return)
 	      val mvinstr = (case (r,result) of
@@ -3841,21 +3901,21 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	  (case getWork() of
 	       NONE => ()
 	     | SOME (n,FunWork vf) => 
-		   (if (!debug)
+		   (if (!diag)
 			then (print "*** Working on fun "; print (Int.toString n); print "\n")
 		    else ();
 		    dofun vf; 
-		    if (!debug)
+		    if (!diag)
 		      then (print "*** Finished fun "; print (Int.toString n); print "\n")
 		    else ();
 		    worklist_loop())
 	     | SOME (n,ConFunWork vvkck) => 
-			(if (!debug) 
+			(if (!diag) 
 			     then (print "*** Working on confun "; 
 				   print (Int.toString n); print "\n")
 			 else ();
 			 doconfun false vvkck; 
-			 if (!debug)
+			 if (!diag)
 			     then (print "*** Finished confun "; 
 				   print (Int.toString n); print "\n")
 			 else ();
@@ -3944,11 +4004,12 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			  val _ = con_rewrite inner c
 		      in  CHANGE_NORECURSE [cbnd]
 		      end
+		  fun khandle (_,k) = CHANGE_NORECURSE k
 	      in  (fn _ => NOCHANGE,
 		   bndhandle,
 		   chandle,
 		   cbhandle,
-		   fn _ => NOCHANGE)
+		   khandle)
 	      end
 	  fun do_export (ExportValue(l,e,c)) = (exp_rewrite inner e;
 						con_rewrite inner c; ())

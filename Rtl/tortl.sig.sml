@@ -3,6 +3,7 @@ sig
    structure Rtl : RTL
    structure Nil : NIL
 
+   val diag : bool ref
    val debug : bool ref
    val debug_full : bool ref
    val debug_full_env : bool ref

@@ -5,6 +5,7 @@ sig
     structure Rtl : RTL
     structure Pprtl : PPRTL
 
+    val show_rtl : bool ref
     val compile_prelude : bool * string -> Rtl.module
     val compile : string -> Rtl.module
     val compiles : string list -> Rtl.module list
@@ -17,6 +18,7 @@ end
 structure Linkrtl : LINKRTL =
 struct
 
+    val show_rtl = ref false
     val error = fn x => Util.error "Linkrtl." x
     fun zip s ([],[]) = []
       | zip s (x::xs,y::ys) = (x,y)::zip s (xs,ys)
@@ -74,7 +76,7 @@ struct
 	    val rtlmod = Rtlopt.GCmerge rtlmod
 	    val _ = print "Finished Rtlopt.GCmerge\n"
 *)
-	    val _ = if debug
+	    val _ = if debug orelse !show_rtl
 			then (print "============================================\n\n";
 			      print "RTL code:\n";
 			      Pprtl.pp_Module rtlmod;
