@@ -43,7 +43,7 @@ struct
 
    val elaborator_specific_optimizations = ref true
    val optimize_empty_structure = ref true
-   val omit_datatype_bindings = ref false
+   val omit_datatype_bindings = ref true
    val select_carries_types = Stats.bool "select_carries_types"
    fun error msg = Util.error "tonil.sml" msg
 
@@ -513,7 +513,11 @@ struct
 			 (
 
 let 
-(*  val _ = (print "update_NILctx_cbnd: ";
+(*
+  val _ = (print "XXXXXXXXX: old context is: ";
+	   Nilcontext.print_context ctxt;
+	   print "\n\n";
+	   print "update_NILctx_cbnd: ";
 	     Ppnil.pp_var v; print "  ::  ";
 	     Ppnil.pp_kind k; print "\n")
 *)
@@ -670,6 +674,8 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 		| NONE => (perr_c name_arg_c;
 			   error "Expected constructor variable")
 
+val _ = print "MOD_APP 1\n"
+
 	   val (var, var_c, var_r, vmap) = chooseName (preferred_name, vmap)
 
 	   val var_arg_r = 
@@ -690,6 +696,7 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 		    | _ => (perr_k knd_fun_c;
 			    error "Expected arrow kind")
 
+
                val (effect,var_body_arg_c,exp_body_type) = 
 		 case strip_arrow type_fun_r 
 		   of SOME (_,effect,[(var_body_arg_c,_)],_,_,exp_body_type) =>
@@ -698,7 +705,9 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 			    error "Expected arrow constructor with one arg")
 	   in
 
+
              val knd_c = Subst.varConKindSubst v_c name_arg_c con_body_kind
+
 
 	     val cbnd_cat = 
 		 APP[cbnd_cat_fun, 
@@ -711,6 +720,8 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 		     else LIST[(var_c, knd_c, App_c(name_fun_c,[name_arg_c]))]
 		     ]
 		   
+
+
 (*
                val _ = (print "ZZZ\n";
 			print "type_fun_r = ";
@@ -740,6 +751,8 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 			       | (true, SOME _) => NILctx'
 			       | _ => error "variable already in context and not a MOD_VAR")
 		 
+
+
 (*
 val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	 Ppnil.pp_con exp_body_type;
@@ -748,7 +761,6 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	 print "\n\n")
 *)
                val type_r = Subst.varConConSubst var_body_arg_c name_arg_c exp_body_type
-
 	       val valuable = (effect = Total) andalso valuable_fun andalso valuable_arg 
 	   end  
 
@@ -1153,15 +1165,15 @@ val _ = print "MOD_FUNCTOR finished\n"
 	record_r_field_types = nil,
 	record_r_exp_items = nil}
 
-     | xsbnds_rewrite_1 context (il_sbnds as Il.SBND(lab, Il.BND_EXP(evar, il_exp))::rest_il_sbnds) =
+     | xsbnds_rewrite_1 context (il_sbnds as (Il.SBND(lab, _))::rest_il_sbnds) =
         if ((Ilutil.is_datatype_lab lab) andalso (! omit_datatype_bindings)) then
 	    xsbnds context rest_il_sbnds
         else
 	    xsbnds_rewrite_2 context il_sbnds
-
+(*
      | xsbnds_rewrite_1 context il_sbnds = 
 	    xsbnds_rewrite_2 context il_sbnds
-
+*)
 
    and xsbnds_rewrite_2 context 
                         (il_sbnds as
@@ -1538,29 +1550,20 @@ val _ = print "MOD_FUNCTOR finished\n"
 		valuable = mod_valuable, 
 		vmap = vmap,
 		...} = xmod (update_vmap(context,vmap)) (il_module, SOME(var, var_c, var_r))
-(*
 
-           val _ = (print "Before binding of ";
-		    Ppnil.pp_var var;
-		    print "\n";
-		    Nilcontext.print_context (NILctx_of context))
-*)
+
 	   val context' = 
 	       update_vmap
 	       (update_NILctx_ebndcat
 		(update_NILctx_cbndcat(context, cbnd_mod_cat),
 		 ebnd_mod_cat),
 		vmap)
-(*
-           val _ = (print "After binding of ";
-		    Ppnil.pp_var var;
-		    print "\n";
-		    Nilcontext.print_context (NILctx_of context'))
-*)
+
 
 	   val {final_context, cbnd_cat, ebnd_cat, valuable, record_c_con_items,
 		record_c_knd_items, record_r_labels, record_r_field_types,
 		record_r_exp_items} = xsbnds context' rest_il_sbnds
+
        in
 	   {final_context = final_context,
 	    cbnd_cat = APP[cbnd_mod_cat, cbnd_cat],
@@ -2615,7 +2618,12 @@ val _ = print "MOD_FUNCTOR finished\n"
   and xsdecs'' context (elab_spec,firstpass,con0,subst,sdecs) = 
        let 
 	   fun loop [] = []
-	     | loop ((sdec as 
+	     | loop (all as (Il.SDEC(lab,_)::rest)) = 
+	       if ((Ilutil.is_datatype_lab lab) andalso (! omit_datatype_bindings)) 
+		   then loop rest
+	       else loop' all
+	   and loop' [] = []
+	     | loop' ((sdec as 
 		     Il.SDEC(_,Il.DEC_EXP(top_var,il_con))) :: rest) = 
 	        if (Util.substring("polyfun",Name.var2string top_var)) then
 		   let
@@ -2637,7 +2645,7 @@ val _ = print "MOD_FUNCTOR finished\n"
 		   end
 	       else
 		   sdec::loop rest
-	     | loop ((sdec as 
+	     | loop' ((sdec as 
 		     Il.SDEC(lbl,
 			     Il.DEC_MOD
 			     (top_var, s as
@@ -2677,7 +2685,7 @@ val _ = print "MOD_FUNCTOR finished\n"
 		   end
 	       else
 		   sdec::loop rest
-	     | loop (sdec::rest) = sdec::(loop rest)
+	     | loop' (sdec::rest) = sdec::(loop rest)
 (*	   val _ = (print "before loop: length sdecs = "; print (Int.toString (length sdecs)); print "\n") *)
 	   val sdecs' = if (elab_spec andalso firstpass)
 			    then loop sdecs

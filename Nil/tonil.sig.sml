@@ -6,6 +6,7 @@ sig
     val debug : bool ref
     val full_debug : bool ref
     val do_kill_cpart_of_functor : bool ref
+    val omit_datatype_bindings : bool ref
 
     val xcompunit : Il.context -> 
                     (Name.var * Name.var) Name.VarMap.map ->
