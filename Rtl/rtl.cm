@@ -14,6 +14,7 @@ pprtl.sig.sml
 pprtl.sml
 tortl.sig.sml
 tortl.sml
+(* tortl_array.sml *)
 (* ------ the following files needed for RTL interpreter ------ *)
 rtlheap.sig.sml
 rtlheap.sml
