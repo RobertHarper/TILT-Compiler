@@ -94,11 +94,11 @@
 0095 [open]	Errno is sometimes clobbered.
 0098 [closed]	does not parse type variables properly
 0099 [closed]	exceptions as values
-0100 [open]	hidden hidden clashes
+0100 [closed]	hidden labels and _ patterns
 0101 [closed]	external symbol clash
 0102 [closed]	word test fails
 0103 [open]	word8 problems
-0104 [open]	hidden hidden name clash
+0104 [closed]	hidden hidden name clash
 0105 [open]	overloading with words
 0106 [closed]	internal Option failure
 0107 [closed]	tilt option failure
@@ -113,9 +113,9 @@
 0117 [open]	option failure
 0118 [open]	syntax discrepancies
 0119 [open]	discrepancies on byte/char tests
-0120 [open]	zero-sized word8array
+0120 [closed]	zero-sized word8array
 0121 [closed]	nonexhaustive binding failure in optimize1
-0122 [open]	overflow in compiler
+0122 [closed]	overflow in compiler
 0123 [open]	possible nontermination
 0124 [open]	flexible records
 0125 [open]	BUG in get_record

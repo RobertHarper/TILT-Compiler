@@ -1,6 +1,6 @@
 Number: 0122
 Title:       overflow in compiler
-Keywords:    overflow
+Keywords:    overflow, lexer
 Submitter:   rwh
 Date:        08/16/02
 Version:     CVS
@@ -9,8 +9,27 @@ Severity:    major
 Problem:     test file causes compiler to crash with overflow
 Code:        
 Transcript:  
-Comments:    
-Fix:         
+Comments:
+	More info on the exn:
+	
+	uncaught exception overflow
+	  raised at: Util/tilword64.sml:141.22-141.30
+	             Parser/frontend.sml:113.32
+	             Top/slave.sml:82.17
+	-
+
+	The lexer fails because it does not check for overflow
+	when converting string literals to TilWord64.word.
+
+	Note that there are additional range checks check_int and
+	check_uint in toil.sml.  These never get to fail.
+
+Fix:
+
+	It is now counted as a parse error when literals overflow.
+
+	N.B. We still fail m0061 because we do not provide InfInt.
+
 Test: m0061
-Owner: rwh
-Status: open
+Owner: swasey
+Status: closed
