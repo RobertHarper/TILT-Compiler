@@ -1586,12 +1586,7 @@ struct
     (case exp 
        of Var_e var => 
 	 (case find_con (D,var)
-	    of SOME con => 
-	      let
-		val (con,kind) = con_valid (D,con)
-	      in
-		(exp,con)
-	      end
+	    of SOME con => (exp,con)
 	     | NONE => 
 	      (error ("Encountered undefined variable " ^ (Name.var2string var) 
 		     ^ "in exp_valid") handle e => raise e))
