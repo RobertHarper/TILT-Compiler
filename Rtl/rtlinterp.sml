@@ -409,14 +409,6 @@ fun trap() =
       (case (name,args,results) of
 	 ("ml_output",([ri,rj],[]),([dest],[])) =>
 	   let
-	     fun getregnum (REGI (v,_)) = Name.var2int v
-	       | getregnum (SREGI HEAPPTR) = 0
-	       | getregnum (SREGI HEAPLIMIT) = 1
-	       | getregnum (SREGI STACKPTR) = 2
-	       | getregnum (SREGI EXNPTR) = 3
-	       | getregnum (SREGI EXNARG) = 4
-	     val rinum = getregnum ri
-	     val rjnum = getregnum rj
 	     val (rival,rjval) = (getlowival(ri),getlowival(rj))
 	     val msg = destring rjval
 	     val stream = find_out rival
@@ -575,6 +567,7 @@ fun trap() =
       | step (LOAD32I(ea,ri)) = 
 	setireg(ri,LONGS(WORD wzero,WORD (H.lookuplong(ea_to_val(ea,4)))))
       | step (STORE32I(ea,ri)) = H.storelong(ea_to_val(ea,4),getlowival(ri))
+      | step (STORENEW32I(ea,ri)) = H.storelong(ea_to_val(ea,4),getlowival(ri))
       | step (LOADQF(ea,rf)) = update_freg(rf,H.lookupquad(ea_to_val(ea,8)))
       | step (STOREQF(ea,ri)) = H.storequad(ea_to_val(ea,8),getfreg(ri))
       | step (NEEDMUTATE(addr)) = ()

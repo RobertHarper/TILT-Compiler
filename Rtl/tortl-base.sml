@@ -709,6 +709,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
     | regi2s (Rtl.SREGI HEAPPTR) = "HEAPPTR"
     | regi2s (Rtl.SREGI HEAPLIMIT) = "HEAPLIMIT"
     | regi2s (Rtl.SREGI STACKPTR) = "STACKPTR"
+    | regi2s (Rtl.SREGI THREADPTR) = "THREADPTR"
     | regi2s (Rtl.SREGI EXNPTR) = "EXNPTR"
     | regi2s (Rtl.SREGI EXNARG) = "EXNARG"
 
@@ -741,7 +742,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 
 
 
-  (* --------- Tag Operation Hlper Functions -------------------- *)
+  (* --------- Tag Operation Helper Functions -------------------- *)
 
   (* for reals, the len reg measures quads *)
 
@@ -760,7 +761,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
     (add_instr(SLL(len,IMM (ptr_len_offset),tag));
      add_instr(ORB(tag,IMM (w2i ptrarray),tag)))
     
-  fun mk_recordtag(flags) = recordtag(flags);
+  fun mk_recordtag(flags) = recordtag(flags)
     
   (* storing a tag *)
     
@@ -1247,6 +1248,31 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		 in  (fn _ => heapptr, state)
 		 end
 
+	fun loadpath path = 
+	    let val tipe = alloc_regi TRACE
+		fun project (cur,[]) = cur
+		  | project (cur,i::rest) = (add_instr(LOAD32I(EA(cur,4*i),tipe)); project(tipe,rest))
+	    in  case path of
+		     Projvar_p (regi,indices) => project(regi,indices)
+		   | Projlabel_p(label,indices) => (* NOT global; is label *)
+			 (add_instr(LADDR(label,0,tipe));
+			  project(tipe,indices))
+		   | Notneeded_p => error "record: Notneeded_p hit"
+	    end
+
+	fun storenew(base,offset,r,rep) = 
+	    (case rep of
+		 TRACE => add_instr(INIT(EA(base,offset),r,NONE))
+	       | NOTRACE_INT => add_instr(STORE32I(EA(base,offset),r))
+	       | NOTRACE_CODE => add_instr(STORE32I(EA(base,offset),r))
+	       | LABEL => add_instr(STORE32I(EA(base,offset),r))
+	       | COMPUTE path => let val tipe = loadpath path
+				     val tmp = alloc_regi NOTRACE_INT
+				 in  add_instr(CMPUI(GE,tipe,IMM 3, tmp));
+				     add_instr(INIT(EA(base,offset),r,SOME tmp))
+				 end
+	       | _ => error "storenew got funny rep")
+
 	fun scan_vals (offset,_,[]) = offset
 	  | scan_vals (offset,[],vl::vls) = error "not enough reps"
 	  | scan_vals (offset,rep::reps,vl::vls) =
@@ -1269,35 +1295,20 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 					add_instr(LADDR(fieldl,0,addr));
 					add_instr(STORE32I(EA(addr,0),r)))
 				   end
-			   else add_instr(STORE32I(EA(heapptr(),offset),r))  (* allocation - not a mutation *)
+			   else 
+			       storenew(heapptr(),offset,r,rep)
 		       end);
 	    scan_vals(offset+4,reps,vls))
 
         (* sometime the tags must be computed at run-time *)
 	fun do_dynamic (r,{bitpos,path}) =
-	    let val tipe = 
-		case path of
-		    Projvar_p (regi,indices) =>
-			let val tipe = alloc_regi TRACE
-			    fun project i = add_instr(LOAD32I(EA(tipe,4*i),tipe))
-			in  add_instr (MV(regi,tipe));
-			    app project indices; 
-			    tipe
-			end
-		  | Projlabel_p(label,indices) => (* NOT global; is label *)
-			let val tipe = alloc_regi TRACE
-			    fun project i = add_instr(LOAD32I(EA(tipe,4*i),tipe))
-			in  add_instr(LADDR(label,0,tipe));
-			    app project indices;
-			    tipe
-			end
-		  | Notneeded_p => error "record: Notneeded_p hit"
+	    let val tipe = loadpath path
 		val tmp1 = alloc_regi NOTRACE_INT
 		val tmp2 = alloc_regi NOTRACE_INT
 	    in (* add_instr(LI(i2w 0,tmp1));
 		add_instr(CMV(NE,tipe,IMM 1,tmp1)); *)
 		add_instr(CMPUI(GT, tipe, IMM 3, tmp1)); (* is it not an int *)
-		add_instr(SLL(tmp1,IMM (bitpos-1),tmp2));
+		add_instr(SLL(tmp1,IMM bitpos,tmp2));
 		add_instr(ORB(tmp2,REG r,r))
 	    end
 
@@ -1312,7 +1323,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	       let val r = alloc_regi(NOTRACE_INT)
 	       in  add_instr (LI(static,r));
 		   app (fn a => do_dynamic(r,a)) dynamic;
-		   add_instr(STORE32I(EA(heapptr(),offset),r)) (* allocation *)
+		   add_instr(STORE32I(EA(heapptr(),offset),r)) (* tags *)
 	       end;
 	   scantags(offset+4,vl))
 

@@ -32,16 +32,7 @@ functor MakeRtlopt(structure Pprtl : PPRTL)
 	structure IRegkey : ORD_KEY = 
 	    struct
 		type ord_key = regi
-		fun sregtonum HEAPPTR = 0
-		  | sregtonum HEAPLIMIT = 1
-		  | sregtonum STACKPTR = 2
-		  | sregtonum EXNPTR = 3
-		  | sregtonum EXNARG = 4
-		fun cmpsreg a b = Int.compare(sregtonum a, sregtonum b)
-		fun compare (REGI (v1,_), REGI (v2,_)) = Name.compare_var(v1,v2)
-		  | compare (SREGI a, SREGI b) = cmpsreg a b
-		  | compare (SREGI _, REGI _) = LESS
-		  | compare (REGI _, SREGI _) = GREATER
+		fun compare (r1,r2) = Int.compare(regi2num r1, regi2num r2)
 	    end
     in
 	structure IRegmap = LocalSplayMapFn(IRegkey)
@@ -218,6 +209,7 @@ functor MakeRtlopt(structure Pprtl : PPRTL)
 	    
 	| LOAD32I (_,r) => [r]
 	| STORE32I (add,r) => [r]
+	| STORENEW32I (add,r) => [r]
 	| LOADQF  (_,_) => nil
 	| STOREQF (_,_) => nil
 	| NEEDMUTATE (r) => [r]

@@ -2,37 +2,34 @@
 signature RTLTAGS =
 sig
 
-   (* the 3-bit type field *)
-
+   (* the low 3 bits indicate the object type *)
+   val skiptag : TilWord32.word
    val record : TilWord32.word
    val intarray : TilWord32.word
    val realarray : TilWord32.word
    val ptrarray : TilWord32.word
 
-   (* bit offset of length field *)
-
-   val real_len_offset : int  (* measured in double-precision floats = 8 bytes *)
+   (* bit offset of length and mask field *)
    val int_len_offset : int   (* measured in bytes *)
    val ptr_len_offset : int   (* measured in words *)
+   val real_len_offset : int  (* measured in double-precision floats = 8 bytes *)
+   val rec_len_offset : int   (* measured in words *)
+   val rec_mask_offset : int  (* low bit corresponds to first entry in record *)
 
-   (* compute tags statically given size of array *)
-
-   val skiptag : TilWord32.word
-   val realarraytag : TilWord32.word -> TilWord32.word
+   (* Compute array tags given logical size *)
    val intarraytag : TilWord32.word -> TilWord32.word
    val ptrarraytag : TilWord32.word -> TilWord32.word
+   val realarraytag : TilWord32.word -> TilWord32.word
 
-   (* # of bytes in string *)
-
-   val rawstringtag : int -> TilWord32.word
-
-   (* given traceability of fields, compute list of tag words.
-       For each tag word, give
-          (1) static portion of tag, making COMPUTEs 0
-	  (2) how to compute dynamic portion of tag.
-	      This is a list of (1) the bitpos
-				(2) the location of the traceability
-				    information.*)
+   (* Compute record tag(s) given a list of RTL representation.
+      Each returned tag word is expressed by the bitwise 
+        OR of 2 parts:
+         (1) static portion of tag
+	 (2) dynamic portion of tag
+	      (a) Present only if there are COMPUTEs
+	      (b) A list of (1) the bitpos
+			    (2) the path location of the dynamic traceability
+   *)
    type tags = {static : TilWord32.word,
 		dynamic : {bitpos : int,
 			   path : Rtl.rep_path} list} list

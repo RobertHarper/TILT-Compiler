@@ -20,7 +20,7 @@ sig
      In C parlance, C externs are r-values, while ML externs
      are l-values.*)
 
-  datatype sregi = HEAPPTR | HEAPLIMIT | EXNPTR | EXNARG | STACKPTR
+  datatype sregi = HEAPPTR | HEAPLIMIT | EXNPTR | EXNARG | STACKPTR | THREADPTR
 
   datatype regi = REGI of var * rep  (* int in var is register # *)
                 | SREGI of sregi
@@ -47,13 +47,9 @@ sig
   val eqregi  : regi * regi -> bool
   val eqregf  : regf * regf -> bool
 
+  val regi2int : regi -> int
+  val sregi2int : sregi -> int
 
-(*
-  val heapptr : regi
-  val exnptr : regi
-  val stackptr : regi
-  val exnarg : regi
-*)
 
   (* save: set of registers to save before a procedure call or at the
      start of executing a procedure body.  These registers are restored
@@ -230,16 +226,15 @@ sig
     | RESTORE_CS 
 
     | LOAD32I  of ea * regi           (* displacements not scaled *)
-    | STORE32I of ea * regi
+    | STORE32I of ea * regi           (* unchecked stores *)
     | LOADQF   of ea * regf
     | STOREQF  of ea * regf
 
-    | NEEDMUTATE of regi    (* after this instr, regi will contain an address 
-			     which is part of the writelist; 
-			     this address should be filled with the mutated locations
-			     before another call to NEEDMUTATE or NEEDGC *)
+    | MUTATE of ea * regi * regi option   (* if option is present, a nonzero value indicates pointer *)
+    | INIT of ea * regi * regi option     (* if option is present, a nonzero value indicates pointer *)
+
     | NEEDGC of sv          (* needgc(sv) calls garbage collector if that
-			     many words are not allocatable *)
+			       many words are not allocatable *)
     | FLOAT_ALLOC of regi * regf * regi * TilWord32.word  (* number of floats *)
     | INT_ALLOC   of regi * regi * regi * TilWord32.word  (* number of bytes *)
     | PTR_ALLOC   of regi * regi * regi * TilWord32.word  (* number of words *)

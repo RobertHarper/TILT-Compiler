@@ -144,7 +144,7 @@ struct
 		      val (clregsi,rec_state) = foldl_list loadcl state var_vcelist
 		      fun dowrite (clregi, (_,{code,cenv,venv,tipe}),s) = 
 				   let val (I ir,_,s) = xexp'(s,fresh_named_var "venv", venv, NONE, NOTID)
-				   in  (add_instr(STORE32I(EA(clregi,8), ir)); s)
+				   in  (add_instr(INIT(EA(clregi,8), ir, NONE)); s)
 				   end
 		      val _ = if is_recur 
 				  then (foldl2 dowrite rec_state (clregsi, var_vcelist); ())
@@ -1602,7 +1602,7 @@ struct
 				       val recstate = foldl folder state (zip vclist clregs)
 				       fun do_write ((clreg,(v,c)),s) = 
 					   let val (r,_,s) = xcon(s,v,c, NONE)
-					   in  add_instr(STORE32I(EA(clreg,4),r)); s
+					   in  add_instr(MUTATE(EA(clreg,4),r,NONE)); s
 					   end
 				   in  foldl do_write recstate (zip clregs vclist)
 				   end
@@ -1872,11 +1872,12 @@ struct
 		     end
 	     in  val named_exports = map mapper exports
 	     end
-	     val mainVar = Name.fresh_named_var("main_" ^ unitname ^ "_doit")
+	     val mainCodeVar = Name.fresh_named_var("main_" ^ unitname ^ "_code")
+	     val mainCodeName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_code")
 	     val mainName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_doit")
 	     val _ = resetDepth()
 	     val _ = resetWork()
-	     val _ = reset_global_state ((mainVar,mainName)::named_exports,
+	     val _ = reset_global_state ((mainCodeVar,mainCodeName)::named_exports,
 					 toplevel_locals)
 		 
 	     val exp = Let_e(Sequential, bnds,NilUtil.true_exp)
@@ -1894,7 +1895,7 @@ struct
 			 then print "tortl - handling imports now\n"
 		     else ()
 
-	     val _ = reset_state(true, (mainVar, mainName))
+	     val _ = reset_state(true, (mainCodeVar, mainCodeName))
 	     fun folder (ImportValue(l,v,c),s) = 
 		 (* For extern or C functions, the label IS the value rather than a pointer *)
 		 let val mllab = ML_EXTERN_LABEL(Name.label2string l)
@@ -1935,6 +1936,12 @@ struct
 	     val _ = if (!debug)
 			 then print "tortl - returned from worklist now\n"
 		     else ()
+
+	     val _ = add_data(COMMENT("Module closure"))
+	     val _ = add_data(DLABEL(mainName))
+	     val _ = add_data(DATA(mainCodeName))
+	     val _ = add_data(INT32(0w0))
+	     val _ = add_data(INT32(0w0))
 
 	     val procs = rev (!pl)
 	     val module = Rtl.MODULE {procs = procs,

@@ -1,10 +1,36 @@
 (*$import Rtl RTLTAGS Util *)
 
+(* It is crucial that the layout of tags here matches that of the runtime.
+   Compare with files interface_*.h. 
+*)
 structure Rtltags :> RTLTAGS =
 struct
   
-    open Rtl
+    (* The low 3 bits of the 32-bit word describe the object type *)
+    val record    = 0w0 : TilWord32.word
+    val subrecord = 0w1 : TilWord32.word
+    val intarray  = 0w2 : TilWord32.word
+    val ptrarray  = 0w3 : TilWord32.word
+    val realarray = 0w4 : TilWord32.word
+    val skiptag   = 0w5 : TilWord32.word
+    
+    (* For raw(bytes), pointer(words), and real(double) arrays, 
+       the upper 29 bits measure the length of the array in bytes.
+       The following offsets can be used for masking in the logical lengths. *)
+    val int_len_offset = 3
+    val ptr_len_offset = 5
+    val real_len_offset = 6
 
+    (* For records, bits 3 to 7 inclusive give the record length which 
+       can vary from 1 to 24.  Note that the empty record is represented 
+       with a small value.  Bits 8 to 31 indicate whether the fields of
+       the record is a pointer or not.  If bit 8 of the header is set,
+       then the first field of the record is a pointer and so on.... *)
+    val rec_len_offset = 3
+    val rec_len_max = 24	
+    val rec_mask_offset = 8
+
+    open Rtl
     val error = fn s => Util.error "Rtl/tags.sml" s
     structure W = TilWord32
     val i2w = W.fromInt
@@ -15,22 +41,9 @@ struct
 			   else W.rshiftl(v,~disp)
     val bitor = W.orb
 
-   type tags = {static : Word32.word,
-		dynamic : {bitpos : int,
-			   path : Rtl.rep_path} list} list
-
-(* Note that this must agree with the Runtime's notion of tags *)
-    val skiptag = i2w 2
-    val max_rec_len = 24	
-    val record =    i2w 0
-    val subrecord = i2w 1
-    val intarray =  i2w 4
-    val realarray = i2w 5
-    val ptrarray =  i2w 6
-
-    val real_len_offset = 6
-    val int_len_offset = 3
-    val ptr_len_offset = 5
+    type tags = {static : Word32.word,
+		 dynamic : {bitpos : int,
+			    path : Rtl.rep_path} list} list
 
     fun realarraytag len =
 	bitor(bitshift(len,real_len_offset),realarray)
@@ -41,30 +54,27 @@ struct
     fun ptrarraytag len =
 	bitor(bitshift(len,int_len_offset),ptrarray)
 
-    fun rawstringtag (len : int) =
-	let val wordlen = (len+3) div 4
-        in intarraytag (i2w wordlen)
-        end
 
-    fun recordtag(flaglist) = 
+    fun pp_flag TRACE = print "TRACE, "
+      | pp_flag UNSET = print "UNSET, "
+      | pp_flag NOTRACE_INT = print "NOTRACE_INT, "
+      | pp_flag NOTRACE_CODE = print "NOTRACE_CODE, "
+      | pp_flag NOTRACE_REAL = print "NOTRACE_REAL, "
+      | pp_flag LABEL = print "LABEL, "
+      | pp_flag LOCATIVE = print "LOCATIVE, "
+      | pp_flag (COMPUTE _) = print "COMPUTE, "
+
+    fun recordtag [] = error "recordtag given empty list"
+      | recordtag flaglist = 
       let 
-	  fun pp_flag TRACE = print "TRACE, "
-	    | pp_flag UNSET = print "UNSET, "
-	    | pp_flag NOTRACE_INT = print "NOTRACE_INT, "
-	    | pp_flag NOTRACE_CODE = print "NOTRACE_CODE, "
-	    | pp_flag NOTRACE_REAL = print "NOTRACE_REAL, "
-	    | pp_flag LABEL = print "LABEL, "
-	    | pp_flag LOCATIVE = print "LOCATIVE, "
-	    | pp_flag (COMPUTE _) = print "COMPUTE, "
-
 	fun split _ [] = (nil,nil)
 	  | split 0 r  = (nil,r)
 	  | split n (a::b) = (case (split (n-1) b) of (x,y) => (a::x,y))
-	fun part arg = 
-	  case (split max_rec_len arg) of
-	    (a,[]) => [(false,a)]
-	  | (a,b) => (true,a)::(part b)
-	fun tagger (isfirst,(notlast,flags)) = 
+	fun part first arg = 
+	  case (split rec_len_max arg) of
+	      (a,[]) => [(first,true,a)]
+	    | (a,b) => (first,false,a)::(part false b)
+	fun tagger (first,last,flags) = 
 	  let 
 	    fun stat_loop []          = 0
 	      | stat_loop (NOTRACE_INT :: rest) = 0 + 2 * (stat_loop rest)
@@ -85,24 +95,20 @@ struct
 	      | dyn_loop (_ :: rest,pos)  = dyn_loop(rest,pos+1)
 
 	    val static_mask = stat_loop flags
-	    val compute_mask = dyn_loop (flags,4)
+	    val dynamic_mask = dyn_loop (flags,rec_mask_offset)
+	    val lenflags = length flags
 	    val lenval = 
-	      if (length flags < max_rec_len) 
-		then (length flags) 
-	      else 
-		if (notlast)
-		  then 31
-		else max_rec_len
-	    val tagval = if (isfirst) then record else subrecord
+		if (lenflags = rec_len_max andalso not last)
+		    then 31
+		else lenflags
+	    val rec_type = if first then record else subrecord
+	    val rec_len = bitshift(i2w lenval,rec_len_offset)
+	    val rec_mask = bitshift(i2w static_mask,rec_mask_offset)
 	  in
-	     {static=bitor(bitor(tagval,bitshift(i2w static_mask,3)),
-			   bitshift(i2w (lenval),27)),
-	      dynamic = compute_mask}
+	      {static = bitor(bitor(rec_type,rec_len),rec_mask),
+	       dynamic = dynamic_mask}
 	  end
-      in
-	map tagger (case (part flaglist) of
-		      (a::b) => (true,a) :: (map (fn arg => (false,arg)) b)
-			| _ => error "tags.sml: bad top case")
+      in  map tagger (part true flaglist) 
       end
 end
 

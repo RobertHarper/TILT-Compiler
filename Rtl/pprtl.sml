@@ -75,6 +75,7 @@ struct
     | regi2s (SREGI HEAPPTR)  = "HEAPPTR"
     | regi2s (SREGI HEAPLIMIT)  = "HEAPLIMIT"
     | regi2s (SREGI STACKPTR) = "STACKPTR"
+    | regi2s (SREGI THREADPTR)   = "THREADPTR"
     | regi2s (SREGI EXNPTR)   = "EXNPTR"
     | regi2s (SREGI EXNARG)   = "EXNARG"
 
@@ -277,7 +278,12 @@ struct
 	      | STORE32I a      => op2si "stl" a
               | LOADQF (ea,r)   => plain ["ldt ",regf2s r,", ",ea2s ea]
               | STOREQF (ea,r)  => plain ["stt ",regf2s r,", ",ea2s ea]
-              | NEEDMUTATE (r)  => plain ["needmutate ",regi2s r]
+
+	      | MUTATE (ea,r,NONE) => op2si "mutate" (ea,r)
+	      | MUTATE (ea,r,SOME r2) => plain ["mutate_dyn ",regi2s r,", ", regi2s r2, ", ", ea2s ea]
+	      | INIT (ea,r,NONE) => op2si "init" (ea,r)
+	      | INIT (ea,r,SOME r2) => plain ["init_dyn ",regi2s r,", ", regi2s r2, ", ", ea2s ea]
+
               | NEEDGC (sv)     => plain ["needgc ",sv2s sv]
               | FLOAT_ALLOC(r1,r2,r3,tag) => 
 		   plain [regi2s r3, " <- float_alloc ",

@@ -165,6 +165,7 @@ struct
 
 	  val numfields = alloc_regi NOTRACE_INT
 	  val gctemp = alloc_regi NOTRACE_INT
+	  val oldmask = alloc_regi NOTRACE_INT
 	  val tmp = alloc_regi NOTRACE_INT
 	  val tmp2 = alloc_regi NOTRACE_INT
 	  val data = alloc_regi NOTRACE_INT
@@ -190,7 +191,7 @@ struct
 	  val _ = add_instr(LOAD32I(EA(summand_con_ir,4*(w2i field_sub)),field_con_ir))
 
 	  (* is it a record type?  fall-through to non-record case *)
-	  val (recordl,nonrecordl) = isrecord_dynamic "xprojsum_multi" field_con_ir
+	  val (recordl,nonrecordl) = isrecord_dynamic "xsum_multi" field_con_ir
 	      
 	  (* easier non-record case *)
 	  val _ = add_instr(ILABEL nonrecordl) 
@@ -200,19 +201,18 @@ struct
 	  val _ = add_instr(MV(ir,desti))
 	  val _ = add_instr(BR afterl)
 	      
-	  (* difficult record case *)
+	  (* difficult record case - XXX breaks for multi-record *)
 	  val _ = add_instr(ILABEL recordl) 
 	  val vl_ir = load_ireg_locval(exp_varloc,NONE)
 	  val _ = add_instr(LOAD32I(EA(vl_ir,~4),rectagi));  (* load record tag *)
-	  (* XXX this will break if record is a multi-record  *)
-	  val _ = add_instr(SRL(rectagi,IMM 27,numfields))
-	  val _ = add_instr(SLL(rectagi,IMM 5, tmp)) 
-	  val _ = add_instr(SRL(tmp,IMM (3+5), tmp))         (* tmp = old mask right-justified *)
-	  val _ = add_instr(SLL(tmp,IMM 4, tmp))             (* tmp = new mask with extra field *)
+	  val _ = add_instr(SRL(rectagi,IMM rec_len_offset,numfields))
+	  val _ = add_instr(ANDB(numfields,IMM 31,numfields))       (* numfields = orig # of fields *)
+	  val _ = add_instr(SRL(rectagi,IMM rec_mask_offset,oldmask))  (* tmp = old mask right-justified *)
+	  val _ = add_instr(SLL(oldmask,IMM (1+rec_mask_offset), tmp)) (* tmp = new mask with extra field *)
 	  (* XXX record aspect is zero *)
 	  val _ = add_instr(ADD(numfields,IMM 1, tmp2))
-	  val _ = add_instr(SLL(tmp2,IMM 27, tmp2))        (* compute new length *)
-	  val _ = add_instr(ORB(tmp,REG tmp2,newtag))      (* final record tag *)
+	  val _ = add_instr(SLL(tmp2,IMM rec_len_offset, tmp2)) (* compute record aspect and new length *)
+	  val _ = add_instr(ORB(tmp,REG tmp2,newtag))           (* throw in the mask *)
 	      
 	  val _ = add_instr(ADD(numfields,IMM 2, gctemp))
 	  val state = needgc(state,REG gctemp)             (* allocate space for sum record *)
@@ -229,7 +229,9 @@ struct
 		   add_instr(SUB(srccursor,IMM 4, srccursor));
 		   add_instr(SUB(destcursor,IMM 4, destcursor));
 		   add_instr(LOAD32I(EA(srccursor,0),data));
-		   add_instr(STORE32I(EA(destcursor,0),data));
+		   add_instr(ANDB(oldmask,IMM 1, tmp));
+		   add_instr(SRL(oldmask, IMM 1, oldmask));
+		   add_instr(INIT(EA(destcursor,0),data,SOME tmp));
 		   add_instr(CMPUI(LE,srccursor,REG vl_ir, tmp));
 		   add_instr(BCNDI(EQ, tmp, loopl,false)))  (* loop will copy record fields *)
 	      
@@ -345,8 +347,8 @@ struct
 		  val loopl = fresh_code_label "projsum_multi_loop"
 		  val tag = alloc_regi NOTRACE_INT
 		  val rectag = alloc_regi NOTRACE_INT
+		  val oldmask = alloc_regi NOTRACE_INT
 		  val tmp = alloc_regi NOTRACE_INT
-		  val tmp2 = alloc_regi NOTRACE_INT
 		  val gctemp = alloc_regi NOTRACE_INT
 		  val sumrectag = alloc_regi NOTRACE_INT
 		  val numfields = alloc_regi NOTRACE_INT
@@ -375,15 +377,14 @@ struct
 			   add_instr(LOAD32I(EA(field_con_ir,4),numfields)))
 
 		  val _ = add_instr(LOAD32I(EA(exp_ir,~4),sumrectag))
-		  val _ = add_instr(LI(0wxf8000000,tmp2))
-		  val _ = add_instr(ANDB(tmp2,REG sumrectag,tmp2))      (* tmp2 is extracted length *)
-		  val _ = add_instr(XORB(tmp2,REG sumrectag,tmp))       (* tmp is mask only *)
-		                                                    (* XXX since record aspect is zero *)
-		  val _ = add_instr(SRL(tmp,IMM 1, tmp))          (* tmp is new mask with record aspect *)
-		  val _ = add_instr(SRL(tmp2,IMM 27, gctemp))
-		  val _ = add_instr(SUB(gctemp,IMM 1, numfields))   (* # of fields in final rec *)
-		  val _ = add_instr(SLL(numfields,IMM 27, tmp2))    (* length bits *)
-		  val _ = add_instr(ORB(tmp,REG tmp2,rectag))      (* final record tag *)
+		  val _ = add_instr(SRL(sumrectag, IMM rec_len_offset,gctemp))
+		  val _ = add_instr(ANDB(gctemp, IMM 31, gctemp))         (* gctemp is original length *)
+		  val _ = add_instr(SUB(gctemp,IMM 1,numfields))          (* numfield = # of fields in final rec *)
+		  val _ = add_instr(SRL(sumrectag, 
+					IMM (1+rec_mask_offset), oldmask))    (* tmp is mask with first field removed *)
+		  val _ = add_instr(SLL(oldmask,IMM rec_mask_offset, rectag)) (* rectag is new mask with XXX record aspect zero *)
+		  val _ = add_instr(SLL(numfields,IMM rec_len_offset, tmp))
+		  val _ = add_instr(ORB(rectag,REG tmp,rectag))           (* final record tag *)
 
 		  val state = needgc(state,REG gctemp)       (* allocate space for record *)
 
@@ -391,9 +392,12 @@ struct
 		  val _ = add_instr(S4ADD(numfields, REG heapptr, destcursor)) (* record tag *)
 		  val _ = add_instr(S4ADD(numfields, REG exp_ir, srccursor)) (* sum tag *)
 
+		  (* XXX this will break if record is a multi-record  *)		  
 		  val _ = (add_instr(ILABEL loopl); 
 			   add_instr(LOAD32I(EA(srccursor,0),data));
-			   add_instr(STORE32I(EA(destcursor,0),data));
+			   add_instr(ANDB(oldmask,IMM 1, tmp));
+			   add_instr(SRL(oldmask, IMM 1, oldmask));
+			   add_instr(INIT(EA(destcursor,0),data,SOME tmp));
 			   add_instr(SUB(srccursor,IMM 4, srccursor));
 			   add_instr(SUB(destcursor,IMM 4, destcursor));
 			   add_instr(CMPUI(EQ,destcursor,REG heapptr, tmp));

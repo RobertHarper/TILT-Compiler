@@ -17,7 +17,7 @@ struct
                    | LOCAL_DATA of string
                    | LOCAL_CODE of string
 
-  datatype sregi = HEAPPTR | HEAPLIMIT | EXNPTR | EXNARG | STACKPTR
+  datatype sregi = HEAPPTR | HEAPLIMIT | EXNPTR | EXNARG | STACKPTR | THREADPTR
   datatype regi = REGI of var * rep  (* int in var is register # *)
                 | SREGI of sregi
   and regf = REGF of var * rep
@@ -49,12 +49,17 @@ struct
     | eqregi (SREGI a, SREGI b) = eqsregi(a,b)
     | eqregi _ = false
   fun eqregf(REGF(v,_),REGF(v',_)) = eq_var(v,v')
-(*
-  val heapptr = REGI(V(25,"heapptr"),NOTRACE_INT)
-  val exnptr = REGI(V(24,"exnptr"),NOTRACE_INT)
-  val stackptr = REGI(V(30,"stackptr"),NOTRACE_INT)
-  val exnarg = REGI(V(26,"exnarg"),TRACE)
-*)
+
+  fun sregi2int HEAPPTR = 0
+    | sregi2int HEAPLIMIT = 1
+    | sregi2int STACKPTR = 2
+    | sregi2int THREADPTR = 3
+    | sregi2int EXNPTR = 4
+    | sregi2int EXNARG = 5
+
+  (* This is okay since variable number start at 256 *)
+  fun regi2int (REGI (v,_)) = Name.var2int v
+    | regi2int (SREGI sregi) = sregi2int sregi
 
   (* save: set of registers to save before a procedure call or at the
      start of executing a procedure body.  These registers are restored
@@ -177,7 +182,9 @@ struct
     | STOREQF    of ea * regf
 
 
-    | NEEDMUTATE of regi
+    | MUTATE of ea * regi * regi option   (* if option is present, a nonzero value indicates pointer *)
+    | INIT of ea * regi * regi option     (* if option is present, a nonzero value indicates pointer *)
+
     | NEEDGC     of sv
     | FLOAT_ALLOC of regi * regf * regi * TilWord32.word
     | INT_ALLOC   of regi * regi * regi * TilWord32.word

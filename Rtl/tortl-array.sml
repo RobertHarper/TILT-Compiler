@@ -176,18 +176,16 @@ struct
 
   fun xptrupdate(state, c) (vl1 : loc_or_val, vl2 : loc_or_val, vl3 : loc_or_val) : loc_or_val * con * state =
       let
-	  val a' = load_ireg_locval(vl1,NONE)
-	  val argi = load_ireg_locval(vl3,NONE)
-	  val addr = alloc_regi (LOCATIVE)
-	  val wloc = alloc_regi (LOCATIVE)
-	  val _ = (add_instr(NEEDMUTATE wloc);
-		   (case (in_imm_range_vl vl2) of
-			SOME i' => add_instr(ADD(a',IMM (i'),addr))
-		      | NONE => let val t = load_ireg_locval(vl2,NONE)
-				in  add_instr(S4ADD(t,REG a',addr))
-				end);
-			add_instr(STORE32I(EA(wloc,0),addr)))
-      in  xupdate_int(state,Prim.W32) (vl1, vl2, vl3)
+	  val base = load_ireg_locval(vl1,NONE)
+	  val newval = load_ireg_locval(vl3,NONE)
+      in  (case (in_imm_range_vl vl2) of
+	       SOME offset => add_instr(MUTATE(EA(base,offset),newval,NONE))
+	     | NONE => let val addr = alloc_regi (LOCATIVE)
+			   val offset = load_ireg_locval(vl2,NONE)
+		       in  add_instr(S4ADD(offset,REG base,addr));
+			   add_instr(MUTATE(EA(addr,0),newval,NONE))
+		       end);
+	  (#1 unit_vvc, #2 unit_vvc, state)
       end
 
   fun xupdate_known(state, c) vlist : loc_or_val * con * state =
@@ -365,7 +363,8 @@ struct
 			gctemp : loc_or_val,   (* number of words to increment heapptr by *)
 			len : regi,         (* number of words to write *)
 			v : regi,           (* write v (len) times *)
-			gafter               (* label to jump to when done *)
+			gafter,             (* label to jump to when done *)
+			isptr
 			) = 
       let 
 	  val skiptag      = alloc_regi NOTRACE_INT
@@ -398,7 +397,9 @@ struct
 	    do_code_align();
 	    add_instr(ILABEL gtop);        (* top of loop *)
 	    add_instr(S4ADD(i,REG dest,tmp));
-	    add_instr(STORE32I(EA(tmp,0),v)); (* allocation *)
+	    if isptr
+		then add_instr(MUTATE(EA(tmp,0),v,NONE))
+	    else add_instr(STORE32I(EA(tmp,0),v)); (* allocation *)
 	    add_instr(SUB(i,IMM 1,i));
 	    add_instr(ILABEL gbottom);
 	    add_instr(BCNDI(GE,i,gtop,true));
@@ -426,19 +427,19 @@ struct
 				 val _ = (add_instr(ICOMMENT "about to make tag");
 					  mk_intarraytag(loglen,tag);
 					  add_instr(ICOMMENT "done making tag");
-					  add_instr(ANDB(loglen,IMM 3,tmp));     (* tmp = loglen % 3 *)
-					  add_instr(ADD(loglen,IMM 3,wordlen));
-					  add_instr(SRL(wordlen,IMM 2,wordlen)); (* wordlen = (loglen + 3)/4*4 *)
+					  add_instr(ADD(loglen,IMM 3,tmp));      
+					  add_instr(SRL(tmp,IMM 2,wordlen));     (* wordlen = (loglen + 3)/4 *)
+					  add_instr(ANDB(loglen,IMM 3,tmp));     (* tmp = loglen % 4 *)
 					  add_instr(LI(0w4,shift));              (* use shift as a temp *)
-					  add_instr(SUB(tmp,REG shift,tmp));
-					  add_instr(ANDB(tmp,IMM 3,tmp));  (* tmp = (4 - (loglen % 4)) % 4 *)
-					  add_instr(SLL(tmp, IMM 3,shift));         (* computed shift amount *)
+					  add_instr(SUB(shift,REG tmp,tmp));
+					  add_instr(ANDB(tmp,IMM 3,tmp));        (* tmp = (4 - tmp) % 4 *)
+					  add_instr(SLL(tmp, IMM 3,shift));  (* shift = # of zero bits in end res *)
 					  
 					  add_instr(SLL(vtemp,IMM 8,fullres));
 					  add_instr(ORB(fullres,REG vtemp,vtemp));
-					  add_instr(SLL(vtemp,IMM 16,fullres));
-					  add_instr(ORB(fullres,REG vtemp,fullres)); (* computed fullres *)
-					  add_instr(SRL(fullres,REG shift, endres)))   (* computed endres *)
+					  add_instr(SLL(vtemp,IMM 16,fullres));    
+					  add_instr(ORB(fullres,REG vtemp,fullres)); (* fullres = array word *)
+					  add_instr(SRL(fullres,REG shift, endres))) (* endres = last array word *)
 				     
 			     in  (wordlen,fullres, SOME endres)
 			     end
@@ -480,7 +481,7 @@ struct
 		val _ = check()
 		val state = (general_init_case(ptag,tag,dest,
 					       VAR_LOC(VREGISTER(false,I gctemp)),
-					       wordlen,v,gafter);
+					       wordlen,v,gafter,false);
 			     (case afteropt of
 				  NONE => ()
 				| SOME ir => (add_instr(SUB(wordlen,IMM 1,i));
@@ -523,7 +524,7 @@ struct
 		     mk_ptrarraytag(len,tag);
 		     general_init_case(ptag,tag,dest,
 				       VAR_LOC(VREGISTER(false,I gctemp)),
-				       len,v,gafter);
+				       len,v,gafter,true);
 		     (* after all this allocation, we cannot merge *)
 		     (VAR_LOC(VREGISTER(false, I dest)),
 		      Prim_c(Array_c, [c]),
