@@ -82,6 +82,7 @@ val debug_bound = ref false
    datatype var_loc = VREGISTER of bool * reg 
 		    | VGLOBAL of label * rep  (* I am located at this label: closure, data, ... *)
    and var_val = VINT of TW32.word
+               | VTAG of TW32.word
                | VREAL of label           (* I am a real located at this label *)
                | VRECORD of label * var_val list (* I have the value of this label *)
                | VVOID of rep
@@ -95,7 +96,7 @@ val debug_bound = ref false
                        | VAR_VAL of var_val
    type varmap = var_rep VarMap.map
    type convarmap = convar_rep' VarMap.map
-   val unitval = VINT 0w256
+   val unitval = VTAG 0w256
    val unit_vvc = (VAR_VAL unitval, Prim_c(Record_c[],[]))
 
    datatype gcinfo = GC_IMM of instr ref | GC_INF
@@ -437,7 +438,7 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 			(* WRONG just an experiment *)
 		  (* we could actually return an answer but this depends on xcon *)
 		  | SOME(_,SOME(VINT _),_) => SOME TRACE
-
+		  | SOME(_,SOME(VTAG _),_) => SOME TRACE
 
 		  | SOME(SOME(VREGISTER (_,I r)),_,_) => SOME(COMPUTE(Projvar_p (r,[])))
 		  | SOME(SOME(VREGISTER (_,F _)),_,_) => error "constructor in float reg"
@@ -474,6 +475,7 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 					   end
 	       in  (case (getconvarrep' state v) of
 		       SOME(_,SOME(VINT _),_) => error "expect constr record: got int"
+		     | SOME(_,SOME(VTAG _),_) => error "expect constr record: got tag"
 		     | SOME(_,SOME(VREAL _),_) => error "expect constr record: got real"
 		     | SOME(_,SOME(VRECORD _),_) => error "expect constr record: got term record"
 		     | SOME(_,SOME(VVOID _),_) => error "expect constr record: got void"
@@ -544,6 +546,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
   fun varval2rep varval =
       (case varval of
 	   VINT _ => NOTRACE_INT
+	 | VTAG _ => TRACE
 	 | VREAL _ => NOTRACE_REAL
 	 | VRECORD _ => TRACE
 	 | VLABEL _ => TRACE (* LABEL the whole idea of varval2rep is suspect *)
@@ -747,8 +750,14 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
     end
 
   fun in_imm_range_vl (VAR_VAL(VINT w)) = ((if in_imm_range w then SOME (w2i w) else NONE) handle _ => NONE)
+   | in_imm_range_vl (VAR_VAL(VTAG w)) = ((if in_imm_range w then SOME (w2i w) else NONE) handle _ => NONE)
     | in_imm_range_vl _ = NONE
   fun in_ea_range scale (VAR_VAL(VINT i)) = 
+      ((if in_ea_disp_range(w2i i * scale)
+	    then SOME (w2i i * scale)
+	else NONE)
+	    handle _ => NONE)
+    | in_ea_range scale (VAR_VAL(VTAG i)) = 
       ((if in_ea_disp_range(w2i i * scale)
 	    then SOME (w2i i * scale)
 	else NONE)
@@ -876,6 +885,10 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 			in  add_instr (LI(i,r));
 			    r
 			end
+	| VTAG i => let val r = pickdest TRACE
+			in  add_instr (LI(i,r));
+			    r
+			end
 	| VREAL l => error ("load_ireg: VREAL")
 
 	| VRECORD(label,_) => 
@@ -943,6 +956,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 			    end
       in case rep of
 	  (VINT i) => error "load_freg: got VINT"
+	| (VTAG i) => error "load_freg: got VTAG"
 	| (VVOID rep) => alloc_regf()
 	| (VREAL l) => doit l
 	| (VRECORD _) => error "load_freg: got VRECORD"
@@ -989,6 +1003,8 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
       | load_reg_locval(VAR_VAL vv, poss_dest) = load_reg_val(vv,poss_dest)
     fun load_ireg_sv(vl as (VAR_VAL(VINT i))) =
 	if (in_imm_range i) then IMM(TW32.toInt i) else REG(load_ireg_locval(vl,NONE))
+      | load_ireg_sv(vl as (VAR_VAL(VTAG i))) =
+	    if (in_imm_range i) then IMM(TW32.toInt i) else REG(load_ireg_locval(vl,NONE))
       | load_ireg_sv vl = REG(load_ireg_locval(vl,NONE))
 
 
@@ -1095,6 +1111,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 						 end
 		  | VAR_VAL (VVOID _) => error "alloc_global got nvoid"
 		  | VAR_VAL (VINT w32) => add_data(INT32 w32)
+		  | VAR_VAL (VTAG w32) => add_data(INT32 w32)
 		  | VAR_VAL (VREAL l) => add_data(DATA l)
 		  | VAR_VAL (VRECORD (l,_)) => add_data(DATA l)
 		  | VAR_VAL (VLABEL l) => add_data(DATA l)
@@ -1189,6 +1206,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	| VAR_LOC(VREGISTER (_,I _)) => error "float in int reg"
 	| VAR_LOC(VGLOBAL (l,_)) => (VAR_VAL(VLABEL l), state)
 	| VAR_VAL(VINT _) => error "can't boxfloat an int"
+	| VAR_VAL(VTAG _) => error "can't boxfloat an tag"
 	| VAR_VAL(VREAL l) => (VAR_VAL(VLABEL l), state)
 	| VAR_VAL(VRECORD _) => error "can't boxfloat a record"
 	| VAR_VAL(VVOID _) => error "can't boxfloat a void"
@@ -1331,6 +1349,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	  | scan_vals (offset,vl::vls) =
 	    ((case (const,vl) of
 		  (true, VAR_VAL (VINT w32)) => add_data(INT32 w32)
+		| (true, VAR_VAL (VTAG w32)) => add_data(INT32 w32)
 		| (true, VAR_VAL (VRECORD (l,_))) => add_data(DATA l)
 		| (true, VAR_VAL (VLABEL l)) => add_data(DATA l)
 		| (true, VAR_VAL (VCODE l)) => add_data(DATA l)

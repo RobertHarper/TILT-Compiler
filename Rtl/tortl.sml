@@ -24,12 +24,14 @@
 functor Tortl(structure Rtl : RTL
 	      structure Pprtl : PPRTL
 	      structure TortlBase : TORTL_BASE 
+	      structure TortlSum : TORTL_SUM
 	      structure Rtltags : RTLTAGS 
 	      structure Nil : NIL
 	      structure NilUtil : NILUTIL
 	      structure Ppnil : PPNIL
 	      sharing Ppnil.Nil = NilUtil.Nil = TortlBase.Nil = Nil
 	      sharing Pprtl.Rtltags = Rtltags
+              sharing TortlSum.TortlBase = TortlBase
 	      sharing Rtl = Pprtl.Rtl = TortlBase.Rtl)
     :> TORTL where Rtl = Rtl 
              where Nil = Nil =
@@ -142,7 +144,7 @@ val debug_bound = ref false
 			  let val (code_lv,_,state) = xexp(state,fresh_named_var "codereg",Var_e code,NONE,NOTID)
 			      val (_,con_lv,_,state) = xcon'(state,fresh_named_var "cenv", cenv,NONE)
 			      val (exp_lv,_,state) = if is_recur
-					       then (VAR_VAL(VINT 0w0),Crecord_c[],state)
+					       then (VAR_VAL(VTAG 0w0),Crecord_c[],state)
 					   else xexp(state,fresh_named_var "venv",venv,NONE,NOTID)
 			      val vls = [code_lv,
 					 con_lv,
@@ -240,6 +242,7 @@ val debug_bound = ref false
 		  fun general_packager [(VAR_VAL vv,_)] = 
 		        (case vv of
 			     (VINT w) => add_data(INT32 w)
+			   | (VTAG w) => add_data(INT32 w)
 			   | (VREAL l) => add_data(DATA l)
 			   | VRECORD (l,_) => add_data(DATA l)
 			   | (VVOID _) => error "got a vvoid in xvector"
@@ -659,17 +662,21 @@ val debug_bound = ref false
 	      val _ = add_instr(BCNDI(NE,r,elsel,false))
 	      val _ = add_instr(ILABEL thenl)
 	      val (zero,zcon,state_zero) = xexp'(state,fresh_named_var "zero_result", zeroexp, copt, context)
-	      val result = zero
+	      val dest = alloc_reg state zcon
+	      val _ = (case (zero, dest) of 
+			   (I zz, I d) => add_instr(MV (zz,d))
+			 | (F zz, F d) => add_instr(FMV (zz,d))
+			 | _ => error "zero_one: different arms have results in float and int registers")
 	      val _ = add_instr(BR afterl)
 	      val _ = add_instr(ILABEL elsel)
 	      val (one,ocon,state_one) = xexp'(state,fresh_named_var "nonzero_result", oneexp, copt, context)
 	      val state = join_states[state_zero,state_one]
-	      val _ = (case (zero,one) of 
-			   (I zz, I oo) => add_instr(MV (oo,zz))
-			 | (F zz, F oo) => add_instr(FMV (oo,zz))
+	      val _ = (case (one,dest) of 
+			   (I oo, I d) => add_instr(MV (oo,d))
+			 | (F oo, F d) => add_instr(FMV (oo,d))
 			 | _ => error "zero_one: different arms have results in float and int registers")
 	      val _ = add_instr(ILABEL afterl)
-	  in (VAR_LOC (VREGISTER (false, result)), zcon,state)
+	  in (VAR_LOC (VREGISTER (false, dest)), zcon,state)
 	  end
 
 
@@ -682,11 +689,18 @@ val debug_bound = ref false
       let
 	  val rescon = ref NONE
 	  val dest = ref NONE
-	  fun mv (r,c) = (case (r,!dest) of
-			      (_,NONE) => (dest := (SOME r); rescon := (SOME c))
-			    | (I ir1, SOME(I ir2)) => add_instr(MV(ir1,ir2))
-			    | (F fr1, SOME(F fr2)) => add_instr(FMV(fr1,fr2))
-			    | _ => error "register mismatch")
+	  fun mv (r,c) = let val _ = (case (!dest) of
+					  NONE => dest := (SOME (alloc_reg state c))
+					| _ => ())
+			     val _ = (case !rescon of
+					  NONE => rescon := SOME c
+					| _ => ())
+			     val d = valOf(!dest)
+			 in (case (r,d) of
+				 (I ir1, I ir2) => add_instr(MV(ir1,ir2))
+			       | (F fr1, F fr2) => add_instr(FMV(fr1,fr2))
+			       | _ => error "register mismatch")
+			 end
 	  fun get_body (Function(_,_,[],[],[],e,c)) = e
 	    | get_body _ = error "get_body of xswitch got a function with arguments"
 	  fun no_match state = 
@@ -901,346 +915,6 @@ val debug_bound = ref false
 
 
 
-  (* First, we assume that datatypes are translated by 
-     rearranging the non value-carrying components to the beginning.
-     To support efficient representations, we let m and n denote
-     the length of the maximal initial segment of non value-carrying components 
-     and n the rest of the components.  Note that this m is
-     NOT the number(k) of non-value-carrying constructors in the datatype.
-     It is possible for m > k. There are then 6 cases to consider:
-
-         1. m=0, n=0    we use the unit representation
-         2. m<>0, n=0   we use tags to represent the datatype
-         3. m=0, n=1    we use the argument type to represent the datatype
-         4. m<>0, n=1   we use tag or pointer to represent the datatype
-         5. m<>0, n>1   we use tag or tagged sum to represent the datatype
-         6. m=0, n>1    we use tagged sum to represent the datatype
-
-     Tag sums are flat if the carrier is a record type.
-     
-     is_record indicates that the injectee is of a record type and the 
-       that the term arguments are passed in separately as record components
-  *)
-
-  and xsum is_record (orig_state : state,
-		      known,
-		      sumcon : con, 
-		      elist,context) : loc_or_val * con * state = 
-      let
-	  open Prim
-	  val (tagcount,sumtypes) = reduce_to_sum "xsum" orig_state sumcon
-
-	  val field_64 = TW64.fromInt(TW32.toInt known)
-	  val field_sub = TW32.uminus(known,tagcount)
-	  val nontagcount = length sumtypes
-	  val single_carrier = nontagcount = 1
-
-	  val (varlocs,orig_state) = 
-	      foldl_list (fn (e,s) => let val (vl,_,s) = xexp(s,fresh_var(),e,NONE,NOTID)
-				      in (vl,s)
-				      end) orig_state elist
-
-
-          fun xtagsum_tag state = 
-	      let val (vl,_,state) = xexp(state,fresh_var(),Const_e(uint(W32,field_64)),NONE,context)
-	      in (vl,state)
-	      end
-
-	  fun xtagsum_single state =
-	      let 
-		  val field_type = List.nth(sumtypes, TW32.toInt field_sub)
-		  val desti = alloc_regi(con2rep state field_type)
-		  fun box_case_vl state = 
-		      let val reps = map valloc2rep varlocs
-		      in  make_record(state,NONE,reps,varlocs)
-		      end
-		  fun nobox_case_vl state = 
-		      if is_record
-			  then box_case_vl state
-		      else (hd varlocs, state)
-	      in  (case simplify_type' orig_state field_type of
-			  (true,Prim_c(Int_c _, _)) => box_case_vl state
-			| (true,Prim_c(Sum_c _, _)) => box_case_vl state
-			| (true,_) => nobox_case_vl state
-			| _ =>
-			      let val beginl = alloc_code_label "tagsum_begin"
-				  val boxl = alloc_code_label "tagsum_boxcase"
-				  val mul = alloc_code_label "tagsum_mucase"
-				  val noboxl = alloc_code_label "tagsum_noboxcase"
-				  val afterl = alloc_code_label "tagsum_after"
-				  val (con_ir,_,state) = xcon(state,fresh_var(),sumcon, NONE)
-				  (* the first 4 fields are: tag, known, tagcount, total *)
-				  val _ = add_instr(LOAD32I(EA(con_ir,4*(4+(w2i field_sub))),con_ir))
-				  val tmp = alloc_regi NOTRACE_INT
-				  val tagi = alloc_regi NOTRACE_INT
-				  val _ = (add_instr(ILABEL beginl);
-					   add_instr(CMPUI(LE, con_ir, IMM 4, tmp)); (* check ints *)
-					   add_instr(BCNDI(NE, tmp, boxl, false));
-					   add_instr(CMPUI(GE, con_ir, IMM 255, tmp));
-					   add_instr(BCNDI(EQ, tmp, noboxl, false));
-					   add_instr(LOAD32I(EA(con_ir,0),tagi));
-					   add_instr(CMPUI(EQ, tagi, IMM 4, tmp)); (* check sums *)
-					   add_instr(BCNDI(NE, tmp, boxl, false));
-					   add_instr(CMPUI(EQ, tagi, IMM 7, tmp)); (* check mu *)
-					   add_instr(BCNDI(NE, tmp, mul, false)))
-				  (* no box case *)
-				  val _ = add_instr(ILABEL noboxl)
-				  val (vl,nobox_state) = nobox_case_vl state
-				  val _ = add_instr(MV(load_ireg_locval(vl,NONE),desti))
-				  val _ = add_instr(BR afterl)
-
-				  (* mu case - must expand *)
-				  val _ = (add_instr(ILABEL mul);
-					   add_instr(LOAD32I(EA(con_ir,4),con_ir));
-					   add_instr(BR beginl))
-
-				  (* box case *)
-				  val _ = add_instr(ILABEL boxl)
-				  val (vl,box_state) = box_case_vl state
-				  val _ = add_instr(MV(load_ireg_locval(vl,NONE), desti))
-				  val _ = add_instr(ILABEL afterl)
-
-			      in  (VAR_LOC(VREGISTER(false, I desti)),
-				   join_states[nobox_state,box_state])
-			      end)
-	      end
-
-	  fun xtagsum_dynamic (state,vl) =
-	      let val numfields = alloc_regi NOTRACE_INT
-		  val gctemp = alloc_regi NOTRACE_INT
-		  val tmp = alloc_regi NOTRACE_INT
-		  val tmp2 = alloc_regi NOTRACE_INT
-		  val data = alloc_regi NOTRACE_INT
-		  val tagi = alloc_regi NOTRACE_INT
-		  val rectagi = alloc_regi NOTRACE_INT
-		  val newtag = alloc_regi NOTRACE_INT
-		  val srccursor = alloc_regi LOCATIVE
-		  val destcursor = alloc_regi LOCATIVE
-		  val field_type = List.nth(sumtypes, TW32.toInt field_sub)
-		  val desti = alloc_regi(con2rep state field_type)
-
-		  val nonrecordl = alloc_code_label "dyntagsum_norecord"
-		  val afterl = alloc_code_label "dyntagsum_after"
-		  val loopl = alloc_code_label "dyntagsum_loop"
-		  val recordl = alloc_code_label "dyntagsum_record"
-
-		  val (con_ir,_,state) = xcon(state,fresh_var(),sumcon,NONE)
-		  (* the first 4 fields are: tag, known, tagcount, total *)	
-	  val _ = add_instr(LOAD32I(EA(con_ir,4*(4+(w2i field_sub))),con_ir))
-
-		  val _ = (add_instr(CMPUI(LE, con_ir, IMM 255, tmp)); (* check for small types *)
-			   add_instr(BCNDI(NE, tmp, nonrecordl, false));
-			   add_instr(LOAD32I(EA(con_ir,0),tagi));  (* load tag *)
-			   add_instr(CMPUI(NE, tagi, IMM 5, tmp)); (* check for record *)
-			   add_instr(BCNDI(NE, tmp, nonrecordl, false)))
-
-		  val _ = add_instr(ILABEL recordl) (* difficult record case *)
-		  val vl_ir = load_ireg_locval(vl,NONE)
-		  val _ = add_instr(LOAD32I(EA(con_ir,0),rectagi));  (* load record tag *)
-  (* XXX this will break if record is a multi-record or tag format changes *)
-		  val _ = add_instr(SRL(rectagi,IMM 27,numfields))
-		  val _ = add_instr(SLL(rectagi,IMM 5, tmp)) 
-		  val _ = add_instr(SRL(tmp,IMM (3+5), tmp)) 
-		  val _ = add_instr(SLL(tmp,IMM 4, tmp))      (* compute new mask *)
-		  val _ = add_instr(ORB(tmp,IMM 3, tmp))       (* add record aspect *)
-		  val _ = add_instr(ADD(numfields,IMM 1, tmp2))
-		  val _ = add_instr(SLL(tmp2,IMM 27, tmp2))   (* compute new length *)
-		  val _ = add_instr(ORB(tmp,REG tmp2,newtag))      (* final record tag *)
-				    
-		  val _ = add_instr(ADD(numfields,IMM 2, gctemp))
-		  val state = needgc(state,REG gctemp)             (* allocate space for sum record *)
-
-		  val _ = add_instr(STORE32I(EA(heapptr,0),newtag))  (* store record tag *)
-		  val _ = add_instr(LI(field_sub, tmp))
-		  val _ = add_instr(STORE32I(EA(heapptr,4),tmp))     (* store sum tag *)
-		  val _ = add_instr(S4ADD(numfields, REG vl_ir, srccursor)) (* initialize src cursor *)
-		  val _ = add_instr(ADD(heapptr,IMM 8, destcursor))
-		  val _ = add_instr(S4ADD(numfields, REG destcursor, destcursor)) (* init dest cursor *)
-
-		  (* record has at least one field *)
-		  val _ = (add_instr(ILABEL loopl); 
-			   add_instr(LOAD32I(EA(srccursor,0),data));
-			   add_instr(STORE32I(EA(destcursor,0),data));
-			   add_instr(SUB(srccursor,IMM 4, srccursor));
-			   add_instr(SUB(destcursor,IMM 4, destcursor));
-			   add_instr(CMPUI(LE,srccursor,REG vl_ir, tmp));
-			   add_instr(BCNDI(EQ, tmp, loopl,false)))  (* loop will copy record fields *)
-
-		  val _ = add_instr(MV(heapptr,desti))
-		  val _ = add_instr(S4ADD(gctemp, REG heapptr, heapptr))
-		  val _ = add_instr(BR afterl)
-
-		  val _ = add_instr(ILABEL nonrecordl) (* easier non-record case *)
-		  val vls = (case varlocs of
-				 [vl] => [VAR_VAL(VINT field_sub),vl]
-			       | _ => error "xtagsum_dynamic not with one arg")
-		  val (lv,state) = make_record(state,NONE,map valloc2rep vls,vls)
-		  val ir = load_ireg_locval(lv,NONE)
-		  val _ = add_instr(MV(ir,desti))
-
-		  val _ = add_instr(ILABEL afterl) (* result is in desti at this point *)
-
-	      in  (VAR_LOC(VREGISTER(false, I desti)),state)
-	      end
-
-	  fun xtagsum state = 
-	      let fun decompose vl reccon labs cons = 
-		    let val bind = fresh_named_var "xtagsum_var"
-			val ir = load_ireg_locval(vl,NONE)
-			val state = add_reg (state, bind, reccon, I ir)
-			fun folder((l,c),state) = 
-			    let val (vl,_,state) = 
-				xexp(state,fresh_var(),
-				 Prim_e(NilPrimOp(select (l)),
-						 [],[Var_e bind]),
-						  NONE, NOTID)
-			    in  (vl,state)
-			    end
-		    in  foldl_list folder state
-				(Listops.zip labs cons)
-		    end
-		  val field_type = List.nth(sumtypes, TW32.toInt field_sub)
-		  val (hnf,field_type') = simplify_type' orig_state field_type
-		  val (vls,state) = 
-		      (case (is_record,hnf,field_type',varlocs) of
-			   (true,_,_,_) => (SOME varlocs, state)
-			 | (_,_,reccon as Prim_c(Record_c labs, cons),[vl]) => 
-			       let val (vls,state) = decompose vl reccon labs cons
-			       in  (SOME vls, state)
-			       end
-			 | (_,true,_,[vl]) => (SOME [vl], state)
-			 | _ => (NONE, state))
-	      in  case (vls,varlocs) of
-		  (NONE,[vl]) => xtagsum_dynamic(state, vl)
-		| (NONE,_) => error "xtagsum_dynamic case not with one vl"
-		| (SOME varlocs,_) =>
-		      let 
-			  val varlocs = (VAR_VAL(VINT field_sub)) :: varlocs
-			  val reps = map valloc2rep varlocs
-		      in  make_record(state,NONE,reps,varlocs)
-		      end
-	      end
-	  val (varloc,state) =
-	      case (TW32.toInt tagcount,nontagcount) of
-		  (0,0) => xtagsum_tag orig_state
-		| (_,0) => xtagsum_tag orig_state
-		| (_,1) => if (TW32.equal(known,tagcount))
-			       then xtagsum_single orig_state
-			   else xtagsum_tag orig_state
-		| (_,_) => if (TW32.ult(known,tagcount))
-			       then xtagsum_tag orig_state
-			   else xtagsum orig_state
-      in (varloc, sumcon, state) 
-      end
-
-  and xdynamic_project_sum(state : state, sumcon, (tagcount,sumtype), 
-			   summand_types, summand_type,
-			   e, context) : loc_or_val * con * state = 
-      let val single_carrier = (length summand_types) = 1
-	  val (r,_,state) = xexp'(state,fresh_var(),e,NONE,NOTID)	
-	  val exp_ir = coercei "" r
-	  val field_sub = TW32.uminus(sumtype,tagcount)
-	  fun single_case() = 
-	      let val desti = alloc_regi(con2rep state summand_type)
-		  fun nobox_case() = add_instr(MV(exp_ir,desti))
-		  fun box_case() = add_instr(LOAD32I(EA(exp_ir,0),desti))
-		  val afterl = alloc_code_label "projsum_single_after"
-		  val boxl = alloc_code_label "projsum_single_box"
-		  val noboxl = alloc_code_label "projsum_single_nobox"
-		  val (con_ir,_,state) = xcon(state,fresh_var(),sumcon, NONE)
-		  (* the first 4 fields are: tag, known, tagcount, total *)
-		  val _ = add_instr(LOAD32I(EA(con_ir,4*(4+(TW32.toInt field_sub))),con_ir))
-		  val tmp = alloc_regi NOTRACE_INT
-		  val tagi = alloc_regi NOTRACE_INT
-		  val _ = (add_instr(CMPUI(LE, con_ir, IMM 4, tmp)); (* check ints *)
-			   add_instr(BCNDI(NE, tmp, boxl, false));
-			   add_instr(CMPUI(GE, con_ir, IMM 255, tmp));
-			   add_instr(BCNDI(EQ, tmp, noboxl, false));
-			   add_instr(LOAD32I(EA(con_ir,0),tagi));
-			   add_instr(CMPUI(EQ, tagi, IMM 4, tmp)); (* check sums *)
-			   add_instr(BCNDI(NE, tmp, boxl, false)))
-		  (* no box case *)
-		  val _ = (add_instr(ILABEL noboxl);
-			   nobox_case();
-			   add_instr(BR afterl))
-		  (* box case *)
-		  val _ = (add_instr(ILABEL boxl);
-			   box_case();
-			   add_instr(ILABEL afterl))
-	      in  (desti, state)
-	      end
-
-	  fun multi_case() = 
-	      let val afterl = alloc_code_label "projsum_multi_after"
-		  val nonrecordl = alloc_code_label "projsum_multi_nonrecord"
-		  val recordl = alloc_code_label "projsum_multi_record"
-		  val loopl = alloc_code_label "projsum_multi_loop"
-		  val tag = alloc_regi NOTRACE_INT
-		  val rectag = alloc_regi NOTRACE_INT
-		  val tmp = alloc_regi NOTRACE_INT
-		  val tmp2 = alloc_regi NOTRACE_INT
-		  val gctemp = alloc_regi NOTRACE_INT
-		  val sumrectag = alloc_regi NOTRACE_INT
-		  val numfields = alloc_regi NOTRACE_INT
-		  val data = alloc_regi NOTRACE_INT
-		  val srccursor = alloc_regi LOCATIVE
-		  val destcursor = alloc_regi LOCATIVE
-		  val desti = alloc_regi(con2rep state summand_type)
-
-		  val (con_ir,_,state) = xcon(state,fresh_var(),sumcon, NONE)
-		  (* the first 4 fields are: tag, known, tagcount, total *)	
-		  val _ = add_instr(LOAD32I(EA(con_ir,4*(4+(TilWord32.toInt field_sub))),con_ir))
-
-		  val _ = (add_instr(CMPUI(GE, con_ir, IMM 255, tmp));
-			   add_instr(BCNDI(EQ, tmp, nonrecordl, false));
-			   add_instr(LOAD32I(EA(con_ir,0),tag));
-			   add_instr(CMPUI(EQ, tag, IMM 5, tmp));
-			   add_instr(BCNDI(NE, tmp, recordl, false)))
-		  (* non-record case *)
-		  val _ = (add_instr(ILABEL nonrecordl);
-			   add_instr(LOAD32I(EA(exp_ir,4),desti));
-			   add_instr(BR afterl))
-		  (* record case *)
-		  val _ = (add_instr(ILABEL recordl);
-			   add_instr(LOAD32I(EA(con_ir,4),numfields)))
-
-		  (* XXX this will break if record is a multi-record or tag format changes *)
-		  val _ = add_instr(LOAD32I(EA(exp_ir,~4),sumrectag))
-		  val _ = add_instr(SRL(sumrectag,IMM 27,gctemp))
-		  val _ = add_instr(SUB(gctemp,IMM 1, numfields))   (* # of fields in final rec *)
-		  val _ = add_instr(SLL(sumrectag,IMM 3, tmp)) 
-		  val _ = add_instr(SRL(tmp,IMM (3 + 27 + 1), tmp)) (* new mask *)
-		  val _ = add_instr(SLL(tmp,IMM 3, tmp))      (* compute new mask *)
-		  val _ = add_instr(ORB(tmp,IMM 3, tmp))      (* add record aspect *)
-		  val _ = add_instr(SLL(numfields,IMM 27, tmp2))   (* compute new length *)
-		  val _ = add_instr(ORB(tmp,REG tmp2,rectag))      (* final record tag *)
-
-
-		  val _ = add_instr(ADD(numfields,IMM 1, gctemp))
-		  val state = needgc(state,REG gctemp)       (* allocate space for record *)
-
-		  val _ = add_instr(STORE32I(EA(heapptr,0),rectag))
-		  val _ = add_instr(S4ADD(numfields, REG heapptr, destcursor)) (* record tag *)
-		  val _ = add_instr(S4ADD(numfields, REG exp_ir, srccursor)) (* sum tag *)
-			   
-		  val _ = (add_instr(ILABEL loopl); 
-			   add_instr(LOAD32I(EA(srccursor,0),data));
-			   add_instr(STORE32I(EA(destcursor,0),data));
-			   add_instr(SUB(srccursor,IMM 4, srccursor));
-			   add_instr(SUB(destcursor,IMM 4, destcursor));
-			   add_instr(CMPUI(EQ,srccursor,REG exp_ir, tmp));
-			   add_instr(BCNDI(EQ, tmp, loopl,false)); (* loop will copy record fields *)
-			   add_instr(MV(heapptr,desti));
-			   add_instr(S4ADD(gctemp, REG heapptr,heapptr));
-			   add_instr(ILABEL afterl))
-	      in  (desti,state)
-	      end
-	  val (ir,state) = if single_carrier then single_case() 
-			   else multi_case()
-	  val lv = VAR_LOC(VREGISTER (false, I ir))
-      in  (lv,summand_type,state)
-      end
-
 
 
   and xnilprim(state : state, nilprim,clist,elist,context,copt) : loc_or_val * con * state = 
@@ -1292,58 +966,29 @@ val debug_bound = ref false
 		   val _ = add_instr(LOAD32I(EA(addr,which * 4), desti))
 	       in  (VAR_LOC(VREGISTER(false, I desti)), con, state)
 	       end
-	 | inject_record known => xsum true (state,known,hd clist,elist,context)
-	 | inject known => xsum false (state,known,hd clist,elist,context)
-
-	 | project_sum_record (k,field) =>
+	 | inject_record known => 
+		let fun folder(e,state) = let val (lv,c,s) = xexp(state,fresh_var(),e,NONE,NOTID)
+					  in  (lv,s)
+					  end
+		    val (lvs,state) = foldl_acc folder state elist
+		in  TortlSum.xsum xcon true (state,known,hd clist,lvs)
+		end
+	 | inject known => 
+		let fun folder(e,state) = let val (lv,c,s) = xexp(state,fresh_var(),e,NONE,NOTID)
+					  in  (lv,s)
+					  end
+		    val (lvs,state) = foldl_acc folder state elist
+		in  TortlSum.xsum xcon false (state,known,hd clist,lvs)
+		end
+	 | project_sum_record (k,field) => 
 	       let val (base,econ,state) = (case elist of
 					  [e] => let val (r,c,s) = xexp'(state,fresh_var(),e,NONE,NOTID)
 						 in  (coercei "" r, c,s)
 						 end
 					| _ => error' "bad project_sum_record: base")
-		   val (tagcount, sumtype, summands) = 
-		         reduce_to_known_sum "project_sum_record" state econ
-		   val index = TW32.toInt(TW32.uminus(sumtype, tagcount))
-
-		   val fieldcon = List.nth(summands,index) handle _ => error "list.nth 2"
-		   val field' = 
-		        let fun loop n [] = 
-				     (print "bad project_sum_record: missing field ";
-				      Ppnil.pp_label field; print "\n in type = \n";
-				      Ppnil.pp_con fieldcon; print "\n";
-				      error "bad project_sum_record: bad econ field not found")
-			      | loop n (a::rest) = if (Name.eq_label(a,field))
-						       then n else loop (n+1) rest
-			in  (case fieldcon of
-				 (Prim_c(Record_c labels, _)) => loop 0 labels
-			       | _ => (case #2(simplify_type state fieldcon) of
-					   (Prim_c(Record_c labels, _)) => loop 0 labels
-					 | c => (print "bad project_sum_record: not record\n";
-						 Ppnil.pp_con c;
-						 error "bad project_sum_record: not record\n")))
-			end
-		   val single_carrier = (length summands) = 1
-		   local
-		       val record_con = (List.nth(summands,index)
-					 handle _ => error' "bad project_sum_record: record_con")
-		   in
-		       val field_con = 
-			   (case (copt,record_con) of
-				(SOME c, _) => c
-			      | (_,Prim_c(Record_c _,cons)) => (List.nth(cons,field')
-							    handle _ => error "list.nth 4")
-			      | _ => (case #2(simplify_type state record_con) of
-					  Prim_c(Record_c _,cons) => (List.nth(cons,field')
-								      handle _ => error "list.nth 5")
-					| c => (print "bad project_sum_record: field_con";
-						Ppnil.pp_con c;
-					    error' "bad project_sum_record: field_con")))
-		   end
-		   val desti = alloc_regi (con2rep state field_con)
-		   val subscript = if single_carrier then field' else field' + 1
-		   val _ = add_instr(LOAD32I(EA(base,4*subscript),desti))
-	       in (VAR_LOC(VREGISTER(false, I desti)), field_con, state)
+	       in  TortlSum.xproject_sum_record (state,TilWord32.toInt k,field,clist,base,econ,NONE)
 	       end
+
 	 | project_sum k =>
 	       let val sumcon = hd clist
 		   val (base,ssumcon,state) = 
@@ -1352,57 +997,9 @@ val debug_bound = ref false
 				     in  (coercei "" r, c,s)
 				     end
 			    | _ => error' "bad project_sum: elist not of length 1")
-		   val v = fresh_named_var "named_project_sumee"
-		   val state = add_reg (state,v,ssumcon,I base)
-		   val (tagcount, sumtype, summand_types) = 
-		         reduce_to_known_sum "project_sum_record" state ssumcon
-	           val index = TW32.toInt(TW32.uminus(sumtype, tagcount))
-		   val summand_type = (List.nth(summand_types,index)
-				     handle _ => error' "bad project_sum: record_con")
-		   fun record_case labels field_cons = 
-		       let 
-			   fun make_e l = Prim_e(NilPrimOp(project_sum_record (k,l)),
-						 [sumcon],[Var_e v])
-			   val elist' = map make_e labels
-		       in  xnilprim(state,Nil.record labels,field_cons,elist',context,copt)
-		       end
-		   fun nonrecord_case() = 
-		       let 
-			   val (single_carrier,need_unbox) = 
-			       if (length summand_types) = 1
-				   then
-				       (case simplify_type' state (hd summand_types) of
-					    (_,Prim_c(Int_c _,_)) => (true,true)
-					  | (_,Prim_c(Sum_c _,_)) => (true,true)
-					  | (true,_) => (true,false)
-					  | _ => error "project_sum not fully done")
-			       else  (false,false)
-
-			   val (lv,c,state) = xexp(state,fresh_var(),Var_e v,NONE,NOTID)
-
-			   fun unbox offset =
-			       let val ir = load_ireg_locval(lv,NONE)
-				   val desti = alloc_regi(con2rep state summand_type)
-				   val _ = add_instr(LOAD32I(EA(ir,offset), desti))
-			       in  (VAR_LOC(VREGISTER(false, I desti)), summand_type,state)
-			       end
-		       in  (case (single_carrier,need_unbox) of
-				(true,false) => (lv,c,state)
-			      | (true,true) => unbox 0
-			      | (false,_) => unbox 4)
-		       end
-	       in  (case summand_type of
-			Prim_c(Record_c labs,cons) => record_case labs cons
-		      | c => 
-			    (case (simplify_type' state summand_type) of
-				 (_,Prim_c(Record_c labs,cons)) => record_case labs cons
-			       | (true,_) => nonrecord_case()
-			       | _ => xdynamic_project_sum(state,sumcon,
-								 (tagcount,sumtype),
-								 summand_types,
-								 summand_type,
-								 Var_e v, context)))
+	       in  TortlSum.xproject_sum xcon (state,TilWord32.toInt k,clist,base,ssumcon,NONE)
 	       end
+
 	 | box_float Prim.F64 => 
 	       let val [e] = elist
 		   val (lv,_,state) = xexp(state,fresh_var(),e,NONE,NOTID)
@@ -1776,9 +1373,10 @@ val debug_bound = ref false
 		       in  xupdate(state,extract_type(t,clist),vl1,vl2,vl3)
 		       end
 
-	     (* zero is legal as a pointer *)
+	     (* we will represent zero length array as an integer zero-length array *)
+	     (*   zero is NOT a legal representation for an empty array *)
 	     | (create_empty_table table) => 
-		       (VAR_VAL(VINT 0w0), 
+                 let val c =
 			(case (table, clist) of
 			    (IntArray is,_) => Prim_c(Array_c, [Prim_c(Int_c is,[])])
 			  | (IntVector is,_) => Prim_c(Vector_c, [Prim_c(Int_c is,[])])
@@ -1791,9 +1389,11 @@ val debug_bound = ref false
 			  | (PtrArray, _) => error "ill-formed aggregate type"
 			  | (PtrVector, _) => error "ill-formed aggregate type"
 			  | (WordArray, _) => error "ill-formed aggregate type"
-			  | (WordVector, _) => error "ill-formed aggregate type"),
-			     state)
-
+			  | (WordVector, _) => error "ill-formed aggregate type")
+		     val (vl,_,_) = xarray(state,Prim_c(Int_c Prim.W32,[]), 
+					   VAR_VAL(VINT 0w0), VAR_VAL(VINT 0w0))
+		 in  (vl,c,state)
+		 end
 	     | (create_table t) => 
 		       let val [vl1,vl2] = vl_list
 		       in xarray(state,extract_type(t,clist),vl1,vl2)
@@ -1884,7 +1484,7 @@ val debug_bound = ref false
 				    in  (I ir,s)
 				    end
 	  val (r,state) = 
-	      (case (simplify_type' state c) of
+	      (case (simplify_type state c) of
 		   (true,Prim_c(Float_c Prim.F64,[])) => floatcase state
 		 | (true,Prim_c(BoxFloat_c Prim.F64,[])) => floatcase state
 		 | (true,Prim_c(Int_c Prim.W8,[])) => nonfloatcase(state, Prim.W8)
@@ -1955,15 +1555,13 @@ val debug_bound = ref false
 	  val a' = load_ireg_locval(vl1,NONE)
 	  val argi = load_ireg_locval(vl3,NONE)
       in  (case is of
-	       Prim.W32 => (add_instr(ICOMMENT "int update start");
-			    (case (in_ea_range 4 vl2) of
+	       Prim.W32 => (case (in_ea_range 4 vl2) of
 				SOME i => add_instr(STORE32I(EA(a',i),argi))
 			      | NONE => let val b' = load_ireg_locval(vl2,NONE)
 					    val addr = alloc_regi (LOCATIVE)
 					in  add_instr(S4ADD(b',REG a',addr));
 					    add_instr(STORE32I(EA(addr,0),argi))
-					end);
-				 add_instr(ICOMMENT "int update end"))
+					end)
 	     | Prim.W8 => let val addr = alloc_regi LOCATIVE
 			      val offset = load_ireg_locval(vl2,NONE)
 			      val subaddr = alloc_regi NOTRACE_INT
@@ -2015,7 +1613,7 @@ val debug_bound = ref false
       : loc_or_val * con * state =
       let
 	  val state = 
-	      (case (simplify_type' state c) of
+	      (case (simplify_type state c) of
 		   (true,Prim_c(Float_c Prim.F64,[])) => (xfloatupdate(vl1,vl2,vl3); state)
 		 | (true,Prim_c(BoxFloat_c Prim.F64,[])) => 
 		       let val fr = unboxFloat(load_ireg_locval(vl3,NONE))
@@ -2091,9 +1689,9 @@ val debug_bound = ref false
       let val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_locval(vl,NONE)
 	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
-	  val (_,cc) = (simplify_type' state c) 
+	  val (_,cc) = (simplify_type state c) 
 	  val state = 
-	      (case (simplify_type' state c) of
+	      (case (simplify_type state c) of
 		   (true,Prim_c(Float_c Prim.F64,[])) => (add_instr(SRL(dest,IMM real_len_offset,dest)); state)
 		 | (true,Prim_c(BoxFloat_c Prim.F64,[])) => (add_instr(SRL(dest,IMM real_len_offset,dest)); state)
 		 | (true,Prim_c(Int_c Prim.W8,[])) => (add_instr(SRL(dest,IMM int_len_offset,dest)); state)
@@ -2352,7 +1950,7 @@ val debug_bound = ref false
     let 
 	val dest = alloc_regi TRACE
 	val state = 
-	    (case (simplify_type' state c) of
+	    (case (simplify_type state c) of
 		 (true,Prim_c(Float_c Prim.F64,[])) => 
 		     error "can't have WordArray of float (use boxfloat)"
 	       | (true,Prim_c(Int_c is,[])) => intcase(state,dest,is,vl1,vl2)
@@ -2462,8 +2060,8 @@ val debug_bound = ref false
 	    kopt : kind option (* Caller may know kind of con being translated *)
 	    ) : bool * loc_or_val * kind * state = 
       let 
-	  fun mk_ptr  i = (true, VAR_VAL (VINT (TW32.fromInt i)), Type_k, state)
-	  fun mk_ptr' i = (true, VAR_VAL (VINT (TW32.fromInt i)), Type_k, state)
+	  fun mk_ptr  i = (true, VAR_VAL (VTAG (TW32.fromInt i)), Type_k, state)
+	  fun mk_ptr' i = (true, VAR_VAL (VTAG (TW32.fromInt i)), Type_k, state)
 	  fun mk_sum_help (state,kinderopt,indices,cons) = 
 	      let val indices' = map (fn i => VAR_VAL(VINT (TW32.fromInt i))) indices
 	          fun folder (c,(const,s)) =
@@ -2499,13 +2097,14 @@ val debug_bound = ref false
 	     | Prim_c(Array_c,[c]) => mk_sum(state,0,[c])
 	     | Prim_c(Vector_c,[c]) => mk_sum(state,1,[c])
 	     | Prim_c(Ref_c,[c]) => mk_sum(state,2,[c])
-	     | Prim_c(Sum_c {known,totalcount,tagcount},cons) => 
+	     | Prim_c(Sum_c {known,totalcount,tagcount},[c]) => 
 		   mk_sum'(state,
 			   [4,(case known of
 				   NONE => ~1
 				 | SOME w => TW32.toInt w), 
 			    TW32.toInt tagcount,
-			    TW32.toInt totalcount],cons)
+			    TW32.toInt totalcount],[c])
+	     | Prim_c(Sum_c {known,totalcount,tagcount},_) => error "Sum_c does not have 1 type arg"
 	     | Prim_c(Record_c _,cons) => mk_sum_help(state,NONE,[5,length cons],cons)
 	     | Prim_c(Vararg_c _,cons) => mk_sum(state,6,cons)
 	     | Prim_c _ => error "ill-formed primitive type"

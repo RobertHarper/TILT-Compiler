@@ -29,9 +29,12 @@ sig
 	VREGISTER of bool * reg   (* flag indicates constant-ness *)
       | VGLOBAL of label * rep  (* I am located at this label: closure, data, ... *)
 
+    (* The distinction between VINT and VTAG is important since they 
+         have different representations.  This is important at join points. *)
     and var_val = 
-	VINT of TilWord32.word
-      | VREAL of label           (* I am a real located at this label *)
+	VINT of TilWord32.word   (* an integer *)
+      | VTAG of TilWord32.word   (* a traceable small pointer value *)
+      | VREAL of label           (* a real located at this label *)
       | VRECORD of label * var_val list (* I have the value of this label *)
       | VVOID of rep
       | VLABEL of label         (* I have the value of this label *)

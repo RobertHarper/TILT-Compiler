@@ -30,12 +30,23 @@ struct
 			    structure NilUtil = Linknil.NilUtil
 			    structure Ppnil = Linknil.PpNil)
 
+    structure TortlSum = TortlSum(structure Nil = Linknil.Nil
+			    structure NilContext = Linknil.NilContext
+			    structure NilStatic = Linknil.NilStatic
+			    structure Rtl = Rtl
+			    structure Pprtl = Pprtl
+			    structure TortlBase = TortlBase
+			    structure Rtltags = Rtltags
+			    structure NilUtil = Linknil.NilUtil
+			    structure Ppnil = Linknil.PpNil)
+
     structure Tortl = Tortl(structure Nil = Linknil.Nil
 			    structure NilContext = Linknil.NilContext
 			    structure NilStatic = Linknil.NilStatic
 			    structure Rtl = Rtl
 			    structure Pprtl = Pprtl
 			    structure TortlBase = TortlBase
+			    structure TortlSum = TortlSum
 			    structure Rtltags = Rtltags
 			    structure NilUtil = Linknil.NilUtil
 			    structure Ppnil = Linknil.PpNil)
