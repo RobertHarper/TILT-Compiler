@@ -9,7 +9,7 @@
 # systems.)  If you are compiling on a sparc or alpha, then look at
 # Runtime/Makefile too.
 #
-# To compile TILT, use "make" or "make with_slaves".  The latter assumes
+# To compile TILT, use "make" or "make with-slaves".  The latter assumes
 # that ./Bin/til_slave works; you can copy (and update for your systems)
 # ./Bin/til_slave_local_xterm or ./Bin/til_slave_remote_emacs.
 
@@ -34,14 +34,14 @@ all:\
 	dump\
 	runtest
 
-with_slaves: FORCE
+with-slaves: FORCE
 	$(MAKE) 'master=$(tiltnj) -m' 'slave=$(tiltnj) -s' all
 
 FORCE:
 
 # SML/NJ heaps
 
-tilt-heap: FORCE
+heap tilt-heap: FORCE
 	$(mkheap) Heaps/tilt Main.main | $(smlnj)
 dump-heap: FORCE
 	$(mkheap) Heaps/dump Dump.main | $(smlnj)
