@@ -41,9 +41,8 @@ structure IlStatic
 
     fun merge_phrase_pc (PHRASE_EXP e, PHRASE_CLASS_EXP (_,c)) = PHRASE_CLASS_EXP (e,c)
       | merge_phrase_pc (PHRASE_CON c, PHRASE_CLASS_CON (_,k)) = PHRASE_CLASS_CON (c,k)
-      | merge_phrase_pc (PHRASE_MOD m, PHRASE_CLASS_MOD (_,s)) = PHRASE_CLASS_MOD (m,s)
+      | merge_phrase_pc (PHRASE_MOD m, PHRASE_CLASS_MOD (_,b,s)) = PHRASE_CLASS_MOD (m,b,s)
       | merge_phrase_pc (PHRASE_SIG (v,s), PHRASE_CLASS_SIG _) = PHRASE_CLASS_SIG (v,s)
-
       | merge_phrase_pc (PHRASE_OVEREXP oe, PHRASE_CLASS_OVEREXP _) = PHRASE_CLASS_OVEREXP oe 
       | merge_phrase_pc  _ = error "merge_phrase_pc got a phrase and phraseclass of conflicting flavors"
        
@@ -135,8 +134,8 @@ fun show_state ({modunself,...}:state) =
 	   in 
 	       (case dec of
 		    DEC_EXP(v,c) => (state,(SDEC(l,DEC_EXP(v,selfify_con(selfify,state,c))))::rev_sdecs)
-		  | DEC_MOD(v,s) => 
-		     let val this_dec = DEC_MOD(v,SelfifySig(state,selfify) (popt,s))
+		  | DEC_MOD(v,b,s) => 
+		     let val this_dec = DEC_MOD(v,b,SelfifySig(state,selfify) (popt,s))
 			 val state = add_modpath(state,v,popt)
 		     in (state,SDEC(l,this_dec)::rev_sdecs)
 		     end
@@ -180,8 +179,8 @@ fun show_state ({modunself,...}:state) =
 			let val state = add_exppath(state,v,popt)
 			in (state,(SBND(l,BND_EXP(v,selfify_exp(selfify,state,e))))::rev_sbnds)
 			end
-		  | BND_MOD(v,m) => 
-			let val this_bnd = BND_MOD(v,SelfifyMod(state,selfify) (popt,m))
+		  | BND_MOD(v,b,m) => 
+			let val this_bnd = BND_MOD(v,b,SelfifyMod(state,selfify) (popt,m))
 			    val state = add_modpath(state,v,popt)
 			in (state,SBND(l,this_bnd)::rev_sbnds)
 			end
@@ -294,8 +293,8 @@ fun show_state ({modunself,...}:state) =
 		     PHRASE_CLASS_EXP(e,c) => PHRASE_CLASS_EXP(exp_subst_modvar(e,[vm]),
 							       con_subst_modvar(c,[vm]))
 		   | PHRASE_CLASS_CON(c,k) => PHRASE_CLASS_CON(con_subst_modvar(c,[vm]),k)
-		   | PHRASE_CLASS_MOD(m,s) => PHRASE_CLASS_MOD(mod_subst_modvar(m,[vm]),
-							       sig_subst_modvar(s,[vm]))
+		   | PHRASE_CLASS_MOD(m,b,s) => PHRASE_CLASS_MOD(mod_subst_modvar(m,[vm]),b,
+							         sig_subst_modvar(s,[vm]))
 		   | _ => pc)
 
 	fun local_Sdecs_Project ctxt (mopt, sdecs, l) = 
@@ -324,12 +323,12 @@ fun show_state ({modunself,...}:state) =
 		  | mh mt _ = NONE
 		fun externalize (et,ct,mt) dec =
 		    case dec of
-			(DEC_MOD(_,s)) => SOME(CLASS_MOD(sig_all_handle(s,eh et,ch ct,mh mt, fn _ => NONE)))
+			(DEC_MOD(_,_,s)) => SOME(CLASS_MOD(sig_all_handle(s,eh et,ch ct,mh mt, fn _ => NONE)))
 		      | (DEC_EXP(_,c)) => SOME(CLASS_EXP(con_all_handle(c,eh et,ch ct,mh mt, fn _ => NONE)))
 		      | (DEC_CON(_,k,SOME c)) => SOME(CLASS_CON k)
 		      | (DEC_CON(_,k,NONE)) => SOME(CLASS_CON k)
 		      | (DEC_EXCEPTION _) => NONE
-		fun extend (et,ct,mt) (l,DEC_MOD(v,_)) = (et,ct,(v,l)::mt)
+		fun extend (et,ct,mt) (l,DEC_MOD(v,_,_)) = (et,ct,(v,l)::mt)
 		  | extend (et,ct,mt) (l,DEC_EXP(v,_)) = ((v,l)::et,ct,mt)
 		  | extend (et,ct,mt) (l,DEC_CON(v,_,_)) = (et,(v,l)::ct,mt)
 		  | extend tables _ = tables
@@ -355,7 +354,7 @@ fun show_state ({modunself,...}:state) =
 			       pp_signat res; print "\n\n"))
 	    in res
 	    end
-	fun SelfifyDec ctxt (DEC_MOD (v,s)) = DEC_MOD(v,SelfifySig ctxt (PATH(v,[]),s))
+	fun SelfifyDec ctxt (DEC_MOD (v,b,s)) = DEC_MOD(v,b,SelfifySig ctxt (PATH(v,[]),s))
 	  | SelfifyDec ctxt dec = dec
 	fun SelfifySdecs ctxt (p : path, sdecs : sdecs) =
 	    case (SelfifySig ctxt (p,SIGNAT_STRUCTURE(NONE,sdecs))) of
@@ -388,9 +387,9 @@ fun show_state ({modunself,...}:state) =
        | _ => false)
    and Bnd_IsSyntacticValue bnd = 
      (case bnd of
-       BND_EXP (v,e) => Exp_IsSyntacticValue e
-     | BND_MOD (v,m) => Module_IsSyntacticValue m
-     | BND_CON (v,c) => true)
+       BND_EXP (_,e) => Exp_IsSyntacticValue e
+     | BND_MOD (_,_,m) => Module_IsSyntacticValue m
+     | BND_CON (_,c) => true)
 
 
 
@@ -738,7 +737,7 @@ fun show_state ({modunself,...}:state) =
 		BND_EXP (v,e) => if (Exp_IsValuable(ctxt,e))
 				     then self (add_context_exp'(ctxt,v,#2 (GetExpCon(e,ctxt))))
 				 else NONE
-	      | BND_MOD (v,m) => let val (va,s) = GetModSig(m,ctxt)
+	      | BND_MOD (v,_,m) => let val (va,s) = GetModSig(m,ctxt)
 				     val s' = SelfifySig ctxt (PATH(v,[]),s)
 				 in if va then self (add_context_mod'(ctxt,v,s'))
 				    else NONE
@@ -1248,8 +1247,8 @@ fun show_state ({modunself,...}:state) =
    and GetBndDec (ctxt,BND_EXP (v,e))  = let val (va,c) = GetExpCon (e,ctxt)
 					 in (va,DEC_EXP(v,c))
 					 end
-     | GetBndDec (ctxt,BND_MOD (v,m))  = let val (va,s) = GetModSig(m,ctxt)
-					 in (va,DEC_MOD(v,s))
+     | GetBndDec (ctxt,BND_MOD (v,b,m))  = let val (va,s) = GetModSig(m,ctxt)
+					 in (va,DEC_MOD(v,b,s))
 					 end
      | GetBndDec (ctxt,BND_CON (v,c))  = (true,DEC_CON(v,GetConKind(c,ctxt),SOME c))
    and GetBndsDecs (ctxt,bnds) = GetBndsDecs'(ctxt,bnds,[])
@@ -1292,7 +1291,7 @@ fun show_state ({modunself,...}:state) =
 						     in SOME([l],PHRASE_CON c') 
 						     end
 					    else loop(lbl,r)
-		       | (BND_MOD (_,m)) => (if (eq_label(l,lbl)) 
+		       | (BND_MOD (_,_,m)) => (if (eq_label(l,lbl)) 
 						 then SOME([l],PHRASE_MOD m) 
 					     else if (is_label_open l)
 						      then 
@@ -1329,13 +1328,13 @@ fun show_state ({modunself,...}:state) =
 			    | (DEC_CON (_,k,NONE)) => 
 				  SOME(false,(PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l),
 							   k),[l]))
-			    | (DEC_MOD (_,s)) => 
-				SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s),[l]))
+			    | (DEC_MOD (_,b,s)) => 
+				SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),b,s),[l]))
 			    | _ => loop m lbl rest)
 		else if (is_label_open l)
 		    then 
 		     (case d of
-		       (DEC_MOD(_,s)) =>
+		       (DEC_MOD(_,_,s)) =>
 			   (case s of
 			       SIGNAT_STRUCTURE (_,sdecs) =>
 				  (case (loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
@@ -1377,7 +1376,7 @@ fun show_state ({modunself,...}:state) =
 					     | NONE => NONE))
 				| _ => NONE)
 			 in  (case phrase_class of
-				  PHRASE_CLASS_MOD (m,s) => 
+				  PHRASE_CLASS_MOD (m,_,s) => 
 				      doit(m,reduce_signat ctxt s)
 				| _ => NONE)
 			 end
@@ -1400,8 +1399,8 @@ fun show_state ({modunself,...}:state) =
 			    | (DEC_CON (_,k,NONE)) => 
 				  SOME([l],PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l),
 							k))
-			    | (DEC_MOD (_,s)) => 
-				  SOME([l],PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s))
+			    | (DEC_MOD (_,b,s)) => 
+				  SOME([l],PHRASE_CLASS_MOD(MOD_PROJECT(m,l),b,s))
 			    | _ => loop lbl rest)
 		else loop lbl rest
 
@@ -1411,7 +1410,7 @@ fun show_state ({modunself,...}:state) =
 	       | [lbl] => loop lbl (rev sdecs)
 	       | (lbl :: lbls) =>
 		     case (loop lbl (rev sdecs)) of
-			 SOME(labs,PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs'))))) =>
+			 SOME(labs,PHRASE_CLASS_MOD (m',_,((SIGNAT_STRUCTURE (_,sdecs'))))) =>
 			     (case (Sdecs_Lookup ctxt (m',sdecs',lbls)) of
 				  SOME(labs2, pc2) => SOME(labs @ labs2, pc2)
 				| NONE => NONE)
@@ -1447,7 +1446,7 @@ fun show_state ({modunself,...}:state) =
      (case module of
        (MOD_VAR v) => 
 	   (case Context_Lookup'(ctxt,v) of
-		SOME(_,PHRASE_CLASS_MOD(_,s)) => (true,s)
+		SOME(_,PHRASE_CLASS_MOD(_,_,s)) => (true,s)
 	      | SOME _ => error ("MOD_VAR " ^ (Name.var2string v) ^ " bound to a non-module")
 	      | NONE => error ("MOD_VAR " ^ (Name.var2string v) ^ " not bound"))
      | MOD_STRUCTURE (sbnds) => 
@@ -1463,7 +1462,7 @@ fun show_state ({modunself,...}:state) =
 	   in (va,res)
 	   end
      | MOD_FUNCTOR (v,s,m,s2) => 
-	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,SelfifySig ctxt (PATH(v,[]), s)))
+	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,false,SelfifySig ctxt (PATH(v,[]), s)))
 	       val (va,signat) = GetModSig(m,ctxt')
 	       (* check equivalence of s2 and signat *)
 	   in  (true,SIGNAT_FUNCTOR(v,s,s2,
@@ -1511,7 +1510,7 @@ fun show_state ({modunself,...}:state) =
 			     print "\nand with signat = \n";  pp_signat signat; 
 			     print "\n";
 			     fail "MOD_PROJECT failed to find label ")
-		      | (SOME (_,PHRASE_CLASS_MOD(_,s))) => (va,s)
+		      | (SOME (_,PHRASE_CLASS_MOD(_,_,s))) => (va,s)
 		      | _ => (print "MOD_PROJECT at label "; pp_label l; 
 			      print "did not find DEC_MOD.  \nsig was = ";
 			      pp_signat signat; print "\n";
@@ -1703,7 +1702,7 @@ fun show_state ({modunself,...}:state) =
 					     end
 				    else loop tables' rest
 				end
-			  | DEC_MOD(v,s) => let val tables' = (ctable, (v,MOD_PROJECT(m,curl))::mtable)
+			  | DEC_MOD(v,_,s) => let val tables' = (ctable, (v,MOD_PROJECT(m,curl))::mtable)
 					    in loop tables' rest
 					    end
 			  | _ => loop tables rest)
@@ -1758,7 +1757,7 @@ fun show_state ({modunself,...}:state) =
 		              (case GetConKind(c,ctxt) of
 				   KIND_TUPLE 1 => true
 				 | _ => false)
-	    | DEC_MOD(v,s) => (var_notin v) andalso (Sig_Valid(ctxt,s))
+	    | DEC_MOD(v,_,s) => (var_notin v) andalso (Sig_Valid(ctxt,s))
 	    | DEC_CON (v,k,NONE) => (var_notin v) andalso (Kind_Valid(k,ctxt))
 	    | DEC_EXCEPTION(name,CON_TAG c) => ((name_notin name) andalso 
 						(case GetConKind(c,ctxt) of
@@ -1789,9 +1788,9 @@ fun show_state ({modunself,...}:state) =
 
      and Dec_IsSub' isSub (ctxt,d1,d2) = 
 	 (case (d1,d2) of
-	      (DEC_MOD(v1,s1),DEC_MOD(v2,s2)) => 
-		  eq_var(v1,v2) andalso (if isSub then Sig_IsSub(ctxt,s1,s2)
-					     else Sig_IsEqual(ctxt,s1,s2))
+	      (DEC_MOD(v1,b1,s1),DEC_MOD(v2,b2,s2)) => 
+		  eq_var(v1,v2) andalso (b1 = b2) andalso 
+                  (if isSub then Sig_IsSub(ctxt,s1,s2) else Sig_IsEqual(ctxt,s1,s2))
 	    | (DEC_CON(v1,k1,SOME c1),DEC_CON(v2,k2,NONE)) => 
 		  isSub andalso eq_var(v1,v2) andalso eq_kind(k1,k2) 
 		  andalso eq_kind(k1,GetConKind(c1,ctxt))
@@ -1821,10 +1820,10 @@ fun show_state ({modunself,...}:state) =
 	       | match_var (SDEC(l1,dec1)::rest1) ((sdec2 as (SDEC(l2,dec2)))::rest2) : sdec list = 
 		 if (eq_label (l1,l2))
 		     then (case (dec1,dec2) of
-			       (DEC_MOD(v1,s1),DEC_MOD(v2,s2)) =>
+			       (DEC_MOD(v1,b1,s1),DEC_MOD(v2,b2,s2)) =>
 				   if (eq_var(v1,v2))
 				       then sdec2::(match_var rest1 rest2)
-				   else SDEC(l2,(DEC_MOD(v1,s2)))::
+				   else SDEC(l2,(DEC_MOD(v1,b1,s2)))::
 				       (match_var rest1 (help sig_subst_modvar (v2,MOD_VAR v1,rest2)))
 			     | (DEC_EXP(v1,c1),DEC_EXP(v2,c2)) =>
 				   if (eq_var(v1,v2))
@@ -1884,7 +1883,7 @@ fun show_state ({modunself,...}:state) =
 		   let val s1_res = if (eq_var(v1,v2)) then s1_res
 				    else sig_subst_modvar(s1_res,[(v1,MOD_VAR v2)])
 		       val s2_arg = SelfifySig ctxt (PATH (v2,[]), s2_arg)
-		       val ctxt' = add_context_dec(ctxt,DEC_MOD(v2,s2_arg))
+		       val ctxt' = add_context_dec(ctxt,DEC_MOD(v2,false,s2_arg))
 		   in  Sig_IsSub' isSub (ctxt',s2_arg,s1_arg) andalso 
 		       Sig_IsSub' isSub (ctxt',s1_res,s2_res)
 		   end)
@@ -1908,7 +1907,7 @@ fun show_state ({modunself,...}:state) =
 			  | NONE => NONE)
 		 | NONE => NONE)
 	  in case pc of
-	      (PHRASE_CLASS_MOD(m,s)) =>
+	      (PHRASE_CLASS_MOD(m,_,s)) =>
 		  (case (m,reduce_signat ctxt s) of
 		       (MOD_STRUCTURE sbnds,SIGNAT_STRUCTURE (_,sdecs)) =>
 			   sbnds_sdecs(sbnds,sdecs)
@@ -1929,7 +1928,16 @@ fun show_state ({modunself,...}:state) =
 	| Context_Lookup_Labels (ctxt as CONTEXT{label_list, ...}, (lab::labrest)) = 
 	(case (labrest,Name.LabelMap.find(label_list,lab)) of
 	    (_,NONE) => NONE
-	  | ([],SOME (path,pc)) => SOME(path,pc)
+	  | ([],SOME (path,pc)) => ((* print "Context_Lookup_Labels found label: ";
+                                    pp_label lab;
+                                    print "\nreturned path: ";
+                                    pp_path path;
+                                    print "\nreturned pc: ";
+                                    pp_phrase_class pc;
+                                    print "\ncontext was: ";
+                                    pp_context ctxt;
+                                    print "\n"; *)
+                                    SOME(path,pc))
 	  | (_,SOME (path,pc)) => LookupHelp(ctxt,labrest,path,pc))
       fun Context_Lookup_Path (ctxt as CONTEXT{var_list,...}, p as PATH (v,labs)) = 
 	  (case (Name.VarMap.find(#1 var_list, v),labs) of

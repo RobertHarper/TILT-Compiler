@@ -104,7 +104,7 @@ structure Signature :> SIGNATURE =
 	     and find_labels path (SDEC(l,DEC_CON (_,k,NONE)),_) = 
 		 error "find_labels should not encounter any abstract types"
 	       | find_labels path (SDEC(l,DEC_CON (_,k,SOME c)),kpaths) =  (k,rev(l::path))::kpaths
-	       | find_labels path (SDEC(l,DEC_MOD (v,s)),kpaths) = 
+	       | find_labels path (SDEC(l,DEC_MOD (v,_,s)),kpaths) = 
 		 (case signat2sdecs context s of
 		      SOME sdecs => (driver (l::path) sdecs) @ kpaths
 		    | NONE => kpaths)
@@ -251,7 +251,7 @@ structure Signature :> SIGNATURE =
 			   end
 		     | (NONE, NONE) => (target := (NONE, SOME cur_path); orig_sig))
 	      fun traverse ctxt _ [] = [] 
-                | traverse ctxt cur_path ((SDEC(l,DEC_MOD(v,s)))::rest) =
+                | traverse ctxt cur_path ((SDEC(l,DEC_MOD(v,b,s)))::rest) =
 		  let val cur_path' = cur_path @ [(v,l)]
 		      val cur_lpath' = vlpath2lpath cur_path'
 		      val matches = List.filter (eq_lpath cur_lpath') lpath_list
@@ -278,7 +278,7 @@ structure Signature :> SIGNATURE =
 				 | _ => error "prematched sig not reducing to sig_struct")
 			      else s
 			val ctxt = add_context_mod'(ctxt,v,SelfifySig ctxt(PATH (v,[]),s))
-		  in (SDEC(l,DEC_MOD(v,s))) :: (traverse ctxt cur_path rest)
+		  in (SDEC(l,DEC_MOD(v,b,s))) :: (traverse ctxt cur_path rest)
 		  end
                 | traverse ctxt cur_path (sdec::rest) = sdec :: (traverse ctxt cur_path rest)
 	  in traverse context [] sdecs
@@ -336,7 +336,7 @@ structure Signature :> SIGNATURE =
 		           val copt = if is_match then transparent(cur_path',copt) else copt
 		       in  DEC_CON(v,k,copt)
 		       end
-		     | DEC_MOD(v,s) =>
+		     | DEC_MOD(v,b,s) =>
 			let val cur_path' = cur_path@[(v,l)]
 			    val typeslots' = List.filter (meta_match true cur_path') typeslots
 			in  if (null typeslots')
@@ -346,8 +346,8 @@ structure Signature :> SIGNATURE =
 					  let val is_first = (not(found_first())
 							      andalso (length typeslots' = 1))
 					      val sdecs' = traverse(cur_path',typeslots') sdecs
-					  in  DEC_MOD(v,if is_first then s
-							else SIGNAT_STRUCTURE(popt,sdecs'))
+					  in  DEC_MOD(v,b,if is_first then s
+							  else SIGNAT_STRUCTURE(popt,sdecs'))
 					  end
 				    | _ => dec)
 			end
@@ -393,7 +393,7 @@ structure Signature :> SIGNATURE =
 						sdecs)
 				 else sdec::(docon curl rest))
 			  | DEC_EXP(v,_) => (bound v; sdec::(docon curl rest))
-			  | DEC_MOD(v,_)  => (bound v; sdec::(docon curl rest))
+			  | DEC_MOD(v,_,_)  => (bound v; sdec::(docon curl rest))
 			  | DEC_CON(v,_,_) => (bound v; sdec::(docon curl rest))
 			  | DEC_EXCEPTION _ => sdec::(docon curl rest)))
 	  fun dosig [] sdecs = elab_error "xsig_wheretype got empty lbls"
@@ -409,12 +409,12 @@ structure Signature :> SIGNATURE =
 		    | loop ((sdec as SDEC(l,DEC_CON(v,_,_)))::rest) = (bound v; sdec::(loop rest))
 		    | loop ((sdec as SDEC(l,DEC_EXP(v,_)))::rest) = (bound v; sdec::(loop rest))
 		    | loop ((sdec as SDEC(l,DEC_EXCEPTION(_,_)))::rest) = (sdec::(loop rest))
-		    | loop ((sdec as SDEC(l,DEC_MOD(v,s)))::rest) = 
+		    | loop ((sdec as SDEC(l,DEC_MOD(v,b,s)))::rest) = 
 		      (bound v; 
 		       if eq_label(l, curl) 
 			   then (case (reduce_signat ctxt s) of
 				     SIGNAT_STRUCTURE(_, sdecs) => 
-					 (SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE
+					 (SDEC(l,DEC_MOD(v,b,SIGNAT_STRUCTURE
 							 (NONE, dosig restl sdecs))))::rest
 				   | s => (error_region();
 					   print "signature not reduced to structure signature";
@@ -446,7 +446,7 @@ structure Signature :> SIGNATURE =
 							       SIGNAT_STRUCTURE(NONE,sdecs)))
 	    val (labels1,s1) = 
 		(case Context_Lookup_Path(context,PATH(mjunk_var,labs1)) of
-		     SOME(PATH(_,labels1 as _::_),PHRASE_CLASS_MOD(_,s1)) => (labels1,s1)
+		     SOME(PATH(_,labels1 as _::_),PHRASE_CLASS_MOD(_,_,s1)) => (labels1,s1)
 		   | _ => (error_region();
 			   print "can't where non-existent or non-structure component\n";
 			   raise WhereError))
@@ -481,7 +481,7 @@ structure Signature :> SIGNATURE =
      (* it is difficult to correctly optimize this case: we try to catch only some cases *)
     and xsig_where_structure(context,sdecs,labs1,m2,sig2) = 
 	let fun find_sdec l [] = NONE
-	      | find_sdec l ((SDEC(l',DEC_MOD(_,s)))::rest) = 
+	      | find_sdec l ((SDEC(l',DEC_MOD(_,_,s)))::rest) = 
 	            if (eq_label(l,l')) then SOME s else find_sdec l rest
 	      | find_sdec l (_::rest) = find_sdec l rest
 	    fun find_sig [] s = SOME s
@@ -514,7 +514,7 @@ structure Signature :> SIGNATURE =
 	  val ctxt' = add_context_mod'(ctxt,mjunk,s)
 	  fun path2triple p = 
 	      (case (Sdecs_Lookup' ctxt' (MOD_VAR mjunk,sdecs',p)) of
-		   SOME(lpath,PHRASE_CLASS_MOD(_,s)) => 
+		   SOME(lpath,PHRASE_CLASS_MOD(_,_,s)) => 
 		       let 
 			   val vpath = join_path_labels(mpath,lpath)
 			   val sdecs = 
@@ -573,7 +573,7 @@ structure Signature :> SIGNATURE =
 	  fun getcomponents (lpath,sdecs) : (lpath * lpath list) = 
 	      let
 		  fun traverse (SDEC(l,DEC_CON (_,_,_))) = [[l]]
-		    | traverse (SDEC(l,DEC_MOD (v,SIGNAT_STRUCTURE(_,sdecs)))) = 
+		    | traverse (SDEC(l,DEC_MOD (v,_,SIGNAT_STRUCTURE(_,sdecs)))) = 
 			  let val lpaths = List.concat (map traverse sdecs)
 			  in map (fn lpath => (l :: lpath)) lpaths
 			  end
@@ -670,11 +670,11 @@ structure Signature :> SIGNATURE =
 						   NONE => NONE
 						 | SOME c => SOME(con_substconmod(c,m))))), m')
 			  end
-		      | folder (SDEC(l,DEC_MOD(v,s)),m) = 
+		      | folder (SDEC(l,DEC_MOD(v,b,s)),m) = 
 		          let val p = join_path_labels(path,[l])
 			      val s = traverse (p,m) s
 			      val m' = mod_addmap(m,p,MOD_VAR v)
-			  in  (SDEC(l,DEC_MOD(v,s)),m')
+			  in  (SDEC(l,DEC_MOD(v,b,s)),m')
 			  end
 		    val (sdecs,m) = foldl_acc folder mapping sdecs
 		in  sdecs
@@ -702,16 +702,16 @@ structure Signature :> SIGNATURE =
 		end
 	      | chandle _ = NONE
 	    fun sdec_help (p as PATH(v,labs)) = if (eq_var(v,var_actual)) then add_path labs else p
-	    fun sdec_handle (SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE(SOME p,sdecs)))) = 
+	    fun sdec_handle (SDEC(l,DEC_MOD(v,b,SIGNAT_STRUCTURE(SOME p,sdecs)))) = 
 		let val s = SIGNAT_STRUCTURE(SOME (sdec_help p), sdecs)
-		in  SOME(SDEC(l,DEC_MOD(v,do_sig s)))
+		in  SOME(SDEC(l,DEC_MOD(v,b,do_sig s)))
 		end
-	      | sdec_handle (SDEC(l,DEC_MOD(v,SIGNAT_INLINE_STRUCTURE{self=SOME p,code,
+	      | sdec_handle (SDEC(l,DEC_MOD(v,b,SIGNAT_INLINE_STRUCTURE{self=SOME p,code,
 								      abs_sig}))) = 
 		let 
 		    val s = SIGNAT_INLINE_STRUCTURE{self=SOME (sdec_help p),code=code,
 						    abs_sig=abs_sig}
-		in  SOME(SDEC(l,DEC_MOD(v,do_sig s)))
+		in  SOME(SDEC(l,DEC_MOD(v,b,do_sig s)))
 		end
 	      | sdec_handle _ = NONE
 	    and do_sig s = sig_all_handle(s, fn _ => NONE, chandle, 
@@ -775,7 +775,7 @@ structure Signature :> SIGNATURE =
 					 SDEC(l,DEC_EXP(v',c')))
 				end
 			else NONE
-		  | SDEC(l,DEC_MOD(v,s)) => 
+		  | SDEC(l,DEC_MOD(v,b,s)) => 
 			(case dosig(l::p, mapping, s) of
 			     SOME(_,m,s) => let val v' = derived_var v
 					      val mapping = mod_addmap(mapping, PATH(v,[]), MOD_VAR v')
@@ -785,8 +785,8 @@ structure Signature :> SIGNATURE =
 						       [] => mod_addmap(mapping,p',MOD_VAR v')
 						     | _ => mapping)
 					  in  SOME(mapping,
-						   SBND(l,BND_MOD(v',m)), 
-						   SDEC(l,DEC_MOD(v',s)))
+						   SBND(l,BND_MOD(v',b,m)), 
+						   SDEC(l,DEC_MOD(v',b,s)))
 					  end
 			   | NONE => NONE)
 		  | _ => NONE
@@ -821,8 +821,8 @@ structure Signature :> SIGNATURE =
 			    | NONE => (print "sig_actual is not a structure\n";
 				       elab_error "sig_actual is not a structure"))
 (*		     val coerced_sig = sig_substconmod(coerced_sig,mapping) *)
-		     val sbnd_augment = SBND(label_local,BND_MOD(var_local, augment_m))
-		     val sdec_augment = SDEC(label_local,DEC_MOD(var_local, augment_s))
+		     val sbnd_augment = SBND(label_local,BND_MOD(var_local, false, augment_m))
+		     val sdec_augment = SDEC(label_local,DEC_MOD(var_local, false, augment_s))
 		     val res as (m,s) = case (coerced_mod, coerced_sig) of
 			 (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE (popt,sdecs)) =>
 			     (MOD_STRUCTURE (sbnd_augment::sbnds), 
@@ -832,8 +832,8 @@ structure Signature :> SIGNATURE =
 			  let val _ = print "WARN: extract_hidden given coerced_mod/sig not strutures\n"
 			      val l = fresh_open_internal_label "internal_mod"
 			      val v = fresh_named_var "internal_mod"
-			      val sbnd = SBND(l,BND_MOD(v,coerced_mod))
-			      val sdec = SDEC(l,DEC_MOD(v,coerced_sig))
+			      val sbnd = SBND(l,BND_MOD(v,false,coerced_mod))
+			      val sdec = SDEC(l,DEC_MOD(v,false,coerced_sig))
 			  in  (MOD_STRUCTURE [sbnd_augment,sbnd],
 			       SIGNAT_STRUCTURE(NONE,[sdec_augment,sdec]))
 			  end
@@ -927,7 +927,7 @@ structure Signature :> SIGNATURE =
 			   then 
 			       let val (reduced,m) = eta_contract(MOD_FUNCTOR(v1,s1,mtemp,inner_sig))
 			       in  (not reduced,
-				    SOME(BND_MOD(name, m), DEC_MOD(name, s2), ctxt))
+				    SOME(BND_MOD(name, true, m), DEC_MOD(name, true, s2), ctxt))
 			       end
 		       else local_error()
 		   end
@@ -1002,7 +1002,7 @@ structure Signature :> SIGNATURE =
 		  if (eq_label(l,lbl))
 		      then SOME d
 		  else (case (is_label_open l, d) of
-			    (true, DEC_MOD(_,s)) =>
+			    (true, DEC_MOD(_,_,s)) =>
 				(case s of
 				     SIGNAT_STRUCTURE(_,sdecs) =>
 					 (case find lbl sdecs of
@@ -1027,7 +1027,7 @@ structure Signature :> SIGNATURE =
 		     | (lbl::rest,SOME sdecs) => let val decopt = find lbl sdecs
 						 in  case (rest,decopt) of
 						     ([],SOME dec) => SOME dec
-						   | (_,SOME(DEC_MOD(_,s))) => dec_lookup s rest
+						   | (_,SOME(DEC_MOD(_,_,s))) => dec_lookup s rest
 						   | _ => NONE
 						 end)
 	      end
@@ -1053,10 +1053,10 @@ structure Signature :> SIGNATURE =
 
 		fun general_mod v =
 		(case (sig_actual_lookup labs) of
-		     SOME(lbls,PHRASE_CLASS_MOD (_,s1)) =>
+		     SOME(lbls,PHRASE_CLASS_MOD (_,b,s1)) =>
 		     let 
 			 val s = (case (is_label_open (hd lbls), dec_target_lookup labs, sig_target) of
-				      (_,SOME(DEC_MOD (_,s)),_) =>  s
+				      (_,SOME(DEC_MOD (_,_,s)),_) =>  s
 				    | (true,_,SIGNAT_STRUCTURE(popt,sdecs1)) =>
 					  SIGNAT_STRUCTURE(popt,
 					  List.filter (fn(SDEC(l,_)) =>
@@ -1073,9 +1073,9 @@ structure Signature :> SIGNATURE =
 				 else ()
 			 val v1 = fresh_var()
 			 val v' = derived_var v
-			 val bnd = BND_MOD(v',mbody)
-			 val dec = DEC_MOD(v',sig_ret)
-			 val ctxt = add_context_dec(ctxt,SelfifyDec ctxt (DEC_MOD(v,sig_ret)))
+			 val bnd = BND_MOD(v',b,mbody)
+			 val dec = DEC_MOD(v',b,sig_ret)
+			 val ctxt = add_context_dec(ctxt,SelfifyDec ctxt (DEC_MOD(v,b,sig_ret)))
 		     in SOME(bnd,dec,ctxt)
 		     end
 		   | _ => (error_region();
@@ -1124,7 +1124,7 @@ structure Signature :> SIGNATURE =
 				      print "\n";
 				      NONE)
 				  end
-			    | SOME(lbls,PHRASE_CLASS_MOD (_,s)) => 
+			    | SOME(lbls,PHRASE_CLASS_MOD (_,_,s)) => 
 				  let val name = derived_var v
 				      val path = join_path_labels(path_actual,lbls)
 				      val (coerced',result) = 
@@ -1158,10 +1158,10 @@ structure Signature :> SIGNATURE =
 				       NONE))
 		   | (_, SOME(DEC_EXP _)) => NONE
 	           (* ----- check for polymorphic specification case first ---- *)
-		   | (SOME(DEC_MOD(v,ss1)), SOME(DEC_MOD(_,_))) => 
+		   | (SOME(DEC_MOD(v,_,ss1)), SOME(DEC_MOD(_,_,_))) => 
 			let val (ss2,lbls) = 
 			    (case (sig_actual_lookup labs) of
-				 SOME(lbls, PHRASE_CLASS_MOD(_,s2)) => (s2,lbls)
+				 SOME(lbls, PHRASE_CLASS_MOD(_,_,s2)) => (s2,lbls)
 			       | _ => error "lookup inconsistent")
 			in
 			  (case (ss1,ss2) of
@@ -1192,7 +1192,7 @@ structure Signature :> SIGNATURE =
 			end
 
                    (* ---- coercion of non-polyfun module component ---------- *)
-         	   | (SOME(DEC_MOD(v,s)),_) => (error_region();
+         	   | (SOME(DEC_MOD(v,_,s)),_) => (error_region();
 						print "module specification but non-module component\n";
 						NONE)
 
@@ -1260,7 +1260,7 @@ structure Signature :> SIGNATURE =
 		    (case (bnd,sig_inline_actual_lookup [lbl]) of
 			 (BND_EXP(v,_), SOME (_,PHRASE_EXP e)) => BND_EXP(v,e)
 		       | (BND_CON(v,_), SOME (_,PHRASE_CON c)) => BND_CON(v,c)
-		       | (BND_MOD(v,_), SOME(_,PHRASE_MOD m)) => BND_MOD(v,m)
+		       | (BND_MOD(v,b,_), SOME(_,PHRASE_MOD m)) => BND_MOD(v,b,m)
 		       | _ => error "sbnd_find: help failed")
 
 		fun sbnd_find lbl [] = error "sbnd_find failed"

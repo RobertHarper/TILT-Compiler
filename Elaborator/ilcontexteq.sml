@@ -104,26 +104,26 @@ struct
 		 DEC_EXP (v,c) => (blastOutChoice 0; blastOutVar v; blastOutCon c)
 	       | DEC_CON (v,k,NONE) => (blastOutChoice 1; blastOutVar v; blastOutKind k)
 	       | DEC_CON (v,k,SOME c) => (blastOutChoice 2; blastOutVar v; blastOutKind k; blastOutCon c)
-	       | DEC_MOD (v,s) => (blastOutChoice 3; blastOutVar v; blastOutSig s)
+	       | DEC_MOD (v,b,s) => (blastOutChoice 3; blastOutVar v; blastOutBool b; blastOutSig s)
 	       | DEC_EXCEPTION (t,c) =>  (blastOutChoice 4; blastOutTag t; blastOutCon c))
 	and blastInDec () =
 	    (case (blastInChoice()) of
 		 0 => DEC_EXP (blastInVar (), blastInCon ())
 	       | 1 => DEC_CON (blastInVar (), blastInKind (), NONE)
 	       | 2 => DEC_CON (blastInVar (), blastInKind (), SOME (blastInCon ()))
-	       | 3 => DEC_MOD (blastInVar (), blastInSig ())
+	       | 3 => DEC_MOD (blastInVar (), blastInBool (), blastInSig ())
 	       | 4 => DEC_EXCEPTION (blastInTag (), blastInCon ())
 	       | _ => error "bad blastInDec")
 	and blastOutBnd bnd = 
 	    (case bnd of
 		 BND_EXP (v,e) => (blastOutChoice 0; blastOutVar v; blastOutExp e)
 	       | BND_CON (v,c) => (blastOutChoice 1; blastOutVar v; blastOutCon c)
-	       | BND_MOD (v,m) => (blastOutChoice 2; blastOutVar v; blastOutMod m))
+	       | BND_MOD (v,b,m) => (blastOutChoice 2; blastOutVar v; blastOutBool b; blastOutMod m))
 	and blastInBnd () =
 	    (case (blastInChoice()) of
 		 0 => BND_EXP(blastInVar (), blastInExp ())
 	       | 1 => BND_CON(blastInVar (), blastInCon ())
-	       | 2 => BND_MOD(blastInVar (), blastInMod ())
+	       | 2 => BND_MOD(blastInVar (), blastInBool (), blastInMod ())
 	       | _ => error "bad blastInBnd")
 	and blastOutSdec (SDEC(l,dec)) = (blastOutLabel l; blastOutDec dec)
 	and blastInSdec () = SDEC(blastInLabel (), blastInDec ())
@@ -676,7 +676,7 @@ struct
 	    case pc of
 		PHRASE_CLASS_EXP (e,c) => (blastOutChoice 0; blastOutExp e; blastOutCon c)
 	      | PHRASE_CLASS_CON (c,k) => (blastOutChoice 1; blastOutCon c; blastOutKind k)
-	      | PHRASE_CLASS_MOD (m,s) => (blastOutChoice 2; blastOutMod m; blastOutSig s)
+	      | PHRASE_CLASS_MOD (m,b,s) => (blastOutChoice 2; blastOutMod m; blastOutBool b; blastOutSig s)
 	      | PHRASE_CLASS_SIG (v,s) => (blastOutChoice 3; blastOutVar v; blastOutSig s)
 	      | PHRASE_CLASS_OVEREXP celist => (blastOutChoice 4; 
 						blastOutList (blastOutPair blastOutCon blastOutExp) celist)
@@ -686,7 +686,7 @@ struct
 	    case (blastInChoice()) of
 		0 => PHRASE_CLASS_EXP(blastInExp (), blastInCon ())
 	      | 1 => PHRASE_CLASS_CON(blastInCon (), blastInKind ())
-	      | 2 => PHRASE_CLASS_MOD(blastInMod (), blastInSig ())
+	      | 2 => PHRASE_CLASS_MOD(blastInMod (), blastInBool (), blastInSig ())
 	      | 3 => PHRASE_CLASS_SIG(blastInVar (), blastInSig ())
 	      | 4 => PHRASE_CLASS_OVEREXP(blastInList (fn() => blastInPair blastInCon blastInExp))
 	      | _ => error "bad blastInPC")
@@ -823,13 +823,13 @@ struct
 	    if Name.eq_label(l,l') then SOME bnd else sbnds_lookup(sbnds,l)
 
 	fun add_dec(DEC_EXP(v,_), DEC_EXP(v',_), vm) = VM.add(v,v',vm)
-	  | add_dec(DEC_MOD(v,_), DEC_MOD(v',_), vm) = VM.add(v,v',vm)
+	  | add_dec(DEC_MOD(v,_,_), DEC_MOD(v',_,_), vm) = VM.add(v,v',vm)
 	  | add_dec(DEC_CON(v,_,_), DEC_CON(v',_,_), vm) = VM.add(v,v',vm)
 	  | add_dec(DEC_EXCEPTION(t,_), DEC_EXCEPTION(t',_), vm) = vm
 	  | add_dec _ = raise NOT_EQUAL
 
 	fun add_bnd(BND_EXP(v,_), BND_EXP(v',_), vm) = VM.add(v,v',vm)
-	  | add_bnd(BND_MOD(v,_), BND_MOD(v',_), vm) = VM.add(v,v',vm)
+	  | add_bnd(BND_MOD(v,_,_), BND_MOD(v',_,_), vm) = VM.add(v,v',vm)
 	  | add_bnd(BND_CON(v,_), BND_CON(v',_), vm) = VM.add(v,v',vm)
 	  | add_bnd _ = raise NOT_EQUAL
 
@@ -1010,8 +1010,8 @@ struct
 	    case (dec, dec')
 	      of (DEC_EXP(v,con),DEC_EXP(v',con')) => 
 		  VM.eq_var(vm,v,v') andalso eq_con(vm,con,con') 
-	       | (DEC_MOD(v,signat), DEC_MOD(v',signat')) => 
-	          VM.eq_var(vm,v,v') andalso eq_signat(vm,signat,signat')
+	       | (DEC_MOD(v,b,signat), DEC_MOD(v',b',signat')) => 
+	          VM.eq_var(vm,v,v') andalso (b = b') andalso eq_signat(vm,signat,signat')
                | (DEC_CON(v,kind,conopt), DEC_CON(v',kind',conopt')) =>
 		  VM.eq_var(vm,v,v') andalso eq_kind(vm,kind,kind') andalso
 		  eq_conopt(vm,conopt,conopt')
@@ -1022,8 +1022,8 @@ struct
 	    case (bnd, bnd')
 	      of (BND_EXP(v,exp),BND_EXP(v',exp')) => 
 		  VM.eq_var(vm,v,v') andalso eq_exp(vm,exp,exp')
-	       | (BND_MOD(v,m), BND_MOD(v',m')) => 
-	          VM.eq_var(vm,v,v') andalso eq_mod(vm,m,m')
+	       | (BND_MOD(v,b,m), BND_MOD(v',b',m')) => 
+	          VM.eq_var(vm,v,v') andalso (b = b') andalso eq_mod(vm,m,m')
                | (BND_CON(v,c), BND_CON(v',c')) =>
 		  VM.eq_var(vm,v,v') andalso eq_con(vm,c,c')
 	       | _ => false                        (* MEMO: () this right?? *)
@@ -1062,8 +1062,8 @@ struct
 		  eq_exp(vm,exp,exp') andalso eq_con(vm,con,con')
 	       | (PHRASE_CLASS_CON(con,kind), PHRASE_CLASS_CON(con',kind')) =>
 		  eq_con(vm,con,con') andalso eq_kind(vm,kind,kind')		  
-	       | (PHRASE_CLASS_MOD(mod,signat), PHRASE_CLASS_MOD(mod',signat')) =>
-		  eq_mod(vm,mod,mod') andalso eq_signat(vm,signat,signat')
+	       | (PHRASE_CLASS_MOD(mod,b,signat), PHRASE_CLASS_MOD(mod',b',signat')) =>
+		  eq_mod(vm,mod,mod') andalso (b = b') andalso eq_signat(vm,signat,signat')
 	       | (PHRASE_CLASS_SIG (v,signat), PHRASE_CLASS_SIG (v',signat')) =>
 		  VM.eq_var(vm,v,v') andalso eq_signat(vm,signat,signat')
 	       | _ => false 

@@ -317,7 +317,7 @@ structure Datatype
 		
 	(* ----------------- compute the equality function  ------------------- *)
 	local
-	    val var_poly_dec = DEC_MOD(mpoly_var,SelfifySig context (PATH(mpoly_var,[]),sigpoly_eq))
+	    val var_poly_dec = DEC_MOD(mpoly_var,false,SelfifySig context (PATH(mpoly_var,[]),sigpoly_eq))
 	    val temp_ctxt = add_context_dec(context,var_poly_dec)
 	    val eq_con = if (is_noncarrying)
 				then con_eqfun top_type_mproj
@@ -355,11 +355,11 @@ structure Datatype
 	    val expose_expbnd = BND_EXP(expose_var,exp_expose_i)
 	    val expose_expdec = DEC_EXP(expose_var,con_expose_i)
 	    val expose_inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expose_expdec)])
-	    val expose_modbnd = BND_MOD(expose_modvar,
+	    val expose_modbnd = BND_MOD(expose_modvar, true,
 					MOD_FUNCTOR(mpoly_var,sigpoly,
 						    MOD_STRUCTURE[SBND(it_lab,expose_expbnd)],
 						    expose_inner_sig))
-	    val expose_moddec = DEC_MOD(expose_modvar,
+	    val expose_moddec = DEC_MOD(expose_modvar, true,
 					SIGNAT_FUNCTOR(mpoly_var,sigpoly,
 						       expose_inner_sig,TOTAL))
 	    val expose_sbnd = SBND(expose_lab,if is_monomorphic 
@@ -376,11 +376,11 @@ structure Datatype
 		  val bnd = BND_EXP(mk_var, exp_mk_ij)
 		  val dec = DEC_EXP(mk_var, con_mk_ij)
 		  val inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,dec)])
-		  val modbnd = BND_MOD(mkpoly_var,
+		  val modbnd = BND_MOD(mkpoly_var, true,
 					   MOD_FUNCTOR(mpoly_var,sigpoly,
 						       MOD_STRUCTURE[SBND(it_lab,bnd)],
 						       inner_sig))
-		  val moddec = DEC_MOD(mkpoly_var,
+		  val moddec = DEC_MOD(mkpoly_var, true,
 				       SIGNAT_FUNCTOR(mpoly_var,sigpoly,
 						      inner_sig,TOTAL))
 	      in  (SBND(constr_lab_ij, if is_monomorphic then bnd else modbnd),
@@ -399,8 +399,8 @@ structure Datatype
 							     code = sbnds}
 			    else SIGNAT_STRUCTURE(NONE,sdecs)
 
-	  in (SBND(module_lab,BND_MOD(module_var,inner_mod)),
-	      SDEC(module_lab,DEC_MOD(module_var,inner_sig)))
+	  in (SBND(module_lab,BND_MOD(module_var,false,inner_mod)),
+	      SDEC(module_lab,DEC_MOD(module_var,false,inner_sig)))
 	  end
 
 
@@ -437,7 +437,7 @@ structure Datatype
 				       if (is_monomorphic)
 					   then eq_expbnd
 				       else
-					   BND_MOD(bnd_var,
+					   BND_MOD(bnd_var, true,
 						   MOD_FUNCTOR(mpoly_var,sigpoly_eq,
 							   MOD_STRUCTURE[SBND(it_lab,eq_expbnd)],
 							       eq_inner_sig))))
@@ -445,7 +445,7 @@ structure Datatype
 				 SDEC(eq_lab,
 				      if (is_monomorphic)
 					  then eq_expdec
-				      else DEC_MOD(bnd_var,
+				      else DEC_MOD(bnd_var, true,
 					     SIGNAT_FUNCTOR(mpoly_var,sigpoly_eq,
 							    eq_inner_sig,TOTAL)))
 			 in (eq_sbnd, eq_sdec)
@@ -466,10 +466,10 @@ structure Datatype
 		    val expbnd = BND_EXP(equal_var, eq_exp)
 		    val expdec = DEC_EXP(equal_var, eq_con)
 		    val inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expdec)])
-		    val modbnd = BND_MOD(top_eq_var, MOD_FUNCTOR(mpoly_var,sigpoly_eq,
+		    val modbnd = BND_MOD(top_eq_var, true, MOD_FUNCTOR(mpoly_var,sigpoly_eq,
 							 MOD_STRUCTURE[SBND(it_lab,expbnd)],
 							 inner_sig))
-		    val moddec = DEC_MOD(top_eq_var, SIGNAT_FUNCTOR(mpoly_var,sigpoly_eq,
+		    val moddec = DEC_MOD(top_eq_var, true, SIGNAT_FUNCTOR(mpoly_var,sigpoly_eq,
 								    inner_sig, TOTAL))
 		    val bnd = if is_monomorphic then expbnd else modbnd
 		    val dec = if is_monomorphic then expdec else moddec
@@ -668,17 +668,17 @@ structure Datatype
 			     val dec = DEC_EXP(eq_var,c)
 			 in  [(SBND(eq_lab,bnd),SDEC(eq_lab,dec))]
 			 end
-		   | SOME(_,PHRASE_CLASS_MOD (m,s)) => 
-			 let val bnd = BND_MOD(eq_var,m)
-			     val dec = DEC_MOD(eq_var,s)
+		   | SOME(_,PHRASE_CLASS_MOD (m,b,s)) => 
+			 let val bnd = BND_MOD(eq_var,b,m)
+			     val dec = DEC_MOD(eq_var,b,s)
 			 in  [(SBND(eq_lab,bnd),SDEC(eq_lab,dec))]
 			 end
 		   | _ => [])
 	    val (all_constr_labs,carrying_constr_labs,constr_sbndsdec) = 
 		(case (Context_Lookup_Labels(context,dt_labs)) of
-		     SOME(_,PHRASE_CLASS_MOD (m,s)) => 
-			 let val bnd = BND_MOD(dt_var,m)
-			     val dec = DEC_MOD(dt_var,s)
+		     SOME(_,PHRASE_CLASS_MOD (m,b,s)) => 
+			 let val bnd = BND_MOD(dt_var,b,m)
+			     val dec = DEC_MOD(dt_var,b,s)
 			     val (_::_::sdecs) = 
 				 (case s of 
 				      SIGNAT_STRUCTURE(_,sdecs) => sdecs
@@ -689,7 +689,7 @@ structure Datatype
 				       | is_arrow _ = NONE
 				 in  case dec of
 				     DEC_EXP(_,c) => is_arrow c
-				   | DEC_MOD (_,SIGNAT_FUNCTOR(_,_,
+				   | DEC_MOD (_,true,SIGNAT_FUNCTOR(_,_,
 						  SIGNAT_STRUCTURE(_,[SDEC(_,DEC_EXP(_,c))]),_)) => is_arrow c
 				   | _ => NONE
 				 end
@@ -787,13 +787,15 @@ structure Datatype
     fun pc_is_const pc = 
 	let val innercon =
 	    (case pc of
-		 PHRASE_CLASS_MOD(_,SIGNAT_FUNCTOR(_,_,s,_)) =>
+		 PHRASE_CLASS_MOD(_,true,SIGNAT_FUNCTOR(_,_,s,_)) =>
 		     (case s of
 			  SIGNAT_STRUCTURE(_,[SDEC(itlabel,
 						   DEC_EXP(_,con))]) => con
-		       | _ => error "ill-formed constructor phrase_class")
+			| _ => (Ppil.pp_phrase_class pc;
+                              error "ill-formed constructor mod phrase_class"))
 	       | PHRASE_CLASS_EXP(_,con) => con
-	       | _ => (error "ill-formed constructor phrase_class"))
+	       | _ => (Ppil.pp_phrase_class pc;
+                       error "ill-formed constructor phrase_class"))
 	in  (case innercon of
 		 CON_ARROW _ => false
 	       | CON_APP _ => true
@@ -825,6 +827,10 @@ structure Datatype
 			     raise NotConstructor)
 		   | SOME lookup_result => lookup_result)
 		
+            val _ = (debugdo (fn () => (print "constr_lookup found phrase class:\n";
+                                        pp_phrase_class pc;
+                                        print "\n")))
+
             (* ls is non-empty *)
 	    val (v,ls) =
 		(case constr_path of
@@ -859,7 +865,7 @@ structure Datatype
 		     SDEC(_,DEC_EXP(_,CON_ARROW(_,c,_,_))) => (case con2path c of
 								   SOME p => APATH p
 								 | NONE => CON c)
-		   | SDEC(_,DEC_MOD(_,SIGNAT_FUNCTOR(_,_,SIGNAT_STRUCTURE(_,sdecs),_))) =>
+		   | SDEC(_,DEC_MOD(_,true,SIGNAT_FUNCTOR(_,_,SIGNAT_STRUCTURE(_,sdecs),_))) =>
 			 (case sdecs of
 			      [SDEC(_,DEC_EXP(_,CON_ARROW(_,CON_APP(c,_),_,_)))] => 
 				  (case con2path c of
@@ -934,7 +940,7 @@ structure Datatype
 
      fun des_dec (d : dec) : ((Il.var * Il.sdecs) option * Il.con) = 
        (case d of
-	  DEC_MOD(_,SIGNAT_FUNCTOR(v,SIGNAT_STRUCTURE (_,sdecs),
+	  DEC_MOD(_,true,SIGNAT_FUNCTOR(v,SIGNAT_STRUCTURE (_,sdecs),
 		    SIGNAT_STRUCTURE(_,[SDEC(_,DEC_EXP(_,c))]),_)) => (SOME (v, sdecs), c)
 	| DEC_EXP(_,c) => (NONE, c)
 	| _ => error "des_dec")
@@ -1033,7 +1039,7 @@ structure Datatype
        val expose_exp = 
 	   (case (Context_Lookup_Path(context,expose_path), sbnds_sdecs_cons_opt) of
 		(SOME(_,PHRASE_CLASS_EXP(e,_)),_) => e
-	      | (SOME(_,PHRASE_CLASS_MOD(m,_)),SOME(sbnds,_,_)) => 
+	      | (SOME(_,PHRASE_CLASS_MOD(m,true,_)),SOME(sbnds,_,_)) => 
 		    (case m of
 			 MOD_FUNCTOR(v,_,MOD_STRUCTURE[SBND(_,BND_EXP(_,e))],_) =>
 			     exp_subst_modvar(e,[(v,MOD_STRUCTURE sbnds)])
@@ -1065,7 +1071,7 @@ structure Datatype
 				  carried_type : Il.con option} option =
        (case (Context_Lookup_Labels(context,map symbol_label path)) of
 	  NONE=> NONE
-	| SOME (path_mod,PHRASE_CLASS_MOD(m,exn_sig as 
+	| SOME (path_mod,PHRASE_CLASS_MOD(m,_,exn_sig as 
 		SIGNAT_STRUCTURE (_,[SDEC(lab1,DEC_EXP(_,ctag)),SDEC(lab2,DEC_EXP(_,cmk))]))) =>
 	      if (eq_label(lab1,stamp_lab) andalso eq_label(lab2,mk_lab))
 		  then 

@@ -169,7 +169,7 @@ struct
 						      | _ => raise NoEqExp)
 				  val eq_label = to_eq_lab type_label
 			      in (case (Context_Lookup(ctxt,eq_label)) of
-				      SOME(_,PHRASE_CLASS_MOD(m,_)) => m
+				      SOME(_,PHRASE_CLASS_MOD(m,_,_)) => m
 				    | _ => raise NoEqExp)
 			      end))
 		in case (GetModSig(ctxt,meq)) of

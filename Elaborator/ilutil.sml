@@ -279,7 +279,7 @@ structure IlUtil
 	   | LET (bnds,e) => let fun loop [] h = h
 				   | loop ((BND_EXP(v,_))::rest) h = loop rest (add_var(h,v))
 				   | loop ((BND_CON(v,_))::rest) h = loop rest (add_convar(h,v))
-				   | loop ((BND_MOD(v,_))::rest) h = loop rest (add_modvar(h,v))
+				   | loop ((BND_MOD(v,_,_))::rest) h = loop rest (add_modvar(h,v))
 				 val state' = loop bnds state
 			     in LET(map (f_bnd state) bnds, 
 				    f_exp state' e)
@@ -404,7 +404,7 @@ structure IlUtil
       and f_bnd (state : state) (bnd : bnd) : bnd =
 	(case bnd of
 	   BND_EXP(v,e) => BND_EXP(v, f_exp state e)
-	 | BND_MOD(v,m) => BND_MOD(v, f_mod state m)
+	 | BND_MOD(v,b,m) => BND_MOD(v, b,f_mod state m)
 	 | BND_CON(v,c) => BND_CON(v, f_con state c))
 
       and f_kind (state : state) (kind : kind) : kind = 
@@ -416,7 +416,7 @@ structure IlUtil
       and f_dec (state : state) (dec : dec) : dec =
 	(case dec of
 	   DEC_EXP(v,c) => DEC_EXP(v, f_con state c)
-	 | DEC_MOD(v,s) => DEC_MOD(v, f_signat state s)
+	 | DEC_MOD(v,b,s) => DEC_MOD(v, b, f_signat state s)
 	 | DEC_CON(v,k,NONE) => DEC_CON(v, f_kind state k, NONE)
 	 | DEC_CON(v,k,SOME c) => DEC_CON(v, f_kind state k, SOME (f_con state c))
 	 | DEC_EXCEPTION(n,c) => DEC_EXCEPTION(n, f_con state c))
@@ -582,7 +582,7 @@ structure IlUtil
 			   else search [l] rest
 		     | ([l],_::rest) => search [l] rest
 		     | (l::ls,[]) => raise DEPENDENT
-		     | (l::ls,(SDEC(curl,DEC_MOD(v,(SIGNAT_STRUCTURE (_,sdecs)))))::rest) =>
+		     | (l::ls,(SDEC(curl,DEC_MOD(v,_,(SIGNAT_STRUCTURE (_,sdecs)))))::rest) =>
 			   if (eq_label(l,curl))
 			       then search ls sdecs
 			   else search (l::ls) rest
@@ -632,7 +632,7 @@ structure IlUtil
 		(case dec of
 		     DEC_EXP (v,c) => loop ((v,MODULE_PROJECT(m,l))::ea,ca,ma) rest
 		   | DEC_CON(v,k,copt) => loop (ea,(v,CON_MODULE_PROJECT(m,l))::ca,ma) rest
-		   | DEC_MOD(v,s) => loop (ea,ca,(v,MOD_PROJECT(m,l))::ma) rest
+		   | DEC_MOD(v,_,s) => loop (ea,ca,(v,MOD_PROJECT(m,l))::ma) rest
 		   | _ => loop (ea,ca,ma) rest)
 	    val (exptable,contable,modtable) = loop ([],[],[]) sdecs
 	    fun exp_handler (VAR var,bound) = 
@@ -1056,7 +1056,7 @@ structure IlUtil
 	      fun loop [] e c m = (e,c,m)
 		| loop ((BND_EXP(v,e))::rest) ee cc mm = loop rest ((v,e)::ee) cc mm
 		| loop ((BND_CON(v,c))::rest) ee cc mm = loop rest ee ((v,c)::cc) mm
-		| loop ((BND_MOD(v,m))::rest) ee cc mm = loop rest ee cc ((v,m)::mm)
+		| loop ((BND_MOD(v,_,m))::rest) ee cc mm = loop rest ee cc ((v,m)::mm)
 	      val (etable,ctable,mtable) = loop bnds [] [] [] 
 	      fun con_handler (CON_VAR var,bound) = if (member_eq(eq_var,var,bound))
 							then NONE else assoc_eq(eq_var,var,ctable)
@@ -1087,7 +1087,7 @@ structure IlUtil
 	  in (case target_bnd of
 		  BND_EXP(v,e) => BND_EXP(v,f_exp handlers e)
 		| BND_CON(v,c) => BND_CON(v,f_con handlers c)
-		| BND_MOD(v,m) => BND_MOD(v,f_mod handlers m))
+		| BND_MOD(v,b,m) => BND_MOD(v,b,f_mod handlers m))
 	  end
 
       exception UNRESOLVED
@@ -1189,7 +1189,7 @@ structure IlUtil
 
     fun is_inline_bnd (BND_EXP(v,e)) = is_inline_exp e
       | is_inline_bnd (BND_CON _) = true
-      | is_inline_bnd (BND_MOD(v,m)) = is_inline_mod m
+      | is_inline_bnd (BND_MOD(v,_,m)) = is_inline_mod m
 
     and is_inline_exp arg_exp = 
 	(case arg_exp of
@@ -1240,7 +1240,7 @@ structure IlUtil
 			 SBND(l,case bnd of
 			      BND_EXP(v,e) => BND_EXP(v, ee e)
 			    | BND_CON(v,c) => BND_CON(v, cc c)
-			    | BND_MOD(v,m) => BND_MOD(v, mm m))
+			    | BND_MOD(v,b,m) => BND_MOD(v, b, mm m))
 		     fun loop [] : sbnd list = []
 		       | loop ((sbnd as SBND(l,bnd))::rest) =
 			 case bnd of
@@ -1263,7 +1263,7 @@ structure IlUtil
 				     val rest' = map (doit (ee,cc,mm)) rest
 				 in sbnd::(loop rest')
 				 end
-			   | BND_MOD (v,m) =>
+			   | BND_MOD (v,b,m) =>
 				 let 
 				     fun ee earg = exp_subst_modvar(earg, [(v,m)])
 				     fun cc carg = con_subst_modvar(carg, [(v,m)])
@@ -1272,7 +1272,7 @@ structure IlUtil
 				     val pathopt = (case pathopt of
 					NONE => NONE
 				      | SOME p => SOME(join_path_labels(p,[l])))
-				     val sbnd = SBND(l,BND_MOD(v,case make_inline_module (context,m,pathopt,inline_type) of
+				     val sbnd = SBND(l,BND_MOD(v,b,case make_inline_module (context,m,pathopt,inline_type) of
 							       SOME m => m
 							     | NONE => raise FAIL))
 				 in sbnd::(loop rest')

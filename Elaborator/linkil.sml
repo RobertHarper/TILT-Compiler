@@ -75,11 +75,11 @@ structure LinkIl :> LINKIL  =
 				     in  ((SBND(l,BND_CON(fv,label2obj path2con l)),
 					   SDEC(l,DEC_CON(fv,k,copt)))::acc, subst)
 				     end
-			       | DEC_MOD(v,s) => 
+			       | DEC_MOD(v,b,s) => 
 				     let val subst = (etab,ctab,(v,MOD_VAR fv)::mtab)
 					 val s = sig_subst_expconmodvar(s,etab,ctab,mtab)
-					 val first = (SBND(l,BND_MOD(fv,label2obj path2mod l)),
-						      SDEC(l,DEC_MOD(fv,s)))
+					 val first = (SBND(l,BND_MOD(fv,b,label2obj path2mod l)),
+						      SDEC(l,DEC_MOD(fv,b,s)))
 					 val rest = 
 					     (case (Name.is_label_open l, s) of
 						  (true,SIGNAT_STRUCTURE(_,inner_sdecs)) =>

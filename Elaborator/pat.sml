@@ -123,7 +123,7 @@ structure Pat
 		 in  (BND_EXP(v',e'),(v,VAR v')::subst)
 		 end
 	      | folder(BND_CON(v,c),subst) = (BND_CON(v,IlUtil.con_subst_expvar(c,subst)),subst)
-	      | folder(BND_MOD(v,m),subst) = (BND_MOD(v,IlUtil.mod_subst_expvar(m,subst)),subst)
+	      | folder(BND_MOD(v,b,m),subst) = (BND_MOD(v,b,IlUtil.mod_subst_expvar(m,subst)),subst)
 	    val (bnds,subst) = foldl_acc folder [] bnds
 	    val e = exp_subst_expvar(e,subst)
 	in  (make_let (bnds, e),c)

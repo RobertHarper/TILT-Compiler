@@ -45,13 +45,13 @@ functor IlEval(structure Il : IL
     and bnd_isval (bnd : bnd) = 
 	(case bnd of
 	     BND_EXP (v,e) => exp_isval e
-	   | BND_MOD (v,m) => mod_isval m
+	   | BND_MOD (v,_,m) => mod_isval m
 	   | BND_CON (v,c) => con_isval c)
 
     and dec_isval (dec : dec) = 
 	(case dec of
 	     DEC_EXP (v,c) => con_isval c
-	   | DEC_MOD (v,s) => true
+	   | DEC_MOD (v,_,s) => true
 	   | DEC_CON (v,k,NONE) => true
 	   | DEC_CON (v,k,SOME c) => con_isval c
 	   | DEC_EXCEPTION (_,c) => con_isval c)
@@ -87,7 +87,7 @@ functor IlEval(structure Il : IL
     type env = bnd list
     val init_env = []
     fun env_bndextend (env,bnd) = bnd::env
-    fun env_modextend (env,v,m) = (BND_MOD(v,m))::env
+    fun env_modextend (env,v,m) = (BND_MOD(v,false,m))::env
     fun env_expextend (env,v,e) = (BND_EXP(v,e))::env
     fun env_conextend (env,v,c) = (BND_CON(v,c))::env
 
@@ -97,7 +97,7 @@ functor IlEval(structure Il : IL
 			   Ppil.pp_bnds bnds;
 			   print "\n\n";
 			   raise NOTFOUND "lookup")
-	      | loop ((cur as (BND_EXP(v,_) | BND_CON(v,_) | BND_MOD(v,_)))::rest) = 
+	      | loop ((cur as (BND_EXP(v,_) | BND_CON(v,_) | BND_MOD(v,_,_)))::rest) = 
 	             if (eq_var(v,tv)) then cur else loop rest 
 	in loop bnds
 	end
@@ -124,7 +124,7 @@ functor IlEval(structure Il : IL
 					    print " found "; Ppil.pp_bnd b;
 					    raise (NOTFOUND "exp_metalookup")))
     fun mod_metalookup lup pp k = (case lup k of
-				      BND_MOD (v,m) => m
+				      BND_MOD (v,_,m) => m
 				    | b => (print "mod_metalookup of "; pp k;
 					    print " found "; Ppil.pp_bnd b;
 					    raise (NOTFOUND "mod_metalookup")))
@@ -423,14 +423,14 @@ functor IlEval(structure Il : IL
     and eval_bnd (env : env) (bnd : bnd) : bnd = 
 	(case bnd of
 	     BND_EXP(v,e) => BND_EXP(v,eval_exp env e)
-	   | BND_MOD(v,m) => BND_MOD(v,eval_mod env m)
+	   | BND_MOD(v,b,m) => BND_MOD(v,b,eval_mod env m)
 	   | BND_CON(v,c) => BND_CON(v,eval_con env c))
 
     and reduce_bnd (env : env) (bnd : bnd) : bnd = 
 	(case bnd of
 	     BND_EXP(v,e) => BND_EXP(v,reduce_exp env e)
 	   | BND_CON(v,c) => BND_CON(v,reduce_con env c)
-	   | BND_MOD(v,m) => BND_MOD(v,reduce_mod env m))
+	   | BND_MOD(v,b,m) => BND_MOD(v,b,reduce_mod env m))
 
     and reduce_mod (env : env) (module : mod) : mod = 
 	(case module of
@@ -440,7 +440,7 @@ functor IlEval(structure Il : IL
 				    in case m' of 
 					MOD_STRUCTURE sbnds => 
 					    let fun loop [] = error "reduce_exp cannot perform project"
-						  | loop ((SBND(ll,BND_MOD(_,m)))::rest) = if (eq_label(l,ll))
+						  | loop ((SBND(ll,BND_MOD(_,_,m)))::rest) = if (eq_label(l,ll))
 											   then reduce_mod env m
 										       else loop rest
 						  | loop (_::rest) = loop rest
@@ -469,7 +469,7 @@ functor IlEval(structure Il : IL
 				 SBND(l,case subst_var(b,[bnd']) of
 				      BND_EXP(v,e) => BND_EXP(v,reduce_exp env e)
 				    | BND_CON(v,c) => BND_CON(v,reduce_con env c)
-				    | BND_MOD(v,m) => BND_MOD(v,reduce_mod env m))
+				    | BND_MOD(v,b,m) => BND_MOD(v,b,reduce_mod env m))
 			     val rest' = map help rest
 			 in (SBND(l,bnd'))::(loop env' rest')
 			 end

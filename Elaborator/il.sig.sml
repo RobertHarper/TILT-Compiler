@@ -96,7 +96,7 @@ signature IL =
                  | MOD_LET of var * mod * mod
     and     sbnd = SBND of label * bnd
     and      bnd = BND_EXP of var * exp
-                 | BND_MOD of var * mod
+                 | BND_MOD of var * bool * mod
                  | BND_CON of var * con
 
     and   signat = SIGNAT_STRUCTURE         of path option * sdec list
@@ -109,12 +109,12 @@ signature IL =
 
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con
-                 | DEC_MOD       of var * signat
+                 | DEC_MOD       of var * bool * signat
                  | DEC_CON       of var * kind * con option 
                  | DEC_EXCEPTION of tag * con
 
 
-    and inline = INLINE_MODSIG of mod * signat
+    and inline = INLINE_MODSIG of bool * mod * signat
                | INLINE_EXPCON of exp * con
                | INLINE_CONKIND of con * kind
 	       | INLINE_OVER   of  (con * exp) list
@@ -135,7 +135,7 @@ signature IL =
 
 	and phrase_class = PHRASE_CLASS_EXP  of exp * con
 	  | PHRASE_CLASS_CON  of con * kind
-	  | PHRASE_CLASS_MOD  of mod * signat
+	  | PHRASE_CLASS_MOD  of mod * bool * signat
 	  | PHRASE_CLASS_SIG  of var * signat
 	  | PHRASE_CLASS_OVEREXP of (con * exp) list
 

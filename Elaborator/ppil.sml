@@ -228,7 +228,9 @@ struct
 						   String ", ", pp_con c, String ")"]
 	       | PHRASE_CLASS_CON  (c,k) => HOVbox[String "PC_CON(", pp_con c,
 						   String ", ", pp_kind k, String ")"]
-	       | PHRASE_CLASS_MOD  (m,s)  => HOVbox[String "PC_MOD(", pp_mod m,
+	       | PHRASE_CLASS_MOD  (m,false,s)  => HOVbox[String "PC_MOD(", pp_mod m,
+						    String ", ", pp_signat s, String ")"]
+	       | PHRASE_CLASS_MOD  (m,true,s)  => HOVbox[String "PC_$POLY$MOD(", pp_mod m,
 						    String ", ", pp_signat s, String ")"]
 	       | PHRASE_CLASS_SIG  (v,s)  => HOVbox[String "PC_SIG(", pp_var v, String " = ",
 						    pp_signat s, String ")"]
@@ -237,7 +239,9 @@ struct
 
     and pp_inline seen inline = 
 	    (case inline of
-		(INLINE_MODSIG (m,s)) => HOVbox[pp_mod seen m, String ":", Break, pp_signat seen s]
+		(INLINE_MODSIG (b,m,s)) => HOVbox[pp_mod seen m, 
+                                                  if b then String ": $POLY$ " else String ":", 
+                                                  Break, pp_signat seen s]
 	      | (INLINE_EXPCON (e,c)) => HOVbox[pp_exp seen e, String ":", pp_con seen c]
 	      | (INLINE_CONKIND (c,k)) => HOVbox[pp_con seen c, String ":", pp_kind seen k]
 	      | (INLINE_OVER _) => String "INLINE_OVER")
@@ -419,7 +423,9 @@ struct
 	let fun help x y = (x,y)
 	  in (case bnd of
 		BND_EXP (v,e) => help (pp_var v) [pp_exp seen e]
-	      | BND_MOD (v,m) => help (pp_var v) [pp_mod seen m]
+	      | BND_MOD (v,false,m) => help (pp_var v) [pp_mod seen m]
+	      | BND_MOD (v,true,m) => help (pp_var v) [String " $POLY$ ", 
+						       pp_mod seen m]
 	      | BND_CON (v,c) => help (pp_var v) [pp_con seen c])
 	  end
 
@@ -427,7 +433,9 @@ struct
       let fun help x y = (x,y)
       in (case dec of
 	    DEC_EXP (v,c) => help (pp_var v) [pp_con seen c]
-	  | DEC_MOD (v,s) => help (pp_var v) [pp_signat seen s]
+	  | DEC_MOD (v,false,s) => help (pp_var v) [pp_signat seen s]
+	  | DEC_MOD (v,true,s) => help (pp_var v) [String " $POLY$ ", 
+						   pp_signat seen s]
 	  | DEC_CON (v,k,NONE) => help (pp_var v) [pp_kind seen k]
 	  | DEC_CON (v,k,SOME c) => help (pp_var v) [pp_con seen c, String " = ", pp_kind seen k]
 	  | DEC_EXCEPTION (n,c) =>  help (pp_tag n) [pp_con seen c])
@@ -492,7 +500,8 @@ struct
 	let val label_pathpc_list = Name.LabelMap.listItemsi label_list
 	    fun pp_xpc (PHRASE_CLASS_EXP (e,c)) = HOVbox[pp_exp [] e, String " : ", pp_con [] c]
 	      | pp_xpc (PHRASE_CLASS_CON (c,k)) = HOVbox[pp_con [] c, String " : ", pp_kind [] k]
-	      | pp_xpc (PHRASE_CLASS_MOD (m,s)) = HOVbox[pp_mod [] m, String " : ", pp_signat [] s]
+	      | pp_xpc (PHRASE_CLASS_MOD (m,false,s)) = HOVbox[pp_mod [] m, String " : ", pp_signat [] s]
+	      | pp_xpc (PHRASE_CLASS_MOD (m,true,s)) = HOVbox[pp_mod [] m, String " : $POLY$ ", pp_signat [] s]
 	      | pp_xpc (PHRASE_CLASS_SIG (v,s)) = HOVbox[pp_var v, String " = ", pp_signat [] s]
 	      | pp_xpc (PHRASE_CLASS_OVEREXP oe) = String "OVEREXP_NOTDONE"
 	    fun doer(lbl,(path,xpc)) = HOVbox[pp_label lbl,

@@ -180,7 +180,7 @@ structure Toil
 
 
 
-     fun add_inline_module (context,label,var,module,signat) =
+     fun add_inline_module (context,label,var,b,module,signat) =
 	 case (make_inline_module (context,module,NONE,true)) of
 	     SOME norm_mod =>
 		 let
@@ -190,7 +190,7 @@ structure Toil
 			      pp_mod norm_mod;
 			      print "\n")
 		     val signat = GetModSig(context,norm_mod)
-		     val inline = INLINE_MODSIG(norm_mod, SelfifySig context (PATH (var,[]),signat))
+		     val inline = INLINE_MODSIG(b, norm_mod, SelfifySig context (PATH (var,[]),signat))
 		 in  add_context_inline(context,label,var,inline)
 		 end
 	   | NONE => add_context_mod(context,label,var,SelfifySig context (PATH(var,[]), signat))
@@ -239,9 +239,9 @@ structure Toil
 			     val sbnds' = sbnd::sbnds
 			     val ctxt' = 
 				 (case (flag,bnd,dec) of
-				      (true,BND_MOD(v,m),DEC_MOD(v',s)) => 
-					  if (eq_label(l,l') andalso (eq_var(v,v')))
-					      then add_inline_module(ctxt,l,v,m,
+				      (true,BND_MOD(v,b,m),DEC_MOD(v',b',s)) => 
+					  if (eq_label(l,l') andalso (b=b') andalso (eq_var(v,v')))
+					      then add_inline_module(ctxt,l,v,b,m,
 								     SelfifySig ctxt (PATH (v,[]),s))
 					  else elab_error "add_context_boolsbnd_ctxts: inconsistent sbnd_sdeclist"
 				    | _ => add_context_sdec(ctxt,SDEC(l',SelfifyDec ctxt dec)))
@@ -602,16 +602,16 @@ structure Toil
 			  end
 		      
 		      
-		    | SOME(_,PHRASE_CLASS_MOD (m,s as SIGNAT_FUNCTOR _)) => 
+		    | SOME(_,PHRASE_CLASS_MOD (m, _, s as SIGNAT_FUNCTOR _)) => 
 			  let val (e,c) = polyfun_inst (context,m,s)
 			  in  (e,c,true)
 			  end
-		    | SOME(_,PHRASE_CLASS_MOD (m,(SIGNAT_STRUCTURE(_,sdecs)))) =>
+		    | SOME(_,PHRASE_CLASS_MOD (m, _,(SIGNAT_STRUCTURE(_,sdecs)))) =>
 			  let fun dosdec (SDEC(l,DEC_EXP(_,c))) =
 				   if (eq_label (l,mk_lab))
 				       then (MODULE_PROJECT(m,mk_lab),c,true)
 				   else unbound()
-				| dosdec (SDEC(l,DEC_MOD(_,s))) =
+				| dosdec (SDEC(l,DEC_MOD(_,_,s))) =
 				       if (eq_label(l,mk_lab))
 					   then 
 					       let val mk_mod = MOD_PROJECT(m,mk_lab)
@@ -635,7 +635,7 @@ structure Toil
        | Ast.DelayExp expr =>
 	     (case (Context_Lookup(context,symbol_label (Symbol.varSymbol "Susp")),
 		   Context_Lookup(context,symbol_label (Symbol.tycSymbol "susp"))) of
-		 (SOME (_,PHRASE_CLASS_MOD(sm,SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE(_,[sdec]),_,_))), 
+		 (SOME (_,PHRASE_CLASS_MOD(sm,_,SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE(_,[sdec]),_,_))), 
 		  SOME(_,PHRASE_CLASS_CON(sc,sk))) =>  
 		 (let 
 		      val (e,c,va) = xexp(context,expr)
@@ -1055,7 +1055,7 @@ structure Toil
 
 
 	     val _ = 
-		 let val extra_dec = DEC_MOD(var_poly,SIGNAT_STRUCTURE(NONE, sdecs))
+		 let val extra_dec = DEC_MOD(var_poly,false,SIGNAT_STRUCTURE(NONE, sdecs))
 		 in  eq_table_pop extra_dec
 		 end
 
@@ -1073,8 +1073,8 @@ structure Toil
 			     val functor_sig = 
 				 SIGNAT_FUNCTOR(var_poly,sig_poly,
 						inner_sig,TOTAL)
-			 in  (SBND(id,BND_MOD(name,functor_mod)),
-			      SDEC(id,DEC_MOD(name,functor_sig)))
+			 in  (SBND(id,BND_MOD(name,true,functor_mod)),
+			      SDEC(id,DEC_MOD(name,true,functor_sig)))
 			 end
 		 in
 		     (case sdecs of
@@ -1173,7 +1173,7 @@ structure Toil
 		       | _ => sbnd_sdec::bind_sbnd_sdec)
 		val is_irrefutable = va andalso Sbnds_IsValuable(context', map #1 bind_sbnd_sdec)
 		fun refutable_case () = 
-		    let val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", SIGNAT_STRUCTURE(NONE,[])))
+		    let val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", false, SIGNAT_STRUCTURE(NONE,[])))
 		    in  map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) sbnd_sdec_list
 		    end
 		and irrefutable_case () = 
@@ -1194,7 +1194,7 @@ structure Toil
 			val poly_sdecs = temp_sdecs @ (make_typearg_sdec lbls_useeq)
 			val (sbnds,sdecs) = (map #1 sbnd_sdec_list, map #2 sbnd_sdec_list)
 			val _ = 
-			    let val extra_dec = DEC_MOD(var_poly,SIGNAT_STRUCTURE (NONE,poly_sdecs))
+			    let val extra_dec = DEC_MOD(var_poly, false,SIGNAT_STRUCTURE (NONE,poly_sdecs))
 			    in  eq_table_pop extra_dec
 			    end
 		    in
@@ -1216,8 +1216,8 @@ structure Toil
 					     val temp_sig = SIGNAT_STRUCTURE(NONE,
 									     [SDEC(it_lab,
 										   DEC_EXP(inner_var,c))])
-					     val bnd = BND_MOD(outer_var,MOD_FUNCTOR(var_poly,sig_poly,temp_mod,temp_sig))
-					     val dec = DEC_MOD(outer_var,
+					     val bnd = BND_MOD(outer_var,true,MOD_FUNCTOR(var_poly,sig_poly,temp_mod,temp_sig))
+					     val dec = DEC_MOD(outer_var,true,
 							       SIGNAT_FUNCTOR(var_poly,sig_poly,
 									      temp_sig,
 									      	   if is_irrefutable 
@@ -1232,9 +1232,9 @@ structure Toil
 								   if is_irrefutable 
 								       then TOTAL else PARTIAL)
 				     val rest_sbnds_sdecs = map2 mod_sig_help (labs,cons)
-				     val final_sbnds = ((SBND(lbl',BND_MOD(var',temp_mod)))::
+				     val final_sbnds = ((SBND(lbl',BND_MOD(var',true,temp_mod)))::
 							(map #1 rest_sbnds_sdecs))
-				     val final_sdecs = ((SDEC(lbl',DEC_MOD(var',temp_sig))) ::
+				     val final_sdecs = ((SDEC(lbl',DEC_MOD(var',true,temp_sig))) ::
 							(map #2 rest_sbnds_sdecs))
 				 in map2 (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) (final_sbnds, final_sdecs)
 				 end)
@@ -1366,7 +1366,7 @@ structure Toil
 	| Ast.OpenDec pathlist => 
 	      let fun help (i,path) = 
 		  (case (Context_Lookup_Labels(context,map symbol_label path)) of
-		       SOME(_,PHRASE_CLASS_MOD(m,s)) => 
+		       SOME(_,PHRASE_CLASS_MOD(m,b,s)) => 
 			   let 
 (* val l = fresh_open_internal_label ("openlbl" ^ (Int.toString i)) *)
 			       val str = foldl (fn (s,acc) => acc ^ (Symbol.name s))
@@ -1375,8 +1375,8 @@ structure Toil
 			       val v = fresh_named_var "openvar"
 			       (* the context wants a SINGAT_STRUCTURE for opens *)
 			       val s = reduce_signat context s
-			   in  SOME(SOME (SBND(l,BND_MOD(v,m))), 
-				    CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))
+			   in  SOME(SOME (SBND(l,BND_MOD(v,false,m))), 
+				    CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))
 			   end
 		     | _ => (error_region(); print "unbound structure: ???\n";
 			     NONE))
@@ -1405,7 +1405,7 @@ structure Toil
 					      end
 					  val sdecs = List.concat (map mapper lbls)
 					  val sp = SIGNAT_STRUCTURE(NONE,sdecs)
-					  val ctxt' = add_context_dec(context,SelfifyDec context (DEC_MOD(vp,sp)))
+					  val ctxt' = add_context_dec(context,SelfifyDec context (DEC_MOD(vp,false,sp)))
 					  val arg_cons = map (fn l => CON_MODULE_PROJECT(MOD_VAR vp,l)) lbls
 					  val arg_con = con_tuple_inject arg_cons
 					  val c' = CON_APP(c,arg_con)
@@ -1436,7 +1436,7 @@ structure Toil
 					      SIGNAT_FUNCTOR(vp,sigpoly,
 							     inner_innersig,TOTAL)
 					      
-				      in  (BND_MOD(v1,innermod), DEC_MOD(v1, innersig))
+				      in  (BND_MOD(v1,true,innermod), DEC_MOD(v1,true, innersig))
 				      end
 			    in  [(SOME(SBND(eqlab,bnd)),CONTEXT_SDEC(SDEC(eqlab,dec)))]
 			    end
@@ -1495,12 +1495,12 @@ structure Toil
 		  val inner_sig = SIGNAT_STRUCTURE(NONE,
 						   [SDEC(stamp_lab,DEC_EXP(var,CON_TAG con)),
 						    SDEC(mk_lab,DEC_EXP(mkvar,mk_con))])
-		in [(SOME(SBND(id_bar,BND_MOD(exnmodvar,inner_mod))),
-		     CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(exnmodvar,inner_sig))))]
+		in [(SOME(SBND(id_bar,BND_MOD(exnmodvar,false,inner_mod))),
+		     CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(exnmodvar,false,inner_sig))))]
 		end
 	| Ast.ExceptionDec [Ast.EbDef {exn: Symbol.symbol, edef: Ast.path}] => 
 	      (case (Context_Lookup_Labels(context,map symbol_label edef)) of
-		   SOME(_,PHRASE_CLASS_MOD(m,s)) => 
+		   SOME(_,PHRASE_CLASS_MOD(m,_,s)) => 
 		       let val id_bar = symbol_label exn
 			   val path_mk_exp = MODULE_PROJECT(m,mk_lab)
 			   val path_stamp_exp = MODULE_PROJECT(m,stamp_lab)
@@ -1515,8 +1515,8 @@ structure Toil
 			   val inner_sig = SIGNAT_STRUCTURE(NONE,
 							    [SDEC(stamp_lab, DEC_EXP(itvar,path_stamp_con)),
 							     SDEC(mk_lab, DEC_EXP(mkvar,path_mk_con))])
-		       in [(SOME(SBND(id_bar,BND_MOD(modvar,inner_mod))),
-			    CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(modvar,inner_sig))))]
+		       in [(SOME(SBND(id_bar,BND_MOD(modvar,false,inner_mod))),
+			    CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(modvar,false,inner_sig))))]
 		       end
 		 | _ => (error_region(); print "unbound exception: ???\n";
 			 []))
@@ -1755,7 +1755,7 @@ structure Toil
 				    val innersig = SIGNAT_STRUCTURE(NONE,
 								    [SDEC(it_lab,
 									  DEC_EXP(fresh_var(),eq_con))])
-				in  DEC_MOD(eq_var,SIGNAT_FUNCTOR(vpoly,sigpoly,innersig,PARTIAL))
+				in  DEC_MOD(eq_var,true,SIGNAT_FUNCTOR(vpoly,sigpoly,innersig,PARTIAL))
 				end)
 					    
 		       val eq_sdec = SDEC(eq_label, eq_dec)
@@ -1892,7 +1892,7 @@ structure Toil
 								       [SDEC(it_lab,
 									     DEC_EXP(fresh_var(),con))]),
 						      TOTAL)
-			in SDEC(symbol_label sym, DEC_MOD(fresh_named_var "unused",fsig))
+			in SDEC(symbol_label sym, DEC_MOD(fresh_named_var "unused",true,fsig))
 			end)
 	       in ADDITIONAL(map doer vtlist )
 	       end
@@ -1900,7 +1900,7 @@ structure Toil
 	       let 
 		   fun doer(sym,SOME sigexp, _) = 
 		       let val s = xsigexp(context,sigexp)
-		       in SDEC(symbol_label sym,DEC_MOD(fresh_var(),s))
+		       in SDEC(symbol_label sym,DEC_MOD(fresh_var(),false,s))
 		       end
 		     | doer(sym,_,_) = error "structure path spec not imped"
 	       in ADDITIONAL(map doer sym_sigexp_path_list)
@@ -1935,7 +1935,7 @@ structure Toil
 			       val signat' = xsigexp(context',sigexp')
 			     in SIGNAT_FUNCTOR(var,signat,signat',PARTIAL)
 			     end
-		      in SDEC(symbol_label funid, DEC_MOD(var,help fsig))
+		      in SDEC(symbol_label funid, DEC_MOD(var,false,help fsig))
 		      end
 		  in ADDITIONAL(map doer sym_fsigexp_list)
 		  end
@@ -1955,7 +1955,7 @@ structure Toil
 						    DEC_EXP(fresh_var(),stamp_con)),
 					       SDEC(mk_lab,
 						    DEC_EXP(fresh_var(),mk_con))])
-			in SDEC(symbol_label sym, DEC_MOD(fresh_var(),inner_sig))
+			in SDEC(symbol_label sym, DEC_MOD(fresh_var(),false,inner_sig))
 			end
 		      in ADDITIONAL(map doer exlist)
 		      end
@@ -2013,11 +2013,11 @@ structure Toil
 		 (case def of
 		      (Ast.VarFct (path,Ast.NoSig)) => 
 			  (case (Context_Lookup_Labels(context,map symbol_label path)) of
-			       SOME(path,PHRASE_CLASS_MOD(m,s as (SIGNAT_FUNCTOR _))) => 
+			       SOME(path,PHRASE_CLASS_MOD(m,_,s as (SIGNAT_FUNCTOR _))) => 
 				   let val l = symbol_label name
 				       val v = fresh_named_var "functor_var"
-				   in [(SOME(false,SBND(l,BND_MOD(v,m))),
-					CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))]
+				   in [(SOME(false,SBND(l,BND_MOD(v,false,m))),
+					CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))]
 				   end
 			     | _ => (error_region();
 				    print "unbound functor: ";
@@ -2043,8 +2043,8 @@ structure Toil
 				| addbool(SOME sbnd,ce) = (SOME(false,sbnd), ce)
 			      val sbnd_ce_list' = map addbool sbnd_ce_list
 			      val v = fresh_named_var "functor_var"
-			      val sbnd = SBND(funid,BND_MOD(v,MOD_FUNCTOR(argvar,signat,m',s')))
-			      val sdec = SDEC(funid,DEC_MOD(v,SIGNAT_FUNCTOR(argvar,signat,s',
+			      val sbnd = SBND(funid,BND_MOD(v,false,MOD_FUNCTOR(argvar,signat,m',s')))
+			      val sdec = SDEC(funid,DEC_MOD(v,false,SIGNAT_FUNCTOR(argvar,signat,s',
 									     PARTIAL)))
 			  in sbnd_ce_list' @ [(SOME(false,sbnd), CONTEXT_SDEC sdec)]
 			  end
@@ -2102,7 +2102,7 @@ structure Toil
 	(case strb of
 	     Ast.VarStr path => 
 		 (case Context_Lookup_Labels(context,map symbol_label path) of
-		      SOME (_,PHRASE_CLASS_MOD(m,s)) =>
+		      SOME (_,PHRASE_CLASS_MOD(m,_,s)) =>
 			  (case reduce_signat context s of
 			       (SIGNAT_STRUCTURE _) => ([],m,s)
 			     | _ => (error_region();
@@ -2120,7 +2120,7 @@ structure Toil
 		 xstrexp(context, Ast.AppStr(f,[(se,flag)]), Ast.NoSig)
 	   | Ast.AppStr (funpath,[(strexp as (Ast.VarStr argpath),_)]) =>
 		 (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
-		      SOME(_,PHRASE_CLASS_MOD(m,s as (SIGNAT_FUNCTOR(var1,sig1,sig2,_)))) => 
+		      SOME(_,PHRASE_CLASS_MOD(m,_,s as (SIGNAT_FUNCTOR(var1,sig1,sig2,_)))) => 
 			  let 
 			      val (sbnd_ce_list,argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
 			      val argmod = 
@@ -2167,8 +2167,8 @@ structure Toil
 			       (* internal labels are exportable *)
 			      val lbl = fresh_internal_label "coerced"
 			      val sbnd_ce = 
-				  (SOME(SBND(lbl,BND_MOD(newvar,sealed))),
-				   CONTEXT_SDEC(SDEC(lbl,DEC_MOD(newvar,sig1'))))
+				  (SOME(SBND(lbl,BND_MOD(newvar,false,sealed))),
+				   CONTEXT_SDEC(SDEC(lbl,DEC_MOD(newvar,false,sig1'))))
 			  in (sbnd_ce_list @ [sbnd_ce],
 			      MOD_APP(m,MOD_VAR newvar),
 			      sig2')
@@ -2212,22 +2212,12 @@ structure Toil
 		     val context' = add_context_mod(context,lbl1,var1,
 						    SelfifySig context (PATH (var1,[]), sig1)) (* <-- inline ? *)
 		     val (sbnd_ce_list,mod2,sig2) = xstrexp(context',strexp,Ast.NoSig)
-		     val final_mod = MOD_STRUCTURE [SBND(lbl1,BND_MOD(var1,mod1)),
-						    SBND(lbl2,BND_MOD(var2,mod2))]
-		     val final_sig = SIGNAT_STRUCTURE(NONE,[SDEC(lbl1,DEC_MOD(var1,sig1)),
-							    SDEC(lbl2,DEC_MOD(var2,sig2))])
-(*
-		     val sig2' = sig2
-		     val final_mod = MOD_PROJECT(MOD_STRUCTURE [SBND(lbl1,BND_MOD(var1,mod1)),
-								SBND(lbl2,BND_MOD(var2,mod2))],
-						 lbl2)
-		     val final_sig = SIGNAT_STRUCTURE(NONE, [SDEC(lbl2,DEC_MOD(var2,sig2'))])
-*)
+		     val final_mod = MOD_STRUCTURE [SBND(lbl1,BND_MOD(var1,false,mod1)),
+						    SBND(lbl2,BND_MOD(var2,false,mod2))]
+		     val final_sig = SIGNAT_STRUCTURE(NONE,[SDEC(lbl1,DEC_MOD(var1,false,sig1)),
+							    SDEC(lbl2,DEC_MOD(var2,false,sig2))])
+
 		 in (sbnd_ce_list,final_mod, final_sig)
-		 (*
-		     if (Sig_IsSub(context',sig2,sig2'))
-			then (sbnd_ce_list,final_mod, final_sig)
-		    else old_err_or "Rule 254 failed" *)
 		 end
 	   | Ast.StructStr dec => 
 		 let 
@@ -2272,8 +2262,8 @@ structure Toil
 							      in  res
 							      end
 		      | _ => let val (sbnd_ce_list,m,s) = xstrexp(context,strexp,constraint)
-				 val rest = [(SOME(SBND(l,BND_MOD(v,m))),
-					      CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))]
+				 val rest = [(SOME(SBND(l,BND_MOD(v,false,m))),
+					      CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))]
 			     in  sbnd_ce_list @ rest
 			     end)
 	       end
@@ -2359,7 +2349,7 @@ structure Toil
 	val _ = push_region(0,1000000)
 	val _ = eq_table_push()
 	val res = xobj arg
-	val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", SIGNAT_STRUCTURE(NONE,[])))
+	val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", false, SIGNAT_STRUCTURE(NONE,[])))
         val tyvar_table = get_tyvar_table()
 	val overload_table = get_overload_table()
 	val flex_table = get_flex_table()
@@ -2378,7 +2368,7 @@ structure Toil
 			 val _ = reset_eq()
 			 val _ = eq_table_push()
 			 val _ = app eq_help eq_table 
-			 val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", 
+			 val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", false,
 						       SIGNAT_STRUCTURE(NONE,[])))
 		     in eq_loop (n+1)
 		     end

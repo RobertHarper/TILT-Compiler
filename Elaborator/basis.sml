@@ -77,12 +77,12 @@ structure Basis
 							  (c2exp instcon)))]
 		  val ctxt = add_context_dec(empty_context,
 					     IlStatic.SelfifyDec empty_context
-					       (DEC_MOD(argvar,argsig)))
+					       (DEC_MOD(argvar,false,argsig)))
 		  val inner_sig = IlStatic.GetModSig(ctxt,resmod)
 		  val m = MOD_FUNCTOR(argvar,argsig,resmod,inner_sig)
 		  val s = SIGNAT_FUNCTOR(argvar,argsig,inner_sig,TOTAL)
 	      in result := add_context_inline(!result,mk_var_lab str, 
-					      fresh_named_var str, INLINE_MODSIG(m,s))
+					      fresh_named_var str, INLINE_MODSIG(true,m,s))
 	      end
 	  fun over_entry str con_exp =
 	      result := add_context_inline(!result,
