@@ -383,6 +383,9 @@ struct
 			   mvlist(map IN_REG args,arg_pos) @
 			   (case func of
 			      DIRECT (LOCAL_CODE label, _) => 
+ (* CS: I don't think this is necessary (on the alpha), as the translation of
+    the call (BSR (i.e., alpha jsr) to a label) puts the address in $pv
+    automatically *)
 				  if hasRpv then [BASE(LADDR(Rpv_virt,LOCAL_CODE label))] 
 				  else []
 (* new code *)              | DIRECT (ML_EXTERN_LABEL label, _) => 
