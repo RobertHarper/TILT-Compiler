@@ -58,7 +58,7 @@ struct
 		  | NONE => UNKNOWN_EFFS)
 	 | _ => UNKNOWN_EFFS)
 
-  fun con2eff (AllArrow_c(_,eff,_,_,_,_,c)) = ARROW_EFFS (eff, con2eff c)
+  fun con2eff (AllArrow_c{effect,body,...}) = ARROW_EFFS (effect, con2eff body)
     | con2eff (Prim_c(Record_c (lbls,_), types)) =
         REC_EFFS (ListPair.zip (lbls, map con2eff types))
     | con2eff _ = UNKNOWN_EFFS
@@ -283,16 +283,23 @@ struct
 	   List.concat bvll)
       end
 
-    | rcon (AllArrow_c (openness,effect,vkl,vlist,conlist,w32,con),cvs) = 
+    | rcon (con as AllArrow_c _, cvs) = (con, [])
+
+(*
       let
-	  val (conlist', bvll) = 
-	      Listops.unzip (map (fn c => rcon (c,cvs)) conlist)
+	  val (eNames,eTypes) = ListPair.unzip eFormals
+	  val (eTypes', bvll) = ListPair.unzip (map (fn c => rcon (c,cvs)) eTypes)
+	  val eFormals' = ListPair.zip (eNames,eTypes')
 	  val (con',bvl') = rcon (con,cvs)
       in
-	  (AllArrow_c(openness,effect,vkl,vlist,conlist',w32,con'),
+	  (AllArrow_c(openness=openness,
+		      effect=effect,
+		      isDependent = isDependent,
+		      tFormals = tFormals,
+		      vkl,vlist,conlist',w32,con'),
 	   (List.concat bvll) @ bvl')
       end
-
+*)
     | rcon (ExternArrow_c (conlist,con),cvs) = 
       let
 	  val (conlist',bvll) = 
@@ -763,10 +770,11 @@ struct
 	  (SOME(e'),bvl,effs,valuable) 
       end
 
-  and rfun (Function(eff,isrec,typelist:(var * kind) list,
-		     isdep, eformals, fformals, bod,ret),cvs,econtext) = 
+  and rfun (Function{effect=eff,recursive=isrec,isDependent=isdep,
+		     tFormals=typelist, eFormals=eformals,
+		     fFormals=fformals, body=bod, body_type=ret},cvs,econtext) = 
       let
-	  
+
 (*
         val t = newtag "fun" 
         val _ = (plist ["start",t];ppin(3)) 
@@ -777,7 +785,7 @@ struct
 	  val cvs' = Set.union (cvs, boundvar_set)
 
 	  val econtext' = 
-	      List.foldr (fn ((v,c),ectx) => Map.insert(ectx, v, con2eff c))
+	      List.foldr (fn ((v,_,c),ectx) => Map.insert(ectx, v, con2eff c))
               econtext eformals
 	      
 	  val (bod',bvl,effs,_) = rexp(bod,cvs',econtext)
@@ -790,7 +798,9 @@ struct
         val _ = plist ["end",t]
 *)
       in
-	  (Function(eff,isrec,typelist,isdep, eformals, fformals,newbod,ret'),
+	  (Function{effect=eff,recursive=isrec,isDependent=isdep,
+		    tFormals=typelist,eFormals=eformals, fFormals=fformals,
+		    body=newbod,body_type=ret'},
 	   up, ARROW_EFFS(eff, effs)) 
       end
   
