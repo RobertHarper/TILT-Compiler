@@ -145,6 +145,8 @@ sig
   (* Intswitch should be apparent.
    * The con list in the Sumswitch tells us the sum type and the w32
    *    is used to index the different cases for the sum type.
+   *    Currently the trace annotation will *always* be Trace, since
+   *    sums are always pointers.
    * Exncase's arms are indexed by expressions that must have type Exntag_c(c) and
    *    the arms must have type tau for some fixed result type tau, assuming bound has type c
    *)
@@ -158,7 +160,7 @@ sig
 		  sumtype : con,
 		  result_type : con,
 		  bound : var,
-		  arms : (w32 * niltrace * exp) list,
+		  arms : (w32 * niltrace * exp) list,  (*Always Trace, see above*)
 		  default : exp option}             (* sum types *)
     | Exncase_e of {arg : exp,
 		    result_type : con,

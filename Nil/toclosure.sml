@@ -13,6 +13,18 @@
      App_e(Closure,...), and App_e(Code,...).
 *)
 
+(* The current closure conversion strategy is to generate direct calls for self calls
+ * and indirect calls for all others.  So
+ * fun f x = g x
+ * and g x = g x
+ * translates to
+ * reccode f' (x,e) = e.g x
+ * andcode g' (x,e) = g' x
+ * recclos f = {f',{g}}
+ * andclos g = {g',{}}
+ * Leaf Petersen, 3/5/01
+ *)
+
 structure ToClosure
     :> TOCLOSURE =
 struct
@@ -30,13 +42,24 @@ struct
     val debug = Stats.ff("ToclosureDebug")
 
     val float64 = Prim_c(Float_c Prim.F64,[])
+
     structure FidSet = VarSet
+
     structure FidMap = VarMap
+
     type fid = var
+
     fun chat s = if (!debug) then print s else ()
 
     (* -------------- types and values manipulating free variables ------------- *)
     (* lists are kept in reverse order; map allow fast lookup/membership  *)
+
+    (*Data structure returned by the variable computation pass.  Contains the
+     * set of free variables of the expression under consideration, with
+     * each variable mapped to a fresh variable that will be used to name 
+     * the corresponding projection from the environment in such a way as to maintain 
+     * the no shadowing invariant
+     *)
     type frees = {free_cvars : var VarMap.map,
 		  free_evars : (var * niltrace * con option) VarMap.map}
 
@@ -82,25 +105,49 @@ struct
 
     (* -------- code to perform the initial free-variable computation ---------------- *)
     local
+      
+      (*Tags to indicate variable status.  A variable marked GLOBAL in the state 
+       * is a global that does not need to be in the environment.
+       * A variable marked LOCAL is bound in the current founction and so does not
+       * need to be included in the environment.
+       * A variable marked SHADOW is bound outside of the current function and is
+       * not global, so it must be included in the environment.
+       * Upon entering a new function, the state must be copied and all variables marked
+       * LOCAL must be changed to SHADOW.
+       * When we leave a function scope, we remove all variables from the free list
+       * except those marked SHADOW.
+       *)
+      
 	datatype expentry = GLOBALe 
 	                  | SHADOWe of niltrace * con option (* Available when of function type *)
 			  | LOCALe  of niltrace * con option
 	datatype conentry = GLOBALc 
 	                  | SHADOWc
 			  | LOCALc
-	datatype state = STATE of {curfid : fid * fid list,
+
+	datatype state = STATE of {curfid : fid * fid list,  (*The current function and the rest of 
+							      * the functions in the current nest*)
 				   is_top : bool,
 				   boundevars : expentry VarMap.map,
 				   boundcvars : conentry VarMap.map,
-				   boundfids : FidSet.set}
+				                             (*What term and type variables are currently
+							      * bound, and what is their status (see above)*)
+				   boundfids : FidSet.set}   (*The set of type and term variables bound
+							      * above which correspond to functions.
+							      *)
 	type funentry = {static : {fid : fid, 
 				   fidtype_var : var,
 				   code_var : fid,
 				   unpack_var : fid,
 				   cenv_var : var,
 				   venv_var : var},
-			 escape : bool,
-			 callee : (fid * state) list,
+			 escape : bool,               (*Escape in the sense that we will generate a closure
+						       * for it.  This may happen even for "non-escaping"
+						       * functions in the current strategy, since we 
+						       * only generate direct calls for self-calls
+						       *)
+			 callee : (fid * state) list,  (*Functions which are called directly.  Currently
+							* will only ever contain self *)
 			 frees : frees}
 
 
@@ -182,6 +229,7 @@ struct
 	fun add_boundevar(s,v,tr,copt) = add_boundevars(s,[(v,tr,copt)])
 	fun add_boundcvar(s,v) = add_boundcvars (s,[v])
 	    
+	(*Is it available?*)
 	fun is_boundevar(STATE{boundevars,...},evar) = 
 	    (case (VarMap.find(boundevars,evar)) of
 		 SOME GLOBALe  => true
@@ -196,7 +244,7 @@ struct
 
 	fun is_boundfid(STATE{boundfids,...}, f) = VarSet.member(boundfids,f)
 
-
+	(*First free occurrence*)
 	fun cvar_isfree (STATE{boundcvars,boundevars,...},{free_cvars,...}:frees,cvar) = 
 	    if (case (VarMap.find(free_cvars,cvar)) of
 		      NONE => false
@@ -262,7 +310,7 @@ struct
 
 
     fun show_state(STATE{boundevars, boundcvars, ...} : state) =
-	let fun show_eentry GLOBALe = print "GLOABLe"
+	let fun show_eentry GLOBALe = print "GLOBALe"
 	      | show_eentry (LOCALe _) = print "LOCALe"
 	      | show_eentry (SHADOWe _) = print "SHADOWe"
 	    fun show_centry GLOBALc = print "GLOABLc"
@@ -459,10 +507,10 @@ struct
 		     in (f, add_boundevar(state,v,tr,NONE))
 		     end
 	       | Fixopen_b var_fun_set =>
-		   let val (outer_curfid,_) = get_curfid state
+		   let (*val (outer_curfid,_) = get_curfid state  XXX Not used?  -Leaf *)
 		       fun do_arm fids_types (v,Function{tFormals,eFormals,fFormals,body,
 							 body_type,...}) =
-			   let val outer_state = add_boundfids false (state,fids_types) 
+			   let (*val outer_state = add_boundfids false (state,fids_types)   XXX Not used?  -Leaf*)
 			       val fids = map #1 fids_types
 			       val local_state = copy_state state (v,fids)
 			       val local_state = add_boundfids true (local_state,fids_types) 
@@ -512,7 +560,8 @@ struct
 			       val lf = VarMap.foldli efolder empty_frees free_evars
 			       val lf = VarMap.foldli cfolder lf free_cvars	   
 			       val f = {free_evars = free_evars,
-					free_cvars = #free_cvars lf}
+					free_cvars = #free_cvars lf}  (* XXX same as free_cvars?  This whole bit there is just checking invariant?  -Leaf*)
+				                                       (* NO!  Creates new derived vars! *)
 			       val _ = add_frees(v,lf)
 			   in  f
 			   end
@@ -558,7 +607,8 @@ struct
 				      NONE => frees
 				    | SOME e => e_find_fv (state,frees) e)
 		     fun folder((w,tr,e),f) =
-			let val state = add_boundevar(state,bound,tr,NONE)
+			let val state = add_boundevar(state,bound,tr,NONE)    (*XXX Don't need to traverse tr as well?  -Leaf *)
+			                                                      (*Invariant: This is always Trace *)
 			in  e_find_fv (state,f) e
 			end
 		     val frees = foldl folder frees arms
@@ -639,7 +689,7 @@ struct
 	   | App_e (_, e, clist, elist, eflist) =>
 		 let val f = (case e of
 				      Var_e v => if (is_fid v andalso 
-						     eq_var(v,#1(get_curfid state)))
+						     eq_var(v,#1(get_curfid state)))  (* XXX Why only if current function?  -Leaf*)
 						     then (
 (*							   print "***** adding callee ";
 							   Ppnil.pp_var v; print " to ";
