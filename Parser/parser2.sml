@@ -1,9 +1,15 @@
 (* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
  *
  * $Log$
-# Revision 1.1  97/10/21  18:07:00  pscheng
-# added copies of files from ml-yacc
+# Revision 1.2  97/10/24  21:36:28  cstone
+# update to 109.32 & NT
 # 
+# Revision 1.2  1997/08/26  19:18:54  jhr
+#   Replaced used of "abstraction" with ":>".
+#
+# Revision 1.1.1.1  1997/01/14  01:38:04  george
+#   Version 109.24
+#
  * Revision 1.3  1996/10/03  03:36:58  jhr
  * Qualified identifiers that are no-longer top-level (quot, rem, min, max).
  *
@@ -97,7 +103,6 @@
 *)
 
 
-
 (* drt (12/15/89) -- the functor should be used in development work, but
    it wastes space in the release version.
 
@@ -105,17 +110,8 @@ functor ParserGen(structure LrTable : LR_TABLE
 		  structure Stream : STREAM) : LR_PARSER =
 *)
 
-abstraction LrParser : LR_PARSER =
+structure LrParser :> LR_PARSER =
    struct
-
-signature FIFO = 
-  sig type 'a queue
-      val empty : 'a queue
-      exception Empty
-      val get : 'a queue -> 'a * 'a queue
-      val put : 'a * 'a queue -> 'a queue
-  end
-
       structure LrTable = LrTable
       structure Stream = Stream
 
@@ -134,7 +130,13 @@ signature FIFO =
       exception ParseError
       exception ParseImpossible of int
 
-      abstraction Fifo : FIFO =
+      structure Fifo :> sig type 'a queue
+                            val empty : 'a queue
+                            exception Empty
+                            val get : 'a queue -> 'a * 'a queue
+                            val put : 'a * 'a queue -> 'a queue
+                        end
+       =
         struct
 	  type 'a queue = ('a list * 'a list)
 	  val empty = (nil,nil)

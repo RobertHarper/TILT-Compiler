@@ -1,9 +1,15 @@
 (* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
  *
  * $Log$
-# Revision 1.1  97/10/21  18:07:01  pscheng
-# added copies of files from ml-yacc
+# Revision 1.2  97/10/24  21:36:30  cstone
+# update to 109.32 & NT
 # 
+# Revision 1.2  1997/08/26  19:18:55  jhr
+#   Replaced used of "abstraction" with ":>".
+#
+# Revision 1.1.1.1  1997/01/14  01:38:04  george
+#   Version 109.24
+#
  * Revision 1.1.1.1  1996/01/31  16:01:43  george
  * Version 109
  * 
@@ -12,7 +18,7 @@
 (* Stream: a structure implementing a lazy stream.  The signature STREAM
    is found in base.sig *)
 
-abstraction Stream : STREAM =
+structure Stream :> STREAM =
 struct
    datatype 'a str = EVAL of 'a * 'a str ref | UNEVAL of (unit->'a)
 

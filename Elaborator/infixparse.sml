@@ -8,7 +8,7 @@ functor InfixParse(structure Il : IL
 
     structure Il = Il
 
-    structure Symbol = Compiler.Symbol
+    structure Symbol = Symbol
     structure Fixity = Fixity
 
     open Il
