@@ -62,7 +62,6 @@ TIME        Basis/OS/time-sig
 PreTime     Basis/OS/pre-time
 Time        Basis/OS/time
 DATE	    Basis/date-sig
-Date	    Basis/date
 OS_FILE_SYS Basis/OS/os-filesys-sig
 OS_IO_SIG   Basis/OS/os-io-sig
 OS_PATH     Basis/OS/os-path-sig
@@ -91,13 +90,16 @@ TextPrimIO     Basis/IO/text-prim-io
 CLEAN_UP       Basis/NJ/cleanup-sig
 CleanUp        Basis/NJ/cleanup
 CleanIO        Basis/IO/clean-io
+BinPrimIO         Basis/IO/bin-prim-io
 BinIOFn        Basis/IO/bin-io-fn
-# "CLEAN_UP", "CleanUp", "CleanIO", "BinIOFn"
+# "CLEAN_UP", "CleanUp", "CleanIO", "BinIOFn", "BinPrimIO"
+
 
 TIMER	       Basis/timer-sig
 Timer	       Basis/useless-timer
 
 POSIX_extern   Basis/extern
+Date	    Basis/date
 POSIX_ERROR    Basis/Posix/posix-error.sig
 POSIX_Error    Basis/Posix/posix-error
 POSIX_FLAGS    Basis/Posix/posix-flags-sig
@@ -134,8 +136,6 @@ OS_IO          Basis/Unix/os-io
 OS             Basis/Unix/os
 # "OS_FileSys", "OS_Path", "OS_Process", "OS_IO", "OS"
 
-BinPrimIO         Basis/IO/bin-prim-io
-# "BinPrimIO"
 
 TextIOFn       Basis/IO/text-io-fn
 PosixPrimIOFn  Basis/Unix/posix-prim-io-fn
@@ -246,10 +246,10 @@ ListMergeSort Basis/Library/list-mergesort
 #SimpleUref    Basis/Library/simple-uref
 # "UREF", "Uref", "SimpleUref"
 
-SplayMapFn     Basis/Library/splay-map-fn
-SplaySetFn     Basis/Library/splay-set-fn
 SPLAY_TREE     Basis/Library/splaytree-sig
 SplayTree      Basis/Library/splaytree
+SplayMapFn     Basis/Library/splay-map-fn
+SplaySetFn     Basis/Library/splay-set-fn
 # "SplayMapFn", "SplaySetFn", "SPLAY_TREE", "SplayTree"
 
 # TIME           Basis/Library/time-limit <--- can't do this file, it uses SMLofNJ.IntervalTimer
@@ -283,6 +283,9 @@ Util Util/util
 LISTOPS Util/listops.sig
 Listops Util/listops
 
+SEQUENCE Util/sequence.sig
+Sequence Util/sequence
+
 STATS Util/stats.sig
 Stats Util/stats
 
@@ -307,6 +310,8 @@ GraphUtil Util/graphutil
 
 Blaster  Util/blast
 
+Specific Util/specific-til
+
 #################### Parser directory #################
 
 
@@ -318,11 +323,11 @@ PRETTYPRINT Parser/pp.sig
 PrettyPrint Parser/pp
 SOURCEMAP Parser/sourcemap.sig
 SourceMap Parser/sourcemap
+PATHNAMES Parser/pathnames.sig
+PathNames Parser/pathnames
 SOURCE   Parser/source.sig
 Source   Parser/source
 
-PATHNAMES Parser/pathnames.sig
-PathNames Parser/pathnames
 
 ERRORMSG Parser/errormsg.sig
 ErrorMsg Parser/errormsg
@@ -372,11 +377,9 @@ LrParser Parser/parser2
 
 MLLrValsFun Parser/ml.grm
 
-
 Join Parser/join
 FRONTEND Parser/frontend.sig
 FrontEnd Parser/frontend
-
 
 # Parser/ppast
 # Parser/tokentable
@@ -385,3 +388,4 @@ LINKPARSE Parser/linkparse.sig
 LinkParse Parser/linkparse
 
 parsetest Self/parsetest
+
