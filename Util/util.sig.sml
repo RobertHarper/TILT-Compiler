@@ -11,7 +11,7 @@ signature UTIL =
     (* Misc helpers *)
     val eq_opt : (('a * 'a -> bool) * 'a option * 'a option) -> bool
     val mapopt : ('a -> 'b) -> 'a option -> 'b option
-
+    val substring : string * string -> bool (* (look for) pattern * (in) target -> present *)
 (*
     (* Conversion: strings to/from int/word/char *)
     val IntStr2word : string -> Word32.word

@@ -13,6 +13,11 @@ structure Listops : LISTOPS =
     fun zip5 a b c d e = (map (fn ((a,b,c),(d,e)) => (a,b,c,d,e)) (zip (zip3 a b c) (zip d e)))
     fun zip6 a b c d e f = (map (fn ((a,b,c),(d,e,f)) => (a,b,c,d,e,f)) (zip (zip3 a b c) (zip3 d e f)))
     fun zip7 a b c d e f g = (map (fn ((a,b,c),(d,e,f,g)) => (a,b,c,d,e,f,g)) (zip (zip3 a b c) (zip4 d e f g)))
+    fun unzip3 abc_list = 
+	let fun unzip3_loop [] (aa,bb,cc) = (rev aa, rev bb, rev cc)
+	      | unzip3_loop ((a,b,c)::rest) (aa,bb,cc) = unzip3_loop rest (a::aa,b::bb,c::cc)
+	in unzip3_loop abc_list ([],[],[])
+	end
     fun map2 F (a,b) = map F (zip a b)
     fun map3 F (a,b,c) = map F (zip3 a b c)
     fun map4 F (a,b,c,d) = map F (zip4 a b c d)

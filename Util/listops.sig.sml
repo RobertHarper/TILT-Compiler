@@ -11,6 +11,8 @@ signature LISTOPS =
     val zip6 : 'a list -> 'b list -> 'c list -> 'd list -> 'e list -> 'f list -> 
                             ('a * 'b * 'c * 'd * 'e * 'f) list
 
+    val unzip3 : ('a * 'b * 'c) list -> ('a list * 'b list * 'c list)
+
     val map2 : ('a * 'b -> 'c) -> 'a list * 'b list -> 'c list
     val map3 : ('a * 'b * 'c -> 'd) -> 'a list * 'b list * 'c list -> 'd list
     val map4 : ('a * 'b * 'c * 'd -> 'e) -> 

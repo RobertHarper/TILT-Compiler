@@ -67,5 +67,14 @@ structure Util : UTIL =
     val setconcat = op @
     val sequenceconcat = op @
 
+    fun substring (pattern,target) =
+	let val pattern = explode pattern
+	    fun match [] _ = true
+	      | match (a::arest) (b::brest) = 
+		(((a = b) andalso (match arest brest)) orelse (match pattern brest))
+	      | match _ _ = false
+	in  (match pattern (explode target))
+	end
+
     val error = real_error
   end
