@@ -141,3 +141,4 @@
 0145 [open]	discrepancies with time results
 0146 [open]	integer constant too large
 0147 [open]	discrepancies with time tests
+0148 [open]	type specification error
