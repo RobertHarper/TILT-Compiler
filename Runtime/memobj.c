@@ -173,7 +173,10 @@ static Stacklet_t* Stacklet_Alloc(StackChain_t *stackChain)
       res = &Stacklets[i];
       break;
     }
-  assert(res != NULL);
+  if (res == NULL) {
+    fprintf(stderr,"Proc %d: thread %d: out of stack space\n", proc->procid, th->tid);
+    abort();
+  }
 
   res->parent = stackChain;
   res->state = Inconsistent;
