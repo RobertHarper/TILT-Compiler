@@ -1,232 +1,102 @@
-(*$import Util Substring Paths Update String Char Bool TextIO Posix Int Word32 Stats COMMUNICATION OS List Platform Dirs Delay Listops Target TopHelp UpdateHelp Compiler Tools Queue Linknil *)
-
+(*
+	Many of the access() calls exist to speed things up
+	on AFS.
+*)
 structure Comm :> COMMUNICATION =
 struct
 
+    val CommDiag = Stats.ff("CommDiag")
+    fun msg str = if (!CommDiag) then print str else ()
+
     val error = fn s => Util.error "communication.sml" s
 
-    structure SS = Substring
+    fun say (s : string) : unit =
+	if !Blaster.BlastDebug then (print s; print "\n") else ()
+
     structure Q = Queue
     structure Map = Util.StringMap
-	
+    structure B = Blaster
+
+    (* Q.delete is buggy. *)
+    fun empty_queue (q : 'a Q.queue) : unit =
+	if Q.isEmpty q then ()
+	else (ignore (Q.dequeue q); empty_queue q)
+
+
+    type job = int * string
+    type plan = Update.plan
+    type flags = (string * bool) list
+    type platform = Target.platform
+
     datatype message =
-	READY					(* Slave signals readiness. *)
-      | ACK_INTERFACE of string			(* Slave signals that interface has been compiled.  The job
-						   is still in progress.  This message can be skipped. *)
-      | ACK_DONE of string * Update.plan	(* Slave gives up on job, informing master what steps are left. *)
-      | ACK_ERROR of string			(* Slave signals that an error occurred during job. *)
-      | FLUSH_ALL of (Target.platform *		(* Master signals that slave should flush file cache and set boolean flags - *)
-		  (string * bool) list)		(* each flag is a pair of the flag name and value.  Currently skipped when
-						   master and slave are the same. *)
-      | FLUSH of (Paths.unit_paths *		(* Master signals that slave should flush files related to plan *)
-		  Update.plan)			(* in anticipation of some other processor doing work. *)
-      | REQUEST of (Paths.unit_paths *		(* Master request slave to compile. *)
-		    Compiler.import list *
-		    Update.plan)
-    val ready = "READY"
-    val ack_interface= "ACK_INTERFACE"
-    val ack_done = "ACK_DONE"
-    val ack_error = "ACK_ERROR"
-    val flushAll = "FLUSH_ALL"
-    val flush = "FLUSH"
-    val request = "REQUEST"
+	READY
+      | ACK_INTERFACE of job
+      | ACK_DONE of job * plan
+      | ACK_ERROR of job * string
+      | FLUSH_ALL of platform * flags
+      | FLUSH of job * plan
+      | REQUEST of job * plan
 
-    (* We use terminators rather than separators so we can represent the empty list. *)
-    val stringTerm = #" " and stringTerm' = "\\032"
-    val listTerm = #"|" and listTerm' = "\\124"
-	
-    (* val messageTerm = #"\n" -- implicit *)
-	
-    (* quote, unquote : string -> string.
-     * We want (unquote (quote s)) = s
-     * and (quote s) contains no terminator characters.
-     *)
-    val quote = String.translate (fn c =>
-				  if c = stringTerm then stringTerm'
-				  else if c = listTerm then listTerm'
-				       else Char.toString c) (* take care of messageTerm *)
-    fun unquote s = case String.fromString s
-		      of SOME s => s
-		       | NONE => error ("malformed string - bad msg: " ^ s)
+    fun blastOutJob (os : B.outstream) (job : job) : unit =
+	(say "blastOutJob";
+	 B.blastOutPair B.blastOutInt B.blastOutString os job)
+    fun blastInJob (is : B.instream) : job =
+	(say "blastInJob";
+	 B.blastInPair B.blastInInt B.blastInString is)
 
-    (* terminatedFields : (char -> bool) -> substring -> substring list * substring *)
-    fun terminatedFields terminator ss =
-	let
-	    val size = SS.size ss
-	    fun findEndpoints (i, start, acc) =
-		if i = size then rev acc
-		else if terminator (SS.sub (ss, i)) then findEndpoints (i+1, i+1, (start, i)::acc)
-		     else findEndpoints (i+1, start, acc)
-	    fun toSubstring (a,b) = SS.slice (ss, a, SOME (b - a))
-	    val endpoints = findEndpoints (0, 0, nil)
-	    val tail = if null endpoints then ss
-		       else let val (_, b) = List.last endpoints
-			    in  toSubstring (b+1, size)
-			    end
-	    val fields = map toSubstring endpoints
-	in  (fields,tail)
-	end
+    fun blastOutFlags (os : B.outstream) (flags : flags) : unit =
+	(say "blastOutFlags";
+	 B.blastOutList (B.blastOutPair B.blastOutString B.blastOutBool) os flags)
+    fun blastInFlags (is : B.instream) : flags =
+	(say "blastInFlags";
+	 B.blastInList (B.blastInPair B.blastInString B.blastInBool) is)
 
-    (* split : char * substring -> substring list *)
-    fun split (terminator, ss) =
-	if SS.isEmpty ss then nil
-	else let val (fields, tail) = terminatedFields (fn c => c = terminator) ss
-	     in  if SS.isEmpty tail then fields
-		 else error ("terminated string followed by garbage")
-	     end
-	 
-    (* parse : substring -> string list list *)
-    fun parse ss =
-	let val listFields = split (listTerm, ss)
-	    fun toList field = map (unquote o SS.string) (split (stringTerm, field))
-	in  map toList listFields
-	end
+    fun blastOutMessage (os : B.outstream) (m : message) : unit =
+	(say "blastOutMessage";
+	 (case m
+	    of READY => B.blastOutInt os 0
+	     | ACK_INTERFACE job =>
+		(B.blastOutInt os 1; blastOutJob os job)
+	     | ACK_DONE (job,plan) =>
+		(B.blastOutInt os 2; blastOutJob os job;
+		 Update.blastOutPlan os plan)
+	     | ACK_ERROR (job,msg) =>
+		(B.blastOutInt os 3; blastOutJob os job;
+		 B.blastOutString os msg)
+	     | FLUSH_ALL (platform,flags) =>
+		(B.blastOutInt os 4; Target.blastOutPlatform os platform;
+		 blastOutFlags os flags)
+	     | FLUSH (job, plan) =>
+		(B.blastOutInt os 5; blastOutJob os job;
+		 Update.blastOutPlan os plan)
+	     | REQUEST (job,plan) =>
+		(B.blastOutInt os 6; blastOutJob os job;
+		 Update.blastOutPlan os plan)))
+    fun blastInMessage (is : B.instream) : message =
+	(say "blastInMessage";
+	 (case B.blastInInt is
+	    of 0 => READY
+	     | 1 => ACK_INTERFACE (blastInJob is)
+	     | 2 => ACK_DONE (blastInJob is, Update.blastInPlan is)
+	     | 3 => ACK_ERROR (blastInJob is, B.blastInString is)
+	     | 4 => FLUSH_ALL (Target.blastInPlatform is, blastInFlags is)
+	     | 5 => FLUSH (blastInJob is, Update.blastInPlan is)
+	     | 6 => REQUEST (blastInJob is, Update.blastInPlan is)
+	     | _ => error "bad message"))
 
-    (* formatHelp : ('a -> string) * char -> 'a list -> string *)
-    fun formatHelp (toString, terminator) =
-	let
-	    val terminator = String.str terminator
-	    fun fmt (nil, acc) = String.concat (rev acc)
-	      | fmt (a::rest, acc) = fmt (rest, terminator :: toString a :: acc)
-	in
-	    fn list => fmt (list, nil)
-	end
-    (* format : string list list -> string *)
-    val format = formatHelp (formatHelp (quote, stringTerm), listTerm)
+    val (blastOutMessages,blastInMessages) =
+	B.magic (B.blastOutList blastOutMessage,
+		 B.blastInList blastInMessage,
+		 "msg $Revision$")
 
-    (* Update.plan <-> string list *)
-    val planToWords = map Update.toString
-    val wordsToPlan = map Update.fromString
-
-    (* Paths.unit_paths <-> string list *)
-    fun pathsToWords paths = [Paths.unitName paths, Paths.sourceFile paths]
-    fun wordsToPaths [unit,file] = Paths.sourceUnitPaths {unit=unit, file=file}
-      | wordsToPaths _ = error ("expected unit_paths - bad msg")
-
-    (* Compiler.kind <-> string *)
-    fun kindName Compiler.DIRECT = "direct"
-      | kindName Compiler.INDIRECT = "indirect"
-    fun kindFromName "direct" = Compiler.DIRECT
-      | kindFromName "indirect" = Compiler.INDIRECT
-      | kindFromName name = error ("unknown kind name " ^ name)
-
-    (* Compiler.import list <-> string list *)
-    fun importListToWords pathsImportList =
-	let fun toWords (Compiler.FILE (paths, kind)) = ["FILE", Paths.unitName paths,
-							 Paths.sourceFile paths, kindName kind]
-	      | toWords (Compiler.PRIM kind) = ["PRIM", kindName kind]
-	in  List.concat (map toWords pathsImportList)
-	end
-    fun wordsToImportList words =
-	let fun conv (nil, acc) = rev acc
-	      | conv ("FILE"::unit::file::kind::rest,acc) =
-		let val paths = Paths.sourceUnitPaths {unit=unit, file=file}
-		    val kind = kindFromName kind
-		in  conv (rest, Compiler.FILE (paths, kind)::acc)
-		end
-	      | conv ("PRIM"::kind::rest,acc) =
-		let val kind = kindFromName kind
-		in  conv (rest, Compiler.PRIM kind::acc)
-		end
-	      | conv (_, acc) = error "expected import list - bad msg"
-	in  conv (words, nil)
-	end
-
-    (* (string * bool) list <-> string list *)
-    fun flagsToWords flags = List.concat (map (fn (name, value) => [name, Bool.toString value]) flags)
-    fun wordsToFlags words =
-	let fun fromString s = case Bool.fromString s
-				 of NONE => error "funny boolean value string - bad msg"
-				  | SOME b => b
-	    fun convert (nil, acc) = rev acc
-	      | convert (name::value::rest, acc) = convert (rest, (name, fromString value) :: acc)
-	      | convert _ = error "expected even number of words in encoded flag list - bad msg"
-	in  convert (words, nil)
-	end
-
-    fun encodeAckInterface unit = [[unit]]
-    fun decodeAckInterface [[unit]] = unit
-      | decodeAckInterface _ = error "bad ack_interface msg"
-
-    fun encodeAckDone (unit, plan) = [[unit], planToWords plan]
-    fun decodeAckDone [[unit], plan] = (unit, wordsToPlan plan)
-      | decodeAckDone _ = error "bad ack_done msg"
-
-    fun encodeAckError unit = [[unit]]
-    fun decodeAckError [[unit]] = unit
-      | decodeAckError _ = error "bad ack_error msg"
-	
-    fun encodeFlushAll (platform, flags) = [[Target.platformName platform], flagsToWords flags]
-    fun decodeFlushAll [[platform], flags] = (Target.platformFromName platform, wordsToFlags flags)
-      | decodeFlushAll _ = error "bad flush_all msg"
-
-    fun encodeFlush (target, plan) = [pathsToWords target, planToWords plan]
-    fun decodeFlush [target, plan] = (wordsToPaths target, wordsToPlan plan)
-      | decodeFlush _ = error ("bad flush msg")
-
-    fun encodeRequest (target, imports, plan) = [pathsToWords target,
-						 importListToWords imports,
-						 planToWords plan]
-    fun decodeRequest [target, imports, plan] =
-	let val target = wordsToPaths target
-	    val imports = wordsToImportList imports
-	    val plan = wordsToPlan plan
-	in  (target, imports, plan)
-	end
-      | decodeRequest _ = error ("bad request msg")
-					     
-    fun messageToString message =
-	let
-	    fun encode (READY) = [[ready]]
-	      | encode (ACK_INTERFACE arg) = [ack_interface] :: (encodeAckInterface arg)
-	      | encode (ACK_DONE arg) = [ack_done] :: (encodeAckDone arg)
-	      | encode (ACK_ERROR arg) = [ack_error] :: (encodeAckError arg)
-	      | encode (FLUSH_ALL arg) = [flushAll] :: (encodeFlushAll arg)
-	      | encode (FLUSH arg) = [flush] :: (encodeFlush arg)
-	      | encode (REQUEST arg) = [request] :: (encodeRequest arg)
-	in  format (encode message) ^ "\n"
-	end
-
-    fun messageFromString string =
-	let
-	    val uptoNewline = SS.substring (string, 0, size string - 1)
-	    val error = fn s => error (s ^ ": " ^ SS.string uptoNewline)
-		
-	    fun decode [[first]] =
-		if first = ready then READY
-		else error ("strange header word")
-	      | decode ([first] :: rest) =
-		if (first = ack_interface) then ACK_INTERFACE (decodeAckInterface rest)
-		else if (first = ack_done) then ACK_DONE (decodeAckDone rest)
-		else if (first = ack_error) then ACK_ERROR (decodeAckError rest)
-		else if (first = flushAll) then FLUSH_ALL (decodeFlushAll rest)
-		else if (first = flush) then FLUSH (decodeFlush rest)
-		else if (first = request) then REQUEST (decodeRequest rest)
-		else error ("strange header word")
-	      | decode _ = error ("bad message")
-	    val parsed = parse uptoNewline
-	in  decode parsed
-	end
-
-    val flagsForSlave =
-	(map (fn (name, ref_cell, _) => (name, ref_cell)) Target.importantFlags) @
-	[("UptoElaborate", Help.uptoElaborate),
-	 ("UptoPhasesplit", Help.uptoPhasesplit),
-	 ("UptoClosureConvert", Help.uptoClosureConvert),
-	 ("UptoRtl", Help.uptoRtl),
-	 ("UptoAsm", Help.uptoAsm),
-	 ("debug_asm", Tools.debugAsm),
-	 ("keep_asm", Help.keepAsm),
-	 ("compress_asm", UpdateHelp.compressAsm),
-	 ("ManagerChat", Help.chat_ref),
-	 ("ManagerVerbose", Help.chatVerbose),
-	 ("TimeEachFile", Help.statEachFile),
-	 ("makeBackups", Help.makeBackups),
-	 ("ShowWrittenContext", Compiler.showWrittenContext),
-	 ("ShowTools", Tools.showTools),
+    val flagsForSlave : (string * bool ref) list =
+	(map (fn (name, ref_cell, _) => (name, ref_cell))
+	 Target.importantFlags) @
+	[("DebugAsm", Tools.DebugAsm),
+	 ("ShowTools", Tools.ShowTools),
 	 ("Typecheck", Linknil.typecheck)]
 
-    fun getFlags () =
+    fun getFlags () : flags =
 	let
 	    (* Also verifies that names correspond to correct flags.  *)
 	    fun getFlag (flag_name, flag_ref) =
@@ -235,58 +105,53 @@ struct
 	in
 	    map getFlag flagsForSlave
 	end
-	
-    fun doFlags [] = ()
-      | doFlags ((flagName, truthValue)::rest) = 
-	let val _ = (Help.chat "Setting "; Help.chat flagName; Help.chat " to ";
-		     Help.chat (Bool.toString truthValue); Help.chat "\n")
-	    val flagRef = Stats.bool flagName
-	    val _ = flagRef := truthValue
-	in  doFlags rest
-	end
 
-    (* zeroFile : string -> unit *)
-    fun zeroFile file = TextIO.closeOut (TextIO.openOut file)
+    val doFlags : flags -> unit =
+	app (fn (name,value) => Stats.bool name := value)
 
-    (* fileExists : string -> bool *)
-    fun fileExists filename = ((OS.FileSys.access (filename, nil) andalso
-				OS.FileSys.access (filename, [OS.FileSys.A_READ, OS.FileSys.A_WRITE]))
-			       handle _ => false)
-	
-    (* fileNonempty : string -> bool option *)
-    fun fileNonempty filename = (SOME (OS.FileSys.fileSize filename > 0)
-				 handle _ => NONE)
+    fun zeroFile (file : string) : unit = BinIO.closeOut (BinIO.openOut file)
 
-    (* removeFile : string -> unit *)
-    (* On AFS it is a lot faster to do access() on a non-existent
-     * file than remove().
-     *)
-    fun removeFile file = if (OS.FileSys.access (file, []) andalso
-			      OS.FileSys.access (file, [OS.FileSys.A_WRITE]))
-			      then OS.FileSys.remove file handle _ => ()
-			  else ()
-			      
-    (* lockFile : string * string -> (unit -> unit) *)
-    fun lockFile (old, new) =
+    fun fileExists (filename : string) : bool =
+	((OS.FileSys.access (filename, nil) andalso
+	  OS.FileSys.access (filename, [OS.FileSys.A_READ, OS.FileSys.A_WRITE]))
+	 handle _ => false)
+
+    fun fileNonempty (filename : string) : bool option =
+	(SOME (OS.FileSys.fileSize filename > 0)
+	 handle _ => NONE)
+
+    fun removeFile (file : string) : unit =
+	if (OS.FileSys.access (file, []) andalso
+	    OS.FileSys.access (file, [OS.FileSys.A_WRITE]))
+	then OS.FileSys.remove file handle _ => ()
+	else ()
+
+    (*
+	A lock file L is a symbolic link from L.  This grabs a lock by
+	creating L -> owner; the return value is a function to delete
+	the lock.  Because on startup the master wipes the
+	communictions directory, this periodically recreates "owner".
+    *)
+    fun lockFile (owner : string, L : string) : unit -> unit =
 	let
-	    fun createLink () = ((Posix.FileSys.link {old=old, new=new}; true)
+	    fun createLink () = ((Posix.FileSys.link {old=owner, new=L}; true)
 				 handle _ => false)
 	    fun loop try =
 		if createLink() then ()
 		else
-		    let val _ = if try = 1 then zeroFile old else () (* Avoid race where master deletes old. *)
-			val _ = if try mod 3 = 0 then print ("Waiting for " ^ new ^ "\n")
+		    let val _ = if try mod 3 = 0 then
+				    (zeroFile owner;
+				     msg ("Waiting for " ^ L ^ "\n"))
 				else ()
 			val _ = Platform.sleep 1.0
 		    in  loop (try + 1)
 		    end
 	    val _ = loop 1		(* acquire lock *)
-	    fun unlock () = removeFile new
+	    fun unlock () = removeFile L
 	in  unlock
 	end
 
-    (* readDir : string -> string list *)
-    fun scanDir dir =
+    fun scanDir (dir : string) : string list =
 	let val dirstream = OS.FileSys.openDir dir
 	    fun read acc = let val entry = OS.FileSys.readDir dirstream
 			   in  if entry = "" then acc
@@ -298,76 +163,83 @@ struct
 	end
 
     type identity = string
-    val master = "master"
-    fun slave tidOpt =
+    val master : identity = "master"
+    fun slave () : identity =
 	let val hostName = Platform.hostname()
 	    val machineName = (case Util.substring(".cs.cmu.edu",hostName) of
 				   NONE => hostName
 				 | SOME pos => String.substring(hostName,0,pos))
 	    val pid = Int.toString(Word32.toInt(Platform.pid()))
-	    val tid = (case tidOpt of
-			   NONE => ""
-			 | SOME tid => "." ^ Int.toString tid)
-	in  machineName ^ "." ^ pid ^ tid
+	in  machineName ^ "." ^ pid
 	end
-    fun compare (id : string, id') = String.compare (id, id')
-    fun name (id : string) = id
+    fun compare (id : identity, id' : identity) : order =
+	String.compare (id, id')
+    fun name (id : identity) : string = id
 
-    type channel = string * string
-    fun eq ((src,dest), (src',dest')) = src = src andalso dest = dest
-    fun toMaster slave = (slave,master)
-    fun fromMaster slave = (master,slave)
-    fun reverse (src,dest) = (dest,src)
-    fun source (src, _) = src
-    fun destination (_, dest) = dest
-	
+    type channel = identity * identity
+    fun eq ((src,dest) : channel, (src',dest') : channel) =
+	src = src andalso dest = dest
+    fun toMaster (slave : identity) : channel = (slave,master)
+    fun fromMaster (slave : identity) : channel = (master,slave)
+    fun reverse ((src,dest) : channel) : channel = (dest,src)
+    fun source ((src, _) : channel) : identity = src
+    fun destination ((_, dest) : channel) : identity = dest
+
     datatype file_type = BUFFER | LOCK | SENDLOCK | RECVLOCK
     datatype name =
 	JUNK_NAME of string
       | CHAN_NAME of string * file_type * channel
-	
+
     local
 	val sep = "-to-"
 	val sep_length = String.size sep
+	fun tyChar (ty : file_type) : char =
+	    (case ty
+	       of BUFFER => #"+"
+		| LOCK => #"#"
+		| SENDLOCK => #"!"
+		| RECVLOCK => #"@")
+	fun charTy (c : char) : file_type option =
+	    (case c
+	       of #"+" => SOME BUFFER
+		| #"#" => SOME LOCK
+		| #"!" => SOME SENDLOCK
+		| #"@" => SOME RECVLOCK
+		| _ => NONE)
     in
 	(* does not include directory *)
-	fun channelToName' (BUFFER,(from,to))   = from ^ sep ^ to ^ "+"
-	  | channelToName' (LOCK,(from,to))     = from ^ sep ^ to ^ "#"
-	  | channelToName' (SENDLOCK,(from,to)) = from ^ sep ^ to ^ "!"
-	  | channelToName' (RECVLOCK,(from,to)) = from ^ sep ^ to ^ "@"
+	fun channelToName' (ty : file_type, c : channel) : string =
+	    (#1 c) ^ sep ^ (#2 c) ^ (str (tyChar ty))
 
 	(* directory has been stripped already *)
-	fun nameToChannel' name : name =
+	fun nameToChannel' (name : string) : name =
 	    (case Util.substring (sep, name) of
 		 NONE => JUNK_NAME name
 	       | SOME pos =>
 		     if size name > pos + 2 then
-			 let 
+			 let
 			     val from = String.substring(name,0,pos)
 			     val to = String.substring(name, pos+sep_length, (size name) - (pos+sep_length) - 1)
 			     val chan = (from, to)
 			     val last = String.sub(name, size name - 1)
 			 in
-			     case last
-			       of #"+" => CHAN_NAME (name, BUFFER, chan)
-				| #"#" => CHAN_NAME (name, LOCK, chan)
-				| #"!" => CHAN_NAME (name, SENDLOCK, chan)
-				| #"@" => CHAN_NAME (name, RECVLOCK, chan)
-				| _ => JUNK_NAME name
+			     case charTy last
+			       of SOME ty => CHAN_NAME (name, ty, chan)
+				| NONE => JUNK_NAME name
 			 end
 		     else JUNK_NAME name)
     end
 
-    (* nameToChannel : string -> channel option *)
-    fun nameToChannel name = (case nameToChannel' name
-				of CHAN_NAME (_, BUFFER, chan) => SOME chan
-				 | _ => NONE)
-	
-    val commDir = Dirs.getCommDir o Dirs.getDirs (* : unit -> string *)
-    fun channelToName arg = Dirs.relative (commDir(), channelToName' arg)
+    fun nameToChannel (name : string) : channel option =
+	(case nameToChannel' name
+	   of CHAN_NAME (_, BUFFER, chan) => SOME chan
+	    | _ => NONE)
+
+    fun channelToName (arg : file_type * channel) : string =
+	OS.Path.joinDirFile {dir=Dirs.commDir(), file=channelToName' arg}
 
     type in_channel = channel * message Q.queue	(* channel and buffered messages from peer *)
-    type out_channel = channel * string Q.queue	(* channel and pending output *)
+    type out_channel = channel * message Q.queue	(* channel and pending output *)
 
     local
 	(* opener : 'a queue map * file_type -> channel -> channel * 'a queue *)
@@ -385,7 +257,7 @@ struct
 	    end
 	val recvQueues : message Q.queue Map.map ref =
 	    ref Map.empty
-	val sendQueues : string Q.queue Map.map ref =
+	val sendQueues : message Q.queue Map.map ref =
 	    ref Map.empty
     in
 	(* openIn : channel -> in_channel *)
@@ -399,18 +271,17 @@ struct
 			       sendQueues := Map.empty)
     end
 
-    (* exists : channel -> bool *)
-    fun exists channel =
+    fun hasMsg (channel : channel) : bool =
 	let val filename = channelToName (BUFFER, channel)
 	in  fileExists filename andalso
 	    (case fileNonempty filename
 	       of SOME r => r
-		| NONE => (print "WARNING: channel disappeared in the middle of exists\n";
-			   exists channel))
+		| NONE => (msg "Warning: channel disappeared in the middle of hasMsg\n";
+			   hasMsg channel))
 	end
 
     (* canReceive : in_channel -> bool *)
-    fun canReceive (channel, queue) = Q.length queue > 0 orelse exists channel
+    fun canReceive (channel, queue) = Q.length queue > 0 orelse hasMsg channel
 
     (* lockChannel : channel * file_type -> (unit -> unit) *)
     fun lockChannel (channel, myLock) =
@@ -425,21 +296,23 @@ struct
 	    val unlock = lockChannel (channel, RECVLOCK)
 	    fun wrap f arg = (f arg handle e => (unlock(); raise e))
 	    val _ =
-		if wrap exists channel then
-		    let val stream = wrap TextIO.openIn file
-			fun wrap' f arg = (f arg handle e => (TextIO.closeIn stream;
-							      unlock();
-							      raise e))
-			(* We don't remove file unless all messages decode properly. *)
+		if wrap hasMsg channel then
+		    let val stream = wrap B.openIn file
+			fun wrap' f arg =
+			    (f arg handle e => (wrap B.closeIn stream;
+						unlock();
+						raise e))
 			fun readMessages acc =
-			    case TextIO.inputLine stream
-			      of "" => rev acc
-			   | data => readMessages (messageFromString data :: acc)
-			val messages = wrap' readMessages nil
-			val _ = wrap TextIO.closeIn stream
-			fun saveMessages () = (app (fn msg => Q.enqueue (queue, msg)) messages;
-					       removeFile file)
-			val _ = wrap saveMessages ()
+			    if B.endOfStream stream then rev acc
+			    else
+				let val acc = blastInMessages stream @ acc
+				    val _ = Blaster.resetIn stream
+				in  readMessages acc
+				end
+			val msgs = wrap' readMessages nil
+			val _ = wrap B.closeIn stream
+			val _ = wrap removeFile file
+			val _ = app (fn msg => Q.enqueue (queue, msg)) msgs
 		    in  ()
 		    end
 		else ()
@@ -463,37 +336,34 @@ struct
 	    val _ = removeFile lockFile
 	in  ()
 	end
-    
+
     (* emptyBuffer : out_channel -> unit *)
     fun emptyBuffer (channel, queue) =
 	let val file = channelToName (BUFFER, channel)
 	    val unlock = lockChannel (channel, SENDLOCK)
 	    fun wrap f arg = (f arg handle e => (unlock(); raise e))
-	    val stream = wrap TextIO.openAppend file
-	    fun wrap' f arg = (f arg handle e => (TextIO.closeOut stream;
+	    val stream = wrap B.openAppend file
+	    fun wrap' f arg = (f arg handle e => (B.closeOut stream;
 						  unlock();
 						  raise e))
 	    fun writeData () =
-		if Q.isEmpty queue then ()
-		else let val data = Q.dequeue queue
-		     in  TextIO.output (stream, data);
-			 writeData()
-		     end
+		(blastOutMessages stream (Q.contents queue);
+		 empty_queue queue)
+
 	    val _ = wrap' writeData ()
-	    val _ = wrap TextIO.closeOut stream
+	    val _ = wrap B.closeOut stream
 	    val _ = unlock()
 	in  ()
 	end
 
     (* send : message -> out_channel -> unit *)
     fun send message =
-	let val data = messageToString message
-	    val autoFlush = (case message
+	let val autoFlush = (case message
 			       of FLUSH _ => false
 				| _ => true)
 	in
 	    fn (arg as (channel, queue)) =>
-	    (Q.enqueue (queue, data);
+	    (Q.enqueue (queue, message);
 	     if autoFlush then emptyBuffer arg else ())
 	end
 
@@ -507,7 +377,7 @@ struct
 
     (* destroyAllChannels : unit -> unit *)
     fun destroyAllChannels () =
-	let val commDir = commDir()
+	let val commDir = Dirs.commDir()
 	    fun removeName name = removeFile (OS.Path.joinDirFile{dir=commDir, file=name})
 	    val names = map nameToChannel' (scanDir commDir)
 	    (* Clean up junk *)
@@ -515,7 +385,7 @@ struct
 	      | removeJunk _ = true
 	    val names = List.filter removeJunk names
 	    (* Clean up files left over from inactive readers and writers *)
-	    fun removeOld' (name, chan) = if exists chan then () else removeName name
+	    fun removeOld' (name, chan) = if hasMsg chan then () else removeName name
 	    fun removeOld (CHAN_NAME (name, RECVLOCK, chan)) = (removeOld' (name, reverse chan); false)
 	      | removeOld (CHAN_NAME (name, SENDLOCK, chan)) = (removeOld' (name, chan); false)
 	      | removeOld _ = true
@@ -530,10 +400,10 @@ struct
 	    val _ = resetBuffers()
 	in  ()
 	end
-    
+
     (* findChannels : (channel -> bool) -> channel list *)
     fun findChannels pred =
-	let val files = scanDir(commDir())
+	let val files = scanDir(Dirs.commDir())
 	    val channels = List.mapPartial nameToChannel files
 	in  List.filter (fn ch => pred ch) channels
 	end
