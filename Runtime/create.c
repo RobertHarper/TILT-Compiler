@@ -112,32 +112,23 @@ val_t get_record(ptr_t rec, int which)
     }
 }
 
-ptr_t alloc_record(val_t *fields, int *masks, int count)
+static ptr_t alloc_small_record(val_t *fields, int mask, int count)
 {
+  /* Bits 0..(RECLEN_MAX - 1) of mask are significant. */
   int i;
   mem_t alloc;
   ptr_t rec;
+  
   assert(count <= RECLEN_MAX);
+  assert((mask >> count) == 0);
+  
   if (count == 0)
     return empty_record;
 
   alloc = alloc_space(4 * (count + 1));
   rec = alloc + 1;
 
-  /* Initialize record tag */
-  {
-    int tag, mask = 0;
-    for (i=0; i<count; i++)
-      {
-	int whichbyte = count >> 5;
-	int whichbit = count & 31;
-	int ison = masks[whichbyte] & (1 << whichbit);
-	if (ison)
-	  mask |= 1 << i;
-      }
-    tag = RECORD_TAG | (count << RECLEN_OFFSET) | (mask << RECMASK_OFFSET);
-    rec[-1] = tag;
-  }
+  rec[-1] = RECORD_TAG | (count << RECLEN_OFFSET) | (mask << RECMASK_OFFSET);
 
   /* Initialize record fields */
   for (i=0; i<count; i++)
@@ -147,6 +138,16 @@ ptr_t alloc_record(val_t *fields, int *masks, int count)
 }
 
 
+ptr_t alloc_record(val_t *fields, int* masks, int count)
+{
+  /* For i in 0..(count / RECLEN_MAX),
+   * Bits 0..(RECLEN_MAX - 1) of masks[i] are significant.
+   */
+  if (count > RECLEN_MAX)
+    BUG("alloc_record not quite fully imped");
+
+  return alloc_small_record(fields, masks[0], count); 
+}
 
 ptr_t alloc_string(int strlen, char *str)
 
@@ -198,47 +199,45 @@ void adjust_stringlen(ptr_t str, int newByteLen)
 ptr_t alloc_recrec(ptr_t rec1, ptr_t rec2)
 {
   val_t fields[2];
-  int mask = 3;
   fields[0] = (val_t) rec1;
   fields[1] = (val_t) rec2;
-
-  return alloc_record(fields, &mask, 2);
+  return alloc_small_record(fields, 3, 2);
 }
-
 
 ptr_t alloc_manyint(int count, int v)
 {
-  int masks[1 + (100/RECLEN_MAX)];
-  val_t fields[100]; 
+  val_t fields[100];
+  int masks[100 / RECLEN_MAX];
   int i;
 
-  if (count > (sizeof(fields)) / (sizeof(val_t)))
+  if (count > arraysize(fields))
     BUG("alloc_manyint not quite fully imped");
 
   for (i=0; i<count; i++)
     fields[i] = v;
-  for (i=0; i<(sizeof(masks)) / (sizeof(int)); i++)
-    masks[i] = 0;
 
+  for (i=0; i<arraysize(masks); i++)
+    masks[i] = 0;
+  
   return alloc_record(fields, masks, count);
 }
 
 ptr_t alloc_manyintrec(int count, int v, ptr_t rec)
 {
-  int masks[100/RECLEN_MAX];
   val_t fields[100];
+  int masks[100 / RECLEN_MAX];
   int i;
 
-  if (count>100)
-    BUG("allocating record too large");
+  if (count + 1 > arraysize(fields))
+    BUG("alloc_manyintrec not quite fully imped");
 
-  for (i=0; i<100/RECLEN_MAX; i++)
-    masks[i] = 0;
-  masks[count/RECLEN_MAX] |= 1 << (count % RECLEN_MAX);
-  
   for (i=0; i<count; i++)
     fields[i] = v;
   fields[count] = (val_t) rec;
+
+  for (i=0; i<arraysize(masks); i++)
+    masks[i] = 0;
+  masks[count/RECLEN_MAX] |= 1 << (count % RECLEN_MAX);
   
   return alloc_record(fields, masks, count+1);
 }

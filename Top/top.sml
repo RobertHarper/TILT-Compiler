@@ -1,4 +1,4 @@
 (*$import Run Main *)
 
-val _ = Run.run {main=Main.main, main'=Main.main'};
+val _ = Run.run Main.main;
 

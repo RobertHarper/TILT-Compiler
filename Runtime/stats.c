@@ -5,6 +5,7 @@
 #include "gcstat.h"
 #include "gc.h"
 #include "thread.h"
+#include <string.h>
 #include <sys/time.h>
 #include <sys/timeb.h>
 #include <sys/resource.h>

@@ -28,6 +28,8 @@ int NumStackChain = 100;
 int NumThread     = 100;
 int NumSysThread  = 1;
 
+void setCommandLine(char* cmd, char** argv);
+
 int process_bool(int *var, char *item, char *option)
 {
   int match = !strcmp(item,option);
@@ -139,10 +141,8 @@ void process_option(int argc, char **argv)
       char *poss_option = *cur;
       char *option = poss_option+1;
       if (*poss_option != '@')
-	{
-	  printf("Ignoring non-option argument '%s'\n",poss_option);
-	  continue;
-	}
+	/* First non-option signals start of user-program options.*/
+	break;
       for (i=0; i<sizeof(table) / sizeof(struct option_entry); i++) {
 	switch (table[i].type) {
 	  case 0 : {
@@ -173,6 +173,7 @@ void process_option(int argc, char **argv)
 	assert(0);
       }
     }
+  setCommandLine(argv[0], cur);
   if (semi) collector_type = Semispace;
   if (gen) collector_type = Generational;
   if (semipara) collector_type = SemispaceParallel;

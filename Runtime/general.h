@@ -35,6 +35,7 @@
 #define RoundUp(x,mult) (((x) + (mult) - 1) / (mult) * (mult))
 #define RoundDown(x,mult) ((x) / (mult) * (mult))
 #define typed_swap(t,a,b) { t swap_temp = a; a = b; b = swap_temp; }
+#define arraysize(a) (sizeof(a)/sizeof(*(a)))
 
 void init_int(int *, int);
 void init_double(double *, double);

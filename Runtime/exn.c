@@ -19,6 +19,28 @@
 
 extern void raise_exception_raw(Thread_t *th, ptr_t exn_arg);
 
+/* Unlike Div and Overflow, we don't have a canonical exception
+ * packet for these exceptions.  The search for the exception stamp
+ * has to happen relatively late (global_init isn't early enough).
+ */
+extern ptr_t RuntimeError_r_INT, RuntimeErrorPRIME_r_INT;
+
+static int getExnStamp(ptr_t exnstructure)
+{
+   int stamp = *((int*) exnstructure); /* first field: 32-bit integer stamp */
+   return stamp;
+}
+
+int RuntimeStamp(void)
+{
+  return getExnStamp(RuntimeError_r_INT);
+}
+
+int RuntimePrimeStamp(void)
+{
+  return getExnStamp(RuntimeErrorPRIME_r_INT);
+}
+
 void exn_init()
 {
   static int buf[100];
@@ -32,7 +54,6 @@ void exn_init()
 void raise_exception(struct ucontext *uctxt, ptr_t exn_arg)
 {
   Thread_t *th = getThread();
-  ptr_t exn_ptr;
   mem_t code;
 
   /* Move saved register from uctxt to thread area so it can be restored by raise_exception_raw */
@@ -41,7 +62,7 @@ void raise_exception(struct ucontext *uctxt, ptr_t exn_arg)
 #ifdef DEBUG
   {
     int i;
-    exn_ptr = th->saveregs[EXNPTR];
+    ptr_t exn_ptr = th->saveregs[EXNPTR];
     code = get_record(exn_ptr,0);
 
     fprintf(stderr,"\n\n--------exn_raise entered---------\n");
@@ -57,28 +78,32 @@ void raise_exception(struct ucontext *uctxt, ptr_t exn_arg)
   raise_exception_raw(th,exn_arg);
 }
 
+void raise_exn(ptr_t exnname, int exnstamp, val_t exnarg, int argPointer)
+{
+  val_t fields[3];
+  int mask = argPointer ? 3 : 1;
+  ptr_t exn;
+  Thread_t* th = getThread();
+  fields[0] = exnstamp;
+  fields[1] = exnarg;
+  fields[2] = (val_t)exnname;
+  exn = alloc_record(fields, &mask, 3);
+  raise_exception_raw(th, exn);
+}
+
+void printString(ptr_t);
+ptr_t exnMessageRuntime(ptr_t);
+
 void toplevel_exnhandler(Thread_t *th)
 {
-  char buf[100];
-  char *msg;
+  char* msg = "";
   unsigned long *saveregs = th->saveregs;
-  ptr_t exn_arg = (ptr_t)saveregs[EXNARG];
-  val_t first = get_record(exn_arg,0);
+  ptr_t exn = (ptr_t)saveregs[EXNARG];
 
-  if (first == *DivideByZeroExn)
-    msg = "Divide by zero"; 
-  else if (first == *OverflowExn)
-     msg = "Overflow"; 
-  else {
-      ptr_t name = (ptr_t) get_record(exn_arg,2);
-      unsigned int tag = ((int *)name)[-1];
-      int bytelen = GET_ARRLEN(tag);
-      bcopy((char *)name,buf,bytelen);
-      buf[bytelen] = 0;
-      msg = buf;
-    }
+  printf("Proc %d: Thread %d (%d): Uncaught exception ",
+	 getSysThread()->stid, th->tid, th->id);
+  printString(exnMessageRuntime(exn));
+  printf("\n");
   
-  printf("Proc %d: Thread %d (%d): Uncaught exception: %s\n",
-	 getSysThread()->stid,th->tid,th->id,msg);
   Finish();
 }

@@ -490,7 +490,7 @@ int forward_coarseParallel(ploc_t vpp, CopyRange_t *copyRange)
 {
   ptr_t obj = *vpp;
   int bytesCopied = copy_coarseParallel(obj, copyRange);
-  assert(obj != obj[-1]);
+  assert((val_t)obj != obj[-1]);
   *vpp = (loc_t) obj[-1];
   return bytesCopied;
 }

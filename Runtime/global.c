@@ -62,7 +62,6 @@ int IsGlobalData(ptr_t addr)
 }
 
 
-
 #ifdef solaris
 extern unsigned long firstdata;
 extern unsigned long firsttext;

@@ -44,9 +44,9 @@
         .globl  GetRpcc
 	.globl	.raise_exception_raw
 	.globl	Overflow_exncon
-	.globl	Divide_exncon
+#	.globl	Divide_exncon
 	.globl	.context_restore
-	.globl  overflow_handler
+#	.globl  overflow_handler
 	.extern NOTINML
         .extern .abort{PR}
         .extern .thread_finish{PR}
@@ -56,12 +56,12 @@ T.NOTINML:	     .tc     NOTINML{TC}, NOTINML
 T.global_exnrec:     .tc     global_exnrec{TC}, global_exnrec
 	
 	.csect  general_data{RW}
-	.globl	Prelude_31_Overflow_1
-	.globl	Prelude_57_Div_1
-Overflow_exncon:	
-	.long	Prelude_31_Overflow_1
-Divide_exncon:		
-	.long	Prelude_57_Div_1
+#	.globl	Prelude_31_Overflow_1
+#	.globl	Prelude_57_Div_1
+#Overflow_exncon:	
+#	.long	Prelude_31_Overflow_1
+#Divide_exncon:		
+#	.long	Prelude_57_Div_1
 global_exnrec:		
 	.long	global_exnhandler
 	.long	0

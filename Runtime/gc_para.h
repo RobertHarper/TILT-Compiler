@@ -8,7 +8,7 @@ typedef struct SharedStack__t
   long Gate, Turn1, Turn2;
 } SharedStack_t;
 
-SharedStack_t *SharedStack_Alloc();
+SharedStack_t *SharedStack_Alloc(void);
 void SynchStart(SharedStack_t *);
 void SynchMid(SharedStack_t *);
 int SynchEnd(SharedStack_t *);  /* Returns 1 if gate was closed and global stack empty; i.e. global stack can not become non-empty */

@@ -4,6 +4,11 @@
 #define _exn_h
 
 void exn_init(void);
+
 void raise_exception(struct ucontext *, ptr_t);
+void raise_exn(ptr_t, int, val_t, int);
+
+int  RuntimeStamp(void);
+int  RuntimePrimeStamp(void);
 
 #endif

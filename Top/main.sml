@@ -4,7 +4,7 @@ structure Main : MAIN =
 struct
 
     val usage = "usage: tilt [-?vs] [-fr flag] [-cm mapfile] [-S [num/]host] [mapfile ...]"
-    val version = "TILT version 0.1 (alpha7)\n"
+    val version = "TILT version 0.1 (alpha8)\n"
 
     datatype cmd =
         Make of string list		(* [mapfile ...] *)
@@ -109,33 +109,5 @@ struct
 			 print (errorMsg e);
 			 print "\n";
 			 OS.Process.failure)
-	end
-	
-    (* main' : unit -> OS.Process.status.  The old interactive loop. *)
-    fun main' () =
-	let val _ = print "TILT Compiler.  Please type one of the following: \n"
-	    val _ = print "(1) make <mapfile>\n"
-	    val _ = print "(2) master <mapfile>\n"
-	    val _ = print "(3) slave\n"
-	    val _ = print "(4) set <flag>\n"
-	    val _ = print "(5) clear <flag>\n"
-	    val _ = TextIO.flushOut TextIO.stdOut
-	    val line = TextIO.inputLine TextIO.stdIn
-	in
-	    if size line = 0
-		then OS.Process.success
-	    else
-		let val line = String.substring(line, 0, (size line) - 1)  (* drop the return *)
-		    val words = String.fields Char.isSpace line
-		    val _ = (case words of 
-				 ["make",mapfile] => Manager.make mapfile
-			       | ["master",mapfile] => Manager.master mapfile
-			       | ["slave"] => Manager.slave()
-			       | ["set",flag] => Stats.bool(flag) := true
-			       | ["clear",flag] => Stats.bool(flag) := false
-			       | _ => print "Command not understood.\n\n")
-		in
-		    main'()
-		end
 	end
 end

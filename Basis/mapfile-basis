@@ -1,5 +1,8 @@
 // This forms the association between the logical unit names and the filenames of the standard basis.
 Prelude     Firstlude
+COMMAND_LINE OS/commandline.sig
+CommandLineHelp OS/commandline-help
+CommandLine  OS/commandline
 GENERAL     General/general.sig
 General     General/general
 OPTION      General/option-sig

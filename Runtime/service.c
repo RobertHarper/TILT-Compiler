@@ -21,7 +21,7 @@
 
 long Prelude_31_Overflow_1 = 1234567890;
 long Prelude_57_Div_1 = 1234567890;
-
+long OS_How_Do_I_Mangle_This_SysErr_1 = 1234567890;
 
 /*
 void exn_save(long *saveregs, long sp, value_t handler)

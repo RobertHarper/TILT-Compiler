@@ -11,8 +11,6 @@
 	.globl  global_exnrec
         .globl  GetRpcc
 	.globl	raise_exception_raw
-	.globl	Overflow_exncon
-	.globl	Divide_exncon
 	.globl  FetchAndAdd
 	.globl  TestAndSet
 	.globl  Yield
@@ -240,12 +238,6 @@ restore_dummy:
 	jmp	$31, ($27), 1
 .set at
 	.end	raise_exception_raw
-
-	.data
-Overflow_exncon:
-	.long	Prelude_31_Overflow_1
-Divide_exncon:
-	.long	Prelude_57_Div_1
 
 	
 	.data

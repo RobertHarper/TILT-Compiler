@@ -26,7 +26,7 @@ void gcstat_finish(unsigned long allocptr);
 
 void gcstat_heapprofile_beforecollect(mem_t bot, mem_t top);
 void gcstat_heapprofile_aftercollect(mem_t bot, mem_t top);
-void gcstat_show_heapprofile();
+void gcstat_show_heapprofile(void);
 
 
 #endif

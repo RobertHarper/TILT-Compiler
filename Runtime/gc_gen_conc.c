@@ -2,6 +2,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
+#include "platform.h"
 #include "tag.h"
 #include "queue.h"
 #include "forward.h"
@@ -253,8 +254,10 @@ static long numOn3 = 0;
 
 static void regionSave(CopyRange_t *copyRange)
 {
-  ptr_t stack[2] = {copyRange->start, copyRange->cursor};
+  ptr_t stack[2];
   int cursor = 2;
+  stack[0] = copyRange->start;
+  stack[1] = copyRange->cursor;
   SynchStart(majorWorkStack2);
   SynchMid(majorWorkStack2);
   moveToGlobalStack(majorWorkStack2, &(stack[0]), &cursor);
@@ -431,11 +434,18 @@ static void CollectorOff(SysThread_t *sysThread)
   while ((curThread = NextJob()) != NULL)
     local_root_scan(sysThread,curThread);
   while (!QueueIsEmpty(sysThread->root_lists)) {
-    Heap_t *legalPrimaryHeaps[3] = {nursery, tenuredFrom, NULL};
-    Heap_t *legalReplicaHeaps[3] = {tenuredFrom, NULL};
+    Heap_t *legalPrimaryHeaps[3];
+    Heap_t *legalReplicaHeaps[3];
     Bitmap_t *legalStarts[3] = {NULL, NULL, NULL};
-    Queue_t *roots = (Queue_t *) Dequeue(sysThread->root_lists);
-    int i, len = QueueLength(roots);  
+    Queue_t *roots;
+    int i, len;
+    legalPrimaryHeaps[0] = nursery;
+    legalPrimaryHeaps[1] = tenuredFrom;
+    legalPrimaryHeaps[2] = NULL;
+    legalReplicaHeaps[0] = tenuredFrom;
+    legalReplicaHeaps[1] = NULL;
+    roots = (Queue_t *) Dequeue(sysThread->root_lists);
+    len = QueueLength(roots);  
     for (i=0; i<len; i++) {
       ploc_t root = (ploc_t) QueueAccess(roots,i);     /* Cannot dequeue from roots since this may be a global */
       loc_t primary = *root, replica;
@@ -460,11 +470,17 @@ static void CollectorOff(SysThread_t *sysThread)
     while ((curThread = NextJob()) != NULL)
       local_root_scan(sysThread,curThread);
     while (!QueueIsEmpty(sysThread->root_lists)) {
-      Heap_t *legalPrimaryHeaps[2] = {tenuredFrom, NULL};
-      Heap_t *legalReplicaHeaps[2] = {tenuredTo, NULL};
+      Heap_t *legalPrimaryHeaps[2];
+      Heap_t *legalReplicaHeaps[2];
       Bitmap_t *legalStarts[2] = {NULL, NULL};
-      Queue_t *roots = (Queue_t *) Dequeue(sysThread->root_lists);
-      int i, len = QueueLength(roots);  
+      Queue_t *roots;
+      int i, len;
+      legalPrimaryHeaps[0] = tenuredFrom;
+      legalPrimaryHeaps[1] = NULL;
+      legalReplicaHeaps[0] = tenuredTo;
+      legalReplicaHeaps[1] = NULL;
+      roots = (Queue_t *) Dequeue(sysThread->root_lists);
+      len = QueueLength(roots);
       for (i=0; i<len; i++) {
 	ploc_t root = (ploc_t) QueueAccess(roots,i);         /* Cannot dequeue from roots since this may be a global */
 	loc_t primary = *root, replica;
@@ -504,7 +520,10 @@ static void CollectorOff(SysThread_t *sysThread)
 	GCType = Major;
       /* The Major -> EndMajor transition occurs elsewhere. */
       if (GCType == EndMajor) {
-	Heap_t *froms[3] = {nursery, tenuredFrom, NULL};
+	Heap_t *froms[3];
+	froms[0] = nursery;
+	froms[1] = tenuredFrom;
+	froms[2] = NULL;
 	GCType = Minor;
 	gc_large_flush();
 	HeapAdjust(0,req_size,froms,tenuredTo);

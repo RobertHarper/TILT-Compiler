@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdarg.h>
 #include "general.h"
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -11,6 +12,7 @@
 #include <dirent.h>
 #include <stropts.h>
 #include <poll.h>
+#include <sys/utsname.h>
 #if (defined alpha_osf)
 #include <float.h>
 int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the Alpha */
@@ -22,6 +24,8 @@ int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the
 #include "thread.h"
 #include "create.h"
 #include "posix.h"
+#include "global.h"
+#include "exn.h"
 
 
 #define PAIR(t,t1,t2,tlong,tstruct) struct tstruct { t1 first; t2 second; }; \
@@ -143,6 +147,23 @@ struct termio_rep_struct
 typedef struct termio_rep_struct *termio_rep;
 
 
+static void runtime_error(int e);
+static void runtime_error_msg(char* msg);
+static void runtime_error_fmt(const char* fmt, ...);
+
+static void unimplemented(int lineno)
+{
+  runtime_error_fmt("function not implemented at %s:%d", __FILE__, lineno);
+}
+#define UNIMP() unimplemented(__LINE__); return 0
+
+static void* emalloc(size_t size)
+{
+  void* buf = malloc(size);
+  if (buf == NULL)
+    runtime_error(errno);
+  return buf;
+}
 
 string cstring2mlstring_alloc(char *str)
 {
@@ -155,7 +176,8 @@ char* mlstring2cstring_buffer(string mlstring, int len, char *buf)
   unsigned int tag = ((int *)mlstring)[-1];
   int bytelen = GET_ARRLEN(tag);
   char *raw = (char *)mlstring;
-  assert((bytelen+1) <= len);
+  if ((bytelen+1) > len)
+     runtime_error_msg("fixed-length buffer too small");
   bcopy(raw,buf,bytelen);
   buf[bytelen] = 0;
   return (char *)buf;
@@ -171,17 +193,42 @@ static char* mlstring2cstring_malloc(string mlstring)
 {
   unsigned int tag = ((int *)mlstring)[-1];
   int bytelen = GET_ARRLEN(tag);
-  char *buf = malloc(bytelen+1);
+  char *buf = emalloc(bytelen+1);
   return mlstring2cstring_buffer(mlstring, bytelen+1, buf);
 }
- 
+
+static void runtime_error(int e)
+{
+   string exnname = cstring2mlstring_alloc("VAL$RuntimeError");
+   int exnstamp = RuntimeStamp();
+   raise_exn(exnname, exnstamp, e, 0);
+}
+
+static void runtime_error_msg(char* msg)
+{
+   string exnname = cstring2mlstring_alloc("VAL$RuntimeErrorPRIME");
+   int exnstamp = RuntimePrimeStamp();
+   string exnarg = cstring2mlstring_alloc(msg);
+   raise_exn(exnname, exnstamp, (val_t) exnarg, 1);
+}
+
+static void runtime_error_fmt(const char* fmt, ...)
+{
+   char buf[1024];
+   va_list args;
+   va_start(args, fmt);
+   vsprintf(buf, fmt, args);
+   va_end(args);
+   runtime_error_msg(buf);
+}
+
 double ln(double arg)
 {
   return log(arg);
 }
 
 
-int getRoundingMode(int unit)
+int getRoundingMode(unit ignored)
 {
 #ifdef alpha_osf
   unsigned int mode = read_rnd();
@@ -191,8 +238,7 @@ int getRoundingMode(int unit)
     case FP_RND_RP: return 2;
     case FP_RND_RM: return 3;
   }
-  printf("read_rnd retrurned unrecognized mode %d\n", mode);
-  assert(0);
+  runtime_error_fmt("read_rnd retrurned unrecognized mode %d", mode);
 #elif (defined solaris)
   fp_rnd mode = fpgetround();
   switch (mode) {
@@ -201,8 +247,7 @@ int getRoundingMode(int unit)
     case FP_RP: return 2;
     case FP_RM: return 3;
   }
-  printf("read_rnd retrurned unrecognized mode %d\n", mode);
-  assert(0);
+  runtime_error_fmt("fpgetround retrurned unrecognized mode %d", mode);
 #endif
 }
 
@@ -212,37 +257,71 @@ ptr_t setRoundingMode(int ml_mode)
 #if (defined alpha_osf)
   int mode = 0;
   switch (ml_mode) {
-    case 1: ml_mode = FP_RND_RZ; break;
-    case 0: ml_mode = FP_RND_RN; break;
-    case 2: ml_mode = FP_RND_RP; break;
-    case 3: ml_mode = FP_RND_RM; break;
-    default : printf("setrounding given unknown mML rounding mode %d\n", mode); assert(0);
+    case 1: mode = FP_RND_RZ; break;
+    case 0: mode = FP_RND_RN; break;
+    case 2: mode = FP_RND_RP; break;
+    case 3: mode = FP_RND_RM; break;
+    default : runtime_error_fmt("setRoundingMode given unknown ML rounding mode %d", ml_mode);
     }
   write_rnd(mode);
 #elif (defined solaris)
   fp_rnd mode = 0;
   switch (ml_mode) {
-    case 1: ml_mode = FP_RZ; break;
-    case 0: ml_mode = FP_RN; break;
-    case 2: ml_mode = FP_RP; break;
-    case 3: ml_mode = FP_RM; break;
-    default : printf("setrounding given unknown mML rounding mode %d\n", mode); assert(0);
+    case 1: mode = FP_RZ; break;
+    case 0: mode = FP_RN; break;
+    case 2: mode = FP_RP; break;
+    case 3: mode = FP_RM; break;
+    default : runtime_error_fmt("setRoundingMode given unknown ML rounding mode %d", ml_mode);
     }
   fpsetround(mode);
 #endif  
   return empty_record;
 }
 
-char* exnNameRuntime(void *unused)
+ptr_t exnNameRuntime(ptr_t exn)
 {
-  assert(0);
-  return 0;
+  return (ptr_t) get_record(exn,2);
 }
 
-char* exnMessageRuntime(void *unused)
+static int stringlen(ptr_t string)
 {
-  assert(0);
-  return 0;
+  tag_t tag = string[-1];
+  int len;
+  if (IS_FORWARDPTR(tag))
+    tag = ((ptr_t)tag) [-1];
+  len = GET_ARRLEN(tag);
+  return len;
+}
+
+ptr_t exnMessageRuntime(ptr_t exn)
+{
+  char buf[1024];
+  char* msg = NULL;
+  val_t exnstamp = get_record(exn,0);
+  
+  if (exnstamp == *DivideByZeroExn)
+    msg = "divide by zero";
+  else if (exnstamp == *OverflowExn)
+    msg = "overflow";
+  else if (exnstamp == RuntimeStamp()) {
+    int e = get_record(exn,1);
+    sprintf(buf, "RuntimeError: %s (errno=%d)", strerror(e), e);
+    msg = buf;
+  } else if (exnstamp == RuntimePrimeStamp()) {
+    char* prefix = "RuntimeError': ";
+    ptr_t errmsg = (ptr_t) get_record(exn,1);
+    int len = stringlen(errmsg);
+    assert(len < sizeof(buf) - sizeof(prefix));
+    sprintf(buf, "%s%.*s", prefix, len, (char*) errmsg);
+    msg = buf;
+  } else {
+    ptr_t exnname = (ptr_t) get_record(exn,2);
+    int len = stringlen(exnname);
+    assert(len < sizeof(buf));
+    sprintf(buf, "%.*s", len, (char*) exnname);
+    msg = buf;
+  }
+  return cstring2mlstring_alloc(msg);
 }
 
 /* extract the exponent */
@@ -260,7 +339,7 @@ int real_logb(double arg)
   *((double *)temp) = arg;
   biasedExp = (int)(temp[1]);
 #else
-  assert(0);
+#error "unimplemented"
 #endif
   biasedExp -= 1023;
   return biasedExp;
@@ -272,12 +351,8 @@ intpair ml_timeofday()
   ptr_t result;
   struct timeval tp;
   struct timezone tzp;
-  int fail = gettimeofday (&tp, &tzp);
-  if (fail) {
-    printf("POSIX function gettimeofday failed with errno = %d\n", errno);
-    assert(0);
-    return 0;
-  }
+  if (gettimeofday(&tp, &tzp) == -1)
+    runtime_error(errno);
   return alloc_intint(tp.tv_sec,tp.tv_usec);
 }
 
@@ -321,40 +396,34 @@ mltm posix_gmTime (intpair sec_musec)
 
 intpair posix_mkTime(mltm unused)
 {
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string posix_strfTime(string_mltm unused)
 {
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string posix_error_msg(int unused)
 {
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string posix_error_name(int unused)
 {
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_error_num(string arg)
 {
   int i;
   char* carg = mlstring2cstring_static(arg);
-  for (i=0; i<((sizeof tbl)/(sizeof (sys_const_t))); i++) {
+  for (i=0; i<arraysize(tbl); i++) {
     char *name = tbl[i].name;
     if (!(strcmp(name,carg)))
       return tbl[i].id;
   }
-  printf("posix_error_num could not find entry '%s'\n",carg);
-  assert(0);
-  return 0;
+  runtime_error_fmt("posix_error_num could not find entry '%s'",carg);
 }
 
 string posix_os_tmpname(unit unused)
@@ -390,10 +459,11 @@ intword_list posix_os_poll(intword_list fd_event_list, intpair_option sec_usec_o
       fds[count].fd = fd;
       fds[count].events = event;
       count++;
-      assert(count < (sizeof(fds))/(sizeof (struct pollfd)));
+      if (count == arraysize(fds))
+	runtime_error_fmt("posix_os_poll has static limit of %d file descriptors", arraysize(fds));
     }
-  printf("count = %d, timeout = %d \n",count, timeout);
-  poll(fds,count,timeout);
+  if (poll(fds,count,timeout) == -1)
+    runtime_error(errno);
   for (i=count-1; i>=0; i--) {
     ptr_t car = alloc_intint(fds[i].fd, fds[i].revents);
     result = alloc_recrec(car,result);
@@ -405,43 +475,34 @@ int posix_io_num(string arg)
 {
   int i;
   char* carg = mlstring2cstring_static(arg);
-  for (i=0; i<((sizeof io_values)/(sizeof (name_val_t))); i++)
+  for (i=0; i<arraysize(io_values); i++)
     {
       char *name = io_values[i].name;
       if (!(strcmp(name,carg)))
 	return io_values[i].id;
     }
-  printf("posix_io_num could not find entry '%s'\n",carg);
-  assert(0);
-  return 0;
+  runtime_error_fmt("posix_io_num could not find entry '%s'",carg);
 }
 
 intpair posix_io_pipe(unit unused)
 {
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_io_dup(int unused)
 {
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_io_dup2(int unused1, int unused2)
 {
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_io_close(int fd)
 {
-  int fail = close(fd);
-  if (fail == -1) {
-    printf("POSIX function close returned with errno = %d\n", errno);
-    assert(0);
-    return 0;
-  }
+  if (close(fd) == -1)
+    runtime_error(errno);
   return empty_record;
 }
 
@@ -457,12 +518,9 @@ word8vector posix_io_read(int fd, int size)
   assert(size >= 0);
   res = alloc_uninit_string(size,&buf);
   bytes_read = read(fd,buf,size);
-  if (bytes_read == -1) {
-      printf("POSIX function read failed with errno = %d\n", errno);
-      assert(0);
-    }
-  else 
-    assert(bytes_read <= size);
+  if (bytes_read == -1)
+    runtime_error(errno);
+  assert(bytes_read <= size);
   adjust_stringlen(res,bytes_read);
   return (word8vector) res;
 }
@@ -471,300 +529,251 @@ word8vector posix_io_read(int fd, int size)
 int posix_io_readbuf(int fd, word8array buf, int len, int start)
 { 
   int bytes_read = read(fd, ((char *)buf) + start, len);
-  if (bytes_read == -1) {
-    printf("POSIX function read failed with errno = %d\n", errno);
-    assert(0);
-    return 0;
-  }
+  if (bytes_read == -1)
+    runtime_error(errno);
   return bytes_read;
 }
 
 int posix_io_writebuf(int fd, word8array buf, int len, int start)
 {
   int written = write(fd, ((char *)buf) + start, len);
-  if (written == -1) {
-    printf("POSIX function write returned with errno = %d\n", errno);
-    assert(0);
-    return 0;
-  }
+  if (written == -1)
+    runtime_error(errno);
   return written;
 }
 
 int posix_io_fcntl_d(int unused1, int unused2)
 {
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 word posix_io_fcntl_gf(int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_io_fcntl_sfd(int unused1, word unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 wordpair posix_io_fcntl_gfl(int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_io_fcntl_sfl(int unusde1, word unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 flock_rep posix_io_fcntl_l(int unused1, int unused2, flock_rep unused3)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_io_lseek(int filedes, int offset, int whence)
 {
   int result_pos = lseek(filedes, offset, whence);
-  if (result_pos == -1) {
-    printf("POSIX function lseek returned with errno = %d\n", errno);
-    assert(0);
-    return 0;
-  }
+  if (result_pos == -1)
+    runtime_error(errno);
   return result_pos;
 }
 
 unit posix_io_fsync(int fd)
 {
   int status = fsync(fd);
-  if (status == -1) {
-    printf("POSIX function fsync returned with errno = %d\n", errno);
-    assert(0);
-    return 0;
-  }
+  if (status == -1)
+    runtime_error(errno);
   return empty_record;
 }
 
 int posix_procenv_getpid(unit unused)
 {
-  return (int)getpid();
+  int pid = (int)getpid();
+  if (pid == -1)
+    runtime_error(errno);
+  return pid;
 }
 
 int posix_procenv_getppid(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 word posix_procenv_getuid(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 word posix_procenv_geteuid(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 word posix_procenv_getgid(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 word posix_procenv_getegid(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_procenv_setuid(word unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_procenv_setgid(word unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 word_list posix_procenv_getgroups(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string posix_procenv_getlogin(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_procenv_getpgrp(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_procenv_setsid(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_procenv_setpgid(int unused1, int unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
+}
+
+static ptr_t stringpair_ctoml_alloc(char* a, char* b)
+{
+  string ml_a = cstring2mlstring_alloc(a);
+  string ml_b = cstring2mlstring_alloc(b);
+  return alloc_recrec(ml_a, ml_b);
+}
+
+static ptr_t consrec_alloc(val_t val, ptr_t list)
+{
+  return alloc_recrec((ptr_t) val, list);
 }
 
 string_stringlist posix_procenv_uname(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  ptr_t acc = NULL;
+  struct utsname name;
+  if (uname(&name) == -1)
+    runtime_error(errno);
+
+  #define ACC(n,v) acc = consrec_alloc((val_t) stringpair_ctoml_alloc(n, v), acc);
+
+  ACC("sysname", name.sysname);
+  ACC("nodename", name.nodename);
+  ACC("release", name.release);
+  ACC("version", name.version);
+  ACC("machine", name.machine);
+
+  #undef ACC
+
+  return acc;
 }
 
 int posix_tty_num(string arg)
 {
   int i;
   char* carg = mlstring2cstring_static(arg);
-  for (i=0; i<((sizeof tty_values)/(sizeof (name_val_t))); i++) {
+  for (i=0; i<arraysize(tty_values); i++) {
     char *name = tty_values[i].name;
     if (!(strcmp(name,carg)))
       return tty_values[i].id;
   }
-  printf("posix_tty_num could not find entry '%s'\n",carg);
-  assert(0);
+  runtime_error_fmt("posix_tty_num could not find entry '%s'",carg);
   return 0;
 }
 
 termio_rep  posix_tty_tcgetattr(int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_tty_tcsetattr(int unused1, int unused2, termio_rep  unused3)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_tty_tcsendbreak(int unused1, int unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_tty_tcdrain(int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_tty_tcflush(int unused1, int unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_tty_tcflow(int unused1, int unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_tty_tcgetpgrp(int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_tty_tcsetpgrp(int unused1, int unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string_word_stringlist posix_sysdb_getgrgid(word unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string_word_stringlist posix_sysdb_getgrnam(string unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string_word_word_string_string posix_sysdb_getpwuid(word unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string_word_word_string_string posix_sysdb_getpwnam(string unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_procenv_time(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int_int_int_int_int posix_procenv_times(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 /* This code relies on NONE being represented by 0. */
 string_option posix_procenv_getenv(string mlname)
 {
-  char *empty = "";
   char *cname = mlstring2cstring_static(mlname);  /* Don't need to free this */
   char *cvalue = getenv(cname);                   /* Don't need to free this and cannot modify it */
   ptr_t mlvalue = (cvalue == NULL) ? 0 : alloc_string(strlen(cvalue),cvalue);
@@ -773,44 +782,35 @@ string_option posix_procenv_getenv(string mlname)
 
 string_list posix_procenv_environ(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string posix_procenv_ctermid(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string posix_procenv_ttyname(int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 bool posix_procenv_isatty(int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_process_num(string arg)
 {
   int i;
   char* carg = mlstring2cstring_static(arg);
-  for (i=0; i<((sizeof process_values)/(sizeof (name_val_t))); i++)
+  for (i=0; i<arraysize(process_values); i++)
     {
       char *name = process_values[i].name;
       if (!(strcmp(name,carg)))
 	return process_values[i].id;
     }
-  printf("posix_process_num could not find entry '%s'\n",carg);
-  assert(0);
+  runtime_error_fmt("posix_process_num could not find entry '%s'",carg);
   return 0;
 }
 
@@ -818,69 +818,58 @@ word posix_process_sysconf(string arg)
 {
   int i;
   char* carg = mlstring2cstring_static(arg);
-  for (i=0; i<((sizeof sysconf_keys)/(sizeof (name_val_t))); i++)
+  for (i=0; i<arraysize(sysconf_keys); i++)
     {
       char *name = sysconf_keys[i].name;
       if (!(strcmp(name,carg)))
 	return sysconf(sysconf_keys[i].id);
     }
-  printf("posix_process_sysconf could not find entry '%s'\n",carg);
-  assert(0);
+  runtime_error_fmt("posix_process_sysconf could not find entry '%s'",carg);
   return 0;
 }
 
 int posix_process_fork(unit unused)
 {
   int code = fork();
-  if (code != -1) {
-    printf("Call to fork returned with %d.\n",code);
-    return code; 
-  }
-  else {
-    printf("POSIX function fork got -1; errno = %d\n", errno);
-    assert(0);
-    return 0;
-  }
+  if (code == -1)
+    runtime_error(errno);
+  return code;
 }
 
 unit posix_process_exec(string path, string_list args)
 {
-  int code, i, length = 0;
+  int code, i, length = 0, errorsave;
   string_list cur = args;
   char **argv;
   while (cur) {
     length++;
     cur = ((string_list_long) cur)->cdr;
   }
-  argv = malloc((length + 1) * sizeof(char *));
-  if (argv == NULL) {
-    printf("malloc in posix_process_exec failed with length = %d\n", length);
-    assert(0);
-  }
+  argv = emalloc((length + 1) * sizeof(char *));
   for (cur=args, i=0; i<length; i++) {
     argv[i] = mlstring2cstring_malloc(((string_list_long) cur)->car);
     cur = ((string_list_long) cur)->cdr;
   }
   argv[length] = NULL;
   code = execv(mlstring2cstring_malloc(path),argv);
-  printf("POSIX function exec returned with errno = %d\n", errno);
-  assert(0);
+  errorsave = errno;
+  /* couldn't exec, might as well free things */
+  for (i=0; i<length; i++)
+    free(argv[i]);
+  free(argv);
+  runtime_error(errorsave);
   return 0;
 }
 
 
 unit posix_process_exece(string unused1, string_list unused2, string_list unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_process_execp(string unused1, string_list unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 inttriple posix_process_waitpid(int argpid, word options)
@@ -890,10 +879,7 @@ inttriple posix_process_waitpid(int argpid, word options)
   int pid = waitpid(argpid, &status, options);
   int how, val;
   if (pid < 0)
-       {
-	 printf("POSIX waitpid got back negative result errno = %d\n", errno);
-	 assert(0);
-       }
+    runtime_error(errno);
 
   if (WIFEXITED(status)) {
     how = 0;
@@ -908,10 +894,7 @@ inttriple posix_process_waitpid(int argpid, word options)
     val = WSTOPSIG(status);
   }
   else
-     {
-       printf("POSIX waitpid got back unknown child status = %d\n", status);
-       assert(0);
-     }
+    runtime_error_fmt("POSIX waitpid got back unknown child status = %d", status);
 
   result = alloc_manyint(3,0);
   result[0] = pid;
@@ -928,44 +911,35 @@ unit posix_process_exit(word8 status)
 
 unit posix_process_kill(int unused1, int unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_process_alarm(int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_process_pause(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_process_sleep(int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 int posix_signal_num(string arg)
 {
   int i;
   char* carg = mlstring2cstring_static(arg);
-  for (i=0; i<((sizeof signal_values)/(sizeof (name_val_t))); i++)
+  for (i=0; i<arraysize(signal_values); i++)
     {
       char *name = signal_values[i].name;
       if (!(strcmp(name,carg)))
 	return signal_values[i].id;
     }
-  printf("posix_signal_num could not find entry '%s'\n",carg);
-  assert(0);
+  runtime_error_fmt("posix_signal_num could not find entry '%s'",carg);
   return 0;
 }
 
@@ -973,14 +947,13 @@ word posix_filesys_num(string arg)
 {
   int i;
   char* carg = mlstring2cstring_static(arg);
-  for (i=0; i<((sizeof filesys_values)/(sizeof (name_val_t))); i++)
+  for (i=0; i<arraysize(filesys_values); i++)
     {
       char *name = filesys_values[i].name;
       if (!(strcmp(name,carg)))
 	return filesys_values[i].id;
     }
-  printf("posix_filesys_num could not find entry '%s'\n",carg);
-  assert(0);
+  runtime_error_fmt("posix_filesys_num could not find entry '%s'",carg);
   return 0;
 }
 
@@ -1018,29 +991,22 @@ unit posix_filesys_closedir(int arg)
 unit posix_filesys_chdir(string dirname)
 {
   const char *cdirname = mlstring2cstring_static(dirname);
-  if (chdir (cdirname) == -1) {
-      printf("POSIX function chdir on ('%s') returned with errno = %d\n", 
-	     cdirname, errno);
-      assert(0);
-    }
-  else return empty_record;
+  if (chdir (cdirname) == -1)
+    runtime_error(errno);
+  return empty_record;
 }
 
-char* getcwd_size(int size)
+static char* getcwd_size(int size)
 {
-  char* cwd = (char*) malloc(size);
-  if (cwd == NULL) {
-    printf("malloc in getcwd_size failed with size = %d\n", size);
-    assert(0);
-  }
+  char* cwd = (char*) emalloc(size);
   if (getcwd(cwd, size) == NULL) {
     int e = errno;
     free(cwd);
     if (e == ERANGE) {
       return getcwd_size(size * 2);
     } else {
-      printf("POSIX function getcwd returned with errno = %d\n", e);
-      assert(0);
+      runtime_error(e);
+      return 0;			/* NOTREACHED */
     }
   } else return cwd;
 }
@@ -1058,27 +1024,19 @@ int posix_filesys_openf(string filename, word oflag, word mode)
   const char *cfilename = mlstring2cstring_static(filename);
   int fd = open(cfilename,oflag,mode);
   if (fd == -1) {
-      printf("POSIX function open on ('%s',%d,%d) returned with errno = %d\n", 
-	     cfilename, oflag, mode, errno);
-      assert(0);
-    }
-  else printf("POSIX function open on ('%s',%d,%d) succeeded.\n",
-	      cfilename, oflag, mode);
-  return fd;
+    runtime_error(errno);
+    return 0;
+  } else return fd;
 }
 
 int posix_filesys_umask(word unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_filesys_link(string unusd1, string unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_filesys_rename(string from, string to)
@@ -1091,61 +1049,47 @@ unit posix_filesys_rename(string from, string to)
 }
 
 unit posix_filesys_symlink(string unused1, string unused)
-{  
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+{
+  UNIMP();
 }
 
 unit posix_filesys_mkdir(string unused1, word unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_filesys_mkfifo(string unused1, word unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_filesys_unlink(string arg)
 {
   char* path = mlstring2cstring_static(arg);
   int result = unlink(path);
-  if (result) {
-    printf("posix_filesys_unlink failed with errno = %d\n", errno);
-    assert(0);
-  }
+  if (result == -1)
+    runtime_error(errno);
   return empty_record;
 }
 
 unit posix_filesys_rmdir(string unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 string posix_filesys_readlink(string unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_filesys_ftruncate(int unused1, int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 #define MODE_BITS (S_IRWXU | S_IRWXG | S_IRWXO | S_ISUID | S_ISGID)
 
-statrep cstat2mlstat_alloc(struct stat *buffer)
+static statrep cstat2mlstat_alloc(struct stat *buffer)
 {
   ptr_t record = alloc_manyint(11,0);
   statrep s = (statrep)record;
@@ -1168,106 +1112,88 @@ statrep cstat2mlstat_alloc(struct stat *buffer)
 statrep posix_filesys_stat(string name)
 {
   struct stat buffer;
-  int error = stat(mlstring2cstring_static(name),&buffer);
-  if (error) {
-    printf("POSIX function stat returned error: errno = %d should raise exn\n",
-	   errno);
-    assert(0);
-  } 
+  if (stat(mlstring2cstring_static(name),&buffer) == -1)
+    runtime_error(errno);
   return cstat2mlstat_alloc(&buffer);
 }
 
 statrep posix_filesys_lstat(string name)
 {
   struct stat buffer;
-  int error = lstat(mlstring2cstring_static(name),&buffer);
-  if (error) {
-    printf("POSIX function lstat returned error: errno = %d should raise exn\n",
-	   errno);
-    assert(0);
-  } 
+  if (lstat(mlstring2cstring_static(name),&buffer) == -1)
+    runtime_error(errno);
   return cstat2mlstat_alloc(&buffer);
 }
 
 statrep posix_filesys_fstat(int filedesc)
 {
   struct stat buffer;
-  int error = fstat(filedesc,&buffer);
-  if (error)
-    {
-      printf("POSIX function fstat called with %d returned error: errno = %d should raise exn\n",
-	     filedesc, errno);
-      assert(0);
-    } 
+  if (fstat(filedesc,&buffer) == -1)
+    runtime_error(errno);
   return cstat2mlstat_alloc(&buffer);
 }
 
-/* XXX what about errno's other than NOENT - shouldn't an exception be raised by posix-filesys.sml? */
 bool posix_filesys_access(string name, word mode)
 {
   char *cname = mlstring2cstring_static(name);
   int code = access(cname,mode);
   if (code == 0)
     return 1; /* true */
-  else
-    return 0; /* false */
+  else {
+    /* Only allowed to raise an exception for errors unrelated
+     * to resolving the pathname and permissions.
+     */
+    switch (errno) {
+    default:
+      return 0; /* false */
+
+    case EINTR:
+      runtime_error(errno);
+      return 0;	/* notreached */
+    }
+  }
 }
 
 unit posix_filesys_chmod(string unused1, word unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_filesys_fchmod(int unused1, word unused2)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_filesys_chown(string unused1, word unused2, word unused3)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_filesys_fchown(int unused1, word unused2, word unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 unit posix_filesys_utime(string unused1, int unused2, int unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 
 intpair posix_filesys_pathconf(string unusde1, string unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 intpair posix_filesys_fpathconf (int unused1, string unused)
 { 
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  UNIMP();
 }
 
 
-void posix_io_fcntl_gfd()
+word posix_io_fcntl_gfd()
 { 
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  UNIMP();
 }
 
 ptr_t til_selfusage()
@@ -1275,7 +1201,8 @@ ptr_t til_selfusage()
   val_t fields[4];
   int masks[4];
   struct rusage rusage;
-  getrusage(RUSAGE_SELF, &rusage);
+  if (getrusage(RUSAGE_SELF, &rusage) == -1)
+    runtime_error(errno);
   fields[0] = rusage.ru_utime.tv_sec;
   fields[1] = rusage.ru_utime.tv_usec;
   fields[2] = rusage.ru_stime.tv_sec;
@@ -1294,17 +1221,43 @@ ptr_t til_realtime()
 
 void printString(ptr_t str)
 {
-  char buf[1024];
-  int len;
-  tag_t tag = str[-1];
-  if (IS_FORWARDPTR(tag))
-    tag = ((ptr_t)tag) [-1];
-  len = GET_ARRLEN(tag);
-  if (!(len + 1 <= sizeof(buf))) {
-    printf("str = %d\n", str);
-    assert(0);
+  int len = stringlen(str);
+  printf("%.*s", len, (char*) str);
+}
+
+/* Not really appropriate here, but I'm planning on reorganizing anyway. */
+
+static char* commandline_cmd = NULL;
+static char** commandline_argv = NULL;
+
+void setCommandLine(char* cmd, char** argv)
+{
+  commandline_cmd = cmd;
+  commandline_argv = argv;
+}
+
+string commandline_name(unit ignored)
+{
+  assert(commandline_name != NULL);
+  return cstring2mlstring_alloc(commandline_cmd);
+}
+
+string_list array_to_string_list(char** arr)
+{
+  /* Convert a NULL-terminated array of strings into a value of type string list.
+   */
+  char* string = *arr;
+  char** next = arr+1;
+  if (string == NULL) return (ptr_t) 0;
+  else {
+    ptr_t car = cstring2mlstring_alloc(string);
+    ptr_t cdr = array_to_string_list(next);
+    return alloc_recrec(car, cdr);
   }
-  strncpy(buf, (char *) str, len);
-  buf[len] = 0;
-  printf("%s", buf);
+}
+
+string_list commandline_arguments(unit ignored)
+{
+  assert(commandline_argv != NULL);
+  return array_to_string_list(commandline_argv);
 }

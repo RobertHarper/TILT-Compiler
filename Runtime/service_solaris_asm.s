@@ -12,8 +12,6 @@
 	.globl  global_exnrec
         .globl  GetTick
 	.globl	raise_exception_raw
-	.globl	Overflow_exncon
-	.globl	Divide_exncon
 	.globl  FetchAndAdd
 	.globl  TestAndSet
 	.globl  Yield
@@ -235,13 +233,6 @@ raise_exception_raw:
 	nop
 	.size	raise_exception_raw,(.-raise_exception_raw)
 
-	.data
-Overflow_exncon:
-	.word	Prelude_31_Overflow_1
-Divide_exncon:
-	.word	Prelude_57_Div_1
-
-	
 	.data
 
  ! a triple to represent the top-level exn record

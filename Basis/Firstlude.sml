@@ -3,7 +3,6 @@
  * compiler primitives are available.  Of special interest
  * is the identifier littleEndian which is a boolean value.
  *)
-    
 
 (* standard fixity *)
 infix  0 before
@@ -12,23 +11,23 @@ infix  4 = <> < > <= >=
 infix  5 @
 infixr 5 ::
 infix  6 + - ^
-infix  7 div mod quot rem / * 
+infix  7 div mod quot rem / *
 infix  9 << >> ~>> && || 
 
 (* standard types *)
 datatype bool = false | true
 datatype 'a list = nil | :: of 'a * 'a list
-datatype 'a susp = Susp of unit -> 'a 
+datatype 'a susp = Susp of unit -> 'a	(* nonstandard *)
 datatype 'a option = NONE | SOME of 'a
 datatype order = GREATER | LESS | EQUAL 
-type int32 = int
+type int32 = int			(* nonstandard *)
 type word = word32
 
 
 (* standard exceptions *)
 exception Match and Bind                   (* pattern related *)
 exception Overflow and Div and Mod and Quot (* arithmetic *)
-      and Floor and Sqrt and Exp and Ln 
+      and Floor and Sqrt and Exp and Ln
 exception Ord and Chr and Substring       (* character/string *)
 exception Hd and Tl and NthTail and Nth   (* list related *)
 exception Subscript and Size              (* array related *)
@@ -242,3 +241,7 @@ val arraymaxlength = 1024 * 1024
 
 (* unimped parts of the standard basis - or exception indicating internal error in basis *)
 exception LibFail of string
+
+(* raised by runtime functions and coerced into OS.SysErr in basis. *)
+exception RuntimeError of int		(* SysErr(s, SOME e) *)
+exception RuntimeError' of string	(* SysErr(s, NONE) *)
