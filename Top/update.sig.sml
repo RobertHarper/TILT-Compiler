@@ -27,22 +27,14 @@ sig
     val KeepAsm : bool ref
     val CompressAsm : bool ref		(* Compress kept assembler. *)
 
-    type iface = Compiler.iface
-    type precontext = Compiler.precontext
+    type context = (string * Paths.iface) list
     type imports = Compiler.imports
     type ue = UnitEnvironment.ue
     type equiv = Crc.crc * Crc.crc -> bool	(* interface CRC equivalence *)
-    type var = Name.var
-    type unit_help =
-	{parms : string -> var list,
-	 get_id : var -> string,
-	 get_unit_paths : var -> Paths.compunit option}
-    type iface_help =
-	{get_id : var -> string,
-	 fresh : ExtSyn.id -> ExtSyn.id,
-	 find : ExtSyn.id -> var,
-	 get_iface_paths : var -> Paths.iface option}
-    type importOnly = var -> bool
+    datatype pack =
+	PACKU of Paths.compunit * ExtSyn.id list
+      | PACKI of Paths.iface * ExtSyn.id list
+      | PACKV of ExtSyn.id * ExtSyn.exp
 
     type plan
 
@@ -58,11 +50,11 @@ sig
 
     val plan_compi : equiv * ue * Paths.iface -> plan
     val plan_compu : equiv * ue * Paths.compunit -> plan
-    val plan_srci : equiv * precontext * imports * Paths.iface -> plan
-    val plan_compile : equiv * precontext * imports * Paths.compunit -> plan
-    val plan_checku : equiv * precontext * Paths.compunit * Paths.iface -> plan
-    val plan_link : equiv * unit_help * var list * Paths.exe -> plan
-    val plan_pack : equiv * unit_help * iface_help * importOnly * var list * Paths.lib -> plan
+    val plan_srci : equiv * context * imports * Paths.iface -> plan
+    val plan_compile : equiv * context * imports * Paths.compunit -> plan
+    val plan_checku : equiv * context * Paths.compunit * Paths.iface -> plan
+    val plan_link : equiv * Paths.compunit  list * Paths.exe -> plan
+    val plan_pack : equiv * pack list * Paths.lib -> plan
 
     val compile : plan -> unit -> plan
     val flush : plan -> unit

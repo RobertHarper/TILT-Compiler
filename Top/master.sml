@@ -17,11 +17,6 @@
 
 	XXX: Actual dependencies should be used to build elaboration
 	contexts; we probably want to build a dependency graph for this.
-
-	XXX: We should check unit environments when interfaces are
-	combined into a context.
-
-	XXX: Add reasonable group file variables.
 *)
 functor Master (val basis :
 		    {group : unit -> string,
@@ -32,6 +27,7 @@ struct
     structure Ue = UnitEnvironment
     structure FileCache = Compiler.FileCache
     structure VarMap = Name.VarMap
+    structure StringSet = Util.StringSet
     structure StringMap = Util.StringMap
     structure StringOrderedSet = Util.StringOrderedSet
     structure VarSet = Name.VarSet
@@ -40,12 +36,14 @@ struct
     fun msg str = if (!MasterDiag) then print str else ()
 
     fun print_strings (skip : int) (ss : string list) : unit =
-	let
+	let val spaces = "    "
+	    val nspaces = size spaces
+
 	    fun f (str : string,col : int) : int =
-		let val cur = 2 + size str
+		let val cur = nspaces + size str
 		in  if (col + cur > !Formatter.Pagewidth)
-		    then (print "\n        "; print str; 6 + cur)
-		    else (print "  "; print str; col + cur)
+		    then (print "\n"; print spaces; print str; cur)
+		    else (print spaces; print str; col + cur)
 		end
 	in  ignore(foldl f skip ss)
 	end
@@ -100,17 +98,57 @@ struct
     type compunit = Paths.compunit
     type var = Name.var
 
-    datatype node =
+    datatype iface_node =
 	SRCI of Paths.iface * Update.imports
       | COMPI of Paths.iface
-      | SRCU of Paths.compunit * var option * Update.imports
+
+    fun iface_paths (iface : iface_node) : Paths.iface =
+	(case iface
+	   of SRCI (p,_) => p
+	    | COMPI p => p)
+
+    fun iface_id (n : iface_node) : string =
+	(case n
+	   of SRCI (p,_) => "source interface " ^ Paths.ifaceName p
+	    | COMPI p => "compiled interface " ^ Paths.ifaceName p)
+
+    datatype unit_node =
+	SRCU of Paths.compunit * var option * Update.imports
       | COMPU of Paths.compunit
       | PRIMU of Paths.compunit * Update.imports
       | IMPORTU of Paths.compunit
       | CHECKU of Paths.compunit * Paths.iface
+
+    fun unit_paths (unit : unit_node) : Paths.compunit =
+	(case unit
+	   of SRCU (p,_,_) => p
+	    | COMPU p => p
+	    | PRIMU (p,_) => p
+	    | IMPORTU p => p
+	    | CHECKU (p,_) => p)
+
+    fun unit_id (n : unit_node) : string =
+	(case n
+	   of SRCU (p,_,_) => "source unit " ^ Paths.unitName p
+	    | COMPU p => "compiled unit " ^ Paths.unitName p
+	    | PRIMU (p,_) => "primitive unit " ^ Paths.unitName p
+	    | IMPORTU p => "imported unit " ^ Paths.unitName p
+	    | CHECKU (p,_) => "checked unit " ^ Paths.unitName p)
+
+    datatype node =
+	UNIT of unit_node
+      | IFACE of iface_node
       | LINK of Paths.exe
       | PACK of Paths.lib * VarSet.set * (E.id * E.exp) list
       | INITIAL
+
+    fun node_id (n : node) : string =
+	(case n
+	   of UNIT n' => unit_id n'
+	    | IFACE n' => iface_id n'
+	    | LINK p => "executable " ^ Paths.exeFile p
+	    | PACK (p,_,_) => "library " ^ Paths.libDir p
+	    | INITIAL => "end of compilation")
 
     local
 	structure VarNode :> NODE where type node = var =
@@ -143,7 +181,10 @@ struct
 	    type equiv = StringEquiv.equiv
 	    val empty = StringEquiv.empty
 	    fun insert (e,a,b) =
-		StringEquiv.insert (e, Crc.toString a, Crc.toString b)
+		let val a = Crc.toString a
+		    val b = Crc.toString b
+		in  StringEquiv.insert (e, a, b)
+		end
 	    fun equiv e =
 		let val eq = StringEquiv.equiv e
 		in  fn (a,b) => eq (Crc.toString a, Crc.toString b)
@@ -210,36 +251,25 @@ struct
 
     fun get_iface_paths' (iface : var) : Paths.iface option =
 	(case get_node iface
-	   of SRCI (p,_) => SOME p
-	    | COMPI p => SOME p
+	   of IFACE iface_node => SOME (iface_paths iface_node)
 	    | _ => NONE)
 
     fun get_iface_paths (iface : var) : Paths.iface =
-	(case get_iface_paths' iface
-	   of SOME p => p
-	    | NONE => error "get_iface_paths given non-interface")
+	(case get_node iface
+	   of IFACE iface_node => iface_paths iface_node
+	    | _ => error "get_iface_paths given non-interface")
 
-    fun get_unit_paths (unit : var) : Paths.compunit option =
+    fun get_unit_paths' (unit : var) : Paths.compunit option =
 	(case get_node unit
-	   of SRCU (p,_,_) => SOME p
-	    | COMPU p => SOME p
-	    | PRIMU (p,_) => SOME p
-	    | IMPORTU p => SOME p
-	    | CHECKU (p,_) => SOME p
+	   of UNIT unit_node => SOME (unit_paths unit_node)
 	    | _ => NONE)
 
-    fun get_id (v : var) : string =
-	(case get_node v
-	   of SRCI (p,_) => "*" ^ Paths.ifaceName p
-	    | COMPI p => "*" ^ Paths.ifaceName p
-	    | SRCU (p,_,_) => Paths.unitName p
-	    | COMPU p => Paths.unitName p
-	    | PRIMU (p,_) => Paths.unitName p
-	    | IMPORTU p => Paths.unitName p
-	    | CHECKU (p,_) => "?" ^ Paths.unitName p
-	    | LINK p => Paths.exeFile p
-	    | PACK (p,_,_) => Paths.libDir p
-	    | INITIAL => "end of compilation")
+    fun get_unit_paths (unit : var) : Paths.compunit =
+	(case get_node unit
+	   of UNIT unit_node => unit_paths unit_node
+	    | _ => error "get_unit_paths given non-unit")
+
+    val get_id : var -> string = node_id o get_node
 
     val nofixup : E.groupfile -> E.groupfile =
 	fn g => g
@@ -274,13 +304,8 @@ struct
 	in  group
 	end
 
-    fun make_imports (imports : var list) : Update.imports =
-	let fun unitname (v : var) : string =
-		(case get_unit_paths v
-		   of SOME p => Paths.unitName p
-		    | NONE => error "make_imports given non-unit")
-	in  map unitname imports
-	end
+    val make_imports : var list -> Update.imports =
+	map (Paths.unitName o get_unit_paths)
 
     fun make_transitive_imports (imports : VarSet.set) : var list =
 	let fun add (v,s) = VarSet.addList (s,get_import_transitive v)
@@ -295,10 +320,11 @@ struct
 		   of Group.SRCI (id,group,file,imports) =>
 			let val p = Paths.srci {id=id, group=group, file=file}
 			    val i = make_imports imports
-			in  (SRCI (p,i), imports)
+			in  (IFACE (SRCI (p,i)), imports)
 			end
 		    | Group.COMPI (id,iface,ue,parms) =>
-			(COMPI (Paths.compi {id=id, file=iface, uefile=ue}),
+			(IFACE (COMPI (Paths.compi {id=id, file=iface,
+						    uefile=ue})),
 			 VarSet.listItems parms))
 	    | Group.UNIT unit =>
 		(case unit
@@ -310,28 +336,28 @@ struct
 			    val edges = (case iface
 					   of NONE => imports
 					    | SOME I => I :: imports)
-			in  (SRCU (p,iface,i), edges)
+			in  (UNIT (SRCU (p,iface,i)), edges)
 			end
 		    | Group.COMPU (id,obj,ue,parms,iface) =>
 			let val p' = get_iface_paths iface
 			    val p = Paths.compu {id=id,file=obj,
 						 uefile=ue,iface=p'}
-			in  (COMPU p, iface :: (VarSet.listItems parms))
+			in  (UNIT (COMPU p), iface :: (VarSet.listItems parms))
 			end
 		    | Group.PRIMU (id,group,imports) =>
 			let val p = Paths.primu {id=id, group=group}
 			    val i = make_imports imports
-			in  (PRIMU (p,i), imports)
+			in  (UNIT (PRIMU (p,i)), imports)
 			end
 		    | Group.IMPORTU (id,iface) =>
 			let val p' = get_iface_paths iface
 			    val p = Paths.importu {id=id, iface=p'}
-			in  (IMPORTU p, [iface])
+			in  (UNIT (IMPORTU p), [iface])
 			end
 		    | Group.CHECKU {U,I} =>
-			let val pU = valOf (get_unit_paths U)
+			let val pU = get_unit_paths U
 			    val pI = get_iface_paths I
-			in  (CHECKU (pU,pI), [U,I])
+			in  (UNIT (CHECKU (pU,pI)), [U,I])
 			end)
 	    | Group.CMD cmd =>
 		(case cmd
@@ -733,7 +759,7 @@ struct
 		   | status => badStatus (node, status, "making done")
 	    val _ = set_status (node, DONE times)
 	    val _ = (case get_node node
-		       of CHECKU (U,I) =>
+		       of UNIT (CHECKU (U,I)) =>
 			    let val I = Paths.ifaceFile I
 				val U = Paths.ifaceFile (Paths.unitIface U)
 			    in  add_eq(FileCache.crc I, FileCache.crc U)
@@ -743,97 +769,21 @@ struct
 	in  ()
 	end
 
-    (*
-	    Invariant: If v in rng(unitmap), then (get_node v) is one
-	    of SRCU, COMPU, PRIMU, or IMPORTU; that is, v does not
-	    correspond to a CHECKU node.
-
-	    The main dependency graph may have several nodes with the
-	    same unit id U, but only because of chains of the form
-
-		    CHECKU -> ...  -> CHECKU ->	node
-
-	    where node is a non-CHECKU unit node.  The invariant
-	    assures us that if U in dom(unitmap), then unitmap(U) is
-	    the variable for node.
-    *)
-    fun unit_help (root : var) : Update.unit_help =
-	let val imports = get_import_transitive root
-	    fun folder (v : var, map) : var StringMap.map =
-		(case get_unit_paths v
-		   of NONE => map
-		    | SOME p => StringMap.insert (map, Paths.unitName p, v))
-	    (* Right-to-left establishes the invariant. *)
-	    val unitmap = foldr folder StringMap.empty imports
-	    fun lookup (U : E.id) : var =
-		(case StringMap.find (unitmap, U)
-		   of SOME v => v
-		    | NONE => error ("unit " ^ U ^ " not in unitmap"))
-	    fun readparms (uefile : string) : var list =
-		let val ue = FileCache.read_ue uefile
-		    val ids = map #1 (Ue.listItemsi ue)
-		in  map lookup ids
-		end
-	in  {parms=readparms, get_id=get_id, get_unit_paths=get_unit_paths}
+    fun get_context (v : var) : Update.context =
+	let val reachable = get_import_transitive v
+	    fun mapper (v : var) : (string * Paths.iface) option =
+		(case get_node v
+		   of UNIT (CHECKU _) => NONE
+		    | UNIT unit_node =>
+			let val U = unit_paths unit_node
+			    val name = Paths.unitName U
+			    val iface = Paths.unitIface U
+			in  SOME (name,iface)
+			end
+		    | IFACE _ => NONE
+		    | node => error ("get_context saw " ^ (node_id node)))
+	in  List.mapPartial mapper reachable
 	end
-
-    (*
-	We need fresh interface identifiers because every unit in a
-	packed library has an explicit interface and the external
-	syntax requires that every interface be named.  get_id has to
-	know about these fresh identifiers for debugging messages;
-	that is the only reason we need the second componenent of the
-	isomorphism.  XXX: We should probably cleanup the external
-	syntax to eliminate the need for all this.
-    *)
-    fun iface_help (root : var) : Update.iface_help =
-	let val imports = get_import_transitive root
-	    type iso = var StringMap.map * string VarMap.map
-	    val empty : iso = (StringMap.empty, VarMap.empty)
-	    fun insert ((sm,vm) : iso, v : var, n : string) : iso =
-		(StringMap.insert (sm, n, v), VarMap.insert (vm, v, n))
-	    fun folder (v : var, iso : iso) : iso =
-		(case get_iface_paths' v
-		   of NONE => iso
-		    | SOME p => insert (iso,v,Paths.ifaceName p))
-	    val iso = foldl folder empty imports
-	    val r = ref iso
-	    fun find (I : E.id) : var =
-		(case StringMap.find (#1(!r), I)
-		   of SOME v => v
-		    | NONE => error ("interface " ^ I ^ " found"))
-	    fun fresh' (sm : var StringMap.map, s : string) : string =
-		if isSome (StringMap.find (sm, s)) then fresh' (sm, s ^ "'")
-		else s
-	    fun fresh (s : string) : string =
-		let val iso = !r
-		    val n = fresh' (#1 iso,s)
-		    val _ = r := insert (iso,Name.fresh_var(),n)
-		in  n
-		end
-	    val real_get_id = get_id
-	    fun get_id (v : var) : string =
-		(case VarMap.find (#2(!r), v)
-		   of SOME I => I
-		    | NONE => real_get_id v)
-	in  {get_id=get_id, fresh=fresh, find=find,
-	     get_iface_paths=get_iface_paths'}
-	end
-
-    val make_precontext : var list -> Update.precontext =
-	List.mapPartial
-	(fn v =>
-	 (case (get_unit_paths v, get_node v)
-	    of (NONE, _) => NONE
-	     | (SOME _, CHECKU _) => NONE
-	     | (SOME U, _) =>
-		let val name = Paths.unitName U
-		    val iface = Paths.ifaceFile (Paths.unitIface U)
-		in  SOME (name, iface)
-		end))
-
-    val get_precontext : var -> Compiler.precontext =
-	make_precontext o get_import_transitive
 
     fun get_ue (node : var) : Ue.ue =
 	let val nodes = get_import_direct node
@@ -843,43 +793,196 @@ struct
 		    val crc = FileCache.crc iface
 		in  (name, crc)
 		end
-	    val mapper = Option.compose (mapone, get_unit_paths)
+	    val mapper = Option.compose (mapone, get_unit_paths')
 	    val ue = List.mapPartial mapper nodes
 	in  (foldl (fn ((u,crc),acc) => Ue.insert (acc,u,crc)) Ue.empty ue)
 	end
 
+    (*
+	We need fresh interface names when the group uses the same
+	name multiple times and when packing inferred interfaces.  In
+	the first case, we want to shadow interface names in group
+	file order.  In the second case, we want to ensure that
+	inferred interface names never shadow names that were in the
+	group.
+    *)
+    fun make_gensym (reserved : StringSet.set) : string -> string =
+	let val used = ref reserved
+	    fun find (set : StringSet.set, base : string, n : int) : string =
+		let val suffix = if n = 0 then "" else Int.toString n
+		    val s = base ^ suffix
+		in  if StringSet.member (set, s) then find (set, base, n+1)
+		    else s
+		end
+	    fun gensym (base : string) : string =
+		let val set = !used
+		    val name = find (set, base, 0)
+		in  used := StringSet.add (set, name);
+		    name
+		end
+	in  gensym
+	end
+
+    type renaming =
+	{shadow : string VarMap.map,
+	 gensym : string -> string}
+
+    fun iface_renaming (nodes : var list) : renaming =
+	let type acc = string VarMap.map * var StringMap.map * StringSet.set
+	    fun folder (v : var, acc as (change, bound, used) : acc) : acc =
+		(case get_node v
+		   of IFACE iface_node =>
+			let val iface = iface_paths iface_node
+			    val name = Paths.ifaceName iface
+			    val change =
+				(case StringMap.find (bound, name)
+				   of SOME v' => VarMap.insert (change, v', name)
+				    | NONE => change)
+			    val bound = StringMap.insert (bound, name, v)
+			    val used = StringSet.add (used, name)
+			in  (change, bound, used)
+			end
+		    | _ => acc)
+	    val acc = (VarMap.empty, StringMap.empty, StringSet.empty)
+	    val (change, bound, used) = foldl folder acc nodes
+	    val gensym = make_gensym used
+	    fun folder (v : var, name : string,
+			shadow : string VarMap.map) : string VarMap.map =
+		VarMap.insert (shadow, v, gensym name)
+	    val shadow = VarMap.foldli folder VarMap.empty change
+	in  {shadow=shadow, gensym=gensym}
+	end
+
+    fun named_iface (renaming : renaming) : var -> Paths.iface =
+	let val {shadow, ...} = renaming
+	    fun get_iface v =
+		let val iface = get_iface_paths v
+		    val name =
+			(case VarMap.find (shadow,v)
+			   of SOME name => name
+			    | NONE => Paths.ifaceName iface)
+		    val file = Paths.ifaceFile iface
+		    val uefile = Paths.ifaceUeFile iface
+		in  Paths.compi {id=name, file=file, uefile=uefile}
+		end
+	in  get_iface
+	end
+
+    fun inferred_iface (renaming : renaming) : Paths.compunit -> Paths.iface =
+	let val {gensym, ...} = renaming
+	    fun make_iface unit =
+		let val iface = Paths.unitIface unit
+		    val name = gensym (Paths.unitName unit)
+		    val file = Paths.ifaceFile iface
+		    val uefile = Paths.ifaceUeFile iface
+		in  Paths.compi {id=name, file=file, uefile=uefile}
+		end
+	in  make_iface
+	end
+
+    type packlist = Update.pack list
+
+    fun pack_node (importOnly : var -> bool, named_iface : var -> Paths.iface,
+		   inferred_iface : Paths.compunit -> Paths.iface)
+		  (v : var, packlist : packlist) : packlist =
+	(case get_node v
+	   of IFACE _ =>
+		let val iface = named_iface v
+		    val pack = Update.PACKI (iface,nil)
+		in  pack :: packlist
+		end
+	    | UNIT (CHECKU _) => packlist
+	    | UNIT unit_node =>
+		let val (unit, inferred, import) =
+			(case unit_node
+			   of SRCU (unit,ifaceopt,_) =>
+				(unit,not(isSome ifaceopt),importOnly v)
+			    | COMPU unit =>
+				(unit,false,importOnly v)
+			    | PRIMU (unit,_) =>
+				(unit,true,importOnly v)
+			    | IMPORTU unit =>
+				(unit,false,true)
+			    | CHECKU _ => error "impossible CHECKU")
+		    val (iface,packlist) =
+			if inferred then
+			    let val iface = inferred_iface unit
+				val pack = Update.PACKI (iface,nil)
+				val packlist = pack :: packlist
+			    in  (iface,packlist)
+			    end
+			else (Paths.unitIface unit, packlist)
+		    val name = Paths.unitName unit
+		    val unit' =
+			if import then
+			    Paths.importu {id=name, iface=iface}
+			else
+			    let val file = Paths.objFile unit
+				val uefile = Paths.ueFile unit
+			    in  Paths.compu {id=name, file=file, uefile=uefile,
+					     iface=iface}
+			    end
+		    val pack = Update.PACKU (unit',nil)
+		in  pack :: packlist
+		end
+	    | _ => error "pack_node saw an unexepected node")
+
     fun plan (node : var) : Update.plan =
 	(case get_node node
-	   of SRCI (iface,imports) =>
-		let val precontext = get_precontext node
-		in  Update.plan_srci (eq,precontext,imports,iface)
+	   of IFACE (SRCI (iface,imports)) =>
+		let val context = get_context node
+		in  Update.plan_srci (eq,context,imports,iface)
 		end
-	    | COMPI iface => Update.plan_compi (eq,get_ue node,iface)
-	    | SRCU (unit,_,imports) =>
-		let val precontext = get_precontext node
-		in  Update.plan_compile (eq,precontext,imports,unit)
+	    | IFACE (COMPI iface) => Update.plan_compi (eq,get_ue node,iface)
+	    | UNIT (SRCU (unit,_,imports)) =>
+		let val context = get_context node
+		in  Update.plan_compile (eq,context,imports,unit)
 		end
-	    | COMPU unit => Update.plan_compu (eq,get_ue node,unit)
-	    | PRIMU (unit,imports) =>
-		let val precontext = get_precontext node
-		in  Update.plan_compile (eq,precontext,imports,unit)
+	    | UNIT (COMPU unit) => Update.plan_compu (eq,get_ue node,unit)
+	    | UNIT (PRIMU (unit,imports)) =>
+		let val context = get_context node
+		in  Update.plan_compile (eq,context,imports,unit)
 		end
-	    | IMPORTU unit => Update.empty_plan
-	    | CHECKU (unit,iface) =>
-		let val precontext = get_precontext node
-		in  Update.plan_checku (eq,precontext,unit,iface)
+	    | UNIT (IMPORTU unit) => Update.empty_plan
+	    | UNIT (CHECKU (unit,iface)) =>
+		let val context = get_context node
+		in  Update.plan_checku (eq,context,unit,iface)
 		end
 	    | LINK exe =>
-		let val unit_help = unit_help node
-		    val roots = sort(get_import_direct node)
-		in  Update.plan_link (eq,unit_help,roots,exe)
+		let val reachable = get_import_direct node
+		    val reachable = sort reachable (* fix order of effects *)
+		    fun mapper (v : var) : Paths.compunit option =
+			(case get_node v
+			   of UNIT (CHECKU _) => NONE
+			    | UNIT unit_node => SOME (unit_paths unit_node)
+			    | IFACE _ => NONE
+			    | node => error ("link saw " ^ node_id node))
+		    val units = List.mapPartial mapper reachable
+		    val (imports,units) = List.partition Paths.isImportUnit units
+		in  if null imports then Update.plan_link (eq,units,exe)
+		    else
+			(print ("Warning: can not link " ^
+				Paths.exeFile exe ^
+				" because of unimplemented unit(s): ");
+			 print_strings 70 (map Paths.unitName imports);
+			 print "\n";
+			 Update.empty_plan)
 		end
 	    | PACK (lib,importOnly,values) =>
-		let val unit_help = unit_help node
-		    val iface_help = iface_help node
-		    fun import v = VarSet.member(importOnly,v)
-		    val roots = get_import_direct node
-		in  Update.plan_pack (eq,unit_help,iface_help,import,roots,lib)
+		let val reachable = get_import_direct node
+		    val reachable = sort reachable (* fix order of effects *)
+		    val importOnly =
+			if !Update.UptoElaborate orelse !Update.UptoAsm then
+			    fn v => true
+			else
+			    fn v => VarSet.member (importOnly, v)
+		    val renaming = iface_renaming reachable
+		    val named_iface = named_iface renaming
+		    val inferred_iface = inferred_iface renaming
+		    val parms = (importOnly, named_iface, inferred_iface)
+		    val packlist = foldl (pack_node parms) nil reachable
+		    val packlist = rev packlist
+		in  Update.plan_pack (eq,packlist,lib)
 		end
 	    | INITIAL => error "plan saw initial")
 
@@ -942,8 +1045,8 @@ struct
 	    val (waiting, pending, pending', done) = loop (waiting, [], [], [])
 	    val done = List.filter (fn v =>
 				    (case get_node v
-				       of COMPI _ => false
-					| COMPU _ => false
+				       of IFACE (COMPI _) => false
+					| UNIT (COMPU _) => false
 					| _ => true)) done
 	    val _ = if !ShowUptodate andalso not (null done) then
 			(print "Already up-to-date: ";
@@ -1252,13 +1355,11 @@ struct
 		app (fn f => FileCache.remove (f x)) paths
 	    fun remove_node (v : var) : unit =
 		(case get_node v
-		   of SRCI (p,_) => remove ifacePaths p
-		    | COMPI _ => ()
-		    | SRCU (p,_,_) => remove unitPaths p
-		    | COMPU _ => ()
-		    | PRIMU (p,_) => remove unitPaths p
-		    | IMPORTU _ => ()
-		    | CHECKU _ => ()
+		   of IFACE (SRCI (p,_)) => remove ifacePaths p
+		    | IFACE (COMPI _) => ()
+		    | UNIT (SRCU (p,_,_)) => remove unitPaths p
+		    | UNIT (PRIMU (p,_)) => remove unitPaths p
+		    | UNIT _ => ()
 		    | LINK p => remove exePaths p
 		    | PACK _ => ()
 		    | INITIAL => error "remove_node saw initial")

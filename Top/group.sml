@@ -624,20 +624,21 @@ struct
 		3. l = LAB_UNIT _ iff c = CLASS_UNIT _.
 		4. a is true iff c comes from append.
 	*)
-	type ctx = (bool * class) LM.map
+	type ctx = (bool * class) LM.map	(* imported or included? *)
 
 	val empty = LM.empty
 
-	fun lookup_iface' (ctx : ctx, I : E.id) : (pos' * var) option =
+	fun lookup_iface' (ctx : ctx, I : E.id) : (pos' * var * bool) option =
 	    (case LM.find (ctx, LAB_IFACE I)
 	       of NONE => NONE
-		| SOME (_,CLASS_IFACE r) => SOME r
+		| SOME (e,CLASS_IFACE (p,v)) => SOME (p,v,e)
 		| _ => error "context iface")
 
-	fun lookup_unit' (ctx : ctx, U : E.id) : (pos' * var * bool) option =
+	fun lookup_unit' (ctx : ctx,
+			  U : E.id) : (pos' * var * bool * bool) option =
 	    (case LM.find (ctx, LAB_UNIT U)
 	       of NONE => NONE
-		| SOME (_,CLASS_UNIT r) => SOME r
+		| SOME (e,CLASS_UNIT (p,v,i)) => SOME (p,v,i,e)
 		| _ => error "context unit")
 
 	fun lookup_val' (ctx : ctx, x : E.id) : (pos' * ty * value) option =
@@ -647,16 +648,27 @@ struct
 		| _ => error "context value")
 
 	fun add_iface (ctx : ctx, I : E.id, p : pos', v : var) : ctx =
-	    (case lookup_iface' (ctx, I)
-	       of NONE => LM.insert (ctx,LAB_IFACE I,(false,CLASS_IFACE (p,v)))
-		| SOME (p',_) =>
-		    Pos'.fail p (I ^ " already named at " ^ Pos'.toString p'))
+	    let fun add() = LM.insert (ctx,LAB_IFACE I,(false,CLASS_IFACE (p,v)))
+	    in
+		(case lookup_iface' (ctx, I)
+		   of NONE => add()
+		    | SOME (_,_,true) => add()
+		    | SOME (p',_,_) =>
+			Pos'.fail p (I ^ " already named at " ^
+				     Pos'.toString p'))
+	    end
 
 	fun add_unit (ctx : ctx, U : E.id, p : pos', v : var, i : bool) : ctx =
-	    (case lookup_unit' (ctx, U)
-	       of NONE => LM.insert (ctx,LAB_UNIT U,(false,CLASS_UNIT (p,v,i)))
-		| SOME (p',_,_) =>
-		    Pos'.fail p (U ^ " already named at " ^ Pos'.toString p'))
+	    let fun add() = LM.insert (ctx,LAB_UNIT U,(false,CLASS_UNIT (p,v,i)))
+	    in
+		(case lookup_unit' (ctx, U)
+		   of NONE => add()
+		    | SOME (_,_,_,true) => add()
+		    | SOME (p',_,_,_) =>
+			if i then add()
+			else Pos'.fail p (U ^ " already named at " ^
+					  Pos'.toString p'))
+	    end
 
 	fun add_val (ctx : ctx, x : E.id, p : pos', t : ty, v : value) : ctx =
 	    LM.insert (ctx,LAB_VAL x,(false,CLASS_VAL (p,t,v)))
@@ -729,8 +741,11 @@ struct
 	fun add (class : class) (c : fctx, f : filename, p : pos') : fctx =
 	    (case SM.find (c,f)
 	       of NONE => SM.insert (c,f,(p,class))
-		| SOME (p',_) =>
-		    Pos'.fail p (f ^ " already named at " ^ Pos'.toString p'))
+		| SOME (p',class') =>
+		    (case (class, class')
+		       of (SOURCE, SOURCE) => c
+			| _ => Pos'.fail p (f ^ " already named at " ^
+					    Pos'.toString p')))
 
 	val start_group : fctx * filename * pos' -> fctx = add GROUP
 
@@ -758,24 +773,26 @@ struct
     sig
 	type global
 	val empty : global
-	val add_unit : global * id * pos' -> global
+	val add_unit : global * id * pos' * var -> global
 	val add_val : global * id * pos' -> global
+	val has_unit : global * id -> (pos' * var) option
     end =
     struct
 	type global =
-	    {units : pos' SM.map,
+	    {units : (pos' * var) SM.map,
 	     vals : pos' SM.map}
 
 	val empty : global =
 	    {units = SM.empty,
 	     vals = SM.empty}
 
-	fun add_unit (g : global, U : id, p : pos') : global =
+	fun add_unit (g : global, U : id, p : pos', v : var) : global =
 	    let val {units,vals} = g
 	    in  (case SM.find (units, U)
-		   of NONE => {units=(SM.insert(units,U,p)), vals=vals}
-		    | SOME p' => Pos'.fail p (U ^ " already named at " ^
-					      Pos'.toString p'))
+		   of NONE => {units=(SM.insert(units,U,(p,v))), vals=vals}
+		    | SOME (p',_) =>
+			Pos'.fail p (U ^ " already named at " ^
+				     Pos'.toString p'))
 	    end
 
 	fun add_val (g : global, x : id, p : pos') : global =
@@ -785,6 +802,9 @@ struct
 		    | SOME p' => Pos'.fail p (x ^ " already named at " ^
 					      Pos'.toString p'))
 	    end
+
+	fun has_unit (g : global, U : id) : (pos' * var) option =
+	    SM.find (#units g, U)
     end
 
     type global = Global.global
@@ -794,8 +814,9 @@ struct
 	type group'
 	val empty : group'
 
-	val add_global_unit : group' * id * pos' -> group'
+	val add_global_unit : group' * id * pos' * var -> group'
 	val add_global_val : group' * id * pos' -> group'
+	val has_global_unit : group' * id -> (pos' * var) option
 
 	val add_entry : group' * var * pos' * entry -> group'	(* var fresh *)
 
@@ -828,9 +849,9 @@ struct
 	     fctx = Fctx.empty,
 	     global = Global.empty}
 
-	fun add_global_unit (g : group', U : id, p : pos') : group' =
+	fun add_global_unit (g : group', U : id, p : pos', v : var) : group' =
 	    let val {group,initial,fctx,global} = g
-		val global = Global.add_unit (global, U, p)
+		val global = Global.add_unit (global, U, p, v)
 	    in  {group=group, initial=initial, fctx=fctx, global=global}
 	    end
 
@@ -839,6 +860,9 @@ struct
 		val global = Global.add_val (global, x, p)
 	    in  {group=group, initial=initial, fctx=fctx, global=global}
 	    end
+
+	fun has_global_unit (g : group', U : id) : (pos' * var) option =
+	    Global.has_unit (#global g, U)
 
 	fun add_entry (g : group', v : var, p : pos', e : entry) : group' =
 	    let val {group,initial,fctx,global} = g
@@ -979,16 +1003,23 @@ struct
 	fun add_unit (gf : group_file, U : id, c : compunit) : group_file =
 	    let val {pos,group,ctx} = gf
 		val (_,p) = pos
-		val group = Group'.add_global_unit (group,U,p)
 		val v = Name.fresh_named_var U
+		val group = Group'.add_global_unit (group,U,p,v)
 		val group = Group'.add_entry (group,v,p,UNIT c)
 		val ctx = Ctx.add_unit (ctx,U,p,v,false)
 	    in  {pos=pos, group=group, ctx=ctx}
 	    end
 
-	fun add_import (gf : group_file, U : id, v : var) : group_file =
+	fun add_import (gf : group_file, U : id, I : var) : group_file =
 	    let val {pos,group,ctx} = gf
 		val (_,p) = pos
+		val v = Name.fresh_named_var U
+		val (group,c) =
+		    (case Group'.has_global_unit (group,U)
+		       of NONE => (Group'.add_global_unit (group,U,p,v),
+				   IMPORTU (U,I))
+			| SOME (_,v') => (group,CHECKU{U=v',I=I}))
+		val group = Group'.add_entry (group,v,p,UNIT c)
 		val ctx = Ctx.add_unit (ctx,U,p,v,true)
 	    in  {pos=pos, group=group, ctx=ctx}
 	    end

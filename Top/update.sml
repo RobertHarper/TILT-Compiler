@@ -48,21 +48,11 @@ struct
     val UptoAsm = Stats.ff "UptoAsm"
 
     type iface = Compiler.iface
+    type context = (string * Paths.iface) list
     type precontext = Compiler.precontext
     type imports = Compiler.imports
     type ue = UnitEnvironment.ue
     type equiv = Crc.crc * Crc.crc -> bool	(* interface CRC equivalence *)
-    type var = Name.var
-    type unit_help =
-	{parms : string -> var list,
-	 get_id : var -> string,
-	 get_unit_paths : var -> Paths.compunit option}
-    type iface_help =
-	{get_id : var -> string,
-	 fresh : ExtSyn.id -> ExtSyn.id,
-	 find : ExtSyn.id -> var,
-	 get_iface_paths : var -> Paths.iface option}
-    type importOnly = var -> bool
 
     (*
 	Some plans have a bit mask.
@@ -83,7 +73,7 @@ struct
       | PACKI of Paths.iface * ExtSyn.id list
       | PACKV of ExtSyn.id * ExtSyn.exp
 
-    type inputs = (precontext * imports * iface option) option
+    type inputs = (Compiler.precontext * imports * iface option) option
     (*
 	Invariants:
 
@@ -279,6 +269,30 @@ struct
 	    in  msg ("  Plan: " ^ plan ^ "\n")
 	    end
 
+    fun ifaceData (iface : Paths.iface) : Crc.crc * ue =
+	let val crc = FileCache.crc (Paths.ifaceFile iface)
+	    val ue = FileCache.read_ue (Paths.ifaceUeFile iface)
+	in  (crc,ue)
+	end
+
+    fun unitEntry (unit : Paths.compunit) : Prelink.entry =
+	let val name = Paths.unitName unit
+	    val iface = ifaceData (Paths.unitIface unit)
+	    val objue = FileCache.read_ue (Paths.ueFile unit)
+	in  Prelink.UNIT {name=name, iface=iface, objue=objue}
+	end
+
+    fun importEntry (name : string, iface : Paths.iface) : Prelink.entry =
+	let val iface = ifaceData iface
+	in  Prelink.IMPORT {name=name, iface=iface}
+	end
+
+    fun ifaceEntry (iface : Paths.iface) : Prelink.entry =
+	let val name = Paths.ifaceName iface
+	    val ue = FileCache.read_ue (Paths.ifaceUeFile iface)
+	in  Prelink.IFACE {name=name, ue=ue}
+	end
+
     datatype status =
 	OK
       | Bad of string
@@ -408,10 +422,15 @@ struct
 	if FileCache.exists infoFile then ()
 	else FileCache.write_info (infoFile, info)
 
-    fun plan_srci (equiv, precontext, imports, iface : Paths.iface) : plan =
+    fun make_precontext (eq : equiv, context : context) : precontext =
+	(Prelink.check (eq, map importEntry context);
+	 map (fn (name, iface) => (name, Paths.ifaceFile iface)) context)
+
+    fun plan_srci (equiv, context, imports, iface : Paths.iface) : plan =
 	let val what = Paths.ifaceName iface
 	    val _ = msg ("[checking interface " ^ what ^ "]\n")
 	    val infoFile = Paths.ifaceInfoFile iface
+	    val precontext = make_precontext (equiv, context)
 	    val info = srci_info (precontext, imports, iface)
 	    val uptodate = check (equiv, infoFile, info)
 	    val exists = FileCache.exists (Paths.ifaceFile iface)
@@ -422,7 +441,7 @@ struct
 	in  plan
 	end
 
-    fun plan_compile (equiv, precontext, imports, unit : Paths.compunit) : plan =
+    fun plan_compile (equiv, context, imports, unit : Paths.compunit) : plan =
 	let val what = Paths.unitName unit
 	    val _ = msg ("[checking unit " ^ what ^ "]\n")
 	    val infoFile = Paths.infoFile unit
@@ -431,6 +450,7 @@ struct
 	    val iface : iface option =
 		if Paths.isUnitIface iface then NONE
 		else SOME (Paths.ifaceFile iface)
+	    val precontext = make_precontext (equiv, context)
 	    val info = if Paths.isSrcUnit unit
 		       then srcu_info (precontext, imports, iface, unit)
 		       else Info.PRIMU
@@ -501,83 +521,19 @@ struct
 	in  plan
 	end
 
-    fun plan_checku (eq : equiv, precontext, U : Paths.compunit,
+    fun plan_checku (eq : equiv, context, U : Paths.compunit,
 		     I : Paths.iface) : plan =
 	let val what = Paths.unitName U
+	    val _ = msg ("[checking import " ^ what ^ "]\n")
 	    val Uiface = Paths.ifaceFile (Paths.unitIface U)
 	    val Iiface = Paths.ifaceFile I
 	    val Ucrc = FileCache.crc Uiface
 	    val Icrc = FileCache.crc Iiface
+	    val precontext = make_precontext (eq, context)
 	    val plan = if eq (Ucrc,Icrc) then EMPTY_PLAN
 		       else CHECK (precontext, U, I)
 	    val _ = showPlan (what, plan)
 	in  plan
-	end
-
-    structure VL =
-    struct
-	type 'a varlist = Name.VarSet.set * 'a list
-	val empty : 'a varlist = (Name.VarSet.empty, nil)
-	fun has (vl : 'a varlist, v : var)	: bool =
-	    Name.VarSet.member (#1 vl, v)
-	fun append (vl : 'a varlist, v : var, x : 'a) : 'a varlist =
-	    (Name.VarSet.add (#1 vl, v), x :: (#2 vl))
-	fun finish (vl : 'a varlist) : 'a list = rev (#2 vl)
-    end
-
-    fun showParms (get_id : var -> string) (v : var, parms : var list) : unit =
-	debugdo(fn () =>
-		let val parms = concat(Listops.join " " (map get_id parms))
-		in  print ("  " ^ get_id v ^ " -> " ^ parms ^ "\n")
-		end)
-
-    fun linkunits (unit_help : unit_help, what : string,
-		   roots : var list) : Paths.compunit list =
-	let val {parms, get_id, get_unit_paths} = unit_help
-	    val showParms = showParms get_id
-	    type unitlist = Paths.compunit VL.varlist
-	    fun add (v : var, ul : unitlist) : unitlist =
-		if VL.has (ul, v) then ul
-		else
-		    (case get_unit_paths v
-		       of NONE => ul
-			| SOME u =>
-			    let val ue = Paths.ueFile u
-				val parms = #parms unit_help ue
-				val _ = showParms (v,parms)
-				val ul = add' (parms, ul)
-			    in	VL.append (ul,v,u)
-			    end)
-	    and add' (vs : var list, ul : unitlist) : unitlist =
-		foldl add ul vs
-	    val units = VL.finish (add' (roots, VL.empty))
-	    val (imports,units) = List.partition Paths.isImportUnit units
-	in
-	    if null imports then units
-	    else
-		(msg ("  " ^ Int.toString(length imports) ^
-		      " unimplemented units; can not link\n");
-		 nil)
-	end
-
-    fun unitPackage' (name : string, iface : Paths.iface) : Prelink.package =
-	let val ueFile = Paths.ifaceUeFile iface
-	    val imports = FileCache.read_ue ueFile
-	    val ifaceFile = Paths.ifaceFile iface
-	    val crc = FileCache.crc ifaceFile
-	    val exports = Ue.insert (Ue.empty, name, crc)
-	in  {unit=name, imports=imports, exports=exports}
-	end
-
-    fun unitPackage (unit : Paths.compunit) : Prelink.package =
-	let val name = Paths.unitName unit
-	    val iface = Paths.unitIface unit
-	    val ueFile = Paths.ueFile unit
-	    val imports = FileCache.read_ue ueFile
-	    val ifaceFile = Paths.ifaceFile iface
-	    val crc = FileCache.crc ifaceFile
-	    val exports = Ue.insert (Ue.empty, name, crc)
-	in  {unit=name, imports=imports, exports=exports}
 	end
 
     (*
@@ -587,7 +543,7 @@ struct
 	would be especially nice to skip the link completely when the
 	executable is up to date.
     *)
-    fun plan_link (eq : equiv, unit_help : unit_help, roots : var list,
+    fun plan_link (eq : equiv, units : Paths.compunit list,
 		   exe : Paths.exe) : plan =
 	let val what = Paths.exeFile exe
 	    val _ = msg ("[checking " ^ what ^ "]\n")
@@ -595,9 +551,7 @@ struct
 	    val uptoAsm = !UptoAsm
 	    val keepAsm = !KeepAsm
 	    val compressAsm = !CompressAsm
-	    val units = if uptoElaborate then nil
-			else linkunits (unit_help, what, roots)
-	    val _ = Prelink.checkTarget eq (what, map unitPackage units)
+	    val _ = Prelink.check (eq, map unitEntry units)
 
 	    fun remove (p : Paths.exe -> string) : unit =
 		FileCache.remove (p exe)
@@ -629,97 +583,10 @@ struct
 		  uptoElaborate orelse
 		  keepAsm)]
 	    val plan =
-		if null units orelse W.equal(W.zero,flags) then EMPTY_PLAN
+		if W.equal(W.zero,flags) then EMPTY_PLAN
 		else LINK (exe,units,flags)
 	    val _ = showPlan (what, plan)
 	in  plan
-	end
-
-    fun packlist (unit_help : unit_help, iface_help : iface_help,
-		  importOnly : importOnly, what : string,
-		  roots : var list) : pack list =
-	let val {parms, get_unit_paths, ...} = unit_help
-	    val {get_id, fresh, find, get_iface_paths} = iface_help
-	    val showParms = showParms get_id
-	    type packlist = pack VL.varlist
-	    val force_import = !UptoElaborate orelse !UptoAsm
-	    fun iface (p : Paths.compunit, p' : Paths.iface) : Paths.iface =
-		let val id =
-			if Paths.isUnitIface p' then
-			    fresh (Paths.unitName p)
-			else Paths.ifaceName p'
-		in  Paths.compi {id=id, file=Paths.ifaceFile p',
-				 uefile=Paths.ifaceUeFile p'}
-		end
-	    fun compunit (p : Paths.compunit,
-			  p' : Paths.iface) : Paths.compunit =
-		Paths.compu {id=Paths.unitName p, file=Paths.objFile p,
-			     uefile=Paths.ueFile p, iface=p'}
-
-	    fun addI (v : var, p : Paths.iface, pl : packlist) : packlist =
-		let val ue = Paths.ifaceUeFile p
-		    val parms = parms ue
-		    val pl = add' (parms, pl)
-		    val pack = PACKI (p,	nil)
-		    val _ = showParms (v, parms)
-		in  VL.append (pl,v,pack)
-		end
-
-	    and addUI (p : Paths.compunit,
-		       pl : packlist) : Paths.iface * packlist =
-		let val p' = Paths.unitIface p
-		    val p' = iface (p, p')
-		    val v = find (Paths.ifaceName p')
-		    val pl = if VL.has (pl,v) then pl
-			     else addI (v, p', pl)
-		in  (p',pl)
-		end
-
-	    and addUImport (v : var, p : Paths.compunit,
-			    p' : Paths.iface, pl : packlist) : packlist =
-		let val p = Paths.importu {id=Paths.unitName p,
-					   iface=p'}
-		    val pack = PACKU (p,nil)
-		in  VL.append (pl, v, pack)
-		end
-
-	    and addUDef (v : var, p : Paths.compunit,
-			 p' : Paths.iface, pl : packlist) : packlist =
-		let val p = compunit (p,p')
-		    val ue = Paths.ueFile p
-		    val parms = parms ue
-		    val pl = add' (parms, pl)
-		    val pack = PACKU (p,nil)
-		    val _ = showParms (v, parms)
-		in  VL.append (pl, v, pack)
-		end
-
-	    and addU (v : var, p : Paths.compunit,
-		      pl : packlist) : packlist =
-		let val (p', pl) = addUI (p, pl)
-		    val import =
-			force_import orelse
-			Paths.isImportUnit p orelse
-			importOnly v
-		    val adder = if import then addUImport else addUDef
-		in  adder(v, p, p', pl)
-		end
-
-	    and add (v : var, pl : packlist) : packlist =
-		if VL.has (pl, v) then pl
-		else
-		    (case get_unit_paths v
-		       of SOME p => addU (v, p, pl)
-			| NONE =>
-			    (case get_iface_paths v
-			       of SOME p => addI (v, p, pl)
-				| NONE => error "pack saw strange var"))
-
-	    and add' (vs : var list, pl : packlist) : packlist =
-		foldl add pl vs
-
-	    val pl = add' (roots, VL.empty)
-	in  VL.finish pl
 	end
 
     (*
@@ -728,25 +595,22 @@ struct
 	changed since the last pack.  For example, supporting multiple
 	runs to pack different targets into the same directory.
     *)
-    fun plan_pack (eq : equiv, unit_help : unit_help, iface_help : iface_help,
-		   import : importOnly, roots : var list,
-		   lib : Paths.lib) : plan =
+    fun plan_pack (eq : equiv, packlist : pack list, lib : Paths.lib) : plan =
 	let val what = Paths.libDir lib
 	    val _ = msg ("[checking " ^ what ^ "]\n")
-	    val packs = packlist (unit_help, iface_help, import, what, roots)
-	    (* XXX: Check interfaces unit environments too. *)
-	    val packages =
+	    val entries =
 		(List.mapPartial
 		 (fn pack =>
 		  (case pack
-		     of PACKU (Paths.IMPORTU ui,_) => SOME (unitPackage' ui)
-		      | PACKU (u,_) => SOME (unitPackage u)
-		      | _ => NONE))
-		 packs)
-	    val _ = Prelink.checkTarget eq (what, packages)
+		     of PACKU (Paths.IMPORTU ui,_) => SOME (importEntry ui)
+		      | PACKU (u,_) => SOME (unitEntry u)
+		      | PACKI (i,_) => SOME (ifaceEntry i)
+		      | PACKV _ => NONE))
+		 packlist)
+	    val _ = Prelink.check (eq, entries)
 	    val plan =
-		if null packs then EMPTY_PLAN
-		else PACK (lib, packs)
+		if null packlist then EMPTY_PLAN
+		else PACK (lib, packlist)
 	    val _ = showPlan (what, plan)
 	in  plan
 	end
@@ -900,7 +764,7 @@ struct
     fun check (precontext, U : Paths.compunit,
 	       I : Paths.iface) : unit -> plan =
 	let val what = Paths.unitName U
-	    val _ = msg ("[checking unit " ^ what ^ "]\n")
+	    val _ = msg ("[checking interface of import " ^ what ^ "]\n")
 	    val Uiface = Paths.ifaceFile (Paths.unitIface U)
 	    val Iiface = Paths.ifaceFile I
 	    val _ =
