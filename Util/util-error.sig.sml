@@ -1,15 +1,7 @@
-(*Pulled out of Util so that Platform can use Error while Util uses Platform.*)
 signature UTIL_ERROR =
 sig
 
-    exception BUG of string
-
-    val showErrors : bool ref
-
-    val dontShow : ('a -> 'b) -> 'a -> 'b
-
-    (* takes error msg *)
-    val raise_error : string -> 'a
+    exception BUG of {file : string, msg : string}
 
     (* takes filename and then error msg *)
     val error : string -> string -> 'a

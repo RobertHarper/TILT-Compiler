@@ -112,7 +112,6 @@ struct
    fun system (command : string) : bool =
        OS.Process.system command <> OS.Process.failure
 
-    val raise_error = UtilError.raise_error
     val error = UtilError.error
 
     local

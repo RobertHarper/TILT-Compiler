@@ -17,9 +17,6 @@ sig
 
     exception UNIMP
 
-    (* takes error msg *)
-    val raise_error : string -> 'a
-
     (* takes filename and then error msg *)
     val error : string -> string -> 'a
 
