@@ -24,6 +24,7 @@ signature PPNIL =
     val pp_bnd     : Nil.bnd -> unit
     val pp_conbnd  : Nil.conbnd -> unit
     val pp_bnds    : Nil.bnd list -> unit
+    val pp_conbnds : Nil.conbnd list -> unit
     val pp_exp     : Nil.exp -> unit
     val pp_con     : Nil.con -> unit
     val pp_kind    : Nil.kind -> unit

@@ -1,1019 +1,1449 @@
-(*$import HOIST Nil NilUtil ListPair Stats Name *)
-(*** questions, should fixopen_b ever move? *)
-(* 
- var naming convections
- bvl/bvs : (bnd * var set) list
-*)
+(*$import HOIST Nil NilUtil ListPair Stats Name Util *)
+
+(* Known problems:
+      Loses phase annotations on term-level constructor bindings.
+      So reifier must be re-run afterwards.
+ *)
+
 structure Hoist :> HOIST = 
 
 struct
-  open Nil Name
+    open Nil Name
+	
+    fun error s = Util.error "hoist.sml" s
 
-  exception HoistError
+    (************************************************************************
+     Flags:
+      debug                : Print debugging information during hoisting
+     ************************************************************************)
 
-  val debug = Stats.ff("HoistDebug")
-  val hoist_through_switch = Stats.ff("HoistThroughSwitch")
-  fun diag s = if !debug then print s else ()
+    val debug = Stats.ff("HoistDebug")
 
-  (* set helper funs *)
-  structure Set = Name.VarSet
-  local open Set 
-  in
-    type hoist = bnd * set
-    type set = set
-    val empty = empty
-    val add = add
-    val set2list = listItems
-    fun list2set x = addList(empty,x)
-    val union = union
-    val subset = isSubset
-    val oneset = singleton
-    fun disjoint(s1,s2) = 
-	let
-	    val (s1',s2') = if (numItems s1) < (numItems s2) then (s1, s2)
-                           else (s2, s1)
-	in
-	    not (exists (fn v => member(s1',v)) s2')
-	end
-    val unionList = List.foldl Set.union Set.empty 
-  end
-  (* end set help funs *)
+    (************************************************************************
+     Tracing effects:
+     It seems too expensive --- and unnecessary --- to maintain a full
+     typing context during the hoisting transformation.  However, it
+     is important to know which term applications are total (e.g., 
+     polymorphic instantiations) and can be hoisted.  Therefore,
+     we maintain a mapping from term variables to "abstract" types.
+     The abstraction preserves only the outermost arrow (total or
+     partial) and record structure, in positive positions.     
+     ************************************************************************)
 
-  datatype bndtype = STAY of bnd * set | UP of var | TOP of var
-  datatype conbndtype = CSTAY of conbnd * set | CUP of var | CTOP of var
+    datatype hoist_effs =
+	ARROW_EFF of effect * hoist_effs 
+      | REC_EFF of (label * hoist_effs) list
+      | UNKNOWN_EFF
+	
+    type econtext = hoist_effs VarMap.map
+	
+    val empty_econtext  = VarMap.empty : econtext
+	
+    fun lookupvar(vmap, v) = 
+	(case VarMap.find(vmap, v) of
+	     NONE => (print "missing variable ";
+		      Ppnil.pp_var v; print "\n";
+		      error "lookupvar: variable not found")
+	   | SOME level => level)
+	     
+    (* ereclookup (effs, l)
+         Returns the hoist_effs value associated with
+	 label l in the given REC_EFF,
+         and UNKNOWN_EFF if given UNKNOWN_EFF.
+	 Because the abstraction on types is sound (though
+	 not complete), we should never get ARROW_EFF here.
+     *)
+    fun ereclookup (effs, l) =
+	(case effs of
+	     REC_EFF lst => 
+		 (case (Listops.assoc_eq (Name.eq_label,l,lst)) of
+		      SOME effs => effs
+		    | NONE => UNKNOWN_EFF)
+		      
+	   | UNKNOWN_EFF => UNKNOWN_EFF
+	   | _ => error "ereclookup got ARROW_EFF")
+	     
+    (* con2eff (con)
+         Does a best-effort abstraction of con into the
+	 hoist_effs datatype.  Because we don't have a context,
+	 this is sound but not complete.
 
+         XXX  After hoisting, best-effort may not be enough, since what
+              used to be a let_c is now simply a variable, with the 
+              information-containing bindings not visible, having been
+              hoisted to an outer level.
 
-  datatype hoist_effs =
-      ARROW_EFFS of Nil.effect * hoist_effs
-    | REC_EFFS of (Nil.label * hoist_effs) list
-    | UNKNOWN_EFFS
+              If this turns out to be a problem, the environment could
+              maintain bindings for type variables as well.
+     *)
+    local
+	fun cbndsToSubst ([], accum) = accum
+          | cbndsToSubst ((Con_cb args)::rest, accum) = 
+	       cbndsToSubst (rest, args :: accum)
+          | cbndsToSubst (_::rest, accum) = 
+	       cbndsToSubst (rest, accum)
 
-  structure Map = Name.VarMap
-  type effect_context = hoist_effs Map.map
-  val empty_fnmap = Map.empty : effect_context
-  val unknown_effs = UNKNOWN_EFFS
-  fun elookup (econtext:effect_context,v) =
-      (case Map.find(econtext,v) of
-	   NONE => unknown_effs
-	 | SOME effs => effs)
-  fun ereclookup (effs, l) =
-      (case effs of
-	   REC_EFFS lst => 
-	       (case (Listops.assoc_eq (Name.eq_label,l,lst)) of
-		    SOME effs => effs
-		  | NONE => UNKNOWN_EFFS)
-	 | _ => UNKNOWN_EFFS)
-
-  fun con2eff (AllArrow_c{effect,body_type,...}) = 
-        ARROW_EFFS (effect, con2eff body_type)
-    | con2eff (Prim_c(Record_c (lbls,_), types)) =
-        REC_EFFS (ListPair.zip (lbls, map con2eff types))
-    | con2eff _ = UNKNOWN_EFFS
-
-  type bvlt = bnd * var list
-
-  (* returns set of free vars *)
-  fun freeExpVars e = 
-      let 
-	  val (free_term_vars, free_type_vars) = 
-	      NilUtil.freeExpConVarInExp (true,e)
-      in 
-	  list2set (free_term_vars @ free_type_vars)
-      end
-
-  (* returns set of free type vars *)
-  fun freeConVars c = 
-      list2set (NilUtil.freeVarInCon c)
-
-  (* stop junk *)
-
-  fun filter_bnds (bvl, stop_vars) =
-      let
-	  fun loop([],stop_vars,up,stay,freev) = (rev up, rev stay, freev)
-	    | loop((bv as (eb,freevars))::rest, stop_vars, up, stay, freev) =
-	      if (disjoint(freevars,stop_vars)) then
-		  loop(rest, stop_vars, bv :: up, stay, freev)
-	      else
-		  loop(rest, Set.addList(stop_vars,NilUtil.varsBoundByBnds [eb]),
-		       up, eb :: stay, Set.union(freev, freevars))
-      in
-	  loop(bvl, stop_vars, nil, nil, Set.empty)
-      end
-
-
-  fun filter_cbnds (hoists, stop_vars) =
-      let
-	  fun loop([], _, up, stay, freev) = (rev up, rev stay, freev)
-	    | loop((bv as (cb,freevars))::rest, stop_vars, up, stay, freev) =
-	      if (disjoint(freevars,stop_vars)) then
-		  loop(rest, stop_vars, bv :: up, stay, freev)
-	      else
-		  loop(rest, Set.add(stop_vars,NilUtil.varBoundByCbnd cb),
-		       up, cb :: stay, Set.union(freev, freevars))
-      in
-	  loop(hoists, stop_vars, nil, nil, Set.empty)
-      end
-
-
-
-  fun filter_ebnds hoists =
-      let
-	  fun loop([],stop_vars,up,stay, freev) = (rev up, rev stay, freev)
-            | loop((bv as (eb as Con_b(_,cb),freevars))::rest, 
-		   stop_vars, up, stay, freev) =
-	         if (disjoint(freevars,stop_vars)) then
-		     loop(rest, stop_vars, bv :: up, stay, freev)
-		 else
-		     loop(rest, Set.add(stop_vars,NilUtil.varBoundByCbnd cb),
-			  up, eb :: stay, Set.union(freev, freevars))
- 	    | loop((bv as (eb,freevars))::rest, stop_vars, up, stay, freev) =
-		  loop(rest, Set.addList(stop_vars,NilUtil.varsBoundByBnds [eb]),
-		       up, eb :: stay, Set.union(freev, freevars))
-      in
-	  loop(hoists, Set.empty, [], [], Set.empty)
-      end
-
-  (* rconbnd : conbndtype * conbnd list * (conbnd * set) list 
-        returns: 1) whether or not the binding is being hoisted
-                    (and if not, a rewritten variant of the binding)
-                 2) 
-   *)
-
-  fun rconbnd (Con_cb(v,con), top_set, hoist_set) =
-      let
-	  val (con', top_cbnds, choists, freev) = 
-	      rcon (con, top_set, hoist_set)
-      in
-	  if (subset(freev, top_set)) then
-	      (CTOP v, top_cbnds @ [Con_cb(v,con')], choists)
-	  else if (subset(freev, hoist_set)) then
-	      (CUP v, top_cbnds, choists @ [(Con_cb(v,con'),freev)])
-	  else
-	      (CSTAY (Con_cb (v,con'), freev), top_cbnds, choists)
-    end
-
-    | rconbnd (Open_cb(v,vklist,con_body), top_set, hoist_set) = 
-        (* We don't hoist functions *)
-        (*** Morgan: if this is changed (ie to hoist open_cbs) then 
-             code_cb wont work *)
-	let
-	  val (con_body', top_cbnds, choists, freev) = 
-	      rcon (con_body,top_set,hoist_set)
-	  val (vars, kinds) = Listops.unzip vklist
-	  val freev = 
-	      unionList (freev :: map (list2set o NilUtil.freeVarInKind) kinds)
-	  val freev = Set.difference(freev, list2set vars)
-	in
-	  (CSTAY(Open_cb(v,vklist,con_body'),freev), top_cbnds, choists)
-	end
-
-    | rconbnd ((Code_cb stuff), top_set, hoist_set) = 
-	let
-	  val (CSTAY(Open_cb stuff', freev), top_cbnds, choists) = 
-	      rconbnd (Open_cb stuff, top_set, hoist_set)
-	in
-	  (CSTAY(Code_cb stuff', freev), top_cbnds, choists)
-	end
-
-  and rconbnd' arg = 
-      let val (ans, top_cbnds, choists) = rconbnd arg
-      in
-	  (ans, 
-	   map (fn cb => Con_b(Runtime,cb)) top_cbnds,
-	   map (fn (cb,s) => (Con_b(Runtime,cb), s)) choists)
-      end
-
-  and rconbnds (conbnds, top_set, hoist_set) = 
-    let
-      fun loop ([],top_set,hoist_set,top,up,stay,freev) = 
-	   (top_set, hoist_set,
-	    List.concat(rev top), List.concat(rev up), rev stay, freev)
-	| loop (cb::rest,top_set,hoist_set,top,up,stay,freev) = 
-	   (case rconbnd (cb,top_set,hoist_set) of 
-		(CSTAY (cb',freev'),top_cbnds, choists) => 
-                    loop (rest, top_set, hoist_set,
-			  top_cbnds :: top, choists :: up, cb'::stay,
-			  Set.union(freev,freev'))
-	      | (CUP v, top_cbnds, choists) => 
-		    let
-			val hoist_set' = Set.add(hoist_set, v)
-		    in
-			loop(rest, top_set, hoist_set',
-			     top_cbnds :: top, choists :: up, stay,
-			     freev)
-		    end
-	      | (CTOP v, top_cbnds, choists) => 
-		    let
-			val hoist_set' = Set.add(hoist_set, v)
-			val top_set' = Set.add(top_set, v)
-		    in
-			loop(rest, top_set', hoist_set',
-			     top_cbnds :: top, choists :: up, stay,
-			     freev)
-		    end)
-      val (top_set, hoist_set, top, up, stay, freev) = 
-	  loop (conbnds, top_set, hoist_set, [], [], [], Set.empty)
-	  
-      val boundv = list2set (map NilUtil.varBoundByCbnd stay)
-      val freev = Set.difference(freev, boundv)
+	fun con2eff' subst (AllArrow_c{effect,body_type,...}) =
+	      ARROW_EFF (effect, con2eff' subst body_type)
+	  | con2eff' subst (Prim_c(Record_c (lbls,_), types)) =
+	      REC_EFF (ListPair.zip (lbls, map (con2eff' subst) types))
+	  | con2eff' subst (Var_c v) =
+	      (case (Listops.assoc_eq(Name.eq_var, v, subst)) of
+		   NONE => UNKNOWN_EFF
+		 | SOME c => con2eff' subst c)
+	  | con2eff' subst (Let_c(Sequential, cbnds, c)) = 
+	      con2eff' (cbndsToSubst(cbnds,subst)) c
+	  | con2eff' _ _ = UNKNOWN_EFF
     in
-      (top_set, hoist_set, top, up, stay, freev)
+	val con2eff = con2eff' []
     end
 
-  and rcon (Prim_c (primcon,conlist), top_set, hoist_set) =
-      let
-	  val (conlist', top_cbnds, choists, freev) = 
-	      rcons (conlist, top_set, hoist_set)
-      in
-	  (Prim_c(primcon,conlist'), top_cbnds, choists, freev)
-      end
+    (************************************************************************
+     Levels:
+     Each variable-binding site has a nesting depth, which is called
+     its level.  The top-level is level 0, and the level increases
+     with increasing level depth.
 
-    | rcon (Mu_c (isRecursive,vcseq), top_set, hoist_set) = 
+     Roughly speaking, the hoisting algorithm proceeds as follows:
+     Each variable will be associated with a level (where the binding
+     of that variable will be hoisted to).  For each bnd, we look at
+     the right-hand side, and look at the levels of each of its free
+     variables.  Since this bnd cannot be hoisted above the bindings
+     of any of its free variables, we look at the maximum of the
+     free-variable levels.  This is the level to which we will hoist
+     the bnd.  (Non-valuable bnds, variables bound as function
+     arguments, etc. obviously cannot be hoisted, and so are assigned
+     the level of their binding site.)
+
+     Unfortunately, this is overly simplistic and we must make two
+     refinements.  First, for each list of bindings we remember *all*
+     the levels of the free variables on the right-hand sides.  This
+     makes it more efficient to determine the levels of the free
+     variables of let-expressions (including those generated by the
+     hoisting process itself).
+
+     Secondly, we have to decide what to do about switches.  In
+     general hoisting code out of switches will slow down the program,
+     because we're now doing parts of multiple arms before picking the
+     "correct" arm rather than just doing the work of the correct arm.
+     (This is also potientially a problem with hoisting code out of
+     functions.  However, since most functions get at least once and
+     often multiple times, on average it is a win to hoist
+     computations out of functions.)
+
+     The simplest heuristic would be to never hoist code out of the
+     arms of a switch, but this seems too restricted.  The
+     second-simplest heuristic is to hoist only closed bindings out of
+     switches (to the top level).  Since we're only hoisting valuable
+     bindings (and the compiler isn't very smart) the cost of
+     evaluating a valuable binding once at top level is pretty small,
+     so this heuristic is very likely to be safe.  Unfortunately, it's
+     pretty restrictive.
+
+     Therefore we will implement the following heuristic: hoist any
+     valuable binding out of a switch if it can also be hoisted
+     outside the enclosing function.  If not, hoist it just to the
+     beginning of the arm.
+
+     Note that if we run hoist before uncurrying, this is guaranteed
+     to lift all type computations in a polymorphic function outside
+     of the term lambda, though they may be blocked by the enclosing
+     type lambda.  For SML, this effectively lets us do all the
+     required type computations "first" and then just refer to
+     closures later [see optimal type lifting, etc.].
+     ************************************************************************)
+
+    type level     = int
+    type levels    = int list  (* invariant: sorted in decreasing order *)
+    val  toplevel = 0
+    val  emptyLevels = []
+
+    (************************************************************************
+     The information maintained by the hoisting algorithm is divided into 
+     an environment and a state.  The distinction is whether the information
+     is threaded through the translation (state) or maintained in a 
+     stack-like fashion (environment).
+
+     The environment includes:
+           currentlevel  = The level number of the immediately enclosing
+                           binding site;
+
+           econtext      = A mapping from term-level variables to
+                           the hoist_effs abstraction of its type;
+
+           levelmap      = A mapping from term- and type-level variables to
+                           the level number of the binding site to which
+                           their binding will be (initially) hoisted.
+
+	   lastfnlevel   = level number of the binding site of the 
+                           enclosing function.  
+
+     The state includes:
+           hoistmap      = Mapping from binding site numbers to 
+                           term-level bindings that we want to hoist to here.
+                           NB: Bindings are kept in reversed order!
+                           Each level also contains a sorted list of
+                           level numbers corresponding to the
+                           free variables in these bindings.
+
+           choistmap     = Mapping from binding site numbers to 
+                           type-level bindings that we want to hoist to here.
+                           NB: Bindings are kept in reversed order!
+                           Each level also contains a sorted list of
+                           level numbers corresponding to the
+                           free variables in these bindings.
+     ************************************************************************)
+
+    local
+	structure IntKey : ORD_KEY = struct
+					 type ord_key = int
+					 val compare = Int.compare
+				     end
+	structure IntMap = SplayMapFn(IntKey) 
+
+	fun lookup (imap, i, default) = 
+	    (case IntMap.find(imap, i) of
+		 NONE => default
+	       | SOME answer => answer)
+
+        fun pp_levelmap levelmap =
+	    let 
+		fun printer (v, l) = (print "[";
+				      Ppnil.pp_var v;
+				      print "=>";
+				      print (Int.toString l);
+				      print "] ")
+	    in
+		VarMap.appi printer levelmap;
+		print "\n"
+	    end
+
+
+        fun pp_hoistmap (hoistmap: (bnd list * levels) IntMap.map) =
+	    let
+		val (top_bnds,_) = lookup (hoistmap, 0, ([],[]))
+	    in
+		print "top bnds: ";
+                print (Int.toString (List.length top_bnds));
+		print "\n";
+		Ppnil.pp_bnds top_bnds;
+		print "\n"
+	    end
+
+        fun pp_choistmap (choistmap: (conbnd list * levels) IntMap.map) =
+	    let
+		val (top_cbnds,_) = lookup (choistmap, 0, ([],[]))
+	    in
+		print "top cbnds: ";
+                print (Int.toString (List.length top_cbnds));
+		print "\n";
+		Ppnil.pp_conbnds top_cbnds;
+		print "\n"
+	    end
+
+
+    in
+	type hoistmap = (bnd list * levels) IntMap.map
+        type choistmap = (conbnd list * levels) IntMap.map
+	datatype env = ENV of {currentlevel : level, 
+			       econtext : econtext,
+			       levelmap : level VarMap.map,
+			       lastfnlevel : level}
+	datatype state = STATE of {hoistmap : hoistmap, 
+				   choistmap : choistmap}
+
+	val empty_env = ENV{currentlevel = toplevel,
+			    econtext = empty_econtext,
+			    levelmap = VarMap.empty,
+			    lastfnlevel = toplevel}
+
+	val empty_state = STATE{hoistmap = IntMap.empty,
+				choistmap = IntMap.empty}
+
+	fun pp_env (ENV{levelmap,...}) = pp_levelmap levelmap
+
+        fun pp_state (STATE{hoistmap,choistmap}) =
+	    (pp_hoistmap hoistmap;
+	     pp_choistmap choistmap)
+
+	(* mergeLevels : levels * levels -> levels
+	     Merges two sorted (in decreasing order) lists of integers
+	 *)
+	fun mergeLevels' ([] : levels, levels' : levels) : levels = levels'
+          | mergeLevels' (levels, []) = levels
+          | mergeLevels' (levels as level::rest, levels' as level'::rest') =
+	    if (level > level') then
+		level :: (mergeLevels' (rest, levels'))
+	    else if (level = level') then
+		level :: (mergeLevels' (rest, rest'))
+	    else
+		level' :: (mergeLevels' (levels, rest'))
+
+        and mergeLevels (levels1, levels2) =
+	    let
+(*		val _ = (print "merging ";
+			 app (print o Int.toString) levels1;
+			 print " with ";
+			 app (print o Int.toString) levels2)
+*)
+		val ans = mergeLevels' (levels1, levels2)
+(*
+		val _= (print " to get ";
+			app (print o Int.toString) ans;
+			print "\n")
+*)
+	    in
+		ans
+	    end
+
+        (* mergeStates : state * state -> state *)
+        fun mergeStates (STATE{hoistmap = hoistmap1,
+	                       choistmap = choistmap1},
+                         STATE{hoistmap = hoistmap2,
+	                       choistmap = choistmap2}) =
+	    let
+		fun folder (level, (bnds,levels), accum_map) =
+		    let val (newbnds, newlevels) = 
+                          (case IntMap.find (accum_map, level)
+			       of NONE => (bnds,levels)
+                                | SOME (bnds',levels') => (bnds @ bnds',
+							  mergeLevels
+							  (levels,levels')))
+		    in
+			IntMap.insert(accum_map, level, (newbnds, newlevels))
+		    end
+
+		val hoistmap =
+		    IntMap.foldli folder hoistmap1 hoistmap2
+		val choistmap =
+		    IntMap.foldli folder choistmap1 choistmap2
+	    in
+		STATE{hoistmap = hoistmap, choistmap = choistmap}
+	    end
+
+        (* currentLevel : env -> level *)
+	fun currentLevel (ENV{currentlevel,...}) = currentlevel
+
+        (* lookupLevel : var -> level 
+              Tells what level the binding of this variable is
+              being hoisted to *)
+	fun lookupLevel (ENV{levelmap,...}, v) = lookupvar(levelmap, v)
+
+        (* lookupEff : env * var -> hoist_effs *)
+	fun lookupEff (ENV{econtext,...}, v) = 
+                (lookupvar(econtext, v))
+                handle e => (print "exception detected in lookupEff\n";
+			     raise e)
+
+        (* bindEff : env * var * hoist_effs -> env *)
+	fun bindEff (ENV{econtext,currentlevel,levelmap,lastfnlevel}, 
+		      v, effs) = 
+	    let
+		val econtext' = VarMap.insert(econtext, v, effs)
+	    in
+		ENV{econtext = econtext',
+		    currentlevel = currentlevel, 
+		    levelmap = levelmap,
+		    lastfnlevel = lastfnlevel}
+	    end
+
+        fun bindsEff (env, [], []) = env
+          | bindsEff (env, v::vs, eff::effs) =
+	    bindsEff (bindEff(env, v, eff), vs, effs)
+          | bindsEff _ = error "bindsEff: length mismatch"
+
+        (* clearLevel : level * state -> state *)
+	fun clearLevel (levnum, STATE{hoistmap,choistmap}) = 
+	    let
+		val hoistmap' = 
+		    IntMap.insert(hoistmap, levnum, ([], emptyLevels))
+		val choistmap' = 
+		    IntMap.insert(choistmap, levnum, ([], emptyLevels))
+	    in
+		STATE{hoistmap = hoistmap', choistmap = choistmap'}
+	    end
+		
+        (* bumpCurrentlevel : env * state -> env * state * level
+              increments the current level counter, clears this level
+              in the state, returns updated env and state and returns
+              the new current level 
+         *)
+	fun bumpCurrentlevel (ENV{currentlevel,econtext,levelmap,lastfnlevel},
+			      state) =
+	    let 
+		val newlevel = currentlevel + 1
+		val env' = ENV{currentlevel = newlevel,
+			       econtext = econtext,
+			       levelmap = levelmap,
+			       lastfnlevel = lastfnlevel}
+		val state' = clearLevel (newlevel, state)
+	    in
+		(env', state', newlevel)
+	    end
+
+	fun enterFunction (ENV{currentlevel, econtext, levelmap, lastfnlevel})=
+	    ENV{currentlevel = currentlevel,
+		econtext = econtext,
+		levelmap = levelmap,
+		lastfnlevel = currentlevel}
+		
+		    
+	fun lastFnLevel (ENV{lastfnlevel,...}) = lastfnlevel
+
+        fun deepestLevel [] = toplevel 
+          | deepestLevel (level::_) = level
+
+        fun splitLevels [] = (toplevel, [])
+          | splitLevels (level::rest) = (level, rest)
+
+        (* bindLevel : env * var * level -> env
+              Record that the binding of the var will be at the
+              given level (for now)
+         *)
+	fun bindLevel(ENV{currentlevel, econtext, levelmap, lastfnlevel}, 
+		       v, level) = 
+	    ENV{currentlevel = currentlevel,
+		econtext = econtext,
+		levelmap = VarMap.insert(levelmap, v, level),
+		lastfnlevel = lastfnlevel}
+
+	fun bindsLevel(env, [], level) = env
+          | bindsLevel(env, v::vs, level) = 
+	    bindsLevel(bindLevel(env, v, level), vs, level)
+
+	fun hoistCbnd(STATE{hoistmap,choistmap}, cbndlevels, cbnd) =
+	    let
+		val (hoistlevel, levels) = splitLevels cbndlevels
+(*
+		val _ = (print "Hoisting cbnd ";
+			 Ppnil.pp_conbnd cbnd;
+			 print "\nto level ";
+			 print (Int.toString hoistlevel);
+			 print "\n")
+*)
+		val (rev_cbnds, levels') = 
+                    lookup (choistmap, hoistlevel, ([],[]))
+		val levels'' = mergeLevels (levels, levels') 
+		val choistmap' =
+		    IntMap.insert(choistmap, hoistlevel, 
+				  (cbnd :: rev_cbnds, levels''))
+	    in
+		STATE{hoistmap = hoistmap,
+		      choistmap = choistmap'}
+	    end
+
+	fun hoistBnd(STATE{hoistmap,choistmap}, bndlevels, bnd) =
+	    let
+		val (hoistlevel, levels) = splitLevels bndlevels
+(*
+		val _ = (print "Hoisting ";
+			 Ppnil.pp_bnd bnd;
+			 print "\nto level ";
+			 print (Int.toString hoistlevel);
+			 print "\n")
+*)
+		val (rev_bnds, levels') = 
+                    lookup (hoistmap, hoistlevel, ([],[]))
+		val levels'' = mergeLevels (levels, levels') 
+		val hoistmap' =
+		    IntMap.insert(hoistmap, hoistlevel, 
+				  (bnd :: rev_bnds, levels''))
+	    in
+		STATE{hoistmap = hoistmap',
+		      choistmap = choistmap}
+	    end
+
+        fun extractCbnds (STATE{choistmap,hoistmap}, levnum) = 
+	    let
+		val (cbnds, levels) = 
+		    (case IntMap.find(choistmap, levnum) of
+			 NONE => ([], emptyLevels)
+		       | SOME (rev_choists, levels) => 
+			     (rev rev_choists, levels))
+
+                (* Sanity check: We're expecting a bunch of cbnds.  If
+                   we find we have hoisted term bindings to this site
+                   something went wrong --- especially since we don't
+                   hoist anything out of typeof's. *)
+		val _ =
+		    (case IntMap.find(hoistmap, levnum) of
+				NONE => ()
+			      | SOME ([],_) => ()
+			      | SOME (bnds,_) => 
+				    (print "ERROR:  found term bindings:\n";
+				     Ppnil.pp_bnds bnds;
+				     print "\nat level ";
+				     print (Int.toString levnum);
+				     print "\nwith cbnds:\n";
+				     Ppnil.pp_conbnds cbnds;
+				     print "\n";
+				     error "extractCbnds:found term bindings"))
+
+		val choistmap' = 
+		    IntMap.insert(choistmap, levnum, ([], emptyLevels))
+		val state' = STATE{hoistmap = hoistmap,
+				   choistmap = choistmap'}
+	    in
+		(cbnds, levels, state')
+	    end
+
+        fun extractBnds (STATE{hoistmap,choistmap}, level) = 
+	    let
+		val (cbnds, clevels) = 
+		    (case IntMap.find(choistmap, level) of
+			 NONE => ([], emptyLevels)
+		       | SOME (rev_choists, clevels) => 
+			     (rev rev_choists, clevels))
+		val (bnds, levels) = 
+		    (case IntMap.find(hoistmap, level) of
+			 NONE => ([], emptyLevels)
+		       | SOME (rev_hoists, levels) => 
+			     (rev rev_hoists, levels))
+		val choistmap' = 
+		    IntMap.insert(choistmap, level, ([], emptyLevels))
+		val hoistmap' = 
+		    IntMap.insert(hoistmap, level, ([], emptyLevels))
+		val state' = STATE{hoistmap = hoistmap',
+				   choistmap = choistmap'}
+		val bnds' = (map (fn cb => Con_b(Runtime, cb)) cbnds) @ bnds
+		val levels' = mergeLevels (clevels, levels)
+	    in
+		(bnds', levels', state')
+	    end
+
+	(* limitLevels: level * levels -> levels
+	     Delete all level numbers in the list >= given level 
+             Assumes levels is sorted in decreasing order.
+         *)
+	fun limitLevels (levnum, []) = []
+          | limitLevels (levnum, levels as lev::levs) = 
+	    if (levnum <= lev) then
+		limitLevels (levnum, levs)
+	    else
+		levels
+
+	fun limitCon (limitlevel, con, env, state, levels) =
+	    let
+		val currentlevel = currentLevel env
+		fun loop (levnum, cbnds, levels, state) =
+		    if (levnum > currentlevel) then
+			(cbnds, levels, state)
+		    else
+			let     
+			    val (cbnds', levels', state') = 
+				extractCbnds(state, levnum)
+			    val levels'' = mergeLevels (levels, levels')
+			in
+			    loop(levnum + 1, cbnds @ cbnds', levels'', state')
+			end
+		    
+		val (cbnds, levels', state') = 
+		    loop (limitlevel, [], levels, state)
+		val levels'' = limitLevels (limitlevel, levels')
+		val con' = NilUtil.makeLetC cbnds con
+	    in
+		(con', state', levels'')
+	    end
+
+	fun limitExp (limitlevel : level, exp : exp, env : env, 
+		      state : state, levels : level list) =
+	    let
+
+		val currentlevel = currentLevel env
+(*
+		val _ = (print "limitExp:  levels were ";
+			 app (print o Int.toString) levels;
+			 print "\ncurrentlevel = ";
+			 print (Int.toString currentlevel);
+			 print "\nlimitlevel = ";
+			 print (Int.toString limitlevel);
+			 print "\n")
+*)
+		fun loop (levnum, bnds, levels, state) =
+		    if (levnum > currentlevel) then
+			(bnds, levels, state)
+		    else
+			let     
+			    val (bnds', levels', state') = 
+				extractBnds(state, levnum)
+			    val levels'' = mergeLevels (levels, levels')
+			in
+			    loop(levnum + 1, bnds @ bnds', levels'', state')
+			end
+		    
+		val (bnds, levels', state) = 
+		    loop (limitlevel, [], levels, state)
+
+		val levels'' = limitLevels (limitlevel, levels')
+(*
+		val _ = (print "limitExp:  levels' = ";
+			 app (print o Int.toString) levels'; 
+			 print "\nlimitExp:  levels'' = ";
+			 app (print o Int.toString) levels'';
+			 print "\n")
+*)
+		val exp' = NilUtil.makeLetE Sequential bnds exp
+	    in
+		(exp', state, levels'')
+	    end
+
+    end (* local *)
+
+    (************************************************************************
+     
+
+     val rcon  : con      * env * state -> con      * state * levels
+     val rcons : con list * env * state -> con list * state * levels
+
+     val rcbnd : conbnd      * env * state -> env * state 
+     val rcbnds: conbnd list * env * state -> env * state 
+
+     val rexp  : exp      * env * state -> 
+                   exp      * state * levels * hoist_effs * bool
+     val rexps : exp list * env * state -> 
+                   exp list * state * levels * hoist_effs list * bool
+
+     ************************************************************************)
+
+  fun rcon (args as (con,_,_)) =
       let
-	  val vclist = Sequence.toList vcseq
-	  fun mapper (v,c) = 
+	  val _ = if (! debug) then
+	              (print "rcon: "; Ppnil.pp_con con; print "\n")
+		  else
+		      ()
+      in
+	  rcon' args
+      end
+	  
+
+  and rcon' (Prim_c (primop as Record_c (labels,SOME vars),cons), env, state) =
+      let
+	  val (env, state, varlevel) = bumpCurrentlevel (env, state)
+
+	  fun loop ([], [], rev_accum, env, state, levels) =
+	      (rev rev_accum, state, levels)
+            | loop (v::vs, c::cs, rev_accum, env, state, levels) = 
 	      let
-		  val (c', top_cbnds, hoists, freev) = 
-		      rcon(c, top_set, hoist_set)
+		  val (c, state, new_levels) = 
+		      rcon_limited varlevel (c, env, state)
+		  val env = bindLevel(env, v, varlevel)
+		  val env = bindEff(env, v, con2eff c)
+		  val levels = mergeLevels(levels, new_levels)
 	      in
-		  ((v,c'), top_cbnds, hoists, freev)
+		  loop(vs, cs, c::rev_accum, env, state, levels)
 	      end
-	  val (vclist'',top_cbnds_list, hoists_list, freev_list) = 
-	      Listops.unzip4 (map mapper vclist)
-	  val top_cbnds = List.concat top_cbnds_list
-	  val hoists = List.concat hoists_list
-	  val freev = 
-	      Set.difference(unionList freev_list,
-			     list2set (map #1 vclist))
+            | loop _ = error "rcon': var/type mismatch in dependent Record_c"
+
+	  val (cons, state, levels) = 
+	      loop (vars, cons, [], env, state, emptyLevels)
       in
-	  (Mu_c (isRecursive,Sequence.fromList vclist''),
-	   top_cbnds, hoists, freev)
+	  (Prim_c(primop, cons), state, levels)
       end
 
-    | rcon (con as AllArrow_c {openness, effect, isDependent, tFormals,
-			       eFormals, fFormals, body_type}, 
-	    top_set, hoist_set) =
+	  
+    | rcon' (Prim_c (primcon,cons), env, state) =
       let
-	  val (eNames,eTypes) = ListPair.unzip eFormals
-	  val (eTypes', top_cbnds, choists, freev) = 
-	      rcons(eTypes, top_set, hoist_set)
-	  val eFormals' = ListPair.zip (eNames,eTypes')
+	  val (cons, state, levels) = rcons (cons, env, state)
+      in
+	  (Prim_c(primcon, cons), state, levels)
+      end
 
-	  val (body_type', top_cbnds', choists', freev') = 
-	      rcon (body_type, top_set, hoist_set)
-	  val (tvars, kinds) = Listops.unzip tFormals
-	  val kinds_freev = 
-	      unionList (map (list2set o NilUtil.freeVarInKind) kinds)
-	  val freev = 
-	      Set.difference
-	      (Set.difference
-	       (unionList[kinds_freev, freev, freev'],
-		list2set tvars),
-	       list2set (List.mapPartial (fn vopt => vopt) eNames))
+    | rcon' (Mu_c (isRecursive, vcseq), env, state) = 
+      let
+	  val (vars, cons) = Listops.unzip (Sequence.toList vcseq)
+
+	  val (env, state, mulevel) = bumpCurrentlevel (env, state)
+	  val env = bindsLevel (env, vars, mulevel)
+
+	  val (cons, state, levels) = rcons_limited mulevel (cons, env, state)
+
+	  val vcseq = Sequence.fromList (Listops.zip vars cons)
+      in
+	  (Mu_c (isRecursive, vcseq), state, levels)
+      end
+
+    | rcon' (con as AllArrow_c {openness, effect, isDependent, tFormals,
+			       eFormals, fFormals, body_type}, 
+	    env, state) =
+      let
+	  val (env, state, arglevel) = bumpCurrentlevel (env, state)
+  
+          val (tFormals, env, state, levels1) = 
+	        rtFormals(tFormals, env, state, arglevel)
+          val (eFormals, env, state, levels2) = 
+	        reFormals_arrow(eFormals, env, state, arglevel)
+
+          val (body_type, state, levels3) = 
+                rcon_limited arglevel (body_type, env, state)
+
+	  val levels = mergeLevels(mergeLevels(levels1, levels2), levels3)
 
       in
 	  (AllArrow_c{openness=openness,
 		      effect=effect,
 		      isDependent = isDependent,
 		      tFormals = tFormals,
-		      eFormals = eFormals',
+		      eFormals = eFormals,
 		      fFormals = fFormals,
-		      body_type = body_type'},
-	   top_cbnds @ top_cbnds',
-	   choists @ choists',
-	   freev)
+		      body_type = body_type},
+	   state, levels)
       end
 
-    | rcon (c as ExternArrow_c (conlist,con),_, _) = 
-      (con, [], [], list2set (NilUtil.freeVarInCon c))
+    | rcon' (ExternArrow_c (cons, con), env, state) = 
+      let
+	  val (cons, state, levels1) = rcons(cons, env, state)
+	  val (con,  state, levels2) = rcon (con,  env, state)
+	  val levels = mergeLevels(levels1,levels2)
+      in
+	  (ExternArrow_c(cons, con), state, levels)
+      end
 
-    | rcon (c as Var_c v,_, _) = (c, [], [], Set.singleton v)
+    | rcon' (c as Var_c v, env, state) = 
+      let
+	  val level = lookupLevel (env, v)
+      in
+	  (c, state, [level])
+      end
       
-    | rcon (Let_c(Sequential,bndlist,bodcon),top_set,hoist_set) = 
+    | rcon' (Let_c(Sequential,cbnds,cbody), env, state) = 
       let
-	  val (top_set', hoist_set', bnd_top_cbnds, bnd_hoists, 
-	       bnd_stay_cbnds, stay_freev) = 
-	      rconbnds(bndlist, top_set, hoist_set) 
-
-          (* we can hoist anything out of the body that depends on
-             anything bound here *)
-	  val bound_var_set = list2set (map NilUtil.varBoundByCbnd bndlist)
-          val body_hoist_set' = union (bound_var_set, hoist_set)
-
-	  val (bodcon',body_top_cbnds, body_hoists, body_freev) = 
-	      rcon (bodcon,top_set',hoist_set') 
-	      
-	  (* But, bindings with free variables whose bindings
-	     are in this let must stay *)
-	  val stop_vars = list2set (map NilUtil.varBoundByCbnd bnd_stay_cbnds)
-	  val (body_hoists, body_stay_cbnds, body_stay_freev) = 
-	      filter_cbnds(body_hoists, stop_vars)
-	      
-	  val top_cbnds = bnd_top_cbnds @ body_top_cbnds
-          val hoists = bnd_hoists @ body_hoists
-          val stay_cbnds= bnd_stay_cbnds @ body_stay_cbnds
-
-	  val boundv = list2set (NilUtil.varsBoundByCbnds stay_cbnds)
-	  val freev = 
-	      Set.difference
-	      (unionList [stay_freev, body_stay_freev, body_freev], boundv)
-
-      in  (NilUtil.makeLetC stay_cbnds bodcon', top_cbnds, hoists, freev)
+	  val (env, state, bndlevel) = bumpCurrentlevel (env, state)
+	  val (env, state) = rcbnds(cbnds, env, state)
+      in  
+          rcon_limited bndlevel (cbody, env, state)
       end
 
-    | rcon (Let_c(Parallel,_,_),_,_) = (print "rcon: Parallel Let_c found";
-					raise HoistError)
+    | rcon' (Let_c(Parallel,_,_),_,_) = error "rcon: Parallel Let_c found"
 
-    | rcon (Crecord_c lclist, top_set, hoist_set) = 
+    | rcon' (Crecord_c lclist, env, state) = 
       let
-	  fun mapper (l,con) =
-	      let
-		  val (con', top_cbnds, hoists, freev) = 
-		      rcon (con, top_set, hoist_set)
-	      in
-		  ((l,con'), top_cbnds, hoists, freev)
-	      end
-
-	  val (lclist', top_cbnds_list, hoists_list, freev_list) =
-	      Listops.unzip4 (map mapper lclist)
+	  val (labels, cons) = Listops.unzip lclist
+	  val (cons, state, levels) = rcons(cons, env, state)
+	  val lclist = Listops.zip labels cons
       in
-	  (Crecord_c lclist', 
-	   List.concat top_cbnds_list, 
-	   List.concat hoists_list,
-	   unionList freev_list)
+	  (Crecord_c lclist, state, levels)
       end
 
-    | rcon (Proj_c (con,lab), top_set, hoist_set) = 
+    | rcon' (Proj_c (con,lab), env, state) = 
       let
-	  val (con', top_cbnds, hoists, freev) = 
-	      rcon (con, top_set, hoist_set)
+	  val (con, state, levels) = rcon(con, env, state)
       in
-	  (Proj_c(con',lab), top_cbnds, hoists, freev)
+	  (Proj_c(con,lab), state, levels)
       end
 
-(*XXX Can't float out top_bnds because they are bnds and not cbnds.
-     Perhaps rcon should instead return term bindings too? *)
-    | rcon (Typeof_c e, top_set, hoist_set) = 
+    | rcon' (Typeof_c e, env, state) = 
       let
-	  val econtext = empty_fnmap (* should be no applications in a typeof *)
-	  val (e', top_bnds, hoists,_: hoist_effs, true, freev) = 
-	      rexp (e, top_set, hoist_set, econtext)
-
-	  val (hoist_bnds, freev_list) = ListPair.unzip hoists
-	  val bnds = top_bnds @ hoist_bnds
-	  val e'' = NilUtil.makeLetE Sequential bnds e'
-	  val freev = unionList freev_list
+	  (* We do not hoist any bindings outside of a typeof.
+             In practice, typeof's generally refer to variables in
+             dependent (term-level) record or function types, and
+             there's no place to hoist these references to anyway.
+             Further, typeof's don't affect space or time properties
+             of generated code. *)
+	  val (e, _, _, _, _) = 
+	      rexp_limited toplevel (e, env, empty_state)
       in
-	  (Typeof_c e'', [], [], freev)
+	  (Typeof_c e, state, emptyLevels)
       end
   
-    | rcon (Closure_c(codecon,envcon), top_set, hoist_set) = 
+    | rcon' (Closure_c(c1, c2), env, state) = 
       let
-	  val (codecon', top_cbnds1, hoists1, freev1) = 
-	      rcon (codecon, top_set, hoist_set)
-	  val (envcon', top_cbnds2, hoists2, freev2) = 
-	      rcon (envcon, top_set, hoist_set)
+	  val (c1, state, levels1) = rcon (c1, env, state)
+	  val (c2, state, levels2) = rcon (c2, env, state)
+	  val levels = mergeLevels (levels1, levels2)
       in
-	  (Closure_c(codecon',envcon'), 
-	   top_cbnds1 @ top_cbnds2,
-	   hoists1 @ hoists2,
-	   Set.union(freev1, freev2))
+	  (Closure_c(c1,c2), state, levels)
       end
 
-    | rcon (App_c(con,conlist), top_set, hoist_set) = 
+    | rcon' (App_c(con,cons), env, state) = 
       let
-	  val (con', top_cbnds1, choists1, freev1) = 
-	      rcon (con,top_set,hoist_set)
-	  val (conlist', top_cbnds2, choists2, freev2) = 
-	      rcons(conlist,top_set,hoist_set)
+	  val (con,  state, levels1) = rcon (con,  env, state)
+	  val (cons, state, levels2) = rcons(cons, env, state)
+	  val levels = mergeLevels (levels1, levels2)
       in
-	  (App_c(con',conlist'), 
-	   top_cbnds1 @ top_cbnds2, 
-	   choists1 @ choists2,
-	   Set.union(freev1, freev2))
+	  (App_c(con,cons), state, levels)
       end
 
-    | rcon (Typecase_c {arg,arms,default,kind},_, _) = 
-      (Util.error "hoist.sml" "rcon of typecase unimplemented")
+    | rcon' (Typecase_c _,_, _) = 
+      (error "rcon of Typecase_c unimplemented")
 
-    | rcon (Annotate_c (annot,con), top_set, hoist_set) = 
+    | rcon' (Annotate_c (annot,con), env, state) = 
       let
-	  val (con', top_cbnds, choists, freev) = 
-	      rcon (con, top_set, hoist_set)
+	  val (con, state, level) = rcon (con, env, state)
       in
-	  (Annotate_c (annot,con'), top_cbnds, choists, freev)
+	  (Annotate_c (annot,con), state, level)
       end
 
-  and rcon' arg = 
-      let val (c', top_cbnds, choists, freev) = rcon arg
-	  val top_bnds = map (fn cb => Con_b(Runtime,cb)) top_cbnds
-	  val hoists = map (fn (cb,s) => (Con_b(Runtime,cb),s)) choists
-      in
-	  (c', top_bnds, hoists, freev)
-      end
-
-  and rcons (conlist, top_set, hoist_set) =
+  and rcons (cons, env, state) = 
       let 
-	  val (conlist', top_cbnds_list, choists_list, freev_list) = 
-	      Listops.unzip4 (map (fn a => rcon (a,top_set,hoist_set)) conlist)
-	  val top_cbnds = List.concat top_cbnds_list
-	  val choists = List.concat choists_list
-	  val freev = unionList freev_list
+	  fun loop ([], rev_accum, state, levels) = 
+                 (rev rev_accum, state, levels)
+            | loop (con::cons, rev_accum, state, levels) = 
+	      let
+		  val (con, state, new_levels) = rcon (con, env, state)
+		  val levels = mergeLevels(levels, new_levels)
+	      in
+		  loop(cons, con::rev_accum, state, levels)
+	      end
       in
-	  (conlist', top_cbnds, choists, freev)
+	  loop (cons, [], state, [])
       end
 
-  and rcons' (conlist, top_set, hoist_set) =
+  and rcons_limited levnum (cons, env, state) = 
       let 
-	  val (conlist', top_bnds_list, hoists_list, freev_list) = 
-	      Listops.unzip4 (map (fn a => rcon'(a,top_set,hoist_set)) conlist)
-	  val top_bnds = List.concat top_bnds_list
-	  val hoists = List.concat hoists_list
-	  val freev = unionList freev_list
+	  fun loop ([], rev_accum, state, levels) = 
+              (rev rev_accum, state, levels)
+            | loop (con::cons, rev_accum, state, levels) = 
+	      let
+		  val (con, state, new_levels) =
+                        rcon_limited levnum (con, env, state)
+		  val levels = mergeLevels(levels, new_levels)
+	      in
+		  loop(cons, con::rev_accum, state, levels)
+	      end
       in
-	  (conlist', top_bnds, hoists, freev)
+	  loop (cons, [], state, [])
       end
 
-  and rbnds (bnds,top_set,hoist_set,econtext) =
+  and rcon_limited levnum (con, env, state) = 
       let
-      fun loop ([],top_set,hoist_set,rev_top_bnds_list,
-		rev_hoists_list,rev_stay_bnds, econtext, valuable, freev) = 
-	   (top_set, hoist_set,
-	    List.concat(rev rev_top_bnds_list), 
-	    List.concat(rev rev_hoists_list), 
-	    rev rev_stay_bnds,
-	    econtext, valuable, freev)
-	| loop (bnd::rest, top_set, hoist_set, rev_top_bnds_list,
-		rev_hoists_list, rev_stay_bnds, econtext, valuable, freev) = 
-	   (case rbnd (bnd,top_set,hoist_set,econtext) of 
-		(STAY (bnd',freev'), top_bnds, hoists, econtext', valuable') =>
-                    loop (rest, top_set, hoist_set,
-			  top_bnds :: rev_top_bnds_list, 
-			  hoists :: rev_hoists_list, 
-			  bnd' :: rev_stay_bnds,
-			  econtext, valuable andalso valuable',
-			  Set.union(freev,freev'))
-	      | (UP v, top_bnds, hoists, econtext', valuable') => 
-		    let
-			val hoist_set' = Set.add(hoist_set, v)
-		    in
-			loop(rest, top_set, hoist_set',
-			     top_bnds :: rev_top_bnds_list, 
-			     hoists :: rev_hoists_list, 
-			     rev_stay_bnds,
-			     econtext, valuable andalso valuable',
-			     freev)
-		    end
-	      | (TOP v, top_bnds, hoists, econtext', valuable') => 
-		    let
-			val hoist_set' = Set.add(hoist_set, v)
-			val top_set' = Set.add(top_set, v)
-		    in
-			loop(rest, top_set', hoist_set',
-			     top_bnds :: rev_top_bnds_list, 
-			     hoists :: rev_hoists_list, 
-			     rev_stay_bnds,
-			     econtext, valuable andalso valuable',
-			     freev)
-		    end)
-
-      val (top_set, hoist_set, top_bnds, hoists, stay_bnds, 
-	   econtext, valuable, freev) =
-	  loop (bnds, top_set, hoist_set, [], [], [], 
-		econtext, true, Set.empty)
-
-      val boundv = list2set (NilUtil.varsBoundByBnds stay_bnds)
-      val freev = Set.difference(freev, boundv)
-
-    in
-	(top_set, hoist_set, top_bnds, hoists, stay_bnds, 
-	 econtext, valuable, freev)
-    end
-
-  and rbnd (Con_b(p,cb), top_set, hoist_set, econtext)  =
-      let
-	  val v = NilUtil.varBoundByCbnd cb
-      (*
-          val vstr = var2string v 
-          val _ = (pprint ("rewriting bnd for con var: "^vstr^"\n");ppin 2) 
-          val _ = ppout 2 
-       *)
+	  val (con, state, levels') = rcon (con, env, state)
       in
-	  case rconbnd' (cb,top_set,hoist_set) of
-	      (CUP v, top_bnds, hoists) => 
-		  (UP v, top_bnds, hoists, econtext, true)
-	    | (CSTAY (cb',freev), top_bnds, hoists) => 
-		  (STAY (Con_b (p,cb'), freev), top_bnds, hoists, 
-		   econtext, true)
-            | (CTOP v, top_bnds, hoists) => 
-		  (TOP v, top_bnds, hoists, econtext, true)
+	  limitCon (levnum, con, env, state, levels')
       end
 
-    | rbnd (Exp_b(v,niltrace,e), top_vars, hoist_vars, econtext) = 
+  and rcbnd (Con_cb(v,con), env, state) = 
       let
-
-	  val (e', top_bnds, hoists, effs, valuable, freev) = 
-	      rexp(e, top_vars, hoist_vars, econtext)
-	  
-	  val newbnd = Exp_b(v,niltrace,e')
-	  val econtext' = Map.insert(econtext,v,effs)
+	  val (con, state, levels) = rcon (con, env, state)
+	  val env = bindLevel (env, v, deepestLevel levels)
+	  val state = hoistCbnd (state, levels, Con_cb(v,con))
       in
-	  if valuable then
-	      if (Set.isSubset(freev, top_vars)) then
-		  (TOP v, top_bnds @ [newbnd], hoists, econtext', valuable)
-	      else 
-		  if (Set.isSubset(freev, hoist_vars)) then
-		      (UP v, top_bnds, hoists @ [(newbnd,freev)], 
-		       econtext', valuable)
-		  else
-		      (STAY (newbnd, freev), top_bnds, hoists, econtext', 
-		       valuable)
-	  else 
-	      (STAY (newbnd, freev), top_bnds, hoists, econtext', valuable)
-    end
+	  (env, state)
+      end
 
-    | rbnd (Fixopen_b(vfs), top_set, hoist_set, econtext_orig) = 
+    | rcbnd (Open_cb(v,tFormals,body), env, state) = 
 	let
-	    fun loop ([],vfl,top_bnds,hoists,econtext,freev) = 
-		(vfl,top_bnds,hoists,econtext,freev)
-	      | loop ((v,f)::rest,vfl,top_bnds,hoists,econtext,freev) = 
-		let
-		    val (f',top_bnds',hoists',effs, freev') = 
-			rfun (f,top_set,hoist_set,econtext_orig)
-		    val econtext' = Map.insert(econtext, v, effs)
-		in
-		    loop (rest, (v,f')::vfl, top_bnds @ top_bnds',
-			  hoists @ hoists', econtext',
-			  Set.union(freev, freev'))
-		end
-	    
-	    val (vfs', top_bnds, hoists, econtext', freev) = 
-		loop (Sequence.toList vfs,[],[],[],econtext_orig, Set.empty)
-	in
-	    (STAY(Fixopen_b(Sequence.fromList vfs'), freev),
-	     top_bnds, hoists, econtext',true)
-	end	
+	    val inner_env = enterFunction env
+	    val (inner_env, state, arglevel) = 
+		bumpCurrentlevel (inner_env, state)
 
-    | rbnd (Fixcode_b(vfs), top_set, hoist_set, econtext_orig) = 
-	let
-	    val (STAY(Fixopen_b vf_seq, freev), 
-		 top_bnds, hoists, econtext', true) =
-		rbnd(Fixopen_b vfs, top_set, hoist_set, econtext_orig)
+	    val (tFormals, inner_env, state, levels1) = 
+		rtFormals(tFormals, inner_env, state, arglevel)
+
+	    val (body, state, levels2) = 
+	        rcon_limited arglevel (body, inner_env, state)
+
+	    val levels = mergeLevels(levels1, levels2)
+	    val env = bindLevel (env, v, deepestLevel(levels))
+	    val cbnd = Open_cb(v, tFormals, body)
+	    val state = hoistCbnd (state, levels, cbnd)
 	in
-	    (STAY(Fixcode_b vf_seq, freev),
-	        top_bnds, hoists, econtext', true)
+	    (env, state)
 	end
-    
-    | rbnd _ = raise HoistError
 
-  and rexp (Var_e v,_,_,econtext) = 
-         (Var_e v, [], [], elookup(econtext,v), true, Set.singleton v)
+    | rcbnd (Code_cb _, _, _) = error "rcbnd: found code_cb"
 
-    | rexp (Const_e c,_,_,econtext) = 
-	 (Const_e c, [], [], UNKNOWN_EFFS, true, Set.empty)
-
-    | rexp (Let_e (seq, bndlst, bodexp), top_set, hoist_set, econtext) = 
+  and rcbnds ([], env, state) = (env, state)
+    | rcbnds (cbnd::cbnds, env, state) = 
       let
-
-	  val (top_set', hoist_set',
-	       bnd_top_bnds, bnd_hoists, bnd_stay_bnds,
-	       econtext', bnd_valuable, stay_vfree) = 
-	      rbnds(bndlst,top_set,hoist_set,econtext)
-
-	  val bound_var_set = list2set (NilUtil.varsBoundByBnds bndlst)
-	  val body_hoist_set = union (bound_var_set,hoist_set)
-	  val (bodexp',body_top_bnds, body_hoists, effs, 
-	       body_valuable, body_vfree) = 
-	      rexp(bodexp,top_set',body_hoist_set,econtext')
-
-	  val stop_vars = list2set (NilUtil.varsBoundByBnds bnd_stay_bnds)
-	  val (body_hoists, body_stay_bnds, body_stay_vfree) = 
-	      filter_bnds(body_hoists, stop_vars)
-
-	  val top_bnds = bnd_top_bnds @ body_top_bnds
-	  val hoists = bnd_hoists @ body_hoists
-	  val stay_bnds = bnd_stay_bnds @ body_stay_bnds
-
-	  val vbound = Set.addList(stop_vars, NilUtil.varsBoundByBnds body_stay_bnds)
-	      
-	  val vfree = 
-	      Set.difference
-	       (unionList [stay_vfree, body_stay_vfree, body_vfree],
-		vbound)
+	  val (env,state) = rcbnd(cbnd, env, state)
       in
-	  (NilUtil.makeLetE seq stay_bnds bodexp',
-	   top_bnds, hoists, effs, bnd_valuable andalso body_valuable,
-	   vfree)
+	  rcbnds (cbnds, env, state)
       end
 
-    | rexp (exp as Prim_e (allp,conlst,explst), top_set, hoist_set, econtext) =
+  and rexp (args as (exp, env, state)) =
       let
-	  val (conlst', con_top_bnds, con_hoists, con_vfree) = 
-	      rcons' (conlst, top_set, hoist_set)
+	  val _ = 
+	      if (! debug) then
+		  (print "rexp: "; Ppnil.pp_exp exp; print "\n"
+		   ; print "  env = "; pp_env env
+		   ; print " state = "; pp_state state)
+	      else
+		  ()
+      in
+	  rexp' args
+      end
 
-	  val (explst', exp_top_bnds, exp_hoists, effs_list, 
-	       valuable_list, exps_vfree) =
-	      rexps (explst, top_set, hoist_set, econtext)
+  and rexp' (exp as Var_e v, env : env, state : state) = 
+      let
+	  val level = lookupLevel (env, v)
+	  val effs = lookupEff(env, v)
+(*
+	  val _ = (print "looking up variable";
+		   Ppnil.pp_var v;
+		   print "and got level";
+		   print (Int.toString level);
+		   print "\n")
+*)
+      in
+	  (exp, state, [level], effs, true)
+      end
+
+    | rexp' (exp as Const_e c, env, state) = 
+	 (exp, state, [], UNKNOWN_EFF, true)
+
+    | rexp' (Let_e(Sequential, bnds, body), env, state) =
+      let
+	  val (env, state, bndlevel) = bumpCurrentlevel (env, state)
+	  val (env, state, bnds_valuable) = rbnds(bnds, env, state)
+	  val (exp, state, levels, eff, body_valuable) =
+	      rexp_limited bndlevel (body, env, state)
+	  val valuable = bnds_valuable andalso body_valuable
+      in
+	  (exp, state, levels, eff, valuable)
+      end
+
+    | rexp' (exp as Prim_e (prim,cons,exps), env, state) =
+      let
+	  val (cons, state, levels1) = rcons(cons, env, state)
+	  val (exps, state, levels2, eff_list, args_valuable) = 
+	         rexps(exps, env, state)
           
-	  (* we don't try very hard to track effect types through primops.
-	   *)
-	  val effs =
-	      (case (allp, effs_list) of
+	  (* we don't try very hard to track effect types through primops. *)
+	  val eff =
+	      (case (prim, eff_list) of
 		   (NilPrimOp (record lbls),  _) =>
-		       REC_EFFS(ListPair.zip (lbls, effs_list))
-                 | (NilPrimOp (select lbl), [effs]) =>
-		       ereclookup (effs, lbl)
-		 | _ => UNKNOWN_EFFS)
-	      
-	  val valuable = (not (NilUtil.effect exp)) andalso
-	      List.all (fn (b:bool)=>b) valuable_list
+		       REC_EFF(ListPair.zip (lbls, eff_list))
+                 | (NilPrimOp (select lbl), [eff]) =>
+		       ereclookup (eff, lbl)
+		 | _ => UNKNOWN_EFF)
 
-	  val vfree = Set.union(con_vfree, exps_vfree)
-
+	  val levels = mergeLevels(levels1, levels2)
+	  val valuable = (not (NilUtil.effect exp)) andalso args_valuable
       in
-	  (Prim_e (allp, conlst', explst'), 
-	   con_top_bnds @ exp_top_bnds,
-	   con_hoists @ exp_hoists,
-	   effs, valuable, vfree)
+	  (Prim_e (prim, cons, exps), state, levels, eff, valuable)
       end
 
-    | rexp (Switch_e s, top_set, hoist_set, econtext) = 
+    | rexp' (Switch_e sw, env, state) = 
       let
-	  val (ns, top_bnds, hoists, effs, valuable, vfree) = 
-	      rswitch (s, top_set, hoist_set, econtext)
+	  val (sw, state, levels, effs, valuable) = 
+	      rswitch (sw, env, state)
       in
-	  (Switch_e ns, top_bnds, hoists, effs, valuable, vfree)
+	  (Switch_e sw, state, levels, effs, valuable)
       end
 
-    | rexp (exp0 as App_e (opn, exp, conlist, explist1, explist2), 
-	    top_set, hoist_set, econtext) = 
+    | rexp' (App_e (openness, exp, cons, exps1, exps2), env, state) =
       let
-	  val (exp', exp_top_bnds, exp_hoists, exp_effs, 
-	       exp_valuable, exp_vfree) = 
-	      rexp (exp, top_set, hoist_set, econtext)
+	  val (exp, state, levels1, exp_effs, valuable1) = 
+	      rexp(exp, env, state)
+	  val (cons, state, levels2) = 
+              rcons(cons, env, state)
+	  val (exps1, state, levels3, _, valuable3) = 
+	      rexps(exps1, env, state)
+	  val (exps2, state, levels4, _, valuable4) = 
+	      rexps(exps2, env, state)
 
-	  val (conlist', con_top_bnds, con_hoists, con_vfree) = 
-	      rcons' (conlist, top_set, hoist_set)
-	  val (explist1', top_bnds1, hoists1, effs1, valuable1, vfree1) =
-	      rexps (explist1, top_set, hoist_set, econtext)
-	  val (explist2', top_bnds2, hoists2, effs2, valuable2, vfree2) =
-	      rexps (explist2, top_set, hoist_set, econtext)
-
-	  val top_bnds = exp_top_bnds @ con_top_bnds @ top_bnds1 @ top_bnds2
-          val hoists = exp_hoists @ con_hoists @ hoists1 @ hoists2
-	  val vfree = unionList [exp_vfree, con_vfree, vfree1, vfree2]
-
-	  fun id (b:bool) = b
-	  val components_valuable = 
-	      exp_valuable andalso
-	      (List.all id valuable1) andalso (List.all id valuable2)
-	      
 	  val (valuable, effs) = 
 	      (case exp_effs of
-		   (ARROW_EFFS (Total,rest)) => (components_valuable, rest)
-		 | (ARROW_EFFS (Partial,rest)) => (false, rest)
-		 | _ => (false, unknown_effs))
+		   (ARROW_EFF (Total,rest)) => 
+		       (valuable1 andalso valuable3 andalso valuable4, rest)
+		 | (ARROW_EFF (Partial,rest)) => (false, rest)
+		 | _ => (false, UNKNOWN_EFF))
+
+	  val levels = mergeLevels(mergeLevels(levels1,levels2),
+ 				   mergeLevels(levels3,levels4))
 
       in
-	  (App_e (opn, exp', conlist', explist1', explist2'), 
-	   top_bnds, hoists, effs, valuable, vfree)
+	  (App_e (openness, exp, cons, exps1, exps2),
+	   state, levels, effs, valuable)
       end
   
-    | rexp (ExternApp_e (exp,explist), top_set, hoist_set, econtext) = 
+    | rexp' (ExternApp_e (exp,exps), env, state) =
       let
-	  val (exp', exp_top_bnds, exp_hoists, _, _, exp_vfree) = 
-	      rexp (exp, top_set, hoist_set, econtext)
-	  val (explist',exps_top_bnds, exps_hoists, _, _, exps_vfree) = 
-	      rexps(explist, top_set, hoist_set, econtext)
-
-	  val top_bnds = exp_top_bnds @ exps_top_bnds
-          val hoists = exp_hoists @ exps_hoists
+	  val (exp, state, levels1, _, valuable1) = rexp(exp, env, state)
+	  val (exps, state, levels2, _, valuable2) = rexps(exps, env, state)
+	  val levels = mergeLevels(levels1,levels2)
+	  val effs = UNKNOWN_EFF
 	  val valuable = false
-	  val effs = unknown_effs
-	  val vfree = Set.union(exp_vfree, exps_vfree)
       in
-	(ExternApp_e (exp',explist'), top_bnds, hoists, effs, valuable, vfree)
+	(ExternApp_e (exp,exps), state, levels, effs, valuable)
       end
 
-    | rexp (Raise_e(exp,con), top_set, hoist_set, econtext) = 
+    | rexp' (Raise_e(exp,con), env, state) = 
       let
-	  val (exp',top_bnds1, hoists1,_,_, vfree1) = 
-	      rexp (exp, top_set, hoist_set, econtext)
-	  val (con',top_bnds2, hoists2, vfree2) = 
-	      rcon' (con, top_set, hoist_set) 
-	  val top_bnds = top_bnds1 @ top_bnds2
-	  val hoists = hoists1 @ hoists2
-	  val effs = unknown_effs
+	  val (exp, state, levels1, _, _) = rexp(exp, env, state)
+	  val (con, state, levels2) = rcon(con, env, state)
+	  val levels = mergeLevels(levels1,levels2)
+	  val effs = UNKNOWN_EFF
 	  val valuable = false
-	  val vfree = Set.union(vfree1, vfree2)
       in
-	  (Raise_e(exp',con'), top_bnds, hoists, effs, valuable, vfree)
+	  (Raise_e(exp,con), state, levels, effs, valuable)
       end
   
-    | rexp (Handle_e {body,bound,handler,result_type},
-	    top_set, hoist_set, econtext) = 
+    | rexp' (Handle_e {body,bound,handler,result_type}, env, state) =
       let
-	  val (body',top_bnds1,hoists1,_,_, vfree1) = 
-	      rexp(body, top_set, hoist_set, econtext)
-	  val (handler',top_bnds2,hoists2,_,_, vfree2) = 
-	      rexp(handler, top_set, hoist_set, econtext)
-	  val (result_type', top_bnds3, hoists3, vfree3) = 
-	      rcon'(result_type, top_set, hoist_set)
-	  val top_bnds = top_bnds1 @ top_bnds2 @ top_bnds3
-	  val hoists = hoists1 @ hoists2 @ hoists3
-	  val effs = unknown_effs
+	  val (body, state, levels1, _, _)  =  rexp (body, env, state)
+	  val (result_type, state, levels2) =  rcon (result_type, env, state)
+
+	  val (inner_env, state, handlerlevel) = bumpCurrentlevel (env, state)
+	  val inner_env = bindLevel(inner_env, bound, handlerlevel)
+          val inner_env = bindEff(inner_env, bound, UNKNOWN_EFF)
+
+	  val limitlevel = lastFnLevel env
+	  val (handler, handler_leftover_state, levels3, _, _) = 
+              rexp_limited limitlevel (handler, inner_env, empty_state)
+          val state = mergeStates (state, handler_leftover_state)
+
+	  val levels = mergeLevels(mergeLevels(levels1, levels2), levels3)
+	  val eff = UNKNOWN_EFF
 	  val valuable = false	
-	  val vfree = Set.union(Set.union(vfree1, vfree3),
-				Set.difference(vfree2, Set.singleton bound))
       in
-	  (Handle_e {body=body', bound = bound,
-		     handler=handler', result_type= result_type'},
-	   top_bnds, hoists, effs, valuable, vfree)
+	  (Handle_e {body = body, bound = bound,
+		     handler = handler, result_type = result_type},
+	   state, levels, eff, valuable)
       end
 
-  and rexps (explst, top_set, hoist_set, econtext) = 
+  and rexp_limited levnum (exp, env, state) = 
       let
-	  fun unzip6 abcdef_list = 
-	      let fun unzip6_loop [] (aa,bb,cc,dd,ee,ff) = 
-		  (rev aa, rev bb, rev cc, rev dd, rev ee, rev ff)
-		    | unzip6_loop ((a,b,c,d,e,f)::rest) (aa,bb,cc,dd,ee,ff) = 
-		  unzip6_loop rest (a::aa,b::bb,c::cc,d::dd,e::ee,f::ff)
-	      in unzip6_loop abcdef_list ([],[],[],[],[],[])
-	      end
-	  
-	  val (explst', top_bnd_list, hoists_list, effs_list, 
-	       valuable_list, vfree_list) = 
-	      unzip6 
-	        (map (fn e => rexp(e, top_set, hoist_set, econtext))
-		 explst)
+	  val (exp, state, levels, eff, valuable) = rexp (exp, env, state)
+	  val (exp, state, levels) = 
+	      limitExp (levnum, exp, env, state, levels)
       in
-	  (explst',
-	   List.concat top_bnd_list,
-	   List.concat hoists_list,
-	   effs_list,
-	   valuable_list,
-	   unionList vfree_list)
+	  (exp, state, levels, eff, valuable)
       end
 
-  and rswitch (Intsw_e{arg,size,arms,default,result_type},
-	       top_set, hoist_set, econtext) =
+  and rexps' (limitopt, exps, env, state) = 
       let
-	  val (arg', arg_top_bnds, arg_hoists, _, _, arg_vfree) = 
-	      rexp (arg, top_set, hoist_set,econtext)
-
-	  fun mapper (w,e) = 
-	      let 
-		  val (e',top_bnds,hoists,_,_, vfree) = 
-		      rexp (e,top_set,hoist_set,econtext)
+	  fun loop ([], rev_accum, state, levels, rev_eff_list, valuable) = 
+	      (rev rev_accum, state, levels, rev rev_eff_list, valuable)
+	    | loop (exp::exps,rev_accum,state,levels,rev_eff_list,valuable) = 
+	      let
+		  val (exp, state, new_levels, new_eff, new_valuable) = 
+		      rexp(exp, env, state)
+		  val (exp, state, new_levels) = 
+		      (case limitopt of
+			   NONE => (exp, state, new_levels)
+			 | SOME limit => 
+			       limitExp(limit, exp, env, state, new_levels))
+			       
 	      in
-		  if (!hoist_through_switch) then
-		      ((w,e'), top_bnds, hoists, vfree)
-		  else
-		      let 
-			  val (hoists, stay_bnds,vfree') = filter_ebnds hoists
-		      in
-			  ((w, NilUtil.makeLetE Sequential stay_bnds e'), 
-			   top_bnds, hoists, Set.union(vfree,vfree'))
-		      end
+		  loop(exps, exp::rev_accum, state, 
+		       mergeLevels(levels, new_levels),
+		       new_eff :: rev_eff_list, 
+		       valuable andalso new_valuable)
 	      end
+      in
+	  loop(exps, [], state, emptyLevels, [], true)
+      end
+
+  and rexps (exps, state, env) = rexps' (NONE, exps, state, env)
+
+  and rexps_limited limit (exps, state, env) = 
+      rexps' (SOME limit, exps, state, env)
+
+  and rbnd (Con_b(p,cb), env, state) = 
+      (* Here's where we lose the phase information *)
+      let
+	  val (env, state) = rcbnd(cb, env, state)
+	  val valuable = true
+      in
+	  (env, state, valuable)
+      end
+
+    | rbnd (Exp_b(v,nt,e), env, state) = 
+      let
+	  val (e, state, levels, effs, valuable) = rexp(e, env, state)
+	  val newbnd = Exp_b(v,nt,e)
+
+          (* We can only hoist valuable bindings.
+             If it is not valuable, we "hoist" to the current level
+             (i.e., don't move the binding).  This is accomplished
+             by stipulating that the binding is dependent on a
+             binding at the current level.
+           *)
+	  val levels = 
+	      if valuable then 
+		  levels
+	      else
+		  mergeLevels ([currentLevel env], levels)
+
+	  val hoistlevel = deepestLevel levels
+
+	  val env = bindLevel(env, v, hoistlevel)
+	  val env = bindEff(env, v, effs)
+
+	  val state = hoistBnd (state, levels, newbnd)
+      in
+	  (env, state, valuable)
+      end
+
+    | rbnd (Fixopen_b vfseq, env : env, state : state) = 
+	let
+	    val vfs = Sequence.toList vfseq
+	    val (vars, functions) = Listops.unzip vfs
+
+	    (* Inside the recursion we cannot treat these functions
+               as total, even if their bodies are lambdas.  Otherwise
+               we might hoist applications of these functions to the
+               top of the function body, introducing an infinite loop. *)
+	    val partial_effs = map (fn _ => UNKNOWN_EFF) functions
+            val env = bindsEff(env, vars, partial_effs)
+
+	    (* We temporarily assign the functions in this nest
+               to a new level.  This prevents references to
+               the function from being hoisted out of the function.
+               Further, we need to be able to distinguish recursive
+               references (which do not prevent these functions from
+               being hoisted) from references to prior definitions
+               in a sequence of bindings. We re-assign levels
+               to the functions defined here after we know
+	       where the recursive nest is going. *)
+            val (inner_env, state, fixopenlevel) = 
+		bumpCurrentlevel (env, state)
+            val inner_env = enterFunction inner_env 
+	    val inner_env = bindsLevel (inner_env, vars, fixopenlevel)
+
+	    fun loop ([], rev_fns, state, levels) = 
+		(rev rev_fns, state, levels)
+	      | loop ((v,f)::rest, vfl, state, levels) = 
+		let
+		    val (f, state, new_levels) = rfun (v, f, inner_env, state)
+		    val levels = mergeLevels (levels, new_levels)
+		in
+		    loop (rest, (v,f)::vfl, state, levels)
+		end
+	    
+	    val (vfs, state, levels) = 
+		loop (vfs, [], state, emptyLevels)
+
+	    val hoistlevel = deepestLevel levels
+
+	    (* Fix effects *)
+	    val function_effs = map (con2eff o (NilUtil.function_type Open)) 
+                                      functions
+            val env = bindsEff(env, vars, function_effs)
+
+	    val env = bindsLevel (env, vars, hoistlevel)
+	    val newbnd = Fixopen_b(Sequence.fromList vfs)
+	    val state = hoistBnd (state, levels, newbnd)
+
+	    val valuable = true
+	in
+	    (env, state, valuable)
+	end	
+
+    | rbnd (Fixcode_b _, _, _) = error "rbnd: found fixcode"
+    | rbnd (Fixclosure_b _, _, _) = error "rbnd: found fixclosure"
+
+  and rbnds ([], env, state) = (env, state, true)
+    | rbnds (bnd::bnds, env, state) = 
+      let
+(*	  val _ = (print "rbnd: "; Ppnil.pp_bnd bnd; print "\n") *)
+	  val (env, state, bnd_valuable) = rbnd(bnd, env, state)
+	  val (env, state, rest_valuable) = rbnds(bnds, env, state)
+	  val valuable = rest_valuable andalso bnd_valuable
+      in
+	  (env, state, valuable)
+      end
+
+  and rswitch (Intsw_e{arg,size,arms,default,result_type}, env, state) =
+      let
+	  val (arg, state, levels1, _, _) = rexp(arg, env, state)
 	      
-	  val (arms',arms_top_bnds_list, arms_hoists_list, vfree_list) = 
-	      Listops.unzip4 (map mapper arms)
-	  val arms_top_bnds = List.concat arms_top_bnds_list
-	  val arms_hoists = List.concat arms_hoists_list
+	  val (ints, exps) = Listops.unzip arms
+          val limitlevel = lastFnLevel env
 
-	  val (default',default_top_bnds,default_hoists,_,_, default_vfree) = 
-	      rexpopt(default, top_set,
-		      (*cheat*)
-		      if (!hoist_through_switch) then hoist_set else top_set,
-		      econtext)
+	  val (exps, arms_leftover_state, levels2, _, _) = 
+		  rexps_limited limitlevel (exps, env, empty_state)
+	  val arms = ListPair.zip(ints, exps)
 
+          val state = mergeStates(state, arms_leftover_state)
+
+	  val (default, default_leftover_state, levels3, _, _) = 
+		  rexpopt_limited limitlevel (default,env,empty_state)
+          val state = mergeStates(state, default_leftover_state)
+
+	  val (result_type, state, levels4) = rcon(result_type, env, state)
+
+	  val levels = mergeLevels(mergeLevels(levels1, levels2),
+                                   mergeLevels(levels3, levels4))
 
 	  val effs = con2eff result_type
 	  val valuable = false
-	  val vfree = unionList (arg_vfree :: default_vfree :: vfree_list)
       in
-	  (Intsw_e {arg=arg', size=size, arms=arms', default=default',
+	  (Intsw_e {arg=arg, size=size, arms=arms, default=default,
 		    result_type = result_type},
-	   arg_top_bnds @ arms_top_bnds @ default_top_bnds,
-	   arg_hoists @ arms_hoists @ default_hoists,
-	   effs, valuable, vfree)
+	   state, levels, effs, valuable)
       end
 
     | rswitch (Sumsw_e {arg,sumtype,bound,arms,default,result_type},
-	       top_set, hoist_set, econtext) = 
+	       env, state) = 
       let
 
-	  val (arg', arg_top_bnds, arg_hoists, _, _, arg_vfree) = 
-	      rexp (arg, top_set, hoist_set, econtext)
+	  val (arg, state, levels1, _, _) = rexp(arg, env, state)
 
-	  val boundset = Set.singleton bound
-	  val arm_hoist_set = Set.add(hoist_set,bound)
-	  fun mapper (w,tr,e) = 
-	      let 
-		  val (e',top_bnds,hoists,_,_, vfree) = 
-		      rexp (e, top_set, arm_hoist_set, econtext)
-	      in
-		  if (!hoist_through_switch) then
-		      let
-			  val (up,stay,vfree') = filter_bnds (hoists, boundset)
-			  val e'' = NilUtil.makeLetE Sequential stay e'
-		      in
-			  ((w,tr,e''), top_bnds, up, Set.union(vfree,vfree'))
-		      end
-		  else
-		      let
-			  val (hoists, stay_bnds2, vfree2) = 
-			      filter_ebnds hoists
-			  val (hoists, stay_bnds1, vfree1) = 
-			      filter_bnds (hoists, boundset) 
-			  val stay_bnds = stay_bnds1 @ stay_bnds2
-		      in
-			  ((w, tr, NilUtil.makeLetE Sequential stay_bnds e'), 
-			   top_bnds, hoists,
-			   unionList [vfree, vfree1, vfree2])
-		      end
-	      end
-	      
-	  val (arms',arms_top_bnds_list, arms_hoists_list, arms_vfree_list) = 
-	      Listops.unzip4 (map mapper arms)
-	  val arms_top_bnds = List.concat arms_top_bnds_list
-	  val arms_hoists = List.concat arms_hoists_list
+          val limitlevel = lastFnLevel env
 
-	  val (default',default_top_bnds,default_hoists,_,_,default_vfree) = 
-	      rexpopt(default, top_set,
-		      (*cheat*)
-		      if (!hoist_through_switch) then hoist_set else top_set,
-		      econtext)
+	  val (inner_env, state, armlevel) = bumpCurrentlevel (env, state)
+	  val inner_env = bindLevel(inner_env, bound, armlevel)
+          val inner_env = bindEff(inner_env, bound, UNKNOWN_EFF)
+
+	  val (tags, nts, exps) = Listops.unzip3 arms
+
+	  val (exps, arms_leftover_state, levels2, _, _) = 
+		  rexps_limited limitlevel (exps, inner_env, empty_state)
+	  val arms = Listops.zip3 tags nts exps
+          val state = mergeStates(state, arms_leftover_state)
+
+	  val (default, default_leftover_state, levels3, _, _) = 
+		  rexpopt_limited limitlevel (default, env, empty_state)
+          val state = mergeStates(state, default_leftover_state)
+
+	  val (result_type, state, levels4) = rcon(result_type, env, state)
+
+	  val levels = mergeLevels(mergeLevels(levels1, levels2),
+                                   mergeLevels(levels3, levels4))
 	      
 	  val effs = con2eff result_type
 	  val valuable = false
-	  val vfree = 
-	      Set.difference
-	      (unionList (arg_vfree :: default_vfree :: arms_vfree_list),
-	       boundset)
       in
-	  (Sumsw_e {arg = arg',
+	  (Sumsw_e {arg = arg,
 		    sumtype = sumtype,
 		    bound = bound,
-		    arms = arms',
-		    default = default',
+		    arms = arms,
+		    default = default,
 		    result_type = result_type},
-	   arg_top_bnds @ arms_top_bnds @ default_top_bnds,
-	   arg_hoists @ arms_hoists @ default_hoists,
-	   effs, valuable, vfree)
+	   state, levels, effs, valuable)
       end
 
     | rswitch (Exncase_e {arg,bound,arms,default,result_type},
-	       top_set, hoist_set, econtext) = 
+	       env, state) = 
       let
-	  val (arg', arg_top_bnds, arg_hoists, _, _, arg_vfree) = 
-	      rexp (arg, top_set, hoist_set, econtext)
+	  val (arg, state, levels1, _, _) = rexp(arg, env, state)
 
-	  val boundset = Set.singleton bound
-	  val arm_hoist_set = add(hoist_set,bound)
+	  val (tags, nts, exps) = Listops.unzip3 arms
 
-	  (* e1 is supposed to be a path, so no point traversing it *)
-	  fun mapper (e1,tr,e) = 
-	      let 
-		  val (e',top_bnds,hoists,_,_,vfree) = 
-		      rexp (e, top_set, arm_hoist_set, econtext)
-	      in
-		 if (!hoist_through_switch) then
-		      let  
-			  val (up,stay,vfree') = filter_bnds (hoists, boundset)
-			  val e'' = NilUtil.makeLetE Sequential stay e'
-		      in
-			  ((e1,tr,e''), top_bnds, up, Set.union(vfree,vfree'))
-		      end
-		 else
-		      let
-			  val (hoists, stay_bnds2, vfree2) = 
-			      filter_ebnds hoists
-			  val (hoists, stay_bnds1, vfree1) = 
-			      filter_bnds (hoists, boundset) 
-			  val stay_bnds = stay_bnds1 @ stay_bnds2
-		      in
-			  ((e1, tr, NilUtil.makeLetE Sequential stay_bnds e'), 
-			   top_bnds, hoists,
-			   unionList [vfree, vfree1, vfree2])
-		      end
-	      end	
-      
-	  val (arms',arms_top_bnds_list, arms_hoists_list, arms_vfree_list) = 
-	      Listops.unzip4 (map mapper arms)
-	  val arms_top_bnds = List.concat arms_top_bnds_list
-	  val arms_hoists = List.concat arms_hoists_list
+          (* CS: Not all tags are variables.  It's not guaranteed
+                 that hoisting from the tags is a good idea.  Maybe
+                 they also should be required to be hoisted out
+                 of the enclosing function? *)
+	  val (tags, state, levels2, _, _) = rexps(tags, env, state)
 
-	  val (default',default_top_bnds,default_hoists,_,_, default_vfree) = 
-	      rexpopt(default, top_set,
-		      (*cheat*)
-		      if (!hoist_through_switch) then hoist_set else top_set,
-		      econtext)
+	  val (inner_env, state, armlevel) = bumpCurrentlevel (env, state)
+	  val inner_env = bindLevel(inner_env, bound, armlevel)
+          val inner_env = bindEff(inner_env, bound, UNKNOWN_EFF)
+
+	  val limitlevel = lastFnLevel inner_env
+	  val (exps, arms_leftover_state, levels3, _, _) = 
+		  rexps_limited limitlevel (exps, inner_env, empty_state)
+          val state = mergeStates(state, arms_leftover_state)
+
+	  val arms = Listops.zip3 tags nts exps
+
+	  val (default, default_leftover_state, levels4, _, _) = 
+		  rexpopt_limited limitlevel (default, env, empty_state)
+          val state = mergeStates(state, default_leftover_state)
+
+	  val (result_type, state, levels5) = rcon(result_type, env, state)
+
+	  val levels = mergeLevels(mergeLevels(mergeLevels(levels1, levels2),
+					      levels3),
+ 				   mergeLevels(levels4,levels5))
 	      
 	  val effs = con2eff result_type
 	  val valuable = false
-	  val vfree = 
-	      Set.difference
-	      (unionList (arg_vfree :: default_vfree :: arms_vfree_list),
-	       boundset)
       in
-	  (Exncase_e {arg=arg',
-		      bound=bound,
-		      arms=arms',
-		      default=default',
+	  (Exncase_e {arg         = arg,
+		      bound       = bound,
+		      arms        = arms,
+		      default     = default,
 		      result_type = result_type},
-	   arg_top_bnds @ arms_top_bnds @ default_top_bnds,
-	   arg_hoists @ arms_hoists @ default_hoists,
-	   effs, valuable, vfree)
+	   state, levels, effs, valuable)
     end
 
-    | rswitch (Typecase_e {arg,arms,default,result_type},_,_,econtext) = 
-    (Util.error "hoist.sml" "Typecase_e not implemented yet")
+    | rswitch (Typecase_e _, _, _) = 
+       (error "rswitch: Typecase_e not implemented yet")
 
-  and rexpopt(NONE,top_set, hoist_set,econtext) = 
-      (NONE,[],[],unknown_effs,true, Set.empty)
-    | rexpopt(SOME(e), top_set, hoist_set, econtext) = 
+  and rexpopt' (_, NONE, env, state) = (NONE, state, emptyLevels, 
+					UNKNOWN_EFF, true)
+    | rexpopt' (limitopt, SOME e, env, state) = 
       let 
-	  val (e', top_bnds, hoists, effs, valuable, vfree) = 
-	      rexp (e, top_set, hoist_set, econtext) 
+	  val (e, state, levels, effs, valuable) = rexp(e, env, state)
+	  val (e, state, levels) = 
+	      (case limitopt of
+		   NONE => (e, state, levels)
+		 | SOME limit => limitExp(limit, e, env, state, levels))
       in 
-	  (SOME(e'), top_bnds, hoists, effs, valuable, vfree) 
+	  (SOME e, state, levels, effs, valuable)
       end
+ 
+  and rexpopt (expopt, env, state) = rexpopt' (NONE, expopt, env, state)
 
-  and rfun (Function{effect=eff,recursive=isrec,isDependent=isdep,
-		     tFormals=tFormals, eFormals=eformals,
-		     fFormals=fformals, body=bod, body_type=ret},
-	    top_set, hoist_set, econtext) = 
+  and rexpopt_limited limit (expopt, env, state) = 
+      rexpopt'(SOME limit, expopt, env, state)
+
+  and rfun (fnvar, 
+	    Function{effect,recursive,isDependent, tFormals, eFormals,
+		     fFormals, body, body_type},
+	    env, state) = 
       let
 
-	  val econtext' = 
-	      List.foldr (fn ((v,_,c),ectx) => Map.insert(ectx, v, con2eff c))
-              econtext eformals
-	      
-	  val (cvars, kinds) = Listops.unzip tFormals
-	  val kinds_freev = 
-	      unionList (map (list2set o NilUtil.freeVarInKind) kinds)
+	  (* rfun is only called to process a part of a FixOpen_b.
+	     Therefore, the current level has already been bumped. *)
+	  val arglevel = currentLevel env
 
-	  val (evars, nts, etypes) = Listops.unzip3 eformals
-	  val (etypes', arg_top_bnds, arg_hoists, cons_freev) = 
-	         rcons' (etypes, top_set, hoist_set)
-	  val eformals' = Listops.zip3 evars nts etypes'
-          val boundvar_set = list2set (cvars @ evars @ fformals)
-	  val body_hoist_set = Set.union (hoist_set, boundvar_set)
+          val (tFormals, env, state, levels1) = 
+                  rtFormals(tFormals, env, state, arglevel)
 
-	  val (bod',body_top_bnds, body_hoists,effs,_, body_freev) = 
-	      rexp(bod,top_set, body_hoist_set, econtext)
-          val (bod_up, bod_stay, bod_stay_freev) = 
-	      filter_bnds (body_hoists, boundvar_set)
-	  val newbod = NilUtil.makeLetE Sequential bod_stay bod'
+          val (eFormals, env, state, levels2) = 
+                  reFormals(eFormals, env, state, arglevel)
 
-	  val (ret',retcon_top_cbnds, retcon_choists, retcon_freev) = 
-	      rcon (ret,top_set,body_hoist_set)
-          val (ret_up, ret_stay, ret_stay_freev) = 
-	      filter_cbnds (retcon_choists, boundvar_set)
-          val newret = NilUtil.makeLetC ret_stay ret'
+	  val env = bindsLevel(env, fFormals, arglevel)
 
-          val hoists = arg_hoists @ 
-	                (map (fn (cb,s) => (Con_b(Runtime,cb), s)) ret_up) @ 
-			bod_up
+	  val (body, state, levels3, _, _) = 
+                  rexp_limited arglevel (body, env, state)
 
-	  val top_bnds = arg_top_bnds @ 
-	      (map (fn cb => Con_b(Runtime,cb)) retcon_top_cbnds) @ 
-	      body_top_bnds
+	  val (body_type, state, levels4) = 
+                  rcon_limited arglevel (body_type, env, state)
 
-	  val freev = 
-	      Set.difference
-	      (Set.difference
-	       (unionList[kinds_freev, cons_freev, body_freev, 
-			  retcon_freev, ret_stay_freev],
-		list2set cvars),
-	       list2set evars)
-
+	  val levels = mergeLevels(mergeLevels(levels1,levels2),
+ 				   mergeLevels(levels3,levels4))
+(*
+	  val _ = (print "Function ";
+		   Ppnil.pp_var fnvar;
+		   print " claims to have body levels ";
+		   app (print o Int.toString) levels)		   
+*)		   
       in
-	  (Function{effect=eff,recursive=isrec,isDependent=isdep,
-		    tFormals=tFormals,eFormals=eformals', fFormals=fformals,
-		    body=newbod,body_type=newret},
-	   top_bnds, hoists, ARROW_EFFS(eff, effs), freev) 
+	  (Function{effect = effect, recursive = recursive,
+		    isDependent = isDependent, tFormals = tFormals,
+		    eFormals = eFormals, fFormals = fFormals,
+		    body = body, body_type = body_type},
+	   state, levels)
       end
-  
+
+  and rtFormals (tFormals, env, state, arglevel) = 
+      let
+	  fun loop ([], rev_accum, env, state, levels) =
+	      (rev rev_accum, env, state, levels)
+            | loop ((v,k)::rest, rev_accum, env, state, levels) = 
+	      let
+		  val (k, state, new_levels) =
+                         rkind_limited arglevel (k, env, state)
+		  val env = bindLevel(env, v, arglevel)
+		  val levels = mergeLevels(levels, new_levels)
+	      in
+		  loop(rest, (v,k)::rev_accum, env, state, levels)
+	      end
+      in
+	  loop(tFormals, [], env, state, emptyLevels)
+      end
+
+  and reFormals (eFormals, env, state, arglevel) = 
+      let
+	  fun loop ([], rev_accum, env, state, levels) =
+	      (rev rev_accum, env, state, levels)
+            | loop ((v,nt,c_orig)::rest, rev_accum, env, state, levels) = 
+	      let
+		  val (c, state, new_levels) = 
+                        rcon_limited arglevel (c_orig, env, state)
+		  val env = bindLevel(env, v, arglevel)
+
+		  (* The unhoisted type is likely to contain more
+                     local information about partial/total arrows *)
+		  val env = bindEff(env, v, con2eff c_orig)
+
+		  val levels = mergeLevels(levels, new_levels)
+	      in
+		  loop(rest, (v,nt,c)::rev_accum, env, state, levels)
+	      end
+      in
+	  loop(eFormals, [], env, state, emptyLevels)
+      end
+
+  and reFormals_arrow (eFormals, env, state, arglevel) = 
+      let
+	  fun loop ([], rev_accum, env, state, levels) =
+	      (rev rev_accum, env, state, levels)
+            | loop ((vopt,c_orig)::rest, rev_accum, env, state, levels) = 
+	      let
+		  val (c, state, new_levels) = 
+                        rcon_limited arglevel (c_orig, env, state)
+		  val env = (case vopt of
+				 NONE => env
+			       | SOME v => bindLevel
+				            (bindEff(env, v, con2eff c_orig),
+					     v, arglevel))
+		  val levels = mergeLevels(levels, new_levels)
+	      in
+		  loop(rest, (vopt,c)::rev_accum, env, state, levels)
+	      end
+      in
+	  loop(eFormals, [], env, state, emptyLevels)
+      end
+
+
+  and rkind_limited _ (Type_k, env : env, state : state) = 
+         (Type_k, state, emptyLevels)
+    | rkind_limited limitlevel (Single_k c, env, state) = 
+      let
+	  val (c, state, levels) = rcon_limited limitlevel (c, env, state)
+      in
+	  (Single_k c, state, levels)
+      end
+    | rkind_limited limitlevel (SingleType_k c, env, state) = 
+      let
+	  val (c, state, levels) = rcon_limited limitlevel (c, env, state)
+      in
+	  (SingleType_k c, state, levels)
+      end
+    | rkind_limited limitlevel (Arrow_k(openness, tFormals, kind),env,state) = 
+      let
+          (* Don't bump the level because there's no
+             place to put bindings here *)
+	  val (tFormals, env, state, levels1) = 
+	         rtFormals(tFormals, env, state, limitlevel)
+
+	  val (kind, state, levels2) = 
+                 rkind_limited limitlevel (kind, env, state)
+
+	  val levels = mergeLevels(levels1, levels2)
+      in
+	  (Arrow_k(openness, tFormals, kind), state, levels)
+      end
+
+    | rkind_limited limitlevel (Record_k lvk_seq, env, state) = 
+      let
+	  val (lvlist, kinds) = Listops.unzip (Sequence.toList lvk_seq)
+	  val (labels, vars) = Listops.unzip lvlist
+	  val tFormals = Listops.zip vars kinds
+
+	  val (tFormals, _, state, levels) =
+	      rtFormals(tFormals, env, state, limitlevel)
+
+	  val kinds = map (#2) tFormals
+	  val lvk_seq = Sequence.fromList (ListPair.zip (lvlist, kinds))
+      in
+	  (Record_k lvk_seq, state, levels)
+      end
+
   fun optimize (MODULE {bnds, imports, exports}) = 
       let
-	  (* collect the 'top level' var names *)
-	  fun split ([],cvs,ectx) = (cvs,ectx)
-	    | split (ImportValue(l,v,_,c)::rest,cvs,ectx) = 
-	      split(rest,Set.add(cvs,v),Map.insert(ectx,v,con2eff c))
-	    | split (ImportType(l,v,k)::rest,cvs,ectx) = 
-		    split(rest,add(cvs,v), ectx)
-		    
-	  val (top_set, econtext) = split (imports, Set.empty, empty_fnmap)
-	  val hoist_set = top_set
+	  (* mark imports as top-level variables;
+             estimate totality of term-level imports *)
+	  fun split ([], env) = env
+	    | split (ImportValue(l,v,_,c)::rest, env) =
+	      let
+		  val env = bindLevel(env, v, toplevel)
+		  val env = bindEff(env, v, con2eff c)
+	      in
+		  split(rest, env)
+	      end
+	    | split (ImportType(l,v,_)::rest, env) = 
+	      let
+		  val env = bindLevel(env, v, toplevel)
+	      in
+		  split(rest, env)
+	      end
 
-	  val (_,_,top_bnds,hoists,stay_bnds,_, _, _) = 
-	      rbnds(bnds, top_set, hoist_set, econtext)
+	  val initial_env = split (imports, empty_env)
+	  val initial_state = empty_state
+
+          val _ = print "Imports Processed\n"
+
+	  val (_, final_state, _) = 
+	      rbnds(bnds, initial_env, initial_state)
 		    
-	  val bnds' = top_bnds @ (map #1 hoists) @ stay_bnds
-		    
+	  val (bnds',_,_) = extractBnds(final_state, toplevel)
       in
 	  MODULE {bnds=bnds',imports=imports,exports=exports}  
       end
