@@ -139,3 +139,4 @@
 0143 [open]	parsing problem with test file
 0144 [open]	redefinition problem in as
 0145 [open]	discrepancies with time results
+0146 [open]	integer constant too large
