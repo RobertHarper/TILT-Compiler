@@ -60,7 +60,7 @@ source unit NilRename = "nilrename.sml" {
 
 source unit SUBST = "subst.sig.sml" {Name}
 source unit Subst = "subst.sml" {
-	Listops Util Name List SUBST 
+	Listops Util Name List SUBST TextIO
 }
 
 source unit NILSUBST = "nilsubst.sig.sml" {Nil SUBST}
