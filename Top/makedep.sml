@@ -1,4 +1,4 @@
-(*$import MAKEDEP Util Time TextIO Date OS Char *)
+(*$import MAKEDEP Util Time TextIO Date OS Char TopLevel *)
 
 structure Makedep :> MAKEDEP = struct
 

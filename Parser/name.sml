@@ -62,9 +62,10 @@ structure Name :> NAME =
 
     val labels_name_sorted_distinct = all_pairs (fn (l1,l2) => compare_label_name(l1,l2) = LESS)
     
-    val var_counter = ref 0
-    val tag_counter = ref 0
-    val label_counter = ref 0
+    (* XXX small variable numbers could be mapped to physical registers at the tortl level *)
+    val var_counter = ref 256
+    val tag_counter = ref 256
+    val label_counter = ref 256
 
     fun inc_counter counter = 
       let val res = !counter

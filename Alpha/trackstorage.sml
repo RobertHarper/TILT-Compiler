@@ -1,4 +1,4 @@
-(*$import DECALPHA PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE BinarySetFn *)
+(*$import DECALPHA PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE BinarySetFn Util *)
 functor AlphaTrackstorage(structure Decalpha : DECALPHA
 (*
 			  structure Regmap : ORD_MAP where type Key.ord_key = Decalpha.register

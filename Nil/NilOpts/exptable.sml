@@ -118,11 +118,10 @@ struct
 	  | IntVector sz => 1*sskip + hash_intsize sz
 	  | FloatArray sz => 2*sskip + hash_floatsize sz
 	  | FloatVector sz => 3*sskip + hash_floatsize sz
-	  | PtrArray => 4*sskip
-	  | PtrVector => 5*sskip
-	  | WordArray => 6*sskip
-	  | WordVector => 7*sskip
-
+	  | OtherArray false => 4*sskip + 0
+	  | OtherArray true => 4*sskip + 1
+	  | OtherVector false => 4*sskip + 2
+	  | OtherVector true => 4*sskip + 3
 
     fun hash_prim p =
 	case p of
