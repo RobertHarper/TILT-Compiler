@@ -88,3 +88,26 @@ The CVS repository contains a few things that are not in the release:
 an old MLRISC backend, some experimental code, regression tests,
 benchmarks, a bugs database, and additional (but outdated)
 documentation.
+
+
+SUPPORT
+-------
+
+This research was supported by the Defense Advanced Research Projects
+Agency (DARPA) and the National Science Foundation (NSF) as part of
+the Fox, PSciCo, and ConCert projects at Carnegie Mellon.
+
+The ConCert Project is supported by NSF under grant number 0121633:
+"ITR/SY+SI: Language Technology for Trustless Software Dissemination".
+
+The PSciCo Project was supported by NSF under the title "Advanced
+Languages for Scientific Computation Environments" as part of the
+Experimental Software Systems program within CISE under grant number
+9706572.
+
+The Fox Project was sponsored by DARPA CSTO under the title "The Fox
+Project: Advanced Languages for Systems Software", ARPA Order Number
+C533, issued by ESC/ENS under Contract Number F19628-95-C-0050 and
+under the title "The Fox Project: Advanced Development of Systems
+Software", ARPA Order Number 8313, issued by ESD/AVS under Contract
+Number F196228-91-C-0168.
