@@ -23,19 +23,37 @@ extern void raise_exception_raw(Thread_t *th, ptr_t exn_arg);
 extern int stringlen(ptr_t string);
 extern ptr_t cstring2mlstring_alloc(const char *);
 
+#define GET_RECORD(t, p, i) ((t)get_record((p),(i)))
+#define GET_PTR(p, i) GET_RECORD(ptr_t,p,i)
+#define GET_INT(p, i) GET_RECORD(int,p,i)
+
+/* The components of an exception module.
+   N.B. must agree with Elaborator/toil.sml. */
+#define MOD_STAMP 0
+#define MOD_MK    1
+
+/* Find canonical exception packet for a global, non-value-carrying
+   exception. */
+static ptr_t exn_lookup(ptr_t global)
+{
+  ptr_t exnmod = (ptr_t) GetGlobal(global);
+  return GET_PTR(exnmod, MOD_MK);
+}
+
 ptr_t getOverflowExn(void)
 {
-  return (ptr_t) GetGlobal(&ml_Overflow_r_INT);
+  return exn_lookup(&ml_Overflow_r_INT);
 }
 
 ptr_t getDivExn(void)
 {
-  return (ptr_t) GetGlobal(&ml_Div_r_INT);
+  return exn_lookup(&ml_Div_r_INT);
 }
 
-#define PACKET_STAMP 0		/* The components of an exception */
-#define PACKET_ARG 1		/* packet. */
-#define PACKET_NAME 2
+/* The components of an exception packet. */
+#define PACKET_STAMP 0
+#define PACKET_ARG   1
+#define PACKET_NAME  2
 
 static ptr_t mkExn(ptr_t exnname, int exnstamp, val_t exnarg, int argPointer)
 {
@@ -55,20 +73,18 @@ static ptr_t mkExn(ptr_t exnname, int exnstamp, val_t exnarg, int argPointer)
  * isn't early enough).
  */
 
-#define GET_RECORD(t, p, i) ((t)get_record((p),(i)))
-#define GET_PTR(p, i) GET_RECORD(ptr_t,p,i)
-#define GET_INT(p, i) GET_RECORD(int,p,i)
+/* The components of the TiltExn structure.
+   N.B. must aree with Basis/Prelude.sml. */
+#define SYSERR  0
+#define LIBFAIL 1
 
-#define DEC_STAMP 0		/* the components of the structure corresponding to an exception */
-#define DEC_INJECT 1		/* declaration -- must agree with Elaborator/toil.sml */
-
-#define SYSERR 0		/* the components of the TiltExn structure -- must agree with */
-#define LIBFAIL 1		/* Basis/Firstlude.sml */
-
+/* Get the exception stamp for the ith TiltExn componenet. */
 static int getTiltExnStamp(int i)
 {
-  ptr_t str = GET_PTR((ptr_t) GetGlobal(&ml_TiltExn_STR_r_INT), i);
-  int stamp = GET_INT(str, DEC_STAMP);
+  ptr_t global = &ml_TiltExn_STR_r_INT;
+  ptr_t tiltexn = (ptr_t) GetGlobal(global);
+  ptr_t exnmod = GET_PTR(tiltexn, i);
+  int stamp = GET_INT(exnmod, MOD_STAMP);
   return stamp;
 }
   
@@ -150,6 +166,11 @@ void raise_exn(ptr_t exn)
 void raise_exception(ucontext_t *uctxt, ptr_t exn_arg)
 {
   Thread_t *th = getThread();
+
+  if (th == NULL)
+    /* This happens, for example, if the runtime
+       divides by zero during initialization.  */
+    DIE("spurious exception");
 
   if (!th->notInML) {
     /* Move saved register from uctxt to thread area so it can be restored by raise_exception_raw */
