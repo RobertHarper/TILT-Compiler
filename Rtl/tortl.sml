@@ -18,7 +18,7 @@
       The check for global and top-level variables must also consider exports.
 *)
    
- 
+
 functor Tortl(structure Rtl : RTL
 	      structure Pprtl : PPRTL 
 	      structure Rtltags : RTLTAGS 
@@ -35,9 +35,10 @@ functor Tortl(structure Rtl : RTL
 struct
 
 val do_constant_records = ref true
-val do_gcmerge = ref true
+val do_gcmerge = ref false
 val debug = ref false
 val debug_full = ref false
+val debug_full_env = ref true
 val debug_simp = ref false
 val debug_bound = ref false
 
@@ -45,7 +46,7 @@ val debug_bound = ref false
 
     structure Rtl = Rtl
     structure Nil = Nil
-    open Util
+    open Util Listops
     open Nil
     open NilUtil
     open Rtl
@@ -60,13 +61,7 @@ val debug_bound = ref false
     structure TW64 = TilWord64
 
 
-    local
-	val callcount = ref 0
-	val switchcount = ref 0
-    in
-	fun get_callcount() = (callcount := (!callcount) + 1; !callcount)
-	fun get_switchcount() = (switchcount := (!switchcount) + 1; !switchcount)
-    end
+
 
    (* ------------------ Overall Data Structures ------------------------------ *)
       
@@ -112,6 +107,9 @@ val debug_bound = ref false
    val unitval = VINT 0w256
    val unit_vvc = (VAR_VAL unitval, Prim_c(Record_c[],[]))
 
+   datatype gcinfo = GC_IMM of instr ref | GC_INF
+   type gcstate = gcinfo list
+
   (* ----- Global data structures ------------------------------
    dl: list of data for module
    pl: list of procedures for the entire module
@@ -131,10 +129,12 @@ val debug_bound = ref false
    val pl : Rtl.proc list ref = ref nil
    type state = {env : NilContext.context,
 		 varmap : varmap,
-		 convarmap : convarmap}
+		 convarmap : convarmap,
+		 gcstate : gcstate}
    fun make_state() : state = {env = NilContext.empty(),
 			       varmap = VarMap.empty,
-			       convarmap = VarMap.empty}
+			       convarmap = VarMap.empty,
+			       gcstate = [GC_INF]}
    val global_state : state ref = ref (make_state())
 
    fun stat_state ({convarmap,...} : state) = 
@@ -170,45 +170,55 @@ val debug_bound = ref false
    end
 
 
-  fun alloc_named_code_label s = LOCAL_CODE(fresh_named_var s)
-  fun alloc_named_data_label s = LOCAL_DATA(fresh_named_var s)
-  fun alloc_named_local_code_label s = LOCAL_LABEL(alloc_named_code_label s)
-  fun alloc_named_local_data_label s = LOCAL_LABEL(alloc_named_data_label s)
-  fun alloc_code_label () = LOCAL_CODE(fresh_var())
-  fun alloc_data_label () = LOCAL_DATA(fresh_var())
-  fun alloc_local_code_label () = LOCAL_LABEL(alloc_code_label())
-  fun alloc_local_data_label () = LOCAL_LABEL(alloc_data_label())
+  fun alloc_code_label s = LOCAL_CODE(fresh_named_var s)
+  fun alloc_data_label s = LOCAL_DATA(fresh_named_var s)
+  fun alloc_local_code_label s = LOCAL_LABEL(alloc_code_label s)
+  fun alloc_local_data_label s = LOCAL_LABEL(alloc_data_label s)
+  fun named_local_data_label v = LOCAL_LABEL(LOCAL_DATA v)
+  fun named_local_code_label v = LOCAL_LABEL(LOCAL_CODE v)
 
   val codeAlign = ref (Rtl.OCTA)
   fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
 
 
-  fun varmap_insert' ({varmap,env,convarmap} : state) (v,vr : var_rep) : state = 
+  (* ---- Looking up and adding new variables --------------- *)
+
+  fun top_rep (v,rep) = 
+      (case rep of
+(* 	   (SOME(VGLOBAL _),_,_) => true *)
+	   (_, SOME(VCODE _), _) => true
+(*	 | (_, SOME(VLABEL _), _) => true *)
+	 | _ => (VarSet.member(!globals,v)))
+
+  fun varmap_insert' ({varmap,env,convarmap,gcstate} : state) (v,vr : var_rep) : state = 
       let val _ = if (!debug_bound)
-		      then (print "varmap adding to v = "; Ppnil.pp_var v; print "\n")
+		      then (print "varmap adding to v = "; 
+			    Ppnil.pp_var v; print "\n")
 		  else ()
 	  val _ = case (VarMap.find(varmap,v)) of
 		  NONE => ()
-		| SOME _ => if (!debug)
-				then print ("hash table already contains entry "
+		| SOME _ => error ("varmap contains "
 					    ^ (Name.var2string v))
-			    else ()
 	  val varmap = VarMap.insert(varmap,v,vr)
-      in  {env=env,varmap=varmap,convarmap=convarmap}
+      in  {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
-  fun convarmap_insert' ({convarmap,varmap,env}:state) (v,cvr : convar_rep) : state = 
+  fun varmap_insert state arg =
+      (if (top_rep arg)
+	   then global_state := varmap_insert' (!global_state) arg
+       else ();
+	varmap_insert' state arg)
+
+  fun convarmap_insert' ({convarmap,varmap,env,gcstate}:state) (v,cvr : convar_rep) : state = 
       let val _ = if (!debug_bound)
 		      then (print "convar adding to v = "; Ppnil.pp_var v; print "\n")
 		  else ()
 	  val _ = (case (VarMap.find(convarmap,v)) of
 		       NONE => ()
-		     | SOME _ => if (!debug)
-				     then print ("hash table already contains entry " 
-						 ^ (Name.var2string v))
-				 else ())
+		     | SOME _ => error ("convarmap already contains "
+						 ^ (Name.var2string v)))
 	  val convarmap = VarMap.insert(convarmap,v,cvr)
-      in  {env=env,varmap=varmap,convarmap=convarmap}
+      in  {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
   fun insert_kind(ctxt,v,k,copt : con option) = 
@@ -244,27 +254,20 @@ val debug_bound = ref false
       in ctxt
       end
 
-
-  fun top_rep (v,rep) = 
-      (case rep of
-(* 	   (SOME(VGLOBAL _),_,_) => true *)
-	   (_, SOME(VCODE _), _) => true
-(*	 | (_, SOME(VLABEL _), _) => true *)
-	 | _ => (VarSet.member(!globals,v)))
-
-  fun env_insert' istop ({env,varmap,convarmap} : state) (v,k,copt) : state = 
+  fun env_insert' istop ({env,varmap,convarmap,gcstate} : state) (v,k,copt) : state = 
       let val _ = if (!debug_bound)
 		      then (print "env adding v = ";
 			    Ppnil.pp_var v; print "   istop = ";
 			    print (Bool.toString istop); print "\n")
 		  else ()
 	  val newenv = insert_kind(env,v,k,copt)
-	  val newstate = {env=newenv,varmap=varmap,convarmap=convarmap}
+	  val newstate = {env=newenv,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
+(*
 	      (* should not call insert_kind again: doing normalization work twice *)
 	  val _ = if istop
-		      then let val {env,varmap,convarmap} = !global_state
+		      then let val {env,varmap,convarmap,gcstate} = !global_state
 			       val env = insert_kind(env,v,k,copt)
-			       val new_globalstate = {env=env,varmap=varmap,convarmap=convarmap}
+			       val new_globalstate = {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
 			   in  global_state := new_globalstate
 			   end
 		  else ()
@@ -273,19 +276,11 @@ val debug_bound = ref false
 			    Ppnil.pp_var v; print "   istop = ";
 			    print (Bool.toString istop); print "\n")
 		  else ()
+*)
       in  newstate
       end
-  
-	   
-  fun lvarmap_insert istop state arg =
-      let val res = varmap_insert' state arg
-	  val _ = if (top_rep arg)
-		      then global_state := varmap_insert' (!global_state) arg
-		  else ()
-      in  res
-      end
 
-  fun lconvarmap_insert istop state (arg as (v,(_,_,k))) copt =
+  fun convarmap_insert state (arg as (v,(_,_,k))) copt =
       let val state = convarmap_insert' state arg
 	  val istop = top_rep arg
 	  val _ = if istop
@@ -295,10 +290,17 @@ val debug_bound = ref false
       end
 
   
+  fun add_var' s (v,vlopt,vvopt,con) =  varmap_insert s (v,(vlopt,vvopt,con))
+  fun add_var  s (v,reg,con)         =  add_var' s (v,SOME(VREGISTER reg), NONE, con)
+  fun add_varloc s (v,vl,con)        =  add_var' s (v,SOME vl,NONE,con)
+  fun add_code s (v,l,con)           =  add_var' s (v,NONE, SOME(VCODE l), con)
 
+  (* adding constructor-level variables and functions *)
+  fun add_convar s (v,vlopt,vvopt,kind,copt) = 
+      convarmap_insert s (v,(vlopt, vvopt, kind)) copt
+  fun add_concode s (v,l,kind,copt) = 
+      convarmap_insert s (v,(NONE, SOME(VCODE l),kind)) copt
 
-
-  (* ---- Looking up and adding new variables --------------- *)
     
    fun getconvarrep ({convarmap=lm,...} : state) v : convar_rep = 
        (case VarMap.find (lm,v) of
@@ -438,7 +440,7 @@ val debug_bound = ref false
 		     | (SOME(VREGISTER (I ir)),_) => SOME(COMPUTE(Projvar_p(ir,indices)))
 		     | (SOME(VREGISTER (F _)),_) => error "constructor in float reg"
 		     | (SOME(VGLOBAL (l,_)),_) => SOME(COMPUTE(Projlabel_p(l,0::indices)))
-		     | (NONE,NONE) => error "no info on this convar"
+		     | (NONE,NONE) => NONE (* reduced to a free variable; must not reduce *)
 	       end
 	 | (Let_c _) => NONE
 	 | (App_c _) => NONE
@@ -449,11 +451,12 @@ val debug_bound = ref false
        end
 
    fun con2rep state con : rep =
-       (let fun failure copt = (print "con2rep failed\n";
+       (let fun failure copt = (print "con2rep failed original con = \n";
 				Ppnil.pp_con con; print "\n";
 				(case copt of
-				    SOME c => (Ppnil.pp_con c; print "\n")
-				  | _ => ()))
+				    SOME c => (print "reduced con = \n";
+					       Ppnil.pp_con c; print "\n")
+				  | _ => print "no reduced con\n"))
 	    fun simp c = (case c of
 	             (* since roll/unroll are no-ops *)
                       	   Mu_c (is_recur,vc_seq,v) => 
@@ -465,10 +468,14 @@ val debug_bound = ref false
 			   | (App_c _) => simp(#2(simplify_type state c))
 			   | (Var_c _) => simp(#2(simplify_type state c))
 			   | _ => simp c)
-	    val c = reduce con handle e => (failure NONE; raise e)
-	in case (con2rep_raw state c) handle e => (failure (SOME c); raise e) of
-	    SOME rep => rep
-	  | NONE => (failure (SOME c); error "con2rep failed")
+	    val c = reduce con handle e => (print "reduce failed\n"; failure NONE; raise e)
+	in (case ((con2rep_raw state c) handle e => (failure (SOME c); raise e)) of
+		SOME rep => rep
+	      | NONE => (* we may have reduced the type to another type
+			   involving a variable not in scope *)
+		    (case ((con2rep_raw state con) handle e => (failure (SOME c); raise e)) of
+			 SOME rep => rep
+		       | NONE => (failure (SOME c); error "con2rep failed")))
 	end)
 
 
@@ -509,8 +516,8 @@ val debug_bound = ref false
 
    local
        val istop : bool ref = ref false
-       val top : local_label ref = ref (alloc_code_label())
-       val currentfun : local_label ref = ref (alloc_code_label())
+       val top : local_label ref = ref (alloc_code_label "dummy_top")
+       val currentfun : local_label ref = ref (alloc_code_label "dummy_fun")
        val resultreg : reg ref = ref (F(REGF(fresh_named_var "badreg",NOTRACE_REAL)))
        val il : (Rtl.instr ref) list ref = ref nil
        val localregi : regi list ref = ref nil
@@ -518,6 +525,7 @@ val debug_bound = ref false
        val argregi : regi list ref = ref nil
        val argregf : regf list ref = ref nil
        val curgc : instr ref option ref = ref NONE
+       val gcstack : instr ref option list ref = ref []
        fun add_instr' i = il := (ref i) :: !il;
    in  
        fun istoplevel() = !istop
@@ -529,34 +537,48 @@ val debug_bound = ref false
        fun getArgF() = !argregf
 
        fun add_data d = dl := d :: !dl
-       fun invalidate_gc() = curgc := NONE
+
+       fun new_gcstate ({env,varmap,convarmap,gcstate} : state) : state =
+	   {env=env,varmap=varmap,convarmap=convarmap,gcstate=[GC_INF]}
+       fun join_states ([] : state list) : state = error "join_states got []"
+	 | join_states (({env,varmap,convarmap,gcstate}) :: rest) = 
+	   let val gcstates = gcstate :: (map #gcstate rest)
+	       val gcstate = List.concat gcstates
+	   in   {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
+	   end
        fun add_instr i = 
 	   (add_instr' i;
 	    case i of
 		NEEDGC _ => error "should use needgc to add a NEEDGC"
-	      | JMP _ => invalidate_gc()
-	      | CALL _ => invalidate_gc()
-	      | FLOAT_ALLOC _ => invalidate_gc()
-	      | INT_ALLOC _ => invalidate_gc()
-	      | PTR_ALLOC _ => invalidate_gc()
 	      | _ => ())
 
-       fun needgc operand = 
-	 if (!do_gcmerge)
-	  then (case (operand,!curgc) of
-		(IMM _,NONE) => let val i = NEEDGC operand
-				    val r = ref i
-				in  (il := r :: !il; curgc := SOME r)
-				end
-	      | (IMM m, SOME (r as ref(NEEDGC(IMM n)))) =>
-				let val i = NEEDGC(IMM(m+n))
-				in  r := i
-				end
-	      | (IMM _, SOME _) => error "curgc is not a NEEDGC IMM"
-	      | (_, NONE) => add_instr'(NEEDGC operand)
-	      | (_, SOME _) => (invalidate_gc();
-				add_instr'(NEEDGC operand)))
-	 else add_instr'(NEEDGC operand)
+       fun needgc(state as {gcstate,env,convarmap,varmap}:state,operand) : state = 
+	 if (not (!do_gcmerge))
+	     then (add_instr'(NEEDGC operand); state)
+	 else
+	      let val has_inf = List.exists (fn GC_INF => true
+                                              | _ => false) gcstate
+		  val is_imm = (case operand of
+				    IMM _ => true
+				  | _ => false)
+	      in  if (has_inf orelse (not is_imm))
+		      then let val r = ref(NEEDGC operand)
+			       val _ = il := r :: !il
+			       val gcinfo = if is_imm then GC_IMM r else GC_INF
+			   in  {env=env,convarmap=convarmap,varmap=varmap,
+				gcstate=[gcinfo]}
+			   end
+		  else (* the merge case where everything is IMM *)
+		      let val (IMM m) = operand
+			  fun update(GC_IMM(r as ref(NEEDGC (IMM n)))) = 
+			      r := (NEEDGC(IMM(m+n)))
+			    | update (GC_IMM _) = error "update given bad GC_IMM"
+			    | update _ = error "update not given GC_IMM"
+		      in  (app update gcstate; state)
+		      end
+	      end
+
+
 
        fun alloc_regi (traceflag) = 
 	   let val r = REGI(fresh_var(),traceflag)
@@ -593,8 +615,10 @@ val debug_bound = ref false
 	     | _ => I(alloc_named_regi v (con2rep state c))
 		   
 
-       fun promote_maps is_top state : state = !global_state
-
+       fun promote_maps is_top ({env,...} : state) : state = 
+	   let val {varmap,convarmap,gcstate,...} = !global_state
+	   in  {varmap = varmap, convarmap = convarmap, env = env, gcstate = gcstate}
+	   end
 
        fun set_args_result ((iargs,fargs),result,return) = 
 	   (resultreg := result;
@@ -608,10 +632,9 @@ val debug_bound = ref false
 			    | _ => fargs))
 
        fun reset_state (is_top,name) = 
-	   (invalidate_gc();
-	    istop := is_top;
+	   (istop := is_top;
 	    currentfun := LOCAL_CODE name;
-	    top := alloc_code_label();
+	    top := alloc_code_label "funtop";
 	    il := nil; 
 	    do_code_align();
 	    add_instr(ILABEL (!top)))
@@ -685,8 +708,6 @@ val debug_bound = ref false
 
 
 
-  fun alloc_named_data_label v = LOCAL_DATA v
-  fun alloc_named_code_label v = LOCAL_CODE v
  
   (* printing functions *)
   fun regi2s (Rtl.REGI (v,_)) = var2string v
@@ -713,19 +734,6 @@ val debug_bound = ref false
        | F r => (print "coercei: "; print (str : string) ; print "\n";
 		 error("coercei: expected int register, found float register "^regf2s r))
 				      
-
-  (* adding term-level variables and functions *)
-  fun add_var' s (v,vlopt,vvopt,con) =  lvarmap_insert (istoplevel()) s (v,(vlopt,vvopt,con))
-  fun add_var  s (v,reg,con)         =  add_var' s (v,SOME(VREGISTER reg), NONE, con)
-  fun add_varloc s (v,vl,con)        =  add_var' s (v,SOME vl,NONE,con)
-  fun add_code s (v,l,con)           =  add_var' s (v,NONE, SOME(VCODE l), con)
-
-  (* adding constructor-level variables and functions *)
-  fun add_convar s (v,vlopt,vvopt,kind,copt) = 
-      lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
-  fun add_concode s (v,l,kind,copt) = 
-        lconvarmap_insert (istoplevel()) s (v,(NONE, SOME(VCODE l),kind))copt
-
 
     
   val heapptr  = SREGI HEAPPTR
@@ -843,11 +851,10 @@ val debug_bound = ref false
 	 add_data(DLABEL (label));
 	 add_data(FLOAT (r)))
 	
-    fun mk_float_data ( r : string) : label =
-	let 
-	    val label = LOCAL_LABEL(alloc_data_label())
-	in mk_named_float_data (r,label);
-	    label
+    fun mk_float_data (r : string) : label =
+	let val label = alloc_local_data_label "floatdata"
+	    val _ = mk_named_float_data (r,label)
+	in label
 	end
   
     fun load_freg_loc (rep : var_loc, poss_dest : regf option) : regf =
@@ -917,14 +924,6 @@ val debug_bound = ref false
 		    | SOME (F fr) => error "load_freg_val on a FLOAT rep and a SOME(F _)"
 		    | SOME (I ir) => I(load_ireg_val(rep, SOME ir))))
 
-(*
-    fun load_ireg((_,SOME v,_) : var_rep, poss_dest) = load_ireg_val(v,poss_dest)
-      | load_ireg((l,_,_) : var_rep, poss_dest) = load_ireg_loc(l,poss_dest)
-    fun load_freg((_,SOME v,_) : var_rep, poss_dest) = load_freg_val(v,poss_dest)
-      | load_freg((l,_,_) : var_rep, poss_dest) = load_freg_loc(l,poss_dest)
-    fun load_reg((_,SOME v,_) : var_rep, poss_dest) = load_reg_val(v,poss_dest)
-      | load_reg((l,_,_) : var_rep, poss_dest) = load_reg_loc(l,poss_dest)
-*)
 
     fun load_ireg_locval(VAR_LOC vl, poss_dest) = load_ireg_loc(vl,poss_dest)
       | load_ireg_locval(VAR_VAL vv, poss_dest) = load_ireg_val(vv,poss_dest)
@@ -937,9 +936,8 @@ val debug_bound = ref false
       | load_ireg_sv vl = REG(load_ireg_locval(vl,NONE))
 
 
-
-
   (* --------- end of load(sv/int/float) ------------------------------------------ *)
+
 
 
   (* --------- Common Code Sequence Helper Functions ------------------------------ *)
@@ -998,12 +996,10 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		      map (fn l => ML_EXTERN_LABEL(Name.label2string l)) rest)
 	       | NONE => (NONE,[]))
 
-
-
 	val (label_opt,vv_opt) = 
 	    (case (lv,label_opt) of
                (VAR_VAL vv, NONE) => (NONE,SOME vv)
-	     | (_, NONE) => (SOME(LOCAL_LABEL(alloc_named_data_label v)),NONE)
+	     | (_, NONE) => (SOME(LOCAL_LABEL(LOCAL_DATA v)),NONE)
 	     | (VAR_VAL vv, SOME _) => (label_opt, SOME vv)
 	     | (_, SOME _) => (label_opt, NONE))
 
@@ -1075,7 +1071,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	val (label_opt,vv_opt) = 
 	    (case (lv,label_opt) of
                (VAR_VAL vv, NONE) => (NONE,SOME vv)
-	     | (_, NONE) => (SOME(LOCAL_LABEL(alloc_named_data_label v)),NONE)
+	     | (_, NONE) => (SOME(named_local_data_label v),NONE)
 	     | (VAR_VAL vv, SOME _) => (label_opt, SOME vv)
 	     | (_, SOME _) => (label_opt, NONE))
       val state' = add_convar state(v,
@@ -1110,33 +1106,38 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			       in  fr
 			       end
 
-  fun boxFloat regf : regi = 
+  fun boxFloat (state,regf) : regi * state = 
       let val dest = alloc_regi TRACE
-	  val _ = if (not (!HeapProfile))
-		      then (needgc(IMM 4);
-			    align_odd_word();
-			    store_tag_zero(realarraytag (i2w 1));
-			    add_instr(STOREQF(EA(heapptr,4),regf)); (* allocation *)
-			    add(heapptr,4,dest);
-			    add(heapptr,12,heapptr))
-		  else
-		      (needgc(IMM 5);
-		       align_even_word();
-		       store_tag_disp(0,MakeProfileTag());
-		       store_tag_disp(4,realarraytag (i2w 1));
-		       add_instr(STOREQF(EA(heapptr,8),regf)); (* allocation *)
-		       add(heapptr,8,dest);
-		       add(heapptr,16,heapptr))
-      in  dest
+	  val state = if (not (!HeapProfile))
+		      then let val state = needgc(state,IMM 4)
+			   in  align_odd_word();
+			       store_tag_zero(realarraytag (i2w 1));
+			       add_instr(STOREQF(EA(heapptr,4),regf)); (* allocation *)
+			       add(heapptr,4,dest);
+			       add(heapptr,12,heapptr);
+			       state
+			   end
+		  else let val state = needgc(state,IMM 5)
+		       in  align_even_word();
+			   store_tag_disp(0,MakeProfileTag());
+			   store_tag_disp(4,realarraytag (i2w 1));
+			   add_instr(STOREQF(EA(heapptr,8),regf)); (* allocation *)
+			   add(heapptr,8,dest);
+			   add(heapptr,16,heapptr);
+			   state
+		       end
+      in  (dest,state)
       end
 
-  fun boxFloat_vl lv : loc_or_val = 
+  fun boxFloat_vl (state,lv) : loc_or_val * state = 
       (case lv of
-	  VAR_LOC(VREGISTER (F fr)) => VAR_LOC(VREGISTER (I (boxFloat fr)))
+	  VAR_LOC(VREGISTER (F fr)) => let val (ir,state) = boxFloat(state,fr)
+				       in  (VAR_LOC(VREGISTER (I ir)), state)
+				       end
 	| VAR_LOC(VREGISTER (I _)) => error "float in int reg"
-	| VAR_LOC(VGLOBAL (l,_)) => VAR_VAL(VLABEL l)
+	| VAR_LOC(VGLOBAL (l,_)) => (VAR_VAL(VLABEL l), state)
 	| VAR_VAL(VINT _) => error "can't boxfloat an int"
-	| VAR_VAL(VREAL l) => VAR_VAL(VLABEL l)
+	| VAR_VAL(VREAL l) => (VAR_VAL(VLABEL l), state)
 	| VAR_VAL(VRECORD _) => error "can't boxfloat a record"
 	| VAR_VAL(VVOID _) => error "can't boxfloat a void"
 	| VAR_VAL(VLABEL _) => error "can't boxfloat a label; labels can't be floats"
@@ -1144,7 +1145,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 
  (* code for allocating an fp array at run-time given a list of var_locs: return an ireg *)
        
-  fun fparray (val_locs : loc_or_val list) : regi = 
+ fun fparray (state, val_locs : loc_or_val list) : regi * state = 
     let 
       val res = alloc_regi TRACE
       val len = length val_locs
@@ -1154,34 +1155,39 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	  in  add_instr(STOREQF(EA(res,offset),src));
 	      scan(t,offset+8)
 	  end
-    in 
+      val state = 
        if (not (!HeapProfile))
 	 then 
-	   (needgc(IMM((if len = 0 then 1 else 2*len)+2));   
-	    align_odd_word();
-	    store_tag_zero(realarraytag(i2w len));
-	    add_instr(ADD(heapptr,IMM 4,res)))
-       else (needgc(IMM((if len = 0 then 1 else 2*len)+3));
-	     align_even_word();
-	     store_tag_disp(0,MakeProfileTag());
-	     store_tag_disp(4,realarraytag(i2w len));
-	     add_instr(ADD(heapptr,IMM 8,res)));
+	     let val state = needgc(state,IMM((if len = 0 then 1 else 2*len)+2))
+	     in  align_odd_word();
+		 store_tag_zero(realarraytag(i2w len));
+		 add_instr(ADD(heapptr,IMM 4,res));
+		 state
+	     end
+       else let val state = needgc(state,IMM((if len = 0 then 1 else 2*len)+3))
+	    in  align_even_word();
+		store_tag_disp(0,MakeProfileTag());
+		store_tag_disp(4,realarraytag(i2w len));
+		add_instr(ADD(heapptr,IMM 8,res));
+		state
+	    end;
+    in
        scan (val_locs,0);
        if (len = 0)
 	   then add_instr(ADD(res,IMM 4,heapptr))
        else
 	   add_instr(ADD(res,IMM (8*len),heapptr));
-       res
-    end
-  
-
+       (res, state)
+    end 
 	      
+
+
   local
     fun shuffle_regs (src : 'a list,dest : 'a list, 
 		      eqreg : ('a * 'a) -> bool,
 		      alloc : 'a -> 'a, 
 		      mover: ('a * 'a) -> instr) =
-      let fun isdest r = Listops.member_eq(eqreg,r, dest)
+      let fun isdest r = member_eq(eqreg,r, dest)
 	
 	local
 	  (* given two lists, zip the lists, and remove any pairs 
@@ -1236,32 +1242,173 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
   end
 
 
+  (* -- create a record given a list of tagwords for the fields,
+   the first n fields which are already in integer registers,
+   and the rest of the fields, which are values *)
+
+  fun make_record' (state, destopt, _ , []) : loc_or_val * state = (VAR_VAL unitval, state)
+    | make_record' (state, destopt, reps : rep list, vl : loc_or_val list) = 
+    let 
+
+	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length vl)) ^ "-record"))
+	val tagwords = mk_recordtag reps
+	val dest = (case destopt of
+			NONE => alloc_regi TRACE
+		      | SOME d => d)
+	val tagwords = 
+	    if (not (!HeapProfile))
+		then tagwords
+	    else ({dynamic=nil,static=MakeProfileTag()}) :: tagwords
+        (* total number of words needed *)
+	val words_alloced = length vl+length tagwords
+(* for some reason VGLOBALs causes a GC bug so we must disallow it until
+   the cause is determined; even add_mutable_object on the
+   non-constant records still fail. :(  *)
+	fun is_varval (VAR_VAL _) = true
+	  | is_varval _ = false
+	val is_top = istoplevel() andalso 
+	    (!do_constant_records andalso (andfold is_varval vl))
+
+	(* shadow heapptr with thunk to prevent accidental use *)
+	val (heapptr,state) = 
+	    if is_top
+		then let fun f _ = error "should not use heapptr here"
+		     in (add_data(COMMENT "static record tag");
+			 (f, state))
+		     end
+	    else let val state = needgc(state,IMM(words_alloced))
+		 in  (fn _ => heapptr, state)
+		 end
+
+	fun scan_vals (offset,[]) = offset
+	  | scan_vals (offset,vl::vls) =
+	    ((case (is_top,vl) of
+		  (true,VAR_VAL (VINT w32)) => add_data(INT32 w32)
+		| (true,VAR_VAL (VRECORD (l,_))) => add_data(DATA l)
+		| (true, VAR_VAL (VLABEL l)) => add_data(DATA l)
+		| (true, VAR_VAL (VCODE l)) => add_data(DATA l)
+		| (true, VAR_LOC (VGLOBAL (l,rep))) => 
+		      let val _ = error "currently this case should be unreachable"
+			  val addr = alloc_regi LABEL
+			  val loc = alloc_regi LABEL
+			  val value = alloc_regi rep
+			  val fieldl = alloc_local_data_label "recfield"
+		      in  (add_data(DLABEL fieldl);
+			   add_data(INT32 0w43);
+			   add_instr(LADDR(fieldl,0,addr));
+			   add_instr(LADDR(l,0,loc));
+			   add_instr(LOAD32I(EA(loc,0),value));
+			   add_instr(STORE32I(EA(addr,0),value)))
+		      end
+		| _ => let val r = load_ireg_locval(vl,NONE)
+			   val _ = if is_top then add_data(INT32 0w0) else ()
+		       in  add_instr(STORE32I(EA(heapptr(),offset),r))  (* allocation - not a mutation *)
+		       end);
+	    scan_vals(offset+4,vls))
+
+        (* sometime the tags must be computed at run-time *)
+	fun do_dynamic (r,{bitpos,path}) =
+	    let val tipe = 
+		case path of
+		    Var_p regi => regi
+		  | Projvar_p (regi,indices) =>
+			let val tipe = alloc_regi TRACE
+			    fun loop src [] = ()
+			      | loop src (i::rest) = (add_instr(LOAD32I(EA(src,4*i),tipe)); loop tipe rest)
+			in  loop regi indices; tipe
+			end
+		  | Label_p label =>
+			let val addr = alloc_regi LABEL
+			    val tipe = alloc_regi TRACE
+			in add_instr(LADDR(label,0,addr));
+			    add_instr(LOAD32I(EA(addr,0),tipe));
+			    tipe
+			end
+		  | Projlabel_p(label,indices) =>
+			let val addr = alloc_regi LABEL
+			    val addr' = alloc_regi LABEL
+			    val tipe = alloc_regi TRACE
+			    fun loop src [] = ()
+			      | loop src (i::rest) = (add_instr(LOAD32I(EA(src,4*i),tipe)); loop tipe rest)
+			in  add_instr(LADDR(label,0,addr));
+			    add_instr(LOAD32I(EA(addr,0),addr'));
+			    loop addr' indices;
+			    tipe
+			end
+		  | Notneeded_p => error "record: Notneeded_p hit"
+		val tmp1 = alloc_regi NOTRACE_INT
+		val tmp2 = alloc_regi NOTRACE_INT
+	    in (* add_instr(LI(i2w 0,tmp1));
+		add_instr(CMV(NE,tipe,IMM 1,tmp1)); *)
+		add_instr(CMPUI(GT, tipe, IMM 3, tmp1)); (* is it not an int *)
+		add_instr(SLL(tmp1,IMM (bitpos-1),tmp2));
+		add_instr(ORB(tmp2,REG r,r))
+	    end
+
+      (* usually, the tags are known at compile time *)	
+      fun scantags (offset,nil : Rtltags.tags) = offset
+	| scantags (offset,({static,dynamic}::vl) : Rtltags.tags) =
+	  (if is_top
+	       then add_data(INT32 static)
+	   else ();
+	   if (is_top andalso (null dynamic))
+	       then ()
+	   else let val r = alloc_regi(NOTRACE_INT)
+		in  add_instr (LI(static,r));
+		    app (fn a => do_dynamic(r,a)) dynamic;
+		    add_instr(STORE32I(EA(heapptr(),offset),r)) (* allocation *)
+		end;
+	   scantags(offset+4,vl))
+
+      val offset = 0
+      val offset = scantags(offset,tagwords);
+      val (result,templabelopt) = 
+	  if is_top
+	      then let val label = alloc_local_data_label "record"
+		   in  ((* add_mutable_object label; *)
+			add_data(DLABEL label);
+			(VAR_VAL(VLABEL label), SOME label))
+		   end
+	  else (VAR_LOC (VREGISTER (I dest)), NONE)
+
+      val offset = scan_vals (offset, vl)
+      val _ = if is_top
+		  then ()
+	      else (add(heapptr(),4 * length tagwords,dest);
+		    add(heapptr(),4 * words_alloced,heapptr()))
+      val _ = add_instr(ICOMMENT ("done allocating an " ^ (Int.toString (length vl)) ^ " record"))
+    in  (result, state)
+    end
+
+  fun make_record arg : regi * state = 
+      let val (lv,s) = make_record' arg
+      in  (load_ireg_locval(lv,NONE),s)
+      end
+			   
 
   fun xbnd state (bnd : bnd) : state =
-      let
-	  val x = 5
-      in
-	  case bnd of
+      (case bnd of
 	      Con_b (v,k,c) => 
-		  let val (lv,k) = xcon'(state,v,c,SOME k)
+		  let val (lv,k,state) = xcon'(state,v,c,SOME k)
 		      val s' =  (if (istoplevel())
 				     then alloc_conglobal (state,v,lv,k,SOME c)
 				 else add_convar state (v,SOME(VREGISTER(load_reg_locval(lv,NONE))),
 							NONE,k,SOME c))
 		  in  s'
 		  end
-	    | Exp_b (v,c,e) => let val (loc_or_val,_) = xexp(state,v,e,SOME c,NOTID)
-				   val s' = (if istoplevel() 
-						 then alloc_global (state,v,c,loc_or_val)
-					     else 
-						 case loc_or_val of
-						     VAR_LOC(var_loc) => add_varloc state (v,var_loc,c)
-						   | VAR_VAL(var_val) => 
-							 let val reg = load_reg_val(var_val, NONE)
-							 in  add_var' state (v,SOME(VREGISTER reg),SOME var_val,c)
-							 end)
-			       in  s'
-			       end
+	    | Exp_b (v,c,e) => 
+		  let val (loc_or_val,_,state) = xexp(state,v,e,SOME c,NOTID)
+		      val s' = (if istoplevel() 
+				    then alloc_global (state,v,c,loc_or_val)
+				else 
+				    case loc_or_val of
+					VAR_LOC(var_loc) => add_varloc state (v,var_loc,c)
+				      | VAR_VAL(var_val) => 
+					    let val reg = load_reg_val(var_val, NONE)
+					    in  add_var' state (v,SOME(VREGISTER reg),SOME var_val,c)
+					    end)
+		  in  s'
+		  end
 	    | Fixopen_b (var_fun_set : (var,function) Nil.set) => error "no open functions permitted"
 	    | Fixcode_b (var_fun_set : (var,function) Nil.set) => 
 		  let 
@@ -1281,75 +1428,74 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		      val var_vcelist = sequence2list var_varconexpset
 		      val _ = add_instr(ICOMMENT ("allocating " ^ 
 						  (Int.toString (length var_vcelist)) ^ " closures"))
-		      fun loadcl ((v,{code,cenv,venv,tipe}),(acc,s)) = 
-			  let val code_lv = #1(xexp(state,fresh_named_var "codereg",Var_e code,NONE,NOTID))
-			      val con_lv = #1(xcon'(state,fresh_named_var "cenv", cenv,NONE))
-			      val exp_lv = if is_recur
-					       then VAR_VAL(VINT 0w0)
-					   else (#1(xexp(state,fresh_named_var "venv",venv,NONE,NOTID)))
+		      fun loadcl ((v,{code,cenv,venv,tipe}),state) = 
+			  let val (code_lv,_,state) = xexp(state,fresh_named_var "codereg",Var_e code,NONE,NOTID)
+			      val (con_lv,_,state) = xcon'(state,fresh_named_var "cenv", cenv,NONE)
+			      val (exp_lv,_,state) = if is_recur
+					       then (VAR_VAL(VINT 0w0),Crecord_c[],state)
+					   else xexp(state,fresh_named_var "venv",venv,NONE,NOTID)
 			      val vls = [code_lv,
 					 con_lv,
 					 exp_lv]
 			      val reps = [NOTRACE_CODE, TRACE, TRACE]
-			      val lv = make_record'(NONE,reps,vls)
+			      val (lv,state) = make_record'(state,NONE,reps,vls)
 			      val ir = load_ireg_locval(lv,NONE)
 			      val s' = if (istoplevel())
-					   then alloc_global(s,v,tipe,lv)
-				       else add_var s (v,I(load_ireg_locval(lv,NONE)),tipe)
-			  in  (ir::acc,s')
+					   then alloc_global(state,v,tipe,lv)
+				       else add_var state (v,I(load_ireg_locval(lv,NONE)),tipe)
+			  in  (ir,s')
 			  end
-		      val (rev_clregsi,rec_state) = foldl loadcl ([],state) var_vcelist
-		      fun dowrite (clregi, (_,{code,cenv,venv,tipe})) = 
-				   let val (I ir) = #1(xexp'(rec_state,fresh_named_var "venv", venv, NONE, NOTID))
-				   in  add_instr(STORE32I(EA(clregi,8), ir))
+		      val (clregsi,rec_state) = foldl_list loadcl state var_vcelist
+		      fun dowrite (clregi, (_,{code,cenv,venv,tipe}),s) = 
+				   let val (I ir,_,s) = xexp'(s,fresh_named_var "venv", venv, NONE, NOTID)
+				   in  (add_instr(STORE32I(EA(clregi,8), ir)); s)
 				   end
 		      val _ = if is_recur 
-				  then (Listops.map2 dowrite (rev rev_clregsi,var_vcelist); ())
+				  then (foldl2 dowrite rec_state (clregsi, var_vcelist); ())
 			      else ()
 		      val _ = add_instr(ICOMMENT ("done allocating " ^ 
 						  (Int.toString (length var_vcelist)) ^ " closures"))
 		  in  rec_state
-		  end
-      end
+		  end)
+
   
   and xconbnd state (cbnd : conbnd) : state = 
-      let
-	  val x = 5
-      in
-	  case cbnd of
-	      Con_cb (v,k,c) => let val (lv,k) = xcon'(state,v,c,SOME k)
-				in  case lv of
-				    VAR_LOC vl => add_convar state (v,SOME vl,NONE,k,SOME c)
-				  | VAR_VAL vv => add_convar state (v,NONE,SOME vv,k,SOME c)
-				end
-	    | Code_cb (conwork as (name,vklist,c,k)) => 
-		  let val funkind = Arrow_k(Code,vklist,k)
-		      val l = LOCAL_LABEL(LOCAL_CODE name)
-		      val state = add_concode state (name,l,funkind,
-						      SOME(Let_c(Sequential,[cbnd],Var_c name)))
-		      val s' = promote_maps (istoplevel()) state
-		  in  (addWork (ConFunWork(s',name,vklist,c,k)); state)
-		  end
-	    | Open_cb _ => (print "open Fun_cb:\n";
-			    Ppnil.pp_conbnd cbnd; print "\n";
-			    error "open Fun_cb")
-      end
+      (case cbnd of
+	   Con_cb (v,k,c) => let val (lv,k,state) = xcon'(state,v,c,SOME k)
+			     in  case lv of
+				 VAR_LOC vl => add_convar state (v,SOME vl,NONE,k,SOME c)
+			       | VAR_VAL vv => add_convar state (v,NONE,SOME vv,k,SOME c)
+			     end
+	 | Code_cb (conwork as (name,vklist,c,k)) => 
+			     let val funkind = Arrow_k(Code,vklist,k)
+				 val l = LOCAL_LABEL(LOCAL_CODE name)
+				 val state = add_concode state (name,l,funkind,
+								SOME(Let_c(Sequential,[cbnd],Var_c name)))
+				 val s' = promote_maps (istoplevel()) state
+			     in  (addWork (ConFunWork(s',name,vklist,c,k)); state)
+			     end
+	 | Open_cb _ => (print "open Fun_cb:\n";
+			     Ppnil.pp_conbnd cbnd; print "\n";
+			     error "open Fun_cb"))
 
-  and xconst state (arg_v : (con,exp) Prim.value) 
-      : loc_or_val * con =
+  and xconst (state : state, arg_v : (con,exp) Prim.value) 
+      : loc_or_val * con * state =
       let
 	  open Prim
 	  open TW64
-	  fun xvector (c,a : exp Array.array) : loc_or_val * con =
+	  fun xvector (c,a : exp Array.array) : loc_or_val * con * state =
 	      let 
-		  val label = alloc_named_local_data_label "string"
+		  val label = alloc_local_data_label "string"
 		  val sz = Array.length a
 		  val tagword = TW32.orb(TW32.lshift(TW32.fromInt sz,int_len_offset),intarray)
 		  val _ = add_data(COMMENT "static string tag")
 		  val _ = add_data(INT32 tagword)
 		  val _ = add_data(DLABEL label)
-		  val vl = (Array.foldr (fn (e,acc) => (xexp(state,Name.fresh_var(),e,NONE,NOTID))::acc)
-			    [] a)
+		  val (state,vl) = (Array.foldr (fn (e,(state,vls)) => 
+					 let val (a,b,state) = xexp(state,Name.fresh_var(),e,NONE,NOTID)
+					 in  (state,(a,b)::vls)
+					 end)
+				    (state,[]) a)
 		  fun layout segsize packager = 
 		  let fun pack [] = ()
 			| pack acc = packager(rev acc)
@@ -1389,23 +1535,22 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			     | _ => (print "xvector not done on type = \n";
 				     Ppnil.pp_con c; print "\n";
 				     error "xvector not fully done"))
-	      in  (VAR_VAL(VLABEL label), Prim_c(Vector_c, [c]))
+	      in  (VAR_VAL(VLABEL label), Prim_c(Vector_c, [c]), state)
 	      end
       in
 	  (case arg_v of
 	       ((uint (ws as (W8 | W16 | W32),w64)) |
 		(int (ws as (W8 | W16 | W32),w64))) =>  
 	       let val w32 = TW64.toUnsignedHalf w64
-	       in  (VAR_VAL(VINT w32), Prim_c(Int_c ws, []))
+	       in  (VAR_VAL(VINT w32), Prim_c(Int_c ws, []),state)
 	       end
 	      | ((uint (W64, _)) | (int (W64, _))) => error "64-bit ints not done"
-	      | (float (F64, s)) => (VAR_VAL(VREAL (mk_float_data s)), Prim_c(Float_c F64, []))
+	      | (float (F64, s)) => (VAR_VAL(VREAL (mk_float_data s)), Prim_c(Float_c F64, []),state)				    
 	      | (float (F32, _)) => error "32 bit floats not done"
 	      | (vector (c,a)) => xvector(c,a)
-	      | (array _ | refcell _) => 
-		    error "array/vector/refcell constants not implemented"
+	      | (array _ | refcell _) => error "array/vector/refcell constants not implemented"
 	      | (tag(t,c)) => let val i = TW32.fromInt (tag2int t)
-			      in  (VAR_VAL(VINT i), Prim_c(Int_c W32, []))
+			      in  (VAR_VAL(VINT i), Prim_c(Int_c W32, []),state)
 			      end)
       end
 
@@ -1416,17 +1561,17 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	     e : exp,    (* The expression being translated *)
 	     copt : con option,    (* The type of the expression being translated *)
 	     context     (* The evaluation context this expression is in *)
-	     ) : reg * con =
+	     ) : reg * con * state =
       (case xexp(state,name,e,copt,context) of
-	   (VAR_LOC var_loc, c) => (load_reg_loc(var_loc,NONE),c)
-	 | (VAR_VAL var_val, c) => (load_reg_val(var_val,NONE),c))
+	   (VAR_LOC var_loc, c, s) => (load_reg_loc(var_loc,NONE),c, s)
+	 | (VAR_VAL var_val, c, s) => (load_reg_val(var_val,NONE),c, s))
 
   and xexp (state : state, (* state of bound variables *)
 	    name  : var, (* Purely for debugging and generation of useful names *)
 	    arg_e : exp,         (* The expression being translated *)
 	    copt  : con option,  (* The type of the expression being translated *)
 	    context     (* The evaluation context this expression is in *)
-	    ) : loc_or_val * con =
+	    ) : loc_or_val * con * state =
       let 
 	  val _ = exp_depth := !exp_depth + 1
 	  val _ = if (!debug)
@@ -1453,32 +1598,32 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	    arg_e : exp,         (* The expression being translated *)
 	    copt  : con option,  (* The type of the expression being translated *)
 	    context     (* The evaluation context this expression is in *)
-	    ) : loc_or_val * con =
+	    ) : loc_or_val * con * state =
       let 
 	  fun pickdesti rep = alloc_named_regi name rep
 	  fun pickdestf () = alloc_named_regf name
 	  val res = 
 	  case arg_e of
 	      Var_e v => (case (getrep state v) of
-			      (_,SOME vv,c) => (VAR_VAL vv,c)
-			    | (SOME vl,_,c) => (VAR_LOC vl, c)
+			      (_,SOME vv,c) => (VAR_VAL vv, c, state)
+			    | (SOME vl,_,c) => (VAR_LOC vl, c, state)
 			    | (NONE,NONE,_) => error "no info on var")
-	    | Const_e v => xconst state v
-	    | Let_e (_, bnds, body) => let fun folder (bnd,s) = xbnd s bnd
-					   val s' = foldl folder state bnds
-					   val (lv,c) = xexp(s',fresh_var(),body,copt,context)
-					   val cbnds = List.mapPartial (fn (Con_b vkc) => SOME(Con_cb vkc)
-									| _ => NONE) bnds
-					   val c' = Let_c(Sequential,cbnds,c)
-				       in  (lv,c')
-				       end
+	    | Const_e v => xconst(state,v)
+	    | Let_e (_, bnds, body) => 
+		  let fun folder (bnd,s) = xbnd s bnd
+		      val state = foldl folder state bnds
+		      val (lv,c,state) = xexp(state,fresh_var(),body,copt,context)
+		      val cbnds = List.mapPartial (fn (Con_b vkc) => SOME(Con_cb vkc)
+		    | _ => NONE) bnds
+		      val c' = Let_c(Sequential,cbnds,c)
+		  in  (lv,c',state)
+		  end
 	    | Prim_e (NilPrimOp nilprim, clist, elist) => xnilprim(state,nilprim,clist,elist,context)
 	    | Prim_e (PrimOp prim, clist, elist) => xprim(state,prim,clist,elist,context)
 	    | Switch_e sw => xswitch(state,name,sw,copt,context)
 	    | App_e (openness, f, clist, elist, eflist) => (* assume the environment is passed in first *)
 		  let 
-(*		      val _ = stat_state state *)
-			  val callcount = get_callcount()
+			  val callcount = Stats.counter("RTLcall")()
 		      local
 			  val _ = add_instr (ICOMMENT ((case openness of
 							    Open => error "no open calls permitted here"
@@ -1486,12 +1631,22 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 							 | ExternCode => "making a direct extern call "
 							 | Closure => "making a closure call ")
 						       ^ (Int.toString callcount)))
-			  val cregsi = map (fn c => #1(xcon(state,fresh_named_var "call_carg", c, NONE))) clist
-			  val eregs = map (fn e => #1(xexp'(state,fresh_named_var "call_e", 
-							    e, NONE, NOTID))) elist
-			  val efregs = map (fn e => #1(xexp'(state,fresh_named_var "call_ef", 
-							     e, NONE, NOTID))) eflist
-			  val (extern_call,selfcall,fun_reglabel,funcon,cregsi',eregs') = 
+
+			  fun cfolder (c,state) =
+			      let val (res,_,state) = xcon(state,fresh_named_var "call_carg", c, NONE)
+			      in  (res,state)
+			      end
+			  fun efolder(e,state) = 
+			      let val (res,_,state) = xexp'(state,fresh_named_var "call_e", 
+							    e, NONE, NOTID)
+			      in  (res,state)
+			      end
+
+			  val (cregsi,state) = foldl_list cfolder state clist
+			  val (eregs, state) = foldl_list efolder state elist
+			  val (efregs, state) = foldl_list efolder state eflist
+
+			  val (extern_call,selfcall,fun_reglabel,funcon,cregsi',eregs',state) = 
 			      (case (openness,f) of
 				   ((ExternCode | Code),Var_e expvar) =>
 				       let 
@@ -1510,10 +1665,10 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 										 REG' reg)
 									    end
 					       | _ => error "bad varloc or varval for function"),
-					    funcon, [], [])
+					    funcon, [], [],state)
 				       end
 				 | (Closure,cl) =>
-				       let val (clreg,funcon) = xexp'(state,fresh_var(),cl,NONE,NOTID)
+				       let val (clreg,funcon,state) = xexp'(state,fresh_var(),cl,NONE,NOTID)
 					   val clregi = (case clreg of
 							     I ir => ir
 							   | F _ => error "closure compiled to float reg")
@@ -1523,7 +1678,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 					   val _ = (add_instr(LOAD32I(EA(clregi,0),funregi));
 						    add_instr(LOAD32I(EA(clregi,4),cregi));
 						    add_instr(LOAD32I(EA(clregi,8),eregi)))
-				       in  (false, false, REG' funregi, funcon, [cregi], [I eregi])
+				       in  (false, false, REG' funregi, funcon, [cregi], [I eregi],state)
 				       end
 				 | ((ExternCode | Code),_) => error "ill-formed application"
 				 | (Open,_) => error "no open apps allowed")
@@ -1538,8 +1693,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			  val efregs = efregs
 			  fun reduce(vklist,clist,rescon) = 
 			      let fun nada _ = NOCHANGE
-				  val table = Listops.map2 (fn ((v,_),c) => (v,c)) (vklist,clist)
-				  fun ch (bound,Var_c v) = (case (Listops.assoc_eq(eq_var,v,table)) of
+				  val table = map2 (fn ((v,_),c) => (v,c)) (vklist,clist)
+				  fun ch (bound,Var_c v) = (case (assoc_eq(eq_var,v,table)) of
 								NONE => NOCHANGE
 							      | SOME c => CHANGE_NORECURSE c)
 				    | ch _ = NOCHANGE
@@ -1585,7 +1740,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 						      shuffle_fregs(fregs,getArgF());
 						      add_instr(BR (getTop())))
 					    else do_call (SOME r));
-				    (VAR_LOC(VREGISTER dest), rescon))
+				    (VAR_LOC(VREGISTER dest), rescon,
+				     new_gcstate state))
 		      val _ = add_instr (ICOMMENT ((case openness of
 							Open => error "no open calls permitted here"
 						     | Code => "done making a direct call "
@@ -1596,16 +1752,14 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		  end
 
 	    | Raise_e (exp, con) =>
-		  let val ir = (case (xexp'(state,name,exp,SOME(Prim_c(Exn_c,[])),NOTID)) of
-				    (I ir,_) => ir
-				  | (F _,_) => error "exception cannot translate to an freg")
+		  let val (I ir,_,state) = xexp'(state,name,exp,SOME(Prim_c(Exn_c,[])),NOTID)
 		      val newpc = alloc_regi LABEL
 		      val rep = con2rep state con
 		  in  add_instr(LOAD32I(EA(exnptr,0),newpc));
 		      add_instr(MV (ir,exnarg));
 		      add_instr RESTORE_CS;
 		      add_instr (JMP(newpc,nil));
-		      (VAR_VAL(VVOID rep), con)
+		      (VAR_VAL(VVOID rep), con, state)
 		  end
             (* --- We rely on the runtime to unwind the stack so we don't need to save the
 	           free variables of the continuation of this expression. *)
@@ -1638,38 +1792,39 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 
 
 
-		      val bl = alloc_code_label()
-		      val hl = alloc_named_code_label (fresh_named_var "handler")
+		      val bl = alloc_code_label "exn_body"
+		      val hl = alloc_code_label "exn_handler"
 		      val hlreg = alloc_regi LABEL
-		      val nl = alloc_named_code_label (fresh_named_var "after_handler")
-
+		      val nl = alloc_code_label "exn_after"
 
 		      val reps = (LABEL :: LABEL :: TRACE :: local_int_reps)
 
-		      val fpbase = (* --- save the floating point values, if any *)
+		      val (fpbase,state) = (* --- save the floating point values, if any *)
 			  (case local_fregs of
-			       [] => NONE
-			     | _ => SOME (fparray(map (VAR_LOC o VREGISTER o F) local_fregs)))
+			       [] => (NONE,state)
+			     | _ => let val (ir,state) = (fparray(state,map (VAR_LOC o VREGISTER o F) local_fregs))
+				    in  (SOME ir, state)
+				    end)
 
 
 		      (* --- create the exn record and set the exnptr to it to install it *)
 		      val int_vallocs = (map (VAR_LOC o VREGISTER o I) 
 					 ([hlreg, stackptr,exnptr] @ local_iregs))
-		      val _ = (add_instr(LADDR(LOCAL_LABEL hl,0,hlreg));
-			       make_record(SOME exnptr,reps, int_vallocs))
+		      val _ = add_instr(LADDR(LOCAL_LABEL hl,0,hlreg))
+		      val (_,state) = make_record(state,SOME exnptr,reps, int_vallocs)
 			  
 
                       (* --- compute the body; restore the exnpointer; branch to after handler *)
 		      (* NOTID and not context because we have to remove the exnrecord *)
-		      val (reg,arg_c) = xexp'(state,name,exp,copt,NOTID)
+		      val (reg,arg_c,state) = xexp'(state,name,exp,copt,NOTID)
 		      val _ = (add_instr(LOAD32I(EA(exnptr,8),exnptr));
 			       add_instr(BR bl));
 
 
 		      (* --- now the code for handler --- *)
-		      val _ = invalidate_gc()
+		      val hstate = new_gcstate state
 		      val xr = alloc_named_regi exnvar TRACE;
-		      val state' = add_var state (exnvar,I xr,exncon)
+		      val hstate = add_var hstate (exnvar,I xr,exncon)
 		      val _ = (add_instr(ILABEL hl);
 			       add_instr(MV(exnarg,xr)))
 
@@ -1704,17 +1859,17 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
                       (* --- restore exnptr; compute the handler; move result into same register
                              as result reg of expression; add after label; and fall-through *)
 		      val _ = add_instr(LOAD32I(EA(exnptr,8),exnptr))
-		      val (hreg,_) = xexp'(state',name,handler_body,SOME hcon,context)
+		      val (hreg,_,hstate) = xexp'(hstate,name,handler_body,SOME hcon,context)
 		      val _ = (case (hreg,reg) of
 				   (I hreg,I reg) => add_instr(MV(hreg,reg))
 				 | (F hreg,F reg) => add_instr(FMV(hreg,reg))
 				 | _ => error "hreg/ireg mismatch in handler")
 		      val _ = add_instr(ILABEL bl)
-		      val _ = invalidate_gc()
+		      val state = join_states[state,hstate]
 
 		  in 
 		      (* for debugging, should check that arg_c and hcon are the same *)
-		      (VAR_LOC(VREGISTER reg), arg_c)
+		      (VAR_LOC(VREGISTER reg), arg_c, state)
 		  end
 	    | Handle_e _ => error "ill-formed handler"
 
@@ -1736,27 +1891,28 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
       end
 
 
+
       (* The trick is to notice that for certain args, the comparison and computation
          can be folded into one instruction. *)
-      and zero_one (state : state, r : regi, copt : con option, zeroexp, oneexp, context) = 
-	  let val thenl = alloc_code_label()
-	      val elsel = alloc_code_label()
-	      val afterl = alloc_code_label()
+      and zero_one (state : state, r : regi, copt : con option, zeroexp, oneexp, context) : loc_or_val * con * state = 
+	  let val thenl = alloc_code_label "zero_case"
+	      val elsel = alloc_code_label "one_case"
+	      val afterl = alloc_code_label "after_zeroone"
 	      val _ = add_instr(BCNDI(NE,r,elsel,false))
-	      val (zero,zcon) = xexp'(state,fresh_named_var "zero_result", zeroexp, copt, context)
+	      val _ = add_instr(ILABEL thenl)
+	      val (zero,zcon,state_zero) = xexp'(state,fresh_named_var "zero_result", zeroexp, copt, context)
 	      val result = zero
 	      val _ = add_instr(BR afterl)
 	      val _ = add_instr(ILABEL elsel)
-	      val (one,ocon) = xexp'(state,fresh_named_var "nonzero_result", oneexp, copt, context)
+	      val (one,ocon,state_one) = xexp'(state,fresh_named_var "nonzero_result", oneexp, copt, context)
+	      val state = join_states[state_zero,state_one]
 	      val _ = (case (zero,one) of 
 			   (I zz, I oo) => add_instr(MV (oo,zz))
 			 | (F zz, F oo) => add_instr(FMV (oo,zz))
 			 | _ => error "zero_one: different arms have results in float and int registers")
 	      val _ = add_instr(ILABEL afterl)
-	  in (VAR_LOC (VREGISTER result), zcon)
+	  in (VAR_LOC (VREGISTER result), zcon,state)
 	  end
-
-
 
 
   and xswitch (state : state,
@@ -1764,7 +1920,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	       sw : switch, (* The switch expression being translated *)
 	       arg_c : con option, (* The type of the switch expression *)
 	       context      (* The evaluation context this expression is in *)
-	       ) : loc_or_val * con =
+	       ) : loc_or_val * con * state =
       let
 	  val rescon = ref NONE
 	  val dest = ref NONE
@@ -1775,30 +1931,37 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			    | _ => error "register mismatch")
 	  fun get_body (Function(_,_,[],[],[],e,c)) = e
 	    | get_body _ = error "get_body of xswitch got a function with arguments"
-	  fun no_match() = (case (!rescon) of
-				SOME c => (mv(xexp'(state,fresh_var(),Raise_e(NilUtil.match_exn,c),
-						    NONE, NOTID)))
-			      | NONE => error "empty switch statement")
-	  val switchcount = get_switchcount()
+	  fun no_match state = 
+	      (case (!rescon) of
+		   SOME c => let val (r,c,newstate) = xexp'(state,fresh_var(),Raise_e(NilUtil.match_exn,c),
+				       NONE, NOTID)
+			     in  mv(r,c); newstate
+			     end
+		 | NONE => error "empty switch statement")
+	  val switchcount = Stats.counter("RTLswitch")()
       in
 	  case sw of
 	      Intsw_e {info, arg, arms, default} => 
-		  let val r = (case (xexp'(state,fresh_named_var "intsw_arg",arg,
+		  let val (r,state) = (case (xexp'(state,fresh_named_var "intsw_arg",arg,
 					   SOME(Prim_c(Int_c info,[])),NOTID)) of
-				   (I ireg,_) => ireg
-				 | (F _,_) => error "intsw argument in float register")
+				   (I ireg,_,state) => (ireg,state)
+				 | (F _,_,_) => error "intsw argument in float register")
 		  in  case (arms,default) of
 		      ([(0w0,z)],SOME e) => zero_one(state, r, arg_c, get_body z, e, context)
 		    | ([(0w0,z),(0w1,one)],NONE) => zero_one(state, r, arg_c, get_body z, get_body one, context)
 		    | _ => (* general case *)
 			  let 
-			      val afterl = alloc_code_label()
-			      fun scan(lab,[]) = (add_instr(ILABEL lab);
-						  case default of
-						      NONE => no_match()
-						    | SOME e => mv(xexp'(state,fresh_var(),e,arg_c,context)))
-				| scan(lab,(i,Function(_,_,_,_,_,body,con))::rest) = 
-				  let val next = alloc_code_label()
+			      val afterl = alloc_code_label "after_intcase"
+			      fun scan(states,lab,[]) = 
+				  (add_instr(ILABEL lab);
+				   case default of
+				       NONE => (no_match state::states)
+				     | SOME e => 
+					   let val (r,c,newstate) = (xexp'(state,fresh_var(),e,arg_c,context))
+					   in  mv(r,c); newstate::states
+					   end)
+				| scan(states,lab,(i,Function(_,_,_,_,_,body,con))::rest) = 
+				  let val next = alloc_code_label "intarm"
 				      val test = alloc_regi(NOTRACE_INT)
 				  in  add_instr(ILABEL lab);
 				      (if in_imm_range i then
@@ -1809,88 +1972,101 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 					      add_instr(CMPSI(EQ,r,REG tmp,test))
 					  end);
 				      add_instr(BCNDI(EQ,test,next,true));
-				      mv(xexp'(state,fresh_var(),body,SOME con,context));
-				      add_instr(BR afterl);
-				      scan(next,rest)
+				      let val (r,c,newstate) = 
+					  xexp'(state,fresh_var(),body,SOME con,context)
+				      in  mv(r,c);
+					  add_instr(BR afterl);
+					  scan(newstate::states,next,rest)
+				      end
 				  end
-			  in  scan(alloc_code_label(),arms);
+			      val new_states = scan([],alloc_code_label "intarm",arms)
+			      val state = join_states new_states
+			  in  
 			      add_instr(ILABEL afterl);
 			      case (!dest,!rescon) of
-				  (SOME r,SOME c) => (VAR_LOC(VREGISTER r),c)
+				  (SOME r,SOME c) => (VAR_LOC(VREGISTER r),c,state)
 				| _ => error "no arms"
 			  end
 		  end
 	    | Exncase_e {info, arg, arms, default} => 
 		  let
-		      val exnarg = (case (xexp'(state,fresh_named_var "exntsw_arg",arg,NONE,NOTID)) of
-					(I ireg,_) => ireg
-				      | (F _,_) => error "exnsw argument in float register")
+		      val (I exnarg,_,state) = xexp'(state,fresh_named_var "exntsw_arg",arg,NONE,NOTID)
+
 		      val exntag = alloc_regi(NOTRACE_INT)
 		      val _ = add_instr(LOAD32I(EA(exnarg,0),exntag))
-		      val afterl = alloc_code_label()
-		      fun scan(lab,[]) =
+		      val afterl = alloc_code_label "after+exncase"
+		      fun scan(states,lab,[]) =
 			  (add_instr(ILABEL lab);
 			   case default of
 			       NONE => 
 				   let val con = (case !rescon of
-						  SOME c => c | NONE => error "no arms")
-				   in  mv(xexp'(state,fresh_var(),Raise_e(arg,con),SOME con,context))
+						  SOME c => c 
+						| NONE => error "no arms")
+				       val (r,c,newstate) = xexp'(state,fresh_var(),Raise_e(arg,con),SOME con,context)
+				   in  mv(r,c); newstate :: states
 				   end
-			     | SOME e => mv(xexp'(state,fresh_var(),e,arg_c,context)))
-			| scan(lab,(armtag,Function(_,_,_,[(v,c)],_,body,con))::rest) = 
+			     | SOME e => 
+				   let val (r,c,newstate) = xexp'(state,fresh_var(),e,arg_c,context)
+				   in  mv(r,c); newstate :: states
+				   end)
+			| scan(states,lab,(armtag,Function(_,_,_,[(v,c)],_,body,con))::rest) = 
 			  let 
-			      val next = alloc_code_label()
+			      val next = alloc_code_label "exnarm"
 			      val test = alloc_regi(NOTRACE_INT)
 			      val carried = alloc_reg state c
 			      val carriedi = (case carried of
 						  I ir => ir
 						| _ => error "carried value is an unboxed float")
-			      val state' = add_var state (v,carried,c)
-			      val _ = add_instr(ILABEL lab);
-			      val armtagi = (case (#1(xexp'(state',fresh_var(),armtag,NONE,NOTID))) of
-						 I ir => ir | _ => error "armtag is a float")
+			      val state = add_var state (v,carried,c)
+			      val _ = add_instr(ILABEL lab)
+			      val (I armtagi,_,state) = xexp'(state,fresh_var(),armtag,NONE,NOTID)
 			  in  add_instr(CMPSI(EQ,exntag,REG armtagi,test));
 			      add_instr(BCNDI(EQ,test,next,true));
 			      add_instr(LOAD32I(EA(exnarg,4),carriedi));
-			      mv(xexp'(state',fresh_var(),body,SOME con,context));
-			      add_instr(BR afterl);
-			      scan(next,rest)
+			      let val (r,c,state) = xexp'(state,fresh_var(),body,SOME con,context)
+			      in  mv(r,c);
+				  add_instr(BR afterl);
+				  scan(state::states,next,rest)
+			      end
 			  end
-			| scan(lab,_) = error "ill-typed exnsw_e Function"
-		  in  scan(alloc_code_label(),arms);
+			| scan(_,_,_) = error "ill-typed exnsw_e Function"
+		      val states = scan([],alloc_code_label "exnarm",arms)
+		      val state = join_states states
+		  in  
 		      add_instr(ILABEL afterl);
 		      case (!dest,!rescon) of
-			  (SOME r,SOME c) => (VAR_LOC(VREGISTER r),c)
+			  (SOME r,SOME c) => (VAR_LOC(VREGISTER r),c,state)
 			| _ => error "no arms"
 		  end 
 	    | Typecase_e _ => error "typecase_e not implemented"
 	    | Sumsw_e {info = (tagcount,cons), arg, arms, default} => 
-		  let val r = (case (xexp'(state,fresh_named_var "sumsw_arg",arg,NONE,NOTID)) of
-				   (I ireg,_) => ireg
-				 | (F _,_) => error "sumsw argument in float register")
-		      val afterl = alloc_code_label()
-		      val nomatchl = alloc_code_label()
+		  let val (I r,_,state) = xexp'(state,fresh_named_var "sumsw_arg",arg,NONE,NOTID)
+		      val afterl = alloc_code_label "after_sum"
+		      val nomatchl = alloc_code_label "nomatch_sum"
 		      val one_carrier = (length cons) = 1
-		      val total = TilWord32.uplus(tagcount, i2w(length cons))
+		      val total = TW32.uplus(tagcount, i2w(length cons))
 		      val exhaustive = 
 			  let val handled = map (fn (w,_) => (w2i w)) arms
-			      fun mem i = Listops.member(i,handled)
-			  in  List.all mem (Listops.count (w2i total))
+			      fun mem i = member(i,handled)
+			  in  List.all mem (count (w2i total))
 			  end
 		      val tag = alloc_regi(NOTRACE_INT)
-		      fun scan(lab,[]) = 
+		      fun scan(newstates,lab,[]) = 
 			  (add_instr(ILABEL lab);
 			   if exhaustive
-			       then ()
+			       then newstates
 			   else (add_instr(ILABEL nomatchl);
 				case default of
-				     NONE => no_match()
-				   | SOME e => mv(xexp'(state,fresh_var(),e,arg_c,context))))
-			| scan(lab,(i,Function(_,_,_,elist,_,body,con))::rest) = 
-			  let val next = alloc_code_label()
+				     NONE => (no_match state)::newstates
+				   | SOME e => 
+					 let val (r,c,state) = xexp'(state,fresh_var(),e,arg_c,context)
+					 in  mv(r,c); state::newstates
+					 end))
+			| scan(newstates,lab,(i,Function(_,_,_,elist,_,body,con))::rest) = 
+			  let val next = alloc_code_label "sumarm"
 			      val test = alloc_regi(NOTRACE_INT)
 			      val _ = add_instr(ILABEL lab)
-			      val state' =
+			      val state =
 				  if (TW32.ult(i,tagcount))
 				      then state
 				  else (case elist of
@@ -1918,7 +2094,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 				   else add_instr(LOAD32I(EA(r,0),tag));
 				      load_tag_done := true)
 			  in  add_instr(ICOMMENT ("switch # : " ^ (Int.toString switchcount) ^ "case " 
-						  ^ (TilWord32.toDecimalString i)));
+						  ^ (TW32.toDecimalString i)));
 			      (case (exhaustive andalso TW32.equal(TW32.uplus(i,0w1),total),
 				     TW32.ult(i,tagcount)) of
 				  (true,_) => ()
@@ -1928,17 +2104,23 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 						    then ()
 						else (load_tag();
 						     check next EQ (TW32.uminus(i,tagcount)) tag)));
-			      mv(xexp'(state',fresh_var(),body,SOME con,context));
-			      add_instr(BR afterl);
-			      scan(next,rest)
+			      let val (r,c,state) = xexp'(state,fresh_var(),body,SOME con,context)
+			      in mv(r,c);
+				  add_instr(BR afterl);
+				  scan(state::newstates,next,rest)
+			      end
 			  end
-		  in  scan(alloc_code_label(),arms);
+		      val states = scan([],alloc_code_label "sumarm",arms)
+		      val state = join_states states
+		  in  
 		      add_instr(ILABEL afterl);
 		      case (!dest,!rescon) of
-			  (SOME r,SOME c) => (VAR_LOC(VREGISTER r),c)
+			  (SOME r,SOME c) => (VAR_LOC(VREGISTER r),c,state)
 			| _ => error "no arms"
 		  end
       end
+
+
 
   (* First, we assume that datatypes are translated by 
      rearranging the non value-carrying components to the beginning.
@@ -1961,46 +2143,46 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
        that the term arguments are passed in separately as record components
   *)
 
-  and xsum is_record (state : state, {tagcount : TW32.word, sumtype : TW32.word},
-			clist,elist,context) : loc_or_val * con = 
+  and xsum is_record (orig_state : state, {tagcount : TW32.word, sumtype : TW32.word},
+			clist,elist,context) : loc_or_val * con * state = 
       let
 	  open Prim
 	  val field_64 = TW64.fromInt(TW32.toInt sumtype)
 	  val field_sub = TW32.uminus(sumtype,tagcount)
-	  val varlocs = map (fn e => #1(xexp(state,fresh_var(),e,NONE,NOTID))) elist
-	  val clist = map (simplify_type' state) clist
+	  val (varlocs,orig_state) = 
+	      foldl_list (fn (e,s) => let val (vl,_,s) = xexp(s,fresh_var(),e,NONE,NOTID)
+				      in (vl,s)
+				      end) orig_state elist
+	  val clist = map (simplify_type' orig_state) clist
 	  val sumcon = Prim_c(Sum_c{tagcount=tagcount,known=NONE}, map #2 clist)
 	  val nontagcount = length clist
 	  val single_carrier = (length clist) = 1
 
-          fun xtagsum_tag() = #1(xexp(state,fresh_var(),Const_e(uint(W32,field_64)),NONE,context))
+          fun xtagsum_tag state = 
+	      let val (vl,_,state) = xexp(state,fresh_var(),Const_e(uint(W32,field_64)),NONE,context)
+	      in (vl,state)
+	      end
 
-
-	  fun xtagsum_single() =
+	  fun xtagsum_single state =
 	      let 
 		  val (hnf,field_con) = List.nth(clist, TW32.toInt field_sub)
 		  val desti = alloc_regi(con2rep state field_con)
-		  fun nobox_case_vl() = hd varlocs
-		  fun box_case_vl() = let val reps = map valloc2rep varlocs
-				      in  make_record'(NONE,reps,varlocs)
-				      end
-		  fun nobox_case() = let val ir = load_ireg_locval (nobox_case_vl(), NONE)
-				     in  add_instr(MV(ir,desti))
-				     end
-		  fun box_case() = let val ir = load_ireg_locval (box_case_vl(), NONE)
-				   in  add_instr(MV(ir,desti))
-				   end
+		  fun nobox_case_vl state = (hd varlocs, state)
+		  fun box_case_vl state = 
+		      let val reps = map valloc2rep varlocs
+		      in  make_record'(state,NONE,reps,varlocs)
+		      end
 	      in  (case (hnf,field_con) of
-			  (true,Prim_c(Int_c _, _)) => box_case_vl()
-			| (true,Prim_c(Sum_c _, _)) => box_case_vl()
-			| (true,_) => nobox_case_vl()
+			  (true,Prim_c(Int_c _, _)) => box_case_vl state
+			| (true,Prim_c(Sum_c _, _)) => box_case_vl state
+			| (true,_) => nobox_case_vl state
 			| _ =>
-			      let val beginl = alloc_code_label()
-				  val boxl = alloc_code_label()
-				  val mul = alloc_code_label()
-				  val noboxl = alloc_code_label()
-				  val afterl = alloc_code_label()
-				  val (con_ir,_) = xcon(state,fresh_var(),field_con, NONE)
+			      let val beginl = alloc_code_label "tagsum_begin"
+				  val boxl = alloc_code_label "tagsum_boxcase"
+				  val mul = alloc_code_label "tagsum_mucase"
+				  val noboxl = alloc_code_label "tagsum_noboxcase"
+				  val afterl = alloc_code_label "tagsum_after"
+				  val (con_ir,_,state) = xcon(state,fresh_var(),field_con, NONE)
 				  val tmp = alloc_regi NOTRACE_INT
 				  val tagi = alloc_regi NOTRACE_INT
 				  val _ = (add_instr(ILABEL beginl);
@@ -2014,52 +2196,28 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 					   add_instr(CMPUI(EQ, tagi, IMM 7, tmp)); (* check mu *)
 					   add_instr(BCNDI(NE, tmp, mul, false)))
 				  (* no box case *)
-				  val _ = (add_instr(ILABEL noboxl);
-					   nobox_case();
-					   add_instr(BR afterl))
+				  val _ = add_instr(ILABEL noboxl)
+				  val (vl,nobox_state) = nobox_case_vl state
+				  val _ = add_instr(MV(load_ireg_locval(vl,NONE),desti))
+				  val _ = add_instr(BR afterl)
+
 				  (* mu case - must expand *)
 				  val _ = (add_instr(ILABEL mul);
 					   add_instr(LOAD32I(EA(con_ir,4),con_ir));
 					   add_instr(BR beginl))
+
 				  (* box case *)
-				  val _ = (add_instr(ILABEL boxl);
-					   box_case();
-					   add_instr(ILABEL afterl))
-			      in  VAR_LOC(VREGISTER(I desti))
+				  val _ = add_instr(ILABEL boxl)
+				  val (vl,box_state) = box_case_vl state
+				  val _ = add_instr(MV(load_ireg_locval(vl,NONE), desti))
+				  val _ = add_instr(ILABEL afterl)
+
+			      in  (VAR_LOC(VREGISTER(I desti)),
+				   join_states[nobox_state,box_state])
 			      end)
 	      end
 
-	  fun xtagsum_multi fieldopt = 
-	      let val (hnf,field_con) = List.nth(clist, TW32.toInt field_sub)
-		  val afterl = alloc_code_label()
-		  val nonrecordl = alloc_code_label()
-		  val recordl = alloc_code_label()
-		  val (con_ir,_) = xcon(state,fresh_var(),field_con, NONE)
-		  val desti = alloc_regi(con2rep state field_con)
-		  val tmp = alloc_regi NOTRACE_INT
-		  val tagi = alloc_regi NOTRACE_INT
-		  val _ = (add_instr(CMPUI(GE, con_ir, IMM 255, tmp));
-			   add_instr(BCNDI(EQ, tmp, nonrecordl, false));
-			   add_instr(LOAD32I(EA(con_ir,0),tagi));
-			   add_instr(CMPUI(EQ, tagi, IMM 5, tmp));
-			   add_instr(BCNDI(NE, tmp, recordl, false)))
-		  (* non-record case *) 
-		  val _ = (add_instr(ILABEL nonrecordl);
-			   let val tagint = field_sub
-			       val varlocs = (VAR_VAL(VINT tagint)) :: varlocs
-			       val reps = map valloc2rep varlocs
-			       val ir = make_record(NONE,reps,varlocs)
-			   in  (add_instr(MV(ir,desti));
-				add_instr(BR afterl))
-			   end)
-		  (* record case *)
-		  val _ = (add_instr(ILABEL recordl);
-			   error "xtagsum_multi not implemented\n";
-			   add_instr(ILABEL afterl))
-	      in  VAR_LOC(VREGISTER(I desti))
-	      end
-
-	  fun xtagsum_dynamic vl =
+	  fun xtagsum_dynamic (state,vl) =
 	      let val (hnf,field_con) = List.nth(clist, TW32.toInt field_sub)
 		  val numfields = alloc_regi NOTRACE_INT
 		  val gctemp = alloc_regi NOTRACE_INT
@@ -2073,12 +2231,12 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		  val destcursor = alloc_regi LOCATIVE
 		  val desti = alloc_regi(con2rep state field_con)
 
-		  val nonrecordl = alloc_code_label()
-		  val afterl = alloc_code_label()
-		  val loopl = alloc_code_label()
+		  val nonrecordl = alloc_code_label "dyntagsum_norecord"
+		  val afterl = alloc_code_label "dyntagsum_after"
+		  val loopl = alloc_code_label "dyntagsum_loop"
+		  val recordl = alloc_code_label "dyntagsum_record"
 
-		  val recordl = alloc_code_label()
-		  val (con_ir,_) = xcon(state,fresh_var(),field_con,NONE)
+		  val (con_ir,_,state) = xcon(state,fresh_var(),field_con,NONE)
 		  val _ = (add_instr(CMPUI(LE, con_ir, IMM 255, tmp)); (* check for small types *)
 			   add_instr(BCNDI(NE, tmp, nonrecordl, false));
 			   add_instr(LOAD32I(EA(con_ir,0),tagi));  (* load tag *)
@@ -2088,7 +2246,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		  val _ = add_instr(ILABEL recordl) (* difficult record case *)
 		  val vl_ir = load_ireg_locval(vl,NONE)
 		  val _ = add_instr(LOAD32I(EA(con_ir,0),rectagi));  (* load record tag *)
-		  (* XXX this will break if record is a multi-record or tag format changes *)
+  (* XXX this will break if record is a multi-record or tag format changes *)
 		  val _ = add_instr(SRL(rectagi,IMM 27,numfields))
 		  val _ = add_instr(SLL(rectagi,IMM 5, tmp)) 
 		  val _ = add_instr(SRL(tmp,IMM (3+5), tmp)) 
@@ -2099,7 +2257,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		  val _ = add_instr(ORB(tmp,REG tmp2,newtag))      (* final record tag *)
 				    
 		  val _ = add_instr(ADD(numfields,IMM 2, gctemp))
-		  val _ = needgc(REG gctemp)             (* allocate space for sum record *)
+		  val state = needgc(state,REG gctemp)             (* allocate space for sum record *)
 
 		  val _ = add_instr(STORE32I(EA(heapptr,0),newtag))  (* store record tag *)
 		  val _ = add_instr(LI(field_sub, tmp))
@@ -2125,69 +2283,76 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		  val vls = (case varlocs of
 				 [vl] => [VAR_VAL(VINT field_sub),vl]
 			       | _ => error "xtagsum_dynamic not with one arg")
-		  val ir = make_record(NONE,map valloc2rep vls,vls)
+		  val (ir,state) = make_record(state,NONE,map valloc2rep vls,vls)
 		  val _ = add_instr(MV(ir,desti))
 
 		  val _ = add_instr(ILABEL afterl) (* result is in desti at this point *)
 
-	      in  VAR_LOC(VREGISTER(I desti))
+	      in  (VAR_LOC(VREGISTER(I desti)),state)
 	      end
 
-	  fun xtagsum () =
+	  fun xtagsum state = 
 	      let val (hnf,field_con) = List.nth(clist, TW32.toInt field_sub)
 		  fun decompose vl reccon cons = 
 		    let val bind = fresh_var()
 			val ir = load_ireg_locval(vl,NONE)
 			val state = add_var state (bind, I ir, reccon)
-			fun mapper(n,c) = #1(xexp(state,fresh_var(),
-						  Prim_e(NilPrimOp(select (generate_tuple_label(n+1))),
+			fun folder(c,(n,state)) = 
+			    let val (vl,_,state) = xexp(state,fresh_var(),
+						  Prim_e(NilPrimOp(select (generate_tuple_label n)),
 							 [],[Var_e bind]),
-						  NONE, NOTID))
-		    in  Listops.mapcount mapper cons
+						  NONE, NOTID)
+			    in  (vl,(n+1,state))
+			    end
+			val (vls,(_,state)) = foldl_list folder (1,state) cons
+		    in  (vls,state)
 		    end
-		  val vls = 
+		  val (vls,state) = 
 		      (case (is_record,hnf,field_con,varlocs) of
-			   (true,_,_,_) => SOME varlocs
-			 | (_,_,reccon as Prim_c(Record_c _, cons),[vl]) => SOME(decompose vl reccon cons)
-			 | (_,true,_,[vl]) => SOME [vl]
-			 | _ => NONE)
+			   (true,_,_,_) => (SOME varlocs, state)
+			 | (_,_,reccon as Prim_c(Record_c _, cons),[vl]) => 
+			       let val (vls,state) = decompose vl reccon cons
+			       in  (SOME vls, state)
+			       end
+			 | (_,true,_,[vl]) => (SOME [vl], state)
+			 | _ => (NONE, state))
 	      in  case (vls,varlocs) of
-		  (NONE,[vl]) => xtagsum_dynamic vl
+		  (NONE,[vl]) => xtagsum_dynamic(state, vl)
 		| (NONE,_) => error "xtagsum_dynamic case not with one vl"
 		| (SOME varlocs,_) =>
 		      let 
 			  val varlocs = (VAR_VAL(VINT field_sub)) :: varlocs
 			  val reps = map valloc2rep varlocs
-			  val ir = make_record(NONE,reps,varlocs)
-		      in VAR_LOC(VREGISTER(I ir))
+			  val (ir,state) = make_record(state,NONE,reps,varlocs)
+		      in (VAR_LOC(VREGISTER(I ir)), state)
 		      end
 	      end
-	  val varloc =
+	  val (varloc,state) =
 	      case (TW32.toInt tagcount,nontagcount) of
-		  (0,0) => xtagsum_tag()
-		| (_,0) => xtagsum_tag()
+		  (0,0) => xtagsum_tag orig_state
+		| (_,0) => xtagsum_tag orig_state
 		| (_,1) => if (TW32.equal(sumtype,tagcount))
-			       then xtagsum_single()
-			   else xtagsum_tag()
+			       then xtagsum_single orig_state
+			   else xtagsum_tag orig_state
 		| (_,_) => if (TW32.ult(sumtype,tagcount))
-			       then xtagsum_tag()
-			   else xtagsum ()
-      in (varloc, sumcon) 
+			       then xtagsum_tag orig_state
+			   else xtagsum orig_state
+      in (varloc, sumcon, state) 
       end
 
-
   and xdynamic_project_sum(state : state, {tagcount,sumtype}, clist,
-			   c, e, context) : loc_or_val * con = 
+			   c, e, context) : loc_or_val * con * state = 
       let val single_carrier = (length clist) = 1
-	  val exp_ir = coercei "" (#1(xexp'(state,fresh_var(),e,NONE,NOTID)))
+	  val (r,_,state) = xexp'(state,fresh_var(),e,NONE,NOTID)	
+	  val exp_ir = coercei "" r
 	  fun single_case() = 
 	      let val desti = alloc_regi(con2rep state c)
 		  fun nobox_case() = add_instr(MV(exp_ir,desti))
 		  fun box_case() = add_instr(LOAD32I(EA(exp_ir,0),desti))
-		  val afterl = alloc_code_label()
-		  val boxl = alloc_code_label()
-		  val noboxl = alloc_code_label()
-		  val (con_ir,_) = xcon(state,fresh_var(),c, NONE)
+		  val afterl = alloc_code_label "projsum_single_after"
+		  val boxl = alloc_code_label "projsum_single_box"
+		  val noboxl = alloc_code_label "projsum_single_nobox"
+		  val (con_ir,_,state) = xcon(state,fresh_var(),c, NONE)
 		  val tmp = alloc_regi NOTRACE_INT
 		  val tagi = alloc_regi NOTRACE_INT
 		  val _ = (add_instr(CMPUI(LE, con_ir, IMM 4, tmp)); (* check ints *)
@@ -2205,14 +2370,14 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		  val _ = (add_instr(ILABEL boxl);
 			   box_case();
 			   add_instr(ILABEL afterl))
-	      in  desti
+	      in  (desti, state)
 	      end
 
 	  fun multi_case() = 
-	      let val afterl = alloc_code_label()
-		  val nonrecordl = alloc_code_label()
-		  val recordl = alloc_code_label()
-		  val loopl = alloc_code_label()
+	      let val afterl = alloc_code_label "projsum_multi_after"
+		  val nonrecordl = alloc_code_label "projsum_multi_nonrecord"
+		  val recordl = alloc_code_label "projsum_multi_record"
+		  val loopl = alloc_code_label "projsum_multi_loop"
 		  val tag = alloc_regi NOTRACE_INT
 		  val rectag = alloc_regi NOTRACE_INT
 		  val tmp = alloc_regi NOTRACE_INT
@@ -2225,7 +2390,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		  val destcursor = alloc_regi LOCATIVE
 		  val desti = alloc_regi(con2rep state c)
 
-		  val (con_ir,_) = xcon(state,fresh_var(),c, NONE)
+		  val (con_ir,_,state) = xcon(state,fresh_var(),c, NONE)
 		  val _ = (add_instr(CMPUI(GE, con_ir, IMM 255, tmp));
 			   add_instr(BCNDI(EQ, tmp, nonrecordl, false));
 			   add_instr(LOAD32I(EA(con_ir,0),tag));
@@ -2252,7 +2417,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 
 
 		  val _ = add_instr(ADD(numfields,IMM 1, gctemp))
-		  val _ = needgc(REG gctemp)       (* allocate space for record *)
+		  val state = needgc(state,REG gctemp)       (* allocate space for record *)
 
 		  val _ = add_instr(STORE32I(EA(heapptr,0),rectag))
 		  val _ = add_instr(S4ADD(numfields, REG heapptr, destcursor)) (* record tag *)
@@ -2268,15 +2433,17 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			   add_instr(MV(heapptr,desti));
 			   add_instr(S4ADD(gctemp, REG heapptr,heapptr));
 			   add_instr(ILABEL afterl))
-	      in  desti
+	      in  (desti,state)
 	      end
-	  val result = if single_carrier then single_case() else multi_case()
-	  val lv = VAR_LOC(VREGISTER (I result))
-      in  (lv,c)
+	  val (ir,state) = if single_carrier then single_case() 
+			   else multi_case()
+	  val lv = VAR_LOC(VREGISTER (I ir))
+      in  (lv,c,state)
       end
 
 
-  and xnilprim(state : state, nilprim,clist,elist,context) : loc_or_val * con = 
+
+  and xnilprim(state : state, nilprim,clist,elist,context) : loc_or_val * con * state = 
       let fun error' s = (print "NIL primexpression was:\n";
 			  Ppnil.pp_exp (Nil.Prim_e(Nil.NilPrimOp nilprim, clist,elist));
 			  print "\n";
@@ -2284,55 +2451,50 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
       in
       (case nilprim of 
 	   Nil.record labels => 
-	       let val vallocs_types = map (fn e => xexp(state,fresh_var(), e,NONE,NOTID)) elist
+	       let fun folder(e,state) = 
+		     let val (vl,c,state) = xexp(state,fresh_var(), e,NONE,NOTID)
+		     in  ((vl,c),state)
+		     end
+		   val (vallocs_types,state) = foldl_list folder state elist
 		   val types = map #2 vallocs_types
 		   val vallocs = map #1 vallocs_types
 		   val c = Prim_c(Record_c labels, types)
 		   val reps = map valloc2rep vallocs
-		   val lv = make_record'(NONE,reps,vallocs)
-	       in  (lv, c)
+		   val (lv,state) = make_record'(state,NONE,reps,vallocs)
+	       in  (lv, c, state)
 	       end
 	 | select label => 
-	       (case elist of 
-		    [e] => 
-			let 
-			    val (I addr,reccon) = xexp'(state,fresh_var(),e,NONE,NOTID)
-			    fun loop [] _ n = error' "bad select 1"
-			      | loop _ [] n = error' "bad select 2"
-			      | loop (l1::lrest) (c1::crest) n = if (eq_label(l1,label))
-								     then (n,c1)
-								 else loop lrest crest (n+1)
-			    val reccon = case reccon of
-				Prim_c(Record_c _, _) => reccon
-			      | _ => #2(simplify_type state reccon)
-			    val (labels,fieldcons) = 
-				(case reccon of
-				     Prim_c(Record_c labels,cons) => (labels,cons)
-				   | c => (print "selecting from exp of type: ";
-					   Ppnil.pp_con c; print "\n";
-					   error' "selecting from a non-record"))
-(*
-			    val _ = (print "labels are: ";
-				     app (fn l => (Ppnil.pp_label l; print " ")) labels; print "\n";
-				     app (fn c => (Ppnil.pp_con c; print " ")) fieldcons; print "\n")
-*)
-			    val (which,con) = loop labels fieldcons 0
-			    val desti = (case (alloc_reg state con) of
-					     I ir => ir
-					   | _ => error "records cannot have floats")
-			    val _ = add_instr(LOAD32I(EA(addr,which * 4), desti))
-			in  (VAR_LOC(VREGISTER(I desti)), con)
-			end
-		  | _ => (Ppnil.pp_exp (Prim_e(NilPrimOp nilprim,clist,elist));
-			  error "bad select 3"))
+	       let val [e] = elist 
+		   val (I addr,reccon,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
+		   fun loop [] _ n = error' "bad select 1"
+		     | loop _ [] n = error' "bad select 2"
+		     | loop (l1::lrest) (c1::crest) n = if (eq_label(l1,label))
+							    then (n,c1)
+							else loop lrest crest (n+1)
+		   val reccon = case reccon of
+		       Prim_c(Record_c _, _) => reccon
+		     | _ => #2(simplify_type state reccon)
+		   val (labels,fieldcons) = 
+		       (case reccon of
+			    Prim_c(Record_c labels,cons) => (labels,cons)
+			  | c => (print "selecting from exp of type: ";
+				  Ppnil.pp_con c; print "\n";
+				  error' "selecting from a non-record"))
+		   val (which,con) = loop labels fieldcons 0
+		   val desti = (case (alloc_reg state con) of
+				    I ir => ir
+				  | _ => error "records cannot have floats")
+		   val _ = add_instr(LOAD32I(EA(addr,which * 4), desti))
+	       in  (VAR_LOC(VREGISTER(I desti)), con, state)
+	       end
 	 | inject_record injinfo => xsum true (state,injinfo,clist,elist,context)
 	 | inject injinfo => xsum false (state,injinfo,clist,elist,context)
 
 	 | project_sum_record {tagcount, sumtype, field} => 
 	       let val index = TW32.toInt(TW32.uminus(sumtype, tagcount))
-		   val (base,econ) = (case elist of
-					  [e] => let val (r,c) = xexp'(state,fresh_var(),e,NONE,NOTID)
-						 in  (coercei "" r, c)
+		   val (base,econ,state) = (case elist of
+					  [e] => let val (r,c,s) = xexp'(state,fresh_var(),e,NONE,NOTID)
+						 in  (coercei "" r, c,s)
 						 end
 					| _ => error' "bad project_sum_record: base")
 		   val summands = 
@@ -2377,7 +2539,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		   val desti = alloc_regi (con2rep state field_con)
 		   val subscript = if single_carrier then field' else field' + 1
 		   val _ = add_instr(LOAD32I(EA(base,4*subscript),desti))
-	       in (VAR_LOC(VREGISTER(I desti)), field_con)
+	       in (VAR_LOC(VREGISTER(I desti)), field_con, state)
 	       end
 	 | project_sum (info as {tagcount, sumtype}) => 
 	       let val index = TW32.toInt(TW32.uminus(sumtype, tagcount))
@@ -2404,17 +2566,17 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 					  | _ => error "project_sum not fully done")
 			       else  (false,false)
 
-			   val (lv,c) = (case elist of
-					     [e] => xexp(state,fresh_var(),e,NONE,NOTID)
-					   | _ => error' "bad project_sum: non-record")
+			   val [e] = elist
+			   val (lv,c,state) = xexp(state,fresh_var(),e,NONE,NOTID)
+
 			   fun unbox offset =
 			       let val ir = load_ireg_locval(lv,NONE)
 				   val desti = alloc_regi(con2rep state summand_con)
 				   val _ = add_instr(LOAD32I(EA(ir,offset), desti))
-			       in  (VAR_LOC(VREGISTER(I desti)), summand_con)
+			       in  (VAR_LOC(VREGISTER(I desti)), summand_con,state)
 			       end
 		       in  (case (single_carrier,need_unbox) of
-				(true,false) => (lv,c)
+				(true,false) => (lv,c,state)
 			      | (true,true) => unbox 0
 			      | (false,_) => unbox 4)
 		       end
@@ -2428,72 +2590,66 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 								     c,e,context)))
 	       end
 	 | box_float Prim.F64 => 
-	       let val (lv,_) = (case elist of
-				       [e] => xexp(state,fresh_var(),e,NONE,NOTID)
-				     | _ => error "boxfloat did not get one arg")
-	       in (boxFloat_vl lv, Prim_c(BoxFloat_c Prim.F64,[]))
+	       let val [e] = elist
+		   val (lv,_,state) = xexp(state,fresh_var(),e,NONE,NOTID)
+		   val (vl,state) = boxFloat_vl(state,lv)
+	       in (vl, Prim_c(BoxFloat_c Prim.F64,[]),state)
 	       end
 	 | unbox_float Prim.F64 => 
-	       let val (I ir,_) = (case elist of
-				       [e] => xexp'(state,fresh_var(),e,NONE,NOTID)
-				     | _ => error "unbox_float did not get one arg")
+	       let val [e] = elist
+		   val (I ir,_,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
 		   val fr = alloc_regf()
 		   val _ = add_instr(LOADQF(EA(ir,0),fr))
-	       in (VAR_LOC(VREGISTER(F fr)), Prim_c(Float_c Prim.F64,[]))
+	       in (VAR_LOC(VREGISTER(F fr)), Prim_c(Float_c Prim.F64,[]),state)
 	       end
 	 | box_float Prim.F32 => error "32-bit floats not done"
 	 | unbox_float Prim.F32 => error "32-bit floats not done"
-	 | roll => (case (clist,elist) of 
-			([c],[e]) => xexp(state,fresh_var(),e,NONE,context)
-		      (* let val (r,_) = xexp'(state,fresh_var(),e,NONE,context)
-			 in (VAR_LOC(VREGISTER r), c)
-                     end *)
-		      | _ => error "roll given bad arguments")
+	 | roll => let val ([c],[e]) = (clist,elist) 
+		   in  xexp(state,fresh_var(),e,NONE,context)
+		   end
 	 | unroll => 
-	       (case (clist,elist) of 
-		    ([c],[e]) => 
-			let val (r,_) = xexp'(state,fresh_var(),e,NONE,context)
-			    val c' = 
-				(case #2(simplify_type state c) of
-				     Mu_c(is_recur,vcseq,v) => NilUtil.muExpand(is_recur,vcseq,v)
-				   | c => 
-					 (print "not a mu type decorating unroll\n";
-					  Ppnil.pp_con c; print "\n";
-					  error "not a mu type decorating an unroll"))
-			in (VAR_LOC(VREGISTER r), c')
-			end
-		  | _ => error "roll given bad arguments")
-	 | make_exntag => (case clist of
-			       [c] => let val c' = Prim_c(Exntag_c,[c])
-					  val desti = alloc_regi NOTRACE_INT
-					  val addr = alloc_regi TRACE
-					  val tmp = alloc_regi NOTRACE_INT
-					  val _ = (add_instr(LADDR(exncounter_label,0,addr));
-						   add_instr(LOAD32I(EA(addr,0),desti));
-						   add_instr(ADD(desti,IMM 1,tmp));
-						   add_instr(STORE32I(EA(addr,0),tmp)))
-				      in  (VAR_LOC(VREGISTER (I desti)), c')
-				      end
-			     | _ => error "bad make_exntag")
-	 | inj_exn name => (case (clist,elist) of
-				(_,[e1,e2]) => let val desti = alloc_regi NOTRACE_INT
-						   val (vl1,_) = xexp(state,fresh_var(),e1,NONE,NOTID)
-						   val (vl2,_) = xexp(state,fresh_var(),e2,NONE,NOTID)
-						   fun char2val c = Const_e(Prim.uint(Prim.W8, TilWord64.fromInt (ord c)))
-						   val name_array = Array.fromList (map char2val (explode name))
-						   val (vl3,_) = xconst state (Prim.vector(char_con,name_array))
-						   val vallocs = [vl1,vl2,vl3]
-						   val reps = map valloc2rep vallocs
-					       in  (VAR_LOC(VREGISTER (I (make_record(NONE,reps,vallocs)))),
-						    Prim_c(Exn_c,[]))
-					       end
-			      | _ => error "bad inj_exn")
+		   let val ([c],[e]) = (clist,elist)
+		       val (r,_,state) = xexp'(state,fresh_var(),e,NONE,context)
+		       val c' = 
+			   (case #2(simplify_type state c) of
+				Mu_c(is_recur,vcseq,v) => NilUtil.muExpand(is_recur,vcseq,v)
+			      | c => 
+				    (print "not a mu type decorating unroll\n";
+				     Ppnil.pp_con c; print "\n";
+				     error "not a mu type decorating an unroll"))
+		   in (VAR_LOC(VREGISTER r), c',state)
+		   end
+	 | make_exntag => 
+		   let val [c] = clist 
+		       val c' = Prim_c(Exntag_c,[c])
+		       val desti = alloc_regi NOTRACE_INT
+		       val addr = alloc_regi TRACE
+		       val tmp = alloc_regi NOTRACE_INT
+		       val _ = (add_instr(LADDR(exncounter_label,0,addr));
+				add_instr(LOAD32I(EA(addr,0),desti));
+				add_instr(ADD(desti,IMM 1,tmp));
+				add_instr(STORE32I(EA(addr,0),tmp)))
+		   in  (VAR_LOC(VREGISTER (I desti)), c',state)
+		   end
+	 | inj_exn name => 
+		   let val [e1,e2] = elist
+		       val desti = alloc_regi NOTRACE_INT
+		       val (vl1,_,state) = xexp(state,fresh_var(),e1,NONE,NOTID)
+		       val (vl2,_,state) = xexp(state,fresh_var(),e2,NONE,NOTID)
+		       fun char2val c = Const_e(Prim.uint(Prim.W8, TW64.fromInt (ord c)))
+		       val name_array = Array.fromList (map char2val (explode name))
+		       val (vl3,_,state) = xconst(state, Prim.vector(char_con,name_array))
+		       val vallocs = [vl1,vl2,vl3]
+		       val reps = map valloc2rep vallocs
+		       val (ir,state) = make_record(state,NONE,reps,vallocs)
+		   in  (VAR_LOC(VREGISTER (I ir)), Prim_c(Exn_c,[]),state)
+		   end
 	 | make_vararg _ => raise Util.UNIMP
 	 | make_onearg _ => raise Util.UNIMP
 	 | peq => error "peq not done")
       end
 
-  and xprim(state : state, prim,clist,elist,context) : loc_or_val * con = 
+  and xprim(state : state, prim,clist,elist,context) : loc_or_val * con * state = 
       let open Prim
 	  fun makecall str arg_types ret_type =
 	  let 
@@ -2522,7 +2678,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 
 
 
-  and xprim'(state : state, prim,clist,elist,context) : loc_or_val * con = 
+  and xprim'(state : state, prim,clist,elist,context) : loc_or_val * con * state = 
       let 
 	  fun error' s = (print "nilprimexpression was:\n";
 			  Ppnil.pp_exp (Nil.Prim_e(Nil.PrimOp prim, clist,elist));
@@ -2554,80 +2710,74 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	      else (a,v1,v2)
 	    | swap arg = arg
           fun stdcmp2i signed oper =
-              (case vl_list of
-                   [vl1,vl2] => 
-                       let 
-                           val (oper,vl1,vl2) = swap(oper,vl1,vl2)
-                           val a' = load_ireg_locval(vl1,NONE)
-                           val b' = load_ireg_sv vl2
-                           val dest = alloc_regi NOTRACE_INT
-                           val cmp = if signed then CMPSI else CMPUI
-                           val _ =  add_instr(cmp(oper,a',b',dest))
-                       in (VAR_LOC(VREGISTER(I dest)),bool_con)
-                       end
-                 | _ => error "need exactly 2 arguments for this primitive")
+                   let val [vl1,vl2] = vl_list
+		       val (oper,vl1,vl2) = swap(oper,vl1,vl2)
+		       val a' = load_ireg_locval(vl1,NONE)
+		       val b' = load_ireg_sv vl2
+		       val dest = alloc_regi NOTRACE_INT
+		       val cmp = if signed then CMPSI else CMPUI
+		       val _ =  add_instr(cmp(oper,a',b',dest))
+		   in (VAR_LOC(VREGISTER(I dest)),bool_con, state)
+		   end
+
           val stdcmp2si = stdcmp2i true
           val stdcmp2ui = stdcmp2i false
 
           (* ----------- floatint point comparison ---------------- *)
 	  fun cmpf oper =
-	      (case vl_list of
-		   [vl1,vl2] => 
-		       let val a' = load_freg_locval(vl1,NONE)
-			   val b' = load_freg_locval(vl2,NONE)
-			   val dest = alloc_regi NOTRACE_INT
-			   val _ =  add_instr(CMPF(oper,a',b',dest))
-		       in (VAR_LOC(VREGISTER(I dest)),bool_con)
-		       end
-		 | _ => error "need exactly 2 arguments for this primitive")
+	      let val [vl1,vl2] = vl_list
+		  val a' = load_freg_locval(vl1,NONE)
+		  val b' = load_freg_locval(vl2,NONE)
+		  val dest = alloc_regi NOTRACE_INT
+		  val _ =  add_instr(CMPF(oper,a',b',dest))
+	      in (VAR_LOC(VREGISTER(I dest)),bool_con,state)
+	      end
+
 
 	  (* ----------- unary integer operations ----------------- *)
-	  fun op1i oper : loc_or_val * con =
-	      (case vl_list of
-		   [vl1] => 
-		       let val a' = load_ireg_locval(vl1,NONE)
-			   val dest = alloc_regi NOTRACE_INT
-			   val _ = add_instr(oper(a',dest))
-		       in (VAR_LOC(VREGISTER(I dest)), int32)
-		       end
-		 | _ => error "need exactly 1 arguments for this primitive")
+	  fun op1i oper : loc_or_val * con * state =
+	      let val [vl1] = vl_list
+		  val a' = load_ireg_locval(vl1,NONE)
+		  val dest = alloc_regi NOTRACE_INT
+		  val _ = add_instr(oper(a',dest))
+	      in (VAR_LOC(VREGISTER(I dest)), int32, state)
+	      end
 
 	  (* ----------- binary integer operations ----------------- *)
-	  fun op2i comflag oper : loc_or_val * con =
-	      (case vl_list of
-		   [vl1,vl2] => 
-		       let (* commute values if the first arg is a small imm *)
-			   val (vl1,vl2) = if comflag then commute(vl1,vl2) else (vl1,vl2)
-			   val a' = load_ireg_locval(vl1,NONE)
-			   val b' = load_ireg_sv vl2
-			   val dest = alloc_regi NOTRACE_INT
-			   val _ = add_instr(oper(a',b',dest))
-		       in (VAR_LOC(VREGISTER(I dest)), int32)
-		       end
-		 | _ => error "need exactly 2 arguments for this primitive")
+	  fun op2i comflag oper : loc_or_val * con * state =
+	      let val [vl1,vl2] = vl_list 
+		  (* commute values if the first arg is a small imm *)
+		  val (vl1,vl2) = if comflag then commute(vl1,vl2) else (vl1,vl2)
+		  val a' = load_ireg_locval(vl1,NONE)
+		  val b' = load_ireg_sv vl2
+		  val dest = alloc_regi NOTRACE_INT
+		  val _ = add_instr(oper(a',b',dest))
+	      in (VAR_LOC(VREGISTER(I dest)), int32, state)
+	      end
+
 	  val commutesop2i = op2i true
 	  val stdop2i = op2i false
 	  fun add_ibar b1 b2 = (add_instr (b1 INT_TT); add_instr (b2 INT_TT))
 	  fun trapZero result = (add_ibar SOFT_ZBARRIER HARD_ZBARRIER; result)
 	  fun trapOver result = (add_ibar SOFT_VBARRIER HARD_VBARRIER; result)
 	  (* ----------- binary and unary float operations ----------------- *)
-	  fun op2f oper : loc_or_val * con =
+	  fun op2f oper : loc_or_val * con * state =
 	      (case vl_list of
 		   [vl1,vl2] => 
 		       let val a' = load_freg_locval(vl1,NONE)
 			   val b' = load_freg_locval(vl2,NONE)
 			   val dest = alloc_regf()
 			   val _ = add_instr(oper(a',b',dest))
-		       in (VAR_LOC(VREGISTER(F dest)), float64)
+		       in (VAR_LOC(VREGISTER(F dest)), float64, state)
 		       end
 		 | _ => error "need exactly 2 arguments for this primitive")
-	  fun op1f oper : loc_or_val * con =
+	  fun op1f oper : loc_or_val * con * state =
 	      (case vl_list of
 		   [vl] => 
 		       let val a' = load_freg_locval(vl,NONE)
 			   val dest = alloc_regf()
 			   val _ = add_instr(oper(a',dest))
-		       in (VAR_LOC(VREGISTER(F dest)), float64)
+		       in (VAR_LOC(VREGISTER(F dest)), float64, state)
 		       end
 		 | _ => error "need exactly 2 arguments for this primitive")
 	  fun extract_type (t,clist) = 
@@ -2637,58 +2787,64 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		 | ((PtrArray | PtrVector), [c]) => c
 		 | ((WordArray | WordVector), [c]) => c
 		 | _ => error' "table primitive did not have right type args")
+	  val unit_vvc = (#1 unit_vvc, #2 unit_vvc, state)
       in (case prim of
 	      soft_vtrap tt => (add_instr(SOFT_VBARRIER(xtt tt)); unit_vvc)
 	    | soft_ztrap tt => (add_instr(SOFT_ZBARRIER(xtt tt)); unit_vvc)
 	    | hard_vtrap tt => (add_instr(HARD_VBARRIER(xtt tt)); unit_vvc)
 	    | hard_ztrap tt => (add_instr(HARD_ZBARRIER(xtt tt)); unit_vvc)
 	       
-	    | mk_ref => (case (vl_list,clist) of
-			     ([vl],[c]) => xarray(state,c,VAR_VAL(VINT 0w1),vl)
-			   | _ => error "mk_ref given bad arguments")
-	    | deref =>  (case (vl_list,clist) of
-			     ([vl],[c]) => xsub(state,c,vl,VAR_VAL(VINT 0w0))
-			   | _ => error "deref given bad arguments")
-	    | setref =>  (case (vl_list,clist) of
-			      ([vl1,vl2],[c]) => xupdate(state,c,vl1,VAR_VAL(VINT 0w0),vl2)
-			    | _ => error "setref given bad arguments")
-	    | eq_ref => (case (clist,vl_list) of
-			     ([c],[vl1,vl2]) => xeqarray(state,c,vl1,vl2)
-			   | _ => error "eq_ref given bad arguments")
+	    | mk_ref => let val ([vl],[c]) = (vl_list,clist) 
+			in  xarray(state,c,VAR_VAL(VINT 0w1),vl)
+			end
+	    | deref =>  let val ([vl],[c]) = (vl_list,clist)
+			in xsub(state,c,vl,VAR_VAL(VINT 0w0))
+			end
 
-	    | float2int => (case vl_list of
-				[vl] => let val src = load_freg_locval(vl,NONE)
-					    val dest = alloc_regi NOTRACE_INT
-					    val _ = add_instr(CVT_REAL2INT(src,dest))
-					in (VAR_LOC(VREGISTER(I dest)), int32)
-					end
-			       | _ => error "wrong number of argument to float2int")
+	    | setref => let val ([vl1,vl2],[c]) = (vl_list,clist)
+			in xupdate(state,c,vl1,VAR_VAL(VINT 0w0),vl2)
+			end
 
-	    | int2float => (case vl_list of
-				[vl] => let val src = load_ireg_locval(vl,NONE)
-					    val dest = alloc_regf()
-					    val _ = add_instr(CVT_INT2REAL(src,dest))
-					in (VAR_LOC(VREGISTER(F dest)), float64)
-					end
-			       | _ => error "wrong number of argument to int2float")
+	    | eq_ref => let val ([vl1,vl2],[c]) = (vl_list,clist)
+			in  xeqarray(state,c,vl1,vl2)
+			end
+
+	    | float2int => 
+		  let val [vl] = vl_list 
+		      val src = load_freg_locval(vl,NONE)
+		      val dest = alloc_regi NOTRACE_INT
+		      val _ = add_instr(CVT_REAL2INT(src,dest))
+		  in (VAR_LOC(VREGISTER(I dest)), int32, state)
+		  end
+
+	    | int2float => 
+		  let val [vl] = vl_list
+		      val src = load_ireg_locval(vl,NONE)
+		      val dest = alloc_regf()
+		      val _ = add_instr(CVT_INT2REAL(src,dest))
+		  in (VAR_LOC(VREGISTER(F dest)), float64,state)
+		  end
 
             (* XXX do we want overflow in some cases or are these casts? *)
-	    | int2uint _ => (case vl_list of
-				 [vl] => (vl, int32)
-			       | _ => error "wrong number of argument to int2uint")
+	    | int2uint _ => 
+		  let val [vl] = vl_list 
+		  in  (vl, int32, state)
+		  end
 
-	    | uint2uint _ => (case vl_list of
-				 [vl] => (vl, int32)
-			       | _ => error "wrong number of argument to uint2int")
+	    | uint2uint _ => 
+		  let val [vl] = vl_list 
+		  in (vl, int32, state)
+		  end
 
-	    | uint2int _ => (case vl_list of
-				 [vl] => (vl, int32)
-			       | _ => error "wrong number of argument to uint2int")
-	    | int2int _ => (case vl_list of
-				 [vl] => (vl, int32)
-			       | _ => error "wrong number of argument to uint2int")
+	    | uint2int _ => 
+		  let val [vl] = vl_list 
+		  in (vl, int32, state)
+		  end
 
-
+	    | int2int _ => 
+		  let val [vl] = vl_list 
+		  in (vl, int32, state)
+		  end
 
 	    | neg_float fs => op1f FNEGD
 	    | abs_float fs => op1f FABSD
@@ -2710,11 +2866,20 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	    | mod_int W32 =>   error "ml style mod not implemented!"
 	    | quot_int W32 =>  trapZero(stdop2i DIVT)
 	    | rem_int W32 =>   trapZero(stdop2i MODT)
+
 	    | plus_uint W32 =>  (commutesop2i ADDT)
 	    | mul_uint W32 =>   (commutesop2i MULT)
 	    | minus_uint W32 => (stdop2i SUBT)
 	    | div_uint W32 =>   (stdop2i DIVT)
 	    | mod_uint W32 =>   (stdop2i MODT)
+
+	    (* XXXXX should this mod with 255 *)
+	    | plus_uint W8 =>  (commutesop2i ADDT)
+	    | mul_uint W8 =>   (commutesop2i MULT)
+	    | minus_uint W8 => (stdop2i SUBT)
+	    | div_uint W8 =>   (stdop2i DIVT)
+	    | mod_uint W8 =>   (stdop2i MODT)
+
 	    | less_int W32 => stdcmp2si LT
 	    | greater_int W32 => stdcmp2si GT
 	    | lesseq_int W32 => stdcmp2si LE
@@ -2754,50 +2919,49 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 *)
 
 	    | (uinta2uinta (is1,is2)) =>
-		  (case vl_list of
-		       [vl] => (vl, Prim_c(Array_c, [Prim_c(Int_c is2,[])]))
-		     | _ => error "illegal uinta2uinta")
+		  let val [vl] = vl_list 
+		  in (vl, Prim_c(Array_c, [Prim_c(Int_c is2,[])]),state)
+		  end
 		       
 	    | (uintv2uintv (is1,is2)) =>
-		       (case vl_list of
-			    [vl] => (vl, Prim_c(Array_c, [Prim_c(Int_c is2,[])]))
-			  | _ => error "illegal uintv2uintv")
+		  let val [vl] = vl_list 
+		  in  (vl, Prim_c(Array_c, [Prim_c(Int_c is2,[])]),state)
+		  end
 
 	    | (array2vector table) => 
 		  (case (table,vl_list,clist) of 
-		       (IntArray is,[vl],_) => (vl,Prim_c(Vector_c, [Prim_c(Int_c is,[])]))
-		     | (FloatArray fs,[vl],_) => (vl,Prim_c(Vector_c, [Prim_c(Float_c fs,[])]))
-		     | (PtrArray,[vl],[c]) => (vl,Prim_c(Vector_c, [c]))
-		     | (WordArray,[vl],[c]) => (vl,Prim_c(Vector_c, [c]))
+		       (IntArray is,[vl],_) => (vl,Prim_c(Vector_c, [Prim_c(Int_c is,[])]),state)
+		     | (FloatArray fs,[vl],_) => (vl,Prim_c(Vector_c, [Prim_c(Float_c fs,[])]),state)
+		     | (PtrArray,[vl],[c]) => (vl,Prim_c(Vector_c, [c]),state)
+		     | (WordArray,[vl],[c]) => (vl,Prim_c(Vector_c, [c]),state)
 		     | _ => error "illegal array2vector")
 
 	    | (vector2array table) => 
 		  (case (table,vl_list,clist) of 
-		       (IntVector is,[vl],_) => (vl,Prim_c(Array_c, [Prim_c(Int_c is,[])]))
-		     | (FloatVector fs,[vl],_) => (vl,Prim_c(Array_c, [Prim_c(Float_c fs,[])]))
-		     | (PtrVector,[vl],[c]) => (vl,Prim_c(Array_c, [c]))
-		     | (WordVector,[vl],[c]) => (vl,Prim_c(Array_c, [c]))
+		       (IntVector is,[vl],_) => (vl,Prim_c(Array_c, [Prim_c(Int_c is,[])]),state)
+		     | (FloatVector fs,[vl],_) => (vl,Prim_c(Array_c, [Prim_c(Float_c fs,[])]),state)
+		     | (PtrVector,[vl],[c]) => (vl,Prim_c(Array_c, [c]),state)
+		     | (WordVector,[vl],[c]) => (vl,Prim_c(Array_c, [c]),state)
 		     | _ => error "illegal array2vector")
 				
-
 	     | (length_table t) => 
-		       let val vl = (case vl_list of
-					[vl] => vl
-				      | _ => error' "length/vlength not given one term arg")
+		       let val [vl] = vl_list 
 			   val c = extract_type(t,clist)
-		       in  xlength(state,c,vl)
+		       in xlength(state,c,vl)
 		       end
-	     | (sub t) => (case vl_list of
-			       [vl1,vl2] => xsub(state,extract_type(t,clist),vl1,vl2)
-			     | _ => error "sub/vsub given bad arguments")
-	     | (update t) => (case vl_list of
-				      [vl1,vl2,vl3] => xupdate(state,extract_type(t,clist),vl1,vl2,vl3)
-				    | _ => error "update given bad arguments")
+	     | (sub t) => 
+		       let val [vl1,vl2] = vl_list 
+		       in  xsub(state,extract_type(t,clist),vl1,vl2)
+		       end
+	     | (update t) => 
+		       let val [vl1,vl2,vl3] = vl_list 
+		       in  xupdate(state,extract_type(t,clist),vl1,vl2,vl3)
+		       end
 
 	     (* zero is legal as a pointer *)
 	     | (create_empty_table table) => 
 		       (VAR_VAL(VINT 0w0), 
-			case (table, clist) of
+			(case (table, clist) of
 			    (IntArray is,_) => Prim_c(Array_c, [Prim_c(Int_c is,[])])
 			  | (IntVector is,_) => Prim_c(Vector_c, [Prim_c(Int_c is,[])])
 			  | (FloatArray fs,_) => Prim_c(Array_c, [Prim_c(Float_c fs,[])])
@@ -2809,32 +2973,34 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			  | (PtrArray, _) => error "ill-formed aggregate type"
 			  | (PtrVector, _) => error "ill-formed aggregate type"
 			  | (WordArray, _) => error "ill-formed aggregate type"
-			  | (WordVector, _) => error "ill-formed aggregate type")
+			  | (WordVector, _) => error "ill-formed aggregate type"),
+			     state)
 
-	     | (create_table t) => (case vl_list of
-					    [vl1,vl2] => xarray(state,extract_type(t,clist),vl1,vl2)
-					  | _ => error "array/vector given bad arguments")
+	     | (create_table t) => 
+		       let val [vl1,vl2] = vl_list
+		       in xarray(state,extract_type(t,clist),vl1,vl2)
+		       end
 
 	     | (equal_table (t as ((IntArray _) | (FloatArray _) | WordArray | PtrArray))) =>
-		  (case vl_list of
-		       [vl1,vl2] => xeqarray(state,extract_type(t,clist),vl1,vl2)
-		     | _ => error "array_eq given bad arguments")
+		       let val [vl1,vl2] = vl_list 
+		       in  xeqarray(state,extract_type(t,clist),vl1,vl2)
+		       end
 	     | (equal_table (t as ((IntVector _) | (FloatVector _) | WordVector | PtrVector))) => 
-		  (case vl_list of
-		       [vl1,vl2] => xeqvector(state,extract_type(t,clist),vl1,vl2)
-		     | _ => error "array_eq given bad arguments")
+		       let val [vl1,vl2] = vl_list 
+		       in xeqvector(state,extract_type(t,clist),vl1,vl2)
+		       end
              | _ => (print "primitive: ";
                        Ppnil.pp_prim prim;
                        print "not implemented\n";
                        raise Util.UNIMP))
       end
 
-
-
+ 
 
 
   (* ---------------- array and vector operations --------------------
      --- the array/vector type may or may not be statically known ---- *)
+
   and xfloatsub(vl1 : loc_or_val, vl2 : loc_or_val) : regf = 
       let
 	  val a' = load_ireg_locval(vl1,NONE)
@@ -2885,43 +3051,52 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	  desti
       end
 
-  and xsub(state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
+  and xsub(state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con * state =
       let
-	  fun floatcase() = xfloatsub(vl1,vl2)
-	  fun nonfloatcase is = xintptrsub(state,is,c,vl1,vl2)
-	  val r = (case (simplify_type' state c) of
-		       (true,Prim_c(Float_c Prim.F64,[])) => I(boxFloat (floatcase()))
-		     | (true,Prim_c(BoxFloat_c Prim.F64,[])) => I(boxFloat (floatcase()))
-		     | (true,Prim_c(Int_c Prim.W8,[])) => I(nonfloatcase Prim.W8)
-		     | (true,_) => I(nonfloatcase Prim.W32)
-		     | (false,c') => let val (r,_) = xcon(state,fresh_var(),c', NONE)
-					 val tmp = alloc_regi NOTRACE_INT
-					 val desti = alloc_regi(con2rep state c)
-					 val afterl = alloc_code_label()
-					 val floatl = alloc_code_label()
-					 val charl = alloc_code_label()
-					 val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-						  add_instr(BCNDI(NE,tmp,floatl,false));
-						  add_instr(CMPUI(EQ, r, IMM 0, tmp));
-						  add_instr(BCNDI(NE,tmp,charl,false)))
-					 val desti = nonfloatcase Prim.W32
-					 val _ = add_instr(BR afterl)
+	  fun floatcase s = let val fr = xfloatsub(vl1,vl2)
+				val (ir,s) = boxFloat(s,fr)
+			    in  (I ir, s)
+			    end
+	  fun nonfloatcase (s,is) = let val ir = xintptrsub(s,is,c,vl1,vl2)
+				    in  (I ir,s)
+				    end
+	  val (r,state) = 
+	      (case (simplify_type' state c) of
+		   (true,Prim_c(Float_c Prim.F64,[])) => floatcase state
+		 | (true,Prim_c(BoxFloat_c Prim.F64,[])) => floatcase state
+		 | (true,Prim_c(Int_c Prim.W8,[])) => nonfloatcase(state, Prim.W8)
+		 | (true,_) => nonfloatcase(state, Prim.W32)
+		 | (false,c') => 
+		       let val (r,_,state) = xcon(state,fresh_var(),c', NONE)
+			   val tmp = alloc_regi NOTRACE_INT
+			   val desti = alloc_regi(con2rep state c)
+			   val afterl = alloc_code_label "sub_after"
+			   val floatl = alloc_code_label "sub_float"
+			   val charl = alloc_code_label "sub_char"
+			   val nonfloatl = alloc_code_label "sub_nonfloat"
+			   val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
+				    add_instr(BCNDI(NE,tmp,floatl,false));
+				    add_instr(CMPUI(EQ, r, IMM 0, tmp));
+				    add_instr(BCNDI(NE,tmp,charl,false)))
+			   val _ = add_instr(ILABEL nonfloatl)
+			   val (I desti,w32_state) = nonfloatcase(state, Prim.W32)
+			   val _ = add_instr(BR afterl)
 
-					 val _ = add_instr(ILABEL charl)
-					 val desti8 = nonfloatcase Prim.W8
-					 val _ = add_instr(MV(desti8,desti))
-					 val _ = add_instr(BR afterl)
+			   val _ = add_instr(ILABEL charl)
+			   val (I desti8,w8_state) = nonfloatcase(state, Prim.W8)
+			   val _ = add_instr(MV(desti8,desti))
+			   val _ = add_instr(BR afterl)
 
-					 val _ = add_instr(ILABEL floatl)
-					 val destf = floatcase()
-					 val boxi = boxFloat destf
-					 val _ = (add_instr(MV(boxi,desti));
+			   val _ = add_instr(ILABEL floatl)
+			   val (I boxi,float_state) = floatcase state
+
+			   val _ = (add_instr(MV(boxi,desti));
 						  add_instr(ILABEL afterl))
-				     in  I(desti)
-				     end)
-      in (VAR_LOC(VREGISTER r), c)
+		       in  (I desti, join_states[w8_state,w32_state,float_state])
+		       end)
+      in (VAR_LOC(VREGISTER r), c, state)
       end
-
+ 
   and xfloatupdate(vl1 : loc_or_val, vl2 : loc_or_val, vl3 : loc_or_val) : loc_or_val * con =
       let val a' = load_ireg_locval(vl1,NONE)
 	  val argf = load_freg_locval(vl3,NONE)
@@ -2996,78 +3171,81 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
       in  xintupdate(Prim.W32, vl1, vl2, vl3)
       end
 
-  and xupdate(state : state,c, vl1 : loc_or_val, vl2 : loc_or_val, vl3 : loc_or_val) : loc_or_val * con =
+  and xupdate(state : state,c, vl1 : loc_or_val, vl2 : loc_or_val, vl3 : loc_or_val) : loc_or_val * con * state =
       let
-	  val r = (case (simplify_type' state c) of
-		       (true,Prim_c(Float_c Prim.F64,[])) => (xfloatupdate(vl1,vl2,vl3); ())
-		     | (true,Prim_c(BoxFloat_c Prim.F64,[])) => 
-			   let val fr = unboxFloat(load_ireg_locval(vl3,NONE))
-			   in  (xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (F fr))); ())
-			   end
-		     | (true,Prim_c(Float_c Prim.F32,[])) => error "32-bit floats not done"
-		     | (true,Prim_c(Int_c is,[])) => (xintupdate(is,vl1,vl2,vl3); ())
-		     | (true,_) => (xptrupdate(c,vl1,vl2,vl3); ())
-		     | (false,c') => let val (r,_) = xcon(state,fresh_var(),c', NONE)
-					 val tmp = alloc_regi NOTRACE_INT
-					 val afterl = alloc_code_label()
-					 val floatl = alloc_code_label()
-					 val intl = alloc_code_label()
-					 val charl = alloc_code_label()
-					 val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-						  add_instr(BCNDI(NE,tmp,floatl,false));
-						  add_instr(CMPUI(EQ, r, IMM 2, tmp));
-						  add_instr(BCNDI(NE,tmp,intl,false));
-						  add_instr(CMPUI(EQ, r, IMM 0, tmp));
-						  add_instr(BCNDI(NE,tmp,charl,false)))
-					 val _ = xptrupdate(c,vl1,vl2,vl3)
-					 val _ = add_instr(BR afterl)
-					 val _ = add_instr(ILABEL intl)
-					 val _ = xintupdate(Prim.W32,vl1,vl2,vl3)
-					 val _ = add_instr(BR afterl)
-					 val _ = add_instr(ILABEL charl)
-					 val _ = xintupdate(Prim.W8,vl1,vl2,vl3)
-					 val _ = add_instr(BR afterl)
-					 val _ = add_instr(ILABEL floatl)
-					 val fr = unboxFloat(load_ireg_locval(vl3,NONE))
-					 val _ = xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (F fr)))
-					 val _ = add_instr(ILABEL afterl)
-				     in  ()
-				     end)
-      in unit_vvc
+	  val r = 
+	      (case (simplify_type' state c) of
+		   (true,Prim_c(Float_c Prim.F64,[])) => (xfloatupdate(vl1,vl2,vl3); ())
+		 | (true,Prim_c(BoxFloat_c Prim.F64,[])) => 
+		       let val fr = unboxFloat(load_ireg_locval(vl3,NONE))
+		       in  (xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (F fr))); ())
+		       end
+		 | (true,Prim_c(Float_c Prim.F32,[])) => error "32-bit floats not done"
+		 | (true,Prim_c(Int_c is,[])) => (xintupdate(is,vl1,vl2,vl3); ())
+		 | (true,_) => (xptrupdate(c,vl1,vl2,vl3); ())
+		 | (false,c') => 
+		       let val (r,_,state) = xcon(state,fresh_var(),c', NONE)
+			   val tmp = alloc_regi NOTRACE_INT
+			   val afterl = alloc_code_label "update_after"
+			   val floatl = alloc_code_label "update_float"
+			   val intl = alloc_code_label "update_int"
+			   val charl = alloc_code_label "update_char"
+			   val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
+				    add_instr(BCNDI(NE,tmp,floatl,false));
+				    add_instr(CMPUI(EQ, r, IMM 2, tmp));
+				    add_instr(BCNDI(NE,tmp,intl,false));
+				    add_instr(CMPUI(EQ, r, IMM 0, tmp));
+				    add_instr(BCNDI(NE,tmp,charl,false)))
+			   val _ = xptrupdate(c,vl1,vl2,vl3)
+			   val _ = add_instr(BR afterl)
+			   val _ = add_instr(ILABEL intl)
+			   val _ = xintupdate(Prim.W32,vl1,vl2,vl3)
+			   val _ = add_instr(BR afterl)
+			   val _ = add_instr(ILABEL charl)
+			   val _ = xintupdate(Prim.W8,vl1,vl2,vl3)
+			   val _ = add_instr(BR afterl)
+			   val _ = add_instr(ILABEL floatl)
+			   val fr = unboxFloat(load_ireg_locval(vl3,NONE))
+			   val _ = xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (F fr)))
+			   val _ = add_instr(ILABEL afterl)
+		       in  ()
+		       end)
+      in (#1 unit_vvc, #2 unit_vvc, state)
       end
 
-  and xeqarray(state : state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
+  and xeqarray(state : state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con * state =
       let val ir1 = load_ireg_locval(vl1,NONE)
 	  val ir2 = load_ireg_locval(vl2,NONE)
 	  val desti = alloc_regi NOTRACE_INT
 	  val _ = add_instr(CMPUI(EQ,ir1,REG ir2,desti))
-      in  (VAR_LOC(VREGISTER (I desti)),NilUtil.bool_con)
+      in  (VAR_LOC(VREGISTER (I desti)),NilUtil.bool_con, state)
       end
 
-  and xeqvector(state : state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
+  and xeqvector(state : state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con * state =
       error "xeqvector not implemented: should be done at ML source level"
 
-  and xlength(state,c, vl : loc_or_val) : loc_or_val * con =
+  and xlength(state,c, vl : loc_or_val) : loc_or_val * con * state =
       let val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_locval(vl,NONE)
 	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
 	  val (_,cc) = (simplify_type' state c) 
-	  val _ = 
+	  val state = 
 	      (case (simplify_type' state c) of
-		   (true,Prim_c(Float_c Prim.F64,[])) => add_instr(SRL(dest,IMM real_len_offset,dest))
-		 | (true,Prim_c(BoxFloat_c Prim.F64,[])) => add_instr(SRL(dest,IMM real_len_offset,dest))
-		 | (true,Prim_c(Int_c Prim.W8,[])) => add_instr(SRL(dest,IMM int_len_offset,dest))
-		 | (true,Prim_c(Int_c Prim.W16,[])) => add_instr(SRL(dest,IMM (1 + int_len_offset),dest))
-		 | (true,Prim_c(Int_c Prim.W32,[])) => add_instr(SRL(dest,IMM (2 + int_len_offset),dest))
+		   (true,Prim_c(Float_c Prim.F64,[])) => (add_instr(SRL(dest,IMM real_len_offset,dest)); state)
+		 | (true,Prim_c(BoxFloat_c Prim.F64,[])) => (add_instr(SRL(dest,IMM real_len_offset,dest)); state)
+		 | (true,Prim_c(Int_c Prim.W8,[])) => (add_instr(SRL(dest,IMM int_len_offset,dest)); state)
+		 | (true,Prim_c(Int_c Prim.W16,[])) => (add_instr(SRL(dest,IMM (1 + int_len_offset),dest)); state)
+		 | (true,Prim_c(Int_c Prim.W32,[])) => (add_instr(SRL(dest,IMM (2 + int_len_offset),dest)); state)
 		 | (true,c) => 
 		       (print "------xlength: default head-normal case. con = \n";
 			Ppnil.pp_con c; print "\n";
-			add_instr(SRL(dest,IMM (2+int_len_offset),dest)))
-		 | (false,c') => let val (r,_) = xcon(state,fresh_var(),c', NONE)
+			add_instr(SRL(dest,IMM (2+int_len_offset),dest));
+			state)
+		 | (false,c') => let val (r,_,state) = xcon(state,fresh_var(),c', NONE)
 				     val tmp = alloc_regi NOTRACE_INT
-				     val afterl = alloc_code_label()
-				     val floatl = alloc_code_label()
-				     val charl = alloc_code_label()
+				     val afterl = alloc_code_label "length_after"
+				     val floatl = alloc_code_label "length_float"
+				     val charl = alloc_code_label "length_char"
 				 in (add_instr(CMPUI(EQ, r, IMM 11, tmp));
 				     add_instr(BCNDI(NE,tmp,floatl,false));
 				     add_instr(CMPUI(EQ, r, IMM 0, tmp));
@@ -3079,13 +3257,13 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 					 add_instr(BR afterl);
 					 add_instr(ILABEL charl);
 					 add_instr(SRL(dest,IMM (int_len_offset),dest));
-					 add_instr(ILABEL afterl))
+					 add_instr(ILABEL afterl);
+					 state)
 				     end)
-      in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Int_c Prim.W32, []))
+      in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Int_c Prim.W32, []),state)
       end
 
-
-    and floatcase (state, dest, Prim.F32, _, _) : unit = error "no 32-bit floats"
+    and floatcase (state, dest, Prim.F32, _, _) : state = error "no 32-bit floats"
       | floatcase (state, dest, Prim.F64, len, fr) = 
 	let 
 	    val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
@@ -3095,13 +3273,14 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	    val tmp = alloc_regi(NOTRACE_INT)
 	    val gctemp  = alloc_regi(NOTRACE_INT)
 	    val cmptemp = alloc_regi(NOTRACE_INT)
-	    val fsmall_alloc = alloc_code_label()
-	    val fafter       = alloc_code_label()
-	    val fbottom      = alloc_code_label()
-	    val ftop         = alloc_code_label()
+	    val fsmall_alloc = alloc_code_label "array_float_smallalloc"
+	    val fafter       = alloc_code_label "array_float_after" 
+	    val fbottom      = alloc_code_label "array_float_bottom"
+	    val ftop         = alloc_code_label "array_float_top"
 	    val v = fr
 	    (* store object tag and profile tag with alignment so that
 	     raw data is octaligned;  then loop through and initialize *)
+	    val state = new_gcstate state
 	in 
 	    (* if array is too large, call runtime to allocate *)
 	    add_instr(LI(0w4096,cmptemp));
@@ -3117,14 +3296,14 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	    if (not (!HeapProfile))
 		then
 		    (add_instr(ADD(gctemp,IMM 3, gctemp));
-		     needgc(REG gctemp);
+		     needgc(state,REG gctemp);
 		     align_odd_word();
 		     mk_realarraytag(len,tag);
 		     add_instr(STORE32I(EA(heapptr,0),tag)); (* store tag *)
 		     add_instr(ADD(heapptr,IMM 4,dest)))
 	    else
 		(add_instr(ADD(gctemp,IMM 4, gctemp)));
-		needgc(REG gctemp);
+		needgc(state,REG gctemp);
 		align_even_word();
 		store_tag_disp(0,ptag);                 (* store profile tag *)
 		mk_realarraytag(len,tag);               
@@ -3146,7 +3325,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		add_instr(ILABEL fbottom);
 		add_instr(BCNDI(GE,i,ftop,true));
 		do_code_align();
-		add_instr(ILABEL fafter)
+		add_instr(ILABEL fafter);
+		state
 	end (* end of floatcase *)
 
 
@@ -3162,8 +3342,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	  val skiptag      = alloc_regi NOTRACE_INT
 	  val tmp          = alloc_regi NOTRACE_INT
 	  val i            = alloc_regi NOTRACE_INT
-	  val gbottom      = alloc_code_label()
-	  val gtop         = alloc_code_label()
+	  val gbottom      = alloc_code_label "array_init_bottom"
+	  val gtop         = alloc_code_label "array_init_top"
       in 
 	  (if (not (!HeapProfile))
 	       then
@@ -3197,7 +3377,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		add_instr(ILABEL gafter)
       end
 
-    and intcase (dest,is,vl1,vl2) = 
+    and intcase (state,dest,is,vl1,vl2) : state = 
 	    let val tag = alloc_regi(NOTRACE_INT)
 		val gctemp  = alloc_regi(NOTRACE_INT)
 		val cmptemp = alloc_regi(NOTRACE_INT)
@@ -3240,8 +3420,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 					  (loglen,vtemp,NONE)
 				      end)
 		       | Prim.W64 => error "someday")
-		val gafter = alloc_code_label()
-		val ismall_alloc = alloc_code_label()
+		val gafter = alloc_code_label "array_int_after"
+		val ismall_alloc = alloc_code_label "array_int_small"
 	    in  (add_instr(LI(i2w 4096,cmptemp));
 		 add_instr(CMPUI(LE, wordlen, REG cmptemp, cmptemp));
 		 add_instr(BCNDI(NE,cmptemp,ismall_alloc,true));
@@ -3255,19 +3435,21 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		 if (!HeapProfile)
 		     then add_instr(ADD(gctemp, IMM 1, gctemp))
 		 else ();
-		     needgc(REG gctemp);
-		     general_init_case(ptag,tag,dest,
+		 let val state = needgc(state,REG gctemp)
+		 in  general_init_case(ptag,tag,dest,
 				       VAR_LOC(VREGISTER(I gctemp)),
 				       wordlen,v,gafter);
-		 (case afteropt of
-		      NONE => ()
-		    | SOME ir => (add_instr(SUB(wordlen,IMM 1,i));
-				  add_instr(S4ADD(i,REG dest,tmp));
-				  add_instr(STORE32I(EA(tmp,0),ir))));
-	        add_instr(ICOMMENT "initializing int/ptr array end"))
+		     (case afteropt of
+			  NONE => ()
+			| SOME ir => (add_instr(SUB(wordlen,IMM 1,i));
+				      add_instr(S4ADD(i,REG dest,tmp));
+				      add_instr(STORE32I(EA(tmp,0),ir))));
+		     add_instr(ICOMMENT "initializing int/ptr array end");
+		     state
+		 end)
 	    end
 
-     and ptrcase (dest,vl1,vl2) = 
+     and ptrcase (state,dest,vl1,vl2) : state = 
 	    let val tag = alloc_regi(NOTRACE_INT)
 		val gctemp  = alloc_regi(NOTRACE_INT)
 		val cmptemp = alloc_regi(NOTRACE_INT)
@@ -3276,8 +3458,9 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
 		val len = load_ireg_locval(vl1,NONE)
 		val v = load_ireg_locval(vl2,NONE)
-		val gafter = alloc_code_label()
-		val psmall_alloc = alloc_code_label()
+		val gafter = alloc_code_label "array_ptr_aftert"
+		val psmall_alloc = alloc_code_label "array_ptr_alloc"
+		val state = new_gcstate state
 	    in  (add_instr(LI((i2w 4096),cmptemp));
 		 add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
 		 add_instr(BCNDI(NE,cmptemp,psmall_alloc,true));
@@ -3291,89 +3474,63 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		 if (!HeapProfile)
 		     then add_instr(ADD(gctemp, IMM 1, gctemp))
 		 else ();
-		     needgc(REG gctemp);
+		     needgc(state,REG gctemp);
 		     mk_ptrarraytag(len,tag);
 		     general_init_case(ptag,tag,dest,
 				       VAR_LOC(VREGISTER(I gctemp)),
-				       len,v,gafter))
+				       len,v,gafter);
+		 state)
 	    end
 
-(*		   case vl1 of
-		       (VAR_VAL(VINT log_size)) => 
-			   let val v = load_ireg_locval(vl1,NONE)
-			       val temp1 = if (!HeapProfile) then 1 else 0
-			       val total_size = temp1 + 1 + 
-				   (if (log_size = 0w0) then 1 else (w2i log_size))
-			   in
-			       if (in_imm_range(total_size)) then
-				   (needgc(IMM total_size);
-				    mk_ptrarraytag(len,tag);
-				    if (log_size = 0w1) 
-					then 
-					    (if (not (!HeapProfile))
-						 then
-						     (add_instr(STORE32I(EA(heapptr,0),tag)); (* tag *)
-						      add_instr(STORE32I(EA(heapptr,4),v));   (* data *)
-						      add_instr(ADD(heapptr,IMM 4, dest));
-						      add_instr(ADD(heapptr,IMM 8, heapptr)))
-					     else
-						 (store_tag_disp(0,ptag);
-						  add_instr(STORE32I(EA(heapptr,4),tag)); 
-						  add_instr(STORE32I(EA(heapptr,8),v)); 
-						  add_instr(ADD(heapptr,IMM 8,dest));
-						  add_instr(ADD(heapptr,IMM 12, heapptr))))
-				    else general_init_case(load_ireg_locval(vl1,NONE),
-							   load_ireg_locval(vl2,NONE),SOME total_size,
-							   alloc_code_label()))
-			       else general_ptrcase(load_ireg_locval(vl1,NONE),load_ireg_locval(vl2,NONE))
-			   end
-*)
 
   (* if we allocate arrays statically, we must add labels of pointer arrays to mutable_objects *)
- and xarray(state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
+ and xarray(state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con * state =
     let 
 	val dest = alloc_regi TRACE
-	val _ = (case (simplify_type' state c) of
-		     (true,Prim_c(Float_c Prim.F64,[])) => 
-			 error "can't have WordArray of float (use boxfloat)"
-		   | (true,Prim_c(Int_c is,[])) => intcase(dest,is,vl1,vl2)
-		   | (true,Prim_c(BoxFloat_c fs,[])) => floatcase(state,dest,fs,
-								  load_ireg_locval(vl1,NONE),
-								  unboxFloat(load_ireg_locval(vl2,NONE)))
-		   | (true,_) => ptrcase(dest,vl1,vl2)
-		   | (false,c') => let val (r,_) = xcon(state,fresh_var(),c', NONE)
-				       val tmp = alloc_regi NOTRACE_INT
-				       val afterl = alloc_code_label()
-				       val floatl = alloc_code_label()
-				       val intl = alloc_code_label()
-				       val charl = alloc_code_label()
-				       val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-						add_instr(BCNDI(NE,tmp,floatl,false));
-						add_instr(CMPUI(EQ, r, IMM 2, tmp));
-						add_instr(BCNDI(NE,tmp,intl,false));
-						add_instr(CMPUI(EQ, r, IMM 0, tmp));
-						add_instr(BCNDI(NE,tmp,charl,false)))
-				       val _ = ptrcase(dest,vl1,vl2)
-				       val _ = add_instr(BR afterl)
+	val state = 
+	    (case (simplify_type' state c) of
+		 (true,Prim_c(Float_c Prim.F64,[])) => 
+		     error "can't have WordArray of float (use boxfloat)"
+	       | (true,Prim_c(Int_c is,[])) => intcase(state,dest,is,vl1,vl2)
+	       | (true,Prim_c(BoxFloat_c fs,[])) => 
+		     floatcase(state,dest,fs,
+			       load_ireg_locval(vl1,NONE),
+			       unboxFloat(load_ireg_locval(vl2,NONE)))
+	       | (true,_) => ptrcase(state,dest,vl1,vl2)
+	       | (false,c') => 
+		     let val (r,_,state) = xcon(state,fresh_var(),c', NONE)
+			 val tmp = alloc_regi NOTRACE_INT
+			 val afterl = alloc_code_label "array_after"
+			 val floatl = alloc_code_label "array_float"
+			 val intl = alloc_code_label "array_int"
+			 val charl = alloc_code_label "array_char"
+			 val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
+				  add_instr(BCNDI(NE,tmp,floatl,false));
+				  add_instr(CMPUI(EQ, r, IMM 2, tmp));
+				  add_instr(BCNDI(NE,tmp,intl,false));
+				  add_instr(CMPUI(EQ, r, IMM 0, tmp));
+				  add_instr(BCNDI(NE,tmp,charl,false)))
+			 val ptr_state = ptrcase(state,dest,vl1,vl2)
+			 val _ = add_instr(BR afterl)
 
-				       val _ = add_instr(ILABEL intl)
-				       val _ = intcase(dest,Prim.W32,vl1,vl2)
-				       val _ = add_instr(BR afterl)
+			 val _ = add_instr(ILABEL intl)
+			 val int_state = intcase(state,dest,Prim.W32,vl1,vl2)
+			 val _ = add_instr(BR afterl)
 
-				       val _ = add_instr(ILABEL charl)
-				       val _ = intcase(dest,Prim.W8,vl1,vl2)
-				       val _ = add_instr(BR afterl)
+			 val _ = add_instr(ILABEL charl)
+			 val char_state = intcase(state,dest,Prim.W8,vl1,vl2)
+			 val _ = add_instr(BR afterl)
 
-				       val _ = add_instr(ILABEL floatl)
-				       val temp = load_ireg_locval(vl2,NONE)
-				       val fr = alloc_regf()
-				       val _ = add_instr(LOADQF(EA(temp,0),fr))
-				       val _ = floatcase(state,dest,Prim.F64,load_ireg_locval(vl1,NONE),fr)
+			 val _ = add_instr(ILABEL floatl)
+			 val temp = load_ireg_locval(vl2,NONE)
+			 val fr = alloc_regf()
+			 val _ = add_instr(LOADQF(EA(temp,0),fr))
+			 val float_state = floatcase(state,dest,Prim.F64,load_ireg_locval(vl1,NONE),fr)
 
-				       val _ = add_instr(ILABEL afterl)
-				   in  ()
-				   end)
-    in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Array_c, [c]))
+			 val _ = add_instr(ILABEL afterl)
+		     in  join_states [float_state, int_state, char_state, ptr_state]
+		     end)
+    in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Array_c, [c]),state)
     end
 
 
@@ -3382,16 +3539,16 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 
    (* ------------------- translate constructors ------------------------ *)
 
-  and xcon arg : regi * kind = 
+  and xcon arg : regi * kind * state = 
       (case xcon' arg of
-	   (VAR_LOC var_loc, k) => (load_ireg_loc(var_loc,NONE),k)
-	 | (VAR_VAL var_val, k) => (load_ireg_val(var_val,NONE),k))
+	   (VAR_LOC var_loc, k, s) => (load_ireg_loc(var_loc,NONE),k,s)
+	 | (VAR_VAL var_val, k, s) => (load_ireg_val(var_val,NONE),k,s))
 
   and xcon' (state : state,
 	    name : var, (* Purely for debugging and generation of useful names *)
 	    arg_con : con,     (* The expression being translated *)
 	    kopt : kind option (* Caller may know kind of con being translated *)
-	    ) : loc_or_val * kind = 
+	    ) : loc_or_val * kind * state = 
       let 
 	  val _ = con_depth := !con_depth + 1
 	  val _ = if (!debug)
@@ -3400,6 +3557,10 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			    if (!debug_full)
 				then (print " on con = \n";
 				      Ppnil.pp_con arg_con)
+			    else ();
+			    if (!debug_full_env)
+				then (print "\nand with env = \n";
+				      show_state state; print "\n")
 			    else ();
 			    print "\n")
 		  else ()
@@ -3416,22 +3577,27 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	    name : var, (* Purely for debugging and generation of useful names *)
 	    arg_con : con,     (* The expression being translated *)
 	    kopt : kind option (* Caller may know kind of con being translated *)
-	    ) : loc_or_val * kind = 
+	    ) : loc_or_val * kind * state = 
       let 
-	  fun mk_ptr  i = (VAR_VAL (VINT (TW32.fromInt i)), Word_k Runtime)
-	  fun mk_ptr' i = (VAR_VAL (VINT (TW32.fromInt i)), Type_k Runtime)
-	  fun mk_sum_help (kinderopt,indices,cons) = 
+	  fun mk_ptr  i = (VAR_VAL (VINT (TW32.fromInt i)), Word_k Runtime, state)
+	  fun mk_ptr' i = (VAR_VAL (VINT (TW32.fromInt i)), Type_k Runtime, state)
+	  fun mk_sum_help (state,kinderopt,indices,cons) = 
 	      let val indices' = map (fn i => VAR_VAL(VINT (TW32.fromInt i))) indices
-		  val con_kinds = map (fn c => xcon'(state,fresh_named_var "xcon_sum",c, NONE)) cons
+	          fun folder (c,s) =
+		       let val (c,k,s) = xcon'(s,fresh_named_var "xcon_sum",c, NONE)
+		       in ((c,k),s)
+		       end
+		  val (con_kinds,state) = foldl_list folder  state cons
 		  val cons' = map #1 con_kinds
 		  val reps = (map (fn _ => NOTRACE_INT) indices') @ (map (fn _ => TRACE) cons')
 		  val kind = (case kinderopt of
 				  NONE => Word_k Runtime
 				| SOME kinder => kinder con_kinds)
-	      in (make_record'(NONE,reps, indices' @ cons'), kind)
+		  val (ir,state) = make_record'(state,NONE,reps, indices' @ cons')
+	      in (ir, kind, state)
 	      end
-	  fun mk_sum' (indices,cons) = mk_sum_help(NONE,indices,cons)
-	  fun mk_sum (index,cons) = mk_sum_help(NONE,[index],cons)
+	  fun mk_sum' (s,indices,cons) = mk_sum_help(s,NONE,indices,cons)
+	  fun mk_sum (s,index,cons) = mk_sum_help(s,NONE,[index],cons)
 	  open Prim
       in
 	  (case arg_con of
@@ -3444,58 +3610,61 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	     | Prim_c(BoxFloat_c F32, []) => mk_ptr 10
 	     | Prim_c(BoxFloat_c F64, []) => mk_ptr 11
 	     | Prim_c(Exn_c,[]) => mk_ptr 12
-	     | Prim_c(Exntag_c,[c]) => mk_sum(12,[c])
-	     | Prim_c(Array_c,[c]) => mk_sum(0,[c])
-	     | Prim_c(Vector_c,[c]) => mk_sum(1,[c])
-	     | Prim_c(Ref_c,[c]) => mk_sum(2,[c])
-	     | Prim_c(Sum_c {known,tagcount},cons) => mk_sum'([4,(case known of
-								      NONE => ~1
-								    | SOME w => TW32.toInt w), 
-							       TW32.toInt tagcount],cons)
-	     | Prim_c(Record_c _,cons) => mk_sum_help(NONE,[5,length cons],cons)
-	     | Prim_c(Vararg_c _,cons) => mk_sum(6,cons)
+	     | Prim_c(Exntag_c,[c]) => mk_sum(state,12,[c])
+	     | Prim_c(Array_c,[c]) => mk_sum(state,0,[c])
+	     | Prim_c(Vector_c,[c]) => mk_sum(state,1,[c])
+	     | Prim_c(Ref_c,[c]) => mk_sum(state,2,[c])
+	     | Prim_c(Sum_c {known,tagcount},cons) => 
+		   mk_sum'(state,
+			   [4,(case known of
+				   NONE => ~1
+				 | SOME w => TW32.toInt w), 
+			    TW32.toInt tagcount],cons)
+	     | Prim_c(Record_c _,cons) => mk_sum_help(state,NONE,[5,length cons],cons)
+	     | Prim_c(Vararg_c _,cons) => mk_sum(state,6,cons)
 	     | Prim_c _ => error "ill-formed primitive type"
 	     | Mu_c (is_recur,vcset,v) => 
 		   let val vclist = sequence2list vcset
-		       fun loop _ [] (rev_lvs,SOME which) = (rev rev_lvs, which)
-			 | loop _ [] (rev_lvs,NONE) = error "bad mu type"
-			 | loop n ((v',c)::vrest) (rev_lvs,opt) = 
-			   let val (lv,k) = if is_recur
-						then mk_sum'([7,0],[])
-					    else mk_sum(7,[c])
+		       fun loop _ [] (s,rev_lvs,SOME which) = (s,rev rev_lvs, which)
+			 | loop _ [] (s,rev_lvs,NONE) = error "bad mu type"
+			 | loop n ((v',c)::vrest) (s,rev_lvs,opt) = 
+			   let val (lv,k,s) = if is_recur
+						then mk_sum'(s,[7,0],[])
+					    else mk_sum(s,7,[c])
 			       val opt' = if (eq_var(v,v')) then SOME(lv,k) else opt
-			   in  loop (n+1) vrest (lv::rev_lvs,opt')
+			   in  loop (n+1) vrest (s,lv::rev_lvs,opt')
 			   end
-		       val (lvs,(res_lv,kind)) = loop 0 vclist ([],NONE)
+		       val (state,lvs,(res_lv,kind)) = loop 0 vclist (state,[],NONE)
 			   
-		       val _ = if is_recur
-				   then
-				       let val clregs = map (fn lv => load_ireg_locval(lv,NONE)) lvs
-					   fun folder (((v,_),clreg),s) = add_convar s (v,SOME(VREGISTER (I clreg)),
-											NONE,Word_k Runtime,NONE)
-					   val recstate = foldl folder state (Listops.zip vclist clregs)
-					   fun do_write (clreg,(v,c)) = 
-					       let val (r,_) = xcon(recstate,v,c, NONE)
-					       in  add_instr(STORE32I(EA(clreg,4),r))
-					       end
-				       in  (Listops.map2 do_write (clregs,vclist); ())
-				       end
-			       else ()
-		   in  (res_lv,kind)
+		       val state = 
+			   if is_recur
+			       then
+				   let val clregs = map (fn lv => load_ireg_locval(lv,NONE)) lvs
+				       fun folder (((v,_),clreg),s) = add_convar s (v,SOME(VREGISTER (I clreg)),
+										    NONE,Word_k Runtime,NONE)
+				       val recstate = foldl folder state (zip vclist clregs)
+				       fun do_write ((clreg,(v,c)),s) = 
+					   let val (r,_,s) = xcon(s,v,c, NONE)
+					   in  add_instr(STORE32I(EA(clreg,4),r)); s
+					   end
+				   in  foldl do_write recstate (zip clregs vclist)
+				   end
+			       else state
+		   in  (res_lv,kind,state)
 		   end
 	     | AllArrow_c (Open,_,_,_,_,_) => error "open Arrow_c"
 	     | AllArrow_c (Closure,_,_,clist,numfloat,c) => 
-		   mk_sum_help(NONE,[9],[])
+		   mk_sum_help(state,NONE,[9],[])
 (*		   mk_sum_help(NONE,[9,TW32.toInt numfloat],c::clist) *)
 	     | AllArrow_c (Code,_,_,clist,numfloat,c) => 
-(*		   mk_sum_help(NONE,[10,TW32.toInt numfloat],c::clist) *)
-		   mk_sum_help(NONE,[10],[])
+(*		   mk_sum_help(state,NONE,[10,TW32.toInt numfloat],c::clist) *)
+		   mk_sum_help(state,NONE,[10],[])
 	     | AllArrow_c (ExternCode,_,_,clist,numfloat,c) => 
 (*		   mk_sum_help(NONE,[11,TW32.toInt numfloat],c::clist) *)
-		   mk_sum_help(NONE,[11],[])
+		   mk_sum_help(state,NONE,[11],[])
 	     | Var_c v => (case (getconvarrep state v) of
-			       (_,SOME vv, k) => (VAR_VAL vv,k)
-			     | (SOME vl,_, k) => (VAR_LOC vl,k)
+			       (_,SOME vv, k) => (VAR_VAL vv,k,state)
+			     | (SOME vl,_, k) => (VAR_LOC vl,k,state)
 			     | (NONE,NONE,_) => error "no info on convar")
 	     | Let_c (letsort, cbnds, c) => 
 		   let fun folder (cbnd,s) = xconbnd s cbnd
@@ -3504,18 +3673,21 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		   end
 	     | Crecord_c lclist => 
 		   let val vars = map (fn (l,_) => fresh_named_var (label2string l)) lclist
-		       fun doer (v,(l,c)) = (l,v,xcon(state,v,c,NONE))
-		       val lvregikind = Listops.map2 doer (vars,lclist)
+		       fun folder ((v,(l,c)),state) = 
+			   let val (vl,k,state) = xcon(state,v,c,NONE)
+			   in ((l,v,(vl,k)), state)
+			   end
+		       val (lvregikind,state) = foldl_list folder state (zip vars lclist)
 		       val lvkList = map (fn (l,v,(_,k)) => ((l,v),k)) lvregikind
 		       val kind = Record_k(list2sequence lvkList)
 		       val vl = map (fn (_,_,(ir,_)) => VAR_LOC(VREGISTER(I ir))) lvregikind
 		       val reps = map (fn _ => TRACE) vl
-		       val lv = make_record'(NONE,reps,vl)
-		   in  (lv,kind)
+		       val (lv,state) = make_record'(state,NONE,reps,vl)
+		   in  (lv,kind,state)
 		   end
 	     | Proj_c (c, l) => 
-		   let val (ir,k) = xcon(state,fresh_named_var "proj_c",c,NONE)
-		       fun loop [] _ = error "ill-formed Mu_c"
+		   let val (ir,k,state) = xcon(state,fresh_named_var "proj_c",c,NONE)
+		       fun loop [] _ = error "ill-formed projection"
 			 | loop (((l',_),k)::vrest) n = if (eq_label(l,l')) 
 							    then (n,k) else loop vrest (n+1)
 		       (* fieldk may have dependencies *)			
@@ -3526,26 +3698,30 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		       val (_,fieldk') = NilStatic.con_valid(ctxt,arg_con)
 		       val dest = alloc_regi TRACE
 		       val _ = add_instr(LOAD32I(EA(ir,4 * which),dest))
-		   in (VAR_LOC(VREGISTER (I dest)), fieldk')
+		   in (VAR_LOC(VREGISTER (I dest)), fieldk',state)
 		   end
 	     | Closure_c (c1,c2) => 
 		   let 
 		       fun kinder [(_,Arrow_k(_,vklist : (var * kind) list, k)),_] = 
-			   let val vklist' = Listops.butlast vklist
+			   let val vklist' = butlast vklist
 			   in  Arrow_k(Closure,vklist',k)
 			   end
 			 | kinder _ = error "bad Closure_c"
-		   in  mk_sum_help(SOME kinder,[],[c1,c2])
+		   in  mk_sum_help(state,SOME kinder,[],[c1,c2])
 		   end
 	     | Typecase_c _ => error "typecase_c not implemented"
 	     | App_c (c,clist) => (* pass in env argument first *)
-		   let val (clregi,k) = xcon(state,fresh_named_var "closure",c,NONE)
+		   let val (clregi,k,state) = xcon(state,fresh_named_var "closure",c,NONE)
 		       val resk = (case (kopt,NilUtil.strip_singleton k) of
 				       (SOME k, _) => k
 				     | (_,Arrow_k(_,_,resk)) => resk (* getshape?? *)
 				     | _ => (Ppnil.pp_kind k; print "\n";
 					     error "bad kind to App_c"))
-		       val cregsi = map (fn c => #1(xcon(state,fresh_named_var "clos_arg",c,NONE))) clist
+		       val (cregsi,state) = 
+			   foldl_list  (fn (c,state) => 
+				   let val (vl,_,state) = xcon(state,fresh_named_var "clos_arg",c,NONE)
+				   in  (vl,state)
+				   end) state clist
 		       val coderegi = alloc_regi NOTRACE_CODE
 		       val envregi = alloc_regi TRACE
 		       val _ = (add_instr(LOAD32I(EA(clregi,0),coderegi));
@@ -3558,157 +3734,12 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 					      results=([desti],[]),
 					      tailcall=false,
 					      save=SAVE(getLocals())})
-		   in (VAR_LOC (VREGISTER (I desti)),resk)
+		   in (VAR_LOC (VREGISTER (I desti)),resk,new_gcstate state)
 		   end
 	     | Annotate_c (_,c) => xcon'(state,name,c,kopt))
       end
 
   
-
-  (* -- create a record given a list of tagwords for the fields,
-   the first n fields which are already in integer registers,
-   and the rest of the fields, which are values *)
-
-  and make_record arg : regi = let val lv = make_record' arg
-			       in  load_ireg_locval(lv,NONE)
-			       end
-			   
-  and make_record' (destopt, _ , []) : loc_or_val = VAR_VAL unitval
-    | make_record' (destopt, reps : rep list, vl : loc_or_val list) = 
-    let 
-
-(*
-	val _ = print "----make_record' called with vl...\n";
-	val _ = app (fn (VAR_VAL _) => (print "varval\n")
-                      | (VAR_LOC _) => (print "varloc\n")) vl
-        val _ = print "\n\n"
-*)
-
-	val _ = add_instr(ICOMMENT ("allocating an " ^ (Int.toString (length vl)) ^ " record"))
-	val tagwords = mk_recordtag reps
-	val dest = (case destopt of
-			NONE => alloc_regi TRACE
-		      | SOME d => d)
-	val tagwords = 
-	    if (not (!HeapProfile))
-		then tagwords
-	    else ({dynamic=nil,static=MakeProfileTag()}) :: tagwords
-        (* total number of words needed *)
-	val words_alloced = length vl+length tagwords
-	(* for some reason VGLOBALs causes a GC bug so we must disallow it until
-	   the cause is determined; even add_mutable_object on the non-constant records still fail. :(  *)
-	fun is_varval (VAR_VAL _) = true
-	  | is_varval _ = false
-	val is_top = istoplevel() andalso (!do_constant_records andalso (Listops.andfold is_varval vl))
-
-	(* shadow heapptr with thunk to prevent accidental use *)
-	val heapptr = if is_top
-			  then (add_data(COMMENT "static record tag");
-				fn _ => error "should not use heapptr here")
-		      else (needgc(IMM(words_alloced)); 
-			    fn _ => heapptr)
-
-
-	fun scan_vals (offset,[]) = offset
-	  | scan_vals (offset,vl::vls) =
-	    ((case (is_top,vl) of
-		  (true,VAR_VAL (VINT w32)) => add_data(INT32 w32)
-		| (true,VAR_VAL (VRECORD (l,_))) => add_data(DATA l)
-		| (true, VAR_VAL (VLABEL l)) => add_data(DATA l)
-		| (true, VAR_VAL (VCODE l)) => add_data(DATA l)
-		| (true, VAR_LOC (VGLOBAL (l,rep))) => 
-		      let val _ = error "currently this case should be unreachable"
-			  val addr = alloc_regi LABEL
-			  val loc = alloc_regi LABEL
-			  val value = alloc_regi rep
-			  val fieldl = LOCAL_LABEL(alloc_named_data_label (Name.fresh_named_var "recfield"))
-		      in  (add_data(DLABEL fieldl);
-			   add_data(INT32 0w43);
-			   add_instr(LADDR(fieldl,0,addr));
-			   add_instr(LADDR(l,0,loc));
-			   add_instr(LOAD32I(EA(loc,0),value));
-			   add_instr(STORE32I(EA(addr,0),value)))
-		      end
-		| _ => let val r = load_ireg_locval(vl,NONE)
-			   val _ = if is_top then add_data(INT32 0w0) else ()
-		       in  add_instr(STORE32I(EA(heapptr(),offset),r))  (* allocation - not a mutation *)
-		       end);
-	    scan_vals(offset+4,vls))
-
-        (* sometime the tags must be computed at run-time *)
-	fun do_dynamic (r,{bitpos,path}) =
-	    let val tipe = 
-		case path of
-		    Var_p regi => regi
-		  | Projvar_p (regi,indices) =>
-			let val tipe = alloc_regi TRACE
-			    fun loop src [] = ()
-			      | loop src (i::rest) = (add_instr(LOAD32I(EA(src,4*i),tipe)); loop tipe rest)
-			in  loop regi indices; tipe
-			end
-		  | Label_p label =>
-			let val addr = alloc_regi LABEL
-			    val tipe = alloc_regi TRACE
-			in add_instr(LADDR(label,0,addr));
-			    add_instr(LOAD32I(EA(addr,0),tipe));
-			    tipe
-			end
-		  | Projlabel_p(label,indices) =>
-			let val addr = alloc_regi LABEL
-			    val addr' = alloc_regi LABEL
-			    val tipe = alloc_regi TRACE
-			    fun loop src [] = ()
-			      | loop src (i::rest) = (add_instr(LOAD32I(EA(src,4*i),tipe)); loop tipe rest)
-			in  add_instr(LADDR(label,0,addr));
-			    add_instr(LOAD32I(EA(addr,0),addr'));
-			    loop addr' indices;
-			    tipe
-			end
-		  | Notneeded_p => error "record: Notneeded_p hit"
-		val tmp1 = alloc_regi NOTRACE_INT
-		val tmp2 = alloc_regi NOTRACE_INT
-	    in (* add_instr(LI(i2w 0,tmp1));
-		add_instr(CMV(NE,tipe,IMM 1,tmp1)); *)
-		add_instr(CMPUI(GT, tipe, IMM 3, tmp1)); (* is it not an int *)
-		add_instr(SLL(tmp1,IMM (bitpos-1),tmp2));
-		add_instr(ORB(tmp2,REG r,r))
-	    end
-
-      (* usually, the tags are known at compile time *)	
-      fun scantags (offset,nil : Rtltags.tags) = offset
-	| scantags (offset,({static,dynamic}::vl) : Rtltags.tags) =
-	  (if is_top
-	       then add_data(INT32 static)
-	   else ();
-	   if (is_top andalso (null dynamic))
-	       then ()
-	   else let val r = alloc_regi(NOTRACE_INT)
-		in  add_instr (LI(static,r));
-		    app (fn a => do_dynamic(r,a)) dynamic;
-		    add_instr(STORE32I(EA(heapptr(),offset),r)) (* allocation *)
-		end;
-	   scantags(offset+4,vl))
-
-      val offset = 0
-      val offset = scantags(offset,tagwords);
-      val (result,templabelopt) = if is_top
-		       then let val label = LOCAL_LABEL(alloc_data_label())
-			    in  ((* add_mutable_object label; *)
-				 add_data(DLABEL label);
-				 (VAR_VAL(VLABEL label), SOME label))
-			    end
-		   else (VAR_LOC (VREGISTER (I dest)), NONE)
-
-      val offset = scan_vals (offset, vl)
-      val _ = if is_top
-		  then ()
-	      else (add(heapptr(),4 * length tagwords,dest);
-		    add(heapptr(),4 * words_alloced,heapptr()))
-      val _ = add_instr(ICOMMENT ("done allocating an " ^ (Int.toString (length vl)) ^ " record"))
-    in  result
-    end
-  
-
 
   local 
       fun doconfun is_top (state,name,vklist,body,kind) = 
@@ -3721,18 +3752,17 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 				else ();
 				print "\n")
 		      else ()
-              fun folder ((v,k),(acc,s)) = let val r = alloc_named_regi v TRACE
+              fun folder ((v,k),s) = let val r = alloc_named_regi v TRACE
 					       val s' = add_convar s (v,SOME(VREGISTER (I r)),NONE,k,NONE)
-					   in  (r::acc,s')
+					   in  (r,s')
                                            end
-	      val (rev_cargs,state) = foldl folder ([],state) vklist
-              val cargs = rev rev_cargs
+	      val (cargs,state) = foldl_list folder state vklist
 	      val args = (cargs,[])
 	      val resulti = alloc_regi TRACE
 	      val results = ([resulti],[])
 	      val return = alloc_regi(LABEL)
 	      val _ = set_args_result(args, I resulti, return)
-	      val (ir,k) = xcon(state,fresh_named_var "result",body,NONE)
+	      val (ir,k,state) = xcon(state,fresh_named_var "result",body,NONE)
 	      val _ = (add_instr(MV(ir,resulti));
 		       add_instr(RETURN return))
 	      val {name=label_name,code} = get_state()
@@ -3757,26 +3787,21 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	      val _ = if (!debug)
 			  then (print "-----dofun_help : "; Ppnil.pp_var name; print "\n")
 		      else ()
-              fun folder ((v,k),(acc,s)) = let val r = alloc_named_regi v TRACE
+              fun folder ((v,k),s) = let val r = alloc_named_regi v TRACE
 					       val s' = add_convar s (v,SOME(VREGISTER (I r)),NONE,k,NONE)
-					   in  (r::acc,s')
+					   in  (r,s')
                                            end
-	      val (rev_cargs,state) = foldl folder ([],state) vklist
-	      val cargs = rev rev_cargs
-              fun folder ((v,c),(acc,s)) = let val r = alloc_named_reg s (c,v)
-					       val s' = add_var s (v,r,c)
-					   in  case r of
-					       I ir => (ir::acc,s')
-					     | _ => error "can't have float reg for general arguments"
-                                           end
-	      val (rev_eiargs,state) = foldl folder ([],state) vclist
-              val eiargs = rev rev_eiargs
-              fun folder (v,(acc,s)) = let val fr = alloc_named_regf v
+	      val (cargs,state) = foldl_list folder state vklist
+              fun folder ((v,c),s) = let val r as (I ir) = alloc_named_reg s (c,v)
+					 val s' = add_var s (v,r,c)
+			             in  (ir, s')
+                                     end
+	      val (eiargs,state) = foldl_list folder state vclist
+              fun folder (v,s) = let val fr = alloc_named_regf v
 					       val s' = add_var s (v,F fr,Prim_c(Float_c Prim.F64,[]))
-					   in  (fr::acc,s')
+					   in  (fr,s')
                                            end
-              val (rev_efargs,state) = foldl folder ([],state) vflist
-	      val efargs = rev rev_efargs
+              val (efargs,state) = foldl_list folder state vflist
 
 	      val args = (cargs @ eiargs, efargs)
 	      val result = alloc_reg state con
@@ -3785,7 +3810,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			       | F fr => ([],[fr]))
 	      val return = alloc_regi(LABEL)
 	      val _ = set_args_result(args, result, return)
-	      val (r,c) = xexp'(state,fresh_named_var "result",body,
+	      val (r,c,state) = xexp'(state,fresh_named_var "result",body,
 				SOME con, ID return)
 	      val mvinstr = (case (r,result) of
 				 (I ir1,I ir2) => MV(ir1,ir2)
@@ -3815,16 +3840,26 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
       fun worklist_loop () = 
 	  (case getWork() of
 	       NONE => ()
-	     | SOME (n,FunWork vf) => (print "*** Working on fun "; print (Int.toString n); print "\n";
-				       dofun vf; 
-				       print "*** Finished fun "; print (Int.toString n); print "\n";
-				       worklist_loop())
-	     | SOME (n,ConFunWork vvkck) => (print "*** Working on confun "; 
-					     print (Int.toString n); print "\n";
-					     doconfun false vvkck; 
-					     print "*** Finished confun "; 
-					     print (Int.toString n); print "\n";
-					     worklist_loop()))
+	     | SOME (n,FunWork vf) => 
+		   (if (!debug)
+			then (print "*** Working on fun "; print (Int.toString n); print "\n")
+		    else ();
+		    dofun vf; 
+		    if (!debug)
+		      then (print "*** Finished fun "; print (Int.toString n); print "\n")
+		    else ();
+		    worklist_loop())
+	     | SOME (n,ConFunWork vvkck) => 
+			(if (!debug) 
+			     then (print "*** Working on confun "; 
+				   print (Int.toString n); print "\n")
+			 else ();
+			 doconfun false vvkck; 
+			 if (!debug)
+			     then (print "*** Finished confun "; 
+				   print (Int.toString n); print "\n")
+			 else ();
+			 worklist_loop()))
   end
 
   (* compute toplevel non-globals: that is, "globals"
