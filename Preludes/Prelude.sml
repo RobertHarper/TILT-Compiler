@@ -448,9 +448,33 @@ structure Real =
     end
 
 
+(* IO externs *)
+extern ml_output : (int, char vector, unit) -->
+extern ml_input : (int, int, char vector) -->
+extern ml_input1 : (int, char) -->
+extern ml_lookahead : (int, char) -->
+extern ml_open_in : (char vector, int) -->
+extern ml_open_out : (char vector, int) -->
+extern ml_close_in : (int, unit) -->
+extern ml_close_out : (int, unit) -->
+extern ml_end_of_stream : (int, bool) -->
+extern ml_flush_out : (int, unit) -->
+
+fun output (arg1,arg2) = Ccall(ml_output,arg1,arg2)
+fun input (arg1, arg2) = Ccall(ml_input, arg1, arg2)
+fun input1 arg = Ccall(ml_input1, arg)
+fun lookahead arg = Ccall(ml_lookahead, arg)
+fun open_in arg = Ccall(ml_open_in, arg)
+fun open_out arg = Ccall(ml_open_out, arg)
+fun close_in arg = Ccall(ml_close_in, arg)
+fun close_out arg = Ccall(ml_close_out, arg)
+fun end_of_stream arg = Ccall(ml_end_of_stream, arg)
+fun flush_out arg = Ccall(ml_flush_out, arg)
+
 structure IO = 
     struct
 	
+
 	(* --------------------- streams --------------- *)
 	type instream = int
 	type outstream = int
