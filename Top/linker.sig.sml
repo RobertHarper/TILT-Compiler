@@ -10,7 +10,7 @@ signature LINKER =
 	                                          (* for initializing clients; label client_entry *)
 
     val mk_uo : {imports : (string * Crc.crc) list,   (* the strings here are *)
-                 exports : (string * Crc.crc) list,   (* unit names - no ext. *)
+                 exports : (string * Crc.crc) list,   (* unit filenames - no ext. *)
 		 base_result : string} -> string
 
   end

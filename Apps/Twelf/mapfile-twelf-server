@@ -1,0 +1,7 @@
+#include mapfile-twelf
+
+SIGINT		src/server/sigint.sig
+SigINT		src/server/sigint-tilt
+Server	 	src/server/server
+//SERVER	src/server/server
+TwelfServer	src/server/server-tilt

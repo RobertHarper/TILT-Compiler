@@ -43,10 +43,14 @@ i386_linux3)
 	;;
 esac
 
-# Hack for now: We do CM.make() in $mldir, which is based on $argdir.
-# When this is released, we'll put @SMLload'able heaps in some known place.
+# Where to run tilt.
 
-mldir=`cd "$argdir/.."; pwd`
+tiltdir=`cd "$argdir/.."; pwd`
+
+# Provide a reasonable default for TILT_LIBDIR.
+
+: ${TILT_LIBDIR:="$tiltdir"}
+export TILT_LIBDIR
 
 # The userid for kinit.  At CMU, this will already be set, so we don't
 # care that `whoami` isn't the right thing for all systypes.
@@ -68,12 +72,10 @@ kgeometry="70x5-0+$yoffset"
 
 ktitle="kinit @ $arghost"
 
-# Default SML/NJ version to use (matters at CMU, harmless elsewhere)
-: ${SML_VERSION:=110}
-
 # The bourne shell script to run remotely.
 
 cmdfile=/tmp/til_slave.$$
+elisp=/tmp/elisp.$$
 
 cmd='	PATH="'"$PATH"'"
 	export PATH
@@ -103,64 +105,57 @@ cmd='	PATH="'"$PATH"'"
 			exit 1
 		fi
 	fi
+
+	# Required if user has modified
+
+	TILT_LIBDIR="'"$TILT_LIBDIR"'"
+	export TILT_LIBDIR
+
+	TILT_VERSION="'"$TILT_VERSION"'"
+	export TILT_VERSION
+
+	# Required at CMU, harmless elsewhere.
 	
-	# Required by TIL
-
-	SYS=`sys`
-	export SYS
-
-	HOST=`hostname`
-	export HOST
-
-	# Required by SML/NJ at CMU, harmless elsewhere
-
-	SML_VERSION='$SML_VERSION'
+	SML_VERSION="'"$SML_VERSION"'"
 	export SML_VERSION
 
-	# Run a slave inside NJ inside emacs.
-	
-	# Hack for now.  We should be using a custom
-	# heap.
+	cat << "END_EMACS" > '$elisp'
+(defvar tilt-executable (concat (getenv "TILT_LIBDIR") "/Bin/tilt"))
+(defvar tilt-slave-args "-vs")
 
-	cd "'"$mldir"'"
-
-	cat << "END_EMACS" > /tmp/elisp'$$'
-(setq load-path (cons "/usr/local/lib/sml/sml-mode" load-path))
-(require '\''sml-mode)
 (require '\''comint)
-(require '\''sml-proc)
-(defun til-slave-startup ()
-  (interactive)
-; (set-default-font "6x10")  Window resize due to font change here does not work with Exceed for wide (>100) windows
-  (menu-bar-mode -1)
-  (delete-file "/tmp/elisp'$$'")
-  (til-slaves '$argcount'))
-(defun til-launch-slave ()
-  (sml-run "/usr/local/bin/sml" "")
-  (sml-skip-errors)
-  (comint-send-string (sml-proc)
-		      (concat "SMLofNJ.Internals.GC.messages false;"
-			      "CM.verbose (SOME false);"
-			      "CM.make();"
-			      "Manager.slave();\n")))
-(defun til-slave (n)
-  (interactive "p")
-  (til-launch-slave)
-  (switch-to-buffer sml-buffer)
-  (rename-buffer (concat "*til slave*" (int-to-string n)) t))
-(defun til-make-slaves (n split)
+
+(defun tilt-nth-slave (n)
+  (let* ((bufname (concat "tilt slave " (int-to-string n)))
+	 (buffer (make-comint bufname tilt-executable nil tilt-slave-args)))
+    (switch-to-buffer buffer)
+    buffer))
+
+(defun tilt-make-slaves (n split)
   (if (= n 0)
       (balance-windows)
     (progn
       (balance-windows)
       (if split (split-window-vertically))
       (balance-windows)
-      (til-slave n)
-      (til-make-slaves (- n 1) t))))
-(defun til-slaves (n) (interactive "p") (til-make-slaves n nil))
+      (tilt-nth-slave n)
+      (tilt-make-slaves (- n 1) t))))
+  
+(defun tilt-slaves (n)
+  (interactive "p")
+  (delete-other-windows)
+  (tilt-make-slaves n nil))
+  
+(defun tilt-slave-startup ()
+  (interactive)
+; (set-default-font "6x10")  Window resize due to font change here does not work with Exceed for wide (>100) windows
+  (menu-bar-mode -1)
+  (delete-file "'$elisp'")
+  (tilt-slaves '$argcount'))
 END_EMACS
+	cd "'"$tiltdir"'"
 	exec emacs --no-init-file -bg black -fg yellow -fn 6x10 \
-		-geometry '$geometry' -l /tmp/elisp'$$' -f til-slave-startup
+		-geometry '$geometry' -l '$elisp' -f tilt-slave-startup
 '
 
 # We put the command into a file because ssh doesn't send the command
@@ -172,7 +167,7 @@ echo "$cmd" > $cmdfile.local
 if [ "$arghost" = localhost ]
 then
 	mv $cmdfile.local $cmdfile
-else	
+else
 	$scp $cmdfile.local "$arghost:$cmdfile"
 	rm -f $cmdfile.local
 fi

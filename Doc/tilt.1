@@ -1,0 +1,131 @@
+.TH TILT 1 "16 January 2000" "Version 0.1"
+.SH NAME
+tilt \- Standard ML compiler
+.SH SYNOPSIS
+.BR tilt " [" -?vs "] [" -fr
+.IR flag ]
+.RB [ -pcm
+.IR mapfile "] [" mapfile " .\|.\|.]"
+.RB [ --
+.RI [ num "/]" host " .\|.\|.]"
+.SH DESCRIPTION
+The TILT (or TIL-Two) Compiler Project is a joint effort between
+researchers at Cornell and Carnegie Mellon.  The goal of the project
+is to produce a compiler for the ML-family of programming languages
+(SML'97, Caml Special Light, and KML) that takes advantage of types
+throughout compilation in order to produce better code without
+compromising safety or correctness.
+.SH OPTIONS
+.TP
+.RI [ mapfile " .\|.\|.\|]"
+This is the primary method for building SML source files.  Each
+.I mapfile
+is recompiled in turn.  See
+.B MAKE SYSTEM
+below for information on what a mapfile is and how to set up sources
+for use with a mapfile.
+.TP
+.BI "-c " mapfile
+Remove object files (and other compiler-generated files)
+associated with
+.IR mapfile .
+.TP
+.BI "-m " mapfile
+Perform a parallel make of
+.IR mapfile ,
+using the current host as master.  Any slaves launched in the current
+directory will contribute to the compilation.
+.TP
+.B -s
+This flag causes tilt to act as a slave for any (future or on-going)
+parallel make in the current directory.
+.TP
+\fB\-p\fP \fImapfile\fP [\fB--\fP [\fIn1\fP/]\fIhost1\fP [\fIn2\fP/]\fIhost2\fP .\|.\|.]
+Perform a parallel make of
+.IR mapfile ,
+using the current host as master and launching
+.IR n1 " slaves on " host1 ", "
+.IR n2 " slaves on " host2 ,
+etc.
+.TP
+.BI "-f " flag
+Set
+.I flag
+to true.  TILT's internal flags are primarily used to debug the
+compiler and are not documented further.  If you're curious, grep for
+Stats.bool under /afs/cs/local/tilt/src.
+.\" Want to list interesting flags here?
+.TP
+.BI "-r " flag
+Set
+.I flag
+to false.
+.TP
+.B -?
+Print usage summary.
+.TP
+.B -v
+Print version information.
+.SH MAKE SYSTEM
+The TILT make system has two components: mapfiles and import lists.
+.PP
+Mapfiles are analagous to UNIX makefiles and SML/NJ's .cm files.
+Mapfiles do not need to have any particular suffix.
+Mapfiles map logical module names to filenames.  For example,
+the following line in a mapfile would indicate that the logical
+module name FooBar is to be associated with the file Baz/foobar.sml.
+Note that the extension .sml is omitted.
+.PP
+FooBar  Bar/foobar
+.PP
+The second feature is a specialized comment placed as the first line
+of an SML source file.  For example, the following first line of a file
+indicates that the file depends on the modules FooBar and Goo.
+.PP
+(*$import FooBar Goo *)
+.PP
+Suppose you have a directory of SML files called twelf.  To get
+twelf to compile with TILT, the first thing needed is to create a
+mapfile in the twelf directory called mapfile-twelf.  Then each of
+the SML source files in the twelf directory must be listed in the
+mapfile along with its assigned logical name.  Then the proper
+dependencies among the modules need to be inserted by adding
+import lines to each source file.  The basis can be included in
+mapfile-twelf with the following line:
+.PP
+#include mapfile-basis
+.PP
+Each source file that uses a basis structure, signature, or functor
+will require the logical name of the file containing the module.  Most
+logical names are the same as their structure, signature, or functor.
+Examples include List, LIST, and TextIO.  The logical name TopLevel
+corresponds to the module containing terms and types bound at the top
+level like print, map, and all basis library structures.
+.PP
+It is unlikely that the dependencies will have been correctly set up
+when TILT is first run.  Error messages that result because of this
+will be of the "unbound variable" sort.  For example, if the structure
+Posix is unbound, then add Posix (or TopLevel) to the import list.
+.SH FILES
+.TP
+/usr/local/lib/tilt
+Directory of compiler and library binaries and support scripts.
+.TP
+/afs/cs/local/tilt/src
+Source code for TILT.
+.TP
+/usr/local/lib/sml/sml-mode/sml-site.el
+.BR emacs (1)
+major mode for editing SML files.  Read the comments at the top of the file
+for information on setting this up.
+.SH SEE ALSO
+.BR sml (1),
+.BR ml-lex (1),
+.BR ml-yacc (1),
+.BR ml-burg (1),
+.BR make (1).
+.SH BUGS
+This is an alpha release of TILT.  If you think you've found a bug,
+send mail to the
+.I til-bugs@cs.cmu.edu
+mailing list.

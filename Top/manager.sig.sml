@@ -4,7 +4,8 @@
 (* ---- Provides an abstraction for communication between master and slave processes ---- *)
 signature COMMUNICATION = 
 sig
-    eqtype channel
+    type channel
+    val eq : channel * channel -> bool
     val toMaster : channel    (* Channel from self/slave to master.  *)
     val fromMaster : channel  (* Channel from master to self/slave.  *)
     val reverse : channel -> channel (* Reverse directionality of channel. *)
@@ -28,7 +29,6 @@ sig
     val findToMasterChannels : unit -> channel list  (* Find all ready channels to master. *)
     val findFromMasterChannels : unit -> channel list  (* Find all ready channels from master. *)
 
-    val tempDir : string                    (* Channel files and other temporary files are here *)
 end
 
 signature HELP = 
@@ -118,8 +118,6 @@ sig
   val tilc   : string * bool * string option * string list -> unit  
                                               (* mapfile, don't link,
 					         optional .exe name, list of files to compile *)
-
-  val command : string * string list -> int  (* to be exported *)
 
 end
 

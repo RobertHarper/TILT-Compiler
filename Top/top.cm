@@ -15,13 +15,17 @@ Group is
 ../Ppc/ppc.cm
 ../C/c.cm
 *)
-linkall.sml
+dirs.sig.sml
+dirs.sml
 (*
+linkall.sml
 toplevel.sml
 measure.sig.sml
 measure.sml
 distribute.sml
 *)
+delay.sig.sml
+delay.sml
 compiler.sig.sml
 compiler.sml
 manager.sig.sml
@@ -30,4 +34,7 @@ linker.sig.sml
 linker.sml
 makedep.sig.sml
 makedep.sml
-
+getopt.sig.sml
+getopt.sml
+main.sig.sml
+main.sml

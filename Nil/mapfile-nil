@@ -1,0 +1,114 @@
+#include ../Elaborator/mapfile-elaborate
+
+// ------------- Nil directory -------------------
+
+ANNOTATION annote.sig
+Annotation annote
+
+TRACEINFO traceinfo.sig
+TraceInfo traceinfo
+
+NIL nil.sig
+Nil nil
+
+PPNIL ppnil.sig
+Ppnil ppnil
+PpnilHtml ppnil-html
+
+NILERROR nilerror.sig
+NilError nilerror
+
+NILREWRITE rewrite.sig
+NilRewrite rewrite
+
+MEASURE measure.sig
+Measure measure
+
+ALPHA alpha_context.sig
+Alpha alpha_context
+
+NILRENAME 	nilrename.sig
+NilRename	nilrename
+
+NILSUBST subst.sig
+NilSubst subst
+
+NilPrimUtilParam nilprimutilparam
+
+NILUTIL nilutil.sig
+NilUtil nilutil
+
+TRAIL trail.sig
+Trail trail
+
+NILCONTEXTPRE	nilcontextpre.sig
+NilContextPre nilcontextpre
+
+NORMALIZE normalize.sig
+Normalize normalize
+
+NILHNF	nilhnf.sig
+NilHNF	nilhnf
+
+NILCONTEXT nilcontext.sig
+NilContext nilcontext
+
+TRACEOPS traceops.sig
+TraceOps traceops
+
+NILSTATIC nilstatic.sig
+NilStatic nilstatic
+
+LINEARIZE linearize.sig
+Linearize linearize
+
+REIFY reify.sig
+Reify reify
+
+EXPTABLE NilOpts/exptable.sig
+ExpTable NilOpts/exptable
+
+TOCLOSURE toclosure.sig
+ToClosure toclosure
+
+VARARG vararg.sig
+Vararg vararg
+
+OPTIMIZE optimize.sig
+Optimize optimize
+
+SPECIALIZE specialize.sig
+Specialize specialize
+
+TONIL tonil.sig
+ToNil tonil
+
+PASS pass.sig
+
+REDUCE reduce.sig
+Reduce reduce
+
+Flatten flatten
+
+HOIST hoist.sig
+Hoist hoist
+
+ANALYZE analyze.sig
+Analyze analyze
+
+INLINE inline.sig
+Inline inline
+
+Reorder reorder
+
+Dummy   dummy
+
+// WNIL    ../Wizard/nil.sig
+// CURTAIN ../Wizard/curtain.sig
+// Curtain ../Wizard/curtain
+
+LINKNIL linknil.sig
+Linknil linknil
+
+
+

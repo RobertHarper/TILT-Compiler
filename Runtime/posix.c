@@ -920,11 +920,10 @@ inttriple posix_process_waitpid(int argpid, word options)
   return (inttriple) result;
 }
 
-unit posix_process_exit(word8 unused)
+unit posix_process_exit(word8 status)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  exit(status);
+  return 0; /* NOTREACHED */
 }
 
 unit posix_process_kill(int unused1, int unused2)

@@ -227,6 +227,7 @@ int main(int argc, char **argv)
 
   thread_go((ptr_t *)(&client_entry),module_count);
   stats_finish();
+  return 0;
 }
 
 

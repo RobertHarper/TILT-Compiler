@@ -4,8 +4,8 @@ structure Util :> UTIL =
   struct
     exception UNIMP
     exception BUG of string
-    fun real_error filename str = let val s = "Error: " ^  filename ^ ": " ^ str
-				  in print s; print "\n"; raise (BUG s)
+    fun real_error filename str = let val s = filename ^ ": " ^ str
+				  in  raise (BUG s)
 				  end
 
     fun loop a b = if (a>b) then [] else a::(loop (a+1) b)
@@ -125,4 +125,5 @@ structure Util :> UTIL =
        else (OS.Process.system command <> OS.Process.failure)
 
     val error = real_error
+
   end

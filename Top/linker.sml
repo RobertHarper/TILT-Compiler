@@ -1,4 +1,4 @@
-(*$import LINKER Compiler Util Crc Listops OS Name Linkalpha Linksparc *)
+(*$import LINKER Compiler Util Crc Listops OS Name Linkalpha Linksparc Dirs *)
 structure Linker :> LINKER =
   struct
 
@@ -27,18 +27,18 @@ structure Linker :> LINKER =
 	     | Til.TIL_SPARC => solaris
 	     | Til.MLRISC_SPARC => solaris
 	end
-    fun crt() = 
+    fun crt dirs = 
 	let val alpha = "/usr/lib/cmplrs/cc/crt0.o "
-	    val solaris = "Runtime/obj_solaris/firstdata.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crt1.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crti.o /usr/ccs/lib/values-Xa.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtbegin.o  -L/usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2 -L/usr/ccs/bin -L/usr/ccs/lib -L/usr/local/lib"
+	    val solaris = Dirs.runtime (dirs, "obj_solaris/firstdata.o") ^ " /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crt1.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crti.o /usr/ccs/lib/values-Xa.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtbegin.o  -L/usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2 -L/usr/ccs/bin -L/usr/ccs/lib -L/usr/local/lib"
 	in   case (Til.getTargetPlatform()) of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
 	     | Til.TIL_SPARC => solaris
 	     | Til.MLRISC_SPARC => solaris
 	end
-    fun ld_libs() = 
-	let val alpha = "Runtime/runtime.alpha_osf.a -call_shared -lpthread -lmach -lexc -lm -lc"
-	    val solaris = "Runtime/runtime.solaris.a -lpthread -lposix4 -lm -lc -lgcc /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtend.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtn.o"
+    fun ld_libs dirs = 
+	let val alpha = Dirs.runtime (dirs, "runtime.alpha_osf.a") ^ " -call_shared -lpthread -lmach -lexc -lm -lc"
+	    val solaris = Dirs.runtime (dirs, "runtime.solaris.a") ^ " -lpthread -lposix4 -lm -lc -lgcc /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtend.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtn.o"
 	in  case (Til.getTargetPlatform()) of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
@@ -136,17 +136,35 @@ structure Linker :> LINKER =
 				    BinIO.closeIn is
 				end
 
+    (* encode/decode necessary because LibDir is not fixed *)
+    (* decode should probably do a path search *)
+
+    (* encode : Dirs.dirs -> string -> string *)
+    fun encode dirs file =
+	(case Dirs.stripLibDir (dirs, file)
+	   of NONE => "U" ^ file
+	    | SOME relativeFile => "L" ^ relativeFile)
+
+    (* decode : Dirs.dirs -> string -> string *)
+    fun decode dirs code =
+	let val file = String.extract (code, 1, NONE)
+	in
+	    case String.sub (code, 0)
+	      of #"L" => Dirs.lib (dirs, file)
+	       | #"U" => file
+	end
 
     local open BinIO_Util
     in
       fun mk_uo {imports : (string * Crc.crc) list,
 		 exports : (string * Crc.crc) list,
 		 base_result : string} : string =
-	let 
+	let
+	    val encode = encode (Dirs.getDirs())
 	    val uo_result = Til.base2uo base_result
 	    val os = BinIO.openOut uo_result
 	    val out_pairs = app (fn (name,crc) =>
-				 (output_string (os, name ^ ":");
+				 (output_string (os, encode name ^ ":");
 				  Crc.output_crc (os, crc);
 				  output_string (os, "\n")))
 	in  output_string (os, "$imports:\n");
@@ -174,10 +192,11 @@ structure Linker :> LINKER =
 	end
  
       fun input_pairs (is : BinIO.instream) : (string * Crc.crc) list =
-	let fun loop a = case lookahead is of
+	let val decode = decode (Dirs.getDirs())
+	    fun loop a = case lookahead is of
 			      NONE => rev a
 			    | SOME #"$" => rev a
-			    | SOME _ => let val unitname = read_unitname_and_colon is
+			    | SOME _ => let val unitname = decode (read_unitname_and_colon is)
 					    val crc = Crc.input_crc is
 					    val _ = read_string(is,"\n")
 					in loop((unitname,crc)::a)
@@ -261,9 +280,10 @@ structure Linker :> LINKER =
 			   else error "mk_exe - as failed"
 
 		   val o_files_str = foldl (fn (a,b) => a ^ " " ^ b) "" o_files
+		   val dirs = Dirs.getDirs()
 		   val command = (ld() ^ " -o " ^
-				  exe_result ^ " " ^ (crt()) ^ " " ^ 
-				     o_files_str ^ " " ^ link_o ^ " " ^ ld_libs())
+				  exe_result ^ " " ^ (crt dirs) ^ " " ^ 
+				     o_files_str ^ " " ^ link_o ^ " " ^ ld_libs dirs)
 		   val _ = (print "Running: "; print command; print "\n")
 		   val success = Util.system command
 		   val _ = if success then ()

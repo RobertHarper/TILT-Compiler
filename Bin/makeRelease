@@ -1,0 +1,123 @@
+#!/usr/local/bin/rc -p
+
+# Copies stuff from the current directory into the misc collection
+# area, resulting in a new misc collection release.  Assumes you've
+# built heaps (Heaps/tilt*), binaries (Top*), and the basis for all
+# platforms.  You need to modify the collection's coll.conf by hand.
+
+# Should probably only be run on linux because of the strange chmod
+# and mkdir usage.
+
+path=(/usr/local/bin /usr/bin /bin)
+
+umask 022
+
+# Tracing
+fn indent { n=$1 {
+	if (~ $n 0) { return 0 } else {
+		echo -n '  '
+		indent `{ expr $n - 1 }
+	}
+}}
+lvl=0
+fn trace { indent $lvl; echo $* }
+fn traceBegin { trace $*; lvl=`{expr $lvl + 1} }
+fn traceEnd { lvl=`{expr $lvl - 1} }
+
+# Like mkdir but creates missing parent dirs too.
+fn createDir { dir=$1 {
+	if (test -d $dir) {
+		return 0
+	} else {
+		trace creating $dir
+		mkdir -p $dir
+        }
+}}
+
+# Delete files which never belong in /usr/local
+fn cleanupDir { dir=$1 {
+	trace cleaning $dir
+	find $dir -name CM | xargs rm -rf
+	find $dir -name CVS | xargs rm -rf
+}}
+
+# Grant group and other all access except writes
+fn fixPerms { dir=$1 {
+	trace fixing permissions on $dir
+	chmod -R og+u,og-w $dir
+}}
+
+# Copy a directory, preserving timestamps and copying symlinks as symlinks
+fn copyDir { dir=$1 dest=$2 {
+	traceBegin copying $dest
+	rm -rf $dest >[2]/dev/null
+	createDir $dest
+	@{cd $dir; tar cf - .} | @{cd $dest; tar xf -}
+	cleanupDir $dest
+	fixPerms $dest
+	traceEnd
+}}
+
+# Copy a file
+fn copyFile { file=$1 dest=$2 {
+	traceBegin copying $dest
+	rm -f $dest >[2]/dev/null
+	createDir `{ dirname $dest }
+	cp -p $file $dest
+	fixPerms $dest
+	traceEnd
+}}
+
+fn copyStuff { dest=$1 i=() {
+	shift
+	for (i in $*) {
+		if (test -f $i) {
+			copyFile $i $dest/$i
+		} else {
+			copyDir $i $dest/$i
+		}
+	}
+}}
+
+# OK, here we go
+
+if (!~ $#* 1) {
+	echo >[1=2] usage: $0 version
+	exit 1
+}
+
+ver=$1
+#dest=/usr/tmp/tilt	Debugging
+dest=/afs/.cs.cmu.edu/misc/tilt
+
+fn archPath { arch=$1 i=$2 { echo $dest/$arch/$ver/$i }}
+fn commonPath { i=$1 { archPath common $i }}
+
+# Choose a version of til_slave
+fn setSlaveScript { script=$1 {
+	trace setting til_slave to $script
+	@{
+		cd `{commonPath lib/tilt/Bin}
+		ln -s $script til_slave
+        }
+}}
+
+copyStuff `{commonPath lib/tilt} \
+		Bin/ ^ (til_slave_local_xterm til_slave_remote_emacs tilt run) \
+		Basis mapfile-lib mapfile-basis
+copyFile Bin/tilt `{commonPath bin/tilt}
+copyFile Doc/tilt.1 `{commonPath man/man1/tilt.1}
+copyStuff `{archPath sun4_55 lib/tilt} \
+		Runtime/obj_solaris/firstdata.o \
+		Runtime/runtime.alpha_osf.a \
+		Heaps/tilt.sparc-solaris \
+		Top.sparc.exe
+copyStuff `{archPath alpha_dux40 lib/tilt} \
+		Runtime/runtime.alpha_osf.a \
+		Heaps/tilt.alpha32-dunix \
+		Top.alpha.exe
+copyStuff `{archPath i386_linux3 lib/tilt} \
+		Heaps/tilt.x86-linux
+setSlaveScript til_slave_local_xterm
+
+exit 0

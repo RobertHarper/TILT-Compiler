@@ -1,0 +1,28 @@
+#!/bin/sh
+
+# driver for TILT for the CMU misc collection
+
+: ${TILT_LIBDIR:=/usr/local/lib/tilt} ${TILT_VERSION:=NJ}
+export TILT_LIBDIR TILT_VERSION
+
+case "$TILT_VERSION" in
+TILT)
+	echo >&2 'tilt: native version of TILT not supported yet'
+	exit 1
+	# exec "$TILT_LIBDIR/Bin/run" "$TILT_LIBDIR/Top" ${1+"$"@}
+	;;
+NJ)
+	case "$TILT_LIBDIR" in
+	/usr/local/lib/*|/usr/lib*)
+		# The misc collection heaps are compiled with 110.9.1
+		SML_VERSION=110.9.1
+		export SML_VERSION
+		;;
+	esac
+	exec /usr/local/bin/sml "@SMLload=$TILT_LIBDIR/Heaps/tilt" ${1+"$@"}
+	;;
+*)
+	echo >&2 "tilt: TILT_VERSION unrecognized -- $TILT_VERSION"
+	exit 1
+	;;
+esac

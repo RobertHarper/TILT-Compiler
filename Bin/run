@@ -1,0 +1,27 @@
+#!/usr/local/bin/rc -p
+
+# Hack to run a TILT-generate executable with command line arguments
+# Use with Run structure in TILT distribution.
+
+i=0 path=(/usr/local/bin /bin /usr/bin) {
+	if (~ $#* 0) { echo >[1=2] usage: $0 program args; exit 1 }
+	TILT_CMD=$1; shift
+	if (! ~ $TILT_CMD *.sparc.exe *.alpha.exe) {
+		switch (`{sys}) {
+		case sun*
+			TILT_CMD=$TILT_CMD ^ .sparc.exe
+		case alpha*
+			TILT_CMD=$TILT_CMD ^ .alpha.exe
+		case *
+			echo >[1=2] $0 ^ ': don''t know how to resolve' $TILT_CMD 'for current platform'
+			exit 1
+		}
+	}
+	TILT_NARGS = $#*
+	while (! ~ $#* 0) {
+		TILT_ARG_$i = $1
+		shift
+		i = `{$expr $i + 1}
+	}
+}
+exec $TILT_CMD

@@ -4,7 +4,8 @@ signature PLATFORM =
 sig
     datatype platform = NT | DUNIX | SOLARIS | LINUX
 	
-    val platform : platform
-    val sleep : real -> unit
+    val platform : unit -> platform
+    val hostname : unit -> string
     val pid : unit -> Word32.word
+    val sleep : real -> unit
 end

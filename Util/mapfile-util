@@ -1,0 +1,45 @@
+// include the basis and NJ library
+#include    ../Basis/Library/mapfile-lib
+
+// ------------ Util directory --------------
+
+UTIL util.sig
+Util util
+
+PLATFORM platform.sig
+Platform platform
+
+LISTOPS listops.sig
+Listops listops
+
+SEQUENCE sequence.sig
+Sequence sequence
+
+STATS stats.sig
+Stats stats
+
+TILWORD tilword.sig
+TilWord32 tilword32-native
+TilWord64 tilword64
+
+FORMATTER formatter.sig
+Formatter formatter
+
+BINIOUTIL bin_io_util.sig
+BinIoUtil bin_io_util
+
+CRC crc.sig
+Crc crc-native
+
+GRAPH graph.sig
+Graph graph
+
+GRAPHUTIL graphutil.sig
+GraphUtil graphutil
+
+Blaster  blast
+
+Specific specific-til
+
+Trace trace
+

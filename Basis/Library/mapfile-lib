@@ -1,0 +1,86 @@
+#include    ../mapfile-basis
+
+// ---------------- NJ Library ----------------------
+
+LIB_BASE       lib-base-sig
+LibBase        lib-base
+ORD_KEY        ord-key-sig
+ORD_MAP        ord-map-sig
+ORD_SET        ord-set-sig
+ARRAY2         array2-sig
+Array2         array2
+HashString     hash-string
+//ATOM           atom-sig
+//Atom           atom
+//MONO_ARRAY_SORT mono-array-sort-sig
+//ARRAY_SORT      array-sort-sig
+//ArrayQSortFn    array-qsort-fn
+//ArrayQSort      array-qsort
+BinaryMapFn     binary-map-fn
+BinarySetFn     binary-set-fn
+//AtomBinaryMap   atom-binary-map
+//AtomBinarySet   atom-binary-set
+HASH_KEY        hash-key-sig
+MONO_HASH_TABLE  mono-hash-table-sig
+MONO_HASH2_TABLE mono-hash2-table-sig
+HASH_TABLE       hash-table-sig
+HashTableRep    hash-table-rep
+HashTableFn     hash-table-fn
+HashTable       hash-table
+//Hash2TableFn    hash2-table-fn
+//AtomTable       atom-table
+//BSearchFn       bsearch-fn
+//CHAR_MAP        char-map-sig
+//CharMap         char-map
+//FIFO            fifo-sig
+//Fifo            fifo
+//FmtFields       fmt-fields
+//FORMAT          format-sig
+//LibRealFormat   real-format
+//Format          format
+IntBinaryMap    int-binary-map
+IntBinarySet    int-binary-set
+// IntListMap      int-list-map
+// IntListSet      int-list-set
+//ITERATE         iterate-sig
+//Iterate         iterate
+//KeywordFn       keyword-fn
+//LIST_FORMAT   list-format-sig
+//ListFormat    list-format
+//ListMapFn     list-map-fn
+LIST_SORT     listsort-sig
+ListMergeSort list-mergesort
+//ListSetFn     list-set-fn
+//LIST_XPROD    list-xprod-sig
+//ListXProd     list-xprod
+//MonoArrayFn   mono-array-fn
+//MONO_DYNAMIC_ARRAY mono-dynamic-array-sig
+//PARSER_COMB   parser-comb-sig
+//ParserComb    parser-comb
+//RAND            rand-sig
+//Rand          rand
+RANDOM		random-sig
+Random          random
+//SCAN          scan-sig
+//Scan          scan
+//UREF          uref-sig
+//Uref          uref
+//SimpleUref    simple-uref
+SPLAY_TREE     splaytree-sig
+SplayTree      splaytree
+SplayMapFn     splay-map-fn
+SplaySetFn     splay-set-fn
+// TIME           time-limit <--- can't do this file, it uses SMLofNJ.IntervalTimer
+// RANDOM         random-sig <--- useless since we are skipping Random
+// Random         random     <--- needs Pack32Big
+//QUEUE          queue-sig
+//Queue          queue
+IO_UTIL        io-util-sig
+IOUtil         io-util
+//DynamicArrayFn dynamic-array-fn
+//BIT_ARRAY      bit-array-sig
+//BitArray       bit-array
+//BIT_VECTOR     bit-vector-sig
+//BitVector      bit-vector
+
+

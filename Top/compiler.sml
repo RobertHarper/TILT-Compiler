@@ -6,7 +6,18 @@ structure Til :> COMPILER =
     val littleEndian = Stats.tt("littleEndian")
 
     datatype platform = TIL_ALPHA | TIL_SPARC | MLRISC_ALPHA | MLRISC_SPARC
-    val targetPlatform = ref TIL_ALPHA
+
+    (* defaultPlatform () -> platform *)
+    fun defaultPlatform () =
+	(case Platform.platform()
+	   of Platform.SOLARIS => (print "Sun detected.  Using Til-Sparc\n";
+				   TIL_SPARC)
+	    | Platform.DUNIX => (print "Alpha detected.  Using Til-Alpha\n";
+				 TIL_ALPHA)
+	    | _ => (print "Unsupported platform detected.  Using Til-Alpha.\n";
+		    TIL_ALPHA))
+	      
+    val targetPlatform = ref (defaultPlatform ())
     fun getTargetPlatform() = !targetPlatform
     fun setTargetPlatform p = 
 	let val little = (case p of
@@ -18,34 +29,12 @@ structure Til :> COMPILER =
 	    littleEndian := little
 	end
     fun native() = 
-	(case (getTargetPlatform(), Platform.platform) of
+	(case (getTargetPlatform(), Platform.platform()) of
 	     (TIL_ALPHA, Platform.DUNIX) => true
 	   | (TIL_ALPHA, _) => false
 	   | (TIL_SPARC, Platform.SOLARIS) => true
 	   | (TIL_SPARC, _) => false
 	   | _ => error "MLRISC not supported")
-
-    local 
-	val envType = (case OS.Process.getEnv "SYS_TYPE" of
-			   NONE => OS.Process.getEnv "SYS"
-			 | some => some)
-    in
-	val _ =
-	    (case envType of
-		 NONE => (print "Environment variable SYS unset. Defaulting to Alpha.\n";  
-			  setTargetPlatform TIL_ALPHA)
-	       | SOME sysType => 
-		     if (String.substring(sysType,0,3)) = "sun"
-			 then (print "Sun detected. Using Til-Sparc\n"; 
-			       setTargetPlatform TIL_SPARC)
-		     else if (String.substring(sysType,0,5)) = "alpha"
-			      then (print "Alpha detected. Using Til-Alpha\n"; 
-				    setTargetPlatform TIL_ALPHA)
-			  else (print "Environment variable SYS_TYPE's value ";
-				print sysType; 
-				print " is unrecognized. Defaulting to Alpha.\n";  
-				setTargetPlatform TIL_ALPHA))
-    end
 
     type sbnd = Il.sbnd
     type context_entry = Il.context_entry

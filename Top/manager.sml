@@ -1,4 +1,4 @@
-(*$import MANAGER LinkParse LinkIl Compiler Linker OS List SplayMapFn SplaySetFn Platform *)
+(*$import MANAGER LinkParse LinkIl Compiler Linker OS List SplayMapFn SplaySetFn Platform Dirs Delay *)
 
 (* This is a slave step which gives a result:
 
@@ -119,33 +119,41 @@ struct
 		 then REQUEST rest
 	else error ("strange header word " ^ first ^ " - bad msg")
 
-    type channel = string * string
+    type channel = (string * string) Delay.value
+    fun eq (chan, chan') = (Delay.force chan) = (Delay.force chan')
+    fun source chan = let val (from, to) = Delay.force chan
+		      in  from
+		      end
+    fun destination chan = let val (from, to) = Delay.force chan
+			   in  to
+			   end
     local
-	val selfName = (case OS.Process.getEnv "HOST" of
-                            NONE => error "HOST environment variable unset"
-                          | SOME selfName => selfName)
-	val selfName = (case Util.substring(".cs.cmu.edu",selfName) of
-			    NONE => selfName
-			  | SOME pos => String.substring(selfName,0,pos))
-	val selfPid = Word32.toInt(Platform.pid())
-	val self = selfName ^ "." ^ (Int.toString selfPid)
-    in  val toMaster = (self, "master")
-	val fromMaster = ("master", self)
-	fun isToMaster (from,to) = to = "master"
-	fun isFromMaster (from,to) = from = "master"
+	fun computeSelf () =
+	    let val selfName = Platform.hostname()
+		val selfName = (case Util.substring(".cs.cmu.edu",selfName)
+				  of NONE => selfName
+				   | SOME pos => String.substring(selfName,0,pos))
+		val selfPid = Int.toString(Word32.toInt(Platform.pid()))
+	    in
+		selfName ^ "." ^ selfPid
+	    end
+	val self = Delay.delay computeSelf
+    in
+	val master = "master"
+	val toMaster = Delay.delay (fn () => (Delay.force self, master))
+	val fromMaster = Delay.delay (fn () => (master, Delay.force self))
+	fun isToMaster chan = destination chan = master
+	fun isFromMaster chan = source chan = master
     end
-
-    fun source(from, to) = from
-    fun destination(from, to) = to
-    fun reverse(from, to) = (to, from)
+    fun reverse chan = let val (from,to) = Delay.force chan
+		       in  Delay.delay (fn () => (to, from))
+		       end
     val sep = "-to-"
     val sep_length = String.size sep
-    val tempDir = "TempCommunication"
-    val _ = if ((OS.FileSys.isDir tempDir)
-		handle e => false)
-		then ()
-	    else OS.FileSys.mkDir tempDir
-    fun channelToName(from, to) = tempDir ^ "/" ^ from ^ sep ^ to
+    val commDir = Dirs.getCommDir o Dirs.getDirs (* : unit -> string *)
+    fun channelToName chan = let val (from, to) = Delay.force chan
+			     in  Dirs.relative (commDir(), from ^ sep ^ to)
+			     end
     (* directory has been stripped already *)
     fun nameToChannel name : channel option = 
 	(case Util.substring ("-to-", name) of
@@ -158,7 +166,7 @@ struct
 								pos+sep_length, 
 								(size name) - 
 								(pos+sep_length))
-				  in  SOME(from, to) 
+				  in  SOME(Delay.delay (fn () => (from, to)))
 				  end
 			 end)
 
@@ -225,7 +233,7 @@ struct
 
     fun findChannels pred =
 	let val files = 
-	    let val dirstream = OS.FileSys.openDir tempDir
+	    let val dirstream = OS.FileSys.openDir (commDir())
 		fun loop acc = let val cur = OS.FileSys.readDir dirstream
 			       in  if (cur = "")
 				       then (OS.FileSys.closeDir dirstream; acc)
@@ -869,8 +877,20 @@ struct
 	    in  foldl folder ([],[],[],[],[],[]) units
 	    end
 
+	    
+	(* getLibDir : unit -> string *)
+	val getLibDir = Dirs.getLibDir o Dirs.getDirs
+	    
+	(* mapfilePath : string -> string list *)
+	fun mapfilePath currentDir = [currentDir, getLibDir()]
+
+	(* readAssociation : string -> (string * string) list *)
 	fun readAssociation mapfile = 
-	    let val is = TextIO.openIn mapfile
+	    let
+		val dir = OS.Path.dir mapfile
+		val findMapfile = Dirs.accessPath (mapfilePath dir, [OS.FileSys.A_READ])
+		fun relative file = Dirs.relative (dir, file)
+		val is = TextIO.openIn mapfile
 		fun dropper s = let val len = size s
 				in  String.sub(s,0) = #";" orelse
 				    (len >= 2 andalso String.substring(s,0,2) = "//")
@@ -882,12 +902,17 @@ struct
 			let val line = TextIO.inputLine is
 			in  (case (split_line dropper line) of
 				 ["#include", innerMapfile] => 
-				     let val dir = OS.Path.dir mapfile
-					 val innerMapfile = dir ^ "/" ^ innerMapfile
-					 val innerAssociation = readAssociation innerMapfile
-				     in  loop (n+1, (rev innerAssociation) @ acc)
-				     end
-			       | [unitname, filebase] => loop (n+1, (unitname, filebase) :: acc)
+				     (case findMapfile innerMapfile
+					of NONE => error ("Line " ^ (Int.toString n) ^ " of " ^ mapfile ^
+							  " includes an unreadable or non-existent file: " ^
+							  line ^ "\n")
+					 | SOME innerMapfile =>
+					    let
+						val innerAssociation = readAssociation innerMapfile
+					    in
+						loop (n+1, (rev innerAssociation) @ acc)
+					    end)
+			       | [unitname, filebase] => loop (n+1, (unitname, relative filebase) :: acc)
 			       | [] => loop (n, acc)
 			       | _ => error ("Line " ^ (Int.toString n) ^ 
 					     " of " ^ mapfile ^ " is ill-formed: " ^ line ^ "\n"))
@@ -897,6 +922,8 @@ struct
 	    in  result
 	    end
 
+	(* setMapping : string * bool -> unit *)
+	(* Build graph from mapFile.  If getImports is true, add (*$import *) edges. *)
 	fun setMapping (mapFile, getImports) =
 	    let val _ = Cache.flushAll()
 		val _ = reset_graph()
@@ -939,6 +966,8 @@ struct
 	    end
 
 
+	(* makeGraph' : string * {maxWeight:int, maxParents:int, maxChildren:int} option -> string *)
+	(* Generate dot(1) representation of current graph, name based on mapfile. *)
 	fun makeGraph'(mapfile : string, collapseOpt) = 
 	    let
 		val start = Time.now() 
@@ -969,6 +998,8 @@ struct
 	    in  dot
 	    end
 
+	(* makeGraph' : string * {maxWeight:int, maxParents:int, maxChildren:int} option -> string *)
+	(* Generate dot(1) representation of graph in mapfile. *)
 	fun makeGraph(mapfile : string, collapseOpt) = 
 	    let val _ = setMapping(mapfile, true)
 	    in  makeGraph'(mapfile, collapseOpt)
@@ -1001,7 +1032,7 @@ struct
 			    | SOME (Comm.ACK_INTERFACE job) => do_ack_interface (Comm.source ch, job)
 			    | SOME (Comm.ACK_ASSEMBLY job) => 
 				  let val _ = (workingSlaves := 
-					       (Listops.list_diff_eq(op =, !workingSlaves, 
+					       (Listops.list_diff_eq(Comm.eq, !workingSlaves, 
 								     [Comm.reverse ch])))
 				      val ut = do_ack_assembly (Comm.source ch, job)
 				      val _ = workingAsm := ut :: (!workingAsm)
@@ -1009,14 +1040,14 @@ struct
 				  end
 			    | SOME (Comm.ACK_OBJECT job) => 
 				  (workingSlaves := 
-				   (Listops.list_diff_eq(op =, !workingSlaves, 
+				   (Listops.list_diff_eq(Comm.eq, !workingSlaves, 
 							 [Comm.reverse ch]));
 				   do_ack_object (Comm.source ch, job)))) 
 		     channels
 		val potentialNewSlaves = map Comm.reverse channels 
 		val _ = readySlaves := (foldl (fn (ch,acc) => 
-						 if ((Listops.member_eq(op =, ch, acc)) orelse
-						     (Listops.member_eq(op =, ch, !workingSlaves)))
+						 if ((Listops.member_eq(Comm.eq, ch, acc)) orelse
+						     (Listops.member_eq(Comm.eq, ch, !workingSlaves)))
 						     then acc else ch::acc) 
 					  (!readySlaves) potentialNewSlaves)
 	    in  length (!readySlaves)
@@ -1129,7 +1160,22 @@ struct
 
 		  in  not fresh
 		  end)
-	      
+
+    (* platformName : unit -> string *)
+    fun platformName (base, ext) = (base ^ (case Til.getTargetPlatform()
+					      of Til.TIL_ALPHA => ".alpha"
+					       | Til.TIL_SPARC => ".sparc"
+					       | _ => error "MLRISC unsupported") ^ ext)
+    (* exeName : string * string list -> string *)
+    fun exeName ("", units) = platformName (List.last units, ".exe")
+      | exeName (exe, _) = exe
+    (* exeDroppings : string * string list -> string list *)
+    fun exeDroppings (exe, units) =
+	let val exeName = exeName (exe, units)
+	    fun linkName ext = platformName ("link_" ^ exeName, ext)
+	in
+	    [exeName, linkName ".o", linkName ".s"]
+	end
     (* waiting, ready, pending, assembling, proceeding - done not included *)
     type state = string list * string list * string list * string list * string list
     datatype result = PROCESSING of Time.time * state  (* All slaves utilized *)
@@ -1298,15 +1344,10 @@ struct
 			in  useSlaves numSlaves state
 			end
 		end
+	    (* makeExe : string * string list -> unit *)
 	    fun makeExe(exe, units) = 
 		let val _ = showTime (true,"Start linking" )
-		    val exe = if exe = "" 
-				  then (List.last units) ^ 
-				      (case Til.getTargetPlatform() of
-					   Til.TIL_ALPHA => ".alpha.exe" 
-					 | Til.TIL_SPARC => ".sparc.exe" 
-					 | _ => error "MLRISC unsupported")
-			      else exe
+		    val exe = exeName (exe, units)
 		    val unit_set = 
 		    List.foldl 
 		    (fn (next, set) => 
@@ -1429,6 +1470,13 @@ struct
 	let val _ = setMapping(mapfile, false)
 	    val units = list_units()
 	    val _ = (print "Purging "; print mapfile; print "\n")
+	    val dirs = Dirs.getDirs()
+	    fun deletable file = not (Dirs.isSystemFile (dirs, file))
+	    fun kill file = if (deletable file andalso
+				OS.FileSys.access(file, []) andalso
+				OS.FileSys.access(file, [OS.FileSys.A_READ]))
+				then OS.FileSys.remove file
+			    else ()
 	    fun remove unit = 
 		let val base = get_base unit
 		    val ui = base2ui base
@@ -1436,13 +1484,18 @@ struct
 		    val s = base2s base
 		    val gz = s ^ ".gz"
 		    val obj = base2o base
-		    fun kill file = if (OS.FileSys.access(file, []) andalso
-					OS.FileSys.access(file, [OS.FileSys.A_READ]))
-					then OS.FileSys.remove file
-				    else ()
 		in  kill ui; kill uo; kill s; kill gz; kill obj
 		end
-	in  app remove units
+	    fun purgePlatform platform =
+		let val savedPlatform = Til.getTargetPlatform()
+		in
+		    Til.setTargetPlatform platform;
+		    app remove units;
+		    Til.setTargetPlatform savedPlatform
+		end
+	in
+	    app purgePlatform [Til.TIL_ALPHA, Til.TIL_SPARC];
+	    app kill (exeDroppings ("", units))
 	end
 end
 
@@ -1450,6 +1503,11 @@ structure Manager :> MANAGER =
 struct
 
   val error = fn s => Util.error "manager.sml" s
+
+  (* checkNative : unit -> unit *)
+  fun checkNative () = if Til.native() then ()
+		       else error "No backend exists for this platform."
+			   
   open Help
 
   val slave = Slave.run
@@ -1464,15 +1522,16 @@ struct
 	end
 
   fun master mapfile = 
-      let val _ = startTime "Starting compilation"
+      let val _ = checkNative()
+	  val _ = startTime "Starting compilation"
 	  val _ = helper Master.run (mapfile, false, NONE, [])
 	  val _ = showTime (true,"Finished compilation")
       in  reshowTimes()
       end
   fun slaves (slaveList : (int * string) list) =
-      let val dir = OS.FileSys.getDir()
-	  val commDir = dir ^ "/" ^ Comm.tempDir
-	  val script = dir ^ "/Bin/til_slave"
+      let val dirs = Dirs.getDirs()
+	  val commDir = Dirs.getCommDir dirs
+	  val script = Dirs.bin (dirs, "til_slave")
 	  fun cmdline (num, count, machine) =
 	      String.concat [script, " ", Int.toString num, " ", Int.toString count, " ",
 			     machine, " ", commDir, "&"]
@@ -1483,10 +1542,11 @@ struct
       in  loop 0 slaveList;
 	  chat "Started slaves.\n"
       end
-  fun pmake (mapfile, slaveList) = (slaves slaveList; master mapfile)
+  fun pmake (mapfile, slaveList) = (checkNative(); slaves slaveList; master mapfile)
 
   fun tilc arg =
-      let fun runner args = 
+      let val _ = checkNative()
+	  fun runner args = 
 	  let val {setup,step,complete} = Master.once args
 	      val _ = Slave.setup()
 	      fun loop state = 
@@ -1503,15 +1563,16 @@ struct
       end
   fun make mapfile = tilc (mapfile, false, NONE, [])
 
-  val purge = Master.purge
-
+  fun purge mapfile = Master.purge mapfile
 
   fun buildRuntime rebuild = 
-      let val command = if rebuild then "cd Runtime; gmake purge; gmake runtime"
+      let val _ = checkNative()
+	  val command = if rebuild then "cd Runtime; gmake purge; gmake runtime"
 			else "cd Runtime; gmake runtime"
       in  if Util.system command then () else error "Error in building runtime"
       end
 
+  (*
   (* getArgs:
      Takes a list of string arguments and returns a 4-tuple.
      The 1st is the mapfile.
@@ -1573,5 +1634,5 @@ struct
 	    val srcs = if hasAll then [] else srcs
 	in (tilc(mapFile, hasC, oFile, srcs); 0)
 	end
-
+*)
 end

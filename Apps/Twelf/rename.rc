@@ -1,0 +1,16 @@
+fn renameFiles{ i=() {
+   for (i in *.fun *.sig) {
+       mv $i $i.sml
+   }
+} }   
+
+fn renameInCM { i=() {
+   for (i in *.cm) {
+       mv $i $i.old
+       sed 's,\.fun,.fun.sml,g
+	    s,\.sig,.sig.sml,g' $i.old > $i
+       rm $i.old
+   }
+} }
+
+fn rename { renameFiles && renameInCM }

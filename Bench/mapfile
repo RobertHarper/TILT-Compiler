@@ -1,28 +1,28 @@
-Prelude		Preludes/Prelude
-;hello		Bench/hello
+Prelude		../Preludes/Prelude
+;hello		hello
 
 ; WORKS
-;life		Bench/life
-leroy		Bench/leroy
-;matmult	Bench/matmult
-;quicksort	Bench/quicksort
-;quicksort2	Bench/quicksort2
-;takc		Bench/takc
-;taku		Bench/taku
-;sort		Bench/sort
-;fft		Bench/fft
-;boyer		Bench/boyer
-;simple		Bench/simple
+;life		life
+leroy		leroy
+;matmult	matmult
+;quicksort	quicksort
+;quicksort2	quicksort2
+;takc		takc
+;taku		taku
+;sort		sort
+;fft		fft
+;boyer		boyer
+;simple		simple
 
 
 ;; TESTING
 
 
-;tyan		Bench/tyan	
-;msort	Bench/msort
-;pia		Bench/pia	
-;lexgen		Bench/lexgen
+;tyan		tyan	
+;msort	msort
+;pia		pia	
+;lexgen		lexgen
 
 ;; BROKEN
 
-;frank		Bench/frank
+;frank		frank
