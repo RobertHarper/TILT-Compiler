@@ -3,7 +3,7 @@ sig
     structure Il : IL
     structure Nil : NIL
     structure NilUtil : NILUTIL
-B    structure NilContext : NILCONTEXT
+    structure NilContext : NILCONTEXT
     structure NilStatic : NILSTATIC
     structure PpNil : PPNIL
 
@@ -22,7 +22,7 @@ structure Linknil (* : LINKNIL *) =
     val typecheck_after_opt = ref true
     val typecheck_after_cc = ref true
 
-    val do_opt = ref false
+    val do_opt = ref true
 
     val error = fn s => Util.error "linknil.sml" s
 
@@ -145,7 +145,8 @@ structure Linknil (* : LINKNIL *) =
 				    structure PrimUtil = NilPrimUtil
 				    structure Subst = NilSubst)
 
-    structure DoOpts = DoOpts (structure Nil = Nil
+    structure DoOpts = DoOpts (structure Normalize = Normalize
+                               structure Nil = Nil
 			       structure NilPrimUtil = NilPrimUtil 
 			       structure PpNil = PpNil
 			       structure NilContext = NilContext

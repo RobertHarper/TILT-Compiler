@@ -1,5 +1,6 @@
 signature NILOPTS = 
 sig
+    val do_anormalize2 : bool ref
     val do_cse : bool ref
     val do_flatten : bool ref
     val do_reduce : bool ref 

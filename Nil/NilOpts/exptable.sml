@@ -299,9 +299,14 @@ struct
 	    ( Con_cb (v1,k1,c1), Con_cb(v2,k2,c2) ) => 
 		Name.compare_var (v1, v2) 
 	  | (Con_cb _, _) => GREATER
-	  | (_, Con_cb _) => LESS 
-	  | ( Open_cb (v1, _, _, _), Open_cb (v2, _, _, _) ) => 
-		Name.compare_var (v1, v2) 
+	  | (_, Con_cb _) => LESS
+ 
+	  | ( Open_cb (v1, vklist1, con1, kind1), Open_cb (v2, vklist2, con2, kind2) ) =>
+		let val v = Name.fresh_var()
+		in
+		    if NilUtil.alpha_equiv_con ( Let_c (Sequential, [b1],Var_c v ), Let_c (Sequential, [b2], Var_c v))
+			then EQUAL else Name.compare_var (v1, v2)
+		end 
 	  | (Open_cb _, _) => GREATER
 	  | (_, Open_cb _ ) => LESS
 	  | _ => raise UNIMP
@@ -342,7 +347,10 @@ struct
 	  | (App_c _, _) => GREATER
 	  | (_, App_c _) => LESS
 
-
+		
+	  | (Let_c (s1, [ Open_cb f1 ] , Var_c v1), Let_c (s2, [ Open_cb f2 ], Var_c v2)) =>
+		if NilUtil.alpha_equiv_con (c1,c2) then EQUAL 
+		else Name.compare_var (v1, v2)
 	  | ( Let_c (sort1, conbnds1, con1) , Let_c (sort2, conbnds2, con2)) => 
 		cmp_orders (cmp_conbnd_list ( conbnds1, conbnds2), cmp_con (con1, con2))
 		

@@ -66,7 +66,7 @@ signature ANORMALIZE =
 	val test_exp : Nil.exp -> Nil.exp
 
     end 
-functor Anormalize (
+functor Anormalize (structure Normalize : NORMALIZE
 		    structure Ppnil : PPNIL
 		    structure Nil : NIL
 		    structure NilUtil : NILUTIL
@@ -80,8 +80,9 @@ functor Anormalize (
 		    
 		    sharing  Ppnil.Nil = Nil = NilStatic.Nil = NilEval.Nil = NilContext.Nil = NilUtil.Nil = Squish.Nil = ExpTable.Nil
 		    sharing  PrimUtil.Prim = Nil.Prim
-		    sharing type PrimUtil.con = Nil.con = Subst.con 
-		    sharing type NilContext.context = NilStatic.context
+		    sharing type Nil.kind = Normalize.kind
+		    sharing type PrimUtil.con = Nil.con = Subst.con = Normalize.con 
+		    sharing type NilContext.context = NilStatic.context = Normalize.context
 			) : ANORMALIZE =
     
 struct 
@@ -100,7 +101,8 @@ struct
     exception BUG
 
     val print_bind = ref false
-
+    val debug = ref false
+   
     (* ----------- CSE aux fns ------------ *)
 
     (* If we redo a constructor, we have to redo the kind *)	
@@ -167,7 +169,8 @@ struct
     soundness. See Tarditi's thesis for more details. *)
     
     fun cse_exp exp ae D sigma =
-	( if (is_elim_exp exp) then 
+	(if !debug then (print " ce ") else () ;
+	 if (is_elim_exp exp) then 
 	      ( case Expmap.find (ae, exp) of 
 		    SOME (var, tau) => 
 			if NilStatic.con_equiv (D, sigma, tau) then 
@@ -192,11 +195,11 @@ struct
 
     (* Should really check the kinds here as well to see if they match *)
     fun cse_con con ac D =
-	( if (is_elim_con con) then  
+	(if !debug then  print " cse_con: " else () ;
+	 if (is_elim_con con) then  
 	      ( case Conmap.find (ac, con) of 
 		    SOME (var) => 
-			( (* print "Found "; Ppnil.pp_con con ; print " to be " ; Ppnil.pp_var var;
-			 print "\n"; *)
+			(
 			 inc_click cse_con_click ; Var_c var )
 		  | NONE => con)
 	  else con)
@@ -288,9 +291,13 @@ struct
 		 | Code_cb (var, vklist, con, kind) =>
 		       insert_kind (D, var, Arrow_k (Code, vklist, kind))) D bnds
 
-    fun contype (D, con) = 
-	let val (con, kind) = NilStatic.con_valid (D, con)
-	in (*  NilUtil.strip_singleton *) kind 
+    fun contype  (D, con) =
+(*	let val (con, kind) = NilStatic.con_valid (D, con)
+	    val kind = NilUtil.strip_singleton kind 
+*)
+	let val con = Normalize.con_normalize D con
+	    val kind = Normalize.get_shape D con
+	in ( if !debug then ( print "Kinding " ; Ppnil.pp_con con ; print " to be " ; Ppnil.pp_kind kind ; print "\n" ) else (); kind )
 	end 
     (* --------- Code to get the type of expressions -----------*)
 
@@ -334,13 +341,15 @@ struct
 		  Prim_c (Record_c labels,cons)
 	    | (select label,_,[exp]) =>
 		  let val con = exp_type (D, exp)
-		      
+		      val _ = (if !debug then (print "records con is " ; Ppnil.pp_con con ; print "\n" ) else ())
 		      (* Now this is a real hack. I want to alpha convert, but all we can do is alpha-normalize! *)
 		      val con = (strip_record (con,label))
+
+(* This alpha_normalize can go into an infinite loop. See leroy1.sml.
 		      val temp = Let_c ( Sequential, [ Con_cb(Name.fresh_var(), Type_k Runtime, con)], con) 
-		      val Let_c (Sequential, bnds, return) = NilUtil.alpha_normalize_con (temp)
-		      
-		  in return
+		      val Let_c (Sequential, bnds, return) = NilUtil.alpha_normalize_con (temp) 
+*)		      
+		  in con
 		  end 
 	    | (inject {tagcount,sumtype},cons,exps as ([] | [_])) => 
 		  Prim_c (Sum_c {tagcount=tagcount,known=NONE},cons)
@@ -350,8 +359,8 @@ struct
 		  List.nth (argcons,Word32.toInt (field - tagcount))
 	    | (project_sum_record {tagcount,sumtype,field},argcons,[argexp]) => 
 		  let val con_i = (List.nth (argcons,Word32.toInt (tagcount - sumtype)) )
-		      handle Subscript => ( print "First one:" ; Ppnil.pp_exp (Prim_e ((NilPrimOp prim), cons, exps)) ; 
-					   map Ppnil.pp_con argcons ; print ( Int.toString (Word32.toInt (tagcount - sumtype))) ;
+		      handle Subscript => (
+					   map Ppnil.pp_con argcons ; 
 					   raise Subscript )
 		      val SOME (labels,cons) = NilUtil.strip_record con_i
 		      val SOME con = Listops.assoc_eq (Name.eq_label, field, (Listops.zip labels cons)) 
@@ -394,7 +403,15 @@ struct
 	      | tag (atag,con) =>
 		    Prim_c (Exntag_c,[con])
 
-    and exp_type (D, exp:exp) = 
+(* The reason why we cant just say this is that the cons in D are in the wrong form.
+   They are a-normalized instead of being fully applied. This leads to type errors. 
+   
+     and exp_type (D, exp:exp ) = 
+	 let val (exp', con) = NilStatic.exp_valid (D, exp)
+	 in con end
+*)
+    and exp_type (D, exp:exp) =
+	(if !debug then (print "Typing" ; Ppnil.pp_exp exp ; print "\n") else ();
  	 case exp of 
 	     Var_e v => ( case find_con (D, v) of 
 			 SOME c => c 
@@ -411,11 +428,10 @@ struct
 	   | Switch_e sw => switch_type (D,sw)
 	   | App_e (_, Var_e f, cons, _, _) =>
 		 let val SOME con =  find_con(D, f)
-		     (* val _ =  print "%%%%%%%%%%%%%%%%%%%%%%%%" ; Ppnil.pp_con con ; "\n" *) 
 		 in 
 		     strip_arrow (con, cons)
-		 end 
-	     
+		 end )
+	
      and switch_type (D, sw) =
 	 case sw of 
 	     Intsw_e {info=intsize,arg,arms,default} =>
@@ -453,7 +469,11 @@ struct
 
 	 (* ---------------- Start of A-normalization code ------------------------ *)
 
+     (* We'd like to do a little hoisting here, along with the normalization.
+      Instead of leaving bindings at the con level, we'd like move them up to the term level *)
+
      datatype norm = EXP of exp | CON of con | BNDLIST of bnd list*context*avail | CONBNDLIST of  conbnd list*context*avail
+	 | KIND of kind 
 
     fun TOEXP (var, kind, con, EXP body ) =
 	EXP (Let_e (Sequential, [ Con_b(var, kind, con) ], body))
@@ -466,14 +486,44 @@ struct
 
     fun CONk (con, D, avail) = CON con
 	(* k :  con * context * avail -> norm
-	   bind : var * kind * norm -> norm 
+	   bind : var * kind * con -> norm 
 	 *)
 	 
 
+    fun normalize_kind (kind:kind) (D:context) (avail:avail) = 
+	(if !debug then print "k" else ();
+	 case kind of 
+	    Type_k p => kind
+	  | Word_k p => kind
+	  | Singleton_k (p, kind, con) =>
+		let val CON con = normalize_con con D avail (TOCON, CONk)
+		    val kind =  normalize_kind kind D avail 
+		in 
+		   Singleton_k (p, kind, con)
+		end
 
-    fun normalize_con con D (avail as (ae,ac)) (bind, k) = 
-	( (* print "**************************\n Normalizing " ; Ppnil.pp_con con ; print "\nAvailable cons are : " ;
-	 Conmap.app Ppnil.pp_var ac; print "\n**************************\n" ; *)
+	  | Record_k lvkseq =>
+		let val lvklist = Util.sequence2list lvkseq
+		    val (lvs, kinds) = Listops.unzip lvklist
+		    val kinds =  normalize_kinds kinds D avail
+		in
+			Record_k (Util.list2sequence (Listops.zip lvs kinds))
+		end
+
+	    
+	  | Arrow_k (openn, vklist, knd) => 
+		let val knd = normalize_kind knd D avail 
+		    val (vs, ks) = Listops.unzip vklist
+		    val ks = normalize_kinds ks D avail 
+		in 
+		    Arrow_k (openn, Listops.zip vs ks, knd)
+		end)
+	     
+    and normalize_kinds kinds D avail = 
+	map (fn (k) => normalize_kind k D avail) kinds
+
+    and normalize_con con D (avail as (ae,ac)) (bind, k) = 
+	(if !debug then print "c" else ();
 	case con of
 	    Prim_c (primcon, cons) => 
 		normalize_con_names cons D avail 
@@ -507,21 +557,25 @@ struct
 		
 		(* The variables in the vklist are bound in the return
 		 con and the CLIST, so we don't want to lift any thing
-		 out as it may contain unbound variables. *)
+		 out as it may contain unbound variables. 
+		 *)
 		
 		else 
-		    let val newD = insert_kind_list (D, vklist)
-			fun do_con con = 
-			    let val CON con = normalize_con con newD avail (TOCON, CONk)
-			    in con
-			    end 
-			val clist = map do_con clist
-			val con = do_con con
+		    let val (vs, ks) = Listops.unzip vklist
+			val kinds = normalize_kinds ks D avail 
+			val vklist = Listops.zip vs kinds
+			val newD = insert_kind_list (D, vklist)
+			     fun do_con con = 
+				 let val CON con = normalize_con con newD avail (TOCON, CONk)
+				 in con
+				 end 
+			     val clist = map do_con clist
+			     val con = do_con con
 		    in 
 			k ( AllArrow_c ( openness, effect, vklist, clist, w32, con), D, avail)
-		    end 
+		    end
 
-				  | Var_c v => k (con, D, avail)		
+	  | Var_c v => k (con, D, avail)		
 	  | Let_c ( sort, bnds , body ) => 
 		let val (bnds:conbnd list, bndD, bndavail ) = normalize_con_bnds bnds D avail
 		    val CON con = normalize_con body bndD bndavail (TOCON, CONk) 
@@ -549,6 +603,7 @@ struct
 		   (k ( (App_c( t, cons)), D, avail)))))))
 
 	  | Typecase_c sw  => (normalize_typecase sw D avail (bind, k))  )
+
     and normalize_cons ((hd :: cons) :con list) D avail (bind, k) = 
 	normalize_con hd D avail 
 	(bind, (fn (t, D, avail) => normalize_cons cons D avail 
@@ -573,12 +628,10 @@ struct
 		  let 
 		      val _ = HashTable.insert env (t,con)
 		      val kind =  contype (D, con) 
-		      val kind = resingletonize kind con
-		      (* val _ = Ppnil.pp_var t ; print " named for " ; Ppnil.pp_con con ;
-			        print " with kind " ; Ppnil.pp_kind kind;  print "\n" *)
+		      val kind =  normalize_kind kind D (ae,ac)
 		      val _ = NilOpts.inc_click normalize_click
-		  in 
-		      bind (t, kind, con, (k ((Var_c t), insert_kind (D, t, kind), (ae,ac) )))
+		  in
+		       bind (t, kind, con, (k ((Var_c t), insert_kind (D, t, kind), (ae,ac) )))
 		  end 
 	  end))) 
 	
@@ -589,21 +642,24 @@ struct
 	    in (t @ rest, newD, avail) end))
        | normalize_con_bnds [] D avail =  ([], D, avail) 
 	
-     
+     (******* ACK!!!!!!!!!!!!!!!!!!!!!!!! ***********************)
     and normalize_con_bnd bnd D (avail as (ae,ac)) (k:conbnd list*context*avail->conbnd list*context*avail ) = 
 	case bnd of 
        Con_cb(var, kind, con) => 
 	   let val CONBNDLIST return = normalize_con con D avail 
-	       (TOCONBNDLIST, (fn (con, D, (ae,ac)) =>
-			       let val _ = HashTable.insert env (var, con)
-				   val kind = contype (D, con)  
-				   (* We have to have this, as if it has a singleton kind 
+	       (TOCONBNDLIST, 
+		(fn (con, D, (ae,ac)) =>
+		 let val kind =  normalize_kind kind D (ae,ac) 
+		     val _ = HashTable.insert env (var, con)
+		       
+		       (* We have to have this, as if it has a singleton kind 
                                       then we want it to reflect the new con *)
-				   val ac = if !do_cse andalso (is_elim_con con) then 
-				       Conmap.insert (ac, con, var)
-					    else 
-						ac
-			       in 
+		       
+		       val ac = if !do_cse andalso (is_elim_con con) then 
+			   Conmap.insert (ac, con, var)
+				else 
+				    ac
+		   in 
 				   (*  
 				    Figure something out here.... might be difficult
 				    case con of 
@@ -614,14 +670,15 @@ struct
 			     k ( bnds @ [ Con_cb  (var, kind, bdy) ], insert_kind (D, var, kind), (ae,ac))
 			 end 
 		   | _ => *) 
-				   CONBNDLIST (k ( [ Con_cb(var,kind, con)] , insert_kind (D, var, kind), (ae,ac) ))
-			       end))
+		       CONBNDLIST (k ( [ Con_cb(var,kind, con)] , insert_kind (D, var, kind), (ae,ac) ))
+		 end))
 	   in return 
 	   end 
 
 
       | Open_cb (v, vklist, con, kind) => 
-	    let 
+	    let val vklist = map (fn (v,k) => (v, normalize_kind k D avail)) vklist
+		val kind = normalize_kind kind D avail 
 		val newD = insert_kind_list (D, vklist)
 		val returnD = insert_kind (D, v, Arrow_k (Open, vklist, kind))
 		val CONBNDLIST return = normalize_con con newD avail 
@@ -637,10 +694,11 @@ struct
 	     val do_sw = fn ( { kind, arg, arms, default}, D, avail)  => 
 		 let val CON default = (normalize_con default D avail (TOCON, CONk))
 		 in 
-		 { kind = kind,
+		 { kind = normalize_kind kind D avail , 
 		  
 		  arms =  map (fn ( primcon, vklist, con) => 
-			       let val newD = insert_kind_list (D, vklist)
+			       let val vklist = map (fn (v,k) => (v, normalize_kind k D avail)) vklist
+				   val newD = insert_kind_list (D, vklist)
 				   val CON con = normalize_con con newD avail (TOCON, CONk)
 			      in 
 				  ( primcon, vklist, con)
@@ -656,7 +714,7 @@ struct
 	 end  
 
     fun normalize_exp exp D (avail as (ae, ac)) (k:exp*context*avail->exp) = 
-	 (  (* print "normalize_exp called on : " ; Ppnil.pp_exp exp; print "\n"; *)
+	( if !debug then ( print "e:" ; Ppnil.pp_exp exp ; print "\n----------------------------------\n") else ();
 	  case exp of
 	    Var_e v => k (exp, D, (ae, ac))
 	  | Const_e c => k (exp, D, (ae, ac))
@@ -675,7 +733,7 @@ struct
 					 let val exp = Prim_e(allp, cons, exps)
 					     val exp = if !do_cse 
 							   then 
-							       ( (* print "Finding cse type of : " ;Ppnil.pp_exp exp ; print "\n" ; *)
+							       ( 
 								cse_exp exp ae D (exp_type (D, exp)) )
 						       else exp
 					 in 
@@ -710,9 +768,8 @@ struct
 	 
 		  
     and name_exp exp D (ae, ac) k = 
-	 let val t:var = (Name.fresh_var())
-	     
-	     (* val _ = (  print "Finding norm type of :" ;Ppnil.pp_exp exp ; print "\n") *)
+	 let val _ = if !debug then print "n" else ()
+	     val t:var = (Name.fresh_var())
 	     val con = exp_type (D, exp)
 	     val (exp, ae) = if !do_cse then (cse_exp exp ae D con, 
 					      if (is_elim_exp exp) 
@@ -755,21 +812,21 @@ struct
      (* k takes a list of normalized bnds *) 
     and normalize_exp_bnd bnd D (ae, ac) (k:bnd list*context*avail->bnd list*context*avail) = 
 	case bnd of 
-	    Con_b (v, knd, c) => 
+	    Con_b (v, knd, c) =>
 		let val BNDLIST returnbnds = normalize_con c D (ae, ac) 
 		    (TOBNDLIST, (fn (con,D, (ae,ac)) =>
-				 let val ac = if !do_cse andalso (is_elim_con con) then 
-				     Conmap.insert (ac, con, v)
+				 let val knd = normalize_kind knd D (ae,ac)
+				     val ac = if !do_cse andalso (is_elim_con con) then 
+					 Conmap.insert (ac, con, v)
 					      else ac
-				     val knd = resingletonize knd con 
 				 in 
 				     BNDLIST ( HashTable.insert env (v, con) ; 
 					      k ([ Con_b(v,knd, c) ], insert_kind (D, v, knd), (ae, ac)))
 				 end ))
 		in returnbnds end 
-
+	    
 	  | Exp_b(var, con, exp) => 
-		let (* val _ =  print "Normalizing " ; Ppnil.pp_var var ; print "\n" *)
+		let  val _ = ( if !debug then( print "Normalizing bind " ; Ppnil.pp_var var ; print "\n" ) else ())
 		    val BNDLIST returnbnds = normalize_con con D (ae,ac)
 		    (TOBNDLIST, (fn (con, D, (ae, ac)) => 
 				 let val exp' =  normalize_exp exp D (ae, ac) #1
@@ -812,7 +869,8 @@ struct
  
      and normalize_fcn (v, (function as Function(e,r,vklist, vclist, vlist, exp, con))) D (ae, ac) 
 	 (k:(var*function)*context*avail->(var*function)list ) =
-	 let val (vars, cons) = Listops.unzip vclist
+	 let val vklist = map (fn (v,k) => (v, normalize_kind k D (ae,ac))) vklist
+	     val (vars, cons) = Listops.unzip vclist
 	     val D = insert_kind_list (D,vklist) 
 
 	     (* Normalize the function argument types and return
@@ -847,7 +905,8 @@ struct
 			      (* First extend D with vklist. Then normalize cons and return con. Then extend D with 
 			       vclist. Then normalize the return exp. *)
 			      	
-			      let val newD = insert_kind_list (D, vklist)
+			      let val vklist = map (fn (v,k) => (v, normalize_kind k D (ae,ac))) vklist
+				  val newD = insert_kind_list (D, vklist)
 				  val (vars, cons) = Listops.unzip vclist
 				  val vclist = Listops.zip vars (map (norm_con newD (ae,ac)) cons)
 				  val con = norm_con newD (ae,ac) con
@@ -897,6 +956,7 @@ struct
 	     val  exp =  
 		 normalize_exp temp D (Expmap.empty, Conmap.empty)  (fn (exp, newD, (ae, ac)) => exp)
 	     val Let_e(Sequential,bnds,_) = Squish.squish exp
+	     val _ = if debug then (print "Normalized bnds *********************************************************\n") else ()
 	     val exports = let val D = extend_bnds D bnds
 		     in  
 			 map ( fn entry =>
@@ -906,7 +966,13 @@ struct
 				      in 
 					  ExportValue(lab, exp, con)
 				      end
-				| _=> entry ) exports
+				  | ExportType (lab, con, kind) =>
+					let val CON con = normalize_con con D (Expmap.empty, Conmap.empty) (TOCON, CONk)
+					    val kind = normalize_kind kind D (Expmap.empty, Conmap.empty)
+				      in 
+					  ExportType(lab, con, kind) 
+				      end
+				) exports
 		     end
 	     val _ = (print "Anormalization clicks\n***********************\n" ; 
 		      NilOpts.print_round_clicks clicks)
@@ -918,5 +984,8 @@ struct
 	 end 
 	
 end
+
+
+
 
 

@@ -1,5 +1,6 @@
 structure NilOpts = 
 struct 
+    val do_anormalize2 = ref false
     val do_cse = ref true
     val do_flatten = ref true
     val do_reduce = ref true

@@ -243,7 +243,20 @@ struct
 		    end 
 
 
-		fun scan_con fset con =
+		fun scan_kind fset kind = 
+		    case kind of
+			Type_k _ => ()
+		      | Word_k _ => ()
+		      | Singleton_k (p, k, con) =>
+			    (scan_kind fset k ; scan_con fset con)
+		      | Record_k lkseq =>
+			Util.appsequence (fn (lv, k) => 
+					  scan_kind fset k) lkseq
+		      | Arrow_k (_, vklist, k) =>
+			    ( app (fn (v,k) => scan_kind fset k) vklist ; scan_kind fset k)
+
+
+		and scan_con fset con =
 		    let 
 			val insesc = insesc fset
 			val insapp = insapp fset
@@ -256,7 +269,9 @@ struct
 				    Util.appsequence (fn (var, con) => scan_con fset con) vcset
 				end 
 			  | AllArrow_c (openness, effect, vklist, clist, w32, con) => 
-				(app (scan_con fset) clist; (scan_con fset) con)
+				(app ((scan_kind fset) o #2) vklist;
+				 app (scan_con fset) clist; 
+				 (scan_con fset) con )
 			  | Var_c v => insesc v
 			  | Let_c (sort, conbnds, con) => 
 				(app (scan_conbnd fset) conbnds ; (scan_con fset) con)
@@ -267,17 +282,20 @@ struct
 						  Var_c v => insapp v
 						| _ => scan_con fset con ; app (scan_con fset) cons)
 			  | Typecase_c { arg=arg, arms = arms, default = default, kind = kind} =>
-				((scan_con fset) arg ; (scan_con fset) default ; 
-				 app (fn (primcon, vklist, con) => (scan_con fset) con) arms )
+				((scan_con fset) arg ; (scan_con fset) default ;
+				 scan_kind fset kind ;
+				 app (fn (primcon, vklist, con) => 
+				      ( app ((scan_kind fset) o #2) vklist;
+				       (scan_con fset) con)) arms )
 			  | Annotate_c (annot,con) => (scan_con fset) con
 			  | Closure_c (con1, con2) => raise UNIMP
 		    end 
 		
 		and scan_conbnd fset conbnd = 
 		    case conbnd of 
-			Con_cb (var, kind, con) => (declare var; scan_con fset con)
+			Con_cb (var, kind, con) => (declare var; scan_kind fset kind ; scan_con fset con)
 		      | Open_cb (var, vklist, con, kind) => 
-			    (declare var; app (declare o #1) vklist; scan_con fset con)
+			    (declare var; app (fn (v,k) => (declare v; scan_kind fset k)) vklist; scan_con fset con)
 		      | Code_cb _ =>raise UNIMP
 			    
 
@@ -326,7 +344,7 @@ struct
 			  | Typecase_e sw => do_sw nada scan_con nada sw 		
 		    end
 		and scan_function fset (Function(_,_,cvarlist,varlist,fvarlist,exp,con)) = 
-		    let fun dec (v,c) = declare v
+		    let fun dec (v,k) = (declare v; scan_kind fset k)
 		    in  ( app dec cvarlist;
 			 app (fn (v, con) => ignore (declare v, scan_con fset con))  varlist;
 			 app declare fvarlist; 
@@ -337,7 +355,7 @@ struct
 		and scan_bnd fset bnd = 
 		    
 		    case bnd of
-			(Con_b (v, k, con) ) => (declare v; scan_con fset con)
+			(Con_b (v, k, con) ) => (declare v; scan_kind fset k; scan_con fset con)
 		      | (Exp_b (v, c, exp)) => ( case NilUtil.strip_arrow c of 
 						SOME (_, Total, _, _, _, _) => 
 						    total_set := VarSet.add (!total_set, v)
@@ -366,6 +384,9 @@ struct
 		fun census_con ( x , con ) = 
 		    ( delta := x ;
 		     scan_con VarSet.empty con) 
+		fun census_kind (x, kind ) = 
+		    (delta := x;
+		     scan_kind VarSet.empty kind)
 		    
 		fun census_bnds ( x, bnds ) = 
 		    ( delta := x;
@@ -378,7 +399,7 @@ struct
 			      ExportValue(label, exp,con) => 
 				  (scan_exp VarSet.empty exp;scan_con VarSet.empty con) 
 			    | ExportType (label, con, kind) =>
-				  scan_con VarSet.empty con) exports )
+				  (scan_con VarSet.empty con; scan_kind VarSet.empty kind)) exports)
 
 	    end (* Census functions *)
 
@@ -455,7 +476,8 @@ struct
 		  | Switch_e sw => false (* Punt on this for now *)
 		  | Handle_e (exp, fcn) => is_pure exp
 			    
-	in  fun xcon_project fset (t :var, kind:kind, (Var_c a):con, label:label) binder do_body =
+		(* ----- Have to recur on the kind here as well ----------------- *)	
+	in  fun xcon_project fset (t :var, kind:kind, (Var_c a):con, label:label) binder do_body do_kind =
 	    if (dead_var t) then 
 		(update_count_c count_esc (sc(a)) ~1 fset; (do_body()))
 	    else 
@@ -471,16 +493,17 @@ struct
 				 in
 				     ( replace_c t b fset; update_count_c count_esc (Var_c a) ~1 fset; do_body() )
 				 end
-			   | _ =>  let val N' = (do_body())
+			   | _ =>  let
+				       val N' = (do_body())
 				   in 
 				       if (dead_var t ) then 
 					   ( update_count count_esc (s(a)) ~1 fset;  N' )
 				       else
-					   binder (t, resingletonize kind (Proj_c (Var_c a, label)), Proj_c (Var_c a, label), N')
+					   binder (t, do_kind fset kind, Proj_c (Var_c a, label), N')
 				   end)
 		  | _=> raise BUG
 			
-	    fun xcon_record fset (x, kind, lclist) binder do_body = 
+	    and xcon_record fset (x, kind, lclist) binder do_body do_kind = 
 		 let val (labels, cons) = Listops.unzip lclist
 		     val cons = map subst_c cons
 		     val lclist = Listops.zip labels cons
@@ -497,41 +520,54 @@ struct
 			     if (dead_var x )
 				 then ( app dec cons ; N' )
 			     else
-				 binder (x, resingletonize kind (Crecord_c lclist), Crecord_c lclist, N')
+				 binder (x, do_kind fset kind, Crecord_c lclist, N')
 			 end
 		 end 
+	      
+	    fun xkind fset kind = 
+		case kind of 
+		    Type_k p => kind
+		  | Word_k p => kind
+		  | Singleton_k (p, k, c) => 
+			Singleton_k (p, xkind fset k, xcon fset c)
+		  | Record_k lvkseq =>
+			Record_k ( Util.mapsequence (fn ((l,v), kind) =>
+					  ((l,v), xkind fset kind)) lvkseq)
+		  | Arrow_k (openn, vklist, k) =>
+			Arrow_k (openn, map (fn (v,k) => (v, xkind fset k)) vklist, xkind fset k)
 
-	   fun xcon fset con = 
+	    and xcon fset con = 
 		case con of 
 		    (* Record Projection *)
 		    Let_c (Sequential, ( Con_cb (t, kind, Proj_c (con, label)):: rest ), body ) => 
 			let fun do_body unit = xcon fset (Let_c (Sequential, rest, body))
 			    fun bind (t, kind, con, body) = Let_c (Sequential, [ Con_cb (t, kind, con)], body)
 			in  
-			    xcon_project fset (t, kind, con, label) bind do_body
+			    xcon_project fset (t, kind, con, label) bind do_body xkind
 			end 
 		  (* Record creation *)
 		  | Let_c (Sequential, ( Con_cb (t, kind, Crecord_c lclist) :: rest ), body) => 
 			   let fun do_body unit = xcon fset (Let_c (Sequential, rest, body))
 			       fun bind (t, kind, con, body) = Let_c (Sequential, [ Con_cb (t, kind, con)], body)
 			   in  
-			       xcon_record fset (t, kind, lclist) bind do_body
+			       xcon_record fset (t, kind, lclist) bind do_body xkind
 			   end 
 			   
 		  (* Function definitions *)
-		  | Let_c (Sequential, ( Open_cb (x, vklist, con, kind) :: rest ), N) =>
+		  | Let_c (Sequential, (Open_cb (x, vklist, con, kind)) :: rest, N) =>
 			let val N' = Let_c ( Sequential, rest, N)
 			   in if (dead_var x) then 
-			       ( census_con ( ~1, con); xcon fset N')
+			       ( app (fn (v,k) => census_kind(~1, k)) vklist; census_con ( ~1, con); xcon fset N')
 			      else 
 				  let val _ = HashTable.insert bind (x, FC (vklist, con, kind))
 				      val N' = xcon fset N'
 				  in if (dead_var x) then 
-				      ( census_con ( ~1,con); N')
-				     else let val newcon =  xcon fset con
-					      val newkind = resingletonize kind newcon
+				      ( app (fn (v,k) => census_kind(~1, k)) vklist; census_con ( ~1,con); N')
+				     else let val newvklist = map (fn (v,k) => (v, xkind fset k)) vklist
+					      val newcon =  xcon fset con
+					      val newkind = xkind fset kind
 					  in 
-					      Let_c (Sequential, [ (Open_cb (x, vklist, newcon, newkind)) ], N')
+					      Let_c (Sequential, [ (Open_cb (x, newvklist, newcon, newkind)) ], N')
 					  end 
 				  end 
 			   end 
@@ -547,13 +583,13 @@ struct
 					| _ => () );
 					  xcon fset N' )
 			       else  
-				   if (dead_var x ) then (census_con(~1, con) ;  xcon fset N' )
+				   if (dead_var x ) then (census_kind (~1, kind); census_con(~1, con) ;  xcon fset N' )
 				    else 
 					let val N' = xcon fset N' 
 					in 
-					    if (dead_var x ) then (census_con(~1, con); N')
+					    if (dead_var x ) then (census_kind (~1, kind); census_con(~1, con); N')
 					    else  let val newcon =  xcon fset con
-						  val newkind = resingletonize kind newcon
+						  val newkind = xkind fset kind 
 						  in 
 						      Let_c (Sequential, [Con_cb (x, newkind, newcon)], N')
 						  end 
@@ -597,7 +633,7 @@ struct
 			    Mu_c (bool, Util.mapsequence (fn (v, c) => (v, xcon fset c)) vcseq, var)
 			end 
 		  | AllArrow_c ( openness, effect, vklist, cons, w32, con) => 
-			AllArrow_c ( openness, effect, vklist, map (xcon fset) cons, w32, xcon fset con)
+			AllArrow_c ( openness, effect, (map (fn (v,k) => (v, xkind fset k)) vklist), map (xcon fset) cons, w32, xcon fset con)
 		  | Crecord_c (lclist) =>
 			Crecord_c ( map (fn  (l,c) => (l, xcon fset c) ) lclist)
 		  | Proj_c (con, label) => Proj_c (xcon fset con, label)
@@ -606,9 +642,9 @@ struct
 		  | Typecase_c { arg=arg, arms=arms, default=default, kind= kind} => 
 		        Typecase_c { arg=xcon fset arg,
 			 default = xcon fset default,
-			 kind = kind, (* Resingletonize? *)
-			 arms = map (fn (primc, vklist, con)=> (primc, vklist, xcon fset con)) arms}
-				      
+			 kind = xkind fset kind, 
+			 arms = map (fn (primc, vklist, con)=> (primc, (map (fn (v,k)=> (v,xkind fset k))vklist) , xcon fset con)) arms}
+		  | _ => (print "Can't match" ; Ppnil.pp_con con ; print "\n"; raise BUG )	
 
 
 	    fun xswitch fset s =
@@ -677,7 +713,8 @@ struct
 		end
 	
 	    and xfunction fset (Function( eff, recu, vklist, vclist, vlist, exp, con)) =
-		let val vclist = map (fn (v,con) => (v, xcon fset con)) vclist
+		let val vklist = map (fn (v,k) => (v, xkind fset k)) vklist
+		    val vclist = map (fn (v,con) => (v, xcon fset con)) vclist
 		    val exp = xexp fset exp
 		    val con = xcon fset con
 		in 
@@ -693,30 +730,31 @@ struct
 			  let fun do_body unit = xbnds fset rest body
 			      fun bind (t, kind, con, (rest,body) ) = (Con_b (t, kind, con)::rest, body)
 			  in  
-			      xcon_project fset (t, kind, con, label) bind do_body
+			      xcon_project fset (t, kind, con, label) bind do_body xkind
 			end 
 		    | Con_b (t, kind, Crecord_c lclist) => 
 			  let fun do_body unit = xbnds fset rest body
 			      fun bind (t, kind, con, (rest,body) ) = (Con_b (t, kind, con)::rest, body)
 			  in  
-			      xcon_record fset (t, kind, lclist) bind do_body
+			      xcon_record fset (t, kind, lclist) bind do_body xkind
 			  end 
        
 		    (* --------------- Constructor function creation --------------- *)
-		    | Con_b (t, kind, Let_c (Sequential, [ Open_cb ( var, vklist, con, retkind) ], Var_c var2)) =>
+		    | Con_b (t, kind, conbnd as (Let_c (Sequential, [ Open_cb ( var, vklist, con, retkind) ], Var_c var2))) =>
 			  ( if Name.eq_var (var, var2) then 
 			      if (dead_var t) then 
-				  (census_con (~1, con); xbnds fset rest body) 
+				  (census_kind (~1, kind); census_con (~1, conbnd); xbnds fset rest body) 
 			      else 
 				  let val _ = HashTable.insert bind (t, FC(vklist, con, retkind))
 				      val (rest,body) = xbnds fset rest body
 				  in if (dead_var t) then 
-				      (census_con (~1, con); (rest, body) )
+				      (census_kind (~1, kind); census_con (~1, conbnd); (rest, body) )
 				     else 
 					 let val newcon = xcon fset con
-					     val newretkind = resingletonize retkind newcon
+					     val newretkind = xkind fset retkind
+					     val newkind = xkind fset kind 
 					 in 
-					    ( Con_b (t, kind, Let_c (Sequential, 
+					    ( Con_b (t, newkind, Let_c (Sequential, 
 								     [Open_cb (var, vklist, newcon, newretkind)], Var_c var))::rest, body)
 					 end
 				  end
@@ -734,13 +772,13 @@ struct
 				 | _ => () );
 				   xbnds fset rest body)
 			else  
-			    if (dead_var x ) then (census_con(~1, con) ;  xbnds fset rest body)
+			    if (dead_var x ) then (census_kind(~1, kind); census_con(~1, con) ;  xbnds fset rest body)
 			    else 
 				let val (rest,body) = xbnds fset rest body
 				in 
-				    if (dead_var x ) then (census_con(~1, con); (rest,body) )
+				    if (dead_var x ) then (census_kind(~1, kind); census_con(~1, con); (rest,body) )
 				    else  let val newcon =  xcon fset con
-					      val newkind = resingletonize kind newcon
+					      val newkind = xkind fset kind 
 					  in 
 					      (Con_b (x, newkind, newcon)::rest, body)
 					  end 
@@ -863,7 +901,8 @@ struct
 				look count_app v = 1 andalso look count_esc v = 0 
 			    fun remove_func 
 				( vc as ( v, Function(eff, _, vklist, vclist, vlist, exp, con))) =  
-				( app (fn (var,con) => census_con (~1, con)) vclist; 
+				(app (fn (var, kind) => census_kind (~1, kind)) vklist; 
+				 app (fn (var,con) => census_con (~1, con)) vclist; 
 				  census_exp ( ~1, exp); 
 				  census_con (~1, con) )
 			    fun recur_func ( v, function) = 
@@ -953,7 +992,7 @@ struct
 			let fun do_entry ( ExportValue ( label, exp, con) ) = 
 			        ExportValue (label, xexp fset exp, xcon fset con)
 			      | do_entry ( ExportType ( label, con, kind )) = 
-				ExportType (label, xcon fset con, resingletonize kind con )
+				ExportType (label, xcon fset con, xkind fset kind )
 			in ( [], EXPORTS (map do_entry entrys) )
 			end )
 

@@ -5,7 +5,8 @@ signature DOOPTS =
     end 
 
 
-functor DoOpts (structure PpNil : PPNIL
+functor DoOpts (structure Normalize : NORMALIZE
+                structure PpNil : PPNIL
 		structure Nil : NIL
 		structure NilContext : NILCONTEXT
 		structure NilEval : NILEVAL
@@ -19,9 +20,10 @@ functor DoOpts (structure PpNil : PPNIL
 		     = NilUtil.Nil = Linearize.Nil
 
 		sharing Nil.Prim = NilPrimUtil.Prim
-		sharing type Nil.con = NilSubst.con = NilPrimUtil.con 
+                sharing type Nil.kind = Normalize.kind
+		sharing type Nil.con = NilSubst.con = NilPrimUtil.con = Normalize.con 
 		sharing type Nil.exp = NilSubst.exp = NilPrimUtil.exp 
-	        sharing type NilContext.context = NilStatic.context
+	        sharing type NilContext.context = NilStatic.context = Normalize.context
 		    ) = 
 			 
 struct
@@ -58,7 +60,7 @@ struct
 				  structure Ppnil = PpNil
 				      )
 
-    structure Anormalize = Anormalize (
+    structure Anormalize = Anormalize (structure Normalize = Normalize
 				       structure ExpTable = ExpTable
 				       structure Squish = Squish
 				       structure NilUtil = NilUtil
@@ -95,27 +97,32 @@ struct
 			       print "\n")
 		     else print "Anormalization complete\n";
 
-	    val nilmod = (Stats.timer("Anormalize2", Anormalize.doModule true)) nilmod;
-	    val _ =  if debug
-			 then (print "\n\n=======================================\n\n";
-			       print "A-normal form2:\n";
-			       PpNil.pp_module nilmod;
-			       print "\n")
-		     else print "Anormalization2 complete\n";
+	    val nilmod = if !NilOpts.do_anormalize2 then 
+		let val nilmod = (Stats.timer("Anormalize2", Anormalize.doModule true)) nilmod;
+		    val _ =  if debug 
+				 then (print "\n\n=======================================\n\n";
+				       print "A-normal form2:\n";
+				       PpNil.pp_module nilmod;
+				       print "\n")
+			     else print "Anormalization2 complete\n";
+		in nilmod end
+			 else nilmod
+
 			 
 	    (* val _ = PpNil.elide_bnd := true; *)
 
  
-	    val nilmod =  if !do_flatten then 
-		let val nilmod = (Stats.timer("Flatten args", FlattenArgs.doModule debug)) nilmod
-		in (  if !NilOpts.print_flatten andalso !do_flatten 
-			 then (print "\n\n=======================================\n\n";
-			       print "Flattened args:\n";
-			       PpNil.pp_module nilmod;
-			       print "\n") 
-		     else print "Flatten args complete\n"; nilmod )
-		end 
-			  else nilmod
+	   val nilmod =
+		if (!do_flatten) then 
+		    (let val nilmod = (Stats.timer("Flatten args", FlattenArgs.doModule debug)) nilmod
+		     in (  if !NilOpts.print_flatten andalso !do_flatten 
+			       then (print "\n\n=======================================\n\n";
+				     print "Flattened args:\n";
+				     PpNil.pp_module nilmod;
+				     print "\n") 
+			   else print "Flatten args complete\n"; nilmod )
+		     end)
+		else nilmod
 
 	  	    
 	    val nilmod = if !do_uncurry then 
