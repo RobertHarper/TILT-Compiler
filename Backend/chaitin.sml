@@ -69,6 +69,7 @@ struct
    val delete_moves = ref true
 
    fun msg (x : string) = if !msgs then print x else ()
+       
    fun print_reglist regs = app (fn r => (print(msReg r); print "  ")) regs
 
    val doTimer = Stats.ff("DoChaitinTimer")
@@ -486,9 +487,9 @@ struct
 		case (stripAnnot instr) of
 		 (BASE(RTL(call as (CALL{func, args, results, ...})))) =>
 		     let
-			 val {regs_destroyed, ...} =  getCallInstrRegs getSignature call
-			 val regs_destroyed' = Regset.filter isPhysical regs_destroyed
+			 val {regs_destroyed, ...} = getCallInstrRegs getSignature call
 (*
+			 val regs_destroyed' = Regset.filter isPhysical regs_destroyed
 			 val _ = (print "regs_destroyed = "; print (Int.toString (length regs_destroyed));
 				  print "regs_destroyed' = "; print (Int.toString (length regs_destroyed'));
 				  print "live_regs = "; print (Int.toString (Regset.numItems live_regs));
@@ -496,14 +497,14 @@ struct
 *)
 		         (* add conflicts between registers destroyed
 			  by call and variables live after call.*)
-		     in   insert_edges (Regset.listItems regs_destroyed,live_regs)
+		     in	 insert_edges (Regset.listItems regs_destroyed,live_regs)
 		     end
                 | _ => ()
 	     end
 	   
 	   fun processBlock (BLOCK{in_live, instrs, ...},n) =
 	       let val _ = msg ("processBlock #" ^ (Int.toString n) ^ ": " ^
-		                 (Int.toString (length (!instrs))) ^ "instrs \n")
+				(Int.toString (length (!instrs))) ^ "instrs \n")
 		   val instructions = rev (!instrs)
 		   val _ = (case instructions of
 				firstInstr::_ => Regset.app insert_node (Bblock.live firstInstr)
@@ -522,7 +523,7 @@ struct
 	      registers either. This restriction isn't implemented right
 	      now.*)
 	     msg("There are " ^ (Int.toString (Labelmap.numItems block_map)) 
-			      ^ " blocks in the blockmap\n");
+		 ^ " blocks in the blockmap\n");
 
 	   Labelmap.foldl processBlock 0 block_map;
 	   if (! debug) then print_graph igraph else ();
@@ -1145,9 +1146,8 @@ struct
        val _ =  subtimer("chaitin_initbias",  initBias)  block_map
        val _ = msg "\tbuilding interference graph\n"
 
-       val igraph = subtimer("chaitin_buildGraph",buildGraph)
-	                 (getSignature,name,block_map,
-			       args,res,callee_saved)
+       val igraph = buildGraph (getSignature,name,block_map,
+				args,res,callee_saved)
        val _ = if (!msgs) then Ifgraph.print_stats igraph else ()
 
        val _ = msg "\tcoloring interference graph\n"
