@@ -1,16 +1,68 @@
 #!/usr/local/bin/rc
 
 # new 'bug description'
+# new -i
 
+# run program -- run program, aborting on non-zero exit status
 fn run { s=(){
 	echo running $*
-	$*
+	echo $*
 	s=$status
 	if(!~ $s 0){
 		echo >[1=2] program exitted with non-zero status, aborting
 		exit 1
 	}
 }}
+nl='
+'
+# read prompt var -- read a line of text into $var
+fn read { x=() {
+	echo >[1=2] -n $1
+	x=``($nl) {
+		awk '
+			{print; print 0; exit}
+                        END {print 1; print 1}
+		'
+	}
+	$2=$x(1)
+	return $x(2)
+}}
+# optional prompt var default
+fn optional {
+	if(!read $1 $2) $2=$3
+	return 0
+}
+# required prompt var
+fn required {
+	while(!read $1 $2)
+		echo >[1=2] 'An answer is required.'
+	return 0
+}
+# usage -- print usage and abort
+fn usage{
+	echo >[1=2] 'usage: new ''bug description'''
+	echo >[1=2] '       new -i'
+	exit 1
+}
+if(~ $1 -i){
+	if(!~ $#* 1) usage
+	echo 'Please type a one-line description of your bug.'
+	echo '(You will be prompted for more fields later.)'
+	required 'Title: ' description
+	# field field description default
+	fn field {result=(){
+		echo >[1=2] -- $1 ^ $2 '['^$3^']' 
+		optional $1 result $3
+		echo -- $1 ^ $result
+	}}
+}else{
+	if(~ $#* 0 || ~ $1 -*) usage
+	description=$^*
+	# field field description default
+	fn field {
+		echo -- $1 ^ $2
+	}
+}
 bugdir=`{dirname $0}
 run cd $bugdir
 run cvs update buglist.txt
@@ -20,25 +72,25 @@ bugno=`{
 		END {printf ("%04d\n",bugno + 1)}
 	' buglist.txt
 }
-description=$^*
 echo $bugno '[open]	' ^ $description >> buglist.txt
 run cvs commit -m 'bug number ' ^ $bugno buglist.txt	# Abort early if we lose race to commit
 mkdir $bugno
 {
-	echo Number: $bugno
-	echo 'Title:       ' ^ $description
-	echo 'Keywords:    <optional - e.g. "modules", "types", "IO", "reals">'
-	echo 'Submitter:   ' ^ `{whoami}
-	echo 'Date:        ' ^ `{date +%D}
-	echo 'Version:     <TILT version number>'
-	echo 'System:      <e.g. solaris,alpha,linux>'
-	echo 'Severity:    <critical, major, minor, cosmetic>'
-	echo 'Problem:     <description of problem>'
-	echo 'Code:        <SML source code to reproduce the bug>'
-	echo 'Transcript:  <transcript of exectution demonstating the bug>'
-	echo 'Comments:    <additional comments>'
-	echo 'Fix:         <optional - but you get extra credit>'
-	echo 'Owner:'
+	echo  'Number:' $bugno
+	echo  'Title:       ' ^ $description
+	field 'Keywords:    ' '<optional - e.g. "modules", "types", "IO", "reals">' ''
+	echo  'Submitter:   ' ^ `{whoami}
+	echo  'Date:        ' ^ `{date +%D}
+	field 'Version:     ' '<TILT version number>' 'CVS'
+	field 'System:      ' '<e.g. solaris,alpha,linux>' 'any'
+	field 'Severity:    ' '<critical, major, minor, cosmetic>' 'minor'
+	field 'Problem:     ' '<description of problem>' ''
+	field 'Code:        ' '<SML source code to reproduce the bug>' ''
+	field 'Transcript:  ' '<transcript of execution demonstating the bug>' ''
+	field 'Comments:    ' '<additional comments>' ''
+	field 'Fix:         ' '<optional - but you get extra credit>' ''
+	field 'Test: ' '*' ''
+	field 'Owner: ' '*' `{whoami}
 	echo 'Status: open'
 } > $bugno/description
 run cvs add $bugno
