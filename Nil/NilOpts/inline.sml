@@ -67,6 +67,7 @@ struct
     val recset = ref VarSet.empty  (* Import this from reduce or find it again? *)
 
     val S =  Name.mk_var_hash_table(200,FnNotFound) : (var, (function * int )) HashTable.hash_table
+    val SC = Name.mk_var_hash_table(200,FnNotFound) : (var, ( (var*kind) list * con * int )) HashTable.hash_table
 
     fun xfunc ( fnVar,   Function(eff, a, vklist, vclist, vlist, body, con )) = 
 	let val (body, size) = xexp body

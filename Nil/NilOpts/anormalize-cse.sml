@@ -221,8 +221,10 @@ struct
 	case exp of 
 	    Prim_e( allp, _, _) => is_elim_allp allp
 	  | App_e ( openness, Var_e v, _, _, _) =>
-		if HashTable.find fntable v = SOME true then true
+		(if HashTable.find fntable v = SOME true then true
 		else false 
+		     handle FnNotFound => 
+			 (Ppnil.pp_var v ; print " not found\n"; raise BUG))
 		    
 	  | _ => false
 
@@ -284,7 +286,7 @@ struct
      all rights this should be a VarMap and passed around instead of a
      global hashtable. *)
     val env = Name.mk_var_hash_table(200,FnNotFound): (var, con)
-     HashTable.hash_table
+	HashTable.hash_table
 
     
     val empty = NilContext.empty
@@ -372,8 +374,9 @@ struct
 	    Con_cb (v,k,c) => Con_b (v,k,c)
 	  | Open_cb (var, vklist, con, kind) =>
 		let val t = Name.fresh_var()
+		    val tkind =  Arrow_k( Open, vklist, kind)
 		in 
-		    Con_b (var, Arrow_k( Open, vklist, kind), Let_c (Sequential, [ Open_cb(t, vklist, con,kind) ], Var_c t))
+		    Con_b (var, tkind, Let_c (Sequential, [ Open_cb(t, vklist, con, kind) ], Var_c t))
 		end
 	  | _ => raise UNIMP
 
@@ -396,10 +399,17 @@ struct
 	    Prim_c (Record_c labels, cons) =>
 		let val SOME (label,con) =  Listops.find2 (fn (l,c) => eq_label (l,label)) (labels,cons)
 		in con end
-	  | Var_c var => strip_record ((HashTable.lookup env var), label)
+	  | Var_c var => (strip_record ((HashTable.lookup env var), label)
+			  handle FnNotFound =>
+			      (print "Strip record: " ; Ppnil.pp_var var ; print " not found\n"; raise BUG ))
 	  | Annotate_c (annot, con') => strip_record (con', label)
 	  | Let_c ( sort, conbnds, con) =>
-		Let_c (sort, conbnds, strip_record (con, label) )
+		( app (fn (cbnd) =>
+		       case cbnd of 
+			   Con_cb (v,k,c) =>
+			       HashTable.insert env (v, c)
+			| _ => () ) conbnds ; 
+		 Let_c (sort, conbnds, strip_record (con, label) ))
 
     fun strip_arrow (con, cons) = 
 	case con of 
@@ -407,10 +417,17 @@ struct
 		let val subst = Subst.fromList (Listops.zip (#1 (Listops.unzip vklist)) cons)
 		in Subst.substConInCon subst con
 		end 
-	  | Var_c var => strip_arrow ((HashTable.lookup env var), cons)
+	  | Var_c var => (strip_arrow ((HashTable.lookup env var), cons)
+			  handle FnNotFound =>
+			      (print "Strip arrow: " ; Ppnil.pp_var var ; " not found\n"; raise BUG ) )
 	  | Annotate_c (annot, con') => strip_arrow (con', cons)
 	  | Let_c ( sort, conbnds, con) =>
-		Let_c (sort, conbnds, strip_arrow (con, cons))
+		( app (fn (cbnd) =>
+		       case cbnd of 
+			   Con_cb (v,k,c) =>
+			       HashTable.insert env (v, c)
+			 | _ => () ) conbnds ; 
+		 Let_c (sort, conbnds, strip_arrow (con, cons)))
 	  
     fun strip (D, con) = 
 	case con of 
@@ -713,8 +730,9 @@ struct
 
     and normalize_con_name con D (avail as (ae,ac)) (bind, k) = 
 	(normalize_con con D avail (bind, 
-	 (fn (con, D, (ae,ac)) => 
-	  let val t:var = (Name.fresh_var()) 
+	 (fn (con, D, (ae,ac)) =>
+	  let val t:var = (Name.fresh_var())
+	      
 	      val con = if !do_cse then cse_con con ac D else con
 	      val ac = if (is_elim_con con) then Conmap.insert (ac, con, t) else ac
 	  in 
@@ -863,8 +881,9 @@ struct
 			       EXP (k (Raise_e (e',c), D, (ae, ac)))))
 		  in returnexp end )
 	  | Handle_e (e,function as Function(eff,r,vks,vcs,vc,exp,c)) =>
-		let val [(v,func)] = normalize_fcn (Name.fresh_var(), function) D (ae,ac) 
+		let val [(v,func as Function(eff, r, vks, vcs, vc, exp, c) )] = normalize_fcn (Name.fresh_var(), function) D (ae,ac) 
 		    (fn (vf, D, a) => [ vf] )
+
 		in 
 		    (k (Handle_e (normalize_exp e D (ae, ac) #1, func), D, (ae, ac)))
 		end )
@@ -873,6 +892,7 @@ struct
     and name_exp exp D (ae, ac) k = 
 	 let val _ = if !debug then print "n" else ()
 	     val t:var = (Name.fresh_var())
+	    
 	     val con = exp_type (D, exp)
 	     val (exp, ae) = if !do_cse then (cse_exp exp ae D con, 
 					      if (is_elim_exp exp) 
@@ -1083,7 +1103,8 @@ struct
 			 map ( fn entry =>
 			      case entry of 
 				  ExportValue(lab, exp, con) => 
-				      let val exp  = normalize_exp exp D (Expmap.empty, Conmap.empty) (fn (x, c, (ae, ac))=> x)
+				      let val CON con = normalize_con con D (Expmap.empty, Conmap.empty) (TOCON, CONk)
+					  val exp  = normalize_exp exp D (Expmap.empty, Conmap.empty) (fn (x, c, (ae, ac))=> x)
 				      in 
 					  ExportValue(lab, exp, con)
 				      end

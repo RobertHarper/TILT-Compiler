@@ -404,19 +404,19 @@ struct
 			    end 
 		      |  Fixclosure_b vcset => raise UNIMP 
 	    in 
-		fun census_exp ( x , exp ) = 
+		fun census_exp fset ( x , exp ) = 
 		    ( delta := x ;
-		     scan_exp VarSet.empty exp) 
-		fun census_con ( x , con ) = 
+		     scan_exp fset exp) 
+		fun census_con fset ( x , con ) = 
 		    ( delta := x ;
-		     scan_con VarSet.empty con) 
-		fun census_kind (x, kind ) = 
+		     scan_con fset con) 
+		fun census_kind fset (x, kind ) = 
 		    (delta := x;
-		     scan_kind VarSet.empty kind)
+		     scan_kind fset kind)
 		    
-		fun census_bnds ( x, bnds ) = 
+		fun census_bnds fset ( x, bnds ) = 
 		    ( delta := x;
-		     map (fn x=> scan_bnd VarSet.empty x) bnds )
+		     map (fn x=> scan_bnd fset x) bnds )
 		fun census_module (x , MODULE{imports=imports, bnds=bnds, exports=exports} ) = 
 		    ( delta := x;
 		     map (fn x=> scan_bnd VarSet.empty x) bnds;
@@ -519,9 +519,10 @@ struct
 			    
 		(* ----- Have to recur on the kind here as well ----------------- *)	
 	in  fun xcon_project fset (t :var, kind:kind, (Var_c a):con, label:label) binder do_body do_kind =
-	    let fun cleanup () = 
-		(update_count_c count_esc (sc a) (~1) fset;
-		 census_kind (~1, kind) )
+
+	    let fun cleanup unit = 
+		(update_count_c count_esc (sc(a)) ~1 fset;
+		 census_kind fset (~1, kind) )
 	    in 
 		if (dead_var t) then 
 		    ( cleanup(); (do_body()))
@@ -559,7 +560,7 @@ struct
 		     fun dec (Var_c a) =  update_count_c count_esc (sc(a)) ~1 fset
 		       | dec _ = ()
 		     fun cleanup unit = 
-			 ( app dec cons; census_kind(~1, kind) )
+			 ( app dec cons; census_kind fset (~1, kind) )
 		 in 
 		     if (dead_var x) 
 			 then ( cleanup()  ; do_body() )
@@ -576,22 +577,22 @@ struct
 	    fun xcon_else fset (x, kind, con) binder do_body do_kind do_con =
 		 if (small_con con) then 
 		     (replace_c x con fset;
-		      census_kind (~1, kind);
+		      census_kind fset (~1, kind);
 		      (case con of 
 			   Var_c v => update_count_c count_esc (sc(v)) ~1 fset
 			 | _ => ());
 		      do_body ())
 		 else
 		     if (dead_var x) then 
-			 (census_kind (~1, kind);
-			  census_con (~1, con);
+			 (census_kind fset (~1, kind);
+			  census_con fset(~1, con);
 			  do_body ())
 		     else 
 			 let val N' = do_body ()
 			 in 
 			     if (dead_var x) then
-				 (census_kind (~1, kind);
-				  census_con (~1, con);
+				 (census_kind fset (~1, kind);
+				  census_con fset (~1, con);
 				  N')
 			     else
 				 binder (x, do_kind fset kind, do_con fset con, N')
@@ -639,9 +640,9 @@ struct
 		  | Let_c (Sequential, (Open_cb (x, vklist, con, kind)) :: rest, N) =>
 			let val N' = Let_c ( Sequential, rest, N)
 			    fun cleanup unit = 
-				( app (fn (v,k) => census_kind(~1, k)) vklist; 
-				 census_con ( ~1, con); 
-				 census_kind (~1, kind) )
+				( app (fn (v,k) => census_kind fset (~1, k)) vklist; 
+				 census_con fset ( ~1, con); 
+				 census_kind fset (~1, kind) )
 			   in if (dead_var x) then 
 			       (cleanup (); xcon fset N')
 			      else 
@@ -653,8 +654,8 @@ struct
 				       away. The con was inlined. 
 				       *)
 				      SOME INLINED => 
-					  (app (fn (v,k) => census_kind(~1, k)) vklist; 
-					   census_kind (~1, kind);
+					  (app (fn (v,k) => census_kind fset (~1, k)) vklist; 
+					   census_kind fset (~1, kind);
 					   N')
 				    | _ => if (dead_var x) then (cleanup () ; N')
 					   else let val newvklist = map (fn (v,k) => (v, xkind fset k)) vklist
@@ -815,19 +816,19 @@ struct
 		    (* --------------- Constructor function creation --------------- *)
 		    | Con_b (t, kind, conbnd as (Let_c (Sequential, [ Open_cb ( var, vklist, con, retkind) ], Var_c var2))) =>
 			  if (dead_var t) then 
-			      (census_kind (~1, kind); census_con (~1, conbnd); xbnds fset rest body) 
+			      (census_kind fset (~1, kind); census_con fset (~1, conbnd); xbnds fset rest body) 
 			  else 
 			      ( if Name.eq_var (var, var2) then 
 				    let val _ = HashTable.insert bind (t, FC(vklist, con, retkind))
 					val (rest,body) = xbnds fset rest body
 				    in ( case (HashTable.find bind t) of 
 					SOME INLINED => 
-					    (app (fn (v,k) => census_kind(~1, k)) vklist; 
-					     census_kind (~1, retkind);
+					    (app (fn (v,k) => census_kind fset (~1, k)) vklist; 
+					     census_kind fset (~1, retkind);
 					     update_count_c count_esc (sc(var2)) ~1 fset;
 					     (rest, body) )
 				      | _ =>  if (dead_var t) then 
-					    (census_kind (~1, kind); census_con (~1, conbnd); (rest, body) )
+					    (census_kind fset (~1, kind); census_con fset (~1, conbnd); (rest, body) )
 					      else 
 						  let val newcon = xcon fset con
 						      val newretkind = xkind fset retkind
@@ -861,8 +862,8 @@ struct
 			  in  
 			      if ( dead_var x ) 
 				  then ( app dec exps; 
-					census_con(~1, con);
-					app (fn (con) => (census_con (~1, con))) cons;
+					census_con fset(~1, con);
+					app (fn (con) => (census_con fset (~1, con))) cons;
 				        xbnds fset rest body )
 					    
 			      else
@@ -871,8 +872,8 @@ struct
 				  in
 				      if (dead_var x )
 					  then ( app dec exps ;
-						census_con(~1, con);
-						app (fn (con) => (census_con (~1, con))) cons;
+						census_con fset (~1, con);
+						app (fn (con) => (census_con fset (~1, con))) cons;
 						(rest, body) )
 				      else
 					  ( Exp_b ( x, xcon fset con, 
@@ -885,8 +886,8 @@ struct
 	  | Exp_b ( x, con, Prim_e (NilPrimOp (select label), cons, [ Var_e a ] )) => 
 		let fun cleanup unit = 
 		     ( update_count count_esc (s(a)) ~1 fset;
-                     census_con (~1, con);
-                     app (fn (con) => (census_con (~1, con))) cons)
+                     census_con fset (~1, con);
+                     app (fn (con) => (census_con fset (~1, con))) cons)
 		in 
 		if ( dead_var x ) then
 		    ( cleanup ();
@@ -913,7 +914,7 @@ struct
 					let val _ = inc_click sum_record_click
 					    val _ = update_count count_esc (Var_e r) 1 fset
 					    val _ = update_count count_esc (Var_e a) ~1 fset
-					    val _ = map (fn (con) => (census_con (1, con))) sum_cons
+					    val _ = map (fn (con) => (census_con fset (1, con))) sum_cons
 					    val (rest, body) = xbnds fset rest body
 					in 					  
 					    (( Exp_b ( x, xcon fset con, 
@@ -937,9 +938,9 @@ struct
 		   (* ------------- Sum projection ... perhaps it was from a record ------------ *)
 		   | Exp_b ( x, con, Prim_e (NilPrimOp (project_sum sum), sum_cons, [ Var_e a ] )) =>
 			 let fun cleanup unit = 
-			     ( census_con(~1, con);
+			     ( census_con fset (~1, con);
 			     update_count count_esc (s(a)) ~1 fset; 
-			     app (fn (con) => (census_con (~1, con))) sum_cons )
+			     app (fn (con) => (census_con fset (~1, con))) sum_cons )
 			in 	   
 			     if ( dead_var x ) 
 			     then (cleanup();
@@ -962,13 +963,13 @@ struct
 			  ( inc_click var_click ;
 			   replace x (Var_e v) fset;
 			   update_count count_esc (s(v)) ~1 fset;
-			   census_con (~1, con);
+			   census_con fset (~1, con);
 			   xbnds fset rest body )
 
 		    (* ----------------- Constants  ----------------- *)
 		    | Exp_b (x, con, Const_e c)  =>
 			( if (dead_var x ) then () else replace x (Const_e c) fset; 
-			  census_con (~1,con );
+			  census_con fset (~1,con );
 			  xbnds fset rest body )
 
 			    
@@ -984,12 +985,12 @@ struct
 
 			    fun remove_rest
 				( vc as ( v, Function(eff, _, vklist, vclist, vlist, exp, con))) =  
-				(app (fn (var, kind) => census_kind (~1, kind)) vklist; 
-				 app (fn (var,con) => census_con (~1, con)) vclist; 
-				 census_con (~1, con))
+				(app (fn (var, kind) => census_kind fset (~1, kind)) vklist; 
+				 app (fn (var,con) => census_con fset (~1, con)) vclist; 
+				 census_con fset (~1, con))
 			    fun remove_func 
 				( vc as ( v, Function(eff, _, vklist, vclist, vlist, exp, con))) =  
-				( census_exp ( ~1, exp); 
+				( census_exp fset ( ~1, exp); 
 				 remove_rest vc
 				 )
 			    fun recur_func ( v, function) = 
@@ -1021,7 +1022,7 @@ struct
 			       if they are dead *)
 			    if (Listops.orfold (fn v => (look count_rec v > 0)) vars ) then
 				if (dead_funcs vars) then
-				    ( census_bnds (~1, [Fixopen_b vcset])   ; xbnds fset rest body)
+				    ( census_bnds fset (~1, [Fixopen_b vcset])   ; xbnds fset rest body)
 				else 
 				    let val (rest,body) = xbnds fset rest body
 				    in 
@@ -1053,11 +1054,11 @@ struct
 		  | Exp_b (x, con, exp)=> 
 			if is_pure exp
 			    then 
-				if (dead_var x ) then (census_exp(~1, exp) ; census_con(~1, con); xbnds fset rest body)
+				if (dead_var x ) then (census_exp fset (~1, exp) ; census_con fset (~1, con); xbnds fset rest body)
 				else 
 				    let val (rest,body) = xbnds fset rest body
 				    in 
-					if (dead_var x ) then (census_exp(~1, exp);census_con(~1, con); (rest,body))
+					if (dead_var x ) then (census_exp fset (~1, exp);census_con fset (~1, con); (rest,body))
 					else 
 					    ( Exp_b (x, xcon fset con, xexp fset exp) :: rest, body)
 				    end 
