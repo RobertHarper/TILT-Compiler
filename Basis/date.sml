@@ -34,8 +34,8 @@ structure Date :> DATE =
       }
 
   (* tables for mapping integers to days/months *)
-    val dayTbl = #[Sun, Mon, Tue, Wed, Thu, Fri, Sat]
-    val monthTbl = #[Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec]
+    val dayTbl = Vector.fromList [Sun, Mon, Tue, Wed, Thu, Fri, Sat]
+    val monthTbl = Vector.fromList [Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec]
 
     fun dayToInt (d) = (case d
 			  of Sun => 0 | Mon => 1 | Tue => 2 | Wed => 3

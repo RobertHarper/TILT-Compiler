@@ -302,8 +302,10 @@ app_exp	: aexp	        ([{item=markexp(aexp,aexpleft,aexpright),
 	| LPAREN exp_2c RPAREN	(TupleExp exp_2c)
 	| LBRACKET exp_list RBRACKET     (ListExp exp_list)
 	| LBRACKET RBRACKET	(ListExp nil)
+(* Getting rid of vector expressions because we don't want to support them.
         | VECTORSTART exp_list RBRACKET (VectorExp exp_list)	  
         | VECTORSTART RBRACKET  (VectorExp nil) 
+*)
 	| LET ldecs IN exp_ps END	
 				(markexp (LetExp{dec=markdec(ldecs,ldecsleft,
 							     ldecsright),

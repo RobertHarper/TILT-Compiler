@@ -36,7 +36,9 @@ struct
     (* application position will be omitted from closures.  This will *)
     (* result in one more way that code might not be closed, but will *)
     (* save some space.                                               *)
-    val omit_coercions = Stats.ff ("closure_omit_coercions")
+    (* This flag is also consulted by the routine in nilutil that finds *)
+    (* free variables in exception handlers.                            *)
+    val omit_coercions = Stats.tt ("closure_omit_coercions")
 
     val typeof_count = Stats.counter "CC_typeofs"
 

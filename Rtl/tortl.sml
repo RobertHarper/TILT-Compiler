@@ -472,13 +472,19 @@ struct
 	    | Unfold_e (vars,from,to) => (VALUE (INT 0w258),state)
 	    | Coerce_e (coercion,cargs,exp) => 
 	      let
-		  (* We need to translate the coercion in case it generates        *)
-		  (* any code that might diverge.  (It would be nice if we         *)
-	          (* were guaranteed at this point that that wouldn't happen, but  *)
-		  (* I'm not certain that we're sure of that.)                     *)
-		  (* Are all of these parameters right?                 joev, 6/01 *) 
-		  val (_,state) = xexp (state,name,coercion,
-					Nil.TraceKnown TraceInfo.Notrace_Int,NOTID)
+		  (* We need to translate the coercion in case it generates       *)
+		  (* any code that might diverge.  It would be nice if we         *)
+	          (* were guaranteed at this point that that wouldn't happen, but *)
+		  (* I'm not certain that we're sure of that.                     *)
+                  (* The exception is when the coercion is a variable, in which   *)
+		  (* case (a) we're sure that it's a value, and (b) it might be   *)
+                  (* missing due to the optimization that leaves coercions out of *)
+                  (* closure environments.                               joev     *)
+		  val state = 
+		    case coercion of 
+		      (Var_e _) => state
+		    | _ => #2 (xexp (state,name,coercion,
+				     Nil.TraceKnown TraceInfo.Notrace_Int,NOTID))
 	      in
 		  xexp (state,name,exp,trace,NOTID)
 	      end
@@ -501,7 +507,7 @@ struct
 		      (* compute free variables that need to be saved for handler *)
 
 		      local
-			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp(false, 0, handler_body)
+			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExnHandler(false, 0, handler_body)
 			  (* Include only constructors that have locations *)
 			  val cTerms = List.mapPartial
 					    (fn v => (case (getconvarrep' state v) of

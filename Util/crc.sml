@@ -1,4 +1,4 @@
-(*$import CRC *)
+(*$import CRC Vector *)
 (* CRC.sml -- written by Andrew Appel for SML/NJ, modified by PS 1994-10-24,
    modified by Martin Elsman 1997-05-30 
 *)
@@ -35,7 +35,7 @@ structure Crc :> CRC =
     end
 
     val table =
-    #[
+    Vector.fromList [
 	0,   225,   450,   291,   900,   869,   582,   679,
      1800,  2025,  1738,  1579,  1164,  1133,  1358,  1455,
      3600,  3825,  4050,  3891,  3476,  3445,  3158,  3255,

@@ -1,4 +1,4 @@
-(*$import Firstlude TiltPrim Prelude StringCvt String Option PreInt PreWord PreReal *)
+(*$import Firstlude TiltPrim Prelude StringCvt String Option PreInt PreWord PreReal Vector *)
 (* num-scan.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -315,11 +315,11 @@ structure NumScan : sig
 	  end
 
     local
-      val negTbl = #[
+      val negTbl = Vector.fromList [
 	      1.0E~0, 1.0E~1, 1.0E~2, 1.0E~3, 1.0E~4,
 	      1.0E~5, 1.0E~6, 1.0E~7, 1.0E~8, 1.0E~9
 	    ]
-      val posTbl = #[
+      val posTbl = Vector.fromList [
 	      1.0E0, 1.0E1, 1.0E2, 1.0E3, 1.0E4,
 	      1.0E5, 1.0E6, 1.0E7, 1.0E8, 1.0E9
 	    ]

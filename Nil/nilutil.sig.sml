@@ -10,6 +10,7 @@ signature NILUTIL =
        The free variables are returned as set.  
        When 2 sets are returned, the first is the term level fvs followed by the type level ones 
     *)
+    val freeExpConVarInExnHandler  : bool * int * Nil.exp  -> Name.VarSet.set * Name.VarSet.set
     val freeExpConVarInExp  : bool * int * Nil.exp  -> Name.VarSet.set * Name.VarSet.set
     val freeExpConVarInCon  : bool * int * Nil.con  -> Name.VarSet.set * Name.VarSet.set
     val freeExpConVarInKind : bool * int * Nil.kind -> Name.VarSet.set * Name.VarSet.set

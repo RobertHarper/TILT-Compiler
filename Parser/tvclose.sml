@@ -99,7 +99,7 @@ struct
 	TVSet.merge (pass1_exp expr0, pass1_exp expr1)
     | pass1_exp (OrelseExp (expr0, expr1)) =
 	TVSet.merge (pass1_exp expr0, pass1_exp expr1)
-    | pass1_exp (VectorExp exprs) = TVSet.union (map pass1_exp exprs)
+    | pass1_exp (VectorExp exprs) = TVSet.union (map pass1_exp exprs) 
     | pass1_exp (WhileExp {test, expr}) =
 	TVSet.merge (pass1_exp test, pass1_exp expr)
     | pass1_exp (MarkExp (exp, region)) = pass1_exp exp
@@ -265,7 +265,7 @@ struct
 	(pass2_exp env expr0; pass2_exp env expr1)
     | pass2_exp env (OrelseExp (expr0, expr1)) =
 	(pass2_exp env expr0; pass2_exp env expr1)
-    | pass2_exp env (VectorExp exprs) = app (pass2_exp env) exprs
+    | pass2_exp env (VectorExp exprs) = app (pass2_exp env) exprs 
     | pass2_exp env (WhileExp {test, expr}) =
 	(pass2_exp env test; pass2_exp env expr)
     | pass2_exp env (MarkExp (exp, region)) = pass2_exp env exp

@@ -988,16 +988,38 @@ struct
 	      | SOME e => CHANGE_NORECURSE e)
       | exp_handler _ _ = NOCHANGE
 
-    fun free_handler (look_in_kind, minLevel) =
+
+    (* var_set_handler creates a set of handlers to pass to the rewriter defined above
+     for the purpose of finding free variables.  This is presumably used for countless 
+     purposes; one very special one is in Tortl for the translation of exception handlers.
+     Since the saving that goes on there has to be compatible with the "free variable" 
+     computation in the closure converter wrt coercion variables, we have a for_exnhandler
+     flag here. *)
+
+    fun var_set_handler (for_exnhandler,look_in_kind, minLevel) =
 	let val free_evars : (Name.VarSet.set ref) = ref Name.VarSet.empty
 	    val free_cvars : (Name.VarSet.set ref) = ref Name.VarSet.empty
-	    fun exp_handler ({level,boundevars,boundcvars,...}:bound,Var_e v) = 
+	    fun normal_exp_handler ({level,boundevars,boundcvars,...}:bound,Var_e v) = 
 		(if (not (Name.VarSet.member(boundevars,v))
 		     andalso (level >= minLevel))
 		     then free_evars := Name.VarSet.add(!free_evars, v)
 		 else ();
 		     NOCHANGE)
-	      | exp_handler _ = NOCHANGE
+	      | normal_exp_handler _ = NOCHANGE
+	    val ignoring_coercions = !(Stats.bool "closure_omit_coercions")
+	    fun coercion_ignoring_exp_handler ({level,boundevars,boundcvars,...}:bound,Var_e v) = 
+		(if (not (Name.VarSet.member(boundevars,v))
+		     andalso (level >= minLevel))
+		     then free_evars := Name.VarSet.add(!free_evars, v)
+		 else ();
+		     NOCHANGE)
+	      (* NOTE: Never ever use the rewritten expression for anything if we are *)
+	      (* ignoring coercions, because of the hacky way we make that happen.    *)
+	      | coercion_ignoring_exp_handler (_,Coerce_e(Var_e v,cargs,e')) =
+		   if ignoring_coercions then
+		     CHANGE_RECURSE (Coerce_e( Const_e(Prim.int(Prim.W8,TilWord64.zero)) ,cargs,e'))
+		   else NOCHANGE
+	      | coercion_ignoring_exp_handler _ = NOCHANGE
 	    fun kind_handler (_,k) = CHANGE_NORECURSE k
 	    fun con_handler ({level,boundevars,boundcvars,...}:bound,Var_c v) = 
 		(if (not (Name.VarSet.member(boundcvars,v))
@@ -1012,14 +1034,23 @@ struct
 	     (STATE{bound = default_bound,
 		    handlers = {bndhandler = default_bndhandler,
 				cbndhandler = default_cbndhandler,
-				exphandler = exp_handler,
+				exphandler = if for_exnhandler then coercion_ignoring_exp_handler
+					     else normal_exp_handler,
 				conhandler = con_handler,
 				kindhandler = if (look_in_kind)
 						  then default_kindhandler
 					      else kind_handler}}))
 	end
-      
+
+    fun free_handler (lookInKind,minLevel) = var_set_handler(false,lookInKind,minLevel)
+    
   in
+
+    fun freeExpConVarInExnHandler(lookInKind,minLevel,e) =
+      let val (evars_ref,cvars_ref,handler) = var_set_handler(true,lookInKind,minLevel)
+      in f_exp handler e;
+	(!evars_ref,!cvars_ref)
+      end
 
     fun freeExpConVarInExp(lookInKind,minLevel,e) = 
 	let val (evars_ref,cvars_ref,handler) = free_handler (lookInKind,minLevel)
