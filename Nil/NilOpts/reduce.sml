@@ -1,7 +1,8 @@
 (* This doesn't handle Fixclosure, Fixcode or Parallel lets *)
 
 
-functor Reduce  ( structure Nil : NIL
+functor Reduce  ( 
+                  structure Nil : NIL
 		  structure Ppnil : PPNIL 
 		  structure PrimUtil : PRIMUTIL
 		  structure NilEval : NILEVAL
@@ -18,7 +19,7 @@ functor Reduce  ( structure Nil : NIL
 			    sharing type Nil.con = NilUtil.Nil.con
 			     sharing type Nil.exp = NilSubst.exp
 				     sharing type Nil.con = NilSubst.con
-			) =
+			) : PASS =
 
 struct 
     
@@ -28,36 +29,31 @@ struct
     exception FnNotFound
     exception BUG
 
-    fun do_it  debug (MODULE{bnds=bnds, imports=imports, exports=exports}) = 
+    fun doModule  debug (MODULE{bnds=bnds, imports=imports, exports=exports}) = 
 	let 
 
 	    (* First, stuff to keep track of how many reductions have been done. *)
-	    fun make_click str = { name = str, round = ref 0, total = ref 0 }
-	    fun inc_click { round=r, name=n, total= t } = 
-		r := !r + 1
-     
-	    val select_click = make_click "Select"    (* How many selections from know records have been replaced *)
-	    val inline_click = make_click "Inline"    (* How many functions called only once inlined *)
-	    val dead_click = make_click "Dead"        (* How many dead variables have  been removed *)
-	    val fold_click = make_click "Fold"        (* How many constants have been folded *)
-	    val switch_click = make_click "Switch"    (* How many known switches have been eliminated *)
-	    val var_click = make_click "Var Propagation"
+	     
+	    val select_click = NilOpts.make_click "Selects from known records" 
+	    (* How many selections from know records have been replaced *)
+	    val inline_click = NilOpts.make_click "Functions Inlined" 
+	    (* How many functions called only once inlined *)
+	    val dead_click = NilOpts.make_click "Dead variables eliminated"
+	    (* How many dead variables have  been removed *)
+	    val fold_click = NilOpts.make_click "Constants folded"        
+	    (* How many constants have been folded *)
+	    val switch_click = NilOpts.make_click "Known switches eliminated"    
+	    (* How many known switches have been eliminated *)
+	    val var_click = NilOpts.make_click "Vars propagated"
+		val sum_record_click = NilOpts.make_click "project_sums to project_sum_records"
 
 	    val clicks = [ select_click, inline_click, var_click,
-			  dead_click, fold_click, switch_click ]
-	    fun reset_clicks unit = 
-		app (fn {round = r, total = t, ... } => 
-		     ( t:= (!t) + (!r) ; r := 0 )) clicks
-	    fun print_clicks unit = 
-		app (fn {name = n, round = r, ... } =>
-		     print (n ^ " :" ^ Int.toString (!r) ^ "\n") ) clicks
-	    fun print_total_clicks unit = 
-		app (fn {name = n, total = t, ... } =>
-		     print ("Total " ^ n ^ " :" 
-		     ^ Int.toString (!t) ^ "\n") ) clicks		
-	    fun all_clicks unit = 
-		foldr (fn ({round = r, ...}, tot) => !r + tot) 0 clicks 
-		
+			  dead_click, fold_click, switch_click, sum_record_click ]
+
+	    fun round_clicks unit = NilOpts.round_clicks clicks
+	    fun print_round_clicks unit  = NilOpts.print_round_clicks clicks
+	    val inc_click  = NilOpts.inc_click
+	    
 
 	    (* Now, tables to keep information about the code as
 	     we walk it *)
@@ -66,11 +62,12 @@ struct
 	     recursive functions.  I can't really see how to extend
 	     his method to handle mututally recursive functions. *)
 	    val recset = ref VarSet.empty
-	
-		
+			
 	    (* Remembers  functions and records to be inlined or 
 	     projected from later *)
-	    datatype bind = F of function | R of label list * exp list | INLINED
+	    datatype bind = F of function | R of label list * exp list | INLINED 
+	      | S of var * {tagcount: w32, sumtype  : w32} * con list
+ 
 	    val bind =  Name.mk_var_hash_table(200,FnNotFound):
 		(var, bind) HashTable.hash_table
 	
@@ -206,7 +203,7 @@ struct
 		    end
 		and scan_bnd bnd = 
 		    case bnd of
-			( Con_b ( v, k, con) ) => ()
+			(Con_b (v, k, con) ) => ()
 		      | (Exp_b (v, c, exp)) => ( declare v; scan_exp exp )
 		      | (Fixopen_b vcset | Fixcode_b vcset) => 
 			    let val vflist = Util.set2list vcset
@@ -348,7 +345,7 @@ struct
 			  Let_e ( Sequential,
 				 ( Exp_b ( x, con, Prim_e (NilPrimOp (record labels), cons, exps)) :: bnds ), N ) =>
 			  let val N' = Let_e ( Sequential, bnds, N)
-			      val _ = HashTable.insert bind ( x, R ( labels,  exps))
+			     
 			      fun dec (Var_e a) =  update count_esc (s(a)) ~1
 				| dec _ = ()
 				  
@@ -356,7 +353,8 @@ struct
 			      if ( dead_var x ) 
 				  then ( app dec exps ; xexp N' )
 			      else
-				  let val N' = xexp N'
+				  let val _ = HashTable.insert bind ( x, R ( labels,  exps))
+				      val N' = xexp N'
 				  in
 				      if (dead_var x)
 					  then ( app dec exps ; N' )
@@ -376,7 +374,7 @@ struct
 				( update count_esc (s(a)) ~1 ; xexp N' )
 			    else
 				( case (s(a)) of
-				    Var_e a => 
+				      Var_e a => 
 					(case ( HashTable.find bind a)  of
 					     SOME ( R(labels, exps )) =>
 						 let val _ = inc_click select_click 
@@ -388,6 +386,20 @@ struct
 						     ( replace x b ; update count_esc (Var_e a) ~1 ; xexp N' )
 						
 						 end
+					     (* Change to project_sum_record *)
+					   | SOME (S (r, {tagcount, sumtype}, sum_cons))  =>
+						 let val _ = inc_click sum_record_click
+						   						     
+						     val _ = update count_esc (Var_e r) 1 
+						     val _ = update count_esc (Var_e a) ~1
+						 in 
+						     Let_e ( Sequential,
+							    [ Exp_b ( x, con, 
+							     Prim_e ( (NilPrimOp 
+								       (project_sum_record 
+								      {tagcount=tagcount, sumtype=sumtype, field=label})),   
+								     sum_cons, [ (s r) ]))], xexp N' )
+						 end 
 					   | _ =>  let val N' = xexp N'
 						   in 
 						       if (dead_var x) then 
@@ -399,6 +411,25 @@ struct
 						   end)
 				  | _ => raise BUG )
 			end
+	      (* Sum projection ... perhaps it was from a record *)
+		  | Let_e ( Sequential, ( Exp_b ( x, con, Prim_e (NilPrimOp (project_sum sum), 
+									     sum_cons, [ Var_e a ] )) :: bnds ), N) =>
+			   let val N' = Let_e ( Sequential, bnds, N)
+			   in  
+			       if ( dead_var x ) 
+				   then ( update count_esc (s(a)) ~1 ; xexp N' )
+			       else
+				   let 
+				       val _ = HashTable.insert bind ( x, S (a, sum, sum_cons))
+				       val N' = xexp N'
+				   in
+				       if (dead_var x)
+					   then (  update count_esc (s(a)) ~1  ; N' )
+				       else
+					   Let_e (Sequential, [Exp_b ( x, con, Prim_e (NilPrimOp (project_sum sum), 
+										       sum_cons, [(s a)] ))], N')
+				   end 
+			   end 
 		  (* Variables *)
 		  | Let_e(Sequential,  ( Exp_b (x, con, Var_e v)  :: bnds ), N) =>
 		    let val N' = Let_e ( Sequential, bnds, N)
@@ -618,7 +649,7 @@ struct
 			  
 	end (* local for ncontract *)
         
-       	(* Body of do_it *)
+       	(* Body of doModule *)
     
 	(* In order that we don't reduce away expressions that need to
 	 be exported, we put them in a record and create a Let
@@ -667,18 +698,18 @@ struct
 	fun loop ( i, exp ) =
 	    if ( i <= x ) then exp 
 	    else 
-		let val _ = reset_clicks()
+		let 
 		    val  exp' = xexp exp
 		in 
-		    ( ( if debug then 
-			    (  print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
-			     print "ITERATION\n";
-			     print_clicks();
-			     Ppnil.pp_exp exp';print "\n";
-			     print_stats() )
-			else 
-			    print_clicks())  ; 
-			    loop ( (all_clicks()) , exp' ) )
+		    (( if debug then 
+			  (  print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
+			   print "ITERATION\n";
+			   print_round_clicks();
+			   Ppnil.pp_exp exp';print "\n";
+			   print_stats() )
+		      else 
+			  print_round_clicks()) ; 
+			   loop ( (round_clicks()) , exp' ))
 		end 
 	val done = (Squish.squish (loop (x+1, exp)))
 
@@ -699,7 +730,7 @@ struct
 							 ExportValue(label, exp, con))
 					   (labels,exps, cons)))
 	      | _ => raise BUG
-	val _ = print_total_clicks()
+	
 	in 
 			MODULE { bnds= newbnds,
 				imports=imports, exports=newexports}   

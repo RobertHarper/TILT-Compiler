@@ -5,10 +5,11 @@ functor FlattenArgs (structure Nil : NIL
 		     structure Ppnil : PPNIL
 		     structure Subst : NILSUBST
 		     structure Squish : SQUISH 
-		     
+		  
+
 		     sharing Ppnil.Nil = Nil = Squish.Nil
 		     sharing type Nil.con = Subst.con
-			 ) = 
+			 ) : PASS = 
 struct
     structure Nil = Nil
     open Nil Name 
@@ -23,14 +24,14 @@ struct
     val flattened = Name.mk_var_hash_table(200, FnNotFound)   :
 	(var , (var * label list * var list * con list)) HashTable.hash_table 
 	
-
+    val flatten_click = NilOpts.make_click "Flatten function args"
 	
     (* If the function only takes a few arguments, (one of which is a record) and
      then we can pass
      the elements of the record as arguments to the function. This should interact nicely with 
      known record projection *) 
 	
-    fun reduceModule (MODULE {bnds, imports, exports} ) = 
+    fun doModule debug (MODULE {bnds, imports, exports} ) = 
 	let 
 	    fun flatten_func ( fnVar, Function(eff, a, vklist,
 					       [ (recordArg, recordType as Prim_c ( Record_c labels, cons )) ],
@@ -39,7 +40,7 @@ struct
 		    then 
 			let
 			    (* First rename the function and make it take more arguments *)
-			    (* val _ = inc_click flatten_click*) 
+			    val _ = NilOpts.inc_click flatten_click 
 
 			    val newFnVar = (Name.fresh_var())
 			    val args = map (fn _ => (Name.fresh_var())) labels
@@ -98,18 +99,8 @@ struct
 			    Fixopen_b (Util.list2set vflist)
 			end 
 		  | _ => raise BUG 
-			
-	    and xexp exp = 
-		case exp of 
-		    Var_e v => exp
-	      | Const_e c => exp
-	      | Prim_e (allp, cons, exps) =>
-		    Prim_e (allp, cons, map xexp exps)
-	      | Switch_e sw => 
-		    Switch_e (xswitch sw)
-	      (* Change function call to new arguments *) 
-	      | Let_e (sort, (Exp_b (v, con, App_e ( openness, Var_e f, tactuals, actual, elist2)) :: rest ), exp) =>
-		(
+
+	    and doApp ( openness, Var_e f, tactuals, actual, elist2) = 
 		 let val r = HashTable.find flattened f
 		 in 
 		     ( case r of 
@@ -124,15 +115,32 @@ struct
 										      [(*Prim_c((Record_c labels), cons) *)], actual))) 
 				       (args ,labels, newcons)
 			       in 
-				   Let_e  (sort, bnds @ [ Exp_b ( v, con, 
-								 App_e (openness, Var_e newName, tactuals, newexps, elist2)) ],
-					   xexp (Let_e (sort, rest, exp)))
+				    (bnds, (openness, Var_e newName, tactuals, newexps, elist2))
 			       end 
-			 | NONE =>  Let_e  (sort, [ Exp_b ( v, con, 
-							   App_e (openness, Var_e f , tactuals, actual, elist2)) ],
-					    xexp (Let_e (sort, rest, exp))) )
-		 end )
-		      
+			 | NONE =>  ( [], (openness, Var_e f , tactuals, actual, elist2)))
+		 end 
+			
+	    and xexp exp = 
+		case exp of 
+		    Var_e v => exp
+	      | Const_e c => exp
+	      | Prim_e (allp, cons, exps) =>
+		    Prim_e (allp, cons, map xexp exps)
+	      | Switch_e sw => 
+		    Switch_e (xswitch sw)
+	      (* Change function call to new arguments *) 
+	      | (App_e app) => 
+		    let val (bnds, app) = doApp app
+		    in 
+			if null bnds  then App_e app
+			else 
+			    Let_e (Sequential, bnds, App_e app)
+		    end 
+	      | Let_e (sort, (Exp_b (v, con, App_e app) :: rest ), exp) =>
+		    let val (bnds, app) = doApp app
+		    in 
+			Let_e  (sort, bnds @ [ Exp_b (v, con, App_e app)], xexp (Let_e (sort, rest, exp)))
+		    end  
 	      | Let_e (sort, (bnd :: bnds), exp ) =>
 		    let val bnd' = xbnd bnd
 		    in 
@@ -169,7 +177,7 @@ struct
 	    fun reduceExport (ExportValue(l,e,c)) = ExportValue(l, xexp e, c)
 	      | reduceExport (ExportType (l,c,k)) = ExportType(l, c, k)
 		
-		(* Clear out the hash table *)
+	    (* Clear out the hash table *)
 	    val _ = HashTable.appi ( fn (key, item) => ignore (HashTable.remove  flattened key)) flattened
 	    val temp =  Let_e(Sequential,bnds, Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w1}),[],[])  ) (* true! *)
 	    val Let_e(Sequential,bnds,_) = Squish.squish (xexp temp)
