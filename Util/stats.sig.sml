@@ -14,7 +14,7 @@ signature STATS =
      val counter : string -> (unit -> int)
      val int     : string -> int ref
      val bool    : string -> bool ref
-     val true    : string -> bool ref (* initialized to true *)
-     val false   : string -> bool ref (* initialized to false *)
+     val tt      : string -> bool ref (* initialized to true *)
+     val ff      : string -> bool ref (* initialized to false *)
    end
 

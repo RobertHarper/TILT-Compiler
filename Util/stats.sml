@@ -69,8 +69,8 @@ structure Stats :> STATS =
 		INT_ENTRY res => res
 	      | _ => error "find_time_entry: did not find a INT_ENTRY"
         end
-      fun find_bool_entry s = 
-	let fun maker () = BOOL_ENTRY(ref true)
+      fun find_bool_entry default s = 
+	let fun maker () = BOOL_ENTRY(ref default)
         in  case (find_entry maker s) of
 		BOOL_ENTRY res => res
 	      | _ => error "find_time_entry: did not find a BOOL_ENTRY"
@@ -81,7 +81,9 @@ structure Stats :> STATS =
 				   end
 			end
       val int = find_int_entry
-      val bool = find_bool_entry
+      val bool = find_bool_entry false
+      val tt = find_bool_entry true
+      val ff = find_bool_entry false
 
       fun timer_help disjoint (str,f) arg =
 	   let val cpu_timer = Timer.startCPUTimer()
@@ -217,5 +219,7 @@ structure Stats :> STATS =
 			   print "\n\n";
 			   print_timers(); 
 			   print "\n\n")
+
+
 
    end
