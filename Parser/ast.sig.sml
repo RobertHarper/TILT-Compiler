@@ -1,23 +1,22 @@
-(*$import Fixity Symbol TilWord64 *)
-
-(* Copyright 1992 by AT&T Bell Laboratories 
+(* Copyright 1992 by AT&T Bell Laboratories
  *
  *)
+(* See CVS revision 1.9 for PvalDec and PletExp. *)
 
 signature AST =
 sig
   type fixity = Fixity.fixity
-  type symbol  = Symbol.symbol 
+  type symbol  = Symbol.symbol
   val infixleft : int -> fixity
   val infixright : int -> fixity
   type literal = TilWord64.word
 
   (* to mark positions in files *)
-  type srcpos  = int 
-  type region  = srcpos * srcpos 
+  type srcpos  = int
+  type region  = srcpos * srcpos
   (* symbolic path (SymPath.spath) *)
   type path = symbol list
-  type 'a fixitem = {item: 'a, fixity: symbol option, region: region} 
+  type 'a fixitem = {item: 'a, fixity: symbol option, region: region}
 
   datatype 'a sigConst
     = NoSig
@@ -26,9 +25,9 @@ sig
 
   (* EXPRESSIONS *)
 
-  datatype top 
-    = ImplTop of string list * dec (* top level implementation file *)
-    | InterTop of string list * spec list (* top level interface file *)
+  datatype top
+    = ImplTop of dec		(* top level implementation file *)
+    | InterTop of spec list	(* top level interface file *)
     | MarkTop of top * region   (* mark a top level file *)
 
   and exp
@@ -41,7 +40,6 @@ sig
     | CaseExp of{expr:exp,rules:rule list}
 				  (* case expression *)
     | LetExp of {dec:dec,expr:exp} (* let expression *)
-    | PletExp of {dec:dec,expr:exp} (* parallel let expression *)
     | SeqExp of exp list		(* sequence of expressions *)
     | IntExp of literal		(* integer *)
     | WordExp of literal	(* word literal *)
@@ -109,10 +107,10 @@ sig
 						  (* application *)
 	     | MarkFct of fctexp * region (* mark *)
 
-  (* WHERE SPEC *)                                                
+  (* WHERE SPEC *)
   and wherespec = WhType of symbol list * tyvar list * ty
                 | WhStruct of symbol list * symbol list
-                                                                
+
   (* SIGNATURE EXPRESSION *)
   and sigexp = VarSig of symbol			(* signature variable *)
              | AugSig of sigexp * wherespec list (* sig augmented with where spec *)
@@ -142,7 +140,6 @@ sig
   (* DECLARATIONS (let and structure) *)
   and dec = ValDec of vb list * tyvar list ref		(* values *)
 	  | ValrecDec of rvb list * tyvar list ref	(* recursive values *)
-          | PvalDec of vb list * tyvar list ref		(* parallel bindingds of values; actually creates threads *)
 	  | FunDec of fb list * tyvar list ref		(* recurs functions *)
 	  | TypeDec of tb list				(* type dec *)
 	  | DatatypeDec of {datatycs: db list, withtycs: tb list}
@@ -218,7 +215,7 @@ sig
 	    | MarkTyv of tyvar * region
 
   (* TYPES *)
-  and ty 
+  and ty
       = VarTy of tyvar			(* type variable *)
       | ConTy of symbol list * ty list	(* type constructor *)
       | RecordTy of (symbol * ty) list 	(* record *)

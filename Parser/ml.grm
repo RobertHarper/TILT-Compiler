@@ -2,14 +2,10 @@
  *
  * Copyright 1989,1992 by AT&T Bell Laboratories
  *)
-
+(* See ml.grm's CVS revision 1.14 for PvalDec and PletExp. *)
 (* Based on grammar in SML/NJ 110.0.7 *)
 
-(* ml.grm.sml imports Fixity Char String TilWord64 YaccBase ML_TOKENS Symbol Ast ErrorMsg AstUtil StrgHash Array *)
-
-(* ml.grm.sig.sml imports TilWord64 Symbol YaccBase *)
-
-open Ast ErrorMsg Symbol FastSymbol AstUtil Fixity 
+open Ast ErrorMsg Symbol FastSymbol AstUtil Fixity
 
 type raw_symbol = FastSymbol.raw_symbol
 
@@ -42,28 +38,28 @@ val quotedBogusString = "'BOGUS"
     | INT of TilWord64.word | INT0 of TilWord64.word
     | WORD of TilWord64.word
     | REAL of string
-    | STRING of string 
+    | STRING of string
     | CHAR of string
     | ABSTYPE | AND
     | ARROW | AS | BAR | CASE | DATATYPE | DOTDOTDOT | ELSE | END | EQUALOP
-    | EQTYPE | EXCEPTION | DO | DOT | DARROW | FN | FUN | FUNCTOR | HANDLE 
-    | HASH | IF | IN | INCLUDE | INFIX | INFIXR | LET | LOCAL | NONFIX | OF 
+    | EQTYPE | EXCEPTION | DO | DOT | DARROW | FN | FUN | FUNCTOR | HANDLE
+    | HASH | IF | IN | INCLUDE | INFIX | INFIXR | LET | LOCAL | NONFIX | OF
     | OP | OPEN | OVERLOAD | RAISE | REC | SHARING | SIG | SIGNATURE | STRUCT
-    | STRUCTURE | THEN | TYPE | VAL | WHERE | WHILE | WILD | WITH | WITHTYPE 
-    | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE 
-    | RBRACKET | RPAREN | ORELSE | ANDALSO | VECTORSTART | BEGINQ 
+    | STRUCTURE | THEN | TYPE | VAL | WHERE | WHILE | WILD | WITH | WITHTYPE
+    | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE
+    | RBRACKET | RPAREN | ORELSE | ANDALSO | VECTORSTART | BEGINQ
     | ENDQ of string | OBJL of string | AQID of FastSymbol.raw_symbol
-    | IMPORT | EXTERN | CCALL | PLET | PVAL | IMPL | INTER
+    | EXTERN | CCALL | IMPL | INTER
 
 %nonterm ident of FastSymbol.raw_symbol
        | id of FastSymbol.raw_symbol
        | int of TilWord64.word
        | op_op of unit
-       | qid of (FastSymbol.raw_symbol ->symbol) -> symbol list 
+       | qid of (FastSymbol.raw_symbol ->symbol) -> symbol list
        | selector of symbol
        | tycon of symbol list
        | tlabel of (symbol * ty)
-       | tlabels  of (symbol * ty) list 
+       | tlabels  of (symbol * ty) list
        | ty' of ty
        | tuple_ty of ty list
        | ty of ty
@@ -73,7 +69,7 @@ val quotedBogusString = "'BOGUS"
        | elabel of  (symbol * exp)
        | elabels of  (symbol * exp) list
        | exp_ps of  exp list
-       | exp of  exp 
+       | exp of  exp
        | app_exp of  exp fixitem list
        | aexp of  exp
        | exp_list of  exp list
@@ -133,9 +129,7 @@ val quotedBogusString = "'BOGUS"
        | fparamList of  (symbol option * sigexp) list
        | fctb of  fctb list
        | interdec of  dec
-       | strlist of string list
-       | imports of string list
-       | top of top 
+       | top of top
 
 %pos int
 %arg (error) : pos * pos -> ErrorMsg.complainer
@@ -146,7 +140,7 @@ val quotedBogusString = "'BOGUS"
 %nonassoc WITHTYPE
 %right AND
 %right ARROW
-%right DARROW 
+%right DARROW
 %left DO
 %left ELSE
 %left RAISE
@@ -159,18 +153,18 @@ val quotedBogusString = "'BOGUS"
 
 %name ML
 
-%keyword ABSTYPE AND AS CASE DATATYPE DOTDOTDOT ELSE END 
+%keyword ABSTYPE AND AS CASE DATATYPE DOTDOTDOT ELSE END
   EQTYPE EXCEPTION  DO  DARROW  FN  FUN  FUNCTOR  HANDLE
   IF IN INCLUDE  INFIX  INFIXR  LET  LOCAL  NONFIX  OF  OP
   OPEN OVERLOAD  RAISE  REC  SHARING  SIG  SIGNATURE  STRUCT
   STRUCTURE THEN TYPE VAL WHILE WHERE WITH WITHTYPE
-  ORELSE ANDALSO 
-  CCALL EXTERN PLET PVAL
+  ORELSE ANDALSO
+  CCALL EXTERN
 
-%change -> VAL | -> THEN | -> ELSE | -> LPAREN | -> SEMICOLON | 
+%change -> VAL | -> THEN | -> ELSE | -> LPAREN | -> SEMICOLON |
         DARROW -> EQUALOP | EQUALOP -> DARROW | AND -> ANDALSO | COLON -> OF |
         SEMICOLON -> COMMA | COMMA -> SEMICOLON |
-        -> IN ID END | -> ELSE ID 
+        -> IN ID END | -> ELSE ID
 
 %value ID (rawSymbol(bogusHash,bogusString))
 %value TYVAR (rawSymbol(quotedBogusHash,quotedBogusString))
@@ -216,7 +210,7 @@ ty'	: TYVAR		(MarkTy (VarTy(Tyv(tyvSymbol TYVAR)),
 	| LBRACE tlabels
 		 RBRACE (MarkTy(RecordTy tlabels,(LBRACEleft,RBRACEright)))
 	| LBRACE RBRACE	(RecordTy [])
-	| LPAREN ty0_pc RPAREN tycon  
+	| LPAREN ty0_pc RPAREN tycon
 			(MarkTy(ConTy(tycon,ty0_pc),(tyconleft,tyconright)))
 	| LPAREN ty RPAREN	(ty)
 	| ty' tycon	(MarkTy(ConTy(tycon,[ty']),(tyconleft,tyconright)))
@@ -228,14 +222,14 @@ tuple_ty : ty' ASTERISK tuple_ty 	(ty' :: tuple_ty)
 ty	: tuple_ty	(TupleTy(tuple_ty))
 	| ty ARROW ty	(ConTy([arrowTycon], [ty1,ty2]))
 	| ty' 		(ty')
-	
+
 ty0_pc	: ty COMMA ty		([ty1,ty2])
 	| ty COMMA ty0_pc 	(ty :: ty0_pc)
 
 match	: rule			([rule])
 	| rule BAR match	(rule :: match)
 
-rule	: pat DARROW exp        (Rule{pat=pat, 
+rule	: pat DARROW exp        (Rule{pat=pat,
 				      exp=markexp(exp,expleft,expright)})
 
 		(* 	EXPRESSIONS	*)
@@ -294,7 +288,7 @@ app_exp	: aexp	        ([{item=markexp(aexp,aexpleft,aexpright),
 	| CHAR 		        (CharExp CHAR)
 	| HASH selector		(markexp(SelectorExp selector,
 						   HASHleft, selectorright))
-	| LBRACE elabels RBRACE	(markexp(RecordExp elabels, 
+	| LBRACE elabels RBRACE	(markexp(RecordExp elabels,
 					 LBRACEleft,RBRACEright))
 	| LBRACE RBRACE		(RecordExp nil)
 	| LPAREN RPAREN		(unitExp)
@@ -303,19 +297,14 @@ app_exp	: aexp	        ([{item=markexp(aexp,aexpleft,aexpright),
 	| LBRACKET exp_list RBRACKET     (ListExp exp_list)
 	| LBRACKET RBRACKET	(ListExp nil)
 (* Getting rid of vector expressions because we don't want to support them.
-        | VECTORSTART exp_list RBRACKET (VectorExp exp_list)	  
-        | VECTORSTART RBRACKET  (VectorExp nil) 
+        | VECTORSTART exp_list RBRACKET (VectorExp exp_list)
+        | VECTORSTART RBRACKET  (VectorExp nil)
 *)
-	| LET ldecs IN exp_ps END	
+	| LET ldecs IN exp_ps END
 				(markexp (LetExp{dec=markdec(ldecs,ldecsleft,
 							     ldecsright),
 						 expr=SeqExp exp_ps},
 					  LETleft,ENDright))
-	| PLET ldecs IN exp_ps END	
-				(markexp (PletExp{dec=markdec(ldecs,ldecsleft,
-								     ldecsright),
-						 expr=SeqExp exp_ps},
-					  PLETleft,ENDright))
         | AQID                  (VarExp([varSymbol AQID]))
         | quote                 (ListExp quote)
 
@@ -332,7 +321,7 @@ exp_2c	: exp COMMA exp_2c	(exp :: exp_2c)
 exp_list : exp			([exp])
 	 | exp COMMA exp_list	(exp :: exp_list)
 
-pat	: pat AS pat		(layered(pat1, pat2, 
+pat	: pat AS pat		(layered(pat1, pat2,
 					 error(pat1left,pat2right)))
 	| pat COLON ty		(ConstraintPat{pattern=pat, constraint=ty})
 	| apats			(FlatAppPat apats)
@@ -343,12 +332,12 @@ apat	: apat'		({item=apat', region=(apat'left,apat'right),
 				  region=(LPARENleft,RPARENright),
 				  fixity=NONE})
 	| id			(let val (v,f) = var'n'fix id
-				 in {item=VarPat [v], 
+				 in {item=VarPat [v],
 				     region=(idleft,idright),
 				     fixity=SOME f} end)
 	| LPAREN RPAREN		({item=unitPat,fixity=NONE,
 				  region=(LPARENleft,RPARENright)})
-	| LPAREN pat COMMA  pat_list RPAREN	
+	| LPAREN pat COMMA  pat_list RPAREN
   				({item=TuplePat(pat :: pat_list),
 				  region=(LPARENleft,RPARENright),
 				  fixity=NONE})
@@ -361,23 +350,23 @@ apat'	: OP ident		(VarPat [varSymbol ident])
         | CHAR 			(CharPat CHAR)
 	| WILD			(WildPat)
 	| LBRACKET RBRACKET	(ListPat nil)
-	| LBRACKET pat_list 
+	| LBRACKET pat_list
 		RBRACKET	(ListPat pat_list)
 (* problem in pattern compilation
         | VECTORSTART RBRACKET  (VectorPat nil)
-	| VECTORSTART pat_list 
+	| VECTORSTART pat_list
 		RBRACKET	(VectorPat pat_list)
 *)
 	| LBRACE RBRACE		(unitPat)
-	| LBRACE plabels RBRACE	
+	| LBRACE plabels RBRACE
 		            (let val (d,f) = plabels
 			     in MarkPat(RecordPat{def=d,flexibility=f},
 					(LBRACEleft,RBRACEright)) end)
 
 plabel	: selector EQUALOP pat	((selector,pat))
 	| ID			(labSymbol ID, VarPat [varSymbol ID])
-	| ID AS pat		(labSymbol ID, 
-				 LayeredPat{varPat=VarPat [varSymbol ID], 
+	| ID AS pat		(labSymbol ID,
+				 LayeredPat{varPat=VarPat [varSymbol ID],
 					    expPat=pat})
 	| ID COLON ty		(labSymbol ID,
 				 ConstraintPat{pattern=VarPat [varSymbol ID],
@@ -420,9 +409,9 @@ fb	: fb'			([MarkFb(Fb fb', (fb'left,fb'right))])
 	| fb' AND fb		(MarkFb(Fb fb', (fb'left,fb'right)) :: fb)
 
 apats	: apat			([apat])
-	| apat apats		(apat :: apats) 
+	| apat apats		(apat :: apats)
 
-clause	: apats constraint EQUALOP exp	
+clause	: apats constraint EQUALOP exp
 		(Clause{pats=apats,
 			resultty=constraint,
 			exp=markexp(exp,expleft,expright)})
@@ -478,12 +467,11 @@ ldec	: VAL vb		(ValDec (vb,ref []))
         | VAL tyvarseq vb       (ValDec(vb,ref tyvarseq))
 	| VAL REC rvb		(ValrecDec (rvb,ref []))
         | VAL REC tyvarseq rvb  (ValrecDec(rvb,ref tyvarseq))
-        | PVAL vb		(PvalDec (vb,ref []))
 	| FUN fb		(FunDec (fb,ref []))
         | FUN tyvarseq fb       (FunDec(fb,ref tyvarseq))
 	| EXTERN ID COLON ty 	(ExternDec(varSymbol ID,ty))
 	| TYPE tb		(TypeDec tb)
-	| DATATYPE ID EQUALOP DATATYPE tycon 
+	| DATATYPE ID EQUALOP DATATYPE tycon
 				(DatatypeDec{datatycs=[Db{tyc=tycSymbol ID,tyvars=[],rhs=Repl tycon}],
 					     withtycs=[]})
 	| DATATYPE db		(DatatypeDec{datatycs=db,withtycs=[]})
@@ -503,10 +491,10 @@ exp_pa	: exp			([exp])
 	| exp AND exp_pa	(exp :: exp_pa)
 
 ldecs	: 			(SeqDec nil)
-	| ldec ldecs  		(makeSEQdec 
+	| ldec ldecs  		(makeSEQdec
 				 (markdec(ldec,ldecleft,ldecright), ldecs))
 	| SEMICOLON ldecs	(ldecs)
-	| LOCAL ldecs IN ldecs END ldecs	
+	| LOCAL ldecs IN ldecs END ldecs
  		(makeSEQdec
  		   (markdec(LocalDec(markdec(ldecs1,ldecs1left,ldecs1right),
 				     markdec(ldecs2,ldecs2left,ldecs2right)),
@@ -521,7 +509,7 @@ spec_s	: 			([])
 	| SEMICOLON spec_s	(spec_s)
 
 spec	: STRUCTURE strspec	([StrSpec strspec])
-	| DATATYPE ID EQUALOP DATATYPE tycon 
+	| DATATYPE ID EQUALOP DATATYPE tycon
 				([DataSpec{datatycs=[Db{tyc=tycSymbol ID,tyvars=[],rhs=Repl tycon}],
 					     withtycs=[]}])
 	| DATATYPE db		([DataSpec{datatycs=db,withtycs=nil}])
@@ -561,7 +549,7 @@ sharespec: sharespec AND sharespec	(sharespec1 @ sharespec2)
 				    (patheqnleft,patheqnright))])
 	 | patheqn	([MarkSpec (ShareStrSpec (patheqn strSymbol),
 				    (patheqnleft,patheqnright))])
-	
+
 patheqn : qid EQUALOP qid	(fn kind => [qid1 kind, qid2 kind])
         | qid EQUALOP patheqn	(fn kind => qid kind :: patheqn kind)
 
@@ -583,12 +571,12 @@ sigb	: sigb AND sigb		(sigb1 @ sigb2)
 	| ident EQUALOP sign	([Sigb{name=sigSymbol ident,def=sign}])
 
 str	: qid	((MarkStr(VarStr(qid strSymbol),(qidleft,qidright))))
-	| STRUCT strdecs END	
+	| STRUCT strdecs END
 		(MarkStr(BaseStr strdecs,(STRUCTleft,ENDright)))
 	| qid arg_fct
 		(MarkStr(AppStr(qid fctSymbol,arg_fct),
 			 (qidleft,arg_fctright)))
-	| LET strdecs IN str END	
+	| LET strdecs IN str END
 		(MarkStr(LetStr(strdecs, str), (LETleft,ENDright)))
         | str COLON sign
 	        (MarkStr(ConstrainedStr(str,Transparent sign),
@@ -627,13 +615,13 @@ sdec	: STRUCTURE strb	(StrDec strb)
 	| ldec			(markdec(ldec,ldecleft,ldecright))
 
 strb	: ident sigconstraint_op EQUALOP str
-	   		([MarkStrb(Strb{name = strSymbol ident,def = str, 
+	   		([MarkStrb(Strb{name = strSymbol ident,def = str,
 					constraint=sigconstraint_op},
 				   (identleft,strright))])
 	| strb AND strb		(strb1 @ strb2)
 
 fparam	: ID COLON sign		((SOME(strSymbol ID),sign))
-	| spec_s		((NONE,MarkSig(BaseSig(spec_s), 
+	| spec_s		((NONE,MarkSig(BaseSig(spec_s),
 					       (spec_sleft,spec_sright))))
 
 fparamList
@@ -641,15 +629,10 @@ fparamList
 
 fctb	: ident fparamList sigconstraint_op EQUALOP str
 		([MarkFctb(Fctb {name = fctSymbol ident,
-                                 def = BaseFct{params=fparamList, body=str,	
+                                 def = BaseFct{params=fparamList, body=str,
 				              constraint=sigconstraint_op}},
 			   (identleft,strright))])
 	| fctb AND fctb		(fctb1 @ fctb2)
 
-strlist: STRING strlist (STRING :: strlist)
-       |                ([])
-
-imports : IMPORT strlist (strlist)
-
-top : IMPL imports sdecs   (marktop(ImplTop(imports, sdecs), importsleft, sdecsright))
-    | INTER imports spec_s (marktop(InterTop(imports, spec_s), importsleft, spec_sright))
+top : IMPL sdecs   (marktop(ImplTop(sdecs), sdecsleft, sdecsright))
+    | INTER spec_s (marktop(InterTop(spec_s), spec_sleft, spec_sright))

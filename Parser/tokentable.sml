@@ -1,9 +1,10 @@
-(*$import ML_TOKENS Symbol StrgHash IntStrMap *)
 (* tokentable.sml
  *
  * COPYRIGHT (c) 1996 Bell Laboratories.
  *
  *)
+
+(* See CVS revision 1.10 for PvalDec and PletExp. *)
 
 (***************************************************************************
 
@@ -14,7 +15,7 @@
 functor TokenTable(Tokens:ML_TOKENS):
   sig val checkToken: (string * int) -> (Tokens.svalue,int)Tokens.token
       val checkTyvar: (string * int) -> (Tokens.svalue,int)Tokens.token
-  end = 
+  end =
 struct
 
 exception NotToken
@@ -66,7 +67,6 @@ val tokenList =
    ("then"	, fn yypos => Tokens.THEN(yypos,yypos+4)),
    ("type"	, fn yypos => Tokens.TYPE(yypos,yypos+4)),
    ("val"	, fn yypos => Tokens.VAL(yypos,yypos+3)),
-   ("pval"	, fn yypos => Tokens.PVAL(yypos,yypos+4)),
    ("where"	, fn yypos => Tokens.WHERE(yypos,yypos+5)),
    ("while"	, fn yypos => Tokens.WHILE(yypos,yypos+5)),
    ("with"	, fn yypos => Tokens.WITH(yypos,yypos+4)),
@@ -74,17 +74,16 @@ val tokenList =
    ("orelse"	, fn yypos => Tokens.ORELSE(yypos,yypos+6)),
    ("andalso"	, fn yypos => Tokens.ANDALSO(yypos,yypos+7)),
    ("extern"    , fn yypos => Tokens.EXTERN(yypos,yypos+6)),
-   ("Ccall"     , fn yypos => Tokens.CCALL(yypos,yypos+5)),
-   ("plet"     , fn yypos => Tokens.PLET(yypos,yypos+4))
+   ("Ccall"     , fn yypos => Tokens.CCALL(yypos,yypos+5))
 ]
 
 (* hash table obtained from the previous list *)
 val tokenTable =
   let val t: (int -> (Tokens.svalue,int)Tokens.token) IntStrMap.intstrmap =
     IntStrMap.new(128,NotToken)
-  in           
-  app (fn (str,tok) => 
-	 IntStrMap.add t (StrgHash.hashString str,str,tok)) 
+  in
+  app (fn (str,tok) =>
+	 IntStrMap.add t (StrgHash.hashString str,str,tok))
       tokenList;
   t
   end
@@ -92,12 +91,12 @@ val tokenTable =
 (* look-up function. If the symbol is found, the corresponding token is
    generated with the position of its begining. Otherwise it is a regular
    identifier. *)
-   
+
 fun checkToken (str,yypos) =
   let val hash = StrgHash.hashString str
   in
   IntStrMap.map tokenTable (hash,str) yypos
-  handle NotToken => 
+  handle NotToken =>
     Tokens.ID(FastSymbol.rawSymbol(hash,str),yypos,yypos+size (str))
   end
 ;

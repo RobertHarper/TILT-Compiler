@@ -1,8 +1,7 @@
-(*$import Symbol AST Fixity TilWord64 *)
-
-(* Copyright 1992 by AT&T Bell Laboratories 
+(* Copyright 1992 by AT&T Bell Laboratories
  *
  *)
+(* See CVS revision 1.13 for PvalDec and PletExp. *)
 (* Abstract syntax of bare ML *)
 
 (****************************************************************************
@@ -31,10 +30,10 @@ datatype 'a sigConst
 
 (* EXPRESSIONS *)
 
-datatype top 
-  = ImplTop of string list * dec (* top level implementation file *)
-  | InterTop of string list * spec list (* top level interface file *)
-  | MarkTop of top * region     (* mark a top level file *)
+  datatype top
+    = ImplTop of dec		(* top level implementation file *)
+    | InterTop of spec list	(* top level interface file *)
+    | MarkTop of top * region   (* mark a top level file *)
 
 and exp
   = VarExp of path		(* variable *)
@@ -45,7 +44,6 @@ and exp
   | CaseExp of{expr:exp,rules:rule list}
 				(* case expression *)
   | LetExp of {dec:dec,expr:exp} (* let expression *)
-  | PletExp of {dec:dec,expr:exp} (* parallel let expression *)
   | SeqExp of exp list		(* sequence of expressions *)
   | IntExp of literal		(* integer *)
   | WordExp of literal		(* word literal *)
@@ -146,7 +144,6 @@ and spec = StrSpec of (symbol * sigexp * path option) list
 (* DECLARATIONS (let and structure) *)
 and dec	= ValDec of vb list * tyvar list ref		(* values *)
 	| ValrecDec of rvb list * tyvar list ref	(* recursive values *)
-        | PvalDec of vb list * tyvar list ref		(* parallel bindingds *)
 	| FunDec of fb list * tyvar list ref		(* recurs functions *)
 	| TypeDec of tb list				(* type dec *)
 	| DatatypeDec of {datatycs: db list, withtycs: tb list}
@@ -222,11 +219,11 @@ and tyvar = Tyv of symbol
 	  | MarkTyv of tyvar * region
 
 (* TYPES *)
-and ty 
+and ty
     = VarTy of tyvar			(* type variable *)
     | ConTy of symbol list * ty list	(* type constructor *)
     | RecordTy of (symbol * ty) list 	(* record *)
     | TupleTy of ty list		(* tuple *)
     | MarkTy of ty * region	        (* mark type *)
- 
+
 end (* structure Ast *)

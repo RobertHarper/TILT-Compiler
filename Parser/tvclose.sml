@@ -1,8 +1,7 @@
-(*$import Ast Int Symbol *)
 (*
    tvclose
 
-   Bind open type variables in ValDec, ValRecDec, PvalDec, and FunDec declarations.
+   Bind open type variables in ValDec, ValRecDec, and FunDec declarations.
 
    This is a two-pass operation in which tyvar bindings (tyvar list
    refs) are destructively modified:
@@ -17,6 +16,7 @@
       bindings that are already bound are eliminated, and those
       remaining are converted to Tyv's.
 
+   See CVS revision 1.10 for PvalDec and PletExp.
 *)
 
 signature TVCLOSE =
@@ -49,7 +49,7 @@ struct
 
       fun merge (a,[]) = a
 	| merge([],a) = a
-	| merge(l as i::a, m as j::b) = 
+	| merge(l as i::a, m as j::b) =
 	    if j<i then j::merge(l,b) else i::merge(a,if i<j then m else b)
 
       fun union [] = []
@@ -75,8 +75,6 @@ struct
 	TVSet.union (pass1_exp expr :: map pass1_rule rules)
     | pass1_exp (LetExp {dec, expr}) =
 	TVSet.merge (pass1_dec dec, pass1_exp expr)
-    | pass1_exp (PletExp {dec, expr}) =
-	TVSet.merge (pass1_dec dec, pass1_exp expr)
     | pass1_exp (SeqExp exprs) = TVSet.union (map pass1_exp exprs)
     | pass1_exp (IntExp literal) = []
     | pass1_exp (WordExp literal) = []
@@ -99,7 +97,7 @@ struct
 	TVSet.merge (pass1_exp expr0, pass1_exp expr1)
     | pass1_exp (OrelseExp (expr0, expr1)) =
 	TVSet.merge (pass1_exp expr0, pass1_exp expr1)
-    | pass1_exp (VectorExp exprs) = TVSet.union (map pass1_exp exprs) 
+    | pass1_exp (VectorExp exprs) = TVSet.union (map pass1_exp exprs)
     | pass1_exp (WhileExp {test, expr}) =
 	TVSet.merge (pass1_exp test, pass1_exp expr)
     | pass1_exp (MarkExp (exp, region)) = pass1_exp exp
@@ -150,9 +148,6 @@ struct
     | pass1_dec (ValrecDec (rvbs, tvbref)) =
 	(tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_rvb rvbs));
 	 [])
-    | pass1_dec (PvalDec (vbs, tvbref)) =
-        (tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_vb vbs));
-	 [])
     | pass1_dec (FunDec (fbs, tvbref)) =
 	(tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_fb fbs));
 	 [])
@@ -191,7 +186,7 @@ struct
     | pass1_fb (MarkFb (fb, region)) = pass1_fb fb
 
   and pass1_clause (Clause {pats, resultty, exp}) =
-        TVSet.union (pass1_exp exp :: 
+        TVSet.union (pass1_exp exp ::
 		     (case resultty of SOME ty => pass1_ty ty | NONE => []) ::
 		     map (pass1_pat o #item) pats)
 
@@ -243,8 +238,6 @@ struct
 	(pass2_exp env expr; app (pass2_rule env) rules)
     | pass2_exp env (LetExp {dec, expr}) =
 	(pass2_dec env dec; pass2_exp env expr)
-    | pass2_exp env (PletExp {dec, expr}) =
-	(pass2_dec env dec; pass2_exp env expr)
     | pass2_exp env (SeqExp exprs) = app (pass2_exp env) exprs
     | pass2_exp env (IntExp literal) = ()
     | pass2_exp env (WordExp literal) = ()
@@ -265,7 +258,7 @@ struct
 	(pass2_exp env expr0; pass2_exp env expr1)
     | pass2_exp env (OrelseExp (expr0, expr1)) =
 	(pass2_exp env expr0; pass2_exp env expr1)
-    | pass2_exp env (VectorExp exprs) = app (pass2_exp env) exprs 
+    | pass2_exp env (VectorExp exprs) = app (pass2_exp env) exprs
     | pass2_exp env (WhileExp {test, expr}) =
 	(pass2_exp env test; pass2_exp env expr)
     | pass2_exp env (MarkExp (exp, region)) = pass2_exp env exp
@@ -310,8 +303,6 @@ struct
         app (pass2_vb (rebind env tvlistref)) vbs
     | pass2_dec env (ValrecDec (rvbs, tvlistref)) =
         app (pass2_rvb (rebind env tvlistref)) rvbs
-    | pass2_dec env (PvalDec (vbs, tvlistref)) =
-        app (pass2_vb (rebind env tvlistref)) vbs
     | pass2_dec env (FunDec (fbs, tvlistref)) =
         app (pass2_fb (rebind env tvlistref)) fbs
     | pass2_dec env (ExternDec (sym,ty)) = ()

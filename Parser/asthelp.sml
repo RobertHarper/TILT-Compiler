@@ -1,7 +1,6 @@
-(*$import TilWord64 TextIO ASTHELP Ast Util Listops Symbol Formatter *)
-
 (* Helper routines on the EL syntax tree AST *)
-structure AstHelp : ASTHELP = 
+(* See CVS revision 1.15 for PvalDec and PletExp. *)
+structure AstHelp : ASTHELP =
   struct
 
     structure Formatter = Formatter
@@ -38,7 +37,7 @@ structure AstHelp : ASTHELP =
       | fb_strip (Ast.MarkFb (fb,r)) = fb_strip fb
 
     fun rvb_strip (Ast.Rvb {var:symbol, fixity: (symbol * region) option,
-			    exp:exp, resultty: ty option}) = {var = var, fixity = fixity, 
+			    exp:exp, resultty: ty option}) = {var = var, fixity = fixity,
 							      exp = exp, resultty = resultty}
       | rvb_strip (MarkRvb (rvb,_)) = rvb_strip rvb
 
@@ -59,10 +58,10 @@ structure AstHelp : ASTHELP =
 	| is_var_bound _ = false
       fun f_ty (state as (doconstr, constrbound : symbol list,
 			  doty, tybound : symbol list,
-			  dovar, varbound : symbol list)) (ty : Ast.ty) : Ast.ty = 
+			  dovar, varbound : symbol list)) (ty : Ast.ty) : Ast.ty =
 	(case ty of
 	   Ast.VarTy tyvar => if (is_tyvar_bound(tyvar,tybound)) then ty else doty tyvar
-	 | Ast.ConTy (symlist,tylist) => 
+	 | Ast.ConTy (symlist,tylist) =>
 	       let val newsyms = map (fn s => if (member_eq(Symbol.eq,s,constrbound))
 						  then s else doconstr s) symlist
 	       in Ast.ConTy(newsyms,map (f_ty state) tylist)
@@ -72,7 +71,7 @@ structure AstHelp : ASTHELP =
 	 | Ast.MarkTy (ty,r) => f_ty state ty)
       fun f_exp (state as (doconstr, constrbound,
 			   doty, tybound,
-			   dovar, varbound : symbol list)) (exp : Ast.exp) : Ast.exp = 
+			   dovar, varbound : symbol list)) (exp : Ast.exp) : Ast.exp =
 	let val self = f_exp state
 	in
 	  (case exp of
@@ -90,14 +89,13 @@ structure AstHelp : ASTHELP =
 	   | (Ast.AndalsoExp (e1,e2)) => Ast.AndalsoExp(f_exp state e1,f_exp state e2)
 	   | (Ast.OrelseExp (e1,e2)) => Ast.OrelseExp(f_exp state e1,f_exp state e2)
 	   | (Ast.FnExp rlist) => Ast.FnExp(map (f_rule state) rlist)
-	   | (Ast.FlatAppExp exp_fix_list) => Ast.FlatAppExp 
+	   | (Ast.FlatAppExp exp_fix_list) => Ast.FlatAppExp
 		 (map (fn {item,fixity,region} => {item=self item,fixity=fixity,region=region}) exp_fix_list)
 	   | (Ast.AppExp {function,argument}) => Ast.AppExp{function=self function,
 							    argument=self argument}
 	   | (Ast.CaseExp {expr,rules}) => Ast.CaseExp{expr=self expr,rules=map (f_rule state) rules}
 	   | (Ast.HandleExp {expr,rules}) => Ast.HandleExp{expr=self expr,rules=map (f_rule state) rules}
 	   | (Ast.LetExp {dec,expr}) => Ast.LetExp{dec=f_dec state dec, expr=self expr}
-	   | (Ast.PletExp {dec,expr}) => Ast.PletExp{dec=f_dec state dec, expr=self expr}
 	   | (Ast.RecordExp symexp_list) => Ast.RecordExp(map (fn (s,e) => (s,self e)) symexp_list)
 	   | (Ast.ConstraintExp {expr,constraint}) => Ast.ConstraintExp{expr=self expr,
 									constraint=f_ty state constraint}
@@ -111,7 +109,7 @@ structure AstHelp : ASTHELP =
 	   | (Ast.CcallExp (e, es)) => error "Don't handle Ccall expressions")
 	end
       and f_rule state (Ast.Rule {pat,exp}) = Ast.Rule{pat=f_pat state pat, exp=f_exp state exp}
-      and f_pat state pat = 
+      and f_pat state pat =
 	(case pat of
 	     Ast.WildPat  => pat
 	   | Ast.VarPat _  => pat
@@ -125,7 +123,7 @@ structure AstHelp : ASTHELP =
 	 | (Ast.VectorPat plist) => Ast.VectorPat(map (f_pat state) plist)
 	 | (Ast.TuplePat plist) => Ast.TuplePat(map (f_pat state) plist)
 	 | (Ast.FlatAppPat pat_fixitem_list) =>
-	         Ast.FlatAppPat(map (fn {item,fixity,region} => 
+	         Ast.FlatAppPat(map (fn {item,fixity,region} =>
 				     {item=f_pat state item,fixity=fixity,region=region}) pat_fixitem_list)
 	 | (Ast.AppPat {constr,argument}) => Ast.AppPat{constr=f_pat state constr,
 						    argument=f_pat state argument}
@@ -134,17 +132,16 @@ structure AstHelp : ASTHELP =
 	 | (Ast.ConstraintPat {pattern,constraint}) => Ast.ConstraintPat{pattern=f_pat state pattern,
 									     constraint=f_ty state constraint}
 	 | (Ast.MarkPat (p,r)) => Ast.MarkPat(f_pat state p,r))
-       
+
       and f_dec (state as (doconstr, constrbound,
 			   doty, tybound,
-			   dovar, varbound : symbol list)) dec = 
+			   dovar, varbound : symbol list)) dec =
 	(case dec of
 	  Ast.ValDec (vb_list,tvr) => Ast.ValDec (map (f_vb state) vb_list, tvr)
 	| Ast.ValrecDec (rvb_list ,tvr)=> Ast.ValrecDec (map (f_rvb state) rvb_list, tvr)
-	| Ast.PvalDec (vb_list,tvr) => error "Don't handle parallel value declarations"
 	| Ast.FunDec (fb_list,tvr) => Ast.FunDec (map (f_fb state) fb_list, tvr)
 	| Ast.TypeDec tb_list => Ast.TypeDec (map (f_tb state) tb_list)
-	| Ast.DatatypeDec {datatycs,withtycs} => 
+	| Ast.DatatypeDec {datatycs,withtycs} =>
 	      let val newconstr = map (fn db => let val (tyc,_,_) = db_strip db
 						in tyc
 						end) datatycs
@@ -172,18 +169,18 @@ structure AstHelp : ASTHELP =
 	| Ast.MarkDec (dec,r) => Ast.MarkDec(f_dec state dec,r))
       and f_vb state (Ast.Vb{pat,exp}) = Ast.Vb{pat=f_pat state pat,exp=f_exp state exp}
 	| f_vb state (Ast.MarkVb(vb,r)) = Ast.MarkVb(f_vb state vb,r)
-      and f_rvb state (Ast.Rvb{var,fixity,exp,resultty}) = 
-	    Ast.Rvb{var=var,fixity=fixity,exp=f_exp state exp, 
+      and f_rvb state (Ast.Rvb{var,fixity,exp,resultty}) =
+	    Ast.Rvb{var=var,fixity=fixity,exp=f_exp state exp,
 		    resultty=case resultty of NONE => NONE | SOME ty => SOME(f_ty state ty)}
 	| f_rvb state (Ast.MarkRvb(rvb,r)) = Ast.MarkRvb(f_rvb state rvb,r)
       and f_fb state (Ast.Fb clauses) = Ast.Fb(map (f_clause state) clauses)
 	| f_fb state (Ast.MarkFb(fb,r)) = Ast.MarkFb(f_fb state fb,r)
-      and f_clause state (Ast.Clause{pats,resultty,exp}) = 
-		Ast.Clause{pats=map (fn {item,fixity,region} => 
+      and f_clause state (Ast.Clause{pats,resultty,exp}) =
+		Ast.Clause{pats=map (fn {item,fixity,region} =>
 				     {item=f_pat state item,fixity=fixity,region=region}) pats,
 			   resultty=case resultty of NONE => NONE | SOME ty => SOME(f_ty state ty),
 			   exp=f_exp state exp}
-      and f_tb (state as (doconstr,constrbound,doty,tybound,dovar,varbound)) (Ast.Tb{tyc,def,tyvars}) = 
+      and f_tb (state as (doconstr,constrbound,doty,tybound,dovar,varbound)) (Ast.Tb{tyc,def,tyvars}) =
 	let val newbound = tybound @ (map tyvar_strip tyvars)
 	  val newstate = (doconstr,constrbound,doty,newbound,dovar,varbound)
 	in Ast.Tb{tyc=tyc,def=f_ty newstate def, tyvars=tyvars}
@@ -191,12 +188,12 @@ structure AstHelp : ASTHELP =
 	| f_tb state (Ast.MarkTb(tb,r)) = Ast.MarkTb(f_tb state tb,r)
       and f_db (state as (doconstr,constrbound,
 			  doty,tybound,
-			  dovar, varbound : symbol list)) (Ast.Db{tyc,rhs,tyvars}) = 
+			  dovar, varbound : symbol list)) (Ast.Db{tyc,rhs,tyvars}) =
 	  let val newbound = tybound @ (map tyvar_strip tyvars)
 	      val newstate = (doconstr,constrbound,doty,newbound,dovar,varbound)
 	      val rhs' = (case rhs of
-			      Repl _ => rhs 
-			    | Constrs sym_tys => 
+			      Repl _ => rhs
+			    | Constrs sym_tys =>
 				  Constrs(map (fn (s,SOME ty) => (s,SOME(f_ty newstate ty))
                                 		| (s,NONE) => (s,NONE)) sym_tys))
 	  in  Ast.Db{rhs=rhs',
@@ -208,7 +205,7 @@ structure AstHelp : ASTHELP =
 	| f_eb state (Ast.EbGen{exn,etype=SOME ty}) = Ast.EbGen{exn=exn,etype=SOME (f_ty state ty)}
 	| f_eb state (Ast.EbDef blob) = Ast.EbDef blob
 	| f_eb state (Ast.MarkEb(eb,r)) = Ast.MarkEb(f_eb state eb,r)
-      and f_strb state (Ast.Strb {name,def,constraint}) = 
+      and f_strb state (Ast.Strb {name,def,constraint}) =
 	  Ast.Strb{name=name,def=f_strexp state def,
 		   constraint=case constraint of
 		   Ast.NoSig => Ast.NoSig
@@ -221,29 +218,29 @@ structure AstHelp : ASTHELP =
 	| f_sigb state (Ast.MarkSigb(sigb,r)) = Ast.MarkSigb(f_sigb state sigb,r)
       and f_fsigb state (Ast.Fsigb{name,def}) = Ast.Fsigb{name=name,def=f_fsigexp state def}
 	| f_fsigb state (Ast.MarkFsigb(fsigb,r)) = Ast.MarkFsigb(f_fsigb state fsigb,r)
-      and f_strexp state strexp = 
+      and f_strexp state strexp =
 	(case strexp of
 	   Ast.VarStr _ => strexp
 	 | Ast.BaseStr dec => Ast.BaseStr (f_dec state dec)
 	 | Ast.ConstrainedStr (strexp,constraint) =>
 	       Ast.ConstrainedStr (f_strexp state strexp,
-				   (case constraint of 
+				   (case constraint of
 					Ast.NoSig => Ast.NoSig
 				      | Ast.Transparent se => Ast.Transparent(f_sigexp state se)
 				      | Ast.Opaque se => Ast.Opaque(f_sigexp state se)))
-	 | Ast.AppStr (p,strexp_bool_list) => Ast.AppStr(p, map 
+	 | Ast.AppStr (p,strexp_bool_list) => Ast.AppStr(p, map
 							 (fn(s,b) => (f_strexp state s,b)) strexp_bool_list)
 	 | Ast.LetStr (dec, strexp) => Ast.LetStr(f_dec state dec, f_strexp state strexp)
 	 | Ast.MarkStr (s,r) => Ast.MarkStr(f_strexp state s,r))
-      and f_fctexp state fctexp = 
+      and f_fctexp state fctexp =
 	(case fctexp of
 	   Ast.VarFct (p,Ast.NoSig) => fctexp
 	 | Ast.VarFct (p,Ast.Transparent fsigexp) => Ast.VarFct(p,Ast.Transparent (f_fsigexp state fsigexp))
 	 | Ast.VarFct (p,Ast.Opaque fsigexp) => Ast.VarFct(p,Ast.Opaque (f_fsigexp state fsigexp))
-	 | Ast.BaseFct {params,body,constraint} => 
+	 | Ast.BaseFct {params,body,constraint} =>
 	     Ast.BaseFct{params=map (fn (so,sigexp) => (so,f_sigexp state sigexp)) params,
 			 body=f_strexp state body,
-			 constraint=(case constraint of 
+			 constraint=(case constraint of
 					 Ast.NoSig => Ast.NoSig
 				       | Ast.Transparent se => Ast.Transparent(f_sigexp state se)
 				       | Ast.Opaque se => Ast.Opaque(f_sigexp state se))}
@@ -254,20 +251,20 @@ structure AstHelp : ASTHELP =
 	| f_sigexp state (Ast.BaseSig speclist) = Ast.BaseSig(map (f_spec state) speclist)
 	| f_sigexp state (Ast.MarkSig (se,r)) = Ast.MarkSig(f_sigexp state se,r)
 	| f_sigexp state (Ast.AugSig (se,_)) = raise UNIMP
-      and f_fsigexp state (Ast.VarFsig s) = Ast.VarFsig s  
-	| f_fsigexp state (Ast.FsigFsig {param,def}) = 
+      and f_fsigexp state (Ast.VarFsig s) = Ast.VarFsig s
+	| f_fsigexp state (Ast.FsigFsig {param,def}) =
 	        Ast.FsigFsig{param=map (fn(so,se) => (so,f_sigexp state se)) param,
 			     def=f_sigexp state def}
 	| f_fsigexp state (Ast.MarkFsig (fse,r)) = Ast.MarkFsig(f_fsigexp state fse,r)
       and f_spec (state as (doconstr,constrbound,
 			    doty,tybound,
-			    dovar, varbound : symbol list)) spec = 
+			    dovar, varbound : symbol list)) spec =
 	(case spec of
-	   Ast.StrSpec s_se_popt_list => 
+	   Ast.StrSpec s_se_popt_list =>
 	       let fun mapper (s,se,popt) = (s,f_sigexp state se,popt)
 	       in  Ast.StrSpec (map mapper s_se_popt_list)
 	       end
-	 | Ast.TycSpec (s_tvs_tyop_list,b) => 
+	 | Ast.TycSpec (s_tvs_tyop_list,b) =>
 	     Ast.TycSpec(map (fn (s,tvs,tyopt) =>
 			      let val newbound =  tybound @ (map tyvar_strip tvs)
 				val newstate = (doconstr,constrbound,doty,newbound,dovar,varbound)
@@ -291,12 +288,12 @@ structure AstHelp : ASTHELP =
 
     in
 
-      fun subst_vars_exp (subst : (Symbol.symbol * Ast.path) list, e : Ast.exp) : Ast.exp = 
-	let 
+      fun subst_vars_exp (subst : (Symbol.symbol * Ast.path) list, e : Ast.exp) : Ast.exp =
+	let
 	  fun do_tyvar tyvar = Ast.VarTy tyvar
-	  fun do_var [sym] = 
+	  fun do_var [sym] =
 	    let fun loop [] = Ast.VarExp[sym]
-		  | loop ((p,s)::rest) = if (Symbol.eq(p,sym)) 
+		  | loop ((p,s)::rest) = if (Symbol.eq(p,sym))
 					     then Ast.VarExp(s) else loop rest
 	    in loop subst
 	    end
@@ -309,8 +306,8 @@ structure AstHelp : ASTHELP =
 	| ty2sym (Ast.TempTyv _) = error "should not see this after parsing"
 	| ty2sym (Ast.MarkTyv(ty,_)) = ty2sym ty
 
-      fun subst_vars_ty (subst : (Symbol.symbol * Ast.tyvar) list, ty : Ast.ty) : Ast.ty = 
-	let 
+      fun subst_vars_ty (subst : (Symbol.symbol * Ast.tyvar) list, ty : Ast.ty) : Ast.ty =
+	let
 	  fun do_tyvar tyvar =
             let val sym = ty2sym tyvar
 	        fun loop [] = Ast.VarTy tyvar
@@ -324,8 +321,8 @@ structure AstHelp : ASTHELP =
 	end
 
 
-      fun free_tyvar_ty (ty : Ast.ty, is_bound) : symbol list = 
-	let 
+      fun free_tyvar_ty (ty : Ast.ty, is_bound) : symbol list =
+	let
 	    val tyvars = ref ([] : Ast.tyvar list)
 	    fun do_tyvar tyvar = (if ((is_bound (ty2sym tyvar)) orelse
 				      (tyvar_member(tyvar,!tyvars)))
@@ -338,8 +335,8 @@ structure AstHelp : ASTHELP =
 	in map tyvar_strip (rev (!tyvars))
 	end
 
-      fun free_tyvar_exp(e : Ast.exp, is_bound) : symbol list = 
-	     let 
+      fun free_tyvar_exp(e : Ast.exp, is_bound) : symbol list =
+	     let
 	       val tyvars = ref ([] : Ast.tyvar list)
 	    fun do_tyvar tyvar = (if ((is_bound (ty2sym tyvar)) orelse
 				      (tyvar_member(tyvar,!tyvars)))
@@ -351,8 +348,8 @@ structure AstHelp : ASTHELP =
 	     in free_tvs
 	     end
 
-      fun free_tyvar_dec(d : Ast.dec, is_bound) : symbol list = 
-	     let 
+      fun free_tyvar_dec(d : Ast.dec, is_bound) : symbol list =
+	     let
 	       val tyvars = ref ([] : Ast.tyvar list)
 	    fun do_tyvar tyvar = (if ((is_bound (ty2sym tyvar)) orelse
 				      (tyvar_member(tyvar,!tyvars)))
@@ -365,10 +362,10 @@ structure AstHelp : ASTHELP =
 	     end
 
       (* finds all free type variables in (e : Ast.exp) not in context *)
-      fun free_tyc_ty(ty : Ast.ty, is_bound) : symbol list = 
-	let 
+      fun free_tyc_ty(ty : Ast.ty, is_bound) : symbol list =
+	let
 	  val constrs = ref ([] : symbol list)
-	  fun do_constr s = (if (not (is_bound s)) 
+	  fun do_constr s = (if (not (is_bound s))
 				then constrs := s :: (!constrs)
 			     else ();
 				 s)
@@ -381,11 +378,9 @@ structure AstHelp : ASTHELP =
 
     end
 
-
-    open Ast
     fun pp_region s1 s2 fmt = HOVbox((String s1) :: (fmt @ [String s2]))
-    fun pp_list doer objs (left,sep,right,break) = 
-      let 
+    fun pp_list doer objs (left,sep,right,break) =
+      let
 	fun loop [] = [String right]
 	  | loop [a] = [doer a, String right]
 	  | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
@@ -399,7 +394,7 @@ structure AstHelp : ASTHELP =
       | pp_tyvar (TempTyv _) = error "should not see this after parsing"
       | pp_tyvar (MarkTyv (tv,_)) = pp_tyvar tv
     fun pp_path p = pp_list pp_sym p ("",".","",false)
-    fun pp_ty ty = 
+    fun pp_ty ty =
 	  (case ty of
 	     VarTy tyvar => pp_tyvar tyvar
 	   | ConTy (syms, tys) => (pp_region "ConTy(" ")"
@@ -410,12 +405,12 @@ structure AstHelp : ASTHELP =
 				    (case tys of
 				       [t] => pp_ty t
 				     | _ => pp_list pp_ty tys ("[",", ","]",false))])
-	   | RecordTy symty_list => (pp_list (fn (sym,ty) => (pp_sym sym; String " = "; pp_ty ty)) 
+	   | RecordTy symty_list => (pp_list (fn (sym,ty) => (pp_sym sym; String " = "; pp_ty ty))
 				     symty_list ("(",", ",")",false))
 	   | TupleTy tys => pp_list pp_ty tys ("(",", ",")",false)
 	   | MarkTy (t,r) => pp_ty t)
 
-    fun pp_pat pat = 
+    fun pp_pat pat =
       (case pat of
 	 Ast.WildPat => String "_"
        | Ast.VarPat p => pp_path p
@@ -426,18 +421,18 @@ structure AstHelp : ASTHELP =
        | Ast.RecordPat _ => String "RecordPatUNIMPED"
        | Ast.ListPat _ => String "ListPatUNIMPED"
        | Ast.TuplePat pats => pp_list pp_pat pats ("(",", ",")",false)
-       | Ast.FlatAppPat patfixes => 
+       | Ast.FlatAppPat patfixes =>
 	     let val pats = map #item patfixes
 	     in  pp_list pp_pat pats ("",", ","",false)
 	     end
        | Ast.AppPat {constr,argument} => pp_region "(" ")" [pp_pat constr, String " ", pp_pat argument]
-       | Ast.ConstraintPat {pattern,constraint} => 
+       | Ast.ConstraintPat {pattern,constraint} =>
 	     pp_region "(" ")" [pp_pat pattern, String ":", pp_ty constraint]
        | Ast.LayeredPat _ => String "LayeredPatUNIMPED"
        | Ast.VectorPat pats => String "VectorPatUNIMPED"
        | Ast.MarkPat (p,r) => pp_pat p)
 
-    fun pp_strexp strexp = 
+    fun pp_strexp strexp =
       (case strexp of
 	 Ast.VarStr p => pp_path p
        | Ast.BaseStr dec => String "BaseStr"
@@ -446,7 +441,7 @@ structure AstHelp : ASTHELP =
        | Ast.LetStr dec => String "LetStr"
        | Ast.MarkStr (se,r) => HOVbox[String "MarkStr ", pp_strexp se])
 
-    fun pp_exp exp = 
+    fun pp_exp exp =
       (case exp of
 	 Ast.VarExp p => pp_path p
        | Ast.IntExp lit => String(TilWord64.toDecimalString lit)
@@ -454,17 +449,17 @@ structure AstHelp : ASTHELP =
        | Ast.FlatAppExp exp_fix_list => let fun help {item,fixity,region} = pp_exp item
 					in pp_list help exp_fix_list ("FlatAppExp(",",",")",false)
 					end
-       | Ast.AppExp{function,argument} => pp_region "App(" ")" 
+       | Ast.AppExp{function,argument} => pp_region "App(" ")"
 	     [pp_exp function, String ",", Break, pp_exp argument]
        | Ast.MarkExp (e,r) => pp_exp e
        | _ => String "Asthelp.pp_exp UNIMPED")
 
 
-    fun wrapper pp out obj = 
-      let 
+    fun wrapper pp out obj =
+      let
 	val fmtstream = open_fmt out
 	val fmt = pp obj
-      in (output_fmt (fmtstream,fmt); 
+      in (output_fmt (fmtstream,fmt);
 	  close_fmt fmtstream;
 	  fmt)
       end
@@ -474,16 +469,16 @@ structure AstHelp : ASTHELP =
 
     val pp_tyvar'  = help' pp_tyvar
     val pp_sym'    = help' pp_sym
-    val pp_path'   = help' pp_path 
-    val pp_ty'     = help' pp_ty 
+    val pp_path'   = help' pp_path
+    val pp_ty'     = help' pp_ty
     val pp_pat'    = help' pp_pat
     val pp_exp'    = help' pp_exp
     val pp_strexp'    = help' pp_strexp
 
     val pp_tyvar = help pp_tyvar
     val pp_sym   = help pp_sym
-    val pp_path  = help pp_path 
-    val pp_ty    = help pp_ty 
+    val pp_path  = help pp_path
+    val pp_ty    = help pp_ty
     val pp_pat   = help pp_pat
     val pp_exp   = help pp_exp
     val pp_strexp   = help pp_strexp
