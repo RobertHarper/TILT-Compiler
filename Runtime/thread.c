@@ -1129,14 +1129,19 @@ Abort
 static void* proc_go(void* untypedProc)
 {
   Proc_t *proc = (Proc_t *) untypedProc;
+  /* pds: Do no binding for uniprocessor applications.  This avoids
+     contention for the first active processor (so does @rotateProc,
+     but this is automatic).  */
+  if (NumProc > 1) {
 #ifdef solaris
-  int status = processor_bind(P_LWPID, P_MYID, proc->processor, NULL);
-  if (status != 0)
-    printf("processor_bind on %d failed with %d\n", proc->processor, status);
+    int status = processor_bind(P_LWPID, P_MYID, proc->processor, NULL);
+    if (status != 0)
+      printf("processor_bind on %d failed with %d\n", proc->processor, status);
 #else
-  if (threadDiag)
-    printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
+    if (threadDiag)
+      printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
 #endif
+  }
   proc->pthread = pthread_self();
   initializePerfMon(proc);
   install_signal_handlers(0);
