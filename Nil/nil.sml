@@ -88,8 +88,9 @@ struct
     | App_c of con * con list                     (* Constructor-level application 
 						       of open or closed constructor function *)
     | Typecase_c of {arg : con,
-                     arms : (primcon * (var * kind) list * con * kind) list,
-                     default : con option}        (* Constructor-level typecase *)
+                     arms : (primcon * (var * kind) list * con) list,
+                     default : con,
+		     kind : kind }        (* Constructor-level typecase *)
     | Annotate_c of annot * con                   (* General-purpose place to hang information *)
 
   and conbnd = Con_cb of (var * kind * con)
