@@ -34,9 +34,11 @@
 	\\
 	y &::=& <\textrm{float variables}> \\
 	\\
+	l &::=& <\textrm{labels}> \\
+	\\
 	\alpha &::=& <\textrm{constructor variables}> \\
 	\\
-	e &::=& \overline n \mid \overline f \mid x \mid y \mid \RecordIntro{l_1 = e_1,\cdots,l_n = e_n} \mid \Proj{l}{e} \mid \App{e}{c_1,\cdots,c_n}{e_1,\cdots,e_m}{e'_1,\cdots,e'_k} \mid \Boxf{e} \mid \Unboxf{e} \mid \Injexn{e_1}{e_2} \\
+	e &::=& \overline n \mid \overline f \mid x \mid y \mid \RecordIntro{l_1 = e_1,\cdots,l_n = e_n} \mid e.l \mid \App{e}{c_1,\cdots,c_n}{e_1,\cdots,e_m}{e'_1,\cdots,e'_k} \mid \Boxf{e} \mid \Unboxf{e} \mid \Injexn{e_1}{e_2} \\
 	&& \mid \Intsw{e}{\overline{n_1} \Rightarrow e_1 \mid \cdots \mid \overline{n_m} \Rightarrow e_m [\mid default \Rightarrow e_d]} \\
 	&& \mid \Sumsw{e}{x}{\overline{n_1} \Rightarrow e_1 \mid \cdots \mid \overline{n_m} \Rightarrow e_m [\mid default \Rightarrow e_d]} \\
 	&& \mid \Exncase{e}{x}{e'_1 \Rightarrow e_1 \mid \cdots \mid e'_m \Rightarrow e_m [\mid default \Rightarrow e_d]} \\
@@ -44,6 +46,7 @@
 	&& \mid \Roll{\alpha_1,\cdots,\alpha_n}{c_1}{c_2} \mid \Unroll{\alpha_1,\cdots,\alpha_n}{c_1}{c_2} \mid \Coerce{e_1}{c_1,\cdots,c_n}{e_2} \\
 	&& \mid \Let{x}{e_1}{e_2} \mid \LetT{x}{\tau}{e_1}{e_2} \mid \LetRec{f_1: \tau_1 (q_1) = e_1 \And \cdots \And f_n: \tau_n (q_n) = e_n}{e} \mid \Typed{e}{\tau} \\
 	&& \mid \Let{\alpha}{c}{e} \mid \Let{y}{e_1}{e_2} \mid \Mkvararg{\PArrow{\tau_1}{\tau_2}}{e} \mid \Mkonearg{\PArrow{\tau_1}{\tau_2}}{e} \\
+	&& \mid \Proj{i}{e} \mid \KProj{i}{e} \mid \Inj{i}{e} \mid \KInj{i}{e} \\
 	\\
 	\Gamma &::=& \cdot \mid \Gamma, x: \tau \mid \Gamma, y \textrm{ (all variables in a context are assumed to be unique)} \\
 	\\
@@ -52,11 +55,19 @@
 
 \section{Additional Notation}
 
-\begin{eqnarray*}
-Branch(\Delta, \Sum{i}{c_1,\cdots,c_n}, j) &=& \Record{}, 0 \leq j < i\ \&\ \forall k \leq n . \Delta \vdash c_k \\
-	&& c_{j-i}, i \leq j < i+n 0 \leq j < i\ \&\ \forall k \leq n . \Delta \vdash c_k \\
-Branch(\Delta, \KSum{i}{\vec c}{k}, j) &=& Branch(\Delta, \Sum{i}{\vec c}, j)
-\end{eqnarray*}
+$$
+\infer[BranchNoncarrying]{Branch(\Delta, \Sum{i}{c_1,\cdots,c_n}, j) = \Record{}}
+{
+	0 \leq j < i
+	\quad \forall k \leq n . \Delta \vdash c_k
+}
+\quad
+\infer[BranchCarrying]{Branch(\Delta, \Sum{i}{c_1,\cdots,c_n}, j) = c_{j-i}}
+{
+	i \leq j < i+n
+	\quad \forall k \leq n . \Delta \vdash c_k
+}
+$$
 
 \section{Kind Well-Formedness Judgment}
 
@@ -88,7 +99,7 @@ $$
 
 $$
 \infer[CFn]{\Delta \vdash \CFn{\alpha_1::\kappa_1,\cdots,\alpha_n::\kappa_n}{c} :: \kappa}
-{
+{-
 	\Delta, \alpha_1::\kappa_1,\cdots,\alpha_n::\kappa_n \vdash c :: \kappa
 }
 $$
@@ -240,7 +251,7 @@ $$
 	\forall i \leq n . \Delta; \Gamma \vdash e_i \Uparrow \tau_i
 }
 \quad
-\infer[RecordProj]{\Delta; \Gamma \vdash \Proj{l_i}{e} \Uparrow \tau_i}
+\infer[Select]{\Delta; \Gamma \vdash e.l_i \Uparrow \tau_i}
 {
 	\Delta; \Gamma \vdash e \Uparrow \Record{l_1: \tau_1,\cdots,l_n: \tau_n}
 }
@@ -317,10 +328,10 @@ $$
 \infer[Roll]{\Delta; \Gamma \vdash \Roll{\alpha_1,\cdots,\alpha_n}{\tau_1}{\tau_2} \Uparrow \Coercion{\alpha_1,\cdots,\alpha_n}{\tau_1}{\tau_2}}
 {
 	\begin{array}{l}
-		\tau_2 = \Rec{\alpha_1,\cdots,\alpha_n}{\sigma_1,\cdots,\sigma_n}.i
-		\quad \Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_1
-		\quad \Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_2 \\
-		\Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_1 = \sigma_i[\sigma_1,\cdots,\sigma_n/\alpha_1,\cdots,\alpha_n]
+		c = \Rec{\alpha_1,\cdots,\alpha_n}{\sigma_1,\cdots,\sigma_n} \\
+		\tau_2 = c.i \\
+		\Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_2 \\
+		\Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_1 = [c.1,\cdots,c.n/\alpha_1,\cdots,\alpha_n]\sigma_i
 	\end{array}
 }
 $$
@@ -329,10 +340,10 @@ $$
 \infer[Unroll]{\Delta; \Gamma \vdash \Unroll{\alpha_1,\cdots,\alpha_n}{\tau_1}{\tau_2} \Uparrow \Coercion{\alpha_1,\cdots,\alpha_n}{\tau_1}{\tau_2}}
 {
 	\begin{array}{l}
-		\tau_1 = \Rec{\alpha_1,\cdots,\alpha_n}{\sigma_1,\cdots,\sigma_n}.i
-		\quad \Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_1
-		\quad \Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_2 \\
-		\Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_2 = \sigma_i[\sigma_1,\cdots,\sigma_n/\alpha_1,\cdots,\alpha_n]
+		c = \Rec{\alpha_1,\cdots,\alpha_n}{\sigma_1,\cdots,\sigma_n} \\
+		\tau_1 = c.i \\
+		\Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_1 \\
+		\Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_2 = [c.1,\cdots,c.n/\alpha_1,\cdots,\alpha_n]\sigma_i
 	\end{array}
 }
 $$
