@@ -1,5 +1,4 @@
-(* should add caching of import scans and contexts read in;
-should detect infinite loops  *)
+(* should add caching of import scans and contexts read in *)
 
 functor Manager (structure Parser: LINK_PARSE
 		 structure Elaborator: ELABORATOR
@@ -108,7 +107,10 @@ struct
 		 Elaborator.eq_context(new_ctxt, readContext uiFile))
 		val _ = if same 
 			    then (if Time.<(OS.FileSys.modTime uiFile, least_new_time)
-				      then OS.FileSys.setTime(uiFile, SOME least_new_time)
+				      then 
+					  (print "OS.FileSys.setTime does not seem to work: conservatively using current time for now!\n";
+					   OS.FileSys.setTime(uiFile, NONE))
+(* OS.FileSys.setTime(uiFile, SOME least_new_time) *)
 				  else ())
 			else (chat ("[writing " ^ uiFile);
 			      writeContext(uiFile, new_ctxt);
@@ -325,14 +327,15 @@ struct
 	  val sourcefile = base2int sourcebase
 	  val (fp, _, specs) = Parser.parse_inter sourcefile
 	  val includes = getImport false mapping unit [] 
-	  val includes = map (name2base mapping) includes
-	  val includes_uo = map base2uo includes
+	  val _ = app (compile false mapping) includes
+	  val includes_base = map (name2base mapping) includes
+	  val includes_uo = map base2uo includes_base
 	  val unitName = OS.Path.base(OS.Path.file sourcefile)
 	  val uiFile = (OS.Path.base sourcefile) ^ ".ui"
       in if (OS.FileSys.access(uiFile, [OS.FileSys.A_READ]) andalso
 	     is_fresh includes_uo (OS.FileSys.modTime uiFile, uiFile))
 	     then ()
-	 else let val (ctxt_for_elab,ctxt) = getContext includes
+	 else let val (ctxt_for_elab,ctxt) = getContext includes_base
 		  val _ = (chat "[Compiling specification file: ";
 			   chat sourcefile; chat "\n")
 	      in  (case Elaborator.elab_specs(ctxt_for_elab, fp, specs) of
