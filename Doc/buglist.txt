@@ -1,9 +1,22 @@
 HIGH PRIORITY
 -------------
+(0) Remove unnecessary renaming in HIL and various NIL phases; 
+	systematically rename in tonil
 
+(1) Debug the typechecker and fix bugs in compiler that the checker reveals
+
+(2) remove Ref_c from Nil;
+    change NIL to include reify results at function formals
+
+(3) modify tortl to fully rely on reification results;
+	after this, all "assuming TRACE" messages should disappear
+
+(4) document how the system is used (mapfiles and make)
 
 NORMAL PRIORITY
 ---------------
+(0) record type should no longer be a primcon
+
 (1) change xcoerce_transparent to copy only the needed type components
 	currently ilcontext, transparently ascribed generates a LOT of kinds in NIL	
 
