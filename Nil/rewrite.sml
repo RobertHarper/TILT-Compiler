@@ -972,6 +972,16 @@ structure NilRewrite :> NILREWRITE =
 	    val _ = flag := (!changed orelse !flag)
 	  in (if !changed then ImportType (label,var,kind) else import,state)
 	  end
+	  | import_helper flag (import as  (ImportBnd (p,cbnd)),state) = 
+	  let
+	    val (import,state) = 
+	      (case rewrite_cbnd state cbnd
+		 of (SOME [cbnd],state) => (ImportBnd(p,cbnd),state)
+		  | (NONE,state) => (import,state)
+		  | _ => error "Rewriter doesn't handle rewriting importbnds to multiple bnds")
+	  in (import,state)
+	  end
+
 
 	fun export_helper flag state (export as (ExportValue (label,var))) =
 	  (case rewrite_exp state (Var_e var)

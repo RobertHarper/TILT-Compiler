@@ -9,6 +9,7 @@ struct
     val error = fn s => Util.error "linearize.sml" s
     val show_stats = Stats.ff("LinearizeStats")
     val linearize = Stats.tt("Linearize")
+    val linearize_cse = Stats.tt("LinearizeCSE")
     val debug = ref false
 
     open Nil
@@ -23,6 +24,8 @@ struct
     structure VarMap = Name.VarMap
     structure VarSet = Name.VarSet
 
+    structure ConMap = ExpTable.Conmap
+
     val derived_var = Name.derived_var
 
     val pp_kind = Ppnil.pp_kind
@@ -33,12 +36,15 @@ struct
     val sequence2list = Sequence.toList
 
     fun map_unzip f ls = Listops.unzip(map f ls)
+    val unzip = Listops.unzip
+    val zip = Listops.zip
 
     (* Code for handling renaming variables with fresh names and keeping track of various translation statistics *)
     local
-	type state = bool * var VarMap.map
+	type state = bool * var VarMap.map * var ConMap.map
 	(* 1: whether or not unbound variables are allowed in input
-	   2: mapping of variables in input to different variables in output *)
+	   2: mapping of variables in input to different variables in output 
+	   3: mapping from constructors to variables binding them *)
 
 	val seen : VarSet.set ref = ref VarSet.empty
         (* variable names that have been encountered in the input code thus far *)
@@ -97,10 +103,10 @@ struct
 					     depth_lcon_conb := 0;
 					     depth_lcon_concb := 0;
 					     depth_lkind_single := 0;
-					     (canBeOpen,VarMap.empty))
+					     (canBeOpen,VarMap.empty,ConMap.empty))
 
         (* debug routine to print information on a state *)
-	fun state_stat str ((canBeOpen,m) : state) : unit =
+	fun state_stat str ((canBeOpen,m,eqn) : state) : unit =
 	    let val _ = if (!debug)
 			    then (print str; print "----\n";
 				  print "state map has ";
@@ -122,7 +128,7 @@ struct
 	 find_var (state, v) ==> replacement variable for v in state
 	 Effects: Error if an unbound variable is requested for a state which does not allow unbound variables
         *)
-	fun find_var ((canBeOpen,s) : state,v : var) : var =
+	fun find_var ((canBeOpen,s,eqn) : state,v : var) : var =
 	     case (VarMap.find(s,v)) of
 		 NONE => if canBeOpen
 			     then v
@@ -135,7 +141,7 @@ struct
 	                         the fresh variable chosen)
 	 Effects: Can modify statistics on number of renamed variables
         *)
-	fun add_var ((canBeOpen,m) : state, v : var) : state * var =
+	fun add_var ((canBeOpen,m,eqn) : state, v : var) : state * var =
 	    let val is_seen = VarSet.member(!seen,v)
 		val _ = if (!debug)
 			    then (print ("add_var on " ^ (Name.var2string v));
@@ -150,8 +156,37 @@ struct
 		val m = (case (VarMap.find(m,v)) of
 			     NONE => VarMap.insert(m,v,v')
 			   | SOME _ => VarMap.insert(#1(VarMap.remove(m,v)),v,v'))
-	    in  ((canBeOpen,m),v')
+	    in  ((canBeOpen,m,eqn),v')
 	    end
+
+      (*
+	 val replace_var : state * var * var -> state 
+	 replace_var (state, v, v') ==> (state modified to replace v with v'.  used for CSE)
+        *)
+	fun replace_var ((canBeOpen,m,eqn) : state, v : var, v' : var) : state =
+	    let 
+	      val _ = seen := VarSet.add(!seen,v)
+	      val m = (case (VarMap.find(m,v)) of
+			 NONE => VarMap.insert(m,v,v')
+		       | SOME _ => VarMap.insert(#1(VarMap.remove(m,v)),v,v'))
+	    in  (canBeOpen,m,eqn)
+	    end
+
+      (*
+	 val add_availC : state * var * con -> state 
+	 add_availC (state, v, c) ==> (state modified to indicate that v is bound to c.  used for CSE)
+        *)
+	fun add_availC ((canBeOpen,m,eqn) : state, v : var, c : con) : state =
+	    let 
+	      val eqn = ConMap.insert(eqn,c,v)
+	    in  (canBeOpen,m,eqn)
+	    end
+
+      (*
+	 val find_availC : state * con -> var option
+	 find_availC (state, c) ==> SOME v if v is available and bound to c.  used for CSE)
+        *)
+	fun find_availC ((canBeOpen,m,eqn) : state, c : con) : var option = ConMap.find(eqn,c)
 
 
 
@@ -178,7 +213,7 @@ struct
 	 of Prim.array (con, arr) => error "Arrays shouldn't ever show up"
 	  | Prim.vector (con, arr) =>
 	   let
-	     val (cbnds, con) = lcon lift state con
+	     val (state, cbnds, con) = lcon lift state con
 	     val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
 	     fun folder (exp,(es,bnds_list)) =
 	       let val (bnds,exp) = lexp lift state exp
@@ -190,7 +225,7 @@ struct
 	     (cbnds @ bnds,Prim.vector (con,arr))
 	   end
 	  | Prim.refcell r => error "Ref cells shouldn't ever show up"
-	  | Prim.tag (t,con) => let val (cbnds,con) = lcon lift state con
+	  | Prim.tag (t,con) => let val (state,cbnds,con) = lcon lift state con
 				    val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
 				in (cbnds,Prim.tag (t,con)) end
 	  | _ => ([],value))
@@ -385,9 +420,7 @@ struct
 		end
 	  | Prim_e (ap,trs,clist,elist) =>
 		let val _ = inc depth_lcon_prim
-		    val cbnds_clist = map (lcon lift state) clist
-		    val (cbnds,clist) = Listops.unzip cbnds_clist
-		    val cbnds = flatten cbnds
+		    val (state,cbnds,clist) = lcon_list lift state clist
 		    val _ = dec depth_lcon_prim
 		    val (bnds,elist) = map_unzip (lexp lift state) elist
 		    val bnds = flatten bnds
@@ -401,11 +434,10 @@ struct
 		end
 	  | App_e (openness,f,clist,elist,flist) =>
 		let val (bnds,f) = lexp lift state f
-		    val (cbnds,clist) = map_unzip (lcon lift state) clist
+		    val (state,cbnds,clist) = lcon_list lift state clist
 		    val (bnds',elist) = map_unzip (lexp lift state) elist
 		    val (bnds'',flist) = map_unzip (lexp lift state) flist
-		in  (bnds @ (flatten((mapmap (fn cb => Con_b(Runtime,cb)) cbnds) @
-				      bnds' @ bnds'')),
+		in  (bnds @ (map (fn cb => Con_b(Runtime,cb)) cbnds) @ (flatten (bnds' @ bnds'')),
 		     App_e (openness,f,clist,elist,flist))
 		end
 	  | Raise_e (e,c) =>
@@ -428,16 +460,16 @@ struct
 	  | Coerce_e (ccn,cons,exp) =>
 		let
 		  val (bnds,ccn) = lexp lift state ccn
-		  val (cbnds,cons) = map_unzip (lcon lift state) cons
+		  val (state,cbnds,cons) = lcon_list lift state cons
 		  val (bnds',exp) = lexp lift state exp
 		in (bnds @
-		    (flatten (mapmap (fn cb => Con_b(Runtime,cb)) cbnds)) @
+		    (map (fn cb => Con_b(Runtime,cb)) cbnds) @
 		    bnds',
 		    Coerce_e (ccn,cons,exp))
 		end
 	  | ForgetKnown_e (sumcon,which) =>
 	    let
-	      val (cbnds,sumcon) = lcon lift state sumcon
+	      val (state,cbnds,sumcon) = lcon lift state sumcon
 	      val bnds = map (fn cb => (Con_b(Runtime,cb))) cbnds
 	    in
 	      (bnds, ForgetKnown_e (sumcon,which))
@@ -480,10 +512,37 @@ struct
 	   end
        in (case arg_cbnd of
 	       Con_cb (v,c) => let val _ = inc depth_lcon_concb
-				   val (cbnds,c) = lcon lift state c
+				   val (state,cbnds,c) = lcon lift state c
 				   val _ = dec depth_lcon_concb
-				   val (state,v) = add_var(state,v)
-			       in  (cbnds @ [Con_cb(v,c)], state)
+			       in
+				 if !linearize_cse then
+				   let
+				     val c =
+				       (case find_availC(state,c) of
+					  NONE => c
+					| SOME v' => Var_c v')
+				     val (cbnds,state) = 
+				       (case c of
+					  Var_c newv => 
+					    let 
+					      val state = replace_var(state,v,newv)
+					    in (cbnds,state)
+					    end
+					| _ => 
+					    let 
+					      val (state,v) = add_var (state,v)
+					      val cbnds = cbnds @ [Con_cb(v,c)]
+					      val state = add_availC(state, v, c)
+					    in (cbnds,state)
+					    end)
+				   in (cbnds,state)
+				   end
+				 else 
+				   let
+				     val (state,v) = add_var (state,v)
+				   in
+				     (cbnds @ [Con_cb(v,c)], state)
+				   end
 			       end
 	     | Open_cb arg => lconfun Open_cb arg
 	     | Code_cb arg => lconfun Code_cb arg)
@@ -504,14 +563,14 @@ struct
     lcon_lift state con ==> (cbnds, con'), such that Let cbnds In con' End is an A-normal version of con, translated using state.
 	The translation is performed in lift mode.
    *)
-   and lcon_lift state arg_con : conbnd list * con = lcon true state arg_con
+   and lcon_lift state arg_con : state * conbnd list * con = lcon true state arg_con
 
    (*
     val lcon_lift' : state -> con -> con
     lcon_lift' state con ==> an A-normal version of con, translated using state and in lift mode
    *)
    and lcon_lift' state arg_con : con =
-       let val (cbnds,c) = lcon true state arg_con
+       let val (_,cbnds,c) = lcon true state arg_con
        in  (case cbnds of
 		[] => c
 	      | _ => Let_c(Sequential,cbnds,c))
@@ -523,7 +582,7 @@ struct
     Effects: Error if extra bindings are generated translating con
    *)
    and lcon_flat state arg_con : con  =
-	let val (cbnds,c) = lcon false state arg_con
+	let val (_,cbnds,c) = lcon false state arg_con
 	    val _ = (case cbnds of
 			 [] => ()
 		       | _ => (print "lcon_flat got non-empty cbnds...";
@@ -570,27 +629,34 @@ struct
 	end
 
    (*
-    val lcon : bool -> state -> con -> conbnd list * con
-    lcon lift state con ==> (cbnds, con'), such that Let cbnds In con' End is an A-normal version of con, translated with state
+    val lcon : bool -> state -> con -> state * conbnd list * con
+    lcon lift state con ==> (state', cbnds, con'), such that Let cbnds In con' End is an A-normal version of con, 
+      translated with state, and state' holds bindings for cbnds.
    *)
-   and lcon lift state arg_con : conbnd list * con  =
-       let val (cbnds,c) = lcon' lift state arg_con
+   and lcon lift state arg_con : state * conbnd list * con  =
+       let val (state,cbnds,c) = lcon' lift state arg_con
        in  if (small_con c orelse not (!linearize) orelse not lift)
-	       then (cbnds, c)
-	   else let val v = Name.fresh_named_var "type"
-		in  (cbnds @ [Con_cb(v,c)], Var_c v)
-		end
+	       then (state,cbnds, c)
+	   else 
+	     (case (!linearize_cse, find_availC (state,c))
+		of (true,SOME v) => (state,cbnds,Var_c v)
+		 | _ => 
+		  let 
+		    val v = Name.fresh_named_var "type"
+		    val state = add_availC (state,v,c)
+		  in  (state,cbnds @ [Con_cb(v,c)], Var_c v)
+		  end)
        end
-       handle e => (print "exception in lcon call with con =\n";
-		    pp_con arg_con; print "\n"; raise e)
+     handle e => (print "exception in lcon call with con =\n";
+		  pp_con arg_con; print "\n"; raise e)
 
    (*
-    val lcon': bool -> state -> con -> conbnd list * con
+    val lcon': bool -> state -> con -> state * conbnd list * con
     lcon' lift state con ==> (cbnds, con'), such that Let cbnds In con' End is an A-normal version of con, translated with state.
 	Does not guarantee that con' is small.
     Effects: Error if con is a Typecase_c
    *)
-   and lcon' lift state arg_con : conbnd list * con  =
+   and lcon' lift state arg_con : state * conbnd list * con  =
        let val local_lcon = lcon lift
 	   val _ = (inc num_lcon;
 		    bumper(num_lcon_prim, depth_lcon_prim);
@@ -603,10 +669,10 @@ struct
        in
 	case arg_con of
 	    Var_c v => (num_var := !num_var + 1;
-			([],Var_c(find_var(state,v))))
+			(state,[],Var_c(find_var(state,v))))
 	  | Prim_c (pc,cons) =>
-                let val (cbnds,cons) = map_unzip (local_lcon state) cons
-                in  (flatten cbnds, Prim_c(pc,cons))
+                let val (state,cbnds,cons) = lcon_list lift state cons
+                in  (state,cbnds, Prim_c(pc,cons))
                 end
 	  | Mu_c (flag,vc_seq) => (* cannot just use lvclist here:
 				   not sequential bindings *)
@@ -615,64 +681,86 @@ struct
 		    val vc_seq' = Sequence.map (fn (v,c) => (v, lcon_flat state c)) vc_seq'
 		    val vc_seq'' = Sequence.map2 (fn ((v,_),(_,c)) => (find_var(state,v),c))
 			         (vc_seq,vc_seq')
-		in  ([],Mu_c(flag,vc_seq''))
+		in  (state,[],Mu_c(flag,vc_seq''))
 		end
 	  | ExternArrow_c (clist,c) =>
 		let
-		    val (cbnds,clist) = Listops.unzip(map (local_lcon state) clist)
-		    val (cbnds',c) = local_lcon state c
-		in  (flatten cbnds@cbnds',ExternArrow_c (clist,c))
+		    val (state,cbnds,clist) = lcon_list lift state clist
+		    val (state,cbnds',c) = local_lcon state c
+		in  (state,cbnds@cbnds',ExternArrow_c (clist,c))
 		end
+
+	  (* This is a special case that turns out to be pretty important in practice.
+	   * -leaf
+	   *)
+	  | AllArrow_c {openness,effect,tFormals = [],eFormals,fFormals,body_type} =>
+	      let
+		val (state,cbnds,eFormals) = lcon_list lift state eFormals
+		val (state,cbnds',body_type) = local_lcon state body_type
+		val cbnds = cbnds @ cbnds'
+	      in  (state,
+		   cbnds,
+		   AllArrow_c {openness=openness,effect=effect,
+			       tFormals=[],eFormals=eFormals,fFormals=fFormals,
+			       body_type=body_type})
+	      end
 	  | AllArrow_c {openness,effect,tFormals,eFormals,fFormals,body_type} =>
 	      let
-		  val (tFormals,state) = lvklist state tFormals
-		  val (eFormals,state) = lclist state eFormals
-		  val body_type = lcon_lift' state body_type
-	      in  ([],
+		  val (tFormals,inner_state) = lvklist state tFormals
+		  val eFormals = lclist_flat inner_state eFormals
+		  val body_type = lcon_lift' inner_state body_type
+	      in  (state,
+		   [],
 		   AllArrow_c {openness=openness,effect=effect,
 			       tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 			       body_type=body_type})
 	      end
 	  | Let_c (letsort,cbnds,c) =>
 		let
-		    val (cbnds,state) = lcbnds lift state cbnds
-		    val _ = state_stat "let_c after fold" state
-		    val (cbnds',c) = local_lcon state c
+		    val (cbnds,inner_state) = lcbnds lift state cbnds
+		    val _ = state_stat "let_c after fold" inner_state
+		    val (inner_state,cbnds',c) = local_lcon inner_state c
 		in  if lift
-			then (cbnds @ cbnds', c)
-		    else ([],Let_c(Sequential, cbnds @ cbnds', c))
+			then (inner_state,cbnds @ cbnds', c)
+		    else (state,[],Let_c(Sequential, cbnds @ cbnds', c))
 		end
 	  | Crecord_c lc_list =>
-		let fun doer(l,c) = let val (cbnds,c) = local_lcon state c
-				    in  (cbnds, (l,c))
-				    end
-		    val (cbnds, lc_list) = Listops.unzip (map doer lc_list)
-		in  (flatten cbnds, Crecord_c lc_list)
+		let 
+		  val (llist,clist) = unzip lc_list
+		  val (state,cbnds,clist) = lcon_list lift state clist
+		  val lc_list = zip llist clist
+		in  (state,cbnds, Crecord_c lc_list)
 		end
 
-	  | Proj_c (c,l) => let val (cbnds, c) = local_lcon state c
-			    in  (cbnds, Proj_c(c,l))
+	  | Proj_c (c,l) => let val (state,cbnds, c) = local_lcon state c
+			    in  (state,cbnds, Proj_c(c,l))
 			    end
 
-	  | Closure_c (c1,c2) => let val (cbnds1,c1) = local_lcon state c1
-				     val (cbnds2,c2) = local_lcon state c2
-				 in  (cbnds1@cbnds2,Closure_c(c1,c2))
+	  | Closure_c (c1,c2) => let val (state,cbnds1,c1) = local_lcon state c1
+				     val (state,cbnds2,c2) = local_lcon state c2
+				 in  (state,cbnds1@cbnds2,Closure_c(c1,c2))
 				 end
-	  | App_c (c,clist) => let val (cbnds,c) = local_lcon state c
-				   val temp = map (local_lcon state) clist
-				   val (cbnds',clist) = Listops.unzip temp
-			       in  (cbnds@flatten cbnds', App_c(c,clist))
+	  | App_c (c,clist) => let val (state,cbnds,c) = local_lcon state c
+				   val (state,cbnds',clist) = lcon_list lift state clist
+			       in  (state,cbnds@cbnds', App_c(c,clist))
 			       end
+	  | Coercion_c {vars = [],from,to} =>
+	    let
+		val (state,cbnds,from) = local_lcon state from
+		val (state,cbnds',to) = local_lcon state to
+	    in (state,cbnds@cbnds',Coercion_c{vars = [],from=from,to=to})
+	    end
 	  | Coercion_c {vars,from,to} =>
 	    let
-		fun folder (v,(state,vars)) = let
-						  val (state,v) = add_var (state,v)
-					      in (state, v::vars)
-					      end
-		val (state, vars) = foldr folder (state, nil) vars
-		val from = lcon_lift' state from
-		val to = lcon_lift' state to
-	    in ([],Coercion_c{vars=vars,from=from,to=to})
+		fun folder (v,(state,vars)) = 
+		  let
+		    val (state,v) = add_var (state,v)
+		  in (state, v::vars)
+		  end
+		val (inner_state, vars) = foldr folder (state, nil) vars
+		val from = lcon_lift' inner_state from
+		val to = lcon_lift' inner_state to
+	    in (state,[],Coercion_c{vars=vars,from=from,to=to})
 	    end
        end
 
@@ -718,15 +806,28 @@ struct
        in  foldl_acc vfolder state vlist
        end
 
-   and lclist state vclist =
-       let fun vcfolder(c,state) =
+   and lclist_flat state vclist =
+       let 
+	 fun cmapper c =
 	   let val _ = inc depth_lcon_function
-	       val c = lcon_lift' state c
-               val _ = dec depth_lcon_function
-	   in  (c, state)
+	     val c = lcon_lift' state c
+	     val _ = dec depth_lcon_function
+	   in  c
 	   end
-	   val (cs,state) = foldl_acc vcfolder state vclist
-       in  (cs, state)
+	 val cs = map cmapper vclist
+       in  cs
+       end
+
+   and lcon_list lift state clist =
+       let 
+	 fun folder (c,(rcbnds,state)) =
+	   let 
+	     val (state,cbnds,c) = lcon lift state c
+	     val rcbnds = List.revAppend(cbnds,rcbnds)
+	   in  (c,(rcbnds,state))
+	   end
+	 val (cs,(rcbnds,state)) = foldl_acc folder ([],state) clist
+       in  (state,rev rcbnds,cs)
        end
 
    (*
@@ -792,22 +893,21 @@ struct
 		    val c = lcon_flat s c
 		    val _ = dec depth_lcon_import
 		in  ([ImportValue(l,v,tr,c)],s)
-		    handle e => (print "exception in limport call\n";
-				 raise e)
 		end
 	  | _ =>
 		let val (s,v) = add_var(s,v)
 		    val _ = inc depth_lcon_import
-		    val (cbs, c) = lcon_lift s c
+		    val (state,cbs, c) = lcon_lift s c
 		    val _ = dec depth_lcon_import
-		in  ((map (fn cb => ImportBnd (Runtime, cb)) cbs) @ [ImportValue(l,v,tr,c)],s)
-		    handle e => (print "exception in limport call\n";
-				 raise e)
+		    val icbs = map (fn cb => ImportBnd (Runtime, cb)) cbs
+		in   (icbs @ [ImportValue(l,v,tr,c)],s)
 		end)
      | limport (ImportType(l,v,k),s) =
        let val (s,v) = add_var(s,v)
        in  ([ImportType(l,v,lkind s k)],s)
        end
+
+     (* There are no import bnds yet *)
      | limport (imp as ImportBnd _,s) = ([imp],s)
 
    (*

@@ -461,9 +461,6 @@ struct
 	  fun reduce_vararg(STATE{equation,...},openness,effect,argc,resc,arg) =
 	      subtimer("optimizeReduceVararg", Vararg.reduce_vararg)(equation,openness,effect,argc,resc,arg)
 
-	  fun kind_of_cbnd(STATE{equation,...},c) =
-	      NilStatic.kind_of_cbnd (equation, c)
-
 	  fun reduce_onearg(STATE{equation,...},openness,effect,argc,resc,arg) =
 	      subtimer("optimizeReduceOnearg", Vararg.reduce_onearg)(equation,openness,effect,argc,resc,arg)
 

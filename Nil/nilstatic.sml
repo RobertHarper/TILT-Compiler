@@ -51,9 +51,9 @@ struct
    the code that it enables.            -- Joe *)
   val equiv_shao_recursion   = Stats.ff "nilstatic_shao_recursion"
 
-(*
 
-val timer = Stats.subtimer'
+
+(*val timer = Stats.subtimer'
 val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer' args args2 else #2 args args2
 val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profile orelse !flag
 						    then Stats.subtimer' (name,f) args  else f args)
@@ -121,6 +121,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val find_con      = flagtimer (import_profile,"Tchk:find_con",NilContext.find_con)
   val find_max_kind = flagtimer (import_profile,"Tchk:find_max_kind",NilContext.find_max_kind)
 
+  val find_kind_equation = flagtimer (import_profile,"Tchk:find_kind_equation",NilContext.find_kind_equation)
+
   val kind_standardize    = flagtimer (import_profile,"Tchk:kind_standardize",NilContext.kind_standardize)
   val kind_of             = flagtimer (import_profile,"Tchk:kind_of",NilContext.kind_of)
 
@@ -168,8 +170,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val same_effect            = NilUtil.same_effect
   val primequiv              = NilUtil.primequiv
   val sub_phase              = NilUtil.sub_phase
+  val alpha_subequiv_con     = NilUtil.alpha_subequiv_con
 
-  val alpha_subequiv_con = fn st => flagtimer (import_profile,"Tchk:alpha_equiv",NilUtil.alpha_subequiv_con st)
   val alpha_subequiv_con = fn st => fn args => if alpha_subequiv_con st args then (alpha_equiv_success();true)
 					       else (alpha_equiv_fails();false)
 
@@ -607,17 +609,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   and con_equiv_wrapper args =
     let
 
-      val alpha_subequiv_con  = fn st => flagtimer(equiv_profile,"Tchk:Equiv:alpha_subequiv",alpha_subequiv_con st)
-      val alphaCRenameKind = fn rename => flagtimer(equiv_profile,"Tchk:Equiv:alphaCRenameKind",alphaCRenameKind rename)
-      val alphaECRenameCon = fn rename => flagtimer(equiv_profile,"Tchk:Equiv:alphaECRenameCon",alphaECRenameCon rename)
-      val alphaCRenameCon  = fn rename => flagtimer(equiv_profile,"Tchk:Equiv:alphaCRenameCon",alphaCRenameCon rename)
-      val alphaCRenameExp  = fn rename => flagtimer(equiv_profile,"Tchk:Equiv:alphaCRenameExp",alphaCRenameExp rename)
-
-      val kind_of = flagtimer(equiv_profile,"Tchk:Equiv:kind_of",kind_of)
-      val type_of = flagtimer(equiv_profile,"Tchk:Equiv:type_of",Normalize.type_of)
-
-      val find_kind_equation = flagtimer(equiv_profile,"Tchk:Equiv:find_kind_equation",NilContext.find_kind_equation)
-
       fun bind_kind_eqn'((D,alpha),var,con,kind) =
 	if NilContext.bound_con (D,var) then
 	  let
@@ -643,10 +634,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    end
 	  else (insert_equation(D,var,con),alpha)
 	end
-
-      val bind_kind_eqn = flagtimer(equiv_profile,"Tchk:Equiv:bind_kind_eqn",bind_kind_eqn)
-      val bind_kind_eqn' = flagtimer(equiv_profile,"Tchk:Equiv:bind_kind_eqn'",bind_kind_eqn')
-      val bind_eqn      = flagtimer(equiv_profile,"Tchk:Equiv:bind_eqn",bind_eqn)
 
       fun instantiate_formals(state,vklist,actuals) =
 	let
@@ -2423,10 +2410,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	let
 	  val _ = NilContext.is_well_formed (kind_valid,con_valid,sub_kind) D
 	  val _ = msg "  Done checking context\n"
-	  val D = foldl import_valid' D imports
+	  val D = subtimer("Tchk:Imports",foldl import_valid' D) imports
           val _ = msg "  Done validating imports\n"
 
-	  val (D,_,_) = bnds_valid(D,bnds)
+	  val (D,_,_) = subtimer("Tchk:TopBnds",bnds_valid)(D,bnds)
 
           val _ = msg "  Done validating module\n"
 	  val _ = app (export_valid D) exports

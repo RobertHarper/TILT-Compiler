@@ -423,9 +423,6 @@ struct
 	fun stripArrow (ENV{context,...}, c) =
 	    Normalize.strip_arrow_norm context c
 
-	fun kind_of_cbnd (ENV{context,...}, c) =
-	    NilStatic.kind_of_cbnd (context, c)
-
 	(* insertLabel : env * label * var -> env *)
 	fun insertLabel (ENV{currentlevel,context,econtext,levelmap,lastfnlevel}, l, v) =
 	    let
@@ -1755,24 +1752,15 @@ struct
 		  (*val (inner_env, state, inner_level) =
 		      bumpCurrentlevel (env, empty_state)*)
 
-		  val (inner_env, state) =
-		      rcbnd phase (cb, env, empty_state)
-
-		  val (bnds, _, _) = extractCbnds (state, toplevel)
-
-		  fun folder ((phase,cb), env) =
-		      let
-			  val (v, k) = kind_of_cbnd (env, cb)
-			  val env = insertKind(env, v, k)
-			  val env = bindLevel(env, v, toplevel)
-		      in
-			  (ImportBnd (phase, cb), env)
-		      end
-		  val (bnds, env) = Listops.foldl_acc folder env bnds
+		val (env, state) =
+		  rcbnd phase (cb, env, empty_state)
+		  
+		val (bnds, _, _) = extractCbnds (state, toplevel)
+		val ibnds = map ImportBnd bnds
 	      in
-		  split(rest, env, List.revAppend(bnds, imps))
+		split(rest, env, List.revAppend(ibnds, imps))
 	      end
-
+	    
 	  val (initial_env, imports) = split (imports, empty_env, [])
 	  val initial_state = empty_state
 

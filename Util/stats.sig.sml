@@ -1,7 +1,9 @@
 signature STATS =
    sig
 
+
      val reset_stats : unit -> unit
+
      (*Just zero out all numerical data - don't remove entries*)
      val clear_stats : unit -> unit
      val print_stats : unit -> unit

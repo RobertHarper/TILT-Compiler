@@ -5,7 +5,7 @@
          averaged before reporting.  Defaults to 1.
    benchmarks is an optional list of which benchmarks to run.  Defaults
          to all of them.
- *)
+   *)
 local 
   val stringem = String.concat
   val printem = List.app print
@@ -139,6 +139,7 @@ local
     end
 
   structure G = Getopt
+
   fun eprint (s : string) : unit =
     TextIO.output(TextIO.stdErr, s)
 

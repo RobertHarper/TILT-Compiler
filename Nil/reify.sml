@@ -503,8 +503,7 @@ struct
 	end
       | reify_mod' (ImportBnd (_, cb) :: is, ctxt, module) =
 	let
-	    val (v, k) = NilStatic.kind_of_cbnd (ctxt, cb)
-	    val ctxt = NilContext.insert_kind(ctxt, v, k)
+	    val ctxt = NilContext.insert_cbnd(ctxt, cb)
 
 	    val (bnds', exports', pset, ctxt, is') =
 		reify_mod' (is, ctxt, module)

@@ -1,4 +1,4 @@
-include group "mapfile-lib"
+import group $libdir ^ "/smlnj-lib/group"
 
 
 source unit GETOPT = "../Top/getopt.sig.sml" {}

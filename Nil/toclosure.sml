@@ -497,6 +497,7 @@ struct
     (* ----- Misc. imports ----- *)
 
 	val insert_con = NilContext.insert_con
+	val insert_cbnd = NilContext.insert_cbnd
 	val insert_kind = NilContext.insert_kind
 	val insert_label = NilContext.insert_label
 
@@ -813,23 +814,23 @@ struct
 
 	   | App_e (_, e, clist, elist, eflist) =>
 		 let val f = (case e of
-				      Var_e v => if (is_fid v andalso
-						     Name.eq_var(v,#1(get_curfid state)))  (* XXX Why only if current function?  -Leaf*)
-                                                                         (* Because we are only tracking callees of direct calls, which only
-                                                                            happen for self-calls?  -joe, 8/2002 *)
-						     then (
-(*							   print "***** adding callee ";
-							   Ppnil.pp_var v; print " to ";
-							   Ppnil.pp_var (get_curfid state); print "\n";
-*)
-							   add_callee(#1(get_curfid state),v,
-								      state);
-							   frees)
-						 else (e_find_fv (state,frees) e)
-				    | _ => (e_find_fv (state,frees) e))
-		     val f = foldl (fn (c,f) => c_find_fv (state,f) c) f clist
-		     val f = foldl (fn (e,f) => e_find_fv (state,f) e) f elist
-		     val f = foldl (fn (e,f) => e_find_fv (state,f) e) f eflist
+				Var_e v => if (is_fid v andalso
+					       Name.eq_var(v,#1(get_curfid state)))  (* XXX Why only if current function?  -Leaf*)
+					     (* Because we are only tracking callees of direct calls, which only
+					      happen for self-calls?  -joe, 8/2002 *)
+					     then (
+						   (*							   print "***** adding callee ";
+						    Ppnil.pp_var v; print " to ";
+						    Ppnil.pp_var (get_curfid state); print "\n";
+						    *)
+						   add_callee(#1(get_curfid state),v,
+							      state);
+						   frees)
+					   else (e_find_fv (state,frees) e)
+			      | _ => (e_find_fv (state,frees) e))
+		   val f = foldl (fn (c,f) => c_find_fv (state,f) c) f clist
+		   val f = foldl (fn (e,f) => e_find_fv (state,f) e) f elist
+		   val f = foldl (fn (e,f) => e_find_fv (state,f) e) f eflist
 		 in  f
 		 end
 	   | ExternApp_e (e, elist) =>
@@ -1764,9 +1765,7 @@ struct
 	     | import_folder (ImportBnd (phase, cb), D) =
 	       let val cbs = cbnd_rewrite initial_state cb
 
-		   fun folder (cb, D) =
-		   let val (v, k) = NilStatic.kind_of_cbnd (D, cb)
-		   in insert_kind(D, v, k) end
+		   fun folder (cb, D) = insert_cbnd (D,cb)
 
   		   val D = foldl folder D cbs
 	       in

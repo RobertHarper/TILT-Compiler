@@ -139,10 +139,16 @@ source unit NilStatic = "nilstatic.sml" {
 	Trail BoundCheck NilPrimUtil NilPrimUtilParam NilDefs ListPair
 }
 
+source unit EXPTABLE = "NilOpts/exptable.sig.sml" {ORD_MAP Nil}
+source unit ExpTable = "NilOpts/exptable.sml" {
+	Array Word32 Name Sequence Listops Nil Prim Util TilWord64
+	EXPTABLE String BinaryMapFn Ppnil Int TraceInfo
+}
+
 source unit LINEARIZE = "linearize.sig.sml" {Nil}
 source unit Linearize = "linearize.sml" {
 	Util Stats Nil Int Prim Array String Name Listops Sequence
-	LINEARIZE NilUtil Ppnil Normalize NilDefs List
+	LINEARIZE NilUtil Ppnil Normalize NilDefs List ExpTable
 }
 
 source unit REIFY = "reify.sig.sml" {Nil}
@@ -150,12 +156,6 @@ source unit Reify = "reify.sml" {
 	Stats NilRename Normalize List Nil NilContext NilUtil Util
 	Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs
 	ListPair NilSubst Prim NilStatic
-}
-
-source unit EXPTABLE = "NilOpts/exptable.sig.sml" {ORD_MAP Nil}
-source unit ExpTable = "NilOpts/exptable.sml" {
-	Array Word32 Name Sequence Listops Nil Prim Util TilWord64
-	EXPTABLE String BinaryMapFn Ppnil Int TraceInfo
 }
 
 source unit TOCLOSURE = "toclosure.sig.sml" {Nil}

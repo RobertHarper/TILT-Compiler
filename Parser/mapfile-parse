@@ -75,10 +75,14 @@ source unit AstUtil = "astutil.sml" {
 source unit NAME = "name.sig.sml" {
 	Symbol HashTable ORD_SET ORD_MAP
 }
+
+source unit RBMap = "nj/redblack-map-fn.sml" {ORD_KEY ORD_MAP LibBase}
+source unit RBSet = "nj/redblack-set-fn.sml" {ORD_KEY ORD_SET LibBase}
+
 source interface Name = "name.int" {NAME}
 source unit Name : Name = "name.sml" {
 	NAME Util Symbol Int Word SplaySetFn SplayMapFn Char String
-	Stats ORD_KEY HashTable
+	Stats ORD_KEY HashTable RBMap RBSet
 }
 source unit NAMEBLAST = "nameblast.sig.sml" {
 	NAME Blaster Name

@@ -254,9 +254,6 @@ struct
 
   fun selfify (con,kind) = selfify'(con,kind,NilSubst.C.empty())
 
-  val selfify = subtimer ("NilUtil:selfify",selfify)
-  val selfify' = subtimer ("NilUtil:selfify'",selfify')
-
   local
     structure A :
       sig

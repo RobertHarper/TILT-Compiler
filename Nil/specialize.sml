@@ -884,11 +884,7 @@ struct
 	  | scan_import(ImportType(l,v,k),ctxt)  =
 	       insert_label(insert_kind(ctxt,v,k),l,v)
 	  | scan_import(ImportBnd (_, cb),ctxt) =
-	       let
-		   val (v, k) = NilStatic.kind_of_cbnd (ctxt, cb)
-	       in
-		   insert_kind(ctxt,v,k)
-	       end
+	       insert_cbnd(ctxt,cb)
 
 	fun scan_export ctxt (ExportValue(l,v)) = (scan_exp ctxt (Var_e v))
 	  | scan_export ctxt (ExportType(l,v)) = ()

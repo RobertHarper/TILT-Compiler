@@ -82,9 +82,6 @@ sig
    val add_reg         : (state * var * con * reg) -> state
    val add_conterm     : (state * Nil.label option * var * kind * term option) -> state
 
-   (* Get variable and type of a conbnd *)
-   val kind_of_cbnd : state -> Nil.conbnd -> Nil.var * Nil.kind
-
    val getrep : state -> var -> term
    val getconvarrep' : state -> var -> convar_rep option
    val getconvarrep : state -> var -> convar_rep

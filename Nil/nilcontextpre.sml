@@ -26,12 +26,12 @@ structure NilContextPre
    val memoize       = Stats.tt "nilcontext_memoize"
    val transitive    = Stats.tt "nilcontext_transitive"
 
-(*   val timer    = Stats.subtimer'
+   val timer    = Stats.subtimer'
    val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer' args args2 else #2 args args2
-     *)
 
+(*
   fun subtimer (_,f) args = f args
-
+*)
    (* Substitutions from NilSubst ************************)
 
    val substConInKind   = fn s => subtimer("Ctx:substConInKind",NilSubst.substConInKind s)

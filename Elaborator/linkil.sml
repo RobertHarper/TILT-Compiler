@@ -566,4 +566,10 @@ struct
 		       fn ilctxt =>
 		       Toil.xspecs (ilctxt, filepos, specs))
 
+    val add_unit    = Stats.timer("Elaboration:add_unit",add_unit)
+    val instantiate = Stats.timer("Elaboration:instantiate",instantiate)
+    val eq          = Stats.timer("Elaboration:eq",eq)
+    val seal        = Stats.timer("Elaboration:seal",seal)
+    val elab_dec    = Stats.timer("Elaboration:elab_dec",elab_dec)
+    val elab_specs  = Stats.timer("Elaboration:elab_specs",elab_specs)
 end

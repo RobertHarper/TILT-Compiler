@@ -37,6 +37,12 @@ if [ -f ./Heaps/tilt.$platform ] ; then echo "Compiled tilt-nj" ; else echo "TIL
 # build the basis
 if ./Test/tilt-nj -b mapfile-basis; then echo "Compiled basis" ; else echo "Basis didn't compile" ; exit 1 ; fi
 
+# build SML/NJ lib
+if ./Test/tilt-nj -m Basis/Library/group ; then echo "Compiled sml/nj-lib" ; else echo "sml/nj-lib didn't compile" ; exit 1 ; fi
+
+# build SML/NJ lib
+if ./Test/tilt-nj -m Parser/Library/group ; then echo "Compiled ml-yacc-lib" ; else echo "ml-yacc-lib didn't compile" ; exit 1 ; fi
+
 # build the test harness
 if (cd Test ; ./tilt-nj -m mapfile) ; then echo "Compiled test harness" ; else echo "Harness didn't compile" ; exit 1; fi
 

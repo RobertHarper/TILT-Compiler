@@ -236,7 +236,6 @@ struct
 
 	fun reduce_hnf (STATE{ctxt,...}) c = Normalize.reduce_hnf(ctxt, c)
 	fun strip_arrow_norm (STATE{ctxt,...}) c = Normalize.strip_arrow_norm ctxt c
-	fun kind_of_cbnd (STATE{ctxt,...}) cb = NilStatic.kind_of_cbnd (ctxt, cb)
     end
 
 
