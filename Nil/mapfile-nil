@@ -1,4 +1,4 @@
-import group "../Basis/Library/mapfile"
+import group $libdir ^ "/smlnj-lib/group"
 include group "../Util/mapfile-util"
 include group "../Parser/mapfile-parse"
 include group "../Elaborator/mapfile-elaborate"

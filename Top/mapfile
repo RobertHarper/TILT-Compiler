@@ -1,4 +1,4 @@
-import group "../Basis/Library/mapfile"
+import group $libdir ^ "/smlnj-lib/group"
 include group "../Util/mapfile-util"
 include group "../Parser/mapfile-parse"
 include group "../Elaborator/mapfile-elaborate"
@@ -59,7 +59,7 @@ source unit Group : GROUP = "group.sml" {
 }
 source unit PRELINK = "prelink.sig.sml" {Crc UnitEnvironment}
 source unit Prelink = "prelink.sml" {
-	Stats PRELINK Crc Util UnitEnvironment
+	Stats PRELINK Crc Util UnitEnvironment Formatter Listops
 }
 source unit UPDATE = "update.sig.sml" {
 	Compiler Crc Paths ExtSyn Blaster Name UnitEnvironment
@@ -98,7 +98,7 @@ source unit Master = "master.sml" {
 	Int Listops SplayMapFn ListMergeSort MASTER Communication
 	Background List Platform Target Paths Statistics
 	ExtSyn UnitEnvironment Name Word HashTableFn EQUIV Equiv Crc
-	Group Option Formatter Date Version
+	Group Option Formatter Date Version Dirs
 }
 source unit SLAVE = "slave.sig.sml" {Communication}
 source unit Slave = "slave.sml" {

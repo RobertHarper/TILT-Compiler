@@ -1,4 +1,4 @@
-import group "../Basis/Library/mapfile"
+import group $libdir ^ "/smlnj-lib/group"
 include group "../Util/mapfile-util"
 
 source unit CONTROL = "control.sig.sml" {}
