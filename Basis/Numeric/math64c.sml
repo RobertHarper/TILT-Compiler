@@ -9,6 +9,7 @@ structure Math64 :> MATH where type real = real =
 
     type real = real
 
+    val NaN = 0.0 / 0.0
     val pi = 3.14159265358979323846
     val e  = 2.7182818284590452354
 
@@ -17,11 +18,14 @@ structure Math64 :> MATH where type real = real =
     val sin   : real -> real = fn arg => Ccall(sin, arg)
     val cos   : real -> real = fn arg => Ccall(cos, arg)
     val tan   : real -> real = fn arg => Ccall(tan, arg)
-    val asin  : real -> real = fn arg => Ccall(asin, arg)
-    val acos  : real -> real = fn arg => Ccall(acos, arg)
+    val asin  : real -> real = fn arg =>
+	if arg < ~1.0 orelse arg > 1.0 then NaN else Ccall(asin,arg)
+    val acos  : real -> real = fn arg =>
+	if arg < ~1.0 orelse arg > 1.0 then NaN else Ccall(acos,arg)
     val atan  : real -> real = fn arg => Ccall(atan, arg)
     val exp   : real -> real = fn arg => Ccall(exp, arg)
-    val ln    : real -> real = fn arg => Ccall(ln, arg)
+    val ln    : real -> real = fn arg =>
+	if arg < 0.0 then NaN else Ccall(ln, arg)
     val log10 : real -> real = fn arg => Ccall(log10, arg)
     val sinh  : real -> real = fn arg => Ccall(sinh, arg)
     val cosh  : real -> real = fn arg => Ccall(cosh, arg)
@@ -42,9 +46,9 @@ structure Math64 :> MATH where type real = real =
 	    if y>x then PIo2 - atan(x/y) else atan(y/x)
 
 	fun atan2py(x,y) =
-	    if x >= 0.0 then atan2pypx(x,y)
-	    else if x == 0.0 andalso y == 0.0 then 0.0
-		 else PI - atan2pypx(~x,y)
+	    if x == 0.0 andalso y == 0.0 then 0.0
+	    else if x >= 0.0 then atan2pypx(x,y)
+	    else PI - atan2pypx(~x,y)
 
     in  fun atan y = (* miraculously handles inf's and nan's correctly *)
 	if y<=0.0 then ~(atanpy(~y)) else atanpy y
@@ -61,7 +65,6 @@ structure Math64 :> MATH where type real = real =
 	fun isNaN x = not(x==x)
 	val plusInfinity = 1E300 * 1E300
 	val minusInfinity = ~plusInfinity
-	val NaN = 0.0 / 0.0
 
         (* This is the IEEE double-precision maxint; won't work accurately on VAX *)
 	val maxint = 4503599627370496.0
