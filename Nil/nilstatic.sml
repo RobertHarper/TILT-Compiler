@@ -54,7 +54,7 @@ struct
       val depth = ref 0
       fun push e = (depth := !depth + 1;
 		    stack := (e :: (!stack));
-		    if ((*!debug andalso *)(!depth mod 20 = 0))
+		    if (!debug andalso (!depth mod 20 = 0))
 			then (print "****nilstatic.sml: stack depth = ";
 			      print (Int.toString (!depth));
 			      print "\n")
@@ -1739,13 +1739,11 @@ struct
 	  val _ = if (!trace)
 		      then (print "Processing fbnd_valid done with making context}\n")
 		    else ()
-(***CS: this check seems pointless/redundent
 	  val found_types = Sequence.map (function_valid openness D) defs
 	  fun checker ((_,c),(_,c')) = 
-	    (type_equiv(origD,c,c')) orelse 
+	    (type_equiv(origD,c',c,true)) orelse 
 	    (error (locate "bnd_valid") "Declared function type does not match found type")
 	  val _ = Sequence.all2 checker (bnd_types,found_types)
-****)
 	in (D,subst)
 	end
 

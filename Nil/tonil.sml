@@ -1143,13 +1143,14 @@ end (* local defining splitting context *)
 					    eFormals = [(arg_var, arg_tr, arg_con)],
 					    fFormals = [],
 					    body,
-					    body_type}) =
+					    body_type = inner_body_type}) =
 		   let val body' = wrap(internal_var, inner_var, body)
-		       val body_con = AllArrow_c{openness = Open, effect = effect, isDependent = false,
-						 tFormals = [], 
-						 eFormals = [(NONE,arg_con)], 
-						 fFormals = 0w0, 
-						 body_type = body_type}
+		       val outer_body_type = AllArrow_c{openness = Open, effect = effect, 
+							isDependent = false,
+							tFormals = [], 
+							eFormals = [(NONE,arg_con)], 
+							fFormals = 0w0, 
+							body_type = inner_body_type}
 		   in  (external_var_r,
 		       Function{effect = effect, 
 				recursive = Leaf, 
@@ -1165,9 +1166,9 @@ end (* local defining splitting context *)
 							       eFormals = [(arg_var,arg_tr,arg_con)],
 							       fFormals = [],
 							       body = body',
-							       body_type = body_con})])],
+							       body_type = inner_body_type})])],
 				       Var_e inner_var),
-				body_type = body_con})
+				body_type = outer_body_type})
 		   end
 
                val ebnd_entries = (Listops.map4 reviseFunction 
