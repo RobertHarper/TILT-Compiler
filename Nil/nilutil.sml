@@ -3,8 +3,8 @@
 (* ------------ Context manipulation functions ------------ *)
 
 functor NilUtilFn(structure Nil : NIL
-		  structure IlUtil : ILUTIL) :> 
-  sig include NILUTIL sharing Nil = Nil end =
+		  structure IlUtil : ILUTIL) :
+  sig include NILUTIL (* sharing Nil = Nil *) end =
 struct
   structure Nil = Nil
     

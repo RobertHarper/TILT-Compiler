@@ -1,8 +1,8 @@
 functor Nil(structure Annotation : ANNOTATION
 	    structure Prim : PRIM)
-	   :> sig 
+	   : sig 
 	        include NIL 
-	        sharing Prim = Prim and Annotation = Annotation 
+(*	        sharing Prim = Prim and Annotation = Annotation *)
               end =
 struct	
 

@@ -1,38 +1,45 @@
 Group 
-        signature NIL
+(*        signature NIL
 	signature NILUTIL
 	signature NILSTATIC
 	signature PPNIL
 
-(*      functor   Nil *)
-(*        functor   Ppnil *)
+
+        functor   Nil
+        functor   Ppnil
+*)
 (*	structure NilUtil   *)
 (*	structure NilStatic *)
 is
 
 smlnj-lib.cm             		(* ------ SML/NJ library ------ *)
-../Util/util.lib.cm             	(* ------ Our own utilities --- *)
-../Parser/parser.lib.cm   		(* ------ Parsing, name utils 	*)
-../Elaborator/elaborator.lib.cm		(* ------ Elaborator Stuff ---- *)
+../Util/util.cm             	(* ------ Our own utilities --- *)
+../Parser/parser.cm   		(* ------ Parsing, name utils 	*)
+../Elaborator/elaborator.cm		(* ------ Elaborator Stuff ---- *)
 
 
 (* ------ Nil stuff ------ *)
+
 annote.sig.sml
 annote.sml
 nil.sig.sml
 nil.sml
 ppnil.sig.sml
 ppnil.sml
-(*tonil.sml*)
+tonil.sml
 nilutil.sig.sml
 nilutil.sml
-(*linknil.sml*)
+linknil.sml
 (*linkstatic.sml*)
+(*
 nilstatic.sig.sml
+*)
 (* nilstatic.sml *)
+(*
 cont.sig.sml
 (*cont.sml*)
 typecheck.sig.sml
+*)
 (*typecheck.sml*)
 nileval.sig.sml
 vararg.sig.sml
@@ -40,3 +47,4 @@ vararg.sml
 nileval.sml 
 toclosure.sig.sml
 toclosure.sml
+
