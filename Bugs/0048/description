@@ -30,6 +30,8 @@ Comments:
 	+fox/til 340 341
 	+fox/til 686 689 691 720 721
 Fix:
+	[Supporting files in CVS prior to 1/6/04.]
+
 	Most of the changes were in Elaborator/datatype.sml.  I also
 	added alpha conversion support for AST tyvars to AstHelp.
 

@@ -24,6 +24,7 @@ Code:
 
 Transcript:  
 Comments:
+	[Supporting files in CVS prior to 1/6/04.]
 
 	Resolve_all_overloads was resolving top-level overloads
 	bottom-up.  In this case, the compiler was trying to resolve
