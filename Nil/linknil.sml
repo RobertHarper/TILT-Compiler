@@ -1,4 +1,4 @@
-structure Linknil =
+structure LinkNil =
 struct
     structure Nil = Nil(structure Annotation = Annotation
 			structure Prim = LinkIl.Prim)      
@@ -6,8 +6,14 @@ struct
     structure Ppnil = Ppnil(structure Nil = Nil
 			    structure Ppprim = LinkIl.Ppprim)
 
-    structure Nilutil = Nilutil(structure Nil = Nil)
-	
+    structure NilUtil = NilUtilFn(structure Nil = Nil)
+      
+    structure NilStatic = NilStaticFn(structure Annotation = Annotation
+				      structure Prim = LinkIl.Prim
+				      structure Nil = Nil
+				      structure NilUtil = NilUtil
+				      structure Cont = Cont)
+(*
     structure Tonil = Tonil(structure Ilstatic = LinkIl.IlStatic
 			    structure Ilutil = LinkIl.IlUtil
                             structure Ilcontext = LinkIl.IlContext
@@ -34,8 +40,8 @@ struct
 	    print "\n"
 	end
            handle (LinkIl.IlContext.NOTFOUND s) => print ("NOTFOUND: " ^ s)
-
+*)
 end
-
+(*
 fun doit () = Linknil.test "test"
-
+*)

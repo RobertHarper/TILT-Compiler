@@ -1,8 +1,16 @@
-Group is
+Group 
+	signature NILUTIL
+	signature NILSTATIC
 
-smlnj-lib.cm             (* ------ SML/NJ library ------ *)
-Util/util.cm             (* ------ Our own utilities --- *)
-Elaborator/elaborator.cm (* ------ Elaborator Stuff ----- *)
+	structure NilUtil
+	structure NilStatic
+is
+
+smlnj-lib.cm             		(* ------ SML/NJ library ------ *)
+../Util/util.lib.cm             	(* ------ Our own utilities --- *)
+../Parser/parser.lib.cm   		(* ------ Parsing, name utils 	*)
+../Elaborator/elaborator.lib.cm		(* ------ Elaborator Stuff ---- *)
+
 
 (* ------ Nil stuff ------ *)
 annote.sig.sml
@@ -13,8 +21,13 @@ ppnil.sig.sml
 ppnil.sml
 tonil.sml
 nilutil.sig.sml
-nilutil.sml
-linknil.sml
+nilutil2.sml
+(*linknil.sml*)
+linkstatic.sml
+nilstatic.sig.sml
+nilstatic.sml
+cont.sig.sml
+cont.sml
 (*
 typecheck.sig.sml
 typecheck.sml

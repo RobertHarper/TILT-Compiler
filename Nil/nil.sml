@@ -1,6 +1,8 @@
 functor Nil(structure Annotation : ANNOTATION
 	    structure Prim : PRIM)
-	   : NIL =
+	   :> sig include NIL 
+		  sharing Prim = Prim and Annotation = Annotation 
+	      end =
 struct	
 
   open Util Name Listops
