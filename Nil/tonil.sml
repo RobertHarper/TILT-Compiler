@@ -1091,14 +1091,37 @@ struct
 
      | xexp context (Il.SCON il_scon) = xvalue context il_scon
 
+(* XXX need to handler floats *)
      | xexp context (il_exp as (Il.PRIM (prim, il_cons, il_args))) = 
        let
+	   open Prim
 	   val cons = map (#1 o (xcon context)) il_cons
 	   val (args, _, valuables) = myunzip3 (map (xexp context) il_args)
            val (AllArrow_c(_,effect,_,_,_,con)) = Nilprimutil.get_type prim cons
            val valuable = (effect = Total) andalso (Listops.andfold (fn x => x) valuables)
+
+	   val con : con = (case con of
+				Prim_c(Float_c fs,[]) => Prim_c(BoxFloat_c fs,[])
+			      | _ => con)
+	   fun id (e : exp) = e
+	   fun box fs e = Prim_e(NilPrimOp(box_float fs), [], [e])
+	   fun unbox fs e = Prim_e(NilPrimOp(unbox_float fs), [], [e])
+	   fun float_float fs = (map (unbox fs) args, box fs)
+	   fun float_int fs = (map (unbox fs) args, id)
+	   fun int_float fs = (args, box fs)
+	   val (args,wrap) = 
+	       (case prim of
+		    ((neg_float fs) | (abs_float fs) |
+		     (plus_float fs) | (minus_float fs) |
+		     (mul_float fs) | (div_float fs)) => float_float fs
+		  | ((less_float fs) | (greater_float fs) |
+		     (lesseq_float fs) | (greatereq_float fs) |
+		     (eq_float fs) | (neq_float fs)) => float_int fs
+		   | float2int => float_int F64
+		   | int2float => int_float F64
+		   | _ => (args,id))
        in
-	   (Prim_e (PrimOp prim, cons, args), con, valuable)
+	   (wrap(Prim_e (PrimOp prim, cons, args)), con, valuable)
        end
 (*
      | xexp context (il_exp as Il.PRIM (prim, il_cons)) = 
