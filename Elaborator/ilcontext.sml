@@ -340,32 +340,34 @@ struct
     fun labelmap_remove x = #1(LabelMap.remove x)
 
     (*
-	Prepare for the possible shadowing of a label.  When shadowing
-	a convar's label, we also change its equality function's label.
+	Handle shadowing.  Equality functions are special: If a type t is
+	shadowed, then +Et must be shadowed in order to maintain the
+	invariant that if +Et is visible, then it is the equality function
+	for type t.  This implementation assumes that only constructor
+	labels have the equality attribute.
     *)
 
     fun shadow' (vm : varMap, lm : labelMap, om : overloadMap, l : label,
-		 labopt : label option) : varMap * labelMap * overloadMap =
+		 l' : label) : varMap * labelMap * overloadMap =
 	(case (LabelMap.find(om,l), LabelMap.find(lm,l))
 	   of (SOME _, NONE) => (vm,lm,labelmap_remove(om,l))
 	    | (NONE, SOME (v,nil)) =>
-	       let val l' = (case labopt
-			       of SOME l' => l'
-				| NONE => fresh_internal_label(label2name' l))
-		   val SOME (_,pc) = VarMap.find(vm,v)
+	       let val SOME (_,pc) = VarMap.find(vm,v)
 		   val vm = VarMap.insert (vm,v,(l',pc))
 		   val lm = labelmap_remove(lm,l)
 		   val lm = LabelMap.insert (lm,l',(v,nil))
-	       in  (case pc
-		      of PHRASE_CLASS_CON _ =>
-			    shadow' (vm,lm,om,to_eq l,SOME (to_eq l'))
-		       | _ => (vm,lm,om))
+	       in  (vm,lm,om)
 	       end
 	    | (NONE, SOME _) => (vm,labelmap_remove(lm,l),om)
 	    | (NONE, NONE) => (vm,lm,om)
 	    | (SOME _, SOME _) => error "overloadMap and labelMap labels\
 					\ not disjoint")
-    fun shadow (vm,lm,om,l) = shadow' (vm,lm,om,l,NONE)
+    fun shadow (vm : varMap, lm : labelMap, om : overloadMap, l : label)
+	: varMap * labelMap * overloadMap =
+	let val l' = fresh_internal_label(label2name' l)
+	    val (vm,lm,om) = shadow' (vm,lm,om,l,l')
+	in  shadow' (vm,lm,om,to_eq l,to_eq l')
+	end
 
     local
 	fun print_binding (l, v, pc) = (pp_label l; print " > "; pp_var v;
