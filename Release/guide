@@ -1,3 +1,10 @@
+Files to check:
+
+	../README
+	../Doc/tilt.1
+	../Doc/tilt.txt	# nroff -man ../Doc/tilt.1 > ../Doc/tilt.txt
+	patterns
+
 Carve out a release by serving a file system based on my CVS working
 directory and creating a tar archive of its contents.  The patterns
 file contains regular expressions that describe the files to serve: To

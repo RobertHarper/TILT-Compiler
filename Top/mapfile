@@ -117,7 +117,7 @@ unit MAIN = "main.sig.sml" {OS}
 interface Main = "main.int" {MAIN}
 unit Main : Main = "main.sml" {
 	MAIN Manager Util TextIO OS Arg Platform Target Int String
-	UtilError Stats
+	UtilError Stats Version IntSyn
 }
 
 unit Dump = "dump.sml" {

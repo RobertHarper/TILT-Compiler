@@ -1,4 +1,12 @@
 #!/bin/sh
 bindir=`dirname "$0"`
 cputype=`"$bindir"/cputype`
-exec "$bindir"/$cputype/runtest ${1+"$@"}
+case $cputype in
+unsupported)
+	echo 1>&2 "runtest: unsupported architecture"
+	exit 1
+	;;
+*)
+	exec "$bindir"/$cputype/runtest ${1+"$@"}
+	;;
+esac

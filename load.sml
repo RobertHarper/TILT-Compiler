@@ -1,4 +1,36 @@
 (*
+
+Here are examples demonstrating the use of "load.sml" to run
+the compiler.
+
+Set the environment variable TILTROOT to the root of the ml96
+hierarchy:
+
+	csh% setenv TILTROOT `pwd`
+	sh$ TILTROOT=`pwd`; export TILTROOT
+
+
+Run SML/NJ with "sml"; all of the examples below should be entered at
+the SML/NJ prompt "-".
+
+use "load.sml";	(* compile TILT and the Load interface with NJ *)
+Load.toExe();	(* arrange for TILT to generate executables *)
+		(* see load.sml for other options *)
+Boot.boot();	(* compile Basis with TILT *)
+Manager.make "mapfile-all";
+		(* compile TILT with TILT *)
+Manager.make "Bench/mapfile-timings";
+		(* compile benchmarks with TILT *)
+Load.make();    (* recompile the compiler after some source *)
+	         * has been changed. *)
+
+
+
+A brief introduction to TILT's compilation manager is Doc/tilt.1 (a
+manual page).  More details can be found in Doc/TM.txt.
+*)
+
+(*
  * This file provides some useful functions for managing the compiler 
  * from the SML/NJ prompt during development.  When an interactive session 
  * is first begun, typing   use "load.sml";   will load the compiler

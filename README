@@ -1,32 +1,20 @@
-This file collects examples demonstrating the use of "load.sml" to run
-the compiler.
+This is TILT version 1.0.
 
-Choose a til_slave script.  For a reasonable default, do
-	% cd Bin; ln -s til_slave_local_xterm til_slave
+This release is set up to compile TILT using SML/NJ 110.0.7 available
+from
 
-Set the environment variable TILT_LIBDIR to the root of the ml96
-hierarchy:
+	http://www.smlnj.org/
 
-	csh% setenv TILT_LIBDIR `pwd`
-	sh$ TILT_LIBDIR=`pwd`; export TILT_LIBDIR
+The architectures and operating systems supported by TILT are listed
+in the manual page (Doc/tilt.1 and Doc/tilt.txt).  Take a look at the
+comments and commands in Makefile and Runtime/Makefile and then try
 
+	make
 
-Run SML/NJ with "sml"; all of the examples below should be entered at
-the SML/NJ prompt "-".
+to compile TILT.  The scripts Bin/tilt and Bin/tilt-nj will run TILT
+out of the current directory; alternatively, you can use
 
-use "load.sml";	(* compile TILT and the Load interface with NJ *)
-Load.toExe();	(* arrange for TILT to generate executables *)
-		(* see load.sml for other options *)
-Boot.boot();	(* compile Basis with TILT *)
-Manager.make "mapfile-all";
-		(* compile TILT with TILT *)
-Manager.make "Bench/mapfile-timings";
-		(* compile benchmarks with TILT *)
-Load.make();    (* recompile the compiler after some source *)
-	         * has been changed. *)
+	su
+	make install
 
-
-
-A brief introduction to TILT's compilation manager is Doc/tilt.1 (a
-manual page).  More details can be found in Doc/TM.txt.
-
+to copy binaries to the directory PREFIX set in Makefile.

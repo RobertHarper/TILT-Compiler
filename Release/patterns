@@ -7,6 +7,9 @@
 - /Apps$
 - /Bench$
 - /BenchData$
+- /Bin/regress$
+- /Bin/runall$
+- /Bin/runtest$
 - /Bugs$
 - /Doc$
 - /MLRISC$

@@ -12,54 +12,56 @@ structure Linknil :> LINKNIL  =
     val UptoPhasesplit = Stats.ff("UptoPhasesplit")
     val show_size  = Stats.ff("showSize")   (* show size after each pass *)
     val show_html  = Stats.ff("showHTML")   (* when showing pass results, generate HTML *)
-    val typecheck  = Stats.tt "Typecheck"   (* typecheck after each pass *)
+    val typecheck  = Stats.ff "Typecheck"   (* typecheck after each pass *)
     val measure    = Stats.ff "Measure"     (* measure after each pass *)
     val show       = Stats.ff "ShowNil"     (* show after each pass *)
 
     (*val typeof_elim = fn nilmod => Typeof_Elim.mod_elim (NilContext.empty()) nilmod*)
 
-    fun makeEntry (enable, str) = ((if enable then Stats.tt else Stats.ff) ("do" ^ str),
-				   Stats.ff("show" ^ str),
-				   Stats.ff("check" ^ str),
-				   Stats.ff("measure" ^ str),
-				   str)
-    fun makeEntry' (doflag, str) = (doflag,
-				    Stats.ff("show" ^ str),
-				    Stats.ff("check" ^ str),
-				    Stats.ff("measure" ^ str),
-				    str)
+    fun makeEntry (enable, check, str) =
+	((if enable then Stats.tt else Stats.ff) ("do" ^ str),
+	 Stats.ff("show" ^ str),
+	 (if check then Stats.tt else Stats.ff) ("check" ^ str),
+	 Stats.ff("measure" ^ str),
+	 str)
+    fun makeEntry' (doflag, check, str) =
+	(doflag,
+	 Stats.ff("show" ^ str),
+	 (if check then Stats.tt else Stats.ff) ("check" ^ str),
+	 Stats.ff("measure" ^ str),
+	 str)
 
-    val phasesplit  = makeEntry (true, "Phasesplit")
-    val cc          = makeEntry' (CompilerControl.ClosureConvertNil, "ClosureConv")
-    val optimize1   = makeEntry (true, "Optimize1")
-    val optimize2   = makeEntry (true, "Optimize2")
-    val optimize3   = makeEntry (true, "Optimize3")
-    val optimize4   = makeEntry (true, "Optimize4")
-    val optimize5   = makeEntry (true, "Optimize5")
-    val optimize6   = makeEntry (true, "Optimize6")
-    val reify1      = makeEntry (true, "Reify1")
-    val reify2      = makeEntry (true, "Reify2")
-    val vararg      = makeEntry (true, "Vararg")
-    val specialize1 = makeEntry (true, "Specialize1")
-    val specialize2 = makeEntry (true, "Specialize2")
-    val rename      = makeEntry (true, "Rename")
-    val hoist1      = makeEntry (true, "Hoist1")
-    val hoist2      = makeEntry (true, "Hoist2")
-    val inlineOnce1 = makeEntry (true, "InlineOnce1")
-    val inlineOnce2 = makeEntry (true, "InlineOnce2")
-    val inline1     = makeEntry (true, "Inline1")
-    val inline2     = makeEntry (true, "Inline2")
-    val inline3     = makeEntry (true, "Inline3")
-    val coerce_elim = makeEntry (false, "CoerceElim")
-    val sing_elim   = makeEntry' (CompilerControl.EliminateSingletons, "SingElim")
-    val rename2     = makeEntry' (CompilerControl.EliminateSingletons, "Rename2")
+    val phasesplit  = makeEntry (true, true, "Phasesplit")
+    val cc          = makeEntry' (CompilerControl.ClosureConvertNil, true, "ClosureConv")
+    val optimize1   = makeEntry (true, false, "Optimize1")
+    val optimize2   = makeEntry (true, false, "Optimize2")
+    val optimize3   = makeEntry (true, false, "Optimize3")
+    val optimize4   = makeEntry (true, false, "Optimize4")
+    val optimize5   = makeEntry (true, false, "Optimize5")
+    val optimize6   = makeEntry (true, false, "Optimize6")
+    val reify1      = makeEntry (true, false, "Reify1")
+    val reify2      = makeEntry (true, false, "Reify2")
+    val vararg      = makeEntry (true, false, "Vararg")
+    val specialize1 = makeEntry (true, false, "Specialize1")
+    val specialize2 = makeEntry (true, false, "Specialize2")
+    val rename      = makeEntry (true, false, "Rename")
+    val hoist1      = makeEntry (true, false, "Hoist1")
+    val hoist2      = makeEntry (true, false, "Hoist2")
+    val inlineOnce1 = makeEntry (true, false, "InlineOnce1")
+    val inlineOnce2 = makeEntry (true, false, "InlineOnce2")
+    val inline1     = makeEntry (true, false, "Inline1")
+    val inline2     = makeEntry (true, false, "Inline2")
+    val inline3     = makeEntry (true, false, "Inline3")
+    val coerce_elim = makeEntry (false, false, "CoerceElim")
+    val sing_elim   = makeEntry' (CompilerControl.EliminateSingletons, false, "SingElim")
+    val rename2     = makeEntry' (CompilerControl.EliminateSingletons, false, "Rename2")
 
-(*    val walk         = makeEntry (true, "Walk")
-    val context_walk = makeEntry (true, "ContextWalk")
-    val bind_walk    = makeEntry (true, "BindWalk")
-    val worst_walk   = makeEntry (true, "WorstWalk")*)
+(*    val walk         = makeEntry (true, false, "Walk")
+    val context_walk = makeEntry (true, false, "ContextWalk")
+    val bind_walk    = makeEntry (true, false, "BindWalk")
+    val worst_walk   = makeEntry (true, false, "WorstWalk")*)
 
-(*  val reorder     = makeEntry (false, "Reorder") *)
+(*  val reorder     = makeEntry (false, false, Reorder") *)
 
     val error = fn s => Util.error "linknil.sml" s
 

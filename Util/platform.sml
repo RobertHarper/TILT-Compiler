@@ -71,26 +71,11 @@ struct
     fun hostname () : string = get "nodename"
 
     (*
-	This is lame.
-    *)
-    fun spinMilli start 0 = ()
-      | spinMilli start n =
-	let fun spin 0 = ()
-	      | spin n = spin (n-1)
-	in spin start; spinMilli start (n-1)
-	end
-    val spinMilliDUNIX = spinMilli 35000   (* timed for tcl *)
-
-    (*  Posix.Process.sleep does not work for times under 1.0 seconds
-          since it seems to round down to the nearest second.
-	OS.IO.poll (as a way to sleep) works on the Sun but not the Alpha.
+	OS.IO.poll (in contrast to Posix.Process.sleep) can be used for
+	millisecond timeouts.
     *)
     fun sleep (duration : real) : unit =
-	(case cputype()
-	   of SUPPORTED ALPHA =>
-		spinMilliDUNIX (1 + Real.floor(duration * 1000.0))
-	    | _ =>
-		(OS.IO.poll([], SOME (Time.fromReal duration)); ()))
+	(OS.IO.poll([], SOME (Time.fromReal duration)); ())
 
     fun pid() =
 	Posix.Process.pidToWord(Posix.ProcEnv.getpid())

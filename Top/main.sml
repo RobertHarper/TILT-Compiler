@@ -6,8 +6,11 @@ struct
     val reject = Util.reject
 
     fun usage () : 'a =
-	let val msg =
-		"usage: tilt project ...\n\
+	let val msg = concat [
+		"TILT version ", Version.version,
+		((" using basis " ^ IntSyn.F.basisdesc())
+		 handle _ => ""),
+		"\nusage: tilt project ...\n\
 		\       tilt -o exe project ...\n\
 		\       tilt -l lib project ...\n\
 		\       tilt -p project ...\n\
@@ -19,7 +22,8 @@ struct
 		\       -m       master only\n\
 		\       -c U     operate on unit U\n\
 		\       -C I     operate on interface I\n\
-		\       -t T     set target architecture to T (sparc or alpha)\n"
+		\       -t T     set target architecture to T (sparc or alpha)\n"]
+
 	in  TextIO.output (TextIO.stdErr, msg);
 	    OS.Process.exit (OS.Process.failure)
 	end

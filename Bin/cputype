@@ -1,5 +1,9 @@
 #!/bin/sh
+#
 # Compare to ../Util/platform.sml
+#
+# If you change this file to recognize your
+# system, then change Platform.cputype too.
 
 case `uname -s` in
 SunOS) echo sparc ;;

@@ -3,4 +3,12 @@ bindir=`dirname "$0"`
 cputype=`"$bindir"/cputype`
 TILTROOT=`cd "$bindir"/..; pwd`
 export TILTROOT
-exec "$bindir"/$cputype/tilt ${1+"$@"}
+case $cputype in
+unsupported)
+	echo 1>&2 "tilt: unsupported architecture; try tilt-nj"
+	exit 1
+	;;
+*)
+	exec "$bindir"/$cputype/tilt ${1+"$@"}
+	;;
+esac

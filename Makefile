@@ -1,17 +1,25 @@
-# Change smlnj to reflect your installation of SML/NJ 110.0.7.  If you
-# are compiling with a more recent version of SML/NJ, then you probably
-# need to modify our CM files and the script ./Bin/mkheap used to generate
-# SML/NJ heaps.
+# Ensure that this Makefile and the scripts ./Bin/tilt-nj and
+# ./Bin/dump-nj have the correct path to the SML/NJ compiler.  The TILT
+# sources compile under SML/NJ versions 110.0.3 and 110.0.7 and under
+# TILT.  If you are compiling with some other SML compiler, then you
+# will probably need to modify our CM files, the script ./Bin/mkheap
+# used to generate SML/NJ heaps, and perhaps some of the TILT code to
+# account for basis library changes.
 #
 # Ensure that ./Bin/cputype prints sparc, alpha, or unsupported.  (After
-# building an SML/NJ heap for TILT with "make tilt-heap", you can use
+# building an SML/NJ heap for TILT with "make heap", you can use
 # ./Bin/tilt-nj to run TILT with the SML/NJ runtime on unsupported
 # systems.)  If you are compiling on a sparc or alpha, then look at
 # Runtime/Makefile too.
 #
 # To compile TILT, use "make" or "make with-slaves".  The latter assumes
 # that the script ./Bin/tilt-slave works on your system.
+#
+# To install into PREFIX, use "make install".  This copies binaries to
+# PREFIX/lib/tilt, manual pages to PREFIX/man, and wrapper scripts
+# to PREFIX/bin.
 
+PREFIX=/usr/local
 smlnj=SML_VERSION=110 /usr/local/bin/sml
 mkheap=./Bin/mkheap
 cputype=`./Bin/cputype`
@@ -68,12 +76,12 @@ tilt: FORCE
 dump: FORCE
 	$(master) -oBin/$(cputype)/dump -c DumpTop Top/mapfile
 runtest: FORCE
-	$(master) -oBin/$(cputype)/runtest -c Runtest Test/mapfile
+	if test -d Test; then $(master) -oBin/$(cputype)/runtest -c Runtest Test/mapfile; fi
 
 # Other targets
 
 clean: FORCE
-	-$(purge) Test/mapfile
+	-if test -d Test; then $(purge) Test/mapfile; fi
 	-$(purge) Top/mapfile
 	-$(purge) Util/arg.group
 	-$(purge) Parser/Library/group
@@ -82,3 +90,13 @@ clean: FORCE
 
 slaves: FORCE
 	$(slaves) -n 4/localhost
+
+install: FORCE
+	-mkdir $(PREFIX)/lib/tilt
+	tar cf - Bin Lib Heaps | (cd $(PREFIX)/lib/tilt && tar xf -)
+	cp Doc/tilt.1 $(PREFIX)/man/man1 && chmod 644 $(PREFIX)/man/man1
+	for name in tilt tilt-nj tilt-slaves dump dump-nj; do \
+		{echo '#!/bin/sh'; \
+		 echo 'exec $(PREFIX)/'$$name' $${1+"$$@"}'; \
+		}>$(PREFIX)/bin/$$name && chmod 755 $(PREFIX)/bin/$$name; \
+	done
