@@ -107,8 +107,8 @@ struct
 	     | loop n (Il.SDEC(lab,bnd)::rest, labs, vars) = 
 	       let val var = (case bnd of
 				  Il.DEC_MOD (v,_,_) => v
-				| Il.DEC_EXP (v,_) => v
-				| Il.DEC_CON (v,_,_) => v)
+				| Il.DEC_EXP (v,_,_,_) => v
+				| Il.DEC_CON (v,_,_,_) => v)
 	       in  loop (n-1) (rest, lab::labs, var::vars)
 	       end
 	     | loop _ _ = error "getSdecName: ran out of bnds"
@@ -166,17 +166,22 @@ struct
        let open Il IlUtil
 	   fun folder(SDEC(l,dec),s : (var * exp) list * (var * con) list * (var * mod) list) = 
 	       case dec of
-		   DEC_EXP(v,c) => let val c = con_subst_expconmodvar(c,#1 s, #2 s, #3 s)
-				   in  (SDEC(l,DEC_EXP(v,c)),s)
-				   end
-		 | DEC_CON(v,k,c) => let val v' = Name.derived_var v
-					 val k = kind_subst_expconmodvar(k,#1 s, #2 s, #3 s)
-					 val c = (case c of
-						      NONE => NONE
-						    | SOME c => SOME(con_subst_expconmodvar(c,#1 s, #2 s, #3 s)))
-				     in  (SDEC(l,DEC_CON(v',k,c)),
-					  (#1 s, (v,CON_VAR v'):: (#2 s), #3 s))
-				     end
+		   DEC_EXP(v,c,eopt,i) => 
+		       let val eopt = (case eopt of
+					   NONE => NONE
+					 | SOME e => SOME(exp_subst_expconmodvar(e,#1 s, #2 s, #3 s)))
+			   val c = con_subst_expconmodvar(c,#1 s, #2 s, #3 s)
+		       in  (SDEC(l,DEC_EXP(v,c,eopt,i)),s)
+		       end
+		 | DEC_CON(v,k,c,i) => 
+		       let val v' = Name.derived_var v
+			   val k = kind_subst_expconmodvar(k,#1 s, #2 s, #3 s)
+			   val c = (case c of
+					NONE => NONE
+				      | SOME c => SOME(con_subst_expconmodvar(c,#1 s, #2 s, #3 s)))
+		       in  (SDEC(l,DEC_CON(v',k,c,i)),
+			    (#1 s, (v,CON_VAR v'):: (#2 s), #3 s))
+		       end
 		 | DEC_MOD(v,b,signat) => let val v' = Name.derived_var v
 					    val signat = sig_subst_expconmodvar(signat,
 										#1 s, #2 s, #3 s)
@@ -988,7 +993,7 @@ end (* local defining splitting context *)
 	record_r_exp_items = nil}
 
      | xsbnds_rewrite_1 context (il_sbnds as (Il.SBND(lab, Il.BND_MOD(var,_, _)))::rest_il_sbnds) =
-        if ((IlUtil.is_dt lab) orelse (IlUtil.is_dt_var var)) then
+        if (IlUtil.is_dt lab) then
 	    xsbnds context rest_il_sbnds
         else
 	    xsbnds_rewrite_2 context il_sbnds
@@ -1595,7 +1600,7 @@ end (* local defining splitting context *)
        in  con
        end
 
-     | xcon' context (Il.CON_SUM {carrier, noncarriers, special}) =
+     | xcon' context (Il.CON_SUM {names, carrier, noncarriers, special}) =
        let
 	   val known = (case special of
 			       NONE => NONE
@@ -2114,12 +2119,6 @@ end (* local defining splitting context *)
        in  xsig' context (con0, sig')
        end
 
-     | xsig' context (con0, Il.SIGNAT_INLINE_STRUCTURE {code,...}) =
-       let val s = IlStatic.GetModSig(IlContext.empty_context, Il.MOD_STRUCTURE code)
-       in  xsig' context (con0, s)
-       end
-
-
    and xsig_struct context (con0,sdecs) = 
        let
 	   val {crdecs, erdecs} =
@@ -2194,13 +2193,12 @@ end (* local defining splitting context *)
 
   and rewrite_sdecs sdecs =
        let 
-	   fun filter (Il.SDEC(lab,Il.DEC_MOD(var,_,_))) =
-	       not ((IlUtil.is_dt lab) orelse (IlUtil.is_dt_var var))
+	   fun filter (Il.SDEC(lab,Il.DEC_MOD(var,_,_))) = not (IlUtil.is_dt lab)
              | filter _ = true
 
 	   fun loop [] = []
 	     | loop ((sdec as 
-		     Il.SDEC(lab,Il.DEC_EXP(top_var,il_con))) :: rest) = 
+		     Il.SDEC(lab,Il.DEC_EXP(top_var,il_con, _, _))) :: rest) = 
 	        if (Util.substring("polyfun!",Name.label2string lab)) then
 		   let
 (*		       val _ = print "entered mono optimization case\n" *)
@@ -2211,7 +2209,7 @@ end (* local defining splitting context *)
 		       val numFunctions = length clist
 		       val (rest, external_labels, external_vars) = 
 			   getSdecNames numFunctions rest
-		       fun make_sdec (lbl,c) = Il.SDEC(lbl,Il.DEC_EXP(Name.fresh_var(),c))
+		       fun make_sdec (lbl,c) = Il.SDEC(lbl,Il.DEC_EXP(Name.fresh_var(),c,NONE,false))
 		       val sdecs' = Listops.map2 make_sdec (external_labels,clist)
 		   in  sdecs' @ (loop rest)
 		   end
@@ -2223,7 +2221,7 @@ end (* local defining splitting context *)
 			     (top_var, true, s as
 			      Il.SIGNAT_FUNCTOR(poly_var, il_arg_signat,
 						Il.SIGNAT_STRUCTURE(_,[Il.SDEC(them_lbl,
-									    Il.DEC_EXP(_,il_con))]),
+									    Il.DEC_EXP(_,il_con,_,_))]),
 						arrow))))
 		     :: rest) = 
 	       if ( (! elaborator_specific_optimizations)
@@ -2275,7 +2273,7 @@ end (* local defining splitting context *)
 	    erdecs = (lbl,var_r,substConInCon subst con) :: erdecs}
        end
 
-     | xsdecs' context(con0, subst, Il.SDEC(lbl, d as Il.DEC_EXP(var,il_con)) :: rest) =
+     | xsdecs' context(con0, subst, Il.SDEC(lbl, d as Il.DEC_EXP(var,il_con, _, _)) :: rest) =
        let
 	   val con = xcon context il_con
 	   val {crdecs, erdecs} = xsdecs' context (con0, subst, rest)
@@ -2285,16 +2283,12 @@ end (* local defining splitting context *)
        end
 
      | xsdecs' context (con0, subst, sdecs as Il.SDEC(lbl, d as Il.DEC_CON(var, il_knd, 
-									maybecon))::rest)=
+									maybecon,_))::rest)=
        let
 	   val knd = 
-	       (case (il_knd,maybecon) of
-		    ( Il.KIND_INLINE _, _) => xkind context il_knd
-		  | (_,NONE) => xkind context il_knd
-		  | (_,SOME il_con) => 
-			(let val c = xcon context il_con
-			 in  Single_k c
-			 end))
+	       (case maybecon of
+		    NONE => xkind context il_knd
+		  | SOME il_con => Single_k(xcon context il_con))
 
 	   val context' = update_NILctx_insert_kind(context, var, knd)
 	   val {crdecs, erdecs} = 
@@ -2313,12 +2307,7 @@ end (* local defining splitting context *)
            val k = Arrow_k (Open, args, makeKindTuple m)
        in  k
        end
-     | xkind context (Il.KIND_INLINE (il_kind,c)) = 
-	 let val con = xcon context c
-	 in  (case il_kind of 
-		  Il.KIND_TUPLE 1 => SingleType_k con
-                | _ => Single_k con)
-	 end
+
 
   fun make_cr_labels l = (Name.internal_label((Name.label2string l) ^ "_c"),
 			  Name.internal_label((Name.label2string l) ^ "_r"))
@@ -2327,20 +2316,18 @@ end (* local defining splitting context *)
        let open Il
 	   fun dopc(v,l,pc,(imports,context)) = 
 	       (case pc of
-		    Il.PHRASE_CLASS_EXP (_,il_type) => 
+		    Il.PHRASE_CLASS_EXP (_,il_type, _, _) => 
 			let val nil_type = xcon context il_type
 			in  (ImportValue(l,v,nil_type)::imports, context)
 			end
-		  | Il.PHRASE_CLASS_CON (il_con, il_kind) => 
+		  | Il.PHRASE_CLASS_CON (il_con, il_kind, il_conopt, _) => 
 			let
 			    val kind = xkind context il_kind
 			    val nil_con = 
-				(case il_con of
-				     Il.CON_VAR v' => 
-					 if (Name.eq_var(v,v'))
-					     then NONE
-					 else ((SOME (xcon context il_con)) handle _ => NONE)
-				   | _ => ((SOME (xcon context il_con)) handle _ => NONE))
+				(case il_conopt of
+				     NONE => NONE
+				   | SOME il_con =>
+					 ((SOME (xcon context il_con)) handle _ => NONE))
 			    val it = ImportType(l,v,(case nil_con of
 						 NONE => kind
 					       | SOME c => Single_k c))
@@ -2473,8 +2460,8 @@ end (* local defining splitting context *)
 	    fun folder ((Il.SDEC(l,dec)),exports) = 
 		    (case (not (IlUtil.is_nonexport l), dec) of
 			 (false,_) => exports
-		       | (true,Il.DEC_EXP (v,_)) => (ExportValue(l,v)::exports)
-		       | (true,Il.DEC_CON (v,_,_)) =>
+		       | (true,Il.DEC_EXP (v,_,_,_)) => (ExportValue(l,v)::exports)
+		       | (true,Il.DEC_CON (v,_,_,_)) =>
 			     let val k = NilContext.find_kind(nil_final_context, v)
 				     handle e => (print "exception while doing DEC_CON\n";
 						  raise e)
