@@ -31,6 +31,7 @@
 0013	pass	Separate compilation and fixity declarations.
 0014	pass	Comparing functor signatures.
 0015	pass	Comparing functor signatures.
+0016	pass	Comparing functor signatures.
 bug55a	fail	Unresolved tyvar breaking elaborator.
 bug55b	fail	Unresolved tyvar breaking phase-splitter.
 bug80	pass	Phase splitter and signatures.

@@ -1,0 +1,1 @@
+functor F (type t) : sig type a = t end

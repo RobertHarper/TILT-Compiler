@@ -1,0 +1,3 @@
+source interface I1 = "i1.int" {}
+source unit U1 : I1 = "u1.sml" {}
+make executable "test." ^ $target ^ ".exe" {U1}
