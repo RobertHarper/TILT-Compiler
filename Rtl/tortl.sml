@@ -2212,8 +2212,6 @@ val debug = ref false
 					 val charl = alloc_code_label()
 					 val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
 						  add_instr(BCNDI(NE,tmp,floatl,false));
-						  add_instr(CMPUI(EQ, r, IMM 7, tmp));
-						  add_instr(BCNDI(NE,tmp,floatl,false));
 						  add_instr(CMPUI(EQ, r, IMM 0, tmp));
 						  add_instr(BCNDI(NE,tmp,charl,false)))
 					 val desti = nonfloatcase Prim.W32
@@ -2311,7 +2309,10 @@ val debug = ref false
       let
 	  val r = (case (simplify_type state c) of
 		       (true,Prim_c(Float_c Prim.F64,[])) => (xfloatupdate(vl1,vl2,vl3); ())
-		     | (true,Prim_c(BoxFloat_c Prim.F64,[])) => (xfloatupdate(vl1,vl2,vl3); ())
+		     | (true,Prim_c(BoxFloat_c Prim.F64,[])) => 
+			   let val fr = unboxFloat(load_ireg_locval(vl3,NONE))
+			   in  (xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (F fr))); ())
+			   end
 		     | (true,Prim_c(Float_c Prim.F32,[])) => error "32-bit floats not done"
 		     | (true,Prim_c(Int_c is,[])) => (xintupdate(is,vl1,vl2,vl3); ())
 		     | (true,_) => (xptrupdate(c,vl1,vl2,vl3); ())
@@ -2322,8 +2323,6 @@ val debug = ref false
 					 val intl = alloc_code_label()
 					 val charl = alloc_code_label()
 					 val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-						  add_instr(BCNDI(NE,tmp,floatl,false));
-						  add_instr(CMPUI(EQ, r, IMM 7, tmp));
 						  add_instr(BCNDI(NE,tmp,floatl,false));
 						  add_instr(CMPUI(EQ, r, IMM 2, tmp));
 						  add_instr(BCNDI(NE,tmp,intl,false));
@@ -2361,13 +2360,19 @@ val debug = ref false
       let val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_locval(vl,NONE)
 	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
+	  val (_,cc) = (simplify_type state c) 
+	  val _ =  (print "------xlength: got a normalized cc = \n";
+		    Ppnil.pp_con cc; print "\n")
 	  val _ = (case (simplify_type state c) of
 		       (true,Prim_c(Float_c Prim.F64,[])) => add_instr(SRL(dest,IMM real_len_offset,dest))
 		     | (true,Prim_c(BoxFloat_c Prim.F64,[])) => add_instr(SRL(dest,IMM real_len_offset,dest))
 		     | (true,Prim_c(Int_c Prim.W8,[])) => add_instr(SRL(dest,IMM int_len_offset,dest))
 		     | (true,Prim_c(Int_c Prim.W16,[])) => add_instr(SRL(dest,IMM (1 + int_len_offset),dest))
 		     | (true,Prim_c(Int_c Prim.W32,[])) => add_instr(SRL(dest,IMM (2 + int_len_offset),dest))
-		     | (true,_) => add_instr(SRL(dest,IMM int_len_offset,dest))
+		     | (true,c) => 
+			   (print "------xlength: default head-normal case. con = \n";
+			    Ppnil.pp_con c; print "\n";
+			    add_instr(SRL(dest,IMM int_len_offset,dest)))
 		     | (false,c') => let val (r,_) = xcon(state,fresh_var(),c')
 					 val tmp = alloc_regi NOTRACE_INT
 					 val afterl = alloc_code_label()
@@ -2375,14 +2380,13 @@ val debug = ref false
 					 val intl = alloc_code_label()
 				     in (add_instr(CMPUI(EQ, r, IMM 11, tmp));
 					 add_instr(BCNDI(NE,tmp,floatl,false));
-					 add_instr(CMPUI(EQ, r, IMM 7, tmp));
-					 add_instr(BCNDI(NE,tmp,floatl,false));
 					 add_instr(CMPUI(EQ, r, IMM 2, tmp));
 					 add_instr(BCNDI(NE,tmp,intl,false));
 					 add_instr(SRL(dest,IMM int_len_offset,dest));
 					 add_instr(BR afterl);
 					 add_instr(ILABEL floatl);
 					 add_instr(SRL(dest,IMM real_len_offset,dest));
+					 add_instr(BR afterl);
 					 add_instr(ILABEL intl);
 					 add_instr(SRL(dest,IMM (2+int_len_offset),dest));
 					 add_instr(ILABEL afterl))
@@ -2654,8 +2658,6 @@ val debug = ref false
 				       val intl = alloc_code_label()
 				       val charl = alloc_code_label()
 				       val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-						add_instr(BCNDI(NE,tmp,floatl,false));
-						add_instr(CMPUI(EQ, r, IMM 7, tmp));
 						add_instr(BCNDI(NE,tmp,floatl,false));
 						add_instr(CMPUI(EQ, r, IMM 2, tmp));
 						add_instr(BCNDI(NE,tmp,intl,false));
