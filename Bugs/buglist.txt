@@ -130,3 +130,4 @@
 0134 [open]	discrepancies for real number operations
 0135 [open]	discrepancies on real numbers
 0136 [open]	more real number discrepancies and unimplemented functions
+0137 [open]	syntax of special constants
