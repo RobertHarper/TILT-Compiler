@@ -439,6 +439,9 @@ val preferred_change =
 (nil
 ,(T 19) :: (T 42) :: nil
 )::
+(nil
+,(T 6) :: (T 7) :: nil
+)::
 nil
 val noShift = 
 fn (T 0) => true | _ => false

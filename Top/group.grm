@@ -22,7 +22,7 @@ structure S = ExtSyn
 %value INT    (~1)
 %value BOOL   (false)
 
-%change -> THEN | -> ELSE | -> LPAREN | -> ELSE ID
+%change -> THEN | -> ELSE | -> LPAREN | -> ELSE ID | -> LBRACE RBRACE
 
 %eop EOF
 %noshift EOF
