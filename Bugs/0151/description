@@ -1,0 +1,16 @@
+Number: 0151
+Title:       name clash problem in ld
+Keywords:    ld, elaboration
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    critical
+Problem:     despite name-mangling, we still get crashes from ld because of multiply-defined identifiers.  in this test file, if you replace "hd_" by "hd", ld will reject.
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0131
+Owner: 
+Status: open
