@@ -789,6 +789,10 @@ struct
 
     fun get_context (v : var) : Update.context = get_context' (VarSet.empty,v)
 
+    (*
+	N.B.  COMPU and COMPI nodes have arrows to every unit named in
+	their unit environment files.
+    *)
     fun get_ue (node : var) : Ue.ue =
 	let val nodes = get_import_direct node
 	    fun mapone (U : Paths.compunit) : string * Crc.crc =

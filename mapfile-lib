@@ -1,2 +1,5 @@
+(*
+	Build non-basis libraries needed by TILT.
+*)
 include group "Basis/Library/group"
 include group "Parser/Library/group"
