@@ -199,12 +199,12 @@ void adjust_stringlen(ptr_t str, int newByteLen)
 
   assert(GET_TYPE(oldTag) == WORD_ARRAY_TYPE);
   assert(newByteLen <= oldByteLen);
-  if (newWordLen == oldWordLen)
-    return;
-  for (i=newSegments; i<oldSegments; i++)
-    str[-(2+i)] = MAKE_SKIP(1);
+  if (newWordLen != oldWordLen) {
+    for (i=newSegments; i<oldSegments; i++)
+      str[-(2+i)] = MAKE_SKIP(1);
+    str[newWordLen] = MAKE_SKIP(oldWordLen - newWordLen);
+  }
   str[-1] = newTag;
-  str[newWordLen] = MAKE_SKIP(oldWordLen - newWordLen);
 }
 
 ptr_t alloc_recrec(ptr_t rec1, ptr_t rec2)
