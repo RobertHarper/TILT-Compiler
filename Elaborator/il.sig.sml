@@ -79,6 +79,7 @@ signature IL =
                  | CON_REF           of con
                  | CON_TAG           of con
 	         (* multi-argument functions can be imported; bool indicates closed code *)
+	         (* primitives are multi-argument also *)
                  | CON_ARROW         of con list * con * bool * (arrow Util.oneshot)
                  | CON_APP           of con * con
                  | CON_MUPROJECT     of int * con

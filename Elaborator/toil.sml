@@ -710,7 +710,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				       then eqexp
 				   else let val v = fresh_named_var "neq_arg"
 					in  #1(make_lambda(v,arg_con, con_bool,
-							   make_ifthenelse(APP(eqexp,[VAR v]),
+							   make_ifthenelse(APP(eqexp,
+									       [VAR v]),
 									   false_exp,true_exp,con_bool)))
 					end
 		     in (res,eq_con,true)
@@ -3264,7 +3265,6 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	  | CON_OVAR ocon => self (CON_TYVAR (ocon_deref ocon))
 	  | CON_INT is => ETAPRIM(eq_int is,[])
 	  | CON_UINT is => ETAILPRIM(eq_uint is,[])
-(*	  | CON_FLOAT fs => ETAPRIM(eq_float fs,[]) *)
 	  | CON_FLOAT fs => raise NoEqExp
 	  | CON_RECORD fields => 
 		let 

@@ -119,6 +119,8 @@ functor IlUtil(structure Ppil : PPIL
        in HANDLE(e,#1 (make_lambda(v,CON_ANY,con,outer)))
        end
 
+    (* etaprims takes a record of their argument
+       but expanded primitives takes their multiple arguments "flattened" *)
     fun etaexpand_help (primer,typer) (prim,cargs) = 
 	let val prim_tipe = typer prim cargs
 	    val (res_tipe,args_tipes) = 
@@ -162,13 +164,11 @@ functor IlUtil(structure Ppil : PPIL
 	   | (ETAILPRIM(ip,cs),RECORD rbnds) => SOME(ILPRIM(ip,cs,map #2 rbnds))
 	   | (x as ETAPRIM(p,cs),y) =>
 		     (case (PrimUtil.get_type' p cs) of
-			  CON_ARROW([CON_RECORD _],_,_,_) => NONE
-			| CON_ARROW(_,_,_,_) => SOME(PRIM(p,cs,[y]))
+			  CON_ARROW([_],_,_,_) => SOME(PRIM(p,cs,[y]))
 			| _ => NONE)
 	   | (x as ETAILPRIM(ip,cs),y) =>
 		     (case (PrimUtil.get_iltype' ip cs) of
-			  CON_ARROW([CON_RECORD _],_,_,_) => NONE
-			| CON_ARROW(_,_,_,_) => SOME(ILPRIM(ip,cs,[y]))
+			 CON_ARROW([_],_,_,_) => SOME(ILPRIM(ip,cs,[y]))
 			| _ => NONE)
 	   | _ => NONE)
 	end
