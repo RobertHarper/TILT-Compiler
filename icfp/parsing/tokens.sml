@@ -85,7 +85,7 @@ struct
 
   val integer = 
       ((digstream -- done) ||
-       (digstream << (ahead (satisfy (fn x => isSep x)))))
+       (digstream << (ahead (satisfy (fn x => isSep x orelse x = #" ")))))
       wth (Option.valOf o Int.fromString o implode)
 
   val escapechar = 
@@ -94,41 +94,41 @@ struct
        (literal #"\\" && literal #"n" return #"\n"))
 		 
   val floatmag = ((repeat  (satisfy Char.isDigit)) <<
-									(literal #".")) &&
-			(repeat1 (satisfy Char.isDigit)) &&
-			(opt (alt [literal #"e", literal #"E"] >> ((opt (literal #"-")) && 
-																								 (repeat (satisfy Char.isDigit)))))
-			wth (fn (a, (b, exponent)) =>
-					 let val mantissa = 
-							 (Option.valOf (Real.fromString ("0." ^ (implode b)))) +
-							 (case a of 
-										nil => 0.0
-									| _ => Real.fromInt 
-												(Option.valOf (Int.fromString (implode a))))
-					 in
-							 case exponent of
-									 NONE => mantissa
-								 | SOME (nexp, e) => 
-											 let val ee = Real.fromInt (Option.valOf (Int.fromString 
-																																(implode e)))
-											 in
-													 mantissa * (case nexp of
-																					 NONE => 10.0 * ee
-																				 | SOME _ => ee / 10.0)
-											 end
-					 end)
-	       
-	val float = opt (literal #"-") && floatmag
-			wth (fn (SOME a, b) => ~ b
-		        | (NONE, b) => b)
-
-(*
-  val insidechars = (repeat (satisfy (fn x => x <> quotc))) wth implode
-*)
-
+		  (literal #".")) &&
+      (repeat1 (satisfy Char.isDigit)) &&
+      (opt (alt [literal #"e", literal #"E"] >> ((opt (literal #"-")) && 
+						 (repeat (satisfy Char.isDigit)))))
+      wth (fn (a, (b, exponent)) =>
+	   let val mantissa = 
+	       (Option.valOf (Real.fromString ("0." ^ (implode b)))) +
+	       (case a of 
+		    nil => 0.0
+		  | _ => Real.fromInt 
+			(Option.valOf (Int.fromString (implode a))))
+	   in
+	       case exponent of
+		   NONE => mantissa
+		 | SOME (nexp, e) => 
+		       let val ee = Real.fromInt (Option.valOf (Int.fromString 
+								(implode e)))
+		       in
+			   mantissa * (case nexp of
+					   NONE => 10.0 * ee
+					 | SOME _ => ee / 10.0)
+		       end
+	   end)
+      
+  val float = opt (literal #"-") && floatmag
+      wth (fn (SOME a, b) => ~ b
+    | (NONE, b) => b)
+      
+  (*
+val insidechars = (repeat (satisfy (fn x => x <> quotc))) wth implode
+    *)
+      
   val getchar = (satisfy (fn x => x <> quotc andalso x <> #"\\") ||
 		 escapechar)
-
+      
   val insidechars = (repeat getchar) wth implode
 
   val stringlit = middle 
@@ -157,8 +157,8 @@ struct
                   | _    => succeed ())
 *)
 
-	fun comment () = literal #"%" >> 
-			repeat (any suchthat (fn x => x <> #"\n"))
+  fun comment () = literal #"%" >> 
+      repeat (any suchthat (fn x => x <> #"\n"))
 
   (* White space. *)
 
