@@ -132,6 +132,10 @@ struct
      | CONS of 'a * 'a catlist
      | APP of 'a catlist list
    
+   fun catfold f acc (LIST ls) = foldl f acc ls
+     | catfold f acc (CONS (elem,cat)) = catfold f (f(elem,acc)) cat
+     | catfold f acc (APP cats) = foldl (fn (cat,acc) => catfold f acc cat) acc cats
+
    fun flattenCatlist ps = 
        let
 	   fun flatten' (ps as LIST lst, accum) = lst :: accum
@@ -389,6 +393,30 @@ struct
        CONTEXT{NILctx=NILctx, vmap=vmap'}
    fun update_NILctx (CONTEXT{NILctx,vmap}, NILctx') =
        CONTEXT{NILctx=NILctx', vmap=vmap}
+   fun update_NILctx_insert_con(CONTEXT{NILctx,vmap},v,c) = 
+       let val NILctx' = Nilcontext.insert_con(NILctx, v, c)
+       in  CONTEXT{NILctx=NILctx', vmap=vmap}
+       end
+   fun update_NILctx_insert_kind(CONTEXT{NILctx,vmap},v,k) = 
+       let val NILctx' = Nilcontext.insert_kind(NILctx, v, k)
+       in  CONTEXT{NILctx=NILctx', vmap=vmap}
+       end
+
+
+   fun update_NILctx_cbndcat (ctxt,cbnd_cat) = 
+       update_NILctx(ctxt,
+		     let fun folder((v,k,c),ctxt) = 
+			 (
+(*
+			  print "update_NILctx_cbnd: ";
+			  Ppnil.pp_var v; print "  ::  ";
+			  Ppnil.pp_kind k; print "\n";
+*)
+			  Nilcontext.insert_kind(ctxt,v,k))
+			 val cbnd_flat = flattenCatlist cbnd_cat
+		     in   (* catfold folder (NILctx_of context) cbnd_cat *)
+			 foldl folder (NILctx_of ctxt) cbnd_flat
+		     end)
 
    fun xmod context (args as (il_mod, _)) =
        let
@@ -650,8 +678,12 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
 	       val con_proj_c = selectFromCon(name_mod_c, lbls)
 
+val _ = print "nilstatic....calling con_valid\n"
+
 	       val (con_proj_c,knd_proj_c) = 
 		 Nilstatic.con_valid(NILctx_of context,con_proj_c)
+
+val _ = print "nilstatic....returned con_valid\n"
 
 (*
 	       val _ = (print "calling projectFromRecord with type_mod_r' = ";
@@ -714,6 +746,19 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 			Nilcontext.c_insert_kind(NILctx_of context, var_arg_c, knd_arg, cont1)
 		    end
 
+(*
+val _ = (print "cbnd_body_cat are ";
+	 app (fn (v,k,c) => (print "  ";
+			     Ppnil.pp_var v; print "  :: ";
+			     Ppnil.pp_kind k; print " = ";
+			     Ppnil.pp_con c; print "\n")) 
+	 (flattenCatlist cbnd_body_cat);
+	 print "\n\n";
+	 print "type_body_r is = \n";
+	 Ppnil.pp_con type_body_r;
+	 print "\n")
+*)
+
 	   val (arrow, effect) = 
 	       if body_valuable then
 		   (Il.TOTAL, Total)
@@ -731,19 +776,37 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
            val local_name_fun_c = Name.fresh_var ()
 
-	   val knd_fun_c = Arrow_k(Open, [(var_arg_c, knd_arg)], knd_body_c)
+	   val cbnds_body_subst = 
+	       let fun folder ((v,k,c),s) = Subst.con_subst_compose(s, Subst.fromList[(v,c)])
+	       in  foldl folder (Subst.empty()) cbnds_body
+	       end
+
+	   val knd_body_c' = Subst.substConInKind cbnds_body_subst knd_body_c
+
+(*
+val _ = (print "knd_body_c is ";
+	 Ppnil.pp_kind knd_body_c;
+	 print "\nknd_body_c' is ";
+	 Ppnil.pp_kind knd_body_c';
+	 print "\n\n")
+*)
+	   val type_body_r' = Let_c(Sequential,
+				    (map Con_cb cbnds_body), 
+				    type_body_r)
+
+	   val knd_fun_c = Arrow_k(Open, [(var_arg_c, knd_arg)], knd_body_c')
 	   val type_fun_r = AllArrow_c(Open, effect, [(var_arg_c, knd_arg)], 
 				       if (is_con_arg_unit andalso !optimize_empty_structure)
 					   then []
 				       else [con_arg], 
 				       w0,
-				       type_body_r)
+				       type_body_r')
 
            val cbnd_fun_cat = 
 	       LIST[(var_fun_c, knd_fun_c,
 		     makeLetC [Open_cb(local_name_fun_c, [(var_arg_c, knd_arg)],
 				       makeLetC (map Con_cb cbnds_body) name_body_c,
-				       knd_body_c)]
+				       knd_body_c')]
 		              (Var_c local_name_fun_c))]
 
 	   val ebnd_fun_cat =  
@@ -758,7 +821,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 					 Let_e(Sequential,
 					       (map Con_b cbnds_body) @ ebnds_body,
 					       name_body_r),
-					 type_body_r))])]
+					 type_body_r'))])]
 
 
        in
@@ -1043,7 +1106,9 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	    ebnd_cat = ebnd_cat,
 	    valuable = valuable,
 	    record_c_con_items = (lbl, Var_c var) :: record_c_con_items,
-	    record_c_knd_items = ((lbl, Name.fresh_var ()), knd) :: record_c_knd_items,
+(* xxx why a fresh var??? *)
+(*    record_c_knd_items = ((lbl, Name.fresh_var ()), knd) :: record_c_knd_items, *)
+	    record_c_knd_items = ((lbl, var), knd) :: record_c_knd_items, 
 	    record_r_labels = record_r_labels,
 	    record_r_field_types = record_r_field_types,
 	    record_r_exp_items = record_r_exp_items}
@@ -1218,20 +1283,22 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
      | xsbnds' context (do_optimize, _, Il.SBND(lbl, Il.BND_MOD(var, il_mod)) :: rest) =
        let
+
+
 	   val (var_c, var_r, vmap') = splitVar (var, vmap_of context)
 	   val {ebnd_cat, cbnd_cat, valuable, knd_c, type_r,...} = 
 	       xmod context (il_mod, SOME (var, var_c, var_r))
 
-           val context' = 
-	       update_NILctx
-		(update_vmap(context, vmap'),
-		 Nilcontext.insert_kind
-		 (Nilcontext.insert_con(NILctx_of context, var_r, type_r), var_c, knd_c))
+(* xxxx added by Perry *)
+	   val context = update_vmap(context, vmap')
+	   val context = update_NILctx_cbndcat(context,cbnd_cat)
+	   val context = update_NILctx_insert_con(context, var_r, type_r)
+
 
 	   val {final_context, cbnd_cat=cbnd_cat', ebnd_cat=ebnd_cat', 
                 valuable=valuable', record_c_con_items, record_c_knd_items, 
                 record_r_labels, record_r_field_types,
-		record_r_exp_items} = xsbnds context' (do_optimize, true, rest)
+		record_r_exp_items} = xsbnds context (do_optimize, true, rest)
        in
 	   {final_context = final_context,
 	    cbnd_cat = APP [cbnd_cat, cbnd_cat'],

@@ -238,7 +238,9 @@ struct
 	     (case (strip_singleton record_kind) of
 		Record_k kinds => sequence2list kinds
 	      | other => 
-		  (error "Non-record kind returned from get_shape' in projection" handle e => raise e))
+		    (print "Non-record kind returned from get_shape' in projection:\n";
+		     PpNil.pp_kind other; print "\n";
+		     error "Non-record kind returned from get_shape' in projection" handle e => raise e))
 	   fun find ((l,v),k) = eq_label(l,label)
 	   (*No dependencies, since shape is all we get*)
 	   val (_,kind) = valOf (List.find find entry_kinds)

@@ -37,6 +37,7 @@ signature NILCONTEXT' =
       * parse trees, since otherwise scoping will cause
       * an attempt to rebind a variable.
       *)
+    val context_addkindmap : context * context -> context
     val insert_kind : (context -> con -> con) -> context * var * kind -> context
     val find_kind : context*var -> kind option
     val find_kind' : context*var -> (con*kind) option
@@ -100,6 +101,7 @@ signature NILCONTEXT =
       * parse trees, since otherwise scoping will cause
       * an attempt to rebind a variable.
       *)
+    val context_addkindmap : context * context -> context
     val insert_kind : context*var*kind -> context
     val find_kind : context*var -> kind option
     val find_kind' : context*var -> (con*kind) option

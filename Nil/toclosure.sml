@@ -842,10 +842,10 @@ struct
 	   val vc_free = map (fn (v,c) => (v,c_rewrite lift c)) vc_free
 	   val doopt = ((length vk_free) < 2) andalso ((length vc_free) < 2)
 	   val vk_free = (case (doopt,vk_free) of
-			     (true,[]) => [(Name.fresh_var(), Record_k[])]
+			     (true,[]) => [(Name.fresh_named_var "nofreecvar", Record_k[])]
 			   | _ => vk_free)
 	   val vc_free = (case (doopt,vc_free) of
-			     (true,[]) => [(Name.fresh_var(), Prim_c(Record_c[],[]))]
+			     (true,[]) => [(Name.fresh_named_var "nofreeevar", Prim_c(Record_c[],[]))]
 			   | _ => vc_free)
 	   val _ = if (!debug)
 		       then (print "fun_rewrite v = "; Ppnil.pp_var v;
@@ -1002,7 +1002,8 @@ struct
 		    val elist' = map (e_rewrite lift) elist
 		    val eflist' = map (e_rewrite lift) eflist
 		    fun docall (cv,{freeevars=vc_free, freecvars=vk_free,...} : frees) = 
-			let val doopt = ((length vk_free) < 2) andalso ((length vc_free) < 2)
+			let val vk_free = rev vk_free
+			    val doopt = ((length vk_free) < 2) andalso ((length vc_free) < 2)
 			    val clist'' = (case (doopt,vk_free) of
 					       (true,[]) => [Crecord_c[]]
 					     | _ => map (fn (v,_) => Var_c v) vk_free)

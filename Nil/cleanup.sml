@@ -5,6 +5,7 @@
        Also, drop import and exports with datatype labels since these
        are the top-level datatypes.
        Check this invariant by checking the labels in the select primitive.
+(3) not performed anymore
    (3) Perform certain beta reductions.
        Transform:
                    let ...
@@ -158,15 +159,17 @@ struct
 				      then CHANGE_RECURSE(Let_e(letsort,rev acc,body))
 				  else NOCHANGE
                   (* Rule 3: applies exactly if there is one bnd *)
+(*
 		  | loop acc [bnd as ((Fixopen_b vfset) | (Fixcode_b vfset))] = 
 		      (case (set2list vfset,body) of
-			   ([(v,Function(_, Leaf, vklist, vclist, flist, e, c))],
+			   ([(v,Function(_, Nil.Leaf, vklist, vclist, flist, e, c))],
 			    App_e(_,Var_e v',cargs,eargs,fargs)) =>
 			   if (eq_var(v,v'))
 			       then CHANGE_RECURSE(Let_e(letsort, rev acc,
 							 ereduce(vklist,vclist,flist,e,c,cargs,eargs,fargs)))
 			   else (changed := true; loop (bnd::acc) [])
 			  | _ => loop (bnd::acc) [])
+*)
 		  | loop acc (bnd::rest) = loop (bnd::acc) rest
 	    in  loop [] bnds
 	    end

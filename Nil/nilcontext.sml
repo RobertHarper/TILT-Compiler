@@ -55,6 +55,18 @@ struct
 		  c_binds_top : (con option*kind) map,
 		  e_binds_top : con map}
 
+  (* given two well-formed contexts,
+    add the entries kindmap of ctxt2 to to the ones in ctxt1;
+    if key is is present in both maps, that entry is not added *)
+  fun context_addkindmap ({kindmap = km1, conmap,top_level,c_binds_top,e_binds_top} : context,
+			  {kindmap = km2,...} : context) = 
+      {kindmap = V.unionWith (fn (e1,e2) => e1) (km1,km2),
+       conmap = conmap,
+       top_level = top_level,
+       c_binds_top = c_binds_top,
+       e_binds_top = e_binds_top}
+      
+
   fun empty ():context = 
     {kindmap = V.empty,
      conmap = V.empty,

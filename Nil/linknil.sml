@@ -190,6 +190,11 @@ structure Linknil (* : LINKNIL *) =
 		 cu_bnds = bnds, vmap = total_varmap} = 
 		Tonil.xcompunit ctxt import_varmap sbnds
 
+(*
+val _ = (print "Nil final context is:\n";
+	 NilContext.print_context nil_final_context;
+	 print "\n\n")
+*)
 
             (* create the imports with classifiers by using the NIL context 
 	      returned by the phase splitter *)
@@ -415,6 +420,17 @@ structure Linknil (* : LINKNIL *) =
 		  print "\n")
 	else (print str; print " complete\n")
 	    
+    fun pcompile' debug (ctxt,sbnds,sdecs) = 
+	let
+	    open Nil LinkIl.Il LinkIl.IlContext Name
+	    val D = NilContext.empty()
+
+	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnds,sdecs)	    
+	    val _ = showmod debug "Phase-split" nilmod
+	in
+	    nilmod
+	end
+
     fun compile' debug (ctxt,sbnds,sdecs) = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
@@ -487,6 +503,13 @@ structure Linknil (* : LINKNIL *) =
 	in  map (compile' debug) mods
 	end
 
+    fun meta_pcompiles debug filenames = 
+	let val mods = valOf ((if debug then linkil_tests else LinkIl.compiles) filenames)
+	in  map (pcompile' debug) mods
+	end
+
+    fun pcompile filename = hd(meta_pcompiles false [filename])
+    fun ptest filename = hd(meta_pcompiles true [filename])
 
     fun compiles filenames = meta_compiles false filenames
     fun compile filename = hd(meta_compiles false [filename])
