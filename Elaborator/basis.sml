@@ -40,7 +40,7 @@ struct
     fun start context = B {sbnds=nil, sdecs=nil, context=context}
 
     fun add_sdec_ctxt (sdec, context) =
-	IlContext.add_context_sdec (context, IlContext.SelfifySdec context sdec)
+	IlContext.add_context_sdec (context, sdec)
 	
     fun add_sbnd_top ((_, sdec), B {sbnds, sdecs, context}) =
 	B {sbnds=sbnds,
@@ -59,8 +59,8 @@ struct
 	    open Il
 	    val body = MOD_STRUCTURE sbnds
 	    val signat = SIGNAT_STRUCTURE sdecs
-	    val sbnd = SBND(lab, BND_MOD(var, true, body))
-	    val sdec = SDEC(lab, DEC_MOD(var, true, signat))
+	    val sbnd = SBND(lab, BND_MOD(var,false,body))
+	    val sdec = SDEC(lab, DEC_MOD(var,false,signat))
 	in  add_sdec_ctxt (sdec,context)
 	end
 end
@@ -108,9 +108,7 @@ structure Basis :> BASIS =
 	    val argsig = SIGNAT_STRUCTURE([SDEC(l,DEC_CON(fresh_var(),
 							  KIND,
 							  NONE, false))])
-	    val inner_ctxt = add_context_dec(context,
-					     IlContext.SelfifyDec context
-					     (DEC_MOD(argvar,false,argsig)))
+	    val inner_ctxt = add_context_dec(context,DEC_MOD(argvar,false,argsig))
 	    val instcon = CON_MODULE_PROJECT(MOD_VAR argvar,l)
 	    val exp = c2exp instcon
 	    val con = IlStatic.GetExpCon(inner_ctxt,exp)
