@@ -960,4 +960,5 @@ struct
 	in  rev desc_
 	end
 
+    val add_include = Stats.timer("Project description", add_include)
 end

@@ -2295,7 +2295,7 @@ structure Toil
 		 SOME _ => ()
 	       | NONE => (Error.warn_region_with "top-level unresolved tyvar -- setting to unit: ";
 			  pp_con (CON_TYVAR tv); print "\n";
-			  Stats.counter "toil.unresolved_tyvar" ();
+			  Stats.counter_inc(Stats.counter"toil.unresolved_tyvar");
 			  ignore(IlStatic.eq_con (ctxt, CON_TYVAR tv, con_unit))))
 	fun tyvar_con_handler (c:con) : con option =
 	    (case c

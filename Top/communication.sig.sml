@@ -29,11 +29,11 @@ sig
     datatype message =
 	READY
       | ACK_INTERFACE of label
-      | ACK_FINISHED of label * Stats.delta
-      | ACK_UNFINISHED of label * Stats.delta
+      | ACK_FINISHED of label * Stats.measurements
+      | ACK_UNFINISHED of label * Stats.measurements
       | ACK_REJECT of label * string
       | BOMB of string
-      | INIT of Platform.objtype * Stats.stats * IntSyn.desc
+      | INIT of Platform.objtype * Stats.flags * IntSyn.desc
       | COMPILE of label
 
     (* Debugging support *)

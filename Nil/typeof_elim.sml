@@ -4,7 +4,7 @@ structure Typeof_Elim :> TYPEOF_ELIM =
     val debug = Stats.ff "typeof_elim_debug"
     val leave_toplevel_typeofs = Stats.ff "leave_toplevel_typeofs"
     val report = Stats.ff "typeofShowSize"
-    val max = Stats.int "TypeofMaxInc"
+    val max = Stats.counter'"TypeofMaxInc"
     local
 
       open TypedNilRewrite
@@ -96,7 +96,7 @@ structure Typeof_Elim :> TYPEOF_ELIM =
 		  val new = Measure.mod_size {cstring = Measure.cstring,count = [],count_in = []} nilmod'
 		  val pct = Real.fromInt(#total new) / Real.fromInt(#total old) * 100.0
 		  val pcti = Real.round pct
-		  val _ = if pcti > !max then max := pcti else ()
+		  val _ = Stats.counter_max(max,pcti)
 		in
 		  List.app print [Int.toString (!i)," Typeof_c nodes rewritten\n",
 				  "New module is ", Int.toString pcti, "% of old module\n"

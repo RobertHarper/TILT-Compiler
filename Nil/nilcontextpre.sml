@@ -178,11 +178,11 @@ structure NilContextPre
     * about 1/12 of the insertion time.  I think Splay Maps make repeated
     * splays on the same value cheap.
     *)
-   val var_max = Stats.int "MaxVarsBound"
+   val var_max = Stats.counter'"MaxVarsBound"
    fun Vinsert (map,v,value) =
      let
        val n = V.numItems map
-       val _ = if n > !var_max then var_max := n else ()
+       val _ = Stats.counter_max(var_max,n)
      in
        if contains map v then
 	 error (locate "Vinsert") ("Variable already occurs in context: "^(Name.var2string v))

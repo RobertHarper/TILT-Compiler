@@ -125,4 +125,8 @@ struct
 	in  Fs.write' writer dest
 	end
 
+    val assemble = Stats.timer("assembling",assemble)
+    val link = Stats.timer("linking",link)
+    val compress = Stats.timer("compressing",compress)
+    val uncompress = Stats.timer("uncompressing",uncompress)
 end

@@ -59,8 +59,7 @@ struct
 
   val diag = ref false
   val debug = Stats.ff("TortlDebug")
-  val debug_full_when = Stats.int("TortlDebugFull")
-  val _ = debug_full_when := 99999
+  val debug_full_when = Stats.int("TortlDebugFull",99999)
   val curfun = ref 0
   fun debug_full() = !debug_full_when <= !curfun
   val debug_full_return = ref false

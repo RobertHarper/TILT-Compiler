@@ -442,7 +442,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	in
 	  (case LD.E.letpath srep
 	     of SOME srep => P.bind srep (fn srep => mkswitch srep drep)
-	      | NONE => (betaexp();
+	      | NONE => (Stats.counter_inc betaexp;
 			 P.bind (mkfn ()) (fn f => LD.E.allapp' f [srep] [drep] [])))
 	end
     in
@@ -711,7 +711,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  in
 	    (case LD.E.letpath srep
 	       of SOME srep => P.bind srep (fn srep => mkswitch srep drep args)
-		| NONE => (betaexp();
+		| NONE => (Stats.counter_inc betaexp;
 			   P.bind (mkfn ()) (fn f => LD.E.allapp' f [srep] ([drep]@args) [])))
 	  end
 

@@ -16,7 +16,8 @@ struct
     fun elab_error s = Util.error "equal.sml: elaborator impossibility" s
     fun error s = Util.error "equal.sml" s
     val debug = Stats.ff("EqualDebug")
-    val num = Stats.int("eqtimes")
+    val MaxNum = Stats.counter'"Max equality reductions"
+    val num = ref 0
 
     fun debugdo t = if (!debug) then ignore (t()) else ()
 
@@ -547,6 +548,7 @@ struct
 				       in  xeq state context (NONE, con)
 				       end))))
 		handle ReallyNoEqExp => NONE
+	    val _ = Stats.counter_max(MaxNum,!num)
 	in
 	    debugdo (fn () => print ("XXX it took me " ^ Int.toString (!num) ^ " tries.\n"));
 	    res

@@ -50,10 +50,9 @@ functor Flatten( structure PrimUtil : PRIMUTIL
       (var , (var * label list * var list * con list)) HashTable.hash_table
 
     (* Counts of optimizations which have occured *)
-    val fold_click = Stats.int "Constants folded"
-    val flatten_click = Stats.int "Functions flattened"
-    fun inc_click c =
-      c := !c + 1
+    val fold_click = Stats.counter "Constants folded"
+    val flatten_click = Stats.counter "Functions flattened"
+    fun inc_click c = Stats.counter_inc c
 
     (* Table of various information about each variable, created during
      the reduce pass. If it is not availble, we don't do this pass. *)

@@ -207,7 +207,7 @@ struct
 				    sumtypeTerm,
 				    exp_varloc,
 				    trace) : term * state =
-      let val _ = Stats.counter("RTLxinject_sum_dyn_single") ()
+      let val _ = Stats.counter_inc(Stats.counter("RTLxinject_sum_dyn_single"))
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
 		sumtypes,field_sub) = help info
@@ -243,7 +243,7 @@ struct
 			    con_varloc,
 			    exp_varloc,
 			    trace) : term * state =
-	let val _ = Stats.counter("RTLxinject_sum_dyn_multi") ()
+	let val _ = Stats.counter_inc(Stats.counter("RTLxinject_sum_dyn_multi"))
 
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -273,7 +273,7 @@ struct
 	end
 
   fun xproject_sum_dynamic (info, sumtypeReg, exp_ir, traceinfo) : term * state =
-     let val _ = Stats.counter("RTLprojsum") ()
+     let val _ = Stats.counter_inc(Stats.counter("RTLprojsum"))
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
 		sumtypes,field_sub) = help info

@@ -513,9 +513,9 @@ struct
 	    let
 		fun init() : Comm.message =
 		    let val objtype = Target.getTarget()
-			val stats = Stats.get()
+			val flags = Stats.get_flags()
 			val desc = get_desc()
-		    in  Comm.INIT(objtype,stats,desc)
+		    in  Comm.INIT(objtype,flags,desc)
 		    end
 		val init = Util.memoize init
 		exception Stop
@@ -554,10 +554,8 @@ struct
 		val _ = findNewSlaves()
 		val slaves = list_slaves()
 		val (workingSlaves, _) = partition_slaves slaves
-		fun update (slave:Comm.identity, delta:Stats.delta) : unit =
-		    let val stats = Stats.get()
-			val stats = Stats.add(stats,delta)
-			val _ = Stats.set stats
+		fun update (slave:Comm.identity, meas:Stats.measurements) : unit =
+		    let val _ = Stats.add_measurements meas
 			val _ = markSlaveIdle slave
 		    in  ()
 		    end
@@ -569,20 +567,21 @@ struct
 			    | SOME Comm.READY => ()
 			    | SOME (Comm.ACK_INTERFACE job) =>
 				markProceeding job
-			    | SOME (Comm.ACK_FINISHED (job, delta)) =>
+			    | SOME (Comm.ACK_FINISHED (job, meas)) =>
 			       (markDone job;
-				update(slave,delta))
-			    | SOME (Comm.ACK_UNFINISHED (job, delta)) =>
+				update(slave,meas))
+			    | SOME (Comm.ACK_UNFINISHED (job, meas)) =>
 			       (markPending' job;
-				update(slave,delta))
+				update(slave,meas))
 			    | SOME (Comm.ACK_REJECT (job,msg)) =>
 			       (print ("slave " ^ Comm.name slave ^
 				       " found an error in " ^
 				       Name.label2longname job ^ "\n");
 				reject msg)
 			    | SOME (Comm.BOMB msg) =>
-				Util.error ("slave " ^ Comm.name slave)
-					   msg
+				let val from = "slave " ^ Comm.name slave
+				in  Util.error from msg
+				end
 			    | SOME _ => error ("slave " ^ (Comm.name slave) ^ " sent a bad message"))
 		    workingSlaves
 		val (_, idleSlaves) = partition_slaves slaves

@@ -369,19 +369,6 @@ structure IlStatic
 			  true)
 	   end
 
-(*
-       val set = fn (arg as (_,c)) =>
-	   let
-	       val islong_before = (Stats.fetch_timer_max "Elab-set") > 0.5
-	       val res = Stats.subtimer("Elab-set",set) arg
-               val islong_after = (Stats.fetch_timer_max "Elab-set") > 0.5
-	       val _ = if (not islong_before andalso islong_after)
-			   then (print "set took more than 0.5s with c = ";
-				 pp_con c; print "\n\n")
-		       else ()
-	   in  res
-	   end
-*)
      in  (set, constrain, undo, commit)
      end
 

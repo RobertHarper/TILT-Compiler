@@ -123,32 +123,32 @@ structure Linknil :> LINKNIL  =
 		    else ()
 (*	    val _ = 
 	      let
-		val max = Stats.int "MaxVarsBound"
-		val phasemax = Stats.int (phasename^"MaxVarsBound")
-		val bound_count = Stats.int "BoundVariables"
-		val unused_count = Stats.int "UnusedVariables"
-		val phasebound = Stats.int (phasename^"::BoundVariables")
-		val phaseunused = Stats.int (phasename^"::UnusedVariables")
+		val max = Stats.counter "MaxVarsBound"
+		val phasemax = Stats.counter'(phasename^"MaxVarsBound")
+		val bound_count = Stats.counter "BoundVariables"
+		val unused_count = Stats.counter "UnusedVariables"
+		val phasebound = Stats.counter'(phasename^"::BoundVariables")
+		val phaseunused = Stats.counter'(phasename^"::UnusedVariables")
 	      in
-		phasemax := Int.max (!max,!phasemax);
-		phasebound := Int.max (!bound_count,!phasebound);
-		phaseunused := Int.max (!unused_count,!phaseunused);
-		max := 0;
-		bound_count := 0;
-		unused_count := 0
+		Stats.counter_max(phasemax,Stats.counter_fetch max);
+		Stats.counter_max(phasebound,Stats.counter_fetch bound_count);
+		Stats.counter_max(phaseunused,Stats.counter_fetch unused_count);
+		Stats.counter_clear max;
+		Stats.counter_clear bound_count;
+		Stats.counter_clear unused_count
 	      end*)
 
 	val _ =
 	  if !measurephase orelse !measure then
 	    let
 	      val (imps,bnds,exps) = Measure.mod_size' {cstring=Measure.cstring,count=[],count_in=[]} nilmod
-	      val impsr = Stats.int (phasename^"::importsize")
-	      val totcsr = Stats.int (phasename^"::totalconsize")
-	      val totsr = Stats.int (phasename^"::totalsize")
+	      val impsr = Stats.counter (phasename^"::importsize")
+	      val totcsr = Stats.counter (phasename^"::totalconsize")
+	      val totsr = Stats.counter (phasename^"::totalsize")
 	    in
-		impsr := !impsr + (#total imps);
-		totcsr := !totcsr + (#cons imps) + (#cons bnds) + (#cons exps);
-		totsr := !totsr + (#total imps) + (#total bnds) + (#total exps)
+		Stats.counter_add(impsr,(#total imps));
+		Stats.counter_add(totcsr,(#cons imps) + (#cons bnds) + (#cons exps));
+		Stats.counter_add(totsr,(#total imps) + (#total bnds) + (#total exps))
 	    end
 	  else ()
 	in  nilmod

@@ -115,7 +115,7 @@ struct
 
   fun xsub_dynamic(state,c, con_ir) (vl1 : term, vl2 : term, tr) : term * state =
       let
-	  val _ = Stats.counter("Rtlxsub_dyn")()
+	  val _ = Stats.counter_inc(Stats.counter("Rtlxsub_dyn"))
 	  fun floatcase s = let val (LOCATION(REGISTER(_,F fr)),s) = xsub_float(state,Prim.F64)
 								(vl1,vl2,Nil.TraceKnown TraceInfo.Notrace_Real)
 				val (ir,s) = boxFloat(s,fr)
@@ -251,7 +251,7 @@ struct
                      (vl1 : term, vl2 : term, vl3 : term)
       : term * state =
       let
-	  val _ = Stats.counter("Rtlxupdate_dyn")()
+	  val _ = Stats.counter_inc(Stats.counter("Rtlxupdate_dyn"))
 	   val r = con_ir
 	   val tmp = alloc_regi NOTRACE_INT
 	   val afterl = fresh_code_label "update_after"
@@ -333,7 +333,7 @@ struct
 
   fun xlen_dynamic (state,c,con_ir) (vl : term) : term * state =
       let
-	  val _ = Stats.counter("Rtlxlen_dyn")()
+	  val _ = Stats.counter_inc(Stats.counter("Rtlxlen_dyn"))
 	  val tag = get_tag vl
 	  val len = alloc_regi NOTRACE_INT
 	  val tmp = alloc_regi NOTRACE_INT
@@ -580,7 +580,7 @@ struct
      (*   (What?  joev)  *)
  and xarray_dynamic (state,c, con_ir) (vl1 : term, vl2opt : term option) : term * state =
     let
-	val _ = Stats.counter("Rtlxarray_dyn")()
+	val _ = Stats.counter_inc(Stats.counter("Rtlxarray_dyn"))
 	val dest = alloc_regi TRACE
 	val r = con_ir
 	val tmp = alloc_regi NOTRACE_INT

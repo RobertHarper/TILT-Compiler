@@ -1,611 +1,814 @@
 structure Stats :> STATS =
 struct
 
-       structure StringMap = Util.StringMap
-       structure B = Blaster
+    structure Map = Util.StringMap
+    structure B = Blaster
 
-       val error = fn s => Util.error "stats.sml" s
-       type time = Time.time
+    val error = fn s => Util.error "stats.sml" s
 
-       type time_entry = {count: int, max : real,last : real,
-			  top_timer : bool, active : bool ref,
-			  sum : {gc : time, sys: time, usr: time, real : time}} ref
+    fun apply (f:'a -> 'b) (x:'a) : (unit -> 'b) =
+        let val r = f x
+        in  fn () => r
+        end handle e => fn () => raise e
 
-       type counter_entry = int ref
-       type int_entry = int ref
-       type bool_entry = bool ref
-       datatype entry = TIME_ENTRY of time_entry
-		      | COUNTER_ENTRY of counter_entry
-		      | INT_ENTRY of int_entry
-		      | BOOL_ENTRY of bool_entry
-	val entries : (string * entry) list ref = ref []
+    (*
+        Counters
+    *)
 
-       fun clear_stats() =
-	 let
-	   fun reset (s,TIME_ENTRY entry) =
-	       let val z = Time.zeroTime
-	       in  entry := {count = 0,
-			     max = 0.0,
-			     last = 0.0,
-			     active = ref false,
-			     top_timer = #top_timer (!entry),
-			     sum = {gc=z,sys=z,usr=z,real=z}}
-	       end
-	     | reset (s,COUNTER_ENTRY entry) = entry := 0
-	     | reset (s,INT_ENTRY entry) = entry := 0
-	     | reset (s,BOOL_ENTRY entry) = () (*entry := true*)
-	 in  List.app reset (!entries)
-	 end
+    datatype combine = ADD | MAX
 
-       fun reset_stats() = (entries := [])
+    fun blastOutCombine (os:B.outstream) (c:combine) : unit =
+        (case c of
+            ADD => B.blastOutInt os 0
+        |   MAX => B.blastOutInt os 1)
 
-       fun fetch_entry name =
-	 Listops.assoc_eq((op =): string * string -> bool,name, !entries)
+    fun blastInCombine (is:B.instream) : combine =
+        (case (B.blastInInt is) of
+            0 => ADD
+        |   1 => MAX
+        |   _ => error "blastInCombine")
 
-       fun find_entry entry_maker s : entry =
-	 (case fetch_entry s of
-	    SOME entry => entry
-	  | NONE => let val entry = entry_maker()
-			val entries' = (s,entry) :: (!entries)
-			val _ = entries := entries'
-		    in entry
-		    end)
+    (* Invariant: If {count,...} : counter, then !count >= 0. *)
 
-      fun find_time_entry s disjoint =
-	let val z = Time.zeroTime
-	    fun maker () = TIME_ENTRY(ref{count = 0,
-					  max = 0.0,
-					  last = 0.0,active = ref false,
-					  top_timer = disjoint,
-					  sum = {gc=z,sys=z,usr=z,real=z}})
-        in  case (find_entry maker s) of
-		TIME_ENTRY res => res
-	      | _ => error "find_time_entry: did not find a TIME_ENTRY"
-	end
+    type counter =
+        {count:int ref,
+         combine:combine}
 
-      fun find_counter_entry s =
-	let fun maker () = COUNTER_ENTRY(ref 0)
-        in  case (find_entry maker s) of
-		COUNTER_ENTRY res => res
-	      | _ => error "find_counter_entry: did not find a COUNTER_ENTRY"
+    fun make_counter (combine:combine) : counter =
+        {count = ref 0,
+         combine = combine}
+
+    fun counter_fetch (counter:counter) : int =
+        let val {count,...} = counter
+        in  !count
         end
-      fun find_int_entry s =
-	let fun maker () = INT_ENTRY(ref 0)
-        in  case (find_entry maker s) of
-		INT_ENTRY res => res
-	      | _ => error "find_int_entry: did not find a INT_ENTRY"
+
+    fun counter_clear (counter:counter) : unit =
+        let val {count,...} = counter
+        in  count := 0
         end
-      fun find_bool_entry maker s =
-         case (find_entry maker s) of
-		BOOL_ENTRY res => res
-	      | _ => error "find_bool_entry: did not find a BOOL_ENTRY"
 
-      fun fetch_timer_max name = #max(!(find_time_entry name false))
-      fun fetch_timer_last name = #last(!(find_time_entry name false))
+    fun counter_changed (counter:counter) : bool =
+        counter_fetch counter > 0
 
-      fun fetch_timer name =
-	let
-	  val ref {count,max,last,sum as {gc, sys, usr, real},...} =
-	    (case fetch_entry name
-	       of SOME (TIME_ENTRY res) => res
-		| _ => error ("fetch_timer: no TIME_ENTRY of name "^name))
-	in
-	  {count = count,
-	   max   = max,
-	   last  = last,
-	   gc    = Time.toReal gc,
-	   cpu   = Time.toReal(Time.+(sys,usr)),
-	   real  = Time.toReal real}
-	end
+    (* Restricts i more than the invariant requires. *)
+    fun counter_add (counter:counter, i:int) : unit =
+        if i >= 0 then
+            let val {count,...} = counter
+            in  count := !count + i
+            end
+        else error "trying to decrease counter"
 
-      fun fetch_counter name =
-	let
-	  val ref count =
-	    (case fetch_entry name
-	       of SOME (COUNTER_ENTRY res) => res
-		| _ => error ("fetch_counter: no COUNTER_ENTRY of name "^name))
-	in count
-	end
+    fun counter_max (counter:counter, i:int) : unit =
+        let val {count,...} = counter
+        in  count := Int.max(!count,i)
+        end
 
-      val int = find_int_entry
-      fun bool str = find_bool_entry
-	             (fn() => error ("trying to get an uninitialized bool " ^ str)) str
-      val tt = find_bool_entry (fn() => BOOL_ENTRY(ref true))
-      val ff = find_bool_entry (fn() => BOOL_ENTRY(ref false))
+    fun counter_inc (counter:counter) : unit =
+        let val {count,...} = counter
+        in  count := !count + 1
+        end
 
-      fun counter str = let val intref = find_counter_entry str
-                        in fn() => let val v = !intref
-				   in intref := v + 1; v
-				   end
-			end
-      fun update_entry {count,max,top_timer,last,active,sum as {gc=gc',sys=sys',usr=usr',real=real'}} {usr,sys,gc} real =
-	let
-	  val new_sum = {gc = Time.+(gc,gc'),
-			 sys = Time.+(sys,sys'),
-			 usr = Time.+(usr,usr'),
-			 real = Time.+(real,real')}
-	  val cur = Time.toReal(Time.+(gc,Time.+(sys,usr)))
-	in {count = count+1,
-	    last = cur,
-	    active = active,
-	    max = Real.max(cur,max),
-	    top_timer = top_timer,
-	    sum = new_sum}
-	end
+    fun counter_acc (master:counter, slave:int) : unit =
+        let val {count,combine} = master
+            val combine : int * int -> int =
+                (case combine of
+                    ADD => op +
+                |   MAX => Int.max)
+            val _ = count := combine (!count,slave)
+        in  ()
+        end
 
-      fun timer_help (avoid_overlap,disjoint) (str,f) arg =
-	let
-	  val entry_ref = find_time_entry str disjoint
-	  val (entry as {active,...}) = !entry_ref
-	in
-	  if avoid_overlap andalso !active then
-	    f arg
-	  else
-	    let
-	      val _ = active := true
-	      val cpu_timer = Timer.startCPUTimer()
-	      val real_timer = Timer.startRealTimer()
-	      val r = f arg
-	      val cpu =  Timer.checkCPUTimer cpu_timer
-	      val real =  Timer.checkRealTimer real_timer
-	      val new_entry = update_entry entry cpu real
-	      val _ = entry_ref := new_entry
-	      val _ = active := false
-	    in r
-	    end
-	end
+    (*
+        Timers
+    *)
 
-      val timer     = fn arg => timer_help (false,true) arg
-      val subtimer  = fn arg => timer_help (false,false) arg
-      val timer'    = fn arg => timer_help (true,true) arg
-      val subtimer' = fn arg => timer_help (true,false) arg
+    (* Invariant:  If {gc,cpu,real} : time, then gc,cpu,real >= 0 *)
 
-      local
-	val startCPUTimer = Timer.startCPUTimer
-	val checkCPUTimer = Timer.checkCPUTimer
+    type time =
+        {gc:real,
+         cpu:real,  (* user and system *)
+         real:real}
 
-	fun add {usr,sys,gc} = Time.toReal(Time.+(sys,usr))
+    (*
+        Gc time is included in cpu time - don't overcount.
+    *)
+    fun time_combine (time:time) : real =
+        let val {gc,cpu,real} = time
+        in  cpu + real
+        end
 
-	val delta_t = ref NONE;
+    val time_zero : time = {gc=0.0, cpu=0.0, real=0.0}
 
-	val delta_timeout = 10000  (* If the timer doesn't advance after 10000 uses, we give up *)
+    fun time_add (a:time, b:time) : time =
+        let val {gc=gca, cpu=cpua, real=reala} = a
+            val {gc=gcb, cpu=cpub, real=realb} = b
+        in  {gc = gca + gcb,
+             cpu = cpua + cpub,
+             real = reala + realb}
+        end
 
-	fun delta () =
-	  (case (!delta_t) of
-	       NONE =>
-	       let
-		 val cputimer = startCPUTimer ()
-		 fun loop cnt =
-		     if (cnt > delta_timeout)
-			 then (print "Warning: timer does not advance after ";
-			       print (Int.toString delta_timeout); print " uses; assuming 0 overhead\n";
-			       0.0)
-		     else let val d = add (checkCPUTimer cputimer)
-			  in  if (Real.==(d,0.0))
-				  then loop (cnt+1)
-			      else d
-			  end
-		 val d = loop 0
-		 val _ = delta_t := SOME d
-	       in d
-	       end
-	     | (SOME r) => r)
+    fun time_apply (f:'a -> 'b) (x:'a) : time * (unit -> 'b) =
+        let val cpu = Timer.startCPUTimer()
+            val real = Timer.startRealTimer()
+            val r = apply f x
+            val {usr,sys,gc} = Timer.checkCPUTimer cpu
+            val real = Time.toReal(Timer.checkRealTimer real)
+            val gc = Time.toReal gc
+            val cpu = Time.toReal(Time.+(sys,usr))  (* usr includes gc *)
+            val time = {gc=gc, cpu=cpu, real=real}
+        in  (time,r)
+        end
 
-	(*This times small functions.  This is just to get a handle on how much
-	 * the timers slow things down.
-	 *)
-	fun ftime(f,epsilon) =
-	  let
-	    val d = delta()
-	    val tmin = (d / epsilon) + d;
+    fun blastOutTime (os:B.outstream) (time:time) : unit =
+        let val {gc,cpu,real} = time
+        in  B.blastOutReal os gc;
+            B.blastOutReal os cpu;
+            B.blastOutReal os real
+        end
 
-	    fun f_for c =
-	      if c > 0 then
-		(f();f_for(c-1))
-	      else ()
+    fun blastInTime (is:B.instream) : time =
+        {gc = B.blastInReal is,
+         cpu = B.blastInReal is,
+         real = B.blastInReal is}
 
-	    fun loop cnt =
-	      let
-		val cputimer = startCPUTimer ()
-		val _ = f_for cnt
-		val tmeas = add (checkCPUTimer cputimer)
-	      in
-		if tmeas < tmin then
-		  loop (cnt + cnt)
-		else tmeas / (Real.fromInt cnt)
-	      end
-	  in
-	    loop 1
-	  end
+    (* Invariant: If {max,last,count,...} : times, then max,last,count >= 0 *)
 
-	val timer_overhead = ref NONE
+    type times =
+        {total:time,
+         max:real,  (* combined *)
+         last:real, (* combined *)
+         count:int}
 
-	fun test() = subtimer("TimerTimingCall",fn x=>x) 3
+    val times_zero : times =
+        {total=time_zero, max=0.0, last=0.0, count=0}
 
-	fun get_overhead () =
-	  (case timer_overhead
-	     of ref (SOME r) => r
-	      | ref NONE => (timer_overhead := SOME (ftime(test,0.01));get_overhead()))
+    fun times_addtime (times:times, time:time) : times =
+        let val {total, max, last, count} = times
+            val total = time_add(total, time)
+            val t = time_combine time
+            val max = Real.max(max,t)
+            val count = count + 1
+        in  {total=total, max=max, last=t, count=count}
+        end
 
-      in
-	fun timer_time n = (Real.fromInt n) * (get_overhead())
-      end
+    fun times_acc (master:times, slave:times) : times =
+        let val {total, max, count, ...} = master
+            val {total=stotal, max=smax, last, count=scount} = slave
+            val total = time_add(total,stotal)
+            val max = Real.max(max,smax)
+            val count = count + scount
+        in  {total=total, max=max, last=last, count=count}
+        end
 
-      local
-	  fun loop i = if i < 0 then () else (print " "; loop (i-1))
-      in
-	  fun lprint max_size str =
-	      (print str; loop (max_size - (size str)))
-	  fun rprint max_size str =
-	      (loop (max_size - (size str)); print str)
-      end
+    fun blastOutTimes (os:B.outstream) (times:times) : unit =
+        let val {total,max,last,count} = times
+        in  blastOutTime os total;
+            B.blastOutReal os max;
+            B.blastOutReal os last;
+            B.blastOutInt os count
+        end
 
-       fun print_timers'() =
-	 let
+    fun blastInTimes (is:B.instream) : times =
+        {total = blastInTime is,
+         max = B.blastInReal is,
+         last = B.blastInReal is,
+         count = B.blastInInt is}
 
-	   (*gc time is included in the user time - don't overcount*)
-	   fun triple2cpu  ({sys,usr,gc,real}) = Time.toReal(Time.+(sys,usr))
-	   fun triple2real ({sys,usr,gc,real})    = Time.toReal real
+    fun times_is_zero (times:times) : bool =
+        let val {count,...} = times
+        in  count = 0
+        end
 
-	   val entries = rev(!entries)
+    type timer =
+        {toplevel:bool,
+         avoid_overlap:bool,
+         times:times ref,
+         active:bool ref}
 
-	   fun folder ((_,TIME_ENTRY (ref{top_timer=true,sum,...})),(acc_cpu,acc_real)) =
-	     (acc_cpu+(triple2cpu sum), acc_real+(triple2real sum))
-	     | folder (_,acc) = acc
+    fun make_timer (toplevel:bool, avoid_overlap:bool) : timer =
+        {toplevel=toplevel,
+         avoid_overlap=avoid_overlap,
+         times=ref times_zero,
+         active=ref false}
 
-	   val (total_cpu, total_real) = foldr folder (0.0,0.0) entries
+    fun timer_clear (timer:timer) : unit =
+        let val {active,times,...} = timer
+            val _ = active := false
+            val _ = times := times_zero
+        in  ()
+        end
 
+    fun timer_changed (timer:timer) : bool =
+        let val {times, ...} = timer
+        in  not(times_is_zero (!times))
+        end
 
-	   fun real2stringWith prec r = Real.fmt (StringCvt.FIX (SOME prec)) r
+    fun timer_active (timer:timer) : bool =
+        let val {active,...} = timer
+        in  !active
+        end
 
-	   val max_name_size = foldl (fn ((n,TIME_ENTRY _),m) => Int.max(m,size n)
-				       | (_,m) => m)
-	                           10 entries
+    fun timer_apply (timer:timer) (f:'a -> 'b) (x:'a) : 'b =
+        let val {avoid_overlap, active, times, ...} = timer
+        in  if avoid_overlap andalso !active then
+                f x
+            else
+                let val _ = active := true
+                    val (time,r) = time_apply f x
+                    val _ = active := false
+                    val _= times := times_addtime(!times,time)
+                in  r()
+                end
+        end
 
-	   fun print_strings(name,count_string,per_call_string,max_string,
-			     time_cpu_string,percent_cpu_string,time_gc_string,
-			     time_real_string,percent_real_string, warning_flag) =
-	     (lprint max_name_size name;
-	      print " | ";
-	      rprint 6 count_string;
-	      rprint 7 per_call_string;
-	      rprint 7 max_string;
-	      print " | ";
-	      rprint 7 time_cpu_string;
-	      rprint 7 percent_cpu_string;
-	      print " | ";
-	      rprint 6 time_gc_string;
-	      print " | ";
-	      rprint 7 time_real_string;
-	      rprint 7 percent_real_string;
-	      print " | ";
-	      lprint 4 warning_flag;
-	      print "\n")
+    fun timer_fetch (timer:timer) : times =
+        let val {times, ...} = timer
+        in  !times
+        end
 
-	   fun pritem (name,TIME_ENTRY(ref {count,max,top_timer,sum,active,...})) =
-	     let
-	       val time_cpu = triple2cpu sum
-	       val time_real = triple2real sum
-	       val per_call = (time_cpu * 1000.0)/(Real.fromInt count) (*In milliseconds!*)
-	       val per_call = (Real.realFloor(per_call * 10.0)) / 10.0
-	       val timer_overhead = timer_time count
-	       val time_cpu_string = real2stringWith 2 time_cpu
-	       val time_real_string = real2stringWith 2 time_real
-	       val time_gc_string   = real2stringWith 2 (Time.toReal (#gc sum))
-	       val count_string = Int.toString count
-	       val per_call_string = real2stringWith 1 per_call
-	       val max_string = Int.toString (Real.trunc (max*1000.0)) (*In milliseconds (truncate, since beyond resolution)*)
-	       fun percent frac =
-		   let val per = frac * 100.0
-		       val str = "(" ^ (real2stringWith 1 per) ^ ")"
-		   in  if (size str <= 5) then " " ^ str else str
-		   end
-	       val percent_cpu_string =
-		   if top_timer then (percent (time_cpu/total_cpu)) else ""
-	       val percent_real_string =
-		 if top_timer then (percent (time_real/total_real)) else ""
+    fun timer_acc (timer:timer, slave:times) : unit =
+        let val {times,...} = timer
+            val _ = times := times_acc(!times, slave)
+        in  ()
+        end
 
-	       (* If timer is active, print a warning flag.
-		* If the timer overhead is greater than 1 second, print it.
-		* Otherwise, if realtime is more than twice cpu time, print
-		* a warning flag *)
-	       val warning_flag = (if !active then "ON!"
-	                           else if timer_overhead > 1.0 then real2stringWith 2 timer_overhead
-				   else if (time_real > time_cpu * 2.0) then "***"
-				   else "")
-	     in
-	       print_strings(name,count_string,per_call_string,max_string,
-			     time_cpu_string,percent_cpu_string,time_gc_string,
-			     time_real_string,percent_real_string, warning_flag)
-	     end
-	     | pritem _ = ()
-	 in
-	   print "\nGlobal timings\n";
-	   print_strings("Timer Name","Calls","Avg","Max",
-			 "cpu","cpu","gc","real"," real","flags");
-	   print_strings("","","(ms)","(ms)",
-			 "(s)","(%)","(s)","(s)"," (%)","");
-	   print "----------------------------------------------------------------------------------------------------\n";
-	   app pritem entries;
-	   print "----------------------------------------------------------------------------------------------------\n";
-	   lprint max_name_size "TOTAL CPU TIME";
-	   print " : ";
-	   print (real2stringWith 2 total_cpu);
-	   print " seconds\n";
-	   lprint max_name_size "TOTAL REAL TIME";
-	   print " : ";
-	   print (real2stringWith 2 total_real);
-	   print " seconds\n";
-	   let val lines = !(int "SourceLines")
-	   in  if lines > 0
-		 then (lprint max_name_size "OVERALL RATE";
-		       print " : ";
-		       print (real2stringWith 2 ((Real.fromInt lines) / total_real));
-		       print " lines/second\n")
-	       else ()
-	   end;
-	   print (Date.toString(Date.fromTimeLocal(Time.now())));
-	   print "\n\n"
-	 end
-
-      fun print_counters'() =
+    (*
+        Estimate timer overhead; this is just used to warn the
+        user so we do not try to account for differences
+        between the master and slaves.  It is not worth fixing
+        this bug.  Run your master and slave on the same
+        machine when you want an accurate warning.
+    *)
+    fun timer_overhead () : real =
         let
-	       fun pritem (name,COUNTER_ENTRY(ref count)) =
-		       (lprint 30 name;
-		        print " : ";
-		        rprint 8 (Int.toString count);
-			print "\n")
-	         | pritem _ = ()
-	in
-	     print "Global counters\n";
-	     print "-------------------------------------------\n";
-	     app pritem (rev(!entries));
-	     print "-------------------------------------------\n"
-	 end
+            (* Estimate the smallest measurable time. *)
+            val cputimer = Timer.startCPUTimer()
+            fun elapsed () : real =
+                let val {sys,usr,...} = Timer.checkCPUTimer cputimer
+                in  Time.toReal(Time.+(sys,usr))
+                end
+            fun find_min_time (timeout:int) : real =
+                if timeout = 0 then 0.0
+                else
+                    let val t = elapsed()
+                    in  if Real.==(t,0.0) then
+                            find_min_time(timeout-1)
+                        else t
+                    end
+            val min_time = find_min_time 10000
 
-      fun print_ints'() =
+            (* Measure a reasonable number of timed function applications. *)
+            fun iter (f:'a -> 'b, x:'a, n:int) : unit =
+                if n = 0 then ()
+                else (f x; iter(f,x,n-1))
+            val target_time = 30.0 * min_time
+            fun measure (f:'a -> 'b, x:'a) : int * real =
+                let fun loop (n:int) : int * real =
+                        let val timer = make_timer(true,false)
+                            val _ = iter (timer_apply timer f,x,n)
+                            val {total,...} = timer_fetch timer
+                            val {cpu,...} = total
+                        in  if cpu >= target_time then
+                                (n,cpu)
+                            else loop(n+n)
+                        end
+                in  loop 1
+                end
+            fun trivial () = ()
+            val (count,slow) = measure (trivial,())
+
+            (* Measure the same number of normal function applications. *)
+            fun measure (f:'a -> 'b, x:'a) : real =
+                let val (time,_) = time_apply iter (f,x,count)
+                    val {cpu,...} = time
+                in  cpu
+                end
+            val fast = measure (trivial,())
+
+            val overhead =
+                if count = 0 orelse slow < fast then 0.0
+                else (slow - fast)/real count
+        in  overhead
+        end
+    val timer_overhead = Util.memoize timer_overhead
+
+    (*
+        Stats
+    *)
+
+    datatype flag =
+        INT of int ref
+    |   BOOL of bool ref
+
+    datatype meas =
+        COUNTER of counter
+    |   TIMER of timer
+
+    datatype stat =
+        FLAG of flag
+    |   MEAS of meas
+
+    (*
+        Invariant:
+        If {map,order} : stats,
+        then order=dom(map)
+        and (rev order) is the order of stat creation.
+    *)
+    type stats =
+        {map:stat Map.map,
+         order:string list} (* backwards *)
+
+    val stats_empty : stats =
+        {map=Map.empty,
+         order=nil}
+
+    val stats : stats ref = ref stats_empty
+
+    fun clear_measurements () : unit =
         let
-	       fun pritem (name,INT_ENTRY(ref count)) =
-		       (lprint 30 name;
-		        print " : ";
-		        rprint 8 (Int.toString count);
-			print "\n")
-	         | pritem _ = ()
-	in
-	    print "Global integer statistics\n";
-	     print "-------------------------------------------\n";
-	     app pritem (rev(!entries));
-	     print "-------------------------------------------\n"
-	 end
+            fun clear (stat:stat) : unit =
+                (case stat of
+                    FLAG _ => ()
+                |   MEAS (COUNTER c) => counter_clear c
+                |   MEAS (TIMER t) => timer_clear t)
+            val {map,...} = !stats
+            val _ = Map.app clear map
+        in  ()
+        end
 
-      fun print_bools'() =
-        let
-	       fun pritem (name,BOOL_ENTRY(ref flag)) =
-		       (lprint 30 name;
-		        print " : ";
-		        print (Bool.toString flag);
-			print "\n")
-	         | pritem _ = ()
-	in
-	     print "Global flags\n";
-	     print "-------------------------------------------\n";
-	     app pritem (rev(!entries));
-	     print "-------------------------------------------\n"
-	 end
+    fun lookup_stat (name:string) : stat option =
+        let val {map,...} = !stats
+        in  Map.find (map,name)
+        end
 
+    fun require_stat (what:string, name:string) : stat =
+        (case (lookup_stat name) of
+            SOME stat => stat
+        |   NONE => error ("trying to use nonexistent " ^ what ^ ": " ^ name))
 
-      fun make_sorted () =
-	let
-	  val orig_entries = !entries
-	  val sort_entries = ListMergeSort.sort (fn ((n1,_),(n2,_)) => String.<(n1,n2)) orig_entries
-	in entries := sort_entries
-	end
+    fun get_stat (maker:unit -> stat, name:string) : stat =
+        (case (lookup_stat name) of
+            SOME stat => stat
+        |   NONE =>
+                let val stat = maker()
+                    val {map,order} = !stats
+                    val map = Map.insert(map,name,stat)
+                    val order = name::order
+                    val _ = stats := {map=map, order=order}
+                in  stat
+                end)
 
-      fun print_bools ()    = (make_sorted();print_bools'())
-      fun print_counters () = (make_sorted();print_counters'())
-      fun print_ints ()     = (make_sorted();print_ints'())
+    val Int = "int"
+    val Bool = "bool"
+    val Counter = "counter"
+    val Timer = "timer"
 
-      val sort_timers = ff "StatsSortTimers"
+    fun stat_ty (stat:stat) : string =
+        (case stat of
+            FLAG (INT _) => Int
+        |   FLAG (BOOL _) => Bool
+        |   MEAS (COUNTER _) => Counter
+        |   MEAS (TIMER _) => Timer)
 
-      fun print_timers ()   = (if !sort_timers then make_sorted() else ();
-			       print_timers'() )
+    fun mismatch (name:string, expected:string, found:stat) : 'a =
+        let val found = stat_ty found
+            val msg = concat [
+                "stat ", name, " mismatch; expected ", expected,
+                " found ", found
+            ]
+        in  error msg
+        end
 
-      fun print_stats() =
-	let val orig_entries = !entries
-	in
-	  make_sorted();
-	  print "\n\n";
-	  print_bools'();
-	  print "\n\n";
-	  print_counters'();
-	  print "\n\n";
-	  print_ints'();
-	  print "\n\n";
-	  if !sort_timers then () else entries := orig_entries;
-	  print_timers'();
-	  print "\n\n"
-	end
+    fun get_int (default:int) (name:string) : int ref =
+        let fun maker () = FLAG(INT (ref default))
+        in
+            (case (get_stat(maker,name)) of
+                FLAG (INT r) => r
+            |   stat => mismatch (name,Int,stat))
+        end
 
-    type time_snap =
-	{count:int, max:real, last:real,
-	 sum:{gc:time, sys:time, usr:time, real:time}}
-    type counter_snap = int
-    type int_snap = int
-    type bool_snap = bool
-    datatype snap =
-	TIME_SNAP of time_snap
-      | COUNTER_SNAP of counter_snap
-      | INT_SNAP of int_snap
-      | BOOL_SNAP of bool_snap
+    fun require_int (name:string) : int ref =
+        (case (require_stat (Int,name)) of
+            FLAG (INT r) => r
+        |   stat => mismatch (name,Int,stat))
 
-    fun get' (entry:entry) : snap =
-	(case entry
-	   of TIME_ENTRY (ref {active=ref true,...}) => error "getting active timer"
-	    | TIME_ENTRY (ref {count,max,last,sum,...}) =>
-		TIME_SNAP {count=count, max=max, last=last, sum=sum}
-	    | COUNTER_ENTRY (ref n) => COUNTER_SNAP n
-	    | INT_ENTRY (ref n) => INT_SNAP n
-	    | BOOL_ENTRY (ref b) => BOOL_SNAP b)
+    fun get_bool (default:bool) (name:string) : bool ref =
+        let fun maker () = FLAG(BOOL(ref default))
+        in
+            (case (get_stat(maker,name)) of
+                FLAG (BOOL r) => r
+            |   stat => mismatch (name,Bool,stat))
+        end
 
-    fun set' (entry:entry, snap:snap) : unit =
-	(case (entry, snap)
-	   of (TIME_ENTRY r, TIME_SNAP b) =>
-		let val {top_timer,active,...} = !r
-		    val _ = if !active then error "setting active timer" else ()
-		    val {count,max,last,sum} = b
-		    val ent =
-			{count=count, max=max, last=last,
-			 top_timer=top_timer, active=active, sum=sum}
-		in  r := ent
-		end
-	    | (COUNTER_ENTRY r, COUNTER_SNAP b) => r := b
-	    | (INT_ENTRY r, INT_SNAP b) => r := b
-	    | (BOOL_ENTRY r, BOOL_SNAP b) => r := b
-	    | _ => error "entry mismatch in set'")
+    fun require_bool (name:string) : bool ref =
+        (case (require_stat(Bool,name)) of
+            FLAG (BOOL r) => r
+        |   stat => mismatch (name,Bool,stat))
 
-fun sub_time what (new,old) =
-	if Time.<(new,old) then
-	    error ("sub_time " ^ Time.toString new ^ " - " ^ Time.toString old ^ "\n")
-	else Time.-(new,old)
+    fun get_counter (combine:combine) (name:string) : counter =
+        let fun maker () = MEAS(COUNTER(make_counter combine))
+        in
+            (case (get_stat(maker,name)) of
+                MEAS (COUNTER c) => c
+            |   stat => mismatch(name,Counter,stat))
+        end
 
-    fun sub' (snap:snap, snap':snap) : snap option =
-	(case (snap,snap')
-	   of (TIME_SNAP a, TIME_SNAP b) =>
-		let val {count, max, last, sum={gc,sys,usr,real}} = a
-		    val {count=count', max=max', last=last',
-			 sum={gc=gc', sys=sys', usr=usr', real=real'}} = b
-		    val changed =
-			count <> count' orelse
-			Real.!= (max,max') orelse
-			Real.!= (last,last') orelse
-			gc <> gc' orelse
-			sys <> sys' orelse
-			usr <> usr' orelse
-			real <> real'
-		in  if changed then
-			let val count = count - count'
-			    val gc = sub_time "gc" (gc,gc')
-			    val sys = sub_time "sys" (sys,sys')
-			    val usr = sub_time "usr" (usr,usr')
-			    val real = sub_time "real" (real,real')
-			    val sum = {gc=gc, sys=sys, usr=usr, real=real}
-			    val ent = {count=count, max=max, last=last, sum=sum}
-			in  SOME (TIME_SNAP ent)
-			end
-		    else NONE
-		end
-	    | (COUNTER_SNAP n, COUNTER_SNAP n') =>
-		if n <> n' then SOME (COUNTER_SNAP (n-n')) else NONE
-	    | (INT_SNAP n, INT_SNAP n') =>
-		if n <> n' then SOME (INT_SNAP n) else NONE
-	    | (BOOL_SNAP b, BOOL_SNAP b') =>
-		if b <> b' then SOME (BOOL_SNAP b) else NONE
-	    | _ => error "entry mismatch in subtract")
+    fun require_counter (name:string) : counter =
+        (case (require_stat (Counter,name)) of
+            MEAS (COUNTER c) => c
+        |   stat => mismatch(name,Counter,stat))
 
-    fun add' (snap:snap, snap':snap) : snap =
-	(case (snap, snap')
-	   of (TIME_SNAP a, TIME_SNAP b) =>
-		let val {count,max,sum={gc,sys,usr,real},...} = a
-		    val {count=count', max=max', last=last',
-			 sum={gc=gc', sys=sys', usr=usr', real=real'}} = b
-		    val count = count+count'
-		    val max = Real.max (max,max')
-		    val gc = Time.+(gc,gc')
-		    val sys = Time.+(sys,sys')
-		    val usr = Time.+(usr,usr')
-		    val real = Time.+(real,real')
-		    val ent =
-			{count=count, max=max, last=last',
-			 sum={gc=gc, sys=sys, usr=usr, real=real}}
-		in  TIME_SNAP ent
-		end
-	    | (COUNTER_SNAP a, COUNTER_SNAP b) => COUNTER_SNAP(a+b)
-	    | (INT_SNAP _, INT_SNAP _) => snap'
-	    | (BOOL_SNAP _, BOOL_SNAP _) => snap'
-	    | _ => error "entry mismatch in add")
+    fun get_timer (options:bool * bool) (name:string) : timer =
+        let fun maker () = MEAS(TIMER(make_timer options))
+        in
+            (case (get_stat(maker,name)) of
+                MEAS(TIMER timer) => timer
+            |   stat => mismatch(name,Timer,stat))
+        end
 
-    type stats = snap StringMap.map
-    type delta = stats
+    fun require_timer (name:string) : timer =
+        (case (require_stat(Timer,name)) of
+            MEAS(TIMER timer) => timer
+        |   stat => mismatch(name,Timer,stat))
 
-    fun from_list (stats : (string * snap) list) : stats =
-	let fun folder ((n,s),m) = StringMap.insert (m,n,s)
-	in  foldl folder StringMap.empty stats
-	end
+    fun int (name:string, default:int) : int ref =
+        get_int default name
 
-    fun get () : stats =
-	let val stats = map (fn (n,e) => (n,get' e)) (!entries)
-	in  from_list stats
-	end
+    val bool : string -> bool ref = require_bool
 
-    fun set (stats:stats) : unit =
-	let fun apper (n,e) =
-		(case StringMap.find (stats,n)
-		   of SOME s => set'(e,s)
-		    | NONE => ())
-	in  app apper (!entries)
-	end
+    val tt : string -> bool ref =
+        get_bool true
 
-    fun sub (a:stats, b:stats) : delta =
-	let fun mapper (n,s) : snap option =
-		(case StringMap.find (b,n)
-		   of SOME s' => sub' (s,s')
-		    | NONE => NONE)
-	in  StringMap.mapPartiali mapper a
-	end
+    val ff : string -> bool ref =
+        get_bool false
 
-    fun add (stats:stats, delta:delta) : stats =
-	let fun mapper (n,s) : snap =
-		(case StringMap.find (delta,n)
-		   of SOME s' => add'(s,s')
-		    | NONE => s)
-	in  StringMap.mapi mapper stats
-	end
+    val counter : string -> counter =
+        get_counter ADD
 
-    fun blastOutSnap (os:B.outstream) (s:snap) : unit =
-	(case s
-	   of TIME_SNAP {count,max,last,sum={gc,sys,usr,real}} =>
-		(B.blastOutInt os 0; B.blastOutInt os count;
-		 B.blastOutReal os max; B.blastOutReal os last;
-		 B.blastOutTime os gc; B.blastOutTime os sys;
-		 B.blastOutTime os usr; B.blastOutTime os real)
-	    | COUNTER_SNAP n => (B.blastOutInt os 1; B.blastOutInt os n)
-	    | INT_SNAP n => (B.blastOutInt os 2; B.blastOutInt os n)
-	    | BOOL_SNAP b => (B.blastOutInt os 3; B.blastOutBool os b))
-    fun blastInSnap (is:B.instream) : snap =
-	(case B.blastInInt is
-	   of 0 =>
-		let val count = B.blastInInt is
-		    val max = B.blastInReal is
-		    val last = B.blastInReal is
-		    val gc = B.blastInTime is
-		    val sys = B.blastInTime is
-		    val usr = B.blastInTime is
-		    val real = B.blastInTime is
-		    val ent =
-			{count=count,max=max,last=last,
-			 sum={gc=gc,sys=sys,usr=usr,real=real}}
-		in  TIME_SNAP ent
-		end
-	    | 1 => COUNTER_SNAP (B.blastInInt is)
-	    | 2 => INT_SNAP (B.blastInInt is)
-	    | 3 => BOOL_SNAP (B.blastInBool is)
-	    | _ => error "bad snap")
+    val counter' : string -> counter =
+        get_counter MAX
 
-    fun blastOutStats (os:B.outstream) (s:stats) : unit =
-	let val entries = StringMap.listItemsi s
-	    val blastout = B.blastOutPair B.blastOutString blastOutSnap
-	in  B.blastOutList blastout os entries
-	end
-    fun blastInStats (is:B.instream) : stats =
-	let val blastin = B.blastInPair B.blastInString blastInSnap
-	    val entries = B.blastInList blastin is
-	in  from_list entries
-	end
+    fun timer_help (options:bool*bool) (name:string, f:'a -> 'b) : 'a -> 'b =
+        let val timer = get_timer options name
+        in  timer_apply timer f
+        end
 
-    val (blastOutDelta, blastInDelta) =
-	B.magic (blastOutStats, blastInStats, "delta $Revision$")
+    val timer : string * ('a -> 'b) -> 'a -> 'b =
+        fn x => timer_help (true,false) x
 
-    val (blastOutStats, blastInStats) =
-	B.magic (blastOutStats, blastInStats, "stats $Revision$")
+    val subtimer : string * ('a -> 'b) -> 'a -> 'b =
+        fn x => timer_help (false,false) x
+
+    val timer' : string * ('a -> 'b) -> 'a -> 'b =
+        fn x => timer_help (true,true) x
+
+    val subtimer' : string * ('a -> 'b) -> 'a -> 'b =
+        fn x => timer_help (false,true) x
+
+    fun fetch_timer_times (name:string) : times =
+        let val timer = require_timer name
+            val times = timer_fetch timer
+        in  times
+        end
+
+    val fetch_timer_last : string -> real =
+        #last o fetch_timer_times
+
+    (*
+        Printing
+    *)
+    local
+        fun loop (i:int) : unit = if i < 0 then () else (print " "; loop (i-1))
+    in
+        fun lprint (max_size:int) (str:string) : unit =
+            (print str; loop (max_size - (size str)))
+        fun rprint (max_size:int) (str:string): unit=
+            (loop (max_size - (size str)); print str)
+    end
+
+    fun entries (sort:bool) : string list =
+        let val {order,map} = !stats
+        in  if sort then
+                Map.foldri (fn (name,_,acc) => name::acc) nil map
+            else
+                rev order
+        end
+
+    val StatsSortTimers = ff "StatsSortTimers"
+
+    fun print_timers () : unit =
+        let val order = entries (!StatsSortTimers)
+            fun timer (name:string) : (string * timer) option =
+                (case (lookup_stat) name of
+                    SOME (MEAS(TIMER timer)) => SOME (name,timer)
+                |   _ => NONE)
+            val timers = List.mapPartial timer order
+
+            fun folder ((name:string,timer:timer), (cpu:real, real:real)) : real * real =
+                if #toplevel timer then
+                    let val times = timer_fetch timer
+                        val {total,...} = times
+                        val {cpu=cpu',real=real',...} = total
+                    in  (cpu+cpu',real+real')
+                    end
+                else (cpu,real)
+            val (total_cpu, total_real) = foldl folder (0.0,0.0) timers
+
+            fun real2string (prec:int) (r:real) : string =
+                Real.fmt (StringCvt.FIX (SOME prec)) r
+
+            val max_name_size =
+                foldl (fn ((n,_),m) => Int.max(m,size n))
+                10 timers
+            val max_name_size = max_name_size + 1
+            fun layout (name:string,count:string,per_call:string,
+                max:string,time_cpu:string,percent_cpu:string,
+                time_gc:string,time_real:string,percent_real:string,
+                warning:string) : unit =
+                (lprint max_name_size name;
+                 print " | ";
+                 rprint 6 count;
+                 rprint 7 per_call;
+                 rprint 7 max;
+                 print " | ";
+                 rprint 7 time_cpu;
+                 rprint 7 percent_cpu;
+                 print " | ";
+                 rprint 6 time_gc;
+                 print " | ";
+                 rprint 7 time_real;
+                 rprint 7 percent_real;
+                 print " | ";
+                 lprint 4 warning;
+                 print "\n")
+            fun print_timer (name:string, timer:timer) : unit =
+                let val {toplevel,times,active,...} = timer
+                    val {total,max,last,count} = !times
+                    val {cpu,real,gc} = total
+                    val count' = Real.fromInt count
+                    val per_call = ((time_combine total)*1000.0)/count' (* ms *)
+                    val per_call = (Real.realFloor(per_call*10.0))/10.0
+                    val overhead = timer_overhead() * count'
+                    val max = Int.toString(trunc (max*1000.0))  (* ms, truncated since beyond resolution *)
+                    val warn_active = !active
+                    val warn_overhead = overhead > 1.0
+                    val warn_time = real > cpu * 2.0
+                    fun percent (frac:real) : string =
+                        if toplevel then
+                            let val per = frac*100.0
+                                val str = "(" ^ real2string 1 per ^ ")"
+                            in  if size str <= 5 then " " ^ str else str
+                            end
+                        else ""
+                    val percent_cpu = percent (cpu/total_cpu)
+                    val percent_real = percent (real/total_real)
+                    val cpu = real2string 2 cpu
+                    val real = real2string 2 real
+                    val gc = real2string 2 gc
+                    val count = Int.toString count
+                    val per_call = real2string 1 per_call
+                    (*
+                        Warn if timer is active, overhead is greater than 1
+                        second, or real time is more than twice cpu time.
+                    *)
+                    val warning =
+                        if warn_active then "ON!"
+                        else if warn_overhead then real2string 2 overhead
+                        else if warn_time then "***"
+                        else ""
+                in  layout(name,count,per_call,max,
+                        cpu,percent_cpu,gc,
+                        real,percent_real,warning)
+                end
+        in
+            print "\nGlobal timings\n";
+            layout("Timer Name","Calls","Avg","Max",
+                "cpu","cpu","gc","real"," real","flags");
+            layout("","","(ms)","(ms)",
+                "(s)","(%)","(s)","(s)"," (%)","");
+            print "----------------------------------------------------------------------------------------------------\n";
+            app print_timer timers;
+            print "----------------------------------------------------------------------------------------------------\n";
+            lprint max_name_size "TOTAL CPU TIME";
+            print " : ";
+            print (real2string 2 total_cpu);
+            print " seconds\n";
+            lprint max_name_size "TOTAL REAL TIME";
+            print " : ";
+            print (real2string 2 total_real);
+            print " seconds\n";
+            let val lines = counter_fetch(counter"SourceLines")
+            in  if lines > 0 andalso total_real > 0.0 then
+                    (lprint max_name_size "OVERALL RATE";
+                     print " : ";
+                     print (real2string 2 ((Real.fromInt lines) / total_real));
+                    print " lines/second\n")
+                else ()
+            end;
+            print (Date.toString(Date.fromTimeLocal(Time.now())));
+            print "\n\n"
+        end
+
+    fun print_counters () : unit =
+        let val order = entries true
+            fun counter (name:string) : (string * counter) option =
+                (case (lookup_stat) name of
+                    SOME (MEAS(COUNTER c)) => SOME (name,c)
+                |   _ => NONE)
+            val counters = List.mapPartial counter order
+
+            fun print_counter (name:string, counter : counter) : unit =
+                (lprint 30 name;
+                 print " : ";
+                 rprint 8 (Int.toString (counter_fetch counter));
+                 print "\n")
+
+        in
+            print "Global counters\n";
+            print "-------------------------------------------\n";
+            app print_counter counters;
+            print "-------------------------------------------\n"
+        end
+
+    fun print_ints () : unit =
+        let val order = entries true
+            fun int (name:string) : (string * int ref) option =
+                (case (lookup_stat) name of
+                    SOME (FLAG (INT r)) => SOME (name,r)
+                |   _ => NONE)
+            val ints = List.mapPartial int order
+            fun print_int (name:string, ref n:int ref) : unit =
+                (lprint 30 name;
+                 print " : ";
+                 rprint 8 (Int.toString n);
+                 print "\n")
+        in
+            print "Global integer flags\n";
+            print "-------------------------------------------\n";
+            app print_int ints;
+            print "-------------------------------------------\n"
+        end
+
+    fun print_bools () : unit =
+        let val order = entries true
+            fun bool (name:string) : (string * bool ref) option =
+                (case (lookup_stat) name of
+                    SOME (FLAG (BOOL r)) => SOME (name,r)
+                |   _ => NONE)
+            val bools = List.mapPartial bool order
+
+            fun print_bool (name:string, ref flag:bool ref) : unit =
+                (lprint 30 name;
+                 print " : ";
+                 print (Bool.toString flag);
+                 print "\n")
+        in
+            print "Global boolean flags\n";
+            print "-------------------------------------------\n";
+            app print_bool bools;
+            print "-------------------------------------------\n"
+        end
+
+    fun print_stats() =
+        (print "\n\n";
+         print_bools();
+         print "\n\n";
+         print_ints();
+         print "\n\n";
+         print_counters();
+         print "\n\n";
+         print_timers();
+         print "\n\n")
+
+    fun print_measurements() =
+        (print "\n\n";
+         print_counters();
+         print "\n\n";
+         print_timers();
+         print "\n\n")
+    (*
+        Communication
+    *)
+    datatype flagv =
+        INTV of int
+    |   BOOLV of bool
+
+    type flags = (string * flagv) list
+
+    fun get_flags () : flags =
+        let val order = entries false
+            fun flag (name:string) : (string * flagv) option =
+                (case (lookup_stat) name of
+                    SOME (FLAG (INT (ref i))) => SOME (name,INTV i)
+                |   SOME (FLAG (BOOL (ref b))) => SOME (name,BOOLV b)
+                |   _ => NONE)
+            val flags = List.mapPartial flag order
+        in  flags
+        end
+
+    fun set_flags (flags:flags) : unit =
+        let fun set (name:string, flagv:flagv) : unit =
+                (case flagv of
+                    INTV n =>
+                        let val r = get_int 0 name
+                        in  r := n
+                        end
+                |   BOOLV b =>
+                        let val r = get_bool true name
+                        in  r := b
+                        end)
+            val _ = app set flags
+        in  ()
+        end
+
+    fun blastOutFlagv (os:B.outstream) (flagv:flagv) : unit =
+        (case flagv of
+            INTV i => (B.blastOutInt os 0; B.blastOutInt os i)
+        |   BOOLV b => (B.blastOutInt os 1; B.blastOutBool os b))
+
+    fun blastInFlagv (is:B.instream) : flagv =
+        (case (B.blastInInt is) of
+            0 => INTV (B.blastInInt is)
+        |   1 => BOOLV (B.blastInBool is)
+        |   _ => error "blastInFlagv")
+
+    val blastOutFlags : B.outstream -> flags -> unit =
+        B.blastOutList (B.blastOutPair B.blastOutString blastOutFlagv)
+
+    val blastInFlags : B.instream -> flags =
+        B.blastInList (B.blastInPair B.blastInString blastInFlagv)
+
+    val (blastOutFlags,blastInFlags) =
+        B.magic (blastOutFlags,blastInFlags,"flags $Revision$")
+
+    datatype measv =
+        COUNTERV of combine * int
+    |   TIMERV of (bool * bool) * times
+
+    type measurements = (string * measv) list
+
+    fun get_measurements () : measurements =
+        let val order = entries false
+            fun measv (name:string) : (string * measv) option =
+                (case (lookup_stat) name of
+                    SOME (MEAS (COUNTER c)) =>
+                        if counter_changed c then
+                            let val {combine,...} = c
+                                val count = counter_fetch c
+                                val counterv = COUNTERV (combine,count)
+                            in  SOME (name,counterv)
+                            end
+                        else NONE
+                |   SOME (MEAS (TIMER t)) =>
+                        if timer_changed t then
+                            let val {toplevel,avoid_overlap,...} = t
+                                val times = timer_fetch t
+                                val timerv =
+                                    TIMERV ((toplevel,avoid_overlap),times)
+                            in  SOME (name, timerv)
+                            end
+                        else NONE
+                |   _ => NONE)
+            val changed = List.mapPartial measv order
+        in  changed
+        end
+
+    fun add_measurements (changed:measurements) : unit =
+        let fun add (name:string, measv:measv) : unit =
+                (case measv of
+                    COUNTERV (options,count) =>
+                        let val counter = get_counter options name
+                        in  counter_acc(counter,count)
+                        end
+                |   TIMERV (options,times) =>
+                        let val timer = get_timer options name
+                        in  timer_acc(timer,times)
+                        end)
+        in  app add changed
+        end
+
+    fun blastOutMeasv (os:B.outstream) (measv:measv) : unit =
+        (case measv of
+            COUNTERV (combine,i) =>
+                (B.blastOutInt os 0; blastOutCombine os combine; B.blastOutInt os i)
+        |   TIMERV ((toplevel,avoid_overlap),times) =>
+                (B.blastOutInt os 1; B.blastOutBool os toplevel;
+                 B.blastOutBool os avoid_overlap; blastOutTimes os times))
+
+    fun blastInMeasv (is:B.instream) : measv =
+        (case (B.blastInInt is) of
+            0 => COUNTERV (blastInCombine is, B.blastInInt is)
+        |   1 => TIMERV ((B.blastInBool is, B.blastInBool is), blastInTimes is)
+        |   _ => error "blastInMeasv")
+
+    val blastOutMeasurements : B.outstream -> measurements -> unit =
+        B.blastOutList (B.blastOutPair B.blastOutString blastOutMeasv)
+
+    val blastInMeasurements : B.instream -> measurements =
+        B.blastInList (B.blastInPair B.blastInString blastInMeasv)
+
+    val (blastOutMeasurements,blastInMeasurements) =
+        B.magic (blastOutMeasurements,blastInMeasurements,"meas $Revision$")
 
 end

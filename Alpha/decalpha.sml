@@ -646,7 +646,10 @@ structure Machine =
 
    val counter
        : string -> (unit -> unit)
-       = fn name => ignore o (Stats.counter name)
+       = fn name =>
+	 let val c = Stats.counter name
+	 in  fn () => Stats.counter_inc c
+	 end
    val large_stack_frame = counter "Large Stack Frames"
    val large_frame_access = counter "Large Frame Accesses"
 

@@ -20,8 +20,8 @@ fun debugmsg  (msg : string) =
       printit
   end
 
-fun addLines lines = let val r = Stats.int("SourceLines")
-		     in  r := !r + lines
+fun addLines lines = let val c = Stats.counter("SourceLines")
+		     in  Stats.counter_add(c,lines)
 		     end
 
 datatype 'a parseResult

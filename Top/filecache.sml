@@ -34,10 +34,10 @@ struct
 
     val error = fn s => Util.error "filecache.sml" s
 
-    val Vacated = Stats.int "FileCache: data bytes vacated"
-    val Demoted = Stats.int "FileCache: data bytes demoted"
-    val DataEvicted = Stats.int "FileCache: data bytes evicted"
-    val CRCEvicted = Stats.int "FileCache: CRC bytes evicted"
+    val Vacated = Stats.counter "Cache::data bytes vacated"
+    val Demoted = Stats.counter "Cache::data bytes demoted"
+    val DataEvicted = Stats.counter "Cache::data bytes evicted"
+    val CRCEvicted = Stats.counter "Cache::CRC bytes evicted"
 
     val FileCacheDebug = Stats.ff"FileCacheDebug"
     fun debugdo t = if (!FileCacheDebug) then (t();()) else ()
@@ -97,6 +97,7 @@ struct
 	 data_low=data_low, entries_high=entries_high,
 	 entries_low=entries_low}
 
+    val cinc : Stats.counter * int -> unit = Stats.counter_add
     fun inc (r : int ref, i : int) = r := !r + i
     fun dec (r : int ref, i : int) = inc(r, ~i)
 
@@ -161,8 +162,8 @@ struct
 		   of CRC (_,size) => (0,size)
 		    | DATUM (_,size) => (size,0)
 		    | BOTH (_,_,size) => (size,size))
-	    val _ = inc(CRCEvicted,crcsize)
-	    val _ = inc(DataEvicted,datasize)
+	    val _ = cinc(CRCEvicted,crcsize)
+	    val _ = cinc(DataEvicted,datasize)
 	    val _ = remove(store,file)
 	in  ()
 	end
@@ -181,7 +182,7 @@ struct
 			let val _ = note ("vacating",file)
 			    val entry = CRC(c,s)
 			    val _ = H.insert table (file,(time,entry))
-			    val _ = inc(Vacated,s)
+			    val _ = cinc(Vacated,s)
 			    val _ = dec(size,s)
 			in  ()
 			end)
@@ -219,7 +220,7 @@ struct
 		       of CRC _ => error "datum_size > 0 in CRC"
 			| DATUM _ => remove(store,file)
 			| BOTH (crc,_,s) => insert(store,file,CRC(crc,s)))
-		val _ = inc (Demoted,datum_size entry)
+		val _ = cinc (Demoted,datum_size entry)
 	    in  ()
 	    end
 	else
@@ -255,11 +256,11 @@ struct
 
     val error = fn s => Util.error "filecache.sml" s
 
-    val CRC = Stats.int "FileCache: bytes CRCed"
-    val CacheCRC = Stats.int "FileCache: bytes CRCed from cache"
-    val Read = Stats.int "FileCache: bytes read"
-    val CacheRead = Stats.int "FileCache: bytes read from cache"
-    val Write = Stats.int "FileCache: bytes written"
+    val CRC = Stats.counter "Cache::bytes CRCed"
+    val CacheCRC = Stats.counter "Cache::bytes CRCed from cache"
+    val Read = Stats.counter "Cache::bytes read"
+    val CacheRead = Stats.counter "Cache::bytes read from cache"
+    val Write = Stats.counter "Cache::bytes written"
 
     type file = string
     type crc = Crc.crc
@@ -284,8 +285,7 @@ struct
     fun file_size (file:file) : int =
 	OS.FileSys.fileSize file
 
-    fun inc (r : int ref, i : int) = r := !r + i
-    fun dec (r : int ref, i : int) = inc(r, ~i)
+    val cinc : Stats.counter * int -> unit = Stats.counter_add
 
     fun flush_all () : unit = store := mkstore()
 
@@ -298,14 +298,14 @@ struct
 	    | SOME _ => true)
 
     fun uncached_crc (file:string, crc:crc, size:int, entry:entry) : crc =
-	let val _ = inc(CRC,size)
+	let val _ = cinc(CRC,size)
 	    val _ = Store.insert (!store,file,entry)
 	in  crc
 	end
 
     fun cached_crc (crc:crc,size:int) : crc =
-	let val _ = inc(CRC,size)
-	    val _ = inc(CacheCRC,size)
+	let val _ = cinc(CRC,size)
+	    val _ = cinc(CacheCRC,size)
 	in  crc
 	end
 
@@ -334,14 +334,14 @@ struct
 	else ()
 
     fun uncached_read (file:file, i:internal, size:int, entry:entry) : internal =
-	let val _ = inc(Read,size)
+	let val _ = cinc(Read,size)
 	    val _ = Store.insert (!store,file,entry)
 	in  i
 	end
 
     fun cached_read (i:internal, size:int) : internal =
-	let val _ = inc(Read,size)
-	    val _ = inc(CacheRead,size)
+	let val _ = cinc(Read,size)
+	    val _ = cinc(CacheRead,size)
 	in  i
 	end
 
@@ -368,7 +368,7 @@ struct
     fun write (file:file, i:internal) : unit =
 	let val _ = Arg.writer (file,i)
 	    val size = file_size file
-	    val _ = inc(Write,size)
+	    val _ = cinc(Write,size)
 	    val _ = Store.insert (!store, file, Store.DATUM (i,size))
 	in  ()
 	end

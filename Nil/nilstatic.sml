@@ -171,9 +171,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val sub_phase              = NilUtil.sub_phase
   val alpha_subequiv_con     = NilUtil.alpha_subequiv_con
 
-  val alpha_subequiv_con = fn st => fn args => if alpha_subequiv_con st args then (alpha_equiv_success();true)
-					       else (alpha_equiv_fails();false)
-
+  val alpha_subequiv_con = fn st => fn args =>
+	let val success = alpha_subequiv_con st args
+	    val counter = if success then alpha_equiv_success
+			  else alpha_equiv_fails
+	    val _ = Stats.counter_inc counter
+	in  success
+	end
   val project_from_kind_nondep = NilUtil.project_from_kind_nondep
 
   val get_arrow_return  = NilUtil.get_arrow_return
@@ -300,10 +304,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   local
     structure Set = Name.VarSet
     val vars : Set.set ref = ref Set.empty
-    val bound_count = Stats.int "BoundVariables"
-    val unused_count = Stats.int "UnusedVariables"
+    val bound_count = Stats.counter "BoundVariables"
+    val unused_count = Stats.counter "UnusedVariables"
 
-    fun mark v = (vars := Set.add (!vars,v);bound_count := !bound_count + 1)
+    fun mark v = (vars := Set.add (!vars,v);Stats.counter_inc bound_count)
     fun see v = if Set.member (!vars,v) then vars := Set.delete (!vars, v) else ()
 
     fun insert_xxx inserter (ctxt,v,xxx) = (mark v;inserter(ctxt,v,xxx))
@@ -312,7 +316,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     fun find_xxx finder (ctxt,v) = (see v;finder (ctxt,v))
   in
     fun var_reset () = vars := Set.empty
-    fun var_stats () = unused_count := !unused_count + (Set.numItems (!vars))
+    fun var_stats () = Stats.counter_add(unused_count,(Set.numItems (!vars)))
     val insert_con              = insert_xxx insert_con
     val insert_con_list         = insert_xxx_list insert_con_list
     val insert_kind             = insert_xxx insert_kind
@@ -886,7 +890,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   val res1 = (tagcount1 = tagcount2) andalso
 		     (totalcount1 = totalcount2) andalso
 		     (known1 = known2)
-		   val _ = sum_equiv_count()
+		   val _ = Stats.counter_inc sum_equiv_count
 		 in
 		   res1 andalso
 		   eq_list(fn (c1,c2) => con_equiv((D,T),c1,c2,k,sk),

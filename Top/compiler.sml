@@ -798,5 +798,5 @@ struct
 	    val _ = debugdo report
 	in  pack' (desc,libdir)
 	end
-
+    val pack = Stats.timer("packing libraries",pack)
 end

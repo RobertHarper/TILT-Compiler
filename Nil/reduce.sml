@@ -78,7 +78,7 @@ structure Reduce
     (* First, stuff to keep track of how many reductions have been done. *)
 
     val max_name_size = ref 10
-    type click = { name : string , last : int ref, total : int ref}
+    type click = { name : string , last : int ref, total : Stats.counter}
     val clicks = ref [] : (click list) ref
 
     fun fprint max_size str =
@@ -89,20 +89,20 @@ structure Reduce
 
     fun make_click str =
 	let val _ = max_name_size := Int.max(size str, !max_name_size)
-	    val t = Stats.int(str)
+	    val t = Stats.counter'(str)
 	    val click = { name = str, last = ref 0, total = t  }
 	in (  clicks := click :: !clicks ;
 	    click )
 	end
 
     fun inc_click { last=r, name=n, total= t } =
-		t := ! t + 1
+		Stats.counter_inc t
     fun print_clicks unit =
 	let fun pritem {name = name, last = r, total = count } =
 	    (print "  ";
 	     fprint (!max_name_size) name;
 	     print " : ";
-	     fprint 8 (Int.toString (!count));
+	     fprint 8 (Int.toString (Stats.counter_fetch count));
 	     print "\n")
 	in
 	    print "Optimization results\n";
@@ -113,15 +113,16 @@ structure Reduce
 
     fun init_clicks unit =
 	app (fn {last = r, total = t, name=str } =>
-	     ( t:= 0 ; r := 0) ) (!clicks)
+	     ( Stats.counter_clear t ; r := 0) ) (!clicks)
 
     fun round_clicks clicks =
-	foldl  (fn ({last = r, total = t, ... }:click, acc:int) =>
-	       ( let val temp = !t - (!r)
-		 in ( r := !t ; temp+acc ) end )) 0 clicks
+	foldl  (fn ({last = r, total, ... }:click, acc:int) =>
+	       ( let val t = Stats.counter_fetch total
+		     val temp = t - (!r)
+		 in ( r := t ; temp+acc ) end )) 0 clicks
     fun print_round_clicks clicks =
 	app (fn {name = n, last = r, total = t } =>
-	     print ("  " ^ n ^ " :" ^ Int.toString ((!t)-(!r)) ^ "\n") ) clicks
+	     print ("  " ^ n ^ " :" ^ Int.toString ((Stats.counter_fetch t)-(!r)) ^ "\n") ) clicks
 
 (*    val select_con_click = make_click "Selects from known con records" *)
     val select_click = make_click "Selects from known exp records"

@@ -76,7 +76,7 @@ unit Compiler : Compiler = "compiler.sml" {
 }
 
 unit COMMUNICATION = "communication.sig.sml" {
-	Name Stats IntSyn Blaster Formatter Platform
+	Name IntSyn Blaster Formatter Platform
 }
 unit Communication = "communication.sml" {
 	COMMUNICATION Queue Util Blaster Formatter

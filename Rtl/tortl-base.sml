@@ -1241,7 +1241,7 @@ struct
 
   fun help_global (add_obj, (state,v, obj, term, obj2)) : state =
     let
-	val _ = Stats.counter("RTLglobal") ()
+	val _ = Stats.counter_inc(Stats.counter("RTLglobal"))
 	val (exported,label,labels) = (case (Name.VarMap.find(!exports,v)) of
 					   SOME (lab::rest) => (true,lab,rest)
 					 | SOME [] => error "no labels in export entry"
@@ -1279,7 +1279,7 @@ struct
 		     kind : kind,
 		     termOpt : term option) : state =
     let
-	val _ = Stats.counter("RTLconglobal") ()
+	val _ = Stats.counter_inc(Stats.counter("RTLconglobal"))
 	val (exported,label,labels) = (case (Name.VarMap.find(!exports,v)) of
 					   SOME (lab::rest) => (true,lab,rest)
 					 | SOME [] => error "no labels in export entry"

@@ -28,17 +28,17 @@ struct
     datatype message =
 	READY
       | ACK_INTERFACE of label
-      | ACK_FINISHED of label * Stats.delta
-      | ACK_UNFINISHED of label * Stats.delta
+      | ACK_FINISHED of label * Stats.measurements
+      | ACK_UNFINISHED of label * Stats.measurements
       | ACK_REJECT of label * string
       | BOMB of string
-      | INIT of Platform.objtype * Stats.stats * IntSyn.desc
+      | INIT of Platform.objtype * Stats.flags * IntSyn.desc
       | COMPILE of label
 
     val blastOutJob = NameBlast.blastOutLabel
     val blastInJob = NameBlast.blastInLabel
-    val blastOutDelta = Stats.blastOutDelta
-    val blastInDelta = Stats.blastInDelta
+    val blastOutMeas = Stats.blastOutMeasurements
+    val blastInMeas = Stats.blastInMeasurements
 
     fun blastOutMessage (os : B.outstream) (m : message) : unit =
 	(say "blastOutMessage";
@@ -46,21 +46,21 @@ struct
 	    of READY => B.blastOutInt os 0
 	     | ACK_INTERFACE job =>
 		(B.blastOutInt os 1; blastOutJob os job)
-	     | ACK_FINISHED (job,delta) =>
+	     | ACK_FINISHED (job,meas) =>
 		(B.blastOutInt os 2; blastOutJob os job;
-		 blastOutDelta os delta)
-	     | ACK_UNFINISHED (job,delta) =>
+		 blastOutMeas os meas)
+	     | ACK_UNFINISHED (job,meas) =>
 		(B.blastOutInt os 3; blastOutJob os job;
-		 blastOutDelta os delta)
+		 blastOutMeas os meas)
 	     | ACK_REJECT (job,msg) =>
 		(B.blastOutInt os 4; blastOutJob os job;
 		 B.blastOutString os msg)
 	     | BOMB msg =>
 		(B.blastOutInt os 5; B.blastOutString os msg)
-	     | INIT (objtype, stats, desc) =>
+	     | INIT (objtype, flags, desc) =>
 		(B.blastOutInt os 6;
 		 Platform.blastOutObjtype os objtype;
-		 Stats.blastOutStats os stats;
+		 Stats.blastOutFlags os flags;
 		 IntSyn.blastOutDesc os desc)
 	     | COMPILE job =>
 		(B.blastOutInt os 7; blastOutJob os job)))
@@ -70,12 +70,12 @@ struct
 	 (case B.blastInInt is
 	    of 0 => READY
 	     | 1 => ACK_INTERFACE (blastInJob is)
-	     | 2 => ACK_FINISHED (blastInJob is, blastInDelta is)
-	     | 3 => ACK_UNFINISHED (blastInJob is, blastInDelta is)
+	     | 2 => ACK_FINISHED (blastInJob is, blastInMeas is)
+	     | 3 => ACK_UNFINISHED (blastInJob is, blastInMeas is)
 	     | 4 => ACK_REJECT (blastInJob is, B.blastInString is)
 	     | 5 => BOMB (B.blastInString is)
 	     | 6 => INIT (Platform.blastInObjtype is,
-			  Stats.blastInStats is, IntSyn.blastInDesc is)
+			  Stats.blastInFlags is, IntSyn.blastInDesc is)
 	     | 7 => COMPILE (blastInJob is)
 	     | _ => error "bad message"))
 

@@ -3,12 +3,7 @@ struct
 
     val error = fn s => Util.error "manager.sml" s
 
-    (*
-	This is not Stats.int "DiagLevel" because
-	we do not want reset_stats to trash the value.
-    *)
-    val DiagLevel = ref 0
-
+    val DiagLevel = Stats.int ("DiagLevel",0)
     val PrintStats = Stats.ff "PrintStats"
     val ResetStats = Stats.tt "ResetStats"
 
@@ -28,7 +23,7 @@ struct
 	end
 
     fun Stats (f : 'a -> 'b) (x : 'a) : 'b =
-	let val _ = if !ResetStats then Stats.clear_stats() else ()
+	let val _ = if !ResetStats then Stats.clear_measurements() else ()
 	    val r = f x
 	    val _ = if !PrintStats then Stats.print_stats() else ()
 	in  r

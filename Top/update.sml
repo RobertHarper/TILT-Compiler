@@ -283,4 +283,5 @@ struct
 	   of I.SCDEC _ => EMPTY
 	    | _ => plan' (desc,pdec))
 
+    val plan = Stats.timer("planning cut-offs", plan)
 end

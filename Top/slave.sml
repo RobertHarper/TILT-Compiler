@@ -4,6 +4,7 @@ struct
     val Standalone = ref true
     val SlaveDiag = Stats.ff "SlaveDiag"
     fun msg str = if (!SlaveDiag) then print str else ()
+    val PrintEachFile = Stats.ff "PrintEachFile"
 
     type comm =
 	{from:Comm.channel,
@@ -63,9 +64,10 @@ struct
 	fact, we skip the acknowledgement if the expected compilation
 	time is small to avoid communication traffic.
     *)
-    fun compile (comm:comm, stats:Stats.stats,
-		 desc:IntSyn.desc, job:Name.label) : Stats.stats =
-	let val start = Time.now()
+    fun compile (comm:comm, desc:IntSyn.desc,
+		 job:Name.label) : unit =
+	let val _ = Stats.clear_measurements()
+	    val start = Time.now()
 	    fun ack_interface () : unit =
 		let val diff = Time.-(Time.now(), start)
 		    val slow = Time.toReal diff > 0.5
@@ -74,35 +76,32 @@ struct
 		end
 	    val (desc,pdec) = Compiler.get_inputs (desc, job)
 	    val finished = Compiler.compile (desc,pdec,ack_interface)
-	    val new = Stats.get()
-	    val delta = Stats.sub(new,stats)
+	    val meas = Stats.get_measurements()
 	    val msg =
-		if finished then Comm.ACK_FINISHED (job,delta)
-		else Comm.ACK_UNFINISHED (job,delta)
+		if finished then Comm.ACK_FINISHED (job,meas)
+		else Comm.ACK_UNFINISHED (job,meas)
 	    val _ = send (comm,msg)
-	in  new
+	    val _ = if !PrintEachFile then Stats.print_measurements() else ()
+	in  ()
 	end handle (e as UtilError.Reject {msg}) =>
 	    let val _ = if !Standalone then ExnHandler.print e else ()
 		val _ = send (comm, Comm.ACK_REJECT (job,msg))
-	    in  stats
+	    in  ()
 	    end
 
-    type state = (IntSyn.desc * Stats.stats) option
+    type state = IntSyn.desc option
 
     fun process (comm:comm, state:state, msg:Comm.message) : state =
 	((case msg
-	   of Comm.INIT (objtype, stats, desc) =>
+	   of Comm.INIT (objtype, flags, desc) =>
 		(Fs.flush();
 		 Target.setTarget objtype;
-		 Stats.set stats;
-		 SOME (desc,stats))
+		 Stats.set_flags flags;
+		 SOME desc)
 	    | Comm.COMPILE job =>
 		(case state
 		   of NONE => error "slave got COMPILE before INIT"
-		    | SOME (desc, stats) =>
-			let val stats = compile (comm, stats, desc, job)
-			in  SOME (desc, stats)
-			end)
+		    | SOME desc => (compile(comm,desc,job); state))
 	    | _ => error "slave got unexpected message")
 	 handle e =>
 	    let val _ = if !Standalone then ExnHandler.print e else ()

@@ -1,12 +1,33 @@
+(*
+	Stats comprise flags and measurements.
+
+	Flags are essentially static.  After you set them up, the
+	master sends them to the slaves and no subsequent changes are
+	communicated.
+
+	Measurements are handled differently.  The slaves clear their
+	measurements at the start of a job and send changes back to
+	the master at the end.
+*)
 signature STATS =
 sig
 
-     val reset_stats : unit -> unit
-
-     (*Just zero out all numerical data - don't remove entries*)
-     val clear_stats : unit -> unit
      val print_stats : unit -> unit
-     val print_timers : unit -> unit
+     val clear_measurements : unit -> unit	(* does not remove entries *)
+     val print_measurements : unit -> unit
+
+     (*
+	Flags
+     *)
+
+     val int  : string * int -> int ref
+     val bool : string -> bool ref
+     val tt   : string -> bool ref (* initialized to true *)
+     val ff   : string -> bool ref (* initialized to false *)
+
+     (*
+	Measurements
+     *)
 
      val timer : string * ('a -> 'b) -> ('a -> 'b)
      val subtimer : string * ('a -> 'b) -> ('a -> 'b)
@@ -20,40 +41,31 @@ sig
       *)
      val timer'    : string * ('a -> 'b) -> ('a -> 'b)
      val subtimer' : string * ('a -> 'b) -> ('a -> 'b)
-
-     val counter : string -> (unit -> int)
-     val int     : string -> int ref
-     val bool    : string -> bool ref
-     val tt      : string -> bool ref (* initialized to true *)
-     val ff      : string -> bool ref (* initialized to false *)
-
-     val fetch_timer_max : string -> real (* in seconds *)
      val fetch_timer_last : string -> real (* in seconds *)
 
-     val fetch_timer : string ->
-	  {count : int,
-	   max   : real, (*seconds*)
-	   last  : real, (*seconds*)
-	   gc    : real, (*seconds*)
-	   cpu   : real, (*seconds*)
-	   real  : real  (*seconds*)
-	   }
-
-     val fetch_counter : string -> int
+     type counter
+     val counter : string -> counter	(* master takes sum of slave & master *)
+     val counter' : string -> counter	(* master takes max of slave & master *)
+     val counter_add : counter * int -> unit	(* nondecreasing *)
+     val counter_max : counter * int -> unit
+     val counter_inc : counter -> unit
+     val counter_clear : counter -> unit
+     val counter_fetch : counter -> int
 
      (*
-	For master-slave communication.
+	Communication
      *)
-     type stats
-     type delta
-     val get : unit -> stats
-     val set : stats -> unit
-     val sub : stats * stats -> delta
-     val add : stats * delta -> stats
 
-     val blastOutStats : Blaster.outstream -> stats -> unit
-     val blastInStats : Blaster.instream -> stats
+     type flags
+     val get_flags : unit -> flags
+     val set_flags : flags -> unit
+     val blastOutFlags : Blaster.outstream -> flags -> unit
+     val blastInFlags : Blaster.instream -> flags
 
-     val blastOutDelta : Blaster.outstream -> delta -> unit
-     val blastInDelta : Blaster.instream -> delta
+     type measurements
+     val get_measurements : unit -> measurements
+     val add_measurements : measurements -> unit
+     val blastOutMeasurements : Blaster.outstream -> measurements -> unit
+     val blastInMeasurements : Blaster.instream -> measurements
+
 end
