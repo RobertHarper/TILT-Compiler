@@ -56,9 +56,15 @@ structure Reduce
       | exp_isval (Raise_e _) = false
       | exp_isval (Handle_e _) = false
 
-    fun exp_issmall (Var_e _) = true
-      | exp_issmall (Const_e _) = true
-      | exp_issmall _ = false
+   (* CS: Duplicates code in linearize *)
+   fun exp_issmall exp =  
+       (case exp of 
+	    Var_e _ => true
+          | Const_e (Prim.int (Prim.W64,_)) => false
+          | Const_e (Prim.uint (Prim.W64,_)) => false
+          | Const_e (Prim.int _) => true
+          | Const_e (Prim.uint _) => true
+	  | _ => false)
 
     (* Since we would like the code to work both on a list of bindings
      in an expression, and the list of bindings in a module, we create
@@ -976,10 +982,21 @@ structure Reduce
 		 end
 		
 	  (* ----------------- Constants  ----------------- *)
-	  | Exp_b (x, nt, Const_e c)  =>
-		(
-		 if (dead_var x ) then () else ( inc_click var_click; replace x (Const_e c) fset);
-		     xbnds fset rest body )
+	  | (bnd as Exp_b (x, nt, e as Const_e c))  =>
+		 if (dead_var x ) then 
+		     xbnds fset rest body
+		 else 
+		     if (exp_issmall e) then
+			 ((inc_click var_click; 
+			  replace x (Const_e c) fset);
+			  xbnds fset rest body)
+		     else
+			 let val (rest,body) = xbnds fset rest body
+			 in 
+			     if (dead_var x ) then (rest,body)
+			     else 
+				 ( bnd :: rest, body)
+			 end
 		      
 		      
 	  (* ----------------- Function bindings ----------------- *)

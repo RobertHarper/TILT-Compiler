@@ -67,6 +67,7 @@ struct
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
   val exn_con = Prim_c(Exn_c, [])
+
   fun function_type openness (Function{effect,recursive,isDependent,
 				       tFormals,eFormals,fFormals, body=_, body_type=(_,con)}) =
        AllArrow_c{openness=openness, effect = effect, isDependent = isDependent,
@@ -74,9 +75,52 @@ struct
 		  eFormals = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c)) eFormals,
 		  fFormals = TilWord32.fromInt(length fFormals), body = con}
 
+  fun intsize_leq (Prim.W8, _) = true
+    | intsize_leq (Prim.W16, Prim.W8) = false
+    | intsize_leq (Prim.W16, _) = true
+    | intsize_leq (Prim.W32, Prim.W32) = true
+    | intsize_leq (Prim.W32, Prim.W64) = true
+    | intsize_leq (Prim.W32, _) = false
+    | intsize_leq (Prim.W64, Prim.W64) = true
+    | intsize_leq (Prim.W64, _) = false
+
   fun effect (Var_e _) = false
     | effect (Const_e _) = false
+    | effect (Prim_e (NilPrimOp make_exntag, _, _)) = true
     | effect (Prim_e (NilPrimOp _, _, _)) = false
+    | effect (Prim_e (PrimOp p, _, _)) = 
+      (case p of
+	   Prim.plus_uint _ => false
+	 | Prim.minus_uint _ => false
+	 | Prim.mul_uint _ => false
+	 | Prim.less_int _ => false
+	 | Prim.greater_int _ => false
+	 | Prim.lesseq_int _ => false
+	 | Prim.greatereq_int _ => false
+	 | Prim.less_uint _ => false
+	 | Prim.lesseq_uint _ => false
+	 | Prim.greatereq_uint _ => false
+	 | Prim.eq_int _ => false
+	 | Prim.neq_int _ => false
+	 | Prim.neg_int _ => false
+	 | Prim.abs_int _ => false
+	 | Prim.not_int _ => false
+	 | Prim.and_int _ => false
+	 | Prim.or_int _ => false
+	 | Prim.xor_int _ => false
+	 | Prim.lshift_int _ => false
+	 | Prim.rshift_int _ => false 
+	 | Prim.rshift_uint _ => false
+	 | _ => true)
+
+(*Do NaN's raise an exception?
+	 | Prim.less_float _ => false
+	 | Prim.greater_float _ => false
+	 | Prim.lesseq_float _ => false
+	 | Prim.greatereq_float _ => false
+	 | Prim.eq_float _ => false
+	 | Prim.neq_float _ => false
+*)
     | effect _ = true
 
   fun is_var_e (Var_e v) = true
@@ -838,6 +882,13 @@ end
 	    (!evars_ref, !cvars_ref)
 	end
 
+    fun freeExpConVarInBnd (look_in_kind, eb) =
+	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
+	in
+	    f_bnd handler eb;
+	    (! evars_ref, !cvars_ref)
+	end
+
     fun freeConVarInCon(look_in_kind,c) =
 	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
 	in  f_con handler c;
@@ -861,6 +912,14 @@ end
 	in  f_con handler c;
 	    (!evars_ref) @ (!cvars_ref)
 	end
+
+    fun freeVarInCbnd cb =
+	let val (evars_ref,cvars_ref,handler) = free_handler true
+	in
+	    f_cbnd handler cb;
+	    (! evars_ref) @ (!cvars_ref)
+	end
+
   end
 
   fun expvars_occur_free (vars : var list, exp : exp) : bool = 

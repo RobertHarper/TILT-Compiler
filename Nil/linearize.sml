@@ -123,7 +123,10 @@ struct
     fun small_exp exp =
 	case exp of 
 	    Var_e _ => true
-	  | Const_e _ => true
+          | Const_e (Prim.int (Prim.W64,_)) => false
+          | Const_e (Prim.uint (Prim.W64,_)) => false
+          | Const_e (Prim.int _) => true
+          | Const_e (Prim.uint _) => true
 	  | _ => false
 
    fun lswitch lift state switch = 
@@ -217,9 +220,26 @@ struct
        let val (bnds,e) = lexp' lift state arg_exp
        in  if (small_exp e orelse not (!linearize) orelse not lift)
 	       then (bnds, e)
-	   else let val v = Name.fresh_named_var "" (* "tmpexp" *)
-		in  (bnds @ [Exp_b(v,TraceUnknown,e)], Var_e v)
-		end
+	   else
+	       let 
+		   val v = 
+		       (case e of
+			    Prim_e(NilPrimOp (select l), _, [Var_e v]) =>
+				let
+				    val vname = Name.var2name v
+				    val lname = Name.label2name l
+				in
+				    if ((String.size vname = 0) orelse
+					(String.sub(vname,0) = #"_")) then
+				     Name.fresh_named_var (Name.label2name l)
+				 else
+				     Name.fresh_named_var
+				     ((Name.var2name v) ^ "_" ^ 
+				      (Name.label2name l))
+				end
+			  | _ => Name.fresh_named_var "" (* "tmpexp" *))
+	       in  (bnds @ [Exp_b(v,TraceUnknown,e)], Var_e v)
+	       end
        end
        handle e => (print "exception in lexp call with con =\n";
 		    pp_exp arg_exp; print "\n"; raise e)

@@ -1,4 +1,4 @@
-(*$import HOIST Nil NilUtil ListPair Stats *)
+(*$import HOIST Nil NilUtil ListPair Stats Name *)
 (*** questions, should fixopen_b ever move? *)
 (* 
  var naming convections
@@ -11,10 +11,6 @@ struct
   open Nil Name
 
   exception HoistError
-
-  (**** in general should hoisting look in kinds? *)
-  (**** for nilutul.free[expcon/con]varin[exp/con] should look in kind be true or false? *)
-  val LOOK_IN_KIND = false
 
   datatype bndtype = STAY of bnd | UP of var
   datatype conbndtype = CSTAY of conbnd | CUP of var
@@ -35,51 +31,63 @@ struct
     val union = union
     val subset = isSubset
     val oneset = singleton
+    fun disjoint(s1,s2) = 
+	not (exists (fn v => member(s1,v)) s2)
   end
   (* end set help funs *)
 
+
+  datatype hoist_effs =
+      ARROW_EFFS of Nil.effect * hoist_effs
+    | REC_EFFS of (Nil.label * hoist_effs) list
+    | UNKNOWN_EFFS
+
+  structure Map = Name.VarMap
+  type effect_context = hoist_effs Map.map
+  val empty_fnmap = Map.empty : effect_context
+  val unknown_effs = UNKNOWN_EFFS
+  fun elookup (econtext:effect_context,v) =
+      (case Map.find(econtext,v) of
+	   NONE => unknown_effs
+	 | SOME effs => effs)
+  fun ereclookup (effs, l) =
+      (case effs of
+	   REC_EFFS lst => 
+	       (case (Listops.assoc_eq (Name.eq_label,l,lst)) of
+		    SOME effs => effs
+		  | NONE => UNKNOWN_EFFS)
+	 | _ => UNKNOWN_EFFS)
+
+  fun con2eff (AllArrow_c(_,eff,_,_,_,_,c)) = ARROW_EFFS (eff, con2eff c)
+    | con2eff (Prim_c(Record_c (lbls,_), types)) =
+        REC_EFFS (ListPair.zip (lbls, map con2eff types))
+    | con2eff _ = UNKNOWN_EFFS
+
   type bvlt = bnd * var list
 
+  (* We can't hoist a kind past a binding of its free variable.
+     (although technically this binding can always be expanded) *)
+  val look_in_kinds = true
 
-  (*** should look-in-kinds flag be true? *)
   (* returns set of free vars *)
-  fun freeExpVars e = let val (a,b) = (NilUtil.freeExpConVarInExp (true,e)) in union (list2set a,list2set b) end(* free term/type vars *)
+  fun freeExpVars e = 
+      let 
+	  val (free_term_vars, free_type_vars) = 
+	      NilUtil.freeExpConVarInExp (look_in_kinds,e)
+      in 
+	  Set.addList (list2set free_term_vars, free_type_vars)
+      end
 
-  (* returns set of free vars *)
-  fun freeConVars c = list2set (NilUtil.freeConVarInCon (true,c)) (* free type vars *)
+  (* returns set of free type vars *)
+  fun freeConVars c = 
+      list2set (NilUtil.freeConVarInCon (look_in_kinds,c))
 
   (* returns set of free vars *)
   fun freeKindVars k = 
-    let
-      fun loop (Type_k, s) = s
- 	| loop (SingleType_k c, s) = union(freeConVars c,s)
- 	| loop (Single_k c, s) = union(freeConVars c,s)
-	| loop (Record_k r,s) = foldr (fn (a,b) => union(a,b)) s (map freeKindVars (map #2 (Sequence.toList r)))
-	| loop (Arrow_k (oness,vkl,k),s) = union((foldr (fn (a,b) => union(a,b)) s (map freeKindVars (map #2 vkl))),
-						 (freeKindVars k))
-    in
-      loop (k,empty)
-    end
+      list2set (NilUtil.freeVarInKind k)
 
-  (* returns set of free vars *)
-  fun freeConbndVars cb' = 
-    let
-      fun free' vkl = foldr (fn (freeset,freeset') => union (freeset,freeset')) empty (map (fn (v,k) => freeKindVars k) vkl)
-
-      fun free (Con_cb (v,c)) = list2set (NilUtil.freeConVarInCon(LOOK_IN_KIND,c))
-	| free (Open_cb (v,vkl,c,k)) = 
-	let
-	  val freeset = free' vkl
-	  val freeset' = freeConVars c
-	  val freeset'' = freeKindVars k
-	in
-	  union (union (freeset,freeset'),freeset'')
-	end
-
-    in
-      free cb'
-    end
-
+  fun freeConbndVars cb =
+      list2set (NilUtil.freeVarInCbnd cb)
 
     
   (* get the bound var from a conbnd *)
@@ -93,18 +101,20 @@ struct
       fun gv ([],l) = rev l
 	| gv (Con_b (p,cb)::rest,l) = gv(rest,(get_conbnd_var cb)::l)
 	| gv (Exp_b (v,_,e)::rest,l) = gv(rest,v::l)
-	| gv (Fixopen_b(vfs)::rest,l) = gv(rest,(map (fn (a,b) => a) (Sequence.toList vfs))@l)
-	| gv (Fixcode_b(vfs)::rest,l) = gv(rest,(map (fn (a,b) => a) (Sequence.toList vfs))@l)
+	| gv (Fixopen_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
+	| gv (Fixcode_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
 	| gv (Fixclosure_b(_)::rest,l) = raise HoistError
     in
       gv (bnd_list,[])
     end
 
+(*
   (* start junk *)
  fun cat_app_zip l = foldr (fn ((a,b),(c,d)) => (a::c,b@d)) ([],[]) l
  fun cat_app_zip' (a,b) = foldr (fn ((a,b),(c,d)) => (a::c,b@d)) ([],[]) (ListPair.zip (a,b))
 
-(*
+*)
+(*******************
   local val count = ref 0 
      in fun newtag i = let val _ = count := !count + 1 
 		    in "_" ^ i ^ (Int.toString(!count)) end 
@@ -166,429 +176,568 @@ struct
 
  fun bvs2s (bvl:bvs list) = bl2s (map #1 bvl)
  fun bvsl2s (bvs:bvs list) = bl2s (map #1 bvs)
-*)    
+*****************)    
   (* stop junk *)
 
-  fun rconbnd cvs (Con_cb(v,con)) : conbndtype * bvs list = 
+  fun filter_bnds (bvl, stop_vars) =
+      let
+	  fun loop([],stop_vars,up,stay) = (rev up, rev stay)
+	    | loop((bv as (eb,freevars))::rest, stop_vars, up, stay) =
+	      if (disjoint(freevars,stop_vars)) then
+		  loop(rest, stop_vars, bv :: up, stay)
+	      else
+		  loop(rest, Set.addList(stop_vars,getBoundVars [eb]),
+		       up, eb :: stay)
+      in
+	  loop(bvl, stop_vars, nil, nil)
+      end
+
+  fun filter_cbnds (bvl, stop_vars) =
+      let
+	  fun loop([],stop_vars,up,stay) = (rev up, rev stay)
+	    | loop((bv as (cb,freevars))::rest, stop_vars, up, stay) =
+	      if (disjoint(freevars,stop_vars)) then
+		  loop(rest, stop_vars, bv :: up, stay)
+	      else
+		  loop(rest, Set.add(stop_vars,get_conbnd_var cb),
+		       up, cb :: stay)
+      in
+	  loop(bvl, stop_vars, nil, nil)
+      end
+
+  (* CS 2/21/99
+     The set cvs appears to be the set of variables which are
+     bound either at top level or at least at a higher level.
+     A binding can be hoisted iff its free variables are included
+     in this set. 
+   *)
+
+  fun rconbnd (Con_cb(v,con), cvs) : conbndtype * (conbnd * set) list = 
     let
-      val (con',bvl) = rcon(con,cvs)
+      val (con',bvl : (conbnd * set) list) = rcon (con,cvs)
       val freev = freeConVars con'
     in
-      case subset (freev,cvs) of
-	true => (CUP v, bvl@[(Con_b (Runtime,Con_cb(v,con')),freev)])
+      case subset(freev,cvs) of
+	true  => (CUP v, bvl @ [(Con_cb(v,con'),freev)])
       | false => (CSTAY (Con_cb (v,con')), bvl)
     end
 
     (*** should these move? *)
     (*** if this is changed (ie to hoist open_cbs) then code_cb wont work *)
-    | rconbnd cvs (Open_cb(v,vklist,con',kind')) = 
+    | rconbnd (cb as Open_cb(v,vklist,con',kind'), cvs) = 
 	let
-	  val l = map (fn (a,b) => (a,rkind(b,cvs))) vklist
-	  val (vkl,bvl) = foldr (fn ((a,(b,c)),(d,e)) => ((a,b)::d,c@e)) ([],[]) l
-	  val (con'',bvl') = rcon(con',cvs)
-	  val (kind'',bvl'') = rkind(kind',cvs)
+	  val (con'',bvl') = rcon (con',cvs)
 	in
-	  (CSTAY(Open_cb(v,vkl,con'',kind'')),bvl@bvl'@bvl'')
+	  (CSTAY(Open_cb(v,vklist,con'',kind')),bvl')
 	end
 
-    | rconbnd cvs (Code_cb goo) = 
+    | rconbnd (cb as (Code_cb goo), cvs) = 
 	let
-	  val (CSTAY(Open_cb goo'),bvl) = rconbnd cvs (Open_cb goo)
+	  val (CSTAY(Open_cb goo'),bvl) = rconbnd (Open_cb goo, cvs)
 	in
 	  (CSTAY(Code_cb goo'),bvl)
 	end
 
-  (* bvsll is inorder,inorder and conbnd list is inorder *)
-  and rconbnds (conbnd,cvs:set) : (bvs list list * conbnd list) = 
+  and rconbnd' arg = 
+      let val (ans, bs) = rconbnd arg
+      in
+	  (ans, map (fn (cb,s) => (Con_b(Runtime,cb), s)) bs)
+      end
+
+
+  (*
+     If we hoist a binding, it's variable gets added to the cvs set
+     so that we can hoist later bindings depending on this one.
+   *)
+
+
+  (* bvsll is inorder and conbnd list is inorder *)
+  and rconbnds (conbnds, cvs) : ((conbnd * set) list * conbnd list) = 
     let
-      fun loop ([],cvs,(up,stay)) = (rev up,rev stay)
-	| loop (cb::rest,cvs,(up,stay)) = 
-	case rconbnd cvs cb of 
-	  (CSTAY cb',bvl) => loop (rest,cvs,(bvl::up,cb'::stay))
-	| (CUP v, bvl) => loop(rest,add(cvs,v),(bvl::up,stay))
+      fun loop ([],cvs,up,stay) = (List.concat(rev up), rev stay)
+	| loop (cb::rest,cvs,up,stay) = 
+	   (case rconbnd (cb,cvs) of 
+		(CSTAY cb',bvl) => loop (rest,cvs, bvl :: up, cb'::stay)
+	      | (CUP v, bvl) => loop(rest, add(cvs,v), bvl :: up, stay))
     in
-      loop (conbnd,cvs,([[]],[]))
+      loop (conbnds,cvs,[],[])
     end
 
-  (*** rewrite kinds at all? *)
-  and rkind (k,cvs:set) = (k,[])
+  and rcon (Prim_c (primcon,conlist), cvs) : (con * (conbnd * set) list) = 
+      let
+	  val (conlist', bvl_list) = 
+	      Listops.unzip (map (fn a => rcon (a,cvs)) conlist)
+	  val bvl = List.concat bvl_list
+      in
+	  (Prim_c(primcon,conlist'), bvl)
+      end
 
-  and rcon (Prim_c (primcon,conlist),cvs) : (con * bvs list) = 
-    let
-      val (conlist', bvl) = cat_app_zip (map (fn a => rcon (a,cvs)) conlist)
-    in
-      (Prim_c(primcon,conlist'),bvl)
-    end
+    | rcon (Mu_c (isRecursive,vcseq), cvs) = 
+      let
+	  val vclist = Sequence.toList vcseq
+	  val vclist' = map (fn (v,c) => (v,rcon(c,cvs))) vclist
+	  val l = map (fn (v,(c,bvl)) => ((v,c),bvl)) vclist'
+	  val (vclist'',bvll) = ListPair.unzip l
+      in
+	  (Mu_c (isRecursive,Sequence.fromList vclist''),
+	   List.concat bvll)
+      end
 
-    | rcon (Mu_c (bool',vcseq),cvs) = 
-    let
-      val vclist = Sequence.toList vcseq
-      val vclist' = map (fn (a,b) => (a,rcon(b,cvs))) vclist
-      val l = map (fn (a,(b,c)) => ((a,b),c)) vclist'
-      val (vclist'',bvll) = ListPair.unzip l
-    in
-      (Mu_c (bool',Sequence.fromList vclist''),List.concat bvll)
-    end
-
-    (*** what to do with this? *)
     | rcon (AllArrow_c (openness,effect,vkl,vlist,conlist,w32,con),cvs) = 
-    let
-      val (conlist',bvl) = cat_app_zip (map (fn a => rcon (a,cvs)) conlist)
-      val (con',bvl') = rcon (con,cvs)
-    in
-      (AllArrow_c(openness,effect,vkl,vlist,conlist',w32,con'),bvl@bvl')
-    end
+      let
+	  val (conlist', bvll) = 
+	      Listops.unzip (map (fn c => rcon (c,cvs)) conlist)
+	  val (con',bvl') = rcon (con,cvs)
+      in
+	  (AllArrow_c(openness,effect,vkl,vlist,conlist',w32,con'),
+	   (List.concat bvll) @ bvl')
+      end
 
     | rcon (ExternArrow_c (conlist,con),cvs) = 
-    let
-      val (conlist',bvl) = cat_app_zip (map (fn a => rcon (a,cvs)) conlist)
-      val (con',bvl') = rcon (con,cvs)
-    in
-      (ExternArrow_c(conlist',con'),bvl@bvl')
-    end
+      let
+	  val (conlist',bvll) = 
+	      Listops.unzip (map (fn c => rcon (c,cvs)) conlist)
+	  val (con',bvl') = rcon (con,cvs)
+      in
+	  (ExternArrow_c(conlist',con'),
+	   (List.concat bvll) @ bvl')
+      end
 
-    | rcon (Var_c(var'),cvs) = (Var_c(var'),[])
-
+    | rcon (c as Var_c(var'),cvs) = (c,[])
+      
     | rcon (Let_c(letsort,bndlist,bodcon),cvs) = 
-    let
-      val (up,stay) = rconbnds(bndlist,cvs) 
+      let
+	  val (up,stay) = rconbnds(bndlist,cvs) 
 
-      (* collect all the bnd vars that are const *)
-      val cvs' = union(cvs,list2set (List.concat (map getBoundVars (map (fn bvl => (map #1 bvl)) up))))
+	  val bound_var_set = list2set (map get_conbnd_var bndlist)
+          val cvs' = union (bound_var_set,cvs)
 
-      val (bodcon',up') = rcon (bodcon,cvs') 
-
-      val up'' : bvs list = (List.concat up) @ up'
-    in
-      (Let_c(letsort,stay,bodcon'),up'')
-    end
+	  val (bodcon',body_up) = rcon (bodcon,cvs') 
+	      
+	  (* bindings that have free variables whose bindings
+           are in this let must stay *)
+	  val stop_vars = list2set (map get_conbnd_var stay)
+	  val (body_up', body_stay') = filter_cbnds(body_up, stop_vars)
+	      
+	  val up'' = up @ body_up'
+      in
+	  (Let_c(letsort,stay @ body_stay',bodcon'),
+	   up'')
+      end
 
     | rcon (Crecord_c lclist, cvs) = 
-    let
-      val lclist' = map (fn (l,con') => (l,rcon(con',cvs))) lclist
-      val (lclist'',bvl) = foldr (fn ((l,(con',bvl)),(cvl',bvl')) => ((l,con')::cvl',bvl@bvl')) ([],[]) lclist'
-    in
-      (Crecord_c lclist'',bvl)
-    end
+      let
+	  val lcu_list = map (fn (l,con') => (l,rcon(con',cvs))) lclist
+	  val (lclist', up_list) = 
+	      Listops.unzip (map (fn (l,(c,bvl)) => ((l,c),bvl)) lcu_list)
+      in
+	  (Crecord_c lclist', List.concat up_list)
+      end
 
     | rcon (Proj_c (con,lab),cvs) = 
-    let
-      val (con',bvl) = rcon (con,cvs)
-    in
-      (Proj_c(con',lab),bvl)
-    end
+      let
+	  val (con',bvl) = rcon (con,cvs)
+      in
+	  (Proj_c(con',lab),bvl)
+      end
 
     | rcon (Typeof_c e,cvs) = 
-    let
-      val (e',bvl) = rexp (e,cvs)
-    in
-      (Typeof_c e',bvl)
-    end
-
+      let
+	  val econtext = empty_fnmap (* should be no applications in a typeof *)
+	  val (e',[],_: hoist_effs,true) = rexp (e, cvs, econtext)
+      in
+	  (Typeof_c e',[])
+      end
+  
     | rcon (Closure_c(codecon,envcon),cvs) = 
-    let
-      val (codecon',bvl) = rcon (codecon,cvs)
-      val (envcon',bvl') = rcon (envcon,cvs)
-    in
-      (Closure_c(codecon',envcon'),bvl@bvl')
-    end
+      let
+	  val (codecon',bvl) = rcon (codecon, cvs)
+	  val (envcon',bvl') = rcon (envcon, cvs)
+      in
+	  (Closure_c(codecon',envcon'), bvl@bvl')
+      end
 
     | rcon (App_c(con,conlist),cvs) = 
-    let
-      val (con',bvl) = rcon (con,cvs)
-      val conlist' = map (fn a => rcon(a,cvs)) conlist
-      val (conlist'',bvl') = cat_app_zip conlist'
-    in
-      (App_c(con',conlist''),bvl@bvl')
-    end
+      let
+	  val (con',bvl') = rcon (con,cvs)
+	  val (conlist',bvll) = 
+	      Listops.unzip (map (fn c => rcon (c,cvs)) conlist)
+      in
+	  (App_c(con',conlist'),
+	   List.concat (bvl' :: bvll))
+      end
 
     (**** clean me till i shine *)
     | rcon (Typecase_c {arg,arms,default,kind},cvs) = 
+      (Util.error "hoist.sml" "rcon of typecase unimplemented")
+(*
     let
       fun proc (primc,vkl,con) =
 	let
-	  val m = map (fn (v,k) => 
-		       let 
-			 val (k',bvl) = rkind (k,cvs) 
-		       in 
-			 ((v,k'),bvl)
-		       end) vkl
-	    
-	  val (vkl',bvl) = ListPair.unzip m
 	  val (con',bvl') = rcon (con,cvs)
 	in
-	  ((primc,vkl',con'),(List.concat bvl)@bvl')
+	  ((primc,vkl,con'),bvl')
 	end
       
       val (arg',bvl:bvs list) = rcon (arg,cvs)
       val (default',bvl':bvs list) = rcon (default,cvs)	
-      val (arms',bvl'') = ListPair.unzip (map proc arms)
+      val (arms',bvl'') = Listops.unzip (map proc arms)
       val bvl'' = List.concat bvl''
-      val (kind',bvl''':bvs list) = rkind (kind,cvs)
-      val a = (bvl @ bvl') @ bvl''
-    in
-      (Typecase_c {arg=arg',arms=arms',default=default',kind=kind'},(bvl@bvl'@bvl''@bvl'''))
+ 
+     in
+      (Typecase_c {arg=arg',arms=arms',default=default',kind=kind},(bvl@bvl'@bvl''))
     end
-
+*)
     | rcon (Annotate_c (annot,con),cvs) = 
-    let
-      val (con',bvl) = rcon (con,cvs)
-    in
-      (Annotate_c (annot,con'),[])
-    end
+      let
+	  val (con',bvl) = rcon (con,cvs)
+      in
+	  (Annotate_c (annot,con'),bvl)
+      end
 
-  and rbnds (bnd_list,cvs) : (bvs list list * bnd list) = 
-    let
-      fun loop ([],cvs,(up,stay)) (*: bvs list * bnd list *)= (rev up,rev stay)
-	| loop (b::rest,cvs,(up,stay)) = 
-	  case rbnd cvs b of 
-	    (STAY b,bvsl) => loop (rest,cvs,(bvsl::up,b::stay))
-	  | (UP v, bvsl) => loop (rest,add(cvs,v),(bvsl::up,stay))
-    in
-      loop (bnd_list,cvs,([],[]))
-    end
+  and rcon' arg = 
+      let val (c', bs) = rcon arg
+      in
+	  (c', map (fn (cb,s) => (Con_b(Runtime,cb), s)) bs)
+      end
 
-  and rbnd cvs (Con_b(p,cb)) : (bndtype * bvs list) = 
-    let
-      val v = get_conbnd_var cb
+  and rbnds (bnd_list,cvs,econtext) : (bvs list * bnd list * effect_context * bool) = 
+      let
+	  fun loop ([],cvs,up,stay,econtext,valuable) = 
+	      (List.concat (rev up),rev stay,econtext,valuable)
+	    | loop (b::rest,cvs,up,stay,econtext,valuable) = 
+	      (case rbnd (b,cvs,econtext) of 
+		   (STAY b, bvsl,econtext',valuable') => 
+		       loop (rest, cvs, bvsl::up, b::stay,
+			     econtext', valuable andalso valuable')
+		 | (UP v, bvsl, econtext', valuable') => 
+		       loop (rest, add(cvs,v), bvsl::up, stay,
+			     econtext', valuable andalso valuable'))
+      in
+	  loop (bnd_list,cvs,[],[],econtext,true)
+      end
+
+  and rbnd (Con_b(p,cb),cvs,econtext) : (bndtype * bvs list * effect_context * bool) = 
+      let
+	  val v = get_conbnd_var cb
+      (*
+          val vstr = var2string v 
+          val _ = (pprint ("rewriting bnd for con var: "^vstr^"\n");ppin 2) 
+          val _ = ppout 2 
+       *)
+      in
+	  case rconbnd' (cb,cvs) of
+	      (CUP v,bvl) => (UP v,bvl,econtext,true)
+	    | (CSTAY cb', bvl) => (STAY (Con_b (p,cb')),bvl,econtext,true)
+      end
+
+    | rbnd (Exp_b(v,niltrace,e), cvs, econtext) = 
+      let
 (*
-      val vstr = var2string v 
-      val _ = (pprint ("rewriting bnd for con var: "^vstr^"\n");ppin 2) 
-      val _ = ppout 2 
+         val vstr = var2string v
+         val _ = (pprint ("rewriting bnd for exp var: "^vstr^"\n");ppin 2)  
 *)
+	  val (e',bvl',effs,valuable) = rexp(e,cvs,econtext)
+	  
+	  val hoistable = 
+	      valuable andalso Set.isSubset(freeExpVars e',cvs)
+
+(*
+          val _ = if hoistable then pprint ("E-moving "^vstr^" up\n") 
+        	      else pprint ("E-keeping "^vstr^" here\n") 
+          val _ = ppout 2 
+*)
+	  val newbnd = Exp_b(v,niltrace,e')
+	  val econtext' = Map.insert(econtext,v,effs)
     in
-      case rconbnd cvs cb of
-	(CUP v,bvl) => (UP v,bvl)
-      | (CSTAY cb', bvl) => (STAY (Con_b (p,cb')),bvl)
+      if hoistable then 
+	  (UP v, bvl'@[(newbnd,freeExpVars e)],econtext',valuable)
+      else 
+	  (STAY newbnd,bvl',econtext',valuable)
     end
 
-    | rbnd cvs (Exp_b(v,niltrace,e)) = 
-    let
-(*
-      val vstr = var2string v
-      val _ = (pprint ("rewriting bnd for exp var: "^vstr^"\n");ppin 2)  
-*)
-      val (e',bvl') = rexp(e,cvs)
-
-      val (up,fv) = if (NilUtil.effect e) then 
-	               (false, NONE)
-		    else let val fv = freeExpVars e
-			 in  (subset(fv,cvs), SOME fv)
-			 end
-(*
-      val _ = if up then pprint ("E-moving "^vstr^" up\n") 
-      	      else pprint ("E-keeping "^vstr^" here\n") 
-      val _ = ppout 2 
-*)
-      val newbnd = Exp_b(v,niltrace,e')
-    in
-      if up then (UP v,bvl'@[(newbnd,valOf fv)])
-      else (STAY newbnd,bvl')
-    end
-
-    (*** need to do more here? pass in fvars as being constant? *)
-    | rbnd cvs (Fixcode_b(vfs)) = 
+    | rbnd (Fixcode_b(vfs), cvs, econtext_orig) = 
 	let
 (*
 	  val fvstr = (sl2s (map var2string (map #1 vfs)))
 	  val _ = (pprint ("rewriting bnd for code funs: "^fvstr^"\n");ppin 2) 
 *)
-	  fun loop ([],vfl,bvl') = (vfl,bvl')
+	  fun loop ([],vfl,bvl',econtext) = (vfl,bvl',econtext)
 
-	    | loop ((v,f)::rest,vfl,bvl') = 
-	    let
-	      val (f',bvl'') = rfun (f,cvs)
-	    in
-	      loop (rest,(v,f')::vfl,bvl''@bvl')
-	    end
+	    | loop ((v,f)::rest,vfl,bvl',econtext) = 
+	      let
+		  val (f',bvl'',effs) = rfun (f,cvs,econtext_orig)
+		  val econtext' = Map.insert(econtext,v, effs)
+	      in
+		  loop (rest,(v,f')::vfl,bvl''@bvl',econtext')
+	      end
 
-	  val (vfs',bvl''') = loop (Sequence.toList vfs,[],[])
+	  val (vfs',bvl''',econtext') = 
+	      loop (Sequence.toList vfs,[],[],econtext_orig)
 (*	  val _ = ppout 2  *)
 	in
-	  (STAY(Fixcode_b(Sequence.fromList vfs')),bvl''')
+	    (STAY(Fixcode_b(Sequence.fromList vfs')),bvl''',econtext',true)
 	end
 
-    (*** need to do more here? pass in fvars as being constant? *)
-    | rbnd cvs (Fixopen_b(vfs)) = 
+    | rbnd (Fixopen_b(vfs), cvs, econtext_orig) = 
 	let
 (*
 	  val fvstr = (sl2s (map var2string (map #1 vfs)))
 	  val _ = (pprint ("rewriting bnd for open funs: "^fvstr^"\n");ppin 2) 
 *)
 
-	  fun loop ([],vfl,bvl') = (vfl,bvl')
+	  fun loop ([],vfl,bvl',econtext) = (vfl,bvl',econtext)
 
-	    | loop ((v,f)::rest,vfl,bvl') = 
-	    let
-	      val (f',bvl'') = rfun (f,cvs)
-	    in
-	      loop (rest,(v,f')::vfl,bvl''@bvl')
-	    end
+	    | loop ((v,f)::rest,vfl,bvl',econtext) = 
+	      let
+		  val (f',bvl'',effs) = rfun (f,cvs,econtext_orig)
+		  val econtext' = Map.insert(econtext,v, effs)
+	      in
+		  loop (rest,(v,f')::vfl,bvl''@bvl',econtext')
+	      end
 
-	  val (vfs',bvl''') = loop (Sequence.toList vfs,[],[])
+	  val (vfs',bvl''',econtext') = 
+	      loop (Sequence.toList vfs,[],[],econtext_orig)
 (*	  val _ = ppout 2  *)
 	in
-	  (STAY(Fixopen_b(Sequence.fromList vfs')),bvl''')
+	    (STAY(Fixopen_b(Sequence.fromList vfs')),bvl''',econtext',true)
 	end
+    
+    | rbnd _ = raise HoistError
 
-    | rbnd _ _ = raise HoistError
+  and rexp (Var_e v,cvs,econtext) = (Var_e v,[],elookup(econtext,v),true)
 
-  and rexp (Var_e v,cvs) = (Var_e v,[])
+    | rexp (Const_e c,cvs,econtext) = (Const_e c, [], UNKNOWN_EFFS, true)
 
-    | rexp (Const_e c,cvs) = (Const_e c, [])
-
-    | rexp (Let_e (seq, bndlst, bodexp),cvs) = 
-    let
+    | rexp (Let_e (seq, bndlst, bodexp),cvs,econtext) = 
+      let
 (*
-      val t = newtag "let" 
-      val _ = (plist ["start",t];ppin(3)) 
+          val t = newtag "let" 
+          val _ = (plist ["start",t];ppin(3)) 
 *)
-      val fvset = list2set (getBoundVars bndlst)
 
-      val u = union (fvset,cvs)
+	  val bound_var_set = list2set (getBoundVars bndlst)
+	  val cvs' = union (bound_var_set,cvs)
+	      
+	  val (up,stay,econtext',valuable') = rbnds(bndlst,cvs,econtext)
+	  val (bodexp',body_up,effs,valuable) = rexp(bodexp,cvs',econtext')
 
-      val (bodexp',bvl) = rexp(bodexp,u)
-      val (bvll',bndlst') = rbnds(bndlst,cvs)
+	  val stop_vars = list2set (getBoundVars stay)
+	  val (body_up', body_stay') = filter_bnds(body_up, stop_vars)
+
 (*
       val _ = diag ("bndlst: "^(bl2s bndlst)^"\n") 
       val _ = diag ("bvl': "^bvl2s (List.concat bvll')^", bndlst': "^(bl2s bndlst')^"\n") 
 *)
-      val (up,stay) = splitbnds (bvl@(List.concat bvll'),cvs)
-      val stay' = bndlst'@(stay)
+	  val up' = up @ body_up
+	  val stay' = stay @ body_stay'
 
 (*
       val _ = pprint ("laying down: "^(bl2s stay')^"\n") 
-      val _ = pprint ("moving up: "^(bl2s (map #1  up)^"\n"))  
+      val _ = pprint ("moving up: "^(bl2s (map #1 up')^"\n"))  
       val _ = (ppout 3;plist ["end",t]) 
 *)
-    in
-      (NilUtil.makeLetE seq stay' bodexp',up)
+      in
+	  (NilUtil.makeLetE seq stay' bodexp',
+	   up', effs, valuable' andalso valuable)
+      end
+
+    | rexp (exp as Prim_e (allp, conlst, explst), cvs, econtext) = 
+      let
+	  val (conlst', con_bvll) = 
+	      Listops.unzip (map (fn c => rcon'(c, cvs)) conlst)
+	  val con_bvl = List.concat con_bvll
+	      
+	  val (explst', exp_bvll, effs_list, valuable_list ) = 
+	      Listops.unzip4 (map (fn e => rexp(e, cvs, econtext)) explst)
+	  val exp_bvl = List.concat exp_bvll
+
+	  (* we don't try very hard to track effect types through primops.
+	   *)
+	  val effs =
+	      (case (allp, effs_list) of
+		   (NilPrimOp (record lbls),  _) =>
+		       REC_EFFS(ListPair.zip (lbls, effs_list))
+                 | (NilPrimOp (select lbl), [effs]) =>
+		       ereclookup (effs, lbl)
+		 | _ => UNKNOWN_EFFS)
+	      
+	  val valuable = (not (NilUtil.effect exp)) andalso
+	      List.all (fn (b:bool)=>b) valuable_list
+	      
+      in
+      (Prim_e (allp, conlst', explst'), con_bvl @ exp_bvl,
+       effs, valuable)
     end
 
-    | rexp (Prim_e (allp, conlst, explst),cvs) = 
-    let
-      val (nconlst,bvl)  = foldr (fn ((c,bvl),(cl,bvll)) => (c::cl,bvl@bvll)) ([],[]) (map (fn c => rcon(c,cvs)) conlst)
-      val (nexplst,bvl') = foldr (fn ((e,bvl),(el,bvll)) => (e::el,bvl@bvll)) ([],[]) (map (fn e => rexp(e,cvs)) explst)
-    in
-      (Prim_e (allp, nconlst, nexplst),bvl@bvl')
+    | rexp (Switch_e s, cvs, econtext) = 
+      let
+	  val (ns, bvl, effs, valuable) = rswitch (s, cvs, econtext)
+      in
+	  (Switch_e ns, bvl, effs, valuable)
+      end
+
+    | rexp (exp0 as App_e (opn, exp, conlist, explist1, explist2), cvs, econtext) = 
+      let
+	  val (exp', exp_bvl, exp_effs, exp_valuable) = rexp (exp,cvs, econtext)
+	  val (conlist', conlist_bvll) = Listops.unzip (map (fn a => rcon'(a,cvs)) conlist)
+	  val (explist1',explist1_bvll, explist1_effs, explist1_valuable) = 
+	      Listops.unzip4 (map (fn e => rexp(e, cvs, econtext)) explist1)
+	  val (explist2',explist2_bvll, explist2_effs, explist2_valuable) = 
+	      Listops.unzip4 (map (fn e => rexp(e, cvs, econtext)) explist2)
+	      
+	  val bvl = List.concat (exp_bvl :: conlist_bvll @ explist1_bvll @ explist2_bvll)
+	      
+	  fun id (b:bool) = b
+	      
+	  val components_valuable = 
+	      exp_valuable andalso
+	      (List.all id explist1_valuable) andalso
+	      (List.all id explist2_valuable)
+	      
+	  val (valuable, effs) = 
+	      (case exp_effs of
+		   (ARROW_EFFS (Total,rest)) => (components_valuable, rest)
+		 | (ARROW_EFFS (Partial,rest)) => (false, rest)
+		 | _ => (false, unknown_effs))
+
+	       val _ = (print "Processing application:\n ";
+			Ppnil.pp_exp exp0;
+			print "components_valuable = ";
+			print (Bool.toString components_valuable);
+			print "valuable = ";
+			print (Bool.toString valuable);
+			print "\n")
+
+		   
+      in
+	  (App_e (opn, exp', conlist', explist1', explist2'), bvl, effs, valuable)
+      end
+  
+    | rexp (ExternApp_e (exp,explist), cvs, econtext) = 
+      let
+	  val (exp', exp_bvl, _, _) = rexp (exp,cvs, econtext)
+	  val (explist',explist_bvll, _, _) = 
+	      Listops.unzip4 (map (fn e => rexp(e, cvs, econtext)) explist)
+
+	  val bvl = List.concat (exp_bvl :: explist_bvll)
+	  val valuable = false
+	  val effs = unknown_effs
+      in
+	(ExternApp_e (exp',explist'), bvl, effs, valuable)
+      end
+
+    | rexp (Raise_e(exp,con),cvs,econtext) = 
+      let
+	  val (exp',bvl,_,_) = rexp (exp,cvs,econtext)
+	  val (con',bvl') = rcon' (con,cvs)
+	  val effs = unknown_effs
+	  val valuable = false
+      in
+	  (Raise_e(exp',con'), bvl @ bvl', effs, valuable)
+      end
+  
+    | rexp (Handle_e (exp,var,exp'),cvs,econtext) = 
+      let
+	  val (nexp,bvl,_,_) = rexp (exp,cvs,econtext)
+	  val (nexp',bvl',_,_) = rexp (exp',cvs,econtext)
+ 	  val effs = unknown_effs
+	  val valuable = false
+      in
+	  (Handle_e (nexp,var,nexp'), bvl@bvl', effs, valuable)
+      end
+
+  and rswitch (Intsw_e {arg,size,arms,default},cvs,econtext) = 
+      let
+	  
+	  fun mapper (w,e) = 
+	      let 
+		  val (e',bvl',_,_) = rexp (e,cvs,econtext)
+	      in
+		  ((w,e'), bvl')
+	      end
+	      
+	  val (arg', bvl', _, _) = rexp (arg,cvs,econtext)
+	  val (arms',bvll) = Listops.unzip (map mapper arms)
+	  val bvl'' = List.concat bvll
+	  val (default',bvl''',_,_) = rexpopt(default,cvs,econtext)
+	      
+	  val effs = unknown_effs
+	  val valuable = false
+      in
+	  (Intsw_e {arg=arg', size=size, arms=arms', default=default'},
+	   bvl'@bvl''@bvl''', effs, valuable)
+      end
+
+    | rswitch (Sumsw_e {arg,sumtype,bound,arms,default},cvs, econtext) = 
+      let
+
+	  val boundset = Set.singleton bound
+
+	  val cvs' = Set.add(cvs,bound)
+
+	  fun mapper (w,e) = 
+	      let 
+		  val (e',bvl,_,_) = rexp (e,cvs',econtext)
+		  val (up,stay) = filter_bnds (bvl, boundset) 
+		  val e'' = NilUtil.makeLetE Sequential stay e'
+	      in
+		  ((w,e''), up)
+	      end
+	      
+	  val (arg', bvl', _, _) = rexp (arg,cvs,econtext)
+	  val (arms',bvll) = Listops.unzip (map mapper arms)
+	  val bvl'' = List.concat bvll
+	  val (default',bvl''',_,_) = rexpopt(default,cvs,econtext)
+	      
+	  val effs = unknown_effs
+	  val valuable = false
+      in
+	  (Sumsw_e {arg = arg',
+		    sumtype = sumtype,
+		    bound = bound,
+		    arms = arms',
+		    default = default'},
+	   bvl' @ bvl'' @ bvl''', 
+	   effs, valuable)
+      end
+
+    | rswitch (Exncase_e {arg,bound,arms,default},cvs,econtext) = 
+      let
+	  val boundset = Set.singleton bound
+
+	  val cvs' = add(cvs,bound)
+
+	  (* e1 is supposed to be a path, so no point traversing it *)
+	  fun mapper (e1,e) = 
+	      let 
+		  val (e',bvl,_,_) = rexp (e,cvs',econtext)
+		  val (up,stay) = filter_bnds (bvl, boundset) 
+		  val e'' = NilUtil.makeLetE Sequential stay e'
+	      in
+		  ((e1,e''), up)
+	      end
+	      
+	  val (arg', bvl', _, _) = rexp (arg,cvs,econtext)
+	  val (arms',bvll) = Listops.unzip (map mapper arms)
+	  val bvl'' = List.concat bvll
+	  val (default',bvl''',_,_) = rexpopt(default,cvs,econtext)
+	      
+	  val effs = unknown_effs
+	  val valuable = false
+      in
+	  (Exncase_e {arg=arg',
+		      bound=bound,
+		      arms=arms',
+		      default=default'},
+	   bvl'@bvl''@bvl''', effs, valuable)
     end
 
-    | rexp (Switch_e s,cvs) = 
+    | rswitch (Typecase_e {arg,arms,default},cvs,econtext) = 
+    (Util.error "hoist.sml" "Typecase_e not implemented yet")
+(*
     let
-      val (ns,bvl) = rswitch (s,cvs)
-    in
-      (Switch_e ns,bvl)
-    end
-
-    | rexp (App_e (opn,exp,conlist, explist, explist'),cvs) = 
-    let
-      val (nexp,bvl) = rexp (exp,cvs)
-      val (nconlist,bvl') = cat_app_zip (map (fn a => rcon(a,cvs)) conlist)
-      val (nexplist,bvl'') = cat_app_zip (map (fn a => rexp(a,cvs)) explist)
-      val (nexplist',bvl''') = cat_app_zip (map (fn a => rexp(a,cvs)) explist')
-      val bvl = bvl@bvl'@bvl''@bvl'''
-    in
-      (App_e (opn, nexp,nconlist, nexplist, nexplist'),bvl)
-    end
-
-    | rexp (ExternApp_e (exp,explist),cvs) = 
-    let
-      val (nexp,bvl) = rexp (exp,cvs)
-      val (nexplist,bvl') = cat_app_zip (map (fn a => rexp(a,cvs)) explist)
-      val bvl = bvl@bvl'
-    in
-      (ExternApp_e (nexp,nexplist),bvl)
-    end
-
-    | rexp (Raise_e(exp,con),cvs) = 
-    let
-      val (nexp,bvl) = rexp (exp,cvs)
-      val (ncon,bvl') = rcon (con,cvs)
-    in
-      (Raise_e(nexp,ncon),bvl@bvl')
-    end
-
-    | rexp (Handle_e (exp,var,exp'),cvs) = 
-    let
-      val (nexp,bvl) = rexp (exp,cvs)
-      val (nexp',bvl') = rexp (exp',cvs)
-    in
-      (Handle_e (nexp,var,nexp'),bvl@bvl')
-    end
-
-  and rswitch (Intsw_e {arg,size,arms,default},cvs) = 
-    let
-
-      fun procarm(arms,tprocfun,cvs) = 
-	let
-	  val l = map (fn (a,b) => (tprocfun (a,cvs),rexp (b,cvs))) arms
-	  val f = fn (((a,b),(c,d)),(e,f)) => ((a,c)::e,b@d@f)
-	in
-	  foldr f ([],[]) l
-	end
-
-      val (arg',bvl') = rexp (arg,cvs)
-      val (arms',bvl'') = procarm(arms,fn (x,b:set) => (x,[]),cvs)
-      val (default',bvl''') = rexpopt(default,cvs)
-
-    in
-      (Intsw_e {arg=arg',
-		size=size,
-		arms=arms',
-		default=default'},
-       bvl'@bvl''@bvl''')
-    end
-
-    | rswitch (Sumsw_e {arg,sumtype,bound,arms,default},cvs) = 
-    let
-
-      fun procarm(arms,tprocfun,cvs) = 
-	let
-	  val l = map (fn (a,b) => (tprocfun (a,cvs),rexp (b,cvs))) arms
-	  val f = fn (((a,b),(c,d)),(e,f)) => ((a,c)::e,b@d@f)
-	in
-	  foldr f ([],[]) l
-	end
-
-      val (arg',bvl') = rexp (arg,cvs)
-      val (sumtype',bvl'') = rcon (sumtype,cvs)
-      val (arms',bvl''') = procarm(arms,fn (x,b) => (x,[]),cvs)
-      val (default',bvl'''') = rexpopt(default,cvs)
-    in
-      (Sumsw_e {arg = arg',
-		sumtype = sumtype',
-		bound = bound,
-		arms = arms',
-		default = default'},
-       bvl'@bvl''@bvl'''@bvl'''')
-    end
-
-    | rswitch (Exncase_e {arg,bound,arms,default},cvs) = 
-    let
-      val (arg',bvl') = rexp (arg,cvs)
-
-      fun procarm(arms,tprocfun,cvs) = 
-	let
-	  val l = map (fn (a,b) => (tprocfun (a,cvs),rexp (b,cvs))) arms
-	  val f = fn (((a,b),(c,d)),(e,f)) => ((a,c)::e,b@d@f)
-	in
-	  foldr f ([],[]) l
-	end 
-
-      val (arms',bvl') = procarm(arms,rexp,cvs)
-
-      val (default',bvl'') = rexpopt(default,cvs)
-    in
-      (Exncase_e {arg=arg',
-		  bound=bound,
-		  arms=arms',
-		  default=default'},
-       bvl'@bvl'')
-    end
-
-    | rswitch (Typecase_e {arg,arms,default},cvs) = 
-    let
-      val (arg',bvl') = rcon (arg,cvs)
+      val (arg',bvl') = rcon' (arg,cvs)
 
       fun procarm(arms,tprocfun,cvs) = 
 	let
@@ -605,97 +754,65 @@ struct
 		   default=default},
        bvl'@bvl''@bvl''')
     end
-
-  and rexpopt(NONE,cvs) = (NONE,[])
-    | rexpopt(SOME(a),cvs) = let val (e',bvl) = rexp (a,cvs) in (SOME(e'),bvl) end
+*)
+  and rexpopt(NONE,cvs,econtext) = (NONE,[],unknown_effs,true)
+    | rexpopt(SOME(a),cvs,econtext) = 
+      let 
+	  val (e',bvl,effs,valuable) = rexp (a,cvs,econtext) 
+      in 
+	  (SOME(e'),bvl,effs,valuable) 
+      end
 
   and rfun (Function(eff,isrec,typelist:(var * kind) list,
-		     vlist,formlist,vl,bod,ret),cvs:set) = 
-    let
+		     isdep, eformals, fformals, bod,ret),cvs,econtext) = 
+      let
+	  
 (*
-      val t = newtag "fun" 
-      val _ = (plist ["start",t];ppin(3)) 
+        val t = newtag "fun" 
+        val _ = (plist ["start",t];ppin(3)) 
 *)
-      val cvl = map (fn (a,b) => a) typelist
-      val cvl' = map (fn (a,b) => a) formlist
-      val cvs' = cvs
-      val (bod',bvl) = rexp(bod,cvs')
-      val (ret',bvl') = rcon (ret,cvs')
-      val (up,stay) = splitbnds(bvl@bvl',cvs)
-      val newbod = NilUtil.makeLetE Sequential stay bod'
+	  val cvars = map #1 typelist
+	  val evars = map #1 eformals
+          val boundvar_set = list2set (cvars @ evars @ fformals)
+	  val cvs' = Set.union (cvs, boundvar_set)
+
+	  val econtext' = 
+	      List.foldr (fn ((v,c),ectx) => Map.insert(ectx, v, con2eff c))
+              econtext eformals
+	      
+	  val (bod',bvl,effs,_) = rexp(bod,cvs',econtext)
+	  val (ret',bvl') = rcon' (ret,cvs')
+	  val (up,stay) = filter_bnds (bvl @ bvl', boundvar_set)
+	  val newbod = NilUtil.makeLetE Sequential stay bod'
 (*
-      val _ = pprint ("laying down at fun: "^(bl2s stay)^"\n") 
-      val _ = ppout 3 
-      val _ = plist ["end",t]
+        val _ = pprint ("laying down at fun: "^(bl2s stay)^"\n") 
+        val _ = ppout 3 
+        val _ = plist ["end",t]
 *)
-    in
-      (Function(eff,isrec,typelist,vlist,formlist,vl,newbod,ret'),up) 
-    end
-
-  and splitbnds (bvl:bvs list,cvs:set) : (bvs list * bnd list) = 
-    let
-(*      val _ = diag ("splitbnds("^(Int.toString (length bvl))^" start\n")  *)
-      (*** both u and s should be reversed. find out where the other rev is happening *)
-      fun loop ([],cvs,(u,s)) = (rev u,rev s)
-
-	| loop ((b,vs:set)::rest,cvs,(u,s)) = 
-	let
-(*
-	  val bname = var2string (hd (getBoundVars [b])) 
-	  val vsname = sl2s (map var2string (set2list vs)) 
-	  val cvsname = sl2s (map var2string (set2list cvs)) 
-	  val _ = diag ("bnd: "^bname^", vs: "^vsname^", cvs: "^cvsname^"\n") 
-*)
-	in
-	  if subset (vs,cvs) 
-	    then loop(rest,union (cvs, list2set (getBoundVars([b]))),((b,vs)::u,s))
-	  else loop(rest,cvs,(u,b::s))
-	end
-      val (u,s) = loop (bvl,cvs,([],[]))
-(*      val _ = diag ("splitting: "^(bvsl2s bvl)^" into up: "^(bvsl2s u)^
-                       " and stay: "^(bl2s s)^"\n") 
-*)
-    in
-      (u,s)
-    end
-
+      in
+	  (Function(eff,isrec,typelist,isdep, eformals, fformals,newbod,ret'),
+	   up, ARROW_EFFS(eff, effs)) 
+      end
+  
   fun optimize (MODULE {bnds, imports, exports}) = 
-    let
+      let
 (*    val _ = diag("we are hoisting\n") *)
 
-      (* remove the bindings from empty lets *)
-      fun stripLet (Let_e(_,bnds,bod)) = bnds@(stripLet bod)
-	| stripLet _ = []
-    
-      (* collect the 'top level' var names *)
-      fun split ([],vl,tl,cvs) = (vl,tl,cvs)
-	| split (ImportValue(l,v,c)::rest,vl,tl,cvs) = split(rest,(v,c)::vl,tl,add(cvs,v))
-	| split (ImportType(l,v,k)::rest,vl,tl,cvs) = split(rest,vl,(v,k)::tl,add(cvs,v))
-
-      val (exp_args,type_args,cvs) = split (imports,[],[],empty)
-
-      val lete = Let_e (Sequential,bnds,NilUtil.unit_exp)
-
-      (******** check 3rd and 4th args *)
-      val startfun = Function(Total,Leaf,type_args,
-			      false,exp_args,[],lete,NilUtil.unit_con)
-
-      val (f,bvl) = rfun(startfun,cvs)
-
-      val Function(_,_,_,_,_,_,some_let,_) = f
-
-      val bnds' = stripLet some_let
-
-      val bnds'' = (map #1 bvl)@bnds'
-
-    in
-      MODULE {bnds=bnds'',imports=imports,exports=exports}  
-    end
+	  (* collect the 'top level' var names *)
+	  fun split ([],cvs,ectx) = (cvs,ectx)
+	    | split (ImportValue(l,v,c)::rest,cvs,ectx) = 
+	      split(rest,Set.add(cvs,v),Map.insert(ectx,v,con2eff c))
+	    | split (ImportType(l,v,k)::rest,cvs,ectx) = 
+		    split(rest,add(cvs,v), ectx)
+		    
+	  val (cvs, econtext) = split (imports,Set.empty,empty_fnmap)
+		    
+	  val (bvl, bnds, _, _) = rbnds(bnds, cvs, econtext)
+		    
+	  val bnds' = (map #1 bvl) @ bnds
+		    
+      in
+	  MODULE {bnds=bnds',imports=imports,exports=exports}  
+      end
 
 end
-
-
-
-
-
-

@@ -95,6 +95,8 @@ structure Linknil :> LINKNIL  =
 
     fun pass (showphase,phasename,phase,filename,nilmod) = 
 	let val _ = print "\n\n=======================================\n"
+	    val _ = (print "Starting "; print phasename; print " on ";
+		     print filename; print "...\n")
 	    val nilmod = Stats.timer(phasename,phase) nilmod
 	    val _ = (print phasename; print " complete: "; print filename; print "\n")
 	    val _ = if !show_size
@@ -103,16 +105,15 @@ structure Linknil :> LINKNIL  =
 			   print (Int.toString (NilUtil.module_size nilmod));
 			   print "\n")
 		    else ()
-	    val _ = if !showphase
-			then
-                          (if !show_html then
-                             PpnilHtml.pp_module 
-                           else
-                             Ppnil.pp_module)   
-                          {module = nilmod,
-                           header = phasename,
-                           name = filename,
-                           pass = phasename}
+	    val _ = if !showphase then
+		      (if !show_html then
+			   PpnilHtml.pp_module 
+		       else
+			   Ppnil.pp_module)   
+			   {module = nilmod,
+			    header = phasename,
+			    name = filename,
+			    pass = phasename}
 		    else ()
 	in  nilmod
 	end
