@@ -67,7 +67,7 @@ functor Rtlinterp(structure Pprtl : PPRTL
 	 error msg)
 	 
     val cur_module = ref ([MODULE{procs=[],
-			     data=(Array.array(0,(STRING ("")))),
+			     data=[],
 			     main=(named_code_label ""),
 			     mutable_objects = nil,
 			     mutable_variables = nil}]);
@@ -284,7 +284,7 @@ fun replace_all_stack(arg) = stack := arg
 		     ^ (Int.toString aa) ^ "\n"); read b);
 
 	val _ = location := actualstart
-	val _ = app (fn MODULE{data,...} => data_layout 0 data false) modules
+	val _ = app (fn MODULE{data,...} => data_layout 0 (Array.fromList data) false) modules
         val _ = let val temp = !location + 7
 		in location := (temp div 8) * 8
 		end;
@@ -297,7 +297,7 @@ fun replace_all_stack(arg) = stack := arg
 
 	val savelocation = !location
 	val _ = location := actualstart
-	val _ = app (fn MODULE{data,...} => data_layout 0 data true) modules
+	val _ = app (fn MODULE{data,...} => data_layout 0 (Array.fromList data) true) modules
 	val _ = location := savelocation
 	val _ = if (!print_dump)
 		  then (print "*****************ALL LABELS LAID OUT -- START ********\n";

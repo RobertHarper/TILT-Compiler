@@ -1,5 +1,6 @@
 (* empty records translate to 256; no allocation *)
 (* to do: strive for VLABEL not VGLOBAL *)
+(* xtagsum_dynamic record case is fragile *)
 
 functor Tortl(structure Rtl : RTL
 	      structure Pprtl : PPRTL 
@@ -18,7 +19,9 @@ struct
 
 val do_constant_records = ref true
 val debug = ref false
+val debug_full = ref false
 val debug_simp = ref false
+val debug_bound = ref false
 
    (* Module-level declarations *)
 
@@ -108,22 +111,17 @@ val debug_simp = ref false
    val nonglobals = ref VarSet.empty
    val dl : Rtl.data list ref = ref nil
    val pl : Rtl.proc list ref = ref nil
-   type varstate = {env : NilContext.context,
-		    varmap : varmap,
-		    convarmap : convarmap}
-   fun make_varstate() : varstate = {env = NilContext.empty(),
-				     varmap = VarMap.empty,
-				     convarmap = VarMap.empty}
-   val global_state : varstate ref = ref (make_varstate())
-   type state = {local_state : varstate}
-		 (* ,global_state : varstate *)
+   type state = {env : NilContext.context,
+		 varmap : varmap,
+		 convarmap : convarmap}
+   fun make_state() : state = {env = NilContext.empty(),
+			       varmap = VarMap.empty,
+			       convarmap = VarMap.empty}
+   val global_state : state ref = ref (make_state())
 
-   fun stat_varstate ({convarmap,...} : varstate) = (VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) convarmap;
+   fun stat_state ({convarmap,...} : state) = (VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) convarmap;
 						     print "\n\n")
-   fun stat_state ({local_state,...} : state) = stat_varstate local_state
 
-   fun make_state() : state = {local_state = make_varstate()
-			       (* global_state = make_varstate() *) }
 
    local
        val mutable_objects : label list ref = ref nil
@@ -140,12 +138,14 @@ val debug_simp = ref false
                  | ConFunWork of (state * var * (var * kind) list * con * kind)
    local
        val worklist : work list ref = ref nil
+       val workcount = ref 0
    in
-       fun addWork more = worklist := more :: (!worklist)
+       fun addWork more = (worklist := more :: (!worklist))
        fun getWork() = (case (!worklist) of
 			    [] => NONE
-			  | (a::b) => (worklist := b; SOME a))
-       fun resetWork() = worklist := []
+			  | (a::b) => (workcount := (!workcount) + 1;
+				       worklist := b; SOME (!workcount, a)))
+       fun resetWork() = (workcount := 0; worklist := [])
    end
 
 
@@ -162,28 +162,28 @@ val debug_simp = ref false
   fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
 
 
-  fun varmap_insert' str ({varmap,env,convarmap} : varstate) (v,vr : var_rep) : varstate = 
-      let val _ = if (!debug)
-		      then (print "varmap adding to "; print str; print " v = "; Ppnil.pp_var v; print "\n")
+  fun varmap_insert' ({varmap,env,convarmap} : state) (v,vr : var_rep) : state = 
+      let val _ = if (!debug_bound)
+		      then (print "varmap adding to v = "; Ppnil.pp_var v; print "\n")
 		  else ()
 	  val _ = case (VarMap.find(varmap,v)) of
 		  NONE => ()
 		| SOME _ => if (!debug)
-				then print ("hash table " ^ str ^ " already contains entry "
+				then print ("hash table already contains entry "
 					    ^ (Name.var2string v))
 			    else ()
 	  val varmap = VarMap.insert(varmap,v,vr)
       in  {env=env,varmap=varmap,convarmap=convarmap}
       end
   
-  fun convarmap_insert' str ({convarmap,varmap,env}:varstate) (v,cvr : convar_rep) : varstate = 
-      let val _ = if (!debug)
-		      then (print "convar adding to "; print str; print " v = "; Ppnil.pp_var v; print "\n")
+  fun convarmap_insert' ({convarmap,varmap,env}:state) (v,cvr : convar_rep) : state = 
+      let val _ = if (!debug_bound)
+		      then (print "convar adding to v = "; Ppnil.pp_var v; print "\n")
 		  else ()
 	  val _ = (case (VarMap.find(convarmap,v)) of
 		       NONE => ()
 		     | SOME _ => if (!debug)
-				     then print ("hash table " ^ str ^ " already contains entry " 
+				     then print ("hash table already contains entry " 
 						 ^ (Name.var2string v))
 				 else ())
 	  val convarmap = VarMap.insert(convarmap,v,cvr)
@@ -191,11 +191,12 @@ val debug_simp = ref false
       end
   
   fun insert_kind(ctxt,v,k,copt : con option) = 
-      let (*
+      let 
+(*
 	  val _ = print "insert_kind start--------\n"
 	  val _ = (print "original kind = \n";
 		   Ppnil.pp_kind k; print "\n") 
-	      *)
+*)
 	  val k = NilStatic.kind_reduce(ctxt,k)
 (*
 	  val _ = (print "reduce kind = \n";
@@ -211,67 +212,79 @@ val debug_simp = ref false
 					Ppnil.pp_con c; print "\n") *)
 			   in  NilUtil.singletonize(k, c)
 			   end)
-(*	  val _ = print "insert_kind middle--------\n"
+(*
+	  val _ = print "insert_kind middle--------\n"
 	  val _ = (print "final kind = \n";
 		   Ppnil.pp_kind k; print "\n";
 		   NilContext.print_context ctxt; print "\n")
 *)
 	  val ctxt =   NilContext.insert_kind(ctxt,v,k)
-(*	  val _ = print "insert_kind end--------\n" *)
+(*	  val _ = print "insert_kind end--------\n"  *)
       in ctxt
       end
 
-  fun env_insert' str ({env,varmap,convarmap} : varstate) (v,k,copt) : varstate = 
-      let val _ = if (!debug)
-		      then (print "env adding to "; print str; print " v = ";
+
+  fun top_rep (v,rep) = 
+      (case rep of
+	   (SOME(VGLOBAL _),_,_) => true
+	 | (_, SOME(VCODE _), _) => true
+	 | (_, SOME(VLABEL _), _) => true
+	 | _ => (VarSet.member(!nonglobals,v)))
+
+  fun env_insert' istop ({env,varmap,convarmap} : state) (v,k,copt) : state = 
+      let val _ = if (!debug_bound)
+		      then (print "env adding v = ";
 			    Ppnil.pp_var v; print "\n")
 		  else ()
-
-	  val env = insert_kind(env,v,k,copt)
-      in  {env=env,varmap=varmap,convarmap=convarmap}
-      end
-  
-  fun local_insert inserter ({local_state} : state) arg : state = 
-      let val local_state = inserter "local" local_state arg
-      in {local_state = local_state}
-      end
-  val lvarmap_insert = local_insert varmap_insert'
-  val lconvarmap_insert = local_insert convarmap_insert'
-  val lenv_insert = local_insert env_insert'
-  
-
-(*      
-  fun global_insert inserter arg : unit = 
-      let val _ = if (!debug)
-		      then print "global_state is updated\n" 
+	  val newenv = insert_kind(env,v,k,copt)
+	  val newstate = {env=newenv,varmap=varmap,convarmap=convarmap}
+	      (* should not call insert_kind again: doing normalization work twice *)
+	  val _ = if istop
+		      then let val {env,varmap,convarmap} = !global_state
+			       val env = insert_kind(env,v,k,copt)
+			       val new_globalstate = {env=env,varmap=varmap,convarmap=convarmap}
+			   in  global_state := new_globalstate
+			   end
 		  else ()
-      in  global_state := (inserter "global" (!global_state) arg)
+	  val _ = if (!debug_bound)
+		      then (print "env done adding to v = ";
+			    Ppnil.pp_var v; print "\n")
+		  else ()
+      in  newstate
+      end
+  
+	   
+  fun lvarmap_insert istop state arg =
+      let val res = varmap_insert' state arg
+	  val _ = if (top_rep arg)
+		      then global_state := varmap_insert' (!global_state) arg
+		  else ()
+      in  res
       end
 
-  val gvarmap_insert = global_insert varmap_insert'
-  val gconvarmap_insert = global_insert convarmap_insert'
-  val genv_insert = global_insert env_insert'
-*)
+  fun lconvarmap_insert istop state (arg as (v,(_,_,k))) copt =
+      let val state = convarmap_insert' state arg
+	  val istop = top_rep arg
+	  val _ = if istop
+		      then global_state := convarmap_insert' (!global_state) arg
+		  else ()
+      in  env_insert' istop state (v,k,copt)
+      end
 
+  
 
 
 
   (* ---- Looking up and adding new variables --------------- *)
     
-   fun getconvarrep ({local_state = {convarmap=lm,...}, ...} : state) v : convar_rep = 
+   fun getconvarrep ({convarmap=lm,...} : state) v : convar_rep = 
        (case VarMap.find (lm,v) of
-	   NONE => 
-	       (case VarMap.find(#convarmap(!global_state),v) of
-		    NONE => error ("getconvarrep: variable "^(var2string v)^" not found")
-		  | SOME convar_rep => convar_rep)
+	   NONE => error ("getconvarrep: variable "^(var2string v)^" not found")
 	 | SOME convar_rep => convar_rep)
 
-  fun getrep ({local_state = {varmap=lm,...}, ...} : state) v = 
+  fun getrep ({varmap=lm,...} : state) v = 
       (case VarMap.find(lm,v) of
-	   NONE => 
-	       (case VarMap.find(#varmap(!global_state),v) of
-		    NONE => error ("getvarrep: variable "^(var2string v)^" not found")
-		  | SOME rep => rep)
+	   NONE => error ("getvarrep: variable "^(var2string v)^" not found")
 	 | SOME rep => rep)
 
     (* given a type returns true and a type in head-normal form
@@ -304,14 +317,21 @@ val debug_simp = ref false
 					print "\nwith env = \n";
 					NilContext.print_context env;
 					print "\n")
-			      else ()
-(*		      val c' = NilStatic.con_reduce(env,c) *)
-		      val (c',_) = NilStatic.con_valid(env,c) 
+			      else 
+			       if (!debug)
+				  then (print "simplify type called\n")
+				   else ()
+		      (* XXXX is once enough ? but full normalization is too slow *)
+		      val c' = NilStatic.con_reduce_once(env,c)
+		      val c' = if (is_hnf c') then c'
+			       else NilStatic.con_reduce_once(env,c')
 		      val _ = if (!debug_simp)
 				  then (print "simplify type: reducer on type returned:\n";
 					Ppnil.pp_con c';
 					print "\n")
-			      else ()
+			      else if (!debug)
+				  then (print "simplify type returned\n")
+				   else ()
 		  in (is_hnf c',c')
 		  end)
 
@@ -323,9 +343,9 @@ val debug_simp = ref false
 		 end
 	   | (hnf,c) => (hnf,c))
 
-    fun simplify_type ({local_state = {env,...}, ...} : state) c : bool * con = 
+    fun simplify_type ({env,...} : state) c : bool * con = 
 	simplify_type_help env c
-    fun simplify_type' ({local_state = {env,...}, ...} : state) c : bool * con = 
+    fun simplify_type' ({env,...} : state) c : bool * con = 
 	simplify_type_help' env c
 
 
@@ -366,11 +386,13 @@ val debug_simp = ref false
 		     | loop _ _ = error "projection is not a chain of projections from a variable"
 		   val (v,labels) = loop con []
 		   val (vlopt,vvopt,kind) = getconvarrep state v
-		   val _ = if (!debug)
-			       then (Ppnil.pp_con con; print "\n";
-				     Ppnil.pp_kind kind; print "\n";
-				     app (fn l => (Ppnil.pp_label l; print ".")) labels; print "\n")
-			   else ()
+(*
+  val _ = if (!debug)
+		       then (Ppnil.pp_con con; print "\n";
+			     Ppnil.pp_kind kind; print "\n";
+			     app (fn l => (Ppnil.pp_label l; print ".")) labels; print "\n")
+		   else ()
+*)
 		   fun loop acc _ [] = rev acc
 		     | loop acc (Record_k fields_seq) (label::rest) = 
 		       let fun extract acc [] = error "bad Proj_c"
@@ -403,7 +425,12 @@ val debug_simp = ref false
        end
 
    fun con2rep state con : rep =
-       let fun simp c = (case c of
+       (let fun failure copt = (print "con2rep failed\n";
+				Ppnil.pp_con con; print "\n";
+				(case copt of
+				    SOME c => (Ppnil.pp_con c; print "\n")
+				  | _ => ()))
+	    fun simp c = (case c of
 	             (* since roll/unroll are no-ops *)
                       	   Mu_c (is_recur,vc_seq,v) => 
 			     reduce(NilUtil.muExpand(is_recur,vc_seq,v))
@@ -413,14 +440,13 @@ val debug_simp = ref false
 			   | (Let_c _) => simp(#2(simplify_type state c))
 			   | (App_c _) => simp(#2(simplify_type state c))
 			   | _ => simp c)
-	   val c = reduce con
-       in case con2rep_raw state c of
-	   SOME rep => rep
-	 | NONE => (print "con2rep failed\n";
-		    Ppnil.pp_con con; print "\n";
-		    Ppnil.pp_con c; print "\n";
-		    error "con2rep failed")
-       end
+	    val c = reduce con handle e => (failure NONE; raise e)
+	in case (con2rep_raw state c) handle e => (failure (SOME c); raise e) of
+	    SOME rep => rep
+	  | NONE => (failure (SOME c); error "con2rep failed")
+	end)
+
+
 
 
    fun varloc2rep varloc =
@@ -512,54 +538,8 @@ val debug_simp = ref false
 	     | _ => I(alloc_named_regi v (con2rep state c))
 		   
 
-       fun promote_maps is_top ({local_state} : state) : state = 
-	   let (* we filter out top-level variable that are in registers;
-		these should not be needed by any functions *)
-val _ = if !debug then print ("*** start promote map : " ^ 
-			      (Bool.toString is_top) ^ "***\n") else ()
+       fun promote_maps is_top state : state = !global_state
 
-	       fun vfolder(v,rep,m) = 
-		   let val should_promote = 
-		       (case rep of
-			    (SOME(VGLOBAL _),_,_) => true
-			  | (_, SOME(VCODE _), _) => true
-			  | _ => (VarSet.member(!nonglobals,v)))
-		   in  if should_promote 
-			   then VarMap.insert(m,v,rep)
-		       else m
-		   end
-(*
-	       fun nfolder(v,k,ctxt) = (case NilContext.find_kind(ctxt,v) of
-					    NONE => NilContext.insert_kind(ctxt,v,k)
-					  | _ => ctxt)
-*)
-	       val global_state' as {env,varmap,convarmap} = 
-		   if is_top orelse true
-		       then 
-			   let val {env,varmap,convarmap} = local_state
-			       val {env=ge,varmap=gv,convarmap=gc} = !global_state
-			       val gv = VarMap.foldli vfolder gv varmap
-			       val gc = VarMap.foldli vfolder gc convarmap
-(*
-			       val _ = (print "ge is:\n";
-					NilContext.print_context ge;
-					print "\n\nenv is:\n";
-					NilContext.print_context env;
-					print "\n\n")
-*)
-(* val _ = if !debug then print "*** before context add kind map ***\n" else () *)
-			       val ge = NilContext.context_addkindmap(ge,env)
-(* val _ = if !debug then print "*** after context add kind map ***\n" else () *)
-			   in {env=ge,varmap=gv,convarmap=gc}
-			   end
-		   else !global_state
-	       val _ = global_state := global_state'
-
-val _ = if !debug then print "*** end promote map ***\n"
-	else ()
-	   in  {local_state = global_state'}
-(*		global_state = global_state'} *)
-	   end
 
        fun set_args_result ((iargs,fargs),result,return) = 
 	   (resultreg := result;
@@ -580,13 +560,19 @@ val _ = if !debug then print "*** end promote map ***\n"
 	    do_code_align();
 	    add_instr(ILABEL (!top)))
 
+       val con_depth = ref 0
+       val exp_depth = ref 0
+       fun resetDepth() = (con_depth := 0;
+			   exp_depth := 0)
+
        fun reset_global_state (exportlist,ngset) = 
 	   let fun exp_adder((v,l),m) = (case VarMap.find(m,v) of
 					     NONE => VarMap.insert(m,v,[l])
 					   | SOME ls => VarMap.insert(m,v,l::ls))
 	       fun gl_adder(v,s) = VarSet.add(s,v)
-	   in  (resetWork();
-		global_state :=  make_varstate();
+	   in  (resetDepth();
+		resetWork();
+		global_state :=  make_state();
 		exports := (foldl exp_adder VarMap.empty exportlist);
 		nonglobals := ngset;
 		dl := nil;
@@ -673,20 +659,18 @@ val _ = if !debug then print "*** end promote map ***\n"
 				      
 
   (* adding term-level variables *)
-  fun add_var' s (v,vlopt,vvopt,con) =  lvarmap_insert s (v,(vlopt,vvopt,con))
+  fun add_var' s (v,vlopt,vvopt,con) =  lvarmap_insert (istoplevel()) s (v,(vlopt,vvopt,con))
   fun add_var  s (v,reg,con)         =  add_var' s (v,SOME(VREGISTER reg), NONE, con)
   fun add_varloc s (v,vl,con)        =  add_var' s (v,SOME vl,NONE,con)
   fun add_code s (v,l,con)           =  add_var' s (v,NONE, SOME(VCODE l), con)
 
   (* adding constructor-level variables *)
   fun add_convar s (v,vlopt,vvopt,kind,copt) = 
-      let val s = lconvarmap_insert s (v,(vlopt, vvopt, kind))
-      in  lenv_insert s (v,kind,copt)
-      end
+lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
+
   fun add_convar_label s (v,l,kind,copt) = 
-      let val s = lenv_insert s (v,kind,copt)
-      in  lconvarmap_insert s (v,(NONE, SOME(VLABEL l),kind))
-      end 
+        lconvarmap_insert (istoplevel()) s (v,(NONE, SOME(VLABEL l),kind))copt
+
 
     
   val heapptr  = SREGI HEAPPTR
@@ -1156,13 +1140,14 @@ val _ = if !debug then print "*** end promote map ***\n"
 	  val x = 5
       in
 	  case bnd of
-	      Con_b (v,k,c) => let val (lv,k) = xcon'(state,v,c)
-				   val s' =  (if (istoplevel() andalso not(VarSet.member(!nonglobals,v)))
-						  then alloc_conglobal (state,v,lv,k,SOME c)
-					      else add_convar state (v,SOME(VREGISTER(load_reg_locval(lv,NONE))),
-								     NONE,k,SOME c))
-			       in  s'
-			       end
+	      Con_b (v,k,c) => 
+		  let val (lv,k) = xcon'(state,v,c,SOME k)
+		      val s' =  (if (istoplevel() andalso not(VarSet.member(!nonglobals,v)))
+				     then alloc_conglobal (state,v,lv,k,SOME c)
+				 else add_convar state (v,SOME(VREGISTER(load_reg_locval(lv,NONE))),
+							NONE,k,SOME c))
+		  in  s'
+		  end
 	    | Exp_b (v,c,e) => let val (loc_or_val,_) = xexp(state,v,e,SOME c,NOTID)
 				   val s' = (if istoplevel() andalso not(VarSet.member(!nonglobals,v))
 						 then alloc_global (state,v,c,loc_or_val)
@@ -1178,14 +1163,16 @@ val _ = if !debug then print "*** end promote map ***\n"
 	    | Fixopen_b (var_fun_set : (var,function) Nil.set) => error "no open functions permitted"
 	    | Fixcode_b (var_fun_set : (var,function) Nil.set) => 
 		  let 
-		      fun adder (v,f as Function(effect,recur,vklist,vclist,vflist,b,c)) = 
+		      fun folder ((v,f as Function(effect,recur,vklist,vclist,vflist,b,c)),s) =
 			  let val funcon = AllArrow_c(Code,effect,vklist,map #2 vclist,
 						      TW32.fromInt (length vflist),c)
-			      val state = add_code state (v, LOCAL_LABEL (LOCAL_CODE v), funcon)
-			      val s' = promote_maps (istoplevel()) state
-			  in  addWork (FunWork(s',v,f))
+			  in  add_code s (v, LOCAL_LABEL (LOCAL_CODE v), funcon)
 			  end
-		  in (app adder (sequence2list var_fun_set); state)
+		      val var_fun_list = (sequence2list var_fun_set)
+		      val state = foldl folder state var_fun_list
+		      val s' = promote_maps (istoplevel()) state
+		      val _ = app (fn (v,f) => addWork (FunWork(s',v,f))) var_fun_list
+		  in state
 		  end
 	    | Fixclosure_b (is_recur,var_varconexpset) => 
 		  let 
@@ -1194,7 +1181,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 						  (Int.toString (length var_vcelist)) ^ " closures"))
 		      fun loadcl ((v,{code,cenv,venv,tipe}),(acc,s)) = 
 			  let val code_lv = #1(xexp(state,fresh_named_var "codereg",Var_e code,NONE,NOTID))
-			      val con_lv = #1(xcon'(state,fresh_named_var "cenv", cenv))
+			      val con_lv = #1(xcon'(state,fresh_named_var "cenv", cenv,NONE))
 			      val exp_lv = if is_recur
 					       then VAR_VAL(VINT 0w0)
 					   else (#1(xexp(state,fresh_named_var "venv",venv,NONE,NOTID)))
@@ -1228,7 +1215,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 	  val x = 5
       in
 	  case cbnd of
-	      Con_cb (v,k,c) => let val (lv,k) = xcon'(state,v,c)
+	      Con_cb (v,k,c) => let val (lv,k) = xcon'(state,v,c,SOME k)
 				in  case lv of
 				    VAR_LOC vl => add_convar state (v,SOME vl,NONE,k,SOME c)
 				  | VAR_VAL vv => add_convar state (v,NONE,SOME vv,k,SOME c)
@@ -1339,11 +1326,33 @@ val _ = if !debug then print "*** end promote map ***\n"
 	    context     (* The evaluation context this expression is in *)
 	    ) : loc_or_val * con =
       let 
+	  val _ = exp_depth := !exp_depth + 1
+	  val _ = if (!debug)
+		      then (print "xexp ";  print (Int.toString (!exp_depth));
+			    print " called";
+			    if (!debug_full)
+				then (print " on exp = \n";
+				      Ppnil.pp_exp arg_e)
+			    else ();
+			    print "\n")
+		  else ()  
+	  val _ = if (!debug)
+		      then (print "xexp ";  print (Int.toString (!exp_depth));
+			    print " returned\n")
+		  else ()
+	  val _ = exp_depth := !exp_depth - 1
+	  val res = xexp''(state,name,arg_e,copt,context)
+	      
+      in  res
+      end
 
-(*	  val _ = (print "xexp translating: ";
-		   Ppnil.pp_exp arg_e;
-		   print "\n\n")
-*)
+  and xexp'' (state : state, (* state of bound variables *)
+	    name  : var, (* Purely for debugging and generation of useful names *)
+	    arg_e : exp,         (* The expression being translated *)
+	    copt  : con option,  (* The type of the expression being translated *)
+	    context     (* The evaluation context this expression is in *)
+	    ) : loc_or_val * con =
+      let 
 	  fun pickdesti rep = alloc_named_regi name rep
 	  fun pickdestf () = alloc_named_regf name
 	  val res = 
@@ -1374,7 +1383,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 							 | ExternCode => "making a direct extern call "
 							 | Closure => "making a closure call ")
 						       ^ (Int.toString callcount)))
-			  val cregsi = map (fn c => #1(xcon(state,fresh_named_var "call_carg", c))) clist
+			  val cregsi = map (fn c => #1(xcon(state,fresh_named_var "call_carg", c, NONE))) clist
 			  val eregs = map (fn e => #1(xexp'(state,fresh_named_var "call_e", 
 							    e, NONE, NOTID))) elist
 			  val efregs = map (fn e => #1(xexp'(state,fresh_named_var "call_ef", 
@@ -1505,7 +1514,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 		      local
 			  val handler_body' = Let_e(Sequential,[Exp_b(exnvar,exncon,NilUtil.match_exn)],
 						    handler_body)
-			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp handler_body'
+			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp(false, handler_body')
 			  val evar_reps = map (fn v => #1(getrep state v)) free_evars
 			  val cvar_reps = map (fn v => #1(getconvarrep state v)) free_cvars
 			  val vlopts = cvar_reps @ evar_reps
@@ -1885,7 +1894,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 				  val mul = alloc_code_label()
 				  val noboxl = alloc_code_label()
 				  val afterl = alloc_code_label()
-				  val (con_ir,_) = xcon(state,fresh_var(),field_con)
+				  val (con_ir,_) = xcon(state,fresh_var(),field_con, NONE)
 				  val tmp = alloc_regi NOTRACE_INT
 				  val tagi = alloc_regi NOTRACE_INT
 				  val _ = (add_instr(ILABEL beginl);
@@ -1915,11 +1924,11 @@ val _ = if !debug then print "*** end promote map ***\n"
 	      end
 
 	  fun xtagsum_multi fieldopt = 
-	      let val afterl = alloc_code_label()
+	      let val (hnf,field_con) = List.nth(clist, TW32.toInt field_sub)
+		  val afterl = alloc_code_label()
 		  val nonrecordl = alloc_code_label()
 		  val recordl = alloc_code_label()
-		  val (_,field_con) = List.nth(clist, TW32.toInt field_sub)
-		  val (con_ir,_) = xcon(state,fresh_var(),field_con)
+		  val (con_ir,_) = xcon(state,fresh_var(),field_con, NONE)
 		  val desti = alloc_regi(con2rep state field_con)
 		  val tmp = alloc_regi NOTRACE_INT
 		  val tagi = alloc_regi NOTRACE_INT
@@ -1944,8 +1953,83 @@ val _ = if !debug then print "*** end promote map ***\n"
 	      in  VAR_LOC(VREGISTER(I desti))
 	      end
 
-	  fun xtagsum fieldopt = 
-	      let fun decompose vl reccon cons = 
+	  fun xtagsum_dynamic vl =
+	      let val (hnf,field_con) = List.nth(clist, TW32.toInt field_sub)
+		  val numfields = alloc_regi NOTRACE_INT
+		  val gctemp = alloc_regi NOTRACE_INT
+		  val tmp = alloc_regi NOTRACE_INT
+		  val tmp2 = alloc_regi NOTRACE_INT
+		  val data = alloc_regi NOTRACE_INT
+		  val tagi = alloc_regi NOTRACE_INT
+		  val rectagi = alloc_regi NOTRACE_INT
+		  val newtag = alloc_regi NOTRACE_INT
+		  val srccursor = alloc_regi LOCATIVE
+		  val destcursor = alloc_regi LOCATIVE
+		  val desti = alloc_regi(con2rep state field_con)
+
+		  val nonrecordl = alloc_code_label()
+		  val afterl = alloc_code_label()
+		  val loopl = alloc_code_label()
+
+		  val recordl = alloc_code_label()
+		  val (con_ir,_) = xcon(state,fresh_var(),field_con,NONE)
+		  val _ = (add_instr(CMPUI(LE, con_ir, IMM 255, tmp)); (* check for small types *)
+			   add_instr(BCNDI(NE, tmp, nonrecordl, false));
+			   add_instr(LOAD32I(EA(con_ir,0),tagi));  (* load tag *)
+			   add_instr(CMPUI(NE, tagi, IMM 5, tmp)); (* check for record *)
+			   add_instr(BCNDI(NE, tmp, nonrecordl, false)))
+
+		  val _ = add_instr(ILABEL recordl) (* difficult record case *)
+		  val vl_ir = load_ireg_locval(vl,NONE)
+		  val _ = add_instr(LOAD32I(EA(con_ir,0),rectagi));  (* load record tag *)
+		  (* XXX this will break if record is a multi-record or tag format changes *)
+		  val _ = add_instr(SRL(rectagi,IMM 27,numfields))
+		  val _ = add_instr(SLL(rectagi,IMM 5, tmp)) 
+		  val _ = add_instr(SRL(tmp,IMM (3+5), tmp)) 
+		  val _ = add_instr(SLL(tmp,IMM 4, tmp))      (* compute new mask *)
+		  val _ = add_instr(ORB(tmp,IMM 3, tmp))       (* add record aspect *)
+		  val _ = add_instr(ADD(numfields,IMM 1, tmp2))
+		  val _ = add_instr(SLL(tmp2,IMM 27, tmp2))   (* compute new length *)
+		  val _ = add_instr(ORB(tmp,REG tmp2,newtag))      (* final record tag *)
+				    
+		  val _ = add_instr(ADD(numfields,IMM 2, gctemp))
+		  val _ = add_instr(NEEDGC(REG gctemp))       (* allocate space for sum record *)
+
+		  val _ = add_instr(STORE32I(EA(heapptr,0),newtag))  (* store record tag *)
+		  val _ = add_instr(LI(field_sub, tmp))
+		  val _ = add_instr(STORE32I(EA(heapptr,4),tmp))     (* store sum tag *)
+		  val _ = add_instr(S4ADD(numfields, REG vl_ir, srccursor)) (* initialize src cursor *)
+		  val _ = add_instr(ADD(heapptr,IMM 8, destcursor))
+		  val _ = add_instr(S4ADD(numfields, REG destcursor, destcursor)) (* init dest cursor *)
+
+		  (* record has at least one field *)
+		  val _ = (add_instr(ILABEL loopl); 
+			   add_instr(LOAD32I(EA(srccursor,0),data));
+			   add_instr(STORE32I(EA(destcursor,0),data));
+			   add_instr(SUB(srccursor,IMM 4, srccursor));
+			   add_instr(SUB(destcursor,IMM 4, destcursor));
+			   add_instr(CMPUI(LE,srccursor,REG vl_ir, tmp));
+			   add_instr(BCNDI(EQ, tmp, loopl,false)))  (* loop will copy record fields *)
+
+		  val _ = add_instr(MV(heapptr,desti))
+		  val _ = add_instr(S4ADD(gctemp, REG heapptr, heapptr))
+		  val _ = add_instr(BR afterl)
+
+		  val _ = add_instr(ILABEL nonrecordl) (* easier non-record case *)
+		  val vls = (case varlocs of
+				 [vl] => [VAR_VAL(VINT field_sub),vl]
+			       | _ => error "xtagsum_dynamic not with one arg")
+		  val ir = make_record(NONE,map valloc2rep vls,vls)
+		  val _ = add_instr(MV(ir,desti))
+
+		  val _ = add_instr(ILABEL afterl) (* result is in desti at this point *)
+
+	      in  VAR_LOC(VREGISTER(I desti))
+	      end
+
+	  fun xtagsum () =
+	      let val (hnf,field_con) = List.nth(clist, TW32.toInt field_sub)
+		  fun decompose vl reccon cons = 
 		    let val bind = fresh_var()
 			val ir = load_ireg_locval(vl,NONE)
 			val state = add_var state (bind, I ir, reccon)
@@ -1955,23 +2039,22 @@ val _ = if !debug then print "*** end promote map ***\n"
 						  NONE, NOTID))
 		    in  Listops.mapcount mapper cons
 		    end
-		  fun analyze vl (_,reccon as Prim_c(Record_c _, cons)) = decompose vl reccon cons
-		    | analyze vl (true,_) = [vl]
-		    | analyze _ _ = error "sorry, xsum not completely implemented"
-		  val varlocs = if is_record 
-				    then varlocs
-				else (case varlocs of
-					  [vl] => analyze vl (List.nth(clist, TW32.toInt field_sub))
-					| _ => error "bad xsum non-record")
-		  val varlocs = 
-		      (case fieldopt of
-			   NONE => varlocs 
-			 | SOME field => let val tagint = field_sub
-					 in  (VAR_VAL(VINT tagint)) :: varlocs
-					 end)
-		  val reps = map valloc2rep varlocs
-		  val ir = make_record(NONE,reps,varlocs)
-	      in VAR_LOC(VREGISTER(I ir))
+		  val vls = 
+		      (case (is_record,hnf,field_con,varlocs) of
+			   (true,_,_,_) => SOME varlocs
+			 | (_,_,reccon as Prim_c(Record_c _, cons),[vl]) => SOME(decompose vl reccon cons)
+			 | (_,true,_,[vl]) => SOME [vl]
+			 | _ => NONE)
+	      in  case (vls,varlocs) of
+		  (NONE,[vl]) => xtagsum_dynamic vl
+		| (NONE,_) => error "xtagsum_dynamic case not with one vl"
+		| (SOME varlocs,_) =>
+		      let 
+			  val varlocs = (VAR_VAL(VINT field_sub)) :: varlocs
+			  val reps = map valloc2rep varlocs
+			  val ir = make_record(NONE,reps,varlocs)
+		      in VAR_LOC(VREGISTER(I ir))
+		      end
 	      end
 	  val varloc =
 	      case (TW32.toInt tagcount,nontagcount) of
@@ -1982,7 +2065,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 			   else xtagsum_tag()
 		| (_,_) => if (TW32.ult(sumtype,tagcount))
 			       then xtagsum_tag()
-			   else xtagsum (SOME sumtype)
+			   else xtagsum ()
       in (varloc, sumcon) 
       end
 
@@ -1998,7 +2081,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 		  val afterl = alloc_code_label()
 		  val boxl = alloc_code_label()
 		  val noboxl = alloc_code_label()
-		  val (con_ir,_) = xcon(state,fresh_var(),c)
+		  val (con_ir,_) = xcon(state,fresh_var(),c, NONE)
 		  val tmp = alloc_regi NOTRACE_INT
 		  val tagi = alloc_regi NOTRACE_INT
 		  val _ = (add_instr(CMPUI(LE, con_ir, IMM 4, tmp)); (* check ints *)
@@ -2023,10 +2106,20 @@ val _ = if !debug then print "*** end promote map ***\n"
 	      let val afterl = alloc_code_label()
 		  val nonrecordl = alloc_code_label()
 		  val recordl = alloc_code_label()
+		  val loopl = alloc_code_label()
 		  val tag = alloc_regi NOTRACE_INT
+		  val rectag = alloc_regi NOTRACE_INT
 		  val tmp = alloc_regi NOTRACE_INT
+		  val tmp2 = alloc_regi NOTRACE_INT
+		  val gctemp = alloc_regi NOTRACE_INT
+		  val sumrectag = alloc_regi NOTRACE_INT
+		  val numfields = alloc_regi NOTRACE_INT
+		  val data = alloc_regi NOTRACE_INT
+		  val srccursor = alloc_regi LOCATIVE
+		  val destcursor = alloc_regi LOCATIVE
 		  val desti = alloc_regi(con2rep state c)
-		  val (con_ir,_) = xcon(state,fresh_var(),c)
+
+		  val (con_ir,_) = xcon(state,fresh_var(),c, NONE)
 		  val _ = (add_instr(CMPUI(GE, con_ir, IMM 255, tmp));
 			   add_instr(BCNDI(EQ, tmp, nonrecordl, false));
 			   add_instr(LOAD32I(EA(con_ir,0),tag));
@@ -2038,7 +2131,36 @@ val _ = if !debug then print "*** end promote map ***\n"
 			   add_instr(BR afterl))
 		  (* record case *)
 		  val _ = (add_instr(ILABEL recordl);
-			   error "xdynamic_project_sum record case not implemented";
+			   add_instr(LOAD32I(EA(con_ir,4),numfields)))
+
+		  (* XXX this will break if record is a multi-record or tag format changes *)
+		  val _ = add_instr(LOAD32I(EA(exp_ir,~4),sumrectag))
+		  val _ = add_instr(SRL(sumrectag,IMM 27,gctemp))
+		  val _ = add_instr(SUB(gctemp,IMM 1, numfields))   (* # of fields in final rec *)
+		  val _ = add_instr(SLL(sumrectag,IMM 3, tmp)) 
+		  val _ = add_instr(SRL(tmp,IMM (3 + 27 + 1), tmp)) (* new mask *)
+		  val _ = add_instr(SLL(tmp,IMM 3, tmp))      (* compute new mask *)
+		  val _ = add_instr(ORB(tmp,IMM 3, tmp))      (* add record aspect *)
+		  val _ = add_instr(SLL(numfields,IMM 27, tmp2))   (* compute new length *)
+		  val _ = add_instr(ORB(tmp,REG tmp2,rectag))      (* final record tag *)
+
+
+		  val _ = add_instr(ADD(numfields,IMM 1, gctemp))
+		  val _ = add_instr(NEEDGC(REG gctemp))       (* allocate space for record *)
+
+		  val _ = add_instr(STORE32I(EA(heapptr,0),rectag))
+		  val _ = add_instr(S4ADD(numfields, REG heapptr, destcursor)) (* record tag *)
+		  val _ = add_instr(S4ADD(numfields, REG exp_ir, srccursor)) (* sum tag *)
+			   
+		  val _ = (add_instr(ILABEL loopl); 
+			   add_instr(LOAD32I(EA(srccursor,0),data));
+			   add_instr(STORE32I(EA(destcursor,0),data));
+			   add_instr(SUB(srccursor,IMM 4, srccursor));
+			   add_instr(SUB(destcursor,IMM 4, destcursor));
+			   add_instr(CMPUI(EQ,srccursor,REG exp_ir, tmp));
+			   add_instr(BCNDI(EQ, tmp, loopl,false)); (* loop will copy record fields *)
+			   add_instr(MV(heapptr,desti));
+			   add_instr(S4ADD(gctemp, REG heapptr,heapptr));
 			   add_instr(ILABEL afterl))
 	      in  desti
 	      end
@@ -2116,6 +2238,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 					    Ppnil.pp_con c;
 					    error' "bad project_sum_record: bad econ not a record")))
 		   val fieldcon = List.nth(summands,index)
+	      handle _ => error "list.nth 2"
 		   val field' = 
 		        let fun loop n [] = 
 				     (print "bad project_sum_record: missing field ";
@@ -2137,9 +2260,11 @@ val _ = if !debug then print "*** end promote map ***\n"
 				     handle _ => error' "bad project_sum_record: record_con")
 		   val field_con = 
 		       (case record_con of
-			    Prim_c(Record_c _,cons) => List.nth(cons,field')
+			    Prim_c(Record_c _,cons) => (List.nth(cons,field')
+							handle _ => error "list.nth 4")
 			  | _ => (case #2(simplify_type state record_con) of
-				      Prim_c(Record_c _,cons) => List.nth(cons,field')
+				      Prim_c(Record_c _,cons) => (List.nth(cons,field')
+								  handle _ => error "list.nth 5")
 				    | c => (print "bad project_sum_record: field_con";
 					    Ppnil.pp_con c;
 					    error' "bad project_sum_record: field_con")))
@@ -2659,7 +2784,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 		     | (true,Prim_c(BoxFloat_c Prim.F64,[])) => I(boxFloat (floatcase()))
 		     | (true,Prim_c(Int_c Prim.W8,[])) => I(nonfloatcase Prim.W8)
 		     | (true,_) => I(nonfloatcase Prim.W32)
-		     | (false,c') => let val (r,_) = xcon(state,fresh_var(),c')
+		     | (false,c') => let val (r,_) = xcon(state,fresh_var(),c', NONE)
 					 val tmp = alloc_regi NOTRACE_INT
 					 val desti = alloc_regi(con2rep state c)
 					 val afterl = alloc_code_label()
@@ -2772,7 +2897,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 		     | (true,Prim_c(Float_c Prim.F32,[])) => error "32-bit floats not done"
 		     | (true,Prim_c(Int_c is,[])) => (xintupdate(is,vl1,vl2,vl3); ())
 		     | (true,_) => (xptrupdate(c,vl1,vl2,vl3); ())
-		     | (false,c') => let val (r,_) = xcon(state,fresh_var(),c')
+		     | (false,c') => let val (r,_) = xcon(state,fresh_var(),c', NONE)
 					 val tmp = alloc_regi NOTRACE_INT
 					 val afterl = alloc_code_label()
 					 val floatl = alloc_code_label()
@@ -2828,7 +2953,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 		       (print "------xlength: default head-normal case. con = \n";
 			Ppnil.pp_con c; print "\n";
 			add_instr(SRL(dest,IMM (2+int_len_offset),dest)))
-		 | (false,c') => let val (r,_) = xcon(state,fresh_var(),c')
+		 | (false,c') => let val (r,_) = xcon(state,fresh_var(),c', NONE)
 				     val tmp = alloc_regi NOTRACE_INT
 				     val afterl = alloc_code_label()
 				     val floatl = alloc_code_label()
@@ -3106,7 +3231,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 								  load_ireg_locval(vl1,NONE),
 								  unboxFloat(load_ireg_locval(vl2,NONE)))
 		   | (true,_) => ptrcase(dest,vl1,vl2)
-		   | (false,c') => let val (r,_) = xcon(state,fresh_var(),c')
+		   | (false,c') => let val (r,_) = xcon(state,fresh_var(),c', NONE)
 				       val tmp = alloc_regi NOTRACE_INT
 				       val afterl = alloc_code_label()
 				       val floatl = alloc_code_label()
@@ -3154,20 +3279,40 @@ val _ = if !debug then print "*** end promote map ***\n"
 
   and xcon' (state : state,
 	    name : var, (* Purely for debugging and generation of useful names *)
-	    arg_con : con     (* The expression being translated *)
+	    arg_con : con,     (* The expression being translated *)
+	    kopt : kind option (* Caller may know kind of con being translated *)
 	    ) : loc_or_val * kind = 
       let 
+	  val _ = con_depth := !con_depth + 1
+	  val _ = if (!debug)
+		      then (print "xcon ";  print (Int.toString (!con_depth));
+			    print " called";
+			    if (!debug_full)
+				then (print " on con = \n";
+				      Ppnil.pp_con arg_con)
+			    else ();
+			    print "\n")
+		  else ()
+	  val res = xcon''(state,name,arg_con,kopt)
+	  val _ = if (!debug)
+		      then (print "xcon ";  print (Int.toString (!con_depth));
+			    print " returned\n")
+		  else ()
+	  val _ = con_depth := !con_depth - 1
+      in  res
+      end
 
-(*
-	  val _ = (print "xcon called on con = \n";
-		   Ppnil.pp_con arg_con;
-		   print "\n\n")
-*)
+  and xcon'' (state : state,
+	    name : var, (* Purely for debugging and generation of useful names *)
+	    arg_con : con,     (* The expression being translated *)
+	    kopt : kind option (* Caller may know kind of con being translated *)
+	    ) : loc_or_val * kind = 
+      let 
 	  fun mk_ptr  i = (VAR_VAL (VINT (TW32.fromInt i)), Word_k Runtime)
 	  fun mk_ptr' i = (VAR_VAL (VINT (TW32.fromInt i)), Type_k Runtime)
 	  fun mk_sum_help (kinderopt,indices,cons) = 
 	      let val indices' = map (fn i => VAR_VAL(VINT (TW32.fromInt i))) indices
-		  val con_kinds = map (fn c => xcon'(state,fresh_named_var "xcon_sum",c)) cons
+		  val con_kinds = map (fn c => xcon'(state,fresh_named_var "xcon_sum",c, NONE)) cons
 		  val cons' = map #1 con_kinds
 		  val reps = (map (fn _ => NOTRACE_INT) indices') @ (map (fn _ => TRACE) cons')
 		  val kind = (case kinderopt of
@@ -3197,11 +3342,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 								      NONE => ~1
 								    | SOME w => TW32.toInt w), 
 							       TW32.toInt tagcount],cons)
-	     | Prim_c(Record_c _,cons) => 
-		   let fun help(n,(_,k)) = ((NilUtil.generate_tuple_label (n+1),
-					     fresh_var()),k)
-		   in  mk_sum_help(NONE,[5],cons)
-		   end
+	     | Prim_c(Record_c _,cons) => mk_sum_help(NONE,[5,length cons],cons)
 	     | Prim_c(Vararg_c _,cons) => mk_sum(6,cons)
 	     | Prim_c _ => error "ill-formed primitive type"
 	     | Mu_c (is_recur,vcset,v) => 
@@ -3224,7 +3365,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 											NONE,Word_k Runtime,NONE)
 					   val recstate = foldl folder state (Listops.zip vclist clregs)
 					   fun do_write (clreg,(v,c)) = 
-					       let val (r,_) = xcon(recstate,v,c)
+					       let val (r,_) = xcon(recstate,v,c, NONE)
 					       in  add_instr(STORE32I(EA(clreg,4),r))
 					       end
 				       in  (Listops.map2 do_write (clregs,vclist); ())
@@ -3245,11 +3386,11 @@ val _ = if !debug then print "*** end promote map ***\n"
 			     | (NONE,NONE,_) => error "no info on convar")
 	     | Let_c (letsort, cbnds, c) => let fun folder (cbnd,s) = xconbnd s cbnd
 						val s' = foldl folder state cbnds
-					    in  xcon'(s',fresh_var(),c)
+					    in  xcon'(s',fresh_var(),c, kopt)
 					    end
 	     | Crecord_c lclist => 
 		   let val vars = map (fn (l,_) => fresh_named_var (label2string l)) lclist
-		       fun doer (v,(l,c)) = (l,v,xcon(state,v,c))
+		       fun doer (v,(l,c)) = (l,v,xcon(state,v,c,NONE))
 		       val lvregikind = Listops.map2 doer (vars,lclist)
 		       val lvkList = map (fn (l,v,(_,k)) => ((l,v),k)) lvregikind
 		       val kind = Record_k(list2sequence lvkList)
@@ -3259,16 +3400,19 @@ val _ = if !debug then print "*** end promote map ***\n"
 		   in  (lv,kind)
 		   end
 	     | Proj_c (c, l) => 
-		   let val (ir,k) = xcon(state,fresh_named_var "proj_c",c)
+		   let val (ir,k) = xcon(state,fresh_named_var "proj_c",c,NONE)
 		       fun loop [] _ = error "ill-formed Mu_c"
 			 | loop (((l',_),k)::vrest) n = if (eq_label(l,l')) 
 							    then (n,k) else loop vrest (n+1)
+		       (* fieldk may have dependencies *)			
 		       val (which,fieldk) = (case (NilUtil.strip_singleton k) of 
 						 Record_k lvk_seq => loop (sequence2list lvk_seq) 0
 					       | _ => error "bad kind to proj_c from")
+		       val {env=ctxt,...} = state
+		       val (_,fieldk') = NilStatic.con_valid(ctxt,arg_con)
 		       val dest = alloc_regi TRACE
 		       val _ = add_instr(LOAD32I(EA(ir,4 * which),dest))
-		   in (VAR_LOC(VREGISTER (I dest)), fieldk)
+		   in (VAR_LOC(VREGISTER (I dest)), fieldk')
 		   end
 	     | Closure_c (c1,c2) => 
 		   let 
@@ -3280,12 +3424,13 @@ val _ = if !debug then print "*** end promote map ***\n"
 		   in  mk_sum_help(SOME kinder,[],[c1,c2])
 		   end
 	     | App_c (c,clist) => (* pass in env argument first *)
-		   let val (clregi,k) = xcon(state,fresh_named_var "closure",c)
-		       val resk = (case (NilUtil.strip_singleton k) of
-				       Arrow_k(_,_,resk) => resk
+		   let val (clregi,k) = xcon(state,fresh_named_var "closure",c,NONE)
+		       val resk = (case (kopt,NilUtil.strip_singleton k) of
+				       (SOME k, _) => k
+				     | (_,Arrow_k(_,_,resk)) => resk (* getshape?? *)
 				     | _ => (Ppnil.pp_kind k; print "\n";
 					     error "bad kind to App_c"))
-		       val cregsi = map (fn c => #1(xcon(state,fresh_named_var "clos_arg",c))) clist
+		       val cregsi = map (fn c => #1(xcon(state,fresh_named_var "clos_arg",c,NONE))) clist
 		       val coderegi = alloc_regi NOTRACE_CODE
 		       val envregi = alloc_regi TRACE
 		       val _ = (add_instr(LOAD32I(EA(clregi,0),coderegi));
@@ -3300,7 +3445,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 					      save=SAVE(getLocals())})
 		   in (VAR_LOC (VREGISTER (I desti)),resk)
 		   end
-	     | Annotate_c (_,c) => xcon'(state,name,c))
+	     | Annotate_c (_,c) => xcon'(state,name,c,kopt))
       end
 
   
@@ -3455,8 +3600,10 @@ val _ = if !debug then print "*** end promote map ***\n"
 	  let 
 	      val _ = reset_state(is_top,name)
 	      val _ = if (!debug)
-			  then (print "-----doconfun on "; Ppnil.pp_var name; print " with body\n";
-				Ppnil.pp_con body;
+			  then (print "-----doconfun on "; Ppnil.pp_var name; 
+				if (!debug_full)
+				    then (print " with body\n"; Ppnil.pp_con body)
+				else ();
 				print "\n")
 		      else ()
               fun folder ((v,k),(acc,s)) = let val r = alloc_named_regi v TRACE
@@ -3470,7 +3617,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 	      val results = ([resulti],[])
 	      val return = alloc_regi(LABEL)
 	      val _ = set_args_result(args, I resulti, return)
-	      val (ir,k) = xcon(state,fresh_named_var "result",body)
+	      val (ir,k) = xcon(state,fresh_named_var "result",body,NONE)
 	      val {name=label_name,revcode} = get_state()
 	      val mvinstr = MV(ir,resulti)
 	      val code = rev((RETURN return)::mvinstr::revcode)
@@ -3552,8 +3699,16 @@ val _ = if !debug then print "*** end promote map ***\n"
       fun worklist_loop () = 
 	  (case getWork() of
 	       NONE => ()
-	     | SOME (FunWork vf) => (dofun vf; worklist_loop())
-	     | SOME (ConFunWork vvkck) => (doconfun false vvkck; worklist_loop()))
+	     | SOME (n,FunWork vf) => (print "*** Working on fun "; print (Int.toString n); print "\n";
+				       dofun vf; 
+				       print "*** Finished fun "; print (Int.toString n); print "\n";
+				       worklist_loop())
+	     | SOME (n,ConFunWork vvkck) => (print "*** Working on confun "; 
+					     print (Int.toString n); print "\n";
+					     doconfun false vvkck; 
+					     print "*** Finished confun "; 
+					     print (Int.toString n); print "\n";
+					     worklist_loop()))
   end
 
 
@@ -3565,10 +3720,15 @@ val _ = if !debug then print "*** end promote map ***\n"
          let 
 
 	     (* compute toplevel non-globals: that is, "globals"
-	       that are not accessed by inside any function and unexported;
+	       that are not accessed inside any function and that are unexported;
 	       when this is the case, we can allocate statically *)
+	     val _ = if (!debug)
+			 then print "tortl - entered translate\n"
+		     else ()
 	     local
 		 val nonglobals = ref VarSet.empty
+		 val numfuns = ref 0
+		 val numconfuns = ref 0
 		 val inner = 
 		     let 
 			 fun remove v = (if (VarSet.member(!nonglobals,v))
@@ -3581,10 +3741,16 @@ val _ = if !debug then print "*** end promote map ***\n"
 			   | ehandle _ = NOCHANGE
 			 fun chandle (_,Var_c v) = remove v
 			   | chandle _ = NOCHANGE
+			 fun bndhandle (_,Fixcode_b s) = (numfuns := (!numfuns) + (length (sequence2list s)); 
+							  NOCHANGE)
+			   | bndhandle _ = NOCHANGE
+			 fun cbndhandle (_,Code_cb _) = (numconfuns := (!numconfuns) + 1; NOCHANGE)
+			   | cbndhandle _ = NOCHANGE
+
 		     in  (ehandle,
-			  fn _ => NOCHANGE,
+			  bndhandle,
 			  chandle,
-			  fn _ => NOCHANGE,
+			  cbndhandle,
 			  fn _ => NOCHANGE)
 		     end
 
@@ -3594,7 +3760,8 @@ val _ = if !debug then print "*** end promote map ***\n"
 			   | bndhandle (_,Exp_b(v,_,_)) = (nonglobals := VarSet.add(!nonglobals,v); NOCHANGE)
 			   | bndhandle (_,Fixopen_b _) = error "encountered fixopen"
 			   | bndhandle (_,bnd as (Fixcode_b vfset)) = 
-			     let val vflist = set2list vfset
+			     let val _ = numfuns := (!numfuns) + 1
+				 val vflist = set2list vfset
 				 fun dofun (Function (_,_,vklist,vclist,_,e,c)) = 
 				     let
 					 val _ = map (fn (_,k) => kind_rewrite inner k) vklist
@@ -3622,7 +3789,8 @@ val _ = if !debug then print "*** end promote map ***\n"
 			 fun cbhandle (_,Con_cb (v,_,_)) = (nonglobals := VarSet.add(!nonglobals,v); NOCHANGE)
 			   | cbhandle (_,Open_cb _) = error "encountered open_cb"
 			   | cbhandle (_,cbnd as (Code_cb (_,vklist,c,k))) = 
-			     let val _ = map (fn (_,k) => kind_rewrite inner k) vklist
+			     let val _ = numconfuns := (!numconfuns) + 1
+				 val _ = map (fn (_,k) => kind_rewrite inner k) vklist
 				 val _ = kind_rewrite inner k
 				 val _ = con_rewrite inner c
 			     in  CHANGE_NORECURSE [cbnd]
@@ -3639,9 +3807,16 @@ val _ = if !debug then print "*** end promote map ***\n"
 						      kind_rewrite inner k; ())
 		 val _ = map (bnd_rewrite outer) bnds
 		 val _ = app do_export exports
+		 val _ = (print "There are "; print (Int.toString (!numfuns));
+			  print " functions and "; print (Int.toString (!numconfuns));
+			  print " constructor functions\n")
 	     in  val nonglobals = !nonglobals
 	     end (* local *)
 
+
+	     val _ = if (!debug)
+			 then print "tortl - handling exports now\n"
+		     else ()
 
 	     (* we do something special for exports of a variable *)
 	     local
@@ -3675,6 +3850,10 @@ val _ = if !debug then print "*** end promote map ***\n"
 			| {HeapProfile = NONE, ...} => HeapProfile := false)
 
 		 
+	     val _ = if (!debug)
+			 then print "tortl - handling imports now\n"
+		     else ()
+
 	    (* translate the expression as a function taking no arguments *)
 	     val mainName = non_generative_named_var ("main_" ^ unitname ^ "_doit")
 	     fun folder (ImportValue(l,v,c),s) = 
@@ -3701,10 +3880,20 @@ val _ = if !debug then print "*** end promote map ***\n"
 			   save=save,
 			   vars=vars}
 	     val _ = add_proc p'
+
+	     val _ = if (!debug)
+			 then print "tortl - calling worklist now\n"
+		     else ()
+
 	     val _ = worklist_loop()
 
+	     val _ = print "tortl - returned from worklist now\n"
+	     val _ = if (!debug)
+			 then print "tortl - returned from worklist now\n"
+		     else ()
+
 	     val module = Rtl.MODULE {procs = rev (!pl),
-				      data = Array.fromList (rev(!dl)),
+				      data = rev(!dl),
 				      main=LOCAL_CODE mainName,
 				      mutable_objects = get_mutable_objects(),
 				      mutable_variables = get_mutable_variables()}

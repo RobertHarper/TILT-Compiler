@@ -67,7 +67,13 @@ struct
 				    elim_tail_call = true, recognize_constants = true}
 	    val rtlmod = Tortl.translate unitname translate_params nilmodule
 (*	    val rtlmod = Rtlopt.opt translate_params rtlmod *)
+
+	    val _ = print "Not doing Rtlopt.GCmerge\n"
+(*
+	    val _ = print "Starting Rtlopt.GCmerge\n"
 	    val rtlmod = Rtlopt.GCmerge rtlmod
+	    val _ = print "Finished Rtlopt.GCmerge\n"
+*)
 	    val _ = if debug
 			then (print "============================================\n\n";
 			      print "RTL code:\n";

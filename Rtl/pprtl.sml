@@ -324,14 +324,14 @@ struct
 	| ALIGN (a) =>  String (".align "^(align2s a))
 	| DLABEL (l) =>  String (label2s l^":")
 
-  fun pp_DataArray' da = 
+  fun pp_DataList' da = 
       let fun pp_Data'' x =
 	        let val s = pp_Data' x
 		in case x of
 		     DLABEL _ => s
 		   | _ => Hbox[String "     ", s]
 		end
-      in  pp_Array' pp_Data'' da
+      in  pp_List' pp_Data'' da
       end
 
 
@@ -383,7 +383,7 @@ struct
 		 @
 		 [String "data objects = ",
 		  Break,
-		  pp_DataArray'  data,
+		  pp_DataList'  data,
 		  Break,
 		  HOVbox[String "mutable objects = ",
 			 pp_List' (String o label2s) mutable_objects],

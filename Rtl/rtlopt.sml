@@ -104,21 +104,16 @@ functor MakeRtlopt(structure Rtl : RTL
 
     fun get_label_data data acc = 
       let
-	val sz = Array.length data
-	fun loop pos acc = 
-	  if (pos >= sz) 
-	    then acc
-	  else let 
-		 val d = Array.sub(data,pos)
-		 val next = loop (pos+1)
-	       in 
-		 case d of
+	fun loop [] acc = acc
+	  | loop (d::rest) acc = 
+	   let val next = loop rest
+	   in  case d of
 		   (DATA (l)) => next (l :: acc)
 		 | (DLABEL (l)) => next (l :: acc)
 		 | (ARRAYP (_,PTR l)) => next (l :: acc)
 		 | _ => next acc
 	       end
-      in loop 0 acc
+      in loop data acc
       end
     
     (* conservatively return true if the instruction does not change memory

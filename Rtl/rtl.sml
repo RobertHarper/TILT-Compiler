@@ -227,7 +227,7 @@ struct
 
   datatype module = MODULE of
                           {procs : proc list,
-			   data : data array,
+			   data : data list,
 			   main : local_label,
 			   mutable_objects : label list,
 			   mutable_variables : (label * rep) list}

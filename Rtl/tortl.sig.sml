@@ -4,6 +4,9 @@ sig
    structure Nil : NIL
 
    val debug : bool ref
+   val debug_full : bool ref
+   val debug_simp : bool ref
+
    val do_constant_records : bool ref
    type translate_params = { HeapProfile : int option, do_write_list : bool, 
                              codeAlign : Rtl.align, FullConditionalBranch : bool, 
