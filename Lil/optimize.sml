@@ -937,6 +937,7 @@ struct
 	  (fn (q,potentialbool) =>
 	   (case unaliasop32 (state,potentialbool)
 	      of Switch (Ifthenelse {arg,thenArm,elseArm,rtype}) =>
+		obind (get_exp_val thenArm)
 		(fn thensv => obind (get_exp_val elseArm)
 		 (fn elsesv => 
 		  (case (reduce_coercion state (q,thensv),reduce_coercion state (q,elsesv))

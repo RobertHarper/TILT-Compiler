@@ -56,7 +56,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
       val Tmil = mkstatic Tmil'
 
       (* interpr :: Tmilr -> T32  *)
-      fun interpr_case (c : Lil.con) : Lil.con = 
+      fun interpr_tuple_case (c : Lil.con) : Lil.con = 
 	let
 	  val flatarm = fn i => (LU.i2w i,fn c => LD.COps.ntuple2tlist i c)
 	  val bigarm  = fn i => (LU.i2w i,fn l => l)
@@ -65,21 +65,23 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  LD.T.tuple (LD.C.sumcase c arms NONE)
 	end
 
-      fun interpr_fn () = 
+      fun interpr_tuple_fn () = 
 	let
 	  val arg = Name.fresh_named_var "interpr_arg"
-	in LD.C.lambda  (arg,Tmilr()) (interpr_case (mk_con (Var_c arg)))
+	in LD.C.lambda  (arg,Tmilr()) (interpr_tuple_case (mk_con (Var_c arg)))
 	end
 
-      val interpr_fn = mkstatic interpr_fn
+      val interpr_tuple_fn = mkstatic interpr_tuple_fn
 
-      fun interpr (c : Lil.con) : Lil.con = 
+      fun interpr_tuple (c : Lil.con) : Lil.con = 
 	if !inline_interp then
-	  interpr_case c
+	  interpr_tuple_case c
 	else 
 	  (case (Dec.C.inj' c,!simplify)
-	     of (SOME _,true) => interpr_case c
-	      | _ => LD.C.app (interpr_fn ()) c)
+	     of (SOME _,true) => interpr_tuple c
+	      | _ => LD.C.app (interpr_tuple_fn ()) c)
+	     
+      fun interpr (c : Lil.con) : Lil.con = LD.T.ptr (interpr_tuple c)
 
       fun interp_case (c : Lil.con) : Lil.con = 
 	LD.C.sumcase c
@@ -87,7 +89,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	 (Otheridx,fn t => t)
 	 ] 
 	(SOME(LD.T.ptr (LD.C.sumcase c [ 
-					(Tupleidx,fn l => interpr l),
+					(Tupleidx,fn l => interpr_tuple l),
 					(BFloatidx,fn _ => LD.T.boxed_float ()),
 					(Ptridx,fn t => t),
 					(Otheridx,fn t => (LD.T.boxed B4 t))
@@ -113,7 +115,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
     in
       val Tmilr = Tmilr
       val Tmil = Tmil
-      val interpr = fn c => LD.T.ptr (interpr c)
+      val interpr = interpr
       val interp = interp
 
       fun Bigtuple l  = LD.C.inj (LU.i2w (!flattenThreshold + 1)) (Tmilr()) (LD.C.tlist l)
@@ -131,7 +133,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 
 
       (* :: Tmilr -> T32 -> T32 *)
-      fun VarargTuplearrowarg arg = 
+      fun VarargTupleArg arg = 
 	let
 	  val flatarm = fn i => (Flatidx i,fn l => (LD.COps.ntuple2tlist i l))
 	  val bigarm  = fn i => (Bigidx(),fn t => LD.C.tlist [LD.T.tupleptr t])
@@ -139,15 +141,15 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	in LD.C.sumcase arg arms NONE
 	end
 
-      fun VarargTuplearrowargfn' () = 
+      fun VarargTupleArgfn () = 
 	let
 	  val argv = Name.fresh_named_var "rarg_c"
 	  val argc = LD.C.var argv
 	in 
 	  LD.C.lambda (argv,Tmilr())
-	  (VarargTuplearrowarg argc )
+	  (VarargTupleArg argc )
 	end
-      val VarargTuplearrowargfn = mkstatic  VarargTuplearrowargfn'
+      val VarargTupleArgfn = mkstatic  VarargTupleArgfn
 
       (* :: Tmilr -> T32 -> T32 *)
       fun VarargTuplecasedef arg rest = 
@@ -186,7 +188,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  val BFloata = fn _ => (LD.C.tlist [LD.T.ptr (LD.T.boxed_float ())])
 	  val Ptra = fn t => (LD.C.tlist [LD.T.ptr t])
 	  val Otherwisea = fn t => (LD.C.tlist [t])
-	  val Tuplea = fn t => (LD.C.app (VarargTuplearrowargfn ()) t )
+	  val Tuplea = fn t => (LD.C.app (VarargTupleArgfn ()) t )
 	  val branch = LD.C.sumcase argc [(Tupleidx,Tuplea),(BFloatidx,BFloata),(Ptridx,Ptra),(Otheridx,Otherwisea)] NONE
 	in LD.T.arrow branch (LD.C.nill (LD.K.T64())) rest
 	end
