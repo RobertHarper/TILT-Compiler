@@ -1,0 +1,15 @@
+#include mapfile-lib
+
+
+life		life		
+leroy		leroy
+fft		fft
+boyer		boyer
+simple		simple
+tyan		tyan
+msort		msort
+pia		pia
+lexgen		lexgen
+frank		frank
+
+bench_times	bench_times	TARGET

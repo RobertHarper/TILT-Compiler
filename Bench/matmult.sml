@@ -1,4 +1,4 @@
-(*$import TopLevel Array Array2 Help *)
+(*$import Int Array Array2 *) 
 
 (* 2-d matrix multiply *)
 
@@ -8,6 +8,13 @@ local
     open Array2
 
     val _ = print "just started\n"
+
+    (* Goes from [start,stop] *)
+    fun for(start,stop,f) = 
+      let fun loop i = if i > stop then () else (f i; loop (i+1))
+      in
+	loop start
+      end
 
     fun outerdot (i,j,A : int array2, B : int array2) =
       let val (ar,ac) = dimensions A

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int List Help Math Real String Help *)
+(*$import Int List Math Real String Help *)
 
 (* Thread safety due to no top-level refs *)
 
@@ -669,3 +669,4 @@ end;
 in
     fun runBarnesHut() = bhP 1000 10 1000  
 end
+

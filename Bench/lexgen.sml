@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int String TextIO Array List *)
+(*$import Int String TextIO Array List *)
 
 fun runSomeLexgen str = 
 let

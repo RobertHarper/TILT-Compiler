@@ -1,32 +1,22 @@
-Prelude		../Preludes/Prelude
-;hello		hello
+#include mapfile-lib
 
-; WORKS
-;life		life
-leroy		leroy
-;matmult	matmult
-;quicksort	quicksort
-;quicksort2	quicksort2
-;takc		takc
-;taku		taku
-;sort		sort
-;fft		fft
-;boyer		boyer
-;simple		simple
-
-; #include ../Basis/mapfile
-; pqueens pqueens
-
-; iii iii
-
-;; TESTING
-
-
-;tyan		tyan	
-;msort	msort
-;pia		pia	
-;lexgen		lexgen
-
-;; BROKEN
-
-;frank		frank
+arithmetic	arithmetic	TARGET
+life		life		
+leroy		leroy		TARGET
+matmult		matmult		TARGET
+quicksort	quicksort	TARGET
+quicksort2	quicksort2	TARGET
+takc		takc		TARGET
+taku		taku		TARGET
+sort		sort		TARGET
+fft		fft		TARGET
+boyer		boyer		TARGET
+simple		simple		TARGET
+pqueens 	pqueens		TARGET
+//iii 		iii		TARGET
+tyan		tyan		TARGET
+msort		msort		TARGET
+pia		pia		TARGET
+lexgen		lexgen		TARGET
+frank		frank		TARGET
+bench_times	bench_times	TARGET

@@ -1,4 +1,4 @@
-(*$import Prelude Int TopLevel Math Real Array *)
+(*$import Int Math Real Array *)
 
 (* Thread safety automatic since no top-level mutable values are present *)
 

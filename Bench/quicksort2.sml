@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import TiltPrim Array *)
 
 (***********************************************************************)
 (*                                                                     *)
@@ -17,8 +17,16 @@
 
 
 local
-val andb = fn(x,y) => uint32toint32((int32touint32 x) && (int32touint32 y))
-val (op &&) = andb
+
+val int32touint32 = TiltPrim.int32touint32
+val uint32toint32 = TiltPrim.uint32toint32
+
+val && = TiltPrim.&&
+
+val andb = fn(x,y) => uint32toint32(&&(int32touint32 x,int32touint32 y))
+
+val && = andb
+
 open Array
 
 fun qsort lo hi (a : int array) =
@@ -100,7 +108,7 @@ fun qsort2 lo hi (a : int array) =
 
 val seed = ref 0
 
-fun random() = (seed := (!seed * 25173 + 17431) && 4095; !seed)
+fun random() = (seed := &&(!seed * 25173 + 17431,4095); !seed)
 
 exception Failed
 

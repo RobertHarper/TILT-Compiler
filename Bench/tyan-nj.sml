@@ -10,24 +10,25 @@ fun revfold f l acc = List.foldl f acc l
 val update = Array.update
 val sub = Array.sub
 val max = Int.max
+val max32 = Int32.max
 val array = Array.array 
 
-val int32touint32 = TiltPrim.int32touint32
-val uint32toint32 = TiltPrim.uint32toint32
-
-val && = TiltPrim.&&
-val || = TiltPrim.||
-val << = TiltPrim.<<
-val >> = TiltPrim.>>
+val int32touint32 = Word32.fromLargeInt
+val uint32toint32 = Word32.toLargeInt
+val && = Word32.andb
+val || = Word32.orb 
+val << = fn (x,y:Int32.int) => (Word32.<< (x,Word.fromLargeInt y))
+val >> = fn (x,y:Int32.int) => (Word32.>> (x,Word.fromLargeInt y))
 
 infix 7 && || << >>
 
 val makestring_int = Int.toString
-(* val andb = fn(x,y) => uint32toint32((int32touint32 x) && (int32touint32 y)) *)
+val makestring_int32 = Int32.toString
+
 val andb = fn(x,y) => uint32toint32((int32touint32 x) && (int32touint32 y))
 val orb = fn(x,y) => uint32toint32((int32touint32 x) || (int32touint32 y))
-val rshift = fn(x,y : int) => uint32toint32((int32touint32 x) >> y)
-val lshift = fn(x,y : int) => uint32toint32((int32touint32 x) << y)
+val rshift = fn(x,y : Int32.int) => uint32toint32((int32touint32 x) >> y)
+val lshift = fn(x,y : Int32.int) => uint32toint32((int32touint32 x) << y)
 val (op >>) = rshift
 val (op <<) = lshift
 
@@ -37,6 +38,13 @@ val smlnj_mod = op mod
 val smlnj_div = op div
 infix 7 smlnj_mod
 infix 7 smlnj_div
+
+nonfix smlnj_mod32
+nonfix smlnj_div32
+val smlnj_mod32 = Int32.mod
+val smlnj_div32 = Int32.div
+infix 7 smlnj_mod32
+infix 7 smlnj_div32
 
 val char_implode = implode
 val char_explode = explode
@@ -78,6 +86,7 @@ structure Util = struct
 
     (* arr[i] := obj :: arr[i]; extend non-empty arr if necessary *)
     fun insert (obj,i,arr) = let
+          val i = Int32.toInt i
 	  val len = Array.length arr
           val res =  if i<len then (update(arr,i,obj::sub(arr,i)); arr)
 	     else let val arr' = array(max(i+1,len+len),[])
@@ -127,22 +136,22 @@ structure Util = struct
 end
 
 structure F = struct
-    val p = 17
+    val p = Int32.fromInt 17
 
-    datatype field = F of int (* for (F n), always 0<=n<p *)
+    datatype field = F of Int32.int (* for (F n), always 0<=n<p *)
     (* exception Div = Integer.Div *)
-    fun show (F x) = print (makestring_int x)
+    fun show (F x) = print (makestring_int32 x)
 
     val char = p
 
     val zero = F 0
     val one = F 1
-    fun coerceInt n = F (n smlnj_mod p)
+    fun coerceInt n = F (n smlnj_mod32 p)
 
     fun add (F n,F m) = let val k = n+m in if k>=p then F(k-p) else F k end
     fun subtract (F n,F m) = if n>=m then F(n-m) else F(n-m+p)
     fun negate (F 0) = F 0 | negate (F n) = F(p-n)
-    fun multiply (F n,F m) = F ((n*m) smlnj_mod p)
+    fun multiply (F n,F m) = F ((n*m) smlnj_mod32 p)
     fun reciprocal (F 0) = raise Div
       | reciprocal (F n) = let
           (* consider euclid gcd alg on (a,b) starting with a=p, b=n.
@@ -153,7 +162,7 @@ structure F = struct
  	  fun gcd ((a,a1),(b,b1)) =
 	      if b=1 then (* by continued fraction expansion, 0<|b1|<p *)
 		 if b1<0 then F(p+b1) else F b1
-	      else let val q = a smlnj_div b
+	      else let val q = a smlnj_div32 b
 	           in gcd((b,b1),(a-q*b,a1-q*b1)) end
           in gcd ((p,0),(n,1)) end
     fun divide (n,m) = multiply (n, reciprocal m)
@@ -172,8 +181,8 @@ structure F = struct
     fun isZero (F n) = n=0
     fun equal (F n,F m) = n=m
 
-    fun display (F n) = if n<=p smlnj_div 2 then makestring_int n
-			else "-" ^ makestring_int (p-n)
+    fun display (F n) = if n<=p smlnj_div32 2 then makestring_int32 n
+			else "-" ^ makestring_int32 (p-n)
 end
 
 
@@ -187,7 +196,7 @@ structure M = struct (* MONO *)
    note that encoded pairs u, v have same var if u>=v, u andb ~0x10000<v
 *)
 
-    datatype mono = M of int list
+    datatype mono = M of Int32.int list
 (*
     fun show (M x) = (print "<"; app (fn i => (print (makestring_int i); print ",")) x; print">")
 *)
@@ -199,6 +208,8 @@ structure M = struct (* MONO *)
     fun x_i v = M [(v<<16)+1]
     fun explode (M l) = map (fn v => (v>>16,v andb 65535)) l
     fun implode l = M (map (fn (v,p) => (v<<16)+p) l)
+    val ord = Int32.fromInt o ord
+    val chr = chr o Int32.toInt
 
     val deg = let fun d([],n) = n | d(u::ul,n) = d(ul,(u andb 65535) + n)
               in fn (M l) => d(l,0) end
@@ -215,9 +226,9 @@ structure M = struct (* MONO *)
 
     fun display (M l) = 
 	let
-	    val aa : int = ord #"a"
-	    val AA : int = ord #"A"
-	    fun dv (v : int) : string = 
+	    val aa : Int32.int = (ord #"a")
+	    val AA : Int32.int = (ord #"A")
+	    fun dv (v : Int32.int) : string = 
 		let val c : char = if v<26 then chr (v+aa) else chr (v-26+AA)
 		in  char_implode[c]
 		end
@@ -225,7 +236,7 @@ structure M = struct (* MONO *)
 		let val v = vv>>16 
 		    val p = vv andb 65535
 		in if p=1 then (dv v) ^ acc
-		   else (dv v) ^ (makestring_int p) ^ acc
+		   else (dv v) ^ (makestring_int32 p) ^ acc
 		end
 	in foldl d "" l
 	end
@@ -279,9 +290,9 @@ structure MI = struct (* MONO_IDEAL *)
      * index first by increasing order of vars
      * children listed in increasing degree order
      *)
-    datatype 'a mono_trie = MT of 'a option * (int * 'a mono_trie) list
+    datatype 'a mono_trie = MT of 'a option * (Int32.int * 'a mono_trie) list
 	                    (* tag, encoded (var,pwr) and children *)
-    datatype 'a mono_ideal = MI of (int * 'a mono_trie) ref
+    datatype 'a mono_ideal = MI of (Int32.int * 'a mono_trie) ref
 	                    (* int maxDegree = least degree > all elements *)
     
     fun rev ([],l) = l | rev (x::xs,l) = rev(xs,x::l)
@@ -343,7 +354,7 @@ structure MI = struct (* MONO_IDEAL *)
 		   else if smallerVar(vp',vp) then i(grabVar vp'::vp::m,mt)
 		   else MT(a',j trie)
 	        end
-	  in mi := (max(d,M.deg m),i (rev(map encode(M.explode m),[]),mt)) end
+	  in mi := (max32(d,M.deg m),i (rev(map encode(M.explode m),[]),mt)) end
 
     fun mkIdeal [] = mkEmpty() 
       | mkIdeal (orig_ms : (M.mono * '_a) list)= let
@@ -442,6 +453,7 @@ local
     fun termMult (a,m,p) =
 	  (map (fn (a',m') => (F.multiply(a,a'),M.multiply(m,m'))) p)
 in
+    val length = fn l => (Int32.fromInt o length) l
     fun negate (P p) = P (neg p)
     fun add (P p1,P p2) = (pair(length p1,length p2); P (plus(p1,p2)))
     fun subtract (P p1,P p2) = (pair(length p1,length p2); P (minus(p1,p2)))
@@ -600,7 +612,7 @@ structure G = struct
 	    fun ins (~1,pairs) = pairs
 	      | ins (i,pairs) = case sub(buckets,i) of
 		[] => ins(i-1,pairs)
-	      | gs => ins(i-1,Util.insert(arrayoflist(h::gs),i,pairs))
+	      | gs => ins(i-1,Util.insert(arrayoflist(h::gs),Int32.fromInt i,pairs))
 	in ins(Array.length buckets - 1,pairs) 
 	end
 
@@ -635,7 +647,7 @@ structure G = struct
 	  fun feedback () = let
 	        val n = !tasksleft
 	        in 
-		    if andb(n,15)=0 then print (makestring_int n) else (); 
+		    if andb(n,15)=0 then print (makestring_int32 n) else (); 
 			print "."; 
 			TextIO.flushOut TextIO.stdOut;
 			tasksleft := n-1
@@ -665,20 +677,20 @@ structure G = struct
 		      end
 	      in tryPair (Array.length fgs -1) 
 	      end
-	  fun numPairs ([],n) = n
+	  fun numPairs ([],n) = Int32.fromInt n
 	    | numPairs (p::ps,n) = numPairs(ps,n-1+Array.length p)
 	  fun gb d = 
 	      if d>=Array.length(!pairs) 
 		  then mi 
 	      else (* note: i nullify entries to reclaim space *)
 	        (pr ["DEGREE ",makestring_int d," with ",
-		     makestring_int(numPairs(sub(!pairs,d),0))," pairs ",
+		     makestring_int32(numPairs(sub(!pairs,d),0))," pairs ",
 		     if d>=Array.length fs then "0" else makestring_int(length(sub(fs,d))),
 			 " generators to do"];
 		 tasksleft := numPairs(sub(!pairs,d),0);
 		 if d>=Array.length fs 
 		     then () 
-		 else tasksleft := !tasksleft + length (sub(fs,d));
+		 else tasksleft := !tasksleft + (Int32.fromInt (length (sub(fs,d))));
 		 if d>(!maxDeg) 
 		     then ()
 		 else (reset();
@@ -704,9 +716,11 @@ local
      term ::= nat mono | mono
      poly ::= term | sign term | poly sign term
     *)
-    datatype char = Dig of int | Var of int | Sign of int
+    datatype char = Dig of Int32.int | Var of Int32.int | Sign of Int32.int
     fun char ch =
-	let val och = ord ch in
+	let 
+	  val och = Int32.fromInt (ord ch)
+	  val ord = Int32.fromInt o ord in
 	  if ord #"0"<=och andalso och<=ord #"9" then Dig (och - ord #"0")
 	  else if ord #"a"<=och andalso och<=ord #"z" then Var (och - ord #"a")
 	  else if ord #"A"<=och andalso och<=ord #"Z" then Var (och - ord #"A" + 26)
@@ -755,7 +769,7 @@ in
 	  val _ = 1=num() orelse Util.illegal "stream doesn't start w/ `1'"
 	  val n = num()
 	  val i = r()
-	  val _ = length i = n orelse Util.illegal "wrong # poly's"
+	  val _ = (Int32.fromInt (length i)) = n orelse Util.illegal "wrong # poly's"
 	  in i end
 
 fun read filename = let
@@ -846,7 +860,7 @@ fun gb fs = let
       val fs = grab g
       fun info f = app print
 	  [M.display(P.leadMono f),
-	   " + ", makestring_int(P.numTerms f - 1), " terms\n"]
+	   " + ", makestring_int32(P.numTerms f - 1), " terms\n"]
       in app info fs end
 ;
 
