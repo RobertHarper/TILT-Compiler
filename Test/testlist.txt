@@ -16,7 +16,7 @@
 #
 # Please keep the status bits up to date.
 
-0001	pass	[Bug #0039 on alpha] Arithmetic exceptions.
+0001	pass	Arithmetic exceptions.
 0002	pass	Top-level types and values, basis structures and sharing.
 0003	pass	Overloading.
 0004	pass	Hello world.
@@ -58,6 +58,7 @@ bug165	pass	Elaborator shadowing variables.
 bug166	pass	Elaborator adding classifiers with unbound, free variables to context.
 bug167	pass	Elaborator bombs on toplevel raise/handle/raise.
 bug168	pass	Real.fromString fails on nan and inf.
+bug179	fail	Array.foldri looks past end of non-empty array.
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
 m0003	pass	Type variable syntax.
