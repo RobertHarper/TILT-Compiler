@@ -129,3 +129,4 @@
 0133 [open]	~inf vs nan
 0134 [open]	discrepancies for real number operations
 0135 [open]	discrepancies on real numbers
+0136 [open]	more real number discrepancies and unimplemented functions
