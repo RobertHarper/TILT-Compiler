@@ -48,7 +48,7 @@ fun marktop(t as MarkTop _, _,_) = t
     | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE 
     | RBRACKET | RPAREN | ORELSE | ANDALSO | FUNSIG | VECTORSTART | BEGINQ 
     | ENDQ of string | OBJL of string | AQID of FastSymbol.raw_symbol
-    | DOLLAR
+    | DOLLAR | EXTERN | CCALL
 
 %nonterm ident of FastSymbol.raw_symbol
        | id of FastSymbol.raw_symbol
@@ -92,8 +92,10 @@ fun marktop(t as MarkTop _, _,_) = t
        | clause of  clause
        | tb of tb list
        | tyvars of tyvar list
+       | tyvarseq of tyvar list
        | tyvar_pc of tyvar list
        | db of  db list
+       | dbrhs of dbrhs                
        | constrs of  (symbol * ty option) list
        | constr of  symbol * ty option
        | eb of  eb list
@@ -106,13 +108,14 @@ fun marktop(t as MarkTop _, _,_) = t
        | spec_s of  spec list
        | spec of  spec list
        | idents of spec list
-       | strspec of  (symbol * sigexp) list
+       | strspec of  (symbol * sigexp option * path option) list
        | fctspec of  (symbol * fsigexp) list
        | tyspec of  (symbol * tyvar list * ty option) list
        | valspec of (symbol * ty) list
        | exnspec of (symbol * ty option) list
        | sharespec of spec list
        | patheqn of (FastSymbol.raw_symbol ->symbol) -> symbol list list
+       | whspec of wherespec list
        | sign of  sigexp
        | sigconstraint_op of  sigexp sigConst
        | fsigconstraint_op of fsigexp sigConst
@@ -164,7 +167,7 @@ fun marktop(t as MarkTop _, _,_) = t
   OPEN OVERLOAD  RAISE  REC  SHARING  SIG  SIGNATURE  STRUCT
   STRUCTURE THEN TYPE VAL WHILE WHERE WITH WITHTYPE
   ORELSE ANDALSO 
-  DOLLAR
+  DOLLAR CCALL EXTERN
 
 %change -> VAL | -> THEN | -> ELSE | -> LPAREN | -> SEMICOLON | 
         DARROW -> EQUALOP | EQUALOP -> DARROW | AND -> ANDALSO | COLON -> OF |
@@ -267,6 +270,7 @@ exp	: exp HANDLE match	(HandleExp{expr=exp,rules=match})
 	 | RAISE exp	     (markexp(markexp(RaiseExp exp, expleft,expright),
 				      RAISEleft,expright))
          | DOLLAR exp           (DelayExp exp)
+	 | CCALL LPAREN exp_list RPAREN 		(CcallExp (hd exp_list, tl exp_list))
 
 app_exp	: aexp	        ([{item=markexp(aexp,aexpleft,aexpright),
 			   region=(aexpleft,aexpright), fixity=NONE}])
@@ -436,15 +440,22 @@ tyvars	: TYVAR			([MarkTyv(Tyv(tyvSymbol TYVAR),
 	| LPAREN tyvar_pc RPAREN  (tyvar_pc)
 	|			  (nil)
 
-tyvar_pc: TYVAR	([MarkTyv(Tyv(tyvSymbol TYVAR), (TYVARleft,TYVARright))])
-	| TYVAR COMMA tyvar_pc
-		(MarkTyv(Tyv(tyvSymbol TYVAR),(TYVARleft,TYVARright))
-		 :: tyvar_pc)
+tyvarseq : TYVAR                 ([MarkTyv(Tyv(tyvSymbol TYVAR),
+                                         (TYVARleft,TYVARright))])
+         | LPAREN tyvar_pc RPAREN  (tyvar_pc)                      
+
+tyvar_pc : TYVAR	([MarkTyv(Tyv(tyvSymbol TYVAR), (TYVARleft,TYVARright))])
+	 | TYVAR COMMA tyvar_pc
+			(MarkTyv(Tyv(tyvSymbol TYVAR),(TYVARleft,TYVARright))
+		         :: tyvar_pc)
 
 db	: db AND db			(db1 @ db2)
-	| tyvars ident EQUALOP constrs	([Db{tyc=tycSymbol ident,
+	| tyvars ident EQUALOP dbrhs	([Db{tyc=tycSymbol ident,
 					     tyvars=tyvars,
-					     def=constrs}])
+					     rhs=dbrhs}])
+
+dbrhs   : constrs                       (Constrs constrs)
+        | DATATYPE tycon                (Repl tycon)
 
 constrs : constr		([constr])
 	| constr BAR constrs	(constr :: constrs)
@@ -468,8 +479,12 @@ fixity	: INFIX			(infixleft 0)
 	| NONFIX		(NONfix)
 
 ldec	: VAL vb		(ValDec (vb,ref []))
+        | VAL tyvarseq vb       (ValDec(vb,ref tyvarseq))
 	| VAL REC rvb		(ValrecDec (rvb,ref []))
+        | VAL REC tyvarseq rvb  (ValrecDec(rvb,ref tyvarseq))
 	| FUN fb		(FunDec (fb,ref []))
+        | FUN tyvarseq fb       (FunDec(fb,ref tyvarseq))
+	| EXTERN ID COLON ty 	(ExternDec(varSymbol ID,ty))
 	| TYPE tb		(TypeDec tb)
 	| DATATYPE db		(DatatypeDec{datatycs=db,withtycs=[]})
  	| DATATYPE db WITHTYPE tb  (DatatypeDec{datatycs=db,withtycs=tb})
@@ -523,7 +538,10 @@ idents	: ident			([IncludeSpec(FastSymbol.sigSymbol ident)])
 				 :: idents)
 
 strspec	: strspec AND strspec	(strspec1 @ strspec2)
-	| ident COLON sign	([(strSymbol ident, sign)])
+        | ident COLON sign      ([(strSymbol ident, SOME sign, NONE)])
+        | ident EQUALOP qid     ([(strSymbol ident, NONE, SOME(qid strSymbol))])
+        | ident COLON sign EQUALOP qid
+                                ([(strSymbol ident, SOME sign, SOME(qid strSymbol))])
 
 fctspec	: fctspec AND fctspec	(fctspec1 @ fctspec2)
 	| ident fsig		([(fctSymbol ident, fsig)])
@@ -541,21 +559,23 @@ exnspec : exnspec AND exnspec	(exnspec1 @ exnspec2)
 	| ident OF ty		([(varSymbol ident,SOME ty)])
 
 sharespec: sharespec AND sharespec	(sharespec1 @ sharespec2)
-	 | TYPE patheqn	([MarkSpec(ShatycSpec(patheqn tycSymbol),
-				   (patheqnleft,patheqnright))])
-	 | patheqn	([MarkSpec (ShareSpec (patheqn strSymbol),
-				    (patheqnleft,patheqnright))])
+         | TYPE patheqn ([MarkSpec (ShareTycSpec(patheqn tycSymbol),
+                                    (patheqnleft,patheqnright))])
+         | patheqn      ([MarkSpec (ShareStrSpec (patheqn strSymbol),
+                                    (patheqnleft,patheqnright))])
 	
 patheqn: qid EQUALOP qid	(fn kind => [qid1 kind, qid2 kind])
        | qid EQUALOP patheqn	(fn kind => qid kind :: patheqn kind)
 
-sign	: ident			(MarkSig(VarSig (sigSymbol ident),
-				         (identleft,identright)))
-	| SIG spec_s END	(MarkSig(SigSig(spec_s),
-	 				 (spec_sleft,spec_sright)))
-        | sign WHERE TYPE tyvars qid EQUALOP ty
-	                        (MarkSig(AugSig(sign,qid tycSymbol,tyvars,ty),
-	 				 (signleft,tyright)))
+whspec  : whspec AND whspec     (whspec1 @ whspec2)
+        | TYPE tyvars qid EQUALOP ty
+                                ([WhType(qid tycSymbol,tyvars,ty)])
+        | qid EQUALOP qid       ([WhStruct(qid1 strSymbol,qid2 strSymbol)])
+
+sign    : ident                 (MarkSig(VarSig (sigSymbol ident),
+                                         (identleft,identright)))
+        | SIG spec_s END        (MarkSig(SigSig(spec_s),(spec_sleft,spec_sright)))
+        | sign WHERE whspec     (MarkSig(AugSig(sign,whspec),(signleft,whspecright)))
 
 sigconstraint_op :		(NoSig)
 	| COLON sign		(Transparent(sign))
@@ -601,8 +621,9 @@ sdecs	: sdec sdecs		(makeSEQdec (markdec(sdec,sdecleft,sdecright),
 	| SEMICOLON sdecs	(sdecs)
 	|			(SeqDec[])
 
+
 (*
- sdecs'	: sdec sdecs'		(makeSEQdec (markdec(sdec,sdecleft,sdecright),
+sdecs'	: sdec sdecs'		(makeSEQdec (markdec(sdec,sdecleft,sdecright),
 					     sdecs'))
 	 | sdec			(markdec(sdec, sdecleft,sdecright))
 *)
@@ -653,8 +674,8 @@ fct_exp: qid	(fn constraint => VarFct(qid fctSymbol,constraint))
 		(fn constraint =>
 		   MarkFct(LetFct(sdecs, fct_exp constraint),
 		   (LETleft,ENDright)))
-
-(* interdec: sdecs'	(markdec(sdecs',sdecs'left,sdecs'right))
+(*
+interdec: sdecs'	(markdec(sdecs',sdecs'left,sdecs'right))
 
 	| exp		(markdec(ValDec([Vb{exp=exp,pat=VarPat itsym}],ref []),
 				 expleft,expright))
@@ -675,6 +696,9 @@ top: sdecs              (marktop(ImplTop([], sdecs), sdecsleft, sdecsright))
 
 (*
  * $Log$
+# Revision 1.5  97/09/03  20:10:21  pscheng
+# added extern and ccall syntax
+# 
 # Revision 1.4  97/07/02  22:03:06  jgmorris
 # Modified syntax to allow for interfaces and implementations.
 # 

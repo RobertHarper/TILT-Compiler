@@ -22,7 +22,7 @@ structure AstHelp : ASTHELP =
     fun tyvar_strip (Ast.Tyv s) = s
       | tyvar_strip (Ast.TempTyv _) = error "should not see this after parsing"
       | tyvar_strip (Ast.MarkTyv (tv,r)) = tyvar_strip tv
-    fun db_strip (Ast.Db {tyc,tyvars,def}) = (tyc,tyvars,def)
+    fun db_strip (Ast.Db {tyc,tyvars,rhs}) = (tyc,tyvars,rhs)
       | db_strip (Ast.MarkDb(db,r)) = db_strip db
     fun tb_strip (Ast.MarkTb(tb,r)) = tb_strip tb
       | tb_strip (Ast.Tb {tyc,tyvars,def}) = (tyc,tyvars,def)
@@ -123,15 +123,16 @@ structure AstHelp : ASTHELP =
 	| Ast.ValrecDec (rvb_list ,tvr)=> Ast.ValrecDec (map (f_rvb state) rvb_list, tvr)
 	| Ast.FunDec (fb_list,tvr) => Ast.FunDec (map (f_fb state) fb_list, tvr)
 	| Ast.TypeDec tb_list => Ast.TypeDec (map (f_tb state) tb_list)
-	| Ast.DatatypeDec {datatycs,withtycs} => let val newconstr = map (fn db => let val (tyc,_,_) = db_strip db
-										   in tyc
-										   end) datatycs
-						     val state = (doconstr, newconstr @ constrbound,
-								  doty, tybound,
-								  dovar,varbound)
-						 in Ast.DatatypeDec{datatycs=map (f_db state) datatycs,
-								    withtycs=map (f_tb state) withtycs}
-						 end
+	| Ast.DatatypeDec {datatycs,withtycs} => 
+	      let val newconstr = map (fn db => let val (tyc,_,_) = db_strip db
+						in tyc
+						end) datatycs
+		  val state = (doconstr, newconstr @ constrbound,
+			       doty, tybound,
+			       dovar,varbound)
+	      in Ast.DatatypeDec{datatycs=map (f_db state) datatycs,
+				 withtycs=map (f_tb state) withtycs}
+	      end
 	| Ast.AbstypeDec{abstycs,withtycs,body} => Ast.AbstypeDec{abstycs=map (f_db state) abstycs,
 								  withtycs=map (f_tb state) withtycs,
 								  body=f_dec state body}
@@ -169,14 +170,18 @@ structure AstHelp : ASTHELP =
 	| f_tb state (Ast.MarkTb(tb,r)) = Ast.MarkTb(f_tb state tb,r)
       and f_db (state as (doconstr,constrbound,
 			  doty,tybound,
-			  dovar, varbound : symbol list)) (Ast.Db{tyc,def,tyvars}) = 
-	let val newbound = tybound @ (map tyvar_strip tyvars)
-	  val newstate = (doconstr,constrbound,doty,newbound,dovar,varbound)
-	in  Ast.Db{def=map (fn (s,SOME ty) => (s,SOME(f_ty newstate ty))
-                             | (s,NONE) => (s,NONE)) def,
-		   tyc=tyc,
-		   tyvars=tyvars}
-	end
+			  dovar, varbound : symbol list)) (Ast.Db{tyc,rhs,tyvars}) = 
+	  let val newbound = tybound @ (map tyvar_strip tyvars)
+	      val newstate = (doconstr,constrbound,doty,newbound,dovar,varbound)
+	      val rhs' = (case rhs of
+			      Repl _ => rhs 
+			    | Constrs sym_tys => 
+				  Constrs(map (fn (s,SOME ty) => (s,SOME(f_ty newstate ty))
+                                		| (s,NONE) => (s,NONE)) sym_tys))
+	  in  Ast.Db{rhs=rhs',
+		     tyc=tyc,
+		     tyvars=tyvars}
+	  end
 	| f_db state (Ast.MarkDb(db,r)) = Ast.MarkDb(f_db state db,r)
       and f_eb state (Ast.EbGen{exn,etype=NONE}) = Ast.EbGen{exn=exn,etype=NONE}
 	| f_eb state (Ast.EbGen{exn,etype=SOME ty}) = Ast.EbGen{exn=exn,etype=SOME (f_ty state ty)}
@@ -221,7 +226,7 @@ structure AstHelp : ASTHELP =
       and f_sigexp state (Ast.VarSig s) = Ast.VarSig s
 	| f_sigexp state (Ast.SigSig speclist) = Ast.SigSig(map (f_spec state) speclist)
 	| f_sigexp state (Ast.MarkSig (se,r)) = Ast.MarkSig(f_sigexp state se,r)
-	| f_sigexp state (Ast.AugSig (se,_,_,_)) = raise UNIMP
+	| f_sigexp state (Ast.AugSig (se,_)) = raise UNIMP
       and f_fsigexp state (Ast.VarFsig s) = Ast.VarFsig s  
 	| f_fsigexp state (Ast.FsigFsig {param,def}) = 
 	        Ast.FsigFsig{param=map (fn(so,se) => (so,f_sigexp state se)) param,
@@ -231,7 +236,11 @@ structure AstHelp : ASTHELP =
 			    doty,tybound,
 			    dovar, varbound : symbol list)) spec = 
 	(case spec of
-	   Ast.StrSpec s_se_list => Ast.StrSpec (map (fn (s,se) => (s,f_sigexp state se)) s_se_list)
+	   Ast.StrSpec s_se_popt_list => 
+	       let fun mapper (arg as (s,NONE,popt)) = arg
+		     | mapper (s,SOME se,popt) = (s,SOME (f_sigexp state se),popt)
+	       in  Ast.StrSpec (map mapper s_se_popt_list)
+	       end
 	 | Ast.TycSpec (s_tvs_tyop_list,b) => 
 	     Ast.TycSpec(map (fn (s,tvs,tyopt) =>
 			      let val newbound =  tybound @ (map tyvar_strip tvs)
@@ -246,7 +255,7 @@ structure AstHelp : ASTHELP =
 							 withtycs=map (f_tb state) withtycs}
 	| Ast.ExceSpec s_to_list => Ast.ExceSpec(map (fn (s,NONE) => (s,NONE)
 	                                    | (s,SOME ty) => (s,SOME(f_ty state ty))) s_to_list)
-	| (Ast.FixSpec _ | Ast.ShareSpec _ | Ast.ShatycSpec _ | Ast.IncludeSpec _) => spec
+	| (Ast.FixSpec _ | Ast.ShareStrSpec _ | Ast.ShareTycSpec _ | Ast.IncludeSpec _) => spec
 (*	| Ast.OpenSpec _ => spec
         | Ast.LocalSpec (slist1,slist2) => Ast.LocalSpec(map (f_spec state) slist1,
 							 map (f_spec state) slist2) *)

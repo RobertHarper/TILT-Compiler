@@ -19,6 +19,8 @@ struct
         union (map ((fv_exp env) o #item) fixitems)
     | fv_exp env (AppExp {function, argument}) =
 	union [fv_exp env function, fv_exp env argument]
+    | fv_exp env (CcallExp (function, arguments)) =
+	union (map (fv_exp env) (function :: arguments))
     | fv_exp env (CaseExp {expr, rules}) =
 	union ((fv_exp env expr) :: (map (fv_rule env) rules))
     | fv_exp env (LetExp {dec, expr}) = union [fv_dec env dec, fv_exp env expr]
@@ -169,6 +171,7 @@ struct
     | fv_dec env (OvldDec _) = []
     | fv_dec env (FixDec {fixity: fixity, ops: symbol list}) = []
     | fv_dec env (ImportDec _) = []
+    | fv_dec env (ExternDec _) = []
     | fv_dec env (MarkDec (dec, region)) = fv_dec env dec
 
   and fv_vb env (Vb {pat, exp}) = union [fv_pat env pat, fv_exp env exp]

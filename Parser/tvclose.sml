@@ -68,6 +68,8 @@ struct
         TVSet.union (map (pass1_exp o #item) fixitems)
     | pass1_exp (AppExp {function, argument}) =
 	TVSet.merge (pass1_exp function, pass1_exp argument)
+    | pass1_exp (CcallExp (function, arguments)) =
+	TVSet.union (map pass1_exp (function :: arguments))
     | pass1_exp (CaseExp {expr, rules}) =
 	TVSet.union (pass1_exp expr :: map pass1_rule rules)
     | pass1_exp (LetExp {dec, expr}) =
@@ -150,6 +152,7 @@ struct
     | pass1_dec (FunDec (fbs, tvbref)) =
 	(tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_fb fbs));
 	 [])
+    | pass1_dec (ExternDec (sym, ty)) = pass1_ty ty
     | pass1_dec (TypeDec tbs) = TVSet.union (map pass1_tb tbs)
     | pass1_dec (DatatypeDec {datatycs, withtycs}) =
 	TVSet.merge (TVSet.union (map pass1_db datatycs),
@@ -193,12 +196,14 @@ struct
         TVSet.remove (TVSet.union (map pass1_tyvar tyvars), pass1_ty def)
     | pass1_tb (MarkTb (tb, region)) = pass1_tb tb
 
-  and pass1_db (Db {tyc, tyvars, def}) =
-        let fun dodef (_, SOME ty) = pass1_ty ty
-	      | dodef _ = []
+  and pass1_db (Db {tyc, tyvars, rhs}) =
+      let fun do_sym_ty (_, SOME ty) = pass1_ty ty
+	    | do_sym_ty _ = []
+	  fun dorhs (Repl _) = []
+	    | dorhs (Constrs sym_tys) = TVSet.union (map do_sym_ty sym_tys)
 	in
 	  TVSet.remove (TVSet.union (map pass1_tyvar tyvars),
-			TVSet.union (map dodef def))
+			dorhs rhs)
 	end
     | pass1_db (MarkDb (db, region)) = pass1_db db
 
@@ -229,6 +234,8 @@ struct
         app ((pass2_exp env) o #item) fixitems
     | pass2_exp env (AppExp {function, argument}) =
 	(pass2_exp env function; pass2_exp env argument)
+    | pass2_exp env (CcallExp (function, arguments)) =
+	(pass2_exp env function; app (pass2_exp env) arguments)
     | pass2_exp env (CaseExp {expr, rules}) =
 	(pass2_exp env expr; app (pass2_rule env) rules)
     | pass2_exp env (LetExp {dec, expr}) =
@@ -300,6 +307,7 @@ struct
         app (pass2_rvb (rebind env tvlistref)) rvbs
     | pass2_dec env (FunDec (fbs, tvlistref)) =
         app (pass2_fb (rebind env tvlistref)) fbs
+    | pass2_dec env (ExternDec (sym,ty)) = ()
     | pass2_dec env (TypeDec tbs) = ()
     | pass2_dec env (DatatypeDec {datatycs, withtycs}) = ()
     | pass2_dec env (AbstypeDec {abstycs, withtycs, body}) = pass2_dec env body

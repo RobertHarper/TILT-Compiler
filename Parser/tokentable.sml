@@ -72,7 +72,10 @@ val tokenList =
    ("with"	, fn yypos => Tokens.WITH(yypos,yypos+4)),
    ("withtype"	, fn yypos => Tokens.WITHTYPE(yypos,yypos+8)),
    ("orelse"	, fn yypos => Tokens.ORELSE(yypos,yypos+6)),
-   ("andalso"	, fn yypos => Tokens.ANDALSO(yypos,yypos+7))]
+   ("andalso"	, fn yypos => Tokens.ANDALSO(yypos,yypos+7)),
+   ("extern"    , fn yypos => Tokens.EXTERN(yypos,yypos+6)),
+   ("Ccall"     , fn yypos => Tokens.CCALL(yypos,yypos+5))
+]
 
 (* hash table obtained from the previous list *)
 val tokenTable =
@@ -106,6 +109,9 @@ end
 
 (*
  * $Log$
+# Revision 1.2  97/09/03  20:10:41  pscheng
+# added extern and ccall syntax
+# 
 # Revision 1.1  97/03/26  14:12:38  pscheng
 # added copy of SMLNJ parser files
 # 

@@ -2,6 +2,8 @@ signature ML_TOKENS =
 sig
 type ('a,'b) token
 type svalue
+val CCALL:  'a * 'a -> (svalue,'a) token
+val EXTERN:  'a * 'a -> (svalue,'a) token
 val DOLLAR:  'a * 'a -> (svalue,'a) token
 val AQID: (FastSymbol.raw_symbol) *  'a * 'a -> (svalue,'a) token
 val OBJL: (string) *  'a * 'a -> (svalue,'a) token

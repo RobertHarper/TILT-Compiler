@@ -3,6 +3,9 @@
  * Copyright 1989 by AT&T Bell Laboratories
  *
  * $Log$
+# Revision 1.3  97/09/03  20:10:37  pscheng
+# added extern and ccall syntax
+# 
 # Revision 1.2  97/07/02  22:03:18  jgmorris
 # Modified syntax to allow for interfaces and implementations.
 # 

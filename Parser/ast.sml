@@ -67,6 +67,7 @@ and exp
   | MarkExp of exp * region	(* mark an expression *)
   | VectorExp of exp list       (* vector *)
   | DelayExp of exp             (* create suspension *)
+  | CcallExp of exp * exp list (* call a C function *)
 
 (* RULE for case functions and exception handler *)
 and rule = Rule of {pat:pat,exp:exp}
@@ -111,10 +112,13 @@ and fctexp = VarFct of path * fsigexp sigConst	(* functor variable *)
 						(* application *)
 	   | MarkFct of fctexp * region (* mark *)
 
+(* WHERE SPEC *)
+and wherespec = WhType of symbol list * tyvar list * ty
+              | WhStruct of symbol list * symbol list
+
 (* SIGNATURE EXPRESSION *)
 and sigexp = VarSig of symbol			(* signature variable *)
-           | AugSig of sigexp * symbol list * tyvar list * ty 
-                                                (* where type *)
+           | AugSig of sigexp * wherespec list (* sig augmented with where spec *)
 	   | SigSig of spec list		(* defined signature *)
 	   | MarkSig of sigexp * region	(* mark *)
 
@@ -125,7 +129,8 @@ and fsigexp = VarFsig of symbol			(* funsig variable *)
 	    | MarkFsig of fsigexp * region	(* mark a funsig *)
 
 (* SPECIFICATION FOR SIGNATURE DEFINITIONS *)
-and spec = StrSpec of (symbol * sigexp) list			(* structure *)
+and spec = StrSpec of (symbol * sigexp option * path option) list
+                                                                (* structure *)
          | TycSpec of ((symbol * tyvar list * ty option) list * bool)
                                                                 (* type *)
 	 | FctSpec of (symbol * fsigexp) list			(* functor *)
@@ -133,8 +138,8 @@ and spec = StrSpec of (symbol * sigexp) list			(* structure *)
          | DataSpec of {datatycs: db list, withtycs: tb list}	(* datatype *)
 	 | ExceSpec of (symbol * ty option) list		(* exception *)
 	 | FixSpec of  {fixity: fixity, ops: symbol list} 	(* fixity *)
-	 | ShareSpec of path list			(* structure sharing *)
-	 | ShatycSpec of path list			(* type sharing *)
+	 | ShareStrSpec of path list			(* structure sharing *)
+	 | ShareTycSpec of path list			(* type sharing *)
 	 | IncludeSpec of symbol			(* include specif *)
          | SigSpec of sigb list                         (* signature *)
 	 | MarkSpec of spec * region		(* mark a spec *)
@@ -160,6 +165,7 @@ and dec	= ValDec of vb list * tyvar list ref		(* values *)
 	| OvldDec of symbol * ty * exp list	(* overloading (internal) *)
         | FixDec of {fixity: fixity, ops: symbol list}  (* fixity *)
         | ImportDec of string list		(* import (unused) *)
+        | ExternDec of symbol * ty      (* declare an external value *)
         | MarkDec of dec * region		(* mark a dec *)
 
 (* VALUE BINDINGS *)
@@ -183,9 +189,12 @@ and tb = Tb of {tyc : symbol, def : ty, tyvars : tyvar list}
        | MarkTb of tb * region
 
 (* DATATYPE BINDING *)
-and db = Db of {tyc : symbol, tyvars : tyvar list,
-		def : (symbol * ty option) list}
+and db = Db of {tyc : symbol, tyvars : tyvar list, rhs : dbrhs}
        | MarkDb of db * region
+
+(* DATATYPE BINDING RIGHT HAND SIDE *)
+and dbrhs = Constrs of (symbol * ty option) list
+          | Repl of symbol list
 
 (* EXCEPTION BINDING *)
 and eb = EbGen of {exn: symbol, etype: ty option} (* Exception definition *)
@@ -225,6 +234,9 @@ end (* structure Ast *)
 
 (*
  * $Log$
+# Revision 1.4  97/09/03  20:10:16  pscheng
+# added extern and ccall syntax
+# 
 # Revision 1.3  97/07/02  22:03:03  jgmorris
 # Modified syntax to allow for interfaces and implementations.
 # 

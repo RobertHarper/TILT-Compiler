@@ -23,8 +23,7 @@ signature ASTHELP =
 
     (* AST stripping routines to remove Mark information *)
     val tyvar_strip: Ast.tyvar -> Symbol.symbol
-    val db_strip   : Ast.db    -> (Symbol.symbol * Ast.tyvar list * 
-                                     (Symbol.symbol * Ast.ty option) list)
+    val db_strip   : Ast.db    -> (Symbol.symbol * Ast.tyvar list * Ast.dbrhs)
     val tb_strip   : Ast.tb    -> (Symbol.symbol * Ast.tyvar list * Ast.ty)
     val fctb_strip : Ast.fctb  -> (Symbol.symbol * Ast.fctexp)
     val strb_strip : Ast.strb  -> (Symbol.symbol * (Ast.strexp * Ast.sigexp Ast.sigConst))
