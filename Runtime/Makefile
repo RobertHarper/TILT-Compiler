@@ -41,7 +41,7 @@ chip_name=${${full_sys_name}_chip_name}
 objdir=obj_${sys_name}
 ASM=${sys_name}_asm
 MAIN=main_nothread.o
-COREFILES_OBJ=${objdir}/gcstat.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/mllib.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/gc_${ASM}.o ${objdir}/mllib_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o 
+COREFILES_OBJ=${objdir}/posix.o ${objdir}/gcstat.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/mllib.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/gc_${ASM}.o ${objdir}/mllib_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o 
 COREFILES_HPROF_OBJ=$(COREFILES_OBJ:.o=.hprof.o)
 
 preludes=
@@ -144,6 +144,9 @@ ${objdir}/prelude1.sml.o: prelude1.sml.${chip_name}.s
 
 ${objdir}/prelude2.sml.o: prelude2.sml.${chip_name}.s
 	as ${ASFLAGS} -o $@ prelude2.sml.${chip_name}.s
+
+${objdir}/posix.o: general.h posix.c posix.h
+	${CC} -o $@ ${CFLAGS} posix.c
 
 ${objdir}/global.o: global.h general.h global.c general.h
 	${CC} -o $@ ${CFLAGS} global.c

@@ -48,9 +48,13 @@ int zero()
 #ifdef alpha_osf
 void float_exn_on()
 {
-  ieee_set_fp_control(IEEE_TRAP_ENABLE_INV|       
-		      IEEE_TRAP_ENABLE_DZE|       
-		      IEEE_TRAP_ENABLE_OVF);
+  /*
+  ieee_set_fp_control( IEEE_TRAP_ENABLE_INV        
+     
+		      IEEE_TRAP_ENABLE_DZE        
+		      IEEE_TRAP_ENABLE_OVF
+		       );
+*/
 }
 #endif
 #ifdef rs_aix
@@ -276,6 +280,7 @@ void fpe_handler(int signum,
     case FPE_FLTOVF:
       gprintf("%d %d ",errno,code);
       gprintf("Float overflow: or could be integer overflow\n");
+return;
       raise_exception(scp,overflow_exn);
       break;
     case FPE_FLTUND:
@@ -289,6 +294,7 @@ void fpe_handler(int signum,
     case FPE_FLTINV:
       printf("%d %d ",errno,code);
       printf("Float Invalid operation\n");
+      return;
       break;
     case FPE_FLTSUB:
       printf("%d %d ",errno,code);
@@ -380,3 +386,9 @@ void signal_init()
   /*     signaltest();   */
 }
 
+
+float_tester (double arg)
+{
+  /*  printf("float_tester = address = %d\n",arg); */
+  printf("float_tester = %lf\n",arg);
+}

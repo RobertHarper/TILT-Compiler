@@ -66,7 +66,7 @@ ml_input_gcentry:
  # ---------------------------------------
  # first C arg = integer descriptor
  # ---------------------------------------
-	.ent	ml_lookahead  (takes  integer descriptor)
+	.ent	ml_lookahead
 ml_lookahead:
  # set gp, allocate some stack space, save args
 .set noat

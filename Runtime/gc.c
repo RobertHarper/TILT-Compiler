@@ -6,7 +6,6 @@
 
 #define LEAST_GC_TO_CHECK -1
 
-
 #ifdef alpha_osf
 #include "interface_osf.h"
 #endif
@@ -25,6 +24,8 @@
 #include "stats.h"
 #include "gcstat.h"
 #include "general.h"
+
+
 
 
 enum GCType { Minor, Major, ForcedMajor, Complete };
@@ -200,14 +201,21 @@ void debug_after_rootscan(unsigned long *saveregs, int regmask, Queue_t *root_li
 }
 
 int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_lists, 	      
-	      Queue_t *uninit_global_roots, Queue_t *global_roots, Queue_t *promoted_global_roots)
+	      Queue_t *global_roots, Queue_t *promoted_global_roots)
 {
   int regmask = 0;
-  unsigned long i,mi, stack_top;
+  unsigned long i,mi, stack_top, len;
   StackObj_t *stack = GetStack(sp);
+  static Queue_t *uninit_global_roots = 0;
+  static Queue_t *temp = 0;
   static int first_time = 1;
   static Queue_t *reg_roots = 0;
 
+  if (uninit_global_roots == 0)
+    { 
+      uninit_global_roots = QueueCreate(100); 
+      temp = QueueCreate(100); 
+    }
 
   stack_top = stack->top;
   
@@ -215,7 +223,7 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
   QueueClear(root_lists);
   
   regmask = trace_stack(saveregs, sp, ret_add, stack->top, root_lists);
-  
+
   stop_timer(&stacktime);
   regmask |= 1 << EXNPTR_REG;
   if (first_time)
@@ -232,70 +240,71 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
     for (mi=0; mi<module_count; mi++)
       for (i=(value_t)*((&GLOBAL_TABLE_BEGIN_VAL)+mi);
 	   i<(value_t)*((&GLOBAL_TABLE_END_VAL)+mi); i+=16)
-	{
-	  value_t table_entry = ((value_t *)i)[0];
-	  int     trace       = ((value_t *)i)[1];
-	  value_t data = *((value_t *)table_entry);
-	  int should_trace = 0;
-	  if (IS_TRACE_YES(trace))
-	    Enqueue(uninit_global_roots,(value_t *)table_entry);
-	  else if (IS_TRACE_NO(trace))
-	      ;
-	  else if (IS_TRACE_CALLEE(trace))
-	    { printf("cannot have trace_callee for globals\n"); exit(-1); }
-	  else if (IS_TRACE_SPECIAL(trace))
-	    { 
-	      int special_type = ((value_t *)i)[2];
-	      int special_data = ((value_t *)i)[3];
-	      int res;
-
-	      if (IS_SPECIAL_STACK(special_type))
-		{ printf("cannot have trace_special_stack for globals\n"); exit(-1); }
-	      else if (IS_SPECIAL_UNSET(special_type))
-		{ printf("cannot have trace_special_unset for globals\n"); exit(-1); }
-	      else if (IS_SPECIAL_STACK_REC(special_type))
-		{ printf("cannot have trace_special_stackrec for globals\n"); exit(-1); }
-	      else if (IS_SPECIAL_GLOBAL(special_type))
-		res = *((int *)special_data);
-	      else if (IS_SPECIAL_GLOBAL_REC(special_type))
-		{
-		  int rec_pos = GET_SPECIAL_STACK_GLOBAL_POS(special_type);
-		  int rec_pos2 = GET_SPECIAL_STACK_GLOBAL_POS2(special_type);
-		  int rec_pos3 = GET_SPECIAL_STACK_GLOBAL_POS3(special_type);
-		  int rec_pos4 = GET_SPECIAL_STACK_GLOBAL_POS4(special_type);
-		  res = ((int *)(*((int *)special_data)))[rec_pos];
-		  if (rec_pos2 > 0)
-		    res = ((int *)res)[rec_pos2-1];
-		  if (rec_pos3 > 0)
-		    res = ((int *)res)[rec_pos3-1];
-		  if (rec_pos4 > 0)
-		    res = ((int *)res)[rec_pos4-1];
-		}
-	      else
-		{ printf("impossible trace_special wordpair entry: %d %d\n",
-			 special_type,special_data);
-		  exit(-1);
-		}
-	      should_trace = (res >= 3);
-	    }
-	}
+	{ Enqueue(uninit_global_roots,(value_t *)i); }
   }
+
   QueueClear(promoted_global_roots);
-  if (QueueLength(uninit_global_roots))
+  QueueClear(temp);
+  len = QueueLength(uninit_global_roots);
+  for (i=0; i<len; i++)
     {
-      int i = 0, len = QueueLength(uninit_global_roots);
-      for (i=0; i<len; i++)
-	{
-	  value_t *data_addr = Dequeue(uninit_global_roots);
-	  if (*data_addr > 255)
+      value_t *e = QueueAccess(uninit_global_roots,i);
+      value_t table_entry = ((value_t *)e)[0];
+      int     trace       = ((value_t *)e)[1];
+      value_t data = *((value_t *)table_entry);
+      int should_trace = 0;
+      int resolved = data >= 256;
+
+      if (!resolved)
+	{ Enqueue(temp,e); }
+      else if (IS_TRACE_YES(trace))
+	should_trace = 1;
+      else if (IS_TRACE_NO(trace))
+	;
+      else if (IS_TRACE_CALLEE(trace))
+	{ printf("cannot have trace_callee for globals\n"); exit(-1); }
+      else if (IS_TRACE_SPECIAL(trace))
+	{ 
+	  int special_type = ((value_t *)e)[2];
+	  int special_data = ((value_t *)e)[3];
+	  int res;
+	  
+	  if (IS_SPECIAL_STACK(special_type))
+	    { printf("cannot have trace_special_stack for globals\n"); exit(-1); }
+	  else if (IS_SPECIAL_UNSET(special_type))
+	    { printf("cannot have trace_special_unset for globals\n"); exit(-1); }
+	  else if (IS_SPECIAL_STACK_REC(special_type))
+	    { printf("cannot have trace_special_stackrec for globals\n"); exit(-1); }
+	  else if (IS_SPECIAL_GLOBAL(special_type))
+	    res = *((int *)special_data);
+	  else if (IS_SPECIAL_GLOBAL_REC(special_type))
 	    {
-	      Enqueue(global_roots,data_addr);
-	      Enqueue(promoted_global_roots,data_addr);
+	      int rec_pos = GET_SPECIAL_STACK_GLOBAL_POS(special_type);
+	      int rec_pos2 = GET_SPECIAL_STACK_GLOBAL_POS2(special_type);
+	      int rec_pos3 = GET_SPECIAL_STACK_GLOBAL_POS3(special_type);
+	      int rec_pos4 = GET_SPECIAL_STACK_GLOBAL_POS4(special_type);
+	      res = ((int *)(((int *)special_data)))[rec_pos];
+	      if (rec_pos2 > 0)
+		res = ((int *)res)[rec_pos2-1];
+	      if (rec_pos3 > 0)
+		res = ((int *)res)[rec_pos3-1];
+	      if (rec_pos4 > 0)
+		res = ((int *)res)[rec_pos4-1];
 	    }
 	  else
-	    Enqueue(uninit_global_roots,data_addr);
-	}
+	    { printf("impossible trace_special wordpair entry: %d %d\n",
+		     special_type,special_data);
+	    exit(-1);
+	    }
+	  should_trace = (res >= 3);
+	} /* TRACE_SPECIAL */ 
+
+      Enqueue(global_roots,table_entry); /* this is accumulated */
+      Enqueue(promoted_global_roots,table_entry); /* this is reset each time */
     }
+
+
+  typed_swap(Queue_t *, uninit_global_roots,temp);
 
   debug_after_rootscan(saveregs,regmask,root_lists);
   first_time = 0;
@@ -1281,10 +1290,14 @@ void paranoid_check(long sp, int stack_top)
       {
 	int *data_add = (int *)count;
 	int data = *data_add;
+	static int newval = 52000;
 	if (data >= fromheap->bottom && data < fromheap->top)
 	  {
 	    printf("TRACE WARNING: old_fromheap has a fromheap value after collection");
-	    printf("   data_add = %d   data = %d\n",data_add,data);
+	    printf("   data_add = %d   data = %d",data_add,data);
+	    printf("      changing to %d\n", newval);
+	    *data_add = newval;
+	    newval++;
 	  }
       }
     for (mi=0; mi<module_count; mi++)
@@ -1379,7 +1392,6 @@ void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_si
   int allocsize, allocptr;
   struct rusage start,finish;
   static Queue_t *root_lists = 0;
-  static Queue_t *uninit_global_roots = 0;
   static Queue_t *global_roots = 0;
   static Queue_t *promoted_global_roots = 0;
   value_t *to_ptr = (value_t *)(toheap->bottom);
@@ -1395,7 +1407,6 @@ void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_si
   if (root_lists == 0)
     {
       root_lists = QueueCreate(200);
-      uninit_global_roots = QueueCreate(100);
       global_roots = QueueCreate(100);
       promoted_global_roots = QueueCreate(100);
     }
@@ -1430,7 +1441,7 @@ void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_si
   HeapObj_Unprotect(toheap);
 
   stack_top = root_scan(saveregs,sp,ret_add,root_lists,
-			uninit_global_roots,global_roots,promoted_global_roots);
+			global_roots,promoted_global_roots);
   Enqueue(root_lists,global_roots);
   Enqueue(root_lists,promoted_global_roots);
 
@@ -1581,7 +1592,6 @@ void gc_handler_gen(unsigned long *saveregs, long sp,
   int allocptr = saveregs[ALLOCPTR_REG];
   struct rusage start,finish;
   static Queue_t *root_lists = 0;
-  static Queue_t *uninit_global_roots = 0;
   static Queue_t *global_roots = 0;
   static Queue_t *promoted_global_roots = 0;
   enum GCType GCtype = isMajor ? Major : Minor;
@@ -1595,7 +1605,6 @@ void gc_handler_gen(unsigned long *saveregs, long sp,
   if (root_lists == 0)
     {
       root_lists = QueueCreate(200);
-      uninit_global_roots = QueueCreate(100);
       global_roots = QueueCreate(100);
       promoted_global_roots = QueueCreate(100);
     }
@@ -1621,7 +1630,7 @@ void gc_handler_gen(unsigned long *saveregs, long sp,
 
   /* root processing */
   stack_top = root_scan(saveregs,sp,ret_add,root_lists,
-			uninit_global_roots,global_roots,promoted_global_roots);
+			global_roots,promoted_global_roots);
   Enqueue(root_lists,promoted_global_roots);
 
   /* -------------- the actual heap collection ---------------------- */

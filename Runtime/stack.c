@@ -556,7 +556,7 @@ int should_trace_big(unsigned long trace,
 	  int rec_pos2 = GET_SPECIAL_STACK_GLOBAL_POS2(special_type);
 	  int rec_pos3 = GET_SPECIAL_STACK_GLOBAL_POS3(special_type);
 	  int rec_pos4 = GET_SPECIAL_STACK_GLOBAL_POS4(special_type);
-	  res = ((int *)(*((int *)special_data)))[rec_pos];
+	  res = ((int *)(((int *)special_data)))[rec_pos];
 	  if (rec_pos2 > 0)
 	    res = ((int *)res)[rec_pos2-1];
 	  if (rec_pos3 > 0)
