@@ -182,4 +182,32 @@ structure Listops : LISTOPS =
 	ListPair.foldl find_one NONE listpair
       end
 
+    fun insertion_sort compare = 
+      let
+	fun insert (a,[]) = [a]
+	  | insert (a,bs as b::bb) = 
+	  case compare (a,b)
+	    of GREATER => (b::(insert (a,bb)))
+	     | _ => a::bs
+	fun sort [] = []
+	  | sort (a::aa) = insert (a, sort aa)
+      in
+	sort 
+      end
+
+    fun exist_pair pred = 
+      let
+	fun loop ([] | [_]) = false
+	  | loop (a::b::rest) = pred(a,b) orelse loop(b::rest)
+      in
+	loop
+      end
+
+    fun no_dups compare list = 
+      let
+	val list = insertion_sort compare list
+	fun eq (a,b) = case compare (a,b) of EQUAL => true | _ => false
+      in
+	not (exist_pair eq list)
+      end
   end

@@ -81,4 +81,5 @@ signature LISTOPS =
     val split : 'a list -> 'a list * 'a
     val opt_cons : 'a -> ('a list option) -> 'a list 
     val find2 : ('a * 'b -> bool) -> ('a list * 'b list) -> ('a * 'b) option
+    val no_dups : ('a * 'a -> order) -> 'a list -> bool
   end
