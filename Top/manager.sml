@@ -173,7 +173,8 @@ struct
       val unitlist = ref ([] : unitname list)
 
       datatype unitinfo = 
-         UNIT of {filebase : filebase,
+         UNIT of {position : int,
+		  filebase : filebase,
 		  imports_base  : unitname list option ref,
 		  includes_base : unitname list option ref,
 		  imports  : unitname list option ref,
@@ -206,9 +207,10 @@ struct
 
       fun list_units () = rev(!unitlist)
 
-      fun add_unit (unitname,filebase) = 
+      fun add_unit (pos,unitname,filebase) = 
 	  case (find_unit unitname) of
-	      NONE => let val newentry = UNIT{filebase = filebase,
+	      NONE => let val newentry = UNIT{position = pos,
+					  filebase = filebase,
 					  imports_base = ref NONE,
 					  includes_base = ref NONE,
 					  imports = ref NONE,
@@ -263,6 +265,10 @@ struct
       fun get_context unit = 
             let val UNIT{context,...} = lookup unit
             in context end
+
+      fun get_position unit = 
+            let val UNIT{position,...} = lookup unit
+            in position end
   end
 
 
@@ -777,8 +783,10 @@ struct
                List.foldl 
                  (fn (next, set) => 
                      let val import_tr = getImportTr_link next
-			 fun check import = if (StringSet.member(set,import)) then ()
-			                    else error ("Mapfile file ordering is inconsistent because " ^
+			 val next_pos = get_position next
+			 fun check import = if (get_position import < next_pos) then ()
+			                    else 
+						error ("Mapfile file ordering is inconsistent because " ^
 							next ^ " imports " ^ import ^ " but precedes it.")
 			 val _ = app check import_tr
 			 val _ = if (!diag_ref)
@@ -819,17 +827,17 @@ struct
 		  else error "Cannot read map file"
 	  val is = TextIO.openIn mapFile
 	  val _ = reset_mapping()
-	  fun fetch_line() = let fun dropper s = String.sub(s,0) = #"#"
+	  fun fetch_line n = let fun dropper s = String.sub(s,0) = #"#"
 				 val line = TextIO.inputLine is
 			     in  case (split_line dropper line) of
-				 [unitname, filebase] => add_unit (unitname, filebase)
+				 [unitname, filebase] => add_unit (n,unitname, filebase)
 			       | [] => ()
 			       | _ => error ("ill-formed map line: " ^ line)
 			     end
-	  fun loop () = if (TextIO.endOfStream is)
+	  fun loop n = if (TextIO.endOfStream is)
 			    then TextIO.closeIn is
-			else (fetch_line();loop())
-      in  loop ()
+			else (fetch_line n;loop(n+1))
+      in  loop 0
       end
 
   fun tilc(mapfile : string, cs : bool, rs : string option, 
