@@ -136,16 +136,9 @@ struct
    end
 
 
-   (* Catenable lists.
 
-      In translating modules, we need to add new lists of bindings to
-      the end of existing lists.  It's not clear yet how long these
-      lists tend to get, but to avoid exponential behavior due to
-      repeated appends, and to avoid lots of list-reverses to keep
-      the bindings in reverse order, we use a simple implementation of
-      catenable lists.  The idea is that we delay all appends until the
-      very end.
-    *)
+   fun Con_b_temp (v,k,c) = Con_b (v,c)
+   fun Con_cb_temp (v,k,c) = Con_cb (v,c)
       
 
    (* upto.  Given n, returns the list of integers 1..n *)
@@ -190,13 +183,13 @@ struct
          LET_C cvar = con IN cvar.l      ==>  con.l
     *) 
    fun makeLetC nil body = body
-     | makeLetC [conbnd as Con_cb(var,_,con)] (cv as Var_c var') =
+     | makeLetC [conbnd as Con_cb(var,con)] (cv as Var_c var') =
        if (Name.eq_var(var,var')) then con else cv
-     | makeLetC [conbnd as Con_cb(var,_,con)] (cv as Proj_c(Var_c var',l)) =
+     | makeLetC [conbnd as Con_cb(var,con)] (cv as Proj_c(Var_c var',l)) =
        if (Name.eq_var(var,var')) then Proj_c(con,l) else cv
      | makeLetC cbnds (cv as Var_c var') =
        (case (List.rev cbnds) of
-	    Con_cb(var,_,con)::rest => 
+	    Con_cb(var,con)::rest => 
 		if (Name.eq_var(var,var')) then
 		    makeLetC (rev rest) con
 		else
@@ -246,7 +239,7 @@ struct
 
    and createBindings (vklist, con_args, vclist, exp_args, fplist, fp_args) =
        let
-	   val con_bnds = map (fn((cvar, knd), con) => Con_b (cvar, knd, con))
+	   val con_bnds = map (fn((cvar, knd), con) => Con_b (cvar, con))
                               (Listops.zip vklist con_args)
            val exp_bnds = map (fn((evar, con), exp) => Exp_b (evar, con, exp))
 	                      (Listops.zip vclist exp_args)
@@ -317,7 +310,7 @@ struct
 
 	    fun vf_mem(v,_) = VarSet.member(fv,v)
 
-	    fun bnd_check (Con_b(v,_,_)) = VarSet.member(fv,v)
+	    fun bnd_check (Con_b(v,_)) = VarSet.member(fv,v)
 	      | bnd_check (Exp_b(v,_,_)) = VarSet.member(fv,v)
 	      | bnd_check (Fixopen_b vfset) = Listops.orfold vf_mem (Util.set2list vfset)
 	      | bnd_check (Fixcode_b vfset) = Listops.orfold vf_mem (Util.set2list vfset)
@@ -708,16 +701,19 @@ in
 		   else (ctxt, used, cm)
 	       end
 
-             | folder(Con_b(v,k,c),(ctxt,used,cm)) = 
+             | folder(Con_b(v,c),(ctxt,used,cm)) = 
                let val insert =
 		    (strict orelse
 		    ((Nilcontext.find_kind(ctxt,v);
 		     print "update_NILctx_ebndcat found var already present\n";
 		     false) handle Nilcontext.Unbound => true))
 	       in  if insert 
-                       then (Nilcontext.insert_kind(ctxt,v,#2 (Nilstatic.con_valid (ctxt, c))),
-			     Name.VarMap.insert(used, v, ref false),
-			     Name.VarMap.insert(cm,v,k))
+                       then
+			   let val k = #2 (Nilstatic.con_valid (ctxt, c))
+			   in  (Nilcontext.insert_kind(ctxt,v,k),
+				Name.VarMap.insert(used, v, ref false),
+				Name.VarMap.insert(cm,v,k))
+			   end
                    else (ctxt,used,cm)
 	       end
              | folder(Fixopen_b vfset, acc) = Util.foldset (folder' Open) acc vfset
@@ -895,15 +891,15 @@ end (* local defining splitting context *)
 				 vmap = vmap_of context, context = context} : mod_result
 			    end
 		      | NONE => let val res = thunk()
+				    val _ = mod_memo := Name.VarMap.insert
+					(!mod_memo,v,Name.PathMap.insert(pathmap,path,res))
 				val {knd_c, knd_c_context,...} = res
 				val _ = (print "\nlookup_mod_memo of "; Ppnil.pp_var v;
 				Ppnil.pp_list Ppnil.pp_label' lbls ("",".","",false);
 				print " returning first-time result\n  knd_c = \n";
 				Ppnil.pp_kind knd_c; print "\nand knd_c_context = \n";
 				Ppnil.pp_kind knd_c_context; print "\n\n")
-				in  mod_memo := Name.VarMap.insert(!mod_memo,v,
-								   Name.PathMap.insert(pathmap,path,res));
-				    res
+				in  res
 				end)
 			handle e => 
 			(* some variable has gone out of scope! must clear the memo *)
@@ -1484,7 +1480,7 @@ end (* local defining splitting context *)
 	   val knd_body_c' = Subst.substConInKind cbnds_body_subst knd_body_c
 	   val knd_body_c_context' = Subst.substConInKind cbnds_body_subst knd_body_c_context
 
-	   val type_body_r' = makeLetC (map Con_cb cbnds_body) type_body_r
+	   val type_body_r' = makeLetC (map Con_cb_temp cbnds_body) type_body_r
 
 	   val knd_fun_c = Arrow_k(Open, [(var_arg_c, knd_arg)], knd_body_c')
 	   val knd_fun_c_context = Arrow_k(Open, [(var_arg_c, knd_arg_context)], knd_body_c_context')
@@ -1498,7 +1494,7 @@ end (* local defining splitting context *)
            val cbnd_fun_cat = 
 	       LIST[(var_fun_c, knd_fun_c,
 		     makeLetC [Open_cb(local_name_fun_c, [(var_arg_c, knd_arg)],
-				       makeLetC (map Con_cb cbnds_body) name_body_c,
+				       makeLetC (map Con_cb_temp cbnds_body) name_body_c,
 				       knd_body_c')]
 		              (Var_c local_name_fun_c))]
 
@@ -1512,7 +1508,7 @@ end (* local defining splitting context *)
 					 else [(var_arg_r, con_arg)],
 					 [],
 					 makeLetE
-					  ((map Con_b cbnds_body) @ ebnds_body)
+					  ((map Con_b_temp cbnds_body) @ ebnds_body)
 					  name_body_r,
 					 type_body_r'))])]
 
@@ -1709,8 +1705,10 @@ end (* local defining splitting context *)
 	   val result = (xsbnds_rewrite_1 context il_sbnds)
 	       handle e => (if (!debug) then (print ("Exception detected in call " ^ 
 						    (Int.toString this_call) ^ " to xsbnds\n");
+(*
 					      print "\nwith context = \n";
 					      print_splitting_context context;
+*)
 					      print "\n")
 			    else ();
 			    raise e)
@@ -2439,7 +2437,7 @@ end (* local defining splitting context *)
 					  Nilutil.generate_tuple_label (n+1)))
 			    val substlist = Listops.mapcount mapper vars
 				
-			    val con1' = makeLetC (map (fn (v,c) => Con_cb(v,Word_k Runtime, c))
+			    val con1' = makeLetC (map (fn (v,c) => Con_cb(v,c))
 						  substlist) con1
 			    val knd1' = Subst.substConInKind (Subst.fromList substlist) knd1
 			    val knd1'_context = Subst.substConInKind (Subst.fromList substlist) knd1_context
@@ -2538,7 +2536,7 @@ end (* local defining splitting context *)
            val cbnd_list = flattenCatlist cbnd_cat
 
 	   val proj_con = Proj_c (name_c, lbl)
-	   val con = makeLetC (map Con_cb cbnd_list) proj_con
+	   val con = makeLetC (map Con_cb_temp cbnd_list) proj_con
 
 	   val knd = if (!use_imprecise_kind_at_bind)
 			 then selectFromKindStrip(knd_c,[lbl])
@@ -2630,8 +2628,10 @@ end (* local defining splitting context *)
 	   val result = (xexp' context il_exp)
 	       handle e => (if (!debug) then (print ("Exception detected in call " ^ 
 						    (Int.toString this_call) ^ " to xexp\n");
+(*
 					      print "\nwith context = \n";
 					      print_splitting_context context;
+*)
 					      print "\n")
 			    else ();
 			    raise e)
@@ -2837,9 +2837,10 @@ end (* local defining splitting context *)
      | xexp' context (Il.HANDLE (il_exp1, il_exp2)) = 
        let
 	   val (exp1, con, _) = xexp context il_exp1
-	   val exp2 = toFunction context il_exp2
+	   val function = toFunction context il_exp2
+	   val Function(_,_,_,[(v,_)],_,handler,_) = function
        in
-	   (Handle_e (exp1, exp2), con, false)
+	   (Handle_e (exp1, v, handler, con), con, false)
        end
 
      | xexp' context (Il.RAISE (il_con, il_exp)) = 
@@ -2854,8 +2855,8 @@ end (* local defining splitting context *)
        let
 	   val {cbnd_cat, ebnd_cat, valuable, final_context=context'} = xbnds context bnds
            val cbnd_list = flattenCatlist cbnd_cat
-           val ebnds = (map Con_b cbnd_list) @ (flattenCatlist ebnd_cat)
-           val cbnds = (map Con_cb cbnd_list)
+           val ebnds = (map Con_b_temp cbnd_list) @ (flattenCatlist ebnd_cat)
+           val cbnds = (map Con_cb_temp cbnd_list)
 	   val (exp, con, valuable') = xexp context' il_exp
 
 
@@ -2945,19 +2946,29 @@ end (* local defining splitting context *)
 			val (exp, _, valuable) = xexp context ilexp
 			val effect = if valuable then Total else Partial
 		    in
-			(Word32.fromInt n, Function(effect, Leaf, [], [], [], exp, rescon))
+			(NONE, (Word32.fromInt n, exp))
 		    end
 		else
-		    (Word32.fromInt n, toFunction context ilexp)) 
+		    let val function = toFunction context ilexp
+			val Function(_,_,_,[(v,_)],_,body,c) = function
+		    in  (SOME v, (Word32.fromInt n, body))
+		    end)
 		:: (xarms (n+1, rest))
 
-	   val arms = xarms (0, il_arms)
+	   val (vars,arms) = unzip(xarms (0, il_arms))
+	   val bound = (case (List.find (fn NONE => false | SOME _ => true) vars) of
+			    SOME (SOME v) => v
+			  | _ => Name.fresh_named_var "ununsed_switch_arg")
+	   val _ = if (List.all (fn NONE => true | SOME v => Name.eq_var(v,bound)) vars)
+		       then () else error "sum_case did not get same var in all arms"
 
 	   val default = (case il_default of 
 			      NONE => NONE
 			    | SOME e => SOME (#1 (xexp context e)))
        in
-	   (Switch_e(Sumsw_e {info = con,
+	   (Switch_e(Sumsw_e {sumtype = con,
+			      result_type = rescon,
+			      bound = bound,
 			      arg  = exp, arms = arms, default = default}),
 	    rescon, 
 	    (* OVERLY CONSERVATIVE!! *)
@@ -2968,18 +2979,27 @@ end (* local defining splitting context *)
        let
 	   val (exp, _, _) = xexp context il_exp
 
-	   fun xarms [] = []
-             | xarms ((il_tag_exp, _, exp) :: rest) = 
-	       (#1 (xexp context il_tag_exp), 
-		toFunction context exp) :: (xarms rest)
+           fun xarm (il_tag_exp, _, exp) =
+	       let val (e1,_,_) = xexp context il_tag_exp
+		   val function = toFunction context exp
+		   val Function(_,_,_,[(v,_)],_,handler,c) = function
+	       in  ((v,c),(e1,handler))
+	       end
 
-	   val (arms as ((_,Function(_,_,_,_,_,_,con))::_)) = xarms il_arms
+	   val temp = map xarm il_arms
+	   val vars_cons = map #1 temp
+	   val arms = map #2 temp
+	   val (bound,con)::_ = vars_cons
+	   val _ = if (List.all (fn (v,_) => Name.eq_var(v,bound)) vars_cons)
+		       then () else error "exn_case did not get same var in all arms"
 
 	   val default = (case il_default of 
 			      NONE => NONE
 			    | SOME e => SOME (#1 (xexp context e)))
        in
-	   (Switch_e(Exncase_e {info = (), arg = exp, arms = arms,
+	   (Switch_e(Exncase_e {result_type = con, 
+				bound = bound,
+				arg = exp, arms = arms,
 				default = default}),
 	    con, false)
        end
@@ -2997,11 +3017,11 @@ end (* local defining splitting context *)
                             ! elaborator_specific_optimizations
 
 	   val cbnds = flattenCatlist cbnd_cat
-	   val bnds = (map Con_b cbnds) @ 
+	   val bnds = (map Con_b_temp cbnds) @ 
 	              (flattenCatlist ebnd_cat)
 
            val unnormalized_con = 
-	       makeLetC (map Con_cb cbnds) 
+	       makeLetC (map Con_cb_temp cbnds) 
 	                (if specialize then type_r 
 			 else projectFromRecord context type_r [label])
 
@@ -3116,7 +3136,7 @@ end (* local defining splitting context *)
 		   context  = context,
 		   ...} = xmod context (il_module, NONE)
 
-	      val cbnds = map Con_cb (flattenCatlist cbnd_mod_cat)
+	      val cbnds = map Con_cb_temp (flattenCatlist cbnd_mod_cat)
 	      val con_mod = makeLetC cbnds name_mod_c
 	      val knd_c = Singleton_k(Runtime, Nilutil.kill_singleton knd_mod_c, con_mod)
 	      val knd_c_context = Singleton_k(Runtime, Nilutil.kill_singleton knd_mod_c_context, 
@@ -3229,8 +3249,10 @@ end (* local defining splitting context *)
 	   val result = xsdecs'' context args
 	       handle e => (if (!debug) then (print ("Exception detected in call " ^ 
 						    (Int.toString this_call) ^ " to xsdecs\n");
+(*
 					      print "\nwith context = \n";
 					      print_splitting_context context;
+*)
 					      print "\n")
 			    else ();
 				raise e)
@@ -3466,7 +3488,7 @@ print (Int.toString (length sdecs')); print "\n") *)
            val empty_splitting_context = make_splitting_context vmap
 
 	   val _ = 
-	       if (!debug) then
+	       if (!full_debug) then
 		   (print "\nInitial HIL context varlist:\n";
 		    app (fn v => (print "  "; Ppnil.pp_var v; print "\n")) (Ilcontext.Context_Varlist HILctx);
 		    print "\n";
@@ -3479,7 +3501,7 @@ print (Int.toString (length sdecs')); print "\n") *)
 	   val initial_splitting_context = xHILctx empty_splitting_context HILctx
 
 	   val _ = 
-	       if (!debug) then
+	       if (!full_debug) then
 		   (print "\nInitial NIL context:\n";
 		    nilcontext_print initial_splitting_context;
 		    print "\n")
@@ -3491,7 +3513,7 @@ print (Int.toString (length sdecs')); print "\n") *)
 	   val {cbnd_cat, ebnd_cat, final_context, ...} =
 	       xsbnds initial_splitting_context il_sbnds
 
-	   val cu_c_list = map Con_b (flattenCatlist cbnd_cat)
+	   val cu_c_list = map Con_b_temp (flattenCatlist cbnd_cat)
 	   val cu_r_list = flattenCatlist ebnd_cat
 
 	   val (nil_initial_context,initial_used) = filter_NILctx initial_splitting_context
@@ -3508,18 +3530,20 @@ print (Int.toString (length sdecs')); print "\n") *)
 		    sbnd_entries : (Il.sbnd option * Il.context_entry) list) : Nil.module = 
 	let
 	    val _ = reset_memo()
-	    open Nil Ilcontext Il Name IlStatic
+	    open Nil Ilcontext Name IlStatic
 
             (* we move all the externs into the context first:
 	       this does not always work if the externs depend on
 	       things in the sbnd_entries list *)
 
-	    fun folder((SOME sbnd,CONTEXT_SDEC sdec),(ctxt,sbnds)) = (ctxt, (sbnd,sdec)::sbnds)
+	    fun folder((SOME sbnd,Il.CONTEXT_SDEC sdec),(ctxt,sbnds)) = 
+		(ctxt, (sbnd,sdec)::sbnds)
 	      | folder((NONE, ce),(ctxt,sbnds)) = 
 		(add_context_entries(ctxt,
-			      [case ce of
-				   CONTEXT_SDEC(SDEC(l,dec)) => CONTEXT_SDEC(SDEC(l,SelfifyDec ctxt dec))
-				 | _ => ce]),
+		      [case ce of
+			   Il.CONTEXT_SDEC(Il.SDEC(l,dec)) => 
+			       Il.CONTEXT_SDEC(Il.SDEC(l,SelfifyDec ctxt dec))
+			 | _ => ce]),
 		 sbnds)
 	    val (ctxt,rev_sbnd_sdecs) = foldl folder (ctxt,[]) sbnd_entries
 	    val sbnds_sdecs = rev rev_sbnd_sdecs
@@ -3537,11 +3561,11 @@ print (Int.toString (length sdecs')); print "\n") *)
 		let val (l,pc) = valOf (Ilcontext.Context_Lookup'(ctxt,v))
 		in                
 		    (case pc of
-			 PHRASE_CLASS_EXP _ => SOME(ImpExp,v,l)
-		       | PHRASE_CLASS_CON _ => SOME(ImpType,v,l)
-		       | PHRASE_CLASS_MOD _ => SOME(ImpMod,v,l)
-		       | PHRASE_CLASS_SIG _ => NONE
-		       | PHRASE_CLASS_OVEREXP _ => NONE)
+			 Il.PHRASE_CLASS_EXP _ => SOME(ImpExp,v,l)
+		       | Il.PHRASE_CLASS_CON _ => SOME(ImpType,v,l)
+		       | Il.PHRASE_CLASS_MOD _ => SOME(ImpMod,v,l)
+		       | Il.PHRASE_CLASS_SIG _ => NONE
+		       | Il.PHRASE_CLASS_OVEREXP _ => NONE)
 		end
 	    val varlist = Ilcontext.Context_Varlist ctxt
 	    val import_temp = List.mapPartial mapper varlist
@@ -3630,23 +3654,23 @@ val _ = (print "Nil final context is:\n";
              open labels must be recursively unpackaged 
              for module bindings, use the varmap returned by the phase-splitter *)
 
-	    fun folder cr_pathopts ((SDEC(l,dec)),exports) = 
+	    fun folder cr_pathopts ((Il.SDEC(l,dec)),exports) = 
 		let open Ilutil
 		    fun make_cpath v = (case cr_pathopts of
 					   SOME (path,_) => join_path_labels(path,[l])
-					 | NONE => SIMPLE_PATH v)
+					 | NONE => Il.SIMPLE_PATH v)
 		    fun make_rpath v = (case cr_pathopts of
 					   SOME (_,path) => join_path_labels(path,[l])
-					 | NONE => SIMPLE_PATH v)
+					 | NONE => Il.SIMPLE_PATH v)
 
-		    fun path2exp (SIMPLE_PATH v) = Var_e v
-		      | path2exp (COMPOUND_PATH (v,lbls)) = 
+		    fun path2exp (Il.SIMPLE_PATH v) = Var_e v
+		      | path2exp (Il.COMPOUND_PATH (v,lbls)) = 
 			let fun loop e [] = e
 			      | loop e (lbl::lbls) = loop (Prim_e(NilPrimOp (select lbl),[],[e])) lbls
 			in loop (Var_e v) lbls
 			end
-		    fun path2con (SIMPLE_PATH v) = Var_c v
-		      | path2con (COMPOUND_PATH (v,lbls)) = 
+		    fun path2con (Il.SIMPLE_PATH v) = Var_c v
+		      | path2con (Il.COMPOUND_PATH (v,lbls)) = 
 			let fun loop c [] = c
 			      | loop c (lbl::lbls) = loop (Proj_c(c,lbl)) lbls
 			in loop (Var_c v) lbls
@@ -3654,12 +3678,12 @@ val _ = (print "Nil final context is:\n";
 		in
 		    (case (not (is_nonexport_lab l), dec) of
 			 (false,_) => exports
-		       | (true,DEC_EXP (v,_)) => 
+		       | (true,Il.DEC_EXP (v,_)) => 
 			     let val e = path2exp (make_rpath v)
 				 val (_,c) = Nilstatic.exp_valid(nil_final_context,e)
 			     in  (ExportValue(l,e,c)::exports)
 			     end
-		       | (true,DEC_CON (v,_,_)) =>
+		       | (true,Il.DEC_CON (v,_,_)) =>
 			     let val c = path2con (make_cpath v)
 				 val (_,k) = Nilstatic.con_valid(nil_final_context,c)
 				 val k = if (!do_kill_cpart_of_functor)
@@ -3673,7 +3697,7 @@ val _ = (print "Nil final context is:\n";
 				     then exports
 				 else (ExportType(l,c,k)::exports)
 			     end
-		       | (true,DEC_MOD (v,s)) => 
+		       | (true,Il.DEC_MOD (v,s)) => 
 			     let val (lc,lr) = make_cr_labels l
 				 val (vc,vr) = (case VarMap.find(total_varmap,v) of
 						    SOME vrc => vrc

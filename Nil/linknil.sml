@@ -94,7 +94,6 @@ structure Linknil (* : LINKNIL *) =
     structure NilContext = NilContextFn(structure NilUtil = NilUtil
 					structure ArgNil = Nil
 					structure PpNil = PpNil
-					structure Cont = Cont
 					structure Subst = NilSubst)
 
     structure Normalize = NormalizeFn(structure Nil = Nil
@@ -147,6 +146,7 @@ structure Linknil (* : LINKNIL *) =
 				    structure NilUtil = NilUtil
 				    structure Ppnil = PpNil)
 
+(*
     structure BetaReduce = BetaReduce(structure Prim = LinkIl.Prim
 				      structure Nil = Nil
 				      structure NilUtil = NilUtil
@@ -160,6 +160,7 @@ structure Linknil (* : LINKNIL *) =
 				structure Ppnil = PpNil
 				structure IlUtil = LinkIl.IlUtil
 				structure Subst = NilSubst)
+*)
 
     structure ToClosure = ToClosure(structure Nil = Nil
 				    structure NilContext = NilContext
@@ -431,12 +432,14 @@ val _ = (print "Nil final context is:\n";
 	    val nilmod = (Stats.timer("Phase-splitting",Tonil.phasesplit)) (ctxt,sbnd_entries)
 	    val _ = showmod (!show_phasesplit orelse debug,!show_size) "Phase-split" (filename, nilmod)
 
+(*
 	    val nilmod = if (!do_cleanup)
 			     then (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
 			 else nilmod
 	    val _ = if (!do_cleanup)
 			then showmod (debug,!show_size) "Cleanup" (filename, nilmod)
 		    else ()
+*)
 
 	    val nilmod = (Stats.timer("Linearization",Linearize.linearize_mod)) nilmod
 	    val _ = showmod (!show_renamed orelse debug,!show_size) "Renaming" (filename, nilmod)

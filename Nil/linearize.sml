@@ -27,18 +27,16 @@ struct
 	val num_lcon = ref 0
 	val num_lkind = ref 0
 
+	val num_lcon_prim = ref 0
 	val num_lcon_expb = ref 0
 	val num_lcon_conb = ref 0
 	val num_lcon_concb = ref 0
-	val num_lkind_conb = ref 0
-	val num_lkind_concb = ref 0
 	val num_lkind_single = ref 0
 
+	val depth_lcon_prim = ref 0
 	val depth_lcon_expb = ref 0
 	val depth_lcon_conb = ref 0
 	val depth_lcon_concb = ref 0
-	val depth_lkind_conb = ref 0
-	val depth_lkind_concb = ref 0
 	val depth_lkind_single = ref 0
 
 	fun bumper(num,depth) = if (!depth > 0) then num := !num + 1 else ()
@@ -51,16 +49,14 @@ struct
 				     num_lexp := 0;
 				     num_lcon := 0;
 				     num_lkind := 0;
+				     num_lcon_prim := 0;
 				     num_lcon_conb := 0;
 				     num_lcon_concb := 0;
-				     num_lkind_conb := 0;
-				     num_lkind_concb := 0;
 				     num_lkind_single := 0;
+				     depth_lcon_prim := 0;
 				     depth_lcon_expb := 0;
 				     depth_lcon_conb := 0;
 				     depth_lcon_concb := 0;
-				     depth_lkind_conb := 0;
-				     depth_lkind_concb := 0;
 				     depth_lkind_single := 0;
 				     VarMap.empty)
 
@@ -109,23 +105,37 @@ struct
 
     end
 
-   fun lsw lexp lfunction state do_info do_arg do_prearm ({info,arg,arms,default} : ('info,'arg,'t) sw) 
-       : ('info,'arg,'t) sw = 
-       let val info' = do_info info
-	   val arg' = do_arg arg
-	   val default' = Util.mapopt (lexp state) default
-	   fun do_arm(prearm,function) = let val prearm' = do_prearm prearm
-					     val function' = lfunction state function
-					 in  (prearm',function')
-					 end
-	   val arms' = map do_arm arms
-       in {info = info',
-	   arg = arg',
-	   arms = arms',
-	   default = default'}
-       end
+   fun lswitch state switch = 
+     (case switch of
+	  Intsw_e {size,arg,result_type,arms,default} =>
+	      let val result_type = lcon state result_type
+		  val arg = lexp state arg
+		  val arms = map (fn (w,e) => (w,lexp state e)) arms
+		  val default = Util.mapopt (lexp state) default
+	      in  Intsw_e {size=size,arg=arg,result_type=result_type,arms=arms,default=default}
+	      end
+	| Sumsw_e {sumtype,arg,result_type,bound,arms,default} =>
+	      let val result_type = lcon state result_type
+		  val sumtype = lcon state sumtype
+		  val arg = lexp state arg
+		  val (state,bound) = add_var(state,bound)
+		  val arms = map (fn (t,e) => (t,lexp state e)) arms
+		  val default = Util.mapopt (lexp state) default
+	      in  Sumsw_e {sumtype=sumtype,arg=arg,result_type=result_type,
+			   bound=bound,arms=arms,default=default}
+	      end
+	| Exncase_e {arg,result_type,bound,arms,default} =>
+	      let val result_type = lcon state result_type
+		  val arg = lexp state arg
+		  val (state,bound) = add_var(state,bound)
+		  val arms = map (fn (e1,e2) => (lexp state e1,lexp state e2)) arms
+		  val default = Util.mapopt (lexp state) default
+	      in  Exncase_e {arg=arg,result_type=result_type,
+			     bound=bound,arms=arms,default=default}
+	      end
+	| Typecase_e _ => error "typecase not handled")
 
-   fun lbnd state arg_bnd : bnd * state =
+   and lbnd state arg_bnd : bnd * state =
        let 
 	   fun add_vars state vx_list = foldl (fn ((v,_),s) => #1(add_var(s,v))) state vx_list
 	   fun vf_help wrapper vf_set = 
@@ -146,19 +156,16 @@ struct
 	   fun mapset f s = list2set(map f (set2list s))
 
        in  (case arg_bnd of
-		Con_b (v,k,c) => let val _ = inc depth_lcon_conb
-				     val c = lcon state c
-				     val _ = dec depth_lcon_conb
-				     val _ = inc depth_lkind_conb
-				     val k = lkind state k
-				     val _ = dec depth_lkind_conb
-				     val (state,v) = add_var(state,v)
-				 in  (Con_b(v,k,c), state)
-				 end
+		Con_b (v,c) => let val _ = inc depth_lcon_conb
+				   val c = lcon state c
+				   val _ = dec depth_lcon_conb
+				   val (state,v) = add_var(state,v)
+			       in  (Con_b(v,c), state)
+			       end
 	      | Exp_b (v,c,e) => let val e = lexp state e
-				     val _ = inc num_lcon_expb
+				     val _ = inc depth_lcon_expb
 				     val c = lcon state c
-				     val _ = dec num_lcon_expb
+				     val _ = dec depth_lcon_expb
 				     val (state,v) = add_var(state,v)
 				 in  (Exp_b(v,c,e), state)
 				 end
@@ -203,7 +210,9 @@ struct
 		in  (lete(bnds, e))
 		end
 	  | Prim_e (ap,clist,elist) =>
-		let val clist' = map (lcon state) clist
+		let val _ = inc depth_lcon_prim
+		    val clist' = map (lcon state) clist
+		    val _ = dec depth_lcon_prim
 		    val elist' = map (lexp state) elist
 		in  Prim_e(ap,clist',elist')
 		end
@@ -219,28 +228,13 @@ struct
 		    val c = lcon state c
 		in  Raise_e(e,c)
 		end
-	  | Switch_e switch =>
-		let fun lsw'() = lsw lexp lfunction state 
-		    fun help pack do_info do_arg do_prearm sw = 
-			let val sw' = (lsw'()) do_info do_arg do_prearm sw
-			in  Switch_e(pack sw')
-			end
-		    fun nada arg = arg
-		    fun sumhelp c = let 
-					       val result = lcon state c
-					
-					   in  result
-					   end
-		in  (case switch of
-			 (Intsw_e sw) => help Intsw_e nada (lexp state) nada sw
-		       | (Sumsw_e sw) => help Sumsw_e sumhelp (lexp state) nada sw
-		       | (Exncase_e sw) => help Exncase_e nada (lexp state) (lexp state) sw
-		       | (Typecase_e sw) => help Typecase_e nada (lcon state) nada sw)
-		end
-	  | Handle_e (e,f) => 
+	  | Switch_e switch => Switch_e(lswitch state switch)
+	  | Handle_e (e,v,handler,c) => 
 		let val e = lexp state e
-		    val f = lfunction state f
-		in  Handle_e(e,f)
+		    val c = lcon state c
+		    val (state,v) = add_var(state,v)
+		    val handler = lexp state handler
+		in  Handle_e(e,v,handler,c)
 		end
 	end
 
@@ -257,14 +251,11 @@ struct
 	   in  (cbnd, state)
 	   end
        in (case arg_cbnd of
-	       Con_cb (v,k,c) => let val _ = inc depth_lkind_concb
-				     val k = lkind state k
-				     val _ = dec depth_lkind_concb
-				     val _ = inc depth_lcon_concb
+	       Con_cb (v,c) => let   val _ = inc depth_lcon_concb
 				     val c = lcon state c
 				     val _ = dec depth_lcon_concb
 				     val (state,v) = add_var(state,v)
-				 in  (Con_cb(v,k,c), state)
+				 in  (Con_cb(v,c), state)
 				 end
 	     | Open_cb arg => lconfun Open_cb arg
 	     | Code_cb arg => lconfun Code_cb arg)
@@ -274,6 +265,7 @@ struct
 
    and lcon state arg_con : con = 
        (inc num_lcon;
+	bumper(num_lcon_prim, depth_lcon_prim);
 	bumper(num_lcon_expb, depth_lcon_expb);
 	bumper(num_lcon_conb, depth_lcon_conb);
 	bumper(num_lcon_concb, depth_lcon_concb);
@@ -370,8 +362,6 @@ struct
 
    and lkind state arg_kind : kind = 
        (inc num_lkind;
-	bumper(num_lkind_conb, depth_lkind_conb);
-	bumper(num_lkind_concb, depth_lkind_concb);
 	bumper(num_lkind_single, depth_lkind_single);
 
 	case arg_kind of
@@ -439,6 +429,8 @@ struct
 		    print "Number of lcon calls: ";
 		    print (Int.toString (!num_lcon)); print "\n";
 
+		    print "Number of lcon calls within Prim_e: ";
+		    print (Int.toString (!num_lcon_prim)); print "\n";
 		    print "Number of lcon calls with Exp_b: ";
 		    print (Int.toString (!num_lcon_expb)); print "\n";
 		    print "Number of lcon calls with Con_b: ";
@@ -448,10 +440,6 @@ struct
 
 		    print "Number of lkind calls: ";
 		    print (Int.toString (!num_lkind)); print "\n";
-		    print "Number of lkind calls for Con_b kinds: ";
-		    print (Int.toString (!num_lkind_conb)); print "\n";
-		    print "Number of lkind calls for Con_cb kinds: ";
-		    print (Int.toString (!num_lkind_concb)); print "\n";
 		    print "Number of lkind calls inside singleton kinds: ";
 		    print (Int.toString (!num_lkind_single)); print "\n")
 

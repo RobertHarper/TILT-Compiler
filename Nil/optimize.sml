@@ -171,17 +171,22 @@ struct
 	fun is_pure(Prim_e (NilPrimOp np, _, elist)) = Listops.andfold is_pure elist
 	  | is_pure(Var_e _) = true
 	  | is_pure _ = false
-	fun cbnd_used state (Con_cb(v,_,_)) = is_used_var(state,v)
+	fun cbnd_used state (Con_cb(v,_)) = is_used_var(state,v)
 	  | cbnd_used state (Open_cb(v,_,_,_)) = is_used_var(state,v)
 	  | cbnd_used state (Code_cb(v,_,_,_)) = is_used_var(state,v)
-	fun bnd_used state (Con_b(v,_,_)) = is_used_var(state,v)
+	fun bnd_used state (Con_b(v,_)) = is_used_var(state,v)
 	  | bnd_used state (Exp_b(v,_,e)) = is_used_var(state,v)
 	  | bnd_used state (Fixopen_b(vfset)) = orfold (fn (v,_) => is_used_var(state,v)) (Util.set2list vfset)
 	  | bnd_used state (Fixcode_b(vfset)) = orfold (fn (v,_) => is_used_var(state,v)) (Util.set2list vfset)
 	  | bnd_used state (Fixclosure_b(_,vclset)) = orfold (fn (v,_) => is_used_var(state,v)) 
 								(Util.set2list vclset)
 
-	fun do_vklist state vklist = map (fn (v,k) => (v,do_kind state k)) vklist
+	fun do_vklist state vklist =
+	    let fun folder((v,k),state) = let val k = do_kind state k
+					  in  ((v,k),add_kind(state,v,k))
+					  end
+	    in  foldl_acc folder state vklist
+	    end
 	and do_vclist state vclist = map (fn (v,c) => (v,do_con state c)) vclist
 	and do_kind (state : state) (kind : kind) : kind = 
 	  (case kind of 
@@ -191,7 +196,9 @@ struct
   	      | Record_k(lvk_seq) => let fun mapper((l,v),k) = ((l,v),do_kind state k)
 				     in  Record_k(Util.mapsequence mapper lvk_seq)
 				     end
-	      | Arrow_k(openness,vklist,k) => Arrow_k(openness,do_vklist state vklist,do_kind state k))
+	      | Arrow_k(openness,vklist,k) => let val (vklist,state) = do_vklist state vklist
+					      in  Arrow_k(openness,vklist,do_kind state k)
+					      end)
 
 (*
 	and do_con (state : state) (con : con) : con =
@@ -207,8 +214,10 @@ struct
 	      | Mu_c(recur,vc_seq) => Mu_c(recur,Util.mapsequence 
 					   (fn (v,c) => (v,do_con state c)) vc_seq)
 	      | AllArrow_c(openness,effect,vklist,vclist,numfloats,c) =>
-			AllArrow_c(openness,effect,do_vklist state vklist, 
+			let val (vklist,state) = do_vklist state vklist
+			in  AllArrow_c(openness,effect,vklist,
 				   map (do_con state) vclist, numfloats, do_con state c)
+			end
 	      | Var_c v => (use_var(state,v); con)
 	      | Crecord_c lclist => Crecord_c(map (fn (l,c) => (l, do_con state c)) lclist)
 	      | Proj_c(c,l) => Proj_c(do_con state c, l)
@@ -227,19 +236,22 @@ struct
 
 	and do_cbnd(cbnd : conbnd, state : state) : conbnd * state = 
 	   (case cbnd of
-		Con_cb(v,k,c) => let val state = add_var(state,v)
-				     val state' = enter_var(state,v)
-				     val state = add_kind_equation(state,v,c,k)
-				 in  (Con_cb(v,do_kind state' k, do_con state' c), state)
-				 end
+		Con_cb(v,c) => let val state = add_var(state,v)
+				   val state' = enter_var(state,v)
+				   val k = NilStatic.get_shape (get_env state) c
+				   val state = add_kind_equation(state,v,c,k)
+			       in  (Con_cb(v,do_con state' c), state)
+			       end
 	      | Open_cb(v,vklist,c,k) => let val state = add_var(state,v)
 					     val state' = enter_var(state,v)
-					 in  (Open_cb(v,do_vklist state vklist, 
-						do_con state' c, do_kind state' k), state)
+					     val (vklist,state') = do_vklist state' vklist
+					 in  (Open_cb(v,vklist,
+						      do_con state' c, do_kind state' k), state)
 					 end
 	      | Code_cb(v,vklist,c,k) => let val state = add_var(state,v)
 					     val state' = enter_var(state,v)
-					 in  (Code_cb(v,do_vklist state' vklist, 
+					     val (vklist,state') = do_vklist state' vklist
+					 in  (Code_cb(v,vklist, 
 						do_con state' c, do_kind state' k), state)
 					 end)
 
@@ -365,32 +377,34 @@ val reduce = fn state => fn pred =>
 
 	fun is_sumsw_int state exp = 
 	  (case exp of
-	     (Switch_e(Sumsw_e{info,
-			      arg=Prim_e(PrimOp(Prim.eq_int is),[],
-					 [Var_e v,Const_e (Prim.int(_,w))]),
-			      arms=[(0w0,Function(_,_,[],[],[],zeroexp,_)),
-				    (0w1,onearm as Function(_,_,[],[],[],oneexp,_))],
-			      default=NONE})) =>
-	    if (is_bool state info)
+	     (Switch_e(Sumsw_e{sumtype,
+			       result_type,
+			       bound,
+			       arg=Prim_e(PrimOp(Prim.eq_int is),[],
+					  [Var_e v,Const_e (Prim.int(_,w))]),
+			       arms=[(0w0,zeroexp),
+				     (0w1,oneexp)],
+			       default=NONE})) =>
+	    if (is_bool state sumtype)
 		then
-		    SOME (is,v,TilWord64.toUnsignedHalf w,zeroexp,onearm)
+		    SOME (result_type,is,v,TilWord64.toUnsignedHalf w,zeroexp,oneexp)
 	    else NONE
 	  | _ => NONE)
 
 	fun convert_sumsw state sum_sw =
 	    let val exp = Switch_e(Sumsw_e sum_sw)
 	    in  (case is_sumsw_int state exp of
-	         SOME (is,commonv,_,_,_) =>
+	         SOME (result_type,is,commonv,_,_,_) =>
 		     let fun loop acc (e : exp) =
 			 (case is_sumsw_int state e of
 			      NONE => (acc,e)
-			    | SOME (is,v,w,zeroexp,onearm) =>
+			    | SOME (_,is,v,w,zeroexp,oneexp) =>
 				  if (Name.eq_var(v,commonv))
-				      then loop ((w,onearm)::acc) zeroexp
+				      then loop ((w,oneexp)::acc) zeroexp
 				  else (acc,e))
 			 val (clauses,base) = loop [] exp
 		     in  if (length clauses > 1)
-			     then Intsw_e{info=is,arg=Var_e commonv,
+			     then Intsw_e{size=is,result_type=result_type,arg=Var_e commonv,
 					  arms=rev clauses,default=SOME base}
 			 else Sumsw_e sum_sw
 		     end
@@ -480,28 +494,44 @@ val reduce = fn state => fn pred =>
 			end
 
 		| Raise_e(e,c) => Raise_e(do_exp state e, do_con state c)
-		| Handle_e(e,f) => Handle_e(do_exp state e, do_function state f))
+		| Handle_e(e,v,handler,c) => 
+			let val [(v,_)] = do_vclist state [(v,Prim_c(Exn_c,[]))]
+			in  Handle_e(do_exp state e, v, do_exp state handler, do_con state c)
+			end)
 
 	and do_switch (state : state) (switch : switch) : switch = 
-	  let fun do_sw do_info do_arg do_tag {info,arg,arms,default} = 
-			{info = do_info info,
-			 arg = do_arg arg,
-			 arms = map (fn (tag,f) => (do_tag tag, do_function state f)) arms,
-			 default = Util.mapopt (do_exp state) default}
-	      val switch = (case switch of 
-				Sumsw_e sw => convert_sumsw state sw
-			      | _ => switch)
-	  in  (case switch of
-		  Intsw_e sw => Intsw_e(do_sw (fn info => info) (do_exp state) (fn itag => itag) sw)
-		| Sumsw_e sw => 
-		     Sumsw_e(do_sw (do_con state) 
-			       (do_exp state) (fn itag => itag) sw)
-		| Exncase_e sw => Exncase_e(do_sw (fn () => ()) (do_exp state) (do_exp state) sw)
-		| Typecase_e _ => error "typecase_e not done")
-	  end
+	    (case switch of
+		 Intsw_e {size,arg,result_type,arms,default} =>
+		     let val arg = do_exp state arg
+			 val result_type = do_con state result_type
+			 val arms = map_second (do_exp state) arms
+			 val default = Util.mapopt (do_exp state) default
+		     in  Intsw_e {size=size,arg=arg,result_type=result_type,
+				  arms=arms,default=default}
+		     end
+	       | Sumsw_e {sumtype,arg,result_type,bound,arms,default} =>
+		     let val arg = do_exp state arg
+			 val result_type = do_con state result_type
+			 val sumtype = do_con state sumtype
+			 val [(bound,_)] = do_vclist state[(bound,sumtype)]
+			 val arms = map_second (do_exp state) arms
+			 val default = Util.mapopt (do_exp state) default
+		     in  Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,result_type=result_type,
+				  arms=arms,default=default}
+		     end
+	       | Exncase_e {arg,result_type,bound,arms,default} =>
+		     let val arg = do_exp state arg
+			 val result_type = do_con state result_type
+			 val [(bound,_)] = do_vclist state[(bound,Prim_c(Exn_c,[]))]
+			 val arms = map (fn (e1,e2) => (do_exp state e1, do_exp state e2)) arms
+			 val default = Util.mapopt (do_exp state) default
+		     in  Exncase_e {bound=bound,arg=arg,result_type=result_type,
+				     arms=arms,default=default}
+		     end
+	       | Typecase_e _ => error "typecase not done")
 
 	and do_function (state : state) (Function(effect,recur,vklist,vclist,vlist,e,c)) =
-		let val vklist = do_vklist state vklist
+		let val (vklist,state) = do_vklist state vklist
 		    val vclist = do_vclist state vclist
 		    val e = do_exp state e
 		    val c = do_con state c
@@ -603,11 +633,12 @@ val reduce = fn state => fn pred =>
 				    exp_b(v,c,e)))
 		   | Exp_b(v,c,Let_e(_,bnds,e)) => do_bnds(bnds @ [Exp_b(v,c,e)], state)
 		   | Exp_b(v,c,e) => exp_b(v,c,e)
-		   | Con_b(v,k,c) => let val state = add_var(state,v)
-					 val state' = enter_var(state,v)
-					 val state = add_kind_equation(state,v,c,k)
-				     in  ([Con_b(v,do_kind state' k, do_con state' c)], state)
-				     end
+		   | Con_b(v,c) => let val state = add_var(state,v)
+				       val state' = enter_var(state,v)
+				       val k = NilStatic.get_shape (get_env state) c
+				       val state = add_kind_equation(state,v,c,k)
+				   in  ([Con_b(v, do_con state' c)], state)
+				   end
 		   | Fixopen_b vfset =>
 		     let val vflist = Util.set2list vfset
 			 val (v_vk_vc_b_c_cw_uw_call,state) = do_uncurry(vflist,state)

@@ -215,7 +215,7 @@ struct
 		| App_e(openness,f,clist,elist,eflist) => 
 			(scan_exp state f; app (scan_exp state) elist; app (scan_exp state) eflist)
 		| Raise_e(e,c) => scan_exp state e
-		| Handle_e(e,f) => (scan_exp state e; scan_function state f))
+		| Handle_e(e,bound,handler,c) => (scan_exp state e; scan_exp state handler))
 
 	and scan_switch (state : state) (switch : switch) : unit = 
 	  let fun scan_sw scan_info scan_arg scan_tag {info,arg,arms,default} = 
@@ -224,10 +224,20 @@ struct
 			 map (fn (tag,f) => (scan_tag tag, scan_function state f)) arms;
 			 Util.mapopt (scan_exp state) default; ())
 	      fun nada _ = ()
+	      (* don't need to bind term-level variables *)
 	  in  (case switch of
-		  Intsw_e sw => scan_sw nada (scan_exp state) nada sw
-		| Sumsw_e sw => scan_sw nada (scan_exp state) nada sw
-		| Exncase_e sw => scan_sw nada (scan_exp state) (scan_exp state) sw
+		  Intsw_e {arg,arms,default,...} => 
+		      (scan_exp state arg;
+		       Util.mapopt (scan_exp state) default;
+		       app (fn (t,e) => (scan_exp state e)) arms)
+		| Sumsw_e {arg,arms,default,...} =>
+		      (scan_exp state arg;
+		       Util.mapopt (scan_exp state) default;
+		       app (fn (t,e) => (scan_exp state e)) arms)
+		| Exncase_e {arg,arms,default,...} =>
+		      (scan_exp state arg;
+		       Util.mapopt (scan_exp state) default;
+		       app (fn (e1,e2) => (scan_exp state e1; scan_exp state e2)) arms)
 		| Typecase_e _ => error "typecase_e not done")
 	  end
 
@@ -241,7 +251,7 @@ struct
 	and scan_bnd (bnd : bnd, state : state) : state = 
 	  	(case bnd of
 		     Exp_b(v,c,e) => (scan_exp state e; state)
-		   | Con_b(v,k,c) => add_var(state,v,SOME c)
+		   | Con_b(v,c) => add_var(state,v,SOME c)
 		   | Fixopen_b vfset =>
 		      let val vflist = (Util.set2list vfset)
 			  val _ = 
@@ -296,21 +306,31 @@ struct
 		      App_e(openness,do_exp f,clist,map do_exp elist,map do_exp eflist) 
 
 		| Raise_e(e,c) => Raise_e(do_exp e, c)
-		| Handle_e(e,f) => Handle_e(do_exp e, do_function f))
+		| Handle_e(e,v,handler,c) => Handle_e(do_exp e, v, do_exp handler, c))
 
 	and do_switch (switch : switch) : switch = 
-	  let fun do_sw do_info do_arg do_tag {info,arg,arms,default} = 
-			{info = do_info info,
-			 arg = do_arg arg,
-			 arms = map (fn (tag,f) => (do_tag tag, do_function f)) arms,
-			 default = Util.mapopt do_exp default}
-	  in  (case switch of
-		  Intsw_e sw => Intsw_e(do_sw (fn info => info) do_exp (fn itag => itag) sw)
-		| Sumsw_e sw => Sumsw_e(do_sw (fn sumcon => sumcon)
-						do_exp  (fn itag => itag) sw)
-		| Exncase_e sw => Exncase_e(do_sw (fn () => ()) do_exp do_exp sw)
-		| Typecase_e _ => error "typecase_e not done")
-	  end
+	   (case switch of
+		Intsw_e {size,arg,result_type,arms,default} =>
+		    let val arg = do_exp arg
+			val arms = map (fn (w,e) => (w,do_exp e)) arms
+			val default = Util.mapopt do_exp  default
+		    in  Intsw_e {size=size,arg=arg,result_type=result_type,arms=arms,default=default}
+		    end
+	      | Sumsw_e {sumtype,arg,result_type,bound,arms,default} =>
+		    let val arg = do_exp arg
+			val arms = map (fn (t,e) => (t,do_exp e)) arms
+			val default = Util.mapopt do_exp default
+		    in  Sumsw_e {sumtype=sumtype,arg=arg,result_type=result_type,
+				 bound=bound,arms=arms,default=default}
+	      end
+	      | Exncase_e {arg,result_type,bound,arms,default} =>
+		let val arg = do_exp arg
+		    val arms = map (fn (e1,e2) => (do_exp e1, do_exp e2)) arms
+		    val default = Util.mapopt do_exp  default
+		in  Exncase_e {arg=arg,result_type=result_type,
+			       bound=bound,arms=arms,default=default}
+		end
+	      | Typecase_e _ => error "typecase not handled")
 
 
 	and do_function (Function(effect,recur,vklist,vclist,vlist,e,c)) : function =
@@ -326,7 +346,7 @@ struct
 	and do_bnd (bnd : bnd) : bnd list =
 	  	(case bnd of
 		     Exp_b(v,c,e) => [Exp_b(v,c,do_exp e)]
-		   | Con_b(v,k,c) => [bnd]
+		   | Con_b(v,c) => [bnd]
 		   | Fixopen_b vfset =>
 		      let val vflist = (Util.set2list vfset)
 			  fun do_vflist vflist = 
@@ -336,7 +356,7 @@ struct
 				   (case (is_candidate v) of
 					NONE => do_vflist vflist
 				      | SOME (v,clist) => 
-					    let fun mapper ((v,k),c) = Con_b(v,k,c)
+					    let fun mapper ((v,k),c) = Con_b(v,c)
 						val cbnds = Listops.map2 mapper (vklist,clist)
 					    in  cbnds @ do_vflist vflist'
 					    end)

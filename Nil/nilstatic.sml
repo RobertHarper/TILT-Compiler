@@ -538,20 +538,11 @@ struct
 	   else
 	     con_valid (origD,varConConSubst var lambda (Let_c (sort,rest,con)))
 	 end
-        | (Let_c (sort,cbnd as (Con_cb(var,kind,con)::rest),body)) =>
+        | (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	   let
-	     val kind = kind_valid(D,kind) 
 	     val (con,kind') = con_valid (D,con)
 	     val con = varConConSubst var (mark_as_checked (con,kind')) (Let_c (sort,rest,body))
-	   in
-	     if sub_kind (D,kind',kind) then
-	       con_valid (D,con)
-	     else
-	       (printl "Kind (error in constructor declaration.";
-		perr_k_k (kind,kind');
-		lprintl "in context = ";
-		NilContext.print_context D; print "\n";
-		(error "Kind error in constructor declaration" handle e => raise e))
+	   in con_valid (D,con)
 	   end
 	| (Let_c (sort,[],body)) => con_valid (D,body)
 	| (Closure_c (code,env)) => 
@@ -839,7 +830,7 @@ struct
 		 if (Name.eq_var(v,v')) then con else con_reduce(D,Var_c v')
 	 | Let_c(letsort,cbnd::rest,c) => 
 		let val subst = case cbnd of
-		    		  Con_cb(v,_,c) => Subst.fromList[(v,c)]
+		    		  Con_cb(v,c) => Subst.fromList[(v,c)]
 				| Open_cb(v,_,_,_) => Subst.fromList[(v,Let_c(letsort,[cbnd],Var_c v))]
 				| Code_cb(v,_,_,_) => Subst.fromList[(v,Let_c(letsort,[cbnd],Var_c v))]
 		in  con_reduce(D,Subst.substConInCon subst (Let_c(letsort,rest,c)))
@@ -1375,7 +1366,8 @@ struct
 	  lprintl "No matching case in prim_valid";
 	  (error "Illegal primitive application" handle e => raise e)))
 
-  and switch_valid (D,switch)  = 
+  and switch_valid (D,switch)  = error "sorry, need to do switch_valid"
+(*
     (case switch
        of Intsw_e {info=intsize,arg,arms,default} =>
 	 let
@@ -1580,6 +1572,8 @@ struct
 			arms=arms,default=default},
 	    rep_con)
 	 end)
+*)
+
        
   and function_valid (D,Function (effect,recursive,tformals,
 				  formals,fformals,body,return)) = 
@@ -1617,28 +1611,16 @@ struct
     let
       val (bnd,subst) = substConInBnd subst bnd 
     in
-      (case bnd
-	 of Con_b (var, given_kind, con) =>
+      (case bnd of
+	   Con_b (var, con) =>
 	   let
 	     val origD = D
-	     val given_kind = kind_valid (D,given_kind)
-	     val (con,found_kind) = con_valid (D,con)
-	     val bnd_kind = if !bnds_made_precise then found_kind else given_kind
+	     val (con,bnd_kind) = con_valid (D,con)
 	     val ((D,subst'),var,bnd_kind) = bind_at_kind (D,var,bnd_kind)
-	     val D = NilContext.insert_kind_equation(D,var,con,found_kind)
+	     val D = NilContext.insert_kind_equation(D,var,con,bnd_kind)
 	     val subst = Subst.con_subst_compose(subst',subst)
-	     val bnd = Con_b (var,bnd_kind,con)
-	   in
-	     if sub_kind (origD,found_kind,given_kind) then
-	       (bnd,(D,subst))
-	     else
-	       if (!bnds_made_precise)
-		 then (print "Warning: kind mismatch in constructor binding;  probably a result of\n";
-			print "  dropping all singleton information including those in negative positions\n";
-	 		(bnd,(D,subst)))
-	       else 
-		(perr_c_k_k (con,given_kind,found_kind);
-		(error ("kind mismatch in constructor binding of "^(var2string var)) handle e => raise e))
+	     val bnd = Con_b (var,con)
+	   in (bnd,(D,subst))
 	   end
 	  | Exp_b (var, con, exp) =>
 	   let
@@ -1900,7 +1882,8 @@ struct
 		(perr_e_c (exp,con);
 		 (error "Non exception raised - Ill formed expression" handle e => raise e))
 	    end
-	| Handle_e (exp,function) =>
+	| Handle_e (exp,v,handler,con) => error "need to do handle_e"
+(*
 	    (case function 
 	       of Function (effect,recursive,[],[(var,c)],
 			    [],body,con) =>
@@ -1929,7 +1912,9 @@ struct
 		 (print "Body is :\n";
 		  PpNil.pp_exp (Handle_e (exp,function));
 		  (error "Illegal body for handler" handle e => raise e)))
-	       )  (*esac*)
+	         (*esac*)
+*)
+	    )
 
       and bnd_valid' (bnd,(D,subst)) = 
 	let 

@@ -67,16 +67,14 @@ struct
    fun lete ([],e) = e
      | lete (ebnds,e) = Let_e(Sequential,ebnds,e)
 
-  fun cbnd2bnd (Con_cb vkc) = Con_b vkc
+  fun cbnd2bnd (Con_cb vc) = Con_b vc
     | cbnd2bnd (Open_cb (confuns as (v,vklist,_,resk))) = 
       let val v' = Name.derived_var v
-	  val k = Arrow_k(Open,vklist,resk)
-      in  Con_b(v',k,Let_c(Sequential,[Open_cb confuns], Var_c v))
+      in  Con_b(v',Let_c(Sequential,[Open_cb confuns], Var_c v))
       end
     | cbnd2bnd (Code_cb (confuns as (v,vklist,_,resk))) = 
       let val v' = Name.derived_var v
-	  val k = Arrow_k(Code,vklist,resk)
-      in  Con_b(v',k,Let_c(Sequential,[Code_cb confuns], Var_c v))
+      in  Con_b(v',Let_c(Sequential,[Code_cb confuns], Var_c v))
       end
 
   fun is_var_e (Var_e v) = true
@@ -238,7 +236,7 @@ struct
 
     (* collections *)
  
-    type bound = {boundcvars : kind Name.VarMap.map,
+    type bound = {boundcvars : Name.VarSet.set,
 		  boundevars : con Name.VarMap.map}
     val emptyCollection = Name.VarMap.empty
     fun collInsert (set, (key,value)) = Name.VarMap.insert(set,key,value)
@@ -257,8 +255,8 @@ struct
 		  kindhandler : bound * kind -> kind changeopt}
 
     fun add_convars (STATE{bound={boundcvars,boundevars},
-			   bndhandler,cbndhandler,conhandler,exphandler,kindhandler},vks) =
-	(STATE{bound = {boundcvars = collMerge boundcvars vks,
+			   bndhandler,cbndhandler,conhandler,exphandler,kindhandler},vs) =
+	(STATE{bound = {boundcvars = Name.VarSet.addList(boundcvars,vs),
 			boundevars = boundevars},
 	       bndhandler = bndhandler,
 	       cbndhandler = cbndhandler,
@@ -266,7 +264,7 @@ struct
 	       exphandler = exphandler,
 	       kindhandler = kindhandler})
 
-    fun add_convar (h : state ,v,k) = add_convars(h,[(v,k)])
+    fun add_convar (h : state ,v) = add_convars(h,[v])
 
     fun add_var (STATE{bound={boundevars,boundcvars},
 		       cbndhandler,bndhandler,conhandler,exphandler,kindhandler}, v, c) =
@@ -286,7 +284,7 @@ struct
 	    fun cbnd_help wrap (var, vklist, c, k) state openness = 
 		let fun folder((v,k),(vklist,s)) = 
 		    let val k' = f_kind state k
-			val s' = add_convar (s,v,k)
+			val s' = add_convar (s,v)
 		    in  ((v,k')::vklist,s')
 		    end
 		    val (rev_vklist',state') = foldl folder ([],state) vklist
@@ -294,12 +292,11 @@ struct
 		    val k' = f_kind state' k
 		    val vklist' = rev rev_vklist'
 		    val funk = Arrow_k(openness,vklist',k')
-		in (wrap(var, vklist', c', k'), add_convar(state,var,funk))
+		in (wrap(var, vklist', c', k'), add_convar(state,var))
 		end
-	    fun do_cbnd (Con_cb(var, kind, con),state) = 
-		let val kind' = f_kind state kind
-		    val con' = f_con state con
-		in (Con_cb(var, kind', con'), add_convar(state,var,kind'))
+	    fun do_cbnd (Con_cb(var, con),state) = 
+		let val con' = f_con state con
+		in (Con_cb(var, con'), add_convar(state,var))
 		end
 	      | do_cbnd (Open_cb args,state) = cbnd_help Open_cb args state Open
 	      | do_cbnd (Code_cb args,state) = cbnd_help Code_cb args state Code
@@ -330,7 +327,7 @@ struct
 	     | (Mu_c (flag,defs)) =>
 		   let
 		       val (con_vars,cons) = ListPair.unzip (Util.set2list defs)
-		       val state' = add_convars (state,map (fn v => (v, Word_k Runtime)) con_vars)
+		       val state' = add_convars (state,con_vars)
 		       val cons' = List.map (f_con state') cons
 		       val defs' = Util.list2set (ListPair.zip (con_vars,cons'))
 		   in  Mu_c (flag,defs')
@@ -390,7 +387,7 @@ struct
                    let fun doarm(pc,vklist,c) =   
                        let fun folder((v,k),(vklist,s)) = 
                            let val k' = f_kind state k
-                               val s' = add_convar (s,v,k')
+                               val s' = add_convar (s,v)
                            in  ((v,k')::vklist,s')
                            end
                            val (rev_vklist',state') = foldl folder ([],state) vklist
@@ -421,7 +418,7 @@ struct
     let
       val knds' = map (fn (var,kind) => 
 		       (var, f_kind state kind)) knds
-      val state' = add_convars (state,knds')
+      val state' = add_convars (state,map #1 knds')
       val cons'  = map (f_con state') cons
       val result' = f_con state' result
     in
@@ -451,7 +448,7 @@ struct
 		fun fold_one (((lbl,var),kind),state) = 
 		  let
 		    val kind'  = f_kind state kind
-		    val state' = add_convar (state,var, kind')
+		    val state' = add_convar (state,var)
 		  in
 		    (((lbl, var), kind'),state')
 		  end
@@ -483,7 +480,7 @@ struct
 	  fun fold_one ((var,knd),state) = 
 	    let
 	      val knd' = f_kind state knd
-	      val state' = add_convar (state, var, knd')
+	      val state' = add_convar (state, var)
 	    in
 	      ((var,knd'),state')
 	    end
@@ -500,7 +497,7 @@ struct
 				      vklist,vclist,vflist,body,con)) = 
       let 
 	  fun vkfolder((v,k),(vklist,s)) = let val k' = f_kind s k
-					   in ((v,k')::vklist, add_convar(s,v,k'))
+					   in ((v,k')::vklist, add_convar(s,v))
 					   end
 	  fun vcfolder((v,c),(vclist,s)) = let val c' = f_con s c
 					   in  ((v,c')::vclist, add_var(s,v,c'))
@@ -519,7 +516,7 @@ struct
 	      AllArrow_c(openness,effect,vklist,(map #2 vclist),TilWord32.fromInt(length vflist),c)
 	  fun do_bnd (bnd,s) : bnd * state = 
 	      case bnd of
-		  Con_b(v,k,c) => (Con_b(v,f_kind state k,f_con state c), add_convar(state,v,k))
+		  Con_b(v,c) => (Con_b(v,f_con state c), add_convar(state,v))
 		| Exp_b(v,c,e) => (Exp_b(v,f_con state c, f_exp state e), add_var(state,v,c))
 		| Fixopen_b vfset => 
 		      let val s' = foldset (fn ((v,f),s) => add_var(s,v,funtype Open f)) s vfset
@@ -559,15 +556,32 @@ struct
 		      end
       end
 
+  and f_switch state sw = 
+      (case sw of
+	   Intsw_e {result_type, arg, size, arms, default} =>
+	       Intsw_e {result_type = f_con state result_type, 
+			arg = f_exp state arg,
+			size = size, 
+			arms = map (fn (t,e) => (t,f_exp state e)) arms,
+			default = Util.mapopt (f_exp state) default}
+	 | Sumsw_e {result_type, arg, sumtype, bound, arms, default} =>
+	       Sumsw_e {result_type = f_con state result_type, 
+			arg = f_exp state arg,
+			sumtype = f_con state sumtype,
+			bound = bound,
+			arms = map (fn (t,e) => (t,f_exp state e)) arms,
+			default = Util.mapopt (f_exp state) default}
+	 | Exncase_e {result_type, arg, bound, arms, default} =>
+	       Exncase_e {result_type = f_con state result_type, 
+			arg = f_exp state arg,
+			bound = bound,
+			arms = map (fn (t,e) => (f_exp state t,f_exp state e)) arms,
+			default = Util.mapopt (f_exp state) default}
+	 | Typecase_e _ => error "typecase not handled")
+
   and f_exp state (exp : exp) : exp = 
       let val self = f_exp state
 	  val (STATE{bound,exphandler,...}) = state
-	  fun dosw {info,arg,arms,default} do_info do_arg do_prearm = 
-	      {info = do_info info,
-	       arg = do_arg arg,
-	       arms = map (fn (t,f) => (do_prearm t, dofun state f)) arms,
-	       default = Util.mapopt self default}
-	  fun identity x = x
 	  fun doexp e = 
 	      case e of
 		  (Var_e _) => e
@@ -596,12 +610,7 @@ struct
 		      in Let_e(sort,bnds',body')
 		      end
 		| (Prim_e (ap,clist,elist)) => Prim_e(ap,map (f_con state) clist, map self elist)
-		| (Switch_e switch) => 
-		      Switch_e(case switch of
-				   Intsw_e sw => Intsw_e(dosw sw identity self identity)
-				 | Sumsw_e sw => Sumsw_e(dosw sw (f_con state) self identity)
-				 | Exncase_e sw => Exncase_e(dosw sw identity self self)
-				 | Typecase_e sw => Typecase_e(dosw sw identity (f_con state) identity))
+		| (Switch_e switch) => Switch_e(f_switch state switch)
 		| (App_e (openness,func,clist,elist,eflist)) => 
 		      App_e(openness,
 			    self func,
@@ -609,14 +618,14 @@ struct
 			    map self elist, 
 			    map self eflist)
 		| Raise_e (e,c) => Raise_e(self e, f_con state c)
-		| Handle_e (e1,f) => Handle_e(self e1, dofun state f)
+		| Handle_e (e,v,h,c) => Handle_e(self e, v, self h, f_con state c)
       in case (exphandler (bound,exp)) of
 	  CHANGE_NORECURSE e => e
 	| CHANGE_RECURSE e => doexp e
 	| NOCHANGE => doexp exp
       end
 
-  val default_bound = {boundevars = emptyCollection, boundcvars = emptyCollection}
+  val default_bound = {boundcvars = Name.VarSet.empty, boundevars = emptyCollection}
   fun default_bnd_handler _ = NOCHANGE
   fun default_cbnd_handler _ = NOCHANGE
   fun default_exp_handler _ = NOCHANGE
@@ -647,7 +656,7 @@ struct
       val free : var list ref = ref []
       fun con_handler ({boundcvars,boundevars},Var_c v) = 
 	let
-	  val _ = if (collMember(boundcvars,v) orelse
+	  val _ = if (Name.VarSet.member(boundcvars,v) orelse
 		      member_eq(eq_var,v,!free))
 		    then ()
 		  else free := (v::(!free))
@@ -729,7 +738,7 @@ struct
 
   local 
     fun con_handler conmap ({boundcvars,boundevars},Var_c var) = 
-	 if (collMember(boundcvars,var)) 
+	 if (Name.VarSet.member(boundcvars,var)) 
 	   then NOCHANGE
 	 else (case (conmap var) of
 		 NONE => NOCHANGE
@@ -755,7 +764,8 @@ struct
 	      | exp_handler _ = NOCHANGE
 	    fun kind_handler (_,k) = CHANGE_NORECURSE k
 	    fun con_handler ({boundevars,boundcvars},Var_c v) = 
-		(if (not (collMember(boundcvars,v)) andalso not (member_eq(eq_var,v,!free_cvars)))
+		(if (not (Name.VarSet.member(boundcvars,v)) 
+		     andalso not (member_eq(eq_var,v,!free_cvars)))
 		     then free_cvars := v :: (!free_cvars)
 		 else ();
 		     NOCHANGE)
@@ -937,7 +947,7 @@ struct
 	  | (Let_c (sort1, binds1,con1),Let_c (sort2, binds2,con2)) => 
 	   let 
 	     val conref = ref context
-	     fun equiv_one (Con_cb(var1,k1,con1),Con_cb(var2,k2,con2)) = 
+	     fun equiv_one (Con_cb(var1,con1),Con_cb(var2,con2)) = 
 	       (alpha_equiv_con' (!conref) (con1,con2))
 	       before (conref := alpha_equate_pair(!conref,(var1,var2)))
 	       
@@ -1113,12 +1123,11 @@ struct
 	       end
 	     fun folder (cbnd,context) = 
 	       case cbnd 
-		 of Con_cb (var,kind,con) =>
+		 of Con_cb (var,con) =>
 		   let 
-		     val kind' = alpha_normalize_kind' context kind
 		     val (context',var') = alpha_bind (context,var)
 		     val con' = alpha_normalize_con' context' con
-		     val cbnd' = Con_cb (var',kind',con')
+		     val cbnd' = Con_cb (var',con')
 		   in  
 		     (cbnd',context')
 		   end
@@ -1265,12 +1274,14 @@ struct
 	   in
 	     Raise_e (exp',con')
 	   end
-	  | Handle_e (exp,function) =>
+	  | Handle_e (exp,v,handler,result_type) =>
 	   let
 	     val exp' = alpha_normalize_exp' contexts exp
-	     val function' = alpha_normalize_function' contexts function
+	     val function = Function(Partial,Nonleaf,[],[(v,Prim_c(Exn_c,[]))],[],handler,result_type)
+	     val Function(_,_,_,[(v',_)],_,handler',result_type') = 
+				     alpha_normalize_function' contexts function
 	   in
-	     Handle_e (exp',function')
+	     Handle_e (exp',v',handler', result_type')
 	   end)
     and alpha_normalize_value' 
       (contexts as (e_context : alpha_context, c_context : alpha_context)) value = 
@@ -1319,12 +1330,11 @@ struct
 	     end
 	in
 	    (case bnd of
-		 Con_b (var, kind, con) =>
+		 Con_b (var, con) =>
 		     let
-			 val kind' = alpha_normalize_kind' c_context kind
 			 val con' = alpha_normalize_con' c_context con
 			 val (c_context',var') = alpha_bind (c_context,var)
-			 val bnd' = (Con_b (var',kind',con'))
+			 val bnd' = (Con_b (var',con'))
 		     in
 			 (bnd',(e_context,c_context'))
 		     end
@@ -1355,50 +1365,45 @@ struct
     and alpha_normalize_switch'
       (contexts as (e_context : alpha_context, c_context : alpha_context)) switch = 
       (case switch
-	 of Intsw_e {info=intsize,arg,arms,default} =>
+	 of Intsw_e {size,arg,result_type,arms,default} =>
 	   let
 	     val arg' = alpha_normalize_exp' contexts arg
-	     val arms' = map_second (alpha_normalize_function' contexts) arms
+	     val arms' = map_second (alpha_normalize_exp' contexts) arms
+	     val result_type' = alpha_normalize_con' c_context result_type
 	     val default' = alpha_normalize_exp_opt' contexts default
 	   in
-	     Intsw_e {info=intsize,arg=arg',
+	     Intsw_e {size=size,arg=arg',result_type=result_type',
 		      arms=arms',default=default'}
 	   end
-	  | Sumsw_e {info,arg,arms,default} => 
+	  | Sumsw_e {sumtype,arg,result_type,bound,arms,default} => 
 	   let
 	     val arg' = alpha_normalize_exp' contexts arg
-	     val arms' = map_second (alpha_normalize_function' contexts) arms
-	     val info' = alpha_normalize_con' c_context info
+	     val sumtype' = alpha_normalize_con' c_context sumtype
+	     val result_type' = alpha_normalize_con' c_context result_type
 	     val default' = alpha_normalize_exp_opt' contexts default
+	     val (e_context', bound') = alpha_bind(e_context,bound)
+	     val contexts' = (e_context,c_context)
+	     val arms' = map_second (alpha_normalize_exp' contexts') arms
 	   in
-	     Sumsw_e {info=info',arg=arg',
+	     Sumsw_e {sumtype=sumtype',arg=arg',bound=bound',
+		      result_type=result_type',
 		      arms=arms',default=default'}
 	   end
-	  | Exncase_e {info,arg,arms,default} =>
+	  | Exncase_e {result_type,arg,bound,arms,default} =>
 	   let
 	     val arg' = alpha_normalize_exp' contexts arg
-	     fun mapper (exp,function) = 
-	       let
-		 val exp' = alpha_normalize_exp' contexts exp
-		 val function' = alpha_normalize_function' contexts function
-	       in
-		 (exp',function')
-	       end
-	     val arms' = map mapper arms
 	     val default' = alpha_normalize_exp_opt' contexts default
-	   in
-	     Exncase_e {info=(),arg=arg',
-			arms=arms',default=default'}
-	   end
-	  | Typecase_e {info,arg,arms,default} =>
-	   let
-	     val arg' = alpha_normalize_con' c_context arg
-	     val arms' = map_second (alpha_normalize_function' contexts) arms
-	     val default' = alpha_normalize_exp_opt' contexts default
-	   in
-	     Typecase_e {info=(),arg=arg',
+	     val result_type' = alpha_normalize_con' c_context result_type
+	     val (e_context', bound') = alpha_bind(e_context,bound)
+	     val contexts' = (e_context,c_context)
+	     val arms' = map (fn (e1,e2) => (alpha_normalize_exp' contexts' e1,
+					     alpha_normalize_exp' contexts' e2)) arms
+	   in Exncase_e {result_type=result_type',arg=arg',
+			 bound=bound',
 			 arms=arms',default=default'}
-	   end)
+	   end
+	  | Typecase_e _ => error "typecase not handled")
+
     and alpha_normalize_function'
       (contexts as (e_context : alpha_context, c_context : alpha_context)) 
       (Function (effect,recursive,tformals,formals,fformals,body,return)) = 

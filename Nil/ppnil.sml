@@ -38,6 +38,8 @@ functor Ppnil(structure ArgNil : NIL
     fun pp_var v = String(var2string v)
     fun pp_label l = String(label2string l)
     fun pp_tag n = String(tag2string n)
+    val pp_word = String o Word32.toString
+
 
 (*
     fun pp_arrow CLOSURE = String "->"
@@ -112,9 +114,7 @@ functor Ppnil(structure ArgNil : NIL
       | pp_primcon (List_c listcon) = pp_listcon listcon
 *)
 
-    and pp_conbnd (Con_cb(v,k,c)) : format = Hbox[pp_var v, String " : ",
-						  pp_kind k, String " = ", 
-						  pp_con c]
+    and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_var v, String " = ", pp_con c]
       | pp_conbnd (Open_cb(v,vklist,c,k)) = 
 	HOVbox[pp_var v, String " = ",
 	       HOVbox[String "FUN_C",
@@ -298,11 +298,14 @@ functor Ppnil(structure ArgNil : NIL
 						  String "End"]
 
 	   | Raise_e (e,c) => pp_region "RAISE(" ")" [pp_exp e, String ",", pp_con c]
-	   | Handle_e (body,handler) => Vbox[HOVbox[String "HANDLE ",
-						    pp_exp body],
-					     Break0 0 0,
-					     HOVbox[String "WITH ",
-						    pp_function handler]]
+	   | Handle_e (body,v,handler,result_type) => 
+		 Vbox[HOVbox[String "HANDLE ",
+			     pp_exp body, String ": ",
+			     pp_con result_type],
+		      Break0 0 0,
+		      HOVbox[String "WITH ", pp_var v, 
+			     String ": EXN . ",
+			     pp_exp handler]]
 	   | Switch_e sw => pp_switch sw)
 
 	 
@@ -321,34 +324,37 @@ functor Ppnil(structure ArgNil : NIL
 	       pp_exp exp]
 
     and pp_switch sw =
-	let fun help {info : 'info, arg: 'arg, 
-		      arms : ('t * function) list, default : exp option}
-	    tstr pp_arg pp_info pp_index =
-	    HOVbox[String ("SWITCH_" ^ tstr ^ " "),
-		   pp_info info,
-		   Break0 0 5,
-		   pp_arg arg,
-		   Break0 0 5,
-		   (pp_list (fn (ind,f) => Hbox[pp_index ind,
-						pp_function f])
-		    arms ("","","", true)),
-		   Break0 0 5,
-		   (case default of 
-			NONE => String "NODEFAULT"
-		      | SOME e => Hbox[String "DEFAULT= ",
-					 pp_exp e])]
+	let fun pp_default NONE = String "NODEFAULT"
+	      | pp_default (SOME e) = Hbox[String "DEFAULT = ", pp_exp e]
 	in
 	    case sw of
-		Intsw_e sw => help sw "INT" pp_exp pp_is' (String o Word32.toString)
-	      | Sumsw_e sw => help sw "SUM" pp_exp pp_con (String o Word32.toString)
-	      | Typecase_e sw => help sw "TCASE" pp_con 
-		                   (fn _ => String "") pp_primcon
-(*
-	      | Listcase_e sw => help sw "LCASE" pp_con
-		                   (fn (v,k,c) => Hbox[pp_var v, String ":", pp_kind k,
-						       String "=", pp_con c]) pp_listcon
-*)
-	      | Exncase_e sw => help sw "EXN" pp_exp (fn () => String "") pp_exp
+		Intsw_e {result_type,arg,size,arms,default} => 
+		    HOVbox[String "INT_SWITCH(", 
+			   pp_exp arg, String ": ",
+			   pp_is' size, String ", ",
+			   pp_con result_type, String ", ", Break0 0 5,
+			   (pp_list (fn (w,e) => Hbox[pp_word w, String ": ", pp_exp e])
+			      arms ("","","", true)),
+			   pp_default default]
+	      | Sumsw_e {result_type,arg,sumtype,bound,arms,default} => 
+		    HOVbox[String "SUM_SWITCH(", 
+			   pp_exp arg, String ": ",
+			   pp_con sumtype, String ", ",
+			   pp_con result_type, String ", ", Break0 0 5,
+			   pp_var bound, String ", ",  Break0 0 5,
+			   (pp_list (fn (w,e) => Hbox[pp_word w, String ": ", pp_exp e])
+			      arms ("","","", true)),
+			   pp_default default]
+	      | Exncase_e {result_type,arg,bound,arms,default} => 
+		    HOVbox[String "EXN_SWITCH(", 
+			   pp_exp arg, String ": EXN, ",
+			   pp_con result_type, String ", ", Break0 0 5,
+			   pp_var bound, String ", ",  Break0 0 5,
+			   (pp_list (fn (t,e) => Hbox[pp_exp t, String ": ", pp_exp e])
+			      arms ("","","", true)),
+			   pp_default default]
+	      | Typecase_e sw => error "can't print typecase"
+
 	end
 
     and pp_bnd bnd =
@@ -358,10 +364,7 @@ functor Ppnil(structure ArgNil : NIL
 		    if (!elide_bnd)
 			then HOVbox[pp_var v, String " = ", Break, pp_exp e]
 		    else HOVbox[pp_var v, String " : ", pp_con c, String " = ", Break, pp_exp e]
-	      | Con_b (v,k,c) => 
-		    if (!elide_bnd)
-			then HOVbox[pp_var v, String " = ", Break, pp_con c]
-		    else HOVbox[pp_var v, String " : ", pp_kind k, String " = ", Break, pp_con c]
+	      | Con_b (v,c) => HOVbox[pp_var v, String " = ", Break, pp_con c]
 	      | Fixopen_b fixset => let val fixlist = set2list fixset
 				    in Vbox(separate (map (pp_fix false) fixlist) Break)
 				    end

@@ -38,7 +38,7 @@ signature NILUTIL =
     val same_effect : Nil.effect * Nil.effect -> bool
 
     datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
-    type bound = {boundcvars : Nil.kind Name.VarMap.map,
+    type bound = {boundcvars : Name.VarSet.set,
 		  boundevars : Nil.con Name.VarMap.map}
     type handlers = ((bound * Nil.exp -> Nil.exp changeopt) *
 		     (bound * Nil.bnd -> (Nil.bnd list) changeopt) *

@@ -1,4 +1,5 @@
 Group 
+(*
         signature NIL
 	signature NILUTIL
 	signature NILSTATIC
@@ -12,7 +13,8 @@ Group
 
         structure Linknil
 	structure LinkIl
-(*	structure NilOpts *)
+(*	structure NilOpts  *)
+*)
 is
 
 ../smlnj-lib.cm         	(* ------ SML/NJ library ------ *)
@@ -29,44 +31,51 @@ nil.sig.sml
 nil.sml
 ppnil.sig.sml
 ppnil.sml
-tonil.sig.sml
-tonil.sml
-cont.sig.sml
-cont.sml
-nilcontext.sig.sml
-nilcontext.sml
 alpha_context.sig.sml
 alpha_context.sml
+subst.sig.sml
+subst.sml
 nilutil.sig.sml
 nilutil.sml
-nilstatic.sig.sml
-nilstatic.sml 
-vararg.sig.sml
-vararg.sml
-nilprimutilparam.sml
-(*
-nileval.sig.sml
-nileval.sml 
-*)
-toclosure.sig.sml
-toclosure.sml
-linknil.sml
-linearize.sig.sml
-linearize.sml
-cleanup.sig.sml
-cleanup.sml
-betareduce.sig.sml
-betareduce.sml
 nilerror.sig.sml
 nilerror.sml
-subst.sml
-subst.sig.sml
-normalize.sml
+nilcontext.sig.sml
+nilcontext.sml
+nilprimutilparam.sml
+linearize.sig.sml
+linearize.sml
 normalize.sig.sml
+normalize.sml
+
+nilstatic.sig.sml
+nilstatic.sml 
+
 optimize.sig.sml  
 optimize.sml  
 specialize.sig.sml
 specialize.sml
+
+tonil.sig.sml
+tonil.sml
+
+toclosure.sig.sml
+toclosure.sml
+
+linknil.sml
+
+
+(*
+cleanup.sig.sml
+cleanup.sml
+betareduce.sig.sml
+betareduce.sml
+cont.sig.sml
+cont.sml
+vararg.sig.sml
+vararg.sml
+nileval.sig.sml
+nileval.sml 
+*)
 
 (* ----- Optimizer Stuff ------- *)
 (*

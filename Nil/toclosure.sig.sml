@@ -5,7 +5,6 @@ signature TOCLOSURE =
 val do_close_path : bool ref
 val do_single_venv : bool ref
 
-	val use_kind_at_bind : bool ref
 	val debug : bool ref
 	val debug_full : bool ref
 

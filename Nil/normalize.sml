@@ -610,7 +610,7 @@ val show_context = ref false
 		   in   res
 		   end
 	    end
-	| (Let_c (sort,cbnd as (Con_cb(var,kind,con)::rest),body)) =>
+	| (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	    let
 	      val con = con_normalize' state con
 	      val state = 
@@ -713,7 +713,7 @@ val show_context = ref false
 		   in  (true,subst,Let_c(sort,rest,con))
 		   end
 	    end
-	| (Let_c (sort,cbnd as (Con_cb(var,kind,con)::rest),body)) =>
+	| (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	    let val (D,subst) = state
 		val con = Subst.substConInCon subst con
 		val subst = add subst (var,con)
@@ -775,16 +775,17 @@ val show_context = ref false
 	   val con = con_normalize' state con
 	 in tag (atag,con)
 	 end)
-  and switch_normalize' state switch = 
-    (case switch
-       of Intsw_e {info,arg,arms,default} =>
+  and switch_normalize' state switch = error "switch_normalize not handled"
+(*
+    (case switch of
+          Intsw_e {size,result_type,arg,arms,default} =>
 	 let
 	   val arg = exp_normalize' state arg
 	   val arms = map_second (function_normalize' state) arms
 	   val default = map_opt (exp_normalize' state) default
 	 in
-	   Intsw_e {info=info,arg=arg,
-		    arms=arms,default=default}
+	   Intsw_e {size=size,result_type=result_type,
+		    arg=arg,arms=arms,default=default}
 	 end
 	| Sumsw_e {info,arg,arms,default} => 
 	 let
@@ -817,6 +818,8 @@ val show_context = ref false
 	   Typecase_e {info=(),arg=arg,
 		       arms=arms,default=default}
 	 end)
+*)
+
   and function_normalize' state (Function (effect,recursive,tformals,
 						 formals,fformals,body,return)) = 
     let
@@ -834,11 +837,12 @@ val show_context = ref false
     end
   and bnd_normalize' state (bnd : bnd) =
     (case bnd
-       of Con_b (var, kind, con) =>
+       of Con_b (var, con) =>
 	 let
 	   val con = con_normalize' state con
+	   val bnd = Con_b (var,con)
+	   val kind = get_shape' (#1 state) con
 	   val (state,var,kind) = bind_at_kind state (var,kind)
-	   val bnd = Con_b (var,kind,con)
 	 in (bnd,state)
 	 end
 	| Exp_b (var, con, exp) =>
@@ -923,11 +927,13 @@ val show_context = ref false
 	   val exp = exp_normalize' state exp
 	 in Raise_e (exp,con)
 	 end
-	| Handle_e (exp,function) =>
+	| Handle_e (exp,v,handler,con) =>
 	 let
 	   val exp = exp_normalize' state exp
-	   val function = function_normalize' state function
-	 in Handle_e (exp,function)
+	   val con = con_normalize' state con
+	       (* XXX need to bind v *)
+	   val handler = exp_normalize' state handler
+	 in Handle_e (exp,v,handler,con)
 	 end)
   fun import_normalize' state (ImportValue (label,var,con)) =
     let

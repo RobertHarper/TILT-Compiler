@@ -317,13 +317,12 @@ functor NilSubstFn(structure Nil : NIL
 		 (Con (var,formals,body,kind),conmap)
 	       end
 	     fun folder (cbnd,conmap) = 
-	       case cbnd 
-		 of Con_cb (var,kind,con) =>
+	       case cbnd of
+		     Con_cb (var,con) =>
 		   let 
-		     val kind = substConInKind' conmap kind
 		     val con = substConInCon' conmap con
 		     val (var,conmap) = con_rebind (var,conmap)
-		     val cbnd = Con_cb (var,kind,con)
+		     val cbnd = Con_cb (var,con)
 		   in  
 		     (cbnd,conmap)
 		   end
@@ -449,12 +448,13 @@ functor NilSubstFn(structure Nil : NIL
 	   in
 	     Raise_e (exp,con)
 	   end
-	  | Handle_e (exp,function) =>
+	  | Handle_e (exp,v,handler,con) =>
 	   let
 	     val exp = substExpConInExp' maps exp
-	     val function = substExpConInFunction' maps function
+	     val function = Function(Partial,Nonleaf,[],[(v,Prim_c(Exn_c,[]))],[],handler,con)
+	     val Function(_,_,_,[(v,_)],_,handler,con) = substExpConInFunction' maps function
 	   in
-	     Handle_e (exp,function)
+	     Handle_e (exp,v,handler,con)
 	   end)
     and substExpConInValue' 
       (maps as (expmap : exp subst,conmap : con subst)) value = 
@@ -505,12 +505,11 @@ functor NilSubstFn(structure Nil : NIL
 	    in	(defs,(expmap,conmap))
 	    end
         in  (case bnd of
-		 Con_b (var, kind, con) =>
+		 Con_b (var, con) =>
 		     let
-			 val kind = substConInKind conmap kind
 			 val con = substConInCon conmap con
 			 val (var,conmap) = con_rebind (var,conmap)
-			 val bnd = (Con_b (var,kind,con))
+			 val bnd = (Con_b (var,con))
 		     in
 			 (bnd,(expmap,conmap))
 		     end
@@ -543,50 +542,45 @@ functor NilSubstFn(structure Nil : NIL
     and substExpConInSwitch'
       (maps as (expmap : exp subst, conmap : con subst)) switch = 
       (case switch
-	 of Intsw_e {info=intsize,arg,arms,default} =>
+	 of Intsw_e {size,arg,result_type,arms,default} =>
 	   let
 	     val arg = substExpConInExp' maps arg
-	     val arms = map_second (substExpConInFunction' maps) arms
+	     val result_type = substConInCon conmap result_type
+	     val arms = map_second (substExpConInExp' maps) arms
 	     val default = mapopt (substExpConInExp' maps) default
 	   in
-	     Intsw_e {info=intsize,arg=arg,
+	     Intsw_e {size=size,arg=arg,result_type=result_type,
 		      arms=arms,default=default}
 	   end
-	  | Sumsw_e {info,arg,arms,default} => 
+	  | Sumsw_e {sumtype,arg,result_type,bound,arms,default} => 
 	   let
+	     val sumtype = substConInCon conmap sumtype
+	     val result_type = substConInCon conmap result_type
 	     val arg = substExpConInExp' maps arg
-	     val arms = map_second (substExpConInFunction' maps) arms
-	     val info = substConInCon conmap info
 	     val default = mapopt (substExpConInExp' maps) default
+	     val (expmap,conmap) = maps
+	     val (bound,expmap) = exp_rebind(bound,expmap)
+	     val maps = (expmap,conmap) 
+	     val arms = map_second (substExpConInExp' maps) arms
 	   in
-	     Sumsw_e {info=info,arg=arg,
+	     Sumsw_e {sumtype=sumtype,arg=arg,result_type=result_type,bound=bound,
 		      arms=arms,default=default}
 	   end
-	  | Exncase_e {info,arg,arms,default} =>
+	  | Exncase_e {arg,result_type,bound,arms,default} =>
 	   let
 	     val arg = substExpConInExp' maps arg
-	     fun mapper (exp,function) = 
-	       let
-		 val exp = substExpConInExp' maps exp
-		 val function = substExpConInFunction' maps function
-	       in
-		 (exp,function)
-	       end
-	     val arms = map mapper arms
+	     val result_type = substConInCon conmap result_type
 	     val default = mapopt (substExpConInExp' maps) default
-	   in
-	     Exncase_e {info=(),arg=arg,
+	     val (expmap,conmap) = maps
+	     val (bound,expmap) = exp_rebind(bound,expmap)
+	     val maps = (expmap,conmap) 
+	     val arms = map (fn (e1,e2) => (substExpConInExp' maps e1,
+					    substExpConInExp' maps e2)) arms
+	   in Exncase_e {arg=arg,result_type=result_type,bound=bound,
 			arms=arms,default=default}
 	   end
-	  | Typecase_e {info,arg,arms,default} =>
-	   let
-	     val arg = substConInCon conmap arg
-	     val arms = map_second (substExpConInFunction' maps) arms
-	     val default = mapopt (substExpConInExp' maps) default
-	   in
-	     Typecase_e {info=(),arg=arg,
-			 arms=arms,default=default}
-	   end)
+	  | Typecase_e _ => error "typecase not handled")
+
     and substExpConInFunction' (maps as (expmap : exp subst,conmap : con subst))
       (Function (effect,recursive,tformals,formals,fformals,body,return)) = 
       let

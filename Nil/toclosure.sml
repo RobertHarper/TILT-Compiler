@@ -22,7 +22,6 @@ functor ToClosure(structure Nil : NIL
 struct
 
 
-    val use_kind_at_bind = ref false
     val do_close_path = ref true
     val do_single_venv = ref true
 
@@ -31,7 +30,7 @@ struct
     val closure_print_free = Stats.bool "closure_print_free"
 
 
-    open Util NilUtil Name Nil Ppnil
+    open Util NilUtil Name Nil Ppnil Listops
     structure Nil = Nil
 
     val error = fn s => error "toclosure.sml" s
@@ -162,9 +161,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	    end
 	fun add_gboundcvar (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},v,k) = 
 	    let val boundcvars' = VarMap.insert(boundcvars,v,GLOBALc)
-		val ctxt' = if (!use_kind_at_bind) 
-				then (error "use_kind_at_bind not done here")
-			    else NilContext.insert_kind(ctxt,v,k)
+		val ctxt' = NilContext.insert_kind(ctxt,v,k)
 	    in  STATE{ctxt = ctxt',
 		      is_top = is_top,
 		      curfid = curfid,
@@ -201,8 +198,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 		        | (SOME c, SOME k) => NilContext.insert_kind_equation(ctxt,v,c,k)
 		        | (SOME c, NONE) => error "add_boundcvar with equation but no kind"
 		        | (NONE,NONE) => error "add_boundcvars with no info"))
-		val ctxt' =  if (!use_kind_at_bind) then ctxt 
-		              else foldl folder ctxt vck_list
+		val ctxt' =  foldl folder ctxt vck_list
 
 		fun folder ((v,NONE,SOME k),m) = VarMap.insert(m,v,wrap k)
 		  | folder ((v,_,_),m) = 
@@ -605,22 +601,10 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		    end
 		val (state,frees) = 
 		    (case bnd of
-			 Con_b(v,k,c) => 
+			 Con_b(v,c) => 
 			     let val f = c_find_fv (state,frees) c
-				 val (state,f) = 
-				     if (!use_kind_at_bind)
-					 then let val k' = NilUtil.singletonize(NilUtil.kill_singleton k,c)
-						  val state = add_boundcvar(state,v,k')
-					      in (state, k_find_fv (state,f) k)
-					      end
-				     else
-					 (* con_valid and con_reduce not quite the same! *)
-					 let 
-					  in  (add_boundcvar'(state,v,c,k), f)
-					       (* by not adding the FV's of k,
-						we are not closed WRT types
-						(pk, k_find_fv (state,f) k) *)
-					  end
+				 val k = NilStatic.get_shape (get_ctxt state) c
+				 val state =  add_boundcvar'(state,v,c,k)
 				 val _ = if (!debug)
 					     then (print "add_boundcvar ";
 						   Ppnil.pp_var v; print "\n")
@@ -717,6 +701,41 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 			 print "\n\n"; raise e)
 	in  res 
 	end
+
+    and switch_find_fv (state : state, frees : frees) switch : frees =
+	(case switch of
+	     Intsw_e{arg,arms,default,...} =>
+		 let val frees = e_find_fv (state,frees) arg
+		     val frees = foldl (fn ((_,e),f) => e_find_fv (state,f) e) frees arms 
+		     val frees = (case default of
+				      NONE => frees
+				    | SOME e => e_find_fv (state,frees) e)
+		 in  frees
+		 end
+	   | Sumsw_e{sumtype,arg,bound,arms,default,...} => 
+		 let val frees = e_find_fv (state,frees) arg
+		     val frees = t_find_fv (state,frees) sumtype
+		     val frees = (case default of
+				      NONE => frees
+				    | SOME e => e_find_fv (state,frees) e)
+		     val state = add_boundevar(state,bound,sumtype)
+		     val frees = foldl (fn ((_,e),f) => e_find_fv (state,f) e) frees arms 
+		 in  frees
+		 end
+	   | Exncase_e{arg,bound,arms,default,...} => 
+		 let val frees = e_find_fv (state,frees) arg
+		     val frees = (case default of
+				      NONE => frees
+				    | SOME e => e_find_fv (state,frees) e)
+		     val state = add_boundevar(state,bound,Prim_c(Exn_c,[]))
+		     val frees = foldl (fn ((e1,e2),f) => 
+					let val f = e_find_fv (state,f) e1
+					    val f = e_find_fv (state,f) e2
+					in  f
+					end) frees arms 
+		 in  frees
+		 end
+	   | Typecase_e _ => error "typecase not handled")
 
     and e_find_fv' (state : state, frees : frees) exp : frees =
 	(if (!debug)
@@ -839,43 +858,8 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		      let val (state',bndfree) = bnds_find_fv (state,frees) bnds
 		      in  e_find_fv (state',bndfree) e
 		      end
-	   | Switch_e switch => 
-		 let
-		     fun do_sw {info, arg, arms, default} do_info do_arg do_prearm =
-			 let val f = do_info (info,frees)
-			     val f = do_arg (arg,f)
-			     fun do_arm((pre,Function(_,_,vklist,vclist,vflist,body,tipe)),f) =
-				 let 
-				     fun vkfolder((v,k),(f,s)) = (k_find_fv (s,f) k,
-								  add_boundcvar(s,v,k))
-				     fun vcfolder((v,c),(f,s)) =
-					 let val f = t_find_fv (s,f) c
-					 in (f, add_boundevar(s,v,c))
-					 end
-				     val (f,s) = (do_prearm (pre,f), state)
-				     val (f,s) = foldl vkfolder (f,s) vklist
-				     val (f,s) = foldl vcfolder (f,s) 
-					 (vclist @ (map (fn v => (v,float64)) vflist))
-				     val f = e_find_fv (s,f) body
-				     val f = c_find_fv (s,f) tipe
-				 in  f
-				 end
-			     val f = foldl do_arm f arms
-			     val f = (case default of
-					   NONE => f
-					 | SOME e => e_find_fv (state,f) e)
-			 in f
-			 end
-		     fun nothing (s,f) = f
-		 in	 case switch of
-		     Intsw_e sw => do_sw sw nothing (fn (e,f) => e_find_fv (state,f) e ) nothing
-		     (* the info field of a sum is just type information and not constructor *)
-		   | Sumsw_e sw => (do_sw sw (fn (c,f) => (t_find_fv (state,f); f))
-				    (fn (e,f) => e_find_fv (state,f) e) nothing)
-		   | Exncase_e sw => (do_sw sw nothing (fn (e,f) => e_find_fv (state,f) e) 
-				      (fn (e,f) => e_find_fv (state,f) e))
-		   | Typecase_e sw => do_sw sw nothing (fn (c,f) => c_find_fv (state,f) c) nothing
-		 end
+	   | Switch_e switch => switch_find_fv (state,frees) switch
+
 	   | App_e (_, e, clist, elist, eflist) =>
 		 let val f = (case e of
 				      Var_e v => if (is_fid v andalso eq_var(v,get_curfid state))
@@ -894,14 +878,13 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		 in  f
 		 end
 	   | Raise_e (e,c) => e_find_fv (state, c_find_fv (state,frees) c) e
-	   | Handle_e (e,Function(_,_,[],[(v,c)],[],body,tipe)) =>
+	   | Handle_e (e,v,body,tipe) =>
 		 let val f = e_find_fv (state,frees) e
-		     val f = c_find_fv (state,f) c
-		     val f = e_find_fv (add_boundevar(state,v,c),f) body
+		     val f = e_find_fv (add_boundevar(state,v,Prim_c(Exn_c,[])),f) body
 		     val f = c_find_fv (state,f) tipe
 		 in  f
-		 end
-	   | Handle_e _ => error "ill-typed Handle_e")
+		 end)
+
 
 
 	and c_find_fv (state : state, frees : frees) con : frees =
@@ -1042,17 +1025,11 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		     end
 	       | Let_c(_,cbnds,c) => 
 		     let 
-			 fun cb_folder (Con_cb(v,k,c),(f,s)) =
+			 fun cb_folder (Con_cb(v,c),(f,s)) =
 			     let val f' = c_find_fv (s,f) c
-				 val (state,f) = 
-				     if (!use_kind_at_bind)
-					 then let 
-						  val s = add_boundcvar(s,v,k)
-					      in (s, k_find_fv (s,f') k)
-					      end
-				     else 
-					 (add_boundcvar'(s,v,c,k),f')
-			     in (f,state)
+				 val k = NilStatic.get_shape (get_ctxt s) c
+				 val state = add_boundcvar'(s,v,c,k)
+			     in (f',state)
 			     end
 			   | cb_folder (Code_cb(v,vklist,c,k), (f,s)) = (f,s)
 			   | cb_folder (Open_cb(v,vklist,c,k), (f,s)) =
@@ -1373,18 +1350,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	       in  pfun_bnd :: closure_bnd_list
 	       end
        in (case bnd of
-		(Con_b(v,k,c)) => if (!use_kind_at_bind)
-				      then [Con_b(v,k_rewrite state k, c_rewrite state c)]
-				  else let val kk = NilUtil.kill_singleton k
-					   val k = (k_rewrite state kk)
-					       handle e => 
-						   (print "k_rewrite failed on k = !\n";
-						    Ppnil.pp_kind k; print "\n";
-						    print "k_rewrite failed on singletonless = !\n";
-						    Ppnil.pp_kind kk; print "\n";
-						    raise e)
-				       in  [Con_b(v,k, c_rewrite state c)]
-				       end
+		(Con_b(v,c)) => [Con_b(v, c_rewrite state c)]
 	      | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite state c, e_rewrite state e)]
 	      | (Fixclosure_b _) => error "there can't be closures while closure-converting"
 	      | (Fixcode_b _) => error "there can't be codes while closure-converting"
@@ -1432,22 +1398,23 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	  | Const_e v => arg_exp
 	  | Switch_e switch => 
 		Switch_e(case switch of 
-		     Intsw_e{info,arg,arms,default} => 
-			 Intsw_e{info=info, arg=e_rewrite arg,
-				 arms=map (fn (w,f) => (w,armfun_rewrite f)) arms,
+		     Intsw_e{size,result_type,arg,arms,default} => 
+			 Intsw_e{size = size, result_type=result_type,
+				 arg = e_rewrite arg,
+				 arms = map_second e_rewrite arms,
+				 default = Util.mapopt e_rewrite default}
+		   | Sumsw_e{sumtype,result_type,arg,bound,arms,default} => 
+			 Sumsw_e{sumtype=c_rewrite sumtype, 
+				 result_type=result_type,arg=e_rewrite arg,
+				 bound = bound,
+				 arms = map_second  e_rewrite arms,
 				 default=Util.mapopt e_rewrite default}
-		   | Sumsw_e{info,arg,arms,default} => 
-			 Sumsw_e{info=c_rewrite info, arg=e_rewrite arg,
-				 arms=map (fn (w,f) => (w,armfun_rewrite f)) arms,
+		   | Exncase_e{result_type,arg,arms,bound,default} => 
+			 Exncase_e{result_type=result_type, arg=e_rewrite arg,
+				   bound=bound,
+				 arms=map (fn (e,f) => (e_rewrite e,e_rewrite f)) arms,
 				 default=Util.mapopt e_rewrite default}
-		   | Exncase_e{info=info,arg,arms,default} => 
-			 Exncase_e{info=info, arg=e_rewrite arg,
-				 arms=map (fn (e,f) => (e_rewrite e,armfun_rewrite f)) arms,
-				 default=Util.mapopt e_rewrite default}
-		   | Typecase_e{info=info,arg,arms,default} => 
-			 Typecase_e{info=info, arg=c_rewrite arg,
-				 arms=map (fn (pc,f) => (pc,armfun_rewrite f)) arms,
-				 default=Util.mapopt e_rewrite default})
+		   | Typecase_e _ => error "typecase not handled")
 			 
 	  | Let_e(letsort,bnds,e) => let val bnds_list = map (bnd_rewrite state) bnds
 				     in Let_e(letsort, List.concat bnds_list, e_rewrite e)
@@ -1483,14 +1450,11 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		       | _ => default())
 		end
 	  | Raise_e (e,c) => Raise_e(e_rewrite e, c_rewrite c)
-	  | Handle_e (e,f) => Handle_e(e_rewrite e, armfun_rewrite f))
+	  | Handle_e (e,v,f,c) => Handle_e(e_rewrite e, v, e_rewrite f, c_rewrite c))
        end
 
-   and cbnd_rewrite state (Con_cb(v,k,c)) : conbnd list = 
-           if (!use_kind_at_bind)
-	       then [Con_cb(v,k_rewrite state k, c_rewrite state c)]
-	   else [Con_cb(v,k_rewrite state (NilUtil.kill_singleton k),
-			c_rewrite state c)]
+   and cbnd_rewrite state (Con_cb(v,c)) : conbnd list = 
+	    [Con_cb(v,c_rewrite state c)]
      | cbnd_rewrite state (Open_cb(v,vklist,c,k)) = 
          let val _ = if (!debug)
 			 then (print "cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
@@ -1520,7 +1484,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	     val k = substConPathInKind (subst, k)
 
 
-	     fun get_cbnd (p,v,k,l) = Con_cb(v,k, Proj_c(Var_c cenv_var,l))
+	     fun get_cbnd (p,v,k,l) = Con_cb(v, Proj_c(Var_c cenv_var,l))
 	     val vklist = map (fn (v,k) => (v,k_rewrite state k)) vklist
 	     val vkl_free = map (fn (p,v,k,l) => (p,v,k_rewrite state k,l)) vkl_free
 	     val vkl_free_kind = Record_k(map
@@ -1534,8 +1498,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	     val con_env = Crecord_c(map (fn (p,_,_,l) => (l,path2con p)) vkl_free)
 	     val k' = Subst.substConInKind 
 			(Subst.fromList [(cenv_var,con_env)]) k
-	     val closure_cb = Con_cb(v,Arrow_k(Closure,vklist,k'),
-				   Closure_c (Var_c code_var, con_env))
+	     val closure_cb = Con_cb(v,Closure_c (Var_c code_var, con_env))
 	 in  [code_cb, closure_cb]
 	 end			
      | cbnd_rewrite state (Code_cb _) = error "found Code_cb during closure-conversion"
@@ -1578,7 +1541,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		    val c = c_rewrite c
 		in  (case (c,cbnds') of
 			 (_,[]) => c
-		       | (Var_c v, [Con_cb(v',_,c')]) => if (eq_var(v,v'))
+		       | (Var_c v, [Con_cb(v',c')]) => if (eq_var(v,v'))
 							     then c'
 							 else Let_c(letsort,cbnds',c)
 		       | _ => Let_c(letsort,cbnds',c))

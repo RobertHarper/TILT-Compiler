@@ -67,7 +67,7 @@ sig
 		totalcount : w32,
                 known : w32 option}           (* sum types *)
     | Record_c of label list                  (* records *)
-    | Vararg_c of openness * effect           (* helps classify make_vararg and make_onearg *)
+    | Vararg_c of openness * effect           (* classifies make_vararg and make_onearg *)
 
   and con = 
       Prim_c of primcon * con list                (* Classify term-level values 
@@ -91,7 +91,7 @@ sig
 		     kind : kind}        (* Constructor-level typecase *)
     | Annotate_c of annot * con                   (* General-purpose place to hang information *)
 
-  and conbnd = Con_cb of (var * kind * con)
+  and conbnd = Con_cb of (var * con)
              | Open_cb of (var * (var * kind) list * con * kind)
              | Code_cb of (var * (var * kind) list * con * kind)
 
@@ -131,21 +131,37 @@ sig
    *    the arms must be functions from [c]->tau for some fixed result type tau.  
    *)
   datatype switch =                                 (* Switching on / Elim Form *)
-      Intsw_e of (Prim.intsize,exp,w32) sw                (* integers *)
-    | Sumsw_e of (con,exp,w32) sw                         (* sum types *)
-    | Exncase_e of (unit,exp,exp) sw                      (* exceptions *)
-    | Typecase_e of (unit,con,primcon) sw                 (* typecase *)
+      Intsw_e of {result_type : con,
+		  arg  : exp, 
+		  size : Prim.intsize,
+		  arms : (w32 * exp) list,
+		  default : exp option}             (* integers *)
+    | Sumsw_e of {result_type : con,
+		  arg : exp,
+		  sumtype : con,
+		  bound : var,
+		  arms : (w32 * exp) list,
+		  default : exp option}             (* sum types *)
+    | Exncase_e of {result_type : con,
+		    arg : exp,
+		    bound : var,
+		    arms : (exp * exp) list,
+		    default : exp option}           (* exceptions *)
+    | Typecase_e of {result_type : con,
+		     arg : con,
+		     arms : ((var * kind) list * exp) list,
+		     default : exp option}          (* typecase *)
 
   and exp =                                          (* Term-level constructs *)
-      Var_e of var                                        (* Term-level variables *)
-    | Const_e of (con,exp) Prim.value                           (* Term-level constants *)
-    | Let_e of letsort * bnd list * exp                   (* Binding construct *)
-    | Prim_e of allprim * (con list) * (exp list)         (* primops must be fully applied *)
-    | Switch_e of switch                                  (* Switch statements *)
-    | App_e of openness * exp * con list *                (* application of open funs, code, or closures *)
-                       exp list * exp list                (* in the case of code, the first exp must be a var *)
+      Var_e of var                                   (* Term-level variables *)
+    | Const_e of (con,exp) Prim.value                (* Term-level constants *)
+    | Let_e of letsort * bnd list * exp              (* Binding construct *)
+    | Prim_e of allprim * (con list) * (exp list)    (* primops must be fully applied *)
+    | Switch_e of switch                             (* Switch statements *)
+    | App_e of openness * exp * con list *           (* application of open funs, code, or closures *)
+                       exp list * exp list           (* in the case of code, the first exp must be a var *)
     | Raise_e of exp * con                                
-    | Handle_e of exp * function
+    | Handle_e of exp * var * exp * con
 
 
   (* result types are needed for recursive definitions in order to make
@@ -156,7 +172,7 @@ sig
    *)
 
   and bnd =                                (* Term-level Bindings with optional classifiers *)
-      Con_b of var * kind * con              (* Binds constructors *)
+      Con_b of var * con                   (* Binds constructors *)
     | Exp_b of var * con * exp               (* Binds expressions *)
     | Fixopen_b of (var,function) set        (* Binds mutually recursive open functions *)
     | Fixcode_b of (var,function) set        (* Binds mutually recursive code functions *)
@@ -175,9 +191,6 @@ sig
   and function = Function of effect * recursive * (var * kind) list * 
                              (var * con) list * (var list) * exp * con  
 
-  (* a generic term-level switch construct. *)
-  withtype ('info,'arg,'t) sw = 
-    {info : 'info, arg: 'arg, arms : ('t * function) list, default : exp option}
 
   datatype import_entry = ImportValue of label * var * con
                         | ImportType of label * var * kind
