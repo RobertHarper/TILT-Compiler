@@ -279,13 +279,13 @@ returnToML:
 	ldgp	$gp, 0($27)				# compute self-gp for load_regs
 	mov	CFIRSTARG_REG, THREADPTR_REG		# restore THREADPTR_REG
 	mov	CSECONDARG_REG, $1			# use $1 as temp for return address
-	stl	$31, noinml_disp(THREADPTR_REG)		# set notInML to zero
+	stl	$31, notinml_disp(THREADPTR_REG)	# set notInML to zero
 	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer structure
 	bsr	load_regs				
 	mov	$1, $26					# restore return address to r26
 	ldq	$1, MLsaveregs_disp+8(THREADPTR_REG)	# restore r1 which was used to save return address
 	ldq	$0, MLsaveregs_disp+0(THREADPTR_REG)	# restore r0 which was used as arg to load_regs
-	ldq	$gp, MLsaveregs_disp+232(THREADPTR_REG)		# restore r29/gp return address	
+	ldq	$gp, MLsaveregs_disp+232(THREADPTR_REG)	# restore r29/gp return address	
 	ret	$31, ($26), 1
 	jsr	abort
 	nop
