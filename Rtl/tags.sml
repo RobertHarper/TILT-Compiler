@@ -30,6 +30,7 @@ struct
 
     val real_len_offset = 6
     val int_len_offset = 3
+    val ptr_len_offset = 5
 
     fun realarraytag len =
 	bitor(bitshift(len,real_len_offset),realarray)

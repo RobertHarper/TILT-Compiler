@@ -13,6 +13,7 @@ sig
 
    val real_len_offset : int  (* measured in double-precision floats = 8 bytes *)
    val int_len_offset : int   (* measured in bytes *)
+   val ptr_len_offset : int   (* measured in words *)
 
    (* compute tags statically given size of array *)
 
