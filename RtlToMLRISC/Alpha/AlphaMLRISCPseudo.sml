@@ -21,6 +21,8 @@ structure AlphaMLRISCPseudo
   | DataTrailer
   | TableHeader
   | TableTrailer
+  | ClusterHeader
+  | ClusterTrailer
   | ProcedureHeader of Label.label
   | ProcedureTrailer of Label.label
   | Export of Label.label
@@ -107,6 +109,10 @@ structure AlphaMLRISCPseudo
       | toString(TableHeader) =
 	  "\t.data\n"
       | toString(TableTrailer) =
+	  ""
+      | toString(ClusterHeader) =
+	  ""
+      | toString(ClusterTrailer) =
 	  ""
       | toString(ProcedureHeader label) =
 	  let
