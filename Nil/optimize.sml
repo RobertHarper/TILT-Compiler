@@ -162,8 +162,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 
 	datatype used_state = UNUSED 
 	                    | USED of int
-	                    | TYPE_USED of int
-	                    | DEFER of (bool * used_state ref) list
+	                    | DEFER of used_state ref list
 	datatype equivalent = UNKNOWN 
 	                    | OPTIONALe of exp | MUSTe of exp 
 	                    | ETAe of int * var * (con list * exp list * exp list) list
@@ -179,23 +178,17 @@ fun pp_alias UNKNOWN = print "unknown"
 	local
 	  type entry = used_state ref * equivalent
 	  datatype state = STATE of {curry_processed : (Name.VarSet.set * var Name.VarMap.map),
-				     intype : bool,
 				     equation : NilContext.context,
 				     current : used_state ref,
 				     mapping : entry Name.VarMap.map,
 				     avail : var ExpTable.Expmap.map * 
 				             var ExpTable.Conmap.map}
-
-
 	      
 	  fun isused r = 
 	      let fun loop count current [] = current
-		    | loop count current ((intype,l)::rest) = 
+		    | loop count current (l::rest) = 
 		      (case (isused l) of
 			   USED _ => loop (count+1) (USED(count+1)) rest
-			 | TYPE_USED _ => loop (count+1)
-			                     (if intype then TYPE_USED(count+1) 
-					      else USED(count+1)) rest
 			 | UNUSED => loop count current rest
 			 | _ => error "got defer")
 	      in  (case (!r) of
@@ -206,8 +199,8 @@ fun pp_alias UNKNOWN = print "unknown"
 		     | r => r)
 	      end
 
-	  fun update_mapping(STATE{intype, equation, current, avail, curry_processed, ...}, mapping) =
-			STATE{intype=intype,curry_processed=curry_processed,
+	  fun update_mapping(STATE{equation, current, avail, curry_processed, ...}, mapping) =
+			STATE{curry_processed=curry_processed,
 			      equation=equation, avail = avail,
 			      current=current,mapping=mapping}
 
@@ -228,27 +221,21 @@ fun pp_alias UNKNOWN = print "unknown"
 	       Name.VarMap.appi show_pair (#2 curry_processed))
 
 	  type state = state
-	  fun new_state() = STATE {intype = false,
-				   curry_processed = (Name.VarSet.empty, Name.VarMap.empty),
+	  fun new_state() = STATE {curry_processed = (Name.VarSet.empty, Name.VarMap.empty),
 				   equation = NilContext.empty(),
 				   current = ref (USED 1),
 				   avail = (ExpTable.Expmap.empty,
 					    ExpTable.Conmap.empty),
 				   mapping = Name.VarMap.empty}
 				   
-	  fun retain_state(STATE{intype, equation, current, mapping, avail, curry_processed}) =
-			STATE{intype=intype,equation=equation, avail=avail,
+	  fun retain_state(STATE{equation, current, mapping, avail, curry_processed}) =
+			STATE{equation=equation, avail=avail,
 			      curry_processed = curry_processed,
 			      current=ref (USED 1),mapping=mapping}
 
-	  fun type_state(STATE{intype, equation, current, mapping, avail, curry_processed}) =
-			STATE{intype=true,equation=equation, avail = avail,
-			      curry_processed = curry_processed,
-			      current=current,mapping=mapping}
 
-	  fun enter_var(STATE{intype, equation, curry_processed, current, mapping, avail}, v) =
-		STATE{intype = intype,
-		      equation=equation,
+	  fun enter_var(STATE{equation, curry_processed, current, mapping, avail}, v) =
+		STATE{equation=equation,
 		      mapping = mapping,
 		      avail = avail,
 		      curry_processed = curry_processed,
@@ -263,15 +250,14 @@ fun pp_alias UNKNOWN = print "unknown"
 		end
 	  fun add_var(state,v) = add_vars(state,[v])
 
-	  fun use_var(STATE{intype,mapping,current,...},v) = 
+	  fun use_var(STATE{mapping,current,...},v) = 
 	  	(case Name.VarMap.find(mapping,v) of
 		  NONE => ()
 		| SOME (r,_) =>
 		   (case !r of
 			USED n => r := (USED(n+1))
-		      | TYPE_USED n => r := DEFER[(intype,current), (true, ref (USED n))]
-		      | UNUSED => r := DEFER[(intype,current)]
-		      | DEFER ls => r := DEFER ((intype,current)::ls)))
+		      | UNUSED => r := DEFER[current]
+		      | DEFER ls => r := DEFER (current::ls)))
 
           fun get_varuse(STATE{mapping,...},v) = 
 		case Name.VarMap.find(mapping,v) of
@@ -283,7 +269,6 @@ fun pp_alias UNKNOWN = print "unknown"
 				     | (_,use) => use)
           fun is_used_var(state,v) = (case get_varuse(state,v) of
 					  USED _ => true
-					| TYPE_USED _ => true
 					| UNUSED => false)
 
 	  fun add_alias(state as STATE{mapping,...},v,alias) =
@@ -304,9 +289,9 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	  fun find_availC(STATE{avail,...},c) = 
 	      if (!do_cse) then ExpTable.Conmap.find(#2 avail,c) else NONE
-	  fun add_availC(state as STATE{curry_processed,intype,mapping,current,equation,avail},c,v) = 
+	  fun add_availC(state as STATE{curry_processed,mapping,current,equation,avail},c,v) = 
 	      if (!do_cse)
-		  then STATE{intype=intype,mapping=mapping,current=current,
+		  then STATE{mapping=mapping,current=current,
 			     equation=equation,
 			     curry_processed = curry_processed,
 			     avail=(#1 avail,
@@ -315,9 +300,9 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	  fun find_availE(STATE{avail,...},e) = 
 	      if (!do_cse) then ExpTable.Expmap.find(#1 avail,e) else NONE
-	  fun add_availE(state as STATE{intype,mapping,current,curry_processed,equation,avail},e,v) = 
+	  fun add_availE(state as STATE{mapping,current,curry_processed,equation,avail},e,v) = 
 	      if (!do_cse andalso (not (NilUtil.effect e)))
-		  then STATE{intype=intype,mapping=mapping,current=current,
+		  then STATE{mapping=mapping,current=current,
 			     curry_processed = curry_processed,
 			     equation=equation,
 			     avail=(ExpTable.Expmap.insert(#1 avail,e,v),
@@ -363,38 +348,34 @@ fun pp_alias UNKNOWN = print "unknown"
 	  fun find_equation(STATE{equation,...},c) = NilContext.find_kind_equation(equation,c)
 	  fun find_con(STATE{equation,...},v) = NilContext.find_con(equation,v)
 
-	  fun add_kind(STATE{avail,intype,curry_processed,equation,current,mapping},v,k) = 
+	  fun add_kind(STATE{avail,curry_processed,equation,current,mapping},v,k) = 
 	      STATE{equation=NilContext.insert_kind(equation,v,k),
-		    intype=intype,
 		    avail=avail,
 		    curry_processed = curry_processed,
 		    mapping=mapping,
 		    current=current}
 	  
-	  fun add_con(STATE{avail,equation,mapping,curry_processed,current,intype},v,c) = 
+	  fun add_con(STATE{avail,equation,mapping,curry_processed,current},v,c) = 
 	      (if (!debug)
 		   then (print "optimize: add_con "; Ppnil.pp_var v;
 			 print " -> "; Ppnil.pp_con c; print "\n")
 	       else ();
 	       STATE{equation=NilContext.insert_con(equation,v,c),
-		    intype=intype,
 		     avail=avail,
 		     curry_processed = curry_processed,
 		    mapping=mapping,
 		    current=current})
 
-	  fun add_curry_processed(STATE{avail,equation,mapping,curry_processed,current,intype},v) =
+	  fun add_curry_processed(STATE{avail,equation,mapping,curry_processed,current},v) =
 	       STATE{equation=equation,
-		    intype=intype,
 		     avail=avail,
 		     curry_processed = (Name.VarSet.add(#1 curry_processed,v), #2 curry_processed),
 		     mapping=mapping,
 		    current=current}
 
-	  fun add_curry_pair(STATE{avail,equation,mapping,curry_processed,current,intype},
+	  fun add_curry_pair(STATE{avail,equation,mapping,curry_processed,current},
 			     curry_name,uncurry_name) =
 	       STATE{equation=equation,
-		    intype=intype,
 		     avail=avail,
 		     curry_processed = (#1 curry_processed, Name.VarMap.insert(#2 curry_processed,
 									       curry_name,uncurry_name)),
@@ -527,10 +508,9 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	fun bnd_used state bnd = 
 	    (case bnd of
-		 (Con_b(_,cb)) => (case (cbnd_used' state cb) of
+		 (Con_b(p,cb)) => (case (cbnd_used' state cb) of
 				       UNUSED => NONE
-				     | TYPE_USED _ => SOME(Con_b(Compiletime,cb))
-				     | USED _ => SOME(Con_b(Runtime,cb)))
+				     | USED _ => SOME(Con_b(p,cb)))
 	       | (Exp_b(v,_,e)) => if is_used_var(state,v) then SOME bnd else NONE
 	       | (Fixopen_b vfset) => 
 		     let val vflist = Sequence.toList vfset
@@ -555,7 +535,6 @@ fun pp_alias UNKNOWN = print "unknown"
 					      | USED n => (print "USED ";
 							   print (Int.toString n);
 							   print "\n"; false)
-					      | TYPE_USED _ => (print "TYPE_USED\n"; false)
 					      | UNUSED => (print "UNUSED\n"; false)
 					      | _ => false))
 					  then (eliminate_uncurry(a,b,af,bf))::(loop rest)
@@ -624,8 +603,6 @@ fun pp_alias UNKNOWN = print "unknown"
 	    in  result
 	    end 
 
-	and do_type (state : state) (con : con) : con = do_con (type_state state) con
-
 	and do_con' (state : state) (con : con) : con =
 	   (case con of
 		Prim_c(Record_c(labs,SOME vlist),clist) => 
@@ -677,7 +654,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		Con_cb(v,c) => 
 		    let val state = add_var(state,v)
 			val state' = enter_var(state,v)
-			val c = do_type state' c
+			val c = do_con state' c
 			val c =
 			    (case find_availC(state,c) of
 				 NONE => c
@@ -838,9 +815,7 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	     val elist = map (do_exp state) elist
              fun default() = Prim_e(prim,
-				    map ((if Normalize_allprim_uses_carg prim 
-					      then do_con else do_type)
-					 state) clist, 
+				    map (do_con state) clist, 
 				    elist)
 	     fun getVals [] = SOME []
 	       | getVals (e::rest) = 
@@ -948,7 +923,7 @@ fun pp_alias UNKNOWN = print "unknown"
 				    | _ => default())
 			      | _ => default())
 		     end
-		| Raise_e(e,c) => Raise_e(do_exp state e, do_type state c)
+		| Raise_e(e,c) => Raise_e(do_exp state e, do_con state c)
 		| Handle_e(e,v,handler) => 
 			let val ([(v,_)],state) = do_vclist state [(v,Prim_c(Exn_c,[]))]
 			in  Handle_e(do_exp state e, v, do_exp state handler)
@@ -968,7 +943,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			      end
 			| arg => 
 			      let 
-				  val result_type = do_type state result_type
+				  val result_type = do_con state result_type
 				  val arms = map_second (do_exp state) arms
 				  val default = Util.mapopt (do_exp state) default
 			      in  Switch_e(Intsw_e {size=size,arg=arg, arms=arms,default=default,
@@ -1019,8 +994,8 @@ fun pp_alias UNKNOWN = print "unknown"
 							  arg)],
 						   Option.valOf default)))
 			   | _ => let
-				      val sumtype = do_type state sumtype
-				      val result_type = do_type state result_type
+				      val sumtype = do_con state sumtype
+				      val result_type = do_con state result_type
 				      val arms = map do_arm arms
 				      val default = Util.mapopt (do_exp state) default
 				  in  
@@ -1031,7 +1006,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		     end
 	       | Exncase_e {arg,bound,arms,default,result_type} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_type state result_type
+			 val result_type = do_con state result_type
 			 fun do_arm(tag,tr,body) = 
 			     let val tag = do_exp state tag
 				 val tr = do_niltrace state tr
@@ -1056,7 +1031,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		    val (tFormals,state) = do_vklist state tFormals
 		    val (eFormals,state) = do_eFormals state eFormals
 		    val body = do_exp state body
-		    val c = do_type state c
+		    val c = do_con state c
 		in  (v,Function{effect=effect,recursive=recursive,isDependent=isDependent,
 				tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 				body=body, body_type = c})
@@ -1241,7 +1216,7 @@ fun pp_alias UNKNOWN = print "unknown"
 					let val _ = do_exp state' (Var_e code)
 					    val cenv = do_con state' cenv
 					    val venv = do_exp state' venv
-					    val tipe = do_type state' tipe
+					    val tipe = do_con state' tipe
 					in  {code=code,cenv=cenv,venv=venv,tipe=tipe}
 					end
 				    val vcllist = map (fn (v,f) => (v,do_closure f)) vcllist

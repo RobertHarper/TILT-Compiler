@@ -218,6 +218,14 @@ structure Linknil :> LINKNIL  =
 				 Hoist.optimize,
 				 filename, nilmod)
 
+	    val nilmod = transform(do_two_optimize, show_two_optimize,
+				 "Optimize2", 
+				 Optimize.optimize
+				   {lift_array = false,
+				    dead = true, projection = true, 
+				    cse = !do_cse, uncurry = !do_uncurry},
+				 filename, nilmod) 
+
             val nilmod = transform(do_reify, show_reify,
                                    "Reification",
                                    Reify.reify_mod,
@@ -227,15 +235,6 @@ structure Linknil :> LINKNIL  =
 				    "Nil_typecheck_post-opt",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
-
-
-	    val nilmod = transform(do_two_optimize, show_two_optimize,
-				 "Optimize2", 
-				 Optimize.optimize
-				   {lift_array = false,
-				    dead = true, projection = true, 
-				    cse = !do_cse, uncurry = !do_uncurry},
-				 filename, nilmod) 
 
 	    val nilmod = transform(ref true, show_cc,
 				 "Closure-conversion", 

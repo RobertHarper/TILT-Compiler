@@ -525,8 +525,7 @@ struct
 						 show_free f; print "\n")
 					     else ()
 						 
-			       val {free_evars,free_cvars} = f
-			       fun folder(v,(_,tr,copt),f) = 
+			       fun efolder(v,(_,tr,copt),f) = 
 				   let 
 				       val self = Listops.member_eq(eq_var,v,
 								    #2(get_curfid (#2 fs)))
@@ -535,10 +534,10 @@ struct
 					| (true, SOME _) => free_evar_add(f,v,tr,copt)
 					| _ => error "no optional type for function")
 				   end
-			       val temp_frees = ({free_cvars=free_cvars,
-						  free_evars=VarMap.empty}) 
-			       val lf = VarMap.foldli folder temp_frees free_evars
-				   
+			       fun cfolder(v,_,f) = free_cvar_add(f,v)
+			       val {free_evars,free_cvars} = f
+			       val lf = VarMap.foldli efolder empty_frees free_evars
+			       val lf = VarMap.foldli cfolder lf free_cvars	   
 			       val f = {free_evars = free_evars,
 					free_cvars = #free_cvars lf}
 			       val _ = add_frees(v,lf)

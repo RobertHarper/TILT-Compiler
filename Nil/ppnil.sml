@@ -430,8 +430,8 @@ structure Ppnil	:> PPNIL =
 				[String " ;; ", Break0 0 0]) @
 			   vcformats @ 
 			   (if (null vfformats)
-				then [String " ;; )"] 
-			    else [String " ;; ", Break0 0 0] @ vfformats @ [String ")"]))],
+				then [String " ;; "] 
+			    else [String " ;; ", Break0 0 0] @ vfformats))],
 		    Break0 0 0,
 		    String (case effect of 
 				Total => " -> " 
