@@ -114,9 +114,12 @@ struct
 		 Let_e(Sequential,bnds, Var_e v) => 
 		     let fun addone(v1,fv) = VarSet.addList(fv,v1)
 			 fun addpair((v1,v2),fv) = VarSet.addList(VarSet.addList(fv,v1),v2)
-			 val fv = foldl addpair VarSet.empty (map NilUtil.freeExpConVarInExp eargs)
-			 val fv = foldl addpair fv (map NilUtil.freeExpConVarInExp fargs)
-			 val fv = foldl addone  fv (map NilUtil.freeConVarInCon cargs)
+			 val fv = foldl addpair VarSet.empty 
+			     (map (fn e => NilUtil.freeExpConVarInExp (true,e)) eargs)
+			 val fv = foldl addpair fv 
+			     (map (fn e => NilUtil.freeExpConVarInExp (true,e)) fargs)
+			 val fv = foldl addone  fv 
+			     (map (fn c => NilUtil.freeConVarInCon(true,c)) cargs)
 			 fun vf_mem(v,_) = VarSet.member(fv,v)
 			 fun bnd_check (Con_b(v,_,_)) = VarSet.member(fv,v)
 			   | bnd_check (Exp_b(v,_,_)) = VarSet.member(fv,v)

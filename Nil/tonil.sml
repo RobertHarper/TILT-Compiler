@@ -38,8 +38,10 @@ struct
 
    open Nil
    val debug      = ref false
+   val diag       = ref true
    val full_debug = ref false
    val trace      = ref false
+   val do_memoize = ref true
 
    val elaborator_specific_optimizations = ref true
    val optimize_empty_structure = ref true
@@ -62,6 +64,7 @@ struct
    val perr_k = NilError.perr_k
    val perr_c_k = NilError.perr_c_k
    val eq_label = Name.eq_label
+
 
    fun gt_label_pair ((l1,_),(l2,_)) = 
        (case Name.compare_label (l1,l2) of
@@ -288,9 +291,9 @@ struct
 	    fun addpair((v1,v2),fv) = VarSet.addList(VarSet.addList(fv,v1),v2)
 
 	    val fv = foldl addpair VarSet.empty 
-		           (map Nilutil.freeExpConVarInExp eargs)
-	    val fv = foldl addpair fv (map Nilutil.freeExpConVarInExp fargs)
-	    val fv = foldl addone  fv (map Nilutil.freeConVarInCon cargs)
+		           (map (fn e => Nilutil.freeExpConVarInExp(true,e))  eargs)
+	    val fv = foldl addpair fv (map (fn e => Nilutil.freeExpConVarInExp(true,e)) fargs)
+	    val fv = foldl addone  fv (map (fn c => Nilutil.freeConVarInCon(true,c)) cargs)
 
 	    fun vf_mem(v,_) = VarSet.member(fv,v)
 
@@ -322,6 +325,9 @@ struct
        in
 	   loop (module, nil)
        end
+
+
+
 
    (* xeffect.  
          Translates the total/partial distinction from HIL to MIL.
@@ -500,12 +506,19 @@ struct
        CONTEXT{NILctx=NILctx, vmap=vmap'}
    fun update_NILctx (CONTEXT{NILctx,vmap}, NILctx') =
        CONTEXT{NILctx=NILctx', vmap=vmap}
+
+   fun nil_insert_kind(nilctxt,v,k) = ((* clear_memo v; *)
+				       Nilcontext.insert_kind(nilctxt,v,k))
+   fun nil_insert_kind_list(nilctxt,vklist) = ((* app (fn (v,_) => clear_memo v) vklist; *)
+					       Nilcontext.insert_kind_list(nilctxt,vklist))
+       
+
    fun update_NILctx_insert_con(CONTEXT{NILctx,vmap},v,c) = 
        let val NILctx' = Nilcontext.insert_con(NILctx, v, c)
        in  CONTEXT{NILctx=NILctx', vmap=vmap}
        end
    fun update_NILctx_insert_kind(CONTEXT{NILctx,vmap},v,k) = 
-       let val NILctx' = Nilcontext.insert_kind(NILctx, v, k)
+       let val NILctx' = nil_insert_kind(NILctx, v, k)
        in  CONTEXT{NILctx=NILctx', vmap=vmap}
        end
 
@@ -524,7 +537,7 @@ let
 	     Ppnil.pp_var v; print "  ::  ";
 	     Ppnil.pp_kind k; print "\n")
 *)
-    val res =  Nilcontext.insert_kind(ctxt,v,k)
+    val res =  nil_insert_kind(ctxt,v,k)
 (*
     val _ = (print "XXXXXXXXX: new context is: ";
 	     Nilcontext.print_context res;
@@ -547,7 +560,7 @@ end)
 			 fun folder(Exp_b(v,c,_),ctxt) = 
 			        Nilcontext.insert_con(ctxt,v,c)
                            | folder(Con_b(v,_,c),ctxt) = 
-			     (Nilcontext.insert_kind
+			     (nil_insert_kind
 				 (ctxt,v,#2 (Nilstatic.con_valid (ctxt, c))))
                            | folder(Fixopen_b vfset, ctxt) =
 			        Util.foldset (folder' Open) ctxt vfset
@@ -560,10 +573,77 @@ end)
 			 foldl folder (NILctx_of ctxt) ebnd_flat
 		     end)
 
+
+   local
+       type con_result = con * kind
+       type mod_result = {cbnd_cat : (var * kind * con) catlist,
+			  ebnd_cat : bnd catlist,
+			  name_c : con,
+			  name_r : exp,
+			  knd_c : kind,
+			  type_r : con,
+			  vmap : (var * var) Name.VarMap.map,
+			  valuable : bool}
+       val con_memo = ref (Name.VarMap.empty : con_result Name.PathMap.map Name.VarMap.map)
+       val mod_memo = ref (Name.VarMap.empty : mod_result Name.PathMap.map Name.VarMap.map)
+   in
+       fun reset_memo() = (con_memo := Name.VarMap.empty; mod_memo := Name.VarMap.empty)
+
+       fun clear_memo v = (con_memo := (#1(Name.VarMap.remove(!con_memo,v))
+					handle LibBase.NotFound => !con_memo);
+			   mod_memo := (#1(Name.VarMap.remove(!mod_memo,v))
+					handle LibBase.NotFound => !mod_memo))
+	   
+       fun lookup_con_memo (path as (v,lbls)) thunk =
+	     (case Name.VarMap.find(!con_memo,v) of
+		NONE => (con_memo := Name.VarMap.insert(!con_memo,v,Name.PathMap.empty);
+			 lookup_con_memo path thunk)
+	      | SOME pathmap =>
+		   (case Name.PathMap.find(pathmap,path) of
+			SOME result => result
+		      | NONE => let val res = thunk()
+				in  con_memo := Name.VarMap.insert(!con_memo,v,
+								   Name.PathMap.insert(pathmap,path,res));
+				    res
+				end))
+
+       fun lookup_mod_memo (path as (v,lbls)) thunk =
+	     (case Name.VarMap.find(!mod_memo,v) of
+		NONE => (mod_memo := Name.VarMap.insert(!mod_memo,v,Name.PathMap.empty);
+			 lookup_mod_memo(v,lbls) thunk)
+	      | SOME pathmap =>
+		   (case Name.PathMap.find(pathmap,path) of
+			SOME result => result
+		      | NONE => let val res = thunk()
+				in  mod_memo := Name.VarMap.insert(!mod_memo,v,
+								   Name.PathMap.insert(pathmap,path,res));
+				    res
+				end))
+
+   end
+
 (* TO DO:
     precheck to drop all datatype-label components
 *)
 
+   fun projectKind c record_kind [] = record_kind
+     | projectKind c record_kind (label::lbls) = 
+	 let
+	   val entry_kinds = 
+	       (case (strip_singleton record_kind) of
+		    Record_k kinds => Util.sequence2list kinds
+		  | _ => error "projectKind did not get record_kind")
+
+	   fun proj_kind (((l,v),k)::rest,subst) = 
+	       if eq_label (l,label) then Subst.substConInKind subst k
+	       else
+		   proj_kind (rest,Subst.add subst (v,Proj_c (c,l)))
+	     | proj_kind ([],subst) = error "projectKind could not project from kind"
+	       
+	   val kind = proj_kind (entry_kinds,Subst.empty())
+	 in projectKind (Proj_c(c,label)) kind lbls
+	 end
+	
 
    fun xmod context (args as (il_mod, _)) =
        let
@@ -576,7 +656,13 @@ end)
 		    print"\n")
 	       else ()
 
-	   val result = xmod' context args
+	   fun check_proj(Il.MOD_VAR v,ls) = 
+	       lookup_mod_memo (v,ls) (fn()=>xmod' context args)
+	     | check_proj(Il.MOD_PROJECT(m,l),ls) = check_proj(m,l::ls)
+	     | check_proj _ = xmod' context args
+	   val result = (case (!do_memoize,args) of
+			     (true,(Il.MOD_PROJECT(m,l),_)) => check_proj(m,[l])
+			   | _ => xmod' context args)
 	       handle e => (if (!debug) then print ("Exception detected in call " ^ 
 						    (Int.toString this_call) ^ " to xmod\n") else ();
 			    raise e)
@@ -636,9 +722,9 @@ end)
      | xmod' context (Il.MOD_APP(ilmod_fun, ilmod_arg), preferred_name) =
        let
 
-(*
+
 val _ = print "MOD_APP start\n"
-*)
+
 
 	   val _ = 
 	     if (!trace) then
@@ -657,10 +743,10 @@ val _ = print "MOD_APP start\n"
 		} = xmod context (ilmod_fun, NONE)
 
 
-(*
-val _ = (print "\nMOD_APP: type_fun_r = \n";
-	 Ppnil.pp_con type_fun_r; print "\n\n\n")
-*)
+
+val _ = (print "\nMOD_APP: type_fun_r computed. \n")
+(*	 Ppnil.pp_con type_fun_r; print "\n\n\n") *)
+
 	   val {cbnd_cat = cbnd_cat_arg,
 		ebnd_cat = ebnd_cat_arg,
                 name_c = name_arg_c,
@@ -746,7 +832,7 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 			       Il.MOD_VAR _ => true 
 			     | _ => false)
 	     val NILctx' = (case (is_var,Nilcontext.find_kind(NILctx, var_arg_c)) of
-				(_,NONE) => Nilcontext.insert_kind(NILctx, var_arg_c, knd_arg_c)
+				(_,NONE) => nil_insert_kind(NILctx, var_arg_c, knd_arg_c)
 			      | (true, SOME _) => NILctx
 			      | _ => error "variable already in context and not a MOD_VAR")
 	     val NILctx'' = (case (is_var,Nilcontext.find_con(NILctx', var_arg_r)) of
@@ -756,13 +842,13 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 		 
 
 
-(*
+
 val _ = (print "-----about to compute type_r;  exp_body_type =\n";
-	 Ppnil.pp_con exp_body_type;
+(*	 Ppnil.pp_con exp_body_type; *)
 	 print "\n-----about to compute type_r = con_reduce of\n";
-	 Ppnil.pp_con (Subst.varConConSubst var_body_arg_c name_arg_c exp_body_type);
+(*	 Ppnil.pp_con (Subst.varConConSubst var_body_arg_c name_arg_c exp_body_type); *)
 	 print "\n\n")
-*)
+
                val type_r = Subst.varConConSubst var_body_arg_c name_arg_c exp_body_type
 	       val valuable = (effect = Total) andalso valuable_fun andalso valuable_arg 
 	   end  
@@ -778,7 +864,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 					      []
 					   else [name_arg_r])
 					  [])]]
-(*val _ = print "MOD_APP finished\n" *)
+val _ = print "MOD_APP finished\n" 
 
        in
 	   {cbnd_cat  = cbnd_cat,
@@ -798,7 +884,11 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
      | xmod' context (initial_mod as (Il.MOD_PROJECT _), preferred_name) =
        let
            val (il_module, lbls) = extractPathLabels initial_mod
-
+	   val _ = if (!omit_datatype_bindings)
+		       then app (fn l => if (Ilutil.is_datatype_lab l)
+					     then error "use of datatype labels detected"
+					 else ()) lbls
+		   else ()
 	   val {cbnd_cat = cbnd_mod_cat, 
 		ebnd_cat = ebnd_mod_cat,
 		name_c   = name_mod_c, 
@@ -839,8 +929,17 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
 	       val con_proj_c = selectFromCon(name_mod_c, lbls)
 
+(* this gives precise unreduced kind -- hopefully faster than reducing the kind but not good enough...
+	       val knd_proj_c = let val (_,k) = Nilstatic.con_valid(NILctx_of context,name_mod_c)
+				in  projectKind name_mod_c k lbls
+				end
+*)
+
 	       val (_,knd_proj_c) = 
 		 Nilstatic.con_valid(NILctx_of context,con_proj_c)
+
+
+
 
 (*
 	       val _ = (print "calling projectFromRecord with type_mod_r' = ";
@@ -873,7 +972,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		    preferred_name) =
        let
 
-
+	   val _ = clear_memo var_arg
 
 	   (* Split the argument parameter *)
 	   val (var_arg_c, var_arg_r, vmap') = splitVar (var_arg, vmap_of context)
@@ -892,11 +991,8 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		type_r = type_body_r,
 		valuable = body_valuable,
 		vmap = vmap
-		} = let
-			fun cont1 NILctx' =
-			    Nilcontext.c_insert_con(NILctx', var_arg_r, con_arg, cont2)
-
-	                and cont2 NILctx'' =
+		} = let val NILctx' = nil_insert_kind(NILctx_of context, var_arg_c, knd_arg)
+	                fun cont2 NILctx'' =
 			    let
 				val context'' = 
 				    update_NILctx
@@ -904,8 +1000,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 			    in
 				xmod context'' (ilmod_body, NONE)
 			    end
-		    in
-			Nilcontext.c_insert_kind(NILctx_of context, var_arg_c, knd_arg, cont1)
+		    in  Nilcontext.c_insert_con(NILctx', var_arg_r, con_arg, cont2)
 		    end
 
 (*
@@ -1064,6 +1159,9 @@ val _ = (print "knd_body_c is ";
     | xmod' context (il_let_mod as (Il.MOD_LET (var_loc, il_loc_mod, il_body_mod)),
 		   preferred_name) =
        let
+
+	   val _ = clear_memo var_loc
+
 	   val (var_loc_c, var_loc_r, vmap) = splitVar (var_loc, vmap_of context)
 
 	   val {cbnd_cat = cbnd_loc_cat,
@@ -1293,6 +1391,9 @@ val _ = (print "knd_body_c is ";
 	   andalso (not (Ilutil.is_eq_lab lbl))) then
 				  
 	   let
+	       val _ = clear_memo top_var
+	       val _ = clear_memo poly_var
+
 	       (* external_labels = Exported labels for these functions.
                   external_vars = Variables to which the functions should be bound
                                   in the returned NIL bindings 
@@ -1332,7 +1433,7 @@ val _ = (print "knd_body_c is ";
 	       val context' = 
 		   update_NILctx(update_vmap(context, vmap''),
 				  Nilcontext.insert_con
-				  (Nilcontext.insert_kind
+				  (nil_insert_kind
 				   (NILctx_of context, poly_var_c, knd_arg),
 				   poly_var_r, con_arg))
 
@@ -1430,8 +1531,8 @@ val _ = (print "knd_body_c is ";
 		   update_NILctx
 		    (update_vmap(context, vmap'),
 		     Nilcontext.c_insert_con_list 
-		     (Nilcontext.c_insert_kind_list
-		      (NILctx_of context, nil_cdecs, fn x => x),
+		     (nil_insert_kind_list
+		      (NILctx_of context, nil_cdecs),
 		      nil_edecs, fn x => x))
 
                val dummy_vars = map (fn _ => Name.fresh_var()) external_vars_c
@@ -1506,7 +1607,7 @@ val _ = (print "knd_body_c is ";
 
            val context' = 
 	       update_NILctx(context,
-			     Nilcontext.insert_kind(NILctx_of context, var, knd))
+			     nil_insert_kind(NILctx_of context, var, knd))
 
 	   val {final_context, cbnd_cat, ebnd_cat, valuable, record_c_con_items,
 		record_c_knd_items, record_r_labels, record_r_field_types,
@@ -1525,6 +1626,8 @@ val _ = (print "knd_body_c is ";
 
      | xsbnds_rewrite_3 context (Il.SBND(lbl, Il.BND_MOD(var, il_module))::rest_il_sbnds) =
        let
+
+	   val _ = clear_memo var
 
            (* Unfortunately, the HIL may duplicate variables, and the flattening
               of modules may put duplicates that used to have disjoint scopes
@@ -1608,7 +1711,13 @@ val _ = (print "knd_body_c is ";
 		    if (!full_debug) then (Ppil.pp_con il_con; print"\n") else ())
 	       else ()
 
-	   val result = (xcon' context il_con)
+	   fun check_proj(Il.MOD_VAR v,ls) = 
+	       lookup_con_memo (v,ls) (fn()=> xcon' context il_con)
+	     | check_proj(Il.MOD_PROJECT(m,l),ls) = check_proj(m,l::ls)
+	     | check_proj _ = xcon' context il_con
+	   val result = (case (!do_memoize,il_con) of
+			     (true,Il.CON_MODULE_PROJECT(m,l)) => check_proj(m,[l])
+			   | _ => xcon' context il_con)
 	       handle e => (if (!debug) then print ("Exception detected in call " ^ 
 						    (Int.toString this_call) ^ " to xcon\n") else ();
 			    raise e)
@@ -1738,7 +1847,7 @@ val _ = (print "knd_body_c is ";
            val (Arrow_k(_,[(v_arg,_)],body)) = Nilutil.strip_singleton knd1
            val (con2, _) = xcon context il_con2
 	   val con = App_c(con1, [con2])
-	   val knd = Subst.varConKindSubst v_arg con1 body
+	   val knd = Subst.varConKindSubst v_arg con2 body
        in
 	   (con, knd)
        end
@@ -1750,26 +1859,23 @@ val _ = (print "knd_body_c is ";
 				 NONE => false | SOME _ => true)
 	   val Il.CON_FUN(vars, Il.CON_TUPLE_INJECT cons) = 
 	       Ilutil.rename_confun(is_bound,vars,Il.CON_TUPLE_INJECT cons)
-	   fun cont1 NILctx' = 
-	       let
-		   val context' = 
-		       update_NILctx
-		       (context, NILctx')
 
-		   val cons'= map (#1 o (xcon context')) cons
-		   val freevars = Listops.flatten (map Ilutil.con_free_convar cons)
-		   val is_recur = Listops.orfold (fn v => Listops.member_eq(Name.eq_var,v,freevars)) vars
+	   val NILctx' = nil_insert_kind_list(NILctx_of context,
+					      map (fn v => (v,Word_k Runtime)) vars)
 
-		   val con = Mu_c (is_recur,
-				   Util.list2set (Listops.zip vars cons'), 
-				   List.nth (vars, i))
-	       in
-		   (con, Word_k Runtime)
-	       end
+	   val context' = 
+	       update_NILctx
+	       (context, NILctx')
+	       
+	   val cons'= map (#1 o (xcon context')) cons
+	   val freevars = Listops.flatten (map Ilutil.con_free_convar cons)
+	   val is_recur = Listops.orfold (fn v => Listops.member_eq(Name.eq_var,v,freevars)) vars
+
+	   val con = Mu_c (is_recur,
+			   Util.list2set (Listops.zip vars cons'), 
+			   List.nth (vars, i))
        in
-	   Nilcontext.c_insert_kind_list(NILctx_of context,
-			      map (fn v => (v,Word_k Runtime)) vars,
-			      cont1)
+	   (con, Word_k Runtime)
        end
 
      | xcon' context (Il.CON_MUPROJECT(i, Il.CON_FUN([var], con))) =
@@ -1791,7 +1897,7 @@ val _ = (print "knd_body_c is ";
 		   (con, Word_k Runtime)
 	       end
        in
-	   Nilcontext.c_insert_kind(NILctx_of context, var, Word_k Runtime, cont1)
+	   cont1(nil_insert_kind(NILctx_of context, var, Word_k Runtime))
        end
 
      | xcon' context (Il.CON_RECORD rdecs) = 
@@ -1837,9 +1943,8 @@ val _ = (print "knd_body_c is ";
 		   (con, Arrow_k(Open, [arg], knd1))
 	       end
        in
-	   Nilcontext.c_insert_kind_list(NILctx_of context, 
-			      (map (fn v => (v, Word_k Runtime)) vars),
-			      cont1)
+	   cont1(nil_insert_kind_list(NILctx_of context, 
+			      (map (fn v => (v, Word_k Runtime)) vars)))
        end
 
      | xcon' context (Il.CON_SUM {carriers, noncarriers, special}) =
@@ -1895,7 +2000,13 @@ val _ = (print "knd_body_c is ";
 	   val con = makeLetC (map Con_cb cbnd_list)
 	                      (Proj_c (name_c, lbl))
 
-	   val (_,knd) = Nilstatic.con_valid (NILctx_of context, con)
+(* this will return unreduced kind -- hopefully faster - wrong context though... *)
+(*	   val knd = let val (_,k) = Nilstatic.con_valid(NILctx_of context, name_c)
+		     in  projectKind name_c k [lbl]
+		     end
+*)
+	   val (_,knd) = Nilstatic.con_valid (NILctx_of context, con) 
+
        in
 	   (con, knd)
        end
@@ -2510,6 +2621,8 @@ val _ = (print "knd_body_c is ";
    and xsig' context (con0,Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
        let
 
+	   val _ = clear_memo var
+
 	   val is_polyfun_sig = 
 	       (case sig_rng of
 		    Il.SIGNAT_STRUCTURE(_,[Il.SDEC(it_lbl,Il.DEC_EXP _)]) => Name.eq_label(it_lbl,Ilutil.it_lab)
@@ -2540,7 +2653,7 @@ val _ = (print "knd_body_c is ";
 				[] else [con], w0, con'))
 	       end
        in
-	   Nilcontext.c_insert_kind(NILctx_of context, var_c, knd, cont1)
+	   cont1(nil_insert_kind(NILctx_of context, var_c, knd))
        end
 
      | xsig' context (con0, ((Il.SIGNAT_STRUCTURE (NONE,sdecs)) |
@@ -2730,7 +2843,7 @@ val _ = (print "knd_body_c is ";
 		    ercons = (Subst.substConInCon subst con) :: ercons}
 	       end
        in
-	   Nilcontext.c_insert_kind(NILctx_of context, var_c, knd, cont1)
+	   cont1(nil_insert_kind(NILctx_of context, var_c, knd))
        end
 
      | xsdecs' context(elab_spec,_,con0, subst, Il.SDEC(lbl, d as Il.DEC_EXP(var,con)) :: rest) =
@@ -2779,7 +2892,7 @@ val _ = (print "knd_body_c is ";
 		    ercons = ercons}
 	       end
        in
-	   Nilcontext.c_insert_kind(NILctx_of context, var, knd'', cont1)
+	   cont1(nil_insert_kind(NILctx_of context, var, knd''))
        end
 
    and xkind context (Il.KIND_TUPLE n) = makeKindTuple n
@@ -2801,10 +2914,12 @@ val _ = (print "knd_body_c is ";
        let
 	   fun folder (v,context) =
 	       let val (l,pc) = 
-		 case Ilcontext.Context_Lookup'(HILctx,v)
-		   of SOME v => v
+		 case Ilcontext.Context_Lookup'(HILctx,v) of
+		      SOME v => v
 		    | NONE => error "Variable not found in ilcontext"
-	       in 
+	       in  if (Ilutil.is_datatype_lab l andalso (!omit_datatype_bindings))
+		       then context
+		   else 
 		   (case pc of
 			Ilcontext.PHRASE_CLASS_EXP (_,il_type) => 
 			    let
@@ -2829,7 +2944,7 @@ val _ = (print "knd_body_c is ";
 				       | SOME c => Singleton_k(Runtime, nil_kind, c))
 			    in
 				update_NILctx
-			    (context, Nilcontext.insert_kind(NILctx_of context, v, nil_kind))
+			    (context, nil_insert_kind(NILctx_of context, v, nil_kind))
 			    end
 		      | Ilcontext.PHRASE_CLASS_MOD (_,il_sig) => 
 			    let
@@ -2851,7 +2966,7 @@ val _ = (print "\n\nHIL MOD CONTEXT ENTRY:\n";
 					    Arrow_k(_,_,Record_k seq) => null (Util.sequence2list seq)
 					  | _ => false)
 					then NILctx_of context
-				    else Nilcontext.insert_kind(NILctx_of context, v_c, knd_c)
+				    else nil_insert_kind(NILctx_of context, v_c, knd_c)
 			    in
 				update_NILctx
 				(context,
@@ -2890,7 +3005,9 @@ val _ = (print "\n\nHIL MOD CONTEXT ENTRY:\n";
 		    print "\n")
 	       else
 		   ()
-
+	   val _ = if (!diag) 
+		       then print "tonil.sml: initial splitting context computed\n"
+		   else ()
 	   val {cbnd_cat, ebnd_cat, final_context, ...} =
 	       xsbnds initial_splitting_context il_sbnds
 
@@ -2903,6 +3020,210 @@ val _ = (print "\n\nHIL MOD CONTEXT ENTRY:\n";
 	    cu_bnds = cu_c_list @ cu_r_list,
 	    vmap = vmap_of final_context}
        end
+
+    fun phasesplit (ctxt : Il.context, 
+		    sbnd_entries : (Il.sbnd option * Il.context_entry) list) : Nil.module = 
+	let
+	    val _ = reset_memo()
+	    open Nil Ilcontext Il Name IlStatic
+	    fun folder((SOME sbnd,CONTEXT_SDEC sdec),(ctxt,sbnds)) = (ctxt, (sbnd,sdec)::sbnds)
+	      | folder((NONE, ce),(ctxt,sbnds)) = 
+		(add_context_entries(ctxt,
+			      [case ce of
+				   CONTEXT_SDEC(SDEC(l,dec)) => CONTEXT_SDEC(SDEC(l,SelfifyDec dec))
+				 | _ => ce]),
+		 sbnds)
+	    val (ctxt,rev_sbnd_sdecs) = foldl folder (ctxt,[]) sbnd_entries
+	    val sbnds_sdecs = rev rev_sbnd_sdecs
+	    val sbnds = map #1 sbnds_sdecs
+	    val sdecs = map #2 sbnds_sdecs
+
+	    fun make_cr_labels l = (internal_label((label2string l) ^ "_c"),
+				    internal_label((label2string l) ^ "_r"))
+
+            (* obtain all the imports with classifiers from the context *)
+	    datatype import_type = ImpExp | ImpType | ImpMod
+		
+	    fun mapper v =
+		let val (l,pc) = valOf (Ilcontext.Context_Lookup'(ctxt,v))
+		in                
+		    (case pc of
+			 PHRASE_CLASS_EXP _ => SOME(ImpExp,v,l)
+		       | PHRASE_CLASS_CON _ => SOME(ImpType,v,l)
+		       | PHRASE_CLASS_MOD _ => SOME(ImpMod,v,l)
+		       | PHRASE_CLASS_SIG _ => NONE
+		       | PHRASE_CLASS_OVEREXP _ => NONE)
+		end
+	    val varlist = Ilcontext.Context_Varlist ctxt
+	    val import_temp = List.mapPartial mapper varlist
+
+            (* create a module-variable to pair of variables map from import_modmap *)
+	    fun folder ((ImpMod,v,l),map) = let val vc = fresh_named_var (var2string v ^ "myvc")
+						val vr = fresh_named_var (var2string v ^ "myvr")
+					    in  VarMap.insert(map,v,(vc,vr))
+					    end
+	      | folder (_,map) = map
+	    val import_varmap = foldl folder VarMap.empty import_temp
+
+
+            (* call the phase splitter *)
+	    val {nil_initial_context : NilContext.context , nil_final_context : NilContext.context, 
+		 cu_bnds = bnds, vmap = total_varmap} = 
+		xcompunit ctxt import_varmap sbnds
+
+(*
+val _ = (print "Nil final context is:\n";
+	 NilContext.print_context nil_final_context;
+	 print "\n\n")
+*)
+
+            (* create the imports with classifiers by using the NIL context 
+	      returned by the phase splitter *)
+	    fun folder ((ImpExp,v,l),imps) = 
+		let val c' = (case NilContext.find_con(nil_initial_context,v) of
+				  SOME c' => c'
+				| NONE => error "exp var not in NIL context")
+		in  (ImportValue(l,v,c'))::imps
+		end
+	      | folder ((ImpType,v,l),imps) = 
+		let 
+		    fun strip_var_from_singleton (var,kind) = 
+			let open Nilutil
+			    fun handler (_,Singleton_k(p,k,c)) = 
+				if (convar_occurs_free(var,c))
+				    then CHANGE_NORECURSE(strip_var_from_singleton(var,k))
+				else NOCHANGE
+			      | handler _ = NOCHANGE
+			    fun nada _ = NOCHANGE
+			    val handlers = (nada,nada,nada,nada,handler)
+			    val res = kind_rewrite handlers kind
+(*
+			    val _ = (print "strip_var_from_singleton: "; PpNil.pp_var var;
+				     print "\n from k = "; PpNil.pp_kind kind;
+				     print "\nresult = "; PpNil.pp_kind res; print "\n\n")
+*)
+			in  res
+			end
+		    val (c,k) = Nilstatic.con_valid(nil_initial_context,Var_c v) 
+		    val k = strip_var_from_singleton(v,Singleton_k(Runtime,k,c))
+		in  (ImportType(l,v,k))::imps
+		end
+	      | folder ((ImpMod,v,l),imps) = 
+		if (Ilutil.is_exportable_lab l) (* a label is exportable iff it is importable *)
+		    then
+			let val (cvar,rvar) = valOf (VarMap.find(import_varmap,v))
+			    val (cl,rl) = make_cr_labels l
+			in  folder((ImpExp,rvar,rl),folder((ImpType,cvar,cl),imps))
+			end
+		else imps
+(*	    val _ = print "---about to compute imports\n" *)
+	    val imports : import_entry list = rev (foldl folder [] import_temp)
+(*	    val _ = print "---adone with compute imports\n" *)
+
+	    (* create the export map by looking at the original sbnds;
+	      labels that are "exportable" must be exported
+             open labels must be recursively unpackaged 
+             for module bindings, use the varmap returned by the phase-splitter *)
+
+	    fun folder cr_pathopts ((SDEC(l,dec)),exports) = 
+		let open Ilutil
+		    fun make_cpath v = (case cr_pathopts of
+					   SOME (path,_) => join_path_labels(path,[l])
+					 | NONE => SIMPLE_PATH v)
+		    fun make_rpath v = (case cr_pathopts of
+					   SOME (_,path) => join_path_labels(path,[l])
+					 | NONE => SIMPLE_PATH v)
+
+		    fun path2exp (SIMPLE_PATH v) = Var_e v
+		      | path2exp (COMPOUND_PATH (v,lbls)) = 
+			let fun loop e [] = e
+			      | loop e (lbl::lbls) = loop (Prim_e(NilPrimOp (select lbl),[],[e])) lbls
+			in loop (Var_e v) lbls
+			end
+		    fun path2con (SIMPLE_PATH v) = Var_c v
+		      | path2con (COMPOUND_PATH (v,lbls)) = 
+			let fun loop c [] = c
+			      | loop c (lbl::lbls) = loop (Proj_c(c,lbl)) lbls
+			in loop (Var_c v) lbls
+			end
+		in
+		    (case (is_exportable_lab l andalso (not (!omit_datatype_bindings) orelse 
+							not (Ilutil.is_datatype_lab l)), 
+			   false andalso Name.is_label_open l, dec) of
+			 (false,false,_) => exports
+		       | (true,_,DEC_EXP (v,_)) => 
+			     let val e = path2exp (make_rpath v)
+				 val (_,c) = Nilstatic.exp_valid(nil_final_context,e)
+			     in  (ExportValue(l,e,c)::exports)
+			     end
+		       | (true,_,DEC_CON (v,_,_)) =>
+			     let val c = path2con (make_cpath v)
+				 val (_,k) = Nilstatic.con_valid(nil_final_context,c)
+			     in  (ExportType(l,c,k)::exports)
+			     end
+		       | (false,true,DEC_EXP _) => error "DEC_EXP with open label"
+		       | (false,true,DEC_CON _) => error "DEC_CON with open label"
+		       | (is_export,is_open,DEC_MOD (v,s)) => 
+			     let val (lc,lr) = make_cr_labels l
+				 val (vc,vr) = (case VarMap.find(total_varmap,v) of
+						    SOME vrc => vrc
+				                  | NONE => (print "Cannot find variable ";
+							Ppnil.pp_var v;
+							print "\n";
+							error "total_varmap missing bindings"))
+(*
+				 val _ = (print "v = "; PpNil.pp_var v; print "\n";
+					  print "vc = "; PpNil.pp_var vc; print "\n";
+					  print "vr = "; PpNil.pp_var vr; print "\n")
+*)
+				 val rpath = make_rpath vr
+				 val cpath = make_cpath vc
+				 val exports = 
+				     if is_export
+					 then
+					     let 
+(*						 val _ = print "exporting module\n"  *)
+						 val er = path2exp rpath
+(*						 val _ = (print "er = "; PpNil.pp_exp er; print "\n") *)
+						 val (_,cr) = Nilstatic.exp_valid(nil_final_context,er)
+(*						 val _ = print "exporting module: type-checked exp\n"  *)
+						 val cc = path2con cpath
+						 val (_,kc) = Nilstatic.con_valid(nil_final_context,cc)
+(*						 val _ = print "done exporting module\n"  *)
+					     in (ExportValue(lr,er,cr)::
+						 ExportType(lc,cc,kc)::
+						 exports)
+					     end
+				     else exports
+				 val exports = 
+				     (case (is_open,s) of
+					  (true,SIGNAT_STRUCTURE (_,sdecs)) =>
+					      let val _ = print "exporting open module\n"
+						  val res = foldl (folder (SOME (cpath,rpath))) exports sdecs
+						  val _ = print "done exporting open module\n"
+					      in res
+					      end
+					| (true, _) => 
+					      (print "DEC_MOD (non-structure) with open label:\n";
+					       Ppil.pp_signat s; print "\n";
+					       error "DEC_MOD (non-structure) with open label")
+					| _ => exports)
+			     in  exports
+			     end)
+		end
+(*	    val _ = print "---about to compute exports\n" *)
+	   val exports : export_entry list = rev(foldl (folder NONE) [] sdecs)
+(*	   val _ = print "---done with compute exports\n" *)
+
+	    val nilmod = MODULE{bnds = bnds, 
+				imports = imports,
+				exports = exports}
+
+	    val _ = reset_memo()
+	in  nilmod
+	end
+
+
 
 end
 

@@ -89,7 +89,7 @@ functor Ppnil(structure ArgNil : NIL
 	       | Record_k lvk_seq => (pp_list (fn ((l,v),k) => HOVbox[pp_label l, String " > ",
 								      pp_var v, String " : ",
 								  pp_kind k])
-				      (sequence2list lvk_seq) ("REC_K{", ",","}", false))
+				      (sequence2list lvk_seq) ("REC_K{", ",","}", true))
 (*	       | List_k k => pp_region "LIST_K)" ")" [pp_kind k] *)
 	       | Arrow_k (openness,ks,k) => 
 		     HOVbox[String "Arrow_k(",

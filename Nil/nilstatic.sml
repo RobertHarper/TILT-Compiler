@@ -28,29 +28,46 @@ struct
   open Nil 
   open Prim
 
+  val closed_check = ref false
   val debug = ref false
   val show_calls = ref false
   val select_carries_types = Stats.bool "select_carries_types"
   val bnds_made_precise = Stats.bool "bnds_made_precise"
 
+  fun error s = Util.error "nilstatic.sml" s
   local
       datatype entry = 
 	EXP of exp * NilContext.context 
       | CON of con * NilContext.context 
       | KIND of kind * NilContext.context
+      | SUBKIND of kind * kind * NilContext.context
       | BND of bnd * NilContext.context
       | MODULE of module * NilContext.context
       val stack = ref ([] : entry list)
-      fun push e = stack := (e :: (!stack))
+      val maxdepth = 10000
+      val depth = ref 0
+      fun clear_stack() = (depth := 0; stack := [])
+      fun push e = (depth := !depth + 1;
+		    stack := (e :: (!stack));
+		    if (!debug andalso (!depth mod 20 = 0))
+			then (print "****nilstatic.sml: stack depth = ";
+			      print (Int.toString (!depth));
+			      print "\n")
+		    else ();
+		    if (!depth) > maxdepth
+			then error "stack depth exceeded"
+		    else ())
   in
     fun push_exp (e,context) = push (EXP(e,context))
     fun push_con(c,context) = push(CON(c,context))
     fun push_kind(k,context) = push(KIND(k,context))
+    fun push_subkind(k1,k2,context) = push(SUBKIND(k1,k2,context))
     fun push_bnd(b,context) = push(BND(b,context))
     fun push_mod(m,context) = push(MODULE(m,context))
-    fun pop() = stack := (tl (!stack))
+    fun pop() = (depth := !depth - 1;
+		 stack := (tl (!stack)))
     fun show_stack() = let val st = !stack
-			   val _ = stack := []
+			   val _ = clear_stack()
 			   fun show (EXP(e,context)) = 
 				     (print "exp_valid called with expression =\n";
 				      PpNil.pp_exp e;
@@ -66,6 +83,13 @@ struct
 				      PpNil.pp_kind k;
 				      print "\nand context"; NilContext.print_context context;
 				      print "\n\n")
+			     | show (SUBKIND(k1,k2,context)) =
+				     (print "sub_kind called with kind1 =\n";
+				      PpNil.pp_kind k1;
+				      print "\n                 and kind2 =\n";
+				      PpNil.pp_kind k2;
+				      print "\nand context"; NilContext.print_context context;
+				      print "\n\n")
 			     | show (BND(b,context)) =
 				     (print "bnd_valid called with bound =\n";
 				      PpNil.pp_bnd b;
@@ -78,8 +102,8 @@ struct
 				      print "\n\n")
 		       in  app show (rev st)
 		       end
-    fun wrap f arg = (f arg) 
-      handle e => (show_stack(); raise e)
+    fun wrap str f arg = (f arg) 
+      handle e => (print "Error while calling "; print str; print "\n"; show_stack(); raise e)
   end
 
   (* Local rebindings from imported structures *)
@@ -108,9 +132,17 @@ struct
   val bind_kind = NilContext.bind_kind
   val bind_kind_list = NilContext.bind_kind_list
   val insert_kind = NilContext.insert_kind
+  val unpull_convar = NilContext.unpull_convar
   val find_kind' = NilContext.find_kind'
-  val leave_top_level = NilContext.leave_top_level
-  val code_context = NilContext.code_context
+
+(*  val leave_top_level = NilContext.leave_top_level *)
+(*  val code_context = NilContext.code_context *)
+  fun leave_top_level D = if (!closed_check) 
+			      then NilContext.leave_top_level D
+			  else D
+  fun code_context D = if (!closed_check) 
+			      then NilContext.code_context D
+			  else D
 
   (*From Alpha*)
   type alpha_context = Alpha.alpha_context
@@ -251,7 +283,7 @@ struct
   (* Local helpers *)
 
 
-  fun error s = Util.error "nilstatic.sml" s
+
     
   fun mark_as_checked (con,kind) = con(*
     (case con
@@ -287,7 +319,11 @@ struct
     let
       val kind = substConInKind subst kind
       val kind = kind_valid (D,kind)
-      val var' = derived_var var 
+      val var' = if (!closed_check orelse (case find_kind'(D,var) of
+					       SOME _ => true
+					     | _ => false))
+		     then derived_var var 
+		 else var
       val D = insert_kind (D,var',kind)
       val subst = Subst.add subst (var,Var_c var')
     in
@@ -461,7 +497,7 @@ struct
 	 end
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>
 	 let
-	   val D = leave_top_level D
+(*	   val D = leave_top_level D *)
 	   val ((D,subst),tformals) = bind_at_kinds D tformals
 	   val formals = map (substConInCon subst) formals
 	   val body = substConInCon subst body
@@ -540,7 +576,7 @@ struct
 	| (Let_c (sort,[],body)) => con_valid (D,body)
 	| (Closure_c (code,env)) => 
 	   let
-	     val D = leave_top_level D
+(*	     val D = leave_top_level D *)
 	     val (env,env_kind) = con_valid (D,env)
 	     val (code,code_kind) =  con_valid (D,code)
 	   in
@@ -549,6 +585,7 @@ struct
 		 let 
 		   val (first,(v,klast)) = split vklist
 		   val con = Closure_c (code,env)
+		   val body_kind = varConKindSubst v env body_kind
 		   val kind = Arrow_k(Closure,first,body_kind)
 		   val kind = singletonize (kind,con)
 		 in
@@ -639,6 +676,9 @@ struct
 	       (error "Constructor function failed: argument not subkind of expected kind" handle e => raise e)
 		 
 	   val con = App_c (cfun,actuals)
+	      val D = (case cfun of
+			   Var_c v => unpull_convar(D,v)
+			 | _ => D)
 	   val con = beta_confun D con
 	   val kind = singletonize (body_kind,con)
 	 in
@@ -691,6 +731,7 @@ struct
    *)
   and sub_kind' (D,kind1,kind2) = 
     let
+	val _ = push_subkind(kind1,kind2,D)
       fun sub_one ((var1,kind1),(var2,kind2),(D,subst1,subst2)) = 
 	let
 	  val kind1 = kind_normalize' (D,subst1) kind1
@@ -705,7 +746,7 @@ struct
 
       fun sub_all D (vks1,vks2) = 
 	foldl_all2 sub_one (D,empty_subst(),empty_subst()) (vks1,vks2)
-    in
+      val res = 
       (case (kind1,kind2)
 	 of (Word_k p1, Word_k p2) => sub_phase(p1,p2)
 	  | (Type_k p1, Type_k p2) => sub_phase(p1,p2)
@@ -751,6 +792,8 @@ struct
 	     printl "")
 	  else ();
 	    false)
+      val _ = pop()
+    in res
     end
 (*and is_word (D,con) = 
     (case con
@@ -1512,7 +1555,7 @@ struct
 	  | Fixclosure_b (is_recur,defs) => 
 	   let
 	     val origD = D
-	     val D = leave_top_level D
+(*	     val D = leave_top_level D *)
 	     val (vars,closures) = unzip (set2list defs)
 	     val tipes = map (fn cl => #tipe cl) closures
 	     val (tipes,_) = unzip (map (curry2 con_valid D) tipes)
@@ -1772,11 +1815,11 @@ struct
 	in  res
       end
 
-      val exp_valid = wrap exp_valid
-      val con_valid = wrap con_valid
-      val kind_valid = wrap kind_valid
-      val con_reduce = wrap con_reduce
-      val kind_reduce = wrap kind_reduce
+      val exp_valid = wrap "exp_valid" exp_valid
+      val con_valid = wrap "con_valid" con_valid
+      val kind_valid = wrap "kind_valid" kind_valid
+      val con_reduce = wrap "con_reduce" con_reduce
+      val kind_reduce = wrap "kind_reduce" kind_reduce
 
       fun import_valid' (ImportValue (label,var,con),(D,subst)) =
 	let
@@ -1848,6 +1891,7 @@ struct
 	in  res
 	end
 
+      fun con_reduce_once (D,c) = Normalize.con_reduce_once D c
+      val module_valid = wrap "module_valid" module_valid
 
-      val module_valid = wrap module_valid
 end

@@ -77,6 +77,9 @@ signature NILSTATIC =
       * alias to Normalize.con_normalize
       *)
 
+    val con_reduce_once : context * Nil.con -> Nil.con
+    (* alias to Normalize.con_reduce_once *)
+
     val kind_reduce : context * Nil.kind -> Nil.kind
     (* kind_reduce (context,kind) => kind'
       * PRE: context is well formed

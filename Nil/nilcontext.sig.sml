@@ -68,6 +68,7 @@ signature NILCONTEXT' =
       *)
     val insert_kind : (context -> con -> con) -> context * var * kind -> context
     val insert_kind_list : (context -> con -> con) -> context* (var * kind) list -> context
+    val unpull_convar : context * var -> context
 
     (* insert_kind normalizer (context,var,kind) => (context',var',subst)
       * - inserts the (possibly previously bound) variable "var" into the context
@@ -174,6 +175,10 @@ signature NILCONTEXT =
       *)
     val insert_kind : context * var * kind -> context
     val insert_kind_list : context* (var * kind) list -> context
+
+    (* unpull_convar will modify the constructor that is returned to
+          the unpulled form (i.e., the variable)  *)
+    val unpull_convar : context * var -> context
 
     (* insert_kind (context,var,kind) => (context',var',subst)
       * - inserts the (possibly previously bound) variable "var" into the context

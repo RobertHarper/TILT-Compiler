@@ -2,8 +2,9 @@ signature NILUTIL =
   sig
     structure Nil : NIL
 
-    val freeExpConVarInExp : Nil.exp -> Nil.var list * Nil.var list (* free term and type level vars *)
-    val freeConVarInCon    : Nil.con -> Nil.var list (* free type level vars *)
+    (* if flag is true, will look inside kinds *)
+    val freeExpConVarInExp : bool * Nil.exp -> Nil.var list * Nil.var list (* free term and type level vars *)
+    val freeConVarInCon    : bool * Nil.con -> Nil.var list (* free type level vars *)
 
     val muExpand : bool * (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
     val generate_tuple_label : int -> Name.label

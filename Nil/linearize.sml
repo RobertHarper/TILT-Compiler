@@ -44,7 +44,10 @@ struct
 	val cellref2bool = fn arg => cellref2bool 0 arg
     in
 	type state = state
-	fun reset_state() : state = (seen := VarSet.empty; ([ref (fresh_named_var "outer", Use)], VarMap.empty))
+	val num_renamed = ref 0
+	fun reset_state() : state = (seen := VarSet.empty; 
+				     num_renamed := 0;
+				     ([ref (fresh_named_var "outer", Use)], VarMap.empty))
 	fun copy_state ((curcells,s) : state) = ((ref(fresh_named_var "copy",Use)) :: curcells,s)
 	fun state_stat str ((_,m) : state) : unit = 
 	    let val _ = if (!debug)
@@ -81,6 +84,9 @@ struct
 			    then (print ("add_var on " ^ (Name.var2string v));
 				  if is_seen then print "  RENAME" else ();
 				      print "\n")
+			else ()
+		val _ = if is_seen
+			    then num_renamed := !num_renamed + 1
 			else ()
 		val _ = seen := (if is_seen then !seen else VarSet.add(!seen,v))
 		val v' = if is_seen then derived_var v else v
@@ -347,11 +353,16 @@ struct
 		    val cbnds = flatten (map #1 cbnd_cons)
 		in  (cbnds, Prim_c(pc,cons'))
 		end
-	  | Mu_c (flag,vc_seq,v) => let val vclist = sequence2list vc_seq
-					val (cbnds,vclist,state) = lvclist state vclist
-					val v = find_var(state,v)
-				    in  (cbnds,Mu_c(flag,list2sequence vclist, v))
-				    end
+	  | Mu_c (flag,vc_seq,v) => (* cannot just use lvclist here: not sequential bindings *)
+		let val vclist = sequence2list vc_seq
+		    val state = foldl (fn ((v,_),s) => #1(add_var(s,v))) state vclist
+		    val vclist' = map (fn (v,c) => (derived_var v, c)) vclist
+		    val (cbnds,vclist',state) = lvclist state vclist'
+		    val vclist = Listops.map2 (fn ((v,_),(_,c)) => (find_var(state,v),c)) 
+			(vclist,vclist')
+		    val v = find_var(state,v)
+		in  (cbnds,Mu_c(flag,list2sequence vclist, v))
+		end
 	  | AllArrow_c (openness,effect,vklist,clist,w32,c) =>
 		let 
 		    val (cbnds_vk, vklist,state) = lvklist state vklist
@@ -502,6 +513,9 @@ struct
 					  end
 	   val (rev_bnds,state) = foldl folder ([],state) bnds
 	   val exports = map (lexport state) exports
+	   val _ = (print "Number of renamed variables: ";
+		    print (Int.toString (!num_renamed));
+		    print "\n")
        in  MODULE{bnds = rev rev_bnds,
 		  imports = imports,
 		  exports = exports}

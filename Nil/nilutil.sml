@@ -478,7 +478,7 @@ struct
 	      let
 		fun fold_one (((lbl,var),kind),state) = 
 		  let
-		    val kind'  = self kind
+		    val kind'  = f_kind state kind
 		    val state' = add_convar (state,var, kind')
 		  in
 		    (((lbl, var), kind'),state')
@@ -757,7 +757,7 @@ struct
 	      | SOME e => CHANGE_NORECURSE e)
       | exp_handler _ _ = NOCHANGE
 
-    fun free_handler() =
+    fun free_handler look_in_kind =
 	let val free_evars : (var list ref) = ref []
 	    val free_cvars : (var list ref) = ref []
 	    fun exp_handler ({boundevars,boundcvars},Var_e v) = 
@@ -766,6 +766,7 @@ struct
 		 else ();
 		     NOCHANGE)
 	      | exp_handler _ = NOCHANGE
+	    fun kind_handler (_,k) = CHANGE_NORECURSE k
 	    fun con_handler ({boundevars,boundcvars},Var_c v) = 
 		(if (not (collMember(boundcvars,v)) andalso not (member_eq(eq_var,v,!free_cvars)))
 		     then free_cvars := v :: (!free_cvars)
@@ -780,18 +781,20 @@ struct
 		    cbndhandler = default_cbnd_handler,
 		    exphandler = exp_handler,
 		    conhandler = con_handler,
-		    kindhandler = default_kind_handler}))
+		    kindhandler = if (look_in_kind)
+				      then default_kind_handler
+				  else kind_handler}))
 	end
       
   in
 
-    fun freeExpConVarInExp e = 
-	let val (evars_ref,cvars_ref,handler) = free_handler()
+    fun freeExpConVarInExp(look_in_kind,e) = 
+	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
 	in  f_exp handler e;
 	    (!evars_ref, !cvars_ref)
 	end
-    fun freeConVarInCon c =
-	let val (evars_ref,cvars_ref,handler) = free_handler()
+    fun freeConVarInCon(look_in_kind,c) =
+	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
 	in  f_con handler c;
 	    !cvars_ref
 	end
@@ -799,7 +802,7 @@ struct
 
   fun expvars_occur_free (vars : var list, exp : exp) : bool = 
     let
-      val (free_expvars,_) = freeExpConVarInExp exp
+      val (free_expvars,_) = freeExpConVarInExp(true,exp)
     in
       case (Listops.list_inter_eq (eq_var, vars, free_expvars)) of
 	nil => true

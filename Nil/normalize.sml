@@ -81,11 +81,14 @@ struct
   type context = NilContext.context
   val find_kind = NilContext.find_kind   
   val find_kind' = NilContext.find_kind'
+  val unpull_convar = NilContext.unpull_convar
 
   fun error s = Util.error "normalize.sml" s
 
+val closed_check = ref false
   val debug = ref false
   val show_calls = ref false
+val show_context = ref false
 
   local
       datatype entry = 
@@ -95,16 +98,28 @@ struct
       | BND of bnd * (NilContext.context * (con subst))
       | MODULE of module * (NilContext.context * (con subst))
       val stack = ref ([] : entry list)
-      fun push e = stack := (e :: (!stack))
+      val maxdepth = 10000
+      val depth = ref 0
+      fun clear_stack() = (depth := 0; stack := [])
+      fun push e = (depth := !depth + 1;
+		    stack := (e :: (!stack));
+		    if (!depth mod 20 = 0)
+			then (print "****normalize.sml: stack depth = ";
+			      print (Int.toString (!depth)))
+		    else ();
+		    if (!depth) > maxdepth
+			then error "stack depth exceeded"
+		    else ())
   in
     fun push_exp (e,context) = push (EXP(e,context))
     fun push_con(c,context) = push(CON(c,context))
     fun push_kind(k,context) = push(KIND(k,context))
     fun push_bnd(b,context) = push(BND(b,context))
     fun push_mod(m,context) = push(MODULE(m,context))
-    fun pop() = stack := (tl (!stack))
+    fun pop() = (depth := !depth - 1;
+		 stack := (tl (!stack)))
     fun show_stack() = let val st = !stack
-			   val _ = stack := []
+			   val _ = clear_stack()
 			   fun show (EXP(e,(context,s))) = 
 			     (print "exp_normalize called with expression =\n";
 			      PpNil.pp_exp e;
@@ -139,8 +154,9 @@ struct
 				      print "\n\n")
 		       in  app show (rev st)
 		       end
-    fun wrap f arg arg2 = (f arg arg2) 
-      handle e => (show_stack(); raise e)
+    fun wrap str f arg arg2 = (f arg arg2) 
+      handle e => (print "\n ------ ERROR in "; print str; print " ---------\n";
+		   show_stack(); raise e)
   end
 	 
   fun count_fields k = 
@@ -341,7 +357,7 @@ struct
       map_annotate beta_typecase' typecase
     end
 
-  and beta_confun D app = 
+  and beta_confun once D app = 
     let
       fun beta_confun' (app as (App_c (con,actuals))) = 
 	let
@@ -352,7 +368,9 @@ struct
 	       let
 		 val (vars,_) = unzip formals
 		 val subst = fromList (zip vars actuals)
-	       in con_normalize' (D,subst) body
+	       in if once
+		      then substConInCon subst body
+		  else con_normalize' (D,subst) body
 	       end
 	     else app)
 	    | beta_confun'' actuals (Closure_c (code,env)) = 
@@ -372,7 +390,11 @@ struct
   and bind_at_kind (D,subst) (var,kind) = 
     let
       val kind = kind_normalize' (D,subst) kind
-      val var' = derived_var var 
+      val var' = if (!closed_check orelse (case find_kind'(D,var) of
+					       SOME _ => true
+					     | _ => false))
+		     then derived_var var 
+		 else var
       val D = insert_kind (D,var',kind)
       val subst = add subst (var,Var_c var')
     in
@@ -399,7 +421,9 @@ struct
 	val _ = if (!show_calls)
 		  then (print "kind_normalize called with kind =\n";
 			PpNil.pp_kind kind; 
-			print "\nand context"; NilContext.print_context D;
+			if (!show_context)
+			    then (print "\nand context"; NilContext.print_context D)
+			else ();
 			print "\n and subst";  Subst.printConSubst subst;
 			print "\n\n")
 		else ()
@@ -445,7 +469,9 @@ struct
 	val _ = if (!show_calls)
 		  then (print "con_normalize called with con =\n";
 			PpNil.pp_con con; 
-			print "\nand context"; NilContext.print_context D;
+			if (!show_context)
+			    then (print "\nand context"; NilContext.print_context D)
+			else ();
 			print "\n and subst";  Subst.printConSubst subst;
 			print "\n\n")
 		else ()
@@ -455,6 +481,36 @@ struct
       end
     else
       con_normalize state con
+
+  and con_reduce_once state (constructor : con) : con  = 
+    (case constructor of
+	 (App_c (cfun,actuals)) => 
+	    let
+		local val (D,subst) = state
+		    fun extract (Var_c v) = 
+			(case (substitute subst v) of
+			    NONE =>  unpull_convar(D,v)
+			  | SOME (Var_c v) => unpull_convar(D,v)
+			  | _ => D)
+		      | extract (Proj_c (c,_)) = extract c
+		      | extract _ = D
+		in  val D = extract cfun
+		end
+	      val cfun = con_normalize' state cfun
+	      val actuals = map (con_normalize' state) actuals
+	      val con = App_c (cfun,actuals)
+	      val con = beta_confun true D con
+	    in con
+	    end
+	| (Proj_c (rvals,label)) => 
+	    let
+	      val rvals = con_normalize' state rvals
+	      val con = Proj_c (rvals,label)
+	      val con = beta_conrecord con
+	    in con
+	    end
+	| _ => constructor)
+
   and con_normalize state (constructor : con) : con  = 
     (case constructor 
        of (Prim_c (pcon,args)) =>
@@ -492,8 +548,7 @@ struct
 	     (case (substitute subst var)  
 		of SOME c => c
 		 | _ => constructor)
-	 in
-	   (case strip_var con
+	   val res = (case strip_var con
 	      of SOME v => 
 		(case find_kind' (D,v)
 		   of SOME (c,_) => c
@@ -501,6 +556,7 @@ struct
 		     (NilContext.print_context D;
 		      error ("Variable not found in context: "^(var2string v))))
 	       | _ => con)
+	 in res
 	 end
         | (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
 			((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
@@ -559,10 +615,20 @@ struct
 	    end
 	| (App_c (cfun,actuals)) => 
 	    let
+		local val (D,subst) = state
+		    fun extract (Var_c v) = 
+			(case (substitute subst v) of
+			    NONE => unpull_convar(D,v)
+			  | SOME (Var_c v) => unpull_convar(D,v)
+			  | _ => D)
+		      | extract (Proj_c (c,_)) = extract c
+		      | extract _ = D
+		in  val D = extract cfun
+		end
 	      val cfun = con_normalize' state cfun
 	      val actuals = map (con_normalize' state) actuals
 	      val con = App_c (cfun,actuals)
-	      val con = beta_confun (#1 state) con
+	      val con = beta_confun false D con
 	    in con
 	    end
 	| (Typecase_c {arg,arms,default,kind}) => 
@@ -800,14 +866,23 @@ struct
   
   fun kind_normalize D = kind_normalize' (D,empty())
   fun con_normalize D = con_normalize' (D,empty())
+  fun con_reduce_once D = con_normalize' (D,empty())
   fun exp_normalize D = exp_normalize' (D,empty())
 
   fun module_normalize D = module_normalize' (D,empty())
 
   val get_shape = get_shape'
+  val beta_confun = beta_confun false
 
-  val kind_normalize = wrap kind_normalize
-  val con_normalize = wrap con_normalize
-  val exp_normalize = wrap exp_normalize
+  val get_shape = wrap "get_shape" get_shape
+  val kind_normalize = wrap "kind_normalize" kind_normalize
+  val con_normalize = wrap "con_normalize"  con_normalize
+  val con_reduce_once = wrap "con_reduce_once"  con_reduce_once
+  val exp_normalize = wrap "exp_normalize" exp_normalize
+  val module_normalize = wrap "mod_normalize" module_normalize
+
+  val kind_normalize' = wrap "kind_normalize'" kind_normalize'
+  val con_normalize' = wrap "con_normalize'"  con_normalize'
+  val exp_normalize' = wrap "exp_normalize'" exp_normalize'
 
 end

@@ -12,6 +12,7 @@ signature NORMALIZE =
 
     (*Print out all major internal calls as they occur*)
     val show_calls : bool ref
+    val show_context : bool ref
 
     (*Given a constructor, returns the most imprecise kind for that
      * con - i.e, merely the shape info
@@ -25,6 +26,7 @@ signature NORMALIZE =
      *)
     val kind_normalize : context -> kind -> kind
     val con_normalize : context -> con -> con
+    val con_reduce_once : context -> con -> con
     val exp_normalize : context -> exp -> exp
     val module_normalize : context -> module -> module
 

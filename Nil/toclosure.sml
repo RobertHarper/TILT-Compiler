@@ -27,11 +27,13 @@ struct
 
     val error = fn s => error "toclosure.sml" s
     val debug = ref false
+    val debug_full = ref false
     val liftCode = ref false (* current lifting is wrong - things go out of scope when lifted *)
     val float64 = Prim_c(Float_c Prim.F64,[])
     structure FidSet = VarSet
     structure FidMap = VarMap
     type fid = var
+    fun chat s = print s
 
     (* -------------- types and values manipulating free variables ------------- *)
     (* kept in reverse order *)
@@ -483,12 +485,14 @@ struct
     and e_find_fv (state : state) exp : frees =
 	let val _ = if (!debug)
 			 then (print "exp_find_fv called on\n";
-			       Ppnil.pp_exp exp; print "\n\n")
+			       if (!debug_full)
+				   then Ppnil.pp_exp exp
+			       else (); 
+				   print "\n\n")
 		     else ()
 	    val res = e_find_fv' state exp
 	    val _ = if (!debug)
-			 then (print "exp_find_fv called on\n";
-			       Ppnil.pp_exp exp; print "\nreturning:\n";
+			 then (print "exp_find_fv called returning:\n";
 			       show_free res; print "\n\n")
 		     else ()
 
@@ -498,7 +502,9 @@ struct
     and e_find_fv' (state : state) exp : frees =
 	(if (!debug)
 	     then (print "exp_find_fv called on\n";
-		   Ppnil.pp_exp exp; print "\n\n")
+		   if (!debug_full)
+		       then Ppnil.pp_exp exp
+		   else (); print "\n\n")
 	 else ();
 	 case exp of
 	     Var_e v => (if (is_boundfid(state,v)) then add_escape v else ();
@@ -628,7 +634,9 @@ struct
 	and c_find_fv (state : state) con : frees =
 	    (if (!debug)
 		 then (print "c_find_fv called on\n";
-		       Ppnil.pp_con con; print "\n\n")
+		       if (!debug_full)
+			   then Ppnil.pp_con con
+		       else (); print "\n\n")
 	     else ();
 		 case con of
 		 Prim_c (pc,clist) => foldl (fn (c,f)=> join_free(f,(c_find_fv state c))) empty_frees clist
@@ -681,9 +689,13 @@ struct
 				 fun folder((v,k),(f,s)) = 
 				     (join_free(f,k_find_fv s k),
 				      add_boundcvar(s,v,k))
-				 val (f,s) = foldl folder (empty_frees,state) vklist
-				 val f' = c_find_fv s c
-			     in  (join_free(f, f'), add_boundcvar(s,v,k))
+				 val ls = copy_state s v
+				 val (f,ls) = foldl folder (empty_frees,ls) vklist
+				 val f' = c_find_fv ls c
+				 val f'' = k_find_fv ls k
+				 val f''' = join_free(join_free(f, f'), f'')
+				 val _ = add_frees(v,f''')
+			     in  (remove_free(s,f'''), add_boundcvar(s,v,k))
 			     end
 			 val (f,s) = foldl cb_folder (empty_frees,state) cbnds
 			 val f' = remove_free(s,c_find_fv s c)
@@ -703,7 +715,10 @@ struct
 	and k_find_fv state kind : frees =
 	    (if (!debug)
 		 then (print "k_find_fv called on\n";
-		       Ppnil.pp_kind kind; print "\n\n")
+		       if (!debug_full)
+			   then Ppnil.pp_kind kind
+			       else ();
+		       print "\n\n")
 	     else ();
 	     case kind of
 	    ((Type_k _) | (Word_k _)) => empty_frees
@@ -1039,11 +1054,17 @@ struct
 	   val k = k_rewrite k
 	   val {code_var, unpack_var, ...} = get_static v
 	   val {freeevars,freecvars=vk_free,...} = get_frees v (* freeevars must be empty *)
+	   val vk_free = rev vk_free
 	   val cfv_var = fresh_named_var "free_cons"
 	   fun get_cbnd (i,(v,k)) = Con_cb(v,k, Proj_c(Var_c cfv_var,
 						       generate_tuple_label(i+1)))
+	   val vklist = map (fn (v,k) => (v,k_rewrite k)) vklist
+	   val vk_free = map (fn (v,k) => (v,k_rewrite k)) vk_free
+	   val vk_free_kind = Record_k(Listops.mapcount
+				       (fn (n,(v,k)) => ((generate_tuple_label(n+1), v), k))
+				       vk_free)
 	   val cbnds = Listops.mapcount get_cbnd vk_free
-	   val vklist' = vklist @ [(cfv_var, kind_tuple(map #2 vk_free))]
+	   val vklist' = vklist @ [(cfv_var, vk_free_kind)]
 	   val code_cb = Code_cb(code_var, vklist',
 				letc(cbnds,(c_rewrite lift c)), k)
 	   val con_env = con_tuple_inject(map (fn (v,k) => Var_c v) vk_free)
@@ -1092,6 +1113,12 @@ struct
    and k_rewrite arg_kind : kind = 
        let val handlers = make_handlers(false)
 	   val k = NilUtil.kind_rewrite handlers arg_kind
+(*
+	       val _ = (print "k_rewrite called with:\n";
+			Ppnil.pp_kind arg_kind; print "\n";
+			print "returning with:\n";
+			Ppnil.pp_kind k; print "\n\n")
+*)
        in  k
        end
 
@@ -1102,7 +1129,10 @@ struct
        end
 
    and k_rewrite' (bound,arg_kind) : kind changeopt = 
-       (case arg_kind of 
+       (
+	(* print "***k_rewrite' called with:\n";
+	 Ppnil.pp_kind arg_kind; print "\n\n"; *)
+case arg_kind of 
 	    ((Type_k _) | (Word_k _) | 
 	     (Singleton_k _) | (Record_k _)) => NOCHANGE
 	  | Arrow_k (Open,vklist,k) => 
@@ -1145,7 +1175,7 @@ struct
 		   else ()
 	   val _ = close_funs(get_fids())
 	   val _ = if (!debug)
-		       then print "Done with close_funs\n"
+		       then print "con_close': Done with close_funs\n"
 		   else ()
 	   val _ = reset_bnds()
 	   val result = c_rewrite true arg_con
@@ -1168,7 +1198,7 @@ struct
 		   else ()
 	   val _ = close_funs(get_fids())
 	   val _ = if (!debug)
-		       then print "Done with close_funs\n"
+		       then print "close_kind': Done with close_funs\n"
 		   else ()
 	   val _ = reset_bnds()
 	   val result = k_rewrite arg_kind
@@ -1200,12 +1230,14 @@ struct
 	       end
 	   val (rev_imports,state) = foldl import_mapper ([],state) imports
 	   val imports = rev rev_imports
+	   val _ = chat "Closure conversion: Computed imports\n"
 	   fun export_mapper (ExportValue(l,e,c)) = Exp_b(fresh_var(),c,e)
 	     | export_mapper (ExportType(l,c,k)) = Con_b(fresh_var(),k,c)
 	   val export_bnds = map export_mapper exports
 	   val arg_exp = Let_e(Sequential, bnds, 
 			       Let_e(Sequential, export_bnds, true_exp))
 	   val {freeevars,freecvars,...} = e_find_fv state arg_exp
+	   val _ = chat "Closure conversion: Computed free vars of bindings\n"
 	   val _ = if (!debug)
 		       then (print "Done with e_find_fv\n";
 			     print "free is empty: ";
@@ -1215,8 +1247,10 @@ struct
 		   else ()
 	   val _ = close_funs(get_fids())
 	   val _ = if (!debug)
-		       then print "Done with close_funs\n"
+		       then print "close_mod: Done with close_funs\n"
 		   else ()
+
+	   val _ = chat "Closure conversion: Performed transitive closure of close funs\n"
 
 	   fun folder (bnd,acc) = 
 	       let val _ = reset_bnds()
@@ -1226,9 +1260,13 @@ struct
 	       in  acc @ bnds'
 	       end
 	   val bnds' = foldl folder [] bnds
+
+	   val _ = chat "Closure conversion: Rewritten bindings\n"
+
 	   fun export_rewrite (ExportValue(l,e,c)) = ExportValue(l,e_rewrite false e,c_rewrite false c)
 	     | export_rewrite (ExportType(l,c,k)) = ExportType(l,c_rewrite false c,k_rewrite k)
 	   val exports' = map export_rewrite exports
+	   val _ = chat "Closure conversion: Rewritten exports\n"
        in  MODULE{bnds = bnds', imports = imports, exports = exports'}
        end	   
 

@@ -2,6 +2,7 @@ Group
         signature NIL
 	signature NILUTIL
 	signature NILSTATIC
+        signature NORMALIZE
 	signature PPNIL
         signature NILCONTEXT
 

@@ -5,6 +5,7 @@ sig
     structure NilUtil : NILUTIL
     structure NilContext : NILCONTEXT
     structure NilStatic : NILSTATIC
+    structure Normalize : NORMALIZE
     structure PpNil : PPNIL
 
     val compile_prelude : bool * string -> Nil.module
@@ -22,7 +23,14 @@ structure Linknil (* : LINKNIL *) =
     val typecheck_after_opt = ref true
     val typecheck_after_cc = ref true
 
-    val do_opt = ref true
+
+    val do_cleanup = ref false
+    val do_opt = ref false
+    val show_size = ref false
+    val show_hil = ref false
+    val show_renamed = ref false
+    val show_before_rtl = ref false
+
 
     val error = fn s => Util.error "linknil.sml" s
 
@@ -149,6 +157,7 @@ structure Linknil (* : LINKNIL *) =
                                structure Nil = Nil
 			       structure NilPrimUtil = NilPrimUtil 
 			       structure PpNil = PpNil
+			       structure Linearize = Linearize
 			       structure NilContext = NilContext
 			       structure NilEval = NilEval
 			       structure NilStatic = NilStatic
@@ -156,7 +165,8 @@ structure Linknil (* : LINKNIL *) =
 			       structure NilUtil = NilUtil
 				   structure Linearize = Linearize
 )
-
+val phasesplit = Tonil.phasesplit
+(*
     fun phasesplit (ctxt : LinkIl.Il.context, 
 		    sbnd_entries : (LinkIl.Il.sbnd option * LinkIl.Il.context_entry) list) : Nil.module = 
 	let
@@ -259,84 +269,7 @@ val _ = (print "Nil final context is:\n";
 	      labels that are "exportable" must be exported
              open labels must be recursively unpackaged 
              for module bindings, use the varmap returned by the phase-splitter *)
-(*
-	    fun folder cr_pathopts ((SBND(l,bnd)),exports) = 
-		let open LinkIl.IlUtil
-		    fun make_cpath v = (case cr_pathopts of
-					   SOME (path,_) => join_path_labels(path,[l])
-					 | NONE => SIMPLE_PATH v)
-		    fun make_rpath v = (case cr_pathopts of
-					   SOME (_,path) => join_path_labels(path,[l])
-					 | NONE => SIMPLE_PATH v)
 
-		    fun path2exp (SIMPLE_PATH v) = Var_e v
-		      | path2exp (COMPOUND_PATH (v,lbls)) = 
-			let fun loop e [] = e
-			      | loop e (lbl::lbls) = loop (Prim_e(NilPrimOp (select lbl),[],[e])) lbls
-			in loop (Var_e v) lbls
-			end
-		    fun path2con (SIMPLE_PATH v) = Var_c v
-		      | path2con (COMPOUND_PATH (v,lbls)) = 
-			let fun loop c [] = c
-			      | loop c (lbl::lbls) = loop (Proj_c(c,lbl)) lbls
-			in loop (Var_c v) lbls
-			end
-		in
-		    (case (is_exportable_lab l, Name.is_label_open l, bnd) of
-			 (false,false,_) => exports
-		       | (true,_,BND_EXP (v,_)) => 
-			     let val e = path2exp (make_rpath v)
-				 val (_,c) = nilstatic_exp_valid(nil_final_context,e)
-			     in  (ExportValue(l,e,c)::exports)
-			     end
-		       | (true,_,BND_CON (v,_)) =>
-			     let val c = path2con (make_cpath v)
-				 val (_,k) = NilStatic.con_valid(nil_final_context,c)
-			     in  (ExportType(l,c,k)::exports)
-			     end
-		       | (false,true,BND_EXP _) => error "BND_EXP with open label"
-		       | (false,true,BND_CON _) => error "BND_CON with open label"
-		       | (is_export,is_open,BND_MOD (v,m)) => 
-			     let val (lc,lr) = make_cr_labels l
-				 val (vc,vr) = (case VarMap.find(total_varmap,v) of
-						    SOME vrc => vrc
-				                  | NONE => (print "Cannot find variable ";
-							Ppnil.pp_var v;
-							print "\n";
-							error "total_varmap missing bindings")
-				 val rpath = make_rpath vr
-				 val cpath = make_rpath vc
-				 val exports = 
-				     if is_export
-					 then
-					     let val _ = print "exporting module\n"
-						 val er = path2exp rpath
-						 val (_,cr) = nilstatic_exp_valid(nil_final_context,er)
-						 val cc = path2con cpath
-						 val (_,kc) = NilStatic.con_valid(nil_final_context,cc)
-						 val _ = print "done exporting module\n"
-					     in (ExportValue(lr,er,cr)::
-						 ExportType(lc,cc,kc)::
-						 exports)
-					     end
-				     else exports
-				 val exports = 
-				     (case (is_open,m) of
-					  (true,MOD_STRUCTURE sbnds) =>
-					      let val _ = print "exporting open module\n"
-						  val res = foldl (folder (SOME (cpath,rpath))) exports sbnds
-						  val _ = print "done exporting open module\n"
-					      in res
-					      end
-					| (true, _) => 
-					      (print "BND_MOD (non-structure) with open label:\n";
-					       LinkIl.Ppil.pp_mod m; print "\n";
-					       error "BND_MOD (non-structure) with open label")
-					| _ => exports)
-			     in  exports
-			     end)
-		end
-*)
 	    fun folder cr_pathopts ((SDEC(l,dec)),exports) = 
 		let open LinkIl.IlUtil
 		    fun make_cpath v = (case cr_pathopts of
@@ -431,23 +364,28 @@ val _ = (print "Nil final context is:\n";
 
 	in  nilmod
 	end
+*)
 
-    fun showmod debug str (filename,nilmod) = 
-	if debug
-	    then (print "\n\n=======================================\n\n";
-		  print str;
-		  print " results:\nsize = ";
-		  print (Int.toString (NilUtil.module_size nilmod));
-		  PpNil.pp_module nilmod;
+    fun showmod (showmod,showsize) str (filename,nilmod) = 
+	(print "\n\n=======================================\n";
+	 print str; print " complete: "; print filename; print "\n";
+	 if showsize
+	     then (print "  size = ";
+		   print (Int.toString (NilUtil.module_size nilmod));
+		   print "\n")
+	 else ();
+	 if showmod
+	    then (PpNil.pp_module nilmod;
 		  print "\n")
-	else (print str; print " complete: "; print filename; print "\n")
+	 else ())
+
 	    
     fun pcompile' debug (filename,(ctxt,sbnd_entries)) =
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
-	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnd_entries)
+	    val nilmod = (Stats.timer("Phase-splitting",Tonil.phasesplit)) (ctxt,sbnd_entries)
 	    val _ = showmod debug "Phase-split" (filename,nilmod)
 	in
 	    nilmod
@@ -458,14 +396,24 @@ val _ = (print "Nil final context is:\n";
 	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
-	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnd_entries)
-	    val _ = showmod debug "Phase-split" (filename, nilmod)
+	    val _ = if (!show_hil)
+			then 
+			    let val sbnds = List.mapPartial #1 sbnd_entries
+			    in  LinkIl.Ppil.pp_sbnds sbnds
+			    end
+		    else ()
+	    val nilmod = (Stats.timer("Phase-splitting",Tonil.phasesplit)) (ctxt,sbnd_entries)
+	    val _ = showmod (debug,!show_size) "Phase-split" (filename, nilmod)
 
-	    val nilmod = (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
-	    val _ = showmod debug "Cleanup" (filename, nilmod)
+	    val nilmod = if (!do_cleanup)
+			     then (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
+			 else nilmod
+	    val _ = if (!do_cleanup)
+			then showmod (debug,!show_size) "Cleanup" (filename, nilmod)
+		    else ()
 
 	    val nilmod = (Stats.timer("Linearization",Linearize.linearize_mod)) nilmod
-	    val _ = showmod debug "Renaming" (filename, nilmod)
+	    val _ = showmod (!show_renamed orelse debug,!show_size) "Renaming" (filename, nilmod)
 
  	    val nilmod' = 
 	      if (!typecheck_before_opt) then
@@ -474,22 +422,22 @@ val _ = (print "Nil final context is:\n";
 		nilmod
 	    val _ = 
 	      if (!typecheck_before_opt) then 
-		  showmod debug "Pre-opt typecheck" (filename, nilmod')
+		  showmod (debug,!show_size) "Pre-opt typecheck" (filename, nilmod')
 	      else ()
 
 	    val nilmod = if (!do_opt) then (Stats.timer("Nil Optimization", DoOpts.do_opts debug)) nilmod else nilmod
 	    val _ = if (!do_opt)
-			then showmod debug "Optimization" (filename,nilmod)
+			then showmod (debug,!show_size) "Optimization" (filename,nilmod)
 		    else ()
 
  	    val nilmod' = 
-	      if (!typecheck_after_opt) then
+	      if (!typecheck_after_opt andalso !do_opt) then
 		(Stats.timer("Nil typechecking",NilStatic.module_valid)) (D,nilmod)
 	      else
 		nilmod
 	    val _ = 
-	      if (!typecheck_after_opt) then 
-		  showmod debug "Post-opt typecheck" (filename, nilmod')
+	      if (!typecheck_after_opt andalso !do_opt) then 
+		  showmod (debug,!show_size) "Post-opt typecheck" (filename, nilmod')
 	      else ()
 	
 (*
@@ -499,10 +447,10 @@ val _ = (print "Nil final context is:\n";
 *)
 
 	    val nilmod = (Stats.timer("Closure-conversion",ToClosure.close_mod)) nilmod
-	    val _ = showmod debug "Closure-conversion" (filename, nilmod)
+	    val _ = showmod (debug,!show_size) "Closure-conversion" (filename, nilmod)
 
 	    val nilmod = (Stats.timer("Linearization2",Linearize.linearize_mod)) nilmod
-	    val _ = showmod debug "Renaming2" (filename, nilmod)
+	    val _ = showmod (debug,!show_size) "Renaming2" (filename, nilmod)
 
  	    val nilmod' = 
 	      if (!typecheck_after_cc) then
@@ -510,8 +458,8 @@ val _ = (print "Nil final context is:\n";
 	      else
 		nilmod
 	    val _ = 
-	      if (!typecheck_after_cc) then 
-		  showmod debug "Post-cc Typecheck" (filename, nilmod')
+	      if (!typecheck_after_cc orelse !show_before_rtl) then 
+		  showmod (!show_before_rtl orelse debug,!show_size) "Post-cc Typecheck" (filename, nilmod')
 	      else ()
 	in  nilmod
 	end
@@ -527,7 +475,7 @@ val _ = (print "Nil final context is:\n";
 
     fun meta_pcompiles debug filenames = 
 	let val mods = valOf ((if debug then linkil_tests else LinkIl.compiles) filenames)
-	in  map (pcompile' debug) (Listops.zip filenames mods)
+	in  map (pcompile' (debug,!show_size)) (Listops.zip filenames mods)
 	end
 
     fun pcompile filename = hd(meta_pcompiles false [filename])
