@@ -29,12 +29,13 @@ structure NilPrimUtilParam
 	fun con_ref c = Prim_c(Array_c,[c])
 	fun con_vector c = Prim_c(Vector_c,[c])
 	fun con_tag c = Prim_c(Exntag_c,[c])
-	val con_bool = 
-	    Proj_c(Mu_c(false,
-			Sequence.fromList
-			[(Name.fresh_named_var "nil_con_bool",
-			  Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]]))]),
-		   IlUtil.generate_tuple_label 1)
+	val con_sumbool = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]])
+ 	val con_bool = 
+ 	    Proj_c(Mu_c(false,
+ 			Sequence.fromList
+ 			[(Name.fresh_named_var "nil_con_bool",
+ 			  con_sumbool)]),
+ 		   IlUtil.generate_tuple_label 1)
 	val con_unit = Prim_c(Record_c ([],NONE), [])
 	val unit_value = Prim_e(NilPrimOp(record []),[],[])
 
@@ -50,8 +51,18 @@ structure NilPrimUtilParam
 		val labs = Listops.mapcount mapper clist
 	    in Prim_c(Record_c (labs,NONE),clist)
 	    end
-	val false_exp = Prim_e(NilPrimOp (inject_known 0w0),[con_bool],[])
-	val true_exp = Prim_e(NilPrimOp (inject_known 0w1),[con_bool],[])
+
+	fun bool_help w =
+	    let val var = Name.fresh_var()
+	    in  Let_e(Sequential,
+		      [Exp_b (var, TraceUnknown,
+			      Prim_e(NilPrimOp (inject_known w), [con_sumbool], []))],
+		      Prim_e(NilPrimOp roll, [con_bool], [Var_e var]))
+	    end
+
+	val false_exp = bool_help 0w0
+	val true_exp = bool_help 0w1
+
 	fun bool2exp false = false_exp
 	  | bool2exp true = true_exp
 
