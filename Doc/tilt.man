@@ -49,6 +49,7 @@ tilt, tilt-nj, tilt-slaves \- Standard ML compiler
 .RI [ num /] host
 .I ...
 .SH DESCRIPTION
+.PP
 TILT is a compiler for Standard ML (SML) that uses Typed Intermediate
 Languages.
 It can make executables and libraries for the SPARC V9 and Alpha
@@ -60,7 +61,7 @@ is a version of the compiler compiled by TILT.
 is a version of the compiler compiled by Standard ML of New Jersey; it
 should run on any Unix system supported by SML/NJ.
 .PP
-TILT operates on a project description comprised of the named
+TILT operates on a project description comprising the named
 .I project
 files.
 By default, TILT performs cutoff incremental recompilation (IR) to
@@ -71,7 +72,7 @@ The options are
 .BI -o " exe"
 Perform IR and link every unit into an executable
 .IR exe .
-This fails if there are unimplemented units.
+This fails if there are unimplemented units (see the following section).
 .TP
 .BI -l " lib"
 Perform IR and pack every unit and interface into a library
@@ -289,9 +290,12 @@ out all of its declarations and changing any relative file names.
 For example, the project description file
 .EX
 	include "help.proj"
+	unit U : I
 .EE
-is well-formed provided it is not named
-.BR help.proj .
+is well-formed provided the project description file
+.B help.proj
+declares an interface named
+.IR I .
 .PP
 In a project description, every unit and interface name
 must be a definite reference to a specific unit or interface.
@@ -332,11 +336,8 @@ are identical.
 .PP
 In a project description file, no unit or interface name
 may be used before it is declared.
-Thus, a project description file specifies the same interfaces and
-units (up to interface equivalence) in any context.
-.PP
 The order of declarations in project description file is important.
-It determines the order of shadowing when an interface or unit
+It determines the order of shadowing when a source interface or unit
 declaration does not specify a list of units on which it depends.
 It determines the order in which new declarations are added to a
 project description.
@@ -401,8 +402,9 @@ then we would use
 rather than
 .IB lib /desc \fR.
 .PP
-A human can learn the interface of a library by looking at the project
-description file
+You can learn the interface of a library
+.I lib
+by looking at the project description file
 .IB lib /inter
 and the interface sources files
 .IB lib /I/* \fR.

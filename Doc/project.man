@@ -16,7 +16,7 @@ project \- TILT project description files
 .PP
 The project description file language has value, interface, and unit
 expressions; value, interface, and unit declarations; conditional
-declarations; and a file include mechanism.
+declarations; and an include mechanism.
 .SS Lexical structure
 .PP
 Project description files are written in the ASCII character set.
@@ -166,7 +166,7 @@ The first form of interface expression is called a source interface.
 The
 .I ve
 names an interface source file (see
-.IR tilt (1)).
+.IR interface (4)).
 The optional list of unit identifiers specifies what units to open
 (and the order) when the source file is compiled.
 If the list is not present, then every unit declared to this point in
@@ -262,13 +262,6 @@ are otherwise ignored.
 The eigth form of declaration causes TILT to terminate with
 an error message containing
 .IR ve .
-.SS Basis library
-TILT makes the basis library available by syntactically rewriting
-every non-basis project description file.  Each project description
-file is changed to include the compiled basis library and each source
-unit and interface with a list of opened units is changed to
-open the basis library units that define the standard top-level
-environment.
 .SS Static checks
 .PP
 TILT
@@ -286,8 +279,6 @@ description.
 .PP
 The internal language permits a list of unit and interface
 declarations.
-The only value expressions in the internal language are string
-constants representing file names.
 An internal language project description is well-formed if every
 identifier has exactly one declaration and no identifier is used
 before it is declared.
@@ -316,11 +307,10 @@ Every project description file read by TILT must be well-formed.
 The balance of this section informally describes what this means.
 .PP
 All identifiers must be bound before they are used.
-The bindings for environment variables, predefined variables, and the
-basis library unit and interface identifiers are not syntactically
-evident.
+The bindings for environment variables, predefined variables, and
+basis library units and interfaces are implicit.
 .PP
-File names in project description files are in Unix syntax and
+File names in project description files are written in Unix syntax and
 relative paths are resolved relative to the directory containing the
 project description file.
 File names in a project description file are syntactically rewritten
@@ -328,16 +318,9 @@ to a canonical form and these are compared to detect include cycles
 and to avoid elaborating the same file twice.
 .PP
 Value identifiers may not be redeclared.
-Unit identifiers may be redeclared provided every declaration ascribes
-an equivalent interface to the unit; at most one implementation is
-provided; and any implementation precedes any other declarations for
-the unit.
-Interface identifiers may be redeclared provided the interface
-expressions are equivalent.
-Source and pre-compiled interface expressions are equivalent if their
-file contents and lists of opened units are identical.
-These restrictions ensure that unit and interface names are definite
-references.
+Unit and interface identifiers may be redeclared provided every
+declaration after the first is redundant (see
+.IR tilt (1)).
 .PP
 Value expressions are implicitly typed with types
 .BR bool ,
@@ -446,4 +429,5 @@ is set to
 .BR true ;
 used to compile the basis library.
 .SH SEE ALSO
-.IR tilt (1)
+.IR tilt (1),
+.IR interface (4)
