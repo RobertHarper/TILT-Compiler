@@ -31,13 +31,14 @@ structure Name :> NAME =
     fun compare_tag (GTAG(a,_),GTAG(b,_)) = Int.compare(a,b)
     fun compare_label((a,sa,oa) : label, (b,sb,ob) : label) = 
 	(case Int.compare(a,b) of
-	     EQUAL => (case String.compare(sa,sb) of
-			   EQUAL => (case (oa,ob) of
-					 (false,true) => LESS
-				       | (true,false) => GREATER
-				       | _ => EQUAL)
+			   EQUAL => (case String.compare(sa,sb) of
+					 EQUAL => (case (oa,ob) of
+						       (false,true) => LESS
+						     | (true,false) => GREATER
+						     | _ => EQUAL)
+				       | res => res)
 			 | res => res)
-	   | res => res)
+
 
     fun make_counter() = 
       let
