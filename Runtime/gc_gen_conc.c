@@ -321,9 +321,9 @@ static void CollectorOn(SysThread_t *sysThread)
   assert(sysThread->LocalCursor == 0);
   QueueClear(sysThread->root_lists);
   if (GCType == Minor || GCType == BeginMajor)
-    SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
+    SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPad, dischargeWithPad);
   else
-    SetCopyRange(&copyRange, toSpace, expandWithPadSave, dischargeWithPadSave);
+    SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPadSave, dischargeWithPadSave);
 
   /* All processors compute thread-specific roots in parallel
      and determine whether a major GC has been requested. */
@@ -542,9 +542,9 @@ void GCRelease_GenConc(SysThread_t *sysThread)
   sysThread->allocStart = sysThread->allocCursor;  /* allocation area is NOT reused */
   sysThread->writelistCursor = sysThread->writelistStart;  /* write list reused once processed */
   if (GCType == Minor || GCType == BeginMajor)
-    SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
+    SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPad, dischargeWithPad);
   else
-    SetCopyRange(&copyRange, toSpace, expandWithPadSave, dischargeWithPadSave);
+    SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPadSave, dischargeWithPadSave);
 
 
   switch (GCStatus) {
@@ -580,7 +580,7 @@ void GCRelease_GenConc(SysThread_t *sysThread)
   while (writelistCurrent < writelistStop) {
     ptr_t primary = *writelistCurrent++, replica;
     tag_t tag;
-    int wordDisp = (int) *writelistCurrent++;
+    int byteDisp = (int) *writelistCurrent++;
 
     forward1_concurrent_stack(primary,&copyRange,&nursery->range,sysThread);
     replica = (ptr_t) primary[-1];
@@ -588,19 +588,21 @@ void GCRelease_GenConc(SysThread_t *sysThread)
 
     switch (GET_TYPE(tag)) {
     case PARRAY_TAG: {
+      int wordDisp = byteDisp/ sizeof(val_t);
       ptr_t primaryField = (ptr_t) primary[wordDisp], replicaField;
       forward1_concurrent_stack(primaryField,&copyRange,&nursery->range,sysThread);
-      replicaField = (ptr_t) primaryField[-1];
+      replicaField = IsTagData(primaryField) ? primaryField : (ptr_t) primaryField[-1];
       replica[wordDisp] = (val_t) replicaField;  /* update replica with replicated object */
       break;
     }
     case IARRAY_TAG: {
+      int wordDisp = byteDisp/ sizeof(val_t);
       int primaryField = (int) primary[wordDisp];
       replica[wordDisp] = primaryField;       /* update replica with primary's non-pointer value */
       break;
     }
     case RARRAY_TAG: {
-      int doublewordDisp = wordDisp * sizeof(val_t) / (sizeof(double));
+      int doublewordDisp = byteDisp / (sizeof(double));
       double primaryField = (int) primary[doublewordDisp];
       replica[doublewordDisp] = primaryField;  /* update replica with primary's non-pointer value */
       break;
@@ -627,9 +629,9 @@ static void do_minor_work(SysThread_t *sysThread, int bytesToCopy)
 
   assert(sysThread->LocalCursor == 0);                                        /* local stack must be empty */ 
   if (GCType == Minor || GCType == BeginMajor)
-    SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
+    SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPad, dischargeWithPad);
   else
-    SetCopyRange(&copyRange, toSpace, expandWithPadSave, dischargeWithPadSave);
+    SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPadSave, dischargeWithPadSave);
   while (!(isEmptyGlobalStack(workStack)) && bytesCopied < bytesToCopy) {
     SynchStart(workStack);
     fetchFromGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor), fetchSize);
@@ -654,7 +656,7 @@ static void do_major_work(SysThread_t *sysThread, int bytesToCopy)
   int i, bytesCopied = 0, lastAndEmpty = 0;
 
   assert(sysThread->LocalCursor == 0);                                        /* local stack must be empty */ 
-  SetCopyRange(&copyRange, tenuredTo, expandWithPad, dischargeWithPad);       /* Get local ranges ready for use */
+  SetCopyRange(&copyRange, sysThread->stid, tenuredTo, expandWithPad, dischargeWithPad);       /* Get local ranges ready for use */
   while (!(isEmptyGlobalStack(majorWorkStack2)) && bytesCopied < bytesToCopy) {
     int cursor = 0;
     ptr_t stack[2];
@@ -705,10 +707,12 @@ static int GCTry_GenConcHelp(SysThread_t *sysThread, int roundSize)
   switch (GCStatus) {
     case GCOff: 
     case GCOn: 
+    case GCPendingOn: 
        GetHeapArea(nursery,roundSize,&tmp_alloc,&tmp_limit);
        break;
-    case GCPendingOn: 
     case GCPendingOff: 
+      tmp_alloc = tmp_limit = 0;
+      break;
     default : 
        assert(0);
   }
