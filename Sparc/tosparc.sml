@@ -1,5 +1,10 @@
 (*$import Sparc MACHINEUTILS TRACETABLE BBLOCK TOASM Util Pprtl *)
 
+(* WARNING: Use Rat or Rat2 only if sure that no spills (or at most one if one of Rat/Rat2 is used)
+              will cause usage of Rat/Rat2 during the live range of Rat/Rat2.
+   THREAD_UNSAFE ERROR XXX: don't use FPTOFROMINT; use thread-specific slot
+*)
+
 (* Translation from Rtl to Sparc pseudoregister-assembly. 
    Assumptions:
      (1) The thread pointer points to a structure where the first 32 longs

@@ -1,5 +1,10 @@
 (*$import Pprtl DecAlpha MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM Util *)
 
+(* WARNING: Use Rat or Rat2 only if sure that no spills (or at most one if one of Rat/Rat2 is used)
+              will cause usage of Rat/Rat2 during the live range of Rat/Rat2.
+   THREAD_UNSAFE ERROR XXX: don't use FPTOFROMINT; use thread-specific slot
+*)
+
 (* Translation from Rtl to DecAlpha pseudoregister-assembly. 
    Assumptions:
      (1) The thread pointer points to a structure where the first 32 longs
@@ -536,12 +541,12 @@ struct
 	 val Rdest = translateIReg rtl_Rdest
        in
 	 case comparison of
-	   Rtl.EQ =>  emit (SPECIFIC (INTOP (CMPEQ, Rsrc1, REGop (Rsrc2), Rdest)))
-	 | Rtl.LE =>  emit (SPECIFIC (INTOP (CMPLE, Rsrc1, REGop (Rsrc2), Rdest)))
-	 | Rtl.LT =>  emit (SPECIFIC (INTOP (CMPLT, Rsrc1, REGop (Rsrc2), Rdest)))
-	 | Rtl.GE =>  emit (SPECIFIC (INTOP (CMPLE, Rsrc2, REGop (Rsrc1), Rdest)))
-	 | Rtl.GT =>  emit (SPECIFIC (INTOP (CMPLT, Rsrc2, REGop (Rsrc1), Rdest)))
-	 | Rtl.NE => (emit (SPECIFIC (INTOP (CMPEQ, Rsrc1, REGop (Rsrc2), Rdest)));
+	   Rtl.EQ =>  emit (SPECIFIC (INTOP (CMPEQ, Rsrc1, REGop Rsrc2, Rdest)))
+	 | Rtl.LE =>  emit (SPECIFIC (INTOP (CMPLE, Rsrc1, REGop Rsrc2, Rdest)))
+	 | Rtl.LT =>  emit (SPECIFIC (INTOP (CMPLT, Rsrc1, REGop Rsrc2, Rdest)))
+	 | Rtl.GE =>  emit (SPECIFIC (INTOP (CMPLE, Rsrc2, REGop Rsrc1, Rdest)))
+	 | Rtl.GT =>  emit (SPECIFIC (INTOP (CMPLT, Rsrc2, REGop Rsrc1, Rdest)))
+	 | Rtl.NE => (emit (SPECIFIC (INTOP (CMPEQ, Rsrc1, REGop Rsrc2, Rdest)));
 		      emit (SPECIFIC (INTOP (CMPEQ, Rdest, REGop Rzero, Rdest))))
        end
 
@@ -557,8 +562,8 @@ struct
 	    | Rtl.LT =>  emit (SPECIFIC (INTOP (CMPLT, Rsrc1, IMMop src2,  Rdest)))
 	    | Rtl.GE => if (src2 = 0) 
 			    then  emit (SPECIFIC (INTOP (CMPLE, Rzero,   REGop Rsrc1, Rdest)))
-			else (emit (SPECIFIC (INTOP (OR,    Rzero, IMMop src2,  Rat)));
-			      emit (SPECIFIC(INTOP (CMPLE, Rat,   REGop Rsrc1, Rdest))))
+			else (emit (SPECIFIC (INTOP (OR, Rzero, IMMop src2,  Rat)));
+			      emit (SPECIFIC(INTOP (CMPLE, Rat, REGop Rsrc1, Rdest))))
 	    | Rtl.GT =>  if (src2 = 0) 
 			    then  emit (SPECIFIC(INTOP (CMPLT, Rzero,   REGop Rsrc1, Rdest)))
 			 else (emit (SPECIFIC(INTOP (OR,    Rzero, IMMop src2,  Rat)));
@@ -758,9 +763,9 @@ struct
 	    to a canonical integer bit-pattern in Rdest, rounding
 	    towards minus-infinity. *)
 	   emit (SPECIFIC (FPCONV (CVTTQM, Fsrc, Fat)));
-	   emit (BASE(LADDR (Rat, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
-	   emit (SPECIFIC(STOREF (STT, Fat, 0, Rat)));
-	   emit (SPECIFIC(LOADI (LDQ, Rdest, 0, Rat)))
+	   emit (BASE(LADDR (Rat2, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
+	   emit (SPECIFIC(STOREF (STT, Fat, 0, Rat2)));
+	   emit (SPECIFIC(LOADI (LDQ, Rdest, 0, Rat2)))
        end
 
      | translate (Rtl.CVT_INT2REAL (rtl_Rsrc, rtl_Fdest)) =
@@ -770,9 +775,9 @@ struct
        in
 	 (* Converts an integer in Rsrc to a double-precision 
 	    floating-point value in Fdest; this is always precise *)
-	   emit (BASE(LADDR (Rat, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
-	   emit (SPECIFIC(STOREI (STQ, Rsrc, 0, Rat)));
-	   emit (SPECIFIC(LOADF  (LDT, Fdest, 0, Rat)));
+	   emit (BASE(LADDR (Rat2, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
+	   emit (SPECIFIC(STOREI (STQ, Rsrc, 0, Rat2)));
+	   emit (SPECIFIC(LOADF  (LDT, Fdest, 0, Rat2)));
 	   emit (SPECIFIC (FPCONV (CVTQT, Fdest, Fdest)))
        end
 
@@ -903,8 +908,8 @@ struct
 	 val Raddr = translateIReg rtl_Raddr
 	 val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC (LOADI (LDQ_U, Rat, disp, Raddr)));
 	 emit (SPECIFIC (LOADI (LDA, Rdest, disp, Raddr)));
+	 emit (SPECIFIC (LOADI (LDQ_U, Rat, disp, Raddr)));
 	 emit (SPECIFIC (INTOP (EXTBL, Rat, REGop Rdest, Rdest)))
        end
 
@@ -912,13 +917,15 @@ struct
        let
 	 val Raddr = translateIReg rtl_Raddr
 	 val Rdest = translateIReg rtl_Rdest
+	 val Rtmp1 =  translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
+	 val Rtmp2 =  translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
        in
-	 emit (SPECIFIC (LOADI (LDA, Rat, disp, Raddr)));
-	 emit (SPECIFIC (LOADI (LDQ_U, Rat2, disp, Raddr)));
-	 emit (SPECIFIC (INTOP (MSKBL, Rat2, REGop Rat, Rat2)));
-	 emit (SPECIFIC (INTOP (INSBL, Rdest, REGop Rat, Rat)));
-	 emit (SPECIFIC (INTOP (OR, Rat, REGop Rat2, Rat)));
-	 emit (SPECIFIC (STOREI (STQ_U, Rat, disp, Raddr)))
+	 emit (SPECIFIC (LOADI (LDA, Rtmp1, disp, Raddr)));
+	 emit (SPECIFIC (LOADI (LDQ_U, Rtmp2, disp, Raddr)));
+	 emit (SPECIFIC (INTOP (MSKBL, Rtmp2, REGop Rtmp1, Rtmp2)));
+	 emit (SPECIFIC (INTOP (INSBL, Rdest, REGop Rtmp1, Rtmp1)));
+	 emit (SPECIFIC (INTOP (OR, Rtmp1, REGop Rtmp2, Rtmp1)));
+	 emit (SPECIFIC (STOREI (STQ_U, Rtmp1, disp, Raddr)))
        end
 
      | translate (Rtl.LOADQF (Rtl.EA (rtl_Raddr, disp), rtl_Fdest)) =

@@ -66,8 +66,8 @@ struct
 
   fun asm_suffix() = ".sparc.s"
 
-  fun comp (asm_file,rtlmod) = 
-    let 
+  fun comp (base_file,rtlmod) = 
+    let val asm_file = base_file ^ (asm_suffix())
 	val _ = print "\n================================================\n"
 	val _ = print "Starting translation to TIL-Sparc assembly\n"
 	val _ = Printutils.openOutput asm_file
@@ -80,14 +80,14 @@ struct
   fun wrapper string command = Stats.timer(string,command)
   val comp = wrapper "toasm" comp
 
-  fun rtl_to_asm (asm_file, rtlmod) : string * Rtl.label =
+  fun rtl_to_asm (base_file, rtlmod) : string * Rtl.label =
       let val Rtl.MODULE{main,...} = rtlmod
-      in (comp(asm_file, rtlmod), main)
+      in (comp(base_file, rtlmod), main)
       end
 
-  fun link (asm_file,labels) = 
+  fun link (base_file,labels) = 
     let val rtlmod = Tortl.entryTables labels
-	val _ = rtl_to_asm(asm_file,rtlmod)
+	val _ = rtl_to_asm(base_file,rtlmod)
     in  ()
     end
 
