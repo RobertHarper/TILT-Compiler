@@ -1,13 +1,13 @@
 functor NilContextFn'(structure ArgNil : NIL
-		     structure PpNil : PPNIL
-		     structure Cont : CONT_SIG
-		     structure NilUtil : NILUTIL
-		     structure Subst : NILSUBST
-		       sharing PpNil.Nil = NilUtil.Nil = ArgNil
-		       and type Subst.con = ArgNil.con
-		       and type Subst.exp = ArgNil.exp
-		       and type Subst.kind = ArgNil.kind) :(*>*)
-   NILCONTEXT' where Nil = ArgNil 
+		      structure PpNil : PPNIL
+		      structure Cont : CONT_SIG
+		      structure NilUtil : NILUTIL
+		      structure Subst : NILSUBST
+		      sharing PpNil.Nil = NilUtil.Nil = ArgNil
+		        and type Subst.con = ArgNil.con
+		        and type Subst.exp = ArgNil.exp
+		        and type Subst.kind = ArgNil.kind) :(*>*)
+  NILCONTEXT' where Nil = ArgNil 
 	      and type 'a subst = 'a Subst.subst = 
 struct
   structure Nil = ArgNil
@@ -34,45 +34,28 @@ struct
      Stats.counter "nilcontext_kinds_renamed")
     
   structure V = Name.VarMap
-
+    
   type 'a map = 'a V.map
+    
+  structure S = Name.VarSet
 
-  (*The con option in the kindmap is the result of pulling
-   * and normalizing the kind.  It is an option, because the
-   * call to normalize must be made with the variable bound,
-   * since the variable being bound may occur in the pulled version
-   * If a variable is looked up, and it's con is NONE, then it must be
-   * the case (by construction) that we are in the process of normalizing
-   * pull of that variable and it's kind.  All occurrences of a variable 
-   * in it's pulled version will be at Singleton's that were opaque.
-   * Therefore we do not lose information by simply returning the variable 
-   * itself in this case.  Trying to normalize and pull on demand in this 
-   * will cause a loop.
+  type set = S.set
+
+  (*The con in the kindmap is the result of pulling
+   * and normalizing the kind.  
    *)
-  type context = {kindmap : (con option*kind) map,
+  type context = {kindmap : (con * kind) map,
 		  conmap : con map,
 		  top_level : bool,
-		  c_binds_top : (con option*kind) map,
-		  e_binds_top : con map}
-
-  (* given two well-formed contexts,
-    add the entries kindmap of ctxt2 to to the ones in ctxt1;
-    if key is is present in both maps, that entry is not added *)
-  fun context_addkindmap ({kindmap = km1, conmap,top_level,c_binds_top,e_binds_top} : context,
-			  {kindmap = km2,...} : context) = 
-      {kindmap = V.unionWith (fn (e1,e2) => e1) (km1,km2),
-       conmap = conmap,
-       top_level = top_level,
-       c_binds_top = c_binds_top,
-       e_binds_top = e_binds_top}
-      
+		  c_binds_top : set,
+		  e_binds_top : set}
 
   fun empty ():context = 
     {kindmap = V.empty,
      conmap = V.empty,
      top_level = true,
-     c_binds_top = V.empty,
-     e_binds_top = V.empty}
+     c_binds_top = S.empty,
+     e_binds_top = S.empty}
 
   fun leave_top_level ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context) : context = 
     {conmap = conmap,kindmap = kindmap,
@@ -80,23 +63,30 @@ struct
      c_binds_top = c_binds_top,e_binds_top = e_binds_top}
 
   fun code_context ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context) : context = 
-    {conmap = e_binds_top,kindmap = c_binds_top,
-     top_level = false,
-     c_binds_top = c_binds_top,e_binds_top = e_binds_top}
+    let 
+      fun filter set (v,a) = S.member (set,v)
+    in
+      {conmap = V.filteri (filter e_binds_top) conmap,
+       kindmap = V.filteri (filter c_binds_top) kindmap,
+       top_level = false,
+       c_binds_top = c_binds_top,
+       e_binds_top = e_binds_top}
+    end
+
 
   fun insert_con ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context,var,con) = 
     {conmap = V.insert (conmap, var, con), 
      kindmap = kindmap,
      top_level = top_level,
      c_binds_top = c_binds_top,
-     e_binds_top = if top_level then V.insert (e_binds_top, var, con) else e_binds_top}
+     e_binds_top = if top_level then S.add (e_binds_top, var) else e_binds_top}
 
   fun insert_code_con ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context,code_var,con) = 
     {conmap = V.insert (conmap, code_var, con), 
      kindmap = kindmap,
      top_level = top_level,
      c_binds_top = c_binds_top,
-     e_binds_top = V.insert (e_binds_top, code_var, con)}
+     e_binds_top = S.add (e_binds_top, code_var)}
 
   fun insert_con_list (C:context,defs : (var * con) list) =
     List.foldl (fn ((v,c),C) => insert_con (C,v,c)) C defs
@@ -109,7 +99,7 @@ struct
   fun remove_con ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context,var) = 
     let
       val conmap = #1 (V.remove (conmap, var))
-      val e_binds_top = (#1 (V.remove (e_binds_top, var))
+      val e_binds_top = (S.delete (e_binds_top, var)
 			 handle LibBase.NotFound => e_binds_top)
     in
       {conmap = conmap, kindmap = kindmap,
@@ -118,23 +108,73 @@ struct
        e_binds_top = e_binds_top}
     end
 
-  fun insert_kind normalizer (D as {kindmap,conmap,top_level,c_binds_top,e_binds_top}:context,var,kind) = 
+  fun inject_kind ({kindmap,conmap,top_level,c_binds_top,e_binds_top}:context,var,con,kind) = 
+    {kindmap = V.insert (kindmap,var,(con,kind)),
+     conmap = conmap,
+     top_level = top_level,
+     c_binds_top = (if top_level then S.add (c_binds_top, var)
+		    else c_binds_top),
+     e_binds_top = e_binds_top}
+
+  (* given two well-formed contexts,
+    add the entries kindmap of ctxt2 to to the ones in ctxt1;
+    if key is is present in both maps, that entry is not added *)
+  fun context_addkindmap ({kindmap = km1, conmap,top_level,c_binds_top = cb1,e_binds_top} : context,
+			  {kindmap = km2, c_binds_top = cb2, ...} : context) = 
+      {kindmap = V.unionWith (fn (e1,e2) => e1) (km1,km2),
+       conmap = conmap,
+       top_level = top_level,
+       c_binds_top = S.union (cb1,cb2) ,
+       e_binds_top = e_binds_top}
+
+  (* NOTE RE: kind insertion -
+   *         The context maintains with every kind the
+   * most precisely defined constructor that can be maintained for the
+   * variable, based on it's kind.  The is created by normalizing the
+   * result of "pulling" with the variables from the kind.  Note
+   * though that the call to normalize must be made with the variable
+   * bound, since the variable being bound may occur in the pulled
+   * version.  Therefore, the normalization of the pulled constructor
+   * is done with var = Var_c var :: selfify(Var_c var,kind) bound in
+   * the context.  It can be shown that if the variable is looked up
+   * in the process of normalizing it's pulled version, then there can
+   * be no extra information extracted by trying to recursively pull,
+   * and it is sufficient to return the variable itself.  (All
+   * occurrences of a variable in it's pulled version will be at
+   * Singleton's that were opaque.  Therefore we do not lose
+   * information by simply returning the variable itself in this case.)
+   * Trying to normalize and pull on demand in this will cause a loop.
+  *)
+
+  val empty_subst = Subst.empty
+  val subst_compose = Subst.con_subst_compose
+  val subst_add = Subst.add
+
+  fun bind_kind normalizer (D:context,var,kind) =
+    let
+      val _ = if !profile then (nilcontext_kinds_renamed();
+				nilcontext_kinds_bound ()) else ()
+      val var' = Name.derived_var var
+      val var_con = Var_c var'
+      val kind = selfify(var_con,kind)
+      val D' = inject_kind (D,var',var_con,kind)
+      val con = normalizer D' (pull(var_con,kind))
+    in
+      (inject_kind(D,var',con,kind),
+       var',
+       subst_add (empty_subst ()) (var,Var_c var'))
+    end
+
+  fun insert_kind normalizer (D as {kindmap,...}:context,var,kind) = 
     (case V.find (kindmap, var)
        of NONE => 
 	 let
-	   val kind = selfify(Var_c var,kind)
-	   val D' = {kindmap = V.insert (kindmap,var,(NONE,kind)),
-		     conmap = conmap,top_level = top_level,
-		     c_binds_top = (if top_level then V.insert (c_binds_top, var, (NONE,kind))
-				    else c_binds_top),
-		     e_binds_top = e_binds_top}
-	   val con = normalizer D' (pull(Var_c var,kind))
+	   val var_con = Var_c var
+	   val kind = selfify(var_con,kind)
+	   val D' = inject_kind (D,var,var_con,kind)
+	   val con = normalizer D' (pull(var_con,kind))
 	 in
-	   {kindmap = V.insert (kindmap, var, (SOME con,kind)),
-	    conmap = conmap,
-	    top_level = top_level,
-	    c_binds_top = (if top_level then V.insert (c_binds_top, var, (SOME con,kind)) else c_binds_top),
-	    e_binds_top = e_binds_top}
+	   inject_kind(D,var,con,kind)
 	 end
 	| _ => error ("Constructor variable "^(var2string var)^" already in context"))
 
@@ -152,48 +192,19 @@ struct
        of SOME(c,k) => SOME k
 	| NONE => NONE)
     
-  fun find_kind' (D as {kindmap,...}:context,var) = 
-    (case V.find (kindmap, var)
-       of SOME(SOME c,k) => SOME (c,k)
-	| SOME(NONE,k) => SOME(Var_c var,k)
-	| NONE => NONE)
+  fun find_kind' (D as {kindmap,...}:context,var) = V.find (kindmap, var)
 	 
   fun remove_kind ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context,var) = 
     let
       val kindmap = #1 (V.remove (kindmap, var))
-      val c_binds_top = (#1 (V.remove (c_binds_top, var))
+      val c_binds_top = (S.delete (c_binds_top, var)
 			 handle LibBase.NotFound => c_binds_top)
     in
-      {conmap = conmap, kindmap = kindmap,
+      {conmap = conmap, 
+       kindmap = kindmap,
        top_level = top_level,
        c_binds_top = c_binds_top,
        e_binds_top = e_binds_top}
-    end
-
-  val empty_subst = Subst.empty
-  val subst_compose = Subst.con_subst_compose
-  val subst_add = Subst.add
-
-  fun bind_kind normalizer (D as {kindmap,conmap,top_level,c_binds_top,e_binds_top}:context,var,kind) =
-    let
-      val var' = Name.derived_var var
-      val _ = if !profile then (nilcontext_kinds_renamed();
-				nilcontext_kinds_bound ()) else ()
-      val kind = selfify(Var_c var',kind)
-      val D' = {kindmap = V.insert (kindmap,var',(NONE,kind)),
-		conmap = conmap,top_level = top_level,
-		c_binds_top = (if top_level then V.insert (c_binds_top, var', (NONE,kind)) 
-			       else c_binds_top),
-		e_binds_top = e_binds_top}
-      val con = normalizer D' (pull (Var_c var',kind))
-      val kindmap = V.insert (kindmap, var', (SOME con,kind))
-      val c_binds_top = if top_level then V.insert (c_binds_top, var', (SOME con,kind)) else c_binds_top
-    in
-      ({kindmap = kindmap, conmap = conmap,
-	top_level = top_level,
-	c_binds_top = c_binds_top, e_binds_top = e_binds_top},
-       var',
-       subst_add (empty_subst ()) (var,Var_c var'))
     end
 
   fun bind_kind_list normalizer = 
@@ -240,12 +251,10 @@ struct
       V.foldli f' acc kindmap
     end
 
-  fun print_con_kind (var,(con_opt,kind)) =
+  fun print_con_kind (var,(con,kind)) =
     (print (Name.var2string var);
-     (case con_opt 
-	of SOME con => (print "=";
-			PpNil.pp_con con)
-	 | NONE => ());
+     print "=";
+     PpNil.pp_con con;
      print "::";
      PpNil.pp_kind kind;
      print "\n")
