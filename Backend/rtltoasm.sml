@@ -58,7 +58,41 @@ struct
      let
        val names = map (fn (Rtl.PROC{name,...}) => name) procs
        local
-	   val {callee_map, rtl_scc = recursive_components, ...} = Recursion.procGroups prog
+
+           (* A *lot* of the cruft in the backend is due to an
+              abandoned attempt to allow (local, non-escaping)
+              functions to use more efficient but non-standard calling
+              conventions.  (Hence, for example, the procedure-signature
+              mapping used below.)
+
+              This is based on the idea of [I forget;
+              remind me to look this up --- Chris] which allocates
+              procedures starting with the leaves and working upward.
+              Each routine can use any registers it wants, and takes
+              its arguments in any registers.  Then when the callers
+              of this function are allocated they know where to put
+              the arguments, and more importantly knows exactly which
+              registers that the callee doesn't use; these can all be
+              treated as callee-save.
+
+              The tricky part is when there are mutually-recursive cycles,
+              which all can't be allocated after their callees.  The
+              cycle can be broken by stipulating that one of the routines
+              will use the standard calling convention, though.
+
+              Tailcalls from one function to another are also an issue.
+
+              I don't recall now exactly why we finally decided that
+              every routine should use the machine calling convention
+              whether because the code was never finished, or never
+              worked, or simply because it made it easier to use gdb.
+            *)
+
+(*         Figure out the call graph and the strongly-connected components
+           where cycles have to be broken.
+*)
+
+(* 	   val {callee_map, rtl_scc = recursive_components, ...} = Recursion.procGroups prog
 	   val _ = print ("  " ^
 			 (Int.toString (length procs)) ^
 			 " procedures.  " ^
@@ -67,7 +101,7 @@ struct
 			 (Int.toString (foldr Int.max 0
 					(map length recursive_components))) ^
 			 ".\n")
-(*	   
+
 	   fun getComponent groups proc =
 	       let
 		   fun loop [] = error "getComponent: procedure not found"
@@ -84,8 +118,13 @@ struct
 	       Listops.member_eq(Rtl.eq_label, proc2, getComponent groups proc1)
 *)
        in
-(*	   val is_mutual_recursive = sameComponent recursive_components *)
-	   val component_names = recursive_components
+(*	   val is_mutual_recursive = sameComponent recursive_components
+	   val component_names = recursive_components *)
+
+           (* If we're not doing anything interesting with calling
+              conventions, we can allocate each procedure independently
+            *)
+	   val component_names = map (fn n => [n]) names
        end
 
        val Labelmap = ref (Labelmap.empty) : procsig Labelmap.map ref

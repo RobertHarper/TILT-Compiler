@@ -1419,7 +1419,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 (eq_list(eq_label,labs1,labs2) andalso
 		  let fun combine(vlistopt,clist) =
 		    (case vlistopt of
-		       NONE => map (fn c => (NONE, c)) clist1
+		       NONE => map (fn c => (NONE, c)) clist
 		     | SOME vars => map2 (fn (v,c) => (SOME v, c)) (vars,clist))
 		      val vclist1 = combine(vlistopt1, clist1)
 		      val vclist2 = combine(vlistopt2, clist2)

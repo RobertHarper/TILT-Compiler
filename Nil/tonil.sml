@@ -3295,10 +3295,10 @@ struct
            xsig_struct context (con0,sdecs)
 
      | xsig' context (con0, Il.SIGNAT_SELF(_, SOME unselfSig, _)) = 
-	   (print "xsig' --- found SIGNAT_SELF with unselfified copy\n";
-	    xsig' context (con0, unselfSig))
+	    xsig' context (con0, unselfSig)
 
-     (* XXX: How is it possible that the following case can happen,
+     (* XXX: How is it possible that the following case can happen
+             --- and it does; I added a print statement to verify ---
              since the imports are unselfified before we get there,
              and the elaborator should never need to translates a
              user-written signature into SIGNAT_SELF.  But
@@ -3317,8 +3317,7 @@ struct
 	   (* XXX:  Why don't we call unselfify here, since the previous
                     case goes to the selfified version.
             *)
-	   (print "xsig' --- found SIGNAT_SELF without unselfified copy\n";
-	    xsig' context (con0, selfSig))
+	   (xsig' context (con0, selfSig))
 
 
    (* xsig_struct.  Helper function used by xsig' to translate 

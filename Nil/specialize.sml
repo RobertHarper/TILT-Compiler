@@ -327,7 +327,7 @@ struct
                                 current instantiated type.
                               *)
 			     fun equal(c1 : con, c2 : con, k : kind) = 
-			          NilStatic.con_equiv(callContext,c1,c2,k)
+			       NilStatic.con_equiv(callContext,c1,c2,k)
 
 			     val isEqual = 
 			       Listops.andfold equal 
