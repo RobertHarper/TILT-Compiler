@@ -1317,14 +1317,15 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		end
 	  val _ = pop()
 	  val _ = if res then ()
-		  else (print "con_equiv' returning false\n";
-			print "subkinding = "; print (Bool.toString sk); print "\n";
-			print "c1 = "; Ppnil.pp_con c1; print "\n";
-			print "c2 = "; Ppnil.pp_con c2; print "\n";
-			print "k = "; Ppnil.pp_kind k; print "\n";
-			(*		  print "min context for c1,c2 = "; 
-			 NilContext.print_context (Nilcontext.cons_error_context (D,[c1,c2])); print "\n";*)
-			print "\n")
+		  else if !debug then 
+		    (print "con_equiv' returning false\n";
+		     print "subkinding = "; print (Bool.toString sk); print "\n";
+		     print "c1 = "; Ppnil.pp_con c1; print "\n";
+		     print "c2 = "; Ppnil.pp_con c2; print "\n";
+		     print "k = "; Ppnil.pp_kind k; print "\n";
+		     (*		  print "min context for c1,c2 = "; 
+		      NilContext.print_context (Nilcontext.cons_error_context (D,[c1,c2])); print "\n";*)
+		     print "\n") else ()
 	in  res
 	end
       (* The substitution returned maps variables in the second list to the first. *)
@@ -1605,13 +1606,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     | _ => false)
 		 
 	    val _ = if res then () 
-		    else
+		    else if !debug then
 		      (print "con_structural_equiv returning false\n";
 		       print "c1 = "; Ppnil.pp_con c1; print "\n";
 		       print "c2 = "; Ppnil.pp_con c2; print "\n";
 		       printl "WITH MINIMAL CONTEXT AS";
 		       print_context (cons_error_context (D,[c1,c2]));
-		       print "\n")
+		       print "\n") else ()
 	in res
 	end 
       val res = con_equiv args

@@ -6,10 +6,25 @@
        fun g() = f () + f ()
     into
        fun f () = 5
-       fun g() = f () + f ()
+       fun g () = f () + f ()
+
+     or convert
+       fun f x = (x,x)            [really fun 'a f (x:'a) = (x,x)]
+       fun g () = (f 1, f 2)      [really fun g () = (f[int](1), f[int](2)) ]
+     into
+       fun f (x:int) = (x,x)
+       fun g () = (f 1, f 2)
+
+
     This is possible when f does not escape.  
     This is desirable since calling a polymorphic function
        requires two calls and can lead to unnecessary constructor code.
+
+    INVARIANT:
+      Because this is a 2-pass algorithm, where first information on
+      all the variables is gathered and then the program is rewritten,
+      all bound variables in the input code must be distinct.
+  
 *)	
 
 structure Specialize :> SPECIALIZE =
@@ -24,19 +39,24 @@ struct
 	val do_proj = ref true
 
 	(* In the first pass, we locate all candidate functions.
-	   Cadidatate functions are term-level functions which
+	   Candidate functions are term-level functions which
 	   (0) have valuable bodies and are non-recursive
-	   (1) Can take constructor arguments.
-	       Cannot take floating point arguments.
-	       Can only take term arugments of unit type.
-	   (2) Cannot escape.  That is, they can appear only
+	   (1) (1) Can take constructor arguments.
+	       (2) Cannot take floating point arguments.
+	       (3) Can only take term arguments of unit type.
+	   (2) Cannot escape.  That is, their uses can appear only
 	       in application position.
 	   (3) are given the same arguments at each application site.
-	       (1) The terms arguments must be valuable.
+	       (1) The term arguments must be valuable.
 	           They are already equal since they are of type unit.
 	       (2) The type arguments must all be equivalent to a type
 	           which is well-formed at the context where the 
 		   candidate function was defined. 
+
+          [Note that properties 0 and 1 are satisfied by the
+           translation of polymorphic functions, except that functions
+           using equality polymorphism don't satisfy 1.3, and hence
+           such functions won't be specialized by the current code.]
 
 	  In the second pass, we rewrite candidate functions and
 	     their applications.
@@ -53,24 +73,46 @@ struct
 	     are added and removed.  Any remaining functions 
 	     after pass 1 are candidates.
 
+	 In some sense this process is sort of a reverse inlining,
+         where the type arguments in an application are moved up into
+         the definition of the function.  This means, however, that
+         we must check that the type arguments specified 
+
        *)
 
+       (****************)
+       (* Global State *)
+       (****************)
 
 	local
+	    (*
+	     Impure:  Marked as potentially recursive, has side-effects,
+                      or has floating-point arguments.
+
+	     Polymorphic:  Either has non-valuable or non-unit term
+	                   arguments, or is used at more than one type.
+            *)
+
 	    datatype entry = 
-		Candidate of {context : context,
+		Candidate of {context  : context,
 			      tFormals : var list, 
 			      eFormals : var list,
-			      tActuals : (con * kind) list option ref,
-			      body : exp,
-			      replace : var}
+			      tKinds   : kind list,
+			      tActuals : con list option ref,
+			      body     : exp,
+			      replace  : var}
 	      | Impure
 	      | Escaping
 	      | Polymorphic
+
 	    val mapping = ref (Name.VarMap.empty : entry Name.VarMap.map)
 	in
-
+	    (* Reset the global state 
+             *)
 	    fun resetCandidates() = mapping := Name.VarMap.empty
+
+            (* Summarize the global state by printing statistics about it.
+             *)
 	    fun showCandidates() = 
 		let fun folder(v,entry,(c,i,e,p)) = 
 		    (case entry of
@@ -78,121 +120,285 @@ struct
 		       | Impure => (c,i+1,e,p)
 		       | Escaping => (c,i,e+1,p)
 		       | Polymorphic => (c,i,e,p+1))
-		    val (c,i,e,p) = Name.VarMap.foldli folder (0,0,0,0) (!mapping)
-		in  print ("  " ^ (Int.toString c) ^ " optimizable candidates.\n");
-		    print ("  " ^ (Int.toString i) ^ " impure.\n");
-		    print ("  " ^ (Int.toString e) ^ " escaping.\n");
-		    print ("  " ^ (Int.toString p) ^ " used polymorphically.\n")
+		    val (c,i,e,p) = 
+		      Name.VarMap.foldli folder (0,0,0,0) (!mapping)
+
+		in  
+		  print("  " ^ (Int.toString c)^ " optimizable candidates.\n");
+		  print ("  " ^ (Int.toString i) ^ " impure.\n");
+		  print ("  " ^ (Int.toString e) ^ " escaping.\n");
+		  print ("  " ^ (Int.toString p) ^ " used polymorphically.\n")
 		end
+
+            (* Replace an existing entry for the variable v, but do
+               nothing if the variable has not already appeared in the
+               mapping.
+             *)
 	    fun editEntry (v,entry) = 
 		(case Name.VarMap.find(!mapping,v) of
 		     NONE => ()
-		   | SOME _ => mapping := Name.VarMap.insert(#1(Name.VarMap.remove(!mapping,v)),
-							     v, entry))
-							     
-	    fun addEntry (v,entry) = mapping := Name.VarMap.insert(!mapping,v,entry)
+		   | SOME _ => 
+		       (* XXX:  Is this remove redundant? *)
+		       mapping := 
+		         Name.VarMap.insert(#1(Name.VarMap.remove(!mapping,v)),
+					    v, entry))
+		
+            (* Insert an entry into the mapping for the variable v
+             *)					     
+	    fun addEntry (v,entry) = 
+	      mapping := Name.VarMap.insert(!mapping,v,entry)
+
+            (* Mark a (previously-seen) variable as Escaping
+             *)
 	    fun escapeCandidate v = editEntry (v,Escaping)
+
+            (* Mark a (previously-seen) variable as Polymorphic
+             *)
 	    fun polyCandidate v = editEntry (v,Polymorphic)
-	    fun addCandidate (context, v : var, Function {recursive, tFormals, eFormals, fFormals, body, ...}) = 
-		let val nonRecur = (case recursive of
-					Arbitrary => false
-				      | _ => true)
-		    val entry = 
-			(case fFormals of
-			     [] => if (nonRecur andalso not (NilDefs.effect body))
-				       then Candidate{body = body,
-						      context = context,
-						      tFormals = map #1 tFormals,
-						      eFormals = map #1 eFormals,
-						      tActuals = ref NONE,
-						      replace = Name.derived_var v}
-				   else Impure
-			   | _ => Impure)
+
+            (* Given a function definition, add it to the global state
+             *)
+	    fun addCandidate (context, v : var, 
+			      Function {recursive, tFormals, eFormals, 
+					fFormals, body, ...}) = 
+		let 
+		  val nonRecur = (case recursive of
+				    Arbitrary => false
+				  | _ => true)
+
+		  val entry = 
+		    (case fFormals of
+		       [] => 
+			 (* No floating-point arguments? (Property 1.2) ]
+			  *)
+			 if (nonRecur andalso not (NilDefs.effect body)) then
+			   (* Nonrecursive and no effects? (Property 1) 
+			    *)
+			   Candidate{body = body,
+				     context = context,
+				     tFormals = map #1 tFormals,
+				     tKinds   = map #2 tFormals,
+				     eFormals = map #1 eFormals,
+				     tActuals = ref NONE,
+				     replace = Name.derived_var v}
+			 else Impure
+		     | _ => Impure)
 		in  addEntry (v,entry)
 		end
-	    fun reduceTo (targetCtxt, currentCtxt) (c : con) : (con * kind) option = 
-		let fun wellFormed c = 
-		    let val fvs = freeConVarInCon (true,0,c)
-		    in  Name.VarSet.foldl (fn (v,ok) => ok andalso bound_con(targetCtxt,v)) true fvs
+
+
+	    (* On input, the constructor c is well-formed with respect
+               to currentCtxt, and sub-context targetCtxt is a sub-context
+               of currentCtxt (so that c might not be well-formed with
+               respect to targetCtxt).
+
+               reductTo tries to return a constructor that is provably
+               equivalent to c (under currentCtxt), but which is
+               well-formed with respect to targetCtxt.
+             *)
+	    fun reduceTo (targetCtxt, currentCtxt) (c : con) : con option = 
+		let 
+		  (* Is the constructor con well-formed with respect to
+		     targetCtxt?  Since we know that it was well-formed
+                     in currentCtxt, and there's no variable shadowing,
+                     it suffices to check that all the free variables in
+                     c appear in targetCtxt.
+                   *)
+		  fun wellFormed (con : con) = 
+		       let 
+			 val fvs = freeConVarInCon (true,0,con)
+		       in  
+			 Name.VarSet.foldl 
+			    (fn (v,ok) => ok andalso bound_con(targetCtxt,v)) 
+			    true fvs
 		    end
-		    val copt = 
-			if (wellFormed c)
-			    then SOME c
-			else let val (_,c) = Normalize.reduce_hnf(currentCtxt, c)
-			     in  if (wellFormed c)
-				     then SOME c
-				 else let val c = Normalize.con_normalize currentCtxt c
-				      in  if (wellFormed c)
-					      then SOME c
-					  else NONE
-				      end
-			     end
-		in   (case copt of
-			  NONE => NONE
-			| SOME c => SOME(c, NilContext.kind_of(targetCtxt, c)))
+
+                  (* We could just normalize c, since the result would
+                     contain the type variables bound earliest possible in 
+                     currentCtxt, and hence would most likely be well-formed
+                     in targetCtxt.  But this is expensive and could
+		     cause the type to blow up in size, so we try to
+                     avoid this if possible.
+                   *)
+  
+		  val copt = 
+		    if (wellFormed c) then
+		      (* If c by itself is well-formed in targetCtxt then
+                         we're done.
+                       *)
+		      SOME c
+		    else
+		      let 
+			val (_,c) = Normalize.reduce_hnf(currentCtxt, c)
+		      in  
+			(* If c is well-formed in targetCtxt after being
+                           head-normalized then we're done.
+                         *)
+			if (wellFormed c) then
+			  SOME c
+			else 
+			  let 
+			    val c = Normalize.con_normalize currentCtxt c
+			  in
+			    (* Finally, try fully-normalizing c *)
+			    if (wellFormed c) then
+			      SOME c
+			    else 
+			      NONE
+			  end
+		      end
+		in   
+		  copt
 		end
+
 	    fun checkCandidate (v, callContext, tArgs, eArgs) = 
-		let fun isUnit e = 
-		       (not (NilDefs.effect e)) andalso 
-		       (case (Normalize.reduce_hnf(callContext,Normalize.type_of (callContext,e))) of
-			    (_,Prim_c(Record_c ([],_), _)) => true
-			  | _ => false)
-		    fun matches defContext tActuals =
-			(case !tActuals of
-			     NONE => 
-				 let val reduced = List.mapPartial (reduceTo (defContext, callContext)) tArgs
-				 in   if (length reduced = length tArgs)
-					  then (tActuals := SOME reduced; true) else false
-				 end
-			   | SOME tAct =>
-				 let fun equal((c1,k),c2) = 
-				     let val c1 = Normalize.con_normalize callContext c1
-					 val c2 = Normalize.con_normalize callContext c2
-					 val eq = NilUtil.alpha_equiv_con(c1,c2)					     
-				     in  eq
-				     end
-				     val isEqual = Listops.andfold equal (Listops.zip tAct tArgs)
-				 in  isEqual
-				 end)
-		in  (case Name.VarMap.find(!mapping, v) of
-			 SOME(Candidate{context, tFormals, eFormals, tActuals, body, ...}) =>
-			      if ((Listops.andfold isUnit eArgs) andalso
-				  matches context tActuals)
-				 then ()
-			     else polyCandidate v
+		let 
+		  (* Is the expression e valuable and of type unit? 
+                   *)
+		  fun isUnit (e : exp) = 
+		    (not (NilDefs.effect e)) andalso 
+		    (case (Normalize.reduce_hnf(callContext,
+						Normalize.type_of (callContext,
+								   e))) of
+		       (_,Prim_c(Record_c ([],_), _)) => true
+		     | _ => false)
+		    
+		  (* Given the typing context at the point where the
+		     function was defined and the ref containing the
+		     type applications we've seen so far, see whether
+		     the new type arguments tArgs are can be hoisted
+                     up to the definition and are consistent with
+                     any other type arguments we've seen.
+                   *)
+		  fun matches defContext 
+		              (tActuals : con list option ref) 
+			      (tKinds : kind list)
+                          : bool =
+		      (case !tActuals of
+			 NONE => 
+			   (* This is the first instantitation we've come
+			      across.  See if we can hoist all the type
+			      arguments, and if so, record them.
+			    *)
+			   let 
+			     val reduced = 
+			       List.mapPartial 
+			          (reduceTo (defContext, callContext)) tArgs
+			   in   
+			     if (length reduced = length tArgs) then
+			       (* All the type arguments could be hoisted *)
+			       (tActuals := SOME reduced; true) 
+			     else 
+			       false
+			   end
+		       | SOME tAct =>
+			   let 
+			     (* If we've seen an application before, we don't
+			        have to worry about figuring out from scratch
+				whether tArgs can be hoisted.  If they're
+				equivalent to the previously-hoisted arguments
+				(in the context where the current instantiation
+				is occurring, since that's where tArgs and
+				the previously-hoisted types both make sense)
+				then we know that tArgs can be hoisted; if
+				they're not equivalent, we don't care whether
+				tArgs can be hoisted or not.
+			      *)
+
+			     (* Compare the type at which the function
+                                was previously instantiated with the
+                                current instantiated type.
+                              *)
+			     fun equal(c1 : con, c2 : con, k : kind) = 
+			          NilStatic.con_equiv(callContext,c1,c2,k)
+
+			     val isEqual = 
+			       Listops.andfold equal 
+			                       (Listops.zip3 tAct tArgs tKinds)
+			   in  
+			     isEqual
+			   end)
+		in   
+		  (case Name.VarMap.find(!mapping, v) of
+			 SOME(Candidate{context, tFormals, eFormals, 
+					tActuals, body, tKinds, ...}) =>
+			 if ((Listops.andfold isUnit eArgs) andalso
+			     matches context tActuals tKinds) then
+			   ()
+			 else 
+			   polyCandidate v
 		       | _ => ())
 		end
 
-	    fun rewriteApplication (v : var) =
+            (* *)
+	    fun rewriteApplication (v : var) : var option=
 		(case Name.VarMap.find(!mapping,v) of
 		     SOME (Candidate{replace,...}) => SOME replace
 		   | _ => NONE)
-	    fun rewriteFunction v = 
-		(case Name.VarMap.find(!mapping,v) of
-		     (* If tActuals is NONE, then the function is dead *)
-		     SOME (Candidate{replace,body,tActuals=ref(SOME tActs),tFormals,eFormals,...}) =>
-			 let val bnds1 = Listops.map2 (fn (v,(c,_)) => (Con_b(Runtime,Con_cb(v,c)))) 
-			                (tFormals, tActs)
 
-			     val bnds2 = map (fn v => Exp_b(v,TraceUnknown,NilDefs.unit_exp)) eFormals
-			 in  SOME(replace, bnds1 @ bnds2, body)
+            (* Rewriter for functions during the second pass.  If the
+	       variable v identifies a function that is still a
+	       candidate after the first pass, this code returns the
+	       new name of the specialized function, bindings of the
+	       arguments to the specialized values, and the function's
+	       body.  Otherwise it returns NONE.  
+	     *)
+	    fun rewriteFunction (v : var) : (var * bnd list * exp) option = 
+		(case Name.VarMap.find(!mapping,v) of
+		     SOME (Candidate{replace, body, tActuals = ref(SOME tActs),
+				     tFormals,eFormals,...}) =>
+			 let 
+			   (* The type arguments were only
+			      instantiated in one way.  Create
+			      bindings that set the type arguments to
+			      these types.  
+			   *)
+			   val bnds1 = 
+			     Listops.map2 
+			        (fn (v,c) => (Con_b(Runtime,Con_cb(v,c)))) 
+				(tFormals, tActs)
+
+			   (* Create bindings that set the term arguments
+			      to unit.
+			    *)
+			   val bnds2 = 
+			     map (fn v => Exp_b(v,TraceUnknown,
+						NilDefs.unit_exp)) 
+			         eFormals
+			 in  
+			   SOME(replace, bnds1 @ bnds2, body)
 			 end
-		   | SOME (Candidate _) => (if (!debug)
-						then (print "Warning: dead function "; pp_var v; print "\n")
-					    else (); NONE)
+
+		   | SOME (Candidate _) => 
+			 (* If after the first pass is done the
+                            function is still a candidate but tActuals
+                            is NONE, then the function was never
+                            applied nor referenced, and so is dead.
+			  *)
+			 (if (!debug) then
+			    (print "Warning: dead function "; 
+			     pp_var v; 
+			     print "\n")
+			  else (); 
+			  NONE)
 		   | _ => NONE)
 
 	end
 
-        (* This first set of functions collects functions that are candidates
-	   for specialization.  In the second pass, we eliminate all
-          calls to specializable functions and patch the specialized
-	   function by wrapping the constructor arguments around the function. *)
+        (* This first set of functions collects functions that are
+	   candidates for specialization.  In the second pass, we
+	   eliminate all calls to specializable functions and patch
+	   the specialized function by wrapping the constructor
+	   arguments around the function. 
+        *)
 
-        (* ----------------------------- PASS ONE -------------------- *)
-	fun scan_exp ctxt exp : unit = 
-	   (case exp of
-		  Var_e v => escapeCandidate v
+       (************)
+       (* Pass One *)
+       (************)
+
+       fun scan_exp ctxt (exp : exp) : unit = 
+	 (case exp of
+	    Var_e v => escapeCandidate v
 		| Const_e _ => ()
 		| Prim_e(p,trlist,clist,elist) => app (scan_exp ctxt) elist
 		| Switch_e sw => scan_switch ctxt sw
