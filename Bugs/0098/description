@@ -10,7 +10,7 @@ Problem:     does not parse type variables properly
 Code:        Test/m0003
 Transcript:  
 Comments:    
-Fix:         
+Fix:         easy fix to ml.lex - tom7
 Test: m0003
 Owner: rwh
-Status: open
+Status: closed

@@ -92,7 +92,7 @@
 0093 [open]	TILT does not support separate compilation.
 0094 [open]	The Runtime uses too much virtual memory.
 0095 [open]	Errno is sometimes clobbered.
-0098 [open]	does not parse type variables properly
+0098 [closed]	does not parse type variables properly
 0099 [closed]	exceptions as values
 0100 [open]	hidden hidden clashes
 0101 [closed]	external symbol clash
