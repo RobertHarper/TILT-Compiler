@@ -8,7 +8,8 @@ structure PpnilHtml :> PPNIL =
     open Util Name Prim Ppprim
 
     val error = fn s => error "ppnil-html.sml" s
-    val elide_prim = Stats.tt("PpnilHtmlElidePrim")
+    val elide_prim = Stats.ff("PpnilHtmlElidePrim")
+    val elide_record = ref false
 
     fun pp_region s1 s2 fmt = HOVbox((String s1) :: (fmt @ [String s2]))
     fun separate [] sep = []
@@ -275,12 +276,19 @@ structure PpnilHtml :> PPNIL =
 	   | Const_e v => Ppprim.pp_value' (fn (Const_e v) => SOME v | _ => NONE) pp_exp pp_con v
            | Prim_e (NilPrimOp (record labels), cons, exps) =>
                  let
-		     fun pp_rbnd (label, exp) = HOVbox[pp_label label, String "=",pp_exp exp]
+		     fun pp_le (label, exp) = HOVbox[pp_label label, String ">",pp_exp exp]
+		     fun pp_lce (label, con, exp) = HOVbox[pp_label label, 
+							   String ": ", pp_con con,
+							   String "> ", pp_exp exp]
 		 in
 		     HOVbox
-		     [if (length labels = length exps)
-			   then pp_list pp_rbnd (Listops.zip labels exps) 
-			       ("{",",","}",false)
+		     [if (length labels = length exps andalso 
+			  length labels = length cons)
+			  then (if !elide_record
+				    then pp_list pp_le (Listops.zip labels exps) 
+					("{",",","}",false)
+				else pp_list pp_lce (Listops.zip3 labels cons exps) 
+				    ("{",",","}",false))
 		       else HOVbox[String "record", pp_list pp_label labels ("",",","", false),
 				   String " :LENGTH_MISMATCH: ",
 				   pp_list pp_exp exps ("",",","", false)]]

@@ -66,22 +66,18 @@ struct
 
   type bvlt = bnd * var list
 
-  (* We can't hoist a kind past a binding of its free variable.
-     (although technically this binding can always be expanded) *)
-  val look_in_kinds = true
-
   (* returns set of free vars *)
   fun freeExpVars e = 
       let 
 	  val (free_term_vars, free_type_vars) = 
-	      NilUtil.freeExpConVarInExp (look_in_kinds,e)
+	      NilUtil.freeExpConVarInExp (true,e)
       in 
 	  Set.addList (list2set free_term_vars, free_type_vars)
       end
 
   (* returns set of free type vars *)
   fun freeConVars c = 
-      list2set (NilUtil.freeConVarInCon (look_in_kinds,c))
+      list2set (NilUtil.freeVarInCon c)
 
   (* returns set of free vars *)
   fun freeKindVars k = 
@@ -89,7 +85,6 @@ struct
 
   fun freeConbndVars cb =
       list2set (NilUtil.freeVarInCbnd cb)
-
     
   (* get the bound var from a conbnd *)
   fun get_conbnd_var (Con_cb (v,c)) = v
@@ -341,13 +336,17 @@ struct
 	  (Proj_c(con',lab), top_cbnds, hoists)
       end
 
+(*XXX Perhaps rcon should instead return term bindings too *)
     | rcon (Typeof_c e, top_set, hoist_set) = 
       let
 	  val econtext = empty_fnmap (* should be no applications in a typeof *)
-	  val (e',[],[],_: hoist_effs,true) = 
+	  val (e', top_bnds, hoists,_: hoist_effs,true) = 
 	      rexp (e, top_set, hoist_set, econtext)
+
+	  val bnds = top_bnds @ (map #1 hoists)
+	  val e'' = NilUtil.makeLetE Sequential bnds e'
       in
-	  (Typeof_c e', [], [])
+	  (Typeof_c e'', [], [])
       end
   
     | rcon (Closure_c(codecon,envcon), top_set, hoist_set) = 

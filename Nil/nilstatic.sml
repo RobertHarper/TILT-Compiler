@@ -2099,11 +2099,14 @@ struct
 	   val con = exp_valid(D,exp)
 	   val D = insert_con(D,v,Prim_c(Exn_c,[]))
 	   val handler_con = exp_valid(D,handler)
-	   val _ = 
-	     (type_equiv(D,con,handler_con,false)) orelse
-	     (e_error(D,exp,"Handler body has different type from handled expression"))
+(*XXX handle should be annotated with a type, like switches! *)
 	 in
-	   con
+	     if type_equiv(D,con,handler_con,true) then
+		 handler_con
+	     else if type_equiv(D,handler_con,con,true) then
+		 con
+	      else
+		  e_error(D,exp,"Handler body has different type from handled expression")
 	 end
        )
 

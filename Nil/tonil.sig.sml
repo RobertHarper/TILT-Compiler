@@ -6,6 +6,7 @@ sig
     val full_debug : bool ref
     val do_kill_cpart_of_functor : bool ref
     val do_memoize : bool ref
+    val killDeadImport : bool ref
 
     val phasesplit : Il.context *  (Il.sbnd option * Il.context_entry) list -> Nil.module
 
