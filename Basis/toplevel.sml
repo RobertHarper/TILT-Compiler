@@ -8,16 +8,13 @@
 *)
 
 (* overloads - complement's Prelude *)
-overload + : 'a as Word31.+
-overload - : 'a as Word31.-
-overload * : 'a as Word31.*
-overload div : 'a as PreInt.idiv and TiltPrim.bdiv and TiltPrim.udiv and Word31.div
-overload mod : 'a as PreInt.imod and TiltPrim.bmod and TiltPrim.umod and Word31.mod
+overload div : 'a as PreInt.idiv and TiltPrim.bdiv and TiltPrim.udiv
+overload mod : 'a as PreInt.imod and TiltPrim.bmod and TiltPrim.umod
 overload abs : 'a as PreInt.iabs and TiltPrim.fabs
-overload <  : 'a as String.<  and Word31.<
-overload >  : 'a as String.>  and Word31.>
-overload <= : 'a as String.<= and Word31.<=
-overload >= : 'a as String.>= and Word31.>=
+overload <  : 'a as String.<
+overload >  : 'a as String.>
+overload <= : 'a as String.<=
+overload >= : 'a as String.>=
 
 exception Div = Div
 exception Overflow = Overflow

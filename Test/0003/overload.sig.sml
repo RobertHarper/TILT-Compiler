@@ -82,7 +82,6 @@ sig
     val int : int
     val word : word
     val word8 : Word8.word
-    (* val word31 : Word31.word -- unsupported *)
     val real : real
     val char : char
     val string : string
@@ -92,7 +91,6 @@ sig
 	
     structure W : WORD_OVERLOAD where type word = Word.word
     structure W8 : WORD_OVERLOAD where type word = Word8.word
-    structure W31 : WORD_OVERLOAD where type word = Word31.word
 
     structure R : REAL_OVERLOAD where type real = Real.real
 
