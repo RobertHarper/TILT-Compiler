@@ -148,7 +148,6 @@ struct
   fun graphColoring(mode, blocks, cblocks, blockDU, prevSpills, 
 						    nodes, regmap) = let
 
-    val _ = print "Perry = ra/ra.sml graphColoring start\n"
     datatype worklists = WKL of
       {simplifyWkl: node list,	(* nodes that can be simplified *)
        moveWkl : move list,	(* moves to be considered for coalescing *)
@@ -156,22 +155,18 @@ struct
        spillWkl : node list,	(* all n, s.t. degree(n)>=K  *)
        stack : node list}	(* nodes removed from the graph *)
 
-    val _ = print "Perry = ra/ra.sml graphColoring 1\n"
     val K = RaUser.nFreeRegs
     val numOfBlocks = Array.length cblocks
     val maxR   = RaArch.maxPseudoR()
 
-    val _ = print "Perry = ra/ra.sml graphColoring 2\n"
     val getnode = Intmap.map nodes
     val chaseReg = chase o getnode
     val chaseRegs = map chaseReg
 
-    val _ = print "Perry = ra/ra.sml graphColoring 3\n"
     (* Info to undo a spill when an optimistic spill has occurred *)
     val spillFlag = ref false		
     val undoInfo : (node * moveStatus ref) list ref  = ref []
 
-    val _ = print "Perry = ra/ra.sml graphColoring 4\n"
     (* lower triangular bitmatrix primitives *)
     (* NOTE: The average ratio of E/N is about 16 *)
     val bitMatrix = BM.new (RaArch.numRegs() * 20)
@@ -197,7 +192,6 @@ struct
     in (rmv' d, rmv' u)
     end (* newdu *)
 
-    val _ = print "Perry = ra/ra.sml graphColoring 5\n"
     val defUse = newdu o RaArch.defUse
 
 	    (*--------interference graph construction--------*)
@@ -337,37 +331,25 @@ struct
     in iter(Intmap.intMapToList nodes, [], [], [])
     end
 
-    val _ = print "Perry = ra/ra.sml graphColoring 5\n"
+
     fun liveness blocks = let
-      val _ = print "Perry = ra/ra.sml graphColoring:liveness start\n"
       fun regmap i = let
-        val _ = print "Perry = ra/ra.sml graphColoring:liveness:regmap start\n"
 	val node = getnode i 
-        val _ = print "Perry = ra/ra.sml graphColoring:liveness:regmap 1\n"
       val res = 
 	  case node
-	      of NODE{color= ref (COLORED r), ...} => 
-		  (print "Perry: ra/ra.sml graphColor:liveness 2.1\n"; r)
-	    | NODE{color=ref PSEUDO, ...} => 
-		  (print "Perry: ra/ra.sml graphColor:liveness 2.2\n"; nodeNumber node)
-	    | NODE{color=ref(ALIASED r), ...} => 
-		  (print "Perry: ra/ra.sml graphColor:liveness 2.3\n"; nodeNumber(chase node))
-	    | _ => (print "Perry: ra/ra.sml graphColor:liveness 2.4\n"; error "liveness.regmap")
-        val _ = print "Perry = ra/ra.sml graphColoring:liveness end\n"
+	      of NODE{color= ref (COLORED r), ...} => r
+	    | NODE{color=ref PSEUDO, ...} => nodeNumber node
+	    | NODE{color=ref(ALIASED r), ...} => nodeNumber(chase node)
+	    | _ => error "liveness.regmap"
       in  res
       end
-        handle _ => (print "Perry = ra/ra.sml graphColoring:liveness:regmap caught exn\n";
-		     i)			(* XXX *)
+        handle _ => i			(* XXX *)
     in RaArch.Liveness.liveness(blocks, regmap)
     end
 
-    val _ = print "Perry = ra/ra.sml graphColoring 6\n"
     val _ = liveness blocks
-    val _ = print "Perry = ra/ra.sml graphColoring 7\n"
     val initialMoves = mkInterferenceGraph()
-    val _ = print "Perry = ra/ra.sml graphColoring 8\n"
     val initialWkls = mkInitialWorkLists initialMoves
-    val _ = print "Perry = ra/ra.sml graphColoring 9\n"
 
     (* debugging *)
     fun dumpGraph() = let
@@ -1160,7 +1142,6 @@ struct
     if RaArch.numRegs() = 0 then cluster
     else let 
 
-	val _ = print "Perry: ra/ra.sml: ra start"
 	exception Nodes
 	val nodes : node Intmap.intmap = Intmap.new(32, Nodes)
 	fun mkNode i = 
@@ -1216,24 +1197,22 @@ struct
 	in Intmap.app fixup nodes
 	end
       in
-	print "Perry: ra/ra.sml: ra 2\n";
 	blockDefUse(blocks, 0);
-	print "Perry: ra/ra.sml: ra 3\n";
 	updtAliases(); 
-	print "Perry: ra/ra.sml: ra 4\n";
 	graphColoring(mode, blocks, cblocks, blockDU, [], nodes, regmap);
-	print "Perry: ra/ra.sml: ra 5\n";
 	debug("after register allocation", blocks, regmap);
-	print "Perry: ra/ra.sml: ra 6\n";
 	cluster
       end 
 end (* functor *)
 
 (*
  * $Log$
-# Revision 1.1  99/02/17  21:17:33  pscheng
+# Revision 1.2  99/02/17  22:32:33  pscheng
 # *** empty log message ***
 # 
+# Revision 1.1  1999/02/17  21:17:33  pscheng
+# *** empty log message ***
+#
 # Revision 1.1  1999/02/17  20:09:33  pscheng
 # *** empty log message ***
 #

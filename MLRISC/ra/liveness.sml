@@ -35,19 +35,13 @@ struct
     end
 
   fun liveness(blocks,regmap) = let
-      val _ = print "Perry: ra/liveness.sml liveness start\n"
       fun codeBlocks [] = []
 	| codeBlocks((blk as F.BBLOCK _)::blks) = blk::codeBlocks blks
 	| codeBlocks(_::blks) = codeBlocks blks
 
-      fun dataflow blkArr = let
-          val _ = print "Perry: ra/liveness.sml liveness:dataflow start\n"
-          val M      			    = Array.length blkArr
+      fun dataflow (M,blkArr) = let
 	  val useArr : int list Array.array = Array.array(M,[])
 	  val defArr : int list Array.array = Array.array(M,[])
-
-          val _ = (print "Perry: ra/liveness.sml liveness:dataflow M = ";
-		   print (Int.toString M); print "\n")
 
 	  fun listNeq([],[]) = false
 	    | listNeq((x:int)::xs,y::ys) = x<>y orelse listNeq(xs,ys)
@@ -58,36 +52,23 @@ struct
 	    
 	  fun init ~1 = ()
             | init n  = let
-	        val _ = print "Perry: ra/liveness.sml liveness:dataflow:init start\n"
 		val temp = Array.sub(blkArr,n)
-	        val _ = print "Perry: ra/liveness.sml liveness:dataflow:init 0.5\n"
 		val F.BBLOCK temp2 = temp
-	        val _ = print "Perry: ra/liveness.sml liveness:dataflow:init 0.6\n"
 		val {blknum,insns,liveIn,...} = temp2
-	        val _ = print "Perry: ra/liveness.sml liveness:dataflow:init 1\n"
 		fun defuse(insn::insns,def,use) = let
-		      val _ = print "Perry: ra/liveness.sml liveness:dataflow:init:defuse 1.start\n"
 		      val (d,u) = defUse insn
-		      val _ = print "Perry: ra/liveness.sml liveness:dataflow:init:defuse 1.1\n"
 		      val u' = SL.difference(uniqMap(u,[]),def)
-		      val _ = print "Perry: ra/liveness.sml liveness:dataflow:init:defuse 1.2\n"
 		      val use' = SL.merge(u', use)
-		      val _ = print "Perry: ra/liveness.sml liveness:dataflow:init:defuse 1.3\n"
 		      val d' = SL.difference(uniqMap(d,[]),use')
-		      val _ = print "Perry: ra/liveness.sml liveness:dataflow:init:defuse 1.4\n"
 		    in
 		      defuse(insns, SL.merge(d',def), use')
 		    end
 		  | defuse([],def,use) = 
-		      (print "Perry: ra/liveness.sml liveness:dataflow:init:defuse 2.1\n";
-		       Array.update(useArr,blknum,use);
-		       print "Perry: ra/liveness.sml liveness:dataflow:init:defuse 2.2\n";
+		      (Array.update(useArr,blknum,use);
 		       Array.update(defArr,blknum,def))
 	      in
 		  defuse(rev(!insns),[],[]);
-		  print "Perry: ra/liveness.sml liveness:dataflow:init 2\n";
 		  liveIn:=cellset(!liveIn,[]);
-		  print "Perry: ra/liveness.sml liveness:dataflow:init 3\n";
 		  init(n-1)
 	      end
 
@@ -143,20 +124,19 @@ struct
 
 	  fun repeat n = if bottomup() then repeat(n+1) else (n+1)
 	in
-	    print "Perry: ra/liveness.sml liveness:dataflow 1\n";
 	    init (M-1); 
-	    print "Perry: ra/liveness.sml liveness:dataflow 2\n";
 	    repeat 0
 	end  
-      val _ = print "Perry: ra/liveness.sml liveness 2\n"
 
       val temp = codeBlocks blocks
+      (* Perry Array.fromList is wrong for empty list *)
+      val arr = (Array.fromList temp)
+      val M = if (null temp)
+		  then 0
+	      else Array.length arr
 
-      val _ = (print "Perry: ra/liveness.sml liveness length temp = ";
-	       print (Int.toString (length temp)); print "\n")
     in 
-	dataflow (Array.fromList temp);
-	print "Perry: ra/liveness.sml liveness 3\n";
+	dataflow(M,arr);
 	blocks
     end
 end
@@ -164,9 +144,12 @@ end
 
 (*
  * $Log$
-# Revision 1.1  99/02/17  21:17:31  pscheng
+# Revision 1.2  99/02/17  22:32:31  pscheng
 # *** empty log message ***
 # 
+# Revision 1.1  1999/02/17  21:17:31  pscheng
+# *** empty log message ***
+#
 # Revision 1.1  1999/02/17  20:09:31  pscheng
 # *** empty log message ***
 #

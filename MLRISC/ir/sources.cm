@@ -1,0 +1,39 @@
+Library
+	signature CONTROL_DEPENDENCE_GRAPH
+	signature CONTROL_FLOW_GRAPH_RESTRUCTURE
+	signature DJ_GRAPH
+	signature DOMINANCE_FRONTIERS
+	signature DOMINATOR_TREE
+	signature IDEFS
+	signature LOOP_STRUCTURE
+	signature STATIC_SINGLE_ASSIGNMENT_FORM
+	signature DERIVED_GRAPH
+	structure IDefs
+	functor ControlDependenceGraphFn
+	functor ControlFlowGraphRestructureFn
+	functor DerivedGraphFn
+	functor DJGraphFn
+	functor DominanceFrontiersFn
+	functor DominatorTreeFn
+	functor LoopStructureFn
+	functor StaticSingleAssignmentFormFn
+is
+	../library/sources.cm
+	../graphs/sources.cm
+	cdg.sig
+	cdg.sml
+	cfg-restructure.sig
+	cfg-restructure.sml
+	derived-graph.sml
+	djgraph.sig
+	djgraph.sml
+	dominance-frontier.sig
+	dominance-frontier.sml
+	dominator.sig
+	dominator.sml
+	idefs2.sig
+	idefs2.sml
+	loop-structure.sig
+	loop-structure.sml
+	ssa.sig
+	ssa.sml

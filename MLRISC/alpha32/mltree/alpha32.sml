@@ -698,27 +698,17 @@ struct
     fun cc (T.CCR(T.CC cc)) = T.GPR(T.REG cc)
       | cc x = x
 
-    fun mltc(T.PSEUDO_OP pOp)    = let val _ = print "Perry: mltree/alpha32.sml pseudoop start\n"
-				       val res = F.pseudoOp pOp
-				       val _ = print "Perry: mltree/alpha32.sml pseudoop end\n"
-				   in res 
-				   end
+    fun mltc(T.PSEUDO_OP pOp)    = F.pseudoOp pOp
       | mltc(T.DEFINELABEL lab)  = F.defineLabel lab
       | mltc(T.ENTRYLABEL lab)   = F.entryLabel lab
       | mltc(T.ORDERED mlts)     = F.ordered mlts
       | mltc(T.BEGINCLUSTER)     = F.beginCluster()
       | mltc(T.CODE stms)        = app stmAction stms
       | mltc(T.BLOCK_NAME name)  = F.blockName name
-      | mltc(T.ENDCLUSTER regmap)= let val _ = print "Perry: mltree/alpha32.sml endcluster start\n"
-				       val res = F.endCluster regmap
-				       val _ = print "Perry: mltree/alpha32.sml endcluster end\n"
-				   in res
-				   end
+      | mltc(T.ENDCLUSTER regmap)= F.endCluster regmap
       | mltc(T.ESCAPEBLOCK regs) = F.exitBlock (map cc regs)
 
-    val _ = print "Perry: mltee/alpha32.sml mltreeComp start\n"
     val res = mltc mltree
-    val _ = print "Perry: mltee/alpha32.sml mltreeComp end\n"
   in res
   end 
 
@@ -728,9 +718,12 @@ end
 
 (*
  * $Log$
-# Revision 1.1  99/02/17  21:15:19  pscheng
+# Revision 1.2  99/02/17  22:32:21  pscheng
 # *** empty log message ***
 # 
+# Revision 1.1  1999/02/17  21:15:19  pscheng
+# *** empty log message ***
+#
 # Revision 1.1  1999/02/17  20:06:50  pscheng
 # *** empty log message ***
 #

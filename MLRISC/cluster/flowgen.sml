@@ -183,7 +183,6 @@ struct
   end
 
   fun endCluster(regmap) = let
-      val _ = print "Perry: cluster/flowgen.sml:endCluster start\n"
       val codegen = 
 	(case !optimize
 	  of NONE => output
@@ -194,7 +193,6 @@ struct
       val addLabTbl = Intmap.add labTbl
       val lookupLabTbl = Intmap.map labTbl
 
-      val _ = print "Perry: cluster/flowgen.sml:endCluster 1\n"
       (* find next code block *)
       exception NextCodeBlock
       fun nextCodeBlock((blk as F.BBLOCK _)::_) = blk
@@ -210,7 +208,6 @@ struct
 	| fillLabTbl(_::blks) = fillLabTbl(blks)
 	| fillLabTbl [] = ()
 
-      val _ = print "Perry: cluster/flowgen.sml:endCluster 2\n"
       val exitBlk = F.EXIT{blknum=nextBlkNum(), pred=ref []}
 
       (** update successor and predecessor information **)
@@ -257,20 +254,15 @@ struct
 	entryBlk
       end
 
-      val _ = print "Perry: cluster/flowgen.sml:endCluster 3\n"
       val _ = case !currBlock
 	of NONE => ()
          | SOME blk => blockList := blk :: !blockList
 
       val blocks = rev(!blockList) before blockList := []
-      val _ = print "Perry: cluster/flowgen.sml:endCluster 4\n"
       val _ = fillLabTbl(blocks)
-      val _ = print "Perry: cluster/flowgen.sml:endCluster 5\n"
       val _ = graphEdges(blocks)
-      val _ = print "Perry: cluster/flowgen.sml:endCluster 6\n"
       val res = codegen (F.CLUSTER{blocks=blocks, entry=mkEntryBlock(), exit=exitBlk,
 				   blkCounter=ref(!bblkCnt), regmap=regmap}) 
-      val _ = print "Perry: cluster/flowgen.sml:endCluster end\n"
     in res
     end
 
@@ -283,9 +275,12 @@ end
 
 (*
  * $Log$
-# Revision 1.1  99/02/17  21:15:25  pscheng
+# Revision 1.2  99/02/17  22:32:22  pscheng
 # *** empty log message ***
 # 
+# Revision 1.1  1999/02/17  21:15:25  pscheng
+# *** empty log message ***
+#
 # Revision 1.1  1999/02/17  20:06:57  pscheng
 # *** empty log message ***
 #

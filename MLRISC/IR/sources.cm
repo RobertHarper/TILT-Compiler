@@ -1,0 +1,54 @@
+Library
+	signature CFG2CLUSTER
+	signature CFG_UTIL
+	signature CLUSTER2CFG
+	signature CONTROL_FLOW_GRAPH
+	signature CONTROL_FLOW_GRAPH_GEN
+	signature DATAFLOW_ANALYZER
+	signature DATAFLOW_PROBLEM
+	signature FORMAT_INSTRUCTION
+	signature LIVENESS_ANALYSIS
+	signature MLRISC_IDEFS
+	signature MLRISC_IR
+	signature RESHAPE_BRANCHES
+	signature STATIC_BRANCH_PREDICTION
+	functor CFG2ClusterFn
+	functor CFGUtilFn
+	functor Cluster2CFGFn
+	functor ControlFlowGraphFn
+	functor ControlFlowGraphGenFn
+	functor DataflowFn
+	functor FormatInstructionFn
+	functor IDefsFn
+	functor LivenessAnalysisFn
+	functor MLRISC_IRFn
+	functor ReshapeBranchesFn
+	functor StaticBranchPredictionFn
+is
+	../mlrisc/sources.cm
+	../util/sources.cm
+	../library/sources.cm
+	../graphs/sources.cm
+	../ir/sources.cm
+	../extensions/sources.cm
+	../visualization/sources.cm
+	dataflow.sig
+	dataflow.sml
+	mlrisc-cfg-gen.sig
+	mlrisc-cfg-gen.sml
+	mlrisc-cfg-util.sig
+	mlrisc-cfg-util.sml
+	mlrisc-cfg.sig
+	mlrisc-cfg.sml
+	mlrisc-cluster2cfg.sml
+	mlrisc-cfg2cluster.sml
+	mlrisc-format-insn.sml
+	mlrisc-idefs.sig
+	mlrisc-idefs.sml
+	mlrisc-ir.sig
+	mlrisc-ir.sml
+	mlrisc-liveness.sml
+	mlrisc-reshape-branches.sig
+	mlrisc-reshape-branches.sml
+	static-branch-prediction.sig
+	static-branch-prediction.sml
