@@ -3,12 +3,14 @@
  * AlphaLink.sml
  * ========================================================================= *)
 
-structure AlphaLink = struct
+structure AlphaLink (* :> LINKALPHA ??? *) = struct
 
   (* -- TIL2 structures ---------------------------------------------------- *)
 
+  structure Rtl = Linkrtl.Rtl
+
   structure Decalpha = Decalpha(val exclude_intregs = []
-				structure Rtl	    = Linkrtl.Rtl)
+				structure Rtl	    = Rtl)
 
   structure Regset = Regset(structure Machine = Decalpha)
 
@@ -117,7 +119,7 @@ structure AlphaLink = struct
 			structure IntSet	 = IntBinarySet
 			structure MLRISCConstant = Constant
 			structure RegisterMap	 = RegisterMap
-			structure Rtl		 = Linkrtl.Rtl
+			structure Rtl		 = Rtl
 			structure TraceTable	 = TraceTable)
 
   structure BasicBlock =
@@ -154,53 +156,58 @@ structure AlphaLink = struct
 		  structure RegisterMap		= RegisterMap
 		  structure RegisterSpillMap	= RegisterSpillMap
 		  structure RegisterTraceMap	= RegisterTraceMap
-		  structure Rtl			= Linkrtl.Rtl
+		  structure Rtl			= Rtl
 		  structure StackFrame		= StackFrame
 		  structure TraceTable		= TraceTable)
 
-  (* -- translation functions ---------------------------------------------- *)
+  (* -- translation functions (adapted from linkalpha.sml) ----------------- *)
 
-  local
-    val suffix = ".alpha.s"
+  val asm_suffix = ".alpha.s"
 
-    fun outputAsm emit (module, asm) =
-	  let
-	    val stream = TextIO.openOut asm
-	  in
-	    AsmStream.asmOutStream := stream;
-	    emit module;
-	    TextIO.closeOut stream
-	  end
+  fun comp(srcfile, rtlmod) = 
+	let
+	  val asmfile = srcfile^asm_suffix
+	  val stream  = TextIO.openOut asmfile
+	in
+	  AsmStream.asmOutStream := stream;
+	  EmitRtlMLRISC.emitModule rtlmod;
+	  TextIO.closeOut stream;
+	  print "Generation of assembly files complete\n";
+	  asmfile
+	end
 
-    val emitModule = EmitRtlMLRISC.emitModule
+  fun link(srcfile, labels) = 
+	let 
+	  val asmfile = srcfile^asm_suffix
+	  val stream  = TextIO.openAppend asmfile
+	in
+	  AsmStream.asmOutStream := stream;
+	  EmitRtlMLRISC.emitEntryTable labels;
+	  TextIO.closeOut stream;
+	  ()
+	end
 
-    fun emitProgram(name, module) =
-	  (EmitRtlMLRISC.emitModule(name, module);
-	   EmitRtlMLRISC.emitEntryTable["prelude", name])
+  fun compile filename = 
+      let val rtlmod = Linkrtl.compile filename
+	  val Rtl.MODULE{main,...} = rtlmod
+      in  (comp(filename,rtlmod),main)
+      end
+  fun test filename = 
+      let val rtlmod = Linkrtl.test filename
+	  val Rtl.MODULE{main,...} = rtlmod
+      in  (comp(filename,rtlmod),main)
+      end
 
-    val translate  = outputAsm emitModule
-    val translate' = outputAsm emitProgram
-
-    fun translateMain(module, asm)  = translate(("main", module), asm)
-    fun translateMain'(module, asm) = translate'(("main", module), asm)
-  in
-    fun compile_prelude sml =
-	  let
-	    val module = Linkrtl.compile_prelude(false, sml)
-	  in
-	    translate(("prelude", module), sml^suffix)
-	  end
-
-    fun compile sml  = translateMain(Linkrtl.compile sml, sml^suffix)
-    fun compile' sml = translateMain'(Linkrtl.compile sml, sml^suffix)
-    fun test sml     = translateMain(Linkrtl.test sml, sml^suffix)
-    fun test' sml    = translateMain'(Linkrtl.test sml, sml^suffix)
-    fun print sml    = Linkrtl.Pprtl.pp_Module(Linkrtl.compile sml)
-  end
-
-  fun std_prelude() = compile_prelude "Preludes/Prelude.sml"
-
-  fun no_prelude() = compile_prelude "empty.sml"
+  val cached_prelude = ref (NONE : (string * Rtl.local_label) option)
+  fun compile_prelude (use_cache,filename) = 
+      case (use_cache, !cached_prelude) of
+	  (true, SOME mlabel) => mlabel
+	| _ => let val rtlmod = Linkrtl.compile_prelude(use_cache,filename)
+		   val Rtl.MODULE{main=label,...} = rtlmod
+		   val mlabel = (comp(filename,rtlmod),label)
+		   val _ = cached_prelude := SOME mlabel
+	       in  mlabel
+	       end
 
 end
 
