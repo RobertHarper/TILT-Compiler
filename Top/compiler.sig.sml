@@ -9,6 +9,7 @@
 signature COMPILER =
 sig
 
+    val CompilerDebug : bool ref
     val CompilerDiag : bool ref
 
     exception Reject of string		(* User code is bad. *)

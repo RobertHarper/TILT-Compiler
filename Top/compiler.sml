@@ -18,7 +18,11 @@ struct
 
     val error = fn s => Util.error "compiler.sml" s
 
-    val CompilerDiag = Stats.ff("CompilerDiag")
+    val CompilerDebug = Stats.ff "CompilerDebug"
+    fun debugdo (f : unit -> 'a) : unit =
+	if (!CompilerDebug) then (f(); ()) else ()
+
+    val CompilerDiag = Stats.ff "CompilerDiag"
     fun msg str = if (!CompilerDiag) then print str else ()
 
     val LinkIlDiag = LinkIl.LinkIlDiag
@@ -172,8 +176,27 @@ struct
 	in  ctxt
 	end
 
+    fun print_list (L : 'a list, what : string, f : 'a -> string) : unit =
+	let val _ = print (what ^ " = ")
+	    val _ = if null L then print "(empty)\n"
+		    else print ("(" ^ Int.toString (length L) ^ " items)\n")
+	in  app (fn x => print ("\t" ^ f x ^ "\n")) L
+	end
+
+    fun print_precontext precontext : unit =
+	 print_list (precontext,"precontext",fn (u,i) => u ^ " : " ^ i )
+
+    fun print_imports imports : unit =
+	print_list (imports,"imports",fn i => i)
+
     fun eq (unit : unitname, precontext, i1 : iface, i2 : iface) : bool =
-	let val ctxt = context precontext
+	let val _ = debugdo
+		(fn () =>
+		 (print "---- Compiler.eq called\n";
+		  print ("iface1 = " ^ i1 ^ "\n");
+		  print ("iface2 = " ^ i2 ^ "\n");
+		  print_precontext precontext))
+	    val ctxt = context precontext
 	    val (_,i1) = instantiate (ctxt,i1)
 	    val (_,i2) = instantiate (ctxt,i2)
 	in  LinkIl.eq (ctxt,i1,i2)
@@ -222,7 +245,15 @@ struct
 			source : file,
 			ifaceTarget : file,
 			ueTarget : file} : unit =
-	let val _ = timestamp()
+	let val _ = debugdo
+		(fn () =>
+		 (print "---- Compiler.elaborate_srci called\n";
+		  print ("name = " ^ ifacename ^ "\n");
+		  print ("source = " ^ source ^ "\n");
+		  print ("iface = " ^ ifaceTarget ^ "\n");
+		  print_precontext precontext;
+		  print_imports imports))
+	    val _ = timestamp()
 	    val _ = Name.reset_label_counter()
 	    val (fp,specs) = parse_inter (ifacename,source)
 	    val _ = msg ("===== Elaborating interface: " ^ ifacename ^
@@ -240,7 +271,15 @@ struct
 			 unitname : unitname,
 			 ifaceTarget : file,
 			 ueTarget : file} : il_module * bool =
-	let val _ = timestamp()
+	let val _ = debugdo
+		(fn () =>
+		 (print "---- Compiler.elaborate_primu called\n";
+		  print ("name = " ^ unitname ^ "\n");
+		  print ("iface = " ^ ifaceTarget ^ "\n");
+		  print ("ue = " ^ ueTarget ^ "\n");
+		  print_precontext precontext;
+		  print_imports imports))
+	    val _ = timestamp()
 	    val _ = Name.reset_label_counter()
 	    val _ = msg ("===== Elaborating unit: " ^ unitname ^ " =====\n")
 	    val ctxt = context precontext
@@ -257,7 +296,16 @@ struct
 			source : file,
 			ifaceTarget : file,
 			ueTarget : file} : il_module * bool =
-	let val _ = timestamp()
+	let val _ = debugdo
+		(fn () =>
+		 (print "---- Compiler.elaborate_srcu called\n";
+		  print ("name = " ^ unitname ^ "\n");
+		  print ("source = " ^ source ^ "\n");
+		  print ("iface = " ^ ifaceTarget ^ "\n");
+		  print ("ue = " ^ ueTarget ^ "\n");
+		  print_precontext precontext;
+		  print_imports imports))
+	    val _ = timestamp()
 	    val _ = Name.reset_label_counter()
 	    val (fp,dec) = parse_impl (unitname,source)
 	    val _ = msg ("===== Elaborating unit: " ^ unitname ^ " =====\n")
@@ -277,7 +325,15 @@ struct
 			 unitname : unitname,
 			 source : file,
 			 interface : iface} : il_module =
-	let val _ = timestamp()
+	let val _ = debugdo
+		(fn () =>
+		 (print "---- Compiler.elaborate_srcu' called\n";
+		  print ("name = " ^ unitname ^ "\n");
+		  print ("source = " ^ source ^ "\n");
+		  print ("constraint = " ^ interface ^ "\n");
+		  print_precontext precontext;
+		  print_imports imports))
+	    val _ = timestamp()
 	    val _ = Name.reset_label_counter()
 	    val (fp,dec) = parse_impl (unitname,source)
 	    val _ = msg ("===== Elaborating unit: " ^ unitname ^ " =====\n")
@@ -322,7 +378,13 @@ struct
 		    asmTarget : file,
 		    ueTarget : file,
 		    rtl_module : rtl_module} : unit =
-	let val _ = timestamp()
+	let val _ = debugdo
+		(fn () =>
+		 (print "---- Compiler.rtl_to_asm called\n";
+		  print ("asm = " ^ asmTarget ^ "\n");
+		  print ("ue = " ^ ueTarget ^ "\n");
+		  print_precontext precontext))
+	    val _ = timestamp()
 	    val toasm = (case Target.getTargetPlatform ()
 			   of Target.TIL_ALPHA => Linkalpha.rtl_to_asm
 			    | Target.TIL_SPARC => Linksparc.rtl_to_asm)
