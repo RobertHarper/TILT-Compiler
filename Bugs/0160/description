@@ -6,8 +6,11 @@ Date:        01/22/03
 Version:     CVS
 System:      any
 Severity:    minor
-Problem:     IlContext.add_context_lable should go away and the pattern compiler should be fixed to work without it.
-Code:        This gets used by patterns like "val a as b = 3".
+Problem:
+	IlContext.add_context_label should go away and the
+	pattern compiler should be fixed to work without it.
+
+Code:	This gets used by patterns like "val a as b = 3".
 Transcript:  
 Comments:    
 Fix:         
