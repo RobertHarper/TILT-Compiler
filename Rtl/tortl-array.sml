@@ -309,9 +309,15 @@ struct
 	    (* store object tag and profile tag with alignment so that
 	     raw data is octaligned;  then loop through and initialize *)
 
+	    
 	in 
 	    (* if array is too large, call runtime to allocate *)
-	    add_instr(BCNDI(LE, len, IMM 4096, fsmall_alloc, true));
+	    let
+		val tmp' = alloc_regi(NOTRACE_INT)
+	    in
+		add_instr(LI(TilWord32.fromInt 4096,tmp'));
+		add_instr(BCNDI(LE, len, REG tmp', fsmall_alloc, true))
+	    end;
 	    add_instr(CALL{call_type = C_NORMAL,
 			   func = LABEL' (C_EXTERN_LABEL "alloc_bigfloatarray"),
 			   args = (case ptag_opt of 
@@ -456,7 +462,12 @@ struct
 		val gafter = fresh_code_label "array_int_after"
 		val ismall_alloc = fresh_code_label "array_int_small"
 		fun check() = 
-		    (add_instr(BCNDI(LE, wordlen, IMM 4096, ismall_alloc, true));
+		    (let
+			 val tmp' = alloc_regi(NOTRACE_INT)
+		     in
+			 add_instr(LI(TilWord32.fromInt 4096,tmp'));
+			 add_instr(BCNDI(LE, wordlen, REG tmp', ismall_alloc, true))
+		     end;
 		     add_instr(CALL{call_type = C_NORMAL,
 				    func = LABEL' (C_EXTERN_LABEL "alloc_bigintarray"),
 				    args = (case ptag_opt of
@@ -513,7 +524,12 @@ struct
 		val gafter = fresh_code_label "array_ptr_aftert"
 		val psmall_alloc = fresh_code_label "array_ptr_alloc"
 		val state = new_gcstate state
-	    in  (add_instr(BCNDI(LE, len, IMM 4096, psmall_alloc, true));
+	    in  (let
+		     val tmp' = alloc_regi(NOTRACE_INT)
+		 in
+		     add_instr(LI(TilWord32.fromInt 4096,tmp'));
+		     add_instr(BCNDI(LE, len, REG tmp', psmall_alloc, true))
+		 end;
 		 add_instr(CALL{call_type = C_NORMAL,
 				func = LABEL' (C_EXTERN_LABEL "alloc_bigptrarray"),
 				args = (case ptag_opt of
