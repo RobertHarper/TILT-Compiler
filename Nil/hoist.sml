@@ -255,22 +255,26 @@ struct
 	   top_cbnds, hoists)
       end
 
-    | rcon (con as AllArrow_c _, top_set, hoist_set) = (con, [], [])
-(*
+    | rcon (con as AllArrow_c {openness, effect, isDependent, tFormals,
+			       eFormals, fFormals, body_type}, top_set, hoist_set) =
       let
 	  val (eNames,eTypes) = ListPair.unzip eFormals
-	  val (eTypes', bvll) = ListPair.unzip (map (fn c => rcon (c,cvs)) eTypes)
+	  val (eTypes', top_cbnds, choists) = rcons(eTypes, top_set, hoist_set)
 	  val eFormals' = ListPair.zip (eNames,eTypes')
-	  val (con',bvl') = rcon (con,cvs)
+
+	  val (body_type', top_cbnds', choists') = rcon (body_type, top_set, hoist_set)
       in
-	  (AllArrow_c(openness=openness,
+	  (AllArrow_c{openness=openness,
 		      effect=effect,
 		      isDependent = isDependent,
 		      tFormals = tFormals,
-		      vkl,vlist,conlist',w32,con'),
-	   (List.concat bvll) @ bvl')
+		      eFormals = eFormals',
+		      fFormals = fFormals,
+		      body_type = body_type'},
+	   top_cbnds @ top_cbnds',
+	   choists @ choists')
       end
-*)
+
     | rcon (ExternArrow_c (conlist,con),_, _) = (con, [], [])
 (*
       let
@@ -952,7 +956,10 @@ struct
               econtext eformals
 	      
 	  val cvars = map #1 typelist
-	  val evars = map #1 eformals
+	  val (evars, nts, etypes) = Listops.unzip3 eformals
+	  val (etypes', arg_top_bnds, arg_hoists) = 
+	         rcons' (etypes, top_set, hoist_set)
+	  val eFormals' = Listops.zip3 evars nts etypes'
           val boundvar_set = list2set (cvars @ evars @ fformals)
 	  val body_hoist_set = Set.union (hoist_set, boundvar_set)
 
@@ -966,8 +973,9 @@ struct
           val (ret_up, ret_stay) = filter_cbnds (retcon_choists, boundvar_set)
           val newret = NilUtil.makeLetC ret_stay ret'
 
-          val hoists = (map (fn (cb,s) => (Con_b(Runtime,cb), s)) ret_up) @ bod_up
-	  val top_bnds = 
+          val hoists = arg_hoists @ 
+	                (map (fn (cb,s) => (Con_b(Runtime,cb), s)) ret_up) @ bod_up
+	  val top_bnds = arg_top_bnds @ 
 	      (map (fn cb => Con_b(Runtime,cb)) retcon_top_cbnds) @ body_top_bnds
 (*
         val _ = pprint ("laying down at fun: "^(bl2s stay)^"\n") 
