@@ -985,7 +985,6 @@ struct
 	(* readAssociation : string -> (string * string * bool) list *)
 	fun readAssociation mapfile = 
 	    let
-                val _ = chat ("Reading mapfile " ^ mapfile)
 		val dir = Dirs.dir mapfile
 		val findMapfile = Dirs.accessPath (mapfilePath dir, [OS.FileSys.A_READ])
 		fun relative file = Dirs.relative (dir, file)
@@ -1031,7 +1030,6 @@ struct
 		fun mapper (n, (unitname, filebase, isTarg)) = 
 		    let 
 			val absBase = OS.Path.mkAbsolute(filebase, OS.FileSys.getDir())
-                        val _ = (print ("unitname = " ^ unitname ^ "\nfilebase = " ^ filebase ^ "\nabsBase = " ^ absBase ^ "\n"))
                         val nodeWeight = Cache.size(base2sml filebase)
 			val info = 
 			    {position = n,
