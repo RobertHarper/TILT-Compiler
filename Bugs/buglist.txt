@@ -96,7 +96,7 @@
 0096 [open]	Does not parse type variables properly.
 0097 [open]	does not parse type variables properly
 0098 [open]	does not parse type variables properly
-0099 [open]	exceptions as values
+0099 [closed]	exceptions as values
 0100 [open]	hidden hidden clashes
 0101 [open]	external symbol clash
 0102 [open]	word test fails

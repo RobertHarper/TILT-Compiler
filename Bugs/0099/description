@@ -10,7 +10,16 @@ Problem:     does not make exceptions available after signature matching
 Code:        
 Transcript:  
 Comments:    
+The problem was that signature matching was not implemented correctly
+in the case that an exception declaration was coerced to a mere value
+spec, such as:
+
+  val E : type_carried -> exn
+
 Fix:         
+The fix was to check for this case.  (It was an instance of a coercion from
+a module, representing the exception, to a value spec.)
+
 Test: m0005
 Owner: rwh
-Status: open
+Status: closed
