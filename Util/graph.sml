@@ -324,7 +324,7 @@ struct
     fun insert_node g n = G.insert_node g (n,())
 end
 
-functor DebugGraph(structure G : LABELLEDGRAPH)
+functor DebugGraph(G : LABELLEDGRAPH)
     :> LABELLEDGRAPH where type node = G.node =
 struct
     val GraphDebug = Stats.ff "GraphDebug"

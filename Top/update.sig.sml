@@ -12,7 +12,6 @@
 	returning a non-empty plan when cross-assembly is needed but
 	not possible.  The third stage is the master performing any
 	unfinished assembly and cleanup.
-
 *)
 signature UPDATE =
 sig
