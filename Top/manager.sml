@@ -1542,7 +1542,6 @@ struct
       in  loop 0 slaveList;
 	  chat "Started slaves.\n"
       end
-  fun pmake (mapfile, slaveList) = (checkNative(); slaves slaveList; master mapfile)
 
   fun tilc arg =
       let val _ = checkNative()

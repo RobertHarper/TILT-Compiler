@@ -102,22 +102,17 @@ sig
   (* buildRuntime   build the runtime; if true, rebuild from scratch
      purge          takes a mapfile and removes all generated files of units named in mapfile
      slave          run a slave
+     slaves	    run some slaves on the given machines
      master         run a master on the given mapfile
      make           run a master on the given mapfile and interleave slave work in the same process
-     pmake          run a master on the given mapfile and start slaves on the given machines
   *)
 
   val buildRuntime : bool -> unit
   val purge : string -> unit
   val slave : unit -> unit
+  val slaves : (int * string) list -> unit
   val master : string -> unit  
   val make : string -> unit
-  val slaves : (int * string) list -> unit  
-  val pmake : string * (int * string) list -> unit  
-
-  val tilc   : string * bool * string option * string list -> unit  
-                                              (* mapfile, don't link,
-					         optional .exe name, list of files to compile *)
 
 end
 

@@ -4,10 +4,11 @@ tilt \- Standard ML compiler
 .SH SYNOPSIS
 .BR tilt " [" -?vs "] [" -fr
 .IR flag ]
-.RB [ -pcm
-.IR mapfile "] [" mapfile " .\|.\|.]"
-.RB [ --
-.RI [ num "/]" host " .\|.\|.]"
+.RB [ -cm
+.IR mapfile ]
+.RB [ -S
+.RI [ num "/]" host ]
+.RI [ mapfile " .\|.\|.]"
 .SH DESCRIPTION
 The TILT (or TIL-Two) Compiler Project is a joint effort between
 researchers at Cornell and Carnegie Mellon.  The goal of the project
@@ -15,6 +16,13 @@ is to produce a compiler for the ML-family of programming languages
 (SML'97, Caml Special Light, and KML) that takes advantage of types
 throughout compilation in order to produce better code without
 compromising safety or correctness.
+.PP
+TILT has Sparc and Alpha backends.  To use TILT you need access to
+a sun4_55 or alpha_dux40 system.  You can run slaves
+.RB ( -s
+or
+.BR -S )
+on any platform for which TILT has been compiled.
 .SH OPTIONS
 .TP
 .RI [ mapfile " .\|.\|.\|]"
@@ -40,13 +48,15 @@ directory will contribute to the compilation.
 This flag causes tilt to act as a slave for any (future or on-going)
 parallel make in the current directory.
 .TP
-\fB\-p\fP \fImapfile\fP [\fB--\fP [\fIn1\fP/]\fIhost1\fP [\fIn2\fP/]\fIhost2\fP .\|.\|.]
-Perform a parallel make of
-.IR mapfile ,
-using the current host as master and launching
-.IR n1 " slaves on " host1 ", "
-.IR n2 " slaves on " host2 ,
-etc.
+\fB-S\fP [\fInum\fP/]\fIhost\fP
+Launch
+.I num
+slaves on
+.I host
+in the current directory.  For this to work, you must be able to
+.BR ssh (1)
+to
+.IR host .
 .TP
 .BI "-f " flag
 Set

@@ -5,7 +5,7 @@
 structure Main : MAIN =
 struct
 
-    val usage = "usage: tilt [-?vs] [-fr flag] [-pcm mapfile] [mapfile ...] [-- [num/]host ...]\n"
+    val usage = "usage: tilt [-?vs] [-fr flag] [-cm mapfile] [-S [num/]host] [mapfile ...]\n"
     val version = "TILT version 0.1 (alpha4)\n"
 
     datatype cmd =
@@ -13,25 +13,38 @@ struct
       | SetFlag of string		(* -f flag *)
       | ResetFlag of string		(* -r flag *)
       | Clean of string			(* -c mapfile *)
-      | Pmake of string			(* -p mapfile *)
       | Master of string		(* -m mapfile *)
       | Slave				(* -s *)
+      | Slaves of int * string		(* -S [num/]host *)
+      | Slaves' of (int * string) list
       | PrintUsage			(* -? *)
       | PrintVersion			(* -v *)
 
-    (* runCmd : cmd * (int * string) list -> unit *)
-    fun runCmd (Make mapfiles, _) = List.app Manager.make mapfiles
-      | runCmd (SetFlag flag, _) = Stats.bool flag := true
-      | runCmd (ResetFlag flag, _) = Stats.bool flag := false
-      | runCmd (Clean mapfile, _) = Manager.purge mapfile
-      | runCmd (Pmake mapfile, hosts) = Manager.pmake (mapfile, hosts)
-      | runCmd (Master mapfile, _) = Manager.master mapfile
-      | runCmd (Slave, _) = Manager.slave ()
-      | runCmd (PrintUsage, _) = print usage
-      | runCmd (PrintVersion, _) = print version
+    (* runCmd : cmd -> unit *)
+    fun runCmd (Make mapfiles) = List.app Manager.make mapfiles
+      | runCmd (SetFlag flag) = Stats.bool flag := true
+      | runCmd (ResetFlag flag) = Stats.bool flag := false
+      | runCmd (Clean mapfile) = Manager.purge mapfile
+      | runCmd (Master mapfile) = Manager.master mapfile
+      | runCmd (Slave) = Manager.slave ()
+      | runCmd (Slaves arg) = Manager.slaves [arg]
+      | runCmd (Slaves' arg) = Manager.slaves arg
+      | runCmd (PrintUsage) = print usage
+      | runCmd (PrintVersion) = print version
 
-    (* run : cmd list * (int * string) list -> unit *)
-    fun run (cmds, hosts) = List.app (fn cmd => runCmd (cmd, hosts)) cmds
+    (* mergeSlaves : cmd list -> cmd list. *)
+    fun mergeSlaves cmds =
+	let fun isSlaves (Slaves _) = true
+	      | isSlaves _ = false
+	    fun strip slaves = List.map (fn (Slaves arg) => arg) slaves
+	    val (slaves, others) = List.partition isSlaves cmds
+	in
+	    if List.null slaves	then others
+	    else (Slaves' (strip slaves)) :: others
+	end
+	
+    (* run : cmd list -> unit *)
+    fun run cmds = List.app runCmd (mergeSlaves cmds)
 
     (*** Scanning   [num/]host    Ug ***)
 	
@@ -103,48 +116,37 @@ struct
     (*** Command line processing ***)
 	
     exception Error of string
-    type cmdline = cmd list * (int * string) list
-
-    (* partition : string list -> string list * (int * string) list *)
-    fun partition args =
-	let
-	    fun mapfiles nil acc = (rev acc, nil)
-	      | mapfiles ("--"::args) acc = (rev acc, hosts args nil)
-	      | mapfiles (mapfile::args) acc = mapfiles args (mapfile :: acc)
-	    and hosts nil acc = rev acc
-	      | hosts (host::args) acc =
-		(case parseHost host
-		   of NONE => raise Error ("argument must have form [num/]host -- " ^ host ^ "\n")
-		    | SOME host' => hosts args (host' :: acc))
-	in  mapfiles args nil
-	end
 	
-    (* cmdline : string list -> cmdline.  May raise Error *)
+    (* slavesArg : string -> int * string *)
+    fun slavesArg arg =
+	(case parseHost arg
+	   of NONE => raise Error ("argument must have form [num/]host -- " ^ arg ^ "\n")
+	    | SOME num_host => num_host)
+	      
+    (* cmdline : string list -> cmd list.  May raise Error *)
     fun cmdline args =
 	let
 	    val options = [Getopt.Arg   (#"f", SetFlag),
 			   Getopt.Arg   (#"r", ResetFlag),
 			   Getopt.Arg   (#"c", Clean),
-			   Getopt.Arg   (#"p", Pmake),
 			   Getopt.Arg   (#"m", Master),
 			   Getopt.Noarg (#"s", Slave),
+			   Getopt.Arg   (#"S", Slaves o slavesArg),
 			   Getopt.Noarg (#"?", PrintUsage),
 			   Getopt.Noarg (#"v", PrintVersion)]
 	in
 	    case Getopt.getopt (options, args)
 	      of Getopt.Error msg => raise Error (msg ^ "\n" ^ usage)
-	       | Getopt.Success (cmds, args') =>
-		  let val (mapfiles, hosts) = partition args'
+	       | Getopt.Success (cmds, mapfiles) =>
+		  let 
 		      val _ = if List.null cmds andalso List.null mapfiles
 				  then raise Error usage
 			      else ()
-		  in  (cmds @ [Make mapfiles], hosts)
+		  in  cmds @ [Make mapfiles]
 		  end
 	end
 
-    (* We could warn user if any commands follow Slave (which doesn't terminate)
-     * Or if hosts are specified without any Pmake.
-     *)
+    (* We could warn user if any commands follow Slave (which doesn't terminate) *)
 
     (* errorMsg : exn -> string *)
     fun errorMsg (Util.BUG msg) = "internal error: " ^ msg ^ "\n"
