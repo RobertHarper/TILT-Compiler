@@ -54,6 +54,7 @@ signature NILUTIL =
     val bnd_rewrite : handlers -> Nil.bnd -> Nil.bnd list
     val kind_rewrite : handlers -> Nil.kind -> Nil.kind
     val con_rewrite : handlers -> Nil.con -> Nil.con
+    val cbnd_rewrite : handlers -> Nil.conbnd -> Nil.conbnd
 
     val exp_size : Nil.exp -> int
     val con_size : Nil.con -> int

@@ -634,6 +634,7 @@ struct
   fun bnd_rewrite h b = #1(f_bnd (to_handlers h) b)
   fun kind_rewrite h k = f_kind(to_handlers h) k
   fun con_rewrite h c = f_con(to_handlers h) c
+  fun cbnd_rewrite h cb = hd (#1(f_cbnd (to_handlers h) cb))
 
   fun con_free_convar (argcon : con) : var list = 
     let 

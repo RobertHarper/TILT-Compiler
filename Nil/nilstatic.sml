@@ -1,3 +1,4 @@
+<<<<<<< nilstatic.sml
 (*$import ANNOTATION PRIMUTIL NIL PPNIL ALPHA NILUTIL NILCONTEXT NILERROR NORMALIZE NILSUBST Stats NILSTATIC Normalize *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	

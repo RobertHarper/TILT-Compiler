@@ -908,7 +908,7 @@ struct
 	  let 
 	      (* Rewrite a binding to do the following:
 	         (a) check record arguments are variables
-		 (b) check inject argument are variables
+		 (b) check inject argument are variables 
 		 (c) rewrite project_sum to project_sum_record or project_sum_nonrecord
 		 If NONE is returned, the binding does not need to be rewrritten.
 		 Otherwise, SOME bindings are returned.  The original bindings
@@ -917,11 +917,14 @@ struct
 		  (case e of
 		       Prim_e(NilPrimOp(record labs),_,elist) => 
 	                 let fun check(Var_e v) = ()
+			       | check (Const_e v) = ()
 			       | check _ = error "record argument is not a variable"
 			 in  NONE
 			 end
 		     | Prim_e(NilPrimOp (inject _), _, [Var_e _]) => NONE
-		     | Prim_e(NilPrimOp (inject k), clist,[injectee]) => error "inject argument is not a var"
+		     | Prim_e(NilPrimOp (inject _), _, [Const_e _]) => NONE
+		     | Prim_e(NilPrimOp (inject k), clist,[injectee]) =>
+			 error "inject argument is not a var"
 		     | Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv]) =>
 			 let val c = type_of(state,e)
 			     val sv_con = find_con(state,sv)
