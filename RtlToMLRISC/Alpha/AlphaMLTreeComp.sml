@@ -84,13 +84,10 @@ local
 		      AlphaIntegerAllocation.allocateCluster
 *)
   fun alpha_codegen arg = 
-      let val _ = print "Perry: Alpha/AlphMLTreeComp.sml alpha_codegen start\n"
+      let 
 	  val tmp = AlphaIntegerAllocation.allocateCluster arg
-	  val _ = print "Perry: Alpha/AlphMLTreeComp.sml alpha_codegen 1\n"
 	  val tmp = AlphaFloatAllocation.allocateCluster tmp
-	  val _ = print "Perry: Alpha/AlphMLTreeComp.sml alpha_codegen 2\n"
 	  val res = AlphaAsmEmit.asmEmit tmp
-	  val _ = print "Perry: Alpha/AlphMLTreeComp.sml alpha_codegen end\n"
       in  res
       end
       

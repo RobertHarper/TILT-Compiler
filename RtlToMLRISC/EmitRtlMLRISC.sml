@@ -229,11 +229,8 @@ functor EmitRtlMLRISC(
        * Return the accumulated call information of the current module.
        * <- the call information
        *)
-      fun infos() = let val _ = print "Perry: EmitRtlMLRISC: infos start\n"
-			val res = !infosRef
-			val _ = print "Perry: EmitRtlMLRISC: infos end\n"
-		    in  res
-		    end
+      fun infos() = !infosRef
+
     end
 
   end
@@ -2077,7 +2074,6 @@ functor EmitRtlMLRISC(
 
     fun emitBody(prefix, main, procedures, data) =
 	  let
-	      val _ = print "Perry EmitRtlMLRisc: emitBody start\n"
 	    fun define name =
 		  let
 		    val label = externalLabel(prefix^name)
@@ -2122,26 +2118,17 @@ functor EmitRtlMLRISC(
 		  [MLTree.PSEUDO_OP MLRISCPseudo.DataTrailer]
 
 	    val clusters = map (fn procedure => [procedure]) procedures
-	      val _ = print "Perry EmitRtlMLRisc: emitBody 1\n"
 	  in
 	    emitMLTree header;
 	    emitMLTree textHeader;
-	      print "Perry EmitRtlMLRisc: emitBody 3\n";
 	    emitMLTree [MLTree.ENDCLUSTER(Cluster.map())];
-	      print "Perry EmitRtlMLRisc: emitBody 4\n";
 	    app (emitCluster' protect resetCluster) clusters;
-	      print "Perry EmitRtlMLRisc: emitBody 5\n";
 	    emitMLTree [MLTree.BEGINCLUSTER];
-	      print "Perry EmitRtlMLRisc: emitBody 6\n";
 	    emitMLTree textTrailer;
 	    emitMLTree dataHeader;
-	      print "Perry EmitRtlMLRisc: emitBody 7\n";
 	    emitData data;
-	      print "Perry EmitRtlMLRisc: emitBody 8\n";
 	    emitMLTree dataTrailer;
-	      print "Perry EmitRtlMLRisc: emitBody 9\n";
-	    emitMLTree trailer;
-	      print "Perry EmitRtlMLRisc: emitBody end\n"
+	    emitMLTree trailer
 	  end
 
     fun resetBody() = ()
@@ -2198,11 +2185,8 @@ functor EmitRtlMLRISC(
 	  let
 	    val name = Label'.string main
 
-	    fun emitBody' operand = let val _ = print "Perry EmitRtlMLRisc: emit start\n"
-					val _ = emitBody operand
-					val _ = print "Perry EmitRtlMLRisc: emit 1\n"
+	    fun emitBody' operand = let val _ = emitBody operand
 					val res = Module.infos()
-					val _ = print "Perry EmitRtlMLRisc: emit end\n"
 				    in  res
 				    end
 
