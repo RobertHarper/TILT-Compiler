@@ -40,15 +40,13 @@ exception Span
 exception Subscript
 
 (* values *)
-(* o, before, ignore -- primitive *)
+(* o, before, ignore, not -- primitive *)
 fun exnName (exn:exn) : string = Ccall(exnNameRuntime,exn)
 fun exnMessage (exn:exn) : string= Ccall(exnMessageRuntime,exn)
 
 fun getOpt (SOME x, _) = x | getOpt (NONE, y) = y
 fun isSome (SOME _) = true | isSome NONE = false
 fun valOf (SOME x) = x | valOf NONE = raise Option
-
-fun not true = false | not false = true
 
 fun rev l =
     let fun revappend([],x) = x

@@ -40,11 +40,10 @@ exception Span
 exception Subscript
 
 (* values *)
-(* o, before, ignore -- primitive *)
+(* o, before, ignore, not -- primitive *)
 val exnName : exn -> string
 val exnMessage : exn -> string
 val getOpt : 'a option * 'a -> 'a
 val isSome : 'a option -> bool
 val valOf : 'a option -> 'a
-val not : bool -> bool
 val rev : 'a list -> 'a list

@@ -1661,6 +1661,8 @@ structure IlStatic
 	     fun add subst (v1,v2) = (v1,v2)::subst
 	     fun eq_exps (es, es', subst) =
 		 andfold (fn (e1,e2) => eq(e1,e2,subst)) (zip es es')
+	     and eq_expopt (e1opt, e2opt, subst) =
+		  Util.eq_opt(fn (e1,e2) => eq(e1,e2,subst), e1opt, e2opt)
 	     and eq (e1,e2,subst) =
 	     (case (e1,e2) of
 		 (PRIM (p1,cs1,es1), PRIM (p2,cs2,es2)) =>
@@ -1708,8 +1710,16 @@ structure IlStatic
 	       | (INJ {sumtype=s1,field=f1,inject=e1opt},
 		  INJ {sumtype=s2,field=f2,inject=e2opt}) =>
 		     eq_con(ctxt,s1,s2) andalso f1 = f2 andalso
-		     Util.eq_opt(fn (e1,e2) => eq(e1,e2,subst), e1opt, e2opt)
+		     eq_expopt(e1opt,e2opt,subst)
 	       | (MODULE_PROJECT _, MODULE_PROJECT _) => eq_epath(e1,e2)
+	       | (CASE {sumtype=s1, arg=arg1, bound=v1, arms=arms1, tipe=c1, default=e1opt},
+		  CASE {sumtype=s2, arg=arg2, bound=v2, arms=arms2, tipe=c2, default=e2opt}) =>
+		     let val subst' = add subst (v2,v1)
+			 fun eqarm (e1opt,e2opt) = eq_expopt(e1opt,e2opt,subst')
+		     in  eq_con(ctxt,s1,s2) andalso eq(arg1,arg2,subst) andalso
+			 andfold eqarm (zip arms1 arms2) andalso
+			 eq_con(ctxt,c1,c2) andalso eqarm(e1opt,e2opt)
+		     end
 	       | _ => (debugdo (fn () =>
 				(print "eq_exp failed with \n    exp1 = ";
 				 pp_exp e1; print "\n\nand exp2 = ";

@@ -247,6 +247,14 @@ structure Basis :> BASIS =
 	  (* ----------------- add base monomorphic values -------------- *)
 	  local
 	    val topvalue_list =  [
+				  ("not",
+				   let val v = fresh_var()
+				       val c = con_bool context
+				       val body = make_ifthenelse context
+					   (VAR v,false_exp context,
+					    true_exp context,c)
+				   in  #1(make_lambda(v,c,c,body))
+				   end)
 				  ]
 	    val basevalue_list =  [
 				   ("empty_array8",PRIM(create_empty_table (IntArray Prim.W8),[],[])),
