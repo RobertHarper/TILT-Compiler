@@ -20,7 +20,7 @@ functor Tonil(structure Ilutil : ILUTIL
 	      structure Subst : NILSUBST
 	       sharing type Nilcontext.context = Normalize.context
 		   and type Subst.subst = Nilcontext.subst)
-              :> TONIL =
+           (*   :> TONIL *) =
 struct
 
 
@@ -363,12 +363,12 @@ local
 in
     type splitting_context = splitting_context
     fun get_nilctxt (CONTEXT{NILctx,...}) = NILctx
-    val empty_splitting_context = CONTEXT{NILctx = Nilcontext.empty(),
-					  sigmap = Name.VarMap.empty,
-					  used = ref Name.VarSet.empty,
-					  vmap = Name.VarMap.empty,
-					  alias = Name.VarMap.empty,
-					  memoized_mpath = Name.PathMap.empty}
+    fun empty_splitting_context() = CONTEXT{NILctx = Nilcontext.empty(),
+					    sigmap = Name.VarMap.empty,
+					    used = ref Name.VarSet.empty,
+					    vmap = Name.VarMap.empty,
+					    alias = Name.VarMap.empty,
+					    memoized_mpath = Name.PathMap.empty}
 
    fun print_splitting_context (CONTEXT{NILctx,sigmap,used,vmap,
 					alias,memoized_mpath}) = 
@@ -461,17 +461,6 @@ val NILctx' = (case k_shape_opt of
    fun update_NILctx_insert_kind_list(ctxt,vklist) = 
        foldl (fn ((v,k),ctxt) => update_NILctx_insert_kind (ctxt,v,k,NONE)) ctxt vklist
 
-
-
-   (* XXX move to nilutil *)
-   fun extractCbnd (Con_cb(v,c)) = (v,c)
-     | extractCbnd (Open_cb(v,vklist,c,k)) = 
-       let val v' = Name.derived_var v
-       in  (v,Let_c(Sequential,
-		    [Open_cb(v',vklist,c,k)],
-		    Var_c v'))
-       end
-     | extractCbnd _ = error "Code_cb not handled"
 
 
 
@@ -954,7 +943,7 @@ end (* local defining splitting context *)
            val local_name_fun_c = Name.fresh_var ()
 
 	   val cbnds_body_subst = 
-	       let fun folder (cbnd,s) = let val (v,c) = extractCbnd cbnd
+	       let fun folder (cbnd,s) = let val (v,c) = Nilutil.extractCbnd cbnd
 					 in  Subst.add s (v, Subst.substConInCon s c)
 					 end
 	       in  foldl folder (Subst.empty()) cbnds_body
@@ -1156,7 +1145,7 @@ end (* local defining splitting context *)
 
 
                val ebnd_entries = Listops.zip external_vars nil_functions
-               val ebnd_types = map (Nilutil.get_function_type Open) nil_functions
+               val ebnd_types = map (Nilutil.function_type Open) nil_functions
 
 	       val ebnds = [Fixopen_b (Sequence.fromList ebnd_entries)]
 
@@ -1290,7 +1279,7 @@ end (* local defining splitting context *)
 
                val ebnd_entries = (Listops.map4 reviseFunction 
 				   (internal_vars, external_vars_r, inner_vars, functions))
-               val ebnd_types = map (Nilutil.get_function_type Open) functions
+               val ebnd_types = map (Nilutil.function_type Open) functions
 
 
 	       val ebnds = [Fixopen_b (Sequence.fromList ebnd_entries)]
@@ -2478,7 +2467,7 @@ end (* local defining splitting context *)
 		       then acc
 		   else dopc(v,l,pc,acc)
 	       end
-	   val (rev_imports,context) = foldl folder ([],empty_splitting_context) 
+	   val (rev_imports,context) = foldl folder ([],empty_splitting_context()) 
 	                                  (Ilcontext.Context_Varlist HILctx)
        in  (rev rev_imports, context)
        end
