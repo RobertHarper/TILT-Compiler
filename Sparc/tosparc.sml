@@ -287,6 +287,13 @@ struct
      | translate_icmp Rtl.LT = BL
      | translate_icmp Rtl.LE = BLE
 
+   fun translate_uicmp Rtl.EQ = BE
+     | translate_uicmp Rtl.NE = BNE
+     | translate_uicmp Rtl.GT = BGU
+     | translate_uicmp Rtl.GE = BCC
+     | translate_uicmp Rtl.LT = BCS
+     | translate_uicmp Rtl.LE = BLEU
+
    fun negate_icmp BE  = BNE
      | negate_icmp BNE = BE
      | negate_icmp BG  = BLE
@@ -381,7 +388,7 @@ struct
    end
    fun test_zero opDivisor = if (!branchingTraps) then test_zero' opDivisor
 			     else ()
-       
+
    fun translate (Rtl.LI (immed, rtl_Rdest)) = load_imm(immed,translateIReg rtl_Rdest)
      | translate (Rtl.LADDR (ea, rtl_Rdest)) =
           let val Rdest = translateIReg rtl_Rdest
@@ -409,7 +416,6 @@ struct
          val cmp = translate_icmp rtl_cmp
        in emit(SPECIFIC(CMP (Rsrc1, IMMop (INT 0))));
 	  emit(SPECIFIC(CBRANCHI(negate_icmp cmp,label,true)));
-	  emit(SPECIFIC NOP);
 	  emit(SPECIFIC(INTOP(OR, Rzero, Rop2, Rdest)));
           translate(Rtl.ILABEL label)
        end
@@ -600,13 +606,7 @@ struct
 	 val Rsrc1 = translateIReg rtl_Rsrc1
 	 val op2 = translateOp rtl_op2
 	 val Rdest = translateIReg rtl_Rdest
-         val br = (case cmp of
-		   Rtl.EQ =>  BE
-		 | Rtl.NE =>  BNE
-		 | Rtl.GT =>  BG
-		 | Rtl.GE =>  BGE
-		 | Rtl.LT =>  BL
-		 | Rtl.LE =>  BLE)
+         val br = translate_icmp cmp
          val label = Rtl.fresh_code_label "cmpsi"
        in emit(SPECIFIC(CMP(Rsrc1, op2)));
 	  load_imm(0w1, Rdest);
@@ -620,13 +620,7 @@ struct
 	 val Rsrc1 = translateIReg rtl_Rsrc1
 	 val op2 = translateOp rtl_op2
 	 val Rdest = translateIReg rtl_Rdest
-         val br = (case cmp of
-		   Rtl.EQ =>  BE
-		 | Rtl.NE =>  BNE
-		 | Rtl.GT =>  BGU
-		 | Rtl.GE =>  BCC
-		 | Rtl.LT =>  BCS
-		 | Rtl.LE =>  BLEU)
+         val br = translate_uicmp cmp
          val label = Rtl.fresh_code_label "cmpui"
        in emit(SPECIFIC(CMP(Rsrc1, op2)));
 	  load_imm(0w1, Rdest);
@@ -801,13 +795,7 @@ struct
          val Fsrc2 = translateFReg rtl_Fsrc2
          val Rdest = translateIReg rtl_Rdest
 	 val label = Rtl.fresh_code_label "cmpf"
-         val br = (case cmp of
-		   Rtl.EQ =>  FBE
-		 | Rtl.NE =>  FBNE
-		 | Rtl.GT =>  FBG
-		 | Rtl.GE =>  FBGE
-		 | Rtl.LT =>  FBL
-		 | Rtl.LE =>  FBLE)
+         val br = translate_fcmp cmp
        in emit(SPECIFIC(FCMPD(Fsrc1, Fsrc2)));
 	  load_imm(0w1, Rdest);
 	  emit(SPECIFIC(CBRANCHF(br,label)));
@@ -817,10 +805,19 @@ struct
 
      | translate (Rtl.BR ll) =  emit (BASE (BR ll))
 
-     | translate (Rtl.BCNDI (comparison, rtl_Rsrc1, rtl_op2, loc_label, pre)) =
+     | translate (Rtl.BCNDSI (comparison, rtl_Rsrc1, rtl_op2, loc_label, pre)) =
        let val Rsrc1 = translateIReg rtl_Rsrc1
 	   val op2 = translateOp rtl_op2
 	   val cmp = translate_icmp comparison
+       in 
+	   emit(SPECIFIC(CMP(Rsrc1,op2)));
+	   emit(SPECIFIC(CBRANCHI(cmp, loc_label, pre)))
+       end
+
+     | translate (Rtl.BCNDUI (comparison, rtl_Rsrc1, rtl_op2, loc_label, pre)) =
+       let val Rsrc1 = translateIReg rtl_Rsrc1
+	   val op2 = translateOp rtl_op2
+	   val cmp = translate_uicmp comparison
        in 
 	   emit(SPECIFIC(CMP(Rsrc1,op2)));
 	   emit(SPECIFIC(CBRANCHI(cmp, loc_label, pre)))
@@ -878,17 +875,7 @@ struct
      | translate (Rtl.PUSH_EXN) = ()
      | translate (Rtl.POP_EXN) = ()
      | translate (Rtl.THROW_EXN) = ()
-     | translate (Rtl.CATCH_EXN) = 
-	  let val tmp1 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
-	      val tmp2 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
-	  in  (*
-	       translate(Rtl.LOAD32I(Rtl.REA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1));
-	       translate(Rtl.CMPUI(Rtl.GT,Rtl.SREGI Rtl.STACK,Rtl.REG tmp1,tmp2));
-	       translate(Rtl.CMV(Rtl.NE,tmp2,Rtl.REG(Rtl.SREGI Rtl.STACK), tmp1));
-	       translate(Rtl.STORE32I(Rtl.REA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1))
-	       *)
-	      ()
-	  end
+     | translate (Rtl.CATCH_EXN) = emit (BASE (RTL HANDLER_ENTRY)) (* indicator to restore callee-save *)
 
      | translate (Rtl.LOAD8I (ea, rtl_Rdest)) =
        let val (Raddr, disp) = loadEA ea
@@ -936,20 +923,34 @@ struct
        in  emit (SPECIFIC (LOADI (LD, Rdest, INT arrayOffset_disp, Rth)))
        end
 
-     | translate (Rtl.REL_STACKPTR (rtl_Rsrc, rtl_Rdest)) =
-       let val stackletOffset = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
-	   val Rsrc = translateIReg rtl_Rsrc
-	   val Rdest = translateIReg rtl_Rdest
-       in  emit (SPECIFIC (LOADI (LD, stackletOffset, INT stackletOffset_disp, Rth)));
-	   emit (SPECIFIC (INTOP (SUB, Rsrc, REGop stackletOffset, Rdest)))
+     | translate (Rtl.LOADSP Rdest) =
+       let val stackletOffset = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
+	   val Rth = Rtl.SREGI Rtl.THREADPTR
+	   val Rsp = Rtl.SREGI Rtl.STACK
+       in  app translate [Rtl.LOAD32I (Rtl.REA (Rth, stackletOffset_disp), stackletOffset),
+			  Rtl.SUB (Rsp, Rtl.REG stackletOffset, Rdest)]
        end
 
-     | translate (Rtl.ABS_STACKPTR (rtl_Rsrc, rtl_Rdest)) =
-       let val stackletOffset = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
-	   val Rsrc = translateIReg rtl_Rsrc
-	   val Rdest = translateIReg rtl_Rdest
-       in  emit (SPECIFIC (LOADI (LD, stackletOffset, INT stackletOffset_disp, Rth)));
-	   emit (SPECIFIC (INTOP (ADD, Rsrc, REGop stackletOffset, Rdest)))
+     (* RESTORESP must preserve Rhandler = Rat2 = %r17, Rexnarg = Rra
+        = %r15, and Rexnptr = %r1.  Fresh temporaries (which may be
+        spilled) can not be used because we are switching stack
+        frames.  Since there can be no spills, we may use Rat and Rat2
+        without interfering with register allocation.  We use Rat both
+        as a temporary and to save Rexnarg around the call to
+        RestoreStackFromML.  *)
+
+     | translate (Rtl.RESTORESP) =
+       let val afterLabel = Rtl.fresh_code_label "after_sp"
+       in  app emit [SPECIFIC(LOADI(LD, Rat, INT stackletOffset_disp, Rth)),
+		     SPECIFIC(INTOP(ADD, Rsp, REGop Rat, Rsp)),
+		     SPECIFIC(LOADI(LD, Rat, INT stackTop_disp, Rth)),
+		     SPECIFIC(CMP(Rsp, REGop Rat)),
+		     SPECIFIC(CBRANCHI(BLEU, afterLabel, true)),
+		     BASE(MOVE(Rexnarg, Rat)), (* Rexnarg = Rra trashed by BSR *)
+		     BASE(BSR (Rtl.C_EXTERN_LABEL ("RestoreStackFromML"), NONE,
+			       {regs_modified=[], regs_destroyed=[], args=[]})),
+		     BASE(MOVE(Rat, Rexnarg))];
+	   translate (Rtl.ILABEL afterLabel)
        end
 
      | translate (Rtl.ICOMMENT str) = emit (BASE(ICOMMENT str))
@@ -996,7 +997,7 @@ struct
 	   (if useImm then [Rtl.ADD(writeAlloc, Rtl.IMM bytesNeeded, writeAllocTemp)]
 	    else [Rtl.LI(i2w bytesNeeded, writeAllocTemp),
 		  Rtl.ADD(writeAlloc, Rtl.REG writeAllocTemp, writeAllocTemp)]);
-	   translate (Rtl.BCNDI(Rtl.LE, writeAllocTemp, Rtl.REG writeLimit, afterLabel, true));
+	   translate (Rtl.BCNDUI(Rtl.LE, writeAllocTemp, Rtl.REG writeLimit, afterLabel, true));
 	   if useImm then emit (SPECIFIC (INTOP(SUB, Rheap, IMMop(INT(bytesForEachMutate * n)), Rat)))
 	   else (load_imm (i2w bytesNeeded, Rat);
 		 emit (SPECIFIC (INTOP(SUB, Rheap, REGop Rat, Rat))));
@@ -1028,7 +1029,7 @@ struct
 		    end);
 	  emit (SPECIFIC (LOADI (LD, Rhlimit, INT heapLimit_disp, Rth)));
 	  emit (SPECIFIC (CMP     (Rat, REGop Rhlimit)));
-	  emit (SPECIFIC (CBRANCHI(BLE, rtl_loclabel,true)));
+	  emit (SPECIFIC (CBRANCHI(BLEU, rtl_loclabel,true)));
 	  emit (BASE (GC_CALLSITE rtl_loclabel));
 	  emit (BASE (BSR (Rtl.C_EXTERN_LABEL ("GCFromML"), NONE,
 			   {regs_modified=[Rat], regs_destroyed=[Rat],
@@ -1036,7 +1037,24 @@ struct
 	  translate (Rtl.ILABEL rtl_loclabel)
        end
 
+     (*
+	The RTL instructions SOFT_ZBARRIER and HARD_ZBARRIER handle
+	any pending divide by zero exceptions.  These are always
+	emitted in pairs so you need to generate code for at most one
+	of them.  I say "at most one" because the runtime and OS may
+	conspire to deliver a signal when division by zero occurs,
+	making explicit barriers unnecessary.  A "hard" barrier is
+	precise: Previous arithmetic instructions are completed, and
+	any necessary div exceptions are raised, before subsequent
+	instructions are issued.  A "soft" barrier provides no such
+	gaurantees (ug).
 
+	SOFT_VBARRIER and HARD_VBARRIER are similar for overflow.
+
+	You also need to generate barriers when translating the
+	following RTL instructions: ADDT, SUBT, MULT, DIVT, and MODT.
+      *)
+	
      | translate (Rtl.SOFT_VBARRIER _) = ()
      | translate (Rtl.SOFT_ZBARRIER _) = ()
      | translate (Rtl.HARD_VBARRIER _) = hard_vbarrier TVS
