@@ -8,6 +8,22 @@ structure LilToTalState :> LILTOTALSTATE =
 
     fun warn s = (print "WARNING: ";print s;print "\n")
 
+    val debug = Stats.ff "LilToTalStateDebug"
+
+    val debuglev = ref 0
+    val chatlev = ref 0 
+
+    fun indent i s = 
+      let
+	fun loop 0 cs = String.implode cs
+	  | loop i cs = loop (i - 1) (#" "::cs)
+      in loop (i+1) (String.explode s)
+      end
+
+    fun chatp i = !(chatlev) >= i
+    fun chat i s = if chatp i then print (indent i s) else ()
+    fun debugdo (i,t) = if (!debug) andalso (i <= !debuglev) then (t(); ()) else ()
+
     fun cout (c : Lil.con) : Lil.con_ = #c c
     fun kout (k : Lil.kind) : Lil.kind_ = #k k
 
@@ -36,7 +52,7 @@ structure LilToTalState :> LILTOTALSTATE =
 	  | 7 => error "Esp not a GP register"
 	  | _ => error "Bad register index")
 
-    datatype rstat' = 
+    datatype rcont = 
       Junk  (* Empty or reserved for temp (not live across calls).  
 	     * If we want to allow temps live across calls, must allow 
 	     * a type here so that we can get the correct machine state. *)
@@ -45,8 +61,8 @@ structure LilToTalState :> LILTOTALSTATE =
 
     (* Reserved registers are locked down (usually because they have
      * been allocated, but not yet initialized).  Available registers
-     * are available for spilling or use (depending on the rstat') *)
-    datatype rstat = Reserved of rstat' | Avail of rstat'
+     * are available for spilling or use (depending on the rcont) *)
+    datatype rstat = Reserved of rcont | Avail of rcont
 
     datatype slot = 
       Temp of int     (* ith temp *)
@@ -65,7 +81,20 @@ structure LilToTalState :> LILTOTALSTATE =
 
     type sstat = rstat * bool  (* true => 32 bit *)
 
+
+    fun print_rcont c = 
+      (case c
+	 of Junk => print "junk"
+	  | Full(c,x) => (print "Contains ";
+			  PpLil.pp_var x))
+
+    fun print_rstat r = 
+      (case r
+	 of Avail c => (print "Avail (";print_rcont c;print ")")
+	  | Reserved c => (print "Reserved (";print_rcont c;print ")"))
+
     fun eq_reg r1 r2 = r1 = r2
+
     fun eq_slot s1 s2 = 
       (case (s1,s2) 
 	 of (Temp i,Temp i') => i = i'
@@ -78,7 +107,6 @@ structure LilToTalState :> LILTOTALSTATE =
 	 of (Tal.Reg r,Tal.Reg r') => r = r'
 	  | (Tal.Prjr ((Tal.Esp,[]),i,NONE), Tal.Prjr ((Tal.Esp,[]),i',NONE)) => i = i'
 	  | _ => false)
-
 
 
     fun sstat_size ss = 
@@ -124,6 +152,22 @@ structure LilToTalState :> LILTOTALSTATE =
 	   temps = temps
 	   }
 
+	fun print_stack ({inargs, outargs, temps}) = 
+	  let
+	    fun printslot (r,is32) = 
+	      (if is32 then () else print "   (cont)   \n";
+	       print_rstat r;print "\n")
+	    val () = print "****Stack****\n"
+	    val () = print "----Inargs---\n"
+	    val () = app printslot inargs
+	    val () = print "----Temps----\n"
+	    val () = app printslot temps
+	    val () = print "----Outargs--\n"
+	    val () = app printslot outargs
+	    val () = print "*****End*****\n"
+	  in ()
+	  end
+
 	fun junk_sstat i =
 	  let
 	    fun loop (i,acc) =
@@ -146,7 +190,7 @@ structure LilToTalState :> LILTOTALSTATE =
 	   *)
 	  fun set_sstat_slot slist i s = 
 	    (case (slist,i) 
-	       of ([],_) => set_sstat_slot (junk_sstat i) i s
+	       of ([],_) => set_sstat_slot (junk_sstat (i + 1)) i s
 		| (ss::slist,0) => 
 		 (case #2 ss
 		    of true => s::slist
@@ -217,29 +261,46 @@ structure LilToTalState :> LILTOTALSTATE =
 	  val alloc_outarg_slot = alloc_slot (#outargs,set_outargs,Outarg)
 	end
 
-	(* Translate offset from bottom of stack area
+	(* Translate offset from bottom of frame region
 	 * into offset from top of stack (stack ptr) 
 	 *)
 	fun slot2offset ({inargs,outargs,temps} : stackdesc) (slot : slot) : Tal.int32 = 
-	  (case slot
-	     of Inarg i => LU.i2w (i + (List.length outargs) + (List.length temps))
-	      | Temp i => LU.i2w (i + (List.length outargs))
-	      | Outarg i => LU.i2w i)
-
+	  let
+	  in
+	    (case slot
+	       of Inarg i =>
+		 let
+		   val prefix = (List.length outargs) + (List.length temps) + (List.length inargs)
+		 in LU.i2w (prefix - (i + 1))
+		 end
+		| Temp i => 
+		 let
+		   val prefix = (List.length outargs) + (List.length temps) 
+		 in LU.i2w (prefix - (i + 1))
+		 end
+		| Outarg i =>
+		 let
+		   val prefix = (List.length outargs) 
+		 in  LU.i2w (prefix - (i + 1))
+		 end)
+	  end
 	(* Translate offset from top of stack (stack ptr)
 	 * into offset from bottom of a specific area.
 	 *)
-	fun offset2slot ({inargs,outargs,temps} : stackdesc) (w : Tal.int32) : slot = 
+	fun offset2slot (sd as {inargs,outargs,temps} : stackdesc) (w : Tal.int32) : slot = 
 	  let
 	    val i = LU.w2i w
 	    val ol = List.length outargs
 	    val tl = List.length temps
 	    val il = List.length inargs
 	  in 
-	    if i < il then Inarg i
-	    else if i < (il + tl) then Temp (i - il)
-	    else if i < (il + tl + ol) then Outarg ((i - il) - tl)
-            else error "Bad offset"
+	    if i < il then Inarg (il - (i + 1))
+	    else if i < (il + tl) then Temp ((il + tl) - (i + 1))
+	    else if i < (il + tl + ol) then Outarg ((il + tl + ol) - (i + 1))
+            else (print "Offset ";print (Int.toString i);
+		  print " too large\n";
+		  print_stack sd;
+		  error "Bad offset")
 	  end
 
 	fun typeof_sd sd =
@@ -310,6 +371,16 @@ structure LilToTalState :> LILTOTALSTATE =
 			of [] => ()
 			 | _ => warn "Unclosed block1")
 	  in #blocks id
+	  end
+
+	fun flush_blocks (id : instrdesc) = 
+	  let
+	    val () = (case #instrs id
+			of [] => ()
+			 | _ => warn "Unclosed block1 flushed")
+	    val id = set_blocks id []
+	    val id = set_instrs id []
+	  in id
 	  end
 
 	fun add_blocks (id : instrdesc) (blocks : Tal.code_block list): instrdesc = 
@@ -399,7 +470,7 @@ structure LilToTalState :> LILTOTALSTATE =
 	fun get_var32_loc (state : state) (v : Lil.var) : loc32 = 
 	  (case get_var32_loc' state v
 	     of SOME loc => loc
-	      | NONE => error "No location for variable")
+	      | NONE => error ("No location for variable " ^ (Name.var2string v)))
 	     
 	fun set_var32_loc state v loc = set_vars32 state (VarMap.insert (#vars32 state,v,loc))
 	  
@@ -469,6 +540,7 @@ structure LilToTalState :> LILTOTALSTATE =
 	fun get_outarg_size (state : state) : Tal.int32 = SD.get_outarg_size (#stack state)
 
 	fun get_blocks (state : state) : Tal.code_block list = ID.get_blocks (#instr state)
+	fun flush_blocks (state : state) : state = set_instr state (ID.flush_blocks (#instr state))
 	fun add_blocks (state : state) (blocks : Tal.code_block list) : state = 
 	  set_instr state (ID.add_blocks (#instr state) blocks)
 
@@ -559,6 +631,9 @@ structure LilToTalState :> LILTOTALSTATE =
      * Updates slot info for spill slot *)
     fun spill_var state (v,con) = 
       let
+
+	val () = chat 2 ("Spilling var " ^ (Name.var2string v) ^ "\n")
+
 	val (state,slot) =
 	  (case S.get_var32_loc state v
 	     of Dual (s,r) => 
@@ -568,7 +643,7 @@ structure LilToTalState :> LILTOTALSTATE =
 	       end
 	      | Reg r => 
 	       let
-		 val (state,slot) = reserve_slot' state (Full (con,v))
+		 val (state,slot) = free_slot' state (Full (con,v))
 		 (* Spilling a var means loading it into its designated location *)
 		 val state = S.emit state (Tal.Mov (Tal.Reg r,(slot2genop state slot,[])))
 	       in (state,slot)
@@ -576,11 +651,10 @@ structure LilToTalState :> LILTOTALSTATE =
 	      | Slot (s as Temp _) => (state,s)
 	      | Slot slot => 
 	       let
-		 val (state,slot) = reserve_slot' state (Full (con,v))
-		 val (state,t) = reserve_temp' false state (Junk)
+		 val (state,slot) = free_slot' state (Full (con,v))
+		 val (state,t) = free_temp' false state (Junk)
 		 (* Spilling a var means loading it into its designated location *)
 		 val state = S.emit state (Tal.Mov (t,(slot2genop state slot,[])))
-		 val state = release_temp state t
 	       in (state,slot)
 	       end)
 
@@ -601,40 +675,95 @@ structure LilToTalState :> LILTOTALSTATE =
       in state
       end
 
-    (* Set a register to Reserved, spilling if necessary *)
-    and reserve_reg' state r rstat' = 
+
+    (* Get a free register, spilling if necessary *)
+    and free_reg' state r rcont = 
       let
 	val state = spill_reg state r
-	val state = S.set_rstat state r (Reserved rstat')
+	val state = S.set_rstat state r (Avail rcont)
       in state
       end
 
-    and reserve_slot' state rstat' = 
+    and free_slot' state rcont = 
       let
 	val (state,slot) = S.alloc_temp_slot state
-	val state = S.set_sstat state slot (Reserved rstat',true)
+	val state = S.set_sstat state slot (Avail rcont,true)
       in (state,slot)
       end
 
-    and reserve_loc (memok : bool) (state : S.state) (rstat' : rstat') : (S.state * loc32) = 
+    and free_loc (memok : bool) (state : S.state) (rcont : rcont) : (S.state * loc32) = 
       (case get_free_reg state
-	 of SOME r => (reserve_reg' state r rstat',Reg r)
+	 of SOME r => (free_reg' state r rcont,Reg r)
 	  | NONE => 
 	   if memok then
 	     let
-	       val (state,slot) = reserve_slot' state rstat'
+	       val (state,slot) = free_slot' state rcont
 	     in (state,Slot slot)
 	     end
 	   else
 	     let
 	       val r = choose_spill_reg state
-	       val state = reserve_reg' state r rstat'
+	       val state = free_reg' state r rcont
 	     in (state,Reg r)
 	     end)
 	
-    and reserve_temp' memok state rstat' = 
+    and free_temp' memok state rcont = 
       let
-	val (state,loc) = reserve_loc memok state rstat'
+	val (state,loc) = free_loc memok state rcont
+      in (state,loc2genop state loc)
+      end
+
+    fun free_reg state r = free_reg' state r Junk
+    fun free_slot state = free_slot' state Junk
+
+
+    fun free_temp memok state = free_temp' memok state Junk
+
+    fun free_temp_reg' (state : S.state) (rcont : rcont) : (S.state * Tal.reg) = 
+      (case free_temp' false state rcont
+	 of (state,Tal.Reg r) => (state,r)
+	  | _ => error "Not a register")
+
+    fun free_temp_reg state = free_temp_reg' state Junk
+
+    val free_temp_any = free_temp true
+
+
+
+    (* Set a register to Reserved, spilling if necessary *)
+    fun reserve_reg' state r rcont = 
+      let
+	val state = spill_reg state r
+	val state = S.set_rstat state r (Reserved rcont)
+      in state
+      end
+
+    fun reserve_slot' state rcont = 
+      let
+	val (state,slot) = S.alloc_temp_slot state
+	val state = S.set_sstat state slot (Reserved rcont,true)
+      in (state,slot)
+      end
+
+    fun reserve_loc (memok : bool) (state : S.state) (rcont : rcont) : (S.state * loc32) = 
+      (case get_free_reg state
+	 of SOME r => (reserve_reg' state r rcont,Reg r)
+	  | NONE => 
+	   if memok then
+	     let
+	       val (state,slot) = reserve_slot' state rcont
+	     in (state,Slot slot)
+	     end
+	   else
+	     let
+	       val r = choose_spill_reg state
+	       val state = reserve_reg' state r rcont
+	     in (state,Reg r)
+	     end)
+	
+    fun reserve_temp' memok state rcont = 
+      let
+	val (state,loc) = reserve_loc memok state rcont
       in (state,loc2genop state loc)
       end
 
@@ -644,8 +773,8 @@ structure LilToTalState :> LILTOTALSTATE =
 
     fun reserve_temp memok state = reserve_temp' memok state Junk
 
-    fun reserve_temp_reg' (state : S.state) (rstat' : rstat') : (S.state * Tal.reg) = 
-      (case reserve_temp' false state rstat'
+    fun reserve_temp_reg' (state : S.state) (rcont : rcont) : (S.state * Tal.reg) = 
+      (case reserve_temp' false state rcont
 	 of (state,Tal.Reg r) => (state,r)
 	  | _ => error "Not a register")
 
@@ -654,13 +783,15 @@ structure LilToTalState :> LILTOTALSTATE =
     val reserve_temp_any = reserve_temp true
 
 
+
+
     fun eq_gop_goc gop1 (gop2,qs) = 
       if eq_gop gop1 gop2 then
 	SOME qs
       else NONE
 
     (* Emit code to initialize register,
-     * and change its status from Reserved to Junk.
+     * and ensure its status is Junk.
      *)
     fun init_reg (state : S.state) (r : Tal.reg) (goc : Tal.genop Tal.coerce) : S.state = 
       let
@@ -691,9 +822,9 @@ structure LilToTalState :> LILTOTALSTATE =
 		    (case goc 
 		       of (Tal.Prjr _,_) =>  (* No mem/mem moves. *)
 			 let
-			   val (state,t) = reserve_temp false state
-			   val state = init_temp state t goc
-			   val state = S.emit state (Tal.Mov (gop,(t,[])))
+			   val (state,r) = free_temp_reg state
+			   val state = S.emit state (Tal.Mov (gop,(Tal.Reg r,[])))
+			   val state = init_reg state r goc
 			 in state
 			 end
 			| _ =>  S.emit state (Tal.Mov (gop,goc))))
@@ -707,22 +838,28 @@ structure LilToTalState :> LILTOTALSTATE =
      * Kill the variable as well.
      *)
     fun define_var state x = 
-      (case S.get_var32_loc' state x
-	 of SOME loc => 
-	   let
-	     val state = 
-	       (case loc
-		  of Reg r => S.set_rstat state r (Avail Junk)
-		   | Slot slot => S.set_sstat state slot (Avail Junk,true)
-		   | Dual(slot,r) => 
-		    let
-		      val state = S.set_rstat state r (Avail Junk)
-		      val state = S.set_sstat state slot (Avail Junk,true)
-		    in state
-		    end)
-	   in(state,SOME (loc2genop state loc))
-	   end
-	  | NONE => (state,NONE))
+      let
+	val () = debugdo(3,fn () => (print "Defining var: ";
+				     PpLil.pp_var x;
+				     print "\n"))
+      in
+	(case S.get_var32_loc' state x
+	   of SOME loc => 
+	     let
+	       val state = 
+		 (case loc
+		    of Reg r => S.set_rstat state r (Avail Junk)
+		     | Slot slot => S.set_sstat state slot (Avail Junk,true)
+		     | Dual(slot,r) => 
+		      let
+			val state = S.set_rstat state r (Avail Junk)
+			val state = S.set_sstat state slot (Avail Junk,true)
+		      in state
+		      end)
+	     in (state,SOME (loc2genop state loc))
+	     end
+	    | NONE => (state,NONE))
+      end
 
 
 
@@ -760,6 +897,12 @@ structure LilToTalState :> LILTOTALSTATE =
 	     val state = S.set_sstat state slot (s,true)
 	   in state
 	   end)
+
+    fun get_loc_stat state loc = 
+      (case loc
+	 of Reg r => S.get_rstat state r
+	  | Slot slot => #1 (S.get_sstat state slot)
+	  | Dual(slot,r) => S.get_rstat state r)
 
     (*
      * If we've seen the variable before then:
@@ -883,6 +1026,7 @@ structure LilToTalState :> LILTOTALSTATE =
     fun reg_slot_mov state r s = S.emit state (Tal.Mov(Tal.Reg r,(slot2genop state s,[])))
 
     fun slot_reg_mov state s r = S.emit state (Tal.Mov(slot2genop state s,(Tal.Reg r,[])))
+
     fun slot_slot_mov state s1 s2 = 
       if eq_slot s1 s2 then state
       else
@@ -927,6 +1071,45 @@ structure LilToTalState :> LILTOTALSTATE =
       in state
       end
 
+    fun sanity_check (state : S.state) = 
+      let
+	val regs = #registers state
+	fun loop i = 
+	  if i < rcount then 
+	    let
+	      val () = 
+		(case Array.sub(regs,i)
+		   of Avail(Full(c,x)) => ()
+		    | Avail(Junk) => ()
+		    | Reserved _ => error "Register is reserved across op boundary")
+	    in loop ( i + 1)
+	    end
+	  else ()
+      in loop 0
+      end
+
+    fun match_registers (orig_state : S.state) (state : S.state) = 
+      let
+	val old_regs = #registers orig_state
+	fun loop i = 
+	  if i < rcount then 
+	    let
+	      val state = 
+		(case Array.sub(old_regs,i)
+		   of Avail(Full(c,x)) => 
+		     let
+		       val r = idxr i
+		       val state = load_var state r x c
+		       val state = release_reg state r
+		     in state 
+		     end
+		    | Avail(Junk) => spill_reg state (idxr i)
+		    | Reserved _ => error "Trying to match reserved register")
+	    in loop ( i + 1)
+	    end
+	  else state
+      in loop 0
+      end
 
     fun compensate (x,loc,state) = 
       (case S.get_var32_loc' state x
@@ -946,6 +1129,32 @@ structure LilToTalState :> LILTOTALSTATE =
 	val vars32 = #vars32 coercer
 	val coercee = VarMap.foldli compensate coercee vars32
       in coercee
+      end
+
+
+    fun reconcile_state (state : S.state) (newstate : S.state) = 
+      let
+	fun reconcile (x,loc,state) = 
+	  (case S.get_var32_loc' state x
+	     of NONE => 
+	       let
+		 val state = S.set_var32_loc state x loc
+		 val state = set_loc_stat state loc (get_loc_stat newstate loc)
+	       in state
+	       end
+	      | SOME _ => state)
+	     
+	val vars32 = #vars32 newstate
+	val state = VarMap.foldli reconcile state vars32
+      in state
+      end
+
+    fun join_states (principal : S.state) (adjunct : S.state) = 
+      let
+	val adjunct = coerce_state adjunct principal
+	val principal = reconcile_state principal adjunct
+	val principal = add_blocks_from_state principal adjunct
+      in principal
       end
 
     fun reserve_next_inarg32 state = 
@@ -1024,5 +1233,6 @@ structure LilToTalState :> LILTOTALSTATE =
 
     val add_blocks_from_state = add_blocks_from_state
     val get_blocks = S.get_blocks
+    val flush_blocks = S.flush_blocks
 
 end  (* LilToTal *)

@@ -365,7 +365,7 @@ structure Lil :> LIL =
 	    | _ => VarSet.empty)
 
     in
-      fun reset_kind_table () = kind_table := (KT.mkTable (1001, Fail "call find, not lookup"))
+      fun reset_kind_table () = kind_table := (KT.mkTable (101, Fail "call find, not lookup"))
 
       fun mk_kind (k_ : kind_) = 
 	(case k_

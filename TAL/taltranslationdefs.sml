@@ -445,6 +445,7 @@ struct
 
       val l_overflow = mk_tal_lbl (Name.internal_label "l_overflow")
       val l_unit = mk_tal_lbl (Name.internal_label "l_unit")
+      val l_array_zero = mk_tal_lbl (Name.internal_label "l_array_zero")
     end
 
 end  (* TalTranslationDefs *)

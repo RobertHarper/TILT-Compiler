@@ -92,5 +92,6 @@ signature TALTRANSLATIONDEFS =
       val mk_tal_lbl : Lil.label -> Tal.label
       val l_overflow : Tal.label
       val l_unit : Tal.label
+      val l_array_zero : Tal.label
     end
   end

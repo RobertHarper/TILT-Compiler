@@ -63,6 +63,8 @@ struct
 					libm, libc, gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"] @
 				       libdl)}
 		     end)
+
+
     val alphaConfig : unit -> config =
 	Util.memoize(fn() =>
 		     let
@@ -80,8 +82,18 @@ struct
 				       "-lc", "-lrt"]}
 		     end)
 
+    (* I'm not sure about all the options yet.  *)
     val talx86Config : unit -> config =
-	fn () => error "No tools for talx86 yet"
+	Util.memoize(fn () =>
+		     let
+		     in
+			 {assembler = ["talc.exe", "--verify-link", "--verify-program"],
+			  linker    = ["talc.exe", "--verify-link", "--verify-program"],
+			  ldpre     = [],
+			  ldpost    = []  (* Obviously, these are not yet complete *)
+			  }
+		     end)
+
 
     fun targetConfig () : config =
 	(case Target.getTarget()

@@ -1,6 +1,9 @@
 signature LILTOTALSTATE = 
   sig
 
+    val debuglev : int ref
+    val chatlev : int ref
+
     type state
 
     val new_state : unit -> state
@@ -9,9 +12,31 @@ signature LILTOTALSTATE =
     val emit : state -> Tal.instruction -> state
     val emit_block : state -> Tal.label -> Tal.con option -> state
 
-    val release_reg : state -> Tal.reg -> state
 
-    (* Reserve a specific register *)
+    (* FREE:
+     * Use this protocol for destination registers.  Ensures that 
+     * the register is not allocated to anything (spilling if necessary).
+     *)
+    val free_reg : state -> Tal.reg -> state
+
+    (* Get a free temp.  true => stack ok, false => register only.
+     *)
+    val free_temp : bool -> state -> (state * Tal.genop)
+
+    val free_temp_reg : state -> state * Tal.reg
+    val free_temp_any : state -> state * Tal.genop
+
+
+    (* RESERVE/RELEASE:
+     * Use this protocol for source registers. 
+     * RESERVE: spills the register if necessary, and locks it down
+     * to prevent the allocator from double allocating or spilling it.
+     * RELEASE: unlocks the register, so that it is available for
+     * spilling and allocation.  Note that init_xxx functions release.
+     *)
+
+
+    val release_reg : state -> Tal.reg -> state
     val reserve_reg : state -> Tal.reg -> state
 
     (* Reserve a temp.  true => stack ok, false => register only.
@@ -22,7 +47,6 @@ signature LILTOTALSTATE =
      * 3) general temps (reserve_temp true)
      *)
     val reserve_temp : bool -> state -> (state * Tal.genop)
-
     val reserve_temp_reg : state -> state * Tal.reg
     val reserve_temp_any : state -> state * Tal.genop
 
@@ -37,13 +61,20 @@ signature LILTOTALSTATE =
     val bind_next_formal32 : state -> Lil.var -> Tal.con -> state
     val bind_next_formal64 : state -> Lil.var -> Tal.con -> state
 
+    (* Initialize and RELEASE *)
     val init_reg : state -> Tal.reg -> Tal.genop Tal.coerce -> state
     val init_temp : state -> Tal.genop -> Tal.genop Tal.coerce -> state
     val init_var32 : state -> Tal.genop -> Lil.var -> Tal.con -> state
     val init_var64 : state -> Tal.genop -> Lil.var -> Tal.con -> state
 
+    (* Load specific register and RESERVE for var *)
+    val load_var : state -> Tal.reg -> Lil.var -> Tal.con -> state
+
+
     (* Lookup the assigned location for a variable, if one exists. *)
     val define_var : state -> Lil.var -> (state * Tal.genop option)
+
+
 
     val typeof_reg : state -> Tal.reg -> Tal.con option
     val typeof_stack : state -> Tal.con
@@ -57,19 +88,22 @@ signature LILTOTALSTATE =
     val get_outarg_size : state -> Tal.int32
     val get_temp_size : state -> Tal.int32
 
-    val load_var : state -> Tal.reg -> Lil.var -> Tal.con -> state
-    val spill_reg : state -> Tal.reg -> state
+
 
     (* add_blocks_from_state dest source:  appends blocks from source
      * to blocks from dest.  
      *)
     val add_blocks_from_state : state -> state -> state
     val get_blocks : state -> Tal.code_block list
+    val flush_blocks : state -> state
 
     val pop_outargs : state -> state
     val alloc_outargs : state -> int -> int -> state
     val alloc_inargs : state -> int -> int -> state
 
-    val coerce_state : state -> state -> state
+    (* join_state principal adjunct *)
+    val join_states : state -> state -> state
+    val match_registers : state -> state -> state
 
+    val sanity_check : state -> unit
   end

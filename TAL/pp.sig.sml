@@ -47,13 +47,17 @@ signature PPTAL =
     val print_code_block :  options -> Tal.code_block -> Formatter.format
     val print_data_block :  options -> Tal.data_block -> Formatter.format
 
-    val print_tal_int :  options -> string -> Tal.tal_int -> Formatter.format
+
+
     val print_tal_imp_body :  options -> Tal.tal_imp -> Formatter.format
     val print_imp_header : options -> string -> Formatter.format
+
+    val print_tal_int :  options -> string -> Tal.tal_int -> Formatter.format
 
     val print_tal_import_refs : options -> Tal.int_ref vector -> Formatter.format
     val print_tal_export_refs : options -> Tal.int_ref vector -> Formatter.format
 
     val print_tal_int_type :  options -> Tal.tal_int_type -> Formatter.format
     val print_tal_pre_mod  :  options -> string -> Tal.tal_pre_mod -> Formatter.format
+
   end (* EOF: talpp.mli *)

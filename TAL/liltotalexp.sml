@@ -3,6 +3,7 @@ structure LilToTalExp :> LILTOTALEXP =
     structure TE = LilToTalEnv
     structure TS = LilToTalState
     structure LTC = LilToTalCon
+    structure LS = LilSubst
     structure TTD = TalTranslationDefs
     structure Eq = LilTypeEquiv
     structure LD = LilDefs
@@ -10,6 +11,8 @@ structure LilToTalExp :> LILTOTALEXP =
     structure Dec = Deconstruct.Dec
     structure Elim = Deconstruct.Elim
     structure TA = TalAbbrev
+
+    structure LO = Listops
 
     open Lil
 
@@ -19,16 +22,25 @@ structure LilToTalExp :> LILTOTALEXP =
     val debuglev = ref 0
     val chatlev = ref 0 
 
+    fun indent i s = 
+      let
+	fun loop 0 cs = String.implode cs
+	  | loop i cs = loop (i - 1) (#" "::cs)
+      in loop (i+1) (String.explode s)
+      end
+
     fun chatp i = !(chatlev) >= i
-    fun chat i s = if chatp i then print s else ()
+    fun chat i s = if chatp i then print (indent i s) else ()
     fun debugdo (i,t) = if (!debug) andalso (i <= !debuglev) then (t(); ()) else ()
 
     fun cout (c : Lil.con) : Lil.con_ = #c c
     fun kout (k : Lil.kind) : Lil.kind_ = #k k
     fun eout (e : Lil.exp) : Lil.exp_ = #e e
 
-      
-    datatype genaddr = L of (Tal.label * bool) | F of bool | S (* label, fallthru, or step *)
+
+    fun fresh_tal_lbl s = (TTD.E.mk_tal_lbl (Name.fresh_internal_label s))
+
+    datatype genaddr = L of (Tal.label * bool) | F of (Tal.label * bool) | S (* label, fallthru, or step *)
 
     datatype dest = 
       RET                     (* Function return context *)
@@ -38,6 +50,7 @@ structure LilToTalExp :> LILTOTALEXP =
       | EFF of genaddr        (* Effect context: value unused. *)
       | CONT of genaddr * Tal.genop  
                               (* Place value in genop and continue to label *)
+
 
 
     local
@@ -96,9 +109,9 @@ structure LilToTalExp :> LILTOTALEXP =
        *)
       fun spill_caller_save state = 
 	let
-	  val state = TS.spill_reg state Tal.Eax
-	  val state = TS.spill_reg state Tal.Ecx
-	  val state = TS.spill_reg state Tal.Edx
+	  val state = TS.free_reg state Tal.Eax
+	  val state = TS.free_reg state Tal.Ecx
+	  val state = TS.free_reg state Tal.Edx
 	in state
 	end
 
@@ -153,7 +166,7 @@ structure LilToTalExp :> LILTOTALEXP =
 
     fun jmp_genaddr state env gd = 
       (case gd
-	 of F coerce  => fallthru state env coerce
+	 of F (l,coerce)  => fallthru state env coerce
 	  | L (l,coerce) => jmp_label state env l coerce
 	  | S   => state)
 
@@ -507,13 +520,13 @@ structure LilToTalExp :> LILTOTALEXP =
 	     val state = jcc_label state env cond l2 coerce2
 	   in state
 	   end
-	  | (F coercef, L (l,coercel)) => 
+	  | (F (_,coercef), L (l,coercel)) => 
 	   let
 	     val state = fallthru state env coercef
 	     val state = jcc_label state env cond l coercel
 	   in state 
 	   end
-	  | (L (l,coercel), F coercef) => 
+	  | (L (l,coercel), F (_,coercef)) => 
 	   let
 	     val state = fallthru state env coercef
 	     val state = jcc_label state env (Tal.negate_condition cond) l coercel
@@ -691,8 +704,22 @@ structure LilToTalExp :> LILTOTALEXP =
     fun mk_ref state env gop args = error "mk_ref:Unimplemented"
     fun length_table state env gop args = error "length_table:Unimplemented"
     fun sub state env gop args = error "sub:Unimplemented"
-    fun create_empty_table state env gop args = error "create_e_table:Unimplemented"
-    fun create_table state env gop args = error "create_table:Unimplemented"
+
+    fun create_empty_table t cs state env gop args = 
+      let
+	val lc = 
+	  (case (t,cs)
+	     of (Prim.IntArray is,[]) => LD.T.intt (LU.i2size is)
+	      | (Prim.FloatArray fs,[]) => LD.T.float ()
+	      | (Prim.OtherArray true,[c]) => c
+	      | _ => error "Bad table")
+	val c = LTC.ctrans env lc
+	val array0 = (Tal.Addr TTD.E.l_array_zero,[Tal.Tapp (Tal.Con c)])
+	val state = TS.emit state (Tal.Mov (gop,array0))
+      in state
+      end
+
+    fun create_table t cs state env gop args = error "create_table:Unimplemented"
 
     fun relop state env (sv1,sv2) =
       let
@@ -702,7 +729,7 @@ structure LilToTalExp :> LILTOTALEXP =
       in state
       end
 
-    fun frelop state env (sv1,sv2) = error "No floats yet"
+    fun frelop state env (sv1,sv2) = error "frelop: No floats yet"
 
     datatype prim32class = 
       Arithbin of (TS.state -> TE.env -> Tal.genop -> (sv32 * sv32) -> TS.state) * (sv32 * sv32)
@@ -713,7 +740,7 @@ structure LilToTalExp :> LILTOTALEXP =
       | EffPrim of (TS.state -> TE.env -> primarg list -> TS.state) * (primarg list)
       | OtherPrim of (TS.state -> TE.env -> Tal.genop -> primarg list -> TS.state) * (primarg list)
 
-    fun classify_prim32 (p : Prim.prim,primargs : Lil.primarg list) : prim32class = 
+    fun classify_prim32 (p : Prim.prim,cs : Lil.con list, primargs : Lil.primarg list) : prim32class = 
       (case p
 	 of Prim.plus_int Prim.W32   => Arithbin(int32bin Tal.Add, get_2primargs32 primargs)
 	  | Prim.minus_int Prim.W32  => Arithbin(int32bin Tal.Sub, get_2primargs32 primargs)
@@ -741,7 +768,7 @@ structure LilToTalExp :> LILTOTALEXP =
 	   
 	  | Prim.not_int _ => Arithun(Tal.Not,get_1primarg32 primargs)
 	  | Prim.neg_int Prim.W32 => Arithun(Tal.Neg,get_1primarg32 primargs)
-	  | Prim.neg_int is => classify_prim32 (Prim.minus_int is, arg32(Const_32 (Prim.int (is,TilWord64.fromUnsignedHalf 0w0)))::primargs)
+	  | Prim.neg_int is => classify_prim32 (Prim.minus_int is, [], arg32(Const_32 (Prim.int (is,TilWord64.fromUnsignedHalf 0w0)))::primargs)
 	  | Prim.abs_int is => error "abs_int should have been compiled away already"
 
           (* relops *)
@@ -769,7 +796,7 @@ structure LilToTalExp :> LILTOTALEXP =
 	  | Prim.hard_ztrap _ => error "No traps"
 
       (* conversions amongst floats, ints, uints with w32 and f64 *)
-	  | Prim.float2int => error "No floats"
+	  | Prim.float2int => error "f2int: No floats"
 
 	  | Prim.int2uint   _ => Id(get_1primarg32 primargs)
 	  | Prim.uint2int   _ => Id(get_1primarg32 primargs)
@@ -793,8 +820,8 @@ structure LilToTalExp :> LILTOTALEXP =
 	  | Prim.update t => EffPrim(update t,primargs)
 	  | Prim.setref   => EffPrim(setref,primargs)
 
-	  | Prim.create_table t       => OtherPrim(create_table t,primargs)
-	  | Prim.create_empty_table t => OtherPrim(create_empty_table t,primargs)
+	  | Prim.create_table t       => OtherPrim(create_table t cs,primargs)
+	  | Prim.create_empty_table t => OtherPrim(create_empty_table t cs,primargs)
 	  | Prim.sub t                => OtherPrim(sub t,primargs)
 	  | Prim.length_table t       => OtherPrim(length_table t,primargs)
 
@@ -884,7 +911,7 @@ structure LilToTalExp :> LILTOTALEXP =
       let
 
 	val state = 
-	  (case (classify_prim32 (p,primargs),destloc)
+	  (case (classify_prim32 (p,cs, primargs),destloc)
 	     of (Relop (cond,args),CC cclbls) => 
 	       let
 		 val state = conditional_branch state env cond cclbls
@@ -999,9 +1026,10 @@ structure LilToTalExp :> LILTOTALEXP =
 	val state = jmp_dest state env dest
       in 
 	case lp
-	  of Box =>  error "No floats"
+	  of Box =>  error "Box: No floats"
 	   | Tuple => 
 	    let
+	      val () = chat 5 "Allocating tuple\n"
 	      val state = TS.reserve_reg state Tal.Eax
 	      val state = 
 		(case dest
@@ -1012,6 +1040,8 @@ structure LilToTalExp :> LILTOTALEXP =
 
 	      val state = TS.emit state (Tal.Coerce(Tal.Reg Tal.Eax,[Tal.Forgetname]))
 	      val state = TS.emit state (Tal.ForgetUnique nm)
+
+	      val () = chat 5 "Initializing elements\n"
 
 	      fun loop state i sv32s = 
 		(case sv32s
@@ -1026,9 +1056,11 @@ structure LilToTalExp :> LILTOTALEXP =
 		     end)
 	      val (sz,state) = loop state 0w0 sv32s
 
+	      val () = chat 5 "Cleaning up\n"
 	      val state = TS.release_reg state Tal.Eax
 	      val state = spill_caller_save state
 	      val state = TS.emit state (Tal.Malloc (nm,sz*0w4,NONE))
+	      val () = chat 5 "Tuple done\n"
 	    in state
 	    end
 	   | Select w => 
@@ -1039,16 +1071,16 @@ structure LilToTalExp :> LILTOTALEXP =
 		   of CONT (d,Tal.Reg r) => (state,r)
 		    | CONT (d,gop) => 
 		     let
-		       val (state,r) = TS.reserve_temp_reg state
+		       val (state,r) = TS.free_temp_reg state
 		       val state = TS.init_temp state gop (Tal.Reg r,[])
 		     in (state,r)
 		     end
 		    | RET => (state,Tal.Eax)
-		    | _ => TS.reserve_temp_reg state)
+		    | _ => TS.free_temp_reg state)
 	      val (state,tr) = allocate_reg_for state env sv
 	      val md = tuple_field tr w
-	      val state = TS.emit state (Tal.Mov(md,(Tal.Reg r,[])))
-	      val state = sv32_trans_reg state env r sv
+	      val state = TS.emit state (Tal.Mov(Tal.Reg r,(md,[])))
+	      val state = sv32_trans_reg state env tr sv
 	    in state
 	    end
 	   | Dyntag => error "No exceptions"
@@ -1070,11 +1102,202 @@ structure LilToTalExp :> LILTOTALEXP =
 	    end
       end
     fun externapp_trans state env dest args = error "No externapps"
-    fun switch_trans state env dest args = error "No switches"
+
+
     fun raise_trans state env dest args = error "No raises"
     fun handle_trans state env dest args = error "No handles"
+    fun op64_trans state env dest oper = error "No float ops"
 
-    fun op32_trans state env dest oper = 
+    fun split (tagcount : w32) (arms : (w32 * label) list) = 
+      let
+	fun loop (tarms,varms,arms) = 
+	  (case arms
+	     of [] => (tarms,varms)
+	      | (w,l)::arms => 
+		 if w < tagcount then loop ((w,l)::tarms,varms,arms)
+		 else loop (tarms,(w,l)::varms,arms))
+      in loop ([],[],arms)
+      end
+
+    fun switch_trans state env dest switch =
+      let
+	val state = jmp_dest state env dest
+	val l = fresh_tal_lbl "merge"
+	val c = TS.typeof_stack state
+	val state = TS.emit_block state l (SOME c)
+
+	val fallthru_dest = 
+	  (case dest 
+	     of CONT (_,d) => CONT (F (l,false),d)
+	      | EFF _ => EFF (F (l,false))
+	      | _ => dest)
+
+	val jump_dest = 
+	  (case dest 
+	     of CONT (_,d) => CONT (L (l, false),d)
+	      | EFF _ => EFF (L (l,false))
+	      | CC (F _,d) => CC (L (l,false),d)
+	      | CC (d,F _) => CC (d, L (l,false))
+	      | _ => dest)
+		    
+      in
+	(case switch 
+	   of Sumcase {arg : sv32,arms :(w32  * var * exp) list,         default: exp option, rtype : con} =>
+	     let
+	       val t = TE.typeof_sv32 env arg
+	       val (tagcount,carriers) = Dec.C.sum_ml t
+	       val nontagcount = List.length carriers
+
+	       val bound = Name.fresh_named_var "bound"
+
+	       fun mapper (w,v,e) = 
+		 let 
+		   val env = TE.bind_var32 (env,(bound,LD.COps.sum2ksum' w t))
+		   val e = LS.varSv32ExpSubst v (Var_32 bound) e
+		   val l = fresh_tal_lbl "arm"
+		 in ((env,l,e),(w,l))
+		 end
+
+	       val (bodies,tags) = LO.map_unzip mapper arms
+
+	       val bodies = 
+		 (case default
+		    of SOME e => bodies @ [(env,fresh_tal_lbl "default",e)]
+		     | NONE => bodies)
+
+	       val args = 
+		 (case bodies
+		    of [] => error "no arms"
+		     | (env,l,e)::rest => (env,fallthru_dest,l,e)::(map (fn (env,l,e) => (env,jump_dest,l,e)) rest))
+
+	       val state = switch_arms state env args
+
+	       val (tarms,varms) = split tagcount tags
+
+	       val hasvalues = not (null varms)
+
+	       val state = fallthru state env false
+
+	       val (state,r) = allocate_reg_for state env arg
+
+	       val (state,vgop) = 
+		 (case TS.define_var state bound
+		    of (state,SOME gop) => (state,gop)
+		     | (state,NONE) => (state,Tal.Reg r))
+
+	       fun loop (state,arms) = 
+		 (case arms 
+		    of [] => state
+		     | (w,l)::arms => 
+		      let
+			val state = jcc_label state env Tal.Eq l false
+			val state = TS.emit state (Tal.Cmp((Tal.Reg r,[]),(Tal.Immed w,[])))
+		      in loop (state,arms)
+		      end)
+
+	       val varms_l = fresh_tal_lbl "carriers"	 
+	       val tarms_l = fresh_tal_lbl "tags"	 
+	       val name = Name.fresh_named_var "sumtg"
+
+	       val state =
+		 if nontagcount = 0 then state
+		 else if nontagcount = 1 then TS.emit_block state varms_l NONE
+		 else
+		   let
+		     val state = loop (state,varms)
+		     val state = TS.emit state (Tal.Mov (Tal.Reg r,(Tal.Prjr((r,[]),0w0,NONE),[])))
+		     val state = TS.emit_block state varms_l NONE
+		   in state
+		   end
+
+	       val state =
+		 if tagcount = 0w0 then fallthru state env false
+		 else
+		   let
+		     val state = loop (state,tarms)
+		     val state = TS.emit_block state tarms_l NONE
+		     val state = jcc_label state env Tal.Above varms_l false
+		     val state = TS.emit state (Tal.Cmp((Tal.Reg r,[]),(Tal.Immed 0w255,[])))
+		   in state
+		   end
+	       val state = TS.init_temp state vgop (Tal.Reg r,[])
+	       val state = TS.emit state (Tal.Nameobj(name,Tal.Reg r));
+	       val state = sv32_trans_reg state env r arg
+	     in state
+	     end
+	    | Dyncase {arg : sv32,arms :(sv32 * (var * con) * exp) list, default: exp,        rtype : con} =>
+	     error "No dyncases yet"
+	    | Intcase {arg : sv32,arms :(w32 * exp) list, size : size,   default: exp,        rtype : con} =>
+	     error "No intcases yet"
+	    | Ifthenelse {arg : conditionCode,  thenArm : exp, elseArm : exp, rtype : con} => 
+	     let
+	       val l_then = fresh_tal_lbl "then"
+	       val l_else = fresh_tal_lbl "else"
+
+	       val thenArg = (env,jump_dest,l_then,thenArm)
+	       val elseArg = (env,fallthru_dest,l_else,elseArm)
+
+	       val state = switch_arms state env [elseArg,thenArg]
+	       val state = fallthru state env false
+	       val state = cc_trans state env (F (l_then,false),L (l_else,false)) arg
+	     in state
+	     end)
+      end
+    and switch_arms bottomstate env args = 
+      let
+	fun loop (topstate,args) = 
+	  (case args
+	     of [] => topstate
+	      | ((env,dest,l,exp)::args) => 
+	       let
+		 val state = TS.match_registers bottomstate topstate
+		 val state = TS.emit_block (etrans state env dest exp) l NONE
+		 val topstate = TS.match_registers topstate state
+	       in loop (topstate,args)
+	       end)
+	val state =
+	  (case args
+	     of [] => bottomstate
+	      | (env,dest,l,exp)::args => 
+	       let
+		 val topstate = TS.emit_block (etrans bottomstate env dest exp) l NONE
+	       in loop (topstate,args)
+	       end)
+      in state
+      end
+    and cc_trans state env (nonzero,zero) cc = 
+      let
+	fun mk_jmp cont = 
+	  (case cont 
+	     of F (l,b) => L (l,b)
+	      | L _ => cont
+	      | _ => error "Shouldn't see steps here")
+
+	val state = 
+	  (case cc
+	     of Exp_cc e => etrans state env (CC (nonzero,zero)) e
+	      | And_cc (cc1,cc2) => 
+	       let
+		 val state = cc_trans state env (nonzero,zero) cc2
+		 val l_and = fresh_tal_lbl "andalso"
+		 val state = TS.emit_block state l_and NONE
+		 val state = cc_trans state env (F (l_and,false),mk_jmp zero) cc1
+	       in state
+	       end
+	      | Or_cc (cc1,cc2) =>
+	       let
+		 val state = cc_trans state env (nonzero,zero) cc2
+		 val l_or = fresh_tal_lbl "orelse"
+		 val state = TS.emit_block state l_or NONE
+		 val state = cc_trans state env (mk_jmp nonzero,F (l_or,false)) cc1
+	       in state
+	       end
+	      | Not_cc cc => cc_trans state env (zero,nonzero) cc)
+      in state
+      end
+
+
+    and op32_trans state env dest oper = 
       (case oper
 	 of Val sv32 => sv32_return_trans state env dest sv32
 	  | Prim32 args => prim32_trans state env dest args
@@ -1087,10 +1310,13 @@ structure LilToTalExp :> LILTOTALEXP =
 	  | Handle args => handle_trans state env dest args
 	  | App (f,eargs,fargs) => error "No Apps allowed!")
 
-    fun op64_trans state env dest oper = error "No float ops"
 
-    fun bnd_trans state env bnd = 
+
+    and bnd_trans state env bnd = 
       let
+	val () = debugdo (2,fn () => (print "Translating bnd:\n";
+				      PpLil.pp_bnd bnd;
+				      print "\n"))
 	val state = 
 	  (case bnd
 	     of Exp32_b (x,oper) => 
@@ -1099,12 +1325,15 @@ structure LilToTalExp :> LILTOTALEXP =
 		   (case TS.define_var state x
 		      of (state,SOME gop) => (state,CONT(S,gop))
 		       | (state,NONE) => (state,EFF S))
+
+		 val () = debugdo (3,fn () => (print "Exp32_b: calling op32_trans\n"))
 		 val state = op32_trans state env dest oper
+		 val () = debugdo (3,fn () => (print "Exp32_b: finished\n"))
 	       in state
 	       end
 	   | Exp64_b (xf,oper) =>
 	       let
-		 val dest = error "No floats"
+		 val dest = error "op64: No floats"
 		 val state = op64_trans state env dest oper
 	       in state
 	       end
@@ -1135,7 +1364,7 @@ structure LilToTalExp :> LILTOTALEXP =
       in state
       end
 
-    fun etrans (state : TS.state) (env : TE.env) (dest : dest) (exp : Lil.exp) : TS.state = 
+    and etrans (state : TS.state) (env : TE.env) (dest : dest) (exp : Lil.exp) : TS.state = 
       let 
 	val state = 
 	  (case eout exp 
@@ -1160,6 +1389,7 @@ structure LilToTalExp :> LILTOTALEXP =
 			   let
 			     val env = TE.bind_bnd outerenv bnd
 			     val state = workloop env bnds
+			     val () = debugdo(1,fn () => TS.sanity_check state)
 			     val state = bnd_trans state outerenv bnd
 			   in state
 			   end)
@@ -1174,7 +1404,7 @@ structure LilToTalExp :> LILTOTALEXP =
 	  | Prim.uint(Prim.W64,_) => error "64 bit ints not done"
 	  | Prim.int(ws,w64) => Tal.D4bytes (TilWord64.toUnsignedHalf w64,[])
 	  | Prim.uint(ws,w64) => Tal.D4bytes (TilWord64.toUnsignedHalf w64,[])
-	  | (Prim.float (Prim.F64, s)) => error "No floats yet"
+	  | (Prim.float (Prim.F64, s)) => error "data:No floats yet"
 	  | (Prim.float (Prim.F32, _)) => error "32 bit floats not done"
 	  | _ => error "Unexpected constant")
 
@@ -1264,6 +1494,9 @@ structure LilToTalExp :> LILTOTALEXP =
 					rtype       : con,
 					body        : exp}) : Tal.code_block list = 
       let
+
+	val ltype = LTC.ctrans env (TE.typeof_code env f)
+
 	val state = TS.new_state()
 	val env = TE.bind_cvars (env,tFormals)
 	val env = TE.bind_vars32 (env,eFormals)
@@ -1271,18 +1504,25 @@ structure LilToTalExp :> LILTOTALEXP =
 	(* currently irrelevant *)
 	val env = TE.set_ms_return env (Tal.cvoid (TTD.K.T32))
 
+	val () = chat 3 ("Translating code body: "^(Name.label2string l)^"\n")
 	val state = etrans state env RET body
+	val () = chat 4 "Placing code formals\n"
 	val state = place_formals state env (eFormals,fFormals)
 
 	val state = TS.new_state' (TS.get_inarg_size state,TS.get_temp_size state,TS.get_outarg_size state)
+
+	val () = chat 4 "Re-translating code body\n"
 	val state = etrans state env RET body
+	val () = chat 4 "Placing code formals\n"
 	val state = place_formals state env (eFormals,fFormals)
 	val framesize = TS.get_frame_size state
 	val state = TS.emit state (Tal.ArithBin(Tal.Sub,Tal.Reg Tal.Esp,Tal.Immed (framesize * 0w4)))
-	val ltype = LTC.ctrans env (TE.typeof_code env f)
-	val state = TS.emit_block state (TTD.E.mk_tal_lbl l) (SOME ltype)
 
+
+	val state = TS.emit_block state (TTD.E.mk_tal_lbl l) (SOME ltype)
 	val blocks = TS.get_blocks state
+
+	val () = chat 3 "Finished with code block\n"
       in blocks
       end
 
@@ -1296,7 +1536,7 @@ structure LilToTalExp :> LILTOTALEXP =
 
     fun data_block env d : Tal.data_block option = 
       (case d
-	 of Dboxed (l,sv64) => error "No floats yet"
+	 of Dboxed (l,sv64) => error "boxed:No floats yet"
 	  | Dtuple args => SOME(tuple_trans env args)
 	  | Darray (l,sz,t,svs) => error "No strings yet"
 	  | Dcode (l,f) => NONE)
@@ -1323,8 +1563,11 @@ structure LilToTalExp :> LILTOTALEXP =
 
     fun data_trans env data = 
       let
+	val () = chat 2 "Adding data types\n"
 	val env = add_data env data
+	val () = chat 2 "Translating data blocks\n"
 	val data_blocks = data_blocks env data
+	val () = chat 2 "Translating code blocks\n"
 	val code_blocks = code_blocks env data
       in (env,code_blocks,data_blocks)
       end
@@ -1348,7 +1591,7 @@ structure LilToTalExp :> LILTOTALEXP =
 			  data   : data list,
 			  confun : con}) : (string * Tal.tal_int * Tal.tal_imp * Tal.tal_int) = 
       let
-	val _ = chat 1 "  Translating timports\n"
+	val _ = chat 1 "Translating timports\n"
 	val (env,int_cons) = timports_trans (TE.empty()) timports
 	val int_abbrevs = Vector.fromList (TalAbbrev.C.abbrevs ())
 	val int_kindabbrevs = Vector.fromList (TalAbbrev.K.abbrevs ())
@@ -1362,13 +1605,13 @@ structure LilToTalExp :> LILTOTALEXP =
 	   int_vals = Vector.fromList [(TTD.E.l_unit,TTD.T.unit())]
 	   }
 
-	val _ = chat 1 "  Creating exports\n"
+	val _ = chat 1 "Creating exports\n"
 
-	val _ = chat 2 "  Translating kind of confun\n"
+	val _ = chat 2 "Translating kind of confun\n"
 	val lk = TE.kindof env confun
 	val k = LTC.ktrans lk
 
-	val _ = chat 2 "  Translating type of expfun\n"
+	val _ = chat 2 "Translating type of expfun\n"
 	val lc = get_entry_type env data entry_r
 	val c = LTC.ctrans env lc
 
@@ -1388,12 +1631,12 @@ structure LilToTalExp :> LILTOTALEXP =
 	val () = TA.K.reset ()
 	val () = TA.C.reset ()
 
-	val _ = chat 1 "  Translating confun\n"
+	val _ = chat 1 "Translating confun\n"
 	val c = LTC.ctrans env confun
 
 	val con_blocks = Vector.fromList [((TTD.E.mk_tal_lbl entry_c),k,c)]
 
-	val _ = chat 1 "  Translating Data\n"
+	val _ = chat 1 "Translating Data\n"
 	val (env,code_blocks,data_blocks) = data_trans env data
 	val imp_abbrevs = Vector.fromList (TalAbbrev.C.abbrevs ())
 	val imp_kindabbrevs = Vector.fromList (TalAbbrev.K.abbrevs ())
@@ -1408,7 +1651,7 @@ structure LilToTalExp :> LILTOTALEXP =
 	val () = TA.K.reset ()
 	val () = TA.C.reset ()
 
-	val _ = chat 1 "  Finished translating module to TAL\n"
+	val _ = chat 1 "Finished translating module to TAL\n"
       in (unitname,tal_int_i,tal_imp,tal_int_e)
       end
 
@@ -1422,12 +1665,12 @@ structure LilToTalExp :> LILTOTALEXP =
 
 	val env = foldl (fn ((l,a,k),env) => TE.bind_cvar (env,(a,k))) (TE.empty()) timports
 
-	val _ = chat 1 "  Creating con exports\n"
+	val _ = chat 1 "Creating con exports\n"
 	val (l,a,lk) = entry_c 
 	val k = LTC.ktrans lk
 	val int_cons = Vector.fromList [(a,k,Tal.AbsCon)]
 
-	val _ = chat 1 "  Creating term exports\n"
+	val _ = chat 1 "Creating term exports\n"
 	val (l,lc) = entry_r
 	val c = LTC.ctrans env lc
 	val int_vals = Vector.fromList [(TTD.E.mk_tal_lbl l,c)]
@@ -1442,7 +1685,7 @@ structure LilToTalExp :> LILTOTALEXP =
 	   }
 
 
-	val _ = chat 1 "  Finished translating interface to TAL\n"
+	val _ = chat 1 "<Finished translating interface to TAL\n"
 
 	val () = TA.K.reset ()
 	val () = TA.C.reset ()
