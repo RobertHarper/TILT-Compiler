@@ -8,6 +8,8 @@ sig
                     Il.sbnds ->
                     {cu_bnds : Nil.bnd list,
 		     vmap : (Name.var * Name.var) Name.VarMap.map}
-   val elaborator_specific_optimizations : bool ref
+
+    val debug : bool ref
+    val elaborator_specific_optimizations : bool ref
 
 end

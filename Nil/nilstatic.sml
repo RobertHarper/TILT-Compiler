@@ -307,7 +307,7 @@ struct
 		of (Record_c labels) => 
 		  Record_c (ListMergeSort.sort gt_label labels)
 		 | (Sum_c {known = SOME i,tagcount}) => 
-		  if (Word32.<=(Word32.fromInt 1,i) andalso Word32.<=(i,tagcount)) then
+		  if (Word32.<=(Word32.fromInt 0,i) andalso Word32.<(i,tagcount)) then
 		    pcon
 		  else
 		    error "Illegal index to sum constructor"
