@@ -952,9 +952,7 @@ struct
       val exhaustive = List.all (fn NONE => false | SOME _ => true) expopt_list
 
       val arg = APP(expose_exp,casearg)
-      val arg = (case IlUtil.exp_reduce (context, arg) of
-		     NONE => arg
-		   | SOME e => e)
+      val arg = IlUtil.exp_try_reduce (context, arg)
 
       val case_exp = 
 	  (CASE{sumtype=sumtype,

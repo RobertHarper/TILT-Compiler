@@ -818,9 +818,7 @@ structure Toil
 			       val _ = constrain e1
 			       val _ = constrain e2
 			       val exp = APP(e1,e2)
-			   in  ((case exp_reduce (context,exp) of
-				     NONE => exp
-				   | SOME e => e),
+			   in  (exp_try_reduce (context,exp), 
 				con_deref rescon,
 				va1 andalso va2 andalso va3)
 			   end)
