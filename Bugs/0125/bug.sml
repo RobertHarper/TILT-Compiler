@@ -1,13 +1,8 @@
-(*$import Int List Vector Array Math Char TextIO *)
-
+(*$import *)
 exception NoExceptionRaised
 
-fun getExn (f : unit -> 'a) = 
-    (f (); NoExceptionRaised) handle e => e
+val exn = (1 div 0; NoExceptionRaised) handle e => e
+    
+val _ = print (exnName exn)
 
-fun prExn(exnStr, exn) =
-    (print "\nShould be `"; print exnStr; print "':\n  ";
-     print (exnName exn); print "\n  ";
-     print (exnMessage exn));
-
-val _ = prExn ("Div",getExn(fn _ => 1 div 0));
+(* exnMessage works fine *)
