@@ -3,25 +3,30 @@ struct
 
     val error = fn s => Util.error "linknil.sml" s
 
-    structure Nil = Nil(structure Annotation = Annotation
+    structure Nil = Nil(structure ArgAnnotation = Annotation
 			structure ArgPrim = LinkIl.Prim)      
 	
     structure Ppnil = Ppnil(structure Nil = Nil
 			    structure Ppprim = LinkIl.Ppprim)
 
+    structure Alpha = Alpha(structure ArgNil = Nil)
+
     structure NilUtil = NilUtilFn(structure ArgNil = Nil
-				  structure IlUtil = LinkIl.IlUtil)
+				  structure IlUtil = LinkIl.IlUtil
+				  structure Alpha = Alpha)
 
     structure Nilcontext = NilContextFn(structure ArgNil = Nil
 					structure PPNil = Ppnil
 					structure Cont = Cont)
-(*      
+
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
 				      structure Prim = LinkIl.Prim
-				      structure Nil = Nil
+				      structure ArgNil = Nil
 				      structure NilUtil = NilUtil
-				      structure Cont = Cont)
-*)
+				      structure NilContext = Nilcontext
+				      structure Ppnil = Ppnil
+				      structure Alpha = Alpha)
+
 
     structure Tonil = Tonil(structure Ilstatic = LinkIl.IlStatic
 			    structure Ilutil = LinkIl.IlUtil
@@ -49,37 +54,45 @@ struct
     fun test s = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
-	    val SOME(sbnds, decs) = LinkIl.elaborate s
+	    val SOME(sbnds, ctxt) = LinkIl.elaborate s
 	    val _ = print "\n\n\nELABORATION SUCESSFULLY COMPLETED\n\n\n"; 
 	    val _ = LinkIl.Ppil.pp_sbnds sbnds
             val _ = print "\nSize of IL = ";
 	    val _ = print (Int.toString (LinkIl.IlUtil.mod_size 
 					 (LinkIl.MOD_STRUCTURE sbnds)));
             val _ = print "\n\n========================================\n"
+            val _ = (print "\n\ninitial_context = ctxt = \n";
+		     LinkIl.Ppil.pp_context ctxt;
+		     print "\n")
 	    val _ = Compiler.Profile.reset () 
-	    fun folder (v,(l,pc),(vmap,mmap)) = 
-		(case pc of
-		     PHRASE_CLASS_EXP _ => (VarMap.insert(vmap,v,l),mmap)
-		   | PHRASE_CLASS_CON _ => (VarMap.insert(vmap,v,l),mmap)
-		   | PHRASE_CLASS_MOD _ => (vmap,VarMap.insert(mmap,v,l))
-		   | PHRASE_CLASS_SIG _ => (vmap,mmap)
-		   | PHRASE_CLASS_OVEREXP _ => (vmap,mmap))
-	    val varmap = LinkIl.IlContext.Context_Varmap decs
+	    fun folder (v,(l,pc),maps as (vmap,mmap)) = 
+		let fun addv () = (VarMap.insert(vmap,v,l),mmap)
+		    fun addm () = (vmap,VarMap.insert(mmap,v,l))
+		in  (case pc of
+			 PHRASE_CLASS_EXP _ => addv()
+		       | PHRASE_CLASS_CON _ => addv()
+		       | PHRASE_CLASS_MOD _ => addm()
+		       | PHRASE_CLASS_SIG _ => maps
+		       | PHRASE_CLASS_OVEREXP _ => maps)
+		end
+	    val varmap = LinkIl.IlContext.Context_Varmap ctxt
 	    val (import_valmap,import_modmap) = (VarMap.foldli folder 
 						 (VarMap.empty,VarMap.empty) varmap)
-	    fun folder ((SBND(l,bnd)),(vmap,mmap)) = 
-		(case bnd of
-		     BND_EXP (v,_) => (VarMap.insert(vmap,v,l),mmap)
-		   | BND_CON (v,_) => (VarMap.insert(vmap,v,l),mmap)
-		   | BND_MOD (v,_) => (vmap,VarMap.insert(mmap,v,l)))
+	    fun folder ((SBND(l,bnd)),maps as (vmap,mmap)) = 
+		if (is_label_internal l)
+		    then maps
+		else (case bnd of
+			  BND_EXP (v,_) => (VarMap.insert(vmap,v,l),mmap)
+			| BND_CON (v,_) => (VarMap.insert(vmap,v,l),mmap)
+			| BND_MOD (v,_) => (vmap,VarMap.insert(mmap,v,l)))
 
 	    val (export_valmap,export_modmap) = foldl folder (VarMap.empty,VarMap.empty) sbnds
 	    fun folder (v,l,map) = let val vc = fresh_named_var "myvc"
-					 val vr = fresh_named_var "myvr"
-				     in  VarMap.insert(map,v,(vc,vr))
-				     end
+				       val vr = fresh_named_var "myvr"
+				   in  VarMap.insert(map,v,(vc,vr))
+				   end
 	    val import_varmap = VarMap.foldli folder VarMap.empty import_modmap
-	    val {cu_bnds = bnds, vmap = total_varmap} = Tonil.xcompunit decs import_varmap sbnds
+	    val {cu_bnds = bnds, vmap = total_varmap} = Tonil.xcompunit ctxt import_varmap sbnds
 	    val _ = print "\nPhase-splitting done.\n";
 
 	    fun folder (v,l,map) = let val lc = internal_label((label2string l) ^ "_c")
@@ -96,20 +109,17 @@ struct
 				exports = exports}
 	    val _ = (print "\n\n=======================================\n\n";
 		     print "phase-split results:\n";
-		     Ppnil.pp_bnds bnds)
+		     Ppnil.pp_module nilmod;
+		     print "\n")
 		
 	    val nilmod' = ToClosure.close_mod nilmod
 
-	in
-
-	    print "phase-splitting results:\n";
-	    Ppnil.pp_module nilmod;
-	    
-	    print "closure-conversion results:\n";
-	    Ppnil.pp_module nilmod';
-
-	    nilmod'
-
+	    val _ = (print "\n\n=======================================\n\n";
+		     print "closure-conversion results:\n";
+		     Ppnil.pp_module nilmod';
+		     print "\n")
+		
+	in  nilmod'
 	end
 end
 
