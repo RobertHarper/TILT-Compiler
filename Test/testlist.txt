@@ -119,7 +119,7 @@ n40     pass	ints aren't reals
 n41     pass	scoping of and
 n42     pass	scoping of val
 n43     pass	occurs check in type inference
-n44     fail	scoping of "and" in type definition
+n44     pass	scoping of "and" in type definition
 n45     pass	opaque datatypes and shadowing
 n46     pass	opaque datatypes and shadowing
 n47     pass	polymorphic exception
