@@ -3,13 +3,17 @@
  * RtlToMLRISC.cm
  * ========================================================================= *)
 
-group is
+group
 
-../Backend/backend.cm
+is
+
 ../Parser/parser.cm
 ../Rtl/rtl.cm
-../MLRISC.cm
 ../smlnj-lib.cm
+
+Backend/backend.cm
+
+MLRISC.cm
 
 BASIC_BLOCK.sig.sml
 CALL_CONVENTION.sig.sml
@@ -19,6 +23,7 @@ FLOAT_CONVENTION.sig.sml
 INTEGER_CONVENTION.sig.sml
 MLRISC_CONSTANT.sig.sml
 MLRISC_PSEUDO.sig.sml
+MLRISC_REGION.sig.sml
 MLTREE_EXTRA.sig.sml
 REGISTER_ALLOCATION.sig.sml
 REGISTER_DATA_FLOW.sig.sml
