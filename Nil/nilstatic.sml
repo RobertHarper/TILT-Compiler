@@ -1205,7 +1205,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       and con_equiv' ((D,T),c1,c2,k,sk) = 
 	let
 
-
 	  fun compare_list2 ([],c) = false
 	    | compare_list2 (a::b,c) = alpha_subequiv_con sk (a,c) orelse compare_list2 (b,c)
 
@@ -1573,9 +1572,12 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		       else (insert_kind(D,v1,Type_k),Alpha.rename(rename,v2,v1))
 		     val (D,rename) =
 		       Listops.foldl2 folder (D,Alpha.empty_context()) (vars1, vars2)
-		   in
-		     con_equiv ((D,T),from2,from1,Type_k,sk) andalso
-		     con_equiv ((D,T),to1,to2,Type_k,sk)
+		     fun equiv (c1, c2) =
+			 let val c1 = alphaCRenameCon rename c1
+			     val c2 = alphaCRenameCon rename c2
+			 in  con_equiv((D,T),c1,c2,Type_k,sk)
+			 end
+		   in  equiv(from1,from2) andalso equiv(to1,to2)
 		   end
 	     | (Var_c v, Var_c v') => eq_var(v,v')
 	     | (Typecase_c {arg=arg1,arms=arms1,default=d1,kind=k1}, 
