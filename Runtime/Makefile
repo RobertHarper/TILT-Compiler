@@ -137,16 +137,16 @@ alpha/opt/%.o: %.c
 # Assembling
 
 sparc/dbg/%.sparc.o: %.sparc.s
-	$(sparc_dbg_as) $(ASFLAGS) -o $@ $*.s
+	$(sparc_dbg_as) $(ASFLAGS) -o $@ $?
 
 sparc/opt/%.sparc.o: %.sparc.s
-	$(sparc_opt_as) $(ASFLAGS) -o $@ $*.s
+	$(sparc_opt_as) $(ASFLAGS) -o $@ $?
 
 alpha/dbg/%.alpha.o: %.alpha.s
-	$(alpha_dbg_as) $(ASFLAGS) -o $@ $*.s
+	$(alpha_dbg_as) $(ASFLAGS) -o $@ $?
 
 alpha/opt/%.alpha.o: %.alpha.s
-	$(alpha_opt_as) $(ASFLAGS) -o $@ $*.s
+	$(alpha_opt_as) $(ASFLAGS) -o $@ $?
 
 # Packing
 
