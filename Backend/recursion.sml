@@ -11,11 +11,6 @@ struct
   fun print_rtl_label ll = print (Pprtl.label2s ll)
   fun print_rtl_var v = print (Pprtl.var2s v)
 
-  fun print_node n = if (! debug)
-		       then print_rtl_label n
-		     else ()
-
-
   (* Given an Rtl module, return:
      - a mapping taking a function name to the functions it calls;
      - the list of strongly-connected components in the call graph;
@@ -40,7 +35,7 @@ struct
 		 print_rtl_label l;
 		 emitString "\n") else ();
 		if isLocal l
-		    then Graph.insert_edge(callgraph, (proc, l))
+		    then Graph.insert_edge callgraph (proc, l)
 		else ())
         | addCall _ _ = ()
 
@@ -49,8 +44,8 @@ struct
       fun addTailCall proc (Rtl.CALL{func=Rtl.LABEL' l,
 				     call_type=ML_TAIL, ...}) =
 	     if isLocal l
-		 then (Graph.insert_edge(tailcallgraph, (proc, l));
-		       Graph.insert_edge(tailcallgraph, (l, proc)))
+		 then (Graph.insert_edge tailcallgraph (proc, l);
+		       Graph.insert_edge tailcallgraph (l, proc))
 	     else ()
 	| addTailCall _ _ = ()
 
@@ -68,30 +63,33 @@ struct
 	let
 	  val procnames = procNames procs
 	in
-	  app (fn proc => Graph.insert_node(callgraph, proc)) procnames;
-	  app (fn proc => Graph.insert_node(tailcallgraph, proc)) procnames;
+	  app (Graph.insert_node callgraph) procnames;
+	  app (Graph.insert_node tailcallgraph) procnames;
 	  procLoop addCall procs;
 	  procLoop addTailCall procs
 	end
 
-      val ghash   = Graph.hash callgraph
-      val gunhash = Graph.unhash callgraph
-
       (* Create the graphs *)
       val _ = makeGraphs module;
 
-      val rtl_scc = map (map gunhash)
-	(Graph.sc_components print_node callgraph)
+      fun sc_components (g:Graph.graph) : Rtl.label list list =
+	  let val scc = Graph.scc g
+	      val _ = if (!debug) then
+			  app (app print_rtl_label) scc
+		      else ()
+	  in  scc
+	  end
 
-      val rtl_tailcall_cc = map (map gunhash)
-	(Graph.sc_components print_node tailcallgraph)
+      val rtl_scc = sc_components callgraph
+
+      val rtl_tailcall_cc = sc_components tailcallgraph
     in
 
       if (! debug) then
 	(emitString "\nCallgraph:\n";
 	 app (fn (n : Rtl.label) =>
 	      let
-		val edges = map gunhash (Graph.edges callgraph (ghash n))
+		val edges = Graph.edges callgraph n
 	      in
 		print_rtl_label n;
 		emitString " : ";
@@ -106,8 +104,7 @@ struct
       else ();
 
       (* Return info *)
-      {callee_map = fn n => map gunhash
-       (Graph.edges callgraph (ghash n)),
+      {callee_map = Graph.edges callgraph,
        rtl_scc    = rtl_scc,
        rtl_tailcall_cc = rtl_tailcall_cc}
     end
