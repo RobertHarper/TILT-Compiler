@@ -21,7 +21,32 @@ struct
   open Nil Prim
 
   val debug = ref false
-    
+  
+
+  local
+      datatype entry = CON of con * NilContext.context | KIND of kind * NilContext.context
+      val stack = ref ([] : entry list)
+      fun push e = stack := (e :: (!stack))
+  in
+      fun push_con(c,context) = push(CON(c,context))
+      fun push_kind(k,context) = push(KIND(k,context))
+      fun pop() = stack := (tl (!stack))
+      fun show_stack() = let val st = !stack
+			     val _ = stack := []
+			     fun show (CON(c,context)) =
+				 (print "con_valid called with constructor =\n";
+				  PpNil.pp_con c;
+				  print "\nand context"; NilContext.print_context context;
+				  print "\n\n")
+			       | show (KIND(k,context)) =
+				 (print "kind_valid called with constructor =\n";
+				  PpNil.pp_kind k;
+				  print "\nand context"; NilContext.print_context context;
+				  print "\n\n")
+			 in  app show (rev st)
+			 end
+  end
+
   (* Local rebindings from imported structures *)
 
   local
@@ -193,9 +218,9 @@ struct
 
   fun perr_k_k (kind1,kind2) = 
     (printl "Expected kind";
-     PpNil.pp_kind kind1;
+     PpNil.pp_kind kind1; print "\n";
      printl "Found kind";
-     PpNil.pp_kind kind2)
+     PpNil.pp_kind kind2; print "\n")
 
   fun perr_c_k_k (con,kind1,kind2) = 
     (printl "Constructor is";
@@ -327,9 +352,9 @@ struct
     (not (p (fst,snd))) andalso sorted_unique p (snd::rest)
     
   fun gt_label (l1,l2) = 
-    (case Name.compare_label (l1,l2)
-       of GREATER => true
-	| _ => false)
+	(case Name.compare_label (l1,l2) of
+	     GREATER => true
+	   | _ => false)
 
   fun subst_fn var1 con = 
     (fn var2 => 
@@ -386,6 +411,7 @@ struct
 	| NONE => NONE)
     | do_eta_fun (formals,body) = NONE
        
+(* XXX must sort here? *)
      (*PRE: elements are in head normal form*)
   fun do_eta_record [] = NONE
     | do_eta_record (entries as (label,con)::rest) = 
@@ -431,19 +457,33 @@ struct
 	let
 	  val kind = kindSubstReduce (D,kmap,kind)
 	in
-	  c_insert_kind (D,var,kind,fn C => k (D,(var,kind)::kmap))
+	  c_insert_kind (D,var,kind,fn D => k (D,(var,kind)::kmap))
 	end
     in
       c_foldl cont step (D,[]) kinds
     end  
 
   and kind_valid (D,kind) = 
+      let val _ = push_kind(kind,D)
+	  val _ = if (!debug)
+		      then (print "kind_valid called with constructor =\n";
+			    PpNil.pp_kind kind;
+			    print "\nand context"; NilContext.print_context D;
+			    print "\n\n")
+		  else ()
+        val res = kind_valid'(D,kind)
+	  val _ = pop()
+      in  res
+      end
+
+  and kind_valid' (D,kind) = 
     (case kind 
        of Type_k p => (Type_k p)
 	| Word_k p => (Word_k p)
 	| Singleton_k (p,kind,con) => 
 	 let
 	   val (con,kind) = (con_valid (D,con))
+	   val kind = strip_singleton kind
 	   val phase = get_phase kind
 	 in
 	   if type_or_word kind andalso sub_phase (p,phase) then
@@ -453,27 +493,27 @@ struct
 	 end
 	| Record_k elts => 
 	 let
-	   val elt_list = sequence2list elts
+	   fun entry_sort (((l1,_),_),((l2,_),_)) = gt_label(l1,l2)
+	   val elt_list = ListMergeSort.sort entry_sort (sequence2list elts)
 	   val vars_and_kinds = map (fn ((l,v),k) => (v,k)) elt_list
 
-	   fun base (D,kmap) = 
+	   fun base (D,rev_kmap) = 
 	     let
 	       val entries = 
 		 ListPair.map (fn (((l,_),_),(v,k)) => ((l,v),k)) 
-		 (elt_list,kmap)
-	     in
-	       (Record_k (list2sequence entries))
+		 (elt_list,rev rev_kmap)
+	     in  (Record_k (list2sequence entries))
 	     end
 	 in
 	   fold_kinds (D,vars_and_kinds,base)
 	 end
 	| Arrow_k (openness, formals, return) => 
 	 let
-	   fun base (D,kmap) = 
+	   fun base (D,rev_kmap) = 
 	     let
-	       val return' = kindSubstReduce (D,kmap,return)
+	       val return' = kindSubstReduce (D,rev_kmap,return)
 	     in
-	       (Arrow_k (openness, kmap,return'))
+	       (Arrow_k (openness, rev rev_kmap,return'))
 	     end
 	 in
 	   fold_kinds (D,formals,base)
@@ -481,22 +521,15 @@ struct
 
 
   and con_valid (D : context, constructor : con) : con * kind = 
-      if (!debug)
-	  then con_valid''(D,constructor)
-      else con_valid'(D,constructor)
-
-  and con_valid'' (D : context, constructor : con) : con * kind = 
-      let val _ = (print "con_valid called with constructor =\n";
-		   PpNil.pp_con constructor; 
-		   print "\nand context"; NilContext.print_context D;
-		   print "\n\n")
+      let val _ = push_con(constructor,D)
+	  val _ = if (!debug)
+		      then (print "con_valid called with constructor =\n";
+			    PpNil.pp_con constructor; 
+			    print "\nand context"; NilContext.print_context D;
+			    print "\n\n")
+		  else ()
 	  val res as (c,k) = con_valid'(D,constructor)
-	  val _ = (print "con_valid called with constructor =\n";
-		   PpNil.pp_con constructor; print "\n";
-		   print "returning k = \n";
-		   PpNil.pp_kind k; print "\n";
-		   print "returning c = \n";
-		   PpNil.pp_con c; print "\n")
+	  val _ = pop()
       in  res
       end
 
@@ -559,30 +592,38 @@ struct
 	    * all distinct - i.e., no duplicates
 	    *)
 
-val _ = (print "nilstatic.sml: MU_C case 0 with constructor =\n";
-	 PpNil.pp_con constructor; print "\n")
-	   val def_list = sequence2list defs
+         local 
+	     val temp = sequence2list defs
+	     fun make_entry (v,_) = (case find_kind(D,var) of
+					 NONE => NONE
+				       | SOME _ => SOME(v,Var_c(Name.derived_var v)))
+	     val table = List.mapPartial make_entry temp
+	     fun subster v = assoc_eq(eq_var,v,table)
+	     fun find_var v = (case assoc_eq(eq_var,v,table) of
+				   SOME (Var_c v) => v 
+				 | SOME _ => error "table has only Var_c's"
+				 | NONE => v)
+	     fun rebind [] pair = pair
+	       | rebind table (v,c) = (find_var v,substConInCon subster c)
+	 in  val def_list = map (rebind table) temp
+	     val var = find_var var
+	 end
 
 	   val var_kinds = map (fn (var,con) => (var,Word_k Runtime)) def_list
-val _ = print "nilstatic.sml: MU_C case 1\n"	     
 	   fun check_one D ((var,con),(cons,kinds)) =
 	     let
-		 val _ = (print "check_ont with con = ";
-			  PpNil.pp_con con; print "\n")
 	       val (con,kind) = (con_valid (D,con))
 	     in
 	       ((var,con)::cons,kind::kinds)
 	     end
 
 	   fun cont D = (List.foldr (check_one D) ([],[]) def_list)
-val _ = print "nilstatic.sml: MU_C case 2\n"
 	   val (cons,kinds) = c_insert_kind_list (D,var_kinds,cont)
 
-val _ = print "nilstatic.sml: MU_C case 3\n"
 	   val con' = Mu_c (list2sequence cons,var)
 
 	   val kind = singletonize (SOME Runtime,Word_k Runtime,con')
-val _ = print "nilstatic.sml: MU_C case 4\n"
+
 	 in
 	   if c_all is_word b_perr_k kinds then
 	     (con',kind)
@@ -635,11 +676,12 @@ val _ = print "nilstatic.sml: MU_C case 4\n"
        
 	| (v as (Var_c var)) => 
 	     (case find_kind (D,var) of
-		  SOME (Singleton_k (_,k,c as Var_c v')) => 
+		  SOME (k as (Singleton_k (_,k',c as Var_c v'))) => 
 		    if (eq_var(var,v')) 
-		      then (v,k) else con_valid(D,c)
+		      then (v,k) 
+		    else con_valid(D,c)
 	       | SOME (Singleton_k (_,k,c)) => con_valid(D,c)
-	       | SOME k => (v,k)
+	       | SOME k => (v,Singleton_k(get_phase k,k,v))
 	       | NONE => 
 		     error ("Encountered undefined variable " ^ (Name.var2string var) 
 			    ^ "in con_valid"))
@@ -722,6 +764,7 @@ val _ = print "nilstatic.sml: MU_C case 4\n"
        
         | (Let_c (sort,cbnd as (Con_cb(var,kind,con)::rest),body)) =>
 	   let
+	     val kind = kind_valid(D,kind) (* must normalize the constructors inside the kind *)
 	     val (con',kind') = con_valid (D,con)
 	     val recur_on = 
 	       case rest 
@@ -731,7 +774,11 @@ val _ = print "nilstatic.sml: MU_C case 4\n"
 	     if alpha_sub_kind (kind',kind) then
 	       con_valid (D,varConConSubst var con' recur_on)
 	     else
-	       error "Kind error in constructor declaration"
+	       (print "Kind error in constructor declaration.  Need k1 <= k2 where k1 =\n";
+		PpNil.pp_kind kind'; print "\nand k2 = \n";
+		PpNil.pp_kind kind; print "\nin context = \n";
+		NilContext.print_context D; print "\n";
+	       error "Kind error in constructor declaration")
 	   end
 	| (Let_c (sort,[],body)) => con_valid (D,body)
 	| (Closure_c (code,env)) => 
@@ -758,15 +805,16 @@ val _ = print "nilstatic.sml: MU_C case 4\n"
 	(* Sort records.  Useful later?*)
 	| (Crecord_c entries) => 
 	   let
-	     
+	     (* this list is not backwards *)
 	   fun base (D,entry_info) =
 	     let
 	       val (entries,entry_kinds) = unzip entry_info
 	       val kind = Record_k (list2sequence entry_kinds)
+
 	     in
-	       case (do_eta_record entries)
-		 of SOME c => (c,kind)
-		  | NONE => (Crecord_c entries,kind)
+		 case (do_eta_record entries) of
+		   SOME c => (c,kind)
+		 | NONE => (Crecord_c entries,kind)
 	     end
 	   
 	   fun split (D,(label,con)) = 
@@ -780,11 +828,11 @@ val _ = print "nilstatic.sml: MU_C case 4\n"
 	   val entries' = ListMergeSort.sort entry_sort entries
 	   fun entry_eq ((l1,_),(l2,_)) = eq_label(l1,l2)
 	   val distinct = sorted_unique entry_eq entries'
-	 in
-	   if distinct then
-	     c_fold_kind_acc base split D entries'
-	   else
-	     error "Labels in record of constructors are not distinct"
+
+	  in if distinct then
+	      c_fold_kind_acc base split D entries'
+	     else
+		 error "Labels in record of constructors are not distinct"
 	 end
 	| (Proj_c (rvals,label)) => 
 	 let
@@ -1772,4 +1820,11 @@ val _ = print "nilstatic.sml: MU_C case 4\n"
 		  PpNil.pp_exp (Handle_e (exp,function));
 		  error "Illegal body for handler"))
 	       )  (*esac*)
+
+      fun wrap f arg = (f arg) 
+	  handle e => (show_stack(); raise e)
+      val con_valid = wrap con_valid
+      val kind_valid = wrap kind_valid
+      val con_reduce = wrap con_reduce
+      val kind_reduce = wrap kind_reduce
 end
