@@ -1217,8 +1217,7 @@ functor EmitRtlMLRISC(
     fun RETURN _ =
 	  raise InvalidRtl "should have been translated to a branch"
 
-    fun SAVE_CS _ =
-	  [MLTree.CODE(CallConventionBasis.setAssignment(Procedure.saves()))]
+    fun SAVE_CS _ = []
 
     val RESTORE_CS =
 	  [MLTree.CODE(CallConventionBasis.getAssignment(Procedure.saves()))]
