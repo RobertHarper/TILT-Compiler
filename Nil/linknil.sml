@@ -1,4 +1,4 @@
-(*$import LinkIl Annotation Nil NilUtil NilContext PpNil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil *)
+(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist *)
 
 structure Linknil (* :> LINKNIL  *) =
   struct
@@ -10,66 +10,43 @@ structure Linknil (* :> LINKNIL  *) =
     val do_cleanup = ref false
     val do_opt = ref false
     val do_one_optimize = ref true
-    val do_vararg = Stats.bool("do_vararg")
-    val _ = do_vararg := false
+    val do_vararg = Stats.ff("do_vararg")
     val do_specialize = ref true
     val do_two_optimize = ref true
+    val do_hoist = Stats.tt("doHoist")
+    val do_cse = Stats.tt("doCSE")
     val show_size = ref false
     val show_hil = ref false
-    val show_phasesplit = ref false
-    val show_renamed = ref false
+    val show_phasesplit = Stats.ff("showPhaseSplit")
+    val show_renamed = Stats.ff("showRenaming1")
     val show_opt = ref false
     val show_one_optimize = ref false
     val show_vararg = ref false
-    val show_two_optimize = ref false
-    val show_specialize = ref false
+    val show_two_optimize = Stats.ff("showOptimize2")
+    val show_hoist = Stats.ff("showHoist")
+    val show_cse = Stats.ff("showCSE")
+    val show_specialize = Stats.ff("showSpecialize")
     val show_cc = ref false
     val show_before_rtl = ref false
 
     val number_flatten = 6
+    val _ = Stats.int("number_flatten") := number_flatten
     val error = fn s => Util.error "linknil.sml" s
 
-    val select_carries_types = Stats.bool "select_carries_types"
-    val profile = Stats.bool "nil_profile"
-    val short_circuit = Stats.bool "subst_short_circuit"
-    val hash = Stats.bool "subst_use_hash"
-    val bnds_made_precise = Stats.bool "bnds_made_precise"
-    val closure_print_free = Stats.bool "closure_print_free"
-    val _ = (select_carries_types:=false;
-	     profile := false;
-	     short_circuit := true;
-	     hash := false;
-	     bnds_made_precise := true;
-	     closure_print_free := false)
+    val profile = Stats.ff "nil_profile"
+    val short_circuit = Stats.tt "subst_short_circuit"
+    val hash = Stats.ff "subst_use_hash"
+    val bnds_made_precise = Stats.tt "bnds_made_precise"
+    val closure_print_free = Stats.ff "closure_print_free"
 
 
-    structure PpNil = Ppnil(structure Ppprim = LinkIl.Ppprim)
-    structure Alpha = Alpha()
-
-    structure NilPrimUtil = PrimUtil(structure Ppprim = LinkIl.Ppprim
-				     structure PrimUtilParam = NilPrimUtilParam)
-
-    structure NilSubst = NilSubstFn(structure PpNil = PpNil)
-
-    structure NilUtil = NilUtilFn(structure IlUtil = LinkIl.IlUtil
-				  structure PrimUtil = NilPrimUtil
-				  structure Alpha = Alpha
-				  structure Subst = NilSubst
-				  structure PpNil = PpNil)
-
-    structure NilError = NilErrorFn(structure PpNil = PpNil)
-
-    structure NilContext = NilContextFn(structure NilUtil = NilUtil
-					structure PpNil = PpNil
-					structure PrimUtil = NilPrimUtil
-					structure Subst = NilSubst)
-
-    structure Normalize = NormalizeFn(val number_flatten = number_flatten
-				      structure NilUtil = NilUtil
-				      structure PrimUtil = NilPrimUtil
-				      structure NilContext = NilContext
-				      structure PpNil = PpNil
-				      structure Subst = NilSubst)
+    structure Ppnil = Ppnil
+    structure Alpha = Alpha
+    structure NilSubst = NilSubst
+    structure NilUtil = NilUtil
+    structure NilError = NilError
+    structure NilContext = NilContext
+    structure Normalize = Normalize
 
 
 (*
@@ -77,77 +54,40 @@ structure Linknil (* :> LINKNIL  *) =
 				      structure PrimUtil = NilPrimUtil
 				      structure NilUtil = NilUtil
 				      structure NilContext = NilContext
-				      structure PpNil = PpNil
+				      structure Ppnil = Ppnil
 				      structure Alpha = Alpha
 				      structure NilError = NilError
 				      structure Subst = NilSubst
 				      structure Normalize = Normalize)
 
-*)
 
-    structure Tonil = Tonil(structure NilError = NilError
-			    structure Nilprimutil = NilPrimUtil
-			    structure Ilutil = LinkIl.IlUtil
-                            structure Ilcontext = LinkIl.IlContext
-                            structure IlStatic = LinkIl.IlStatic
-			    structure Nilcontext = NilContext
-			    structure Nilutil = NilUtil
-			    structure Normalize = Normalize
-			    structure Ppnil = PpNil
-			    structure Ppil = LinkIl.Ppil
-			    structure Subst = NilSubst)
-
-    structure Optimize = Optimize(structure Subst = NilSubst			
-				  structure NilUtil = NilUtil
-				  structure NilContext = NilContext
-				  structure Normalize = Normalize
-				  structure Ppnil = PpNil)
-(*
     structure Vararg = Vararg(val number_flatten = number_flatten
 			      structure Subst = NilSubst			
 			      structure NilUtil = NilUtil
 			      structure NilContext = NilContext
 			      structure Normalize = Normalize
-			      structure Ppnil = PpNil)
-*)
-    structure Specialize = Specialize(structure NilUtil = NilUtil
-				      structure Ppnil = PpNil)
+			      structure Ppnil = Ppnil)
 
-    structure Linearize = Linearize(structure NilUtil = NilUtil
-				    structure Ppnil = PpNil)
-
-(*
-    structure BetaReduce = BetaReduce(structure Prim = Prim
-				      structure NilUtil = NilUtil
-				      structure Ppnil = PpNil
-				      structure IlUtil = LinkIl.IlUtil
-				      structure Subst = NilSubst)
-
-    structure Cleanup = Cleanup(structure Prim = Prim
-				structure NilUtil = NilUtil
-				structure Ppnil = PpNil
-				structure IlUtil = LinkIl.IlUtil
-				structure Subst = NilSubst)
 *)
 
-    structure ToClosure = ToClosure(structure NilContext = NilContext
-				    structure Normalize = Normalize
-				    structure Ppnil = PpNil
-				    structure NilUtil = NilUtil
-				    structure Subst = NilSubst)
+    structure Tonil = Tonil
+    structure Optimize = Optimize
+    structure Specialize = Specialize
+    structure Linearize = Linearize
+    structure ToClosure = ToClosure
 
 	
 (*
     structure NilEval = NilEvaluate(structure Nil = Nil
 				    structure NilUtil = NilUtil
-				    structure Ppnil = PpNil
+				    structure Ppnil = Ppnil
 				    structure PrimUtil = NilPrimUtil
 				    structure Subst = NilSubst)
 
 
     structure DoOpts = DoOpts (structure Nil = Nil
 			       structure NilPrimUtil = NilPrimUtil 
-			       structure PpNil = PpNil
+			       structure Ppnil = Ppnil
 			       structure Linearize = Linearize
 			       structure NilContext = NilContext
 			       structure NilEval = NilEval
@@ -161,30 +101,34 @@ structure Linknil (* :> LINKNIL  *) =
      val phasesplit = Stats.timer("Phase-splitting",Tonil.phasesplit)
 
 
+    fun pass (showphase,phasename,phase,filename,nilmod) = 
+	let val _ = print "\n\n=======================================\n"
+	    val nilmod = Stats.timer(phasename,phase) nilmod
+	    val _ = (print phasename; print " complete: "; print filename; print "\n")
+	    val _ = if !show_size
+			then (print "  size = ";
+			      print (Int.toString (NilUtil.module_size nilmod));
+			      print "\n")
+		    else ()
+	    val _ = if !showphase
+			then (Ppnil.pp_module nilmod; print "\n")
+		    else ()
+	in  nilmod
+	end
 
-    fun showmod (showmod,showsize) str (filename,nilmod) = 
-	(print "\n\n=======================================\n";
-	 print str; print " complete: "; print filename; print "\n";
-	 if showsize
-	     then (print "  size = ";
-		   print (Int.toString (NilUtil.module_size nilmod));
-		   print "\n")
-	 else ();
-	 if showmod
-	    then (PpNil.pp_module nilmod;
-		  print "\n")
-	 else ())
-
+    fun transform (ref false,showphase,phasename,phase,filename,nilmod) = 
+	(print "\n===== SKIPPING "; print phasename; print "  =======\n"; nilmod)
+      | transform (ref true,showphase,phasename,phase,filename,nilmod) = 
+	pass (showphase,phasename,phase,filename,nilmod)
 	    
     fun pcompile' debug (filename,(ctxt,sbnd_entries)) =
 	let
 	    open Nil Il LinkIl.IlContext Name
 	    val D = NilContext.empty
 
-	    val nilmod = (Stats.timer("Phase-splitting",Tonil.phasesplit)) (ctxt,sbnd_entries)
-	    val _ = showmod debug "Phase-split" (filename,nilmod)
-	in
-	    nilmod
+	in  pass(show_phasesplit,
+		 "Phase-split", Tonil.phasesplit,
+		 filename, (ctxt,sbnd_entries))
 	end
 
     fun compile' debug (filename,(ctxt,sbnd_entries)) =
@@ -199,60 +143,57 @@ structure Linknil (* :> LINKNIL  *) =
 			    end
 		    else ()
 
-	    val nilmod = (Stats.timer("Phase-splitting",Tonil.phasesplit)) (ctxt,sbnd_entries)
-	    val _ = showmod (!show_phasesplit orelse debug,!show_size) "Phase-split" (filename, nilmod)
-
-(*
-	    val nilmod = if (!do_cleanup)
-			     then (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
-			 else nilmod
-	    val _ = if (!do_cleanup)
-			then showmod (debug,!show_size) "Cleanup" (filename, nilmod)
-		    else ()
-*)
-
-	    val nilmod = (Stats.timer("Linearization",Linearize.linearize_mod)) nilmod
-	    val _ = showmod (!show_renamed orelse debug,!show_size) "Renaming" (filename, nilmod)
+	    val nilmod = pass(show_phasesplit,
+			       "Phase-split", Tonil.phasesplit,
+			       filename, (ctxt,sbnd_entries))
 
 
-	    val nilmod = if (!do_one_optimize)
-			     then (Stats.timer("OneOptimize",Optimize.optimize)) nilmod
-			 else nilmod
-	    val _ = if (!do_one_optimize)
-			then showmod (!show_one_optimize orelse debug,!show_size) 
-			        "OneOptimize" (filename, nilmod)
-		    else ()
+	    val nilmod = transform(ref true, show_renamed,
+				 "Renaming1",Linearize.linearize_mod,
+				 filename, nilmod)
 
-(*
-	    val nilmod = (Stats.timer("Linearization__temp",Linearize.linearize_mod)) nilmod
-*)
+	    val nilmod = transform(do_one_optimize, show_one_optimize,
+				 "Optimize1", 
+				 Optimize.optimize
+				   {dead = true, projection = true, 
+				    cse = false, uncurry = true},
+				 filename, nilmod)
+
 	    val _ = if (!do_vararg) then error "no vararg" else ()
 (*
 	    val nilmod = if (!do_vararg)
 			     then (Stats.timer("Vararg",Vararg.optimize)) nilmod
 			 else nilmod
 	    val _ = if (!do_vararg)
-			then showmod (!show_vararg,!show_size) 
+			then transform (!show_vararg,!show_size) 
 			    "Vararg" (filename, nilmod)
 		    else ()
 *)
 
-	    val nilmod = if (!do_specialize)
-			     then (Stats.timer("Specialize",Specialize.optimize)) nilmod
-			 else nilmod
-	    val _ = if (!do_specialize)
-			then showmod (!show_specialize orelse debug,!show_size) 
-			        "Specialize" (filename, nilmod)
-		    else ()
+	    val nilmod = transform(do_specialize, show_specialize,
+				 "Specialize",
+				 Specialize.optimize,
+				 filename, nilmod)
+
+	    val nilmod = transform(do_hoist, show_hoist,
+				 "Hoist", 
+				 Hoist.optimize,
+				 filename, nilmod)
 
 
-	    val nilmod = if (!do_two_optimize)
-			     then (Stats.timer("TwoOptimize",Optimize.optimize)) nilmod
-			 else nilmod
-	    val _ = if (!do_two_optimize)
-			then showmod (!show_two_optimize orelse debug,!show_size) 
-			        "TwoOptimize" (filename, nilmod)
-		    else ()
+	    val nilmod = transform(do_two_optimize, show_two_optimize,
+				 "Optimize2", 
+				 Optimize.optimize
+				   {dead = true, projection = true, 
+				    cse = !do_cse, uncurry = false},
+				 filename, nilmod)
+
+(*
+	    val nilmod = transform(do_cse, show_cse,
+				 "CSE", 
+				 Anormalize.doModule true,
+				 filename, nilmod)
+*)
 
 
 (*
@@ -263,7 +204,7 @@ structure Linknil (* :> LINKNIL  *) =
 		nilmod
 	    val _ = 
 	      if (!typecheck_before_opt) then 
-		  showmod (debug,!show_size) "Pre-opt typecheck" (filename, nilmod')
+		  transform (debug,!show_size) "Pre-opt typecheck" (filename, nilmod')
 	      else ()
 *)
 
@@ -272,7 +213,7 @@ structure Linknil (* :> LINKNIL  *) =
 			    then (Stats.timer("Nil Optimization", 
 					      DoOpts.do_opts debug)) nilmod else nilmod
 	    val _ = if (!do_opt)
-			then showmod (!show_opt orelse debug,!show_size) 
+			then transform (!show_opt orelse debug,!show_size) 
 			    "Optimization" (filename,nilmod)
 		    else ()
 *)
@@ -285,21 +226,25 @@ structure Linknil (* :> LINKNIL  *) =
 		nilmod
 	    val _ = 
 	      if (!typecheck_after_opt andalso !do_opt) then 
-		  showmod (debug,!show_size) "Post-opt typecheck" (filename, nilmod')
+		  transform (debug,!show_size) "Post-opt typecheck" (filename, nilmod')
 	      else ()
 *)
 	
 (*
 	    val _ = print "starting beta-reduction\n"	  
 	    val nilmod = (Stats.timer("Beta-reduction",BetaReduce.reduceModule)) nilmod
-	    val _ = showmod debug  "Beta-reduction" nilmod
+	    val _ = transform debug  "Beta-reduction" nilmod
 *)
 
-	    val nilmod = (Stats.timer("Closure-conversion",ToClosure.close_mod)) nilmod
-	    val _ = showmod (debug orelse !show_cc,!show_size) "Closure-conversion" (filename, nilmod)
 
-	    val nilmod = (Stats.timer("Linearization2",Linearize.linearize_mod)) nilmod
-	    val _ = showmod (debug orelse !show_before_rtl,!show_size) "Renaming2" (filename, nilmod)
+	    val nilmod = transform(ref true, show_cc,
+				 "Closure-conversion", 
+				 ToClosure.close_mod,
+				 filename, nilmod)
+
+	    val nilmod = transform(ref true, show_before_rtl,
+				 "Renaming2",Linearize.linearize_mod,
+				 filename, nilmod)
 
 (*
  	    val nilmod' = 
@@ -309,7 +254,7 @@ structure Linknil (* :> LINKNIL  *) =
 		nilmod
 	    val _ = 
 	      if (!typecheck_after_cc) then 
-		  showmod (debug,!show_size) "Post-cc Typecheck" (filename, nilmod')
+		  transform (debug,!show_size) "Post-cc Typecheck" (filename, nilmod')
 	      else ()
 *)
 

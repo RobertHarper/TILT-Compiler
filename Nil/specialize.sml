@@ -1,4 +1,4 @@
-(*$import Nil NILUTIL PPNIL LibBase SPECIALIZE *)
+(*$import Nil NilUtil Ppnil LibBase SPECIALIZE *)
 
 (* A two-pass optimizer to remove unnecesssarily polymorphic code:
      Essentially, convert
@@ -12,9 +12,7 @@
        requires two calls and can lead to unnecessary constructor code.
 *)	
 
-functor Specialize(structure NilUtil : NILUTIL
-		   structure Ppnil : PPNIL)
-     :> SPECIALIZE =
+structure Specialize :> SPECIALIZE =
 struct
 
 	open Util Nil NilUtil Listops
@@ -368,7 +366,7 @@ struct
 				      | SOME (v,clist) => 
 					    let fun mapper ((v,k),c) = Con_b(Runtime,Con_cb(v,c))
 						val cbnds = Listops.map2 mapper (vklist,clist)
-					    in  cbnds @ do_vflist vflist'
+					    in  cbnds @ do_vflist (Sequence.toList vflist')
 					    end)
 			     | _ => do_vflist vflist)
 		      end

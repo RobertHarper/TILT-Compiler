@@ -1,7 +1,6 @@
-(*$import NIL PPNIL NILSUBST Stats *)
-functor NilSubstFn(structure PpNil : PPNIL)
+(*$import Ppnil NILSUBST Stats *)
 
-  :> NILSUBST 
+structure NilSubst :> NILSUBST 
   = 
   struct
 
@@ -14,11 +13,11 @@ functor NilSubstFn(structure PpNil : PPNIL)
     open Nil
 
     val debug = ref false
-    val profile = Stats.bool "nil_profile"
-    val short_circuit = Stats.bool "subst_short_circuit"
+    val profile = Stats.ff "nil_profile"
+    val short_circuit = Stats.ff "subst_short_circuit"
 
     (*Preliminary results suggest that this is a bad idea.*)
-    val subst_use_hash = Stats.bool "subst_use_hash"
+    val subst_use_hash = Stats.ff "subst_use_hash"
 
     val local_subst_count = ref 0
     fun get_subst_count() = !local_subst_count
@@ -307,13 +306,13 @@ functor NilSubstFn(structure PpNil : PPNIL)
       let
 	fun print_one (v,c) =
 	  (TextIO.print ((Name.var2string v)^"->");
-	   PpNil.pp_con c)
+	   Ppnil.pp_con c)
 	val _ = 
 	  if !debug then
 	    (Util.lprintl "Substituting map :";
 	     VarMap.appi print_one (#subst (#2 mapping));
 	     Util.lprintl "Into constructor :";
-	     PpNil.pp_con con;
+	     Ppnil.pp_con con;
 	     Util.printl "")
 	  else ()
       in
@@ -707,7 +706,7 @@ functor NilSubstFn(structure PpNil : PPNIL)
       else 
 	varConKindSubst
 
-    val printConSubst = print PpNil.pp_con
+    val printConSubst = print Ppnil.pp_con
 
 
 

@@ -7,7 +7,7 @@ sig
     structure NilContext : NILCONTEXT
 (*    structure NilStatic : NILSTATIC *)
     structure Normalize : NORMALIZE
-    structure PpNil : PPNIL
+    structure Ppnil : PPNIL
     structure ToClosure : TOCLOSURE
     sharing type NilContext.context = Normalize.context (* = NilStatic.context  *)
 

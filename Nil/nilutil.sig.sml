@@ -27,7 +27,7 @@ signature NILUTIL =
     val function_type : Nil.openness -> Nil.function -> Nil.con
 
     val makeLetC : Nil.conbnd list -> Nil.con -> Nil.con
-    val makeLetE : Nil.bnd list -> Nil.exp -> Nil.exp
+    val makeLetE : Nil.letsort -> Nil.bnd list -> Nil.exp -> Nil.exp
     val makeAppE : Nil.exp -> Nil.con list -> Nil.exp list -> Nil.exp list -> Nil.exp
     val extractCbnd : Nil.conbnd -> Nil.var * Nil.con
 

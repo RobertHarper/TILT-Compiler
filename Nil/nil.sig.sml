@@ -101,6 +101,8 @@ sig
     | select of label            (* record field selection; takes the record type *)
     | inject of TilWord32.word   (* slow; must be given one type that is
 				    reducible to a sum type *)
+    | inject_nonrecord of TilWord32.word   (* fast; the type of the injected field must reduce
+					            to a non-record type *)
     | inject_record of TilWord32.word 
                                  (* fast; must be given one type that is reducible
 				    to a sum type where the indicated component must 
@@ -110,6 +112,9 @@ sig
     | project_sum of TilWord32.word (* slow; same requirement as inject *)
     | project_sum_record of TilWord32.word * label (* fast; same requirement as inject_record;
 				                      the record type must contain the label given here *)
+    | project_sum_nonrecord of TilWord32.word (* fast; same as project_sum except
+					          we know that field is not a record type *)
+
 
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)

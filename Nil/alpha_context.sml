@@ -1,6 +1,6 @@
-(*$import Nil Listops ALPHA TopLevel Option *)
+(*$import Nil Listops ALPHA TopLevel Option ListPair *)
 
-functor Alpha()
+structure Alpha
     :> ALPHA =
   struct
 

@@ -3,7 +3,7 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 		    structure PrimUtil : PRIMUTIL
 			 where type con = Nil.con
 		         where type exp = Nil.exp
-		    structure PpNil : PPNIL
+		    structure Ppnil : PPNIL
 		    structure Alpha : ALPHA
 		    structure NilUtil : NILUTIL 
 		    structure NilContext : NILCONTEXT
@@ -25,8 +25,8 @@ struct
   val closed_check = ref false
   val debug = ref false
   val show_calls = ref false
-  val select_carries_types = Stats.bool "select_carries_types"
-  val bnds_made_precise = Stats.bool "bnds_made_precise"
+  val select_carries_types = Stats.ff "select_carries_types"
+  val bnds_made_precise = Stats.ff "bnds_made_precise"
 
   fun error s = Util.error "nilstatic.sml" s
   local
@@ -66,40 +66,40 @@ struct
 			   val _ = clear_stack()
 			   fun show (EXP(e,context)) = 
 				     (print "exp_valid called with expression =\n";
-				      PpNil.pp_exp e;
+				      Ppnil.pp_exp e;
 				      print "\nand context"; NilContext.print_context context;
 				      print "\n\n")
 			     | show (CON(c,context)) =
 				     (print "con_valid called with constructor =\n";
-				      PpNil.pp_con c;
+				      Ppnil.pp_con c;
 				      print "\nand context"; NilContext.print_context context;
 				      print "\n\n")
 			     | show (EQCON(c1,c2,context)) =
 				     (print "con_equiv called with constructor =\n";
-				      PpNil.pp_con c1; print "\nand\n";
-				      PpNil.pp_con c2;
+				      Ppnil.pp_con c1; print "\nand\n";
+				      Ppnil.pp_con c2;
 				      print "\nand context"; NilContext.print_context context;
 				      print "\n\n")
 			     | show (KIND(k,context)) =
 				     (print "kind_valid called with kind =\n";
-				      PpNil.pp_kind k;
+				      Ppnil.pp_kind k;
 				      print "\nand context"; NilContext.print_context context;
 				      print "\n\n")
 			     | show (SUBKIND(k1,k2,context)) =
 				     (print "sub_kind called with kind1 =\n";
-				      PpNil.pp_kind k1;
+				      Ppnil.pp_kind k1;
 				      print "\n                 and kind2 =\n";
-				      PpNil.pp_kind k2;
+				      Ppnil.pp_kind k2;
 				      print "\nand context"; NilContext.print_context context;
 				      print "\n\n")
 			     | show (BND(b,context)) =
 				     (print "bnd_valid called with bound =\n";
-				      PpNil.pp_bnd b;
+				      Ppnil.pp_bnd b;
 				      print "\nand context"; NilContext.print_context context;
 				      print "\n\n")
 			     | show (MODULE(m,context)) =
 				     (print "module_valid called with module =\n";
-				      PpNil.pp_module m;
+				      Ppnil.pp_module m;
 				      print "\nand context"; NilContext.print_context context;
 				      print "\n\n")
 		       in  app show (rev st)
@@ -328,7 +328,7 @@ struct
       let val _ = push_kind(kind,D)
 	  val _ = if (!show_calls)
 		      then (print "kind_valid called with kind =\n";
-			    PpNil.pp_kind kind;
+			    Ppnil.pp_kind kind;
 			    print "\nand context"; NilContext.print_context D;
 			    print "\n\n")
 		  else ()
@@ -371,7 +371,7 @@ struct
       let val _ = push_con(constructor,D)
 	  val _ = if (!show_calls)
 		      then (print "con_valid called with constructor =\n";
-			    PpNil.pp_con constructor; 
+			    Ppnil.pp_con constructor; 
 			    print "\nand context"; NilContext.print_context D;
 			    print "\n\n")
 		  else ()
@@ -552,9 +552,9 @@ struct
 	       else
 		   (print "Invalid kind for closure environment:";
 		    print " env_kind < klast failed\n";
-		    print "env_kind is "; PpNil.pp_kind env_kind; print "\n";
-		    print "klast is "; PpNil.pp_kind klast; print "\n";
-		    print "code_kind is "; PpNil.pp_kind code_kind; print "\n";
+		    print "env_kind is "; Ppnil.pp_kind env_kind; print "\n";
+		    print "klast is "; Ppnil.pp_kind klast; print "\n";
+		    print "code_kind is "; Ppnil.pp_kind code_kind; print "\n";
 		    (error "Invalid kind for closure environment" handle e => raise e))
 	   end
 	| (Crecord_c entries) => 
@@ -571,7 +571,7 @@ struct
 	     if distinct then
 	       (con,kind)
 	     else
-	       (PpNil.pp_list PpNil.pp_label' labels 
+	       (Ppnil.pp_list Ppnil.pp_label' labels 
 		("labels are: ",",",";",true);
 	       (error "Labels in record of constructors not distinct" handle e => raise e))
 	   end
@@ -613,7 +613,7 @@ struct
 	     case (cfun_kind) of
 	         (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
 		| _ => (print "Invalid kind for constructor application\n";
-			PpNil.pp_kind cfun_kind; print "\n";
+			Ppnil.pp_kind cfun_kind; print "\n";
 			(error "Invalid kind for constructor application" handle e => raise e))
 
 	   val (actuals,actual_kinds) = 
@@ -752,9 +752,9 @@ struct
 	 (if !debug then
 	    (lprintl "sub_kind failed!";
 	     printl "Kind:";
-	     PpNil.pp_kind kind1;
+	     Ppnil.pp_kind kind1;
 	     lprintl "Not equivalent to :";
-	     PpNil.pp_kind kind2;
+	     Ppnil.pp_kind kind2;
 	     printl "")
 	  else ();
 	    false)
@@ -1178,7 +1178,7 @@ struct
 		 case strip_record con_k
 		   of SOME (ls,cs) => (ls,cs)
 		    | NONE => (printl "Field is not a record ";
-			       PpNil.pp_con con_k;
+			       Ppnil.pp_con con_k;
 			       (error "Record injection on illegal field" handle e => raise e))
 	     in
 	       if c_all2 (fn (c1,c2) => type_equiv(D,c1,c2))
@@ -1189,7 +1189,7 @@ struct
 	     end
 	   else
 	     (printl "Expression ";
-	      PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
+	      Ppnil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
 	      (error "Illegal injection - field out of range" handle e => raise e))
 	 end
 	| (project_sum k,[argcon],[argexp]) => 
@@ -1280,7 +1280,7 @@ struct
 	       (case expand_mucon argcon of
 		    SOME pair => pair
 		  | NONE => (print "cannot expand reduced argcon of ROLL: ";
-			     PpNil.pp_con argcon; print "\n";
+			     Ppnil.pp_con argcon; print "\n";
 			     error "cannot expand reduced argcon of ROLL"))
 
 	   fun folder ((v,c),D) = NilContext.insert_kind_equation(D,v,c,Type_k)
@@ -1303,7 +1303,7 @@ struct
 	       (case expand_mucon argcon of
 		    SOME pair => pair
 		  | NONE => (print "cannot expand reduced argcon of UNROLL: ";
-			     PpNil.pp_con argcon; print "\n";
+			     Ppnil.pp_con argcon; print "\n";
 			     error "cannot expand reduced argcon of UNROLL"))
 
 	 in
@@ -1409,7 +1409,7 @@ struct
 	       else
 		 (perr_e_c (arg,argcon);
 		  print "given type:\n";
-	  	  PpNil.pp_con sum_decl; print "\n";
+	  	  Ppnil.pp_con sum_decl; print "\n";
 		  error "Type given for sum switch argument does not match found type")
 
 	     val cons = (* carrier should be normalized already *) 
@@ -1677,8 +1677,8 @@ struct
 		   {code=code,cenv=cenv,venv=venv,tipe=tipe}
 		 else
 		   (perr_c_c (tipe,con);
-		    print "code_type is "; PpNil.pp_con code_type; print "\n";
-		    print "con is "; PpNil.pp_con con; print "\n";
+		    print "code_type is "; Ppnil.pp_con code_type; print "\n";
+		    print "con is "; Ppnil.pp_con con; print "\n";
 		    (error "Type error in closure" handle e => raise e))
 	       end
 	     val D = insert_con_list (origD,zip vars tipes)
@@ -1693,7 +1693,7 @@ struct
       let val _ = push_exp(exp,D)
 	  val _ = if (!show_calls)
 		      then (print "exp_valid called with expression =\n";
-			    PpNil.pp_exp exp; 
+			    Ppnil.pp_exp exp; 
 			    print "\nand context"; NilContext.print_context D;
 			    print "\n\n")
 		  else ()
@@ -1742,9 +1742,9 @@ struct
 		 (o_perr_c_c "Length mismatch in prim args") (arg_types,exp_cons) then
 		  return_type
 		else
-		  (PpNil.pp_list PpNil.pp_con' arg_types ("\nExpected arguments of types: ",",","\n",false);
-		   PpNil.pp_list PpNil.pp_exp' exps ("\nFound arguments: ",",","\n",false);
-		   PpNil.pp_list PpNil.pp_con' exp_cons ("\nof types: ",",","\n",false);
+		  (Ppnil.pp_list Ppnil.pp_con' arg_types ("\nExpected arguments of types: ",",","\n",false);
+		   Ppnil.pp_list Ppnil.pp_exp' exps ("\nFound arguments: ",",","\n",false);
+		   Ppnil.pp_list Ppnil.pp_con' exp_cons ("\nof types: ",",","\n",false);
 		   error "Illegal type for Prim op")
 	      val exp = Prim_e (PrimOp prim,cons,exps)
 	    in
@@ -1792,9 +1792,9 @@ struct
 		if eq_len (tformals,kinds) then
 		  foldl2 check_one_kind (D,Subst.empty()) (tformals,kinds)
 		else
-		  (PpNil.pp_list (fn (v,k) => PpNil.pp_kind' k) tformals 
+		  (Ppnil.pp_list (fn (v,k) => Ppnil.pp_kind' k) tformals 
 		   ("\nFormal param kinds are: ",",","\n",false);
-		   PpNil.pp_list PpNil.pp_con' cons ("\nActuals are: ",",","\n",false);
+		   Ppnil.pp_list Ppnil.pp_con' cons ("\nActuals are: ",",","\n",false);
 		   error "Length mismatch between formal and actual constructor parameter lists" 
 		   handle e => raise e)
 
@@ -1815,9 +1815,9 @@ struct
 		  else
 		    (error "Expected float for float parameter" handle e => raise e)
 		else
-		  (PpNil.pp_list PpNil.pp_con' formals ("\nFormal Types: (",", ",")\n",false);
-		   PpNil.pp_list PpNil.pp_con' t_cons ("\nActual Types: (",", ",")\n",false);
-		   PpNil.pp_list PpNil.pp_exp' t_exps ("\nActuals: (",", ",")\n",false);
+		  (Ppnil.pp_list Ppnil.pp_con' formals ("\nFormal Types: (",", ",")\n",false);
+		   Ppnil.pp_list Ppnil.pp_con' t_cons ("\nActual Types: (",", ",")\n",false);
+		   Ppnil.pp_list Ppnil.pp_exp' t_exps ("\nActuals: (",", ",")\n",false);
 		   perr_e exp;
 		   error "Formal/actual parameter type mismatch" handle e => raise e)
 
@@ -1866,16 +1866,16 @@ struct
 		     (Handle_e (exp',function'),con'')
 		   else
 		     (print "Declared as : \n";
-		      PpNil.pp_con con';
+		      Ppnil.pp_con con';
 		      print "\nExpected : \n";
-		      PpNil.pp_con con'';
+		      Ppnil.pp_con con'';
 		      print "\nFound : \n";
-		      PpNil.pp_con con''';
+		      Ppnil.pp_con con''';
 		      (error "Handler body has incorrect type" handle e => raise e))
 		 end
 	       | _ => 
 		 (print "Body is :\n";
-		  PpNil.pp_exp (Handle_e (exp,function));
+		  Ppnil.pp_exp (Handle_e (exp,function));
 		  (error "Illegal body for handler" handle e => raise e)))
 	         (*esac*)
 *)
@@ -1887,7 +1887,7 @@ struct
 	  val _ = push_bnd(bnd',D)
 	  val _ = if (!show_calls)
 		    then (print "bnd_valid called with bnd =\n";
-			  PpNil.pp_bnd bnd';
+			  Ppnil.pp_bnd bnd';
 			  print "\nand context"; NilContext.print_context D;
 			  print "\n\n")
 		  else ()
@@ -1948,7 +1948,7 @@ struct
 	let val _ = push_mod(module,D)
 	  val _ = if (!show_calls)
 		    then (print "module_valid called with module =\n";
-			  PpNil.pp_module module;
+			  Ppnil.pp_module module;
 			  print "\nand context"; NilContext.print_context D;
 			  print "\n\n")
 		  else ()

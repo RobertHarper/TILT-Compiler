@@ -1,30 +1,22 @@
-(*$import NIL PPNIL NILUTIL NILCONTEXT NILSUBST NORMALIZE PRIMUTIL *)
-functor NormalizeFn(val number_flatten : int
-		    structure PpNil : PPNIL
-		    structure NilUtil : NILUTIL 
-		    structure PrimUtil : PRIMUTIL 
-			where type con = Nil.con
-			where type exp = Nil.exp
-		    structure NilContext : NILCONTEXT
-		    structure Subst : NILSUBST
-			where type 'a subst = 'a NilContext.subst) 
-    :> NORMALIZE 
-  where type context = NilContext.context 
-  and type 'a subst = 'a Subst.subst = 
+(*$import Ppnil NilUtil NilContext NilSubst NORMALIZE *)
+
+structure Normalize :> NORMALIZE =
 struct	
 
+
+    val number_flatten = Stats.int("number_flatten")
 
   open Nil 
   open Prim
 
-  type 'a subst = 'a Subst.subst
-  val substConInKind= Subst.substConInKind
-  val substConInExp = Subst.substConInExp
-  val substConInCon = Subst.substConInCon
-  val empty = Subst.empty
-  val add = Subst.add
-  val substitute = Subst.substitute
-  val fromList = Subst.fromList
+  type 'a subst = 'a NilSubst.subst
+  val substConInKind= NilSubst.substConInKind
+  val substConInExp = NilSubst.substConInExp
+  val substConInCon = NilSubst.substConInCon
+  val empty = NilSubst.empty
+  val add = NilSubst.add
+  val substitute = NilSubst.substitute
+  val fromList = NilSubst.fromList
 
   val map_annotate = NilUtil.map_annotate
   val is_var_c = NilUtil.is_var_c
@@ -91,13 +83,13 @@ val show_context = ref false
 	 let
 	   fun folder (((label,var),kind),subst) = 
 	     let
-	       val kind = Subst.substConInKind subst kind
+	       val kind = NilSubst.substConInKind subst kind
 	       val con = pull (Proj_c (c,label),kind)
-	       val subst = Subst.add subst (var,con)
+	       val subst = NilSubst.add subst (var,con)
 	     in
 	       ((label,con),subst)
 	     end
-	   val (entries,subst) = Listops.foldl_acc folder (Subst.empty()) (Sequence.toList elts)
+	   val (entries,subst) = Listops.foldl_acc folder (NilSubst.empty()) (Sequence.toList elts)
 	 in
 	   (Crecord_c entries)
 	 end
@@ -119,6 +111,9 @@ val show_context = ref false
 	 end)
     end
 
+  val warnDepth = 1000
+  val maxDepth = 10000
+
 
   local
       datatype entry = 
@@ -128,7 +123,7 @@ val show_context = ref false
       | BND of bnd * (NilContext.context * (con subst))
       | MODULE of module * (NilContext.context * (con subst))
       val stack = ref ([] : entry list)
-      val maxdepth = 10000
+
       val depth = ref 0
       fun push e = (depth := !depth + 1;
 		    stack := (e :: (!stack));
@@ -136,7 +131,7 @@ val show_context = ref false
 			then (print "****normalize.sml: stack depth = ";
 			      print (Int.toString (!depth)))
 		    else ();
-		    if (!depth) > maxdepth
+		    if (!depth) > maxDepth
 			then error "stack depth exceeded"
 		    else ())
   in
@@ -152,35 +147,35 @@ val show_context = ref false
 			   val _ = clear_stack()
 			   fun show (EXP(e,(context,s))) = 
 			     (print "exp_normalize called with expression =\n";
-			      PpNil.pp_exp e;
+			      Ppnil.pp_exp e;
 			      print "\nand context"; 
 			      NilContext.print_context context;
 			      print "\n and subst";
-			      Subst.printConSubst s;
+			      NilSubst.printConSubst s;
 			      print "\n\n")
 			     | show (CON(c,(context,s))) =
 				     (print "con_normalize called with constructor =\n";
-				      PpNil.pp_con c;
+				      Ppnil.pp_con c;
 				      print "\nand context"; NilContext.print_context context;
-				      print "\n and subst";  Subst.printConSubst s;
+				      print "\n and subst";  NilSubst.printConSubst s;
 				      print "\n\n")
 			     | show (KIND(k,(context,s))) =
 				     (print "kind_normalize called with kind =\n";
-				      PpNil.pp_kind k;
+				      Ppnil.pp_kind k;
 				      print "\nand context"; NilContext.print_context context;
-				      print "\n and subst";  Subst.printConSubst s;
+				      print "\n and subst";  NilSubst.printConSubst s;
 				      print "\n\n")
 			     | show (BND(b,(context,s))) =
 				     (print "bnd_normalize called with bound =\n";
-				      PpNil.pp_bnd b;
+				      Ppnil.pp_bnd b;
 				      print "\nand context"; NilContext.print_context context;
-				      print "\n and subst";  Subst.printConSubst s;
+				      print "\n and subst";  NilSubst.printConSubst s;
 				      print "\n\n")
 			     | show (MODULE(m,(context,s))) =
 				     (print "module_normalize called with module =\n";
-				      PpNil.pp_module m;
+				      Ppnil.pp_module m;
 				      print "\nand context"; NilContext.print_context context;
-				      print "\n and subst";  Subst.printConSubst s;
+				      print "\n and subst";  NilSubst.printConSubst s;
 				      print "\n\n")
 		       in  app show (rev st)
 		       end
@@ -202,7 +197,7 @@ val show_context = ref false
 		 | NONE => (error "Field not in record" handle e => raise e))
 	    | NONE => (false,proj))
     | beta_conrecord' proj = 
-	   (PpNil.pp_con proj;
+	   (Ppnil.pp_con proj;
 	    (error "beta_conrecord called on non-projection" handle e => raise e))
 
   fun beta_conrecord proj = #2(beta_conrecord' proj)
@@ -259,7 +254,7 @@ val show_context = ref false
 		(case get_shape' D code of
 	          Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
 		| k => (print "Invalid closure: code component does not have code kind\n";
-			PpNil.pp_kind k; print "\n";
+			Ppnil.pp_kind k; print "\n";
 			error "Invalid closure: code component does not have code kind" 
 			handle e => raise e))		      
 		val (first,(v,klast)) = split vklist
@@ -289,7 +284,7 @@ val show_context = ref false
 		Record_k kinds => find (Sequence.toList kinds)
 	      | other => 
 		    (print "Non-record kind returned from get_shape' in projection:\n";
-		     PpNil.pp_kind other; print "\n";
+		     Ppnil.pp_kind other; print "\n";
 		     error "Non-record kind returned from get_shape' in projection" 
 		     handle e => raise e))
 	 end
@@ -300,7 +295,7 @@ val show_context = ref false
 		case cfun_kind of
 		  (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
 		| _ => (print "Invalid (non-arrow) kind for constructor application\n";
-			PpNil.pp_kind cfun_kind; print "\n";
+			Ppnil.pp_kind cfun_kind; print "\n";
 			(error "Invalid kind for constructor application" handle e => raise e))
 	      fun folder (((v,k),c),D) = NilContext.insert_kind_equation(D,v,c,k)
 	      val D = foldl folder D (zip formals actuals)
@@ -357,7 +352,7 @@ val show_context = ref false
 		 | NONE => default)
 	    | _ => typecase)
 	| beta_typecase' _ = 
-	   (PpNil.pp_con typecase;
+	   (Ppnil.pp_con typecase;
 	    (error "beta_typecase called on non type case" handle e => raise e))
     in
       map_annotate beta_typecase' typecase
@@ -399,7 +394,7 @@ val show_context = ref false
 	in  beta_confun'' actuals con
 	end
       | beta_confun' _ _ con =
-	(PpNil.pp_con con;
+	(Ppnil.pp_con con;
 	 (error "beta_confun called on non-application" handle e => raise e))
 
 
@@ -439,11 +434,11 @@ val show_context = ref false
 	val _ = push_kind(kind,state)
 	val _ = if (!show_calls)
 		  then (print "kind_normalize called with kind =\n";
-			PpNil.pp_kind kind; 
+			Ppnil.pp_kind kind; 
 			if (!show_context)
 			    then (print "\nand context"; NilContext.print_context D)
 			else ();
-			print "\n and subst";  Subst.printConSubst subst;
+			print "\n and subst";  NilSubst.printConSubst subst;
 			print "\n\n")
 		else ()
 	val res = kind_normalize state kind
@@ -461,10 +456,9 @@ val show_context = ref false
 	   val elt_list = Sequence.toList elts
 	   val (labels,vars_and_kinds) = unzip (map (fn ((l,v),k) => (l,(v,k))) elt_list)
 	   val (vars_and_kinds,state) =  bind_at_kinds state vars_and_kinds
-	   val elts = 
-	     map2 (fn (l,(v,k)) => ((l,v),k)) (labels,vars_and_kinds)
+	   val elts = map2 (fn (l,(v,k)) => ((l,v),k)) (labels,vars_and_kinds)
 	 in  
-	   Record_k elts
+	   Record_k (Sequence.fromList elts)
 	 end
 	| Arrow_k (openness, formals, return) => 
 	 let
@@ -480,11 +474,11 @@ val show_context = ref false
 	val _ = push_con(con,state)
 	val _ = if (!show_calls)
 		  then (print "con_normalize called with con =\n";
-			PpNil.pp_con con; 
+			Ppnil.pp_con con; 
 			if (!show_context)
 			    then (print "\nand context"; NilContext.print_context D)
 			else ();
-			print "\n and subst";  Subst.printConSubst subst;
+			print "\n and subst";  NilSubst.printConSubst subst;
 			print "\n\n")
 		else ()
 	val res = con_normalize state con
@@ -770,9 +764,9 @@ val show_context = ref false
 	val _ = push_exp(exp,state)
 	val _ = if (!show_calls)
 		  then (print "exp_normalize called with expression =\n";
-			PpNil.pp_exp exp; 
+			Ppnil.pp_exp exp; 
 			print "\nand context"; NilContext.print_context D;
-			print "\n and subst";  Subst.printConSubst subst;
+			print "\n and subst";  NilSubst.printConSubst subst;
 			print "\n\n")
 		else ()
 	val res = exp_normalize state exp
@@ -899,14 +893,16 @@ val show_context = ref false
 		    if (length defs = 1) 
 			then (v,mu_con)
 		    else (v,Proj_c(mu_con,NilUtil.generate_tuple_label(n+1)))
-		val subst = Subst.fromList(Listops.mapcount mapper defs)
+		val subst = NilSubst.fromList(Listops.mapcount mapper defs)
 		val (_,c) = List.nth(defs,which-1)
-	    in  Subst.substConInCon subst c
+	    in  NilSubst.substConInCon subst c
 	    end
 	in  (case #2(reduce_hnf(D,mu_con)) of
 		 Mu_c (_,defs) => extract(defs,1)
 	       | Proj_c(Mu_c (_,defs), l) => extract(defs,lab2int l (Sequence.length defs))
-	       | _ => error "expandMuType reduced to non-mu type")
+	       | c => (print "expandMuType reduced to non-mu type";
+		       Ppnil.pp_con c;
+		       error "expandMuType reduced to non-mu type"))
 	end
 
   and con_reduce_letfun state (sort,coder,var,formals,body,body_kind,rest,con) = 
@@ -951,17 +947,18 @@ val show_context = ref false
 
 	| (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	    let val (D,subst) = state
-		val con = Subst.substConInCon subst con
+		val con = NilSubst.substConInCon subst con
 		val subst = add subst (var,con)
 	    in  (PROGRESS,subst,Let_c(sort,rest,body))
 	    end
 	| (Let_c (sort,[],body)) => (PROGRESS,#2 state,body)
-	| (Closure_c (c1,c2)) => (HNF, #2 state, constructor)
-			(* (case con_reduce state c1 of
-				      (true,subst,c) => (true,subst,Closure_c(c,c2))
-				    | _ => (false,#2 state,constructor)) *)
+	| (Closure_c (c1,c2)) => 
+	    let val (progress,subst,c1) = con_reduce state c1 
+	    in  (progress,subst,Closure_c(c1,c2))
+	    end
 	| (Crecord_c _) => (HNF,#2 state,constructor)
 	| Typeof_c e => (PROGRESS, #2 state, type_of(#1 state,e))
+	| (Proj_c (Mu_c _,lab)) => (HNF,#2 state,constructor)
 	| (Proj_c (c,lab)) => 
 	      (case con_reduce state c of
 		   (PROGRESS,subst,c) => (PROGRESS,subst,Proj_c(c,lab))
@@ -991,38 +988,44 @@ val show_context = ref false
 
 
 
-    and reduce_once (D,con) = let val (progress,subst,c) = con_reduce(D,Subst.empty()) con
-			      in  Subst.substConInCon subst c
+    and reduce_once (D,con) = let val (progress,subst,c) = con_reduce(D,NilSubst.empty()) con
+			      in  NilSubst.substConInCon subst c
 			      end
     and reduce_until (D,pred,con) = 
         let fun loop n (subst,c) = 
             let val _ = if (n>1000) then error "reduce_until exceeded 1000 reductions" else ()
 	    in  case (pred c) of
-                SOME info => REDUCED(valOf(pred (Subst.substConInCon subst c)))
+                SOME info => REDUCED(valOf(pred (NilSubst.substConInCon subst c)))
 	      | NONE => let val (progress,subst,c) = con_reduce(D,subst) c
 			in  case progress of
 				PROGRESS => loop (n+1) (subst,c) 
-			      | HNF => (case pred (Subst.substConInCon subst c) of
-		                    SOME _ => REDUCED(valOf(pred (Subst.substConInCon subst c)))
-				  | NONE => UNREDUCED (Subst.substConInCon subst c))
-			      | IRREDUCIBLE => UNREDUCED (Subst.substConInCon subst c)
+			      | HNF => (case pred (NilSubst.substConInCon subst c) of
+		                    SOME _ => REDUCED(valOf(pred (NilSubst.substConInCon subst c)))
+				  | NONE => UNREDUCED (NilSubst.substConInCon subst c))
+			      | IRREDUCIBLE => UNREDUCED (NilSubst.substConInCon subst c)
 			end
 	    end
-        in  loop 0 (Subst.empty(),con)
+        in  loop 0 (NilSubst.empty(),con)
         end
     and reduce_hnf (D,con) = 
         let fun loop n (subst,c) = 
-            let val _ = if (n>1000) then (print "reduce_hnf exceeded 1000 reductions\n";
-					  PpNil.pp_con (Subst.substConInCon subst c); print "\n\n";
-					  print "reduce_hnf exceeded 1000 reductions")
+            let val _ = if (n>maxDepth) 
+			    then (print "reduce_hnf exceeded max reductions\n";
+				  Ppnil.pp_con (NilSubst.substConInCon subst c); print "\n\n";
+				  error "reduce_hnf exceeded max reductions")
 			 else ()
+		val _ = if (n > 0 andalso n mod warnDepth = 0) 
+			    then (print "reduce_hnf at iteration #";
+				  print (Int.toString n);
+				  print "\n")
+			else ()
 	        val (progress,subst,c) = con_reduce(D,subst) c  
 	    in  case progress of
 			 PROGRESS => loop (n+1) (subst,c) 
-		       | HNF => (true, Subst.substConInCon subst c)
-		       | IRREDUCIBLE => (false, Subst.substConInCon subst c)
+		       | HNF => (true, NilSubst.substConInCon subst c)
+		       | IRREDUCIBLE => (false, NilSubst.substConInCon subst c)
 	    end
-        in  loop 0 (Subst.empty(),con)
+        in  loop 0 (NilSubst.empty(),con)
         end
 
     and reduce(D,con) = con_normalize D con
@@ -1032,17 +1035,17 @@ val show_context = ref false
 	(case #2(reduce_hnf(D,c)) of
 	     c as (Crecord_c _) => beta_conrecord(Proj_c(c,l))
 	   | c => (print "projectTuple reduced to non-crecord type = \n";
-		   PpNil.pp_con c; print "\n";
+		   Ppnil.pp_con c; print "\n";
 		   error "projectTuple reduced to non-crecord type"))
 
     and removeDependence vclist c = 
-	let fun loop subst [] = Subst.substExpConInCon (subst,Subst.empty()) c
+	let fun loop subst [] = NilSubst.substExpConInCon (subst,NilSubst.empty()) c
 	      | loop subst ((v,c)::rest) = 
 	           let val e = Raise_e(NilUtil.match_exn,c)
-		   in  loop (Subst.add subst (v,Subst.substExpConInExp 
-					      (subst,Subst.empty()) e)) rest
+		   in  loop (NilSubst.add subst (v,NilSubst.substExpConInExp 
+					      (subst,NilSubst.empty()) e)) rest
 		   end
-	in  loop (Subst.empty()) vclist
+	in  loop (NilSubst.empty()) vclist
 	end
 
     and projectRecordType(D:context, c:con, l:label) = 
@@ -1060,7 +1063,7 @@ val show_context = ref false
 		      NONE => error "projectRecordType could not find field"
 		    | SOME c => c)
 	   | c => (print "projectRecordType reduced to non-record type = \n";
-		   PpNil.pp_con c; print "\n";
+		   Ppnil.pp_con c; print "\n";
 		   error "projectRecordType reduced to non-record type"))
 
     and reduceToSumtype(D: context, c:con) = 
@@ -1072,7 +1075,7 @@ val show_context = ref false
 		      Crecord_c lcons => (tagcount,known,map #2 lcons)
 		    | _ => error "reduceToSumtype failed to reduced carrier to a crecord")
            | c => (print "reduceToSumtype failed to reduced argument to sumtype\n";
-		   PpNil.pp_con c; print "\n";
+		   Ppnil.pp_con c; print "\n";
 		   error "reduceToSumtype failed to reduced argument to sumtype"))
 
     and projectSumType(D:context, c:con, s:TilWord32.word) = 
@@ -1089,7 +1092,7 @@ val show_context = ref false
 		       | _ => projectTuple(D,hd cons, NilUtil.generate_tuple_label (which + 1))
 		     end
 	   | c => (print "projectSumType reduced to non-sum type = \n";
-		   PpNil.pp_con c; print "\n";
+		   Ppnil.pp_con c; print "\n";
 		   error "projectSumType reduced to non-sum type"))
 
    and reduce_vararg(D:context,openness,effect,argc,resc) = 
@@ -1097,7 +1100,7 @@ val show_context = ref false
 	   val no_flatten = AllArrow_c(openness,effect,[],NONE,[argc],0w0,resc)
        in  case (reduce_hnf(D,argc)) of
 	   (_,Prim_c(Record_c (labs,_),cons)) => 
-	       if (length labs > number_flatten) then no_flatten 
+	       if (length labs > !number_flatten) then no_flatten 
 	       else AllArrow_c(openness,effect,[],
 			       NONE,cons,0w0,resc)
 	 | (true,_) => no_flatten
@@ -1125,7 +1128,10 @@ val show_context = ref false
 	       end
 	 | Exncase_e {default=SOME def,...} => type_of(D,def)
 	 | Exncase_e {arms,bound,...} => 
-	       let val D = NilContext.insert_con(D,bound,Prim_c(Exn_c,[]))
+	       let val (tage,body) = hd arms
+		   val tagcon = type_of(D,tage)
+		   val Prim_c(Exntag_c, [con]) = #2(reduce_hnf(D,tagcon))
+		   val D = NilContext.insert_con(D,bound,con)
 	       in  type_of(D,#2(hd arms))
 	       end
 	 | Typecase_e _ => error "typecase_e not done")
@@ -1162,7 +1168,7 @@ val show_context = ref false
 			      | Open_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v))
 			      | Code_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v)))
 		       val D = NilContext.insert_kind_equation(D,v,c,Singleton_k c)
-		       val subst = Subst.add subst (v,Subst.substConInCon subst c)
+		       val subst = NilSubst.add subst (v,NilSubst.substConInCon subst c)
 		   in  (D,subst)
 		   end
 	     | Exp_b (var, exp) =>
@@ -1183,7 +1189,7 @@ val show_context = ref false
 		(D,subst)
 	      end)
      in
-       List.foldl folder (D,Subst.empty()) bnds
+       List.foldl folder (D,NilSubst.empty()) bnds
      end
 
    and type_of_prim (D,prim,cons,exps) = 
@@ -1192,7 +1198,9 @@ val show_context = ref false
 	  | select lab => projectRecordType(D,type_of(D,hd exps),lab)
 	  | inject s => hd cons
 	  | inject_record s => hd cons
+	  | inject_nonrecord s => hd cons
 	  | project_sum s => projectSumType(D,hd cons, s)
+	  | project_sum_nonrecord s => projectSumType(D,hd cons, s)
 	  | project_sum_record (s,lab) => let val summandType = projectSumType(D,hd cons, s)
 					  in  projectRecordType(D,summandType,lab)
 					  end
@@ -1229,12 +1237,12 @@ val show_context = ref false
 	      val (D,subst) = type_of_bnds (D,bnds)
 	      val c = type_of (D,exp)
 	    in
-	      Subst.substConInCon subst c
+	      NilSubst.substConInCon subst c
 	    end
 	   | Prim_e (NilPrimOp prim,cons,exps) => type_of_prim (D,prim,cons,exps)
 	   | Prim_e (PrimOp prim,cons,exps) =>   
 	    let 
-	      val (total,arg_types,return_type) = PrimUtil.get_type prim cons
+	      val (total,arg_types,return_type) = NilPrimUtil.get_type prim cons
 	    in
 	      return_type
 	    end
@@ -1245,11 +1253,11 @@ val show_context = ref false
 	    in  (case #2(reduce_hnf(D,app_con)) of
 		     ExternArrow_c(_,c) => c
 		   | c => (print "Ill Typed expression - not an arrow type. c = \n";
-			      PpNil.pp_con app_con;
+			      Ppnil.pp_con app_con;
 			      print "\nreduce to = \n";
-			      PpNil.pp_con c;
+			      Ppnil.pp_con c;
 			      print "\nexp = \n";
-			      PpNil.pp_exp app;
+			      Ppnil.pp_exp app;
 			      print "\n";
 			      error "Ill Typed expression - not an arrow"))
 	    end	   
@@ -1262,19 +1270,19 @@ val show_context = ref false
 		   | AllArrow_c(_,_,tformals,NONE,_,_,c) => (tformals,[],c)
 		   | Prim_c(Vararg_c _, [_,c]) => ([],[],c)
 		   | c => (print "Ill Typed expression - not an arrow type.\n app_con = \n";
-			      PpNil.pp_con app_con;
+			      Ppnil.pp_con app_con;
 			      print "\nreduce to = \n";
-			      PpNil.pp_con c;
+			      Ppnil.pp_con c;
 			      print "\nexp = \n";
-			      PpNil.pp_exp app;
+			      Ppnil.pp_exp app;
 			      print "\n";
 			      error "Ill Typed expression - not an arrow"))
 
-	      val subst = Subst.fromList (zip (#1 (unzip tformals)) cons)
-	      val con = Subst.substConInCon subst body
+	      val subst = NilSubst.fromList (zip (#1 (unzip tformals)) cons)
+	      val con = NilSubst.substConInCon subst body
 		  
 	    in  removeDependence 
-		  (map (fn (v,c) => (v,Subst.substConInCon subst c)) formals)
+		  (map (fn (v,c) => (v,NilSubst.substConInCon subst c)) formals)
 		  con
 	    end
 
@@ -1306,4 +1314,22 @@ val show_context = ref false
 
   val reduceToSumtype = wrap1 "reduceToSumType" reduceToSumtype
   val type_of = wrap1 "type_of" type_of
+
+  fun nilprim_uses_carg np =
+	(case np of
+	     record _ => false
+	   | select _ => false
+	   | roll => false
+	   | unroll => false
+	   | project_sum_record _ => false
+	   | project_sum_nonrecord _ => false
+	   | project_sum _ => true
+	   | inject_record _ => false
+	   | inject_nonrecord _ => false
+	   | inject _ => true
+	   | _ => true)
+
+  fun prim_uses_carg (NilPrimOp np) = nilprim_uses_carg np
+    | prim_uses_carg (PrimOp _) = true
+
 end

@@ -1,10 +1,8 @@
-(*$import Nil PPPRIM PRIM Formatter PPNIL *)
+(*$import Nil Ppprim Formatter PPNIL *)
 (* Nil pretty-printer. *)
-functor Ppnil(structure Ppprim : PPPRIM)
 
-	:> PPNIL =
+structure Ppnil	:> PPNIL =
   struct
-
 
     open Nil Formatter
     open Util Name Prim Ppprim
@@ -244,9 +242,11 @@ functor Ppnil(structure Ppprim : PPPRIM)
 	String (case nilprimop of
 		    record labels => "record"
 		  | select label => raise (BUG "pp_nilprimop: control should not reach here")
-		  | inject w => "inject_" ^ (TilWord32.toDecimalString w)
+		  | inject w => "inject_dyn" ^ (TilWord32.toDecimalString w)
+		  | inject_nonrecord w => "inject_nonrec_" ^ (TilWord32.toDecimalString w)
 		  | inject_record w => "inject_rec_" ^ (TilWord32.toDecimalString w)
-		  | project_sum w => "project_sum_" ^ (TilWord32.toDecimalString w)
+		  | project_sum w => "project_sum_dyn" ^ (TilWord32.toDecimalString w)
+		  | project_sum_nonrecord w => "project_sum_nonrec_" ^ (TilWord32.toDecimalString w)
 		  | project_sum_record (w,field) => ("project_sum_rec_" ^ (TilWord32.toDecimalString w) ^
 						 "[" ^ (Name.label2string field) ^ "]")
 		  | roll => "roll"

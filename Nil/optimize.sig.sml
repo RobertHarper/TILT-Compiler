@@ -2,5 +2,8 @@
 signature OPTIMIZE = 
   sig
       val debug : bool ref
-      val optimize : Nil.module -> Nil.module
+      val optimize :  {dead : bool,
+		       projection : bool,
+		       uncurry : bool,
+		       cse : bool} -> Nil.module -> Nil.module
   end

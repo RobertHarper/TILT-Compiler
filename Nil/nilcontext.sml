@@ -1,18 +1,16 @@
-(*$import NIL PPNIL NILUTIL NILSUBST Stats NILCONTEXT PRIMUTIL Option *)
-functor NilContextFn(structure PpNil : PPNIL
-		     structure NilUtil : NILUTIL
-		     structure PrimUtil : PRIMUTIL
-		     structure Subst : NILSUBST)
-   :> NILCONTEXT where type 'a subst = 'a Subst.subst = 
+(*$import Stats Option Ppnil NilSubst NilUtil NILCONTEXT *)
+
+structure NilContext
+   :> NILCONTEXT where type 'a subst = 'a NilSubst.subst = 
  struct
 
 
    open Nil 
    open Prim
 
-   type 'a subst = 'a Subst.subst
+   type 'a subst = 'a NilSubst.subst
 
-   val substConInKind = Subst.substConInKind
+   val substConInKind = NilSubst.substConInKind
 
    val var2string = Name.var2string
 
@@ -34,10 +32,10 @@ functor NilContextFn(structure PpNil : PPNIL
 
    val error = Util.error
 
-   val profile = Stats.bool "nil_profile"
-   val debug = Stats.bool "nil_debug"
-   val eager = Stats.bool "nil_eager"
-   val _ = eager := false
+   val profile = Stats.ff "nil_profile"
+   val debug = Stats.ff "nil_debug"
+   val eager = Stats.ff "nil_eager"
+
    val (nilcontext_kinds_bound,
 	nilcontext_kinds_renamed) =
      (Stats.counter "nilcontext_kinds_bound",
@@ -122,20 +120,20 @@ functor NilContextFn(structure PpNil : PPNIL
    fun print_con (var,con) =
      (print (Name.var2string var);
       print ":";
-      PpNil.pp_con con;
+      Ppnil.pp_con con;
       print "\n")
 
    fun print_entry (var,{eqn,kind,shape,index}:k_entry) =
      (print (Name.var2string var);
       (case eqn
 	 of SOME c => (print " = ";
-		       PpNil.pp_con c)
+		       Ppnil.pp_con c)
 	  | NONE => ());
       print "::";
       (if delayed kind then
 	 print "Delayed"
        else
-	 PpNil.pp_kind (thaw kind));
+	 Ppnil.pp_kind (thaw kind));
       print "\n")
 
    fun print_kinds ({kindmap,...}:context) = 
@@ -196,10 +194,10 @@ functor NilContextFn(structure PpNil : PPNIL
 		   (not (contains kindmap var), 
 		       var_error var),
 		   (allBound_k kindmap shape, 
-		       fn () => (PpNil.pp_kind shape;
+		       fn () => (Ppnil.pp_kind shape;
 				 print "Kind contains variables not found in context")),
 		   (is_shape shape, 
-		       fn () => (PpNil.pp_kind shape;
+		       fn () => (Ppnil.pp_kind shape;
 				 print "Kind is not a shape"))
 		   ]
 	 else ();
@@ -302,7 +300,7 @@ functor NilContextFn(structure PpNil : PPNIL
 		 Record_k kinds => valOf "2" (Sequence.find (fn (l,v) => eq_label(l,label)) kinds)
 	       | other => 
 		 (print "Non-record kind returned from shape_of in projection:\n";
-		  PpNil.pp_kind other; print "\n";
+		  Ppnil.pp_kind other; print "\n";
 		  error (locate "shape_of") "Non-record kind returned from shape_of in projection"))
 
 	    (*No dependencies, since shape is all we get*)
@@ -314,7 +312,7 @@ functor NilContextFn(structure PpNil : PPNIL
 		 case shape_of (D,cfun) of
 		   (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
 		 | cfun_kind => (print "Invalid kind for constructor application\n";
-			 PpNil.pp_kind cfun_kind; print "\n";
+			 Ppnil.pp_kind cfun_kind; print "\n";
 			 error (locate "shape_of") "Invalid kind for constructor application")
 	     in body_kind
 	     end
@@ -350,7 +348,7 @@ functor NilContextFn(structure PpNil : PPNIL
 	    (not (contains kindmap var),
 		 var_error var),
 	    (allBound_k kindmap kind,
-		 fn () => (PpNil.pp_kind kind;
+		 fn () => (Ppnil.pp_kind kind;
 			   print "Kind contains variables not found in context"))
 	    ]
 	 else (); 
@@ -374,13 +372,13 @@ functor NilContextFn(structure PpNil : PPNIL
 	    (not (contains kindmap var),
 		 var_error var),
 	    (allBound_k kindmap kind,
-		 fn () => (PpNil.pp_kind kind;
+		 fn () => (Ppnil.pp_kind kind;
 			   print "Kind contains variables not found in context")),
 	    (allBound_k kindmap shape,
-		 fn () => (PpNil.pp_kind shape;
+		 fn () => (Ppnil.pp_kind shape;
 			   print "Shape kind contains variables not found in context")),
 	    (is_shape shape, 
-	     fn () => (PpNil.pp_kind shape;
+	     fn () => (Ppnil.pp_kind shape;
 		       print "Shape kind is not a shape"))
 	    ]
 	 else ();
@@ -404,16 +402,16 @@ functor NilContextFn(structure PpNil : PPNIL
 	    (not (contains kindmap var),
 		 var_error var),
 	    (allBound_c kindmap con,
-		 fn () => (PpNil.pp_con con;
+		 fn () => (Ppnil.pp_con con;
 			   print "Constructor contains variables not found in context")),
 	    (allBound_k kindmap kind,
-		 fn () => (PpNil.pp_kind kind;
+		 fn () => (Ppnil.pp_kind kind;
 			   print "Kind contains variables not found in context")),
 	    (allBound_k kindmap shape,
-		 fn () => (PpNil.pp_kind shape;
+		 fn () => (Ppnil.pp_kind shape;
 			   print "Shape kind contains variables not found in context")),
 	    (is_shape shape, 
-	     fn () => (PpNil.pp_kind shape;
+	     fn () => (Ppnil.pp_kind shape;
 		       print "Shape kind is not a shape"))
 	    ]
 	 else ();
@@ -437,10 +435,10 @@ functor NilContextFn(structure PpNil : PPNIL
 	    (not (contains kindmap var),
 		 var_error var),
 	    (allBound_c kindmap con,
-		 fn () => (PpNil.pp_con con;
+		 fn () => (Ppnil.pp_con con;
 			   print "Constructor contains variables not found in context")),
 	    (allBound_k kindmap kind,
-		 fn () => (PpNil.pp_kind kind;
+		 fn () => (Ppnil.pp_kind kind;
 			   print "Kind contains variables not found in context"))
 	    ]
 	 else ();
@@ -464,7 +462,7 @@ functor NilContextFn(structure PpNil : PPNIL
 		   (not (contains kindmap var),
 			var_error var),
 		   (allBound_c kindmap con,
-			fn () => (PpNil.pp_con con;
+			fn () => (Ppnil.pp_con con;
 				  print "Constructor contains variables not found in context"))
 		   ]
 	 else ();
@@ -566,12 +564,12 @@ functor NilContextFn(structure PpNil : PPNIL
 		       | loop (subst,((l,v),k)::rest) = 
 		       if (Name.eq_label(label,l))
 			 then substConInKind subst k
-		       else loop (Subst.add subst (v,Proj_c(rvals,l)),rest)
-		   in  loop (Subst.empty(),lvk_list)
+		       else loop (NilSubst.add subst (v,Proj_c(rvals,l)),rest)
+		   in  loop (NilSubst.empty(),lvk_list)
 		   end
 		  | other => 
 		   (print "Non-record kind returned from shape_of in projection:\n";
-		    PpNil.pp_kind other; print "\n";
+		    Ppnil.pp_kind other; print "\n";
 		    error (locate "kind_of") "Non-record kind returned from shape_of in projection"))
 
 	  in kind
@@ -582,13 +580,13 @@ functor NilContextFn(structure PpNil : PPNIL
 		 (case strip_singleton (D,kind_of (D,cfun)) of
 		    (Arrow_k (_,formals,body_kind)) => 
 		      let 
-			fun folder ((v,k),c,subst) = Subst.add subst (v,c)
-			val subst = Listops.foldl2 folder (Subst.empty()) (formals,actuals)
+			fun folder ((v,k),c,subst) = NilSubst.add subst (v,c)
+			val subst = Listops.foldl2 folder (NilSubst.empty()) (formals,actuals)
 		      in  
 			substConInKind subst body_kind
 		      end
 		  | cfun_kind => (print "Invalid kind for constructor application\n";
-				  PpNil.pp_kind cfun_kind; print "\n";
+				  Ppnil.pp_kind cfun_kind; print "\n";
 				  error (locate "kind_of") "Invalid kind for constructor application"))
 	     in body_kind
 	     end
@@ -622,13 +620,13 @@ functor NilContextFn(structure PpNil : PPNIL
 		       | loop subst (((l',v),k)::rest) = 
 			   if (Name.eq_label(l,l'))
 			     then (KIND k, subst)
-			   else loop (Subst.add subst (v,Proj_c(c,l'))) rest
+			   else loop (NilSubst.add subst (v,Proj_c(c,l'))) rest
 		 in  loop subst lvk_list
 		 end
 	    | Singleton_k c => (CON(Proj_c(c,l)), subst)
 	    | _ => 
 		 (print "bad kind to project from = \n";
-		  PpNil.pp_kind k;
+		  Ppnil.pp_kind k;
 		  print "\n\n";
 		  error (locate "find_kind_equation.project_kind") 
 		  "bad kind to project_kind"))
@@ -637,7 +635,7 @@ functor NilContextFn(structure PpNil : PPNIL
 	   (case k 
 	      of Arrow_k (openness,vklist, k) => 
 		let 
-		  fun folder (((v,k),c),subst) = Subst.add subst (v,c)
+		  fun folder (((v,k),c),subst) = NilSubst.add subst (v,c)
 		in  
 		  (KIND k, foldl folder subst (Listops.zip vklist clist))
 		end
@@ -650,12 +648,12 @@ functor NilContextFn(structure PpNil : PPNIL
 		(case V.find(kindmap,v) 
 		   of SOME {eqn,kind,shape,index} => 
 		     (case eqn
-			of SOME c => (CON c, Subst.empty())
+			of SOME c => (CON c, NilSubst.empty())
 			 | NONE => 
 			  if delayed kind then
 			    raise Opaque
 			  else
-			    (KIND (thaw kind), Subst.empty()))
+			    (KIND (thaw kind), NilSubst.empty()))
 		    | NONE => raise Unbound)
 	       | (Proj_c (c,l)) => 
 		   let 
@@ -674,18 +672,18 @@ functor NilContextFn(structure PpNil : PPNIL
 		     | KIND k => app_kind(k,c1,clist,subst)
 		   end
 	       | _ => ((* print "traverse given non-path = \n";
-			PpNil.pp_con c; print "\n"; *)
+			Ppnil.pp_con c; print "\n"; *)
 		       raise Opaque))
 
      in 
        (case traverse con 
 	  of (CON c, _) => SOME c
-	   | (KIND (Singleton_k c),subst) => SOME (Subst.substConInCon subst c)
+	   | (KIND (Singleton_k c),subst) => SOME (NilSubst.substConInCon subst c)
 	   | _ => NONE)
 
 	  handle Opaque => NONE
 	       | e => (print "find_kind_equation given = \n";
-		       PpNil.pp_con con; print "\n"; raise e)
+		       Ppnil.pp_con con; print "\n"; raise e)
      end
 
 

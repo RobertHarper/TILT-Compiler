@@ -1,4 +1,4 @@
-(*$import ANNOTATION PRIM NIL Sequence *)
+(*$import ANNOTATION PRIM NIL Sequence Util Listops *)
 
 structure Nil :> NIL =
 struct	
@@ -98,9 +98,11 @@ struct
       record of label list       (* record intro *)
     | select of label            (* record field selection *)
     | inject of TilWord32.word
+    | inject_nonrecord of TilWord32.word
     | inject_record of TilWord32.word
     | project_sum of TilWord32.word
     | project_sum_record of TilWord32.word * label
+    | project_sum_nonrecord of TilWord32.word
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
     | roll | unroll              (* coerce to/from recursive type *) 

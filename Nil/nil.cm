@@ -63,6 +63,9 @@ tonil.sml
 toclosure.sig.sml
 toclosure.sml
 
+hoist.sig.sml
+hoist.sml
+
 linknil.sig.sml
 linknil.sml
 
@@ -82,17 +85,19 @@ nileval.sig.sml
 nileval.sml 
 *)
 
-(* ----- Optimizer Stuff ------- *)
-(*
-NilOpts/nilopts.sig.sml
-NilOpts/nilopts.sml
-NilOpts/squish.sig.sml
-NilOpts/squish.sml
 NilOpts/exptable.sig.sml
 NilOpts/exptable.sml
+
+NilOpts/nilopts.sig.sml
+NilOpts/nilopts.sml
 NilOpts/pass.sig.sml
-NilOpts/rename.sml
 NilOpts/anormalize-cse.sml
+
+(* ----- Optimizer Stuff ------- *)
+(*
+NilOpts/squish.sig.sml
+NilOpts/squish.sml
+NilOpts/rename.sml
 NilOpts/reduce.sml
 NilOpts/flattenargs.sml
 NilOpts/uncurry.sml

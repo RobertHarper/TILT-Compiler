@@ -1,5 +1,6 @@
-(*$import NIL PPNIL NILERROR *)
-functor NilErrorFn(structure PpNil : PPNIL) :> NILERROR =
+(*$import Ppnil NILERROR *)
+
+structure NilError :> NILERROR =
   struct
     val printl = Util.printl
     val lprintl = Util.lprintl
@@ -57,64 +58,64 @@ functor NilErrorFn(structure PpNil : PPNIL) :> NILERROR =
 
     fun perr_e exp = 
       (lprintl "Expression is";
-       PpNil.pp_exp exp;
+       Ppnil.pp_exp exp;
        printl "")
       
     fun perr_c con =
       (lprintl "Constructor is";
-       PpNil.pp_con con;
+       Ppnil.pp_con con;
        printl "")
       
     fun perr_k kind = 
       (lprintl "Kind is";
-       PpNil.pp_kind kind;
+       Ppnil.pp_kind kind;
        printl "")
       
     fun b_perr_k kind = (perr_k kind;false)
       
     fun perr_e_c (exp,con) = 
       (lprintl "Expression is";
-       PpNil.pp_exp exp;
+       Ppnil.pp_exp exp;
        lprintl "of type";
-       PpNil.pp_con con;
+       Ppnil.pp_con con;
        printl "")
       
     fun perr_c_c (con1,con2) = 
       (lprintl "Expected constructor";
-       PpNil.pp_con con1;
+       Ppnil.pp_con con1;
        lprintl "Found constructor";
-       PpNil.pp_con con2;
+       Ppnil.pp_con con2;
        printl "")
       
     fun perr_c_k (con1,kind) = 
       (lprintl "Constructor";
-       PpNil.pp_con con1;
+       Ppnil.pp_con con1;
        lprintl "of Kind";
-       PpNil.pp_kind kind;
+       Ppnil.pp_kind kind;
        printl "")
       
     fun perr_k_k (kind1,kind2) = 
       (lprintl "Expected kind";
-       PpNil.pp_kind kind1; 
+       Ppnil.pp_kind kind1; 
        lprintl "Found kind";
-       PpNil.pp_kind kind2; print "\n")
+       Ppnil.pp_kind kind2; print "\n")
       
     fun perr_c_k_k (con,kind1,kind2) = 
       (lprintl "Constructor is";
-       PpNil.pp_con con;
+       Ppnil.pp_con con;
        lprintl "Expected kind";
-       PpNil.pp_kind kind1;
+       Ppnil.pp_kind kind1;
        lprintl "Found kind";
-       PpNil.pp_kind kind2;
+       Ppnil.pp_kind kind2;
        printl "")
       
     fun perr_e_c_c (exp,con1,con2) = 
       (lprintl "Expression is";
-       PpNil.pp_exp exp;
+       Ppnil.pp_exp exp;
        lprintl "Expected type";
-       PpNil.pp_con con1;
+       Ppnil.pp_con con1;
        lprintl "Found type";
-       PpNil.pp_con con2;
+       Ppnil.pp_con con2;
        printl "")
       
     fun o_perr pr s opt =  

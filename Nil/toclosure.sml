@@ -1,4 +1,4 @@
-(*$import NIL NILCONTEXT NILUTIL PPNIL NILSUBST TOCLOSURE Stats Listops Bool NORMALIZE *)
+(*$import NilContext NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool *)
 
 (* Closure conversion is accomplished in two phases.  
    The first phase scans the program for free type and term variables of 
@@ -9,27 +9,15 @@
    App_e(Closure,...), and App_e(Code,...).
 *)
 
-functor ToClosure(structure Normalize : NORMALIZE
-		  structure NilContext : NILCONTEXT
-		  structure NilUtil : NILUTIL
-		  structure Ppnil : PPNIL
-		  structure Subst : NILSUBST
-		      sharing type NilContext.context = Normalize.context)
+structure ToClosure
     :> TOCLOSURE =
 struct
 
 
-    val do_close_path = Stats.bool("Closure_TermPath")
-    val do_close_cpath = Stats.bool("Closure_TypePath")
-    val do_single_venv = Stats.bool("Closure_TermCompress")
-    val _ = do_close_path := false
-    val _ = do_close_cpath := false
-    val _ = do_single_venv := true
-
-
-
-
-    val closure_print_free = Stats.bool "closure_print_free"
+    val do_close_path = Stats.ff("Closure_TermPath")
+    val do_close_cpath = Stats.ff("Closure_TypePath")
+    val do_single_venv = Stats.tt("Closure_TermCompress")
+    val closure_print_free = Stats.ff "closure_print_free"
 
 
     open Util NilUtil Name Nil Ppnil Listops
@@ -751,54 +739,6 @@ struct
 
 
 
-    and nilprim_uses_carg_conservative (np,clist) = 
-	(case np of
-	     record _ => false
-	   | select _ => false
-	   | roll => false
-	   | unroll => false
-	   | project_sum_record _ => false
-	   | project_sum known => true
-	   | _ => true)
-
-
-
-    and nilprim_uses_carg state (np,clist) = 
-	(case np of
-	     record _ => false
-	   | select _ => false
-	   | roll => false
-	   | unroll => false
-	   | project_sum_record _ => false
-	   | project_sum known =>
-		 let 
-		     val (tagcount,totalcount,carrier) = 
-			 (case #2(reduce_hnf "toclosure_hnf4" (get_ctxt state, hd clist)) of
-			      Prim_c(Sum_c{known,totalcount,tagcount},cons) =>
-				  (tagcount,totalcount,hd cons)
-			      | _ => error "project_sum decoration not reducible to sum type")
-		     val cons = 
-			 if (TilWord32.equal(totalcount,TilWord32.uplus(tagcount,0w1))) then [carrier]
-			 else (case #2(reduce_hnf "toclosure_hnf5" (get_ctxt state, carrier)) of
-				   Crecord_c lcons => map #2 lcons
-				 | _ => error "project_sum decoration reduced to a bad sum type")
-			     
-		     val which_con = TilWord32.toInt (TilWord32.uminus(known,tagcount))
-		     val field_con = List.nth(cons, which_con)
-		     val irreducible = not(istype_reducible(state,field_con))
-		     val _ = if irreducible
-				 then (Stats.counter
-				       
-				       ("toclosure.irreducible-project_sum")(); 
-				       if (!debug) 
-					   then print "toclosure: irreducible projsum\n" 
-				       else ())
-			     else (if (!debug)
-				       then (print "toclosure: projsum: field_con was reducible:\n"; Ppnil.pp_con field_con; print "\n") else ())
-		 in  irreducible
-		 end
-	   | _ => true)
-
 
     and e_find_fv arg exp : frees =
 	let val res = e_find_fv' arg exp
@@ -875,20 +815,13 @@ struct
 		       end
 	       end
 
-	   | Prim_e (NilPrimOp np,clist,elist) =>
+	   | Prim_e (p,clist,elist) =>
 		 let fun tfold(t,f) = t_find_fv (state,f) t
 		     fun cfold(c,f) = c_find_fv (state,f) c
 		     fun efold(e,f) = e_find_fv (state,f) e
-		     val frees = if (nilprim_uses_carg state (np,clist))
+		     val frees = if (Normalize.prim_uses_carg p)
 				     then foldl cfold frees clist
 				 else foldl tfold frees clist
-		     val frees = foldl efold frees elist
-		 in  frees
-		 end
-	   | Prim_e (PrimOp _,clist,elist) =>
-		 let fun cfold(c,f) = c_find_fv (state,f) c
-		     fun efold(e,f) = e_find_fv (state,f) e
-		     val frees = foldl cfold frees clist
 		     val frees = foldl efold frees elist
 		 in  frees
 		 end
@@ -1028,7 +961,7 @@ struct
 				val f' = k_find_fv (ls,f) k
 				val f'' = c_find_fv (ls,f') c
 				val _ = add_frees(v,f'')
-				val ak = Arrow_k(Open,vklist,k)
+				val ak = Singleton_k(#2(extractCbnd cbnd))
 			    in  (remove_free(s,f''), add_boundcvar(s,v,ak))
 			    end)
 			
@@ -1453,12 +1386,6 @@ struct
 
 	  | Prim_e(NilPrimOp np,clist,elist) => 
 	       Prim_e(NilPrimOp np,map c_rewrite clist, map e_rewrite elist)
-(*
-	       if (nilprim_uses_carg_conservative (np,clist))
-		   then Prim_e(NilPrimOp np,map c_rewrite clist, map e_rewrite elist)
-	       else Prim_e(NilPrimOp np,clist, map e_rewrite elist)
-*)
-
 	  | Prim_e(p,clist,elist) => 
 	       Prim_e(p,map c_rewrite clist, map e_rewrite elist)
 
@@ -1559,16 +1486,16 @@ struct
 	     fun get_cbnd (p,v,k,l) = Con_cb(v, Proj_c(Var_c cenv_var,l))
 	     val vklist = map (fn (v,k) => (v,k_rewrite state k)) vklist
 	     val vkl_free = map (fn (p,v,k,l) => (p,v,k_rewrite state k,l)) vkl_free
-	     val vkl_free_kind = Record_k(map
-					  (fn (p,v,k,l) => ((l, v), k))
-					  vkl_free)
+	     val vkl_free_kind = Record_k(Sequence.fromList(map
+							    (fn (p,v,k,l) => ((l, v), k))
+							    vkl_free))
 	     val cbnds = map get_cbnd vkl_free
 	     val vklist' = vklist @ [(cenv_var, vkl_free_kind)]
 	     val code_cb = Code_cb(code_var, vklist',
 				c_rewrite (copy_state(state ,v)) c, k)
 	     val con_env = Crecord_c(map (fn (p,_,_,l) => (l,c_rewrite state (path2con p))) vkl_free)
-	     val k' = Subst.substConInKind 
-			(Subst.fromList [(cenv_var,con_env)]) k
+	     val k' = NilSubst.substConInKind 
+			(NilSubst.fromList [(cenv_var,con_env)]) k
 	     val closure_cb = Con_cb(v,Closure_c (Var_c code_var, con_env))
 	 in  [code_cb, closure_cb]
 	 end			

@@ -1,11 +1,8 @@
-(*$import NIL PRIMUTIL PRIM ILUTIL ALPHA NILSUBST PPNIL NILUTIL *)
-(* -------------------------------------------------------- *)
-functor NilUtilFn(structure PrimUtil : PRIMUTIL
-		  structure IlUtil : ILUTIL
-		  structure Alpha : ALPHA
-		  structure Subst : NILSUBST
-		  structure PpNil : PPNIL)
+(*$import Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam *)
 
+structure NilPrimUtil :> PRIMUTIL where type con = Nil.con
+                                 where type exp = Nil.exp = PrimUtil(structure PrimUtilParam = NilPrimUtilParam)
+structure NilUtil
   :> NILUTIL where type alpha_context = Alpha.alpha_context =
 struct
 
@@ -64,7 +61,10 @@ struct
       AllArrow_c(openness,effect,vklist, if dep then SOME (map #1 vclist) else NONE,
 		 map #2 vclist,TilWord32.fromInt(length vflist),c)
 
-  fun effect (e : exp) = true (* very conservative *)
+  fun effect (Var_e _) = false
+    | effect (Const_e _) = false
+    | effect (Prim_e (NilPrimOp _, _, _)) = false
+    | effect _ = true
 
 
   fun is_var_e (Var_e v) = true
@@ -194,8 +194,8 @@ struct
     val foldl_acc = Listops.foldl_acc
     val eq_len = Listops.eq_len
     val member_eq = Listops.member_eq
-    val same_intsize = PrimUtil.same_intsize
-    val same_floatsize = PrimUtil.same_floatsize
+    val same_intsize = NilPrimUtil.same_intsize
+    val same_floatsize = NilPrimUtil.same_floatsize
     val eq_var2 = Name.eq_var2
   end
   (**)
@@ -778,10 +778,10 @@ struct
 					    then mu_con
 					else Proj_c(mu_con,generate_tuple_label(which+1)))
 	  val vc_list' = Listops.mapcount mapper vc_list
-	  val conmap = Subst.fromList vc_list'
+	  val conmap = NilSubst.fromList vc_list'
 	  val c = (case (Listops.assoc_eq(eq_var,v,vc_list)) of
 		     SOME c => c | NONE => error "bad mu type")
-      in  Subst.substConInCon conmap c
+      in  NilSubst.substConInCon conmap c
       end
 
   fun same_openness (Open,Open) = true
@@ -1220,14 +1220,14 @@ struct
 
   fun alpha_mu is_bound (vclist) = 
       let fun folder((v,_),subst) = if (is_bound v)
-				       then Subst.add subst (v,Var_c(Name.derived_var v))
+				       then NilSubst.add subst (v,Var_c(Name.derived_var v))
 				    else subst
-	  val subst = foldl folder (Subst.empty()) vclist
-	  fun substcon c = Subst.substConInCon subst c
+	  val subst = foldl folder (NilSubst.empty()) vclist
+	  fun substcon c = NilSubst.substConInCon subst c
 	  fun lookup var = (case (substcon (Var_c var)) of
 				(Var_c v) => v
 			      | _ => error "substcon returned non Var_c")
-      in  if (Subst.is_empty subst)
+      in  if (NilSubst.is_empty subst)
 	      then (vclist)
 	  else (map (fn (v,c) => (lookup v, substcon c)) vclist)
       end
@@ -1302,14 +1302,15 @@ struct
                  makeLetE (bnds, formal = arg) IN fnbody
     *)
 
-   fun makeLetE nil body = body
-     | makeLetE ebnds (Let_e(Sequential, ebnds', body)) =
-          makeLetE (ebnds @ ebnds') body
-     | makeLetE ebnds body =
+   fun makeLetE Parallel ebnds body = Let_e(Parallel, ebnds, body)
+     | makeLetE _ nil body = body
+     | makeLetE _ ebnds (Let_e(Sequential, ebnds', body)) =
+          makeLetE Sequential (ebnds @ ebnds') body
+     | makeLetE _ ebnds body =
        (case (List.rev ebnds, body) of
            (Exp_b(evar',exp)::rest, Var_e evar) => 
 	       if (Name.eq_var(evar',evar)) then 
-                  makeLetE (List.rev rest) exp
+                  makeLetE Sequential (List.rev rest) exp
                else
 		   Let_e(Sequential, ebnds, body)
          | (Fixopen_b fset :: rest, 
@@ -1318,10 +1319,11 @@ struct
 		    [(evar', 
 		      Function(_,Leaf,vklist,dep,vclist,fplist,fnbody,body_t))] => 
  		       if (Name.eq_var(evar',evar)) then
-			   makeLetE ((List.rev rest) @ 
-				     (createBindings(vklist, con_args,
-						     vclist, exp_args,
-						     fplist, fp_args)))
+			   makeLetE Sequential 
+			   ((List.rev rest) @ 
+			    (createBindings(vklist, con_args,
+					    vclist, exp_args,
+					    fplist, fp_args)))
 			   fnbody
 		       else
 			   Let_e(Sequential, ebnds, body)
@@ -1361,7 +1363,7 @@ struct
 	    if (intersect) then 
 		App_e(Open, fn_exp, cargs, eargs, fargs)
 	    else
-		makeLetE bnds (makeAppE exp cargs eargs fargs)
+		makeLetE Sequential bnds (makeAppE exp cargs eargs fargs)
 	end
       | makeAppE fn_exp cargs eargs fargs = 
             App_e(Open, fn_exp, cargs, eargs, fargs)

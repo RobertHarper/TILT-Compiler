@@ -1,4 +1,4 @@
-(*$import Nil *)
+(*$import Nil NilContext NilSubst *)
 
 signature NORMALIZE = 
   sig
@@ -7,8 +7,8 @@ signature NORMALIZE =
     type con = Nil.con
     type exp = Nil.exp
     type module = Nil.module
-    type context 
-    type 'a subst
+    type context = NilContext.context
+    type 'a subst = 'a NilSubst.subst
 
     (*Print debugging messages*)
     val debug : bool ref
@@ -88,5 +88,7 @@ signature NORMALIZE =
     (* gets the type of a well-formed expression *)
     val reduceToSumtype : context * Nil.con -> TilWord32.word * TilWord32.word option * Nil.con list
     val type_of : context * Nil.exp -> Nil.con
+
+    val prim_uses_carg : Nil.allprim -> bool
 
   end

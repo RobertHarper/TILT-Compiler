@@ -15,8 +15,7 @@ struct
     open Name
     open Util Listops
 
-    val debug = Stats.bool("vararg_debug")
-    val _ = debug := false
+    val debug = Stats.ff("vararg_debug")
     val error = fn s => Util.error "vararg.sml" s
 
 (* xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
