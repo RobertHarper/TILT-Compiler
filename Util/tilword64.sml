@@ -1,4 +1,4 @@
-structure TilWord64 (* :> TILWORD where type halfword = TilWord32.word *) =
+structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
  struct
 
   structure W = TilWord32
