@@ -1,0 +1,46 @@
+#!/usr/local/bin/rc
+
+# new 'bug description'
+
+fn run { s=(){
+	echo running $*
+	$*
+	s=$status
+	if(!~ $s 0){
+		echo >[1=2] program exitted with non-zero status, aborting
+		exit 1
+	}
+}}
+bugdir=`{dirname $0}
+run cd $bugdir
+run cvs update buglist.txt
+bugno=`{
+	awk '
+		{bugno=$1}
+		END {printf ("%04d\n",bugno + 1)}
+	' buglist.txt
+}
+description=$^*
+echo $bugno '[open]	' ^ $description >> buglist.txt
+mkdir $bugno
+{
+	echo Number: $bugno
+	echo 'Title:       ' ^ $description
+	echo 'Keywords:    <optional - e.g. "modules", "types", "IO", "reals">'
+	echo 'Submitter:   ' ^ `{whoami}
+	echo 'Date:        ' ^ `{date +%D}
+	echo 'Version:     <TILT version number>'
+	echo 'System:      <e.g. solaris,alpha,linux>'
+	echo 'Severity:    <critical, major, minor, cosmetic>'
+	echo 'Problem:     <description of problem>'
+	echo 'Code:        <SML source code to reproduce the bug>'
+	echo 'Transcript:  <transcript of exectution demonstating the bug>'
+	echo 'Comments:    <additional comments>'
+	echo 'Fix:         <optional - but you get extra credit>'
+	echo 'Owner:'
+	echo 'Status: open'
+} > $bugno/description
+cvs add $bugno
+cvs add $bugno/description
+cvs commit -m 'bug number ' ^ $bugno buglist.txt $bugno
+echo now edit $bugdir/$bugno/description
