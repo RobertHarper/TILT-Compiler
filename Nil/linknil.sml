@@ -75,10 +75,12 @@ structure Linknil :> LINKNIL  =
     structure NilContext = NilContextFn(structure NilUtil = NilUtil
 					structure ArgNil = Nil
 					structure PpNil = PpNil
+					structure PrimUtil = NilPrimUtil
 					structure Subst = NilSubst)
 
     structure Normalize = NormalizeFn(structure Nil = Nil
 				      structure NilUtil = NilUtil
+				      structure PrimUtil = NilPrimUtil
 				      structure NilContext = NilContext
 				      structure PpNil = PpNil
 				      structure Subst = NilSubst)
@@ -107,6 +109,7 @@ structure Linknil :> LINKNIL  =
                             structure IlStatic = LinkIl.IlStatic
 			    structure Nilcontext = NilContext
 			    structure Nilutil = NilUtil
+			    structure Normalize = Normalize
 			    structure Ppnil = PpNil
 			    structure Ppil = LinkIl.Ppil
 			    structure Nil = Nil
@@ -116,6 +119,7 @@ structure Linknil :> LINKNIL  =
 				  structure Subst = NilSubst			
 				  structure NilUtil = NilUtil
 				  structure NilContext = NilContext
+				  structure Normalize = Normalize
 				  structure NilStatic = NilStatic
 				  structure Ppnil = PpNil)
 
@@ -145,6 +149,7 @@ structure Linknil :> LINKNIL  =
 
     structure ToClosure = ToClosure(structure Nil = Nil
 				    structure NilContext = NilContext
+				    structure Normalize = Normalize
 				    structure NilStatic = NilStatic
 				    structure Ppnil = PpNil
 				    structure NilUtil = NilUtil
@@ -204,7 +209,7 @@ structure Linknil :> LINKNIL  =
     fun compile' debug (filename,(ctxt,sbnd_entries)) =
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
-	    val D = NilContext.empty
+	    val D = NilContext.empty()
 
 	    val _ = if (!show_hil)
 			then 

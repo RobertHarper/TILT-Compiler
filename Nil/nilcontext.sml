@@ -1,328 +1,669 @@
-(*$import NIL PPNIL NILUTIL NILSUBST Stats NILCONTEXT *)
+(*$import NIL PPNIL NILUTIL NILSUBST Stats NILCONTEXT PRIMUTIL Option *)
 functor NilContextFn(structure ArgNil : NIL
 		      structure PpNil : PPNIL
 		      structure NilUtil : NILUTIL
+		      structure PrimUtil : PRIMUTIL
 		      structure Subst : NILSUBST
 		      sharing PpNil.Nil = NilUtil.Nil = ArgNil
-		        and type Subst.con = ArgNil.con
-		        and type Subst.exp = ArgNil.exp
-		        and type Subst.kind = ArgNil.kind) 
-  :> NILCONTEXT where Nil = ArgNil 
-                where type 'a subst = 'a Subst.subst = 
-struct
-  structure Nil = ArgNil
-  open Nil Util Listops Name
-  open Prim
+		        and ArgNil.Prim = PrimUtil.Prim
+		        and type Subst.con = PrimUtil.con = ArgNil.con
+		        and type Subst.exp = PrimUtil.exp = ArgNil.exp
+			and type Subst.kind = ArgNil.kind) 
+   :> NILCONTEXT where Nil = ArgNil 
+		 where type 'a subst = 'a Subst.subst = 
+ struct
+   structure Nil = ArgNil
 
-  type 'a subst = 'a Subst.subst
+   open Nil 
+   open Prim
 
-  val var2string = Name.var2string
-  val selfify = NilUtil.selfify    
+   type 'a subst = 'a Subst.subst
 
+   val substConInKind = Subst.substConInKind
 
+   val var2string = Name.var2string
 
-  fun error s = Util.error "nilcontext.sml" s
+   val eq_label = Name.eq_label
+   val fresh_named_var = Name.fresh_named_var
+   val eq_var = Name.eq_var
 
-  val profile = Stats.bool "nil_profile"
-  val (nilcontext_kinds_bound,
-       nilcontext_kinds_renamed) =
-    (Stats.counter "nilcontext_kinds_bound",
-     Stats.counter "nilcontext_kinds_renamed")
-    
-  structure V = Name.VarMap
-    
-  type 'a map = 'a V.map
-    
-  structure S = Name.VarSet
+   val zip = Listops.zip
+   val unzip = Listops.unzip
+   val map2 = Listops.map2
+   val split = Listops.split
+   val map_second = Listops.map_second
 
-  type set = S.set
-  exception Unbound
-
-  (*The con in the kindmap is the result of pulling
-   * and normalizing the kind.  
-   *)
-  type context = {equation: con map,
-		  kindmap : (kind * kind option ref) map,
-		  conmap  : con map}
+   val curry2 = Util.curry2
 
 
+   val is_shape = NilUtil.is_shape  
+   val strip_arrow = NilUtil.strip_arrow
+
+   val error = Util.error
+
+   val profile = Stats.bool "nil_profile"
+   val debug = Stats.bool "nil_debug"
+   val (nilcontext_kinds_bound,
+	nilcontext_kinds_renamed) =
+     (Stats.counter "nilcontext_kinds_bound",
+      Stats.counter "nilcontext_kinds_renamed")
+
+   structure V = Name.VarMap
+
+   type 'a map = 'a V.map
+
+   exception Unbound
+
+   fun locate fn_name = "nilcontext.sml::"^fn_name
+
+   (*Possibly uncomputed data.*)
+   type 'a delay = 'a option ref
+
+   fun delay () = ref NONE
+
+   fun immediate value = ref (SOME value)
+
+   fun instantiate' delay value = delay := (SOME value)
+
+   fun instantiate delay value = 
+     (case delay 
+	of ref NONE => delay := (SOME value)
+	 | _ => error (locate "instantiate") "Trying to instantiate previously instantiated delay")
+
+   fun fill_delay delay fill = 
+     (case delay 
+	of ref NONE => 
+	  let
+	    val value = fill ()
+	  in
+	    (delay := SOME value;
+	     value)
+	  end
+	 | ref (SOME value) => value)
+
+   fun valOf str NONE = (print "valOf failed at "; print str; print "\n";
+			 raise Option.Option)
+     | valOf str (SOME x) = x
+
+   fun extract delay = valOf "1" (!delay)
+
+   fun delayed delay = not(Option.isSome (!delay))
+
+   type k_entry = {eqn: con option,
+		   kind : kind delay,
+		   shape : kind delay,
+		   index : int}
+
+   type context = 
+     {kindmap : k_entry map,
+      conmap  : con map,
+      counter : int}
+   (* kindmap(v) => (con,kind,shape,i)
+     * Invariants: Not all of con, kind, shape are ref NONE
+     *             v == con :: kind
+     *             con :: kind
+     *             kind <: shape
+     *             Forall(k) s.t. c::k, k<:shape
+     *             Forall(v1,2), if v1 => (c1,k1,s1,i1)
+     *              and v2 => (c2,k2,s2,i2), then
+     *              i1 < i2 iff v1 inserted before v2.
+     *             Forall(v) s.t. v => (c,k,s,i), counter > i
+     *)
+
+   fun empty () : context = 
+     {kindmap = V.empty,
+      conmap = V.empty,
+      counter = 0}
 
 
-  fun print_con_kind (var,(con,kind)) =
-    (print (Name.var2string var);
-     print "=";
-     PpNil.pp_con con;
-     print "::";
-     PpNil.pp_kind kind;
-     print "\n")
-
-  fun print_con (var,con) =
-    (print (Name.var2string var);
-     print ":";
-     PpNil.pp_con con;
-     print "\n")
-
-  fun print_kind (var,(kind,_)) =
-    (print (Name.var2string var);
-     print ":";
-     PpNil.pp_kind kind;
-     print "\n")
-
-  fun print_kinds ({kindmap,...}:context) = 
-    (print "\n Constructor variables and kinds are :\n";
-     V.appi print_kind kindmap)
-
-  fun print_cons ({conmap,...}:context) = 
-    (print "\n Expression variables and constructors are :\n";
-     V.appi print_con conmap)
-
-  fun print_context ({kindmap,conmap,equation}:context) = 
-    (print "\n Constructor variables and kinds are :\n";
-     V.appi print_kind kindmap;
-     print "\n Equations are :\n";
-     V.appi print_con equation;
-     print "\n Expression variables and constructors are :\n";
-     V.appi print_con conmap)
-
-  val empty : context = {equation = V.empty,
-			 kindmap = V.empty,
-			 conmap = V.empty}
+   fun contains map var = Option.isSome (V.find (map,var))
 
 
-  fun insert_con ({conmap,equation,kindmap}:context,var,con) = 
-    {conmap = V.insert (conmap, var, con), 
-     kindmap = kindmap,
-     equation=equation}
+   exception Assert of string 
 
-  fun insert_con_list (C:context,defs : (var * con) list) =
-    List.foldl (fn ((v,c),C) => insert_con (C,v,c)) C defs
+   fun assert location checkl = 
+     let
+       val loc_string = "\nAssertion violated in "^location^": "
 
-  fun find_con ({conmap,...}:context,var) = 
-      (case V.find (conmap, var) of
-	   SOME con => con
-	 | NONE => raise Unbound)
-    
-  fun remove_con ({conmap,equation,kindmap}:context,var) = 
-    let val conmap = #1 (V.remove (conmap, var))
-    in  {conmap = conmap, kindmap = kindmap, equation=equation}
-    end
-
-  fun insert_kind ({conmap,kindmap,equation}:context,var,kind) = 
-    {conmap = conmap, 
-     equation=equation,
-     kindmap = V.insert (kindmap, var, (kind, ref NONE))}
-
-  fun insert_kind_equation ({conmap,kindmap,equation}:context,var,con,kind) = 
-    {conmap = conmap, 
-     equation = V.insert(equation, var, con),
-     kindmap = V.insert(kindmap, var, (kind, ref NONE))}
-
-  fun insert_kind_list ({conmap,kindmap,equation}:context,vklist) = 
-    {conmap = conmap, 
-     equation=equation,
-     kindmap = foldl (fn ((v,k),kindmap) => V.insert (kindmap, v, (k, ref NONE))) kindmap vklist}
-
-
-  fun bind_kind (D:context,var,kind) =
-    let val (var',subst) = (case V.find(#kindmap D,var) of
-			     NONE => (var,Subst.empty())
-			   | SOME _ => 
-			      let val var' = Name.derived_var var
-			      in  (var',Subst.add (Subst.empty ()) (var,Var_c var'))
-			      end)
-    in (insert_kind(D,var',kind), var', subst)
-    end
-
-
-  fun bind_kind_list (D:context,vklist) = 
-    let
-      fun folder ((v,k),(D,vklist,s)) = 
-	let val (D,v,subst) = bind_kind(D,v,k)
-	    val s = Subst.con_subst_compose(subst,s)
-	in  (D,(v,k)::vklist,s)
-        end
-      val (ctxt,rev_vklist,subst) = foldl folder (D,[],Subst.empty()) vklist
-    in  (ctxt,rev rev_vklist,subst)
-    end
-
-
-  fun make_shape D kind = 
-    (case kind of
-          Type_k => kind
-	| Singleton_k con => get_shape D con
-	| Record_k elts => 
-	   let fun folder(((l,v),k),D) = (((l,v),make_shape D k),insert_kind(D,v,k))
-	   in  Record_k (#1(Sequence.foldl_acc folder D elts))
-	   end
-	| Arrow_k (openness, formals, return) => 
-	 let fun folder((v,k),D) = ((v,make_shape D k), insert_kind(D,v,k))
-	     val (formals,D) = foldl_acc folder D formals
-	     val return = make_shape D return
-	 in  (Arrow_k (openness, formals,return))
-	 end)
-
-  and get_shape (D : context) (constructor : con) : kind = 
-      (case constructor of
-	 Prim_c (Int_c W64,_) => Type_k
-       | Prim_c (Float_c F32,_) => Type_k (* error? *)
-       | Prim_c (Float_c F64,_) => Type_k (* error? *)
-       | Prim_c _ => Type_k
-
-	| (Mu_c (recur,defs)) => let val len = Sequence.length defs
-				 in  if len = 1
-					 then Type_k
-				     else NilUtil.kind_tuple(Listops.copy(len,Type_k))
-				 end
-	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) => Type_k
-	| (Var_c var) => find_shape_kind (D,var)
-        | Let_c (sort,[Open_cb (var,formals,body,body_kind)],Var_c v) =>
-	   if (eq_var(var,v)) then Arrow_k(Open,formals,body_kind) else get_shape D (Var_c v)
-	| Let_c(sort,[Code_cb (var,formals,body,body_kind)],Var_c v) =>
-	   if (eq_var(var,v)) then Arrow_k(Code,formals,body_kind) else get_shape D (Var_c v)
-        | Let_c (sort,[Code_cb (var,formals,body,body_kind)],Closure_c(Var_c v,_)) =>
-	   if (eq_var(var,v)) then Arrow_k(Closure,Listops.butlast formals,body_kind) 
-	   else get_shape D (Var_c v)
-        | Let_c (sort,[],body) => get_shape D body
-        | Let_c (sort,cbnd::rest,body) => 
-	       let val D = (case cbnd of
-				Con_cb(v,c) => insert_kind(D,v,Singleton_k c)
-			      | Open_cb(v,formals,_,body_kind) => insert_kind(D,v,Arrow_k(Open,formals,body_kind))
-			      | Code_cb(v,formals,_,body_kind) => insert_kind(D,v,Arrow_k(Code,formals,body_kind)))
-	       in  get_shape D (Let_c(sort,rest,body))
-	       end
-	| (Closure_c (code,env)) => 
-	    let val (vklist,body_kind) = 
-		(case get_shape D code of
-	          Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
-		| Arrow_k (ExternCode,vklist,body_kind) => (vklist,body_kind)
-		| k => (print "Invalid closure: code component does not have code kind\n";
-			PpNil.pp_kind k; print "\n";
-			error "Invalid closure: code component does not have code kind" 
-			handle e => raise e))		      
-		val (first,(v,klast)) = split vklist
-		val kind = Arrow_k(Closure,first,body_kind)
-	    in kind
-	    end
-
-	| (Crecord_c entries) => 
-	 let
-	   val (labels,cons) = unzip entries
-	   val kinds = (map (get_shape D) cons)
-	   val k_entries = 
-	     map2 (fn (l,k) => ((l,fresh_named_var "crec_norm"),k)) (labels,kinds)
-	   val entries = zip labels cons
-	 in Record_k (Sequence.fromList k_entries)
-	 end
-	| (Proj_c (rvals,label)) => 
-	 let
-	   val record_kind = get_shape D rvals
-	   fun find D [] = error "could not find field in record kind"
-	     | find D (((l,v),k)::rest) = 
-	       if (eq_label(l,label))
-		   then make_shape D k (* there may have been dependencies *)
-	       else find (insert_kind(D,v,k)) rest
-	 in  (case record_kind of
-		Record_k kinds => find D (Sequence.toList kinds)
-	      | other => 
-		    (print "Non-record kind returned from get_shape in projection:\n";
-		     PpNil.pp_kind other; print "\n";
-		     error "Non-record kind returned from get_shape in projection" 
-		     handle e => raise e))
-	 end
-	| (App_c (cfun,actuals)) => 
-	    let
-	      val cfun_kind = get_shape D cfun
-	      val (formals,body_kind) = 
-		case cfun_kind of
-		  (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
-		| _ => (print "Invalid (non-arrow) kind for constructor application\n";
-			PpNil.pp_kind cfun_kind; print "\n";
-			(error "Invalid kind for constructor application" handle e => raise e))
-	      fun folder (((v,k),c),D) = insert_kind_equation(D,v,c,k)
-	      val D = foldl folder D (zip formals actuals)
-	    in make_shape D body_kind
-	    end
-	| (Typecase_c {arg,arms,default,kind}) => kind
-	| (Annotate_c (annot,con)) => get_shape D con)
-
-
-
-
-  and find_kind ({kindmap,...}:context,var) = 
-    (case (V.find (kindmap, var)) of
-          SOME (k,_) => k
-	| NONE => raise Unbound)
-
-  and find_shape_kind (ctxt as {kindmap,equation,...}:context,var) = 
-    (case (V.find (kindmap, var)) of
-          SOME (k,r) => (case !r of
-			     SOME k => k
-			   | NONE => let val k = (case V.find(equation,var) of
-						      SOME c => get_shape ctxt c
-						    | NONE => make_shape ctxt k)
-				     in (r := SOME k; k)
-				     end)
-	| NONE => raise Unbound)
-
-  fun remove_kind ({conmap,kindmap,equation},var) = 
-    let val equation = #1 (V.remove (equation, var))
-    in  {conmap = conmap, 
-         kindmap = kindmap,
-         equation = equation}
-    end
-
-  fun find_kind_equation(s as {equation,...}:context,con) : con option = 
-    let open Nil
-	datatype result = CON of con | KIND of kind
-	exception Opaque
-        fun project_kind(k,c,l,subst) = 
-	  (case k of
-	     Record_k lvk_seq => 
-		let val lvk_list = Sequence.toList lvk_seq
-		    fun loop _ [] = error "find_kind_equation.project_kind: missing label"
-		      | loop subst (((l',v),k)::rest) = 
-			  if (Name.eq_label(l,l'))
-			    then (KIND k, subst)
-			  else loop (Subst.add subst (v,Proj_c(c,l'))) rest
-		in  loop subst lvk_list
-		end
-	   | Singleton_k c => (CON(Proj_c(c,l)), subst)
-	   | _ => error "bad kind to project_kind")
-        fun app_kind(k,c1,clist,subst) = 
-	  (case k of
-	     Arrow_k (openness,vklist, k) => 
-		let fun folder(((v,k),c),subst) = Subst.add subst (v,c)
-		in  (KIND k, foldl folder subst (Listops.zip vklist clist))
-		end
-	   | Singleton_k c => (CON(App_c(c,clist)), subst)
-	   | _ => error "bad kind to app_kind")
-        fun traverse c : result * con subst = 
-	  case c of
-             (Var_c v) => (case V.find(equation,v) of
-			  SOME c => (CON c, Subst.empty())
-			| NONE => (KIND (find_kind(s,v)), Subst.empty()))
-           | (Proj_c (c,l)) => 
-		let val (res,subst) = traverse c
-		in  case res of
-		      CON c => (CON(Proj_c(c,l)), subst)
-		    | KIND k => project_kind(k,c,l,subst)
-		end
-           | (App_c(c1,clist)) =>
-		let val (res,subst) = traverse c1
-		in  case res of
-		      CON c => (CON(App_c(c,clist)), subst)
-		    | KIND k => app_kind(k,c1,clist,subst)
-		end
-          | _ => ((* print "traverse given non-path = \n";
-		     PpNil.pp_con c; print "\n"; *)
-		  raise Opaque)
-     in (case traverse con of
-	   (CON c, _) => SOME c
-	 | (KIND (Singleton_k c),subst) => SOME (Subst.substConInCon subst c)
-	 | _ => NONE)
-	handle Opaque => NONE
-	    | e => (print "find_kind_equation given = \n";
-		  PpNil.pp_con con; print "\n"; raise e)
+       fun check (b,f) = if b then () 
+			 else (f() handle any => ();
+			       print loc_string;
+			       raise Assert location)
+     in
+       List.app check checkl
      end
+
+   (**** Printing functions *****)
+
+   fun print_con (var,con) =
+     (print (Name.var2string var);
+      print ":";
+      PpNil.pp_con con;
+      print "\n")
+
+   fun print_entry (var,{eqn,kind,shape,index}:k_entry) =
+     (print (Name.var2string var);
+      (case eqn
+	 of SOME c => (print " = ";
+		       PpNil.pp_con c)
+	  | NONE => ());
+      print "::";
+      (if delayed kind then
+	 print "Delayed"
+       else
+	 PpNil.pp_kind (extract kind));
+      print "\n")
+
+   fun print_kinds ({kindmap,...}:context) = 
+     (print "\n Constructor variables, kinds, and equations are :\n";
+      V.appi print_entry kindmap)
+
+   fun print_cons ({conmap,...}:context) = 
+     (print "\n Expression variables and constructors are :\n";
+      V.appi print_con conmap)
+
+   fun print_context (context:context) = 
+     (print_kinds context;
+      print_cons context)
+
+   fun print_context' (context:context) = 
+     (print_kinds context;
+      print_cons context)
+
+   (*****Term level context functions. ******)
+
+   fun insert_con ({conmap,kindmap,counter}:context,var,con) = 
+     let
+       val _ = 
+	 if !debug then
+	   assert (locate "insert_con")
+	   [
+	    (not (contains conmap var),fn () => print ("Term variable already occurs in context: "^(Name.var2string var)))
+	    ]
+	 else ()
+     in
+       {conmap = V.insert (conmap, var, con), 
+	kindmap = kindmap,
+	counter = counter}
+     end
+
+   fun insert_con_list (C:context,defs : (var * con) list) =
+     List.foldl (fn ((v,c),C) => insert_con (C,v,c)) C defs
+
+   fun find_con ({conmap,...}:context,var) = 
+       (case V.find (conmap, var) of
+	    SOME con => con
+	  | NONE => raise Unbound)
+
+
+   (*****Constructor level context functions. ******)
+
+   fun allBound_c kindmap con = List.all (contains kindmap) (NilUtil.freeConVarInCon (true,con))
+   fun allBound_k kindmap kind = List.all (contains kindmap) (NilUtil.freeConVarInKind kind)
+
+   fun var_error v () = error (locate "var_error") ("Constructor variable already occurs in context: "^(Name.var2string v))
+
+   fun insert_shape ({conmap,kindmap,counter}:context,var,shape:kind) = 
+     let
+       val _ =  
+	 if !debug then
+	   assert (locate "insert_shape")
+		  [
+		   (not (contains kindmap var), 
+		       var_error var),
+		   (allBound_k kindmap shape, 
+		       fn () => (PpNil.pp_kind shape;
+				 print "Kind contains variables not found in context")),
+		   (is_shape shape, 
+		       fn () => (PpNil.pp_kind shape;
+				 print "Kind is not a shape"))
+		   ]
+	 else ();
+
+       val entry = {eqn = NONE,
+		    kind = immediate shape,  (*can never get better info*)
+		    shape = immediate shape,
+		    index = counter}
+     in
+       {conmap = conmap, 
+	counter = counter+1,
+	kindmap = V.insert (kindmap, var, entry)}
+     end
+
+   (* Turn a kind into a shape *)
+   fun make_shape (D:context,kind:kind):kind = 
+     (case kind 
+	of Type_k => kind
+	 | Singleton_k con => shape_of (D,con)  
+	 | Record_k elts => 
+	  let 
+	    fun folder(((l,v),k),D) = let val k' = make_shape(D,k)
+				      in  (((l,v),k'),insert_shape(D,v,k'))
+				      end
+	    val (entries,_) = (Sequence.foldl_acc folder D elts)
+	  in  Record_k entries
+	  end
+	 | Arrow_k (openness, formals, return) => 
+	  let 
+	    fun folder((v,k),D) = let val k' = make_shape(D,k)
+				  in  ((v,k'), insert_shape(D,v,k'))
+				  end
+	    val (formals,D) = Listops.foldl_acc folder D formals
+	    val return = make_shape (D,return)
+	  in  (Arrow_k (openness, formals,return))
+	  end)
+
+   and shape_of (D : context,constructor : con) : kind = 
+     let 
+       val _ = 
+	 if !debug then
+	   assert (locate "shape_of") 
+		  [
+		   ]
+	 else ()
+     in
+       (case constructor 
+	  of Prim_c (Int_c W64,_) => Type_k
+	   | Prim_c (Float_c F32,_) => Type_k (* error? *)
+	   | Prim_c (Float_c F64,_) => Type_k (* error? *)
+	   | Prim_c _ => Type_k
+
+	   | (Mu_c (recur,defs)) => 
+	    let val len = Sequence.length defs
+	    in  if len = 1
+		  then Type_k
+		else NilUtil.kind_tuple(Listops.copy(len,Type_k))
+	    end
+
+	 | (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) => Type_k
+
+	 | (v as (Var_c var)) => 
+	    (find_shape (D,var)
+	     handle Unbound =>
+	       (print_context D;
+		error (locate "shape_of") ("variable "^(var2string var)^" not in context")))
+
+	 | Let_c (sort,bnds,body) => 
+	    let
+	      val D = kind_of_bnds (D,bnds)
+	    in
+	      shape_of (D,body)
+	    end
+
+	 | (Closure_c (code,env)) => 
+	    let 
+	      val (vklist,body_kind) = 
+		(case shape_of (D,code) 
+		   of Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
+		    | Arrow_k (ExternCode,vklist,body_kind) => (vklist,body_kind)
+		    | _ => error (locate "shape_of") "Invalid closure: code component does not have code kind")
+	      val shape = Arrow_k(Closure,Listops.butlast vklist,body_kind)
+	    in shape
+	    end
+
+	 | (Crecord_c entries) => 
+	  let
+	    val (labels,cons) = unzip entries
+	    val kinds = (map (curry2 shape_of D) cons)
+	    val k_entries = 
+		   map2 (fn (l,k) => ((l,fresh_named_var "crec_norm"),k)) (labels,kinds)
+	    val entries = zip labels cons
+	  in Record_k (Sequence.fromList k_entries)
+	  end
+
+	 | (Proj_c (rvals,label)) => 
+	  let
+	    val kind = 
+	      (case (shape_of (D,rvals)) of
+		 Record_k kinds => valOf "2" (Sequence.find (fn (l,v) => eq_label(l,label)) kinds)
+	       | other => 
+		 (print "Non-record kind returned from shape_of in projection:\n";
+		  PpNil.pp_kind other; print "\n";
+		  error (locate "shape_of") "Non-record kind returned from shape_of in projection"))
+
+	    (*No dependencies, since shape is all we get*)
+	  in kind
+	  end
+	 | (App_c (cfun,actuals)) => 
+	     let
+	       val (formals,body_kind) = 
+		 case shape_of (D,cfun) of
+		   (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
+		 | cfun_kind => (print "Invalid kind for constructor application\n";
+			 PpNil.pp_kind cfun_kind; print "\n";
+			 error (locate "shape_of") "Invalid kind for constructor application")
+	     in body_kind
+	     end
+	 | (Typecase_c {arg,arms,default,kind}) => make_shape (D,kind)
+	 | (Annotate_c (annot,con)) => shape_of (D,con))
+       end 
+   and kind_of_bnds (D : context, bnds : conbnd list) : context = 
+     let
+       fun folder (bnd,D) = 
+	 (case bnd 
+	    of Open_cb (var,formals,body,body_kind) => 
+	      insert_shape (D,var,make_shape (D,Arrow_k(Open,formals,body_kind)))
+	     | Code_cb (var,formals,body,body_kind) => 
+	      insert_shape (D,var,make_shape (D,Arrow_k(Code,formals,body_kind)))
+	     | Con_cb (var,con) =>
+	      insert_shape (D,var,shape_of (D,con)))
+       val D = List.foldl folder D bnds
+     in
+       D
+     end
+   and find_shape (context as {kindmap,...}:context,var) = 
+     (case (V.find (kindmap, var)) of
+	SOME {eqn,kind,shape,index} => 
+	  if delayed shape then
+	    let
+	      val value = 
+		if delayed kind then
+		  (shape_of (context,valOf "3" eqn))
+		else
+		  (make_shape (context,extract kind))
+	    in
+	      (instantiate' shape value;
+		  value)
+	    end
+	  else
+	    extract shape
+      | NONE => raise Unbound)
+
+
+   fun insert_kind ({conmap,kindmap,counter}:context,var,kind) = 
+     let
+       val _ =  
+	 if !debug then
+	   assert (locate "insert_kind")
+	   [
+	    (not (contains kindmap var),
+		 var_error var),
+	    (allBound_k kindmap kind,
+		 fn () => (PpNil.pp_kind kind;
+			   print "Kind contains variables not found in context"))
+	    ]
+	 else ();
+
+       val entry = {eqn = NONE,
+		    kind = immediate kind,
+		    shape = delay (),
+		    index = counter}
+     in
+       {conmap = conmap, 
+	counter = counter+1,
+	kindmap = V.insert (kindmap, var, entry)}
+     end
+
+   fun insert_kind_equation ({conmap,kindmap,counter}:context,var,con,kind) = 
+     let
+       val _ =  
+	 if !debug then
+	   assert (locate "insert_kind_equation")
+	   [
+	    (not (contains kindmap var),
+		 var_error var),
+	    (allBound_c kindmap con,
+		 fn () => (PpNil.pp_con con;
+			   print "Constructor contains variables not found in context")),
+	    (allBound_k kindmap kind,
+		 fn () => (PpNil.pp_kind kind;
+			   print "Kind contains variables not found in context"))
+	    ]
+	 else ();
+       val entry = {eqn = SOME con,
+		    kind = immediate kind,
+		    shape = delay (),
+		    index = counter}
+     in
+       {conmap = conmap, 
+	counter = counter+1,
+	kindmap = V.insert (kindmap, var, entry)}
+     end
+
+   fun insert_equation ({conmap,kindmap,counter}:context,var,con) =  
+     let
+       val _ =  
+	 if !debug then
+	   assert (locate "insert_equation")
+		  [
+		   (not (contains kindmap var),
+			var_error var),
+		   (allBound_c kindmap con,
+			fn () => (PpNil.pp_con con;
+				  print "Constructor contains variables not found in context"))
+		   ]
+	 else ();
+
+       val entry = {eqn = SOME con,
+		    kind = delay (),
+		    shape = delay (),
+		    index = counter}
+     in
+       {conmap = conmap, 
+	counter = counter+1,
+	kindmap = V.insert (kindmap, var, entry)}
+     end
+
+   fun insert_kind_list (C:context,vklist) = 
+     foldl (fn ((v,k),C) => insert_kind (C,v,k)) C vklist
+
+
+   fun strip_singleton (D : context,kind : kind) : kind = 
+     (case kind
+	of Singleton_k con => kind_of (D,con)
+	 | _ => kind)
+   and kind_of (D : context,constructor : con) : kind = 
+     let 
+       val _ = 
+	 if !debug then
+	   assert (locate "kind_of") 
+		  [
+		   ]
+	 else ()
+     in 
+       (case constructor 
+	  of Prim_c (Int_c W64,_) => Type_k
+	   | Prim_c (Float_c F32,_) => Type_k (* error? *)
+	   | Prim_c (Float_c F64,_) => Type_k (* error? *)
+	   | Prim_c _ => Type_k
+
+	   | (Mu_c (recur,defs)) => 
+	    let val len = Sequence.length defs
+	    in  if len = 1
+		  then Type_k
+		else NilUtil.kind_tuple(Listops.copy(len,Type_k))
+	    end
+
+	 | (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) => Type_k
+
+	 | (v as (Var_c var)) => 
+	    (find_kind (D,var)
+	     handle Unbound =>
+	       (print_context D;
+		error (locate "kind_of") ("variable "^(var2string var)^" not in context")))
+
+	 | Let_c (sort,bnds,body) => 
+	    let
+	      fun folder (bnd,D) = 
+		(case bnd 
+		   of Open_cb (var,formals,body,body_kind) => 
+		     insert_shape (D,var,Arrow_k(Open,formals,body_kind))
+		    | Code_cb (var,formals,body,body_kind) => 
+		     insert_shape (D,var,Arrow_k(Code,formals,body_kind))
+		    | Con_cb (var,con) =>
+		     insert_shape (D,var,kind_of (D,con)))
+	      val D = List.foldl folder D bnds
+	    in
+	      kind_of (D,body)
+	    end
+
+	 | (Closure_c (code,env)) => 
+	    let 
+	      val (vklist,body_kind) = 
+		(case strip_singleton (D,kind_of (D,code))
+		   of Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
+		    | Arrow_k (ExternCode,vklist,body_kind) => (vklist,body_kind)
+		    | _ => (error (locate "kind_of") "Invalid closure: code component does not have code kind" ))
+	    in 
+	      Arrow_k(Closure,Listops.butlast vklist,body_kind)
+	    end
+
+	 | (Crecord_c entries) => 
+	  let
+	    val (labels,cons) = unzip entries
+	    val kinds = (map (curry2 kind_of D) cons)
+	    val k_entries = 
+		   map2 (fn (l,k) => ((l,fresh_named_var "crec_norm"),k)) (labels,kinds)
+	    val entries = zip labels cons
+	  in Record_k (Sequence.fromList k_entries)
+	  end
+
+	 | (Proj_c (rvals,label)) => 
+	  let
+	    val kind = 
+	      (case strip_singleton (D,kind_of (D,rvals))
+		 of Record_k lvk_seq => 
+		   let 
+		     val lvk_list = Sequence.toList lvk_seq
+		     fun loop (subst,[]) = error (locate "kind_of") "missing label"
+		       | loop (subst,((l,v),k)::rest) = 
+		       if (Name.eq_label(label,l))
+			 then substConInKind subst k
+		       else loop (Subst.add subst (v,Proj_c(rvals,l)),rest)
+		   in  loop (Subst.empty(),lvk_list)
+		   end
+		  | other => 
+		   (print "Non-record kind returned from shape_of in projection:\n";
+		    PpNil.pp_kind other; print "\n";
+		    error (locate "kind_of") "Non-record kind returned from shape_of in projection"))
+
+	  in kind
+	  end
+	 | (App_c (cfun,actuals)) => 
+	     let
+	       val body_kind = 
+		 (case strip_singleton (D,kind_of (D,cfun)) of
+		    (Arrow_k (_,formals,body_kind)) => 
+		      let 
+			fun folder ((v,k),c,subst) = Subst.add subst (v,c)
+			val subst = Listops.foldl2 folder (Subst.empty()) (formals,actuals)
+		      in  
+			substConInKind subst body_kind
+		      end
+		  | cfun_kind => (print "Invalid kind for constructor application\n";
+				  PpNil.pp_kind cfun_kind; print "\n";
+				  error (locate "kind_of") "Invalid kind for constructor application"))
+	     in body_kind
+	     end
+	 | (Typecase_c {arg,arms,default,kind}) => kind
+	 | (Annotate_c (annot,con)) => kind_of (D,con))
+     end
+   and find_kind (context as {kindmap,...}:context,var) = 
+     (case (V.find (kindmap, var)) of
+	   SOME {eqn,kind,shape,index} => 
+	     if delayed kind then
+	       (case eqn
+		  of NONE => extract shape
+		   (*All three cannot be delayed *)
+		   | SOME con => 
+		    let
+		      val value = kind_of (context,con)
+		    in
+		      (instantiate' kind value;
+		       value)
+		    end)
+		    (*This relies fundamentally on the context invariants.
+		     * Since every inserted equation is guaranteed to 
+		     * be closed by the context, and since no variable
+		     * can be shadowed in the context, no free variables
+		     * in con can be captured by subsequent insertions
+		     *)
+	     else
+	       extract kind
+	 | NONE => raise Unbound)
+
+   (*PRE:  con :: T or W *)
+   fun find_kind_equation(s as {kindmap,...}:context,con) : con option = 
+     let open Nil
+	 datatype result = CON of con | KIND of kind
+	 exception Opaque
+
+	 val _ = 
+	   if !debug then 
+	     assert (locate "find_kind_equation")
+		    [
+		     ]
+	   else
+	     ()
+
+	 fun project_kind(k,c,l,subst) = 
+	   (case k of
+	      Record_k lvk_seq => 
+		 let val lvk_list = Sequence.toList lvk_seq
+		     fun loop _ [] = error (locate "find_kind_equation.project_kind") "missing label"
+		       | loop subst (((l',v),k)::rest) = 
+			   if (Name.eq_label(l,l'))
+			     then (KIND k, subst)
+			   else loop (Subst.add subst (v,Proj_c(c,l'))) rest
+		 in  loop subst lvk_list
+		 end
+	    | Singleton_k c => (CON(Proj_c(c,l)), subst)
+	    | _ => error (locate "find_kind_equation.project_kind") "bad kind to project_kind")
+
+	 fun app_kind(k,c1,clist,subst) = 
+	   (case k 
+	      of Arrow_k (openness,vklist, k) => 
+		let 
+		  fun folder (((v,k),c),subst) = Subst.add subst (v,c)
+		in  
+		  (KIND k, foldl folder subst (Listops.zip vklist clist))
+		end
+	       | Singleton_k c => (CON(App_c(c,clist)), subst)
+	       | _ => error (locate "app_kind") "bad kind to app_kind")
+
+	 fun traverse c : result * con subst = 
+	   (case c 
+	      of (Var_c v) => 
+		(case V.find(kindmap,v) 
+		   of SOME {eqn,kind,shape,index} => 
+		     (case eqn
+			of SOME c => (CON c, Subst.empty())
+			 | NONE => 
+			  if delayed kind then
+			    raise Opaque
+			  else
+			    (KIND (extract kind), Subst.empty()))
+		    | NONE => raise Unbound)
+	       | (Proj_c (c,l)) => 
+		   let 
+		     val (res,subst) = traverse c
+		   in  
+		     case res of
+		       CON c => (CON(Proj_c(c,l)), subst)
+		     | KIND k => project_kind(k,c,l,subst)
+		   end
+	       | (App_c(c1,clist)) =>
+		   let 
+		     val (res,subst) = traverse c1
+		   in  
+		     case res of
+		       CON c => (CON(App_c(c,clist)), subst)
+		     | KIND k => app_kind(k,c1,clist,subst)
+		   end
+	       | _ => ((* print "traverse given non-path = \n";
+			PpNil.pp_con c; print "\n"; *)
+		       raise Opaque))
+
+     in 
+       (case traverse con 
+	  of (CON c, _) => SOME c
+	   | (KIND (Singleton_k c),subst) => SOME (Subst.substConInCon subst c)
+	   | _ => NONE)
+
+	  handle Opaque => NONE
+	       | e => (print "find_kind_equation given = \n";
+		       PpNil.pp_con con; print "\n"; raise e)
+     end
+
 
 end

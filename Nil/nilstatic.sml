@@ -137,9 +137,8 @@ struct
   val insert_con = NilContext.insert_con
   val insert_con_list = NilContext.insert_con_list
   val find_con = NilContext.find_con
-  val bind_kind = NilContext.bind_kind
-  val bind_kind_list = NilContext.bind_kind_list
   val insert_kind = NilContext.insert_kind
+  val insert_kind_list = NilContext.insert_kind_list
   val find_kind = NilContext.find_kind
 
 
@@ -484,12 +483,11 @@ struct
 
 	   val var_kinds = map (fn var => (var,Type_k)) vars
 
-	   val (D',var_kinds,subst) = bind_kind_list (D,var_kinds)
+	   val D' = insert_kind_list (D,var_kinds)
            val D = if is_recur then D' else D
 
 	   val (vars,_) = unzip var_kinds
 
-	   val cons = map (substConInCon subst) cons
 
 	   val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
 	   val defs = Sequence.fromList (zip vars cons)

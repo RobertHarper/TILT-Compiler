@@ -209,14 +209,16 @@ struct
     (* collections *)
  
     type bound = {boundcvars : Name.VarSet.set,
-		  boundevars : con Name.VarMap.map}
+		  boundevars : Name.VarSet.set}
+(*
     val emptyCollection = Name.VarMap.empty
-    fun collInsert (set, (key,value)) = Name.VarMap.insert(set,key,value)
+    fun collInsert (set, (key,value)) = Name.VarSet.insert(set,key)
     fun collMerge set [] = set
       | collMerge set (a::rest) = collMerge (collInsert(set,a)) rest
     fun collMember (set,k) = (case Name.VarMap.find(set,k) of
 				  NONE => false
 				| SOME _ => true)
+*)
     datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
     datatype state =
 	STATE of {bound : bound,
@@ -241,7 +243,7 @@ struct
     fun add_var (STATE{bound={boundevars,boundcvars},
 		       cbndhandler,bndhandler,conhandler,exphandler,kindhandler}, v, c) =
 	(STATE{bound = {boundcvars = boundcvars,
-			boundevars = collInsert (boundevars, (v,c))},
+			boundevars = Name.VarSet.add(boundevars, v)},
 	       bndhandler = bndhandler,
 	       cbndhandler = cbndhandler,
 	       conhandler = conhandler,
@@ -588,7 +590,7 @@ struct
 	| NOCHANGE => doexp exp
       end
 
-  val default_bound = {boundcvars = Name.VarSet.empty, boundevars = emptyCollection}
+  val default_bound = {boundcvars = Name.VarSet.empty, boundevars = Name.VarSet.empty}
   fun default_bnd_handler _ = NOCHANGE
   fun default_cbnd_handler _ = NOCHANGE
   fun default_exp_handler _ = NOCHANGE
@@ -697,7 +699,7 @@ struct
       | con_handler _ _ = NOCHANGE
 	   
     fun exp_handler expmap ({boundevars,boundcvars},Var_e var) = 
-      if (collMember(boundevars,var)) 
+      if (Name.VarSet.member(boundevars,var)) 
 	then NOCHANGE
       else (case (expmap var) of
 		NONE => NOCHANGE
@@ -708,7 +710,7 @@ struct
 	let val free_evars : (var list ref) = ref []
 	    val free_cvars : (var list ref) = ref []
 	    fun exp_handler ({boundevars,boundcvars},Var_e v) = 
-		(if (not (collMember(boundevars,v)) andalso not (member_eq(eq_var,v,!free_evars)))
+		(if (not (Name.VarSet.member(boundevars,v)) andalso not (member_eq(eq_var,v,!free_evars)))
 		     then free_evars := v :: (!free_evars)
 		 else ();
 		     NOCHANGE)
@@ -744,6 +746,11 @@ struct
     fun freeConVarInCon(look_in_kind,c) =
 	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
 	in  f_con handler c;
+	    !cvars_ref
+	end
+    fun freeConVarInKind k =
+	let val (evars_ref,cvars_ref,handler) = free_handler true
+	in  f_kind handler k;
 	    !cvars_ref
 	end
   end
@@ -1143,7 +1150,7 @@ struct
        | (Singleton_k con) => Singleton_k(alpha_normalize_con' context con)
        | (Record_k fieldseq) =>
 	   let
-	     fun fold_one (((lbl,var),knd),context) = 
+	     fun fold_one (((lbl,var),kind),context) = 
 	       let
 		 val kind'  = alpha_normalize_kind' context kind
 		 val (context',var') = alpha_bind (context,var)
@@ -1421,5 +1428,18 @@ struct
 	      then (vclist)
 	  else (map (fn (v,c) => (lookup v, substcon c)) vclist)
       end
+
+
+  (* Returns true if the kind is a shape 
+   *)
+  fun is_shape kind = 
+    (case kind 
+       of Type_k => true
+        | Singleton_k con => false
+        | Record_k elts => Sequence.all (fn (_,k) => is_shape k) elts
+        | Arrow_k (openness, formals, return) => 
+         (List.all (fn (_,k) => is_shape k) formals) 
+         andalso (is_shape return))
+
 
 end

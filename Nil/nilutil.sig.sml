@@ -6,7 +6,9 @@ signature NILUTIL =
     (* if flag is true, will look inside kinds *)
     val freeExpConVarInExp : bool * Nil.exp -> Nil.var list * Nil.var list (* free term and type level vars *)
     val freeConVarInCon    : bool * Nil.con -> Nil.var list (* free type level vars *)
+    val freeConVarInKind   : Nil.kind -> Nil.var list (* free type level vars *)
 
+    val is_shape : Nil.kind -> bool
     val muExpand : bool * (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
     val generate_tuple_label : int -> Name.label
     val exp_tuple : (Nil.exp * Nil.con) list -> Nil.exp
@@ -38,7 +40,7 @@ signature NILUTIL =
 
     datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
     type bound = {boundcvars : Name.VarSet.set,
-		  boundevars : Nil.con Name.VarMap.map}
+		  boundevars : Name.VarSet.set}
     type handlers = ((bound * Nil.exp -> Nil.exp changeopt) *
 		     (bound * Nil.bnd -> (Nil.bnd list) changeopt) *
 		     (bound * Nil.con -> Nil.con changeopt) *

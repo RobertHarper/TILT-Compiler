@@ -1,4 +1,4 @@
-(*$import NIL NILCONTEXT NILSTATIC NILUTIL NILSUBST PPNIL OPTIMIZE Stats *)
+(*$import NIL NILCONTEXT NILSTATIC NILUTIL NILSUBST PPNIL OPTIMIZE Stats NORMALIZE *)
 (* A one-pass optimizer with the following goals:
 	Convert project_sum to project_sum_record.
 	Eliminate dead code.
@@ -8,12 +8,13 @@
 
 functor Optimize(structure Nil : NIL
 		 structure NilContext : NILCONTEXT
+		 structure Normalize : NORMALIZE
 		 structure NilStatic : NILSTATIC
 		 structure NilUtil : NILUTIL
 		 structure Subst : NILSUBST
 		 structure Ppnil : PPNIL
-		 sharing Ppnil.Nil = NilUtil.Nil = NilContext.Nil = NilStatic.Nil = Nil 
-		 sharing type NilContext.context = NilStatic.context
+		 sharing Ppnil.Nil = NilUtil.Nil = NilContext.Nil = NilStatic.Nil = Normalize.Nil = Nil 
+		 sharing type NilContext.context = NilStatic.context = Normalize.context
 		 sharing type Subst.con = Nil.con) 
     :> OPTIMIZE where Nil = Nil = 
 struct
@@ -62,7 +63,7 @@ struct
 	      end
 	in
 	  type state = state
-	  fun new_state() = STATE {equation = NilContext.empty,
+	  fun new_state() = STATE {equation = NilContext.empty(),
 				   used = Name.VarMap.empty,
 				   uncurry = Name.VarMap.empty,
 				   alias = Name.VarMap.empty,
@@ -70,7 +71,7 @@ struct
 	  fun retain_state(STATE{equation,alias,used,current,uncurry}) = 
 			STATE{used=used,alias=alias,equation=equation,
 			      uncurry=uncurry,current=ref USED}
-	  fun add_vars(STATE{equation=equation,used,alias,current,uncurry},vars) = 
+	  fun add_vars(STATE{equation,used,alias,current,uncurry},vars) = 
 		let val r = ref UNUSED
 		in  STATE{equation=equation,
 			  used=foldl (fn (v,m) => Name.VarMap.insert(m,v,r)) used vars,
@@ -141,17 +142,19 @@ struct
 		    uncurry=uncurry,
 		    current=current}
 	  fun add_con(STATE{equation,alias,used,uncurry,current},v,c) = 
-	      STATE{equation=NilContext.insert_con(equation,v,c),
+	      (STATE{equation=NilContext.insert_con(equation,v,c),
 		    used=used,
 		    alias=alias,
 		    uncurry=uncurry,
-		    current=current}
+		    current=current})
 	  fun add_kind_equation(STATE{equation,alias,used,uncurry,current},v,c,k) = 
 	      STATE{equation=NilContext.insert_kind_equation(equation,v,c,k),
 		    used=used,
 		    alias=alias,
 		    uncurry=uncurry,
 		    current=current}
+
+	  fun type_of(STATE{equation,...},e) = Normalize.type_of(equation,e)
 	end
 
 
@@ -275,9 +278,12 @@ struct
 					 then SOME(v,f)
 				     else NONE)
 		  | is_lambda _ = NONE
-		fun loop (depth,alias,curry_call,args,cwrapper_opt,v,function) = 
+		fun loop (depth,alias,funcons,curry_call,args,cwrapper_opt,v,function) = 
 		    let val (body,con,vk,vc,vf,wrapper) = separate function
 			val alias = if (depth>1) then (v,true,curry_call)::alias else alias
+			val funcon = AllArrow_c(Open,Partial,vk,map #2 vc,
+						TilWord32.fromInt(length vf),con)
+			val funcons = if (depth>1) then (v,funcon)::funcons else funcons
 			val curry_call = App_e(Open,curry_call,
 						map (Var_c o #1) vk, 
 						map (Var_e o #1) vc, map Var_e vf)
@@ -302,39 +308,45 @@ struct
 							 map (Var_e o #1) vc,
 							 map Var_e vf)
 				fun uwrapper(body,con) = Function(Partial,Arbitrary,vk,vc,vf,body,con)
-			    in  (depth,uncurry_call,vk,vc,body,con,alias,cwrapper_base,uwrapper)
+			    in  (depth,uncurry_call,vk,vc,vf,body,con,
+				 alias,funcons,cwrapper_base,uwrapper)
 			    end
 		    in  case (is_lambda body) of
-			SOME(v,f) => loop (depth+1,alias,curry_call,args,SOME cwrapper_nonbase,v,f)
+			SOME(v,f) => loop (depth+1,alias,funcons,
+					   curry_call,args,SOME cwrapper_nonbase,v,f)
 		      | NONE => base()
 		    end
-	    in  loop(1,[],Var_e curry_name,([],[],[]),NONE,curry_name,function)
+	    in  loop(1,[],[],Var_e curry_name,([],[],[]),NONE,curry_name,function)
 	    end
 
 	fun do_uncurry(vflist,state) = 
 	  let fun folder ((v,f),(acc,state)) = 
-			let (* v' is the name of the uncurried function *)
-			    val v' = Name.derived_var v
-			    val (depth,uncurry_call,vk,vc,body,con,aliases,
-				 cwrapper,uwrapper) = extract_uncurry(Open,v,v',f)
-			    val temp = (v,vk,vc,body,con,cwrapper,uwrapper,uncurry_call)
-			    val state = if (depth>1)
-					 then 
-					     let val state = add_var(state,v')
-						 val state = add_curry(state,v,depth,v')
-					     in  add_aliases(state,aliases)
-					     end
-					else state
-		         in   (temp::acc,state)
-			 end
+	        let (* v' is the name of the uncurried function *)
+		    val v' = Name.fresh_named_var ((Name.var2name v) ^ "_uncurry")
+		    val (depth,uncurry_call,vk,vc,vf,body,con,aliases,funcons,
+			 cwrapper,uwrapper) = extract_uncurry(Open,v,v',f)
+		    val temp = (v,vk,vc,vf,body,con,cwrapper,uwrapper,uncurry_call)
+		    val state =
+			let val Function(effect,recur,vklist,vclist,vflist,e,c) = f
+			    val funcon = AllArrow_c(Open,Partial,vklist,map #2 vclist,
+						    TilWord32.fromInt(length vflist),c)
+			in  add_con(state,v,funcon)
+			end
+		    val state = 
+			if (depth>1)
+			    then 
+				let
+				    val state = foldl (fn ((v,c),s) => add_con(s,v,c))state funcons
+				    val state = add_var(state,v')
+				    val state = add_curry(state,v,depth,v')
+				in  add_aliases(state,aliases)
+				end
+			else state
+		in   (temp::acc,state)
+		end
 	  in  foldl folder ([],state) vflist
 	  end
 
-	fun getType (exp : exp) : con option = 
-	    (case exp of
-		 Prim_e(NilPrimOp(record labs), clist, _) =>
-		     SOME(Prim_c(Record_c labs, clist))
-	       | _ => NONE)
 
 (*
 	fun reduce_once (state : state) (con : con) : con option = 
@@ -394,6 +406,9 @@ val reduce = fn state => fn pred =>
 	     SOME(TilWord32.toInt tagcount, TilWord32.toInt totalcount, 
 		  known, c)
 	   | getsum _ = NONE
+
+	 fun getexn (Prim_c(Exntag_c, [c])) = SOME c
+	   | getexn _ = NONE
 
 	fun is_sumsw_int state exp = 
 	  (case exp of
@@ -553,8 +568,16 @@ val reduce = fn state => fn pred =>
 	       | Exncase_e {arg,result_type,bound,arms,default} =>
 		     let val arg = do_exp state arg
 			 val result_type = do_con state result_type
-			 val ([(bound,_)],state) = do_vclist state[(bound,Prim_c(Exn_c,[]))]
-			 val arms = map (fn (e1,e2) => (do_exp state e1, do_exp state e2)) arms
+			 fun do_arm(tag,body) = 
+			     let val tag = do_exp state tag
+				 val tagcon = type_of(state,tag)
+				 val con = (case (getexn tagcon) of
+						SOME c => c
+					      | _ => error "type of tag is not exntag_c")
+				 val (_,state) = do_vclist state[(bound,con)]
+			     in  (tag,do_exp state body)
+			     end
+			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
 		     in  Exncase_e {bound=bound,arg=arg,result_type=result_type,
 				     arms=arms,default=default}
@@ -582,6 +605,7 @@ val reduce = fn state => fn pred =>
 				     val state = (case e of
 						    Var_e _ => add_alias(state,v,false,e)
 						  | _ => state)
+				     val state = add_con(state,v,c)
 				 in  ([Exp_b(v,do_con state' c, e)], state)
 				 end
 	      fun exp_b_proj(v,c,sumcon,k,labs,reccons,sv) = 
@@ -589,13 +613,14 @@ val reduce = fn state => fn pred =>
 							(Name.label2string l)) labs
 		      val _ = do_exp state (Var_e sv)
 		      val _ = do_con state sumcon
-		      fun mapper(v,c,l) = 
-				let val np = project_sum_record(k, l)
-			 	in  Exp_b(v,c,Prim_e(NilPrimOp np,[sumcon],[Var_e sv]))
-				end
 		      val state = foldl (fn (v,s) => add_var(s,v)) state vars
-		      val bnds = Listops.map3 mapper (vars,reccons,labs)
-
+		      fun folder((v,c,l),s) = 
+				let val np = project_sum_record(k, l)
+			 	in  (Exp_b(v,c,Prim_e(NilPrimOp np,[sumcon],[Var_e sv])),
+				     add_con(s,v,c))
+				end
+		      val (bnds,state) = Listops.foldl_acc folder state
+			                 (Listops.zip3  vars reccons labs)
 		      val r = Prim_e(NilPrimOp(record labs), reccons, map Var_e vars)
 		      val bnd = Exp_b(v,c,r)
 		      val (bnds2,state) = do_bnd(bnd,state)
@@ -604,8 +629,9 @@ val reduce = fn state => fn pred =>
 		  in  (bnds @ bnds2, state)
 		  end
 	  in	(case bnd of
-		     Exp_b(v,c,e as Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv])) =>
-		     let fun getrecord (Crecord_c lcons) = SOME(map #2 lcons)
+		     Exp_b(v,_,e as Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv])) =>
+		     let val c = type_of(state,e)
+			 fun getrecord (Crecord_c lcons) = SOME(map #2 lcons)
 			   | getrecord _ = NONE
 			 val sv_con = find_con(state,sv)
 			 val fieldcon = 
@@ -624,8 +650,9 @@ val reduce = fn state => fn pred =>
 			 | NONE => exp_b(v,c,e)
 		     end
 		   (* anormalizes the components of a record *)
-		 | Exp_b(v,c,Prim_e(NilPrimOp(record labs),clist,elist)) => 
-		     let fun folder((Var_e v,c),bnds) = (v, bnds)
+		 | Exp_b(v,_,e as Prim_e(NilPrimOp(record labs),clist,elist)) => 
+		     let val c = type_of(state,e)
+			 fun folder((Var_e v,c),bnds) = (v, bnds)
 			   | folder((e,c),bnds) = 
 			 let val v = Name.fresh_named_var "named"
 			     val bnd = Exp_b(v,c,e)
@@ -642,25 +669,30 @@ val reduce = fn state => fn pred =>
 			 val e = Prim_e(NilPrimOp(record labs),clist,map Var_e vars)
 			 val state = add_alias(state,v,false,e)
 			 val bnd = Exp_b(v,c,e)
+			 val state = add_con(state,v,c)
 		     in  (bnds @ [bnd], state)
 		     end
 
 		 (* these 2 cases names inject_sum's argument to a variable *)
-		   | Exp_b(v,c,e as Prim_e(NilPrimOp (inject _), _, [Var_e _])) => exp_b(v,c,e)
-		   | Exp_b(v,c,Prim_e(NilPrimOp (inject k), clist,[e])) => 
-		     (case getType e of
-			 SOME injectee_con =>
-			     let 
-				 val var = Name.fresh_named_var "named"
-				 val bnd1 = Exp_b(var,injectee_con,e)
-				 val bnd2 = Exp_b(v,c,Prim_e(NilPrimOp (inject k),
-							     clist,[Var_e var]))
-			     in  do_bnds([bnd1,bnd2], state)
-			     end
-			 | NONE => (print "WARNING: optimize.sml: binding inject of non-record\n";
-				    exp_b(v,c,e)))
+		   | Exp_b(v,_,e as Prim_e(NilPrimOp (inject _), _, [Var_e _])) => 
+		     let val c = type_of(state,e)
+		     in  exp_b(v,c,e)
+		     end
+		   | Exp_b(v,_,e as Prim_e(NilPrimOp (inject k), clist,[injectee])) => 
+		     let val c = type_of(state,e)
+			 val injectee_con = type_of(state,injectee)
+			 val var = Name.fresh_named_var "named2"
+			 val bnd1 = Exp_b(var,injectee_con,injectee)
+			 val bnd2 = Exp_b(v,c,Prim_e(NilPrimOp (inject k),
+						     clist,[Var_e var]))
+			 val state = add_con(state,var,injectee_con)
+			 val state = add_con(state,v,c)
+		     in  do_bnds([bnd1,bnd2], state)
+		     end
 		   | Exp_b(v,c,Let_e(_,bnds,e)) => do_bnds(bnds @ [Exp_b(v,c,e)], state)
-		   | Exp_b(v,c,e) => exp_b(v,c,e)
+		   | Exp_b(v,c,e) => let val c = type_of(state,e)
+				     in  exp_b(v,c,e)
+				     end
 		   | Con_b(p,cbnd) => let val (cbnd,state) = do_cbnd(cbnd,state)
 				      in  ([Con_b(p,cbnd)], state)
 				      end
@@ -670,9 +702,11 @@ val reduce = fn state => fn pred =>
 			 val state = add_vars(state,map #1 vflist)
 			 val state = add_vars(state,map #1 v_vk_vc_b_c_cw_uw_call)
 			 val state' = enter_var(state,hd(map #1 vflist))
-			 fun mapper (v,vk,vc,b,c,cw,uw,call) = 
+			 fun mapper (v,vk,vc,vf,b,c,cw,uw,call) = 
 			     let fun folder((v,k),state) = add_kind(state,v,k)
 				 val state = foldl folder state vk
+				 fun folder((v,c),state) = add_con(state,v,c)
+				 val state = foldl folder state vc
 			     in  (v,do_exp state b, do_con state c,
 				  cw, uw, call)
 			     end
@@ -719,7 +753,8 @@ val reduce = fn state => fn pred =>
 				in  ([Fixclosure_b(recur,Sequence.fromList vcllist)], state)
 				end)
 	  end
-	fun do_import(ImportValue(l,v,c),state) = (ImportValue(l,v,do_con state c), state)
+	fun do_import(ImportValue(l,v,c),state) = (ImportValue(l,v,do_con state c), 
+						   add_con(state,v,c))
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_kind(state,v,k))
 

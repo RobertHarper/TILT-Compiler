@@ -1,4 +1,4 @@
-(*$import NIL NILSTATIC NILCONTEXT NILUTIL PPNIL NILSUBST TOCLOSURE Stats Listops Bool *)
+(*$import NIL NILSTATIC NILCONTEXT NILUTIL PPNIL NILSUBST TOCLOSURE Stats Listops Bool NORMALIZE *)
 
 (* Closure conversion is accomplished in two phases.  
    The first phase scans the program for free type and term variables of 
@@ -11,12 +11,13 @@
 
 functor ToClosure(structure Nil : NIL
 		  structure NilStatic : NILSTATIC
+		  structure Normalize : NORMALIZE
 		  structure NilContext : NILCONTEXT
 		  structure NilUtil : NILUTIL
 		  structure Ppnil : PPNIL
 		  structure Subst : NILSUBST
-		  sharing NilUtil.Nil = Ppnil.Nil = NilStatic.Nil = NilContext.Nil = Nil
-		      and type NilContext.context = NilStatic.context
+		  sharing NilUtil.Nil = Ppnil.Nil = NilStatic.Nil = NilContext.Nil = Normalize.Nil = Nil
+		      and type NilContext.context = NilStatic.context = Normalize.context
 			 and type Subst.con = Nil.con
 		         and type Subst.exp = Nil.exp
 			 and type Subst.kind = Nil.kind)
@@ -164,8 +165,9 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 			 escape : bool,
 			 callee : (fid * state) list,
 			 frees : frees}
-	fun add_gboundevar (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},v) = 
+	fun add_gboundevar (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},v,c) = 
 	    let val boundevars' = VarMap.insert(boundevars,v,GLOBALe)
+		val ctxt = NilContext.insert_con(ctxt,v,c)
 	    in  STATE{is_top = is_top,
 		      curfid = curfid,
 		      ctxt = ctxt,
@@ -189,7 +191,8 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 			   else (if is_top then (fn _ => GLOBALe) 
 				 else (fn c => LOCALe(c,ref NONE)))
 		val boundevars' = foldl (fn ((v,c),m) => VarMap.insert(m,v,wrap c)) boundevars vc_list
-	    in  STATE{ctxt = ctxt,
+		val ctxt' = foldl (fn ((v,c),ctxt) => NilContext.insert_con(ctxt,v,c)) ctxt vc_list
+	    in  STATE{ctxt = ctxt',
 		      is_top = is_top,
 		      curfid = curfid,
 		      boundevars = boundevars',
@@ -511,6 +514,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	val is_boundevar = is_boundevar
 	val is_boundcvar = is_boundcvar
 
+	fun type_of(STATE{ctxt,...},e) = Normalize.type_of(ctxt,e) 
 
     (* ----- Global data structure to keep track of function information ------------ *)
 
@@ -524,7 +528,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	     end)
 	    
 	fun initial_state topfid = let val _ = add_fun topfid
-				   in   STATE{ctxt = NilContext.empty,
+				   in   STATE{ctxt = NilContext.empty(),
 					      is_top = true,
 					      curfid=topfid,boundfids=VarSet.empty,
 					      boundevars = VarMap.empty,
@@ -622,15 +626,17 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 			     let val (f,state) = cbnd_find_fv(cbnd,(frees,state))
 			     in (state, f)
 			     end
-		       | Exp_b(v,c,e) => 
-					 let val f = t_find_fv (state,frees) c
-					     val f = e_find_fv (state,f) e
-					     val _ = if (!debug)
-							 then (print "add_boundevar ";
-							       Ppnil.pp_var v; print "\n")
-						     else ()
-					 in (add_boundevar(state,v,c), f)
-					 end
+		       | Exp_b(v,_,e) => 
+			     let 
+				 val c = type_of(state,e) 
+				 val f = t_find_fv (state,frees) c
+				 val f = e_find_fv (state,f) e
+				 val _ = if (!debug)
+					     then (print "add_boundevar ";
+						   Ppnil.pp_var v; print "\n")
+					 else ()
+			     in (add_boundevar(state,v,c), f)
+			     end
 		       | Fixopen_b var_fun_set =>
 			     let val outer_curfid = get_curfid state
 				 fun do_arm fids_types (v,Function(_,_,vklist,vclist,vflist,body,tipe)) =
@@ -712,6 +718,8 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	   | project_sum known => true
 	   | _ => true)
 
+
+
     and nilprim_uses_carg state (np,clist) = 
 	(case np of
 	     record _ => false
@@ -752,7 +760,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 		 in  irreducible
 		 end
 	   | _ => true)
-	
+
 
     and e_find_fv arg exp : frees =
 	let val res = e_find_fv' arg exp
@@ -810,6 +818,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 			  NONE => frees
 			| SOME (c,r) =>
 			      let val frees = free_evar_add(frees,v,c)
+				  val c = NilUtil.alpha_normalize_con c
 				  val f = remove_free(state,
 							 (case !r of
 							      SOME f => f
@@ -854,7 +863,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 		     fun efold(e,f) = e_find_fv (state,f) e
 		     val frees = if (nilprim_uses_carg state (np,clist))
 				     then foldl cfold frees clist
-				 else frees
+				 else foldl tfold frees clist
 		     val frees = foldl efold frees elist
 		 in  frees
 		 end
@@ -1440,9 +1449,12 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	       end
 
 	  | Prim_e(NilPrimOp np,clist,elist) => 
+	       Prim_e(NilPrimOp np,map c_rewrite clist, map e_rewrite elist)
+(*
 	       if (nilprim_uses_carg_conservative (np,clist))
 		   then Prim_e(NilPrimOp np,map c_rewrite clist, map e_rewrite elist)
 	       else Prim_e(NilPrimOp np,clist, map e_rewrite elist)
+*)
 
 	  | Prim_e(p,clist,elist) => 
 	       Prim_e(p,map c_rewrite clist, map e_rewrite elist)
@@ -1661,7 +1673,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	   (* Scan module for free variables *)
 	   fun import_folder (ImportValue(l,v,c),state) = 
 	       let val f = c_find_fv (state,empty_frees) c
-	       in  add_gboundevar(state,v)
+	       in  add_gboundevar(state,v,c)
 	       end
 	     | import_folder (ImportType(l,v,k),state) = 
 	       let val f = k_find_fv (state,empty_frees) k

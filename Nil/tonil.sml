@@ -1,4 +1,4 @@
-(*$import IL PPIL ILUTIL ILCONTEXT ILSTATIC NIL NILUTIL NILERROR NILCONTEXT NILSTATIC PPNIL NILSUBST PRIMUTIL Stats LibBase ListMergeSort TONIL *)
+(*$import IL PPIL ILUTIL ILCONTEXT ILSTATIC NIL NILUTIL NILERROR NILCONTEXT NILSTATIC PPNIL NILSUBST PRIMUTIL Stats LibBase ListMergeSort TONIL NORMALIZE *)
 
 (* We box all floats and translate floating point operations accordingly.
    Thus, kind type is replaced by work types.
@@ -13,6 +13,7 @@ functor Tonil(structure Il : IL
               structure Ilcontext : ILCONTEXT
               structure IlStatic : ILSTATIC
               structure Nilcontext : NILCONTEXT
+	      structure Normalize : NORMALIZE
               structure Nilstatic : NILSTATIC
               structure Nilprimutil : PRIMUTIL
               structure Ppnil : PPNIL
@@ -20,9 +21,9 @@ functor Tonil(structure Il : IL
 	      structure Subst : NILSUBST
                sharing Ilutil.Il = Ppil.Il = Ilcontext.Il = IlStatic.Il = Il
 	       sharing Nilutil.Nil = Nilcontext.Nil = Ppnil.Nil = 
-		   Nilstatic.Nil = NilError.Nil = Nil
+		   Nilstatic.Nil = NilError.Nil = Normalize.Nil = Nil
                sharing Nil.Prim = Nilprimutil.Prim = Il.Prim
-	       sharing type Nilstatic.context = Nilcontext.context
+	       sharing type Nilstatic.context = Nilcontext.context = Normalize.context
 	       sharing type Nilprimutil.exp = Nilutil.Nil.exp
                    and type Nilprimutil.con = Nilutil.Nil.con
 	       sharing type Subst.con = Nil.con
@@ -350,7 +351,28 @@ struct
 	   loop (module, nil)
        end
 
-
+   fun rename_sdecs sdecs = 
+       let open Il Ilutil
+	   fun folder(SDEC(l,dec),s : (var * exp) list * (var * con) list * (var * mod) list) = 
+	       case dec of
+		   DEC_EXP(v,c) => let val c = con_subst_expconmodvar(c,#1 s, #2 s, #3 s)
+				   in  (SDEC(l,DEC_EXP(v,c)),s)
+				   end
+		 | DEC_CON(v,k,c) => let val v' = Name.derived_var v
+					 val k = kind_subst_expconmodvar(k,#1 s, #2 s, #3 s)
+					 val c = (case c of
+						      NONE => NONE
+						    | SOME c => SOME(con_subst_expconmodvar(c,#1 s, #2 s, #3 s)))
+				     in  (SDEC(l,DEC_CON(v',k,c)),
+					  (#1 s, (v,CON_VAR v'):: (#2 s), #3 s))
+				     end
+		 | DEC_MOD(v,signat) => let val v' = Name.derived_var v
+					    val signat = sig_subst_expconmodvar(signat,
+										#1 s, #2 s, #3 s)
+					in  (SDEC(l,DEC_MOD(v,signat)),s)
+					end
+       in  #1(foldl_acc folder ([],[],[]) sdecs)
+       end
 
 
    (* xeffect.  
@@ -562,7 +584,7 @@ local
 in
     type splitting_context = splitting_context
     fun get_nilctxt (CONTEXT{NILctx,...}) = NILctx
-    fun make_splitting_context vmap = CONTEXT{NILctx = Nilcontext.empty,
+    fun make_splitting_context vmap = CONTEXT{NILctx = Nilcontext.empty(),
 					      sigmap = Name.VarMap.empty,
 					      used = Name.VarMap.empty,
 					      vmap = vmap,
@@ -761,14 +783,14 @@ in
 			  cm)
 		else (ctxt, used, cm)
 	     end
-           fun folder(Exp_b(v,c,_),(ctxt,used,cm)) = 
+           fun folder(Exp_b(v,_,e),(ctxt,used,cm)) = 
                let val insert = 
 		   (strict orelse
 		   ((Nilcontext.find_con(ctxt,v);
 		    print "update_NILctx_ebndcat found var already present\n";
 		    false) handle Nilcontext.Unbound => true))
 	       in  if insert
-		       then (Nilcontext.insert_con(ctxt,v,c), 
+		       then (Nilcontext.insert_con(ctxt,v,Normalize.type_of(ctxt,e)), 
 			     Name.VarMap.insert(used, v, ref false), cm)
 		   else (ctxt, used, cm)
 	       end
@@ -3272,7 +3294,7 @@ end (* local defining splitting context *)
        end
 		    
        
-   and xsdecs context (args as (_,_,_,_,sdecs)) =
+   and xsdecs context (a,b,c,d,sdecs) =
        let
 	   val this_call = ! xsdecs_count
 	   val _ = if (! debug) then
@@ -3285,6 +3307,9 @@ end (* local defining splitting context *)
 *)
 					    print "\n\n") else ())
                    else ()
+
+	   val sdecs = rename_sdecs sdecs
+	   val args = (a,b,c,d,sdecs)
 
 	   val result = xsdecs'' context args
 	       handle e => (if (!debug) then (print ("Exception detected in call " ^ 

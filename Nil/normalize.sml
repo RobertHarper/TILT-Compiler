@@ -1,12 +1,14 @@
-(*$import NIL PPNIL NILUTIL NILCONTEXT NILSUBST NORMALIZE *)
+(*$import NIL PPNIL NILUTIL NILCONTEXT NILSUBST NORMALIZE PRIMUTIL *)
 functor NormalizeFn(structure Nil : NIL
 		    structure PpNil : PPNIL
 		    structure NilUtil : NILUTIL 
+		    structure PrimUtil : PRIMUTIL 
 		    structure NilContext : NILCONTEXT
 		    structure Subst : NILSUBST
+			 sharing PrimUtil.Prim = Nil.Prim
 		         sharing NilUtil.Nil = PpNil.Nil = NilContext.Nil = Nil
-			 and type Subst.con = Nil.con
-		         and type Subst.exp = Nil.exp
+			 and type Subst.con = Nil.con = PrimUtil.con
+		         and type Subst.exp = Nil.exp = PrimUtil.exp
 			 and type Subst.kind = Nil.kind
 			 and type Subst.bnd = Nil.bnd
 			 and type Subst.subst = NilContext.subst) 
@@ -240,7 +242,7 @@ val show_context = ref false
 				      1 => Type_k
 				    | len => NilUtil.kind_tuple(Listops.copy(len,Type_k)))
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) => Type_k
-	| (Var_c var) => NilContext.find_shape_kind (D,var)
+	| (Var_c var) => NilContext.find_shape (D,var)
         | Let_c (sort,[Open_cb (var,formals,body,body_kind)],Var_c v) =>
 	   if (eq_var(var,v)) then Arrow_k(Open,formals,body_kind) else get_shape' D (Var_c v)
 	| Let_c(sort,[Code_cb (var,formals,body,body_kind)],Var_c v) =>
@@ -976,5 +978,235 @@ val show_context = ref false
   val kind_normalize' = wrap "kind_normalize'" kind_normalize'
   val con_normalize' = wrap "con_normalize'"  con_normalize'
   val exp_normalize' = wrap "exp_normalize'" exp_normalize'
+
+
+    fun is_hnf c : bool = 
+        (case c of
+             Prim_c(pc,clist) => true
+           | AllArrow_c _ => true
+           | Var_c _ => false
+           | Let_c _ => false
+           | Mu_c _ => true
+           | Proj_c (Mu_c _,_) => true
+           | Proj_c _ => false
+           | App_c _ => false
+           | Crecord_c _ => true
+           | Closure_c _ => error "Closure_c not a type"
+           | Typecase_c _ => false
+           | Annotate_c (_,c) => false)
+
+    fun reduce_until_hnf(env,c) : con = 
+        let fun diagnose n [] = error "reduce_until_hnf: diagnose"
+              | diagnose n (c::rest) = (print "reduce_until_hnf(";
+                                        print (Int.toString n);
+                                        print ") =\n"; PpNil.pp_con c; print "\n";
+                                        diagnose (n+1) rest)
+            fun loop (n,past) (subst,c) = 
+            if (n>1000) then diagnose 0 (rev past)
+                else 
+            if (is_hnf c)
+                then (subst,c )
+            else let val next = (n+1,c::past)
+                     val (progress,subst,c) = con_reduce_once(env,subst) c
+                 in  if progress then loop next (subst,c) else (subst,c)
+                 end
+            val (subst,c) = loop (0,[]) (Subst.empty(),c)
+        in  Subst.substConInCon subst c
+        end
+
+    fun lab2int l ~1 = error "lab2int failed"
+      | lab2int l n = if (eq_label(l,NilUtil.generate_tuple_label n))
+			  then n else lab2int l (n-1)
+
+    fun expandMuType(D:context, mu_con:con) =
+	let fun extract (defs,which) =
+	    let val defs = Sequence.toList defs
+		fun mapper (n,(v,_)) = 
+		    if (length defs = 1) 
+			then (v,mu_con)
+		    else (v,Proj_c(mu_con,NilUtil.generate_tuple_label(n+1)))
+		val subst = Subst.fromList(Listops.mapcount mapper defs)
+		val (_,c) = List.nth(defs,which-1)
+	    in  Subst.substConInCon subst c
+	    end
+	in  (case (reduce_until_hnf(D,mu_con)) of
+		 Mu_c (_,defs) => extract(defs,1)
+	       | Proj_c(Mu_c (_,defs), l) => extract(defs,lab2int l (Sequence.length defs))
+	       | _ => error "expandMuType reduced to non-mu type")
+	end
+
+    fun projectTuple(D:context, c:con, l:label) = 
+	(case (reduce_until_hnf(D,c)) of
+	     c as (Crecord_c _) => beta_conrecord(Proj_c(c,l))
+	   | c => (print "projectTuple reduced to non-crecord type = \n";
+		   PpNil.pp_con c; print "\n";
+		   error "projectTuple reduced to non-crecord type"))
+
+    fun projectRecordType(D:context, c:con, l:label) = 
+	(case (reduce_until_hnf(D,c)) of
+	     Prim_c(Record_c labs, cons) =>
+		 (case (Listops.assoc_eq(eq_label,l,Listops.zip labs cons)) of
+		      NONE => error "projectRecordType could not find field"
+		    | SOME c => c)
+	   | c => (print "projectRecordType reduced to non-record type = \n";
+		   PpNil.pp_con c; print "\n";
+		   error "projectRecordType reduced to non-record type"))
+
+    fun projectSumType(D:context, c:con, s:TilWord32.word) = 
+	(case (reduce_until_hnf(D,c)) of
+	     Prim_c(Sum_c {tagcount,totalcount,known}, cons) =>
+		 if (TilWord32.ult(s,tagcount))
+		     then error "projectSumType: asking for tag fields"
+		 else 
+		     let val nontagcount = TilWord32.toInt(TilWord32.uminus(totalcount,tagcount))
+			 val which = TilWord32.toInt(TilWord32.uminus(s,tagcount))
+		     in  case (nontagcount,which) of
+			 (0,_) => error "projectSumType: only tag fields"
+		       | (1,0) => hd cons
+		       | _ => projectTuple(D,hd cons, NilUtil.generate_tuple_label (which + 1))
+		     end
+	   | c => (print "projectSumType reduced to non-sum type = \n";
+		   PpNil.pp_con c; print "\n";
+		   error "projectSumType reduced to non-sum type"))
+
+   fun type_of_switch (D:context,switch:switch):con  = 
+     (case switch
+	of Intsw_e {result_type,...} => result_type
+	 | Sumsw_e {result_type,...} => result_type
+	 | Exncase_e {result_type,...} => result_type
+	 | Typecase_e {result_type,...} => result_type)
+
+   fun type_of_value (D,value) = 
+     (case value 
+	of int (intsize,_) => Prim_c (Int_c intsize,[])
+	 | uint (intsize,_) => Prim_c (Int_c intsize,[])
+	 | float (floatsize,string) => Prim_c (Float_c floatsize,[])
+	 | array (con,arr) => Prim_c (Array_c,[con])
+	 | vector (con,vec) => Prim_c (Vector_c,[con])
+	 | refcell expref => Prim_c (Ref_c,[type_of(D,!expref)])
+	 | tag (atag,con) => Prim_c (Exntag_c,[con]))
+
+   and type_of_fbnd (D,openness,constructor,defs) = 
+     let
+       fun ftype (Function (effect,recursive,tformals,formals,fformals,body,return)) = 
+	 let
+	   val num_floats = Word32.fromInt (List.length fformals)
+	   val con = AllArrow_c (openness,effect,tformals,#2 (unzip formals),num_floats,return)
+	 in
+	   con
+	 end
+       val def_list = Sequence.toList defs
+       val (vars,functions) = unzip def_list
+       val declared_c = map ftype functions
+       val bnd_types = zip vars declared_c
+       val D = NilContext.insert_con_list (D,bnd_types)
+     in
+       D
+     end
+   and type_of_bnds (D,bnds) = 
+     let
+       fun folder (bnd,(D,subst)) = 
+	 (case bnd of
+	       Con_b (phase, cbnd) => 
+		   let val D = NilContext.kind_of_bnds (D,[cbnd])
+		       val (v,c) = 
+			   (case cbnd of
+				Con_cb (v,c) => (v,c)
+			      | Open_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v))
+			      | Code_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v)))
+		       val subst = Subst.add subst (v,Subst.substConInCon subst c)
+		   in  (D,subst)
+		   end
+	     | Exp_b (var, _, exp) =>
+	      let
+		val con = type_of (D,exp)
+		val D = NilContext.insert_con(D,var,con)
+	      in
+		(D,subst)
+	      end
+	     | (Fixopen_b defs) => (type_of_fbnd(D,Open,Fixopen_b,defs),subst)
+	     | (Fixcode_b defs) => (type_of_fbnd(D,Code,Fixcode_b,defs),subst)
+	     | Fixclosure_b (is_recur,defs) => 
+	      let
+		val defs_l = Sequence.toList defs
+		val defs_l = Listops.map_second (fn cl => #tipe cl) defs_l
+		val D = NilContext.insert_con_list (D,defs_l)
+	      in 
+		(D,subst)
+	      end)
+     in
+       List.foldl folder (D,Subst.empty()) bnds
+     end
+   and type_of_prim (D,prim,cons,exps) = 
+       (case prim of
+	    record labs => Prim_c(Record_c labs, map (fn e => type_of(D,e)) exps)
+	  | select lab => projectRecordType(D,type_of(D,hd exps),lab)
+	  | inject s => hd cons
+	  | inject_record s => hd cons
+	  | project_sum s => projectSumType(D,hd cons, s)
+	  | project_sum_record (s,lab) => let val summandType = projectSumType(D,hd cons, s)
+					  in  projectRecordType(D,summandType,lab)
+					  end
+	  | box_float fs => Prim_c(BoxFloat_c fs,[])
+	  | unbox_float fs => Prim_c(Float_c fs,[])
+	  | roll => hd cons
+	  | unroll => expandMuType(D,hd cons)
+	  | make_exntag => Prim_c(Exntag_c, cons)
+	  | inj_exn _ => Prim_c(Exn_c, [])
+	  | make_vararg (openness,effect) => error "type_of vararg not done"
+	  | make_onearg (openness,effect) => error "type_of onearg not done"
+	  | peq => error "peq not done")
+
+   and type_of (D : context,exp : exp) : con = 
+     let
+     in
+       (case exp 
+	  of Var_e var => 
+	    (NilContext.find_con (D,var)
+	     handle Unbound =>
+	       error 
+	       ("Encountered undefined variable " ^ (Name.var2string var) 
+		^ "in type_of"))
+	   | Const_e value => type_of_value (D,value)
+	   | Let_e (letsort,bnds,exp) => 
+	    let
+	      val (D,subst) = type_of_bnds (D,bnds)
+	      val c = type_of (D,exp)
+	    in
+	      Subst.substConInCon subst c
+	    end
+	   | Prim_e (NilPrimOp prim,cons,exps) => type_of_prim (D,prim,cons,exps)
+	   | Prim_e (PrimOp prim,cons,exps) =>   
+	    let 
+	      val (total,arg_types,return_type) = PrimUtil.get_type prim cons
+	    in
+	      return_type
+	    end
+	   | Switch_e switch => type_of_switch (D,switch)
+	   | (App_e (openness,app,cons,texps,fexps)) =>
+	    let
+	      val app_con : con = type_of (D,app)
+	      val  (_,_,tformals,_,_,body) = 
+		(case (NilUtil.strip_arrow(reduce_until_hnf(D,app_con))) of
+		      SOME c => c
+		    | NONE => (print "Ill Typed expression - not an arrow type. c = \n";
+			       PpNil.pp_con app_con;
+			       print "\nexp = \n";
+			       PpNil.pp_exp app;
+			       print "\n";
+			       error "Ill Typed expression - not an arrow"))
+
+	      val subst = Subst.fromList (zip (#1 (unzip tformals)) cons)
+
+	      val con = Subst.substConInCon subst body
+	    in
+	      con
+	    end
+
+	   | Raise_e (exp,con) => con
+	   | Handle_e (exp,v,handler,con) => type_of (D,exp)
+	    )
+     end
+
 
 end

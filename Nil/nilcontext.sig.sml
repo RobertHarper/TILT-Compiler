@@ -9,12 +9,12 @@ signature NILCONTEXT =
     type 'a subst
     type context
 
-    val empty : context
+    val empty : unit -> context
     exception Unbound
 
     (*Insert a type into a context: the constructor is not necessarily normalized *)
     val insert_con : context * var * con -> context
-    val remove_con : context * var -> context
+
     val find_con   : context * var -> con
     val insert_con_list : context * (var * con) list -> context
 
@@ -38,26 +38,23 @@ signature NILCONTEXT =
     val insert_kind_equation : context * var * con * kind -> context
     val insert_kind_list : context* (var * kind) list -> context
 
+    val make_shape : context * Nil.kind -> Nil.kind
 
-    (* bind_kind (context,var,kind) => (context',var',subst)
-      * - inserts the (possibly previously bound) variable "var" into the context
-      * with kind selfify(Var_c var,kind)
-      * PRE: kind is normalized
-      * POST: substitute subst var => var'
-      *       find_kind(context',var') => selfify(Var_c var',kind)
-      *       find_kind(context',var') => con_normalize(pull(Var_c var',kind))
-      *)
-    val bind_kind : context * var * kind -> context * var * con subst
-    val bind_kind_list : context * (var * kind) list -> context * (var * kind) list * con subst
+    (*Given a constructor, returns the most imprecise kind for that
+     * con - i.e, merely the shape info
+     *)
+    val shape_of : context * Nil.con -> Nil.kind
+    val kind_of : context * Nil.con -> Nil.kind
+    val kind_of_bnds : context * Nil.conbnd list -> context
 
     (*find_kind_project returns the kind, and the most precise constructor
      * that can be created based on the transparent information in the
      * kind.  Note that in the case of transparency, SOME ... will be returned.
      * A NONE denotes the path is at least partially opaque.
      *)
-    val find_shape_kind    : context * var -> kind
+    val find_shape         : context * var -> kind
     val find_kind          : context * var -> kind
-    val remove_kind        : context * var -> context
+
     val find_kind_equation : context * con -> con option
 
 

@@ -85,4 +85,8 @@ signature NORMALIZE =
      * where p == cj, or the default case if none match.
      *)
     val beta_typecase : context -> con -> con
+
+    (* gets the type of a well-formed expression *)
+    val type_of : context * Nil.exp -> Nil.con
+
   end
