@@ -31,6 +31,14 @@ Code:
 	See mapfile-bug and bug.sml.
 Transcript:
 Comments:
+	[Files with long names were renamed:
+		PosixPrimIOFn_putV_code_157734		putV_code_157734
+		POSIX_IO_Str_writeVec_code_123246	writeVec_code_123246
+		PosixPrimIOFn_anonfun_code_157476	anonfun_code_157476
+		PosixPrimIOFn_announce_inner_code_157496	announce_inner_code_157496
+		PosixPrimIOFn_anonfun_code_157483	anonfun_code_157483
+	 -pds 8/8/02]
+
 	Code emitted by the compiler performs signed rather than
 	unsigned comparisons on addresses.  In particular, sometimes
 	an address is compared with 0x100 to see if it is a pointer or
