@@ -1711,7 +1711,7 @@ struct
 		  val subst = Subst.con_subst_compose(subst_one,subst)
 		in
 		  if sub_kind (origD,actual_kind,formal_kind) then
-		    (D,subst_one)
+		    (D,subst)
 		  else
 		    (perr_k_k (formal_kind,actual_kind);
 		     (error "Constructor parameter kind mismatch" handle e => raise e))
