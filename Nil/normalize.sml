@@ -731,10 +731,10 @@ val show_context = ref false
   and bnd_normalize' state (bnd : bnd) =
     (case bnd of
           Con_b (p, cb) => error "sorry not handled"
-	| Exp_b (var, exp) =>
+	| Exp_b (var, tinfo, exp) =>
 	 let
 	   val exp = exp_normalize' state exp
-	   val bnd = Exp_b (var,exp)
+	   val bnd = Exp_b (var,tinfo,exp)
 	 in (bnd,state)
 	 end
 	| (Fixopen_b defs) =>
@@ -1171,7 +1171,7 @@ val show_context = ref false
 		       val subst = NilSubst.add subst (v,NilSubst.substConInCon subst c)
 		   in  (D,subst)
 		   end
-	     | Exp_b (var, exp) =>
+	     | Exp_b (var, _, exp) =>
 	      let
 		val con = type_of (D,exp)
 		val D = NilContext.insert_con(D,var,con)
@@ -1327,7 +1327,13 @@ val show_context = ref false
 	   | inject_record _ => false
 	   | inject_nonrecord _ => false
 	   | inject _ => true
-	   | _ => true)
+           | box_float _ => false
+           | unbox_float _ => false
+           | make_exntag => false
+           | inj_exn _ => false
+           | make_vararg _ => true
+           | make_onearg _ => true
+           | peq => true)
 
   fun aggregate_uses_carg (Prim.OtherArray false) = true
     | aggregate_uses_carg (Prim.OtherVector false) = true

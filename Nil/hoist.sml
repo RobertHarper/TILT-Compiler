@@ -91,7 +91,7 @@ struct
     let
       fun gv ([],l) = rev l
 	| gv (Con_b (p,cb)::rest,l) = gv(rest,(get_conbnd_var cb)::l)
-	| gv (Exp_b (v,e)::rest,l) = gv(rest,v::l)
+	| gv (Exp_b (v,_,e)::rest,l) = gv(rest,v::l)
 	| gv (Fixopen_b(vfs)::rest,l) = gv(rest,(map (fn (a,b) => a) (Sequence.toList vfs))@l)
 	| gv (Fixcode_b(vfs)::rest,l) = gv(rest,(map (fn (a,b) => a) (Sequence.toList vfs))@l)
 	| gv (Fixclosure_b(_)::rest,l) = raise HoistError
@@ -361,7 +361,7 @@ struct
       | (CSTAY cb', bvl) => (STAY (Con_b (p,cb')),bvl)
     end
 
-    | rbnd cvs (Exp_b(v,e)) = 
+    | rbnd cvs (Exp_b(v,niltrace,e)) = 
     let
 (*
       val vstr = var2string v
@@ -369,7 +369,7 @@ struct
 *)
       val (e',bvl') = rexp(e,cvs)
       val fv = freeExpVars e
-      (* hack, can't have floats at top-level *)
+      (* XXX hack, can't have floats at top-level (bug in tortl) *)
       val up = subset(fv,cvs) andalso (not (NilUtil.effect e))
 	                      andalso (case e of
 					   Prim_e(NilPrimOp(unbox_float _),_,_) => false
@@ -379,7 +379,7 @@ struct
       	      else pprint ("E-keeping "^vstr^" here\n") 
       val _ = ppout 2 
 *)
-      val newbnd = Exp_b(v,e')
+      val newbnd = Exp_b(v,niltrace,e')
     in
       if up then (UP v,bvl'@[(newbnd,fv)])
       else (STAY newbnd,bvl')

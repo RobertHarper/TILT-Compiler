@@ -14,6 +14,7 @@ structure Linknil (* :> LINKNIL  *) =
     val do_specialize = ref true
     val do_two_optimize = ref true
     val do_hoist = Stats.tt("doHoist")
+    val do_reify = Stats.tt("doReify")
     val do_cse = Stats.tt("doCSE")
     val show_size = ref false
     val show_hil = ref false
@@ -24,6 +25,7 @@ structure Linknil (* :> LINKNIL  *) =
     val show_vararg = ref false
     val show_two_optimize = Stats.ff("showOptimize2")
     val show_hoist = Stats.ff("showHoist")
+    val show_reify = Stats.ff("showReify")
     val show_cse = Stats.ff("showCSE")
     val show_specialize = Stats.ff("showSpecialize")
     val show_cc = ref false
@@ -180,6 +182,11 @@ structure Linknil (* :> LINKNIL  *) =
 				 "Hoist", 
 				 Hoist.optimize,
 				 filename, nilmod)
+
+            val nilmod = transform(do_reify, show_reify,
+                                   "Reification",
+                                   Reify.reify_mod,
+                                   filename, nilmod)
 
 
 	    val nilmod = transform(do_two_optimize, show_two_optimize,

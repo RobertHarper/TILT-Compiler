@@ -88,7 +88,7 @@ struct
   fun xbnd state (bnd : bnd) : state =
       (case bnd of
 	      Con_b (phase,cbnd) => xconbnd state (phase,cbnd)
-	    | Exp_b (v,e) => 
+	    | Exp_b (v,_,e) => 
 		  let val c = type_of state e
 		      val (loc_or_val,_,state) = xexp(state,v,e,SOME c,NOTID)
 		  in  (case (istoplevel(),loc_or_val) of
@@ -577,7 +577,7 @@ struct
 
 
 		      local
-			  val handler_body' = Let_e(Sequential,[Exp_b(exnvar,NilUtil.match_exn)],
+			  val handler_body' = Let_e(Sequential,[Exp_b(exnvar,TraceKnown (valOf(TraceOps.get_trace (NilContext.empty (), NilUtil.exn_con))), NilUtil.match_exn)],
 						    handler_body)
 			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp(false, handler_body')
 			  val evar_reps = map (fn v => #1(getrep state v)) free_evars
@@ -1901,7 +1901,7 @@ struct
 	  val outer = 
 	      let 
 		  fun bndhandle (_,Con_b(_,cb)) = NOCHANGE
-		    | bndhandle (_,Exp_b(v,_)) = (addtop v; NOCHANGE)
+		    | bndhandle (_,Exp_b(v,_,_)) = (addtop v; NOCHANGE)
 		    | bndhandle (_,Fixopen_b _) = error "encountered fixopen"
 		    | bndhandle (_,bnd as (Fixcode_b vfseq)) = 
 		      let val _ = numfuns := (!numfuns) + 1
@@ -2001,13 +2001,14 @@ struct
 			 ExportValue(l,e) =>
 			     let val lab = ML_EXTERN_LABEL(Name.label2string l)
 				 val v = fresh_var()
-				 val default = ((v,lab), SOME (Exp_b(v,e)))
+				 val default = ((v,lab), SOME (Exp_b(v,TraceUnknown,e))) 
 			     in  case e of
 				 Var_e v => 
 				     if (Listops.orfold (is_import v) imports)
 					 then default
 				     else ((v,lab),NONE)
-			       | _ => default
+			       | _ => (* default *)
+                                      error "export of non-variable"
 			     end
 		       | ExportType(l,c) =>
 			     let val lab = ML_EXTERN_LABEL(Name.label2string l)

@@ -342,7 +342,7 @@ struct
 				       UNUSED => NONE
 				     | TYPE_USED => SOME(Con_b(Compiletime,cb))
 				     | USED => SOME(Con_b(Runtime,cb)))
-	       | (Exp_b(v,e)) => if is_used_var(state,v) then SOME bnd else NONE
+	       | (Exp_b(v,_,e)) => if is_used_var(state,v) then SOME bnd else NONE
 	       | (Fixopen_b vfset) => 
 		     if orfold (fn (v,_) => is_used_var(state,v)) (Sequence.toList vfset)
 			 then SOME bnd else NONE
@@ -804,21 +804,21 @@ struct
 	                 let fun folder(Var_e v,bnds) = (v, bnds)
 			       | folder(e,bnds) = 
 			           let val v = Name.fresh_named_var "namedRecComp"
-				       val bnd = Exp_b(v,e)
+				       val bnd = Exp_b(v,TraceUnknown,e)
 				   in  (v, bnd ::bnds)
 				   end
 			     val (vars,rev_bnds) = foldl_acc folder [] elist
 			     val bnds = rev rev_bnds
 			 in  case bnds of
 			       [] => NONE
-			     | _ => SOME(bnds @ [Exp_b(v,Prim_e(NilPrimOp(record labs),[],map Var_e vars))])
+			     | _ => SOME(bnds @ [Exp_b(v,TraceUnknown,Prim_e(NilPrimOp(record labs),[],map Var_e vars))])
 			 end
 		     | Prim_e(NilPrimOp (inject _), _, [Var_e _]) => NONE
 		     | Prim_e(NilPrimOp (inject k), clist,[injectee]) => 
 			 let val injectee_con = type_of(state,injectee)
 			     val var = Name.fresh_named_var "namedInjectee"
-			 in  SOME([Exp_b(var,injectee),
-				   Exp_b(v,Prim_e(NilPrimOp (inject k),clist,[Var_e var]))])
+			 in  SOME([Exp_b(var,TraceUnknown,injectee),
+				   Exp_b(v,TraceUnknown,Prim_e(NilPrimOp (inject k),clist,[Var_e var]))])
 			 end
 		     | Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv]) =>
 			 let val c = type_of(state,e)
@@ -831,13 +831,13 @@ struct
 						     (Name.label2string l)) labs
 				     fun mapper(v,l) =
 					 let val np = project_sum_record(k, l)
-					 in  Exp_b(v,Prim_e(NilPrimOp np,[sumcon],[Var_e sv]))
+					 in  Exp_b(v,TraceUnknown,Prim_e(NilPrimOp np,[sumcon],[Var_e sv]))
 					 end
 				     val bnds = Listops.map2 mapper (vars, labs)
-				 in  SOME(bnds @ [Exp_b(v,Prim_e(NilPrimOp(record labs), [], map Var_e vars))])
+				 in  SOME(bnds @ [Exp_b(v,TraceUnknown,Prim_e(NilPrimOp(record labs), [], map Var_e vars))])
 				 end
 			     (* not a record for sure *)
-			     | (true, _) => SOME[Exp_b(v,Prim_e(NilPrimOp (project_sum_nonrecord k),
+			     | (true, _) => SOME[Exp_b(v,TraceUnknown,Prim_e(NilPrimOp (project_sum_nonrecord k),
 								[sumcon],[Var_e sv]))]
 			     | (_,c) => ((* print "project_sum irreducible...";
 					 Ppnil.pp_con c; print "\n"; *)
@@ -845,7 +845,7 @@ struct
 			 end
 		     | _ => NONE)
 	  in	(case bnd of
-		     Exp_b(v,e) =>
+		     Exp_b(v,niltrace,e) =>
 			 ((* print "working on bnd with v = "; Ppnil.pp_var v; print "\n";  *)
 			  case rewrite_bnd(v,e) of
 			      NONE => 
@@ -868,7 +868,7 @@ struct
 						     | _ => add_availE(state, e, v))
 				      val state = add_alias(state,v,alias)
 				      val state = add_con(state,v,c)
-				  in  ([Exp_b(v, e)], state)
+				  in  ([Exp_b(v, niltrace, e)], state)
 				  end
 			    | SOME bnds => do_bnds(bnds,state))
 		   | Con_b(p,cbnd) => let (* val _ = (print "working on bnd with v = "; 

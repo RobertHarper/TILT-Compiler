@@ -251,7 +251,7 @@ struct
 
 	and scan_bnd (bnd : bnd, state : state) : state = 
 	  	(case bnd of
-		     Exp_b(v,e) => (scan_exp state e; state)
+		     Exp_b(v,_,e) => (scan_exp state e; state)
 		   | Con_b(p,cbnd) => 
 			 (case cbnd of
 			      Con_cb(v,c) => add_var(state,v,SOME c)
@@ -353,7 +353,7 @@ struct
 
 	and do_bnd (bnd : bnd) : bnd list =
 	  	(case bnd of
-		     Exp_b(v,e) => [Exp_b(v,do_exp e)]
+		     Exp_b(v,traceinfo,e) => [Exp_b(v,traceinfo,do_exp e)]
 		   | Con_b(v,c) => [bnd]
 		   | Fixopen_b vfset =>
 		      let val vflist = (Sequence.toList vfset)

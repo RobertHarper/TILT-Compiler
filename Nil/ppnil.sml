@@ -363,7 +363,7 @@ structure Ppnil	:> PPNIL =
     and pp_bnd bnd =
 	let fun help x y = (x,y)
 	  in (case bnd of
-	        Exp_b (v,e) => HOVbox[pp_var v, String " = ", Break, pp_exp e]
+	        Exp_b (v,_,e) => HOVbox[pp_var v, String " = ", Break, pp_exp e]
 	      | Con_b (Runtime,cb) => pp_conbnd cb
 	      | Con_b (Compiletime,cb) => HOVbox[String "COMPILE_TIME ", Break, pp_conbnd cb]
 	      | Fixopen_b fixset => let val fixlist = Sequence.toList fixset

@@ -555,7 +555,7 @@ end (* local defining splitting context *)
 					 else
 					  (Var_c pc, Var_e pr,
 						LIST[Con_cb(pc,Var_c vc)],
-						LIST[Exp_b(pr,Var_e vr)],
+						LIST[Exp_b(pr,TraceUnknown,Var_e vr)],
 						update_NILctx_insert_kind_equation(context,pc,
 						Var_c vc,SOME knd_c_context)))
 					| _ => (name_c, name_r, LIST[], LIST[], context))
@@ -619,7 +619,7 @@ end (* local defining splitting context *)
 					let val context = update_NILctx_insert_kind_equation(context,pc,
 										    name_c, SOME knd_c_context)
 					in  (Var_c pc, Var_e pr, 
-						LIST[Con_cb(pc,name_c)], LIST[Exp_b(pr,name_r)],
+						LIST[Con_cb(pc,name_c)], LIST[Exp_b(pr,TraceUnknown, name_r)],
 						context)
 					end)
 			in {cbnd_cat=cbnd_cat, ebnd_cat=ebnd_cat, name_c=name_c, name_r=name_r,
@@ -736,7 +736,7 @@ end (* local defining splitting context *)
 		    NONE => (LIST cbnds, LIST nil, context)
 		  | SOME (_, name_c, name_r) => 
 			(APPEND[LIST cbnds, LIST[Con_cb(name_c, Var_c var_mod_c)]],
-			 LIST [Exp_b (name_r, Var_e var_mod_r)],
+			 LIST [Exp_b (name_r, TraceUnknown, Var_e var_mod_r)],
 			 update_NILctx_insert_kind_equation
 			  (context,
 			   name_c, Var_c var_mod_c, SOME knd_c_context)))
@@ -785,7 +785,7 @@ end (* local defining splitting context *)
 						   knd_c_context, SOME knd_c_context)
 
        
-	   val ebnd_cat_new = LIST[Exp_b(var_r, 
+	   val ebnd_cat_new = LIST[Exp_b(var_r, TraceUnknown,
 					 NilUtil.makeAppE
 					 name_fun_r
 					 [name_arg_c]
@@ -845,7 +845,7 @@ end (* local defining splitting context *)
 	   val cbnd_cat_new = LIST [Con_cb(var_proj_c, con_proj_c)]
            val cbnd_proj_cat = APPEND[cbnd_mod_cat,cbnd_cat_new]
 
-	   val ebnd_cat_new = LIST [Exp_b(var_proj_r, 
+	   val ebnd_cat_new = LIST [Exp_b(var_proj_r, TraceUnknown,
 					  selectFromRec(name_mod_r,lbls))]
 	   val ebnd_proj_cat = APPEND[ebnd_mod_cat, ebnd_cat_new]
 
@@ -1000,8 +1000,8 @@ end (* local defining splitting context *)
 
 	   val ebnd_cat_new = 
 	       if specialize 
-		   then LIST[Exp_b (var_str_r, #2(hd record_r_exp_items))]
-	       else     LIST[Exp_b (var_str_r, 
+		   then LIST[Exp_b (var_str_r, TraceUnknown, #2(hd record_r_exp_items))]
+	       else     LIST[Exp_b (var_str_r, TraceUnknown,
 				    Prim_e (NilPrimOp (record (map #1 record_r_exp_items)),
 					    [], map #2 record_r_exp_items))]
 	   val ebnd_str_cat = APPEND[ebnd_cat,ebnd_cat_new]
@@ -1215,8 +1215,8 @@ end (* local defining splitting context *)
 		   let 
 		       fun mapper(internal_var,external_var_r) = 
 			   if (Name.eq_var(internal_var,current_internal_var))
-			       then Exp_b(internal_var, Var_e inner_var)
-			   else Exp_b(internal_var, NilUtil.makeAppE 
+			       then Exp_b(internal_var, TraceUnknown, Var_e inner_var)
+			   else Exp_b(internal_var, TraceUnknown, NilUtil.makeAppE 
 				      (Var_e external_var_r)
 				      [Var_c poly_var_c]
 				      [Var_e poly_var_r]
@@ -1316,7 +1316,7 @@ end (* local defining splitting context *)
        in
 	   {final_context = final_context,
 	    cbnd_cat = cbnd_cat,
-	    ebnd_cat = APPEND[LIST [Exp_b(var,exp)], ebnd_cat],
+	    ebnd_cat = APPEND[LIST [Exp_b(var,TraceUnknown, exp)], ebnd_cat],
 	    record_c_con_items = record_c_con_items,
 	    record_c_knd_items_context = record_c_knd_items_context,
 	    record_r_exp_items = (lbl, Var_e var) :: record_r_exp_items}

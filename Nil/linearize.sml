@@ -180,9 +180,9 @@ struct
 				    val _ = dec depth_lcon_conb
 				in  (map (fn cb => Con_b(p,cb)) cbnds,state)
 				end
-	      | Exp_b (v,e) => let val (bnds,e) = lexp true state e
+	      | Exp_b (v,niltrace,e) => let val (bnds,e) = lexp true state e
 				   val (state,v) = add_var(state,v)
-			       in  (bnds @ [Exp_b(v,e)], state)
+			       in  (bnds @ [Exp_b(v,niltrace,e)], state)
 			       end
 	      | Fixopen_b vf_set => vf_help Fixopen_b vf_set
 	      | Fixcode_b vf_set => vf_help Fixcode_b vf_set
@@ -218,7 +218,7 @@ struct
        in  if (small_exp e orelse not (!linearize) orelse not lift)
 	       then (bnds, e)
 	   else let val v = Name.fresh_named_var "tmpexp"
-		in  (bnds @ [Exp_b(v,e)], Var_e v)
+		in  (bnds @ [Exp_b(v,TraceUnknown,e)], Var_e v)
 		end
        end
        handle e => (print "exception in lexp call with con =\n";

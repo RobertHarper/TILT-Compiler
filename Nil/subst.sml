@@ -540,11 +540,13 @@ structure NilSubst :> NILSUBST
 		     in
 			 (bnd,mapping)
 		     end
-	       | Exp_b (var, exp) =>
+	       | Exp_b (var, _, exp) =>
 		     let
 			 val exp = substExpConInExp' mapping exp
 			 val (var,mapping) = exp_rebind (var,mapping)
-			 val bnd = (Exp_b (var,exp))
+                         (*XXX overly conservative!
+                            substitution in traceinfo might be malformed *)
+			 val bnd = (Exp_b (var,TraceUnknown,exp))
 		     in
 			 (bnd,mapping)
 		     end

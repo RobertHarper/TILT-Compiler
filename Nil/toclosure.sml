@@ -632,7 +632,7 @@ struct
 			     let val (f,state) = cbnd_find_fv(cbnd,(frees,state))
 			     in (state, f)
 			     end
-		       | Exp_b(v,e) => 
+		       | Exp_b(v,_,e) => 
 			     let 
 				 val c = type_of(state,e) 
 				 val f = e_find_fv (state,frees) e
@@ -1336,7 +1336,7 @@ struct
 		(Con_b(p,cb)) => let val cbnds = cbnd_rewrite state cb
 				 in  map (fn cb => Con_b(p,cb)) cbnds
 				 end
-	      | (Exp_b(v,e)) => [Exp_b(v, e_rewrite state e)]
+	      | (Exp_b(v,niltrace,e)) => [Exp_b(v, niltrace, e_rewrite state e)]
 	      | (Fixclosure_b _) => error "there can't be closures while closure-converting"
 	      | (Fixcode_b _) => error "there can't be codes while closure-converting"
 	      | (Fixopen_b var_fun_set) => funthing_helper (fun_rewrite state) var_fun_set)

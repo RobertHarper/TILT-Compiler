@@ -1,4 +1,4 @@
-(*$import Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam *)
+(*$import Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam TraceInfo *)
 
 structure NilPrimUtil :> PRIMUTIL where type con = Nil.con
                                  where type exp = Nil.exp = PrimUtil(structure PrimUtilParam = NilPrimUtilParam)
@@ -57,6 +57,7 @@ struct
   val true_exp = Prim_e(NilPrimOp (inject 0w1),[true_con],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
+  val exn_con = Prim_c(Exn_c, [])
   fun function_type openness (Function(effect,recur,vklist,dep,vclist,vflist,_,c)) = 
       AllArrow_c(openness,effect,vklist, if dep then SOME (map #1 vclist) else NONE,
 		 map #2 vclist,TilWord32.fromInt(length vflist),c)
@@ -491,7 +492,8 @@ struct
 		  Con_b(p,cb) => let val (cbnds,state) = f_cbnd state cb
 				 in  (map (fn cb => Con_b(p,cb)) cbnds, state)
 				 end
-		| Exp_b(v,e) => ([Exp_b(v, f_exp state e)], add_var(state,v))
+		| Exp_b(v,tinfo,e) => ([Exp_b(v, tinfo, f_exp state e)], 
+				       add_var(state,v))
 		| Fixopen_b vfset => 
 		      let val s' = Sequence.foldl (fn ((v,f),s) => add_var(s,v)) s vfset
 			  fun doer(v,f) = (v,dofun s' f)
@@ -1087,11 +1089,20 @@ struct
 		     let val (cbnd,c_context') = alpha_normalize_cbnd' c_context cb
 		     in  (Con_b(phase, cbnd), (e_context, c_context'))
 		     end
-	       | Exp_b (var, exp) =>
+	       | Exp_b (var, niltrace, exp) =>
 		     let
 			 val exp' = alpha_normalize_exp' (e_context,c_context) exp
 			 val (e_context',var') = alpha_bind (e_context,var)
-			 val bnd' = (Exp_b (var',exp'))
+                         val niltrace' = 
+			     (case niltrace of
+				  TraceKnown (TraceInfo.Compute (v,ls)) =>
+				      TraceKnown 
+				       (TraceInfo.Compute(substitute(c_context,v),ls))
+				| TraceCompute v =>
+				      TraceCompute (substitute(c_context,v))
+				| _ => niltrace)
+
+			 val bnd' = (Exp_b (var',niltrace',exp'))
 		     in
 			 (bnd',(e_context',c_context))
 		     end
@@ -1281,10 +1292,10 @@ struct
        let
 	   val con_bnds = map (fn((cvar, knd), con) => Con_b (Runtime, Con_cb(cvar, con)))
                               (Listops.zip vklist con_args)
-           val exp_bnds = map (fn((evar, con), exp) => Exp_b (evar, exp))
+           val exp_bnds = map (fn((evar, con), exp) => Exp_b (evar, TraceUnknown, exp))
 	                      (Listops.zip vclist exp_args)
 	   val float_type = Prim_c (Float_c Prim.F64, [])
-           val fp_bnds = map (fn (evar, exp) => Exp_b (evar, exp))
+           val fp_bnds = map (fn (evar, exp) => Exp_b (evar, TraceUnknown, exp))
 	                     (Listops.zip fplist fp_args)
        in
            con_bnds @ exp_bnds @ fp_bnds
@@ -1308,12 +1319,14 @@ struct
           makeLetE Sequential (ebnds @ ebnds') body
      | makeLetE _ ebnds body =
        (case (List.rev ebnds, body) of
+(*         (* XXX Breaks a-normal form *)
            (Exp_b(evar',exp)::rest, Var_e evar) => 
 	       if (Name.eq_var(evar',evar)) then 
                   makeLetE Sequential (List.rev rest) exp
                else
 		   Let_e(Sequential, ebnds, body)
-         | (Fixopen_b fset :: rest, 
+*)
+           (Fixopen_b fset :: rest, 
 	    App_e(_,Var_e evar, con_args, exp_args, fp_args))=>
 	       (case (Sequence.toList fset) of
 		    [(evar', 
@@ -1352,7 +1365,7 @@ struct
 	    fun bnd_check (Con_b(_,Con_cb(v,_))) = VarSet.member(fv,v)
 	      | bnd_check (Con_b(_,Open_cb(v,_,_,_))) = VarSet.member(fv,v)
 	      | bnd_check (Con_b(_,Code_cb(v,_,_,_))) = VarSet.member(fv,v)
-	      | bnd_check (Exp_b(v,_)) = VarSet.member(fv,v)
+	      | bnd_check (Exp_b(v,_,_)) = VarSet.member(fv,v)
 	      | bnd_check (Fixopen_b vfset) = Listops.orfold vf_mem (Sequence.toList vfset)
 	      | bnd_check (Fixcode_b vfset) = Listops.orfold vf_mem (Sequence.toList vfset)
 	      | bnd_check (Fixclosure_b (_,vfset)) = 

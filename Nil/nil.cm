@@ -74,6 +74,12 @@ vararg.sig.sml
 vararg.sml
 
 
+reify.sml
+traceops.sig.sml
+traceops.sml
+traceinfo.sig.sml
+traceinfo.sml
+
 (*
 cleanup.sig.sml
 cleanup.sml
@@ -88,10 +94,12 @@ nileval.sml
 NilOpts/exptable.sig.sml
 NilOpts/exptable.sml
 
+(*
 NilOpts/nilopts.sig.sml
 NilOpts/nilopts.sml
 NilOpts/pass.sig.sml
 NilOpts/anormalize-cse.sml
+*)
 
 (* ----- Optimizer Stuff ------- *)
 (*

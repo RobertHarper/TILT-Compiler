@@ -33,6 +33,12 @@ sig
    *)
   datatype recursive = Leaf | NonRecursive | Arbitrary
 
+  (* Trace annotations are inserted by the reifier and used by tortl.
+   *)
+  datatype niltrace = TraceUnknown
+                    | TraceKnown of TraceInfo.traceinfo
+                    | TraceCompute of var
+
   (* A sequential let only permits the bindings to be evaluated sequentially. 
    * A parallel let permits the bindings to be concurrently executed.
    *)
@@ -175,7 +181,7 @@ sig
 
   and bnd =                                (* Term-level Bindings with optional classifiers *)
       Con_b of phase * conbnd                (* Binds constructors *)
-    | Exp_b of var * exp               (* Binds expressions *)
+    | Exp_b of var * niltrace * exp          (* Binds expressions *)
     | Fixopen_b of (var,function) sequence  (* Binds mutually recursive open functions *)
     | Fixcode_b of (var,function) sequence  (* Binds mutually recursive code functions *)
                                              (* Allows the creation of term and for-all closures;

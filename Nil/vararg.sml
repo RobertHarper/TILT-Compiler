@@ -333,7 +333,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 			 let val vars = map (Name.fresh_named_var o Name.label2name) labels
 			     val vclist = zip vars (map (do_con state) cons)
 			     val state = add_con(state,v,argc)
-			     val bnd = Exp_b(v,Prim_e(NilPrimOp(record labels),[],map Var_e vars))
+			     val bnd = Exp_b(v,TraceUnknown,Prim_e(NilPrimOp(record labels),[],map Var_e vars))
 			     val body = Let_e(Sequential,[bnd],do_exp state body)
 			 in  [(funvar,Function(effect,recur,[],dep,vclist,[],body,resc))]
 			 end
@@ -372,7 +372,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 			 let val v = fresh_named_var "funarg"
 			     fun proj l = Prim_e(NilPrimOp(select l),cons,[Var_e v])
 			     val args' = map proj labels
-			 in  Let_e(Sequential,[Exp_b(v,arg')],App_e(Open,f', [],args',[]))
+			 in  Let_e(Sequential,[Exp_b(v,TraceUnknown,arg')],App_e(Open,f', [],args',[]))
 			 end
 		 else nochange
 	     fun dynamic(openness,effect,argc,resc) =  
@@ -449,10 +449,10 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
      and do_bnd (bnd : bnd, state : state) : bnd list * state = 
 	 let 
 	 in  (case bnd of
-		  Exp_b(v,e) => let val c = type_of(state,e)
+		  Exp_b(v,niltrace,e) => let val c = type_of(state,e)
 				    val e = do_exp state e
 				    val state = add_con(state,v,c)
-				in  ([Exp_b(v,e)], state)
+				in  ([Exp_b(v,niltrace,e)], state)
 				end
 		| Con_b(p,cbnd) => let val (cbnd,state) = do_cbnd(cbnd,state)
 				   in  ([Con_b(p,cbnd)], state)
