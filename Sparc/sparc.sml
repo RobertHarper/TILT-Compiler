@@ -1,4 +1,4 @@
-(*$import RTL SPARC String Rtl Util Char Listops *)
+(*$import Prelude TopLevel TilWord32 Int Name Word32 Core SPARC String Rtl Util Char Listops *)
 
 structure  Sparc :> SPARC =
 struct

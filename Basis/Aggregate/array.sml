@@ -1,4 +1,4 @@
-(*$import ARRAY General List *)
+(*$import Prelude ARRAY General List *)
 (* array.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -265,9 +265,12 @@ structure Array : ARRAY =
 
 (*
  * $Log$
-# Revision 1.4  99/09/22  15:44:59  pscheng
-# *** empty log message ***
+# Revision 1.5  2000/09/12  18:54:06  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.4  1999/09/22 15:44:59  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.3  1998/05/14  16:38:56  pscheng
 # result types on sme functions were wrong
 #

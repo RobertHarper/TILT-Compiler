@@ -1,4 +1,4 @@
-(*$import TOOLS TopHelp Util Stats OS Dirs Target Popen *)
+(*$import Prelude TopLevel Delay String List TOOLS TopHelp Util Stats OS Dirs Target Popen *)
 
 structure Tools :> TOOLS =
 struct

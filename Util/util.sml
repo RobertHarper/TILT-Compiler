@@ -1,4 +1,4 @@
-(*$import UtilError Platform TopLevel UTIL OS TextIO *)
+(*$import Prelude TopLevel Array String UtilError Platform UTIL OS TextIO *)
 
 structure Util :> UTIL = 
   struct

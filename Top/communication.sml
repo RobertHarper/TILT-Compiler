@@ -1,4 +1,4 @@
-(*$import Stats COMMUNICATION OS List Platform Dirs Delay Listops Target TopHelp UpdateHelp Compiler Tools Queue *)
+(*$import Prelude TopLevel Util Substring Paths Update String Char Bool TextIO Posix Int Word32 Stats COMMUNICATION OS List Platform Dirs Delay Listops Target TopHelp UpdateHelp Compiler Tools Queue *)
 
 structure Comm :> COMMUNICATION =
 struct
@@ -21,7 +21,7 @@ struct
       | FLUSH of (Paths.unit_paths *		(* Master signals that slave should flush files related to plan *)
 		  Update.plan)			(* in anticipation of some other processor doing work. *)
       | REQUEST of (Paths.unit_paths *		(* Master request slave to compile. *)
-		    Paths.unit_paths list *
+		    (Paths.unit_paths * Update.import) list *
 		    Update.plan)
     val ready = "READY"
     val ack_interface= "ACK_INTERFACE"
@@ -98,18 +98,24 @@ struct
     val planToWords = map Update.toString
     val wordsToPlan = map Update.fromString
 
-    (* Paths.unit_paths list <-> string list *)
-    fun pathsListToWords pathsList =
-	let fun toWords paths = [Paths.unitName paths, Paths.sourceFile paths]
-	in  List.concat (map toWords pathsList)
+    (* Paths.unit_paths <-> string list *)
+    fun pathsToWords paths = [Paths.unitName paths, Paths.sourceFile paths]
+    fun wordsToPaths [unit,file] = Paths.sourceUnitPaths {unit=unit, file=file}
+      | wordsToPaths _ = error ("expected unit_paths - bad msg")
+
+    (* (Paths.unit_paths * import) list <-> string list *)
+    fun pathsImportListToWords pathsImportList =
+	let fun toWords (paths, import) = [Paths.unitName paths, Paths.sourceFile paths, Compiler.importName import]
+	in  List.concat (map toWords pathsImportList)
 	end
-    fun wordsToPathsList words =
+    fun wordsToPathsImportList words =
 	let fun conv (nil, acc) = rev acc
-	      | conv (_::nil, acc) = error "expected even number of words in encoded unit_paths list - bad msg"
-	      | conv (unit::file::rest, acc) =
+	      | conv (unit::file::import::rest, acc) =
 		let val paths = Paths.sourceUnitPaths {unit=unit, file=file}
-		in  conv (rest, paths::acc)
+		    val import = Compiler.importFromName import
+		in  conv (rest, (paths, import)::acc)
 		end
+	      | conv (_, acc) = error "expected (unit_paths * import) list - bad msg"
 	in  conv (words, nil)
 	end
 
@@ -141,16 +147,19 @@ struct
     fun decodeFlushAll [[platform], flags] = (Target.platformFromName platform, wordsToFlags flags)
       | decodeFlushAll _ = error "bad flush_all msg"
 
-    fun encodeFlush (target, plan) = [pathsListToWords [target], planToWords plan]
-    fun decodeFlush [target, plan] = (case wordsToPathsList target
-					of [target] => (target, wordsToPlan plan)
-					 | _ => error ("bad flush msg"))
+    fun encodeFlush (target, plan) = [pathsToWords target, planToWords plan]
+    fun decodeFlush [target, plan] = (wordsToPaths target, wordsToPlan plan)
       | decodeFlush _ = error ("bad flush msg")
 
-    fun encodeRequest (target, imports, plan) = [pathsListToWords (target::imports), planToWords plan]
-    fun decodeRequest [paths, plan] = (case wordsToPathsList paths
-					 of (target::imports) => (target, imports, wordsToPlan plan)
-					  | _ => error ("bad request msg"))
+    fun encodeRequest (target, imports, plan) = [pathsToWords target,
+						 pathsImportListToWords imports,
+						 planToWords plan]
+    fun decodeRequest [target, imports, plan] =
+	let val target = wordsToPaths target
+	    val imports = wordsToPathsImportList imports
+	    val plan = wordsToPlan plan
+	in  (target, imports, plan)
+	end
       | decodeRequest _ = error ("bad request msg")
 					     
     fun messageToString message =
@@ -236,8 +245,14 @@ struct
 				 handle _ => NONE)
 
     (* removeFile : string -> unit *)
-    fun removeFile file = OS.FileSys.remove file handle _ => ()
-
+    (* On AFS it is a lot faster to do access() on a non-existent
+     * file than remove().
+     *)
+    fun removeFile file = if (OS.FileSys.access (file, []) andalso
+			      OS.FileSys.access (file, [OS.FileSys.A_WRITE]))
+			      then OS.FileSys.remove file handle _ => ()
+			  else ()
+			      
     (* lockFile : string * string -> (unit -> unit) *)
     fun lockFile (old, new) =
 	let

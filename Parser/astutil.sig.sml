@@ -1,4 +1,4 @@
-(*$import ErrorMsg Symbol Ast *)
+(*$import Prelude ErrorMsg Symbol Ast *)
 
 (* Copyright 1992 by AT&T Bell Laboratories 
  *
@@ -32,6 +32,9 @@ signature ASTUTIL =
 
 (*
  * $Log$
+# Revision 1.3  2000/09/12  18:56:46  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.2  98/02/15  22:43:18  pscheng
 # bootstrapping changes
 # 

@@ -1,4 +1,4 @@
-(*$import Nil *)
+(*$import Prelude Nil *)
 
 (* A generic signature for a pass of the optimizer *)
 signature PASS =     

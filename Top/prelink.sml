@@ -1,4 +1,4 @@
-(*$import PRELINK Crc Util UnitEnvironment *)
+(*$import Prelude TopLevel Stats PRELINK Crc Util UnitEnvironment *)
 
 structure Prelink
     :> PRELINK

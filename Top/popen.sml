@@ -1,4 +1,4 @@
-(*$import POPEN TopLevel Util *)
+(*$import Prelude TopLevel POPEN TextIO OS Util *)
 
 structure Popen : POPEN =
 struct

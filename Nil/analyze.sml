@@ -1,4 +1,4 @@
-(*$import Nil Listops Name NilUtil NilRewrite NilSubst ANALYZE *)
+(*$import Prelude TopLevel Util Stats Sequence Array Prim Ppnil Int Nil Listops Name NilUtil NilRewrite NilSubst ANALYZE *)
 
 (* This module performs function usage analysis.
    The result is some information for each term-level function

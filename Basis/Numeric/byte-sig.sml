@@ -1,4 +1,4 @@
-(*$import Word8 Word8Vector Word8Array Substring *)
+(*$import Prelude Word8 Word8Vector Word8Array Substring *)
 (* byte-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -22,6 +22,9 @@ signature BYTE =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:28  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:52:31  pscheng
 # added basis
 # 

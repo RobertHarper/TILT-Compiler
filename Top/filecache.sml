@@ -1,4 +1,4 @@
-(*$import FILECACHE OS List TopHelp Stats Paths *)
+(*$import Prelude TopLevel Util Time Crc Int FILECACHE OS List TopHelp Stats Paths *)
 
 functor FileCache(type internal
 		  val equaler : internal * internal -> bool
@@ -125,9 +125,15 @@ struct
 
   fun backup file =
       let val backup = Paths.fileToBackup file
-      in
-	  (OS.FileSys.remove backup handle _ => ());
-	  OS.FileSys.rename {old=file, new=backup}
+	  (* On AFS it is a lot faster to do access() on a non-existent
+	   * file than remove().
+	   *)
+	  val _ = if (OS.FileSys.access (backup, []) andalso
+		      OS.FileSys.access (backup, [OS.FileSys.A_WRITE]))
+		      then (OS.FileSys.remove backup handle _ => ())
+		  else ()
+	  val _ = OS.FileSys.rename {old=file, new=backup}
+      in  ()
       end
 
   fun write (file, result) = 

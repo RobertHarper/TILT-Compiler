@@ -1,4 +1,4 @@
-(*$import MACHINE *)
+(*$import Prelude Core Rtl MACHINE *)
 signature DECALPHA =
 sig
 

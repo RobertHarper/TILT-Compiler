@@ -1,4 +1,4 @@
-(*$import LIST_SORT TopLevel LibBase *)
+(*$import Prelude LIST_SORT TopLevel LibBase *)
 (* listsort.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

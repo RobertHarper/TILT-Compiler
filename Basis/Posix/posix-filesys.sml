@@ -1,4 +1,4 @@
-(*$import Word32 PreOS POSIX_extern List Time POSIX_FILE_SYS *)
+(*$import Prelude Int Word32 PreOS POSIX_extern List Time POSIX_FILE_SYS *)
 (* posix-filesys.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

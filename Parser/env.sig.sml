@@ -1,4 +1,4 @@
-(*$import SYMBOL TopLevel *)
+(*$import Prelude SYMBOL *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* env.sig *)
@@ -69,6 +69,9 @@ end (* signature ENV *)
 
 (*
  * $Log$
+# Revision 1.6  2000/09/12  18:56:49  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.5  99/02/05  15:58:28  pscheng
 # *** empty log message ***
 # 

@@ -1,4 +1,4 @@
-(*$import Core MACHINE MACHINEUTILS TRACETABLE *)
+(*$import Prelude Core MACHINE MACHINEUTILS TRACETABLE *)
 (* Definitions of annotated instructions and basic blocks, and some
    simple dataflow operations on them.*)
 

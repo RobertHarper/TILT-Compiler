@@ -1,4 +1,4 @@
-(*$import DIRS Delay Util Platform String Option List SplaySetFn Paths *)
+(*$import Prelude TopLevel OS DIRS Delay Util Platform String Option List SplaySetFn Paths *)
 
 structure Dirs :> DIRS =
 struct

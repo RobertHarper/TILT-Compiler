@@ -1,4 +1,4 @@
-(*$import POSIX_FileSys Word32 POSIX_SYS_DB POSIX_extern *)
+(*$import Prelude POSIX_FileSys Word32 POSIX_SYS_DB POSIX_extern *)
 (* posix-sysdb.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -93,6 +93,9 @@ structure POSIX_Sys_DB :> POSIX_SYS_DB
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:42  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:53:40  pscheng
 # added basis
 # 

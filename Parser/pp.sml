@@ -1,4 +1,4 @@
-(*$import TopLevel Control Array Vector PpQueue PRETTYPRINT String *)
+(*$import Prelude TopLevel General List Control Array Vector PpQueue PRETTYPRINT String *)
 
 (* pp.sml
  *
@@ -549,6 +549,9 @@ end (* PrettyPrint *)
 
 (*
  * $Log$
+# Revision 1.5  2000/09/12  18:57:07  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.4  98/04/24  22:51:53  pscheng
 # fixed imports
 # 

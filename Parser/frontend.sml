@@ -1,4 +1,4 @@
-(*$import FRONTEND Join MLLrValsFun MLLexFun Ast Source Control LrParser Stats *)
+(*$import Prelude TopLevel ErrorMsg TextIO SourceMap FRONTEND Join MLLrValsFun MLLexFun Ast Source Control LrParser Stats *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* frontend.sml *)
@@ -122,6 +122,9 @@ end (* structure FrontEnd *)
 
 (*
  * $Log$
+# Revision 1.10  2000/09/12  18:56:52  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.9  99/02/17  20:31:05  pscheng
 # *** empty log message ***
 # 

@@ -1,4 +1,4 @@
-(*$import Ppnil NILERROR *)
+(*$import Prelude TopLevel List Util Ppnil NILERROR *)
 
 structure NilError :> NILERROR =
   struct

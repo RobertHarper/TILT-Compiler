@@ -1,4 +1,4 @@
-(*$import Il IlContext IlUtil Ppil Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool Stats Util *)
+(*$import Prelude TopLevel Int Name Il SplayMapFn Prim Tyvar Fixity List Listops IlContext IlUtil Ppil Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool Stats Util *)
 (* Equality of contexts *)
 
 structure IlContextEq 
@@ -36,7 +36,12 @@ struct
 	(case IntMap.find(!inMap,i) of
 	     SOME v => v
 	   | NONE => let val v = Name.fresh_var()
-			 (* val _ = (print "int2var adding "; print (Int.toString i); print "  to  "; Ppil.pp_var v; print "\n") *)
+			 val _ = if (!blast_debug)
+				     then (print "int2var adding ";
+					   print (Int.toString i);
+					   print "  to  ";
+					   Ppil.pp_var v; print "\n")
+				 else ()
 			 val _ = inMap := IntMap.insert(!inMap,i,v)
 		     in  v
 		     end)
@@ -827,19 +832,25 @@ struct
 
 	exception NOT_EQUAL    (* raised when contexts are not equal *)
 
-	fun wrap str f arg = let fun msg() = (print str; print " returning false\n")
-				 val res = (f arg handle NOT_EQUAL => (msg(); raise NOT_EQUAL))
-				 val _ = if res then () 
-					 else msg()
-			     in  res
-			     end
+	fun wrap str f arg =
+	    if (!debug) then
+		let fun msg() = (print str; print " returning false\n")
+		    val res = (f arg handle NOT_EQUAL => (msg(); raise NOT_EQUAL))
+		    val _ = if res then () 
+			    else msg()
+		in  res
+		end
+	    else f arg
+		
 	fun wrap' (str,thunk) f arg =
-	    let fun msg() = (print str; print " returning false\n"; thunk arg)
-				 val res = (f arg handle NOT_EQUAL => (msg(); raise NOT_EQUAL))
-				 val _ = if res then () 
-					 else msg()
-			     in  res
-			     end
+	    if (!debug) then
+		let fun msg() = (print str; print " returning false\n"; thunk arg)
+		    val res = (f arg handle NOT_EQUAL => (msg(); raise NOT_EQUAL))
+		    val _ = if res then () 
+			    else msg()
+		in  res
+		end
+	    else f arg
 
 	type vm = var Name.VarMap.map
 	structure VM =
@@ -868,9 +879,12 @@ struct
 		fun folder (v, l, (vm, vlist)) =
 		      case Name.LabelMap.find(reverse,l) of
 			   SOME v' => (VM.add(v,v',vm), v :: vlist)
-			 | NONE => (print "label "; Ppil.pp_label l;
-				    print " not found in ur'\n"; 
-				    raise NOT_EQUAL)
+			 | NONE => let val _ = if (!debug)
+						   then (print "label "; Ppil.pp_label l;
+							 print " not found in ur'\n")
+					       else ()
+				   in  raise NOT_EQUAL
+				   end
 	    in  Name.VarMap.foldli folder (vm, vlist) ur
 	    end
 
@@ -897,9 +911,9 @@ struct
 		     print "nil\n")
 		    
 		val _ = if length lvlist <> length lvlist' 
-			    then (print "extend_vm_contxt: lvlist length not equal\n";
-				  if (!debug)
-				      then (printLvlist "lvlist" lvlist;
+			    then (if (!debug)
+				      then (print "extend_vm_contxt: lvlist length not equal\n";
+					    printLvlist "lvlist" lvlist;
 					    printLvlist "lvlist'" lvlist')
 				  else ();
 				  raise NOT_EQUAL)
@@ -907,9 +921,12 @@ struct
 		fun folder ((l,v), (vm,vlist)) =
 		      case Context_Lookup_Label(c',l) of
 			   SOME(PATH (v',_),_) => (VM.add(v,v',vm), v::vlist)
-			 | NONE => (print "label "; Ppil.pp_label l;
-				    print " not found in c'\n"; 
-				    raise NOT_EQUAL)
+			 | NONE => let val _ = if (!debug)
+						   then (print "label "; Ppil.pp_label l;
+							 print " not found in c'\n")
+					       else ()
+				   in  raise NOT_EQUAL
+				   end
 	       (* Note use of foldr *)
 	    in foldr folder (vm,vlist) lvlist
 	    end
@@ -936,18 +953,24 @@ struct
 	    let val _ = if length sdecs <> length sdecs' then raise NOT_EQUAL else ()
 	    in foldr (fn (SDEC(l,dec), vm) => case sdecs_lookup(sdecs',l)
 		                                of SOME dec' => add_dec(dec,dec',vm)
-					         | NONE => (print "XXX label mismatch ";
-							    Ppil.pp_label l; print "\n";
-							    raise NOT_EQUAL)) vm sdecs
+					         | NONE => let val _ = if (!debug)
+									   then (print "XXX label mismatch ";
+										 Ppil.pp_label l; print "\n")
+								       else ()
+							   in  raise NOT_EQUAL
+							   end) vm sdecs
 	    end
 
 	fun extend_vm_sbnds(sbnds,sbnds',vm) : vm =
 	    let val _ = if length sbnds <> length sbnds' then raise NOT_EQUAL else ()
 	    in foldr (fn (SBND(l,bnd), vm) => case sbnds_lookup(sbnds',l)
 		                                of SOME bnd' => add_bnd(bnd,bnd',vm)
-					         | NONE => (print "XXX label mismatch ";
-							    Ppil.pp_label l; print "\n";
-							    raise NOT_EQUAL)) vm sbnds
+					         | NONE => let val _ = if (!debug)
+									   then (print "XXX label mismatch ";
+										 Ppil.pp_label l; print "\n")
+								       else ()
+							   in  raise NOT_EQUAL
+							   end) vm sbnds
 	    end
 
 
@@ -1035,11 +1058,12 @@ struct
 	       | (CON_MODULE_PROJECT(mod,lab), CON_MODULE_PROJECT(mod',lab')) =>
 		     eq_mod(vm,mod,mod') andalso Name.eq_label(lab,lab')
 	       | _ => false
-		val _ = if res then () 
-		    else (print "XXX eq_con false - \ncon = ";
-			  Ppil.pp_con con;
-			  print "\ncon' = ";
-			  Ppil.pp_con con'; print "\n")
+		val _ = if res orelse not (!debug)
+			    then () 
+			else (print "XXX eq_con false - \ncon = ";
+			      Ppil.pp_con con;
+			      print "\ncon' = ";
+			      Ppil.pp_con con'; print "\n")
 	    in res
 	    end
  
@@ -1099,11 +1123,12 @@ struct
                | (SIGNAT_VAR v1, SIGNAT_VAR v2) => VM.eq_var(vm,v1,v2)
                | (SIGNAT_OF p1, SIGNAT_OF p2) => eq_path(vm,p1,p2)
                | _ => false
-		val _ = if res then () 
-		    else (print "XXX eq_signat false - \nsignat = ";
-			  Ppil.pp_signat signat;
-			  print "\nsignat' = ";
-			  Ppil.pp_signat signat'; print "\n")
+		val _ = if res orelse not (!debug)
+			    then () 
+			else (print "XXX eq_signat false - \nsignat = ";
+			      Ppil.pp_signat signat;
+			      print "\nsignat' = ";
+			      Ppil.pp_signat signat'; print "\n")
 	  in  res
 	  end
 
@@ -1113,9 +1138,12 @@ struct
 		    (fn (SDEC(l,dec)) =>
 		     case sdecs_lookup(sdecs',l) of
 			 SOME dec' => eq_dec(vm,dec,dec')
-		       | NONE => (print "XXX eq_sdecs' returning false due to ";
-				  Ppil.pp_label l; print "\n";
-				  false)) sdecs
+		       | NONE => let val _ = if (!debug)
+						 then (print "XXX eq_sdecs' returning false due to ";
+						       Ppil.pp_label l; print "\n")
+					     else ()
+				 in  false
+				 end) sdecs
 	    in  res
 	    end	    
 
@@ -1143,11 +1171,12 @@ struct
 		  VM.eq_var(vm,v,v') andalso eq_kind(vm,kind,kind') andalso
 		  eq_conopt(vm,conopt,conopt') andalso inline=inline'
 	       | _ => false
-		val _ = if res then () 
-		    else (print "XXX eq_dec false - \ndec = ";
-			  Ppil.pp_dec dec;
-			  print "\ndec' = ";
-			  Ppil.pp_dec dec'; print "\n")
+		val _ = if res orelse not (!debug)
+			    then () 
+			else (print "XXX eq_dec false - \ndec = ";
+			      Ppil.pp_dec dec;
+			      print "\ndec' = ";
+			      Ppil.pp_dec dec'; print "\n")
 	    in res
 	    end
 	and eq_bnd(vm,bnd,bnd') =
@@ -1204,17 +1233,18 @@ struct
 
 	fun eq_cntxt(vm,c,c',vars) =
 	    let fun folder v =
-		    let fun diag s = 
-			if (!debug)
-			    then (print s;
-				  print "eq_cntxt was processing v = ";
-				  Ppil.pp_var v; print "\n";
-				  print "context 1 = \n";
-				  Ppil.pp_context c;
-				  print "\n\ncontext 2 = \n";
-				  Ppil.pp_context c';
-				  print "\n\n")
-			else ()
+		    let
+			fun diag s = 
+			    if (!debug)
+				then (print s;
+				      print "eq_cntxt was processing v = ";
+				      Ppil.pp_var v; print "\n";
+				      print "context 1 = \n";
+				      Ppil.pp_context c;
+				      print "\n\ncontext 2 = \n";
+				      Ppil.pp_context c';
+				      print "\n\n")
+			    else ()
 			val res = 
 			    (case (Context_Lookup_Var(c,v), Context_Lookup_Var(c',VM.lookup vm v)) of
 				 (SOME (_, pc), SOME (_, pc')) => eq_pc(vm,pc,pc')

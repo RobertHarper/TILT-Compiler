@@ -1,4 +1,4 @@
-(*$import TortlBase Name *)
+(*$import Prelude Nil Rtl Prim TortlBase Name *)
 
 signature TORTL_ARRAY = 
 sig

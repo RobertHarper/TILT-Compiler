@@ -1,4 +1,4 @@
-(*$import Nil Ppprim Formatter PPNIL *)
+(*$import Prelude TopLevel Sequence Annotation Listops TilWord32 Int TextIO Util Name Prim Word32 TraceInfo Nil Ppprim Formatter PPNIL *)
 (* Nil pretty-printer. *)
 
 structure Ppnil	:> PPNIL =

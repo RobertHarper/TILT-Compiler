@@ -1,4 +1,4 @@
-(*$import Il IlStatic IlUtil Ppil IlContext EQUAL Stats *)
+(*$import Prelude TopLevel List Prim Int Il IlStatic IlUtil Ppil Util Listops Name IlContext Tyvar EQUAL Stats *)
 (* Equality compiler *)
 structure Equal
     :> EQUAL =
@@ -46,9 +46,10 @@ struct
 				  SOME(_,PHRASE_CLASS_EXP(e,_,_,_)) => (e, con_eqfun name)
 				| _ => (case pc of
 					    PHRASE_CLASS_CON(_,_,SOME c,_) => self(con,c)
-					  | _ => (print "No eq expression available for CON_VAR "; pp_var v;
-						  print " at label "; pp_label eq_label;
-						  print ".  Perhaps due to shadowing\n";
+					  | _ => (debugdo (fn () =>
+							   (print "No eq expression available for CON_VAR "; pp_var v;
+							    print " at label "; pp_label eq_label;
+							    print ".  Perhaps due to shadowing\n"));
 						  raise NoEqExp)))
 			  end)
 	  | CON_OVAR ocon => self (name,CON_TYVAR (ocon_deref ocon))

@@ -1,4 +1,4 @@
-(*$import ILCONTEXT Util Listops Name Ppil Stats IlUtil *)
+(*$import Prelude TopLevel List Int ILCONTEXT Il Util Name Listops Ppil Stats IlUtil *)
 structure IlContext :> ILCONTEXT =
 struct
 
@@ -344,6 +344,9 @@ struct
 			      labelMap = lm1, pathMap = pm1, ordering = ord1})
 	: partial_context option * context = 
 	let
+	    val _ = debugdo (fn () => (print "plus PARTIAL CONTEXT:\n";
+				       pp_pcontext orig_pctxt;
+				       print "\n\n"))
 	    val pctxt_option = alphaVaryPartialContext(ctxt, orig_pctxt)
 	    val (CONTEXT{fixityMap = fm2, overloadMap = om2,
 			 labelMap = lm2, pathMap = pm2, ordering = ord2}, 
@@ -415,7 +418,10 @@ struct
 
     fun plus_context (ctxt, partial_ctxts) 
 	: partial_context option list * context = 
-	foldl_list plus ctxt partial_ctxts
+	(debugdo (fn() => (print "plus CONTEXT:\n";
+			   pp_context ctxt;
+			   print "\n\n"));
+	 foldl_list plus ctxt partial_ctxts)
     
     fun show_varset str set = 
 	(print str; print ": ";
@@ -536,7 +542,67 @@ struct
 		    fixityMap = fixityMap}
 	end
 
+    (* Invariant: If f : label_info then f is 1-1. *)
+    type label_info = label Name.LabelMap.map
 
+    fun inverse (li : label_info) : label_info =
+	let fun folder (l, l', li') = Name.LabelMap.insert (li', l', l)
+	in  Name.LabelMap.foldli folder Name.LabelMap.empty li
+	end
+    
+    val empty_label_info : label_info = Name.LabelMap.empty
+	
+    fun get_labels ((CONTEXT{fixityMap, overloadMap, labelMap, ...}, _), li) =
+	let
+	    fun addLabel (li', l) =
+		case Name.LabelMap.find (li', l)
+		  of NONE => Name.LabelMap.insert (li', l, fresh_internal_label "")
+		   | SOME _ => li'
+	    fun addDomain (map,acc) = Name.LabelMap.foldli (fn (l, _, acc') => addLabel (acc', l)) acc map
+	    val li = addDomain (fixityMap, li)
+	    val li = addDomain (overloadMap, li)
+	    val li = addDomain (labelMap, li)
+	in  li
+	end
+    
+    fun map_labels (li : label_info) (l : label) : label =
+	(case Name.LabelMap.find (li, l)
+	   of NONE => (debugdo (fn () =>
+				(print "map_labels: "; pp_label l;
+				 print " -> "; pp_label l; print "\n"));
+		       l)
+	    | SOME l' => (debugdo (fn () =>
+				   (print "map_labels: "; pp_label l;
+				    print " -> "; pp_label l'; print "\n"));
+			  l'))
+    fun map_context_labels (CONTEXT{pathMap, overloadMap, labelMap, ordering, fixityMap}, li) =
+	let val lookup = map_labels li
+	    fun folder (l, v, map) = Name.LabelMap.insert (map, lookup l, v)
+	    fun changeDomain map = Name.LabelMap.foldli folder Name.LabelMap.empty map
+	    val pathMap = Name.PathMap.map (fn (l,v) => (lookup l, v)) pathMap
+	    val overloadMap = changeDomain overloadMap
+	    val labelMap = changeDomain labelMap
+	    val fixityMap = changeDomain fixityMap
+	in  CONTEXT{pathMap = pathMap,
+		    overloadMap = overloadMap,
+		    labelMap = labelMap,
+		    ordering = ordering,
+		    fixityMap = fixityMap}
+	end
+    fun map_partial_context_labels ((context, frees), li) =
+	let val context = map_context_labels (context, li)
+	    val frees = Name.VarMap.map (map_labels li) frees
+	in  (context, frees)
+	end
+
+    fun obscure_labels (ctxt, li) = map_context_labels (ctxt, li)
+
+    fun unobscure_labels ((ctxt, partial_ctxt, binds), li) =
+	let val li' = inverse li
+	in  (map_context_labels (ctxt, li'),
+	     map_partial_context_labels (partial_ctxt, li'),
+	     binds)
+	end
 
     fun removeNonExport (CONTEXT{pathMap, overloadMap, labelMap, ordering, fixityMap}, frees) = 
 	let val ordering = List.filter (fn PATH p => let val SOME(l,_) = Name.PathMap.find(pathMap,p)
@@ -681,11 +747,11 @@ struct
        fun SelfifySig ctxt (p : path, signat : signat) = 
 	   TransformSig (initial_state (true, ctxt)) (SOME p,signat)
 	   handle exn =>
+	       (debugdo (fn () =>
 	       (print "SelfifySig encountered error while selfifying with p = "; pp_path p;
 		print " and signat =\n";
 		pp_signat signat; print "\n\n";
-(*		print " and ctxt =\n";
-		pp_context ctxt; print "\n\n"; *)
+		          print " and ctxt =\n"; pp_context ctxt; print "\n\n"));
 		raise exn)
 
        fun SelfifyDec ctxt (DEC_MOD (v,b,s)) = DEC_MOD(v,b,SelfifySig ctxt (PATH(v,[]),s))

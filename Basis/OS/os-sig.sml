@@ -1,4 +1,4 @@
-(*$import OS_FILE_SYS OS_PATH OS_IO_SIG OS_PROCESS *)
+(*$import Prelude OS_FILE_SYS OS_PATH OS_IO_SIG OS_PROCESS *)
 (* os-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -26,6 +26,9 @@ signature OS =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:35  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:53:08  pscheng
 # added basis
 # 

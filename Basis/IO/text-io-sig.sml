@@ -1,4 +1,4 @@
-(*$import Prelude TEXT_STREAM_IO *)
+(*$import Prelude Substring StringCvt TEXT_STREAM_IO *)
 (* text-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -68,9 +68,12 @@ signature TEXT_IO =
 
 (*
  * $Log$
-# Revision 1.2  2000/08/29  23:06:45  swasey
-# Updated TextIOFn in an attempt to solve a bug.
+# Revision 1.3  2000/09/12  18:54:16  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  2000/08/29 23:06:45  swasey
+ * Updated TextIOFn in an attempt to solve a bug.
+ *
 # Revision 1.1  98/03/09  19:50:51  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import BinIO Util TilWord64 String TopLevel *)
+(*$import Prelude TopLevel BinIO Util TilWord64 Word8Vector Word8 Word32 Int String *)
 
 signature BLASTER = sig
 (*

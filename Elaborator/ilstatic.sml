@@ -1,4 +1,4 @@
-(*$import Il IlContext IlContextEq PrimUtil Ppil IlUtil Util Listops ILSTATIC Stats Option *)
+(*$import Prelude TopLevel Prim Tyvar Name Int List Il IlContext IlContextEq PrimUtil Ppil IlUtil Util Listops ILSTATIC Stats Option *)
 (* Static semantics *)
 structure IlStatic
   :> ILSTATIC =
@@ -23,11 +23,13 @@ structure IlStatic
    fun reduce_sigvar(context,v) = 
 	(case (Context_Lookup_Var(context,v)) of
 	     SOME(_,PHRASE_CLASS_SIG(v,s)) => s
-	   | SOME _ => (print "reduce_sigvar given SIGVAR = "; pp_var v;
-			print "in ctxt bound but not to signature: \n"; Ppil.pp_context context;
+	   | SOME _ => (debugdo (fn () =>
+				 (print "reduce_sigvar given SIGVAR = "; pp_var v;
+				  print "in ctxt bound but not to signature: \n"; Ppil.pp_context context));
 			error "reduce_sigvar given unbound SIGVAR")
-	   | NONE => (print "reduce_sigvar given unbound SIGVAR = "; pp_var v;
-		      print "in ctxt: \n"; Ppil.pp_context context;
+	   | NONE => (debugdo (fn () =>
+			       (print "reduce_sigvar given unbound SIGVAR = "; pp_var v;
+				print "in ctxt: \n"; Ppil.pp_context context));
 		      error "reduce_sigvar given unbound SIGVAR"))
 
    fun sig_subst_modvar(signat,vmlist) = 
@@ -783,10 +785,11 @@ structure IlStatic
 				 else 
 				     (if (eq_con(ctxt,econ,cNorm))
 					  then cUnroll
-				      else (print "UNROLL: expression type does not match decoration";
-					    print "\necon = "; pp_con econ;
-					    print "\ncNorm = "; pp_con cNorm;
-					    print "\nctxt = "; pp_context ctxt;
+				      else (debugdo (fn () =>
+						     (print "UNROLL: expression type does not match decoration";
+						      print "\necon = "; pp_con econ;
+						      print "\ncNorm = "; pp_con cNorm;
+						      print "\nctxt = "; pp_context ctxt));
 					    error "UNROLL: expression type does not match decoration"))
 			     end
 		     else error "projected decoration has the wrong KIND_ARROW")
@@ -1035,12 +1038,13 @@ structure IlStatic
 			in  
 			    if (sub_con(ctxt,c,tipe))
 				then loop (n+1) va rest
-			    else (print "case arm type mismatch: checking exp = ";
-				  pp_exp exparg; print "\nwith ctxt = ";
-				  pp_context ctxt; print "\n";
-				  print "exp = \n"; pp_exp exp;
-				  print "c = \n"; pp_con c;
-				  print "tipe = \n"; pp_con tipe;
+			    else (debugdo (fn () =>
+					   (print "case arm type mismatch: checking exp = ";
+					    pp_exp exparg; print "\nwith ctxt = ";
+					    pp_context ctxt; print "\n";
+					    print "exp = \n"; pp_exp exp;
+					    print "c = \n"; pp_con c;
+					    print "tipe = \n"; pp_con tipe));
 				  error "case arm type mismatch")
 			end
 	   in if (eq_con(ctxt,eargCon,sumcon))
@@ -1166,10 +1170,11 @@ structure IlStatic
 				      doit(m,reduce_signat ctxt s)
 				| _ => NONE)
 			 end
-		     | _ => (print "Sdecs_Lookup_Help could not find label";
-			     pp_label lbl; print " in sdecs:\n";
-			     pp_sdecs sdecs; print "\n";
-			     error "Sdecs_Lookup_Help could not find label"))
+		     | _ => (debugdo (fn () =>
+				      (print "Sdecs_Lookup_Help could not find label ";
+				       pp_label lbl; print " in sdecs:\n";
+				       pp_sdecs sdecs; print "\n"));
+			     error ("Sdecs_Lookup_Help could not find label " ^ label2string lbl)))
 	end
 
 

@@ -1,4 +1,4 @@
-(*$import IL PRIMUTILPARAM Il Name *)
+(*$import Prelude Symbol Listops Int IL PRIMUTILPARAM Il Util Prim Name *)
 structure IlPrimUtilParam
     :> PRIMUTILPARAM where type con = Il.con 
                      where type exp = Il.exp

@@ -1,4 +1,4 @@
-(*$import RTL TilWord32 Name Util *)
+(*$import Prelude TopLevel RTL TilWord32 Name Util *)
 
 fun in_imm_range x =  TilWord32.ult(x,0w255)
 fun in_ea_disp_range x = x >= ~32768 andalso x<32768

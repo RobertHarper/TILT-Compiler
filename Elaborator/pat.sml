@@ -1,4 +1,4 @@
-(*$import Il IlStatic Ppil IlUtil IlContext Datatype Error PAT AstHelp Stats *)
+(*$import Prelude TopLevel Util Listops Name Prim Int Symbol TilWord64 Array Tyvar List Ast Il IlStatic Ppil IlUtil IlContext Datatype Error PAT AstHelp Stats *)
 
 (* xxx should coalesce constants *)
 
@@ -315,7 +315,9 @@ structure Pat
 			      else (case Datatype.exn_lookup context p of
 				    NONE => (case p of
 						 [s] => ([s], [], Wild)
-					       | _ => (AstHelp.pp_path' p;
+					       | _ => (error_region();
+						       print "non-constructor path pattern: ";
+						       AstHelp.pp_path p; print "\n";
 						       error "non-constructor path pattern"))
 				  | SOME {stamp, carried_type=NONE} => ([], [], Exception(p, stamp, NONE))
 				  | SOME {stamp, carried_type} => error "exception constructoris missing pattern")
@@ -350,7 +352,10 @@ structure Pat
 						      [s] => Symbol.name s = "ref"
 						    | _ => false)
 						     then ([], [], Ref (pat2Pattern argument))
-						 else (AstHelp.pp_path p; error "non-constructor path pattern")
+						 else (error_region();
+						       print "non-constructor path pattern: ";
+						       AstHelp.pp_path p; print "\n";
+						       error "non-constructor path pattern")
 				       | SOME {stamp, carried_type=NONE} => error "exception constris not value-carrying"
 				       | SOME {stamp, carried_type=SOME c} => 
 					     ([], [], Exception(p, stamp, SOME (c, pat2Pattern argument))))
@@ -974,7 +979,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 					 end
 	    | (_, []) => (error_region();
 			  print "Redundant matches.\n";
-			  Ppil.pp_context context;
+			  debugdo (fn () => Ppil.pp_context context);
 			  #1(Error.dummy_exp (context,"RedundantMatch")))
 	    | _ =>
 		  let

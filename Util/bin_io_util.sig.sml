@@ -1,4 +1,4 @@
-(*$import BinIO *)
+(*$import Prelude BinIO *)
 
 (* Non-blocking binary IO utility functions; 
  * to deal with strings and chars.  *)

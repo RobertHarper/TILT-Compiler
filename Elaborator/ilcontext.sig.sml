@@ -1,4 +1,4 @@
-(*$import IL Il *)
+(*$import Prelude IL Il Fixity Name *)
 
 signature ILCONTEXT =
   sig
@@ -47,6 +47,13 @@ signature ILCONTEXT =
     val plus_context : Il.context * Il.partial_context list -> Il.partial_context option list * Il.context
     (* GC the given context by using the partial context and bindings as roots *)
     val gc_context : Il.module -> Il.context
+
+    (* Support for hiding top-level labels. *)
+    type label_info
+    val empty_label_info : label_info
+    val get_labels : Il.partial_context * label_info -> label_info
+    val obscure_labels : Il.context * label_info -> Il.context
+    val unobscure_labels : Il.module * label_info -> Il.module
 	
     (* ---- These lookup functions don't perform selfification ---- *)		
     val Context_Fixity       : context -> Fixity.fixity Name.LabelMap.map

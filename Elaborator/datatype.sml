@@ -1,4 +1,4 @@
-(*$import Il IlStatic IlUtil IlContext Ppil Name Ast GraphUtil ListMergeSort AstHelp DATATYPE Stats *)
+(*$import Prelude TopLevel String Symbol Int List Util Listops Tyvar Il IlStatic IlUtil IlContext Ppil Name Ast GraphUtil ListMergeSort AstHelp DATATYPE Stats *)
 
 (* Datatype compiler and destructures of datatype signatures. *)
 structure Datatype

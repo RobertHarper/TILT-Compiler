@@ -1,4 +1,4 @@
-(*$import Word32 Array Vector Word8Vector CharVector CRC Char BinIO CharArray BinIoUtil *)
+(*$import Prelude TopLevel Word8 String Byte Option Word32 Array Vector Word8Vector CharVector CRC Char BinIO CharArray BinIoUtil *)
 
 (* CRC.sml -- written by Andrew Appel for SML/NJ, modified by PS 1994-10-24,
    modified by Martin Elsman 1997-05-30 

@@ -1,4 +1,4 @@
-(*$import MONO_VECTOR Vector List *)
+(*$import Prelude General Array MONO_VECTOR Vector List *)
 (* word8-vector.sml specialized copy of vector.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -118,6 +118,9 @@ structure Word8Vector : MONO_VECTOR =
 
 (*
  * $Log$
+# Revision 1.3  2000/09/12  18:54:11  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.2  98/05/14  16:38:59  pscheng
 # result types on sme functions were wrong
 # 

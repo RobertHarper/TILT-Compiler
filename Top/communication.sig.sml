@@ -1,4 +1,4 @@
-(*$import Paths Target Update *)
+(*$import Prelude Paths Target Update *)
 
 (* ---- Provides an abstraction for communication between master and slave processes ---- *)
 signature COMMUNICATION = 
@@ -35,7 +35,7 @@ sig
       | FLUSH of (Paths.unit_paths *		(* Master signals that slave should flush files related to plan *)
 		  Update.plan)			(* in anticipation of some other processor doing work. *)
       | REQUEST of (Paths.unit_paths *		(* Master request slave to compile. *)
-		    Paths.unit_paths list *
+		    (Paths.unit_paths * Update.import) list *
 		    Update.plan)
     (* These are all non-blocking. *)
     (* Buffered access to channels. *)

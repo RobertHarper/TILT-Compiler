@@ -1,4 +1,4 @@
-(*$import Ast Il IlContext IlStatic Ppil IlUtil Datatype Toil BASIS Stats *)
+(*$import Prelude TopLevel Util Name Prim Tyvar Symbol Fixity Ast Il IlContext IlStatic Ppil IlUtil Datatype Toil BASIS Stats *)
 (* Forms the initial basis for elaboration *)
 structure Basis
    :> BASIS =

@@ -1,4 +1,4 @@
-(*$import Time Crc *)
+(*$import Prelude *)
 
 signature MANAGER = 
 sig

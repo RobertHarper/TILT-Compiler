@@ -1,4 +1,4 @@
-(*$import Name TilWord32 *)
+(*$import Prelude Name TilWord32 *)
 signature RTL =
 sig
 

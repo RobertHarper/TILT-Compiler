@@ -1,4 +1,4 @@
-(*$import POSIX_FLAGS General *)
+(*$import Prelude Word32 POSIX_FLAGS General *)
 (* posix-tty-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -179,6 +179,9 @@ signature POSIX_TTY =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:42  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:53:41  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import Il Nil Ppil IlUtil IlContext IlStatic NilUtil NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL Option *)
+(*$import Prelude TopLevel Name Listops Util Sequence List Prim Tyvar Int Word32 Array TilWord64 TilWord32 Il Nil Ppil IlUtil IlContext IlStatic NilUtil NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL Option *)
 
 (* We box all floats and translate floating point operations accordingly.
    Thus, kind type is replaced by work types.

@@ -1,4 +1,4 @@
-(*$import MONO_VECTOR MONO_ARRAY PRIM_IO Option General *)
+(*$import Prelude PreOS MONO_VECTOR MONO_ARRAY PRIM_IO Option General *)
 (* prim-io-fn.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -235,9 +235,12 @@ functor PrimIOFn (
 
 (*
  * $Log$
-# Revision 1.2  2000/01/20  13:31:53  pscheng
-# *** empty log message ***
+# Revision 1.3  2000/09/12  18:54:16  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  2000/01/20 13:31:53  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:50:46  pscheng
 # added basis
 #

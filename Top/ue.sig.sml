@@ -1,4 +1,4 @@
-(*$import Crc *)
+(*$import Prelude Crc *)
 
 (* Unit Environments: A unit environment is a finite map from unit
  * names to crc's. *)

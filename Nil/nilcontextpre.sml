@@ -1,4 +1,4 @@
-(*$import Stats Option Ppnil NilSubst NilUtil ListMergeSort NILCONTEXTPRE *)
+(*$import Prelude TopLevel Name Listops Util NilError List ListPair Sequence Prim Nil Stats Option Ppnil NilSubst NilUtil ListMergeSort NILCONTEXTPRE *)
 
 (* This structure implements the main body of the context code.
  * In order to eliminate cycles in the code dependencies, some

@@ -1,4 +1,4 @@
-(*$import OS_PATH OS_PathFn *)
+(*$import Prelude Substring OS_PATH OS_PathFn *)
 (* os-path.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -43,9 +43,12 @@ structure OS_Path : OS_PATH = OS_PathFn (
 
 (*
  * $Log$
-# Revision 1.2  2000/08/22  18:28:24  swasey
-# Brought up to date
+# Revision 1.3  2000/09/12  18:55:02  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  2000/08/22 18:28:24  swasey
+ * Brought up to date
+ *
 # Revision 1.1  98/03/09  19:54:19  pscheng
 # added basis
 # 

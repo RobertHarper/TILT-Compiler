@@ -1,4 +1,4 @@
-(*$import UTIL_ERROR TopLevel TextIO *)
+(*$import Prelude TopLevel UTIL_ERROR TextIO *)
 
 (*Pulled out of Util so that Platform can use Error while Util uses Platform.*)
 structure UtilError :> UTIL_ERROR = 

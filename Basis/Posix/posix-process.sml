@@ -1,4 +1,4 @@
-(*$import POSIX_Signal Word32 Time Word8 POSIX_extern POSIX_PROCESS *)
+(*$import Prelude List Int POSIX_Signal Word32 Time Word8 POSIX_extern POSIX_PROCESS *)
 (* posix-process.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -131,9 +131,12 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
 
 (*
  * $Log$
-# Revision 1.2  99/09/22  15:45:13  pscheng
-# *** empty log message ***
+# Revision 1.3  2000/09/12  18:54:40  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  1999/09/22 15:45:13  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:53:34  pscheng
 # added basis
 #

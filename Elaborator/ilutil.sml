@@ -1,4 +1,4 @@
-(*$import IL Ppil PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats *)
+(*$import Prelude TopLevel PRIMUTIL IL Il Symbol Int Array String Prim Ppil Util Listops Name Tyvar PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats *)
 (* Il Utility *)
 structure IlPrimUtil :> PRIMUTIL where type con = Il.con
                                  where type exp = Il.exp = PrimUtil(structure PrimUtilParam = IlPrimUtilParam)

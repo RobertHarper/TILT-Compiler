@@ -1,4 +1,4 @@
-(*$import PRIM Formatter Prim *)
+(*$import Prelude PRIM Formatter Prim *)
 (* Pretty-printing routines for the primitives *)
 signature PPPRIM =
   sig

@@ -1,4 +1,4 @@
-(*$import StringCvt String Option *)
+(*$import Prelude StringCvt String Option *)
 (* num-scan.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -407,6 +407,9 @@ structure NumScan : sig
 
 (*
  * $Log$
+# Revision 1.3  2000/09/12  18:54:45  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.2  99/03/03  19:32:54  leaf
 # *** empty log message ***
 # 

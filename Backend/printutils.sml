@@ -1,4 +1,4 @@
-(*$import BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO Util Listops *)
+(*$import Prelude TopLevel Int Array Core BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO Util Listops *)
 functor Printutils(val commentHeader : string
 		   structure Machineutils : MACHINEUTILS
                    structure Tracetable : TRACETABLE

@@ -1,4 +1,4 @@
-(*$import NIL PRIMUTILPARAM Int Nil IlUtil *)
+(*$import Prelude TopLevel Sequence Name Symbol Listops NIL PRIMUTILPARAM Prim Int Nil IlUtil *)
 
 structure NilPrimUtilParam
     :> PRIMUTILPARAM where type con = Nil.con 

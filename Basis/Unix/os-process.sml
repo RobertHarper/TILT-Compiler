@@ -1,4 +1,4 @@
-(*$import OS_PROCESS Posix CleanUp *)
+(*$import Prelude List Word8 PreOS OS_PROCESS Posix CleanUp *)
 (* os-process.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -64,6 +64,9 @@ structure OS_Process :> OS_PROCESS =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:55:03  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:54:20  pscheng
 # added basis
 # 

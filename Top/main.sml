@@ -1,4 +1,4 @@
-(*$import MAIN TopLevel Manager Stats Getopt UtilError Dirs Target *)
+(*$import Prelude TopLevel List String Int OS MAIN Manager Stats Getopt UtilError Dirs Target *)
 
 structure Main : MAIN =
 struct

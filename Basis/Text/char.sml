@@ -1,4 +1,4 @@
-(*$import CHAR General PreString NumFormat *)
+(*$import Prelude CHAR General PreString NumFormat StringCvt *)
 (* char.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

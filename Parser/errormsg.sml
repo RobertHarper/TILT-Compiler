@@ -1,4 +1,4 @@
-(*$import ERRORMSG PrettyPrint SourceMap Control PathNames *)
+(*$import Prelude TopLevel Int Source ERRORMSG PrettyPrint SourceMap Control PathNames *)
 
 (* <errormsg.sml>=                                                          *)
 (* Copyright 1989 by AT&T Bell Laboratories *)
@@ -139,6 +139,9 @@ end  (* structure ErrorMsg *)
 
 (*
  * $Log$
+# Revision 1.4  2000/09/12  18:56:50  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.3  98/02/01  01:27:58  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places

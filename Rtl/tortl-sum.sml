@@ -1,4 +1,4 @@
-(*$import TORTLSUM Rtl Pprtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats *)
+(*$import Prelude TopLevel Util Listops Name List Int Prim TilWord32 TilWord64 TORTLSUM Rtl Pprtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats *)
 
 (* ASSUMPTIONS and GUARANTEES:
 	(1) Integer types are represented by the tags 0 to 3.

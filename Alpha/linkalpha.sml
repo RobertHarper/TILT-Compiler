@@ -1,4 +1,4 @@
-(*$import LINKASM Linkrtl DecAlpha Labelgraph DecAlphaUtils IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils VarGraph TrackStorage Color Chaitin RtlToAsm Recursion *)
+(*$import Prelude TopLevel Util Rtl Stats LINKASM Linkrtl DecAlpha Labelgraph DecAlphaUtils IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils VarGraph TrackStorage Color Chaitin RtlToAsm Recursion *)
 
 
 structure Linkalpha :> LINKASM =

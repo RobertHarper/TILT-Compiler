@@ -1,4 +1,4 @@
-(*$import HASH_KEY *)
+(*$import Prelude HASH_KEY *)
 (* mono-hash-table-sig.sml
  *
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories.

@@ -1,4 +1,4 @@
-(*$import TopLevel Int *)
+(*$import Prelude TopLevel Int *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* fixity.sml *)
@@ -31,9 +31,12 @@ end (* structure Fixity *)
 
 (*
  * $Log$
-# Revision 1.3  99/09/22  15:46:05  pscheng
-# *** empty log message ***
+# Revision 1.4  2000/09/12  18:56:51  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.3  1999/09/22 15:46:05  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.2  1998/01/21  20:40:16  pscheng
 # moved the .sig files to .sig.sml file
 #

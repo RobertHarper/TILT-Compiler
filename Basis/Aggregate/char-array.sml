@@ -1,4 +1,4 @@
-(*$import MONO_ARRAY String Word8Array *)
+(*$import Prelude MONO_ARRAY String Word8Array *)
 (* char-array.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Labs.
@@ -44,6 +44,9 @@ structure CharArray : MONO_ARRAY =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:07  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:50:10  pscheng
 # added basis
 # 

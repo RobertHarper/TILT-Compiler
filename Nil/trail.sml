@@ -1,4 +1,4 @@
-(*$import Nil NilUtil Alpha TRAIL *)
+(*$import Prelude TopLevel Sequence ListPair SplaySetFn Util Name Int Word32 Prim Nil NilUtil Alpha TRAIL *)
 
 structure Trail :> TRAIL = 
   struct

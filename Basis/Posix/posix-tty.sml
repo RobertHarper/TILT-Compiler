@@ -1,4 +1,4 @@
-(*$import POSIX_FileSys POSIX_Process Word32 Byte POSIX_TTY POSIX_extern *)
+(*$import Prelude List Word8Vector Word8Array Int POSIX_FileSys POSIX_Process Word32 Byte POSIX_TTY POSIX_extern *)
 (* posix-tty.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -289,9 +289,12 @@ structure POSIX_TTY :> POSIX_TTY
 
 (*
  * $Log$
-# Revision 1.2  99/09/22  15:45:14  pscheng
-# *** empty log message ***
+# Revision 1.3  2000/09/12  18:54:43  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  1999/09/22 15:45:14  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:53:43  pscheng
 # added basis
 #

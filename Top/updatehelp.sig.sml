@@ -9,12 +9,13 @@ sig
     structure InfoCache : FILECACHE
 
     type unit_paths			(* parameter *)
+    type import				(* parameter *)
     type state
 	
     datatype asmfiles = COMPRESSED | UNCOMPRESSED | BOTH | NEITHER
     val goalAsmFiles : unit -> asmfiles
 	
-    val init : unit_paths * unit_paths list -> state
+    val init : unit_paths * (unit_paths * import) list -> state
     val elaborate : state -> state
     val generate : state -> state
     val prepare : state -> state

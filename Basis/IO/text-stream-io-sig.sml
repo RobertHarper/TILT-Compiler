@@ -1,4 +1,4 @@
-(*$import Substring STREAM_IO *)
+(*$import Prelude Substring STREAM_IO *)
 (* text-stream-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -14,6 +14,9 @@ signature TEXT_STREAM_IO =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:18  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:50:54  pscheng
 # added basis
 # 

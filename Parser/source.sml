@@ -1,4 +1,4 @@
-(*$import SOURCE TextIO PathNames Control *)
+(*$import Prelude SourceMap PrettyPrint IO SOURCE TextIO PathNames Control *)
 
 (* <source.sml>=                                                            *)
 (* source.sml
@@ -43,6 +43,9 @@ end (* structure Source *)
 
 (*
  * $Log$
+# Revision 1.4  2000/09/12  18:57:11  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.3  98/02/01  01:28:16  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places

@@ -1,4 +1,4 @@
-(*$import EXPTABLE String BinaryMapFn Ppnil *)
+(*$import Prelude TopLevel Array Word32 Name Sequence Listops Nil Prim Util TilWord64 EXPTABLE String BinaryMapFn Ppnil *)
 
 (* Basically revamped from old version of Til *)
 

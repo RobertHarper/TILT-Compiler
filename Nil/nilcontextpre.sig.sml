@@ -1,4 +1,4 @@
-(*$import Nil *)
+(*$import Prelude Nil *)
 
 (*The signature of the true implementation of contexts.  In order to 
  * eliminate cyclic dependencies, the main implementation is paramaterized

@@ -1,4 +1,4 @@
-(*$import Name TRACEINFO *)
+(*$import Prelude Name TRACEINFO *)
 
 structure TraceInfo :> TRACEINFO = 
 struct

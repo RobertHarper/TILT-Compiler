@@ -1,13 +1,15 @@
-(*$import UPDATE UpdateHelp Paths TopHelp Time Util List Info *)
+(*$import Prelude TopLevel UnitEnvironment Stats UPDATE UpdateHelp Paths TopHelp Time Util List Info *)
 
 structure Update
     :> UPDATE
-        where type unit_paths = Paths.unit_paths =
+        where type unit_paths = Paths.unit_paths
+	where type import = UpdateHelp.import =
 struct
 
     val error = fn s => Util.error "update.sml" s
 	
     type unit_paths = Paths.unit_paths
+    type import = UpdateHelp.import
 
     val showStale = Stats.ff "ShowStale"
     val showPlan = Stats.tt "ShowPlan"
@@ -40,19 +42,14 @@ struct
 
 	 	Up to date checks
 		-----------------
-			Source		Constraint	Imported Interface	All Imported Interfaces
-	  Interface	 (1)		 (1),(2)	 (1)			 (4)
-	  Assembler	 (3)		 (3),(2)	 (3)			 (4)
-	  Object	 (3)		 (3),(2)	 (3)			 (4)
+			Source		Constraint	Imported Interface
+	  Interface	 (1)		 (1),(2)	 (1)
+	  Assembler	 (3)		 (3),(2)	 (3)
+	  Object	 (3)		 (3),(2)	 (3)
 
 		(1): lastWritten(col) <= lastChecked(row)
 		(2): constraint hasn't appeared or disappeared
 		(3): lastWritten(col) <= lastWritten(row)
-		(4): set of units imported hasn't changed since last elaboration
-
-	  Note: We currently have to check a unit against its transitive
-	  imports, which is why (4) is necessary.  A solution involving direct
-	  imports only requires elaborator support.
      *)
 
     type status = bool * bool * bool	(* interface uptodate, assembler uptodate, object uptodate *)
@@ -92,9 +89,9 @@ struct
 	    (il_time, asm_time, obj_time)
 	end
 
-    (* joinStatus : bool * bool * bool * bool -> bool *)
-    fun joinStatus (v_source, v_interface, v_import, v_units) =
-	v_source andalso v_interface andalso v_import andalso v_units
+    (* joinStatus : bool * bool * bool -> bool *)
+    fun joinStatus (v_source, v_interface, v_import) =
+	v_source andalso v_interface andalso v_import
 
     (* chatStatus : bool -> string * time * bool * bool * bool -> unit *)
     fun chatStatus interface_same (what, time, v_source, v_interface, v_import) =
@@ -143,13 +140,6 @@ struct
 	    val asm_v_import = Time.<= (import_time, asm_time)
 	    val obj_v_import = Time.<= (import_time, obj_time)
 
-	    val new_units = foldl (fn (import,acc) => StringSet.add (acc, Paths.unitName import)) StringSet.empty imports
-	    val old_units = case info
-			      of NONE => StringSet.empty
-			       | SOME {imports, ...} =>
-				  Ue.foldi (fn (name,_,acc) => StringSet.add (acc, name)) StringSet.empty imports
-	    val all_v_units = StringSet.equal (new_units, old_units)
-
 	    val _ = if not (!showStale) then ()
 		    else
 			let
@@ -158,8 +148,6 @@ struct
 				    else stale (infoFile, Missing)
 			    val _ = if interface_same orelse (not info_exists) then ()
 				    else stale (sourceFile, Because "interface file has been created or removed")
-			    val _ = if all_v_units orelse StringSet.isEmpty old_units then ()
-				    else stale (sourceFile, Because "set of imported units have changed")
 			    val chatStatus = chatStatus interface_same
 				
 			    val _ = chatStatus (Paths.ilFile target, il_time, il_v_source, il_v_interface, il_v_import)
@@ -170,9 +158,9 @@ struct
 		    in ()
 		    end
 	in
-	    (joinStatus (il_v_source,  il_v_interface,  il_v_import,  all_v_units),
-	     joinStatus (asm_v_source, asm_v_interface, asm_v_import, all_v_units),
-	     joinStatus (obj_v_source, obj_v_interface, obj_v_import, all_v_units))
+	    (joinStatus (il_v_source,  il_v_interface,  il_v_import),
+	     joinStatus (asm_v_source, asm_v_interface, asm_v_import),
+	     joinStatus (obj_v_source, obj_v_interface, obj_v_import))
 	end
 
     datatype todo = ELABORATE | GENERATE | PREPARE | ASSEMBLE | CLEANUP

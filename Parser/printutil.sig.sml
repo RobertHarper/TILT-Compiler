@@ -1,4 +1,4 @@
-(*$import ENV *)
+(*$import Prelude SYMBOL ENV *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* printutil.sig *)
@@ -25,6 +25,9 @@ end (* signature PRINTUTIL *)
 
 (*
  * $Log$
+# Revision 1.3  2000/09/12  18:57:09  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.2  98/02/15  22:44:05  pscheng
 # bootstrapping changes
 # 

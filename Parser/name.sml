@@ -1,4 +1,4 @@
-(*$import NAME Util Symbol Int Word31 SplaySetFn SplayMapFn Char String Stats *)
+(*$import Prelude TopLevel NAME Util Symbol Int Word31 SplaySetFn SplayMapFn Char String Stats ORD_KEY HashTable *)
 
 structure Name :> NAME =
   struct

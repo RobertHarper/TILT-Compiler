@@ -1,4 +1,4 @@
-(*$import UNIT_ENVIRONMENT Crc TopHelp *)
+(*$import Prelude UNIT_ENVIRONMENT Crc TopHelp *)
 
 structure UnitEnvironment :> UNIT_ENVIRONMENT =
 struct

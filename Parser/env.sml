@@ -1,4 +1,4 @@
-(*$import ENV TopLevel StrgHash Array Vector Control ErrorMsg *)
+(*$import Prelude TopLevel ENV String Int List StrgHash Array Vector Control ErrorMsg *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* env.sml *)
@@ -351,9 +351,12 @@ structure FastSymbol = Env.FastSymbol
 
 (*
  * $Log$
-# Revision 1.7  2000/01/20  13:32:26  pscheng
-# *** empty log message ***
+# Revision 1.8  2000/09/12  18:56:49  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.7  2000/01/20 13:32:26  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.6  1999/02/12  22:22:01  pscheng
 # *** empty log message ***
 #

@@ -1,4 +1,4 @@
-(*$import RUN TopLevel CommandLine *)
+(*$import Prelude Posix Word8 OS RUN TopLevel CommandLine *)
 
 structure Run : RUN =
 struct

@@ -1,4 +1,4 @@
-(*$import ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
+(*$import Prelude TopLevel StrgHash Control SourceMap Int String Char ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
 
 functor MLLexFun(structure Tokens : ML_TOKENS)=
    struct
@@ -9,6 +9,9 @@ functor MLLexFun(structure Tokens : ML_TOKENS)=
  * Copyright 1989 by AT&T Bell Laboratories
  *
  * $Log$
+# Revision 1.9  2000/09/12  18:56:59  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.8  98/02/27  17:32:17  pscheng
 # The fix in compilation of implementation files with interfaces
 # allows Symbol and FastSymbol to be exported without Env.

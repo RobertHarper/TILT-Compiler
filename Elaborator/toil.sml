@@ -1,6 +1,6 @@
-(*$import Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat InfixParse Datatype Equal Error Signature TVClose TOIL *)
+(*$import Prelude TopLevel Util Listops Name Tyvar Prim Ast Symbol String TilWord64 Array Int List Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat InfixParse Datatype Equal Error Signature TVClose TOIL *)
 
-(* todo : LetExp and CaseExp: valuability coputation too conservative
+(* todo : LetExp and CaseExp: valuability computation too conservative
           optimize coercion functors to recognize when it is entirely unndeeded 
           optimize coercion functions of polymorphic values to be identity by normalizing type argument positions
 *)
@@ -1840,10 +1840,10 @@ val _ = print "plet0\n"
 			   end
 		      else
 			       (error_region();
-			       print "unbound type constructor: ";
-			       pp_pathlist AstHelp.pp_sym' syms; print "\n";
-				pp_context context;
-			       fresh_named_con(context,"unbound_type")))
+				print "unbound type constructor: ";
+				pp_pathlist AstHelp.pp_sym' syms; print "\n";
+				debugdo (fn () => pp_context context);
+				fresh_named_con(context,"unbound_type")))
 	     end)
 
 				  
@@ -2006,7 +2006,7 @@ val _ = print "plet0\n"
 				    in SIGNAT_STRUCTURE (Signature.xsig_where_type(context,sdecs,labels,c,k))
 				   end
 			      | _ => (error_region();
-				      print "Can't where type a non-type component";
+				      print "Can't where type a non-type component\n";
 				      s))
 		     | _ => (error_region();
 				print "Can't where type a non-structure signature\n";
@@ -2303,7 +2303,7 @@ val _ = print "plet0\n"
 			    print "cannot apply a non-functor\n";
 			    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE []))
 	            | NONE => (error_region();
-			    print "identifier not bound";
+			    print "identifier not bound: ";
 			       AstHelp.pp_path funpath;
 			       print "\n";
 			    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE [])))

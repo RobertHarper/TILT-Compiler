@@ -1,4 +1,4 @@
-(*$import TopLevel Array *)
+(*$import Prelude TopLevel Array *)
 
 (* ppqueue.sml
  *
@@ -86,6 +86,9 @@ end (* structure PPQueue *)
 
 (*
  * $Log$
+# Revision 1.3  2000/09/12  18:57:08  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.2  98/01/21  20:40:42  pscheng
 # moved the .sig files to .sig.sml file
 # 

@@ -1,4 +1,4 @@
-(*$import CharArray CharVector TextPrimIO CleanIO Substring IO OS_PRIM_IO TEXT_IO OS Option *)
+(*$import Prelude Int CharArray CharVector TextPrimIO CleanIO Substring IO OS_PRIM_IO TEXT_IO OS Option *)
 (* text-io-fn.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -886,9 +886,12 @@ functor TextIOFn (
 
 (*
  * $Log$
-# Revision 1.2  2000/08/29  23:06:45  swasey
-# Updated TextIOFn in an attempt to solve a bug.
+# Revision 1.3  2000/09/12  18:54:16  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  2000/08/29 23:06:45  swasey
+ * Updated TextIOFn in an attempt to solve a bug.
+ *
 # Revision 1.1  98/03/09  19:50:50  pscheng
 # added basis
 # 

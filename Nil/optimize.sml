@@ -1,4 +1,4 @@
-(*$import Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps Vararg *)
+(*$import Prelude TopLevel Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps Vararg *)
 
 (* A one-pass optimizer with the following goals.  
    Those marked - are controlled by the input parameters.

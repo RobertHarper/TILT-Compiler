@@ -1,4 +1,4 @@
-(*$import TopLevel SourceMap PrettyPrint Source *)
+(*$import Prelude SourceMap PrettyPrint Source *)
 
 (* <errormsg.sig>=                                                          *)
 (* Copyright 1989 by AT&T Bell Laboratories *)
@@ -29,6 +29,9 @@ signature ERRORMSG =
 
 (*
  * $Log$
+# Revision 1.3  2000/09/12  18:56:50  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.2  98/02/01  01:27:57  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places

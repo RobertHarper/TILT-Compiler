@@ -1,4 +1,4 @@
-(*$import IL Ast Il *)
+(*$import Prelude IL Ast Il *)
 (* Datatype compiler and destructurer of compiled modules/signatures. *)
 signature DATATYPE = 
   sig

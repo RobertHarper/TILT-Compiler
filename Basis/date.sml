@@ -1,4 +1,4 @@
-(*$import PreTime DATE Time POSIX_extern Vector Int *)
+(*$import Prelude List PreTime DATE Time POSIX_extern Vector Int *)
 (* date.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -304,9 +304,12 @@ val scan       : (getc : (char, 'a) StringCvt.reader) -> 'a -> (date * 'a) optio
 
 (*
  * $Log$
-# Revision 1.3  2000/08/21  20:29:19  swasey
-# Changes for the new Manager.
+# Revision 1.4  2000/09/12  18:54:03  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.3  2000/08/21 20:29:19  swasey
+ * Changes for the new Manager.
+ *
 # Revision 1.2  98/04/06  21:17:34  pscheng
 # update: Typeof_c, dependent arrow/record types
 # 

@@ -1,4 +1,4 @@
-(*$import MONO_ARRAY Array List *)
+(*$import Prelude General MONO_ARRAY Array List *)
 (* array.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -268,6 +268,9 @@ structure Word8Array : MONO_ARRAY where type elem = char
 
 (*
  * $Log$
+# Revision 1.3  2000/09/12  18:54:10  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.2  98/05/14  16:38:58  pscheng
 # result types on sme functions were wrong
 # 

@@ -1,4 +1,4 @@
-(*$import MASTER Communication TopHelp Prelink LinkParse Tools Background OS List Platform Dirs Target Paths Statistics *)
+(*$import Prelude TopLevel Util Stats Update UpdateHelp Time Graph Compiler TextIO Real64 Vector String Char Int Listops SplayMapFn ListMergeSort MASTER Communication TopHelp Prelink LinkParse Tools Background OS List Platform Dirs Target Paths Statistics *)
 
 (* 
    The master sets up by deleting all channels and then takes master steps which are:
@@ -93,6 +93,13 @@ struct
 	fun get_import_transitive unit = 
 	    (rev(Dag.ancestors(!graph,unit))
 	     handle Dag.UnknownNode _ => error ("unit " ^ unit ^ " missing"))
+	fun get_import unit =
+	    let fun isDirect import = if Dag.has_edge (!graph, import, unit)
+					  then Compiler.DIRECT
+				      else Compiler.INDIRECT
+		val imports = get_import_transitive unit
+	    in  map (fn import => (get_paths import, isDirect import)) imports
+	    end
 	fun get_dependent_direct unit = 
 	    (Dag.children(!graph,unit)
 	     handle Dag.UnknownNode _ => error ("unit " ^ unit ^ " missing"))
@@ -283,7 +290,11 @@ struct
 	    fun read_import unit = 
 		let val paths = get_paths unit
 		    val imports = parse_impl_import(Paths.sourceFile paths)
-		    val _ = app (fn import => add_edge(import,unit)) imports
+		    val interfaceFile = Paths.interfaceFile paths
+		    val includes = if Cache.exists interfaceFile
+				       then parse_inter_include interfaceFile
+				   else nil
+		    val _ = app (fn import => add_edge(import,unit)) (imports @ includes)
 		    val _ = set_status(unit, if (null imports) then READY (Time.now()) else WAITING)
 		in  ()
 		end
@@ -680,7 +691,7 @@ struct
     fun analyzeReady unit =		(* Unit is ready so its imports exist *)
 	let
 	    val paths = get_paths unit
-	    val imports = get_import_transitive unit (* direct imports insufficient *)
+	    val imports = get_import_direct unit (* no need to check transitively *)
 	    val import_paths = map get_paths imports
 	    val (status, plan) = Update.plan (paths, import_paths)
 	    val _ = if Update.interfaceUptodate status
@@ -857,12 +868,11 @@ struct
 	let
 	    fun useOne unit =
 		let val target = get_paths unit
-		    val imports = get_import_transitive unit
-		    val import_paths = map get_paths imports
+		    val imports = get_import unit
 		    val plan = getPlan unit
 		    val _ = markWorking' unit
 		    val _ = Update.flush (target, plan)
-		in  useLocal (unit, fn () => execute (target, import_paths, plan))
+		in  useLocal (unit, fn () => execute (target, imports, plan))
 		end
 	    fun useSome (0, _) = 0
 	      | useSome (n, nil) = n
@@ -878,13 +888,12 @@ struct
 		let fun showSlave name = chat ("  [Calling " ^ name ^ 
 					       " to compile " ^ unit ^ "]\n")
 		    val target = get_paths unit
-		    val imports = get_import_transitive unit
-		    val import_paths = map get_paths imports
+		    val imports = get_import unit
 		    val plan = getPlan unit
 		    val _ = markWorking unit
 		    val _ = Update.flush (target, plan)
 		in  useSlave (showSlave,
-			      Comm.REQUEST (target, import_paths, plan),
+			      Comm.REQUEST (target, imports, plan),
 			      SOME (Comm.FLUSH (target, plan)))
 		end
 	    fun useSome (0, _) = 0
@@ -1098,8 +1107,13 @@ struct
 	    val _ = (print "Purging "; print mapfile; print what; print "\n")
 	    val dirs = Dirs.getDirs()
 	    fun deletable file = not (Dirs.isSystemFile (dirs, file))
-	    fun kill file = if deletable file
-				then (OS.FileSys.remove file handle _ => ())
+	    (* On AFS it is a lot faster to do access() on a non-existent
+	     * file than remove().
+	     *)
+	    fun kill file = if (deletable file andalso
+				OS.FileSys.access (file, []) andalso
+				OS.FileSys.access (file, [OS.FileSys.A_WRITE]))
+				then OS.FileSys.remove file
 			    else ()
 	    fun remove unit =
 		let val paths = get_paths unit

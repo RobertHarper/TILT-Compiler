@@ -1,4 +1,4 @@
-(*$import TopLevel Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY *)
+(*$import Prelude TopLevel Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY *)
 
 structure Reify :> REIFY =
 struct

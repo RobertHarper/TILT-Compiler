@@ -1,4 +1,4 @@
-(*$import PRIM Prim *)
+(*$import Prelude PRIM Prim *)
 signature PRIMUTIL =
     sig
 

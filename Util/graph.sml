@@ -1,4 +1,4 @@
-(*$import GRAPH TopLevel Array SplayMapFn SplaySetFn Util HashString HashTableFn *)
+(*$import Prelude TopLevel GRAPH Int TextIO String List Array SplayMapFn SplaySetFn Util HashString HashTableFn *)
 
 functor Graph(A : NODE) : DIRECTEDGRAPH =
 struct
@@ -328,6 +328,12 @@ struct
 	(flush g;
 	 Graph.insert_edge(main, (src, dest)))
 
+    fun has_edge (g as {main, ...} : 'a graph, src, dest) =
+	let val edges = Graph.edges main (Graph.hash main src)
+	    val hash = Graph.hash main dest
+	in  List.exists (fn h => h = hash) edges
+	end
+    
     (* Queries requiring only inspection of non-cached infomation *)
     fun isNode ({attributes, ...} : 'a graph, node) = 
 	(case StringMap.find(!attributes, node) of

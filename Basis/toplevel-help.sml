@@ -1,4 +1,4 @@
-(*$import String Option Substring List General TextIO *)
+(*$import Real64 String Option Substring List General TextIO *)
 (* http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
 
 val option_valOf = Option.valOf

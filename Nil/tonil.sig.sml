@@ -1,4 +1,4 @@
-(*$import Il Nil *)
+(*$import Prelude Il Nil *)
 signature TONIL =
 sig
 

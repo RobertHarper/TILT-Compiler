@@ -1,4 +1,4 @@
-(*$import LIST_PAIR *)
+(*$import Prelude LIST_PAIR *)
 (* list-pair.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -79,6 +79,9 @@ structure ListPair : LIST_PAIR =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:08  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:50:14  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import VECTOR General List Array *)
+(*$import Prelude VECTOR General List Array *)
 (* vector.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -117,6 +117,9 @@ structure Vector : VECTOR =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:10  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:50:20  pscheng
 # added basis
 # 

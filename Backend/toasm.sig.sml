@@ -1,4 +1,4 @@
-(*$import MACHINE BBLOCK TRACETABLE Rtl *)
+(*$import Prelude Core MACHINE BBLOCK TRACETABLE Rtl *)
 (* Translation of RTL to pre-annotated assembly *)
 
 signature TOASM =

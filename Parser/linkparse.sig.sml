@@ -1,4 +1,4 @@
-(*$import FrontEnd SourceMap *)
+(*$import Prelude Ast SourceMap *)
 
 signature LINK_PARSE =
  sig 

@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude TextIO *)
 
 signature NODE =
 sig
@@ -62,6 +62,7 @@ sig
 
     val numNodes : 'a graph -> int
     val numEdges : 'a graph -> int
+    val has_edge : 'a graph * node * node -> bool
     val nodeAttribute : 'a graph * node -> 'a
     val nodeWeight : 'a graph * node -> int
     val ancestorWeight : 'a graph * node -> int

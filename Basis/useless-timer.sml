@@ -1,4 +1,4 @@
-(*$import TIMER *)
+(*$import TIMER Time *)
 
 (* user sec, user usec, system sec, system usec *)
 extern til_selfusage : (unit, int * int * int * int) -->

@@ -12,13 +12,14 @@ sig
 	
     type status					(* abstract *)
     type unit_paths				(* parameter *)
+    type import					(* parameter *)
     type plan = todo list
 	
-    val plan : unit_paths * unit_paths list -> status * plan (* transitive imports *)
+    val plan : unit_paths * unit_paths list -> status * plan (* direct imports *)
     val interfaceUptodate : status -> bool
 
     type state
-    val init : unit_paths * unit_paths list -> state (* transitive imports *)
+    val init : unit_paths * (unit_paths * import) list -> state
     val execute : todo * state -> state
     val flush : unit_paths * plan -> unit	(* Flush files in anticipation of other processor executing plan *)
     val flushAll : unit -> unit

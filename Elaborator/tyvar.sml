@@ -1,4 +1,4 @@
-(*$import TYVAR Listops Name Util List Stats Int *)
+(*$import Prelude TopLevel TYVAR Listops Name Util List Stats Int *)
 
 (* XXXX thread-unsafe: new_stamp *)
 

@@ -1,4 +1,4 @@
-(*$include PRIM_IO Word8Array Int32 *)
+(*$include PRIM_IO Word8Array Int *)
 
 structure TextPrimIO : PRIM_IO where type array = Word8Array.array
 				  and type vector = string

@@ -1,4 +1,4 @@
-(*$import ORD_KEY *)
+(*$import Prelude ORD_KEY *)
 (* ord-map-sig.sml
  *
  * COPYRIGHT (c) 1996 by AT&T Research.  See COPYRIGHT file for details.

@@ -1,4 +1,4 @@
-(*$import Word32 *)
+(*$import Prelude Word32 *)
 
 signature TILWORD =
     sig

@@ -1,4 +1,4 @@
-(*$import Ppnil NILRENAME Stats NilError NilRewrite Option *)
+(*$import Prelude TopLevel Sequence HashTable Alpha Ppnil Util Name Nil NILRENAME Stats NilError NilRewrite Option *)
 
 structure NilRename :> NILRENAME = 
   struct

@@ -1,4 +1,4 @@
-(*$import LISTOPS List Util ListPair TopLevel Substring StringCvt Int *)
+(*$import Prelude TopLevel LISTOPS List Util ListPair Substring StringCvt Int *)
 
 structure Listops :> LISTOPS = 
   struct

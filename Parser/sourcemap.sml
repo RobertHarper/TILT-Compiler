@@ -1,4 +1,4 @@
-(*$import SOURCEMAP TopLevel *)
+(*$import Prelude SOURCEMAP TopLevel *)
 
 (* I can imagine at least three implementations: one that doesn't           *)
 (* support resynchronization, one that supports resynchronization only at   *)
@@ -190,6 +190,9 @@ end
 
 (*
  * $Log$
+# Revision 1.3  2000/09/12  18:57:12  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.2  98/01/21  20:40:49  pscheng
 # moved the .sig files to .sig.sml file
 # 

@@ -1,4 +1,4 @@
-(*$import TIME PreTime Real64 Bool NumFormat Char *)
+(*$import Prelude Int String StringCvt TIME PreTime Real64 Bool NumFormat Char *)
 (* time.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -185,9 +185,12 @@ structure Time : TIME =
 
 (*
  * $Log$
-# Revision 1.3  99/09/22  15:45:11  pscheng
-# *** empty log message ***
+# Revision 1.4  2000/09/12  18:54:36  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.3  1999/09/22 15:45:11  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.2  1998/04/06  21:17:42  pscheng
 # update: Typeof_c, dependent arrow/record types
 #

@@ -1,4 +1,4 @@
-(*$import HOIST Nil NilUtil ListPair Stats Name Util *)
+(*$import Prelude TopLevel Ppnil List Sequence Listops Int ORD_KEY SplayMapFn  HOIST Nil NilUtil ListPair Stats Name Util *)
 
 (* Known problems:
       Loses phase annotations on term-level constructor bindings.

@@ -1,4 +1,4 @@
-(*$import Il IlStatic IlUtil Ppil IlContext Error SIGNATURE Bool Stats Option *)
+(*$import Prelude TopLevel Formatter List Int Listops Util Name Tyvar Il IlStatic IlUtil Ppil IlContext Error SIGNATURE Bool Stats Option *)
 
 (* Need to improve where_structure to use SIGNAT_OF *)
 
@@ -391,7 +391,7 @@ structure Signature :> SIGNATURE =
 					   pp_lpath lbls;
 					   print "\n";
 					   orig_sdecs)
-	       | CONCRETE (lbls,_,c) => let val _ = print "where_type concrete case\n"
+	       | CONCRETE (lbls,_,c) => let val _ = debugdo (fn () => print "where_type concrete case\n")
 					in  if (eq_con(ctxt,con,c))
 						then orig_sdecs
 					    else (error_region();

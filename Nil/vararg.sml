@@ -1,4 +1,4 @@
-(*$import VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize *)
+(*$import Prelude TopLevel Name Util Listops Sequence List TraceInfo Int TilWord32 NilSubst NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize *)
 
 structure Vararg :> VARARG = 
 struct

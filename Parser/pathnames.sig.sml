@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude *)
 
 (* pathnames.sig
  *
@@ -15,6 +15,9 @@ signature PATHNAMES =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:57:05  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/01/21  20:40:39  pscheng
 # moved the .sig files to .sig.sml file
 # 

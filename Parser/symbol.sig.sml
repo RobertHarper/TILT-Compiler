@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude *)
 
 (* Copyright 1989 by AT&T Bell Laboratories *)
 signature SYMBOL = sig
@@ -32,6 +32,9 @@ end
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:57:15  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/01/21  20:40:52  pscheng
 # moved the .sig files to .sig.sml file
 # 

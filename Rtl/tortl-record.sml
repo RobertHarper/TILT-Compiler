@@ -1,4 +1,4 @@
-(*$import Rtl Pprtl Rtltags TortlBase Nil TORTLRECORD Stats *)
+(*$import Prelude TopLevel Util Listops Name TilWord32 TilWord64 Int List Rtl Pprtl Rtltags TortlBase Nil TORTLRECORD Stats *)
 
 structure TortlRecord :> TORTL_RECORD =
 struct

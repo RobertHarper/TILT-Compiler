@@ -1,4 +1,4 @@
-(*$import TORTLARRAY Rtl Pprtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats *)
+(*$import Prelude TopLevel TORTLARRAY TilWord32 Util Prim Name TraceInfo String Int Rtl Pprtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats *)
 
 (* Note that integer and floating-point array updates do not require a barrier
    except when using a concurent collector.  Also, the complexity of get_tag

@@ -1,4 +1,4 @@
-(*$import Nil Name *)
+(*$import Prelude Nil Name *)
 
 signature ANALYZE = 
     sig

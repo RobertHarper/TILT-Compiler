@@ -1,4 +1,4 @@
-(*$import Name *)
+(*$import Prelude Name *)
 
 signature TRACEINFO = 
 sig

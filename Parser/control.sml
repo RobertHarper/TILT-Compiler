@@ -1,4 +1,4 @@
-(*$import TopLevel TextIO CONTROL *)
+(*$import Prelude TextIO CONTROL *)
 
 (* control.sml
  *
@@ -155,6 +155,9 @@ end
 
 (*
  * $Log$
+# Revision 1.4  2000/09/12  18:56:48  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.3  98/02/01  01:27:56  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places

@@ -1,4 +1,4 @@
-(*$import LINEARIZE NilUtil Ppnil Normalize *)
+(*$import Prelude TopLevel Util Stats Nil Int Prim Array String Name Listops Sequence LINEARIZE NilUtil Ppnil Normalize *)
 
 structure Linearize
     :> LINEARIZE =

@@ -1,4 +1,4 @@
-(*$import GETOPT TopLevel *)
+(*$import Prelude GETOPT String Char List *)
 
 structure Getopt :> GETOPT =
 struct

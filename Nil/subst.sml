@@ -1,4 +1,4 @@
-(*$import Ppnil NILSUBST Stats NilError NilRewrite NilRename Option *)
+(*$import Prelude TopLevel Listops Util Name Nil List TextIO Ppnil NILSUBST Stats NilError NilRewrite NilRename Option *)
 
 (* This stucture implements and abstract type of substitutions, supporting
  * both simultaneuous (parallel) and sequential substitutions.  Included

@@ -1,4 +1,4 @@
-(*$import LINKASM Linkrtl Sparc Labelgraph SparcUtils IfGraph SparcCallConv Bblock Tracetable DivMult ToSparc PrintUtils VarGraph SparcTrackStorage Color Chaitin RtlToAsm Recursion *)
+(*$import Prelude TopLevel Util Rtl Stats LINKASM Linkrtl Sparc Labelgraph SparcUtils IfGraph SparcCallConv Bblock Tracetable DivMult ToSparc PrintUtils VarGraph SparcTrackStorage Color Chaitin RtlToAsm Recursion *)
 
 
 structure Linksparc :> LINKASM =

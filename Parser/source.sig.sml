@@ -1,4 +1,4 @@
-(*$import TopLevel SourceMap PrettyPrint TextIO *)
+(*$import Prelude SourceMap PrettyPrint TextIO *)
 
 (* <source.sig>=                                                            *)
 (* source.sig
@@ -47,6 +47,9 @@ signature SOURCE =
 
 (*
  * $Log$
+# Revision 1.3  2000/09/12  18:57:11  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.2  98/02/01  01:28:15  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places

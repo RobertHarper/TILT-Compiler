@@ -1,4 +1,4 @@
-(*$import Sparc SparcUtils CALLCONV Util *)
+(*$import Prelude TopLevel Listops Core Sparc SparcUtils CALLCONV Util *)
 
 structure SparcCallconv
     :> CALLCONV where Machine = Sparc.Machine =

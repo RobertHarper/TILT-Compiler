@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude *)
 
 (* Copyright 1989 by AT&T Bell Laboratories *)
 signature INTSTRMAP =
@@ -17,6 +17,9 @@ signature INTSTRMAP =
 
 (*
  * $Log$
+# Revision 1.3  2000/09/12  18:56:52  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.2  99/02/05  15:58:32  pscheng
 # *** empty log message ***
 # 

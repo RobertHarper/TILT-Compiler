@@ -1,4 +1,4 @@
-(*$import StringCvt PreInt PreReal MATH Ieee *)
+(*$import Prelude StringCvt PreInt PreReal MATH Ieee *)
 (* real-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -102,6 +102,9 @@ signature REAL =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:31  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:52:47  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import CharVector Char Word32 *)
+(*$import Prelude CharVector Char Word32 *)
 (* hash-string.sml
  *
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories

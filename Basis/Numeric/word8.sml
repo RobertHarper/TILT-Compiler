@@ -1,4 +1,4 @@
-(*$import WORD Prelude General NumFormat NumScan *)
+(*$import WORD Prelude PreWord StringCvt General NumFormat NumScan *)
 (* word8.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -126,6 +126,9 @@ structure Word8 :> WORD where type word = word8 =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:33  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:52:58  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import MONO_VECTOR String Word8Vector *)
+(*$import Prelude MONO_VECTOR String Word8Vector *)
 
 (* char-vector.sml
  *
@@ -41,6 +41,9 @@ structure CharVector :> MONO_VECTOR where type elem = char and type vector = str
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:07  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:50:12  pscheng
 # added basis
 # 

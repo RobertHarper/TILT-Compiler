@@ -1,4 +1,4 @@
-(*$import Ast SourceMap IL Il *)
+(*$import Prelude Ast SourceMap IL Il *)
 
 signature ERROR = 
   sig

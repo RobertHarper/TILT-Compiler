@@ -1,4 +1,4 @@
-(*$import SUBSTRING String PreString General *)
+(*$import Prelude SUBSTRING String PreString General *)
 (* substring.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

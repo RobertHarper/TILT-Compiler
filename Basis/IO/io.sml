@@ -1,4 +1,4 @@
-(*$import IO_SIG *)
+(*$import Prelude IO_SIG *)
 (* io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -27,6 +27,9 @@ structure IO : IO =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:15  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:50:43  pscheng
 # added basis
 # 

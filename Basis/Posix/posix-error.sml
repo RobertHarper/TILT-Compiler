@@ -1,4 +1,4 @@
-(*$import POSIX_ERROR POSIX_extern *)
+(*$import Prelude POSIX_ERROR POSIX_extern *)
 (* posix-error.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,4 @@
-(*$import Rtl *)
+(*$import Prelude Rtl *)
 
 
 signature LINKASM =

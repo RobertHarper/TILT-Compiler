@@ -1,4 +1,4 @@
-(*$import Name Graph Word32 HashTableFn Util *)
+(*$import Name Graph Word32 HashTableFn Util GRAPH *)
 
 (* Directed graphs whose vertices are variables.   Useful for
    representing dependency information such as call graphs.*)

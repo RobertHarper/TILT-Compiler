@@ -1,4 +1,4 @@
-(*$import PrimIOFn Int CharVector CharArray *)
+(*$import Prelude PRIM_IO PrimIOFn Int CharVector CharArray *)
 (* text-prim-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -18,9 +18,12 @@ structure TextPrimIO :> PRIM_IO where type array = Word8Array.array
 
 (*
  * $Log$
-# Revision 1.2  99/09/22  15:45:01  pscheng
-# *** empty log message ***
+# Revision 1.3  2000/09/12  18:54:17  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  1999/09/22 15:45:01  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:50:53  pscheng
 # added basis
 #

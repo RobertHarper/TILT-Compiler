@@ -1,4 +1,4 @@
-(*$import Prim Annotation Sequence TraceInfo *)
+(*$import Prelude Word32 TilWord32 Name Prim Annotation Sequence TraceInfo *)
 
 signature NIL =
 sig

@@ -1,4 +1,4 @@
-(*$import ML_TOKENS Symbol StrgHash IntStrMap *)
+(*$import Prelude TopLevel ML_TOKENS Symbol StrgHash IntStrMap *)
 (* tokentable.sml
  *
  * COPYRIGHT (c) 1996 Bell Laboratories.
@@ -112,6 +112,9 @@ end
 
 (*
  * $Log$
+# Revision 1.7  2000/09/12  18:57:15  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.6  99/05/12  15:27:55  pscheng
 # *** empty log message ***
 # 

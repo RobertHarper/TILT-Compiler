@@ -1,4 +1,4 @@
-(*$import Core *)
+(*$import Prelude Core *)
 (* Interference graphs and operations on them *)
 
 signature IFGRAPH =

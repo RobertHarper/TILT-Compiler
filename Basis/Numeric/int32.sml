@@ -1,4 +1,4 @@
-(*$import General NumScan NumFormat INTEGER *)
+(*$import Prelude StringCvt PreInt General NumScan NumFormat INTEGER *)
 (* int32.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -110,9 +110,12 @@ structure SysInt = Int32
 
 (*
  * $Log$
-# Revision 1.2  2000/01/20  13:31:54  pscheng
-# *** empty log message ***
+# Revision 1.3  2000/09/12  18:54:29  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  2000/01/20 13:31:54  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:52:36  pscheng
 # added basis
 #

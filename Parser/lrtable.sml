@@ -1,8 +1,11 @@
-(*$import TopLevel Array List YaccBase *)
+(*$import Prelude Array List YaccBase *)
 
 (* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
  *
  * $Log$
+# Revision 1.4  2000/09/12  18:56:54  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.3  98/01/21  20:40:22  pscheng
 # moved the .sig files to .sig.sml file
 # 

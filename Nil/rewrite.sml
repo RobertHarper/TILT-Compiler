@@ -1,4 +1,4 @@
-(*$import Nil NILREWRITE *)
+(*$import Prelude TopLevel Name List Sequence Prim Array TraceInfo Listops Util Nil NILREWRITE *)
 structure NilRewrite :> NILREWRITE = 
   struct
     open Nil

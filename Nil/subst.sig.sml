@@ -1,4 +1,4 @@
-(*$import Name Nil *)
+(*$import Prelude Name Nil *)
 
 (*Abstract substitutions used in NILSUBST*)
 signature SUBST = 

@@ -1,4 +1,4 @@
-(*$import BIN_IO OS_PRIM_IO Word8Array Word8Vector BinPrimIO Option CleanIO *)
+(*$import Prelude Word8 Int IO BIN_IO OS_PRIM_IO Word8Array Word8Vector BinPrimIO Option CleanIO *)
 (* bin-io-fn.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -649,9 +649,12 @@ functor BinIOFn (
 
 (*
  * $Log$
-# Revision 1.2  99/09/22  15:45:00  pscheng
-# *** empty log message ***
+# Revision 1.3  2000/09/12  18:54:14  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  1999/09/22 15:45:00  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:50:37  pscheng
 # added basis
 #

@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude *)
 
 (* \section{Source locations}                                               *)
 (*                                                                          *)
@@ -115,6 +115,9 @@ end
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:57:11  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/01/21  20:40:48  pscheng
 # moved the .sig files to .sig.sml file
 # 

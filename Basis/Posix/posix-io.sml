@@ -1,4 +1,4 @@
-(*$import POSIX_IO_SIG POSIX_FileSys POSIX_Process Word32 POSIX_extern *)
+(*$import Int Prelude Word8Vector Word8Array List POSIX_IO_SIG POSIX_FileSys POSIX_Process Word32 POSIX_extern *)
 (* posix-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -226,9 +226,12 @@ structure POSIX_IO :> POSIX_IO where type open_mode = POSIX_FileSys.open_mode
 
 (*
  * $Log$
-# Revision 1.2  99/09/22  15:45:12  pscheng
-# *** empty log message ***
+# Revision 1.3  2000/09/12  18:54:39  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  1999/09/22 15:45:12  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:53:24  pscheng
 # added basis
 #

@@ -1,4 +1,4 @@
-(*$import DecAlpha DecAlphaUtils Util CALLCONV  *)
+(*$import Prelude TopLevel Core DecAlpha DecAlphaUtils Util CALLCONV  *)
 
 structure DecalphaCallconv
     :> CALLCONV where Machine = Decalpha.Machine =

@@ -1,4 +1,4 @@
-(*$import Word32 Time *)
+(*$import Prelude Word32 Time *)
 (* posix-procenv-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -65,6 +65,9 @@ signature POSIX_PROC_ENV =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:39  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:53:28  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam TraceInfo Stats NilRewrite *)
+(*$import Prelude TopLevel Name Util TilWord32 Sequence Prim Array PRIMUTIL Listops Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam TraceInfo Stats NilRewrite *)
 
 (* This structure contains a miscellaneous collection of functions
  * for dealing with the NIL that have no other natural place.

@@ -1,4 +1,4 @@
-(*$import BBLOCK TRACETABLE MACHINE MACHINEUTILS Array *)
+(*$import Prelude Core Rtl BBLOCK TRACETABLE MACHINE MACHINEUTILS Array *)
 
 signature PRINTUTILS =
 sig

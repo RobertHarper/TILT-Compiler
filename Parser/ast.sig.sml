@@ -1,4 +1,4 @@
-(*$import Fixity TopLevel Symbol TilWord64 *)
+(*$import Prelude Fixity Symbol TilWord64 *)
 
 (* Copyright 1992 by AT&T Bell Laboratories 
  *
@@ -235,9 +235,12 @@ end (* signature AST *)
 
 (*
  * $Log$
-# Revision 1.5  2000/01/20  13:32:25  pscheng
-# *** empty log message ***
+# Revision 1.6  2000/09/12  18:56:45  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.5  2000/01/20 13:32:25  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.4  99/05/12  15:27:40  pscheng
 # *** empty log message ***
 # 

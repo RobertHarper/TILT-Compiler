@@ -1,4 +1,4 @@
-(*$import IL Il *)
+(*$import Prelude Name Symbol Prim Tyvar IL Il *)
 (* Utility routines for the internal language. *)
 signature ILUTIL =
   sig

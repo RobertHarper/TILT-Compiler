@@ -1,4 +1,4 @@
-(*$import ERROR IlUtil Il Util *)
+(*$import Prelude TopLevel Ast SourceMap Int ERROR IlUtil Il Util Stats *)
 (* Stateful module holding the error state of the elaboration process *)
 
 structure Error

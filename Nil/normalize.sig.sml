@@ -1,4 +1,4 @@
-(*$import Nil NilContextPre NilSubst *)
+(*$import Prelude TilWord32 Alpha Nil NilContextPre NilSubst *)
 
 signature NORMALIZE = 
   sig

@@ -1,4 +1,4 @@
-(*$import Posix PreOS OS_FileSys OS_Path OS_Process OS_IO OS_SIG *)
+(*$import Prelude OS_PROCESS Posix PreOS OS_FileSys OS_Path OS_Process OS_IO OS_SIG *)
 (* os.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -28,6 +28,9 @@ structure OS :> OS where type IO.iodesc = PreOS.IO.iodesc and type syserror = Po
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:55:04  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:54:22  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import Fixity Name Prim Tyvar Util *)
+(*$import Prelude Fixity Name Prim Tyvar Util *)
 
 (* The datatypes for the internal language. *)
 signature IL =

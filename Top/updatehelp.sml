@@ -1,8 +1,9 @@
-(*$import UPDATE_HELP Paths FileCache Info Util TopHelp Compiler Time UnitEnvironment List OS Tools *)
+(*$import Prelude TopLevel Stats UPDATE_HELP Paths FileCache Info Util TopHelp Compiler Time UnitEnvironment List OS Tools *)
 
 structure UpdateHelp
     :> UPDATE_HELP
 	where type unit_paths = Paths.unit_paths
+	where type import = Compiler.import
 	where type InfoCache.internal = Info.info =
 struct
     val error = fn s => Util.error "updatehelp.sml" s
@@ -21,9 +22,10 @@ struct
     structure Ue = UnitEnvironment
 
     type unit_paths = Paths.unit_paths
+    type import = Compiler.import
     type notes = {unit : string,
 		  target : Paths.unit_paths,
-		  imports : Paths.unit_paths list,
+		  imports : (Paths.unit_paths * import) list,
 		  ilFile : string,
 		  infoFile : string,
 		  asmFile : string,
@@ -39,7 +41,7 @@ struct
 	   | (true, false) => UNCOMPRESSED
 	   | (false, _) => NEITHER
 	
-    (* notes : unit_paths * unit_paths list -> notes *)
+    (* notes : unit_paths * (unit_paths * import) list -> notes *)
     fun notes (target, imports) =
 	{unit = Paths.unitName target,
 	 target = target,
@@ -50,7 +52,7 @@ struct
 	 asmzFile = Paths.asmzFile target,
 	 objFile = Paths.objFile target}
 	
-    (* init : unit_paths * unit_paths list -> state *)
+    (* init : unit_paths * (unit_paths list * unit_paths list) -> state *)
     fun init arg : state = (notes arg, NONE)
 
     (* mkUe : unit_paths list -> ue *)
@@ -73,12 +75,15 @@ struct
 						   then SOME interfaceFile
 					       else NONE),
 				    targetIlFile = ilFile,
-				    importIlFiles = map Paths.ilFile imports}
+				    imports = map (fn (paths,ty) => (Paths.ilFile paths, ty)) imports}
+	    fun isdirect (_, Compiler.DIRECT) = true
+	      | isdirect _ = false
+	    val directImports = map #1 (List.filter isdirect imports)
 	    val info' = {unit = unit,
 			 lastWritten = IlCache.modTime ilFile,
 			 lastChecked = Time.now(),
 			 constrained = constrained,
-			 imports = mkUe imports,
+			 imports = mkUe directImports,
 			 exports = mkUe [target]}
 	    val _ = InfoCache.write (infoFile, info')
 	    (* We check after writing the .info file. *)

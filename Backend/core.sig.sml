@@ -1,4 +1,4 @@
-(*$import Rtl TilWord32 *)
+(*$import Prelude ORD_MAP ORD_SET Rtl TilWord32 *)
 
 signature CORE =
   sig

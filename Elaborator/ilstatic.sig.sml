@@ -1,4 +1,4 @@
-(*$import IL Il *)
+(*$import Prelude Util Il *)
 (* Static Semantics of the IL. *)
 signature ILSTATIC = 
   sig

@@ -1,4 +1,4 @@
-(*$import TopLevel TextIO *)
+(*$import Prelude TextIO *)
 
 (*
 % ForML Version 0.6 - 25 January 1993 - er@cs.cmu.edu

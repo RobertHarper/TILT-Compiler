@@ -1,4 +1,4 @@
-(*$import TopLevel CommandLine BinIO OS LinkIl Name Run *)
+(*$import Prelude TopLevel CommandLine BinIO OS LinkIl Name Run *)
 
 structure Dumpil
     :> sig val main : string * string list -> OS.Process.status end =
@@ -29,6 +29,8 @@ struct
 	in  ()
 	end
 
-    fun main (_, files) = (app printPartialContextFile files; OS.Process.success)
+    fun main (_, files) = (LinkIl.IlContextEq.blast_debug := true;
+			   app printPartialContextFile files;
+			   OS.Process.success)
 end
 val _ = Run.run Dumpil.main

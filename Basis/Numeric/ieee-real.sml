@@ -1,4 +1,4 @@
-(*$import IEEE String Int *)
+(*$import Prelude IEEE String Int *)
 (* ieee-real.sml
  *
  * COPYRIGHT (c) 1996 AT&T Bell Laboratories.
@@ -92,9 +92,12 @@ structure IEEEReal : IEEE_REAL =
 
 (*
  * $Log$
-# Revision 1.3  99/09/22  15:45:08  pscheng
-# *** empty log message ***
+# Revision 1.4  2000/09/12  18:54:29  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.3  1999/09/22 15:45:08  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.2  1998/04/06  21:17:39  pscheng
 # update: Typeof_c, dependent arrow/record types
 #

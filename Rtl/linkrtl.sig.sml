@@ -1,4 +1,4 @@
-(*$import NIL TORTL PPRTL RTL Nil *)
+(*$import Prelude TORTL PPRTL Rtl Nil *)
 
 signature LINKRTL = 
 sig

@@ -1,4 +1,4 @@
-(*$import Util Name Listops IL Prim Tyvar *)
+(*$import Prelude Fixity Util Name Listops IL Prim Tyvar *)
 
 structure Il :> IL =
   struct

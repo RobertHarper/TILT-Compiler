@@ -1,4 +1,4 @@
-(*$import Nil NilSubst Alpha *)
+(*$import Prelude Name TilWord32 Sequence Prim Nil NilSubst Alpha *)
 
 signature NILUTIL =
   sig

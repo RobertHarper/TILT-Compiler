@@ -1,4 +1,4 @@
-(*$import Il *)
+(*$import Prelude Il *)
 
 signature SIGNATURE = 
 sig

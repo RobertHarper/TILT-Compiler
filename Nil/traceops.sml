@@ -1,4 +1,4 @@
-(*$import TraceInfo Nil NilContext Util Normalize TRACEOPS Name *)
+(*$import Prelude TraceInfo Nil NilContext Util Normalize TRACEOPS Name *)
 
 structure TraceOps :> TRACEOPS = 
 struct

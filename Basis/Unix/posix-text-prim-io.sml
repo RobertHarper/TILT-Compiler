@@ -1,4 +1,4 @@
-(*$import PosixPrimIOFn PosixBinPrimIO TextPrimIO CharArray *)
+(*$import Prelude String Int IO PosixPrimIOFn PosixBinPrimIO TextPrimIO CharArray *)
 (* posix-text-prim-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -114,6 +114,9 @@ structure PosixTextPrimIO : sig
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:55:06  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:54:30  pscheng
 # added basis
 # 

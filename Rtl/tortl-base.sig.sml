@@ -1,4 +1,4 @@
-(*$import Rtl Nil *)
+(*$import Prelude Name Rtl Nil TilWord32 *)
 signature TORTL_BASE = 
 sig
 

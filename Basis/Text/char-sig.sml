@@ -1,4 +1,4 @@
-(*$import StringCvt *)
+(*$import Prelude StringCvt *)
 (* char-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,4 @@
-(*$import Ast Symbol Formatter *)
+(*$import Prelude Ast Symbol Formatter *)
 
 (* Helper routines for the external AST. *)
 signature ASTHELP = 

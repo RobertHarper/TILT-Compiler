@@ -1,4 +1,4 @@
-(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay *)
+(*$import Prelude TopLevel BinIO List TopHelp Int Name Time ListPair Real64 Listops Paths COMPILER LinkParse Il LinkIl Nil Linknil Rtl Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay *)
 
 structure Compiler :> COMPILER =
 struct
@@ -7,11 +7,21 @@ struct
 
     val showWrittenContext = Stats.ff("ShowWrittenContext")
     val writeUnselfContext = Stats.ff("WriteUnselfContext")
+    val showImports = Stats.ff("ShowImports")
 
     type il_module = LinkIl.module
     type nil_module = Nil.module
     type rtl_module = Rtl.module
 
+    datatype import = DIRECT | INDIRECT
+
+    fun importName DIRECT = "direct"
+      | importName INDIRECT = "indirect"
+
+    fun importFromName "direct" = DIRECT
+      | importFromName "indirect" = INDIRECT
+      | importFromName name = error ("unknown import name " ^ name)
+	
     fun readPartialContextRaw file = 
 	let 
 (*	    val _ = print ("XXX reading context file " ^ file ^ "\n") *)
@@ -33,7 +43,7 @@ struct
     
     fun writePartialContextRaw (file,pctxt) = 
 	let val _ = writePartialContextRaw' (file,pctxt)
-	    val shortpctxt = Delay.delay (fn () => IlContext.UnselfifyPartialContext pctxt)
+	    val shortpctxt = Delay.delay (fn () => LinkIl.IlContext.UnselfifyPartialContext pctxt)
 	    val _ = if (!writeUnselfContext)
 			then (let val shortfile = Paths.ilToUnself file ^ ".unself"
 			      in  writePartialContextRaw' (shortfile, Delay.force shortpctxt)
@@ -41,9 +51,9 @@ struct
 		    else ()
 	    val _ = if (!showWrittenContext)
 			then (print "Selfified context:\n"; 
-			      Ppil.pp_pcontext pctxt;
+			      LinkIl.Ppil.pp_pcontext pctxt;
 			      print "\n\n\nUnselfified context:\n";
-			      Ppil.pp_pcontext (Delay.force shortpctxt))
+			      LinkIl.Ppil.pp_pcontext (Delay.force shortpctxt))
 		    else ()
 	in  () 
 	end
@@ -53,20 +63,36 @@ struct
 				  val equaler = LinkIl.IlContextEq.eq_partial_context
 				  val reader = readPartialContextRaw
 				  val writer = writePartialContextRaw)
-    fun getContext uifiles =
-	let val _ = Name.reset_varmap()
+
+    fun chatImports imports =
+	let fun isdirect (_, DIRECT) = true
+	      | isdirect (_, INDIRECT) = false
+	    val direct = map #1 (List.filter isdirect imports)
+	    val indirect = map #1 (List.filter (not o isdirect) imports)
+	in
+	    Help.chat ("  [" ^ Int.toString (length direct) ^ " direct imports: ");
+	    Help.chat_strings 20 direct;
+	    Help.chat ("\n   " ^ Int.toString (length indirect) ^ " indirect imports: ");
+	    Help.chat_strings 20 indirect;
+	    Help.chat "]\n"
+	end
+	
+    fun getContext imports =
+	let val _ = if (!showImports) then chatImports imports else ()
+	    val _ = Name.reset_varmap()
 	    val _ = IlCache.tick()
 	    val start = Time.now()
-	    val isCached_ctxts = map IlCache.read uifiles
+	    val (iscached,partial_ctxts) = ListPair.unzip (map (IlCache.read o #1) imports)
 	    val diff = Time.toReal(Time.-(Time.now(), start))
 	    val diff = (Real.realFloor(diff * 100.0)) / 100.0
-	    val partial_ctxts = map #2 isCached_ctxts
-	    val (cached_temp,uncached_temp) = (List.partition (fn (imp,(isCached,_)) => isCached)
-					       (Listops.zip uifiles isCached_ctxts))
-	    val cached = map #1 cached_temp
-	    val uncached = map #1 uncached_temp
-	    val cached_size = foldl (fn (uifile,acc) => acc + (IlCache.size uifile)) 0 cached
-	    val uncached_size = foldl (fn (uifile,acc) => acc + (IlCache.size uifile)) 0 uncached
+	    fun folder ((_, INDIRECT), pctxt, acc) = LinkIl.IlContext.get_labels (pctxt, acc)
+	      | folder (_, _, acc) = acc
+	    val indirect_labels = Listops.foldl2 folder LinkIl.IlContext.empty_label_info (imports, partial_ctxts)
+	    fun folder ((file, _), true, (c,u)) = (file::c, u)
+	      | folder ((file, _), false, (c,u)) = (c,file::u)
+	    val (cached, uncached) = Listops.foldl2 folder (nil,nil) (imports, iscached)
+	    val cached_size = foldl (fn (ilFile,acc) => acc + (IlCache.size ilFile)) 0 cached
+	    val uncached_size = foldl (fn (ilFile,acc) => acc + (IlCache.size ilFile)) 0 uncached
 	    val _ = (Help.chat "  ["; Help.chat (Int.toString (length cached)); 
 		     Help.chat " imports of total size "; Help.chat (Int.toString cached_size);
 		     Help.chat " were cached.\n";
@@ -74,51 +100,26 @@ struct
 		     Help.chat " imports of total size "; Help.chat (Int.toString uncached_size);
 		     Help.chat " were uncached and took ";
 		     Help.chat (Real.toString diff); Help.chat " seconds.";
-(*		     Help.chat "\n\nCACHED: "; Help.chat_strings 20 cached;
-		     Help.chat "\n\nUNCACHED: "; Help.chat_strings 20 uncached;
-*)		     Help.chat "]\n")
+		     if (!showImports) then (Help.chat "\n\nCACHED: "; Help.chat_strings 20 cached;
+					     Help.chat "\n\nUNCACHED: "; Help.chat_strings 20 uncached;
+					     Help.chat "\n\n")
+		     else ();
+		     Help.chat "]\n")
 	    val initial_ctxt = LinkIl.initial_context()
 	    val addContext = Stats.timer("AddingContext",LinkIl.plus_context)
 	    val (partial_context_opts, context) = addContext (initial_ctxt, partial_ctxts)
-	    val _ = Listops.map2 (fn (NONE,_) => false
-	                           | (SOME new, file) => IlCache.updateCache(file,new))
-		        (partial_context_opts, uifiles)
+	    val _ = Listops.app2 (fn (NONE,_) => false
+	                           | (SOME new, (file,_)) => IlCache.updateCache(file,new))
+		                 (partial_context_opts, imports)
+	    val context = LinkIl.IlContext.obscure_labels (context, indirect_labels)
 	    val _ = Help.chat ("  [Added contexts.]\n")
-	in  context
+	in  (context, indirect_labels)
 	end
 
 
-    fun elab_constrained(unit,ctxt,sourcefile,fp,dec,fp2,specs,uiFile,least_new_time) =
-	(case LinkIl.elab_dec_constrained(unit, ctxt, fp, dec, fp2,specs) of
-	     SOME (il_module as (ctxt, partial_ctxt, binds)) =>
-		 let val partial_ctxt_export = IlContext.removeNonExport partial_ctxt
-		     val _ = Help.chat ("  [writing " ^ uiFile)
-		     val written = IlCache.write (uiFile, partial_ctxt_export)
-		     val _ = Help.chat "]\n"
-		     val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module 
-		     val il_module = (reduced_ctxt, partial_ctxt, binds)
-		 in  (il_module, written)
-		 end
-	   | NONE => error("File " ^ sourcefile ^ " failed to elaborate."))
-    
-    fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
-	case LinkIl.elab_dec(unit, pre_ctxt, fp, dec) of
-	    SOME (il_module as (ctxt, partial_ctxt, binds)) =>
-		let val partial_ctxt_export = IlContext.removeNonExport partial_ctxt
-		    val _ = Help.chat ("  [writing " ^ uiFile)
-		    val written = IlCache.write (uiFile, partial_ctxt_export)
-		    val _ = if written then ()
-			    else Help.chat " - unnecessary"
-		    val _ = Help.chat "]\n"
-		    val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module 
-		    val il_module = (reduced_ctxt, partial_ctxt, binds)
-		in  (il_module, written)
-		end
-	  | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
-
     (* elaborate : {...} -> il_module * bool *)
-    fun elaborate {unit, smlFile, intFile, targetIlFile, importIlFiles} =
-	let val ctxt = getContext importIlFiles
+    fun elaborate {unit, smlFile, intFile, targetIlFile, imports} =
+	let val (ctxt, label_info) = getContext imports
 	    val _ = Help.chat ("  [Parsing " ^ smlFile ^ "]\n")
 	    val (lines,fp, _, dec) = LinkParse.parse_impl smlFile
 	    val _ = if (lines > 3000) (* XXX: reconsider *)
@@ -127,20 +128,40 @@ struct
 			      Help.chat " lines.   Flushing file cache.]\n";
 			      IlCache.flushAll())
 		    else ()
-	    (* Elaborate the source file, generating a .ui file *)
+	    (* Elaborate source file *)
+	    val il_module_opt =
+		case intFile
+		  of SOME intFile' =>
+		      let val (_,fp2, _, specs) = LinkParse.parse_inter intFile'
+			  val _ = Help.chat ("  [Warning: constraints currently coerce.  ")
+			  val _ = Help.chat ("Not compatible with our notion of freshness.]\n")
+			  val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " with constraint]\n"  )
+		      in  LinkIl.elab_dec_constrained(unit,ctxt,fp,dec,fp2,specs)
+		      end
+		   | NONE => 
+		      let val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " non-constrained]\n")
+		      in  LinkIl.elab_dec(unit,ctxt,fp,dec)
+		      end
+	    val il_module =
+		case il_module_opt
+		  of NONE => error("File " ^ smlFile ^ " failed to elaborate.")
+		   | SOME ilmodule' => ilmodule'
+	    val il_module =
+		let val (_, partial_ctxt, binds) = il_module
+		    val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module
+		in  (reduced_ctxt, partial_ctxt, binds)
+		end
+	    val il_module = LinkIl.IlContext.unobscure_labels (il_module, label_info)
+	    (* Update il file *)
 	    val _ = IlCache.flushSome [targetIlFile]
-	in  case intFile
-	      of SOME intFile' =>
-		  let val (_,fp2, _, specs) = LinkParse.parse_inter intFile'
-		      val _ = Help.chat ("  [Warning: constraints currently coerce.  ")
-		      val _ = Help.chat ("Not compatible with our notion of freshness.]\n")
-		      val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " with constraint]\n"  )
-		  in elab_constrained(unit,ctxt,smlFile,fp,dec,fp2,specs,targetIlFile,Time.zeroTime)
-		  end
-	       | NONE => 
-		  let val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " non-constrained]\n")
-		  in elab_nonconstrained(unit,ctxt,smlFile,fp,dec,targetIlFile,Time.zeroTime)
-		  end
+	    val (_, partial_ctxt, _) = il_module
+	    val partial_ctxt_export = LinkIl.IlContext.removeNonExport partial_ctxt
+	    val _ = Help.chat ("  [writing " ^ targetIlFile)
+	    val written = IlCache.write (targetIlFile, partial_ctxt_export)
+	    val _ = if written then ()
+		    else Help.chat " - unnecessary"
+	    val _ = Help.chat "]\n"
+	in  (il_module, written)
 	end
     
     (* il_to_nil : string * il_module -> nil_module *)

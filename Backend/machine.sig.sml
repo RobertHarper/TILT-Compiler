@@ -1,4 +1,4 @@
-(*$import Core Rtl Name TilWord32 *)
+(*$import Prelude Core Rtl Name TilWord32 *)
 
 signature MACHINE =
   sig

@@ -1,4 +1,4 @@
-(*$import OS_FILE_SYS OS_Path Posix POSIX_extern *)
+(*$import Prelude Word32 List General OS_FILE_SYS OS_Path Posix POSIX_extern *)
 (* os-filesys.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -143,9 +143,12 @@ structure OS_FileSys :> OS_FILE_SYS =
 
 (*
  * $Log$
-# Revision 1.2  2000/04/20  20:00:04  pscheng
-# *** empty log message ***
+# Revision 1.3  2000/09/12  18:55:00  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  2000/04/20 20:00:04  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:54:08  pscheng
 # added basis
 #

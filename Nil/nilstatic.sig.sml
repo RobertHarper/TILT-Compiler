@@ -1,4 +1,4 @@
-(*$import Nil *)
+(*$import Prelude Nil *)
 signature NILSTATIC = 
   sig
 

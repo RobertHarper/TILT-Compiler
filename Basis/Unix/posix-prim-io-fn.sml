@@ -1,4 +1,4 @@
-(*$import PRIM_IO Word8Vector Word8Array Posix IO BinPrimIO OS_PRIM_IO OS *)
+(*$import Prelude Int PRIM_IO Word8Vector Word8Array Posix IO BinPrimIO OS_PRIM_IO OS *)
 (* posix-bin-prim-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -204,9 +204,12 @@ functor PosixPrimIO(structure PrimIO : PRIM_IO
 
 (*
  * $Log$
-# Revision 1.2  99/09/22  15:45:16  pscheng
-# *** empty log message ***
+# Revision 1.3  2000/09/12  18:55:05  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  1999/09/22 15:45:16  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:54:27  pscheng
 # added basis
 #

@@ -1,4 +1,4 @@
-(*$import MANAGER Master Slave Compiler OS *)
+(*$import Prelude Util Stats TopHelp Dirs String Int MANAGER Master Slave Compiler OS *)
 
 structure Manager :> MANAGER = 
 struct

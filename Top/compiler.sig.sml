@@ -5,6 +5,7 @@ sig
 
     val showWrittenContext : bool ref	(* Print contexts as they are written to disk. *)
     val writeUnselfContext : bool ref	(* Write out unselfified context too. *)
+    val showImports : bool ref		(* Print imports when building contexts. *)
 
     (* Contains only ilFiles *)
     structure IlCache : FILECACHE
@@ -13,6 +14,10 @@ sig
     type nil_module
     type rtl_module
 
+    datatype import = DIRECT | INDIRECT
+    val importName : import -> string
+    val importFromName : string -> import
+	
     (* In all compiler phases, unit names may be used to generate
      * unique identifiers.  We assume that unit names are globally
      * unique.  *)
@@ -22,7 +27,7 @@ sig
      * modify Cache.
      *)
     val elaborate : {unit : string, smlFile : string, intFile : string option,
-		     targetIlFile : string, importIlFiles : string list}
+		     targetIlFile : string, imports : (string * import) list}
 	-> il_module * bool					(* true if ilFile written to disk  *)
 	
     val il_to_nil : string * il_module -> nil_module		(* unit name *)

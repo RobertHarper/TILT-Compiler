@@ -1,4 +1,4 @@
-(*$import LIST *)
+(*$import Prelude LIST *)
 (* list.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -161,6 +161,9 @@ structure List : LIST =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:09  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:50:16  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import TILWORD Word32 Util Char Listops String TopLevel *)
+(*$import Prelude TopLevel TILWORD Word32 Util Char Listops String *)
 
 (* TIL2/ML Compiler Source, 
  * Copyright (c) 1997:  Perry Cheng, Chris Stone, Greg Morrisett,

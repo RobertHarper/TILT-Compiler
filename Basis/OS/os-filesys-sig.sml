@@ -1,4 +1,4 @@
-(*$import Prelude Time *)
+(*$import Int Prelude Time *)
 (* os-filesys-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -51,9 +51,12 @@ signature OS_FILE_SYS =
 
 (*
  * $Log$
-# Revision 1.2  99/09/22  15:45:10  pscheng
-# *** empty log message ***
+# Revision 1.3  2000/09/12  18:54:34  swasey
+# Changes for cutoff compilation
 # 
+ * Revision 1.2  1999/09/22 15:45:10  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:53:03  pscheng
 # added basis
 #

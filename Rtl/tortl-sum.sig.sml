@@ -1,4 +1,4 @@
-(*$import TortlBase Name *)
+(*$import Prelude Nil TilWord32 Rtl TortlBase Name *)
 
 signature TORTL_SUM = 
 sig

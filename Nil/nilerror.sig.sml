@@ -1,4 +1,4 @@
-(*$import Nil *)
+(*$import Prelude Nil *)
 signature NILERROR = 
   sig
     exception FailedAssert of string

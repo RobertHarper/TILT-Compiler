@@ -1,4 +1,4 @@
-(*$import Nil *)
+(*$import Prelude ORD_MAP Nil *)
 
 signature EXPTABLE =
 sig

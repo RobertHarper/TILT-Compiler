@@ -1,4 +1,4 @@
-(*$import General *)
+(*$import Prelude *)
 
 signature PRELINK =
 sig

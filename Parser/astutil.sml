@@ -1,4 +1,4 @@
-(*$import ASTHELP Ast Util Listops Symbol Formatter ASTUTIL PrintUtil *)
+(*$import Prelude TopLevel Fixity ErrorMsg Ast Util Listops Symbol Formatter ASTUTIL PrintUtil *)
 
 (* Copyright 1992 by AT&T Bell Laboratories 
  *)
@@ -83,6 +83,9 @@ end (* structure *)
 
 (*
  * $Log$
+# Revision 1.5  2000/09/12  18:56:46  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.4  98/02/15  22:43:19  pscheng
 # bootstrapping changes
 # 

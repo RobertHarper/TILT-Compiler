@@ -1,4 +1,4 @@
-(*$import YaccBase ML_TOKENS Ast ErrorMsg AstUtil StrgHash Array *)
+(*$import Prelude TopLevel Fixity Char String TilWord64 YaccBase ML_TOKENS Symbol Ast ErrorMsg AstUtil StrgHash Array *)
 
 functor MLLrValsFun(structure Token : TOKEN)
  : sig structure ParserData : PARSER_DATA

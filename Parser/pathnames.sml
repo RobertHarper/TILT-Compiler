@@ -1,4 +1,4 @@
-(*$import TopLevel PATHNAMES String *)
+(*$import Prelude TopLevel PATHNAMES String *)
 
 (* Copyright 1989 by AT&T Bell Laboratories *)
 
@@ -44,6 +44,9 @@ end
 
 (*
  * $Log$
+# Revision 1.4  2000/09/12  18:57:06  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.3  98/04/24  22:51:52  pscheng
 # fixed imports
 # 

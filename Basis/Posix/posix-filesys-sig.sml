@@ -1,4 +1,4 @@
-(*$import PreOS Word32 POSIX_FLAGS Time *)
+(*$import Prelude Int PreOS Word32 POSIX_FLAGS Time *)
 (* posix-filesys-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -149,6 +149,9 @@ signature POSIX_FILE_SYS =
 
 (*
  * $Log$
+# Revision 1.2  2000/09/12  18:54:37  swasey
+# Changes for cutoff compilation
+# 
 # Revision 1.1  98/03/09  19:53:19  pscheng
 # added basis
 # 

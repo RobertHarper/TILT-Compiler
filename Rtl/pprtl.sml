@@ -1,4 +1,4 @@
-(*$import PPRTL Rtl Rtltags Formatter TextIO *)
+(*$import Prelude TopLevel Name Array TilWord32 Int PPRTL Rtl Rtltags Formatter TextIO *)
 
 structure Pprtl :> PPRTL =
 struct
