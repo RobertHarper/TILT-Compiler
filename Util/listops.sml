@@ -108,6 +108,8 @@ structure Listops : LISTOPS =
 				     else a::(list_diff_eq (p,rest,b))
     fun list_inter ([],_) = []
       | list_inter (a::rest,b) = if (member(a,b)) then a::(list_inter(rest,b)) else list_inter(rest,b) 
+    fun list_inter_eq (_,[],_) = []
+      | list_inter_eq (p,a::rest,b) = if (member_eq(p,a,b)) then a::(list_inter_eq(p,rest,b)) else list_inter_eq(p,rest,b) 
 
 
     fun eq_list (f, [], []) = true

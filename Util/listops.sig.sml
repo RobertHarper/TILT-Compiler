@@ -54,6 +54,7 @@ signature LISTOPS =
     val list_diff  : ''a list * ''a list -> ''a list
     val list_diff_eq  : (('a * 'a -> bool) * 'a list * 'a list) -> 'a list
     val list_inter : ''a list * ''a list -> ''a list
+    val list_inter_eq : ('a * 'a -> bool) * 'a list * 'a list -> 'a list
     val butlast : 'a list -> 'a list
     (* these are all left to right *)
     val andfold : ('a -> bool) -> 'a list -> bool
