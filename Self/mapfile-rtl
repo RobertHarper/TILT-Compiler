@@ -62,7 +62,6 @@ TIME        Basis/OS/time-sig
 PreTime     Basis/OS/pre-time
 Time        Basis/OS/time
 DATE	    Basis/date-sig
-Date	    Basis/date
 OS_FILE_SYS Basis/OS/os-filesys-sig
 OS_IO_SIG   Basis/OS/os-io-sig
 OS_PATH     Basis/OS/os-path-sig
@@ -91,13 +90,16 @@ TextPrimIO     Basis/IO/text-prim-io
 CLEAN_UP       Basis/NJ/cleanup-sig
 CleanUp        Basis/NJ/cleanup
 CleanIO        Basis/IO/clean-io
+BinPrimIO         Basis/IO/bin-prim-io
 BinIOFn        Basis/IO/bin-io-fn
-# "CLEAN_UP", "CleanUp", "CleanIO", "BinIOFn"
+# "CLEAN_UP", "CleanUp", "CleanIO", "BinIOFn", "BinPrimIO"
+
 
 TIMER	       Basis/timer-sig
 Timer	       Basis/useless-timer
 
 POSIX_extern   Basis/extern
+Date	    Basis/date
 POSIX_ERROR    Basis/Posix/posix-error.sig
 POSIX_Error    Basis/Posix/posix-error
 POSIX_FLAGS    Basis/Posix/posix-flags-sig
@@ -134,8 +136,6 @@ OS_IO          Basis/Unix/os-io
 OS             Basis/Unix/os
 # "OS_FileSys", "OS_Path", "OS_Process", "OS_IO", "OS"
 
-BinPrimIO         Basis/IO/bin-prim-io
-# "BinPrimIO"
 
 TextIOFn       Basis/IO/text-io-fn
 PosixPrimIOFn  Basis/Unix/posix-prim-io-fn
@@ -246,10 +246,10 @@ ListMergeSort Basis/Library/list-mergesort
 #SimpleUref    Basis/Library/simple-uref
 # "UREF", "Uref", "SimpleUref"
 
-SplayMapFn     Basis/Library/splay-map-fn
-SplaySetFn     Basis/Library/splay-set-fn
 SPLAY_TREE     Basis/Library/splaytree-sig
 SplayTree      Basis/Library/splaytree
+SplayMapFn     Basis/Library/splay-map-fn
+SplaySetFn     Basis/Library/splay-set-fn
 # "SplayMapFn", "SplaySetFn", "SPLAY_TREE", "SplayTree"
 
 # TIME           Basis/Library/time-limit <--- can't do this file, it uses SMLofNJ.IntervalTimer
@@ -309,6 +309,7 @@ GRAPHUTIL Util/graphutil.sig
 GraphUtil Util/graphutil
 
 Blaster  Util/blast
+
 Specific Util/specific-til
 
 #################### Parser directory #################
@@ -322,11 +323,11 @@ PRETTYPRINT Parser/pp.sig
 PrettyPrint Parser/pp
 SOURCEMAP Parser/sourcemap.sig
 SourceMap Parser/sourcemap
+PATHNAMES Parser/pathnames.sig
+PathNames Parser/pathnames
 SOURCE   Parser/source.sig
 Source   Parser/source
 
-PATHNAMES Parser/pathnames.sig
-PathNames Parser/pathnames
 
 ERRORMSG Parser/errormsg.sig
 ErrorMsg Parser/errormsg
@@ -389,7 +390,6 @@ LinkParse Parser/linkparse
 
 #################### Elaborator directory #################
 
-
 PRIM    Elaborator/prim.sig
 Prim    Elaborator/prim
 PPPRIM  Elaborator/ppprim.sig
@@ -412,23 +412,31 @@ ILCONTEXT Elaborator/ilcontext.sig
 IlContext Elaborator/ilcontext
 ILCONTEXTEQ Elaborator/ilcontexteq.sig
 IlContextEq Elaborator/ilcontexteq
+	
+ERROR Elaborator/error.sig
+Error Elaborator/error
+
+INFIXPARSE Elaborator/infixparse.sig
+InfixParse Elaborator/infixparse
+
+
+
 ILSTATIC  Elaborator/ilstatic.sig
 IlStatic  Elaborator/ilstatic
 
-ERROR Elaborator/error.sig
-Error Elaborator/error
-INFIXPARSE Elaborator/infixparse.sig
-InfixParse Elaborator/infixparse
 EQUAL Elaborator/equal.sig
 Equal Elaborator/equal
 DATATYPE Elaborator/datatype.sig
 Datatype Elaborator/datatype
 SIGNATURE Elaborator/signature.sig
 Signature Elaborator/signature
+
 PAT Elaborator/pat.sig
 Pat Elaborator/pat
+
 TOIL Elaborator/toil.sig
 Toil Elaborator/toil
+
 BASIS Elaborator/basis.sig
 Basis Elaborator/basis
 
@@ -448,6 +456,16 @@ Nil Nil/nil
 
 PPNIL Nil/ppnil.sig
 Ppnil Nil/ppnil
+PpnilHtml Nil/ppnil-html
+
+NILERROR Nil/nilerror.sig
+NilError Nil/nilerror
+
+NILREWRITE Nil/rewrite.sig
+NilRewrite Nil/rewrite
+
+NILRENAME 	Nil/nilrename.sig
+NilRename	Nil/nilrename
 
 NILSUBST Nil/subst.sig
 NilSubst Nil/subst
@@ -460,37 +478,35 @@ NilPrimUtilParam Nil/nilprimutilparam
 NILUTIL Nil/nilutil.sig
 NilUtil Nil/nilutil
 
-NILERROR Nil/nilerror.sig
-NilError Nil/nilerror
-
-NILCONTEXT Nil/nilcontext.sig
-NilContext Nil/nilcontext
-
-#NILSTATIC Nil/nilstatic.sig
-#NilStatic Nil/nilstatic
+NILCONTEXTPRE	Nil/nilcontextpre.sig
+NilContextPre Nil/nilcontextpre
 
 NORMALIZE Nil/normalize.sig
 Normalize Nil/normalize
 
-TRACEOPS Nil/traceops.sig
-TraceOps Nil/traceops
+NILHNF	Nil/nilhnf.sig
+NilHNF	Nil/nilhnf
 
+NILCONTEXT Nil/nilcontext.sig
+NilContext Nil/nilcontext
 
+NILSTATIC Nil/nilstatic.sig
+NilStatic Nil/nilstatic
 
 LINEARIZE Nil/linearize.sig
 Linearize Nil/linearize
+
+TRACEOPS Nil/traceops.sig
+TraceOps Nil/traceops
+
+REIFY Nil/reify.sig
+Reify Nil/reify
 
 EXPTABLE Nil/NilOpts/exptable.sig
 ExpTable Nil/NilOpts/exptable
 
 OPTIMIZE Nil/optimize.sig
 Optimize Nil/optimize
-
-REIFY Nil/reify.sig
-Reify Nil/reify
-
-HOIST Nil/hoist.sig
-Hoist Nil/hoist
 
 SPECIALIZE Nil/specialize.sig
 Specialize Nil/specialize
@@ -500,6 +516,19 @@ ToClosure Nil/toclosure
 
 TONIL Nil/tonil.sig
 ToNil Nil/tonil
+
+PASS Nil/pass.sig
+
+REDUCE Nil/reduce.sig
+Reduce Nil/reduce
+
+Flatten Nil/flatten
+
+HOIST Nil/hoist.sig
+Hoist Nil/hoist
+
+INLINE Nil/inline.sig
+Inline Nil/inline
 
 LINKNIL Nil/linknil.sig
 Linknil Nil/linknil
@@ -520,11 +549,11 @@ TortlBase Rtl/tortl-base
 TORTLSUM Rtl/tortl-sum.sig
 TortlSum  Rtl/tortl-sum
 
+TORTLVARARG Rtl/tortl-vararg.sig
+TortlVararg Rtl/tortl-vararg
+
 TORTLARRAY Rtl/tortl-array.sig
 TortlArray Rtl/tortl-array
-
-TORTLVARARG Rtl/tortl-vararg.sig
-TortlVararg  Rtl/tortl-vararg
 
 TORTL     Rtl/tortl.sig
 Tortl     Rtl/tortl
@@ -532,4 +561,3 @@ Tortl     Rtl/tortl
 LINKRTL Rtl/linkrtl.sig
 Linkrtl Rtl/linkrtl
 
-rtltest Self/rtltest

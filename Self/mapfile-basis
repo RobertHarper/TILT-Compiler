@@ -61,7 +61,6 @@ ListPair    Basis/Aggregate/list-pair
 TIME        Basis/OS/time-sig
 PreTime     Basis/OS/pre-time
 Time        Basis/OS/time
-DATE	    Basis/date-sig
 OS_FILE_SYS Basis/OS/os-filesys-sig
 OS_IO_SIG   Basis/OS/os-io-sig
 OS_PATH     Basis/OS/os-path-sig
@@ -99,12 +98,15 @@ TIMER	       Basis/timer-sig
 Timer	       Basis/useless-timer
 
 POSIX_extern   Basis/extern
+DATE	    Basis/date-sig
 Date	    Basis/date
 POSIX_ERROR    Basis/Posix/posix-error.sig
 POSIX_Error    Basis/Posix/posix-error
 POSIX_FLAGS    Basis/Posix/posix-flags-sig
 POSIX_IO_SIG     Basis/Posix/posix-io-sig
 # "POSIX_extern", "POSIX_ERROR", "POSIX_Error", "POSIX_FLAGS", "POSIX_IO_SIG"
+
+
 
 POSIX_FILE_SYS Basis/Posix/posix-filesys-sig
 POSIX_FileSys Basis/Posix/posix-filesys

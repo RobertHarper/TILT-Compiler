@@ -481,14 +481,14 @@ NilUtil Nil/nilutil
 NILCONTEXTPRE	Nil/nilcontextpre.sig
 NilContextPre Nil/nilcontextpre
 
-NILCONTEXT Nil/nilcontext.sig
-NilContext Nil/nilcontext
-
 NORMALIZE Nil/normalize.sig
 Normalize Nil/normalize
 
 NILHNF	Nil/nilhnf.sig
 NilHNF	Nil/nilhnf
+
+NILCONTEXT Nil/nilcontext.sig
+NilContext Nil/nilcontext
 
 NILSTATIC Nil/nilstatic.sig
 NilStatic Nil/nilstatic
