@@ -9,8 +9,8 @@ Severity:    critical
 Problem:     despite name-mangling, we still get crashes from ld because of multiply-defined identifiers.  in this test file, if you replace "hd_" by "hd", ld will reject.
 Code:        
 Transcript:  
-Comments:    
+Comments:
 Fix:         
-Test: m0131
+Test: m0131, 0010, 0011, 0012
 Owner: swasey
 Status: open

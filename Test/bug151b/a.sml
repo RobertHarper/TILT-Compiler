@@ -1,0 +1,2 @@
+(*$import *)
+val x = "a"
