@@ -1,0 +1,16 @@
+Number: 0166
+Title:       Elaborator adding classifiers with unbound, free variables to context.
+Keywords:    Elaborator, context
+Submitter:   swasey
+Date:        05/23/03
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     IlcontextChecks signals an error while compiling the SML/NJ redblack-set-fn.sml.
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: bug166
+Owner: swasey
+Status: open
