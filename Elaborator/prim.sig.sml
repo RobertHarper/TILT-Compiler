@@ -4,6 +4,15 @@ signature PRIM =
     datatype intsize = W8 | W16 | W32 | W64
     datatype floatsize = F32 | F64
 
+    (*
+	An integer of any size is represented as a sign-extended,
+	twos-complement 64 bit word.  Invariant: The upper 64-w bits of a
+	w-bit integer in this format are either all zero or all one.
+
+	A word of any size is represented as a 64-bit word.  Invariant:
+	The upper 64-w bits of a w-bit word in this format are all zero.
+    *)
+
     (* zero-length arrays and vectors need type    *)
     (* Most of these existed only so that we could write an interpreter,
      * which we never bothered to do. *)

@@ -24,7 +24,7 @@ struct
 	  | F64 => W64)
 
     val con_string = con_vector(con_uint W8)
-    fun value_type exp_typer scon : con =
+    fun value_type (exp_typer:exp -> con) (scon:value) : con =
 	(case scon of
 	     (int (is,_)) => con_int is
 	   | (uint (is,_)) => con_uint is
@@ -38,7 +38,7 @@ struct
 	   | (refcell (ref e)) => con_ref (exp_typer e)
 	   | (tag (_,c)) => con_tag c)
 
-    fun get_aggregate_type (context,prim,aggregate,cons) =
+    fun get_aggregate_type (context:context,prim:prim,aggregate:table,cons:con list) : bool * con list * con =
 	let
 	    fun help (arg,res) = (false,[arg],res)
 	    fun help' (args,res) = (false,args,res)
@@ -94,7 +94,7 @@ struct
 	end
 
 
-  fun get_type context prim cons =
+  fun get_type (context:context) (prim:prim) (cons:con list) : bool * con list * con =
      let
 	 fun help (arg,res) = (false,[arg],res)
 	 fun help' (args,res) = (false,args,res)
@@ -187,7 +187,7 @@ struct
 
      end
 
-  fun get_iltype context ilprim cons =
+  fun get_iltype (context:context) (ilprim:ilprim) (cons:con list) : bool * con list * con =
       (case (ilprim,cons) of
 	   (not_uint is, []) => (true,[con_uint is], con_uint is)
 	 | (and_uint is, []) => (true,[con_uint is, con_uint is], con_uint is)
@@ -200,45 +200,100 @@ struct
 	 | _ => error "get_iltype is ill-formed")
 
 
-  fun get_type' context prim args =
+  fun get_type' (context:context) (prim:prim) (args:con list) : con =
       let val (total,incons,outcon) = get_type context prim args
 	  val arrow = if total then total_arrow else partial_arrow
       in  arrow(incons,outcon)
       end
 
-  fun get_iltype' context ilprim arg =
+  fun get_iltype' (context:context) (ilprim:ilprim) (arg:con list) : con =
       let val (total,incons,outcon) = get_iltype context ilprim arg
 	  val arrow = if total then total_arrow else partial_arrow
       in  arrow(incons,outcon)
       end
 
-    fun apply context prim cons vals = (* instance arg *)
+    (*
+	int2value converts a 64-bit twos-complement integer to a value.
+	uint2value converts a 64-bit word to a value.  These ensure that
+	the value invariants hold.
+    *)
+    val s8 : TilWord64.word * TilWord64.word =
+	(TilWord64.fromInt ~128,TilWord64.fromInt 127)
+    val s16 : TilWord64.word * TilWord64.word =
+	(TilWord64.fromInt ~32768,TilWord64.fromInt 32767)
+    val s32 : TilWord64.word * TilWord64.word =
+	(TilWord64.fromSignedHalf TilWord32.most_neg,
+	 TilWord64.fromSignedHalf TilWord32.most_pos)
+    val s64 : TilWord64.word * TilWord64.word =
+	(TilWord64.most_neg, TilWord64.most_pos)
+
+    fun int2value (is:intsize) (w:TilWord64.word) : value =
+	let val (low,high) =
+		(case is of
+		    W8 => s8
+		|   W16 => s16
+		|   W32 => s32
+		|   W64 => s64)
+	    val _ =
+		if TilWord64.sgte(w,low) andalso TilWord64.slte(w,high) then
+		    ()
+		else
+		    raise Overflow
+	in  int(is,w)
+	end
+
+    val u8 : TilWord64.word =
+	TilWord64.fromInt 255
+    val u16 : TilWord64.word =
+	TilWord64.fromInt 65535
+    val u32 : TilWord64.word =
+	TilWord64.fromUnsignedHalf TilWord32.neg_one
+    val u64 : TilWord64.word =
+	TilWord64.neg_one
+
+    fun uint2value (is:intsize) (w:TilWord64.word) : value =
+	let val mask =
+		(case is of
+		    W8 => u8
+		|   W16 => u16
+		|   W32 => u32
+		|   W64 => u64)
+	    val w = TilWord64.andb(w,mask)
+	in  uint(is,w)
+	end
+
+    fun apply (context:context) (prim:prim) (cons:con list) (vals:exp list) : exp = (* instance arg *)
 	let
-	    fun bad s = (print "Error "; print s; print " while applying ";
-			 Ppprim.pp_prim prim;
-			 print "\n";
-			 error "bad apply")
+	    fun bad (s:string) : 'a =
+		(print "Error "; print s; print " while applying ";
+		 Ppprim.pp_prim prim;
+		 print "\n";
+		 error "bad apply")
+
 	    (* Some converters.  If the conversion is impossible, a type error has occurred *)
-	    val exp2value = (fn e => (case (exp2value e) of
-					  NONE => bad "exp2value"
-					| SOME v => v))
+	    val exp2value : exp -> value =
+		(fn e =>
+		(case (exp2value e) of
+		    NONE => bad "exp2value"
+		|   SOME v => v))
 
 	    (* NJ fucks up Real.fromString - it doesn't not handle nan and inf properly.
 	     * So if we are compiling under NJ, Real.fromString may fail, and so
 	     * we have to try to patch it up here.  This should never happen under the
 	     * TILT compiled tilt.
 	     *)
-	    fun string2float s = 
+	    fun string2float (s:string) : real = 
 	      let
+		fun error() = bad "string2float"
 		fun unsigned_alpha_2float s = 
 		  if (s = "inf") orelse (s = "infinity") then (Real.posInf)
 		  else if s = "nan" then (0.0/0.0) 
- 	          else bad "value2float"
+ 	          else error()
 	      in
 		(* I believe that the only valid float strings that contain letters other than "E" or "e"
 		 * Are [+,~,-]nan and [+,~,-]inf[inity].
 		 *)
-		if (Char.contains s #"n") orelse (Char.contains s #"i") then
+		if size s > 0 andalso ((Char.contains s #"n") orelse (Char.contains s #"i")) then
 		  let
 		    val c0 = String.sub (s,0)
 		  in
@@ -250,60 +305,54 @@ struct
 		      in if neg then ~r else r
 		      end
 		  end
-		else bad "value2float"
+		else error()
 	      end
 
-	    fun value2float fs (float (fs',s)) = if (fs = fs')
-						     then (case Float.fromString s of
-							       NONE => string2float s
-							     | SOME f => f)
-						 else bad "value2float"
-	      | value2float _ _ = bad "value2float"
-	    fun value2int is (int (is',w)) = if (is = is') then w else bad "value2int"
-	      | value2int is (uint (is',w)) = if (is = is') then w else bad "value2int"
-	      | value2int _ _ = bad "value2int"
-	    fun value2int' is (int (is',w)) = if (is = is') then TilWord64.toInt w else bad "value2int'"
-	      | value2int' is (uint (is',w)) = if (is = is') then TilWord64.toInt w else bad "value2int'"
-	      | value2int' _ _ = bad "value2int'"
-	    fun value2ref (refcell r) = r
-	      | value2ref _ = bad "value2ref"
+	    fun value2float (fs:floatsize) (v:value) : real =
+		(case v of
+		    float (fs',s) =>
+			if (fs = fs')
+			then
+			    (case (Float.fromString s) of
+				NONE => string2float s
+			    |	SOME f => f)
+			else bad "value2float"
+		|   _ => bad "value2float")
 
-	    val int2exp = value2exp o int
-	    val float2exp = value2exp o float
-	    val uint2exp = value2exp o uint
+	    fun value2int (is:intsize) (v:value) : TilWord64.word =
+		(case v of
+		    int (is',w) => if (is = is') then w else bad "value2int"
+		|   _ => bad "value2int")
 
-	    (* Some filters to perform Word canonicalization *)
-	    fun filter is w =
-		let val one = TilWord64.fromInt 1
-		    val shift = (case is of
-				     W8 => 8
-				   | W16 => 16
-				   | W32 => 32
-				   | W64 => 64)
-		in (is,TilWord64.andb(w,TilWord64.uminus(TilWord64.lshift(one,shift),one)))
-		end
+	    fun value2uint (is:intsize) (v:value) : TilWord64.word =
+		(case v of
+		    uint (is',w) => if (is = is') then w else bad "value2uint"
+		|   _ => bad "value2uint")
 
-	    fun objbinary value2obj op2 =
-		(case vals of
-		     [a,b] => let val obj1 = value2obj(exp2value a)
-				  val obj2 = value2obj(exp2value b)
-			      in value2exp(op2 (obj1,obj2))
-			      end
-		   | _ => bad "objbinary")
-	    fun objbinary value2obj1 value2obj2 op2 =
+	    val value2shiftint : value -> int =
+		TilWord64.toInt o (value2int W32)
+
+	    fun value2ref (v:value) : exp ref =
+		(case v of
+		    refcell r => r
+		|   _ => bad "value2ref")
+
+	    fun objbinary (value2obj1:value -> 'a) (value2obj2:value -> 'b) (op2:'a * 'b -> value) : exp =
 		(case vals of
 		     [a,b] => let val obj1 = value2obj1(exp2value a)
 				  val obj2 = value2obj2(exp2value b)
 			      in value2exp(op2 (obj1,obj2))
 			      end
 		   | _ => bad "objbinary")
-	    fun objunary value2obj op1 =
+
+	    fun objunary (value2obj:value -> 'a) (op1:'a -> value) : exp =
 		(case vals of
 		     [a] => let val obj = value2obj(exp2value a)
 			    in value2exp(op1 obj)
 			    end
 		   | _ => bad "objunary")
-	    fun objpred value2obj op2 =
+
+	    fun objpred (value2obj:value -> 'a) (op2:'a * 'a -> bool) : exp =
 		(case vals of
 		     [a,b] => let val obj1 = value2obj(exp2value a)
 				  val obj2 = value2obj(exp2value b)
@@ -312,28 +361,49 @@ struct
 		   | x => (print ("x has length " ^ (Int.toString (length x)) ^ "\n");
 			   bad "objpred"))
 
-	    fun ibinary is op2 = objbinary (value2int is) (value2int is) (int o (filter is) o op2)
-	    fun iunary is op1 = objunary (value2int is) (int o (filter is) o op1)
+	    fun iunary (is:intsize) (op1:TilWord64.word -> TilWord64.word) : exp =
+		objunary (value2int is) ((int2value is) o op1)
 
-(*	    fun fbinary fs op2 = objbinary (value2float fs) (value2float fs)
-		                   ((fn f => (float(fs,Float.toString f))) o op2)
-	    fun funary fs op1 = objunary (value2float fs)
-		                   ((fn f => (float(fs,Float.toString f))) o op1)
+	    fun ibinary (is:intsize) (op2:TilWord64.word * TilWord64.word -> TilWord64.word) : exp =
+		objbinary (value2int is) (value2int is) ((int2value is) o op2)
 
-	    fun fpred fs pred = objpred (value2float fs) pred
+	    fun isbinary (is:intsize) (op2:TilWord64.word * int -> TilWord64.word) : exp =
+		objbinary (value2int is) value2shiftint ((int2value is) o op2)
+
+	    fun ipred (is:intsize) (pred:TilWord64.word * TilWord64.word -> bool) : exp =
+		objpred (value2int is) pred
+
+	    fun uunary (is:intsize) (op1:TilWord64.word -> TilWord64.word) : exp =
+		objunary (value2uint is) ((uint2value is) o op1)
+
+	    fun ubinary (is:intsize) (op2:TilWord64.word * TilWord64.word -> TilWord64.word) : exp =
+		objbinary (value2uint is) (value2uint is) ((uint2value is) o op2)
+
+	    fun usbinary (is:intsize) (op2:TilWord64.word * int -> TilWord64.word) : exp =
+		objbinary (value2uint is) value2shiftint ((uint2value is) o op2)
+
+	    fun upred (is:intsize) (pred:TilWord64.word * TilWord64.word -> bool) : exp =
+		objpred (value2uint is) pred
+
+(*
+	    fun fbinary (fs:floatsize) (op2:real * real -> real) : exp =
+		objbinary (value2float fs) (value2float fs)
+		    ((fn f => (float(fs,Float.toString f))) o op2)
+
+	    fun funary (fs:floatsize) (op1:real -> real) : exp =
+		objunary (value2float fs)
+		    ((fn f => (float(fs,Float.toString f))) o op1)
+
+	    fun fpred (fs:floatsize) (pred:real * real -> bool) : exp =
+		objpred (value2float fs) pred
 *)
 
 	    (* Unless we're really sure we can get the rounding semantics right,
 	     * don't try to evaluate floating point ops.  Note: NJ floats are fucked.
 	     *)
-	    fun fbinary fs op2 = raise Div
-	    fun funary fs op1  = raise Div
-	    fun fpred fs pred  = raise Div
-
-	    fun isbinary is op2 = objbinary (value2int is) (value2int' is) (int o (filter is) o op2)
-
-	    fun ipred is pred = objpred (value2int is) pred
-
+	    fun fbinary (fs:floatsize) (op2:real * real -> real) : exp = raise Div
+	    fun funary (fs:floatsize) (op1:real -> real) : exp = raise Div
+	    fun fpred (fs:floatsize) (pred:real * real -> bool) : exp = raise Div
 	in
 	    (case (prim,cons,vals) of
 		 (soft_vtrap _,[],_) => unit_value
@@ -344,14 +414,14 @@ struct
 
 	  | (float2int, [], _) => objunary (value2float F64)
 	                                (fn f => (int(W32,TilWord64.fromInt(floor f))))
-	  | (int2float, [], [v]) => objunary (value2int W32)
+	  | (int2float, [], _) => objunary (value2int W32)
 					(fn w => (float(F64,Float.toString(real(TilWord64.toInt w)))))
-	  | (int2uint(is1,is2), [], [v]) => objunary (value2int is1) (fn w => uint(is2,w))
-	  | (uint2int(is1,is2), [], [v]) => objunary (value2int is1) (fn w => int(is2,w))
-	  | (int2int(is1,is2), [], [v]) => objunary (value2int is1) (fn w => int(is2,w))
-	  | (uint2uint(is1,is2), [], [v]) => objunary (value2int is1) (fn w => uint(is2,w))
-	  | (uinta2uinta(is1,is2),_,_) => error "UNIMP"
-	  | (uintv2uintv(is1,is2),_,_) => error "UNIMP"
+	  | (int2uint(is1,is2), [], _) => objunary (value2int is1) (uint2value is2)
+	  | (uint2int(is1,is2), [], _) => objunary (value2uint is1) (int2value is2)
+	  | (int2int(is1,is2), [], _) => objunary (value2int is1) (int2value is2)
+	  | (uint2uint(is1,is2), [], _) => objunary (value2uint is1) (uint2value is2)
+	  | (uinta2uinta(is1,is2),_,_) => raise UNIMP
+	  | (uintv2uintv(is1,is2),_,_) => raise UNIMP
 
 	  | (neg_float fs, [], _) => funary fs (op ~)
 	  | (plus_float fs, [], _) => fbinary fs (op +)
@@ -372,20 +442,20 @@ struct
 	  | (mod_int is, [], _) => ibinary is TilWord64.smod
 	  | (quot_int is, [], _) => ibinary is TilWord64.squot
 	  | (rem_int is, [], _) => ibinary is TilWord64.smod
-      	  | (plus_uint is, [], _) => ibinary is TilWord64.uplus
-      	  | (minus_uint is, [], _) => ibinary is TilWord64.uminus
-      	  | (mul_uint is, [], _) => ibinary is TilWord64.umult
-      	  | (div_uint is, [], _) => ibinary is TilWord64.udiv
-      	  | (mod_uint is, [], _) => ibinary is TilWord64.umod
+      	  | (plus_uint is, [], _) => ubinary is TilWord64.uplus
+      	  | (minus_uint is, [], _) => ubinary is TilWord64.uminus
+      	  | (mul_uint is, [], _) => ubinary is TilWord64.umult
+      	  | (div_uint is, [], _) => ubinary is TilWord64.udiv
+      	  | (mod_uint is, [], _) => ubinary is TilWord64.umod
 	  | (lshift_int is, [], _) => isbinary is TilWord64.lshift
 	  | (rshift_int is, [], _) => isbinary is TilWord64.rshifta
-	  | (rshift_uint is, [], _) => isbinary is TilWord64.rshiftl
+	  | (rshift_uint is, [], _) => usbinary is TilWord64.rshiftl
 	  | (neg_int is, [], _) => iunary is TilWord64.snegate
 	  | (abs_int is, [], _) => iunary is TilWord64.absolute
-	  | (not_int is, [], _) => iunary is TilWord64.notb
-	  | (and_int is, [], _) => ibinary is TilWord64.andb
-	  | (or_int is, [], _) => ibinary is TilWord64.orb
-	  | (xor_int is, [], _) => ibinary is TilWord64.xorb
+	  | (not_int is, [], _) => uunary is TilWord64.notb
+	  | (and_int is, [], _) => ubinary is TilWord64.andb
+	  | (or_int is, [], _) => ubinary is TilWord64.orb
+	  | (xor_int is, [], _) => ubinary is TilWord64.xorb
 
 	  | (less_int is, [], _) => ipred is TilWord64.slt
 	  | (greater_int is, [], _) => ipred is TilWord64.sgt
@@ -394,10 +464,10 @@ struct
 	  | (eq_int is, [], _) => ipred is TilWord64.equal
 	  | (neq_int is, [], _) => ipred is TilWord64.nequal
 
-	  | (less_uint is, [], _) => ipred is (TilWord64.ult)
-	  | (greater_uint is, [], _) => ipred is (TilWord64.ugt)
-	  | (lesseq_uint is, [], _) => ipred is (TilWord64.ulte)
-	  | (greatereq_uint is, [], _) => ipred is (TilWord64.ugte)
+	  | (less_uint is, [], _) => upred is (TilWord64.ult)
+	  | (greater_uint is, [], _) => upred is (TilWord64.ugt)
+	  | (lesseq_uint is, [], _) => upred is (TilWord64.ulte)
+	  | (greatereq_uint is, [], _) => upred is (TilWord64.ugte)
 
 	  | (length_table _, _, _) => raise UNIMP
 	  | (sub _,_,_)  => raise UNIMP
@@ -414,171 +484,6 @@ struct
 
 	  | _ => bad "general"())
 	end
-
-(*
-	  | (mk_ref, [c], [a]) => value2exp(refcell(ref a))
-	  | (deref, [c], [a]) => !(value2ref(exp2value a))
-	  | (eq_ref, [c], _) => objpred value2ref (op =)
-	  | (setref, [c], [loc1,exp2]) => ((value2ref(exp2value(loc1))) := exp2; unit_value)
-
-    fun applyil  vals =
-	let
-	in
-	    (case (,cons,vals) of
-	  | (PLUS_uint, [], _) => uibinary (Word32.+)
-	  | (MINUS_uint, [], _) => uibinary (Word32.-)
-	  | (MUL_uint, [], _) => uibinary (Word32.* )
-	  | (DIV_uint, [], _) => uibinary (Word32.div)
-	  | (MOD_uint, [], _) => uibinary (Word32.mod)
-	  | (LSHIFT_uint, [], _) => uibinary (fn (w1,w2) => Word32.<<(w1,Word31.fromLargeWord w2))
-	  | (RSHIFT_uint, [], _) => uibinary (fn (w1,w2) => Word32.>>(w1,Word31.fromLargeWord w2))
-	  | (AND_uint, [], _) => uibinary (Word32.andb)
-	   | (OR_uint, [], _) => uibinary (Word32.orb)
-
-	end
-*)
-
-
-(*
-  val skip = 16
-
-    fun tt2int int_tt = 0
-      | tt2int real_tt = 1
-      | tt2int both_tt = 2
-
-    fun int2tt 0 =  int_tt
-      | int2tt 1 = real_tt
-      | int2tt 2 = both_tt
-
-    fun intsize2int W8 = 0
-      | intsize2int W16 = 1
-      | intsize2int W32 = 2
-      | intsize2int W64 = 3
-
-    fun int2intsize 0 = W8
-      | int2intsize 1 = W16
-      | int2intsize 2 = W32
-      | int2intsize 3 = W64
-
-    fun floatsize2int F32 = 0
-      | floatsize2int F64 = 1
-
-    fun int2floatsize 0 = F32
-      | int2floatsize 1 = F64
-
-    fun table2pair t =
-	case t of
-	    IntArray sz => (0, intsize2int sz)
-	  | IntVector sz => (1, intsize2int sz)
-	  | FloatArray sz => (2, floatsize2int sz)
-	  | FloatVector sz => (3, floatsize2int sz)
-	  | OtherArray false => (4, 0)
-	  | OtherArray true => (4, 1)
-	  | OtherVector false => (5, 0)
-	  | OtherVector true => (5, 1)
-
-    fun pair2table (0, i) = IntArray (int2intsize i)
-      | pair2table (1, i) = IntVector (int2intsize i)
-      | pair2table (2, i) = FloatArray (int2floatsize i)
-      | pair2table (3, i) = FloatVector (int2floatsize i)
-      | pair2table (4, 0) = OtherArray false
-      | pair2table (4, 1) = OtherArray true
-      | pair2table (5, 0) = OtherVector false
-      | pair2table (5, 1) = OtherVector true
-
-
-    fun prim2triple p =
-	case p of
-	    soft_vtrap tt => (0, tt2int tt, 0)
-	  | soft_ztrap tt => (1, tt2int tt, 0)
-	  | hard_vtrap tt => (2, tt2int tt, 0)
-	  | hard_ztrap tt => (3, tt2int tt, 0)
-
-	  | float2int => (6, 0, 0)
-	  | int2float => (7, 0, 0)
-	  | int2uint (sz1, sz2) => (8, intsize2int sz1, intsize2int sz2)
-	  | uint2int (sz1, sz2) => (9, intsize2int sz1, intsize2int sz2)
-	  | int2int (sz1, sz2) => (10, intsize2int sz1, intsize2int sz2)
-	  | uint2uint (sz1, sz2) => (11, intsize2int sz1, intsize2int sz2)
-	  | uinta2uinta (sz1, sz2) => (12, intsize2int sz1, intsize2int sz2)
-	  | uintv2uintv (sz1 , sz2) => (13, intsize2int sz1, intsize2int sz2)
-
-	  | neg_float sz => (14, floatsize2int sz, 0)
-	  | abs_float sz => (15, floatsize2int sz, 0)
-	  | plus_float sz => (16, floatsize2int sz, 0)
-	  | minus_float  sz => (17, floatsize2int sz, 0)
-	  | mul_float sz => (18, floatsize2int sz, 0)
-	  | div_float sz  => (19, floatsize2int sz, 0)
-	  | less_float sz => (20, floatsize2int sz, 0)
-	  | greater_float sz => (21, floatsize2int sz, 0)
-	  | lesseq_float sz => (22, floatsize2int sz, 0)
-	  | greatereq_float sz => (23, floatsize2int sz, 0)
-	  | eq_float sz => (24, floatsize2int sz, 0)
-	  | neq_float sz => (25, floatsize2int sz, 0)
-
-	  | plus_int sz => (26, intsize2int sz, 0)
-	  | minus_int sz => (27, intsize2int sz, 0)
-	  | mul_int sz => (28, intsize2int sz, 0)
-	  | div_int sz => (29, intsize2int sz, 0)
-	  | mod_int sz => (30, intsize2int sz, 0)
-	  | quot_int sz => (31, intsize2int sz, 0)
-	  | rem_int sz => (32, intsize2int sz, 0)
-	  | plus_uint sz => (33, intsize2int sz, 0)
-	  | minus_uint sz => (34, intsize2int sz, 0)
-	  | mul_uint sz => (35, intsize2int sz, 0)
-	  | div_uint sz => (36, intsize2int sz, 0)
-	  | mod_uint sz => (37, intsize2int sz, 0)
-	  | less_int sz => (38, intsize2int sz, 0)
-	  | greater_int sz => (39, intsize2int sz, 0)
-	  | lesseq_int sz => (40, intsize2int sz, 0)
-	  | greatereq_int sz => (41, intsize2int sz, 0)
-	  | less_uint sz => (42, intsize2int sz, 0)
-	  | greater_uint sz => (43, intsize2int sz, 0)
-	  | lesseq_uint sz => (44, intsize2int sz, 0)
-	  | greatereq_uint sz => (45, intsize2int sz, 0)
-	  | eq_int sz => (46, intsize2int sz, 0)
-	  | neq_int sz => (47, intsize2int sz, 0)
-	  | neg_int sz => (48, intsize2int sz, 0)
-	  | abs_int sz => (49, intsize2int sz, 0)
-
-	  (* bit-pattern manipulation *)
-	  | not_int sz => (50, intsize2int sz, 0)
-	  | and_int sz => (51, intsize2int sz, 0)
-	  | or_int sz => (52, intsize2int sz, 0)
-	  | xor_int sz => (53, intsize2int sz, 0)
-	  | lshift_int sz => (54, intsize2int sz, 0)
-	  | rshift_int sz => (55, intsize2int sz, 0)
-	  | rshift_uint sz => (56, intsize2int sz, 0)
-
-	  (* array and vector ops - bool = true indicates writeable *)
-	  | array2vector t => let val (a,b) = table2pair t
-				  in  (54, a, b)
-				  end
-	  | vector2array t =>  let val (a,b) = table2pair t
-				  in  (55, a, b)
-				  end
-	  | create_table t =>  let val (a,b) = table2pair t
-				  in  (56, a, b)
-				  end
-	  | create_empty_table t =>  let val (a,b) = table2pair t
-				  in  (57, a, b)
-				  end
-	  | sub t =>  let val (a,b) = table2pair t
-				  in  (58, a, b)
-				  end
-	  | update t =>  let val (a,b) = table2pair t
-				  in  (59, a, b)
-				  end
-	  | length_table t =>  let val (a,b) = table2pair t
-				  in  (60, a, b)
-				  end
-	  | equal_table t =>  let val (a,b) = table2pair t
-				  in  (61, a, b)
-				  end
-
-
-
-*)
 
 
 end
