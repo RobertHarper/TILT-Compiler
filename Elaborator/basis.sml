@@ -1,11 +1,6 @@
-(*$import Ast Il ILCONTEXT ILSTATIC PPIL ILUTIL DATATYPE TOIL BASIS Stats *)
+(*$import Ast Il IlContext IlStatic Ppil IlUtil Datatype Toil BASIS Stats *)
 (* Forms the initial basis for elaboration *)
-functor Basis(structure IlContext : ILCONTEXT
-	      structure IlStatic : ILSTATIC
-	      structure Ppil : PPIL
-	      structure IlUtil : ILUTIL
-	      structure Datatype : DATATYPE
-	      structure Toil : TOIL)
+structure Basis
    :> BASIS =
   struct
 
@@ -468,17 +463,17 @@ xxxxx *)
 		  (* NOT TOTAL! has a store effect - otherwise we would generalize *)
 		  ("ref", (fn c => let val v = fresh_var()
 				    in #1(make_lambda(v,c,CON_REF c,
-							    PRIM(mk_ref,[c],[VAR v])))
+							    ILPRIM(mk_ref,[c],[VAR v])))
 				    end)),
 		   ("!", (fn c => let val v = fresh_var()
 				  in #1(make_total_lambda(v,CON_REF c,c,
-							  PRIM(deref,[c],[VAR v])))
+							  ILPRIM(deref,[c],[VAR v])))
 				  end)),
 		   (":=", (fn c => let val v = fresh_var()
 				       val pc = con_tuple[CON_REF c, c]
 				       fun proj n = RECORD_PROJECT(VAR v,generate_tuple_label n,pc)
 				   in #1(make_total_lambda(v,pc,
-							   con_unit,PRIM(setref,[c],
+							   con_unit,ILPRIM(setref,[c],
 									 [proj 1, proj 2])))
 				   end))]
 	  in val _ = app poly_entry basepolyvalue_list
@@ -591,5 +586,10 @@ xxxxx *)
         (* (!result, !sbnds_result, datatype_sdecs, 
 	    add_context_sdecs(!result,datatype_self_sdecs)) *)
       end
+
+(*    val initial_context = Util.memoize initial_context *)
   
   end
+
+
+

@@ -1,12 +1,8 @@
-(*$import Il ILSTATIC ILUTIL PPIL ILCONTEXT ERROR SIGNATURE Bool Stats *)
+(*$import Il IlStatic IlUtil Ppil IlContext Error SIGNATURE Bool Stats *)
 
 (* Need to improve where_structure to use SIGNAT_OF *)
 
-functor Signature(structure IlStatic : ILSTATIC
-		  structure IlUtil : ILUTIL
-		  structure Ppil : PPIL
-		  structure IlContext : ILCONTEXT
-		  structure Error : ERROR)
+structure Signature
     :> SIGNATURE =
 
   struct
@@ -24,6 +20,7 @@ functor Signature(structure IlStatic : ILSTATIC
 
     val debug = Stats.ff("SignatureDebug")
     val debug_full = Stats.ff("SignatureDebugFull")
+    fun msg s = if !debug then print s else ()
 
     fun debugdo t = if (!debug) then (t(); ()) else ()
     type labels = label list
@@ -58,13 +55,7 @@ functor Signature(structure IlStatic : ILSTATIC
     fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg handle e => con
     fun sub_con arg = IlStatic.sub_con arg handle e => false
     fun eq_con arg = IlStatic.eq_con arg handle e => false
-    fun eq_modproj (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
-      | eq_modproj (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
-      | eq_modproj _ = false
-    fun eq_conproj (CON_VAR v, CON_VAR v') = eq_var (v,v')
-      | eq_conproj (CON_MODULE_PROJECT (m,l), 
-		    CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
-      | eq_conproj _ = false
+
 	
     fun type_is_abstract(v,CON_MODULE_PROJECT(m,l)) = 
 	let fun loop acc (MOD_VAR v') = if eq_var(v,v') then SOME acc else NONE
@@ -138,23 +129,19 @@ functor Signature(structure IlStatic : ILSTATIC
 
     (* ----------------- Substitution Helper Functions ----------------------- *)
     local
-	type mapping = (con * con) list * (mod * mod) list * 
-	    ((con * con) list LabelMap.map) * (con VarMap.map) *
-	    ((mod * mod) list LabelMap.map) * (mod VarMap.map)
+	type mapping = con Name.PathMap.map * mod Name.PathMap.map
 
-	fun chandle (_,_,clmap,cvmap,_,_) (CON_VAR v) = VarMap.find(cvmap,v) 
-	  | chandle (_,_,clmap,cvmap,_,_) (c as CON_MODULE_PROJECT(_,l)) = 
-	    (case LabelMap.find(clmap,l) of
-		 NONE => NONE
-	       | SOME (cclist) => assoc_eq(eq_conproj, c, cclist))
-	  | chandle _ _ = NONE
+	fun chandle (cmap,_) c =
+	    (case IlUtil.con2path c of
+		 SOME (SIMPLE_PATH v) => Name.PathMap.find(cmap,(v,[]))
+	       | SOME (COMPOUND_PATH (v,labs)) => Name.PathMap.find(cmap,(v,labs))
+	       | NONE => NONE)
 
-	fun mhandle (_,_,_,_,mlmap,mvmap) (MOD_VAR v) = VarMap.find(mvmap,v) 
-	  | mhandle (_,_,_,_,mlmap,mvmap) (m as MOD_PROJECT(_,l)) = 
-	    (case LabelMap.find(mlmap,l) of
-		 NONE => NONE
-	       | SOME (mmlist) => assoc_eq(eq_modproj, m, mmlist))
-	  | mhandle _ _ = NONE
+	fun mhandle (_,mmap) m =
+	    (case IlUtil.mod2path m of
+		 SOME (SIMPLE_PATH v) => Name.PathMap.find(mmap,(v,[]))
+	       | SOME (COMPOUND_PATH (v,labs)) => Name.PathMap.find(mmap,(v,labs))
+	       | NONE => NONE)
 
 	fun sdechandle mapping (SDEC(l,DEC_CON(v,k,SOME c))) =
 	    (case chandle mapping c of
@@ -185,47 +172,11 @@ functor Signature(structure IlStatic : ILSTATIC
 					sdechandle mapping)
     in
 	type mapping = mapping
-	val empty_mapping = ([],[],LabelMap.empty,VarMap.empty,
-			     LabelMap.empty,VarMap.empty)
-	fun getcclist((cclist,_,_,_,_,_) : mapping) = cclist
-	fun getmmlist((_,mmlist,_,_,_,_) : mapping) = mmlist
-	fun join_maps((cclist1,mmlist1,cllist1,cvlist1,mllist1,mvlist1) : mapping,
-		      (cclist2,mmlist2,cllist2,cvlist2,mllist2,mvlist2) : mapping) : mapping = 
-	    (cclist1 @ cclist2, mmlist1 @ mmlist2,
-	     LabelMap.unionWith (op @) (cllist1,cllist2),
-	     VarMap.unionWith (fn (x,y) => x) (cvlist1,cvlist2),
-	     LabelMap.unionWith (op @) (mllist1,mllist2),
-	     VarMap.unionWith (fn (x,y) => y) (mvlist1,mvlist2))
-	fun convar_addmap(v,c,(cclist,mmlist,clmap,cvmap,mlmap,mvmap)) = 
-	    let val cclist = (CON_VAR v, c)::cclist
-		val cvmap = VarMap.insert(cvmap,v,c)
-	    in  (cclist,mmlist,clmap,cvmap,mlmap,mvmap)
-	    end
-	fun modvar_addmap(v,m,(cclist,mmlist,clmap,cvmap,mlmap,mvmap)) = 
-	    let val mmlist = (MOD_VAR v, m)::mmlist
-		val mvmap = VarMap.insert(mvmap,v,m)
-	    in  (cclist,mmlist,clmap,cvmap,mlmap,mvmap)
-	    end
-	fun conproj_addmap(CON_MODULE_PROJECT(m,l),c,(cclist,mmlist,clmap,cvmap,mlmap,mvmap)) = 
-	    let val pair = (CON_MODULE_PROJECT(m,l), c)
-		val cclist = pair::cclist
-		val temp = pair::(case LabelMap.find(clmap,l) of
-				      NONE => []
-				    | SOME ccs => ccs)
-		val clmap = LabelMap.insert(clmap,l,temp)
-	    in  (cclist,mmlist,clmap,cvmap,mlmap,mvmap)
-	    end
-	  | conproj_addmap _ = error "conproj_addmap not given a CON_MODULE_PROJECT"
-	fun modproj_addmap(MOD_PROJECT(m,l),m',(cclist,mmlist,clmap,cvmap,mlmap,mvmap)) = 
-	    let val pair = (MOD_PROJECT(m,l), m')
-		val mmlist = pair::mmlist
-		val temp = pair::(case LabelMap.find(mlmap,l) of
-				      NONE => []
-				    | SOME mms => mms)
-		val mlmap = LabelMap.insert(mlmap,l,temp)
-	    in  (cclist,mmlist,clmap,cvmap,mlmap,mvmap)
-	    end
-	  | modproj_addmap _ = error "modproj_addmap not given a MOD_PROJECT"
+	val empty_mapping = (Name.PathMap.empty, Name.PathMap.empty)
+	fun path2vpath (SIMPLE_PATH v) = (v,[])
+	  | path2vpath (COMPOUND_PATH vlabs) = vlabs
+	fun con_addmap((cmap,mmap),path,c) = (Name.PathMap.insert(cmap,path2vpath path,c), mmap)
+	fun mod_addmap((cmap,mmap),path,m) = (cmap, Name.PathMap.insert(mmap,path2vpath path,m))
 	val kind_substconmod = kind_substconmod
 	val con_substconmod = con_substconmod
 	val sig_substconmod = sig_substconmod
@@ -717,7 +668,7 @@ val _ = print "DONE FINDING LABELS\n"
 		      | folder (SDEC(l,DEC_EXCEPTION _),_) = error "got DEC_EXCEPTION"
 		      | folder (SDEC(l,DEC_CON(v,k,copt)),m) = 
 		          let val p = join_path_labels(path,[l])
-			      val m' = conproj_addmap(path2con p,CON_VAR v,m)
+			      val m' = con_addmap(m,p,CON_VAR v)
 			  in  (SDEC(l,DEC_CON(v,kind_substconmod(k,m),
 					      (case copt of
 						   NONE => NONE
@@ -726,7 +677,7 @@ val _ = print "DONE FINDING LABELS\n"
 		      | folder (SDEC(l,DEC_MOD(v,s)),m) = 
 		          let val p = join_path_labels(path,[l])
 			      val s = traverse (p,m) s
-			      val m' = modproj_addmap(path2mod p,MOD_VAR v,m)
+			      val m' = mod_addmap(m,p,MOD_VAR v)
 			  in  (SDEC(l,DEC_MOD(v,s)),m')
 			  end
 		    val (sdecs,m) = foldl_acc folder mapping sdecs
@@ -811,10 +762,11 @@ val _ = print "DONE FINDING LABELS\n"
 			let val v' = derived_var v
 			    val k' = kind_substconmod(k,mapping)
 			    val copt' = Util.mapopt (fn c => con_substconmod(c,mapping)) copt
-			    val c' = path2con(labels2path_actual(rev(l::p)))
-			    val mapping = convar_addmap(v,CON_VAR v',mapping)
+			    val p' = labels2path_actual(rev(l::p))
+			    val c' = path2con p'
+			    val mapping = con_addmap(mapping,SIMPLE_PATH v,CON_VAR v')
 			    val mapping = (case p of
-					       [] => conproj_addmap(c',CON_VAR v',mapping)
+					       [] => con_addmap(mapping,p',CON_VAR v')
 					     | _ => mapping)
 			in  SOME(mapping,
 				 SBND(l,BND_CON(v',c')),
@@ -834,11 +786,11 @@ val _ = print "DONE FINDING LABELS\n"
 		  | SDEC(l,DEC_MOD(v,s)) => 
 			(case dosig(l::p, mapping, s) of
 			     SOME(_,m,s) => let val v' = derived_var v
-					      val mapping = modvar_addmap(v, MOD_VAR v', mapping)
-					      val m' = path2mod(labels2path_actual[l])
+					      val mapping = mod_addmap(mapping, SIMPLE_PATH v, MOD_VAR v')
+					      val p' = labels2path_actual[l]
 					      val mapping = 
 						  (case p of
-						       [] => modproj_addmap(m',MOD_VAR v',mapping)
+						       [] => mod_addmap(mapping,p',MOD_VAR v')
 						     | _ => mapping)
 					  in  SOME(mapping,
 						   SBND(l,BND_MOD(v',m)), 
@@ -955,7 +907,7 @@ val _ = print "DONE FINDING LABELS\n"
 		   ((CON_MODULE_PROJECT(MOD_VAR var_poly, l), c)::csubst)
 		 | folder (_,csubst) = csubst
 	       val csubst = foldl folder [] sbnds_poly
-	       fun chandle c = assoc_eq(eq_conproj,c,csubst)
+	       fun chandle c = assoc_eq(eq_cpath,c,csubst)
 	       fun ehandle _ = NONE : exp option
 	       fun mhandle _ = NONE : mod option
 	       fun sdechandle _ = NONE : sdec option
@@ -1191,7 +1143,7 @@ val _ = print "DONE FINDING LABELS\n"
 					   spec_con = c,
 					   actual_sig = s}
 				      val _ = if coerced' 
-						  then (print "coerced because of polyval\n";
+						  then (msg "coerced because of polyval\n";
 							coerced := true)
 					      else ()
 				  in  result
@@ -1413,10 +1365,12 @@ val _ = print "DONE FINDING LABELS\n"
 		      print (Int.toString actual_str_length); print "\n";
 		      print "target_str_length = "; 
 		      print (Int.toString target_str_length); print "\n";
-		      print "actual_sdecs: "; 
-		      app (fn SDEC(l,_) => (pp_label l; print "  ")) asd; print "\n";
-		      print "target_sdecs: "; 
-		      app (fn SDEC(l,_) => (pp_label l; print "  ")) tsd; print "\n")
+		      if (!debug)
+			then (print "actual_sdecs: "; 
+			      app (fn SDEC(l,_) => (pp_label l; print "  ")) asd; print "\n";
+			      print "target_sdecs: "; 
+			      app (fn SDEC(l,_) => (pp_label l; print "  ")) tsd; print "\n")
+		      else ())
 		else ()
 
 

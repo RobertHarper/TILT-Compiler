@@ -1,9 +1,6 @@
-(*$import Il ILSTATIC ILUTIL PPIL ILCONTEXT EQUAL Stats *)
+(*$import Il IlStatic IlUtil Ppil IlContext EQUAL Stats *)
 (* Equality compiler *)
-functor Equal(structure IlStatic : ILSTATIC
-	      structure IlUtil : ILUTIL
-	      structure IlContext : ILCONTEXT 
-	      structure Ppil : PPIL)
+structure Equal
     :> EQUAL =
 struct
 
@@ -146,7 +143,7 @@ struct
 			    else (elab_error "Prelude vector_eq is bad")
 		in  beta_reduce(e,self c) 
 		end
-	  | CON_REF c => ETAPRIM(eq_ref,[c])
+	  | CON_REF c => ETAILPRIM(eq_ref,[c])
 	  | CON_MODULE_PROJECT(m,l) => 
 		let val e = MODULE_PROJECT(m,to_eq_lab l)
 		in (GetExpCon(ctxt,e) 

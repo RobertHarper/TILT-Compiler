@@ -1,7 +1,7 @@
-(*$import ERROR ILUTIL Il *)
+(*$import ERROR IlUtil Il *)
 (* Stateful module holding the error state of the elaboration process *)
 
-functor Error(structure IlUtil : ILUTIL)
+structure Error
    :> ERROR =
 struct
 

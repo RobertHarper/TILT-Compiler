@@ -1,6 +1,5 @@
-(*$import IL ILCONTEXT Util Listops Name PPIL Stats *)
-functor IlContext(structure Ppil : PPIL)
-    :> ILCONTEXT =
+(*$import ILCONTEXT Util Listops Name Ppil Stats *)
+structure IlContext :> ILCONTEXT =
 struct
 
     structure Il = Il

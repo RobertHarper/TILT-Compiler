@@ -1,4 +1,4 @@
-(*$import Il ILSTATIC ILUTIL PPIL ILCONTEXT PAT AstHelp INFIXPARSE DATATYPE EQUAL ERROR SIGNATURE TOIL Stats *)
+(*$import Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat InfixParse Datatype Equal Error Signature TOIL *)
 
 (* todo : LetExp and CaseExp: valuability coputation too conservative
           optimize coercion functors to recognize when it is entirely unndeeded 
@@ -6,16 +6,7 @@
 *)
 
 (* The translation from EL to IL *)
-functor Toil(structure IlStatic : ILSTATIC
-	     structure IlUtil : ILUTIL
-	     structure Ppil : PPIL
-	     structure IlContext : ILCONTEXT
-	     structure Pat : PAT
-	     structure InfixParse : INFIXPARSE
-	     structure Datatype : DATATYPE
-	     structure Equal : EQUAL
-	     structure Error : ERROR
-	     structure Signature : SIGNATURE)
+structure Toil
    :> TOIL =
   struct
 
@@ -678,16 +669,16 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		      val value_arg = fresh_named_var "delay_value"
 		      val thunk_c = CON_ARROW([con_unit],c,false,oneshot_init PARTIAL)
 		      val dummy_fun = #1(make_thunk(c, RAISE(c,bindexn_exp)))
-		      val bnd = BND_EXP(ref_arg,PRIM(mk_ref,[thunk_c], [dummy_fun]))
-		      val thunk_e = #1(make_thunk(c, APP(PRIM(deref,[thunk_c],[VAR ref_arg]),
+		      val bnd = BND_EXP(ref_arg,ILPRIM(mk_ref,[thunk_c], [dummy_fun]))
+		      val thunk_e = #1(make_thunk(c, APP(ILPRIM(deref,[thunk_c],[VAR ref_arg]),
 							 unit_exp)))
 		      val wrapped_exp = APP(wrapper_exp,thunk_e)
 		      val final_c = CON_APP(sc, c)
-		      val inner_body = #1(make_seq[(PRIM(setref,[thunk_c],
+		      val inner_body = #1(make_seq[(ILPRIM(setref,[thunk_c],
 						    [VAR ref_arg,
 						     #1(make_thunk(c, VAR value_arg))]), con_unit),
 						   (VAR value_arg, c)])
-		      val assign_exp = PRIM(setref,[thunk_c],
+		      val assign_exp = ILPRIM(setref,[thunk_c],
 					    [VAR ref_arg,
 					     #1(make_thunk(c, LET([BND_EXP(value_arg,e)], inner_body)))])
 		      val body = #1(make_seq[(assign_exp, con_unit),(wrapped_exp,final_c)])

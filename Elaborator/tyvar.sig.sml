@@ -5,19 +5,27 @@ signature TYVAR =
 
     val debug : bool ref (* the usual debug flag *)
 
-    type ('ctxt,'1con) tyvar           (* type meta-variable used for type inference *)
     type stamp
+
+    (* type meta-variable used for type inference *)
+    type ('ctxt,'1con) tyvar_info     
+    datatype ('ctxt,'1con) tyvar = TYVAR of ('ctxt,'1con) tyvar_info
+
 
     (* bool represents hardness *)
     datatype 'a status = FAIL | MAYBE | MATCH of 'a
     type ('ctxt,'1con,'a) constraint = ('ctxt,'1con) tyvar * bool -> 'a status
     type ('ctxt,'1con,'a) uocon   (* uninstantiated overloaded type with constraints *)
-    type ('ctxt,'1con) ocon         (* uninstantiated overloaded type with constraints *)
+    (* uninstantiated overloaded type with constraints *)
+    type ('ctxt,'1con) ocon_info
+    datatype ('ctxt,'1con) ocon = OCON of ('ctxt,'1con) ocon_info
 
     val get_stamp           : unit   -> stamp
     val fresh_tyvar         : 'ctxt  -> ('ctxt,'1con) tyvar (* create a new initially unset tyvar *)
     val fresh_named_tyvar   : 'ctxt * string -> ('ctxt,'1con) tyvar (* create a new initially unset tyvar *)
     val fresh_stamped_tyvar : 'ctxt * string * stamp -> ('ctxt,'1con) tyvar
+    val tyvar_copy          : ('ctxt,'1con) tyvar -> ('ctxt,'1con) tyvar
+    val tyvar_update        : ('ctxt,'1con) tyvar * ('ctxt,'1con) tyvar -> unit
     val tyvar_after         : stamp -> ('ctxt,'1con) tyvar -> bool (* true if tycar created after stamp *)
     val tyvar_stamp         : ('ctxt,'1con) tyvar -> stamp
     val stamp2int           : stamp -> int

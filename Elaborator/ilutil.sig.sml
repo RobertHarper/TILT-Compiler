@@ -35,6 +35,9 @@ signature ILUTIL =
     val exp2path : exp -> Il.path option
     val con2path : con -> Il.path option
     val eq_path  : Il.path * Il.path -> bool
+    val eq_mpath : mod * mod -> bool
+    val eq_cpath : con * con -> bool
+    val eq_epath : exp * exp -> bool
 
     (* error functions *)
     val error_exp : string -> Il.exp -> string -> 'a
@@ -259,8 +262,7 @@ signature ILUTIL =
        and substitute in the corresponding value give by the bnd list *)
     val subst_var : Il.bnd * (Il.bnd list) -> Il.bnd
 
-    val eq_modval : mod * mod -> bool
-    val eq_mod : mod * mod -> bool
+
     val rename_confun : (Il.var -> bool) * (var list) * con -> con
 
   end;

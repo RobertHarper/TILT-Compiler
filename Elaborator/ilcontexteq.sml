@@ -243,7 +243,11 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		   | not_uint is => (blastOutChoice os 2; blastOutIS os is)
 		   | and_uint is => (blastOutChoice os 3; blastOutIS os is)
 		   | or_uint is => (blastOutChoice os 4; blastOutIS os is)
-		   | lshift_uint is => (blastOutChoice os 5; blastOutIS os is))
+		   | lshift_uint is => (blastOutChoice os 5; blastOutIS os is)
+		   | mk_ref => (blastOutChoice os 6)
+		   | deref => (blastOutChoice os 7)
+		   | eq_ref => (blastOutChoice os 8)
+		   | setref => (blastOutChoice os 9))
 	    end
 
 	and blastInIlPrim is = 
@@ -255,6 +259,10 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		   | 3 => and_uint(blastInIS is)
 		   | 4 => or_uint(blastInIS is)
 		   | 5 => lshift_uint(blastInIS is)
+		   | 6 => mk_ref
+		   | 7 => deref
+		   | 8 => eq_ref
+		   | 9 => setref
 		   | _ => error "bad blastInIlPrim")
 	    end
 
@@ -312,8 +320,6 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		   | hard_vtrap tt => (blastOutChoice os 2; blastOutTT os tt)
 		   | hard_ztrap tt => (blastOutChoice os 3; blastOutTT os tt)
 			 
-		   | mk_ref => (blastOutChoice os 4)
-		   | deref => (blastOutChoice os 5)
 
 		       (* conversions amongst floats, ints, uints with w32 and f64 *)
 		   | float2int (* floor *) => (blastOutChoice os 6)
@@ -323,9 +329,6 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		   | uinta2uinta (is1,is2) => (blastOutChoice os 10; blastOutIS os is1; blastOutIS os is2)
 		   | uintv2uintv (is1,is2) => (blastOutChoice os 11; blastOutIS os is1; blastOutIS os is2)
 
-		   (* ref operation *)
-		   | eq_ref => (blastOutChoice os 12)
-		   | setref => (blastOutChoice os 13)
 
 		   (* floatint-point operations *)	
 		   | neg_float fs  => (blastOutChoice os 14; blastOutFS os fs)
@@ -405,8 +408,6 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		   | 2 => hard_vtrap(blastInTT is)
 		   | 3 => hard_ztrap(blastInTT is)
 			 
-		   | 4 => mk_ref
-		   | 5 => deref
 
 		       (* conversions amongst floats, ints, uints with w32 and f64 *)
 		   | 6 => float2int (* floor *)
@@ -416,9 +417,6 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		   | 10 => uinta2uinta(blastInIS is, blastInIS is)
 		   | 11 => uintv2uintv(blastInIS is, blastInIS is)
 
-		   (* ref operation *)
-		   | 12 => eq_ref
-		   | 13 => setref
 
 		   (* floatint-point operations *)	
 		   | 14 => neg_float(blastInFS is)

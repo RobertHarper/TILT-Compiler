@@ -1,92 +1,34 @@
-(*$import LINKIL Prim Il Ppprim Ppil IlUtil PrimUtil IlContext IlStatic Toil Pat Datatype Signature Basis Tyvar IlPrimUtilParam IlContextEq Error Equal InfixParse Formatter LinkParse Specific *)
+(*$import LINKIL Prim Il Ppprim Ppil IlUtil PrimUtil IlContext IlStatic Toil Pat Datatype Signature Basis Tyvar IlPrimUtilParam IlContextEq Error Equal InfixParse Formatter LinkParse Specific TVClose *)
 
 structure LinkIl :> LINKIL  = 
     struct
-	structure Ppprim = Ppprim()
-	structure Ppil = Ppil(structure Ppprim = Ppprim)
-	structure IlContext = IlContext(structure Ppil = Ppil)
 
-	structure IlPrimUtilParam = IlPrimUtilParam()
-	structure IlPrimUtil = PrimUtil(structure Ppprim = Ppprim
-					structure PrimUtilParam = IlPrimUtilParam)
-	structure IlUtil = IlUtil(structure Ppil = Ppil
-				  structure IlContext = IlContext
-				  structure PrimUtil = IlPrimUtil)
-
-	structure IlStatic = IlStatic(structure IlContext = IlContext
-				      structure PrimUtil = IlPrimUtil
-				      structure Ppil = Ppil
-				      structure IlUtil = IlUtil)
-
-	structure Error = Error(structure IlUtil = IlUtil)
-
-        structure Datatype = Datatype(structure IlStatic = IlStatic
-				      structure IlUtil = IlUtil
-				      structure Ppil = Ppil
-				      structure IlContext = IlContext)
-
-	structure Signature = Signature(structure IlStatic = IlStatic
-					structure IlUtil = IlUtil
-					structure Ppil = Ppil
-					structure IlContext = IlContext
-					structure Error = Error)
-
-	structure Equal = Equal(structure IlStatic = IlStatic
-				structure IlUtil = IlUtil
-				structure IlContext = IlContext
-				structure Ppil = Ppil)
-	    
-	structure InfixParse = InfixParse(structure Ppil = Ppil)
-
-	structure Pat = Pat(structure IlStatic = IlStatic
-			    structure IlUtil = IlUtil
-			    structure Ppil = Ppil
-			    structure Datatype = Datatype
-			    structure IlContext = IlContext
-			    structure Error = Error)
+	structure Ppprim = Ppprim
+	structure Ppil = Ppil
+	structure IlContext = IlContext
+	structure IlPrimUtilParam = IlPrimUtilParam
+	structure IlUtil = IlUtil
+	structure IlStatic = IlStatic
+	structure Error = Error
+        structure Datatype = Datatype
+	structure Signature = Signature
+	structure Equal = Equal
+	structure InfixParse = InfixParse
+	structure Pat = Pat
+	structure Toil = Toil
+	structure Basis = Basis
 
 
-	structure Toil = Toil(structure IlStatic = IlStatic
-			      structure IlUtil = IlUtil
-			      structure Ppil = Ppil
-			      structure IlContext = IlContext
-			      structure Pat = Pat
-			      structure InfixParse = InfixParse
-			      structure Datatype = Datatype
-			      structure Equal = Equal
-			      structure Error = Error
-			      structure Signature = Signature)
-
-	structure Basis = Basis(structure IlContext = IlContext
-				structure IlStatic = IlStatic
-				structure Ppil = Ppil
-				structure IlUtil = IlUtil
-				structure Datatype = Datatype      
-				structure Toil = Toil)
-(*
-	structure IlEval = IlEval(structure IlContext = IlContext
-				  structure PrimUtil = IlPrimUtil
-				  structure IlStatic = IlStatic
-				  structure IlUtil = IlUtil
-				  structure Ppil = Ppil);
-*)	    
-	open Il IlUtil Ppil IlStatic Formatter
-	    
-        type module = (Il.context * (Il.sbnd option * Il.context_entry) list)
 (*
 	val _ = Compiler.Control.Print.printDepth := 15;
 	val _ = Pagewidth := 80;
 	fun setdepth d = Compiler.Control.Print.printDepth := d
 *)
+
+	open Il IlUtil Ppil IlStatic Formatter
 	val error = fn s => Util.error "linkil.sml" s
 
-
-(*
-	fun parse s = 
-	    let val (is,dec) = LinkParse.parse_one s
-	    in (Source.filepos is, LinkParse.named_form_dec(LinkParse.tvscope_dec dec))
-	    end
-*)	    
+        type module = (Il.context * (Il.sbnd option * Il.context_entry) list)
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 
 	fun SelfifySdec ctxt (SDEC(l,dec)) = SDEC(l,SelfifyDec ctxt dec)
@@ -234,22 +176,11 @@ structure LinkIl :> LINKIL  =
 		      | loop acc (_::rest) = loop acc rest
 		in  loop [] sbnd_entries
 		end
- 	    val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()  
 
-(*
-	    val ctxt_inline = Basis.empty_context
-	    val ctxt_noninline = Basis.empty_context
-*)
-(*
-	    val ctxt_inline = IlContext.add_context_inline(Basis.empty_context,
-			Name.symbol_label(Symbol.tycSymbol "float"),
-			Name.fresh_named_var "float",
-			Il.INLINE_CONKIND(Il.CON_FLOAT Il.Prim.F64, 
-					Il.KIND_TUPLE 1))
-	    val ctxt_noninline = ctxt_inline
-*)
        	    fun reparse filename : module = 
-		(case elaborate(ctxt_inline,filename) of 
+	    let val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()  
+			     
+	    in  (case elaborate(ctxt_inline,filename) of 
 		       NONE => error "prelude failed to elaborate"
 		     | SOME (sbnds_entries : (sbnd option * context_entry) list) =>
 		     let 
@@ -258,7 +189,6 @@ structure LinkIl :> LINKIL  =
 			 (* compute prelude_module *)
 			 val m = (ctxt_noninline,sbnds_entries)
 			 val _ = prelude_module := SOME m
-
 
 			 (* compute inlineprelude_quad *)
 			 val entries = map #2 sbnds_entries
@@ -273,6 +203,7 @@ structure LinkIl :> LINKIL  =
 			 val _ = inlineprelude_quad := SOME (ctxt_inline,sbnd_entry_filt,ctxt_noninline)
 		     in  m
 		     end)
+	    end
 	in  
 	    fun compile_prelude (use_cache,filename) =
 		(case (!prelude_module, use_cache) of
@@ -474,10 +405,15 @@ structure LinkIl :> LINKIL  =
 	    open Ast
 	    fun seqDec [d] = d
 	      | seqDec decs = SeqDec decs
-	    fun valspec2dec (sym,ty) = ValDec([Vb{pat = ConstraintPat{pattern = VarPat [sym], 
-								      constraint = ty},
-						  exp = VarExp [sym]}],
-					      ref [])
+	    fun valspec2dec (sym,ty) = 
+		let val pat = ConstraintPat{pattern = VarPat [sym], 
+					    constraint = ty}
+		    val dec = ValDec([Vb{pat = pat,
+						exp = VarExp [sym]}],
+					    ref [])
+		    val _ = TVClose.closeDec dec
+		in  dec
+		end
 	    fun strspec2dec coerce (sym,SOME sigexp,path_opt) = 
 		let val copysym = Symbol.strSymbol("copy_" ^ (Symbol.name sym))
 		in  if coerce

@@ -35,9 +35,6 @@ structure Prim :> PRIM =
       | hard_vtrap of traptype
       | hard_ztrap of traptype
 
-      (* ref ops *)
-      | mk_ref
-      | deref
 
       (* conversions amongst floats, ints, uints with w32 and f64 *)
       | float2int (* floor *)
@@ -49,9 +46,6 @@ structure Prim :> PRIM =
       | uinta2uinta of intsize * intsize
       | uintv2uintv of intsize * intsize
 
-      (* ref operation *)
-      | eq_ref
-      | setref
 
       (* floatint-point operations *)	
       | neg_float of floatsize
@@ -134,5 +128,10 @@ structure Prim :> PRIM =
       | or_uint of intsize
       | xor_uint of intsize
       | lshift_uint of intsize
+
+      | mk_ref
+      | deref
+      | eq_ref
+      | setref
 
   end

@@ -1,11 +1,9 @@
-(*$import IL PPIL ILCONTEXT PRIMUTIL ILUTIL ListMergeSort Stats *)
+(*$import IL Ppil IlContext PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats *)
 (* Il Utility *)
-functor IlUtil(structure Ppil : PPIL
-	       structure IlContext : ILCONTEXT
-	       structure PrimUtil : PRIMUTIL
-	       where type con = Il.con
-	       where type exp = Il.exp)
+structure IlPrimUtil :> PRIMUTIL where type con = Il.con
+                                 where type exp = Il.exp = PrimUtil(structure PrimUtilParam = IlPrimUtilParam)
 
+structure IlUtil
   :> ILUTIL =
   struct
 
@@ -168,8 +166,8 @@ functor IlUtil(structure Ppil : PPIL
 			   primer(prim,cargs,eargs)))
 	end
 
-    val prim_etaexpand = etaexpand_help (PRIM,PrimUtil.get_type')
-    val ilprim_etaexpand = etaexpand_help (ILPRIM,PrimUtil.get_iltype')
+    val prim_etaexpand = etaexpand_help (PRIM,IlPrimUtil.get_type')
+    val ilprim_etaexpand = etaexpand_help (ILPRIM,IlPrimUtil.get_iltype')
 
 
     fun con_deref (CON_TYVAR tyvar) = (case (tyvar_deref tyvar) of
@@ -219,6 +217,19 @@ functor IlUtil(structure Ppil : PPIL
       | eq_path(COMPOUND_PATH (v1,l1), COMPOUND_PATH(v2,l2)) = 
 	eq_var(v1,v2) andalso eq_list(eq_label,l1,l2)
       | eq_path _ = false
+
+    fun eq_mpath (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
+      | eq_mpath (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
+      | eq_mpath _ = false
+    fun eq_epath (VAR v, VAR v') = eq_var (v,v')
+      | eq_epath (MODULE_PROJECT (m,l), MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
+      | eq_epath _ = false
+	
+    fun eq_cpath (CON_VAR v, CON_VAR v') = eq_var (v,v')
+      | eq_cpath (CON_MODULE_PROJECT (m,l), 
+		  CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
+      | eq_cpath _ = false
+
 
       (* -------------------------------------------------------- *)
       (* ------------ Context manipulation functions ------------ *)
@@ -1342,16 +1353,16 @@ functor IlUtil(structure Ppil : PPIL
 	     (ETAPRIM(p,cs),RECORD rbnds) => PRIM(p,cs,map #2 rbnds)
 	   | (ETAILPRIM(ip,cs),RECORD rbnds) => ILPRIM(ip,cs,map #2 rbnds)
 	   | (x as ETAPRIM(p,cs),y) =>
-		     (case (PrimUtil.get_type' p cs) of
+		     (case (IlPrimUtil.get_type' p cs) of
 			  CON_ARROW([_],_,_,_) => PRIM(p,cs,[y])
 			| _ => def)
 	   | (x as ETAILPRIM(ip,cs),y) =>
-		     (case (PrimUtil.get_iltype' ip cs) of
+		     (case (IlPrimUtil.get_iltype' ip cs) of
 			 CON_ARROW([_],_,_,_) => ILPRIM(ip,cs,[y])
 			| _ => def)
-	   | (FIX (false,TOTAL,[FBND(name,arg,argtype,bodytype,body)]), VAR argvar) => 
+	   | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), VAR argvar) => 
 			  exp_subst_expvar(body,[(arg,VAR argvar)])
-	   | (FIX (false,TOTAL,[FBND(name,arg,argtype,bodytype,body)]), y) => 
+	   | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), y) => 
 			  LET([BND_EXP(arg,y)],body)
 	   | _ => def)
 	end

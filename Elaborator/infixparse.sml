@@ -1,5 +1,5 @@
-(*$import INFIXPARSE Il PPIL AstHelp ListMergeSort Stats *)
-functor InfixParse(structure Ppil : PPIL)
+(*$import INFIXPARSE Il Ppil AstHelp ListMergeSort Stats *)
+structure InfixParse
   :> INFIXPARSE =
   struct
 

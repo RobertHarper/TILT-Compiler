@@ -1,7 +1,6 @@
 (*$import PPPRIM PRIM Util Formatter Prim Stats *)
 (* Primitives pretty-printer. *)
-functor Ppprim()
-	:> PPPRIM =
+structure Ppprim :> PPPRIM =
   struct
 
     open Prim Formatter Util
@@ -32,7 +31,11 @@ functor Ppprim()
 	  | and_uint is => Hbox[String "AND_UINT", pp_is is]
 	  | or_uint is => Hbox[String "OR_UINT", pp_is is]
 	  | xor_uint is => Hbox[String "XOR_UINT", pp_is is]
-	  | lshift_uint is => Hbox[String "LSHIFT_UINT", pp_is is])
+	  | lshift_uint is => Hbox[String "LSHIFT_UINT", pp_is is]
+          | mk_ref  => String "MK_REF"
+          | deref  => String "DEREF"
+	  | eq_ref => String "EQ_REF"
+	  | setref => String "SETREF")
 
     fun pp_prim prim = 
 	  (case prim of
@@ -43,8 +46,7 @@ functor Ppprim()
 	   | hard_ztrap tt => String "HARD_ZTRAP"
 
 (*	   | NOT => String "NOT" *)
-	   | mk_ref  => String "MK_REF"
-	   | deref  => String "DEREF"
+
 (*
 	   | SIZE => String "SIZE"
 	   | CHR => String "CHR"
@@ -99,8 +101,7 @@ functor Ppprim()
 	  | EQ_BOOL => String "EQ_BOOL"
 	  | XOR => String "XOR"
 *)
-	  | eq_ref => String "EQ_REF"
-	  | setref => String "SETREF"
+
 (*
 	  | STRING_CONCAT => String "STRING_CONCAT"
 *)

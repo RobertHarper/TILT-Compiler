@@ -1,5 +1,5 @@
 (*$import IL PRIMUTILPARAM Il *)
-functor IlPrimUtilParam()
+structure IlPrimUtilParam
     :> PRIMUTILPARAM where type con = Il.con 
                      where type exp = Il.exp
     =

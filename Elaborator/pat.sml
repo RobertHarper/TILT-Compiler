@@ -1,19 +1,14 @@
-(*$import Il ILSTATIC PPIL ILUTIL AstHelp DATATYPE ILCONTEXT ERROR PAT Stats *)
+(*$import Il IlStatic Ppil IlUtil IlContext Datatype Error PAT AstHelp Stats *)
 
 (* xxx should coalesce constants *)
 
-functor Pat(structure IlStatic : ILSTATIC
-	    structure IlUtil : ILUTIL
-	    structure Ppil : PPIL
-	    structure Datatype : DATATYPE
-	    structure IlContext : ILCONTEXT
-	    structure Error : ERROR)
+structure Pat
    :> PAT =
   struct
 
-    val do_result_type = Stats.bool("PatResultType")
-    val _ = do_result_type :=  true
-    
+    val do_result_type = Stats.tt("PatResultType")
+    val debug = Stats.ff("Pattern_debug")
+
     type polyinst = Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list 
     type typecompile = Il.context * Ast.ty -> Il.con
     type expcompile = Il.context * Ast.exp -> Il.exp * Il.con * bool
@@ -42,8 +37,6 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 			end
 			
     val error = fn s => error "pat.sml" s
-    val debug = Stats.bool("Pattern_debug")
-    val _ = debug := false
     fun printint i = print (Int.toString i)
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun nada() = ()
@@ -319,7 +312,7 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 		else (error_region();
 		      print "ref pattern used on a non-ref argument\n")
 	val v = fresh_var()
-	val bnd' = BND_EXP(v,PRIM(deref,[elemcon],[VAR var]))
+	val bnd' = BND_EXP(v,ILPRIM(deref,[elemcon],[VAR var]))
 	val newargs = (CASE_VAR(v,elemcon))::args
 	val context = add_context_dec(context,DEC_EXP(v,elemcon))
 	val newarms = map (fn (p,(c,b,eopt)) => (p::c,b,eopt)) acc

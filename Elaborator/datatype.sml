@@ -1,10 +1,7 @@
-(*$import IL ILSTATIC ILUTIL ILCONTEXT Name PPIL Ast GraphUtil ListMergeSort AstHelp DATATYPE Stats *)
+(*$import Il IlStatic IlUtil IlContext Ppil Name Ast GraphUtil ListMergeSort AstHelp DATATYPE Stats *)
 
 (* Datatype compiler and destructures of datatype signatures. *)
-functor Datatype(structure IlStatic : ILSTATIC
-		 structure IlUtil : ILUTIL
-		 structure Ppil : PPIL
-		 structure IlContext : ILCONTEXT)
+structure Datatype
     :> DATATYPE =
   struct
 

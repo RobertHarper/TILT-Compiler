@@ -35,10 +35,6 @@ signature PRIM =
       | hard_vtrap of traptype
       | hard_ztrap of traptype
 
-      (* ref ops *)
-      | mk_ref
-      | deref
-
       (* conversions amongst floats, ints, uints with w32 and f64 *)
       | float2int (* floor *)
       | int2float (* real  *) 
@@ -48,10 +44,6 @@ signature PRIM =
       | uint2uint of intsize * intsize
       | uinta2uinta of intsize * intsize
       | uintv2uintv of intsize * intsize
-
-      (* ref operation *)
-      | eq_ref
-      | setref
 
       (* floatint-point operations *)	
       | neg_float of floatsize
@@ -135,5 +127,10 @@ signature PRIM =
       | xor_uint of intsize
       | lshift_uint of intsize
 
+      (* translated to arrays *)
+      | mk_ref
+      | deref
+      | eq_ref
+      | setref
 
   end

@@ -1,18 +1,11 @@
-(*$import Il ILCONTEXT PRIMUTIL PPIL ILUTIL Util Listops ILSTATIC Stats *)
+(*$import Il IlContext PrimUtil Ppil IlUtil Util Listops ILSTATIC Stats Option *)
 (* Static semantics *)
-functor IlStatic(structure IlContext : ILCONTEXT
-		 structure PrimUtil : PRIMUTIL
-		     where type con = Il.con
-		     where type exp = Il.exp
-		 structure Ppil : PPIL
-		 structure IlUtil : ILUTIL)
+structure IlStatic
   :> ILSTATIC =
   struct
 
 
     open Util Listops
-
-    structure PrimUtil = PrimUtil
     open Il Ppil IlUtil 
     open IlContext 
     open Prim Tyvar Name
@@ -98,21 +91,9 @@ fun show_state ({modunself,...}:state) =
        val add_conpath = meta_add add_conpath
        val add_modpath = meta_add add_modpath
 
-       fun eq_modproj (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
-	 | eq_modproj (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
-	 | eq_modproj _ = false
-       fun eq_expproj (VAR v, VAR v') = eq_var (v,v')
-	 | eq_expproj (MODULE_PROJECT (m,l), MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
-	 | eq_expproj _ = false
-
-       fun eq_conproj (CON_VAR v, CON_VAR v') = eq_var (v,v')
-	 | eq_conproj (CON_MODULE_PROJECT (m,l), 
-		       CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
-	 | eq_conproj _ = false
-
-       fun ehandler ({expunself,...} : state) (m,l) = assoc_eq(eq_expproj, MODULE_PROJECT(m,l), expunself)
+       fun ehandler ({expunself,...} : state) (m,l) = assoc_eq(eq_epath, MODULE_PROJECT(m,l), expunself)
        fun chandler ({conunself,...} : state) (m,l) = 
-	   let val res = assoc_eq(eq_conproj, CON_MODULE_PROJECT(m,l), conunself)
+	   let val res = assoc_eq(eq_cpath, CON_MODULE_PROJECT(m,l), conunself)
 (*
 	       val _ = (print "(un)-selfify chandler called with\n";
 			pp_con (CON_MODULE_PROJECT(m,l));
@@ -125,7 +106,7 @@ fun show_state ({modunself,...}:state) =
 *)
 	   in  res
 	   end
-       fun mhandler ({modunself,...} : state) (m,l) = assoc_eq(eq_modproj,MOD_PROJECT(m,l), modunself)
+       fun mhandler ({modunself,...} : state) (m,l) = assoc_eq(eq_mpath,MOD_PROJECT(m,l), modunself)
 
 
        fun selfify_exp(selfify,state as {expself,conself,modself,...}:state,e) = 
@@ -172,7 +153,7 @@ fun show_state ({modunself,...}:state) =
 				      val copt' = 
 					  (if (not selfify andalso 
 					       case (c',popt) of
-						   (CON_MODULE_PROJECT _, SOME p) => eq_conproj(c', path2con p)
+						   (CON_MODULE_PROJECT _, SOME p) => eq_cpath(c', path2con p)
 (*
 						       (print "l = "; pp_label l; print "\n";
 							print "l' = "; pp_label l'; print "\n";
@@ -450,10 +431,10 @@ fun show_state ({modunself,...}:state) =
 	     is called with the type variable and the given type.
 	     The unifier may be side-effecting or not.
     -------------------------------------------------------------- *)
-   fun unify_maker is_hard (fetch : (context,con) tyvar -> con option) 
+   fun unify_maker (fetch : (context,con) tyvar -> con option) 
        set (constrained,tyvar,c,decs,is_sub) = 
      let 
-       val self = unify_maker is_hard fetch set 
+       val self = unify_maker fetch set 
      in (case (fetch tyvar) of
 	   NONE => let val tyvar_ctxts = tyvar_getctxts tyvar
 		   in (case c of
@@ -461,45 +442,43 @@ fun show_state ({modunself,...}:state) =
 			       eq_tyvar(tv,tyvar) orelse 
 			       (case (fetch tv) of
 				    SOME c' => self(constrained,tyvar,c',decs,is_sub)
-				  | NONE => (set(constrained,tyvar,c); true))
+				  | NONE => (set(decs,constrained,tyvar,c); true))
 			 | _ => 
 			       (
-(*
-				print "unifying tyvar with non-tyvar "; pp_con c;
-				print "\ntyvar has "; print (Int.toString (length tyvar_ctxts));
-				print " contexts and they are:\n";
-				app (fn ctxt => pp_context ctxt) tyvar_ctxts;
-				print "\n\n";
-*)
 			       not (con_occurs(c,tyvar))
 			       andalso (map (fn ctxt => GetConKind(c,ctxt)) tyvar_ctxts; true
 					handle _ => false)
-			       andalso (set(constrained,tyvar,c); true)))
+			       andalso (set(decs,constrained,tyvar,c); true)))
 		   end
-	 | (SOME c') => meta_eq_con (is_hard,self) constrained (c',c,decs,is_sub))
+	 | (SOME c') => meta_eq_con self constrained (c',c,decs,is_sub))
      end
 
-   and local_con_constrain(ctxt,c,param as {constrain,stamp,...},ctxts) : con = 
-       let
-	   val _ = debugdo (fn () => (print "local_con_constrain called on c = ";
-				      pp_con c; print "\n"))
-	   val param' = {constrain = constrain,
-			 stamp = stamp,
-			 eq_constrain = false}
-	   fun help (CON_REF c) = (con_constrain(c,help,param',ctxts);
-				   SOME(CON_REF c))
-	     | help (CON_ARRAY c) = (con_constrain(c,help,param',ctxts);
-				     SOME(CON_ARRAY c))
-	     | help _ = NONE
-	   val c' = Normalize(c,ctxt) 
-	   val _ = con_constrain(c',help,param,ctxts)
-       in c'
-       end
 
-   and hard_unifier (arg as (_,_,_,ctxt,_)) =
+
+   (* XXXX we are not able to undo the effects of the con_constrain *)
+     and local_con_constrain(ctxt,c,param as {constrain,stamp,...},ctxts) : con = 
+	   let
+	       val _ = debugdo (fn () => (print "local_con_constrain called on c = ";
+					  pp_con c; print "\n"))
+	       val param' = {constrain = constrain,
+			     stamp = stamp,
+			     eq_constrain = false}
+	       fun help (CON_REF c) = (con_constrain(c,help,param',ctxts);
+				       SOME(CON_REF c))
+		 | help (CON_ARRAY c) = (con_constrain(c,help,param',ctxts);
+					 SOME(CON_ARRAY c))
+		 | help _ = NONE
+	       (* Is it faster or space-efficient to (head) normalize or not? *)
+	       val (_,c') = Normalize(c,ctxt) 
+	       val _ = con_constrain(c',help,param,ctxts)
+	   in c'
+	   end
+
+   and unify () =
      let 
+       val table = ref ([] : {saved : (context,con) tyvar, active : (context,con) tyvar} list)
        fun hard_fetch tv = tyvar_deref tv
-       fun hard_set (constr,tv,c) = 
+       fun hard_set (ctxt,constr,tv,c) = 
 	   let val _ = (debugdo (fn () => (print "now hard-setting ";
 					   pp_con (CON_TYVAR tv); print " to ";
 					   pp_con c; print "\n")))
@@ -507,84 +486,48 @@ fun show_state ({modunself,...}:state) =
 	       val c = local_con_constrain(ctxt,c,
 					   {constrain = constr,
 					    eq_constrain = (tyvar_is_use_equal tv),
-					    stamp = SOME(tyvar_stamp tv)},tyvar_ctxts);
-
+					    stamp = SOME(tyvar_stamp tv)},tyvar_ctxts)
+	       val entry = {saved = tyvar_copy tv, active = tv}
+	       val _ = table := (entry::(!table))
 	   in  tyvar_set(tv,c)
 	   end
-     in  unify_maker true hard_fetch hard_set arg
+       fun undo() = app (fn {saved,active} => tyvar_update(active,saved)) (!table)
+     in  (unify_maker hard_fetch hard_set, undo)
      end
-   and soft_unifier () =
-     let 
-       val table = ref ([] : ((context,con) tyvar * con) list)
-       val constr_con = ref ([] : con list)
-       val useeq_con = ref ([] : con list)
-       fun soft_fetch (tyvar : (context,con) tyvar) = let 
-(*				  val v = tyvar_getvar tyvar *)
-				  fun loop [] = NONE
-				    | loop ((tv,c)::rest) = 
-(*				      if (eq_var(v,tyvar_getvar tv)) *)
-				      if (eq_tyvar(tyvar,tv))
-					  then SOME c
-				      else NONE
-			      in (case (tyvar_deref tyvar) of
-				    SOME c' => SOME c'
-				  | NONE => loop (!table))
-			      end
-       fun soft_set (constr,tv,c) = 
-	   let val _ = debugdo (fn () => 
-				(print "now soft-setting ";
-				 print (tyvar2string tv); print " to ";
-				 pp_con c; print "\n"))
-	       val _ = if constr then constr_con := c::(!constr_con) else ()
-	       val _ = if (tyvar_is_use_equal tv) 
-			   then useeq_con := c::(!useeq_con) else ()
-	   in table := (tv,c)::(!table)
-	   end
-       fun soft_unify arg = unify_maker false soft_fetch soft_set arg
-     in (soft_unify,table,constr_con,useeq_con)
-     end
-   and eq_con (con1,con2,decs) = meta_eq_con (true,hard_unifier) false (con1,con2,decs,false)
+
+   and eq_con (con1,con2,decs) = 
+       let val (unifier,undo) = unify()
+       in  meta_eq_con unifier false (con1,con2,decs,false)
+       end
+
    and sub_con (con1,con2,ctxt) = 
-     let fun msg() = (print "subcon called with con1 = \n";
-			 pp_con con1; print "\nand con2 = \n";
-			 pp_con con2; print "\nand ctxt = \n";
-			 pp_context ctxt; print "\n")
-     in  ((meta_eq_con (false,hard_unifier) false (con1,con2,ctxt,true))
-	  handle e => (if !trace then msg() else (); raise e))
-     end
+       let fun msg() = (print "subcon called with con1 = \n";
+			pp_con con1; print "\nand con2 = \n";
+			pp_con con2; print "\nand ctxt = \n";
+			pp_context ctxt; print "\n")
+	   val (unifier,undo) = unify()
+       in  meta_eq_con unifier false (con1,con2,ctxt,true)
+       end
 
-   and soft_eq_con (con1,con2,ctxt) = 
-     let val (soft_unify,table,constr_con,useeq_con) = soft_unifier()
-     in  if (meta_eq_con (false,soft_unify) false (con1,con2,ctxt,false))
-	   then ((* app tyvar_set (!table);  *)
-		 map (fn c => local_con_constrain(ctxt,c,{constrain = true,
-					       stamp = NONE,
-					       eq_constrain = false},
-(* XXX *)					    [ctxt])) (!constr_con);
-		 map (fn c => local_con_constrain(ctxt,c,{constrain=false,
-					       stamp = NONE,
-					       eq_constrain = true},
- (* XXX *)			[ctxt])) (!useeq_con);
-		 true)
-	 else false
-     end
-   and meta_eq_con (is_hard,unifier) constrained (con1,con2,ctxt,is_sub) = 
-       (case (con1,con2) of
-	    (CON_MODULE_PROJECT(m,l),CON_MODULE_PROJECT(m',l')) =>
-		(eq_label(l,l') andalso eq_mod(m,m')) orelse
-		(meta_eq_con_hidden (is_hard,unifier) constrained (con1,con2,ctxt,is_sub))
-	  | _ => (meta_eq_con_hidden (is_hard,unifier) constrained (con1,con2,ctxt,is_sub)))
+   and soft_eq_con (con1,con2,decs) = 
+       let val (unifier,undo) = unify()
+	   val is_eq = meta_eq_con unifier false (con1,con2,decs,false)
+	   val _ = undo()
+       in  is_eq
+       end
 
-   and meta_eq_con_hidden (is_hard,unifier) constrained (con1,con2,ctxt,is_sub) = 
-     let fun msg() = (print "meta_eq_con_hidden called with con1 = \n";
-			 pp_con con1; print "\nand con2 = \n";
-			 pp_con con2; print "\nand ctxt = \n";
-			 pp_context ctxt; print "\n")
-in (meta_eq_con_hidden' (is_hard,unifier) constrained (con1,con2,ctxt,is_sub))
-	  handle e => (if !trace then msg() else (); raise e)
-end
+   and meta_eq_con unifier constrained (con1,con2,ctxt,is_sub) = 
+       let val same = eq_cpath(con1,con2)
+	   fun msg() = (print "meta_eq_con_hidden called with con1 = \n";
+			pp_con con1; print "\nand con2 = \n";
+			pp_con con2; print "\nand ctxt = \n";
+			pp_context ctxt; print "\n")
+       in  same orelse
+	   ((meta_eq_con_hidden unifier constrained (con1,con2,ctxt,is_sub))
+	    handle e => (if !trace then msg() else (); raise e))
+       end
 
-   and meta_eq_con_hidden' (is_hard,unifier) constrained (con1,con2,ctxt,is_sub) = 
+   and meta_eq_con_hidden unifier constrained (con1,con2,ctxt,is_sub) = 
      let 
 
        val _ = debugdo (fn () => (print "\nUnifying"; 
@@ -608,7 +551,7 @@ end
 				  print "\n"))
        val constrained = constrained orelse isocon1 orelse isocon2
 
-       val self = meta_eq_con (is_hard,unifier) constrained
+       val self = meta_eq_con unifier constrained
 
        (* the flex record considered as an entirety is not generalizeable
 	  but its subparts are generalizable *)
@@ -688,9 +631,7 @@ end
 	  | (CON_VAR v1, CON_VAR v2) => eq_var(v1,v2)
 	  | (CON_APP(c1_a,c1_r), CON_APP(c2_a,c2_r)) => self(c1_a,c2_a,ctxt,is_sub) 
 	                                                andalso self(c1_r,c2_r,ctxt,is_sub)
-	  | (CON_MODULE_PROJECT (m1,l1), CON_MODULE_PROJECT (m2,l2)) => 
-		eq_modval(m1,m2) andalso eq_label(l1,l2)
-
+	  | (CON_MODULE_PROJECT (m1,l1), CON_MODULE_PROJECT (m2,l2)) => eq_cpath(con1,con2)
 	  | (CON_INT is1, CON_INT is2) => is1 = is2
 	  | (CON_UINT is1, CON_UINT is2) => is1 = is2
 	  | (CON_FLOAT fs1, CON_FLOAT fs2) => fs1 = fs2
@@ -830,7 +771,7 @@ end
 			  end
      | _ => false)
 	
-   and GetSconCon(ctxt,scon) : con = PrimUtil.value_type (fn e => #2(GetExpCon(e,ctxt))) scon
+   and GetSconCon(ctxt,scon) : con = IlPrimUtil.value_type (fn e => #2(GetExpCon(e,ctxt))) scon
 
 
   (* Rules 35 - 48 *)
@@ -843,10 +784,9 @@ end
 	  handle e => (if !trace then msg() else (); raise e)
      end
 
-   and GetConKind' (arg : con, ctxt : context) : kind = 
+   and GetConKind' (con : con, ctxt : context) : kind = 
      let fun ksimp (KIND_INLINE(k,_)) = ksimp k
 	   | ksimp k = k
-	 val con = arg (* Normalize(arg,ctxt) *)
      in case con of
        (CON_TYVAR tv) => KIND_TUPLE 1 
      | (CON_VAR v) => 
@@ -943,9 +883,9 @@ end
 	       (case exparg of
 		    APP(e1,e2) => (GetExpCon(e1,ctxt),[e2])
 		  | EXTERN_APP(_,e1,es2) => (GetExpCon(e1,ctxt),es2)
-		  | PRIM(p,cs,es) => ((true, PrimUtil.get_type' p cs), es)
-		  | ILPRIM(ip,cs,es) => ((true, PrimUtil.get_iltype' ip cs),es))
-	       val con1 = Normalize(con1,ctxt)
+		  | PRIM(p,cs,es) => ((true, IlPrimUtil.get_type' p cs), es)
+		  | ILPRIM(ip,cs,es) => ((true, IlPrimUtil.get_iltype' ip cs),es))
+	       val (_,con1) = HeadNormalize(con1,ctxt)
 	       val vacon2 = map (fn e => GetExpCon(e,ctxt)) es2
 	       val va2 = Listops.andfold #1 vacon2
 	       val cons2 = map #2 vacon2
@@ -973,7 +913,7 @@ end
 	   end
 
    and GetExpRollCon' (ctxt,isroll,e,c) : bool * con = 
-       let val cNorm = Normalize' "ROLL/UNROLL" (c,ctxt)
+       let val (_,cNorm) = HeadNormalize(c,ctxt)
 	   val (va,econ) = GetExpCon(e,ctxt)
 	   val error = fn str => (print "typing roll/unroll expression:\n";
 				  Ppil.pp_exp e;
@@ -1008,7 +948,7 @@ end
 						      error "ROLL: expression type does not match decoration"))
 					 else 
 					     (if (eq_con(econ,cNorm,ctxt))
-						  then Normalize' "ROLL/UNROLL 3" (con2,ctxt)
+						  then #2(HeadNormalize(con2,ctxt))
 					      else (print "UNROLL: expression type does not match decoration";
 						    print "\necon = "; pp_con econ;
 						    print "\ncNorm = "; pp_con cNorm;
@@ -1026,8 +966,8 @@ end
 				     SOME e => if va then (va,con)
 					       else GetExpCon(e,ctxt)
 				   | NONE => (va,con))
-     | ETAPRIM (p,cs) => (true, etaize (PrimUtil.get_type' p cs))
-     | ETAILPRIM (ip,cs) => (true, etaize(PrimUtil.get_iltype' ip cs))
+     | ETAPRIM (p,cs) => (true, etaize (IlPrimUtil.get_type' p cs))
+     | ETAILPRIM (ip,cs) => (true, etaize(IlPrimUtil.get_iltype' ip cs))
      | (VAR v) => (case Context_Lookup'(ctxt,v) of
 		       SOME(_,PHRASE_CLASS_EXP(_,c)) => (true,c)
 		     | SOME _ => error "VAR looked up to a non-value"
@@ -1150,48 +1090,44 @@ end
 	   end
      | ROLL(c,e) => GetExpRollCon'(ctxt,true,e,c)
      | UNROLL(c,_,e) => GetExpRollCon'(ctxt,false,e,c)
-    | (INJ {sumtype,field,inject}) =>
-       let val sumtype = (case sumtype of
-			      CON_SUM _ => sumtype
-			    | _ => Normalize(sumtype,ctxt))
-	   val (carrier,noncarriers) = 
-	         (case sumtype of
-		      CON_SUM {carrier,noncarriers,special} => (carrier,noncarriers)
-		    | _ => error "INJ got type irreudcible to a special sumtype")
-       in  
-	(case inject of
-	   NONE => 
-	       if (field<noncarriers)
-		   then (true,CON_SUM{noncarriers=noncarriers,
-				      carrier= Normalize(carrier,ctxt),
+     | (INJ {sumtype,field,inject}) =>
+	   let val (_,sumtype) = HeadNormalize(sumtype,ctxt)
+	       val (carrier,noncarriers) = 
+		   (case sumtype of
+			CON_SUM {carrier,noncarriers,special} => (carrier,noncarriers)
+		      | _ => error "INJ got type irreudcible to a special sumtype")
+	   in  
+	       (case (field<noncarriers,inject) of
+		    (true,NONE) => 
+			(true,CON_SUM{noncarriers=noncarriers,
+				      carrier=carrier,
 				      special=NONE})
-	       else (error "INJ: bad injection")
-	| SOME e =>
-	  if (field<noncarriers)
-	      then (error "INJ: bad injection")
-	  else let val (va,econ) = GetExpCon(e,ctxt)
-		   val carrier = Normalize(carrier,ctxt)
-		   val i = field - noncarriers (* i >= 0 *)
-		   val (n,fieldcon_opt) = 
-		       (case carrier of 
-		             CON_TUPLE_INJECT [] => (0,NONE)
-		           | CON_TUPLE_INJECT clist => (length clist, SOME(List.nth(clist,i)))
-			   | _ => (1,SOME carrier))
-	       in if (i >= n)
-		      then
-			  (print "INJ: injection field out of range in exp:";
-			   Ppil.pp_exp exparg; print "\n";
-			   error "INJ: injection field out of range")
-		  else
-		      if (eq_con(econ, valOf fieldcon_opt, ctxt))
-			   then (va,CON_SUM{noncarriers=noncarriers,carrier=carrier,special=NONE})
-		       else (print "INJ: injection does not type check eq_con failed on: ";
-			     Ppil.pp_exp exparg; print "\n";
-			     print "econ is "; Ppil.pp_con econ; print "\n";
-			     print "nth clist is "; Ppil.pp_con (valOf fieldcon_opt); print "\n";
-			     error "INJ: injection does not typecheck")
-	       end)
-       end
+		  | (false, NONE) => error "INJ: bad injection"
+		  | (true,SOME e) => error "INJ: bad injection" 
+		  | (false, SOME e) => 
+		      let val (va,econ) = GetExpCon(e,ctxt)
+			  val (_,carrier) = HeadNormalize(carrier,ctxt)
+			  val i = field - noncarriers (* i >= 0 *)
+			  val (n,fieldcon_opt) = 
+			      (case carrier of 
+				   CON_TUPLE_INJECT [] => (0,NONE)
+				 | CON_TUPLE_INJECT clist => (length clist, SOME(List.nth(clist,i)))
+				 | _ => (1,SOME carrier))
+		      in if (i >= n)
+			     then
+				 (print "INJ: injection field out of range in exp:";
+				  Ppil.pp_exp exparg; print "\n";
+				  error "INJ: injection field out of range")
+			 else
+			     if (eq_con(econ, valOf fieldcon_opt, ctxt))
+				 then (va,CON_SUM{noncarriers=noncarriers,carrier=carrier,special=NONE})
+			     else (print "INJ: injection does not type check eq_con failed on: ";
+				   Ppil.pp_exp exparg; print "\n";
+				   print "econ is "; Ppil.pp_con econ; print "\n";
+				   print "nth clist is "; Ppil.pp_con (valOf fieldcon_opt); print "\n";
+				   error "INJ: injection does not typecheck")
+		      end)
+	   end
      | (EXN_CASE {arg,arms,default,tipe}) =>
 	   let 
 	       val (_,argcon) = GetExpCon(arg,ctxt)
@@ -1227,13 +1163,13 @@ end
 	   let 
 	       val sumtype = (case sumtype of
 				  CON_SUM _ => sumtype
-				| _ => Normalize(sumtype,ctxt))
+				| _ => #2(HeadNormalize(sumtype,ctxt)))
 	       val {carrier,noncarriers,special=_} = 
 		   (case sumtype of
 			CON_SUM triple => triple
 		      | _ => error "CASE got type irreducible to a sumtype")
 	       val n = length arms
-	       val carrier = Normalize' "CASE" (carrier,ctxt)
+	       val (_,carrier) = HeadNormalize(carrier,ctxt)
 	       val (va,eargCon) = GetExpCon(arg,ctxt)
 	       val sumcon = CON_SUM {special = NONE,
 				     carrier = carrier,
@@ -1283,12 +1219,12 @@ end
 				 print " not in signature s = \n";
 				 pp_signat signat; print "\n"; *)
 				fail "MODULE_PROJECT: label not in modsig")
-		     | (SOME (_,PHRASE_CLASS_EXP(_,con))) => (va,Normalize(con,ctxt))
+		     | (SOME (_,PHRASE_CLASS_EXP(_,con))) => (va,con)
 		     | SOME _ => fail "MODULE_PROJECT: label not of exp")
 	       fun notself_case(sdecs) = 
 		   (case local_Sdecs_Project ctxt(if va then SOME m else NONE, sdecs, l) of
 			NONE => error "MODULE_PROJECT: label not in modsig"
-		      | SOME (CLASS_EXP con) => (va,Normalize(con,ctxt))
+		      | SOME (CLASS_EXP con) => (va,con)
 		      | SOME _ => fail "MODULE_PROJECT: label not of exp")
 	   in case (reduce_signat ctxt signat) of
 	       SIGNAT_FUNCTOR _ => error "cannot project from module with functor signature"
@@ -1301,9 +1237,8 @@ end
 	   end
 
      | (SEAL (e,c)) => let val (va,c') = GetExpCon(e,ctxt)
-			   val c'' = Normalize(c,ctxt)
-		       in if sub_con(c',c'',ctxt)
-			      then (va,c'')
+		       in if sub_con(c',c,ctxt)
+			      then (va,c)
 			  else error "SEAL: expression type does not match sealing type"
 		       end)
 
@@ -1602,66 +1537,149 @@ end
 			 in (va,s)
 			 end)
 
-    and HeadNormalize (arg,ctxt) : (bool * con) = 
+    and Normalize (con,ctxt) : (bool * con) = 
 	let fun msg() = (print "HeadNormalize called with con =\n";
-			 pp_con arg; print "\n and ctxt = \n";
+			 pp_con con; print "\n and ctxt = \n";
 			 pp_context ctxt; print "\n")
-	in  HeadNormalize'(arg,ctxt)
+	in  Normalize'(true,con,ctxt)
 	  handle e => (if !trace then msg() else (); raise e)
 	end
 
-    and HeadNormalize' (arg,ctxt) : (bool * con) = 
+
+    and HeadNormalize (con,ctxt) : (bool * con) = 
+	let fun msg() = (print "HeadNormalize called with con =\n";
+			 pp_con con; print "\n and ctxt = \n";
+			 pp_context ctxt; print "\n")
+	in  Normalize'(false,con,ctxt)
+	  handle e => (if !trace then msg() else (); raise e)
+	end
+
+    and Normalize' (full,arg,ctxt) : (bool * con) = 
 	 (case arg of
-	      CON_OVAR ocon => let val tv = ocon_deref ocon
-			    val (_,c') = HeadNormalize(CON_TYVAR tv,ctxt)
+	      CON_INT _  => (false,arg)
+	    | CON_FLOAT _  => (false,arg)
+	    | CON_UINT _  => (false,arg)
+	    | CON_ANY => (false,arg)
+	    | (CON_REF c) => if full 
+				 then let val (change,c) = Normalize'(full,c,ctxt)
+				      in  (change, CON_REF c)
+				      end
+			     else (false, arg)
+	    | (CON_ARRAY c) => if full 
+				   then let val (change,c) = Normalize'(full,c,ctxt)
+					in  (change, CON_ARRAY c)
+					end
+			       else (false, arg)
+	    | (CON_VECTOR c) => if full
+				    then let val (change,c) = Normalize'(full,c,ctxt)
+					 in  (change, CON_VECTOR c)
+					 end
+				else (false, arg)
+	    | (CON_TAG c) => if full
+				 then let val (change,c) = Normalize'(full,c,ctxt)
+				      in  (change, CON_TAG c)
+				      end
+			     else (false, arg)
+	    | CON_SUM{carrier,noncarriers,special} =>
+		if full
+		    then let val (change,c) = Normalize'(full,carrier,ctxt)
+			 in  (change, CON_SUM{carrier=c,noncarriers=noncarriers,
+					      special=special})
+			 end
+		else (false, arg)
+	    | (CON_ARROW (cs1,c2,closed,comp)) =>
+		  if full
+		      then let val (cs1,change1) = foldl_acc 
+			              (fn (c,ch) => let val (ch',c') = Normalize'(full,c,ctxt)
+						    in  (c', ch orelse ch')
+						    end) false cs1
+			       val (change2, c2) = Normalize'(full,c2,ctxt)
+			   in (change1 orelse change2, CON_ARROW (cs1, c2, closed, comp))
+			   end
+		  else (false, arg)
+	    | CON_MU c => if full
+			      then let val (change,c) = Normalize'(full,c,ctxt) 
+				   in  (change, CON_MU c)
+				   end
+			  else (false, arg)
+
+	    | (CON_RECORD rdecs) => if full
+				       then let fun folder ((l,c),ch) = 
+					           let val (ch',c') = Normalize'(full,c,ctxt)
+						   in  ((l,c'),ch orelse ch')
+						   end
+						val (rdecs,ch) = foldl_acc folder false rdecs
+					    in  (ch, CON_RECORD rdecs)
+					    end
+				    else (false, arg)
+	    | (CON_FLEXRECORD (ref (INDIRECT_FLEXINFO rf))) => 
+				    Normalize'(full,CON_FLEXRECORD rf,ctxt)
+	    | (CON_FLEXRECORD (r as ref (FLEXINFO (stamp,flag,rdecs)))) => 
+				    let fun f (l,c)= (l,#2(Normalize'(full,c,ctxt)))
+					val _ = r := FLEXINFO(stamp,flag,map f rdecs)
+				    in  (false, arg)
+				    end
+	    | CON_OVAR ocon => let val tv = ocon_deref ocon
+				   val (_,c') = Normalize'(full,CON_TYVAR tv,ctxt)
 			       in (true,c')
 			       end
 	    | (CON_TYVAR tv) => (tyvar_isconstrained tv,
 				 case tyvar_deref tv of
 				     NONE => arg
-				   | SOME c => #2(HeadNormalize(c,ctxt)))
+				   | SOME c => #2(Normalize'(full,c,ctxt)))
 	    | (CON_VAR v) => (case (Context_Lookup'(ctxt,v)) of
 				  SOME(_,PHRASE_CLASS_CON (CON_VAR v',k)) => 
 				      if (eq_var(v,v'))
 					  then (case k of (* we consider KIND_INLINE abstrct *)
-(*						    KIND_INLINE (k,c) => HeadNormalize(c,ctxt) 
+(*						    KIND_INLINE (k,c) => Normalize'(c,ctxt) 
 						  | *) _ => (false, CON_VAR v))
-				      else HeadNormalize(CON_VAR v',ctxt)
-				| SOME(_,PHRASE_CLASS_CON (c,_)) => HeadNormalize(c,ctxt)
+				      else Normalize'(full,CON_VAR v',ctxt)
+				| SOME(_,PHRASE_CLASS_CON (c,_)) => Normalize'(full,c,ctxt)
 				| SOME _ => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound to a con")
 				| NONE => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound"))
-	    | CON_TUPLE_PROJECT (i,c) => 
-		  let val (f,c) = HeadNormalize(c,ctxt)
+      | (CON_TUPLE_INJECT cs) => 
+		    if full
+			then let val (cs,change) = foldl_acc 
+			    (fn (c,ch) => let val (ch',c') = Normalize'(full,c,ctxt)
+					  in  (c', ch orelse ch')
+					  end) false cs
+			     in  (change, CON_TUPLE_INJECT cs)
+			     end
+		    else (false, arg)
+      | CON_TUPLE_PROJECT (i,c) => 
+		  let val (f,c) = Normalize'(full,c,ctxt)
 		  in case c of
 		      CON_TUPLE_INJECT cons => 
 			  let val len = length cons
 			  in if (i >= 0 andalso i < len)
 				 then 
-				     let val (f',c') = HeadNormalize(List.nth(cons,i),
+				     let val (f',c') = Normalize'(full,List.nth(cons,i),
 								     ctxt)
 				     in (f orelse f', c')
 				     end
 			     else
-				 error "HeadNormalize: con tuple projection - index wrong"
+				 error "Normalize': con tuple projection - index wrong"
 					       end
 		    | _ => (f,CON_TUPLE_PROJECT(i,c))
 		  end
 	    (* Eta contract functions *)
-	    | c as CON_FUN([v],CON_APP(f,CON_VAR v')) => if (eq_var(v,v')) then HeadNormalize(f,ctxt)
+	    | c as CON_FUN([v],CON_APP(f,CON_VAR v')) => if (eq_var(v,v')) 
+							     then Normalize'(full,f,ctxt)
 							else (false,c)
 	    | c as CON_FUN(vars,CON_APP(f,CON_TUPLE_INJECT args)) =>
 		let fun match (v,(CON_VAR v')) = eq_var(v,v')
 		      | match _ = false
 		in  if (length vars = length args andalso (andfold match (zip vars args)))
-			then HeadNormalize(f,ctxt)
+			then Normalize'(full,f,ctxt)
 		     else (false,c)
 		end
+	    | (CON_FUN (vs,c)) => (false, arg)
 	    | CON_APP(c1,c2) => 
-		  let val (f1,c1') = HeadNormalize(c1,ctxt)
-		      val (f2,c2') = HeadNormalize(c2,ctxt)
+		  let val (f1,c1') = Normalize'(full,c1,ctxt)
+		      val (f2,c2') = Normalize'(full,c2,ctxt)
 		      val (f,c) = (case (c1',c2') of
 				       (CON_FUN(vars,cons), _) =>
-					   HeadNormalize(ConApply(false,c1',c2'),ctxt)
+					   Normalize'(full,ConApply(false,c1',c2'),ctxt)
 				     | _ => (false,CON_APP(c1',c2')))
 		  in (f1 orelse f2 orelse f, c)
 		  end
@@ -1669,10 +1687,10 @@ end
 		  (let 
 		   val (_,s) = GetModSig(m,ctxt)
 		   fun break_loop (c as (CON_MODULE_PROJECT(m',l'))) = 
-		       if (eq_label(l,l') andalso eq_mod(m,m')) 
+		       if (eq_label(l,l') andalso eq_mpath(m,m')) 
 			   then (false,c)
-		       else HeadNormalize(c,ctxt)
-		     | break_loop c = HeadNormalize(c,ctxt)
+		       else Normalize'(full,c,ctxt)
+		     | break_loop c = Normalize'(full,c,ctxt)
 		   fun loop _ [] = (false,arg)
 		     | loop (tables as (ctable,mtable)) ((SDEC(curl,dec))::rest) = 
 		       (case dec of
@@ -1696,7 +1714,7 @@ end
 			  | NONE => (false,arg))
 		   fun notself_case sdecs = 
 		       (debugdo (fn () => 
-				 (print "HeadNormalize: CON_MODULE_PROJECT case: l = "; 
+				 (print "Normalize': CON_MODULE_PROJECT case: l = "; 
 				  pp_label l; print "\n and sdecs = ";
 				  pp_sdecs sdecs;
 				  print "\n"));
@@ -1712,127 +1730,8 @@ end
 		     | SIGNAT_FUNCTOR _ => (print "CON_MODULE_PROJECT from functor = \n";
 					    pp_mod m;
 					    error "CON_MODULE_PROJECT from a functor"))
-	       end)
-	  | c => (false,c))
-
+	       end))
 	
-    and Normalize' str (arg,ctxt) = 
-	(debugdo (fn () => (print "Normalize called with string = ";
-			    print str; print "\n"));
-	 Normalize (arg,ctxt))
-	
- (* -------- performs CON application, tuple projection, and module projections ----- *)
-   and Normalize (arg,ctxt) = 
-       (debugdo (fn () => (print "Normalize called with con = ";
-			   pp_con arg; print "\nand ctxt = \n";
-			   pp_context ctxt;	print "\n"));
-      case arg of
-	CON_INT _  => arg
-      | CON_FLOAT _  => arg
-      | CON_UINT _  => arg
-      | CON_ANY => arg
-      | (CON_OVAR ocon)           => let val tv = ocon_deref ocon
-				     in Normalize(CON_TYVAR tv,ctxt)
-				     end
-      | (CON_REF c)               => CON_REF (Normalize(c,ctxt))
-      | (CON_ARRAY c)             => CON_ARRAY (Normalize(c,ctxt))
-      | (CON_VECTOR c)            => CON_VECTOR (Normalize(c,ctxt))
-      | (CON_TAG c)               => CON_TAG (Normalize(c,ctxt))
-      | (CON_ARROW (cs1,c2,closed,comp))  => CON_ARROW (map (fn c => Normalize(c,ctxt)) cs1, 
-						 Normalize(c2,ctxt),closed,comp)
-      | (CON_MU c)     => CON_MU(Normalize(c,ctxt))
-      | (CON_RECORD rdecs)        => let fun f (l,c)= (l,Normalize(c,ctxt))
-	                             in CON_RECORD (map f rdecs)
-                                     end
-      | (CON_FLEXRECORD (ref (INDIRECT_FLEXINFO rf))) => Normalize(CON_FLEXRECORD rf,ctxt)
-      | (CON_FLEXRECORD (r as ref (FLEXINFO (stamp,flag,rdecs)))) => 
-	    let fun f (l,c)= (l,Normalize(c,ctxt))
-		val _ = r := FLEXINFO(stamp,flag,map f rdecs)
-	    in arg
-	    end
-      | (CON_FUN (vs,c))          => CON_FUN (vs,c)
-      | (CON_SUM {noncarriers,carrier,special}) => 
-	    CON_SUM{noncarriers = noncarriers,
-		    carrier = Normalize(carrier,ctxt),
-		    special = special}
-      | (CON_TUPLE_INJECT cs)     => CON_TUPLE_INJECT (map (fn c => Normalize(c,ctxt)) cs)
-      | (CON_TUPLE_PROJECT (i,c)) => let val c' = Normalize(c,ctxt)
-					 val arg' = CON_TUPLE_PROJECT(i,c')
-				     in #2(HeadNormalize(arg',ctxt))
-				     end
-      | (CON_MODULE_PROJECT (m as MOD_STRUCTURE sbnds,l)) => (* no need to normalize m *)
-	    (case (Sbnds_Lookup ctxt (sbnds,[l])) of
-		 SOME(_, PHRASE_CON c) => Normalize(c,ctxt)
-	       | SOME _ => error "Sbnds_Lookup projected out a non-con component"
-	       | NONE => error "Sbnds_Lookup could not find component")
-      | (CON_MODULE_PROJECT (m,l)) => 
-	    (let val _ = debugdo (fn () =>
-				  (print "normalize about to call getmodsig of m = \n";
-				   pp_mod m;
-				   print "\nand ctxt = \n";
-				   pp_context ctxt;
-				   print "\n"))
-		 val (_,signat) = GetModSig(m,ctxt)
-		 val _ = debugdo (fn () => (print "normalize got back sig:\n";
-					    pp_signat signat; print "\n"))
-		 fun self_case(p,sdecs) = 
-		     (case Sdecs_Lookup ctxt (path2mod p, sdecs, [l]) of
-			  NONE => (print "CON_MOD_PROJECT failed to find label = ";
-				       pp_label l; print " and signat = \n";
-				       pp_signat signat; print "\n";
-				       error "CON_MOD_PROJECT failed to find label")
-			| (SOME (_,PHRASE_CLASS_CON(c,k))) => 
-			      (case c of
-				   CON_MODULE_PROJECT(m',l') => 
-				       if (eq_label(l,l') andalso eq_mod(m,m'))
-					   then c
-				       else Normalize(c,ctxt)
-				 | _ => Normalize(c,ctxt))
-			| (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON")
-		 fun notself_case (sbnds,sdecs) = 
-		     let val p = SIMPLE_PATH (fresh_named_var "badbadbad")
-		     in case Sdecs_Lookup ctxt (path2mod p, sdecs, [l]) of
-			 NONE => (print "CON_MOD_PROJECT failed to find label = ";
-				  pp_label l; print " and signat = \n";
-				  pp_signat signat; print "\n";
-				  error "CON_MOD_PROJECT failed to find label")
-		       | (SOME (_,PHRASE_CLASS_CON(c,k))) => 
-			     (case c of
-				  CON_MODULE_PROJECT(m',l') => 
-				      if (eq_label(l,l') andalso eq_mod(m,m'))
-					  then c
-				      else Normalize(c,ctxt)
-				| _ => Normalize(c,ctxt))
-		       | (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON"
-		     end
-
-	     in  
-		 case (m,reduce_signat ctxt signat) of
-		     (_,SIGNAT_FUNCTOR _) => error "cannot project for functor"
-		   | (_,SIGNAT_VAR _) => error "cannot project from signat_var"
-		   | (_,SIGNAT_STRUCTURE (SOME p,sdecs)) => self_case(p,sdecs)
-		   | (_,SIGNAT_INLINE_STRUCTURE{self=SOME p,abs_sig=sdecs,...}) => self_case(p,sdecs)
-		   | (MOD_STRUCTURE sbnds,SIGNAT_STRUCTURE (NONE,sdecs)) => notself_case(sbnds,sdecs)
-		   | (MOD_STRUCTURE sbnds, SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...}) => 
-			 notself_case(sbnds,sdecs)
-		   | _ => (print "Normalize: CON_MODULE_PROJECT with m = ";
-			   pp_mod m;
-			   (* print "and context = "; pp_context ctxt; print "\n"; *)
-			   error "Normalize encountered ill-formed module projection")
-	     end)
-      | (CON_VAR v) => (case #2(HeadNormalize(arg,ctxt)) of
-			    CON_VAR v' => if (eq_var(v,v')) 
-					      then arg else Normalize(CON_VAR v',ctxt)
-			  | c => Normalize(c,ctxt))
-      | (CON_TYVAR co) => (case tyvar_deref co of
-			      SOME c => Normalize(c,ctxt)
-			    | NONE => arg)
-      | (CON_APP(a,b)) => let val a' = Normalize(a,ctxt)
-			      val b' = Normalize(b,ctxt)
-			      val c' = CON_APP(a',b')
-			  in #2(HeadNormalize(c',ctxt))
-			  end)
-
 
      and Kind_Valid (KIND_TUPLE n,_)     = n >= 0
        | Kind_Valid (KIND_ARROW (m,n),_) = (m >= 0) andalso (n >= 0)
@@ -2046,8 +1945,8 @@ end
     val eq_con = fn (ctxt,c1,c2) => eq_con(c1,c2,ctxt)
     val sub_con = fn (ctxt,c1,c2) => sub_con(c1,c2,ctxt)
     val soft_eq_con = fn (ctxt,c1,c2) => soft_eq_con(c1,c2,ctxt)
-    val con_normalize = fn (context,c) => Normalize(c,context)
-    val con_head_normalize = fn (context,c) => #2(HeadNormalize(c,context))
+    fun con_normalize (context,c) = #2(Normalize(c,context))
+    fun con_head_normalize (context,c) = #2(HeadNormalize(c,context))
 
     val GetExpCon = fn (d,e) => #2(GetExpCon(e,d))
     val GetConKind = fn (d,c) => GetConKind(c,d)

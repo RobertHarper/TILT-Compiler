@@ -1,6 +1,6 @@
-(*$import PRIM PPPRIM PRIMUTILPARAM Real64 PRIMUTIL *)
-functor PrimUtil(structure Ppprim : PPPRIM
-		 structure PrimUtilParam : PRIMUTILPARAM)
+(*$import PRIM Ppprim PRIMUTILPARAM Real64 PRIMUTIL *)
+
+functor PrimUtil(structure PrimUtilParam : PRIMUTILPARAM)
     :> PRIMUTIL where type con = PrimUtilParam.con
 		where type exp = PrimUtilParam.exp
 		=
@@ -98,8 +98,6 @@ struct
        | (soft_ztrap _,[]) => (false,[],con_unit)
        | (hard_vtrap _,[]) => (false,[],con_unit)
        | (hard_ztrap _,[]) => (false,[],con_unit)
-       | (mk_ref, [instance]) => thelp(instance,con_ref instance)
-       | (deref, [instance]) => thelp(con_ref instance,instance)
 
        | (neg_float fs ,[]) => help(con_float fs, con_float fs)
        | (abs_float fs ,[]) => help(con_float fs, con_float fs)
@@ -126,9 +124,7 @@ struct
        | (flush_out,[]) => help(con_int W32, con_unit)
        | (close_out,[]) => help(con_int W32, con_unit)
 
-       | (setref, [instance]) => thelp'([con_ref instance,instance],con_unit)
 
-       | (eq_ref, [instance]) => help'([con_ref instance, con_ref instance],con_bool)
        | (plus_float fs,[]) => help'([con_float fs, con_float fs], con_float fs)
        | (minus_float fs,[]) =>  help'([con_float fs, con_float fs], con_float fs)
        | (mul_float fs,[]) =>  help'([con_float fs, con_float fs], con_float fs)
@@ -190,15 +186,20 @@ struct
 
      end
 
-  fun get_iltype ilprim _ =
-      (case ilprim of
-	   (not_uint is) => (false,[con_uint is], con_uint is)
-	 | (and_uint is) => (false,[con_uint is, con_uint is], con_uint is)
-	 | (or_uint is) => (false,[con_uint is, con_uint is], con_uint is)
-	 | (xor_uint is) => (false,[con_uint is, con_uint is], con_uint is)
-	 | (lshift_uint is) => (false,[con_uint is, con_int W32], con_uint is)
-	 | eq_uint is => (false, [con_uint is, con_uint is], con_bool)
-	 | neq_uint is => (false, [con_uint is, con_uint is], con_bool))
+  fun get_iltype ilprim cons =
+      (case (ilprim,cons) of
+	   (not_uint is,_) => (false,[con_uint is], con_uint is)
+	 | (and_uint is,_) => (false,[con_uint is, con_uint is], con_uint is)
+	 | (or_uint is,_) => (false,[con_uint is, con_uint is], con_uint is)
+	 | (xor_uint is,_) => (false,[con_uint is, con_uint is], con_uint is)
+	 | (lshift_uint is,_) => (false,[con_uint is, con_int W32], con_uint is)
+	 | (eq_uint is,_) => (false, [con_uint is, con_uint is], con_bool)
+	 | (neq_uint is,_) => (false, [con_uint is, con_uint is], con_bool)
+
+	 | (mk_ref, [instance]) => (true,[instance],con_ref instance)
+	 | (deref, [instance]) => (true,[con_ref instance], instance)
+	 | (setref, [instance]) => (true,[con_ref instance,instance],con_unit)
+	 | (eq_ref, [instance]) => (false, [con_ref instance, con_ref instance],con_bool))
 
 	   
   fun get_type' prim args = 
@@ -299,10 +300,7 @@ struct
 	       | (soft_ztrap _,[],_) => unit_value
 	       | (hard_vtrap _,[],_) => unit_value
 	       | (hard_ztrap _,[],_) => unit_value
-	  | (mk_ref, [c], [a]) => value2exp(refcell(ref a))
-	  | (deref, [c], [a]) => !(value2ref(exp2value a))
-	  | (eq_ref, [c], _) => objpred value2ref (op =)
-	  | (setref, [c], [loc1,exp2]) => ((value2ref(exp2value(loc1))) := exp2; unit_value)
+
 
 	  | (float2int, [], _) => objunary (value2float F64)
 	                                (fn f => (int(W32,TilWord64.fromInt(floor f))))
@@ -404,6 +402,11 @@ struct
 	| _ => false)
     
 (*
+	  | (mk_ref, [c], [a]) => value2exp(refcell(ref a))
+	  | (deref, [c], [a]) => !(value2ref(exp2value a))
+	  | (eq_ref, [c], _) => objpred value2ref (op =)
+	  | (setref, [c], [loc1,exp2]) => ((value2ref(exp2value(loc1))) := exp2; unit_value)
+
     fun applyil  vals = 
 	let 
 	in
