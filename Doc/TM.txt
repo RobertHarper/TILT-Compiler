@@ -83,11 +83,11 @@ DISCUSSION
 A module can contain any number of top-level declarations. It can be
 defined by an interface file, an implementation file, or both.
 
-A module has two sets of dependencies called imports and includes.  I say
-"set" because order is not important inside import and include lists.
-Imports are the modules needed to compile the implementation; includes are
-the modules necessary to elaborate the interface. Only direct dependencies
-are listed.
+A module has two sets of dependencies called imports and includes.
+We say "set" because order is not important inside import and include
+lists.  Imports are the modules needed to compile the implementation;
+includes are the modules necessary to elaborate the interface. Only
+direct dependencies are listed.
 
 A module can only depend on modules which are listed earlier in the
 mapfile. Thus the order in which modules are listed gives a "use-file"
