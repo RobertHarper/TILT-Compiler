@@ -102,17 +102,17 @@ functor EmitRtlMLRISC(
   fun splice f (element, list) = f element@list
 
   (*
-   * Call a given function followed by a given unwind function, even if the
-   * former throws an exception.
-   * result -> the function to return the result of
-   * unwind -> the unwind function to call
-   * <- the result of calling result
+   * Wrap a given function with a given unwind function.
+   * operator -> the function to wrap
+   * unwind   -> the unwind function to wrap operator with
+   * <- the wrapped function
    *)
-  fun protect(result, unwind)  =
+  fun protect (operator, unwind) operand =
 	let
-	  val value = result() handle except => (unwind(); raise except)
+	  val result = operator operand
+			 handle except => (unwind(); raise except)
 	in
-	  unwind(); value
+	  unwind(); result
 	end
 
   infix protect
@@ -245,10 +245,9 @@ functor EmitRtlMLRISC(
       val mapRef = ref emptyMap
     in
       (*
-       * Start a new cluster with a given register map.
-       * map -> the register map of the cluster
+       * Start a new cluster.
        *)
-      fun open_ map = mapRef := map
+      fun open_() = mapRef := Cells.resetRegs()
 
       (*
        * Terminate the current cluster.
@@ -290,12 +289,11 @@ functor EmitRtlMLRISC(
       val savesRef = ref emptySaves
     in
       (*
-       * Start a new procedure with a given stack frame.
-       * frame -> the stack frame of the procedure
+       * Start a new procedure.
        *)
-      fun open_ frame = (frameRef   := frame;
-			 integerMin := Cells.maxReg();
-			 floatMin   := Cells.maxFreg())
+      fun open_() = (frameRef	:= StackFrame.frame();
+		     integerMin := Cells.maxReg();
+		     floatMin	:= Cells.maxFreg())
 
       (*
        * Terminate the current procedure.
@@ -1633,101 +1631,123 @@ functor EmitRtlMLRISC(
     fun assignCallee(target, source) =
 	  Register.assign(target, TraceTable.TRACE_CALLEE(Machine.R source))
 
+    fun translate(Rtl.PROC{name	   = label,
+			   args	   = arguments,
+			   results = results,
+			   code	   = instructions,
+			   save	   = Rtl.SAVE saves,
+			   known   = knownFlag, (* ??? *)
+			   ...}) =
+	  let
+	    (*
+	     * Start translating a new procedure.
+	     * procedure must be opened before any rtl is translated
+	     *)
+	    val _ = Procedure.open_()
+
+	    (*
+	     * replace return instructions with branches to return code.
+	     *)
+	    val return	      = Rtl.fresh_code_label()
+	    val instructions' = transformReturn return instructions
+
+	    (*
+	     * translate labels and registers
+	     *)
+	    val label'	   = LocalLabel.translate label
+	    val arguments' = RegisterSet.translateCall arguments
+	    val results'   = RegisterSet.translateCall results
+	    val saves'	   = RegisterSet.translateCall saves
+
+	    (*
+	     * assign callee-save registers to pseudo-registers
+	     *)
+	    val saves'' = ExternalConvention.save saves'
+	    val live	   = ExternalConvention.integerSave saves''
+
+	    val _ = Procedure.setSaves saves''
+	    val _ = app assignCallee live
+
+	    (*
+	     * translate the body of the procedure
+	     *)
+	    val body = foldr (splice translateInstruction) [] instructions'
+
+	    (*
+	     * generate code to enter and exit the procedure
+	     *)
+	    val frame = Procedure.frame()
+
+	    val enter =
+		  [MLTree.PSEUDO_OP(MLRISCPseudo.ProcedureHeader label')]@
+		  ExternalConvention.enter frame (arguments', saves'', body)
+
+	    val exit =
+		  [MLTree.DEFINELABEL(LocalLabel.translate return)]@
+		  ExternalConvention.exit frame (results', saves'', body)@
+		  [MLTree.PSEUDO_OP(MLRISCPseudo.ProcedureTrailer label')]
+
+	    (*
+	     * define a deferred spill location in the current stack frame
+	     * for each register that might be live in the procedure
+	     * this must happen after all pseudo-registers are allocated
+	     *)
+	    val _ = Register.deferSpill frame (Procedure.integers())
+	    val _ = FloatRegister.deferSpill frame (Procedure.floats())
+
+	    (*
+	     * update the liveness information at the call sites in the
+	     * procedure
+	     *)
+	    val procedure = enter@body@exit
+	    val _	  = updateCallSites procedure
+	  in
+	    (*
+	     * spill polymorphic value descriptors that are used by call
+	     * sites
+	     *)
+	    Register.spillPolys (callSiteLive procedure) procedure
+	  end
+
     fun reset() = (Register.resetSource();
 		   FloatRegister.resetSource();
 		   Procedure.close())
   in
-    fun translateProcedure(Rtl.PROC{name    = label,
-				    args    = arguments,
-				    results = results,
-				    code    = instructions,
-				    save    = Rtl.SAVE saves,
-				    known   = knownFlag, (* ??? *)
-				    ...}) =
-	  (fn() =>
-	     let
-	       (*
-		* Start translating a new procedure.
-		* stack frame must be created before any registers are mapped
-		* procedure must be opened before any rtl is translated
-		*)
-	       val frame = StackFrame.frame()
-
-	       val _ = Procedure.open_ frame
-
-	       (*
-		* replace return instructions with branches to return code.
-		*)
-	       val return	 = Rtl.fresh_code_label()
-	       val instructions' = transformReturn return instructions
-
-	       (*
-		* translate labels and registers
-		*)
-	       val label'     = LocalLabel.translate label
-	       val arguments' = RegisterSet.translateCall arguments
-	       val results'   = RegisterSet.translateCall results
-	       val saves'     = RegisterSet.translateCall saves
-
-	       (*
-		* assign callee-save registers to pseudo-registers
-		*)
-	       val saves'' = ExternalConvention.save saves'
-	       val live	   = ExternalConvention.integerSave saves''
-
-	       val _ = Procedure.setSaves saves''
-	       val _ = app assignCallee live
-
-	       (*
-		* translate the body of the procedure
-		*)
-	       val body = foldr (splice translateInstruction) [] instructions'
-
-	       (*
-		* generate code to enter and exit the procedure
-		*)
-	       val enter =
-		     [MLTree.PSEUDO_OP(MLRISCPseudo.ProcedureHeader label')]@
-		     ExternalConvention.enter frame (arguments', saves'', body)
-
-	       val exit =
-		     [MLTree.DEFINELABEL(LocalLabel.translate return)]@
-		     ExternalConvention.exit frame (results', saves'', body)@
-		     [MLTree.PSEUDO_OP(MLRISCPseudo.ProcedureTrailer label')]
-
-	       (*
-		* define a deferred spill location in the current stack frame
-		* for each register that might be live in the procedure
-		* this must happen after all pseudo-registers are allocated
-		*)
-	       val _ = Register.deferSpill frame (Procedure.integers())
-	       val _ = FloatRegister.deferSpill frame (Procedure.floats())
-
-	       (*
-		* update the liveness information at the call sites in the
-		* procedure
-		*)
-	       val procedure = enter@body@exit
-	       val _	     = updateCallSites procedure
-	     in
-	       (*
-		* spill polymorphic value descriptors that are used by call
-		* sites
-		*)
-	       Register.spillPolys (callSiteLive procedure) procedure
-	     end)
-	    protect reset
+    val translateProcedure = translate protect reset
   end
 
   (* -- emitter functions -------------------------------------------------- *)
 
+  val emitData = app (emitMLTree o translateData)
+
   local
-    fun translateBody(prefix, main, procedures, data) =
+    fun emitCluster translateProcedure procedures =
 	  let
-	    val map = Cells.resetRegs()
+	    val _ = Cluster.open_()
 
-	    val _ = Cluster.open_ map
+	    val emitProcedures = app (emitMLTree o translateProcedure)
 
+	    val header = [
+		  MLTree.BEGINCLUSTER,
+		  MLTree.PSEUDO_OP MLRISCPseudo.ClusterHeader
+		]
+
+	    val trailer = [
+		  MLTree.PSEUDO_OP MLRISCPseudo.ClusterTrailer,
+		  MLTree.ENDCLUSTER(Cluster.map())
+		]
+	  in
+	    emitMLTree header;
+	    emitProcedures procedures;
+	    emitMLTree trailer
+	  end
+
+    fun resetCluster() = (Register.resetTarget();
+			  FloatRegister.resetTarget();
+			  Cluster.close())
+
+    fun emitBody(prefix, main, procedures, data) =
+	  let
 	    fun define name =
 		  let
 		    val label = externalLabel(prefix^name)
@@ -1743,6 +1763,8 @@ functor EmitRtlMLRISC(
 		     [])@
 		  translateProcedure procedure
 
+	    val emitCluster' = emitCluster translateProcedure'
+
 	    val header = [
 		  MLTree.BEGINCLUSTER,
 		  MLTree.PSEUDO_OP MLRISCPseudo.ModuleHeader
@@ -1750,7 +1772,7 @@ functor EmitRtlMLRISC(
 
 	    val trailer = [
 		  MLTree.PSEUDO_OP MLRISCPseudo.ModuleTrailer,
-		  MLTree.ENDCLUSTER map
+		  MLTree.ENDCLUSTER(Cluster.map())
 		]
 
 	    val textHeader =
@@ -1768,23 +1790,25 @@ functor EmitRtlMLRISC(
 	    val dataTrailer =
 		  define "_SML_GLOBALS_END_VAL"@
 		  [MLTree.PSEUDO_OP MLRISCPseudo.DataTrailer]
+
+	    val clusters = map (fn procedure => [procedure]) procedures
 	  in
-	    header@
-	    textHeader@
-	    (foldr (splice translateProcedure') textTrailer procedures)@
-	    dataHeader@
-	    (Array.foldr (splice translateData) dataTrailer data)@
-	    trailer
+	    emitMLTree header;
+	    emitMLTree textHeader;
+	    emitMLTree [MLTree.ENDCLUSTER(Cluster.map())];
+	    app (emitCluster' protect resetCluster) clusters;
+	    emitMLTree [MLTree.BEGINCLUSTER];
+	    emitMLTree textTrailer;
+	    emitMLTree dataHeader;
+	    Array.app (emitMLTree o translateData) data;
+	    emitMLTree dataTrailer;
+	    emitMLTree trailer
 	  end
 
-    fun resetBody() = (Register.resetTarget();
-		       FloatRegister.resetTarget();
-		       Cluster.close())
+    fun resetBody() = ()
 
-    fun translateTables(prefix, infos, objects, variables) =
+    fun emitTables(prefix, infos, objects, variables) =
 	  let
-	    val map = Cells.resetRegs()
-
 	    val header = [
 		  MLTree.BEGINCLUSTER,
 		  MLTree.PSEUDO_OP MLRISCPseudo.TableHeader
@@ -1792,7 +1816,7 @@ functor EmitRtlMLRISC(
 
 	    val trailer = [
 		  MLTree.PSEUDO_OP MLRISCPseudo.TableTrailer,
-		  MLTree.ENDCLUSTER map
+		  MLTree.ENDCLUSTER(Cluster.map())
 		]
 
 	    fun translateVariable(label, represent) =
@@ -1800,7 +1824,7 @@ functor EmitRtlMLRISC(
 
 	    val objects' = objects
 
-	    val variables' = List.map translateVariable variables
+	    val variables' = map translateVariable variables
 
 	    val calls = TraceTable.MakeTableHeader prefix@
 			TraceTable.MakeTable infos@
@@ -1809,52 +1833,47 @@ functor EmitRtlMLRISC(
 	    val mutables = TraceTable.MakeMutableTable(prefix, objects')
 
 	    val globals = TraceTable.MakeGlobalTable(prefix, variables')
-
-	    val foldData = foldr (splice translateData)
 	  in
-	    header@
-	    (foldData (foldData (foldData trailer globals) mutables) calls)
+	    emitMLTree header;
+	    emitData calls;
+	    emitData mutables;
+	    emitData globals;
+	    emitMLTree trailer
 	  end
 
     fun resetTables() = (LocalLabel.reset();
-			 Label.reset();
-			 Module.close())
-  in
-    fun emitModule(Rtl.MODULE{main		= main,
-			      procs		= procedures,
-			      data		= data,
-			      mutable_objects	= objects,
-			      mutable_variables = variables}) =
-	  let
-	    val _ = Module.open_()
+			 Label.reset())
 
+    fun emit(Rtl.MODULE{main		  = main,
+			procs		  = procedures,
+			data		  = data,
+			mutable_objects	  = objects,
+			mutable_variables = variables}) =
+	  let
 	    val name = LocalLabel.string main
 
-	    fun emitBody() =
-		  (emitMLTree(translateBody(name, main, procedures, data));
-		   Module.infos())
+	    fun emitBody' operand = (emitBody operand; Module.infos())
 
-	    fun emitTables infos () =
-		  emitMLTree(translateTables(name, infos, objects, variables))
+	    val infos =
+		  (emitBody' protect resetBody)(name, main, procedures, data)
 	  in
-	    (emitTables(emitBody protect resetBody)) protect resetTables
+	    (emitTables protect resetTables)(name, infos, objects, variables)
 	  end
+  in
+    fun emitModule operand = (Module.open_();
+			      (emit protect Module.close) operand)
   end
 
   fun emitEntryTable labels =
 	let
-	  val map = Cells.resetRegs()
-
-	  val emitData = app (emitMLTree o translateData)
-
-	  val names = List.map LocalLabel.string labels
+	  val names = map LocalLabel.string labels
 
 	  fun table name =
 		let
 		  fun data prefix =
 			Rtl.DATA(Rtl.ML_EXTERN_LABEL(prefix^"_"^name))
 		in
-		  Rtl.DLABEL(Rtl.ML_EXTERN_LABEL name)::List.map data names
+		  Rtl.DLABEL(Rtl.ML_EXTERN_LABEL name)::map data names
 		end
 
 	  val header = [
@@ -1864,7 +1883,7 @@ functor EmitRtlMLRISC(
 
 	  val trailer = [
 		MLTree.PSEUDO_OP MLRISCPseudo.TableTrailer,
-		MLTree.ENDCLUSTER map
+		MLTree.ENDCLUSTER(Cluster.map())
 	      ]
 
 	  val tables = [
