@@ -77,19 +77,6 @@ val _ =
      LoadVars.first := false
    )
   else if !LoadVars.sticky then
-<<<<<<< load2.sml
-    ((if !LoadVars.typecheck then typecheck true
-      else if !LoadVars.typecheck_some then typecheck_some true
-      else ());
-     (if !LoadVars.show then show true
-      else if !LoadVars.show_some then show_some true
-      else if !LoadVars.show_hil then show_hil true 
-      else ());
-     (if !LoadVars.toRtl then toRtl()
-      else if !LoadVars.toAsm then toAsm()
-      else if !LoadVars.toExe then toExe() else ()))
-  else ()
-=======
     (if !LoadVars.typecheck then typecheck true else ();
      if !LoadVars.typecheck_some then typecheck_some true else ();
      if !LoadVars.show_hil then show_hil true else ();
@@ -99,7 +86,6 @@ val _ =
      else if !LoadVars.toAsm then toAsm()
      else if !LoadVars.toExe then toExe() else ()
        ) else ()
->>>>>>> 1.4
 
 end
 
