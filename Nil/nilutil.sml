@@ -42,8 +42,8 @@ struct
   val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
   val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
   val match_exn = Prim_e(NilPrimOp inj_exn,[unit_con],[match_tag,unit_exp])
-  val false_exp = Prim_e(NilPrimOp roll, [bool_con], [Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w0}),[],[])])
-  val true_exp = Prim_e(NilPrimOp roll, [bool_con], [Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w1}),[],[])])
+  val false_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w0}),[],[])
+  val true_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w1}),[],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
 
@@ -310,7 +310,7 @@ struct
 	      let
 		val (args', result') = f_arrow_kind state (args, result)
 	      in
-		Arrow_k (openness, args, result)
+		Arrow_k (openness, args', result')
 	      end)
 
     in

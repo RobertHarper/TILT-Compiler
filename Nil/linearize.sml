@@ -375,13 +375,29 @@ struct
 					  in  (cbnds_vk @ cbnds_k, Arrow_k(openness,vklist,k))
 					  end)
 
+   fun lexport state (ExportValue(l,e,c)) = 
+       let val (bnds,e) = lexp state e
+	   val (cbnds,c) = lcon state c
+       in  ExportValue(l,Let_e(Sequential,bnds,e),Let_c(Sequential,cbnds,c))
+       end
+     | lexport state (ExportType(l,c,k)) = 
+       let val (cbnds_c,c) = lcon state c
+	   val (cbnds_k,k) = lkind state k
+	   val _ = (case cbnds_k of
+			[] => ()
+		      | _ => error "lexport: ExportType has nontrivial kind")
+       in  ExportType(l,Let_c(Sequential,cbnds_c,c),k)
+       end
+
    fun linearize_mod (MODULE{bnds,imports,exports}) = 
-       let fun folder (bnd,(acc,state)) = let val (state,bnds) = lbnd state bnd
+       let val state = reset_state()
+	   fun import_folder (((ImportValue(_,v,_)) | (ImportType(_,v,_))),s) = #1(add_var(s,v))
+	   val state = foldl import_folder state imports
+	   fun folder (bnd,(acc,state)) = let val (state,bnds) = lbnd state bnd
 					  in  (rev bnds @ acc, state)
 					  end
-	   val state = reset_state()
-	   val state = VarMap.foldli (fn (v,_,s) => #1(add_var(s,v))) state imports
-	   val (rev_bnds,state) = (foldl folder ([],state) bnds)
+	   val (rev_bnds,state) = foldl folder ([],state) bnds
+	   val exports = map (lexport state) exports
        in  MODULE{bnds = rev rev_bnds,
 		  imports = imports,
 		  exports = exports}

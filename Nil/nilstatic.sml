@@ -697,7 +697,7 @@ struct
 					  PpNil.pp_con c; print "\n")
 			   else ();
 			   con_valid (D,c))
-	      | NONE => (print "failed to beta-reduce!\n";
+	      | NONE => (if !debug then print "failed to beta-reduce!\n" else ();
 			 (App_c (cfun,actuals),
 			 substConInKind lookup body_kind))
 	 end

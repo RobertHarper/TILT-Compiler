@@ -387,14 +387,22 @@ functor Ppnil(structure Nil : NIL
     fun pp_bnds bnds = pp_list pp_bnd bnds ("[",",","]",true)
 
     fun pp_module (MODULE{bnds,imports,exports}) = 
-	Vbox0 0 1 [pp_bnds bnds,
-		   Break,
-		   String "IMPORTS:", Break,
-		   pp_list (fn (v,l) => (Hbox[pp_label l, String " = ", pp_var v])) 
-		   (Name.VarMap.listItemsi imports) ("","","",true), Break,
-		   String "EXPORTS:", Break,
-		   pp_list (fn (v,l) => (Hbox[pp_label l, String " = ", pp_var v])) 
-		   (Name.VarMap.listItemsi exports) ("","","",true)]
+	let 
+	    fun pp_importentry (ImportValue (l,v,c)) = 
+		Hbox[pp_label l, String " = ", pp_var v, String " : ", pp_con c]
+	      |  pp_importentry (ImportType (l,v,k)) = 
+		Hbox[pp_label l, String " = ", pp_var v, String " : ", pp_kind k]
+	    fun pp_exportentry (ExportValue (l,e,c)) = 
+		Hbox[pp_label l, String " = ", pp_exp e, String " : ", pp_con c]
+	      |  pp_exportentry (ExportType (l,c,k)) = 
+		Hbox[pp_label l, String " = ", pp_con c, String " : ", pp_kind k]
+	in  Vbox0 0 1 [pp_bnds bnds,
+		       Break,
+		       String "IMPORTS:", Break,
+		       pp_list pp_importentry imports ("","","",true), Break,
+		       String "EXPORTS:", Break,
+		       pp_list pp_exportentry exports ("","","",true), Break]
+	end
 
     fun help pp = pp
     fun help' pp obj = (wrapper pp TextIO.stdOut obj; ())

@@ -1,15 +1,17 @@
 signature TONIL =
 sig
     structure Il : IL
-    structure Nil : NIL
+    structure NilContext : NILCONTEXT
 
+    val debug : bool ref
     val xcompunit : Il.context -> 
                     (Name.var * Name.var) Name.VarMap.map ->
                     Il.sbnds ->
-                    {cu_bnds : Nil.bnd list,
+                    {nil_initial_context : NilContext.context,
+		     nil_final_context : NilContext.context,
+		     cu_bnds : NilContext.Nil.bnd list,
 		     vmap : (Name.var * Name.var) Name.VarMap.map}
 
-    val debug : bool ref
     val elaborator_specific_optimizations : bool ref
 
 end
