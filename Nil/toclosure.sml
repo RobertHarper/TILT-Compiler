@@ -96,6 +96,9 @@ Some Factoids:
   values that must be boxed when building environments; constructor phase matters as
   described above ("Non-Closed Code").
 
+  - Closure conversion DOES NOT SEEM TO require code in A-normal form; all it cares
+  about is that functions have unique names; see above.
+
 
  joev, 8/2002
 *)

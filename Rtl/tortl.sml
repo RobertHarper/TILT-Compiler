@@ -21,6 +21,12 @@
    naive, performing linear search in all nontrivial cases.  This could stand to be
    improved.
 
+   - Tortl requires that its input contain no shadowing.  In particular, the mapping from
+   variables to "terms" (maintained by add_term and friends in TortlBase) obviously
+   cannot allow multiple entries for the same variable.
+
+   - Tortl looks like it should deal pretty well with code that is not in A-normal form.
+
       joev 8/2002
 *)
 
@@ -127,7 +133,7 @@ struct
    context, or not the identity context.   The identity context
    carries the register containing the return address for the
    function with it.*)
-  
+   (* This is just used for deciding whether a call is a tail call.  -joev *)  
   datatype context = ID of regi | NOTID
    
   fun xbnd state (bnd : bnd) : state =
