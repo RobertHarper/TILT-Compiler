@@ -36,6 +36,8 @@ struct
 
 val do_constant_records = ref true
 val do_gcmerge = ref true
+val do_single_crecord = ref true
+
 
 val diag = ref true
 val debug = ref false
@@ -179,6 +181,10 @@ val debug_bound = ref false
   fun named_local_data_label v = LOCAL_LABEL(LOCAL_DATA v)
   fun named_local_code_label v = LOCAL_LABEL(LOCAL_CODE v)
 
+  val local_sub = Name.fresh_named_var "local_subscript"
+  val local_update = Name.fresh_named_var "local_update"
+  val local_array = Name.fresh_named_var "local_array"
+
   val codeAlign = ref (Rtl.OCTA)
   fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
 
@@ -243,9 +249,12 @@ val debug_bound = ref false
       in
 	  (case (k,copt) of
 	       (Singleton_k(_,_,c'),SOME c) => 
-		   (print "insert_kind: c' = ";
+		   (
+(*
+		    print "insert_kind: c' = ";
 		    Ppnil.pp_con c'; print "\n c = \n";
 		    Ppnil.pp_con c'; print "\n";
+*)
 		    equation c)
 	     | (_,SOME c) => equation c
 	     | (Singleton_k(_,_,c),_) => equation c
@@ -320,16 +329,37 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
     fun is_hnf c : bool = 
 	(case c of
 	     Prim_c(pc,clist) => true
-	   | Mu_c _ => true
 	   | AllArrow_c _ => true
 	   | Var_c _ => false
 	   | Let_c _ => false
+	   | Mu_c _ => true
+	   | Proj_c (Mu_c _,_) => true
 	   | Proj_c _ => false
 	   | App_c _ => false
 	   | Crecord_c _ => error "Crecord_c not a type"
 	   | Closure_c _ => error "Closure_c not a type"
 	   | Typecase_c _ => false
 	   | Annotate_c (_,c) => is_hnf c)
+
+    fun reduce_until_hnf(env,c) : con = 
+	let fun diagnose n [] = error "reduce_until_hnf: diagnose"
+	      | diagnose n (c::rest) = (print "reduce_until_hnf(";
+					print (Int.toString n);
+					print ") =\n"; Ppnil.pp_con c; print "\n";
+					diagnose (n+1) rest)
+	    
+	    fun loop (n,past) (subst,c) = 
+	    if (n>1000) then diagnose 0 (rev past)
+		else 
+	    if (is_hnf c)
+		then (subst,c )
+	    else let val next = (n+1,c::past)
+		     val (progress,subst,c) = NilStatic.con_reduce_once(env,subst) c
+		 in  if progress then loop next (subst,c) else (subst,c)
+		 end
+	    val (subst,c) = loop (0,[]) (NilStatic.empty_subst,c)
+	in  NilStatic.con_subst(subst,c)
+	end
 
     fun simplify_type_help env c : bool * con = 
 	(case c of
@@ -339,7 +369,7 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 		 end
 	   | Mu_c _ => (true,c)
 	   | _ => let val _ = if (!debug_simp)
-				  then (print "simplify type calling the type reducer on type:\n";
+				  then (print "simplify type calling type reducer on:\n";
 					Ppnil.pp_con c;
 					print "\nwith env = \n";
 					NilContext.print_context env;
@@ -348,10 +378,8 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 			       if (!debug)
 				  then (print "simplify type called\n")
 				   else ()
-		      (* XXXX is once enough ? but full normalization is too slow *)
-		      val c' = NilStatic.con_reduce_once(env,c)
-		      val c' = if (is_hnf c') then c'
-			       else NilStatic.con_reduce_once(env,c')
+
+		      val c' = reduce_until_hnf(env,c)
 		      val _ = if (!debug_simp)
 				  then (print "simplify type: reducer on type returned:\n";
 					Ppnil.pp_con c';
@@ -363,12 +391,24 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 		  end)
 
     fun simplify_type_help' env c : bool * con = 
-	(case simplify_type_help env c of
-	     (_, Mu_c (is_recur,vc_seq,v)) => 
-		 let val env' = insert_kind(env,v,Word_k Runtime,NONE)
-		 in  simplify_type_help' env' (NilUtil.muExpand(is_recur,vc_seq,v))
-		 end
-	   | (hnf,c) => (hnf,c))
+	let fun help(is_recur,v,vc_seq) = 
+	    let val env' = insert_kind(env,v,Word_k Runtime,NONE)
+	    in  simplify_type_help' env' (NilUtil.muExpand(is_recur,vc_seq,v))
+	    end
+	in
+	    (case simplify_type_help env c of
+		 (_, Mu_c (is_recur,vc_seq)) => 
+		     (case (sequence2list vc_seq) of
+			  [(v,c)] => help (is_recur,v, vc_seq)
+			| _ => error "simplify_type given non-single Mu_c")
+	       | (_, Proj_c(Mu_c (is_recur,vc_seq),l)) => 
+			  let fun loop n [] = error "bad Proj_c(Mu_c,...)"
+				| loop n ((v,_)::rest) = if (eq_label(NilUtil.generate_tuple_label n,l))
+							     then v else loop (n+1) rest
+			  in  help(is_recur,loop 1 (sequence2list vc_seq), vc_seq)
+			  end
+	       | (hnf,c) => (hnf,c))
+	end
 
     fun simplify_type ({env,...} : state) c : bool * con = 
 	simplify_type_help env c
@@ -383,14 +423,13 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
    fun con2rep_raw (state : state) con : rep option = 
        let fun primcon2rep (pcon,clist) = 
 	   case (pcon,clist) of
-	       (Int_c _,_) => NOTRACE_INT
+	       (Int_c _,_) => SOME NOTRACE_INT
 	     | (Float_c Prim.F32,_) => error "32-bit floats not supported"
-	     | (Float_c Prim.F64,_) => NOTRACE_REAL
+	     | (Float_c Prim.F64,_) => SOME NOTRACE_REAL
 	     | (((BoxFloat_c _) | Exn_c | Array_c | Vector_c | Ref_c | Exntag_c | 
-		   (Sum_c _) | (Record_c _) | (Vararg_c _)),_) => TRACE
+		   (Sum_c _) | (Record_c _) | (Vararg_c _)),_) => SOME TRACE
        in case con of
-	   Prim_c(pcon,clist) => SOME(primcon2rep(pcon,clist))
-	 | Mu_c (is_recur,vc_seq,v) => NONE
+	   Prim_c(pcon,clist) => primcon2rep(pcon,clist)
 	 | AllArrow_c (Open,_,_,_,_,_) => error "no open lambdas allowed by this stage"
 	 | AllArrow_c(Closure,_,_,_,_,_) => SOME TRACE
 	 | AllArrow_c(Code,_,_,_,_,_) => SOME NOTRACE_CODE
@@ -407,7 +446,8 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 			 | SOME(SOME(VGLOBAL (l,_)),_,_) => SOME(COMPUTE(Projlabel_p(l,[0])))
 			 | SOME(NONE,NONE,_) => error "no information on this convar!!"
 			 | NONE => NONE)
-
+	 | Mu_c (is_recur,vc_seq) => SOME TRACE
+	 | Proj_c(Mu_c _,_) => SOME TRACE
 	 | (Proj_c _) =>
 	       (let fun koop (Proj_c (c,l)) acc = koop c (l::acc)
 		     | koop (Var_c v) acc = (v,acc)
@@ -418,8 +458,12 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 		       let fun extract acc [] = error "bad Proj_c"
 			     | extract acc (((l,_),fc)::rest) = 
 			       if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
-			   val (con,index) = extract 0 (sequence2list fields_seq)
-		       in  loop (index::acc) con rest
+			   val fields_list = (sequence2list fields_seq)
+			   val (con,index) = extract 0 fields_list 
+			   val acc = if (!do_single_crecord andalso length fields_list = 1)
+					 then acc
+				     else (index::acc) 
+		       in  loop acc con rest
 		       end
 		     | loop acc (Singleton_k(_,k,c)) labs = loop acc k labs
 		     | loop acc _ labs = error "expect record kind"
@@ -432,11 +476,15 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 		     | SOME(_,SOME(VREAL _),_) => error "expect constr record: got real"
 		     | SOME(_,SOME(VRECORD _),_) => error "expect constr record: got term record"
 		     | SOME(_,SOME(VVOID _),_) => error "expect constr record: got void"
-		     | SOME(_,SOME(VLABEL l),kind) => indices(fn x => COMPUTE(Projlabel_p(l,x))) kind
+		     | SOME(_,SOME(VLABEL l),kind) => indices(fn [] => COMPUTE(Label_p l)
+							       | x => COMPUTE(Projlabel_p(l,x))) kind
 		     | SOME(_,SOME(VCODE _),_) => error "expect constr record: got code"
-		     | SOME(SOME(VREGISTER (I ir)),_,kind) => indices (fn x => COMPUTE(Projvar_p(ir,x))) kind
+		     | SOME(SOME(VREGISTER (I ir)),_,kind) => 
+			   indices (fn [] => COMPUTE(Var_p ir)
+			             | x => COMPUTE(Projvar_p(ir,x))) kind
 		     | SOME(SOME(VREGISTER (F _)),_,_) => error "constructor in float reg"
-		     | SOME(SOME(VGLOBAL (l,_)),_,kind) => indices (fn x => COMPUTE(Projlabel_p(l,0::x))) kind
+		     | SOME(SOME(VGLOBAL (l,_)),_,kind) => indices 
+			   (fn x => COMPUTE(Projlabel_p(l,0::x))) kind
 		     | SOME(NONE,NONE,_) => error "no info on convar"
 		     | NONE => NONE) 
 	       end handle e => NONE)
@@ -455,20 +503,14 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 				    SOME c => (print "reduced con = \n";
 					       Ppnil.pp_con c; print "\n")
 				  | _ => print "no reduced con\n"))
-	    fun simp (Mu_c (is_recur,vc_seq,v)) = NilUtil.muExpand(is_recur,vc_seq,v)
-	      | simp c = c
-	    val con = simp con
 	    fun reduce c = 
-		let val c = (case c of
-			       (Proj_c _) => #2(simplify_type state c)
-			     | (Let_c _) => #2(simplify_type state c)
-			     | (App_c _) => #2(simplify_type state c)
-			     | (Var_c _) => #2(simplify_type state c)
-			     | _ => c)
-		in  case c of
-			Mu_c _ => reduce(simp c)
-		      | _ => c
-		end
+		 (case c of
+		      (Proj_c _) => #2(simplify_type state c)
+		    | (Let_c _) => #2(simplify_type state c)
+		    | (App_c _) => #2(simplify_type state c)
+		    | (Var_c _) => #2(simplify_type state c)
+		    | _ => c)
+
 	in  (case (con2rep_raw state con) of
 		 NONE => 
 		     let val c = reduce con handle e => (print "reduce failed\n"; failure NONE; raise e)
@@ -524,6 +566,8 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
    argreg{i/f}: the argument registers  
    ---> If top and currentfun and NONE, then we are at top-level 
         and the register lists will also be empty.   <--- *)
+
+
 
    local
        val istop : bool ref = ref false
@@ -664,12 +708,19 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
        fun resetDepth() = (con_depth := 0;
 			   exp_depth := 0)
 
+       val local_sub_used = ref false
+       val local_update_used = ref false
+       val local_array_used = ref false
+
        fun reset_global_state (exportlist,ngset) = 
 	   let fun exp_adder((v,l),m) = (case VarMap.find(m,v) of
 					     NONE => VarMap.insert(m,v,[l])
 					   | SOME ls => VarMap.insert(m,v,l::ls))
 	       fun gl_adder(v,s) = VarSet.add(s,v)
-	   in  (resetDepth();
+	   in  (local_sub_used := false;
+		local_update_used := false;
+		local_array_used := false;
+		resetDepth();
 		resetWork();
 		global_state :=  make_state();
 		exports := (foldl exp_adder VarMap.empty exportlist);
@@ -1643,14 +1694,20 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	    | Switch_e sw => xswitch(state,name,sw,copt,context)
 	    | App_e (openness, f, clist, elist, eflist) => (* assume the environment is passed in first *)
 		  let 
-			  val callcount = Stats.counter("RTLcall")()
+		      val callcount = Stats.counter("RTLcall")()
+		      val call_type = 
+			      (case openness of
+				    Open => error "no open calls permitted here"
+				  | Code => "direct call "
+				  | ExternCode => "direct extern call "
+				  | Closure => (if (length elist = 0 andalso length eflist = 0)
+						    then "closure polycall"
+						else "closure call ")
+				    ^ (Int.toString callcount))
 		      local
-			  val _ = add_instr (ICOMMENT ((case openness of
-							    Open => error "no open calls permitted here"
-							  | Code => "making a direct call "
-							 | ExternCode => "making a direct extern call "
-							 | Closure => "making a closure call ")
-						       ^ (Int.toString callcount)))
+
+			  val _ = add_instr (ICOMMENT ("making " ^ call_type))
+
 
 			  fun cfolder (c,state) =
 			      let val (res,_,state) = xcon(state,fresh_named_var "call_carg", c, NONE)
@@ -1721,13 +1778,17 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 				  val handlers = (nada,nada,ch,nada,nada)
 			      in  con_rewrite handlers rescon
 			      end
-			  val rescon = (case (copt,funcon) of
-					    (SOME c,_) => c
-					  | (NONE,AllArrow_c(_,_,vklist,_,_,rescon)) => reduce(vklist,clist,rescon)
-					  | (_,c) => 
-						(case #2(simplify_type state c) of
-						     AllArrow_c(_,_,vklist,_,_,rescon) => reduce(vklist,clist,rescon)
-						   | _ => error "cannot compute type of result of call"))
+			  val rescon = 
+			      (case (copt,funcon) of
+				   (SOME c,_) => c
+				 | (NONE,AllArrow_c(_,_,vklist,_,_,rescon)) => reduce(vklist,clist,rescon)
+				 | (_,c) => 
+				       (case #2(simplify_type state c) of
+					    AllArrow_c(_,_,vklist,_,_,rescon) => reduce(vklist,clist,rescon)
+					  | c => (print "cannot compute type of result of call\n";
+						  print "funcon = \n"; Ppnil.pp_con funcon; print "\n";
+						  print "reduced to \n"; Ppnil.pp_con c; print "\n";
+						  error "cannot compute type of result of call")))
 						     
 		      end
 (*
@@ -1770,12 +1831,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 				      | (ID r,true,false) => do_call (SOME r))
 		      val result = (VAR_LOC(VREGISTER dest), rescon,
 				     new_gcstate state)
-		      val _ = add_instr (ICOMMENT ((case openness of
-							Open => error "no open calls permitted here"
-						     | Code => "done making a direct call "
-						     | ExternCode => "done making a direct extern call "
-						     | Closure => "done making a closure call ")
-						   ^ (Int.toString callcount)))
+		      val _ = add_instr (ICOMMENT ("done making " ^ call_type))
+
 		  in  result
 		  end
 
@@ -2520,6 +2577,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		     | loop (l1::lrest) (c1::crest) n = if (eq_label(l1,label))
 							    then (n,c1)
 							else loop lrest crest (n+1)
+		   val oldreccon = reccon
 		   val reccon = case reccon of
 		       Prim_c(Record_c _, _) => reccon
 		     | _ => #2(simplify_type state reccon)
@@ -2527,7 +2585,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		       (case reccon of
 			    Prim_c(Record_c labels,cons) => (labels,cons)
 			  | c => (print "selecting from exp of type: ";
-				  Ppnil.pp_con c; print "\n";
+				  Ppnil.pp_con oldreccon; print "\nwhich reduces to\n";
+				  Ppnil.pp_con reccon; print "\n";
 				  error' "selecting from a non-record"))
 		   val (which,con) = loop labels fieldcons 0
 		   val con = (case copt of 
@@ -2660,19 +2719,13 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	 | box_float Prim.F32 => error "32-bit floats not done"
 	 | unbox_float Prim.F32 => error "32-bit floats not done"
 	 | roll => let val ([c],[e]) = (clist,elist) 
+	               (* the type returned is not right *)
 		   in  xexp(state,fresh_var(),e,NONE,context)
 		   end
 	 | unroll => 
 		   let val ([c],[e]) = (clist,elist)
-		       val (r,_,state) = xexp'(state,fresh_var(),e,NONE,context)
-		       val c' = 
-			   (case #2(simplify_type state c) of
-				Mu_c(is_recur,vcseq,v) => NilUtil.muExpand(is_recur,vcseq,v)
-			      | c => 
-				    (print "not a mu type decorating unroll\n";
-				     Ppnil.pp_con c; print "\n";
-				     error "not a mu type decorating an unroll"))
-		   in (VAR_LOC(VREGISTER r), c',state)
+		       (* the type returned is not right *)
+		   in  xexp(state,fresh_var(),e,NONE,context)
 		   end
 	 | make_exntag => 
 		   let val [c] = clist 
@@ -3124,7 +3177,26 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		 | (true,Prim_c(Int_c Prim.W8,[])) => nonfloatcase(state, Prim.W8)
 		 | (true,_) => nonfloatcase(state, Prim.W32)
 		 | (false,_) => 
-		       let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
+		     if ((case getCurrentFun() of
+			      LOCAL_CODE v => not(Name.eq_var(local_sub,v))
+			    | _ => false))
+			 then 
+			     let val _ = local_sub_used := true
+				 val v1 = Name.fresh_named_var "array"
+				 val v2 = Name.fresh_named_var "index"
+				 val ir1 = load_ireg_locval(vl1,NONE)
+				 val ir2 = load_ireg_locval(vl2,NONE)
+				 val state = add_var state (v1, I ir1, 
+							    Prim_c(Array_c, [c]))
+				 val state = add_var state (v2, I ir2, 
+							    Prim_c(Int_c Prim.W32,[]))
+				 val e = App_e(Code,Var_e local_sub,[c],[Var_e v1, Var_e v2],[])
+				 val (r,_,s) = xexp'(state, Name.fresh_named_var "subscript", e,
+						     SOME c, NOTID)
+			     in  (r,s)
+			     end
+		     else 
+                       let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 			   val tmp = alloc_regi NOTRACE_INT
 			   val desti = alloc_regi(con2rep state c)
 			   val afterl = alloc_code_label "sub_after"
@@ -3228,19 +3300,44 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
       in  xintupdate(Prim.W32, vl1, vl2, vl3)
       end
 
-  and xupdate(state : state,c, vl1 : loc_or_val, vl2 : loc_or_val, vl3 : loc_or_val) : loc_or_val * con * state =
+  and xupdate(state : state,c, vl1 : loc_or_val, vl2 : loc_or_val, vl3 : loc_or_val) 
+      : loc_or_val * con * state =
       let
-	  val r = 
+	  val state = 
 	      (case (simplify_type' state c) of
-		   (true,Prim_c(Float_c Prim.F64,[])) => (xfloatupdate(vl1,vl2,vl3); ())
+		   (true,Prim_c(Float_c Prim.F64,[])) => (xfloatupdate(vl1,vl2,vl3); state)
 		 | (true,Prim_c(BoxFloat_c Prim.F64,[])) => 
 		       let val fr = unboxFloat(load_ireg_locval(vl3,NONE))
-		       in  (xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (F fr))); ())
+			   val _ = xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (F fr)))
+		       in state
 		       end
 		 | (true,Prim_c(Float_c Prim.F32,[])) => error "32-bit floats not done"
-		 | (true,Prim_c(Int_c is,[])) => (xintupdate(is,vl1,vl2,vl3); ())
-		 | (true,_) => (xptrupdate(c,vl1,vl2,vl3); ())
+		 | (true,Prim_c(Int_c is,[])) => (xintupdate(is,vl1,vl2,vl3); state)
+		 | (true,_) => (xptrupdate(c,vl1,vl2,vl3); state)
 		 | (false,_) => (* simplified type may involve variable not in scope *)
+		     if ((case getCurrentFun() of
+			      LOCAL_CODE v => not(Name.eq_var(local_update,v))
+			    | _ => false))
+			 then 
+			     let val _ = local_update_used := true
+				 val v1 = Name.fresh_named_var "array"
+				 val v2 = Name.fresh_named_var "index"
+				 val v3 = Name.fresh_named_var "item"
+				 val ir1 = load_ireg_locval(vl1,NONE)
+				 val ir2 = load_ireg_locval(vl2,NONE)
+				 val ir3 = load_ireg_locval(vl3,NONE)
+				 val state = add_var state (v1, I ir1, 
+							    Prim_c(Array_c, [c]))
+				 val state = add_var state (v2, I ir2, 
+							    Prim_c(Int_c Prim.W32,[]))
+				 val state = add_var state (v3, I ir3, c)
+				 val e = App_e(Code,Var_e local_update,[c],
+					       [Var_e v1, Var_e v2, Var_e v3],[])
+				 val (r,_,s) = xexp'(state, Name.fresh_named_var "update", e,
+						     SOME c, NOTID)
+			     in  s
+			     end
+		     else
 		       let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 			   val tmp = alloc_regi NOTRACE_INT
 			   val afterl = alloc_code_label "update_after"
@@ -3265,7 +3362,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			   val fr = unboxFloat(load_ireg_locval(vl3,NONE))
 			   val _ = xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (F fr)))
 			   val _ = add_instr(ILABEL afterl)
-		       in  ()
+		       in  state
 		       end)
       in (#1 unit_vvc, #2 unit_vvc, state)
       end
@@ -3556,6 +3653,26 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			       unboxFloat(load_ireg_locval(vl2,NONE)))
 	       | (true,_) => ptrcase(state,dest,vl1,vl2)
 	       | (false,_) => 
+		     if ((case getCurrentFun() of
+			      LOCAL_CODE v => not(Name.eq_var(local_array,v))
+			    | _ => false))
+			 then 
+			     let val _ = local_array_used := true
+				 val v1 = Name.fresh_named_var "size"
+				 val v2 = Name.fresh_named_var "item"
+				 val ir1 = load_ireg_locval(vl1,NONE)
+				 val ir2 = load_ireg_locval(vl2,NONE)
+				 val state = add_var state (v1, I ir1, 
+							    Prim_c(Int_c Prim.W32,[]))
+				 val state = add_var state (v2, I ir2, c)
+				 val e = App_e(Code,Var_e local_array,[c],
+					       [Var_e v1, Var_e v2],[])
+				 val (I r,_,s) = xexp'(state, Name.fresh_named_var "array", e,
+						     SOME c, NOTID)
+				 val _ = add_instr(MV(r,dest))
+			     in  s
+			     end
+		     else
 		     let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 			 val tmp = alloc_regi NOTRACE_INT
 			 val afterl = alloc_code_label "array_after"
@@ -3681,18 +3798,16 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	     | Prim_c(Record_c _,cons) => mk_sum_help(state,NONE,[5,length cons],cons)
 	     | Prim_c(Vararg_c _,cons) => mk_sum(state,6,cons)
 	     | Prim_c _ => error "ill-formed primitive type"
-	     | Mu_c (is_recur,vcset,v) => 
+	     | Mu_c (is_recur,vcset) => 
 		   let val vclist = sequence2list vcset
-		       fun loop _ [] (s,rev_lvs,SOME which) = (s,rev rev_lvs, which)
-			 | loop _ [] (s,rev_lvs,NONE) = error "bad mu type"
-			 | loop n ((v',c)::vrest) (s,rev_lvs,opt) = 
+		       fun loop _ [] (s,rev_lvs) = (s,rev rev_lvs)
+			 | loop n ((v',c)::vrest) (s,rev_lvs) = 
 			   let val (lv,k,s) = if is_recur
 						then mk_sum'(s,[7,0],[])
 					    else mk_sum(s,7,[c])
-			       val opt' = if (eq_var(v,v')) then SOME(lv,k) else opt
-			   in  loop (n+1) vrest (s,lv::rev_lvs,opt')
+			   in  loop (n+1) vrest (s,lv::rev_lvs)
 			   end
-		       val (state,lvs,(res_lv,kind)) = loop 0 vclist (state,[],NONE)
+		       val (state,lvs) = loop 0 vclist (state,[])
 			   
 		       val state = 
 			   if is_recur
@@ -3708,7 +3823,13 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 				   in  foldl do_write recstate (zip clregs vclist)
 				   end
 			       else state
-		   in  (res_lv,kind,state)
+		   in (case lvs of
+			   [lv] => (lv, Word_k Runtime, state)
+			 | _ => let val kind = kind_tuple (map (fn _ => Word_k Runtime) lvs)
+				    val reps = map (fn _ => TRACE) lvs
+				    val (lv,state) = make_record'(state,NONE,reps,lvs)
+				in  (lv,kind,state)
+				end)
 		   end
 	     | AllArrow_c (Open,_,_,_,_,_) => error "open Arrow_c"
 	     | AllArrow_c (Closure,_,_,clist,numfloat,c) => 
@@ -3740,23 +3861,34 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		       val kind = Record_k(list2sequence lvkList)
 		       val vl = map (fn (_,_,(ir,_)) => VAR_LOC(VREGISTER(I ir))) lvregikind
 		       val reps = map (fn _ => TRACE) vl
-		       val (lv,state) = make_record'(state,NONE,reps,vl)
+		       val (lv,state) = (case (!do_single_crecord,lclist) of
+					     (true,[_]) => let val [(_,_,(ir,_))] = lvregikind
+						    in  (VAR_LOC(VREGISTER(I ir)), state)
+						    end
+					   | _ => make_record'(state,NONE,reps,vl))
 		   in  (lv,kind,state)
 		   end
 	     | Proj_c (c, l) => 
-		   let val (ir,k,state) = xcon(state,fresh_named_var "proj_c",c,NONE)
-		       fun loop [] _ = error "ill-formed projection"
-			 | loop (((l',_),k)::vrest) n = if (eq_label(l,l')) 
+		   let val (ir,k,state) = xcon(state,fresh_named_var "proj_c",
+								   c,NONE)
+		       val k as Record_k lvk_seq = NilUtil.kill_singleton k
+		       fun default() = 
+			   let fun loop [] _ = error "ill-formed projection"
+				 | loop (((l',_),k)::vrest) n = if (eq_label(l,l')) 
 							    then (n,k) else loop vrest (n+1)
 		       (* fieldk may have dependencies *)			
-		       val (which,fieldk) = 
-			   (case (NilUtil.kill_singleton k) of 
-				Record_k lvk_seq => loop (sequence2list lvk_seq) 0
-			      | _ => error "bad kind to proj_c from")
-		       val {env=ctxt,...} = state
-		       val dest = alloc_regi TRACE
-		       val _ = add_instr(LOAD32I(EA(ir,4 * which),dest))
-		   in (VAR_LOC(VREGISTER (I dest)), fieldk, state)
+			       val (which,fieldk) = 
+				   (case k of
+					Record_k lvk_seq => loop (sequence2list lvk_seq) 0
+				      | _ => error "bad kind to proj_c from")
+			       val {env=ctxt,...} = state
+			       val dest = alloc_regi TRACE
+			       val _ = add_instr(LOAD32I(EA(ir,4 * which),dest))
+			   in (VAR_LOC(VREGISTER (I dest)), fieldk, state)
+			   end
+		   in  (case (!do_single_crecord,Util.sequence2list lvk_seq) of
+			    (true,[(_,k)]) => (VAR_LOC(VREGISTER(I ir)),k,state)
+			  | _ => default())
 		   end
 	     | Closure_c (c1,c2) => 
 		   let 
@@ -3991,7 +4123,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		      in  CHANGE_NORECURSE [bnd]
 		      end
 		  
-		  fun chandle (_,Mu_c(_,vcseq,_)) = (map (fn (v,_) => 
+		  fun chandle (_,Mu_c(_,vcseq)) = (map (fn (v,_) => 
 							  (addtop v; addglobal v))
 						     (sequence2list vcseq);
 						     NOCHANGE)
@@ -4071,10 +4203,45 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		     | mapper (_,ExportType(l,Var_c v,_)) = NONE
 		     | mapper ((v,_),ExportValue(l,e,c)) = SOME(Exp_b(v,c,e))
 		     | mapper ((v,_),ExportType(l,c,k)) = SOME(Con_b(v,k,c))
+		   val local_bnds = 
+		       let val c = Name.fresh_named_var "subscript_type"
+			   val array = Name.fresh_named_var "subscript_array"
+			   val index = Name.fresh_named_var "subscript_index"
+			   val body = Prim_e(PrimOp(Prim.sub Prim.WordArray), [Var_c c], 
+					     [Var_e array, Var_e index])
+			   val sub_fun = Function(Partial,Leaf,[(c,Word_k Runtime)],
+						  [(array,Prim_c(Array_c,[Var_c c])),
+						   (index,Prim_c(Int_c Prim.W32 ,[]))], [],
+						  body, Var_c c)
+			   val c = Name.fresh_named_var "update_type"
+			   val array = Name.fresh_named_var "update_array"
+			   val index = Name.fresh_named_var "update_index"
+			   val item = Name.fresh_named_var "update_item"
+			   val body = Prim_e(PrimOp(Prim.update Prim.WordArray), [Var_c c], 
+					     [Var_e array, Var_e index, Var_e item])
+			   val update_fun = Function(Partial,Leaf,[(c,Word_k Runtime)],
+						  [(array,Prim_c(Array_c,[Var_c c])),
+						   (index,Prim_c(Int_c Prim.W32 ,[])),
+						   (item,Var_c c)], [],
+						  body, Var_c c)
+			   val c = Name.fresh_named_var "array_type"
+			   val size = Name.fresh_named_var "array_size"
+			   val item = Name.fresh_named_var "array_item"
+			   val body = Prim_e(PrimOp(Prim.create_table Prim.WordArray), [Var_c c], 
+					     [Var_e size, Var_e item])
+			   val array_fun = Function(Partial,Leaf,[(c,Word_k Runtime)],
+						  [(size,Prim_c(Int_c Prim.W32 ,[])),
+						   (item,Var_c c)], [],
+						  body, Prim_c(Array_c,[Var_c c]))
+		       in  [Fixcode_b (Util.list2sequence [(local_sub,sub_fun)]),
+			    Fixcode_b (Util.list2sequence [(local_update,update_fun)]),
+			    Fixcode_b (Util.list2sequence [(local_array,array_fun)])]
+		       end
 		   val export_bnds = List.mapPartial mapper named_exports
-	     in  val exp = Let_e(Sequential,bnds,
+	     in  val exp = Let_e(Sequential,local_bnds,
+				 Let_e(Sequential, bnds,
 				   Let_e(Sequential,export_bnds,
-				   Const_e(Prim.int(Prim.W32,TW64.zero))))
+				   Const_e(Prim.int(Prim.W32,TW64.zero)))))
 		 val con = Prim_c(Int_c Prim.W32,[])
 	     end
 
@@ -4128,7 +4295,25 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			 then print "tortl - returned from worklist now\n"
 		     else ()
 
-	     val module = Rtl.MODULE {procs = rev (!pl),
+	     val procs = let fun revFilter acc [] = acc
+			       | revFilter acc ((a as PROC{name,...})::b) = 
+		                   let val v = (case name of
+						    LOCAL_CODE v => v
+						  | LOCAL_DATA v => v)
+				       val is_sub = Name.eq_var(local_sub,v) 
+				       val is_update = Name.eq_var(local_update,v) 
+				       val is_array = Name.eq_var(local_array,v) 
+				       val discard = (is_sub andalso  not (!local_sub_used))
+					   orelse (is_update andalso  not (!local_update_used))
+					   orelse (is_array andalso  not (!local_array_used))
+				   in  if discard 
+					   then revFilter acc b
+				       else revFilter (a::acc) b
+				   end
+			 in  revFilter [] (!pl)
+			 end
+
+	     val module = Rtl.MODULE {procs = procs,
 				      data = rev(!dl),
 				      main=LOCAL_CODE mainName,
 				      mutable_objects = get_mutable_objects(),
