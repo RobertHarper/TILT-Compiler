@@ -3,11 +3,14 @@
 
 // ------------ Util directory --------------
 
-UTIL util.sig
-Util util
+UTIL_ERROR util-error.sig
+UtilError util-error
 
 PLATFORM platform.sig
 Platform platform
+
+UTIL util.sig
+Util util
 
 LISTOPS listops.sig
 Listops listops

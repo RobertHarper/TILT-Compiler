@@ -1459,10 +1459,10 @@ end (* local defining splitting context *)
      | xcon' context (Il.CON_FLEXRECORD fr) = xflexinfo context fr
 
      | xcon' context (Il.CON_INT Prim.W64) =
-       raise Util.BUG "64-bit integers not handled during/after phase-split"
+       error "64-bit integers not handled during/after phase-split"
 
      | xcon' context (Il.CON_UINT Prim.W64) =
-       raise Util.BUG "64-bit integers not handled during/after phase-split"
+       error "64-bit integers not handled during/after phase-split"
 
      | xcon' context (Il.CON_INT intsize) =
        let

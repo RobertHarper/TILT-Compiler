@@ -277,6 +277,7 @@ functor FileCache(type internal
     FILECACHE where type internal = internal =
 struct
 
+  val backupCtx = Stats.ff "CacheBackupCtx"
   type internal = internal
   val cache = ref 5  (* Number of ticks before an unused entry is discarded *)
   val error = fn s => Util.error "manager.sml" s
@@ -391,23 +392,35 @@ struct
 				  val _ = set(file, stat)
 			      in  crc
 			      end)
-	   
+
+  fun backup file =
+      let val backup = file ^ ".BACKUP"
+      in
+	  (OS.FileSys.remove backup handle _ => ());
+	  OS.FileSys.rename {old=file, new=backup}
+      end
+
   fun write (file, result) = 
-      let val same = (exists file) andalso
+      let val exists = exists file
+	  val same = exists andalso
 		      let val (_,oldResult) = read file
 		      in  equaler(result, oldResult)
 		      end
       in  if same
 	      then false
-	  else let val _ = writer(file,result)
-		   val crc = Crc.crc_of_file file
-		   val SOME (s,t) = modTimeSize_raw file
-		   val stat = if (!cache>0) 
-				  then CACHED(s, t, crc, 2, result)
-			      else CRC (s, t, crc)
-		   val _ = set(file, stat)
-	       in  true
-	       end
+	  else
+	      let val _ = if exists andalso (!backupCtx)
+			      then backup file
+			  else ()
+		  val _ = writer(file,result)
+		  val crc = Crc.crc_of_file file
+		  val SOME (s,t) = modTimeSize_raw file
+		  val stat = if (!cache>0) 
+				 then CACHED(s, t, crc, 2, result)
+			     else CRC (s, t, crc)
+		  val _ = set(file, stat)
+	      in  true
+	      end
       end
 
 end
@@ -419,6 +432,7 @@ struct
     val error = fn s => Util.error "manager.sml" s
     val stat_each_file = Stats.tt("TimeEachFile")
     val showWrittenContext = Stats.ff("ShowWrittenContext")
+    val writeUnselfContext = Stats.ff("WriteUnselfContext")
 
     datatype result = WORK of string | WAIT | READY
     fun readPartialContextRaw file = 
@@ -432,24 +446,31 @@ struct
 	end
     val readPartialContextRaw = Stats.timer("ReadingContext",readPartialContextRaw)
 
-    fun writePartialContextRaw (file,pctxt) = 
+    fun writePartialContextRaw' (file,pctxt) =
 	let val os = BinIO.openOut file
 	    val _ = LinkIl.IlContextEq.blastOutPartialContext os pctxt
 	    val _ = BinIO.closeOut os
-	    val _ = if (!showWrittenContext)
+	in
+	    ()
+	end
+    
+    fun writePartialContextRaw (file,pctxt) = 
+	let val _ = writePartialContextRaw' (file,pctxt)
+	    val shortpctxt = Delay.delay (fn () => IlContext.UnselfifyPartialContext pctxt)
+	    val _ = if (!writeUnselfContext)
 			then (let val shortfile = file ^ ".unself"
-				  val shortpctxt = IlContext.UnselfifyPartialContext pctxt
-				  val os = BinIO.openOut shortfile
-				  val _ = LinkIl.IlContextEq.blastOutPartialContext os shortpctxt
-				  val _ = BinIO.closeOut os
-			      in  print "Selfified context:\n"; 
-				  Ppil.pp_pcontext pctxt;
-				  print "\n\n\nUnselfified context:\n"; 
-				  Ppil.pp_pcontext shortpctxt
+			      in  writePartialContextRaw' (shortfile, Delay.force shortpctxt)
 			      end)
+		    else ()
+	    val _ = if (!showWrittenContext)
+			then (print "Selfified context:\n"; 
+			      Ppil.pp_pcontext pctxt;
+			      print "\n\n\nUnselfified context:\n";
+			      Ppil.pp_pcontext (Delay.force shortpctxt))
 		    else ()
 	in  () 
 	end
+    
     val writePartialContextRaw = Stats.timer("WritingContext",writePartialContextRaw)
     structure Cache = FileCache(type internal = Il.partial_context
 				val equaler = LinkIl.IlContextEq.eq_partial_context
@@ -1500,7 +1521,7 @@ struct
 		    val s = base2s base
 		    val gz = s ^ ".gz"
 		    val obj = base2o base
-		in  kill ui; kill uo; kill s; kill gz; kill obj
+		in  app kill [ui, ui ^ ".BACKUP", ui ^ ".unself", uo, s, gz, obj]
 		end
 	    fun purgePlatform platform =
 		let val savedPlatform = Til.getTargetPlatform()
@@ -1509,9 +1530,12 @@ struct
 		    app remove units;
 		    Til.setTargetPlatform savedPlatform
 		end
+	    val dot = mapfile ^ ".dot"
+	    val ps = mapfile ^ ".ps"
 	in
 	    app purgePlatform [Til.TIL_ALPHA, Til.TIL_SPARC];
-	    app kill (exeDroppings ("", units))
+	    app kill (exeDroppings ("", units));
+	    app kill [dot, ps]
 	end
 end
 

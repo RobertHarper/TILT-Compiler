@@ -3,6 +3,7 @@ structure Linker :> LINKER =
   struct
 
     val debug_asm = Stats.bool("debug_asm")
+    val keep_link_asm = Stats.ff("keep_link_asm")
     val error = fn x => Util.error "Linker" x
 
     type config = {assembler : string list,
@@ -307,7 +308,7 @@ structure Linker :> LINKER =
 			
 		    val _ = run [assembler, ["-o", link_o, link_s]]
 		    val _ = run [linker, ["-o", exe_result], ldpre, o_files, [link_o], ldpost]
-		    val _ = if !(Stats.bool("keep_asm"))
+		    val _ = if not (!keep_link_asm)
 				then List.app OS.FileSys.remove [link_s, link_o]
 			    else ()
 		in

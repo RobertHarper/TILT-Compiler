@@ -112,12 +112,12 @@ copyFile Doc/tilt.1 `{commonPath man/man1/tilt.1}
 copyStuff `{archPath sun4_55 lib/tilt} \
 		Runtime/obj_solaris/firstdata.o \
 		Runtime/runtime.alpha_osf.a \
-		Heaps/tilt.sparc-solaris \
-		Top.sparc.exe
+		Heaps/tilt.sparc-solaris
+		#Top.sparc.exe
 copyStuff `{archPath alpha_dux40 lib/tilt} \
 		Runtime/runtime.alpha_osf.a \
-		Heaps/tilt.alpha32-dunix \
-		Top.alpha.exe
+		Heaps/tilt.alpha32-dunix
+		#Top.alpha.exe
 copyStuff `{archPath i386_linux3 lib/tilt} \
 		Heaps/tilt.x86-linux
 setSlaveScript til_slave_local_xterm

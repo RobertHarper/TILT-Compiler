@@ -115,14 +115,15 @@ will require the logical name of the file containing the module.  Most
 logical names are the same as their structure, signature, or functor.
 Examples include List, LIST, and TextIO.  The logical name TopLevel
 corresponds to the module containing terms and types bound at the top
-level like print, map, and all basis library structures.
+level like print, map, etc.  A complete list of the logical names
+used by the basis can be found in /usr/local/lib/tilt/Basis/mapfile-basis.
 .PP
 It is unlikely that the dependencies will have been correctly set up
 when
 .I tilt
 is first run.  Error messages that result because of this
 will be of the "unbound variable" sort.  For example, if the structure
-Posix is unbound, then add Posix (or TopLevel) to the import list.
+Posix is unbound, then add Posix to the import list.
 .SH FILES
 .TP
 /usr/local/lib/tilt

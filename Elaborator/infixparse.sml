@@ -141,7 +141,7 @@ structure InfixParse
 						   then rightscan rest (v2::op1::acc)
 						 else (right_rewrite_list acc)::op1::v2::rest
 	      | rightscan [] acc = [right_rewrite_list acc]
-              | rightscan _ acc = raise (BUG "rightscan encountered ill-formed expression")
+              | rightscan _ acc = error "rightscan encountered ill-formed expression"
 	  in
 	    scan acc
 	  end

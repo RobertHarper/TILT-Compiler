@@ -2,6 +2,8 @@ Group is
 (* ------ SML/NJ library ------ *)
 ../smlnj-lib.cm
 (* ------ Our own utilities --- *)
+util-error.sig.sml
+util-error.sml
 util.sig.sml
 util.sml
 platform.sig.sml

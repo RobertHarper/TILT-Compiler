@@ -886,8 +886,19 @@ struct
 		val lvlist = List.mapPartial (mapper c) vlist
 		val lvlist' = List.mapPartial (mapper c') vlist'
 
+		fun printLvlist name list =
+		    (print (name ^ " = ");
+		     List.app (fn (l, v) => (print "("; Ppil.pp_label l;
+					     print ","; Ppil.pp_var v;
+					     print ") :: ")) list;
+		     print "nil\n")
+		    
 		val _ = if length lvlist <> length lvlist' 
 			    then (print "extend_vm_contxt: lvlist length not equal\n";
+				  if (!debug)
+				      then (printLvlist "lvlist" lvlist;
+					    printLvlist "lvlist'" lvlist')
+				  else ();
 				  raise NOT_EQUAL)
 			else ()
 		fun folder ((l,v), (vm,vlist)) =
@@ -1045,7 +1056,7 @@ struct
 	and eq_kind(vm,kind,kind') = 
 	    case (kind,kind') of
 		 (KIND_TUPLE i, KIND_TUPLE i') => i=i'
-	       | (KIND_ARROW p, KIND_ARROW p') => p=p'
+	       | (KIND_ARROW (i,k), KIND_ARROW (i',k')) => i=i' andalso eq_kind(vm,k, k')
 	       | (KIND, KIND) => true
 	       | _ => false
  

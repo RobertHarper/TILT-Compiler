@@ -5,7 +5,10 @@ signature UTIL =
   sig
 
     exception UNIMP
-    exception BUG of string
+
+    (* takes error msg *)
+    val raise_error : string -> 'a
+	
     (* takes filename and then error msg *)
     val error : string -> string -> 'a
 
@@ -48,10 +51,11 @@ signature UTIL =
     val memoize : (unit -> 'a) -> (unit -> 'a)
 
     (* system command *)
-    (* If the system is UNIX (has a sys command), then execute system and return the success status.
-       Otherwise, put the command in a file called worklist.  When the file disappears
-          the command returns.  Presumably there is a process on a UNIX system monitoring
-	  this file and executing commands placed there. *)
+    (* If we're running on UNIX, execute command via OS.Process.system.
+     * Otherwise put the command in a file called worklist and wait for
+     * the file to disappear.  Presumably there is a process on a non-UNIX
+     * system monitoring this file and executing commands placed there.
+     *)
     val system : string -> bool
 
   end

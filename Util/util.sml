@@ -1,16 +1,13 @@
-(*$import TopLevel UTIL OS TextIO *)
+(*$import UtilError Platform TopLevel UTIL OS TextIO *)
 
 structure Util :> UTIL = 
   struct
     exception UNIMP
-    exception BUG of string
-    fun real_error filename str = let val s = filename ^ ": " ^ str
-				  in  raise (BUG s)
-				  end
+
+    val error = fn s => UtilError.error "util.sml" s
 
     fun loop a b = if (a>b) then [] else a::(loop (a+1) b)
     fun count n = loop 0 (n-1)
-    val error = fn s => real_error "util.sml" s
 
     local 
 	val precomputeMax = 10
@@ -100,30 +97,24 @@ structure Util :> UTIL =
 	      | SOME res => res)
        end
 
-   val has_sys = 
-       let val command = "sys > sysname"
-       in  (OS.Process.system command = OS.Process.success
-	    andalso 
-	    let val is = TextIO.openIn "sysname"
-		val str = TextIO.input is
-		val _ = TextIO.closeIn is
-	    in  isSome(substring("alpha",str)) orelse isSome(substring("sun",str))
-	    end)
-       end
+   (* isUnix : unit -> bool *)
+   fun isUnix () = Platform.platform() <> Platform.NT
+       
    fun system command = 
-       if (not has_sys)
-	        then 
-                  let val os = TextIO.openOut "worklist"
-	              val _ = TextIO.output(os,command)
-	              val _ = TextIO.closeOut os
-		      fun count 0 = () | count n = count(n-1)
-		      fun sleep 0 = () | sleep n = (count 1000000; sleep(n-1))
-		      fun loop() = if OS.FileSys.access("worklist",[])
-					then (sleep 10; loop()) else ()
-                  in  loop(); true
-                  end
+       if not (isUnix())
+	   then 
+	       let val os = TextIO.openOut "worklist"
+		   val _ = TextIO.output(os,command)
+		   val _ = TextIO.closeOut os
+		   fun count 0 = () | count n = count(n-1)
+		   fun sleep 0 = () | sleep n = (count 1000000; sleep(n-1))
+		   fun loop() = if OS.FileSys.access("worklist",[])
+				    then (sleep 10; loop()) else ()
+	       in  loop(); true
+	       end
        else (OS.Process.system command <> OS.Process.failure)
 
-    val error = real_error
+    val raise_error = UtilError.raise_error
+    val error = UtilError.error
 
   end

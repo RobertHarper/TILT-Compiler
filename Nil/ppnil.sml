@@ -243,7 +243,7 @@ structure Ppnil	:> PPNIL =
 	String (case nilprimop of
 		    record labels => "record"
 		  | partialRecord (labels,missField) => "partialRecord_" ^ (Int.toString missField)
-		  | select label => raise (BUG "pp_nilprimop: control should not reach here")
+		  | select label => error "pp_nilprimop: control should not reach here"
 		  | inject w => "inject_dyn" ^ (TilWord32.toDecimalString w)
 		  | inject_known w => "inject_known_" ^ (TilWord32.toDecimalString w)
 		  | inject_known_record w => "inject_knownrec_" ^ (TilWord32.toDecimalString w)

@@ -1,11 +1,9 @@
-(*$import MAIN TopLevel Manager Stats Getopt *)
-
-(* was $import MAIN Prelude List TextIO TopLevel Manager Stats Getopt *)
+(*$import MAIN TopLevel Manager Stats Getopt UtilError Dirs *)
 
 structure Main : MAIN =
 struct
 
-    val usage = "usage: tilt [-?vs] [-fr flag] [-cm mapfile] [-S [num/]host] [mapfile ...]\n"
+    val usage = "usage: tilt [-?vs] [-fr flag] [-cm mapfile] [-S [num/]host] [mapfile ...]"
     val version = "TILT version 0.1 (alpha6)\n"
 
     datatype cmd =
@@ -16,10 +14,15 @@ struct
       | Master of string		(* -m mapfile *)
       | Slave				(* -s *)
       | Slaves of int * string		(* -S [num/]host *)
-      | Slaves' of (int * string) list
       | PrintUsage			(* -? *)
       | PrintVersion			(* -v *)
 
+    (* isSlaves, isSlave : cmd -> bool *)
+    fun isSlaves (Slaves _) = true
+      | isSlaves _ = false
+    fun isSlave (Slave) = true
+      | isSlave _ = false
+	
     (* runCmd : cmd -> unit *)
     fun runCmd (Make mapfiles) = List.app Manager.make mapfiles
       | runCmd (SetFlag flag) = Stats.bool flag := true
@@ -28,102 +31,48 @@ struct
       | runCmd (Master mapfile) = Manager.master mapfile
       | runCmd (Slave) = Manager.slave ()
       | runCmd (Slaves arg) = Manager.slaves [arg]
-      | runCmd (Slaves' arg) = Manager.slaves arg
-      | runCmd (PrintUsage) = print usage
-      | runCmd (PrintVersion) = print version
+      | runCmd (PrintUsage) = (print usage; print "\n")
+      | runCmd (PrintVersion) = (print version;
+				 print "(Using basis from ";
+				 print (Dirs.getLibDir (Dirs.getDirs ()));
+				 print ")\n")
 
-    (* mergeSlaves : cmd list -> cmd list. *)
-    fun mergeSlaves cmds =
-	let fun isSlaves (Slaves _) = true
-	      | isSlaves _ = false
-	    fun strip slaves = List.map (fn (Slaves arg) => arg) slaves
-	    val (slaves, others) = List.partition isSlaves cmds
+    (* run : cmd list -> unit.
+     * As a hack, we launch any remote slaves first since they operate in the
+     * background and any local slave last since it won't terminate.
+     *)
+    fun run cmds =
+	let
+	    val (remoteSlaves, cmds) = List.partition isSlaves cmds
+	    val remoteSlaves = List.map (fn (Slaves arg) => arg) remoteSlaves
+	    val (localSlave, cmds) = List.partition isSlave cmds
 	in
-	    if List.null slaves	then others
-	    else (Slaves' (strip slaves)) :: others
+	    if List.null remoteSlaves then () else Manager.slaves remoteSlaves;
+	    List.app runCmd cmds;
+	    if List.null localSlave then () else Manager.slave()
 	end
-	
-    (* run : cmd list -> unit *)
-    fun run cmds = List.app runCmd (mergeSlaves cmds)
+    
+    exception ArgErr of string
 
-    (*** Scanning   [num/]host    Ug ***)
-	
-    (* intScan : int -> (char,'a) StringCvt.reader -> (int,'a) StringCvt.reader
-     * (intScan n cs) is a reader for integers >= n.
-     *)
-    fun intScan min reader source =
-	case Int.scan StringCvt.DEC reader source
-	  of NONE => NONE
-	   | SOME (n, source') => if n < min then NONE else SOME (n, source')
-    fun natScan reader source = intScan 1 reader source
-	
-    (* stringScan : int -> (char,'a) StringCvt.reader -> (string,'a) StringCvt.reader
-     * (stringScan n cs) is a reader for strings of length at least n.
-     *)
-    fun stringScan minLen reader source =
-	let val (s, empty) = StringCvt.splitl (fn _ => true) reader source
-	in  if size s < minLen then NONE
-	    else SOME (s, empty)
-	end
-    fun nonEmpty reader source = stringScan 1 reader source
-
-    (* numHostScan : (char,'a) StringCvt.reader -> (int*string,'a) StringCvt.reader
-     * (numHostScan cs) is a reader for n/host pairs.
-     *)
-    fun numHostScan reader source =
-	case natScan reader source
-	  of NONE => NONE
-	   | SOME (n, source') =>
-	      case reader source'
-		of SOME (#"/", source'') =>
-		    (case nonEmpty reader source''
-		       of NONE => NONE
-			| SOME (s, empty) => SOME ((n, s), empty))
-		 | _ => NONE
-
-    (* all : (char -> bool) -> string -> bool *)
-    fun all p s =
-	let exception False
-	    fun check c = if p c then ()
-			  else raise False
-	in
-	    (CharVector.app check s; true)
-	    handle False => false
-	end
-
-    (* hostScan : (char,'a) StringCvt.reader -> (int*string,'a) StringCvt.reader
-     * (hostScan cs) is a reader for strings of the form n/host or host.
-     *)
-    fun hostScan reader source =
-	case numHostScan reader source
-	  of NONE =>
-	      (case nonEmpty reader source
-		 of NONE => NONE
-		  | SOME (s, empty) => (* s must not contain / *)
-		     let fun notslash #"/" = false
-			   | notslash _ = true
-		     in
-			 if all notslash s
-			     then SOME ((1, s), empty)
-			 else NONE
-			 handle Slash => NONE
-		     end)
-	   | r => r
-
-    (* parseHost : string -> (int * string) option *)
-    val parseHost = StringCvt.scanString hostScan
-
-    (*** Command line processing ***)
-	
-    exception Error of string
-	
     (* slavesArg : string -> int * string *)
     fun slavesArg arg =
-	(case parseHost arg
-	   of NONE => raise Error ("argument must have form [num/]host -- " ^ arg ^ "\n")
-	    | SOME num_host => num_host)
-	      
-    (* cmdline : string list -> cmd list.  May raise Error *)
+	let fun isslash c = c = #"/"
+	    val args = String.fields isslash arg
+	    fun error() = raise ArgErr ("argument must have form [num/]host -- " ^ arg)
+	    fun nonempty "" = error()
+	      | nonempty s = s
+	    fun nat num = (case Int.fromString num
+			     of NONE => error()
+			      | SOME n => if n > 0 then n
+					  else error())
+	in
+	    case args
+	      of [host] => (1, nonempty host)
+	       | [num, host] => (nat num, nonempty host)
+	       | _ => error()
+	end
+
+    (* cmdline : string list -> cmd list.  May raise ArgErr *)
     fun cmdline args =
 	let
 	    val options = [Getopt.Arg   (#"f", SetFlag),
@@ -136,28 +85,31 @@ struct
 			   Getopt.Noarg (#"v", PrintVersion)]
 	in
 	    case Getopt.getopt (options, args)
-	      of Getopt.Error msg => raise Error (msg ^ "\n" ^ usage)
+	      of Getopt.Error msg => raise ArgErr (msg ^ "\n" ^ usage)
 	       | Getopt.Success (cmds, mapfiles) =>
 		  let 
 		      val _ = if List.null cmds andalso List.null mapfiles
-				  then raise Error usage
+				  then raise ArgErr usage
 			      else ()
 		  in  cmds @ [Make mapfiles]
 		  end
 	end
 
-    (* We could warn user if any commands follow Slave (which doesn't terminate) *)
-
     (* errorMsg : exn -> string *)
-    fun errorMsg (Util.BUG msg) = "internal error: " ^ msg ^ "\n"
-      | errorMsg (Error msg) = msg
-      | errorMsg (e) = (exnMessage e) ^ "\n"
+    fun errorMsg (UtilError.BUG msg) = "internal error: " ^ msg
+      | errorMsg (ArgErr msg) = msg
+      | errorMsg (e) = exnMessage e
 
     (* main : string * string list -> OS.Process.status *)
     fun main (_, args) =
-	((run (cmdline args); OS.Process.success)
-	 handle e => (print "tilt: "; print (errorMsg e);
-		      OS.Process.failure))
+	let val _ = UtilError.showErrors := false
+	in
+	    (run (cmdline args); OS.Process.success)
+	    handle e => (print "tilt: ";
+			 print (errorMsg e);
+			 print "\n";
+			 OS.Process.failure)
+	end
 	
     (* main' : unit -> OS.Process.status.  The old interactive loop. *)
     fun main' () =

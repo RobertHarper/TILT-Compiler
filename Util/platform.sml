@@ -1,10 +1,10 @@
-(*$import PLATFORM Util String OS Posix *)
+(*$import PLATFORM UtilError String OS Posix *)
 
 structure Platform :> PLATFORM = 
 
 struct
 
-    val error = fn s => Util.error "platform.sml" s
+    val error = fn s => UtilError.error "platform.sml" s
     datatype platform = NT | DUNIX | SOLARIS | LINUX
 
     (* get : string -> string *)
