@@ -118,6 +118,8 @@ struct
    (* makeLabels.  Returns a list of labels for a tuple of length n. *)
    fun makeLabels n = Listops.map0count (fn n => IlUtil.generate_tuple_label(n+1)) n
 
+   fun makeInternalLabels n = Listops.map0count (fn n => Name.fresh_internal_label "bnd") n
+
    (* makeVars.  Returns a list of fresh variables of length n. *)
    fun makeVars n = Listops.map0count (fn _ => Name.fresh_var ()) n
 
@@ -2040,7 +2042,7 @@ end (* local defining splitting context *)
 
    and xbnds context bnds =
        let
-	   val temporary_labels = makeLabels (length bnds)
+	   val temporary_labels = makeInternalLabels (length bnds)
 	   val sbnds = map Il.SBND (Listops.zip temporary_labels bnds)
 
 	   val {final_context, cbnd_cat, ebnd_cat, record_c_con_items,
@@ -2219,12 +2221,12 @@ end (* local defining splitting context *)
 			     Il.DEC_MOD
 			     (top_var, true, s as
 			      Il.SIGNAT_FUNCTOR(poly_var, il_arg_signat,
-						Il.SIGNAT_STRUCTURE(_,[Il.SDEC(it_lbl,
+						Il.SIGNAT_STRUCTURE(_,[Il.SDEC(them_lbl,
 									    Il.DEC_EXP(_,il_con))]),
 						arrow))))
 		     :: rest) = 
 	       if ( (! elaborator_specific_optimizations)
-                   andalso (Name.eq_label (lbl, IlUtil.them_lab))) then
+                   andalso (Name.eq_label (them_lbl, IlUtil.them_lab))) then
                    (* if a polymorphic function has a "them" label rather than 
                       an "it" label, then it is a polymorphic function nest whose
                       code (i.e., this entire component) will be eliminated by the
