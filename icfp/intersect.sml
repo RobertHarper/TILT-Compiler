@@ -68,8 +68,10 @@ structure Intersect : INTERSECT =
 				     end
 		     val l2 = memoize l2
 		     fun l3() : l3 = let val [{hit, dist}] = l2()
+(*
 					 val _ = (print "plane hit at "; printV3 hit; print "\n")
 					 val _ = (print "forward transform is:\n"; Matrix.printM4 m4; print "\n")
+*)
 					 val (u,_,v) = Matrix.applyPoint(Matrix.invert m4, hit)
 					 val tPos = t > 0.0
 					 val dpNeg = dp(dir0, N) < 0.0
@@ -187,7 +189,7 @@ structure Intersect : INTERSECT =
 	      in  if (hit)
 		      then
 			  let val [{u,v,face=_,N,hit,dist}] = l3()
-			      val _ = (print "hit cube plane  u = "; printR u; print "   v = "; printR v; print "\n")
+(*			      val _ = (print "hit cube plane  u = "; printR u; print "   v = "; printR v; print "\n") *)
 			  in  if (u >= 0.0 andalso u < 1.0 andalso
 				  v >= 0.0 andalso v < 1.0)
 				  then [{u=u,v=v,face=face,N=N,hit=hit,dist=dist}]

@@ -34,7 +34,11 @@
 % white cube
 white solid-color apply cube
 	2.0 uscale
-	-1.0 -1.0 1.0 translate 
+	-1.0 -1.0 -1.0 translate 
+	45.0 rotatex
+	45.0 rotatey
+	45.0 rotatez
+	0.0 0.0 3.0 translate 
 
 % transform here to look around
 
