@@ -232,15 +232,16 @@ struct
 
         fun pp_choistmap (choistmap: (conbnd list * levels) IntMap.map) =
 	    let
-		val (top_cbnds,_) = lookup (choistmap, 0, ([],[]))
+		fun printLevel (level, (cbnds, _)) =
+		    (print "level "; print (Int.toString level);
+		     print " cbnds: ";
+		     print (Int.toString (List.length cbnds));
+		     print "\n";
+		     Ppnil.pp_conbnds cbnds;
+		     print "\n")
 	    in
-		print "top cbnds: ";
-                print (Int.toString (List.length top_cbnds));
-		print "\n";
-		Ppnil.pp_conbnds top_cbnds;
-		print "\n"
-	    end
-
+		IntMap.appi printLevel choistmap
+ 	    end
 
     in
 	type hoistmap = (bnd list * levels * bool) IntMap.map
@@ -784,8 +785,8 @@ struct
       let
 	val (env, state, arglevel) = bumpCurrentlevel (env, state)
 	val env = foldl (fn (v,e) => bindLevel(e,v,arglevel)) env vars
-	val (from,state,levels1) = rcon (from,env,state)
-	val (to,state,levels2) = rcon (to,env,state)
+	val (from,state,levels1) = rcon_limited arglevel (from,env,state)
+	val (to,state,levels2) = rcon_limited arglevel (to,env,state)
 	val levels = mergeLevels (levels1,levels2)
       in
 	(Coercion_c {vars=vars,from=from,to=to},state,levels)
