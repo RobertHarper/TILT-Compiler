@@ -103,8 +103,6 @@ struct
 
     
 
-    val specific_comp_files = wrapper "toasm" specific_comp_files
-
     fun compile_help _ [] = error "compile given no files"
       | compile_help debug src_files =
 	let val last_srcfile = List.last src_files
