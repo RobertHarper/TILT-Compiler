@@ -306,7 +306,7 @@ struct
 	       val kind = get_shape' D c
 	       val kind' = get_shape' D record_c
 	     in
-	       if alpha_equiv_kind (kind,kind') andalso (all (etable c) fields) then
+	       if NilUtil.alpha_equiv_kind (kind,kind') andalso (all (etable c) fields) then
 		 c
 	       else 
 		 record_c

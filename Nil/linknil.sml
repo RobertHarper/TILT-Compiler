@@ -11,7 +11,7 @@ sig
     val compile : string -> Nil.module
     val compiles : string list -> Nil.module list
     val test : string -> Nil.module
-    val il_to_nil : Il.context * Il.sbnds * Il.sdecs -> Nil.module
+    val il_to_nil : LinkIl.module -> Nil.module
 
     val do_opt : bool ref
 end
@@ -154,9 +154,22 @@ structure Linknil (* : LINKNIL *) =
 			       structure NilSubst = NilSubst
 			       structure NilUtil = NilUtil)
 
-    fun phasesplit (ctxt,sbnds,sdecs) : Nil.module = 
+    fun phasesplit (ctxt : LinkIl.Il.context, 
+		    sbnd_entries : (LinkIl.Il.sbnd option * LinkIl.Il.context_entry) list) : Nil.module = 
 	let
-	    open Nil LinkIl.Il LinkIl.IlContext Name
+	    open Nil LinkIl.Il LinkIl.IlContext Name LinkIl.IlStatic
+	    fun folder((SOME sbnd,CONTEXT_SDEC sdec),(ctxt,sbnds)) = (ctxt, (sbnd,sdec)::sbnds)
+	      | folder((NONE, ce),(ctxt,sbnds)) = 
+		(add_context_entries(ctxt,
+			      [case ce of
+				   CONTEXT_SDEC(SDEC(l,dec)) => CONTEXT_SDEC(SDEC(l,SelfifyDec dec))
+				 | _ => ce]),
+		 sbnds)
+	    val (ctxt,rev_sbnd_sdecs) = foldl folder (ctxt,[]) sbnd_entries
+	    val sbnds_sdecs = rev rev_sbnd_sdecs
+	    val sbnds = map #1 sbnds_sdecs
+	    val sdecs = map #2 sbnds_sdecs
+
 	    fun make_cr_labels l = (internal_label((label2string l) ^ "_c"),
 				    internal_label((label2string l) ^ "_r"))
 
@@ -426,23 +439,23 @@ val _ = (print "Nil final context is:\n";
 		  print "\n")
 	else (print str; print " complete\n")
 	    
-    fun pcompile' debug (ctxt,sbnds,sdecs) = 
+    fun pcompile' debug (ctxt,sbnd_entries) =
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
-	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnds,sdecs)	    
+	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnd_entries)
 	    val _ = showmod debug "Phase-split" nilmod
 	in
 	    nilmod
 	end
 
-    fun compile' debug (ctxt,sbnds,sdecs) = 
+    fun compile' debug (ctxt,sbnd_entries) =
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
-	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnds,sdecs)	    
+	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnd_entries)
 	    val _ = showmod debug "Phase-split" nilmod
 
 	    val nilmod = (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
@@ -515,21 +528,22 @@ val _ = (print "Nil final context is:\n";
 	end
 
     fun pcompile filename = hd(meta_pcompiles false [filename])
+    fun pcompiles filenames = hd(meta_pcompiles false filenames)
     fun ptest filename = hd(meta_pcompiles true [filename])
 
     fun compiles filenames = meta_compiles false filenames
     fun compile filename = hd(meta_compiles false [filename])
     fun tests filenames = meta_compiles true filenames
     fun test filename = hd(meta_compiles true [filename])
-    fun il_to_nil (context, sbnds, sdecs) = compile' false (context, sbnds, sdecs)
+    fun il_to_nil ilmod = compile' false ilmod
 
     val cached_prelude = ref (NONE : Nil.module option)
     fun compile_prelude (use_cache,filename) = 
 	case (use_cache, !cached_prelude) of
 		(true, SOME m) => m
-	      | _ => let val (ctxt,sbnds,sdecs) = 
+	      | _ => let val (ctxt,sbnd_entries) =
 				LinkIl.compile_prelude(use_cache,filename)
-			 val m = compile' false (ctxt,sbnds,sdecs)
+			 val m = compile' false (ctxt,sbnd_entries)
 			 val _ = cached_prelude := SOME m
 		     in  m
 		     end

@@ -1,6 +1,7 @@
 (* We box all floats and translate floating point operations accordingly.
    Thus, kind type is replaced by work types.
-   Also note that all record fields must be sorted by their labels. *)
+   Also note that all term-level (but not type-level) 
+        record fields must be sorted by their labels. *)
 
 functor Tonil(structure ArgIl : IL
 	      structure ArgNil : NIL
@@ -478,6 +479,7 @@ struct
 
    val do_kill_cpart_of_functor = ref false
    val xmod_count = ref 0
+   val xsig_count = ref 0
    val xcon_count = ref 0
    val xexp_count = ref 0
    val xsdecs_count = ref 0
@@ -507,12 +509,20 @@ struct
        update_NILctx(ctxt,
 		     let fun folder((v,k,c),ctxt) = 
 			 (
-(*
-			  print "update_NILctx_cbnd: ";
-			  Ppnil.pp_var v; print "  ::  ";
-			  Ppnil.pp_kind k; print "\n";
+
+let 
+(*  val _ = (print "update_NILctx_cbnd: ";
+	     Ppnil.pp_var v; print "  ::  ";
+	     Ppnil.pp_kind k; print "\n")
 *)
-			  Nilcontext.insert_kind(ctxt,v,k))
+    val res =  Nilcontext.insert_kind(ctxt,v,k)
+(*
+    val _ = (print "XXXXXXXXX: new context is: ";
+	     Nilcontext.print_context res;
+	     print "\n\n")
+*)
+in res
+end)
 			 val cbnd_flat = flattenCatlist cbnd_cat
 		     in   (* catfold folder (NILctx_of context) cbnd_cat *)
 			 foldl folder (NILctx_of ctxt) cbnd_flat
@@ -552,7 +562,6 @@ struct
 	   val _ = 
 	       if (!debug) then
 		   (xmod_count := this_call + 1;
-		    
 		    print ("\nCall " ^ (Int.toString this_call) ^ " to xmod\n");
 		    Ppil.pp_mod il_mod;
 		    (* print"\n";
@@ -809,6 +818,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	       val con_proj_c = selectFromCon(name_mod_c, lbls)
 
 val _ = print "nilstatic....calling con_valid\n"
+
 
 	       val (_,knd_proj_c) = 
 		 Nilstatic.con_valid(NILctx_of context,con_proj_c)
@@ -1079,7 +1089,7 @@ val _ = (print "knd_body_c is ";
 
    and xsbnds context il_sbnds =
        let
-	   val this_call = ! xcon_count
+	   val this_call = ! xsbnds_count
 	   val _ = 
 	       if (!debug andalso !full_debug) then
 		   (xcon_count := this_call + 1;
@@ -1741,27 +1751,27 @@ val _ = (print "knd_body_c is ";
 		       (context, NILctx')
 
 		   val (con1, knd1) = xcon context' il_con1
-		   val (arg, con1') =
+		   val (arg, con1, knd1) =
 		       case vars of
-			   [v] => ((v, Word_k Runtime), con1)
+			   [v] => ((v, Word_k Runtime), con1, knd1)
 			 | _ => let fun mapper (n,_) = ((Nilutil.generate_tuple_label (n+1),
 							 Name.fresh_var()),Word_k Runtime)
 				    val arg_var = Name.fresh_var()
-
 				    val arg_kind = Record_k(Util.sequence2list
 							    (Listops.mapcount mapper vars))
 				    fun mapper (n,v) = 
-					Con_cb(v,Word_k Runtime, 
-					       Proj_c(Var_c arg_var, 
-						      Nilutil.generate_tuple_label (n+1)))
+					(v,Proj_c(Var_c arg_var, 
+						  Nilutil.generate_tuple_label (n+1)))
+				    val substlist = Listops.mapcount mapper vars
 
-				    val con1' = Let_c(Sequential,Listops.mapcount mapper vars,con1)
-				in  ((arg_var, arg_kind), con1')
+				    val con1' = Let_c(Sequential,map (fn (v,c) => Con_cb(v,Word_k Runtime, c)) substlist,con1)
+				    val knd1' = Subst.substConInKind (Subst.fromList substlist) knd1
+				in  ((arg_var, arg_kind), con1', knd1')
 				end
 
 		   val fun_name = Name.fresh_var ()
 		   val con = Let_c(Sequential,
-				   [Open_cb(fun_name, [arg], con1', knd1)],
+				   [Open_cb(fun_name, [arg], con1, knd1)],
 				   Var_c fun_name)
 	       in
 		   (con, Arrow_k(Open, [arg], knd1))
@@ -1790,7 +1800,6 @@ val _ = (print "knd_body_c is ";
 	   val tuple_length = List.length cons
 	   val labels = makeLabels tuple_length
 	   val vars = makeVars tuple_length
-
 	   val con = Crecord_c(Listops.zip labels cons)
 	   val knd = Record_k (Util.list2sequence 
 			       (Listops.zip (Listops.zip labels vars) knds))
@@ -2527,18 +2536,26 @@ val _ = (print "knd_body_c is ";
 
    and xsig context (con, il_sig) =
        let
-(*	   val _ = (print "call to xsig\n";
-		    Ppil.pp_signat il_sig) *)
+	   val this_call = ! xmod_count
+	   val _ = 
+	       if (!debug) then
+		   (xsig_count := this_call + 1;
+		    print ("\nCall " ^ (Int.toString this_call) ^ " to xsig\n");
+		    Ppil.pp_signat il_sig;
+		    print "\n")
+	       else ()
 	   val result = xsig' context (con, il_sig)
-(* 	   val _ = (print "back from xsig\n") *)
-       in
-	   result
+	       handle e => (if (!debug) then print ("Exception detected in call " ^ 
+						    (Int.toString this_call) ^ " to xsig\n") else ();
+				raise e)
+       in  if (!debug) then print ("Return " ^ (Int.toString this_call) ^ " from xsig\n") else ();
+	    result
        end
 		    
        
    and xsdecs context (args as (_,_,_,_,sdecs)) =
        let
-	   val this_call = ! xmod_count
+	   val this_call = ! xsdecs_count
 	   val _ = if (! debug) then
 	            (xsdecs_count := this_call + 1;
 		     print ("Call " ^ (Int.toString this_call) ^ " to xsdecs\n");
@@ -2770,6 +2787,15 @@ val _ = (print "knd_body_c is ";
 			    let
 				val (v_c, v_r,_) = splitVar (v, vmap_of context)
 				val (knd_c, type_r) = xsig context (Var_c v_c, il_sig)
+(*
+val _ = (print "\n\nHIL MOD CONTEXT ENTRY:\n";
+	 print "knd_c is:\n";
+	 Ppnil.pp_kind knd_c;
+	 print "\n";
+	 print "type_r is:\n";
+	 Ppnil.pp_con type_r;
+	 print "\n")
+*)
 				val inner_ctxt = 
 				    if (false andalso
 					!do_kill_cpart_of_functor andalso
@@ -2796,8 +2822,6 @@ val _ = (print "knd_body_c is ";
 	         CONTEXT{NILctx = Nilcontext.empty(),
 			 vmap = vmap}
 
-	   val initial_splitting_context = xHILctx empty_splitting_context HILctx
-
 	   val _ = 
 	       if (!debug) then
 		   (print "\nInitial HIL context varlist:\n";
@@ -2805,7 +2829,15 @@ val _ = (print "knd_body_c is ";
 		    print "\n";
 		    print "\nInitial HIL context:\n";
 		    Ppil.pp_context HILctx;
-		    print "\nInitial NIL context:\n";
+		    print "\n")
+	       else
+		   ()
+
+	   val initial_splitting_context = xHILctx empty_splitting_context HILctx
+
+	   val _ = 
+	       if (!debug) then
+		   (print "\nInitial NIL context:\n";
 		    Nilcontext.print_context (NILctx_of initial_splitting_context);
 		    print "\n")
 	       else

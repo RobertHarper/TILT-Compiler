@@ -13,8 +13,8 @@ functor NilPrimUtilParam(structure Nil : NIL)
 	type exp = exp
 	type ('con,'exp) value = ('con,'exp) Prim.value
 
-	fun partial_arrow (c1,c2) = AllArrow_c(Code,Partial,[],[c1],0w0,c2)
-	fun total_arrow (c1,c2) = AllArrow_c(Code,Total,[],[c1],0w0,c2)
+	fun partial_arrow (cons,c2) = AllArrow_c(Code,Partial,[],cons,0w0,c2)
+	fun total_arrow (cons,c2) = AllArrow_c(Code,Total,[],cons,0w0,c2)
 	fun con_int is = Prim_c(Int_c is,[])
 	fun con_uint is = Prim_c(Int_c is,[])
 	fun con_float fs = Prim_c(Float_c fs,[])

@@ -420,7 +420,8 @@ struct
 							 then (print "add_boundcvar ";
 							       Ppnil.pp_var v; print "\n")
 						     else ()
-					 in (add_boundcvar(state,v,k), f)
+					     val k' = NilUtil.singletonize(k,c)
+					 in (add_boundcvar(state,v,k'), f)
 					 end
 		       | Exp_b(v,c,e) => let val f = e_find_fv state e
 					     val f = join_free(f,c_find_fv state c)
