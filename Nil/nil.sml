@@ -89,12 +89,15 @@ struct
 					               code and environment *)
     | App_c of con * con list                     (* Constructor-level application 
 						       of open or closed constructor function *)
+    | Typecase_c of {arg : con,
+                     arms : (primcon * (var * kind) list * con * kind) list,
+                     default : con option}        (* Constructor-level typecase *)
     | Annotate_c of annot * con                   (* General-purpose place to hang information *)
 
   and conbnd = Con_cb of (var * kind * con)
              | Fun_cb of (var * openness * (var * kind) list * con * kind)
 
-  withtype confun = effect * (var * kind) list * con list * con
+  withtype confun = effect * (var * kind) list * con list * w32 * con
 
   datatype nilprim = 
       record of label list       (* record intro *)
@@ -103,9 +106,12 @@ struct
                  tagcount : w32} (* slow; sum intro *)
     | inject_record of {field : w32,       (* fast; sum intro where argument is a record  *)
 			tagcount : w32}    (* whose components are individually passed in *)
-    | project_sum of w32         (* slow; given a special sum type, return carried value *)
-    | project_sum_record of w32 * w32 (* fast; given a special sum type of record type, 
-				               return the specified field *)
+    | project_sum of {tagcount : w32,
+                      sumtype  : w32}         (* slow; given a special sum type, return carried value *)
+    | project_sum_record of {tagcount : w32,
+			     sumtype  : w32,
+                             field : w32}     (* fast; given a special sum type of record type, 
+				                 return the specified field *)
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
     | roll | unroll              (* coerce to/from recursive type *) 
@@ -129,7 +135,7 @@ struct
       Intsw_e of (Prim.intsize,exp,w32) sw                (* integers *)
     | Sumsw_e of (w32 * con list,exp,w32) sw              (* sum types *)
     | Exncase_e of (unit,exp,exp) sw                      (* exceptions *)
-
+    | Typecase_e of (unit,con,primcon) sw                 (* typecase *)
 
   and exp =                                          (* Term-level constructs *)
       Var_e of var                                        (* Term-level variables *)
@@ -137,8 +143,8 @@ struct
     | Let_e of letsort * bnd list * exp                   (* Binding construct *)
     | Prim_e of allprim * (con list) * (exp list)         (* primops must be fully applied *)
     | Switch_e of switch                                  (* Switch statements *)
-    | App_e of exp * (con list) * (exp list)              (* Application of open functions and closures *)
-    | Call_e of var * (con list) * (exp list)             (* Application of code pointers *)
+    | App_e of exp * (con list) * exp list * exp list     (* Application of open functions and closures *)
+    | Call_e of var * (con list) * exp list * exp list    (* Application of code pointers *)
     | Raise_e of exp * con                                
     | Handle_e of exp * function
 
@@ -165,7 +171,7 @@ struct
    *)
 
   and function = Function of openness * effect * recursive *
-                             ((var * kind) list) * ((var * con) list) * 
+                             ((var * kind) list) * ((var * con) list) * (var list) *
 			     exp * con  
 
   (* a generic term-level switch construct. *)

@@ -138,6 +138,22 @@ functor Ppnil(structure Nil : NIL
 	       end
 	 | Closure_c (c1,c2) => HOVbox[String "CLOSURE_C(", pp_con c1, String ",", 
 				       pp_con c2, String ")"]
+	 | Typecase_c {arg, arms, default} =>
+	       let fun pp_arm(pc,vklist,c,k) = HOVbox[pp_primcon pc, String " => ",
+						      String "FUN_C",
+						      (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
+						       vklist),
+						      Break0 0 5,
+						      pp_con c,
+						      Break0 0 5,
+						      pp_kind k]
+	       in HOVbox[String "TYPECASE_C(", pp_con arg, Break0 0 5,
+			 pp_list pp_arm arms ("","","",true),
+			 (case default of 
+			      NONE => String "NONE"
+			    | SOME c => Hbox[String "SOME ",
+					     pp_con c])]
+	       end
 	 | App_c (con,conlist) => HOVbox[String "APP_C(",
 (*
 					       pp_arrow arrow,
@@ -190,7 +206,7 @@ functor Ppnil(structure Nil : NIL
       | pp_primcon (Record_c labels) = String "RECORD"
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "RECORD", pp_openness oness, pp_effect e]
 
-    and pp_confun id (effect,vklist,clist,con) = 
+    and pp_confun id (effect,vklist,clist,numfloats,con) = 
 	HOVbox[String (id ^ "("),
 	       (case effect of
 		    Total => String "TOTAL; "
@@ -198,6 +214,7 @@ functor Ppnil(structure Nil : NIL
 	       (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k]) vklist),
 	       String "; ", Break0 0 5,
 	       (pp_list pp_con clist ("",",","",false)),
+	       String "; ", String (TilWord32.toDecimalString numfloats),
 	       String "; ", Break0 0 5,
 	       pp_con con]
 
@@ -226,14 +243,16 @@ functor Ppnil(structure Nil : NIL
 						   pp_list pp_con cons ("[",",","]",false)] @
 						   [pp_list pp_exp exps
 						    ("[",",","]",false)])
-	   | App_e (efun,cons,exps) => (pp_region "APP(" ")" 
-					[pp_exp efun, String ",", Break, 
-					 pp_list pp_con cons ("[",",","]",false),
-					 pp_list pp_exp exps ("[",",","]",false)])
-	   | Call_e (v,cons,exps) => (pp_region "CALL(" ")" 
-				      [pp_var v, String ",", Break, 
-				       pp_list pp_con cons ("[",",","]",false),
-				       pp_list pp_exp exps ("[",",","]",false)])
+	   | App_e (efun,cons,exps,fexps) => (pp_region "APP(" ")" 
+					      [pp_exp efun, String ",", Break, 
+					       pp_list pp_con cons ("[",",","]",false),
+					       pp_list pp_exp exps ("[",",",";",false),
+					       pp_list pp_exp fexps (" ",",","]",false)])
+	   | Call_e (v,cons,exps,fexps) => (pp_region "CALL(" ")" 
+					    [pp_var v, String ",", Break, 
+					     pp_list pp_con cons ("[",",","]",false),
+					     pp_list pp_exp exps ("[",",",";",false),
+					     pp_list pp_exp fexps (" ",",","]",false)])
 	   | Let_e (letsort,bnds,e) => Vbox0 0 1 [String (case letsort of
 							      Sequential => "LET  "
 							    | Parallel => "LETP "),
@@ -253,12 +272,14 @@ functor Ppnil(structure Nil : NIL
 	   | Switch_e sw => pp_switch sw)
 
 	 
-    and pp_function (Function(openness,effect,recursive,vklist,vclist,exp,c)) = 
+    and pp_function (Function(openness,effect,recursive,vklist,vclist,vflist,exp,c)) = 
 	HOVbox[String "/\\",
 	       (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
 		vklist),
 	       (pp_list' (fn (v,c) => Hbox[pp_var v,pp_con c])
 		vclist),
+	       (pp_list' (fn v => Hbox[pp_var v,String ": Float"])
+		vflist),
 	       Break0 0 5,
 	       pp_exp exp]
 
@@ -284,9 +305,9 @@ functor Ppnil(structure Nil : NIL
 	      | Sumsw_e sw => help sw "SUM" pp_exp 
 		    (fn (tagcount,clist) => pp_con(Prim_c(Sum_c {tagcount=tagcount,known=NONE},clist)))
 								 (String o Word32.toString)
-(*
 	      | Typecase_e sw => help sw "TCASE" pp_con 
-		                   (fn (v,c) => Hbox[pp_var v, String "=", pp_con c]) pp_primcon
+		                   (fn _ => String "") pp_primcon
+(*
 	      | Listcase_e sw => help sw "LCASE" pp_con
 		                   (fn (v,k,c) => Hbox[pp_var v, String ":", pp_kind k,
 						       String "=", pp_con c]) pp_listcon
@@ -314,7 +335,7 @@ functor Ppnil(structure Nil : NIL
 	end
 
      and pp_fix (v,Function(openness,effect,
-                          recursive,vklist,vclist,e,c)) : format = 
+                          recursive,vklist,vclist,vflist,e,c)) : format = 
        HOVbox([String (case openness of Open => "/\\ "| Closed => "/CLOSED\\"),
                pp_var v,
                String " ["] @
@@ -325,6 +346,9 @@ functor Ppnil(structure Nil : NIL
               (foldr (op @) nil 
                  (map (fn (v,c) => [pp_var v, String " : ", pp_con c]) 
                       vclist)) @
+	      (foldr (op @) nil 
+	       (map (fn v => [pp_var v, String " : Float"])
+		vflist)) @
               [String ")", 
                String (case effect of Total => "->" | Partial => "-`"),
                pp_con c, 

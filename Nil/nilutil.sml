@@ -13,147 +13,124 @@ struct
     type 'a collection = 'a list
 
     val emptyCollection = nil
-
-    fun collMember eqitem (lst, x) =
-	let
-	    fun loop [] = false
-	      | loop (y::ys) = (eqitem (x,y)) orelse (loop ys)
-	in
-	    loop lst
-	end
-
+    val collMember = Listops.member_eq
     fun collInsert (lst, x) = x :: lst
 
-
+    datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
     datatype state =
 	STATE of {boundcvars : var collection,
 		  boundevars : var collection,
-		  conmap : var -> con option,
-                  expmap : var -> exp option}
+		  conhandler : var collection * con -> con changeopt,
+                  exphandler : var collection * exp -> exp changeopt}
 
-    fun stateBindcvar (STATE{boundcvars,boundevars,conmap,expmap}) v =
+    fun stateBindcvar (STATE{boundcvars,boundevars,conhandler,exphandler}) v =
 	(STATE{boundcvars = collInsert (boundcvars, v),
 	       boundevars = boundevars,
-	       conmap = conmap,
-	       expmap = expmap})
+	       conhandler = conhandler,
+	       exphandler = exphandler})
 
     fun stateBindcvars state nil = state
       | stateBindcvars state (v::vs)= stateBindcvars (stateBindcvar state v) vs
 
-    fun stateBindevar (STATE{boundcvars,boundevars,conmap,expmap}) v =
+    fun stateBindevar (STATE{boundcvars,boundevars,conhandler,exphandler}) v =
 	(STATE{boundcvars = boundcvars,
 	       boundevars = collInsert (boundevars, v),
-	       conmap = conmap,
-	       expmap = expmap})
+	       conhandler = conhandler,
+	       exphandler = exphandler})
 
     fun stateBindevars state nil = state
       | stateBindevars state (v::vs)= stateBindevars (stateBindcvar state v) vs
 		  
-    fun doSubstCon state (Prim_c (prim, cons)) =
-	  Prim_c(prim, map (doSubstCon state) cons)
-
-      | doSubstCon state (Mu_c(set, var)) = 
-	let
-	    val names = map (fn (name,_) => name) (Util.set2list set)
-	    val state' = stateBindcvars state names
-		
-	    fun fixMubnd (name, con) = (name, doSubstCon state' con)
-	in
-	    Mu_c(Util.mapset fixMubnd set, var)
-	end
-
-      | doSubstCon state (Arrow_c(openness, confun)) =
-	Arrow_c(openness, doSubstConfun state confun)
-
-      | doSubstCon state (Code_c confun) =
-	Code_c (doSubstConfun state confun)
-
-      | doSubstCon (STATE{boundcvars,conmap,...}) (con as Var_c cvar) =
-	if (collMember Name.eq_var (boundcvars, cvar)) then
-	    con
-	else
-	    (case (conmap cvar) of
-		 NONE => con
-	       | SOME subst_con => subst_con)
-
-      | doSubstCon state (Let_c (Parallel, bnds, body)) =
-	let
-	    val cvars  = map (fn (cvar, _) => cvar) bnds
-	    val bnds'  = map (fn (var, con) => (var, doSubstCon state con))
-		            bnds
-	    val state' = stateBindcvars state cvars
-	    val body'  = doSubstCon state' body
-	in
-	    Let_c (Parallel, bnds', body')
-	end
-
-      | doSubstCon state (Let_c (Sequential, bnds, body)) =
-	let
-	    val (state', bnds') =
-		let fun loop state [] = (state, [])
-		      | loop state ((cvar, con)::rest) =
-			let
-			    val con'   = doSubstCon state con
-			    val state' = stateBindcvar state cvar
-			    val (state'', rest') = loop state' rest
-			in
-			    (state'', (cvar, con') :: rest)
-			end
+    fun doSubstCon (state as (STATE{boundcvars,conhandler,...})) c =
+	let 
+	    fun do_cbnd state (Con_cb(var, k, con)) = 
+		(var,Con_cb(var, doSubstKind state k,
+			    doSubstCon state con))
+	      | do_cbnd state (Fun_cb(var,openness, args, body, kind)) = 
+		let
+		    val vars   = map (fn (var,_) => var) args
+		    val args'  = map (fn (var,knd) => (var, doSubstKind state knd))
+			args
+		    val state' = stateBindcvars state vars
+		    val body'  = doSubstCon state' body
+		    val kind'  = doSubstKind state' kind
 		in
-		    loop state bnds
+		    (var,Fun_cb(var,openness, args', body', kind'))
 		end
-	    val body' = doSubstCon state' body
+	    fun docon (Prim_c (prim, cons)) =
+		Prim_c(prim, map (doSubstCon state) cons)
+	      | docon (Mu_c(set, var)) = 
+		let
+		    val names = map (fn (name,_) => name) (Util.set2list set)
+		    val state' = stateBindcvars state names
+			
+		    fun fixMubnd (name, con) = (name, doSubstCon state' con)
+		in
+		    Mu_c(Util.mapset fixMubnd set, var)
+		end
+	      | docon (Arrow_c(openness, confun)) =
+		Arrow_c(openness, doSubstConfun state confun)
+	      | docon (Code_c confun) =
+		Code_c (doSubstConfun state confun)
+	      | docon (con as Var_c cvar) = con
+	      | docon (Let_c (Parallel, bnds, body)) =
+		let
+		    val var_bnds'  = map (do_cbnd state) bnds
+		    val cvars = map #1 var_bnds'
+		    val bnds' = map #2 var_bnds'
+		    val state' = stateBindcvars state cvars
+		    val body'  = doSubstCon state' body
+		in
+		    Let_c (Parallel, bnds', body')
+		end
+	      | docon (Let_c (Sequential, bnds, body)) =
+		let
+		    val (state', bnds') =
+			let fun loop state [] = (state, [])
+			      | loop state (cbnd::rest) =
+				let
+				    val (cvar,cbnd') = do_cbnd state cbnd
+				    val state' = stateBindcvar state cvar
+				    val (state'', rest') = loop state' rest
+				in
+				    (state'', cbnd' :: rest)
+				end
+			in
+			    loop state bnds
+			end
+		    val body' = doSubstCon state' body
+		in
+		    Let_c (Sequential, bnds', body')
+		end
+	      | docon (Crecord_c fields) =
+		let fun dorbnd(lbl,con) = (lbl, doSubstCon state con)
+		    val fields' = map dorbnd fields
+		in  Crecord_c fields'
+		end
+	      | docon (Proj_c (con, lbl)) =
+		let  val con' = doSubstCon state con
+		in   Proj_c (con', lbl)
+		end
+	      | docon (Closure_c (ccode, cenv)) = 
+		let val ccode' = doSubstCon state ccode
+		    val cenv' = doSubstCon state cenv
+		in  Closure_c(ccode', cenv')
+		end
+	      | docon (App_c (f, args)) =
+		let val f' = doSubstCon state f
+		    val args' = map (doSubstCon state) args
+		in  App_c (f', args')
+		end
+	      | docon (Annotate_c (annot, con)) =
+		let val con' = doSubstCon state con
+		in  Annotate_c (annot, con)
+		end
+	    
 	in
-	    Let_c (Sequential, bnds', body')
-	end
-
-      | doSubstCon state (Fun_c(openness, args, body)) =
-	let
-	    val vars   = map (fn (var,_) => var) args
-	    val args'  = map (fn (var,knd) => (var, doSubstKind state knd))
-		           args
-	    val state' = stateBindcvars state vars
-	    val body'  = doSubstCon state' body
-	in
-	    Fun_c(openness, args', body')
-	end
-
-      | doSubstCon state (Crecord_c fields) =
-	let
-	    val fields' = map (fn (lbl,con) => (lbl, doSubstCon state con))
-                             fields
-	in
-	    Crecord_c fields'
-	end
-
-      | doSubstCon state (Proj_c (con, lbl)) =
-	let
-	    val con' = doSubstCon state con
-	in
-	    Proj_c (con', lbl)
-	end
-
-      | doSubstCon state (Closure_c (ccode, cenv)) = 
-	let
-	    val ccode' = doSubstCon state ccode
-	    val cenv' = doSubstCon state cenv
-	in
-	    Closure_c(ccode', cenv')
-	end
-
-      | doSubstCon state (App_c (f, args)) =
-	let
-	    val f' = doSubstCon state f
-	    val args' = map (doSubstCon state) args
-	in
-	    App_c (f', args')
-	end
-
-      | doSubstCon state (Annotate_c (annot, con)) =
-	let
-	    val con' = doSubstCon state con
-	in
-	    Annotate_c (annot, con)
+	    case (conhandler(boundcvars,c)) of
+		NOCHANGE => docon c
+	      | CHANGE_NORECURSE c' => c'
+	      | CHANGE_RECURSE c' => docon c'
 	end
 
     and doSubstConfun state (effect, knds, cons, result) =
@@ -167,16 +144,14 @@ struct
 	    (effect, knds', cons', result')
 	end
 
-    and doSubstKind state (kind as Type_k) = kind
+    and doSubstKind state (kind as (Type_k _ | Word_k _)) = kind
 
-      | doSubstKind state (kind as Word_k) = kind
-
-      | doSubstKind state (Singleton_k(kind, con)) =
+      | doSubstKind state (Singleton_k(p, kind, con)) =
 	let
 	    val kind' = doSubstKind state kind
 	    val con' = doSubstCon state con
 	in
-	    Singleton_k(kind', con')
+	    Singleton_k(p, kind', con')
 	end
 
       | doSubstKind state (Record_k fieldseq) =
@@ -218,21 +193,25 @@ struct
 
     fun substConInCon conmap =
         let
+	    fun conhandler (boundcvars,Var_c v) = 
+		if (collMember(Name.eq_var,v,boundcvars))
+		    then NOCHANGE
+		else (case (conmap v) of
+			  NONE => NOCHANGE
+			| SOME c => CHANGE_RECURSE c)
+	      | conhandler _ = NOCHANGE
 	    val state = STATE{boundcvars = emptyCollection,
 			      boundevars = emptyCollection,
-			      conmap = conmap,
-			      expmap = fn _ => NONE}
+			      conhandler = conhandler,
+			      exphandler = fn _ => NOCHANGE}
 	in
 	    doSubstCon state
 	end
 
-    fun substConInKind conmap =
-        let
-	    val state = STATE{boundcvars = emptyCollection,
-			      boundevars = emptyCollection,
-			      conmap = conmap,
-			      expmap = fn _ => NONE}
-	in
-	    doSubstKind state
-	end
+    fun generate_tuple_label _ = raise Div
+    fun exp_tuple _ = raise Div
+    fun con_tuple _ = raise Div
+    fun con_tuple_inject _ = raise Div
+    fun kind_tuple _ = raise Div
+
 end

@@ -51,7 +51,7 @@ struct
 	   flatten' (ps,accum')
        end
 
-   fun flattenPseudoseq ps = List.concat (flatten' ps)
+   fun flattenPseudoseq (ps : 'a pseudoseq) = List.concat ((flatten' (ps,[])) : 'a list list)
        
    fun extendmap (map, key, value) key' =
        if (Name.eq_var (key, key')) then SOME value else map key'
@@ -111,7 +111,7 @@ struct
        end
 
    fun makeLetC nil body = body
-     | makeLetC bnds body = Let_c (Sequential, bnds, body)
+     | makeLetC cbnds body = Let_c (Sequential, cbnds, body)
 
    val count = ref 0
    fun gms (args as (_, module)) = 
@@ -148,6 +148,13 @@ struct
 	   loop lst
        end
 
+   fun cbnd2ebnd (Con_cb(v,kopt,c)) = Con_b(v,kopt,c)
+     | cbnd2ebnd (fcb as (Fun_cb(v,openness,vklist,_,k))) = 
+       let val kind = Arrow_k(openness,vklist,k)
+       in Con_b(v,SOME kind,
+		Let_c(Sequential,[fcb],Var_c v))
+       end
+
    fun xeffect (Il.TOTAL) = Total
      | xeffect (Il.PARTIAL) = Partial
 
@@ -180,8 +187,8 @@ struct
 	       (case preferred_name of
 		    NONE => (LIST nil, LIST nil, Var_c var'_c, Var_e var'_r)
 		  | SOME (_, name_c, name_r) => 
-			(LIST [(name_c, Var_c var'_c)], 
-			 LIST [Exp_b (name_r, Var_e var'_r)],
+			(LIST [Con_cb(name_c, SOME(kind_of_var'_c), Var_c var'_c)], 
+			 LIST [Exp_b (name_r, SOME(Var_c var'_c), Var_e var'_r)],
 			 Var_c name_c, Var_e name_r))
        in
 	   {cbnd_ps = cbnd_ps,
@@ -212,9 +219,11 @@ struct
 		valuable = valuable'} = xmod decs (mod2, NONE)
        in
 	   {cbnd_ps = APP[cbnd_ps', cbnd_ps'',
-			  LIST[(var_c,App_c(name'_c,[name''_c]))]],
+			  LIST[Con_cb(var_c,SOME kind,
+				      App_c(name'_c,[name''_c]))]],
 	    ebnd_ps = APP[ebnd_ps', ebnd_ps'',
-			  LIST[Exp_b(var_r, App_e(name'_r, 
+			  LIST[Exp_b(var_r, SOME(Var_c var_c),
+				     App_e(name'_r, 
 					   [name''_c],
 					   [name''_r]))]],
             name_c = Var_c var_c,
@@ -238,8 +247,10 @@ struct
 			     Prim_e(NilPrimOp(select lbl), [], 
 				    SOME [Var_e mvar_r]))
                   | SOME (_, var_c, var_r) =>
-			(LIST [(var_c, Proj_c(Var_c mvar_c, lbl))],
+			(LIST [Con_cb(var_c, SOME kind,
+				      Proj_c(Var_c mvar_c, lbl))],
 			 LIST [Exp_b(var_r, 
+				     SOME(Var_c var_c),
 				     Prim_e(NilPrimOp(select lbl), [], 
 					    SOME [Var_e mvar_r]))],
 			 Var_c var_c,
@@ -271,8 +282,8 @@ struct
 	       (case preferred_name of 
 		    NONE => (LIST [], LIST[], code_c, code_e)
                   | SOME (_, var_c, var_r) =>
-			(LIST [(var_c, code_c)],
-			 LIST [Exp_b(var_r, code_e)],
+			(LIST [Con_cb(var_c, SOME kind, code_c)],
+			 LIST [Exp_b(var_r, SOME(Var_c var_c), code_e)],
 			 Var_c var_c,
 			 Var_e var_r))
        in
@@ -291,15 +302,18 @@ struct
 		valuable} = xmod decs (module, NONE)
            val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
 	       Ilstatic.SelfifySig(Il.SIMPLE_PATH var, il_signat)
-	   val (_, Ilcontext.PHRASE_CLASS_MOD(_,il_signat')) = 
-	       Ilcontext.Sdecs_Lookup(Il.MOD_VAR var, sdecs, [lbl])
+	   val il_signat' = 
+	       (case (Ilcontext.Sdecs_Lookup(Il.MOD_VAR var, sdecs, [lbl])) of
+		    SOME(_,Ilcontext.PHRASE_CLASS_MOD(_,il_signat')) => il_signat'
+		  | _ => error "xmod: unexpected lookup failure")
 						   
        in
 	   {cbnd_ps = APP[cbnd_ps,
-			  LIST [(var_c, Proj_c(name_c, lbl))]],
+			  LIST [Con_cb(var_c, SOME kind, Proj_c(name_c, lbl))]],
 	    ebnd_ps = APP[ebnd_ps,
-			  LIST [Exp_b(var_r,Prim_e(NilPrimOp(select lbl), 
-						   [], SOME [name_r]))]],
+			  LIST [Exp_b(var_r,SOME(Var_c var_c),
+				      Prim_e(NilPrimOp(select lbl), 
+					     [], SOME [name_r]))]],
             name_c = Var_c var_c,
 	    name_r = Var_e var_r,
 	    il_signat = il_signat',
@@ -335,15 +349,16 @@ struct
 
            val cbnds = flattenPseudoseq cbnd_ps''
            val ebnds = flattenPseudoseq ebnd_ps''
+	   val confun_var = Name.fresh_named_var "anon_confun"
        in
-	   {cbnd_ps = LIST[(var_c, Fun_c(Open, [(var'_c, knd)], 
-					 makeLetC cbnds (name''_c)))],
+	   {cbnd_ps = LIST[Fun_cb(confun_var, Open, [(var'_c, knd)], 
+				  makeLetC cbnds (name''_c), knd'')],
             ebnd_ps = LIST[Fixfun_b [(var_not_in_defn,
 				   Function(Open, effect, Leaf,
 					    [(var'_c, knd)],
 					    [(var'_r, con)],
 					    Let_e(Sequential,
-						  (map Con_b cbnds) @ ebnds,
+						  (map cbnd2ebnd cbnds) @ ebnds,
 						  name''_r),
 					    con''))]],
 	    name_c = Var_c var_c,
@@ -361,9 +376,10 @@ struct
 		il_sdecs, valuable} = xsbnds decs sbnds
        in
 	   {cbnd_ps = APP[cbnds,
-			  LIST [(var_c, Crecord_c crbnds)]],
+			  LIST [Con_cb(var_c, SOME kind, Crecord_c crbnds)]],
 	    ebnd_ps = APP[ebnds,
 			  LIST[Exp_b (var_r, 
+				      SOME(Var_c var_c),
 				      Prim_e (NilPrimOp (record erlabels),
 					      ercons, SOME erfields))]],
             name_c = Var_c var_c,
@@ -424,7 +440,7 @@ struct
        in
 	   {cbnds = cbnds,
 	    crbnds = crbnds,
-	    ebnds = CONS (Exp_b (var, exp), ebnds),
+	    ebnds = CONS (Exp_b (var, SOME tipe, exp), ebnds),
 	    erlabels = lab :: erlabels,
 	    erfields = (Var_e var) :: erfields,
 	    ercons = tipe :: ercons,
@@ -440,9 +456,9 @@ struct
 	       Ilcontext.add_context_con'(decs, var, il_knd, SOME il_con)
 	   val {cbnds, crbnds, ebnds, erlabels, 
 		erfields, ercons, il_sdecs, valuable} = xsbnds decs' rest
-           val (con,_) = xcon decs il_con
+           val (con,kind) = xcon decs il_con
        in
-	   {cbnds = CONS((var, con), cbnds),
+	   {cbnds = CONS(Con_cb(var, SOME kind, con), cbnds),
 	    crbnds = (lab, Var_c var) :: crbnds,
 	    ebnds = ebnds,
 	    erlabels = erlabels, 
@@ -626,7 +642,10 @@ struct
 		       vars))
 	   val (con1, Singleton_k(knd1,_)) = xcon decs' il_con1
 	   val args = map (fn v => (v, Type_k)) vars
-	   val con = Fun_c(Open, args, con1)
+	   val name = Name.fresh_named_var "anon_confun"
+	   val con = Let_c(Sequential,
+			   [Fun_cb(name,Open, args, con1, knd1)],
+			   Var_c name)
        in
 	   (con, Singleton_k(Arrow_k(Open, args, knd1), con))
        end
@@ -677,9 +696,10 @@ struct
 	   val var = Name.fresh_var ()
            val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
 	       Ilstatic.SelfifySig(Il.SIMPLE_PATH var, il_signat)
-	   val (_, Ilcontext.PHRASE_CLASS_CON(_,il_knd)) = 
-	       Ilcontext.Sdecs_Lookup(Il.MOD_VAR var, sdecs, [lbl])
-
+	   val il_knd =
+	       (case (Ilcontext.Sdecs_Lookup(Il.MOD_VAR var, sdecs, [lbl])) of
+		    SOME(_, Ilcontext.PHRASE_CLASS_CON(_,il_knd)) => il_knd
+		  | _ => error "xcon': unexpected failure")
 	   val con = makeLetC (flattenPseudoseq cbnd_ps) 
 	                      (Proj_c (name_c, lbl))
 	   val knd = xkind il_knd
@@ -815,7 +835,7 @@ struct
            (* SLOW *)
 (*           val il_fun_con = Ilstatic.GetExpCon (decs, il_exp1)
            val (il_arrow, il_fun_result) = 
-	       (case (Ilstatic.con_head_normalize' (decs, il_fun_con)) of
+	       (case (Ilstatic.con_head_normalize (decs, il_fun_con)) of
                    Il.CON_ARROW(il_arrow,il_con,_) => (il_arrow, il_con)
                 | _ => error "xexp: APP of non-arrow-type function")
            val (con, _) = xcon decs il_fun_result
@@ -861,7 +881,7 @@ struct
      | xexp decs (il_exp0 as (Il.RECORD_PROJECT (il_exp, label, il_record_con))) =
        let
 	   val (exp, _, valuable) = xexp decs il_exp
-           val fields = (case (Ilstatic.con_head_normalize' (decs, il_record_con)) of
+           val fields = (case (Ilstatic.con_head_normalize (decs, il_record_con)) of
                            Il.CON_RECORD fields => fields
                          | hnf => (print "Oops\n";
 				   Ppil.pp_exp il_exp0;
@@ -1013,12 +1033,12 @@ struct
 	   val var = Name.fresh_var ()
            val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
 	       Ilstatic.SelfifySig(Il.SIMPLE_PATH var, il_signat)
-	   val (_, Ilcontext.PHRASE_CLASS_EXP(_,il_con)) = 
+	   val SOME(_, Ilcontext.PHRASE_CLASS_EXP(_,il_con)) = 
 	       Ilcontext.Sdecs_Lookup(Il.MOD_VAR var, sdecs, [label])
 	   val (con,_) = xcon decs il_con
 	     
 	   val cbnds = flattenPseudoseq cbnd_ps
-	   val bnds = (map Con_b cbnds) @ 
+	   val bnds = (map cbnd2ebnd cbnds) @ 
 	              (flattenPseudoseq ebnd_ps)
        in
 	   (Let_e (Sequential, bnds, Prim_e (NilPrimOp (select label), 
@@ -1087,7 +1107,7 @@ struct
 			    val il_con = Ilstatic.GetExpCon (decs, il_exp)
 			    val (exp, con, valuable) = xexp decs il_exp
 			in
-			    (LIST [Exp_b(var, exp)], 
+			    (LIST [Exp_b(var, SOME con, exp)], 
 			     Il.DEC_EXP(var, il_con),
 			     valuable)
 			end
@@ -1098,7 +1118,7 @@ struct
 			    val {ebnd_ps, cbnd_ps, il_signat, valuable,...} = 
 				xmod decs (il_module, SOME (var, var_c, var_r))
  			in
-			   (APP [LIST (map Con_b (flattenPseudoseq cbnd_ps)),
+			   (APP [LIST (map cbnd2ebnd (flattenPseudoseq cbnd_ps)),
 				 ebnd_ps],
 			    Ilstatic.SelfifyDec (Il.DEC_MOD(var, il_signat)),
 			    valuable)
@@ -1107,9 +1127,9 @@ struct
 		  | (Il.BND_CON(var,il_con)) =>
 			let
 			    val il_knd = Ilstatic.GetConKind (decs, il_con) 
-			    val (con, _) = xcon decs il_con
+			    val (con, k) = xcon decs il_con
 			in
-			    (LIST [Con_b(var, con)],
+			    (LIST [Con_b(var, SOME k, con)],
 			     Il.DEC_CON(var, il_knd, SOME il_con),
 			     true)
 			end)
