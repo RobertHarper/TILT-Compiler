@@ -41,9 +41,6 @@ struct
   open Nil NilUtil
   open Rtl Rtltags Pprtl TortlBase
 
-  fun maxsp_disp() =
-      (print "Warning: maxsp_disp used but is not platform-independent; works only for alpha\n"; 
-       8 * 32 + 8 * 32)
 
     val show_cbnd = Stats.ff("show_cbnd")
 
@@ -505,7 +502,6 @@ struct
 		      val rep = niltrace2rep state trace
 		  in  add_instr(LOAD32I(EA(exnptr,0),newpc));
 		      add_instr(MV (ir,exnarg));
-		      add_instr RESTORE_CS;
 		      add_instr (JMP(newpc,nil));
 		      (VALUE(VOID rep), state)
 		  end
@@ -545,8 +541,9 @@ struct
 
 
 		      val hl = fresh_code_label "exn_handler"
+		      val body_after = fresh_code_label "exn_after"
+		      val handler_after = fresh_code_label "exn_after"
 		      val hlreg = alloc_regi NOTRACE_CODE
-		      val bl = fresh_code_label "exn_after"
 
 		      val (fpbase,bstate) = (* --- save the floating point values, if any *)
 			  (case local_fregs of
@@ -564,17 +561,17 @@ struct
 		      val _ = add_instr(LADDR(hl,0,hlreg))
 		      val (new_exnrec,bstate) = make_record(bstate, reps, int_vallocs)
 		      val _ = load_ireg_term(new_exnrec, SOME exnptr)
+		      val _ = add_instr SAVE_EXN 
 
                       (* --- compute the body; restore the exnpointer; branch to after handler *)
 		      (* NOTID and not context because we have to remove the exnrecord *)
 		      val (reg,bstate) = xexp'(bstate,name,exp,trace,NOTID)
 		      val _ = (add_instr(LOAD32I(EA(exnptr,8),exnptr));
-			       add_instr(BR bl));
+			       add_instr(BR body_after));
 
 
 		      (* --- now the code for handler --- *)
 		      val _ = add_instr(ILABEL hl)
-		      val _ = add_instr(HANDLER_ENTRY)
 
 		      (* --- restore the int registers - stack-pointer FIRST --- *)
 		      val _ = let 
@@ -602,20 +599,13 @@ struct
 			      end
 			  
 		      (* --- now that stack-pointer is restored, 
-		         ---    we can update maxsp of the thread
 		         ---    we can move the exn arg 
 		         ---    we can call new_gcstate 
 		         ---    note that since the exnarg and ra register are the same
 		                  the exn arg must be moved before the gc_check *)
-		      val tmp1 = alloc_regi(NOTRACE_INT)
-		      val tmp2 = alloc_regi(NOTRACE_INT)
-		      val maxsp_disp = maxsp_disp()
-		      val _ = add_instr(LOAD32I(EA(SREGI THREADPTR,maxsp_disp),tmp1))
-		      val _ = add_instr(CMPUI(GT,SREGI STACKPTR,REG tmp1,tmp2))
-		      val _ = add_instr(CMV(NE,tmp2,REG(SREGI STACKPTR), tmp1))
-		      val _ = add_instr(STORE32I(EA(SREGI THREADPTR,maxsp_disp),tmp1))
 		      val xr = alloc_named_regi exnvar TRACE
 		      val _ = add_instr(MV(exnarg,xr))
+		      val _ = add_instr RESTORE_EXN (* This translates to updating maxsp *)
 		      val hstate = new_gcstate state
 		      val hstate = add_reg (hstate,exnvar,Prim_c(Exn_c,[]),I xr)
 
@@ -628,7 +618,10 @@ struct
 				   (I hreg,I reg) => add_instr(MV(hreg,reg))
 				 | (F hreg,F reg) => add_instr(FMV(hreg,reg))
 				 | _ => error "hreg/ireg mismatch in handler")
-		      val _ = add_instr(ILABEL bl)
+		      val _ = add_instr(ILABEL body_after)
+		      val _ = add_instr RESTORE_EXN
+		      val _ = add_instr(ILABEL handler_after)
+
 		      val state = join_states[state,bstate,hstate]
 
 		  in 

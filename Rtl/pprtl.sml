@@ -244,9 +244,9 @@ struct
 		    else (HOVbox [String " saved = ",pp_RegList' save]),
 		    String "}"]
               | RETURN r => plain["return", regi2s r]
-	      | SAVE_CS  l => String ("save_cs"^label2s l)
-              | END_SAVE => String "end save"
-	      | RESTORE_CS => String "restore_cs"
+	      | SAVE_EXN => String "save_exn"
+              | END_EXN => String "end_exn"
+	      | RESTORE_EXN => String "restore_exn"
 	      | LOAD32I a       => op2li "ldl" a
 	      | STORE32I a      => op2si "stl" a
 	      | LOAD8I a       => op2li "ldb" a

@@ -3,22 +3,20 @@
 #define doublesize     8
 #define longsize       8
 #define ptrsize        8
-#define intsize        4
 #endif
 #ifdef solaris
 #define doublesize     8
 #define longsize       4
 #define ptrsize        4
-#define intsize        4
 #endif
 #define maxsp_disp     longsize*32+8*32
 #define snapshot_disp  longsize*32+8*32+longsize
 #define sysThread_disp longsize*32+8*32+longsize+ptrsize
 #define notinml_disp   longsize*32+8*32+longsize+ptrsize+ptrsize
-#define scratch_disp   longsize*32+8*32+longsize+ptrsize+ptrsize+intsize
-#define thunk_disp     longsize*32+8*32+longsize+ptrsize+ptrsize+intsize+doublesize
-#define nextThunk_disp longsize*32+8*32+longsize+ptrsize+ptrsize+intsize+doublesize+ptrsize
-#define numThunk_disp  longsize*32+8*32+longsize+ptrsize+ptrsize+intsize+doublesize+ptrsize+intsize
+#define scratch_disp   longsize*32+8*32+longsize+ptrsize+ptrsize+longsize
+#define thunk_disp     longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize
+#define nextThunk_disp longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize
+#define numThunk_disp  longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize+longsize
 
 #ifndef _inside_stack_h
 #ifndef _asm_
@@ -45,7 +43,9 @@
      -1 : Yield was called		
 */
 
-
+/* decalpha.sml, sparc.sml, and the ***_disp above have to be changed if the fields are modified 
+   Note that long is used to avoid padding problems.
+*/
 struct Thread__t
 {
   long               saveregs[32];     /* Register set; compiler relied on this being first */
@@ -53,27 +53,26 @@ struct Thread__t
   long               maxSP;            /* Used by mutator exn handler; compiler relies on this third */
   StackSnapshot_t    *snapshots;       /* Used by stack.c and stack_asm.s */
   struct SysThread__t *sysThread;      /* of type SysThread_t * - relied on by service_alpha_osf.s  */
-  int                notInML;          /* set to true whenever mutator calls a normal external function */
+  long                notInML;          /* set to true whenever mutator calls a normal external function */
   double             scratch;
   value_t            *thunks;          /* Array of num_add unit -> unit */
-  int                nextThunk;        /* Index of next unstarted thunk.  Initially zero. */
-  int                numThunk;         /* Number of thunks.  At least one. */
+  long               nextThunk;        /* Index of next unstarted thunk.  Initially zero. */
+  long               numThunk;         /* Number of thunks.  At least one. */
 
   /* ---- The remaining fields not accessed by assembly code ---- */
 
-  int                last_snapshot;    /* Index of last used snapshot */
+  long               last_snapshot;    /* Index of last used snapshot */
   StackChain_t       *stackchain;      /* Stack */
   Queue_t            *retadd_queue;
-  int                tid;              /* Thread ID */
-  int                id;               /* Structure ID */
-  int                status;           /* Thread status */
-  int                request;          /* Why pre-empted? */
+  long                tid;              /* Thread ID */
+  long                id;               /* Structure ID */
+  long                status;           /* Thread status */
+  long                request;          /* Why pre-empted? */
   struct Thread__t   *parent;
   value_t            oneThunk;         /* Avoid allocation by optimizing for common case */
   Queue_t            *reg_roots;
   Queue_t            *root_lists;
   Queue_t            *loc_roots;
-  int pad;
 };
 
 typedef struct Thread__t Thread_t;

@@ -1231,12 +1231,12 @@ functor EmitRtlMLRISC(
     fun RETURN _ =
 	  raise InvalidRtl "should have been translated to a branch"
 
-    fun SAVE_CS _ = []
+    fun SAVE_EXN() = []
 
-    fun RESTORE_CS _ =
+    fun RESTORE_EXN() =
 	  [MLTree.CODE(CallConventionBasis.getAssignment(Procedure.saves()))]
 
-    val END_SAVE = []
+    fun END_EXN() = []
 
     fun LOAD32I(address, dest) =
 	  [MLTree.CODE[MLTree.MV(dest, MLTree.LOAD32(address, memory))]]
@@ -1423,12 +1423,12 @@ functor EmitRtlMLRISC(
       | translateInstruction(Rtl.JMP(src, targets)) =
 	  JMP(srcReg src, map label targets)
 
-      | translateInstruction(Rtl.SAVE_CS target) =
-	  SAVE_CS(label target)
-      | translateInstruction(Rtl.END_SAVE) =
-	  END_SAVE
-      | translateInstruction(Rtl.RESTORE_CS) =
-	  RESTORE_CS()
+      | translateInstruction(Rtl.SAVE_EXN) =
+	  SAVE_EXN()
+      | translateInstruction(Rtl.END_EXN) =
+	  END_EXN()
+      | translateInstruction(Rtl.RESTORE_EXN) =
+	  RESTORE_EXN()
 
       | translateInstruction(Rtl.LOAD32I(address, dest)) =
 	  LOAD32I(ea address, destReg dest)
@@ -1578,8 +1578,8 @@ functor EmitRtlMLRISC(
      * <- true if instructions contains and exception handler
      *)
     fun hasHandler nil		      = false
-      | hasHandler(Rtl.SAVE_CS _::_)  = true
-      | hasHandler(Rtl.RESTORE_CS::_) = true
+      | hasHandler(Rtl.SAVE_EXN ::_)  = true
+      | hasHandler(Rtl.RESTORE_EXN::_) = true
       | hasHandler(_::instructions)   = hasHandler instructions
 
     (*

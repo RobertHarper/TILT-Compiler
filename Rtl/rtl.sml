@@ -163,9 +163,9 @@ struct
 
     (* see signature for comments *)
 
-    | SAVE_CS of label
-    | END_SAVE
-    | RESTORE_CS
+    | SAVE_EXN
+    | END_EXN
+    | RESTORE_EXN
 
     | LOAD32I    of ea * regi          
     | STORE32I   of ea * regi

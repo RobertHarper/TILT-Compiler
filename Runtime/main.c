@@ -21,9 +21,9 @@ int ThreadedVersion = THREADED_VERSION;
 int LEAST_GC_TO_CHECK = -1;
 
 int NumHeap       = 20;
-int NumStack      = 400;
-int NumStackChain = 400;
-int NumThread     = 200;
+int NumStack      = 100;
+int NumStackChain = 100;
+int NumThread     = 100;
 int NumSysThread  = 1;
 
 int process_bool(int *var, char *item, char *option)

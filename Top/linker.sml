@@ -38,7 +38,7 @@ structure Linker :> LINKER =
 	end
     fun ld_libs() = 
 	let val alpha = "Runtime/runtime.alpha_osf.a -call_shared -lpthread -lmach -lexc -lm -lc"
-	    val solaris = "Runtime/runtime.solaris.a -lpthread -lm -lc -lgcc /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtend.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtn.o"
+	    val solaris = "Runtime/runtime.solaris.a -lpthread -lposix4 -lm -lc -lgcc /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtend.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtn.o"
 	in  case !Til.platform of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha

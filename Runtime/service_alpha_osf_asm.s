@@ -90,15 +90,16 @@ start_client:
 	ldq	ALLOCPTR_REG, ALLOCPTR_DISP(THREADPTR_REG)	# initialize heap ptr outside loop
 	ldq	ALLOCLIMIT_REG, ALLOCLIMIT_DISP(THREADPTR_REG)	# initizlize heap limit outside loop
 	ldq	$sp, SP_DISP(THREADPTR_REG)			# initialize stack outside loop
+	br	$31, after_loop
 thunk_loop:
 	stl	$31, notinml_disp(THREADPTR_REG)
 .set noat
- 	ldq	$16, nextThunk_disp(THREADPTR_REG)	# fetch nextThunk
-	addq	$16, 1, $17				# increment and
- 	stq	$16, nextThunk_disp(THREADPTR_REG)	#   save nextThunk
+ 	ldl	$16, nextThunk_disp(THREADPTR_REG)	# fetch nextThunk
+	addl	$16, 1, $17				# increment and
+ 	stl	$17, nextThunk_disp(THREADPTR_REG)	#   save nextThunk
  	ldq	$17, thunk_disp(THREADPTR_REG)		# fetch thunks
 	s4addq	$16, $17, $16				# $16 holds current thunk' address
-	ldl	$at, ($17)				# fetch current thunk
+	ldl	$at, ($16)				# fetch current thunk
 	ldl	$27, ($at)				# fetch code pointer
 	ldl	$0, 4($at)				# fetch type env
 	ldl	$2, 8($at)				# fetch term env
@@ -108,8 +109,8 @@ start_client_retadd_val:
 	br	$gp, dummy
 dummy:	ldgp	$gp, 0($gp)
 after_loop:	
-	ldq	$16, nextThunk_disp(THREADPTR_REG)	# fetch nextThunk
-	ldq	$17, numThunk_disp(THREADPTR_REG)	# fetch numThunk
+	ldl	$16, nextThunk_disp(THREADPTR_REG)	# fetch nextThunk
+	ldl	$17, numThunk_disp(THREADPTR_REG)	# fetch numThunk
 	cmplt	$16, $17, $at
 	bne	$at, thunk_loop				# execute if nextThunk < numThunk
 	lda	$at, 1($31)

@@ -665,6 +665,7 @@ struct
 	 val Fsrc  = translateFReg rtl_Fsrc
          val Rdest = translateIReg rtl_Rdest
        in
+	   print "FPTOFROMINT used\n";
 	   emit (SPECIFIC (FPMOVE(FDTOI, Fsrc, Fat)));
 	   emit (BASE (LADDR (Rat, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
 	   emit (SPECIFIC (STOREF (STF, Fat, 0, Rat)));
@@ -676,6 +677,7 @@ struct
 	 val Rsrc  = translateIReg rtl_Rsrc
          val Fdest = translateFReg rtl_Fdest
        in
+	   print "FPTOFROMINT used\n";
 	   emit (BASE (LADDR (Rat, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
 	   emit (SPECIFIC (STOREI (ST, Rsrc, 0, Rat)));
 	   emit (SPECIFIC (LOADF  (LDF, Fat, 0, Rat)));
@@ -763,10 +765,16 @@ struct
      | translate (Rtl.RETURN rtl_Raddr) =
           emit (BASE (RTL (RETURN {results = ! current_res})))
 
-     | translate (Rtl.SAVE_CS l) = emit (BASE (RTL (SAVE_CS l)))
-
-     | translate (Rtl.END_SAVE) = ()
-     | translate (Rtl.RESTORE_CS) = ()
+     | translate (Rtl.SAVE_EXN) = ()
+     | translate (Rtl.END_EXN) = ()
+     | translate (Rtl.RESTORE_EXN) = 
+	  let val tmp1 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
+	      val tmp2 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
+	  in  translate(Rtl.LOAD32I(Rtl.EA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1));
+	      translate(Rtl.CMPUI(Rtl.GT,Rtl.SREGI Rtl.STACKPTR,Rtl.REG tmp1,tmp2));
+	      translate(Rtl.CMV(Rtl.NE,tmp2,Rtl.REG(Rtl.SREGI Rtl.STACKPTR), tmp1));
+	      translate(Rtl.STORE32I(Rtl.EA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1))
+	  end
 
      | translate (Rtl.LOAD32I (Rtl.EA (rtl_Raddr, disp), rtl_Rdest)) =
        let

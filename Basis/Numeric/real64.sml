@@ -110,11 +110,6 @@ structure Real64 :> REAL where type real = real =
     fun trunc n = if n < 0.0 then negate(floor(~n)) else floor n
     fun ceil n = negate(floor(~n))
     fun round x = floor(x+0.5)  (* bug: does not do round-to-nearest *)
-
-    fun realFloor _ = raise Fail "Real.realFloor unimplemented"
-    fun realCeil _ = raise Fail "Real.realCeil unimplemented"
-    fun realTrunc _ = raise Fail "Real.realTrunc unimplemented"
-
     val abs : real -> real = abs_float
     val fromInt : int -> real = real
 
@@ -212,6 +207,30 @@ structure Real64 :> REAL where type real = real =
   (* This is the IEEE double-precision maxint *)
     val maxint = 4503599627370496.0
 
+
+    local
+    (* realround mode x returns x rounded to the nearest integer using the
+     * given rounding mode.
+     * May be applied to inf's and nan's.
+     *)
+      fun realround mode x = let
+            val saveMode = IEEEReal.getRoundingMode ()
+            in
+              IEEEReal.setRoundingMode mode;
+              if x>=0.0 then x+maxint-maxint else x-maxint+maxint
+                before IEEEReal.setRoundingMode saveMode
+            end
+    in
+    val realFloor = realround IEEEReal.TO_NEGINF
+    val realCeil = realround IEEEReal.TO_POSINF
+    val realTrunc = realround IEEEReal.TO_ZERO
+    end
+(*
+    fun realFloor _ = raise Fail "Real.realFloor unimplemented"
+    fun realCeil _ = raise Fail "Real.realCeil unimplemented"
+    fun realTrunc _ = raise Fail "Real.realTrunc unimplemented"
+*)
+
   (* realround(x) returns x rounded to some nearby integer, almost always
    * the nearest integer.
    *  May be applied to inf's and nan's.
@@ -257,6 +276,16 @@ structure Real64 :> REAL where type real = real =
 	    | i => i
 	  (* end case *))
 
+(*
+  (* This function is IEEE double-precision specific;
+     we do not apply it to inf's and nan's *)
+    fun scalb (x, k) = if lessu(I.+(k,1022),2046)
+	  then Assembly.A.scalb(x,k)
+          else let val k1 = I.div(k, 2)
+	    in
+	      scalb(scalb(x, k1), I.-(k, k1))
+	    end
+*)
     fun scalb (x, k) = raise Fail "scalb and real_scalb not implemented: multiarg C fun..."
 (*
 if lt(plus(k,1022),2046)
@@ -287,9 +316,12 @@ structure LargeReal = Real64
 
 (*
  * $Log$
-# Revision 1.2  98/04/06  21:17:40  pscheng
-# update: Typeof_c, dependent arrow/record types
+# Revision 1.3  99/04/15  18:52:56  pscheng
+# *** empty log message ***
 # 
+# Revision 1.2  1998/04/06  21:17:40  pscheng
+# update: Typeof_c, dependent arrow/record types
+#
 # Revision 1.1  1998/03/09  19:52:50  pscheng
 # added basis
 #

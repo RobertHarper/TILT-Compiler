@@ -179,35 +179,49 @@ sig
            . either the tag 0 or an array of the subset of
              the fp registers.
 
-       SAVE_CS, END_SAVE, RESTORE are used by the Rtl
+       SAVE_EXN, END_EXN, RESTORE_EXN are used by the Rtl
        interpreter and in the translation to Alpha machine code.
        In the Rtl interpreter, they manipulate the implicit
        call stack.  Note that the stack pointer register, although
        bogus at this stage, is explicitly changed by the RTL code.
 
-       - SAVE_CS saves the call stack on an exception stack
-       - END_SAVE pops the top entry of the exception stack and
+       - SAVE_EXN saves the call stack on an exception stack
+       - END_EXN pops the top entry of the exception stack and
          throws it away.
-       - RESTORE pops the top entry of the exception stack and 
+       - RESTORE_EXN pops the top entry of the exception stack and 
          installs it as the control stack.
          
-       A handler is installed by doing by setting the exnptr
-       and doing a SAVE_CS.  It is uninstalled by resetting
-       the exnptr and doing an END_SAVE.
+       A handler is installed by 
+         (1) Allocating a new record of the handler, 
+	     previous exn pointer, stack pointer, and other regs
+	     that are needed by the handler.
+	 (2) Installing this record into the exn pointer.
+	 (3) Doing a SAVE_EXN
+
+       The handler itself 
+         (1) Restores stack pointer
+	 (2) Recovers previous exn pointer
+	 (3) Restores other register
+         (4) RESTORE_EXN
+	 (5) exn handler code
+
+       The code after the handler
+         (1) A label for the main code to branch to
+         (2) Begins with an END_EXN
+         (3) A label for the handler to branch to
 
        A raise is compiled as 
          (1) extract the new pc value from the exnrecord
-         (1) move the value associated with the
+         (2) move the value associated with the
 	     exception to the exnarg.
-	 (2) a RESTORE
 	 (3) jump to the new pc value.
 
        The code for a handler restores the integer registers
        and fp registers, including the exnptr and stackptr.*)
 
-    | SAVE_CS of label
-    | END_SAVE
-    | RESTORE_CS 
+    | SAVE_EXN
+    | END_EXN
+    | RESTORE_EXN
 
     | LOAD32I  of ea * regi           (* displacements not scaled *)
     | STORE32I of ea * regi           (* unchecked stores *)

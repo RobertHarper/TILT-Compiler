@@ -15,6 +15,7 @@ sig
   
   val in_imm_range : int -> bool
   val in_ea_disp_range : int -> bool
+  val maxsp_disp : int
 
   datatype storei_instruction = ST | STUB | STD
   datatype storef_instruction = STF | STDF

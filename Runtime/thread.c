@@ -217,7 +217,7 @@ void fillThread(Thread_t *th, int i)
   th->saveregs[THREADPTR] = (long) th;
   th->saveregs[ALLOCLIMIT] = 0;
   th->retadd_queue = QueueCreate(0,2000);
-  th->stackchain = StackChain_Alloc();
+  th->stackchain = NULL;
   th->reg_roots = QueueCreate(0,32);
   th->root_lists = QueueCreate(0,200);
   th->loc_roots = QueueCreate(0,10);
@@ -245,7 +245,8 @@ void resetThread(Thread_t *th, Thread_t *parent, value_t *thunks, int numThunk)
       th->nextThunk = 0;
       th->numThunk = numThunk;
     }
-  /*  th->stackchain = StackChain_Alloc(); */
+  if (th->stackchain == NULL)
+    th->stackchain = StackChain_Alloc(); 
   QueueClear(th->snapshots[0].roots);
   QueueClear(th->retadd_queue);
   QueueClear(th->reg_roots);

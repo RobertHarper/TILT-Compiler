@@ -4,10 +4,12 @@ structure  Sparc :> SPARC =
 struct
 
 
-
     val exclude_intregs = []
     val error = fn s => Util.error "sparc.sml" s
-    val threadScratch_disp : int = 4 * 32 + 8 * 32 + 4 + 8 + 8 + 4
+    val iregs_disp         = 0
+    val fregs_disp         = iregs_disp + 4 * 32
+    val maxsp_disp         = fregs_disp + 8 * 32
+    val threadScratch_disp = maxsp_disp + 4 + 4 + 4 + 4
 
 structure Machine = 
   struct
