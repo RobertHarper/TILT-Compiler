@@ -30,3 +30,5 @@ m0026	Word32 checks.
 m0027	Word checks.
 m0027	Word sub checks.
 m0028	Word stuff.
+m0029	Word8 array
+m0030	Word8 vector

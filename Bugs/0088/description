@@ -1,0 +1,16 @@
+Number: 0088
+Title:       Tests that fail
+Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Submitter:   rwh
+Date:        15 Aug 02
+Version:     CVS
+System:	     solaris
+Severity:    various
+Problem:     various
+Code:	     tests 
+Transcript:  see test directory
+Comments:    from mlton suite
+Fix:	     <optional - but you get extra credit>
+Test: *
+Owner: *
+Status: open
