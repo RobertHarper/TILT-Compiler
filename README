@@ -4,8 +4,12 @@ Please send comments and bug reports to
 
 	til-developers@cs.cmu.edu
 
-Please see the file ./License/CMU for TILT's copyright notice,
+Please read the file ./License/CMU containing TILT's copyright notice,
 permission notice, and disclaimer.
+
+The files ./Doc/tilt.txt and ./Doc/tilt-project.txt describe the
+command-line interface to TILT and the compilation manager.  The Doc
+directory also contains PostScript versions of these files.
 
 
 INSTALLING TILT
@@ -73,6 +77,50 @@ PARALLEL MAKE
 
 	to compile TILT.  The slaves will contribute to the TILT
 	compilation jobs that make starts.
+
+
+INCOMPATIBILITIES
+
+	TILT has some incompatibilities with Standard ML and some
+	extensions.
+
+	The value restriction used by TILT is different than that
+	specified in SML.  TILT treats declarations like "val a = e1 and b
+	= e2" as a derived forms for declarations like "val (a,b) =
+	(e1,e2)".  A variable in a val declaration will only be
+	generalized if the right hand side is a value and the variable
+	does not occur in the argument of a datatype constructor.
+
+	TILT does not support non-uniform datatypes.  Specifically, in a
+	strongly-connected datbind of the form
+
+		tyvarseq1 tycon1 = conbind1
+		...
+		tyvarseqn tyconn = conbindn
+
+	TILT requires that no tyvarseq contains duplicates; there exists k
+	such that every tyvarseq has length k; and for each application
+	tyseq tyconi occurring in conbindj, tyseq = tyvarseqj.  For
+	example, TILT rejects "datatype 'a t = T of int t" but accepts
+	"datatype 'a t = T of 'a t".
+
+	TILT implements an extension to structure sharing specifications
+	(that is, "spec sharing longstrid1 = ...  longstridn") that is
+	likely to be incompatible with the extensions implemented by other
+	SML compilers.  The file ./Doc/structure_sharing.txt describes the
+	structure sharing extension planned for a future version of TILT.
+
+	TILT supports signature expression of the form "sigexp where
+	longstrid1 = longstrid2" as a shorthand for a series of type
+	realizations.
+
+
+PLANS
+
+	Future versions of TILT will include bug fixes, performance
+	enhancements, a TALx86 backend for linux, a new structure sharing
+	extension, and an updated Basis library.  See the file
+	./KNOWN_BUGS lists known bugs.
 
 
 SUPPORT
