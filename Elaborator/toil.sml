@@ -1295,7 +1295,6 @@ functor Toil(structure Il : IL
     (* --------------------------------------------------------- 
       ------------ Signature bindings and expressions ----------
       --------------------------------------------------------- *)
-(* XXX AST does not support wheretypes *)
      and xsigexp(context,sigexp) : signat =
        (case sigexp of
 	  Ast.VarSig s => (case (Context_Lookup(context,[symbol_label s])) of
@@ -1303,7 +1302,26 @@ functor Toil(structure Il : IL
 					| _ => error "lookup of sigexp yielded wrong flavor")
 	| Ast.SigSig speclist => SIGNAT_STRUCTURE(NONE,xspec(context,speclist))
 	| Ast.MarkSig (s,r) => xsigexp(context,s)
-	| Ast.AugSig _ => raise UNIMP)
+	| Ast.AugSig (s, [], tyvars, ty) => error "ill-formed where type"
+	| Ast.AugSig (s, (sym::_), tyvars, ty) => (* why more than one symbol *)
+	      let val (popt,sdecs) = (case xsigexp(context,s) of
+					  SIGNAT_STRUCTURE popt_sdecs => popt_sdecs
+					| _ => error "can't where type a non-structure")
+		  val mjunk = MOD_VAR(fresh_named_var "mjunk")
+		  val (labels,pc) = (Sdecs_Lookup'(mjunk,sdecs,[symbol_label sym]))
+		  val k = (case pc of
+			       PHRASE_CLASS_CON(_,k) => k
+			     | _ => error "where type given a non-type")
+		  fun folder (tv,context) = 
+		      let val s = AstHelp.tyvar_strip tv
+		      in add_context_sdec(context,SDEC(symbol_label s, 
+						       DEC_CON(gen_var_from_symbol s, 
+							       KIND_TUPLE 1, NONE)))
+		      end
+		  val context = foldl folder context tyvars
+		  val c = xty(context,ty)
+	      in SIGNAT_STRUCTURE(popt,xsig_wheretype(sdecs,labels,c,k))
+	      end)
 
      and xsigb(context,Ast.MarkSigb(sigb,_)) : context_entry = xsigb(context,sigb)
        | xsigb(context,Ast.Sigb{name,def}) = 
@@ -1424,25 +1442,9 @@ functor Toil(structure Il : IL
 						      withtycs=withtycs}
 		in ADDITIONAL(map #2 sbnd_sdecs)
 		end
-	   | (Ast.ShatycSpec paths) => 
-		 let 
-		     val v = fresh_var()
-		     fun loop [] sdecs = sdecs
-		       | loop [_] sdecs = sdecs
-		       | loop (a::b::rest) sdecs = 
-			 let val s = SIGNAT_STRUCTURE (NONE, sdecs)
-			     val m = MOD_VAR(fresh_named_var "junk")
-			     val la = #1(Sdecs_Lookup'(m,sdecs,map symbol_label a))
-			     val lb = #1(Sdecs_Lookup'(m,sdecs,map symbol_label b))
-			 in case (xsig_sharing(s,la,lb,KIND_TUPLE 1)) of
-			     SIGNAT_STRUCTURE (NONE, sdecs') => loop (b::rest) sdecs'
-			   | SIGNAT_STRUCTURE _ => error "xsig_sharing returned selfified sig"
-			   | _ => error "xsig_sharing returned non SIGNAT_STRUCTURE"
-			 end
-		 in ALL_NEW(loop paths prev_sdecs)
-		 end
+	   | (Ast.ShatycSpec paths) => ALL_NEW(xsig_sharing_type(context,prev_sdecs,paths))
+	   | (Ast.ShareSpec paths) => ALL_NEW(xsig_sharing_structure(context,prev_sdecs,paths))
 	   | (Ast.FixSpec _) => error "Ast.FixitySpec not implemented"
-	   | (Ast.ShareSpec _) => error "Ast.ShareSpec (structure sharing) not implemented"
 	   | (Ast.MarkSpec (s,r)) => xspec1 context prev_sdecs s
          fun loop ctxt prev_sdecs [] = prev_sdecs
            | loop ctxt prev_sdecs (spec::specrest) =
@@ -1468,7 +1470,7 @@ functor Toil(structure Il : IL
 	 let 
 	     fun help (context,(name,def)) : ((bool * sbnd) option * context_entry) list = 
 		 (case def of
-		      (Ast.VarFct _) => raise UNIMP
+		      (Ast.VarFct _) => error "No variables in functor bindings"
 		    | (Ast.FctFct {params=[(argnameopt,sigexp)],body,constraint}) =>
 			  let 
 			      val arglabel = (case argnameopt of
@@ -1490,10 +1492,10 @@ functor Toil(structure Il : IL
 									     PARTIAL)))
 			  in sbnd_ce_list' @ [(SOME(false,sbnd), CONTEXT_SDEC sdec)]
 			  end
-		    | (Ast.FctFct {params=[],body,constraint}) => error "FctFct with no parameters"
-		    | (Ast.FctFct _) => error "FctFct with more than 1 parameter"
-		    | (Ast.LetFct _) => raise UNIMP
-		    | (Ast.AppFct _) => raise UNIMP
+		    | (Ast.FctFct {params=[],body,constraint}) => error "Functor of order 0"
+		    | (Ast.FctFct _) => error "No higher order functors"
+		    | (Ast.LetFct _) => error "No lets in functor bindings"
+		    | (Ast.AppFct _) => error "No higher order functors"
 		    | (Ast.MarkFct (f,r)) => help (context,(name,f)))
 	 in  packagedecs help context (map fctb_strip fctbs)
 	 end
@@ -1703,7 +1705,7 @@ functor Toil(structure Il : IL
     (* --------------------------------------------------------- 
       ------------------ SIGNATURE PATCHING -------------------
       --------------------------------------------------------- *)
-    and xsig_wheretype(signat : signat, lbls : label list, con : con, kind : kind) : signat = 
+    and xsig_wheretype(osdecs : sdecs, lbls : label list, con : con, kind : kind) : sdecs =
       let 
 	val fv = con_free_convar con
 	fun bound v = if (member_eq(eq_var,v,fv)) 
@@ -1741,105 +1743,137 @@ functor Toil(structure Il : IL
 		   | SDEC(l,DEC_EXCEPTION _) => sdec::(loop rest))
 	      in loop sdecs
 	      end		
-      in (case signat of
-	    SIGNAT_FUNCTOR _ => error "xsig_wheretype for fuctor sig"
-	  | (SIGNAT_STRUCTURE (SOME p,sdecs)) => SIGNAT_STRUCTURE(NONE,dosig lbls sdecs) 
-(* (Unselfify(v,sdecs))) *)
-	  | (SIGNAT_STRUCTURE (NONE,sdecs)) => SIGNAT_STRUCTURE(NONE,dosig lbls sdecs))
+      in dosig lbls osdecs
       end
 
+ (* looks for label and returns a triple of (1) sdecs that precede the label, 
+    (2) the found dec, (3) sdecs that follow the label *)
+  and xsig_find (cl : label) (sdecs : sdecs) : (sdecs * dec * sdecs) = 
+     let fun loop [] _ = (print "xsig_find: could not find label "; pp_label cl;
+			   error "xsig_find_type: could not find label")
+	   | loop (SDEC(l,dec)::rest) acc = if eq_label(l,cl) then (rev acc,dec,rest)
+					    else loop rest (SDEC(l,dec)::acc)
+     in loop sdecs []
+     end
 
-  and xsig_sharing(signat : signat, lbls1 : label list, lbls2 : label list, kind : kind) : signat = 
+ (* looks for the label that occurs second and returns a 4-tuple  of (1) sdecs that precede the label, 
+    (2) sdecs that follow the label, (3) the label/dec of the the found/second label,
+    (4) the label/dec of the not found/first label *)
+  and xsig_find2 (lbl1,lbl2,sdecs) = 
       let
-	  fun find cl [] _ = (print "xsig_sharing: could not find label "; pp_label cl;
-			      print "\nlbls1 = "; pp_pathlist pp_label' lbls1;
-			      print "\nlbls2 = "; pp_pathlist pp_label' lbls2;
-			      print "\nsignat = "; pp_signat signat;  print "\n";
-			      error "xsig_sharing: could not find label")
-	    | find cl (SDEC(l,dec)::rest) acc = 
-	      if eq_label(l,cl) then (rev acc,dec,rest)
-	      else find cl rest (SDEC(l,dec)::acc)
-
-	fun lookup (cl,sdecs,t) = 
-	    let fun loop [] acc = (print "xsig_sharing: could not find label "; pp_label cl;
-				   print "\nlbls1 = "; pp_pathlist pp_label' lbls1;
-				   print "\nlbls2 = "; pp_pathlist pp_label' lbls2;
-				   print "\nsignat = "; pp_signat signat;  print "\n";
-				 error "xsig_sharing: could not find label")
-		| loop (SDEC(l,dec)::rest) acc = 
-	              if eq_label(l,cl) then let val (dec',rest') = t(dec,rest)
-				       in (rev acc) @ ((SDEC(l,dec')) :: rest')
-				       end
-		      else loop rest (SDEC(l,dec)::acc)
-	  in loop sdecs []
-	  end
-        val sdecs = (case signat of
-		       SIGNAT_FUNCTOR _ => error "xsig_sharing got a functor sig"
-		     | SIGNAT_STRUCTURE (SOME _,sdecs) => sdecs (* Unselfify v_sdecs *)
-		     | SIGNAT_STRUCTURE (_,sdecs) => sdecs)
-	val sdecs' = 
-	  (case (lbls1,lbls2) of
-	     (([],_) | (_,[])) => error "xsig_sharing: empty label list"
-	   | ([lbl],[lbl']) => 
-		 let 
-		     local
-			 val (prev_sdecs,dec,rest_sdecs) = find lbl sdecs []
-			 val (prev_sdecs',dec',rest_sdecs') = find lbl' sdecs []
-		     in val (prev_sdecs',rest_sdecs',dec,dec',lbl') = 
-			 (if (length rest_sdecs) < (length rest_sdecs')
-			      then (prev_sdecs,rest_sdecs,dec',dec,lbl)
-			  else (prev_sdecs',rest_sdecs',dec,dec',lbl'))
-		     end
-		 in (* dec' is further along than dec *)
-		     (case (dec,dec') of
-			  (DEC_CON(v,k,NONE),DEC_CON(v',k',NONE)) =>
-			      if (k = k') 
-				  then prev_sdecs' @ [SDEC(lbl',DEC_CON(v',k',SOME (CON_VAR v)))]
-				      @ rest_sdecs'
-			      else error "kind mismatch in xsig_sharing"
-			| _ => error "lookup did not get CON in xsig_sharing")
-		 end
-	   | (lbl::lbls,[lbl']) =>
-	       lookup (lbl', sdecs, fn (dec',sdecs_rest) =>
-		       (dec',lookup(lbl, sdecs_rest, fn (dec, sdecs'') =>
-				    (case (dec',dec) of
-				       (DEC_CON(v',k,NONE),DEC_MOD(v,s)) =>
-					 if (k = kind) 
-					   then let val sig' = xsig_wheretype(s,lbls,CON_VAR v',k)
-						in (DEC_MOD(v,sig'), sdecs'')
-						end
-					 else error "xsig_sharing: kind mismatch"
-				     | _ => error "lookup did not get CON in xsig_sharing"))))
-	   | (lbl::lbls,lbl'::lbls') =>
-	       if eq_label(lbl,lbl') 
-		 then lookup (lbl, sdecs, fn(dec,sdecs') =>
-			      (case dec of
-				 DEC_MOD(v,sig') =>
-				   let val sig'' = xsig_sharing(sig',lbls,lbls',kind)
-				   in (DEC_MOD(v,sig''), sdecs')
-				   end
-			       | _ => error "xsig_sharing: can't share these decs"))
-	       else
-		   let
-		     local
-			 val (prev_sdecs,dec,rest_sdecs) = find lbl sdecs []
-			 val (prev_sdecs',dec',rest_sdecs') = find lbl' sdecs []
-		     in val (prev_sdecs',rest_sdecs',dec,lbl,lbls,dec',lbl') = 
-			 (if (length rest_sdecs) < (length rest_sdecs')
-			      then (prev_sdecs,rest_sdecs,dec',lbl',lbls',dec,lbl)
-			  else (prev_sdecs',rest_sdecs',dec,lbl,lbls,dec',lbl'))
-		     end
-		   in (case (dec,dec') of
-			   (DEC_MOD(v,s),DEC_MOD(v',s')) =>
-			       let val p = COMPOUND_PATH(v,lbls')
-				   val s'' = xsig_wheretype(s',lbls', path2con p, kind)
-				   val sdec = SDEC(lbl',(DEC_MOD(v',s'')))
-			       in  prev_sdecs' @ [sdec] @ rest_sdecs'
-			       end
-			 | _ => error "xsig_sharing: can't share this shape of labels")
-		   end)
-      in SIGNAT_STRUCTURE (NONE, sdecs')
+	  val (prev_sdecs1,dec1,rest_sdecs1) = xsig_find lbl1 sdecs
+	  val (prev_sdecs2,dec2,rest_sdecs2) = xsig_find lbl2 sdecs
+      in 
+	  if (length rest_sdecs1) < (length rest_sdecs2)
+	      then (prev_sdecs1,rest_sdecs1,(lbl1,dec1),(lbl2,dec2))
+	  else (prev_sdecs2,rest_sdecs2,(lbl2,dec2),(lbl1,dec1))
       end
+
+  and type_is_abstract(v,CON_MODULE_PROJECT(m,l)) = 
+	let fun loop acc (MOD_VAR v') = if eq_var(v,v') then SOME acc else NONE
+              | loop acc (MOD_PROJECT(m,l)) = loop (l::acc) m
+              | loop _ _ = NONE
+        in loop [l] m
+        end
+    | type_is_abstract _ = NONE
+
+  and xsig_sharing_structure(ctxt,sdecs,paths) : sdecs = 
+      let
+	  type lpath = label list
+	  val mjunk = MOD_VAR(fresh_named_var "mjunk")
+	  fun path2sdecs p = (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label p)) of
+				  (l,PHRASE_CLASS_MOD(_,SIGNAT_STRUCTURE(_,sd))) => (l,sd)
+				| _ => error "xsig_sharing_structure: path led to non-structure")
+	  val lpath_sdecs_list : (lpath * sdecs) list = map path2sdecs paths
+	  fun getcomponents (lpath,sdecs) : (lpath * lpath list) = 
+	      let
+		  fun traverse (SDEC(l,DEC_CON _)) = [[l]]
+		    | traverse (SDEC(l,DEC_MOD (v,SIGNAT_STRUCTURE(_,sdecs)))) = 
+		      let val lpaths = List.concat (map traverse sdecs)
+		      in map (fn lpath => (l :: lpath)) lpaths
+		      end
+		    | traverse _ = []
+	      in (lpath, List.concat (map traverse sdecs))
+	      end
+	  val lpath_lpaths_list : (lpath * lpath list) list = map getcomponents lpath_sdecs_list
+	  val lpaths = #2 (hd lpath_lpaths_list)
+	  val num_types = length lpaths
+	  val _ = if (andfold (fn (_,lpaths) => length lpaths = num_types) lpath_lpaths_list)
+		      then ()
+		  else error "xsig_sharing_structure failed"
+	  val labels : lpath list list = (map (fn (lpath,lpaths) => map (fn lps => lpath @ lps) lpaths) 
+					  lpath_lpaths_list)
+	  val labels_list : lpath list list = mapmap (follow_labels (sdecs,ctxt)) labels
+	  val labels_list = Listops.transpose labels_list
+	  fun folder (labels : label list list,sdecs) = xsig_sharing_rewrite(sdecs,labels)
+      in foldl folder sdecs labels_list
+      end
+
+  and follow_labels (sdecs,ctxt) =
+      let val v = fresh_named_var "modtemp"
+	  val s = SIGNAT_STRUCTURE(NONE, sdecs)
+	  val ctxt = add_context_mod'(ctxt,v,SelfifySig(SIMPLE_PATH v, s))
+	  fun result labels : label list =
+	      let val c = path2con(COMPOUND_PATH(v,labels))
+		  val c' = con_normalize'(ctxt,c)
+	      in  case (type_is_abstract(v,c')) of
+		  SOME lbls => lbls
+		| NONE => error "can't share non-abstract types"
+	      end
+      in result
+      end
+  and xsig_sharing_type(ctxt,sdecs,path) : sdecs = 
+      let val mjunk = MOD_VAR(fresh_named_var "mjunk")
+	  fun path2label p = #1(Sdecs_Lookup'(mjunk,sdecs,map symbol_label p))
+          val labels = map path2label path
+          val labels = map (follow_labels (sdecs,ctxt)) labels
+      in xsig_sharing_rewrite(sdecs,labels)
+      end
+
+      (* labels is a list of paths (relative to the sdecs) to opaque type
+	 components;  we search for the one that occurs first and
+         then transparently type-abbreviate all of the rest to the first one *)
+      and xsig_sharing_rewrite(sdecs,labels) : sdecs = 
+        let local val firstcon = ref NONE
+            in fun transparent curpath = 
+		case (!firstcon) of
+		  SOME c => SOME c
+                | NONE => 
+		  case curpath of
+		    [] => error "transparent got empty path"
+		  | (v,_)::vlrest => let val p = COMPOUND_PATH(v,map #2 vlrest)
+					 val c = path2con p
+					 val _ = firstcon := (SOME c)
+				     in NONE
+				     end
+	    end
+            fun match l labels = 
+	    let fun folder(lab::labs,(match,mismatch)) = 
+			if (eq_label(l,lab))
+				then (labs::match,mismatch)
+			else (match,(lab::labs)::mismatch)
+	          | folder([],_) = error "xsig_sdecs_rewrite: match failed"
+            in foldl folder ([],[]) labels
+	    end
+	    fun traverse _ [] = [] 
+	      | traverse (_,[]) sdecs = sdecs
+              | traverse (cur_path,labels) ((SDEC(l,dec))::rest) =
+		let val (match_lab,labels) = match l labels
+                    val dec' = 
+			if (length match_lab = 0) 
+			then dec 
+			else case dec of
+		      DEC_CON(v,k,copt) => 
+			DEC_CON(v,k,transparent (cur_path @ [(v,l)]))
+                    | DEC_MOD(v,SIGNAT_STRUCTURE(popt,sdecs)) =>
+			let val sdecs' = traverse(cur_path@[(v,l)],match_lab) sdecs
+			in DEC_MOD(v,SIGNAT_STRUCTURE(popt,sdecs'))
+			end
+                    | _ => dec
+                in (SDEC(l,dec')) :: (traverse (cur_path,labels) rest)
+	        end
+	in traverse ([],labels) sdecs
+        end
 
     (* --------------------------------------------------------- 
       ------------------ COERCION COMPILATION-------------------
@@ -2227,8 +2261,7 @@ functor Toil(structure Il : IL
 	     pp_label l; print "\nrdecs are:";
 	     pp_con (CON_RECORD rdecs); print "\nfieldc is:";
 	     pp_con fieldc; print "\n";
-	     ())
-(* error "Unresolved flex record" *)
+	     error "Unresolved flex record")
 	  | flex_help (l,ref(FLEXINFO(_,true,rdecs)),fieldc,eshot) = 
 	    let val v = fresh_named_var "flex_eta_var"
 		val recc = CON_RECORD rdecs
@@ -2294,4 +2327,6 @@ functor Toil(structure Il : IL
     val xdec = overload_wrap xdec
     val xexp = overload_wrap xexp
     val xeq = xeqopt
+
+
   end;

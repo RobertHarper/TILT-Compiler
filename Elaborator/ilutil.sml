@@ -1033,6 +1033,23 @@ functor IlUtil(structure Ppil : PPIL
 	   | _ => NONE)
 
 
+   fun eq_modval (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
+     | eq_modval (MOD_PROJECT (m,l), 
+		  MOD_PROJECT(m',l')) = eq_modval(m,m') andalso eq_label(l,l')
+     | eq_modval (MOD_SEAL(m,s),m') = eq_modval(m,m')
+     | eq_modval (m',MOD_SEAL(m,s)) = eq_modval(m,m')
+     | eq_modval (MOD_VAR _, MOD_PROJECT _) = false
+     | eq_modval (MOD_PROJECT _, MOD_VAR _) = false
+     | eq_modval (m1,m2) = (print "eq_modval for a non value\nm1 = \n";
+			   pp_mod m1; print "\nm2 = \n";
+			   pp_mod m2; print "\n";
+			   error "eq_modval for a non value")
+   fun eq_mod (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
+     | eq_mod (MOD_PROJECT (m,l), 
+		  MOD_PROJECT(m',l')) = eq_mod(m,m') andalso eq_label(l,l')
+     | eq_mod (MOD_SEAL(m,s),m') = eq_mod(m,m')
+     | eq_mod (m',MOD_SEAL(m,s)) = eq_mod(m,m')
+     | eq_mod _ = false
 
 
 

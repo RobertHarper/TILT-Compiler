@@ -27,23 +27,6 @@ functor IlStatic(structure Il : IL
    fun mod_ispath (MOD_VAR _) = true
      | mod_ispath (MOD_PROJECT (m,_)) = mod_ispath m
      | mod_ispath _ = false
-   fun eq_modval (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
-     | eq_modval (MOD_PROJECT (m,l), 
-		  MOD_PROJECT(m',l')) = eq_modval(m,m') andalso eq_label(l,l')
-     | eq_modval (MOD_SEAL(m,s),m') = eq_modval(m,m')
-     | eq_modval (m',MOD_SEAL(m,s)) = eq_modval(m,m')
-     | eq_modval (MOD_VAR _, MOD_PROJECT _) = false
-     | eq_modval (MOD_PROJECT _, MOD_VAR _) = false
-     | eq_modval (m1,m2) = (print "eq_modval for a non value\nm1 = \n";
-			   pp_mod m1; print "\nm2 = \n";
-			   pp_mod m2; print "\n";
-			   error "eq_modval for a non value")
-   fun eq_mod (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
-     | eq_mod (MOD_PROJECT (m,l), 
-		  MOD_PROJECT(m',l')) = eq_mod(m,m') andalso eq_label(l,l')
-     | eq_mod (MOD_SEAL(m,s),m') = eq_mod(m,m')
-     | eq_mod (m',MOD_SEAL(m,s)) = eq_mod(m,m')
-     | eq_mod _ = false
 
    (* --- remove references to internal variables from signature with given module ---- *)
    fun SelfifySig'(ctable : (var * con) list, 
@@ -764,8 +747,11 @@ functor IlStatic(structure Il : IL
 					    error "RdecLookup could not find label")
 		 | RdecLookup (label,(l,c)::rest) = if eq_label(label,l) then c
 						    else RdecLookup (label,rest)
+	       fun chase (ref (FLEXINFO(_,_,rdecs))) = rdecs
+		 | chase (ref (INDIRECT_FLEXINFO fr)) = chase fr
 	   in (case con' of
 		   (CON_RECORD rdecs) => (va,RdecLookup(l,rdecs))
+		 | (CON_FLEXRECORD fr) => (va,RdecLookup(l,chase fr))
 		 | _ => (print "Record Proj on exp not of type CON_RECORD; type = ";
 			 pp_con con; print "\n";
 			 error "Record Proj on exp not of type CON_RECORD"))

@@ -98,15 +98,21 @@ functor Pat(structure Il : IL
       | wrapbnds (bnds, (e,c)) = (LET (bnds, e),c)
 
 
-    fun letprojecthelp (context : context, rv : Il.var, recsyms : Symbol.symbol list)
+    fun letprojecthelp' (context : context, rv : Il.var, labels)
       : Il.bnds * Il.var list * Il.con list = 
       let 
-	  val labels = map symbol_label recsyms
 	  val vars = map (fn _ => fresh_var()) labels
 	  val cons = map (fn _ => fresh_con context) labels
 	  val rcon = CON_RECORD(sort_labelpair(zip labels cons))
 	  val bnds = map2 (fn (v,l) => BND_EXP(v,RECORD_PROJECT(VAR rv,l,rcon))) (vars,labels)
       in (bnds,vars,cons)
+      end
+
+    fun letprojecthelp (context : context, rv : Il.var, recsyms : Symbol.symbol list)
+      : Il.bnds * Il.var list * Il.con list = 
+      let 
+	  val labels = map symbol_label recsyms
+      in letprojecthelp'(context,rv,labels)
       end
 
 
@@ -198,6 +204,7 @@ functor Pat(structure Il : IL
 	 in (vc_ll, wrapbnd(bnd,ec))
 	 end)
 
+(*
   and tuprec_case (arg1,
 		   args,
 		   syms : Symbol.symbol list,
@@ -215,7 +222,58 @@ functor Pat(structure Il : IL
       val (vc_ll : bound list, ec) = match(newargs @ args,newarms,def)
     in (vc_ll,wrapbnd(bnd1,wrapbnds(rbnds,ec)))
     end
-
+*)
+  and tuprec_case (arg1,
+		   args,
+		   accs : (((label * Ast.pat) list * bool) * arm) list,
+		   def : def) : bound list * (exp * con) = 
+    let
+	fun is_subset ([],s2) = true
+	  | is_subset (r1::s1,s2) = member_eq(eq_label,r1,s2) andalso is_subset(s1,s2)
+	fun same(s1,s2) = if (is_subset(s1,s2) 
+			      andalso is_subset(s2,s1))
+			      then s2
+			  else error "tuprec_case failed same"
+	fun subset(s1,s2) = if (is_subset(s1,s2)) 
+				then s2 
+			    else error "tuprec_case failed subset"
+	fun merge([],s2) = s2
+	  | merge(s1::r1,s2) = if (member_eq(eq_label,s1,s2))
+				   then merge(r1,s2)
+			       else merge(r1,s1::s2)
+	fun unique (splist : (label * Ast.pat) list) = 
+	    let fun folder((l,_),acc) = if (member_eq(eq_label,l,acc))
+					    then error "tuprec_case failed due to duplicate field names"
+					else l::acc
+	    in foldl folder [] splist
+	    end
+	fun folder (((splist : (label * Ast.pat) list,flag),_),(syms,flex)) = 
+	    (case (flag,flex) of
+		 (false,false) => (same(unique splist,syms),false)
+	       | (true,false) => (subset(unique splist,syms),false)
+	       | (false,true) => (subset(syms,unique splist),false)
+	       | (true,true) => (merge(unique splist,syms),true))
+	val (syms,flex) = foldl folder ([],true) accs
+	fun fetch splist s = (case assoc_eq(eq_label,s,splist) of
+				  SOME p => p
+				| NONE => Ast.WildPat)
+	fun acc_normalize((splist,flex),arm) = (map (fetch splist) syms, arm)
+	val accs' = map acc_normalize accs
+	val (bnd1,(var1,con1)) = lethelp("recordcase",arg1)
+	val (rbnds,rvars,rcons) = letprojecthelp'(context,var1,syms)
+	val lc = sort_labelpair (zip syms rcons)
+	val argcon = if flex 
+			 then CON_FLEXRECORD(ref (FLEXINFO(Tyvar.get_stamp(),false,lc)))
+		     else CON_RECORD lc
+	val _ = con_unify'(context,"tuprec_case",
+			   ("con1",con1),
+			   ("(rcons)",argcon),nada)
+	val newargs = map2 (fn (v,c) => CASE_VAR(v,c)) (rvars,rcons)
+	fun extender (pats,(cl,bound,body)) = (pats @ cl, bound, body)
+	val newarms = map extender accs'
+	val (vc_ll : bound list, ec) = match(newargs @ args,newarms,def)
+    in (vc_ll,wrapbnd(bnd1,wrapbnds(rbnds,ec)))
+    end
 
   and exn_case(arg1,args,
 	       accs: ((Ast.symbol list * Il.exp * Il.con option * Ast.pat option) * arm) list,
@@ -523,7 +581,7 @@ functor Pat(structure Il : IL
 			 | _ => constr_dispatch())
 		 end
 
-	       fun tuple_record_dispatch() =
+(*	       fun tuple_record_dispatch() =
 		 let 
 		   fun makesym n = mapcount (fn (i,_) => generate_tuple_symbol (i+1)) (count n)
 		   val syms = (case headpat1 of
@@ -540,6 +598,19 @@ functor Pat(structure Il : IL
 		     | tuprecpred _ = NONE
 		   val (accs,vc_ll2,def) = find_maxseq tuprecpred arms
 		   val (vc_ll,ec) = tuprec_case(arg1,argrest,syms,accs,def)
+		 in (vc_ll @ vc_ll2, ec)
+		 end
+*)
+	       fun tuple_record_dispatch() =
+		 let 
+		   fun tuple_case _ [] = []
+		     | tuple_case n (p::r) = (generate_tuple_label n,p)::(tuple_case (n+1) r)
+		   fun rec_case (s,p) = (symbol_label s, p)
+		   fun tuprecpred (Ast.TuplePat pats) = SOME(tuple_case 1 pats, false)
+		     | tuprecpred (Ast.RecordPat {def,flexibility}) = SOME(map rec_case def, flexibility)
+		     | tuprecpred _ = NONE
+		   val (accs,vc_ll2,def) = find_maxseq tuprecpred arms
+		   val (vc_ll,ec) = tuprec_case(arg1,argrest,accs,def)
 		 in (vc_ll @ vc_ll2, ec)
 		 end
 

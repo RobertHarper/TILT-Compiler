@@ -215,7 +215,8 @@ signature ILUTIL =
        and substitute in the corresponding value give by the bnd list *)
     val subst_var : Il.bnd * (Il.bnd list) -> Il.bnd
 
-
+    val eq_modval : mod * mod -> bool
+    val eq_mod : mod * mod -> bool
 
   end;
 
