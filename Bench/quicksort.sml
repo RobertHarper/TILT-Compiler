@@ -11,41 +11,33 @@
 
 (* $Id$ *)
 
-(* Good test for loops. Best compiled with unsafe libraries. *)
-(*
-type 'a array1 = 'a Array.array
-val array1 = Array.array
-val sub1 = Array.sub
-val update1 = Array.update
-infix 9 &&
-val op && = Bits.andb
-*)
+
 val andb = fn(x,y) => uint32toint32((int32touint32 x) && (int32touint32 y))
 val (op &&) = andb
 local
 fun inc x = x := (!x) + 1
 fun dec x = x := (!x) - 1
 
-fun qsort lo hi (a : int array1) =
+fun qsort lo hi (a : int array) =
   if lo < hi then 
   let val i = ref lo 
       val j = ref hi 
-      val pivot = sub1(a,hi) 
+      val pivot = sub(a,hi) 
   in
       while !i < !j do
-	  (while !i < hi andalso sub1(a,!i) <= pivot do inc i;
-	   while !j > lo andalso sub1(a,!j) >= pivot do dec j;
+	  (while !i < hi andalso sub(a,!i) <= pivot do inc i;
+	   while !j > lo andalso sub(a,!j) >= pivot do dec j;
 	   if !i < !j then 
-	       let val temp = sub1(a,!i) 
+	       let val temp = sub(a,!i) 
 	       in 
-		   update1(a,!i,sub1(a,!j)); 
-		   update1(a,!j,temp)
+		   update(a,!i,sub(a,!j)); 
+		   update(a,!j,temp)
 	       end
 	   else ());
-      let val temp = sub1(a,!i) 
+      let val temp = sub(a,!i) 
       in 
-	  update1(a,!i,sub1(a,hi)); 
-	  update1(a,hi,temp)
+	  update(a,!i,sub(a,hi)); 
+	  update(a,hi,temp)
       end;
       qsort lo (!i-1) a;
       qsort (!i+1) hi a
@@ -56,26 +48,26 @@ fun qsort lo hi (a : int array1) =
 
 fun cmp (i:int) j = i - j
 
-fun qsort2 lo hi (a : int array1) =
+fun qsort2 lo hi (a : int array) =
   if lo < hi then 
   let val i = ref lo 
       val j = ref hi 
-      val pivot = sub1(a,hi) 
+      val pivot = sub(a,hi) 
   in
       while !i < !j do
-	  (while !i < hi andalso cmp (sub1(a,!i)) pivot <= 0 do inc i;
-	   while !j > lo andalso cmp (sub1(a,!j)) pivot >= 0 do dec j;
+	  (while !i < hi andalso cmp (sub(a,!i)) pivot <= 0 do inc i;
+	   while !j > lo andalso cmp (sub(a,!j)) pivot >= 0 do dec j;
 	   if !i < !j then 
-	       let val temp = sub1(a,!i) 
+	       let val temp = sub(a,!i) 
 	       in 
-		   update1(a,!i,sub1(a,!j)); 
-		   update1(a,!j,temp)
+		   update(a,!i,sub(a,!j)); 
+		   update(a,!j,temp)
 	       end
 	   else ());
-      let val temp = sub1(a,!i) 
+      let val temp = sub(a,!i) 
       in 
-	  update1(a,!i,sub1(a,hi)); 
-	  update1(a,hi,temp)
+	  update(a,!i,sub(a,hi)); 
+	  update(a,hi,temp)
       end;
       qsort lo (!i-1) a;
       qsort (!i+1) hi a
@@ -96,21 +88,21 @@ fun for(start,stop,f) =
     end
 
 fun test_sort sort_fun size =
-  let val a = array1(size, 0) 
-      val check = array1(4096,0)
+  let val a = array(size, 0) 
+      val check = array(4096,0)
   in
       for(0,size-1,fn i =>
 	  let val n = random() 
 	  in 
-	      update1(a,i,n); 
-	      update1(check,n,sub1(check,n)+1)
+	      update(a,i,n); 
+	      update(check,n,sub(check,n)+1)
 	  end);
       sort_fun 0 (size-1) a;
-      (update1(check,sub1(a,0),sub1(check,sub1(a,0))-1);
+      (update(check,sub(a,0),sub(check,sub(a,0))-1);
        for (1,size-1,fn i =>
-         (if sub1(a,i-1) > sub1(a,i) then raise Failed else ();
-          update1(check,sub1(a,i),sub1(check,sub1(a,i)) - 1)));
-       for(0,4095,fn i => if sub1(check,i) <> 0 then raise Failed else ());
+         (if sub(a,i-1) > sub(a,i) then raise Failed else ();
+          update(check,sub(a,i),sub(check,sub(a,i)) - 1)));
+       for(0,4095,fn i => if sub(check,i) <> 0 then raise Failed else ());
        print "OK"; print "\n") handle Failed =>
       (print "failed"; print "\n")
   end

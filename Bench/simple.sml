@@ -5,10 +5,8 @@ local
 
   val Control_trace = ref false
 
-(*   val grid_max=100 (* don't make this < 5 *) *)
-  val grid_max=20 (* don't make this < 5 *)
+  val grid_max=20 (* was originally 100; don't make this < 5 *)
 
-  infix 9 sub
 
   fun min(x:real,y:real) = if x<y then x else y
   fun max(x:real,y:real) = if x<y then y else x
@@ -50,9 +48,9 @@ local
 	(fn j => 
 	 print (makestring_real (sub2(A,(i,j))) ^ ", "));
 	print (makestring_real (sub2(A,(i,u2))) ^ "]\n")))
-  val array1 = fn ((l,u),v) => (array1(u-l+1,v),(l,u))
-  val sub1 = fn ((A,(l:int,u:int)),i:int) => sub1(A,i-l) 
-  val update1 = fn((A,(l,_)),i,v) => update1(A,i-l,v)
+  val array1 = fn ((l,u),v) => (array(u-l+1,v),(l,u))
+  val sub1 = fn ((A,(l:int,u:int)),i:int) => sub(A,i-l) 
+  val update1 = fn((A,(l,_)),i,v) => update(A,i-l,v)
   fun bounds1(_,b) = b
  (*
   * Specification of the state variable computation

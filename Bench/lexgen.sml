@@ -97,15 +97,15 @@ local
   end
 end (* local ... nonfix > *)
 
-   infix 9 sub1
+   infix 9 sub
 
-   datatype token = CHARS of bool array1 | QMARK | STAR | PLUS | BAR
+   datatype token = CHARS of bool array | QMARK | STAR | PLUS | BAR
 	  | LP | RP | CARAT | DOLLAR | SLASH | STATE of string list
 	  | REPS of int * int | ID of string | ACTION of string
 	  | BOF | EOF | ASSIGN | SEMI | ARROW | LEXMARK | LEXSTATES  |
 	    COUNT | REJECT | FULLCHARSET | STRUCT | HEADER | ARG
 	
-   datatype exp = EPS | CLASS of bool array1 * int | CLOSURE of exp
+   datatype exp = EPS | CLASS of bool array * int | CLOSURE of exp
 		| ALT of exp * exp | CAT of exp * exp | TRAIL of int
 		| END of int
    (* flags describing input Lex spec. - unnecessary code is omitted *)
@@ -332,8 +332,8 @@ val rec escaped = fn () => case nextch() of
 		   end
 	
 
-	val onechar = fn x => let val c = array1(!CharSetSize,false) in
-		update1(c,ord(x),true); CHARS(c)
+	val onechar = fn x => let val c = array(!CharSetSize,false) in
+		update(c,ord(x),true); CHARS(c)
 		end
 		
 	in case !LexState of 0 => let val makeTok = fn () =>
@@ -398,8 +398,8 @@ val rec escaped = fn () => case nextch() of
 		| #"$" => DOLLAR
 		| #"/" => SLASH
 		| #";" => SEMI
-		| #"." => let val c = array1(!CharSetSize,true) in
-				update1(c,10,false); CHARS(c)
+		| #"." => let val c = array(!CharSetSize,true) in
+				update(c,10,false); CHARS(c)
 			end
 			(* assign and arrow *)
 		| #"=" => let val c = nextch() 
@@ -414,9 +414,9 @@ val rec escaped = fn () => case nextch() of
 							 end;
 			      val first = classch();
 			      val flag = (first<> #"^");
-			      val c = array1(!CharSetSize,not flag);
+			      val c = array(!CharSetSize,not flag);
 			      val add = fn x => if x=nullchar then ()
-						else update1(c,ord(x),flag)
+						else update(c,ord(x),flag)
 			      val range = fn (x,y) =>
 				  if char_gt(x,y) then (pr_err "bad char. range")
 				  else let val i = ref(ord(x)) and j = ord(y)
@@ -508,8 +508,8 @@ fun GetExp () : exp =
 
 	let val optional = fn e => ALT(EPS,e)
 
-	 val newline = fn () => let val c = array1(!CharSetSize,false) in
-		update1(c,10,true); c
+	 val newline = fn () => let val c = array(!CharSetSize,false) in
+		update(c,10,true); c
 		end
 	
 	val trail = fn (e1,e2) => CAT(CAT(e1,TRAIL(0)),e2)
@@ -851,13 +851,13 @@ fun makeaccept ends =
 			
 fun leafdata(e:(int list * exp) list) =
 	let 
-	    val fp = array1(!LeafNum + 1,nil)
-	val leaf = array1(!LeafNum + 1,EPS)
+	    val fp = array(!LeafNum + 1,nil)
+	val leaf = array(!LeafNum + 1,EPS)
 	val tcpairs = ref nil
 	val trailmark = ref ~1;
 	val rec add = fn
 		  (nil,x) => ()
-		| (hd::tl,x) => (update1(fp,hd,union "leafdata-add" (fp sub1 hd,x));
+		| (hd::tl,x) => (update(fp,hd,union "leafdata-add" (fp sub hd,x));
 			add(tl,x))
 	val rec moredata = fn
 		  CLOSURE(e1) =>
@@ -865,10 +865,10 @@ fun leafdata(e:(int list * exp) list) =
 		| ALT(e1,e2) => (moredata(e1); moredata(e2))
 		| CAT(e1,e2) => (moredata(e1); moredata(e2);
 			add(lastpos(e1),firstpos(e2)))
-		| CLASS(x,i) => update1(leaf,i,CLASS(x,i))
-		| TRAIL(i) => (update1(leaf,i,TRAIL(i)); if !trailmark = ~1
+		| CLASS(x,i) => update(leaf,i,CLASS(x,i))
+		| TRAIL(i) => (update(leaf,i,TRAIL(i)); if !trailmark = ~1
 			then trailmark := i else ())
-		| END(i) => (update1(leaf,i,END(i)); if !trailmark <> ~1
+		| END(i) => (update(leaf,i,END(i)); if !trailmark <> ~1
 			then (tcpairs := (!trailmark,i)::(!tcpairs);
 			trailmark := ~1) else ())
 		| _ => ()
@@ -887,7 +887,7 @@ let val StateTab = ref (create(string_leq)) : (string,int) dictionary ref
 (* 
 fun check_fp n = if (n < 0) 
 		     then ()
-		 else (check (fp sub1 n); 
+		 else (check (fp sub n); 
 		       print "checked fp sub ";
 		       print (Int.toString n); print "\n";
 		       check_fp (n-1))
@@ -927,7 +927,7 @@ and getstate (state) =
 and getfin state =
 	let fun f nil fins = fins
 	      | f (hd::tl) fins =
-	         case (leaf sub1 hd) 
+	         case (leaf sub hd) 
 	            of END _ => f tl (hd::fins)
 	             | _ => f tl fins
 	in f state nil
@@ -936,7 +936,7 @@ and getfin state =
 and gettc state =
 	let fun f nil fins = fins
 	      | f (hd::tl) fins =
-	         case (leaf sub1 hd) 
+	         case (leaf sub hd) 
 	            of TRAIL _ => f tl (hd::fins)
 	             | _ => f tl fins
 	in f state nil
@@ -946,15 +946,15 @@ and gettrans (state) =
       let fun loop c tlist =
 	 let fun cktrans nil r = r
 	       | cktrans (hd::tl) r =
-		  case (leaf sub1 hd) of
+		  case (leaf sub hd) of
 	           CLASS(i,_)=>
-			(if (i sub1 c) then 
+			(if (i sub c) then 
 			     (
 (*
 			      print "gettrans with hd = ";
 			      print (Int.toString hd); print "\n";
 *)
-			      cktrans tl (union "gettrans" (r,fp sub1 hd)))
+			      cktrans tl (union "gettrans" (r,fp sub hd)))
 		         else cktrans tl r handle Subscript => 
 						cktrans tl r
 			)
@@ -969,17 +969,17 @@ and gettrans (state) =
      end
 	
 and startstates() =
-	let val startarray = array1(!StateNum + 1, nil);
+	let val startarray = array(!StateNum + 1, nil);
             fun listofarray(a,n) =
-  		let fun f i l = if i >= 0 then  f (i-1) ((a sub1 i)::l) else l
+  		let fun f i l = if i >= 0 then  f (i-1) ((a sub i)::l) else l
  		in f (n-1) nil end
 	val rec makess = fn
 		  nil => ()
 		| (startlist,e)::tl => (fix(startlist,firstpos(e));makess(tl))
 	and fix = fn
 		  (nil,_) => ()
-		| (s::tl,firsts) => (update1(startarray,s,
-			union "startstates" (firsts,startarray sub1 s));
+		| (s::tl,firsts) => (update(startarray,s,
+			union "startstates" (firsts,startarray sub s));
 			fix(tl,firsts))
 	in makess(rules);listofarray(startarray, !StateNum + 1)
 	end

@@ -28,17 +28,17 @@ datatype 'a option = NONE | SOME of 'a
 exception Tabulate
 fun tabulate (i,f) = 
 if i <= 0 then raise Tabulate else
-let val a = array1(i,f 0)
-    fun tabify j = if j < i then (update1(a,j,f j); tabify (j+1)) else a
+let val a = array(i,f 0)
+    fun tabify j = if j < i then (update(a,j,f j); tabify (j+1)) else a
 in
     tabify 1
 end
 
 exception ArrayofList
 fun arrayoflist (hd::tl) =
-let val a = array1((length tl) + 1,hd)
+let val a = array((length tl) + 1,hd)
     fun al([],_) = a
-      | al(hd::tl,i) = (update1(a,i,hd); al(tl,i+1))
+      | al(hd::tl,i) = (update(a,i,hd); al(tl,i+1))
 in
     al(tl,1)
 end
@@ -60,10 +60,10 @@ structure Util = struct
     (* arr[i] := obj :: arr[i]; extend non-empty arr if necessary *)
     fun insert (obj,i,arr) = let
 	  val len = length1 arr
-          val res =  if i<len then (update1(arr,i,obj::sub1(arr,i)); arr)
-	     else let val arr' = array1(max(i+1,len+len),[])
-		      fun copy ~1 = (update1(arr',i,[obj]); arr')
-			| copy j = (update1(arr',j,sub1(arr,j));
+          val res =  if i<len then (update(arr,i,obj::sub(arr,i)); arr)
+	     else let val arr' = array(max(i+1,len+len),[])
+		      fun copy ~1 = (update(arr',i,[obj]); arr')
+			| copy j = (update(arr',j,sub(arr,j));
 				    copy(j-1))
 		      in copy(len-1) end 
           in res
@@ -74,8 +74,8 @@ structure Util = struct
       | arrayoflists ([]::ls) = arrayoflists ls
       | arrayoflists [l] = arrayoflist l
       | arrayoflists (ls as (obj0::_)::_) = let	 
-	  val a = array1(revfold (fn (l,n) => length l + n) ls 0,obj0)
-	  fun ins (i,[]) = i | ins (i,x::l) = (update1(a,i,x); ins(i+1,l))
+	  val a = array(revfold (fn (l,n) => length l + n) ls 0,obj0)
+	  fun ins (i,[]) = i | ins (i,x::l) = (update(a,i,x); ins(i+1,l))
 	  fun insert (i,[]) = a | insert (i,l::ll) = insert(ins(i,l),ll)
           in insert(0,ls) end
 *)
@@ -88,7 +88,7 @@ structure Util = struct
 	  infix sub
 
 
-	  val op sub = sub1 and update = update1
+	  val op sub = sub and update = update
 	  fun swap (i,j) = let val ai = a sub i
 			   in update(a,i,a sub j); update(a,j,ai) end
 	  (* sort all a[k], 0<=i<=k<j<=length a *)
@@ -333,7 +333,7 @@ structure MI = struct (* MONO_IDEAL *)
 	  val msa = arrayoflist orig_ms
 	  val ms : (M.mono * '_a) list = 
 	      Util.stripSort (fn ((m,_),(m',_)) => M.compare (m,m')) msa
-	  val buckets = revfold ins ms (array1(0,[]))
+	  val buckets = revfold ins ms (array(0,[]))
 	  val n = length1 buckets
 	  val mi = mkEmpty()
           fun sort i = if i>=n then mi else let
@@ -342,8 +342,8 @@ structure MI = struct (* MONO_IDEAL *)
 		fun filter ([],l) = app (fn (m,a) => insert(mi,m,a)) l
 		  | filter (x::xx,l) = if redundant x then filter(xx,l)
 				       else filter(xx,x::l)
-		in filter(sub1(buckets,i),[]);
-		   update1(buckets,i,[]);
+		in filter(sub(buckets,i),[]);
+		   update(buckets,i,[]);
 		   sort(i+1)
 		end
           in sort 0 end
@@ -370,16 +370,16 @@ val log = let fun log(n,l) = if n<=1 then l else log((n >> 1),1+l)
           in fn n => log(n,0) end
 val maxLeft = ref 0
 val maxRight = ref 0
-val counts = tabulate(20,fn _ => array1(20,0))
+val counts = tabulate(20,fn _ => array(20,0))
 val indices = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
-fun resetCounts() = app(fn i => app (fn j => update1(sub1(counts,i),j,0)) indices) indices
+fun resetCounts() = app(fn i => app (fn j => update(sub(counts,i),j,0)) indices) indices
 fun pair(l,r) = let
       val l = log l and r = log r
       val _ = maxLeft := max(!maxLeft,l) and _ = maxRight := max(!maxRight,r)
-      val a = sub1(counts,l)
-      in update1(a,r,sub1(a,r)+1) end
+      val a = sub(counts,l)
+      in update(a,r,sub(a,r)+1) end
 fun getCounts () = 
-  map (fn i => map (fn j => sub1(sub1(counts,i),j)) indices) indices
+  map (fn i => map (fn j => sub(sub(counts,i),j)) indices) indices
 
 
 structure P = struct
@@ -487,7 +487,7 @@ end
 end
 
 structure HP = struct
-	datatype hpoly = HP of P.poly array1
+	datatype hpoly = HP of P.poly array
 	val log = let
 	      fun log(n,l) = if n<8 then l else log((n >> 2),1+l)
 	      in fn n => log(n,0) end
@@ -499,19 +499,19 @@ structure HP = struct
 	      in if l>=length1 ps then let
 		   val n = length1 ps
 		   in HP(tabulate(n+n,
-			 fn i => if i<n then sub1(ps,i)
+			 fn i => if i<n then sub(ps,i)
 			         else if i=l then p else P.zero))
 		   end
 		 else let
-		   val p = P.add(p,sub1(ps,l))
-		   in if l=log(P.numTerms p) then (update1(ps,l,p); HP ps)
-		      else (update1(ps,l,P.zero); add (p,HP ps))
+		   val p = P.add(p,sub(ps,l))
+		   in if l=log(P.numTerms p) then (update(ps,l,p); HP ps)
+		      else (update(ps,l,P.zero); add (p,HP ps))
 		   end
 	      end
 	fun leadAndRest (HP ps) = let
 	      val n = length1 ps
 	      fun lar (m,indices,i) = if i>=n then lar'(m,indices) else let
-		    val p = sub1(ps,i)
+		    val p = sub(ps,i)
 		    in if P.isZero p then lar(m,indices,i+1)
 		       else if null indices then lar(P.leadMono p,[i],i+1)
 			    else case M.compare(m,P.leadMono p) of
@@ -521,8 +521,8 @@ structure HP = struct
 		    end
 	      and lar' (_,[]) = NONE
 		| lar' (m,i::is) = let
-		    fun extract i = case P.leadAndRest(sub1(ps,i)) of
-			  ((a,_),rest) => (update1(ps,i,rest); a)
+		    fun extract i = case P.leadAndRest(sub(ps,i)) of
+			  ((a,_),rest) => (update(ps,i,rest); a)
 		    val a = revfold (fn (j,b) => F.add(extract j,b))
 				    is (extract i)
 		    in if F.isZero a then lar(M.one,[],0) else SOME(a,m,HP ps)
@@ -576,9 +576,9 @@ structure G = struct
 		else (inc usedPairs;
 		      Util.insert(P.cons((F.one,m'),g'),M.deg mm+d,arr))
 	  val buckets = MI.fold insert (MI.mkIdeal (MI.fold tag mi []))
-	      			       (array1(0,[]))
+	      			       (array(0,[]))
 	  fun ins (~1,pairs) = pairs
-	    | ins (i,pairs) = case sub1(buckets,i) of
+	    | ins (i,pairs) = case sub(buckets,i) of
 	            [] => ins(i-1,pairs)
 		  | gs => ins(i-1,Util.insert(arrayoflist(h::gs),i,pairs))
 	  in ins(length1 buckets - 1,pairs) end
@@ -586,9 +586,9 @@ structure G = struct
     fun grobner fs = let
 	 fun pr l = print (string_implode (l@["\n"]))
 	  val fs = revfold (fn (f,fs) => Util.insert(f,P.deg f,fs))
-	      		   fs (array1(0,[]))
+	      		   fs (array(0,[]))
 	  (* pairs at least as long as fs, so done when done w/ all pairs *)
-	  val pairs = ref(array1(length1 fs,[]))
+	  val pairs = ref(array(length1 fs,[]))
 	  val mi = MI.mkEmpty()
 	  val newDegGens = ref []
           val addGen = (* add and maybe auto-reduce new monic generator h *)
@@ -633,9 +633,9 @@ structure G = struct
 		      end
 	      end
 	  fun tryPairs fgs = let
-		val ((a,m),f) = P.leadAndRest (sub1(fgs,0))
+		val ((a,m),f) = P.leadAndRest (sub(fgs,0))
 		fun tryPair i = if i=0 then () else let
-		      val ((b,n),g) = P.leadAndRest (sub1(fgs,i))
+		      val ((b,n),g) = P.leadAndRest (sub(fgs,i))
 		      val k = M.lcm(m,n)
 		      in 
 			 try (P.spair(b,M.divide(k,m),f,a,M.divide(k,n),g));
@@ -648,19 +648,19 @@ structure G = struct
 	        (* note: i nullify entries to reclaim space *)
 	        (
 pr ["DEGREE ",makestring_int d," with ",
-    makestring_int(numPairs(sub1(!pairs,d),0))," pairs ",
-    if d>=length1 fs then "0" else makestring_int(length(sub1(fs,d))),
+    makestring_int(numPairs(sub(!pairs,d),0))," pairs ",
+    if d>=length1 fs then "0" else makestring_int(length(sub(fs,d))),
     " generators to do"];
-tasksleft := numPairs(sub1(!pairs,d),0);
+tasksleft := numPairs(sub(!pairs,d),0);
 if d>=length1 fs then () 
-else tasksleft := !tasksleft + length (sub1(fs,d));
+else tasksleft := !tasksleft + length (sub(fs,d));
 if d>(!maxDeg) then ()
 else (             reset();
       		   newDegGens := [];
-		   app tryPairs (sub1(!pairs,d));
-		   update1(!pairs,d,[]);
+		   app tryPairs (sub(!pairs,d));
+		   update(!pairs,d,[]);
 		   if d>=length1 fs then ()
-		   else (app try (sub1(fs,d)); update1(fs,d,[]));
+		   else (app try (sub(fs,d)); update(fs,d,[]));
 pr ["maybe ",makestring_int(!maybePairs)," prime ",makestring_int (!primePairs),
     " using ",makestring_int (!usedPairs),"; found ",makestring_int (!newGens)]
 );
@@ -782,7 +782,7 @@ fun sort [] = []
 let
     val a = arrayoflist a
     val b = tabulate(length1 a,fn i => i)
-    val sub = sub1 and update = update1
+    val sub = sub and update = update
     infix sub
     fun swap (i,j) = let val ai = a sub i in update(a,i,a sub j); update(a,j,ai) end
     (* sort all k, 0<=i<=k<j<=length a *)
