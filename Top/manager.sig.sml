@@ -1,3 +1,4 @@
+(*$import Prelude *)
 (* The intended external syntax for tilc is as follows:
  *
  * The following three options, if they occur, must be the only switch:
@@ -40,6 +41,8 @@
  *)
 
 signature MANAGER = sig
+
+  
   val cache_context : bool ref
   val up_to_phasesplit : bool ref
   val up_to_elaborate : bool ref

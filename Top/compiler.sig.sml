@@ -1,3 +1,4 @@
+(*$import Prelude *)
 (* Abstract view of the compiler - from HIL and down; to be used by
  * the separate compilation system. *)
 

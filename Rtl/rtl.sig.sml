@@ -1,3 +1,4 @@
+(*$import Name TilWord32 *)
 signature RTL =
 sig
 
@@ -80,7 +81,7 @@ sig
 
   (* in_imm_range: is an integer in a range of immediate values ? *) 
 
-  val in_imm_range : Word32.word -> bool
+  val in_imm_range : TilWord32.word -> bool
 
   datatype cmp = EQ | LE | LT | GE | GT | NE | LBC | LBS
 
@@ -93,7 +94,7 @@ sig
 
   datatype traptype = INT_TT | REAL_TT | BOTH_TT
   datatype instr = 
-      LI     of Word32.word * regi
+      LI     of TilWord32.word * regi
     | LADDR  of label * int * regi
     | LEA    of ea * regi               
     | MV     of regi * regi               (* src,dest *)
@@ -242,9 +243,9 @@ sig
 			     before another call to NEEDMUTATE or NEEDGC *)
     | NEEDGC of sv          (* needgc(sv) calls garbage collector if that
 			     many words are not allocatable *)
-    | FLOAT_ALLOC of regi * regf * regi * Word32.word  (* number of floats *)
-    | INT_ALLOC   of regi * regi * regi * Word32.word  (* number of bytes *)
-    | PTR_ALLOC   of regi * regi * regi * Word32.word  (* number of words *)
+    | FLOAT_ALLOC of regi * regf * regi * TilWord32.word  (* number of floats *)
+    | INT_ALLOC   of regi * regi * regi * TilWord32.word  (* number of bytes *)
+    | PTR_ALLOC   of regi * regi * regi * TilWord32.word  (* number of words *)
                             (* len, value, dest:
 			     allocate a f/i/p array of logical length len
 			     filled with the f/i/p value v and put the
@@ -262,17 +263,17 @@ sig
     | HALT                  (* needed for termination of main *)    
     | ICOMMENT of string
 
-  datatype labelortag = PTR of label | TAG of Word32.word
+  datatype labelortag = PTR of label | TAG of TilWord32.word
 
   datatype data = 
       COMMENT of string
     | STRING of (string)
-    | INT32 of  (Word32.word)
-    | INT_FLOATSIZE of (Word32.word)
+    | INT32 of  (TilWord32.word)
+    | INT_FLOATSIZE of (TilWord32.word)
     | FLOAT of  (string)
     | DATA of   (label)
 (* array of i words inited to word32 *)
-    | ARRAYI of (int * Word32.word)
+    | ARRAYI of (int * TilWord32.word)
 (* array of i words initialized to fp value in string *)
     | ARRAYF of (int * string)
 (* array of i words initialized to label or small int *)

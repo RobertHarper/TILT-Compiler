@@ -29,4 +29,5 @@ rtlinterp.sml
 rtlopt.sig.sml
 rtlopt.sml
 (* ------ the never-absent link file for this directory -------- *)
+linkrtl.sig.sml
 linkrtl.sml

@@ -1,4 +1,4 @@
-
+(*$import RTL PPRTL RTLTAGS NIL NILCONTEXT NILSTATIC NILUTIL PPNIL TORTLBASE Listops Stats Bool *)
 
 functor TortlBase(structure Rtl : RTL
 		  structure Pprtl : PPRTL 
@@ -10,7 +10,7 @@ functor TortlBase(structure Rtl : RTL
 		  structure Ppnil : PPNIL
 		  sharing Ppnil.Nil = NilUtil.Nil = NilContext.Nil = NilStatic.Nil = Nil
 		  sharing Pprtl.Rtltags = Rtltags
-		  sharing Rtl = Pprtl.Rtl
+		  sharing Pprtl.Rtl = Rtltags.Rtl = Rtl
 		  sharing type NilStatic.context = NilContext.context)
     :> TORTL_BASE where Rtl = Rtl where Nil = Nil
    =
@@ -151,12 +151,13 @@ val debug_bound = ref false
 
   (* ---- Looking up and adding new variables --------------- *)
 
-  fun top_rep (v,rep) = 
+  fun top_rep (v,rep) =
       (case rep of
-(* 	   (SOME(VGLOBAL _),_,_) => true *)
-	   (_, SOME(VCODE _), _) => true
-(*	 | (_, SOME(VLABEL _), _) => true *)
-	 | _ => (VarSet.member(!globals,v)))
+ 	   (SOME(VGLOBAL _),_,_) => true 
+	 | (_, SOME _, _) => true
+	 | _ => false)
+
+(*	 | _ => (VarSet.member(!globals,v))) *)
 
   fun varmap_insert' ({varmap,env,convarmap,gcstate} : state) (v,vr : var_rep) : state = 
       let val _ = if (!debug_bound)
@@ -261,15 +262,14 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
       end
 
   
-  fun add_var' s (v,vlopt,vvopt,con) =  varmap_insert s (v,(vlopt,vvopt,con))
-  fun add_var  s (v,reg,con)         =  add_var' s (v,SOME(VREGISTER(false,reg)), NONE, con)
-  fun add_varloc s (v,vl,con)        =  add_var' s (v,SOME vl,NONE,con)
-  fun add_code s (v,l,con)           =  add_var' s (v,NONE, SOME(VCODE l), con)
+  fun add_var (s,v,con,vlopt,vvopt) =  varmap_insert s (v,(vlopt,vvopt,con))
+  fun add_reg (s,v,con,reg)         =  add_var (s,v,con,SOME(VREGISTER(false,reg)), NONE)
+  fun add_code (s,v,con,l)          =  add_var (s,v,con,NONE, SOME(VCODE l))
 
   (* adding constructor-level variables and functions *)
-  fun add_convar s (v,vlopt,vvopt,kind,copt) = 
+  fun add_convar (s,v,kind,copt,vlopt,vvopt) = 
       convarmap_insert s (v,(vlopt, vvopt, kind)) copt
-  fun add_concode s (v,l,kind,copt) = 
+  fun add_concode (s,v,kind,copt,l) = 
       convarmap_insert s (v,(NONE, SOME(VCODE l),kind)) copt
 
   fun getconvarrep' ({convarmap=lm,...} : state) v : convar_rep option = VarMap.find (lm,v) 
@@ -421,8 +421,16 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 	       (Int_c _,_) => SOME NOTRACE_INT
 	     | (Float_c Prim.F32,_) => error "32-bit floats not supported"
 	     | (Float_c Prim.F64,_) => SOME NOTRACE_REAL
-	     | (((BoxFloat_c _) | Exn_c | Array_c | Vector_c | Ref_c | Exntag_c | 
-		   (Sum_c _) | (Record_c _) | (Vararg_c _)),_) => SOME TRACE
+	     | (BoxFloat_c _, _) => SOME TRACE
+	     | (Exn_c , _) => SOME TRACE
+	     | (Array_c , _) => SOME TRACE
+	     | (Vector_c , _) => SOME TRACE
+	     | (Ref_c , _) => SOME TRACE
+	     | (Exntag_c , _) => SOME TRACE
+	     | ((Sum_c _) , _) => SOME TRACE
+	     | ((Record_c _) , _) => SOME TRACE
+	     | ((Vararg_c _), _) => SOME TRACE
+
        in case con of
 	   Prim_c(pcon,clist) => primcon2rep(pcon,clist)
 	 | AllArrow_c (Open,_,_,_,_,_) => error "no open lambdas allowed by this stage"
@@ -954,17 +962,21 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
       end
 
     fun load_reg_loc (rep : var_loc, destopt : reg option) : reg = 
-	(case rep of
-	     ((VREGISTER (_,F _)) | (VGLOBAL (_, NOTRACE_REAL))) =>
+	let val rep_is_float = (case rep of
+				    VREGISTER (_, F _) => true
+				  | VGLOBAL (_, NOTRACE_REAL) => true
+				  | _ => false)
+	in  if (rep_is_float)
+	    then
 		 (case destopt of
 		      NONE => F(load_freg_loc(rep, NONE))
 		    | SOME (I ir) => error "load_reg on a FLOAT rep and a SOME(I _)"
 		    | SOME (F fr) => F(load_freg_loc(rep, SOME fr)))
-	   | _ =>
-		 (case destopt of
+	    else (case destopt of
 		      NONE => I(load_ireg_loc(rep, NONE))
 		    | SOME (F fr) => error "load_freg on a FLOAT rep and a SOME(F _)"
-		    | SOME (I ir) => I(load_ireg_loc(rep, SOME ir))))
+		    | SOME (I ir) => I(load_ireg_loc(rep, SOME ir)))
+	end
 
     fun load_reg_val (rep : var_val, destopt : reg option) : reg = 
 	(case rep of
@@ -1031,7 +1043,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		  add_instr(ADD(reg,REG size,dest))
 	      end
 
-  fun alloc_global (state,v : var,
+  fun add_global (state,v : var,
 		    con : con,
 		    lv : loc_or_val) : state =
     let 
@@ -1057,19 +1069,20 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
       val loc = alloc_regi LABEL
       val rtl_rep = con2rep state con
 
-      val state' = add_var' state (v,
-				   case label_opt of
-				       NONE => NONE
-				     | SOME label => 
-					   SOME(VGLOBAL(label,rtl_rep)),
-				   vv_opt,
-				   con)
+      val state' = add_var (state,v,con,
+			    case label_opt of
+				NONE => NONE
+			      | SOME label => 
+				    SOME(VGLOBAL(label,rtl_rep)),
+			    vv_opt)
+
     in  (case label_opt of
 	NONE => ()
       | SOME label =>
 	    (Stats.counter("RTLglobal") ();
 	     (case rtl_rep of
-		  (TRACE | COMPUTE _) => add_mutable_variable(label,rtl_rep)
+		  TRACE  => add_mutable_variable(label,rtl_rep)
+		| COMPUTE _ => add_mutable_variable(label,rtl_rep)
 		| _ => ());
 	      (case lv of
 		   VAR_VAL (VREAL _) => add_data(ALIGN (QUAD))
@@ -1100,11 +1113,11 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	state'
     end
 
-  fun alloc_conglobal (state : state,
-		       v : var,
-		       lv : loc_or_val,
-		       kind : kind,
-		       copt : con option) : state = 
+  fun add_conglobal (state : state,
+		     v : var,
+		     kind : kind,
+		     copt : con option,
+		     lv : loc_or_val) : state = 
     let 
 	(* we lay out the convar as a global if it is exported or we
 	   don't already know its value; if the value is known and
@@ -1122,12 +1135,12 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	     | (_, NONE) => (SOME(named_local_data_label v),NONE)
 	     | (VAR_VAL vv, SOME _) => (label_opt, SOME vv)
 	     | (_, SOME _) => (label_opt, NONE))
-      val state' = add_convar state(v,
-				    case label_opt of
-					NONE => NONE
-				      | SOME label => 
-					    SOME(VGLOBAL(label,TRACE)),
-				    vv_opt, kind, copt)
+      val state' = add_convar (state,v,kind,copt,
+			       case label_opt of
+				   NONE => NONE
+				 | SOME label => 
+				       SOME(VGLOBAL(label,TRACE)),
+			       vv_opt)
     in
 	(case label_opt of
 	    SOME label => 

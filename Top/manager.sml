@@ -1,15 +1,18 @@
+(*$import MANAGER LINKPARSE LINKIL COMPILER LINKER MAKEDEP OS LinkParse LinkIl Linker MakeDep Compiler List *)
+(* it is touching too many files so it's slow *)
 (* should add caching of import scans *)
 
 functor Manager (structure Parser: LINK_PARSE
-		 structure Elaborator: ELABORATOR
+		 structure Elaborator: LINKIL
 		 structure Compiler: COMPILER
 		 structure Linker: LINKER
 		 structure Makedep: MAKEDEP
 		 sharing type Elaborator.sbnd = Compiler.sbnd
 		 sharing type Elaborator.context_entry = Compiler.context_entry
-		 sharing type Elaborator.context = Compiler.context 
-		) : MANAGER = 
+		 sharing type Elaborator.context = Compiler.context)
+		:> MANAGER = 
 struct
+
 
   val up_to_phasesplit = ref false
   val up_to_elaborate = ref false
@@ -120,13 +123,13 @@ struct
   fun elab_constrained(ctxt,sourcefile,fp,dec,fp2,specs,least_new_time) =
       let 
       in case Elaborator.elab_dec_constrained(ctxt, fp, dec, fp2,specs) of
-	      SOME sbnds_entries_ctxt => sbnds_entries_ctxt 
+	      SOME ctxt_sbnds_entries => ctxt_sbnds_entries
             | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
       end
 
   fun elab_nonconstrained(mapping,unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
       case Elaborator.elab_dec(pre_ctxt, fp, dec)
-	of SOME(sbnd_entries, new_ctxt) => 
+	of SOME(new_ctxt, sbnd_entries) => 
 	    let	val same = 
 		(access(uiFile, [OS.FileSys.A_READ]) andalso
 		 Elaborator.IlContextEq.eq_context(new_ctxt, readContext mapping unit))
@@ -140,7 +143,7 @@ struct
 			else (chat ("[writing " ^ uiFile);
 			      writeContext mapping (unit, new_ctxt);
 			      chat "]\n")
-	    in (sbnd_entries, new_ctxt)
+	    in (new_ctxt,sbnd_entries)
 	    end
          | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
 
@@ -220,14 +223,15 @@ struct
   fun is_fresh files (curdate,curfile) = 
       let fun folder f = 
 	      let val t = OS.FileSys.modTime f
-		  handle OS.SysErr _ => error (f ^ "not present")
+		  handle OS.SysErr _ => error (f ^ "not present") 
 	      in  Time.<=(t,curdate)
 		  orelse
 		  (chat ("  [" ^ f ^ " is newer than " ^ curfile ^ "]\n"); false)
 	      end
       in  Listops.andfold folder files
       end
-	  
+(* handle OS.SysErr _ => false *)
+
   fun  compileSML make_uo mapping unitname : unit = 
        if !(#4(lookup_unit mapping unitname))
 	   then ()
@@ -301,7 +305,7 @@ struct
 	  val intFile = srcBase ^ ".int"
 	  val oFile = srcBase ^ ".o"
 	  val uoFile = srcBase ^ ".uo"
-	  val (sbnds, ctxt') = 
+	  val (ctxt',sbnds) = 
 	      if access(intFile, []) then 
 		  let val _ = compileINT mapping unit 
 		      val (fp2, _, specs) = Parser.parse_inter intFile
@@ -349,7 +353,6 @@ struct
   and compileINT mapping unit =
       let val sourcebase = name2base mapping unit
 	  val sourcefile = base2int sourcebase
-	  val (fp, _, specs) = Parser.parse_inter sourcefile
 	  val includes = getImport false mapping unit [] 
 	  val _ = app (compile false mapping) includes
 	  val includes_base = map (name2base mapping) includes
@@ -360,6 +363,7 @@ struct
 	     is_fresh includes_uo (OS.FileSys.modTime uiFile, uiFile))
 	     then ()
 	 else let val (ctxt_for_elab,ctxt) = getContext mapping includes
+		  val (fp, _, specs) = Parser.parse_inter sourcefile
 		  val _ = (chat "[Compiling specification file: ";
 			   chat sourcefile; chat "\n")
 	      in  (case Elaborator.elab_specs(ctxt_for_elab, fp, specs) of

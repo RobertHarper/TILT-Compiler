@@ -1,3 +1,4 @@
+(*$import TextIO Time *)
 signature MAKEDEP = sig
   
   type unitName = string

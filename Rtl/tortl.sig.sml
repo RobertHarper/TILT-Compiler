@@ -1,3 +1,4 @@
+(*$import RTL NIL *)
 signature TORTL =
 sig
    structure Rtl : RTL

@@ -1,22 +1,6 @@
-signature LINKRTL = 
-sig
-    structure Nil : NIL
-    structure Tortl : TORTL
-    structure Rtl : RTL
-    structure Pprtl : PPRTL
-    structure TortlBase : TORTL_BASE
+(*$import LINKRTL Linknil TortlBase Tortl Util TilWord32 Rtl RtlTags Pprtl *)
 
-    val show_rtl : bool ref
-    val compile_prelude : bool * string -> Rtl.module
-    val compile : string -> Rtl.module
-    val compiles : string list -> Rtl.module list
-    val test : string -> Rtl.module
-    val tests : string list -> Rtl.module list
-    val nil_to_rtl : Nil.module * string -> Rtl.module
-                                  (* unit name *)
-end
-
-structure Linkrtl : LINKRTL =
+structure Linkrtl :> LINKRTL =
 struct
 
     val show_rtl = ref false
@@ -56,6 +40,7 @@ struct
 			    structure NilUtil = Linknil.NilUtil
 			    structure Ppnil = Linknil.PpNil)
 
+(*
     structure Rtlopt = MakeRtlopt(structure Rtl = Rtl
 				  structure Pprtl = Pprtl)
 
@@ -74,6 +59,7 @@ struct
 				    structure Heap = Heap
 				    structure Registerset = Registerset
 				    structure Operations = Operations)
+*)
     fun compile' (debug,unitname,nilmodule) = 
 	let val translate_params = {HeapProfile = NONE, do_write_list = true,
 				    codeAlign = Rtl.QUAD, FullConditionalBranch = false,

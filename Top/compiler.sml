@@ -1,4 +1,4 @@
-
+(*$import COMPILER Linknil Linkrtl Linkalpha OS *)
 structure Til : COMPILER =
     struct
 
@@ -11,10 +11,11 @@ structure Til : COMPILER =
 	val as_path = "as"
 	val has_sys = OS.Process.system "sys" = OS.Process.success
 
-	val debug_asm = ref true
+	val debug_asm = ref false
 	fun get_debug_flag() = if (!debug_asm) then " -g " else ""
 	fun assemble(s_file,o_file) =
 	    let val command = as_path ^ (get_debug_flag()) ^ " -c -o " ^ o_file ^ " " ^ s_file
+		val rmcommand = "rm " ^ s_file
 	    in  if (not has_sys)
 	        then 
                   let val os = TextIO.openOut "worklist"
@@ -26,7 +27,10 @@ structure Til : COMPILER =
                   in  loop()
                   end
 	        else 
-	          (if OS.Process.system command =  OS.Process.success then ()
+	          (if (OS.Process.system command =  OS.Process.success 
+		       andalso ((OS.FileSys.fileSize o_file > 0)
+				handle _ => false))
+		       then (OS.Process.system rmcommand; ())
 		  else error "assemble. System command as failed")
 	    end
 

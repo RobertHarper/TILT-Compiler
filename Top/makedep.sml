@@ -1,4 +1,6 @@
-structure Makedep : MAKEDEP = struct
+(*$import MAKEDEP Util Time TextIO Date OS Char *)
+
+structure Makedep :> MAKEDEP = struct
 
   type unitName = string
 
@@ -19,7 +21,7 @@ structure Makedep : MAKEDEP = struct
 
   fun isWhiteSpace istream = 
     case TextIO.lookahead istream of
-      (SOME #" " | SOME #"\t" | SOME #"\012" | SOME #"\n") => true
+      SOME c => Char.isSpace c
     | _ => false
 
   fun skipWhiteSpace istream =
@@ -239,10 +241,9 @@ structure Makedep : MAKEDEP = struct
       if (TextIO.endOfStream i) then ["### DO NOT DELETE THIS LINE\n"]
       else let
 	val str = TextIO.inputLine i
-	fun strip [] = ""
-	  | strip ((#" " | #"\t" | #"\n" | #"\012")::rest) = strip rest
-	  | strip (c::rest) = (Char.toString c)^(strip rest)
-	val s = strip(String.explode(str))
+	val chars = String.explode str
+	val chars = List.filter (fn c => not (Char.isSpace c)) chars
+	val s = implode chars
       in if s = "###DONOTDELETETHISLINE" then [str]
 	else str::(findLine i)
       end

@@ -1,3 +1,5 @@
+(*$import Formatter RTL RTLTAGS *)
+
 signature PPRTL =
 sig
 

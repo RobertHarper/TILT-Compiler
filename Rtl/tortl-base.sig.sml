@@ -1,3 +1,4 @@
+(*$import RTL NIL *)
 signature TORTL_BASE = 
 sig
 
@@ -66,14 +67,16 @@ sig
    val new_gcstate : state -> state
    val join_states : state list -> state
    val promote_maps : bool -> state -> state
-   val add_var : state -> (var * reg * con) -> state
-   val add_var' : state -> (var * var_loc option * var_val option * con) -> state
-   val add_varloc : state -> var * var_loc * con -> state
-   val add_code : state -> (var * label * con) -> state
-   val add_convar : state -> (var * var_loc option * var_val option * kind * con option) -> state
-   val add_concode : state -> (var * label * kind * con option) -> state
-   val alloc_global : state * var * con * loc_or_val -> state
-   val alloc_conglobal : state * var * loc_or_val * kind * con option -> state
+
+   val add_code        : (state * var * con * label) -> state
+   val add_reg         : (state * var * con * reg) -> state
+   val add_var         : (state * var * con * var_loc option * var_val option) -> state
+   val add_global      : (state * var * con * loc_or_val) -> state
+
+   val add_concode     : (state * var * kind * con option * label) -> state
+   val add_convar      : (state * var * kind * con option * var_loc option * var_val option) -> state
+   val add_conglobal   : (state * var * kind * con option * loc_or_val) -> state
+
    val getrep : state -> var -> var_rep
    val getconvarrep : state -> var -> convar_rep
    val getconvarrep' : state -> var -> convar_rep option

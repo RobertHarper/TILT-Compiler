@@ -1,4 +1,5 @@
-structure Linker : LINKER =
+(*$import LINKER Util Crc Listops OS Name Linkalpha *)
+structure Linker :> LINKER =
   struct
 
     val as_path = "as"

@@ -1,4 +1,5 @@
-functor Rtltags(structure Rtl : RTL) : RTLTAGS =
+(*$import RTL RTLTAGS *)
+functor Rtltags(structure Rtl : RTL) :> RTLTAGS where Rtl = Rtl =
 struct
 
     structure Rtl = Rtl

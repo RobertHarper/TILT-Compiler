@@ -1,3 +1,4 @@
+(*$import Crc *)
 signature LINKER = 
   sig
 

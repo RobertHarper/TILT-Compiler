@@ -112,12 +112,55 @@ LINES/SEC                      : 1.779
 	frontend.sml
 	ilcontext.sml
 
-(7)  the NONEs are constrained to the same type!
 
-		   ((CON_MODULE_PROJECT(MOD_VAR var_poly, l), c)::csubst)
-		 | folder (_,csubst) = csubst
-	       val csubst = foldl folder [] sbnds_poly
-	       fun chandle c = assoc_eq(eq_conproj,c,csubst)
-	       val con'' = con_all_handle(con', fn _ => NONE,
-					  chandle, fn _ => NONE : mod option,
-					  fn _ => NONE : sdec option)
+(7)   fun top_rep (v,rep : var_loc option * var_val option * 'a) = 
+      (case rep of
+ 	   (SOME(VGLOBAL _),_,_) => true 
+	 | (_, SOME _, _) => true
+	 | _ => false)
+
+not generalizing the user 'a
+
+(8) can't have variable named extern
+
+(9) NJ 109.32 does not accept this.  what is the precise meaning of structure sharing/where-ing?
+
+signature Inner = sig type t end
+
+signature Middle1 = 
+sig
+  structure Inner : Inner
+end
+
+signature Middle2 = 
+sig
+  structure Inner : Inner
+end
+
+signature Outer = 
+sig
+  structure Middle1 : Middle1
+  structure Middle2 : Middle2
+  sharing Middle1.Inner = Middle2.Inner
+end
+
+functor Maker(structure Middle1 : Middle1
+	      structure Middle2 : Middle2
+	      sharing Middle1.Inner = Middle2.Inner)
+    :> Outer where Middle1 = Middle1
+             where Middle2 = Middle2 
+   =
+struct
+    structure Middle1 = Middle1
+    structure Middle2 = Middle2
+end
+
+structure Inner :> Inner = struct type t = int end
+structure Middle1 = struct structure Inner = Inner end
+structure Middle2 = struct structure Inner = Inner end
+structure Outer = Maker(structure Middle1 = Middle1
+			structure Middle2 = Middle2)
+
+(10) dropping the :> in ast.sml and replacing it with : causes the NIL optimizer to loop
+
+(11) sharing a partly shared structure is bad

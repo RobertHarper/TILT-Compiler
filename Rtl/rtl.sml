@@ -1,5 +1,7 @@
-functor Rtl (val in_imm_range : Word32.word -> bool
-	     val in_ea_disp_range : int -> bool) : RTL =
+(*$import RTL TilWord32 Name *)
+
+functor Rtl (val in_imm_range : TilWord32.word -> bool
+	     val in_ea_disp_range : int -> bool) :> RTL =
 struct
 
 
@@ -84,7 +86,7 @@ struct
 
   datatype traptype = INT_TT | REAL_TT | BOTH_TT
   datatype instr = 
-      LI     of Word32.word * regi
+      LI     of TilWord32.word * regi
     | LADDR  of label * int * regi
     | LEA    of ea * regi               
     | MV     of regi * regi               (* src,dest *)
@@ -179,9 +181,9 @@ struct
 
     | NEEDMUTATE of regi
     | NEEDGC     of sv
-    | FLOAT_ALLOC of regi * regf * regi * Word32.word
-    | INT_ALLOC   of regi * regi * regi * Word32.word
-    | PTR_ALLOC   of regi * regi * regi * Word32.word
+    | FLOAT_ALLOC of regi * regf * regi * TilWord32.word
+    | INT_ALLOC   of regi * regi * regi * TilWord32.word
+    | PTR_ALLOC   of regi * regi * regi * TilWord32.word
           
     | SOFT_VBARRIER of traptype
     | SOFT_ZBARRIER of traptype
@@ -194,18 +196,18 @@ struct
     | HALT
     | ICOMMENT of string
 
-  datatype labelortag = PTR of label | TAG of Word32.word
+  datatype labelortag = PTR of label | TAG of TilWord32.word
 
 
   datatype data = 
       COMMENT of string
     | STRING of (string)
-    | INT32 of  (Word32.word)
-    | INT_FLOATSIZE of (Word32.word)
+    | INT32 of  (TilWord32.word)
+    | INT_FLOATSIZE of (TilWord32.word)
     | FLOAT of  (string)
     | DATA of   (label)
 (* array of i words inited to word32 *)
-    | ARRAYI of (int * Word32.word)
+    | ARRAYI of (int * TilWord32.word)
 (* array of i words initialized to fp value in string *)
     | ARRAYF of (int * string)
 (* array of i words initialized to label or small int *)
