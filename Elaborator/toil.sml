@@ -385,6 +385,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			 loop (sbnds, add_context_entries(context, [ce])) rest
 		   | ((NONE,cf as (CONTEXT_FIXITY _))::rest) => 
 			 loop (sbnds,add_context_entries(ctxt,[cf])) rest
+		   | ((NONE,cf as (CONTEXT_ALIAS _))::rest) => 
+			 loop (sbnds,add_context_entries(ctxt,[cf])) rest
 		   | ((SOME (flag,sbnd as SBND(l,bnd)), CONTEXT_SDEC (sdec as SDEC(l',dec)))::rest) => 
 			 let 
 			     val sbnds' = sbnd::sbnds
@@ -815,7 +817,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		  end)
 		| _ => elab_error "constructor #Susp or type #susp not defined in initial basis\n")
        | Ast.LetExp {dec,expr} => 
-	     let val boolsbnd_ctxt_list = xdec'(context, dec)
+	     let val boolsbnd_ctxt_list = xdec' true (context, dec)
 		 val (sbnds,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list)
 		 val (e,c,va) = xexp(context',expr)
 		 val bnds = map (fn (SBND(_,bnd)) => bnd) sbnds
@@ -1073,11 +1075,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	 in  if (is_eq) then (type_sdec :: eq_sdec :: rest) else type_sdec :: rest
 	 end
 	
-     and xdec' (context : context, d : Ast.dec) : ((bool * sbnd) option * context_entry) list = 
+     and xdec' islocal (context : context, d : Ast.dec) : ((bool * sbnd) option * context_entry) list = 
        let 
 	   fun strip (Ast.MarkDec(d,r)) = strip d
 	     | strip d = d
-	   val sbndsdec_list = xdec(context,d)
+	   val sbndsdec_list = xdec islocal (context,d)
 	   val inlineflag = (case (strip d) of
 				 (Ast.DatatypeDec {datatycs,withtycs}) => false
 			       | _ => false)
@@ -1123,7 +1125,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
        in rev rev_sbnd_sdecs
        end
 	   
-     and xdec (context : context, d : Ast.dec) : (sbnd option * context_entry) list =
+     and xdec islocal (context : context, d : Ast.dec) : (sbnd option * context_entry) list =
        (case d of
           (* --- The tricky thing about this value declarations is figuring 
 	     --- out what type variables need to be generalized.  There are two
@@ -1503,7 +1505,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		val con = xty(context,ty)
 	    in  [(NONE, CONTEXT_SDEC(SDEC(lab,DEC_EXP(var,con))))]
 	    end
-	| Ast.SeqDec decs => packagedecs xdec' context decs
+	| Ast.SeqDec decs => packagedecs (xdec' islocal) context decs
 	| Ast.OpenDec pathlist => 
 	      let fun help (i,path) = 
 		  (case (Context_Lookup(context,map symbol_label path)) of
@@ -1593,15 +1595,15 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					      error "cannot parse datbind"))
 		  val dec = Ast.SeqDec[Ast.DatatypeDec{datatycs=dt,withtycs=[]},
 				       Ast.TypeDec wt]
-	      in  xdec(context,dec)
+	      in  xdec islocal (context,dec)
 	      end
-	| Ast.StrDec strblist => xstrbinds(context,strblist) 
+	| Ast.StrDec strblist => xstrbinds islocal (context,strblist) 
  	| Ast.FctDec fctblist => xfctbind(context,fctblist) 
 
 	| Ast.ExceptionDec [] => parse_error "ExceptionDec []"
 	| Ast.ExceptionDec [Ast.MarkEb (eb,r)] => 
 	      let val _ = push_region r
-		  val res = xdec(context, Ast.ExceptionDec [eb])
+		  val res = xdec islocal (context, Ast.ExceptionDec [eb])
 		  val _ = pop_region()
 	      in res
 	      end
@@ -1652,14 +1654,14 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		       end
 		 | _ => (error_region(); print "unbound exception: ???\n";
 			 []))
-	| Ast.ExceptionDec eblist => xdec(context,Ast.SeqDec(map (fn eb => Ast.ExceptionDec [eb]) eblist))
+	| Ast.ExceptionDec eblist => xdec islocal (context,Ast.SeqDec(map (fn eb => Ast.ExceptionDec [eb]) eblist))
 
         (* Rule 244 *)
 	| Ast.LocalDec (dec1,dec2) => 
 	      let 
-		  val boolsbnd_ctxt_list1 = xdec'(context,dec1)
+		  val boolsbnd_ctxt_list1 = xdec' true (context,dec1)
 		  val (_,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list1)
-		  val boolsbnd_ctxt_list2 = xdec'(context',dec2)
+		  val boolsbnd_ctxt_list2 = xdec' false (context',dec2)
 		  fun temp (opt : (bool * sbnd) option,ce) = (mapopt #2 opt,ce)
 		  fun rename(opt,CONTEXT_SDEC(SDEC(_,dec))) = 
 		      let val lbl = fresh_internal_label "local"
@@ -1690,7 +1692,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	      let val ctxt : context_entry = xsigb(context,sigb)
 		  (* CONTEXT_SIGNATs do not need to be selfified *)
 		  val context' = add_context_entries(context,[ctxt])
-		  val sbnd_ctxt_rest = xdec(context',Ast.SigDec rest)
+		  val sbnd_ctxt_rest = xdec islocal (context',Ast.SigDec rest)
 	      in (NONE,ctxt)::sbnd_ctxt_rest
 	      end
 	| Ast.AbstypeDec {abstycs,withtycs,body} => 
@@ -1702,7 +1704,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		      end
 		  val bdec = Ast.SeqDec((map get_dec abstycs) @ [body])
 		  val desugared_dec = Ast.LocalDec(ldec,bdec)
-	      in xdec(context, desugared_dec)
+	      in xdec islocal (context, desugared_dec)
 	      end
 	| Ast.FsigDec fsiglist => parse_error "functor signature declaration not handled"
 	| Ast.AbsDec strblist => parse_error "abstract structure not handled"
@@ -1720,7 +1722,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 
         (* translate declaration by dropping region information *)
 	| Ast.MarkDec (dec,region) => let val _ = push_region region
-					  val res = xdec(context,dec)
+					  val res = xdec islocal (context,dec)
 					  val _ = pop_region()
 				      in res
 				      end)
@@ -2336,7 +2338,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		 let val (var1,var2) = (fresh_var(), fresh_var())
 		     val (lbl1,lbl2) = (fresh_open_internal_label "lbl1",
 					fresh_open_internal_label "lbl2")
-		     val boolsbnd_sdec_list = xdec'(context,dec)
+		     val boolsbnd_sdec_list = xdec' true (context,dec)
 		     val (mod1,sig1) = boolsbnd_ctxt_list2modsig boolsbnd_sdec_list
 		     val context' = add_context_mod(context,lbl1,var1,
 						    SelfifySig(SIMPLE_PATH var1, sig1)) (* <-- inline ? *)
@@ -2360,7 +2362,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		 end
 	   | Ast.StructStr dec => 
 		 let 
-		     val sbnd_ctxt_list = xdec(context,dec)
+		     val sbnd_ctxt_list = xdec false (context,dec)
 		     val sbnds = List.mapPartial #1 sbnd_ctxt_list
 		     val sdecs = List.mapPartial (fn (_,CONTEXT_SDEC sdec) => SOME sdec
 		   | _ => NONE) sbnd_ctxt_list
@@ -2377,15 +2379,34 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
     (* --------------------------------------------------------- 
       ------------------ STRUCTURE BINDINGS --------------------
       --------------------------------------------------------- *)
-     and xstrbinds (context : context, strbs : Ast.strb list) 
+     and xstrbinds (islocal : bool) (context : context, strbs : Ast.strb list) 
 	 : (sbnd option * context_entry) list =
        let val strbs = map strb_strip strbs
-	   fun help (n,(d,c)) = let val (sbnd_ce_list,m,s) = xstrexp(context,d,c)
-				    val v = fresh_named_var "strbindvar"
-				    val l = symbol_label n
-				in  sbnd_ce_list @ [(SOME(SBND(l,BND_MOD(v,m))),
-						     CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))]
-				end
+	   fun help (n,(strexp,constraint)) = 
+	       let val v = fresh_named_var "strbindvar"
+		   val l = symbol_label n
+		   fun alias_case path = 
+		       (case Context_Lookup(context,map symbol_label path) of
+			    SOME (_,PHRASE_CLASS_MOD _) =>
+				[(NONE, CONTEXT_ALIAS(l,map symbol_label path))]
+			  | _ => (error_region();
+				  print "unbound structure: ";
+				  AstHelp.pp_path path;
+				  print "\n";
+				  []))
+	       in  (case (islocal,strexp) of
+			(true,Ast.VarStr path) => alias_case path
+		      | (true,Ast.MarkStr(Ast.VarStr path, r)) => let val _ = push_region r
+								  val res = alias_case path
+								  val _ = pop_region()
+							      in  res
+							      end
+		      | _ => let val (sbnd_ce_list,m,s) = xstrexp(context,strexp,constraint)
+				 val rest = [(SOME(SBND(l,BND_MOD(v,m))),
+					      CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))]
+			     in  sbnd_ce_list @ rest
+			     end)
+	       end
        in flatten(map help strbs)
        end
 
@@ -3552,7 +3573,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	    | Error => NONE)
       end
     
-    val xdec = fn (ctxt,fp,dec) => overload_wrap fp xdec (ctxt,dec)
+    val xdec = fn (ctxt,fp,dec) => overload_wrap fp (xdec false) (ctxt,dec)
     val xexp = fn (ctxt,fp,exp) => overload_wrap fp xexp (ctxt,exp)
     val xstrexp = fn (ctxt,fp,strexp,sigc) => overload_wrap fp xstrexp (ctxt,strexp,sigc)
     val xspec = fn (ctxt,fp,specs) => overload_wrap fp xspec (ctxt,specs)

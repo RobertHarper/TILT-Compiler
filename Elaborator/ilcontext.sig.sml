@@ -29,6 +29,7 @@ signature ILCONTEXT =
 	val add_context_sdec  : context * sdec -> context
 	val add_context_sdecs : context * sdecs -> context
 	val add_context_inline : context * label * var * inline -> context
+	val add_context_alias : context * label * label list -> context
 	val add_context_entries : context * context_entry list -> context
 
 	val add_context_mod  : context * label * var * signat            -> context
@@ -96,7 +97,7 @@ signature ILCONTEXT =
 				pp_signat : signat -> Formatter.format} *
 	    context -> Formatter.format
 
-	val blastOutContext : TextIO.outstream -> context -> unit
-	val blastInContext : TextIO.instream -> context
+	val blastOutContext : BinIO.outstream -> context -> unit
+	val blastInContext : BinIO.instream -> context
 
     end

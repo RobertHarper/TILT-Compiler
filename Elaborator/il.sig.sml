@@ -125,6 +125,7 @@ signature IL =
 
     and context_entry = 
 		CONTEXT_INLINE of label * var * inline
+              | CONTEXT_ALIAS of label * label list
 	      | CONTEXT_SDEC   of sdec
 	      | CONTEXT_SIGNAT of label * var * signat
               | CONTEXT_FIXITY of fixity_table

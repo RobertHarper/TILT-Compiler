@@ -123,6 +123,7 @@ signature ILLEAK =
 
     and context_entry = 
 		CONTEXT_INLINE of label * var * inline
+              | CONTEXT_ALIAS of label * label list
 	      | CONTEXT_SDEC   of sdec
 	      | CONTEXT_SIGNAT of label * var * signat
               | CONTEXT_FIXITY of fixity_table
@@ -131,7 +132,8 @@ signature ILLEAK =
 			       fixity_list : fixity_table,
 			       label_list : (path * phrase_class) Name.LabelMap.map,
 			       var_list : (label * phrase_class) Name.VarMap.map * var list,
-			       tag_list : con Name.TagMap.map}
+			       tag_list : con Name.TagMap.map,
+			       alias_list : label list Name.LabelMap.map}
 
 	and phrase_class = PHRASE_CLASS_EXP  of exp * con
 	  | PHRASE_CLASS_CON  of con * kind

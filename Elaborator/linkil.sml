@@ -173,11 +173,15 @@ structure LinkIl (* : LINKIL *) =
 	    else SOME pair
 	  | kill_datatype pair = SOME pair
 
+
+	val xdec = Stats.timer("Elaboration",Toil.xdec)
+	val xspec = Stats.timer("Elaboration",Toil.xspec)
+
 	fun elaborate (context,filename) : ((sbnd option * context_entry) list) option = 
 	    let val (filepos,imports,astdec) = LinkParse.parse_impl filename
 		val _ = print ("Parsing complete: " ^ filename ^ "\n")
 		val res = 
-		    (case (Toil.xdec(context,filepos,astdec)) of
+		    (case (xdec(context,filepos,astdec)) of
 		     SOME sbnd_ctxt_list =>
 			 let 
 			     val _ = print ("Elaboration complete: " ^ filename ^ "\n")
@@ -190,7 +194,7 @@ structure LinkIl (* : LINKIL *) =
 			   NONE))
 	    in  res
 	    end
-	val elaborate = Stats.timer("Elaboration",elaborate)
+
 
 
 
@@ -461,14 +465,14 @@ structure LinkIl (* : LINKIL *) =
 
 	type filepos = SourceMap.charpos -> string * int * int
 	fun elab_specs (ctxt, fp, specs) = 
-	    case Toil.xspec(ctxt, fp, specs) of
+	    case xspec(ctxt, fp, specs) of
 		SOME sdecs => let val sdecs' = map SelfifySdec sdecs
 			      in  SOME(IlContext.add_context_sdecs(empty_context, sdecs'))
 			      end
 	      | NONE => NONE
 
 	fun elab_dec (ctxt, fp, dec) = 
-	    case Toil.xdec(ctxt,fp,dec) 
+	    case xdec(ctxt,fp,dec) 
 		of SOME sbnd_ctxt_list => 
 		    let val sbnds = List.mapPartial #1 sbnd_ctxt_list
 			val ctxts = map #2 sbnd_ctxt_list

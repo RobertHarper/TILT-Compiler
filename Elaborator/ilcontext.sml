@@ -48,24 +48,27 @@ struct
     (* --------------------- EXTENDERS ---------------------------------------- *)
     type var_seq_map = (label * phrase_class) VarMap.map * var list
     fun var_seq_insert ((m,s),v,value) = (VarMap.insert(m,v,value),v::s)
-    val empty_context = CONTEXT{flatlist = [],
+    val empty_context = CONTEXT{alias_list = LabelMap.empty,
+				flatlist = [],
 				fixity_list = [],
 				label_list = LabelMap.empty,
 				var_list = (VarMap.empty,[]),
 				tag_list = TagMap.empty}
 
 
-    fun add_context_fixity(CONTEXT {flatlist,fixity_list,
+    fun add_context_fixity(CONTEXT {alias_list, flatlist,fixity_list,
 				    label_list,var_list,tag_list}, 
-			   f) = CONTEXT({flatlist = flatlist,
+			   f) = CONTEXT({alias_list = alias_list,
+					 flatlist = flatlist,
 					 fixity_list = f @ fixity_list,
 					 label_list = label_list,
 					 var_list = var_list,
 					 tag_list = tag_list})
-    fun add_context_flat(CONTEXT {flatlist,fixity_list,
+    fun add_context_flat(CONTEXT {alias_list, flatlist,fixity_list,
 				  label_list,var_list,tag_list}, entry) = 
 	let val flatlist = entry::flatlist
-	in  CONTEXT({flatlist = flatlist,
+	in  CONTEXT({alias_list = alias_list,
+		     flatlist = flatlist,
 			fixity_list = fixity_list,
 			label_list = label_list,
 			var_list = var_list,
@@ -75,14 +78,15 @@ struct
     (*  path is the path to the inline object; 
        lbl is the local name given to the object *)
     local
-	fun help (CONTEXT {flatlist,fixity_list,
+	fun help (CONTEXT {alias_list, flatlist,fixity_list,
 			   label_list,var_list,tag_list},path,lbl,pc) = 
 	    let 
 	        val label_list = Name.LabelMap.insert(label_list,lbl,(path,pc))
 	        val var_list = (case path of
 				    SIMPLE_PATH v => var_seq_insert(var_list,v,(lbl,pc))
 				  | _ => var_list)
-            in CONTEXT({flatlist = flatlist,
+            in CONTEXT({alias_list = alias_list,
+			flatlist = flatlist,
 			fixity_list = fixity_list,
 			label_list = label_list,
 			var_list = var_list,
@@ -132,7 +136,7 @@ struct
     end
 
     fun stat_context(CONTEXT {flatlist,fixity_list,
-			      label_list,var_list,tag_list}) = 
+			      label_list,var_list,tag_list, alias_list}) = 
 	() (* (Name.LabelMap.appi 
 	 (fn (l,(path,pc)) => (print "label = "; print (Name.label2string l); print "\n"))
 	 label_list;
@@ -147,7 +151,7 @@ struct
 	    fun mk_path v = (case pathopt of
 				 NONE => SIMPLE_PATH v
 			       | SOME p => join_path_labels(p,[l]))
-	    fun help(CONTEXT {flatlist,fixity_list,
+	    fun help(CONTEXT {alias_list, flatlist,fixity_list,
 			      label_list,var_list,tag_list}, 
 		     v, from_path, pc_maker) =
 		let val path = mk_path v
@@ -157,7 +161,8 @@ struct
 		    val var_list = (case path of
 					SIMPLE_PATH v => var_seq_insert(var_list,v,(l,pc))
 				      | _ => var_list)
-		in CONTEXT{flatlist = flatlist,
+		in CONTEXT{alias_list = alias_list,
+			   flatlist = flatlist,
 			   fixity_list = fixity_list,
 			   label_list = label_list,
 			   var_list = var_list,
@@ -181,10 +186,11 @@ struct
 		      else ctxt
 		  end
 	  | DEC_EXCEPTION(t,c) => 
-		  let val CONTEXT {flatlist,fixity_list,
+		  let val CONTEXT {alias_list, flatlist,fixity_list,
 				   label_list,var_list,tag_list} = ctxt
 		      val tag_list = Name.TagMap.insert(tag_list,t,c)
-		  in CONTEXT{flatlist = flatlist,
+		  in CONTEXT{alias_list = alias_list,
+			     flatlist = flatlist,
 			     fixity_list = fixity_list,
 			     label_list = label_list,
 			     var_list = var_list,
@@ -194,19 +200,33 @@ struct
     fun add_context_sdec(ctxt,sdec) = add_context_sdec'(add_context_flat(ctxt, CONTEXT_SDEC sdec),NONE,sdec)
 
 
-    fun add_context_sig(CONTEXT {flatlist,fixity_list,
+    fun add_context_sig(CONTEXT {alias_list, flatlist,fixity_list,
 				 label_list,var_list,tag_list}, 
 			l, v, signat) = 
-	CONTEXT({flatlist = (CONTEXT_SDEC(SDEC(l,DEC_MOD(v,signat))))::flatlist,
+	CONTEXT({alias_list = alias_list,
+		 flatlist = (CONTEXT_SDEC(SDEC(l,DEC_MOD(v,signat))))::flatlist,
 		 fixity_list = fixity_list,
 		 label_list = Name.LabelMap.insert(label_list,l,
 						   (SIMPLE_PATH v, PHRASE_CLASS_SIG signat)),
 		 var_list = var_seq_insert(var_list,v,(l, PHRASE_CLASS_SIG signat)),
 		 tag_list = tag_list})
 
+    fun add_context_alias(CONTEXT {alias_list, flatlist,fixity_list,
+				   label_list,var_list,tag_list}, 
+			  l, labs) = 
+	let val alias_list = LabelMap.insert(alias_list,l,labs)
+	in CONTEXT{alias_list = alias_list,
+		   flatlist = flatlist,
+		   fixity_list = fixity_list,
+		   label_list = label_list,
+		   var_list = var_list,
+		   tag_list = tag_list}
+	end
+
     fun add_context_entry(ctxt, entry) = 
 	(case entry of
 	     CONTEXT_FIXITY f => add_context_fixity(ctxt,f)
+	   | CONTEXT_ALIAS (l,labs) => add_context_alias(ctxt,l,labs)
 	   | CONTEXT_SDEC sdec => add_context_sdec(ctxt,sdec)
 	   | CONTEXT_SIGNAT (l,v,s) => add_context_sig(ctxt,l,v,s)
 	   | CONTEXT_INLINE (l,v,i) => add_context_inline(ctxt,l,v,i))
@@ -474,6 +494,16 @@ struct
       fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = Name.TagMap.find(tag_list,t)
 
 
+      fun do_alias(ctxt,[]) = []
+	| do_alias(CONTEXT{alias_list,...},orig as (label::rest)) = 
+	   (case (LabelMap.find(alias_list,label)) of
+		NONE => orig
+	      | SOME labs => labs @ rest)
+
+      val Context_Lookup = fn (ctxt, labs) => let val labs = do_alias(ctxt,labs)
+					      in Context_Lookup(ctxt, labs) 
+					      end
+
      fun context_to_sdecs (CONTEXT {var_list,...}) =
 	  Name.VarMap.foldli (fn (v,(lab,phrase_class),sdecs) =>
 			      case phrase_class
@@ -485,7 +515,7 @@ struct
 
       (* faster when first context is larger than second *)
       fun plus (csubster,ksubster,ssubster,orig_ctxt, 
-		ctxt2 as CONTEXT{flatlist, fixity_list, label_list, var_list, tag_list}) =
+		ctxt2 as CONTEXT{flatlist, fixity_list, label_list, var_list, tag_list,alias_list=_}) =
 	  let val ctxt = add_context_fixity(orig_ctxt,fixity_list)
 	      fun varIn (v,ctxt) = (case (Context_Lookup'(ctxt,v)) of
 					NONE => false
@@ -580,17 +610,14 @@ struct
 		    else ()
 	fun say s = if (!blast_debug) then print s else ()
 
-	fun blastOutChar os c = TextIO.output1(os,c)
-	fun blastInChar is =  (case TextIO.input1 is of
-				   SOME c => c
-				 | NONE => error "premature end of file in input1")
-
 	fun blastOutChoice os i = if (!useOldBlast)
 				      then blastOutInt os i
-				  else blastOutChar os (chr i)
+				  else BinIO.output1(os,Word8.fromInt i)
 	fun blastInChoice is = if (!useOldBlast)
 				   then blastInInt is
-			       else ord(blastInChar is)
+			       else Word8.toInt(case BinIO.input1 is of
+						    NONE => error "blastInChoice failed"
+						  | SOME w => w)
     in
 
 	fun blastOutPath os (SIMPLE_PATH v) = (blastOutChoice os 0; blastOutVar os v)
@@ -1289,8 +1316,11 @@ struct
 	fun blastOutTagList os tag_list = blastOutTagmap os blastOutCon tag_list
 	fun blastInTagList is = blastInTagmap is blastInCon 
 
-    fun blastOutContext os (CONTEXT {flatlist, fixity_list, label_list, var_list, tag_list}) = 
-	(blastOutFixityTable os fixity_list;
+    fun blastOutContext os (CONTEXT {flatlist, fixity_list, label_list, var_list, tag_list, alias_list}) = 
+	(if Name.LabelMap.numItems alias_list = 0
+	     then ()
+	 else error "Blasting out context with non-empty alias_list";
+	 blastOutFixityTable os fixity_list;
 	 blastOutLabelList os label_list;
 	 blastOutVarList os var_list;
 	 blastOutTagList os tag_list)
@@ -1301,7 +1331,7 @@ struct
 	    val var_list = blastInVarList is
 	    val tag_list = blastInTagList is
 	in CONTEXT {flatlist = [], fixity_list = fixity_list, label_list = label_list, 
-		    var_list = var_list, tag_list = tag_list}
+		    var_list = var_list, tag_list = tag_list, alias_list = Name.LabelMap.empty}
 	end
 
     end (* local *)

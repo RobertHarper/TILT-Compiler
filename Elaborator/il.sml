@@ -124,11 +124,13 @@ functor Il(structure Prim : PRIM
 
     and context_entry = 
 		CONTEXT_INLINE of label * var * inline
+              | CONTEXT_ALIAS of label * label list
 	      | CONTEXT_SDEC   of sdec
 	      | CONTEXT_SIGNAT of label * var * signat
               | CONTEXT_FIXITY of fixity_table
 
-    and context = CONTEXT of  {flatlist : context_entry list,
+    and context = CONTEXT of  {alias_list : label list Name.LabelMap.map,
+			       flatlist : context_entry list,
 			       fixity_list : fixity_table,
 			       label_list : (path * phrase_class) Name.LabelMap.map,
 			       var_list : (label * phrase_class) Name.VarMap.map * var list,
