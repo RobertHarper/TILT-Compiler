@@ -248,19 +248,12 @@ structure Signature
 		  (case !target of
 		       (SOME s,_) => s
 		     | (NONE, SOME vlpath) => 
-			   let fun loop [] current = (print "loop empty\n";
-						      SIGNAT_OF(path2mod (vlpath2path current)))
+			   let fun loop [] current = SIGNAT_OF(path2mod (vlpath2path current))
 				 | loop ((v1,l1)::rest1) (all2 as ((v2,l2)::rest2)) = 
 			            if (eq_var(v1,v2))
-					then (print "loop dropping\n";
-					      loop rest1 rest2)
-				    else (print "loop done with rest2 = ";
-					  pp_vlpath rest2;
-					  print "\n";
-					  SIGNAT_OF(path2mod (vlpath2path all2)))
+					then loop rest1 rest2
+				    else SIGNAT_OF(path2mod (vlpath2path all2))
 				 | loop _ [] = error "empty target path"
-			       val _ = (print "cur_path is "; pp_vlpath cur_path; print "\n";
-					print "vl_path is "; pp_vlpath vlpath; print "\n")
 			   in  loop cur_path vlpath
 			   end
 		     | (NONE, NONE) => (target := (NONE, SOME cur_path); orig_sig))
@@ -560,15 +553,19 @@ structure Signature
 *)
 		      val sdecs = xsig_sharing_rewrite_structure(ctxt,sdecs,
 								 map #2 lpath_var_sdecs_list,NONE)
+(*
 		      val _ = (print "returning sdecs = ";
 			       pp_sdecs sdecs; print "\n\n\n")
+*)
 		  in  sdecs
 		  end
 	  else let val _ = print "STRUCTURE_SHARING failed; expanding to components\n"
 		   val res = xsig_sharing_structure_components(ctxt,sdecs,
 							       map #3 lpath_var_sdecs_list)
+(*
 		      val _ = (print "returning sdecs = ";
 			       pp_sdecs sdecs; print "\n\n\n")
+*)
 	       in  res
 	       end
       end

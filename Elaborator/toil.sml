@@ -15,20 +15,6 @@ structure Toil
     open Util Listops Name IlContext Tyvar
     open Prim Error
 
-fun Sig_IsSub arg = IlStatic.Sig_IsSub arg handle e => false
-fun sub_con arg = IlStatic.sub_con arg handle e => false
-fun eq_con arg = IlStatic.eq_con arg handle e => false
-fun soft_eq_con arg = IlStatic.soft_eq_con arg handle e => false
-fun con_normalize (arg as (ctxt,con)) = IlStatic.con_normalize arg handle e => con
-fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg handle e => con
-	    fun eq_modproj (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
-	      | eq_modproj (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
-	      | eq_modproj _ = false
-	    fun eq_conproj (CON_VAR v, CON_VAR v') = eq_var (v,v')
-	      | eq_conproj (CON_MODULE_PROJECT (m,l), 
-			    CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
-	      | eq_conproj _ = false
-
     val parse_error = fn s => error "toil.sml: parse impossibility" s
     val pat_error = fn s => error "toil.sml: pattern impossibility" s
     val elab_error = fn s => error "toil.sml: elaborator impossibility" s
@@ -1003,11 +989,18 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 						       reraise = false}
 			    fun con_folder ((_,c),acc) = CON_ARROW([c],acc,false,oneshot_init PARTIAL)
 			    val func = foldr con_folder bodyc arglist
-			    val _ = if (eq_con(context'',body_con,bodyc) andalso
-					eq_con(context'',fun_con,func))
+			    val _ = if eq_con(context'',body_con,bodyc)
 					then ()
 				    else (error_region();
-					  print "function constraint does not match body type\n")
+					  print "function constraint does not match body type\n";
+					  print "Actual type: "; pp_con bodyc; print "\n";
+					  print "Constraint type: "; pp_con body_con; print "\n")
+			    val _ = if eq_con(context'',fun_con,func)
+					then ()
+				    else (error_region();
+					  print "function constraint does not match body type\n";
+					  print "Actual type: "; pp_con func; print "\n";
+					  print "Constraint type: "; pp_con fun_con; print "\n")
 			    local 
 				fun help ((v,c),(e,resc)) = make_lambda(v,c,resc,e)
 			    in 
@@ -1327,15 +1320,21 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		    let 
 			val fun_con = fresh_named_con (context',"fun_con")
 			val body_con = fresh_named_con (context',"body_con")
-			fun help (Ast.Clause{pats = {item=Ast.VarPat[s],
-						     fixity=NONE,...}::rest, resultty,exp}) =
-			    (symbol_label s, (parse_pats context' (map #item rest),exp))
-			  | help (Ast.Clause{pats : Ast.pat Ast.fixitem list, resultty,exp}) =
-			    (case (parse_pats context' (map #item pats)) of
+			fun help (Ast.Clause{pats, resultty, exp}) = 
+		            ((case resultty of
+	                        SOME ty => if (eq_con(context',xty(context',ty),body_con)) then ()
+			                   else (error_region();
+						 print "conflicting result type constraints\n")
+			      | NONE => ());
+			     (case pats of
+				{item=Ast.VarPat[s],fixity=NONE,...}::rest =>
+				    (symbol_label s, (parse_pats context' (map #item rest),exp))
+			      | _ => 
+			         (case (parse_pats context' (map #item pats)) of
 				 (Ast.VarPat[s])::rest => (symbol_label s, (rest, exp))
-				     | (Ast.AppPat{constr = Ast.VarPat[s],
-						   argument}::rest) => (symbol_label s, (argument::rest, exp))
-						 | _ => error "illegal pattern for function declaraion")
+				     | (Ast.AppPat{constr = Ast.VarPat[s], argument}::rest) => 
+					(symbol_label s, (argument::rest,exp))
+				     | _ => error "illegal pattern for function declaraion")))
 			fun getid [] = parse_error "no ids"
 			  | getid [a] = a
 			  | getid (a::(rest as b::_)) = 
@@ -1390,9 +1389,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					     KIND_TUPLE _ => NONE
 					   | KIND_ARROW(m,_) => SOME m)
 			  val vp = fresh_named_var "varpoly"
-			  val (ctxt',c',sigpoly) = 
+			  val (ctxt',c',c'',sigpoly) = 
 			      case is_poly of 
-				  NONE => (context,c,SIGNAT_STRUCTURE(NONE,[]))
+				  NONE => (context,c,c,SIGNAT_STRUCTURE(NONE,[]))
 				| SOME m => 
 				      let
 					  val lbls = Listops.map0count canonical_tyvar_label m
@@ -1410,10 +1409,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					  val arg_cons = map (fn l => CON_MODULE_PROJECT(MOD_VAR vp,l)) lbls
 					  val arg_con = con_tuple_inject arg_cons
 					  val c' = CON_APP(c,arg_con)
-				      in  (ctxt',c',sp)
+					  val c'' = ConApply(true,c,arg_con)
+				      in  (ctxt',c',c'',sp)
 				      end
 			  val eqlab = to_eq_lab l
-			  val eq_con = con_eqfun c'
+			  val eq_con = con_eqfun c''
 		    in case (xeq(ctxt',c')) of
 			SOME eq_exp =>
 			    let
@@ -2067,15 +2067,15 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
      and xstrexp (context : context, strb : Ast.strexp,  Ast.Opaque sigexp) 
 	 : (decresult * mod * signat) = 
 	 let 
-	     val (sbnd_ce_list,module,sig_actual) = xstrexp(context,strb,Ast.NoSig)
-	     val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	     val sig_target = xsigexp(context,sigexp)
+	     val (sbnd_ce_list,module,sig_actual) = xstrexp(context,strb,Ast.NoSig)
+	     val (_,context) = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	     val mod_var = fresh_named_var "inner_mod"
 	 in  if (Sig_IsSub(context,sig_actual,sig_target))
 		 then
 		     (sbnd_ce_list,module, sig_target)
 	     else let val (mod'_body,sig_ret') = 
-		          Signature.xcoerce_seal(polyinst,context',mod_var,sig_actual,sig_target)
+		          Signature.xcoerce_seal(polyinst,context,mod_var,sig_actual,sig_target)
 		      val resmod =  MOD_LET(mod_var,module, MOD_SEAL(mod'_body, sig_target))
 		  in  (sbnd_ce_list,resmod, sig_target)
 		  end
