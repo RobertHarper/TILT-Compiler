@@ -124,7 +124,9 @@ struct
     fun source(from, to) = from
     fun destination(from, to) = to
     fun reverse(from, to) = (to, from)
-    fun channelToName(from, to) = from ^ "-to-" ^ to
+    val sep = "-to-"
+    val sep_length = String.size sep
+    fun channelToName(from, to) = from ^ sep ^ to
     fun nameToChannel name : channel option = 
 	(case Util.substring ("-to-", name) of
 	     NONE => NONE
@@ -132,7 +134,10 @@ struct
 			     String.sub(name,0) = #"@")
 			     then NONE
 			 else let val from = String.substring(name,0,pos)
-				  val to = String.substring(name, pos+2, (size name) - (pos + 2))
+				  val to = String.substring(name, 
+							    pos+sep_length, 
+							    (size name) - 
+							     (pos+sep_length))
 			      in  SOME(from, to) 
 			      end)
 
