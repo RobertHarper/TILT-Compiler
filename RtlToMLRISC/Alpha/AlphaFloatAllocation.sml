@@ -9,7 +9,6 @@ functor AlphaFloatAllocation(
 	  structure FloatConvention:   FLOAT_CONVENTION
 	  structure FlowGraph:	       FLOWGRAPH
 	  structure IntegerConvention: INTEGER_CONVENTION where type id = int
-	  structure RegisterSpillMap:  REGISTER_SPILL_MAP
 
 	  structure AlphaRewrite: sig
 
@@ -32,25 +31,32 @@ functor AlphaFloatAllocation(
 
 	  sharing type AlphaInstructions.instruction =
 		       AlphaRewrite.I.instruction
-	      and type AlphaInstructions.Constant.const =
-		       RegisterSpillMap.offset
 	      and type IntegerConvention.id =
-		       FloatConvention.id =
-		       RegisterSpillMap.id
+		       FloatConvention.id
 	) :> REGISTER_ALLOCATION
-	       where type spillMap = RegisterSpillMap.map
-		 and type cluster  = FlowGraph.cluster
+	       where type id      = int
+		 and type offset  = AlphaInstructions.Constant.const
+		 and type cluster = FlowGraph.cluster
 	  = struct
 
   (* -- types -------------------------------------------------------------- *)
 
-  type spillMap = RegisterSpillMap.map
+  type id = int
+
+  type offset = AlphaInstructions.Constant.const
 
   type cluster = FlowGraph.cluster
 
+  (* -- exceptions --------------------------------------------------------- *)
+
+  exception NoLookup
+
   (* -- values ------------------------------------------------------------- *)
 
-  val spillMap = RegisterSpillMap.map()
+  fun noLookup _ = raise NoLookup
+
+  val lookupSpill  = ref(noLookup: id -> offset)
+  val lookupReload = ref(noLookup: id -> offset)
 
   (* -- get register structure --------------------------------------------- *)
 
@@ -88,20 +94,18 @@ functor AlphaFloatAllocation(
 	      b	   = IntegerConvention.stackPointer,
 	      d	   = AlphaInstructions.CONSTop offset
 	    }::nil
-
-      val lookup = RegisterSpillMap.lookupSpill spillMap
     in
       fun spill{instr = instruction, reg = target} =
 	    case instruction of
 	      AlphaInstructions.FCOPY([_], [source], _) => 
-		{code  = template(source, lookup target),
+		{code  = template(source, !lookupSpill target),
 		 proh  = [],
 		 instr = NONE}
 	    | _ =>
 		let
 		  val target' = Cells.newFreg()
 		in
-		  {code	 = template(target', lookup target),
+		  {code	 = template(target', !lookupSpill target),
 		   proh	 = [target'],
 		   instr = SOME(AlphaRewrite.frewriteDef
 				  (instruction, target, target'))}
@@ -116,19 +120,17 @@ functor AlphaFloatAllocation(
 	      b	   = IntegerConvention.stackPointer,
 	      d	   = AlphaInstructions.CONSTop offset
 	    }::tail
-
-      val lookup = RegisterSpillMap.lookupReload spillMap
     in
       fun reload{instr = instruction, reg = source} =
 	    case instruction of
 	      AlphaInstructions.FCOPY([target], [_], _) => 
-		{code = template(target, lookup source, []),
+		{code = template(target, !lookupReload source, []),
 		 proh = []}
 	    | _ =>
 		let
 		  val source' = Cells.newFreg()
 		in
-		  {code = template(source', lookup source,
+		  {code = template(source', !lookupReload source,
 				   [AlphaRewrite.frewriteUse
 				      (instruction, source, source')]),
 		   proh = [source']}
@@ -143,6 +145,9 @@ functor AlphaFloatAllocation(
     RegisterAllocation(structure RaUser = UserParameters)
 
   (* -- functions ---------------------------------------------------------- *)
+
+  fun setLookup(lookupSpill', lookupReload') = (lookupSpill  := lookupSpill';
+						lookupReload := lookupReload')
 
   fun allocateCluster cluster = (FloatAllocation.ra cluster before
 				 GetRegister.reset())
