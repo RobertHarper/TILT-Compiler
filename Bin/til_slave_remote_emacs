@@ -35,7 +35,7 @@ argdir="$4"
 # specified.  On other systems, scp -q causes a usage error.
 
 case `sys` in
-i386_linux3)
+i386_linux3|i386_rh60)
 	scp="scp -q"
 	;;
 *)
