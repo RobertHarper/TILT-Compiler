@@ -7,6 +7,11 @@ Version:     CVS
 System:	     any
 Severity:    major
 Problem:
+
+	[In addressing this bug, we should create regression tests that
+	verify the compiler rejects any code violating a syntactic
+	restriction.]
+
 	(1) TILT is not checking all the syntactic restrictions listed
 	    on pages 8, 9, and 12 of the Definition.
 
@@ -17,6 +22,7 @@ Problem:
 		VAL REC tyvarseq rvb
 	    which should be
 	        VAL tyvarseq REC rvb
+	[This has been fixed.]
 
 	(4) The parser is not generating enough MarkPat expressions.
 	    Try compiling the targets Bind_TuplePat, Bind_ListPat, and

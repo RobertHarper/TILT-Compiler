@@ -5,7 +5,7 @@ Submitter:   rwh
 Date:        08/16/02
 Version:     CVS
 System:      any
-Severity:    minor
+Severity:    major
 Problem:     when run in harness, the output does not agree; when run by hand, output is correct.  race condition?
 
 	The harness collects output in a pipe.  It is likely that (1) if

@@ -697,7 +697,7 @@ void global_root_init(void)
   tenuredGlobal = SetCreate(numGlobals);
 }
 
-void add_global_root(Proc_t *proc, vmem_t global)
+void add_global_root(Proc_t *proc, volatile mem_t global)
 {
   tag_t tag = global[-1];
   if (tag == TAG_REC_TRACE) {

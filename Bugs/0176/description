@@ -1,0 +1,30 @@
+Number: 0176
+Title:	TILT can not compile with -fnil_debug.
+Keywords:	nil, debug code
+Submitter:	swasey@cs.cmu.edu
+Date:	2/4/04
+Version:	CVS
+System:	any
+Severity:	minor
+Problem:
+
+	Tilt can not compile the primitive unit with -fnil_debug.
+
+Code:
+
+	tilt-nj -vv -fnil_debug -fBootstrap Basis/project
+
+Transcript:
+
+	....
+	[compiling unit TiltPrim]
+	Problem with analyzing vk_list
+	Error while calling module_valid
+	tilt: BUG: slave sheridan.home.14813: nilcontext.sml::Vinsert: Variable already occurs in context: _2750
+	status=1
+
+Comments:
+Fix:
+Test:
+Owner:
+Status: open

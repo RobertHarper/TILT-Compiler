@@ -500,7 +500,7 @@ void GCRelease_SemiConc(Proc_t *proc)
     tag_t tag;
 
     if (IsGlobalData(primary)) {
-      add_global_root(proc,primary);
+      add_global_root(proc,(ptr_t)primary);
       continue;
     }
     if (!gcOn)

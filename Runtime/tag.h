@@ -34,7 +34,6 @@ typedef volatile ptr_t *vploc_t;
 typedef unsigned int  tag_t;  /* An ML tag */
 typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 				 There is not necessarily a object at the location. */
-typedef volatile unsigned int *vmem_t;
 
 #ifdef alpha
 #pragma pointer_size restore

@@ -16,10 +16,10 @@ INSTALLING TILT
 		http://www.smlnj.org/
 
 	TILT supports the SPARC V9 and Alpha architectures running SunOS
-	5.5.1, SunOS 5.7, SunOS 5.8, and Digital Unix V4.0D but can run on
-	any Unix system supported by SML/NJ.  Unsupported architectures
-	can be used as compilation slaves (for any supported architecture)
-	but TILT can not generate binaries for them.
+	5.5.1, SunOS 5.7, SunOS 5.8, SunOS 5.9, and Digital Unix V4.0D but
+	can run on any Unix system supported by SML/NJ.  Unsupported
+	architectures can be used as compilation slaves (for any supported
+	architecture) but TILT can not generate binaries for them.
 
 	Take a look at the comments and commands in Makefile and
 	Runtime/Makefile and then try

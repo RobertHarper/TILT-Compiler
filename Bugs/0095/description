@@ -1,11 +1,11 @@
 Number: 0095
-Title:       Errno is sometimes clobbered.
+Title:       Errno is sometimes clobbered leading to spurious SysErr exceptions from the runtime.
 Keywords:    Runtime
 Submitter:   swasey
 Date:        08/16/02
 Version:     CVS
 System:      solaris
-Severity:    minor
+Severity:    major
 Problem:
 
 	This is going to be hard to reproduce.  I spotted it again in

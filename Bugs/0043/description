@@ -1,23 +1,117 @@
 Number: 0043
-Title:       Assembler warnings on Alpha.
+Title:       Alpha assembler trashes registers.
 Keywords:    code generator, assembler
 Submitter:   David Swasey <swasey@cs.cmu.edu>
 Date:        4/11/2001
 Version:     CVS
 System:	     alpha
-Severity:    minor
+Severity:    minor (because its the alpha)
 Problem:
+
 	The code we generate for multiply can lead to an as(1) warning.
+
 Code:
-	Basis/OS/time.sml hits the problem.
 Transcript:
+
 	as1: Warning: /usr1/swasey/ml96/Basis/OS/TM/alpha/time.sml.s, line 2119: macro instruction used $at
 	one_case_248126:
 		ldl	$25, 32($sp)
 	2119:	mullv	$25, 10, $25
 		stl	$25, 16($sp)
 		trapb
+
 Comments:
+
+	See Appendix C of "True64 Unix Assembly Language Programmer's
+	Guide", 2002.  (available online).
+
+	The register $at (aka $28) is normally reserved for the assembler
+	to use.  It and the registers $23, $24, $25, and $27 are trashed
+	when the assembler replaces a macro instruction by a sequence of
+	machine instructions.  The following table lists the macro
+	instructions that trash registers and the registers they trash:
+
+		Macro instructions and the registers they trash
+
+			ldb	$28 $23
+			ldbu	$28 $23
+			ldw	$28 $23
+			ldwu	$28 $23
+			stb	$28 $23 $24
+			stw	$28 $23 $24
+			ustw	$28 $23 $24 $25 $27
+			ustl	$28 $23 $24 $25 $27
+			ustq	$28 $23 $24 $25 $27
+			uldw	$28 $23 $24
+			uldwu	$28 $23 $24
+			uldl	$28 $23 $24
+			uldq	$28 $23 $24
+			divl	$28 $23 $24 $25 $27 (note 1)
+			divq	$28 $23 $24 $25 $27 (note 1)
+			divlu	$28 $23 $24 $25 $27 (note 1)
+			divqu	$28 $23 $24 $25 $27 (note 1)
+			reml	$28 $23 $24 $25 $27 (note 1)
+			remq	$28 $23 $24 $25 $27 (note 1)
+			remlu	$28 $23 $24 $25 $27 (note 1)
+			remqu	$28 $23 $24 $25 $27 (note 1)
+			mull	$28 (note 2)
+			mullv	$28 (note 2)
+
+		note 1: Destroys $27 only if the third operand is a register
+		other than $27.
+
+		note 2: This is just a guess; these instructions are not
+		listed in the appendix cited above but on tcl they seem to be
+		macros and they are not listed in my copy of "Alpha
+		Architecture Reference Manual", 1992.
+
+	In addition, $at is trashed by
+
+		(1) address operands whose absolute address falls outside the
+		range -32768 to 32767, and
+
+		(2) immediate operands that fall outside the range -32768 to
+		32767 for the ldil and ldiq instructions and the range 0 to
+		255 for other instructions if the instruction uses the same
+		source and destination register.
+
+	TILT uses the as directive ".set noat".  Generated code can use
+	$at without warnings but as will warn if it ever translates our
+	code to machine instructions that trash $at.  It is unclear
+	whether or not the assembler will warn about trashing the other
+	"temporaries".  (These warnings are serious.)
+
+	We want to ensure that TILT implements the following invariants:
+	Whenever TILT emits a macro instruction, it is OK for the
+	indicated registers to be trashed.  TILT brackets uses of the
+	macro instructions with ".set at" and "set .noat" to silence
+	assembler warnings.
+
+	TILT attempts to deal with this issue by not using $at as both the
+	source and destination register for mull or mullv in
+	Decalpha.msInstr' and by treating it as a register owned by the
+	register allocator (most code sequences avoid $at).
+
+	Steps to take:
+
+	1.  We need to ensure TILT only uses addresses and immediate
+	values that fall within the limits above.  Alternatively, we can ensure
+	that the RA knows what calculations trash which temporaries.
+
+	2.  We need to ensure TILT does not care if the assembler trashes
+	the listed registers in any code sequence using a macro
+	instruction.  TILT should wrap such code sequences with "set .at"
+	and "set .noat" to silence assembler warnings.
+
+	3.  Maybe we want TILT to run silently when the assembler is set to
+	issue warnings if it ever issues multiple machine instructions for
+	a single "instruction".  This could be tested with the directives
+
+		set .noreorder
+		set .nomacro
+
+	(But these directives should probably not be the default.)
+
 Fix:
 Test: 
 Owner: swasey

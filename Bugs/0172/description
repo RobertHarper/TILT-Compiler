@@ -1,0 +1,19 @@
+Number: 0172
+Title:	TILT does not implement the latest Basis library spec.
+Keywords:	Basis
+Submitter:	swasey@cs.cmu.edu
+Date:	2/4/04
+Version:	CVS
+System:	any
+Severity:	major
+Problem:
+
+	Our basis library implementation is out of date.
+
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

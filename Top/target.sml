@@ -1,3 +1,6 @@
+(*
+	XXX: Should Tonil.flattenmodules be a significant flag?
+*)
 structure Target :> TARGET =
 struct
 

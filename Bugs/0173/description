@@ -1,0 +1,34 @@
+Number: 0173
+Title:	Master-slave communication could be improved.
+Keywords:	Manager
+Submitter:	swasey@cs.cmu.edu
+Date:	2/4/04
+Version:	CVS
+System:	any
+Severity:	minor
+Problem:
+
+	structure Comm sometimes replays messages.  It happens with
+	multiple slaves on a fast linux box.  The master is currently
+	dealing with this by testing for and ignoring spurious messages in
+	Master.waitForSlaves.  Slaves ignore the problem.
+
+	The master does not notice if a slave dies.  (TILT does not
+	support signals so we can not simply have tell the master "i am
+	dying" when it gets interrupted.) Maybe we could detect most slave
+	deaths by using sockets to communicate and the file system for an
+	initial authentication handshake.
+
+	It would be nice to make communication more efficient.  Leaf
+	suggest sending multiple jobs at a time.  If there is one slave,
+	send it all available jobs.  Possibly, let the user indicate how
+	many jobs a slave can receive at once.  Bumping this number up on
+	fast slaves will tend to speed up compilation.
+
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

@@ -24,7 +24,7 @@
 
 void show_stack(mem_t sp, mem_t cur_retadd, mem_t top);
 void stack_init(void);
-void add_global_root(Proc_t *proc, vmem_t global);
+void add_global_root(Proc_t *proc, volatile mem_t global);
 void minor_global_scan(Proc_t *);    /* Return all initialized global locs not in the tenured list */
 void minor_global_promote(Proc_t *);         /* Move initialized global locs into the tenured list */
 void major_global_scan(Proc_t *);

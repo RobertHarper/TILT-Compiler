@@ -163,6 +163,9 @@ Comments:
             This might be a bug (suboptimality) in the hoister.
 
 Fix:
+
+	Not a big deal; closed.
+
 Test: 
 Owner: swasey
-Status: open
+Status: closed

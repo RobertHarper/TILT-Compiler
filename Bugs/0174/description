@@ -1,0 +1,34 @@
+Number: 0174
+Title:	Layout of GC tables is imperfect.
+Keywords:	runtime, gc
+Submitter:	swasey@cs.cmu.edu
+Date:	2/4/04
+Version:	CVS
+System:	solaris,alpha
+Severity:	minor
+Problem:
+
+	Information about the mutator is passed to the gc using a few
+	tables.  The tables are generally stored as a list of fixed-size
+	entries described by a start address and an end address (a
+	separate global symbol).  The linker may place padding between the
+	actual end of data and the address of the end symbol.  This can
+	confuse the GC.
+
+Code:
+Transcript:
+Comments:
+
+	Eliminate globalend and traceglobalend in favor of storing
+	explicit size information along with the data.  This will involve
+	changing (at least):
+
+		../../Rtl/tortl.sml
+		../../Runtime/client.h
+		../../Runtime/gc.c
+		../../Runtime/stack.c
+
+Fix:
+Test:
+Owner: swasey
+Status: open

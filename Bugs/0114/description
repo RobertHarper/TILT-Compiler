@@ -5,10 +5,10 @@ Submitter:   rwh
 Date:        08/16/02
 Version:     CVS
 System:      any
-Severity:    minor
+Severity:    major
 Problem:     fails to type check, perhaps because of word overloading problem
 Code:        
-	(* ../../Test/bug114/mapfile *)
+	(* ../../Test/bug114/project *)
 	val f : Word8.word -> int = fn 0w0 => 1
 
 Transcript:  

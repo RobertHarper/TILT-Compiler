@@ -1,0 +1,23 @@
+Number: 0171
+Title:	TILT does not implement sensible structure sharing.
+Keywords:	Elaborator
+Submitter:	swasey@cs.cmu.edu
+Date:	2/4/04
+Version:	CVS
+System:	any
+Severity:	minor
+Problem:
+
+	We decided how structure sharing should work; see
+
+		 ../../Doc/structure_sharing.txt
+
+	TILT does not implement this.
+
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

@@ -1,0 +1,20 @@
+Number: 0175
+Title:	TILT does not include the latest SML/NJ library.
+Keywords:	libraries
+Submitter:	swasey@cs.cmu.edu
+Date:	2/4/04
+Version:	CVS
+System:	any
+Severity:	major
+Problem:
+
+	The SML/NJ library packaged with TILT is old and could be updated
+	with little trouble.
+
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

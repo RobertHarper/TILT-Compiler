@@ -123,30 +123,30 @@ FORCE:
 # Compiling
 
 sparc/dbg/%.o: %.c
-	$(sparc_dbg_cc) $(CFLAGS) -c -o $@ $?
+	$(sparc_dbg_cc) $(CFLAGS) -c -o $@ $*.c
 
 sparc/opt/%.o: %.c
-	$(sparc_opt_cc) $(CFLAGS) -c -o $@ $?
+	$(sparc_opt_cc) $(CFLAGS) -c -o $@ $*.c
 
 alpha/dbg/%.o: %.c
-	$(alpha_dbg_cc) $(CFLAGS) -c -o $@ $?
+	$(alpha_dbg_cc) $(CFLAGS) -c -o $@ $*.c
 
 alpha/opt/%.o: %.c
-	$(alpha_opt_cc) $(CFLAGS) -c -o $@ $?
+	$(alpha_opt_cc) $(CFLAGS) -c -o $@ $*.c
 
 # Assembling
 
 sparc/dbg/%.sparc.o: %.sparc.s
-	$(sparc_dbg_as) $(ASFLAGS) -o $@ $?
+	$(sparc_dbg_as) $(ASFLAGS) -o $@ $*.s
 
 sparc/opt/%.sparc.o: %.sparc.s
-	$(sparc_opt_as) $(ASFLAGS) -o $@ $?
+	$(sparc_opt_as) $(ASFLAGS) -o $@ $*.s
 
 alpha/dbg/%.alpha.o: %.alpha.s
-	$(alpha_dbg_as) $(ASFLAGS) -o $@ $?
+	$(alpha_dbg_as) $(ASFLAGS) -o $@ $*.s
 
 alpha/opt/%.alpha.o: %.alpha.s
-	$(alpha_opt_as) $(ASFLAGS) -o $@ $?
+	$(alpha_opt_as) $(ASFLAGS) -o $@ $*.s
 
 # Packing
 

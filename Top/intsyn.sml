@@ -34,6 +34,7 @@ struct
 	val I = "I"
 	val L = "L"
 	val C = "C"
+	val P = "P"
 	val Info = "info"
 	val Context = "context"
 	val Pinterface = "pinterface"
@@ -54,7 +55,7 @@ struct
 	val Target : unit -> string = Target.targetString
 
 	fun pdir' (desc:file) : file =
-	    dir desc/TM/file desc
+	    dir desc/TM/P/file desc
 
 	val pdir : pos -> file = pdir' o Pos.file
 
