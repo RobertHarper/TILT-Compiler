@@ -17,7 +17,7 @@
 # Please keep the status bits up to date.
 
 0001	pass	Arithmetic exceptions.
-0002	pass	Top-level types and values, basis structures and sharing.
+0002	fail	[bug165] Top-level types and values, basis structures and sharing.
 0003	pass	Overloading.
 0004	pass	Hello world.
 0005	fail	Picky infix decl parsing bug.
