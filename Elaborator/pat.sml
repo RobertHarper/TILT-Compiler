@@ -1205,7 +1205,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 
 
 	local
-	    val tupleLabel = fresh_internal_label "bindTuple"
+	    val tupleLabel = internal_label "bindTuple"
 	    val tupleVar = fresh_named_var "bindTuple"
 	in  val (tupleSbndSdec,base) = 
 	         (case binde of

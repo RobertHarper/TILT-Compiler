@@ -916,18 +916,32 @@ structure IlUtil
 	val to_cluster = to_meta_lab cluster_str
     end
 
-    fun label2name lab = 
-      let
-	val str = Name.label2name lab
-	val len = size str
-	fun loop n = if ((n+1) < len andalso 
-			(String.sub(str,n) = #"+" orelse
-			 String.sub(str,n) = #"-"))
-			then loop (n+2) else n
-	val start = loop 0
-      in String.substring(str,start,len - start)
-      end
+    local 
+	fun split str = 
+	    let val len = size str
+		fun loop n = if ((n+1) < len andalso 
+				 (String.sub(str,n) = #"+" orelse
+				  String.sub(str,n) = #"-"))
+				 then loop (n+2) else n
+		val start = loop 0
+	    in  (String.substring(str,0, start),
+		 String.substring(str,start,len - start))
+	    end
 
+    in
+	fun prependToInternalLabel (prefix, lab) = 
+	    let val str = Name.label2name lab
+		val (attributes, name) = split str
+		val name = prefix ^ name
+	    in  internal_label(attributes ^ name)
+	    end
+	
+	fun label2name lab = 
+	    let val str = Name.label2name lab
+		val (attributes, name) = split str
+	    in  name
+	    end
+    end
 
     fun exp_reduce e : exp option = 
 	(case e of

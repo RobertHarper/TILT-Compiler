@@ -270,8 +270,8 @@ structure Toil
                                    else if (!r < 0)
                                             then elab_error "maxmap count inconsistency"
                                         else (* rename case *)
-                                            let val name = Name.label2name l
-						val l' = fresh_internal_label ("hidden_" ^ name)
+                                            let val qualifier = "hidden" ^ (Int.toString (!r)) ^ "_"
+						val l' = prependToInternalLabel(qualifier, l)
                                             in (SOME (SBND(l',bnd)), 
                                                 CONTEXT_SDEC(SDEC(l',dec)))
                                                 :: (uniquify rest)

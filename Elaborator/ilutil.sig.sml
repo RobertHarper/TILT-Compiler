@@ -100,8 +100,9 @@ signature ILUTIL =
     val is_dt : label -> bool
     val is_cluster : label -> bool
 
-    (* Lose all characteristics *)
-    val label2name : label -> string
+
+    val prependToInternalLabel : string * label -> label   (* Keeps characteristics *)
+    val label2name : label -> string                       (* Lose all characteristics *)
 
     (* special values *)
     val con_unit : con
