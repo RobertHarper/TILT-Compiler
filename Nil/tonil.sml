@@ -4,6 +4,35 @@
    Also note that all term-level (but not type-level) 
         record fields must be sorted by their labels. *)
 
+(* Issues.
+
+     (1) All the questions marked XXX in the comments below.
+ 
+     (2) There is some inconsistency in how particular Elaborator
+         idioms are recognized.
+
+            Sometimes we use is_dt and sometimes we require both
+            is_dt and is_nonexport.
+
+            There are several methods used to detect modules that
+            are really the translation of SML polymorphic instantiation,
+            polymorphic types, and polymorphic definitions.  This is
+            perhaps inevitable...the translation of
+                val x = SOME
+            needn't explicitly mention any "it" labels, for example,
+            even though we really want to know that the functor that
+            the Elaborator generates for x (equivalent to /\a. SOME[a])
+            really is a polymorphic definition.
+
+         All such checks can be found by looking for uses of the
+         elaborator_specific_optimizations ref.
+
+     (3) The generated code contains Typeof_c; it doesn't seem possible
+         to eliminate this without at least having the translations of
+         sdecs, exps, etc. return types as well.  This would be a global
+         revision of the code.
+ *)
+
 structure Tonil :> TONIL =
 struct
 
@@ -27,12 +56,23 @@ struct
    (* killDeadImport  :  should the import list be GC'ed to include
                          only variables used by the code being split?
 
-      do_preproject   :
+      do_preproject   :  When we have a module, should we eagerly
+                         translate all paths to substructures?
+                         
+			 XXX:  Currently this is done only for functor
+			       arguments.  Why?
       
-      do_memoize      : 
+      do_memoize      :  Should the translation of constructor paths 
+                         be memoized?
 
       do_polyrec      :  should we transform mutually-recursive polymorphic
                          functions into polymorphic recursion?
+
+                         It is *not* obvious that this is a good idea,
+                         but it does make the resulting code slightly
+                         easier to read.
+
+                         XXX: What is the right default?
 
       keep_hil_numbers:  when mapping variables to var_c and var_r,
                          should the resulting names mention the HIL
@@ -335,9 +375,11 @@ struct
    local
      (* The splitting context contains all the information maintained
         as the phase-splitting process goes along.  This includes
-          HILctx : The IL context, containing the types of the IL 
-                   bound variables visible at this point in the
-                   translation's input.
+          HILctx : The initial HIL context (the imports). Not
+                   kept up-to-date as we traverse the code, as
+                   it's only used by some of the IlUtil functions ---
+                   apparently to find the bool type and simple things
+		   like that.
 
           NILctx : The Nil context, containing the kinds of the NIL
                    bound *type* variables visible at this point in the
@@ -349,7 +391,8 @@ struct
                    Bound term variables are not put into the context,
                    because they're never needed.
 
-          sigmap : 
+          sigmap : a mapping from signature variables to IL signatures,
+	           accumulated as the imports are processed.
 
           used   : The set of all (NIL) variables used in the generated
                    NIL code; this is used to figure out which (translations
@@ -720,6 +763,32 @@ struct
    (* IL-to-NIL translations *)
    (**************************)
 
+   (* Type definitions for the return types of some of the
+      translation functions; contents are described more 
+      below.
+    *)
+
+   type xmod_result = {cbnd_cat : conbnd catlist,
+		       ebnd_cat : bnd catlist,
+		       name_c : con,
+		       name_r : exp,
+		       (* knd_c : kind,*)
+		       context : splitting_context}
+
+   type xbnds_result = {cbnd_cat : conbnd catlist,
+			ebnd_cat : bnd catlist,
+			final_context : splitting_context}
+
+   type xsbnds_result = {cbnd_cat : conbnd catlist,
+			 ebnd_cat : bnd catlist,
+			 final_context : splitting_context,
+			 record_c_con_items : (N.label * con) list,
+			 record_c_knd_items : ((N.label * N.var) * kind) list,
+			 record_r_exp_items : (N.label * exp) list}
+
+   type xsdecs_result = {erdecs : (N.label * N.var * con) list,
+			 crdecs : ((N.label * N.var) * kind) list}
+
    (* One last helper function (which must be defined after the wrapped
       splitNewVar function).  
 
@@ -740,10 +809,14 @@ struct
    fun xeffect (Il.TOTAL) = Total
      | xeffect (Il.PARTIAL) = Partial
 
-   (* xilprim.  Translates the so-called "IL primitives" (primitives
+   (* xilprim.  Translates the simplest "IL primitives" (primitives
        which are only segregated in the IL for typing reasons) into
        the corresponding common primitives, which have the same
        run-time behavior at the level of bits.
+
+       Only the primitives that take no arguments are handled here;
+       the ref-related primitives are translated in the ILPRIM case
+       of xexp'.
     *)
    fun xilprim (Prim.eq_uint intsize)     = Prim.eq_int intsize
      | xilprim (Prim.neq_uint intsize)    = Prim.neq_int intsize
@@ -761,7 +834,7 @@ struct
              to which the two parts of the module must be bound.
 	     If so, these names must be "fresh" (not in the context).
       
-      Suppose 
+      Assume
          xmod in_context (il_mod, required_names)
       returns 
          {name_c, name_r, cbnd_cat, ebnd_cat, context} =
@@ -785,12 +858,6 @@ struct
         (5) name_r = Var_e var_r
     *)
 
-   type xmod_result = {cbnd_cat : conbnd catlist,
-		       ebnd_cat : bnd catlist,
-		       name_c : con,
-		       name_r : exp,
-		       (* knd_c : kind,*)
-		       context : splitting_context}
 
    fun xmod (context : splitting_context)
             (args as (il_mod : Il.mod, 
@@ -1377,9 +1444,47 @@ struct
        end
        (* End of xmod' *)
 
-   (* xmod.  Translation of a sequence of IL structure bindings.
+   (* xsbnds.  Translation of a sequence of IL structure bindings.
+
+      Assume
+         xsbnds in_context il_sbnds
+      returns 
+         {cbnd_cat : conbnd catlist,
+	  ebnd_cat : bnd catlist,
+	  final_context : splitting_context,
+	  record_c_con_items : (N.label * con) list,
+	  record_c_knd_items : ((N.label * N.var) * kind) list,
+	  record_r_exp_items : (N.label * exp) list}
+
+      Let cbnds = flatten_catlist cbnd_cat
+      and ebnds = flatten_catlist ebnd_cat
+      and (labels, exps) = unzip record_r_exp_items
+
+      Then
+
+        (1) final_context is the, well, final context; it results from
+            threading the context through the translation of all
+            the il_sbnds.
+        (2) If these sbnds were the contents of a structure then
+            the type part of this structure would be
+                LET_C cbnds IN  CRECORD_C(record_c_con_items) END
+            with kind
+                LET cbnds IN Record_k record_c_knd_items
+            (even though kind-level lets are not officially allowed)
+            and the run-time part of the contents would be
+                LET_E cbnds @ ebnds IN
+                   Prim_C(Record_C labels, tvar::exps)
+
+            where tvar is the tracability value for those expressions.
+
+      At the moment, record_c_knd_items does not appear to be used
+      anywhere, and could perhaps be removed.
+
+      Further, to determine the tracability of the exps without using
+      Typeof_c it seems necessary to return the types of those expressions.
+      
     *)
-   and xsbnds context il_sbnds =
+   and xsbnds context (il_sbnds : Il.sbnd list) : xsbnds_result =
        let
 	   (* Tracing messages on entry *)
 	   val this_call = ! xsbnds_count
@@ -1584,42 +1689,77 @@ struct
 
 	   (* Same as the previous case, but now we're doing polymorphic
 	      function clusters.
-           *)
-	   let
+
+	      XXX:  Is this a good idea?  With polymorphic recursion,
+                    recursive calls actually are two calls --- one for
+                    polymorphic instantiation and one to actually call
+                    the resulting function.
+
+                    On the other hand, leaving the code as is can
+                    result in an n-fold increase in the number of
+                    closures allocated at run-time (where n is the
+                    number of mutually-recursive functions) because
+                    each instantiation of a single function actually
+                    creates closures for all of the functions. 
+           *) 
+	     let
 
                val _ = clear_memo top_var
                val _ = clear_memo poly_var
 
 	       (* external_labels = Exported labels for these functions.
-                  external_vars = Variables to which the functions should be bound
-                                  in the returned NIL bindings 
-                  rest_il_sbnds' = remaining il_sbnds after this group of functions 
+                  external_vars = Variables to which the functions are being
+		                  bound in (skipped) IL bindings 
+                  rest_il_sbnds' = remaining il_sbnds after this 
+                                   cluster of functions and the projections
                 *)
 	       val num_functions = length fbnds
 	       val (rest_il_sbnds', external_labels, external_vars) = 
 		   getSbndNames num_functions rest_il_sbnds
 
-	       (* internal_vars = Variables to which the functions are bound
-	                          in the direct translation of the HIL cluster.
-		  functions = Bodies of the functions in this 
-		                 mutually-recursive group *)
-
-	       val ((poly_var_c, poly_var_r), context') = splitNewVar (poly_var, context)
-
+               (* Split the signature of the polymorphic argument structure.
+                  Remember that because of equality polymorphism, there 
+                  may be value specs as well as type specs in this
+                  signature
+                *)
+	       val ((poly_var_c, poly_var_r), context') = 
+		                       splitNewVar (poly_var, context)
 	       val (knd_arg, con_arg) = 
 		      xsig context' (Var_c poly_var_c, il_arg_signat)
 
+	       (* Translate the cluster of functions.
+                *)
 	       val context' = update_NILctx_insert_kind(context', poly_var_c, 
 							knd_arg)
-
 	       val Let_e (_, (Fixopen_b set)::_, _) = xexp context' il_exp
 
-               val (internal_vars, functions) = Listops.unzip (Sequence.toList set)
+	       (* internal_vars = Variables to which the functions are bound
+                                  and by which they refer to each other
+	                          in the direct translation of the HIL cluster.
+		  functions = Bodies of the functions in this 
+		                 mutually-recursive group *)
+               val (internal_vars, functions) = 
+		 Listops.unzip (Sequence.toList set)
 
-               val inner_vars = map 
-		   (fn v => N.fresh_named_var((N.var2name v) ^ "_inner")) external_vars
+               (* Each function definition will become a curried function,
+                     first taking the polymorphic parameters and then
+                     taking the function arguments.
+                 inner_vars = the names of these "inner" functions, the 
+                     ones returned when the outer function is instantiated.
+                *)
+               val inner_vars = 
+		 map (fn v => N.fresh_named_var((N.var2name v) ^ "_inner")) 
+		     external_vars
 
+               (* external_var_rs = The _r parts of the external_var variables,
+                                    which will be used by later parts of the
+                                    code to refer to these functions.
 
+                  These will be the variable names of the "outer" functions
+                     and will also be used by each function to refer
+                     to the other functions (which is the idea of 
+                     polymorphic recursion).
+                *)
                val (external_var_rs, context) =
 		   let
 		       fun folder (v,context) = 
@@ -1631,65 +1771,100 @@ struct
 		   in
 		       Listops.foldl_acc folder context external_vars
 		   end
-
-	       fun wrap(current_internal_var, inner_var,e) = 
+		 
+	       (* Wrap the function body e with bindings that
+                  define each of the names it is currently using to
+                  refer to the other functions 
+                  to be the result of polymorphically-instantiatiating
+                  the corresponding outer function.
+                *)
+	       fun wrap(current_internal_var, inner_var, e) = 
 		   let 
 		       fun mapper(internal_var,external_var_r) = 
-			   if (N.eq_var(internal_var,current_internal_var))
-			       then Exp_b(internal_var, TraceUnknown, Var_e inner_var)
-			   else Exp_b(internal_var, TraceUnknown, NU.makeAppE 
-				      (Var_e external_var_r)
-				      [Var_c poly_var_c]
-				      [Var_e poly_var_r]
-				      [])
-		       val bnds = Listops.map2 mapper (internal_vars, external_var_rs)
-		   in  NU.makeLetE Sequential bnds e
+			 if (N.eq_var(internal_var,current_internal_var)) then
+			   (* Since the original code couldn't have been
+			      polymorphic recursive, a direct recursive
+			      call of a function to itself can still go
+			      directly to the inner (non-polymorphic) name,
+			      rather than re-instantiating itself.
+			    *)
+			   Exp_b(internal_var, TraceUnknown, Var_e inner_var)
+			 else 
+			   Exp_b(internal_var, TraceUnknown, 
+				 NU.makeAppE 
+				    (Var_e external_var_r)
+				    [Var_c poly_var_c]
+				    [Var_e poly_var_r]
+				    [])
+		       val bnds = Listops.map2 mapper 
+			           (internal_vars, external_var_rs)
+		   in  
+		     NU.makeLetE Sequential bnds e
 		   end
-
+		 
+               (* Rewrite each function into this curried outer/inner
+                  function pair.
+                *)
                fun reviseFunction (internal_var,
-				   external_var_r, inner_var,
+				   external_var_r, 
+				   inner_var,
 				   Function{effect,recursive,isDependent,
 					    tFormals = [],
-					    eFormals = [(arg_var, arg_tr, arg_con)],
+					    eFormals = [(arg_var, arg_tr, 
+							 arg_con)],
 					    fFormals = [],
 					    body,
 					    body_type = inner_body_type}) =
 		   let val body' = wrap(internal_var, inner_var, body)
-		       val outer_body_type = AllArrow_c{openness = Open, effect = effect, 
-							isDependent = false,
-							tFormals = [], 
-							eFormals = [(NONE,arg_con)], 
-							fFormals = 0w0, 
-							body_type = inner_body_type}
-		   in  (external_var_r,
-		       Function{effect = Total,
-				recursive = Leaf, 
-				isDependent = false,
-				tFormals = [(poly_var_c, knd_arg)],
-				eFormals = [(poly_var_r, TraceUnknown, con_arg)],
-				fFormals = [],
-				body = Let_e (Sequential,
+
+		       val outer_body_type = 
+			 AllArrow_c{openness = Open, effect = effect, 
+				    isDependent = false,
+				    tFormals = [], 
+				    eFormals = [(NONE,arg_con)], 
+				    fFormals = 0w0, 
+				    body_type = inner_body_type}
+		   in  
+		     (external_var_r,
+		      Function{effect = Total,
+			       recursive = Leaf, 
+			       isDependent = false,
+			       tFormals = [(poly_var_c, knd_arg)],
+			       eFormals = [(poly_var_r, TraceUnknown, con_arg)],
+			       fFormals = [],
+			       body = 
+			        Let_e (Sequential,
 				       [Fixopen_b
-					(Sequence.fromList 
-					 [(inner_var, Function{effect=effect,recursive=recursive,isDependent=false,
-							       tFormals = [],
-							       eFormals = [(arg_var,arg_tr,arg_con)],
-							       fFormals = [],
-							       body = body',
-							       body_type = inner_body_type})])],
+				        (Sequence.fromList 
+					 [(inner_var, 
+					   Function
+					     {effect=effect,
+					      recursive=recursive,
+					      isDependent=false,
+					      tFormals = [],
+					      eFormals =
+					        [(arg_var,arg_tr,arg_con)],
+					      fFormals = [],
+					      body = body',
+					      body_type = inner_body_type})])],
 				       Var_e inner_var),
 				body_type = outer_body_type})
 		   end
 
                val ebnd_entries = (Listops.map4 reviseFunction 
-				   (internal_vars, external_var_rs, inner_vars, functions))
-               val ebnd_types = map (NU.function_type Open) functions
-
-
+				   (internal_vars, external_var_rs, 
+				    inner_vars, functions))
 	       val ebnds = [Fixopen_b (Sequence.fromList ebnd_entries)]
+
+               (* Currently unused, but will be needed if we start
+                  returning contexts with types, to avoid requiring
+                  Typeof_c's *)
+               (* val ebnd_types = map (NU.function_type Open) functions *)
 
                val context = update_polyfuns_list(context, external_var_rs)
 
+	       (* Translate the remaining bindings
+		*)
 	       val {final_context, cbnd_cat, ebnd_cat, record_c_con_items,
 		    record_c_knd_items, 
 		    record_r_exp_items} = xsbnds context rest_il_sbnds'
@@ -1700,7 +1875,8 @@ struct
 		ebnd_cat = APPEND [LIST ebnds, ebnd_cat],
 		record_c_con_items = record_c_con_items,
   	        record_c_knd_items =  record_c_knd_items,
-		record_r_exp_items = (Listops.zip external_labels (map Var_e external_var_rs))
+		record_r_exp_items = (Listops.zip external_labels 
+				                  (map Var_e external_var_rs))
 		                     @ record_r_exp_items}
 	   end
        else
@@ -2006,7 +2182,8 @@ struct
 			    raise e)
 
 	in
-	   (* Tracing messages on return *)
+	   (* Tracing messages on return 
+            *)
 	    if (!debug) then 
 	      print ("Return " ^ (Int.toString this_call) ^ 
 		     " from xcon\n") 
@@ -2278,17 +2455,16 @@ struct
       and that the body of the let will just return that function.
 
       The toFunction function translates the fix, pulls it apart, and
-      returns the handler's parameter, argument type (hopefully exn)
-      and the handler body.
+      returns the handler's parameter and the code for the handler body.
     *)
-   and toFunction context (exp as Il.FIX _) : N.var * con * exp =
+   and toFunction context (exp as Il.FIX _) : N.var * exp =
        let
 	   val Let_e (_, [Fixopen_b fns], Var_e var) = xexp context exp
        in
 	   case	(Sequence.lookup (N.eq_var) fns var) of
 	       SOME (Function{tFormals=[], isDependent=false,
-			      eFormals=[(v,_,c)], fFormals=[],body,...}) => 
-	               (v,c,body)
+			      eFormals=[(v,_,_)], fFormals=[],body,...}) => 
+	               (v,body)
 	     | NONE => error "(toFunction): impossible"
        end
      | toFunction _ e = 
@@ -2347,64 +2523,87 @@ struct
 	   Const_e (Prim.tag (tag, con))
        end
 
-   and xexp context il_exp =
+   (* xexp.  Wrapper function for translating expressions *)
+   and xexp context (il_exp : Il.exp) : Nil.exp =
        let
+	   (* Tracing messages on entry 
+            *)
 	   val this_call = ! xexp_count
 	   val _ = 
 	       if (!debug) then
 		   (xexp_count := this_call + 1;
-		    print ("Call " ^ (Int.toString this_call) ^ " to xexp\n");
-		    if (!full_debug) then (Ppil.pp_exp il_exp; print"\n") else ())
+		   print ("Call " ^ (Int.toString this_call) ^ " to xexp\n");
+		   if (!full_debug) then 
+		     (Ppil.pp_exp il_exp; print"\n") 
+		   else ())
 	       else ()
 
 	   val result = (xexp' context il_exp)
-	       handle e => (if (!debug) then (print ("Exception detected in call " ^ 
-						    (Int.toString this_call) ^ " to xexp\n");
-					      print "\nwith exp = \n";
-					      Ppil.pp_exp il_exp;
-(*
-					      print "\nwith context = \n";
-					      print_splitting_context context;
-*)
-					      print "\n")
+	       handle e => (if (!debug) then 
+			      (print ("Exception detected in call " ^ 
+				      (Int.toString this_call) ^ " to xexp\n");
+			       print "\nwith exp = \n";
+			       Ppil.pp_exp il_exp;
+			       (*
+				print "\nwith context = \n";
+				print_splitting_context context;
+				*)
+			       print "\n")
 			    else ();
 			    raise e)
 
 	in
-	    if (!debug) then print ("Return " ^ (Int.toString this_call) ^ " from xexp\n") else ();
+	   (* Tracing messages on return
+            *)
+	    if (!debug) then 
+	      print ("Return " ^ (Int.toString this_call) ^ " from xexp\n") 
+	    else ();
 	    result
         end
 
-
-   and xexp' context (Il.OVEREXP(_, _, exp_oneshot)) = 
+   (* xexp'.   Worker function for translating expressions.  
+               Should only be called by xexp, and not recursively.
+    *)
+   and xexp' context (Il.OVEREXP(_, _, exp_oneshot) : Il.exp) : Nil.exp = 
        xexp context (derefOneshot exp_oneshot)
 
      | xexp' context (Il.SCON il_scon) = xvalue context il_scon
 
      | xexp' context (Il.ETAPRIM (prim, il_cons)) = 
-       xexp context (IlUtil.prim_etaexpand(get_hilctxt context,prim,il_cons))
+          xexp context (IlUtil.prim_etaexpand(get_hilctxt context, prim, 
+					      il_cons))
 
      | xexp' context (Il.ETAILPRIM (ilprim, il_cons)) = 
-       xexp context (IlUtil.ilprim_etaexpand(get_hilctxt context,ilprim,il_cons))
+          xexp context (IlUtil.ilprim_etaexpand(get_hilctxt context, ilprim,
+						il_cons))
 
      | xexp' context (il_exp as (Il.PRIM (prim, il_cons, il_args))) = 
        let
 	   open Prim
+	   (* translate the constructor and term arguments *)
 	   val cons = map (xcon context) il_cons
 	   val args = map (xexp context) il_args
-           val (effect,con) = 
-	     (* get_type' uses the NIL context just to find "bool" *)
-	     case NU.strip_arrow (NilPrimUtil.get_type' (get_nilctxt context)  prim cons) of
-		 SOME {effect,body_type,...} => (effect,body_type)
-		| _ => (perr_c (NilPrimUtil.get_type' (get_nilctxt context) prim cons);
-			error "Expected arrow constructor")
 
+           val (effect,con) = 
+	     case NU.strip_arrow 
+	            (NilPrimUtil.get_type' (get_nilctxt context) prim cons) of
+		 SOME {effect,body_type,...} => (effect, body_type)
+		| _ => (perr_c (NilPrimUtil.get_type' 
+				(get_nilctxt context) prim cons);
+			error "xexp'/PRIM: Expected arrow constructor")
+
+           (* The IL may think the primitive returns an unboxed float,
+              but the phase-splitting adds code to box the result, which
+              changes the return type.
+            *)
 	   val con : con = (case con of
-				Prim_c(Float_c fs,[]) => Prim_c(BoxFloat_c fs,[])
+				Prim_c(Float_c fs,[]) => 
+				  Prim_c(BoxFloat_c fs,[])
 			      | _ => con)
+
 	   fun id (e : exp) = e
-	   fun box fs e = Prim_e(NilPrimOp(box_float fs),[], [], [e])
-	   fun unbox fs e = Prim_e(NilPrimOp(unbox_float fs), [],[], [e])
+	   fun box fs e       = Prim_e(NilPrimOp(box_float fs),[], [], [e])
+	   fun unbox fs e     = Prim_e(NilPrimOp(unbox_float fs), [],[], [e])
 	   fun float_float fs = (map (unbox fs) args, box fs)
 	   fun float_int fs = (map (unbox fs) args, id)
 	   fun int_float fs = (args, box fs)
@@ -2425,9 +2624,10 @@ struct
 		   | float2int => float_int F64
 		   | int2float => int_float F64
 		   | _ => (args,id))
-       in  wrap(Prim_e (PrimOp prim, [],cons, args))
-	   
+       in  
+	 wrap(Prim_e (PrimOp prim, [], cons, args))
        end
+
      | xexp' context (il_exp as (Il.ILPRIM (ilprim, il_cons, il_args))) = 
        let
 	   val cons = map (xcon context) il_cons
@@ -2435,7 +2635,10 @@ struct
 	   val zero = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 0))
 	   val one = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 1))
 	   val t = (Prim.OtherArray false)
-       in  case ilprim of
+       in
+	 (* Translate away IL-only primitives. *)
+	 case ilprim of
+	     (* Refs are represented as arrays in the rest of the compiler *)
 	     Prim.mk_ref => Prim_e(PrimOp(Prim.create_table t),[],
 				   cons, one::args)
 	   | Prim.deref => Prim_e(PrimOp(Prim.sub t),[],
@@ -2446,41 +2649,67 @@ struct
 					| _ => error "bad set_ref")
 	   | Prim.eq_ref => Prim_e(PrimOp(Prim.equal_table t),[],
 				   cons, args)
-	   | _ => Prim_e (PrimOp (xilprim ilprim), [],cons, args)
+             (* The translation of the other IL-only primitives 
+                is independent of the arguments, and so is moved
+                to a helper function
+              *)
+	   | _ => Prim_e (PrimOp (xilprim ilprim), [], cons, args)
        end
 
      | xexp' context (Il.VAR var) = 
        let
+	   (* The IL variable var had a renaming chosen whereever it
+              was bound; apply this renaming *)
 	   val var' = rename_var(var, context)
        in
 	   mark_var_used(context,var');
 	   Var_e var'
        end
 
-     | xexp' context (il_exp as (Il.EXTERN_APP (il_con1,il_exp1, il_exps2))) =
+     | xexp' context (il_exp as (Il.EXTERN_APP (il_con1, il_exp1, il_exps2))) =
        let
-	   val exp1 = xexp context il_exp1
-	   val exps2 = map (xexp context) il_exps2
-	   val Il.CON_ARROW(cons2,res_con,_,_) = il_con1
-	   fun mapper(e,Il.CON_FLOAT _) = Prim_e (NilPrimOp (unbox_float Prim.F64),[],[],[e])
-	     | mapper(e,_) = e
-	   val exps2 = Listops.map2 mapper (exps2,cons2)
-	   val app = ExternApp_e (exp1, exps2)
-       in  (case res_con of
-	     Il.CON_FLOAT _ => Prim_e (NilPrimOp (box_float Prim.F64),[],[],[app])
+	 val exp1 = xexp context il_exp1
+	 val exps2 = map (xexp context) il_exps2
+	 val Il.CON_ARROW(cons2,res_con,_,_) = il_con1
+
+	 (* An external function is not expecting boxed floats, so
+            unbox any float arguments.
+             
+            XXX Depends on the elaborator not using type abbreviations
+            that expand out into float in the type annotation of
+            the EXTERN_APP function!  i.e, the code is looking
+            literally for CON_FLOAT, rather than doing any reductions.
+          *)
+	 fun mapper(e,Il.CON_FLOAT _) = 
+	        Prim_e (NilPrimOp (unbox_float Prim.F64),[],[],[e])
+	   | mapper(e,_) = e
+	 val exps2 = Listops.map2 mapper (exps2,cons2)
+
+	 (* Create the application
+          *)
+	 val app = ExternApp_e (exp1, exps2)
+       in  
+	 (case res_con of
+	     Il.CON_FLOAT _ => 
+	       (* If the external function returned an unboxed float,
+                  it has to be boxed.
+                *)
+	       Prim_e (NilPrimOp (box_float Prim.F64),[],[],[app])
 	   | _ => app)
        end
-
            
      | xexp' context (il_exp as (Il.APP (il_exp1, il_exp2))) = 
+         (* XXX:  Is there any reason why, other than optimization, 
+	          that we reduce trivial redices here?
+	  *)
          (case IlUtil.exp_reduce (get_hilctxt context,il_exp) of
-	      NONE => 
-		  let
-		      val exp1 = xexp context il_exp1
-		      val exp2 = xexp context il_exp2
-		  in  App_e (Open, exp1, [], [exp2], [])
-		  end	   
-	    | SOME il_exp => xexp' context il_exp)
+	    NONE => 
+	      let
+		val exp1 = xexp context il_exp1
+		val exp2 = xexp context il_exp2
+	      in  App_e (Open, exp1, [], [exp2], [])
+	      end	   
+	  | SOME il_exp => xexp' context il_exp)
 
      | xexp' context (Il.FIX (is_recur, il_arrow, fbnds)) = 
        let
@@ -2491,6 +2720,9 @@ struct
            val labels = IlUtil.generate_tuple_labels num_names
        in
 	   if (num_names = 1) then
+	       (* If there's only one function, it should translate to
+                  a value of a function type, rather than a 1-tuple
+               *)
                NU.makeLetE Sequential [Fixopen_b set] (hd names)
            else
 	     let
@@ -2504,10 +2736,6 @@ struct
 	       val ebnd = Exp_b (evar,TraceUnknown,tag)
 	       val fields = (Var_e evar)::names
 	     in
-	       (* Note: xsbnds_rewrite_2 relies on the Fixopen_b binding
-		* being first.  It drops everything else to eliminate the
-		* nest.
-		*)
 	       NU.makeLetE Sequential [Fixopen_b set,
 					    cbnd,
 					    ebnd]
@@ -2515,9 +2743,10 @@ struct
 	     end
        end
 
-     (*Empty record does not take gctag, so treat special
+     (* The empty record does not take gctag, so treat it specially
       *)
-     | xexp' context (Il.RECORD [])    = (Prim_e (NilPrimOp (record []), [],[], []))
+     | xexp' context (Il.RECORD [])    = 
+          (Prim_e (NilPrimOp (record []), [], [], []))
 
      | xexp' context (Il.RECORD rbnds) = 
        let
@@ -2525,6 +2754,7 @@ struct
 	   val exps = map (xexp context) il_exps
 
 	   fun mapper e = let val v = N.fresh_named_var "record_temp" 
+	                      val _ = typeof_count()
 			  in (Exp_b (v,TraceUnknown,e),
 			      Typeof_c (Var_e v),
 			      TraceUnknown,
@@ -2555,7 +2785,8 @@ struct
        let
 	   val exp = xexp context il_exp
 	   val sumcon = xcon context il_con
-       in  Prim_e (NilPrimOp (project (TilWord32.fromInt i)), [],[sumcon], [exp])
+       in  Prim_e (NilPrimOp (project (TilWord32.fromInt i)), 
+		   [], [sumcon], [exp])
        end
 (*
 	       handle e => (print "SUM_TAIL error\n";
@@ -2571,7 +2802,7 @@ struct
        let
 	   val body = xexp context il_exp1
 	   val result_type = xcon context il_con
-	   val (bound, _, handler) = toFunction context il_exp2
+	   val (bound, handler) = toFunction context il_exp2
        in
 	   Handle_e {body = body, bound = bound,
 		     handler = handler, result_type = result_type}
@@ -2579,31 +2810,36 @@ struct
 
      | xexp' context (Il.RAISE (il_con, il_exp)) = 
        let
-	   val exp = xexp context il_exp
-	   val con = xcon context il_con
-       in  Raise_e (exp, con)
+	 val exp = xexp context il_exp
+	 val con = xcon context il_con
+       in
+	 Raise_e (exp, con)
        end
 
      | xexp' context (Il.LET (bnds, il_exp)) = 
        let
-	   val {cbnd_cat, ebnd_cat, final_context=context'} = xbnds context bnds
-           val cbnds = flattenCatlist cbnd_cat
-           val ebnds = (map NU.makeConb cbnds) @ (flattenCatlist ebnd_cat)
-	   val exp = xexp context' il_exp
-       in  NU.makeLetE Sequential ebnds exp
+	 val {cbnd_cat, ebnd_cat, final_context=context'} =
+	   xbnds context bnds
+	 val cbnds = flattenCatlist cbnd_cat
+	 val ebnds = (map NU.makeConb cbnds) @ (flattenCatlist ebnd_cat)
+	 val exp = xexp context' il_exp
+       in
+	 NU.makeLetE Sequential ebnds exp
        end
 
      | xexp' context (Il.NEW_STAMP il_con) = 
-       let val con = xcon context il_con
-       in  Prim_e(NilPrimOp make_exntag, [],[con], [])
+       let 
+	 val con = xcon context il_con
+       in  
+	 Prim_e(NilPrimOp make_exntag, [],[con], [])
        end
 
      | xexp' context (Il.EXN_INJECT (s, il_tag, il_exp)) =
        let
-	   val tag = xexp context il_tag
-	   val exp = xexp context il_exp
+	 val tag = xexp context il_tag
+	 val exp = xexp context il_exp
        in
-           Prim_e (NilPrimOp (inj_exn s), [],[], [tag, exp])
+	 Prim_e (NilPrimOp (inj_exn s), [],[], [tag, exp])
        end
 
      | xexp' context (Il.COERCE(il_coercion,il_cons,il_exp)) = 
@@ -2653,7 +2889,8 @@ struct
 	 val expanded_con = xcon context il_expanded_con
 	 val mu_con = xcon context il_mu_con
 	 val exp = Fold_e(vars',expanded_con,mu_con)
-       in exp
+       in 
+	 exp
        end
 	 
   | xexp' context (Il.UNFOLD (vars, il_mu_con, il_expanded_con)) = 
@@ -2729,101 +2966,153 @@ struct
 
      | xexp' context (Il.INJ {sumtype, field, inject = eopt}) =
        let
-	   val sumcon = xcon context sumtype
-	   val field =  TilWord32.fromInt field
-	   val elist = (case eopt of
-			    NONE => []
-			  | SOME il_exp => [xexp context il_exp])
+	 val sumcon = xcon context sumtype
+	 val field  =  TilWord32.fromInt field
+	 val elist  = (case eopt of
+			 NONE => []
+		       | SOME il_exp => [xexp context il_exp])
        in
-	   Prim_e(NilPrimOp (inject field),[],[sumcon],elist)
+	 Prim_e(NilPrimOp (inject field),[],[sumcon],elist)
        end
 
-
      | xexp' context (Il.CASE {sumtype, arg=il_arg, arms=il_arms, bound,
-			       tipe,default=il_default}) =
+			       tipe, default=il_default}) =
        let
-	   (* We want to use the result type given to avoid type blowup *)
+	   (* We want to use the result type given, rather than
+              reconstructing the type, to avoid type blowup *)
 	   val result_type = xcon context tipe
 	   val sumcon = xcon context sumtype
 	   val exp = xexp context il_arg
 	   val (bound', context') = insert_rename_var(bound, context)
+
 	   fun xarm (n, NONE ) = NONE
-	     | xarm (n, SOME ilexp) = SOME(Word32.fromInt n, TraceUnknown, xexp context' ilexp)
+	     | xarm (n, SOME ilexp) = SOME(Word32.fromInt n, 
+					   TraceUnknown, 
+					   xexp context' ilexp)
 	   val arms = List.mapPartial (fn x => x) (mapcount xarm il_arms)
+
 	   val default = Util.mapopt (xexp context') il_default
        
-	in Switch_e(Sumsw_e {sumtype = sumcon,
-			     bound = bound',
-			     arg  = exp, arms = arms, 
-			     default = default,
-			     result_type = result_type})
+       in 
+	 Switch_e(Sumsw_e {sumtype = sumcon,
+			   bound = bound',
+			   arg  = exp, arms = arms, 
+			   default = default,
+			   result_type = result_type})
        end
 
-     | xexp' context (e as Il.EXN_CASE {arg = il_exp, arms = il_arms, default = il_default, tipe}) =
+     | xexp' context (e as Il.EXN_CASE {arg = il_exp, arms = il_arms, 
+					default = il_default, tipe}) =
        let
 	   val exp = xexp context il_exp
 	   val result_type = xcon context tipe
+           
+           (* Check that the arms are all single-component FIXes
+            *)
 	   val (bounds, tags, bodies) = 
 		Listops.unzip3
-		  (map (fn (tag,_,Il.FIX(false,_,[Il.FBND(_,var,_,_,e)])) => (var,tag,e)
-			| (_,_,il_arm) => (print "EXN_CASE MATCHn"; Ppil.pp_exp il_arm; raise Match)) il_arms)
+		  (map (fn (tag,_,Il.FIX(false,_,[Il.FBND(_,var,_,_,e)])) => 
+			     (var,tag,e)
+		         | (_,_,il_arm) => 
+			     (print "EXN_CASE MATCH"; 
+			      Ppil.pp_exp il_arm; 
+			      raise Match)) 
+		       il_arms)
 	   val (bound :: rest) = bounds
-	   val _ = if (List.all (fn v => N.eq_var(v,bound)) rest)
-		       then () else error "exn_case did not get same var in all arms"
+
+           (* Check that the elaborator uses the same variable
+              for each arm of the case, which it currently does. 
+            *)
+	   val _ = if (List.all (fn v => N.eq_var(v,bound)) rest) then
+	              ()
+		   else error "xexp': exn_case didn't get same var in all arms"
 
 	   val (bound', context') = insert_rename_var (bound, context)
 
-	   val arms' = 
-	       Listops.map2 (fn (tag,body) => (xexp context' tag, TraceUnknown,
-					       xexp context' body))
-                  (tags, bodies)
+	   val arms = 
+	       Listops.map2 (fn (tag,body) => 
+			          (xexp context' tag, 
+				   TraceUnknown,
+				   xexp context' body))
+                            (tags, bodies)
 
 	   val default = Util.mapopt (xexp context) il_default
        in
-	   Switch_e(Exncase_e {	bound = bound',
-				arg = exp, arms = arms',
-				default = default,
-				result_type = result_type})
+	   Switch_e(Exncase_e {bound = bound',
+			       arg = exp, 
+			       arms = arms,
+			       default = default,
+			       result_type = result_type})
        end
 
      | xexp' context (Il.MODULE_PROJECT (il_module, label)) =
        let
+           (* This code is slightly confusing.  It's not clear
+              how much, if any, of this work is redundant.
+            *)
 
+
+           (* Are we projecting the "it" label?
+            *)
            val is_it_proj = N.eq_label(label, IlUtil.it_lab)
 
+           (* Try to optimize the translation of this projection,
+              by recognizing it as part of a polymorphic instantiation
+            *)
 	   val mod_opt = 
 	       (case il_module of
-		    Il.MOD_APP(il_mod_fun, mod_arg) =>
-			(case (extractProjLabels il_mod_fun) of
-			     (Il.MOD_VAR v, lbls) => 
-				 let
-				     val ((_,v_r),_) = splitVar (v,context)
-				 in
-				     if ((!elaborator_specific_optimizations) andalso
-					 ((var_is_polyfun(context, v_r)) orelse is_it_proj)) then
-					 let
-					     val {ebnd_cat, cbnd_cat, name_c, name_r, ...} = 
-						 xmod context (mod_arg, NONE)
-					     val _ = mark_var_used (context, v_r)
-					 in 
-					     SOME (NU.makeLetE Sequential
-						   ((map NU.makeConb (flattenCatlist cbnd_cat)) @
-						    (flattenCatlist ebnd_cat))
-						   (NU.makeAppE 
-						    (NU.makeSelect (Var_e v_r) lbls) [name_c] [name_r] []))
-					 end
-				     else
-					 NONE
-				 end
-			   | _ => NONE)
-		  | _ => NONE)
+		  Il.MOD_APP(il_mod_fun, mod_arg) =>
+		    (case (extractProjLabels il_mod_fun) of
+		       (Il.MOD_VAR v, lbls) => 
+			 (* We have a path applied to an argument *)
+			 let
+			   val ((_,v_r),_) = splitVar (v,context)
+			 in
+			   if ((!elaborator_specific_optimizations) andalso
+			       ((var_is_polyfun(context, v_r)) orelse 
+				is_it_proj)) then
+			     (* It appears to be polymorphic instantiation
+                                and we're optimizing these.
+                              *)
 
+                             (* XXX:  Is it really possible to have a 
+                                 projection from a polymorphic instantiation
+                                 that doesn't end in "it", or another
+                                 discardable label?  If so, fun_part_r
+                                 might need to project "lbls @ [lbl]"
+                                 in such cases.
+                              *)
+			     let
+			       val {ebnd_cat, cbnd_cat, name_c, name_r, ...} = 
+				    xmod context (mod_arg, NONE)
+			       val _ = mark_var_used (context, v_r)
+			       val fun_part_r = 
+				 NU.makeSelect (Var_e v_r) lbls
+						  
+			     in 
+			       SOME (NU.makeLetE Sequential
+				     ((map NU.makeConb (flattenCatlist cbnd_cat)) @
+				      (flattenCatlist ebnd_cat))
+				     (NU.makeAppE 
+				      fun_part_r [name_c] [name_r] []))
+			     end
+			   else
+			     NONE
+			 end
+		     | _ => NONE)
+		| _ => NONE)
+
+           (* If we managed to optimize the translation, return this
+              optimized translation.  Otherwise, translate the entire
+              module.
+            *)
 	   val module = 
 	       (case mod_opt of 
 		    SOME module => module
 		  | NONE => 
 			let
-			    val {ebnd_cat, cbnd_cat, name_r, ...} = xmod context (il_module, NONE)
+			    val {ebnd_cat, cbnd_cat, name_r, ...} = 
+			      xmod context (il_module, NONE)
 			    val cbnds = flattenCatlist cbnd_cat
 			    val bnds = (map NU.makeConb cbnds) @ (flattenCatlist ebnd_cat)
 			in
@@ -2831,21 +3120,33 @@ struct
 			end)
 
        in
-	   if ((!elaborator_specific_optimizations) andalso is_it_proj) then
-	       module
-	   else
-               Prim_e (NilPrimOp (select label), [],[], [module])
+	 (* Even if it's a projection of the it label, we know that
+            the resulting run-time part of the module is not a singleton
+            record, but the value we want.  Otherwise, project out
+            the component.
+    
+            When does this happen?
+          *)
+	 if ((!elaborator_specific_optimizations) andalso is_it_proj) then
+	   module
+	 else
+	   Prim_e (NilPrimOp (select label), [],[], [module])
        end
 
-     | xexp' context (Il.SEAL (exp,_)) = xexp context exp
+     | xexp' context (Il.SEAL (exp,_)) = 
+         (* We can freely break abstraction, so we do.
+          *)
+         xexp context exp
 
-
+   (* xfbnds.  Translation of the core of the Il.FIX construct
+    *)
    and xfbnds context (is_recur, il_arrow, fbnds) = 
        let
 	   val recursive = if is_recur then Arbitrary else NonRecursive
 	   val totality = xeffect il_arrow
 	   val fun_names = map (fn Il.FBND(v,_,_,_,_) => v) fbnds
 	   val (fun_names', context') = insert_rename_vars (fun_names, context)
+
 	   fun mapper (Il.FBND(var1, var2, il_con1, il_con2, body)) = 
 	       let
 		   val var1' = rename_var(var1, context')
@@ -2853,37 +3154,94 @@ struct
 		   val con1 = xcon context'' il_con1
 		   val con2 = xcon context'' il_con2
 		   val body' = xexp context'' body
-	       in  (var1', Function{recursive = recursive, effect = totality, isDependent = false,
-				    tFormals = [], eFormals = [(var2', TraceUnknown, con1)], 
-				    fFormals=[], body = body', body_type = con2})
+	       in  
+		 (var1', Function{recursive = recursive, effect = totality, 
+				  isDependent = false, tFormals = [], 
+				  eFormals = [(var2', TraceUnknown, con1)], 
+				  fFormals=[], body = body', body_type = con2})
 	       end
-       in  map mapper fbnds
+       in  
+	 map mapper fbnds
        end
+         handle e => (print "uncaught exception in xfbnds\n";
+		      raise e)
 
-   handle e => (print "uncaught exception in xfbnds\n";
-		raise e)
+   (* xbnds.  Translation of a sequence of bindings.
 
-
+      Implemented by adding a bunch of unnecessary labels, so that
+      we get a sequence of sbnds, translating the sbnds, and then
+      throwing away all the label-related results.
+    *)
    and xbnds context bnds =
        let
 	   val temporary_labels = makeInternalLabels (length bnds)
 	   val sbnds = map Il.SBND (Listops.zip temporary_labels bnds)
 
-	   val {final_context, cbnd_cat, ebnd_cat, record_c_con_items,
-		record_c_knd_items, 
-		record_r_exp_items} = 
+	   val {final_context, cbnd_cat, ebnd_cat, ...} =
 		xsbnds context sbnds
-
        in
 	   {cbnd_cat = cbnd_cat,
 	    ebnd_cat = ebnd_cat,
 	    final_context = final_context}
        end
 
-   and xsig' context (con0,Il.SIGNAT_VAR v) = 
-          xsig' context (con0,case find_sig(context,v) of
-			        NONE => error "unbound signature variable"
-			      | SOME s => s)
+   (* xsig.  The wrapper function for translating signatures.
+
+              Because the type of the term part can refer to the
+              components of the type part, we can only translate
+              signatures given the name of the type part, con0.
+
+              That is, we can only translate signatures *of* something,
+              (rather than signatures in isolation), and con0 is
+              the compile-time part of that something.
+   *)
+
+   and xsig context (con, il_sig) =
+       let
+	   (* Tracing message on entry *)
+	   val this_call = ! xsig_count
+	   val _ = 
+	       if (!debug) then
+		   (xsig_count := this_call + 1;
+		    print ("\nCall " ^ (Int.toString this_call) ^ 
+			   " to xsig\n");
+		    if (!full_debug) then 
+		      (Ppil.pp_signat il_sig; print "\n") 
+		    else ())
+	       else ()
+
+           (* Do the translation *)
+	   val result = 
+	     xsig' context (con, il_sig)
+	        handle e => (if (!debug) 
+			       then (print ("Exception detected in call " ^ 
+					    (Int.toString this_call) ^ 
+					    " to xsig:\n");
+				     Ppil.pp_signat il_sig;
+				     print "\n")
+			     else ();
+			     raise e)
+       in  
+	 (* Tracing message on exit *)
+	 if (!debug) then 
+	   print ("Return " ^ (Int.toString this_call) ^ " from xsig\n") 
+	 else ();
+
+	 result
+       end
+
+   (* xsig'.  Translation of signatures.  
+              Should only be called by the wrapper function xsig,
+              and not even recursively.
+
+              Same arguments/results as xsig.
+    *)
+
+   and xsig' context (con0, Il.SIGNAT_VAR v) = 
+          xsig' context (con0,
+			 case find_sig(context,v) of
+			   NONE => error "unbound signature variable"
+			 | SOME s => s)
 
      |  xsig' context (con0,Il.SIGNAT_OF il_path) = 
           let val {cbnd_cat = cbnd_mod_cat, 
@@ -2910,16 +3268,12 @@ struct
 
 	   val _ = clear_memo var
 
-	   val is_polyfun_sig = 
-	       (case sig_rng of
-		    Il.SIGNAT_STRUCTURE([Il.SDEC(it_lbl,Il.DEC_EXP _)]) => N.eq_label(it_lbl,IlUtil.it_lab)
-		  | _ => false)
-
 	   val ((var_c, var_r), context) = splitNewVar (var, context)
 	   val (knd, con) = xsig context (Var_c var_c, sig_dom)
 	   val context = update_NILctx_insert_kind(context, var_c, knd)
 	       
-	   val (knd', con') = xsig context (App_c(con0, [Var_c var_c]), sig_rng)
+	   val (knd', con') = xsig context (App_c(con0, [Var_c var_c]), 
+					    sig_rng)
 
            val effect = xeffect arrow
 	       
@@ -2932,291 +3286,444 @@ struct
 			body_type = con'})
        end
 
-     | xsig' context (con0, Il.SIGNAT_STRUCTURE sdecs) = xsig_struct context (con0,sdecs)
-     | xsig' context (con0, Il.SIGNAT_SELF(_, SOME unselfSig, _)) = xsig' context (con0, unselfSig)
-     (* the self signature has no self-references; but rather has no internal variable uses *)
-     | xsig' context (con0, Il.SIGNAT_SELF(_, NONE, selfSig)) = xsig' context (con0, selfSig)
+     | xsig' context (con0, Il.SIGNAT_STRUCTURE sdecs) = 
+           xsig_struct context (con0,sdecs)
+
+     (* XXX The following 2 cases may never happen, since the imports
+        are unselfified before we get there, and the elaborator
+        never translates a user-written signature into SIGNAT_SELF
+      *)
+
+     | xsig' context (con0, Il.SIGNAT_SELF(_, SOME unselfSig, _)) = 
+	   (print "xsig' --- found SIGNAT_SELF with unselfified copy\n";
+	    xsig' context (con0, unselfSig))
+     (* the self signature has no self-references; 
+        but rather has no internal variable uses (???)
+      *) 
+     | xsig' context (con0, Il.SIGNAT_SELF(_, NONE, selfSig)) = 
+	   (* XXX:  Why don't we call unselfify here, since the previous
+                    case goes to the selfified version.
+            *)
+	   (print "xsig' --- found SIGNAT_SELF without unselfified copy\n";
+	    xsig' context (con0, selfSig))
 
 
-   and xsig_struct context (con0,sdecs) = 
+   (* xsig_struct.  Helper function used by xsig' to translate 
+                    structure signatures.
+    *)
+   and xsig_struct context (con0 : con, sdecs : Il.sdec list) = 
        let
+	   (* Translate the sdecs
+            *)
 	   val {crdecs, erdecs} =
 	       xsdecs context (con0, NilSubst.C.empty(), sdecs)
+
+           (* Create the kind part *)           
 	   val kind = Record_k (Sequence.fromList crdecs)
+
 	   val (erlabs, ervars, ercons) = Listops.unzip3 erdecs
+
+           (* Create the type part *)
 	   val type_r = Prim_c(Record_c (erlabs,SOME ervars), ercons)
-	   val type_r = (case (!elaborator_specific_optimizations,sdecs,erdecs) of
-			     (true,[Il.SDEC(it_lbl,_)],[(_,_,ercon)]) =>
+	     
+           (* If this is the signature of a single-element module
+              with the "it" label (and hence an artifact of encoding
+              polymorphism in the HIL), then "unbox" the result by
+              taking it out of the module.
+            *)
+	   val type_r = (case (!elaborator_specific_optimizations,
+			       sdecs, erdecs) of
+			     (true, [Il.SDEC(it_lbl,_)], [(_,_,ercon)]) =>
 				 (if (N.eq_label(it_lbl,IlUtil.it_lab))
 				      then ercon
 				  else type_r)
 			   | _ => type_r)
-       in  (kind, type_r)
+
+       in  
+	 (kind, type_r)
        end
 
-   and xsig context (con, il_sig) =
-       let
-	   val this_call = ! xsig_count
-	   val _ = 
-	       if (!debug) then
-		   (xsig_count := this_call + 1;
-		    print ("\nCall " ^ (Int.toString this_call) ^ " to xsig\n");
-		    if (!full_debug) then (Ppil.pp_signat il_sig; print "\n") else ())
-	       else ()
-	   val result = xsig' context (con, il_sig)
-	       handle e => (if (!debug) 
-				then (print ("Exception detected in call " ^ 
-					    (Int.toString this_call) ^ " to xsig:\n");
-				      Ppil.pp_signat il_sig;
-				      print "\n")
-			    else ();
-				raise e)
-       in  if (!debug) then print ("Return " ^ (Int.toString this_call) ^ " from xsig\n") else ();
-	    result
-       end
 		    
- (* Returns erdecs: term decs
-            crdecs: type decs*)
-   and xsdecs context (con,subst,sdecs) =
+   (* xsdecs.  Wrapper function for translating sdecs.
+ 
+      Assume
+         {erdecs, crdecs} = xsdecs in_context (con,subst,sdecs).
+      where
+         con is the type part of the structure whose signature
+            contains these sdecs. (See the arguments of xsig).
+    *)
+   and xsdecs context (con,subst,sdecs) : xsdecs_result =
        let
+	   (* Tracing message on entry *)
 	   val this_call = ! xsdecs_count
 	   val _ = if (! debug) then
 	            (xsdecs_count := this_call + 1;
-		     print ("Call " ^ (Int.toString this_call) ^ " to xsdecs\n");
-		     if (!full_debug) then (Ppil.pp_sdecs sdecs; print "\n";
-(*
-					    print "\nwith context = \n";
-					    NilContext_print context;
-*)
-					    print "\n\n") else ())
+		     print ("Call " ^ (Int.toString this_call) ^ 
+			    " to xsdecs\n");
+		     if (!full_debug) then 
+		       (Ppil.pp_sdecs sdecs; print "\n";
+			(*
+			 print "\nwith context = \n";
+			 NilContext_print context;
+			 *)
+			print "\n\n") 
+		     else ())
                    else ()
 
+           (* Rewrite the sdecs to get rid of datatype structures
+              and inefficient recursive-function definitions
+            *)
 	   val sdecs = rewrite_sdecs sdecs
 
-	   val result = xsdecs' context (con,subst,sdecs)
-	       handle e => (if (!debug) then (print ("Exception detected in call " ^ 
-						    (Int.toString this_call) ^ " to xsdecs\n");
-(*
-					      print "\nwith context = \n";
-					      print_splitting_context context;
-*)
-					      print "\n")
+           (* Translate the resulting sdecs
+            *)
+	   val result = 
+	     xsdecs' context (con,subst,sdecs)
+	        handle e => (if (!debug) then 
+			       (print ("Exception detected in call " ^ 
+				       (Int.toString this_call) ^ 
+				       " to xsdecs\n");
+				(*
+				 print "\nwith context = \n";
+				 print_splitting_context context;
+				 *)
+				print "\n")
 			    else ();
-				raise e)
+			    raise e)
 		   
        in
-	   if (!debug) then print ("Return " ^ (Int.toString this_call) ^ " from xsdecs\n") else ();
-	   result
+	 (* Tracing message on return *)
+	 if (!debug) then 
+	   print ("Return " ^ (Int.toString this_call) ^ " from xsdecs\n") 
+	 else ();
+	 
+	 result
        end
 
-  and rewrite_sdecs sdecs =
-       let 
-	   fun filter (Il.SDEC(lab,Il.DEC_MOD(var,_,_))) = not (N.is_dt lab)
-             | filter _ = true
+  (* rewrite_sdecs.  Transforms a sequence of IL declarations in
+         a fashion exactly parallel to the translations that
+         the rewrite_xxx functions do to sbnds.
+   *)
+   and rewrite_sdecs (sdecs : Il.sdec list) : Il.sdec list =
+     let 
+       fun filter (Il.SDEC(lab,Il.DEC_MOD(var,_,_))) = not (N.is_dt lab)
+	 | filter _ = true
+	   
+       fun loop [] = []
+	 | loop ((sdec as 
+		  Il.SDEC(lab,Il.DEC_EXP(top_var,il_con, _, _))) :: rest) = 
+	     if (N.is_cluster lab) then
+	       let
+                 (* XXX
+                      Why do we rewrite the declarations of the
+                      projections from this nest, instead of just
+                      translating them as-is as we do in the
+                      polymorphic case below?
+                 *)
 
-	   fun loop [] = []
-	     | loop ((sdec as 
-		     Il.SDEC(lab,Il.DEC_EXP(top_var,il_con, _, _))) :: rest) = 
-	        if (N.is_cluster lab) then
-		   let
-(*		       val _ = print "entered mono optimization case\n" *)
-		       val clist = (case il_con of
-					Il.CON_RECORD lclist => map #2 lclist
-				      | Il.CON_ARROW _ => [il_con]
-				      | _ => error "can't optimize mono fun")
-		       val numFunctions = length clist
-		       val (rest, external_labels, external_vars) = 
-			   getSdecNames numFunctions rest
-		       fun make_sdec (lbl,c) = Il.SDEC(lbl,Il.DEC_EXP(N.fresh_var(),c,NONE,false))
-		       val sdecs' = Listops.map2 make_sdec (external_labels,clist)
-		   in  sdecs' @ (loop rest)
-		   end
-	       else
-		   sdec::loop rest
-	     | loop ((sdec as 
-		     Il.SDEC(lbl,
-			     Il.DEC_MOD
-			     (top_var, true, s as
-			      Il.SIGNAT_FUNCTOR(poly_var, il_arg_signat,
-						Il.SIGNAT_STRUCTURE([Il.SDEC(them_lbl,
-									    Il.DEC_EXP(_,il_con,_,_))]),
-						arrow))))
-		     :: rest) = 
-	       if ((!do_polyrec)
-		   andalso (!elaborator_specific_optimizations) 
-	           andalso (N.eq_label (them_lbl, IlUtil.them_lab))) then
-                   (* if a polymorphic function has a "them" label rather than 
-                      an "it" label, then it is a polymorphic function nest whose
-                      code (i.e., this entire component) will be eliminated by the
-                      phase-splitter.  Therefore, the corresponding specification
-                      also is ignored. 
+		 (* val _ = print "entered mono optimization case\n" *)
+		 val clist = (case il_con of
+				Il.CON_RECORD lclist => map #2 lclist
+			      | Il.CON_ARROW _ => [il_con]
+			      | _ => error "can't optimize mono fun")
+		 val numFunctions = length clist
+		 val (rest, external_labels, external_vars) = 
+		   getSdecNames numFunctions rest
+		 fun make_sdec (lbl,c) = 
+		   Il.SDEC(lbl,Il.DEC_EXP(N.fresh_var(),c,NONE,false))
+		 val sdecs' = Listops.map2 make_sdec (external_labels,clist)
+	       in  sdecs' @ (loop rest)
+	       end
+	     else
+	       sdec::loop rest
+	 | loop ((sdec as 
+		  Il.SDEC(lbl,
+			  Il.DEC_MOD
+			  (top_var, true, s as
+			   Il.SIGNAT_FUNCTOR
+			     (poly_var, il_arg_signat,
+			      Il.SIGNAT_STRUCTURE([Il.SDEC(them_lbl,
+							   Il.DEC_EXP(_,il_con,
+								      _,_))]),
+			      arrow))))
+		 :: rest) = 
+	     if ((!do_polyrec)
+		 andalso (!elaborator_specific_optimizations) 
+		 andalso (N.eq_label (them_lbl, IlUtil.them_lab))) then
+	       
+	       (* if a polymorphic function has a "them" label rather
+		  than an "it" label, then it is a polymorphic
+		  function nest whose code (i.e., this entire
+		  component) will be eliminated by the phase-splitter.
+		  Therefore, the corresponding specification also is
+		  ignored.
 
-                      Note that the phase-splitter does some complicated transformations
-                      to the projections from such a nest, in order to turn polymorphic
-                      recursively-defined-functions into polymorphic recursion; however,
-                      the types of the projections, which we know immediately follow,
-                      are unchanged so we just continue here without doing anything special.
-                   *)
+                  Note that the phase-splitter does some complicated
+                  transformations to the projections from such a nest,
+                  in order to turn polymorphic
+                  recursively-defined-functions into polymorphic
+                  recursion; however, the types of the projections,
+                  which we know immediately follow, are unchanged so
+                  we just continue on and translate them without doing
+                  anything special.  
+		*)
 		   loop rest
 	       else
 		   sdec :: (loop rest)
 	     | loop (sdec::rest) = sdec::(loop rest)
 
+           (* Get rid of the inner-datatype structures
+            *)
 	   val sdecs = if !elaborator_specific_optimizations
 			   then List.filter filter sdecs
 		       else sdecs
-       in  loop sdecs
+       in  
+	 (* Compensate for the transformation of recursive-function
+	    definitions
+          *)
+	 loop sdecs
        end
    
+   (* xsdecs'.  The worker function for translating sequences of sdecs.
+                Should only be called by xsdecs (not even recursively).
+
+                Same arguments/results as xsdecs'.
+
+                The subsitution argument is used because the types
+                of the run-time part cannot refer directly to the
+                internal variable names of the compile-time parts.
+                Such references are replaced by projections from
+                the compile-time part, and the correspondence between
+                variables and projections is maintained in the substitution.
+    *)
    and xsdecs' context (con0, _, []) = {crdecs = nil, erdecs = nil}
 
      | xsdecs' context (con0, subst,  
-		    Il.SDEC(lbl, d as Il.DEC_MOD(var,is_poly,signat)) :: rest) =
+			Il.SDEC(lbl, d as Il.DEC_MOD(var,is_poly,signat)) 
+			  :: rest) =
        let
 	   val _ = clear_memo var
 	   val ((var_c, var_r), context') = splitNewVar (var, context)
+
+	   (* Split the signature *)
 	   val (knd, con) = xsig context' (Proj_c(con0, lbl), signat)
 	       
 	   val context' = update_NILctx_insert_kind(context', var_c, knd)
 
 	   val {crdecs, erdecs} =
-	       xsdecs' context' (con0, addToConSubst subst (var_c, Proj_c(con0, lbl)), rest)
+	       xsdecs' context' (con0, 
+				 addToConSubst subst (var_c, 
+						      Proj_c(con0, lbl)),
+				 rest)
 
+           (* If this module is due to the translation of polymorphism
+	      then we'll never refer to the compile-time part (because
+	      the instantiation will be optimized to only apply the
+	      run-time part) and so we don't need to define a
+	      compile-time part.
+	   *)
 	   val kill_con = is_poly andalso (! elaborator_specific_optimizations)
 
        in  {crdecs = if kill_con then
-                          crdecs
+	               crdecs
                      else
-                          ((lbl, var_c), knd) :: crdecs,
-	    erdecs = (lbl,var_r, NS.substConInCon subst con) :: erdecs}
+		       ((lbl, var_c), knd) :: crdecs,
+
+	    erdecs = (lbl, var_r, NS.substConInCon subst con) :: erdecs}
        end
 
-     | xsdecs' context (con0, subst, Il.SDEC(lbl, d as Il.DEC_EXP(var,il_con, _, _)) :: rest) =
+     | xsdecs' context (con0, subst, 
+			Il.SDEC(lbl, d as Il.DEC_EXP(var,il_con, _, _)) 
+			  :: rest) =
        let
-	   val con = xcon context il_con
-	   val (var', context') = insert_rename_var(var, context)
-	   val {crdecs, erdecs} = xsdecs' context' (con0, subst, rest)
+	 val con = xcon context il_con
+	 val (var', context') = insert_rename_var(var, context)
+	 val {crdecs, erdecs} = xsdecs' context' (con0, subst, rest)
        in
-	   {crdecs = crdecs,
-	    erdecs = (lbl,var',NS.substConInCon subst con) :: erdecs}
+	 {crdecs = crdecs,
+	  erdecs = (lbl,var',NS.substConInCon subst con) :: erdecs}
        end
 
-     | xsdecs' context (con0, subst, sdecs as Il.SDEC(lbl, d as Il.DEC_CON(var, il_knd, 
-									maybecon,_))::rest)=
+     | xsdecs' context (con0, subst, 
+			sdecs as Il.SDEC(lbl, d as Il.DEC_CON(var, il_knd, 
+							      maybecon,_))
+			  :: rest)=
        let
-	   val knd = 
-	       (case maybecon of
-		    NONE => xkind context il_knd
-		  | SOME il_con => Single_k(xcon context il_con))
+	 val knd = 
+	   (case maybecon of
+	      NONE => xkind context il_knd
+	    | SOME il_con => Single_k(xcon context il_con))
+	      
+	 val (var', context') = insert_rename_var(var, context)
+	 val context'' = update_NILctx_insert_kind(context', var', knd)
 
-	   val (var', context') = insert_rename_var(var, context)
-	   val context'' = update_NILctx_insert_kind(context', var', knd)
-	   val {crdecs, erdecs} = 
-	       xsdecs' context'' (con0, addToConSubst subst (var', Proj_c(con0, lbl)),rest)
+	 val {crdecs, erdecs} = 
+	       xsdecs' context'' (con0, 
+				  addToConSubst subst (var', Proj_c(con0,lbl)),
+				  rest)
 
-      in   {crdecs = ((lbl, var'), knd) :: crdecs,
-	    erdecs = erdecs}
+       in   
+	 {crdecs = ((lbl, var'), knd) :: crdecs,
+	  erdecs = erdecs}
        end
 
-   and xkind context (Il.KIND) = Type_k
-     | xkind context (Il.KIND_TUPLE n) = 
-       let val k = NilDefs.kind_type_tuple n
-       in k
-       end
+   (* xkind.   Translation of kinds.
+               No wrapper function is created because HIL kinds are
+               so simple.
+    *)
+   and xkind context (Il.KIND : Il.kind) : kind = Type_k
+
+     | xkind context (Il.KIND_TUPLE n) = NilDefs.kind_type_tuple n
+
      | xkind context (Il.KIND_ARROW (n,il_kres)) =
        let val args = map0count (fn _ => (N.fresh_var(), Type_k)) n
 	   val kres = xkind context il_kres
-           val k = Arrow_k (Open, args, kres)
-       in  k
+       in
+           Arrow_k (Open, args, kres)
        end
 
-
+   (* xHILctx.  Translation of the initial HIL context into
+                a list of imports and an initial splitting context.
+    *)
    fun xHILctx HILctx =
-       let open Il
-	   fun dopc(v,l,pc,(imports,context)) = 
+       let 
+	   fun dopc(v, l, pc, (imports, context : splitting_context)) = 
 	       (case pc of
 		    Il.PHRASE_CLASS_EXP (_,il_type, _, _) => 
 			let val nil_type = xcon context il_type
 			    val (v',context') = insert_rename_var(v,context)
-			in  (ImportValue(l,v',TraceUnknown,nil_type)::imports, context')
+                            (* We rename this variable, but we don't need
+                               to add 
+			            v' : nil_type
+                               to the NIL context because we currently don't
+                               need term variables in this context.
+                            *)
+
+			    (* XXX: Why don't we need an insert_label
+			       in this case?  Ask Leaf or someone...
+                             *)
+			in  (ImportValue(l,v',TraceUnknown,nil_type)::imports,
+			     context')
 			end
 		  | Il.PHRASE_CLASS_CON (il_con, il_kind, il_conopt, _) => 
 			let
-			    val kind = xkind context il_kind
-			    val nil_con = 
-				(case il_conopt of
-				     NONE => NONE
-				   | SOME il_con => SOME (xcon context il_con))
-			    val (v',context') = insert_rename_var(v,context)
-			    val it = ImportType(l,v',(case nil_con of
-						 NONE => kind
-					       | SOME c => Single_k c))
-			    val context'' = 
-				(case nil_con of 
-				     NONE => update_NILctx_insert_kind(context', v', kind)
-				   | SOME c => update_NILctx_insert_kind_equation(context', v', c))
-			    val context''' = update_NILctx_insert_label(context'',l,v')
+			  val kind = xkind context il_kind
+			  val nil_con = 
+			    (case il_conopt of
+			       NONE => NONE
+			     | SOME il_con => SOME (xcon context il_con))
+			  val (v',context') = insert_rename_var(v,context)
+			  val it = ImportType(l,v',(case nil_con of
+						      NONE => kind
+						    | SOME c => Single_k c))
+			  (* For imported types we do need to insert them
+                             into the context.
+                           *)
+			  val context'' = 
+			    (case nil_con of 
+			       NONE => update_NILctx_insert_kind(context', v',
+								 kind)
+			     | SOME c => 
+				 update_NILctx_insert_kind_equation(context', 
+								    v', c))
+
+                          (* Maintain the mapping between labels and
+                             (renamed) variables for imports.
+                           *)
+			  val context''' = 
+			        update_NILctx_insert_label(context'',l,v')
+
 			in  (it::imports, context''')
 			end
+
 		  | Il.PHRASE_CLASS_MOD (_,is_polyfun,il_sig) => 
 			let
-			    val (l_c,l_r) = N.make_cr_labels l
-			    val ((v_c, v_r),context) = splitNewVar (v,context)
-			    val il_sig = IlContext.UnselfifySig IlContext.empty_context (PATH(v,[]), il_sig)
-			    val (knd, type_r) = xsig context (Var_c v_c, il_sig)
+			  val (l_c,l_r) = N.make_cr_labels l
+			  val ((v_c, v_r),context) = splitNewVar (v,context)
+
+                          (* Make sure the signature is unselfified
+                             (so that it is a valid signature)
+                           *)
+			  val il_sig = IlContext.UnselfifySig 
+			                 IlContext.empty_context 
+					 (Il.PATH(v,[]), il_sig)
+
+			  val (knd, type_r) = xsig context (Var_c v_c, il_sig)
 				
-			    val context = update_NILctx_insert_kind(context, v_c, knd)
-			    val context = update_NILctx_insert_label(context, l_c, v_c)
+			  val context = update_NILctx_insert_kind(context, 
+								  v_c, knd)
+			  val context = update_NILctx_insert_label(context, 
+								   l_c, v_c)
 				
-			    val iv = ImportValue(l_r,v_r,TraceUnknown,type_r)
-			    val it = ImportType(l_c,v_c,knd)
+			  val iv = ImportValue(l_r,v_r,TraceUnknown,type_r)
+			  val it = ImportType(l_c,v_c,knd)
 			in
-			    if is_polyfun then
-				(iv::imports, update_polyfuns(context, v_r))
-			    else
-				(iv::it::imports, context)
+			  (* If we're importing a polymorphic function,
+			     then we don't ever need the type part.
+			   *)
+			  if is_polyfun then
+			    (iv::imports, update_polyfuns(context, v_r))
+			  else
+			    (iv::it::imports, context)
 			end
+
 		  | Il.PHRASE_CLASS_SIG(v,il_sig) => 
-			(imports,update_insert_sig(context,v,il_sig)))
+			(* Just store any signature definition we come
+			   across.
+                         *)
+			(imports,
+			 update_insert_sig(context,v,il_sig)))
+
+           (* Process each HIL context entries *)
 	   fun folder (p,acc) =
-	       let val SOME(l,pc) = IlContext.Context_Lookup_Path(HILctx,p)
-	       in  (case ((!elaborator_specific_optimizations) andalso (N.is_dt l), 
-			  N.is_nonexport l, p) of
-			(false, false, PATH(v,[])) => dopc(v,l,pc,acc)
+	       let 
+		 val SOME(l,pc) = IlContext.Context_Lookup_Path(HILctx,p)
+	       in  
+		 (* Skip the datatype labels 
+		  *)
+		 (case ((!elaborator_specific_optimizations) andalso 
+			(N.is_dt l), 
+			N.is_nonexport l, p) of
+			(false, false, Il.PATH(v,[])) => dopc(v,l,pc,acc)
 		      | _ => acc)
 	       end
-	   val (rev_imports,context) = foldl folder ([],make_initial_splitting_context HILctx)
-	                                  (IlContext.Context_Ordering HILctx)
+
+	   val (rev_imports,context) = 
+	     foldl folder ([], make_initial_splitting_context HILctx)
+	                  (IlContext.Context_Ordering HILctx)
        in  (rev rev_imports, context)
        end
 
-
+    (* The top-level function for the phase-splitter.
+     *)
     fun phasesplit (HILctx : Il.context, 
-		    sbnd_entries : (Il.sbnd option * Il.context_entry) list) : Nil.module = 
+		    sbnd_entries : (Il.sbnd option * Il.context_entry) list) 
+              : Nil.module = 
 	let
 	    val _ = reset_memo()
 
-            (* we move all the externs into the context first:
-	       this does not always work if the externs depend on
-	       things in the sbnd_entries list *)
+            (* We move all the externs into the context first.
 
+	       XXX: this does not always work if the externs depend on
+	       things in the sbnd_entries list 
+             *)
 	    fun folder((SOME sbnd,Il.CONTEXT_SDEC sdec),(ctxt,sbnds)) = 
-		(ctxt, (sbnd,sdec)::sbnds)
+		  (ctxt, (sbnd,sdec)::sbnds)
 	      | folder((NONE, ce),(ctxt,sbnds)) = 
-		(IlContext.add_context_entries(ctxt,
-		      [case ce of
-			   Il.CONTEXT_SDEC(Il.SDEC(l,dec)) => 
-			       Il.CONTEXT_SDEC(Il.SDEC(l,IlContext.SelfifyDec ctxt dec))
-			 | _ => ce]),
-		 sbnds)
+		  (IlContext.add_context_entries
+		    (ctxt, [case ce of
+			      Il.CONTEXT_SDEC(Il.SDEC(l,dec)) => 
+				Il.CONTEXT_SDEC
+				    (Il.SDEC(l,IlContext.SelfifyDec ctxt dec))
+			    | _ => ce]),
+		    sbnds)
+
 	    val (HILctx,rev_sbnd_sdecs) = foldl folder (HILctx,[]) sbnd_entries
 	    val sbnds_sdecs = rev rev_sbnd_sdecs
 	    val sbnds = map #1 sbnds_sdecs
 	    val sdecs = map #2 sbnds_sdecs
 
-
-
-            (* Compute the initial context and imports *)
+            (* Debugging printing *)
 	    val _ = 
 		if (!full_debug) then
 		    (print "\nInitial HIL context varlist:\n";
@@ -3229,10 +3736,14 @@ struct
 		else
 		    ()
 		    
+            (* Compute the initial context and imports 
+	     *)
 	    val (imports,initial_splitting_context) = 
 		Stats.subtimer("Phase-split-ctxt",xHILctx)
 		HILctx
 		
+
+            (* Debugging printing *)
 	    val _ = 
 		if (!full_debug) then
 		    (print "\nInitial NIL context:\n";
@@ -3240,9 +3751,12 @@ struct
 		     print "\n")
 		else
 		    ()
+
+
 	    val _ = msg "  Initial context is phase-split\n"
 
-	    (* Phase-split the bindings *)
+	    (* Phase-split the bindings 
+             *)
 	    val {cbnd_cat, ebnd_cat, final_context, ...} =
 		xsbnds initial_splitting_context sbnds
 	    val cbnds = map NU.makeConb (flattenCatlist cbnd_cat)
@@ -3255,13 +3769,16 @@ struct
                nil_final_context
              *)
             val used = get_used initial_splitting_context 
+
 	    val _ = msg "  Bindings are phase-split\n" 
 
-	    fun filtering l = if !debug
-				  then print ("filtering import " ^ N.label2string l ^ "\n")
+	    fun filtering l = if !debug then
+	                         print ("filtering import " ^ N.label2string l
+				        ^ "\n")
 			      else ()
 		
-	     (* Filter out the unused imports *)
+	    (* Filter out the unused imports 
+	     *)
 	    fun filter_imports [] = ([], used)
               | filter_imports ((iv as ImportValue(l,v,_,c)) :: rest) =
 		   let
@@ -3285,54 +3802,80 @@ struct
 		       else
 			   (filtering l; result)
 		   end
-	    val imports = if (!killDeadImport) then #1 (filter_imports imports) else imports
+
+	    val imports = if (!killDeadImport) then 
+	                    #1 (filter_imports imports) 
+			  else 
+			    imports
 
 	    val _ = msg "  Imports are computed\n" 
 
 
-	    (* create the exports *)
+	    (* Create the exports 
+	     *)
 	    fun folder ((Il.SDEC(l,dec)),exports) = 
 		    (case (not (N.is_nonexport l) andalso
 			   not ((N.is_dt l) andalso
                                 (!elaborator_specific_optimizations)), dec) of
+                         (* if the label is marked don't export, or
+                            its an internal datatype label that will be
+                            dropped, then don't export it.
+                          *)
 			 (false,_) => exports
+
 		       | (true,Il.DEC_EXP (v,_,_,_)) => 
-			     let val v' = rename_var (v, final_context)
-			     in  (ExportValue(l,v')::exports)
+			     let 
+			       val v' = rename_var (v, final_context)
+			     in
+			       (ExportValue(l,v')::exports)
 			     end
+
 		       | (true,Il.DEC_CON (v,_,_,_)) =>
 			     let 
-				 val v' = rename_var (v, final_context)
-				 val k = NilContext.find_kind(nil_final_context, v')
-				     handle e => (print "exception while doing DEC_CON\n";
-						  raise e)
-			     in  (ExportType(l,v')::exports)
+			       val v' = rename_var (v, final_context)
+			     in  
+			       (ExportType(l,v')::exports)
 			     end
+
 		       | (true,Il.DEC_MOD (v,is_polyfun,s)) => 
-			     let val (lc,lr) = N.make_cr_labels l
-				 (* Already bound *)
-				 val ((vc,vr),_) = splitVar (v,final_context)
-				 val exports = 
-				     if is_polyfun then
-					 (ExportValue(lr,vr)::exports)
-				     else 
-					 (ExportValue(lr,vr)::
-					  ExportType(lc,vc)::
-					  exports)
-			     in  exports
+			     let 
+			       (* Split the label *)
+			       val (lc,lr) = N.make_cr_labels l
+			       (* v should already be bound in the context*)
+			       val ((vc,vr),_) = splitVar (v,final_context)
+
+			       val exports = 
+				 
+				 if (is_polyfun andalso
+				     (!elaborator_specific_optimizations)) then
+				   (* Translations of polymorphic functions
+				      won't generate a type part. *)
+				   (ExportValue(lr,vr)::exports)
+				 else 
+				   (ExportValue(lr,vr)::
+				    ExportType(lc,vc)::
+				    exports)
+			     in  
+			       exports
 			     end)
-	    val exports : export_entry list = rev(foldr folder [] sdecs)
+
+	    val exports : export_entry list = rev (foldr folder [] sdecs)
+
 	    val _ = msg "  Exports are phase-split\n" 
 
+            (* We finally have the phase-split compilation unit.
+             *)
 	    val nilmod = MODULE{bnds = bnds, 
 				imports = imports,
 				exports = exports}
 
+            (* Release the memory for the memo pad immediately, rather
+	       than waiting for the next time the phase-splitter runs.
+             *)
 	    val _ = reset_memo()
-	in  nilmod
+	in  
+	  nilmod
 	end
-
-
 
 end
 
