@@ -1,0 +1,3 @@
+(*$include LINKASM *)
+
+structure Linkalpha : LINKASM
