@@ -6,7 +6,7 @@
 # run program -- run program, aborting on non-zero exit status
 fn run { s=(){
 	echo running $*
-	echo $*
+	$*
 	s=$status
 	if(!~ $s 0){
 		echo >[1=2] program exitted with non-zero status, aborting
