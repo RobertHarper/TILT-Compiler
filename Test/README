@@ -24,11 +24,8 @@ In the case of Exit, subsequent lines contain the output expected from
 the test code.  (The test code's exit status is ignored.  See
 runtest.sml for more information.)
 
-The mapfile is a TILT manager group file.  The harness will use TILT
-to build it.  If the expected result is not Reject, then the mapfile
-must make an executable named "Test." ^ $objtype ^ ".exe".  The name
-is important because the harness has to find the generated executable
-(eg, ml96/Test/n/Test.sparc.exe).
+The mapfile is a TILT project description.  The harness will create an
+executable containing all the units in this description.
 
 Each test directory should also contain ML source files (referenced by
 the mapfile) and documentation, but there are as yet no conventions

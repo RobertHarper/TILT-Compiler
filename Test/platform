@@ -1,9 +1,0 @@
-switch(`{uname -s}){
-case SunOS
-	objtype=sparc
-case OSF1
-	objtype=alpha
-case *
-	echo >[2=1] 'can not run TILT binaries on this platform'
-	exit 1	# ie, Bomb
-}

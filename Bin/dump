@@ -1,5 +1,4 @@
-#!/usr/local/bin/rc
-bindir=`{dirname $0}
-top=`{cd $bindir/..; pwd}
-. $top/Test/platform
-exec $top/Bin/$objtype/dump $*
+#!/bin/sh
+bindir=`dirname "$0"`
+cputype=`"$bindir"/cputype`
+exec "$bindir"/$cputype/dump ${1+"$@"}

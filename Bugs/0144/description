@@ -11,6 +11,8 @@ Code:
 Transcript:  
 Comments:    
 Fix:         
+	The assembler label bug is fixed.
+	The test m0119 continues to fail for other reasons.
 Test: m0119
-Owner: 
-Status: open
+Owner: swasey
+Status: closed

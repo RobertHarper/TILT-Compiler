@@ -1,0 +1,19 @@
+#!/bin/sh
+bindir=`dirname "$0"`
+bindir=`cd "$bindir"; pwd`
+testdir=`cd "$bindir"/../Test; pwd`
+cd "$testdir"
+
+# Check the status marker, ignoring comments and blank lines
+awk '/^#|^$/ {next} $2 ~ /pass|fail|skip/ {next} {print "Bad status marker for " $1}' testlist.txt
+
+# Say which ones we're skipping
+echo Skipping:  `awk '/^#/ {next} $2 ~ /skip/ {print $1 " "}' testlist.txt`
+
+# Run the ones we expect to fail
+echo 'These tests should fail....'
+"$bindir"/runtest '@fixheap=20000' ${1+"$@"} -F `awk '/^#/ {next} $2 ~ /fail/ {print $1}' testlist.txt`
+
+# Run the ones we expect to succeed
+echo 'These tests should succeed....'
+"$bindir"/runtest '@fixheap=20000' ${1+"$@"} -S `awk '/^#/ {next} $2 ~ /pass/ {print $1}' testlist.txt`

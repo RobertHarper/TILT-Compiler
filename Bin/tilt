@@ -1,6 +1,6 @@
-#!/usr/local/bin/rc
-bindir=`{dirname $0}
-top=`{cd $bindir/..; pwd}
-TILTROOT=$top
-. $top/Test/platform
-exec $top/Bin/$objtype/tilt $*
+#!/bin/sh
+bindir=`dirname "$0"`
+cputype=`"$bindir"/cputype`
+TILTROOT=`cd "$bindir"/..; pwd`
+export TILTROOT
+exec "$bindir"/$cputype/tilt ${1+"$@"}

@@ -31,6 +31,11 @@ opaque signature ascription.  This should eliminate the need for
 xdecspec as well.  Perry may have had reasons for this that we don't
 understand, though.
 
+External interfaces are now opaque.  xcoerced_seal no longer tries to
+return a transparant signature; these "leaky" signatures were not well
+formed unless the module being coerced was valuable and they are no
+longer needed.  -dave
+
 Test: *
-Owner: *
-Status: open
+Owner: swasey
+Status: closed

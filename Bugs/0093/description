@@ -38,5 +38,9 @@ Code:
 Transcript:
 Comments:
 Fix:
-Owner:
-Status: open
+
+	Implemented separate compilation.  TM.txt needs to be updated
+	for the new manager.  -dave
+
+Owner: swasey
+Status: closed

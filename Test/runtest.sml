@@ -1,14 +1,14 @@
 (*
 NAME
-	regress, runall, runtest, tilt, tilt-nj, platform
+	regress, runall, runtest, tilt, tilt-nj
 		- regression test harness for the TILT compiler
 
 SYNOPSIS
 	../Bin/regress [all | nj | tilt] [outfile]
 
-	./runall [-fnc]
+	../Bin/runall [-fnc]
 
-	./Runtest.$objtype.exe [-fncFS] testdir ...
+	../Bin/runtest [-fncFS] testdir ...
 
 	../Bin/tilt [tilt-options]
 	../Bin/tilt-nj [tilt-options]
@@ -58,21 +58,17 @@ DESCRIPTION
 
 	Tilt and tilt-nj are the TILT executables used by runtest.
 
-	Platform sets the environment variable $objtype which is used
-	by runall and tilt to help find TILT executables.
-
 EXAMPLES
 	In order to use the harness, you must build command-line
 	versions of TILT and compile the test harness.  The glorious
 	details (which are handled by ../Bin/regress) are:
 
 	1. Check out the sources.
-	2. Compile the runtime with gmake runtime inside ml96/Runtime.
-	3. Compile TILT under SML/NJ with gmake heap inside ml96.
-	4. Compile the Basis with ./Bin/tilt-nj -b mapfile-basis inside ml96.
-	5. Compile native TILT with ./Bin/tilt-nj -m mapfile-all
-	   inside ml96.
-	6. Compile runtest with ../Bin/tilt-nj -m mapfile inside ml96/Test.
+	2. Compile the runtime with make runtime inside ml96.
+	3. Compile TILT under SML/NJ with make tilt_heap inside ml96.
+	4. Compile the Basis with make basis inside ml96.
+	5. Compile native TILT with make all inside ml96 (optional).
+	6. Compile runtest with make runtest inside ml96.
 	7. Choose a til_slave script.  For a reasonable default, do
 	   ln -s til_slave_local_xterm til_slave inside ml96/Bin.
 
@@ -81,16 +77,23 @@ EXAMPLES
 	Once these steps are complete, you can run individual tests:
 
 		cd ml96/Test
-		./Runtest.sparc.exe -n 0001 0003
+		../Bin/runtest -n 0001 0003
 
 	Or you can run them all:
 
 		cd ml96/Test
-		./runall -n
+		../Bin/runall -n
 
 SEE ALSO
 	../Doc/tilt.1
 	README
+*)
+
+(*
+	XXX: TILT's Util can now handle child processes as well as runtest. Runtest
+	should use that.
+
+	XXX: Runtest should use TILT's Platform to check the platform.
 *)
 
 signature BUF =
