@@ -1,5 +1,5 @@
-functor Alpha(structure ArgNil : NIL) :(*> *)
-   ALPHA (*where structure Nil = ArgNil *)=
+functor Alpha(structure ArgNil : NIL) :> 
+   ALPHA where structure Nil = ArgNil =
   struct
 
     structure Nil = ArgNil

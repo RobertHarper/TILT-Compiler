@@ -1,8 +1,8 @@
 functor NilContextFn(structure ArgNil : NIL
 		     structure PpNil : PPNIL
 		     structure Cont : CONT
-		     sharing PpNil.Nil = ArgNil) :(*> *)
-   NILCONTEXT (*where structure Nil = ArgNil *)= 
+		     sharing PpNil.Nil = ArgNil) :> 
+   NILCONTEXT where structure Nil = ArgNil = 
 struct
   structure Nil = ArgNil
 

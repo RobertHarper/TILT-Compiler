@@ -9,8 +9,10 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 		    sharing NilUtil.Nil = NilContext.Nil = Alpha.Nil = PpNil.Nil = ArgNil
 		    and Annotation = ArgNil.Annotation
 		    and Prim = ArgNil.Prim = PrimUtil.Prim
-		    and type NilUtil.alpha_context = Alpha.alpha_context) :(*> *)
-  NILSTATIC (*where structure Nil = ArgNil and type context = NilContext.context *)= 
+		    and type NilUtil.alpha_context = Alpha.alpha_context
+		    and type PrimUtil.con = ArgNil.con
+		    and type PrimUtil.exp = ArgNil.exp) :>
+  NILSTATIC where structure Nil = ArgNil and type context = NilContext.context = 
 struct	
   
   structure Annotation = Annotation
@@ -80,11 +82,18 @@ struct
     val fresh_var = Name.fresh_var
     val assoc_eq = Listops.assoc_eq
     val eq_len = Listops.eq_len
+    val eq_len3 = Listops.eq_len3
     val map_second = Listops.map_second
-    val zip3 = Listops.zip3
-    val unzip3 = Listops.unzip3
-    val unzip = ListPair.unzip
+    val foldl_acc = Listops.foldl_acc
+    val map3 = Listops.map3
+    val app2 = Listops.app2
+    val app3 = Listops.app3
     val zip = ListPair.zip
+    val zip3 = Listops.zip3
+    val unzip = ListPair.unzip
+    val unzip3 = Listops.unzip3
+    val unzip4 = Listops.unzip4
+    val all3 = Listops.all3
     val map = List.map
     val same_intsize = PrimUtil.same_intsize
     val same_floatsize = PrimUtil.same_floatsize
@@ -96,14 +105,174 @@ struct
 
   fun error s = Util.error "nilstatic.sml" s
 
+  fun c_all pred fc = 
+    let
+      fun all [] = true
+	| all (fst::rest) = 
+	if pred fst then
+	  all rest
+	else
+	  fc fst
+    in
+      all
+    end
+
+  fun c_all1 pred fc = 
+    let
+      fun all [] = true
+	| all (fst::rest) = 
+	if pred fst then
+	  all rest
+	else
+	  fc (SOME fst)
+    in
+      all
+    end
+
+  fun c_all2 pred fc = 
+    let
+      fun all ([],[]) = true
+	| all (a::arest,b::brest) = 
+	if pred (a,b) then
+	  all (arest,brest)
+	else
+	  fc (SOME (a,b))
+	| all _ = fc NONE
+    in
+      all
+    end
+
+  fun c_all3 pred fc = 
+    let
+      fun all ([],[],[]) = true
+	| all (a::arest,b::brest,c::crest) = 
+	if pred (a,b,c) then
+	  all (arest,brest,crest)
+	else
+	  fc (SOME (a,b,c))
+	| all _ = fc NONE
+    in
+      all
+    end
+
   fun printl s = print (s^"\n")
   fun lprintl s = print ("\n"^s^"\n")
+
+
+  fun perr_e exp = 
+    (printl "Expression is";
+     PpNil.pp_exp exp)
+
+  fun o_perr_e s opt = 
+    let
+      val _ = case opt 
+		of (SOME exp) => perr_e exp
+		 | NONE => printl s
+    in
+      false
+    end
+
+  fun perr_c con =
+    (printl "Constructor is";
+     PpNil.pp_con con)
+
+  fun o_perr_c s opt = 
+    let
+      val _ = case opt 
+		of (SOME con) => perr_c con
+		 | (NONE) => printl s
+    in
+      false
+    end
+
+  fun perr_k kind = 
+    (printl "Kind is";
+     PpNil.pp_kind kind)
+
+  fun b_perr_k kind = (perr_k kind;false)
+
+  fun o_perr_k s opt = 
+    let
+      val _ = case opt 
+		of (SOME kind) => perr_k kind
+		 | (NONE) => printl s
+    in
+      false
+    end
+
+  fun perr_e_c (exp,con) = 
+    (printl "Expression is";
+     PpNil.pp_exp exp;
+     lprintl "of type";
+     PpNil.pp_con con)
+
+  fun o_perr_e_c s opt = 
+    let
+      val _ = 
+	case opt
+	  of (SOME (exp,con)) => perr_e_c (exp,con)
+	   | (NONE) =>  printl s
+    in
+      false
+    end
+
+  fun perr_c_c (con1,con2) = 
+    (printl "Expected constructor";
+     PpNil.pp_con con1;
+     printl "Found constructor";
+     PpNil.pp_con con2)
+
+  fun o_perr_c_c s opt = 
+    let
+      val _ = 
+	case opt 
+	  of SOME cons => perr_c_c cons
+	   | NONE => printl s
+    in
+      false
+    end
+
+  fun perr_k_k (kind1,kind2) = 
+    (printl "Expected kind";
+     PpNil.pp_kind kind1;
+     printl "Found kind";
+     PpNil.pp_kind kind2)
+
+  fun o_perr_k_k s opt = 
+    let
+      val _ = 
+	case opt 
+	  of SOME kinds => perr_k_k kinds
+	   | NONE => printl s
+    in
+      false
+    end
+
+  fun perr_e_c_c (exp,con1,con2) = 
+    (printl "Expression is";
+     PpNil.pp_exp exp;
+     lprintl "Expected type";
+     PpNil.pp_con con1;
+     lprintl "Found type";
+     PpNil.pp_con con2)
+
+  fun o_perr_e_c_c s opt = 
+    let
+      val _ = 
+	case opt
+	  of (SOME args) => perr_e_c_c args
+	   | NONE => printl s
+    in
+      false
+    end
+
   fun split ls = 
       let fun split' _ [] = error "split given empty list"
 	    | split' acc [x] = (rev acc,x)
 	    | split' acc (a::rest) = split' (a::acc) rest
       in split' [] ls
       end
+
   fun strip_singleton (Singleton_k(_,k,_)) = strip_singleton k
     | strip_singleton k = k
 
@@ -119,6 +288,9 @@ struct
 	 | NONE => Singleton_k (get_phase kind,kind,con)
     else
       kind
+
+  fun is_var_e (Var_e v) = true
+    | is_var_e _ = false
 
   fun is_exn_con (Prim_c (Exn_c,_)) = true
     | is_exn_con (Annotate_c (_,con)) = is_exn_con con
@@ -140,6 +312,10 @@ struct
     | strip_float (Annotate_c (_,con)) = strip_float con
     | strip_float _ = NONE
 
+  fun strip_int (Prim_c (Int_c intsize,[])) = SOME intsize
+    | strip_int (Annotate_c (_,con)) = strip_int con
+    | strip_int _ = NONE
+
   fun strip_sum (Prim_c (Sum_c {tagcount,known},cons)) = SOME (tagcount,known,cons)
     | strip_sum (Annotate_c (_,con)) = strip_sum con
     | strip_sum _ = NONE
@@ -147,6 +323,11 @@ struct
   fun strip_arrow (AllArrow_c body) = SOME body
     | strip_arrow (Annotate_c (_,con)) = strip_arrow con
     | strip_arrow _ = NONE
+
+  fun get_arrow_return con = 
+    case strip_arrow con
+      of SOME (_,_,_,_,_,body_c) => SOME body_c
+       | NONE => NONE
 
   fun strip_record (Prim_c (Record_c labels,cons)) = SOME (labels,cons)
     | strip_record (Annotate_c (_,con)) = strip_record con
@@ -195,11 +376,6 @@ struct
     
   fun varConConSubst var con = substConInCon (subst_fn var con)
     
-  fun primKind ((Int_c W64) | 
-		(Float_c F32) |
-		(Float_c F64)) = Type_k Runtime
-    | primKind _ = Word_k Runtime
-
   fun do_beta_fun (Let_c (sort,cbnds,Annotate_c (_,con)),actuals) = 
     do_beta_fun (Let_c (sort,cbnds,con),actuals) 
     | do_beta_fun (Let_c (sort,((Open_cb (var,formals,body,body_kind))::rest | 
@@ -358,48 +534,54 @@ struct
       in  res
       end
 
+  and pcon_valid (D : context, pcon : primcon, args : con list ) 
+    : primcon * kind * (con list) * kind list = 
+    let
+      val (args',kinds) = 
+	unzip (map (curry2 con_valid D) args)
+    in
+      (case pcon
+	 of ((Int_c W64) | 
+	     (Float_c F32) |
+	     (Float_c F64)) => (pcon,Type_k Runtime,args',kinds)
+	 | ((Int_c W32) | (Int_c W16) | (Int_c W8) | 
+	    (BoxFloat_c F64) | (BoxFloat_c F32) |
+	    (Exn_c) | (Array_c) | (Vector_c) | (Ref_c) | (Exntag_c)) 
+	   => (pcon,Word_k Runtime,args',kinds)
+	 | (Record_c labels) => 
+	   (if c_all is_word b_perr_k kinds then
+	      (Record_c (ListMergeSort.sort gt_label labels),Word_k Runtime,args',kinds)
+	    else
+	      error "Record contains field of non-word kind")
+	 | (Sum_c {known,tagcount}) => 
+	      (if c_all is_word b_perr_k kinds then
+		 let
+		   val valid =  
+		     (case known 
+			of SOME i => 
+			  (Word32.<=(Word32.fromInt 0,i) andalso 
+			   Word32.<(i,tagcount))
+			 | NONE => true) 
+		 in
+		   if valid then
+		     (pcon,Word_k Runtime,args',kinds)
+		   else
+		     error "Illegal index to sum constructor" 
+		 end
+	       else
+		 error "Sum contains non-word component")
+	 | (Vararg_c _) => 
+		 (if c_all is_word b_perr_k kinds then
+		    (pcon,Word_k Runtime,args',kinds)
+		  else 
+		    error "Vararg has non-word component"))
+    end
   and con_valid' (D : context, constructor : con) : con * kind = 
      (case constructor 
        of (Prim_c (pcon,args)) =>
 	 let
-	   val (args',kinds) = 
-	     unzip (map (fn x => (con_valid (D,x))) args)
-	   val (pcon',kind) = 
-	     (case pcon
-		of ((Int_c W64) | 
-		    (Float_c F32) |
-		    (Float_c F64)) => (pcon,Type_k Runtime)
-		| ((Int_c W32) | (Int_c W16) | (Int_c W8) | 
-		   (BoxFloat_c F64) | (BoxFloat_c F32) |
-		   (Exn_c) | (Array_c) | (Vector_c) | (Ref_c) | (Exntag_c)) 
-		  => (pcon,Word_k Runtime)
-		| (Record_c labels) => 
-		  (if List.all is_word kinds then
-		     (Record_c (ListMergeSort.sort gt_label labels),Word_k Runtime)
-		   else
-		     error "Record contains field of non-word kind")
-		| (Sum_c {known,tagcount}) => 
-		  (if List.all is_word kinds then
-		     let
-		       val valid =  
-			 (case known 
-			    of SOME i => 
-			      (Word32.<=(Word32.fromInt 0,i) andalso 
-			       Word32.<(i,tagcount))
-			     | NONE => true) 
-		     in
-		       if valid then
-			 (pcon,Word_k Runtime)
-		       else
-			 error "Illegal index to sum constructor" 
-		     end
-		   else
-		     error "Sum contains non-word component")
-		| (Vararg_c _) => 
-		  (if List.all is_word kinds then
-		     (pcon,Word_k Runtime)
-		     else 
-		       error "Vararg has non-word component"))
+
+	   val (pcon',kind,args',kinds) = pcon_valid (D,pcon,args)
 	   val con = (Prim_c (pcon',args'))
 
 	 in
@@ -425,12 +607,10 @@ struct
 	   val con' = Mu_c (Util.list2sequence cons,var)
 	   val kind = singletonize (SOME Runtime,Word_k Runtime,con')
 	 in
-	   (*ASSERT*)
-	   if List.all is_word kinds then
+	   if c_all is_word b_perr_k kinds then
 	     (con',kind)
 	   else
-	     (app (fn k => (print "kind = "; PpNil.pp_kind k; print "\n\n")) (map strip_singleton kinds);
-	      error "Invalid kind for recursive constructor")
+	     error "Invalid kind for recursive constructor"
 	 end
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>
 	 let
@@ -455,11 +635,11 @@ struct
 	       val tformals' = List.rev rev_tformals
 	       val (body'',body_kind) = con_valid (D,body')
 	       val (formals',formal_kinds) = 
-		 unzip (map (fn c => con_valid (D,c)) formals)
+		 unzip (map (curry2 con_valid D) formals)
 	       val con = AllArrow_c (openness,effect,tformals',formals',numfloats,body'')
 	     in
 	       (*ASSERT*)
-	       if (List.all type_or_word formal_kinds) andalso 
+	       if (c_all type_or_word b_perr_k formal_kinds) andalso 
 		 (type_or_word body_kind) then
 		 (con,Singleton_k(Runtime,Word_k Runtime,con))
 	       else
@@ -669,27 +849,20 @@ struct
 			error "Invalid kind for constructor application")
 
 	   val (actuals',actual_kinds) = 
-	     unzip (map (fn c => (con_valid (D,c))) actuals)
+	     unzip (map (curry2 con_valid D) actuals)
 
 	   val (formal_vars,formal_kinds) = unzip formals
 
 	   fun match_params ((formal,fkind),actual_kind) = 
 	     alpha_sub_kind (actual_kind,fkind)
 
-	   val _ = if eq_len (actual_kinds,formal_kinds) then ()
-		   else error "Constructor function applied to wrong number of arguments"
 	   val apps = 
-	     if ListPair.all alpha_sub_kind (actual_kinds,formal_kinds) 
-		 then zip (formal_vars,actuals')
+	     if c_all2 alpha_sub_kind 
+	       (o_perr_k_k "Constructor function applied to wrong number of arguments") 
+	       (actual_kinds,formal_kinds) 
+	       then zip (formal_vars,actuals')
 	     else
-	       (print "actual_kinds are:\n";
-		app (fn k => (PpNil.pp_kind k; print "\n")) actual_kinds;
-		print "\n\n";
-		print "formal_kinds are:\n";
-		app (fn k => (PpNil.pp_kind k; print "\n")) formal_kinds;
-		print "\n";
-		error "Constructor function failed: argument not subkind of expected kind")
-	       
+		error "Constructor function failed: argument not subkind of expected kind"
 	   fun lookup v = assoc_eq (eq_var,v,apps)
 	 in
 	   case (do_beta_fun (cfun',actuals))
@@ -706,12 +879,18 @@ struct
 	   val kind' = kind_valid (D,kind)
 	   fun doarm (pcon,args,body) = 
 	     let
-	       val pkind = primKind pcon
-	       val args' = map_second (fn k => kind_valid (D,k)) args
-	       val (body',body_kind) = c_insert_kind_list (D,args',fn D => con_valid (D,body))
+	       val (vars,kinds) = unzip args
+	       val argcons = map Var_c vars
+	       val (pcon',pkind,argcons',kinds') = 
+		 c_insert_kind_list (D,args,fn D => pcon_valid (D,pcon,argcons))
+
+	       val args' = zip (vars,kinds')
+	       val (body',body_kind) = 
+		 c_insert_kind_list (D,args',fn D => con_valid (D,body))
+
 	     in
 	       if alpha_sub_kind (body_kind,kind') then
-		 (pcon,args',body')
+		 (pcon',args,body')
 	       else
 		 error "Illegal kind in typecase"
 	     end
@@ -904,11 +1083,8 @@ struct
 	       if alpha_equiv_con (con',con'') then
 		 (label,exp',con')
 	       else
-		 (printl ("Record field "^(label2string label)^" declared as type ");
-		  PpNil.pp_con con';
-		  lprintl "found to have type ";
-		  PpNil.pp_con con'';
-		  error "Type mismatch in record")
+		 (perr_c_c (con',con'');
+		  error ("Type mismatch in record at field "^(label2string label)))
 	     end
 	   val fields'' = map check_one fields'
 	   val (labels',exps',cons') = unzip3 fields'
@@ -925,10 +1101,7 @@ struct
 	     (case strip_record con 
 		of SOME x => x
 		 | NONE => 
-		  (printl ("Label "^(label2string label)^" projected from expression");
-		   PpNil.pp_exp exp;
-		   lprintl " of type ";
-		   PpNil.pp_con con;
+		  (perr_e_c (exp,con);
 		   error "Projection from value of non record type"))
 	 in
 	   case find2 (fn (l,c) => eq_label (l,label)) (labels,cons)
@@ -936,16 +1109,14 @@ struct
 	       ((select label,[],[exp']),
 		con,singletonize (SOME Runtime,Word_k Runtime,con))
 	      | NONE => 
-	       (printl ("Label "^(label2string label)^" projected from expression");
-		PpNil.pp_exp exp;
-		lprintl " of type ";
-		PpNil.pp_con con;
+	       (perr_e_c (exp,con);
+		printl ("Label "^(label2string label)^" projected from expression");
 		error "No such label")
 	 end
 	| (inject {tagcount,field},cons,exps as ([] | [_])) =>  
 	 let
 	   val (cons',kinds) = 
-	     unzip (map (fn c => con_valid (D,c)) cons)
+	     unzip (map (curry2 con_valid D) cons)
 	   val con = Prim_c (Sum_c {tagcount=tagcount,known=SOME field},cons')
 	   val kind = singletonize (SOME Runtime,Word_k Runtime,con)
 	 in
@@ -954,8 +1125,7 @@ struct
 	       if (field < tagcount) then
 		 ((inject {tagcount=tagcount,field=field},cons',[]),con,kind)
 	       else
-		 (printl "Expression ";
-		  PpNil.pp_exp (Prim_e (NilPrimOp prim,cons',[]));
+		 (perr_e (Prim_e (NilPrimOp prim,cons',[]));
 		  error "Illegal injection - field out of range")
 	      | argexp::_ =>    
 		 if (tagcount <= field) andalso 
@@ -967,25 +1137,19 @@ struct
 		     if alpha_equiv_con (argcon,con_k) then 
 		       ((inject {tagcount=tagcount,field=field},cons',[argexp']),con,kind)
 		     else
-		       (printl "Expression ";
-			PpNil.pp_exp argexp';
-			lprintl "Of declared type ";
-			PpNil.pp_con con_k;
-			lprintl "found to be of type";
-			PpNil.pp_con argcon;
+		       (perr_e_c_c (argexp',con_k,argcon);
 			error "Illegal injection - type mismatch in args")
 		   end
 		 else
-		   (printl "Expression ";
-		    PpNil.pp_exp (Prim_e (NilPrimOp prim,cons',[argexp]));
+		   (perr_e (Prim_e (NilPrimOp prim,cons',[argexp]));
 		    error "Illegal injection - field out of range")
 	 end
 	| (inject_record {tagcount,field},argcons,argexps) => 
 	 let
 	   val (argcons',argkinds) = 
-	     unzip (map (fn c => con_valid (D,c)) argcons)
+	     unzip (map (curry2 con_valid D) argcons)
 	   val (argexps',expcons,expkinds) = 
-	     unzip3 (map (fn e => exp_valid (D,e)) exps)
+	     unzip3 (map (curry2 exp_valid D) exps)
 	   val con = Prim_c (Sum_c {tagcount=tagcount,known=SOME field},argcons')
 	   val kind = singletonize (SOME Runtime,Word_k Runtime,con)
 	 in
@@ -1000,17 +1164,11 @@ struct
 			       PpNil.pp_con con_k;
 			       error "Record injection on illegal field")
 	     in
-	       if eq_len (expcons,cons) andalso
-		 ListPair.all alpha_equiv_con (expcons,cons) then 
+	       if c_all2 alpha_equiv_con 
+		 (o_perr_c_c "Length mismatch") (expcons,cons) then 
 		 ((inject_record {tagcount=tagcount,field=field},argcons',argexps'),con,kind)
 	       else
-		 (printl "Expressions ";
-		  PpNil.pp_list PpNil.pp_exp' argexps' ("",",","\n",false);
-		  lprintl "Of declared types ";
-		  PpNil.pp_list PpNil.pp_con' cons ("",",","\n",false);
-		  lprintl "found to be of type";
-		  PpNil.pp_list PpNil.pp_con' expcons ("",",","\n",false);
-		  error "Illegal record injection - type mismatch in args")
+		  error "Illegal record injection - type mismatch in args"
 	     end
 	   else
 	     (printl "Expression ";
@@ -1020,7 +1178,7 @@ struct
 	| (project_sum {tagcount,sumtype},argcons,[argexp]) => 
 	 let
 	   val (argexp',argcon,argkind) = exp_valid (D,argexp)
-	   val (argcons',argkinds) = unzip (map (fn c => con_valid (D,c)) argcons)
+	   val (argcons',argkinds) = unzip (map (curry2 con_valid D) argcons)
 	 in
 	   case strip_sum argcon
 	     of SOME (tagcount',SOME field,cons) =>
@@ -1031,46 +1189,31 @@ struct
 		   val con_i = List.nth (argcons',Word32.toInt sumtype)
 		   val kind = singletonize (SOME Runtime,Word_k Runtime,con_i)
 		 in
-		   if ListPair.all alpha_equiv_con (cons,argcons') then
+		   if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch") (cons,argcons') then
 		     ((prim,argcons',[argexp']),con_i,kind)
 		   else
-		     (printl "Expression ";
-		      PpNil.pp_exp argexp;
-		      lprintl "expected fields of type";
-		      PpNil.pp_list PpNil.pp_con' argcons' ("",",","",false);
-		      lprintl "Found to have type ";
-		      PpNil.pp_con argcon;
-		      error "Arguments to project_sum don't match")
+		      error "Arguments to project_sum don't match"
 		 end
 	       else 
-		 (printl "Projection ";
-		  PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
-		  lprintl "From expression ";
-		  PpNil.pp_exp argexp;
-		  lprintl "Of Type ";
-		  PpNil.pp_con argcon;
+		 (perr_e_c ((Prim_e (NilPrimOp prim,cons,exps)),
+			    argcon);
 		  error "Illegal projection - numbers don't match")
 	      | _ => 
-		 (printl "Projection ";
-		  PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
-		  lprintl "From expression ";
-		  PpNil.pp_exp argexp;
-		  lprintl "Of Type ";
-		  PpNil.pp_con argcon;
+		 (perr_e_c ((Prim_e (NilPrimOp prim,cons,exps)),
+			    argcon);
 		  error "Illegal projection - expression not of sum type")
-		 
 	 end
 	| (project_sum_record {tagcount,sumtype,field},argcons,[argexp]) => 
 	 let
 	   val (argexp',argcon,argkind) = exp_valid (D,argexp)
-	   val (argcons',argkinds) = unzip (map (fn c => con_valid (D,c)) argcons)
+	   val (argcons',argkinds) = unzip (map (curry2 con_valid D) argcons)
 	 in
 	   case strip_sum argcon
 	     of SOME (tagcount',SOME sumtype,cons) =>
 	       (if tagcount' = tagcount andalso
 		  sumtype = sumtype andalso
 		  sumtype < tagcount then
-		  if ListPair.all alpha_equiv_con (cons,argcons') then
+		  if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch") (cons,argcons') then
 		    let
 		      val con_i = List.nth (argcons',Word32.toInt sumtype)
 		    in
@@ -1085,34 +1228,16 @@ struct
 			    end
 			  else error "Project_sum_record field out of range"
 			 | NONE => 
-			    (printl "Sum record projection of type ";
-			     PpNil.pp_con con_i;
-			     lprintl "Expected record type";
-			     error "Illegal type in sum record projection")
+			    (perr_c con_i;
+			     error "Non recrod type in sum record projection")
 		    end
 		  else
-		    (printl "Expression ";
-		     PpNil.pp_exp argexp;
-		     lprintl "expected fields of type";
-		     PpNil.pp_list PpNil.pp_con' argcons' ("",",","",false);
-		     lprintl "Found to have type ";
-		     PpNil.pp_con argcon;
-		     error "Arguments to project_sum don't match")
+		    error "Arguments to project_sum don't match"
 		else 
-		  (printl "Projection ";
-		   PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
-		   lprintl "From expression ";
-		   PpNil.pp_exp argexp;
-		   lprintl "Of Type ";
-		   PpNil.pp_con argcon;
+		  (perr_e (Prim_e (NilPrimOp prim,cons,exps));
 		   error "Illegal projection - numbers don't match"))
 	      | _ => 
-		  (printl "Projection ";
-		   PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
-		   lprintl "From expression ";
-		   PpNil.pp_exp argexp;
-		   lprintl "Of Type ";
-		   PpNil.pp_con argcon;
+		  (perr_e (Prim_e (NilPrimOp prim,cons,exps));
 		   error "Illegal projection - expression not of sum type")
 	 end
 	| (box_float floatsize,[],[exp]) => 
@@ -1161,12 +1286,7 @@ struct
 		 if con_equiv (D,con,con'') then
 		   ((roll,[argcon'],[exp']),argcon',argkind)
 		 else
-		   (printl "Rolled expression ";
-		    PpNil.pp_exp exp';
-		    lprintl "expected as type ";
-		    PpNil.pp_con con'';
-		    lprintl "found to be type ";
-		    PpNil.pp_con con;
+		   (perr_e_c_c (exp',con'',con);
 		    error "Error in roll")
 	       end
 	      | NONE => 
@@ -1193,15 +1313,10 @@ struct
 		      singletonize(SOME Runtime,Word_k Runtime,con''))
 		   end
 		 else
-		   (printl "Unolled expression ";
-		    PpNil.pp_exp exp';
-		    lprintl "expected as type ";
-		    PpNil.pp_con argcon';
-		    lprintl "found to be type ";
-		    PpNil.pp_con con;
+		   (perr_e_c_c (exp',argcon',con);
 		    error "Error in unroll"))
 	       | NONE => 
-		   (printl "Unoll primitive given argument of type";
+		   (printl "Urnoll primitive given argument of type";
 		    PpNil.pp_con argcon';
 		    lprintl " not a recursive type";
 		    error "Illegal constructor argument in unroll"))
@@ -1233,12 +1348,8 @@ struct
 	       else
 		 error "Type mismatch in exception injection"
 	      | NONE =>  
-		 (printl "Expression ";
-		  PpNil.pp_exp exp2;
-		  lprintl "of type ";
-		  PpNil.pp_con con2;
-		  lprintl "not a tag";
-		  error "Illegal argument to exception injection")
+		 (perr_e_c (exp2,con2);
+		  error "Illegal argument to exception injection - not a tag")
 	 end
 	| (make_vararg (openness,effect),cons,exps) =>
 	 error "make_vararg unimplemented....punting"
@@ -1246,10 +1357,228 @@ struct
 	 error "make_onearg unimplemented....punting"
 	| (peq,cons,exps) => error "Polymorphic equality should not appear at this level"
 	| (prim,cons,exps) => 
-	 (printl "Error in exp_valid - malformed expression";
-	  PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
+	 (perr_e (Prim_e (NilPrimOp prim,cons,exps));
 	  lprintl "No matching case in exp_valid";
 	  error "Illegal primitive application"))
+
+  and switch_valid (D,switch)  = 
+    (case switch
+       of Intsw_e {info=intsize,arg,arms,default} =>
+	 let
+	   val (arg',argcon,argkind) = exp_valid (D,arg)
+	   val (ns,arm_exps) = unzip arms
+	   val (arm_exps',arm_cons,arm_kinds) =
+	     unzip3 (map (curry2 function_valid D) arm_exps)
+	   val arms' = zip (ns,arm_exps')
+	   val _ = 
+	     case strip_int argcon
+	       of SOME intsize' => 
+		 if same_intsize (intsize,intsize') then ()
+		 else error "Integer size mismatch in int switch"
+		| NONE => 
+		 (perr_e_c (arg',argcon);
+		  error "Branch argument not an int")
+
+	   fun check_one con arm_con = 
+	     case strip_arrow arm_con
+	       of SOME (_,_,[],[],_,body_c) => 
+		 if alpha_equiv_con (con,body_c) then ()
+		 else
+		   (perr_c_c (con,body_c);
+		    error "Branch arm types don't match")
+		| SOME _ => error "IntSwitch has illegal function type - arguments present"
+		| NONE => error "IntSwitch has non-function type"
+
+	   val (default',rep_opt) = opt_arrow_con (D,default,arm_cons)
+	   val (rep_con,rep_kind) = 
+	     case rep_opt
+	       of SOME v => v
+		| NONE => error "No valid arms in int branch"
+	   val _ = List.app (check_one rep_con) arm_cons
+	 in
+	   (Intsw_e {info=intsize,arg=arg',
+		     arms=arms',default=default'},
+	    rep_con,rep_kind)
+	 end
+	| Sumsw_e {info=(tagcount,decl_cons),arg,arms,default} => 
+	 let
+	   val (arg',argcon,argkind) = exp_valid (D,arg)
+	   val (ns,arm_exps) = unzip arms
+	   val (arm_exps',arm_cons,arm_kinds) =
+	     unzip3 (map (curry2 function_valid D) arm_exps)
+	   val arms' = zip (ns,arm_exps')
+	   val (decl_cons',decl_kinds) = unzip (map (curry2 con_valid D) decl_cons)
+	   val sum_cons = 
+	     case strip_sum argcon
+	       of SOME (tagcount,NONE,cons) => cons
+
+		| SOME (tagcount,SOME _,cons) =>
+		   error "Sum case called on known sum type constructor"
+		| NONE => 
+		 (perr_e_c (arg',argcon);
+		  error "Branch argument not of sum type")
+	   fun check_one con (arm_con,sum_con,decl_con) = 
+	     case strip_arrow arm_con
+	       of SOME (_,_,[],[arg_con],_,body_c) => 
+		 if (alpha_equiv_con (con,body_c) andalso
+		     alpha_equiv_con (arg_con,sum_con) andalso
+		     alpha_equiv_con (decl_con,sum_con)) then ()
+		 else
+		   (printl "Argmument type :";
+		    perr_c_c (sum_con,argcon);
+		    printl "Return type";
+		    perr_c_c (con,body_c);
+		    error "Sum Branch arm types don't match")
+		| SOME _ => error "SumSwitch has illegal function type - wrong arguments"
+		| NONE => error "SumSwitch has non-function type"
+	   val (default',rep_opt) = opt_arrow_con (D,default,arm_cons)
+	   val (rep_con,rep_kind) = 
+	     case rep_opt
+	       of SOME v => v
+		| NONE => error "No valid arms in sum branch"
+	   val _ = 
+	     if eq_len3 (arm_cons,sum_cons,decl_cons')  then
+	       app3 (check_one rep_con) (arm_cons,sum_cons,decl_cons')
+	     else
+	       error "Argument/sum/branch lists of different lengths in sum switch"
+	 in
+	   (Sumsw_e {info=(tagcount,decl_cons'),arg=arg',
+		     arms=arms',default=default'},
+	    rep_con,rep_kind)
+	 end
+     | Exncase_e {info=_,arg,arms,default} =>
+	 let
+	   val (arg',argcon,argkind) = exp_valid (D,arg)
+	   val (vars,arm_exps) = unzip arms
+	   val (arm_exps',arm_cons,arm_kinds) =
+	     unzip3 (map (curry2 function_valid D) arm_exps)
+	   val (vars',var_cons,var_kinds) = 
+	     unzip3 (map (curry2 exp_valid D) vars)
+
+	   val _ = if c_all is_var_e (fn e => (perr_e e;false)) vars' then ()
+		   else error "Non-variable index in exncase"
+
+	   val arms' = zip (vars',arm_exps')
+
+	   fun check_one con (var_con,arm_con) = 
+	     case strip_arrow arm_con
+	       of SOME (_,_,[],[arg_con],_,body_c) => 
+		 (case strip_exntag var_con
+		    of SOME exn_con =>
+		      if (alpha_equiv_con (con,body_c) andalso
+			  alpha_equiv_con (arg_con,var_con)) then 
+			()
+		      else
+			(printl "Argument type :";
+			 perr_c_c (var_con,arg_con);
+			 printl "Return type";
+			 perr_c_c (con,body_c);
+			 error "Exn Branch arm types don't match")
+		     | NONE => error ("Variable has wrong type"))
+		| SOME _ => error "Exncase has illegal function type - wrong arguments"
+		| NONE => error "SumSwitch has non-function type"
+
+	   val (default',rep_opt) = opt_arrow_con (D,default,arm_cons)
+	   val (rep_con,rep_kind) = 
+	     case rep_opt
+	       of SOME v => v
+		| NONE => error "No valid arms in exn case"
+	   val _ = 
+	     if eq_len (var_cons,arm_cons)  then
+	       app2 (check_one rep_con) (var_cons,arm_cons)
+	     else
+	       error "Argument/branch lists of different lengths in exncase"
+	 in
+	   (Exncase_e {info=(),arg=arg',
+		       arms=arms',default=default'},
+	    rep_con,rep_kind)
+	 end
+     | Typecase_e {info,arg=argcon,arms,default} =>
+	 let
+	   val (argcon',argkind) = con_valid (D,argcon)
+	   val (pcons,arm_fns) = unzip arms
+	   val (arm_fns',arm_cons,arm_kinds) = 
+	     unzip3 (map (curry2 function_valid D) arm_fns)
+	   val args = [] (*HACK!!! WRONG!!!*)
+	   val (pcons',pkinds,_,_) = 
+	     unzip4 (map (fn p => pcon_valid(D,p,args)) pcons)
+
+	   val arms' = zip (pcons',arm_fns')
+
+	   fun check_one con arm_con = error "Unimplemented"
+(*	     case strip_arrow arm_con
+	       of SOME (_,_,[],[pcon],_,body_c) => 
+		 (case strip_exntag arg_con
+		    of SOME exn_con =>
+		      if alpha_equiv_con (con,body_c) then 
+			()
+		      else
+			(printl "Argument type :";
+			 perr_c_c (var_con,arg_con);
+			 printl "Return type";
+			 perr_c_c (con,body_c);
+			 error "Exn Branch arm types don't match")
+		     | NONE => error ("Variable "^(var2string v)^"has wrong type"))
+		| SOME _ => error "Exncase has illegal function type - wrong arguments"
+		| NONE => error "SumSwitch has non-function type"
+*)
+	   val (default',rep_opt) = opt_arrow_con (D,default,arm_cons)
+	   val (rep_con,rep_kind) = 
+	     case rep_opt
+	       of SOME v => v
+		| NONE => error "No valid arms in type case"
+	   val _ = 
+	       List.app (check_one rep_con) arm_cons
+	 in
+	   (Typecase_e {info=(),arg=argcon',
+			arms=arms',default=default'},
+	    rep_con,rep_kind)
+	 end)
+       
+  and opt_arrow_con (D,SOME def,_) =
+    let
+      val (def',defcon,defkind) = exp_valid (D,def)
+    in
+      (SOME def',SOME (defcon,defkind))
+    end
+    | opt_arrow_con (D,NONE,fst::_) =
+    (case get_arrow_return fst
+       of SOME con => (NONE,SOME (con_valid (D,con)))
+	| NONE => (NONE,NONE))
+    | opt_arrow_con _ = (NONE,NONE)
+  and function_valid (D,Function (effect,recursive,tformals,
+				  formals,fformals,body,return)) = 
+    let
+      fun check_k ((var,kind),D) =
+	let
+	  val kind' = kind_valid (D,kind)
+	in
+	  ((var,kind'),insert_kind (D,var,kind'))
+	end
+      val (tformals',D') = foldl_acc check_k D tformals
+      fun check_c ((var,con),D) = 
+	let
+	  val (con',kind) = con_valid (D,con)
+	in
+	  ((var,con'),insert_con (D,var,con'))
+	end
+      val (formals',D'') = foldl_acc check_c D' formals
+      val D''' = 
+	foldl (fn (v,D) => 
+	       insert_con (D,v,Prim_c (Float_c F64,[]))) D'' fformals
+      val (body',body_c,body_kind) = exp_valid (D''',body)
+      val (return',return_kind) = con_valid (D''',return)
+      val num_floats = Word32.fromInt (List.length fformals)
+      val con = AllArrow_c (Open,effect,tformals',#2 (unzip formals'),num_floats,return')
+      val (con',kind) = con_valid (D,con)  (*Some extra stuff needs to be done *)
+      val function' = Function (effect,recursive,tformals',formals',fformals,body',return')
+    in
+      if alpha_equiv_con (body_c,return') then
+	(function',con',kind)
+      else
+	(perr_e_c_c (body',return',body_c);
+	 error "Return expression has wrong type")
+    end
   and bnds_valid (D,bdns) = error "Unimplemented"
 
   and exp_valid (D : context,exp : exp) : (exp * con * kind) = 
@@ -1284,29 +1613,38 @@ struct
 	    in
 	      (Prim_e (NilPrimOp prim',cons',exps'),con,kind)
 	    end
-	| Prim_e (PrimOp prim,cons,exps) =>   error "Unimplemented"
-	(*	       let 
-	 *			 val 
-	 * val con = PrimUtil.get_type prim cons
-	 *		 val exp' = Prim_e (PrimOp prim,cons
-	 *	       in
-	 *	       end
-	 *)
-	| Switch_e switch => error "Unimplemented"  
+	| Prim_e (PrimOp prim,cons,exps) =>   
+	    let 
+	      val (cons',kinds) = unzip (map (curry2 con_valid D) cons)
+	      val con = PrimUtil.get_type prim cons'
+	      val (con',kind) = con_valid (D,con)
+	      val (exps',expcons,expkinds) = 
+		unzip3 (map (curry2 exp_valid D) exps)
+	      val exp' = Prim_e (PrimOp prim,cons',exps')
+	    in
+	      if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch") (cons',expcons) then
+		(exp',con',kind)
+	      else
+		(map3 perr_e_c_c (exps',cons',expcons);
+		 error "Argument type mismatch in primop")
+	    end
+	| Switch_e switch =>
+	    let
+	      val (switch',con,kind) = switch_valid (D,switch)
+	    in
+	      (Switch_e switch,con,kind)
+	    end
 	| ((App_e (openness as Code,exp as (Var_e _),cons,texps,fexps)) |  
 	   (App_e (openness as (Closure | Open),exp,cons,texps,fexps))) =>
 	let
-	  val (cons',kinds) = unzip (map (fn c => con_valid (D,c)) cons)
-	  val actuals_t = map (fn e => exp_valid (D,e)) texps
-	  val actuals_f = map (fn e => exp_valid (D,e)) fexps
+	  val (cons',kinds) = unzip (map (curry2 con_valid D) cons)
+	  val actuals_t = map (curry2 exp_valid D) texps
+	  val actuals_f = map (curry2 exp_valid D) fexps
 	  val (exp',con,kind) = exp_valid (D,exp)
 	  val (openness',_,tformals,formals,numfloats,body) = 
 	    (case strip_arrow con
 	       of SOME c => c
-		| NONE => (printl "Expression ";
-			   PpNil.pp_exp exp';
-			   lprintl "Of type ";
-			   PpNil.pp_con con;
+		| NONE => (perr_e_c (exp',con);
 			   error "Application of non-arrow expression"))
 
 	      fun check_cons ([],[],[],D) = true
@@ -1314,24 +1652,14 @@ struct
 		if alpha_equiv_con (con,con') then
 		  check_cons ([],actuals_f,formals,D)
 		else
-		  (printl ("Formal expression parameter of type");
-		   PpNil.pp_con con';
-		   lprintl "passed actual parameter ";
-		   PpNil.pp_exp exp;
-		   lprintl "of type ";
-		   PpNil.pp_con con;
-		   error "Parameter type mismatch")
+		  (perr_e_c_c (exp,con',con);
+		   error "Formal/actual parameter type mismatch")
 		| check_cons ((exp,con,kind)::actuals_t,actuals_f,con'::formals,D) = 
 		  if alpha_equiv_con (con,con') then
 		    check_cons (actuals_t,actuals_f,formals,D)
 		  else
-		    (printl ("Formal expression parameter of type");
-		     PpNil.pp_con con';
-		     lprintl "passed actual parameter ";
-		     PpNil.pp_exp exp;
-		     lprintl "of type ";
-		     PpNil.pp_con con;
-		     error "Parameter type mismatch")
+		  (perr_e_c_c (exp,con',con);
+		   error "Formal/actual parameter type mismatch")
 		| check_cons _ = error "exp_valid: Too few formals in parameter list"
 
 	      fun check_kinds ([],[],D) = SOME D
@@ -1339,11 +1667,8 @@ struct
 		if alpha_sub_kind (kind',kind) then
 		  check_kinds (tformals,actuals,insert_kind (D,var,kind))
 		else
-		  (printl ("Formal constructor parameter "^(var2string var)^"of kind ");
-		   PpNil.pp_kind kind;
-		   lprintl "passed actual parameter of kind ";
-		   PpNil.pp_kind kind';
-		   error "Parameter kind mismatch")
+		  (perr_k_k (kind,kind');
+		   error "Constructor parameter kind mismatch")
 		| check_kinds (_,_,D) = NONE
 
 	      val params_match = 
@@ -1380,10 +1705,7 @@ struct
 	      if is_exn_con (con'') then
 		(exp',con',singletonize (NONE,kind',con'))
 	      else
-		(printl "Raised expression ";
-		 PpNil.pp_exp exp';
-		 lprintl "Of type ";
-		 PpNil.pp_con con';
+		(perr_e_c (exp',con');
 		 error "Non exception raised - Ill formed expression")
 	    end
 	| Handle_e (exp,function) =>
@@ -1413,7 +1735,5 @@ struct
 		 (print "Body is :\n";
 		  PpNil.pp_exp (Handle_e (exp,function));
 		  error "Illegal body for handler"))
-	       )
-
-
+	       )  (*esac*)
 end

@@ -8,8 +8,8 @@ functor NilUtilFn(structure ArgNil : NIL
 		  structure IlUtil : ILUTIL
 		  structure Alpha : ALPHA
 		  sharing ArgNil = Alpha.Nil
-		  and Prim = PrimUtil.Prim = ArgNil.Prim) :(*>*) 
-  NILUTIL (*where structure Nil = ArgNil and type alpha_context = Alpha.alpha_context *) =
+		  and Prim = PrimUtil.Prim = ArgNil.Prim) :>
+  NILUTIL where structure Nil = ArgNil and type alpha_context = Alpha.alpha_context =
 struct
 
   structure Nil = ArgNil

@@ -48,8 +48,7 @@ signature NAME =
     (* Hash tables *)
     val mk_var_hash_table : (int * exn) -> (var, 'val) HashTable.hash_table
 
-    structure VarSet : ORD_SET
-    where type Key.ord_key = var
+    structure VarSet : ORD_SET where type Key.ord_key = var
 
     structure VarMap : ORD_MAP
     where type Key.ord_key = var
@@ -61,7 +60,7 @@ signature NAME =
     where type Key.ord_key = tag
 
     type vpath = var * label list
+
     structure PathMap : ORD_MAP
     where type Key.ord_key = vpath
-
   end

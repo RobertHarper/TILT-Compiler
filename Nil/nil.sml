@@ -1,7 +1,7 @@
 functor Nil(structure ArgAnnotation : ANNOTATION
 	    structure ArgPrim : PRIM)
-	   :(*>*) NIL (*where structure Prim = ArgPrim 
-			and structure Annotation = ArgAnnotation *)=
+	   :> NIL where structure Prim = ArgPrim 
+			and structure Annotation = ArgAnnotation =
 struct	
 
   open Util Name Listops
