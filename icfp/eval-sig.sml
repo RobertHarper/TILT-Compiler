@@ -2,8 +2,6 @@
 signature EVAL =
 sig
 
-		type ? = int
-
 		type v3 = real * real * real
 		type color = v3
 
@@ -24,9 +22,19 @@ sig
 			| Array of value vector
 			| Point of v3
 			| Closure of closure
-			| Object of obj * closure
+			| Object of obj 
 			| Light of light
 			| MLfun of (env * stack) -> (env * stack)
+
+		and obj = 
+				Sphere of m4 * closure
+			| Cube of m4 * closure
+			| Cone of m4 * closure
+			| Cylinder of m4 * closure
+			| Plane of m4 * closure
+			| Union of obj * obj
+			| Difference of obj * obj
+			| Intersection of obj * obj
 
 		withtype closure = env * Gml.exp list
 		withtype env = value Envmap.map 
