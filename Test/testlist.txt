@@ -29,6 +29,7 @@
 0011	fail	[Bug# 0151] name-mangling test [x] <- * -> [x]
 0011b	fail	[Bug# 0151] name-mangling test [+] <- * -> [+] (overloaded vs. normal identifier)
 0012	fail	[Bug# 0151] name-mangling test [x] <- * <- * -> [x]
+0013	fail	Datatype replication.
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
 m0003	pass	[Bug# 0098] Type variable syntax.
