@@ -735,7 +735,7 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
     if (flipTransition)
       add_histogram(&proc->gcFlipTransitionHistogram, proc->nonMutatorTime);
     add_histogram(&proc->gcPauseHistogram, proc->nonMutatorTime);
-    if (proc->nonMutatorTime > 0.2) {
+    if (proc->nonMutatorTime > 0.2 && segWork != 0) {
       double timeDivWork = proc->nonMutatorTime / (segWork / 1000.0);
       add_histogram(&proc->timeDivWorkHistogram, timeDivWork);
     }
