@@ -284,7 +284,10 @@ val _ = (print "Nil final context is:\n";
 			     let val (lc,lr) = make_cr_labels l
 				 val (vc,vr) = (case VarMap.find(total_varmap,v) of
 						    SOME vrc => vrc
-						  | NONE => error "total_varmap missing bindings")
+				                  | NONE => (print "Cannot find variable ";
+							Ppnil.pp_var v;
+							print "\n";
+							error "total_varmap missing bindings")
 				 val rpath = make_rpath vr
 				 val cpath = make_rpath vc
 				 val exports = 
@@ -358,7 +361,10 @@ val _ = (print "Nil final context is:\n";
 			     let val (lc,lr) = make_cr_labels l
 				 val (vc,vr) = (case VarMap.find(total_varmap,v) of
 						    SOME vrc => vrc
-						  | NONE => error "total_varmap missing bindings")
+				                  | NONE => (print "Cannot find variable ";
+							PpNil.pp_var v;
+							print "\n";
+							error "total_varmap missing bindings"))
 (*
 				 val _ = (print "v = "; PpNil.pp_var v; print "\n";
 					  print "vc = "; PpNil.pp_var vc; print "\n";
@@ -529,3 +535,4 @@ val _ = (print "Nil final context is:\n";
 		     end
 end
 
+fun doit() = Linknil.compile_prelude(false, "test");

@@ -797,6 +797,15 @@ struct
 	end
   end
 
+  fun expvars_occur_free (vars : var list, exp : exp) : bool = 
+    let
+      val (free_expvars,_) = freeExpConVarInExp exp
+    in
+      case (Listops.list_inter_eq (eq_var, vars, free_expvars)) of
+	nil => true
+      | _ => false
+    end
+
   fun muExpand (flag,vcseq,v) = 
       let val vc_list = sequence2list vcseq
 	  val vc_list' = map (fn (v,_) => (v,Mu_c(flag,vcseq,v))) vc_list
@@ -1454,4 +1463,8 @@ struct
   fun type_or_word T = alpha_sub_kind (T,Type_k Runtime)
   fun is_word T = alpha_sub_kind (T,Word_k Runtime)
 
-end;
+  fun get_function_type openness (Function(effect, recur, vklist, vclist, vlist, _, con)) =
+      AllArrow_c(openness, effect, vklist, map #2 vclist, 
+		 Word32.fromInt (List.length vlist), con)
+
+end

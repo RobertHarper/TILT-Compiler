@@ -270,6 +270,14 @@ functor Ppnil(structure ArgNil : NIL
 	(case exp of
 	     Var_e var => pp_var var
 	   | Const_e v => Ppprim.pp_value' (fn (Const_e v) => SOME v | _ => NONE) pp_exp pp_con v
+           | Prim_e (NilPrimOp (record labels), cons, exps) =>
+                 let
+		     fun pp_rbnd (label, exp) = HOVbox[pp_label label, String ">",pp_exp exp]
+		 in
+		     HOVbox
+		     [String "record", 
+		      pp_list pp_rbnd (Listops.zip labels exps) ("(",",",")",false)]
+		 end
 	   | Prim_e (prim,cons,exps) => 
 		 let val p = (case prim of
 				  PrimOp p => pp_prim' p
@@ -304,16 +312,17 @@ functor Ppnil(structure ArgNil : NIL
 	 
     and pp_function (Function(effect,recursive,vklist,vclist,vflist,exp,c)) = 
 	HOVbox[String(case recursive of Leaf => "/Leaf\\" | Nonleaf => "/\\"),
-	       (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
+	       (pp_list' (fn (v,k) => Hbox[pp_var v, String ":",pp_kind k])
 		vklist),
-	       (pp_list' (fn (v,c) => Hbox[pp_var v,pp_con c])
+	       (pp_list' (fn (v,c) => Hbox[pp_var v, String ":", pp_con c])
 		vclist),
-	       (pp_list' (fn v => Hbox[pp_var v,String ": Float"])
+	       (pp_list' (fn v => Hbox[pp_var v,String ":Float"])
 		vflist),
+	       String ":",
+	       pp_con c,
+	       String "=",
 	       Break0 0 5,
-	       pp_exp exp,
-	       String " : ",
-	       pp_con c]
+	       pp_exp exp]
 
     and pp_switch sw =
 	let fun help {info : 'info, arg: 'arg, 
@@ -327,9 +336,10 @@ functor Ppnil(structure ArgNil : NIL
 		   (pp_list (fn (ind,f) => Hbox[pp_index ind,
 						pp_function f])
 		    arms ("","","", true)),
+		   Break0 0 5,
 		   (case default of 
-			NONE => String "NONE"
-		      | SOME e => Hbox[String "SOME ",
+			NONE => String "NODEFAULT"
+		      | SOME e => Hbox[String "DEFAULT= ",
 					 pp_exp e])]
 	in
 	    case sw of
@@ -387,7 +397,11 @@ functor Ppnil(structure ArgNil : NIL
 			     vflist ("",",","",false))
 	    val temp = (length vclist) + (length vflist)
 	in
-	    Vbox([String (if is_code then "/CODE\\" else "/\\ "),
+	    Vbox([String (case (is_code,recursive) of
+			    (false,Nonleaf) => "/\\ "
+			  | (false, Leaf) => "/LEAF\\"
+			  | (true, Nonleaf) => "/CODE\\"
+			  | (true, Leaf) => "/LEAFCODE\\"),
 		    pp_var v, Break,
 		    pp_region "(" ")"
 		    [HVbox(vkformats @

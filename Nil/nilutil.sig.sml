@@ -30,6 +30,7 @@ signature NILUTIL =
 
     val con_free_convar : Nil.con -> Name.var list
     val convar_occurs_free : Name.var * Nil.con -> bool
+    val expvars_occur_free : Name.var list * Nil.exp -> bool
 
     val same_openness : Nil.openness * Nil.openness -> bool
     val same_effect : Nil.effect * Nil.effect -> bool
@@ -103,5 +104,6 @@ signature NILUTIL =
     val selfify : (Nil.con * Nil.kind) -> Nil.kind
     val pull: (Nil.con * Nil.kind) -> Nil.con
     val get_arrow_return : Nil.con -> Nil.con option
+    val get_function_type : Nil.openness -> Nil.function -> Nil.con
     
   end
