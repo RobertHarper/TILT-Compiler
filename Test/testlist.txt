@@ -228,3 +228,9 @@ m0083	nested loops
 m0084	non-exhaustive match
 m0085	generativity
 m0086	opaque types
+m0087	open scoping
+m0088	exit status
+m0089	overloading
+m0090	patterns
+m0091	polymorphic equality
+m0092	polymorphic equality

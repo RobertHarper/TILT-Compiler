@@ -11,6 +11,6 @@ Code:        type_of failed on COERCE( select[+Nbool_in]{}[_r_8639]()[],inject_d
 Transcript:  tilt: Empty
 Comments:    
 Fix:         
-Test: 
+Test: m0092
 Owner: 
 Status: open
