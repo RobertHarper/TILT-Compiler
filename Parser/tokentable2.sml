@@ -33,6 +33,7 @@ val tokenList =
    ("and"	, fn yypos => Tokens.AND(yypos,yypos+3)),
    ("abstype"	, fn yypos => Tokens.ABSTYPE(yypos,yypos+7)),
    ("->"	, fn yypos => Tokens.ARROW(yypos,yypos+2)),
+   ("->>"	, fn yypos => Tokens.ARROWG(yypos,yypos+3)),
    ("as"	, fn yypos => Tokens.AS(yypos,yypos+2)),
    ("case"	, fn yypos => Tokens.CASE(yypos,yypos+4)),
    ("datatype"	, fn yypos => Tokens.DATATYPE(yypos,yypos+8)),

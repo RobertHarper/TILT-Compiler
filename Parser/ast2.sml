@@ -23,6 +23,8 @@ type 'a fixitem = {item: 'a, fixity: symbol option, region: region}
 
 type literal = TilWord64.word
 
+datatype functorarrow = Applicative | Generative
+
 datatype 'a sigConst
   = NoSig
   | Transparent of 'a
@@ -108,17 +110,10 @@ and strexp = VarStr of path			(* variable structure *)
 						(* application *)
 	   | LetStr of dec * strexp		(* let in structure *)
 	   | MarkStr of strexp * region (* mark *)
-
-(* FUNCTOR EXPRESSION *)
-and fctexp = VarFct of path * fsigexp sigConst	(* functor variable *)
 	   | BaseFct of {			(* definition of a functor *)
 		params	   : (symbol option * sigexp) list,
 		body	   : strexp,
 		constraint : sigexp sigConst}
-	   | LetFct of dec * fctexp
-	   | AppFct of path * (strexp * bool) list * fsigexp sigConst
-						(* application *)
-	   | MarkFct of fctexp * region (* mark *)
 
 (* WHERE SPEC *)
 and wherespec = WhType of symbol list * tyvar list * ty
@@ -129,19 +124,14 @@ and sigexp = VarSig of symbol			(* signature variable *)
            | AugSig of sigexp * wherespec list (* sig augmented with where spec *)
 	   | BaseSig of spec list		(* defined signature *)
 	   | MarkSig of sigexp * region	(* mark *)
-
-(* FUNCTOR SIGNATURE EXPRESSION *)
-and fsigexp = VarFsig of symbol			(* funsig variable *)
-	    | BaseFsig of {param: (symbol option * sigexp) list, result:sigexp}
-						(* defined funsig *)
-	    | MarkFsig of fsigexp * region	(* mark a funsig *)
+           | FunSig of (symbol option * sigexp) * sigexp * functorarrow (* functor signature *)
 
 (* SPECIFICATION FOR SIGNATURE DEFINITIONS *)
 and spec = StrSpec of (symbol * sigexp * path option) list
                                                                 (* structure *)
          | TycSpec of ((symbol * tyvar list * ty option) list * bool)
                                                                 (* type *)
-	 | FctSpec of (symbol * fsigexp) list			(* functor *)
+	 | FctSpec of (symbol * sigexp) list			(* functor *)
 	 | ValSpec of (symbol * ty) list			(* value *)
          | DataSpec of {datatycs: db list, withtycs: tb list}	(* datatype *)
 	 | ExceSpec of (symbol * ty option) list		(* exception *)
@@ -160,9 +150,7 @@ and dec	= ValDec of vb list * vb list * tyvar list ref	(* values, recursive valu
 							(* abstract type *)
 	| ExceptionDec of eb list			(* exception *)
 	| StrDec of strb list				(* structure *)
-	| FctDec of fctb list				(* functor *)
 	| SigDec of sigb list				(* signature *)
-	| FsigDec of fsigb list				(* funsig *)
 	| LocalDec of dec * dec				(* local dec *)
 	| SeqDec of dec list				(* sequence of dec *)
 	| OpenDec of path list				(* open structures *)
@@ -204,27 +192,23 @@ and eb = EbGen of {exn: symbol, etype: ty option} (* Exception definition *)
 and strb = Strb of {name: symbol,def: strexp,constraint: sigexp sigConst}
 	 | MarkStrb of strb * region
 
-(* FUNCTOR BINDING *)
-and fctb = Fctb of {name: symbol,def: fctexp}
-	 | MarkFctb of fctb * region
-
 (* SIGNATURE BINDING *)
 and sigb = Sigb of {name: symbol,def: sigexp}
 	 | MarkSigb of sigb * region
-
-(* FUNSIG BINDING *)
-and fsigb = Fsigb of {name: symbol,def: fsigexp}
-	  | MarkFsigb of fsigb * region
 
 (* TYPE VARIABLE *)
 and tyvar = Tyv of symbol
 	  | TempTyv of symbol (* temporary used in tyvar binding inference *)
 	  | MarkTyv of tyvar * region
 
+and typath = TypathHead of symbol
+           | TypathProj of typath * symbol
+           | TypathApp of typath * typath
+
 (* TYPES *)
 and ty
     = VarTy of tyvar			(* type variable *)
-    | ConTy of symbol list * ty list	(* type constructor *)
+    | ConTy of typath * ty list	(* type constructor *)
     | RecordTy of (symbol * ty) list 	(* record *)
     | TupleTy of ty list		(* tuple *)
     | MarkTy of ty * region	        (* mark type *)

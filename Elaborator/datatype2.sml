@@ -662,13 +662,15 @@ structure Datatype
 
     (* checkTy : int * Symbol.symbol list * Symbol.symbol list -> ty -> bool *)
     fun checkTy G (Ast.VarTy _) = true
-      | checkTy G (Ast.ConTy (path, args)) =
+      | checkTy G (Ast.ConTy (typath, args)) =
 	let val argsOk = ALL (checkTy G) args
 	    val (tycons, tyvars) = G
 	    val appOk =
-		if length path = 1 andalso Listops.member_eq(Symbol.eq, hd path, tycons)
-		then checkArgs (tyvars, args)
-		else true
+		(case typath of Ast.TypathHead sym => 
+                     if Listops.member_eq(Symbol.eq, sym, tycons)
+		     then checkArgs (tyvars, args)
+		     else true
+	           | _ => true)
 	in  AND(argsOk, appOk)
 	end
       | checkTy G (Ast.RecordTy tyrow) = ALL (fn (_, ty) => checkTy G ty) tyrow

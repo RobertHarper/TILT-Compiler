@@ -133,14 +133,7 @@ struct
     | pass1_strexp (LetStr (dec, strexp)) =
 	(pass1_dec dec; pass1_strexp strexp)
     | pass1_strexp (MarkStr (strexp, region)) = pass1_strexp strexp
-
-  and pass1_fctexp (VarFct _) = ()
-    | pass1_fctexp (BaseFct {params, body, constraint}) = pass1_strexp body
-    | pass1_fctexp (LetFct (dec, fctexp)) =
-        (pass1_dec dec; pass1_fctexp fctexp)
-    | pass1_fctexp (AppFct (path, strexpbools, fsigconst)) =
-	app (pass1_strexp o #1) strexpbools
-    | pass1_fctexp (MarkFct (fctexp, region)) = pass1_fctexp fctexp
+    | pass1_strexp (BaseFct {params, body, constraint}) = pass1_strexp body
 
   and pass1_dec (ValDec (vbs, rvbs, tvbref)) =
         (tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_vb (vbs @ rvbs)));
@@ -159,9 +152,7 @@ struct
 		     pass1_dec body]
     | pass1_dec (ExceptionDec ebs) = TVSet.union (map pass1_eb ebs)
     | pass1_dec (StrDec strbs) = (app pass1_strb strbs; [])
-    | pass1_dec (FctDec fctbs) = (app pass1_fctb fctbs; [])
     | pass1_dec (SigDec sigbs) = []
-    | pass1_dec (FsigDec fsigbs) = []
     | pass1_dec (LocalDec (dec0, dec1)) = (pass1_dec dec0; pass1_dec dec1)
     | pass1_dec (SeqDec decs) = TVSet.union (map pass1_dec decs)
     | pass1_dec (OpenDec paths) = []
@@ -203,9 +194,6 @@ struct
 
   and pass1_strb (Strb {name, def, constraint}) = pass1_strexp def
     | pass1_strb (MarkStrb (strb, region)) = pass1_strb strb
-
-  and pass1_fctb (Fctb {name, def}) = pass1_fctexp def
-    | pass1_fctb (MarkFctb (fctb, region)) = pass1_fctb fctb
 
   and pass1_tyvar (Tyv symbol) = [symbol]
     | pass1_tyvar (TempTyv symbol) = [symbol]
@@ -264,14 +252,7 @@ struct
     | pass2_strexp (LetStr (dec, strexp)) =
 	(pass2_dec [] dec; pass2_strexp strexp)
     | pass2_strexp (MarkStr (strexp, region)) = pass2_strexp strexp
-
-  and pass2_fctexp (VarFct _) = ()
-    | pass2_fctexp (BaseFct {params, body, constraint}) = pass2_strexp body
-    | pass2_fctexp (LetFct (dec, fctexp)) =
-        (pass2_dec [] dec; pass2_fctexp fctexp)
-    | pass2_fctexp (AppFct (path, strexpbools, fsigconst)) =
-	app (pass2_strexp o #1) strexpbools
-    | pass2_fctexp (MarkFct (fctexp, region)) = pass2_fctexp fctexp
+    | pass2_strexp (BaseFct {params, body, constraint}) = pass2_strexp body
 
   and rebind env tvlistref =
         let fun split_tvs [] = ([], [])
@@ -300,9 +281,7 @@ struct
     | pass2_dec env (AbstypeDec {abstycs, withtycs, body}) = pass2_dec env body
     | pass2_dec env (ExceptionDec ebs) = ()
     | pass2_dec env (StrDec strbs) = app pass2_strb strbs
-    | pass2_dec env (FctDec fctbs) = app pass2_fctb fctbs
     | pass2_dec env (SigDec sigbs) = ()
-    | pass2_dec env (FsigDec fsigbs) = ()
     | pass2_dec env (LocalDec (dec0, dec1)) =
 	(pass2_dec env dec0; pass2_dec env dec1)
     | pass2_dec env (SeqDec decs) = app (pass2_dec env) decs
@@ -322,9 +301,6 @@ struct
 
   and pass2_strb (Strb {name, def, constraint}) = pass2_strexp def
     | pass2_strb (MarkStrb (strb, region)) = pass2_strb strb
-
-  and pass2_fctb (Fctb {name, def}) = pass2_fctexp def
-    | pass2_fctb (MarkFctb (fctb, region)) = pass2_fctb fctb
 
   fun closeDec dec = (pass1_dec dec; pass2_dec [] dec; ())
 

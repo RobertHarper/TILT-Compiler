@@ -39,7 +39,7 @@ val quotedBogusString = "'BOGUS"
     | STRING of string
     | CHAR of string
     | ABSTYPE | AND
-    | ARROW | AS | BAR | CASE | DATATYPE | DOTDOTDOT | ELSE | END | EQUALOP
+    | ARROW | ARROWG | AS | BAR | CASE | DATATYPE | DOTDOTDOT | ELSE | END | EQUALOP
     | EQTYPE | EXCEPTION | DO | DOT | DARROW | FN | FUN | FUNCTOR | HANDLE
     | HASH | IF | IN | INCLUDE | INFIX | INFIXR | LET | LOCAL | NONFIX | OF
     | OP | OPEN | OVERLOAD | RAISE | REC | SHARING | SIG | SIGNATURE | STRUCT
@@ -54,7 +54,8 @@ val quotedBogusString = "'BOGUS"
        | op_op of unit
        | qid of (FastSymbol.raw_symbol ->symbol) -> symbol list
        | selector of symbol
-       | tycon of symbol list
+       | tycon of typath
+       | modpath of typath
        | tlabel of (symbol * ty)
        | tlabels  of (symbol * ty) list
        | ty' of ty
@@ -108,7 +109,7 @@ val quotedBogusString = "'BOGUS"
        | topspec of  topspec
        | idents of spec list
        | strspec of  (symbol * sigexp * path option) list
-       | fctspec of  (symbol * fsigexp) list
+       | fctspec of  (symbol * sigexp) list
        | tyspec of  (symbol * tyvar list * ty option) list
        | etyspec of  (symbol * tyvar list * ty option) list
        | valspec of (symbol * ty) list
@@ -119,9 +120,10 @@ val quotedBogusString = "'BOGUS"
        | sign of  sigexp
        | sigconstraint_op of  sigexp sigConst
        | sigb of  sigb list
-       | fsig of fsigexp
+       | fsig of sigexp
        | str of  strexp
-       | arg_fct of  (strexp * bool) list
+       | arg_fcts of (strexp * bool) list
+       | arg_fct of strexp * bool 
        | strdec of  dec
        | strdecs of  dec
        | sdec of  dec
@@ -129,8 +131,11 @@ val quotedBogusString = "'BOGUS"
        | strb of  strb list
        | fparam of  symbol option * sigexp
        | fparamList of  (symbol option * sigexp) list
-       | fctb of  fctb list
+       | fctb of  strb list
        | top of top
+       | functorarrow of functorarrow
+       
+%verbose
 
 %pos int
 %arg (error) : pos * pos -> ErrorMsg.complainer
@@ -141,6 +146,7 @@ val quotedBogusString = "'BOGUS"
 %nonassoc WITHTYPE
 %right AND
 %right ARROW
+%right ARROWG
 %right DARROW
 %left DO
 %left ELSE
@@ -201,10 +207,15 @@ selector: id		(labSymbol id)
 	| INT		(Symbol.labSymbol (TilWord64.toDecimalString INT))
 	| DIGIT		(Symbol.labSymbol (Int.toString DIGIT))
 
-tycon   : ID DOT tycon		(strSymbol ID :: tycon)
-	| ID			([tycSymbol ID])
+modpath : ID                    (TypathHead(strSymbol ID))
+        | modpath DOT ID        (TypathProj(modpath, strSymbol ID))
+        | modpath LPAREN modpath RPAREN
+                                (TypathApp(modpath1,modpath2))        
 
-tlabel	: selector COLON ty	(selector, ty )
+tycon   : ID                    (TypathHead(tycSymbol ID))
+        | modpath DOT ID        (TypathProj(modpath, tycSymbol ID))
+
+tlabel	: selector COLON ty	(selector,ty)
 
 tlabels : tlabel COMMA tlabels	(tlabel :: tlabels)
 	| tlabel		([tlabel])
@@ -224,7 +235,7 @@ tuple_ty : ty' ASTERISK tuple_ty 	(ty' :: tuple_ty)
 	 | ty' ASTERISK ty'	 	([ty'1,ty'2])
 
 ty	: tuple_ty	(TupleTy(tuple_ty))
-	| ty ARROW ty	(ConTy([arrowTycon], [ty1,ty2]))
+	| ty ARROW ty	(ConTy(TypathHead(arrowTycon), [ty1,ty2]))
 	| ty' 		(ty')
 
 ty0_pc	: ty COMMA ty		([ty1,ty2])
@@ -457,8 +468,8 @@ ldec	: VAL vb		(ValDec(#1 vb, #2 vb,ref []))
         | FUN tyvarseq fb       (FunDec(fb,ref tyvarseq))
 	| EXTERN ID COLON ty 	(ExternDec(varSymbol ID,ty))
 	| TYPE tb		(TypeDec tb)
-	| DATATYPE ID EQUALOP DATATYPE tycon
-				(DatatypeDec{datatycs=[Db{tyc=tycSymbol ID,tyvars=[],rhs=Repl tycon}],
+	| DATATYPE ID EQUALOP DATATYPE qid
+				(DatatypeDec{datatycs=[Db{tyc=tycSymbol ID,tyvars=[],rhs=Repl (qid tycSymbol)}],
 					     withtycs=[]})
 	| DATATYPE db		(DatatypeDec{datatycs=db,withtycs=[]})
  	| DATATYPE db WITHTYPE tb  (DatatypeDec{datatycs=db,withtycs=tb})
@@ -492,8 +503,9 @@ spec_s	: 			([])
 	| SEMICOLON spec_s	(spec_s)
 
 spec	: STRUCTURE strspec	([StrSpec strspec])
-	| DATATYPE ID EQUALOP DATATYPE tycon
-				([DataSpec{datatycs=[Db{tyc=tycSymbol ID,tyvars=[],rhs=Repl tycon}],
+        | FUNCTOR strspec       ([StrSpec strspec])
+	| DATATYPE ID EQUALOP DATATYPE qid
+				([DataSpec{datatycs=[Db{tyc=tycSymbol ID,tyvars=[],rhs=Repl (qid tycSymbol)}],
 					     withtycs=[]}])
 	| DATATYPE db		([DataSpec{datatycs=db,withtycs=nil}])
 	| DATATYPE db WITHTYPE tb ([DataSpec{datatycs=db,withtycs=tb}])
@@ -506,11 +518,10 @@ spec	: STRUCTURE strspec	([StrSpec strspec])
 	| INCLUDE ident idents	(IncludeSpec(VarSig(FastSymbol.sigSymbol ident))
 				:: idents)
 
-fsig	: fparamList COLON sign
-				(BaseFsig{param=fparamList,result=sign})
+fsig	: fparamList COLON sign	(foldr (fn (x,s) => FunSig(x,s,Generative)) sign fparamList)
 
 fctspec	: fctspec AND fctspec	(fctspec1 @ fctspec2)
-	| ident fsig		([(fctSymbol ident, fsig)])
+	| ident fsig		([(strSymbol ident, fsig)])
 
 topspec	: spec			(TopSpec spec)
 	| FUNCTOR fctspec	(TopSpec [FctSpec fctspec])
@@ -562,10 +573,17 @@ whspec  : whspec AND whspec     (whspec1 @ whspec2)
 				([WhType(qid tycSymbol,tyvars,ty)])
         | qid EQUALOP qid	([WhStruct(qid1 strSymbol,qid2 strSymbol)])
 
+functorarrow : 
+          ARROW                 (Applicative)
+        | ARROWG                (Generative)
+
 sign	: ident			(MarkSig(VarSig (sigSymbol ident),
 				         (identleft,identright)))
 	| SIG spec_s END	(MarkSig(BaseSig(spec_s),(spec_sleft,spec_sright)))
         | sign WHERE whspec     (MarkSig(AugSig(sign,whspec),(signleft,whspecright)))
+        | LPAREN fparam RPAREN functorarrow sign 
+                                (MarkSig(FunSig(fparam,sign,functorarrow),(LPARENleft,signright)))
+        | LPAREN sign RPAREN    (sign)
 
 sigconstraint_op :		(NoSig)
 	| COLON sign		(Transparent(sign))
@@ -575,12 +593,10 @@ sigconstraint_op :		(NoSig)
 sigb	: sigb AND sigb		(sigb1 @ sigb2)
 	| ident EQUALOP sign	([Sigb{name=sigSymbol ident,def=sign}])
 
-str	: qid	((MarkStr(VarStr(qid strSymbol),(qidleft,qidright))))
+str	: qid                   (MarkStr(VarStr(qid strSymbol),(qidleft,qidright)))
+        | qid arg_fcts          (MarkStr(AppStr(qid strSymbol, arg_fcts),(qidleft,arg_fctsright)))
 	| STRUCT strdecs END
 		(MarkStr(BaseStr strdecs,(STRUCTleft,ENDright)))
-	| qid arg_fct
-		(MarkStr(AppStr(qid fctSymbol,arg_fct),
-			 (qidleft,arg_fctright)))
 	| LET strdecs IN str END
 		(MarkStr(LetStr(strdecs, str), (LETleft,ENDright)))
         | str COLON sign
@@ -593,11 +609,13 @@ str	: qid	((MarkStr(VarStr(qid strSymbol),(qidleft,qidright))))
 	        (MarkStr(ConstrainedStr(str,WeakOpaque sign),
 		         (strleft,signright)))
 
+arg_fcts : arg_fct               ([arg_fct])
+        | arg_fct arg_fcts       (arg_fct::arg_fcts)
 
-arg_fct : LPAREN str RPAREN 		([(str, true)])
-	| LPAREN strdecs RPAREN		([(MarkStr(BaseStr strdecs,
+arg_fct : LPAREN str RPAREN 		((str, true))
+	| LPAREN strdecs RPAREN		((MarkStr(BaseStr strdecs,
 						   (strdecsleft,strdecsright)),
-					   false)])
+					   false))
 
 strdecs	: strdec strdecs	(makeSEQdec (markdec(strdec,strdecleft,strdecright),
 					     strdecs))
@@ -617,7 +635,8 @@ strdec	: STRUCTURE strb	(StrDec strb)
 
 sdec	: STRUCTURE strb	(StrDec strb)
 	| SIGNATURE sigb	(SigDec sigb)
-	| FUNCTOR fctb		(FctDec fctb)
+	| FUNCTOR fctb		(StrDec fctb)
+        | FUNCTOR strb          (StrDec strb)
 	| LOCAL sdecs IN sdecs END (LocalDec(markdec(sdecs1,
 						     sdecs1left,sdecs1right),
 				    markdec(sdecs2,sdecs2left,sdecs2right)))
@@ -635,11 +654,13 @@ fparam	: ID COLON sign		((SOME(strSymbol ID),sign))
 
 fparamList
 	: LPAREN fparam	RPAREN			([fparam])
+        | LPAREN fparam RPAREN fparamList       (fparam::fparamList) 
 
 fctb	: ident fparamList sigconstraint_op EQUALOP str
-		([MarkFctb(Fctb {name = fctSymbol ident,
+		([MarkStrb(Strb {name = strSymbol ident,
                                  def = BaseFct{params=fparamList, body=str,
-				              constraint=sigconstraint_op}},
+				              constraint=sigconstraint_op},
+				 constraint = NoSig},
 			   (identleft,strright))])
 	| fctb AND fctb		(fctb1 @ fctb2)
 

@@ -73,5 +73,6 @@ signature ILSTATIC =
     val Context_Lookup_Path : Il.context * Il.path -> (Il.path * Il.phrase_class) option
     val Sdecs_Lookup : Il.context -> Il.mod * Il.sdecs * Il.label list ->
 	                            (Il.label list * Il.phrase_class) option
+    val PeelModSig : Il.context -> Il.mod * Il.signat -> Il.label list * Il.phrase_class
 
   end

@@ -126,20 +126,10 @@ struct
 	namify_let (LetStr, name_dec, dec, name_strexp name, strexp)
     | name_strexp name (MarkStr (strexp, region)) =
 	process (name_strexp name strexp, fn se => MarkStr (se, region))
-
-  and name_fctexp name (VarFct _) = Unaltered
-    | name_fctexp name (BaseFct {params, body, constraint}) =
+    | name_strexp name (BaseFct {params, body, constraint}) =
         process
 	(name_strexp name body,
 	 fn se => BaseFct {params=params, body=se, constraint=constraint})
-    | name_fctexp name (LetFct (dec, fctexp)) =
-	namify_let (LetFct, name_dec, dec, name_fctexp name, fctexp)
-    | name_fctexp name (AppFct (path, strexpbools, fsigconst)) =
-	let
-	  val (newstrbs, newsebs) = nameify_strexpbools name (name_strexp name) strexpbools
-	in Declare (newstrbs, AppFct (path, newsebs, fsigconst)) end
-    | name_fctexp name (MarkFct (fctexp, region)) =
-	process (name_fctexp name fctexp, fn fe => MarkFct (fe, region))
 
   and dec_declare (Declare (strbs, dec)) =
         flatten_seqdec
@@ -148,8 +138,6 @@ struct
 
   and name_dec (StrDec strbs) =
 	dec_declare (process (grind_list name_strb strbs, fn ss => StrDec ss))
-    | name_dec (FctDec fctbs) =
-	dec_declare (process (grind_list name_fctb fctbs, fn fs => FctDec fs))
     | name_dec (LocalDec (dec1, dec2)) =
 	process (grind_list name_dec [dec1, dec2],
 		 fn [d1, d2] => LocalDec (d1, d2) | _ => impossible "name_dec")
@@ -168,11 +156,6 @@ struct
 		 fn d => Strb {name=name, def=d, constraint=constraint})
     | name_strb (MarkStrb (strb, region)) =
 	process (name_strb strb, fn sb => MarkStrb (sb, region))
-
-  and name_fctb (Fctb {name, def}) =
-        process (name_fctexp name def, fn d => Fctb {name=name, def=d})
-    | name_fctb (MarkFctb (fctb, region)) =
-	process (name_fctb fctb, fn fb => MarkFctb (fb, region))
 
   fun namedForm dec =
       let val _ = resetCounter()	(* Names can be exported so they must match up for each compile. *)

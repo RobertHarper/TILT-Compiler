@@ -27,8 +27,6 @@ structure AstHelp : ASTHELP =
       | db_strip (Ast.MarkDb(db,r)) = db_strip db
     fun tb_strip (Ast.MarkTb(tb,r)) = tb_strip tb
       | tb_strip (Ast.Tb {tyc,tyvars,def}) = (tyc,tyvars,def)
-    fun fctb_strip (Ast.MarkFctb (fctb,r)) = fctb_strip fctb
-      | fctb_strip (Ast.Fctb{name,def}) = (name,def)
     fun strb_strip (Ast.MarkStrb (strb,r)) = strb_strip strb
       | strb_strip (Ast.Strb {name,def,constraint}) = (name,(def,constraint))
     fun vb_strip (Ast.MarkVb (vb,r)) = vb_strip vb
@@ -56,10 +54,13 @@ structure AstHelp : ASTHELP =
 			  dovar, varbound : symbol list)) (ty : Ast.ty) : Ast.ty =
 	(case ty of
 	   Ast.VarTy tyvar => if (is_tyvar_bound(tyvar,tybound)) then ty else doty tyvar
-	 | Ast.ConTy (symlist,tylist) =>
-	       let val newsyms = map (fn s => if (member_eq(Symbol.eq,s,constrbound))
-						  then s else doconstr s) symlist
-	       in Ast.ConTy(newsyms,map (f_ty state) tylist)
+	 | Ast.ConTy (typath,tylist) =>
+	       let 
+                   fun dosym s = if member_eq(Symbol.eq,s,constrbound) then s else doconstr s
+		   val typath = (case typath of TypathHead(s) => TypathHead(dosym s)
+		                              | TypathProj(modpath,s) => TypathProj(modpath, dosym s)
+				              | _ => typath)
+	       in Ast.ConTy(typath,map (f_ty state) tylist)
 	       end
 	 | Ast.RecordTy (symty_list) => Ast.RecordTy(map (fn (s,ty) => (s, f_ty state ty)) symty_list)
 	 | Ast.TupleTy tylist => Ast.TupleTy(map (f_ty state) tylist)
@@ -151,9 +152,7 @@ structure AstHelp : ASTHELP =
 								  body=f_dec state body}
 	| Ast.ExceptionDec eb_list => Ast.ExceptionDec (map (f_eb state) eb_list)
 	| Ast.StrDec strb_list => Ast.StrDec (map (f_strb state) strb_list)
-	| Ast.FctDec fctb_list => Ast.FctDec (map (f_fctb state) fctb_list)
 	| Ast.SigDec sigb_list => Ast.SigDec (map (f_sigb state) sigb_list)
-	| Ast.FsigDec fsigb_list => Ast.FsigDec (map (f_fsigb state) fsigb_list)
 	| Ast.LocalDec (d1,d2) => Ast.LocalDec(f_dec state d1, f_dec state d2)
 	| Ast.SeqDec dec_list => Ast.SeqDec(map (f_dec state) dec_list)
 	| Ast.OpenDec _ => dec
@@ -204,12 +203,8 @@ structure AstHelp : ASTHELP =
 		 | Ast.WeakOpaque se => Ast.WeakOpaque(f_sigexp state se)
 		 | Ast.Transparent se => Ast.Transparent(f_sigexp state se)}
 	| f_strb state (Ast.MarkStrb(strb,r)) = Ast.MarkStrb(f_strb state strb,r)
-      and f_fctb state (Ast.Fctb{name,def}) = Ast.Fctb{name=name,def=f_fctexp state def}
-	| f_fctb state (Ast.MarkFctb(fctb,r)) = Ast.MarkFctb(f_fctb state fctb,r)
       and f_sigb state (Ast.Sigb{name,def}) = Ast.Sigb{name=name,def=f_sigexp state def}
 	| f_sigb state (Ast.MarkSigb(sigb,r)) = Ast.MarkSigb(f_sigb state sigb,r)
-      and f_fsigb state (Ast.Fsigb{name,def}) = Ast.Fsigb{name=name,def=f_fsigexp state def}
-	| f_fsigb state (Ast.MarkFsigb(fsigb,r)) = Ast.MarkFsigb(f_fsigb state fsigb,r)
       and f_strexp state strexp =
 	(case strexp of
 	   Ast.VarStr _ => strexp
@@ -224,13 +219,7 @@ structure AstHelp : ASTHELP =
 	 | Ast.AppStr (p,strexp_bool_list) => Ast.AppStr(p, map
 							 (fn(s,b) => (f_strexp state s,b)) strexp_bool_list)
 	 | Ast.LetStr (dec, strexp) => Ast.LetStr(f_dec state dec, f_strexp state strexp)
-	 | Ast.MarkStr (s,r) => Ast.MarkStr(f_strexp state s,r))
-      and f_fctexp state fctexp =
-	(case fctexp of
-	   Ast.VarFct (p,Ast.NoSig) => fctexp
-	 | Ast.VarFct (p,Ast.Transparent fsigexp) => Ast.VarFct(p,Ast.Transparent (f_fsigexp state fsigexp))
-	 | Ast.VarFct (p,Ast.StrongOpaque fsigexp) => Ast.VarFct(p,Ast.StrongOpaque (f_fsigexp state fsigexp))
-	 | Ast.VarFct (p,Ast.WeakOpaque fsigexp) => Ast.VarFct(p,Ast.WeakOpaque (f_fsigexp state fsigexp))
+	 | Ast.MarkStr (s,r) => Ast.MarkStr(f_strexp state s,r)
 	 | Ast.BaseFct {params,body,constraint} =>
 	     Ast.BaseFct{params=map (fn (so,sigexp) => (so,f_sigexp state sigexp)) params,
 			 body=f_strexp state body,
@@ -238,19 +227,11 @@ structure AstHelp : ASTHELP =
 					 Ast.NoSig => Ast.NoSig
 				       | Ast.Transparent se => Ast.Transparent(f_sigexp state se)
 				       | Ast.StrongOpaque se => Ast.StrongOpaque(f_sigexp state se)
-				       | Ast.WeakOpaque se => Ast.WeakOpaque(f_sigexp state se))}
-	 | Ast.LetFct (dec,fctexp) => Ast.LetFct(f_dec state dec, f_fctexp state fctexp)
-	 | Ast.AppFct _ => error "don't handle (higher-order) functor application"
-	 | Ast.MarkFct (f,r) => Ast.MarkFct(f_fctexp state f, r))
+				       | Ast.WeakOpaque se => Ast.WeakOpaque(f_sigexp state se))})
       and f_sigexp state (Ast.VarSig s) = Ast.VarSig s
 	| f_sigexp state (Ast.BaseSig speclist) = Ast.BaseSig(map (f_spec state) speclist)
 	| f_sigexp state (Ast.MarkSig (se,r)) = Ast.MarkSig(f_sigexp state se,r)
 	| f_sigexp state (Ast.AugSig (se,_)) = error "f_sigexp AugSig unimplemented"
-      and f_fsigexp state (Ast.VarFsig s) = Ast.VarFsig s
-	| f_fsigexp state (Ast.BaseFsig {param,result}) =
-	        Ast.BaseFsig{param=map (fn(so,se) => (so,f_sigexp state se)) param,
-			     result=f_sigexp state result}
-	| f_fsigexp state (Ast.MarkFsig (fse,r)) = Ast.MarkFsig(f_fsigexp state fse,r)
       and f_spec (state as (doconstr,constrbound,
 			    doty,tybound,
 			    dovar, varbound : symbol list)) spec =
@@ -267,7 +248,7 @@ structure AstHelp : ASTHELP =
 				  NONE => NONE
 				| SOME ty => SOME(f_ty newstate ty))
 			      end) s_tvs_tyop_list, b)
-	| Ast.FctSpec s_fse_list => Ast.FctSpec(map (fn (s,fse) => (s,f_fsigexp state fse)) s_fse_list)
+	| Ast.FctSpec s_fse_list => Ast.FctSpec(map (fn (s,fse) => (s,f_sigexp state fse)) s_fse_list)
 	| Ast.ValSpec s_ty_list => Ast.ValSpec (map (fn (s,ty) => (s,f_ty state ty)) s_ty_list)
 	| Ast.DataSpec{datatycs,withtycs} => Ast.DataSpec{datatycs=map (f_db state) datatycs,
 							 withtycs=map (f_tb state) withtycs}
@@ -392,12 +373,9 @@ structure AstHelp : ASTHELP =
     fun pp_ty ty =
 	  (case ty of
 	     VarTy tyvar => pp_tyvar tyvar
-	   | ConTy (syms, tys) => (pp_region "ConTy(" ")"
-				   [(case syms of
-				       [s] => pp_sym s
-				     | _ => pp_list pp_sym syms ("[",", ","]",false)),
-				    String ", ",
-				    (case tys of
+           (* XXX This case is broken *)
+	   | ConTy (_,tys) =>  (pp_region "ConTy(" ")"
+				   [(case tys of
 				       [t] => pp_ty t
 				     | _ => pp_list pp_ty tys ("[",", ","]",false))])
 	   | RecordTy symty_list => (pp_list (fn (sym,ty) => (pp_sym sym; String " = "; pp_ty ty))

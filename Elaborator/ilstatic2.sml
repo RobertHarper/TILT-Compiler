@@ -1367,8 +1367,7 @@ structure IlStatic
 	       val _ = debugdo (fn () => (print "\n\nMOD_APP case in GetModSig got asignat and bsignat\n";
 					  print "asignat is\n"; pp_signat asignat; print "\n";
 					  print "bsignat is\n"; pp_signat bsignat; print "\n"))
-	       val _ = (vab andalso pureb)
-		       orelse error "trying to apply functor to invaluable/impure/non-named-form argument"
+	       val _ = pureb orelse error "trying to apply functor to impure argument"
 	   in case (reduce_signat ctxt asignat) of
 	       SIGNAT_FUNCTOR (v,csignat,dsignat,ar) =>
 (*
@@ -1960,5 +1959,7 @@ structure IlStatic
     val Module_IsValuable = fn (d,m) => Module_IsValuable m d
     val Bnds_IsValuable = fn (d,bs) => Bnds_IsValuable bs d
     val Sbnds_IsValuable = fn (d,ss) => Sbnds_IsValuable ss d
+
+    val PeelModSig = fn ctxt => fn (m,s) => PeelModSig ctxt (PHRASE_CLASS_MOD(m,false,s,fn () => s))
 
   end

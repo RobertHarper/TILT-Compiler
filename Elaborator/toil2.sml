@@ -334,6 +334,18 @@ structure Toil :> TOIL =
          in (uniquify sbnd_ctxt_list,pure)
          end
 
+     fun contains_generative_signature (context, s : signat) : bool =
+	 let 
+	     exception GenerativeSignatureSeen
+	     fun sig_handler (SIGNAT_FUNCTOR(_,_,_,GENERATIVE)) = raise GenerativeSignatureSeen
+	       | sig_handler _ = NONE
+	     val handler = (default_exp_handler, default_con_handler, default_mod_handler,
+			    default_sdec_handler, sig_handler)
+	 in
+	     (sig_handle handler (deep_reduce_signat context s); false)
+	     handle GenerativeSignatureSeen => true
+	 end
+
 
 
     (* ---------------------------------------------------------
@@ -1408,7 +1420,6 @@ structure Toil :> TOIL =
 	      in  (xdec (context,dec), true)
 	      end
 	| Ast.StrDec strblist => xstrbinds(context,strblist)
- 	| Ast.FctDec fctblist => (xfctbind(context,fctblist),true)
 
 	| Ast.ExceptionDec [] => parse_error "ExceptionDec []"
 	| Ast.ExceptionDec [Ast.MarkEb (eb,r)] =>
@@ -1544,27 +1555,19 @@ structure Toil :> TOIL =
 				     in (map helper ops, true)
 				     end
 
-	(* These cases are unhandled *)
-	| Ast.SigDec [] => ([],true)
-	| Ast.SigDec (sigb::rest) =>
-	      let val ctxt : context_entry = xsigb(context,sigb)
-		  (* CONTEXT_SIGNATs do not need to be selfified *)
-		  val context' = add_context_entries(context,[ctxt])
-		  val sbnd_ctxt_rest = xdec (context',Ast.SigDec rest)
-	      in ((NONE,ctxt)::sbnd_ctxt_rest,true)
-	      end
+	| Ast.SigDec sigbs =>
+              (map (fn sigb => (NONE,xsigb(context,sigb))) sigbs, true)
 	| Ast.AbstypeDec {abstycs,withtycs,body} =>
 	      let val ldec = Ast.DatatypeDec{datatycs = abstycs, withtycs = withtycs}
 		  fun get_dec(Ast.MarkDb(db,_)) = get_dec db
 		    | get_dec(Ast.Db{tyc,tyvars,...}) =
-		      let val ty = Ast.ConTy([tyc],map Ast.VarTy tyvars)
+		      let val ty = Ast.ConTy(Ast.TypathHead(tyc),map Ast.VarTy tyvars)
 		      in Ast.TypeDec[Ast.Tb{tyc=tyc,tyvars=tyvars,def=ty}]
 		      end
 		  val bdec = Ast.SeqDec((map get_dec abstycs) @ [body])
 		  val desugared_dec = Ast.LocalDec(ldec,bdec)
 	      in (xdec (context, desugared_dec),true)
 	      end
-	| Ast.FsigDec fsiglist => parse_error "functor signature declaration not handled"
 	| Ast.OvldDec (sym,ignored_type,exp_list) =>
 	      let val con_exp_list = map (fn e => let val (e,c,_) = xexp(context,e)
 						  in (c,e)
@@ -1621,52 +1624,91 @@ structure Toil :> TOIL =
 					  fun doer (lab,ty) = (lab,xty(context,ty))
 				      in CON_RECORD(map doer sorted_lab_ty_list)
 				      end
-       | Ast.ConTy (syms,ty_list) =>
-	     let val con_list = map (fn t => xty(context,t)) ty_list
-	     in  (case (Context_Lookup_Labels(context, map symbol_label syms)) of
-		      SOME(path,PHRASE_CLASS_CON(_,k,copt,inline)) =>
-			let val con =
-			    (case (copt,inline) of
-			       (SOME c,true) => c
-			     | _ => path2con path)
-			in
-			  (case (con_list,k) of
-			      ([],KIND) => con
-			    | (_,KIND_ARROW(n, KIND)) =>
+
+       | Ast.ConTy (typath,ty_list) =>
+	     let 
+		 val con_list = map (fn t => xty(context,t)) ty_list
+
+		 val weird_case = ref false
+
+                 exception Unbound
+
+		 fun xmodpath (Ast.TypathHead sym) : mod * signat =
+                     (case Context_Lookup_Labels(context,[symbol_label sym]) of
+                         SOME (_,PHRASE_CLASS_MOD(m,_,s,_)) => (m,s)
+		       | _ => raise Unbound)
+		   | xmodpath (Ast.TypathProj (mp,sym)) =
+                     (case xmodpath mp of (m,SIGNAT_STRUCTURE sdecs) =>
+                         (case Sdecs_Lookup context (m,sdecs,[symbol_label sym]) of
+			      SOME (_,PHRASE_CLASS_MOD(m',_,s',_)) => (m',s')
+			    | _ => raise Unbound)
+		        | _  => raise Unbound)
+		   | xmodpath (Ast.TypathApp (mp1,mp2)) =
+	             (case (xmodpath mp1) of (f,SIGNAT_FUNCTOR(v,s1,s2,APPLICATIVE)) =>
+			  let val (argmod,argsig) = xmodpath mp2
+			      val _ = Sig_IsSub(context,argsig,s1) orelse raise Unbound
+			      val s = sig_subst(s2,subst_modvar(v,argmod))
+			      val m = MOD_APP(f,argmod)
+			  in (case PeelModSig context (m,s) of
+				  (_,PHRASE_CLASS_MOD(m,_,s,_)) => (m,s)
+				| _ => raise Unbound)
+			  end
+		        | _ => raise Unbound)
+
+                 fun xtypath (Ast.TypathHead sym) : con * kind =
+		     (case Context_Lookup_Labels(context,[symbol_label sym]) of
+			 SOME (_,PHRASE_CLASS_CON(c,k,copt,inline)) =>
+                           ((case (copt,inline) of (SOME c',true) => c' | _ => c), k)
+		       | _ =>
+		          if Symbol.eq(sym, Symbol.tycSymbol "-->")
+			      then (weird_case := true;
+				    let fun split _ [] = error "need at least result type"
+					  | split cons [c] = (rev cons,c)
+					  | split cons (c::d) = split (c::cons) d
+					val (arg_cons,res_con) = split [] con_list
+				    in (CON_ARROW(arg_cons,res_con,true,oneshot_init PARTIAL),KIND)
+				    end)
+			  else raise Unbound)
+		   | xtypath (Ast.TypathProj (mp,sym)) =
+		     (case xmodpath mp of (m,SIGNAT_STRUCTURE sdecs) =>
+                         (case Sdecs_Lookup context (m,sdecs,[symbol_label sym]) of
+			      SOME (_,PHRASE_CLASS_CON(c,k,copt,inline)) =>
+                                ((case (copt,inline) of (SOME c',true) => c' | _ => c), k)
+			    | _ => raise Unbound)
+		        | _  => raise Unbound)
+		   | xtypath _ = parse_error "Type path is neither TypathHead nor TypathProj"
+
+		 val (con,k) = xtypath typath 
+		     handle Unbound =>
+			       (weird_case := true;
+				error_region();
+				print "ill-formed type constructor\n";
+(*				pp_pathlist AstHelp.pp_sym' syms; print "\n"; *)
+				(Error.dummy_type(context,"unbound_conty"),KIND))
+
+	     in  if !weird_case then con else
+		 (case (con_list,k) of
+		      ([],KIND) => con
+		    | (_,KIND_ARROW(n, KIND)) =>
 				  if (n = length con_list)
 				      then ConApply(true,con,con_list)
 				  else (error_region();
 					tab_region();
 					print "type constructor ";
-					app print (map Symbol.name syms);
+					pp_con con;
 					print " wants ";
 					print (Int.toString n);
 					print " arguments, given ";
 					print (Int.toString (length con_list));
 					print "\n";
 					Error.dummy_type(context,"badarity_type"))
-			     | _ => (pp_kind k; print "\nand c = ";
-				     pp_con con;
-				     elab_error "external_label mapped to type with unexpected kind"))
-			end
-		    | _ =>
-		      if (length syms = 1 andalso
-			     Symbol.eq(hd syms, Symbol.tycSymbol "-->"))
-		      then let fun split _ [] = error "need at least result type"
-				 | split cons [c] = (rev cons,c)
-			         | split cons (c::d) = split (c::cons) d
-			       val (arg_cons,res_con) = split [] con_list
-			   in  CON_ARROW(arg_cons,res_con,true,
-					 oneshot_init PARTIAL)
-			   end
-		      else
-			       (error_region();
-				print "unbound type constructor: ";
-				pp_pathlist AstHelp.pp_sym' syms; print "\n";
-				Error.dummy_type(context,"unbound_conty")))
-	     end)
+	            | _ => (pp_kind k; print "\nand c = ";
+		            pp_con con;
+			    elab_error "external_label mapped to type with unexpected kind"))
 
+	     end
 
+     )
     (* ---------------------------------------------------------
       ------------------ TYPE DEFINITIONS ---------------------
       --------------------------------------------------------- *)
@@ -1827,8 +1869,24 @@ structure Toil :> TOIL =
 		     | _ => (error_region();
 				print "Can't where type a non-structure signature\n";
 				s))
-	      end)
-
+	      end
+	| Ast.FunSig((symOpt,sigarg),sigres,astarrow) => 
+          let val (strid,v) = (case symOpt of SOME sym => (symbol_label sym, gen_var_from_symbol sym)
+	                                | NONE => (functor_arg_lab, fresh_named_var "functor_arg"))
+	      val sig1 = xsigexp(context,sigarg)
+              val arrow = (case astarrow of Ast.Generative => GENERATIVE
+	                     | Ast.Applicative =>
+			       if contains_generative_signature(context,sig1)
+				   then (error_region();
+					 print "Argument of applicative functor signature cannot contain generative functor signatures\n";
+					 GENERATIVE)
+			       else APPLICATIVE)
+	      val context' = add_context_mod(context,strid,v,sig1)
+	      val sig2 = xsigexp(context',sigres)
+	  in 
+	      SIGNAT_FUNCTOR(v,sig1,sig2,arrow)
+	  end
+     )
 
      and xsigb(context,Ast.MarkSigb(sigb,r)) : context_entry =
 	 let val _ = push_region r
@@ -1913,25 +1971,7 @@ structure Toil :> TOIL =
 		    fun doer (funid,fsig) =
 		      let
 			val var = fresh_var()
-			fun help (Ast.VarFsig _) = parse_error "Ast.VarFsig encountered"
-			  | help (Ast.MarkFsig (fs,r)) = let val _ = push_region r
-							     val res = help fs
-							     val _ = pop_region ()
-							 in res
-							 end
-			  | help (Ast.BaseFsig {param,result=sigexp'}) =
-			     let (* this is a derived form *)
-			       val (strid,sigexp) =
-				   (case param
-				      of [(SOME s,se)] => (symbol_label s,se)
-				       | [(NONE,se)] => (functor_arg_lab, se)
-				       | _ => elab_error "higher-order functors not supported")
-			       val signat = xsigexp(context,sigexp)
-			       val context' = add_context_mod(context,strid,var,signat)
-			       val signat' = xsigexp(context',sigexp')
-			     in SIGNAT_FUNCTOR(var,signat,signat',GENERATIVE)
-			     end
-		      in SDEC(symbol_label funid, DEC_MOD(var,false,help fsig))
+		      in SDEC(symbol_label funid, DEC_MOD(var,false,xsigexp(context,fsig)))
 		      end
 		  in ADDITIONAL(map doer sym_fsigexp_list)
 		  end
@@ -2006,10 +2046,11 @@ structure Toil :> TOIL =
        end
 
 
+(*
     (* ---------------------------------------------------------
       ------------------ FUNCTOR BINDINDS ---------------------
       --------------------------------------------------------- *)
-     and xfctbind (context : context, fctbs : Ast.fctb list) : decresult =
+     and xfctbind (context : context, fctbs : Ast.strb list) : decresult =
 	 let
 	     fun help (context,(name,def)) : decresult =
 		 (case def of
@@ -2054,6 +2095,7 @@ structure Toil :> TOIL =
 	     val help = fn x => (resolve_overloads (fn () => help x), true)
 	 in  #1(packagedecs help (context,true) (map fctb_strip fctbs))
 	 end
+*)
 
     (* ---------------------------------------------------------
       ------------------ STRUCTURE EXPRESSION -----------------
@@ -2089,64 +2131,90 @@ structure Toil :> TOIL =
 	(case strb of
 	     Ast.VarStr path =>
 		 (case Context_Lookup_Labels(context,map symbol_label path) of
-		      SOME (_,PHRASE_CLASS_MOD(m,_,s,_)) =>
-			  (case reduce_signat context s of
-			       (SIGNAT_STRUCTURE _) => (m,s,true)
-			     | _ => (error_region();
-				     print "binding a non-structure module: ";
-				     AstHelp.pp_path path;
-				     print "\n";
-				     dummy_strexp_result))
+		      SOME (_,PHRASE_CLASS_MOD(m,_,s,_)) => (m,s,true)
 		    | _ => (error_region();
-			    print "unbound structure: ";
+			    print "unbound module: ";
 			    AstHelp.pp_path path;
 			    print "\n";
 			    dummy_strexp_result))
 	   | Ast.AppStr (_,[]) => parse_error "AppStr with no arguments"
-	   | Ast.AppStr (funpath,[(strexp,_)]) =>
-		 (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
-		      SOME(_,PHRASE_CLASS_MOD(m,_,SIGNAT_FUNCTOR(var1,sig1,sig2,arrow),_)) =>
-			  let
-			      val (argmod,argsig,argpure) = xstrexp(context,strexp,Ast.NoSig)
-			      val argpathOpt = mod2path argmod
-			      val pure = (arrow = APPLICATIVE) andalso argpure
-			  in
-			      if isSome(argpathOpt) andalso Sig_IsSub(context,argsig,sig1)
-				then (MOD_APP(m,argmod),
-				      sig_subst(sig2,subst_modvar(var1,argmod)),
-				      pure)
-			      else
-				let val var_coerced = fresh_named_var "functorArgCoerced"
-				    val (mod_coerced,sig_coerced) =
-					(case argpathOpt of
-					     SOME argpath => 
-						 Signature.xcoerce_functor(context,argpath,argsig,sig1)
-					   | NONE => 
-						 Signature.xcoerce_transparent(context,argmod,argsig,sig1))
-				    val path_coerced = 
-					case Context_Lookup_Path(add_context_mod'(context,var_coerced,sig_coerced),
-								 PATH(var_coerced,[])) of
-					    SOME(_,PHRASE_CLASS_MOD(m,_,_,_)) => m
-					  | _ => elab_error "AppStr case"
-				    val mod_result = MOD_APP(m,path_coerced)
-				    val sig_result = sig_subst(sig2,subst_modvar(var1,path_coerced))
-				in
-				    (make_existential_mod(var_coerced,mod_coerced,mod_result),
-				     make_existential_sig(var_coerced,sig_coerced,sig_result),
-				     pure)
-				end
-			  end
-	            | SOME _ => (error_region();
-				 print "cannot apply a non-functor\n";
-				 dummy_strexp_result)
-	            | NONE => (error_region();
-			       print "functor identifier not bound: ";
-			       AstHelp.pp_path funpath;
-			       print "\n";
-			       dummy_strexp_result))
-	   | Ast.AppStr (_,_) => (error_region();
-				  print "multiple functor arguments not supported yet\n";
-				  dummy_strexp_result)
+	   | Ast.AppStr (funpath,strexpbools) =>
+             (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
+		  SOME(_,PHRASE_CLASS_MOD(f,_,SIGNAT_FUNCTOR(var1,sig1,sig2,arrow),_)) =>
+		   let
+                     exception EscapeFromAppStr
+
+                     (* Elaborates a single functor application. *)
+		     fun dofunctorapp (context,f,var1,sig1,sig2,arrow,strexp) : mod * signat * bool =
+		       let
+			  val (argmod,argsig,argpure) = xstrexp(context,strexp,Ast.NoSig)
+			  val argpathOpt = mod2path argmod
+			  val pure = (arrow = APPLICATIVE) andalso argpure
+		       in
+			  if isSome(argpathOpt) andalso Sig_IsSub(context,argsig,sig1)
+			      then (MOD_APP(f,argmod),
+				    sig_subst(sig2,subst_modvar(var1,argmod)),
+				    pure)
+			  else
+			      let val var_coerced = fresh_named_var "functorArgCoerced"
+				  val (mod_coerced,sig_coerced) =
+				      (case argpathOpt of
+					   SOME argpath => 
+					       Signature.xcoerce_functor(context,argpath,argsig,sig1)
+					 | NONE => 
+					       Signature.xcoerce_transparent(context,argmod,argsig,sig1))
+				  val path_coerced = 
+				      case Context_Lookup_Path(add_context_mod'(context,var_coerced,sig_coerced),
+							       PATH(var_coerced,[])) of
+					  SOME(_,PHRASE_CLASS_MOD(m,_,_,_)) => m
+					| _ => elab_error "AppStr case"
+				  val mod_result = MOD_APP(f,path_coerced)
+				  val sig_result = sig_subst(sig2,subst_modvar(var1,path_coerced))
+			      in
+				  (make_existential_mod(var_coerced,mod_coerced,mod_result),
+				   make_existential_sig(var_coerced,sig_coerced,sig_result),
+				   pure)
+			      end
+		       end
+
+                     (* Elaborates curried functor application F(arg1)...(argn) by first elaborating
+                        F(arg1)...(argn-1) to a module M, then returning
+                        [hidden = M, visible* = hidden(argn)], except that hidden must be peeled before applying to argn.
+                        The argument strexps is assumed to be in reverse order (i.e. [argn,...,arg1]).
+                      *)
+		     fun docurriedapps (strexps) : mod * signat * bool = (
+		       case strexps of
+                           [strexp] => dofunctorapp(context,f,var1,sig1,sig2,arrow,strexp)
+			 | (strexp::strexps) => 
+                           let val (mod_curried,sig_curried,pure) = docurriedapps strexps
+			       val var_curried = fresh_named_var("curriedFunctorApplication")
+			       val context' = add_context_mod'(context,var_curried,sig_curried)
+			       val (f,(var1,sig1,sig2,arrow)) = 
+				     (case Context_Lookup_Path(context',PATH(var_curried,[])) of
+					  SOME(_,PHRASE_CLASS_MOD(f,_,SIGNAT_FUNCTOR fsig,_)) => (f,fsig)
+					| _ => (error_region();
+						print "cannot apply a non-functor\n";
+						raise EscapeFromAppStr))
+			       val (mod_result,sig_result,pure') = dofunctorapp(context',f,var1,sig1,sig2,arrow,strexp)
+			   in (make_existential_mod(var_curried,mod_curried,mod_result),
+			       make_existential_sig(var_curried,sig_curried,sig_result),
+			       pure andalso pure')
+			   end
+                     )
+
+		   in
+		       docurriedapps(rev(map #1 strexpbools))
+		       handle EscapeFromAppStr => dummy_strexp_result
+		   end
+
+		| SOME _ => (error_region();
+			     print "cannot apply a non-functor\n";
+			     dummy_strexp_result)
+		| NONE => (error_region();
+			   print "functor identifier not bound: ";
+			   AstHelp.pp_path funpath;
+			   print "\n";
+			   dummy_strexp_result))
 	   | Ast.LetStr (dec,strexp) => 
 		 let val var1 = fresh_named_var "letbound"
 		     val (sbnd_ctxt_list,pure1) = xdec' (context,dec)
@@ -2172,7 +2240,40 @@ structure Toil :> TOIL =
 					   val res = xstrexp(context,strexp,Ast.NoSig)
 					   val _ = pop_region()
 				       in res
-				       end)
+				       end
+	   | (Ast.BaseFct {params=[],body,constraint}) => parse_error "Functor has no parameters"
+           | (Ast.BaseFct {params,body,constraint}) =>
+		let
+                    fun doit ((argnameopt,sigexp),context) =
+		        let val arglabel = (case argnameopt of
+						NONE => functor_arg_lab
+					      | SOME s => symbol_label s)
+			    val argvar = fresh_named_var "functor_arg"
+			    val signat = xsigexp(context,sigexp)
+			    val context' = add_context_mod(context,arglabel,argvar,signat)
+			in  ((argvar,signat),context')
+			end
+		    val (args,context') = foldl_acc doit context params
+		    val (m',s',pure) = xstrexp(context',body,constraint)
+		    fun tomodsig [(v,s)] = 
+			let val arrow = if not pure orelse contains_generative_signature(context',s)
+					    then GENERATIVE
+					else APPLICATIVE
+			in (MOD_FUNCTOR(arrow,v,s,m',s'),SIGNAT_FUNCTOR(v,s,s',arrow))
+			end
+		      | tomodsig ((v,s)::args) =
+			let val (fmod,fsig) = tomodsig args
+			    val arrow = if contains_generative_signature(context',s)
+					    then GENERATIVE
+					else APPLICATIVE
+			in  (MOD_FUNCTOR(arrow,v,s,fmod,fsig),
+			     SIGNAT_FUNCTOR(v,s,fsig,arrow))
+			end
+		    val (fmod,fsig) = tomodsig args
+		in
+                    (fmod,fsig,pure)
+		end
+      )
 
 
 

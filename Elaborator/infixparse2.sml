@@ -288,7 +288,7 @@ structure InfixParse
 	      | varty_handler _ _ = NONE
 
 	    (* (tys) sym is a reference to the withtype-bound sym in one of the datatype definitions *)
-	    fun conty_handler (ConTy ([sym], tys)) =
+	    fun conty_handler (ConTy (TypathHead sym, tys)) =
 		(case (Listops.assoc_eq(Symbol.eq, sym, with_table)) of
 		     NONE => NONE
                    (* def is the withtype definition of sym, tyvars are its type variables *)

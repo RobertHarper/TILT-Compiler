@@ -776,23 +776,46 @@ structure Signature :> SIGNATURE =
 	in  (case (sig_actual,sig_target) of
 		 (SIGNAT_FUNCTOR(v1,s1,s1',a1),
 		  SIGNAT_FUNCTOR(v2,s2,s2',a2)) =>
+(*
+		 if Sig_IsSub(context,sig_actual,sig_target)
+		     then let val m = path2mod path_actual
+			  in (false, m, GetModSig(context,m))
+			  end
+		 else
+*)
 		 let
-		     val _ = if sub_sigarrow(a1,a2) then ()
-			     else raise (FAILURE "arrow mismatch in xcoerce")
+		     val _ = if sub_sigarrow(a1,a2) then () else
+			 error_region_with "cannot coerce a generative functor to an applicative functor signature\n"
 		     val p2 = PATH(v2,[])
 		     val context' = add_context_mod'(context,v2,s2)
-		     val (_,m3,_) = xcoerce(context',p2,s2,s1)
-		     val subst = subst_add_modvar(empty_subst,v1,MOD_VAR v2)
-		     val s1' = sig_subst(s1',subst)
-		     val v1' = fresh_named_var "var_actual_xcoerce"
+		     val (coerced_funarg,v3,m3,context') = 
+			 if Sig_IsSub(context',s2,s1) 
+			     then let val m = MOD_VAR v2 
+				  in (false,v2,m,context') end 
+			 else case a2 of 
+			     GENERATIVE => 
+				  let val (_,m3,s3) = xcoerce(context',p2,s2,s1) 
+				      val v3 = fresh_named_var "var_funarg_coerced"
+				      val context' = add_context_mod'(context',v3,s3)
+				  in (true,v3,m3,context') end
+			   | APPLICATIVE =>
+		                 (error_region_with "when coercing an applicative functor to an applicative signature,\n";
+				  tab_region_with "argument signature of target must be a HIL subsignature of actual argument signature\n";
+				  reject "signature matching failed")
+			   | _ => error "xcoerce should not be targeting total/partial functors"
+		     val s1' = sig_subst(s1',subst_modvar(v1,MOD_VAR v3))
+		     val v1' = fresh_named_var "var_funresult_actual"
 		     val p1' = PATH(v1',[])
-		     val context'' = add_context_mod'(context',v1',s1')
-		     val (_,m4,_) = xcoerce(context'',p1',s1',s2')
-		     val arg = MOD_APP(path2mod path_actual, m3)
-		     val body = MOD_LET(v1',arg,m4)
+		     val m1' = MOD_APP(path2mod path_actual, MOD_VAR v3)
+		     val principal_s1' = GetModSig(context',m1')
+		     val context'' = add_context_mod'(context',v1',principal_s1')
+		     val (_,m2',s4) = xcoerce(context'',p1',principal_s1',s2')
+		     val s2' = case a2 of APPLICATIVE => sig_subst(s4,subst_modvar(v1',m1')) | _ => s2'
+		     val body = MOD_LET(v1',m1',MOD_SEAL(m2',s2'))
+		     val body = if coerced_funarg then MOD_LET(v3,m3,body) else body
 		 in (true,
-		     MOD_FUNCTOR(a1,v2,s2,body,s2'),
-		     sig_target)
+		     MOD_FUNCTOR(a2,v2,s2,body,s2'),
+		     SIGNAT_FUNCTOR(v2,s2,s2',a2))
 		 end
 	   | (SIGNAT_STRUCTURE sdecs_actual,
 	      SIGNAT_STRUCTURE sdecs_target) =>
@@ -1026,8 +1049,8 @@ structure Signature :> SIGNATURE =
 
 		(* ------- coercion of a non-existent or non-module component to a module spec ---- *)
 		| (_, DEC_MOD _, _) =>
-			(error_region_with "coercion of a non-module or non-existent component\n";
-			 tab_region_with   "  to a module specification failed at ";
+			(error_region_with "coercion of a non-module or non-polymorphic or non-existent component\n";
+			 tab_region_with   "  to a module or polymorphic value specification failed at ";
 			 pp_label lab; print "\n";
 			 NONE)
 

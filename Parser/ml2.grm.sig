@@ -64,6 +64,7 @@ val DATATYPE:  'a * 'a -> (svalue,'a) token
 val CASE:  'a * 'a -> (svalue,'a) token
 val BAR:  'a * 'a -> (svalue,'a) token
 val AS:  'a * 'a -> (svalue,'a) token
+val ARROWG:  'a * 'a -> (svalue,'a) token
 val ARROW:  'a * 'a -> (svalue,'a) token
 val AND:  'a * 'a -> (svalue,'a) token
 val ABSTYPE:  'a * 'a -> (svalue,'a) token
