@@ -40,13 +40,13 @@ parsing/stostream.sml
 gml-sig.sml
 gml.sml
 
+eval-sig.sml
+eval.sml
+
 parse-sig.sml
 parse.sml
 
 parsestring.sml
-
-eval-sig.sml
-eval.sml
 
 ppm-sig.sml
 ppm.sml

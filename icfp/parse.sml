@@ -17,13 +17,17 @@ struct
   infixr 2 wth suchthat return guard
   infixr 1 ||
       
+  fun resvd x = 
+      case Envmap.find (Eval.T.opers, String.extract
+			(x,1,NONE)) of NONE => true 
+		                        | _ => false
+
   fun lit x = (anyWord suchthat (curry2 op= x))
       
+  val oper = (anyWord suchthat resvd) wth Oper
+
   val binder = ((anyWord suchthat (fn x => CharVector.sub(x, 0) = #"/")) 
-		suchthat (fn x => case Envmap.find
-			  (Toplevel.opers, String.extract (x,1,NONE)) of
-			  NONE => true
-			| _ => false))
+		suchthat (not o resvd))
                 wth (fn x => Binder (String.extract (x,1,NONE)))
 
 (* val operator = [ "addi", "addf", "acos", "asin", "clampf", "cos",
@@ -46,6 +50,7 @@ struct
       alt [ anyNumber wth Int,
 	    anyFloat wth Real,
 	    anyString wth String,
+	    oper,
 	    binder,
 	    literal,
 	    $array,

@@ -11,11 +11,11 @@ sig
         Sunlight of v3 * color
       | Pointlight of v3 * color
       | Spotlight of { pos : v3,
-                      dir : v3,
-                      color : color,
-                      cutoff : real, (* half of the cone in degrees *)
-                      att : real }
-        
+                       dir : v3,
+                       color : color,
+                       cutoff : real, (* half of the cone in degrees *)
+                       att : real } 
+       
     datatype value =
         Int of int
       | Bool of bool
@@ -41,5 +41,12 @@ sig
     withtype env = value Envmap.map 
     and closure = env * Gml.exp list
     and stack = value list
+
+    structure T :
+	sig
+	    val opers : (stack -> stack) Envmap.map
+	end
+
+    val eval : Gml.exp list -> stack
         
 end

@@ -19,7 +19,7 @@ sig
   val combine : m4 * m4 -> m4
 
   val translateM : real * real * real * m4 -> m4
-  val scaleM : real * real * real -> m4
+  val scaleM : real * real * real * m4 -> m4
   val uScaleM : real * m4 -> m4
   val rotxM : real * m4 -> m4
   val rotyM: real * m4 -> m4
