@@ -1,18 +1,16 @@
 SMLNJ=SML_VERSION=110 /usr/local/bin/sml
-TILTNJ=./Test/tilt-nj -v
+TILTNJ=./Test/tilt-nj -v -fPrelinkDebug
 
-# Use slaves
-SLAVES=slaves
+# Use slaves (gmake slaves all to build)
 MASTER=-M
 BOOT=-B
 
 # Do not use slaves
-#SLAVES=
 #MASTER=-m
 #BOOT=-b
 
 .PHONY: all runtime heap slaves basis smlnj-lib ml-yacc-lib tilt
-all: runtime heap $(SLAVES) basis smlnj-lib ml-yacc-lib tilt
+all: runtime heap basis smlnj-lib ml-yacc-lib tilt
 
 runtime:
 	(cd Runtime && gmake runtime)
