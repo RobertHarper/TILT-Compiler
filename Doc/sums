@@ -1,0 +1,106 @@
+This document summarizes the layout optimizations that are done for
+values of sum types.  It also discusses the currently disabled
+sum-of-record optimization.  This document is cribbed heavily from
+various til-developers emails and til documentation.
+
+--Leaf Petersen, 4/9/02
+
+
+The documentation from tortl-sum describes the basic layout scheme for
+sum types.
+
+First, we assume that datatypes have already been translated so that
+carriers and non-carriers are statically distinguished.  Let m denote
+the number of non value-carrying components and n the number of
+value-carrying components.  There are various cases.
+
+INVARIANT: Values of sum type always look like pointers or tags, but not an int.
+
+1. n=0         we use a tag to represent the datatype
+2. m>0, n=1    we use a tag for the non-carriers;
+               the carrier is boxed only if the carried type might look like a tag 
+               (e.g., ints, sums, mu's)
+3. n>1         we use tags for the non-carriers and box all carriers
+
+    NOTE: It might seem that we can further specialize the case where m=0 and n=1
+           where the sum is represented by the type carried by the one constructor.
+	   This is possible at some additional complexity:
+	   (1) Sums might look like ints now.
+	   (2) The GC must now decode sum types to check for this case.
+	       This potentially requires repeated decoding of nested sum types
+	       and mu types.  The current representation of mu types is that
+	       it is a base case and has a pointer type which is possible 
+	       because we only have mu's of sums.
+
+
+More concretely (from an email from Perry):
+
+The option type "datatype 'a option = None | Some of 'a" translates to
+a sum type with one non-carrier and a carrier.  In general, if there
+is only one carrier, we can avoid boxing the carrier.  We must be
+careful to limit this optimization to cases where the carrier type
+cannot be confused with a tag. So the option type looks like this:
+
+'a option when 'a is int, sum, mu's, ...
+----------------------------------------
+None    =   0
+            -----
+Some x -->  | x |
+            -----
+Some 3 -->  -----
+            | 3 |
+            -----
+
+'a option otherwise (e.g. int * int)
+----------------------------------------
+None    =   0
+Some x  =   x
+               ---------
+Some (5,7) --> | 5 | 7 |
+               ---------
+
+
+An additional optimization that was done at one point in TILT is to
+flatten a sum-allocated record containing the tag and a pointer to a
+record into a single flat record.  My understanding is that this
+optimization is currently disabled, since the additional expense
+incurred in typecases is significant.
+
+[From Perry]
+You are right that a sum of a record is flattened to have
+only one level of indirection instead of two.  However,
+this does not make project the record a no-op.  In fact,
+it is quite expensive.  Given this datatype:
+
+datatype dt = A of int | B of dt | C of int * int
+
+This is how some value might be encoded:
+               ---------
+x = A 5 ---->  | 0 | 5 |
+               ---------
+
+               ---------
+B x -------->  | 1 | x |
+               ---------
+
+               -------------
+C (3,4) ---->  | 2 | 3 | 4 |
+               -------------
+
+If we were not to perform the special flattening in the record case,
+then we would instead have
+
+               --------            ---------
+C (3,4) ---->  | 2 | -|----------> | 3 | 4 |
+               --------            ---------
+
+If we do not flatten, it is easy to recover the pair (3,4).  However
+the pair cannot easily be recovered if we flatten the datatype but
+instead requires allocation.  Like almost all optimizations, you can
+find cases that show its usefulness or uselessness.  We used this
+optimization because many ML programs (as recognized by CAML) use sums
+of records without ever passing around the record by itself.
+
+
+
+

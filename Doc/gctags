@@ -1,0 +1,163 @@
+This document summarizes the implementation of NIL level GC tags for
+sums and records.
+
+--Leaf Petersen, 4/9/02
+
+
+We chose to make GC tags explicit in the code to allow tag
+computations to be hoisted out of loops.  Tags for records whose
+component types are not statically known cannot be statically
+computed, and can be somewhat expensive to compute.  Therefore, we
+chose to make tag creation primitives explicit in the NIL to expose
+them to the optimization phases.
+
+1) Records
+
+
+D |- v0 : GCTag(Record_c[t1 x ... x tn])
+D |- vi : ti
+----------------------------------------------------- (n >= 1)
+D |- record[v0,v1,...,vn] : Record_c[t1 x ... x tn]
+
+-----------------------------------------------------
+D |- record[] : Record_c[]
+
+D |- c :: T
+| |- c == Record_c[t1 x ... x tn] :: T
+---------------------------------------- (n>=1)
+D |- mk_record_gctag[c] :: T
+
+Discussion:
+
+Empty records are represented as a small constant value.  No tag is
+needed, so none should be computed.
+
+Large records must be broken up into a sequence of chained records,
+each with its own tag.  This is currently not accounted for in the
+tagging scheme.  Currently, we go ahead and generate the tag, and then
+just discard it.  Two slightly better possibilities exist.
+
+a) Have the mk_record_gctag compute the *first* tag for large records.
+At least in this case we are not discarding work, even though we can't
+hoist the rest of the tags.  This would be fairly easy to do.
+
+b) Have the record primitive expect as many tag arguments as are
+necessary.  This is probably the right thing to do, but entails extra
+complications in Nil.  Introducing records becomes significantly more
+complicated.  Moreover, this seems unlikely to be a big win.  Large
+records are usually structures - allocated once at the top level.
+Worth doing just for cleanliness though, if nothing else.
+
+
+2) Sums
+
+Since sums often (but not always) create a record to hold the *sum*
+tag and the value, they also potentially create gc tags that could be
+hoisted.  Here the issue is not nearly as straightforward.  First I
+describe what is implemented, then I give some discussion of
+alternatives.  I simplify the sum typing rules a bit for simplicity.
+For a more in depth discussion of sums, see the sum document in the
+DOC directory.
+
+
+D |- c :: T
+D |- c == SUM(k,c1...cn)
+--------------------------------------  (0 <= i < k)
+D |- inject_i [c]() : SUM_i(k,ck...cn)
+
+D |- c :: T
+D |- c == SUM(k,c1...cn)
+--------------------------------------  (0 <= i < k)
+D |- inject_known_i [c]() : SUM_i(k,ck...cn)
+
+D |- c :: T
+D |- c == SUM(k,c1...cn)
+D |- e : ci
+--------------------------------------  (k <= i < n)
+D |- inject_i [c](e) : SUM_i(k,ck...cn)
+
+D |- c :: T
+D |- c == SUM(k,ck)
+D |- e : ci
+D |- ci known
+D |- ci nontaglike
+--------------------------------------  (i = k)
+D |- inject_known_i [c](e) : SUM_i(k,ck)
+
+D |- c :: T
+D |- c == SUM(k,ck)
+D |- t : GCTag(SUM_i(k,ck))
+D |- e : ci
+D |- ci known
+D |- ci taglike
+--------------------------------------  (i = k)
+D |- inject_known_i [c](t,e) : SUM_i(k,ck)
+
+D |- c :: T
+D |- c == SUM(k,ck)
+D |- t : GCTag(SUM_i(k,ck))
+D |- ci known
+D |- e : ci
+--------------------------------------  (k <= i < n, n > k)
+D |- inject_known_i [c](t,e) : SUM_i(k,ck,...,cn)
+
+
+A type is considered taglike iff it's weak-head normal form is one of
+the following: 
+
+Int_c, Sum_c _, Mu_c _, Proj_c(Mu_c), Exntag_c.
+
+A type is considered nontaglike iff it is known, and it's weak-head
+normal form is not one of the above.
+
+A type is known if it's weak-head normal form is not a path.
+
+Discussion:
+
+The gctag is never needed for non-carrier cases.  Because of various
+layout optimizations, it is not immediately apparent whether or not
+injection into a sum will allocate or not for carrier cases.
+Therefore, we cannot always statically know whether or not we need a
+gc tag.  In some cases however, we can know, and so make the tagging
+explicit.
+
+Let m denote the number of non value-carrying components and n the
+number of value-carrying components.  What are the various cases?
+
+1. n=0         we use a tag to represent the datatype
+
+No gctag is needed, since we will not allocate.
+
+3. m>=0, n=1    we use a tag for the non-carriers;
+                the carrier is boxed only if the carried type might look like a tag 
+		(e.g., ints, sums, mu's, exntags)
+
+The gctag may or may not be needed for the carrier case.  If the
+carrier type is statically known, then we can predict at compile time
+whether or not it is needed.  But if it is not, then we cannot.
+
+4. n>1         we use tags for the non-carriers and box all carriers
+
+The gctag is always needed for the carrier case.
+
+
+
+So for inject_known, we can always tell whether or not to compute a
+gctag.  Therefore, we always expect that we will get a tag if we need
+it, and the typing rules indicate this.
+
+A further optimization would be to say that inject takes a gctag if
+the number of carriers is > 1, since in this case we know that we will
+need it.  This would allow the gctag to be hoisted for
+
+datatype t = A of u | B of u*u
+
+though still not for
+
+datatype t' = A | B of u
+
+(where u is some unknown type)
+
+This may very well be worth doing, but I have chosen not to do so yet,
+just to keep things marginally simpler.
+
