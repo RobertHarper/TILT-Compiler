@@ -1486,9 +1486,7 @@ functor Toil(structure Il : IL
 			      val context' = add_context_mod(context,arglabel,argvar,
 							     SelfifySig (SIMPLE_PATH argvar, 
 									 signat))
-			      val _ = print "about to compile functor body"
 			      val (m',s') = xstrexp(context',body,constraint)
-			      val _ = print "compiled functor body"
 			      val v = fresh_named_var "functor_var"
 			      val sbnd = SBND(funid,BND_MOD(v,MOD_FUNCTOR(argvar,signat,m')))
 			      val sdec = SDEC(funid,DEC_MOD(v,SIGNAT_FUNCTOR(argvar,signat,s',

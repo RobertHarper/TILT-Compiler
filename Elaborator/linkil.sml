@@ -112,20 +112,30 @@ structure LinkIl (* : LINKIL *) =
 	val (initial_context, initial_sbnds) = Basis.initial_context(Toil.xty,
 								     Toil.xeq) 
 	val initial_sbnds_len = length initial_sbnds
+
+	fun add_context_entries(ctxt,entries) = 
+	    let fun help (CONTEXT_SDEC(SDEC(l,dec))) = CONTEXT_SDEC(SDEC(l,SelfifyDec dec))
+		  | help ce = ce
+		val entries' = map help entries
+	    in IlContext.add_context_entries(IlContext.empty_context,entries')
+	    end
 	    
 	fun elaborate_diff'(context,s) = 
 	    let
 		val what = parse s
 		val sbnd_ctxt_list = Toil.xdec(context,what) 
-		    handle (e as IlContext.NOTFOUND s) => (print "NOTFOUND: "; print s; print "\n"; raise e)
+		    handle (e as IlContext.NOTFOUND s) => 
+			(print "NOTFOUND: "; print s; print "\n"; raise e)
 		val sbnds = List.mapPartial #1 sbnd_ctxt_list
 		val ctxts = map #2 sbnd_ctxt_list
 	    in	(sbnds,ctxts)
 	    end;
+
 	fun elaborate'(context,s) = 
 	    let val (sbnds,context_diff) = elaborate_diff'(context,s)
-	    in	(sbnds,IlContext.add_context_entries(context,context_diff))
+	    in	(sbnds,add_context_entries(context,context_diff))
 	    end
+
 	fun elaborate s = elaborate'(initial_context,s)
 	fun elaborate_diff s = elaborate_diff'(initial_context,s)
 	fun evaluate target_sbnds =
@@ -140,31 +150,27 @@ structure LinkIl (* : LINKIL *) =
 	    in ressbnds
 	    end
 
-	fun foobaz arg = 
-	    let fun help (CONTEXT_SDEC(SDEC(l,dec))) = CONTEXT_SDEC(SDEC(l,SelfifyDec dec))
-		  | help ce = ce
-		val arg' = map help arg
-	    in IlContext.add_context_entries(IlContext.empty_context,arg')
-	    end
 
-	fun check filename doprint =
+	fun check timeit filename doprint =
 	    let
 		val (sbnds,cdiff) = elaborate_diff filename
+		val _ = timeit(SOME "ELABORATION")
 	    in  if doprint 
 		    then
 			(print "test: sbnds are: \n";
 			 Ppil.pp_sbnds sbnds;
 			 print "test: context is: \n";
-			 Ppil.pp_context (foobaz cdiff))
-		else ()
+			 Ppil.pp_context (add_context_entries(IlContext.empty_context,cdiff)))
+		else ();
+		    timeit NONE
 	    end
 	
-	fun check' filename doprint =
+	fun check' timeit filename doprint =
 	    let
 		open Il
 		open IlContext
 		val (sbnds,cdiff) = elaborate_diff filename
-		val _ = print "ELABORATED\n"
+		val _ = timeit(SOME "ELABORATION")
 		val _ = if doprint 
 			    then (print "test: sbnds are: \n";
 				  Ppil.pp_sbnds sbnds)
@@ -178,59 +184,55 @@ structure LinkIl (* : LINKIL *) =
 			 else ()
 		val ctxt = initial_context 
 		val precise_s = IlStatic.GetModSig(ctxt,m)
-		val _ = print "OBTAINED SIGNATURE\n"
-		val _ = if doprint
-			    then (	  print "\nprecise_s is:\n";
-				  Ppil.pp_signat precise_s;
-				  print "\n";
-				  print "\ncontext is\n";
-				  Ppil.pp_context (foobaz cdiff);
-				  print "\n")
-			else ()
-	    in (m,given_s,precise_s,ctxt)
-	    end
-
-	fun check'' filename doprint =
-	    let
-		open Il
-		open IlContext
-		val (sbnds,cdiff) = elaborate_diff filename
-		val _ = print "ELABORATED\n"
-		val _ = if doprint 
-			    then (print "test: sbnds are: \n";
-				  Ppil.pp_sbnds sbnds)
-			else ()
-		val m = MOD_STRUCTURE sbnds
-		val sdecs = List.mapPartial (fn (CONTEXT_SDEC sdec) => SOME sdec | _ => NONE) cdiff
-		val given_s = SIGNAT_STRUCTURE (NONE,sdecs)
-		val _ =  if doprint
-			     then (print "\ngiven_s is:\n";
-				   Ppil.pp_signat given_s)
-			 else ()
-		val ctxt = initial_context 
-		val precise_s = IlStatic.GetModSig(ctxt,m)
-		val _ = print "OBTAINED SIGNATURE\n"
+		val _ = timeit(SOME "TYPECHECKING")
 	    in if doprint
 		then (	  print "\nprecise_s is:\n";
 			  Ppil.pp_signat precise_s;
 			  print "\n";
 			  print "\ncontext is\n";
-			  Ppil.pp_context (foobaz cdiff);
+			  Ppil.pp_context (add_context_entries(IlContext.empty_context,cdiff));
 			  print "\n")
 		else ();
 		if (IlStatic.Sig_IsSub(ctxt,precise_s,given_s))
-		    then print "check worked\n"
+		    then timeit(SOME "SANITY-CHECK")
 		else Util.error "help.sml" "test'' failed: precise_s not a subsig of given_s";
+		    timeit NONE;
 		    (m,given_s,precise_s,ctxt)
 	    end
-	val test = fn s => check s false
-	val ptest = fn s => check s true
-	val test' = fn s => check' s false
-	val ptest' = fn s => check' s true
-	val test'' = fn s => check'' s false
-	val ptest'' = fn s => check'' s true
 
-structure IntKey = struct type ord_key = int val compare = Int.compare end;
- structure IntMap = SplayMapFn(IntKey);
+	fun timer () = let val timer = Timer.totalCPUTimer()
+			   val total = ref Time.zeroTime
+			   val last = ref(#usr(Timer.checkCPUTimer timer))
+			   val strings = ref ([] : string list)
+			   fun result (SOME str) =
+			       let val {gc,sys,usr} = Timer.checkCPUTimer timer
+				   val diff = Time.-(usr,!last)
+				   val _ = total := (Time.+(diff,!total))
+				   val _ = last := usr
+				   val s = ("Elapsed usr time for " ^ str ^ 
+					    ": " ^ (Time.toString diff) ^ "s\n")
+				   val _ = strings := (!strings) @ [s]
+			       in print s
+			       end
+			     | result NONE = (print "\n\n";
+					      print "============\n";
+					      print "TOTAL RESULT\n";
+					      print "============\n";
+					      app print (!strings);
+					      print "============\n";
+					      print "TOTAL = ";
+					      print (Time.toString (!total));
+					      print "s\n")
+		       in result
+		       end
+
+	val test = fn s => check (timer()) s false
+	val ptest = fn s => check (timer()) s true
+	val test' = fn s => check' (timer()) s false
+	val ptest' = fn s => check' (timer()) s true
+	val test'' = fn s => (check' (timer()) s false; ())
+	val ptest'' = fn s => (check' (timer()) s true; ())
+
+
     end (* struct *)
 
