@@ -209,45 +209,6 @@ this sharing information we get for free.
 "avoiding inlining (hence duplication) of constructors" ?
 
 
-To some extent, the two steps from SML through HIL to MIL might be
-unnecessary.  Changing the HIL elaboration to go directly to MIL
-(including the phase splitting) would be an option except that we
-could not enforce SML type generativity.  Therefore, we would have to
-do a pre-typecheck of the SML code (perhaps simply following the
-stamp-based approach of The Definition) to ensure that abstraction is
-being respected and then ignore generativity in the MIL as we do now.
-It might be difficult to do this efficiently in a non-ad-hoc
-manner, however, since SML cannot be written in a fully-type-explicit
-manner (explicit in ML) and we wouldn't want to do type inference twice.
-
-A different alternative would be to discard the MIL entirely, and
-extend the HIL with enough constructs (closures, etc.) to allow the
-remaining phases to transform HIL code.  We considered this, but
-decided against it because (1) the HIL was insufficiently close to the
-old TIL1 IL to reuse code, and (2) working with the HIL would have
-required more duplication of code for the expression and module levels
-(e.g., closure converting functions and functors).  It turns out 
-we didn't reuse much code anyway.
-
-A solution to (2) would be to work with a first-class module
-system.  However, Mark Lillibridge has shown the typechecking
-problem to be undecidable in general, which makes it less suitable
-for our purposes.
-
-The translation of SML polymorphism to HIL functors is elegant.
-However, given that we immediately translate these back to MIL
-polymorphism again, we might have just added explicit polymorphism as
-a special "derived form" (like let) to the HIL datatype and translated
-this specially.
-
-Even once the decision to use phase-splitting was made, there
-was still a fair amount of flexability left in deciding exactly
-what the MIL would be like.  The main question was whether
-we wanted to use singleton kinds and dependent types or
-whether these should be eliminated entirely. (The FLINT compiler
-took the latter route.)  
-
-
 ------------
 What is MIL?
 ------------
@@ -340,3 +301,47 @@ with typecase/Typecase alone.
 -------------------
 Typechecking of MIL
 -------------------
+
+
+-----------
+Reflections
+-----------
+
+To some extent, the two steps from SML through HIL to MIL might be
+unnecessary.  Changing the HIL elaboration to go directly to MIL
+(including the phase splitting) would be an option except that we
+could not enforce SML type generativity.  Therefore, we would have to
+do a pre-typecheck of the SML code (perhaps simply following the
+stamp-based approach of The Definition) to ensure that abstraction is
+being respected and then ignore generativity in the MIL as we do now.
+It might be difficult to do this efficiently in a non-ad-hoc
+manner, however, since SML cannot be written in a fully-type-explicit
+manner (explicit in ML) and we wouldn't want to do type inference twice.
+
+A different alternative would be to discard the MIL entirely, and
+extend the HIL with enough constructs (closures, etc.) to allow the
+remaining phases to transform HIL code.  We considered this, but
+decided against it because (1) the HIL was insufficiently close to the
+old TIL1 IL to reuse code, and (2) working with the HIL would have
+required more duplication of code for the expression and module levels
+(e.g., closure converting functions and functors).  It turns out 
+we didn't reuse much code anyway.
+
+A solution to (2) would be to work with a first-class module
+system.  However, Mark Lillibridge has shown the typechecking
+problem to be undecidable in general, which makes it less suitable
+for our purposes.
+
+The translation of SML polymorphism to HIL functors is elegant.
+However, given that we immediately translate these back to MIL
+polymorphism again, we might have just added explicit polymorphism as
+a special "derived form" (like let) to the HIL datatype and translated
+this specially.
+
+Even once the decision to use phase-splitting was made, there
+was still a fair amount of flexability left in deciding exactly
+what the MIL would be like.  The main question was whether
+we wanted to use singleton kinds and dependent types or
+whether these should be eliminated entirely. (The FLINT compiler
+took the latter route.)  
+
