@@ -15,10 +15,15 @@ Code:
 Transcript:  
 Comments:
 
-	Does HS permits this code?  If not, then we need to change the
-	"error" in reduce_to_remove into a real error message (because
-	the user code is wrong).  If so, then we need to fix the
-	translation of LetExp.
+	Does HS permits this code?  Yes.  See the discussion around
+	page 7 of the technical report.  It looks like TILT is
+	consistent with an earlier version of HS that did not permit
+	this code.
+
+	We need to fix the translation of LetExp.  There may be
+	similar bugs so we need to look at how the translations of
+	local expressions and signature ascription handle escaping
+	type information.
 
 Fix:         
 Test: n16
