@@ -1,3 +1,1 @@
-unit Test = "general.sml" {
-	Int List Vector Array Math Char TextIO
-}
+unit Test = "general.sml" {Vector Array TextIO IO}
