@@ -48,7 +48,10 @@ signature LISTOPS =
     (* Misc list helpers *)
     val eq_list : (('a * 'a -> bool) * 'a list * 'a list) -> bool
     val eq_listlist : (('a * 'a -> bool) * 'a list list * 'a list list) -> bool
+    (*[0...(n-1)]*)
     val count : int -> int list
+    (*[1...n]*)
+    val count1 : int -> int list
     val copy : int * 'a -> 'a list
     val member : ''a * ''a list -> bool
     val member_eq : ('a * 'a -> bool) * 'a * 'a list -> bool

@@ -515,7 +515,7 @@ struct
 			  fun reduce(vklist,clist,rescon) = 
 			      let val cbnds = map2 (fn ((v,_),c) => Con_cb(v,c)) (vklist,clist)
 			      in  if (null cbnds) then rescon 
-				  else NilSubst.renameCon(Let_c(Sequential,cbnds,rescon))
+				  else NilRename.renameCon(Let_c(Sequential,cbnds,rescon))
 			      end
 			  val rescon = 
 			      (case (#2(simplify_type state funcon)) of

@@ -98,7 +98,7 @@ struct
 
   fun rename_func (f:function) = 
       let val (b,_) = 
-	  NilSubst.renameBnd (Fixopen_b (Sequence.fromList
+	  NilRename.renameBnd (Fixopen_b (Sequence.fromList
 [(Name.fresh_var(),f)]))
       in
 	  case b of

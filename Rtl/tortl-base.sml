@@ -222,7 +222,7 @@ struct
 					  of SingleType_k _ => Type_k
 					   | kind => kind)
 	                       (* XXX should be removed when uniqueness invariant is removed *)
-			       val k = NilSubst.renameCVarsKind k 
+			       val k = NilRename.renameCVarsKind k 
 			     in  SOME(vl,vv,k)
 			     end)
 

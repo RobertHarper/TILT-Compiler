@@ -7,7 +7,7 @@ signature NORMALIZE =
     type con = Nil.con
     type exp = Nil.exp
     type module = Nil.module
-    type context = NilContext.context
+    type context = NilContextPre.context
     type 'a subst = 'a NilSubst.subst
 
     (*Print debugging messages*)
@@ -26,6 +26,7 @@ signature NORMALIZE =
     val con_normalize : context -> con -> con
     val exp_normalize : context -> exp -> exp
     val module_normalize : context -> module -> module
+    val pull : con * kind -> con
 
     (*Normalizing functions with substitutions.
      * xxx_normalize' (context,subst) xxx is equivalent to

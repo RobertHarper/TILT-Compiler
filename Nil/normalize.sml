@@ -2,9 +2,9 @@
 
 structure Normalize :> NORMALIZE =
 struct	
+  structure NilContext = NilContextPre
 
-
-    val number_flatten = Stats.int("number_flatten")
+  val number_flatten = Stats.int("number_flatten")
 
   open Nil 
   open Prim
@@ -214,6 +214,8 @@ struct
 	    (error "beta_conrecord called on non-projection" handle e => raise e))
 
   fun beta_conrecord proj = #2(beta_conrecord' proj)
+
+  val beta_conrecord = Stats.subtimer("Norm:beta_conrecord",beta_conrecord)
 
   fun eta_confun lambda = 
     let
@@ -889,10 +891,10 @@ struct
 	 let val (D,subst) = state
 	 in  (case (substitute subst var) of
 		   SOME c => (PROGRESS, subst, c)
-		 | NONE =>
-	           (case NilContext.find_kind_equation(D,Var_c var) of
+		 | NONE => (IRREDUCIBLE, subst, constructor))
+(*	           (case NilContext.find_kind_equation(D,Var_c var) of
 			SOME c => (PROGRESS, subst, c)
-		      | NONE => (IRREDUCIBLE, subst, Var_c var)))
+		      | NONE => (IRREDUCIBLE, subst, Var_c var)))*)
 	 end
 
         | (Let_c (sort,((cbnd as Open_cb (var,formals,body,body_kind))::rest),con)) =>
@@ -923,9 +925,10 @@ struct
 			   val (progress,con) = beta_conrecord' (Proj_c (c,lab))
 		       in  if progress
 			       then (PROGRESS,subst,con)
-			   else case (NilContext.find_kind_equation(D,con)) of
-			       NONE => (IRREDUCIBLE,subst,con)
-			     | SOME c => (PROGRESS,subst,c)
+			   else (IRREDUCIBLE,subst,con)
+		       (*case (NilContext.find_kind_equation(D,con)) of
+			NONE => (IRREDUCIBLE,subst,con)
+		 | SOME c => (PROGRESS,subst,c)*)
 		       end)
 	| (App_c (cfun,actuals)) => 
 	       (case con_reduce state cfun of
@@ -935,9 +938,10 @@ struct
 			    val (progress,con) = beta_confun' true D (App_c(c,actuals))
 			in  if progress
 				then (PROGRESS,subst,con)
-			    else case (NilContext.find_kind_equation(D,con)) of
+			    else (IRREDUCIBLE,subst,con)
+			      (*case (NilContext.find_kind_equation(D,con)) of
 				NONE => (IRREDUCIBLE,subst,con)
-			      | SOME c => (PROGRESS,subst,c)
+			      | SOME c => (PROGRESS,subst,c)*)
 			end)
 	| (Typecase_c {arg,arms,default,kind}) => error "typecase not done yet"
 	| (Annotate_c (annot,con)) => con_reduce state con)
@@ -945,7 +949,11 @@ struct
 
 
     and reduce_once (D,con) = let val (progress,subst,c) = con_reduce(D,NilSubst.empty()) con
-			      in  NilSubst.substConInCon subst c
+			      in  (case progress 
+				     of IRREDUCIBLE => (case NilContext.find_kind_equation (D,c) 
+							  of SOME c => NilSubst.substConInCon subst c
+							   | NONE => NilSubst.substConInCon subst c)
+				      | _ => NilSubst.substConInCon subst c)
 			      end
     and reduce_until (D,pred,con) = 
         let fun loop n (subst,c) = 
@@ -958,7 +966,10 @@ struct
 			      | HNF => (case pred (NilSubst.substConInCon subst c) of
 		                    SOME _ => REDUCED(valOf(pred (NilSubst.substConInCon subst c)))
 				  | NONE => UNREDUCED (NilSubst.substConInCon subst c))
-			      | IRREDUCIBLE => UNREDUCED (NilSubst.substConInCon subst c)
+			      | IRREDUCIBLE => 
+				  (case NilContext.find_kind_equation(D,c) 
+				     of SOME c => loop (n+1) (subst,c)
+				      | NONE => UNREDUCED (NilSubst.substConInCon subst c))
 			end
 	    end
         in  loop 0 (NilSubst.empty(),con)
@@ -979,7 +990,10 @@ struct
 	    in  case progress of
 			 PROGRESS => loop (n+1) (subst,c) 
 		       | HNF => (true, NilSubst.substConInCon subst c)
-		       | IRREDUCIBLE => (false, NilSubst.substConInCon subst c)
+		       | IRREDUCIBLE => 
+			   (case NilContext.find_kind_equation(D,c)
+			      of SOME c => loop (n+1) (subst,c)
+			       | NONE => (false, NilSubst.substConInCon subst c))
 	    end
         in  loop 0 (NilSubst.empty(),con)
         end
@@ -988,11 +1002,13 @@ struct
 
 
     and projectTuple(D:context, c:con, l:label) = 
-	(case #2(reduce_hnf(D,c)) of
-	     c as (Crecord_c _) => beta_conrecord(Proj_c(c,l))
-	   | c => (print "projectTuple reduced to non-crecord type = \n";
-		   Ppnil.pp_con c; print "\n";
-		   error "projectTuple reduced to non-crecord type"))
+	(case (reduce_hnf(D,Proj_c(c,l))) of
+	   (true,c)  => c
+	 | (false,c) => c(*
+			  (print "projectTuple irreducible type = \n";
+			   Ppnil.pp_con c; print "\n";
+			   error "projectTuple")*)
+	     )
 
     and removeDependence vclist c = 
 	let fun loop subst [] = NilSubst.substExpInCon subst c
@@ -1045,7 +1061,10 @@ struct
 		     in  case (nontagcount,which) of
 			 (0,_) => error "projectSumType: only tag fields"
 		       | (1,0) => hd cons
-		       | _ => projectTuple(D,hd cons, NilUtil.generate_tuple_label (which + 1))
+		       | _ => (projectTuple(D,hd cons, NilUtil.generate_tuple_label (which + 1))
+			       handle e => (print "projectSumtype - unable to reduce Tuple\n";
+					    NilContext.print_context D;
+					    raise e))
 		     end
 	   | c => (print "projectSumType reduced to non-sum type = \n";
 		   Ppnil.pp_con c; print "\n";
@@ -1271,9 +1290,9 @@ struct
   val beta_typecase = wrap2 "beta_typecase" beta_typecase
 
   val reduceToSumtype = wrap1 "reduceToSumType" reduceToSumtype
-  val type_of = fn arg => (wrap1 "type_of" type_of arg)
-      handle e => (print "type_of failed on ";
-		   Ppnil.pp_exp (#2 arg); raise e)
+  val type_of = fn arg => (wrap1 "type_of" type_of arg
+			   handle e => (print "type_of failed on ";
+					Ppnil.pp_exp (#2 arg); raise e))
 
   fun nilprim_uses_carg np =
 	(case np of

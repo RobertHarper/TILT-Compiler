@@ -36,12 +36,16 @@ alpha_context.sig.sml
 alpha_context.sml
 subst.sig.sml
 subst.sml
+nilrename.sml
+nilrename.sig.sml
+
 nilutil.sig.sml
 nilutil.sml
 nilerror.sig.sml
 nilerror.sml
 nilcontext.sig.sml
 nilcontext.sml
+nilcontextpre.sml
 nilprimutilparam.sml
 linearize.sig.sml
 linearize.sml
@@ -50,6 +54,8 @@ normalize.sml
 rewrite.sig.sml
 rewrite.sml
 
+nilhnf.sml
+nilhnf.sig.sml
 nilstatic.sig.sml
 nilstatic.sml 
 

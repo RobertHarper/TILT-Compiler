@@ -1,4 +1,4 @@
-(*$import TopLevel Util STATS Timer Listops Date *)
+(*$import TopLevel Util STATS Timer Listops Date ListMergeSort *)
 
 structure Stats :> STATS =
    struct
@@ -128,10 +128,13 @@ structure Stats :> STATS =
 		       val time_real = triple2real triple
 		       val time_cpu_string = real2string time_cpu
 		       val time_real_string = real2string time_real
+		       val count_string = Int.toString count
 		       val percent_cpu_string = real2string(time_cpu/total_cpu * 100.0)
 		       val percent_real_string = real2string(time_real/total_real * 100.0)
 		   in
 		       fprint (!max_name_size) name;
+		       print " : ";
+		       fprint 8 count_string;
 		       print " : ";
 		       fprint 8 time_cpu_string;
 		       fprint 10 (if disjoint then ("(" ^ percent_cpu_string ^ "%)") else "");
@@ -211,7 +214,8 @@ structure Stats :> STATS =
 	     print "-------------------------------------------\n"
 	 end
 
-      fun print_stats() = (print "\n\n";
+      fun print_stats() = (entries := ListMergeSort.sort (fn ((n1,_),(n2,_)) => n1 < n2) (!entries);
+			   print "\n\n";
 			   print_counters(); 	
 			   print "\n\n";
 			   print_ints(); 	

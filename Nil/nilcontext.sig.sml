@@ -1,5 +1,5 @@
 (*$import Nil *)
-signature NILCONTEXT = 
+signature NILCONTEXTPRE = 
   sig
       
     type kind = Nil.kind
@@ -16,6 +16,8 @@ signature NILCONTEXT =
     val insert_con : context * var * con -> context
 
     val find_con   : context * var -> con
+    val find_std_con_pre : (context * con -> con) -> context * var -> con
+
     val insert_con_list : context * (var * con) list -> context
 
     (*NOTE: Use of bind_kind over insert_kind is strongly recommended.
@@ -78,3 +80,10 @@ signature NILCONTEXT =
     val isRenamedCon : context -> Nil.con -> bool
     val isRenamedKind : context -> Nil.kind -> bool
   end 
+
+
+signature NILCONTEXT = 
+  sig
+    include NILCONTEXTPRE
+    val find_std_con : context * var -> con
+  end

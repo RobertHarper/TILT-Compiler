@@ -1,4 +1,4 @@
-(*$import Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam TraceInfo *)
+(*$import Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam TraceInfo Stats *)
 
 structure NilPrimUtil :> PRIMUTIL where type con = Nil.con
                                  where type exp = Nil.exp = PrimUtil(structure PrimUtilParam = NilPrimUtilParam)
@@ -11,6 +11,9 @@ struct
 
   val debug = ref false
   fun error s = Util.error "nilutil.sml" s
+
+  val timer = Stats.timer 
+  val subtimer = Stats.subtimer
 
   fun fresh_var() = Name.fresh_named_var "nilutil"
   val unzip = ListPair.unzip
@@ -166,14 +169,28 @@ struct
 
   val fresh_named_var = Name.fresh_named_var
 
-
+  local
+    val substConInKind = fn subst => subtimer ("Selfify:substConInKind",NilSubst.substConInKind subst)
+  in
   fun selfify (con,kind) =
     (case kind of
           Type_k => SingleType_k con
 	| SingleType_k _ => kind
 	| Single_k _ => kind
 	| Record_k entries => 
-	 Record_k (Sequence.map (fn ((l,v),k) => ((l,v),selfify (Proj_c (con,l),k))) entries)
+	    let
+	      val subst = ref (NilSubst.empty())
+	      fun mapper ((l,v),k) = 
+		let
+		  val proj = Proj_c (con,l)
+		  val kres = selfify (proj,substConInKind (!subst) k)
+		in
+		  (subst := NilSubst.add (!subst) (v,proj);
+		   ((l,v),kres))
+		end
+	    in
+	      Record_k (Sequence.map mapper entries)
+	    end
 	| Arrow_k (openness,args,return) => 
 	 let
 	   val (formal_vars,_) = ListPair.unzip args
@@ -181,6 +198,8 @@ struct
 	 in
 	   Arrow_k (openness,args,selfify(App_c (con,actuals),return))
 	 end)
+end
+  val selfify = subtimer ("Selfify",selfify)
 
   fun singletonize (kind as SingleType_k(_),con) = kind
     | singletonize (kind as Single_k(_),con) = kind
