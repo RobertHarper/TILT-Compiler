@@ -63,7 +63,7 @@ unit Project : PROJECT = "project.sml" {
 unit TOOLS = "tools.sig.sml" {}
 interface Tools = "tools.int" {TOOLS}
 unit Tools : Tools = "tools.sml" {
-	TOOLS Util Stats String OS Target IntSyn Platform List Fs
+	TOOLS Util Stats String OS Target IntSyn Platform List Fs Listops
 }
 unit COMPILER = "compiler.sig.sml" {Name IntSyn}
 interface Compiler = "compiler.int" {COMPILER}
@@ -80,13 +80,13 @@ unit COMMUNICATION = "communication.sig.sml" {
 unit Communication = "communication.sml" {
 	COMMUNICATION Queue Util Blaster Formatter
 	Stats Name IntSyn NameBlast String Posix OS
-	List Platform BinIO Bool Fs
+	List Platform BinIO Bool Fs Target
 }
 
 unit SLAVE = "slave.sig.sml" {}
 unit Slave = "slave.sml" {
 	SLAVE Util Stats Communication Time Platform IntSyn Compiler
-	UtilError Target Fs Name
+	UtilError Fs Name
 }
 
 unit UPDATE = "update.sig.sml" {IntSyn}
