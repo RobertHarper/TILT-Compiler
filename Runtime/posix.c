@@ -1270,12 +1270,18 @@ static bool filter(const char* name) {
 string posix_filesys_readdir(int arg)
 {
   DIR *dir = (DIR *)arg;
-  struct dirent *entry = readdir(dir);
-  while (entry != NULL && filter(entry->d_name))
-	  entry = readdir(dir);
-  if (entry == NULL)
-    runtime_error(errno);
-  return cstring2mlstring_alloc(entry->d_name);
+  struct dirent *entry;
+  do {
+    errno = 0;
+    entry = readdir(dir);
+  } while (entry != NULL && filter(entry->d_name));
+  if (entry != NULL)
+    return cstring2mlstring_alloc(entry->d_name);
+  else {
+    if (errno != 0)
+      runtime_error(errno);
+    return cstring2mlstring_alloc("");
+  }
 }
 
 unit posix_filesys_rewinddir(int arg)
