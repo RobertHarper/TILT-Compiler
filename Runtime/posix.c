@@ -132,7 +132,7 @@ typedef struct termio_rep_struct *termio_rep;
 
 static char* mlstring2cstring(string mlstring)
 {
-  char buf[1024];
+  static char buf[1024];
   unsigned int tag = ((int *)mlstring)[-1];
   int len = tag >> POSSLEN_SHIFT;
   char *raw = (char *)mlstring;
@@ -251,13 +251,14 @@ string posix_error_name(int unused)
 int posix_error_num(string arg)
 {
   int i;
+  char* carg = mlstring2cstring(arg);
   for (i=0; i<((sizeof tbl)/(sizeof (sys_const_t))); i++)
     {
       char *name = tbl[i].name;
-      if (!(strcmp(name,arg)))
+      if (!(strcmp(name,carg)))
 	return tbl[i].id;
     }
-  printf("posix_error_num could not find entry '%s'\n",arg);
+  printf("posix_error_num could not find entry '%s'\n",carg);
   assert(0);
 }
 
@@ -280,13 +281,14 @@ intword_list posix_os_poll(intword_list unused1, intpair_option unused2)
 int posix_io_num(string arg)
 {
   int i;
+  char* carg = mlstring2cstring(arg);
   for (i=0; i<((sizeof io_values)/(sizeof (name_val_t))); i++)
     {
       char *name = io_values[i].name;
-      if (!(strcmp(name,arg)))
+      if (!(strcmp(name,carg)))
 	return io_values[i].id;
     }
-  printf("posix_io_num could not find entry '%s'\n",arg);
+  printf("posix_io_num could not find entry '%s'\n",carg);
   assert(0);
 }
 
@@ -503,13 +505,14 @@ string_stringlist posix_procenv_uname(unit unused)
 int posix_tty_num(string arg)
 {
   int i;
+  char* carg = mlstring2cstring(arg);
   for (i=0; i<((sizeof tty_values)/(sizeof (name_val_t))); i++)
     {
       char *name = tty_values[i].name;
-      if (!(strcmp(name,arg)))
+      if (!(strcmp(name,carg)))
 	return tty_values[i].id;
     }
-  printf("posix_tty_num could not find entry '%s'\n",arg);
+  printf("posix_tty_num could not find entry '%s'\n",carg);
   assert(0);
 }
 
@@ -630,26 +633,28 @@ bool posix_procenv_isatty(int unused)
 int posix_process_num(string arg)
 {
   int i;
+  char* carg = mlstring2cstring(arg);
   for (i=0; i<((sizeof process_values)/(sizeof (name_val_t))); i++)
     {
       char *name = process_values[i].name;
-      if (!(strcmp(name,arg)))
+      if (!(strcmp(name,carg)))
 	return process_values[i].id;
     }
-  printf("posix_process_num could not find entry '%s'\n",arg);
+  printf("posix_process_num could not find entry '%s'\n",carg);
   assert(0);
 }
 
 word posix_process_sysconf(string arg)
 {
   int i;
+  char* carg = mlstring2cstring(arg);
   for (i=0; i<((sizeof sysconf_values)/(sizeof (name_val_t))); i++)
     {
       char *name = sysconf_values[i].name;
-      if (!(strcmp(name,arg)))
+      if (!(strcmp(name,carg)))
 	return sysconf_values[i].id;
     }
-  printf("posix_process_sysconf could not find entry '%s'\n",arg);
+  printf("posix_process_sysconf could not find entry '%s'\n",carg);
   assert(0);
 }
 
@@ -784,26 +789,28 @@ int posix_process_sleep(int unused)
 int posix_signal_num(string arg)
 {
   int i;
+  char* carg = mlstring2cstring(arg);
   for (i=0; i<((sizeof signal_values)/(sizeof (name_val_t))); i++)
     {
       char *name = signal_values[i].name;
-      if (!(strcmp(name,arg)))
+      if (!(strcmp(name,carg)))
 	return signal_values[i].id;
     }
-  printf("posix_signal_num could not find entry '%s'\n",arg);
+  printf("posix_signal_num could not find entry '%s'\n",carg);
   assert(0);
 }
 
 word posix_filesys_num(string arg)
 {
   int i;
+  char* carg = mlstring2cstring(arg);
   for (i=0; i<((sizeof filesys_values)/(sizeof (name_val_t))); i++)
     {
       char *name = filesys_values[i].name;
-      if (!(strcmp(name,arg)))
+      if (!(strcmp(name,carg)))
 	return filesys_values[i].id;
     }
-  printf("posix_filesys_num could not find entry '%s'\n",arg);
+  printf("posix_filesys_num could not find entry '%s'\n",carg);
   assert(0);
 }
 
@@ -890,10 +897,15 @@ unit posix_filesys_mkfifo(string unused1, word unused)
   assert(0);
 }
 
-unit posix_filesys_unlink(string unused)
+unit posix_filesys_unlink(string arg)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  char* path = mlstring2cstring(arg);
+  int result = unlink(path);
+  if (result) {
+    printf("posix_filesys_unlink failed with errno = %d\n", errno);
+    assert(0);
+  }
+  return 256; /* unit */
 }
 
 unit posix_filesys_rmdir(string unused)
