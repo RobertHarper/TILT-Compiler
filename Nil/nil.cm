@@ -6,6 +6,7 @@ Group
         signature NILCONTEXT
 
         structure Linknil
+	structure LinkIl
 is
 
 ../smlnj-lib.cm         	(* ------ SML/NJ library ------ *)

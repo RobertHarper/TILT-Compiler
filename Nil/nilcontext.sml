@@ -73,22 +73,13 @@ struct
   fun inc int_ref = int_ref := !int_ref + 1
 
   fun insert_kind ({kindmap,conmap}:context,var,kind) = 
-    let
-      val _ = (Util.lprintl "Insert kind used";
-	       inc bound)
-    in
       (case V.find (kindmap, var)
 	 of NONE => {kindmap = V.insert (kindmap, var, selfify(Nil.Var_c var,kind)),
 		     conmap = conmap}
 	  | _ => error ("Constructor variable "^(var2string var)^" already in context"))
-    end
 
   fun insert_kind_list (C:context,defs : (var * kind) list) =
-    let
-      val _ = (Util.lprintl "Insert kind list used")
-    in
       List.foldl (fn ((v,k),C) => insert_kind (C,v,k)) C defs
-    end
 
   fun find_kind ({kindmap,...}:context,var) = V.find (kindmap, var)
     

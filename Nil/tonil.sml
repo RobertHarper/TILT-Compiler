@@ -52,6 +52,7 @@ struct
    val strip_var = Nilutil.strip_var
    val strip_arrow = Nilutil.strip_arrow
    val strip_singleton = Nilutil.strip_singleton
+   val is_unit_c = Nilutil.is_unit_c
 
    val perr_c = NilError.perr_c
    val perr_e = NilError.perr_e
@@ -467,9 +468,8 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 		| _ => (perr_e name_arg_r;
 			   error "Expected expression variable")
 
-	   val is_type_arg_unit = (case type_arg_r of
-				       Prim_c(Record_c _,[]) => true
-				     | _ => false)
+	   val is_type_arg_unit = is_unit_c type_arg_r 
+
            val name_c = Var_c var_c
 	   val name_r = Var_e var_r
 
@@ -638,9 +638,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   (* Split the argument parameter *)
 	   val (var_arg_c, var_arg_r, vmap') = splitVar (var_arg, vmap_of context)
 	   val (knd_arg, con_arg) = xsig context (Var_c var_arg_c, il_arg_signat)
-	   val is_con_arg_unit = (case con_arg of
-				      Prim_c(Record_c _,[]) => true
-				    | _ => false)
+	   val is_con_arg_unit = is_unit_c con_arg 
 
            val context' = update_vmap(context, vmap')
 
@@ -1044,9 +1042,8 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
 	       val (poly_var_c, poly_var_r, vmap'') = splitVar (poly_var, vmap')
 	       val (knd_arg, con_arg) = xsig context (Var_c poly_var_c, il_arg_signat)
-	       val is_con_arg_unit = (case con_arg of
-					  Prim_c(Record_c _,[]) => true
-					| _ => false)
+	       val is_con_arg_unit = is_unit_c con_arg 
+
 	       val context' = 
 		   update_NILctx(update_vmap(context, vmap''),
 				  Nilcontext.insert_con
@@ -2108,11 +2105,13 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		       
 		   val (knd', con') = 
 		       xsig context' (App_c(con0, [Var_c var]), sig_rng)
-		       
+
+		   val is_con_unit = is_unit_c con
 	       in
-		   (Arrow_k (Open, [(var_c, knd)], knd'),
-		    AllArrow_c (Open, xeffect arrow, [(var_c, knd)],
-				[con], w0, con'))
+		 (Arrow_k (Open, [(var_c, knd)], knd'),
+		  AllArrow_c (Open, xeffect arrow, [(var_c, knd)],
+			      if is_con_unit andalso !optimize_empty_structure then 
+				[] else [con], w0, con'))
 	       end
        in
 	   Nilcontext.c_insert_kind(NILctx_of context, var_c, knd, cont1)

@@ -8,7 +8,12 @@ signature NILSUBST =
     type 'a subst
 
     val debug : bool ref
-    val get_stats : unit -> {substituted:int,short_circuited:int}
+    val stats : bool ref
+    val get_stats : unit -> {substituted:int,
+			     short_circuited:int,
+			     average_size:int,
+			     average_sc_size:int}
+
     val reset_stats : unit -> unit
 
     val empty : unit -> 'a subst

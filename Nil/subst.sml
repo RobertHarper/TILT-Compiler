@@ -11,13 +11,22 @@ functor NilSubstFn(structure Nil : NIL
     open Nil
 
     val debug = ref false
+    val stats = ref false
+
     val substituted = ref 0
     val short_circuited = ref 0
-
+    val total_size = ref 0
+    val total_sc_size = ref 0
     fun inc int_ref = int_ref := !int_ref + 1
 
-    fun get_stats () = {substituted=(!substituted),short_circuited=(!short_circuited)}
-    fun reset_stats () = (substituted := 0;short_circuited := 0)
+    fun get_stats () = {substituted=(!substituted),
+			short_circuited=(!short_circuited),
+			average_size = !total_size div !substituted,
+			average_sc_size = !total_sc_size div !short_circuited}
+    fun reset_stats () = (substituted := 0;
+			  short_circuited := 0;
+			  total_size := 0;
+			  total_sc_size := 0)
 
     val foldl_acc = Listops.foldl_acc
     val map_second = Listops.map_second
@@ -29,7 +38,13 @@ functor NilSubstFn(structure Nil : NIL
     fun error s = Util.error "subst.sml" s
 
     local
-      open LargeWord
+      structure W = LargeWord
+      type word = W.word
+      val fromInt = W.fromInt
+      val orb = W.orb
+      val andb = W.andb
+      val notb = W.notb
+      val xorb = W.xorb
     in
       val var2word = fromInt o Name.var2int
 
@@ -73,10 +88,24 @@ functor NilSubstFn(structure Nil : NIL
 	end
 
       fun substitute {test,subst} var = 
-	if (andb (test,var2word var)) = zero then
-	  (inc substituted;VarMap.find (subst,var))
-	else 
-	  (inc substituted;inc short_circuited;NONE)
+	let
+	  val _ = 
+	    if !stats then
+	      if (andb (test,var2word var)) = zero then
+		(inc substituted;
+		 total_size := !total_size + (VarMap.numItems subst))
+	      else 
+		(inc substituted;
+		 total_size := !total_size + (VarMap.numItems subst);
+		 inc short_circuited;
+		 total_sc_size := !total_sc_size + (VarMap.numItems subst))
+	    else ()
+	in
+	  if (andb (test,var2word var)) = zero then
+	    VarMap.find (subst,var)
+	  else 
+	    NONE
+	end
 
       fun is_empty {test,subst} = (VarMap.numItems subst) = 0
 

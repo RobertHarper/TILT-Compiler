@@ -93,6 +93,7 @@ signature NILUTIL =
     val is_exn_con : Nil.con -> bool
     val is_var_c : Nil.con -> bool
     val is_float_c : Nil.con -> bool
+    val is_unit_c : Nil.con -> bool
     val strip_singleton : Nil.kind -> Nil.kind
     val singletonize : (Nil.phase option * Nil.kind * Nil.con) -> Nil.kind
     val get_arrow_return : Nil.con -> Nil.con option

@@ -120,6 +120,9 @@ struct
 
     fun is_exn_con' (Prim_c (Exn_c,[])) = true
       | is_exn_con' _ = false
+
+    fun is_unit_c' (Prim_c(Record_c _,[])) = true
+      | is_unit_c' _ = false
   in
     val strip_var = strip_annotate strip_var'
     val strip_exntag = strip_annotate strip_exntag'
@@ -136,6 +139,7 @@ struct
     val strip_app = strip_annotate strip_app'
 
     val is_exn_con = strip_annotate is_exn_con'
+    val is_unit_c = strip_annotate is_unit_c'
     val is_var_c = isSome o strip_var
     val is_float_c = isSome o strip_float
   end

@@ -1639,24 +1639,18 @@ struct
 	| Prim_e (PrimOp prim,cons,exps) =>   
 	    let 
 	      val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
-	      val app_con = PrimUtil.get_type' prim cons
-	      val (app_con,kind) = con_valid (D,app_con)
-	      val exps_and_cons = (map (curry2 exp_valid D) exps)
-	      val (exps,exp_cons) = unzip exps_and_cons
-	      val exp_arg = 
-		(case exps_and_cons 
-		   of [] => []
-		    | [arg] => [#1 arg]
-		    | list => [exp_tuple list])
-	      val var = fresh_var();
-	      val D = insert_con(D,var,app_con)
-	      val openness = 
-		(case strip_arrow app_con
-		   of SOME (openness,_,_,_,_,_) => openness
-		    | NONE => error "Invalid type for primop")
-	      val app = App_e(openness,Var_e var,[],exp_arg,[])
-	      val (app,con) = (exp_valid(D,app)
-			       handle any => error "Error in primop")
+	      val (total,arg_types,return_type) = PrimUtil.get_type prim cons
+	      val (return_type,_) = con_valid(D,return_type)
+	      val (arg_types,_) = unzip (map (curry2 con_valid D) arg_types)
+	      val (exps,exp_cons) = unzip (map (curry2 exp_valid D) exps)
+	      val con = 
+		if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch in prim args") (arg_types,exp_cons) then
+		  return_type
+		else
+		  (PpNil.pp_list PpNil.pp_con' arg_types ("\nExpected arguments of types: ",",","\n",false);
+		   PpNil.pp_list PpNil.pp_exp' exps ("\nFound arguments: ",",","\n",false);
+		   PpNil.pp_list PpNil.pp_con' exp_cons ("\nof types: ",",","\n",false);
+		   error "Illegal type for Prim op")
 	      val exp = Prim_e (PrimOp prim,cons,exps)
 	    in
 	      (exp,con)
@@ -1667,17 +1661,17 @@ struct
 	    in
 	      (Switch_e switch,con)
 	    end
-	| ((App_e (openness as (Code | ExternCode),exp as (Var_e _),cons,texps,fexps)) |  
-	   (App_e (openness as (Closure | Open),exp,cons,texps,fexps))) =>
+	| ((App_e (openness as (Code | ExternCode),app as (Var_e _),cons,texps,fexps)) |  
+	   (App_e (openness as (Closure | Open),app,cons,texps,fexps))) =>
 	    let
 	      val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
 	      val actuals_t = map (curry2 exp_valid D) texps
 	      val actuals_f = map (curry2 exp_valid D) fexps
-	      val (exp,con) = exp_valid (D,exp)
+	      val (app,con) = exp_valid (D,app)
 	      val (openness',_,tformals,formals,numfloats,body) = 
 		(case strip_arrow con
 		   of SOME c => c
-		    | NONE => (perr_e_c (exp,con);
+		    | NONE => (perr_e_c (app,con);
 			       (error "Application of non-arrow expression" handle e => raise e)))
 		   
 	      fun check_one_kind ((var,formal_kind),actual_kind,(D,subst)) = 
@@ -1726,9 +1720,12 @@ struct
 		  (PpNil.pp_list PpNil.pp_con' formals ("\nFormal Types: ",", ","\n",false);
 		   PpNil.pp_list PpNil.pp_exp' t_exps ("\nActuals: ",", ","\n",false);
 		   PpNil.pp_list PpNil.pp_con' t_cons ("\nActual Types: ",", ","\n",false);
+		   perr_e exp;
+		   lprintl "Function is";
+		   perr_e_c (app,con);
 		   error "Formal/actual parameter type mismatch" handle e => raise e)
 
-	      val exp = App_e (openness,exp,cons,t_exps,f_exps)
+	      val exp = App_e (openness,app,cons,t_exps,f_exps)
 	      val subst2 = Subst.fromList (zip (#1 (unzip tformals)) cons)
 	      val subst = Subst.con_subst_compose (subst2,subst1)
 	      val con = substConInCon subst body
