@@ -8,6 +8,8 @@
 # Should probably only be run on linux because of the strange chmod
 # and mkdir usage.
 
+if (! ~ `{/usr/local/bin/sys} i386_linux*) { echo run me on linux; exit 1 } 
+
 path=(/usr/local/bin /usr/bin /bin)
 
 umask 022

@@ -6,7 +6,7 @@ structure Main : MAIN =
 struct
 
     val usage = "usage: tilt [-?vs] [-fr flag] [-pcm mapfile] [mapfile ...] [-- [num/]host ...]\n"
-    val version = "TILT version 0.1 (alpha3)\n"
+    val version = "TILT version 0.1 (alpha4)\n"
 
     datatype cmd =
         Make of string list		(* [mapfile ...] *)
