@@ -4,8 +4,8 @@
 
 infix 1 seq
 fun e1 seq e2 = e2;
-fun check b = if b then "OK" else "WRONG";
-fun check_th f = (if f () then "OK" else "WRONG") handle _ => "EXN";
+fun chck b = if b then "OK" else "WRONG";
+fun chck_th f = (if f () then "OK" else "WRONG") handle _ => "EXN";
 
 fun range (from, to) p = 
     let open Int 
@@ -13,11 +13,11 @@ fun range (from, to) p =
 	(from > to) orelse (p from) andalso (range (from+1, to) p)
     end;
 
-fun checkrange bounds = check o range bounds;
+fun chckrange bounds = chck o range bounds;
 
 fun tst0 s s' = print (s ^ "    \t" ^ s' ^ "\n");
-fun tst  s b = tst0 s (check  b);
-fun tst' s f = tst0 s (check_th f);
+fun tst  s b = tst0 s (chck  b);
+fun tst' s f = tst0 s (chck_th f);
 
 fun tstrange s bounds = (tst s) o range bounds  
 
@@ -53,148 +53,148 @@ local
     fun pr_ln s s' = print (s ^ ": " ^ s' ^ "\n")
 in
 
-val test1 = checkrange (0, 255) 
+val test1 = chckrange (0, 255) 
     (fn i => i = w2i (i2w i));
 val _ = pr_ln "test1" test1
-val test2 = checkrange (~1000, 1000) 
+val test2 = chckrange (~1000, 1000) 
     (fn i => let val r = w2i (i2w i) 
 	     in 0 <= r andalso r < 256 end);
 val _ = pr_ln "test2" test2
-val test3 = checkrange (~128, 127) 
+val test3 = chckrange (~128, 127) 
     (fn i => i = toIntX (i2w i));
 val _ = pr_ln "test3" test3
-val test4 = checkrange (~1000, 1000)
+val test4 = chckrange (~1000, 1000)
     (fn i => let val r = toIntX (i2w i) 
 	     in ~128 <= r andalso r < 128 end);
 val _ = pr_ln "test4" test4
-val test5a = checkrange (0,15) 
+val test5a = chckrange (0,15) 
     (fn i => (i+240) div 2 * 2 + 1
              = w2i (orb (i2w i, i2w 241)));
 val _ = pr_ln "test5a" test5a
-val test5b = checkrange (0,255)
+val test5b = chckrange (0,255)
     (fn i => i = w2i (orb (i2w i, i2w i)));
 val _ = pr_ln "test5b" test5b
-val test5c = checkrange (~1000,1000)
+val test5c = chckrange (~1000,1000)
     (fn i => let val r = w2i (andb (i2w 2047, i2w i)) 
 	     in 0 <= r andalso r < 256 end);
 val _ = pr_ln "test5c" test5c
-val test6a = checkrange (0,15) 
+val test6a = chckrange (0,15) 
     (fn i => i div 2 * 2 = w2i (andb (i2w i, i2w 254)));
 val _ = pr_ln "test6a" test6a
-val test6b = checkrange (0,255)
+val test6b = chckrange (0,255)
     (fn i => i = w2i (andb (i2w i, i2w i)));
 val _ = pr_ln "test6b" test6b
-val test6c = checkrange (~1000,1000)
+val test6c = chckrange (~1000,1000)
     (fn i => let val r = w2i (andb (i2w 2047, i2w i)) 
 	     in 0 <= r andalso r < 256 end);
 val _ = pr_ln "test6c" test6c
-val test7a = checkrange (0,15) 
+val test7a = chckrange (0,15) 
     (fn i => i+240 = w2i (xorb (i2w i, i2w 240)));
 val _ = pr_ln "test7a" test7a
-val test7b = checkrange (0, 255)
+val test7b = chckrange (0, 255)
     (fn i => 0 = w2i (xorb (i2w i, i2w i)));
 val _ = pr_ln "test7b" test7b
-val test7c = checkrange (~1000,1000)
+val test7c = chckrange (~1000,1000)
     (fn i => let val r = w2i (xorb (i2w 0, i2w i)) 
 	     in 0 <= r andalso r < 256 end);
 val _ = pr_ln "test7c" test7c
-val test8a = check (255 = w2i (notb (i2w 0)));
+val test8a = chck (255 = w2i (notb (i2w 0)));
 val _ = pr_ln "test8a" test8a
-val test8b = check (0 = w2i (notb (i2w 255)));
+val test8b = chck (0 = w2i (notb (i2w 255)));
 val _ = pr_ln "test8b" test8b
-val test8c = checkrange (~1000,1000)
+val test8c = chckrange (~1000,1000)
     (fn i => let val r = w2i (notb (i2w i)) 
 	     in 0 <= r andalso r < 256 end);
 val _ = pr_ln "test8c" test8c
 
-val test9a = checkrange (0,7)
+val test9a = chckrange (0,7)
     (fn k => pwr2 k = w2i (<< (i2w 1, i2W k)));
 val _ = pr_ln "test9a" test9a
-val test9b = checkrange (8,70)
+val test9b = chckrange (8,70)
     (fn k => 0 = w2i (<< (i2w 1, i2W k)));
 val _ = pr_ln "test9b" test9b
-val test9c = checkrange (~50,50)
+val test9c = chckrange (~50,50)
     (fn k => let val r = w2i (<< (i2w 1, i2W k))
 	     in 0 <= r andalso r < 256 end);
 val _ = pr_ln "test9c" test9c
-val test9d = checkrange (~50,50)
+val test9d = chckrange (~50,50)
     (fn k => let val r = w2i (>> (i2w 1, i2W k))
 	     in 0 <= r andalso r < 256 end);
 val _ = pr_ln "test9d" test9d
-val test9e = checkrange (0, 127) 
+val test9e = chckrange (0, 127) 
     (fn i => 2 * i = w2i (<< (i2w i, i2W 1)));
 val _ = pr_ln "test9e" test9e
-val test9f = checkrange (0, 255)
+val test9f = chckrange (0, 255)
     (fn i => i div 2 = w2i (>> (i2w i, i2W 1)));
 val _ = pr_ln "test9f" test9f
-val test9g = checkrange (0,64)
+val test9g = chckrange (0,64)
     (fn k => rwp 255 k = w2i (>> (i2w 255, i2W k)));
 val _ = pr_ln "test9g" test9g
-val test9h = checkrange (8,65)
+val test9h = chckrange (8,65)
     (fn k => 0 = w2i (<< (i2w 255, i2W k)));
 val _ = pr_ln "test9h" test9h
-val test9i = checkrange (1,65)
+val test9i = chckrange (1,65)
     (fn k => 0 = w2i (>> (i2w 1, i2W k)));
 val _ = pr_ln "test9i" test9i
 
-val test10a = checkrange (1,65)
+val test10a = chckrange (1,65)
     (fn k => 0 = w2i (~>> (i2w 1, i2W k)));
 val _ = pr_ln "test10a" test10a
-val test10b = checkrange (1,65)
+val test10b = chckrange (1,65)
     (fn k => 255 = w2i (~>> (i2w ~1, i2W k)));
 val _ = pr_ln "test10b" test10b
-val test10c = checkrange (~50,50)
+val test10c = chckrange (~50,50)
     (fn k => let val r = w2i (~>> (i2w 1, i2W k))
 	     in 0 <= r andalso r < 256 end);
 val _ = pr_ln "test10c" test10c
-val test10d = checkrange (~128, 127)
+val test10d = chckrange (~128, 127)
     (fn i => i div 2 = toIntX (~>> (i2w i, i2W 1)));
 val _ = pr_ln "test10d" test10d
-val test10e = checkrange (0,65)
+val test10e = chckrange (0,65)
     (fn k => rwp ~128 k = toIntX (~>> (i2w ~128, i2W k)));
 val _ = pr_ln "test10e" test10e
-val test11a = check (Word8.>  (i2w 255, i2w 254));
+val test11a = chck (Word8.>  (i2w 255, i2w 254));
 val _ = pr_ln "test11a" test11a
-val test11b = check (Word8.<  (i2w 253, i2w 254));
+val test11b = chck (Word8.<  (i2w 253, i2w 254));
 val _ = pr_ln "test11b" test11b
-val test11c = check (Word8.>= (i2w 128, i2w 128));
+val test11c = chck (Word8.>= (i2w 128, i2w 128));
 val _ = pr_ln "test11c" test11c
-val test11d = check (Word8.>= (i2w 128, i2w 127));
+val test11d = chck (Word8.>= (i2w 128, i2w 127));
 val _ = pr_ln "test11d" test11d
-val test11e = check (Word8.<= (i2w 1,   i2w 1));
+val test11e = chck (Word8.<= (i2w 1,   i2w 1));
 val _ = pr_ln "test11e" test11e
-val test11f = check (Word8.<= (i2w 0,   i2w 1));
+val test11f = chck (Word8.<= (i2w 0,   i2w 1));
 val _ = pr_ln "test11f" test11f
 
-val test12a = check (w2i(Word8.+(i2w   5, i2w  10)) =  15);
+val test12a = chck (w2i(Word8.+(i2w   5, i2w  10)) =  15);
 val _ = pr_ln "test12a" test12a
-val test12b = check (w2i(Word8.+(i2w 127, i2w  11)) = 138);
+val test12b = chck (w2i(Word8.+(i2w 127, i2w  11)) = 138);
 val _ = pr_ln "test12b" test12b
-val test12c = check (w2i(Word8.+(i2w 254, i2w   3)) =   1);
+val test12c = chck (w2i(Word8.+(i2w 254, i2w   3)) =   1);
 val _ = pr_ln "test12c" test12c
-val test12d = check (w2i(Word8.-(i2w  10, i2w   3)) =   7);
+val test12d = chck (w2i(Word8.-(i2w  10, i2w   3)) =   7);
 val _ = pr_ln "test12d" test12d
-val test12e = check (w2i(Word8.-(i2w 138, i2w  11)) = 127);
+val test12e = chck (w2i(Word8.-(i2w 138, i2w  11)) = 127);
 val _ = pr_ln "test12e" test12e
-val test12f = check (w2i(Word8.-(i2w   1, i2w   3)) = 254);
+val test12f = chck (w2i(Word8.-(i2w   1, i2w   3)) = 254);
 val _ = pr_ln "test12f" test12f
-val test12g = check (w2i(Word8.*(i2w   5, i2w  11)) =  55);
+val test12g = chck (w2i(Word8.*(i2w   5, i2w  11)) =  55);
 val _ = pr_ln "test12g" test12g
-val test12h = check (w2i(Word8.*(i2w   4, i2w  35)) = 140);
+val test12h = chck (w2i(Word8.*(i2w   4, i2w  35)) = 140);
 val _ = pr_ln "test12h" test12h
-val test12i = check (w2i(Word8.*(i2w   3, i2w 129)) = 131);
+val test12i = chck (w2i(Word8.*(i2w   3, i2w 129)) = 131);
 val _ = pr_ln "test12i" test12i
-val test12j = check (w2i(Word8.div(i2w  10, i2w 3)) =   3);
+val test12j = chck (w2i(Word8.div(i2w  10, i2w 3)) =   3);
 val _ = pr_ln "test12j" test12j
-val test12k = check (w2i(Word8.div(i2w 255, i2w 1)) = 255);
+val test12k = chck (w2i(Word8.div(i2w 255, i2w 1)) = 255);
 val _ = pr_ln "test12k" test12k
-val test12l = check (w2i(Word8.div(i2w 242, i2w 3)) =  80);
+val test12l = chck (w2i(Word8.div(i2w 242, i2w 3)) =  80);
 val _ = pr_ln "test12l" test12l
-val test12m = check (w2i(Word8.mod(i2w  10, i2w 3)) =   1);
+val test12m = chck (w2i(Word8.mod(i2w  10, i2w 3)) =   1);
 val _ = pr_ln "test12m" test12m
-val test12n = check (w2i(Word8.mod(i2w 255, i2w 1)) =   0);
+val test12n = chck (w2i(Word8.mod(i2w 255, i2w 1)) =   0);
 val _ = pr_ln "test12n" test12n
-val test12o = check (w2i(Word8.mod(i2w 242, i2w 3)) =   2);
+val test12o = chck (w2i(Word8.mod(i2w 242, i2w 3)) =   2);
 val _ = pr_ln "test12o" test12o
 val test12p = (Word8.div(i2w 0, i2w 256) seq "WRONG")
               handle Div => "OK" | _ => "WRONG";
@@ -204,7 +204,7 @@ val test12q = (Word8.mod(i2w 0, i2w 256) seq "WRONG")
 val _ = pr_ln "test12q" test12q
 
 fun chk f (s, r) = 
-    check_th(fn _ => 
+    chck_th(fn _ => 
 	   case f s of
 	       SOME res => res = i2w r
 	     | NONE     => false)
@@ -437,23 +437,23 @@ local
 
 in
 val test18 = 
-    check_th(fn _ => range (0, 255) fromToString);
+    chck_th(fn _ => range (0, 255) fromToString);
 val _ = pr_ln "test18" test18
 
 val test19 = 
-    check_th(fn _ => range (0, 255) (scanFmt StringCvt.BIN));
+    chck_th(fn _ => range (0, 255) (scanFmt StringCvt.BIN));
 val _ = pr_ln "test19" test19
 
 val test20 = 
-    check_th(fn _ => range (0, 255) (scanFmt StringCvt.OCT));
+    chck_th(fn _ => range (0, 255) (scanFmt StringCvt.OCT));
 val _ = pr_ln "test20" test20
 
 val test21 = 
-    check_th(fn _ => range (0, 255) (scanFmt StringCvt.DEC));
+    chck_th(fn _ => range (0, 255) (scanFmt StringCvt.DEC));
 val _ = pr_ln "test21" test21
 
 val test22 = 
-    check_th(fn _ => range (0, 255) (scanFmt StringCvt.HEX));
+    chck_th(fn _ => range (0, 255) (scanFmt StringCvt.HEX));
 val _ = pr_ln "test22" test22
 
 end

@@ -5,8 +5,8 @@
 
 infix 1 seq
 fun e1 seq e2 = e2;
-fun check b = if b then "OK" else "WRONG";
-fun check' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
+fun chck b = if b then "OK" else "WRONG";
+fun chck' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
 
 fun range (from, to) p = 
     let open Int 
@@ -14,11 +14,11 @@ fun range (from, to) p =
 	(from > to) orelse (p from) andalso (range (from+1, to) p)
     end;
 
-fun checkrange bounds = check o range bounds;
+fun chckrange bounds = chck o range bounds;
 
 fun tst0 s s' = print (s ^ "    \t" ^ s' ^ "\n");
-fun tst  s b = tst0 s (check  b);
-fun tst' s f = tst0 s (check' f);
+fun tst  s b = tst0 s (chck  b);
+fun tst' s f = tst0 s (chck' f);
 
 fun tstrange s bounds = (tst s) o range bounds  
 
@@ -48,36 +48,36 @@ local
     fun pr_ln s s' = print (s ^ ": " ^ s' ^ "\n")
 in
 
-val test1 = checkrange (0, 1025)
+val test1 = chckrange (0, 1025)
     (fn i => i = w2i (i2w i));
 val _ = pr_ln "test1" test1
 
-val test3 = checkrange (~1000, 1000) 
+val test3 = chckrange (~1000, 1000) 
     (fn i => i = toIntX (i2w i));
 val _ = pr_ln "test3" test3
 
-val test5a = checkrange (0,15) 
+val test5a = chckrange (0,15) 
     (fn i => (i+960) div 2 * 2 + 1
              = w2i (orb (i2w i, i2w 961)));
 val _ = pr_ln "test5a" test5a
-val test5b = checkrange (0,513)
+val test5b = chckrange (0,513)
     (fn i => i = w2i (orb (i2w i, i2w i)));
 val _ = pr_ln "test5b" test5b
-val test6a = checkrange (0,15) 
+val test6a = chckrange (0,15) 
     (fn i => i div 2 * 2 = w2i (andb (i2w i, i2w ~2)));
 val _ = pr_ln "test6a" test6a
-val test6b = checkrange (0,513)
+val test6b = chckrange (0,513)
     (fn i => i = w2i (andb (i2w i, i2w i)));
 val _ = pr_ln "test6b" test6b
-val test7a = checkrange (0,15) 
+val test7a = chckrange (0,15) 
     (fn i => i+960 = w2i (xorb (i2w i, i2w 960)));
 val _ = pr_ln "test7a" test7a
-val test7b = checkrange (0, 513)
+val test7b = chckrange (0, 513)
     (fn i => 0 = w2i (xorb (i2w i, i2w i)));
 val _ = pr_ln "test7b" test7b
-val test8a = check(~1 = w2i (notb (i2w 0)));
+val test8a = chck(~1 = w2i (notb (i2w 0)));
 val _ = pr_ln "test8a" test8a
-val test8b = check (0 = w2i (notb (i2w ~1)));
+val test8b = chck (0 = w2i (notb (i2w ~1)));
 val _ = pr_ln "test8b" test8b
 val maxposint = valOf Int.maxInt;
 val maxnegint = ~maxposint-1;
@@ -86,110 +86,110 @@ fun pwr2 0 = 1
 fun rwp i 0 = i
   | rwp i n = rwp i (n-1) div 2;
 
-val test9a = checkrange (0,29)
+val test9a = chckrange (0,29)
     (fn k => pwr2 k = w2i (<< (i2w 1, i2w k)));
 val _ = pr_ln "test9a" test9a
-val test9b = checkrange (32,65)
+val test9b = chckrange (32,65)
     (fn k => 0 = w2i (<< (i2w 1, i2w k)));
 val _ = pr_ln "test9b" test9b
-val test9c = check (maxnegint = w2i (<< (i2w 1, i2w 31)));
+val test9c = chck (maxnegint = w2i (<< (i2w 1, i2w 31)));
 val _ = pr_ln "test9c" test9c
-val test9d = checkrange (0, 1025)
+val test9d = chckrange (0, 1025)
     (fn i => 2 * i = w2i (<< (i2w i, i2w 1)));
 val _ = pr_ln "test9d" test9d
-val test9e = checkrange (0, 1025)
+val test9e = chckrange (0, 1025)
     (fn i => i div 2 = w2i (>> (i2w i, i2w 1)));
 val _ = pr_ln "test9e" test9e
-val test9f = checkrange (0,65)
+val test9f = chckrange (0,65)
     (fn k => rwp maxposint k = w2i (>> (i2w maxposint, i2w k)));
 val _ = pr_ln "test9f" test9f
-val test9g = checkrange (32,65)
+val test9g = chckrange (32,65)
     (fn k => 0 = w2i (<< (i2w ~1, i2w k)));
 val _ = pr_ln "test9g" test9g
-val test9h = checkrange (1,65)
+val test9h = chckrange (1,65)
     (fn k => 0 = w2i (>> (i2w 1, i2w k)));
 val _ = pr_ln "test9h" test9h
 
-val test10a = checkrange (1,65)
+val test10a = chckrange (1,65)
     (fn k => 0 = w2i (~>> (i2w 1, i2w k)));
 val _ = pr_ln "test10a" test10a
-val test10b = checkrange (1,65)
+val test10b = chckrange (1,65)
     (fn k => ~1 = w2i (~>> (i2w ~1, i2w k)));
 val _ = pr_ln "test10b" test10b
-val test10c = checkrange (~513, 513)
+val test10c = chckrange (~513, 513)
     (fn i => i div 2 = toIntX (~>> (i2w i, i2w 1)));
 val _ = pr_ln "test10c" test10c
-val test10d = checkrange (0,65)
+val test10d = chckrange (0,65)
     (fn k => rwp maxnegint k = toIntX (~>> (i2w maxnegint, i2w k)));
 val _ = pr_ln "test10d" test10d
 local 
     open Word
 in
-val test11a = check (i2w 256 > i2w 255);
+val test11a = chck (i2w 256 > i2w 255);
 val _ = pr_ln "test11a" test11a
-val test11b = check (i2w 0 < i2w ~1);
+val test11b = chck (i2w 0 < i2w ~1);
 val _ = pr_ln "test11b" test11b
-val test11c = check (i2w maxposint >= i2w maxposint);
+val test11c = chck (i2w maxposint >= i2w maxposint);
 val _ = pr_ln "test11c" test11c
-val test11d = check (i2w maxnegint >= i2w 127);
+val test11d = chck (i2w maxnegint >= i2w 127);
 val _ = pr_ln "test11d" test11d
-val test11e = check (i2w 1 <= i2w 1);
+val test11e = chck (i2w 1 <= i2w 1);
 val _ = pr_ln "test11e" test11e
-val test11f = check (i2w 0 <= i2w 1);
+val test11f = chck (i2w 0 <= i2w 1);
 val _ = pr_ln "test11f" test11f
-val test11g = check (i2w 0 < i2w maxposint);
+val test11g = chck (i2w 0 < i2w maxposint);
 val _ = pr_ln "test11g" test11g
-val test11h = check (i2w maxposint < i2w maxnegint);
+val test11h = chck (i2w maxposint < i2w maxnegint);
 val _ = pr_ln "test11h" test11h
-val test11i = check (i2w maxnegint < i2w ~1);
+val test11i = chck (i2w maxnegint < i2w ~1);
 val _ = pr_ln "test11i" test11i
 end;
 
 local 
     open Word
 in
-val test12a = checkrange(0, 300) (fn k => w2i (i2w k + i2w 17) = add(k, 17));
+val test12a = chckrange(0, 300) (fn k => w2i (i2w k + i2w 17) = add(k, 17));
 val _ = pr_ln "test12a" test12a
-val test12b = checkrange(0, 300) (fn k => w2i (i2w k - i2w 17) = sub(k, 17));
+val test12b = chckrange(0, 300) (fn k => w2i (i2w k - i2w 17) = sub(k, 17));
 val _ = pr_ln "test12b" test12b
-val test12c = checkrange(0, 300) (fn k => w2i (i2w k * i2w 17) = mul(k, 17));
+val test12c = chckrange(0, 300) (fn k => w2i (i2w k * i2w 17) = mul(k, 17));
 val _ = pr_ln "test12c" test12c
-val test12d = checkrange(0, 300) 
+val test12d = chckrange(0, 300) 
     (fn k => w2i (i2w k div i2w 17) = idiv(k, 17));
 val _ = pr_ln "test12d" test12d
-val test12e = checkrange(0, 300) 
+val test12e = chckrange(0, 300) 
     (fn k => w2i (i2w k mod i2w 17) = imod(k, 17));
 val _ = pr_ln "test12e" test12e
-val test12f = checkrange(0, 300) 
+val test12f = chckrange(0, 300) 
     (fn k => w2i (i2w k + i2w maxnegint) = add(k, maxnegint));
 val _ = pr_ln "test12f" test12f
-val test12g = checkrange(0, 300) 
+val test12g = chckrange(0, 300) 
     (fn k => w2i (i2w maxnegint - i2w k - i2w 1) = sub(maxposint,k));
 val _ = pr_ln "test12g" test12g
-val test12h = checkrange(0, 300) 
+val test12h = chckrange(0, 300) 
     (fn k => w2i (i2w k * i2w maxnegint) = mul(imod(k, 2), maxnegint));
 val _ = pr_ln "test12h" test12h
-val test12i = checkrange(0, 300) 
+val test12i = chckrange(0, 300) 
     (fn k => w2i (i2w k * i2w maxposint + i2w k) = mul(imod(k, 2), maxnegint));
 val _ = pr_ln "test12i" test12i
-val test12j = checkrange(0, 300) 
+val test12j = chckrange(0, 300) 
     (fn k => w2i (i2w k div i2w ~1) = 0);
 val _ = pr_ln "test12j" test12j
-val test12k = checkrange(0, 300) 
+val test12k = chckrange(0, 300) 
     (fn k => w2i (i2w k mod i2w ~1) = k);
 val _ = pr_ln "test12k" test12k
-val test12l = check(w2i (i2w maxposint + i2w 1) = maxnegint);
+val test12l = chck(w2i (i2w maxposint + i2w 1) = maxnegint);
 val _ = pr_ln "test12l" test12l
-val test12m = check(w2i (i2w maxnegint - i2w 1) = maxposint);
+val test12m = chck(w2i (i2w maxnegint - i2w 1) = maxposint);
 val _ = pr_ln "test12m" test12m
-val test12n = check(w2i (i2w ~1 div i2w 2) = maxposint);
+val test12n = chck(w2i (i2w ~1 div i2w 2) = maxposint);
 val _ = pr_ln "test12n" test12n
-val test12o = check(w2i (i2w ~1 mod i2w 2) = 1);
+val test12o = chck(w2i (i2w ~1 mod i2w 2) = 1);
 val _ = pr_ln "test12o" test12o
-val test12p = check(w2i (i2w ~1 div i2w 100) = idiv(maxposint, 50));
+val test12p = chck(w2i (i2w ~1 div i2w 100) = idiv(maxposint, 50));
 val _ = pr_ln "test12p" test12p
 (*31bit
-val test12q = check(w2i (i2w ~1 mod i2w 10) = 7);
+val test12q = chck(w2i (i2w ~1 mod i2w 10) = 7);
 val _ = pr_ln "test12q" test12q
 *)
 val test12r = (i2w 17 div i2w 0 seq "WRONG") 
@@ -199,7 +199,7 @@ val test12s = (i2w 17 mod i2w 0 seq "WRONG")
               handle Div => "OK" | _ => "WRONG";
 val _ = pr_ln "test12s" test12s
 fun chk f (s, r) = 
-    check'(fn _ => 
+    chck'(fn _ => 
 	   case f s of
 	       SOME res => res = i2w r
 	     | NONE     => false)
@@ -334,19 +334,19 @@ local
 
 in
 val test18 = 
-    check'(fn _ => range (0, 1200) fromToString);
+    chck'(fn _ => range (0, 1200) fromToString);
 val _ = pr_ln "test18" test18
 val test19 = 
-    check'(fn _ => range (0, 1200) (scanFmt StringCvt.BIN));
+    chck'(fn _ => range (0, 1200) (scanFmt StringCvt.BIN));
 val _ = pr_ln "test19" test19
 val test20 = 
-    check'(fn _ => range (0, 1200) (scanFmt StringCvt.OCT));
+    chck'(fn _ => range (0, 1200) (scanFmt StringCvt.OCT));
 val _ = pr_ln "test20" test20
 val test21 = 
-    check'(fn _ => range (0, 1200) (scanFmt StringCvt.DEC));
+    chck'(fn _ => range (0, 1200) (scanFmt StringCvt.DEC));
 val _ = pr_ln "test21" test21
 val test22 = 
-    check'(fn _ => range (0, 1200) (scanFmt StringCvt.HEX));
+    chck'(fn _ => range (0, 1200) (scanFmt StringCvt.HEX));
 val _ = pr_ln "test22" test22
 end
 end;
