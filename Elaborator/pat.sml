@@ -1076,9 +1076,9 @@ struct
 	  (* Choose rules until pred is satisfied. 
 	     The pred is run on the pair of the pattern in question and the list of
 	        patterns with that one removed.
-
-	     We check that the first rule fails the predicate.
-	     returns matched (pred false), unmatched (pred true on first).
+	     Splits the list of rules into (matched, unmatched) where matched @ unmatched
+	     is the original list and matched is the longest prefix of rules that don't satisfy pred.
+	     We require that the first rule does not satisfy the predicate (so matched is not nil).
 	     *)
 	  fun untilPred (pred : (basePattern * basePattern list) -> bool, col, rules : baseRule list) = 
 	      let 
