@@ -1,0 +1,11 @@
+(*
+	Compile with
+
+	tilt-nj -pp name2.project
+	tilt-nj -rEqPayAsYouGo -fUptoElaborate -fShowHIL name2.project
+
+	to see that a and b each invoke their own equality at type int *
+	int.
+*)
+
+unit U = "name2.sml" {}

@@ -27,7 +27,6 @@ formatter.sig.sml
 formatter.sml
 graphutil.sig.sml
 graphutil.sml
-splay-map-fn.sml
 stats.sig.sml
 stats.sml
 compiler_control.sig.sml

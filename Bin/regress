@@ -63,7 +63,7 @@ if [ $arg = all -o $arg = nj ] ; then
 NJ compiled TILT results
 ************************************************************";
 
-    (cd ./Test ; ./runall -nf);
+    (cd ./Test ; ../Bin/runall -nf);
 fi
 ) 2>&1 | tee -a $outfile
 (
@@ -79,6 +79,6 @@ if [ $arg = all -o $arg = tilt ] ; then
 TILT compiled TILT results
 ************************************************************" ;
 
-    (cd ./Test ; ./runall -f) ;
+    (cd ./Test ; ../Bin/runall -f) ;
 fi
 ) 2>&1 | tee -a $outfile

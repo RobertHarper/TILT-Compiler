@@ -47,7 +47,7 @@
 0047 [closed]	Mishandling ref in patterns.
 0048 [closed]	Datatype elaboration problems.
 0049 [closed]	Datatype optimizer problems.
-0050 [open]	Type abbreviations in signatures are handled poorly.
+0050 [closed]	Equality types are handled poorly.
 0051 [closed]	Vararg violating bound variable invariant.
 0052 [open]	Equality compiler generates poor code.
 0053 [closed]	Nil bool2exp violating bound variable invariant.
@@ -145,7 +145,7 @@
 0149 [closed]	type checking error
 0150 [open]	parsing problem on non-corner case
 0151 [closed]	name clash problem in ld
-0152 [open]	Incorrect matching of eqtype specs.
+0152 [closed]	Incorrect matching of eqtype specs.
 0153 [open]	Sharing abstract type and eqtype specs is broken.
 0154 [closed]	Equality allowed on non-eqtypes by elaborator.
 0155 [open]	Type sharing fails on corner case.

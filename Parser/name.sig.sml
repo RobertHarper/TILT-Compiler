@@ -53,6 +53,7 @@ signature NAME =
 
     val label2string : label -> string
     val tag2string   : tag  -> string
+    val namespace : label -> Symbol.namespace option
 
     (* These should be used by NameBlast only *)
     val reset_varmap : unit -> unit  (* clear out the string part of variables *)

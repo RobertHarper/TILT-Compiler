@@ -1,0 +1,10 @@
+(*
+	Compile with
+
+	tilt-nj -pp name.project
+	tilt-nj -rEqPayAsYouGo -fUptoElaborate -fShowHIL name.project
+
+	to see that f contains its own version of equality at type t.
+*)
+
+unit U = "name.sml" {}

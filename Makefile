@@ -24,12 +24,12 @@ purge=$(tiltnj) -pp
 all:\
 	tilt_heap\
 	dump_heap\
+	runtime\
 	slaves\
 	basis\
 	smlnj-lib\
 	ml-yacc-lib\
 	arg\
-	runtime\
 	tilt\
 	dump\
 	runtest

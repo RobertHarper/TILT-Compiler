@@ -53,6 +53,7 @@ bug151a	pass	name-mangling test [x] <- [x]
 bug151b	pass	order of imports and effects are correct
 bug151c	pass	implicit imports do not conflict with explicit imports
 bug151d	pass	name-mangling test [x] <- * <- * -> [x]
+bug152	pass	Incorrect matching of eqtype specs.
 bug154	pass	Equality allowed on non-eqtypes by elaborator.
 bug155	fail	Type sharing fails on corner case.
 bug159	fail	Datatype replication.

@@ -1,0 +1,5 @@
+(*
+	tilt-nj -pp test.project && tilt-nj -fShowInterface -fShowHIL test.project
+	tilt-nj -pp test.project && tilt-nj -rEqPayAsYouGo -fShowInterface -fShowHIL test.project
+*)
+unit test = "test.sml" {}

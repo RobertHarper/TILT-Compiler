@@ -1,100 +1,194 @@
 Number: 0050
-Title:       Type abbreviations in signatures are handled poorly.
+Title:       Equality types are handled poorly.
 Keywords:    Elaborator
 Submitter:   David Swasey <swasey@cs.cmu.edu>
 Date:        4/24/2001
 Version:     CVS
 System:	     any
-Severity:    major
+Severity:    minor
 Problem:
-	We don't follow a consistent policy wrt the export of equality functions.  Equality functions are created at
-	every type abbreviation and datatype declaration which admits equality.  These are exported when the type is at
-	the top-level.  These are hidden by signature ascription unless "saved" by an eqtype spec.
 
-	Lets adopt the following:
-	* type abbreviations don't invoke the equality compiler
-	* datatype declarations invoke the equality compiler (since we are moving to an opaque interpretation)
-	* ascription against an eqtype specification invokes the equality compiler
-	* use of equality invokes the equality compiler
-	* a unit exports an equality function for every datatype which admits equality and for every eqtype spec
-	* the map from types to already-compiled equality functions is maintained on a per-unit basis
-	----
-	(1) The IL translation of the spec
-	
-		type tyvarseq tycon = ty
-		
-	    never includes an sdec for an equality function.  However,
-	    this sdec should be included if when each var in tyvarseq
-	    admits equality, ty admits equality.  (That is, if the
-	    type function in rule (64) admits equality according to
-	    pgs 17-18 of the Definition.)
+	Comments quoted with ">" are from the original bug report.
 
-	(2) Once (1) is fixed, our "eqtype abbreviation" extension is
-            unnecessary.
-	----
-	If a signature specifies a type abbreviation which admits
-	equality, the corresponding IL signature should include an
-	equality function sdec.
+	>[...] Equality functions are created at every type
+	>abbreviation and datatype declaration which admits equality.
+	>These are exported when the type is at the top-level.  These are
+	>hidden by signature ascription unless "saved" by an eqtype spec.
 
-	For example, the signature
+	The policy as described is consistent with HS.  TILT goes further
+	than HS in two ways.
 
-	        sig type a = int end
+	First, TILT supports signature specs of the form
 
-	is translated to (roughly)
+		eqtype t = ty
 
-	        [a > a' : TYPE = int]
+	This is a bug because it is not standard.  It is a bad idea in any
+	case because it is unecessary.  If ty admits equality and the spec
+	is
 
-	With this translation, signature ascription and functor application
-	discard equality functions.  I think a better translation is
+		type t = ty
 
-	        [a > a' : TYPE = int,
-	         +Ea > eq : a' * a' -> bool]
-	----
-	According to the Definition, type abbreviations in signatures can admit
-	equality.  For example, the spec
+	then t admits equality.
 
-	        type tyvarseq tycon = ty
+	Second, TILT invokes the equality compiler at every type dec.
+	This is a poor attempt to cache equality compilations.  Elaborating
+	the dec
 
-	is (p. 59) a derived form for the spec
+		type t = int
 
-	        include sig type tyvarseq tycon end
-	                where type tyvarseq tycon = ty
+	leads to two sdecs
 
-	The type realizer in rule (64) maps the type name t for tycon (which
-	does not admit equality) to a type function which can admit equality.
+		t : TYPE = int
+		+Et : t * t -> bool
 
-	This makes our "eqtype abbreviation" extension unnecessary, I think, and
-	points out a bug in our elaboration of type abbreviations.  The extension
-	is that we accept specs of the form
+	The intent is to have the equality compiler call +Et---rather than
+	generate and apply a new equality function---when equality at t is
+	needed either later in the same compilation unit or in another
+	compilation unit (if +Et is not hidden by an interface).  This is
+	bad because (a) it is not pay as you go and (b) it is not
+	effective.  (a) refers to the fact that even if I do not use
+	compiler-generated equality, the compiler will waste time and
+	space defining them.  (b) holds because the equality function is
+	associated with the *label* rather than the *type* so a cached
+	equality function will not be found after the type is reduced or
+	if the type is not named.
 
-	        eqtype tyvarseq tycon = ty
+	For example, consider the code (in name.project)
 
-	whose IL translation always includes an sdec for an equality function.
-	The bug is that the translation of
+		type t = int
+		val x:t = 5
+		val r = x=x
 
-	        type tyvarseq tycon = ty
+	Despite the ascription, the equality compiler fails to find +Et
+	and the code to compute r contains its own copy.  (IIRC, the
+	cached function will be used if the dec for x is changed to "val x
+	= (5:t)".)
 
-	never includes one.
+	For example, consider the code (in name2.project)
+
+		val x : (int * int) = (5,10)
+		val a = x=x
+		val b = x=x
+
+	The elaborator does not cache equality at type int*int so the code
+	to compute a and the code to compute b each define equality at
+	that type.
+
+	We could use a better strategy for caching equality functions that
+	is not based on type names.  It is possible to add an index (by
+	constructor) of previously compiled equality functions to the
+	elaboration context and to provide an alternate interface to the
+	equality compiler that returns a list of sbnds/sdecs rather than
+	an exp so that intermediate eq functions are named.  Developing
+	and implementing a concrete proposal does not seem worthwhile at
+	this time.
+
+	>Lets adopt the following:
+	>
+	>[A] type abbreviations don't invoke the equality compiler
+	>
+	>[B] datatype declarations invoke the equality compiler [...]
+	>
+	>[C] ascription against an eqtype specification invokes the equality
+	>compiler
+	>
+	>[D] use of equality invokes the equality compiler
+	>
+	>[E] a unit exports an equality function for every datatype which
+	>admits equality and for every eqtype spec
+	>
+	>[F] the map from types to already-compiled equality functions is
+	>maintained on a per-unit basis
+
+	The compiler does (A)-(E) with EqPayAsYouGo.  It works as before
+	without the flag.  As previously discussed, (F) is not worth the
+	trouble right now.
+
+	>(1) The IL translation of the spec
+	>
+	>	type tyvarseq tycon = ty
+	>	
+	>    never includes an sdec for an equality function.  However,
+	>    this sdec should be included if when each var in tyvarseq
+	>    admits equality, ty admits equality.  (That is, if the
+	>    type function in rule (64) admits equality according to
+	>    pgs 17-18 of the Definition.)
+	>
+	>(2) Once (1) is fixed, our "eqtype abbreviation" extension is
+	>unnecessary.
+	>
+	>[lots of misguided details erased]
+
+	(1) and (2) are wrong.  If the user wants an eqtype, then the user
+	should specify an eqtype.  As previously discussed, specs of the
+	form "eqtype t = ty" are unnecessary.
+
 Code:
-	Equality at A2.a is being re-written and not simply invoked to
-	implement equality at notok and alsonotok.  Once the bug is
-	fixed, we will only see one non-trivial equality function.
 
-		structure A = struct type a = int * int * int * int end
-		signature A2 = sig type a = int * int * int * int end
-		structure A2 : A2 = A
+	The example code in the preceeding discussion is described by
+	name.project and name2.project.
 
-		type ok = A.a
-
-		type notok = A2.a
-
-		functor alsoNotOk(A' : A2) =
-		struct
-		    type alsonotok = A'.a
-		end
 Transcript:
 Comments:
 Fix:
+
+	I removed support for "eqtype t = ty" specs.
+
+	I changed the coercion compiler to invoke the equality compiler a'
+	la' HS.  (This also fixes bug 152.)
+
+	I defined a flag EqPayAsYouGo.  When set, the elaborator does not
+	attempt to generate equality functions for every type definition.
+	This means we will no longer enjoy any additional reuse that
+	name-based caching enabled.
+
 Test:
+
+	Some test code I used after implementing EqPayAsYouGo is described
+	by test.project.  Another test was boostrapping TILT.
+
+	I gathered some information while compiling with and without the
+	flag.  I only ran this test once with one master and four slaves.
+	The times are the accumulated cpu and real times reported by
+	-fPrintStats.  The basis library size was obtained with
+
+		du -a Lib/basis |
+		awk '
+			/obj/{sum += $1}
+			END{print sum}
+		'
+
+	The tilt binary size was obtained with ls -l.
+
+			Without flag	With flag	With/Without
+	basis
+	CPU(s)		756		749		0.99
+	REAL(s)		874		856		0.97
+
+	smlnj-lib
+	CPU(s)		650		656		1.00
+	REAL(s)		748		757		1.01
+
+	ml-yacc-lib
+	CPU(s)		150		149		0.99
+	REAL(s)		186		187		1.00
+
+	arg
+	CPU(s)		8		8		1.00
+	REAL(s)		40		40		1.00
+
+	tilt
+	CPU(s)		16792		16717		0.99
+	REAL(s)		18103		17481		0.96
+
+	runtest
+	CPU(s)		25		25		1.00
+	REAL(s)		28		29		1.03
+
+	basis size(KB)	5998		5996		0.99
+	tilt size(B)	37113704	37124904	1.00
+
+	I am leaving EqPayAsYouGo turned on.
+
 Owner: swasey
-Status: open
+Status: closed

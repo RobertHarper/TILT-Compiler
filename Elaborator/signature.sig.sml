@@ -13,8 +13,10 @@ sig
     type label = Il.label
     type labels = label list
 
-    val installHelpers: {polyinst : Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list}
-	                -> unit
+    val installHelpers:
+	{polyinst : Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list,
+	 eq_compile : Il.context * Il.con -> (Il.exp * Il.con) option}
+	-> unit
 
     val xsig_where_type : context * sdec list * label list * con * kind -> sdec list
     val xsig_where_structure : context * sdec list * label list * mod * signat -> sdec list

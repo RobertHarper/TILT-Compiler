@@ -10,9 +10,13 @@ struct
     val _ = Pat.installHelpers {typecompile = Toil.typecompile,
 				expcompile = Toil.expcompile,
 				polyinst = Toil.polyinst}
-    val _ = Signature.installHelpers {polyinst = Toil.polyinst}
-    val _ = IlUtil.installHelpers {Context_Lookup_Labels = IlStatic.Context_Lookup_Labels,
-				   compiling_tiltprim = compiling_tiltprim}
+    val _ = Signature.installHelpers
+	{polyinst = Toil.polyinst,
+	 eq_compile = Toil.xeq}
+    val _ = IlUtil.installHelpers
+	{Context_Lookup_Labels = IlStatic.Context_Lookup_Labels,
+	 compiling_tiltprim = compiling_tiltprim,
+	 eq_con = IlStatic.eq_con}
     val _ = IlPrimUtilParam.installHelpers {con_bool = IlUtil.con_bool,
 					    true_exp = IlUtil.true_exp,
 					    false_exp = IlUtil.false_exp}

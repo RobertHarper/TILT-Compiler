@@ -1,8 +1,7 @@
 #!/bin/sh
 bindir=`dirname "$0"`
 bindir=`cd "$bindir"; pwd`
-testdir=`cd "$bindir"/../Test; pwd`
-cd "$testdir"
+cd "$bindir"/../Test
 
 # Check the status marker, ignoring comments and blank lines
 awk '/^#|^$/ {next} $2 ~ /pass|fail|skip/ {next} {print "Bad status marker for " $1}' testlist.txt

@@ -31,6 +31,10 @@ Error: value specification but missing component: +Et_INT
 
 Comments:    
 Fix:         
-Test: *
-Owner: *
-Status: open
+
+	The coercion compiler now invokes the equality compiler.
+	See ../0050/description for more info.
+
+Test: bug152
+Owner: swasey
+Status: closed
