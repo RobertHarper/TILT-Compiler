@@ -23,10 +23,20 @@ functor AlphaPseudoInstr(
 
   (* -- functions ---------------------------------------------------------- *)
 
-  fun divl _ = raise Unimplemented
+  local
+    (* not sure what these are used for ??? *)
+    val temps = foldl I.C.addReg I.C.empty [23, 24, 25, 26, 28]
+  in
+    fun divl({ra, rb, rc}, _) = 
+      [I.PSEUDOARITH{oper = I.DIVL, ra = ra, rb = rb, rc = rc, tmps = temps}]
 
-  fun divlu _ = raise Unimplemented
+    fun divlu({ra, rb, rc}, _) = 
+      [I.PSEUDOARITH{oper = I.DIVLU, ra = ra, rb = rb, rc = rc, tmps = temps}]
+  end
 
+  (*
+   * We use a procedure in the runtime system for this.
+   *)
   fun cvti2d _ = raise Unimplemented
 
 end
