@@ -210,7 +210,19 @@ struct
 	   fun loop (Il.MOD_PROJECT(module, lbl), accum) =
 	              loop (module, lbl :: accum)
              | loop (module, accum) = (module, accum)
+
+	   fun checkloop (Il.MOD_PROJECT(module, lbl), accum) =
+	            if (N.is_dt lbl) then
+	              error "Use of datatype label detected"
+		    else 
+		      checkloop (module, lbl :: accum)
+             | checkloop (module, accum) = (module, accum)
        in
+         (* Avoid checking the ref every time around the loop 
+          *)
+	 if (!elaborator_specific_optimizations) then
+	   checkloop (module, nil)
+	 else
 	   loop (module, nil)
        end
 
@@ -1162,7 +1174,7 @@ struct
            *)
 	   val _ = if ((!elaborator_specific_optimizations) andalso
 		       (N.is_dt lbl)) then
-		      error "use of datatype labels detected"
+                      error "Use of datatype labels detected"
 		   else ()
 	   
 	   val {cbnd_cat = cbnd_mod_cat, 

@@ -496,551 +496,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   end
 
 
-  fun assertWellFormed context = 
-    let
-      val debug' = !debug
-      val _ = debug := false
-      val res = 
-	((NilContext.is_well_formed (kind_valid,con_valid,sub_kind) context, fn () => ())
-	 handle any => (debug := debug';raise any))
-      val _ = debug := debug'
-    in
-      res
-    end
-  and kind_valid (D,kind) = 
-    let 
-      val _ = push_kind(kind,D)
-      val _ = if (!show_calls)
-		then (print "kind_valid called with kind =\n";
-		      pp_kind kind;
-		      if !show_context then (print "\nand context"; NilContext.print_context D) else ();
-		      print "\n\n")
-	      else ()
-
-      val _ = 
-	if !debug then
-	  assert (locate "kind_valid - PRE")
-	  [
-	   assertWellFormed D
-	   (* assertRenamedKind (D,kind) *)
-	   ]
-	else ()
-
-      val kind = kind_valid'(D,kind)
-      val _ = if (!show_calls)
-		then (printl "kind_valid returned")
-	      else ()
-
-      val _ = pop()
-    in  kind
-    end
-
-  and kind_valid' (D : context, kind : kind) : kind = 
-    (case kind of
-       Type_k => kind
-     | SingleType_k con => (con_analyze(D,con,Type_k);kind)
-     | Single_k con => con_valid(D,con)
-     | Record_k elts => 
-	 let
-	   fun folder (((l,v),k),D) = 
-	     let val kstd = kind_valid (D,k)
-	     in (((l,v),kstd),insert_stdkind (D,v,kstd))
-	     end
-	   val (elts,_) = Sequence.foldl_acc folder D elts
-	   fun compare (((l1,_),_),((l2,_),_)) = Name.compare_label (l1,l2)
-	   val _ = 
-	     (no_dups compare elts) orelse
-	     (k_error (D,kind,"Labels in record kind not distinct"))
-	 in Record_k elts
-	 end
-     | Arrow_k (openness, formals, return) => 
-	 let val (formals,D) = vklist_valid (D,formals)
-	 in  Arrow_k(openness,formals,kind_valid (D,return))
-	 end)
-  and vklist_valid (D,vklist) = 
-    let 
-      fun folder ((v,k),D) = 
-	let val kstd = kind_valid (D,k)
-	in ((v,kstd),insert_stdkind (D,v,kstd))
-	end
-    in foldl_acc folder D vklist
-    end
-
-  and pcon_analyze (D,pcon,args) = 
-    let
-      val type_analyze = curry2 type_analyze
-    in
-      (case pcon of
-	 (Record_c (labels,SOME vars)) =>
-	   let
-	     fun folder (v,c,D) = (type_analyze D c;insert_con (D,v,c))
-	     val D = foldl2 folder D (vars,args)
-	   in if labels_distinct labels then ()
-	      else (c_error(D,Prim_c(pcon,args),"DepRecord contains duplicate field labels"))
-	   end
-       | (Record_c (labels,NONE)) => 
-	   let val _ = app (type_analyze D) args
-	   in if labels_distinct labels then ()
-	      else (error (locate "pcon_valid") "Record contains duplicate field labels")
-	   end
-       | (Sum_c {known,totalcount,tagcount}) => 
-	   let
-	     val carriers = TilWord32.uminus(totalcount,tagcount)
-	     val k = kind_type_tuple (TilWord32.toInt carriers)
-	     val _ = 
-	       (case args
-		  of [con] => con_analyze(D,con,k)
-		   | _ => error (locate "pcon_valid") "Wrong number of args to Sum_c")
-	     val _ = 
-	       (case known 
-		  of SOME i => 
-		    (Word32.<=(Word32.fromInt 0,i) andalso 
-		     Word32.<(i,totalcount)) orelse
-		    (perr_c (Prim_c (pcon,args));
-		     error (locate "pcon_valid") "Illegal index to sum constructor")
-		   | NONE => true)
-	   in ()
-	   end
-       | (Vararg_c _) =>  app (type_analyze D) args
-       | _ => ())
-    end
-  and con_analyze (D : context, constructor : con,kind : kind) : unit = 
-    let val type_analyze = curry2 type_analyze
-    in
-      (case (constructor,kind) of
-	 (constructor,SingleType_k c) => 
-	 let val _ = type_analyze D constructor
-	     val _ = type_equiv(D,constructor,c)
-	 in ()
-	 end
-       | (_,Single_k c) => ck_error (D,constructor,kind,"Non standard kind given to con_analyze")
-       | (Prim_c (pcon,args),  Type_k) =>  pcon_analyze(D,pcon,args)
-       | (Mu_c (is_recur,defs),Record_k lvk_seq) =>
-	 let 
-	   val D = if is_recur 
-		     then let fun folder((v,_),D) = insert_stdkind (D,v,Type_k)
-			  in  Sequence.foldl folder D defs end
-		   else D
-	 in Sequence.app ((type_analyze D) o #2) defs
-	 end
-       | (AllArrow_c {openness,effect,isDependent,
-		      tFormals,eFormals,fFormals,body_type},Type_k) =>
-	 let
-	   val (tFormals,D) = vklist_valid (D,tFormals)
-
-	   fun folder ((vopt,c),D) = (type_analyze D c;
-				      case vopt of 
-					NONE => D
-				      | SOME v => insert_con (D,v,c))
-	   
-	   val D = foldl folder D eFormals
-	   val _ = type_analyze  D body_type
-	 in ()
-	 end
-       | (ExternArrow_c (args,body),Type_k) => 
-	 let
-	   val _ = map (type_analyze D) args
-	   val _ = type_analyze D body
-	 in ()
-	 end
-       | (v as (Var_c var),kind) => 
-	 let
-	   val _ = sub_kind(D,find_max_kind (D,var),kind)
-	     handle NilContext.Unbound =>
-	       (printem ["UNBOUND VARIABLE = ",var2string var,
-			   " CONTEXT IS \n"];
-		NilContext.print_context D;
-		error  (locate "con_valid") ("variable "^(var2string var)^" not in context"))
-	 in ()
-	 end
-       | (Let_c (Parallel,cbnds,con),_) => error' "Parallel bindings not supported yet"
-       | (Let_c (Sequential,cbnds,con),kind) =>
-	   let
-	     fun check_bnd (D,maker,Tag) (var,formals,body) = 
-	       let
-		 val kind = lambda_valid(D,Tag,formals,body)
-		 val var' = derived_var var
-		 val bnd = maker (var',formals,body)
-		 val con = Let_c (Sequential,[bnd],Var_c var')
-		 val D = insert_stdkind_equation(D,var,con,kind)
-	       in D
-	       end
-	     
-	     val body_var_opt = strip_var con
-	       
-	     fun loop ([],D) = con_analyze(D,con,kind)
-	       | loop (bnd::rest,D) =
-	       (case bnd
-		  of Open_cb (args as (var,formals,body)) =>
-		    if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
-		      ignore(sub_kind(D,lambda_valid(D,Open,formals,body),kind))
-		    else loop(rest,check_bnd (D,Open_cb,Open) args)
-
-		   | Code_cb (args as (var,formals,body)) => 
-		      if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
-			ignore(sub_kind(D,lambda_valid(D,Code,formals,body),kind))
-		      else loop(rest,check_bnd (D,Code_cb,Code) args)
-		   | Con_cb (var,con) => loop(rest,insert_stdkind_equation(D,var,con,con_valid(D,con))))
-
-	   in loop (cbnds,D)
-	   end
-       | (Typeof_c exp,Type_k) => ignore(exp_valid(D,exp))
-       | (Closure_c (code,env),kind1 as Arrow_k(Closure,_,_)) => 
-	 let
-	   val code_kind =  con_valid (D,code)
-	   (*Or could synthesize on the environment*)
-	   val ((v,klast),vklist,body_kind) = 
-	      case code_kind of
-	       Arrow_k (Code ,c_parm::vklist,body_kind) => (c_parm,vklist,body_kind)
-	     | _ => (c_error(D,constructor,"Invalid closure: code has wrong kind"))
-		 
-	   val kind2 = Arrow_k(Closure,vklist,body_kind)
-	   val _ = sub_kind(D,kind2,kind1)
-	   val _ = (con_analyze(D,env,klast)) handle e => k_error(D,klast,"Illegal kind in Closure2?")
-	 in ()
-	 end
-       | (Crecord_c entries,Record_k lvkseq) => 
-	 let
-	   val (labels,cons) = unzip entries
-	   val (labels',vks) = unzip ((Sequence.maptolist (fn ((l,v),k) => (l,(v,k)))) lvkseq)
-	   val _ = con_analyze_vk_list (D,cons,vks)
-	 in
-	   if eq_list (eq_label,labels,labels') then () 
-	   else c_error(D,constructor,"Illegal labels")
-	 end
-       | (Proj_c (rvals,label),kind1) => 
-	 let
-	   (*This will never be dependent*)
-	   val record_kind = con_valid (D,rvals)
-	     
-	   val kind2 = project_from_kind_nondep (record_kind,label)
-	 in if sub_kind(D,kind2,kind1) then ()
-	    else k_error(D,kind1, "Trying to analyze projection at wrong kind")
-	 end
-       | (App_c (cfun_orig,actuals),kind1) => 
-	 let
-	   val cfun_kind = con_valid (D,cfun_orig)
-	     
-	   val (formals,body_kind) = 
-	     case cfun_kind of
-	       (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
-	     | _ => 
-		 (
-		  print "Invalid kind for constructor application\n";
-		  pp_kind cfun_kind; print "\n";
-		  (c_error(D,constructor,"Invalid kind for constructor application" ))
-		  )
-		 
-	   val D = con_analyze_vk_list(D,actuals,formals)
-	 in if sub_kind(D,body_kind,kind1) then ()
-	    else k_error(D,kind1, "Analyzed kind and return kind from app don't match")
-	 end
-       | (Coercion_c {vars,from,to},Type_k) =>
-	  let
-	    fun folder (v,D) = insert_stdkind(D,v,Type_k)
-	    val D = foldl folder D vars
-	  in
-	    con_analyze(D,from,Type_k);
-	    con_analyze(D,to,Type_k)
-	  end
-       | (Typecase_c {arg,arms,default,kind=given_kind},kind) => 
-	 let
-	   val given_kind = kind_valid (D,given_kind)
-	   val origD = D
-	   fun doarm (pcon,args,body) = 
-	     let
-	       fun folder ((v,k),D) =
-		 let val k = kind_valid (origD,k)
-		 in
-		   (Var_c v,insert_stdkind(D,v,k))
-		 end
-	       val (argcons,D) = foldl_acc folder D args
-	       val _ = pcon_analyze (D,pcon,argcons)
-	       val _ = con_analyze(D,body,given_kind)
-	     in ()
-	     end
-	   val _ = app doarm arms
-	   val _ = type_analyze D arg
-	   val _ = con_analyze (D,default,given_kind)
-	 in if sub_kind(D,given_kind,kind) then () else k_error(D,kind,"Return type for typecase doesn't match")
-	 end
-       | (Annotate_c (annot,con),kind) => con_analyze(D,con,kind)
-       | _ => ck_error (D,constructor,kind,"Illegal Con/Kind combination in analysis")
-	 )
-    end
-  and con_analyze_vk_list (D,cons : con list,
-			   vks : (var * kind) list) = 
-    let
-      val origD = D
-      fun folder (c,(v,k),(D,subst)) = 
-	let val k = substConInKind subst k
-	    val _ = con_analyze(origD,c,k)
-	    val subst = Subst.C.sim_add subst (v,c)
-	    val D = insert_kind_equation(D,v,c,k)
-	in(D,subst)
-	end
-      val (D,_) = (foldl2 folder (D,Subst.C.empty()) (cons,vks)
-		   handle e => (print "Problem with analyzing vk_list\n";raise e))
-    in D
-    end
-  and type_analyze(D,c) = con_analyze(D,c,Type_k)
-  and con_valid (D : context, constructor : con) : kind = 
-    let 
-      val _ = push_con(constructor,D)
-      val _ = if (!show_calls)
-		then (print "con_valid called with constructor =\n";
-		      pp_con constructor; 
-		      if !show_context then (print "\nand context"; NilContext.print_context D) else ();
-		      print "\n\n")
-	      else ()
-
-      val _ = 
-	if !debug then
-	  assert (locate "con_valid PRE")
-	  [
-	   assertWellFormed D
-	   (* assertRenamedCon (D,constructor) *)
-	   ]
-	else ()
-      val k = flagtimer (con_valid_top,"Tchk:con_valid",con_valid') (D,constructor)
-      val _ = if (!show_calls)
-		then (printl "con_valid returned")
-	      else ()
-      val _ = 
-	if !debug then
-	  assert (locate "con_valid POST")
-	  [
-	   (* assertRenamedKind (D,k) *)
-	   ]
-	else ()
-      val _ = pop()
-    in  k
-    end
-
-
-  
-  and con_valid' (D : context, constructor : con) : kind = 
-    let
-      val kind = 
-	(case constructor of
-	   (Prim_c (pcon,args)) => ((flagtimer (con_valid_prof,"Tchk:pcon_valid",pcon_analyze) (D,pcon,args);
-				     SingleType_k(constructor))
-				    handle e => c_error(D,constructor,"Prim con invalid"))
-	   | (AllArrow_c {openness,effect,isDependent,
-			  tFormals,eFormals,fFormals,body_type}) =>
-	     (
-	      type_analyze (D,constructor);
-	      SingleType_k(constructor)
-	      )
-	 | (ExternArrow_c (args,body)) => 
-	   (
-	    type_analyze (D,constructor);
-	    SingleType_k(constructor)
-	    )
-	 | (Mu_c (is_recur,defs)) =>
-	   let
-	     val D =
-	       if is_recur then
-		 let fun folder((v,_),D) = insert_stdkind (D,v,Type_k)
-		 in  Sequence.foldl folder D defs
-		 end
-	       else D
-		 
-	     val _ = app (fn (_,c) => type_analyze (D,c)) (Sequence.toList defs)
-
-	     fun mapper (i,(v,c)) = 
-		 let val label = generate_tuple_label(i+1)
-		 in((label,derived_var v),SingleType_k(Proj_c(constructor,label)))
-		 end
-	     val entries = Sequence.mapcount mapper defs
-		 
-	   in  Record_k(entries)
-	   end
-	 | (v as (Var_c var)) => 
-	   let
-	     val kind = (find_max_kind (D,var)
-			 handle NilContext.Unbound =>
-			   (printem ["UNBOUND VARIABLE = ",var2string var,
-				       " CONTEXT IS \n"];
-			    NilContext.print_context D;
-			    error  (locate "con_valid") ("variable "^(var2string var)^" not in context")))
-	   in
-	     kind
-	   end
-	 | (Let_c (Parallel,cbnds,con)) => error' "Parallel bindings not supported yet"
-	 | (c as (Let_c (Sequential,cbnds,con))) =>
-	   let
-
-	     val _ = 
-	       if !print_lets then
-		 (printl "let is:";
-		  pp_con c;
-		  printl "")
-	       else ()
-
-	     fun check_bnd ((D,subst),maker,Tag) (var,formals,body) = 
-					 let
-							 val kind = lambda_valid(D,Tag,formals,body)
-							 val var' = derived_var var
-							 val bnd = maker (var',formals,body)
-							 val con = Let_c (Sequential,[bnd],Var_c var')
-							 val D = insert_stdkind_equation(D,var,con,kind)
-							 val subst = Subst.C.addr(subst,var,con)
-					 in (D,subst)
-					 end
-	     
-	     val body_var_opt = strip_var con
-	       
-	     fun loop ([],(D,subst)) = substConInKind subst (con_valid(D,con))
-	       | loop (bnd::rest,state as (D,subst)) =
-	       (case bnd
-		  of Open_cb (args as (var,formals,body)) =>
-		    if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
-		      substConInKind subst (lambda_valid(D,Open,formals,body))
-		    else loop(rest,check_bnd (state,Open_cb,Open) args)
-		   | Code_cb (args as (var,formals,body)) => 
-		    if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
-		      substConInKind subst (lambda_valid(D,Code,formals,body))
-		    else loop(rest,check_bnd (state,Code_cb,Code) args)
-		   | Con_cb (var,con) => 
-		      let val D = insert_stdkind_equation(D,var,con,con_valid(D,con))
-			  val subst = Subst.C.addr (subst,var,con)
-		      in loop(rest,(D,subst))
-		      end)
-
-	     val res = loop (cbnds,(D,Subst.C.empty()))
-	     val _ = 
-					 if !print_lets then
-							 (printl "Kind is:";
-								pp_kind res;
-								printl "")
-					 else ()
-	   in res
-				 
-	   end
-	 | (Typeof_c exp) => (SingleType_k(exp_valid (D,exp)))
-	 | (Closure_c (code,env)) => 
-	   let
-	     val code_kind =  con_valid (D,code)
-	     val ((v,closure_k),vklist,body_kind) = 
-	       case code_kind of
-		 Arrow_k (Code ,c_parm::vklist,body_kind) => (c_parm,vklist,body_kind)
-	       | _ => (c_error(D,constructor,"Invalid closure: code component does not have correct kind"))
-	     val _ = (con_analyze (D,env,closure_k)) handle e => k_error(D,closure_k,"Illegal kind in Closure?")
-	     val kind = Arrow_k(Closure,vklist,body_kind)
-	   in varConKindSubst v env kind
-	   end
-	 | (Crecord_c entries) => 
-	   let
-	     val _ = if (!trace)
-		       then print "{con_valid processing Crecord_c\n"
-		     else ()
-	     val (labels,cons) = unzip entries
-	     val kinds = map (curry2 con_valid D) cons
-	     val _ =  
-	       (labels_distinct labels) orelse
-	       (Ppnil.pp_list Ppnil.pp_label' labels 
-		("labels are: ",",",";",true);
-		Listops.no_dups (fn (x,y) => let val _ = (printem ["comparing: ",label2string x, " and ",
-								   label2string y," : "])
-						 val result = Name.compare_label (x,y)
-						 val _ = if result = EQUAL then print "TRUE\n" else print "FALSE\n"
-					     in result end) labels;
-		(c_error(D,constructor,"Labels in record of constructors not distinct" )))
-	     val _ = if (!trace)
-		       then print "con_valid done processing Crecord_c\n}"
-		     else () 
-	     val k_entries = 
-	       map2 (fn (l,k) => ((l,fresh_named_var "con_valid_record"),k)) (labels,kinds)
-	   in Record_k (Sequence.fromList k_entries)
-	   end
-	 | (Proj_c (rvals,label)) => 
-	   let
-	     (*This will never be dependent*)
-	     val record_kind = con_valid (D,rvals)
-	       
-	     val entry_kinds = 
-	       (case record_kind of
-		  Record_k kinds => kinds
-		| other => 
-		    (c_error(D,constructor,"Projection from constructor of non-record kind")))
-	     val labs = map (#1 o #1) (Sequence.toList entry_kinds)
-	       
-	     val _ = if (member_eq(eq_label,label,labs))
-		       then () 
-		     else (print "attempted to project label ";
-			   pp_label label;
-			   print " from \n";
-			   pp_con rvals;
-			   print "\n which has labels";
-			   pp_list pp_label' labs ("",", ","",false);
-			   c_error(D,constructor,"Ill-formed projection"))
-	   in
-	     project_from_kind_nondep (record_kind,label)
-	   end
-	 | (App_c (cfun_orig,actuals)) => 
-	   let
-	     
-	     val cfun_kind = con_valid (D,cfun_orig)
-	       
-	     val (formals,body_kind) = 
-	       case cfun_kind of
-		 (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
-	       | _ => 
-		   (
-		    print "Invalid kind for constructor application\n";
-		      pp_kind cfun_kind; print "\n";
-		      (c_error(D,constructor,"Invalid kind for constructor application" ))
-		      )
-
-	     val (formal_vars,formal_kinds) = unzip formals		   
-	     val _ = app2 (fn (c,k) => con_analyze(D,c,k)) (actuals,formal_kinds)
-
-	     fun folder (v,c,subst) = NilSubst.C.sim_add subst (v,c)
-	     val subst = Listops.foldl2 folder (NilSubst.C.empty()) (formal_vars,actuals)
-	   in  
-	     substConInKind subst body_kind
-	   end
-	 | (Coercion_c {vars,from,to}) =>
-	   (type_analyze (D,constructor);
-	    SingleType_k constructor)
-	 | (Typecase_c {arg,arms,default,kind=given_kind}) => 
-	   let
-	     val given_kind = kind_valid (D,given_kind)
-	     val origD = D
-	     fun doarm (pcon,args,body) = 
-	       let
-		 fun folder ((v,k),D) =
-		   let val k = kind_valid (origD,k)
-		   in
-		     (Var_c v,insert_kind(D,v,k))
-		   end
-		 val (argcons,D) = foldl_acc folder D args
-		 val _ = pcon_analyze (D,pcon,argcons)
-		 val _ = con_analyze(D,body,given_kind)
-	       in ()
-	       end
-	     val _ = (app doarm arms;
-		      type_analyze (D,arg);
-		      con_analyze (D,default,given_kind)) 
-	       handle e => (print "Problem with Typecase arms\n";raise e)
-	   in
-	     given_kind
-	   end
-	 | (Annotate_c (annot,con)) => con_valid (D,con)
-	   )
-    in
-      kind
-    end
-  and lambda_valid (D,Tag,formals,body) = 
-    let 
-      val (formals,D) = vklist_valid (D,formals)
-      val body_kind = con_valid(D,body)
-    in Arrow_k(Tag,formals,body_kind)
-    end		  
-
   (*PRE: kind1 and kind2 not necessarily normalized *)
-  and sub_kind   (D,k1,k2) = subeq_kind false ((D,Trail.empty),k1,k2)
+  fun sub_kind   (D,k1,k2) = subeq_kind false ((D,Trail.empty),k1,k2)
   and kind_equiv (D,k1,k2) = subeq_kind true  ((D,Trail.empty),k1,k2)
   and kind_equiv' args     = subeq_kind false args
 
@@ -1618,6 +1075,550 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       val res = con_equiv args
     in res
     end
+
+  fun assertWellFormed context = 
+    let
+      val debug' = !debug
+      val _ = debug := false
+      val res = 
+	((NilContext.is_well_formed (kind_valid,con_valid,sub_kind) context, fn () => ())
+	 handle any => (debug := debug';raise any))
+      val _ = debug := debug'
+    in
+      res
+    end
+  and kind_valid (D,kind) = 
+    let 
+      val _ = push_kind(kind,D)
+      val _ = if (!show_calls)
+		then (print "kind_valid called with kind =\n";
+		      pp_kind kind;
+		      if !show_context then (print "\nand context"; NilContext.print_context D) else ();
+		      print "\n\n")
+	      else ()
+
+      val _ = 
+	if !debug then
+	  assert (locate "kind_valid - PRE")
+	  [
+	   assertWellFormed D
+	   (* assertRenamedKind (D,kind) *)
+	   ]
+	else ()
+
+      val kind = kind_valid'(D,kind)
+      val _ = if (!show_calls)
+		then (printl "kind_valid returned")
+	      else ()
+
+      val _ = pop()
+    in  kind
+    end
+
+  and kind_valid' (D : context, kind : kind) : kind = 
+    (case kind of
+       Type_k => kind
+     | SingleType_k con => (con_analyze(D,con,Type_k);kind)
+     | Single_k con => con_valid(D,con)
+     | Record_k elts => 
+	 let
+	   fun folder (((l,v),k),D) = 
+	     let val kstd = kind_valid (D,k)
+	     in (((l,v),kstd),insert_stdkind (D,v,kstd))
+	     end
+	   val (elts,_) = Sequence.foldl_acc folder D elts
+	   fun compare (((l1,_),_),((l2,_),_)) = Name.compare_label (l1,l2)
+	   val _ = 
+	     (no_dups compare elts) orelse
+	     (k_error (D,kind,"Labels in record kind not distinct"))
+	 in Record_k elts
+	 end
+     | Arrow_k (openness, formals, return) => 
+	 let val (formals,D) = vklist_valid (D,formals)
+	 in  Arrow_k(openness,formals,kind_valid (D,return))
+	 end)
+  and vklist_valid (D,vklist) = 
+    let 
+      fun folder ((v,k),D) = 
+	let val kstd = kind_valid (D,k)
+	in ((v,kstd),insert_stdkind (D,v,kstd))
+	end
+    in foldl_acc folder D vklist
+    end
+
+  and pcon_analyze (D,pcon,args) = 
+    let
+      val type_analyze = curry2 type_analyze
+    in
+      (case pcon of
+	 (Record_c (labels,SOME vars)) =>
+	   let
+	     fun folder (v,c,D) = (type_analyze D c;insert_con (D,v,c))
+	     val D = foldl2 folder D (vars,args)
+	   in if labels_distinct labels then ()
+	      else (c_error(D,Prim_c(pcon,args),"DepRecord contains duplicate field labels"))
+	   end
+       | (Record_c (labels,NONE)) => 
+	   let val _ = app (type_analyze D) args
+	   in if labels_distinct labels then ()
+	      else (error (locate "pcon_valid") "Record contains duplicate field labels")
+	   end
+       | (Sum_c {known,totalcount,tagcount}) => 
+	   let
+	     val carriers = TilWord32.uminus(totalcount,tagcount)
+	     val k = kind_type_tuple (TilWord32.toInt carriers)
+	     val _ = 
+	       (case args
+		  of [con] => con_analyze(D,con,k)
+		   | _ => error (locate "pcon_valid") "Wrong number of args to Sum_c")
+	     val _ = 
+	       (case known 
+		  of SOME i => 
+		    (Word32.<=(Word32.fromInt 0,i) andalso 
+		     Word32.<(i,totalcount)) orelse
+		    (perr_c (Prim_c (pcon,args));
+		     error (locate "pcon_valid") "Illegal index to sum constructor")
+		   | NONE => true)
+	   in ()
+	   end
+       | (Vararg_c _) =>  app (type_analyze D) args
+       | _ => ())
+    end
+  and con_analyze (D : context, constructor : con,kind : kind) : unit = 
+    let val type_analyze = curry2 type_analyze
+    in
+      (case (constructor,kind) of
+	 (constructor,SingleType_k c) => 
+	 let val _ = type_analyze D constructor
+	     val _ = type_equiv(D,constructor,c)
+	 in ()
+	 end
+       | (_,Single_k c) => ck_error (D,constructor,kind,"Non standard kind given to con_analyze")
+       | (Prim_c (pcon,args),  Type_k) =>  pcon_analyze(D,pcon,args)
+       | (Mu_c (is_recur,defs),Record_k lvk_seq) =>
+	 let 
+	   val D = if is_recur 
+		     then let fun folder((v,_),D) = insert_stdkind (D,v,Type_k)
+			  in  Sequence.foldl folder D defs end
+		   else D
+	 in Sequence.app ((type_analyze D) o #2) defs
+	 end
+       | (AllArrow_c {openness,effect,isDependent,
+		      tFormals,eFormals,fFormals,body_type},Type_k) =>
+	 let
+	   val (tFormals,D) = vklist_valid (D,tFormals)
+
+	   fun folder ((vopt,c),D) = (type_analyze D c;
+				      case vopt of 
+					NONE => D
+				      | SOME v => insert_con (D,v,c))
+	   
+	   val D = foldl folder D eFormals
+	   val _ = type_analyze  D body_type
+	 in ()
+	 end
+       | (ExternArrow_c (args,body),Type_k) => 
+	 let
+	   val _ = map (type_analyze D) args
+	   val _ = type_analyze D body
+	 in ()
+	 end
+       | (v as (Var_c var),kind) => 
+	 let
+	   val _ = sub_kind(D,find_max_kind (D,var),kind)
+	     handle NilContext.Unbound =>
+	       (printem ["UNBOUND VARIABLE = ",var2string var,
+			   " CONTEXT IS \n"];
+		NilContext.print_context D;
+		error  (locate "con_valid") ("variable "^(var2string var)^" not in context"))
+	 in ()
+	 end
+       | (Let_c (Parallel,cbnds,con),_) => error' "Parallel bindings not supported yet"
+       | (Let_c (Sequential,cbnds,con),kind) =>
+	   let
+	     fun check_bnd (D,maker,Tag) (var,formals,body) = 
+	       let
+		 val kind = lambda_valid(D,Tag,formals,body)
+		 val var' = derived_var var
+		 val bnd = maker (var',formals,body)
+		 val con = Let_c (Sequential,[bnd],Var_c var')
+		 val D = insert_stdkind_equation(D,var,con,kind)
+	       in D
+	       end
+	     
+	     val body_var_opt = strip_var con
+	       
+	     fun loop ([],D) = con_analyze(D,con,kind)
+	       | loop (bnd::rest,D) =
+	       (case bnd
+		  of Open_cb (args as (var,formals,body)) =>
+		    if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
+		      ignore(sub_kind(D,lambda_valid(D,Open,formals,body),kind))
+		    else loop(rest,check_bnd (D,Open_cb,Open) args)
+
+		   | Code_cb (args as (var,formals,body)) => 
+		      if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
+			ignore(sub_kind(D,lambda_valid(D,Code,formals,body),kind))
+		      else loop(rest,check_bnd (D,Code_cb,Code) args)
+		   | Con_cb (var,con) => loop(rest,insert_stdkind_equation(D,var,con,con_valid(D,con))))
+
+	   in loop (cbnds,D)
+	   end
+       | (Typeof_c exp,Type_k) => ignore(exp_valid(D,exp))
+       | (Closure_c (code,env),kind1 as Arrow_k(Closure,_,_)) => 
+	 let
+	   val code_kind =  con_valid (D,code)
+	   (*Or could synthesize on the environment*)
+	   val ((v,klast),vklist,body_kind) = 
+	      case code_kind of
+	       Arrow_k (Code ,c_parm::vklist,body_kind) => (c_parm,vklist,body_kind)
+	     | _ => (c_error(D,constructor,"Invalid closure: code has wrong kind"))
+		 
+	   val kind2 = Arrow_k(Closure,vklist,body_kind)
+	   val _ = sub_kind(D,kind2,kind1)
+	   val _ = (con_analyze(D,env,klast)) handle e => k_error(D,klast,"Illegal kind in Closure2?")
+	 in ()
+	 end
+       | (Crecord_c entries,Record_k lvkseq) => 
+	 let
+	   val (labels,cons) = unzip entries
+	   val (labels',vks) = unzip ((Sequence.maptolist (fn ((l,v),k) => (l,(v,k)))) lvkseq)
+	   val _ = con_analyze_vk_list (D,cons,vks)
+	 in
+	   if eq_list (eq_label,labels,labels') then () 
+	   else c_error(D,constructor,"Illegal labels")
+	 end
+       | (Proj_c (rvals,label),kind1) => 
+	 let
+	   (*This will never be dependent*)
+	   val record_kind = con_valid (D,rvals)
+	     
+	   val kind2 = project_from_kind_nondep (record_kind,label)
+	 in if sub_kind(D,kind2,kind1) then ()
+	    else k_error(D,kind1, "Trying to analyze projection at wrong kind")
+	 end
+       | (App_c (cfun_orig,actuals),kind1) => 
+	 let
+	   val cfun_kind = con_valid (D,cfun_orig)
+	     
+	   val (formals,body_kind) = 
+	     case cfun_kind of
+	       (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
+	     | _ => 
+		 (
+		  print "Invalid kind for constructor application\n";
+		  pp_kind cfun_kind; print "\n";
+		  (c_error(D,constructor,"Invalid kind for constructor application" ))
+		  )
+		 
+	   val D = con_analyze_vk_list(D,actuals,formals)
+	 in if sub_kind(D,body_kind,kind1) then ()
+	    else k_error(D,kind1, "Analyzed kind and return kind from app don't match")
+	 end
+       | (Coercion_c {vars,from,to},Type_k) =>
+	  let
+	    fun folder (v,D) = insert_stdkind(D,v,Type_k)
+	    val D = foldl folder D vars
+	  in
+	    con_analyze(D,from,Type_k);
+	    con_analyze(D,to,Type_k)
+	  end
+       | (Typecase_c {arg,arms,default,kind=given_kind},kind) => 
+	 let
+	   val given_kind = kind_valid (D,given_kind)
+	   val origD = D
+	   fun doarm (pcon,args,body) = 
+	     let
+	       fun folder ((v,k),D) =
+		 let val k = kind_valid (origD,k)
+		 in
+		   (Var_c v,insert_stdkind(D,v,k))
+		 end
+	       val (argcons,D) = foldl_acc folder D args
+	       val _ = pcon_analyze (D,pcon,argcons)
+	       val _ = con_analyze(D,body,given_kind)
+	     in ()
+	     end
+	   val _ = app doarm arms
+	   val _ = type_analyze D arg
+	   val _ = con_analyze (D,default,given_kind)
+	 in if sub_kind(D,given_kind,kind) then () else k_error(D,kind,"Return type for typecase doesn't match")
+	 end
+       | (Annotate_c (annot,con),kind) => con_analyze(D,con,kind)
+       | _ => ck_error (D,constructor,kind,"Illegal Con/Kind combination in analysis")
+	 )
+    end
+  and con_analyze_vk_list (D,cons : con list,
+			   vks : (var * kind) list) = 
+    let
+      val origD = D
+      fun folder (c,(v,k),(D,subst)) = 
+	let val k = substConInKind subst k
+	    val _ = con_analyze(origD,c,k)
+	    val subst = Subst.C.sim_add subst (v,c)
+	    val D = insert_kind_equation(D,v,c,k)
+	in(D,subst)
+	end
+      val (D,_) = (foldl2 folder (D,Subst.C.empty()) (cons,vks)
+		   handle e => (print "Problem with analyzing vk_list\n";raise e))
+    in D
+    end
+  and type_analyze(D,c) = con_analyze(D,c,Type_k)
+  and con_valid (D : context, constructor : con) : kind = 
+    let 
+      val _ = push_con(constructor,D)
+      val _ = if (!show_calls)
+		then (print "con_valid called with constructor =\n";
+		      pp_con constructor; 
+		      if !show_context then (print "\nand context"; NilContext.print_context D) else ();
+		      print "\n\n")
+	      else ()
+
+      val _ = 
+	if !debug then
+	  assert (locate "con_valid PRE")
+	  [
+	   assertWellFormed D
+	   (* assertRenamedCon (D,constructor) *)
+	   ]
+	else ()
+      val k = flagtimer (con_valid_top,"Tchk:con_valid",con_valid') (D,constructor)
+      val _ = if (!show_calls)
+		then (printl "con_valid returned")
+	      else ()
+      val _ = 
+	if !debug then
+	  assert (locate "con_valid POST")
+	  [
+	   (* assertRenamedKind (D,k) *)
+	   ]
+	else ()
+      val _ = pop()
+    in  k
+    end
+
+
+  
+  and con_valid' (D : context, constructor : con) : kind = 
+    let
+      val kind = 
+	(case constructor of
+	   (Prim_c (pcon,args)) => ((flagtimer (con_valid_prof,"Tchk:pcon_valid",pcon_analyze) (D,pcon,args);
+				     SingleType_k(constructor))
+				    handle e => c_error(D,constructor,"Prim con invalid"))
+	   | (AllArrow_c {openness,effect,isDependent,
+			  tFormals,eFormals,fFormals,body_type}) =>
+	     (
+	      type_analyze (D,constructor);
+	      SingleType_k(constructor)
+	      )
+	 | (ExternArrow_c (args,body)) => 
+	   (
+	    type_analyze (D,constructor);
+	    SingleType_k(constructor)
+	    )
+	 | (Mu_c (is_recur,defs)) =>
+	   let
+	     val D =
+	       if is_recur then
+		 let fun folder((v,_),D) = insert_stdkind (D,v,Type_k)
+		 in  Sequence.foldl folder D defs
+		 end
+	       else D
+		 
+	     val _ = app (fn (_,c) => type_analyze (D,c)) (Sequence.toList defs)
+
+	     fun mapper (i,(v,c)) = 
+		 let val label = generate_tuple_label(i+1)
+		 in((label,derived_var v),SingleType_k(Proj_c(constructor,label)))
+		 end
+	     val entries = Sequence.mapcount mapper defs
+		 
+	   in  Record_k(entries)
+	   end
+	 | (v as (Var_c var)) => 
+	   let
+	     val kind = (find_max_kind (D,var)
+			 handle NilContext.Unbound =>
+			   (printem ["UNBOUND VARIABLE = ",var2string var,
+				       " CONTEXT IS \n"];
+			    NilContext.print_context D;
+			    error  (locate "con_valid") ("variable "^(var2string var)^" not in context")))
+	   in
+	     kind
+	   end
+	 | (Let_c (Parallel,cbnds,con)) => error' "Parallel bindings not supported yet"
+	 | (c as (Let_c (Sequential,cbnds,con))) =>
+	   let
+
+	     val _ = 
+	       if !print_lets then
+		 (printl "let is:";
+		  pp_con c;
+		  printl "")
+	       else ()
+
+	     fun check_bnd ((D,subst),maker,Tag) (var,formals,body) = 
+					 let
+							 val kind = lambda_valid(D,Tag,formals,body)
+							 val var' = derived_var var
+							 val bnd = maker (var',formals,body)
+							 val con = Let_c (Sequential,[bnd],Var_c var')
+							 val D = insert_stdkind_equation(D,var,con,kind)
+							 val subst = Subst.C.addr(subst,var,con)
+					 in (D,subst)
+					 end
+	     
+	     val body_var_opt = strip_var con
+	       
+	     fun loop ([],(D,subst)) = substConInKind subst (con_valid(D,con))
+	       | loop (bnd::rest,state as (D,subst)) =
+	       (case bnd
+		  of Open_cb (args as (var,formals,body)) =>
+		    if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
+		      substConInKind subst (lambda_valid(D,Open,formals,body))
+		    else loop(rest,check_bnd (state,Open_cb,Open) args)
+		   | Code_cb (args as (var,formals,body)) => 
+		    if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
+		      substConInKind subst (lambda_valid(D,Code,formals,body))
+		    else loop(rest,check_bnd (state,Code_cb,Code) args)
+		   | Con_cb (var,con) => 
+		      let val D = insert_stdkind_equation(D,var,con,con_valid(D,con))
+			  val subst = Subst.C.addr (subst,var,con)
+		      in loop(rest,(D,subst))
+		      end)
+
+	     val res = loop (cbnds,(D,Subst.C.empty()))
+	     val _ = 
+					 if !print_lets then
+							 (printl "Kind is:";
+								pp_kind res;
+								printl "")
+					 else ()
+	   in res
+				 
+	   end
+	 | (Typeof_c exp) => (SingleType_k(exp_valid (D,exp)))
+	 | (Closure_c (code,env)) => 
+	   let
+	     val code_kind =  con_valid (D,code)
+	     val ((v,closure_k),vklist,body_kind) = 
+	       case code_kind of
+		 Arrow_k (Code ,c_parm::vklist,body_kind) => (c_parm,vklist,body_kind)
+	       | _ => (c_error(D,constructor,"Invalid closure: code component does not have correct kind"))
+	     val _ = (con_analyze (D,env,closure_k)) handle e => k_error(D,closure_k,"Illegal kind in Closure?")
+	     val kind = Arrow_k(Closure,vklist,body_kind)
+	   in varConKindSubst v env kind
+	   end
+	 | (Crecord_c entries) => 
+	   let
+	     val _ = if (!trace)
+		       then print "{con_valid processing Crecord_c\n"
+		     else ()
+	     val (labels,cons) = unzip entries
+	     val kinds = map (curry2 con_valid D) cons
+	     val _ =  
+	       (labels_distinct labels) orelse
+	       (Ppnil.pp_list Ppnil.pp_label' labels 
+		("labels are: ",",",";",true);
+		Listops.no_dups (fn (x,y) => let val _ = (printem ["comparing: ",label2string x, " and ",
+								   label2string y," : "])
+						 val result = Name.compare_label (x,y)
+						 val _ = if result = EQUAL then print "TRUE\n" else print "FALSE\n"
+					     in result end) labels;
+		(c_error(D,constructor,"Labels in record of constructors not distinct" )))
+	     val _ = if (!trace)
+		       then print "con_valid done processing Crecord_c\n}"
+		     else () 
+	     val k_entries = 
+	       map2 (fn (l,k) => ((l,fresh_named_var "con_valid_record"),k)) (labels,kinds)
+	   in Record_k (Sequence.fromList k_entries)
+	   end
+	 | (Proj_c (rvals,label)) => 
+	   let
+	     (*This will never be dependent*)
+	     val record_kind = con_valid (D,rvals)
+	       
+	     val entry_kinds = 
+	       (case record_kind of
+		  Record_k kinds => kinds
+		| other => 
+		    (c_error(D,constructor,"Projection from constructor of non-record kind")))
+	     val labs = map (#1 o #1) (Sequence.toList entry_kinds)
+	       
+	     val _ = if (member_eq(eq_label,label,labs))
+		       then () 
+		     else (print "attempted to project label ";
+			   pp_label label;
+			   print " from \n";
+			   pp_con rvals;
+			   print "\n which has labels";
+			   pp_list pp_label' labs ("",", ","",false);
+			   c_error(D,constructor,"Ill-formed projection"))
+	   in
+	     project_from_kind_nondep (record_kind,label)
+	   end
+	 | (App_c (cfun_orig,actuals)) => 
+	   let
+	     
+	     val cfun_kind = con_valid (D,cfun_orig)
+	       
+	     val (formals,body_kind) = 
+	       case cfun_kind of
+		 (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
+	       | _ => 
+		   (
+		    print "Invalid kind for constructor application\n";
+		      pp_kind cfun_kind; print "\n";
+		      (c_error(D,constructor,"Invalid kind for constructor application" ))
+		      )
+
+	     val (formal_vars,formal_kinds) = unzip formals		   
+	     val _ = app2 (fn (c,k) => con_analyze(D,c,k)) (actuals,formal_kinds)
+
+	     fun folder (v,c,subst) = NilSubst.C.sim_add subst (v,c)
+	     val subst = Listops.foldl2 folder (NilSubst.C.empty()) (formal_vars,actuals)
+	   in  
+	     substConInKind subst body_kind
+	   end
+	 | (Coercion_c {vars,from,to}) =>
+	   (type_analyze (D,constructor);
+	    SingleType_k constructor)
+	 | (Typecase_c {arg,arms,default,kind=given_kind}) => 
+	   let
+	     val given_kind = kind_valid (D,given_kind)
+	     val origD = D
+	     fun doarm (pcon,args,body) = 
+	       let
+		 fun folder ((v,k),D) =
+		   let val k = kind_valid (origD,k)
+		   in
+		     (Var_c v,insert_kind(D,v,k))
+		   end
+		 val (argcons,D) = foldl_acc folder D args
+		 val _ = pcon_analyze (D,pcon,argcons)
+		 val _ = con_analyze(D,body,given_kind)
+	       in ()
+	       end
+	     val _ = (app doarm arms;
+		      type_analyze (D,arg);
+		      con_analyze (D,default,given_kind)) 
+	       handle e => (print "Problem with Typecase arms\n";raise e)
+	   in
+	     given_kind
+	   end
+	 | (Annotate_c (annot,con)) => con_valid (D,con)
+	   )
+    in
+      kind
+    end
+  and lambda_valid (D,Tag,formals,body) = 
+    let 
+      val (formals,D) = vklist_valid (D,formals)
+      val body_kind = con_valid(D,body)
+    in Arrow_k(Tag,formals,body_kind)
+    end		  
+
 
 (* Term level type checking.  *)
 

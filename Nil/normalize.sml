@@ -1124,9 +1124,17 @@ struct
 	end
 
     and projectRecordType(D:context, c:con, l:label) = 
-	(case #2(reduce_hnf(D,c)) of
+      let
+	fun err () = 
+	  (
+	   print "projectRecordType could not find field ";Ppnil.pp_label l;print " in constructor: \n";
+	   Ppnil.pp_con c;print "\n";
+	   error' "Error in record projection"
+	   )
+      in
+	case #2(reduce_hnf(D,c)) of
 	     Prim_c(Record_c (labs,SOME vars), cons) =>
-		 let fun loop _ [] = error' "projectRecordType could not find field"
+		 let fun loop _ [] = err()
 		       | loop rev_vclist ((ll,v,c)::rest) = 
 		     if (eq_label(l,ll))
 			 then removeDependence (rev rev_vclist) c
@@ -1135,11 +1143,12 @@ struct
 		 end
 	   | Prim_c(Record_c (labs,_), cons) =>
 		 (case (Listops.assoc_eq(eq_label,l,Listops.zip labs cons)) of
-		      NONE => error' "projectRecordType could not find field"
+		      NONE => err()
 		    | SOME c => c)
 	   | c => (print "projectRecordType reduced to non-record type = \n";
 		   Ppnil.pp_con c; print "\n";
-		   error' "projectRecordType reduced to non-record type"))
+		   error' "projectRecordType reduced to non-record type")
+      end
 
     and reduceToSumtype(D: context, c:con) = 
 	(case #2(reduce_hnf(D,c)) of
