@@ -71,10 +71,10 @@ endif
 endif
 
 # --------------------------- C and asm flags ---------------------------
-# CFLAGS=-c -g -D${sys_name}
+#CFLAGS=-c -g -D${sys_name}
 CFLAGS=-c -O2 -D${sys_name}
 
-alpha_osf_asflags=-O1
+alpha_osf_asflags=-O1 -g
 rs_aix_asflags=-mppc 
 META_ASFLAGS=${sys_name}_asflags
 ASFLAGS=${${META_ASFLAGS}} -D${sys_name}
