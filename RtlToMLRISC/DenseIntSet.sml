@@ -3,18 +3,17 @@
  * DenseIntSet.sml
  * ========================================================================= *)
 
-functor DenseIntSet(
-	  structure IntMap: ORD_MAP where type Key.ord_key = int
-	  structure WordN:  WORD
-	) :> ORD_SET
-	       where type Key.ord_key = int
-	  = struct
+structure DenseIntSet
+	    :> ORD_SET
+		 where type Key.ord_key = int
+	    = struct
 
   (* -- structures --------------------------------------------------------- *)
 
-  structure Key = IntMap.Key
+  structure IntMap = IntBinaryMap
+  structure WordN  = Word32
 
-  structure WordN = Word32 (* 2x speedup from this ??? *)
+  structure Key = IntMap.Key
 
   (* -- types -------------------------------------------------------------- *)
 
@@ -106,14 +105,14 @@ functor DenseIntSet(
     fun countInt 0 = 0
       | countInt n = (n mod 1)+countInt(n div 2)
 
-    val countInt8 = Vector.tabulate(256, countInt)
+    val countInt8 = Array.tabulate(256, countInt)
 
     val w8   = Word.fromInt 8
     val w255 = WordN.fromInt 255
   in
     fun countWord(count, word) =
 	  if word<>zero then
-	    countWord(count+Vector.sub(countInt8, WordN.toInt(word andb w255)),
+	    countWord(count+Array.sub(countInt8, WordN.toIntX(word andb w255)),
 		      word>>w8)
 	  else
 	    count
@@ -321,6 +320,8 @@ functor DenseIntSet(
   (* -- layered functions -------------------------------------------------- *)
 
   fun singleton item = add(empty, item)
+
+  fun add'(item, set) = add(set, item)
 
   fun addList(set, list) =
 	List.foldl (fn(item, set) => add(set, item)) set list
