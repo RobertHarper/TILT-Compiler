@@ -158,24 +158,9 @@ struct
          Creates the kind for a "tuple" of types of length n. 
          1-tuples yield kind Word, rather than a record kind.
     *)
-   fun makeKindTuple 1 = Type_k
-     | makeKindTuple n =
-       let
-	   fun makeField i =
-	       ((IlUtil.generate_tuple_label (i+1), Name.fresh_var()), 
-		Type_k)
-       in  
-	   Record_k (Sequence.fromList (Listops.map0count makeField n))
-       end
+   val makeKindTuple = NilUtil.kind_type_tuple
 
    fun substConInCon subst con = NilSubst.substConInCon subst con
-
-   (*con_a will be renamed when it is substituted*)
-   fun varConConSubst var con_a con_b = 
-       NilSubst.varConConSubst var con_a con_b
-     
-   fun varConKindSubst var con kind = 
-       NilSubst.varConKindSubst var con kind
 
    (*This will work as long as you don't do any composing of substitutions*)
    val addToConSubst = NilSubst.C.sim_add

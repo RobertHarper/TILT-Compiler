@@ -2,92 +2,96 @@
 
 structure Normalize :> NORMALIZE =
 struct	
+
   structure NilContext = NilContextPre
+
 
   val number_flatten = Stats.int("number_flatten")
 
-  val profile = Stats.ff "nil_profile"
+  val profile       = Stats.ff "nil_profile"
   val local_profile = Stats.ff "normalize_profile"
+
   val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
     
   open Nil 
   open Prim
 
   type con_subst = NilSubst.con_subst
+
   val substConInKind= fn s => subtimer("Norm:substConInKind",NilSubst.substConInKind s)
   val substConInExp = fn s => subtimer("Norm:substConInExp",NilSubst.substConInExp s)
   val substConInCon = fn s => subtimer("Norm:substConInCon",NilSubst.substConInCon s)
   val substExpInCon = fn s => subtimer("Norm:substExpInCon",NilSubst.substExpInCon s)
-  val empty = NilSubst.C.empty
-  val add = NilSubst.C.sim_add
-  val addr = NilSubst.C.addr
-  val substitute = NilSubst.C.substitute
-  val fromList = NilSubst.C.simFromList
+
+  val empty         = NilSubst.C.empty
+  val add           = NilSubst.C.sim_add
+  val addr          = NilSubst.C.addr
+  val substitute    = NilSubst.C.substitute
+  val fromList      = NilSubst.C.simFromList
   val printConSubst = NilSubst.C.print
 
-  val map_annotate = NilUtil.map_annotate
-  val strip_annotate = NilUtil.strip_annotate
-  val is_var_c = NilUtil.is_var_c
-  val strip_var = NilUtil.strip_var
-  val strip_crecord = NilUtil.strip_crecord
-  val strip_proj = NilUtil.strip_proj
-  val strip_prim = NilUtil.strip_prim
-  val strip_app = NilUtil.strip_app
-  val con_free_convar = NilUtil.con_free_convar
+  val makeLetC             = NilUtil.makeLetC
+  val map_annotate         = NilUtil.map_annotate
+  val strip_annotate       = NilUtil.strip_annotate
+  val is_var_c             = NilUtil.is_var_c
+  val strip_var            = NilUtil.strip_var
+  val strip_crecord        = NilUtil.strip_crecord
+  val strip_proj           = NilUtil.strip_proj
+  val strip_prim           = NilUtil.strip_prim
+  val strip_app            = NilUtil.strip_app
+  val con_free_convar      = NilUtil.con_free_convar
   val generate_tuple_label = NilUtil.generate_tuple_label
-
-  val primequiv = NilUtil.primequiv
-
-  val singletonize = NilUtil.singletonize 
+  val primequiv            = NilUtil.primequiv
+  val singletonize         = NilUtil.singletonize 
 
 
   (*From Name*)
-  val eq_var = Name.eq_var
-  val eq_var2 = Name.eq_var2
-  val eq_label = Name.eq_label
+  val eq_var          = Name.eq_var
+  val eq_var2         = Name.eq_var2
+  val eq_label        = Name.eq_label
   val fresh_named_var = Name.fresh_named_var
-  fun fresh_var () = fresh_named_var "normalize"
-  val derived_var = Name.derived_var
-  val label2string = Name.label2string
-  val var2string = Name.var2string 
+  fun fresh_var ()    = fresh_named_var "normalize"
+  val derived_var     = Name.derived_var
+  val label2string    = Name.label2string
+  val var2string      = Name.var2string 
 
   (*From Listops*)
   val map_second = Listops.map_second
-  val foldl_acc = Listops.foldl_acc
-  val map = Listops.map
-  val map2 = Listops.map2
-  val zip = Listops.zip
-  val unzip = Listops.unzip
-  val all = Listops.all
-  val all2 = Listops.all2
+  val foldl_acc  = Listops.foldl_acc
+  val map        = Listops.map
+  val map2       = Listops.map2
+  val zip        = Listops.zip
+  val unzip      = Listops.unzip
+  val all        = Listops.all
+  val all2       = Listops.all2
 
   (*From Util *)
-  val eq_opt = Util.eq_opt
+  val eq_opt  = Util.eq_opt
   val map_opt = Util.mapopt
-  val printl = Util.printl
+  val printl  = Util.printl
   val lprintl = Util.lprintl
 
-  (* Local helpers *)
-  type context = NilContext.context
-  val find_kind = NilContext.find_kind   
-  val kind_of = NilContext.kind_of
-  val find_con = NilContext.find_con
+  (* NilContext *)
+  type context   = NilContext.context
+  val find_kind  = NilContext.find_kind   
+  val kind_of    = NilContext.kind_of
+  val find_con   = NilContext.find_con
   val insert_con = NilContext.insert_con
+
+  val find_kind_equation = NilContext.find_kind_equation
+  val print_context      = NilContext.print_context
 
   fun error s = Util.error "normalize.sml" s
 
-  val assert = NilError.assert
-  val locate = NilError.locate "Normalize"
+  val assert   = NilError.assert
+  val locate   = NilError.locate "Normalize"
   val perr_k_k = NilError.perr_k_k
 
-  val isRenamedCon = NilContext.isRenamedCon
-  val isRenamedKind = NilContext.isRenamedKind
-  val print_context = NilContext.print_context
+
 
   val debug = ref false
   val show_calls = ref false
   val show_context = ref false
-
 
   fun pull (c,kind) = 
     let open Nil NilUtil Name Util
@@ -881,51 +885,7 @@ struct
            | Typecase_c _ => false
            | Annotate_c (_,c) => false)
 
-(*    fun expandMuType(D:context, mu_con:con) =
-	let 
-	  fun to_proj (Annotate_c (_,c)) = to_proj c
-	    | to_proj (con as Proj_c _)  = SOME con
-	    | to_proj (con as Mu_c _)    = SOME con
-	    | to_proj _                  = NONE
-	       
-	  fun extract mu_tuple_con (defs,which) =
-	    let val defs = Sequence.toList defs
-		fun mapper (n,(v,_)) = 
-		    if (length defs = 1) 
-			then (v,mu_con)
-		    else (v,Proj_c(mu_tuple_con,NilUtil.generate_tuple_label(n+1)))
-		val subst = fromList(Listops.mapcount mapper defs)
-		val (_,c) = List.nth(defs,which-1)
-	    in  substConInCon subst c
-	    end
-	  fun loop (subst,c) = 
-	    case (to_proj c) of
-	      SOME c => substConInCon subst c
-	    | NONE => let val (progress,subst,c) = con_reduce(D,subst) c
-		      in  case progress of
-			PROGRESS => loop (subst,c) 
-		      | HNF => (case to_proj (substConInCon subst c) of
-				  SOME c => c
-				| NONE => error "Unable to reduce to proj or mu")
-		      | IRREDUCIBLE => 
-			  (case NilContext.find_kind_equation(D,c) 
-			     of SOME c => loop (subst,c)
-			      | NONE => error "Unable to reduce to proj or mu")
-		      end
-	  val mu_con' = loop (empty(),mu_con)
 
-	in 
-	  case strip_annotate mu_con' of  
-	    (Mu_c (_,defs)) => extract mu_con (defs,1)
-	  | (Proj_c (mu_tuple, l))  => 
-	      (case strip_annotate(#2(reduce_hnf(D,mu_con'))) of
-		 (Mu_c (_,defs)) => extract mu_con (defs,1)
-	       | (Proj_c (Mu_c (_,defs),_)) => extract mu_tuple (defs, lab2int l (Sequence.length defs))
-	       | c => (Ppnil.pp_con c;
-		       error "expandMuType projects from non-mu type"))
-	  | _ => error "expandMuType reduced to non-mu type"
-	end
-*)
     fun expandMuType(D:context, mu_con:con) =
 	let 
 	       
@@ -940,7 +900,7 @@ struct
 	      val bnds = Listops.mapcount mapper defs
 	      val bnds = (Con_cb (var',mu_tuple_con))::bnds
 	      val (_,c) = List.nth(defs,which-1)
-	      val con = Let_c(Sequential,bnds,c)
+	      val con = makeLetC bnds c
 	    in  con
 	    end
 
@@ -951,28 +911,7 @@ struct
 	  | _ => error "expandMuType reduced to non-mu type"
 	end
 
-(*    fun expandMuType(D:context, mu_con:con) =
-      let 
-	       
-	fun extract mu_tuple_con (defs,which) =
-	  let 
-	    val defs = Sequence.toList defs
-	    fun mapper (n,(v,_)) = 
-	      if (length defs = 1) 
-		then  (v,mu_con)
-	      else (v,Proj_c(mu_tuple_con,NilUtil.generate_tuple_label(n+1)))
-	      val subst = fromList(Listops.mapcount mapper defs)
-	      val (_,c) = List.nth(defs,which-1)
 
-	    in  substConInCon subst c
-	    end
-
-	in 
-	  case #2(reduce_hnf(D,mu_con)) of  
-	    (Mu_c (_,defs)) => extract mu_con (defs,1)
-	  | (Proj_c (mu_tuple as Mu_c (_,defs), l))  => extract mu_tuple (defs, lab2int l (Sequence.length defs))
-	  | _ => error "expandMuType reduced to non-mu type"
-	end*)
   and con_reduce_letfun state (sort,coder,var,formals,body,rest,con) = 
 	    let
 	      val (D,subst) = state
@@ -1002,9 +941,6 @@ struct
 	 in  (case (substitute subst var) of
 		   SOME c => (PROGRESS, subst, c)
 		 | NONE => (IRREDUCIBLE, subst, constructor))
-(*	           (case NilContext.find_kind_equation(D,Var_c var) of
-			SOME c => (PROGRESS, subst, c)
-		      | NONE => (IRREDUCIBLE, subst, Var_c var)))*)
 	 end
 
         | (Let_c (sort,((cbnd as Open_cb (var,formals,body))::rest),con)) =>
@@ -1050,7 +986,6 @@ struct
 	| (Annotate_c (annot,con)) => con_reduce state con)
 
 
-    and find_kind_equation (D,c) = NilContext.find_kind_equation (D,c)
     and reduce_once (D,con) = let val (progress,subst,c) = con_reduce(D,empty()) con
 			      in  (case progress 
 				     of IRREDUCIBLE => (case find_kind_equation (D,c) 
@@ -1123,11 +1058,7 @@ struct
     and projectTuple(D:context, c:con, l:label) = 
 	(case (reduce_hnf(D,Proj_c(c,l))) of
 	   (true,c)  => c
-	 | (false,c) => c(*
-			  (print "projectTuple irreducible type = \n";
-			   Ppnil.pp_con c; print "\n";
-			   error "projectTuple")*)
-	     )
+	 | (false,c) => c)
 
     and removeDependence vclist c = 
 	let fun loop subst [] = substExpInCon subst c

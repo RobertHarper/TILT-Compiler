@@ -1,44 +1,58 @@
 (*$import Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List NilPrimUtilParam TraceInfo Stats NilRewrite *)
 
+(* This structure contains a miscellaneous collection of functions
+ * for dealing with the NIL that have no other natural place.
+ *)
+
 structure NilPrimUtil :> PRIMUTIL where type con = Nil.con
                                  where type exp = Nil.exp = PrimUtil(structure PrimUtilParam = NilPrimUtilParam)
+
 structure NilUtil
   :> NILUTIL =
 struct
 
+  (* IMPORTS *)
   open Nil Util 
   open Name
 
+    
   val debug = ref false
+
   fun error s = Util.error "nilutil.sml" s
 
-  val profile = Stats.ff "nil_profile"
+  val profile       = Stats.ff "nil_profile"
   val local_profile = Stats.ff "nilutil_profile"
      
   val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
-     
-  fun fresh_var()  = Name.fresh_named_var "nilutil"
 
-  val unzip = ListPair.unzip
-  val zip = ListPair.zip
+  val unzip     = ListPair.unzip
+  val zip       = ListPair.zip
+
   val foldl_acc = Listops.foldl_acc
+  val foldl2    = Listops.foldl2
+  val foldl4    = Listops.foldl4
+  val eq_list   = Listops.eq_list
 
-   fun extractCbnd (Con_cb(v,c)) = (v,c)
-     | extractCbnd (Open_cb(v,vklist,c)) = 
-       let val v' = Name.derived_var v
-       in  (v,Let_c(Sequential,
-		    [Open_cb(v',vklist,c)],
-		    Var_c v'))
-       end
-     | extractCbnd (Code_cb(v,vklist,c)) = 
-       let val v' = Name.derived_var v
-       in  (v,Let_c(Sequential,
-		    [Code_cb(v',vklist,c)],
-		    Var_c v'))
-       end
+  (* END IMPORTS *)
+
+
+  fun extractCbnd (Con_cb(v,c)) = (v,c)
+    | extractCbnd (Open_cb(v,vklist,c)) = 
+    let val v' = Name.derived_var v
+    in  (v,Let_c(Sequential,
+		 [Open_cb(v',vklist,c)],
+		 Var_c v'))
+    end
+    | extractCbnd (Code_cb(v,vklist,c)) = 
+    let val v' = Name.derived_var v
+    in  (v,Let_c(Sequential,
+		 [Code_cb(v',vklist,c)],
+		 Var_c v'))
+    end
 
   val generate_tuple_symbol = IlUtil.generate_tuple_symbol
   val generate_tuple_label = IlUtil.generate_tuple_label
+
   fun exp_tuple (elist : exp list) = 
       let val labels = Listops.mapcount (fn (i,_) => generate_tuple_label(i+1)) elist
       in Prim_e(NilPrimOp(record labels),[],elist)
@@ -56,6 +70,9 @@ struct
 			     val lvk_list = Listops.mapcount doer klist
 			 in  Record_k(Sequence.fromList lvk_list)
 			 end
+
+  fun kind_type_tuple 1   = Type_k
+    | kind_type_tuple len = kind_tuple(Listops.map0count (fn _ => Type_k) len)
 
   val unit_con = con_tuple []
   val unit_exp = exp_tuple []
@@ -377,15 +394,7 @@ struct
  
     type bound = {boundcvars : Name.VarSet.set,
 		  boundevars : Name.VarSet.set}
-(*
-    val emptyCollection = Name.VarMap.empty
-    fun collInsert (set, (key,value)) = Name.VarSet.insert(set,key)
-    fun collMerge set [] = set
-      | collMerge set (a::rest) = collMerge (collInsert(set,a)) rest
-    fun collMember (set,k) = (case Name.VarMap.find(set,k) of
-				  NONE => false
-				| SOME _ => true)
-*)
+
     datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
     datatype state =
 	STATE of {bound : bound,
@@ -1042,6 +1051,10 @@ struct
     | same_effect (Partial,Partial) = true
     | same_effect _ = false
 
+  fun sub_effect (sk,Total,Total) = true
+    | sub_effect (sk,Partial,Partial) = true
+    | sub_effect (sk,Total,Partial) = sk
+    | sub_effect (sk,_,_) = false
 
   (*Pre: Records are sorted by label *)
   fun primequiv (pcon1,pcon2) = 
@@ -1057,9 +1070,11 @@ struct
 	| (Loc_c,Loc_c) => true
 	| (Exntag_c,Exntag_c) => true
 	 | (Sum_c {known=k1,tagcount=t1,totalcount=to1},
-	    Sum_c {known=k2,tagcount=t2,totalcount=to2}) => (Util.eq_opt (op =,k1,k2)
-							     andalso (to1 = to2)
-							     andalso (t1 = t2))
+	    Sum_c {known=k2,tagcount=t2,totalcount=to2}) => 
+	    Util.eq_opt (op =,k1,k2) 
+	    andalso (to1 = to2)
+	    andalso (t1 = t2)
+
 	 | (Record_c (labs1,NONE),Record_c (labs2,NONE)) => 
 	      Listops.eq_list (eq_label,labs1,labs2)
 	 | (Record_c (labs1,SOME vars1),Record_c (labs2,SOME vars2)) => 
@@ -1125,171 +1140,159 @@ struct
 	   end
 	  | _ => false)
     end
-  and alpha_equiv_con' context (con1,con2) = 
-    let
-      val recur = alpha_equiv_con' context
-    in
-      (case (con1,con2)
-	 of (Prim_c (pcon1,args1),Prim_c (pcon2,args2)) => 
-	   primequiv (pcon1,pcon2) andalso
-	   alpha_equiv_con_list context (args1,args2)
-	   
-	  (*Assume - sets must maintain ordering!  We only judge*)
-	  (* mus with the same ordering to be equiv *) 
-	  | (Mu_c (flag1,defs1),Mu_c (flag2,defs2)) =>
-	   let
-	     val def_list1 = Sequence.toList defs1
-	     val def_list2 = Sequence.toList defs2
-	     val (var_list1,con_list1) = ListPair.unzip def_list1
-	     val (var_list2,con_list2) = ListPair.unzip def_list2
-	     val context' = alpha_equate_pairs (context,(var_list1,var_list2))
-	   in
-	     flag1 = flag2 andalso
-	     alpha_equiv_con_list context' (con_list1,con_list2)
-	   end
-             (*XXX need to fix this! *)
-	  | (AllArrow_c {openness = o1, effect = eff1, isDependent = i1,
-			 tFormals = t1, eFormals = e1, fFormals = f1, body_type = b1},
-	     AllArrow_c {openness = o2, effect = eff2, isDependent = i2,
-			 tFormals = t2, eFormals = e2, fFormals = f2, body_type = b2}) =>
-	   let
-	     val conref = ref context
-	     fun tformal_equiv ((var1,kind1),(var2,kind2)) = 
-	       (alpha_equiv_kind' (!conref) (kind1,kind2))
-	       before (conref :=  alpha_equate_pair (!conref,(var1,var2)))
-	   in
-	     same_openness(o1,o2) andalso (f1 = f2) andalso (eff1=eff2) andalso
-	     Listops.eq_list(tformal_equiv, t1, t2) andalso
-	     alpha_equiv_con_list (!conref) (map #2 e1, map #2 e2) andalso
-	     alpha_equiv_con' (!conref) (b1,b2)
-	   end 
 
+  and alpha_equiv_con' context args = alpha_subequiv_con' false context args  
+  and alpha_subequiv_con_list st context (cl1,cl2) = 
+    Listops.eq_list (fn (c1,c2) => alpha_subequiv_con' st context (c1,c2),cl1,cl2)
+  and alpha_equiv_vk_list context (vk1,vk2) = 
+    let 
+      fun folder ((var1,kind1),(var2,kind2),(context,equal)) = 
+	if equal then
+	  (alpha_equate_pair (context,(var1,var2)),alpha_equiv_kind' context (kind1,kind2))
+	else (context,false)
+    in foldl2 folder (context,true) (vk1,vk2)
+    end
+  and alpha_subequiv_con' st context (con1,con2) = 
+    let
+      val res = 
+	(case (con1,con2)
+	   of (Prim_c (pcon1,args1),Prim_c (pcon2,args2)) => 
+	     let
+	       val res1 = 
+		 (case (pcon1,pcon2) of
+		    (Record_c (labs1,vlistopt1), 
+		     Record_c (labs2,vlistopt2)) => Listops.eq_list(eq_label,labs1,labs2)
+		  | (Sum_c{tagcount=tagcount1,totalcount=totalcount1,
+			   known=known1}, 
+		     Sum_c{tagcount=tagcount2,totalcount=totalcount2,
+			   known=known2}) =>
+		    (
+		     (tagcount1 = tagcount2)     
+		     andalso (totalcount1 = totalcount2) 
+		     andalso (case (known1,known2,st) of
+				(NONE,NONE,_) => true
+			      | (SOME w1, SOME w2,_) => (w1=w2)
+			      | (SOME w1, NONE, true) => true
+			      | _ => false)
+		     )
+		  | (_,_) => primequiv(pcon1,pcon2))
+	       val st' = st andalso (covariant_prim pcon1)
+	     in res1 andalso alpha_subequiv_con_list st' context (args1,args2)
+	     end
+	    | (Mu_c (flag1,defs1),Mu_c (flag2,defs2)) =>
+		flag1 = flag2 andalso
+		let
+		  val def_list1 = Sequence.toList defs1
+		  val def_list2 = Sequence.toList defs2
+		  val (var_list1,con_list1) = ListPair.unzip def_list1
+		  val (var_list2,con_list2) = ListPair.unzip def_list2
+		  val context = if flag1 then alpha_equate_pairs (context,(var_list1,var_list2)) else context
+		in alpha_subequiv_con_list false context (con_list1,con_list2)
+		end
+	    | (AllArrow_c {openness = o1, effect = eff1, isDependent = i1,
+			   tFormals = t1, eFormals = e1, fFormals = f1, body_type = b1},
+	       AllArrow_c {openness = o2, effect = eff2, isDependent = i2,
+			   tFormals = t2, eFormals = e2, fFormals = f2, body_type = b2}) =>
+
+		(same_openness(o1,o2)              
+		 andalso (f1 = f2) 
+		 andalso (sub_effect (st,eff1,eff2))
+		 andalso (List.length t1 = List.length t2) 
+		 andalso
+		 let val (context,equal) = alpha_equiv_vk_list context (t1,t2)
+		 in (alpha_subequiv_con_list st context (map #2 e1, map #2 e2) 
+		     andalso alpha_subequiv_con' st context (b1,b2))
+		 end )
+
+			 (*Common case?*)
+	  | (Typeof_c (Var_e v1), Typeof_c (Var_e v2)) => Name.eq_var (v1,v2)
 
           (* XXX need to fix this! *)
-	  | (Typeof_c exp1, Typeof_c exp2) => 
-                false
-(*
-                alpha_equiv_exp' context (exp1,exp2)
-*)
-	  | (Var_c var1,Var_c var2) => alpha_pair_eq(context,(var1,var2))
+	  | (Typeof_c exp1, Typeof_c exp2) => false
 
+	  | (Var_c var1,Var_c var2) => alpha_pair_eq(context,(var1,var2))
+		
+	  (* Note - can't subtype lets without recording variance info,
+	   * so set subtyping to false here.
+	   *)
 	  | (Let_c (sort1, binds1,con1),Let_c (sort2, binds2,con2)) => 
 	   let 
-	     val conref = ref context
-	     fun equiv_one (Con_cb(var1,con1),Con_cb(var2,con2)) = 
-	       (alpha_equiv_con' (!conref) (con1,con2))
-	       before (conref := alpha_equate_pair(!conref,(var1,var2)))
-	       
-	       | equiv_one (Open_cb(var1,formals1,con1),
-			     Open_cb(var2,formals2,con2)) =
-	       let
-		 val conref' = ref (!conref)
-		 fun equiv_one ((var1,kind1),(var2,kind2))= 
-		   (alpha_equiv_kind' (!conref') (kind1,kind2))
-		   before (conref' := alpha_equate_pair(!conref',(var1,var2)))
-	       in
-		 ((ListPair.all equiv_one (formals1,formals2))
-		  andalso alpha_equiv_con' (!conref') (con1,con2))
-		 before (conref := alpha_equate_pair(!conref,(var1,var2)))
+	     fun equate_fun context ((var1,formals1,con1),(var2,formals2,con2)) = 
+	       let val (context',equal) = alpha_equiv_vk_list context (formals1,formals2)
+	       in if equal then (alpha_equate_pair(context,(var1,var2)),
+				 alpha_equiv_con' context' (con1,con2))
+		  else (context,false)
 	       end
-	       | equiv_one (Code_cb(var1,formals1,con1),
-			    Code_cb(var2,formals2,con2)) =
-	       let
-		 val conref' = ref (!conref)
-		 fun equiv_one ((var1,kind1),(var2,kind2))= 
-		   (alpha_equiv_kind' (!conref') (kind1,kind2))
-		   before (conref' := alpha_equate_pair(!conref',(var1,var2)))
-	       in
-		 ((ListPair.all equiv_one (formals1,formals2))
-		  andalso alpha_equiv_con' (!conref') (con1,con2))
-		 before (conref := alpha_equate_pair(!conref,(var1,var2)))
-	       end
-	       | equiv_one _ = false
+
+	     fun equiv_one (_,_,(context,false))   = (context,false)
+	       | equiv_one (bnd1,bnd2,(context,_)) =
+	       (case (bnd1,bnd2) 
+		  of (Con_cb(var1,con1),Con_cb(var2,con2)) => 
+		    (alpha_equate_pair(context,(var1,var2)),alpha_equiv_con' context (con1,con2))
+		   | (Open_cb args1,Open_cb args2) => equate_fun context (args1,args2)
+		   | (Code_cb args1,Code_cb args2) => equate_fun context (args1,args2)
+		   | _ => (context,false))
 	   in
-	     (ListPair.all equiv_one (binds1,binds2))
-	     andalso alpha_equiv_con' (!conref) (con1,con2)
+	     (eq_len(binds1,binds2) andalso
+	      let val (context,equal) = foldl2 equiv_one (context,true) (binds1,binds2)
+	      in equal andalso alpha_subequiv_con' st context (con1,con2)
+	      end)
 	   end
 	  | (Closure_c (code1,env1),Closure_c (code2,env2)) => 
-	   recur (code1,code2) andalso recur (env1,env2)
+	   alpha_subequiv_con' st context (code1,code2) andalso alpha_subequiv_con' st context (env1,env2)
 	  
-	  (* Cannot be dependent.  Note Precondition is sorted labels*)
 	  | (Crecord_c entries1,Crecord_c entries2) => 
 	   let
 	     fun equiv_each ((lbl1,con1),(lbl2,con2)) = 
-	       (eq_label (lbl1,lbl2) andalso
-		recur (con1,con2))
-	   in
-	     eq_len (entries1,entries2) andalso 
-	     (ListPair.all equiv_each (entries1,entries2))
+	       (eq_label (lbl1,lbl2) 
+		andalso	alpha_subequiv_con' st context (con1,con2))
+	   in eq_list (equiv_each,entries1,entries2)
 	   end
+
 	  | (Proj_c (crec1,label1),Proj_c (crec2,label2)) => 
 	   eq_label (label1,label2) andalso
-	   recur (crec1,crec2)
+	   alpha_subequiv_con' st context (crec1,crec2)
 	   
 	  | (App_c (cfun1,actuals1),App_c (cfun2,actuals2)) => 
-	   recur (cfun1,cfun2) andalso
-	   (ListPair.all recur (actuals1,actuals2))
-	   
+	   alpha_subequiv_con' st context (cfun1,cfun2) 
+	   andalso alpha_subequiv_con_list st context (actuals1,actuals2)
+	  | (Typecase_c {arg=arg1,arms=arms1,default=d1,kind=k1}, 
+	     Typecase_c {arg=arg2,arms=arms2,default=d2,kind=k2}) => 
+	   let
+	     fun arm_equiv ((pc1,f1,b1),(pc2,f2,b2)) = 
+	       primequiv(pc1,pc2) andalso 
+	       let val (context,equal) = alpha_equiv_vk_list context (f1,f2)
+	       in alpha_subequiv_con' st context (b1,b2)
+	       end
+	   in
+	     alpha_subequiv_con' st context (arg1,arg2)
+	     andalso alpha_subequiv_con' st context (d1,d2)
+	     andalso alpha_equiv_kind' context (k1,k2)
+	     andalso eq_list (arm_equiv,arms1,arms2)
+	   end
 	  | (Annotate_c (annot1,con1),con2) => 
-	   recur (con1,con2)
+	   alpha_subequiv_con' st context (con1,con2)
 	  | (con1,Annotate_c (annot1,con2)) => 
-	   recur (con1,con2)
+	   alpha_subequiv_con' st context (con1,con2)
 	  | _ => false)
-	 orelse (if !debug then
-		   (lprintl "alpha_equiv_con failed!";
-		    printl "Constructor:";
-		    Ppnil.pp_con con1;
-		    lprintl "Not equivalent to :";
-		    Ppnil.pp_con con2;
-		    printl "")
-		 else ();
-		   false)
+
+      val _ = 
+	if !debug andalso not res then
+	  (lprintl "alpha_equiv_con failed!";
+	   printl "Constructor:";
+	   Ppnil.pp_con con1;
+	   lprintl "Not equivalent to :";
+	   Ppnil.pp_con con2;
+	   printl "")
+	else ()
 		   
+    in res
     end
+
+  fun alpha_subequiv_con st args = alpha_subequiv_con' st (empty_context (),empty_context ()) args
   
-  and alpha_equiv_con_list context list_pair = 
-    eq_len list_pair andalso
-    ListPair.all (alpha_equiv_con' context) list_pair
-(*
-  fun alpha_sub_kind' context (k1,k2) = 
-    (case (k1,k2) of
-	  (Type_k, Type_k) => true
-	| (Singleton_k c1,Singleton_k c2) => alpha_equiv_con' context (c1,c2)
-	| (Singleton_k c1,k2) => false
-	| (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
-	 let
-	   val conref = ref context
-	   fun sub_one ((var1,kind1),(var2,kind2)) = 
-	     (alpha_sub_kind' (!conref) (kind1,kind2))
-	     before (conref := alpha_equate_pair (!conref,(var1,var2)))
-	 in
-	   (same_openness (openness1,openness2) andalso 
-	    eq_len (formals1,formals2) andalso 
-	    ListPair.all sub_one (formals1,formals2) andalso
-	    alpha_sub_kind' (!conref) (return1,return2))
-	 end
-       
-	| (Record_k elts1,Record_k elts2) => 
-	 let
-	   val conref = ref context
-	   fun sub_one (((lbl1,var1),kind1),((lbl2,var2),kind2)) = 
-	     (eq_label (lbl1,lbl2) andalso
-	      alpha_sub_kind' (!conref) (kind1,kind2))
-	     before (conref := (alpha_equate_pair (!conref,(var1,var2))))
-	 in
-	   eq_len (elts1,elts2) andalso 
-	   (ListPair.all sub_one (elts1,elts2))
-	 end
-	| (_,_) => false)
-*)       
-  val alpha_equiv_con = alpha_equiv_con' (empty_context (),empty_context ())
-
-  val alpha_equiv_kind = alpha_equiv_kind' (empty_context (),empty_context ())
-(*
-  val alpha_sub_kind = alpha_sub_kind' (empty_context (),empty_context ())
-
-*)
-(* End exported functions *)
+  val alpha_equiv_con    = alpha_subequiv_con false 
+  val alpha_equiv_kind   = alpha_equiv_kind' (empty_context (),empty_context ())
 
 
   fun alpha_mu is_bound (vclist) = 

@@ -21,38 +21,41 @@ structure NilRename :> NILRENAME =
 
     type 'a map = 'a Name.VarMap.map
 
+    (* Normal renaming *)
     local
       open NilRewrite
 
-      fun exp_var_xxx ((exp_subst,con_subst),var,any) = 
+      type state = {exp_subst : var map,con_subst : var map}
+
+      fun exp_var_xxx ({exp_subst,con_subst} : state,var,any) = 
 	let
 	  val var' = Name.derived_var var
 	  val exp_subst = VarMap.insert (exp_subst,var,var')
 	in
-	  ((exp_subst,con_subst),SOME var')
+	  ({exp_subst = exp_subst,con_subst = con_subst},SOME var')
 	end
 
-      fun con_var_xxx ((exp_subst,con_subst),var,any) = 
+      fun con_var_xxx ({exp_subst,con_subst} : state,var,any) = 
 	let
 	  val var' = Name.derived_var var
 	  val con_subst = VarMap.insert (con_subst,var,var')
 	in
-	  ((exp_subst,con_subst),SOME var')
+	  ({exp_subst = exp_subst,con_subst = con_subst},SOME var')
 	end
 
-      fun conhandler (subst as (exp_subst,con_subst),con : con) =
+      fun conhandler (state as {con_subst,...} : state,con : con) =
 	(case con
 	   of Var_c var => 
 	     (case VarMap.find (con_subst,var)
-		of SOME var => (CHANGE_NORECURSE (subst,Var_c var))
+		of SOME var => (CHANGE_NORECURSE (state,Var_c var))
 		 | _ => NORECURSE)
 	    | _ => NOCHANGE)
 
-      fun exphandler (subst as (exp_subst,con_subst),exp : exp) =
+      fun exphandler (state as {exp_subst,...} : state,exp : exp) =
 	(case exp
 	   of Var_e var => 
 	     (case VarMap.find (exp_subst,var)
-		of SOME var => (CHANGE_NORECURSE (subst,Var_e var))
+		of SOME var => (CHANGE_NORECURSE (state,Var_e var))
 		 | _ => NORECURSE)
 	    | _ => NOCHANGE)
       (*Default trace handler should suffice
@@ -99,40 +102,40 @@ structure NilRename :> NILRENAME =
 	   rewrite_cbnd = renameCBnd',
 	   rewrite_mod = renameMod',...} = rewriters all_handlers
 
-      val empty = (VarMap.empty,VarMap.empty)
+      fun empty_state () = {exp_subst = VarMap.empty,con_subst = VarMap.empty}
+
+
+    in
+      val renameEVarsExp = renameEVarsExp' (empty_state())
+      val renameEVarsCon = renameEVarsCon' (empty_state())
+      val renameEVarsKind = renameEVarsKind' (empty_state())
+	
+      val renameCVarsExp = renameCVarsExp' (empty_state())
+      val renameCVarsCon = renameCVarsCon' (empty_state())
+      val renameCVarsKind = renameCVarsKind' (empty_state())
+
+      val renameExp = renameExp' (empty_state())
+      val renameCon = renameCon' (empty_state())
+      val renameKind = renameKind' (empty_state())
+      val renameMod = renameMod' (empty_state())
 
       fun renameBnd bnd = 
 	let
-	  val (bnds,substs) = renameBnd' empty bnd
+	  val (bnds,{con_subst,exp_subst}) = renameBnd' (empty_state ()) bnd
 	in
-	  (hd bnds,substs)
+	  (hd bnds,(exp_subst,con_subst))
 	end
 
       fun renameCBnd bnd = 
 	let
-	  val (bnds,(esubst,subst)) = renameCBnd' empty bnd
+	  val (bnds,{con_subst,...}) = renameCBnd' (empty_state()) bnd
 	in
-	  (hd bnds,subst)
+	  (hd bnds,con_subst)
 	end
 
-    in
-      val renameEVarsExp = renameEVarsExp' empty
-      val renameEVarsCon = renameEVarsCon' empty
-      val renameEVarsKind = renameEVarsKind' empty
-	
-      val renameCVarsExp = renameCVarsExp' empty
-      val renameCVarsCon = renameCVarsCon' empty
-      val renameCVarsKind = renameCVarsKind' empty
-
-      val renameExp = renameExp' empty
-      val renameCon = renameCon' empty
-      val renameKind = renameKind' empty
-      val renameMod = renameMod' empty
-      val renameBnd = renameBnd
-      val renameCBnd = renameCBnd
     end
   
-
+    (* Renaming with respect to a predicate *)
     local
       open NilRewrite
 

@@ -1,4 +1,4 @@
-(*$import Nil NilSubst *)
+(*$import Nil NilSubst Alpha *)
 
 signature NILUTIL =
   sig
@@ -25,7 +25,7 @@ signature NILUTIL =
     val con_tuple : Nil.con list -> Nil.con
     val con_tuple_inject : Nil.con list -> Nil.con
     val kind_tuple : Nil.kind list -> Nil.kind
-
+    val kind_type_tuple : int -> Nil.kind
     val unit_con : Nil.con
     val unit_exp : Nil.exp
     val match_exn : Nil.exp
@@ -54,7 +54,8 @@ signature NILUTIL =
     val expvars_occur_free : Name.var list * Nil.exp -> bool
 
     val same_openness : Nil.openness * Nil.openness -> bool
-    val same_effect : Nil.effect * Nil.effect -> bool
+    val same_effect   : Nil.effect * Nil.effect -> bool
+    val sub_effect    : bool * Nil.effect * Nil.effect -> bool
 
     datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
     type bound = {boundcvars : Name.VarSet.set,
@@ -86,8 +87,9 @@ signature NILUTIL =
     val alpha_sub_kind : Nil.kind * Nil.kind -> bool
 *)
 
-    val alpha_equiv_con : Nil.con * Nil.con -> bool
-    val alpha_equiv_kind : Nil.kind * Nil.kind -> bool
+    val alpha_subequiv_con : bool -> Nil.con * Nil.con -> bool
+    val alpha_equiv_con    : Nil.con * Nil.con -> bool
+    val alpha_equiv_kind   : Nil.kind * Nil.kind -> bool
 
     val sub_phase : Nil.phase * Nil.phase -> bool
 
