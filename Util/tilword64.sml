@@ -1,4 +1,4 @@
-structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
+structure TilWord64 (* :> TILWORD where type halfword = TilWord32.word *) =
  struct
 
   structure W = TilWord32
@@ -125,15 +125,19 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
   fun slte(a,b) = slt(a,b) orelse equal(a,b)
   fun sgt(a,b) = not(slte(a,b))
   fun sgte(a,b) = not(slt(a,b))
-  fun splus ((h1,l1),(h2,l2)) = 
+  fun splus (v1 as (h1,l1),v2 as (h2,l2)) = 
       let 
+	  val s1 = sign v1
+	  val s2 = sign v2
 	  val (low_high,low_low) = W.uplus'(l1,l2)
 	  val (high_high,high_low) = W.uplus'(h1,h2)
 	  val (high_high',high_low) = W.uplus'(low_high,high_low)
-      in if (W.equal(high_high, W.zero) andalso
-	     W.equal(high_high', W.zero))
-	     then (high_low,low_low)
-	 else raise Overflow
+	  val res = (high_low,low_low)
+	  val s3 = sign res
+      in case (s1,s2,s3) of
+	  (1,1,(0 | ~1)) => raise Overflow
+	| (~1,~1,(0 | 1)) => raise Overflow
+	| _ => res
       end
   fun snegate arg = if (equal(arg,most_neg))
 			 then raise Overflow

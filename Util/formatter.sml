@@ -14,7 +14,7 @@
   with the formatting and printing routines.}
 %************************************************************************
 *)
-structure Formatter : FORMATTER =
+structure Formatter :> FORMATTER =
    struct
 
 fun fold f l b = foldr f b l
@@ -765,10 +765,13 @@ make the use of {\tt fmtstreams} on files more convenient.
       fun close_fmt (Formatstream outs) = outs
 
       fun output_fmt(Formatstream outs,fm) = 
-          fold (fn (s,_) => TextIO.output(outs, s))
-               (Spmod(0,0) :: (snd(print'p(1,!Pagewidth,0,!Blanks,!Indent,!Skip,Hori,fm,nil))))
-               ()
-
+	  let val strlist = (snd(print'p(1,!Pagewidth,0,!Blanks,!Indent,!Skip,Hori,fm,nil)))
+	      val longcount = !Pagewidth
+	      fun hasnewline s = Listops.orfold (fn c => c = #"\n") (explode s)
+	      val ismulti = Listops.orfold hasnewline strlist
+	      val _ = if ismulti then TextIO.output(outs,Spmod'(0,0)) else ()
+	  in  foldr (fn (s,_) => TextIO.output(outs, s)) () strlist
+	  end
       (*
       fun debug_output_fmt(Formatstream fs, fm) =
                   let val mw = (!Pagewidth)
