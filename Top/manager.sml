@@ -56,26 +56,43 @@ struct
 
   type unitname = string
   type filebase = string
+  datatype fresh = STALE | FRESH_INTER | FRESH_IMPL
   local
-      datatype mapping = Map of ((unitname * (filebase * unitname list option ref * 
-					      unitname list option ref * bool ref *
-					      Elaborator.context option ref)) list) ref
-      fun find_unit (Map (ref entries)) unitname = Listops.assoc(unitname,entries)
+      structure StringKey = 
+	  struct
+	      type ord_key = unitname
+	      val compare = String.compare
+	  end
+      structure StringMap = SplayMapFn(StringKey)
+      datatype mapping = 
+	  Map of (unitname list * 
+		  {filebase : filebase,
+		   imports  : unitname list option ref,
+		   includes : unitname list option ref,
+		   fresh : fresh ref,
+		   context : Elaborator.context option ref} StringMap.map) ref
+
+      fun find_unit (Map (ref(_,m))) unitname = StringMap.find(m,unitname)
   in  type mapping = mapping
-      fun make_mapping() = Map(ref [])
-      fun add_unit (m as Map (r as (ref entries))) (unitname,filebase) = 
+      fun make_mapping() = Map(ref ([],StringMap.empty))
+      fun add_unit (m as Map (r as (ref(units,map)))) (unitname,filebase) = 
 	  case (find_unit m  unitname) of
-	      NONE => r := (unitname,(filebase,ref NONE, ref NONE, ref false, ref NONE))::entries
+	      NONE => let val newentry = {filebase = filebase,
+					  imports = ref NONE,
+					  includes = ref NONE,
+					  fresh = ref STALE,
+					  context = ref NONE}
+		      in  r := (unitname::units,StringMap.insert(map,unitname,newentry))
+		      end
 	    | SOME _ => error ("unit " ^ unitname ^ " already present")
       fun lookup_unit m unitname =
 	  (case (find_unit m  unitname) of
 	       NONE => error ("unit " ^ unitname ^ " missing")
 	     | SOME entry => entry)
-      fun list_units (Map (ref data)) = rev(map #1 data)
+      fun list_units (Map (ref (units,m))) = rev units
   end
 
-  fun name2base (mapping : mapping) (name : string) = 
-      #1(lookup_unit mapping name)
+  fun name2base (mapping : mapping) (name : string) = #filebase(lookup_unit mapping name)
 
   fun base2ui (f : string) = f ^ ".ui"
   fun base2uo (f : string) = f ^ ".uo"
@@ -83,7 +100,7 @@ struct
   fun base2int (f : string) = f ^ ".int"
 
   fun readContext mapping unit = 
-      let val r = #5(lookup_unit mapping unit) 
+      let val r = #context(lookup_unit mapping unit) 
       in  (case !r of
 	       SOME ctxt => ctxt
 	     | NONE => let val uifile = base2ui (name2base mapping unit)
@@ -93,8 +110,8 @@ struct
 		       end)
       end
   fun writeContext mapping (unit,ctxt) = 
-       let val r = #5(lookup_unit mapping unit)
-	   val _ = r := SOME ctxt
+       let val r = #context(lookup_unit mapping unit)
+	   val _ = if (!cache_context) then r := SOME ctxt else ()
 	   val uifile = base2ui (name2base mapping unit)
        in  writeContextRaw(uifile,ctxt)
        end
@@ -184,14 +201,16 @@ struct
    if the interface file is present, search the includes
    if the interface file is absent, search the imports *)
   fun getImport use_imp mapping unitname seenunits : unitname list =
-      (case (use_imp,lookup_unit mapping unitname) of
-	  (true,(_,ref (SOME result),_,_,_)) => result  (* cached implementation imports *)
-	| (false,(_,_,ref (SOME result),_,_)) => result (* cached interface includes *)
-	| (_,(sourcebase,r_imp,r_int,_,_)) =>
-	      let val smlfile = base2sml sourcebase
-		  val intfile = base2int sourcebase
-		  fun folder(import,acc) = 
-		      let val depends = getImport false mapping import (import::seenunits)
+     let val {imports=impref,includes=incref,filebase,...} = lookup_unit mapping unitname
+	 val smlfile = base2sml filebase
+	 val intfile = base2int filebase
+	 val int_exists = access(intfile, [OS.FileSys.A_READ])
+     in  (case (use_imp orelse (not int_exists), !impref, !incref) of
+	  (true, SOME i,_) => i (* cached implementation imports *)
+	| (false,_, SOME i) => i (* cached interface includes *)
+	| _ =>
+	      let fun folder(import,acc) = 
+		      let val depends = getImport use_imp mapping import (import::seenunits)
 			  fun adder(u, ac) = 
 			      if Listops.member(u,ac)
 				  then ac else u::ac
@@ -207,7 +226,7 @@ struct
 			       val imports = parse_inter_include intfile
 			       val _ = check_loop imports
 			       val result = rev(foldl folder [] imports)
-			       val _ = r_int := SOME result
+			       val _ = incref := SOME result
 			   in  result
 			   end
 		  else 
@@ -215,10 +234,11 @@ struct
 			  val imports = parse_impl_import smlfile
 			  val _ = check_loop imports
 			  val result = rev(foldl folder [] imports)
-			  val _ = r_imp := SOME result
+			  val _ = impref := SOME result
 		      in  result
 		      end
 	      end)
+     end
 
   fun is_fresh files (curdate,curfile) = 
       let fun folder f = 
@@ -233,9 +253,13 @@ struct
 (* handle OS.SysErr _ => false *)
 
   fun  compileSML make_uo mapping unitname : unit = 
-       if !(#4(lookup_unit mapping unitname))
-	   then ()
-       else compileSML' make_uo mapping unitname 
+      let val _ = (print "compileSML: "; print unitname; print "\n")
+	  val fresh = #fresh(lookup_unit mapping unitname)
+      in  (case !fresh of
+	       STALE       => (compileSML' make_uo mapping unitname; fresh := FRESH_IMPL)
+	     | FRESH_INTER => (compileSML' make_uo mapping unitname; fresh := FRESH_IMPL)
+	     | FRESH_IMPL => ())
+      end
 
   and compileSML' make_uo mapping unitname : unit = 
       let val sourcebase = name2base mapping unitname
@@ -269,7 +293,7 @@ struct
 			chat_imports 4 imports;
 			chat "]\n";
 			compileSML'' mapping (unitname, imports, least_new_time))
-      in  (#4(lookup_unit mapping unitname)) := true
+      in  ()
       end
   
   and compile make_uo mapping unit =
@@ -350,7 +374,16 @@ struct
       end
 
   (* XXXXXX change to be recursive like compileSML *)
-  and compileINT mapping unit =
+  and compileINT mapping unitname =
+      let val _ = (print "compileINT: "; print unitname; print "\n")
+	  val fresh = #fresh(lookup_unit mapping unitname)
+      in  (case !fresh of
+	       STALE => (compileINT' mapping unitname; fresh := FRESH_INTER)
+	     | FRESH_INTER => ()
+	     | FRESH_IMPL => ())
+      end
+
+  and compileINT' mapping unit =
       let val sourcebase = name2base mapping unit
 	  val sourcefile = base2int sourcebase
 	  val includes = getImport false mapping unit [] 
