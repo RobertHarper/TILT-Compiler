@@ -1,14 +1,16 @@
 (*$import Int List Word8 Word8Vector BinIO *)
 
+val file = "testBinIO.txt"
+
 fun testRange (start, length) =
       let
         val allChars = Word8Vector.tabulate(length, fn i => Word8.fromInt ((i + start) mod 256))
 
-        val outStr = BinIO.openOut "testBinIO.txt"
+        val outStr = BinIO.openOut file
         val _ = BinIO.output (outStr, allChars)
         val _ = BinIO.closeOut outStr
         
-        val inStr = BinIO.openIn "testBinIO.txt"
+        val inStr = BinIO.openIn file
         val readChars = BinIO.inputAll inStr
         val _ = BinIO.closeIn inStr
         
@@ -35,4 +37,5 @@ val _ = List.tabulate(256, fn i => List.tabulate(257, fn i2 => testRange (i, i2)
 val _ = print "test of writing files of all possible characters in strings of lengths 0-256 finished\n"
 val _ = List.tabulate(6, fn i => List.tabulate(5000, fn i2 => testRange (i, i2)))
 
+val _ = OS.FileSys.remove file
 val _ = print "test finished\n"
