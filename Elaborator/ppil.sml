@@ -8,8 +8,6 @@ struct
     open Il Formatter
     open Prim Ppprim Tyvar
 
-    val showOnlyModule = Stats.ff("showOnlyModule")
-
     val convarMode = ref 2  (* 0 - value only; 1 - variable only; 2 - variable and value *)
     val error = fn s => error "ppil.sml" s
 
@@ -271,13 +269,13 @@ struct
 	in  
 	    (case pc of
 		 PHRASE_CLASS_EXP  (e,c,eopt,inline) => 
-		     help (if inline then "PC_EXP_INLINE" else "PC_EXP(") ")"
+		     help (if inline then "PC_EXP_INLINE(" else "PC_EXP(") ")"
 		     ([pp_exp e, String ": ", pp_con c] @
 		      (case eopt of
 			   NONE => []
 			 | SOME e => [String "= ", pp_exp e]))
 	       | PHRASE_CLASS_CON  (c,k,copt,inline) =>
-		     help (if inline then "PC_CON_INLINE" else "PC_CON(") ")"
+		     help (if inline then "PC_CON_INLINE(" else "PC_CON(") ")"
 		     ([pp_con c, String ": ", pp_kind k] @
 		      (case copt of
 			   NONE => []
@@ -443,15 +441,6 @@ struct
 				pp_path p,
 				String ")"]
        | SIGNAT_STRUCTURE sdecs => pp_sdecs seen sdecs
-       | SIGNAT_SELF (p, unselfSigOpt, selfSig) => HOVbox[String "SIGS_SELF(",
-							  pp_path p, String ", ", Break,
-							  String "UNSELF_SIG = ", 
-							  (case unselfSigOpt of
-							       NONE => String "NONE"
-							     | SOME s => pp_signat seen s), 
-							  Break,
-							  String "SELF_SIG = ", pp_signat seen selfSig, Break,
-							  String ")"]
        | SIGNAT_FUNCTOR (v,s1,s2,a) => HOVbox0 1 8 1 
 	                                        [String "SIGF(",
 						 pp_var v,
@@ -569,40 +558,36 @@ struct
       | pp_context_entry' (CONTEXT_OVEREXP (l,ovld)) = 
 			   HOVbox[String "CONTEXT_OVEREXP: ", pp_label l, String " ", pp_ovld' ovld]
 
-    fun pp_context' (CONTEXT{fixityMap, overloadMap, pathMap, ordering, ...}) = 
+    fun pp_context' (CONTEXT{varMap, ordering, labelMap, fixityMap, overloadMap, ...}) = 
 	let fun fixity_doer (l, f) = Hbox[pp_label l, String " : ", pp_fixity f]
 	    fun overload_doer (l, ovld) =
 		Vbox[pp_label l, String " OVEREXP: ", Break, pp_ovld' ovld]
-	    fun path_doer (PATH path) = 
-		let val SOME(label, pc) = Name.PathMap.find(pathMap, path)
+	    fun label_doer (l,vpath) =
+		Hbox[pp_label l, String " --> ", Break, pp_path (PATH vpath)]
+	    fun var_doer v = 
+		let val SOME(label, pc) = Name.VarMap.find(varMap, v)
 		in  HOVbox[pp_label label,
 			   String " --> ",
-			   pp_path (PATH path),
+			   pp_var v,
 			   String " : ",
 			   pp_phrase_class true [] pc]
 		end
-	    fun isModule (SOME (_, PHRASE_CLASS_MOD _)) = true
-	      | isModule (SOME (_, PHRASE_CLASS_SIG _)) = true
-	      | isModule _ = false
-	    val ordering = if (!showOnlyModule)
-			       then List.filter (fn (PATH p) => isModule (Name.PathMap.find(pathMap, p))) ordering
-			   else ordering
-	    val pathRes = [String "---- Pathmap ----",
-			   Break,
-			   pp_list path_doer (rev ordering) ("","","", true),
-			   Break]
-
-	in  if (!showOnlyModule)
-		then pathRes
-	    else 
-		[String "---- Fixity ----",
-		 Break,
-		 pp_list fixity_doer (Name.LabelMap.listItemsi fixityMap) ("","", "", true),
-		 Break,
-		 String "---- Overload ----",
-		 Break,
-		 pp_list overload_doer (Name.LabelMap.listItemsi overloadMap) ("","", "", true),
-		 Break] @ pathRes
+	in  [String "---- Fixity ----",
+	     Break,
+	     pp_list fixity_doer (Name.LabelMap.listItemsi fixityMap) ("","", "", true),
+	     Break,
+	     String "---- Overloads ----",
+	     Break,
+	     pp_list overload_doer (Name.LabelMap.listItemsi overloadMap) ("","", "", true),
+	     Break,
+	     String "---- Labels ----",
+	     Break,
+	     pp_list label_doer (Name.LabelMap.listItemsi labelMap) ("", "", "", true),
+	     Break,
+	     String "---- Varmap ----",
+	     Break,
+	     pp_list var_doer (rev ordering) ("","","", true),
+	     Break]
 	end
 
     fun pp_pcontext' ((ctxt, free) : Il.partial_context) = 
