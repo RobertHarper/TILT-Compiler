@@ -1182,6 +1182,7 @@ val debug = ref false
       end
 
 
+
   and xexp' (state : state, (* state of bound variables *)
 	     name : var, (* Purely for debugging and generation of useful names *)
 	     e : exp,    (* The expression being translated *)
@@ -1485,6 +1486,8 @@ val debug = ref false
 	  end
 
 
+
+
   and xswitch (state : state,
 	       name : var,  (* Purely for debugging and generation of useful names *)
 	       sw : switch, (* The switch expression being translated *)
@@ -1686,12 +1689,12 @@ val debug = ref false
        that the term arguments are passed in separately as record components
   *)
 
-  and xsum is_record (state : state, {tagcount : TW32.word,field : TW32.word},
+  and xsum is_record (state : state, {tagcount : TW32.word, sumtype : TW32.word},
 			clist,elist,context) : loc_or_val * con = 
       let
 	  open Prim
-	  val field_64 = TW64.fromInt(TW32.toInt field)
-	  val field_sub = TW32.uminus(field,tagcount)
+	  val field_64 = TW64.fromInt(TW32.toInt sumtype)
+	  val field_sub = TW32.uminus(sumtype,tagcount)
 	  val varlocs = map (fn e => #1(xexp(state,fresh_var(),e,NONE,NOTID))) elist
 	  val clist = map (simplify_type' state) clist
 	  val sumcon = Prim_c(Sum_c{tagcount=tagcount,known=NONE}, map #2 clist)
@@ -1817,12 +1820,12 @@ val debug = ref false
 	      case (TW32.toInt tagcount,nontagcount) of
 		  (0,0) => xtagsum_tag()
 		| (_,0) => xtagsum_tag()
-		| (_,1) => if (TW32.equal(field,tagcount))
+		| (_,1) => if (TW32.equal(sumtype,tagcount))
 			       then xtagsum_single()
 			   else xtagsum_tag()
-		| (_,_) => if (TW32.ult(field,tagcount))
+		| (_,_) => if (TW32.ult(sumtype,tagcount))
 			       then xtagsum_tag()
-			   else xtagsum (SOME field)
+			   else xtagsum (SOME sumtype)
       in (varloc, sumcon) 
       end
 
@@ -1887,6 +1890,7 @@ val debug = ref false
       in  (lv,c)
       end
 
+
   and xnilprim(state : state, nilprim,clist,elist,context) : loc_or_val * con = 
       let fun error' s = (print "nilprimexpression was:\n";
 			  Ppnil.pp_exp (Nil.Prim_e(Nil.NilPrimOp nilprim, clist,elist));
@@ -1933,15 +1937,32 @@ val debug = ref false
 		  | _ => (Ppnil.pp_exp (Prim_e(NilPrimOp nilprim,clist,elist));
 			  error "bad select 3"))
 	 | inject_record injinfo => xsum true (state,injinfo,clist,elist,context)
-	 | inject (injinfo as {tagcount, field}) => xsum false (state,injinfo,clist,elist,context)
+	 | inject injinfo => xsum false (state,injinfo,clist,elist,context)
 
 	 | project_sum_record {tagcount, sumtype, field} => 
 	       let val index = TW32.toInt(TW32.uminus(sumtype, tagcount))
-		   val field' = TW32.toInt field
+		   val (base,econ) = (case elist of
+					  [e] => let val (r,c) = xexp'(state,fresh_var(),e,NONE,NOTID)
+						 in  (coercei "" r, c)
+						 end
+					| _ => error' "bad project_sum_record: base")
+		   val field' = 
+		       (case econ of
+			    Prim_c(Sum_c _, summands) =>
+				(case (List.nth (summands, index)) of
+				     Prim_c(Record_c labels, _) =>
+					 let fun loop n [] = error "bad project_sum_record: bad econ field not found"
+					       | loop n (a::rest) = if (Name.eq_label(a,field))
+									then n else loop (n+1) rest
+					 in  loop 0 labels
+					 end
+				   | _ => (print  "bad project_sum_record: bad econ not a record:\n";
+					   Ppnil.pp_con econ;
+					   error' "bad project_sum_record: bad econ not a record"))
+			  | _ => (print  "bad project_sum_record: bad econ not a record:\n";
+				     Ppnil.pp_con econ;
+				     error' "bad project_sum_record: bad econ not a record"))
 		   val single_carrier = (length clist) = 1
-		   val base = (case elist of
-				   [e] => coercei "" (#1(xexp'(state,fresh_var(),e,NONE,NOTID)))
-				 | _ => error' "bad project_sum_record: base")
 		   val record_con = (List.nth(clist,index)
 				     handle _ => error' "bad project_sum_record: record_con")
 		   val field_con = (case record_con of
@@ -1962,7 +1983,7 @@ val debug = ref false
 			   fun make_e (n,_) = Prim_e(NilPrimOp(project_sum_record
 							       {tagcount = tagcount,
 								sumtype = sumtype,
-								field = TW32.fromInt n}),
+								field = NilUtil.generate_tuple_label (n+1)}),
 						     clist,elist)
 			   val elist' = Listops.mapcount make_e field_cons
 		       in  xnilprim(state,Nil.record labels,field_cons,elist',context)
@@ -2094,6 +2115,8 @@ val debug = ref false
 				   (Const_e(Prim.int(Prim.W32,TW64.zero)))::elist,context)
 	    | _ => xprim'(state,prim,clist,elist,context))
       end
+
+
 
   and xprim'(state : state, prim,clist,elist,context) : loc_or_val * con = 
       let 
@@ -2300,6 +2323,7 @@ val debug = ref false
 	    | rshift_int W32 => stdop2i SRA
 	    | rshift_uint W32 => stdop2i SRL
 
+(*
 	    | ((plus_int _) | (mul_int _) | (minus_int _) | (div_int _) | 
 	       (mod_int _) | (quot_int _) | (rem_int _) | 
 	       (plus_uint _) | (mul_uint _) | (minus_uint _) |
@@ -2311,6 +2335,7 @@ val debug = ref false
 	       ) => (print "non 32-bit math not done: ";
 		     Ppnil.pp_prim prim; print "\n";
 		     error "non 32-bit math not done")
+*)
 
 	    | (uinta2uinta (is1,is2)) =>
 		  (case vl_list of
@@ -2355,11 +2380,12 @@ val debug = ref false
 		  (case vl_list of
 		       [vl1,vl2] => xeqvector(state,extract_type(t,clist),vl1,vl2)
 		     | _ => error "array_eq given bad arguments")
-	     | _ => (print "primitive: ";
-		       Ppnil.pp_prim prim;
-		       print "not implemented\n";
-		       raise XXX))
+             | _ => (print "primitive: ";
+                       Ppnil.pp_prim prim;
+                       print "not implemented\n";
+                       raise XXX))
       end
+
 
 
   (* ---------------- array and vector operations --------------------
@@ -2482,6 +2508,7 @@ val debug = ref false
 			      val offset = load_ireg_locval(vl2,NONE)
 			      val subaddr = alloc_regi NOTRACE_INT
 			      val temp = alloc_regi NOTRACE_INT
+			      val temp2 = alloc_regi NOTRACE_INT
 			      val data = alloc_regi NOTRACE_INT
 			      val ordata = alloc_regi NOTRACE_INT
 			      val mask = alloc_regi NOTRACE_INT
@@ -2489,8 +2516,8 @@ val debug = ref false
 				       add_instr(ANDB(offset,IMM 3, subaddr));
 				       add_instr(NOTB(subaddr,temp));
 				       add_instr(SLL(subaddr,IMM 3, subaddr));
-				       add_instr(ANDB(offset,REG temp, offset));
-				       add_instr(ADD(a',REG offset,addr));
+				       add_instr(ANDB(offset,REG temp, temp2));
+				       add_instr(ADD(a',REG temp2,addr));
 				       add_instr(LOAD32I(EA(addr,0),data));
 				       add_instr(LI(0w255, mask));
 				       add_instr(SLL(mask,REG subaddr, mask));
@@ -2903,6 +2930,9 @@ val debug = ref false
 				   end)
     in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Int_c Prim.W32, []))
     end
+
+
+
 
 
    (* ------------------- translate constructors ------------------------ *)
