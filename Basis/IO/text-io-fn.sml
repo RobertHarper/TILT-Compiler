@@ -447,9 +447,6 @@ functor TextIOFn (
 	fun isNL #"\n" = true
 	  | isNL _ = false
 
-	fun isLineBreak (OSTRM{bufferMode, ...}) =
-	      if (!bufferMode = IO.LINE_BUF) then isNL else (fn _ => false)
-
 	fun isClosedOut (strm as OSTRM{closed=ref true, ...}, mlOp) =
 	      outputExn (strm, mlOp, IO.ClosedStream)
 	  | isClosedOut _ = ()
@@ -462,12 +459,34 @@ functor TextIOFn (
 		      handle ex => outputExn (strm, mlOp, ex))
 	      (* end case *))
 
+      (* A version of copyVec that checks for newlines, while it is copying.
+       * This is used for LINE_BUF output of strings and substrings.
+       *)
+	fun lineBufCopyVec (src, srcI, srcLen, dst, dstI) = let
+	      val stop = srcI+srcLen
+	      fun cpy (srcI, dstI, lb) =
+		    if (srcI < stop)
+		      then let val c = vecSub(src, srcI)
+			in
+			  arrUpdate (dst, dstI, c);
+			  cpy (srcI+1, dstI+1, lb orelse isNL c)
+			end
+		      else lb
+	      in
+		cpy (srcI, dstI, false)
+	      end
+
+      (* a version of copyVec for BLOCK_BUF output of strings and substrings. *)
+	fun blockBufCopyVec (src, srcI, srcLen, dst, dstI) = (
+	      A.copyVec {
+		  src = src, si = srcI, len = SOME srcLen, dst = dst, di = dstI
+		};
+	      false)
+
 	fun output (strm as OSTRM os, v) = let
 	      val _ = isClosedOut (strm, "output")
 	      val {buf, pos, bufferMode, ...} = os
 	      fun flush () = flushBuffer (strm, "output")
-	      fun flushAll () = (#writeArr os {buf=buf, i=0, sz=NONE}
-		    handle ex => outputExn (strm, "output", ex))
 	      fun writeDirect () = (
 		    case !pos
 		     of 0 => ()
@@ -486,53 +505,34 @@ functor TextIOFn (
 			  val avail = bufLen - i
 			  in
 			    if (avail < dataLen)
-			      then (
-				A.copyVec{
-				    src=v, si=0, len=SOME avail, dst=buf, di=i
-				  };
-				flushAll();
-				if (copyVec(v, avail, dataLen-avail, buf, 0))
-			  	  then flush()
-			  	  else pos := dataLen-avail)
-			    else (
-(** NOTE: this update should be after the copy **)
-			      pos := i + dataLen;
-			      if (copyVec(v, 0, dataLen, buf, i)
-			      orelse (avail = dataLen))
-				then flush()
-				else ())
+			      then let
+				val _ = A.copyVec{
+					src=v, si=0, len=SOME avail, dst=buf, di=i
+				      }
+				val _ = #writeArr os {buf=buf, i=0, sz=NONE}
+				      handle ex => (
+					pos := bufLen;
+					outputExn (strm, "output", ex))
+				val needsFlush = copyVec(v, avail, dataLen-avail, buf, 0)
+				in
+				  pos := dataLen-avail;
+				  if needsFlush then flush() else ()
+				end
+			      else let
+			 	val needsFlush = copyVec(v, 0, dataLen, buf, i)
+				in
+				  pos := i + dataLen;
+				  if (needsFlush orelse (avail = dataLen))
+				    then flush()
+				    else ()
+				end
 			  end
 		    end
 	      in
 		case !bufferMode
 		 of IO.NO_BUF => writeDirect ()
-		  | IO.LINE_BUF => let
-		      fun copyVec (src, srcI, srcLen, dst, dstI) = let
-			    val stop = srcI+srcLen
-			    fun cpy (srcI, dstI, lb) =
-				  if (srcI < stop)
-				    then let val c = vecSub(src, srcI)
-				      in
-				        arrUpdate (dst, dstI, c);
-				        cpy (srcI+1, dstI+1, lb orelse isNL c)
-				       end
-				    else lb
-			    in
-			      cpy (srcI, dstI, false)
-			    end
-		      in
-			insert copyVec
-		      end
-		  | IO.BLOCK_BUF => let
-		      fun copyVec (src, srcI, srcLen, dst, dstI) = (
-			    A.copyVec {
-				src = src, si = srcI, len = SOME srcLen,
-				dst = dst, di = dstI
-			      };
-			    false)
-		      in
-			insert copyVec
-		      end
+		  | IO.LINE_BUF => insert lineBufCopyVec
+		  | IO.BLOCK_BUF => insert blockBufCopyVec
 		(* end case *)
 	      end
 
@@ -668,45 +668,55 @@ functor TextIOFn (
 	fun outputSubstr (strm as OSTRM os, ss) = let
 	      val _ = isClosedOut (strm, "outputSubstr")
 	      val (v, dataStart, dataLen) = substringBase ss
-	      val {buf, pos, ...} = os
+	      val {buf, pos, bufferMode, ...} = os
 	      val bufLen = A.length buf
 	      fun flush () = flushBuffer (strm, "outputSubstr")
-	      in
-		if (dataLen >= bufLen)
-		  then (
-		    if (!pos > 0)
-		      then (#writeArr os {buf=buf, i=0, sz=SOME(!pos)}; pos := 0)
-		      else ();
-		    #writeVec os {buf=v, i=dataStart, sz=SOME dataLen}
-		  ) handle ex => outputExn (strm, "outputSubstr", ex)
-		else let
-		    fun copyVec (srcI, srcLen, dstI) = let
-			  val isLB = isLineBreak strm
-			  fun cpy (srcI, dstI, lb) =
-				if (srcI < srcLen)
-				  then let val c = vecSub(v, srcI)
-				    in
-				      arrUpdate (buf, dstI, c);
-				      cpy (srcI+1, dstI+1, lb orelse isLB c)
-				     end
-				  else lb
-			  in
-			    cpy (srcI, dstI, false)
-			  end
-		    val i = !pos
-		    val avail = bufLen - i
+	      fun writeDirect () = (
+		    case !pos
+		     of 0 => ()
+		      | n => (#writeArr os {buf=buf, i=0, sz=SOME n}; pos := 0)
+		    (* end case *);
+		    #writeVec os {buf=v, i=dataStart, sz=SOME dataLen})
+		      handle ex => outputExn (strm, "outputSubstr", ex)
+	      fun insert copyVec = let
+		    val bufLen = A.length buf
 		    in
-		      if (avail < dataLen)
-			then (
-			  copyVec(dataStart, avail, i);
-			  flush();
-			  if (copyVec(avail, dataLen-avail, 0))
-			    then flush()
-			    else pos := dataLen-avail)
-		      else if (copyVec(dataStart, dataLen, i) orelse (avail = dataLen))
-			then flush()
-			else pos := i + dataLen
+		      if (dataLen >= bufLen)
+			then writeDirect()
+			else let
+			  val i = !pos
+			  val avail = bufLen - i
+			  in
+			    if (avail < dataLen)
+			      then let
+				val _ = A.copyVec{
+					src=v, si=dataStart, len=SOME avail, dst=buf, di=i
+				      }
+				val _ = #writeArr os {buf=buf, i=0, sz=NONE}
+				      handle ex => (
+					pos := bufLen;
+					outputExn (strm, "outputSubstr", ex))
+				val needsFlush = copyVec(v, avail, dataLen-avail, buf, 0)
+				in
+				  pos := dataLen-avail;
+				  if needsFlush then flush() else ()
+				end
+			    else let
+			      val needsFlush = copyVec(v, dataStart, dataLen, buf, i)
+			      in
+				pos := i + dataLen;
+				if (needsFlush orelse (avail = dataLen))
+				  then flush()
+				  else ()
+			      end
+			  end
 		    end
+	      in
+		case !bufferMode
+		 of IO.NO_BUF => writeDirect()
+		  | IO.LINE_BUF => insert lineBufCopyVec
+		  | IO.BLOCK_BUF => insert blockBufCopyVec
+		(* end case *)
 	      end
 
 	fun setBufferMode (strm as OSTRM{bufferMode, ...}, IO.NO_BUF) = (
@@ -856,10 +866,29 @@ functor TextIOFn (
 
     fun print s = (output (stdOut, s); flushOut stdOut)
 
+    fun scanStream scanFn = let
+	  val scan = scanFn StreamIO.input1
+	  fun doit strm = let
+		val instrm = getInstream strm
+		in
+		  case scan instrm
+		   of NONE => NONE
+		    | SOME(item, instrm') => (
+			setInstream(strm, instrm');
+			SOME item)
+		  (* end case *)
+		end
+	  in
+	    doit
+	  end
+
   end (* TextIOFn *)
 
 (*
  * $Log$
+# Revision 1.2  2000/08/29  23:06:45  swasey
+# Updated TextIOFn in an attempt to solve a bug.
+# 
 # Revision 1.1  98/03/09  19:50:50  pscheng
 # added basis
 # 

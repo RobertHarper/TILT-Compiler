@@ -59,10 +59,18 @@ signature TEXT_IO =
 
     val print : string -> unit
 
+    val scanStream :
+	  ((elem, StreamIO.instream) StringCvt.reader
+	    -> ('a, StreamIO.instream) StringCvt.reader
+	  ) -> instream -> 'a option
+
   end;
 
 (*
  * $Log$
+# Revision 1.2  2000/08/29  23:06:45  swasey
+# Updated TextIOFn in an attempt to solve a bug.
+# 
 # Revision 1.1  98/03/09  19:50:51  pscheng
 # added basis
 # 
