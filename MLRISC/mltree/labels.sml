@@ -36,18 +36,3 @@ structure Label : LABEL =
   end
 
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:25  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:17:24  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:09:25  pscheng
-# *** empty log message ***
-#
- * Revision 1.1.1.1  1998/04/08 18:39:02  george
- * Version 110.5
- *
- *)

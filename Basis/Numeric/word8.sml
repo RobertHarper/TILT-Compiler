@@ -153,24 +153,3 @@ structure Word8 :> WORD where type word = TiltPrim.uint8 =
   end  (* structure Word8 *)
 
 
-(*
- * $Log$
-# Revision 1.4  2001/12/13  16:31:24  swasey
-# *** empty log message ***
-# 
-# Revision 1.3  2000/11/27  22:36:37  swasey
-# *** empty log message ***
-# 
- * Revision 1.2  2000/09/12 18:54:33  swasey
- * Changes for cutoff compilation
- *
-# Revision 1.1  98/03/09  19:52:58  pscheng
-# added basis
-# 
- * Revision 1.2  1997/02/11  15:15:56  george
- * got rid of structure rebinding, since inlining is now preserved
- *
- * Revision 1.1.1.1  1997/01/14  01:38:18  george
- *   Version 109.24
- *
- *)

@@ -81,29 +81,3 @@ fun AntiquoteExp e = AppExp{function=VarExp antiquoteDcon,argument= e}
 end (* structure *)
 
 
-(*
- * $Log$
-# Revision 1.6  2001/12/13  16:32:34  swasey
-# *** empty log message ***
-# 
-# Revision 1.5  2000/09/12  18:56:46  swasey
-# Changes for cutoff compilation
-# 
-# Revision 1.4  98/02/15  22:43:19  pscheng
-# bootstrapping changes
-# 
-# Revision 1.3  1998/02/01  01:27:54  pscheng
-# Changes to facilitate bootstrapping:
-#   Added ascription in various places
-#   Split up files into signature and code
-#
-# Revision 1.2  1998/01/21  20:40:09  pscheng
-# moved the .sig files to .sig.sml file
-#
-# Revision 1.1  97/03/26  14:12:23  pscheng
-# added copy of SMLNJ parser files
-# 
- * Revision 1.1.1.1  1997/01/14  01:38:43  george
- *   Version 109.24
- *
- *)

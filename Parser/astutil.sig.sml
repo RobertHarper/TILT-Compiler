@@ -30,24 +30,3 @@ signature ASTUTIL =
   end
 
 
-(*
- * $Log$
-# Revision 1.4  2001/12/13  16:32:34  swasey
-# *** empty log message ***
-# 
-# Revision 1.3  2000/09/12  18:56:46  swasey
-# Changes for cutoff compilation
-# 
-# Revision 1.2  98/02/15  22:43:18  pscheng
-# bootstrapping changes
-# 
-# Revision 1.1  1998/01/21  20:40:08  pscheng
-# moved the .sig files to .sig.sml file
-#
-# Revision 1.1  97/03/26  18:16:02  pscheng
-# added the sig file
-# 
- * Revision 1.1.1.1  1997/01/14  01:38:43  george
- *   Version 109.24
- *
- *)

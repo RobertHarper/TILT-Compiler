@@ -54,21 +54,3 @@ struct
 
 end
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:56  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  22:33:26  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:07:01  pscheng
-# *** empty log message ***
-#
- * Revision 1.1.1.2  1998/11/16 21:47:28  george
- *   Version 110.10
- *
- * Revision 1.1.1.1  1998/04/08 18:39:01  george
- * Version 110.5
- *
- *)

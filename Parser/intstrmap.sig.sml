@@ -15,21 +15,3 @@ signature INTSTRMAP =
     val transform : ('a -> 'b) -> 'a intstrmap -> 'b intstrmap
   end
 
-(*
- * $Log$
-# Revision 1.4  2001/12/13  16:32:36  swasey
-# *** empty log message ***
-# 
-# Revision 1.3  2000/09/12  18:56:52  swasey
-# Changes for cutoff compilation
-# 
-# Revision 1.2  99/02/05  15:58:32  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1998/01/21  20:40:19  pscheng
-# moved the .sig files to .sig.sml file
-#
-# Revision 1.1  97/03/26  18:16:04  pscheng
-# added the sig file
-# 
- *)

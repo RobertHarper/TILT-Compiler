@@ -265,30 +265,3 @@ struct
 end
 
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:07  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:16:20  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:07:57  pscheng
-# *** empty log message ***
-#
- * Revision 1.6  1998/10/06 14:04:27  george
- *   The instruction sequence FCMP, FTEST, FBCC is being replaced
- *   by the composite instruction FBRANCH.  This makes scheduling and
- *   other tasks easier.  Also, added BLR and BL in the instruction set.
- * 							[leunga]
- *
- * Revision 1.5  1998/09/30 19:35:22  dbm
- * fixing sharing/defspec conflict
- *
- * Revision 1.4  1998/07/25 03:08:15  george
- *   added to support block names in MLRISC
- *
- * Revision 1.3  1998/05/25 15:10:53  george
- *   Fixed RCS keywords
- *
- *)

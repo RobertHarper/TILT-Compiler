@@ -82,26 +82,3 @@ struct
    end
 end
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:56  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:15:26  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:06:58  pscheng
-# *** empty log message ***
-#
- * Revision 1.3  1998/10/06 14:07:48  george
- * Flowgraph has been removed from modules that do not need it.
- * Changes to compiler/CodeGen/*/*{MLTree,CG}.sml necessary.
- * 						[leunga]
- *
- * Revision 1.2  1998/07/25 03:08:22  george
- *   added to support block names in MLRISC
- *
- * Revision 1.1.1.1  1998/04/08 18:39:02  george
- * Version 110.5
- *
- *)

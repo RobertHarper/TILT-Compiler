@@ -124,19 +124,4 @@ functor Alpha32Rewrite(Instr : ALPHA32INSTR) = struct
   end
 end
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:52  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:15:22  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:06:53  pscheng
-# *** empty log message ***
-#
- * Revision 1.3  1998/05/25 15:10:50  george
- *   Fixed RCS keywords
- *
- *)
 

@@ -95,18 +95,3 @@ structure CleanUp : sig
 
   end (* CleanUp *)
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:21  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  98/03/09  19:52:26  pscheng
-# added basis
-# 
-# Revision 1.1  1997/02/11  20:44:45  george
-#   Version 109.25.1
-#
- * Revision 1.1.1.1  1997/01/14  01:38:14  george
- *   Version 109.24
- *
- *)

@@ -88,23 +88,3 @@ structure Alpha32Cells : ALPHA32CELLS = struct
 end
 
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:51  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:15:12  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:06:43  pscheng
-# *** empty log message ***
-#
- * Revision 1.4  1998/10/06 14:07:29  george
- * Flowgraph has been removed from modules that do not need it.
- * Changes to compiler/CodeGen/*/*{MLTree,CG}.sml necessary.
- * 						[leunga]
- *
- * Revision 1.3  1998/05/25 15:10:46  george
- *   Fixed RCS keywords
- *
- *)

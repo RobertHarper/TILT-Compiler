@@ -233,21 +233,3 @@ structure Real64Array : MONO_ARRAY =
   end (* structure Real64Array *)
 
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:23  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  98/03/09  19:52:48  pscheng
-# added basis
-# 
- * Revision 1.3  1997/05/29  14:44:24  jhr
- *   SML'97 Basis Library changes (phase 1)
- *
- * Revision 1.2  1997/02/11  15:15:45  george
- * got rid of structure rebinding, since inlining is now preserved
- *
- * Revision 1.1.1.1  1997/01/14  01:38:16  george
- *   Version 109.24
- *
- *)

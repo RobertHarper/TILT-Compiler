@@ -52,20 +52,3 @@ structure Timer : TIMER =
   end (* Timer *)
 
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:16  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  98/03/09  15:45:47  pscheng
-# adding the basis
-# 
- * Revision 1.2  1997/07/31  17:25:01  jhr
- *   We are now using 32-bit ints to represent the seconds portion of a
- *   time value.  This was required to handle the change in the type of
- *   Time.{to,from}{Seconds,Milliseconds,Microseconds}.
- *
- * Revision 1.1.1.1  1997/01/14  01:38:17  george
- *   Version 109.24
- *
- *)

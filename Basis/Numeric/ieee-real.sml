@@ -90,30 +90,3 @@ structure IEEEReal :> IEEE_REAL =
   end;
 
 
-(*
- * $Log$
-# Revision 1.6  2001/12/13  16:31:22  swasey
-# *** empty log message ***
-# 
-# Revision 1.5  2000/11/27  22:36:29  swasey
-# *** empty log message ***
-# 
- * Revision 1.4  2000/09/12 18:54:29  swasey
- * Changes for cutoff compilation
- *
- * Revision 1.3  1999/09/22 15:45:08  pscheng
- * *** empty log message ***
- *
-# Revision 1.2  1998/04/06  21:17:39  pscheng
-# update: Typeof_c, dependent arrow/record types
-#
-# Revision 1.1  1998/03/09  19:52:34  pscheng
-# added basis
-#
- * Revision 1.2  1997/05/29  14:44:22  jhr
- *   SML'97 Basis Library changes (phase 1)
- *
- * Revision 1.1.1.1  1997/01/14  01:38:14  george
- *   Version 109.24
- *
- *)

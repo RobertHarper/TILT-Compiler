@@ -359,30 +359,3 @@ end
 (*
  *)
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:08  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:16:21  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:07:58  pscheng
-# *** empty log message ***
-#
- * Revision 1.6  1998/12/30 20:19:09  jhr
- *   Modifications to support direct generation of code into code objects.
- *
- * Revision 1.5  1998/10/06 14:04:33  george
- *   The instruction sequence FCMP, FTEST, FBCC is being replaced
- *   by the composite instruction FBRANCH.  This makes scheduling and
- *   other tasks easier.  Also, added BLR and BL in the instruction set.
- * 							[leunga]
- *
- * Revision 1.4  1998/09/30 19:35:40  dbm
- * fixing sharing/defspec conflict
- *
- * Revision 1.3  1998/05/25 15:10:57  george
- *   Fixed RCS keywords
- *
- *)

@@ -273,27 +273,3 @@ struct
      currBlock := NONE)
 end
 
-(*
- * $Log$
-# Revision 1.3  2001/12/13  16:31:54  swasey
-# *** empty log message ***
-# 
-# Revision 1.2  99/02/17  22:32:22  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  21:15:25  pscheng
-# *** empty log message ***
-#
-# Revision 1.1  1999/02/17  20:06:57  pscheng
-# *** empty log message ***
-#
- * Revision 1.1.1.1  1998/11/16 21:47:21  george
- *   Version 110.10
- *
- * Revision 1.4  1998/07/25 03:08:17  george
- *   added to support block names in MLRISC
- *
- * Revision 1.3  1998/05/25 15:11:03  george
- *   Fixed RCS keywords
- *
- *)

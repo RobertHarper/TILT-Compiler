@@ -186,30 +186,3 @@ structure Time :> TIME where type time = PreTime.time =
 
   end (* TIME *)
 
-(*
- * $Log$
-# Revision 1.6  2001/12/13  16:31:25  swasey
-# *** empty log message ***
-# 
-# Revision 1.5  2000/11/27  22:36:39  swasey
-# *** empty log message ***
-# 
- * Revision 1.4  2000/09/12 18:54:36  swasey
- * Changes for cutoff compilation
- *
- * Revision 1.3  1999/09/22 15:45:11  pscheng
- * *** empty log message ***
- *
-# Revision 1.2  1998/04/06  21:17:42  pscheng
-# update: Typeof_c, dependent arrow/record types
-#
-# Revision 1.1  1998/03/09  19:53:11  pscheng
-# added basis
-#
- * Revision 1.2  1997/05/29  14:44:29  jhr
- *   SML'97 Basis Library changes (phase 1)
- *
- * Revision 1.1.1.1  1997/01/14  01:38:17  george
- *   Version 109.24
- *
- *)

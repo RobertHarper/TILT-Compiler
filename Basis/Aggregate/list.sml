@@ -150,24 +150,3 @@ structure List :> LIST where type 'a list = 'a list =
 
   end (* structure List *)
 
-(*
- * $Log$
-# Revision 1.4  2001/12/13  16:31:17  swasey
-# *** empty log message ***
-# 
-# Revision 1.3  2000/11/27  22:36:21  swasey
-# *** empty log message ***
-# 
- * Revision 1.2  2000/09/12 18:54:09  swasey
- * Changes for cutoff compilation
- *
-# Revision 1.1  98/03/09  19:50:16  pscheng
-# added basis
-# 
- * Revision 1.2  1997/06/02  19:15:02  jhr
- *   SML'97 Basis Library changes (phase 2)
- *
- * Revision 1.1.1.1  1997/01/14  01:38:15  george
- *   Version 109.24
- *
- *)

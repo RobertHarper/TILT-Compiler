@@ -42,21 +42,3 @@ structure Pathnames : PATHNAMES =
 *)
 end
 
-(*
- * $Log$
-# Revision 1.5  2001/12/13  16:32:46  swasey
-# *** empty log message ***
-# 
-# Revision 1.4  2000/09/12  18:57:06  swasey
-# Changes for cutoff compilation
-# 
-# Revision 1.3  98/04/24  22:51:52  pscheng
-# fixed imports
-# 
-# Revision 1.2  1998/01/21  20:40:40  pscheng
-# moved the .sig files to .sig.sml file
-#
-# Revision 1.1  97/03/26  14:12:32  pscheng
-# added copy of SMLNJ parser files
-# 
- *)

@@ -1208,37 +1208,4 @@ struct
       end 
 end (* functor *)
 
-(*
- * $Log$
-# Revision 1.5  2001/12/13  16:32:26  swasey
-# *** empty log message ***
-# 
-# Revision 1.4  99/02/26  02:05:48  pscheng
-# *** empty log message ***
-# 
-# Revision 1.3  99/02/25  10:11:58  pscheng
-# *** empty log message ***
-# 
-# Revision 1.2  1999/02/17  22:32:33  pscheng
-# *** empty log message ***
-#
-# Revision 1.1  1999/02/17  21:17:33  pscheng
-# *** empty log message ***
-#
-# Revision 1.1  1999/02/17  20:09:33  pscheng
-# *** empty log message ***
-#
- * Revision 1.6  1998/10/16 12:49:51  george
- *   Installed ~1 hack for C--
- *
- * Revision 1.5  1998/09/30 19:36:34  dbm
- * fixing sharing/defspec conflict
- *
- * Revision 1.4  1998/07/25 03:08:24  george
- *   added to support block names in MLRISC
- *
- * Revision 1.3  1998/05/25 15:11:05  george
- *   Fixed RCS keywords
- *
- *)
 

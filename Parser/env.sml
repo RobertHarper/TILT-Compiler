@@ -349,39 +349,3 @@ structure Symbol = Env.Symbol
 structure FastSymbol = Env.FastSymbol
 
 
-(*
- * $Log$
-# Revision 1.9  2001/12/13  16:32:35  swasey
-# *** empty log message ***
-# 
-# Revision 1.8  2000/09/12  18:56:49  swasey
-# Changes for cutoff compilation
-# 
- * Revision 1.7  2000/01/20 13:32:26  pscheng
- * *** empty log message ***
- *
-# Revision 1.6  1999/02/12  22:22:01  pscheng
-# *** empty log message ***
-#
-# Revision 1.5  1998/02/27  17:32:14  pscheng
-# The fix in compilation of implementation files with interfaces
-# allows Symbol and FastSymbol to be exported without Env.
-# Thus, HIL no longer depends on Env (which had depended on many
-# Basis modules) .
-#
-# Revision 1.4  1998/02/15  22:43:24  pscheng
-# bootstrapping changes
-#
-# Revision 1.3  1998/01/21  20:40:13  pscheng
-# moved the .sig files to .sig.sml file
-#
-# Revision 1.2  97/07/24  11:24:27  pscheng
-# changed Unbound exception for 109.30
-# 
-# Revision 1.1  97/03/26  14:12:25  pscheng
-# added copy of SMLNJ parser files
-# 
- * Revision 1.1.1.1  1997/01/14  01:38:36  george
- *   Version 109.24
- *
- *)

@@ -87,21 +87,3 @@ signature DATE =
   end;
 
 
-(*
- * $Log$
-# Revision 1.4  2001/12/13  16:31:16  swasey
-# *** empty log message ***
-# 
-# Revision 1.3  2000/11/27  22:36:17  swasey
-# *** empty log message ***
-# 
- * Revision 1.2  2000/08/21 20:29:19  swasey
- * Changes for the new Manager.
- *
-# Revision 1.1  98/03/09  15:45:44  pscheng
-# adding the basis
-# 
- * Revision 1.1.1.1  1997/01/14  01:38:14  george
- *   Version 109.24
- *
- *)

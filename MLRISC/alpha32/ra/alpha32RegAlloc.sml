@@ -89,29 +89,3 @@ end
 
 
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:52  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:15:20  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:06:51  pscheng
-# *** empty log message ***
-#
- * Revision 1.6  1998/10/06 14:07:31  george
- * Flowgraph has been removed from modules that do not need it.
- * Changes to compiler/CodeGen/*/*{MLTree,CG}.sml necessary.
- * 						[leunga]
- *
- * Revision 1.5  1998/09/30 19:34:39  dbm
- * fixing sharing/defspec conflict
- *
- * Revision 1.4  1998/07/25 03:08:13  george
- *   added to support block names in MLRISC
- *
- * Revision 1.3  1998/05/25 15:10:49  george
- *   Fixed RCS keywords
- *
- *)

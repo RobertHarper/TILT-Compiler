@@ -75,18 +75,3 @@ signature SIGNALS =
   end; (* SIGNALS *)
 
 
-(*
- * $Log$
-# Revision 1.3  2001/12/13  16:31:21  swasey
-# *** empty log message ***
-# 
-# Revision 1.2  2000/09/21  01:08:35  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1998/03/09  19:52:26  pscheng
-# added basis
-#
- * Revision 1.1.1.1  1997/01/14  01:38:20  george
- *   Version 109.24
- *
- *)

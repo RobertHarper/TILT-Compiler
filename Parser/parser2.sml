@@ -1,47 +1,5 @@
 (*$import Prelude TopLevel List YaccBase Stream LrTable TextIO Int *)
 
-(* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
- *
- * $Log$
-# Revision 1.8  2001/12/13  16:32:45  swasey
-# *** empty log message ***
-# 
-# Revision 1.7  2000/09/12  18:57:04  swasey
-# Changes for cutoff compilation
-# 
- * Revision 1.6  1999/09/22 15:46:08  pscheng
- * *** empty log message ***
- *
-# Revision 1.5  1998/03/09  15:39:30  pscheng
-# added debugs
-#
-# Revision 1.4  1998/02/15  22:44:04  pscheng
-# bootstrapping changes
-#
-# Revision 1.3  1998/01/21  20:40:38  pscheng
-# moved the .sig files to .sig.sml file
-#
-# Revision 1.2  1997/10/24  21:36:28  cstone
-# update to 109.32 & NT
-#
-# Revision 1.2  1997/08/26  19:18:54  jhr
-#   Replaced used of "abstraction" with ":>".
-#
-# Revision 1.1.1.1  1997/01/14  01:38:04  george
-#   Version 109.24
-#
- * Revision 1.3  1996/10/03  03:36:58  jhr
- * Qualified identifiers that are no-longer top-level (quot, rem, min, max).
- *
- * Revision 1.2  1996/02/26  15:02:29  george
- *    print no longer overloaded.
- *    use of makestring has been removed and replaced with Int.toString ..
- *    use of IO replaced with TextIO
- *
- * Revision 1.1.1.1  1996/01/31  16:01:42  george
- * Version 109
- * 
- *)
 
 (* parser.sml:  This is a parser driver for LR tables with an error-recovery
    routine added to it.  The routine used is described in detail in this

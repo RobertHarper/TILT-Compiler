@@ -134,27 +134,3 @@ structure Vector :> VECTOR where type 'a vector = 'a vector =
   end  (* Vector *)
 
 
-(*
- * $Log$
-# Revision 1.4  2001/12/13  16:31:18  swasey
-# *** empty log message ***
-# 
-# Revision 1.3  2000/11/27  22:36:22  swasey
-# *** empty log message ***
-# 
- * Revision 1.2  2000/09/12 18:54:10  swasey
- * Changes for cutoff compilation
- *
-# Revision 1.1  98/03/09  19:50:20  pscheng
-# added basis
-# 
- * Revision 1.3  1997/05/29  14:44:30  jhr
- *   SML'97 Basis Library changes (phase 1)
- *
- * Revision 1.2  1997/02/11  15:16:12  george
- * moved stuff from System to SMLofNJ
- *
- * Revision 1.1.1.1  1997/01/14  01:38:17  george
- *   Version 109.24
- *
- *)

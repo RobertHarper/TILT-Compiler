@@ -332,26 +332,3 @@ struct
 
 end (* spanDep.sml *)
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:53  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:15:25  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:06:56  pscheng
-# *** empty log message ***
-#
- * Revision 1.3  1998/10/06 14:07:49  george
- * Flowgraph has been removed from modules that do not need it.
- * Changes to compiler/CodeGen/*/*{MLTree,CG}.sml necessary.
- * 						[leunga]
- *
- * Revision 1.2  1998/08/12 13:36:09  leunga
- *   Fixed the 2.0 + 2.0 == nan bug by treating FCMP as instrs with delay slots
- *
- * Revision 1.1  1998/08/05 19:47:21  george
- *   Changes to support the SPARC back end
- *
- *)

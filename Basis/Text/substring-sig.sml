@@ -61,24 +61,3 @@ signature SUBSTRING =
 
   end
 
-(*
- * $Log$
-# Revision 1.4  2001/12/13  16:31:32  swasey
-# *** empty log message ***
-# 
-# Revision 1.3  2000/11/27  22:36:42  swasey
-# *** empty log message ***
-# 
- * Revision 1.2  2000/08/21 20:29:20  swasey
- * Changes for the new Manager.
- *
-# Revision 1.1  98/03/09  19:54:01  pscheng
-# added basis
-# 
- * Revision 1.2  1997/06/02  19:15:05  jhr
- *   SML'97 Basis Library changes (phase 2)
- *
- * Revision 1.1.1.1  1997/01/14  01:38:17  george
- *   Version 109.24
- *
- *)

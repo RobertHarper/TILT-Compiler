@@ -81,24 +81,3 @@ struct
 	end)
 end
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:29  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:17:47  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:09:50  pscheng
-# *** empty log message ***
-#
- * Revision 1.3  1998/10/06 14:06:27  george
- *  fixed up some machine description problems. [leunga]
- *
- * Revision 1.2  1998/09/30 19:38:39  dbm
- * fixing sharing/defspec conflict
- *
- * Revision 1.1.1.1  1998/08/05 19:38:49  george
- *   Release 110.7.4
- *
- *)

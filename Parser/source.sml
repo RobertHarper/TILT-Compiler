@@ -41,23 +41,3 @@ struct
 
 end (* structure Source *)
 
-(*
- * $Log$
-# Revision 1.5  2001/12/13  16:32:48  swasey
-# *** empty log message ***
-# 
-# Revision 1.4  2000/09/12  18:57:11  swasey
-# Changes for cutoff compilation
-# 
-# Revision 1.3  98/02/01  01:28:16  pscheng
-# Changes to facilitate bootstrapping:
-#   Added ascription in various places
-#   Split up files into signature and code
-# 
-# Revision 1.2  1998/01/21  20:40:47  pscheng
-# moved the .sig files to .sig.sml file
-#
-# Revision 1.1  97/03/26  14:12:36  pscheng
-# added copy of SMLNJ parser files
-# 
- *)

@@ -24,18 +24,3 @@ functor Alpha32Shuffle(I:ALPHA32INSTR) = struct
   val shufflefp = Shuffle.shuffle {mvInstr=fmove, ea=I.FDirect}
 end
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:51  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:15:18  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:06:49  pscheng
-# *** empty log message ***
-#
- * Revision 1.3  1998/05/25 15:10:51  george
- *   Fixed RCS keywords
- *
- *)

@@ -179,24 +179,3 @@ signature POSIX_TTY =
 
   end (* signature POSIX_TTY *)
 
-(*
- * $Log$
-# Revision 1.4  2001/12/13  16:31:30  swasey
-# *** empty log message ***
-# 
-# Revision 1.3  2000/11/27  22:36:40  swasey
-# *** empty log message ***
-# 
- * Revision 1.2  2000/09/12 18:54:42  swasey
- * Changes for cutoff compilation
- *
-# Revision 1.1  98/03/09  19:53:41  pscheng
-# added basis
-# 
- * Revision 1.2  1997/06/07  15:27:42  jhr
- *   SML'97 Basis Library changes (phase 3; Posix changes)
- *
- * Revision 1.1.1.1  1997/01/14  01:38:23  george
- *   Version 109.24
- *
- *)

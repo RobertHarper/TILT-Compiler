@@ -305,22 +305,3 @@ fun getInfo sigId = (case (Array.sub(!sigTbl, sigId))
   end; (* Signals *)
 
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:22  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  98/03/09  19:52:27  pscheng
-# added basis
-# 
- * Revision 1.3  1997/02/26  21:00:28  george
- *    Defined a new top level Option structure. All 'a option related
- *    functions have been moved out of General.
- *
- * Revision 1.2  1997/01/31  20:39:48  jhr
- * Replaced uses of "abstraction" with opaque signature matching.
- *
- * Revision 1.1.1.1  1997/01/14  01:38:20  george
- *   Version 109.24
- *
- *)

@@ -113,18 +113,3 @@ signature SOURCE_MAP = sig
   val newlineCount: sourcemap -> region -> int
 end
 
-(*
- * $Log$
-# Revision 1.3  2001/12/13  16:32:48  swasey
-# *** empty log message ***
-# 
-# Revision 1.2  2000/09/12  18:57:11  swasey
-# Changes for cutoff compilation
-# 
-# Revision 1.1  98/01/21  20:40:48  pscheng
-# moved the .sig files to .sig.sml file
-# 
-# Revision 1.1  97/03/26  18:16:06  pscheng
-# added the sig file
-# 
- *)

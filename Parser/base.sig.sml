@@ -1,27 +1,5 @@
 (*$import Prelude *)
 
-(* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
- *
- * $Log$
-# Revision 1.3  2001/12/13  16:32:34  swasey
-# *** empty log message ***
-# 
-# Revision 1.2  2000/09/12  18:56:47  swasey
-# Changes for cutoff compilation
-# 
-# Revision 1.1  98/01/21  20:40:10  pscheng
-# moved the .sig files to .sig.sml file
-# 
-# Revision 1.2  1997/10/24  21:36:25  cstone
-# update to 109.32 & NT
-#
-# Revision 1.1.1.1  1997/01/14  01:38:04  george
-#   Version 109.24
-#
- * Revision 1.1.1.1  1996/01/31  16:01:42  george
- * Version 109
- * 
- *)
 
 (* base.sig: Base signature file for SML-Yacc.  This file contains signatures
    that must be loaded before any of the files produced by ML-Yacc are loaded

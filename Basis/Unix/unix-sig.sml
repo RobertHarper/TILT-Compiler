@@ -59,18 +59,3 @@ signature UNIX =
   end
 
 
-(*
- * $Log$
-# Revision 1.3  2001/12/13  16:31:35  swasey
-# *** empty log message ***
-# 
-# Revision 1.2  2000/11/27  22:36:45  swasey
-# *** empty log message ***
-# 
- * Revision 1.1  1998/03/09 19:54:32  pscheng
- * added basis
- *
- * Revision 1.1.1.1  1997/01/14  01:38:25  george
- *   Version 109.24
- *
- *)

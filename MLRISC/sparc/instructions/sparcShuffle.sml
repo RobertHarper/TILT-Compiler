@@ -47,18 +47,3 @@ functor SparcShuffle(I:SPARCINSTR) = struct
 end
 
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:28  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:17:45  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:09:45  pscheng
-# *** empty log message ***
-#
- * Revision 1.1.1.1  1998/08/05 19:38:49  george
- *   Release 110.7.4
- *
- *)

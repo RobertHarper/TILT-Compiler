@@ -188,18 +188,3 @@ structure SourceMap : SOURCE_MAP = struct
     end
 end
 
-(*
- * $Log$
-# Revision 1.4  2001/12/13  16:32:48  swasey
-# *** empty log message ***
-# 
-# Revision 1.3  2000/09/12  18:57:12  swasey
-# Changes for cutoff compilation
-# 
-# Revision 1.2  98/01/21  20:40:49  pscheng
-# moved the .sig files to .sig.sml file
-# 
-# Revision 1.1  97/03/26  14:12:37  pscheng
-# added copy of SMLNJ parser files
-# 
- *)

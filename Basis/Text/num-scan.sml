@@ -423,36 +423,5 @@ structure NumScan : sig
   end;
 
 
-(*
- * $Log$
-# Revision 1.5  2001/12/13  16:31:32  swasey
-# *** empty log message ***
-# 
-# Revision 1.4  2000/11/27  22:36:41  swasey
-# *** empty log message ***
-# 
- * Revision 1.3  2000/09/12 18:54:45  swasey
- * Changes for cutoff compilation
- *
-# Revision 1.2  99/03/03  19:32:54  leaf
-# *** empty log message ***
-# 
-# Revision 1.1  98/03/09  19:53:54  pscheng
-# added basis
-# 
- * Revision 1.4  1997/06/30  14:45:30  jhr
- * Fixed bug in scanning "0" as a word.
- *
- * Revision 1.3  1997/04/13  03:23:04  george
- *   Fix for bug 1027 -- jhr
- *
- * Revision 1.2  1997/02/26  21:00:06  george
- *    Defined a new top level Option structure. All 'a option related
- *    functions have been moved out of General.
- *
- * Revision 1.1.1.1  1997/01/14  01:38:15  george
- *   Version 109.24
- *
- *)
 
 

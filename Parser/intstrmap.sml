@@ -98,24 +98,3 @@ struct
       end
 end
 
-(*
- * $Log$
-# Revision 1.6  2001/12/13  16:32:36  swasey
-# *** empty log message ***
-# 
-# Revision 1.5  2000/11/27  22:37:01  swasey
-# *** empty log message ***
-# 
- * Revision 1.4  2000/09/12 18:56:53  swasey
- * Changes for cutoff compilation
- *
- * Revision 1.3  1999/09/22 15:46:07  pscheng
- * *** empty log message ***
- *
-# Revision 1.2  1998/01/21  20:40:19  pscheng
-# moved the .sig files to .sig.sml file
-#
-# Revision 1.1  97/03/26  14:12:29  pscheng
-# added copy of SMLNJ parser files
-# 
- *)

@@ -303,27 +303,3 @@ structure Date :> DATE =
   end;
 
 
-(*
- * $Log$
-# Revision 1.6  2001/12/13  16:31:16  swasey
-# *** empty log message ***
-# 
-# Revision 1.5  2000/11/27  22:36:17  swasey
-# *** empty log message ***
-# 
- * Revision 1.4  2000/09/12 18:54:03  swasey
- * Changes for cutoff compilation
- *
- * Revision 1.3  2000/08/21 20:29:19  swasey
- * Changes for the new Manager.
- *
-# Revision 1.2  98/04/06  21:17:34  pscheng
-# update: Typeof_c, dependent arrow/record types
-# 
-# Revision 1.1  1998/03/09  15:45:45  pscheng
-# adding the basis
-#
- * Revision 1.1.1.1  1997/01/14  01:38:14  george
- *   Version 109.24
- *
- *)

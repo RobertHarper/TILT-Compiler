@@ -110,27 +110,3 @@ structure Int32 :> INTEGER where type int = int =
 
   end
 
-(*
- * $Log$
-# Revision 1.5  2001/12/13  16:31:22  swasey
-# *** empty log message ***
-# 
-# Revision 1.4  2000/11/27  22:36:30  swasey
-# *** empty log message ***
-# 
- * Revision 1.3  2000/09/12 18:54:29  swasey
- * Changes for cutoff compilation
- *
- * Revision 1.2  2000/01/20 13:31:54  pscheng
- * *** empty log message ***
- *
-# Revision 1.1  1998/03/09  19:52:36  pscheng
-# added basis
-#
- * Revision 1.2  1997/02/11  15:15:43  george
- * got rid of structure rebinding, since inlining is now preserved
- *
- * Revision 1.1.1.1  1997/01/14  01:38:15  george
- *   Version 109.24
- *
- *)

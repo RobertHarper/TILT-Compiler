@@ -517,31 +517,3 @@ struct
   val mlriscComp = stmAction
 end
 
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:11  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:16:26  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:08:06  pscheng
-# *** empty log message ***
-#
- * Revision 1.7  1998/10/06 14:04:26  george
- *   The instruction sequence FCMP, FTEST, FBCC is being replaced
- *   by the composite instruction FBRANCH.  This makes scheduling and
- *   other tasks easier.  Also, added BLR and BL in the instruction set.
- * 							[leunga]
- *
- * Revision 1.6  1998/09/30 19:35:03  dbm
- * fixing sharing/defspec conflict
- *
- * Revision 1.5  1998/08/11 14:03:23  george
- *   Exposed emitInstr in MLTREECOMP to allow a client to directly
- *   inject native instructions into the flowgraph.
- *
- * Revision 1.3  1998/05/25 15:10:52  george
- *   Fixed RCS keywords
- *
- *)

@@ -63,27 +63,3 @@ sig
 
   end;
 
-(*
- * $Log$
-# Revision 1.5  2001/12/13  16:31:20  swasey
-# *** empty log message ***
-# 
-# Revision 1.4  2000/11/27  22:36:26  swasey
-# *** empty log message ***
-# 
- * Revision 1.3  2000/09/12 18:54:16  swasey
- * Changes for cutoff compilation
- *
- * Revision 1.2  2000/08/29 23:06:45  swasey
- * Updated TextIOFn in an attempt to solve a bug.
- *
-# Revision 1.1  98/03/09  19:50:51  pscheng
-# added basis
-# 
- * Revision 1.2  1997/05/20  12:13:50  dbm
- *   SML '97 sharing, where structure.
- *
- * Revision 1.1.1.1  1997/01/14  01:38:19  george
- *   Version 109.24
- *
- *)

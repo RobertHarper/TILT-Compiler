@@ -716,31 +716,3 @@ struct
 end
 
 
-(*
- * $Log$
-# Revision 1.3  2001/12/13  16:31:51  swasey
-# *** empty log message ***
-# 
-# Revision 1.2  99/02/17  22:32:21  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  21:15:19  pscheng
-# *** empty log message ***
-#
-# Revision 1.1  1999/02/17  20:06:50  pscheng
-# *** empty log message ***
-#
- * Revision 1.7  1998/09/30 19:32:26  dbm
- * fixing sharing/defspec conflict
- *
- * Revision 1.6  1998/08/11 14:03:13  george
- *   Exposed emitInstr in MLTREECOMP to allow a client to directly
- *   inject native instructions into the flowgraph.
- *
- * Revision 1.4  1998/06/05 23:53:57  george
- *   Fix for bug 1399 1361
- *
- * Revision 1.3  1998/05/25 15:10:44  george
- *   Fixed RCS keywords
- *
- *)
