@@ -23,16 +23,21 @@ structure IlUtil :> ILUTIL =
 	    ref (fn _ => error "Context_Lookup_Labels not installed")
 	val Ctiltprim : (unit -> bool) ref =
 	    ref (fn () => error "compiling_tiltprim not installed")
+	val Ceq_con : (context * con * con -> bool) ref =
+	    ref (fn _ => error "eq_con not installed")
     in
-	fun installHelpers {Context_Lookup_Labels : context * label list -> (path * phrase_class) option,
-			    compiling_tiltprim : bool ref} : unit =
+	fun installHelpers
+		{Context_Lookup_Labels : context * label list -> (path * phrase_class) option,
+		 compiling_tiltprim : bool ref,
+		 eq_con : context * con * con -> bool} : unit =
 	    let val _  = Clooklabs := Context_Lookup_Labels
-		fun tiltprim () = !compiling_tiltprim
-		val _ = Ctiltprim := tiltprim
+		val _ = Ctiltprim := (fn () => !compiling_tiltprim)
+		val _ = Ceq_con := eq_con
 	    in ()
 	    end
 	fun Context_Lookup_Labels arg = !Clooklabs arg
 	fun compiling_tiltprim () : bool = !Ctiltprim ()
+	fun eq_con arg = !Ceq_con arg
     end
 
     (* -------------------------------------------------------- *)
@@ -240,6 +245,13 @@ structure IlUtil :> ILUTIL =
     fun con_eqfun context c = CON_ARROW([con_tuple[c,c]],
 					con_bool context,
 					false, oneshot_init PARTIAL)
+
+    fun eqfun_con (context:context, eqfun:con) : con =
+	let val c = CON_TYVAR(fresh_named_tyvar(context,"eqtype"))
+	    val eqfun' = con_eqfun context c
+	    val valid = eq_con(context,eqfun,eqfun')
+	in  if valid then c else error "unexpected type for equality function"
+	end
 
     (* Note: the phase-splitter will emit much better code if functions
      * are elaborated in the way that it expects (at least while do_polyrec

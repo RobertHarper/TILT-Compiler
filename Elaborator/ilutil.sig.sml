@@ -2,9 +2,11 @@
 signature ILUTIL =
   sig
 
-    val installHelpers : {Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option,
-			  compiling_tiltprim : bool ref
-			  } -> unit
+    val installHelpers :
+	{Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option,
+	 compiling_tiltprim : bool ref,
+	 eq_con : Il.context * Il.con * Il.con -> bool
+	} -> unit
 
     val debug : bool ref
     exception FAILURE of string
@@ -89,7 +91,8 @@ signature ILUTIL =
     val to_external_bool_eta   : context -> Prim.prim * con list -> exp
     val ilto_external_bool_eta : context -> Prim.ilprim * con list -> exp
 
-    val con_eqfun : context -> con -> con
+    val con_eqfun : context -> con -> con	(* c |-> (c * c -> bool) *)
+    val eqfun_con : context * con -> con	(* (c * c -> bool) |-> c *)
     val con_tuple : con list -> con                 (* the type of tuple values *)
     val con_tuple_inject : con list -> con          (* makes a tuple of types   *)
     val con_record : (Symbol.symbol * con) list -> con
