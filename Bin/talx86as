@@ -51,14 +51,14 @@ case $# in
 esac
 
 bindir=`dirname "$0"`
-runtimedir=`cd "$bindir"/../Runtime/talx86; pwd`
+libdir=`cd "$bindir"/../Lib/talx86; pwd`
 
 cputype=`"$bindir"/cputype`
 case $cputype in
 talx86)
 	exec "$bindir/talc" $verify -c --translucent-sums\
 		--quiet-asm --quiet-verify\
-		-I "$runtimedir" $incs -o "$obj" -to "$tobj" "$asm"
+		-I "$libdir" $incs -o "$obj" -to "$tobj" "$asm"
 	;;
 *)
 	# talc is probably a cross-assembler

@@ -8,12 +8,17 @@ DEST=../../Lib/talx86
 
 LIB=$(DEST)/runtime.a
 
+# The tali files are needed during assembly.
+
 EXTRA=\
 	$(DEST)/runtime.o\
 	$(DEST)/runtime.to\
 	$(DEST)/stdlib.o\
 	$(DEST)/support.o\
 	$(DEST)/support.to\
+	$(DEST)/stdlib.tali\
+	$(DEST)/support_e.tali\
+	$(DEST)/tilt_main.tali\
 
 HFILES=\
 	s.h\
