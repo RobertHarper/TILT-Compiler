@@ -288,14 +288,22 @@ struct
       end
 
     (* -----------------  allocation code ---------------------- *)
+  fun make_ptag_opt () = 
+      if (!HeapProfile) 
+	  then let val temp = alloc_regi(NOTRACE_INT)
+		   val _ = add_instr(LI(MakeProfileTag(), temp))
+	       in  SOME temp
+	       end
+      else NONE
+
     fun xarray_float (state, Prim.F32) (_, _) : loc_or_val * con * state = error "no 32-bit floats"
       | xarray_float (state, Prim.F64) (vl1, vl2) = 
 	let 
 	    val len = load_ireg_locval(vl1,NONE)
 	    val fr = load_freg_locval(vl2,NONE)
 	    val dest = alloc_regi TRACE
-	    val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
-	    val skiptag      = alloc_regi NOTRACE_INT
+	    val ptag_opt = make_ptag_opt()
+	    val skiptag = alloc_regi NOTRACE_INT
 	    val tag = alloc_regi(NOTRACE_INT)
 	    val i = alloc_regi(NOTRACE_INT)
 	    val tmp = alloc_regi(NOTRACE_INT)
@@ -313,57 +321,64 @@ struct
 	    add_instr(LI(0w4096,cmptemp));
 	    add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
 	    add_instr(BCNDI(NE,cmptemp,fsmall_alloc,true));
-	    add_instr(FLOAT_ALLOC(len,fr,dest,ptag));
+	    add_instr(CALL{call_type = C_NORMAL,
+			   func = LABEL' (C_EXTERN_LABEL "alloc_bigfloatarray"),
+			   args = ((case ptag_opt of 
+					NONE => [len]
+				      | SOME ptag => [len,ptag]),
+				   [fr]),
+			   results = ([dest],[]),
+			   save = SAVE(getLocals())});
 	    add_instr(BR fafter);
 	     
 	    (* inline allocation code - start by doing the tag stuff*)
 	    add_instr(ILABEL fsmall_alloc);
 	    add_instr(ADD(len,REG len, gctemp));
-	    if (not (!HeapProfile))
-		then
+	    (case ptag_opt of
+		 NONE =>
 		    (add_instr(ADD(gctemp,IMM 3, gctemp));
 		     needgc(state,REG gctemp);
 		     align_odd_word();
 		     mk_realarraytag(len,tag);
 		     add_instr(STORE32I(EA(heapptr,0),tag)); (* store tag *)
 		     add_instr(ADD(heapptr,IMM 4,dest)))
-	    else
-		(add_instr(ADD(gctemp,IMM 4, gctemp)));
-		needgc(state,REG gctemp);
-		align_even_word();
-		store_tag_disp(0,ptag);                 (* store profile tag *)
-		mk_realarraytag(len,tag);               
-		add_instr(STORE32I(EA(heapptr,4),tag)); (* store tag *)
-		add_instr(ADD(heapptr,IMM 8,dest));
+	       | SOME ptag =>
+		    (add_instr(ADD(gctemp,IMM 4, gctemp));
+		     needgc(state,REG gctemp);
+		     align_even_word();
+		     add_instr(STORE32I(EA(heapptr,0), ptag));                (* store profile tag *)
+		     mk_realarraytag(len,tag);               
+		     add_instr(STORE32I(EA(heapptr,4),tag)); (* store tag *)
+		     add_instr(ADD(heapptr,IMM 8,dest))));
 		
-		(* now use a loop to initialize the data portion *)
-		add_instr(S8ADD(len,REG dest,heapptr));
-		add_instr(LI(Rtltags.skiptag, skiptag));
-		add_instr(STORE32I(EA(heapptr,0),skiptag));
-		add_instr(ADD(heapptr,IMM 4,heapptr));
-		add_instr(SUB(len,IMM 1,i));      (* init val *)
-		add_instr(BR fbottom);             (* enter loop from bottom *)
-		do_code_align();
-		add_instr(ILABEL ftop);            (* loop start *)
-		add_instr(S8ADD(i,REG dest,tmp));
-		add_instr(STOREQF(EA(tmp,0),fr));  (* initialize value *)
-		add_instr(SUB(i,IMM 1,i));
-		add_instr(ILABEL fbottom);
-		add_instr(BCNDI(GE,i,ftop,true));
-		add_instr(ILABEL fafter);
-		(VAR_LOC(VREGISTER(false, I dest)),
-		 Prim_c(Array_c, [Prim_c(Float_c Prim.F64,[])]),
-		 new_gcstate state)   (* after all this allocation, we cannot merge *)
+	    (* now use a loop to initialize the data portion *)
+	    add_instr(S8ADD(len,REG dest,heapptr));
+	    add_instr(LI(Rtltags.skiptag, skiptag));
+	    add_instr(STORE32I(EA(heapptr,0),skiptag));
+	    add_instr(ADD(heapptr,IMM 4,heapptr));
+	    add_instr(SUB(len,IMM 1,i));      (* init val *)
+	    add_instr(BR fbottom);             (* enter loop from bottom *)
+	    do_code_align();
+	    add_instr(ILABEL ftop);            (* loop start *)
+	    add_instr(S8ADD(i,REG dest,tmp));
+	    add_instr(STOREQF(EA(tmp,0),fr));  (* initialize value *)
+	    add_instr(SUB(i,IMM 1,i));
+	    add_instr(ILABEL fbottom);
+	    add_instr(BCNDI(GE,i,ftop,true));
+	    add_instr(ILABEL fafter);
+	    (VAR_LOC(VREGISTER(false, I dest)),
+	     Prim_c(Array_c, [Prim_c(Float_c Prim.F64,[])]),
+	     new_gcstate state)   (* after all this allocation, we cannot merge *)
 	end (* end of floatcase *)
 
 
-  and general_init_case(ptag : Word32.word, (* profile tag *)
-			tag  : regi,        (* tag *)
-			dest : regi,        (* destination register *)
-			gctemp : loc_or_val,   (* number of words to increment heapptr by *)
-			len : regi,         (* number of words to write *)
-			v : regi,           (* write v (len) times *)
-			gafter,             (* label to jump to when done *)
+  and general_init_case(ptag_opt : regi option, (* optional profile tag *)
+			tag  : regi,         (* tag *)
+			dest : regi,         (* destination register *)
+			gctemp : loc_or_val, (* number of words to increment heapptr by *)
+			len : regi,          (* number of words to write *)
+			v : regi,            (* write v (len) times *)
+			gafter,              (* label to jump to when done *)
 			isptr
 			) = 
       let 
@@ -373,15 +388,13 @@ struct
 	  val gbottom      = fresh_code_label "array_init_bottom"
 	  val gtop         = fresh_code_label "array_init_top"
       in 
-	  (if (not (!HeapProfile))
-	       then
-		   (add_instr(ICOMMENT "storing tag");
-		    add_instr(STORE32I(EA(heapptr,0),tag)); (* allocation *)
-		    add_instr(ADD(heapptr,IMM 4,dest)))
-	   else
-	       (store_tag_disp(0,ptag);
-		add_instr(STORE32I(EA(heapptr,4),tag)); (* allocation *)
-		add_instr(ADD(heapptr,IMM 8,dest))));
+	  (case ptag_opt of
+	       NONE => (add_instr(ICOMMENT "storing tag");
+			add_instr(STORE32I(EA(heapptr,0),tag)); (* allocation *)
+			add_instr(ADD(heapptr,IMM 4,dest)))
+	     | SOME ptag => (add_instr(STORE32I(EA(heapptr,0), ptag));
+			     add_instr(STORE32I(EA(heapptr,4),tag)); (* allocation *)
+			     add_instr(ADD(heapptr,IMM 8,dest))));
 	       
 	   (* gctemp's contents reflects the profile tag already *)
 	   (case gctemp of
@@ -415,7 +428,8 @@ struct
 		val tmp     = alloc_regi(LOCATIVE)
 		val vtemp = load_ireg_locval(vl2,NONE)
 		val loglen = load_ireg_locval(vl1,NONE)
-		val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
+		val ptag_opt = make_ptag_opt()
+
 		val _ = add_instr(ICOMMENT "initializing int/ptr array start")
 		val (wordlen,v,afteropt) = 
 		    (case is of
@@ -456,7 +470,13 @@ struct
 		    (add_instr(LI(i2w 4096,cmptemp));
 		     add_instr(CMPUI(LE, wordlen, REG cmptemp, cmptemp));
 		     add_instr(BCNDI(NE,cmptemp,ismall_alloc,true));
-		     add_instr(INT_ALLOC(wordlen,v,dest,ptag));
+		     add_instr(CALL{call_type = C_NORMAL,
+				    func = LABEL' (C_EXTERN_LABEL "alloc_bigintarray"),
+				    args = ((case ptag_opt of
+						 NONE => [wordlen,v]
+					       | SOME ptag => [wordlen,v,ptag]), []),
+				    results = ([dest],[]),
+				    save = SAVE(getLocals())});
 		     add_instr(BR gafter);
 		     do_code_align();
 		     add_instr(ILABEL ismall_alloc);
@@ -479,7 +499,7 @@ struct
 		       | _ => check())
 *)
 		val _ = check()
-		val state = (general_init_case(ptag,tag,dest,
+		val state = (general_init_case(ptag_opt,tag,dest,
 					       VAR_LOC(VREGISTER(false,I gctemp)),
 					       wordlen,v,gafter,false);
 			     (case afteropt of
@@ -501,7 +521,7 @@ struct
 		val cmptemp = alloc_regi(NOTRACE_INT)
 		val i       = alloc_regi(NOTRACE_INT)
 		val tmp     = alloc_regi(LOCATIVE)
-		val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
+		val ptag_opt = make_ptag_opt()
 		val len = load_ireg_locval(vl1,NONE)
 		val v = load_ireg_locval(vl2,NONE)
 		val gafter = fresh_code_label "array_ptr_aftert"
@@ -510,7 +530,13 @@ struct
 	    in  (add_instr(LI((i2w 4096),cmptemp));
 		 add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
 		 add_instr(BCNDI(NE,cmptemp,psmall_alloc,true));
-		 add_instr(PTR_ALLOC(len,v,dest,ptag));
+		 add_instr(CALL{call_type = C_NORMAL,
+				func = LABEL' (C_EXTERN_LABEL "alloc_bigptrarray"),
+				args = ((case ptag_opt of
+					    NONE => [len,v]
+					  | SOME ptag => [len,v,ptag]), []),
+				results = ([dest],[]),
+				save = SAVE(getLocals())});
 		 add_instr(BR gafter);
 		 do_code_align();
 		 add_instr(ILABEL psmall_alloc);
@@ -522,7 +548,7 @@ struct
 		 else ();
 		     needgc(state,REG gctemp);
 		     mk_ptrarraytag(len,tag);
-		     general_init_case(ptag,tag,dest,
+		     general_init_case(ptag_opt,tag,dest,
 				       VAR_LOC(VREGISTER(false,I gctemp)),
 				       len,v,gafter,true);
 		     (* after all this allocation, we cannot merge *)

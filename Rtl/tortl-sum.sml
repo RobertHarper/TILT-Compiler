@@ -323,7 +323,7 @@ struct
 	  val summand_type = (List.nth(sumtypes,w2i field_sub)
 			      handle _ => error "bad project_sum: record_con")
 
-	  val dest as I desti = alloc_reg_trace state traceinfo
+	  val (_,dest as I desti) = alloc_reg_trace state traceinfo
 
 	  fun single_case() = 
 	      let val afterl = fresh_code_label "projsum_single_after"
@@ -437,7 +437,7 @@ struct
 	      in  loop 0 labs_cons
 	      end
 
-	  val I desti = alloc_reg_trace state niltrace
+	  val (_,I desti) = alloc_reg_trace state niltrace
 	  val subscript = if single_carrier then recfield_index else recfield_index + 1
 	  val _ = add_instr(LOAD32I(EA(base,4*subscript),desti))
       in (VAR_LOC(VREGISTER(false, I desti)), recfield_con, state)
@@ -457,7 +457,7 @@ struct
 
 	  fun unbox offset =
 	      let val ir = load_ireg_locval(lv,NONE)
-		  val I desti = alloc_reg_trace state niltrace
+		  val (_,I desti) = alloc_reg_trace state niltrace
 		  val _ = add_instr(LOAD32I(EA(ir,offset), desti))
 	      in  (VAR_LOC(VREGISTER(false, I desti)), summand_type,state)
 	      end

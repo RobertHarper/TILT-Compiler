@@ -115,7 +115,9 @@ struct
     | tt2s REAL_TT = "(REAL_TT)"
     | tt2s BOTH_TT = "(BOTH_TT)"
 
-
+  fun calltype2s ML_NORMAL = "ML_NORMAL"
+    | calltype2s (ML_TAIL r) = "ML_TAIL(" ^ (regi2s r) ^")"
+    | calltype2s C_NORMAL = "C_NORMAL"
 
   fun pp_LabelPair' (l,t) =
       HOVbox [String (label2s l),String (rep2s t)]
@@ -209,12 +211,6 @@ struct
               | FNEGD a => op2f "neg" a
 	      | CVT_REAL2INT a => opfi "floor" a
 	      | CVT_INT2REAL a => opif "int2real" a
-	      | SQRT  a => op2f "sqrt" a
-	      | SIN   a => op2f "sin" a
-	      | COS   a => op2f "cos" a
-	      | ARCTAN a => op2f "arctan" a
-	      | EXP  a => op2f "exp" a
-	      | LN   a => op2f "ln" a
 	      | CMPF (cmp,r,v,dest) => opffi (cmpf2s cmp) (r,v,dest)
               | BR l => String("br "^label2s l)
               | BCNDI (cmp,regi,dest,pred) =>
@@ -245,12 +241,12 @@ struct
 			  else nil))
               | JMP (r,labels) => Hbox [String ("jmp "^regi2s r),
 					pp_List' (String o label2s) labels]
-              | CALL {extern_call, func,return : regi option,args=(ia,fa),
-			results=(ir,fr),tailcall,save} =>
+              | CALL {call_type, func, args=(ia,fa),
+		      results=(ir,fr), save} =>
 		   HOVbox0 1 15 1
-		   [String (extend (if extern_call then "ext_call" else  "call")),
-		    String (case func
-				of REG' f => (regi2s f)
+		   [String (extend ("call_" ^ (calltype2s call_type))),
+		    String (case func of
+				REG' f => (regi2s f)
 			      | LABEL' l => (label2s l)),
 		    Break,
 		    String "arguments = (",
@@ -261,14 +257,8 @@ struct
 		    pp_RegPair'(ir,fr),
 		    Break,
 
-		    String "{ret= ",
-		    String (case return
-				of (SOME ret) => (regi2s ret)
-			      | _ => "none"),
 		    if !elideSave then String ""
 		    else (HOVbox [String " saved = ",pp_Save' save]),
-			String " tailcall = ",
-			String (bool2s tailcall),
 			String "}"]
               | RETURN r => plain["return", regi2s r]
 	      | SAVE_CS  l => String ("save_cs"^label2s l)
@@ -285,15 +275,7 @@ struct
 	      | INIT (ea,r,SOME r2) => plain ["init_dyn ",regi2s r,", ", regi2s r2, ", ", ea2s ea]
 
               | NEEDGC (sv)     => plain ["needgc ",sv2s sv]
-              | FLOAT_ALLOC(r1,r2,r3,tag) => 
-		   plain [regi2s r3, " <- float_alloc ",
-			  regi2s r1,"  ",regf2s r2]
-              | INT_ALLOC(r1,r2,r3,tag) => 
-		   plain [regi2s r3, " <- int_alloc ",
-			  regi2s r1,"  ",regi2s r2]
-              | PTR_ALLOC(r1,r2,r3,tag) => 
-		   plain [regi2s r3, " <- ptr_alloc ",
-			  regi2s r1,"  ",regi2s r2]
+
 	      | (SOFT_VBARRIER tt) => String ("soft_vbarrier" ^ (tt2s tt))
 	      | (SOFT_ZBARRIER tt) => String ("soft_zbarrier" ^ (tt2s tt))
 	      | (HARD_VBARRIER tt) => String ("hard_vbarrier" ^ (tt2s tt))

@@ -86,6 +86,8 @@ sig
                  | ODDOCTA (* 16 bytes bound + 12 *)
 
   datatype traptype = INT_TT | REAL_TT | BOTH_TT
+  datatype calltype = ML_NORMAL | ML_TAIL of regi | C_NORMAL
+
   datatype instr = 
       LI     of TilWord32.word * regi
     | LADDR  of label * int * regi
@@ -130,12 +132,6 @@ sig
     | FABSD  of regf * regf 
     | FNEGD  of regf * regf
 
-    | SQRT   of regf * regf
-    | SIN    of regf * regf
-    | COS    of regf * regf
-    | ARCTAN of regf * regf
-    | EXP    of regf * regf
-    | LN     of regf * regf
     | CMPF   of cmp * regf * regf * regi
 
     (* flow of control instructions *)
@@ -162,23 +158,20 @@ sig
 
     (* CALL function will invoke the function identified in _func
        at the point of invocation, the arguments lie in _arg
-       upon a return, the code expects its results to be in _results
-       the return should be made to the value in _return
-		if _return is NONE, then return to the instr after CALL
-       if _tailcall is true, then it happens to be that the
-		return values from this call can be directly
-		returned to the caller of THIS function
-       _save contains registers the caller would like saved
+       Upon a return, the code expects its results to be in _results
+       The call may be a normal ML call or a normal C call.  If the call
+          is an ML tailcall, then there are no results and the extra
+	  register contains the return address to return to.
+           _save contains registers the caller would like saved
 		and restored
     *)
 
-    | CALL of {extern_call : bool,
+    | CALL of {call_type : calltype,
 	       func: reg_or_label,
-	       return : regi option,
 	       args : regi list * regf list, 
 	       results : regi list * regf list,
-	       tailcall : bool,
 	       save : save}
+
     | RETURN of regi                 (* address to return to *)
 
     (* exceptions --- we implement exceptions by saving the
@@ -235,13 +228,7 @@ sig
 
     | NEEDGC of sv          (* needgc(sv) calls garbage collector if that
 			       many words are not allocatable *)
-    | FLOAT_ALLOC of regi * regf * regi * TilWord32.word  (* number of floats *)
-    | INT_ALLOC   of regi * regi * regi * TilWord32.word  (* number of bytes *)
-    | PTR_ALLOC   of regi * regi * regi * TilWord32.word  (* number of words *)
-                            (* len, value, dest:
-			     allocate a f/i/p array of logical length len
-			     filled with the f/i/p value v and put the
-			     result in dest *)
+
     (* for signalling hardware(Alpha): SOFT -> BARRIER; HARD -> nop
       for non-signalling hardware(PPC): SOFT -> NOP; HARD -> test-and-branch *)
     | SOFT_VBARRIER of traptype

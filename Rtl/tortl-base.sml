@@ -585,8 +585,8 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
        fun alloc_reg_trace state trace = 
 	   let val rep = niltrace2rep state trace
 	   in  case rep of
-	       NOTRACE_REAL => F(alloc_regf())
-	     | _ => I(alloc_regi rep)
+	       NOTRACE_REAL => (rep,F(alloc_regf()))
+	     | _ => (rep,I(alloc_regi rep))
 	   end
 
        fun alloc_reg state c = 

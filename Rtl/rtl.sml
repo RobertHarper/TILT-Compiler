@@ -88,6 +88,7 @@ struct
   datatype cmp =  EQ | LE  | LT  | GE  | GT | NE | LBC | LBS
 
   datatype traptype = INT_TT | REAL_TT | BOTH_TT
+  datatype calltype = ML_NORMAL | ML_TAIL of regi | C_NORMAL
   datatype instr = 
       LI     of TilWord32.word * regi
     | LADDR  of label * int * regi
@@ -132,12 +133,6 @@ struct
     | FABSD  of regf * regf 
     | FNEGD  of regf * regf
 
-    | SQRT   of regf * regf
-    | SIN    of regf * regf
-    | COS    of regf * regf
-    | ARCTAN of regf * regf
-    | EXP    of regf * regf
-    | LN     of regf * regf
     | CMPF   of cmp * regf * regf * regi
 
     (* flow of control instructions *)
@@ -161,12 +156,10 @@ struct
 
     (* see sig for comments *)
 
-    | CALL of {extern_call : bool,
+    | CALL of {call_type : calltype,
 	       func: reg_or_label,
-	       return : regi option,
 	       args : regi list * regf list, 
 	       results : regi list * regf list,
-	       tailcall : bool,
 	       save : save}
     | RETURN of regi                 (* address to return to *)
 
@@ -186,9 +179,6 @@ struct
     | INIT of ea * regi * regi option     (* if option is present, a nonzero value indicates pointer *)
 
     | NEEDGC     of sv
-    | FLOAT_ALLOC of regi * regf * regi * TilWord32.word
-    | INT_ALLOC   of regi * regi * regi * TilWord32.word
-    | PTR_ALLOC   of regi * regi * regi * TilWord32.word
           
     | SOFT_VBARRIER of traptype
     | SOFT_ZBARRIER of traptype

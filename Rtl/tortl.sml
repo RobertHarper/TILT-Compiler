@@ -420,18 +420,16 @@ struct
 				     
 		      val (_,ExternArrow_c(_,rescon)) = simplify_type state funcon
 		      val SOME niltrace = traceinfo_opt
-		      val dest = alloc_reg_trace state niltrace
+		      val (_,dest) = alloc_reg_trace state niltrace
 		      val results = (case dest of
 					 F fr => ([],[fr])
 				       | I ir => ([ir],[]))	      
 		      val _ = add_instr(LI(0w1,tmp1))
 		      val _ = add_instr(STORE32I(EA(SREGI THREADPTR,notinml_disp),tmp1))
-		      val _ = add_instr(CALL{extern_call = true,
+		      val _ = add_instr(CALL{call_type = C_NORMAL,
 					     func=fun_reglabel,
-					     return= NONE,
 					     args=(iregs,fregs),
 					     results=results,
-					     tailcall = false,
 					     save=SAVE(getLocals())})
 		      val _ = add_instr(LI(0w0,tmp2))
 		      val _ = add_instr(STORE32I(EA(SREGI THREADPTR,notinml_disp),tmp2))
@@ -534,7 +532,6 @@ struct
 					  print "funcon = \n"; Ppnil.pp_con funcon; print "\n";
 					  print "reduced to \n"; Ppnil.pp_con c; print "\n";
 					  error "cannot compute type of result of call"))
-						     
 		      end
 
 		      val iregs = (cregsi @ cregsi' @ 
@@ -544,40 +541,39 @@ struct
 		      val fregs = map coercef efregs
 
 		      val SOME niltrace = traceinfo_opt
-		      fun thunk() = alloc_reg_trace state niltrace
-		      fun do_call return_opt = 
-			  let val tailcall=(case return_opt of
-						       SOME _ => true
-						     | NONE => false)
-			      val dest = if tailcall
-					     then getResult thunk
-					 else thunk()
-			      val results = (case dest of
-						 F fr => ([],[fr])
-					       | I ir => ([ir],[]))	      
-			      val _ = add_instr(CALL{extern_call = false,
-						     func=fun_reglabel,
-						     return=return_opt,
-						     args=(iregs,fregs),
-						     results=results,
-						     tailcall = tailcall,
-						     save=SAVE(getLocals())})
-			  in  dest
-			  end
-		      val dest = (case (context,#elim_tail_call(!cur_params),selfcall) of
-					(NOTID,_,_) => do_call NONE
-				      | (_, false,_) => do_call NONE
-				      | (ID r,true,true) =>  
-					    (shuffle_iregs(iregs,getArgI());
-					     shuffle_fregs(fregs,getArgF());
-					     add_instr(BR (getTop()));
-					     thunk())
-				      | (ID r,true,false) => do_call (SOME r))
-		      val result = (VAR_LOC(VREGISTER (false,dest)), rescon,
-				     new_gcstate state)
-		      val _ = add_instr (ICOMMENT ("done making " ^ call_type))
-
-		  in  result
+		      val (resrep,dest) = alloc_reg_trace state niltrace
+		      val context = if (#elim_tail_call(!cur_params))
+					then context
+				    else NOTID
+		      val results = (case dest of
+					 F fr => ([],[fr])
+				       | I ir => ([ir],[]))
+		  in
+		      (case (context,selfcall) of
+			   (NOTID, _) => 
+			       (add_instr(CALL{call_type = ML_NORMAL,
+					       func = fun_reglabel,
+					       args = (iregs,fregs),
+					       results = results,
+					       save=SAVE(getLocals())});
+				add_instr (ICOMMENT ("done making normal call"));
+				(VAR_LOC(VREGISTER (false,dest)), rescon,
+				 new_gcstate state))
+			 | (ID r,true) =>  
+			       (shuffle_iregs(iregs,getArgI());
+				shuffle_fregs(fregs,getArgF());
+				add_instr(BR (getTop()));
+				add_instr (ICOMMENT ("done making self tail call"));
+				(VAR_VAL (VVOID resrep), rescon, state))
+			 | (ID r,false) =>
+			       (add_instr(CALL{call_type = ML_TAIL r,
+					       func=fun_reglabel,
+					       args=(iregs,fregs),
+					       results=([],[]),
+					       save=SAVE([],[])});
+				add_instr (ICOMMENT ("done making tail call"));
+				(VAR_LOC(VREGISTER (false,dest)), rescon,
+				 new_gcstate state)))
 		  end
 
 	    | Raise_e (exp, con) =>
@@ -748,7 +744,7 @@ struct
 	      val (zero,zcon,state_zero) = xexp'(state,fresh_named_var "zero_result", 
 						 zeroexp, traceinfo_opt, context)
 	      val SOME traceinfo = traceinfo_opt
-	      val dest = alloc_reg_trace state traceinfo
+	      val (_,dest) = alloc_reg_trace state traceinfo
 	      val _ = (case (zero, dest) of 
 			   (I zz, I d) => add_instr(MV (zz,d))
 			 | (F zz, F d) => add_instr(FMV (zz,d))
@@ -778,7 +774,7 @@ struct
 	  val dest = ref NONE
 	  val SOME traceinfo = traceinfo_opt
 	  fun mv (r,c) = let val _ = (case (!dest) of
-					  NONE => dest := (SOME (alloc_reg_trace state traceinfo))
+					  NONE => dest := (SOME (#2(alloc_reg_trace state traceinfo)))
 					| _ => ())
 			     val _ = (case !rescon of
 					  NONE => rescon := SOME c
@@ -1039,7 +1035,7 @@ struct
 							else loop lrest crest (n+1)
 		   val (which,con) = loop labels fieldcons 0
 		   val I desti = (case traceinfo_opt of
-				      SOME traceinfo => alloc_reg_trace state traceinfo
+				      SOME traceinfo => #2(alloc_reg_trace state traceinfo)
 				    | _ => alloc_reg state con)
 		   val _ = add_instr(LOAD32I(EA(addr,which * 4), desti))
 	       in  (VAR_LOC(VREGISTER(false, I desti)), con, state)
@@ -1730,12 +1726,10 @@ struct
 		       val _ = (add_instr(LOAD32I(EA(clregi,0),coderegi));
 				add_instr(LOAD32I(EA(clregi,4),envregi)))
 		       val desti = alloc_regi TRACE
-		       val _ = add_instr(CALL{extern_call = false,
+		       val _ = add_instr(CALL{call_type = ML_NORMAL,
 					      func=REG' coderegi,
-					      return=NONE,
 					      args=(cregsi @ [envregi],[]),
 					      results=([desti],[]),
-					      tailcall=false,
 					      save=SAVE(getLocals())})
 		       val state = new_gcstate state
 		       val _ = add_instr(ICOMMENT "done making constructor call")
@@ -1971,6 +1965,40 @@ struct
 
 	 in module
 	 end
+
+     fun entryTables nl =
+	 let val nl = map (fn ML_EXTERN_LABEL str => str
+	                    | _ => error "bad RTL label") nl
+	     val count = length nl
+             fun mktable(name,suffix) =
+		 DLABEL (ML_EXTERN_LABEL name) ::
+		 map (fn s => DATA(ML_EXTERN_LABEL (s ^ suffix))) nl
+	     val gc_table_begin =    mktable("GCTABLE_BEGIN_VAL","_GCTABLE_BEGIN_VAL")
+	     val gc_table_end =	     mktable("GCTABLE_END_VAL","_GCTABLE_END_VAL")
+	     val sml_globals =       mktable("SML_GLOBALS_BEGIN_VAL","_SML_GLOBALS_BEGIN_VAL")
+	     val end_sml_globals =   mktable("SML_GLOBALS_END_VAL","_SML_GLOBALS_END_VAL")
+	     val muttable_begin =    mktable("MUTABLE_TABLE_BEGIN_VAL","_MUTABLE_TABLE_BEGIN_VAL")
+	     val muttable_end =      mktable("MUTABLE_TABLE_END_VAL","_MUTABLE_TABLE_END_VAL")
+	     val codetable_begin =   mktable("CODE_BEGIN_VAL","_CODE_BEGIN_VAL")
+	     val codetable_end =     mktable("CODE_END_VAL","_CODE_END_VAL")
+             val entrytable =        mktable("client_entry","")
+	     val count = [DLABEL (ML_EXTERN_LABEL "module_count"),
+			  INT32 (TilWord32.fromInt count)]
+	     val data = count @
+		 gc_table_begin @
+		 gc_table_end @
+		 sml_globals @
+		 end_sml_globals @
+		 muttable_begin @
+		 muttable_end @
+		 codetable_begin @
+		 codetable_end @
+		 entrytable
+	 in  MODULE{procs = [], data = data,
+		    main = ML_EXTERN_LABEL "linkfile", 
+		    mutable = []}
+         end
+
 
 
 end;

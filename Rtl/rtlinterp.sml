@@ -537,13 +537,7 @@ fun trap() =
 	      | _ => error "step: FCVTI"
 	in update_freg(dest,QFLOAT(O.long_to_real(lons)))
 	end
-      | step (SQRT(a,dest)) = update_freg(dest,QFLOAT(Math.sqrt(getfval(a))))
       | step (CVT_REAL2INT(a,dest)) = update_ireg(dest,lpack(wzero,i2w(floor(getfval(a)))))
-      | step (SIN(a,dest)) = update_freg(dest,QFLOAT(Math.sin(getfval(a))))
-      | step (COS(a,dest)) = update_freg(dest,QFLOAT(Math.cos(getfval(a))))
-      | step (ARCTAN(a,dest)) = update_freg(dest,QFLOAT(Math.atan(getfval(a))))
-      | step (EXP(a,dest)) = update_freg(dest,QFLOAT(Math.exp(getfval(a))))
-      | step (LN(a,dest)) = update_freg(dest,QFLOAT(Math.ln(getfval(a))))
 
       | step (CMPF(cmp,a,b,dest)) = 
 	let val res = (O.cmpf_to_fun cmp)(getfval(a),getfval(b))
@@ -572,9 +566,6 @@ fun trap() =
       | step (STOREQF(ea,ri)) = H.storequad(ea_to_val(ea,8),getfreg(ri))
       | step (NEEDMUTATE(addr)) = ()
       | step (NEEDGC(sz)) = ()
-      | step (FLOAT_ALLOC(sz,v,dest,ptag)) = error "float_alloc not done for rtlinterp"
-      | step (INT_ALLOC(sz,v,dest,ptag)) = error "int_alloc not done for rtlinterp"
-      | step (PTR_ALLOC(sz,v,dest,ptag)) = error "ptr_alloc not done for rtlinterp"
       | step (IALIGN _) = error "alignment not done for rtlinterp"
       | step (ILABEL _) = ()
       

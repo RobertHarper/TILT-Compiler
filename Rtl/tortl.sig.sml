@@ -17,5 +17,6 @@ sig
 
    val translate : string -> translate_params -> Nil.module -> Rtl.module
                    (* unit name *)
+   val entryTables : Rtl.label list -> Rtl.module
 
 end
