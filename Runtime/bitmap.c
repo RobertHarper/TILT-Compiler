@@ -37,7 +37,7 @@ static int GetBit(unsigned long *data, int i)
 {
   int long_pos = i >> log_size_long;
   int bit_pos = i & mask_long;
-  return (data[long_pos] & (1UL << bit_pos));
+  return (data[long_pos] >> bit_pos) & 1UL;
 }
 
 static void SetBit(unsigned long *data, int i)
