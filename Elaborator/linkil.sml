@@ -373,16 +373,18 @@ structure LinkIl (* : LINKIL *) =
 						   Ppil.pp_context context;
 						   print "\n")
 					 else ()
-			    in   (case ((Stats.timer("SANITY_CHECK",sanity_check))
+			    in  ()
+			    (* (case ((Stats.timer("SANITY_CHECK",sanity_check))
 					(context,m,precise_s,given_s)) of
 				      NONE => ()
 				    | SOME str => (print "\n\n****** SANITY_CHECK FAILED: ";
 						   print str;
 						   print " ******\n\n";
 						   error "sanity-check"))
+				   *)
 			    end
-		    else ()
-*)
+		    else ()*)
+
 		val _ = if doprint
 			    then (print "\n\n\nELABORATION SUCESSFULLY COMPLETED\n\n\n"; 
 				  Ppil.pp_sbnds sbnds;
