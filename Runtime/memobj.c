@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <assert.h>
 #include <stdio.h>
 #include <errno.h>
@@ -589,6 +590,20 @@ mem_t StackError(ucontext_t *ucontext, mem_t badadd)
 
 extern mem_t datastart;
 
+static unsigned long rlimit(int resource)
+{
+  struct rlimit r;
+  int e;
+  unsigned long unlimited = (unsigned long)INT_MAX;
+
+  e = getrlimit(resource,&r);
+  if(e==-1)
+    return unlimited;
+  if(r.rlim_max == RLIM_INFINITY)
+    return unlimited;
+  return ((unsigned long)(int)r.rlim_max) * 0.90;
+}
+
 void memobj_init(void)
 {
   Stacklet_t *s1, *s2;
@@ -601,6 +616,11 @@ void memobj_init(void)
 
   max_bytes = (unsigned long)INT_MAX;
   max_bytes = Min(max_bytes, mem_bytes);
+  max_bytes = Min(max_bytes, rlimit(RLIMIT_DATA));
+  max_bytes = Min(max_bytes, rlimit(RLIMIT_AS));
+  #ifdef RLIMIT_VMEM
+  max_bytes = Min(max_bytes, rlimit(RLIMIT_VMEM));
+  #endif
 
   init_int(&MinHeapByte, min_bytes);
   init_int(&MaxHeapByte, 0.40 * max_bytes);
