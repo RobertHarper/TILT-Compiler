@@ -1,16 +1,52 @@
 Number: 0108
 Title:       Parsing of infix(r) declarations is not correct.
-Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Keywords:    SML/NJ parser parsing infix picky
 Submitter:   tom7
 Date:        08/16/02
-Version:     <TILT version number>
-System:      <e.g. solaris,alpha,linux>
-Severity:    <critical, major, minor, cosmetic>
-Problem:     <description of problem>
-Code:        <SML source code to reproduce the bug>
-Transcript:  <transcript of execution demonstating the bug>
-Comments:    <additional comments>
-Fix:         <optional - but you get extra credit>
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     
+
+     The SML/NJ parser parses infix(r) declarations incorrectly,
+     primarily because it does not look for a single decimal
+     digit after infix(r), and instead attempts to lex the next
+     token and extract a number from it. This can result in
+     correct programs being rejected, incorrect programs being
+     accepted, and incorrect program behavior.
+
+Code:
+
+     Some declarations that should be accepted:
+
+     infix 0x0
+     infix 0e0
+     infix 0w0
+     
+     infix 0x90 a
+
+     Some declarations that should be rejected:
+
+     infix 00 x
+     infix ~0 x
+
+     Example code that runs incorrectly:
+
+     (* should parse as infix 0 x0 l,
+	  but parses as infix 0 l *)
+     infix 0x0 l
+	
+     val op x0 = 0
+     fun f _ _ = 2
+     fun f x0 0 = 1
+       | f x0 x = f 0 (x - 1)
+
+     val x = if f x0 1 = 1 then print "WRONG\n"
+ 	                   else print "OK\n"
+
+Transcript:
+Comments: 
+Fix:
 Test: *
 Owner: *
 Status: open
