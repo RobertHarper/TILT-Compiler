@@ -778,6 +778,18 @@ struct
 	in  f_kind handler k;
 	    !cvars_ref
 	end
+
+    fun freeVarInKind k =
+	let val (evars_ref,cvars_ref,handler) = free_handler true
+	in  f_kind handler k;
+	    (!evars_ref) @ (!cvars_ref)
+	end
+
+    fun freeVarInCon c =
+	let val (evars_ref,cvars_ref,handler) = free_handler true
+	in  f_con handler c;
+	    (!evars_ref) @ (!cvars_ref)
+	end
   end
 
   fun expvars_occur_free (vars : var list, exp : exp) : bool = 

@@ -246,7 +246,7 @@ structure Linknil (* :> LINKNIL  *) =
 
 
  	    val nilmod = check (typecheck_after_opt,show_typecheck,
-				    "Nil typechecking - post opt",
+				    "Nil_typecheck_post-opt",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
 	
@@ -275,7 +275,7 @@ structure Linknil (* :> LINKNIL  *) =
 
 
  	    val nilmod = check (typecheck_after_cc,show_typecheck,
-				    "Nil typechecking - post cc",
+				    "Nil_typecheck_post-cc",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
 

@@ -7,6 +7,8 @@ signature NILUTIL =
     val freeExpConVarInExp : bool * Nil.exp -> Nil.var list * Nil.var list (* free term and type level vars *)
     val freeConVarInCon    : bool * Nil.con -> Nil.var list (* free type level vars *)
     val freeConVarInKind   : Nil.kind -> Nil.var list (* free type level vars in kind*)
+    val freeVarInKind      : Nil.kind -> Nil.var list
+    val freeVarInCon       : Nil.con -> Nil.var list
 
     val muExpand : bool * (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
     val generate_tuple_label : int -> Name.label
