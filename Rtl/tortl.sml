@@ -505,7 +505,8 @@ struct
 			  val rescon = 
 			      (case (#2(simplify_type state funcon)) of
 				   Prim_c(Vararg_c _, [_,rescon]) => reduce([],clist,rescon)
-				 | AllArrow_c{tFormals,body,...} => reduce(tFormals,clist,body)
+				 | AllArrow_c{tFormals,body_type,...} => 
+				       reduce(tFormals,clist,body_type)
 				 | c => (print "cannot compute type of result of call\n";
 					  print "funcon = \n"; Ppnil.pp_con funcon; print "\n";
 					  print "reduced to \n"; Ppnil.pp_con c; print "\n";
@@ -742,7 +743,7 @@ struct
 	  val switchcount = Stats.counter("RTLswitch")()
       in
 	  case sw of
-	      Intsw_e {size, arg, arms, default} => 
+	      Intsw_e {size, arg, arms, default, result_type} => 
 		  let val (r,state) = (case (xexp'(state,fresh_named_var "intsw_arg",arg,
 						   Nil.TraceUnknown,NOTID)) of
 				   (I ireg,_,state) => (ireg,state)
@@ -790,7 +791,7 @@ struct
 				| _ => error "no arms"
 			  end
 		  end
-	    | Exncase_e {arg, bound, arms, default} => 
+	    | Exncase_e {arg, bound, arms, default, result_type} => 
 		  let
 		      val (I exnarg,_,state) = xexp'(state,fresh_named_var "exncase_arg",arg,
 						     Nil.TraceUnknown,NOTID)
@@ -846,7 +847,7 @@ struct
 			| _ => error "no arms"
 		  end 
 	    | Typecase_e _ => error "typecase_e not implemented"
-	    | Sumsw_e {sumtype, arg, bound, arms, default} =>
+	    | Sumsw_e {sumtype, arg, bound, arms, default, result_type} =>
 	      let val (tagcount,_,cons) = reduce_to_sum "sumsw" state sumtype
 		  val totalcount = tagcount + TilWord32.fromInt(length cons)
 		  fun spcon i = Prim_c(Sum_c{tagcount=tagcount,
@@ -1112,7 +1113,7 @@ struct
 		       val (state,resulti) = TortlVararg.xmake_onearg local_xexp (state,argc,resc,function)
 		   in  (LOCATION(REGISTER(false, I resulti)), 
 			AllArrow_c{openness=openness,effect=eff,isDependent=false,
-				   tFormals=[],eFormals=[(NONE,c1)],fFormals=0w0,body=c2},
+				   tFormals=[],eFormals=[(NONE,c1)],fFormals=0w0,body_type=c2},
 			state)
 		   end
 	 | peq => error "peq not done")
@@ -1587,10 +1588,10 @@ struct
 		   end
 *)
 	     | AllArrow_c {openness=Open,...} => error "open Arrow_c"
-	     | AllArrow_c {openness=Closure,eFormals=clist,fFormals=numfloat,body=c,...} => 
+	     | AllArrow_c {openness=Closure,eFormals=clist,fFormals=numfloat,body_type=c,...} => 
 		   mk_sum_help(state,NONE,[9],[])
 (*		   mk_sum_help(NONE,[9,TW32.toInt numfloat],c::clist) *)
-	     | AllArrow_c {openness=Code,eFormals=clist,fFormals=numfloat,body=c,...} => 
+	     | AllArrow_c {openness=Code,eFormals=clist,fFormals=numfloat,body_type=c,...} => 
 (*		   mk_sum_help(state,NONE,[10,TW32.toInt numfloat],c::clist) *)
 		   mk_sum_help(state,NONE,[10],[])
 	     | ExternArrow_c _ =>
@@ -1606,7 +1607,7 @@ struct
 						      | REGISTER (const,_) => const)
 				in  (const, LOCATION vl,k)
 				end
-			  | (NONE,NONE,_) => error "no info on convar")
+			  | (NONE,NONE,_) => error ("no info on convar" ^ (Name.var2string v)))
 		   in  (vl,vv,k,state)
 		   end
 	     | Let_c (letsort, cbnds, c) => 

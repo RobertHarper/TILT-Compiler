@@ -48,7 +48,7 @@ val debug_full = ref false
 		val venv_var = Name.fresh_named_var "vararg_support_venv"
 		val venv_type = AllArrow_c{openness=Closure,effect=Partial,isDependent=false,
 					   tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,
-					   body=resc}
+					   body_type=resc}
 		val expvars = map0count (fn n => Name.fresh_named_var 
 					 ("vararg_support_expvar_" ^ (Int.toString n))) n
 		val vclist = mapcount (fn (n,ev) => (ev,proj n)) expvars
@@ -73,13 +73,13 @@ val debug_full = ref false
 					eFormals=[(NONE,
 						   con_tuple(map (Var_c o #1) (Listops.butlast vklist)))],
 					fFormals=0w0,
-					body=Var_c(#1(List.last vklist))}
+					body_type=Var_c(#1(List.last vklist))}
 		val flat_funcon = AllArrow_c{openness=Closure,effect=Partial,isDependent=false,
 					     tFormals=[],
 					     eFormals=map (fn (v,_) => (NONE, Var_c v))
 					                 (Listops.butlast vklist), 
 					     fFormals=0w0,
-					     body=Var_c(#1(List.last vklist))}
+					     body_type=Var_c(#1(List.last vklist))}
 		val vcl = (resvar,{code=codevar,venv=Var_e funvar,
 				   cenv=con_tuple_inject(map Var_c convars),
 				   tipe=flat_funcon})
@@ -113,7 +113,7 @@ val debug_full = ref false
 					   tFormals=[], 
 					   eFormals=map (fn c => (NONE,c)) argcs, 
 					   fFormals=0w0,
-					   body=resc}
+					   body_type=resc}
 		val expvar = Name.fresh_named_var "onearg_support_expvar"
 		val args = map0count (fn n => Prim_e(NilPrimOp(select(generate_tuple_label (n+1))),
 						     [], [Var_e expvar])) n
@@ -138,13 +138,13 @@ val debug_full = ref false
 					eFormals=[(NONE,
 						   con_tuple(map (Var_c o #1) (Listops.butlast vklist)))], 
 					fFormals=0w0,
-					body=Var_c(#1(List.last vklist))}
+					body_type=Var_c(#1(List.last vklist))}
 		val flat_funcon = AllArrow_c{openness=Closure,effect=Partial, isDependent=false,
 					     tFormals=[],
 					     eFormals=map (fn (v,_) => (NONE, Var_c v)) 
 					                  (Listops.butlast vklist), 
 					     fFormals=0w0,
-					     body=Var_c(#1(List.last vklist))}
+					     body_type=Var_c(#1(List.last vklist))}
 		val vcl = (resvar,{code=codevar,venv=Var_e funvar,
 				   cenv=con_tuple_inject(map Var_c convars),
 				   tipe=funcon})
@@ -205,7 +205,7 @@ val debug_full = ref false
 		    val funcon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
 					    tFormals=[], 
 					    eFormals=[(NONE,con_tuple(map Var_c convars))],
-					    fFormals=0w0, body=Var_c resconvar}
+					    fFormals=0w0, body_type=Var_c resconvar}
 		    val state = add_term  (state,funvar,funcon,
 					   LOCATION(REGISTER (false,I function)))
 		    val e = App_e(Code,Var_e supportvar,(map Var_c convars) @ [Var_c resconvar],
@@ -265,7 +265,7 @@ val debug_full = ref false
 		    val funcon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
 					    tFormals=[], 
 					    eFormals=[(NONE,con_tuple(map Var_c convars))],
-					    fFormals=0w0, body=Var_c resconvar}
+					    fFormals=0w0, body_type=Var_c resconvar}
 		    val state = add_term  (state,funvar,funcon,
 					  LOCATION(REGISTER (false,I function)))
 		    val e = App_e(Code,Var_e supportvar,(map Var_c convars) @ [Var_c resconvar],

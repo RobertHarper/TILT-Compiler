@@ -393,10 +393,18 @@ struct
 		       | TraceInfo.Label => NOTRACE_LABEL
 		       | TraceInfo.Locative => LOCATIVE
 		       | TraceInfo.Compute (v,labs) => 
-			     let val SOME(_,_,k) = getconvarrep' state v
+			     ((let val SOME(_,_,k) = getconvarrep' state v
 				 val labs = cpath2indices state k labs
 			     in  pathcase(v,labs)
-			     end))
+			     end)
+				  handle _ => 
+				      (print "unbound representation ";
+				       Ppnil.pp_var v;
+				       print ".";
+				       app Ppnil.pp_label labs;
+				       print "\n";
+				       raise Match
+				      ))))
        end
 
    fun con2rep state con : rep =
