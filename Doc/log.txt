@@ -74,3 +74,22 @@ variables of type floating-point.  As a workaround, I have disabled the
 hoister and CSE for unboxed floating-point terms.
 
 ------------------------------------------------------------------------
+
+April 26
+
+	The optimzer rather than tortl is now responsible for
+lifting out the polymorphic array operations.  THe lifting
+is needed so we don't get too many copies of these operations
+which are rather lengthy.
+	
+	Since the optimizer binds variables rather early,
+we eneded up with NIL variables with their integer parts
+in the teens.  This had the bizarre effect that tortl
+translated them to RTL variables with the same low nbumbers.
+Unfortunately, these were then mapped to physical registers.
+In particular, I was fortunate enough to have the heap pointer
+trashed so I detected this quite quickly.  If it had been
+a normal physical register, this would have been very hard to 
+figure out.
+
+--------------------------------------------------------------------
