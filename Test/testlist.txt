@@ -20,8 +20,8 @@
 0002	fail	Top-level types and values, basis structures and sharing.
 0003	pass	Overloading.
 0004	pass	Hello world.
-0005    fail	Picky infix decl parsing bug.
-0006    fail	More infix decls that should be accepted.
+0005	fail	Picky infix decl parsing bug.
+0006	fail	More infix decls that should be accepted.
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
 m0003	pass	[Bug# 0098] Type variable syntax.
@@ -44,7 +44,7 @@ m0019	pass	Hello world in four lines.
 m0020	pass	Empty structure.
 m0021	pass	Explicit polymorphism and recursion.
 m0022	pass	Null tuple.
-m0024   pass	Merge sort.
+m0024	pass	Merge sort.
 m0025	fail	[Bug# 0100] Word value ranges.
 m0026	pass	Word32 checks.
 m0027	pass	Word sub checks.
@@ -72,147 +72,147 @@ m0049	pass	vectors
 m0050	pass	vectors
 m0051	pass	vectors
 m0052	pass	vector looping
-n0      fail	abstype not equality type
-n1      pass	scoping of abstype
-n2      pass	syntax error (exp in local top)
-n3      pass	syntax error (exp in local bottom)
-n4      pass	syntax error (exp in local bottom)
-n5      pass	syntax error (exp in let top)
-n6      fail	unresolved flex pattern
-n7      pass	arrow not an equality type
-n8      pass	exn not an equality type
-n9      pass	arrow not an equality type
-n10     pass	distinct namespaces of types and values
-n11     pass	ref constraint (obsolete imperative tyvar test)
-n12     pass	ref constraint (obsolete imperative tyvar test)
-n13     pass	record type mismatch
-n14     pass	records aren't ints
-n15     pass	scoping
-n16     pass	type shadowing and opaque datatypes
+n0	fail	abstype not equality type
+n1	pass	scoping of abstype
+n2	pass	syntax error (exp in local top)
+n3	pass	syntax error (exp in local bottom)
+n4	pass	syntax error (exp in local bottom)
+n5	pass	syntax error (exp in let top)
+n6	fail	unresolved flex pattern
+n7	pass	arrow not an equality type
+n8	pass	exn not an equality type
+n9	pass	arrow not an equality type
+n10	pass	distinct namespaces of types and values
+n11	pass	ref constraint (obsolete imperative tyvar test)
+n12	pass	ref constraint (obsolete imperative tyvar test)
+n13	pass	record type mismatch
+n14	pass	records aren't ints
+n15	pass	scoping
+n16	pass	type shadowing and opaque datatypes
 n16a	pass	opaque datatypes
-n17     pass	records aren't lists
-n18     pass	nested pairs aren't triples
-n19     pass	distinct type variables don't unify
-n20     pass	polymorphic constraint
-n21     pass	polymorphic constraint
-n22     pass	exception handler typing
-n23     pass	exception handler typing
-n24     pass	exception raise typing
-n25     pass	multi-arm fn typing
-n26     pass	multi-arm fn typing
-n27     pass	equality typing
-n28     pass	type inference with refs
-n29     pass	type inference with refs
-n30     pass	type inference with refs
-n31     pass	type inference with refs
-n32     pass	distinct type variables don't unify
-n33     pass	scope of explicit type variables
-n34     pass	non-equality datatype
-n35     fail	abstypes are not equality types
-n36     pass	scoping of abstype
-n37     pass	exception constructor in pattern match
-n38     pass	scoping of local
-n39     pass	opaque datatypes and type scope
+n17	pass	records aren't lists
+n18	pass	nested pairs aren't triples
+n19	pass	distinct type variables don't unify
+n20	pass	polymorphic constraint
+n21	pass	polymorphic constraint
+n22	pass	exception handler typing
+n23	pass	exception handler typing
+n24	pass	exception raise typing
+n25	pass	multi-arm fn typing
+n26	pass	multi-arm fn typing
+n27	pass	equality typing
+n28	pass	type inference with refs
+n29	pass	type inference with refs
+n30	pass	type inference with refs
+n31	pass	type inference with refs
+n32	pass	distinct type variables don't unify
+n33	pass	scope of explicit type variables
+n34	pass	non-equality datatype
+n35	fail	abstypes are not equality types
+n36	pass	scoping of abstype
+n37	pass	exception constructor in pattern match
+n38	pass	scoping of local
+n39	pass	opaque datatypes and type scope
 n39a	pass	type scope
 n39b	pass	opaque datatypes
-n40     pass	ints aren't reals
-n41     pass	scoping of and
-n42     pass	scoping of val
-n43     pass	occurs check in type inference
-n44     pass	scoping of "and" in type definition
-n45     pass	opaque datatypes and shadowing
-n46     pass	opaque datatypes and shadowing
-n47     pass	polymorphic exception
-n49     pass	type inference with records
-n50     pass	type inference with records
-n51     pass	type inference with records
-n52     pass	type inference with records
-n53     pass	type inference with type constructors
-n54     pass	type inference
-n55     fail	value restriction
-n56     fail	duplicate id pattern
-n57     fail	duplicate label in record
-n58     pass	duplicate label in record pattern
-n59     fail	duplicate label in record type
-n60     fail	duplicate id in "and" binding
-n61     fail	duplicate id in "and" type binding
-n62     fail	duplicate id in "and" type binding
-n63     fail	duplicate constructor in datatype
-n64     fail	duplicate constructor in exception "and" declaration
-n65     fail	duplicate type id in multi-datatype declaration
-n66     fail	duplicate constructor in multi-datatype declaration
-n67     fail	duplicate type argument in type definition
-n68     pass	duplicate type argument in datatype
-n69     fail	duplicate type argument in abstype
-n70     fail	unbound type variable in datatype
-n71     fail	unbound type variable in abstype
-n72     pass	illegal val rec
-n73     pass	illegal val rec
-n74     pass	illegal val rec
-n75     pass	illegal val rec
-n76     pass	miscellaneous
-n77     pass	bindings
-n78     pass	functions and pattern matchings
-n79     pass	withtype
-n80     pass	abstype
-n81     pass	simple equalities
-n82     fail	flex records
-n83     pass	equality types
-n84     pass	record equality
-n85     pass	shadowing
-n86     pass	parenthesization
-n87     pass	records
-n88     pass	list reversal
-n89     pass	type constraints
-n90     pass	exception handling
-n91     pass	monomorphic function application
-n92     pass	Denmark Core-SML accept test
-n93     pass	Denmark Core-SML accept test
-n94     pass	Denmark Core-SML accept test
-n95     pass	Denmark Core-SML accept test
-n96     pass	Denmark Core-SML accept test
-n97     pass	Denmark Core-SML accept test
-n98     fail	Denmark Core-SML accept test
-n99     fail	Denmark Core-SML accept test
-n100    pass	Denmark Core-SML accept test
-n101    pass	Denmark Core-SML accept test
-n102    fail	Denmark Core-SML accept test
-n103    fail	Denmark Core-SML accept test
-n104    pass	Denmark Core-SML accept test
-n105    pass	Denmark Core-SML accept test
-n106    pass	Denmark Core-SML accept test
-n107    pass	Denmark Core-SML accept test
-n108    pass	Denmark Core-SML accept test
-n109    fail	Denmark Core-SML accept test
-n110    pass	Denmark Core-SML accept test
-n111    pass	Denmark Core-SML accept test
-n112    pass	Denmark Core-SML accept test
-n113    pass	Denmark Core-SML accept test
-n114    pass	Denmark Core-SML accept test
-n115    pass	Denmark Core-SML accept test
-n116    pass	Denmark Core-SML accept test
-n117    fail	Denmark Core-SML accept test
-n118    pass	Denmark Core-SML accept test
-n119    pass	Denmark Core-SML accept test
-n120    pass	Denmark Core-SML accept test
-n121    pass	Denmark Core-SML accept test
-n122    pass	Denmark Core-SML accept test
-n123    pass	Denmark Core-SML accept test
-n124    pass	Denmark Core-SML accept test
-n125    pass	Denmark Core-SML accept test
-n126    fail	Denmark Core-SML accept test
-n127    pass	Denmark Core-SML accept test
-n128    pass	Denmark Core-SML accept test
-n129    pass	Denmark Core-SML accept test
-n130    fail	Denmark Core-SML accept test
-n131    pass	Denmark Core-SML accept test
-n132    pass	Denmark Core-SML accept test
-n133    pass	Denmark Core-SML accept test
-n134    pass	Denmark Core-SML accept test
-n135    pass	Denmark Core-SML accept test
-n136    pass	Denmark Core-SML accept test
-n137    pass	Denmark Core-SML accept test
-n138    fail	Denmark Core-SML accept test
+n40	pass	ints aren't reals
+n41	pass	scoping of and
+n42	pass	scoping of val
+n43	pass	occurs check in type inference
+n44	pass	scoping of "and" in type definition
+n45	pass	opaque datatypes and shadowing
+n46	pass	opaque datatypes and shadowing
+n47	pass	polymorphic exception
+n49	pass	type inference with records
+n50	pass	type inference with records
+n51	pass	type inference with records
+n52	pass	type inference with records
+n53	pass	type inference with type constructors
+n54	pass	type inference
+n55	fail	value restriction
+n56	fail	duplicate id pattern
+n57	fail	duplicate label in record
+n58	pass	duplicate label in record pattern
+n59	fail	duplicate label in record type
+n60	fail	duplicate id in "and" binding
+n61	fail	duplicate id in "and" type binding
+n62	fail	duplicate id in "and" type binding
+n63	fail	duplicate constructor in datatype
+n64	fail	duplicate constructor in exception "and" declaration
+n65	fail	duplicate type id in multi-datatype declaration
+n66	fail	duplicate constructor in multi-datatype declaration
+n67	fail	duplicate type argument in type definition
+n68	pass	duplicate type argument in datatype
+n69	pass	duplicate type argument in abstype
+n70	fail	unbound type variable in datatype
+n71	fail	unbound type variable in abstype
+n72	pass	illegal val rec
+n73	pass	illegal val rec
+n74	pass	illegal val rec
+n75	pass	illegal val rec
+n76	pass	miscellaneous
+n77	pass	bindings
+n78	pass	functions and pattern matchings
+n79	pass	withtype
+n80	pass	abstype
+n81	pass	simple equalities
+n82	fail	flex records
+n83	pass	equality types
+n84	pass	record equality
+n85	pass	shadowing
+n86	pass	parenthesization
+n87	pass	records
+n88	pass	list reversal
+n89	pass	type constraints
+n90	pass	exception handling
+n91	pass	monomorphic function application
+n92	pass	Denmark Core-SML accept test
+n93	pass	Denmark Core-SML accept test
+n94	pass	Denmark Core-SML accept test
+n95	pass	Denmark Core-SML accept test
+n96	pass	Denmark Core-SML accept test
+n97	pass	Denmark Core-SML accept test
+n98	fail	Denmark Core-SML accept test
+n99	fail	Denmark Core-SML accept test
+n100	pass	Denmark Core-SML accept test
+n101	pass	Denmark Core-SML accept test
+n102	fail	Denmark Core-SML accept test
+n103	fail	Denmark Core-SML accept test
+n104	pass	Denmark Core-SML accept test
+n105	pass	Denmark Core-SML accept test
+n106	pass	Denmark Core-SML accept test
+n107	pass	Denmark Core-SML accept test
+n108	pass	Denmark Core-SML accept test
+n109	fail	Denmark Core-SML accept test
+n110	pass	Denmark Core-SML accept test
+n111	pass	Denmark Core-SML accept test
+n112	pass	Denmark Core-SML accept test
+n113	pass	Denmark Core-SML accept test
+n114	pass	Denmark Core-SML accept test
+n115	pass	Denmark Core-SML accept test
+n116	pass	Denmark Core-SML accept test
+n117	fail	Denmark Core-SML accept test
+n118	pass	Denmark Core-SML accept test
+n119	pass	Denmark Core-SML accept test
+n120	pass	Denmark Core-SML accept test
+n121	pass	Denmark Core-SML accept test
+n122	pass	Denmark Core-SML accept test
+n123	pass	Denmark Core-SML accept test
+n124	pass	Denmark Core-SML accept test
+n125	pass	Denmark Core-SML accept test
+n126	fail	Denmark Core-SML accept test
+n127	pass	Denmark Core-SML accept test
+n128	pass	Denmark Core-SML accept test
+n129	pass	Denmark Core-SML accept test
+n130	fail	Denmark Core-SML accept test
+n131	pass	Denmark Core-SML accept test
+n132	pass	Denmark Core-SML accept test
+n133	pass	Denmark Core-SML accept test
+n134	pass	Denmark Core-SML accept test
+n135	pass	Denmark Core-SML accept test
+n136	pass	Denmark Core-SML accept test
+n137	pass	Denmark Core-SML accept test
+n138	fail	Denmark Core-SML accept test
 m0053	fail	[Bug #0118] val rec declarations
 m0054	fail	[Bug #0119] bytes and characters
 m0055	pass	character patterns
