@@ -5,7 +5,7 @@ Submitter:	swasey@cs.cmu.edu
 Date:	2/4/04
 Version:	CVS
 System:	any
-Severity:	major
+Severity:	minor
 Problem:
 
 	Our basis library implementation is out of date.

@@ -102,7 +102,7 @@
 0111 [closed]	runtime error: failed assertion
 0112 [closed]	option exception
 0113 [closed]	Parsing (op*)
-0114 [open]	overloading constants
+0114 [open]	Overloading 0w0 : Word8.word sometimes fails.
 0115 [closed]	withtype scoping wrong
 0117 [closed]	option failure
 0118 [closed]	Parsing of val rec
