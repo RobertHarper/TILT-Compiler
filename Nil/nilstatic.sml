@@ -9,8 +9,8 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 		    sharing NilUtil.Nil = NilContext.Nil = Alpha.Nil = PpNil.Nil = ArgNil
 		    and Annotation = ArgNil.Annotation
 		    and Prim = ArgNil.Prim = PrimUtil.Prim
-		    and type NilUtil.alpha_context = Alpha.alpha_context) (*:> 
-  sig include NILSTATIC sharing Nil = ArgNil and type context = NilContext.context end *)= 
+		    and type NilUtil.alpha_context = Alpha.alpha_context) :(*> *)
+  NILSTATIC (*where structure Nil = ArgNil and type context = NilContext.context *)= 
 struct	
   
   structure Annotation = Annotation
@@ -83,6 +83,9 @@ struct
     val map_second = Listops.map_second
     val zip3 = Listops.zip3
     val unzip3 = Listops.unzip3
+    val unzip = ListPair.unzip
+    val zip = ListPair.zip
+    val map = List.map
     val same_intsize = PrimUtil.same_intsize
     val same_floatsize = PrimUtil.same_floatsize
   end
@@ -136,6 +139,10 @@ struct
   fun strip_float (Prim_c (Float_c floatsize,[])) = SOME floatsize
     | strip_float (Annotate_c (_,con)) = strip_float con
     | strip_float _ = NONE
+
+  fun strip_sum (Prim_c (Sum_c {tagcount,known},cons)) = SOME (tagcount,known,cons)
+    | strip_sum (Annotate_c (_,con)) = strip_sum con
+    | strip_sum _ = NONE
 
   fun strip_arrow (AllArrow_c body) = SOME body
     | strip_arrow (Annotate_c (_,con)) = strip_arrow con
@@ -217,7 +224,7 @@ struct
        
   fun do_eta_fun (formals,body as App_c(con,actuals)) = 
     let
-      val (formal_vars,_) = ListPair.unzip formals
+      val (formal_vars,_) = unzip formals
       fun eq (var1,(Var_c var2)) = eq_var(var1,var2)
 	| eq (formal,Annotate_c (an,con)) = eq (formal,con)
 	| eq _ = false
@@ -305,7 +312,7 @@ struct
 	| Record_k elts => 
 	 let
 	   val elt_list = Util.sequence2list elts
-	   val vars_and_kinds = List.map (fn ((l,v),k) => (v,k)) elt_list
+	   val vars_and_kinds = map (fn ((l,v),k) => (v,k)) elt_list
 
 	   fun base (D,kmap) = 
 	     let
@@ -356,7 +363,7 @@ struct
        of (Prim_c (pcon,args)) =>
 	 let
 	   val (args',kinds) = 
-	     ListPair.unzip (List.map (fn x => (con_valid (D,x))) args)
+	     unzip (map (fn x => (con_valid (D,x))) args)
 	   val (pcon',kind) = 
 	     (case pcon
 		of ((Int_c W64) | 
@@ -404,7 +411,7 @@ struct
 	    * all distinct - i.e., no duplicates
 	    *)
 	   val def_list = Util.sequence2list defs
-	   val var_kinds = List.map (fn (var,con) => (var,Word_k Runtime)) def_list
+	   val var_kinds = map (fn (var,con) => (var,Word_k Runtime)) def_list
 	     
 	   fun check_one D ((var,con),(cons,kinds)) =
 	     let
@@ -448,7 +455,7 @@ struct
 	       val tformals' = List.rev rev_tformals
 	       val (body'',body_kind) = con_valid (D,body')
 	       val (formals',formal_kinds) = 
-		 ListPair.unzip (List.map (fn c => con_valid (D,c)) formals)
+		 unzip (map (fn c => con_valid (D,c)) formals)
 	       val con = AllArrow_c (openness,effect,tformals',formals',numfloats,body'')
 	     in
 	       (*ASSERT*)
@@ -597,7 +604,7 @@ struct
 	     
 	   fun base (D,entry_info) =
 	     let
-	       val (entries,entry_kinds) = ListPair.unzip entry_info
+	       val (entries,entry_kinds) = unzip entry_info
 	       val kind = Record_k (Util.list2sequence entry_kinds)
 	     in
 	       case (do_eta_record entries)
@@ -662,9 +669,9 @@ struct
 			error "Invalid kind for constructor application")
 
 	   val (actuals',actual_kinds) = 
-	     ListPair.unzip (List.map (fn c => (con_valid (D,c))) actuals)
+	     unzip (map (fn c => (con_valid (D,c))) actuals)
 
-	   val (formal_vars,formal_kinds) = ListPair.unzip formals
+	   val (formal_vars,formal_kinds) = unzip formals
 
 	   fun match_params ((formal,fkind),actual_kind) = 
 	     alpha_sub_kind (actual_kind,fkind)
@@ -673,7 +680,7 @@ struct
 		   else error "Constructor function applied to wrong number of arguments"
 	   val apps = 
 	     if ListPair.all alpha_sub_kind (actual_kinds,formal_kinds) 
-		 then ListPair.zip (formal_vars,actuals')
+		 then zip (formal_vars,actuals')
 	     else
 	       (print "actual_kinds are:\n";
 		app (fn k => (PpNil.pp_kind k; print "\n")) actual_kinds;
@@ -710,13 +717,13 @@ struct
 	     end
 	   val (arg',arg_kind) = con_valid (D,arg)
 	   val (default',def_kind) = con_valid (D,default)
-	   val arms' = List.map doarm arms
+	   val arms' = map doarm arms
 	   fun do_beta_typecase (arg as (Prim_c (pcon,args))) = 
 	     (case List.find (fn (pcon',formals,body) => primequiv (pcon,pcon')) arms
 		of SOME (pcon',formals,body) => 
 		  let
-		    val (formal_vars,_) = ListPair.unzip formals
-		    val apps = ListPair.zip (formal_vars,args)
+		    val (formal_vars,_) = unzip formals
+		    val apps = zip (formal_vars,args)
 		  in
 		    if eq_len (formal_vars,args) then
 		      substConInCon (list2cmap apps) body
@@ -762,7 +769,7 @@ struct
 	     end
 	    | Arrow_k (openness, formals, return) => 
 	     let
-	       val vars = List.map (fn (v,_) => (Var_c v)) formals
+	       val vars = map (fn (v,_) => (Var_c v)) formals
 	       val c = pull (App_c (c,vars),return)
 	       val var = fresh_var()
 	     in
@@ -903,7 +910,7 @@ struct
 		  PpNil.pp_con con'';
 		  error "Type mismatch in record")
 	     end
-	   val fields'' = List.map check_one fields'
+	   val fields'' = map check_one fields'
 	   val (labels',exps',cons') = unzip3 fields'
 	   val exp' = (record labels',cons',exps')
 	   val con = Prim_c (Record_c labels',cons')
@@ -935,15 +942,179 @@ struct
 		PpNil.pp_con con;
 		error "No such label")
 	 end
-	| (inject {tagcount,field},cons,exps) =>  error "Unimplemented"  (* slow; sum intro *)
-	| (inject_record {tagcount,field},cons,exps) =>       error "Unimplemented"
-	(* fast; sum intro where argument is a record *)
-	(* whose components are individually passed in *)
-	| (project_sum {tagcount,sumtype},cons,exps) => error "Unimplemented"
-	      (* slow; given a special sum type, return carried value *)
-	| (project_sum_record {tagcount,sumtype,field},cons,exps) => error "Unimplemented"
-	(* fast; given a special sum type of record type, 
-	 return the specified field *)
+	| (inject {tagcount,field},cons,exps as ([] | [_])) =>  
+	 let
+	   val (cons',kinds) = 
+	     unzip (map (fn c => con_valid (D,c)) cons)
+	   val con = Prim_c (Sum_c {tagcount=tagcount,known=SOME field},cons')
+	   val kind = singletonize (SOME Runtime,Word_k Runtime,con)
+	 in
+	   case exps 
+	     of [] => 
+	       if (field < tagcount) then
+		 ((inject {tagcount=tagcount,field=field},cons',[]),con,kind)
+	       else
+		 (printl "Expression ";
+		  PpNil.pp_exp (Prim_e (NilPrimOp prim,cons',[]));
+		  error "Illegal injection - field out of range")
+	      | argexp::_ =>    
+		 if (tagcount <= field) andalso 
+		   ((Word32.toInt field) < ((Word32.toInt tagcount) + (List.length cons'))) then
+		   let
+		     val (argexp',argcon,argkind) = exp_valid (D,argexp)
+		     val con_k = List.nth (cons',Word32.toInt (field-tagcount))
+		   in
+		     if alpha_equiv_con (argcon,con_k) then 
+		       ((inject {tagcount=tagcount,field=field},cons',[argexp']),con,kind)
+		     else
+		       (printl "Expression ";
+			PpNil.pp_exp argexp';
+			lprintl "Of declared type ";
+			PpNil.pp_con con_k;
+			lprintl "found to be of type";
+			PpNil.pp_con argcon;
+			error "Illegal injection - type mismatch in args")
+		   end
+		 else
+		   (printl "Expression ";
+		    PpNil.pp_exp (Prim_e (NilPrimOp prim,cons',[argexp]));
+		    error "Illegal injection - field out of range")
+	 end
+	| (inject_record {tagcount,field},argcons,argexps) => 
+	 let
+	   val (argcons',argkinds) = 
+	     unzip (map (fn c => con_valid (D,c)) argcons)
+	   val (argexps',expcons,expkinds) = 
+	     unzip3 (map (fn e => exp_valid (D,e)) exps)
+	   val con = Prim_c (Sum_c {tagcount=tagcount,known=SOME field},argcons')
+	   val kind = singletonize (SOME Runtime,Word_k Runtime,con)
+	 in
+	   if (tagcount <= field) andalso 
+	     ((Word32.toInt field) < ((Word32.toInt tagcount) + (List.length argcons'))) then
+	     let
+	       val con_k = List.nth (argcons',Word32.toInt (field-tagcount))
+	       val (labels,cons) = 
+		 case strip_record con_k
+		   of SOME (ls,cs) => (ls,cs)
+		    | NONE => (printl "Field is not a record ";
+			       PpNil.pp_con con_k;
+			       error "Record injection on illegal field")
+	     in
+	       if eq_len (expcons,cons) andalso
+		 ListPair.all alpha_equiv_con (expcons,cons) then 
+		 ((inject_record {tagcount=tagcount,field=field},argcons',argexps'),con,kind)
+	       else
+		 (printl "Expressions ";
+		  PpNil.pp_list PpNil.pp_exp' argexps' ("",",","\n",false);
+		  lprintl "Of declared types ";
+		  PpNil.pp_list PpNil.pp_con' cons ("",",","\n",false);
+		  lprintl "found to be of type";
+		  PpNil.pp_list PpNil.pp_con' expcons ("",",","\n",false);
+		  error "Illegal record injection - type mismatch in args")
+	     end
+	   else
+	     (printl "Expression ";
+	      PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
+	      error "Illegal injection - field out of range")
+	 end
+	| (project_sum {tagcount,sumtype},argcons,[argexp]) => 
+	 let
+	   val (argexp',argcon,argkind) = exp_valid (D,argexp)
+	   val (argcons',argkinds) = unzip (map (fn c => con_valid (D,c)) argcons)
+	 in
+	   case strip_sum argcon
+	     of SOME (tagcount',SOME field,cons) =>
+	       if tagcount' = tagcount andalso
+		 field = sumtype andalso
+		 field < tagcount then
+		 let
+		   val con_i = List.nth (argcons',Word32.toInt sumtype)
+		   val kind = singletonize (SOME Runtime,Word_k Runtime,con_i)
+		 in
+		   if ListPair.all alpha_equiv_con (cons,argcons') then
+		     ((prim,argcons',[argexp']),con_i,kind)
+		   else
+		     (printl "Expression ";
+		      PpNil.pp_exp argexp;
+		      lprintl "expected fields of type";
+		      PpNil.pp_list PpNil.pp_con' argcons' ("",",","",false);
+		      lprintl "Found to have type ";
+		      PpNil.pp_con argcon;
+		      error "Arguments to project_sum don't match")
+		 end
+	       else 
+		 (printl "Projection ";
+		  PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
+		  lprintl "From expression ";
+		  PpNil.pp_exp argexp;
+		  lprintl "Of Type ";
+		  PpNil.pp_con argcon;
+		  error "Illegal projection - numbers don't match")
+	      | _ => 
+		 (printl "Projection ";
+		  PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
+		  lprintl "From expression ";
+		  PpNil.pp_exp argexp;
+		  lprintl "Of Type ";
+		  PpNil.pp_con argcon;
+		  error "Illegal projection - expression not of sum type")
+		 
+	 end
+	| (project_sum_record {tagcount,sumtype,field},argcons,[argexp]) => 
+	 let
+	   val (argexp',argcon,argkind) = exp_valid (D,argexp)
+	   val (argcons',argkinds) = unzip (map (fn c => con_valid (D,c)) argcons)
+	 in
+	   case strip_sum argcon
+	     of SOME (tagcount',SOME sumtype,cons) =>
+	       (if tagcount' = tagcount andalso
+		  sumtype = sumtype andalso
+		  sumtype < tagcount then
+		  if ListPair.all alpha_equiv_con (cons,argcons') then
+		    let
+		      val con_i = List.nth (argcons',Word32.toInt sumtype)
+		    in
+		      case strip_record con_i
+			of SOME (labels,cons) =>
+			  if (Word32.toInt field) < List.length labels then
+			    let 
+			      val con_j = List.nth (cons,Word32.toInt field) 
+			      val kind = singletonize (SOME Runtime,Word_k Runtime,con_j)
+			    in
+			      ((prim,argcons',[argexp']),con_j,kind)
+			    end
+			  else error "Project_sum_record field out of range"
+			 | NONE => 
+			    (printl "Sum record projection of type ";
+			     PpNil.pp_con con_i;
+			     lprintl "Expected record type";
+			     error "Illegal type in sum record projection")
+		    end
+		  else
+		    (printl "Expression ";
+		     PpNil.pp_exp argexp;
+		     lprintl "expected fields of type";
+		     PpNil.pp_list PpNil.pp_con' argcons' ("",",","",false);
+		     lprintl "Found to have type ";
+		     PpNil.pp_con argcon;
+		     error "Arguments to project_sum don't match")
+		else 
+		  (printl "Projection ";
+		   PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
+		   lprintl "From expression ";
+		   PpNil.pp_exp argexp;
+		   lprintl "Of Type ";
+		   PpNil.pp_con argcon;
+		   error "Illegal projection - numbers don't match"))
+	      | _ => 
+		  (printl "Projection ";
+		   PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
+		   lprintl "From expression ";
+		   PpNil.pp_exp argexp;
+		   lprintl "Of Type ";
+		   PpNil.pp_con argcon;
+		   error "Illegal projection - expression not of sum type")
+	 end
 	| (box_float floatsize,[],[exp]) => 
 	 let
 	   val (exp',con,kind) = exp_valid (D,exp)
@@ -984,7 +1155,7 @@ struct
 	       let
 		 val def_list = Util.set2list set
 		 val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
-		 val cmap = list2cmap (List.map (fn (v,c) => (v,Mu_c (set,v))) def_list)
+		 val cmap = list2cmap (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
 		 val con'' = substConInCon cmap con'
 	       in
 		 if con_equiv (D,con,con'') then
@@ -1015,7 +1186,7 @@ struct
 		   let
 		     val def_list = Util.set2list set
 		     val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
-		     val cmap = list2cmap (List.map (fn (v,c) => (v,Mu_c (set,v))) def_list)
+		     val cmap = list2cmap (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
 		     val con'' = substConInCon cmap con'
 		   in
 		     ((roll,[argcon'],[exp']),con'',
@@ -1125,9 +1296,9 @@ struct
 	| ((App_e (openness as Code,exp as (Var_e _),cons,texps,fexps)) |  
 	   (App_e (openness as (Closure | Open),exp,cons,texps,fexps))) =>
 	let
-	  val (cons',kinds) = ListPair.unzip (List.map (fn c => con_valid (D,c)) cons)
-	  val actuals_t = List.map (fn e => exp_valid (D,e)) texps
-	  val actuals_f = List.map (fn e => exp_valid (D,e)) fexps
+	  val (cons',kinds) = unzip (map (fn c => con_valid (D,c)) cons)
+	  val actuals_t = map (fn e => exp_valid (D,e)) texps
+	  val actuals_f = map (fn e => exp_valid (D,e)) fexps
 	  val (exp',con,kind) = exp_valid (D,exp)
 	  val (openness',_,tformals,formals,numfloats,body) = 
 	    (case strip_arrow con
@@ -1161,6 +1332,7 @@ struct
 		     lprintl "of type ";
 		     PpNil.pp_con con;
 		     error "Parameter type mismatch")
+		| check_cons _ = error "exp_valid: Too few formals in parameter list"
 
 	      fun check_kinds ([],[],D) = SOME D
 		| check_kinds ((var,kind)::tformals,kind'::actuals,D) = 
@@ -1196,6 +1368,10 @@ struct
 	      else
 		error "Error in application - different openness"
 	    end
+	| App_e _ => 
+	    (printl "Application expression ";
+	     PpNil.pp_exp exp;
+	     error "Illegal application.  Closure with non-var?")
 	| Raise_e (exp,con) => 
 	    let
 	      val (con',kind) = con_valid (D,con)

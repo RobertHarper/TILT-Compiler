@@ -1,5 +1,5 @@
-functor Alpha(structure ArgNil : NIL) :> 
-  sig include ALPHA sharing Nil = ArgNil end =
+functor Alpha(structure ArgNil : NIL) :(*> *)
+   ALPHA (*where structure Nil = ArgNil *)=
   struct
 
     structure Nil = ArgNil
