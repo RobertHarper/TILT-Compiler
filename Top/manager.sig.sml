@@ -1,54 +1,109 @@
-(*$import Prelude *)
-(* The intended external syntax for tilc is as follows:
- *
- * The following three options, if they occur, must be the only switch:
- *    -?, -h         -- Display help message printed by Help.help
- *    -mkdep <file>  -- Compute the dependencies for the current directory and
- *                      append the results to the specified file
- *
- * The next two options can each occur at most once on the command line, but
- * they can be mixed in any combination.  In all cases, the rest of the 
- * command line must be a list of source and/or object (.sml, .int, .uo, and .ui)
- * files.
- *
- *    -c             -- Compile the .sml or .int source files to .uo or .ui files.
- *                      This option does not link them.  It ignores .uo and .ui
- *                      arguments.
- *    -o <file>      -- Create an executable from the specified source or object
- *                      files and place the resulting executable in <file> it
- *                      first compiles and links the sources.
- * If none of the above arguments is specified, i.e. tilc <file1>...<fileN>, it
- * is equivalent to tilc -o a.out <file1>...<fileN>.
- * 
- * Note that these options can be interspersed throughout the files, but
- * the relative ordering of the source files is important. For example:
- *
- *    tilc -o output.exe file1.sml file2.int file3.sml  
- * is the same as 
- *    tilc file1.sml file2.int -o output.exe file3.sml
- * but both are different from
- *    tilc -o output.exe file2.sml file1.int file3.sml
- * all three of those are different from
- *    tilc file1.sml -o file2.int output.exe file3.sml 
- * This last one will cause an error (output.exe is not a valid source file)
- *
- * -o without the -r switch creates a tempory .uo file that is deleted at the
- * end of compilation.
- * 
- *)
+(*$import LinkIl *)
 
-signature MANAGER = sig
 
-  val chat_ref : bool ref
-  val diag_ref : bool ref
+(* ---- Provides an abstraction for communication between master and slave processes ---- *)
+signature COMMUNICATION = 
+sig
+    type job = string list
 
-  val eager : bool ref
-  val cache_context : int ref
-  val flush_cache : unit -> unit
+    (* Slaves can acknowledge completed jobs and request new jobs.  *)
+    val acknowledge : job option -> unit    (* non-blocking *)
+    val request : unit -> job option        (* blocking *)
 
-  val stat_each_file : bool ref
-  val tilc : string * bool * string option * string list  -> unit  (* mapfile * args  *)
-  val purge : string -> unit  (* given a mapfile, remove all compiled .ui and .uo and .o files *)
-  val buildRuntime : bool -> unit (* if bool is true, runtime is purged and then rebuilt *)
-  val command : string * string list  -> int  (* to be exported *)
+    (* The master periodically calls findSlaves which polls for available slaves which are triples:
+       (1) Name of the slave
+       (2) The name of the last job the slave completed.  A NONE indicates a new slave.
+       (3) A thunk for passing another job to the slave. A NONE indicates slave can terminate.
+     *)
+    val findSlaves : unit -> (string * job option * (job option -> unit)) list
+
+    val masterTest : unit -> unit
+    val slaveTest : unit -> unit
 end
+
+signature HELP = 
+    sig
+	structure StringSet : ORD_SET where type Key.ord_key = string
+	type filebase = string
+	type unitname = string
+	val base2int : string -> string
+	val base2o : string -> string
+	val base2s : string -> string
+	val base2sml : string -> string
+	val base2ui : string -> string
+	val base2uo : string -> string
+	val cache_context : int ref
+	val chat : string -> unit
+	val chat_ref : bool ref
+	val chat_strings : int -> string list -> int
+
+	val forget_stat : string -> unit
+	val exists : string -> bool
+	val modTime : string -> Time.time
+
+	val getContext : string list -> LinkIl.context
+	val writeContext : string * Il.context -> unit
+	val get_base : string -> string
+	val get_import_direct : string -> string list
+	val get_import_transitive : string -> string list
+	val get_position : string -> int
+	val get_ui_crc : string -> Crc.crc
+	val parse_depend : string -> (string -> string list) -> string -> string list
+
+	val setMapping : bool * string -> unit  (* true indicates master *)
+	val list_units : unit -> string list
+	val stat_each_file : bool ref
+	val stop_early_compiling_sml_to_ui : bool ref
+
+	(* Given a list of units, divide into 3 groups: WAITING, READY, PENDING, DONE.
+	   Units are initially WAITING if they have imports and READY if they have none.
+	   When a unit is marked DONE explicitly, more units will become READY. *)
+	val partition : string list -> string list * string list * string list * string list
+	val markPending : string -> unit
+	val markDone  : string -> unit
+  end
+
+signature SLAVE = 
+sig
+    val slaveTest : unit -> unit
+    val setup : unit -> unit
+    val once : unit -> bool      (* true indicates some work was done *)
+    val run : unit -> unit
+end
+
+signature MASTER = 
+sig
+    type state
+    val masterTest : unit -> unit
+    val once : string * string list -> string list * state * (state -> bool * state option)
+	                                           (* true indicates all available slaves were utilized *)
+    val run : string * string list -> string list  (* Takes the mapfile and a list of units that are desired,
+						        returning a list of units that are required *)
+end
+
+signature MANAGER = 
+sig
+
+  (* buildRuntime   build the runtime; if true, rebuild from scratch
+     purge          takes a mapfile and removes all generated files of units named in mapfile
+     slave          run a slave
+     master         run a master on the given mapfile
+     make           run a master on the given mapfile and interleave slave work in the same process
+     pmake          run a master on the given mapfile and start slaves on the given machines
+  *)
+
+  val buildRuntime : bool -> unit
+  val purge : string -> unit
+  val slave : unit -> unit
+  val master : string -> unit  
+  val make : string -> unit
+  val pmake : string * string list -> unit  
+
+  val tilc   : string * bool * string option * string list -> unit  
+                                              (* mapfile, don't link,
+					         optional .exe name, list of files to compile *)
+
+  val command : string * string list -> int  (* to be exported *)
+
+end
+

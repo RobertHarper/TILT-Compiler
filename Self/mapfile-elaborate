@@ -280,6 +280,9 @@ IOUtil         Basis/Library/io-util
 UTIL Util/util.sig
 Util Util/util
 
+PLATFORM Util/platform.sig
+Platform Util/platform
+
 LISTOPS Util/listops.sig
 Listops Util/listops
 

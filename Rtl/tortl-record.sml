@@ -146,8 +146,7 @@ struct
       let fun loop (state,reps,terms,labopt) =
 	  if (length terms < maxRtlRecord)
 	      then make_record_core(const, state, reps, terms, labopt)
-	  else let val _ = print ("make_record_help encountered large record " ^ (Int.toString (length terms)) ^ "\n")
-		   fun split(ls,n) = (List.take(ls,n), List.drop(ls,n))
+	  else let fun split(ls,n) = (List.take(ls,n), List.drop(ls,n))
 		   val (terms1,terms2) = split(terms,maxRtlRecord-1)
 		   val (reps1,reps2) = split(reps,maxRtlRecord-1)
 		   val (record2,state) = loop (state,reps2,terms2,NONE)
@@ -197,8 +196,7 @@ struct
   fun record_project (src, index, dest) = 
       if (index >= 0 andalso index < (maxRtlRecord-1))
 	  then add_instr(LOAD32I(EA(src,4*index), dest))
-      else let val _ = print ("record_project given large index " ^ (Int.toString index) ^ "\n")
-	       val tmp = alloc_regi TRACE
+      else let val tmp = alloc_regi TRACE
 	       val _ = add_instr(LOAD32I(EA(src,4*(maxRtlRecord-1)), tmp))
 	   in  record_project(tmp,index-(maxRtlRecord-1),dest)
 	   end

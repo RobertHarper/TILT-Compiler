@@ -48,7 +48,7 @@ fun marktop(t as MarkTop _, _,_) = t
     | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE 
     | RBRACKET | RPAREN | ORELSE | ANDALSO | FUNSIG | VECTORSTART | BEGINQ 
     | ENDQ of string | OBJL of string | AQID of FastSymbol.raw_symbol
-    | DOLLAR | EXTERN | CCALL | PLET
+    | DOLLAR | EXTERN | CCALL | PLET | PVAL
 
 %nonterm ident of FastSymbol.raw_symbol
        | id of FastSymbol.raw_symbol
@@ -167,12 +167,12 @@ fun marktop(t as MarkTop _, _,_) = t
   OPEN OVERLOAD  RAISE  REC  SHARING  SIG  SIGNATURE  STRUCT
   STRUCTURE THEN TYPE VAL WHILE WHERE WITH WITHTYPE
   ORELSE ANDALSO 
-  DOLLAR CCALL EXTERN PLET
+  DOLLAR CCALL EXTERN PLET PVAL
 
 %change -> VAL | -> THEN | -> ELSE | -> LPAREN | -> SEMICOLON | 
         DARROW -> EQUALOP | EQUALOP -> DARROW | AND -> ANDALSO | COLON -> OF |
         SEMICOLON -> COMMA | COMMA -> SEMICOLON |
-        -> IN ID END | -> ELSE ID
+        -> IN ID END | -> ELSE ID 
 
 %value ID (rawSymbol(bogusHash,bogusString))
 %value TYVAR (rawSymbol(quotedBogusHash,quotedBogusString))
@@ -487,6 +487,7 @@ ldec	: VAL vb		(ValDec (vb,ref []))
         | VAL tyvarseq vb       (ValDec(vb,ref tyvarseq))
 	| VAL REC rvb		(ValrecDec (rvb,ref []))
         | VAL REC tyvarseq rvb  (ValrecDec(rvb,ref tyvarseq))
+        | PVAL vb		(PvalDec (vb,ref []))
 	| FUN fb		(FunDec (fb,ref []))
         | FUN tyvarseq fb       (FunDec(fb,ref tyvarseq))
 	| EXTERN ID COLON ty 	(ExternDec(varSymbol ID,ty))
@@ -701,9 +702,12 @@ top: sdecs              (marktop(ImplTop([], sdecs), sdecsleft, sdecsright))
 
 (*
  * $Log$
-# Revision 1.7  99/01/18  20:18:24  pscheng
+# Revision 1.8  99/05/12  15:27:42  pscheng
 # *** empty log message ***
 # 
+# Revision 1.7  1999/01/18  20:18:24  pscheng
+# *** empty log message ***
+#
 # Revision 1.6  1997/10/21  21:00:27  pscheng
 # got rid of int inf
 #

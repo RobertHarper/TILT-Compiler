@@ -146,6 +146,7 @@ sig
   (* DECLARATIONS (let and structure) *)
   and dec = ValDec of vb list * tyvar list ref		(* values *)
 	  | ValrecDec of rvb list * tyvar list ref	(* recursive values *)
+          | PvalDec of vb list * tyvar list ref		(* parallel bindingds *)
 	  | FunDec of fb list * tyvar list ref		(* recurs functions *)
 	  | TypeDec of tb list				(* type dec *)
 	  | DatatypeDec of {datatycs: db list, withtycs: tb list}
@@ -234,9 +235,12 @@ end (* signature AST *)
 
 (*
  * $Log$
-# Revision 1.3  99/01/18  20:18:21  pscheng
+# Revision 1.4  99/05/12  15:27:40  pscheng
 # *** empty log message ***
 # 
+# Revision 1.3  1999/01/18  20:18:21  pscheng
+# *** empty log message ***
+#
 # Revision 1.2  1998/02/15  22:43:11  pscheng
 # bootstrapping changes
 #

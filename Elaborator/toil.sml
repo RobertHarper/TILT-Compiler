@@ -1312,6 +1312,72 @@ val _ = print "plet0\n"
 	    in  xfundec islocal (context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
 	    end
 
+	(* We compile away parallel bindings like this:
+
+	     pval p1 = e1
+	     and  p2 = e2
+
+	     ---> extra primitives needed: Spawn and Yield
+                  We assume there are no user interrupts.
+	          Otherwise we must make sure the SetWaitState and Spawns are atomic.
+
+	    val r1 = ref NONE
+            val r2 = ref NONE
+            fun t1() = r1 := SOME e1 
+            fun t1() = r2 := SOME e2
+            val _ = Ccall(Spawn t1)
+            val _ = Ccall(Spawn,t2)
+            val _ = Ccall(Yield,())
+            val SOME pa = !r1
+            val SOME pb = !r2	     
+	 *)
+	| Ast.PvalDec (vblist,ref tyvars) => (* parallel bindings *)
+	    let
+		 (* helpers *)
+		fun intexp n = Ast.IntExp(TilWord64.fromInt n)
+		fun call(f,args) = Ast.CcallExp(f,args)
+		fun callbind(sym,f,args) = Ast.ValDec([Ast.Vb{pat=Ast.VarPat[sym],exp=call(f,args)}],ref[])
+		fun app(f,arg) = Ast.AppExp{function=f,argument=arg}
+		fun appbind(sym,f,arg) = Ast.ValDec([Ast.Vb{pat=Ast.VarPat[sym],exp=app(f,arg)}],ref[])
+		fun sym str = Symbol.varSymbol str
+		fun var sym = Ast.VarExp[sym]
+		fun varsym str = var(sym str)
+		val tuple = Ast.TupleExp
+		val empty = tuple[]
+		val ref_expr = varsym "ref"
+		val deref_expr = varsym "!"
+		val set_expr = varsym ":="
+		    
+		(* symbols and expressions *)
+		val pats_exps = map vb_strip vblist
+		val count = length pats_exps
+		val fresh_str = Int.toString(var2int(fresh_var()))
+		val refs = map0count (fn n => sym ("r" ^ fresh_str ^ "*" ^ (Int.toString n))) count
+		val thunks = map0count (fn n => sym ("t" ^ fresh_str ^ "*" ^ (Int.toString n))) count
+		val discard = sym "_"
+		    
+		(* decs *)
+		val ref_decs = map (fn refsym => appbind(refsym,ref_expr,varsym "NONE")) refs
+		fun thunker (thunk,ref_sym,(_,exp)) = 
+		    let val body = app(set_expr,tuple[var ref_sym, app(varsym "SOME",exp)])
+		    in  Ast.FunDec([Ast.Fb[Ast.Clause{pats=[{item=Ast.VarPat[thunk],fixity=NONE,region=(0,0)},
+							    {item=Ast.TuplePat[],fixity=NONE,region=(0,0)}],
+						      resultty=NONE,exp=body}]],
+				   ref [])
+		    end
+		val thunk_decs = map3 thunker (thunks,refs,pats_exps)
+		val spawn_decs = map (fn sym => callbind(discard,varsym "Spawn",
+							 [var sym])) thunks
+		val yield_dec = callbind(discard,varsym "Yield",[empty])
+		val result_decs = 
+		    map2 (fn ((pat,_),slot) => 
+			  Ast.ValDec([Ast.Vb{pat=Ast.AppPat{constr=Ast.VarPat[Symbol.varSymbol "SOME"],
+							    argument=pat},
+					     exp=app(deref_expr,var slot)}],ref [])) (pats_exps,refs)
+		val decs = ref_decs @ thunk_decs @ spawn_decs @ [yield_dec] @ result_decs
+	    in  xdec islocal (context, Ast.SeqDec decs)
+	    end
+
 	| Ast.FunDec (fblist,ref tyvars) => 
 	    let val tyvar_stamp = get_stamp()
 		val tyvars = map tyvar_strip tyvars

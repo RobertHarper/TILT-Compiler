@@ -5,6 +5,7 @@ structure Linearize
 struct
 
     val error = fn s => Util.error "linearize.sml" s
+    val show_stats = Stats.ff("LinearizeStats")
     val linearize = Stats.tt("Linearize")
     val debug = ref false
 
@@ -634,30 +635,32 @@ struct
 	   val (bnds,state) = foldl_acc folder state bnds
 	   val bnds = flatten bnds
 	   val exports = map (lexport state) exports
-	   val _ = (print "  Number of renamed variables: ";
-		    print (Int.toString (!num_renamed)); print "\n";
-		    print "  Number of variables: ";
-		    print (Int.toString (!num_var)); print "\n";
-		    print "  Number of lexp calls: ";
-		    print (Int.toString (!num_lexp)); print "\n";
-		    print "  Number of lcon calls: ";
-		    print (Int.toString (!num_lcon)); print "\n";
-
-		    print "    Number of lcon calls from Prim_e: ";
-		    print (Int.toString (!num_lcon_prim)); print "\n";
-		    print "    Number of lcon calls from Import: ";
-		    print (Int.toString (!num_lcon_import)); print "\n";
-		    print "    Number of lcon calls from Singletons: ";
-		    print (Int.toString (!num_lcon_single)); print "\n";
-		    print "    Number of lcon calls from Function formals: ";
-		    print (Int.toString (!num_lcon_function)); print "\n";
-		    print "    Number of lcon calls from Con_b: ";
-		    print (Int.toString (!num_lcon_conb)); print "\n";
-		    print "    Number of lcon calls from Con_cb: ";
-		    print (Int.toString (!num_lcon_concb)); print "\n";
-
-		    print "  Number of lkind calls: ";
-		    print (Int.toString (!num_lkind)); print "\n")
+	   val _ = if (!show_stats)
+		       then (print "  Number of renamed variables: ";
+			     print (Int.toString (!num_renamed)); print "\n";
+			     print "  Number of variables: ";
+			     print (Int.toString (!num_var)); print "\n";
+			     print "  Number of lexp calls: ";
+			     print (Int.toString (!num_lexp)); print "\n";
+			     print "  Number of lcon calls: ";
+			     print (Int.toString (!num_lcon)); print "\n";
+			     
+			     print "    Number of lcon calls from Prim_e: ";
+			     print (Int.toString (!num_lcon_prim)); print "\n";
+			     print "    Number of lcon calls from Import: ";
+			     print (Int.toString (!num_lcon_import)); print "\n";
+			     print "    Number of lcon calls from Singletons: ";
+			     print (Int.toString (!num_lcon_single)); print "\n";
+			     print "    Number of lcon calls from Function formals: ";
+			     print (Int.toString (!num_lcon_function)); print "\n";
+			     print "    Number of lcon calls from Con_b: ";
+			     print (Int.toString (!num_lcon_conb)); print "\n";
+			     print "    Number of lcon calls from Con_cb: ";
+			     print (Int.toString (!num_lcon_concb)); print "\n";
+			     
+			     print "  Number of lkind calls: ";
+			     print (Int.toString (!num_lkind)); print "\n")
+		   else ()
 	   val _ = reset_state()
 
        in  MODULE{bnds = bnds,

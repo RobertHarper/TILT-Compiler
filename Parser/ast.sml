@@ -150,6 +150,7 @@ and spec = StrSpec of (symbol * sigexp option * path option) list
 (* DECLARATIONS (let and structure) *)
 and dec	= ValDec of vb list * tyvar list ref		(* values *)
 	| ValrecDec of rvb list * tyvar list ref	(* recursive values *)
+        | PvalDec of vb list * tyvar list ref		(* parallel bindingds *)
 	| FunDec of fb list * tyvar list ref		(* recurs functions *)
 	| TypeDec of tb list				(* type dec *)
 	| DatatypeDec of {datatycs: db list, withtycs: tb list}
@@ -237,9 +238,12 @@ end (* structure Ast *)
 
 (*
  * $Log$
-# Revision 1.8  99/01/18  20:18:22  pscheng
+# Revision 1.9  99/05/12  15:27:41  pscheng
 # *** empty log message ***
 # 
+# Revision 1.8  1999/01/18  20:18:22  pscheng
+# *** empty log message ***
+#
 # Revision 1.7  1998/02/15  22:43:12  pscheng
 # bootstrapping changes
 #

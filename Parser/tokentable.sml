@@ -68,6 +68,7 @@ val tokenList =
    ("then"	, fn yypos => Tokens.THEN(yypos,yypos+4)),
    ("type"	, fn yypos => Tokens.TYPE(yypos,yypos+4)),
    ("val"	, fn yypos => Tokens.VAL(yypos,yypos+3)),
+   ("pval"	, fn yypos => Tokens.PVAL(yypos,yypos+4)),
    ("where"	, fn yypos => Tokens.WHERE(yypos,yypos+5)),
    ("while"	, fn yypos => Tokens.WHILE(yypos,yypos+5)),
    ("with"	, fn yypos => Tokens.WITH(yypos,yypos+4)),
@@ -111,9 +112,12 @@ end
 
 (*
  * $Log$
-# Revision 1.5  99/01/18  20:18:46  pscheng
+# Revision 1.6  99/05/12  15:27:55  pscheng
 # *** empty log message ***
 # 
+# Revision 1.5  1999/01/18  20:18:46  pscheng
+# *** empty log message ***
+#
 # Revision 1.4  1998/02/15  22:44:08  pscheng
 # bootstrapping changes
 #

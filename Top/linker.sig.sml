@@ -2,8 +2,6 @@
 signature LINKER = 
   sig
 
-    structure Crc : CRC
-
     type package = {unit : string, base : string, 
 		    uiFile : string, uoFile : string, oFile : string}
 

@@ -1,27 +1,164 @@
-(*$import MANAGER LinkParse LinkIl Compiler Linker MakeDep OS List SplayMapFn SplaySetFn *)
+(*$import MANAGER LinkParse LinkIl Compiler Linker MakeDep OS List SplayMapFn SplaySetFn Platform *)
 
-structure Manager :> MANAGER = 
 
-  struct
+structure Communication :> COMMUNICATION = 
+struct
+    type job = string list
+    val delimiter = #"|"
+    val start = "!START!"
+    val stop = "!STOP!"
 
-    structure Elaborator = LinkIl
-    structure Compiler = Til
-    structure Parser = LinkParse
+    fun namepid2ID (name,pid) = name ^ "." ^ (Int.toString pid)
+    val SOME selfName = OS.Process.getEnv "HOST"
+    val selfPid = Word32.toInt(Platform.pid())
+    val selfID = namepid2ID(selfName, selfPid)
+    fun channel(from, to) = to ^ "<-" ^ from 
 
-    val error = fn x => Util.error "Manager" x
-    val chat_ref = Stats.tt("ManagerChat")
-    val diag_ref = Stats.ff("ManagerDiag")
-    fun chat s = if !chat_ref then (print s; TextIO.flushOut TextIO.stdOut)
-		 else ()
-    fun diag s = if !diag_ref then (print s; TextIO.flushOut TextIO.stdOut)
-		 else ()
+    (* --- Asynchronously send the message on the channel --- *)
+    fun send (channel, strings) = 
+	let fun loop [] = ""
+	      | loop [str] = str
+	      | loop (str::rest) = str ^ (String.str delimiter) ^ (loop rest)
+	    val message = loop strings
+	    val temp = "TEMP" ^ channel
+	    val _ = if (OS.FileSys.access(temp, [OS.FileSys.A_READ]))
+			then OS.FileSys.remove temp
+		    else ()
+	    val fd = TextIO.openAppend temp
+	    val _ = TextIO.output(fd, message)
+	    val _ = TextIO.closeOut fd
+	    val _ = OS.FileSys.rename{old=temp, new=channel}
+	in  ()
+	end
 
+    (* --- Asynchronously look for a message on the channel --- *)
+    fun receive channel : job option =
+	if (OS.FileSys.access(channel,[])) 
+	    then let val fd = TextIO.openIn channel
+		     fun loop acc = if (TextIO.endOfStream fd)
+					then acc
+				    else loop (acc ^ (TextIO.inputAll fd))
+		     val message = loop ""
+		     val _ = TextIO.closeIn fd
+		     val _ = OS.FileSys.remove channel
+		     fun loop words curWord [] = rev ((implode (rev curWord)) :: words)
+		       | loop words curWord ((c : char)::crest) = 
+			 if (c = delimiter)
+			     then loop ((implode (rev curWord)) :: words) [] crest
+			 else loop words (c :: curWord) crest
+		     val words = loop [] [] (explode message)
+		 in  SOME words
+		 end
+	else NONE
+
+    fun channelReady channel = not (OS.FileSys.access(channel,[]))
+
+    (* Non-blocking acknowledgement and blocking request for jobs *)
+    fun acknowledge (completed : job option) = 
+	let val masterID = "master"
+	    val slaveID = selfID
+	    val ch = channel(slaveID, masterID)
+	    (* Acknowledge job completion and request more if acknowledgement processed *)
+	in (case completed of
+		SOME msg => send(ch, msg)
+	      | NONE => send(ch, [start]))
+	end
+
+    fun request () =
+	let val masterID = "master"
+	    val slaveID = selfID
+	    val ch = channel(masterID, slaveID)
+	in  (* Look for available jobs *)
+	    receive ch
+	end
+
+
+    (* Master looks for willing slaves - this call does not block 
+       Slaves are represented by an optional string (indicating the file it just compiled)
+          and an invoking function to cause the slave to continue compiling.
+    *)
+    fun findSlaves () =
+	let val files = 
+	      let val dirstream = OS.FileSys.openDir "."
+		  fun loop acc = let val cur = OS.FileSys.readDir dirstream
+				 in  if (cur = "")
+					 then (OS.FileSys.closeDir dirstream; acc)
+				     else loop (cur :: acc)
+				 end
+	      in  loop []
+	      end
+	    val masterID = "master"
+	    val len = size masterID
+	    val channels = List.filter (fn s => (size s > len) andalso
+					        (String.substring(s,0,len) = masterID)) files
+	    fun apper channel = 
+		let val SOME message = receive channel
+		    val message = (case message of
+				       [temp] => if (temp = start) then NONE else SOME message
+				     | _ => SOME message)
+		    val tmp = size "master<-"
+		    val slaveName = String.substring(channel,tmp,(size channel) - tmp)
+		    val revChannel = slaveName ^ "<-master"
+		    fun invoke NONE = send(revChannel, [stop])
+		      | invoke (SOME words) = send(revChannel, words)
+		in  (slaveName, message, invoke)
+		end
+	in  map apper channels
+	end
+
+    fun masterTest() = 
+	let val max = 5
+	    val current = ref 0
+	    val completed = ref 0
+	    fun nextJob invoke = (current := (!current) + 1;
+				  if (!current > max) 
+				      then invoke NONE
+				  else (print "Issuing "; print (Int.toString (!current)); print "\n";
+					invoke (SOME [(Int.toString(!current))]));
+				  if (!current = max) then print "Done Issuing\n" else ())
+	    fun loop () = 
+		let val slaves = findSlaves()
+		in  app (fn (slaveName, done, invoke) => 
+			 ((case done of
+			      NONE => ()
+			    | SOME str => (completed := (!completed) + 1;
+					   print ("  Slave " ^ slaveName ^ 
+						  " completed " ^ (String.concat str) ^ "\n")));
+			       nextJob invoke)) slaves;
+		    if (!completed < max) then loop() else (print "Master done\n"; ())
+		end
+	in  loop()
+	end
+
+    fun slaveTest() = 
+	let val _ = acknowledge NONE
+	    fun loop () = 
+		(case (request()) of
+		     NONE => print "Slave done\n"
+		   | SOME msg => (print "Received "; app print msg; print "\n";  
+				  Platform.sleep 1.0; acknowledge (SOME msg);
+				  print "Processed "; app print msg; print "\n";  
+				  loop ()))
+	in  loop ()
+	end
+end
+
+
+structure Help :> HELP = 
+struct
+    val stat_each_file = Stats.ff("TimeEachFile")
+    val cache_context = ref 5
+    val error = fn s => Util.error "pmanager.sml" s
     val stat_each_file = Stats.ff("TimeEachFile")
     val cache_context = ref 5
     val stop_early_compiling_sml_to_ui = ref false
     val eager = ref true
 
-    fun chat_imports skip imports =
+    (* ---- Some diagnostic message helper functions ---- *)
+    val chat_ref = Stats.tt("ManagerChat")
+    fun chat s = if !chat_ref then (print s; TextIO.flushOut TextIO.stdOut)
+		 else ()
+    fun chat_strings skip imports =
 	let fun f(str,acc) = let val acc = if acc > 80
 						then (chat "\n        "; 8)
 					    else acc + (size str) + 2
@@ -29,8 +166,6 @@ structure Manager :> MANAGER =
 			     end
 	in  if (!chat_ref) then foldl f skip imports else 0
 	end
-
-    fun help() = print "This is TILT - no help available.\n"
 
 
     (* ---- we want to do lookup on strings ----- *)
@@ -89,26 +224,27 @@ structure Manager :> MANAGER =
 	    
     end
 
-  (* ------------ reading the import/include list of a file -------------*)
-  (* Takes a string(line) and splits into white-space separted fields.
-     Inclusively drops all fields after the first field(non-empty string) 
-       that passes dropper. *)
+    type unitname = string
+    type filebase = string
+    fun base2sml (f : string) = f ^ ".sml"
+    fun base2int (f : string) = f ^ ".int"
+    val base2ui = Til.base2ui
+    val base2s = Til.base2s
+    val base2o = Til.base2o
+    val base2uo = Til.base2uo
 
-  fun split_line dropper line = 
-       let val fields = String.fields Char.isSpace line
-	   fun filter [] = []
-	     | filter (x::y) = if size x = 0 then 
-                                  filter y
-                               else if dropper x then
-                                  []
-                               else
-                                  x :: (filter y)
-       in  
-           filter fields
-       end
-
-
-  fun parse_depend depend_str failure file =
+    fun split_line dropper line = 
+	let val fields = String.fields Char.isSpace line
+	    fun filter [] = []
+	      | filter (x::y) = if (size x = 0)
+				    then filter y
+				else if dropper x 
+					 then []
+				     else
+					 x :: (filter y)
+	in 	filter fields
+	end
+    fun parse_depend depend_str failure file =
       let val ins = TextIO.openIn file
 	  val line = TextIO.inputLine ins
 	  val sz = size line
@@ -128,589 +264,569 @@ structure Manager :> MANAGER =
   	     print "Calling parser to process.\n";
              failure file)
       end
+    fun parse_impl_import file = 
+	parse_depend "(*$import" (#3 o LinkParse.parse_impl) file
+    fun parse_inter_include file = 
+	parse_depend "(*$include" (#3 o LinkParse.parse_inter) file
+    val _ = "*)*)"
 
-   fun parse_impl_import file = 
-         parse_depend "(*$import" (#3 o Parser.parse_impl) file
+    fun readContextRaw file = 
+	let val is = BinIO.openIn file
+	    val res = LinkIl.IlContextEq.blastInContext is
+	    val _ = BinIO.closeIn is
+	in  res
+	end
+    val readContextRaw = Stats.timer("ReadingContext",readContextRaw)
 
-   fun parse_inter_include file = 
-         parse_depend "(*$include" (#3 o Parser.parse_inter) file
+    fun writeContextRaw (file,ctxt) = 
+	let val os = BinIO.openOut file
+	    val _ = LinkIl.IlContextEq.blastOutContext os ctxt
+	    val _ = BinIO.closeOut os
+	in  () 
+	end
+    val writeContextRaw = Stats.timer("WritingContext",writeContextRaw)
+    val addContext = Stats.timer("AddingContext",LinkIl.plus_context)
 
+    datatype status = WAITING | READY | PENDING | DONE
+    local
+	datatype unitinfo = 
+	    UNIT of {position : int,
+		     filebase : string,
+		     imports_direct  : string list option ref,
+		     imports_transitive : string list option ref,
+		     dependents_direct : string list ref,
+		     context : (int * LinkIl.context) option ref,
+		     status : status ref,
+		     ui_crc : Crc.crc option ref}
+	    
+        val units = ref ([] : unitname list)
+	val mapping = ref (StringMap.empty : unitinfo StringMap.map)
+	val mapfileInfo = ref NONE
 
-  fun readContextRaw file = 
-         let val is = BinIO.openIn file
-	     val res = Elaborator.IlContextEq.blastInContext is
-	     val _ = BinIO.closeIn is
-	 in  
-            res
-         end
-  val readContextRaw = Stats.timer("ReadingContext",readContextRaw)
-
-  fun writeContextRaw (file,ctxt) = 
-         let val os = BinIO.openOut file
-             val _ = Elaborator.IlContextEq.blastOutContext os ctxt
-             val _ = BinIO.closeOut os
-         in  
-            ()
-         end
-  val writeContextRaw = Stats.timer("WritingContext",writeContextRaw)
-
-
-  val addContext = Stats.timer("AddingContext",Elaborator.plus_context)
-
-  type unitname = string
-  type filebase = string
-  fun base2sml (f : string) = f ^ ".sml"
-  fun base2int (f : string) = f ^ ".int"
-  val base2ui = Compiler.base2ui
-  val base2s = Compiler.base2s
-  val base2o = Compiler.base2o
-  val base2uo = Compiler.base2uo
-
-  datatype fresh = STALE | FRESH_INTER | FRESH_IMPL
-  local
-      val unitlist = ref ([] : unitname list)
-
-      datatype unitinfo = 
-         UNIT of {position : int,
-		  filebase : filebase,
-		  imports_base  : unitname list option ref,
-		  includes_base : unitname list option ref,
-		  imports  : unitname list option ref,
-		  imports_link  : unitname list option ref,
-		  includes : unitname list option ref,
-		  fresh : fresh ref,
-		  context : (int * Elaborator.context) option ref}
-
-      val mapping = ref (StringMap.empty : unitinfo StringMap.map)
-
-      fun find_unit unitname = StringMap.find(!mapping,unitname)
-      fun lookup unitname =
-	  (case (find_unit unitname) of
-	       NONE => error ("unit " ^ unitname ^ " missing")
-	     | SOME entry => entry)
-
-  in  
-      fun tick_cache() = let fun apper (UNIT{context=r as (ref(SOME(i,ctxt))),...}) = 
-	                         if (i<=1) then r := NONE else r := SOME(i-1,ctxt)
-			       | apper _ = ()
-  	                 in  StringMap.app apper (!mapping)
-                         end
-      fun flush_cache() = let fun apper (UNIT{context=r as (ref(SOME(i,ctxt))),...}) = 
-	                         r := NONE
-			       | apper _ = ()
-  	                 in  StringMap.app apper (!mapping)
-                         end
-      fun reset_mapping() = (unitlist := [];
-			     mapping := StringMap.empty)
-
-      fun list_units () = rev(!unitlist)
-
-      fun add_unit (pos,unitname,filebase) = 
-	  case (find_unit unitname) of
-	      NONE => let val newentry = UNIT{position = pos,
-					  filebase = filebase,
-					  imports_base = ref NONE,
-					  includes_base = ref NONE,
-					  imports = ref NONE,
-                                          imports_link = ref NONE,
-					  includes = ref NONE,
-					  fresh = ref STALE,
-					  context = ref NONE}
-			  val _ = mapping :=  StringMap.insert(!mapping,unitname,newentry)
-			  val _ = unitlist := unitname::(!unitlist)
-		      in  ()
-		      end
-	    | SOME _ => error ("unit " ^ unitname ^ " already present")
-
-      fun get_base unit = 
-            let val UNIT{filebase,...} = lookup unit
-            in filebase end
-
-      fun get_fresh unit = 
-            let val UNIT{fresh,...} = lookup unit
-            in fresh end
-
-      fun get_import_direct unit = 
-	  let val UNIT{imports_base=r,filebase,...} = lookup unit
-	  in  (case !r of
-	        SOME result => result
-	      | NONE => let val result = parse_impl_import(base2sml filebase)
-		        in   (r := SOME result; result)
-                        end)
-          end
-
-      fun get_include_direct unit = 
-	  let val UNIT{includes_base=r,filebase,...} = lookup unit
-	  in  (case !r of
-	        SOME result => result
-	      | NONE => let val result = parse_inter_include(base2int filebase)
-		        in   (r := SOME result; result)
-                        end)
-          end
-
-      fun get_import unit = 
-            let val UNIT{imports,...} = lookup unit
-            in imports end
-
-      fun get_imports_link unit = 
-            let val UNIT{imports_link,...} = lookup unit
-            in imports_link end
-
-      fun get_include unit =
-            let val UNIT{includes,...} = lookup unit
-            in includes end
-
-      fun get_context unit = 
+	fun find_unit unitname = StringMap.find(!mapping,unitname)
+	fun lookup unitname =
+	    (case (find_unit unitname) of
+		 NONE => error ("unit " ^ unitname ^ " missing")
+	       | SOME entry => entry)
+	fun get_context unit = 
             let val UNIT{context,...} = lookup unit
-            in context end
-
-      fun get_position unit = 
-            let val UNIT{position,...} = lookup unit
-            in position end
-  end
-
-
-  fun readContext unit = 
-      let val r = get_context unit
-      in  (case !r of
-	       SOME (i,ctxt) => (r := SOME(Int.min(i+2,!cache_context),ctxt); 
-		                 (true,ctxt))
-	     | NONE => let val uifile = base2ui (get_base unit)
-			   val ctxt = readContextRaw uifile
-			   val _ = if (!cache_context>0) 
-                                   then r:=SOME(2,ctxt) else ()
-		       in  (false,ctxt)
-		       end)
-      end
-
-  fun writeContext (unit,ctxt) = 
-       let val r = get_context unit
-(*	   val _ = if (!cache_context>0) then r := SOME(2,ctxt) else () *)
-	   val uifile = base2ui (get_base unit)
-	   val same = 
-	       (exists uifile) andalso
-	       let val _ = print "XXXX reading old uifile\n"
-		   val old_ctxt = readContextRaw uifile
-		   val _ = print "XXXX done old uifile\n"
-	       in  Elaborator.IlContextEq.eq_context(old_ctxt,ctxt)
-	       end handle _ => (print "Warning: Ill-formed uifile?\n"; false)
-        in  if same
-		then chat ("  [" ^ uifile ^ " remains unchanged]\n")
-	    else (forget_stat uifile;
-		  chat ("  [writing " ^ uifile);
-		  writeContextRaw(uifile,ctxt);
-		  chat "]\n")
-        end
-
-
-  fun getContext imports = 
-      let 
-	  val _ = Name.reset_varmap()
-	  val _ = tick_cache()
-          val cached_ctxts = map readContext imports
-	  val ctxts = map #2 cached_ctxts
-	  val uncached = List.mapPartial (fn (imp,(false,_)) => SOME imp
-	                                   | _ => NONE) (Listops.zip imports cached_ctxts)
-	  val _ = (chat "  [These imports were not cached: ";
-		   chat_imports 30 uncached;
-		   chat "]\n")
-
-	  val initial_ctxt = Elaborator.initial_context()
-	  val context = addContext (initial_ctxt :: ctxts)
-	  val _ = chat ("  [Added contexts.]\n")
-      in  context
-      end
-
-
-  fun elab_constrained(ctxt,sourcefile,fp,dec,fp2,specs,least_new_time) =
-      let 
-      in case Elaborator.elab_dec_constrained(ctxt, fp, dec, fp2,specs) of
-	      SOME ctxt_sbnds_entries => ctxt_sbnds_entries
-            | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
-      end
-
-  fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
-      case Elaborator.elab_dec(pre_ctxt, fp, dec) of
-	   SOME(new_ctxt, sbnd_entries) => 
-	    let val _ = (chat ("  [writing " ^ uiFile);
-			 writeContext (unit, new_ctxt);
-			 chat "]\n")
-	    in (new_ctxt,sbnd_entries)
+            in context 
 	    end
-         | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
-
-
-  local
-
-  (* getImportTransitive:
-   given a unit, find all the imports it depends on with leaves listed first;
-   if the interface file is present, search the includes
-   if the interface file is absent, search the imports *)
-  fun getImportTr' use_imp linking unitname seenunits : unitname list =
-     let val filebase = get_base unitname
-	 val impref = if linking then (get_imports_link unitname) else (get_import unitname)
-	 val incref = get_include unitname
-	 val smlfile = base2sml filebase
-	 val intfile = base2int filebase
-	 val int_exists = exists intfile
-     in  (case (use_imp orelse (not int_exists), !impref, !incref) of
-	  (true, SOME i,_) => i (* cached implementation imports *)
-	| (false,_, SOME i) => i (* cached interface includes *)
-	| _ =>
-	      let fun folder(import,acc) = 
-		      let val depends = getImportTr' linking
-                                          linking import 
-                                          (import::seenunits)
-			  fun adder(u, ac) = 
-			      if Listops.member(u,ac)
-				  then ac else u::ac
-		      in  adder(import,foldl adder acc depends)
-		      end
-		  fun check_loop imports = 
-		      app (fn imp => if (Listops.member(imp,seenunits))
-					 then error ("Loop detected in: " ^
-						     foldr (fn (a,b) => (a ^ " " ^ b)) "" seenunits)
-				     else ()) imports
-	      in  if (not use_imp andalso exists intfile)
-		      then let val _ = diag ("  [Scanning " ^ intfile ^ " for includes]\n")
-			       val base_includes = get_include_direct unitname
-			       val _ = check_loop base_includes
-			       val result = rev(foldl folder [] base_includes)
-			       val _ = incref := SOME result
-			   in  result
-			   end
-		  else 
-		      let val _ = diag ("  [Scanning " ^ smlfile ^ " for imports]\n")
-			  val base_imports = get_import_direct unitname
-			  val _ = check_loop base_imports
-			  val result = rev(foldl folder [] base_imports)
-			  val _ = impref := SOME result
-		      in  result
-		      end
-	      end)
-     end
-  in
-
-     fun getImportTr use_imp unitname = 
-           getImportTr' use_imp false unitname [unitname]
-
-     fun getImportTr_link unitname =
-           getImportTr' true true unitname [unitname]
-
-  end
-
-  (* ----- get_latest ----- *)
-  fun get_latest [] = (NONE, Time.zeroTime)
-    | get_latest (f::fs) = 
-      let
-         val recur_result as (_,fstime) = get_latest fs 
-         val ftime = modTime f
-      in
-         if (Time.>=(ftime, fstime)) then (SOME f, ftime) else recur_result
-      end
-
-
-  val depth = ref 0
-  fun space 0 = ()
-    | space n = (print " "; space (n-1))
-  fun push_tab() = (print (Int.toString (!depth));
-		    space (2 * (!depth)); 
-		    depth := !depth + 1)
-  fun pop() = (depth := !depth - 1)
-
-  (* INVARIANT:  If there is a .int file, the .ui file is already fresh *)
-  (* If make_uo is false, force the .ui file to be fresh
-     otherwise, force the .ui and .uo files to be fresh *)
-  fun compileSML make_uo unitname : unit = 
-      let val _ = if (!diag_ref) then 
-                     (push_tab(); 
-                      print "compileSML: "; 
-                      print unitname; 
-                      print "\n") 
-                  else ()
-
-	  val fresh = get_fresh unitname
-
-	  val _ = (case !fresh of
-		       STALE       => (compileSML' make_uo unitname; 
-                                       fresh := FRESH_IMPL)
-		     | FRESH_INTER => (compileSML' make_uo unitname; 
-                                       fresh := FRESH_IMPL)
-		     | FRESH_IMPL => ())
-
-	  val _ = if (!diag_ref) then pop() else ()
-      in  ()
-      end
-
-  (* INVARIANT:  If there is a .int file, the .ui file is already fresh *)
-  and compileSML' make_uo unitname = 
-      let val sourcebase = get_base unitname
-	  val intfile = base2int sourcebase
-	  val smlfile = base2sml sourcebase
-	  val uofile = base2uo sourcebase
-	  val ofile = base2o sourcebase
-	  val uifile = base2ui sourcebase
-
-
-	  val direct_imports = get_import_direct unitname
-	  val direct_imports_base = map get_base direct_imports
-          val direct_imports_ui = map base2ui direct_imports_base
-
-	  (* Call getImportTr to obtain all imports, possibly detecting cycles *)
-	  val all_imports = getImportTr true unitname
-	  val all_imports_base = map get_base all_imports
-	  val all_imports_ui = map base2ui all_imports_base
-
-          (* make sure all imports are fresh *)
-	  val _ = app (compile false) direct_imports
-
-	  val smldate = modTime smlfile
-
-	  val (latest_import_file, latest_import_time) = 
-                get_latest direct_imports_ui
-
-          val nonconstrained = not (exists intfile)
-          val dest_ui_exists = exists uifile
-          val dest_uo_exists = exists uofile
-          val dest_o_exists = exists ofile
  
-          val sml_changed = 
-              if make_uo then
+    in 
+	fun list_units() = !units
+	fun get_ui_crc unit = 
+            let val UNIT{filebase,ui_crc,...} = lookup unit
+            in  (case !ui_crc of
+		     SOME crc => crc
+		   | NONE => let val uiFile = base2ui filebase
+				 val crc = Crc.crc_of_file uiFile
+				 val _ = ui_crc := SOME crc
+			     in  crc
+			     end)
+	    end
+	fun get_base unit = 
+            let val UNIT{filebase,...} = lookup unit
+            in filebase 
+	    end
+	fun get_position unit = 
+            let val UNIT{position,...} = lookup unit
+            in  position
+	    end
+	fun get_import_direct unit = 
+            let val UNIT{imports_direct = ref (SOME res),...} = lookup unit
+            in  res
+	    end
+	fun get_import_transitive unit = 
+            let val UNIT{imports_transitive = ref (SOME res),...} = lookup unit
+            in  res
+	    end
+
+	fun isDone unit = 
+	    let val UNIT{status,...} = lookup unit
+	    in  (case !status of
+		     DONE => true
+		   | _ => false)
+	    end
+	fun markReady unit = 
+	    let val UNIT{status,...} = lookup unit
+	    in  (case !status of
+		     WAITING => status := READY
+		   | READY => status := READY
+		   | PENDING => error "unit was pending; making ready\n"
+		   | DONE => error "unit was done; making ready\n")
+	    end
+	fun checkReady unit = 
+	    let val imports = get_import_direct unit (* no need to check transitively *)
+		val ready = Listops.andfold isDone imports
+	    in  if ready then markReady unit else ()
+	    end
+	fun markPending unit = 
+	    let val UNIT{status,filebase,dependents_direct,...} = lookup unit
+		val _ = status := PENDING
+	    in  ()
+	    end
+	fun markDone unit = 
+	    let val UNIT{status,filebase,dependents_direct,...} = lookup unit
+		val uifile = base2ui filebase
+		fun loop() = if (exists uifile) then () 
+			     else (print ("non-existent " ^ uifile ^ "\n"); loop())
+		val _ = loop()
+		val _ = status := DONE
+	    in  app checkReady (!dependents_direct)
+	    end
+	fun partition units = 
+	    let fun folder (unit,(w,r,p,d)) = 
+		let val UNIT {status,...} = lookup unit
+		in  (case !status of
+			 WAITING => (unit::w, r, p, d)
+		       | READY => (w, unit::r, p, d)
+		       | PENDING => (w, r, unit::p, d)
+		       | DONE => (w, r, p, unit::d))
+		end
+	    in  foldl folder ([],[],[],[]) units
+	    end
+	fun computeTransitive targetunit seenunits = 
+	    let val UNIT{imports_transitive, ...} = lookup targetunit
+	    in  (case !imports_transitive of
+		   NONE => 
+		       let fun folder(import,acc) = 
+			   let val depends = computeTransitive import (import::seenunits)
+			       fun adder(u, ac) = if Listops.member(u,ac)
+						      then ac else u::ac
+			   in  adder(import,foldl adder acc depends)
+			   end
+			   fun check_loop imports = 
+			       app (fn imp => if (Listops.member(imp,seenunits))
+						  then error ("Loop detected in: " ^
+							      foldr (fn (a,b) => (a ^ " " ^ b)) "" seenunits)
+					      else ()) imports
+			   val base_imports = get_import_direct targetunit
+			   val _ = check_loop base_imports
+			   val result = rev(foldl folder [] base_imports)
+			   val _ = imports_transitive := SOME result
+		       in  result
+		       end
+		 | SOME result => result)
+	    end
+
+	fun setMapping (isMaster, mapFile) =
+	    let val _ = reset_stats()
+		fun init_status() = 
+		    let fun help unit = 
+			let val UNIT{status,imports_direct=ref (SOME imp),...} = lookup unit
+			in  if (null imp) then status := READY else status := WAITING
+			end
+		    in  app help (list_units())
+		    end
+		val mapTime = if (exists mapFile)
+			       then modTime mapFile
+			   else error "Cannot read map file"
+		val same = (case !mapfileInfo of
+				SOME (name,time) => (name = mapFile andalso (time = mapTime))
+			      | _ => false)
+	    in  if same then (chat ("Mapfile " ^ mapFile ^ " cached.");
+			      if isMaster then (init_status(); chat "  Initializing status.") else ();
+			      chat "\n")
+		else 
+		  let
+		      val _ = mapfileInfo := SOME(mapFile,mapTime)
+		      val is = TextIO.openIn mapFile
+		      fun loop (map,us) n = 
+			  if (TextIO.endOfStream is)
+			      then (map,us)
+			  else 
+			      let fun dropper s = String.sub(s,0) = #"#"
+				  val line = TextIO.inputLine is
+			      in  (case (split_line dropper line) of
+				       [unitname, filebase] => 
+					   let val entry = 
+					       UNIT {position = n,
+						     filebase = filebase,
+						     imports_direct = ref NONE,
+						     imports_transitive = ref NONE,
+						     dependents_direct = ref [],
+						     context = ref NONE,
+						     status = ref WAITING,
+						     ui_crc = ref NONE} 
+					   in  loop (StringMap.insert(map, unitname, entry), 
+						     unitname::us) (n+1)
+					      end
+				     | [] => loop (map,us) n
+				     | _ => error ("ill-formed map line: " ^ line))
+			      end
+		      val (map,rev_us) = loop (StringMap.empty,[]) 0
+		      val _ = TextIO.closeIn is
+		      val _ = mapping := map
+		      val _ = units := rev rev_us
+		      val _ = chat ("Mapfile " ^ mapFile ^ " read.\n")
+		      fun compute_graph unit = 
+			  let val UNIT {status, filebase, imports_direct, imports_transitive, ...} = lookup unit
+			      val imports = parse_impl_import(base2sml filebase)
+			      val _ = imports_direct := SOME imports
+
+			      val _ = computeTransitive unit []
+			      val _ = app (fn imp => let val UNIT{dependents_direct, ...} = lookup imp
+						     in  dependents_direct := unit :: (!dependents_direct)
+						     end) imports
+			  in  ()
+			  end
+		      val _ = app compute_graph (!units)
+		      val _ = init_status()
+		      val _ = chat ("Dependency graph computed.\n")
+		  in  ()
+		  end
+	    end
+
+	fun tick_cache() = let fun apper (UNIT{context=r as (ref(SOME(i,ctxt))),...}) = 
+	    if (i<=1) then r := NONE else r := SOME(i-1,ctxt)
+				 | apper _ = ()
+			   in  StringMap.app apper (!mapping)
+			   end
+		       
+	fun readContext unit = 
+	    let val r = get_context unit
+	    in  (case !r of
+		     SOME (i,ctxt) => (r := SOME(Int.min(i+2,!cache_context),ctxt); 
+				       (true,ctxt))
+		   | NONE => let val uifile = base2ui (get_base unit)
+				 val ctxt = readContextRaw uifile
+				 val _ = if (!cache_context>0) 
+					     then r:=SOME(2,ctxt) else ()
+			     in  (false,ctxt)
+			     end)
+	    end
+	
+	fun writeContext (unit,ctxt) = 
+	    let val r = get_context unit
+		(*	   val _ = if (!cache_context>0) then r := SOME(2,ctxt) else () *)
+		val uifile = base2ui (get_base unit)
+		val same = 
+		    (exists uifile) andalso
+		    let val old_ctxt = readContextRaw uifile
+		    in  LinkIl.IlContextEq.eq_context(old_ctxt,ctxt)
+		    end handle _ => (print "Warning: Ill-formed uifile?\n"; false)
+	    in  if same
+		    then chat ("  [" ^ uifile ^ " remains unchanged]\n")
+		else (forget_stat uifile;
+		      chat ("  [writing " ^ uifile);
+		      writeContextRaw(uifile,ctxt);
+		      chat "]\n")
+	    end
+	
+	fun getContext imports = 
+	    let 
+		val _ = Name.reset_varmap()
+		val _ = tick_cache()
+		val cached_ctxts = map readContext imports
+		val ctxts = map #2 cached_ctxts
+		val uncached = (List.mapPartial 
+				(fn (imp,(false,_)) => SOME imp
+			      | _ => NONE) (Listops.zip imports cached_ctxts))
+		val _ = (chat "  [These imports were not cached: ";
+			 chat_strings 30 uncached;
+			 chat "]\n")
+		val initial_ctxt = LinkIl.initial_context()
+		val context = addContext (initial_ctxt :: ctxts)
+		val _ = chat ("  [Added contexts.]\n")
+	    in  context
+	    end
+    end
+end
+
+
+
+structure Slave :> SLAVE =
+struct
+    val error = fn s => Util.error "pmanager.sml" s
+
+    fun setup () = Communication.acknowledge NONE
+    fun single perform =
+	(case Communication.request() of
+	     NONE => false
+	   | SOME cur => (Help.chat ("Received " ^ (String.concat cur) ^ "\n");
+			  perform cur; Communication.acknowledge (SOME cur);
+			  Help.chat ("Processed " ^ (String.concat cur) ^ "\n");
+			  true))
+    fun all perform =
+	let val _ = setup()
+	    fun loop () =
+		(single perform;
+		 loop())
+	in  loop()
+	end
+
+    fun slaveTest() = all (fn _ => Platform.sleep 1.0)
+    fun elab_constrained(unit,ctxt,sourcefile,fp,dec,fp2,specs,uiFile,least_new_time) =
+	(case LinkIl.elab_dec_constrained(ctxt, fp, dec, fp2,specs) of
+	     SOME (new_ctxt, sbnd_entries) =>
+		 let val _ = (Help.chat ("  [writing " ^ uiFile);
+			      Help.writeContext (unit, new_ctxt);
+			      Help.chat "]\n")
+		 in (new_ctxt,sbnd_entries)
+		 end
+	   | NONE => error("File " ^ sourcefile ^ " failed to elaborate."))
+    
+    fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
+	case LinkIl.elab_dec(pre_ctxt, fp, dec) of
+	    SOME(new_ctxt, sbnd_entries) => 
+		let val _ = (Help.chat ("  [writing " ^ uiFile);
+			     Help.writeContext (unit, new_ctxt);
+			     Help.chat "]\n")
+		in (new_ctxt,sbnd_entries)
+		end
+	  | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
+
+
+    fun perform [mapFile,unit] = 
+	let val _ = Help.setMapping (false, mapFile)
+	    val base = Help.get_base unit
+	    val intFile = Help.base2int base
+	    val smlFile = Help.base2sml base
+	    val uiFile = Help.base2ui base
+	    val imports = Help.get_import_transitive unit
+	    val ctxt = Help.getContext imports
+		
+	    val _ = Help.chat ("\n  [Parsing " ^ smlFile ^ "]\n")
+	    val (lines,fp, _, dec) = LinkParse.parse_impl smlFile
+(*  		  val _ = if (lines > 1000) then flush_cache() else () *)
+
+	    (* Elaborate the source file, generating a .ui file *)
+	    val (ctxt',sbnds) = 
+		if Help.exists intFile then
+		    let val (_,fp2, _, specs) = LinkParse.parse_inter intFile
+			val _ = Help.chat ("  [Warning: constraints currently coerce.  Not compatiable with our notion of freshness.]\n")
+			val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " with constraint]\n"  )
+		    in elab_constrained(unit,ctxt,smlFile,fp,dec,fp2,specs,uiFile,Time.zeroTime)
+		    end
+		else let val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " non-constrained]\n")
+		     in elab_nonconstrained(unit,ctxt,smlFile,fp,dec,uiFile,Time.zeroTime)
+		     end
+
+	    (* Continue compilation, generating a platform-dependent .o object file *)
+	    val _ = Help.chat ("  [Compiling to object file ...")
+	    val oFile = Til.compile(ctxt, base, sbnds, ctxt')  
+	    val _ =  Help.chat "]\n"
+		
+	    (* Generate a .uo file containing the checksum for the .o file *)
+	    val _ = Help.chat ("  [Creating .uo file ...")
+	    val imports_uo = map (fn imp => (imp, Help.get_ui_crc imp)) imports
+	    val exports_uo = [(base, Help.get_ui_crc unit)]
+	    val uoFile = Linker.mk_uo {imports = imports_uo,
+				       exports = exports_uo,
+				       base_result = base}
+	    val _ = Help.chat "]\n"
+	    val _ = (Help.forget_stat uoFile; Help.forget_stat uiFile)
+		
+	    (* Print some diagnostic information *)
+	    val _ = if (!Help.stat_each_file)
+			then (OS.Process.system ("size " ^ oFile); Stats.print_timers())
+		    else ()
+	      in  ()
+	end
+      | perform _ = error "Slave received ill-formed message"
+	
+    fun once() = single perform 
+    fun run() = all perform 
+
+end
+
+
+
+
+structure Master =
+struct
+    val error = fn s => Util.error "pmanager.sml" s
+    open Help
+
+    local
+	val waitingSlaves = ref ([] : (string * (Communication.job option -> unit)) list)
+    in  (* Asynchronously ask for whether there are slaves ready *)
+	fun pollForSlaves process_ack : int = 
+	    let val (names,acks,slaves) = Listops.unzip3 (Communication.findSlaves())
+		val _ = app process_ack (Listops.zip names acks)
+		val _ = waitingSlaves := (Listops.zip names slaves) @ (!waitingSlaves)
+	    in  length (!waitingSlaves)
+	    end
+	(* Works only if there are slaves available *)
+	fun useSlave process_request = 
+	    let val (name_invoke::rest) = !waitingSlaves
+		val _ = waitingSlaves := rest
+	    in  process_request name_invoke
+	    end
+    end
+
+  (* ----- Compute the latest mod time of a list of files --------- *)
+    fun get_latest [] = (NONE, Time.zeroTime)
+      | get_latest (f::fs) = 
+	let
+	    val recur_result as (_,fstime) = get_latest fs 
+	    val ftime = modTime f
+	in  if (Time.>=(ftime, fstime)) then (SOME f, ftime) else recur_result
+	end
+
+    (* Compiles the unit either by determining that compilation is not necessary or by calling a slave. 
+       This call does not block. *)
+    fun needsCompile unitname = 
+        let val sourcebase = get_base unitname
+	    val intfile = base2int sourcebase
+	    val smlfile = base2sml sourcebase
+	    val uofile = base2uo sourcebase
+	    val ofile = base2o sourcebase
+	    val uifile = base2ui sourcebase
+
+	    val smldate = modTime smlfile
+	    val dest_ui_exists = exists uifile
+	    val dest_uo_exists = exists uofile
+	    val dest_o_exists = exists ofile
+
+	    val direct_imports = get_import_direct unitname
+	    val direct_imports_base = map get_base direct_imports
+	    val direct_imports_ui = map base2ui direct_imports_base
+	    val (latest_import_file, latest_import_time) = get_latest direct_imports_ui
+ 
+	    val sml_changed = 
                 (dest_ui_exists andalso
                  dest_uo_exists andalso 
                  dest_o_exists andalso
                  (Time.<(modTime uofile, smldate) orelse
-                  Time.<(modTime ofile, smldate) orelse
-                  (nonconstrained
-                   andalso Time.<(modTime uifile, smldate))))
-              else
-                (nonconstrained andalso
-                 dest_ui_exists andalso
-                 Time.<(modTime uifile, smldate))
+                  Time.<(modTime ofile, smldate)))
 
-          val constraint_changed = 
-              (make_uo andalso
-               dest_uo_exists andalso
-               dest_o_exists andalso
-               not (nonconstrained) andalso
-               (Time.<=(modTime uofile, modTime uifile) orelse
-                Time.<=(modTime ofile, modTime uifile) orelse
-                Time.<=(modTime uofile, modTime intfile) orelse
-                Time.<=(modTime ofile, modTime intfile)))
-
-          val import_changed = 
-              if make_uo then
+	    val import_changed = 
                 (dest_uo_exists andalso
                  dest_o_exists andalso
                  (Time.<(modTime ofile, latest_import_time) orelse
                   Time.<(modTime uofile, latest_import_time)))
-              else
-                (dest_ui_exists andalso
-                 Time.<(modTime uifile, latest_import_time))
 
-          val fresh =           
-             if (not dest_ui_exists) then
-                (chat ("  [Compiling "^ smlfile ^ " because " ^ 
-                      uifile ^ " is missing.]\n");
-                 false)
-             else if (make_uo andalso (not dest_uo_exists)) then
-                (chat ("  [Compiling "^ smlfile ^ " because " ^ 
-                      uofile ^ " is missing.]\n");
-                 false)
-             else if (make_uo andalso (not dest_o_exists)) then
-                (chat ("  [Compiling "^ smlfile ^ " because " ^ 
-                      ofile ^ " is missing.]\n");
-                 false)
-             else if sml_changed then
-                (chat ("  [Compiling "^ smlfile ^ " because " ^
-                      smlfile ^ " newer than objects or interface.]\n");
-                 false)
-             else if constraint_changed then
-                (chat ("  [Compiling "^ smlfile ^ " because " ^
-                      uifile ^ " newer than object files.]\n");
-                 false)
-             else if import_changed then
-                (chat ("  [Compiling "^ smlfile ^ " because " ^
-                      (valOf latest_import_file) ^ " changed.]\n");
-                 false)
-             else 
-                true
-
-	  val _ = if fresh
-		      then diag ("  [" ^ smlfile ^ " is up-to-date]\n")
-		  else (chat ("  [" ^ smlfile ^ " has imports: ");
-			chat_imports 30 all_imports;
-			chat "]\n";
-			compileSML'' (unitname, all_imports, make_uo);
-                        diag "returning from compileSML'\n")
-      in  ()
-      end
-
-  (* generates a .ui file, and optionally a .uo file *)
-  and compile make_uo unitname =
-      let val sourcebase = get_base unitname
-	  val source_sml = base2sml sourcebase
-	  val source_int = base2int sourcebase
-          val full_compile = !eager orelse make_uo
-      in  case (full_compile, exists source_int, exists source_sml) of
-	  (true, true, true)   => (compileINT unitname; 
-                                   compileSML true unitname)
-	| (false, true, true)  => compileINT unitname
-	| (false, true, false) => compileINT unitname
-	| (_, false, true)     => compileSML full_compile unitname
-        | (true, _, false) => error ("Missing " ^ source_sml ^
-                                     ": cannot generate .uo")
-	| _ => error ("Missing " ^ source_sml ^ " and " ^ source_int ^ 
-                       ": cannot generate .ui")
-      end
-
-  and compileSML'' (unit, imports, make_uo) : unit = 
-      let val _ = if (!stat_each_file)
-		      then Stats.clear_stats()
-		  else ()
-	  val srcBase = get_base unit
-	  val smlfile = base2sml srcBase
-
-	  val ctxt = getContext imports
-
-	  val _ = chat ("\n  [Parsing " ^ smlfile ^ "]\n")
-	  val (lines,fp, _, dec) = Parser.parse_impl smlfile
-	  val _ = if (lines > 1000) then flush_cache() else ()
-
-	  val import_bases = map get_base imports
-	  val import_uis = List.map (fn x => (x, Linker.Crc.crc_of_file (base2ui x))) import_bases
-	  val uiFile = base2ui srcBase
-	  val intFile = base2int srcBase
-
-	  val (ctxt',sbnds) = 
-	      if exists intFile then 
-		  let val _ = compileINT unit 
-		      val (_,fp2, _, specs) = Parser.parse_inter intFile
-		      val _ = chat ("  [Elaborating " ^ smlfile ^ " with constraint]\n"  )
-		  in elab_constrained(ctxt,smlfile,fp,dec,fp2,specs,Time.zeroTime)
-		  end
-	      else let val _ = chat ("  [Elaborating " ^ smlfile ^ " non-constrained]\n")
-		   in elab_nonconstrained(unit,ctxt,smlfile,fp,dec,uiFile,Time.zeroTime)
-		   end
-
-	  val _ = chat ("  [Compiling to object file ...")
-	  val oFile = Compiler.compile(ctxt, srcBase, sbnds, ctxt')  (* generates oFile *)
-	  val _ =  chat "]\n"
-
-	  val crc = Linker.Crc.crc_of_file uiFile
-	  val exports = [(srcBase, crc)]
-	  val _ = chat ("  [Creating .uo file ...")
-	  val uoFile = Linker.mk_uo {imports = import_uis,
-				     exports = exports,
-				     base_result = srcBase}
-
-          val _ = (forget_stat uoFile; forget_stat uiFile)
-	  val _ = chat "]\n"
-	  val _ = OS.Process.system ("size " ^ oFile)
-	  val _ = if (!stat_each_file)
-		      then Stats.print_timers()
-		  else ()
-      in  ()
-      end
+	    val fresh =           
+		 if (not dest_ui_exists) then
+		     (chat ("    [" ^ sourcebase ^ " is out-of-date: " ^
+			    uifile ^ " is missing.]\n");
+		      false)
+		 else if (not dest_uo_exists) then
+		     (chat ("    [" ^ sourcebase ^ " is out-of-date: " ^
+			    uofile ^ " is missing.]\n");
+		      false)
+		 else if (not dest_o_exists) then
+		     (chat ("    [" ^ sourcebase ^ " is out-of-date: " ^
+			    ofile ^ " is missing.]\n");
+		      false)
+		 else if sml_changed then
+		     (chat ("    [" ^ sourcebase ^ " is out-of-date: " ^
+			    smlfile ^ " newer than objects or interface.]\n");
+		      false)
+                 else if import_changed then
+		     (chat ("    [" ^ sourcebase ^ " is out-of-date: " ^
+			    (valOf latest_import_file) ^ " changed.]\n");
+		      false)
+		 else 
+		     true
 
 
-  and compileINT unitname =
-      let val _ = 
-             if (!diag_ref) then 
-                (push_tab(); 
-                 print "compileINT: "; 
-                 print unitname; 
-                 print "\n") 
-             else ()
+	    val _ = if fresh
+			then (chat ("  [" ^ sourcebase ^ " is up-to-date]\n");
+			      markDone unitname)
+		    else ()
 
-	  val fresh = get_fresh unitname
+	in  not fresh
+	end
 
-	  val _ = (case !fresh of
-		       STALE => (compileINT' unitname; fresh := FRESH_INTER)
-		     | FRESH_INTER => ()
-		     | FRESH_IMPL => ())
+    type state = string list * string list
+    fun once (mapfile, srcs) = 
+	let val _ = setMapping (true, mapfile)
+	    val srcs = if (null srcs) then list_units() else srcs
+	    val temp = map get_import_transitive srcs
+	    (* XXX Should be in module Listops *)
+	    fun list_union_eq eq ([], b) = b
+	      | list_union_eq eq (a::rest, b) = if (Listops.member_eq(eq,a,b))
+						    then list_union_eq eq (rest, b)
+						else list_union_eq eq (rest, a::b)
+	    val units = foldl (list_union_eq (fn (a:string,b) => a=b)) [] temp
+	    val _ = chat "Computed all necessary units\n"
+	    fun waitForSlaves() = 
+		let fun do_ack (_,NONE) = ()
+		      | do_ack (name,SOME [mapFile,u]) = 
+		          (markDone u; chat ("  [Slave " ^ name ^ " compiled " ^ u ^ "]\n"))
+		      | do_ack _ = error "Acknowledgement not two words"
+		    val numSlaves = pollForSlaves do_ack
+		in  if numSlaves = 0
+			then (Platform.sleep 0.1; waitForSlaves())
+		    else numSlaves
+		end
+	    fun getReady waiting = 
+		let val (waiting,ready, [], []) = partition waiting
+		    val reallyReady = List.filter needsCompile ready
+		in  if (length ready = length reallyReady)
+			then (waiting, reallyReady)
+		    else getReady (waiting @ reallyReady)
+		end
+	    fun step (([], []) : state)  = (false, NONE)
+	      | step (waiting, pending) =
+		let val (w,r, pending, done) = partition pending
+		    val _ = if (null w) then () else (print "waiting nonempty: ";
+						      app print w; print "\n")
+		    val _ = if (null r) then () else (print "ready nonempty: "; app print r; print "\n")
+		    val (waiting,ready) = getReady waiting
+		    val numSlaves = waitForSlaves()
+		    fun useSlaves slavesLeft (pending, ready, waiting) = 
+			(case (slavesLeft, ready) of
+			     (0, _) => (true, pending, ready @ waiting)
+			   | (_, []) =>
+				 (chat "  [Idling: Available slaves but no jobs.";
+				  chat "  Waiting for completion of ";
+				  chat_strings 20 pending;
+				  chat "]\n";
+				  chat "waiting = "; 
+				  chat_strings 10 waiting;
+				  chat "\n\n";
+				  (false,pending,waiting))
+			   | (_, first::rest) =>
+				 let fun do_request (name, invoke) = 
+				     let val _ = chat ("  [Calling slave " ^ name ^ 
+						       " to compile " ^ first ^ "]\n");
+					 val _ = markPending first
+					 val _ = invoke (SOME [mapfile,first])
+					 val base = get_base first
+					 val _ = forget_stat (base2ui base)
+					 val _ = forget_stat (base2o base)
+					 val _ = forget_stat (base2uo base)
+				     in  () 
+				     end
+				 in  useSlave do_request; 
+				     useSlaves (slavesLeft - 1) (first::pending, rest, waiting)
+				 end)
+		    val (allSlavesUsed, pending, waiting) = useSlaves numSlaves (pending, ready, waiting)
+		in  (allSlavesUsed, SOME (waiting, pending))
+		end
+	in  (units, (units, []), step)
+	end
+    fun run args = 
+	let val (units,state,step) = once args
+	    fun loop state = case (step state) of
+		               (_,NONE) => units
+			     | (progress,SOME state) => (if progress then Platform.sleep 1.0 else ();
+							 loop state)
+	in  loop state
+	end
+end
 
-	  val _ = if (!diag_ref) then pop() else ()
+structure Manager :> MANAGER = 
+struct
 
-      in 
-        () 
-      end
+  val error = fn s => Util.error "pmanager.sml" s
+  open Help
 
-  and compileINT' unitname =
-      let val sourcebase = get_base unitname
-	  val sourcefile = base2int sourcebase
-          val uifile     = base2ui sourcebase
-          val direct_includes = get_include_direct unitname
-          val _ = app (compile false) direct_includes
-
-	  val includes_base = map get_base direct_includes
-          val includes_ui = map base2ui includes_base
-          val (latest_include_file, latest_include_time) = 
-                  get_latest includes_ui
-
-          val dest_ui_exists = exists uifile
-
-      in
-          if (dest_ui_exists andalso
-              Time.>=(modTime uifile, modTime sourcefile) andalso
-              Time.>=(modTime uifile, latest_include_time)) then
-            (* uifile is up-to-date.  Do not touch this file. *)
-            ()
-          else
-            let
-                val _ = (chat ("  [Compiling " ^ sourcefile ^ " because ");
-                         (case (dest_ui_exists, latest_include_file)  of
-                            (false,_) => chat (uifile ^ " is missing.]\n")
-                          | (_,SOME f) => chat (f ^ " has changed.]\n")
-                          | (_,NONE) => chat (sourcefile ^" has changed.]\n")))
-
-                val all_includes = getImportTr false unitname
-
-                val ctxt = getContext all_includes
-
-	        val (_,fp, _, specs) = Parser.parse_inter sourcefile
-
-	      in  (case Elaborator.elab_specs(ctxt, fp, specs) of
-		       SOME ctxt' => (chat ("  [Writing " ^ uifile);
-                                      writeContext (unitname, ctxt');
-                                      chat "]\n")
-		     | NONE => error("File " ^ sourcefile ^ 
-                                     " failed to elaborate."))
-	      end
-      end
-
-  val flags = (ref false, ref false, ref false, ref false) (* c, r ,o, all *)
-
-  fun resetFlags () = (#1(flags) := false;
-		       #2(flags) := false;
-		       #3(flags) := false;
-		       #4(flags) := false)
-
-
-
-
-  (* exeopt  - if present, names the final executable 
-     srcs    - unit names *)
-
-  fun compileThem(exeopt, units) = 
-      let val _ = app (compile true) units
-          val unit_set = 
+  fun makeExe(exe, units) = 
+      let val unit_set = 
                List.foldl 
                  (fn (next, set) => 
-                     let val import_tr = getImportTr_link next
-			 val next_pos = get_position next
+                     let val import_tr = Help.get_import_transitive next
+			 val next_pos = Help.get_position next
 			 fun check import = if (get_position import < next_pos) then ()
 			                    else 
 						error ("Mapfile file ordering is inconsistent because " ^
 							next ^ " imports " ^ import ^ " but precedes it.")
 			 val _ = app check import_tr
-			 val _ = if (!diag_ref)
-				     then (print "Imports for ";
-					   print next;
-					   print " are:\n   ";
-					   app (fn s => (print s; print " ")) import_tr;
-					   print "\n")
-				 else ()
 		     in StringSet.add(StringSet.addList (set, import_tr), next)
                      end)
                  (StringSet.empty)
@@ -718,73 +834,96 @@ structure Manager :> MANAGER =
 
 	  val units = List.filter (fn unit => (StringSet.member(unit_set,unit))) units
 
-      in  (case exeopt of
-	       NONE => ()
-	     | SOME out => 
-		   let fun mapper unit = 
-		       let val base = get_base unit
-		       in  {unit=unit, base=base,
-			    uiFile=base2ui base, uoFile=base2uo base, oFile=base2o base}
-		       end
-		       val packages = map mapper units
-		   in  (print "Manager calling linker with: ";
-			app (fn s => (print s; print " ")) units;
-			print "\n";
-			Linker.mk_exe {units = packages, exe_result = out})
-		   end)
-      end
-       
-  fun setMapping mapFile =
-      let val _ = if (exists mapFile)
-		      then ()
-		  else error "Cannot read map file"
-	  val is = TextIO.openIn mapFile
-	  val _ = reset_mapping()
-	  fun fetch_line n = let fun dropper s = String.sub(s,0) = #"#"
-				 val line = TextIO.inputLine is
-			     in  case (split_line dropper line) of
-				 [unitname, filebase] => add_unit (n,unitname, filebase)
-			       | [] => ()
-			       | _ => error ("ill-formed map line: " ^ line)
-			     end
-	  fun loop n = if (TextIO.endOfStream is)
-			    then TextIO.closeIn is
-			else (fetch_line n;loop(n+1))
-      in  loop 0
+	  fun mapper unit = 
+	      let val base = get_base unit
+	      in  {unit=unit, base=base,
+		   uiFile=base2ui base, uoFile=base2uo base, oFile=base2o base}
+	      end
+	  val packages = map mapper units
+      in  (print "Manager calling linker with: ";
+	   app (fn s => (print s; print " ")) units;
+	   print "\n";
+	   Linker.mk_exe {units = packages, exe_result = exe})
       end
 
-
-  fun tilc(mapfile : string, cs : bool,
-	   os : string option, srcs : string list) =
+  val slave = Slave.run
+  fun helper runner (mapfile : string, cs : bool, os : string option, srcs : string list) =
 	let val _ = if !(Stats.tt "Reset stats between calls") then Stats.clear_stats() else ()
-	    val _ = reset_stats()
-	    val _ = (depth := 0)
-	    val _ = setMapping mapfile
-	    val srcs = if srcs = [] 
-			   then list_units()
-		       else srcs
-	    val default_exe = (List.last srcs) ^ ".exe"
 	in  (case (cs, os) of
-		    (false, NONE)   => compileThem(SOME default_exe, srcs)
-		  | (false, SOME f) => compileThem(SOME f, srcs)
-		  | (true,  NONE)   => compileThem(NONE, srcs)
-		  | (true,  SOME _) => error "Cannot specify -c and -o");
+		 (false, NONE)   => let val units = runner(mapfile, srcs)
+					val default_exe = (List.last units) ^ ".exe"
+				    in  makeExe(default_exe, units)
+				    end
+	       | (false, SOME given_exe) => let val units = runner(mapfile, srcs)
+					    in  makeExe(given_exe, units)
+					    end
+	       | (true,  NONE)   => (runner(mapfile, srcs); ())
+	       | (true,  SOME _) => error "Cannot specify -c and -o");
 	    Stats.print_stats()
 	end
 
+  fun master mapfile = helper Master.run (mapfile, false, NONE, [])
+  fun pmake (mapfile, slaves) = 
+      let fun startSlave (num,machine) = 
+	  let val geometry = "80x16+0+" ^ (Int.toString (num * 250))
+	      val dir = OS.FileSys.getDir()
+	      val SOME display = OS.Process.getEnv "DISPLAY"
+	      val SOME user = OS.Process.getEnv "USER"
+	      val out = TextIO.openOut "startSlave1"
+	      val _ = TextIO.output(out, "(shell)\n")
+	      val _ = TextIO.output(out, "(end-of-buffer)\n")
+	      val _ = TextIO.output(out, "(insert-file \"" ^ dir ^ "/startSlave2\")\n")
+	      val _ = TextIO.output(out, "(end-of-buffer)\n")
+	      val _ = TextIO.output(out, "(comint-send-input)\n")
+	      val _ = TextIO.output(out, "(insert-file \"" ^ dir ^ "/startSlave3\")\n")
+	      val _ = TextIO.output(out, "(end-of-buffer)\n")
+	      val _ = TextIO.output(out, "(comint-send-input)\n")
+	      val _ = TextIO.closeOut out
+	      val out = TextIO.openOut "startSlave2"
+	      val _ = TextIO.output(out, "cd " ^ dir ^ "; Local/sml-cm\n")
+	      val _ = TextIO.closeOut out
+	      val out = TextIO.openOut "startSlave3"
+	      val _ = TextIO.output(out, "CM.make(); Manager.slave();\n")
+	      val _ = TextIO.closeOut out
+	      val command = 
+		  "setenv DISPLAY " ^ display ^ 
+		  "; xterm -geometry -0 -e kinit " ^ user ^
+		  "; emacs -bg black -fg yellow -geometry " ^ geometry ^ " -l " ^ dir ^ "/startSlave1"
+	  in  (OS.Process.system ("rsh " ^ machine ^ " '" ^ command ^ "'&"); ()) 
+	  end
+      in  Listops.mapcount startSlave slaves; 
+	  master mapfile
+      end
+  fun tilc arg =
+      let fun runner args = 
+	  let val (units,mstate,mstep) = Master.once args
+	      val _ = Slave.setup()
+	      fun loop state = 
+		  (case (mstep state) of
+		       (_,NONE) => units
+		     | (_,SOME state) => (Slave.once(); 
+					  loop state))
+	  in  loop mstate
+	  end
+      in  helper runner arg
+      end
+  fun make mapfile = tilc (mapfile, false, NONE, [])
 
   fun purge(mapfile : string) =
-      let val _ = setMapping mapfile
-	  val units = list_units()
+      let val _ = (print "Purging "; print mapfile; print "\n")
+	  val _ = Help.setMapping (false, mapfile)
+	  val units = Help.list_units()
 	  fun remove unit = 
 	      let val base = get_base unit
 		  val ui = base2ui base
 		  val uo = base2uo base
 		  val s = base2s base
 		  val obj = base2o base
-		  val command = "rm -f " ^ ui ^ "; rm -f " ^ s ^ "; rm -f " ^ uo ^ "; rm -f " ^ obj
-	      in  (Util.system command; ())
-
+		  fun kill file = if (OS.FileSys.access(file, []) andalso
+				      OS.FileSys.access(file, [OS.FileSys.A_READ]))
+				      then OS.FileSys.remove file
+				  else ()
+	      in  kill ui; kill uo; kill s; kill obj
 	      end
       in  app remove units
       end
@@ -801,6 +940,13 @@ structure Manager :> MANAGER =
      The 2nd indicates whether the -c flag is present.
      The 3rd carries the name of the -o filename (final executable), if present.
      The 4th component is a list of the source files to process. *)
+
+  val flags = (ref false, ref false, ref false, ref false) (* c, r ,o, all *)
+
+  fun resetFlags () = (#1(flags) := false;
+		       #2(flags) := false;
+		       #3(flags) := false;
+		       #4(flags) := false)
 
   fun getArgs (args : string list) :  string option * bool * string option * bool * string list = 
       let
@@ -831,6 +977,7 @@ structure Manager :> MANAGER =
       in  (resetFlags(); loop args (NONE, false, NONE, false, []))
       end
 
+  fun help() = print "This is TILT - no help available.\n"
   fun command(env : string, args : string list) : int =
     case args of 
       [] => (print ("No arguments specified.\n"); 1)
@@ -852,4 +999,3 @@ structure Manager :> MANAGER =
 	end
 
 end
-

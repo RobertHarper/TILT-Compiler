@@ -2,7 +2,7 @@
 (*
    tvclose
 
-   Bind open type variables in ValDec, ValRecDec, and FunDec declarations.
+   Bind open type variables in ValDec, ValRecDec, PvalDec, and FunDec declarations.
 
    This is a two-pass operation in which tyvar bindings (tyvar list
    refs) are destructively modified:
@@ -151,6 +151,9 @@ struct
 	 [])
     | pass1_dec (ValrecDec (rvbs, tvbref)) =
 	(tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_rvb rvbs));
+	 [])
+    | pass1_dec (PvalDec (vbs, tvbref)) =
+        (tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_vb vbs));
 	 [])
     | pass1_dec (FunDec (fbs, tvbref)) =
 	(tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_fb fbs));
@@ -310,6 +313,8 @@ struct
         app (pass2_vb (rebind env tvlistref)) vbs
     | pass2_dec env (ValrecDec (rvbs, tvlistref)) =
         app (pass2_rvb (rebind env tvlistref)) rvbs
+    | pass2_dec env (PvalDec (vbs, tvlistref)) =
+        app (pass2_vb (rebind env tvlistref)) vbs
     | pass2_dec env (FunDec (fbs, tvlistref)) =
         app (pass2_fb (rebind env tvlistref)) fbs
     | pass2_dec env (ExternDec (sym,ty)) = ()
