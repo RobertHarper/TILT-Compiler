@@ -302,14 +302,14 @@ struct
 	      | IALIGN x        => String (".align "^align2s x)
 	      | ILABEL l        => String (local_label2s l^":")
 	      | HALT            => String ("halt")
-	      | ICOMMENT s => String ("ICOMMENT -- " ^ s)
+	      | ICOMMENT s => String ("### " ^ s)
 
   fun labelortag2s (PTR l) = label2s l
     | labelortag2s (TAG i) = word2str i
 
   fun pp_Data' d =
       case d of
-	  COMMENT (s) => String s
+	  COMMENT (s) => String ("### " ^ s)
 	| STRING (s) =>  String (".ascii \""^s^"\"")
 	| INT32 (bi) =>  String (".long "^(word2str bi))
 	| INT_FLOATSIZE (a) =>   String (".long_floatsize "^(word2str a))
