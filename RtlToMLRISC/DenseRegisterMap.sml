@@ -35,9 +35,34 @@ functor DenseRegisterMap(
    * id -> the id to get the block index and offset of
    * <- the block index of id
    * <- the block offset of id
-   * use shift+mask to speed this up ???
    *)
-  fun split id = (id div blockSize, id mod blockSize)
+  local
+    val w5  = Word.fromInt 5
+    val w6  = Word.fromInt 6
+    val w31 = Word.fromInt 31
+    val w63 = Word.fromInt 63
+
+    fun split32 id =
+	  let
+	    val word = Word.fromInt id
+	  in
+	    (Word.toIntX(Word.>>(word, w5)), Word.toIntX(Word.andb(word, w31)))
+	  end
+
+    fun split64 id =
+	  let
+	    val word = Word.fromInt id
+	  in
+	    (Word.toIntX(Word.>>(word, w6)), Word.toIntX(Word.andb(word, w63)))
+	  end
+
+    fun splitN id = (id div blockSize, id mod blockSize)
+  in
+    val split = case blockSize of
+		  32 => split32
+		| 64 => split64
+		| _  => splitN
+  end
 
   (*
    * Return a block map with a new value block for a given index containing
