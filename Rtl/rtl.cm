@@ -23,5 +23,7 @@ rtloper.sig.sml
 rtloper.sml
 rtlinterp.sig.sml
 rtlinterp.sml
+rtlopt.sig.sml
+rtlopt.sml
 (* ------ the never-absent link file for this directory -------- *)
 linkrtl.sml

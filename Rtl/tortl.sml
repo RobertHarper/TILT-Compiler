@@ -1141,7 +1141,9 @@ val debug = ref false
 		      val s' = promote_maps (istoplevel()) state
 		  in  (addWork (ConFunWork(s',name,vklist,c,k)); state)
 		  end
-	    | Open_cb _ => error "open Fun_cb"
+	    | Open_cb _ => (print "open Fun_cb:\n";
+			    Ppnil.pp_conbnd cbnd; print "\n";
+			    error "open Fun_cb")
       end
 
   and xconst state (arg_v : (con,exp) Prim.value) 
@@ -1362,7 +1364,8 @@ val debug = ref false
 		      local
 			  val handler_body' = Let_e(Sequential,[Exp_b(exnvar,exncon,NilUtil.match_exn)],
 						    handler_body)
-			  val fvhandler = NilUtil.freeExpVarInExp handler_body'
+			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp handler_body'
+			  val fvhandler = free_cvars @ free_evars
 			  fun loop [] (irep,ir,fr) = (irep,ir,fr)
 			    | loop (v::rest) (irep,ir,fr) = 
 			      let val var = Var_e v
@@ -1739,7 +1742,9 @@ val debug = ref false
 								 else loop lrest crest (n+1)
 			    val (labels,fieldcons) = (case reccon of
 							  Prim_c(Record_c labels,cons) => (labels,cons)
-							| _ => error "selecting from a non-record")
+							| c => (print "selecting from exp of type: ";
+								Ppnil.pp_con c; print "\n";
+								error' "selecting from a non-record"))
 (*
 			    val _ = (print "labels are: ";
 				     app (fn l => (Ppnil.pp_label l; print " ")) labels; print "\n";

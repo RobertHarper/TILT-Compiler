@@ -32,6 +32,9 @@ struct
 			    structure NilUtil = Linknil.NilUtil
 			    structure Ppnil = Linknil.PpNil)
 
+    structure Rtlopt = MakeRtlopt(structure Rtl = Rtl
+				  structure Pprtl = Pprtl)
+
     structure Registerset = MakeRegisterSet(structure Rtl = Rtl
 					    structure Pprtl = Pprtl)
 
@@ -52,6 +55,8 @@ struct
 				    codeAlign = Rtl.QUAD, FullConditionalBranch = false,
 				    elim_tail_call = true, recognize_constants = true}
 	    val rtlmod = Tortl.translate translate_params nilmodule
+(*	    val rtlmod = Rtlopt.opt translate_params rtlmod *)
+	    val rtlmod = Rtlopt.GCmerge rtlmod
 	    val _ = if debug
 			then (print "============================================\n\n";
 			      print "RTL code:\n";
