@@ -443,19 +443,22 @@ struct
 	    app (fn l => (Ppnil.pp_label l; print "\n")) labels;
 	    error ("Record_cc failed from " ^ str))
 
-   fun projectFromRecord con [] = con
-     | projectFromRecord (Prim_c(Record_c (lbl::lbls), con::cons)) (l' as (lbl'::lbls')) =
+   fun projectFromRecord nilctxt con [] = con
+     | projectFromRecord nilctxt (Prim_c(Record_c (lbl::lbls), con::cons)) (l' as (lbl'::lbls')) =
        if (Name.eq_label (lbl, lbl')) then 
-	   projectFromRecord con lbls'
+	   projectFromRecord nilctxt con lbls'
        else
-	   projectFromRecord (Prim_c(Record_cc "1" lbls, cons)) l'
-     | projectFromRecord c labels =
-       (print "Error: bad projection from constructor ";
-	Ppnil.pp_con c;
-	print " and labels ";
-	app (fn l => (Ppnil.pp_label l; print " ")) labels;
-        print "\n";
-	error "projectFromRecord: bad projection")
+	   projectFromRecord nilctxt (Prim_c(Record_cc "1" lbls, cons)) l'
+     | projectFromRecord nilctxt c labels =
+	   (case Nilstatic.con_reduce(nilctxt,c) of
+		c as (Prim_c(Record_c _, _)) => projectFromRecord nilctxt c labels
+	      | _ => 
+		    (print "Error: bad projection from constructor ";
+		     Ppnil.pp_con c;
+		     print " and labels ";
+		     app (fn l => (Ppnil.pp_label l; print " ")) labels;
+		     print "\n";
+		     error "projectFromRecord: bad projection"))
 
    (* xmod:  Translation of an IL module.
 
@@ -674,7 +677,7 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 		| NONE => (perr_c name_arg_c;
 			   error "Expected constructor variable")
 
-val _ = print "MOD_APP 1\n"
+
 
 	   val (var, var_c, var_r, vmap) = chooseName (preferred_name, vmap)
 
@@ -844,7 +847,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 			Ppnil.pp_con type_mod_r'; print "\n and hd lbls = ";
 			Ppnil.pp_label (hd lbls); print "\n")
 *)
-	       val type_proj_r = projectFromRecord type_mod_r' lbls
+	       val type_proj_r = projectFromRecord (NILctx_of context) type_mod_r' lbls
 	   end
 
 
@@ -870,7 +873,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		    preferred_name) =
        let
 
-val _ = print "MOD_FUNCTOR start\n"
+
 
 	   (* Split the argument parameter *)
 	   val (var_arg_c, var_arg_r, vmap') = splitVar (var_arg, vmap_of context)
@@ -982,7 +985,7 @@ val _ = (print "knd_body_c is ";
 					  name_body_r,
 					 type_body_r'))])]
 
-val _ = print "MOD_FUNCTOR finished\n"
+
        in
 	   {cbnd_cat = cbnd_fun_cat,
             ebnd_cat = ebnd_fun_cat,
@@ -1759,7 +1762,7 @@ val _ = print "MOD_FUNCTOR finished\n"
 
 		   val con = Mu_c (is_recur,
 				   Util.list2set (Listops.zip vars cons'), 
-				   List.nth (vars, i-1))
+				   List.nth (vars, i))
 	       in
 		   (con, Word_k Runtime)
 	       end
@@ -2154,7 +2157,7 @@ val _ = print "MOD_FUNCTOR finished\n"
        let
 	   val (exp_record, con_record, valuable) = xexp context il_exp
 
-	   val con = projectFromRecord con_record [label]
+	   val con = projectFromRecord (NILctx_of context) con_record [label]
 	   val cons = 
 	     if !select_carries_types then
 	       case strip_record con_record 
@@ -2388,7 +2391,7 @@ val _ = print "MOD_FUNCTOR finished\n"
 	                (if specialize then 
 			     type_r 
 			 else
-			     projectFromRecord type_r [label])
+			     projectFromRecord (NILctx_of context) type_r [label])
 
 (*
            val _ = (print "unnormalized con = ";

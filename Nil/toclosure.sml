@@ -672,6 +672,7 @@ struct
 		     let 
 			 fun cb_folder (Con_cb(v,k,c),(f,s)) =
 			     let val f' = c_find_fv s c
+				 val f' = join_free(f', k_find_fv s k)
 			     in (join_free(f, f'), add_boundcvar(s,v,k))
 			     end
 			   | cb_folder (Code_cb(v,vklist,c,k), _) = error "code_cb during closure conversion"
@@ -700,7 +701,11 @@ struct
 	       | Annotate_c (_,c) => c_find_fv state c)
 		 
 	and k_find_fv state kind : frees =
-	    (case kind of
+	    (if (!debug)
+		 then (print "k_find_fv called on\n";
+		       Ppnil.pp_kind kind; print "\n\n")
+	     else ();
+	     case kind of
 	    ((Type_k _) | (Word_k _)) => empty_frees
 	  | (Singleton_k (p,k,c)) => (k_find_fv state k; (c_find_fv state c))
 	  | (Record_k lv_kind_seq) =>
