@@ -52,7 +52,7 @@ structure Linker : LINKER =
 			     if (crc = crc2)
 				 then acc
 			     else error ("Link Error: The unit object " ^ unitname ^ " builds\n" ^
-					 "on a version of " ^ name ^ " which is inconcistent\n" ^
+					 "on a version of " ^ name ^ " which is inconsistent\n" ^
 					 "with which it is linked."))
 		val rev_ue = foldl folder [] ue1
 	  in rev rev_ue
@@ -68,7 +68,7 @@ structure Linker : LINKER =
 		else (* un1=un2 *)
 		  if crc1=crc2 then plus(ue1',ue2',(un1,crc1)::a)
 		  else error ("Link Error: The unit object " ^ unitname ^ " builds\n" ^
-			      "on a version of " ^ un1 ^ " which is inconcistent\n" ^
+			      "on a version of " ^ un1 ^ " which is inconsistent\n" ^
 			      "with versions of " ^ un1 ^ " imported elsewhere.") 
 	  in plus(ue1,ue2,[])
 	  end
