@@ -22,7 +22,9 @@
 #define Csaveregs_disp      longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz
 #define writelistAlloc_disp longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz
 #define writelistLimit_disp longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz
-#define stackLimit_disp     longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz+MLptrSz 
+#define stackLimit_disp     longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz+MLptrSz
+#define stackTop_disp	    longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz+MLptrSz+intSz
+
 #if    defined(solaris)
 #define snapshot_size       16
 #elif  defined(alpha_osf)
@@ -163,7 +165,8 @@ typedef struct Thread__t
   volatile double             Cfregs[32];        
   volatile ploc_t             writelistAlloc;
   volatile ploc_t             writelistLimit;
-  volatile mem_t              stackLimit;       /* Bottom of current stack */
+  volatile mem_t              stackLimit;       /* Bottom of current stacklet */
+  volatile mem_t	      stackTop;		/* Top of current stacklet */
   volatile int                globalOffset;     /* zero or four */
   volatile int                stackletOffset;   /* zero or stackletSize * 1024 */
   volatile int                arrayOffset;      /* zero or four */

@@ -13,7 +13,8 @@ struct
     val writelistAlloc_disp = threadScratch_disp + 8 + 8 + 8 + 8 * 32 + 8 * 32
     val writelistLimit_disp = writelistAlloc_disp + 4  (* ploc_t is 4 bytes *)
     val stackLimit_disp     = writelistLimit_disp + 4
-    val globalOffset_disp   = stackLimit_disp + 4
+    val stackTop_disp       = stackLimit_disp + 4
+    val globalOffset_disp   = stackTop_disp + 4
     val stackletOffset_disp = globalOffset_disp + 4
     val arrayOffset_disp    = stackletOffset_disp + 4
 
@@ -686,7 +687,7 @@ structure Machine =
        = fn name => ignore o (Stats.counter name)
    val large_stack_frame = counter "Large Stack Frames"
    val large_frame_access = counter "Large Frame Accesses"
-       
+
    fun allocate_stack_frame (sz, prevframe_maxoffset) =
        let val _ = if sz < 0 then error "allocate_stack_frame given negative size" else ()
 	   val _ = if in_ea_disp_range sz then () else large_stack_frame()
@@ -770,7 +771,7 @@ structure Machine =
                | SOME x => x)
 
 
-   val special_iregs = listunique[Rzero, Rgp, Rat, Rsp, Rth, Rheap, Rhlimit, Rat2, Rexnptr, Rexnarg, Rpv', Rra]
+   val special_iregs = listunique[Rzero, Rgp, Rat, Rsp, Rth, Rheap, Rhlimit, Rat2, Rexnptr, Rexnarg, Rpv' (* = Rhandler *), Rra]
    val special_fregs = listunique[Fat, Fat2, Fzero]
 
    val general_iregs = listdiff(listdiff(int_regs,special_iregs),

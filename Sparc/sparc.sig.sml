@@ -14,6 +14,7 @@ sig
   val writelistAlloc_disp : int
   val writelistLimit_disp : int
   val heapLimit_disp : int
+  val stackTop_disp : int
   val globalOffset_disp : int
   val stackletOffset_disp : int
   val arrayOffset_disp : int

@@ -184,3 +184,17 @@ void toplevel_exnhandler(Thread_t *th)
 	  getProc()->procid, th->tid, th->id, msg_len, (char*)msg);
   Finish();
 }
+
+void RestoreStackFromMutator(Thread_t* th)
+{
+  mem_t sp = (mem_t) th->saveregs[SP];
+  mem_t ra = (mem_t) th->saveregs[RA];
+  Stacklet_t* oldStacklet = CurrentStacklet(th->stack);
+  Stacklet_t* newStacklet = EstablishStacklet(th->stack, sp);
+  assert(oldStacklet != newStacklet);
+  th->stackLimit = StackletPrimaryBottom(newStacklet);
+  th->stackTop = StackletPrimaryTop(newStacklet);
+  Stacklet_KillReplica(newStacklet);
+  returnToML(th, ra);
+  abort();
+}
