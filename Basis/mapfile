@@ -1,0 +1,292 @@
+# Basis/Library/time-limit <--- can't do this file, it uses SMLofNJ.IntervalTimer
+# RANDOM         Basis/Library/random-sig <--- useless since we are skipping Random
+# Random         Basis/Library/random     <--- needs Pack32Big
+
+# PrimIOFn       59 seconds; slow in backend
+# BinIOFn        100 seconds; slow in cc and tortl and backend
+# TextIOFn       45 seconds; slow in backend
+# PosixBinPrimIO 6 seconds to compile; slow in cc and tortl
+# PosixTextPrimIO 16 seconds to compile; slow in cc and very slow in tortl
+# TextIO         13 seconds; slow in cc and tortl
+
+# BinaryMapFn    70 seconds (lots of constructor functions)
+# HashTableFn    30 seconds (lots of constructor functions)
+# Hash2TableFn   58 seconds (lots of constructor functions)
+
+
+# BinIOFn        does not work with optimizer (anormalize-cse chokes)
+# OsProcess      does not work with optimizer (anormalize-cse chokes)
+# TextIOFn        does not work with optimizer (anormalize-cse chokes)
+# PosixTextPrimIO  does not work with optimizer (anormalize-cse chokes)
+# Array2         does not work with optimizer (anormalize-cse chokes)
+# ArrayQSort     does not work with optimizer (anormalize-cse chokes)
+# BinaryMapFn    does not work with optimizer (anormalize-cse chokes)
+# BinarySetFn    tortl fails with optimizer on
+
+Prelude     Basis/Firstlude
+GENERAL     Basis/General/general.sig
+General     Basis/General/general
+OPTION      Basis/General/option-sig
+Option      Basis/General/option
+STRING_CVT  Basis/Text/string-cvt-sig
+StringCvt   Basis/Text/string-cvt 
+# "Prelude", "GENERAL", "General", "OPTION", "Option", "STRING_CVT", "StringCvt"
+BOOL        Basis/General/bool-sig
+Bool        Basis/General/bool
+LIST        Basis/Aggregate/list-sig
+List        Basis/Aggregate/list
+PreString   Basis/Text/pre-string
+NumFormat   Basis/Text/num-format
+CHAR        Basis/Text/char-sig
+Char        Basis/Text/char 
+# "BOOL", "Bool", "LIST", "List", "PreString", "NumFormat", "CHAR", "Char"
+STRING      Basis/Text/string-sig
+String      Basis/Text/string
+SUBSTRING   Basis/Text/substring-sig
+Substring   Basis/Text/substring
+PreInt      Basis/Numeric/pre-int
+NumScan     Basis/Text/num-scan
+INTEGER     Basis/Numeric/integer-sig
+Int32       Basis/Numeric/int32 
+# "STRING", "String", "SUBSTRING", "Substring", "PreInt", "NumScan", "INTEGER", "Int32"
+PreReal     Basis/Numeric/pre-real
+MATH        Basis/Numeric/math-sig
+Math64      Basis/Numeric/math64c
+IEEE        Basis/Numeric/ieee-real-sig
+Ieee        Basis/Numeric/ieee-real 
+REAL        Basis/Numeric/real-sig
+RealFormat  Basis/Numeric/real-format
+Real64      Basis/Numeric/real64
+# "PreReal", "MATH", "Math64", "IEEE", "Ieee", "REAL", "RealFormat", "Real64"
+PreWord     Basis/Numeric/pre-word
+WORD        Basis/Numeric/word-sig
+Word8       Basis/Numeric/word8
+Word32      Basis/Numeric/word32
+# "PreWord", "WORD", "Word8", "Word32"
+ARRAY       Basis/Aggregate/array-sig
+Array       Basis/Aggregate/array
+VECTOR      Basis/Aggregate/vector-sig
+Vector      Basis/Aggregate/vector
+MONO_VECTOR Basis/Aggregate/mono-vector-sig
+MONO_ARRAY  Basis/Aggregate/mono-array-sig
+Word8Vector Basis/Aggregate/word8-vector
+Word8Array  Basis/Aggregate/word8-array
+# "ARRAY", "Array", "VECTOR", "Vector", "MONO_VECTOR", "MONO_ARRAY", "Word8Vector", "Word8Array"
+BYTE        Basis/Numeric/byte-sig
+Byte        Basis/Numeric/byte
+CharVector  Basis/Aggregate/char-vector
+CharArray   Basis/Aggregate/char-array
+LIST_PAIR   Basis/Aggregate/list-pair-sig
+ListPair    Basis/Aggregate/list-pair
+TopLevel    Basis/toplevel
+# "BYTE", "Byte", "CharVector", "CharArray", "LIST_PAIR", "ListPair", "TopLevel"
+
+
+TIME        Basis/OS/time-sig
+PreTime     Basis/OS/pre-time
+Time        Basis/OS/time
+OS_FILE_SYS Basis/OS/os-filesys-sig
+OS_IO_SIG   Basis/OS/os-io-sig
+OS_PATH     Basis/OS/os-path-sig
+OS_PathFn   Basis/OS/os-path-fn   
+OS_PROCESS  Basis/OS/os-process-sig
+OS_SIG      Basis/OS/os-sig
+PreOS       Basis/Unix/pre-os
+# "TIME", "PreTime", "Time", "OS_FILE_SYS", "OS_IO_SIG", "OS_PATH", "OS_PathFn", "OS_PROCESS", "OS_SIG", "PreOS"
+
+IO_SIG         Basis/IO/io-sig
+IO             Basis/IO/io
+STREAM_IO      Basis/IO/stream-io-sig
+TEXT_STREAM_IO Basis/IO/text-stream-io-sig
+TEXT_IO        Basis/IO/text-io-sig
+IMPERATIVE_IO  Basis/IO/imperative-io-sig
+BIN_IO         Basis/IO/bin-io-sig
+
+# "IO_SIG", "IO", "STREAM_IO", "TEXT_STREAM_IO", "TEXT_IO", "IMPERATIVE_IO", "BIN_IO"
+
+PRIM_IO        Basis/IO/prim-io-sig
+OS_PRIM_IO     Basis/IO/os-prim-io-sig
+PrimIOFn       Basis/IO/prim-io-fn
+TextPrimIO     Basis/IO/text-prim-io
+# "PRIM_IO", "OS_PRIM_IO", "PrimIOFn", "TextPrimIO" 
+
+CLEAN_UP       Basis/NJ/cleanup-sig
+CleanUp        Basis/NJ/cleanup
+CleanIO        Basis/IO/clean-io
+BinIOFn        Basis/IO/bin-io-fn
+# "CLEAN_UP", "CleanUp", "CleanIO", "BinIOFn"
+
+POSIX_extern   Basis/extern
+POSIX_ERROR    Basis/Posix/posix-error.sig
+POSIX_Error    Basis/Posix/posix-error
+POSIX_FLAGS    Basis/Posix/posix-flags-sig
+POSIX_IO_SIG     Basis/Posix/posix-io-sig
+# "POSIX_extern", "POSIX_ERROR", "POSIX_Error", "POSIX_FLAGS", "POSIX_IO_SIG"
+
+POSIX_FILE_SYS Basis/Posix/posix-filesys-sig
+POSIX_FileSys Basis/Posix/posix-filesys
+POSIX_PROCESS Basis/Posix/posix-process-sig
+# "POSIX_FILE_SYS", "POSIX_FileSys", "POSIX_PROCESS"
+
+POSIX_SIGNAL  Basis/Posix/posix-signal-sig
+POSIX_Signal  Basis/Posix/posix-signal
+POSIX_Process Basis/Posix/posix-process
+POSIX_IO      Basis/Posix/posix-io
+# "POSIX_SIGNAL", "POSIX_Signal", "POSIX_Process", "POSIX_IO"
+
+POSIX_PROC_ENV Basis/Posix/posix-procenv-sig
+POSIX_ProcEnv  Basis/Posix/posix-procenv
+POSIX_TTY      Basis/Posix/posix-tty-sig
+POSIX_Tty      Basis/Posix/posix-tty
+# "POSIX_PROC_ENV", "POSIX_ProcEnv", "POSIX_TTY", "POSIX_Tty"
+
+POSIX_SYS_DB   Basis/Posix/posix-sysdb-sig
+POSIX_Sys_DB   Basis/Posix/posix-sysdb
+POSIX          Basis/Posix/posix-sig
+Posix          Basis/Posix/posix
+# "POSIX_SYS_DB", "POSIX_Sys_DB", "POSIX", "Posix"
+
+OS_Path        Basis/Unix/os-path
+OS_FileSys     Basis/Unix/os-filesys
+OS_Process     Basis/Unix/os-process
+OS_IO          Basis/Unix/os-io
+OS             Basis/Unix/os
+# "OS_FileSys", "OS_Path", "OS_Process", "OS_IO", "OS"
+
+BinPrimIO         Basis/IO/bin-prim-io
+# "BinPrimIO"
+
+TextIOFn       Basis/IO/text-io-fn
+PosixPrimIOFn  Basis/Unix/posix-prim-io-fn
+PosixBinPrimIO Basis/Unix/posix-bin-prim-io
+PosixTextPrimIO Basis/Unix/posix-text-prim-io
+TextIO         Basis/Unix/posix-text-io
+UNIX           Basis/Unix/unix-sig
+Unix           Basis/Unix/unix
+# "TextIOFn", 
+# "PosixBinPrimIO"
+# "PosixTextPrimIO" 
+# "TextIO"
+# "UNIX", "Unix"
+
+LIB_BASE       Basis/Library/lib-base-sig
+LibBase        Basis/Library/lib-base
+ORD_KEY        Basis/Library/ord-key-sig
+ORD_MAP        Basis/Library/ord-map-sig
+ORD_SET        Basis/Library/ord-set-sig
+# "LIB_BASE", "LibBase", "ORD_KEY", "ORD_MAP", "ORD_SET"
+
+ARRAY2         Basis/Library/array2-sig
+Array2         Basis/Library/array2
+HashString     Basis/Library/hash-string
+ATOM           Basis/Library/atom-sig
+Atom           Basis/Library/atom
+# "ARRAY2", "Array2", "HashString", "ATOM", "Atom"
+
+MONO_ARRAY_SORT Basis/Library/mono-array-sort-sig
+ARRAY_SORT      Basis/Library/array-sort-sig
+ArrayQSortFn    Basis/Library/array-qsort-fn
+ArrayQSort      Basis/Library/array-qsort
+# "MONO_ARRAY_SORT", "ARRAY_SORT", "ArrayQSortFn", "ArrayQSort"
+
+BinaryMapFn     Basis/Library/binary-map-fn
+BinarySetFn     Basis/Library/binary-set-fn
+AtomBinaryMap   Basis/Library/atom-binary-map
+AtomBinarySet   Basis/Library/atom-binary-set
+# "BinaryMapFn", "BinarySetFn", "AtomBinaryMap", "AtomBinarySet"
+
+HASH_KEY        Basis/Library/hash-key-sig
+MONO_HASH_TABLE  Basis/Library/mono-hash-table-sig
+MONO_HASH2_TABLE Basis/Library/mono-hash2-table-sig
+HASH_TABLE       Basis/Library/hash-table-sig
+# "HASH_KEY", "MONO_HASH_TABLE", "MONO_HASH2_TABLE", "HASH_TABLE"
+
+HashTableRep    Basis/Library/hash-table-rep
+HashTableFn     Basis/Library/hash-table-fn
+HashTable       Basis/Library/hash-table
+Hash2TableFn    Basis/Library/hash2-table-fn
+# "HashTableRep", "HashTableFn", "HashTable", "Hash2TableFn"
+
+AtomTable       Basis/Library/atom-table
+BSearchFn       Basis/Library/bsearch-fn
+CHAR_MAP        Basis/Library/char-map-sig
+CharMap         Basis/Library/char-map
+# "AtomTable", "BSearchFn", "CHAR_MAP", "CharMap"
+
+FIFO            Basis/Library/fifo-sig
+Fifo            Basis/Library/fifo
+FmtFields       Basis/Library/fmt-fields
+FORMAT          Basis/Library/format-sig
+LibRealFormat   Basis/Library/real-format
+Format          Basis/Library/format
+# "FIFO", "Fifo", "FmtFields", "FORMAT", "LibRealFormat", "Format"
+
+IntBinaryMap    Basis/Library/int-binary-map
+IntBinarySet    Basis/Library/int-binary-set
+IntListMap      Basis/Library/int-list-map
+IntListSet      Basis/Library/int-list-set
+# "IntBinaryMap", "IntBinarySet", "IntListMap", "IntListSet"
+
+ITERATE         Basis/Library/iterate-sig
+Iterate         Basis/Library/iterate
+KeywordFn       Basis/Library/keyword-fn
+# "ITERATE", "Iterate", "KeywordFn"
+
+LIST_FORMAT   Basis/Library/list-format-sig
+ListFormat    Basis/Library/list-format
+ListMapFn     Basis/Library/list-map-fn
+LIST_SORT     Basis/Library/listsort-sig
+# "LIST_FORMAT", "ListFormat", "ListMapFn", "LIST_SORT"
+
+ListMergeSort Basis/Library/list-mergesort
+ListSetFn     Basis/Library/list-set-fn
+LIST_XPROD    Basis/Library/list-xprod-sig
+ListXProd     Basis/Library/list-xprod
+# "ListMergeSort", "ListSetFn", "LIST_XPROD", "ListXProd"
+
+MonoArrayFn   Basis/Library/mono-array-fn
+MONO_DYNAMIC_ARRAY Basis/Library/mono-dynamic-array-sig
+PARSER_COMB   Basis/Library/parser-comb-sig
+ParserComb    Basis/Library/parser-comb
+# "MonoArrayFn", "MONO_DYNAMIC_ARRAY", "PARSER_COMB", "ParserComb"
+
+RAND          Basis/Library/rand-sig
+Rand          Basis/Library/rand
+SCAN          Basis/Library/scan-sig
+Scan          Basis/Library/scan
+# "RAND", "Rand", "SCAN", "Scan"
+
+UREF          Basis/Library/uref-sig
+Uref          Basis/Library/uref
+SimpleUref    Basis/Library/simple-uref
+# "UREF", "Uref", "SimpleUref"
+
+SplayMapFn     Basis/Library/splay-map-fn
+SplaySetFn     Basis/Library/splay-set-fn
+SPLAY_TREE     Basis/Library/splaytree-sig
+SplayTree      Basis/Library/splaytree
+# "SplayMapFn", "SplaySetFn", "SPLAY_TREE", "SplayTree"
+
+# TIME           Basis/Library/time-limit <--- can't do this file, it uses SMLofNJ.IntervalTimer
+# RANDOM         Basis/Library/random-sig <--- useless since we are skipping Random
+# Random         Basis/Library/random     <--- needs Pack32Big
+
+QUEUE          Basis/Library/queue-sig
+Queue          Basis/Library/queue
+IO_UTIL        Basis/Library/io-util-sig
+IOUtil         Basis/Library/io-util
+# "QUEUE", "Queue", "IO_UTIL", "IOUtil"
+
+DynamicArrayFn Basis/Library/dynamic-array-fn
+BIT_ARRAY      Basis/Library/bit-array-sig
+BitArray       Basis/Library/bit-array
+BIT_VECTOR     Basis/Library/bit-vector-sig
+BitVector      Basis/Library/bit-vector
+# "DynamicArrayFn", "BIT_ARRAY", "BIT_VECTOR", "BitArray", "BitVector"
+
+bug Test/bug
+bug2 Test/bug2
+bug3 Test/bug3
+bug4 Test/bug4
+bug5 Test/bug5
+bug6 Test/bug6
