@@ -1,0 +1,4 @@
+TILT correctly converts datatype value constructors to ordinary values
+during signature matching, but does not do the same for exception
+constructors.
+

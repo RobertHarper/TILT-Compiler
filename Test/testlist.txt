@@ -7,5 +7,7 @@ m0002	Raise uncaught exception.
 m0003	Type variable syntax.
 m0004	Deep loop, unused handler.
 m0005	Verifies that signature constraints change status.
+m0006	Check ref's and polymorphism.
+m0007	Check ref's and polymorphism.
 
 
