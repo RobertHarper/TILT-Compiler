@@ -436,16 +436,17 @@ struct
 	let val os = BinIO.openOut file
 	    val _ = LinkIl.IlContextEq.blastOutPartialContext os pctxt
 	    val _ = BinIO.closeOut os
-	    val shortfile = file ^ ".unself"
-	    val shortpctxt = IlContext.UnselfifyPartialContext pctxt
-	    val os = BinIO.openOut shortfile
-	    val _ = LinkIl.IlContextEq.blastOutPartialContext os shortpctxt
-	    val _ = BinIO.closeOut os
 	    val _ = if (!showWrittenContext)
-			then (print "Selfified context:\n"; 
-			      Ppil.pp_pcontext pctxt;
-			      print "\n\n\nUnselfified context:\n"; 
-			      Ppil.pp_pcontext shortpctxt)
+			then (let val shortfile = file ^ ".unself"
+				  val shortpctxt = IlContext.UnselfifyPartialContext pctxt
+				  val os = BinIO.openOut shortfile
+				  val _ = LinkIl.IlContextEq.blastOutPartialContext os shortpctxt
+				  val _ = BinIO.closeOut os
+			      in  print "Selfified context:\n"; 
+				  Ppil.pp_pcontext pctxt;
+				  print "\n\n\nUnselfified context:\n"; 
+				  Ppil.pp_pcontext shortpctxt
+			      end)
 		    else ()
 	in  () 
 	end
