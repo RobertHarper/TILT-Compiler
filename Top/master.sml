@@ -22,10 +22,10 @@ struct
 	
     structure S = Update
 	
-    structure Comm = Comm(val slaveTidOpt = NONE)
     structure Cache = UpdateHelp.Cache
     structure InfoCache = UpdateHelp.InfoCache
     structure StringOrderedSet = Help.StringOrderedSet
+    structure StringMap = Help.StringMap
 	
     val chat = Help.chat
     val chat_strings = Help.chat_strings
@@ -344,26 +344,106 @@ struct
 
     local
 	val workingLocal = ref ([] : (string * (unit -> bool)) list)
-	val readySlaves = ref ([] : Comm.channel list)
-	val knownSlaves = ref ([] : Comm.channel list)
-	val workingSlaves = ref ([] : Comm.channel list)
-    in
-	fun flushSlave toMaster =
-	    let val toSlave = Comm.reverse toMaster
+	val idleTimes : Time.time list ref =
+	    ref nil
+	val workingTimes : Time.time list ref =
+	    ref nil
+	    
+	fun addDuration r (_:Comm.identity, duration) = r := duration :: (!r)
+	val add_idle_time = addDuration idleTimes
+	val add_working_time = addDuration workingTimes
+	    
+	datatype slave_status =
+	    WORKING_SLAVE of Time.time	(* Slave is working.  Start time. *)
+	  | IDLE_SLAVE of Time.time	(* Slave is idle.  Start time. *)
+
+	type slave_info = {status : slave_status ref,
+			   in_channel : Comm.in_channel,
+			   out_channel : Comm.out_channel}
+
+	structure SlaveMap = SplayMapFn(type ord_key = Comm.identity
+					val compare = Comm.compare)
+	    
+	val slaveMap : slave_info SlaveMap.map ref =
+	    ref SlaveMap.empty
+	    
+	fun resetSlaveMap () = slaveMap := SlaveMap.empty
+	fun add_slave (slave, info) = slaveMap := SlaveMap.insert (!slaveMap, slave, info)
+	fun lookup_slave slave =
+	    (case SlaveMap.find (!slaveMap, slave)
+	       of NONE => error ("slave " ^ Comm.name slave ^ " missing")
+		| SOME info => info)
+	fun slave_known slave = isSome (SlaveMap.find (!slaveMap, slave))
+	fun list_slaves () = map #1 (SlaveMap.listItemsi (!slaveMap))
+	    
+	fun get_slave_status slave = !(#status(lookup_slave slave))
+	fun set_slave_status (slave, status) = (#status(lookup_slave slave) := status)
+	fun get_in_channel slave = #in_channel(lookup_slave slave)
+	fun get_out_channel slave = #out_channel(lookup_slave slave)
+
+	fun markSlaveIdle slave =
+	    let val now = Time.now()
+		val workingTime = case get_slave_status slave
+				    of WORKING_SLAVE t => t
+				     | IDLE_SLAVE _ => error ("slave " ^ Comm.name slave ^
+							      " idle - making idle")
+		val diff = Time.-(now, workingTime)
+		val _ = add_working_time (slave, diff)
+		val _ = set_slave_status (slave, IDLE_SLAVE now)
+	    in  ()
+	    end
+	fun markSlaveWorking slave =
+	    let val now = Time.now()
+		val idleTime = case get_slave_status slave
+				 of IDLE_SLAVE t => t
+				  | WORKING_SLAVE _ => error ("slave " ^ Comm.name slave ^
+							      " working - making working")
+		val diff = Time.-(now, idleTime)
+		val _ = add_idle_time (slave, diff)
+		val _ = set_slave_status (slave, WORKING_SLAVE now)
+	    in  ()
+	    end
+
+	fun partition_slaves slaves =
+	    let
+		fun folder (slave, (w,i)) =
+		    (case (get_slave_status slave)
+		       of WORKING_SLAVE _ => (slave::w, i)
+			| IDLE_SLAVE _ => (w, slave::i))
+		val result = foldl folder (nil, nil) slaves
+	    in  result
+	    end
+
+	fun findNewSlaves () =
+	    let
 		val platform = Target.getTargetPlatform()
 		val flags = Comm.getFlags()
-	    in  Comm.send(toSlave, Comm.FLUSH (platform, flags))
+		val flushAll = Comm.FLUSH_ALL (platform, flags)
+		    
+		exception Stop
+		fun addSlave slave =
+		    let val _ = if slave_known slave then raise Stop
+				else ()
+			val channel = Comm.toMaster slave
+			val in_channel = if not (Comm.exists channel) then raise Stop
+					 else Comm.openIn channel
+			val name = Comm.name slave
+			val _ = chat ("  [Sending FLUSH_ALL to " ^ name ^ "]\n")
+			val out_channel = Comm.openOut (Comm.reverse channel)
+			val _ = Comm.send flushAll out_channel
+		    in
+			add_slave (slave, {status = ref (IDLE_SLAVE (Time.now())),
+					   in_channel = in_channel,
+					   out_channel = out_channel})
+		    end handle Stop => ()
+	    in  app addSlave (Comm.findSlaves())
 	    end
+    in
 	(* Kill active slave channels to restart and send flush slave's file caches *)
-	fun resetSlaves() = let val _ = workingLocal := []
-				val _ = readySlaves := []
-				val _ = workingSlaves := []
-				val toMaster = Comm.findToMasterChannels()
-				val fromMaster = Comm.findFromMasterChannels()
-				val _ = app Comm.erase toMaster
-				val _ = app Comm.erase fromMaster
-				val _ = knownSlaves := toMaster
-			    in  app flushSlave toMaster
+	fun resetSlaves() = let val _ = resetSlaveMap()
+				val _ = workingLocal := nil
+				val _ = Comm.destroyAllChannels()
+			    in  ()
 			    end
 	(* Asynchronously ask for whether there are slaves ready *)
 	fun pollForSlaves (do_ack_interface, do_ack_done, do_ack_local): int * int= 
@@ -373,42 +453,29 @@ struct
 						   if done() then (do_ack_local unit; false)
 						   else true) (!workingLocal)
 		val _ = workingLocal := newWorkingLocal
-		val channels = Comm.findToMasterChannels()
-		fun noLongerWorking ch =
-		    (workingSlaves := (Listops.list_diff_eq(Comm.eq, !workingSlaves, [Comm.reverse ch])))
-		val _ = 
-		    app (fn ch =>
-			 case Comm.receive ch
-			   of NONE => error ("Ready channel became empty: " ^ 
-					     (Comm.source ch) ^ " to " ^ (Comm.destination ch))
-			    | SOME Comm.READY =>
-			       if List.exists (fn ch' => Comm.eq (ch, ch')) (!knownSlaves) then ()
-			       else
-				   let val name = Comm.source ch
-				       val _ = chat ("  [Sending FLUSH to " ^ name ^ "]\n")
-				       val _ = flushSlave ch
-				       val _ = knownSlaves := ch :: (!knownSlaves)
-				   in  ()
-				   end
-			    | SOME (Comm.ACK_INTERFACE unit) => do_ack_interface (Comm.source ch, unit)
+		val _ = findNewSlaves()
+		val slaves = list_slaves()
+		val (workingSlaves, _) = partition_slaves slaves
+		val _ =
+		    app (fn slave =>
+			 case Comm.receive (get_in_channel slave)
+			   of NONE => ()
+			    | SOME Comm.READY => ()
+			    | SOME (Comm.ACK_INTERFACE unit) => do_ack_interface (Comm.name slave, unit)
 			    | SOME (Comm.ACK_DONE (unit, plan)) =>
-			       (do_ack_done (Comm.source ch, unit, plan);
-				noLongerWorking ch)
+			       (do_ack_done (Comm.name slave, unit, plan);
+				markSlaveIdle slave)
 			    | SOME (Comm.ACK_ERROR unit) =>
-			       (chat "\n\nSlave "; chat (Comm.source ch); 
+			       (chat "\n\nSlave "; chat (Comm.name slave); 
 				chat " signalled error during job "; 
 				chat unit; chat "\n";
 				error "slave signalled error")
-			    | SOME (Comm.FLUSH _) => error ("slave " ^ (Comm.source ch) ^ " sent flush")
-			    | SOME (Comm.REQUEST _) => error ("slave " ^ (Comm.source ch) ^ " sent request"))
-		    channels
-		val potentialNewSlaves = map Comm.reverse channels 
-		val _ = readySlaves := (foldl (fn (ch,acc) => 
-						 if ((Listops.member_eq(Comm.eq, ch, acc)) orelse
-						     (Listops.member_eq(Comm.eq, ch, !workingSlaves)))
-						     then acc else ch::acc) 
-					  (!readySlaves) potentialNewSlaves)
-	    in  (length (!readySlaves), maxWorkingLocal - length (!workingLocal))
+			    | SOME (Comm.FLUSH_ALL _) => error ("slave " ^ (Comm.name slave) ^ " sent flushAll")
+			    | SOME (Comm.FLUSH _) => error ("slave " ^ (Comm.name slave) ^ " sent flush")
+			    | SOME (Comm.REQUEST _) => error ("slave " ^ (Comm.name slave) ^ " sent request"))
+		    workingSlaves
+		val (_, idleSlaves) = partition_slaves slaves
+	    in  (length idleSlaves, maxWorkingLocal - length (!workingLocal))
 	    end
 	(* Should only be used when we are below our limit on local processes. *)
 	fun useLocal (unit, f) =
@@ -417,13 +484,48 @@ struct
 	    in  ()
 	    end
 	(* Works only if there are slaves available *)
-	fun useSlave (showSlave, job) = 
-	    let val (chan::rest) = !readySlaves
-		val _ = readySlaves := rest
-		val _ = workingSlaves := (chan :: (!workingSlaves))
-	    in  showSlave (Comm.destination chan); 
-		Comm.send (chan, Comm.REQUEST job)
+	fun useSlave (showSlave, forMySlave, forOtherSlaves) = 
+	    let val slaves = list_slaves ()
+		val (workingSlaves, idleSlaves) = partition_slaves slaves
+		val (mySlave, idleSlaves') = if null idleSlaves then error ("useSlave when all slaves working")
+					     else (hd idleSlaves, tl idleSlaves)
+		val _ = (showSlave (Comm.name mySlave);
+			 markSlaveWorking mySlave;
+			 Comm.send forMySlave (get_out_channel mySlave))
+		val _ = case forOtherSlaves
+			  of NONE => ()
+			   | SOME msg =>
+			      let val sendMsg = Comm.send msg
+				  val sendTo = sendMsg o get_out_channel
+				  val otherSlaves = workingSlaves @ idleSlaves'
+			      in  app sendTo otherSlaves
+			      end
+	    in  ()
 	    end
+	fun closeSlaves () =
+	    let
+		val slaves = list_slaves()
+		val (working, idling) = partition_slaves slaves
+		val _ = if null working then ()
+			else (chat "The following slaves are still working: ";
+			      chat_strings 40 (map Comm.name working);
+			      chat "\n";
+			      error ("slaves still working - closeSlaves"))
+			    
+		fun close slave =
+		    let val _ = Comm.closeIn (get_in_channel slave)
+			val _ = Comm.closeOut (get_out_channel slave)
+			val now = Time.now()
+			val (IDLE_SLAVE idleTime) = get_slave_status slave
+			val diff = Time.-(now, idleTime)
+			val _ = add_idle_time (slave, diff)
+		    in  ()
+		    end
+		val _ = app close slaves
+		val _ = resetSlaveMap()
+	    in  ()
+	    end
+	fun slaveTimes() = (!workingTimes, !idleTimes)
     end
 
     fun statusName WAITING = "waiting"
@@ -707,7 +809,8 @@ struct
 		in  String.concat ["min ", toString (VectorStats.min v),
 				   " max ", toString (VectorStats.max v),
 				   " mean ", toString (VectorStats.mean v),
-				   " absdev ", toString (VectorStats.absdev v)]
+				   " absdev ", toString (VectorStats.absdev v),
+				   " (n=" ^ Int.toString (Vector.length v) ^ ")"]
 		end
 	    fun mapper unit =
 		let val (total, slave, master) = getTotalTimes unit
@@ -718,9 +821,15 @@ struct
 		in  if total' > 0.0 then SOME (unit, idle, total') else NONE
 		end
 	    val unsorted = List.mapPartial mapper units
-	    val _ = chat (Int.toString (length unsorted) ^ " of  " ^ Int.toString (length units) ^ " units needed compilation.\n" ^
-			  "  Work time statistics (in seconds): " ^ stats (map #3 unsorted) ^ "\n" ^
-			  "  Idle time statistics (in seconds): " ^ stats (map #2 unsorted) ^ "\n")
+	    val (slaveWork, slaveIdle) = slaveTimes()
+	    val slaveWork = map Time.toReal slaveWork
+	    val slaveIdle = map Time.toReal slaveIdle
+	    val _ = chat (Int.toString (length unsorted) ^ " of  " ^
+			  Int.toString (length units) ^ " units needed compilation.\n" ^
+			  "  Unit work times (in seconds): " ^ stats (map #3 unsorted) ^ "\n" ^
+			  "  Unit wait times (in seconds): " ^ stats (map #2 unsorted) ^ "\n" ^
+			  "  Slave work times (in seconds): " ^ stats slaveWork ^ "\n" ^
+			  "  Slave idle times (in seconds): " ^ stats slaveIdle ^ "\n")
 	    fun greater ((_,_,x),(_,_,y)) = x > (y : real)
 	    val sorted = ListMergeSort.sort greater unsorted
 	    val (underOne,overOne) = List.partition (fn (_,_,t) => t < 1.0) sorted
@@ -738,7 +847,7 @@ struct
 	    val _ = app (fn (unit,idle,total) =>
 			 chat ("  " ^ unit ^ 
 			       (Util.spaces (20 - (size unit))) ^ " took " ^ 
-			       (toString total) ^ " seconds of work and idled for " ^
+			       (toString total) ^ " seconds of work and waited for " ^
 			       (toString idle) ^ " seconds.\n")) overThirty
 	in  ()
 	end
@@ -774,7 +883,9 @@ struct
 		    val plan = getPlan unit
 		    val _ = markWorking unit
 		    val _ = Update.flush (target, plan)
-		in  useSlave (showSlave, (target, import_paths, plan))
+		in  useSlave (showSlave,
+			      Comm.REQUEST (target, import_paths, plan),
+			      SOME (Comm.FLUSH (target, plan)))
 		end
 	    fun useSome (0, _) = 0
 	      | useSome (n, nil) = n
@@ -855,17 +966,20 @@ struct
 		    val requiredUnits = (get_import_transitive unit) @ [unit]
 
 		    (* Check unit environments *)
+		    val _ = chat ("  [Checking that unit environments match up.]\n")
 		    val requiredPackages = map make_package requiredUnits
 		    val _ = Prelink.checkTarget (unit, requiredPackages)
 
 		    (* Generate startup code *)
 		    val _ = if Help.wantAssembler() then () else raise Stop
+		    val _ = chat ("  [Generating startup code.]\n")
 		    val paths = get_paths unit
 		    val linkAsmFile = Paths.linkAsmFile paths
 		    val _ = Compiler.link (linkAsmFile, requiredUnits)
 
 		    (* Assemble startup code *)
 		    val _ = if Help.wantBinaries() then () else raise Stop
+		    val _ = chat ("  [Assembling startup code.]\n")
 		    val linkObjFile = Paths.linkObjFile paths
 		    val _ = Tools.assemble (linkAsmFile, linkObjFile);
 
@@ -886,7 +1000,8 @@ struct
 	in  {setup = fn _ => initialState,
 	     step = step, 
 	     complete = (fn _ =>
-			 let val _ = if !chat_verbose
+			 let val _ = closeSlaves()
+			     val _ = if !chat_verbose
 					 then finalReport units
 				     else ()
 			 in  app makeExe finalTargets
