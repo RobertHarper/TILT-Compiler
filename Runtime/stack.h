@@ -12,12 +12,20 @@
 
 #define IS_SPECIAL_STACK(type)      ((type) == 0)
 #define IS_SPECIAL_GLOBAL(type)     ((type) == 1)
-#define IS_SPECIAL_STACK_REC(type)  ((type) > 1 && (type) % 2 == 0)
-#define IS_SPECIAL_GLOBAL_REC(type) ((type) > 1 && (type) % 2 == 1)
+#define IS_SPECIAL_STACK_REC(type)  ((type & 3) == 2)
+#define IS_SPECIAL_GLOBAL_REC(type) ((type & 3) == 3)
 #define IS_SPECIAL_UNSET(type)      (((signed int)type) == -1)
 
-#define GET_SPECIAL_STACK_REC_POS(type) ((type) / 2 - 1)
-#define GET_SPECIAL_STACK_GLOBAL_POS(type) ((type) / 2 - 1)
+#define GET_SPECIAL_STACK_REC_POS(type) ((type >> 2) & 63)
+#define GET_SPECIAL_STACK_REC_POS2(type) ((type >> 8) & 63)
+#define GET_SPECIAL_STACK_REC_POS3(type) ((type >> 14) & 63)
+#define GET_SPECIAL_STACK_REC_POS3(type) ((type >> 20) & 63)
+
+#define GET_SPECIAL_STACK_GLOBAL_POS(type) ((type >> 2) & 63)
+#define GET_SPECIAL_STACK_GLOBAL_POS2(type) ((type >> 8) & 63)
+#define GET_SPECIAL_STACK_GLOBAL_POS3(type) ((type >> 14) & 63)
+#define GET_SPECIAL_STACK_GLOBAL_POS3(type) ((type >> 20) & 63)
+
 
 void show_stack(value_t sp, value_t cur_retadd, value_t top);
 unsigned int trace_stack(unsigned long *saveregs,

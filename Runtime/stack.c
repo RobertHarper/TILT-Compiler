@@ -535,12 +535,24 @@ int should_trace_big(unsigned long trace,
       else if (IS_SPECIAL_STACK_REC(special_type))
 	{
 	  int rec_pos = GET_SPECIAL_STACK_REC_POS(special_type);
+	  int rec_pos2 = GET_SPECIAL_STACK_REC_POS2(special_type);
+	  int rec_pos3 = GET_SPECIAL_STACK_REC_POS3(special_type);
 	  res = ((int *)((int *)cur_sp)[special_data/4])[rec_pos];
+	  if (rec_pos2 > 0)
+	    res = ((int *)res)[rec_pos2-1];
+	  if (rec_pos3 > 0)
+	    res = ((int *)res)[rec_pos3-1];
 	}
       else if (IS_SPECIAL_GLOBAL_REC(special_type))
 	{
 	  int rec_pos = GET_SPECIAL_STACK_GLOBAL_POS(special_type);
+	  int rec_pos2 = GET_SPECIAL_STACK_GLOBAL_POS2(special_type);
+	  int rec_pos3 = GET_SPECIAL_STACK_GLOBAL_POS3(special_type);
 	  res = ((int *)(*((int *)special_data)))[rec_pos];
+	  if (rec_pos2 > 0)
+	    res = ((int *)res)[rec_pos2-1];
+	  if (rec_pos3 > 0)
+	    res = ((int *)res)[rec_pos3-1];
 	}
       else
 	printf("impossible trace_special wordpair entry: %d %d\n",
