@@ -1,15 +1,42 @@
 Number: 0093
 Title:       TILT does not support separate compilation.
-Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Keywords:    Elaborator, Manager
 Submitter:   swasey
 Date:        08/16/02
-Version:     <TILT version number>
-System:      <e.g. solaris,alpha,linux>
-Severity:    <critical, major, minor, cosmetic>
-Problem:     <description of problem>
-Code:        <SML source code to reproduce the bug>
-Transcript:  <transcript of exectution demonstating the bug>
-Comments:    <additional comments>
-Fix:         <optional - but you get extra credit>
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:
+	In ml96/doc/TM.txt, we wrote
+
+		Separate compilation means different things to
+		different people. We think it essential that a system
+		supporting separate compilation can use a compilation
+		unit without having source code for that unit.
+
+		We stress that TILT does not currently support
+		separate compilation.
+
+	See that document to learn about our design.
+
+	Some problems are:
+
+	1. The elaborator may not perform interface matching
+	correctly.  See bug number 86.
+
+	2. The manager does not build up separate elaboration contexts
+	for a unit's external interface and source.  The TM.txt
+	document is confused on this point; contrast the sections
+	"Internal Interface" and "File Dependencies".
+
+	3. The manager does not permit a compilation unit with an
+	external interface file but no source.  Most of the machinery
+	described in the "Canidate Implementations" section of TM.txt
+	is missing.
+
+Code:
+Transcript:
+Comments:
+Fix:
 Owner:
 Status: open
