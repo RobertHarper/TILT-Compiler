@@ -124,7 +124,7 @@ PLANNED IMPROVEMENTS
 --------------------
 
 We plan to move import and include lists out of the source and interface
-files and into the mapfileq.
+files and into the mapfile.
 
 We plan to eliminate the special treatment of suffixes .sml and .int
 and to require the user to explicitly specify when source and interface
