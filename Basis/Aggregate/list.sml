@@ -16,9 +16,23 @@ structure List :> LIST where type 'a list = 'a list =
     val op >= = InlineT.DfltInt.>=
     val op =  = InlineT.=
 *)
+
+    infix  6 + -
+    infix  4 = <> > >= < <=
+
+    (* Note: not overloaded yet *)
+    val op + = TiltPrim.iplus
+    val op - = TiltPrim.iminus
+    val op < = TiltPrim.ilt
+    val op > = TiltPrim.igt
+    val op <= = TiltPrim.ilte
+    val op >= = TiltPrim.igte
+
     datatype list = datatype list
 
-    exception Empty = Empty
+    infixr 5 :: @
+
+    exception Empty 
 
     fun null [] = true | null _ = false
 
@@ -60,16 +74,6 @@ structure List :> LIST where type 'a list = 'a list =
             | loop(acc, _::x) = loop(acc+1,x)
           in loop(0,l) end
 
-(*
-    fun rev l = let
-          fun loop ([], acc) = acc
-            | loop (a::r, acc) = loop(r, a::acc)
-          in
-	    loop (l, [])
-	  end
-*)
-    val rev = rev
-
     fun op @(x,[]) = x
       | op @(x,l) = let
           fun f([],l) = l
@@ -84,6 +88,12 @@ structure List :> LIST where type 'a list = 'a list =
 
     fun revAppend ([],l) = l
       | revAppend (h::t,l) = revAppend(t,h::l)
+
+    fun rev l =
+      let fun revappend([],x) = x
+	    | revappend(hd::tl,x) = revappend(tl,hd::x)
+      in  revappend(l,[])
+      end
 
     fun app f = let
           fun a2 (e::r) = (f e; a2 r) | a2 [] = ()
@@ -110,9 +120,16 @@ structure List :> LIST where type 'a list = 'a list =
     fun find pred [] = NONE
       | find pred (a::rest) = if pred a then SOME a else (find pred rest)
 
-    fun filter pred [] = []
-      | filter pred (a::rest) = if pred a then a::(filter pred rest)
-                                else (filter pred rest)
+    fun filter pred l = 
+      let
+	fun loop (l,acc) = 
+	  (case l 
+	     of [] => rev acc
+	      | (a::rest) => 
+	       if pred a then loop (rest,a::acc)
+	       else loop (rest,acc))
+      in loop (l,[])
+      end
 
     fun partition pred l = let
           fun loop ([],trueList,falseList) = (rev trueList, rev falseList)

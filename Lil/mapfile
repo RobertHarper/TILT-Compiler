@@ -56,7 +56,7 @@ unit Pexp = "pexp.sml" { PEXP
 unit LILDEFS = "lildefs.sig.sml" { Lil Pexp }
 unit LilDefs = "lildefs.sml" { LILDEFS 
 	Lil Util Pexp Reduce Deconstruct Listops LilSubst LilUtil Name List 
-	TilWord32 Prim PpLil
+	TilWord32 Prim PpLil TilWord64
 }
 
 unit TRANSLATIONDEFS = "translationdefs.sig.sml" { Lil Pexp Prim }

@@ -445,6 +445,7 @@ struct
       inlineManyFun := 0
     end
 
+
   fun inline_once (inlinecons,iterate) nilmod =
     let
       val _ = reset();
@@ -529,6 +530,7 @@ struct
 		     else nilmod
       in  nilmod
       end
+
 
 end (* struct *)
 

@@ -45,6 +45,11 @@ structure LilUtil :> LILUTIL =
 	  GREATER
 	else EQUAL
 
+  fun value2w32 v =
+    (case v
+       of int (sz,w64)   => TilWord64.toSignedHalf w64
+	| uint (sx,w64)  => TilWord64.toUnsignedHalf w64
+	| _ => error "Not a word value")
 
     fun i2size pis = 
       (case pis 
@@ -69,6 +74,7 @@ structure LilUtil :> LILUTIL =
 	  | B2 => error "size has no corresponding floatsize"
 	  | B4 => F32
 	  | B8 => F64)
+
 
     (* Find the strongly connected components of the graph.
      * Result is a list of list of vars and their info.

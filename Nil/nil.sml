@@ -255,5 +255,8 @@ struct
 			       imports : import_entry list,
 			       exports : export_entry list}
 
+  datatype interface = INTERFACE of {imports : import_entry list,
+				     exports : import_entry list}
+
 end
 

@@ -330,6 +330,127 @@ structure Linknil :> LINKNIL  =
 	end
     handle Stop nilmod => nilmod
 
-    val il_to_nil = compile'
 
+
+    local
+      fun pass filename (ref false, _, _, _, _) (transformer,obj) =
+	error "pass called with a false flag"
+	| pass filename (ref true, showphase, checkphase, measurephase, phasename) (transformer,obj) =
+	let val str = "Starting " ^ phasename ^ ": " ^ filename
+	    val _ = Timestamp.timestamp()
+	    val _ = printBold str
+	    val nilint = Stats.timer(phasename,transformer) obj
+
+	    val _ = if !showphase orelse !show then
+		      ((if !show_html then
+			   PpnilHtml.pp_interface
+		       else
+			   Ppnil.pp_interface)
+			   {interface = nilint,
+			    header = phasename,
+			    name = filename,
+			    pass = phasename};
+		      print "\n")
+		    else ()
+	    val _ = if !checkphase orelse !typecheck then
+		      Stats.timer(phasename^"_Typecheck",NilStatic.interface_valid) (NilContext.empty (), nilint)
+		    else ()
+	in  nilint
+	end
+      
+      fun transform filename (ref false,_,_,_,phasename) (_,nilint) =
+	let val str = "Skipping " ^ phasename ^ " : " ^ filename
+	in  (* printBold str;  *)
+	    nilint
+	end
+	| transform filename (tr as (ref true,_,_,_,_)) arg =
+	pass filename tr arg
+	
+      exception Stop of Nil.interface
+    in
+      fun compile_interface' (filename,ilinterface : Il.context * Il.sdec (*Il.interface*)) =
+	let
+	    val pass = pass filename
+	    val transform = transform filename
+
+	    open Nil Name
+	    val D = NilContext.empty()
+
+	    val nilint = pass phasesplit (Tonil.phasesplit_interface, ilinterface)
+
+	    val _ = if !UptoPhasesplit
+			then raise (Stop nilint)
+		    else ()
+
+	    val nilint = transform rename (Linearize.linearize_int, nilint)
+
+	    val nilint = transform optimize1
+				   (Optimize.optimize_int {doDead = true,
+							   doProjection = SOME 50,
+							   doCse = true,
+							   doPolyUncurry = false,
+							   doUncurry = false},
+				    nilint)
+
+
+	    val nilint = transform sing_elim (SingletonElim.R_interface, nilint)
+
+	    (* sing_elim doesn't produce a-normal types *)
+	    val nilint = transform rename2 (Linearize.linearize_int, nilint)
+
+	    val nilint = transform hoist1 (Hoist.optimize_int, nilint)
+
+	    val nilint = transform optimize2
+				   (Optimize.optimize_int {doDead = true,
+							   doProjection = SOME 50,
+							   doCse = true,
+							   doPolyUncurry = false,
+							   doUncurry = false},
+				    nilint)
+
+	    (* Could consider some inlining to make code smaller *)
+(*	    val nilint = transform inline1
+		                   (Inline.inline_int {iterate = true,
+						       inlinecons = true,
+						       tinyThreshold = 20,
+						       sizeThreshold = 50,
+						       occurThreshold = 5},
+				    nilint)
+*)
+	    val nilint = transform vararg (Vararg.optimize_int, nilint)
+
+	    val nilint = transform optimize3
+				   (Optimize.optimize_int {doDead = true,
+							   doProjection = SOME 50,
+							   doCse = true,
+							   doPolyUncurry = false,
+							   doUncurry = false},
+				    nilint)
+(*
+	    val nilint = transform inline2
+		                   (Inline.inline {iterate = false,
+						   inlinecons = false,
+						   tinyThreshold = 20,
+						   sizeThreshold = 50,
+						   occurThreshold = 5},
+				    nilint)
+*)
+
+	    val nilint = transform hoist2 (Hoist.optimize_int, nilint)
+
+	    val nilint = transform optimize4
+	      (Optimize.optimize_int {doDead = true,
+				      doProjection = SOME 50,
+				      doCse = true,
+				      doPolyUncurry = false,
+				      doUncurry = false},
+	       nilint)
+
+	in  nilint
+	end
+      handle Stop nilint => nilint
+    end
+
+    val il_to_nil = compile'
+    val ilint_to_nilint = compile_interface'
 end

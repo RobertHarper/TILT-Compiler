@@ -324,15 +324,19 @@ structure LilDefs :> LILDEFS  =
 	
 	fun sum2ksum (which : Lil.con) (sumtype : Lil.con) = 
 	  let
-	    val (tagcount,carriers) = VALOF (Dec.C.sum' sumtype) "sum2ksum: not a sum"
+	    val (tagcount,carriers) = 
+	      (VALOF (Dec.C.sum' sumtype) "sum2ksum: not a sum")
+	      handle any => (print "Type is\n";
+			     PpLil.pp_con sumtype;print "\n";
+			     raise any)
+
 	  in
 	    C.pcon_app Lil.KSum_c [which,
 				   tagcount,
 				   carriers]
 	  end
 
-	fun sum2ksum' which sumtype = sum2ksum (C.nat which) sumtype
-
+	fun sum2ksum' (which : Lil.w32) (sumtype : Lil.con) = sum2ksum (C.nat which) sumtype
 
 	fun sum_totalcount c = 
 	  let
@@ -613,7 +617,7 @@ structure LilDefs :> LILDEFS  =
 	  let
 	    val ksum = COps.sum2ksum' i sumtype
 	  in injforget' ksum sv
-	  end
+	  end handle any => (print "inj_nontag\n";raise any)
 	val inj_nontag_from_sumtype = ret3 inj_nontag_from_sumtype'
 
 	fun tapp' c sv = TApp (sv,c)
@@ -660,6 +664,20 @@ structure LilDefs :> LILDEFS  =
 	val ptreq' = ret2 ptreq''
 	val ptreq  = op2sv2 ptreq''
 
+	fun inteq'' sz (sv1,sv2) = 
+	  let
+	    val args = 
+	      (case sz
+		 of B1 => [slice (sz,sv1),slice (sz,sv2)]
+		  | _ => [arg32 sv1,arg32 sv2])
+	  in Prim32(Prim.eq_int (LU.size2i sz),[],args)
+	  end
+	val inteq' = ret2 inteq''
+	val inteq = op2sv2 inteq''
+
+	fun intconst' sz w = Const_32(Prim.int(LU.size2i sz,TilWord64.fromSignedHalf w))
+	val intconst = ret2 intconst'
+	
 	fun update_array64'' arr i sv64 = Prim32 (Prim.update (Prim.FloatArray Prim.F64),[],[arg32 arr,arg32 i,arg64 sv64])
 	val update_array64' = ret3 update_array64''
 	val update_array64 = op2sv3 update_array64''

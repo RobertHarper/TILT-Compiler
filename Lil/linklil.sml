@@ -76,6 +76,8 @@ structure Linklil :> LINKLIL  =
       end
 
 
+    type entry = bool ref * bool ref * bool ref * string
+
     fun makeEntry (enable, str) = ((if enable then Stats.tt else Stats.ff) ("do" ^ str),
 				   Stats.ff("show" ^ str),
 				   Stats.ff("check" ^ str),
@@ -93,55 +95,64 @@ structure Linklil :> LINKLIL  =
 	if (!LinkLilDiag) then
 	  (print "===== "; print str; print " =====\n")
 	else ()
-	  
-    fun pass filename (ref false, _, _,_) (transformer,obj) =
-      error "pass called with a false flag"
-      | pass filename (ref true, showphase, checkphase, phasename) (transformer,obj) =
+
+    fun pass 
+      (check : 'obj -> unit) 
+      (pp : {obj : 'obj,phasename : string,filename : string} -> unit) 
+      (filename : string)
+      ((ref false, _, _,_) : entry)
+      (transformer : 'preobj -> 'obj,preobj : 'preobj) :'obj=   error "pass called with a false flag"
+
+      | pass check pp filename (ref true, showphase, checkphase, phasename) (transformer,obj) =
       let 
 	val str = "Starting " ^ phasename ^ ": " ^ filename
 	val _ = Timestamp.timestamp()
 	val _ = printBold str
-	val lilmod = Stats.timer(phasename,transformer) obj
+	val obj = Stats.timer(phasename,transformer) obj
 	val () = hashreport()
 	val _ = 
 	  if !showphase orelse !show then
-	    (PpLil.pp_pass
-	     {module = lilmod,
-	      header = phasename,
-	      name = filename,
-	      pass = phasename};
+	    (pp
+	     {obj = obj,
+	      phasename = phasename,
+	      filename = filename};
 	     print "\n")
 	  else ()
 
 	val _ = 
 	  if !checkphase orelse !typecheck then
-	    Stats.timer(phasename^"_Typecheck",LilTypecheck.M.check) lilmod
+	    Stats.timer(phasename^"_Typecheck",check) obj
 	  else ()
 
 	val () = hashreport()
 
-	in  lilmod
+	in  obj
 	end
 
-    fun transform filename (ref false,_,_,phasename) (_,lilmod) =
+    fun transform check pp filename (ref false,_,_,phasename) (_,obj) =
 	let val str = "Skipping " ^ phasename ^ " : " ^ filename
 	in  (* printBold str;  *)
-	    lilmod
+	    obj
 	end
-      | transform filename (tr as (ref true,_,_,_)) arg =
-	pass filename tr arg
+      | transform check pp filename (tr as (ref true,_,_,_)) arg =
+	pass check pp filename tr arg
 	
 
     exception Stop of Lil.module
 
-    fun compile' (filename,nilmodule : Nil.module) =
+    fun compile' (unitname,nilmodule : Nil.module) =
       let
-	val pass = pass filename
-	val transform = transform filename
+	fun pp_obj {obj,phasename,filename} =
+	  PpLil.pp_pass {module = obj,
+			 header = phasename,
+			 name = filename,
+			 pass = phasename}
+	val pass = pass LilTypecheck.M.check pp_obj unitname
+	val transform = transform LilTypecheck.M.check pp_obj unitname
 	  
 	val () = gc()
 
-	val lilmod = pass niltolil (NiltoLil.niltolil, nilmodule)
+	val lilmod = pass niltolil (NiltoLil.niltolil unitname, nilmodule)
 	  
 	val _ = if !UpToLil
 		  then raise (Stop lilmod)
@@ -149,12 +160,12 @@ structure Linklil :> LINKLIL  =
 
 	val lilmod = transform optimize1 (LilOptimize.optimize {doCse = true},lilmod)
 
-	val () = gc()
+	val lilmod = transform optimize2 (LilOptimize.optimize {doCse = true},lilmod) 
+
+(*	val () = gc()*)
 
 	val lilmod = transform lilclose (LilClosure.close_mod, lilmod)
 	 
-	val lilmod = transform optimize2 (LilOptimize.optimize {doCse = true},lilmod) 
-
 	val lilmod = transform optimize3 (LilOptimize.optimize {doCse = true},lilmod) 
 
 	val () = gc()
@@ -163,6 +174,37 @@ structure Linklil :> LINKLIL  =
       end
     handle Stop lilmod => lilmod
       
+
+    exception StopInt of Lil.interface
+
+    fun compile_int' (unitname,nilinterface : Nil.interface) =
+      let
+	fun pp_obj {obj,phasename,filename} =
+	  PpLil.pp_intpass {interface = obj,
+			    header = phasename,
+			    name = filename,
+			    pass = phasename}
+
+	val pass = pass LilTypecheck.I.check pp_obj unitname
+	val transform = transform LilTypecheck.I.check pp_obj unitname
+	  
+	val () = gc()
+
+	val lilint = pass niltolil (NiltoLil.niltolil_int unitname, nilinterface)
+	  
+	val _ = if !UpToLil
+		  then raise (StopInt lilint)
+		else ()
+
+	val lilint = transform lilclose (LilClosure.close_int, lilint)
+	 
+	val () = gc()
+
+      in  lilint
+      end
+    handle StopInt lilint => lilint
+      
+    val nilint_to_lilint = compile_int'
     val nil_to_lil = compile'
 
 end

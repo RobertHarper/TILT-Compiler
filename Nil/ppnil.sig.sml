@@ -19,6 +19,7 @@ signature PPNIL =
     val pp_list'    : ('a -> Formatter.format) -> 'a list ->
                                   (string * string * string * bool) -> Formatter.format
     val pp_module'   : Nil.module -> Formatter.format
+    val pp_interface'   : Nil.interface -> Formatter.format
 
     (* these go to std_out *)
     val pp_bnd     : Nil.bnd -> unit
@@ -38,5 +39,10 @@ signature PPNIL =
                        name: string,
                        pass: string,
                        header: string} -> unit
+
+    val pp_interface   : {interface: Nil.interface,
+			  name: string,
+			  pass: string,
+			  header: string} -> unit
 
   end

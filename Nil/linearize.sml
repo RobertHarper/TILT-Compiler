@@ -939,6 +939,36 @@ struct
        in  e
        end
 
+   fun report () = 
+     let
+       val _ = if (!show_stats)
+		 then (print "  Number of renamed variables: ";
+		       print (Int.toString (!num_renamed)); print "\n";
+		       print "  Number of variables: ";
+		       print (Int.toString (!num_var)); print "\n";
+		       print "  Number of lexp calls: ";
+		       print (Int.toString (!num_lexp)); print "\n";
+		       print "  Number of lcon calls: ";
+		       print (Int.toString (!num_lcon)); print "\n";
+
+		       print "    Number of lcon calls from Prim_e: ";
+		       print (Int.toString (!num_lcon_prim)); print "\n";
+		       print "    Number of lcon calls from Import: ";
+		       print (Int.toString (!num_lcon_import)); print "\n";
+		       print "    Number of lcon calls from Singletons: ";
+		       print (Int.toString (!num_lcon_single)); print "\n";
+		       print "    Number of lcon calls from Function formals: ";
+		       print (Int.toString (!num_lcon_function)); print "\n";
+		       print "    Number of lcon calls from Con_b: ";
+		       print (Int.toString (!num_lcon_conb)); print "\n";
+		       print "    Number of lcon calls from Con_cb: ";
+		       print (Int.toString (!num_lcon_concb)); print "\n";
+
+		       print "  Number of lkind calls: ";
+		       print (Int.toString (!num_lkind)); print "\n")
+	       else ()
+     in ()
+     end
    (*
     val linearize_mod : module -> module
     linearize_mod module ==> module with bindings, imports, and exports A-normalized
@@ -951,37 +981,29 @@ struct
 	   val (bnds,state) = foldl_acc folder state bnds
 	   val bnds = flatten bnds
 	   val exports = map (lexport state) exports
-	   val _ = if (!show_stats)
-		       then (print "  Number of renamed variables: ";
-			     print (Int.toString (!num_renamed)); print "\n";
-			     print "  Number of variables: ";
-			     print (Int.toString (!num_var)); print "\n";
-			     print "  Number of lexp calls: ";
-			     print (Int.toString (!num_lexp)); print "\n";
-			     print "  Number of lcon calls: ";
-			     print (Int.toString (!num_lcon)); print "\n";
-
-			     print "    Number of lcon calls from Prim_e: ";
-			     print (Int.toString (!num_lcon_prim)); print "\n";
-			     print "    Number of lcon calls from Import: ";
-			     print (Int.toString (!num_lcon_import)); print "\n";
-			     print "    Number of lcon calls from Singletons: ";
-			     print (Int.toString (!num_lcon_single)); print "\n";
-			     print "    Number of lcon calls from Function formals: ";
-			     print (Int.toString (!num_lcon_function)); print "\n";
-			     print "    Number of lcon calls from Con_b: ";
-			     print (Int.toString (!num_lcon_conb)); print "\n";
-			     print "    Number of lcon calls from Con_cb: ";
-			     print (Int.toString (!num_lcon_concb)); print "\n";
-
-			     print "  Number of lkind calls: ";
-			     print (Int.toString (!num_lkind)); print "\n")
-		   else ()
 	   val _ = reset_state false
 
        in  MODULE{bnds = bnds,
 		  imports = imports,
 		  exports = exports}
+       end
+
+
+   (*
+    val linearize_interface : interface -> interface
+    linearize_int interface ==> interface with imports, and exports A-normalized
+   *)
+   fun linearize_int (INTERFACE{imports,exports}) =
+       let 
+	   val state = reset_state false
+	   val (imports,state) = limports(imports,state)
+	   val (exports,state) = limports(exports,state)
+	   val _ = report()
+	   val _ = reset_state false
+
+       in  INTERFACE{
+		     imports = imports,
+		     exports = exports}
        end
 
 end

@@ -10,6 +10,8 @@ signature VARARG =
       val flattenThreshold : int
       (* Maximum number of components in a function's single record argument such that the function should still be flattened *)
 
+      val optimize_int : Nil.interface -> Nil.interface
+
       val optimize : Nil.module -> Nil.module
       (* Flatten functions and change applications where appropriate *)
 

@@ -219,7 +219,9 @@ structure Basis :> BASIS =
 				  ("vector",let val v = fresh_var()
 					    in CON_FUN([v],CON_VECTOR (CON_VAR v))
 					    end),
-				   ("string",CON_INTVECTOR Prim.W8)
+				  ("word8array",CON_INTARRAY Prim.W8),
+				  ("word8vector",CON_INTVECTOR Prim.W8),
+				  ("string",CON_INTVECTOR Prim.W8)
 				  ]
 	      val basetype_list = [("float64", float64),
 				   ("int32", int32),

@@ -153,6 +153,9 @@ structure LilClosure :> LILCLOSURE =
 	  subst = subst}
 
     fun new_env (info,globals,topfid) = ENV{info = info,globals = globals,dcalls = VarMap.empty, curfid = [topfid],context = LilContext.empty(),subst=empty_subst()}
+
+    fun empty_env () = ENV{info = VarMap.empty,globals = VarMap.empty,dcalls = VarMap.empty, curfid = [],context = LilContext.empty(),subst=empty_subst()}
+
     fun current_fid (ENV{curfid,...}) = hd curfid
     fun current_fids (ENV{curfid,...}) = curfid
     fun get_context (ENV{context,...}) = context
@@ -407,7 +410,7 @@ structure LilClosure :> LILCLOSURE =
       val data : data list ref = ref []
       fun add_data d = data := d :: !data
     in
-      fun add_dtuple (l,c,q,svs) = add_data (Dtuple (l,c,q,svs))
+      fun add_dtuple (l,c,qs,svs) = add_data (Dtuple (l,c,qs,svs))
       fun add_dboxed (l,sv)    = add_data (Dboxed (l,sv))
       fun add_dcode (l,f)      = add_data (Dcode (l,f))
       fun get_data () = rev (!data)
@@ -779,10 +782,10 @@ structure LilClosure :> LILCLOSURE =
 		       val _ = chat 4 ("Adding static closure for: "^(Name.var2string fname)^"\n")
 		       val env = exp_label_bind (env,(clos_lbl,fclos_type))
 		       val tuplbl   = Name.fresh_internal_label ((Name.label2name code_lbl)^"_clos")
-		       val q = LD.Q.pack fclos_type venv_type
+		       val qs = [(Pack, [fclos_type,venv_type])]
 		       val () = 
 			 add_dtuple (clos_lbl,
-				     fclos_type,SOME q,
+				     fclos_type,qs,
 				     [codeptr,venv])
 		       val env = sv32subst(env,fname,Label clos_lbl)
 		     in P.ret env
@@ -1010,7 +1013,7 @@ structure LilClosure :> LILCLOSURE =
 	    of (true,SOME l,LilPrimOp32 (Tuple,_,svs,_)) => 
 	      let
 		val t = LD.T.tupleptr' (map (fn sv => typeof_sv32(env,sv)) svs)
-		val () = add_dtuple (l,t,NONE,svs)
+		val () = add_dtuple (l,t,[],svs)
 		val env = sv32subst (env,v,Label l)
 		val env = exp_label_bind (env,(l,t))
 	      in P.ret env
@@ -1281,7 +1284,9 @@ structure LilClosure :> LILCLOSURE =
     fun rewrite_datum env d = 
       (case d
 	 of Dboxed (l,sv64) => Dboxed (l,rewrite_sv64 env sv64)
-	  | Dtuple (l,t,q,svs) => Dtuple (l,rewrite_con env t,Util.mapopt (rewrite_sv32 env) q,map (rewrite_sv32 env) svs)
+	  | Dtuple (l,t,qs,svs) => Dtuple (l,rewrite_con env t,
+					   map (fn (ctag,cons) => (ctag,map (rewrite_con env) cons)) qs,
+					   map (rewrite_sv32 env) svs)
 	  | Darray (l,sz,t,svs) => Darray (l,sz,rewrite_con env t,map (rewrite_value env) svs)
 	  | Dcode (l,f) => 
 	   let
@@ -1331,7 +1336,7 @@ structure LilClosure :> LILCLOSURE =
       end
 
 
-    fun close_mod (module as MODULE{timports,data,confun,expfun}) = 
+    fun close_mod (module as MODULE{unitname,parms,entry_c,entry_r,timports,data,confun}) = 
       let 
 
 	val () = reset_data()	  
@@ -1345,7 +1350,7 @@ structure LilClosure :> LILCLOSURE =
 	val env = new_env (info,globals,top_fid)	  
 
 	val _ = chat 1 "  Adding timports\n"
-	val env = con_vars_bind (env,timports)
+	val env = con_vars_bind (env,map (fn (l,v,k) => (v,k)) timports)
 
 	val _ = chat 1 "  Rewriting data\n"	  
 	val (data,env) = rewrite_data env data
@@ -1353,16 +1358,48 @@ structure LilClosure :> LILCLOSURE =
 	val _ = chat 1 "  Rewriting confun\n"	  
 	val confun = rewrite_con env confun
 
-	val _ = chat 1 "  Rewriting expfun\n"
-	val expfun = rewrite_exp env expfun
-
 	val _ = chat 1 "  Module rewritten\n"
 
 	val data = data @ (get_data())
 	val () = reset_data()
 	val () = reset_rewritten()
-      in  MODULE{timports = timports,data=data,confun=confun,expfun=expfun}
+      in  MODULE{unitname = unitname,parms = parms,entry_c = entry_c,entry_r = entry_r,timports = timports,data=data,confun=confun}
       end handle any => (reset_data();reset_rewritten();raise any)
+
+
+    fun close_int (INTERFACE {unitname : string,
+			      timports : timport list,
+			      entry_c : label * var * kind,
+			      entry_r : label * con}) =
+      let 
+
+	val () = reset_rewritten()	  
+      
+	val env = empty_env ()
+
+	val _ = chat 1 "  Adding timports\n"
+	val env = con_vars_bind (env,map (fn (l,v,k) => (v,k)) timports)
+	val env = 
+	  let
+	    val (_,a,k) = entry_c
+	  in con_var_bind (env,(a,k))
+	  end
+
+	val entry_r = 
+	  let
+	    val (l,c) = entry_r
+	  in (l,rewrite_con env c)
+	  end
+
+	val _ = chat 1 "  Interface rewritten\n"
+
+	val () = reset_rewritten()
+      in  
+	INTERFACE {unitname = unitname,
+		   timports = timports,
+		   entry_c = entry_c,
+		   entry_r = entry_r}
+      end handle any => (reset_rewritten();raise any)
     
   end (* ClosureConvert *)
 

@@ -45,6 +45,7 @@ signature NILSTATIC =
       *)
 
     val module_valid : context * Nil.module -> unit
+    val interface_valid : context * Nil.interface -> unit
 
     val con_equiv  : context * Nil.con * Nil.con * Nil.kind -> bool
     val type_equiv : context * Nil.con * Nil.con  -> bool

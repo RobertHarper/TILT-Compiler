@@ -475,28 +475,33 @@ structure PpnilHtml :> PPNIL =
 
     fun pp_conbnds bnds = pp_list pp_conbnd bnds ("[",",","]",true)
 
+    fun pp_importentry (ImportValue (l,v,tr,c)) =
+      Hbox[pp_label l, String " > ", pp_bound_var v, String " : ", pp_trace tr,
+	   String " : ", pp_con c]
+      |  pp_importentry (ImportType (l,v,k)) =
+      Hbox[pp_label l, String " > ", pp_bound_var v, String " :: ", pp_kind k]
+      |  pp_importentry (ImportBnd (Compiletime, cb)) =
+      Hbox[String "STATIC ", pp_conbnd cb]
+      |  pp_importentry (ImportBnd (Runtime, cb)) =
+      Hbox[pp_conbnd cb]
+    fun pp_exportentry (ExportValue (l,v)) =
+      Hbox[pp_label l, String " = ", pp_var v]
+      |  pp_exportentry (ExportType (l,v)) =
+      Hbox[pp_label l, String " = ", pp_var v]
+
     fun pp_module (MODULE{bnds,imports,exports}) =
-	let
-	    fun pp_importentry (ImportValue (l,v,tr,c)) =
-		Hbox[pp_label l, String " > ", pp_bound_var v, String " : ", pp_trace tr,
-		     String " : ", pp_con c]
-	      |  pp_importentry (ImportType (l,v,k)) =
-		Hbox[pp_label l, String " > ", pp_bound_var v, String " :: ", pp_kind k]
-	      |  pp_importentry (ImportBnd (Compiletime, cb)) =
-		Hbox[String "STATIC ", pp_conbnd cb]
-	      |  pp_importentry (ImportBnd (Runtime, cb)) =
-		Hbox[pp_conbnd cb]
-	    fun pp_exportentry (ExportValue (l,v)) =
-		Hbox[pp_label l, String " = ", pp_var v]
-	      |  pp_exportentry (ExportType (l,v)) =
-		Hbox[pp_label l, String " = ", pp_var v]
-	in  Vbox0 0 1 [pp_bnds bnds,
-		       Break,
-		       String "IMPORTS:", Break,
-		       pp_list pp_importentry imports ("","","",true), Break,
-		       String "EXPORTS:", Break,
-		       pp_list pp_exportentry exports ("","","",true), Break]
-	end
+      Vbox0 0 1 [pp_bnds bnds,
+		 Break,
+		 String "IMPORTS:", Break,
+		 pp_list pp_importentry imports ("","","",true), Break,
+		 String "EXPORTS:", Break,
+		 pp_list pp_exportentry exports ("","","",true), Break]
+
+    fun pp_interface (INTERFACE{imports,exports}) =
+      Vbox0 0 1 [String "IMPORTS:", Break,
+		 pp_list pp_importentry imports ("","","",true), Break,
+		 String "EXPORTS:", Break,
+		 pp_list pp_importentry exports ("","","",true), Break]
 
     fun help pp = pp
     fun help' pp obj = (wrapper pp TextIO.stdOut obj; ())
@@ -513,6 +518,7 @@ structure PpnilHtml :> PPNIL =
     val pp_bnds' = help pp_bnds
     val pp_exp' = help pp_exp
     val pp_module' = help pp_module
+    val pp_interface' = help pp_interface
 
     val pp_var = help' pp_var
     val pp_label  = help' pp_label
@@ -525,11 +531,21 @@ structure PpnilHtml :> PPNIL =
     val pp_conbnds = help' pp_conbnds
     val pp_bnds = help' pp_bnds
     val pp_exp = help' pp_exp
+
     fun pp_module {module, name:string, pass:string, header:string} =
         let val st = TextIO.openOut (name ^ "." ^ pass ^ ".html")
         in (TextIO.output(st, header);
             TextIO.output(st, "\n\n");
             wrapper pp_module' st module;
+            TextIO.closeOut st;
+            ())
+        end
+
+    fun pp_interface {interface, name:string, pass:string, header:string} =
+        let val st = TextIO.openOut (name ^ "." ^ pass ^ ".html")
+        in (TextIO.output(st, header);
+            TextIO.output(st, "\n\n");
+            wrapper pp_interface' st interface;
             TextIO.closeOut st;
             ())
         end

@@ -743,15 +743,17 @@ struct
 		val (bnds,state) = do_bnds(bnds,state)
 		val (exports,state) = foldl_acc do_export state exports
 		val result = MODULE{imports=imports,exports=exports,bnds=bnds}
-		val _ = if not (!debug) orelse NilRename.isRenamedMod result
-			    then ()
-			else (Ppnil.pp_module {module=result,
-					       name = "",
-					       pass = "Vararg",
-					       header = "bound variable reuse"};
-			      error "bound variable reuse")
 	    in  result
 	    end
+
+	fun optimize_int (INTERFACE{imports, exports}) =
+	  let 
+	    val state = new_state flattenThreshold
+	    val (imports,state) = foldl_acc do_import state imports
+	    val (exports,state) = foldl_acc do_import state exports
+	    val result = INTERFACE{imports=imports,exports=exports}
+	  in  result
+	  end
 
 	fun reduce_vararg (D,openness,effect,argc,resc,arg) =
 	  let

@@ -32,4 +32,9 @@ signature LILTYPECHECK =
 	val check : Lil.module -> unit
       end
 
+    structure I : 
+      sig
+	val check : Lil.interface -> unit
+      end
+
   end

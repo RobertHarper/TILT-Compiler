@@ -75,7 +75,7 @@ structure LilSubst :> LILSUBST =
     type con_subst  = con delay map 
     type kind_subst = kind delay map 
 
-    fun restrict (subst : con delay map,frees : VarSet.set) = 
+    fun restrict (subst : 'a delay map,frees : VarSet.set) = 
       let
 (*	val _ = print "\nFiltering subst\n";
 	val _ = VarMap.appi (fn (a,c) => (print ((Name.var2string a)^"=");pp_con (thaw c);print "\t")) subst
@@ -114,12 +114,31 @@ structure LilSubst :> LILSUBST =
 		     of SOME kind_delay => 
 		       CHANGE_NORECURSE (state,thaw kind_delay)
 		      | _ => NORECURSE)
-		 | _ => NOCHANGE))
+		 | _ => 
+		     let
+		       val ksubst = restrict (ksubst,free_kvars_kind kind)
+		     in 
+		       if is_empty ksubst then 
+			 NORECURSE
+		       else
+			 CHANGE_RECURSE({csubst = NONE,ksubst = SOME ksubst,sv32subst = NONE,sv64subst = NONE},kind)
+		     end))
 
 
       fun conhandler (state : state as {csubst,ksubst,sv32subst,sv64subst},con : con) =
 	(case csubst 
-	   of NONE => (case ksubst of NONE => NORECURSE | _ => NOCHANGE)
+	   of NONE => 
+	     (case ksubst 
+		of NONE => NORECURSE 
+		 | SOME ksubst => 
+		  let
+		    val ksubst = restrict (ksubst,free_kvars_con con)
+		  in 
+		    if is_empty ksubst then 
+		      NORECURSE
+		    else
+		      CHANGE_RECURSE({csubst = NONE,ksubst = SOME ksubst,sv32subst = sv32subst,sv64subst = sv64subst},con)
+		  end)
 	    | SOME csubst => 
 	     let
 	       fun default csubst = 

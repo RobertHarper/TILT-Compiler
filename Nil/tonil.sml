@@ -4291,27 +4291,53 @@ end (* local defining splitting context *)
      end
 
 
+   fun FlattenHILInt (HILctx,sdec) : (fimport list * Il.sdec list) = error "Unimplemented"
 
+
+   (*  In the case that we choose not to flatten, map to the same type as a flattened module
+    *)
+   fun dontFlattenHILInt (HILctx,sdec) : (fimport list * Il.sdec list) = 
+     let
+       
+       fun folder (entry,imports) =
+	 (case entry 
+	    of Il.CONTEXT_SDEC sdec => (ISDEC sdec)::imports
+	     | Il.CONTEXT_SIGNAT arg => (ISGNT arg)::imports
+	     | Il.CONTEXT_EXTERN arg => (IXTRN arg)::imports
+	     | Il.CONTEXT_FIXITY arg => imports
+	     | Il.CONTEXT_OVEREXP arg => imports)
+	    
+       val imports =
+	 foldr folder  [] (IlContext.list_entries HILctx)
+	 
+
+       val sdecs = [sdec]
+
+     in (imports,sdecs)
+     end
+
+
+   fun flatten_type_to_bnds (context,name,con) = 
+     let
+       (* Horrible icky hack to avoid modifying xsig and xcon to return cbnds *)
+       val (cbnds,c) = 
+	 (case NU.flattenCLet con
+	    of Let_c (_,tbnds,body) => (tbnds,body)
+	     | Var_c v => ([],Var_c v)
+	     | _ => 
+	      let
+		val type_var = Name.fresh_named_var name
+	      in ([Con_cb(type_var,con)],Var_c type_var)
+	      end)
+	    
+       val context = update_NILctx_insert_cbnd_list(context,cbnds)
+	 
+       val ibnds = rev (map (fn cb => ImportBnd(Runtime,cb)) cbnds)
+     in (context,ibnds,c)
+     end
+   
    fun ximports (fimports,context) =
      let
-       fun flatten_type_to_bnds (context,name,con) = 
-	 let
-	   (* Horrible icky hack to avoid modifying xsig and xcon to return cbnds *)
-	   val (cbnds,c) = 
-	     (case NU.flattenCLet con
-		of Let_c (_,tbnds,body) => (tbnds,body)
-		 | Var_c v => ([],Var_c v)
-		 | _ => 
-		  let
-		    val type_var = Name.fresh_named_var name
-		  in ([Con_cb(type_var,con)],Var_c type_var)
-		  end)
-		     
-	   val context = update_NILctx_insert_cbnd_list(context,cbnds)
-
-	   val ibnds = rev (map (fn cb => ImportBnd(Runtime,cb)) cbnds)
-	 in (context,ibnds,c)
-	 end
 
        fun dodec(l,dec,(imports, bnds,context : splitting_context)) = 
 	 (case dec of
@@ -4558,5 +4584,165 @@ end (* local defining splitting context *)
        val _ = reset_memo()
      in
        nilmod
+     end
+
+
+   (* The top-level function for the phase-splitter.
+    *)
+   fun phasesplit_interface (ilinterface : Il.context * Il.sdec) : Nil.interface =
+     let
+       val _ = reset_memo()
+
+       val (HILctx,sdec) = ilinterface
+	 
+       (* GC the HIL context *)
+       val roots = IlUtil.sdec_free sdec
+
+       val HILctx = IlContext.gc_context (HILctx, roots)
+	 
+       val _ =
+	 if (!full_debug) then
+	   (print "\nInitial HIL context:\n";
+	    Ppil.pp_context HILctx;
+	    print "\n")
+	 else
+	   ()
+	   
+       val (fimports,sdecs) = if (!flatten_modules) 
+				then FlattenHILInt (HILctx,sdec)
+			      else dontFlattenHILInt (HILctx,sdec)
+	 
+       (* Debugging printing *)
+       val _ =
+	 if ((!full_debug) orelse (!printFlat)) andalso (!flatten_modules) then
+	   (print "\nFlattened HIL module:\n";
+	    print "\tFlattened imports:\n";
+	    print_fimports fimports;
+	    print "\n";
+	    print "\tFlattened exports:\n";
+	    Ppil.pp_sdecs sdecs;
+	    print "\n")
+	 else
+	   ()
+	   
+	   
+       (* Compute the initial context and imports.  
+	*)
+       val (imports,import_bnds,initial_splitting_context) =
+	 Stats.subtimer("Phase-split-ctxt",ximports) (fimports,make_initial_splitting_context HILctx)
+	 
+       (* Debugging printing *)
+       val _ =
+	 if (!full_debug) then
+	   (print "\nInitial NIL context:\n";
+	    NilContext_print initial_splitting_context;
+	    print "\n")
+	 else
+	   ()
+	   
+	   
+       val _ = msg "  Initial context is phase-split\n"
+	 
+       (* Since we actually compute FV sets for imports during filtering,
+	* we only care about the status of variables from the body
+	* of the module.  Keeping the used information from above
+	* could in principle interfere with cascaded elimination.
+	*)
+       val _ = reset_used initial_splitting_context
+	 	 
+       (* Create the exports.
+	*)
+
+       val context = initial_splitting_context 
+
+       val exports : import_entry list =
+	 let
+	   fun loop ([],acc) = rev acc
+	     | loop ((Il.SDEC (l,dec))::sdecs,acc) = 
+	     (case dec of
+		Il.DEC_MOD (v, is_polyfun, il_sig) =>
+		  let
+		    val (l_c,l_r) = N.make_cr_labels l
+		      
+		    val ((v_c, v_r),context) = splitNewVar (v,context)
+		  
+		    val (knd, type_r) = xsig context (Var_c v_c, il_sig)
+		  
+		    val context = update_NILctx_insert_kind(context,v_c, knd)
+
+		    val (context,ivtbs,type_r) = flatten_type_to_bnds(context,(Name.var2name v)^"_t",type_r)
+		  
+		    val context = insert_con(context, v_r, type_r)
+		  
+		  
+		    val iv = ImportValue(l_r,v_r,TraceUnknown,type_r)
+		    val it = ImportType(l_c,v_c,knd)
+
+		    (* If we're importing a polymorphic function,
+			     then we don't ever need the type part.
+			       *)
+		    val acc =
+		      if is_polyfun then
+			iv::ivtbs@imports@acc
+		      else
+			(iv::ivtbs@(it::imports@acc))
+		  in loop(sdecs,acc)
+		  end
+	      | Il.DEC_EXP (var, il_con, _,_) =>
+		  let
+		    val l = if Name.is_flat l then #2 (Name.make_cr_labels l) else l
+		      
+		    val con = xcon context il_con
+		    val (context,ibnds,con) = flatten_type_to_bnds(context,(Name.var2name var)^"_type",con)
+		    val (var, context) = insert_rename_var(var, context)
+		    val context = update_NILctx_insert_con(context, var, con)
+		    val acc = 
+		      ((ImportValue(l,var,TraceUnknown,con))::ibnds@imports@acc)
+		  in loop(sdecs,acc)
+		  end
+	      | Il.DEC_CON(var, il_knd, maybecon,_) =>
+		  let
+		    val l = if Name.is_flat l then #1 (Name.make_cr_labels l) else l
+		    val knd =
+		      (case maybecon of
+			 NONE => xkind context il_knd
+		       | SOME il_con => Single_k(xcon context il_con))
+			 
+		    val (var, context) = insert_rename_var(var, context)
+		    val context = update_NILctx_insert_kind(context, var, knd)
+		    val acc =
+		      ((ImportType(l,var,knd))::imports@acc)
+		  in loop(sdecs,acc)
+		  end)
+	 in loop (sdecs,[])
+	 end
+       
+       val _ = msg "  Exports are phase-split\n"
+	 
+       val used = get_used initial_splitting_context
+	 
+	 
+       val (imports,import_bnds) = 
+	 if (!killDeadImport) then
+	   filter_imports used (imports,import_bnds)
+	 else
+	   (imports,import_bnds)
+	   
+       val ibnds = map (fn b => case b of Con_b (p,cb) => ImportBnd(p,cb) | _ => error "No Bnds in interfaces") import_bnds
+
+
+       val _ = msg "  Imports are computed\n"
+
+       (* We finally have the phase-split compilation unit.
+	*)
+       val nilint = INTERFACE{imports = imports @ ibnds,
+			      exports = exports}
+	 
+       (* Release the memory for the memo pad immediately, rather
+	than waiting for the next time the phase-splitter runs.
+	*)
+       val _ = reset_memo()
+     in
+       nilint
      end
 end

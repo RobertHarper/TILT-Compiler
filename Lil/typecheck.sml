@@ -37,27 +37,6 @@ structure LilTypecheck :> LILTYPECHECK =
 
     type env = LilContext.context
 
-    local
-      val checked : (env * kind) ConMap.map ref = ref ConMap.empty
-
-      fun context_eq_vars(c1,c2,vars) = 
-	let
-	  val vars = Name.VarSet.listItems vars
-	  fun agree a = Eq.K.equal (LC.find_cvar (c1,a)) (LC.find_cvar (c2,a))
-	in List.all agree vars
-	end
-    in
-
-      fun is_ok env c = 
-	(case ConMap.find(!checked,c)
-	   of SOME (oldenv,k) => 
-	     if context_eq_vars (env,oldenv,free_cvars_con c) 
-	       then SOME k else NONE
-	    | NONE => NONE)
-      fun reset_checked () = checked := ConMap.empty
-      fun set_checked (c,envk) = checked := (ConMap.insert(!checked,c,envk))
-    end
-
     (* Used as an escape continuation to avoid type checking dead vcase 
      * branches.
      * *)
@@ -132,6 +111,7 @@ structure LilTypecheck :> LILTYPECHECK =
 
     fun ANDALSO (b1,b2) = fn s => (b1 s;b2 s;())
     fun ASSERT b s = if b then () else (FAIL s)
+    fun ASSERTc b s c = if b then () else (FAILc s c)
     infix 0 ANDALSO
       
     fun DECT f t s = 
@@ -192,17 +172,56 @@ structure LilTypecheck :> LILTYPECHECK =
     fun vcase_cvar args = ((LC.vcase_cvar args) 
 			   handle LC.Unbound s => FAIL ("Vcase of unbound variable "^s)
 				| LC.Rebound s => FAIL ("Vcase rebinds variable "^s))
+
+
+
     structure K = 
       struct
-	type env = {env : env, pos : bool}
-	fun flip {env,p} = {env = env, p = not p}
+	type env = {env : env, p : bool}
+	fun flip ({env,p} : env) : env = {env = env, p = not p}
 	fun parity p = if p then LC.Pos else LC.Neg
+	fun neg p = (case p
+		       of LC.Pos => LC.Neg
+			| LC.Neg => LC.Pos
+			| _ => p)
+	local
+	  val checked : env KindMap.map ref = ref KindMap.empty
+	    
+	  fun context_eq_vars({env = env1,p = pos1},{env = env2,p = pos2},vars) = 
+	    let
+	      val samepos = pos1 = pos2
+	      val vars = Name.VarSet.listItems vars
+	      fun agree a = 
+		let val p1 = find_kvar (env1,a) and p2 = find_kvar (env2,a)
+		in
+		  (p2 = LC.Any) orelse
+		  if samepos then p1 = p2
+		  else (neg p1) = p2
+		end
+	    in List.all agree vars
+	    end
+	in
+	  
+	  fun is_ok env k = 
+	    (case KindMap.find(!checked,k)
+	       of SOME oldenv => context_eq_vars (env,oldenv,free_kvars_kind k) 
+		| NONE => false)
+	  fun reset_checked () = checked := KindMap.empty
+	  fun set_checked (c,env) = checked := (KindMap.insert(!checked,c,env))
+	end
 
 	fun mu_var_bind ({env,p},j) = {env = bind_kvar (env,j,parity p),p=p}
 	fun all_var_bind ({env,p},j) = {env = bind_kvar (env,j,LC.Any),p=p}
 
 	fun check env k s = 
-	  ((check' env k) handle IllTyped => FAILk s k)
+	  if is_ok env k then ()
+	  else
+	    let
+	      val () = ((check' env k) handle IllTyped => FAILk s k)
+	      val () = set_checked (k,env)
+	    in ()
+	    end
+
 	and check' env (k : Lil.kind) = 
 	  (case kout k
 	     of T s => ()
@@ -229,12 +248,42 @@ structure LilTypecheck :> LILTYPECHECK =
 		   val env = all_var_bind (env,j)
 		 in check env k "Ill formed All kind"
 		 end)
-	     
+
 	val check = fn env => fn k => fn s => check {env=env,p=true} k s
       end
 
+
     structure C = 
       struct
+
+
+	local
+	  val checked : (env * kind) ConMap.map ref = ref ConMap.empty
+	    
+	  fun context_eq_vars(c1,c2,vars) = 
+	    let
+	      val vars = Name.VarSet.listItems vars
+	      fun agree a = Eq.K.equal (find_cvar (c1,a)) (find_cvar (c2,a))
+	    in List.all agree vars
+	    end
+	  
+	  fun context_covers_vars(env,vars) = 
+	    let
+	      val () = Name.VarSet.app (fn j => ignore(find_kvar(env,j))) vars
+	    in true
+	    end
+	in
+	  
+	  fun is_ok env c = 
+	    (case ConMap.find(!checked,c)
+	       of SOME (oldenv,k) => 
+		 if context_eq_vars (env,oldenv,free_cvars_con c) andalso context_covers_vars (env,free_kvars_con c)
+		   then SOME k else NONE
+		| NONE => NONE)
+	  fun reset_checked () = checked := ConMap.empty
+	  fun set_checked (c,envk) = checked := (ConMap.insert(!checked,c,envk))
+	end
+      
 	type env = env
 
 	fun psynth p = Synth.Kindof.primcon p	  
@@ -318,6 +367,7 @@ structure LilTypecheck :> LILTYPECHECK =
 		     val sumk = synth env argc "Case_c arg is bad"
 		     val ks = VALOF (Dec.K.sum' sumk) "Case_c: arg kind not a sum"
 		     val arms = LO.insertion_sort (fn (a,b) => LU.cmpw32(#1 a,#1 b)) arms
+		     (* remaining arms, remaining kinds, current index, complete coverage *)
 		     fun checkarms (arms,ks,iw,complete) = 
 		       (case (arms,ks)
 			  of ([],_) => 
@@ -504,6 +554,22 @@ structure LilTypecheck :> LILTYPECHECK =
 
     structure T = 
       struct
+
+
+	fun discriminable (tagcount : Lil.w32) (sum_args : Lil.con list) : bool = 
+	  (case (tagcount,sum_args)
+	     of (_,[]) => true
+	      | (0w0,[_]) => true
+	      | (_,[c]) => isSome (Dec.C.ptr' c)
+	      | (_, args) => 
+	       let
+		 fun tagged c = 
+		   (case Dec.C.tuple_ptr_ml' c
+		      of SOME(t::_) => isSome (Dec.C.tag' t)
+		       | _ => false)
+	       in
+		 List.all tagged args
+	       end)
 
 	fun check32 (env : LC.context) (t : Lil.con) (s : string) = ((C.check' env t (LD.K.T32())) handle IllTyped => FAILc s t)
 	fun check64 (env : LC.context) (t : Lil.con) (s : string) = ((C.check' env t (LD.K.T64())) handle IllTyped => FAILc s t)
@@ -939,6 +1005,13 @@ structure LilTypecheck :> LILTYPECHECK =
 	    val env = bind_cvars (env,vks)
 	  in env
 	  end
+        and checklvks env lvks s = 
+	  let
+	    val vks = map (fn (l,v,k) => (v,k)) lvks
+	    val () = LO.app_second (fn k => K.check env k s) vks
+	    val env = bind_cvars (env,vks)
+	  in env
+	  end
         and checkvt32s env vts s = 
 	  let
 	    val () = LO.app_second (fn t => T.check32 env t s) vts
@@ -981,6 +1054,8 @@ structure LilTypecheck :> LILTYPECHECK =
 		 val () = T.check32 env rtype "Sumcase: bad return type"
 		 val t = sv32 env arg "Sumcase: bad arg"
 		 val (tagcount,sum_args) = VALOF (Dec.C.sum_ml' t) "sum_totalcount: not a sum"
+		 val () = ASSERTc (T.discriminable tagcount sum_args) "Sumcase: type is not discriminable" t
+
 		 val len = LU.i2w(List.length sum_args)
 		 val n = TilWord32.uplus (tagcount,len)
 		 fun armcheck (w,v,exp) = 
@@ -1148,26 +1223,27 @@ structure LilTypecheck :> LILTYPECHECK =
 	       | _ => FAILc "Unfold on path not handled" c
 	  end
 
-      end
 
+       fun coercions env qlist tend = 
+	 (case qlist
+	    of [] => tend
+	     | q::qlist => 
+	      let
+		val qtype = coercion env q "coercions: Coercion has bad type"
+		val (from,to) = VALOF (Dec.C.coercion' qtype) "coercions: Coercion not of coercion type"
+		val () = EQUALTYPES to tend "coercions: Coercion from type and arg type differ"
+	      in coercions env qlist from
+	      end)
+      end
     structure D = 
       struct
 	fun check env d = 
 	  (case d
 	     of Dboxed (l,sv64) => E.sv64check env sv64 (LD.T.ptr (LD.T.boxed_float())) "Dboxed: bad box"
-	      | Dtuple (l,t,q,svs) => 
+	      | Dtuple (l,t,qs,svs) => 
 	       let
 		 val () = T.check32 env t "Dtuple: bad type"
-		 val tupt = 
-		   (case q
-		      of SOME q => 
-			let
-			  val qt = E.sv32 env q "Dtuple: bad coercion"
-			  val (from,to) = VALOF (Dec.C.coercion' qt) "Dtuple: q not of coercion type"
-			  val () = EQUALTYPES to t "Dtuple: coercion doesn't match decoration"
-			in from
-			end
-		       | NONE => t)
+		 val tupt = E.coercions env qs t 
 		 val t = VALOF (Dec.C.ptr' tupt) "Dtuple: type not a ptr"
 		 val ts = VALOF (Dec.C.tuple_ml' t) "Dtuple: type not a tuple"
 		 val () = LO.app2 (fn (sv,t) => E.sv32check env sv t "Dtuple: bad field") (svs,ts)
@@ -1215,12 +1291,14 @@ structure LilTypecheck :> LILTYPECHECK =
 
     structure K = 
       struct
+	val reset = K.reset_checked
 	val check = fn env => fn k => K.check env k "KIND CHECK FAILED"
 	val check = wrap2 check
       end
 
     structure C = 
       struct
+	val reset = C.reset_checked
 	val check = fn env => fn c => fn k => C.check env c k "CON CHECK FAILED"
 	val synth = fn env => fn c => C.synth env c "CON SYNTH FAILED"
 	val check = wrap3 check
@@ -1238,6 +1316,7 @@ structure LilTypecheck :> LILTYPECHECK =
       struct
 	val check = fn env => fn e => fn t => E.expcheck env e t "EXP CHECK FAILED"
 	val checkvks = fn env => fn vks => E.checkvks env vks "VKS LIST CHECK FAILED"
+	val checklvks = fn env => fn lvks => E.checklvks env lvks "LVKS LIST CHECK FAILED"
 	val synth = fn env => fn e => E.exp env e "EXP SYNTH FAILED"
 	val check = wrap3 check
 	val synth = wrap2 synth
@@ -1249,25 +1328,51 @@ structure LilTypecheck :> LILTYPECHECK =
 	val check = fn env => fn d => D.datalist env d "BAD DATA SEGMENT"
 	val check = wrap2 check
       end
+
+    fun reset_checked () = (K.reset();C.reset())
+
     structure M = 
       struct
-	fun check (MODULE {timports : (var * kind) list,
+
+
+	fun check (MODULE {unitname : string,
+			   parms : Name.LabelSet.set,
+			   entry_c : label,
+			   entry_r : label,
+			   timports : (label * var * kind) list,
 			   data   : data list,
-			   confun : con,
-			   expfun : exp}) = 
+			   confun : con}) = 
 	  let
 	    val () = reset_checked()
 	    val () = msg "\tValidating type imports\n"
-	    val env = E.checkvks (LC.empty()) timports
+	    val env = E.checklvks (LC.empty()) timports
 	    val () = msg "\tValidating data\n"
 	    val env  = D.check data env
 	    val () = msg "\tValidating confun\n"
 	    val () = if !paranoid then ASSERT (LR.isRenamedCon confun) "CONFUN fails renaming check" else ()
 	    val _  = C.synth env confun
-	    val () = msg "\tValidating expfun\n"
-	    val () = if !paranoid then ASSERT (LR.isRenamedExp expfun) "EXPFUN fails renaming check" else ()
-	    val () = E.synth env expfun
 	    val () = msg "\tDone validating module\n"
+	    val () = reset_checked()
+	  in ()
+	  end handle any => (reset_checked();raise any)
+      end
+
+    structure I = 
+      struct
+	fun check (INTERFACE {unitname : string,
+			      timports : timport list,
+			      entry_c = (entry_cl,entry_cv,entry_c_kind) : label * var * kind,
+			      entry_r = (entry_rl,entry_r_con) : label * con}) = 
+	  let
+	    val () = reset_checked()
+	    val () = msg "\tValidating type imports\n"
+	    val env = E.checklvks (LC.empty()) timports
+	    val () = msg "\tValidating confun kind\n"
+	    val _  = K.check env entry_c_kind
+	    val env = bind_cvar (env,(entry_cv,entry_c_kind))
+	    val () = msg "\tValidating term fun type\n"
+	    val _  = C.check env entry_r_con (LD.K.T32())
+	    val () = msg "\tDone validating interface\n"
 	    val () = reset_checked()
 	  in ()
 	  end handle any => (reset_checked();raise any)

@@ -613,7 +613,7 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 					add_gboundfids(env,vts))
 		      | _ => add_boundfids (env, vts))
 		     
-		(* This is a bid ad-hoc.  We record all variables from the current
+		(* This is a bit ad-hoc.  We record all variables from the current
 		 * nest that occur free in the enclosed function as escapees of the 
 		 * enclosing nest, so that the close_funs computation can add
 		 * their free variables.
@@ -905,10 +905,11 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		 val frees = findfv_sv64 env Frees.empty_frees sv64
 	       in ()
 	       end
-	      | Dtuple (l,t,q,svs) => 
+	      | Dtuple (l,t,qs,svs) => 
 	       let
-		 val _ = findfv_con env 
-		 val _ = Util.mapopt (findfv_sv32 env Frees.empty_frees) q
+		 val frees = Frees.empty_frees
+		 val () = ignore(findfv_con env  frees t)
+		 val () = app (fn (ctag,cons) => app (ignore o (findfv_con env frees)) cons) qs
 		 val () = app (fn sv => ignore (findfv_sv32 env Frees.empty_frees sv)) svs
 	       in ()
 	       end
@@ -985,9 +986,9 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	end
 	
 	(* Scan module for free variables *)
-	(* Shouldn't be any code in the data segment yet.
-	 *)
-	fun findfv_module top_fid (MODULE{timports,data,confun,expfun}) = 
+	(* Shouldn't be any code in the data segment yet.	
+ *)
+	fun findfv_module top_fid (MODULE{unitname,parms,entry_c,entry_r,timports,data,confun}) = 
 	  let
 
 	    val _ = chat 1 "  Scanning for free variables\n"
@@ -995,21 +996,19 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 
 	    val env = initial_env top_fid
 
-	    val env = con_var_list_bind(env,timports)
+	    val env = con_var_list_bind(env,map (fn (l,v,k) => (v,k)) timports)
 (*	      if !do_con_globals then 
-		foldl (fn (vk,env) => con_gvar_bind(env,vk)) env timports
+		foldl (fn ((l,v,k),env) => con_gvar_bind(env,(v,k))) env timports
 	      else
 		con_var_list_bind(env,timports)
 *)
 	    val () = 
 	      if !do_con_globals then 
-		app (fn (v,k) => Global.add_conglobal v) timports
+		app (fn (l,v,k) => Global.add_conglobal v) timports
 	      else
 		()
 	    val env = findfv_data env data
 
-	    val _ = findfv_exp env Frees.empty_frees expfun
-	      
 	    val _ = chat 1 "  Computing transitive closure of close funs\n"
 	    val _ = close_funs(Global.get_fids())
 	    val _ = chat 1 "  Finished closure analysis\n"

@@ -40,11 +40,15 @@ structure TranslationDefs :> TRANSLATIONDEFS =
     local
 
       (* Tmilr == 1 + T32 + T32 * T32 + .... + T32 list (All lists < flattenThreshold represented directly) *)
+      (* Actually, currently
+       * Tmilr == 1 + T32 + T32 * T32 + .... + Tmem , because TAL product types can't use an unknown number 
+       * of fields *)
 
       fun Tmilr' () = 
 	let
 	  val flats = countflat (fn i => LD.K.ntuple (LO.copy (i,LD.K.T32())))
-	in LD.K.sum (flats@[LD.K.tlist()])
+	in (*LD.K.sum (flats@[LD.K.tlist()])*)
+	  LD.K.sum (flats@[LD.K.TM()])
 	end
       val Tmilr = mkstatic Tmilr'
 
@@ -58,11 +62,12 @@ structure TranslationDefs :> TRANSLATIONDEFS =
       (* interpr :: Tmilr -> T32  *)
       fun interpr_tuple_case (c : Lil.con) : Lil.con = 
 	let
-	  val flatarm = fn i => (LU.i2w i,fn c => LD.COps.ntuple2tlist i c)
+	  val flatarm = fn i => (LU.i2w i,fn c => LD.T.tuple (LD.COps.ntuple2tlist i c))
 	  val bigarm  = fn i => (LU.i2w i,fn l => l)
 	  val arms = countall flatarm bigarm
 	in
-	  LD.T.tuple (LD.C.sumcase c arms NONE)
+	  (*LD.T.tuple (LD.C.sumcase c arms NONE)*)
+	  LD.C.sumcase c arms NONE
 	end
 
       fun interpr_tuple_fn () = 
@@ -121,7 +126,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
       val interpr = interpr
       val interp = interp
 
-      fun Bigtuple l  = LD.C.inj (LU.i2w (!flattenThreshold + 1)) (Tmilr()) (LD.C.tlist l)
+      fun Bigtuple l  = LD.C.inj (LU.i2w (!flattenThreshold + 1)) (Tmilr()) (LD.T.tuple (LD.C.tlist l))
       fun Flattuple l = LD.C.inj (LU.i2w (List.length l)) (Tmilr()) (LD.C.ntuple l)
 	
       (* : T32 list -> Tmilr *)
@@ -138,8 +143,8 @@ structure TranslationDefs :> TRANSLATIONDEFS =
       (* :: Tmilr -> T32 -> T32 *)
       fun VarargTupleArg arg = 
 	let
-	  val flatarm = fn i => (Flatidx i,fn l => (LD.COps.ntuple2tlist i l))
-	  val bigarm  = fn i => (Bigidx(),fn t => LD.C.tlist [LD.T.tupleptr t])
+	  val flatarm = fn i => (Flatidx i,fn l => LD.COps.ntuple2tlist i l)
+	  val bigarm  = fn i => (Bigidx(),fn t => LD.C.tlist [LD.T.ptr t])
 	  val arms= countall flatarm bigarm
 	in LD.C.sumcase arg arms NONE
 	end
@@ -158,7 +163,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
       fun VarargTuplecasedef arg rest = 
 	let
 	  val flatarm = fn i => (Flatidx i,fn l => (LD.COps.ntuple2tlist i l))
-	  val bigarm  = fn i => (Bigidx(),fn t => LD.C.tlist [LD.T.tupleptr t])
+	  val bigarm  = fn i => (Bigidx(),fn t => LD.C.tlist [LD.T.ptr t])
 	  val arms= countall flatarm bigarm
 	in LD.T.arrow (LD.C.sumcase arg arms NONE) (LD.C.nill (LD.K.T64())) rest
 	end
@@ -253,7 +258,9 @@ structure TranslationDefs :> TRANSLATIONDEFS =
       val unit_arm = fn _ => LD.T.unit ()
       val void_arm = fn _ => LD.T.void ()
 
-      fun proof' arm arg w = LD.C.sumcase arg [(w,arm)] (SOME (void_arm()))
+      fun proof' arm arg w = 
+	LD.T.ptr (LD.T.tuple' [LD.T.tag w,LD.C.sumcase arg [(w,arm)] (SOME (void_arm()))])
+
       fun proof c w = proof' unit_arm c w
 	
      fun tuple_sum c = 
@@ -369,22 +376,36 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 
       fun Rtuple_i (i : con) (c : con) : con = mk_tuple_sum_i i c
       fun R_i (i : con) (c : con) : con = mk_top_sum_i i c
+
+      fun proof_in which sumt pv = 
+	P.bind (LD.E.tag_and_box which pv) (LD.E.inj_nontag_from_sumtype which sumt)
+
+      fun proof_out ksum sv = 
+	let
+	  val sv = LD.E.project' ksum sv
+	  val sv = LD.E.select 0w1 sv
+	in sv
+	end
     end
 
     fun tuple i R_c  = 
       let
 	val (_,sum_args) = Dec.C.sum R_c
-	val r_sum = Dec.C.hd sum_args
+	val tuple_armt = Dec.C.hd sum_args
+	val r_sum = (case Dec.C.tuple_ptr_ml' tuple_armt
+		       of SOME [tagt,sumt] => sumt
+			| _ => error "Bad type for proof")
+
 	val arm = Tupleidx' i
 	    
-	val r_exp = P.bind (LD.E.unit()) (LD.E.inj_nontag_from_sumtype arm r_sum)
-	val pexp   = P.bind r_exp (LD.E.inj_nontag_from_sumtype Tupleidx R_c)
+	val r_exp = proof_in arm r_sum (LD.E.unit'())
+	val pexp  = P.bind r_exp (proof_in Tupleidx R_c)
       in pexp
       end
       
-    fun bfloat R_c    = P.bind (LD.E.unit()) (LD.E.inj_nontag_from_sumtype BFloatidx R_c)
-    fun ptr R_c       = P.bind (LD.E.unit()) (LD.E.inj_nontag_from_sumtype Ptridx R_c)
-    fun otherwise R_c = P.bind (LD.E.unit()) (LD.E.inj_nontag_from_sumtype Otheridx R_c)
+    fun bfloat R_c    = proof_in BFloatidx R_c (LD.E.unit'())
+    fun ptr R_c       = proof_in Ptridx    R_c (LD.E.unit'())
+    fun otherwise R_c = proof_in Otheridx  R_c (LD.E.unit'())
       
     val tuple' = fn a => fn b => P.SV32.to_op (tuple a b)
     val bfloat' = fn a => P.SV32.to_op (bfloat a)
@@ -402,7 +423,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 		let
 		  val ksum = R_i (LD.C.nat iw) srep
 		  val x = Name.fresh_named_var "x"
-		  val x_i = LD.E.project ksum (Var_32 x)
+		  val x_i = proof_out ksum (Var_32 x)
 		  val e = fn _ => if which = iw then yes srep else no srep
 		  val exp = P.bind x_i 
 		    (fn x_i =>LD.E.vcase iw srep e x_i)
@@ -535,7 +556,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	      val iw = LU.i2w i
 	      val ksum = Rtuple_i (LD.C.nat iw) srepc
 	      val x = Name.fresh_named_var "tuplerep"
-	      val x_i = LD.E.project ksum (Var_32 x)
+	      val x_i = proof_out ksum (Var_32 x)
 	      val a = P.bind x_i (fn x_i => LD.E.letinj iw (srepc,x_i))
 	      val e = P.bind a (fn a => mkbody i a)
 	      val e = P.Lili.to_exp e
@@ -562,7 +583,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  val iw = Tupleidx
 	  val ksum = R_i (LD.C.nat iw) argc
 	  val x = Name.fresh_named_var "drep"
-	  val x_i = LD.E.project ksum (Var_32 x)
+	  val x_i = proof_out ksum (Var_32 x)
 	  val oper = P.bind x_i 
 	    (fn x_i => P.bind (LD.E.letinj iw (argc,x_i))
 	     (fn a => P.ret (tuple_case a rtype x_i f)))
@@ -577,7 +598,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	    let
 	      val ksum = R_i (LD.C.nat iw) argc
 	      val x = Name.fresh_named_var "drep"
-	      val x_i = LD.E.project ksum (Var_32 x)
+	      val x_i = proof_out ksum (Var_32 x)
 	      val oper = P.bind x_i 
 		(fn x_i => P.bind (LD.E.letinj iw (argc,x_i))
 		 (fn a => P.ret f))
@@ -669,7 +690,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 		  let
 		    val ksum = R_i (LD.C.nat iw) srep
 		    val x = Name.fresh_named_var "x"
-		    val x_i = LD.E.project ksum (Var_32 x)
+		    val x_i = proof_out ksum (Var_32 x)
 		    val e = fn _ => if BFloatidx = iw then yes srep args else no srep args
 		    val exp = P.bind x_i 
 		      (fn x_i =>LD.E.vcase iw srep e x_i)

@@ -51,6 +51,11 @@ signature CDEC =
     val float  : Lil.con -> unit
     val float' : Lil.con -> unit option
 
+    val tag  : Lil.con -> Lil.con 
+    val tag' : Lil.con -> Lil.con option
+    val tag_ml  : Lil.con -> Lil.w32
+    val tag_ml' : Lil.con -> Lil.w32 option
+
     val ptr  : Lil.con -> Lil.con
     val ptr' : Lil.con -> Lil.con option
 
@@ -114,6 +119,11 @@ signature CDEC =
     val tuple_ml  : Lil.con -> Lil.con list
     val tuple_ml' : Lil.con -> Lil.con list option
 
+    val tuple_ptr  : Lil.con -> Lil.con 
+    val tuple_ptr' : Lil.con -> Lil.con option
+    val tuple_ptr_ml  : Lil.con -> Lil.con list
+    val tuple_ptr_ml' : Lil.con -> Lil.con list option
+
     val list     : Lil.con -> Lil.kind * (Lil.con list)
     val list'    : Lil.con -> (Lil.kind * (Lil.con list)) option
     val nill  : Lil.con -> Lil.kind 
@@ -154,12 +164,10 @@ signature CDEC =
     val embed  : Lil.con -> (Lil.size * Lil.con)
     val embed' : Lil.con -> (Lil.size * Lil.con) option
       
-    val externarrow : Lil.con -> (Lil.size * Lil.con * Lil.con *
-    Lil.con) val externarrow' : Lil.con -> (Lil.size * Lil.con *
-    Lil.con * Lil.con) option val externarrow_ml : Lil.con ->
-    (Lil.size * Lil.con list * Lil.con list * Lil.con) val
-    externarrow_ml' : Lil.con -> (Lil.size * Lil.con list * Lil.con
-    list * Lil.con) option
+    val externarrow : Lil.con -> (Lil.size * Lil.con * Lil.con * Lil.con) 
+    val externarrow' : Lil.con -> (Lil.size * Lil.con * Lil.con * Lil.con) option 
+    val externarrow_ml : Lil.con -> (Lil.size * Lil.con list * Lil.con list * Lil.con) 
+    val externarrow_ml' : Lil.con -> (Lil.size * Lil.con list * Lil.con list * Lil.con) option
 
     val coercion  : Lil.con -> (Lil.con * Lil.con)
     val coercion' : Lil.con -> (Lil.con * Lil.con) option
@@ -230,6 +238,7 @@ signature DECONSTRUCT =
 	    (* Every small value is trivially an nary-tapp
 	     *)
 	    val nary_tapp : Lil.sv32 -> Lil.sv32 * Lil.con list 
+	    val nary_tabs : Lil.sv32 -> (Lil.var * Lil.kind) list * Lil.sv32
 	    val coerce  : Lil.sv32 -> (Lil.sv32 * Lil.sv32)
 	    val coerce' : Lil.sv32 -> (Lil.sv32 * Lil.sv32) option
 	    val coercen : Lil.sv32 -> (Lil.sv32 list * Lil.sv32)

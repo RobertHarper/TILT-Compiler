@@ -63,23 +63,23 @@ structure SingletonElim :> SINGLETONELIM =
     (*PRE: con has been de-singletonized *)
     fun R_k env (arg : con * kind) : con option  =
       let
-	val changed = ref false
 	fun path2var p = 
 	  (case ND.con2path p
 	     of SOME (v,[])  => Name.derived_var v
 	      | SOME(v,lbls) => Name.label2var (List.last lbls)
 	      | NONE => Name.fresh_named_var "erasure_fun")
-	fun trans env (c,k) =
+	fun trans changed env (c,k) =
 	  (case k
 	     of Type_k => c
 	      | SingleType_k c' => (changed := true; R_c env c')
 	      | Single_k c' => (changed := true; R_c env c')
 	      | Record_k lvks =>
 	       let
+		 val flag = ref false
 		 fun folder (((l,v),oldk),env) =
 		   let
 		     (* Invariant: c is always a path (doesn't require renaming) *)
-		     val c = trans env (Proj_c(c,l),oldk)
+		     val c = trans flag env (Proj_c(c,l),oldk)
 		     val k = erasek env oldk
 		     val bnd = Con_cb(v,c)
 		     val field = (l,Var_c v)
@@ -88,14 +88,16 @@ structure SingletonElim :> SINGLETONELIM =
 		   end
 		 val (cbsfields,_) = foldl_acc folder env lvks
 		 val (cbs,fields) = unzip cbsfields
-	       in mkLetC cbs (Crecord_c fields)
+	       in if !flag then (changed := true;mkLetC cbs (Crecord_c fields))
+		  else c
 	       end
 	      | Arrow_k (os,vks,k) =>
 	       let
+		 val flag = ref false
 		 fun folder ((v,oldk),env) =
 		   let
 		     val newv = Name.derived_var v
-		     val newc = trans env (Var_c newv,oldk)
+		     val newc = trans flag env (Var_c newv,oldk)
 		     val k = erasek env oldk
 		     val arg = Var_c v
 		     val bnd = Con_cb(v,newc)
@@ -105,16 +107,18 @@ structure SingletonElim :> SINGLETONELIM =
 		   end
 		 val (vbas,env) = foldl_acc folder env vks
 		 val (vks,bnds,args) = unzip3 vbas
-		 val body = trans env (App_c(c,args),k)
+		 val body = trans flag env (App_c(c,args),k)
 		 val k = erasek env k
 
 		 val name = path2var c
 		 val newbody = mkLetC bnds body
 		 val lam = Open_cb (name,vks,newbody)
 
-	       in Let_c (Sequential,[lam],Var_c name)
+	       in if !flag then (changed := true;Let_c (Sequential,[lam],Var_c name))
+		 else c
 	       end)
-	val res = trans env arg
+	val changed = ref false
+	val res = trans changed env arg
       in
 	if !changed then SOME res
 	else NONE
@@ -339,6 +343,13 @@ structure SingletonElim :> SINGLETONELIM =
        val (imports,env) = R_imports imports
        val (bnds,_) = R_bnds env bnds
      in MODULE{bnds=bnds,imports=imports,exports=exports}
+     end
+
+   fun R_interface (INTERFACE{imports,exports}) =
+     let
+       val (imports,env) = R_imports imports
+       val (exports,env) = R_imports exports
+     in INTERFACE{imports=imports,exports=exports}
      end
 
    val erasek = fn (D : NilContext.context) => fn (k : kind) => erasek (Env {ctxt = D}) k

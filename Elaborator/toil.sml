@@ -530,11 +530,13 @@ structure Toil :> TOIL =
 				   then eqexp
 			       else let val v = fresh_named_var "neq_arg"
 					val con_bool = con_bool context
-					val true_exp = true_exp context
-					val false_exp = false_exp context
-				    in  #1(make_lambda(v,arg_con,con_bool,
-						       make_ifthenelse context (APP(eqexp,VAR v),
-										false_exp,true_exp,con_bool)))
+					val bool_in = bool_in context
+					val con_internal_bool = con_internal_bool context
+					val true_exp = internal_bool_exp context true
+					val false_exp = internal_bool_exp context false
+					val switch = make_ifthenelse context (APP(eqexp,VAR v),
+									      false_exp,true_exp,con_internal_bool)
+				    in  #1(make_lambda(v,arg_con,con_bool,COERCE(bool_in,[],switch)))
 				    end
 		 in (res,eq_con,true)
 		 end

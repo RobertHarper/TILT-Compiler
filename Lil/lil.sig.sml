@@ -30,7 +30,7 @@ signature LIL =
     | Mu_k of var * kind
     | All_k of var * kind
 
-    withtype kind = { k : kind_ , id : uid}
+    withtype kind = { k : kind_ , id : uid, kvars : Name.VarSet.set}
       
     datatype primcon =                             (* classifies term-level ... *)
       Int_c of size                           (* register integers *)
@@ -71,7 +71,7 @@ signature LIL =
     | Fold_c of kind * con
     | Ptr_c of con
 
-    withtype con = {c : con_,id : uid,whnf : con_ option ref, cvars : Name.VarSet.set} 
+    withtype con = {c : con_,id : uid,whnf : con_ option ref, cvars : Name.VarSet.set, kvars : Name.VarSet.set} 
 
     datatype ctag = 
       Roll 
@@ -168,9 +168,11 @@ signature LIL =
     datatype data = 
       Dboxed of label * sv64 
       | Darray of label * size * con * value list
-      | Dtuple of label * con * sv32 option * sv32 list  (* l : c = sv @ <svs> *)
+      | Dtuple of label * con * coercion list * sv32 list  (* l : c = q @ <svs> *)
       | Dcode of label * function
       
+
+    type timport = label * var * kind
 
     (* A lil module is:
      * 1) a list of global imported types, which are bound throughout the module
@@ -183,10 +185,18 @@ signature LIL =
      *    This can be implemented as two seperate functions, but it is hard
      *    to avoid duplicating lots of code in this case.
      *)
-    datatype module = MODULE of {timports : (var * kind) list,
+    datatype module = MODULE of {unitname : string,
+				 parms : Name.LabelSet.set,
+				 entry_c : label,
+				 entry_r : label,
+				 timports : timport list,
 				 data   : data list,
-				 confun : con,
-				 expfun : exp}
+				 confun : con}
+
+    datatype interface = INTERFACE of {unitname : string,
+				       timports : timport list,
+				       entry_c : label * var * kind,
+				       entry_r : label * con}
 
     val mk_kind : kind_ -> kind
     val eq_kind : kind * kind -> bool
@@ -197,6 +207,8 @@ signature LIL =
     val mk_pcon     : primcon -> con
 
     val free_cvars_con : con -> Name.VarSet.set
+    val free_kvars_con : con -> Name.VarSet.set
+    val free_kvars_kind : kind -> Name.VarSet.set
     val eq_con : con * con -> bool
     val cmp_con : con * con -> order
     val set_whnf : con * con -> unit

@@ -17,6 +17,12 @@ signature OPTIMIZE =
        * uncurrying (doUncurry), or common subexpression elimination (doCse) based on input parameters.
        *)
 
+      val optimize_int :  {doDead : bool,
+			   doProjection : int option,
+			   doUncurry : bool,
+			   doPolyUncurry : bool,
+			   doCse : bool} -> Nil.interface -> Nil.interface
+	
       val generate : unit -> {sub : Nil.label * Nil.var * Nil.niltrace * Nil.con,
 			      update : Nil.label * Nil.var * Nil.niltrace * Nil.con,
 			      array : Nil.label * Nil.var * Nil.niltrace * Nil.con,

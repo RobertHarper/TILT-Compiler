@@ -308,6 +308,8 @@ structure IlUtil :> ILUTIL =
       in f
       end
 
+    val internal_bool_exp = IlPrimUtilParam.bool2exp 
+    val con_internal_bool = IlPrimUtilParam.con_bool
 
     fun make_fold_coercion (vars,unrolltype,rolltype) : exp * con =
 	(FOLD(vars,unrolltype,rolltype),CON_COERCION(vars,unrolltype,rolltype))

@@ -584,10 +584,12 @@ structure PpLil :> PPLIL =
       in 
       (case d
 	 of Dboxed (l,sv) => HOVbox[pp_label l,String " = ",Break0 0 2,pp_sv64 sv]
-	  | Dtuple (l,c,qopt,svs) => 
+	  | Dtuple (l,c,qs,svs) => 
 	   HOVbox[pp_label l, String ":",Break0 0 2,pp_con c,String " = ",Break0 0 2,
-		  (case qopt of SOME sv => pp_sv32 sv | NONE => String ""),Break,
-		     String "@",Break,
+		  (case qs 
+		     of [] => String ""
+		      | _ => 
+		       HOVbox[pp_list pp_coercion qs ("[",",","]",false),Break,String "@",Break]),
 		     pp_list pp_sv32 svs ("<",",",">",false)]
 
 	  | Darray (l,sz,c,svs) => 
@@ -598,16 +600,30 @@ structure PpLil :> PPLIL =
       end
     fun pp_datalist ds = pp_list pp_data ds ("",",","",true)
 
-    fun pp_module (MODULE{timports,data,confun,expfun}) = 
+    fun pp_lvk (l,v,k) = Hbox [pp_label l,String " > ",pp_var v,String " :: ",pp_kind k]
+    fun pp_lc (l,c) = Hbox [pp_label l,String " : ",pp_con c]
+
+    fun pp_module (MODULE{unitname,parms,entry_c,entry_r,timports,data,confun}) = 
       Vbox0 0 1 [
+		 String ("UNIT: "^unitname),Break0 0 0,
+		 String ("PARMS: "),pp_list pp_label (Name.LabelSet.listItems parms) ("",",","",true) ,Break0 0 2,
+		 String ("ENTRY_R: "),pp_label entry_r,Break0 0 0,
+		 String ("ENTRY_C: "),pp_label entry_c,Break0 0 2,
 		 String "TIMPORTS:", Break0 0 2,
-		 pp_list pp_vk timports ("",",","",true), Break0 0 2,
+		 pp_list pp_lvk timports ("",",","",true), Break0 0 2,
 		 String "DATA:", Break0 0 2,
 		 pp_datalist data, Break,
 		 String "CONFUN:", Break0 0 2,
-		 pp_con confun, Break,
-		 String "EXPFUN:", Break0 0 2,
-		 pp_exp expfun,Break
+		 pp_con confun, Break
+		 ]
+
+    fun pp_interface (INTERFACE{unitname,entry_c,entry_r,timports}) = 
+      Vbox0 0 1 [
+		 String ("INTERFACE: "^unitname),Break0 0 0,
+		 String "TIMPORTS:", Break0 0 2,
+		 pp_list pp_lvk timports ("",",","",true), Break0 0 2,
+		 String ("ENTRY_C: "),pp_lvk entry_c,Break0 0 2,
+		 String ("ENTRY_R: "),pp_lc entry_r,Break
 		 ]
 
     fun help pp obj = 
@@ -634,6 +650,7 @@ structure PpLil :> PPLIL =
     val pp_op32' = help pp_op32
     val pp_op64' = help pp_op64
     val pp_module' = help pp_module
+    val pp_interface' = help pp_interface
 
     val pp_var = help' pp_var
     val pp_label  = help' pp_label
@@ -648,10 +665,18 @@ structure PpLil :> PPLIL =
     val pp_op32 = help' pp_op32
     val pp_op64 = help' pp_op64
     val pp_module = help' pp_module
+    val pp_interface = help' pp_interface
+
     val pp_pass = 
       fn {module, name:string, pass:string, header:string} =>
       (print "PASS: "; print pass; print "\n";
        print header; print "\n\n";
        pp_module module)
+
+    val pp_intpass = 
+      fn {interface, name:string, pass:string, header:string} =>
+      (print "PASS: "; print pass; print "\n";
+       print header; print "\n\n";
+       pp_interface interface)
       
   end

@@ -1,3 +1,4 @@
+
 (* The main LIL datatype
  * Leaf Petersen
  *)
@@ -31,7 +32,7 @@ structure Lil :> LIL =
     | Mu_k of var * kind
     | All_k of var * kind
 
-    withtype kind = { k : kind_ , id : uid }
+    withtype kind = { k : kind_ , id : uid, kvars : VarSet.set}
       
 
     datatype primcon =                             (* classifies term-level ... *)
@@ -73,7 +74,7 @@ structure Lil :> LIL =
     | Fold_c of kind * con
     | Ptr_c of con
 
-    withtype con = {c : con_,id : uid,whnf : con_ option ref, cvars : VarSet.set} 
+    withtype con = { c : con_,id : uid,whnf : con_ option ref, cvars : VarSet.set, kvars : VarSet.set } 
 
     datatype ctag = 
       Roll 
@@ -170,9 +171,10 @@ structure Lil :> LIL =
     datatype data = 
       Dboxed of label * sv64 
       | Darray of label * size * con * value list
-      | Dtuple of label * con * sv32 option * sv32 list  (* l : c = sv @ <svs> *)
+      | Dtuple of label * con * coercion list * sv32 list  (* l : c = q @ <svs> *)
       | Dcode of label * function
       
+    type timport = label * var * kind
 
     (* A lil module is:
      * 1) a list of global imported types, which are bound throughout the module
@@ -185,11 +187,26 @@ structure Lil :> LIL =
      *    This can be implemented as two seperate functions, but it is hard
      *    to avoid duplicating lots of code in this case.
      *)
-    datatype module = MODULE of {timports : (var * kind) list,
+    datatype module = MODULE of {unitname : string,
+				 parms : Name.LabelSet.set,
+				 entry_c : label,
+				 entry_r : label,
+				 timports : timport list,
 				 data   : data list,
-				 confun : con,
-				 expfun : exp}
+				 confun : con}
 
+
+    datatype interface = INTERFACE of {unitname : string,
+				       timports : timport list,
+				       entry_c : label * var * kind,
+				       entry_r : label * con}
+
+
+    val inc = Stats.counter_inc
+    val con_lookups = Stats.counter "contable_lookups"
+    val con_makes = Stats.counter "contable_misses"
+    val kind_lookups = Stats.counter "kindtable_lookups"
+    val kind_makes = Stats.counter "kindtable_misses"
 
     (* Hashing code borrowed from Karl Crary's TALT implementation
      *)
@@ -328,13 +345,25 @@ structure Lil :> LIL =
       
     local
 
-      val T1 = {k=T B1, id = new_stamp()}
-      val T2 = {k=T B2, id = new_stamp()}
-      val T4 = {k=T B4, id = new_stamp()}
-      val T8 = {k=T B4, id = new_stamp()}
-      val TM = {k=Tmem, id = new_stamp()}
-      val Unitk = {k=Unit_k, id = new_stamp()}
-      val Nat = {k=Nat_k, id = new_stamp()}
+      val T1 = {k=T B1, id = new_stamp(), kvars = VarSet.empty}
+      val T2 = {k=T B2, id = new_stamp(), kvars = VarSet.empty}
+      val T4 = {k=T B4, id = new_stamp(), kvars = VarSet.empty}
+      val T8 = {k=T B4, id = new_stamp(), kvars = VarSet.empty}
+      val TM = {k=Tmem, id = new_stamp(), kvars = VarSet.empty}
+      val Unitk = {k=Unit_k, id = new_stamp(), kvars = VarSet.empty}
+      val Nat = {k=Nat_k, id = new_stamp(), kvars = VarSet.empty}
+
+
+      fun free_kvars k_ = 
+	(case k_ 
+	   of Arrow_k (k1,k2) => VarSet.union (#kvars k1,#kvars k2)
+	    | Prod_k (k1,k2) => VarSet.union (#kvars k1,#kvars k2)
+	    | Sum_k ks => List.foldl (fn (k,f) => VarSet.union(#kvars k,f)) VarSet.empty ks
+	    | Var_k j => VarSet.singleton j
+	    | Mu_k (j,k) => VarSet.difference(#kvars k,VarSet.singleton j)
+	    | All_k (j,k) => VarSet.difference(#kvars k,VarSet.singleton j)
+	    | _ => VarSet.empty)
+
     in
       fun reset_kind_table () = kind_table := (KT.mkTable (1001, Fail "call find, not lookup"))
 
@@ -350,16 +379,22 @@ structure Lil :> LIL =
 	    | Unit_k => Unitk
 	    | Nat_k => Nat
 	    | _ => 
-		(case KT.find (!kind_table) k_ of
-		   NONE =>
-		     let 
-		       val stamp = new_stamp ()
-		       val k = {k=k_, id = stamp}
-		     in
-		       KT.insert (!kind_table) (k_, k);
-		       k
-		     end
-		 | SOME k => k))
+		let
+		  val () = inc kind_lookups
+		in
+		  (case KT.find (!kind_table) k_ of
+		     NONE =>
+		       let
+			 val () = inc kind_makes
+			 val stamp = new_stamp ()
+			 val kvars = free_kvars k_
+			 val k = {k=k_, id = stamp, kvars = kvars}
+		       in
+			 KT.insert (!kind_table) (k_, k);
+			 k
+		       end
+		   | SOME k => k)
+		end)
     end
 
     (*******  CONSTRUCTORS  *******)
@@ -484,67 +519,106 @@ structure Lil :> LIL =
     val collisions : con_ list ColMap.map ref = ref ColMap.empty
 
     local
-      val int1 = {c=Prim_c(Int_c B1), id=new_stamp(), whnf=ref (SOME(Prim_c(Int_c B1))), cvars = VarSet.empty}
-      val int2 = {c=Prim_c(Int_c B2), id=new_stamp(), whnf=ref (SOME(Prim_c(Int_c B2))), cvars = VarSet.empty}
-      val int4 = {c=Prim_c(Int_c B4), id=new_stamp(), whnf=ref (SOME(Prim_c(Int_c B4))), cvars = VarSet.empty}
-      val int8 = {c=Prim_c(Int_c B8), id=new_stamp(), whnf=ref (SOME(Prim_c(Int_c B8))), cvars = VarSet.empty}
-      val float = {c=Prim_c(Float_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Float_c))), cvars = VarSet.empty}
-      val void = {c=Prim_c(Void_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Void_c))), cvars = VarSet.empty}
-      val boxed1 = {c=Prim_c(Boxed_c B1), id=new_stamp(), whnf=ref (SOME(Prim_c(Boxed_c B1))), cvars = VarSet.empty}
-      val boxed2 = {c=Prim_c(Boxed_c B2), id=new_stamp(), whnf=ref (SOME(Prim_c(Boxed_c B2))), cvars = VarSet.empty}
-      val boxed4 = {c=Prim_c(Boxed_c B4), id=new_stamp(), whnf=ref (SOME(Prim_c(Boxed_c B4))), cvars = VarSet.empty}
-      val boxed8 = {c=Prim_c(Boxed_c B8), id=new_stamp(), whnf=ref (SOME(Prim_c(Boxed_c B8))), cvars = VarSet.empty}
-      val tuple = {c=Prim_c(Tuple_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Tuple_c))), cvars = VarSet.empty}
-      val array1 = {c=Prim_c(Array_c B1), id=new_stamp(), whnf=ref (SOME(Prim_c(Array_c B1))), cvars = VarSet.empty}
-      val array2 = {c=Prim_c(Array_c B2), id=new_stamp(), whnf=ref (SOME(Prim_c(Array_c B2))), cvars = VarSet.empty}
-      val array4 = {c=Prim_c(Array_c B4), id=new_stamp(), whnf=ref (SOME(Prim_c(Array_c B4))), cvars = VarSet.empty}
-      val array8 = {c=Prim_c(Array_c B8), id=new_stamp(), whnf=ref (SOME(Prim_c(Array_c B8))), cvars = VarSet.empty}
-      val arrow = {c=Prim_c(Arrow_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Arrow_c))), cvars = VarSet.empty}
-      val code = {c=Prim_c(Code_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Code_c))), cvars = VarSet.empty}
-      val dyntag = {c=Prim_c(Dyntag_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Dyntag_c))), cvars = VarSet.empty}
-      val tag = {c=Prim_c(Tag_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Tag_c))), cvars = VarSet.empty}
-      val sum = {c=Prim_c(Sum_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Sum_c))), cvars = VarSet.empty}
-      val ksum = {c=Prim_c(KSum_c), id=new_stamp(), whnf=ref (SOME(Prim_c(KSum_c))), cvars = VarSet.empty}
-      val exists = {c=Prim_c(Exists_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Exists_c))), cvars = VarSet.empty}
-      val forall = {c=Prim_c(Forall_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Forall_c))), cvars = VarSet.empty}
-      val rek = {c=Prim_c(Rec_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Rec_c))), cvars = VarSet.empty}
-      val externarrow1 = {c=Prim_c(ExternArrow_c B1), id=new_stamp(), whnf=ref (SOME(Prim_c(ExternArrow_c B1))), cvars = VarSet.empty}
-      val externarrow2 = {c=Prim_c(ExternArrow_c B2), id=new_stamp(), whnf=ref (SOME(Prim_c(ExternArrow_c B2))), cvars = VarSet.empty}
-      val externarrow4 = {c=Prim_c(ExternArrow_c B4), id=new_stamp(), whnf=ref (SOME(Prim_c(ExternArrow_c B4))), cvars = VarSet.empty}
-      val externarrow8 = {c=Prim_c(ExternArrow_c B8), id=new_stamp(), whnf=ref (SOME(Prim_c(ExternArrow_c B8))), cvars = VarSet.empty}
-      val coercion = {c=Prim_c(Coercion_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Coercion_c))), cvars = VarSet.empty}
-      val star = {c=Star_c, id=new_stamp(), whnf=ref (SOME Star_c), cvars = VarSet.empty}
-      val refc = {c=Prim_c Ref_c, id=new_stamp(), whnf=ref (SOME (Prim_c Ref_c)), cvars = VarSet.empty}
-      val embed1 = {c=Prim_c(Embed_c B1), id=new_stamp(), whnf=ref (SOME(Prim_c(Embed_c B1))), cvars = VarSet.empty}
-      val embed2 = {c=Prim_c(Embed_c B2), id=new_stamp(), whnf=ref (SOME(Prim_c(Embed_c B2))), cvars = VarSet.empty}
-      val embed4 = {c=Prim_c(Embed_c B4), id=new_stamp(), whnf=ref (SOME(Prim_c(Embed_c B4))), cvars = VarSet.empty}
-      val embed8 = {c=Prim_c(Embed_c B8), id=new_stamp(), whnf=ref (SOME(Prim_c(Embed_c B8))), cvars = VarSet.empty}
+      fun primc p = {c=Prim_c p, id=new_stamp(), whnf=ref (SOME (Prim_c p)), cvars = VarSet.empty, kvars = VarSet.empty}
+      val int1 = primc(Int_c B1)
+      val int2 = primc(Int_c B2)
+      val int4 = primc(Int_c B4)
+      val int8 = primc(Int_c B8)
+      val float = primc(Float_c)
+      val void   = primc(Void_c)
+      val boxed1 = primc(Boxed_c B1)
+      val boxed2 = primc(Boxed_c B2)
+      val boxed4 = primc(Boxed_c B4)
+      val boxed8 = primc(Boxed_c B8)
+      val tuple = primc(Tuple_c)
+      val array1 = primc(Array_c B1)
+      val array2 = primc(Array_c B2)
+      val array4 = primc(Array_c B4)
+      val array8 = primc(Array_c B8)
+      val arrow = primc(Arrow_c)
+      val code = primc(Code_c)
+      val dyntag = primc(Dyntag_c)
+      val tag = primc(Tag_c)
+      val sum = primc(Sum_c)
+      val ksum = primc(KSum_c)
+      val exists = primc(Exists_c)
+      val forall = primc(Forall_c)
+      val rek = primc(Rec_c)
+      val externarrow1 = primc(ExternArrow_c B1)
+      val externarrow2 = primc(ExternArrow_c B2)
+      val externarrow4 = primc(ExternArrow_c B4)
+      val externarrow8 = primc(ExternArrow_c B8)
+      val coercion = primc(Coercion_c)
+      val refc = primc(Ref_c)
+      val embed1 = primc(Embed_c B1)
+      val embed2 = primc(Embed_c B2)
+      val embed4 = primc(Embed_c B4)
+      val embed8 = primc(Embed_c B8)
+
+      fun normc c_ = {c = c_, id=new_stamp(), whnf=ref (SOME c_), cvars = VarSet.empty, kvars = VarSet.empty}
+      val star = normc Star_c
+
       val nat_cached = 32
       fun mknat i = 
 	let
 	  val iw = TilWord32.fromInt i
 	in
-	  {c=Nat_c iw, id=new_stamp(), whnf=ref (SOME(Nat_c iw)), cvars = VarSet.empty}
+	  normc (Nat_c iw)
 	end
       val nats = Array.tabulate(nat_cached,mknat)
 
-      fun hash_con (c_ : con_,whnf,frees) = 
-	let
+      fun con_details (con : con_) = 
+	let 
+	  fun cvars (c:con) = #cvars c
+	  fun kvars (c:con) = #kvars c
+	in
+	  case con
+	    of Var_c a => (SOME con,VarSet.singleton a,VarSet.empty)
+	     | App_c (c1,c2) => (NONE,VarSet.union(cvars c1,cvars c2),VarSet.union (kvars c1, kvars c2))
+	     | APP_c (c,k) => (NONE,cvars c,VarSet.union(kvars c,#kvars k))
+	     | Pi1_c c => (NONE,cvars c,kvars c)
+	     | Pi2_c c => (NONE,cvars c,kvars c)
+	     | Pr_c (j,(a,k1),k2,r,c) => 
+	      (SOME con,
+	       VarSet.difference (cvars c,VarSet.addList(VarSet.empty,[a,r])),
+	       VarSet.difference (VarSet.union(VarSet.union(#kvars k1,#kvars k2),kvars c),VarSet.singleton j))
+	     | Case_c (arg,arms,default) => 
+	      let
+		val cs1 = cvars arg
+		val ks1 = kvars arg
+		fun arm ((w,(a,c)),(cs,ks)) =
+		  (VarSet.union(cs,VarSet.difference(cvars c,VarSet.singleton a)),
+		   VarSet.union (ks,#kvars c))
+		val (cs,ks) = foldl arm (cs1,ks1) arms
+		val (cs,ks) = 
+		  case default
+		    of NONE => (cs,ks) 
+		     | SOME c => (VarSet.union(cs,cvars c),VarSet.union(ks,kvars c))
+	      in (NONE,cs,ks)
+	      end
+	     | LAM_c (a,c) => (SOME con,cvars c,VarSet.difference(kvars c,VarSet.singleton a))
+	     | Lam_c ((a,_),c) => (SOME con,VarSet.difference(cvars c,VarSet.singleton a),kvars c)
+	     | Pair_c (c1,c2) => (SOME con,VarSet.union (cvars c1, cvars c2),VarSet.union (kvars c1,kvars c2))
+	     | Inj_c (w,k,c) => (SOME con,cvars c,VarSet.union(#kvars k,kvars c))
+	     | Fold_c (k,c) => (SOME con,cvars c,VarSet.union(#kvars k,kvars c))
+	     | Ptr_c c => (SOME con,cvars c,kvars c)
+	     | Star_c => (SOME con,VarSet.empty,VarSet.empty)
+	     | Nat_c _ => (SOME con,VarSet.empty,VarSet.empty)
+	     | Prim_c _=> (SOME con,VarSet.empty,VarSet.empty)
+	end
 
-(*	  val () = 
-	    (case ColMap.find (!collisions,ConKey.hashVal c_)
-	       of SOME cs => if List.exists (fn c_' => ConKey.sameKey (c_,c_')) cs 
-			       then () 
-			     else collisions := ColMap.insert(!collisions,ConKey.hashVal c_,c_::cs)
-		| NONE => collisions := ColMap.insert(!collisions,ConKey.hashVal c_,[c_]))
-	*)       
+      fun hash_con (c_ : con_) = 
+	let
+	  val () = inc con_lookups
 	in
 	  case CT.find (!con_table) c_ of
 	    NONE =>
 	      let 
+		val () = inc con_makes
 		val stamp = new_stamp ()
+		val (whnf,cfrees,kfrees) = con_details c_
 		val whnf = ref whnf
-		val c = {c=c_, id=stamp, whnf=whnf, cvars = frees}
+		val c = {c=c_, id=stamp, whnf=whnf, cvars = cfrees, kvars = kfrees}
 	      in
 		CT.insert (!con_table) (c_, c);
 		c
@@ -606,47 +680,27 @@ structure Lil :> LIL =
 	         
       fun mk_con (con : con_) : con = 
 	let 
-	  fun cvars (c:con) = #cvars c
 	in
 	  case con
-	    of Var_c a => hash_con(con,SOME con,VarSet.singleton a)
-	     | Nat_c w => 
+	    of Nat_c w => 
 	      let
 		val i = TilWord32.toInt w
 	      in
 		if i < nat_cached then
 		  Array.sub(nats,i)
 		else
-		  hash_con(con,SOME con,VarSet.empty) 
+		  hash_con con
 	      end
 	     | Prim_c p => mk_pcon p
-	     | App_c (c1,c2) => hash_con(con,NONE,VarSet.union(cvars c1,cvars c2))
-	     | APP_c (c,_) => hash_con(con,NONE,cvars c)
-	     | Pi1_c c => hash_con(con,NONE,cvars c)
-	     | Pi2_c c => hash_con(con,NONE,cvars c)
-	     | Pr_c (j,(a,_),_,r,c) => 
-	      hash_con(con,SOME con,VarSet.difference (cvars c,VarSet.addList(VarSet.empty,[a,r])))
-	     | Case_c (arg,arms,default) => 
-	      let
-		val s1 = cvars arg
-		val s2 = foldl (fn ((w,(a,c)),s) => VarSet.union(s,VarSet.difference(cvars c,VarSet.singleton a))) s1 arms
-		val frees = 
-		  case default
-		    of NONE => s2
-		     | SOME c => VarSet.union(s2,cvars c)
-	      in hash_con(con,NONE,frees)
-	      end
-	     | LAM_c (a,c) => hash_con(con,SOME con,cvars c)
-	     | Lam_c ((a,_),c) => hash_con(con,SOME con,VarSet.difference(cvars c,VarSet.singleton a))
-	     | Pair_c (c1,c2) => hash_con(con,SOME con,VarSet.union (cvars c1, cvars c2))
-	     | Inj_c (w,k,c) => hash_con(con,SOME con,cvars c)
-	     | Fold_c (k,c) => hash_con(con,SOME con,cvars c)
-	     | Ptr_c c => hash_con(con,SOME con,cvars c)
 	     | Star_c => star
+	     | _ => hash_con con
 	end
     end
 
     fun free_cvars_con (c : con) = #cvars c
+    fun free_kvars_con (c : con) = #kvars c
+    fun free_kvars_kind (k : kind) = #kvars k
+
     fun set_whnf (c1 : con,c2 : con) : unit = (#whnf c1) := SOME (#c c2)
     fun name_con (c : con) = "con_"^(Word.toString (#id c))
     fun name_kind (k : kind) = "kind_"^(Word.toString (#id k))

@@ -550,24 +550,34 @@ struct
 	val e = P.bind e (fn sv => P.ret (LD.Q.coerce_many qs sv))
       in P.Lili.to_exp e
       end
-    
+
+    fun valuable_cc cc = 
+      (case cc
+	 of Exp_cc e => isSome (get_exp_val e)
+	  | Not_cc cc => valuable_cc cc
+	  | And_cc (cc1,cc2) => (valuable_cc cc1) andalso (valuable_cc cc2)
+	  | Or_cc (cc1,cc2) =>  (valuable_cc cc1) andalso (valuable_cc cc2))
+	 
     (* inline indicates whether or not it is safe to 
      * inline the contents of the operator (safe when the switch 
      * was either local or known to be used linearly here)
      *)
     fun reduce_nested_if (inline,state,qs,oper) = 
-      (case oper
-	 of Switch (Ifthenelse {arg,thenArm,elseArm,rtype}) =>
-	   (case (inline,get_coercedbool state (qs,thenArm),get_coercedbool state (qs, elseArm))
-	      of (_,SOME true,SOME false) => SOME arg
-	       | (_,SOME false,SOME true) => SOME (Not_cc arg)
-	       | (_,SOME a,SOME a')  => SOME (Exp_cc (mk_exp(Val32_e(LD.E.bool' a))))  (* a == a'*)
-	       | (true,SOME true,_)  => SOME (Or_cc(arg,Exp_cc(coerce_exp qs elseArm)))
-	       | (true,SOME false,_) => SOME (And_cc(Not_cc arg,Exp_cc(coerce_exp qs elseArm)))
-	       | (true,_,SOME true)  => SOME (Or_cc(Not_cc arg,Exp_cc(coerce_exp qs thenArm)))
-	       | (true,_,SOME false) => SOME (And_cc(arg,Exp_cc(coerce_exp qs thenArm)))
-	       | _ => NONE)
-	  | _ => NONE)
+      let
+      in
+	case oper
+	  of Switch (Ifthenelse {arg,thenArm,elseArm,rtype}) =>
+	    (case (inline,get_coercedbool state (qs,thenArm),get_coercedbool state (qs, elseArm))
+	       of (_,SOME true,SOME false) => if inline orelse (valuable_cc arg) then SOME arg else NONE
+		| (_,SOME false,SOME true) => if inline orelse (valuable_cc arg) then SOME (Not_cc arg) else NONE
+		| (_,SOME a,SOME a')  => SOME (Exp_cc (mk_exp(Val32_e(LD.E.bool' a))))  (* a == a'*)
+		| (true,SOME true,_)  => SOME (Or_cc(arg,Exp_cc(coerce_exp qs elseArm)))
+		| (true,SOME false,_) => SOME (And_cc(Not_cc arg,Exp_cc(coerce_exp qs elseArm)))
+		| (true,_,SOME true)  => SOME (Or_cc(Not_cc arg,Exp_cc(coerce_exp qs thenArm)))
+		| (true,_,SOME false) => SOME (And_cc(arg,Exp_cc(coerce_exp qs thenArm)))
+		| _ => NONE)
+	   | _ => NONE
+      end
 	 
     fun reduce_exp_cc state e = 
       (case get_exp_val e
@@ -604,14 +614,7 @@ struct
      *)
     fun reduce_cc state cc = 
       let
-	
-	fun valuable cc = 
-	  (case cc
-	     of Exp_cc e => isSome (get_exp_val e)
-	      | Not_cc cc => valuable cc
-	      | And_cc (cc1,cc2) => (valuable cc1) andalso (valuable cc2)
-	      | Or_cc (cc1,cc2) =>  (valuable cc1) andalso (valuable cc2))
-	     
+		     
 	fun static_cc b = Exp_cc (mk_exp (Val32_e (LD.E.bool' b)))
 	  
 	  
@@ -642,10 +645,11 @@ struct
 		     | (SOME true,NONE) => cc2
 		     | (SOME false,NONE) => static_cc false
 		     | (NONE,SOME tag) => 
-		      if valuable cc1 then
-			if tag then cc1
-			else static_cc false
-		      else And_cc (cc1,cc2)
+		      if tag then cc1  (* cc2 is valuable and true*)
+		      else             (* cc2 is valuable and false *)
+			if valuable_cc cc1 then  
+			  static_cc false
+			else And_cc (cc1,static_cc false)
 		     | (NONE, NONE) => And_cc (cc1,cc2)
 	     end
 	    | Or_cc (cc1,cc2) => 
@@ -657,10 +661,12 @@ struct
 		   | (SOME true,NONE) => static_cc true
 		   | (SOME false,NONE) => cc2
 		   | (NONE,SOME tag) => 
-		    if valuable cc1 then
-		      if tag then static_cc true
-		      else cc1
-		    else Or_cc (cc1,cc2)
+		    if tag then (* cc2 is valuable and true *)
+		      if valuable_cc cc1 then
+			static_cc true   
+		      else Or_cc(cc1,cc2)
+		    else        (* cc2 is valuable and false *)
+		      cc1
 		   | (NONE, NONE) => Or_cc (cc1,cc2)
 	     end
       end
@@ -741,25 +747,28 @@ struct
 		| _ => default())
 	   end
 	   | _ => switch_opts2(state,bnds,acc))
-    (* Continue with other opts    *)
-    and switch_opts2(state,bnds,acc) = bnd_opts (state,tl bnds,(hd bnds)::acc)
+
     (* Progress was made and a bnd eliminated.  Backtrack to try
      * with the next pair of adjacent bnds.
      *)
     and switch_opts_backtrack(state,bnds,acc) =
       (case acc
 	 of (bnd::acc) => switch_opts (state,bnd::bnds,acc)
-	  | _ => switch_opts2(state,bnds,acc))
+	  | _ => switch_opts (state,bnds,acc))
 
-    and bnd_opts (state,bnds,acc) = 
+    (* Continue with other opts, in this case none.    *)
+    and switch_opts2(state,bnds,acc) = 
       (case bnds
 	 of [] => rev acc
-	  | bnd::bnds => 
-	   (case bnd_used state bnd
-	      of SOME bnd => switch_opts(state,bnd::bnds,acc)
-	       | NONE => bnd_opts(state,bnds,acc)))
+	  | bnd::bnds => switch_opts (state,bnds,bnd::acc))
 
-    fun killbnds state bnds = bnd_opts(state,bnds,[])
+
+    fun killbnds state bnds = 
+      let
+	val bnds = List.mapPartial (bnd_used state) bnds
+	val bnds = switch_opts(state,bnds,[])
+      in bnds
+      end
 
     fun getVals state l = 
       let
@@ -1122,6 +1131,14 @@ struct
 					rtype=rtype}))
 		end
 	  end
+	fun intsw_to_if {arg,arms,default,size,rtype} =
+	  (case arms
+	     of [(w,thenArm)] => 
+	       let
+		 val e = P.Lili.to_exp (LD.E.inteq size (arg,LD.E.intconst' size w))
+	       in SOME {arg = Exp_cc e, thenArm = thenArm, elseArm = default, rtype = rtype}
+	       end
+	      | _ => NONE)
 	fun sumsw_to_if {arg,arms,default,rtype} =
 	  (case Dec.C.sum_ml' (typeof_sv32 (state,arg))
 	     of SOME (0w2,[]) => 
@@ -1150,7 +1167,10 @@ struct
 	      | _ => NONE)
       in
 	case switch 
-	  of Intcase int_sw => int_switch int_sw
+	  of Intcase int_sw => 
+	    (case intsw_to_if int_sw
+	       of SOME ifte => do_ifthenelse state ifte
+		| NONE => int_switch int_sw)
 	   | Sumcase sum_sw => 
 	    (case sumsw_to_if sum_sw
 	       of SOME ifte => do_ifthenelse state ifte
@@ -1178,18 +1198,24 @@ struct
       end
     and do_cc (state : state) (cc : conditionCode) = 
       let
-	(* Two passes. First we rewrite it (expanding out aliases, etc).
-	 * Then we try to reduce it.  Reduction can use the context 
+	(* Two passes. First we try to reduce it, then we rewrite it 
+	 * (expanding out aliases, etc). Reduction can use the context 
 	 * to try to reduce coercions, but shouldn't do any further
 	 * rewriting of expressions.
+	 *
+	 * Doing it in the other order might be better, but then we have a 
+	 * problem with inlined expressions not being rewritten in their
+	 * new context.
 	 *)
+	val cc = reduce_cc state cc
+
 	val cc = 
 	  case cc
 	    of Exp_cc e => Exp_cc (do_exp' state e)
 	     | Not_cc cc => Not_cc (do_cc state cc)
 	     | And_cc(cc1,cc2) => And_cc (do_cc state cc1,do_cc state cc2)
 	     | Or_cc(cc1,cc2) => Or_cc (do_cc state cc1,do_cc state cc2)
-      in reduce_cc state cc
+      in cc
       end
 
     and do_function (state : state) (v,Function{tFormals, 
@@ -1478,7 +1504,9 @@ struct
     fun do_datum state d = 
       (case d
 	 of Dboxed (l,sv64) => Dboxed (l,do_sv64 state sv64)
-	  | Dtuple (l,t,q,svs) => Dtuple (l,do_con state t,Util.mapopt (do_sv32 state) q,map (do_sv32 state) svs)
+	  | Dtuple (l,t,qs,svs) => Dtuple (l,do_con state t,
+					   map (fn (ctag,cons) => (ctag,map (do_con state) cons)) qs,
+					   map (do_sv32 state) svs)
 	  | Darray (l,sz,t,vs) => Darray (l,sz,do_con state t,map (do_value state) vs)
 	  | Dcode (l,f) => 
 	   let
@@ -1501,19 +1529,18 @@ struct
       in (data,state)
       end
 
-    fun optimize params (MODULE{timports, data, confun, expfun}) =
+    fun optimize params (MODULE{unitname,parms,entry_c,entry_r,timports, data, confun}) =
       let
 	val _ = reset_stats()
 	  
 	val state = newState (params,VarSet.empty)
-	val state = foldl (fn (ak,state) => bind_cvar(state,ak)) state timports
+	val state = foldl (fn ((l,a,k),state) => bind_cvar(state,(a,k))) state timports
 	val (data,state) = do_data state data
 	val confun = do_con state confun
-	val expfun = do_exp' state expfun
 
 	val _ = chat_stats ()
 	  
-      in  MODULE{timports=timports,data=data,confun=confun,expfun=expfun}
+      in  MODULE{unitname = unitname,parms = parms,entry_c = entry_c, entry_r = entry_r,timports=timports,data=data,confun=confun}
       end
   end
 end (* Optimize *)

@@ -1722,57 +1722,58 @@ struct
 	    (Record_k lvk_seq, state, levels)
 	  end
     end
-
-  fun optimize (MODULE {bnds, imports, exports}) =
+  
+    (* mark imports as top-level variables;
+     estimate totality of term-level imports *)
+   
+    fun split ([], env, imps) = (env, rev imps)
+      | split ((imp as ImportValue(l,v,tr,oldc))::rest, env, imps) =
       let
-	  (* mark imports as top-level variables;
-             estimate totality of term-level imports *)
-
-	  fun split ([], env, imps) = (env, rev imps)
-	    | split ((imp as ImportValue(l,v,tr,oldc))::rest, env, imps) =
-	      let
-		val (c, state,_) =
-		  rtype (oldc, env, empty_state)
-		  
-		val (bnds, _, _) = extractCbnds (state, toplevel)
-		val ibnds = map ImportBnd bnds
-
-		val env = bindLevel(env, v, toplevel)
-		val env = bindEff(env, v, con2eff c)
-	      in
-		  split(rest, env,  ImportValue(l,v,tr,c)::(List.revAppend (ibnds, imps)))
-	      end
-	    | split ((imp as ImportType(l,v,oldk))::rest, env, imps) =
-	      let
-		val (k, state,_) =
-		  rkind (oldk, env, empty_state)
-		  
-		val (bnds, _, _) = extractCbnds (state, toplevel)
-
-		val ibnds = map ImportBnd bnds
-
-		val env = insertKind(env, v, oldk)
-		val env = bindLevel(env, v, toplevel)
-	      in
-		  split(rest, env, ImportType(l,v,k):: (List.revAppend (ibnds, imps)))
-	      end
-	    | split (ImportBnd (phase, cb)::rest, env, imps) =
-	      let
-		  (*val (inner_env, state, inner_level) =
-		      bumpCurrentlevel (env, empty_state)*)
-
-		val (env, state) =
-		  rcbnd phase (cb, env, empty_state)
-		  
-		val (bnds, _, _) = extractCbnds (state, toplevel)
-		val ibnds = map ImportBnd bnds
-	      in
-		split(rest, env, List.revAppend(ibnds, imps))
-	      end
-	    
+	val (c, state,_) =
+	  rtype (oldc, env, empty_state)
+	  
+	val (bnds, _, _) = extractCbnds (state, toplevel)
+	val ibnds = map ImportBnd bnds
+	  
+	val env = bindLevel(env, v, toplevel)
+	val env = bindEff(env, v, con2eff c)
+      in
+	split(rest, env,  ImportValue(l,v,tr,c)::(List.revAppend (ibnds, imps)))
+      end
+      | split ((imp as ImportType(l,v,oldk))::rest, env, imps) =
+      let
+	val (k, state,_) =
+	  rkind (oldk, env, empty_state)
+	  
+	val (bnds, _, _) = extractCbnds (state, toplevel)
+	  
+	val ibnds = map ImportBnd bnds
+	  
+	val env = insertKind(env, v, oldk)
+	val env = bindLevel(env, v, toplevel)
+      in
+	split(rest, env, ImportType(l,v,k):: (List.revAppend (ibnds, imps)))
+      end
+      | split (ImportBnd (phase, cb)::rest, env, imps) =
+      let
+	(*val (inner_env, state, inner_level) =
+	 bumpCurrentlevel (env, empty_state)*)
+	
+	val (env, state) =
+	  rcbnd phase (cb, env, empty_state)
+	  
+	val (bnds, _, _) = extractCbnds (state, toplevel)
+	val ibnds = map ImportBnd bnds
+      in
+	split(rest, env, List.revAppend(ibnds, imps))
+      end
+    
+    fun optimize (MODULE {bnds, imports, exports}) =
+      let
+	
 	  val (env, imports) = split (imports, empty_env, [])
 	  val state = empty_state
-
+	    
           val _ = msg "  Imports processed\n"
 
 
@@ -1794,6 +1795,17 @@ struct
 	  val _ = if not valuable then print "Warning: non-valuable binding hoisted to top level\n" else ()
       in
 	  MODULE {bnds=pure_bnds@effect_bnds,imports=imports,exports=exports}
+      end
+
+    fun optimize_int (INTERFACE {imports, exports}) =
+      let
+	
+	  val (env, imports) = split (imports, empty_env, [])
+          val _ = msg "  Imports processed\n"
+	  val (env, exports) = split (exports, env, [])
+          val _ = msg "  Exports processed\n"
+      in
+	  INTERFACE {imports=imports,exports=exports}
       end
 
 end

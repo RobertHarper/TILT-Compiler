@@ -41,4 +41,9 @@ signature PPLIL =
                        pass: string,
                        header: string} -> unit
 
+    val pp_intpass     : {interface: Lil.interface,
+			  name: string,
+			  pass: string,
+			  header: string} -> unit
+
   end

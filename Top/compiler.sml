@@ -359,7 +359,7 @@ struct
 	    val isparm : label -> bool =
 		(case module of
 		    RTL (Rtl.MODULE {parms,...}) => isrtlparm parms
-		|   LIL _ => fn _ => true)
+		|   LIL (Lil.MODULE {parms,...}) => isrtlparm parms)
 	    fun unit (U:label) : label option =
 		if isparm U then SOME U else NONE
 	    fun mapper (pdec:I.pdec) : label option =

@@ -284,28 +284,18 @@ struct
 	  | (Const_64 a,Const_64 b) => cmp_value (a,b))
 
     fun cmp_ctag (a,b) =
-      (case (a,b)
-	 of (Roll,Roll) => EQUAL
-	  | (Roll,_) => GREATER
-	  | (_,Roll) => LESS
-	  | (Unroll,Unroll) => EQUAL
-	  | (Unroll,_) => GREATER
-	  | (_,Unroll) => LESS
-	  | (Pack,Pack) => EQUAL
-	  | (Pack,_) => GREATER
-	  | (_,Pack) => LESS
-	  | (ForgetKnown,ForgetKnown) => EQUAL
-	  | (ForgetKnown,_) => GREATER
-	  | (_,ForgetKnown) => LESS
-	  | (ProjKnown,ProjKnown) => EQUAL
-	  | (ProjKnown,_) => GREATER
-	  | (_,ProjKnown) => LESS
-	  | (InjUnion,InjUnion) => EQUAL
-	  | (InjUnion,_) => GREATER
-	  | (_,InjUnion) => LESS
-	  | (InjForget,InjForget) => EQUAL)
-(*	  | (InjForget,_) => GREATER
-	  | (_,InjForget) => LESS*)
+      let
+	fun hash_tag a = 
+	  (case a
+	     of Roll => 0
+	      | Unroll => 1
+	      | Pack => 2
+	      | ForgetKnown => 3
+	      | ProjKnown => 4
+	      | InjUnion => 5
+	      | InjForget => 6)
+      in cmp_int (hash_tag a,hash_tag b)
+      end
 
     fun cmp_coercion (a,b) = cmp2 (cmp_ctag,cmp_con_list) (a,b)
 
@@ -338,17 +328,15 @@ struct
 	  | (Unit,Unit) => EQUAL)
 
     fun cmp_size (a,b) =
-      (case (a,b)
-	 of (B8, B8) => EQUAL
-	  | (B8,_) => GREATER
-	  | (_,B8) => LESS
-	  | (B4,B4) => EQUAL
-	  | (B4,_) => GREATER
-	  | (_,B4) => LESS
-	  | (B2,B2) => EQUAL
-	  | (B2,_) => GREATER
-	  | (_,B2) => LESS
-	  | (B1,B1) => EQUAL)
+      let
+	fun hash_size a = 
+	  (case a 
+	     of B1 => 1
+	      | B2 => 2
+	      | B4 => 4
+	      | B8 => 8)
+      in cmp_int(hash_size a,hash_size b)
+      end
 
     val cmp_sv32_list = cmp_list cmp_sv32
     val cmp_sv64_list = cmp_list cmp_sv64

@@ -10,6 +10,7 @@ signature LILUTIL =
     val removewnth' : Lil.w32 -> 'a list -> ('a * 'a list) option
       
     val cmpw32 : (Lil.w32 * Lil.w32) -> order
+    val value2w32 : Lil.value -> Lil.w32 
 
     val i2size : Prim.intsize -> Lil.size
     val f2size : Prim.floatsize -> Lil.size

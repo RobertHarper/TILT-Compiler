@@ -346,11 +346,29 @@ local
 	      
 	    val tuple_ml = opt_out "Not a deconstructible tuple type" tuple_ml'
 
+	    fun tuple_ptr' c =
+	      obind (ptr' c)
+	      (fn c => tuple' c)
+
+	    val tuple_ptr = opt_out "Not a tuple ptr type" tuple_ptr' 
+
+	    fun tuple_ptr_ml' c = 
+	      obind (tuple_ptr' c)
+	      (fn c => obind (list' c)
+	       (fn (k,l) => SOME l))
+
+	    val tuple_ptr_ml = opt_out "Not a deconstructible tuple_ptr" tuple_ptr_ml'
+
 	    fun float' c = obind (prim0' c) (fn Float_c => SOME () | _ => NONE)
 	    val float = opt_out "Not float type" float'
 
 	    fun void' c = obind (prim0' c) (fn Void_c => SOME () | _ => NONE)
 	    val void = opt_out "Not void type" void'
+
+	    fun tag' c = obind (prim1' c) (fn (Tag_c,c) => SOME c | _ => NONE)
+	    val tag = opt_out "Not a tag type" tag'
+	    fun tag_ml' c = obind (tag' c) (fn c => nat' c)
+	    val tag_ml = opt_out "Not a deconstructible tag type" tag_ml'
 
 	    fun tl (c : con) = 
 	      (case cons_ml' c
@@ -706,6 +724,15 @@ structure Deconstruct :> DECONSTRUCT =
 		     of TApp (sv,c) => loop (sv,c::cc)
 		      | _ => (sv, cc))
 	      in loop (sv,[])
+	      end
+
+	    fun nary_tabs (sv : sv32) : (var * kind) list * sv32 = 
+	      let
+		fun loop (vks,sv) = 
+		  (case sv
+		     of Tabs (vk,sv) => loop (vk::vks,sv)
+		      | _ => (rev vks,sv))
+	      in loop ([],sv)
 	      end
 
 	    fun coerce' sv =

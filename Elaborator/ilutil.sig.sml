@@ -72,9 +72,11 @@ signature ILUTIL =
     val lab_false : label
 
     val con_bool : context -> con
+    val con_internal_bool : context -> con
     val bool_out : context -> exp
     val bool_in : context -> exp
 
+    val internal_bool_exp : context -> bool -> exp
     val true_exp : context -> exp
     val false_exp : context -> exp
     val vector_eq : context -> mod * signat

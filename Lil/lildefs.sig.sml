@@ -123,6 +123,7 @@ signature LILDEFS =
 	val ksum2sum : Lil.con -> Lil.con
 	val sum2ksum  : Lil.con -> Lil.con -> Lil.con
 	val sum2ksum' : Lil.w32 -> Lil.con -> Lil.con
+
 	val sum_totalcount : Lil.con -> Lil.w32
 	(* Project the first i fields from the given con *)
 	val project_i_fields : int -> Lil.con -> Lil.con list
@@ -271,6 +272,13 @@ signature LILDEFS =
 	val ptreq'' : Lil.sv32 -> Lil.sv32 -> Lil.op32
 	val ptreq'  : Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp
 	val ptreq   : Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
+
+	val inteq'' : Lil.size -> (Lil.sv32 * Lil.sv32) -> Lil.op32 
+	val inteq'  : Lil.size -> (Lil.sv32 * Lil.sv32) -> Lil.op32 P.pexp
+	val inteq   : Lil.size -> (Lil.sv32 * Lil.sv32) -> Lil.sv32 P.pexp
+
+	val intconst' : Lil.size -> Lil.w32 -> Lil.sv32
+	val intconst  : Lil.size -> Lil.w32 -> Lil.sv32 P.pexp
 
 	val update_array64'' : Lil.sv32 -> Lil.sv32 -> Lil.sv64 -> Lil.op32
 	val update_array64'  : Lil.sv32 -> Lil.sv32 -> Lil.sv64 -> Lil.op32 P.pexp

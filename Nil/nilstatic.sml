@@ -317,7 +317,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   in
     fun var_reset () = vars := Set.empty
     fun var_stats () = Stats.counter_add(unused_count,(Set.numItems (!vars)))
-    val insert_con              = insert_xxx insert_con
+(*    val insert_con              = insert_xxx insert_con
     val insert_con_list         = insert_xxx_list insert_con_list
     val insert_kind             = insert_xxx insert_kind
     val insert_kind_equation    = insert_xxx_eqn insert_kind_equation
@@ -328,7 +328,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
     val find_con      = find_xxx find_con
     val find_max_kind = find_xxx find_max_kind
-      
+  *)    
   end
 
 
@@ -2505,8 +2505,52 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	in  res
 	end
 
+
+      fun interface_valid' (D,INTERFACE {imports,exports}) =
+	let
+	  val _ = NilContext.is_well_formed (kind_valid,con_valid,sub_kind) D
+	  val _ = msg "  Done checking context\n"
+	  val D = foldl import_valid' D imports
+
+          val _ = msg "  Done validating imports\n"
+
+	  val D = foldl import_valid' D exports
+          val _ = msg "  Done validating exports\n"
+	in
+	  ()
+	end
+
+      fun interface_valid (D,interface) =
+	let
+	  val _ = clear_stack ()
+	  val _ = var_reset()
+
+	  val _ = if (!show_calls)
+		    then (print "interface_valid called with interface =\n";
+                          Ppnil.pp_interface
+                                        {interface = interface,
+                                         header = "",
+                                         name = "",
+                                         pass = ""};
+			  if !show_context then (print "\nand context"; NilContext.print_context D) else ();
+			  print "\n\n")
+		  else ()
+
+	  val res = interface_valid'(D,interface)
+
+	  val _ = if (!show_calls)
+		    then (printl "interface_valid returned")
+		  else ()
+
+	  val _ = var_stats()
+	in  res
+	end
+
       val module_valid = wrap "module_valid" module_valid
       val module_valid = subtimer ("Module_valid", module_valid)
+
+      val interface_valid = wrap "interface_valid" interface_valid
+      val interface_valid = subtimer ("Interface_valid", interface_valid)
 
       val con_equiv = fn (D,c1,c2,k) => subtimer("Tchk:Top:con_equiv",con_equiv) (D,c1,c2,k,false)
       and sub_con = fn (D,c1,c2,k) => con_equiv (D,c1,c2,k,true)

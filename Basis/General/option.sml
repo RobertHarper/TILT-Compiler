@@ -7,6 +7,7 @@ structure Option :> OPTION where type 'a option = 'a option =
   struct
 
     datatype option = datatype option
+
     exception Option = Option
 
     val getOpt = getOpt

@@ -676,6 +676,7 @@ struct
 
 	end
 
+
         (* Helper functions for uncurry optimizations *)
 	fun get_lambda e = 
 	  let
@@ -859,22 +860,60 @@ struct
 	end
 
 
+	(*** Code for inteq to intneq conversion  ***)
+	(* Find an internal boolean constant *)
+	fun get_bool_const state e = 
+	  (case unalias (state,e)
+	     of Coerce_e (q,[],v) => 
+	       (case (unalias (state,q),unalias (state,v))
+		  of (ForgetKnown_e (sumcon,w),Prim_e(NilPrimOp(inject_known _),[],clist,[])) =>
+		    (case NilUtil.strip_sum (#2(reduce_hnf(state,sumcon)))
+		       of SOME (0w2,0w2,_,_) => 
+			 (case w 
+			    of 0w0 => SOME false
+			     | 0w1 => SOME true
+			     | _ => NONE)
+			| _ => NONE)
+		   | _ => NONE)
+	      | _ => NONE)
+
+
+
+	fun intsw_negate state {size,arg,arms,default,result_type} = 
+	  (case (arms,default)
+	     of ([(w,thenArm)],SOME elseArm) => 
+	       (case (get_bool_const state thenArm, get_bool_const state elseArm)
+		  of (SOME false,SOME true) => 
+		    let
+		      val c = Const_e(Prim.int(size,TilWord64.fromUnsignedHalf w))
+		    in 
+		      SOME (Prim_e(PrimOp(Prim.neq_int size),[],[],[arg,c]))
+		    end
+		   | (SOME true,SOME false) => 
+		    let
+		      val c = Const_e(Prim.int(size,TilWord64.fromUnsignedHalf w))
+		    in 
+		      SOME (Prim_e(PrimOp(Prim.eq_int size),[],[],[arg,c]))
+		    end
+		   | _ => NONE)
+	      | _ => NONE)
+
+
 	(*** Code for Sumsw to Intsw conversion ***)
 
-	fun get_eq_args state e =
+	fun get_int_eq state e = 
 	  let
 	    val res = case unalias (state,e)
-			of Coerce_e (q,[],e) =>
-			  (case unalias (state,e)
-			     of Prim_e(PrimOp(Prim.eq_int is),[],[],[v1,v2]) =>
-			       (case (v1,v2)
-				  of (Var_e v,Const_e (Prim.int(_,w))) => SOME(is,v,w)
-				   | (Const_e (Prim.int(_,w)),Var_e v) => SOME(is,v,w)
-				   | _ => NONE)  (* Not compared to a constant *)
-			      | _ => NONE)  (* Not eq *)
-			 | _ => NONE (*Not a coercion *)
+			of Prim_e(PrimOp(Prim.eq_int is),[],[],[v1,v2]) => SOME(is,v1,v2)
+			 | _ => NONE
 	  in res
 	  end
+
+	fun get_eq_args state e = 
+	  (case get_int_eq state e
+	     of SOME (is,Var_e v,Const_e (Prim.int(_,w))) => SOME(is,v,w)
+	      | SOME (is,Const_e (Prim.int(_,w)),Var_e v) => SOME(is,v,w)
+	      | _ => NONE)  (* Not eq, or not compared to a constant *)
 
 	fun is_sumsw_int state (Switch_e(Sumsw_e{sumtype,bound,arg,arms,default,...})) =
 	  (case (get_eq_args state arg,arms,default) of
@@ -1908,7 +1947,10 @@ struct
 
 	    in
 	    (case switch of
-		 Intsw_e int_sw => int_switch int_sw
+		 Intsw_e int_sw => 
+		   (case intsw_negate state int_sw
+		      of SOME e => do_exp state e
+		       | NONE => int_switch int_sw)
 	       | Sumsw_e sum_sw =>
 			  (case convert_sumsw state sum_sw of
 			       NONE => sum_switch sum_sw
@@ -2217,6 +2259,31 @@ struct
 	    in  (NONE, ExportType(l,v))
 	    end
 
+
+	fun filter_imports state imports = 
+	  let
+	    fun import_used imp = 
+	      let 
+		fun dolv (l,v) = 
+		  if not (!kill_imports) then true
+		  else if is_used_var (state,v) then true
+		  else
+		    let val _ = (inc imports_killed;
+				 chat2 ("Filtering label " ^ Name.label2name l ^ "\n"))
+		    in false
+		    end
+		  
+	      in
+		case imp
+		  of ImportBnd (_, cbnd) => cbnd_used state cbnd
+		   | ImportType (l,v,_) => dolv (l,v)
+		   | ImportValue (l,v,_,_) => dolv (l,v)
+	      end
+	    
+	    val imports = List.filter import_used imports
+	  in imports 
+	  end
+
 	fun optimize params (MODULE{imports, exports, bnds}) =
 	  let
 	      val _ = reset_debug()
@@ -2234,30 +2301,29 @@ struct
 	      val bnds = if (null export_bnds) then bnds else bnds @ export_bnds
               val bnds = Listops.map_concat (bnd_used state) bnds
 	      val bnds = flattenBnds bnds
-
-	      fun import_used imp = 
-		let 
-		  fun dolv (l,v) = 
-		    if not (!kill_imports) then true
-		    else if is_used_var (state,v) then true
-		    else
-		      let val _ = (inc imports_killed;
-				   chat2 ("Filtering label " ^ Name.label2name l ^ "\n"))
-		      in false
-		      end
-
-		in
-		  case imp
-		    of ImportBnd (_, cbnd) => cbnd_used state cbnd
-		    | ImportType (l,v,_) => dolv (l,v)
-		    | ImportValue (l,v,_,_) => dolv (l,v)
-		end
-
-	      val imports = List.filter import_used imports
-
+	      val imports = filter_imports state imports
 	      val _ = chat_stats ()
+	      val _ = reset_debug()
+	      val _ = reset_stats()
 
 	  in  MODULE{imports=imports,exports=exports,bnds=bnds}
+	  end
+
+	fun optimize_int params (INTERFACE{imports, exports}) =
+	  let
+	      val _ = reset_debug()
+	      val _ = reset_stats()
+
+	      val state = newState params
+	      val (imports,state) = foldl_acc do_import state imports
+	      val (exports,state) = foldl_acc do_import state exports
+
+	      val imports = filter_imports state imports
+	      val _ = chat_stats ()
+	      val _ = reset_debug()
+	      val _ = reset_stats()
+
+	  in  INTERFACE{imports=imports,exports=exports}
 	  end
 
 end

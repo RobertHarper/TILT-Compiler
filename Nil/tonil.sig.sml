@@ -10,7 +10,7 @@ sig
     val killDeadImport : bool ref
 
     val phasesplit : Il.module -> Nil.module
-
+    val phasesplit_interface : (*Il.interface*) Il.context * Il.sdec -> Nil.interface
     val elaborator_specific_optimizations : bool ref
 
 
