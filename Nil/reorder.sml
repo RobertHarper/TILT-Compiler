@@ -178,17 +178,16 @@ struct
                    | NilPrimOp (inject_known_record _) => (ALLOCATE, Movable)
                    | NilPrimOp (box_float _) => (ALLOCATE, Movable)
 		   | NilPrimOp (inj_exn _) => (ALLOCATE, Movable)
-                     (* The following three primitives are big and so 
-                        not inlined.  Actually, I don't think we even 
-                        use peq, but if we did I doubt it would be inlined. *)
+                     (* The following two primitives are big and so 
+                        not inlined.  *)
 		   | NilPrimOp (make_vararg _) => (APPLY, Movable)
 		   | NilPrimOp (make_onearg _) => (APPLY, Movable)
-                     (* We don't inline the typecasing code for polymorphic
-                        array operations; they're turned into function calls *)
 
 		   | NilPrimOp mk_record_gctag   => (OTHER, Movable)
 		   | NilPrimOp mksum_known_gctag => (OTHER, Movable)
 
+                     (* We don't inline the typecasing code for polymorphic
+                        array operations; they're turned into function calls *)
 		   | PrimOp (sub (OtherArray false)) => (APPLY, Immovable)
 		   | PrimOp (sub (OtherVector false)) => (APPLY, Immovable)
 		   | PrimOp (update (OtherArray false)) => (APPLY, Immovable)

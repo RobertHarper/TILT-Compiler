@@ -1,4 +1,4 @@
-(*$import Annotation Prim NilRename Name Listops Sequence List Array Option Int TilWord32 Word32 Bool Util NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha Trail BoundCheck NilPrimUtil NilDefs *)
+(*$import Annotation Prim NilRename Name Listops Sequence List Array Option Int TilWord32 Word32 Bool Util NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha Trail BoundCheck NilPrimUtil NilPrimUtilParam NilDefs *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
 
@@ -156,7 +156,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 
   val kind_type_tuple        = NilDefs.kind_type_tuple
-  val bool_con               = NilDefs.bool_con
+  val bool_con               = NilPrimUtilParam.con_bool 
 
   (*From NilUtil*)
   val makeLetC               = NilUtil.makeLetC
@@ -1775,7 +1775,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       val con' = exp_valid(D,exp)
     in
       ignore (subtimer("exp_analyze:st",subtype)(D,con',con) orelse 
-	      (perr_c_c (con,con');
+	      (print "Analyzing an expression of type\n";Ppnil.pp_con con';
+	       print "\nAt type \n";Ppnil.pp_con con;
 	       e_error(D,exp,"Expression cannot be given required type")))
     end
   and exp_valid (D : context, exp : exp) : con = 
@@ -1814,7 +1815,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
       fun conditionCode_valid (D,arg) = 
 	(case arg 
-	   of Exp_cc exp       => exp_analyze(D,exp,bool_con)
+	   of Exp_cc exp       => exp_analyze(D,exp,bool_con D)
 	    | And_cc (cc1,cc2) => (conditionCode_valid(D,cc1);
 				   conditionCode_valid(D,cc2))
 	    | Or_cc (cc1,cc2)  => (conditionCode_valid(D,cc1);
@@ -2187,9 +2188,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     | (record [],[],[]) => NilDefs.unit_con
 	     | (record labels,[],t::exps) =>
 		 let 
-		   val cons = map (curry2 exp_valid D) exps
-		   val rtype = Prim_c (Record_c (labels,NONE),cons)
-		   val _ = exp_analyze(D,t,mkGCTagType(rtype))
+		   val gctag_type = exp_valid (D,t)
+		   val rtype = (case con_head_normalize (D,gctag_type)
+				  of Prim_c(GCTag_c,[rtype]) => rtype
+				   | _ => e_error(D,t,"Expression does not have GCTag type"))
+		   val cons  = map (curry2 exp_valid D) exps
+		   val _ = if subtype (D,Prim_c (Record_c (labels,NONE),cons),rtype) then ()
+			   else e_error(D,orig_exp,"Type of record does not agree with GCTag")
 		   val _ = (labels_distinct labels) orelse e_error(D,orig_exp, "Fields not distinct" )
 		   val _ = ((List.length labels) = (List.length exps)) orelse e_error(D,orig_exp, "Wrong number of fields")
 		 in rtype

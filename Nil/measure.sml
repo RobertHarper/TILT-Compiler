@@ -66,21 +66,17 @@ structure Measure :> MEASURE =
       fun exphandler ({exp,active,...} : state,_ : exp) = (inc exp;incl active; NOCHANGE)
 
       (* con binder *)
-      fun con_var_xxx (state as {con_vars,...} : state,_,_) = (inc con_vars;(state,NONE))
+      fun con_var_bind (state as {con_vars,...} : state,_) = (inc con_vars;(state,NONE))
       (* exp binder *)
-      fun exp_var_xxx (state as {exp_vars,...} : state,_,_) = (inc exp_vars;(state,NONE))
+      fun exp_var_bind (state as {exp_vars,...} : state,_) = (inc exp_vars;(state,NONE))
 
       val all_handlers =  
 	let
 	  val h = set_kindhandler default_handler kindhandler
 	  val h = set_conhandler h conhandler
 	  val h = set_exphandler h exphandler
-	  val h = set_con_binder h con_var_xxx
-	  val h = set_con_definer h con_var_xxx
-	  val h = set_exp_binder  h exp_var_xxx
-	  val h = set_exp_definer h exp_var_xxx
-	  val h = set_sum_binder  h exp_var_xxx
-	  val h = set_exn_binder  h exp_var_xxx
+	  val h = set_con_binder h con_var_bind
+	  val h = set_exp_binder  h exp_var_bind
 	in
 	  h
 	end

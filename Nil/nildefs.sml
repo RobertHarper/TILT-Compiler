@@ -100,10 +100,13 @@ structure NilDefs :> NILDEFS =
 
     fun covariant_prim p =
       (case p of
-	 Sum_c _ => true
+	 Sum_c _    => true
        | Record_c _ => true
-       | _ => false)
-	 
+       | GCTag_c    => true
+       | Vector_c   => true
+       | Vararg_c _ => false  (* Actually, this is covariant in the result type.*)
+       | _          => false)
+
     fun nilprim_uses_carg np =
       (case np of
 	 record _ => false
@@ -181,25 +184,56 @@ structure NilDefs :> NILDEFS =
 			 
     fun kind_type_tuple 1   = Type_k
     | kind_type_tuple len = tuple_kind(Listops.map0count (fn _ => Type_k) len)
-      
+    
+    (*unit*)  
     val unit_con = tuple_con []
       
+    (*()*)
     val unit_exp = Prim_e(NilPrimOp(record []),[],[],[])
-      
-    val bool_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[con_tuple[]])
-    val false_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w0},[con_tuple[]])
-    val true_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w1},[con_tuple[]])
+
+    (*Type of strings*)
     val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
-    val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
-    val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[],[],[match_tag,unit_exp])
-    val false_exp = Prim_e(NilPrimOp (inject_known 0w0),[],[false_con],[])
-    val true_exp = Prim_e(NilPrimOp (inject_known 0w1),[],[true_con],[])
+
+    (*Type of 32 bit integers
+     *)
     val int_con = Prim_c(Int_c Prim.W32,[])
+    (*Type of 8 bit chars.
+     *)
     val char_con = Prim_c(Int_c Prim.W8,[])
-    val exn_con = Prim_c(Exn_c, [])
+
+    val ftype64 = Prim_c (Float_c Prim.F64,[])  (*Type of 64 bit floats*)
+
     val boxfloat_con = Prim_c(BoxFloat_c Prim.F64, [])
     val unboxfloat_con = Prim_c(Float_c Prim.F64, [])
-      
+
+    (*Exn type
+     *)
+    val exn_con = Prim_c(Exn_c, [])
+
+    (* This will not be the same as the user level match tag
+     *)
+    val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
+
+    (* An internal match exception, for use by the compiler.  If the compiler
+     * is correct, this should never be raised.
+     *)
+    val internal_match_exn = Prim_e(NilPrimOp (inj_exn "internal_match"),[],[],[match_tag,unit_exp])
+
+    (* Dummy sum type used by toRtl to stand in for some unknown (and irrelevant) types.
+     *)
+    val dummy_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[con_tuple[]])
+
+    (* Create a new record, with an appropriate GCTag attached.
+     * mk_record_with_gctag lbls traces types exps name
+     * lbls   : record labels
+     * traces : optional trace args.  If not present, set to TraceUnknown
+     * types  : types of fields
+     * exps   : field values
+     * name   : optional name for the record.
+     *
+     * If optional name argument is present, then the record will be bound
+     * to that variable, and the expression returned will simply be that var
+     *)      
     fun mk_record_with_gctag (labels,trs_opt,cons,exps,name_opt) : (bnd list * exp) = 
       let 
 	val (bnds,rcrd) = 

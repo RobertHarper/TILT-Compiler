@@ -1396,6 +1396,11 @@ struct
 
 	  val env = bindsLevel(env, fFormals, arglevel)
 
+	  (* Since we bumped the level of the function variables
+	   * and the arguments, this call will remove the function
+	   * variable levels from the list of levels, which allows
+	   * recursive functions to be hoisted.
+	   *)
 	  val (body, state, levels3, body_eff, body_valuable) = 
                   rexp_limited arglevel (body, env, state)
 

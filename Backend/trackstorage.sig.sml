@@ -10,9 +10,9 @@ sig
   (* max_on_stack: maximum # of args passed on stack by this
      procedure.
 
-     stack_resident: set of traceable int variables which must
-     be resident on the stack.   These are assumed to fill the
-     first N integers slots.*)
+     stack_resident: set of traceable 32-bit (non floating-point)
+     variables which must be resident on the stack.  These are assumed
+     to fill the first N integer slots.*)
 
   val newInfo : {callee_saves: Core.register list,
 		 regs_destroyed   : Core.register list,

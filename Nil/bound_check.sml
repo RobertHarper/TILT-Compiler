@@ -34,7 +34,7 @@ structure BoundCheck :> BOUNDCHECK =
       *)
 
       (* Term variable binder *)
-      fun exp_var_xxx (state : state as {error,context,ebound,cbound},var,any) : (state * var option)= 
+      fun exp_var_bind (state : state as {error,context,ebound,cbound},var) : (state * var option)= 
 	(if member (ebound, var) orelse NilContext.bound_exp (context,var) then
 	   (lprintl ("Warning! Expression variable " ^ (Name.var2string var) ^ " rebound");
 	    error := true;
@@ -45,7 +45,7 @@ structure BoundCheck :> BOUNDCHECK =
 	    NONE))
 
       (* Constructor variable binder *)
-      fun con_var_xxx (state :state as {error,context,cbound,ebound},var,any) : (state * var option)= 
+      fun con_var_bind (state :state as {error,context,cbound,ebound},var) : (state * var option)= 
 	(if member (cbound, var) orelse NilContext.bound_con (context,var) then
 	   (lprintl ("Warning! Constructor variable " ^ (Name.var2string var) ^ " rebound");
 	    error := true;
@@ -82,11 +82,8 @@ structure BoundCheck :> BOUNDCHECK =
 
       val all_handlers =  
 	let
-	  val h = set_con_binder default_handler con_var_xxx
-	  val h = set_con_definer h con_var_xxx
-	  val h = set_exp_binder h exp_var_xxx
-	  val h = set_exp_definer h exp_var_xxx
-	  val h = set_sum_binder h exp_var_xxx
+	  val h = set_con_binder default_handler con_var_bind
+	  val h = set_exp_binder h exp_var_bind
 	  val h = set_exphandler h exphandler
 	  val h = set_conhandler h conhandler
 	in

@@ -109,26 +109,6 @@ struct
 	   (Ppnil.pp_kind other; print "\n";
 	    error  "project_from_kind_nondep: Trying to project from non-record kind ")
 	       
-    (* get the bound var from a conbnd *)
-    fun varBoundByCbnd (Con_cb (v,c)) = v
-      | varBoundByCbnd (Open_cb (v,_,_)) = v
-      | varBoundByCbnd (Code_cb (v,_,_)) = v
-
-    val varsBoundByCbnds = map varBoundByCbnd
-	
-    (* get the bound vars from a list of bnds *)
-    fun varsBoundByBnds bnds = 
-	let
-	    fun gv ([],l) = rev l
-	      | gv (Con_b (p,cb)::rest,l) = gv(rest,(varBoundByCbnd cb)::l)
-	      | gv (Exp_b (v,_,e)::rest,l) = gv(rest,v::l)
-	      | gv (Fixopen_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
-	      | gv (Fixcode_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
-	      | gv (Fixclosure_b(_,vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
-	in
-	    gv (bnds,[])
-	end
-
 
     fun convert_sum_to_special 
       (Prim_c(Sum_c {tagcount,totalcount,known},carriers), w) =
@@ -988,6 +968,26 @@ struct
 	end
 
   end
+
+    (* get the bound var from a conbnd *)
+    fun varBoundByCbnd (Con_cb (v,c)) = v
+      | varBoundByCbnd (Open_cb (v,_,_)) = v
+      | varBoundByCbnd (Code_cb (v,_,_)) = v
+      
+    val varsBoundByCbnds = map varBoundByCbnd
+      
+    (* get the bound vars from a list of bnds *)
+    fun varsBoundByBnds bnds = 
+      let
+	fun gv ([],l) = rev l
+	  | gv (Con_b (p,cb)::rest,l) = gv(rest,(varBoundByCbnd cb)::l)
+	  | gv (Exp_b (v,_,e)::rest,l) = gv(rest,v::l)
+	  | gv (Fixopen_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
+	  | gv (Fixcode_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
+	  | gv (Fixclosure_b(_,vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
+      in
+	gv (bnds,[])
+      end
 
   fun muExpand (flag,vcseq,v) = 
       let val vc_list = Sequence.toList vcseq

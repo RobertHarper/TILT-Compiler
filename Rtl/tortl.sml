@@ -694,9 +694,9 @@ struct
 			 end
 	  fun no_match state = 
 	      (case (!dest) of
-		   SOME _ => let val c = NilDefs.bool_con (* XXX not really *)
+		   SOME _ => let val c = NilDefs.dummy_con (* XXX not really *)
 				 val (r,newstate) = 
-		                      xexp'(state,fresh_var(),Raise_e(NilDefs.match_exn,c),
+		                      xexp'(state,fresh_var(),Raise_e(NilDefs.internal_match_exn,c),
 					    trace, context)
 			     in  move r; newstate
 			     end
@@ -758,7 +758,7 @@ struct
 			  (add_instr(ILABEL lab);
 			   case default of
 			       NONE => 
-				   let val con = NilDefs.bool_con  (* XXX not really *)
+				   let val con = NilDefs.dummy_con  (* XXX not really *)
 				       val (r,newstate) = xexp'(state,fresh_var(),
 								  Raise_e(arg,con),trace,context)
 				   in  move r; newstate :: states

@@ -1117,7 +1117,7 @@ struct
     and removeDependence vclist c = 
 	let fun loop subst [] = substExpInCon subst c
 	      | loop subst ((v,c)::rest) = 
-	           let val e = Raise_e(NilDefs.match_exn,c)
+	           let val e = Raise_e(NilDefs.internal_match_exn,c)
 		   in  loop (NilSubst.E.addr (subst,v,e)) rest
 		   end
 	in  loop (NilSubst.E.empty()) vclist

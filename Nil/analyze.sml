@@ -18,7 +18,8 @@
    val g = f 5         level = 1
    val g = f 5 6       level = 2
 
-   The analysis will attempt to compute the maximum level.  
+   The analysis will attempt to compute the maximum level for each use.  
+
    Consider this expression:
 
    let val g = f 5

@@ -49,7 +49,11 @@ sig
 
    val live : Machine.instruction annotated -> Core.Regset.set
    val defUse : Machine.instruction -> Machine.register list * Machine.register list
+  
+   (* liveness analysis *)
    val blockDefUse : (Machine.register option * Tracetable.trace) Core.Regmap.map -> bblock -> bblock
+
+   (* use the results of the liveness analysis to annotate individual instructions *)
    val liveVars : ((Machine.register option * Tracetable.trace) Core.Regmap.map)
                    -> bblock Core.Labelmap.map -> Machine.label -> 
                       bblock Core.Labelmap.map

@@ -27,7 +27,7 @@ structure NilRename :> NILRENAME =
 
       type state = {exp_subst : var map,con_subst : var map}
 
-      fun exp_var_xxx ({exp_subst,con_subst} : state,var,any) = 
+      fun exp_var_bind ({exp_subst,con_subst} : state,var) = 
 	let
 	  val var' = Name.derived_var var
 	  val exp_subst = VarMap.insert (exp_subst,var,var')
@@ -35,11 +35,7 @@ structure NilRename :> NILRENAME =
 	  ({exp_subst = exp_subst,con_subst = con_subst},SOME var')
 	end
 
-      (*XXX This is broken, but don't fuck with switch vars right now -Leaf
-       *)
-      fun sum_var_bind (state as {exp_subst,con_subst} : state,var,any) = (state,NONE)
-
-      fun con_var_xxx ({exp_subst,con_subst} : state,var,any) = 
+      fun con_var_bind ({exp_subst,con_subst} : state,var) = 
 	let
 	  val var' = Name.derived_var var
 	  val con_subst = VarMap.insert (con_subst,var,var')
@@ -62,14 +58,14 @@ structure NilRename :> NILRENAME =
 		of SOME var => (CHANGE_NORECURSE (state,Var_e var))
 		 | _ => NORECURSE)
 	    | _ => NOCHANGE)
-      (*Default trace handler should suffice
+
+      (* Default trace handler will suffice.
+       *
        *)
       val exp_handlers = 
 	let   
 	  val h = set_exphandler default_handler exphandler
-	  val h = set_exp_binder h exp_var_xxx
-	  val h = set_exp_definer h exp_var_xxx
-	  val h = set_sum_binder h sum_var_bind
+	  val h = set_exp_binder h exp_var_bind
 	in
 	  h
 	end
@@ -81,8 +77,7 @@ structure NilRename :> NILRENAME =
       val con_handlers = 
 	let
 	  val h = set_conhandler default_handler conhandler
-	  val h = set_con_binder h con_var_xxx
-	  val h = set_con_definer h con_var_xxx
+	  val h = set_con_binder h con_var_bind
 	in
 	  h
 	end
@@ -94,8 +89,7 @@ structure NilRename :> NILRENAME =
       val all_handlers =  
 	let
 	  val h = set_conhandler exp_handlers conhandler
-	  val h = set_con_binder h con_var_xxx
-	  val h = set_con_definer h con_var_xxx
+	  val h = set_con_binder h con_var_bind
 	in
 	  h
 	end
@@ -160,7 +154,7 @@ structure NilRename :> NILRENAME =
 		    epred : var -> bool,
 		    cpred : var -> bool}
 
-      fun exp_var_xxx (state :state as {esubst,csubst,epred,cpred},var,any) = 
+      fun exp_var_bind (state :state as {esubst,csubst,epred,cpred},var) = 
 	if epred var then
 	  let
 	    val var' = Name.derived_var var
@@ -170,10 +164,7 @@ structure NilRename :> NILRENAME =
 	  end
 	else (state,NONE)
 
-      (*XXX See above -Leaf *)
-      fun sum_var_bind (state :state as {esubst,csubst,epred,cpred},var,any) = (state,NONE)
-
-      fun con_var_xxx (state :state as {esubst,csubst,epred,cpred},var,any) = 
+      fun con_var_bind (state :state as {esubst,csubst,epred,cpred},var) = 
 	if cpred var then
 	  let
 	    val var' = Name.derived_var var
@@ -202,12 +193,9 @@ structure NilRename :> NILRENAME =
       val all_handlers = 
 	let
 	  val h = set_exphandler default_handler exphandler
-	  val h = set_exp_binder h exp_var_xxx
-	  val h = set_exp_definer h exp_var_xxx
-	  val h = set_sum_binder h sum_var_bind
+	  val h = set_exp_binder h exp_var_bind
 	  val h = set_conhandler h conhandler
-	  val h = set_con_binder h con_var_xxx
-	  val h = set_con_definer h con_var_xxx
+	  val h = set_con_binder h con_var_bind
 	in
 	  h
 	end
@@ -264,23 +252,20 @@ structure NilRename :> NILRENAME =
 		    cbound : varset,
 		    ebound : varset}
 
-      fun exp_var_xxx (state : state as {epred,ebound,...},var,any) = 
+      fun exp_var_bind (state : state as {epred,ebound,...},var) = 
 	(if isSome (find ebound var) orelse (epred var)
 	   then raise Rebound var
 	 else (insert ebound (var,());(state,NONE)))
 
-      fun con_var_xxx (state :state as {cpred,cbound,...},var,any) = 
+      fun con_var_bind (state :state as {cpred,cbound,...},var) = 
 	(if isSome (find cbound var) orelse (cpred var)
 	   then raise Rebound var
 	 else (insert cbound (var,());(state,NONE)))
 
       val all_handlers =  
 	let
-	  val h = set_con_binder default_handler con_var_xxx
-	  val h = set_con_definer h con_var_xxx
-	  val h = set_exp_binder h exp_var_xxx
-	  val h = set_exp_definer h exp_var_xxx
-	  val h = set_sum_binder h exp_var_xxx
+	  val h = set_con_binder default_handler con_var_bind
+	  val h = set_exp_binder h exp_var_bind
 	in
 	  h
 	end
@@ -323,10 +308,10 @@ structure NilRename :> NILRENAME =
 
       type state = {bound : VarSet.set}
 
-      fun exp_var_xxx (state : state as {bound},var,any) = 
+      fun exp_var_bind (state : state as {bound},var) = 
         ({bound = VarSet.add (bound, var)}, NONE)
 
-      fun con_var_xxx (state : state as {bound},var,any) = 
+      fun con_var_bind (state : state as {bound},var) = 
         ({bound = VarSet.add (bound, var)}, NONE)
 
       fun conhandler (state as {bound},con : con) =
@@ -351,11 +336,8 @@ structure NilRename :> NILRENAME =
 	let
 	  val h = set_conhandler default_handler conhandler
 	  val h = set_exphandler h  exphandler
-	  val h = set_con_binder h con_var_xxx
-	  val h = set_con_definer h con_var_xxx
-	  val h = set_exp_binder h exp_var_xxx
-	  val h = set_con_binder h exp_var_xxx
-	  val h = set_sum_binder h exp_var_xxx
+	  val h = set_con_binder h con_var_bind
+	  val h = set_exp_binder h exp_var_bind
 	in h 
 	end
 
@@ -398,14 +380,14 @@ structure NilRename :> NILRENAME =
       type state = {cbound : VarSet.set,
 		    ebound : VarSet.set}
 
-      fun exp_var_xxx (state : state as {ebound,cbound},var,any) : (state * var option)= 
+      fun exp_var_bind (state : state as {ebound,cbound},var) : (state * var option)= 
 	(if member (ebound, var) then
 	   raise Rebound var
 	 else
 	   ({ebound = add (ebound,var),cbound = cbound},
 	    NONE))
 
-      fun con_var_xxx (state :state as {cbound,ebound},var,any) : (state * var option)= 
+      fun con_var_bind (state :state as {cbound,ebound},var) : (state * var option)= 
 	(if member (cbound, var) then
 	   raise Rebound var
 	 else
@@ -414,11 +396,8 @@ structure NilRename :> NILRENAME =
 
       val all_handlers =  
 	let
-	  val h = set_con_binder default_handler con_var_xxx
-	  val h = set_con_definer h con_var_xxx
-	  val h = set_exp_binder h exp_var_xxx
-	  val h = set_exp_definer h exp_var_xxx
-	  val h = set_sum_binder h exp_var_xxx
+	  val h = set_con_binder default_handler con_var_bind
+	  val h = set_exp_binder h exp_var_bind
 	in
 	  h
 	end
@@ -455,7 +434,7 @@ structure NilRename :> NILRENAME =
       type state = {alpha_e : Alpha.alpha_context,
 		    alpha_c : Alpha.alpha_context}
 	
-      fun con_var_xxx (state as {alpha_e,alpha_c} : state,var,any) = 
+      fun con_var_bind (state as {alpha_e,alpha_c} : state,var) = 
 	if Alpha.bound (alpha_c,var) then ({alpha_e = alpha_e,alpha_c = Alpha.unbind (alpha_c,var)},NONE)
 	else (state,NONE)
 	  
@@ -470,7 +449,7 @@ structure NilRename :> NILRENAME =
 		  NORECURSE)
 	      | _ => NOCHANGE)
 	     
-      fun exp_var_xxx (state as {alpha_e,alpha_c} : state,var,any) = 
+      fun exp_var_bind (state as {alpha_e,alpha_c} : state,var) = 
 	if Alpha.bound (alpha_e,var) then ({alpha_c = alpha_c,alpha_e = Alpha.unbind (alpha_e,var)},NONE)
 	else (state,NONE)
 	  
@@ -489,11 +468,8 @@ structure NilRename :> NILRENAME =
 	let
 	  val h = set_conhandler default_handler conhandler
 	  val h = set_exphandler h exphandler
-	  val h = set_con_binder h con_var_xxx
-	  val h = set_con_definer h con_var_xxx
-	  val h = set_exp_binder h exp_var_xxx
-	  val h = set_exp_definer h exp_var_xxx
-	  val h = set_sum_binder h exp_var_xxx
+	  val h = set_con_binder h con_var_bind
+	  val h = set_exp_binder h exp_var_bind
 	in
 	  h
 	end

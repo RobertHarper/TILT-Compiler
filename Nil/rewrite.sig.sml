@@ -6,8 +6,7 @@ signature NILREWRITE =
 
     type ('state,'term) termhandler = 'state * 'term -> ('state * 'term) changeopt
     type ('state, 'bnd) bndhandler  = 'state * 'bnd -> ('state * 'bnd list) changeopt
-    type ('state,'class) binder     = 'state * Nil.var * 'class -> ('state * Nil.var option)
-    type ('state,'term) definer     = 'state * Nil.var * 'term -> ('state * Nil.var option)
+    type 'state          binder     = 'state * Nil.var  -> ('state * Nil.var option)
 
     datatype 'state handler =
       HANDLER of {
@@ -21,12 +20,8 @@ signature NILREWRITE =
 		  exphandler   : ('state,Nil.exp) termhandler,
 		  kindhandler  : ('state,Nil.kind) termhandler,
 		  tracehandler : ('state,Nil.niltrace) termhandler,
-		  con_var_bind   : ('state,Nil.kind) binder,
-		  con_var_define : ('state,Nil.con) definer,
-		  exp_var_bind   : ('state,Nil.con) binder,
-		  exp_var_define : ('state,Nil.exp) definer,
-		  sum_var_bind   : ('state,(Nil.con * Nil.w32)) binder,
-		  exn_var_bind   : ('state,Nil.exp) binder,
+		  con_var_bind : 'state binder,
+		  exp_var_bind : 'state binder,
 		  labelled_var : 'state * Nil.label * Nil.var -> 'state
 		  }
      
@@ -41,7 +36,7 @@ signature NILREWRITE =
 				       }
     val null_handler        : 'state * 'a -> ('state * 'b) changeopt
 
-    val null_binder         : ('state,'a) binder
+    val null_binder         : 'state binder
 
     val null_label_binder   : 'state * Nil.label * Nil.var -> 'state
 
@@ -51,14 +46,9 @@ signature NILREWRITE =
     val set_conhandler      : 'state handler -> ('state, Nil.con) termhandler  -> 'state handler
     val set_exphandler      : 'state handler -> ('state, Nil.exp) termhandler  -> 'state handler
 
-    val set_con_binder      : 'state handler -> ('state,Nil.kind) binder -> 'state handler
-    val set_con_definer     : 'state handler -> ('state,Nil.con) definer -> 'state handler
+    val set_con_binder      : 'state handler -> 'state binder -> 'state handler
 
-    val set_exp_binder      : 'state handler -> ('state,Nil.con) binder  -> 'state handler
-    val set_exp_definer     : 'state handler -> ('state,Nil.exp) definer -> 'state handler
-
-    val set_sum_binder      : 'state handler -> ('state,(Nil.con * Nil.w32)) binder -> 'state handler
-    val set_exn_binder      : 'state handler -> ('state,Nil.exp) binder -> 'state handler
+    val set_exp_binder      : 'state handler -> 'state binder  -> 'state handler
 
     val set_label_binder    : 'state handler -> ('state * Nil.label * Nil.var -> 'state) -> 'state handler
   end

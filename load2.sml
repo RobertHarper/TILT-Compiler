@@ -39,7 +39,7 @@ fun show b =
     Stats.bool "showInline3" := b
   end;
 
-fun show_hil b = LinkIl.show_hil := b;
+fun show_hil b = (LoadVars.show_hil := b;LinkIl.show_hil := b)
 
 fun show_some b = 
   let in
