@@ -1064,15 +1064,22 @@ struct
      | translate (Rtl.NEEDMUTATE n) =
        let val wordsForEachMutate = 3
 	   val bytesForEachMutate = 4 * wordsForEachMutate
+	   val bytesNeeded = bytesForEachMutate * n
+	   val useImm = in_imm_range bytesNeeded
 	   val writeAlloc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	   val writeLimit = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	   val writeAllocTemp = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	   val afterLabel = Rtl.fresh_code_label "afterMutateCheck"
        in  emit (SPECIFIC(LOADI (LDL, translateIReg writeAlloc, writelistAlloc_disp, Rth)));
 	   emit (SPECIFIC(LOADI (LDL, translateIReg writeLimit, writelistLimit_disp, Rth)));
-	   translate (Rtl.ADD(writeAlloc, Rtl.IMM (bytesForEachMutate * n), writeAllocTemp));
+	   app translate
+	   (if useImm then [Rtl.ADD(writeAlloc, Rtl.IMM bytesNeeded, writeAllocTemp)]
+	    else [Rtl.LI(i2w bytesNeeded, writeAllocTemp),
+		  Rtl.ADD(writeAlloc, Rtl.REG writeAllocTemp, writeAllocTemp)]);
 	   translate (Rtl.BCNDI(Rtl.LE, writeAllocTemp, Rtl.REG writeLimit, afterLabel, true));
-	   emit (SPECIFIC (INTOP(SUBL, Rheap, IMMop(bytesForEachMutate * n), Rat)));
+	   if useImm then emit (SPECIFIC (INTOP(SUBL, Rheap, IMMop bytesNeeded, Rat)))
+	   else (load_imm (i2w bytesNeeded, Rat);
+		 emit (SPECIFIC (INTOP(SUBL, Rheap, REGop Rat, Rat))));
 	   emit (BASE (GC_CALLSITE afterLabel));
 	   emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
 			    {regs_modified=[Rat], regs_destroyed=[Rat],
