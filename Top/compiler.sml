@@ -43,7 +43,6 @@ structure Til :> COMPILER =
 	   | (TIL_SPARC, _) => false
 	   | _ => error "MLRISC not supported")
 	     
-    (* checkNative : unit -> unit *)
     fun checkNative () = if native() orelse (!uptoAsm) then ()
 			 else error "No backend exists for this platform."
 

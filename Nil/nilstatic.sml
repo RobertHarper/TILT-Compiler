@@ -1,4 +1,4 @@
-(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha Trail *)
+(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha Trail BoundCheck *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
 
@@ -39,6 +39,7 @@ struct
   val alpha_equiv_fails      = Stats.counter "Alpha Equiv Checks Failed"
   val kind_standardize_calls = Stats.counter "Kind Standardize Calls"
 
+  val print_lets          = Stats.ff "nilstatic_print_lets"
 
 
 (*  
@@ -850,9 +851,16 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     kind
 	   end
 	 | (Let_c (Parallel,cbnds,con)) => error' "Parallel bindings not supported yet"
-	 | (Let_c (Sequential,cbnds,con)) =>
+	 | (c as (Let_c (Sequential,cbnds,con))) =>
 	   let
-		
+
+	     val _ = 
+	       if !print_lets then
+		 (printl "let is:";
+		  pp_con c;
+		  printl "")
+	       else ()
+
 	     fun check_bnd ((D,subst),maker,Tag) (var,formals,body) = 
 	       let
 		 val kind = lambda_valid(D,Tag,formals,body)
@@ -883,7 +891,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		      in loop(rest,(D,subst))
 		      end)
 
-	   in loop (cbnds,(D,Subst.C.empty()))
+	     val res = loop (cbnds,(D,Subst.C.empty()))
+	     val _ = 
+	       if !print_lets then
+		 (printl "Kind is:";
+		  pp_kind res;
+		  printl "")
+	       else ()
+	   in res
 	   end
 	 | (Typeof_c exp) => (SingleType_k(exp_valid (D,exp)))
 	 | (Closure_c (code,env)) => 
@@ -2319,7 +2334,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    if (!assertions) then
 	      assert (locate "module_valid")
 	      [
-	       (NilRename.noShadowsMod module,fn () => print "Typechecker called with shadowed code")
+	       (BoundCheck.check_mod (D,module),fn () => print "Typechecker called with ill-formed code")
 	       ]
 	    else ()
 

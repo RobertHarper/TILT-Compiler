@@ -53,6 +53,9 @@ Normalize normalize
 NILCONTEXT nilcontext.sig
 NilContext nilcontext
 
+BOUNDCHECK	bound_check.sig
+BoundCheck	bound_check
+
 TRACEOPS traceops.sig
 TraceOps traceops
 

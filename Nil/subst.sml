@@ -15,6 +15,9 @@ structure NilSubst :> NILSUBST =
     val debug         = Stats.ff "nil_debug"
     val profile       = Stats.ff "nil_profile"
     val subst_profile = Stats.ff "subst_profile"
+    val make_lets     = Stats.ff "subst_make_lets"
+    val eager_lets    = Stats.ff "subst_eager_lets"
+    val opt_lets      = Stats.tt "subst_opt_lets"
 
     val subtimer = fn args => fn args2 => if !profile orelse !subst_profile then Stats.subtimer args args2 else #2 args args2
 
@@ -68,11 +71,29 @@ structure NilSubst :> NILSUBST =
 	| delayed (ref (THAWED _)) = false
     end
 
+    local
+      (* (aa,bb) == aa @ (rev bb) *)
+      type 'a dlist = ('a list * 'a list)
+    in
+      type 'a dlist = 'a dlist
+      val DNIL = (nil,nil)
+      fun LCONS (a,(left,right)) = if !make_lets then (a::left,right) else DNIL
+      fun RCONS ((left,right),a) = if !make_lets then (left,a::right) else DNIL
+
+      fun dempty i = 
+	(case i
+	   of (nil,nil) => true
+	    | _ => false)
+      fun dListToList (left,right)    = left @ (rev right)
+      fun dListFromList ll = (ll,nil)
+      fun dListApp ((l1,r1),(l2,r2))  = (l1 @ (List.revAppend (r1,(l2 @ (rev r2)))),nil)
+    end
+
     type 'a map = 'a VarMap.map
 
     (* The definition of the types.  These are exported*)
-    type con_subst = con delay map
-    type exp_subst = exp delay map
+    type con_subst = con delay map * (var * con delay) dlist
+    type exp_subst = exp delay map * (var * exp delay) dlist
 
     (* How to carry out substitutions on the various levels.  Uses the rewriter.
      *)
@@ -82,29 +103,47 @@ structure NilSubst :> NILSUBST =
 
       type state = {esubst : exp_subst,csubst : con_subst}
 
-      val substitute = VarMap.find
+      fun substitute ((s,i),var) = VarMap.find (s,var)
 
-      val add = VarMap.insert
+      fun is_empty (s,i) = if !make_lets then dempty i else (VarMap.numItems s) = 0
 
-      fun is_empty s = (VarMap.numItems s) = 0
+      fun empty ()   = (VarMap.empty,DNIL)
 
-      fun empty ()   = VarMap.empty
+      fun listItems (s,i) = map_second thaw (if !eager_lets then VarMap.listItemsi s else dListToList i)
 
       fun kindhandler(state : state as {esubst,csubst},kind : kind) = 
 	let
 	  fun makeLet c = 
-	    let
-	      val items    = VarMap.listItemsi csubst
-	      val vcpairs  = map_second thaw items
-	      val cbnds    = map Con_cb vcpairs
-	    in Let_c(Sequential,cbnds,c)
+	    let  
+	      fun makeLetC nil body = body
+		| makeLetC [conbnd as Con_cb(var,con)] (cv as Var_c var') =
+		if (Name.eq_var(var,var')) then con else cv
+		| makeLetC [conbnd as Con_cb(var,con)] (cv as Proj_c(Var_c var',l)) =
+		  if (Name.eq_var(var,var')) then Proj_c(con,l) else cv
+		| makeLetC cbnds (cv as Var_c var') =
+		    (case (List.rev cbnds) of
+		       Con_cb(var,con)::rest => 
+			 if (Name.eq_var(var,var')) then
+			   makeLetC (rev rest) con
+			 else
+			   Let_c (Sequential, cbnds, cv)
+		     | _ => Let_c (Sequential, cbnds, cv))
+		| makeLetC cbnds (Let_c(Sequential, cbnds', body)) =
+		       makeLetC (cbnds @ cbnds') body
+		| makeLetC cbnds body = Let_c (Sequential, cbnds, body)
+
+	      val items    = listItems csubst
+	      val cbnds    = map Con_cb items
+	    in if !opt_lets then makeLetC cbnds c else Let_c(Sequential,cbnds,c)
 	    end
 	in
 	  if is_empty esubst then
-	    (case kind of
-	       SingleType_k c => CHANGE_NORECURSE(state,SingleType_k (makeLet c))
-	     | Single_k c     => CHANGE_NORECURSE(state,Single_k (makeLet c))
-	     | _ => NOCHANGE)
+	    if !make_lets then
+	      (case kind of
+		 SingleType_k c => CHANGE_NORECURSE(state,SingleType_k (makeLet c))
+	       | Single_k c     => CHANGE_NORECURSE(state,Single_k (makeLet c))
+	       | _ => NOCHANGE)
+	    else NOCHANGE
 	  else NOCHANGE
 	end
 
@@ -162,7 +201,7 @@ structure NilSubst :> NILSUBST =
            rewrite_bnd = substExpConInBnd',
 	   rewrite_trace = substExpConInTrace',...} = rewriters exp_con_handler
  
-      fun empty_state (esubst : exp delay map,csubst : con delay map) : state = 
+      fun empty_state (esubst : exp_subst,csubst : con_subst) : state = 
 	{esubst = esubst, csubst = csubst}
 
       (* Given a rewriter, carry out an expression and constructor
@@ -232,16 +271,18 @@ structure NilSubst :> NILSUBST =
     end  
 
 
+
     (* Here we define the abstract interface for substitutions.  This section 
      * defines the bits that are generic to all levels in a functor parameterized 
      * by the actual substitution functions, which are level specific. 
      *)
 
-    functor SubstFn(type item                                         (*What is it: e.g. con, exp *)
-		    type item_subst = item delay VarMap.map           (*The substitution type  *)
-		    val substItemInItem : item_subst -> item -> item  (*For composition *)
-		    val renameItem : item -> item                     (*To avoid shadowing *)
-		    val printer : item -> unit)                       (*To print them out *)
+    functor SubstFn(type item                                          (*What is it: e.g. con, exp *)
+		    type item_subst = 
+		      item delay VarMap.map * (var * item delay) dlist (*The substitution type  *)
+		    val substItemInItem : item_subst -> item -> item   (*For composition *)
+		    val renameItem : item -> item                      (*To avoid shadowing *)
+		    val printer : item -> unit)                        (*To print them out *)
       :> SUBST where type item = item
 		 and type item_subst = item_subst =
     struct
@@ -252,55 +293,53 @@ structure NilSubst :> NILSUBST =
 
       fun rename (item :item) : item delay = delay (fn () => renameItem item)
 
-      fun empty () : item_subst = VarMap.empty
+      fun empty () : item_subst = (VarMap.empty,DNIL)
 	
-      fun substitute subst var = mapopt thaw (VarMap.find (subst,var))
+      fun substitute (subst,items) var = mapopt thaw (VarMap.find (subst,var))
 	
-      fun toList (subst : item_subst) = map_second thaw (VarMap.listItemsi subst)
+      fun toList (subst : item_subst) = if !make_lets then map_second thaw (dListToList (#2 subst)) else (map_second thaw (VarMap.listItemsi (#1 subst)))
 	
-      fun sim_add subst (var,value) : item_subst = VarMap.insert (subst,var,rename value) 
+      fun item_insert (subst as (s,i),var,delay) = 
+	(VarMap.insert(s,var,delay),RCONS(i,(var,delay)))
+
+      fun sim_add subst (var,value) : item_subst = item_insert(subst,var,rename value)
       
-      fun addl (var,item,subst) = 
+      fun addl (var,item,(subst,items)) = 
 	let
 	  val item_delay = rename item
-	  val map_subst = VarMap.insert (empty(),var,item_delay)
+	  val map_subst = item_insert(empty(),var,item_delay)
 	  fun domap i = delay (fn () => substItemInItem map_subst (thaw i))
-	in VarMap.insert (VarMap.map domap subst,var,item_delay)
+	in item_insert((VarMap.map domap subst,items),var,item_delay)
 	end
       
-      fun addr  (subst,var,item) = 
-	VarMap.insert (subst,var,delay (fn () => substItemInItem subst (renameItem item)))
+      fun addr (s as (subst,items),var,item) = 
+	let 
+	  val item_delay = rename item
+	in (VarMap.insert (subst,var,delay (fn () => substItemInItem s (thaw item_delay))),
+	    RCONS(items,(var,item_delay)))
+	end
 
-      fun is_empty subst = (VarMap.numItems subst) = 0
+      fun is_empty (subst,_) = (VarMap.numItems subst) = 0
 	
-      fun compose (subst1,subst2) = 
+      fun compose (s1 as (subst1,items1),(subst2,items2)) = 
 	let
-	  fun domap item_delay = delay (fn () => substItemInItem subst1 (thaw item_delay))
+	  fun domap item_delay = delay (fn () => substItemInItem s1 (thaw item_delay))
 	  val subst2 = VarMap.map domap subst2
-	  val subst = VarMap.unionWith #2 (subst1,subst2)
-	in subst
+	  val subst = VarMap.unionWith (fn _ => error "compose" "Duplicate variables in substitution composition") (subst1,subst2)
+	in (subst,dListApp(items1,items2))
 	end
       
-      fun merge (subst1,subst2) = VarMap.unionWith #2 (subst1,subst2)
+      fun merge ((subst1,items1),(subst2,items2)) = 
+	(VarMap.unionWith (fn _ => error "merge" "Duplicate variables in merged substitutions") (subst1,subst2),
+	 dListApp(items1,items2))
 
-      fun simFromList (list : (var * item) list) : item_subst = 
-	let
-	  fun fold ((var,value),subst) = 
-	    VarMap.insert(subst,var,rename value)
-	    
-	  val subst =  List.foldl fold VarMap.empty list
-	in subst
-	end
+      fun simFromList (list : (var * item) list) : item_subst = List.foldl (fn (v,s) => sim_add s v) (empty()) list
 
-      fun seqFromList (list : (var * item) list) : item_subst = 
-	let
-	  fun fold ((var,value),subst) = 
-	    VarMap.insert (subst,var,delay (fn () => substItemInItem subst (renameItem value)))
-	  val subst =  List.foldl fold VarMap.empty list
-	in subst
-	end
+      fun seqFromList (list : (var * item) list) : item_subst = List.foldl (fn ((v,i),s) => addr (s,v,i)) (empty()) list
 
-      fun printf (printer : item -> unit) (subst: item_subst) = 
+      (* N.B. doesn't print items
+       *)
+      fun printf (printer : item -> unit) ((subst,items): item_subst) = 
 	let
 	  fun print1 (v,a) = 
 	    (TextIO.print (Name.var2string v);
@@ -335,14 +374,17 @@ structure NilSubst :> NILSUBST =
     local 
       fun renameCon (con :con) : con delay = delay (fn () => NilRename.renameCon con)
       fun renameExp (exp :exp) : exp delay = delay (fn () => NilRename.renameExp exp)
-    in
-      fun varConExpSubst var con exp = substConInExp (VarMap.insert (VarMap.empty,var,renameCon con)) exp
-      fun varConConSubst var con con2 = substConInCon (VarMap.insert (VarMap.empty,var,renameCon con)) con2
-      fun varConKindSubst var con kind = substConInKind (VarMap.insert (VarMap.empty,var,renameCon con)) kind
 
-      fun varExpExpSubst var exp1 exp2 = substExpInExp (VarMap.insert (VarMap.empty,var,renameExp exp1)) exp2
-      fun varExpConSubst var exp con = substExpInCon (VarMap.insert (VarMap.empty,var,renameExp exp)) con
-      fun varExpKindSubst var exp kind = substExpInKind (VarMap.insert (VarMap.empty,var,renameExp exp)) kind
+      fun item_insert (subst as (s,i),var,delay) = 
+	(VarMap.insert(s,var,delay),RCONS(i,(var,delay)))
+    in
+      fun varConExpSubst var con exp   = substConInExp  (item_insert(C.empty(),var,renameCon con)) exp
+      fun varConConSubst var con con2  = substConInCon  (item_insert(C.empty(),var,renameCon con)) con2
+      fun varConKindSubst var con kind = substConInKind (item_insert(C.empty(),var,renameCon con)) kind
+
+      fun varExpExpSubst var exp1 exp2 = substExpInExp  (item_insert(E.empty(),var,renameExp exp1)) exp2
+      fun varExpConSubst var exp con   = substExpInCon  (item_insert(E.empty(),var,renameExp exp))  con
+      fun varExpKindSubst var exp kind = substExpInKind (item_insert(E.empty(),var,renameExp exp))  kind
     end
 
   end

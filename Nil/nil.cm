@@ -104,6 +104,9 @@ reorder.sml
 trail.sig.sml
 trail.sml
 
+bound_check.sml
+bound_check.sig.sml
+
 (*
 cleanup.sig.sml
 cleanup.sml

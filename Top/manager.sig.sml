@@ -119,6 +119,7 @@ sig
   val slaves : (int * string) list -> unit
   val master : string -> unit  
   val make : string -> unit
+  val makeNoLink : string -> unit
 
 end
 

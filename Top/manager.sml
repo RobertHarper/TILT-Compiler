@@ -1683,6 +1683,8 @@ struct
       end
   fun make mapfile = tilc (mapfile, true)
 
+  fun makeNoLink mapfile = tilc (mapfile,false)
+
   fun purge mapfile = Master.purge mapfile
 
   fun buildRuntime rebuild = 

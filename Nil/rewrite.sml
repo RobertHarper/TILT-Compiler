@@ -197,13 +197,25 @@ structure NilRewrite :> NILREWRITE =
 	      let
 	      in
 		(case con 
-		   of (Prim_c (pcon,args)) => 
+		   of (Prim_c (Record_c (labels,SOME vars),args)) => 
+		     let
+		       val changed = ref false
+		       fun folder (v,c,state) = 
+			 let
+			   val c = recur_c changed state c 
+			   val (state,v) = bind_e changed (state,v,c)
+			 in
+			   (v,c,state)
+			 end
+		       val (vars,args,state) = foldl_acc2 folder state (vars,args)
+		     in if !changed then SOME (Prim_c (Record_c(labels,SOME vars),args)) else NONE
+		     end
+		    | (Prim_c (pcon,args)) => 
 		     let
 		       val changed = ref false
 		       val args = map_f recur_c changed state args
 		     in if !changed then SOME (Prim_c (pcon,args)) else NONE
 		     end
-		     
 		    | (Mu_c (flag,defs)) =>
 		     let
 		       val changed = ref false
