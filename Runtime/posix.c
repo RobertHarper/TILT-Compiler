@@ -871,7 +871,13 @@ word posix_process_sysconf(string arg)
 
 int posix_process_fork(unit unused)
 {
-  int code = fork();
+  int code;
+  Proc_t *self = getProc();
+  code = fork();
+  if (getThread() == NULL) {
+    assert(code == 0);
+    self->pthread = pthread_self();
+  }
   if (code == -1)
     runtime_error(errno);
   return code;
