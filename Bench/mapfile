@@ -1,24 +1,28 @@
 Prelude		Preludes/Prelude
-#hello		Bench/hello
+;hello		Bench/hello
 
-# WORKS
+; WORKS
 life		Bench/life
-#leroy		Bench/leroy
-#frank		Bench/frank
-#matmult	Bench/matmult
-#quicksort	Bench/quicksort
-#quicksort2	Bench/quicksort2
-#takc		Bench/takc
-#taku		Bench/taku
-#sort		Bench/sort
-#fft		Bench/fft
-#simple		Bench/simple
-#tyan		Bench/tyan	
-#msort	Bench/msort
-#pia		Bench/pia	
-#lexgen		Bench/lexgen
-#boyer		Bench/boyer
+;leroy		Bench/leroy
+;matmult	Bench/matmult
+;quicksort	Bench/quicksort
+;quicksort2	Bench/quicksort2
+;takc		Bench/takc
+;taku		Bench/taku
+;sort		Bench/sort
+;fft		Bench/fft
+;boyer		Bench/boyer
+;simple		Bench/simple
 
 
-# TESTING
-#fastlife	Bench/fastlife
+;; TESTING
+
+
+;tyan		Bench/tyan	
+;msort	Bench/msort
+;pia		Bench/pia	
+;lexgen		Bench/lexgen
+
+;; BROKEN
+
+;frank		Bench/frank
