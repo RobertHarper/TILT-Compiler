@@ -217,3 +217,8 @@ m0073	functors
 m0074	general basis items
 m0075	deep raise
 m0075	deep raise
+m0076	identifier syntax
+m0077	integer overflow
+m0078	integers
+m0079	list tabulation
+m0080	known case
