@@ -8,3 +8,5 @@ tracetable.sig.sml
 
 tracetable.sml
 
+LittleEndianTraceTable.sml
+
