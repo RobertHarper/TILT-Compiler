@@ -2,6 +2,7 @@ structure NilOpts =
 struct 
     val debug = ref false
 
+    val do_anormalize = ref true
     val do_anormalize2 = ref false
     val do_cse = ref true
     val do_flatten = ref true

@@ -87,16 +87,22 @@ struct
 			    print "\n")
 		  else () ;
 		      
-	    val nilmod = (Stats.timer("Anormalize", Anormalize.doModule debug)) nilmod;
-	    val _ =  if !NilOpts.print_anormalize
-			 then (print "\n\n=======================================\n\n";
-			       print "A-normal form:\n";
-			       PpNil.pp_module nilmod;
-			       print "\n")
-		     else print "Anormalization complete\n";
+	    val nilmod =  
+		if !NilOpts.do_anormalize
+		 then 
+		  let val nilmod = (Stats.subtimer("Anormalize", Anormalize.doModule debug)) nilmod
+		      val _ =  if !NilOpts.print_anormalize
+			     then (print "\n\n=======================================\n\n";
+				   print "A-normal form:\n";
+				   PpNil.pp_module nilmod;
+				   print "\n")
+			       else print "Anormalization complete\n"
+		  in  nilmod
+		  end
+		else nilmod
 
 	    val nilmod = if !NilOpts.do_anormalize2 then 
-		let val nilmod = (Stats.timer("Anormalize2", Anormalize.doModule true)) nilmod;
+		let val nilmod = (Stats.subtimer("Anormalize2", Anormalize.doModule true)) nilmod;
 		    val _ =  if debug 
 				 then (print "\n\n=======================================\n\n";
 				       print "A-normal form2:\n";
@@ -112,7 +118,7 @@ struct
  
 	   val nilmod =
 		if (!do_flatten) then 
-		    (let val nilmod = (Stats.timer("Flatten args", FlattenArgs.doModule debug)) nilmod
+		    (let val nilmod = (Stats.subtimer("Flatten args", FlattenArgs.doModule debug)) nilmod
 		     in (  if !NilOpts.print_flatten andalso !do_flatten 
 			       then (print "\n\n=======================================\n\n";
 				     print "Flattened args:\n";
@@ -124,7 +130,7 @@ struct
 
 	  	    
 	    val nilmod = if !do_uncurry then 
-		let val nilmod = (Stats.timer("Uncurry args", Uncurry.doModule debug)) nilmod
+		let val nilmod = (Stats.subtimer("Uncurry args", Uncurry.doModule debug)) nilmod
 		in (  if !NilOpts.print_uncurry andalso !do_uncurry 
 			 then (print "\n\n=======================================\n\n";
 			       print "Uncurried args:\n";
@@ -135,7 +141,7 @@ struct
 			 else nilmod
 	    
 	    val nilmod = if !do_inline then 
-		(Stats.timer("Inline General", Inline.doModule debug)) nilmod
+		(Stats.subtimer("Inline General", Inline.doModule debug)) nilmod
 		else nilmod
 	    val _ =  if !NilOpts.print_inline andalso !do_inline 
 			 then (print "\n\n=======================================\n\n";
@@ -146,7 +152,7 @@ struct
 
 	    (* As I'm not doing renaming during the general inlining, should do it now.... *)
 	    val nilmod = if !do_inline then 
-		(Stats.timer("Linearization2",Linearize.linearize_mod)) nilmod
+		(Stats.subtimer("Linearization2",Linearize.linearize_mod)) nilmod
 		else nilmod
 	    val _ = if !NilOpts.print_inline andalso !do_inline
 			then (print "\n\n=======================================\n\n";
@@ -156,7 +162,7 @@ struct
 		    else if !do_inline then print "Renaming complete\n" else ()
 			
 	    val nilmod = if !do_reduce then
-		let val nilmod = (Stats.timer("Reduce", Reduce.doModule debug)) nilmod
+		let val nilmod = (Stats.subtimer("Reduce", Reduce.doModule debug)) nilmod
 		in ( if !NilOpts.print_reduce 
 			 then (print "\n\n=======================================\n\n";
 			       print "Reduced:\n";
@@ -167,7 +173,7 @@ struct
 			 else nilmod
 			
 	    val nilmod = if !do_reduce then
-		let val nilmod = (Stats.timer("Reduce", Reduce.doModule debug)) nilmod
+		let val nilmod = (Stats.subtimer("Reduce", Reduce.doModule debug)) nilmod
 		in ( if !NilOpts.print_reduce 
 			 then (print "\n\n=======================================\n\n";
 			       print "Reduced:\n";

@@ -33,6 +33,13 @@ struct
     val cmp_int:(int*int->order) = cmp_maker op< op>
     val cmp_TilWord64 = cmp_maker TilWord64.slt TilWord64.sgt
     val cmp_uTilWord64 = cmp_maker TilWord64.ult TilWord64.ugt
+    fun openness2int ope =
+	case ope of 
+	    Open => 0
+	  | Code => 1
+	  | Closure => 2
+	  | ExternCode => 3
+    fun cmp_openness(op1,op2) = cmp_int(openness2int op1, openness2int op2)
 
     fun cmp_option cmp (a,b) =
 	case (a,b) of
@@ -79,12 +86,9 @@ struct
 	    F32 => 0
 	  | F64 => 1
 
-    fun hash_openness ope =
-	case ope of 
-	    Open => 0
-	  | Code => 1
-	  | Closure => 2
-	  | ExternCode => 3
+    val hash_openness = openness2int
+
+
 
     fun hash_effect eff =
 	case eff of 
@@ -381,8 +385,13 @@ struct
 		    if not (null vklist2 )
 			then Name.compare_var ((#1 (hd vklist1)), (#1 (hd vklist2)))
 		    else GREATER 
-		else cmp_orders( cmp_orders (cmp_con_list(clist1, clist2), cmp_con (con1, con2)), cmp_int (Word32.toInt w321, Word32.toInt w322))
-	    in if return = EQUAL then (Ppnil.pp_con c1 ; print "Should be equivalent to " ; Ppnil.pp_con c2 ; raise UNIMP)
+		else cmp_orders(cmp_openness(op1,op2),
+				cmp_orders(cmp_orders (cmp_con_list(clist1, clist2), 
+						       cmp_con (con1, con2)), 
+					   cmp_int (Word32.toInt w321, Word32.toInt w322)))
+	    in if return = EQUAL 
+		   then (Ppnil.pp_con c1 ; print "Should be equivalent to " ; 
+			 Ppnil.pp_con c2 ; raise UNIMP)
 	       else return end 
 	  | ( AllArrow_c _, _) => GREATER
 	  | ( _, AllArrow_c _ ) => LESS

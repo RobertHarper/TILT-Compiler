@@ -35,6 +35,9 @@ struct
 			  scan_exp (Let_e(Sequential, rest, body)) ) 
 	  | (App_e ( openness, Var_e g, clist, elist, elist2 )) =>
 	         ( app scan_exp elist ; app scan_exp elist2)
+	  | (App_e ( openness, e, clist, elist, elist2 )) =>
+	         (print "WARNING: uncurry.sml encountered unnamed form\n";
+		  scan_exp e;  app scan_exp elist ; app scan_exp elist2)
 	  | (Let_e (_, (bnd :: rest) , body)) => ( scan_bnd bnd;  scan_exp (Let_e (Sequential, rest, body)))
 	  | Let_e (_, [], body) => scan_exp body
 
@@ -199,9 +202,8 @@ struct
 				     app)  
 			  | NONE => app)  
 		| NONE => app)  
-	   | 
-	    doApp ( app as (openness, Var_e g,c , args, e)) = 
-	    app
+	   | doApp ( app as (openness, Var_e g,c , args, e)) = app
+	  | doApp app = (print "WARNING: uncurry enconutered unnamed form\n"; app)
 	    
 	and xexp exp = 
 	    case exp of 

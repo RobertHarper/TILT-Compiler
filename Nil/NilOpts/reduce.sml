@@ -503,7 +503,8 @@ struct
 		  | Const_e _ => true
 		  | App_e (_, Var_e f, _,_,_) => 
 		        VarSet.member (!total_set, f) (* We don't have to check args because of A-normal form *)
-		  | App_e _ => error "not in A-normal form"
+		  | App_e _ => (print "WARNING: reduce.sml found App not in A-normal form";
+				false)
 		  | Prim_e (allp, _, _) =>
 			is_pure_allp allp
 		  | Let_e (_, bnds, exp) => 
@@ -670,7 +671,11 @@ struct
 		  | Let_c (Sequential, [], N) => xcon fset N
 		  | Let_c _ => raise UNIMP
 
-		  (* Funnction application *) 
+		  (* Function application *) 
+		  | App_c (Let_c(letsort,bnds,Var_c v),cons) =>
+			xcon fset (Let_c(letsort,bnds,App_c(Var_c v, cons)))
+
+		  (* Function application *) 
 		  | App_c ( Var_c f, cons) => 
 			let val new_app = App_c (sc(f), map (xcon fset) cons)
 			    val Var_c sf = sc(f) 
@@ -695,7 +700,10 @@ struct
 				    | NONE => new_app )
 			    else new_app
 			end 
-					      
+		  (* unnamed application *)		      
+		  | App_c (f, cons) => 
+			(print "WARNING: reduce.sml: App_c with non-lambda/non-varaible\n";
+			 App_c (xcon fset f, map (xcon fset) cons))
 		  | Var_c var => sc(var)
 		  | Prim_c (primcon, cons) => 
 			Prim_c (primcon, map (xcon fset) cons)
@@ -716,7 +724,7 @@ struct
 			 default = xcon fset default,
 			 kind = xkind fset kind, 
 			 arms = map (fn (primc, vklist, con)=> (primc, (map (fn (v,k)=> (v,xkind fset k))vklist) , xcon fset con)) arms}
-		  | _ => (print "Can't match" ; Ppnil.pp_con con ; print "\n"; raise BUG )	
+
 
 
 	    fun xswitch fset s =
@@ -1194,7 +1202,9 @@ struct
 			else
 			    new_app
 			end
-	      | App_e ( _, _, _, _, _) => raise BUG
+	      | App_e ( _, _, _, _, _) => 
+			(print "WARNING: reduce.sml found app not in A-normal form\n";
+			 exp)
 	      | Var_e v => s(v)
 	      | Const_e c => exp
 	      | Raise_e (exp, con) => Raise_e (xexp fset exp, xcon fset con)
