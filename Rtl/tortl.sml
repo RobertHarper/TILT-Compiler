@@ -592,16 +592,19 @@ val debug = ref false
 
   (* for reals, the len reg measures quads *)
 
+  (* measured in octets *)
   fun mk_realarraytag(len,tag) = 
     (add_instr(SLL(len,IMM (real_len_offset),tag));
      add_instr(ORB(tag,IMM (w2i realarray),tag)))
     
+  (* measured in bytes *)
   fun mk_intarraytag(len,tag) = 
     (add_instr(SLL(len,IMM (int_len_offset),tag));
      add_instr(ORB(tag,IMM (w2i intarray),tag)))
     
+  (* measured in words *)
   fun mk_ptrarraytag(len,tag) = 
-    (add_instr(SLL(len,IMM (int_len_offset),tag));
+    (add_instr(SLL(len,IMM (ptr_len_offset),tag));
      add_instr(ORB(tag,IMM (w2i ptrarray),tag)))
     
   fun mk_recordtag(flags) = recordtag(flags);
@@ -2155,6 +2158,7 @@ val debug = ref false
 			      val offset = load_ireg_locval(vl2,NONE)
 			      val subaddr = alloc_regi NOTRACE_INT
 			      val data = alloc_regi NOTRACE_INT
+			      val temp = alloc_regi NOTRACE_INT
 			      val _ = (add_instr(ANDB(offset,IMM 3, subaddr));
 				       add_instr(NOTB(subaddr,temp));
 				       add_instr(SLL(subaddr,IMM 3, subaddr));
@@ -2162,10 +2166,11 @@ val debug = ref false
 				       add_instr(ADD(a',REG offset,addr));
 				       add_instr(LOAD32I(EA(addr,0),data));
 				       add_instr(SRL(data,REG subaddr,data));
-				       add_instr(ANDB(data,IMM 0w255, desti)))
+				       add_instr(ANDB(data,IMM 255, desti)))
 			  in ()
 			  end
-	     | _ => error "xintptrsub not done on all int sizes")
+	     | _ => error "xintptrsub not done on all int sizes");
+	  desti
       end
 
   and xsub(state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
@@ -2174,8 +2179,8 @@ val debug = ref false
 	  fun nonfloatcase is = xintptrsub(state,is,c,vl1,vl2)
 	  val r = (case (simplify_type state c) of
 		       (true,Prim_c(Float_c F64,[])) => I(boxFloat (floatcase()))
-		     | (true,Prim_c(Int_c W8,[])) => I(nonfloatcase W8)
-		     | (true,_) => I(nonfloatcase W32)
+		     | (true,Prim_c(Int_c W8,[])) => I(nonfloatcase Prim.W8)
+		     | (true,_) => I(nonfloatcase Prim.W32)
 		     | (false,c') => let val (r,_) = xcon(state,fresh_var(),c')
 					 val tmp = alloc_regi NOTRACE_INT
 					 val desti = alloc_regi(con2rep state c)
@@ -2186,10 +2191,10 @@ val debug = ref false
 						  add_instr(BCNDI(NE,tmp,floatl,false));
 						  add_instr(CMPUI(EQ, r, IMM 0, tmp));
 						  add_instr(BCNDI(NE,tmp,charl,false)))
-					 val desti = nonfloatcase W32
+					 val desti = nonfloatcase Prim.W32
 					 val _ = add_instr(BR afterl)
 					 val _ = add_instr(ILABEL charl)
-					 val desti8 = nonfloatcase W8
+					 val desti8 = nonfloatcase Prim.W8
 					 val _ = add_instr(MV(desti8,desti))
 					 val _ = add_instr(ILABEL floatl)
 					 val destf = floatcase()
@@ -2345,93 +2350,104 @@ val debug = ref false
       end
 
 
-  and xarray(state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
-    let 
-	val dest = alloc_regi TRACE
-	val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
-	val tag = alloc_regi(NOTRACE_INT)
-	val gctemp  = alloc_regi(NOTRACE_INT)
-	val cmptemp = alloc_regi(NOTRACE_INT)
-	val i       = alloc_regi(NOTRACE_INT)
-	val tmp     = alloc_regi(LOCATIVE)
-	val len     = load_ireg_locval(vl1,NONE)
-	val skiptag = alloc_regi(NOTRACE_INT)
-	fun floatcase (Prim.F32, fr) = error "no 32-bit floats"
-	  | floatcase (Prim.F64, fr) = 
-	    let 
-		val fsmall_alloc = alloc_code_label()
-		val fafter       = alloc_code_label()
-		val fbottom      = alloc_code_label()
-		val ftop         = alloc_code_label()
-		val v = fr
+    and floatcase (state, dest, Prim.F32, _, _) : unit = error "no 32-bit floats"
+      | floatcase (state, dest, Prim.F64, len, fr) = 
+	let 
+	    val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
+	    val skiptag      = alloc_regi NOTRACE_INT
+	    val tag = alloc_regi(NOTRACE_INT)
+	    val i = alloc_regi(NOTRACE_INT)
+	    val tmp = alloc_regi(NOTRACE_INT)
+	    val gctemp  = alloc_regi(NOTRACE_INT)
+	    val cmptemp = alloc_regi(NOTRACE_INT)
+	    val fsmall_alloc = alloc_code_label()
+	    val fafter       = alloc_code_label()
+	    val fbottom      = alloc_code_label()
+	    val ftop         = alloc_code_label()
+	    val v = fr
 	    (* store object tag and profile tag with alignment so that
 	     raw data is octaligned;  then loop through and initialize *)
-	    in 
-	       (* if array is too large, call runtime to allocate *)
-	       add_instr(LI(0w4096,cmptemp));
-	       add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
-	       add_instr(BCNDI(NE,cmptemp,fsmall_alloc,true));
-	       add_instr(FLOAT_ALLOC(len,v,dest,ptag));
-	       add_instr(BR fafter);
+	in 
+	    (* if array is too large, call runtime to allocate *)
+	    add_instr(LI(0w4096,cmptemp));
+	    add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
+	    add_instr(BCNDI(NE,cmptemp,fsmall_alloc,true));
+	    add_instr(FLOAT_ALLOC(len,v,dest,ptag));
+	    add_instr(BR fafter);
 	     
-	       (* inline allocation code - start by doing the tag stuff*)
-	       do_code_align();
-	       add_instr(ILABEL fsmall_alloc);
-	       add_instr(ADD(len,REG len, gctemp));
-	       if (not (!HeapProfile))
-		   then
-		       (add_instr(ADD(gctemp,IMM 3, gctemp));
-			add_instr(NEEDGC(REG gctemp));
-			align_odd_word();
-			mk_realarraytag(len,tag);
-			add_instr(STORE32I(EA(heapptr,0),tag)); (* store tag *)
-			add_instr(ADD(heapptr,IMM 4,dest)))
-	       else
-		   (add_instr(ADD(gctemp,IMM 4, gctemp)));
-		   add_instr(NEEDGC(REG gctemp));
-		   align_even_word();
-		   store_tag_disp(0,ptag);                 (* store profile tag *)
-		   mk_realarraytag(len,tag);               
-		   add_instr(STORE32I(EA(heapptr,4),tag)); (* store tag *)
-		   add_instr(ADD(heapptr,IMM 8,dest));
-		   
-	     (* now use a loop to initialize the data portion *)
-	      add_instr(S8ADD(len,REG dest,heapptr));
-	      add_instr(LI(Rtltags.skiptag, skiptag));
-	      add_instr(STORE32I(EA(heapptr,0),skiptag));
-	      add_instr(ADD(heapptr,IMM 4,heapptr));
-	      add_instr(SUB(len,IMM 1,i));      (* init val *)
-	      add_instr(BR fbottom);             (* enter loop from bottom *)
-	      do_code_align();
-	      add_instr(ILABEL ftop);            (* loop start *)
-	      add_instr(S8ADD(i,REG dest,tmp));
-	      add_instr(STOREQF(EA(tmp,0),v));  (* initialize value *)
-	      add_instr(SUB(i,IMM 1,i));
-	      add_instr(ILABEL fbottom);
-	      add_instr(BCNDI(GE,i,ftop,true));
-	      do_code_align();
-	      add_instr(ILABEL fafter)
-	    end (* end of floatcase *)
-	local
-            (* create an object with tag register, given v register, and length gctemp_imm *)
-	    fun general_init_case(len,v,gctemp_imm,afteropt, gafter) = 
-		let 
-		    val gbottom      = alloc_code_label()
-		    val gtop         = alloc_code_label()
-		in 
-		    (if (not (!HeapProfile))
-			 then
-			     (add_instr(STORE32I(EA(heapptr,0),tag)); (* allocation *)
-			      add_instr(ADD(heapptr,IMM 4,dest)))
-		     else
-			 (store_tag_disp(0,ptag);
-			  add_instr(STORE32I(EA(heapptr,4),tag)); (* allocation *)
-			  add_instr(ADD(heapptr,IMM 8,dest)));
-		  
-		  (* gctemp's contents reflects the profile tag already *)
-		     (case gctemp_imm of
-			      NONE => add_instr(S4ADD(gctemp,REG heapptr,heapptr))
-			    | (SOME n) => add_instr(ADD(heapptr, IMM (4*n), heapptr)));
+	    (* inline allocation code - start by doing the tag stuff*)
+	    do_code_align();
+	    add_instr(ILABEL fsmall_alloc);
+	    add_instr(ADD(len,REG len, gctemp));
+	    if (not (!HeapProfile))
+		then
+		    (add_instr(ADD(gctemp,IMM 3, gctemp));
+		     add_instr(NEEDGC(REG gctemp));
+		     align_odd_word();
+		     mk_realarraytag(len,tag);
+		     add_instr(STORE32I(EA(heapptr,0),tag)); (* store tag *)
+		     add_instr(ADD(heapptr,IMM 4,dest)))
+	    else
+		(add_instr(ADD(gctemp,IMM 4, gctemp)));
+		add_instr(NEEDGC(REG gctemp));
+		align_even_word();
+		store_tag_disp(0,ptag);                 (* store profile tag *)
+		mk_realarraytag(len,tag);               
+		add_instr(STORE32I(EA(heapptr,4),tag)); (* store tag *)
+		add_instr(ADD(heapptr,IMM 8,dest));
+		
+		(* now use a loop to initialize the data portion *)
+		add_instr(S8ADD(len,REG dest,heapptr));
+		add_instr(LI(Rtltags.skiptag, skiptag));
+		add_instr(STORE32I(EA(heapptr,0),skiptag));
+		add_instr(ADD(heapptr,IMM 4,heapptr));
+		add_instr(SUB(len,IMM 1,i));      (* init val *)
+		add_instr(BR fbottom);             (* enter loop from bottom *)
+		do_code_align();
+		add_instr(ILABEL ftop);            (* loop start *)
+		add_instr(S8ADD(i,REG dest,tmp));
+		add_instr(STOREQF(EA(tmp,0),v));  (* initialize value *)
+		add_instr(SUB(i,IMM 1,i));
+		add_instr(ILABEL fbottom);
+		add_instr(BCNDI(GE,i,ftop,true));
+		do_code_align();
+		add_instr(ILABEL fafter)
+	end (* end of floatcase *)
+
+
+  and general_init_case(ptag : Word32.word, (* profile tag *)
+			tag  : regi,        (* tag *)
+			dest : regi,        (* destination register *)
+			gctemp : loc_or_val,   (* number of words to increment heapptr by *)
+			len : regi,         (* number of words to write *)
+			v : regi,           (* write v (len) times *)
+			afteropt : regi option, (* overwrite (if present) once in the last position *)
+			gafter               (* label to jump to when done *)
+			) = 
+      let 
+	  val skiptag      = alloc_regi NOTRACE_INT
+	  val tmp          = alloc_regi NOTRACE_INT
+	  val i            = alloc_regi NOTRACE_INT
+	  val gbottom      = alloc_code_label()
+	  val gtop         = alloc_code_label()
+      in 
+	  (if (not (!HeapProfile))
+	       then
+		   (add_instr(ICOMMENT "storing tag");
+		    add_instr(STORE32I(EA(heapptr,0),tag)); (* allocation *)
+		    add_instr(ADD(heapptr,IMM 4,dest)))
+	   else
+	       (store_tag_disp(0,ptag);
+		add_instr(STORE32I(EA(heapptr,4),tag)); (* allocation *)
+		add_instr(ADD(heapptr,IMM 8,dest)));
+	       
+	       (* gctemp's contents reflects the profile tag already *)
+	       (case gctemp of
+		   (VAR_VAL (VINT n)) => add_instr(ADD(heapptr, IMM (4*(w2i n)), heapptr))
+		  | _ => let val gctemp = load_ireg_locval(gctemp,NONE)
+			 in  add_instr(S4ADD(gctemp,REG heapptr,heapptr))
+			 end);
+
 		add_instr(LI(Rtltags.skiptag, skiptag));
 		add_instr(STORE32I(EA(heapptr,0),skiptag));
 		add_instr(ADD(heapptr,IMM 4,heapptr));
@@ -2441,91 +2457,109 @@ val debug = ref false
 		add_instr(ILABEL gtop);        (* top of loop *)
 		add_instr(S4ADD(i,REG dest,tmp));
 		add_instr(STORE32I(EA(tmp,0),v)); (* allocation *)
-		add_instr(SUB(i,IMM 1,i));
-		add_instr(ILABEL gbottom);
-		add_instr(BCNDI(GE,i,gtop,true));
-		do_code_align();
-		add_instr(ILABEL gafter);
-		case afteropt of
-		    NONE => ()
-		  | SOME ir => (add_instr(SUB(len,IMM 1,i));
-				add_instr(S4ADD(i,REG dest,tmp));
-				add_instr(STORE32I(EA(tmp,0),v))))
-		end
-	     fun general_intcase (len,v,afteropt) = 
-		 let val gafter = alloc_code_label()
-		     val ismall_alloc = alloc_code_label()
-		 in  (add_instr(LI(i2w 4096,cmptemp));
-		      add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
-		      add_instr(BCNDI(NE,cmptemp,ismall_alloc,true));
-		      add_instr(INT_ALLOC(len,v,dest,ptag));
-		      add_instr(BR gafter);
-		      do_code_align();
-		      add_instr(ILABEL ismall_alloc);
-		      add_instr(CMPUI(EQ,len,IMM 0, gctemp));
-		      add_instr(ADD(gctemp,IMM 1, gctemp));
-		      add_instr(ADD(gctemp,REG len, gctemp));
-		      if (!HeapProfile)
-			  then add_instr(ADD(gctemp, IMM 1, gctemp))
-		      else ();
-			  add_instr(NEEDGC(REG gctemp));
-			  mk_intarraytag(len,tag);
-			  general_init_case(len,v,NONE,afteropt,gafter))
-		 end
-	     fun general_ptrcase (len,v) = 
-		 let val gafter = alloc_code_label()
-		     val psmall_alloc = alloc_code_label()
-		 in  (add_instr(LI((i2w 4096),cmptemp));
-		      add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
-		      add_instr(BCNDI(NE,cmptemp,psmall_alloc,true));
-		      add_instr(PTR_ALLOC(len,v,dest,ptag));
-		      add_instr(BR gafter);
-		      do_code_align();
-		      add_instr(ILABEL psmall_alloc);
-		      add_instr(CMPUI(EQ,len,IMM 0, gctemp));
-		      add_instr(ADD(gctemp,IMM 1, gctemp));
-		      add_instr(ADD(gctemp,REG len, gctemp));
-		      if (!HeapProfile)
-			  then add_instr(ADD(gctemp, IMM 1, gctemp))
-		      else ();
-			  add_instr(NEEDGC(REG gctemp));
-			  mk_ptrarraytag(len,tag);
-			  general_init_case(len,v,NONE,NONE,gafter))
-		 end
-	   in
-	       fun intcase is = 
-		   let val vtemp = load_ireg_locval(vl2,NONE)
-		       val vlen = load_ireg_locval(vl1,NONE)
-		       val (v,afteropt) = 
-			   (case is of
-				Prim.W8 => let val fullres = alloc_regi NOTRACE_INT
-					       val endres = alloc_regi NOTRACE_INT
-					       val tmp = alloc_regi NOTRACE_INT
-					       val _ = (add_instr(ANDB(vlen,IMM 3,tmp));
-							add_instr(ADD(vlen,IMM 3,vlen));
-							add_instr(SRL(vlen,IMM 2,vlen));
-							add_instr(SLL(vlen,IMM 2,vlen));
-							add_instr(LI(0w4,fullres));
-							add_instr(SUB(tmp,REG fullres,tmp));
-							add_instr(ANDB(tmp,IMM 3,tmp));
-							add_instr(SLL(tmp, IMM 3, tmp));
-							
-							add_instr(SLL(vtemp,IMM 8,fullres));
-							add_instr(ORB(fullres,REG vtemp,vtemp));
-							add_instr(SLL(vtemp,IMM 16,fullres));
-							add_instr(ORB(fullres,REG vtemp,fullres));
-							add_instr(SRL(fullres,REG tmp, endres)))
-						   
-				      in  (fullres, SOME endres)
-				      end
-			      | Prim.W16 => error "someday"
-			      | Prim.W32 => (vtemp,NONE)
-			      | Prim.W64 => error "someday")
-		   in  
-		       general_intcase(vlen,v,afteropt)
-		   end
+		    add_instr(SUB(i,IMM 1,i));
+		    add_instr(ILABEL gbottom);
+		    add_instr(BCNDI(GE,i,gtop,true));
+		    do_code_align();
+		    add_instr(ILABEL gafter);
+		    case afteropt of
+			NONE => ()
+		      | SOME ir => (add_instr(SUB(len,IMM 1,i));
+				    add_instr(S4ADD(i,REG dest,tmp));
+				    add_instr(STORE32I(EA(tmp,0),v))))
+      end
 
-	       fun ptrcase() = 
+    and intcase (dest,is,vl1,vl2) = 
+	    let val tag = alloc_regi(NOTRACE_INT)
+		val gctemp  = alloc_regi(NOTRACE_INT)
+		val cmptemp = alloc_regi(NOTRACE_INT)
+		val i       = alloc_regi(NOTRACE_INT)
+		val tmp     = alloc_regi(LOCATIVE)
+		val vtemp = load_ireg_locval(vl2,NONE)
+		val loglen = load_ireg_locval(vl1,NONE)
+		val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
+		val (wordlen,v,afteropt) = 
+		    (case is of
+			 Prim.W8 => let val fullres = alloc_regi NOTRACE_INT
+					val endres = alloc_regi NOTRACE_INT
+					val wordlen = alloc_regi(NOTRACE_INT)
+					val _ = (add_instr(ICOMMENT "about to make tag");
+						 mk_intarraytag(loglen,tag);
+						 add_instr(ICOMMENT "done making tag");
+						 add_instr(ANDB(wordlen,IMM 3,tmp));
+						 add_instr(ADD(wordlen,IMM 3,wordlen));
+						 add_instr(SRL(wordlen,IMM 2,wordlen));
+						 add_instr(SLL(wordlen,IMM 2,wordlen));
+						 add_instr(LI(0w4,fullres));
+						 add_instr(SUB(tmp,REG fullres,tmp));
+						 add_instr(ANDB(tmp,IMM 3,tmp));
+						 add_instr(SLL(tmp, IMM 3, tmp));
+						 
+						 add_instr(SLL(vtemp,IMM 8,fullres));
+						 add_instr(ORB(fullres,REG vtemp,vtemp));
+						 add_instr(SLL(vtemp,IMM 16,fullres));
+						 add_instr(ORB(fullres,REG vtemp,fullres));
+						 add_instr(SRL(fullres,REG tmp, endres)))
+					    
+				    in  (wordlen,fullres, SOME endres)
+				    end
+		       | Prim.W16 => error "someday"
+		       | Prim.W32 => (add_instr(SLL(loglen,IMM 2, tmp));
+				      mk_intarraytag(tmp,tag);
+				      (loglen,vtemp,NONE))
+		       | Prim.W64 => error "someday")
+		val gafter = alloc_code_label()
+		val ismall_alloc = alloc_code_label()
+	    in  (add_instr(LI(i2w 4096,cmptemp));
+		 add_instr(CMPUI(LE, wordlen, REG cmptemp, cmptemp));
+		 add_instr(BCNDI(NE,cmptemp,ismall_alloc,true));
+		 add_instr(INT_ALLOC(wordlen,v,dest,ptag));
+		 add_instr(BR gafter);
+		 do_code_align();
+		 add_instr(ILABEL ismall_alloc);
+		 add_instr(CMPUI(EQ,loglen,IMM 0, gctemp));
+		 add_instr(ADD(gctemp,IMM 1, gctemp));
+		 add_instr(ADD(gctemp,REG wordlen, gctemp));
+		 if (!HeapProfile)
+		     then add_instr(ADD(gctemp, IMM 1, gctemp))
+		 else ();
+		     add_instr(NEEDGC(REG gctemp));
+		     general_init_case(ptag,tag,dest,
+				       VAR_LOC(VREGISTER(I gctemp)),
+				       wordlen,v,afteropt,gafter))
+	    end
+
+     and ptrcase (dest,vl1,vl2) = 
+	    let val tag = alloc_regi(NOTRACE_INT)
+		val gctemp  = alloc_regi(NOTRACE_INT)
+		val cmptemp = alloc_regi(NOTRACE_INT)
+		val i       = alloc_regi(NOTRACE_INT)
+		val tmp     = alloc_regi(LOCATIVE)
+		val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
+		val len = load_ireg_locval(vl1,NONE)
+		val v = load_ireg_locval(vl2,NONE)
+		val gafter = alloc_code_label()
+		val psmall_alloc = alloc_code_label()
+	    in  (add_instr(LI((i2w 4096),cmptemp));
+		 add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
+		 add_instr(BCNDI(NE,cmptemp,psmall_alloc,true));
+		 add_instr(PTR_ALLOC(len,v,dest,ptag));
+		 add_instr(BR gafter);
+		 do_code_align();
+		 add_instr(ILABEL psmall_alloc);
+		 add_instr(CMPUI(EQ,len,IMM 0, gctemp));
+		 add_instr(ADD(gctemp,IMM 1, gctemp));
+		 add_instr(ADD(gctemp,REG len, gctemp));
+		 if (!HeapProfile)
+		     then add_instr(ADD(gctemp, IMM 1, gctemp))
+		 else ();
+		     add_instr(NEEDGC(REG gctemp));
+		     mk_ptrarraytag(len,tag);
+		     general_init_case(ptag,tag,dest,
+				       VAR_LOC(VREGISTER(I gctemp)),
+				       len,v,NONE,gafter))
+	    end
+
 (*		   case vl1 of
 		       (VAR_VAL(VINT log_size)) => 
 			   let val v = load_ireg_locval(vl1,NONE)
@@ -2555,48 +2589,47 @@ val debug = ref false
 							   alloc_code_label()))
 			       else general_ptrcase(load_ireg_locval(vl1,NONE),load_ireg_locval(vl2,NONE))
 			   end
-		     | _ => *)
-		   general_ptrcase(load_ireg_locval(vl1,NONE),load_ireg_locval(vl2,NONE)
-	   end
-	val _ = (case ((* table, *) simplify_type state c) of
-(*		     (((Prim.IntArray is) | (Prim.IntVector is)),_) => intcase is
-		   | (((Prim.FloatArray fs) | (Prim.FloatVector fs)),_) => floatcase(fs,load_freg_locval(vl2,NONE))
-		   | ((Prim.PtrArray | Prim.PtrVector),_) => ptrcase()
-		   | (_,hnf_c) =>
-			 (case hnf_c of
 *)
-			      (true,Prim_c(Float_c Prim.F64,[])) => 
-				  error "can't have WordArray of float (use boxfloat)"
-			    | (true,Prim_c(Int_c is,[])) => intcase is
-			    | (true,Prim_c(BoxFloat_c fs,[])) => floatcase(fs,load_freg_locval(vl2,NONE))
-			    | (true,_) => ptrcase()
-			    | (false,c') => let val (r,_) = xcon(state,fresh_var(),c')
-						val tmp = alloc_regi NOTRACE_INT
-						val afterl = alloc_code_label()
-						val floatl = alloc_code_label()
-						val intl = alloc_code_label()
-						val charl = alloc_code_label()
-						val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-							 add_instr(BCNDI(NE,tmp,floatl,false)))
-						val _ = (add_instr(CMPUI(EQ, r, IMM 2, tmp));
-							 add_instr(BCNDI(NE,tmp,intl,false)))
-						val _ = (add_instr(CMPUI(EQ, r, IMM 0, tmp));
-							 add_instr(BCNDI(NE,tmp,charl,false)))
-						val _ = ptrcase()
-						val _ = add_instr(BR afterl)
-						val _ = add_instr(ILABEL intl)
-						val _ = intcase Prim.W32
-						val _ = add_instr(ILABEL charl)
-						val _ = intcase Prim.W8
-						val _ = add_instr(BR afterl)
-						val _ = add_instr(ILABEL floatl)
-						val temp = load_ireg_locval(vl2,NONE)
-						val fr = alloc_regf()
-						val _ = add_instr(LOADQF(EA(temp,0),fr))
-						val _ = floatcase(Prim.F64,fr)
-						val _ = add_instr(ILABEL afterl)
-					    in  ()
-					    end)
+
+
+ and xarray(state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
+    let 
+	val dest = alloc_regi TRACE
+	val _ = (case (simplify_type state c) of
+		     (true,Prim_c(Float_c Prim.F64,[])) => 
+			 error "can't have WordArray of float (use boxfloat)"
+		   | (true,Prim_c(Int_c is,[])) => intcase(dest,is,vl1,vl2)
+		   | (true,Prim_c(BoxFloat_c fs,[])) => floatcase(state,dest,fs,
+								  load_ireg_locval(vl1,NONE),
+								  load_freg_locval(vl2,NONE))
+		   | (true,_) => ptrcase(dest,vl1,vl2)
+		   | (false,c') => let val (r,_) = xcon(state,fresh_var(),c')
+				       val tmp = alloc_regi NOTRACE_INT
+				       val afterl = alloc_code_label()
+				       val floatl = alloc_code_label()
+				       val intl = alloc_code_label()
+				       val charl = alloc_code_label()
+				       val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
+						add_instr(BCNDI(NE,tmp,floatl,false)))
+				       val _ = (add_instr(CMPUI(EQ, r, IMM 2, tmp));
+						add_instr(BCNDI(NE,tmp,intl,false)))
+				       val _ = (add_instr(CMPUI(EQ, r, IMM 0, tmp));
+						add_instr(BCNDI(NE,tmp,charl,false)))
+				       val _ = ptrcase(dest,vl1,vl2)
+				       val _ = add_instr(BR afterl)
+				       val _ = add_instr(ILABEL intl)
+				       val _ = intcase(dest,Prim.W32,vl1,vl2)
+				       val _ = add_instr(ILABEL charl)
+				       val _ = intcase(dest,Prim.W8,vl1,vl2)
+				       val _ = add_instr(BR afterl)
+				       val _ = add_instr(ILABEL floatl)
+				       val temp = load_ireg_locval(vl2,NONE)
+				       val fr = alloc_regf()
+				       val _ = add_instr(LOADQF(EA(temp,0),fr))
+				       val _ = floatcase(state,dest,Prim.F64,load_ireg_locval(vl1,NONE),fr)
+				       val _ = add_instr(ILABEL afterl)
+				   in  ()
+				   end)
     in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Int_c Prim.W32, []))
     end
 
