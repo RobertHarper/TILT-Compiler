@@ -350,11 +350,12 @@ returnToML:
 	stq	$31, notinml_disp(THREADPTR_REG)	# set notInML to zero
 	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer structure
 	bsr	load_regs				
-	mov	$1, $26					# restore return address to r26
+	mov	$1, ASMTMP2_REG
 	ldq	$1, MLsaveregs_disp+8(THREADPTR_REG)	# restore r1 which was used to save return address
 	ldq	$0, MLsaveregs_disp+0(THREADPTR_REG)	# restore r0 which was used as arg to load_regs
-	ldq	$gp, MLsaveregs_disp+232(THREADPTR_REG)	# restore r29/gp return address	
-	ret	$31, ($26), 1
+	ldq	$gp, MLsaveregs_disp+232(THREADPTR_REG)	# restore r29/gp return address
+	ldq	$26, MLsaveregs_disp+RA_DISP(THREADPTR_REG) # restore return address register but not used to get back to ML
+	ret	$31, (ASMTMP2_REG), 1
 	jsr	abort
 	nop
 .set at
