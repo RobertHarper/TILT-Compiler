@@ -41,8 +41,8 @@
 0023	pass	Elaborator error: Bombing with unbound variable during coercion.
 0024	pass	Problem with "where structure" signature patching.
 0025	pass	Problem with "where structure" and datatype modules.
-bug55a	fail	Unresolved tyvar breaking elaborator.
-bug55b	fail	Unresolved tyvar breaking phase-splitter.
+bug55a	pass	Unresolved tyvar breaking elaborator.
+bug55b	pass	Unresolved tyvar breaking phase-splitter.
 bug80	pass	Phase splitter and signatures.
 bug82	fail	Type of thunk prematurely made a rigid record.
 bug84	pass	Shadowing :: or nil breaks pattern compiler.
@@ -57,6 +57,7 @@ bug159	fail	Datatype replication.
 bug163	pass	Pattern compiler causing elaborator to bomb.
 bug165	pass	Elaborator shadowing variables.
 bug166	pass	Elaborator adding classifiers with unbound, free variables to context.
+bug167	pass	Elaborator bombs on toplevel raise/handle/raise.
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
 m0003	pass	Type variable syntax.

@@ -52,7 +52,7 @@
 0052 [open]	Equality compiler generates poor code.
 0053 [closed]	Nil bool2exp violating bound variable invariant.
 0054 [open]	TILT not enforcing syntactic restrictions.
-0055 [open]	Unresolved tyvars breaking elaborator and phase-splitter.
+0055 [closed]	Unresolved tyvars breaking elaborator and phase-splitter.
 0056 [closed]	Transparent ascription failing on datatype equality functions.
 0057 [closed]	Coercion compilation not alpha-varying correctly.
 0058 [closed]	Elaborator not coercing total arrows to partial arrows correctly.
@@ -160,4 +160,4 @@
 0164 [closed]	Garbage collector skipping global roots.
 0165 [closed]	Elaborator shadowing variables.
 0166 [closed]	Elaborator adding classifiers with unbound, free variables to context.
-0167 [open]	Elaborator bombs on toplevel raise/handle/raise
+0167 [closed]	Elaborator bombs on toplevel raise/handle/raise

@@ -25,7 +25,17 @@ Transcript:  The exact error messages are as follows:
 
 Comments:    This code should be accepted, but subject to the value restriction 
    it should be made non-polymorphic.
+
 Fix:         
-Test: *
-Owner: *
-Status: open
+
+	Toil recorded tyvars as they were created so it could
+	instantiate any left-over unset ones after elaboration.  The
+	problem is that other parts of the elaborator created tyvars
+	behind Toil's back; these were not instantiated.
+
+	I fixed this by eliminating Toil's tyvar table in favor of
+	walking over the elaboration result to hunt for unset tyvars.
+
+Test: bug167
+Owner: swasey
+Status: closed

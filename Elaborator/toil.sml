@@ -38,7 +38,6 @@ structure Toil
         -------------------------------------------------------------- *)
 
     local
-      val tyvar_table = ref([] : tyvar list)
       val overload_table = ref ([] : (region * ocon) list list)
       val eq_table = ref ([] : (region * tyvar) list)
       val flex_table = ref ([] : (label * flexinfo ref * con * exp Util.oneshot) list)
@@ -47,12 +46,8 @@ structure Toil
 	fun reset_elaboration fp =
 	    (Error.reset fp;
 	     reset_eq();
-	     tyvar_table := [];
 	     overload_table := [[]];
 	     flex_table := [])
-	fun get_tyvar_table () = !tyvar_table
-	fun add_tyvar_table tv = (tyvar_table := tv :: (!tyvar_table))
-
 	fun overload_table_push () = overload_table := nil :: !overload_table
 	fun overload_table_pop () = (case !overload_table
 				       of nil => error "overload_table_pop: overload table is empty"
@@ -69,24 +64,6 @@ structure Toil
 		       pp_con (CON_TYVAR tyvar); print "\n"));
 	     eq_table := (peek_region(), tyvar) :: (!eq_table))
 	fun get_eq_table() = !eq_table
-    end
-
-    local
-	fun tvwrap (f : 'a -> 'b) (proj : 'b -> tyvar) (a : 'a) : 'b =
-	    let val b = f a
-		val tv = proj b
-		val _ =  add_tyvar_table tv
-	    in  b
-	    end
-	fun conproj (what : string) (c : con) : tyvar =
-	    (case c
-	       of CON_TYVAR tv => tv
-		| _ => error (what ^ " not CON_TYVAR"))
-    in
-	val fresh_tyvar     = tvwrap fresh_tyvar     (fn tv => tv)
-	val fresh_con       = tvwrap fresh_con       (conproj "fresh_con")
-	val fresh_named_con = tvwrap fresh_named_con (conproj "fresh_named_con")
-	val dummy_type      = tvwrap dummy_type      (conproj "dummy_type")
     end
 
     fun make_overload (context, cons_exps : (con * exp) list, default : int) : exp * con * bool =
@@ -2236,9 +2213,12 @@ structure Toil
 
     and xeq (ctxt : context, argcon : con) : (exp * con) option = xeq' (ctxt, NONE, argcon)
 
-
-    (* ------------ Exported interface to resolve overloading ------------ *)
-    fun overload_wrap ctxt fp xobj arg =
+    (*
+	Exported functions set up Error state, resolve overloading and
+	flexible records, and instantiate unset tyvars.
+    *)
+    fun overload_wrap (ctxt:context) (fp:filepos) (xobj:'a -> 'b)
+		      (rewriter:IlUtil.handler -> 'b -> 'b) (arg:'a) : 'b option =
       let
 	fun flex_help (l,ref(FLEXINFO(stamp,false,rdecs)),fieldc,eshot) =
 	    (error_region();
@@ -2255,32 +2235,25 @@ structure Toil
 	    end
 	  | flex_help (l,ref(INDIRECT_FLEXINFO fr),fieldc,eshot) = flex_help (l,fr,fieldc,eshot)
 	fun eq_help (reg,tyvar) =
-	    let
-		fun error' (msg, debugmsg) =
-		    let
-		    in  ()
-		    end
-	    in
-		case tyvar_eq_hole tyvar
-		  of NONE => ()
-		   | SOME os =>
-		      (case oneshot_deref os
-			 of SOME _ => ()
-			  | NONE =>
-			     let
-				 val _ = (push_region reg; error_region(); pop_region();
-					  print "unresolved equality"; print "\n")
-				 val _ = debugdo (fn () =>
-						  let
-						      fun printOpt f NONE = print "NONE"
-							| printOpt f (SOME x) = (print "SOME "; f x)
-						  in
-						      print " tyvar = "; print (tyvar2string tyvar); print "\n";
-						      print " con   = "; printOpt pp_con (tyvar_deref tyvar); print "\n"
-						  end)
-			     in ()
-			     end)
-	    end
+	    (case tyvar_eq_hole tyvar
+	       of NONE => ()
+	        | SOME os =>
+		  (case oneshot_deref os
+		     of SOME _ => ()
+		      | NONE =>
+			 let
+			     val _ = (push_region reg; error_region(); pop_region();
+				      print "unresolved equality"; print "\n")
+			     val _ = debugdo (fn () =>
+					      let
+						  fun printOpt f NONE = print "NONE"
+						    | printOpt f (SOME x) = (print "SOME "; f x)
+					      in
+						  print " tyvar = "; print (tyvar2string tyvar); print "\n";
+						  print " con = "; printOpt pp_con (tyvar_deref tyvar); print "\n"
+					      end)
+			 in ()
+			 end))
 	fun tyvar_help tv =
 	    (case (Tyvar.tyvar_deref tv) of
 		 SOME _ => ()
@@ -2288,15 +2261,20 @@ structure Toil
 			  pp_con (CON_TYVAR tv); print "\n";
 			  Stats.counter "toil.unresolved_tyvar" ();
 			  ignore(IlStatic.eq_con (ctxt, CON_TYVAR tv, con_unit))))
-
+	fun tyvar_con_handler (c:con) : con option =
+	    (case c
+	       of CON_TYVAR tyvar => (tyvar_help tyvar; NONE)
+		| _ => NONE)
+	val tyvar_handler : IlUtil.handler =
+	    (default_exp_handler, tyvar_con_handler, default_mod_handler,
+	     default_sdec_handler, default_sig_handler)
 	val _ = reset_elaboration fp
 	val res = xobj arg
-        val tyvar_table = get_tyvar_table()
 	val flex_table = get_flex_table()
 	val eq_table = get_eq_table()
 	val _ = resolve_all_overloads()
 	val _ = app flex_help flex_table
-        val _ = app tyvar_help tyvar_table
+        val _ = ignore (rewriter tyvar_handler res)
 	val _ = app eq_help eq_table
 	val result = (case (get_error()) of
 			  NoError => SOME res
@@ -2310,8 +2288,16 @@ structure Toil
     val expcompile = xexp
     val typecompile = xty
 
-    val xdec = fn (ctxt,fp,dec) => (TVClose.closeDec dec;
-				    overload_wrap ctxt fp (xdec false) (ctxt,dec))
-    val xspecs = fn (ctxt,fp,specs) => overload_wrap ctxt fp xspec (ctxt,specs)
-    val seal = fn (ctxt,fp,ma,sa,st) => overload_wrap ctxt fp Signature.xcoerce_seal (ctxt,ma,sa,st)
+    val xdec : Il.context * filepos * Ast.dec -> Il.decresult option =
+	fn (ctxt,fp,dec) =>
+	(TVClose.closeDec dec;
+	 overload_wrap ctxt fp (xdec false) IlUtil.decresult_handle (ctxt,dec))
+
+    val xspecs : Il.context * filepos * Ast.spec list -> Il.sdecs option =
+	fn (ctxt,fp,specs) => overload_wrap ctxt fp xspec IlUtil.sdecs_handle (ctxt,specs)
+
+    val seal : Il.context * filepos * Il.mod * Il.signat * Il.signat -> Il.mod option =
+	fn (ctxt,fp,ma,sa,st) =>
+	overload_wrap ctxt fp Signature.xcoerce_seal IlUtil.mod_handle (ctxt,ma,sa,st)
+
   end

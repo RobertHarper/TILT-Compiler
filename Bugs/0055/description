@@ -48,6 +48,9 @@ Comments:
 	compile fine.  I think TILT should behave the same way no matter what
 	form of pattern appears on the left.
 Fix:
+
+	See ../0167/description.
+
 Test: bug55.1, bug55.2
 Owner: swasey
-Status: open
+Status: closed
