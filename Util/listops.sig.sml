@@ -77,10 +77,21 @@ signature LISTOPS =
     val foldl_acc : ('a * 'b -> 'c * 'b) -> 'b -> 'a list -> 'c list * 'b
 
     val foldl2 : ('a * 'b * 'state -> 'state) -> 'state -> ('a list * 'b list) -> 'state
+    val foldl_list : ('a * 'b -> 'c * 'b) -> 'b -> 'a list -> 'c list * 'b
     val eq_len : 'a list * 'b list -> bool
     val eq_len3 : 'a list *'b list * 'c list -> bool
     val split : 'a list -> 'a list * 'a
     val opt_cons : 'a -> ('a list option) -> 'a list 
     val find2 : ('a * 'b -> bool) -> ('a list * 'b list) -> ('a * 'b) option
     val no_dups : ('a * 'a -> order) -> 'a list -> bool
+
+   (* catenable lists *)
+   datatype 'a catlist =
+       LIST of 'a list
+     | CONS of 'a * 'a catlist
+     | APPEND of 'a catlist list
+
+   val flattenCatlist : 'a catlist -> 'a list
+
+
   end

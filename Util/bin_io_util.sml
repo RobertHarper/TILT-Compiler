@@ -4,10 +4,14 @@ structure BinIO_Util : BIN_IO_UTIL =
     type instream = BinIO.instream
     type outstream = BinIO.outstream
 
-    fun non_blocker(is,i) f = case BinIO.canInput(is,i)
-				of SOME 0 => NONE
-				 | NONE => NONE
-				 | SOME i' => if i=i' then f() else NONE
+    val use_non_blocking = ref false
+    fun non_blocker(is,i) f = 
+	if (!use_non_blocking)
+	    then (case BinIO.canInput(is,i)
+		      of SOME 0 => NONE
+		    | NONE => NONE
+		    | SOME i' => if i=i' then f() else NONE)
+	else f()
 
     val elemToChar = Char.chr o Word8.toInt
     val charToElem = Word8.fromInt o Char.ord
@@ -39,12 +43,18 @@ structure BinIO_Util : BIN_IO_UTIL =
     fun copy (is : instream, os : outstream) : unit =
       let val n = 1024
 	  fun loop () =
+	      let
+(*
 	    case BinIO.canInput(is, n)
 	      of SOME 0 => ()
 	       | NONE => () 
-	       | SOME n' => let val v = BinIO.inputN(is,n')
-			    in BinIO.output(os,v); loop()
-			    end
+	       | SOME n' => 
+*)
+		  val n' = n
+		     val v = BinIO.inputN(is,n')
+		  in BinIO.output(os,v); 
+		      if (Word8Vector.length v > 0) then loop() else ()
+		  end
       in loop ()
       end 
       

@@ -3,7 +3,7 @@ structure Stats :> STATS =
 
        val error = fn s => Util.error "stats.sml" s
        type time = Time.time
-       type time_entry = (int * {gc : time, sys: time, usr: time})  ref
+       type time_entry = (int * bool * {gc : time, sys: time, usr: time})  ref
        type counter_entry = int ref
        type int_entry = int ref
        type bool_entry = bool ref
@@ -23,16 +23,14 @@ structure Stats :> STATS =
        val max_name_size = ref 10
        fun clear_stats() = 
 	 let
-	   fun reset (s,TIME_ENTRY entry) = 
-	     let val z = Time.zeroTime
-	     in
-	       entry := (0,{gc=z,sys=z,usr=z})
-	     end
+	   fun reset (s,TIME_ENTRY entry) =
+	       let val z = Time.zeroTime
+	       in  entry := (0,#2 (!entry),{gc=z,sys=z,usr=z})
+	       end
 	     | reset (s,COUNTER_ENTRY entry) = entry := 0
 	     | reset (s,INT_ENTRY entry) = entry := 0
 	     | reset (s,BOOL_ENTRY entry) = () (*entry := true*)
-	 in
-	   List.app reset (!entries)
+	 in  List.app reset (!entries)
 	 end
 
        fun reset_stats() = (max_name_size := 10; 
@@ -49,9 +47,9 @@ structure Stats :> STATS =
 			    val _ = entries := entries'
 			in entry
 			end)
-      fun find_time_entry s = 
+      fun find_time_entry s disjoint = 
 	let val z = Time.zeroTime
-	    fun maker () = TIME_ENTRY(ref(0,{gc=z,sys=z,usr=z}))
+	    fun maker () = TIME_ENTRY(ref(0,disjoint,{gc=z,sys=z,usr=z}))
         in  case (find_entry maker s) of
 		TIME_ENTRY res => res
 	      | _ => error "find_time_entry: did not find a TIME_ENTRY"
@@ -75,24 +73,29 @@ structure Stats :> STATS =
 	      | _ => error "find_time_entry: did not find a BOOL_ENTRY"
         end
       fun counter str = let val intref = find_counter_entry str
-                        in fn() => (intref := (1 + (!intref)))
+                        in fn() => let val v = !intref
+				   in intref := v + 1; v
+				   end
 			end
       val int = find_int_entry
       val bool = find_bool_entry
 
-      fun timer (str,f) arg =
+      fun timer_help disjoint (str,f) arg =
 	   let val timer = Timer.startCPUTimer()
 	       val r = f arg
 	       val {gc,sys,usr} =  Timer.checkCPUTimer timer
-	       val entry_ref = find_time_entry str
-	       val (count,{gc=gc',sys=sys',usr=usr'}) = !entry_ref
-	       val new_entry = (count+1,
+	       val entry_ref = find_time_entry str disjoint
+	       val (count,disjoint,{gc=gc',sys=sys',usr=usr'}) = !entry_ref
+	       val new_entry = (count+1, disjoint, 
 				{gc = Time.+(gc,gc'),
 				 sys = Time.+(sys,sys'),
 				 usr = Time.+(usr,usr')})
 	       val _ = entry_ref := new_entry
 	   in r
 	   end
+
+      val timer = fn arg => timer_help true arg
+      val subtimer = fn arg => timer_help false arg
 
        fun fprint max_size str =
 	   let fun loop i = if i < 0 then () else (print " "; loop (i-1))
@@ -104,20 +107,23 @@ structure Stats :> STATS =
 	       fun triple2real {gc,sys,usr} = Time.toReal(Time.+(gc,Time.+(sys,usr)))
 (*               val entries = StringMap.listItemsi(!entries) *)
 	       val entries = rev(!entries)
-               fun folder ((_,TIME_ENTRY (ref(_,t))),acc) = acc+(triple2real t)
+               fun folder ((_,TIME_ENTRY (ref(_,true,t))),acc) = acc+(triple2real t)
                  | folder (_,acc) = acc
 	       val total_time = foldr folder 0.0 entries
 	       fun real2string r = Real.fmt (StringCvt.FIX (SOME 3)) r
-	       fun pritem (name,TIME_ENTRY(ref (count,triple))) =
+	       fun pritem (name,TIME_ENTRY(ref (count,disjoint,triple))) =
 		   let 
 		       val time_real = triple2real triple
 		   in
 		       fprint (!max_name_size) name;
 		       print " : ";
 		       fprint 8 (real2string time_real);
-		       print " (";
-		       print (real2string(time_real/total_time * 100.0));
-		       print "%)\n"
+		       if disjoint
+			   then (print " (";
+				 print (real2string(time_real/total_time * 100.0));
+				 print "%)")
+		       else ();
+		       print "\n"
 		   end
 	        | pritem _ = ()
 	 in
@@ -127,7 +133,16 @@ structure Stats :> STATS =
 	     print "-------------------------------------------\n";
 	     fprint (!max_name_size) "TOTAL TIME";
 	     print " : ";
-	     fprint 8 (real2string total_time)
+	     fprint 8 (real2string total_time);
+	     print "\n";
+	     let val lines = !(int "SourceLines") 
+	     in  if lines > 0
+		 then (fprint (!max_name_size) "LINES/SEC";
+		       print " : ";
+		       fprint 8 (real2string ((Real.fromInt lines) / total_time));
+		       print "\n")
+		 else ()
+	     end
 	 end
 
       fun print_counters() = 

@@ -212,4 +212,38 @@ structure Listops : LISTOPS =
       in
 	not (exist_pair eq list)
       end
+
+  fun foldl_list (folder : 'a * 'b -> 'c * 'b) (base : 'b) (data : 'a list) : 'c list * 'b = 
+	let fun loop [] (ls,acc) = (rev ls, acc)
+	      | loop (x::y) (ls,acc) = let val (item,acc) = folder(x,acc)
+                                       in  loop y (item::ls,acc)
+				       end
+        in  loop data ([],base)
+        end
+
+   datatype 'a catlist =
+       LIST of 'a list
+     | CONS of 'a * 'a catlist
+     | APPEND of 'a catlist list
+
+   fun flattenCatlist ps = 
+       let
+	   fun flatten' (ps as LIST lst, accum) = lst :: accum
+	     | flatten' (CONS (x, ps), accum) = 
+	       let
+		   val accum' = flatten' (ps, accum)
+	       in
+		   [x] :: accum'
+	       end
+	     | flatten' (APPEND nil, accum) = accum
+	     | flatten' (APPEND (ps::pss), accum) = 
+	       let
+		   val accum' = flatten' (APPEND pss, accum)
+	       in
+		   flatten' (ps,accum')
+	       end
+       in
+	   List.concat (flatten' (ps, nil))
+       end
+
   end

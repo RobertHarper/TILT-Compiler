@@ -7,7 +7,8 @@ signature STATS =
      val print_stats : unit -> unit
 
      val timer : string * ('a -> 'b) -> ('a -> 'b)
-     val counter : string -> (unit -> unit)
+     val subtimer : string * ('a -> 'b) -> ('a -> 'b)
+     val counter : string -> (unit -> int)
      val int     : string -> int ref
      val bool    : string -> bool ref
    end

@@ -120,14 +120,24 @@ structure Crc :> CRC =
       let val is = BinIO.openIn s
 	  val arr = crc_new ()
 	  val n = Word8Vector.maxLen
-	  fun loop () =
+(* NT version of SML/NJ does not support canInput *)
+(*	  fun loop () =
 	    case BinIO.canInput(is,n)
 	      of SOME n' => let val v = BinIO.inputN(is,n')
-				val _ = Word8Vector.foldl (fn (e,_) => crc_append arr (Word8.toInt e)) () v
+				val _ = Word8Vector.foldl (fn (e,_) => 
+crc_append arr (Word8.toInt e)) () v
 			    in if n=n' then loop()
 			       else ()
 			    end
 	       | NONE => ()
+*)
+	  fun loop () =
+		  let val v = BinIO.inputN(is,n)
+		      val _ = Word8Vector.foldl (fn (e,_) => 
+						 crc_append arr (Word8.toInt e)) () v
+		  in if (Word8Vector.length v > 0) then loop()
+		     else ()
+		  end
       in loop(); BinIO.closeIn is; crc_extract arr
       end 
 	    
