@@ -62,7 +62,7 @@ struct
 			      print "RTL code:\n";
 			      Pprtl.pp_Module rtlmod;
 			      print "\n\n";
-			      Rtlinterp.RTL_interp([("main",rtlmod)],([],[]),false);
+(*			      Rtlinterp.RTL_interp([("main",rtlmod)],([],[]),false); *)
 			      ())
 		    else print "Translation to RTL complete\n"
 	in  rtlmod

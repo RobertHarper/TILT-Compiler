@@ -241,9 +241,9 @@ sig
 			     before another call to NEEDMUTATE or NEEDGC *)
     | NEEDGC of sv          (* needgc(sv) calls garbage collector if that
 			     many words are not allocatable *)
-    | FLOAT_ALLOC of regi * regf * regi * Word32.word
-    | INT_ALLOC   of regi * regi * regi * Word32.word
-    | PTR_ALLOC   of regi * regi * regi * Word32.word
+    | FLOAT_ALLOC of regi * regf * regi * Word32.word  (* number of floats *)
+    | INT_ALLOC   of regi * regi * regi * Word32.word  (* number of bytes *)
+    | PTR_ALLOC   of regi * regi * regi * Word32.word  (* number of words *)
                             (* len, value, dest:
 			     allocate a f/i/p array of logical length len
 			     filled with the f/i/p value v and put the
@@ -285,7 +285,8 @@ sig
      _save is what registers this procedure will use
 	so the first action upon entry is to save these regs
   *)
-  datatype proc = PROC of {name : local_label,
+  datatype proc = PROC of {external_name: label option,
+			   name : local_label,
 			   return : regi,
 			   args : regi list * regf list ,
 			   results : regi list * regf list,

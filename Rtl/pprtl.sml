@@ -345,12 +345,16 @@ struct
       in  pp_Array' pp_Instr'' code
       end
 
-  fun pp_Proc' (PROC{name,return,args,results,code,known,save,vars}) =
+  fun pp_Proc' (PROC{external_name,name,return,args,results,code,known,save,vars}) =
       (if !DEBUG then
 	    (print "laying out procedure "; 
 	     print (label2s (LOCAL_LABEL name)); print "\n")
       else ();
 	   Vbox0 0 1 [String(label2s (LOCAL_LABEL name)),
+		      Break,
+		      String(case external_name of
+				 NONE => ""
+			       | SOME l => "(EXTERN = " ^ (label2s l) ^ ")"),
 		      Break,
 		      Hbox[String "     ", HOVbox[String "args = ",pp_RegPair' args]],
 		      Break,

@@ -188,7 +188,7 @@ struct
     | HARD_ZBARRIER of traptype
 
     | HANDLER_ENTRY
-    | ILABEL     of local_label
+    | ILABEL of local_label
     | IALIGN of align
     | HALT
     | ICOMMENT of string
@@ -214,7 +214,8 @@ struct
 
 
   (* see sig for comments *)
-  datatype proc = PROC of {name : local_label,
+  datatype proc = PROC of {external_name : label option,
+			   name : local_label,
 			   return : regi,
 			   args : regi list * regf list ,
 			   results : regi list * regf list,
