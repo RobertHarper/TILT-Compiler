@@ -1,3 +1,4 @@
+(*$import Prelude *)
 (*  Compute the 100th Fibonacci number.
     Compute an approximation (2000th iterate)
        using the arc-tangent expansion. (McLauren series)
