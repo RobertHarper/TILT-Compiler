@@ -24,9 +24,9 @@ conclusions:
 
  (4) The tracability annotation should be something like
 
-         datatype trace_annot = UNKNOWN
-                              | TRACE_KNOWN of <abstract trace info>
-                              | TRACE_COMPUTE of <short path>
+       datatype niltrace = TraceUnknown
+                         | TraceKnown of <abstract trace info>
+                         | TraceCompute of var
 
      where we assume the reifier is parameterized by a function
 
@@ -120,4 +120,37 @@ Parser				14.5 min	3.4meg
 Total				92 min		9meg
 
 
---------------------------------------------------------------------
+------------------------------------------------------------------------
+
+April 28  Chris
+
+I've checked-in the first version of the reifier, which works
+essentially as described above.  Main changes were to:
+
+   nil.sig.sml    added a niltrace datatype, and annotation to Exp_b
+   traceinfo.sig.sml
+   traceinfo.sml       rtl-like datatype for nil tracability 
+   traceops.sig.sml
+   traceops.sml        contains get_trace : ctxt * con -> traceinfo
+
+(It would be nice to merge traceinfo and traceops, or put the
+traceops with nilutil, but either of these would create cyclic
+dependencies.)
+
+Several other nil files and tortl have been modified to insert
+TraceUnknown on Exp_b bindings, or to preserve the niltrace annotation
+when modifying bindings.  
+
+toclosure and tortl do not (yet) use the niltrace annotations.  The
+only benefit they get from the reifier is that classifiers on function
+arguments will now always either have a known hnf or be a (small)
+path.  (This may require placing type bindings between the two
+lambdas of a polymorphic function, which may inhibit uncurrying
+unless these are made into extra type arguments.)
+
+Although primitives such as record creation are not actually passed
+type arguments (which are officially needed to determine the
+traceability of the record components), if we're in A-normal form at
+the expression level we're guaranteed that tortl can determine the
+tracability of all the components because it will know the tracability
+of all variables.
