@@ -5,7 +5,7 @@ structure Linker :> LINKER =
     val as_path = "as"
     val ld_path = "ld"
     val startup_lib = "/usr/lib/cmplrs/cc/crt0.o "
-    val ld_libs = "/afs/cs.cmu.edu/project/fox/member/pscheng/ml96/Runtime/runtime.alpha_osf.a " ^
+    val ld_libs = "Runtime/runtime.alpha_osf.a " ^
 		  "-lm -lc -lots"
                   (* runtime, etc *)
     val error = fn x => Util.error "Linker" x
