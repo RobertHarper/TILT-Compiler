@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord32 Name Int Core RTL DECALPHA String Rtl Util Char List *)
+(*$import Prelude TopLevel TilWord32 Name Int Core RTL DECALPHA String Rtl Util Char List Stats *)
 
 structure Decalpha :> DECALPHA =
 
@@ -680,8 +680,15 @@ structure Machine =
 	   load_imm' (i2w offset, Rat) @
 	   [SPECIFIC (INTOP (ADDL, Rsp, REGop Rat, Rsp))]
 	   
+   val counter
+       : string -> (unit -> unit)
+       = fn name => ignore o (Stats.counter name)
+   val large_stack_frame = counter "Large Stack Frames"
+   val large_frame_access = counter "Large Frame Accesses"
+       
    fun allocate_stack_frame (sz, prevframe_maxoffset) =
        let val _ = if sz < 0 then error "allocate_stack_frame given negative size" else ()
+	   val _ = if in_ea_disp_range sz then () else large_stack_frame()
 	   val after = freshCodeLabel()
        in
 	   List.concat
@@ -719,9 +726,12 @@ structure Machine =
        if in_ea_disp_range offset then
 	   f(base, offset)
        else
-	   List.concat [load_imm' (i2w offset, temp),
-			[SPECIFIC(INTOP(ADDL,base,REGop temp,temp))],
-			f(temp, 0)]
+	   let val _ = large_frame_access()
+	   in
+	       List.concat [load_imm' (i2w offset, temp),
+			    [SPECIFIC(INTOP(ADDL,base,REGop temp,temp))],
+			    f(temp, 0)]
+	   end
        
    fun push (src,actual_location,tmp) =
        let val reduce_offset = fn (offset,f) => reduce_offset (Rsp, offset, tmp, f)
