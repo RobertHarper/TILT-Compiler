@@ -1510,9 +1510,10 @@ functor EmitRtlMLRISC(
 	      RegisterSet.translate save)
       | translateInstruction(Rtl.RETURN src) =
 	  RETURN(srcReg src)
-
+(*
       | translateInstruction(Rtl.NEEDMUTATE dest) =
 	  NEEDMUTATE(destReg dest)
+*)
       | translateInstruction(Rtl.NEEDGC src) =
 	  NEEDGC(value src)
       | translateInstruction(Rtl.FLOAT_ALLOC(length, initial, dest, _)) =
