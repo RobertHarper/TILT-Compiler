@@ -54,10 +54,11 @@
            - Implementation experience
 
   - Transformations/Optimizations
+     - Dead code elimination
+     - reductions: known projections, project_sum, ...
      - Hoisting
      - Common-subexpression elimination
      - Constant propagation
-     - Dead code elimination
      - GC Reification
      - Renaming/Linearization
      - Closure conversion
@@ -70,7 +71,7 @@
      - To do: uncurrying, partial applications (poly. instantiation)
 
   - Representation
-     - Varisbles(not deBruijn indices)
+     - Variables(not deBruijn indices)
      - Context
 
   - Separate Compilation

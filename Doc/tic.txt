@@ -299,10 +299,103 @@ versions of vararg/Vararg that flatten arguments in a way that is inexpressible
 with typecase/Typecase alone.
 
 
+----------------------
+Transformations in MIL
+----------------------
+One of the simplest to implement yet useful transformation is dead code elimination.
+Unused constructors expression and effect-free term expressions are removed.  Running this
+optimization first cuts down on the program size so that other optimizations run faster.
+
+As alluded to before, the optimizer attempts to rewrite all uses of project_sum to the more
+efficient project_sum_record.  This is accomplished with 2 optimizations: known record projection
+and dead code elimination.  Consider the ML code below.
+
+	datatype dt = A of int | B of int * int
+	fun f (arg as (B(x,y))) = x + y
+ 	              ^^^^^^^^^^^^^^^^^
+
+The underlined portion is initially compiled to the following MIL code:
+
+	let val v = project_sum arg
+	    val x = v.1
+	    val y = v.2
+	in  x + y
+	end
+
+When the project_sum_record is replaced by project_sums, we obtain:
+
+	let val tmp1 = project_sum_record(1,arg)
+	    val tmp2 = project_sum_record(2,arg)
+	    val v = (tmp1,tmp2)
+	    val x = v.1
+	    val y = v.2
+	in  x + y
+	end
+
+Finally, dead code elimination reduces the above to:
+
+	let val x = project_sum_record(1,arg)
+	    val y = project_sum_record(2,arg)
+	in  x + y
+	end
+
+
+Closure-conversion in MIL is accomplished in two steps.  In the first phase,
+the free variables for each term-level and constructor-level function are gathered.
+Since variables bound at the top level are always accessible, functions do not have
+to be closed with respect to these variables.  Consequently, such variables are not
+considered free during this analysis.  While computing free variables,
+we perform escape analysis to deduce which functions escape and
+which functions are directly called by other functions.  Then, using the call-graph
+obtained, we perform a transitive closure operation to determine the final 
+free varaibles sets for each function.  In the second phase, the program is
+rewritten so that each open function is replaced by a code function and
+a closure.  In the case that the function does not escape, the closure is
+not created.  In addition, known function calls are replaced by calls to
+the code function rather than through the closure.  This latter optimization
+is the reason that we must compute the transitive closure in the first phase.
+We give an example of closure-converting monomorphic code.
+For example, the unclosed MIL code:
+
+fun_open f (x : int) = 
+  let val a = x + 5
+      val b = x + 3
+      fun_open h(y : int) = y + a
+      fun_open g(z : int) = h (z + b)
+  in  g
+  end
+
+is converted to the following.  Note that since h does not escape, we do not need
+to create a closure for it.
+
+fun_code fcode (x : int) = 
+  let val a = x + 5
+      val b = x + 3
+      fun_open hcode(y : int, (a : int)) = y + a
+      fun_open gcode(z : int, (a : int, b : int)) = hcode (z + b, a)
+      fun_closure g = gcode(z, (a,b))
+  in  g
+  end
+fun_closure f = (f,(),())
+
+(I've elided the details of an unpacking function.)
+
+During closure-conversion, it is important to distinguish between types and
+constructors.  In particular, since types are not used at run-time and are
+present only for type-checking, there is no need to be closed with respect to
+to types.  Without this distinction, the type environment may be excessively large,
+leading to unnecessarily large programs.  This problem is very evident in compiling
+heavily functorized code.
+
+
 -------------------
 Typechecking of MIL
 -------------------
 
+-----------
+Performance
+-----------
+CW - object seems to be twice as big.
 
 -----------
 Reflections
