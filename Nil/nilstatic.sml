@@ -400,20 +400,21 @@ struct
 	  fun beta_reduce_fun'' actuals
 	    (Let_c (sort,(([Open_cb (var,formals,body,body_kind)]) |
 			  ([Code_cb (var,formals,body,body_kind)])),con)) = 
-	    (case strip_var con
-	       of SOME var2 =>
-		 if eq_var (var,var2) then
-		   let
-		     val (vars,_) = unzip formals
-		     val conmap = list2cmap (zip vars actuals)
-		     val body' = substConInCon conmap body
-		     val (body'',_) = con_valid(D,body')
-		   in
-		     body''
-		   end
-		 else
-		   app
-		| NONE => app)
+		let val fooey = 1
+		in    (case strip_var con of
+			 SOME var2 =>
+				 if eq_var (var,var2) then
+				   let
+				     val (vars,_) = unzip formals
+				     val conmap = list2cmap (zip vars actuals)
+				     val body' = substConInCon conmap body
+				     val (body'',_) = con_valid(D,body')
+				   in
+				     body''
+				   end
+				 else app
+			| NONE => app)
+		end
 	    | beta_reduce_fun'' actuals (Closure_c (code,env)) = 
 	       beta_reduce_fun'' (actuals @ [env]) code
 	    | beta_reduce_fun'' _ _ = app
@@ -606,6 +607,21 @@ struct
 	| (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
 			((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
 	 let
+	   val (formals,body,body_kind) = 
+				let fun mapper (v,_) = (case NilContext.find_kind(D,v) of
+								NONE => NONE
+							      | SOME _ => SOME(v,Var_c (Name.derived_var v)))
+				    val table = List.mapPartial mapper formals
+				    fun subst v  = Listops.assoc_eq(eq_var,v,table)
+				in  case table of
+					[] => (formals,body,body_kind)
+				      | _ => (map (fn (v,k) => ((case subst v of
+								        SOME (Var_c v') => v'
+								      | _ => v),
+								NilUtil.substConInKind subst k)) formals,
+						substConInCon subst body,
+						substConInKind subst body_kind)
+				end
 	   val origD = D
 	   val (D,formals) = foldKSR (D,formals)
 	   val _ = if (!debug)
