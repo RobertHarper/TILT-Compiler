@@ -517,6 +517,7 @@ struct
 	let val intFile = Help.base2int base
 	    val smlFile = Help.base2sml base
 	    val uiFile = Help.base2ui base
+            val _ = Platform.sleep 0.5
 	    val _ = Help.chat ("  [Assembling to object file ...")
 	    val _ = Til.assemble base;
 	    val _ =  Help.chat "]\n"
