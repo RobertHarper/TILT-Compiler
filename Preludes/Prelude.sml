@@ -4,7 +4,6 @@
  * is the identifier littleEndian which is a boolean value.
  *)
     
-
 (* standard fixity *)
 infix  3 := o before
 infix  4 = <> < > <= >= 
@@ -285,12 +284,12 @@ structure String =
 		fun loop n = 
 		    if (ult(n,s))
 			then let val cx = unsafe_vsub(x,n)
-				 val cy = unsafe_vsub(x,n)
+				 val cy = unsafe_vsub(y,n)
 			     in  if ult(int32touint32(uint8toint32 cx),
 					int32touint32(uint8toint32 cy))
 				     then LESS
 				 else if (cx = cy)
-					  then EQUAL
+					  then loop (uplus(n,0w1))
 				      else GREATER
 			     end
 		    else EQUAL
@@ -500,4 +499,4 @@ extern setRoundingMode : (int, int) -->
 extern getRoundingMode : (int, int) -->
 extern ml_timeofday : (unit, (int * int)) -->
 
-fun log x = log10 x
+val log = ln 
