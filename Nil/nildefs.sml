@@ -198,6 +198,7 @@ structure NilDefs :> NILDEFS =
     val char_con = Prim_c(Int_c Prim.W8,[])
     val exn_con = Prim_c(Exn_c, [])
     val boxfloat_con = Prim_c(BoxFloat_c Prim.F64, [])
+    val unboxfloat_con = Prim_c(Float_c Prim.F64, [])
       
     fun mk_record_with_gctag (labels,trs_opt,cons,exps,name_opt) : (bnd list * exp) = 
       let 

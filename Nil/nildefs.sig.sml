@@ -65,6 +65,7 @@ signature NILDEFS =
     val int_con : Nil.con   (* 32-bit ints *)
     val char_con : Nil.con  (* 8-bit ints *)
     val boxfloat_con : Nil.con
+    val unboxfloat_con : Nil.con
 
     (* If optional variable argument is present, then the record will be bound
      * to that variable, and the expression returned will simply be that var
