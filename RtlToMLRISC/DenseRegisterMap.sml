@@ -3,11 +3,14 @@
  * DenseRegisterMap.sml
  * ========================================================================= *)
 
-functor DenseRegisterMap(
-	  structure IntMap: ORD_MAP where type Key.ord_key = int
-	) :> REGISTER_MAP
-	       where type id = int
-	  = struct
+structure DenseRegisterMap
+	    :> REGISTER_MAP
+		 where type id = int
+	    = struct
+
+  (* -- structures --------------------------------------------------------- *)
+
+  structure IntMap = IntBinaryMap
 
   (* -- types -------------------------------------------------------------- *)
 
@@ -37,10 +40,28 @@ functor DenseRegisterMap(
    * <- the block offset of id
    *)
   local
+    val w3  = Word.fromInt 3
+    val w4  = Word.fromInt 4
     val w5  = Word.fromInt 5
     val w6  = Word.fromInt 6
+    val w7  = Word.fromInt 7
+    val w15 = Word.fromInt 15
     val w31 = Word.fromInt 31
     val w63 = Word.fromInt 63
+
+    fun split8 id =
+	  let
+	    val word = Word.fromInt id
+	  in
+	    (Word.toIntX(Word.>>(word, w3)), Word.toIntX(Word.andb(word, w7)))
+	  end
+
+    fun split16 id =
+	  let
+	    val word = Word.fromInt id
+	  in
+	    (Word.toIntX(Word.>>(word, w4)), Word.toIntX(Word.andb(word, w15)))
+	  end
 
     fun split32 id =
 	  let
@@ -59,7 +80,9 @@ functor DenseRegisterMap(
     fun splitN id = (id div blockSize, id mod blockSize)
   in
     val split = case blockSize of
-		  32 => split32
+		  8  => split8
+		| 16 => split16
+		| 32 => split32
 		| 64 => split64
 		| _  => splitN
   end
