@@ -428,13 +428,26 @@ structure Machine =
 	charLoop (map ord (explode string))
     end
 
+  fun splitstring s = 
+      let val len = String.size s
+	  val chunksize = 64
+	  fun loop n = 
+	      if (n + chunksize < len) then
+		  String.substring(s, n, chunksize) :: loop (n + chunksize)
+	      else
+		  [String.extract(s, n, NONE)]
+      in
+	  loop 0
+      end
+
   fun single s = [(1, "\t" ^ s ^ "\n")]
   fun msData (COMMENT com) =  single ("\t# " ^ com)
-    | msData (STRING (s)) = single
-        (if (s = "") then
-	  "# .ascii \"\" (zero length string)"
+    | msData (STRING (s)) = 
+        if (s = "") then
+	  single ("# .ascii \"\" (zero length string)")
 	else
-	  (".ascii \"" ^ (fixupString s) ^ "\""))
+	  map (fn s' => (1 , "\t.ascii \"" ^ (fixupString s') ^ "\"\n"))
+              (splitstring s)
     | msData (INT32 (w))  = single (".long " ^ (wms w))
     | msData (FLOAT (f))  = single (".t_floating " ^ (fixupFloat f))
     | msData (DATA (label)) = single (".long " ^ (msLabel label))
