@@ -1,0 +1,16 @@
+Number: 0099
+Title:       exceptions as values
+Keywords:    exceptions, signature matching
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     does not make exceptions available after signature matching
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0005
+Owner: rwh
+Status: open

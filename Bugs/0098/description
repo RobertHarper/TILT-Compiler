@@ -1,0 +1,16 @@
+Number: 0098
+Title:       does not parse type variables properly
+Keywords:    type variable syntax
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      solaris
+Severity:    minor
+Problem:     does not parse type variables properly
+Code:        Test/m0003
+Transcript:  
+Comments:    
+Fix:         
+Test: m0003
+Owner: rwh
+Status: open
