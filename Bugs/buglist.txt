@@ -157,4 +157,5 @@
 0176 [open]	TILT can not compile with -fnil_debug.
 0177 [open]	Nonexhaustive match warning is overly pessimistic.
 0178 [open]	Word8Array and Array each use a single empty array.
-0179 [open]	Array.foldri looks past end of non-empty array.
+0179 [closed]	Array.foldri looks past end of non-empty array.
+0180 [open]	Extended vs double precision floating point.
