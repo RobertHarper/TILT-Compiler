@@ -111,7 +111,7 @@ structure Substring :> SUBSTRING where type substring = substring =
 	    fun scan j = if ((j <> stop) andalso pred(unsafe_vsub(s, j)))
 		  then scan(uminus(j,0w1))
 		  else j
-	    val k : int = (w2i (scan (i2w (i+n-1)))) + i - 1
+	    val k : int = (w2i (scan (i2w (i+n-1)))) - i + 1
 	    in
 	      chop (s, i, n, k)
 	    end
