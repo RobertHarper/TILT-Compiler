@@ -438,7 +438,7 @@ static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
 }
 
 
-static void addRegRoots(Proc_t *proc, unsigned long *saveregs, unsigned int regMask)
+static void addRegRoots(Proc_t *proc, volatile unsigned long *saveregs, unsigned int regMask)
 {
   int i;
   for (i=0; i<32; i++)
@@ -523,7 +523,7 @@ void thread_root_scan(Proc_t *proc, Thread_t *th)
   for (i=0; i<stack->cursor; i++) {
     Stacklet_t *stacklet = stack->stacklets[i];
     unsigned int bottomRegstate = downtrace_stacklet(proc, stacklet, primaryStackletOffset, saveregs);
-    addRegRoots(proc, (unsigned long *) &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32], bottomRegstate | (1 << EXNPTR));  
+    addRegRoots(proc, &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32], bottomRegstate | (1 << EXNPTR));
     if (i + 1 == stack->cursor)
       addRegRoots(proc, (unsigned long *)(th->saveregs), bottomRegstate | (1 << EXNPTR));
   }
@@ -562,7 +562,7 @@ void initial_root_scan(Proc_t *proc, Thread_t *th)
 int work_root_scan(Proc_t *proc, Stacklet_t *stacklet)
 {
   int i, done, uptraceDone = 1;
-  mem_t replicaRegs = (mem_t) &stacklet->bottomBaseRegs[replicaStackletOffset == 0 ? 0 : 32];
+  volatile reg_t* replicaRegs = &stacklet->bottomBaseRegs[replicaStackletOffset == 0 ? 0 : 32];
 
   int numWords, numFrames;
   unsigned int bottomRegstate;
@@ -647,7 +647,7 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   lapPerfMon(proc,0);
   */
   for (i=firstActive; i<stack->cursor; i++) {
-    volatile mem_t replicaRegs = (mem_t) &stack->stacklets[i]->bottomBaseRegs[replicaStackletOffset == 0 ? 0 : 32];
+    volatile reg_t* replicaRegs = &stack->stacklets[i]->bottomBaseRegs[replicaStackletOffset == 0 ? 0 : 32];
     int bottomRegstate = downtrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset, th->saveregs);
     addRegRoots(proc, (unsigned long *) replicaRegs, bottomRegstate | (1 << EXNPTR));
     if (i + 1 == stack->cursor)

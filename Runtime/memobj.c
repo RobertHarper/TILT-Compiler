@@ -263,8 +263,8 @@ int Stacklet_Copy(Stacklet_t *stacklet)
     mem_t replicaBottom = stacklet->baseBottom + (replicaStackletOffset / sizeof(val_t));
     mem_t primaryCursor = stacklet->baseCursor + (primaryStackletOffset / sizeof(val_t));
     mem_t replicaCursor = stacklet->baseCursor + (replicaStackletOffset / sizeof(val_t));
-    mem_t primaryRegs = (mem_t) &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
-    mem_t replicaRegs = (mem_t) &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 32 : 0];
+    volatile reg_t* primaryRegs = &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
+    volatile reg_t* replicaRegs = &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 32 : 0];
     assert(stacklet->count > 0);
     assert(stacklet->baseExtendedBottom <= stacklet->baseCursor);
     assert(stacklet->baseCursor <= stacklet->baseTop);
