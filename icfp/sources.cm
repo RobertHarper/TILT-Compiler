@@ -20,6 +20,9 @@ library/splay-set-fn.sml
 stdin-sig.sml
 stdin.sml
 
+matrix-sig.sml
+matrix.sml
+
 stringmap.sml
 
 parsing/stream-sig.sml
@@ -45,15 +48,22 @@ parsestring.sml
 eval-sig.sml
 eval.sml
 
+ppm-sig.sml
+ppm.sml
+
 toplevel-sig.sml
 toplevel.sml
 
-
+(* commented out; not added or don't compile *)
 intersect.sig.sml
+(*
 intersect.sml
-
+*)
 light.sig.sml
+(*
 light.sml
-
+*)
 render.sig.sml
+(*
 render.sml
+*)

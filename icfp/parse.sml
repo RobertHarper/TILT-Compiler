@@ -16,11 +16,13 @@ struct
   infix  2 -- ##
   infixr 2 wth suchthat return guard
   infixr 1 ||
-
-	fun lit x = (anyWord suchthat (curry2 op= x))
-
-	val binder = (anyWord suchthat (fn x => CharVector.sub(x, 0) = #"/")) 
-			          wth (fn x => Binder (implode (tl (explode x))))
+      
+  fun lit x = (anyWord suchthat (curry2 op= x))
+      
+  val binder = ((anyWord suchthat (fn x => CharVector.sub(x, 0) = #"/")) 
+		suchthat (fn x => Envmap.lookup 
+			  (Toplevel.opers, String.extract (x,1,NONE)) = NONE))
+                wth (fn x => Binder (String.extract (x,1,NONE)))
 
 (* val operator = [ "addi", "addf", "acos", "asin", "clampf", "cos",
 	"divi", "divf", "eqi", "equif", "floor", "frac", "lessi",
@@ -30,24 +32,24 @@ struct
 	"cone", "plane", "translate", "scale", "uscale", "rotatex",
 	"rotatey", "rotatez", "light", "pointlight", "spotlight",
 	"union", "intersect", "difference", "render" ] *)
-
-	val literal = anyWord wth Var
-
-	fun array () = (lit "[" >> repeat ($exp) << lit "]") 
-			wth (Array o Vector.fromList)
-
-	and function () = (lit "{" >> repeat ($exp) << lit "}") wth Fun
-
-	and exp () =
-			alt [ anyNumber wth Int,
-					  anyFloat wth Real,
-						anyString wth String,
-						binder,
-						literal,
-						$array,
-						$function ]
-
-	val prog = repeat ($exp)
+      
+  val literal = anyWord wth Var
+      
+  fun array () = (lit "[" >> repeat ($exp) << lit "]") 
+      wth (Array o Vector.fromList)
+      
+  and function () = (lit "{" >> repeat ($exp) << lit "}") wth Fun
+      
+  and exp () =
+      alt [ anyNumber wth Int,
+	    anyFloat wth Real,
+	    anyString wth String,
+	    binder,
+	    literal,
+	    $array,
+	    $function ]
+      
+  val prog = repeat ($exp)
 						
 end
 

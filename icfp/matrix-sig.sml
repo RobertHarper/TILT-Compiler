@@ -3,8 +3,8 @@ sig
 
   type m4 =  real * real * real * real * 
              real * real * real * real * 
-             real * real * real * real
              real * real * real * real *
+             real * real * real * real
 	type v4 =  real * real * real * real
   type v3 =  real * real * real
 

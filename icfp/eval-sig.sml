@@ -2,11 +2,8 @@
 signature EVAL =
 sig
 
-    (* FIXME *)
-    type m4 = int
-    type v3 = real * real * real
-	
-
+    type m4 = Matrix.m4
+    type v3 = Matrix.v3
 
     type color = v3
         
