@@ -33,6 +33,5 @@ recursion.sml
 color1.sml
 chaitin.sml
 rtltoasm.sml
-vargraph.sml
 
 link.sig.sml

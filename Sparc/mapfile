@@ -26,8 +26,8 @@ source unit ToSparc = "tosparc.sml" {
 	BBLOCK TOASM Util Pprtl
 }
 source unit Linksparc = "linksparc.sml" {
-	Util Rtl Stats LINKASM Linkrtl Sparc Labelgraph SparcUtils
+	Util Rtl Stats LINKASM Linkrtl Sparc SparcUtils
 	IfGraph SparcCallConv Bblock Tracetable ToSparc PrintUtils
-	VarGraph SparcTrackStorage Color Chaitin RtlToAsm Recursion
+	SparcTrackStorage Color Chaitin RtlToAsm Recursion
 	Tortl
 }

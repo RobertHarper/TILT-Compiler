@@ -63,7 +63,7 @@ source unit Chaitin = "chaitin.sml" {
 }
 
 source unit Labelgraph = "labelgraph.sml" {
-	Rtl MACHINE GRAPH HashTableFn Graph MACHINE HashString
+	Rtl MACHINE GRAPH HashTableFn Graph MACHINE HashString Pprtl
 }
 
 source unit RECURSION = "recursion.sig.sml" {Rtl}
@@ -74,10 +74,6 @@ source unit RTLTOASM = "rtltoasm.sig.sml" {Rtl}
 source unit RtlToAsm = "rtltoasm.sml" {
 	Rtl Core PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM
 	MACHINEUTILS Stats RTLTOASM Int Util Listops List
-}
-
-source unit VarGraph = "vargraph.sml" {
-	Name Graph Word HashTableFn Util GRAPH
 }
 
 source unit LINKASM = "link.sig.sml" {Rtl}

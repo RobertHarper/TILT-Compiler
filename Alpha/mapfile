@@ -29,7 +29,7 @@ source unit TrackStorage = "trackstorage.sml" {
 }
 source interface Linkalpha = "linkalpha.int" {LINKASM}
 source unit Linkalpha : Linkalpha = "linkalpha.sml" {
-	Util Rtl Stats LINKASM Linkrtl DecAlpha Labelgraph DecAlphaUtils
+	Util Rtl Stats LINKASM Linkrtl DecAlpha DecAlphaUtils
 	IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils
-	VarGraph TrackStorage Color Chaitin RtlToAsm Recursion Tortl
+	TrackStorage Color Chaitin RtlToAsm Recursion Tortl
 }
