@@ -148,11 +148,9 @@ functor AlphaIntegerAllocation(
 						lookupReload := lookupReload')
 
   local
-    val allocate  = IntegerAllocation.ra IntegerAllocation.REGISTER_ALLOCATION
-    val propagate = IntegerAllocation.ra IntegerAllocation.COPY_PROPAGATION
+    val allocate = IntegerAllocation.ra IntegerAllocation.REGISTER_ALLOCATION
   in
-    fun allocateCluster cluster =
-	(propagate(allocate cluster) before GetRegister.reset())
+    fun allocateCluster cluster = allocate cluster before GetRegister.reset()
   end
 
 end
