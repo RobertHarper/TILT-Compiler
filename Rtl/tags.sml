@@ -6,11 +6,6 @@
 structure Rtltags :> RTLTAGS =
 struct
   
-   val ptrWriteBarrier = Stats.tt "PtrWriteBarrier"     (* record pointer array mutation *)
-   val fullWriteBarrier = Stats.tt "FullWriteBarrier"   (* all mutations recorded *)
-   val mirrorGlobal = Stats.tt "MirrorGlobal"           (* replicate pointer globals *)
-   val mirrorPtrArray = Stats.ff "MirrorPtrArray"       (* replicate pointer arrays *)
-
    val uninitVal = 0w258 : TilWord32.word
 
     (* The low 3 bits of the 32-bit word describe the object type - 0w0 and 0w4 for forwarding ptrs; 0w7 for special tags *)

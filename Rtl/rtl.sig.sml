@@ -195,7 +195,7 @@ sig
        code.  Currently, PUSH_EXN, POP_EXN, THROW_EXN are no-ops
        while CATCH_EXN translate into code that records the fact that
        a handler has entered and some special calling convention code
-       on the Alpha.
+       on the Alpha.  (On the Sparc, it is a no-op.  -joev)
 
        - PUSH_EXN adds a new entry to the exception stack
        - POP_EXN  discards the top entry of the exception stack

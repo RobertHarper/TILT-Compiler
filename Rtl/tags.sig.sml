@@ -2,11 +2,6 @@
 signature RTLTAGS =
 sig
 
-   val ptrWriteBarrier : bool ref     (* record pointer array mutation *)
-   val fullWriteBarrier : bool ref    (* all mutations recorded *)
-   val mirrorGlobal : bool ref     (* replicate pointer globals *)
-   val mirrorPtrArray : bool ref   (* replicate pointer arrays *)
-
    val uninitVal : TilWord32.word
 
    (* special tags - with low 3 bits set to 7 *)

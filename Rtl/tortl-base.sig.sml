@@ -2,6 +2,7 @@
 signature TORTL_BASE = 
 sig
 
+    val mirrorGlobal : bool ref
     val do_gcmerge : bool ref
 
     val do_constant_records : bool ref

@@ -13,7 +13,7 @@ struct
     structure VarMap = Name.VarMap
     structure VarSet = Name.VarSet
 
-    val mirrorGlobal = Rtltags.mirrorGlobal
+    val mirrorGlobal = Stats.tt "MirrorGlobal"           (* replicate pointer globals *)
     val mirrorGlobalTag = Rtltags.mirrorGlobalTag
 
     type label = Rtl.label

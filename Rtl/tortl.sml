@@ -1,5 +1,29 @@
 (*$import Util Listops Name TilWord32 TilWord64 Int Sequence Prim List Array TraceInfo Symbol Vararg Rtl Pprtl TortlRecord TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps TORTL Optimize String NilDefs *)
 
+(*
+   Some features of the translator that might not be obvious to the naked eye:
+
+   - The translation proceeds one function at a time.  There is a work list; translating
+   each arm of a fixcode binding consists merely of adding the function to the work list.
+   Some information about the current function (such as the locations of the arguments and
+   return address) is held in global refs (in TortlBase) rather than in the "state"
+   argument that is threaded through the translation.
+
+   - The translation is imperative; the function add_instr from TortlBase statefully emits 
+   an instruction into a data structure (currently a ref list ref) that gets turned into 
+   an array at the end of translating each function.  Some simple backpatching occurs
+   for the arguments of NEEDALLOC and NEEDMUTATE instructions, but mostly the structure of 
+   the instruction list does not change once it is created.
+
+   - Tortl seems to support Typecase_e (correctness unknown), but not Typecase_c.
+   It does not support Ifthenelse_e, but adding rudimentary support for this construct
+   would probably not be difficult.  Compilation of switches in general is extremely 
+   naive, performing linear search in all nontrivial cases.  This could stand to be
+   improved.
+
+      joev 8/2002
+*)
+
 (* (1) This translation relies on the layout of the thread structure which is
        pointed to by the thread pointer.  Check Runtime/thread.h for details.
    (2) Empty records translate to 256, requiring no allocation 
@@ -41,7 +65,6 @@ struct
 
   (* Module-level declarations *)
   open Nil Rtl TortlBase
-  structure TB = TortlBase
   structure TW32 = TilWord32
   structure TW64 = TilWord64
   
@@ -81,8 +104,6 @@ struct
 			cbnd_depth := 0)
 
     val HeapProfile = NONE : int option
-    val do_write_list = Stats.tt("DoWriteList")
-    val recognize_constants = Stats.tt("RtlRecognizeConstants")
     val elim_tail_call = Stats.tt("ElimTailCall")
 
     val coercion_int = 257
@@ -1350,7 +1371,7 @@ struct
 			    in  extract_dispatch(t,state,vl,
 						 (TortlArray.xlen_float,
 						  TortlArray.xlen_int,
-						  TortlArray.xlen_known,
+						  TortlArray.xlen_ptr,
 						  TortlArray.xlen_dynamic))
 			    end)
 
@@ -1362,7 +1383,7 @@ struct
 			    in  extract_dispatch(t,state,(vl1,vl2,trace),
 						 (TortlArray.xsub_float,
 						  TortlArray.xsub_int,
-						  TortlArray.xsub_known,
+						  TortlArray.xsub_ptr,
 						  TortlArray.xsub_dynamic))
 			    end)
 
@@ -1374,7 +1395,7 @@ struct
 			    in  extract_dispatch(t,state,(vl1,vl2,vl3),
 						 (TortlArray.xupdate_float,
 						  TortlArray.xupdate_int,
-						  TortlArray.xupdate_known,
+						  TortlArray.xupdate_ptr,
 						  TortlArray.xupdate_dynamic))
 			    end)
 		  
@@ -1383,7 +1404,7 @@ struct
 		       extract_dispatch(t,state,(VALUE (INT 0w0),NONE),
 					(TortlArray.xarray_float,
 					 TortlArray.xarray_int,
-					 TortlArray.xarray_known,
+					 TortlArray.xarray_ptr,
 					 TortlArray.xarray_dynamic))
 	     | (create_table t) => 
 		  (case (isLink, t) of
@@ -1393,7 +1414,7 @@ struct
 			    in  extract_dispatch(t,state,(vl1,SOME vl2),
 						 (TortlArray.xarray_float,
 						  TortlArray.xarray_int,
-						  TortlArray.xarray_known,
+						  TortlArray.xarray_ptr,
 						  TortlArray.xarray_dynamic))
 			    end)
 
@@ -1885,7 +1906,7 @@ struct
 		 let val vl = (GLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
 		 in  add_conterm (s,v,k, SOME(LOCATION vl))
 		 end
-	     val localMirrorArray = load_ireg_val(INT (if (!Rtltags.mirrorPtrArray) then 0w1 else 0w0), NONE)
+	     val localMirrorArray = load_ireg_val(INT (if (!TortlArray.mirrorPtrArray) then 0w1 else 0w0), NONE)
 	     val _ = add_instr(CALL{call_type = C_NORMAL,
 				    func = LABEL' (C_EXTERN_LABEL "AssertMirrorPtrArray"),
 				    args = [I localMirrorArray],

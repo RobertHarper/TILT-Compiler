@@ -2,8 +2,6 @@
 
 signature LINKRTL = 
 sig
-    structure Tortl : TORTL
-    structure Pprtl : PPRTL
 	
     val show_rtl : bool ref
     val ptrWriteBarrier : bool ref
