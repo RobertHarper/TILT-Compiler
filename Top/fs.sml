@@ -241,6 +241,9 @@ struct
 	(C.flush_all();
 	 flush_dir_cache())
 
+    fun flush_some (files:file list) : unit =
+	app C.flush files
+
     val CacheExistsInferred = Stats.counter "CacheExistsInferred"
     fun exists (file:file) : bool =
 	(case (C.peek(file,ATTR_EXISTS)) of

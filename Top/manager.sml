@@ -47,11 +47,11 @@ struct
 	 [Master.MasterVerbose, Compiler.CompilerVerbose,
 	  LinkParse.LinkParseDiag, Compiler.CompilerDiag,
 	  Linknil.LinkNilDiag, Linkrtl.LinkRtlDiag, Linksparc.diag,
-	  Linkalpha.diag],
+	  Linkalpha.diag, Tools.ToolsDiag],
 	 [Master.MasterVVerbose, LinkIl.LinkIlDiag, Tonil.diag,
 	  IlContext.IlcontextDiag, Hoist.HoistDiag, Inline.InlineDiag,
 	  NilStatic.NilStaticDiag, Specialize.SpecializeDiag,
-	  Normalize.NormalizeDiag, Tools.ToolsDiag, LilTypecheck.diag]]
+	  Normalize.NormalizeDiag, Tools.ShowTools, LilTypecheck.diag]]
 
     fun setDiagLevel (i : int) : unit =
 	let val i = Int.max (i+1, 0)

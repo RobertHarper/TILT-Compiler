@@ -102,10 +102,8 @@ struct
 
     fun process (comm:comm, state:state, msg:Comm.message) : state =
 	((case msg
-	   of Comm.INIT (objtype, flags, desc) =>
+	   of Comm.INIT desc =>
 		(Fs.flush();
-		 Target.setTarget objtype;
-		 Stats.set_flags flags;
 		 SOME desc)
 	    | Comm.COMPILE_INT job => (compile(comm,desc state,job,true); state)
 	    | Comm.COMPILE job => (compile(comm,desc state,job,false); state)

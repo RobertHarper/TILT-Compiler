@@ -27,6 +27,7 @@ sig
 	val read : (Blaster.instream -> 'a) -> file -> 'a
 
 	val flush : unit -> unit
+	val flush_some : file list -> unit
 	val exists : file -> bool
 	val crc : file -> Crc.crc
 	val remove : file -> unit

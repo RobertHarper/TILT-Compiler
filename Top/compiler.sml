@@ -663,9 +663,16 @@ struct
 
     fun assemble' (desc:I.desc, pdec:I.pdec) : unit =
 	let val {name=U,uexp,...} = I.D.D.u pdec
+	    val _ = msg("[assembling " ^ Name.label2longname U ^ "]\n")
 	    val asm = I.P.U.asm uexp
 	    val asmz = I.P.U.asmz uexp
 	    val obj = I.P.U.obj uexp
+	    (*
+		Update may have brought information about these
+		files into the cache which a slave subsequently made
+		out of date.
+	    *)
+	    val _ = Fs.flush_some [asm,asmz,obj]    
 	in  if assemble'' (desc,asm,asmz,obj) then ()
 	    else error "unable to assemble (not native)"
 	end

@@ -524,10 +524,8 @@ struct
 	fun findNewSlaves () : unit =
 	    let
 		fun init() : Comm.message =
-		    let val objtype = Target.getTarget()
-			val flags = Stats.get_flags()
-			val desc = get_desc()
-		    in  Comm.INIT(objtype,flags,desc)
+		    let val desc = get_desc()
+		    in  Comm.INIT desc
 		    end
 		val init = Util.memoize init
 		exception Stop

@@ -32,7 +32,7 @@ struct
       | ACK_UNFINISHED of label * Stats.measurements
       | ACK_REJECT of label * string
       | BOMB of string
-      | INIT of Platform.objtype * Stats.flags * IntSyn.desc
+      | INIT of IntSyn.desc	(* Also transmits flags and target. *)
       | COMPILE_INT of label
       | COMPILE of label
 
@@ -58,10 +58,10 @@ struct
 		 B.blastOutString os msg)
 	     | BOMB msg =>
 		(B.blastOutInt os 5; B.blastOutString os msg)
-	     | INIT (objtype, flags, desc) =>
+	     | INIT desc =>
 		(B.blastOutInt os 6;
-		 Platform.blastOutObjtype os objtype;
-		 Stats.blastOutFlags os flags;
+		 Platform.blastOutObjtype os (Target.getTarget());
+		 Stats.blastOutFlags os (Stats.get_flags());
 		 IntSyn.blastOutDesc os desc)
 	     | COMPILE_INT job =>
 		(B.blastOutInt os 7; blastOutJob os job)
@@ -77,8 +77,12 @@ struct
 	     | 3 => ACK_UNFINISHED (blastInJob is, blastInMeas is)
 	     | 4 => ACK_REJECT (blastInJob is, B.blastInString is)
 	     | 5 => BOMB (B.blastInString is)
-	     | 6 => INIT (Platform.blastInObjtype is,
-			  Stats.blastInFlags is, IntSyn.blastInDesc is)
+	     | 6 =>
+		let (* Target and flags are hidden affect blastInDesc *)
+		    val _ = Target.setTarget (Platform.blastInObjtype is)
+		    val _ = Stats.set_flags (Stats.blastInFlags is)
+		in  INIT (IntSyn.blastInDesc is)
+		end
 	     | 7 => COMPILE_INT (blastInJob is)
 	     | 8 => COMPILE (blastInJob is)
 	     | _ => error "bad message"))
@@ -126,10 +130,8 @@ struct
 	    | BOMB msg =>
 		F.HOVbox [F.String "BOMB", F.Break,
 			  F.String "msg = ", F.String msg]
-	    | INIT (objtype, _, desc) =>
-		F.HOVbox [F.String "FLUSH_ALL", F.Break,
-			  F.String "objtype = ",
-			  F.String (Platform.toString objtype), F.Break,
+	    | INIT desc =>
+		F.HOVbox [F.String "INIT", F.Break,
 			  F.String "desc = ", IntSyn.pp_desc desc]
 	    | COMPILE_INT job =>
 		F.HOVbox [F.String "COMPILE_INT", F.Break,

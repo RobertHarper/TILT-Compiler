@@ -33,7 +33,7 @@ sig
       | ACK_UNFINISHED of label * Stats.measurements
       | ACK_REJECT of label * string
       | BOMB of string
-      | INIT of Platform.objtype * Stats.flags * IntSyn.desc
+      | INIT of IntSyn.desc	(* Also transmits flags and target. *)
       | COMPILE_INT of label
       | COMPILE of label
 

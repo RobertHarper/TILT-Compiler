@@ -101,11 +101,30 @@ struct
 	    | Platform.SPARC => sparcConfig()
 	    | Platform.TALx86 => talx86Config())
 
-    fun run' (command:string list) : unit =
-	Util.run {command=command, stdin=NONE, stdout=NONE, wait=true}
+    fun run' (arg as {command:string list, stdin:string option, stdout:string option, wait:bool}) : unit =
+	let val _ =
+		if !ShowTools then
+		    let val stdin =
+			    (case stdin of
+				NONE => nil
+			    |	SOME file => ["<",file])
+			val stdout =
+			    (case stdout of
+				NONE => nil
+			    |	SOME file => [">",file])
+			val bg = if wait then nil else ["&"]
+			val msg = List.concat[command,stdin,stdout,bg]
+			val msg = Listops.concatWith " " msg
+		    in  print "running: "; print msg; print "\n"
+		    end
+		else ()
+	in  Util.run arg
+	end
 
-    val run : string list list -> unit =
-	run' o List.concat
+    fun run (command:string list list) : unit =
+	let val command = List.concat command
+	in  run'{command=command, stdin=NONE, stdout=NONE, wait=true}
+	end
 
     fun assemble (tal_includes : string list, asmFile : string, objFile : string) : unit =
 	let val _ = msg "  Assembling\n"
@@ -129,7 +148,7 @@ struct
     fun compress {src : string, dest : string} : unit =
 	let val _ = msg "  Compressing\n"
 	    fun writer (tmp:string) : unit =
-		Util.run
+		run'
 		    {command = ["gzip","-cq9"],
 		     stdin = SOME src,
 		     stdout = SOME tmp,
@@ -140,7 +159,7 @@ struct
     fun uncompress {src : string, dest : string} : unit =
 	let val _ = msg "  Uncompressing\n"
 	    fun writer (tmp:string) : unit =
-		Util.run
+		run'
 		    {command = ["gunzip", "-cq"],
 		     stdin = SOME src,
 		     stdout = SOME tmp,
