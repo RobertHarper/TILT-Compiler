@@ -91,7 +91,7 @@ m0025	pass	Word value ranges.
 m0026	pass	Word32 checks.
 m0027	pass	Word sub checks.
 m0028	pass	Word stuff.
-m0029	fail	Word8 array
+m0029	fail	[Bug #0178] Word8 array
 m0030	pass	Word8 vector
 m0031	pass	List
 m0032	pass	List pair
