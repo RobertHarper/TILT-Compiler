@@ -1,0 +1,4 @@
+source unit ARG = "arg.sig.sml" {}
+source interface ARG = "arg.int" {ARG}
+source unit Arg : ARG = "arg.sml" {ARG String Substring}
+make library $libdir ^ "/arg"
