@@ -48,17 +48,13 @@ structure Util :> UTIL =
 
     fun CharStr2char s = String.sub(s,0)
 
-
-    datatype 'a oneshot = ONESHOT of int * 'a option ref
-    val oneshot_count = ref 0
-    fun inc r = (r := (!r) + 1; !r)
-    fun oneshot() = ONESHOT(inc oneshot_count, ref NONE)
-    fun oneshot_init item = ONESHOT(inc oneshot_count, ref (SOME item))
-    fun oneshot_set(ONESHOT(_,ref (SOME _)),_) = localerror "oneshot_set called on something already set"
-      | oneshot_set(ONESHOT(_,r as (ref NONE)),item) = r := (SOME item)
-    fun oneshot_deref (ONESHOT (_,r)) = !r
-    fun eq_oneshot (ONESHOT a,ONESHOT b) = a = b
-
+    type 'a oneshot = 'a option ref
+    fun oneshot () = ref NONE
+    fun oneshot_init a = ref (SOME a)
+    fun oneshot_set (ref (SOME _), _) = localerror "oneshot_set called on something already set"
+      | oneshot_set (r, a) = r := SOME a
+    val oneshot_deref = !
+    val eq_oneshot = op =
 
     fun substring (pattern,target) =
 	let val pattern = explode pattern
