@@ -55,6 +55,11 @@ Comments:    This is pretty pathological, but we should
 	not be rebound.  For example, I think SOME and NONE are used
 	to translate pval declarations.
 
+        [tom7] My mistake, disallowing bindings of :: and nil is
+        consistent with the def. Page 12:
+
+	"No datdesc, valdesc, or exdesc may describe true, false,
+	 nil, ::, or ref."
 Fix:
 Test: *
 Owner: *

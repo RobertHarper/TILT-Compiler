@@ -1,0 +1,49 @@
+Number: 0090
+Title:       Shadowing type "bool" causes equality compiler to fail.
+Keywords:    equality compiler pathological shadowing
+Submitter:   tom7
+Date:        15 aug 2002
+Version:     cvs 15 aug 2002
+System:      any
+Severity:    minor
+Problem:
+        Shadowing the type name "bool" causes the equality compiler
+        to generate ill-typed code. This is because it looks up
+        "bool" in the current context.
+
+Code:        
+
+        type bool = unit -> unit
+        datatype newtype = A
+        val _ = if A = A then 1 else 2
+
+Transcript:
+
+        tomtests/eq.sml:20.1-20.31 Error: datacon is
+        CON_PATH(_19075.bool_TYC)
+        casecon is bool_26420
+        constructor pattern used on an argument of the wrong type
+
+Comments:
+
+        Note that unlike my last picky bug report of this sort (0084),
+        the definition doesn't forbid the rebinding of any type
+        names. This kind of rebinding be a little hard to imagine for
+        "bool", but is not uncommon for types like "int" (IntInf,
+        Int31, etc. each bind their own "int". Will there ever be a
+        Bool64? ;)). More seriously, I suppose this could come up
+        in reasonable code like the following:
+
+        functor F(S : sig type bool end) : sig end =
+        struct
+            open S
+            datatype newtype = A
+            val _ = if A = A then 1 else 2
+        end
+
+
+Fix: Need a "blessed" context that the compiler uses to look up
+     special types and values.
+Test: *
+Owner: *
+Status: open
