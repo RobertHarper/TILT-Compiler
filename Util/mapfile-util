@@ -63,10 +63,11 @@ source unit Blaster : BLASTER = "blast.sml" {
 	IntListMap Option HashTableFn HashString Stats Byte
 }
 
-source unit CRC = "crc.sig.sml" {Blaster}
+source unit CRC = "crc.sig.sml" {Blaster Formatter}
 source unit Crc = "crc-native.sml" {
 	Word8 String Byte Option Word32 Array Vector Word8Vector
 	CharVector CRC Char Blaster BinIO CharArray BinIoUtil Blaster Util
+	Formatter
 }
 
 source unit GRAPH = "graph.sig.sml" {TextIO}

@@ -5,6 +5,11 @@
 structure Comm :> COMMUNICATION =
 struct
 
+    structure Q = Queue
+    structure Map = Util.StringMap
+    structure B = Blaster
+    structure F = Formatter
+
     val CommDiag = Stats.ff("CommDiag")
     fun msg str = if (!CommDiag) then print str else ()
 
@@ -12,10 +17,6 @@ struct
 
     fun say (s : string) : unit =
 	if !Blaster.BlastDebug then (print s; print "\n") else ()
-
-    structure Q = Queue
-    structure Map = Util.StringMap
-    structure B = Blaster
 
     (* Q.delete is buggy. *)
     fun empty_queue (q : 'a Q.queue) : unit =
@@ -84,10 +85,61 @@ struct
 	     | 6 => REQUEST (blastInJob is, Update.blastInPlan is)
 	     | _ => error "bad message"))
 
-    val (blastOutMessages,blastInMessages) =
+    val (blastOutMessages,blastInMessages') =
 	B.magic (B.blastOutList blastOutMessage,
 		 B.blastInList blastInMessage,
 		 "msg $Revision$")
+
+    fun readMessages (is : B.instream, acc : message list) : message list =
+	if B.endOfStream is then rev acc
+	else
+	    let val acc = blastInMessages' is @ acc
+		val _ = Blaster.resetIn is
+	    in	readMessages (is,acc)
+	    end
+    val blastInMessages : B.instream -> message list =
+	fn is => readMessages (is,nil)
+
+    val Com = F.String ","
+
+    fun pp_job ((n,s) : job) : F.format =
+	F.Hbox [F.String "(", F.String (Int.toString n), Com,
+		F.String (String.toString s), F.String ")"]
+
+    val Eq = F.String "="
+    fun pp_flag (name : string, value : bool) : F.format =
+	F.Hbox [F.String name, Eq, F.String (Bool.toString value)]
+
+    fun pp_message (msg : message) : F.format =
+	(case msg
+	   of READY => F.String "READY"
+	    | ACK_INTERFACE job =>
+		F.HOVbox [F.String "ACK_INTERFACE", F.Break,
+			  F.String "job = ", pp_job job]
+	    | ACK_DONE (job, plan) =>
+		F.HOVbox [F.String "ACK_DONE", F.Break,
+			  F.String "job = ", pp_job job, Com, F.Break,
+			  F.String "plan = ", Update.pp_plan plan]
+	    | ACK_ERROR (job, msg) =>
+		F.HOVbox [F.String "ACK_DONE", F.Break,
+			  F.String "job = ", pp_job job, Com, F.Break,
+			  F.String "msg = ", F.String msg]
+	    | FLUSH_ALL (platform, flags) =>
+		F.HOVbox [F.String "FLUSH_ALL", F.Break,
+			  F.String "platform = ",
+			  F.String (Target.platformName platform), Com, F.Break,
+			  F.String "flags = ", F.pp_list pp_flag flags]
+	    | FLUSH (job, plan) =>
+		F.HOVbox [F.String "FLUSH", F.Break,
+			  F.String "job = ", pp_job job, Com, F.Break,
+			  F.String "plan = ", Update.pp_plan plan]
+	    | REQUEST (job, plan) =>
+		F.HOVbox [F.String "REQUEST", F.Break,
+			  F.String "job = ", pp_job job, Com, F.Break,
+			  F.String "plan = ", Update.pp_plan plan])
+
+    val pp_messages : message list -> F.format =
+	F.pp_list pp_message
 
     val flagsForSlave : (string * bool ref) list =
 	(map (fn (name, ref_cell, _) => (name, ref_cell))
@@ -302,14 +354,7 @@ struct
 			    (f arg handle e => (wrap B.closeIn stream;
 						unlock();
 						raise e))
-			fun readMessages acc =
-			    if B.endOfStream stream then rev acc
-			    else
-				let val acc = blastInMessages stream @ acc
-				    val _ = Blaster.resetIn stream
-				in  readMessages acc
-				end
-			val msgs = wrap' readMessages nil
+			val msgs = wrap' blastInMessages stream
 			val _ = wrap B.closeIn stream
 			val _ = wrap removeFile file
 			val _ = app (fn msg => Q.enqueue (queue, msg)) msgs

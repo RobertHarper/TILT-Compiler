@@ -69,21 +69,12 @@ struct
 	in  errors
 	end
 
-    fun pp_entry (name : string, crc : crc) : F.format =
-	F.Hbox [F.String name, F.String " : ", F.String (Crc.toString crc)]
-
-    fun pp_ue (ue : Ue.ue) : F.format =
-	let val entries = Ue.listItemsi ue
-	    val fmts = map pp_entry entries
-	    val fmts = Listops.join F.Break fmts
-	in  F.HOVbox0 0 0 1 fmts
-	end
-
     fun pp_shadow (name : string) : F.format =
 	F.String ("unit " ^ name ^ " not unique")
 
     fun pp_mismatch (what : string, name : string, crc : crc) : F.format =
-	F.Hbox [F.String what, F.String " requires ", pp_entry (name,crc)]
+	F.Hbox [F.String what, F.String " requires ", F.String name,
+		F.String " : ", Crc.pp_crc crc]
 
     fun pp_error (e : error) : F.format =
 	let val (ue, msg) =
@@ -91,7 +82,7 @@ struct
 		   of SHADOW (ctx, name) => (ctx, pp_shadow name)
 		    | MISMATCH (what, ctx, name, crc) =>
 			(ctx, pp_mismatch (what, name, crc)))
-	    val ue = F.Hbox[F.String "sees: ", pp_ue ue]
+	    val ue = F.Hbox[F.String "sees: ", Ue.pp_ue ue]
 	in  F.Vbox[msg, F.Break, ue]
 	end
 

@@ -47,6 +47,7 @@ sig
 
     val blastOutPlan : Blaster.outstream -> plan -> unit
     val blastInPlan : Blaster.instream -> plan
+    val pp_plan : plan -> Formatter.format
 
     val plan_compi : equiv * ue * Paths.iface -> plan
     val plan_compu : equiv * ue * Paths.compunit -> plan

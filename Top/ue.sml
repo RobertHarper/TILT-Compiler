@@ -8,6 +8,7 @@ struct
 
     structure Map = Util.StringMap
     structure B = Blaster
+    structure F = Formatter
 
     type equiv = Crc.crc * Crc.crc -> bool
     type ue = Crc.crc Map.map
@@ -30,12 +31,18 @@ struct
     val (blastOutUe, blastInUe) =
 	Blaster.magic (blastOutUe, blastInUe, "ue $Revision$")
 
-    val empty      = Map.empty
-    val insert     = Map.insert
-    val find       = Map.find
+    val Has = F.String " : "
+    fun pp_entry (name : string, crc : Crc.crc) : F.format =
+	F.Hbox [F.String name, Has, Crc.pp_crc crc]
+
+    fun pp_ue (ue : ue) : F.format = F.pp_list pp_entry (Map.listItemsi ue)
+
+    val empty = Map.empty
+    val insert = Map.insert
+    val find = Map.find
     val listItemsi = Map.listItemsi
-    val appi       = Map.appi
-    val foldi      = Map.foldli
+    val appi = Map.appi
+    val foldi = Map.foldli
 
     datatype ue_result =
 	VALID of ue

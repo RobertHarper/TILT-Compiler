@@ -1,6 +1,8 @@
 structure Info :> INFO =
 struct
 
+    structure F = Formatter
+    structure B = Blaster
     structure Ue = UnitEnvironment
 
     fun error s = Util.error "info.sml" s
@@ -17,8 +19,6 @@ struct
 	SRCI of context * imports * crc
       | PRIMU
       | SRCU of context * imports * crc * crc option
-
-    structure B = Blaster
 
     fun blastOutImports (os : B.outstream) (I : imports) : unit =
 	(say "blastOutImports"; B.blastOutList B.blastOutString os I)
@@ -48,5 +48,25 @@ struct
 
     val (blastOutInfo, blastInInfo) =
 	B.magic (blastOutInfo, blastInInfo, "info $Revision$")
+
+    val pp_imports : imports -> F.format =
+	F.pp_list' F.Hbox F.String
+
+    val Com = F.String ","
+    fun pp_info (info : info) : F.format =
+	(case info
+	   of SRCI (context,imports,crc) =>
+		F.HOVbox [F.String "SRCI", F.Break,
+			  F.String "context = ", Ue.pp_ue context, Com, F.Break,
+			  F.String "imports = ", pp_imports imports, Com, F.Break,
+			  F.String "source crc = ", Crc.pp_crc crc]
+	    | PRIMU => F.String "PRIMU"
+	    | SRCU (context, imports, crc, crcopt) =>
+		F.HOVbox [F.String "SRCU", F.Break,
+			  F.String "context = ", Ue.pp_ue context, Com, F.Break,
+			  F.String "imports = ", pp_imports imports, Com, F.Break,
+			  F.String "source crc = ", Crc.pp_crc crc, Com, F.Break,
+			  F.String "iface crc = ",
+			  F.pp_option Crc.pp_crc crcopt])
 
 end

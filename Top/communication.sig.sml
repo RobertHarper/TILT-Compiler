@@ -48,6 +48,10 @@ sig
       | FLUSH of job * plan
       | REQUEST of job * plan
 
+    (* Debugging support *)
+    val blastInMessages : Blaster.instream -> message list
+    val pp_messages : message list -> Formatter.format
+
     (* These do not block. *)
     val canReceive : in_channel -> bool
     val receive : in_channel -> message option

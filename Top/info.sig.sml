@@ -19,5 +19,6 @@ sig
 
     val blastOutInfo : Blaster.outstream -> info -> unit
     val blastInInfo : Blaster.instream -> info
+    val pp_info : info -> Formatter.format
 
 end

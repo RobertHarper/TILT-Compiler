@@ -158,6 +158,9 @@ crc_append arr (Word8.toInt e)) () v
 	in  String.translate (fn c => (w2s (Byte.charToByte c))) crc
 	end
 
+    fun pp_crc (crc : crc) : Formatter.format =
+	Formatter.String (toString crc)
+
     fun fromString s =
 	if size s = 40 then
 	    let fun char i = Option.map Byte.byteToChar (Word8.fromString (String.extract (s, i, SOME 2)))

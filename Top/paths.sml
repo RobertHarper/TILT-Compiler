@@ -1,6 +1,9 @@
 structure Paths :> PATHS =
 struct
-    val error = fn s => Util.error "paths.sml" s
+    structure F = Formatter
+    structure B = Blaster
+
+   val error = fn s => Util.error "paths.sml" s
 
     fun say (s : string) : unit =
 	if !Blaster.BlastDebug then (print s; print "\n") else ()
@@ -40,8 +43,6 @@ struct
       | COMPI of id * filename * filename	(* iface, ue *)
       | UNITI of filename * filename		(* iface, ue *)
 
-    structure B = Blaster
-
     fun blastOutIface (os : B.outstream) (iface : iface) : unit =
 	(say "blastOutIface";
 	 (case iface
@@ -65,6 +66,23 @@ struct
 	     | _ => error "bad iface"))
     val (blastOutIface,blastInIface) =
 	B.magic (blastOutIface, blastInIface, "iface $Revision$")
+
+    fun pp_iface (iface : iface) : F.format =
+	(case iface
+	   of SRCI (id,dir,source) =>
+		F.HOVbox [F.String "SRCI ",
+			  F.String "name = ", F.String id, F.Break,
+			  F.String "dir = ", F.String dir, F.Break,
+			  F.String "source = ", F.String source]
+	    | COMPI (id,iface,ue) =>
+		F.HOVbox [F.String "COMPI ",
+			  F.String "name = ", F.String id, F.Break,
+			  F.String "iface = ", F.String iface, F.Break,
+			  F.String "ue = ", F.String ue]
+	    | UNITI (iface,ue) =>
+		F.HOVbox [F.String "UNITI ",
+			  F.String "iface = ", F.String iface, F.Break,
+			  F.String "ue = ", F.String ue])
 
     fun srci {id:id, group:filename, file=src:filename} : iface =
 	SRCI (id,dir group/TM/file group/I/id,src)
@@ -157,6 +175,30 @@ struct
 	     | _ => error "bad unit"))
     val (blastOutUnit, blastInUnit) =
 	B.magic (blastOutUnit, blastInUnit, "unit $Revision$")
+
+    fun pp_unit (unit : compunit) : F.format =
+	(case unit
+	   of SRCU (id,dir,source,iface) =>
+		F.HOVbox [F.String "SRCU ",
+			  F.String "name = ", F.String id, F.Break,
+			  F.String "dir = ", F.String dir, F.Break,
+			  F.String "source = ", F.String source, F.Break,
+			  F.String "iface = ", pp_iface iface]
+	    | COMPU (id,obj,ue,iface) =>
+		F.HOVbox [F.String "COMPU ",
+			  F.String "name = ", F.String id, F.Break,
+			  F.String "obj = ", F.String obj, F.Break,
+			  F.String "ue = ", F.String ue, F.Break,
+			  F.String "iface = ", pp_iface iface]
+	    | PRIMU (id,dir,iface) =>
+		F.HOVbox [F.String "PRIMU ",
+			  F.String "name = ", F.String id, F.Break,
+			  F.String "dir = ", F.String dir, F.Break,
+			  F.String "iface = ", pp_iface iface]
+	    | IMPORTU (id,iface) =>
+		F.HOVbox [F.String "IMPORTU ",
+			  F.String "name = ", F.String id, F.Break,
+			  F.String "iface = ", pp_iface iface])
 
     fun uniti (dir : filename) : iface =
 	UNITI (dir/iface, dir/ifaceue)
@@ -263,6 +305,11 @@ struct
     val (blastOutExe, blastInExe) =
 	B.magic (blastOutExe, blastInExe, "exe $Revision$")
 
+    fun pp_exe ((dir,exe) : exe) : F.format =
+	F.HOVbox [F.String "EXE ",
+		  F.String "dir = ", F.String dir, F.Break,
+		  F.String "exe = ", F.String exe]
+
     fun exeAsmFile ((dir,_) : exe) : string = dir/target()/asm
     fun exeAsmzFile ((dir,_) : exe) : string = dir/target()/asmz
     fun exeObjFile ((dir,_) : exe) : string = dir/target()/obj
@@ -277,6 +324,10 @@ struct
 	(say "blastInLib"; B.blastInString is)
     val (blastOutLib, blastInLib) =
 	B.magic (blastOutLib, blastInLib, "lib $Revision$")
+
+    fun pp_lib (lib : lib) : F.format =
+	F.HOVbox [F.String "LIB ",
+		  F.String "lib = ", F.String lib]
 
     fun lib {dir:string} : lib = dir
 

@@ -10,6 +10,7 @@ sig
 
     val blastOutUe : Blaster.outstream -> ue -> unit
     val blastInUe : Blaster.instream -> ue
+    val pp_ue : ue -> Formatter.format
 
     val empty : ue
 

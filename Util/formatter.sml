@@ -331,6 +331,26 @@ and Depth f = Deep f
 
 fun Newpage() = Str(0, Np())
 
+fun join (fmts : format list) : format list =
+    (case fmts
+       of nil => fmts
+	| _ :: nil => fmts
+	| fmt :: fmts' => fmt :: String "," :: Break :: (join fmts'))
+
+fun pp_list' (box : format list -> format) (pp : 'a -> format) (xs : 'a list) : format =
+    let val fmts = map pp xs
+	val fmts = join fmts
+    in	Hbox [String "[", box fmts, String "]"]
+    end
+
+fun pp_list (pp : 'a -> format) (xs : 'a list) : format =
+    pp_list' (HOVbox0 0 0 1) pp xs
+
+fun pp_option (pp : 'a -> format) (x : 'a option) : format =
+    (case x
+       of NONE => String "NONE"
+	| SOME a => Hbox [String "SOME(", pp a, String ")"])
+
 (*
 %***********************************************************************
 \subsection{Printing a {\ml format}-structure}

@@ -28,6 +28,7 @@ sig
 
     val blastOutIface : Blaster.outstream -> iface -> unit
     val blastInIface : Blaster.instream -> iface
+    val pp_iface : iface -> Formatter.format
 
     val srci : {id:id, group:filename, file:filename} -> iface
     val compi : {id:id, file:filename, uefile:filename} -> iface
@@ -53,6 +54,7 @@ sig
 
     val blastOutUnit : Blaster.outstream -> compunit -> unit
     val blastInUnit : Blaster.instream -> compunit
+    val pp_unit : compunit -> Formatter.format
 
     val srcu : {id:id, group:filename, file:filename,
 		iface:iface option} -> compunit
@@ -80,6 +82,7 @@ sig
 
     val blastOutExe : Blaster.outstream -> exe -> unit
     val blastInExe : Blaster.instream -> exe
+    val pp_exe : exe -> Formatter.format
 
     val exe : {group:filename, exe:string} -> exe
 
@@ -93,6 +96,7 @@ sig
 
     val blastOutLib : Blaster.outstream -> lib -> unit
     val blastInLib : Blaster.instream -> lib
+    val pp_lib : lib -> Formatter.format
 
     val lib : {dir:string} -> lib
 

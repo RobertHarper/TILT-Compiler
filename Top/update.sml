@@ -23,11 +23,15 @@
 structure Update :> UPDATE =
 struct
 
+    structure F = Formatter
+    structure B = Blaster
+    structure E = ExtSyn
+
     val error = fn s => Util.error "update.sml" s
     val reject = fn s => raise Compiler.Reject s
 
     fun say (s : string) : unit =
-	if !Blaster.BlastDebug then (print s; print "\n") else ()
+	if !B.BlastDebug then (print s; print "\n") else ()
 
     structure Ue = UnitEnvironment
     structure FileCache = Compiler.FileCache
@@ -133,9 +137,6 @@ struct
 	    | CHECK _ => false
 	    | LINK _ => false
 	    | PACK _ => false)
-
-    structure B = Blaster
-    structure E = ExtSyn
 
     val blastOutStrings : B.outstream -> string list -> unit =
 	B.blastOutList B.blastOutString
@@ -268,6 +269,82 @@ struct
 	    let val plan = concat(Listops.join " " (planStrings plan))
 	    in  msg ("  Plan: " ^ plan ^ "\n")
 	    end
+
+    val Has = F.String " : "
+    val pp_ctx : precontext -> F.format =
+	F.pp_list
+	(fn (name,iface) => F.Hbox [F.String name, Has, F.String iface])
+
+    val pp_imports : imports -> F.format =
+	F.pp_list F.String
+
+    val pp_inputs : inputs -> F.format =
+	F.pp_option
+	(fn (ctx, imports, ifaceopt) =>
+	 F.HOVbox [F.String "context = ", pp_ctx ctx, F.Break,
+		   F.String "imports = ", pp_imports imports, F.Break,
+		   F.String "iface = ",
+		   F.pp_option F.String ifaceopt, F.Break])
+
+    fun pp_flags (flags : W.word) : F.format =
+	F.Hbox [F.String (W.toHexString flags), F.Space,
+		F.pp_list' F.Hbox F.String (flagStrings flags)]
+
+    fun pp_value (v : ExtSyn.exp) : F.format =
+	(case v
+	   of ExtSyn.EXP_STR s => F.String (String.toString s)
+	    | ExtSyn.EXP_INT i => F.String (Int.toString i)
+	    | ExtSyn.EXP_BOOL b => F.String (Bool.toString b)
+	    | _ => error "bad ExtSyn.value")
+
+    val Com = F.String ","
+    fun pp_pack (pack : pack) : F.format =
+	(case pack
+	   of PACKU (unit,imports) =>
+		F.HOVbox [F.String "PACKU", F.Break,
+			  F.String "unit = ", Paths.pp_unit unit, Com, F.Break,
+			  F.String "imports = ", pp_imports imports]
+	    | PACKI (iface,imports) =>
+		F.HOVbox [F.String "PACKI", F.Break,
+			  F.String "iface = ",
+			  Paths.pp_iface iface, Com, F.Break,
+			  F.String "imports = ", pp_imports imports]
+	    | PACKV (name,value) =>
+		F.Hbox [F.String "PACKV ", F.String name,
+			F.String " =", F.Break, pp_value value])
+
+    fun pp_plan (plan : plan) : F.format =
+	(case plan
+	   of EMPTY_PLAN => F.String "EMPTY_PLAN"
+	    | ELAB_SRCI (iface, ctx, imports, info) =>
+		F.HOVbox [F.String "ELAB_SRCI", F.Break,
+			  F.String "iface = ",
+			  Paths.pp_iface iface, Com, F.Break,
+			  F.String "context = ", pp_ctx ctx, Com, F.Break,
+			  F.String "imports = ",
+			  pp_imports imports, Com, F.Break,
+			  F.String "info = ", Info.pp_info info]
+	    | COMPILE (unit, inputs, flags, info) =>
+		F.HOVbox [F.String "COMPILE", F.Break,
+			  F.String "unit = ", Paths.pp_unit unit, Com, F.Break,
+			  F.String "inputs = ", pp_inputs inputs, Com, F.Break,
+			  F.String "flags = ", pp_flags flags, Com, F.Break,
+			  F.String "info = ", Info.pp_info info]
+	    | CHECK (ctx, unit, iface) =>
+		F.HOVbox [F.String "CHECK", F.Break,
+			  F.String "context = ", pp_ctx ctx, Com, F.Break,
+			  F.String "unit = ", Paths.pp_unit unit, Com, F.Break,
+			  F.String "iface = ", Paths.pp_iface iface]
+	    | LINK (exe, units, flags) =>
+		F.HOVbox [F.String "LINK", F.Break,
+			  F.String "exe = ", Paths.pp_exe exe, Com, F.Break,
+			  F.String "units = ",
+			  F.pp_list Paths.pp_unit units, Com, F.Break,
+			  F.String "flags = ", pp_flags flags]
+	    | PACK (lib, packs) =>
+		F.HOVbox [F.String "PACK", F.Break,
+			  F.String "lib = ", Paths.pp_lib lib, Com, F.Break,
+			  F.String "packs = ", F.pp_list pp_pack packs])
 
     fun ifaceData (iface : Paths.iface) : Crc.crc * ue =
 	let val crc = FileCache.crc (Paths.ifaceFile iface)

@@ -51,6 +51,11 @@ These may may be changed by the user.
       val  HOVbox: format list -> format
       val  HOVbox0: int -> int -> int -> format list -> format (* blanks, indent, skip *)
       val  Depth:  format -> format
+
+      val pp_list' : (format list -> format) -> ('a -> format) -> 'a list -> format
+      val pp_list : ('a -> format) -> 'a list -> format
+      val pp_option : ('a -> format) -> 'a option -> format
+
 (*
 \subsection{Output routines}
 *)
