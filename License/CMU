@@ -1,4 +1,19 @@
-Copyright (c) 2004 Carnegie Mellon University
+The following copyright notice, permission notice, and disclaimer
+apply to the TILT software with the following exceptions:
+
+1.	The basis library, lexer, parser, and SML/NJ library were adapated
+	from various versions of SML/NJ.  The applicable copyright notice,
+	license, and disclaimer is reproduced in the file ./Lucent.
+
+2.	Portions of the SML/NJ library were adapated from Stephen Adams'
+	binary tree implementation of applicative integer sets.  The
+	applicable copyright notice and license is reproduced in the file
+	./Adams.
+
+
+TILT COPYRIGHT NOTICE, PERMISSION NOTICE, AND DISCLAIMER
+
+Copyright (c) 2004 by Carnegie Mellon University
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the

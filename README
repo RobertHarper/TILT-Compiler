@@ -4,110 +4,112 @@ Please send comments and bug reports to
 
 	til-developers@cs.cmu.edu
 
+Please see the file ./License/CMU for TILT's copyright notice,
+permission notice, and disclaimer.
+
 
 INSTALLING TILT
----------------
 
-This release is set up to compile TILT using SML/NJ 110.0.7 available
-from
+	This release is set up to compile TILT using SML/NJ 110.0.7
+	available from
 
-	http://www.smlnj.org/
+		http://www.smlnj.org/
 
-TILT supports the SPARC V9 and Alpha architectures running SunOS
-5.5.1, SunOS 5.7, SunOS 5.8, and Digital Unix V4.0D but can run on any
-Unix system supported by SML/NJ.  Unsupported architectures can be
-used as compilation slaves (for any supported architecture) but TILT
-can not generate binaries for them.
+	TILT supports the SPARC V9 and Alpha architectures running SunOS
+	5.5.1, SunOS 5.7, SunOS 5.8, and Digital Unix V4.0D but can run on
+	any Unix system supported by SML/NJ.  Unsupported architectures
+	can be used as compilation slaves (for any supported architecture)
+	but TILT can not generate binaries for them.
 
-Take a look at the comments and commands in Makefile and
-Runtime/Makefile and then try
+	Take a look at the comments and commands in Makefile and
+	Runtime/Makefile and then try
 
-	make
+		make
 
-to compile TILT.  On unsupported architectures, the final message will
-be "tilt: unable to link".
+	to compile TILT.  On unsupported architectures, the final message
+	will be "tilt: unable to link".
 
-Once make has finished, the scripts Bin/tilt and Bin/tilt-nj will run
-TILT out of the current directory; alternatively, you can use
+	Once make has finished, the scripts Bin/tilt and Bin/tilt-nj will
+	run TILT out of the current directory; alternatively, you can use
 
-	su
-	make install
+		su
+		make install
 
-to copy binaries to the directory PREFIX set in Makefile.
+	to copy binaries to the directory PREFIX set in Makefile.
 
 
 PARALLEL MAKE
--------------
 
-If your machine is fast and has plenty of memory, then you can speed
-up the installation of TILT by running extra compilation slaves.
+	If your machine is fast and has plenty of memory, then you can
+	speed up the installation of TILT by running extra compilation
+	slaves.
 
-Use "make with-slaves" rather than "make".  If the script
-./Bin/tilt-slave works on your platform, then when once make compiles
-TILT under SML/NJ, you will see a new window running emacs with four
-buffers named *tilt slave n*.  The slaves will contribute to the TILT
-compilation jobs that make starts.
+	Use "make with-slaves" rather than "make".  If the script
+	./Bin/tilt-slave works on your platform, then when once make
+	compiles TILT under SML/NJ, you will see a new window running
+	emacs with four buffers named *tilt slave n*.  The slaves will
+	contribute to the TILT compilation jobs that make starts.
 
-An alternative that does not rely on the script ./Bin/tilt-slave is to
-compile TILT under SML/NJ and then run TILT slaves by hand:
+	An alternative that does not rely on the script ./Bin/tilt-slave
+	is to compile TILT under SML/NJ and then run TILT slaves by hand:
 
-1. Compile TILT with SML/NJ:
+	1.  Compile TILT with SML/NJ:
 
-	make heap
+		make heap
 
-2. Open a new window and run
+	2.  Open a new window and run
 
-	./Bin/tilt-nj -s
+		./Bin/tilt-nj -s
 
-in the current directory.  You can do this a few times.
+	in the current directory.  You can do this a few times.
 
-3.  If you are compiling on a network file system and have spare
-machines you want to use as slaves, then repeat steps (1) and (2) on
-those machines.
+	3.  If you are compiling on a network file system and have spare
+	machines you want to use as slaves, then repeat steps (1) and (2)
+	on those machines.
 
-4. Run
+	4.  Run
 
-	make
+		make
 
-to compile TILT.  The slaves will contribute to the TILT compilation
-jobs that make starts.
+	to compile TILT.  The slaves will contribute to the TILT
+	compilation jobs that make starts.
 
 
 CVS ACCESS
-----------
 
-For faster access to bugs (and bug fixes), you can pull TILT from our
-CVS server:
+	For faster access to bugs (and bug fixes), you can pull TILT from
+	our CVS server:
 
-	cvs -d :pserver:guest_tilt@cvs.concert.cs.cmu.edu:/cvsroot login
-	# Use an empty password
+		cvs -d :pserver:guest_tilt@cvs.concert.cs.cmu.edu:/cvsroot login
+		# Use an empty password
 
-	cvs -d :pserver:guest_tilt@cvs.concert.cs.cmu.edu:/cvsroot checkout ml96
+		cvs -d :pserver:guest_tilt@cvs.concert.cs.cmu.edu:/cvsroot checkout ml96
 
-The CVS repository contains a few things that are not in the release:
-an old MLRISC backend, some experimental code, regression tests,
-benchmarks, a bugs database, and additional (but outdated)
-documentation.
+	The CVS repository contains a few things that are not in the
+	release: an old MLRISC backend, some experimental code, regression
+	tests, benchmarks, a bugs database, and additional (but outdated)
+	documentation.
 
 
 SUPPORT
--------
 
-This research was supported by the Defense Advanced Research Projects
-Agency (DARPA) and the National Science Foundation (NSF) as part of
-the Fox, PSciCo, and ConCert projects at Carnegie Mellon.
+	This research was supported by the Defense Advanced Research
+	Projects Agency (DARPA) and the National Science Foundation (NSF)
+	as part of the Fox, PSciCo, and ConCert projects at Carnegie
+	Mellon University.
 
-The ConCert Project is supported by NSF under grant number 0121633:
-"ITR/SY+SI: Language Technology for Trustless Software Dissemination".
+	The ConCert Project is supported by NSF under grant number
+	0121633: "ITR/SY+SI: Language Technology for Trustless Software
+	Dissemination".
 
-The PSciCo Project was supported by NSF under the title "Advanced
-Languages for Scientific Computation Environments" as part of the
-Experimental Software Systems program within CISE under grant number
-9706572.
+	The PSciCo Project was supported by NSF under the title "Advanced
+	Languages for Scientific Computation Environments" as part of the
+	Experimental Software Systems program within CISE under grant
+	number 9706572.
 
-The Fox Project was sponsored by DARPA CSTO under the title "The Fox
-Project: Advanced Languages for Systems Software", ARPA Order Number
-C533, issued by ESC/ENS under Contract Number F19628-95-C-0050 and
-under the title "The Fox Project: Advanced Development of Systems
-Software", ARPA Order Number 8313, issued by ESD/AVS under Contract
-Number F196228-91-C-0168.
+	The Fox Project was sponsored by DARPA CSTO under the title "The
+	Fox Project: Advanced Languages for Systems Software", ARPA Order
+	Number C533, issued by ESC/ENS under Contract Number
+	F19628-95-C-0050 and under the title "The Fox Project: Advanced
+	Development of Systems Software", ARPA Order Number 8313, issued
+	by ESD/AVS under Contract Number F196228-91-C-0168.
