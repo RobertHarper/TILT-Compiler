@@ -662,7 +662,9 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		     (blastOutChoice os 3; blastOutSbnds os code; blastOutSdecs os imp_sig; blastOutSdecs os abs_sig)
 	       | SIGNAT_INLINE_STRUCTURE {self=SOME p,code,imp_sig,abs_sig} => 
 		     (blastOutChoice os 4; blastOutPath os p;
-		      blastOutSbnds os code; blastOutSdecs os imp_sig; blastOutSdecs os abs_sig))
+		      blastOutSbnds os code; blastOutSdecs os imp_sig; blastOutSdecs os abs_sig)
+	       | SIGNAT_VAR v => (blastOutChoice os 5; blastOutVar os v)
+	       | SIGNAT_OF m => (blastOutChoice os 6; blastOutMod os m))
 
 	and blastInSig is =
 	    (case (blastInChoice is) of
@@ -673,6 +675,8 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 					       imp_sig = blastInSdecs is, abs_sig = blastInSdecs is}
 	       | 4 => SIGNAT_INLINE_STRUCTURE {self=SOME(blastInPath is), code = blastInSbnds is, 
 					       imp_sig = blastInSdecs is, abs_sig = blastInSdecs is}
+	       | 5 => SIGNAT_VAR(blastInVar is)
+	       | 6 => SIGNAT_OF(blastInMod is)
 	       | _ => error "bad blastInSig")
 				     
 	fun blastOutPC os pc = 
@@ -680,7 +684,7 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		PHRASE_CLASS_EXP (e,c) => (blastOutChoice os 0; blastOutExp os e; blastOutCon os c)
 	      | PHRASE_CLASS_CON (c,k) => (blastOutChoice os 1; blastOutCon os c; blastOutKind os k)
 	      | PHRASE_CLASS_MOD (m,s) => (blastOutChoice os 2; blastOutMod os m; blastOutSig os s)
-	      | PHRASE_CLASS_SIG s => (blastOutChoice os 3; blastOutSig os s)
+	      | PHRASE_CLASS_SIG (v,s) => (blastOutChoice os 3; blastOutVar os v; blastOutSig os s)
 	      | PHRASE_CLASS_OVEREXP celist => (blastOutChoice os 4; 
 						blastOutList (blastOutPair blastOutCon blastOutExp) os celist)
 
@@ -690,7 +694,7 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		0 => PHRASE_CLASS_EXP(blastInExp is, blastInCon is)
 	      | 1 => PHRASE_CLASS_CON(blastInCon is, blastInKind is)
 	      | 2 => PHRASE_CLASS_MOD(blastInMod is, blastInSig is)
-	      | 3 => PHRASE_CLASS_SIG(blastInSig is)
+	      | 3 => PHRASE_CLASS_SIG(blastInVar is, blastInSig is)
 	      | 4 => PHRASE_CLASS_OVEREXP(blastInList (blastInPair blastInCon blastInExp) is)
 	      | _ => error "bad blastInPC")
 
@@ -808,7 +812,7 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 				  raise NOT_EQUAL)
 			else ()
 		fun folder ((l,v), vm) =
-		      case Context_Lookup(c',[l]) of
+		      case Context_Lookup(c',l) of
 			   SOME(SIMPLE_PATH v',_) => VM.add(v,v',vm)
 		         | SOME(COMPOUND_PATH (v',_),_) => VM.add(v,v',vm)
 			 | NONE => (print "label not found in c'\n"; 
@@ -973,8 +977,8 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 
 
 	and eq_signat'(vm,signat,signat') =
-	    case (signat,signat')
-	      of (SIGNAT_STRUCTURE(pathopt, sdecs), SIGNAT_STRUCTURE(pathopt', sdecs')) =>
+	    case (signat,signat') of
+	         (SIGNAT_STRUCTURE(pathopt, sdecs), SIGNAT_STRUCTURE(pathopt', sdecs')) =>
 		  eq_pathopt(vm,pathopt,pathopt') andalso eq_sdecs(vm,sdecs,sdecs')
 	       | (SIGNAT_FUNCTOR(v,signat1,signat2,a), SIGNAT_FUNCTOR(v',signat1',signat2',a')) =>
 		  eq_signat(vm,signat1,signat1') andalso a=a' andalso
@@ -985,6 +989,7 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		  eq_sbnds(vm,c1,c2) andalso
 		  eq_sdecs(vm,i1,i2) andalso
 		  eq_sdecs(vm,a1,a2)
+               | (SIGNAT_VAR v1, SIGNAT_VAR v2) => VM.eq_var(vm,v1,v2)
                | _ => false
 
 	and eq_signat arg = wrap "eq_signat" eq_signat' arg
@@ -1067,8 +1072,8 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		  eq_con(vm,con,con') andalso eq_kind(vm,kind,kind')		  
 	       | (PHRASE_CLASS_MOD(mod,signat), PHRASE_CLASS_MOD(mod',signat')) =>
 		  eq_mod(vm,mod,mod') andalso eq_signat(vm,signat,signat')
-	       | (PHRASE_CLASS_SIG signat, PHRASE_CLASS_SIG signat') =>
-		  eq_signat(vm,signat,signat')
+	       | (PHRASE_CLASS_SIG (v,signat), PHRASE_CLASS_SIG (v',signat')) =>
+		  VM.eq_var(vm,v,v') andalso eq_signat(vm,signat,signat')
 	       | _ => false 
 
 	fun eq_cntxt(vm,c,c',vars) =

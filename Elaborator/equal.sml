@@ -5,9 +5,8 @@ functor Equal(structure Il : IL
 		 structure IlUtil : ILUTIL
 		 structure IlContext : ILCONTEXT 
 		 structure Ppil : PPIL 
-		 sharing Ppil.IlContext = IlContext 
 		 sharing IlContext.Il = IlUtil.Il = IlStatic.Il = Ppil.Il = Il)
-    :> EQUAL where IlContext = IlContext =
+    :> EQUAL where Il = Il =
 struct
 
     structure Il = Il
@@ -51,7 +50,7 @@ struct
 						    SOME(l,_) => l
 						  | _ => raise NoEqExp)
 			      val eq_label = to_eq_lab type_label
-			  in (case (Context_Lookup(ctxt,[eq_label])) of
+			  in (case (Context_Lookup(ctxt,eq_label)) of
 				  SOME(_,PHRASE_CLASS_EXP(e,_)) => e
 				| _ => raise NoEqExp)
 			  end)
@@ -174,7 +173,7 @@ struct
 								  SOME(l,_) => l
 								| _ => (print "noeq 1\n"; raise NoEqExp))
 					    val eq_label = to_eq_lab type_label
-					in (case (Context_Lookup(ctxt,[eq_label])) of
+					in (case (Context_Lookup(ctxt,eq_label)) of
 						SOME(_,PHRASE_CLASS_MOD(m,_)) => m
 					      | _ => (print "noeq 2\n";
 						      raise NoEqExp))
@@ -259,14 +258,14 @@ struct
 	  val clist = zip cvars mu_cons
 	  fun cfolder ((cvar,cl),ctxt) = 
 	      let val dec = DEC_CON(cvar,KIND_TUPLE 1,NONE)
-	      in add_context_sdec(ctxt,SDEC(cl,SelfifyDec dec))
+	      in add_context_sdec(ctxt,SDEC(cl,SelfifyDec ctxt dec))
 	      end
 	  fun efolder ((evar,cvar,el),ctxt) = 
 	      let 
 		  val con = CON_ARROW([con_tuple[CON_VAR cvar, CON_VAR cvar]],
 				      con_bool,false,oneshot_init PARTIAL)
 		  val dec = DEC_EXP(evar,con)
-	      in add_context_sdec(ctxt,SDEC(el,SelfifyDec dec))
+	      in add_context_sdec(ctxt,SDEC(el,SelfifyDec ctxt dec))
 	      end
 	  val ctxt = foldl cfolder ctxt (zip cvars type_lbls)
 	  val ctxt = foldl efolder ctxt (zip3 evars cvars eq_lbls)

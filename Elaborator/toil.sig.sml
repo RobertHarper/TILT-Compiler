@@ -1,3 +1,4 @@
+(*$import IL Ast *)
 (* The translation from AST to IL. *)
 signature TOIL = 
   sig

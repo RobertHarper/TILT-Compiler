@@ -1,7 +1,9 @@
-(*$import Ast SourceMap *)
+(*$import Ast SourceMap IL *)
 
 signature ERROR = 
   sig
+
+    structure Il : IL
     datatype ErrorLevel = Error | NoError | Warn
     type region = Ast.srcpos * Ast.srcpos
 
@@ -30,5 +32,9 @@ signature ERROR =
 
     (* Tabbing for multi-line warning/error messages *)
     val tab_region : unit -> unit
+
+    (* Creating place-holder expressions and types *)
+    val dummy_type : Il.context * string -> Il.con
+    val dummy_exp : Il.context * string -> Il.exp * Il.con
 
   end

@@ -6,9 +6,8 @@ functor Datatype(structure Il : IL
 		 structure IlUtil : ILUTIL
 		 structure Ppil : PPIL
 		 structure IlContext : ILCONTEXT
-		 sharing Ppil.IlContext = IlContext
 		 sharing IlContext.Il = IlUtil.Il = IlStatic.Il = Ppil.Il = Il)
-    :> DATATYPE where IlContext = IlContext = 
+    :> DATATYPE where Il = Il =
   struct
 
     structure IlContext = IlContext
@@ -300,7 +299,7 @@ functor Datatype(structure Il : IL
 		
 	(* ----------------- compute the equality function  ------------------- *)
 	local
-	    val var_poly_dec = DEC_MOD(mpoly_var,SelfifySig(SIMPLE_PATH mpoly_var,sigpoly_eq))
+	    val var_poly_dec = DEC_MOD(mpoly_var,SelfifySig context (SIMPLE_PATH mpoly_var,sigpoly_eq))
 	    val temp_ctxt = add_context_dec(context,var_poly_dec)
 	    val eq_con = if (is_noncarrying)
 				then make_eqcon top_type_mproj
@@ -605,7 +604,7 @@ functor Datatype(structure Il : IL
 				  map (fn (_,sd) => (Ppil.pp_sdec sd; print "\n")) sbnd_sdecs;
 				  print "\n\n")
 			else ()
-		val sdecs = map (fn (_,SDEC(l,dec)) => SDEC(l,SelfifyDec dec)) sbnd_sdecs
+		val sdecs = map (fn (_,SDEC(l,dec)) => SDEC(l,SelfifyDec context dec)) sbnd_sdecs
 		val context' = add_context_sdecs(context,sdecs)
 		val acc' = (rev sbnd_sdecs) @ acc
 	    in loop context' acc' rest
@@ -645,7 +644,7 @@ functor Datatype(structure Il : IL
 	    val constr_sumarg_labs = change_path (fn _ => old_constr_sumarg_lab)
 
 	    val eq_sbndsdec = 
-		(case (Context_Lookup(context,eq_labs)) of
+		(case (Context_Lookup_Labels(context,eq_labs)) of
 		     SOME(_,PHRASE_CLASS_EXP (e,c)) => 
 			 let val bnd = BND_EXP(eq_var,e)
 			     val dec = DEC_EXP(eq_var,c)
@@ -658,7 +657,7 @@ functor Datatype(structure Il : IL
 			 end
 		   | _ => [])
 	    val (all_constr_labs,carrying_constr_labs,constr_sbndsdec) = 
-		(case (Context_Lookup(context,dt_labs)) of
+		(case (Context_Lookup_Labels(context,dt_labs)) of
 		     SOME(_,PHRASE_CLASS_MOD (m,s)) => 
 			 let val bnd = BND_MOD(dt_var,m)
 			     val dec = DEC_MOD(dt_var,s)
@@ -697,7 +696,7 @@ functor Datatype(structure Il : IL
 	    val constr_ssum_labs = map change_path (map (fn l => fn _ => l) oldconstr_ssum_labs)
 
 	    fun copy_type str (lookup_labs, lab, var) =
-		case (Context_Lookup(context,lookup_labs)) of
+		case (Context_Lookup_Labels(context,lookup_labs)) of
 		     SOME(_,PHRASE_CLASS_CON (c,k)) => 
 			 let 
 			     val bnd = BND_CON(var,c)
@@ -796,7 +795,7 @@ functor Datatype(structure Il : IL
 					pp_context context;
 					print "\n")))
 	    val (constr_path,pc) = 
-		(case (Context_Lookup(context,map symbol_label p)) of
+		(case (Context_Lookup_Labels(context,map symbol_label p)) of
 		     NONE=> (debugdo (fn () => print "constr_lookup modsig_lookup got NONE\n");
 			     raise NotConstructor)
 		   | SOME lookup_result => lookup_result)
@@ -818,7 +817,18 @@ functor Datatype(structure Il : IL
 			   | SIGNAT_INLINE_STRUCTURE {abs_sig = sdecs,...} => sdecs
 			   | _ => raise NotConstructor)
 
-	    val (SDEC(internal_type_lab,_))::_ = sdecs
+(*
+	    val _ = case sdecs of
+		(SDEC(internal_type_lab,DEC_CON(_,_,SOME c)))::_ => ()
+	      | _ => (print "datatype_constr_lookup failed with sdecs = \n";
+		      pp_sdecs sdecs; print "\n")
+*)
+	    val (internal_type_lab,type_path) = 
+		(case sdecs of
+		     (SDEC(internal_type_lab,DEC_CON(_,_,SOME c)))::_ =>
+			 (internal_type_lab, con2path c)
+		   | _ => raise NotConstructor)
+
 	    val type_lab = symbol_label(Symbol.tycSymbol (Name.label2name internal_type_lab))
 	    val num_constr = (length sdecs) - 2
 
@@ -834,7 +844,7 @@ functor Datatype(structure Il : IL
 				else ()
 			val p = (case ls of
 			 [_] => 
-			     (case (Context_Lookup(context,[lab])) of
+			     (case (Context_Lookup(context,lab)) of
 				  SOME (p,_) => p
 				| NONE => ((* print "constr_lookup failed to find path: ";
 					   pp_label lab; print "\n"; *)
@@ -846,7 +856,9 @@ functor Datatype(structure Il : IL
 				else ()
 		    in  p
 		    end
-	    in  val type_path = get_path type_lab
+	    in  
+(* this path could get shadowed so we can't get the type_path this way *)
+(*		val type_path = get_path type_lab *)
 		val sum_path = get_path sum_lab
 		val ssum_path = map get_path ssum_lab
 	    end
@@ -929,7 +941,7 @@ functor Datatype(structure Il : IL
      | Context_Lookup_Path(ctxt,COMPOUND_PATH (v,labs)) = 
           (case Context_Lookup'(ctxt,v) of
 	       NONE => NONE
-	     | SOME (lab,_) => Context_Lookup(ctxt,lab::labs))
+	     | SOME (lab,_) => Context_Lookup_Labels(ctxt,lab::labs))
 	       
  fun instantiate_datatype_signature (context : Il.context,
 				     path : Ast.path,
@@ -1009,7 +1021,7 @@ functor Datatype(structure Il : IL
 
    fun exn_lookup context path : {stamp : Il.exp,
 				  carried_type : Il.con option} option =
-       (case (Context_Lookup(context,map symbol_label path)) of
+       (case (Context_Lookup_Labels(context,map symbol_label path)) of
 	  NONE=> NONE
 	| SOME (path_mod,PHRASE_CLASS_MOD(m,exn_sig as 
 		SIGNAT_STRUCTURE (_,[SDEC(lab1,DEC_EXP(_,ctag)),SDEC(lab2,DEC_EXP(_,cmk))]))) =>

@@ -44,28 +44,8 @@ signature ILCONTEXT =
 
 	(* ------------ Lookup routines ----------------- *)
 
-	datatype phrase = 
-	    PHRASE_EXP of exp
-	  | PHRASE_CON of con
-	  | PHRASE_MOD of mod
-	  | PHRASE_SIG of signat
-	  | PHRASE_OVEREXP of (con * exp) list
-
-	datatype class = 
-	    CLASS_EXP of con
-	  | CLASS_CON of kind
-	  | CLASS_MOD of signat
-	  | CLASS_SIG
-	  | CLASS_OVEREXP
-	    
-
 	type phrase_class = Il.phrase_class
 
-        (* ----- Useful structure-related helper functions ------- *)	    
-        (* ----- Sdecs_Lookup' looks inside starred structure --------- *)
-	val Sdecs_Lookup  : mod * sdecs * label list -> (label list * phrase_class) option
-	val Sdecs_Lookup' : mod * sdecs * label list -> (label list * phrase_class) option
-	val Sbnds_Lookup  : Il.sbnds * label list -> (label list * phrase) option
 
 	val context_to_sdecs : Il.context -> Il.sdecs
 	val plus_context : ((con * (var * exp) list * (var * con) list * (var * mod) list) -> con) *
@@ -75,9 +55,9 @@ signature ILCONTEXT =
 
 	(* ---- none of these lookup functions perform normalization ---- *)		
 	val fixity : context -> fixity_table
-	val Context_Lookup     : context * label list -> (path * phrase_class) option
-	val Context_Lookup'    : context * var        -> (label * phrase_class) option
-	val Context_Exn_Lookup : context * tag        -> con option
+	val Context_Lookup     : context * label -> (path * phrase_class) option
+	val Context_Lookup'    : context * var   -> (label * phrase_class) option
+	val Context_Exn_Lookup : context * tag   -> con option
 	val Context_Varlist    : context -> var list
 
 

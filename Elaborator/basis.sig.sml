@@ -1,3 +1,4 @@
+(*$import IL *)
 (* Contains the initial basis context to translate in. *)
 signature BASIS = 
   sig

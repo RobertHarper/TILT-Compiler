@@ -1,4 +1,4 @@
-(*$import PRIM PPPRIM PRIMUTILPARAM Real64 *)
+(*$import PRIM PPPRIM PRIMUTILPARAM Real64 PRIMUTIL *)
 functor PrimUtil(structure Prim : PRIM
 		 structure Ppprim : PPPRIM
 		 structure PrimUtilParam : PRIMUTILPARAM
@@ -33,6 +33,65 @@ struct
 	   | (refcell (ref e)) => con_ref (exp_typer e)
 	   | (tag (_,c)) => con_tag c)
 
+    fun get_aggregate_type (prim,aggregate,cons) = 
+	let      
+	    fun help (arg,res) = (false,[arg],res)
+	    fun help' (args,res) = (false,args,res)
+	    fun thelp (arg,res) = (true,[arg],res)
+	    fun thelp' (args,res) = (true,args,res)
+
+	    fun create_empty_array instance = thelp'([], con_array instance)
+	    fun create_empty_vector instance = thelp'([], con_vector instance)
+	    fun create_array instance = thelp'([con_uint W32, instance], con_array instance)
+	    fun create_vector instance = thelp'([con_uint W32, instance], con_vector instance)
+	    fun len_array instance = thelp(con_array instance, con_uint W32)
+	    fun len_vector instance = thelp(con_vector instance, con_uint W32)
+	    fun sub_array instance = thelp'([con_array instance, con_uint W32], instance)
+	    fun sub_vector instance = thelp'([con_vector instance, con_uint W32], instance)
+	    fun update_array instance =  thelp'([con_array instance, con_uint W32, instance], con_unit)
+	    fun update_vector instance =  thelp'([con_vector instance, con_uint W32, instance], con_unit)
+	    fun eq_array instance = help'([con_array instance, con_array instance],con_bool)
+	    fun eq_vector instance = help(partial_arrow([instance, instance],con_bool),
+					  partial_arrow([con_vector instance, 
+							 con_vector instance],con_bool))
+	    fun array2vector_array instance = thelp(con_array instance, con_vector instance)
+	    fun vector2array_vector instance = thelp(con_vector instance, con_array instance)
+	    fun do_array instance = 
+		(case prim of
+		     create_table _ => create_array instance
+		   | create_empty_table _ => create_empty_array instance
+		   | length_table _ => len_array instance
+		   | sub _ => sub_array instance
+		   | update _ => update_array instance
+		   | equal_table _ => eq_array instance
+		   | array2vector _ => array2vector_array instance
+		   | vector2array _ => error "use array2vector"
+		   | _ => error "pattern impossibility")
+	    fun do_vector instance = 
+		(case prim of
+		     create_table _ => create_vector instance
+		   | create_empty_table _ => create_empty_vector instance
+		   | length_table _ => len_vector instance
+		   | sub _ => sub_vector instance
+		   | update _ => update_vector instance
+		   | equal_table _ => eq_vector instance
+		   | array2vector _ => error "use vector2array"
+		   | vector2array _ => vector2array_vector instance
+		   | _ => error "pattern impossibility")
+		     
+	in  (case (aggregate,cons) of
+		 (WordArray, [instance]) => do_array instance
+	       | (WordVector, [instance]) => do_vector instance
+	       | (PtrArray, [instance]) => do_array instance
+	       | (PtrVector, [instance]) => do_vector instance
+	       | (IntArray is, []) => do_array (con_uint is)
+	       | (IntVector is, []) => do_vector (con_uint is)
+	       | (FloatArray fs, []) => do_array (con_float fs)
+	       | (FloatVector fs, []) => do_vector (con_float fs)
+	       | _ => error "ill-formed table primitive")
+	end
+
+
   fun get_type prim cons =
      let 
 	 fun help (arg,res) = (false,[arg],res)
@@ -41,17 +100,18 @@ struct
 	 fun thelp' (args,res) = (true,args,res)
      in
 	 (case (prim,cons) of
-	 ((soft_vtrap _ | soft_ztrap _ | hard_vtrap _ | hard_ztrap _),[]) => (false,[],con_unit)
+	 (soft_vtrap _,[]) => (false,[],con_unit)
+       | (soft_ztrap _,[]) => (false,[],con_unit)
+       | (hard_vtrap _,[]) => (false,[],con_unit)
+       | (hard_ztrap _,[]) => (false,[],con_unit)
        | (mk_ref, [instance]) => thelp(instance,con_ref instance)
        | (deref, [instance]) => thelp(con_ref instance,instance)
-(*	      | SIZE => help(con_string, con_int)
-	      | CHR  => help(con_int, con_char)
-	      | ORD  => help(con_char, con_int)
-	      | EXPLODE => help(CON_VECTOR con_char, CON_LIST con_char)
-	      | IMPLODE => help(CON_LIST con_char, CON_VECTOR con_char) *)
-(* | SQRT | SIN | COS | ARCTAN | EXP | LN *)
-       | ((neg_float fs | abs_float fs),[]) => help(con_float fs, con_float fs)
-       | ((not_int is | neg_int is | abs_int is),[]) => help(con_int is, con_int is)
+
+       | (neg_float fs ,[]) => help(con_float fs, con_float fs)
+       | (abs_float fs ,[]) => help(con_float fs, con_float fs)
+       | (not_int is,[]) => help(con_int is, con_int is)
+       | (neg_int is,[]) => help(con_int is, con_int is)
+       | (abs_int is,[]) => help(con_int is, con_int is)
        | (float2int,[]) => help(con_float F64, con_int W32)
        | (int2float,[]) => help(con_int W32, con_float F64)
        | (int2int(is1,is2),[]) => help(con_int is1, con_int is2)
@@ -72,125 +132,79 @@ struct
        | (flush_out,[]) => help(con_int W32, con_unit)
        | (close_out,[]) => help(con_int W32, con_unit)
 
-(*	      | ISNIL {instance} => help(CON_LIST instance, con_bool)
-	      | CAR {instance} => help(CON_LIST instance, instance)
-	      | CDR {instance} => help(CON_LIST instance, CON_LIST instance)
-	      | OPEN_IN => raise UNIMP
-	      | OPEN_OUT => raise UNIMP
-	      | INPUT => raise UNIMP
-	      | LOOKAHEAD => raise UNIMP
-	      | CLOSE_IN => raise UNIMP
-	      | END_OF_STREAM => raise UNIMP
-	      | CLOSE_OUT => raise UNIMP
-	      | USE => raise UNIMP
-	      | FLUSH_OUT => raise UNIMP *)
+       | (setref, [instance]) => thelp'([con_ref instance,instance],con_unit)
+
+       | (eq_ref, [instance]) => help'([con_ref instance, con_ref instance],con_bool)
+       | (plus_float fs,[]) => help'([con_float fs, con_float fs], con_float fs)
+       | (minus_float fs,[]) =>  help'([con_float fs, con_float fs], con_float fs)
+       | (mul_float fs,[]) =>  help'([con_float fs, con_float fs], con_float fs)
+       | (div_float fs,[]) => help'([con_float fs, con_float fs], con_float fs)
+
+       | (less_float fs,[]) => help'([con_float fs, con_float fs], con_bool)
+       | (greater_float fs,[]) => help'([con_float fs, con_float fs], con_bool)
+       | (lesseq_float fs,[]) => help'([con_float fs, con_float fs], con_bool)
+       | (greatereq_float fs,[]) => help'([con_float fs, con_float fs], con_bool)
+       | (eq_float fs,[]) => help'([con_float fs, con_float fs], con_bool)
+       | (neq_float fs,[])  => help'([con_float fs, con_float fs], con_bool)
+
+       | (plus_int is,[]) =>  help'([con_int is, con_int is], con_int is)
+       | (minus_int is,[]) =>  help'([con_int is, con_int is], con_int is)
+       | (mul_int is,[]) =>  help'([con_int is, con_int is], con_int is)
+       | (div_int  is,[]) =>  help'([con_int is, con_int is], con_int is)
+       | (mod_int is,[]) =>  help'([con_int is, con_int is], con_int is)
+       | (quot_int is,[]) => help'([con_int is, con_int is], con_int is)
+       | (rem_int is,[]) => help'([con_int is, con_int is], con_int is)
+	     
+       | (plus_uint is,[]) => help'([con_uint is, con_uint is], con_uint is)
+       | (minus_uint is,[]) => help'([con_uint is, con_uint is], con_uint is)
+       | (mul_uint is,[]) => help'([con_uint is, con_uint is], con_uint is)
+       | (div_uint is,[]) => help'([con_uint is, con_uint is], con_uint is)
+       | (mod_uint is,[]) =>  help'([con_uint is, con_uint is], con_uint is)
+
+       | (less_int is,[])      => help'([con_int is, con_int is], con_bool)
+       | (greater_int is,[])   => help'([con_int is, con_int is], con_bool)
+       | (lesseq_int is,[])    => help'([con_int is, con_int is], con_bool)
+       | (greatereq_int is,[]) => help'([con_int is, con_int is], con_bool)
+       | (eq_int is,[])        => help'([con_int is, con_int is], con_bool)
+       | (neq_int is,[])        => help'([con_int is, con_int is], con_bool)
+
+       | (lshift_int is,[])  => help'([con_int is, con_int W32], con_int is)
+       | (rshift_int is,[])  => help'([con_int is, con_int W32], con_int is)
+       | (rshift_uint is,[]) => help'([con_uint is, con_int W32], con_uint is)
+       | (and_int is,[])     => help'([con_int is, con_int is], con_int is)
+       | (or_int is,[])      => help'([con_int is, con_int is], con_int is)
+       | (xor_int is,[])     => help'([con_int is, con_int is], con_int is)
+
+       | (less_uint is,[]) => help'([con_uint is, con_uint is], con_bool)
+       | (greater_uint is,[]) => help'([con_uint is, con_uint is], con_bool)
+       | (lesseq_uint is,[]) => help'([con_uint is, con_uint is], con_bool)
+       | (greatereq_uint is,[]) => help'([con_uint is, con_uint is], con_bool)
 
 
-(*	      | length2 {instance} => raise UNIMP *)
+       | (array2vector aggregate,cons) => get_aggregate_type(prim,aggregate,cons)
+       | (vector2array aggregate,cons) => get_aggregate_type(prim,aggregate,cons)
+       | (create_table aggregate,cons)  => get_aggregate_type(prim,aggregate,cons)
+       | (create_empty_table aggregate,cons)  => get_aggregate_type(prim,aggregate,cons)
+       | (length_table aggregate,cons)  => get_aggregate_type(prim,aggregate,cons)
+       | (sub aggregate,cons)  => get_aggregate_type(prim,aggregate,cons)
+       | (update aggregate,cons)  => get_aggregate_type(prim,aggregate,cons)
+       | (equal_table aggregate,cons) => get_aggregate_type(prim,aggregate,cons)
 
-(*	     and  => help'([con_bool,con_bool],con_bool) *)
-	| (setref, [instance]) => thelp'([con_ref instance,instance],con_unit)
-(*	   | or  => help'([con_bool,con_bool],con_bool) 
-	   | eq_bool  => help'([con_bool,con_bool],con_bool)
-	   | xor  => help'([con_bool,con_bool],con_bool) *)
-	| (eq_ref, [instance]) => help'([con_ref instance, con_ref instance],con_bool)
-(*	   | string_concat => help'([con_string,con_string],con_string) *)
-(*	| ((eq_char | neq_char),[]) => help'([con_char,con_char],con_bool) *)
-(*	   | (eq_string | neq_string) => help'([con_string,con_string],con_bool) *)
-	 | ((plus_float fs | minus_float fs | mul_float fs | 
-	      div_float fs),[]) => help'([con_float fs, con_float fs], con_float fs)
-	 | ((less_float fs | greater_float fs |
-	       lesseq_float fs | greatereq_float fs | 
-	       eq_float fs | neq_float fs),[])  => help'([con_float fs, con_float fs], con_bool)
-	 | ((plus_int is | minus_int is | mul_int is | 
-	       div_int  is | mod_int is | 
-	       quot_int is | rem_int is),[]) => help'([con_int is, con_int is], con_int is)
-	 | ((plus_uint is | minus_uint is | mul_uint is | 
-	       div_uint is | mod_uint is),[]) => help'([con_uint is, con_uint is], con_uint is)
-   	  | ((less_int is | greater_int is |
-	       lesseq_int is | greatereq_int is | 
-	       eq_int is | neq_int is),[])  => help'([con_int is, con_int is], con_bool)
-	  | ((lshift_int is | rshift_int is),[]) => help'([con_int is, con_int W32], con_int is)
-	  | (rshift_uint is,[]) => help'([con_uint is, con_int W32], con_uint is)
-	  | ((and_int is | or_int is | xor_int is),[]) => help'([con_int is, con_int is], con_int is)
-	   | ((less_uint is | greater_uint is |
-	       lesseq_uint is | greatereq_uint is),[]) => help'([con_uint is, con_uint is], con_bool)
-(*	  | cons {instance} => help'([instance,con_list instance],con_list instance) *)
-
-	     | (((array2vector aggregate) | (vector2array aggregate) |
-		 (create_table aggregate) | (create_empty_table aggregate) |
-		 (length_table aggregate) | (sub aggregate) | (update aggregate) | 
-		 (equal_table aggregate)), cons) =>
-	     let fun create_empty_array instance = thelp'([], con_array instance)
-		 fun create_empty_vector instance = thelp'([], con_vector instance)
-		 fun create_array instance = thelp'([con_uint W32, instance], con_array instance)
-		 fun create_vector instance = thelp'([con_uint W32, instance], con_vector instance)
-		 fun len_array instance = thelp(con_array instance, con_uint W32)
-		 fun len_vector instance = thelp(con_vector instance, con_uint W32)
-		 fun sub_array instance = thelp'([con_array instance, con_uint W32], instance)
-		 fun sub_vector instance = thelp'([con_vector instance, con_uint W32], instance)
-		 fun update_array instance =  thelp'([con_array instance, con_uint W32, instance], con_unit)
-		 fun update_vector instance =  thelp'([con_vector instance, con_uint W32, instance], con_unit)
-		 fun eq_array instance = help'([con_array instance, con_array instance],con_bool)
-		 fun eq_vector instance = help(partial_arrow([instance, instance],con_bool),
-					       partial_arrow([con_vector instance, 
-							      con_vector instance],con_bool))
-		 fun array2vector_array instance = thelp(con_array instance, con_vector instance)
-		 fun vector2array_vector instance = thelp(con_vector instance, con_array instance)
-		 fun do_array instance = 
-		     (case prim of
-			  create_table _ => create_array instance
-			| create_empty_table _ => create_empty_array instance
-			| length_table _ => len_array instance
-			| sub _ => sub_array instance
-			| update _ => update_array instance
-			| equal_table _ => eq_array instance
-			| array2vector _ => array2vector_array instance
-			| vector2array _ => error "use array2vector"
-			| _ => error "pattern impossibility")
-		 fun do_vector instance = 
-		     (case prim of
-			  create_table _ => create_vector instance
-			| create_empty_table _ => create_empty_vector instance
-			| length_table _ => len_vector instance
-			| sub _ => sub_vector instance
-			| update _ => update_vector instance
-			| equal_table _ => eq_vector instance
-			| array2vector _ => error "use vector2array"
-			| vector2array _ => vector2array_vector instance
-			| _ => error "pattern impossibility")
-
-	     in  (case (aggregate,cons) of
-		      (WordArray, [instance]) => do_array instance
-		    | (WordVector, [instance]) => do_vector instance
-		    | (PtrArray, [instance]) => do_array instance
-		    | (PtrVector, [instance]) => do_vector instance
-		    | (IntArray is, []) => do_array (con_uint is)
-		    | (IntVector is, []) => do_vector (con_uint is)
-		    | (FloatArray fs, []) => do_array (con_float fs)
-		    | (FloatVector fs, []) => do_vector (con_float fs)
-		    | _ => error "ill-formed table primitive")
-	     end
-
-
-	  | _ => (Ppprim.pp_prim prim;
-		  error "can't get type")
-(*	   | array2  {instance} => raise UNIMP
-	   | SUB2    {instance} => raise UNIMP *) )
-
-(*	 | 4 p =>
-	     (case p of
-		UPDATE2 {instance} => raise UNIMP) *)
+	     
+       | _ => (Ppprim.pp_prim prim;
+	       error "can't get type"))
 
      end
 
   fun get_iltype ilprim _ =
       (case ilprim of
 	   (not_uint is) => (false,[con_uint is], con_uint is)
-	 | ((and_uint is) | (or_uint is) | (xor_uint is))=> 
-	       (false,[con_uint is, con_uint is], con_uint is)
+	 | (and_uint is) => (false,[con_uint is, con_uint is], con_uint is)
+	 | (or_uint is) => (false,[con_uint is, con_uint is], con_uint is)
+	 | (xor_uint is) => (false,[con_uint is, con_uint is], con_uint is)
 	 | (lshift_uint is) => (false,[con_uint is, con_int W32], con_uint is)
-	 | (eq_uint is | neq_uint is) => (false, [con_uint is, con_uint is], con_bool))
+	 | eq_uint is => (false, [con_uint is, con_uint is], con_bool)
+	 | neq_uint is => (false, [con_uint is, con_uint is], con_bool))
 
 	   
   fun get_type' prim args = 
@@ -287,8 +301,10 @@ struct
 
 	in 
 	    (case (prim,cons,vals) of
-		 ((soft_vtrap _ | soft_ztrap _ 
-			       | hard_vtrap _ | hard_ztrap _),[],_) => unit_value
+		 (soft_vtrap _,[],_) => unit_value
+	       | (soft_ztrap _,[],_) => unit_value
+	       | (hard_vtrap _,[],_) => unit_value
+	       | (hard_ztrap _,[],_) => unit_value
 	  | (mk_ref, [c], [a]) => value2exp(refcell(ref a))
 	  | (deref, [c], [a]) => !(value2ref(exp2value a))
 	  | (eq_ref, [c], _) => objpred value2ref (op =)

@@ -107,6 +107,9 @@ signature IL =
 						code : sbnd list, (* may be selfified *)
 						imp_sig : sdec list,
 						abs_sig : sdec list}
+		 | SIGNAT_VAR of var
+	         | SIGNAT_OF of mod
+
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con
                  | DEC_MOD       of var * signat
@@ -136,7 +139,7 @@ signature IL =
 	and phrase_class = PHRASE_CLASS_EXP  of exp * con
 	  | PHRASE_CLASS_CON  of con * kind
 	  | PHRASE_CLASS_MOD  of mod * signat
-	  | PHRASE_CLASS_SIG  of signat
+	  | PHRASE_CLASS_SIG  of var * signat
 	  | PHRASE_CLASS_OVEREXP of (con * exp) list
 
     withtype value = (con,exp) Prim.value

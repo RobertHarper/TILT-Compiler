@@ -1,3 +1,4 @@
+(*$import Prim Il Ppprim Ppil IlUtil IlPrimUtil IlContext IlStatic Toil Pat Datatype Signature Basis *)
 signature LINKIL = 
   sig
       structure Prim : PRIM
@@ -23,10 +24,9 @@ structure LinkIl (* : LINKIL *) =
     struct
 	structure Tyvar = Tyvar();
 	structure Prim = Prim();
-	structure IlLeak = Il(structure Prim = Prim
-			      structure Tyvar = Tyvar);
-	structure Il : IL = IlLeak
-	structure IlContext = IlContext(structure Il = IlLeak);
+	structure Il = Il(structure Prim = Prim
+			  structure Tyvar = Tyvar);
+	structure IlContext = IlContext(structure Il = Il);
 	structure Formatter = Formatter;
 	structure AstHelp = AstHelp;
 	structure Ppprim = Ppprim(structure ArgPrim = Prim);
@@ -48,19 +48,24 @@ structure LinkIl (* : LINKIL *) =
 				      structure PrimUtil = IlPrimUtil
 				      structure IlUtil = IlUtil
 				      structure Ppil = Ppil);
-	structure Datatype = Datatype(structure Il = Il
+	structure Error = Error(structure Il = Il
+				      structure IlUtil = IlUtil)
+        structure Datatype = Datatype(structure Il = Il
 				      structure IlContext = IlContext
+				      structure Error = Error
 				      structure AstHelp = AstHelp
 				      structure IlStatic = IlStatic
 				      structure IlUtil = IlUtil
 				      structure Ppil = Ppil);
 	structure Signature = Signature(structure Il = Il
 				      structure IlContext = IlContext
+				      structure Error = Error
 				      structure AstHelp = AstHelp
 				      structure IlStatic = IlStatic
 				      structure IlUtil = IlUtil
 				      structure Ppil = Ppil);
 	structure Equal = Equal(structure Il = Il
+				structure Error = Error
 				structure IlContext = IlContext
 				structure IlStatic = IlStatic
 				structure IlUtil = IlUtil
@@ -70,6 +75,7 @@ structure LinkIl (* : LINKIL *) =
 					  structure Ppil = Ppil
 					  structure AstHelp = AstHelp);
 	structure Pat = Pat(structure Il = Il
+			    structure Error = Error
 			    structure IlContext = IlContext
 			    structure IlStatic = IlStatic
 			    structure IlUtil = IlUtil
@@ -107,12 +113,14 @@ structure LinkIl (* : LINKIL *) =
 	    
 	structure Il = Il
         type module = (Il.context * (Il.sbnd option * Il.context_entry) list)
-
+(*
 	val _ = Compiler.Control.Print.printDepth := 15;
 	val _ = Pagewidth := 80;
+	fun setdepth d = Compiler.Control.Print.printDepth := d
+*)
 	val error = fn s => Util.error "linkil.sml" s
 
-	fun setdepth d = Compiler.Control.Print.printDepth := d
+
 (*
 	fun parse s = 
 	    let val (is,dec) = LinkParse.parse_one s
@@ -121,16 +129,17 @@ structure LinkIl (* : LINKIL *) =
 *)	    
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 
-	fun SelfifySdec(SDEC(l,dec)) = SDEC(l,SelfifyDec dec)
-	fun local_add_context_entries(ctxt,entries) = 
-	    let fun help (CONTEXT_SDEC sdec) = CONTEXT_SDEC(SelfifySdec sdec)
-		  | help ce = ce
-		val entries' = map help entries
-	    in IlContext.add_context_entries(ctxt,entries')
-	    end
-
-	fun local_add_context_sdecs(ctxt,sdecs) = 
-	    local_add_context_entries(ctxt,map CONTEXT_SDEC sdecs)
+	fun SelfifySdec ctxt (SDEC(l,dec)) = SDEC(l,SelfifyDec ctxt dec)
+	local
+	    fun help self_ctxt (ctxt,entries) = 
+		let fun folder (CONTEXT_SDEC sdec,ctxt) = 
+		    IlContext.add_context_sdec(ctxt,SelfifySdec self_ctxt sdec)
+		      | folder (ce,ctxt) = IlContext.add_context_entries(ctxt,[ce])
+		in  foldl folder ctxt entries
+		end
+	in  fun local_add_context_entries (ctxt,entries) = help ctxt (ctxt,entries)
+	    val local_add_context_entries' = help
+	end
 
 	val empty_context = IlContext.empty_context
 
@@ -480,19 +489,21 @@ structure LinkIl (* : LINKIL *) =
 	val init_context = empty_context
 
 	type filepos = SourceMap.charpos -> string * int * int
-	fun elab_specs (ctxt, fp, specs) = 
-	    case xspec(ctxt, fp, specs) of
-		SOME sdecs => let val sdecs' = map SelfifySdec sdecs
-			      in  SOME(IlContext.add_context_sdecs(empty_context, sdecs'))
-			      end
+	fun elab_specs (base_ctxt, fp, specs) = 
+	    case xspec(base_ctxt, fp, specs) of
+		SOME sdecs => 
+		    let val ctxts = map CONTEXT_SDEC sdecs
+			val ctxt = local_add_context_entries' base_ctxt (empty_context,ctxts) 
+		    in  SOME ctxt
+		    end
 	      | NONE => NONE
 
-	fun elab_dec (ctxt, fp, dec) = 
-	    case xdec(ctxt,fp,dec) 
+	fun elab_dec (base_ctxt, fp, dec) = 
+	    case xdec(base_ctxt,fp,dec) 
 		of SOME sbnd_ctxt_list => 
 		    let val sbnds = List.mapPartial #1 sbnd_ctxt_list
 			val ctxts = map #2 sbnd_ctxt_list
-			val ctxt = local_add_context_entries(empty_context,ctxts) 
+			val ctxt = local_add_context_entries' base_ctxt (empty_context,ctxts) 
 		    in 
 			SOME(sbnd_ctxt_list,ctxt)
 		    end

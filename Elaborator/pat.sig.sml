@@ -1,3 +1,4 @@
+(*$import IL Ast *)
 (* Pattern compiler.  
    Handles pattern bindings, case statements, and function declarations. *)
 signature PAT = 

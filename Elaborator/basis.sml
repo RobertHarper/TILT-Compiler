@@ -1,3 +1,4 @@
+(*$import IL ILCONTEXT ILSTATIC PPIL ILUTIL DATATYPE TOIL BASIS Stats *)
 (* Forms the initial basis for elaboration *)
 functor Basis(structure Il : IL
 	      structure IlContext : ILCONTEXT
@@ -6,9 +7,8 @@ functor Basis(structure Il : IL
 	      structure IlUtil : ILUTIL
 	      structure Datatype : DATATYPE
 	      structure Toil : TOIL
-	      sharing Datatype.IlContext = Ppil.IlContext = IlContext
-	      sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il 
-		                   = Toil.Il = Il) : BASIS =
+	      sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il =
+		      Datatype.Il = Toil.Il = Il) : BASIS =
   struct
 
     structure Il = Il
@@ -559,7 +559,7 @@ xxxxx *)
 
 
 		val bool_self_sdecs = map (fn (SDEC(l,dec)) => 
-					   SDEC(l,IlStatic.SelfifyDec dec)) bool_sdecs
+					   SDEC(l,IlStatic.SelfifyDec (!result) dec)) bool_sdecs
 (*
 	      fun self_sdec (SDEC(l,dec)) = SDEC(l,IlStatic.SelfifyDec dec)
 

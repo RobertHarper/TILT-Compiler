@@ -5,8 +5,7 @@ functor Ppil(structure Il : IL
 	     structure Ppprim : PPPRIM
 	     sharing Il.Prim = Ppprim.Prim
 	     sharing IlContext.Il = Il)
-	:> PPIL where Il = Il
-                where IlContext = IlContext =
+	:> PPIL where Il = Il =
   struct
 
     structure IlContext = IlContext
@@ -228,7 +227,8 @@ functor Ppil(structure Il : IL
 					      String ", ", pp_kind seen k, String ")"]
 	  | PHRASE_CLASS_MOD  (m,s)  => HOVbox[String "PC_MOD(", pp_mod seen m,
 					       String ", ", pp_signat seen s, String ")"]
-	  | PHRASE_CLASS_SIG  s  => HOVbox[String "PC_SIG(", pp_signat seen s, String ")"]
+	  | PHRASE_CLASS_SIG  (v,s)  => HOVbox[String "PC_SIG(", pp_var v, String " = ",
+						pp_signat seen s, String ")"]
 	  | PHRASE_CLASS_OVEREXP _ => String "PC_OVEREXP")
 
     and pp_inline seen inline = 
@@ -367,7 +367,11 @@ functor Ppil(structure Il : IL
 
     and pp_signat seen signat = 
       (case signat of
-	 SIGNAT_STRUCTURE (NONE,sdecs) => pp_list (pp_sdec seen) sdecs ("SIGS[",", ", "]", true)
+	 SIGNAT_VAR v => pp_var v 
+       | SIGNAT_OF m =>  HOVbox[String "SIGS_OF(",
+				pp_mod seen m,
+				String ")"]
+       | SIGNAT_STRUCTURE (NONE,sdecs) => pp_list (pp_sdec seen) sdecs ("SIGS[",", ", "]", true)
        | SIGNAT_STRUCTURE (SOME p,sdecs) => HOVbox[String "SIGS_NORM(",
 						   pp_path p, String ", ",
 						   pp_list (pp_sdec seen) sdecs ("[",",","]",true),

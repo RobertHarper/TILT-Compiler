@@ -1,4 +1,4 @@
-(*$import IL ILCONTEXT Util Listops Name nameBlast Blaster *)
+(*$import IL ILCONTEXT Util Listops Name NameBlast Blaster *)
 functor IlContext(structure Il : IL) 
     :> ILCONTEXT where Il = Il   =
 struct
@@ -185,6 +185,12 @@ struct
 			  then foldl (sdec_help (v,l)) ctxt sdecs
 		      else ctxt
 		  end
+	  | DEC_MOD(v,s) =>
+		  let val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, s)))
+		  in  if (is_label_open l)
+			  then error "add_context_sdec got DEC_MOD with open label but not a SIGNAT_STRUCTURE"
+		      else ctxt
+		  end
 	  | DEC_EXCEPTION(t,c) => 
 		  let val CONTEXT {alias_list, flatlist,fixity_list,
 				   label_list,var_list,tag_list} = ctxt
@@ -207,14 +213,15 @@ struct
 		 flatlist = (CONTEXT_SDEC(SDEC(l,DEC_MOD(v,signat))))::flatlist,
 		 fixity_list = fixity_list,
 		 label_list = Name.LabelMap.insert(label_list,l,
-						   (SIMPLE_PATH v, PHRASE_CLASS_SIG signat)),
-		 var_list = var_seq_insert(var_list,v,(l, PHRASE_CLASS_SIG signat)),
+						   (SIMPLE_PATH v, PHRASE_CLASS_SIG(v,signat))),
+		 var_list = var_seq_insert(var_list,v,(l, PHRASE_CLASS_SIG (v,signat))),
 		 tag_list = tag_list})
 
     fun add_context_alias(CONTEXT {alias_list, flatlist,fixity_list,
 				   label_list,var_list,tag_list}, 
 			  l, labs) = 
-	let val alias_list = LabelMap.insert(alias_list,l,labs)
+	let val _ = error "add_context_alias: no one should be using this now"
+	    val alias_list = LabelMap.insert(alias_list,l,labs)
 	in CONTEXT{alias_list = alias_list,
 		   flatlist = flatlist,
 		   fixity_list = fixity_list,
@@ -257,10 +264,10 @@ struct
      The lookup rules can return item from different grammatical classes
      so we need some additional datatypes to package up the results 
      --------------------------------------------------------- *)
-    datatype phrase = PHRASE_EXP of exp
+(*    datatype phrase = PHRASE_EXP of exp
                     | PHRASE_CON of con
                     | PHRASE_MOD of mod
-                    | PHRASE_SIG of signat
+                    | PHRASE_SIG of var * signat
                     | PHRASE_OVEREXP of (con * exp) list
 
     datatype class = CLASS_EXP of con
@@ -268,7 +275,7 @@ struct
                    | CLASS_MOD of signat
                    | CLASS_SIG
                    | CLASS_OVEREXP
-
+*)
 
     type phrase_class_p = path * phrase_class
 
@@ -294,10 +301,10 @@ struct
     val path2con = path2obj (CON_VAR, CON_MODULE_PROJECT)
     val path2exp = path2obj (VAR, MODULE_PROJECT)
 
-    fun combine_pc (PHRASE_EXP e, CLASS_EXP c) = PHRASE_CLASS_EXP (e,c)
+(*    fun combine_pc (PHRASE_EXP e, CLASS_EXP c) = PHRASE_CLASS_EXP (e,c)
       | combine_pc (PHRASE_CON c, CLASS_CON k) = PHRASE_CLASS_CON (c,k)
       | combine_pc (PHRASE_MOD m, CLASS_MOD s) = PHRASE_CLASS_MOD (m,s)
-      | combine_pc (PHRASE_SIG s, CLASS_SIG) = PHRASE_CLASS_SIG s
+      | combine_pc (PHRASE_SIG (v,s), CLASS_SIG) = PHRASE_CLASS_SIG (v,s)
       | combine_pc (PHRASE_OVEREXP oe, CLASS_OVEREXP) = PHRASE_CLASS_OVEREXP oe 
       | combine_pc _ = error "combine_pc got a phrase and a class of conflicting flavors"
     fun pc2class (PHRASE_CLASS_EXP (e,c)) = CLASS_EXP c
@@ -311,8 +318,19 @@ struct
       | classpath2pc (p, CLASS_MOD s) = (p, PHRASE_CLASS_MOD (path2mod p, s))
       | classpath2pc (p, CLASS_SIG) = error "classpath2pc got a CLASS_SIG"
       | classpath2pc (p, CLASS_OVEREXP) = error "classpath2pc got a CLASS_OVEREXP"
+*)
 
-    fun Sbnds_Lookup (sbnds, labs) : (labels * phrase) option =
+      fun Context_Varlist (CONTEXT {var_list,...}) = rev(#2 var_list)
+      fun Context_Lookup' (CONTEXT {var_list,...},v) = Name.VarMap.find(#1 var_list,v)
+      fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = Name.TagMap.find(tag_list,t)
+
+   fun reduce_sigvar(context,v) = 
+	(case (Context_Lookup'(context,v)) of
+			SOME(_,PHRASE_CLASS_SIG(v,s)) => s
+		      | NONE => error "reduce_sigvargiven unbound SIGVAR")
+
+(*
+    fun Sbnds_Lookup ctxt (sbnds, labs) : (labels * phrase) option =
 	let 
 (*
 	    val _ = (print "sbnds_lookup called with labs = ";
@@ -352,13 +370,13 @@ struct
 	       | (lbl :: lbls) =>
 		     (case (loop lbl (rev sbnds)) of
 			 SOME(labs,PHRASE_MOD (MOD_STRUCTURE sbnds)) => 
-			     (case (Sbnds_Lookup(sbnds,lbls)) of
+			     (case (Sbnds_Lookup ctxt (sbnds,lbls)) of
 				  SOME(labs2,phrase2) => SOME(labs@labs2,phrase2)
 				| _ => NONE)
 		       | _ => NONE))
 	end
 
-    fun Sdecs_Lookup_help (om, sdecs, labs) : (bool * (phrase_class * labels)) option = 
+    fun Sdecs_Lookup_help ctxt (om, sdecs, labs) : (bool * (phrase_class * labels)) option = 
 	let 
 	    fun loop m lbl [] = NONE
 	      | loop m lbl ((sdec as (SDEC(l,d)))::rest) =
@@ -375,13 +393,16 @@ struct
 				SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s),[l]))
 			    | _ => loop m lbl rest)
 		else if (is_label_open l)
-		    then (case d of
-			      (DEC_MOD(_,SIGNAT_STRUCTURE (_,sdecs))) =>
+		    then 
+		     (case d of
+		       (DEC_MOD(_,s)) =>
+			   (case s of
+			       SIGNAT_STRUCTURE (_,sdecs) =>
 				  (case (loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
 				       SOME (flag,(class,lbls')) => SOME(flag,(class,l::lbls'))
 				     | NONE => loop m lbl rest)
-			    | (DEC_MOD(_,((SIGNAT_INLINE_STRUCTURE{code,abs_sig=sdecs,...})))) =>
-				  (case (Sbnds_Lookup(code,[lbl]),
+			    | SIGNAT_INLINE_STRUCTURE{code,abs_sig=sdecs,...} =>
+				  (case (Sbnds_Lookup ctxt (code,[lbl]),
 					 loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
 				       (SOME (lbl,p), SOME(_,(pc,lbls'))) => 
 						SOME(true,(combine_pc(p,pc2class pc),l::lbls'))
@@ -389,6 +410,7 @@ struct
 				     | (NONE, SOME _) => error "sdecs_Lookup: open case:  NONE/SOME"
 				     | (NONE,NONE) => loop m lbl rest)
 			    | _ => loop m lbl rest)
+		        | _ => loop m lbl rest)
 		     else loop m lbl rest
 
 	in
@@ -397,27 +419,35 @@ struct
 	       | [lbl] => loop om lbl (rev sdecs)
 	       | (lbl :: lbls) =>
 		     case (loop om lbl (rev sdecs)) of
-			 SOME(_,(phrase_class,labs)) =>
-			     (case phrase_class of
-				  PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs')))) =>
-				      (case (Sdecs_Lookup_help(m',sdecs',lbls)) of
-					  SOME(nontrivial,(pc2,labs2)) => SOME(nontrivial,(pc2,labs @ labs2))
-					| NONE => NONE)
-				| PHRASE_CLASS_MOD (m',((SIGNAT_INLINE_STRUCTURE {code,abs_sig,...}))) =>
-				    (case (Sbnds_Lookup(code,lbls)) of
-					 SOME(labels,phrase) =>
-					     (case (Sdecs_Lookup_help(m',abs_sig,lbls)) of
-						  SOME(_,(pc,labs2)) => 
-						      let val class = pc2class pc
-						      in  SOME(true,(combine_pc(phrase,class),labs@labs2))
-						      end
-						| NONE => NONE)
-	                               | NONE => NONE)
+		       SOME(_,(phrase_class,labs)) =>
+			 let fun doit(m',s) =
+			     (case s of
+				  SIGNAT_STRUCTURE (_,sdecs') =>
+				      (case (Sdecs_Lookup_help ctxt(m',sdecs',lbls)) of
+					   SOME(nontrivial,(pc2,labs2)) => 
+					       SOME(nontrivial,(pc2,labs @ labs2))
+					 | NONE => NONE)
+				| SIGNAT_INLINE_STRUCTURE {code,abs_sig,...} =>
+				      (case (Sbnds_Lookup ctxt (code,lbls)) of
+					SOME(labels,phrase) =>
+					  (case (Sdecs_Lookup_help ctxt(m',abs_sig,lbls)) of
+					       SOME(_,(pc,labs2)) => 
+						   let val class = pc2class pc
+						   in  SOME(true,(combine_pc(phrase,class),
+								  labs@labs2))
+						   end
+					     | NONE => NONE))
 				| _ => NONE)
-		       | NONE => NONE)
+			 in  (case phrase_class of
+				  PHRASE_CLASS_MOD (m,SIGNAT_VAR v) => 
+				      doit(m,reduce_sigvar(ctxt,v))
+				| PHRASE_CLASS_MOD (m,s) => 
+				      doit(m,s)
+				| _ => NONE)
+			 end)
 	end
 
-    fun Sdecs_Lookup (m, sdecs, labs) : (labels * phrase_class) option =
+    fun Sdecs_Lookup ctxt (m, sdecs, labs) : (labels * phrase_class) option =
 	let 
 	    fun loop lbl [] = NONE
 	      | loop lbl ((sdec as (SDEC(l,d)))::rest) =
@@ -442,7 +472,7 @@ struct
 	       | (lbl :: lbls) =>
 		     case (loop lbl (rev sdecs)) of
 			 SOME(labs,PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs'))))) =>
-			     (case (Sdecs_Lookup(m',sdecs',lbls)) of
+			     (case (Sdecs_Lookup ctxt (m',sdecs',lbls)) of
 				  SOME(labs2, pc2) => SOME(labs @ labs2, pc2)
 				| NONE => NONE)
 		       | SOME _ => NONE
@@ -451,15 +481,15 @@ struct
 
 
     fun Context_Lookup (ctxt, [] : label list) : (path * phrase_class) option = NONE
-      | Context_Lookup (CONTEXT{label_list, ...}, (lab::labrest)) = 
+      | Context_Lookup (ctxt as CONTEXT{label_list, ...}, (lab::labrest)) = 
 	(case (labrest,Name.LabelMap.find(label_list,lab)) of
 	    (_,NONE) => NONE
 	  | ([],SOME (path,pc)) => SOME(path,pc)
 	  | (_,SOME (path,pc)) =>
 		let fun sbnds_sdecs (sbnds,sdecs) = 
-		    (case (Sbnds_Lookup(sbnds,labrest)) of
+		    (case (Sbnds_Lookup ctxt (sbnds,labrest)) of
 			 SOME(labels,phrase) =>
-			     (case (Sdecs_Lookup_help(path2mod path,sdecs,labrest)) of
+			     (case (Sdecs_Lookup_help ctxt (path2mod path,sdecs,labrest)) of
 				  SOME(_,(pc,labels')) => 
 				      let val class = pc2class pc
 					  val p = join_path_labels(path,labels)
@@ -475,7 +505,7 @@ struct
 				      {abs_sig=sdecs,code=sbnds,...})) =>
 			sbnds_sdecs(sbnds,sdecs)
 		  | PHRASE_CLASS_MOD(_,SIGNAT_STRUCTURE (_,sdecs)) =>
-			(case (Sdecs_Lookup_help(path2mod path,sdecs,labrest)) of
+			(case (Sdecs_Lookup_help ctxt (path2mod path,sdecs,labrest)) of
 			     SOME(_,(pc,labels)) =>
 				 let val class = pc2class pc
 				     val p = join_path_labels(path,labels)
@@ -487,18 +517,17 @@ struct
 		end)
 
 
-      fun Sdecs_Lookup'(m,sdecs,labels) = 
-	  (case (Sdecs_Lookup_help (m,sdecs,labels)) of
+      fun Sdecs_Lookup' ctxt (m,sdecs,labels) = 
+	  (case (Sdecs_Lookup_help ctxt (m,sdecs,labels)) of
 	       SOME(_,(pc,labels)) => SOME(labels,pc)
 	     | NONE => NONE)
 
+*)
 
-      fun Context_Varlist (CONTEXT {var_list,...}) = rev(#2 var_list)
+     fun Context_Lookup (ctxt as CONTEXT{label_list, ...}, lab) = 
+	 Name.LabelMap.find(label_list,lab)
 
-      fun Context_Lookup' (CONTEXT {var_list,...},v) = Name.VarMap.find(#1 var_list,v)
-      fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = Name.TagMap.find(tag_list,t)
-
-
+(*
       fun do_alias(ctxt,[]) = []
 	| do_alias(CONTEXT{alias_list,...},orig as (label::rest)) = 
 	   (case (LabelMap.find(alias_list,label)) of
@@ -508,6 +537,7 @@ struct
       val Context_Lookup = fn (ctxt, labs) => let val labs = do_alias(ctxt,labs)
 					      in Context_Lookup(ctxt, labs) 
 					      end
+*)
 
      fun context_to_sdecs (CONTEXT {var_list,...}) =
 	  Name.VarMap.foldli (fn (v,(lab,phrase_class),sdecs) =>
@@ -550,7 +580,7 @@ struct
 										 SDEC(lab,DEC_CON(v,do_k kind,
 												  SOME (do_c con))))
 				| PHRASE_CLASS_MOD(m,signat) => add_context_sdec(ctxt,SDEC(lab,DEC_MOD(v,do_s signat)))
-				| PHRASE_CLASS_SIG s => add_context_entry(ctxt,CONTEXT_SIGNAT(lab,v,do_s s))
+				| PHRASE_CLASS_SIG (v,s) => add_context_entry(ctxt,CONTEXT_SIGNAT(lab,v,do_s s))
 				| PHRASE_CLASS_OVEREXP celist => add_context_inline(ctxt,lab,v,INLINE_OVER celist),
 				      subst)
 			  end
@@ -590,7 +620,7 @@ struct
 	    fun pp_xpc (PHRASE_CLASS_EXP (e,c)) = HOVbox[pp_exp e, String " : ", pp_con c]
 	      | pp_xpc (PHRASE_CLASS_CON (c,k)) = HOVbox[pp_con c, String " : ", pp_kind k]
 	      | pp_xpc (PHRASE_CLASS_MOD (m,s)) = HOVbox[pp_mod m, String " : ", pp_signat s]
-	      | pp_xpc (PHRASE_CLASS_SIG s) = pp_signat s
+	      | pp_xpc (PHRASE_CLASS_SIG (v,s)) = HOVbox[pp_var v, String " = ", pp_signat s]
 	      | pp_xpc (PHRASE_CLASS_OVEREXP oe) = String "OVEREXP_NOTDONE"
 	    fun doer(lbl,(path,xpc)) = HOVbox[pp_label lbl,
 					   String " --> ",

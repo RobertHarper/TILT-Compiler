@@ -1,15 +1,15 @@
+(*$import IL ILCONTEXT PRIMUTIL PPIL ILUTIL Util Listops ILSTATIC *)
 (* Static semantics *)
 functor IlStatic(structure Il : IL
 		 structure IlContext : ILCONTEXT
 		 structure PrimUtil : PRIMUTIL
 		 structure Ppil : PPIL
 		 structure IlUtil : ILUTIL
-		 sharing Ppil.IlContext = IlContext
 		 sharing Ppil.Il = IlUtil.Il = IlContext.Il = Il
 		 sharing PrimUtil.Prim = Il.Prim
 		 sharing type PrimUtil.con = Il.con
 		 sharing type PrimUtil.exp = Il.exp)
-  : ILSTATIC  =
+  :> ILSTATIC where Il = Il =
   struct
 
 
@@ -32,30 +32,62 @@ functor IlStatic(structure Il : IL
      | mod_ispath (MOD_PROJECT (m,_)) = mod_ispath m
      | mod_ispath _ = false
 
+
+   fun reduce_sigvar(context,v) = 
+	(case (Context_Lookup'(context,v)) of
+	     SOME(_,PHRASE_CLASS_SIG(v,s)) => s
+	   | NONE => (print "reduce_sigvar given unbound SIGVAR = "; pp_var v;
+		      print "in ctxt: \n"; Ppil.pp_context context;
+		      error "reduce_sigvar given unbound SIGVAR"))
+
+   datatype phrase = PHRASE_EXP of exp
+                    | PHRASE_CON of con
+                    | PHRASE_MOD of mod
+                    | PHRASE_SIG of var * signat
+                    | PHRASE_OVEREXP of (con * exp) list
+
+    datatype class = CLASS_EXP of con
+                   | CLASS_CON of kind
+                   | CLASS_MOD of signat
+                   | CLASS_SIG
+                   | CLASS_OVEREXP
+
+
+    fun merge_phrase_pc (PHRASE_EXP e, PHRASE_CLASS_EXP (_,c)) = PHRASE_CLASS_EXP (e,c)
+      | merge_phrase_pc (PHRASE_CON c, PHRASE_CLASS_CON (_,k)) = PHRASE_CLASS_CON (c,k)
+      | merge_phrase_pc (PHRASE_MOD m, PHRASE_CLASS_MOD (_,s)) = PHRASE_CLASS_MOD (m,s)
+      | merge_phrase_pc (PHRASE_SIG (v,s), PHRASE_CLASS_SIG _) = PHRASE_CLASS_SIG (v,s)
+
+      | merge_phrase_pc (PHRASE_OVEREXP oe, PHRASE_CLASS_OVEREXP _) = PHRASE_CLASS_OVEREXP oe 
+      | merge_phrase_pc  _ = error "merge_phrase_pc got a phrase and phraseclass of conflicting flavors"
+       
+       
    (* --- remove references to internal variables from signature with given module ---- *)
    local
-       type state = {expself : (var * exp) list,
+       type state = {ctxt : context,
+	             expself : (var * exp) list,
 		     conself : (var * con) list,
 		     modself : (var * mod) list,
 		     expunself : (exp * exp) list,
 		     conunself : (con * con) list,
 		     modunself : (mod * mod) list}
-       val initial_state = {expunself = [],
-			    conunself  = [],
-			    modunself  = [],
+       fun initial_state ctxt = {ctxt = ctxt,
+			         expunself = [],
+			         conunself  = [],
+			         modunself  = [],
 			    expself  = [],
 			    conself  = [],
 			    modself  = []}
-       fun add_exppath({expunself,conunself,modunself,expself,conself,modself} : state,v,p) = 
-	   {expunself = (path2exp p, VAR v)::expunself,conunself=conunself,modunself=modunself,
+       fun add_exppath({ctxt,expunself,conunself,modunself,expself,conself,modself} : state,v,p) = 
+	   {ctxt=ctxt,expunself = (path2exp p, VAR v)::expunself,conunself=conunself,modunself=modunself,
 	    expself = (v,path2exp p)::expself,
 	    conself=conself,modself=modself}
-       fun add_conpath({expunself,conunself,modunself,expself,conself,modself}:state,v,p) = 
-	   {conunself = (path2con p, CON_VAR v)::conunself,expunself=expunself,modunself=modunself,
+       fun add_conpath({ctxt,expunself,conunself,modunself,expself,conself,modself}:state,v,p) = 
+	   {ctxt=ctxt,conunself = (path2con p, CON_VAR v)::conunself,expunself=expunself,modunself=modunself,
 	    conself = (v,path2con p)::conself,
 	    expself=expself,modself=modself}
-       fun add_modpath({expunself,conunself,modunself,expself,conself,modself}:state,v,p) = 
-	   {modunself = (path2mod p, MOD_VAR v)::modunself,expunself=expunself,conunself=conunself,
+       fun add_modpath({ctxt,expunself,conunself,modunself,expself,conself,modself}:state,v,p) = 
+	   {ctxt=ctxt,modunself = (path2mod p, MOD_VAR v)::modunself,expunself=expunself,conunself=conunself,
 	    modself = (v,path2mod p)::modself,
 	    conself=conself,expself=expself}
        fun meta_add adder (state,v,NONE) = state
@@ -196,6 +228,16 @@ functor IlStatic(structure Il : IL
 		       let val sbnds = do_sbnds (popt,selfify) (state, sbnds)
 		       in  MOD_STRUCTURE sbnds
 		       end
+		 | (MOD_PROJECT (m,l)) => 
+		       if selfify
+			   then MOD_PROJECT(SelfifyMod (state,selfify) (NONE,m), l)
+		       else mod_subst_allproj(m,ehandler state, chandler state, 
+					      mhandler state, fn _ => NONE)
+		 | m as (MOD_VAR v) => 
+		       if selfify
+			   then mod_subst_conmodvar(m,#conself state, #modself state)
+		       else mod_subst_allproj(m,ehandler state, chandler state, 
+					      mhandler state, fn _ => NONE)
 		 | _ => error "selfify_mod' given a mod which is not a functor or structure")
 	   end
        and SelfifySig (state:state,selfify) (popt: path option, signat : signat) : signat = 
@@ -206,8 +248,7 @@ functor IlStatic(structure Il : IL
 			   val s2' = SelfifySig (state,selfify) (NONE,s2)
 		       in  SIGNAT_FUNCTOR(v,s1',s2',a)
 		       end
-		 | ((true,SIGNAT_INLINE_STRUCTURE {self=_,code,abs_sig,imp_sig}) |
-		       (false,SIGNAT_INLINE_STRUCTURE {self=SOME _,code,abs_sig,imp_sig})) =>
+		 | (true,SIGNAT_INLINE_STRUCTURE {self=_,code,abs_sig,imp_sig}) =>
 		       let val abs_sig = do_sdecs (popt,selfify) (state, abs_sig)
 			   val imp_sig = do_sdecs (popt,selfify) (state, imp_sig)
 			   val code = do_sbnds (popt,selfify) (state, code)
@@ -215,8 +256,20 @@ functor IlStatic(structure Il : IL
 		       in  SIGNAT_INLINE_STRUCTURE{self=popt,
 						   code=code, abs_sig=abs_sig, imp_sig=imp_sig}
 		       end
-		 | ((_,SIGNAT_STRUCTURE (NONE,sdecs)) |
-		       (false,SIGNAT_STRUCTURE (SOME _,sdecs))) =>
+		 | (false,SIGNAT_INLINE_STRUCTURE {self=SOME _,code,abs_sig,imp_sig}) =>
+		       let val abs_sig = do_sdecs (popt,selfify) (state, abs_sig)
+			   val imp_sig = do_sdecs (popt,selfify) (state, imp_sig)
+			   val code = do_sbnds (popt,selfify) (state, code)
+			   val popt = if selfify then popt else NONE
+		       in  SIGNAT_INLINE_STRUCTURE{self=popt,
+						   code=code, abs_sig=abs_sig, imp_sig=imp_sig}
+		       end
+		 | (_,SIGNAT_STRUCTURE (NONE,sdecs)) =>
+		       let val sdecs' = do_sdecs (popt,selfify) (state, sdecs)
+			   val popt = if selfify then popt else NONE
+		       in  SIGNAT_STRUCTURE(popt,sdecs')
+		       end
+		 | (false,SIGNAT_STRUCTURE (SOME _,sdecs)) =>
 		       let val sdecs' = do_sdecs (popt,selfify) (state, sdecs)
 			   val popt = if selfify then popt else NONE
 		       in  SIGNAT_STRUCTURE(popt,sdecs')
@@ -229,11 +282,13 @@ functor IlStatic(structure Il : IL
 				      else SelfifySig (state,selfify) 
 					  (popt, SIGNAT_STRUCTURE(NONE,sdecs))
 			 | _ => s)
+		 | (_, SIGNAT_VAR v) => SelfifySig (state,selfify) (popt,reduce_sigvar(#ctxt state,v))
+		 | (_, SIGNAT_OF m) => SIGNAT_OF(SelfifyMod(state,selfify) (popt, m))
 		 | _ => signat)
 	   end
    in
-       val SelfifySig' = SelfifySig (initial_state,true)
-       val UnselfifySig' = SelfifySig (initial_state,false)
+       fun SelfifySig' ctxt = SelfifySig (initial_state ctxt, true)
+       fun UnselfifySig' ctxt = SelfifySig (initial_state ctxt, false)
    end
 
      (* Performs lookup in a structure signature, performing
@@ -248,12 +303,8 @@ functor IlStatic(structure Il : IL
 		   | PHRASE_CLASS_MOD(m,s) => PHRASE_CLASS_MOD(mod_subst_modvar(m,[vm]),
 							       sig_subst_modvar(s,[vm]))
 		   | _ => pc)
-	fun local_Sdecs_Lookup (m,sdecs,labels) = 
-	    (case (Sdecs_Lookup(m,sdecs,labels)) of
-		 NONE => NONE
-	       | SOME(_,pc) => SOME pc)
 
-	fun local_Sdecs_Project(mopt, sdecs, l) = 
+	fun local_Sdecs_Project ctxt (mopt, sdecs, l) = 
 	    let
 		fun bad () = (print "local_Sdecs_Project failed on ";
 			      pp_label l;
@@ -295,14 +346,14 @@ functor IlStatic(structure Il : IL
 	    in loop ([],[],[]) sdecs
 	    end
     in					     
-	val Sdecs_Lookup = local_Sdecs_Lookup
-	val Sdecs_Project = local_Sdecs_Project
 
-	fun UnselfifySig(p : path, signat : signat) = 
-	    UnselfifySig'(SOME p,signat)
+	val local_Sdecs_Project = local_Sdecs_Project
 
-	fun SelfifySig(p : path, signat : signat) = 
-	    let val res = SelfifySig'(SOME p,signat)
+	fun UnselfifySig ctxt (p : path, signat : signat) = 
+	    UnselfifySig' ctxt (SOME p,signat)
+
+	fun SelfifySig ctxt (p : path, signat : signat) = 
+	    let val res = SelfifySig' ctxt (SOME p,signat)
 		val _ = debugdo 
 		    (fn () => (print "SelfifySig': p is "; pp_path p;
 			       print "\nsignat is\n";
@@ -310,10 +361,10 @@ functor IlStatic(structure Il : IL
 			       pp_signat res; print "\n\n"))
 	    in res
 	    end
-	fun SelfifyDec (DEC_MOD (v,s)) = DEC_MOD(v,SelfifySig(SIMPLE_PATH v,s))
-	  | SelfifyDec dec = dec
-	fun SelfifySdecs(p : path, sdecs : sdecs) =
-	    case (SelfifySig(p,SIGNAT_STRUCTURE(NONE,sdecs))) of
+	fun SelfifyDec ctxt (DEC_MOD (v,s)) = DEC_MOD(v,SelfifySig ctxt (SIMPLE_PATH v,s))
+	  | SelfifyDec ctxt dec = dec
+	fun SelfifySdecs ctxt (p : path, sdecs : sdecs) =
+	    case (SelfifySig ctxt (p,SIGNAT_STRUCTURE(NONE,sdecs))) of
 		SIGNAT_STRUCTURE (SOME _,sdecs) => sdecs
 	      | _ => error "SelfifySdecs: SelfifySig returned non-normal structure"
     end
@@ -547,45 +598,12 @@ end
 				  else print " isocon2 is not constrained: ";
 				  print "\n"))
        val constrained = constrained orelse isocon1 orelse isocon2
-(*
-       val constrained = constrained' orelse (case (con1,con2)
-						  (CON_FLEXRECORD _ | _) => true
-						| (_ | CON_FLEXRECORD _) => true
-						| _ => false)
-*)
+
        val self = meta_eq_con (is_hard,unifier) constrained
 
        (* the flex record considered as an entirety is not generalizeable
 	  but its subparts are generalizable *)
-       fun doit() = 
-	 (case (con1,con2) of
-	    (CON_TYVAR tv1, CON_TYVAR tv2) => 
-		(eq_tyvar(tv1,tv2) 
-		 orelse (unifier(constrained,tv1,con2,ctxt,is_sub)))
-	  | (CON_TYVAR tv1, CON_FLEXRECORD _) => unifier(constrained,tv1,con2,ctxt,is_sub)
-	  | (CON_TYVAR tv1, _) => unifier(constrained,tv1,con2,ctxt,is_sub)
-	  | (_, CON_TYVAR tv2) => unifier(constrained,tv2,con1,ctxt,is_sub)
-	  | (CON_VAR v1, CON_VAR v2) => eq_var(v1,v2)
-	  | (CON_APP(c1_a,c1_r), CON_APP(c2_a,c2_r)) => self(c1_a,c2_a,ctxt,is_sub) 
-	                                                andalso self(c1_r,c2_r,ctxt,is_sub)
-	  | (CON_MODULE_PROJECT (m1,l1), CON_MODULE_PROJECT (m2,l2)) => 
-		eq_modval(m1,m2) andalso eq_label(l1,l2)
-
-	  | ((CON_INT is1, CON_INT is2) | (CON_UINT is1, CON_UINT is2)) => is1 = is2
-	  | (CON_FLOAT fs1, CON_FLOAT fs2) => fs1 = fs2
-	  | (CON_ANY, CON_ANY) => true
-	  | (CON_ARRAY c1, CON_ARRAY c2) => self(c1,c2,ctxt,is_sub)
-	  | (CON_VECTOR c1, CON_VECTOR c2) => self(c1,c2,ctxt,is_sub)
-	  | (CON_REF c1, CON_REF c2) => self(c1,c2,ctxt,is_sub)
-	  | (CON_TAG c1, CON_TAG c2) => self(c1,c2,ctxt,is_sub)
-	  | (CON_ARROW (c1_a,c1_r,flag1,comp1), CON_ARROW(c2_a,c2_r,flag2,comp2)) => 
-		(flag1 = flag2 
-		 andalso eq_comp(comp1,comp2,is_sub)
-		 andalso (length c1_a = length c2_a andalso
-			  Listops.andfold (fn (c2,c1) => self (c2,c1,ctxt,is_sub)) (zip c1_a c2_a))
-		 andalso self(c1_r,c2_r,ctxt,is_sub))
-	  | (CON_MU c1, CON_MU c2) => (self(c1,c2,ctxt,is_sub))
-	  | ((CON_RECORD _ | CON_FLEXRECORD _),(CON_RECORD _ | CON_FLEXRECORD _)) =>
+       fun dorecord() = 
 		let 
 		    fun match rdecs1 rdecs2 = 
 			let fun help ((l1,c1),(l2,c2)) = eq_label(l1,l2) 
@@ -627,9 +645,11 @@ end
 		      | follow c = c
 		in (case (follow con1, follow con2) of
 			(CON_RECORD r1, CON_RECORD r2) => match r1 r2
-		      | ((CON_RECORD rdecs, CON_FLEXRECORD(r as ref(FLEXINFO(stamp,false,flex_rdecs)))) |
-			 ((CON_FLEXRECORD(r as ref(FLEXINFO(stamp,false,flex_rdecs))),
-			   CON_RECORD rdecs))) =>
+		      | (CON_RECORD rdecs, CON_FLEXRECORD(r as ref(FLEXINFO(stamp,false,flex_rdecs)))) =>
+			((subset flex_rdecs rdecs) andalso (stamp_constrain stamp rdecs;
+							    r := FLEXINFO(stamp,true,rdecs);
+							    true))
+		      | (CON_FLEXRECORD(r as ref(FLEXINFO(stamp,false,flex_rdecs))),CON_RECORD rdecs) =>
 			((subset flex_rdecs rdecs) andalso (stamp_constrain stamp rdecs;
 							    r := FLEXINFO(stamp,true,rdecs);
 							    true))
@@ -647,6 +667,40 @@ end
 					    end))
 		       | _ => error "must have a CON_RECORD or CON_FLEXRECORD here")
 		end
+
+       fun doit() = 
+	 (case (con1,con2) of
+	    (CON_TYVAR tv1, CON_TYVAR tv2) => 
+		(eq_tyvar(tv1,tv2) 
+		 orelse (unifier(constrained,tv1,con2,ctxt,is_sub)))
+	  | (CON_TYVAR tv1, CON_FLEXRECORD _) => unifier(constrained,tv1,con2,ctxt,is_sub)
+	  | (CON_TYVAR tv1, _) => unifier(constrained,tv1,con2,ctxt,is_sub)
+	  | (_, CON_TYVAR tv2) => unifier(constrained,tv2,con1,ctxt,is_sub)
+	  | (CON_VAR v1, CON_VAR v2) => eq_var(v1,v2)
+	  | (CON_APP(c1_a,c1_r), CON_APP(c2_a,c2_r)) => self(c1_a,c2_a,ctxt,is_sub) 
+	                                                andalso self(c1_r,c2_r,ctxt,is_sub)
+	  | (CON_MODULE_PROJECT (m1,l1), CON_MODULE_PROJECT (m2,l2)) => 
+		eq_modval(m1,m2) andalso eq_label(l1,l2)
+
+	  | (CON_INT is1, CON_INT is2) => is1 = is2
+	  | (CON_UINT is1, CON_UINT is2) => is1 = is2
+	  | (CON_FLOAT fs1, CON_FLOAT fs2) => fs1 = fs2
+	  | (CON_ANY, CON_ANY) => true
+	  | (CON_ARRAY c1, CON_ARRAY c2) => self(c1,c2,ctxt,is_sub)
+	  | (CON_VECTOR c1, CON_VECTOR c2) => self(c1,c2,ctxt,is_sub)
+	  | (CON_REF c1, CON_REF c2) => self(c1,c2,ctxt,is_sub)
+	  | (CON_TAG c1, CON_TAG c2) => self(c1,c2,ctxt,is_sub)
+	  | (CON_ARROW (c1_a,c1_r,flag1,comp1), CON_ARROW(c2_a,c2_r,flag2,comp2)) => 
+		(flag1 = flag2 
+		 andalso eq_comp(comp1,comp2,is_sub)
+		 andalso (length c1_a = length c2_a andalso
+			  Listops.andfold (fn (c2,c1) => self (c2,c1,ctxt,is_sub)) (zip c1_a c2_a))
+		 andalso self(c1_r,c2_r,ctxt,is_sub))
+	  | (CON_MU c1, CON_MU c2) => (self(c1,c2,ctxt,is_sub))
+	  | (CON_RECORD _, CON_RECORD _) => dorecord()
+	  | (CON_RECORD _, CON_FLEXRECORD _) => dorecord()
+	  | (CON_FLEXRECORD _, CON_RECORD _) => dorecord()
+	  | (CON_FLEXRECORD _, CON_FLEXRECORD _) => dorecord()
 	  | (CON_FUN (vs1,c1), CON_FUN(vs2,c2)) => 
 		(length vs1 = length vs2) andalso
 		let fun folder (v,acc) = add_context_con'(acc,v,KIND_TUPLE 1, NONE)
@@ -685,17 +739,27 @@ end
    and eq_sdecs (ctxt,sdecs1,sdecs2) = eq_list(eq_sdec ctxt, sdecs1, sdecs2)
 
 
-   and eq_sig (ctxt,
-	       ((SIGNAT_STRUCTURE (NONE,sdecs1)) | (SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs1,...})),
-	       ((SIGNAT_STRUCTURE (NONE,sdecs2)) | (SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs2,...}))) =
-       eq_sdecs(ctxt,sdecs1,sdecs2)
+   and eq_sig (ctxt,SIGNAT_STRUCTURE (NONE,sdecs1),SIGNAT_STRUCTURE (NONE,sdecs2)) = 
+                   eq_sdecs(ctxt,sdecs1,sdecs2)
+     | eq_sig (ctxt,SIGNAT_STRUCTURE (NONE,sdecs1),
+		   SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs2,...}) = 
+		   eq_sdecs(ctxt,sdecs1,sdecs2)
+     | eq_sig (ctxt,SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs1,...},
+		   SIGNAT_STRUCTURE (NONE,sdecs2)) = 
+                   eq_sdecs(ctxt,sdecs1,sdecs2)
+     | eq_sig (ctxt,SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs1,...},
+		   SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs2,...}) = 
+		   eq_sdecs(ctxt,sdecs1,sdecs2)
      | eq_sig (ctxt,SIGNAT_FUNCTOR (v1,s1_arg,s1_res,a1), 
 	       SIGNAT_FUNCTOR (v2,s2_arg,s2_res,a2)) = 
        (eq_arrow(a1,a2,false) andalso (eq_var(v1,v2)) andalso (eq_sig(ctxt,s1_arg,s2_arg)))
-       andalso let val s1_arg' = SelfifySig(SIMPLE_PATH v1,s1_arg)
+       andalso let val s1_arg' = SelfifySig ctxt (SIMPLE_PATH v1,s1_arg)
 		   val ctxt' = add_context_mod'(ctxt,v1,s1_arg')
 	       in  eq_sig (ctxt',s1_res,s2_res)
 	       end
+     | eq_sig(ctxt,SIGNAT_VAR v, s2) = eq_sig(ctxt,reduce_sigvar(ctxt,v),s2)
+     | eq_sig(ctxt,s1, SIGNAT_VAR v) = eq_sig(ctxt,SIGNAT_VAR v, s1)
+     | eq_sig(ctxt,SIGNAT_OF m1, SIGNAT_OF m2) = eq_mod(m1,m2)
      | eq_sig _ = raise UNIMP
 
 
@@ -739,7 +803,7 @@ end
 				     then self (add_context_exp'(ctxt,v,#2 (GetExpCon(e,ctxt))))
 				 else NONE
 	      | BND_MOD (v,m) => let val (va,s) = GetModSig(m,ctxt)
-				     val s' = SelfifySig(SIMPLE_PATH v,s)
+				     val s' = SelfifySig ctxt (SIMPLE_PATH v,s)
 				 in if va then self (add_context_mod'(ctxt,v,s'))
 				    else NONE
 				 end
@@ -760,7 +824,7 @@ end
      | MOD_LET (v,m1,m2) => let val (va1,s1) = GetModSig(m1,ctxt)
 			    in va1 andalso
 				(Module_IsValuable m2 (add_context_mod'(ctxt,v,
-									   SelfifySig(SIMPLE_PATH v,s1))))
+									   SelfifySig ctxt (SIMPLE_PATH v,s1))))
 			    end
      | MOD_PROJECT (m,l) => Module_IsValuable m ctxt
      | MOD_APP (m1,m2) => let val (va1,s1) = GetModSig(m1,ctxt)
@@ -810,8 +874,15 @@ end
 	   in (case (ksimp k1, ksimp k2) of
 		   (KIND_ARROW(a,b),KIND_TUPLE c) => 
 		       if (a=c) then KIND_TUPLE b
-		       else error "GetConKind: kind mismatch in CON_APP"
-		 | _ => error "GetConKind: kind mismatch in CON_APP")
+		       else (print "GetConKind: kind mismatch in "; pp_con con;
+			     print "\nDomain arity = "; print (Int.toString a);
+			     print "\nArgument arity = "; print (Int.toString c); print "\n";
+			     error "GetConKind: kind mismatch in CON_APP")
+		 | (k1,k2) => 
+			(print "GetConKind: kind mismatch in "; pp_con con;
+			     print "\nFunction kind = "; pp_kind k1;
+			     print "\nArgument kind = "; pp_kind k2; print "\n";
+			     error "GetConKind: kind mismatch in CON_APP"))
 	   end
      | (CON_MU c) => (case GetConKind(c,ctxt) of
 			KIND_ARROW(m,n) => KIND_TUPLE n
@@ -840,25 +911,21 @@ end
 				     | _ => error "got CON_TUPLE_PROJECT in GetConKind")
      | (CON_MODULE_PROJECT (m,l)) => 
 	   let val (_,signat) = GetModSig(m,ctxt)
-	   in (case signat of
-		   SIGNAT_FUNCTOR _ => error "cannot project from functor"
-		 | ((SIGNAT_STRUCTURE (self,sdecs)) |
-		       (SIGNAT_INLINE_STRUCTURE {self,abs_sig=sdecs,...})) =>
-		       (case Sdecs_Lookup(MOD_VAR (fresh_var()),sdecs,[l]) of
-			    NONE => (print "no such label = ";
-				     pp_label l; print " in sig \n";
-				     Ppil.pp_signat (SIGNAT_STRUCTURE(self,sdecs));
-				     print "\n";
-				     error "no such label in sig")
-			  | SOME(PHRASE_CLASS_CON(_,k)) => k
-			  | _ => error "label in sig not a DEC_CON"))
+	       val (self,sdecs) = 
+		   (case (reduce_signat ctxt signat) of
+			SIGNAT_FUNCTOR _ => error "cannot project from functor"
+		      | SIGNAT_VAR _ => error "cannot project from SIGNAT_VAR"
+		      | SIGNAT_STRUCTURE (self,sdecs) => (self,sdecs)
+		      | SIGNAT_INLINE_STRUCTURE {self,abs_sig=sdecs,...} => (self,sdecs))
+	   in  (case Sdecs_Lookup ctxt (MOD_VAR (fresh_var()),sdecs,[l]) of
+		    NONE => (print "no such label = ";
+			     pp_label l; print " in sig \n";
+			     Ppil.pp_signat (SIGNAT_STRUCTURE(self,sdecs));
+			     print "\n";
+			     error "no such label in sig")
+		  | SOME(_,PHRASE_CLASS_CON(_,k)) => k
+		  | _ => error "label in sig not a DEC_CON")
 	   end
-(*		       (SignatLookup(m,l,signat)) of
-		   NONE => error "no such label in sig"
-		 | SOME(PHRASE_CLASS_CON(_,k)) => k
-		 | _ => error "label in sig not a DEC_CON")
-*)
-
      end
 
    (* --------- Rules 69 to 96 ----------- *)
@@ -876,20 +943,7 @@ end
 		    | CON_ARROW(cons,rescon,b,a) => CON_ARROW([con_tuple cons],rescon,b,a)
 		    | _ => c)
 
-   and GetExpCon' (exparg,ctxt) : bool * con = 
-     (case exparg of
-       SCON scon => (true,GetSconCon(ctxt,scon))
-     | OVEREXP (con,va,eone) => (case oneshot_deref eone of
-				     SOME e => if va then (va,con)
-					       else GetExpCon(e,ctxt)
-				   | NONE => (va,con))
-     | ETAPRIM (p,cs) => (true, etaize (PrimUtil.get_type' p cs))
-     | ETAILPRIM (ip,cs) => (true, etaize(PrimUtil.get_iltype' ip cs))
-     | (VAR v) => (case Context_Lookup'(ctxt,v) of
-		       SOME(_,PHRASE_CLASS_EXP(_,c)) => (true,c)
-		     | SOME _ => error "VAR looked up to a non-value"
-		     | NONE => error ("GetExpCon: (VAR " ^ (Name.var2string v) ^ "v) not in context"))
-     | ((PRIM _) | (ILPRIM _) | (APP _)) =>
+   and GetExpAppCon' (exparg,ctxt) : bool * con = 
 	   let val ((va1,con1),es2) = 
 	       (case exparg of
 		    APP(e1,es2) => (GetExpCon(e1,ctxt),es2)
@@ -920,6 +974,70 @@ end
 		     pp_exp exparg;
 		     error "Type mismatch in expression application")
 	   end
+
+   and GetExpRollCon' (ctxt,isroll,e,c) : bool * con = 
+       let val cNorm = Normalize' "ROLL/UNROLL" (c,ctxt)
+	   val (va,econ) = GetExpCon(e,ctxt)
+	   val error = fn str => (print "typing roll/unroll expression:\n";
+				  Ppil.pp_exp e;
+				  print "\n";
+				  error str)
+	   val (i,cInner) = (case cNorm of
+			       (CON_TUPLE_PROJECT(i,CON_MU cInner)) => (i, cInner)
+	                     | CON_MU cInner => (0, cInner)
+  	                     | _ => (print "\nUnnormalized Decoration of (UN)ROLL was ";
+				   pp_con c; print "\n";
+				   print "\nNormalized Decoration of (UN)ROLL was ";
+				   pp_con cNorm; print "\n";
+				   error "decoration of ROLL not a recursive type CON_MU or CON_TUPLE_PROJ(CON_MU)"))
+       in (va,
+	   (case GetConKind(cInner,ctxt) of
+			KIND_ARROW(n,n') =>
+			    (if ((n = n') andalso (0 <= i) andalso (i < n))
+				 then 
+				     let 
+					 fun temp j = if n = 1 then cInner else CON_TUPLE_PROJECT(j,CON_MU cInner)
+					 val contemp = CON_APP(cInner,con_tuple_inject(map0count temp n))
+					 val con2 = if (n = 1) then contemp
+						    else CON_TUPLE_PROJECT(i,contemp)
+				     in
+					 if isroll
+					     then
+						 (if (sub_con(econ,con2,ctxt))
+						      then cNorm
+						  else
+						      (Ppil.pp_con econ; print "\n";
+						       Ppil.pp_con con2; print "\n";
+						      error "ROLL: expression type does not match decoration"))
+					 else 
+					     (if (eq_con_from_get_exp6(econ,cNorm,ctxt))
+						  then Normalize' "ROLL/UNROLL 3" (con2,ctxt)
+					      else (print "UNROLL: expression type does not match decoration";
+						    print "\necon = "; pp_con econ;
+						    print "\ncNorm = "; pp_con cNorm;
+						    print "\nctxt = "; pp_context ctxt;
+						    error "UNROLL: expression type does not match decoration"))
+				     end
+			     else error "projected decoration has the wrong KIND_ARROW")
+		      | _ => error "projected decoration has the wrong kind"))
+       end
+
+   and GetExpCon' (exparg,ctxt) : bool * con = 
+     (case exparg of
+       SCON scon => (true,GetSconCon(ctxt,scon))
+     | OVEREXP (con,va,eone) => (case oneshot_deref eone of
+				     SOME e => if va then (va,con)
+					       else GetExpCon(e,ctxt)
+				   | NONE => (va,con))
+     | ETAPRIM (p,cs) => (true, etaize (PrimUtil.get_type' p cs))
+     | ETAILPRIM (ip,cs) => (true, etaize(PrimUtil.get_iltype' ip cs))
+     | (VAR v) => (case Context_Lookup'(ctxt,v) of
+		       SOME(_,PHRASE_CLASS_EXP(_,c)) => (true,c)
+		     | SOME _ => error "VAR looked up to a non-value"
+		     | NONE => error ("GetExpCon: (VAR " ^ (Name.var2string v) ^ "v) not in context"))
+     | (PRIM _) => GetExpAppCon' (exparg,ctxt)
+     | (ILPRIM _) => GetExpAppCon' (exparg,ctxt)
+     | (APP _) => GetExpAppCon' (exparg,ctxt)
      | (FIX (r,a,fbnds)) => (* must check that there are no function calls for TOTAL *)
 	   let fun get_arm_type(FBND(_,_,c,c',_)) = CON_ARROW([c],c',false,oneshot_init a)
 	       val res_type = (case fbnds of
@@ -1007,7 +1125,7 @@ end
 	   end
      | (LET (bnds,e)) => 
 	   let 
-	       fun folder ((_,dec),ctxt) = add_context_dec(ctxt,SelfifyDec dec)
+	       fun folder ((_,dec),ctxt) = add_context_dec(ctxt,SelfifyDec ctxt dec)
 	       val vdecs = GetBndsDecs(ctxt,bnds)
 	       val va_decs = andfold #1 vdecs
 	       val ctxt' = foldl folder ctxt vdecs
@@ -1024,56 +1142,8 @@ end
 		  then (va1 andalso va2, CON_ANY)
 	      else error "EXN_INJECT tag type and value: type mismatch"
 	   end
-     | (ROLL(c,e) | UNROLL(c,_,e)) => 
-       let val cNorm = Normalize' "ROLL/UNROLL" (c,ctxt)
-	   val (va,econ) = GetExpCon(e,ctxt)
-	   val isroll = (case exparg of
-			     ROLL _ => true
-			   | UNROLL _ => false
-			   | _ => error "IMPOSSIBLE: what happened to (UN)ROLL")
-	   val error = fn str => (print "typing expression:\n";
-				  Ppil.pp_exp exparg;
-				  print "\n";
-				  error str)
-	   val (i,cInner) = (case cNorm of
-			       (CON_TUPLE_PROJECT(i,CON_MU cInner)) => (i, cInner)
-	                     | CON_MU cInner => (0, cInner)
-  	                     | _ => (print "\nUnnormalized Decoration of (UN)ROLL was ";
-				   pp_con c; print "\n";
-				   print "\nNormalized Decoration of (UN)ROLL was ";
-				   pp_con cNorm; print "\n";
-				   error "decoration of ROLL not a recursive type CON_MU or CON_TUPLE_PROJ(CON_MU)"))
-       in (va,
-	   (case GetConKind(cInner,ctxt) of
-			KIND_ARROW(n,n') =>
-			    (if ((n = n') andalso (0 <= i) andalso (i < n))
-				 then 
-				     let 
-					 fun temp j = if n = 1 then cInner else CON_TUPLE_PROJECT(j,CON_MU cInner)
-					 val contemp = CON_APP(cInner,con_tuple_inject(map0count temp n))
-					 val con2 = if (n = 1) then contemp
-						    else CON_TUPLE_PROJECT(i,contemp)
-				     in
-					 if isroll
-					     then
-						 (if (sub_con(econ,con2,ctxt))
-						      then cNorm
-						  else
-						      (Ppil.pp_con econ; print "\n";
-						       Ppil.pp_con con2; print "\n";
-						      error "ROLL: expression type does not match decoration"))
-					 else 
-					     (if (eq_con_from_get_exp6(econ,cNorm,ctxt))
-						  then Normalize' "ROLL/UNROLL 3" (con2,ctxt)
-					      else (print "UNROLL: expression type does not match decoration";
-						    print "\necon = "; pp_con econ;
-						    print "\ncNorm = "; pp_con cNorm;
-						    print "\nctxt = "; pp_context ctxt;
-						    error "UNROLL: expression type does not match decoration"))
-				     end
-			     else error "projected decoration has the wrong KIND_ARROW")
-		      | _ => error "projected decoration has the wrong kind"))
-       end
+     | ROLL(c,e) => GetExpRollCon'(ctxt,true,e,c)
+     | UNROLL(c,_,e) => GetExpRollCon'(ctxt,false,e,c)
     | (INJ {sumtype,inject}) =>
        let val sumtype = (case sumtype of
 			      CON_SUM _ => sumtype
@@ -1199,23 +1269,27 @@ end
 	   end
      | (MODULE_PROJECT(m,l)) => 
 	   let val (va,signat) = GetModSig(m,ctxt)
-	   in case signat of
-	       SIGNAT_FUNCTOR _ => error "cannot project from module with functor signature"
-	     | ((SIGNAT_STRUCTURE(SOME p,sdecs)) |
-		   (SIGNAT_INLINE_STRUCTURE{self=SOME p,abs_sig=sdecs,...})) =>
-		   (case Sdecs_Lookup(path2mod p, sdecs,[l]) of
+	       fun self_case(p,sdecs) = 
+		   (case Sdecs_Lookup ctxt (path2mod p, sdecs,[l]) of
 		       NONE => ((* print "Normalize: label "; pp_label l;
 				 print " not in signature s = \n";
 				 pp_signat signat; print "\n"; *)
 				fail "MODULE_PROJECT: label not in modsig")
-		     | (SOME (PHRASE_CLASS_EXP(_,con))) => (va,Normalize(con,ctxt))
+		     | (SOME (_,PHRASE_CLASS_EXP(_,con))) => (va,Normalize(con,ctxt))
 		     | SOME _ => fail "MODULE_PROJECT: label not of exp")
-	     | ((SIGNAT_STRUCTURE (NONE,sdecs)) |
-			(SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...})) =>
-		   (case Sdecs_Project(if va then SOME m else NONE, sdecs, l) of
+	       fun notself_case(sdecs) = 
+		   (case local_Sdecs_Project ctxt(if va then SOME m else NONE, sdecs, l) of
 			NONE => error "MODULE_PROJECT: label not in modsig"
 		      | SOME (CLASS_EXP con) => (va,Normalize(con,ctxt))
 		      | SOME _ => fail "MODULE_PROJECT: label not of exp")
+	   in case (reduce_signat ctxt signat) of
+	       SIGNAT_FUNCTOR _ => error "cannot project from module with functor signature"
+	     | SIGNAT_VAR _ => error "cannot project from module with signature variable"
+	     | SIGNAT_STRUCTURE(SOME p,sdecs) => self_case(p,sdecs)
+	     | SIGNAT_INLINE_STRUCTURE{self=SOME p,abs_sig=sdecs,...} => self_case(p,sdecs)
+	     | SIGNAT_STRUCTURE (NONE,sdecs) => notself_case sdecs
+	     | SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...} => notself_case sdecs
+
 (* 	(print "MODULE_PROJECT with m = ";
 	pp_mod m; raise UNIMP) *)
 	   end
@@ -1265,7 +1339,7 @@ end
    and GetBndsDecs' (ctxt,[],acc) = rev acc
      | GetBndsDecs' (ctxt,bnd::rest,acc) = 
        let val (va,d) = GetBndDec(ctxt,bnd)
-	   val ctxt' = add_context_dec(ctxt,SelfifyDec d)
+	   val ctxt' = add_context_dec(ctxt,SelfifyDec ctxt d)
        in GetBndsDecs' (ctxt',rest, (va,d)::acc)
        end
    and GetSbndSdec (ctxt,SBND (l, bnd)) = let val (va,dec) = GetBndDec(ctxt,bnd)
@@ -1276,14 +1350,209 @@ end
      | GetSbndsSdecs (ctxt, (sbnd as (SBND(l,bnd))) :: rest) = 
        let val (va,dec) = GetBndDec(ctxt,bnd)
 	   val sdec = SDEC(l,dec)
-	   val ctxt' = add_context_dec(ctxt, SelfifyDec dec)
+	   val ctxt' = add_context_dec(ctxt, SelfifyDec ctxt dec)
        in (sbnd,sdec)::(GetSbndsSdecs(ctxt',rest))
        end
 
 
 
+    and Sbnds_Lookup ctxt (sbnds, labs) : (labels * phrase) option =
+	let 
+(*
+	    val _ = (print "sbnds_lookup called with labs = ";
+		     app (fn l => (print (Name.label2string l); print ".")) labs; 
+		     print "\nand sbnds are:\n";
+		     app (fn (SBND(l,_)) => (print (Name.label2string l); print " ...")) sbnds;
+		     print "\n\n")
+*)
+	    fun loop lbl [] = NONE
+	      | loop lbl ((sbnd as SBND(l,b))::r) = 
+		let val self = loop lbl 
+		in
+		    (case b of
+			 (BND_EXP (_,e)) => if (eq_label(l,lbl)) 
+						then SOME([l],PHRASE_EXP e) else self r
+		       | (BND_CON (_,c)) => if (eq_label(l,lbl)) 
+						then let val c' = c (* XXX *)
+						     in SOME([l],PHRASE_CON c') 
+						     end
+					    else self r
+		       | (BND_MOD (_,m)) => (if (eq_label(l,lbl)) 
+						 then SOME([l],PHRASE_MOD m) 
+					     else if (is_label_open l)
+						      then 
+							  (case m of 
+							       MOD_STRUCTURE sbnds =>
+								   (case (self (rev sbnds)) of
+									SOME(lbls',phrase) => SOME(l::lbls',phrase)
+								      | NONE => self r)
+							     | _ => self r)
+						  else self r))
+		end
+	in
+	    (case labs of
+		 [] => error "Sbnds_Lookup got []"
+	       | [lbl] => loop lbl (rev sbnds)
+	       | (lbl :: lbls) =>
+		     (case (loop lbl (rev sbnds)) of
+			 SOME(labs,PHRASE_MOD (MOD_STRUCTURE sbnds)) => 
+			     (case (Sbnds_Lookup ctxt (sbnds,lbls)) of
+				  SOME(labs2,phrase2) => SOME(labs@labs2,phrase2)
+				| _ => NONE)
+		       | _ => NONE))
+	end
+
+    and Sdecs_Lookup_help ctxt (om, sdecs, labs) : (bool * (phrase_class * labels)) option = 
+	let 
+	    fun loop m lbl [] = NONE
+	      | loop m lbl ((sdec as (SDEC(l,d)))::rest) =
+		if (eq_label(l,lbl)) 
+		    then (case d of
+			      (DEC_EXP (_,c)) => 
+				  SOME(false,(PHRASE_CLASS_EXP(MODULE_PROJECT(m,l), c),[l]))
+			    | (DEC_CON (_,k,SOME c)) =>
+				  SOME(true,(PHRASE_CLASS_CON(c,k),[l]))
+			    | (DEC_CON (_,k,NONE)) => 
+				  SOME(false,(PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l),
+							   k),[l]))
+			    | (DEC_MOD (_,s)) => 
+				SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s),[l]))
+			    | _ => loop m lbl rest)
+		else if (is_label_open l)
+		    then 
+		     (case d of
+		       (DEC_MOD(_,s)) =>
+			   (case s of
+			       SIGNAT_STRUCTURE (_,sdecs) =>
+				  (case (loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
+				       SOME (flag,(class,lbls')) => SOME(flag,(class,l::lbls'))
+				     | NONE => loop m lbl rest)
+			    | SIGNAT_INLINE_STRUCTURE{code,abs_sig=sdecs,...} =>
+				  (case (Sbnds_Lookup ctxt (code,[lbl]),
+					 loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
+				       (SOME (lbl,p), SOME(_,(pc,lbls'))) => 
+						SOME(true,(merge_phrase_pc(p,pc),l::lbls'))
+				     | (SOME _, NONE) => error "sdecs_Lookup: open case:  SOME/NONE"
+				     | (NONE, SOME _) => error "sdecs_Lookup: open case:  NONE/SOME"
+				     | (NONE,NONE) => loop m lbl rest)
+			    | _ => loop m lbl rest)
+		        | _ => loop m lbl rest)
+		     else loop m lbl rest
+
+	in
+	    (case labs of
+		 [] => error "Sdecs_Lookup_help got []"
+	       | [lbl] => loop om lbl (rev sdecs)
+	       | (lbl :: lbls) =>
+		     case (loop om lbl (rev sdecs)) of
+		       SOME(_,(phrase_class,labs)) =>
+			 let fun doit(m',s) =
+			     (case s of
+				  SIGNAT_STRUCTURE (_,sdecs') =>
+				      (case (Sdecs_Lookup_help ctxt(m',sdecs',lbls)) of
+					   SOME(nontrivial,(pc2,labs2)) => 
+					       SOME(nontrivial,(pc2,labs @ labs2))
+					 | NONE => NONE)
+				| SIGNAT_INLINE_STRUCTURE {code,abs_sig,...} =>
+				      (case (Sbnds_Lookup ctxt (code,lbls)) of
+					SOME(labels,phrase) =>
+					  (case (Sdecs_Lookup_help ctxt(m',abs_sig,lbls)) of
+					       SOME(_,(pc,labs2)) => 
+						   SOME(true,(merge_phrase_pc(phrase,pc),
+							      labs@labs2))
+					     | NONE => NONE))
+				| _ => NONE)
+			 in  (case phrase_class of
+				  PHRASE_CLASS_MOD (m,s) => 
+				      doit(m,reduce_signat ctxt s)
+				| _ => NONE)
+			 end
+		     | _ => (print "Sdecs_Lookup_help could not find label";
+			     pp_label lbl; print " in sdecs:\n";
+			     pp_sdecs sdecs; print "\n";
+			     error "Sdecs_Lookup_help could not find label"))
+	end
+
+    and Sdecs_Lookup ctxt (m, sdecs, labs) : (labels * phrase_class) option =
+	let 
+	    fun loop lbl [] = NONE
+	      | loop lbl ((sdec as (SDEC(l,d)))::rest) =
+		if (eq_label(l,lbl)) 
+		    then (case d of
+			      (DEC_EXP (_,c)) => 
+				  SOME([l],PHRASE_CLASS_EXP(MODULE_PROJECT(m,l), c))
+			    | (DEC_CON (_,k,SOME c)) =>
+				  SOME([l],PHRASE_CLASS_CON(c,k))
+			    | (DEC_CON (_,k,NONE)) => 
+				  SOME([l],PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l),
+							k))
+			    | (DEC_MOD (_,s)) => 
+				  SOME([l],PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s))
+			    | _ => loop lbl rest)
+		else loop lbl rest
+
+	in
+	    (case labs of
+		 [] => error "Sdecs_Lookup got []"
+	       | [lbl] => loop lbl (rev sdecs)
+	       | (lbl :: lbls) =>
+		     case (loop lbl (rev sdecs)) of
+			 SOME(labs,PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs'))))) =>
+			     (case (Sdecs_Lookup ctxt (m',sdecs',lbls)) of
+				  SOME(labs2, pc2) => SOME(labs @ labs2, pc2)
+				| NONE => NONE)
+		       | SOME _ => NONE
+		       | NONE => NONE)
+	end
+
+
+
+    and Sdecs_Lookup' ctxt (m,sdecs,labels) = 
+	  (case (Sdecs_Lookup_help ctxt (m,sdecs,labels)) of
+	       SOME(_,(pc,labels)) => SOME(labels,pc)
+	     | NONE => NONE)
+
+    and Context_Lookup_Labels (ctxt, [] : label list) : (path * phrase_class) option = NONE
+      | Context_Lookup_Labels (ctxt as CONTEXT{label_list, ...}, (lab::labrest)) = 
+	(case (labrest,Name.LabelMap.find(label_list,lab)) of
+	    (_,NONE) => NONE
+	  | ([],SOME (path,pc)) => SOME(path,pc)
+	  | (_,SOME (path,pc)) =>
+		let fun sbnds_sdecs (sbnds,sdecs) = 
+		    (case (Sbnds_Lookup ctxt (sbnds,labrest)) of
+			 SOME(labels,phrase) =>
+			     (case (Sdecs_Lookup_help ctxt (path2mod path,sdecs,labrest)) of
+				  SOME(_,(pc,labels')) => 
+				      let val p = join_path_labels(path,labels)
+				      in  SOME(p,merge_phrase_pc(phrase,pc)) 
+				      end
+				| NONE => NONE)
+		       | NONE => NONE)
+		in case pc of
+		    (PHRASE_CLASS_MOD(m,s)) =>
+			(case (m,reduce_signat ctxt s) of
+			     (MOD_STRUCTURE sbnds,SIGNAT_STRUCTURE (_,sdecs)) =>
+				 sbnds_sdecs(sbnds,sdecs)
+			   | (_,SIGNAT_INLINE_STRUCTURE{abs_sig=sdecs,code=sbnds,...}) =>
+				 sbnds_sdecs(sbnds,sdecs)
+			   | (_,SIGNAT_STRUCTURE (_,sdecs)) =>
+				 (case (Sdecs_Lookup_help ctxt (path2mod path,sdecs,labrest)) of
+				      SOME(_,(pc,labels)) =>
+					  let val p = join_path_labels(path,labels)
+					  in  SOME (p,pc)
+					  end
+				    | _ => NONE)
+			   | _ => NONE)
+		  | _ => NONE
+		end)
+
+
 
    (* ------------ Return a module's signature    -------------- *)
+   and reduce_signat context (SIGNAT_VAR v) = reduce_sigvar(context,v)
+     | reduce_signat context (SIGNAT_OF m ) = #2(GetModSig(m,context))
+     | reduce_signat context s = s
+
    and GetModSig (module, ctxt : context) : bool * signat =
      let fun msg() = (print "GetModSig called with module = \n";
 			 pp_mod module; print "\nand ctxt = \n";
@@ -1306,14 +1575,14 @@ end
 		   let 
 		       val (lva,sdec) = GetSbndSdec(ctxt,sb)
 		       val SDEC(_,dec) = sdec
-		   in loop (va andalso lva) sbs (sdec::acc) (add_context_dec(ctxt,SelfifyDec dec))
+		   in loop (va andalso lva) sbs (sdec::acc) (add_context_dec(ctxt,SelfifyDec ctxt dec))
 		   end
 	       val (va,sdecs) = (loop true sbnds [] ctxt)
 	       val res = SIGNAT_STRUCTURE(NONE,sdecs)
 	   in (va,res)
 	   end
      | MOD_FUNCTOR (v,s,m) => 
-	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,SelfifySig(SIMPLE_PATH v, s)))
+	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,SelfifySig ctxt (SIMPLE_PATH v, s)))
 	       val (va,signat) = GetModSig(m,ctxt')
 	   in  (true,SIGNAT_FUNCTOR(v,s,signat,
 				    (if va then TOTAL else PARTIAL)))
@@ -1327,8 +1596,9 @@ end
 	       val _ = debugdo (fn () => (print "\n\nMOD_APP case in GetModSig got asignat and bsignat\n";
 					  print "asignat is\n"; pp_signat asignat; print "\n";
 					  print "bsignat is\n"; pp_signat bsignat; print "\n"))
-	   in case asignat of
+	   in case (reduce_signat ctxt asignat) of
 	       (SIGNAT_STRUCTURE _) => error "Can't apply a structure signature"
+	     | (SIGNAT_VAR _) => error "Can't apply a structure with variable signature"
 	     | (SIGNAT_INLINE_STRUCTURE _) => error "Can't apply a structure signature"
 	     | SIGNAT_FUNCTOR (v,csignat,dsignat,ar) =>
 		   if (Sig_IsSub(ctxt, bsignat, csignat))
@@ -1339,7 +1609,7 @@ end
 	   end
      | MOD_LET (v,m1,m2) => 
 	   let val (va1,s1) = GetModSig(m1,ctxt)
-	       val s1' = SelfifySig(SIMPLE_PATH v,s1)
+	       val s1' = SelfifySig ctxt (SIMPLE_PATH v,s1)
 	       val ctxt' = add_context_mod'(ctxt,v,s1')
 	       val (va2,s2) = GetModSig(m2,ctxt')
 	   in (va1 andalso va2,sig_subst_modvar(s2,[(v,m1)]))
@@ -1351,31 +1621,32 @@ end
 	       val (va,signat) = GetModSig(m,ctxt)
 	       val _ = debugdo (fn () => (print "retrieved signat of \n"; 
 					  pp_signat signat; print "\n"))
-	   in case signat of
-	       SIGNAT_FUNCTOR _ => error "cannot project from functor"
-	     | ((SIGNAT_STRUCTURE (SOME p,sdecs)) |
-		   (SIGNAT_INLINE_STRUCTURE {self=SOME p,abs_sig=sdecs,...})) =>
-		   (case Sdecs_Lookup(path2mod p, sdecs,[l]) of
+	       fun self_case(p,sdecs) = 
+		   (case Sdecs_Lookup ctxt (path2mod p, sdecs,[l]) of
 			NONE =>  
-			    (print "GetModSig: SignatLookup MOD_PROJECT failed with label ";
+			 (print "GetModSig: SignatLookup MOD_PROJECT failed with label ";
 			     pp_label l;
-(*			     print "\nand with signat = \n";
-                             pp_signat signat;
-*)
-					 print "\n";
-
-					 fail "MOD_PROJECT failed to find label ")
-		      | (SOME (PHRASE_CLASS_MOD(_,s))) => (va,s)
+(*			     print "\nand with signat = \n";  pp_signat signat; *)
+			     print "\n";
+			     fail "MOD_PROJECT failed to find label ")
+		      | (SOME (_,PHRASE_CLASS_MOD(_,s))) => (va,s)
 		      | _ => (print "MOD_PROJECT at label "; pp_label l; 
 			      print "did not find DEC_MOD.  \nsig was = ";
 			      pp_signat signat; print "\n";
 			      fail "MOD_PROJECT found label not of flavor DEC_MOD"))
-	     | ((SIGNAT_STRUCTURE (NONE,sdecs)) |
-			(SIGNAT_INLINE_STRUCTURE {self=NONE,abs_sig=sdecs,...})) =>
-			(case Sdecs_Project(if va then SOME m else NONE, sdecs, l) of
-			     NONE => error "MOD_PROJECT: label not in modsig"
-			   | SOME (CLASS_MOD s) => (va,s)
-			   | SOME _ => fail "MOD_PROJECT: label found wrong flavor")
+	       fun notself_case(sdecs) = 
+		   (case local_Sdecs_Project ctxt(if va then SOME m else NONE, sdecs, l) of
+			NONE => error "MOD_PROJECT: label not in modsig"
+		      | SOME (CLASS_MOD s) => (va,s)
+		      | SOME _ => fail "MOD_PROJECT: label found wrong flavor")
+
+	   in case (reduce_signat ctxt signat) of
+	       SIGNAT_FUNCTOR _ => error "cannot project from functor"
+	     | SIGNAT_VAR _ => error "cannot project from variable signature"
+	     | SIGNAT_STRUCTURE (SOME p,sdecs) => self_case(p,sdecs)
+	     | SIGNAT_INLINE_STRUCTURE {self=SOME p,abs_sig=sdecs,...} => self_case(p,sdecs)
+	     | SIGNAT_STRUCTURE (NONE,sdecs) => notself_case sdecs
+	     | SIGNAT_INLINE_STRUCTURE {self=NONE,abs_sig=sdecs,...} => notself_case sdecs
 	   end
 (*		   
 	       val res = case SignatLookup(m,l,signat) of
@@ -1487,20 +1758,26 @@ end
 					    in loop tables' rest
 					    end
 			  | _ => loop tables rest)
-	       in (case s of 
-		       ((SIGNAT_STRUCTURE(NONE,sdecs)) | (SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...})) => 
-			   (debugdo (fn () => (print "HeadNormalize: CON_MODULE_PROJECT case: l = "; pp_label l;
-					       print "\n and sdecs = ";
-					       pp_sdecs sdecs;
-					       print "\n"));
-			    loop ([],[]) sdecs)
-		     | ((SIGNAT_STRUCTURE (SOME p,sdecs)) | 
-			   (SIGNAT_INLINE_STRUCTURE{self=SOME p,abs_sig=sdecs,...})) =>
-			   (* XXX loop ([],[]) sdecs *)
-			   (case Sdecs_Lookup(path2mod p, sdecs, [l]) of
-				SOME(PHRASE_CLASS_CON(c,_)) => break_loop c
-			      | SOME _ => error "CON_MOD_PROJECT found signature with wrong flavor"
-			      | NONE => (false,arg))
+		   fun self_case(p,sdecs) = 
+		       (case Sdecs_Lookup ctxt (path2mod p, sdecs, [l]) of
+			    SOME(_,PHRASE_CLASS_CON(c,_)) => break_loop c
+			  | SOME _ => error "CON_MOD_PROJECT found signature with wrong flavor"
+			  | NONE => (false,arg))
+		   fun notself_case sdecs = 
+		       (debugdo (fn () => 
+				 (print "HeadNormalize: CON_MODULE_PROJECT case: l = "; 
+				  pp_label l; print "\n and sdecs = ";
+				  pp_sdecs sdecs;
+				  print "\n"));
+			loop ([],[]) sdecs)
+	       in (case (reduce_signat ctxt s) of 
+		       SIGNAT_STRUCTURE(NONE,sdecs) => notself_case sdecs
+		     | SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...} => notself_case sdecs
+		     | SIGNAT_STRUCTURE (SOME p,sdecs) => self_case(p,sdecs)
+		     | SIGNAT_INLINE_STRUCTURE{self=SOME p,abs_sig=sdecs,...} => self_case(p,sdecs)
+		     | SIGNAT_VAR _ => (print "CON_MODULE_PROJECT from signat var \n";
+					pp_mod m;
+					error "CON_MODULE_PROJECT from signat var")
 		     | SIGNAT_FUNCTOR _ => (print "CON_MODULE_PROJECT from functor = \n";
 					    pp_mod m;
 					    error "CON_MODULE_PROJECT from a functor"))
@@ -1519,7 +1796,10 @@ end
 			   pp_con arg; print "\nand ctxt = \n";
 			   pp_context ctxt;	print "\n"));
       case arg of
-	(CON_INT _ | CON_FLOAT _ | CON_UINT _ | CON_ANY) => arg
+	CON_INT _  => arg
+      | CON_FLOAT _  => arg
+      | CON_UINT _  => arg
+      | CON_ANY => arg
       | (CON_OVAR ocon)           => let val tv = ocon_deref ocon
 				     in Normalize(CON_TYVAR tv,ctxt)
 				     end
@@ -1550,7 +1830,7 @@ end
 				     in #2(HeadNormalize(arg',ctxt))
 				     end
       | (CON_MODULE_PROJECT (m as MOD_STRUCTURE sbnds,l)) => (* no need to normalize m *)
-	    (case (Sbnds_Lookup(sbnds,[l])) of
+	    (case (Sbnds_Lookup ctxt (sbnds,[l])) of
 		 SOME(_, PHRASE_CON c) => Normalize(c,ctxt)
 	       | SOME _ => error "Sbnds_Lookup projected out a non-con component"
 	       | NONE => error "Sbnds_Lookup could not find component")
@@ -1564,61 +1844,52 @@ end
 		 val (_,signat) = GetModSig(m,ctxt)
 		 val _ = debugdo (fn () => (print "normalize got back sig:\n";
 					    pp_signat signat; print "\n"))
-	     in  
-		 case (m,signat) of
-		     (_,SIGNAT_FUNCTOR _) => error "cannot project for functor"
-		   | (_,((SIGNAT_STRUCTURE (SOME p,sdecs)) |
-			 (SIGNAT_INLINE_STRUCTURE{self=SOME p,abs_sig=sdecs,...}))) => 
-			 (case Sdecs_Lookup(path2mod p, sdecs, [l]) of
-			      NONE => (print "CON_MOD_PROJECT failed to find label = ";
+		 fun self_case(p,sdecs) = 
+		     (case Sdecs_Lookup ctxt (path2mod p, sdecs, [l]) of
+			  NONE => (print "CON_MOD_PROJECT failed to find label = ";
 				       pp_label l; print " and signat = \n";
 				       pp_signat signat; print "\n";
 				       error "CON_MOD_PROJECT failed to find label")
-			    | (SOME (PHRASE_CLASS_CON(c,k))) => 
-				  (case c of
-				       CON_MODULE_PROJECT(m',l') => 
-					   if (eq_label(l,l') andalso eq_mod(m,m'))
-					       then c
-					   else Normalize(c,ctxt)
-				     | _ => Normalize(c,ctxt))
-			    | (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON")
-		   | (MOD_STRUCTURE sbnds,
-			      ((SIGNAT_STRUCTURE (NONE,sdecs)) | 			 
-			       (SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...}))) => 
+			| (SOME (_,PHRASE_CLASS_CON(c,k))) => 
+			      (case c of
+				   CON_MODULE_PROJECT(m',l') => 
+				       if (eq_label(l,l') andalso eq_mod(m,m'))
+					   then c
+				       else Normalize(c,ctxt)
+				 | _ => Normalize(c,ctxt))
+			| (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON")
+		 fun notself_case (sbnds,sdecs) = 
 		     let val p = SIMPLE_PATH (fresh_named_var "badbadbad")
-		     in case Sdecs_Lookup(path2mod p, sdecs, [l]) of
-					  NONE => (print "CON_MOD_PROJECT failed to find label = ";
-						   pp_label l; print " and signat = \n";
-						   pp_signat signat; print "\n";
-						   error "CON_MOD_PROJECT failed to find label")
-			    | (SOME (PHRASE_CLASS_CON(c,k))) => 
-				  (case c of
-				       CON_MODULE_PROJECT(m',l') => 
-					   if (eq_label(l,l') andalso eq_mod(m,m'))
-					       then c
-					   else Normalize(c,ctxt)
-				     | _ => Normalize(c,ctxt))
-			    | (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON"
+		     in case Sdecs_Lookup ctxt (path2mod p, sdecs, [l]) of
+			 NONE => (print "CON_MOD_PROJECT failed to find label = ";
+				  pp_label l; print " and signat = \n";
+				  pp_signat signat; print "\n";
+				  error "CON_MOD_PROJECT failed to find label")
+		       | (SOME (_,PHRASE_CLASS_CON(c,k))) => 
+			     (case c of
+				  CON_MODULE_PROJECT(m',l') => 
+				      if (eq_label(l,l') andalso eq_mod(m,m'))
+					  then c
+				      else Normalize(c,ctxt)
+				| _ => Normalize(c,ctxt))
+		       | (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON"
 		     end
-		    | _ => (print "Normalize: CON_MODULE_PROJECT with m = ";
+
+	     in  
+		 case (m,reduce_signat ctxt signat) of
+		     (_,SIGNAT_FUNCTOR _) => error "cannot project for functor"
+		   | (_,SIGNAT_VAR _) => error "cannot project from signat_var"
+		   | (_,SIGNAT_STRUCTURE (SOME p,sdecs)) => self_case(p,sdecs)
+		   | (_,SIGNAT_INLINE_STRUCTURE{self=SOME p,abs_sig=sdecs,...}) => self_case(p,sdecs)
+		   | (MOD_STRUCTURE sbnds,SIGNAT_STRUCTURE (NONE,sdecs)) => notself_case(sbnds,sdecs)
+		   | (MOD_STRUCTURE sbnds, SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...}) => 
+			 notself_case(sbnds,sdecs)
+		   | _ => (print "Normalize: CON_MODULE_PROJECT with m = ";
 			    pp_mod m;
 			    print "and context = ";
 			    pp_context ctxt;
 			    raise UNIMP)
 	     end)
-		 (* case SignatLookup'(m,l,signat) of
-		 NONE => (print "CON_MOD_PROJECT failed to find label = ";
-			  pp_label l; print " and signat = \n";
-			  pp_signat signat; print "\n";
-			  error "CON_MOD_PROJECT failed to find label")
-	       | (SOME (_,PHRASE_CLASS_CON(c,k))) => 
-		     (case c of
-			  CON_MODULE_PROJECT(m',l') => 
-			      if (eq_label(l,l') andalso eq_mod(m,m'))
-				  then c
-			      else Normalize(c,ctxt)
-			| _ => Normalize(c,ctxt))
-	       | (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON" *)
       | (CON_VAR v) => (case #2(HeadNormalize(arg,ctxt)) of
 			    CON_VAR v' => if (eq_var(v,v')) 
 					      then arg else Normalize(CON_VAR v',ctxt)
@@ -1635,29 +1906,35 @@ end
 
      and Kind_Valid (KIND_TUPLE n,_)     = n >= 0
        | Kind_Valid (KIND_ARROW (m,n),_) = (m >= 0) andalso (n >= 0)
-       | Kind_Valid (KIND_INLINE (k,c),ctxt) = let val k' = GetConKind(c,ctxt)
-						   fun eq_kind (KIND_TUPLE n1, KIND_TUPLE n2) = n1 = n2
-						     | eq_kind (KIND_ARROW(m1,n1), KIND_ARROW(m2,n2)) = 
-						       ((m1 = m2) andalso (n1 = n2))
-						     | eq_kind _ = false
-					       in  Kind_Valid(k,ctxt) andalso eq_kind(k,k')
-					       end
+       | Kind_Valid (KIND_INLINE (k,c),ctxt) = 
+	 let val k' = GetConKind(c,ctxt)
+	     fun eq_kind (KIND_TUPLE n1, KIND_TUPLE n2) = n1 = n2
+	       | eq_kind (KIND_ARROW(m1,n1), KIND_ARROW(m2,n2)) = 
+		 ((m1 = m2) andalso (n1 = n2))
+	       | eq_kind _ = false
+	 in  Kind_Valid(k,ctxt) andalso eq_kind(k,k')
+	 end
 
      and Context_Valid ctxt = raise Util.UNIMP
 
      and Decs_Valid (ctxt,[]) = true
        | Decs_Valid (ctxt,a::rest) = Dec_Valid(ctxt,a) andalso 
-	 Decs_Valid(add_context_dec(ctxt,SelfifyDec a),rest)
+	 Decs_Valid(add_context_dec(ctxt,SelfifyDec ctxt a),rest)
 
      and Dec_Valid (ctxt : context, dec) = 
 	 let fun var_notin v  = (Context_Lookup'(ctxt,v); false) handle _ => true
 	     fun name_notin n = (Context_Exn_Lookup(ctxt,n); false) handle _ => true
        in  (case dec of
-	      DEC_EXP(v,c) => (var_notin v) andalso (GetConKind(c,ctxt) = (KIND_TUPLE 1))
+	      DEC_EXP(v,c) => (var_notin v) andalso 
+		              (case GetConKind(c,ctxt) of
+				   KIND_TUPLE 1 => true
+				 | _ => false)
 	    | DEC_MOD(v,s) => (var_notin v) andalso (Sig_Valid(ctxt,s))
 	    | DEC_CON (v,k,NONE) => (var_notin v) andalso (Kind_Valid(k,ctxt))
 	    | DEC_EXCEPTION(name,CON_TAG c) => ((name_notin name) andalso 
-						(GetConKind(c,ctxt) = (KIND_TUPLE 1)))
+						(case GetConKind(c,ctxt) of
+						     KIND_TUPLE 1 => true
+						   | _ => false))
 	    | _ => false)
        end
 				
@@ -1666,7 +1943,7 @@ end
      and Sdecs_Valid (ctxt, []) = Context_Valid ctxt
        | Sdecs_Valid (ctxt, (SDEC(label,dec)::rest)) = 
 	 (Dec_Valid(ctxt,dec) andalso 
-	  Sdecs_Valid(add_context_dec(ctxt,SelfifyDec dec),rest) andalso 
+	  Sdecs_Valid(add_context_dec(ctxt,SelfifyDec ctxt dec),rest) andalso 
 	  (not (List.exists (fn l => eq_label(label,l))
 		(Sdecs_Domain rest))))
 
@@ -1675,7 +1952,8 @@ end
        | Sig_Valid (ctxt : context, SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,...}) = Sdecs_Valid(ctxt,sdecs)
        | Sig_Valid (ctxt, SIGNAT_FUNCTOR(v,s_arg,s_res,arrow)) = 
 	 (Sig_Valid(ctxt,s_arg) andalso 
-	  Sig_Valid(add_context_mod'(ctxt,v,SelfifySig(SIMPLE_PATH v,s_arg)),s_res))
+	  Sig_Valid(add_context_mod'(ctxt,v,SelfifySig ctxt (SIMPLE_PATH v,s_arg)),s_res))
+       | Sig_Valid (ctxt : context, SIGNAT_VAR v) = Sig_Valid(ctxt,reduce_sigvar(ctxt,v))
 
      and Dec_IsSub (ctxt,d1,d2) = 
 	 (case (d1,d2) of
@@ -1725,7 +2003,7 @@ end
 				  raise NOPE)
 	     fun loop ctxt [] [] = true
 	       | loop ctxt (SDEC(_,dec1)::rest1) (SDEC(_,dec2)::rest2) = 
-		 let val dec1 = SelfifyDec dec1
+		 let val dec1 = SelfifyDec ctxt dec1
 		 in (Dec_IsSub(ctxt,dec1,dec2)
 		     andalso loop (add_context_dec(ctxt,dec1)) rest1 rest2)
 		 end
@@ -1738,22 +2016,22 @@ end
      and Sig_IsSub' (ctxt, sig1, sig2) = 
 	 let fun help(ctxt,sdecs1,sdecs2) = Sdecs_IsSub(ctxt,sdecs1,sdecs2)
 	 in
-	     (case (sig1,sig2) of
+	     (case (reduce_signat ctxt sig1,reduce_signat ctxt sig2) of
 		  (SIGNAT_STRUCTURE (NONE,sdecs1), 
 		   SIGNAT_STRUCTURE (NONE,sdecs2)) => 
 		  let val v = fresh_named_var "selfvar"
 		      val p = SIMPLE_PATH v
-		      val sdecs1 = SelfifySdecs(p,sdecs1)
-		      val sdecs2 = SelfifySdecs(p,sdecs2)
+		      val sdecs1 = SelfifySdecs ctxt (p,sdecs1)
+		      val sdecs2 = SelfifySdecs ctxt (p,sdecs2)
 		      val ctxt = add_context_mod'(ctxt,v,SIGNAT_STRUCTURE(SOME p,sdecs1))
 		  in help(ctxt,sdecs1,sdecs2)
 		  end
 		| (SIGNAT_INLINE_STRUCTURE {self,abs_sig,...},_) => Sig_IsSub'(ctxt,SIGNAT_STRUCTURE(self,abs_sig),sig2)
 		| (_,SIGNAT_INLINE_STRUCTURE {self,abs_sig,...}) => Sig_IsSub'(ctxt,sig1,SIGNAT_STRUCTURE(self,abs_sig))
 		| (SIGNAT_STRUCTURE (NONE,sdecs1), 
-		   SIGNAT_STRUCTURE (SOME p,sdecs2)) => help(ctxt,SelfifySdecs(p,sdecs1),sdecs2)
+		   SIGNAT_STRUCTURE (SOME p,sdecs2)) => help(ctxt,SelfifySdecs ctxt (p,sdecs1),sdecs2)
 		| (SIGNAT_STRUCTURE (SOME p,sdecs1), 
-		   SIGNAT_STRUCTURE (NONE, sdecs2)) => help(ctxt,sdecs1,SelfifySdecs(p,sdecs2))
+		   SIGNAT_STRUCTURE (NONE, sdecs2)) => help(ctxt,sdecs1,SelfifySdecs ctxt (p,sdecs2))
 		| (SIGNAT_STRUCTURE (SOME p1,sdecs1), 
 		   SIGNAT_STRUCTURE (SOME p2,sdecs2)) => eq_path(p1,p2)
 							  orelse help(ctxt,sdecs1,sdecs2)
@@ -1762,7 +2040,7 @@ end
 		  ((eq_arrow(a1,a2,true)) andalso 
 		   let val s1_res = if (eq_var(v1,v2)) then s1_res
 				    else sig_subst_modvar(s1_res,[(v1,MOD_VAR v2)])
-		       val s2_arg = SelfifySig(SIMPLE_PATH v2, s2_arg)
+		       val s2_arg = SelfifySig ctxt (SIMPLE_PATH v2, s2_arg)
 		       val ctxt' = add_context_dec(ctxt,DEC_MOD(v2,s2_arg))
 		   in  Sig_IsSub(ctxt',s2_arg,s1_arg) andalso 
 		       Sig_IsSub(ctxt',s1_res,s2_res)

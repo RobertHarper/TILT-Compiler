@@ -1,12 +1,16 @@
-(*$import ERROR *)
+(*$import ERROR IL ILUTIl *)
 (* Stateful module holding the error state of the elaboration process *)
 
-structure Error :> ERROR = 
+functor Error(structure Il : IL
+	      structure IlUtil : ILUTIL
+	      sharing IlUtil.Il = Il)
+   :> ERROR where Il = Il = 
 struct
 
     datatype ErrorLevel = NoError | Warn | Error
     type region = Ast.srcpos * Ast.srcpos
-
+    structure Il = Il
+    open Il IlUtil
 
     val error_level = ref NoError
     val src_region = ref ([] : region list)
@@ -51,6 +55,15 @@ struct
 	end
     val tab = spaces 10
     fun tab_region() = print tab
+
+
+    fun dummy_type(context,str) = fresh_named_con(context,str)
+    fun dummy_exp (context,str) =
+	let val c = fresh_named_con(context,str)
+	    val e = RAISE(c,EXN_INJECT("elab_fail",NEW_STAMP con_unit,RECORD[]))
+	in (e,c)
+	end
+
 
 end
 

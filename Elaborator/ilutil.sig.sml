@@ -34,6 +34,7 @@ signature ILUTIL =
     val path2exp : Il.path -> exp
     val mod2path : mod -> Il.path
     val exp2path : exp -> Il.path
+    val con2path : con -> Il.path
     val eq_path  : Il.path * Il.path -> bool
 
     (* error functions *)

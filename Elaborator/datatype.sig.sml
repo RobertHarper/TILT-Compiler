@@ -1,26 +1,26 @@
-(*$import ILCONTEXT Ast *)
+(*$import IL Ast *)
 (* Datatype compiler and destructurer of compiled modules/signatures. *)
 signature DATATYPE = 
   sig
-    structure IlContext : ILCONTEXT
+    structure Il : IL
 
     val debug : bool ref
 
-    val exn_lookup : IlContext.Il.context -> Ast.path -> 
-	{stamp : IlContext.Il.exp,
-	 carried_type : IlContext.Il.con option} option
+    val exn_lookup : Il.context -> Ast.path -> 
+	{stamp : Il.exp,
+	 carried_type : Il.con option} option
 
 
     (* Takes a context, a procedure for type expression compilation, and
        datatype and withtype specifications, and returns a module and 
        signature for the datatype declaration. *)
     val compile : {transparent : bool,
-		   context : IlContext.context,
-		   typecompile : IlContext.context * Ast.ty -> IlContext.Il.con,
+		   context : Il.context,
+		   typecompile : Il.context * Ast.ty -> Il.con,
 		   datatycs : Ast.db list,
-		   eq_compile : IlContext.context * IlContext.con -> IlContext.exp option,
-		   eq_compile_mu : IlContext.context * IlContext.con -> IlContext.exp option} -> 
-	                        (IlContext.Il.sbnd * IlContext.Il.sdec) list
+		   eq_compile : Il.context * Il.con -> Il.exp option,
+		   eq_compile_mu : Il.context * Il.con -> Il.exp option} -> 
+	                        (Il.sbnd * Il.sdec) list
 
 
     (* The datatype module/signature returned will be such that:
@@ -38,18 +38,18 @@ signature DATATYPE =
 
     (* Predicate for identifying constructors and separating value-carrying
        from non-value-carrying ones *)
-    val is_constr : IlContext.Il.context -> Ast.path -> bool
-    val is_nonconst_constr : IlContext.Il.context -> Ast.path -> bool
+    val is_constr : Il.context -> Ast.path -> bool
+    val is_nonconst_constr : Il.context -> Ast.path -> bool
 
 
     val instantiate_datatype_signature : 
-            IlContext.Il.context * Ast.path *
-	    (IlContext.Il.context * IlContext.Il.sdecs -> 
-	     IlContext.Il.sbnd list * IlContext.Il.sdecs * IlContext.Il.con list)
-	    -> {instantiated_type : IlContext.Il.con,
-		instantiated_sumtype : IlContext.Il.con,
-		instantiated_special_sumtype : IlContext.Il.con list,
-		arms : {name : IlContext.Il.label, arg_type : IlContext.Il.con option} list,
-		expose_exp : IlContext.Il.exp}
+            Il.context * Ast.path *
+	    (Il.context * Il.sdecs -> 
+	     Il.sbnd list * Il.sdecs * Il.con list)
+	    -> {instantiated_type : Il.con,
+		instantiated_sumtype : Il.con,
+		instantiated_special_sumtype : Il.con list,
+		arms : {name : Il.label, arg_type : Il.con option} list,
+		expose_exp : Il.exp}
 			 
   end;

@@ -1,16 +1,16 @@
+(*$import IL PPIL ILCONTEXT PRIMUTIL ILUTIL ListMergeSort *)
 (* Il Utility *)
-functor IlUtil(structure Ppil : PPIL
-	       structure Il : IL
+functor IlUtil(structure Il : IL
+	       structure Ppil : PPIL
 	       structure IlContext : ILCONTEXT
 	       structure PrimUtil : PRIMUTIL
-	       sharing PrimUtil.Prim = Il.Prim
                sharing Ppil.Il = IlContext.Il = Il
+	       sharing PrimUtil.Prim = Il.Prim
 	       sharing type PrimUtil.con = Il.con
 	       sharing type PrimUtil.exp = Il.exp)
 
-  : ILUTIL = 
+  :> ILUTIL where Il = Il = 
   struct
-    structure Il = Il
 
     open Il IlContext Ppil 
     open Util Listops Name 
@@ -196,6 +196,13 @@ functor IlUtil(structure Ppil : PPIL
 	      | _ => (print "exp was: "; pp_exp e;
 		      print "\n";
 		      error "exp2path called on non-projection")
+	fun con2path (c : con) =
+	    case c of
+		CON_VAR v => SIMPLE_PATH v
+	      | CON_MODULE_PROJECT (m,l) => loop (MOD_PROJECT(m,l)) []
+	      | _ => (print "con was: "; pp_con c;
+		      print "\n";
+		      error "con2path called on non-projection")
     end
 
 
@@ -242,7 +249,8 @@ functor IlUtil(structure Ppil : PPIL
 	       SOME e => e
 	     | NONE =>
 	  (case exp of
-	     (SCON _ | OVEREXP _) => exp
+	     SCON _ => exp
+	   | OVEREXP _ => exp
 	   | VAR v => exp
 	   | PRIM (p,cs,es) => PRIM(p, map (f_con state) cs, map self es)
 	   | ILPRIM (ilp,cs,es) => ILPRIM(ilp, map (f_con state) cs, map self es)
@@ -301,7 +309,10 @@ functor IlUtil(structure Ppil : PPIL
 					     | SOME c => self c)
 		     | CON_VAR _ => con
 		     | (CON_OVAR ocon) => (self (CON_TYVAR (ocon_deref ocon)); con)
-		     | (CON_INT _ | CON_FLOAT _ | CON_UINT _ | CON_ANY) => con
+		     | CON_INT _ => con
+		     | CON_FLOAT _  => con
+		     | CON_UINT _  => con
+		     | CON_ANY => con
 		     | CON_ARRAY c => CON_ARRAY (self c)
 		     | CON_VECTOR c => CON_VECTOR (self c)
 		     | CON_REF c => CON_REF (self c)
@@ -349,14 +360,16 @@ functor IlUtil(structure Ppil : PPIL
 	       SOME s => s
 	     | NONE =>
 	(case s of
-	   SIGNAT_STRUCTURE (popt,sdecs) => SIGNAT_STRUCTURE (popt,map (f_sdec state) sdecs)
-	 | SIGNAT_INLINE_STRUCTURE {self,code,abs_sig,imp_sig} =>
-	       let val imp_sig = map (f_sdec state) imp_sig
-		   val abs_sig = map (f_sdec state) abs_sig
-		   val code = map (f_sbnd state) code
-	       in  SIGNAT_INLINE_STRUCTURE {self=self,code=code,abs_sig=abs_sig,imp_sig=imp_sig}
-	       end
-	 | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1, 
+	     SIGNAT_VAR v => s
+	   | SIGNAT_OF m => SIGNAT_OF(f_mod state m)
+	   | SIGNAT_STRUCTURE (popt,sdecs) => SIGNAT_STRUCTURE (popt,map (f_sdec state) sdecs)
+	   | SIGNAT_INLINE_STRUCTURE {self,code,abs_sig,imp_sig} =>
+		 let val imp_sig = map (f_sdec state) imp_sig
+		     val abs_sig = map (f_sdec state) abs_sig
+		     val code = map (f_sbnd state) code
+		 in  SIGNAT_INLINE_STRUCTURE {self=self,code=code,abs_sig=abs_sig,imp_sig=imp_sig}
+		 end
+	   | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1, 
 							   f_signat state s2, a)))
 
       and f_rbnd state (l,e) = (l, f_exp state e)
@@ -1169,11 +1182,19 @@ functor IlUtil(structure Ppil : PPIL
 	     OVEREXP (_,_,oe) => (case oneshot_deref oe of
 				      NONE => false
 				    | SOME e => is_inline_exp e)
-	   | ((SCON _) | (VAR _) | (ETAPRIM _) | (ETAILPRIM _) | (FIX _))  => true
-	   | ((PRIM _) | (ILPRIM _)) => false
+	   | SCON _ => true
+	   | VAR _ => true 
+	   | ETAPRIM _ => true
+	   | ETAILPRIM _ => true
+	   | (FIX _) => true
+	   | PRIM _ => false
+	   | ILPRIM _ => false
 	   | (RECORD le_list) => List.all (fn (_,e) => is_inline_exp e) le_list
-	   | ((SUM_TAIL (_,e)) | (ROLL(_,e)) | (UNROLL(_,_,e)))  => is_inline_exp e
-	   | ((HANDLE (e1,e2)) | (EXN_INJECT(_,e1,e2))) => (is_inline_exp e1) andalso (is_inline_exp e2)
+	   | SUM_TAIL (_,e)  => is_inline_exp e
+	   | ROLL(_,e) => is_inline_exp e
+	   | UNROLL(_,_,e) => is_inline_exp e
+	   | HANDLE (e1,e2) => (is_inline_exp e1) andalso (is_inline_exp e2)
+	   | EXN_INJECT(_,e1,e2) => (is_inline_exp e1) andalso (is_inline_exp e2)
 	   | (RAISE (_,e)) => is_inline_exp e
 	   | (LET (bnds,e)) => (List.all is_inline_bnd bnds) andalso (is_inline_exp e)
 	   | (NEW_STAMP _) => false

@@ -1,3 +1,5 @@
+(*$import IL ILSTATIC PPIL ILUTIL ASTHELP DATATYPE ILCONTEXT ERROR PAT Stats *)
+
 (* xxx should coalesce constants *)
 
 functor Pat(structure Il : IL
@@ -7,9 +9,9 @@ functor Pat(structure Il : IL
 	    structure AstHelp : ASTHELP
 	    structure Datatype : DATATYPE
 	    structure IlContext : ILCONTEXT
-	    sharing Datatype.IlContext = Ppil.IlContext = IlContext
-	    sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
-   : PAT  =
+	    structure Error : ERROR
+	    sharing Datatype.Il = Error.Il = IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
+   :> PAT where Il = Il =
   struct
 
       val do_result_type = ref true
@@ -200,6 +202,7 @@ functor Pat(structure Il : IL
 				 val bound = foldl bound_intersect bound (map #2 one_bounds)
 				 val bound = List.filter (fn (s,_,_) => not(Symbol.eq(s,wildSymbol))) bound
 
+(*
 				 val _ = (print "BEFORE: one_bounds:\n";
 					  app (fn (one,b) =>
 					       (app(fn (s,v,_) =>
@@ -207,10 +210,12 @@ functor Pat(structure Il : IL
 						   pp_var v; print "    ")) b;
 						print "\n")) one_bounds;
 					  print "\n\n")
+*)
 
 				 val one_bounds = map (fn (one,b) => 
 						       (one,bound_intersect(bound,b))) one_bounds
 
+(*
 				 val _ = (print "AFTER: one_bounds:\n";
 					  app (fn (one,b) =>
 					       (app(fn (s,v,_) =>
@@ -218,6 +223,7 @@ functor Pat(structure Il : IL
 						   pp_var v; print "    ")) b;
 						print "\n")) one_bounds;
 					  print "\n\n")
+*)
 
 				 val bound_vars = map #2 bound
 				 val bound_cons = map #3 bound
@@ -543,7 +549,8 @@ debugdo
 	     fun listpat2pat [] = Ast.VarPat [Symbol.varSymbol "nil"]
 	       | listpat2pat (p::rest) = Ast.AppPat{constr=Ast.VarPat[Symbol.varSymbol "::"],
 						     argument=Ast.TuplePat[p,listpat2pat rest]}
-	     fun do_arm ([],bound,body) = error "no pattern but have arguments"
+	     fun do_arm ([],bound,body) = (error_region();
+					   error "no pattern but have arguments")
 	       | do_arm (hdpat::tlpat,bound,b) = 
 		 case hdpat of
 		     (Ast.MarkPat(p,r)) => do_arm (p::tlpat,bound,b)
@@ -657,7 +664,7 @@ debugdo
 	       fun ref_dispatch() = 
 		 let
 		   fun refpred (Ast.AppPat {constr=Ast.VarPat [s],argument}) =
-		     if (s = Symbol.varSymbol "ref") then SOME argument else NONE
+		     if (Symbol.eq(s,Symbol.varSymbol "ref")) then SOME argument else NONE
 		     | refpred _ = NONE
 		   val (accs,def) = find_maxseq refpred arms
 		 in  ref_case(arg1,argrest,accs,def)
@@ -678,9 +685,10 @@ debugdo
 		     in  constr_case(arg1,argrest,accs,def)
 		     end
 		 in (case (hd(#1 (hd arms))) of
-			   Ast.AppPat{constr=Ast.VarPat[s],...} => if (s = Symbol.varSymbol "ref") 
-									then ref_dispatch()
-								      else constr_dispatch()
+			   Ast.AppPat{constr=Ast.VarPat[s],...} => 
+			       if (Symbol.eq(s,Symbol.varSymbol "ref"))
+				   then ref_dispatch()
+			       else constr_dispatch()
 			 | _ => constr_dispatch())
 		 end
 
@@ -795,16 +803,22 @@ debugdo
 			    | eqpat _ = true
 		      in  constant_dispatch(CON_UINT W8,equaler,eqpat)
 		      end
-		  | (Ast.RecordPat _ | Ast.TuplePat _) => tuple_record_dispatch()
-		  | (Ast.WildPat) => var_dispatch()
-		  | (Ast.VarPat p) => (if (is_constr p) then constructor_dispatch() 
-				      else if (is_exn p) then exn_dispatch() 
-					   else (case p of 
-						  [_] => var_dispatch()
-						| _ => error "illegal variable pattern - path"))
+		  | Ast.RecordPat _ => tuple_record_dispatch()
+		  | Ast.TuplePat _ => tuple_record_dispatch()
+		  | Ast.WildPat => var_dispatch()
+		  | (Ast.VarPat p) => 
+		      (if (is_constr p) then constructor_dispatch() 
+		       else if (is_exn p) then exn_dispatch() 
+			    else (case p of 
+				      [_] => var_dispatch()
+				    | _ => (Error.error_region();
+					    print "illegal variable pattern - path\n";
+					    error "illegal variable pattern - path")))
 	          | (Ast.AppPat {constr,argument}) =>
-			(case constr of
-			     ((Ast.VarPat p) | (Ast.MarkPat (Ast.VarPat p,_))) => 
+			(case (case constr of
+				   Ast.MarkPat (p,_) => p
+				 | p => p) of
+			     (Ast.VarPat p) =>
 				 if (is_exn p) then exn_dispatch() 
 				 else constructor_dispatch()
 			   | _ => constructor_dispatch())
@@ -823,27 +837,27 @@ debugdo
 
 
 
-
-    fun get_bound (pat : Ast.pat) : Ast.symbol list = 
+    (* find all the variables that are bound; constructors are NOT bound *)
+    fun get_bound context (pat : Ast.pat) : Ast.symbol list = 
 	let open Ast
 	in  (case pat of
 	    WildPat => []
-          | VarPat [s] => [s]
+          | VarPat [s] => if (Datatype.is_constr context [s]) then [] else [s]
           | VarPat _ => []
           | IntPat _ => []
           | WordPat _ => []
           | StringPat _ => []
           | CharPat _ => []
           | RecordPat {def:(symbol * pat) list, flexibility:bool} => 
-		 Listops.flatten(map (fn (_,p) => get_bound p) def)
-          | ListPat p => Listops.flatten(map get_bound p)
-          | TuplePat p => Listops.flatten(map get_bound p)
+		 Listops.flatten(map (fn (_,p) => get_bound context p) def)
+          | ListPat p => Listops.flatten(map (get_bound context) p)
+          | TuplePat p => Listops.flatten(map (get_bound context) p)
 	  | FlatAppPat patfixes => error "flatapppat should be parsed away"
-          | AppPat {constr:pat,argument:pat} => get_bound argument
-          | ConstraintPat {pattern:pat,constraint:ty} => get_bound pattern
-          | LayeredPat {varPat:pat,expPat:pat} => (get_bound varPat) @ (get_bound expPat)
-          | VectorPat p => Listops.flatten(map get_bound p)
-          | MarkPat (p,r) => get_bound p
+          | AppPat {constr:pat,argument:pat} => get_bound context argument
+          | ConstraintPat {pattern:pat,constraint:ty} => get_bound context  pattern
+          | LayeredPat {varPat:pat,expPat:pat} => (get_bound context varPat) @ (get_bound context expPat)
+          | VectorPat p => Listops.flatten(map (get_bound context) p)
+          | MarkPat (p,r) => get_bound context p
           | OrPat _ => error "orpat not handler"
           | DelayPat _ => error "delaypat not handled")
 	end
@@ -861,7 +875,7 @@ debugdo
 		 print "bindcompile called with context = \n";
 		 Ppil.pp_context context; print "\n\n")
 *)
-	val boundsyms = get_bound bindpat
+	val boundsyms = get_bound context bindpat
 
 	val args = [CASE_VAR (argvar,argc)] 
 	val arms = [([bindpat],[],SOME(Ast.TupleExp(map (fn s => Ast.VarExp [s]) boundsyms)))]
