@@ -1,4 +1,4 @@
-(*$import TopLevel FORMATTER Listops *)
+(*$import TopLevel FORMATTER Listops Stats *)
 
 (* Perry's modifications:
     (1) added fold and changed implode to concat 

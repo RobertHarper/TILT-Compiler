@@ -131,41 +131,22 @@ struct
 
     fun lvalue lift state value = 
       (case value 
-	 of Prim.array (con, arr) =>
-	   let
-	     val (cbnds, con) = lcon lift state con
-	     val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
-	     val bnds = ref []
-	     fun modifier exp = 
-	       let val (bnds',exp) = lexp lift state exp
-	       in (bnds := !bnds @ bnds';exp)
-	       end
-	     val _ = Array.modify modifier arr
-	   in
-	     (cbnds @ !bnds,Prim.array (con,arr))
-	   end
+	 of Prim.array (con, arr) => error "Arrays shouldn't ever show up"
 	  | Prim.vector (con, arr) => 
 	   let
 	     val (cbnds, con) = lcon lift state con
 	     val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
-	     val bnds = ref []
-	     fun modifier exp = 
-	       let val (bnds',exp) = lexp lift state exp
-	       in (bnds := !bnds @ bnds';exp)
+	     fun folder (exp,(es,bnds_list)) = 
+	       let val (bnds,exp) = lexp lift state exp
+	       in (exp::es,bnds@bnds_list)
 	       end
-	     val _ = Array.modify modifier arr
+	     val (exps,bnds) = Array.foldr folder ([],[]) arr
+	     val arr = Array.fromList exps
 	   in
-	     (cbnds @ !bnds,Prim.vector (con,arr))
+	     (cbnds @ bnds,Prim.vector (con,arr))
 	   end
-	  | Prim.refcell r => 
-	   let val (bnds,rval) = lexp lift state (!r)
-	   in (r:=rval;(bnds,Prim.refcell r))
-	   end
-	  | Prim.tag (t,con) => 
-	   let val (cbnds,con) = lcon lift state con
-	     val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
-	   in (cbnds,Prim.tag (t,con))
-	   end
+	  | Prim.refcell r => error "Ref cells shouldn't ever show up"
+	  | Prim.tag (t,con) => error "Tags shouldn't ever show up"
 	  | _ => ([],value))
 
    and lswitch lift state switch = 
