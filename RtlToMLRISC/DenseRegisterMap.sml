@@ -1,3 +1,5 @@
+(*$import TopLevel IREGISTER_MAP intBinaryMap Array Word32 *)
+
 
 (* =========================================================================
  * DenseRegisterMap.sml

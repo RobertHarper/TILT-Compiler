@@ -1,3 +1,5 @@
+(*$import TopLevel HashTableFn Word32 *)
+
 
 (* =========================================================================
  * IntHashTable.sml

@@ -1,3 +1,4 @@
+(*$import TopLevel TraceTable Linkrtl *)
 
 (* =========================================================================
  * LittleEndianTraceTable.sml

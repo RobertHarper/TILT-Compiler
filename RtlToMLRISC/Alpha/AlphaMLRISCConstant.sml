@@ -1,3 +1,5 @@
+(*$import TopLevel MLRISC_CONSTANT *)
+
 
 (* =========================================================================
  * AlphaMLRISCConstant.sml

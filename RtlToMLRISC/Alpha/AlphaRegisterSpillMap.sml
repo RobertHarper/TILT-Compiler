@@ -1,3 +1,5 @@
+(*$import RegisterSpillMap AlphaMLRISCConstant *)
+
 
 (* =========================================================================
  * AlphaRegisterSpillMap.sml

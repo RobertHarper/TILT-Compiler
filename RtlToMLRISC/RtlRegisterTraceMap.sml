@@ -1,3 +1,5 @@
+(*$import TopLevel CELLS TRACETABLE REGISTER_TRACE_MAP DenseIntSet DenseRegisterMap *)
+
 
 (* =========================================================================
  * RtlRegisterTraceMap.sml

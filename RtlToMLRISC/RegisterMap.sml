@@ -1,3 +1,5 @@
+(*$import TopLevel REGISTER_MAP IntHashTable *)
+
 
 (* =========================================================================
  * RegisterMap.sml

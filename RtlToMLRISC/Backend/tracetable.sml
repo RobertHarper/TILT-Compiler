@@ -1,3 +1,5 @@
+(*$import RTL TRACETABLE Int32 *)
+
 (* This is how the compiler tells the runtime about how to determine all roots
    from the registers and from the stack.  The runtime, at GC, will walk the 
    stack.  For each frame encountered, it will look up information generated
@@ -92,7 +94,7 @@ functor Tracetable(val little_endian    : bool
 	    | loop (#"^" :: rest) = "HAT" ^ (loop rest)
 	    | loop (#"|" :: rest) = "BAR" ^ (loop rest)
 	    | loop (#"*" :: rest) = "STAR" ^ (loop rest)
-	    | loop (s :: rest) = (str s) ^ (loop rest)
+	    | loop (s :: rest) = (String.str s) ^ (loop rest)
 	in
 	  loop o explode
 	end

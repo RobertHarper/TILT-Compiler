@@ -1,3 +1,5 @@
+(*$import TopLevel MLRISC_PSEUDO DenseIntSet Label Word32 *)
+
 
 (* =========================================================================
  * AlphaMLRISCPseudo.sml

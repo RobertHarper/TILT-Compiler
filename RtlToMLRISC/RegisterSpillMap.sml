@@ -1,3 +1,5 @@
+(*$import TopLevel MLRISC_CONSTANT REGISTER_SPILL_MAP DenseRegisterMap *)
+
 
 (* =========================================================================
  * RegisterSpillMap.sml

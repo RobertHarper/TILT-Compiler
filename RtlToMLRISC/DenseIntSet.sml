@@ -1,3 +1,5 @@
+(*$import TopLevel ORD_SET LibBase IntMap Word32 IntBinaryMap Array *)
+
 
 (* =========================================================================
  * DenseIntSet.sml

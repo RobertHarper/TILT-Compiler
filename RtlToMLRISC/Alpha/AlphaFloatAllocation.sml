@@ -1,3 +1,4 @@
+(*$import TopLevel ALPHA32Instr CELLS FlowGraph FLOAT_CONVENTION INTEGER_CONVENTION MLRISC_REGION ALPHA32INSTR RA REGISTER_ALLOCATION *)
 
 (* =========================================================================
  * AlphaFloatAllocation.sml
