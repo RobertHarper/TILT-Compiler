@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel CommandLine BinIO OS LinkIl Name Run *)
+(*$import CommandLine BinIO OS LinkIl Name Run *)
 
 structure Dumpil
     :> sig val main : string * string list -> OS.Process.status end =

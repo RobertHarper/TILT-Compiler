@@ -1,4 +1,4 @@
-(*$import Prelude PATHS Target OS *)
+(*$import PATHS Target OS *)
 
 (* Thread-safety: We use Target.platformString which depends on the
  * compiler flags; everything else is pure. *)

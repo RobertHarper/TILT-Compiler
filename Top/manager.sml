@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Stats TopHelp Dirs String Int MANAGER Slave Compiler OS Master MASTER Option *)
+(*$import Util Stats TopHelp Dirs String Int MANAGER Slave Compiler OS Master MASTER Option *)
 
 functor Manager (val bootMapfile : unit -> string option
 		 structure Master : MASTER)

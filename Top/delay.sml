@@ -1,4 +1,4 @@
-(*$import Prelude DELAY *)
+(*$import DELAY *)
 
 structure Delay :> DELAY =
 struct

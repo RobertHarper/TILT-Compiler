@@ -1,4 +1,4 @@
-(*$import Prelude Time *)
+(*$import Time *)
 
 
 signature MASTER = 

@@ -1,4 +1,4 @@
-(*$import Prelude FILECACHE *)
+(*$import FILECACHE *)
 
 signature UPDATE_HELP =
 sig

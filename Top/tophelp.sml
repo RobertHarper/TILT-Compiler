@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Time String Util Stats TextIO Date ORD_MAP ORD_SET Real SplayMapFn SplaySetFn *)
+(*$import Time String Util Stats TextIO Date ORD_MAP ORD_SET Real SplayMapFn SplaySetFn *)
 
 signature HELP = 
     sig

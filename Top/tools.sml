@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Delay String List TOOLS TopHelp Util Stats OS Dirs Target Popen *)
+(*$import Delay String List TOOLS TopHelp Util Stats OS Dirs Target Popen *)
 
 (* One handy source is the gcc "specs" file. *)
 

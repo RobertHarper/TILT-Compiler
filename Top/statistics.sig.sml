@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import *)
 
 signature STATISTICS =
 sig

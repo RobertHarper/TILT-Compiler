@@ -1,4 +1,4 @@
-(*$import Prelude Time Crc *)
+(*$import Time Crc *)
 
 signature FILECACHE = 
     sig

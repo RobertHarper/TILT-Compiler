@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel BACKGROUND Posix Word8 SysWord UtilError TextIO Option Int OS Util Stats *)
+(*$import BACKGROUND Posix Word8 SysWord UtilError TextIO Option Int OS Util Stats *)
 
 structure Background :> BACKGROUND =
 struct

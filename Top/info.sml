@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel INFO UnitEnvironment Time Option Crc Util List String TextIO Bool TopHelp Int Date *)
+(*$import INFO UnitEnvironment Time Option Crc Util List String TextIO Bool TopHelp Int Date *)
 
 (* XXX: timestamps should be written as dates in UTC.  No Date.fromString, though. *)
 

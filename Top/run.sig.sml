@@ -1,4 +1,4 @@
-(*$import Prelude OS *)
+(*$import OS *)
 
 signature RUN =
 sig

@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import *)
 
 (* XXX: we want compress, uncompress, dot, ps, etc all here. *)
 

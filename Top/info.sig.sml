@@ -1,4 +1,4 @@
-(*$import Prelude UnitEnvironment Time *)
+(*$import UnitEnvironment Time *)
 
 (* XXX: info should be abstract and should support
  * per-target information.  lastWritten is silly..

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Time Stats SLAVE Update TopHelp Communication OS List Platform Target Paths *)
+(*$import Util Time Stats SLAVE Update TopHelp Communication OS List Platform Target Paths *)
 
 (* This is a slave step which gives a result:
 

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Time Crc Int FILECACHE OS List TopHelp Stats Paths *)
+(*$import Util Time Crc Int FILECACHE OS List TopHelp Stats Paths *)
 
 functor FileCache(type internal
 		  val equaler : internal * internal -> bool

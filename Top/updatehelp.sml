@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Stats UPDATE_HELP Paths FileCache Info Util TopHelp Compiler Time UnitEnvironment List OS Tools Timestamp *)
+(*$import Stats UPDATE_HELP Paths FileCache Info Util TopHelp Compiler Time UnitEnvironment List OS Tools Timestamp *)
 
 structure UpdateHelp
     :> UPDATE_HELP

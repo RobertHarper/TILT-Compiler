@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TARGET Stats Word32 Util Platform Linkrtl Core *)
+(*$import TARGET Stats Word32 Util Platform Linkrtl Core *)
 
 structure Target :> TARGET =
 struct

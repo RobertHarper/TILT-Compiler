@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import *)
 
 (* Notes:
  * Some paths depend on compiler state via Target.platformString.
