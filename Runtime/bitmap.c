@@ -8,9 +8,11 @@
 
 #ifdef solaris
 #define log_size_long 5
+#define mask_long 31
 #endif
 #ifdef alpha_osf
 #define log_size_long 6
+#define mask_long 63
 #endif
 
 Bitmap_t *CreateBitmap(int size)
@@ -33,23 +35,23 @@ void DestroyBitmap(Bitmap_t *b)
 
 static int GetBit(unsigned long *data, int i)
 {
-  int long_pos = i >> (log_size_long);
-  int bit_pos = i & (sizeof (unsigned long));
+  int long_pos = i >> log_size_long;
+  int bit_pos = i & mask_long;
   return (data[long_pos] & (1UL << bit_pos));
 }
 
 static void SetBit(unsigned long *data, int i)
 {
-  int long_pos = i >> (log_size_long);
-  int bit_pos = i & (sizeof (unsigned long));
+  int long_pos = i >> log_size_long;
+  int bit_pos = i & mask_long;
   data[long_pos] |= (1UL << bit_pos);
 }
 
 
 static void ClearBit(unsigned long *data, int i)
 {
-  int long_pos = i >> (log_size_long);
-  int bit_pos = i & (sizeof (unsigned long));
+  int long_pos = i >> log_size_long;
+  int bit_pos = i & mask_long;
   data[long_pos] &= ~(1UL << bit_pos);
 }
 
