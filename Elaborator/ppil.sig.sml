@@ -1,0 +1,57 @@
+(* Pretty-printing routines for the internal language. *)
+signature PPIL =
+  sig
+    structure Il : IL
+    structure Formatter : FORMATTER
+
+    (* type variables can be displayed in different ways *)
+    datatype display = VAR_ONLY | VALUE_ONLY | VAR_VALUE
+    val convar_display : display ref
+
+
+
+    (* these don't do actual output *)
+    val pp_bnd'     : Il.bnd -> Formatter.format
+    val pp_bnds'    : Il.bnds -> Formatter.format
+    val pp_dec'     : Il.dec -> Formatter.format
+    val pp_decs'    : Il.decs -> Formatter.format
+    val pp_sdec'    : Il.sdec -> Formatter.format
+    val pp_sdecs'   : Il.sdecs -> Formatter.format
+    val pp_exp'     : Il.exp -> Formatter.format
+    val pp_con'     : Il.con -> Formatter.format
+    val pp_kind'    : Il.kind -> Formatter.format
+    val pp_scon'    : Il.Prim.scon -> Formatter.format
+    val pp_prim'    : Il.prim -> Formatter.format
+    val pp_context' : Il.context -> Formatter.format
+    val pp_signat'  : Il.signat -> Formatter.format
+    val pp_mod'     : Il.mod -> Formatter.format
+    val pp_var'     : Il.Name.var -> Formatter.format
+    val pp_label'   : Il.Name.label -> Formatter.format
+    val pp_path'    : Il.path -> Formatter.format
+    val pp_list'    : ('a -> Formatter.format) -> 'a list -> 
+                                  (string * string * string * bool) -> Formatter.format
+
+    (* these go to std_out *)
+    val pp_bnd     : Il.bnd -> unit
+    val pp_bnds    : Il.bnds -> unit
+    val pp_sbnd    : Il.sbnd -> unit
+    val pp_sbnds   : Il.sbnds -> unit
+    val pp_dec     : Il.dec -> unit
+    val pp_decs    : Il.decs -> unit
+    val pp_sdec    : Il.sdec -> unit
+    val pp_sdecs   : Il.sdecs -> unit
+    val pp_exp     : Il.exp -> unit
+    val pp_con     : Il.con -> unit
+    val pp_kind    : Il.kind -> unit
+    val pp_scon    : Il.Prim.scon -> unit
+    val pp_prim    : Il.prim -> unit
+    val pp_context : Il.context -> unit
+    val pp_signat  : Il.signat -> unit
+    val pp_mod     : Il.mod -> unit
+    val pp_var     : Il.Name.var -> unit
+    val pp_label   : Il.Name.label -> unit
+    val pp_path    : Il.path -> unit
+    val pp_list    : ('a -> Formatter.format) -> 'a list -> 
+                                  (string * string * string * bool) -> unit
+
+  end
