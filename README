@@ -1,7 +1,7 @@
 This is TILT version 1.0.
 
-This release is set up to compile TILT using SML/NJ 110.0.7 available
-from
+This release is set up to compile TILT using SML/NJ 110.0.3 or 110.0.7
+available from
 
 	http://www.smlnj.org/
 
@@ -11,8 +11,12 @@ commands in Makefile and Runtime/Makefile and then try
 
 	make
 
-to compile TILT.  The scripts Bin/tilt and Bin/tilt-nj will run TILT
-out of the current directory; alternatively, you can use
+to compile TILT.  On unsupported platforms, the final message will be
+"tilt: unable to link".  This is expected: TILT cross-compiled up to
+assembler for sparc but did not assemble anything.
+
+Once make has finished, the scripts Bin/tilt and Bin/tilt-nj will run
+TILT out of the current directory; alternatively, you can use
 
 	su
 	make install

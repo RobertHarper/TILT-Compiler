@@ -14,7 +14,6 @@
 #define CSECONDARG_REG $17
 #define CTHIRDARG_REG $18
 
-#define FTMP         30
 #define ASMTMP       28
 #define ASMTMP2      25
 #define ASMTMP_REG  $28

@@ -15,7 +15,6 @@
 #define CTHIRDARG_REG %r10
 #define RESULT_REG    %r8
 
-#define FTMP         31
 #define ASMTMP       16
 #define ASMTMP_REG    %r16
 #define ASMTMP2      17

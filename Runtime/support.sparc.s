@@ -1,7 +1,7 @@
 
  ! This code assumes that the thread pointer points to a structure
  ! containing 32 longs constituting the integer register set followed
- ! by 16 doubles constituting the floating-point register set and that
+ ! by 32 doubles constituting the floating-point register set and that
  ! the thread pointer is unmodified by call to GCFromML.  We maintain
  ! the invariant that there is only one valid register window while
  ! the mutator is running.  That is, the C parts of the runtime may
