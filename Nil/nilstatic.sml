@@ -135,8 +135,6 @@ struct
   val projectRecordType = Normalize.projectRecordType
   val projectSumType = Normalize.projectSumType
   val type_of = Normalize.type_of
-  val strip_singleton = Normalize.strip_singleton
-  val push_singleton = Normalize.push_singleton
 
   (*From NilContext*)
   type context = NilContext.context
@@ -146,15 +144,9 @@ struct
   val find_con = NilContext.find_con
   val insert_kind = NilContext.insert_kind
   val insert_kind_list = NilContext.insert_kind_list
-  val find_kind = NilContext.find_kind
-  val shape_of = NilContext.shape_of
-  val make_shape = NilContext.make_shape
-  val isRenamedExp = NilContext.isRenamedExp
-  val isRenamedCon = NilContext.isRenamedCon
-  val isRenamedKind = NilContext.isRenamedKind
-
-  (*From Alpha*)
-  type alpha_context = Alpha.alpha_context
+  val find_kind = NilContext.find_std_kind             (*NOTE RENAMING!*)
+  val kind_standardize = NilContext.kind_standardize
+  val kind_of = NilContext.kind_of
 
 
   structure Subst = NilSubst
@@ -266,6 +258,7 @@ struct
   val split_opt = Util.split_opt
   val printl = Util.printl
   val lprintl = Util.lprintl
+  val lprint = Util.lprint
   val curry2 = Util.curry2
   val curry3 = Util.curry3
 
@@ -319,18 +312,6 @@ struct
     
 
 
-  fun assertRenamed (isRenamed,printer,name) (context,item) = 
-    (isRenamed context item, 
-     fn () => (lprintl (name^" not properly renamed when passed to function");
-	       printl (name^" is:");
-	       printer item;
-	       lprintl "Context is:";
-	       NilContext.print_context context;
-	       printl ""))
-    
-  val assertRenamedKind = assertRenamed (isRenamedKind,pp_kind,"Kind")
-  val assertRenamedCon = assertRenamed (isRenamedCon,pp_con,"Con")
-  val assertRenamedExp = assertRenamed (isRenamedExp,pp_exp,"Exp")
 
 (*  val find_con = 
     (fn (D,v)=> 
@@ -357,14 +338,28 @@ struct
   fun con_head_normalize (D,con) = 
     let
       val (is_hnf,con') = reduce_hnf(D,con)
+      val _ = 
+	if !debug andalso (not is_hnf) then
+	  (lprint "Constructor = ";Ppnil.pp_con con;
+	   lprint "Normalized = ";Ppnil.pp_con con';
+	   lprintl "Unable to reduce to head normal form")
+	else ()
     in
       con'
     end
 
-  fun is_type D kind = 
-    (case make_shape (D,kind)
+  (*PRE: kind is standard
+   *)
+  fun is_type kind = 
+    (case kind
        of Type_k => true
         | SingleType_k _ => true
+	| _ => false)
+
+  fun is_type' D kind = 
+    (case kind_standardize(D,kind) 
+       of Type_k => true
+	| SingleType_k _ => true
 	| _ => false)
 
   fun assertWellFormed context = 
@@ -487,7 +482,7 @@ struct
 	     let
 	       val _ = 
 		 (if labels_distinct labels then
-		    (c_all (is_type D) b_perr_k kinds) orelse
+		    (c_all is_type b_perr_k kinds) orelse
 		    (error (locate "pcon_valid") "Record contains field of non-word kind")
 		  else
 		    (error (locate "pcon_valid") "Record contains duplicate field labels"))
@@ -498,7 +493,7 @@ struct
 	       val kinds = 
 		 (case kinds
 		    of [rkind] =>
-		      (case strip_singleton(D,rkind)
+		      (case rkind
 			 of Record_k entries => Sequence.maptolist (fn (_,k) => k) entries
 			  | other => [other])
 		     | _ => error (locate "pcon_valid") "Wrong number of args to Sum_c")
@@ -508,7 +503,7 @@ struct
 		  ((length kinds) = (Word32.toInt (totalcount - tagcount))) orelse
 		  (error (locate "pcon_valid") "Sum_c counts disagree with args");
 		  
-		  (List.all (is_type D) kinds) orelse
+		  (List.all is_type kinds) orelse
 		  (error (locate "pcon_valid") "Sum contains non-word component" );
 
 		  (case known 
@@ -525,7 +520,7 @@ struct
 	 | (Vararg_c _) => 
 	     let
 	       val _ = 
-		 (c_all (is_type D) b_perr_k kinds) orelse
+		 (c_all is_type b_perr_k kinds) orelse
 		 (error (locate "pcon_valid") "Vararg has non-word component" )
 	     in ()
 	     end
@@ -553,7 +548,7 @@ struct
 	       val kinds = map (fn (_,c) => con_valid(D,c)) (Sequence.toList defs)
 
 	       val _ = 
-		 (c_all (is_type D) b_perr_k kinds) orelse
+		 (c_all is_type b_perr_k kinds) orelse
 		 (error (locate "con_valid") "Invalid kind for recursive constructor" )
 	     in
 	       ()
@@ -575,7 +570,7 @@ struct
 		     | NONE => (map (curry2 con_valid D) formals,D))
 	       val body_kind = con_valid (D,body)
 	       val _ = 
-		 ((c_all (is_type D) b_perr_k formal_kinds) andalso (is_type D body_kind)) orelse
+		 ((c_all is_type b_perr_k formal_kinds) andalso (is_type body_kind)) orelse
 		 (error (locate "con_valid") "Invalid arrow constructor")
 	     in
 	       ()
@@ -585,7 +580,7 @@ struct
 	       val kinds = map (curry2 con_valid D) args
 	       val kind = con_valid (D,body)
 	       val _ = 
-		 ((c_all (is_type D) b_perr_k kinds) andalso (is_type D kind)) orelse
+		 ((c_all is_type b_perr_k kinds) andalso (is_type kind)) orelse
 		 (error (locate "con_valid") "Invalid extern arrow constructor")
 	     in
 	       ()
@@ -611,7 +606,7 @@ struct
 	       val env_kind = con_valid (D,env)
 	       val code_kind =  con_valid (D,code)
 	       val (vklist,body_kind) = 
-		 case strip_singleton (D,code_kind) of
+		 case code_kind of
 		   Arrow_k (Code ,vklist,body_kind) => (vklist,body_kind)
 		 | Arrow_k (ExternCode,vklist,body_kind) =>  (vklist,body_kind)
 		 | _ => (error (locate "con_valid") "Invalid closure: code component does not have code kind")
@@ -658,7 +653,7 @@ struct
 	       val record_kind = con_valid (D,rvals)
 		 
 	       val entry_kinds = 
-		 (case (strip_singleton (D,record_kind)) of
+		 (case record_kind of
 		    Record_k kinds => kinds
 		  | other => 
 		      (perr_c_k (constructor,record_kind);
@@ -689,7 +684,7 @@ struct
 *)
 	       val cfun_kind = con_valid (D,cfun_orig)
 	       val (formals,body_kind) = 
-		 case (strip_singleton (D,cfun_kind)) of
+		 case cfun_kind of
 		   (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
 		 | _ => (print "Invalid kind for constructor application\n";
 			 pp_kind cfun_kind; print "\n";
@@ -730,7 +725,7 @@ struct
 	       val arg_kind = con_valid (D,arg)
 	       val def_kind = con_valid (D,default)
 	       val _ = 
-		 ((sub_kind (D,def_kind,given_kind)) andalso (is_type D arg_kind)) orelse
+		 ((sub_kind (D,def_kind,given_kind)) andalso (is_type arg_kind)) orelse
 		 (error (locate "con_Valid") "Error in type case" handle e => raise e)
 	     in
 	       ()
@@ -741,7 +736,7 @@ struct
 	     in
 	       ()
 	     end)
-      val kind = Single_k(constructor)
+      val kind = kind_of(D,constructor)
     in
       kind
     end
@@ -832,16 +827,20 @@ struct
 	  | (SingleType_k _ ,Type_k) => true
 	  | (SingleType_k (c1),SingleType_k (c2)) => 
 	     type_equiv(D,c1,c2)
+	  | (SingleType_k (c1), _) => false
+(*
 	  | (SingleType_k (c1),Single_k (c2)) => 
 	   subeq_kind is_eq (D,push_singleton (D,c1),push_singleton (D,c2))
-	  | (SingleType_k (c1), _) => false
-	  | (Single_k _ ,Type_k) => is_type D kind1
+	  | (Single_k _ ,Type_k) => is_type kind1
 	  | (Single_k (c1),Single_k (c2)) => 
 	   subeq_kind is_eq (D,push_singleton (D,c1),push_singleton (D,c2))
 	  | (Single_k (c1),k2) => (* k2 must be a higher kind *)
 	   subeq_kind is_eq (D,push_singleton (D,c1),k2)
 	  | (k1,Single_k (c2)) => (* k1 must be a higher kind *)
 	   subeq_kind is_eq (D,k1,push_singleton (D,c2))
+*)
+	  | (Single_k _,_) => error (locate "subeq_kind") "Non-standard kind encountered"
+	  | (_,Single_k _) => error (locate "subeq_kind") "Non-standard kind encountered"
 	  | (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
 	   (if eq_len (formals1,formals2) then
 	      let
@@ -925,6 +924,7 @@ struct
 		  print "c1 = "; Ppnil.pp_con c1; print "\n";
 		  print "c2 = "; Ppnil.pp_con c2; print "\n";
 		  print "k = "; Ppnil.pp_kind k; print "\n";
+		  print "context = "; NilContext.print_context D; print "\n";
 		  print "\n")
     in  res
     end
@@ -1747,7 +1747,6 @@ struct
 	  if !debug then
 	    assert (locate "exp_valid PRE")
 	    [
-	     assertRenamedExp (D,exp),
 	     assertWellFormed D
 	     ]
 	  else ()
@@ -2053,15 +2052,7 @@ struct
       fun module_valid (D,module) = 
 	let 
 	  val _ = push_mod(module,D)
-	  val module = 
-	    if !debug then
-	      (assert (locate "module_valid:PRE")
-	       [
-		(isRenamedMod module,fn () => lprintl "Module not renamed")
-		]
-	       ;module) 
-	      handle NilError.FailedAssert s => (lprintl "Renaming for you";renameMod module)
-	    else module
+
 	  val _ = if (!show_calls)
 		    then (print "module_valid called with module =\n";
                           Ppnil.pp_module 
@@ -2077,13 +2068,7 @@ struct
 	  val _ = if (!show_calls)
 		    then (printl "module_valid returned")
 		  else ()
-	  val _ =
-	    if !debug then
-	      assert (locate "module_valid:POST")
-	      [
-	       (isRenamedMod module,fn () => lprintl "Renaming not preserved")
-	       ]
-	    else ()
+
 	  val _ = pop()
 	in  res
 	end

@@ -87,8 +87,4 @@ signature NORMALIZE =
 
     val allprim_uses_carg : Nil.allprim -> bool
 
-    val get_shape : context * Nil.con -> Nil.kind
-    val make_shape : context * Nil.kind -> Nil.kind
-    val push_singleton : context * Nil.con -> Nil.kind
-    val strip_singleton : context * Nil.kind -> Nil.kind
   end

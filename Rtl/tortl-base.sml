@@ -154,7 +154,7 @@ struct
 	varmap_insert' state arg)
 
   fun convarmap_insert' str ({is_top,convarmap,varmap,env,gcstate}:state) 
-                        (v,(vl,vv,k,kopt,copt)) : state = 
+                        (v,(vl,vv,k,copt)) : state = 
       let val _ = if (!debug_bound)
 		      then (print "convar adding to v = "; Ppnil.pp_var v; print "\n")
 		  else ()
@@ -166,36 +166,34 @@ struct
       in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
-  fun insert_kind(ctxt,v,k,kopt,copt : con option) = 
-	  (case (k,kopt,copt) of
-	       (_,NONE,NONE) => NilContext.insert_kind(ctxt,v,k)
-	     | (_,NONE,SOME c) => NilContext.insert_kind_equation(ctxt,v,c,k)
-	     | (_,SOME sh,NONE) => NilContext.insert_kind_shape(ctxt,v,k,sh)
-	     | (_,SOME sh,SOME c) => NilContext.insert_kind_shape_equation(ctxt,v,c,k,sh))
+  fun insert_kind(ctxt,v,k,copt : con option) = 
+	  (case (k,copt) of
+	       (_,NONE) => NilContext.insert_kind(ctxt,v,k)
+	     | (_,SOME c) => NilContext.insert_kind_equation(ctxt,v,c,k)
 	       handle e => (print "\nError in tortl_insert_kind with \n"; 
 			    NilContext.print_context ctxt;
 			    print "\n";
-			    raise e)
+			    raise e))
 
 
-  fun env_insert' ({is_top,env,varmap,convarmap,gcstate} : state) (v,k,kopt,copt) : state = 
+  fun env_insert' ({is_top,env,varmap,convarmap,gcstate} : state) (v,k,copt) : state = 
       let val _ = if (!debug_bound)
 		      then (print "env adding v = ";
 			    Ppnil.pp_var v; print "\n")
 		  else ()
-	  val newenv = insert_kind(env,v,k,kopt,copt)
+	  val newenv = insert_kind(env,v,k,copt)
 	  val newstate = {is_top=is_top,env=newenv,
 			  varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       in  newstate
       end
 
-  fun convarmap_insert str state (arg as (v,(vl,vv,k,kshape_opt,copt))) =
+  fun convarmap_insert str state (arg as (v,(vl,vv,k,copt))) =
       let val state = convarmap_insert' str state arg
-	  val state = env_insert' state (v,k,kshape_opt,copt)
+	  val state = env_insert' state (v,k,copt)
 	  val _ = if (#is_top state)
 	      (* top_rep (vl,vv) *)
 		      then let val gs = convarmap_insert' str (!global_state) arg
-			       val gs = env_insert' gs (v,k,kshape_opt,copt)
+			       val gs = env_insert' gs (v,k,copt)
 			   in  global_state := gs
 			   end
 		  else ()
@@ -210,17 +208,19 @@ struct
 
 
   (* adding constructor-level variables and functions *)
-  fun add_convar str (s,v,kind,kshape_opt,copt,vlopt,vvopt) = 
-      let val result = convarmap_insert str s (v,(vlopt, vvopt, kind, kshape_opt,copt))
+  fun add_convar str (s,v,kind,copt,vlopt,vvopt) = 
+      let val result = convarmap_insert str s (v,(vlopt, vvopt, kind,copt))
       in  result
       end
-  fun add_concode str (s,v,kind,kshape_opt,copt,l) = 
-      convarmap_insert str s (v,(NONE, SOME(VCODE l),kind, kshape_opt,copt))
+  fun add_concode str (s,v,kind,copt,l) = 
+      convarmap_insert str s (v,(NONE, SOME(VCODE l),kind,copt))
 
    fun getconvarrep' ({convarmap,env,...} : state) v : convar_rep option = 
        (case VarMap.find (convarmap,v) of
 	   NONE => NONE
-	 | SOME (vl,vv) => let val k = NilContext.find_shape(env,v)
+	 | SOME (vl,vv) => let val k = (case NilContext.find_std_kind(env,v)
+					  of SingleType_k _ => Type_k
+					   | kind => kind)
 	                       (* XXX should be removed when uniqueness invariant is removed *)
 			       val k = NilSubst.renameCVarsKind k 
 			     in  SOME(vl,vv,k)
@@ -240,10 +240,6 @@ struct
        or false and a type not in head-normal form 
        in either case, the returned type is possibly simpler than the argument type *)
 
-    fun get_shape ({env,...} : state) c = Stats.subtimer("RTL_getshape",
-							 Normalize.get_shape) (env,c)
-    fun make_shape ({env,...} : state) k = Stats.subtimer("RTL_makeshape",
-							  Normalize.make_shape) (env,k)
     fun simplify_type ({env,...} : state) con : bool * con = 
 	let val result = Stats.subtimer("RTL_reduce_hnf",
 					Normalize.reduce_hnf)(env,con)
@@ -280,10 +276,12 @@ struct
 	  in  loop acc con rest
 	  end
 	    | loop acc (Single_k c) labs = 
-	  let val k = Stats.subtimer("RTLgetshape0",
-				     Normalize.get_shape)  (#env state,c)
+	  let val k = Stats.subtimer("RTLkind_of0",
+				     NilContext.kind_of)  (#env state,c)
 	  in  loop acc k labs
 	  end
+	    | loop acc (SingleType_k c) labs = 
+	  loop acc Type_k labs
 	    | loop acc _ labs = error "expect record kind"
       in  loop [] k labs
       end
@@ -1052,7 +1050,6 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
   fun add_conglobal str (state : state,
 		     v : var,
 		     kind : kind,
-		     kshape_opt : kind option,
 		     copt : con option,
 		     lv : loc_or_val) : state = 
     let 
@@ -1067,7 +1064,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	       | VAR_LOC vl => (case vl of
 				    VGLOBAL _ => (false,SOME vl, NONE)
 				  | _ => (true,SOME(VGLOBAL(label,TRACE)), NONE)))
-	val state' = add_convar str (state,v,kind,kshape_opt, copt, vl_opt, vv_opt)
+	val state' = add_convar str (state,v,kind, copt, vl_opt, vv_opt)
 
 	val _ = if (exported orelse is_reg)
 		    then allocate_global(label,labels,TRACE,lv)

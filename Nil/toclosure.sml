@@ -207,8 +207,8 @@ struct
 		       val entry = 
 			   (if is_top 
 				then GLOBALc
-			    else LOCALc(memoize (fn() => Stats.subtimer("toclosure_make_shape",
-						 (Util.curry2 NilContext.make_shape) ctxt) k),
+			    else LOCALc(memoize (fn() => Stats.subtimer("toclosure_kind_standardize",
+						 (Util.curry2 NilContext.kind_standardize) ctxt) k),
 						 ref NONE))
 		       val boundcvars = VarMap.insert(boundcvars,v,entry)
 		   in  (ctxt,boundcvars)

@@ -13,6 +13,7 @@ structure Util :> UTIL =
     val error = fn s => real_error "util.sml" s
 	
     fun printl s = print (s^"\n")
+    fun lprint s = print ("\n"^s)
     fun lprintl s = print ("\n"^s^"\n")
 
     fun mapopt f NONE = NONE

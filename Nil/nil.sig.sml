@@ -49,6 +49,7 @@ sig
     | SingleType_k of con           (* singleton-kind at kind type *)
     | Single_k of con               (* singleton-kind at any kind *)
                                     (* dependent record kind *)
+
     | Record_k of ((label*var),kind) sequence
                                     (* dependent arrow kinds for open 
 				       constr funs, closed funs, or closures *)

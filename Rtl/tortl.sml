@@ -171,15 +171,15 @@ struct
 				       in  (lv,k,state)
 				       end
 			   in  case (istoplevel(),lv) of
-			       (true,_) => add_conglobal "0" (state,v,k,SOME k,SOME c, lv)
-			     | (_,VAR_LOC vl) => add_convar "3" (state,v,k,SOME k, SOME c,SOME vl,NONE)
-			     | (_,VAR_VAL vv) => add_convar "4" (state,v,k,SOME k, SOME c,NONE,SOME vv)
+			       (true,_) => add_conglobal "0" (state,v,k,SOME c, lv)
+			     | (_,VAR_LOC vl) => add_convar "3" (state,v,k, SOME c,SOME vl,NONE)
+			     | (_,VAR_VAL vv) => add_convar "4" (state,v,k, SOME c,NONE,SOME vv)
 			   end
 	 | Code_cb (conwork as (name,vklist,c,k)) => 
 			     let val funkind = Arrow_k(Code,vklist,k)
 				 val funcon = Let_c(Sequential,[cbnd],Var_c name)
 				 val l = LOCAL_CODE(Name.var2string name)
-				 val state = add_concode "5" (state,name,funkind,NONE, SOME funcon,l)
+				 val state = add_concode "5" (state,name,funkind, SOME funcon,l)
 				 val _ = if phase = Compiletime
 					     then ()
 					 else addWork (ConFunWork(promote_maps state,name,vklist,c,k))
@@ -1749,7 +1749,7 @@ struct
 		      else ()
               fun folder ((v,k),s) = 
 			let val r = alloc_named_regi v TRACE
-			    val s' = add_convar "6" (s,v,k,NONE,NONE,SOME(VREGISTER (false,I r)),NONE)
+			    val s' = add_convar "6" (s,v,k,NONE,SOME(VREGISTER (false,I r)),NONE)
 			in  (r,s')
                         end
 	      val (cargs,state) = foldl_list folder state vklist
@@ -1778,7 +1778,7 @@ struct
 		      else ()
               fun folder ((v,k),s) = 
 		  let val r = alloc_named_regi v TRACE
-		      val s' = add_convar "7" (s,v,k,NONE,NONE,SOME(VREGISTER (false,I r)),NONE)
+		      val s' = add_convar "7" (s,v,k,NONE,SOME(VREGISTER (false,I r)),NONE)
 		  in  (r,s')
 		  end
 	      val (cargs,state) = foldl_list folder state vklist
@@ -1908,7 +1908,7 @@ struct
 		 end
 	       | folder (ImportType(l,v,k),s) = 
 		 let val vl = (VGLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
-		 in  add_conglobal "1" (s,v,k,NONE,NONE, VAR_LOC vl)
+		 in  add_conglobal "1" (s,v,k,NONE, VAR_LOC vl)
 		 end
 	     val state = needgc(make_state(),IMM 0)
 	     val state = foldl folder state imports

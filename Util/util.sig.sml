@@ -11,6 +11,8 @@ signature UTIL =
 
     (* printl s => print (s^"\n") *)
     val printl : string -> unit
+    (* lprint s => print ("\n"^s) *)
+    val lprint : string -> unit
     (* lprintl s => print ("\n"^s^"\n") *)
     val lprintl : string -> unit
 

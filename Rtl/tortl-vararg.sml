@@ -171,11 +171,11 @@ val debug_full = ref false
 			let val tempi = alloc_regi TRACE
 			    val _ = add_instr(LOAD32I(EA(argc,4*(2+n)),tempi))
 			in  (n+1,
-			     add_convar "vararg" (state,convar,Type_k,NONE,NONE,
+			     add_convar "vararg" (state,convar,Type_k,NONE,
 						  SOME((VREGISTER (false,I tempi))), NONE))
 			end
 		    val (_,state) = foldl folder (0,state) convars
-		    val state = add_convar "vararg" (state,resconvar,Type_k,NONE,NONE,
+		    val state = add_convar "vararg" (state,resconvar,Type_k,NONE,
 						     SOME((VREGISTER (false,I resc))), NONE)
 		    val funcon = AllArrow_c(Closure,Partial,[],
 					    NONE,[con_tuple(map Var_c convars)],
@@ -230,11 +230,11 @@ val debug_full = ref false
 			let val tempi = alloc_regi TRACE
 			    val _ = add_instr(LOAD32I(EA(argc,4*(2+n)),tempi))
 			in  (n+1,
-			     add_convar "onearg" (state,convar,Type_k,NONE,NONE,
+			     add_convar "onearg" (state,convar,Type_k,NONE,
 						  SOME((VREGISTER (false,I tempi))), NONE))
 			end
 		    val (_,state) = foldl folder (0,state) convars
-		    val state = add_convar "onearg" (state,resconvar,Type_k,NONE,NONE,
+		    val state = add_convar "onearg" (state,resconvar,Type_k,NONE,
 						     SOME((VREGISTER (false,I resc))), NONE)
 		    val funcon = AllArrow_c(Closure,Partial,[],
 					    NONE,[con_tuple(map Var_c convars)],

@@ -62,8 +62,8 @@ struct
   (* Local helpers *)
   type context = NilContext.context
   val find_kind = NilContext.find_kind   
-  val shape_of = NilContext.shape_of
-  val make_shape = NilContext.make_shape
+  val kind_of = NilContext.kind_of
+  val kind_standardize = NilContext.kind_standardize
   val find_con = NilContext.find_con
   val insert_con = NilContext.insert_con
 
@@ -1233,9 +1233,6 @@ struct
 	    )
      end
 
-  val get_shape = wrap1 "get_shape" shape_of
-  val make_shape = wrap1 "make_shape" make_shape
-
   val kind_normalize = wrap2 "kind_normalize" kind_normalize
   val con_normalize = wrap2 "con_normalize"  con_normalize
   val exp_normalize = wrap2 "exp_normalize" exp_normalize
@@ -1298,152 +1295,22 @@ struct
   fun allprim_uses_carg (NilPrimOp np) = nilprim_uses_carg np
     | allprim_uses_carg (PrimOp p) = prim_uses_carg p
 
-  fun push_singleton (D : context,constructor : con) : kind = 
-     let 
-
-      val _ = if (!show_calls)
-		then (printl "push_singleton called with con =";
-		      Ppnil.pp_con constructor; 
-		      print "\n\n")
-	      else ()
-      val res = 
-	(case constructor 
-	   of Prim_c (Int_c W64,_) => Type_k
-	    | Prim_c (Float_c F32,_) => Type_k 
-	    | Prim_c (Float_c F64,_) => Type_k 
-	    | Prim_c _ => Type_k
-
-	    | (Mu_c (recur,defs)) => 
-	     let 
-	       val len = Sequence.length defs
-	     in  if len = 1
-		   then Type_k
-		 else 
-		   let 
-		     fun mapper (i,(v,c)) = 
-		       let val label = generate_tuple_label(i+1)
-		       in((label,fresh_named_var "mu_c_internal"),Type_k
-			  (*Singleton_k(Proj_c(constructor,label))*))
-		       end
-		     val entries = Sequence.mapcount mapper defs
-		   in  Record_k(entries)
-		   end
-	     end
-
-	    | (AllArrow_c _) => Type_k
-
-	    | ExternArrow_c _ => Type_k
-	    | (v as (Var_c var)) => 
-	     let
-	       val kind = (find_kind (D,var)
-			   handle Unbound =>
-			     (print_context D;
-			      error  ("variable "^(var2string var)^" not in context")))
-	     in
-	       strip_singleton(D,kind)
-	     end
-	    | Let_c (sort,bnds,let_body) =>
-	     let
-	       fun add_bnd subst maker (var,formals,body,body_kind) = 
-		 let
-		   val var' = derived_var var
-		   val bnd = maker (var',formals,body,body_kind)
-		   val con = Let_c (sort,[bnd],Var_c var')
-		   val con = substConInCon subst con
-		   val subst = NilSubst.add subst (var,con)
-		 in subst
-		 end
-	       val body_var_opt = strip_var let_body
-	       fun loop ([],subst) = push_singleton(D,substConInCon subst let_body)
-		 | loop (bnd::rest,subst) =
-		 (case bnd
-		    of Open_cb (args as (var,formals,body,body_kind)) =>
-		      if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
-			substConInKind subst (Arrow_k(Open,formals,Single_k body))
-		      else loop(rest,add_bnd subst Open_cb args)
-		     | Code_cb (args as (var,formals,body,body_kind)) => 
-			if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
-			  substConInKind subst (Arrow_k(Code,formals,Single_k body))
-			else loop(rest,add_bnd subst Code_cb args)
-		     | Con_cb (var,con) => loop(rest,NilSubst.add subst (var,substConInCon subst con)))
-	     in
-	       loop (bnds,NilSubst.empty())
-	     end
-	    
-	    | Typeof_c _ => Type_k
-	      
-	    | (Closure_c (code,env)) => 
-	      let 
-		val (vklist,body_kind) = 
-		  (case push_singleton (D,code)
-		     of Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
-		      | Arrow_k (ExternCode,vklist,body_kind) => (vklist,body_kind)
-		      | _ => (error  "Invalid closure: code component does not have code kind" ))
-	      in 
-		Arrow_k(Closure,Listops.butlast vklist,body_kind)
-	      end
-	    
-	    | (Crecord_c entries) => 
-	      let
-		val k_entries = 
-		  map (fn (l,c) => ((l,fresh_named_var "crec_push_singleton"),Single_k c)) entries
-	      in Record_k (Sequence.fromList k_entries)
-	      end
-	    
-	    | (Proj_c (rvals,label)) => 
-	      (case push_singleton (D,rvals)
-		 of Record_k lvk_seq => strip_singleton(D,NilUtil.project_from_kind (lvk_seq,rvals,label))
-		  | other => 
-		   (print "Non-record kind returned from shape_of in projection:\n";
-		    Ppnil.pp_kind other; print "\n";
-		    error  "Non-record kind returned from push_singlteton in projection"))
-		 
-	    | (App_c (cfun,actuals)) => 
-	      (case push_singleton (D,cfun) of
-		 (Arrow_k (_,formals,body_kind)) => 
-		   let 
-		     fun folder ((v,k),c,subst) = NilSubst.add subst (v,c)
-		     val subst = Listops.foldl2 folder (NilSubst.empty()) (formals,actuals)
-		   in  
-		     strip_singleton(D,substConInKind subst body_kind)
-		   end
-	       | cfun_kind => (print "Invalid kind for constructor application\n";
-			       Ppnil.pp_kind cfun_kind; print "\n";
-			       error  "Invalid kind for constructor application"))
-		 
-	    | (Typecase_c {arg,arms,default,kind}) => kind
-	    | (Annotate_c (annot,con)) => push_singleton(D,con))
-
-      val _ = if (!show_calls)
-		then (printl "push_singleton returning with kind =";
-		      Ppnil.pp_kind res; 
-		      print "\n\n")
-	      else ()
-     in 
-       res
-     end
    
-  and strip_singleton (D : context,kind : kind) : kind = 
+  fun strip_singleton (D : context,kind : kind) : kind = 
     let 
       val _ = if (!show_calls)
 		then (print "strip_singleton called with kind =\n";
 		      Ppnil.pp_kind kind; 
 		      print "\n\n")
 	      else ()
-       val _ = 
-	 if !debug then
-	   assert (locate "strip_singleton") 
-	   [
-	    (isRenamedKind D kind, 
-	     fn () => (Ppnil.pp_kind kind;
-		       lprintl ("Type not properly renamed passed to push_singleton")))
-	    ]
-	 else ()
 
       val res = 
-	(case kind of
-	      SingleType_k _ => Type_k
-	    | Single_k con => push_singleton (D,con)
+	(case kind
+	   of Single_k con => 
+	     (case (kind_of (D,con))
+		of SingleType_k con => Type_k
+		 | kind => kind)
+	    | SingleType_k con => Type_k
 	    | _ => kind)
 
       val _ = if !show_calls 
@@ -1454,12 +1321,6 @@ struct
 	 if !debug then
 	   assert (locate "strip_singleton") 
 	   [
-	    (isRenamedKind D res,
-	     fn () => (Ppnil.pp_kind res;
-		       lprintl ("Kind not properly renamed in push_singleton"))),
-	    ((case res of (SingleType_k _) => false | (Single_k _) => false | _ => true),
-	     fn () => (perr_k_k (kind,res);
-		       lprintl ("Failed to strip singleton")))
 	    ]
 	 else ()
 

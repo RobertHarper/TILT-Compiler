@@ -35,31 +35,31 @@ signature NILCONTEXT =
       *    If var is already bound, raises an exception
       *)
     val insert_kind : context * var * kind -> context
-    val insert_shape : context * var * kind -> context
-    val insert_kind_shape : context * var * kind * kind -> context
-    val insert_kind_shape_equation : context * var * con * kind * kind -> context
+
     val insert_kind_equation : context * var * con * kind -> context
     val insert_equation : context * var * con -> context
     val insert_kind_list : context* (var * kind) list -> context
 
-    val make_shape : context * Nil.kind -> Nil.kind
 
-
-    (*Given a constructor, returns the most imprecise kind for that
-     * con - i.e, merely the shape info
-     *)
-    val shape_of : context * Nil.con -> Nil.kind
 
     (*find_kind_project returns the kind, and the most precise constructor
      * that can be created based on the transparent information in the
      * kind.  Note that in the case of transparency, SOME ... will be returned.
      * A NONE denotes the path is at least partially opaque.
      *)
-    val find_shape         : context * var -> kind
     val find_kind          : context * var -> kind
 
     val find_kind_equation : context * con -> con option
 
+    (* Return the standard kind of the variable
+     *)
+    val find_std_kind      : context * var -> kind
+
+    val kind_standardize : context * kind -> kind
+
+    (* Return the most precise standard kind for the constructor
+     *)
+    val kind_of : context * con -> kind
 
     (* Useful debuggin routines *)
     val print_context : context -> unit

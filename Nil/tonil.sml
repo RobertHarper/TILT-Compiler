@@ -192,7 +192,7 @@ struct
     *)
    (* XXX: xmod of functors is broken WRT totality *)
 
-   fun xeffect (Il.TOTAL) = Total
+   fun xeffect (Il.TOTAL) = Partial
      | xeffect (Il.PARTIAL) = Partial
 
    (* xilprim.  Translates the so-called "IL primitives" (primitives
@@ -407,7 +407,7 @@ in
 		
    fun NilContext_find_shape(ctxt as CONTEXT{NILctx,used,...},v) = 
        (let val _ = NilContext_use_var(ctxt,v)
-	    val k = NilContext.find_shape(NILctx,v)
+	    val k = NilContext.find_std_kind(NILctx,v)
        in   SOME ((*NilSubst.renameCVarsKind*) k)
        end
        handle NilContext.Unbound => NONE)
@@ -1252,7 +1252,7 @@ end (* local defining splitting context *)
 					   _,[(arg_var,arg_con)],[],body,body_con)) =
 		   let val body' = wrap(internal_var, inner_var, body)
 		   in  (external_var_r,
-		       Function(Total, Leaf, 
+		       Function(Partial, Leaf, 
 				[(poly_var_c, knd_arg_use)],
 				false,
 				[(poly_var_r, con_arg)],
@@ -2588,7 +2588,7 @@ end (* local defining splitting context *)
 				 val ((vc,vr),_) = splitVar (v,final_context)
 				 val exports = 
                                     let
-                                        val kc = NilContext.find_shape(nil_final_context, vc)
+                                        val kc = NilContext.find_std_kind(nil_final_context, vc)
                                          handle e => (print "exception while doing DEC_MOD\n";
                                                       raise e)
                                     in if killArrowKind "8" final_context kc

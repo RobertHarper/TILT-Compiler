@@ -74,9 +74,9 @@ sig
    val add_var         : (state * var * con * var_loc option * var_val option) -> state
    val add_global      : (state * var * con * loc_or_val) -> state
 
-   val add_concode     : string -> (state * var * kind * kind option * con option * label) -> state
-   val add_convar      : string -> (state * var * kind * kind option * con option * var_loc option * var_val option) -> state
-   val add_conglobal   : string -> (state * var * kind * kind option * con option * loc_or_val) -> state
+   val add_concode     : string -> (state * var * kind * con option * label) -> state
+   val add_convar      : string -> (state * var * kind * con option * var_loc option * var_val option) -> state
+   val add_conglobal   : string -> (state * var * kind * con option * loc_or_val) -> state
 
    val getrep : state -> var -> var_rep
    val getconvarrep : state -> var -> convar_rep
@@ -90,8 +90,6 @@ sig
    val istoplevel : unit -> bool
 
    (* Type reduction and Representation functions *)
-   val get_shape : state -> con -> kind
-   val make_shape : state -> kind -> kind
    val simplify_type : state -> con -> bool * con
    val reduce_to_sum : string -> state -> con -> TilWord32.word * TilWord32.word option * con list
    val con2rep : state -> con -> rep
