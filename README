@@ -1,3 +1,11 @@
+Conventions:
+(1) All functors are closed except for references to structures in pervasive
+	or those in the Util directory.  We let CM track those for us.
+	This helps to cut down on having too functor parameters.
+
+========================================================================================
+
+
 todo:
 	too many things are made PARTIAL right now so that unification works
 
