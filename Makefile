@@ -2,7 +2,7 @@ SMLNJ=SML_VERSION=110 /usr/local/bin/sml
 TILTNJ=./Bin/tilt-nj -vv
 m=
 
-.PHONY: all with_slaves runtime heaps tilt_heap dump_heap slaves basis lib tilt
+.PHONY: all with_slaves runtime heaps tilt_heap dump_heap slaves basis lib tilt clean
 all: runtime heaps basis lib tilt
 
 with_slaves:
@@ -30,3 +30,7 @@ lib:
 
 tilt:
 	$(TILTNJ) $m mapfile-all
+
+clean:
+	-$(TILTNJ) -cc mapfile-all mapfile-lib
+	-$(TILTNJ) -bcc mapfile-basis
