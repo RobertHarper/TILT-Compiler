@@ -778,7 +778,8 @@ make the use of {\tt fmtstreams} on files more convenient.
 	      fun hasnewline s = Listops.orfold (fn c => c = #"\n") (explode s)
 	      val ismulti = Listops.orfold hasnewline strlist
 	      val _ = if ismulti then TextIO.output(outs,Spmod'(0,0)) else ()
-	  in  foldr (fn (s,_) => TextIO.output(outs, s)) () strlist
+	  in  foldr (fn (s,_) => TextIO.output(outs, s)) () strlist;
+	      TextIO.flushOut outs
 	  end
       (*
       fun debug_output_fmt(Formatstream fs, fm) =
