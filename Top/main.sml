@@ -96,7 +96,8 @@ struct
 	end
 
     (* errorMsg : exn -> string *)
-    fun errorMsg (UtilError.BUG msg) = "internal error: " ^ msg
+    fun errorMsg (UtilError.BUG msg) = (* Not yet true that BUG implies a compiler error.
+				         "internal error: " ^ *) msg
       | errorMsg (ArgErr msg) = msg
       | errorMsg (e) = exnMessage e
 
