@@ -73,6 +73,11 @@ signature CORE =
     | BSR     of label * register option * {regs_modified : register list, regs_destroyed : register list,
 					    args : register list}
                        (* if register is SOME ?, then ? is the reg where we want to put retadd *)
+		       (* regs_modified includes any register that is written to, whether or not it
+			  is restored by the end of the instruction.  So regs_destroyed is a subset
+			  of regs_modified.  This is only used by some of the exception handling
+			  code, since exceptions can skip over the register-restoring epilogue of
+			  functions.  *)
     | JSR     of bool * register * int * label list (* link, dest, hint, labels *)
     | RET     of bool * int (* link, hint *)
     | GC_CALLSITE of label

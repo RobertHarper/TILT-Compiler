@@ -94,7 +94,7 @@ struct
 
   fun sloc2int (ACTUAL4 x) = x
     | sloc2int (ACTUAL8 x) = x
-    | sloc2int arg = error ("decalpha.sml: Attempt to concretize stacklocation: " ^ 
+    | sloc2int arg = error ("Attempt to concretize stacklocation: " ^ 
 			    (msStackLocation arg))
     
    fun regNum (R n) = n
