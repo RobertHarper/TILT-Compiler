@@ -38,7 +38,7 @@ structure Linker :> LINKER =
 		     let
 			 val _ = Til.checkNative()	(* gccFile only works native *)
 		     in
-			 {assembler = ["/usr/ccs/bin/as"],
+			 {assembler = ["/usr/ccs/bin/as", "-xarch=v8plus"],
 			  linker    = ["/usr/ccs/bin/ld"], (* -L/usr/local/lib ? *)
 			  ldpre     = [runtimeFile "obj_solaris/firstdata.o", gccFile "crt1.o", gccFile "crti.o",
 				       "/usr/ccs/lib/values-Xa.o", gccFile "crtbegin.o"],
@@ -51,7 +51,7 @@ structure Linker :> LINKER =
 		     let
 			 val debug = if (!debug_asm) then ["-g"] else nil
 		     in
-			 {assembler = ["/usr/bin/as"],
+			 {assembler = ["/usr/bin/as"] @ debug,
 			  linker    = ["/usr/bin/ld", "-call_shared", "-D", "a000000", "-T", "8000000"] @ debug,
 			  ldpre     = ["/usr/lib/cmplrs/cc/crt0.o"],
 			  ldpost    = [runtimeFile "runtime.alpha_osf.a", "-lpthread", "-lmach", "-lexc", "-lm", "-lc", "-lrt"]}
