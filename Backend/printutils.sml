@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int Array Core BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO Util Listops *)
+(*$import Int Array Core BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO Util Listops *)
 functor Printutils(val commentHeader : string
 		   structure Machineutils : MACHINEUTILS
                    structure Tracetable : TRACETABLE
@@ -197,8 +197,10 @@ struct
 						 | _ => error "missing block")
 	        in  case (rev (!instrs)) of
 		      first_instr::_ => (case (stripAnnot first_instr) of
-					BASE(ILABEL l) =>  
-					emitString (".globl " ^ (msLabel l) ^ "\n")
+					BASE(ILABEL l) =>
+					     if globalLabel l
+						 then emitString (".globl " ^ (msLabel l) ^ "\n")
+					     else ()
 				      | _ => ())
 		    | _ => ()
                 end

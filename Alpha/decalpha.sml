@@ -437,12 +437,11 @@ structure Machine =
     | msData (INT32 (w))  = single (".long " ^ (wms w))
     | msData (FLOAT (f))  = single (".t_floating " ^ (fixupFloat f))
     | msData (DATA (label)) = single (".long " ^ (msLabel label))
-    | msData (DLABEL (label))   = 
-	   [(1,case label of
-		 LOCAL_CODE _ => ((msLabel label) ^ ":\n")
-	       | LOCAL_DATA _ => ((msLabel label) ^ ":\n")
-	       | _ => ("\t.globl " ^ (msLabel label) ^ "\n" ^
-		       (msLabel label) ^ ":\n"))]
+    | msData (DLABEL (label)) =
+	    [(1,if globalLabel label
+		    then ("\t.globl " ^ msLabel label ^ "\n" ^
+			  msLabel label ^ ":\n")
+		else (msLabel label ^ ":\n"))]
 
    fun freshCodeLabel () = Rtl.fresh_code_label "code"
    fun freshDataLabel () = Rtl.fresh_data_label "data"

@@ -109,6 +109,7 @@ signature CORE =
 	    regs_modified  : Regset.set,      (* Physical registers modified (but restored) by procedure *)
 	    callee_saved: Regset.set}         (* Physical registers saved by procedure *)
 
+   val globalLabel : label -> bool
    val msLabel : label -> string
    val msReg : register -> string
    val makeAsmLabel : string -> string

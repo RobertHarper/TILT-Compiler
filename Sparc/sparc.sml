@@ -449,11 +449,10 @@ structure Machine =
     | msData (FLOAT (f))  = single (".double 0r" ^ (fixupFloat f))
     | msData (DATA (label)) = single (".long " ^ (msLabel label))
     | msData (DLABEL (label))   = 
-	   [(1,case label of
-		 LOCAL_CODE _ => ((msLabel label) ^ ":\n")
-	       | LOCAL_DATA _ => ((msLabel label) ^ ":\n")
-	       | _ => ("\t.globl " ^ (msLabel label) ^ "\n" ^
-		       (msLabel label) ^ ":\n"))]
+	     [(1,if globalLabel label
+		     then ("\t.globl " ^ msLabel label ^ "\n" ^
+			   msLabel label ^ ":\n")
+		 else (msLabel label ^ ":\n"))]
 
    fun freshCodeLabel () = Rtl.fresh_code_label "code"
    fun freshDataLabel () = Rtl.fresh_data_label "data"

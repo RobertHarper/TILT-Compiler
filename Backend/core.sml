@@ -77,6 +77,10 @@ struct
 	in  String.translate xlate s
 	end
 
+  fun globalLabel (LOCAL_CODE _) = false
+    | globalLabel (LOCAL_DATA _) = false
+    | globalLabel _ = true
+
   fun msLabel (LOCAL_CODE s) = makeAsmLabel s
     | msLabel (LOCAL_DATA s) = makeAsmLabel s
     | msLabel (ML_EXTERN_LABEL s) = "ml_" ^ makeAsmLabel s
