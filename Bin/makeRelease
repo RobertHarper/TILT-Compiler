@@ -242,8 +242,8 @@ fn makeSparc { sparc=$1 {
 	copyStuff $sparc/lib/tilt \
 		Runtime/obj_solaris/firstdata.o \
 		Runtime/runtime.solaris.a \
-		Heaps/tilt.sparc-solaris
-		#Top.sparc.exe
+		Heaps/tilt.sparc-solaris \
+		Top.sparc.exe
 	traceEnd
 }}
 
@@ -260,8 +260,8 @@ fn makeAlpha { alpha=$1 {
 	traceBegin makeAlpha $alpha
 	copyStuff $alpha/lib/tilt \
 		Runtime/runtime.alpha_osf.a \
-		Heaps/tilt.alpha32-dunix
-		#Top.alpha.exe
+		Heaps/tilt.alpha32-dunix \
+		Top.alpha.exe
 	traceEnd
 }}
 
