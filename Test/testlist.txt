@@ -109,7 +109,7 @@ n33     pass	scope of explicit type variables
 n34     pass	non-equality datatype
 n35     fail	abstypes are not equality types
 n36     pass	scoping of abstype
-n37     fail	exception constructor in pattern match
+n37     pass	exception constructor in pattern match
 n38     pass	scoping of local
 n39     fail	opaque datatypes
 n40     pass	ints aren't reals
@@ -117,7 +117,7 @@ n41     pass	scoping of and
 n42     pass	scoping of val
 n43     pass	occurs check in type inference
 n44     fail	scoping of "and" in type definition
-n45     fail	opaque datatypes and shadowing
+n45     pass	opaque datatypes and shadowing
 n46     pass	opaque datatypes and shadowing
 n47     pass	polymorphic exception
 n49     pass	type inference with records
@@ -129,7 +129,7 @@ n54     pass	type inference
 n55     fail	value restriction
 n56     fail	duplicate id pattern
 n57     fail	duplicate label in record
-n58     fail	duplicate label in record pattern
+n58     pass	duplicate label in record pattern
 n59     fail	duplicate label in record type
 n60     fail	duplicate id in "and" binding
 n61     fail	duplicate id in "and" type binding

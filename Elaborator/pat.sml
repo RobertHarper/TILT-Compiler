@@ -109,11 +109,19 @@ struct
     val do_result_type = Stats.tt("PatResultType")
     val debug = Stats.ff("Pattern_debug")
 
+    (* Use error to signal a compiler error.  Print an error message
+       and then abort() to signal an error in the source program.
+       Top-level functions in the pattern compiler should handle
+       Abort. *)
     val error = fn s => Util.error "pat.sml" s
-    fun error_reg s =
+    exception Abort
+    fun abort () = raise Abort
+    fun abort' s =
 	let in
 	    Error.error_region ();
-	    error s
+	    print s;
+	    print "\n";
+	    abort()
 	end
 
     fun printint i = print (Int.toString i)
@@ -342,13 +350,13 @@ struct
 		   | (WILD, WILD) => loop (n+1, WILD, rest)
 		   | (WILD, SUM bp) => SUMWILD (0, bp)
 		   | (WILD, INT) => INTWILD 0
-		   | (WILD, _) => error_reg "cannot get a SUMWILD or INTWILD in one element"
+		   | (WILD, _) => abort' "cannot get a SUMWILD or INTWILD in one element"
 		   | (SUM _, SUM _) => loop (n+1, acc, rest)
 		   | (SUM bp, WILD) => SUMWILD (n, bp)
-		   | (SUM _, _) => error_reg "patterns do not agree: expected SUM or WILD"
+		   | (SUM _, _) => abort' "patterns do not agree: expected SUM or WILD"
 		   | (INT, INT) => loop (n+1, INT, rest)
 		   | (INT, WILD) => INTWILD n
-		   | (INT, _) => error_reg "patterns do not agree: expected INT or WILD")
+		   | (INT, _) => abort' "patterns do not agree: expected INT or WILD")
 	in  loop (1, reduce pat, map reduce pats)
 	end
 
@@ -376,14 +384,14 @@ struct
 				    NONE => (case p of
 						 [s] => 
 						     if (Symbol.name s = "ref") then
-							 error_reg "constructor used without argument in pattern"
+							 abort' "constructor used without argument in pattern"
 						     else ([s], [], Wild)
 					       | _ => (Error.error_region();
 						       print "non-constructor path pattern: ";
 						       AstHelp.pp_path p; print "\n";
-						       error "non-constructor path pattern"))
+						       abort()))
 				  | SOME {stamp, carried_type=NONE} => ([], [], Exception(p, stamp, NONE))
-				  | SOME _ => error_reg "exception constructor is missing pattern")
+				  | SOME _ => abort' "exception constructor is missing pattern")
 		| IntPat lit => ([], [], Int lit)
 		| WordPat lit => ([], [], Word lit)
 		| StringPat str => ([], [], String str)
@@ -411,13 +419,13 @@ struct
 						 else (Error.error_region();
 						       print "non-constructor in app pattern: ";
 						       AstHelp.pp_path p; print "\n";
-						       error "non-constructor in app pattern")
+						       abort())
 				       | SOME {stamp, carried_type=NONE} => 
-						     error_reg ("non-value-carrying exception constructor " ^
+						     abort' ("non-value-carrying exception constructor " ^
 								"applied to argument in pattern")
 				       | SOME {stamp, carried_type=SOME c} => 
 					     ([], [], Exception(p, stamp, SOME (c, ptop argument))))
-			 | _ => error_reg "AppPat applied a non-path")
+			 | _ => abort' "AppPat applied a non-path")
 		| ConstraintPat{pattern,constraint} =>
 		      let val c = typecompile (context,constraint)
 			  val (syms, cons, bp) = ptop pattern
@@ -596,12 +604,12 @@ struct
       | eqLiteral (Word lit, Word lit') = TilWord64.equal(lit, lit') 
       | eqLiteral (String str, String str') = str = str'
       | eqLiteral (Char str, Char str') = str = str'
-      | eqLiteral _ = error "eqLiteral: pattern is not literal"
+      | eqLiteral _ = abort' "eqLiteral: pattern is not literal"
     fun conLiteral (Int lit) = CON_INT W32
       | conLiteral (Word lit) = CON_UINT W32
       | conLiteral (String str) = CON_VECTOR(CON_UINT W8)
       | conLiteral (Char str) = CON_UINT W8
-      | conLiteral _ = error "conLiteral: pattern is not literal"
+      | conLiteral _ = abort' "conLiteral: pattern is not literal"
 
     (* generate an expression testing v against b (a literal pattern).
        This is used in constant_case below to generate the decision tree. *)
@@ -692,7 +700,7 @@ struct
 	    val elemcon = U.fresh_con context
 	    val _ = if (IlStatic.eq_con(context, con, CON_REF elemcon))
 			then ()
-		    else (error_reg "ref pattern used on a non-ref argument")
+		    else (abort' "ref pattern used on a non-ref argument")
 			
 	    (* bind a new variable for the contents of the ref *)
 	    val v = N.fresh_var()
@@ -739,15 +747,15 @@ struct
 	val (targetArg, restArgs, info_arms) = record_ref_dispatch (extractRecordInfo,col,args,arms)
 
 	fun same(s1,s2) = if Listops.sameset_eq N.eq_label s1 s2 then s2
-			  else error_reg "flex records do not all agree in record patterns (test: same)"
+			  else abort' "flex records do not all agree in record patterns (test: same)"
 
 	fun subset(s1,s2) = if Listops.subset_eq N.eq_label s1 s2 then s2 
-			    else error_reg "flex records do not all agree in record patterns (test: subset)"
+			    else abort' "flex records do not all agree in record patterns (test: subset)"
 
 	(* check that there are no duplicate labels *)
 	fun unique (splist : (label * pattern) list) = 
 	    let fun folder((l,_),acc) = if (Listops.member_eq(N.eq_label,l,acc))
-					    then error_reg "duplicate field names in record pattern"
+					    then abort' "duplicate field names in record pattern"
 					else l::acc
 	    in foldr folder [] splist (* foldr preserves the order *)
 	    end
@@ -897,7 +905,7 @@ struct
 		 | c => (Error.error_region ();
 			 print "sumcon not reducible to SUM_CON: ";
 			 Ppil.pp_con c; print "\n";
-			 error "sumcon not reducible to SUM_CON"))
+			 abort()))
       in  
 	  fun mk_ssumcon i = CON_SUM{names=names,
 				     noncarriers=noncarriers,
@@ -926,7 +934,7 @@ struct
 		     (false,_, _) => NONE
 		   | (true,NONE, NONE) => SOME baseRule
 		   | (true,SOME argpat, SOME arg) => SOME(extendBaseRule context (baseRule, argpat, arg))
-		   | (true, _, _) => error_reg "value-carrying vs non-value-carrying mismatch")
+		   | (true, _, _) => abort' "value-carrying vs non-value-carrying mismatch")
 	    val relevants : baseRule list = List.mapPartial armhelp info_arms
 
 	    val context = C.add_context_dec(context,DEC_EXP(casevar,mk_ssumcon i,NONE, false))
@@ -1412,7 +1420,9 @@ struct
 
 	val lc_list = (case IlStatic.con_head_normalize(context, bindc) of
 			   CON_RECORD lc_list => lc_list
-			 | c => (Ppil.pp_con c; print "\n"; error "bindc not a tuple"))
+			 | c => (debugdo (fn () =>
+					  (Ppil.pp_con c; print "\n"));
+				 error "bindc not a tuple"))
 
 	fun mapper(n,s) = 
 	    let val l = N.symbol_label s
@@ -1434,7 +1444,7 @@ struct
 	       | _ => tupleSbndSdec @ external_sbnd_sdecs)
 
       in final_sbnd_sdecs
-      end
+      end handle Abort => []
 
     (* Compile an AST case into an IL exp/con. This essentially
        just involves calling match. When used for an SML handle
@@ -1451,7 +1461,7 @@ struct
 	val arms = map (fn (pat,body) => ([pat], body)) cases
 
 	val _ = if reraise andalso not (IlStatic.eq_con(context,argc,CON_ANY))
-		    then error_reg "default of pattern not an exn type"
+		    then abort' "default of pattern not an exn type"
 		else ()
 
 	fun default returntype () = 
@@ -1462,8 +1472,7 @@ struct
 		 end
 
       in  compile (context, args, arms, default)
-      end
-
+      end handle Abort => Error.dummy_exp (context, "case_pat")
 
     (* ---- funCompile creates a curried function ----------------------- *)
     fun funCompile {context : context,
@@ -1498,7 +1507,8 @@ struct
 	  val (e,c) = compile (context,args,rules,default)
 
       in {arglist = args, body = (e,c) }
-      end
+      end handle Abort => {arglist = nil,
+			   body = Error.dummy_exp (context, "fun_pat")}
 
   end
 
