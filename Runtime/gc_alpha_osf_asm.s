@@ -17,6 +17,7 @@
 	.globl	save_regs		# helper function used locally and in service_alpha_osf_asm.s
 	.globl  NewStackletFromML	# called from ML mutator function prologs
 	.globl  PopStackletFromML	# (installed by runtime) called before ML mutator function epilogs
+	.globl	RestoreStackFromML
 	.globl	GCFromML		# called from ML mutator
 	.globl	returnFromGCFromML	# used by scheduler to go back to ML
 	.globl	GCFromC			# called from C function including those of runtime
@@ -286,6 +287,36 @@ PopStackletFromMLgetgp2:
 .set at
 	.end	PopStackletFromML
 
+ # ----------------- RestoreStackFromML ----------------------------------------------------------------
+ # This routine is called when raising an exception sets $sp outside the top stacklet.
+ # -----------------------------------------------------------------------------------------------------
+	.ent	RestoreStackFromML
+	.frame $sp, 0, $26
+	.prologue 0
+RestoreStackFromML:
+.set noat
+	stq	$0,  MLsaveregs_disp(THREADPTR_REG)	# save $0, $1, $26, $29 manually
+	stq	$1,  MLsaveregs_disp+8(THREADPTR_REG)	
+	stq	$26, MLsaveregs_disp+RA_DISP(THREADPTR_REG)
+	stq	$29, MLsaveregs_disp+232(THREADPTR_REG)
+	br	$gp, RestoreStackFromMLgetgp1
+RestoreStackFromMLgetgp1:
+	ldgp	$gp, 0($gp)				# compute self-gp for save_regs/c call
+	mov	1, $0
+	stq	$0, notinml_disp(THREADPTR_REG)		# leaving ML
+	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer
+	bsr	save_regs
+	mov	THREADPTR_REG, CFIRSTARG_REG		# pass user thread pointer as arg
+	ldq	ASMTMP_REG, proc_disp(THREADPTR_REG)	# get system thread pointer
+	ldq	$sp, (ASMTMP_REG)			# run on system thread stack
+	jsr	$26, RestoreStackFromMutator		
+	br	$gp, RestoreStackFromMLgetgp2
+RestoreStackFromMLgetgp2:
+	ldgp	$gp, 0($gp)				# compute self-gp for abort
+	jsr	abort
+	nop
+.set at
+	.end	RestoreStackFromML
 
  # ----------------- GCFromML ---------------------------------
  # return address comes in normal return address register
