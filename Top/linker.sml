@@ -5,8 +5,7 @@ structure Linker :> LINKER =
     val as_path = "as"
     val ld_path = "ld"
     val startup_lib = "/usr/lib/cmplrs/cc/crt0.o "
-    val ld_libs = "Runtime/runtime.alpha_osf.a " ^
-		  "-lm -lc -lots"
+    val ld_libs = "Runtime/runtime.alpha_osf.a -call_shared -lpthread -lmach -lexc -lc -lm"
                   (* runtime, etc *)
     val error = fn x => Util.error "Linker" x
 
@@ -206,7 +205,7 @@ structure Linker :> LINKER =
 	  fun pr_list [] = ""
 	    | pr_list [a] = a
 	    | pr_list (a::xs) = a ^ " " ^ pr_list xs
-	  val command = (ld_path ^ " -non_shared -r -o " ^ o_file ^ 
+	  val command = (ld_path ^ " -r -o " ^ o_file ^ 
 			 " " ^ pr_list o_files)
 	  val _ = (print "Running: "; print command; print "\n")
 	  val success = Util.system command
@@ -236,7 +235,7 @@ structure Linker :> LINKER =
 		   val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)
 		   val _ = if success then ()
 			   else error "mk_exe - as failed"
-		   val command = (ld_path ^ " -D 40000000 -T 20000000 -non_shared -o " ^ 
+		   val command = (ld_path ^ " -D 40000000 -T 20000000 -o " ^ 
 				  exe_result ^ " " ^ startup_lib ^ " " ^ o_temp ^ " " ^ link_o ^ " " ^ ld_libs)
 		   val _ = (print "Running: "; print command; print "\n")
 		   val success = Util.system command
