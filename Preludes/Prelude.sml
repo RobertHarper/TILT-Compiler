@@ -5,7 +5,8 @@
  *)
     
 (* standard fixity *)
-infix  3 := o before
+infix  0 before
+infix  3 := o 
 infix  4 = <> < > <= >= 
 infix  5 @
 infixr 5 ::
@@ -477,9 +478,11 @@ open IO
 (* unimped parts of the standard basis *)
 exception LibFail of string
 
+(* we cannot use types defined in this module for the externs 
+   because of a deficiency in the phase-splitter *)
 (* Predefined external functions *)
-extern exnName : (exn, string) -->
-extern exnMessage : (exn, string) -->
+extern exnName : (exn, char vector) -->
+extern exnMessage : (exn, char vector) -->
 extern real_logb : (float, int) -->
 extern real_scalb : (float * int, float) -->
 extern sqrt : (float, float) -->
