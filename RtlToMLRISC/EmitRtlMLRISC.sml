@@ -1231,6 +1231,7 @@ functor EmitRtlMLRISC(
 	  let
 	    val cur_alloc_pointer = externalExp "cur_alloc_pointer"
 	    val cur_alloc_limit	  = externalExp "cur_alloc_limit"
+	    val stackPointer	  = IntegerConvention.stackPointer
 	    val heapPointer	  = IntegerConvention.heapPointer
 	    val heapLimit	  = IntegerConvention.heapLimit
 	    val thread  	  = IntegerConvention.threadPointer
@@ -1242,10 +1243,14 @@ functor EmitRtlMLRISC(
 	  in
 	    [MLTree.CODE[
 	       MLTree.STORE32(pointer, MLTree.REG heapPointer, memory),
-	       MLTree.STORE32(limit, MLTree.REG heapLimit, memory)
+	       MLTree.STORE32(limit, MLTree.REG heapLimit, memory),
+	       MLTree.MV(stackPointer, MLTree.SUB(MLTree.REG stackPointer,
+						  MLTree.LI 256, MLTree.LR))
 	     ]]@
 	    CALL operand@
 	    [MLTree.CODE[
+	       MLTree.MV(stackPointer, MLTree.ADD(MLTree.REG stackPointer,
+						  MLTree.LI 256)),
 	       MLTree.MV(heapPointer, MLTree.LOAD32(pointer, memory)),
 	       MLTree.MV(heapLimit, MLTree.LOAD32(limit, memory))
 	     ]]

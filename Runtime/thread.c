@@ -333,6 +333,7 @@ void work(SysThread_t *sth)
 static void* systhread(void* addr)
 {
   SysThread_t *st = getSysThread();
+  test();
   st->stack = (int)(&st);
   work(st);
   assert(0);

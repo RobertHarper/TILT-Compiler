@@ -41,6 +41,8 @@ FILE* des2ptr(int des)
 void mllib_init()
 {
   int i=0;
+  test();
+  test();
   for (i=0; i<100; i++)
     lookahead_char[i] = -1;
   des2ptr_table[0] = stdin;
@@ -52,6 +54,15 @@ void mllib_init()
 }
 
 
+void test2()
+{
+  fwrite("abcd\n\n\n\n",1,5,stdout);
+}
+
+void test()
+{
+  test2();
+}
 
 int ml_output(value_t _des, value_t mlstring)
 {
@@ -68,6 +79,7 @@ int ml_output(value_t _des, value_t mlstring)
     }
 #endif
 
+  test();
   fwrite(str,1,bytelen,F);
 
   return 0;

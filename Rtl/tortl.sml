@@ -36,6 +36,8 @@ struct
   val debug_simp = ref false
   val debug_bound = ref false
       
+  fun msg str = if (!debug) then print str else ()
+
   (* Module-level declarations *)
   open Util Listops Name
   open Nil NilUtil
@@ -94,7 +96,7 @@ struct
       (case bnd of
 	      Con_b (phase,cbnd) => xconbnd state (phase,cbnd)
 	    | Exp_b (v,t,e) => 
-		  let val _ = (print "working on exp_b "; print (var2string v); print "\n")
+		  let val _ = (msg "working on exp_b "; msg (var2string v); msg "\n")
 		      val c = type_of state e
 		      val (term,_,state) = xexp(state,v,e,t,NOTID)
 		  in  if istoplevel()
@@ -104,9 +106,9 @@ struct
 	    | Fixopen_b var_fun_seq => error "no open functions permitted"
 	    | Fixcode_b var_fun_seq =>
 		  let 
-		      val _ = (print "working on fixopen_b "; (* print (var2string v); *) print "\n")
-		      fun folder ((v,f as Function(effect,recur,vklist,_,vclist,vflist,b,c)),s) =
-			  let val funcon = NilUtil.function_type Code f
+		      val _ = msg "working on fixopen_b\n"
+		      fun folder ((v,function),s) =
+			  let val funcon = NilUtil.function_type Code function
 			  in  add_code (s, v, funcon, LOCAL_CODE (Name.var2string v))
 			  end
 		      val var_fun_list = (Sequence.toList var_fun_seq)
@@ -117,7 +119,7 @@ struct
 		  end
 	    | Fixclosure_b (is_recur,var_varconexpset) => 
 		  let 
-		      val _ = (print "working on fixclosure_b "; (* print (var2string v); *) print "\n")
+		      val _ = msg "working on fixclosure_b\n"
 		      val var_vcelist = Sequence.toList var_varconexpset
 		      val _ = add_instr(ICOMMENT ("allocating " ^ 
 						  (Int.toString (length var_vcelist)) ^ " closures"))
@@ -528,19 +530,17 @@ struct
 			      end
 			  val rescon = 
 			      (case (#2(simplify_type state funcon)) of
-				   (Prim_c(Vararg_c _, [_,rescon])) => reduce([],clist,rescon)
-				 | (AllArrow_c(_,_,vklist,_,_,_,rescon)) => reduce(vklist,clist,rescon)
+				   Prim_c(Vararg_c _, [_,rescon]) => reduce([],clist,rescon)
+				 | AllArrow_c{tFormals,body,...} => reduce(tFormals,clist,body)
 				 | c => (print "cannot compute type of result of call\n";
 					  print "funcon = \n"; Ppnil.pp_con funcon; print "\n";
 					  print "reduced to \n"; Ppnil.pp_con c; print "\n";
 					  error "cannot compute type of result of call"))
 		      end
 
-		      val iregs = (cregsi @ cregsi' @ 
-				   (map (coercei "call") eregs) @
-				   (map (coercei "call") eregs'))
-		      val fregs = map coercef efregs
-		      val args = (map I iregs) @ (map F fregs)
+		      val args = (map I cregsi) @ 
+			         (map I cregsi') @
+				 eregs @ eregs' @ efregs
 
 		      val (resrep,dest) = alloc_reg_trace state trace
 		      val context = if (#elim_tail_call(!cur_params))
@@ -1040,7 +1040,7 @@ struct
 	 | project_sum_record (k,field) => 
 	       let val e = hd elist
 		   val (r,econ,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
-		   val base = coercei "" r
+		   val I base = r
 	       in  TortlSum.xproject_sum_record ((state,k,econ),field,clist,base,trace)
 	       end
 
@@ -1048,7 +1048,7 @@ struct
 	       let val sumcon = hd clist
 		   val e = hd elist
 		   val (r,ssumcon,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
-		   val base = coercei "" r
+		   val I base = r
 	       in  TortlSum.xproject_sum_nonrecord ((state,k,sumcon),base,ssumcon,trace)
 	       end
 
@@ -1057,7 +1057,7 @@ struct
 		   val e = hd elist
 		   val (er,ssumcon,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
 		   val (cr,_,state) = xcon(state,fresh_var(),sumcon,NONE)
-		   val base = coercei "" er
+		   val I base = er
 	       in  TortlSum.xproject_sum_dynamic ((state,k,sumcon),cr,base,trace)
 	       end
 
@@ -1111,9 +1111,10 @@ struct
 		   in  (lv, Prim_c(Exn_c,[]),state)
 		   end
 	 | make_vararg oe => 
-		   let val local_xexp = fn (s,e) => coercei "vararg" 
-		                                     (#1(xexp'(s,fresh_var(),e,
-							       Nil.TraceUnknown,NOTID)))
+		   let fun local_xexp (s,e) = 
+		          let val (I ir, _, _) = xexp'(s,fresh_var(),e, Nil.TraceUnknown,NOTID)
+			  in  ir
+			  end
 		       val [c1,c2] = clist
 		       val (argc, _, state) = xcon(state,fresh_var(),c1, NONE)
 		       val (resc, _, state) = xcon(state,fresh_var(),c2, NONE)
@@ -1125,9 +1126,10 @@ struct
 			state)
 		   end
 	 | make_onearg (openness,eff) => 
-		   let val local_xexp = fn (s,e) => coercei "onearg" 
-		                                      (#1(xexp'(s,fresh_var(),e,
-								Nil.TraceUnknown,NOTID)))
+		   let  fun local_xexp (s,e) = 
+		          let val (I ir, _, _) = xexp'(s,fresh_var(),e, Nil.TraceUnknown,NOTID)
+			  in  ir
+			  end
 		       val [c1,c2] = clist
 		       val (argc, _, state) = xcon(state,fresh_var(),c1, NONE)
 		       val (resc, _, state) = xcon(state,fresh_var(),c2, NONE)
@@ -1135,7 +1137,8 @@ struct
 							Nil.TraceUnknown, NOTID)
 		       val (state,resulti) = TortlVararg.xmake_onearg local_xexp (state,argc,resc,function)
 		   in  (LOCATION(REGISTER(false, I resulti)), 
-			AllArrow_c(openness,eff,[],NONE,[c1],0w0,c2),
+			AllArrow_c{openness=openness,effect=eff,isDependent=false,
+				   tFormals=[],eFormals=[(NONE,c1)],fFormals=0w0,body=c2},
 			state)
 		   end
 	 | peq => error "peq not done")
@@ -1609,11 +1612,11 @@ struct
 				end)
 		   end
 *)
-	     | AllArrow_c (Open,_,_,_,_,_,_) => error "open Arrow_c"
-	     | AllArrow_c (Closure,_,_,_,clist,numfloat,c) => 
+	     | AllArrow_c {openness=Open,...} => error "open Arrow_c"
+	     | AllArrow_c {openness=Closure,eFormals=clist,fFormals=numfloat,body=c,...} => 
 		   mk_sum_help(state,NONE,[9],[])
 (*		   mk_sum_help(NONE,[9,TW32.toInt numfloat],c::clist) *)
-	     | AllArrow_c (Code,_,_,_,clist,numfloat,c) => 
+	     | AllArrow_c {openness=Code,eFormals=clist,fFormals=numfloat,body=c,...} => 
 (*		   mk_sum_help(state,NONE,[10,TW32.toInt numfloat],c::clist) *)
 		   mk_sum_help(state,NONE,[10],[])
 	     | ExternArrow_c _ =>
@@ -1754,7 +1757,9 @@ struct
 	      val p = get_proc()
 	  in add_proc p
 	  end
-     fun dofun_help is_top (state,vname,Function(effect,recur,vklist,_,vclist,vflist,body,con)) = 
+     fun dofun_help is_top (state,vname,Function{tFormals=vklist,
+						 eFormals=vclist,
+						 fFormals=vflist,body,...}) =
 	  let 
 	      val name = (case (Name.VarMap.find(!exports,vname)) of
 			      NONE => LOCAL_CODE (Name.var2string vname)
@@ -1771,7 +1776,7 @@ struct
 		  in  (r,s')
 		  end
 	      val (cargs,state) = foldl_list folder state vklist
-              fun folder ((v,c),s) = let val r as (I ir) = alloc_named_reg s (c,v)
+              fun folder ((v,tr,c),s) = let val r as (I ir) = alloc_named_reg s (c,v)
 					 val s' = add_reg (s,v,c,r)
 			             in  (ir, s')
                                      end
@@ -1806,25 +1811,17 @@ struct
 	     | SOME (n,FunWork vf) => 
 		   let val _ = curfun := n
 		       val temp = "function " ^ (Int.toString n) ^ ": " ^ (Name.var2name (#2 vf))
-		       val _ = if (!diag)
-				   then (print "*** Working on "; print temp; print "\n")
-			       else ()
+		       val _ = (msg "*** Working on "; msg temp; msg "\n")
 		       val _ = dofun vf
-		       val _ = if (!diag)
-				   then (print "*** Finished "; print temp; print "\n")
-			       else ()
+		       val _ = (msg "*** Finished "; msg temp; msg "\n")
 		   in  worklist_loop()
 		   end
 	     | SOME (n,ConFunWork vvkck) => 
 		   let val _ = curfun := n
-		       val temp = "confunction " ^ (Int.toString n) ^ ": " ^ (Name.var2name (#2 vvkck))
-		       val _ = if (!diag) 
-				   then (print "*** Working on "; print temp; print "\n")
-			       else ()
+		       val temp = "con_function " ^ (Int.toString n) ^ ": " ^ (Name.var2name (#2 vvkck))
+		       val _ = (msg "*** Working on "; msg temp; msg "\n")
 		       val _ = doconfun false vvkck
-		       val _ = if (!diag)
-				   then (print "*** Finished "; print temp; print "\n")
-			       else ()
+		       val _ = (msg "*** Finished "; msg temp; msg "\n")
 		   in  worklist_loop()
 		   end)
   end
@@ -1837,26 +1834,18 @@ struct
 					  exports : export_entry list}) =
          let 
 
-	     val _ = if (!debug)
-			 then print "tortl - entered translate\n"
-		     else ()
+	     val _ = msg "tortl - entered translate\n"
 
+	     (* To reduce unnecessary labels, we can determine top-level locals.
+	        These are variables bound and only used outside functions.
+		For now, to avoid an initial pass, we leave it empty
+	     *)
 	     val toplevel_locals = VarSet.empty
 
-	     val _ = if (!debug)
-			 then print "tortl - handling exports now\n"
-		     else ()
-
-
 	     local
-		 fun mapper (ExportValue(l,v)) =
-		     let val lab = ML_EXTERN_LABEL(Name.label2string l)
-		     in  (v,lab)
-		     end
-		   |  mapper (ExportType(l,v)) =
-		     let val lab = ML_EXTERN_LABEL(Name.label2string l)
-		     in  (v,lab)
-		     end
+		 fun help l = ML_EXTERN_LABEL(Name.label2string l)
+		 fun mapper (ExportValue(l,v)) = (v, help l)
+		   | mapper (ExportType(l,v)) = (v, help l)
 	     in  val named_exports = map mapper exports
 	     end
 	     val mainCodeVar = Name.fresh_named_var("main_" ^ unitname ^ "_code")
@@ -1878,13 +1867,12 @@ struct
 			| {HeapProfile = NONE, ...} => HeapProfile := false)
 
 		 
-	     val _ = if (!debug)
-			 then print "tortl - handling imports now\n"
-		     else ()
+	     val _ = msg "tortl - handling imports now\n"
 
 	     val _ = reset_state(true, (mainCodeVar, mainCodeName))
 	     fun folder (ImportValue(l,v,c),s) = 
-		 (* For extern or C functions, the label IS the value rather than a pointer *)
+		 (* For extern or C functions, 
+		    the label IS the code value rather than an address containing the code value *)
 		 let val mllab = ML_EXTERN_LABEL(Name.label2string l)
 		     val lv = 			 
 			 (case c of
@@ -1909,16 +1897,9 @@ struct
 	      val p = get_proc()
 	     val _ = add_proc p
 
-	     val _ = if (!debug)
-			 then print "tortl - calling worklist now\n"
-		     else ()
-
+	     val _ = msg "tortl - calling worklist now\n"
 	     val _ = worklist_loop()
-
-	     val _ = print "tortl - returned from worklist now\n"
-	     val _ = if (!debug)
-			 then print "tortl - returned from worklist now\n"
-		     else ()
+	     val _ = msg "tortl - returned from worklist now\n"
 
 	     val _ = add_data(COMMENT("Module closure"))
 	     val _ = add_data(DLABEL(mainName))

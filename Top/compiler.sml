@@ -15,7 +15,7 @@ structure Til : COMPILER =
     val as_path = "as"
 	
     val debug_asm = ref false
-    val keep_asm = Stats.ff("keep_asm")
+    val keep_asm = Stats.tt("keep_asm")
     val compress_asm = Stats.tt("compress_asm")
     fun as_flag() = 
 	(case !platform of

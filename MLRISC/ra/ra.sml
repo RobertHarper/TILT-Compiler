@@ -138,8 +138,9 @@ struct
   end
 
 (* Perry - set to true to show instructions before allocation *)
+  val perry_debug = false
   fun debug(msg, blocks, regmap) =			
-    if true then
+    if perry_debug then
       (print ("------------------" ^ msg ^ " ----------------\n");
        printBlocks(blocks,regmap))
     else  () 
@@ -362,11 +363,13 @@ struct
     end
 
 (* Perry - dumpGraph called to figure out why callee-save registers are being moved around *)
-    val _ = (print "dumping graph\n";
-	     print "-------------\n";
-	     dumpGraph();
-	     print "\n\n")
-    val _ = debug("before register allocation", blocks, regmap);
+    val _ = if perry_debug
+		then (print "dumping graph\n";
+		      print "-------------\n";
+		      dumpGraph();
+		      print "\n\n")
+	    else ()
+    val _ = debug("before register allocation", blocks, regmap)
 
 
 		    (*---------simplify-----------*)
@@ -1207,9 +1210,12 @@ end (* functor *)
 
 (*
  * $Log$
-# Revision 1.2  99/02/17  22:32:33  pscheng
+# Revision 1.3  99/02/25  10:11:58  pscheng
 # *** empty log message ***
 # 
+# Revision 1.2  1999/02/17  22:32:33  pscheng
+# *** empty log message ***
+#
 # Revision 1.1  1999/02/17  21:17:33  pscheng
 # *** empty log message ***
 #

@@ -131,8 +131,6 @@ sig
    (* Helper routines *)
    val in_ea_range : int -> term -> int option
    val in_imm_range_vl : term -> int option
-   val coercei : string -> reg -> regi
-   val coercef : reg -> regf
    val shuffle_iregs : regi list * regi list -> unit
    val shuffle_fregs : regf list * regf list -> unit
    val shuffle_regs  : reg  list * reg  list -> unit

@@ -310,9 +310,9 @@ struct
 
        in case con of
 	   Prim_c(pcon,clist) => primcon2rep(pcon,clist)
-	 | AllArrow_c (Open,_,_,_,_,_,_) => error "no open lambdas allowed by this stage"
-	 | AllArrow_c(Closure,_,_,_,_,_,_) => SOME TRACE
-	 | AllArrow_c(Code,_,_,_,_,_,_) => SOME NOTRACE_CODE
+	 | AllArrow_c{openness=Open,...} => error "no open lambdas allowed by this stage"
+	 | AllArrow_c{openness=Closure,...} => SOME TRACE
+	 | AllArrow_c{openness=Code,...} => SOME NOTRACE_CODE
 	 | ExternArrow_c _ => SOME NOTRACE_CODE
 	 | Var_c v => 
 	       (case (getconvarrep' state v) of
@@ -702,21 +702,6 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
   fun reg2s (I x) = regi2s x
     | reg2s (F x) = regf2s x
 
-  (* coercing/getting registers *)
-    
-  fun coercef (r : reg) : regf =
-    case r
-      of F r => r
-    | I r => error("coercef: expected float register, found int register "^regi2s r)
-	
-  fun coercei str (r : reg) : regi =
-    case r
-      of I r => r
-       | F r => (print "coercei: "; print (str : string) ; print "\n";
-		 error("coercei: expected int register, found float register "^regf2s r))
-				      
-
-    
   val heapptr  = SREGI HEAPPTR
   val stackptr = SREGI STACKPTR
   val exnptr   = SREGI EXNPTR
