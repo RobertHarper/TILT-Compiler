@@ -70,9 +70,15 @@ tilt: FORCE
 	*) $(master) -oBin/$(cputype)/tilt -c Top Top/mapfile ;; \
 	esac
 dump: FORCE
-	$(master) -oBin/$(cputype)/dump -c DumpTop Top/mapfile
+	case $(cputype) in \
+	unsupported) $(master) -c DumpTop Top/mapfile ;; \
+	*) $(master) -oBin/$(cputype)/dump -c DumpTop Top/mapfile ;; \
+	esac
 runtest: FORCE
-	$(master) -oBin/$(cputype)/runtest -c Runtest Test/mapfile
+	case $(cputype) in \
+	unsupporte) $(master) -c Runtest Test/mapfile ;; \
+	*) $(master) -oBin/$(cputype)/runtest -c Runtest Test/mapfile ;; \
+	esac
 
 # Other targets
 
