@@ -49,5 +49,6 @@ signature ASTHELP =
     val free_tyvar_ty  : Ast.ty  * (Ast.symbol -> bool) -> Ast.symbol list
     val free_tyc_ty    : Ast.ty  * (Ast.symbol -> bool) -> Ast.symbol list 
     val subst_vars_exp : (Symbol.symbol * Ast.path) list * Ast.exp -> Ast.exp 
+    val subst_vars_ty  : (Symbol.symbol * Ast.tyvar) list * Ast.ty -> Ast.ty 
 
   end

@@ -18,6 +18,7 @@ struct
     val map_second = Listops.map_second
     val mapcount = Listops.mapcount
     val app = app
+    val app_second = fn f => app (fn (a,b) => f b)
     val all = List.all
     val all2 = Listops.all2
     val no_dups = Listops.no_dups

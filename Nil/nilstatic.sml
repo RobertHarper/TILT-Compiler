@@ -1611,7 +1611,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  val bnd_types = Sequence.map_second (function_type openness) defs
 	    
 	  (*Checks that the decorations are well-formed*)
-	  val _ = Sequence.map_second (curry2 type_analyze D) bnd_types
+	  val _ = Sequence.app_second (curry2 type_analyze D) bnd_types
 	  val D = Sequence.foldl (fn ((v,c),D) => insert_con(D,v,c)) D bnd_types
 	  val _ = Sequence.app (function_valid openness D) defs
 	in (D,Sequence.toList bnd_types)

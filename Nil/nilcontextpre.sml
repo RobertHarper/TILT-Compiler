@@ -69,9 +69,9 @@ structure NilContextPre
    val lprintl  = Util.lprintl
    val lprint   = Util.lprint
    val eq_opt   = Util.eq_opt
-   val error    = Util.error
    val mapopt   = Util.mapopt
 
+   fun error' s = Util.error "nilcontextpre.sml" s
    fun error s s' = Util.error s s'
 
    (* NilError *******************************************)
@@ -723,7 +723,7 @@ structure NilContextPre
 		   end
 		   | _ => ());
 		  ((index = counter) orelse
-		   (error "Indexing error"))
+		   (error' "Indexing error"))
 		  )
 	      
 	    val D = 

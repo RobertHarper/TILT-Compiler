@@ -15,6 +15,7 @@ signature SEQUENCE =
     val mapcount : (int * ('a * 'b) -> ('c * 'd)) -> ('a,'b) sequence -> ('c,'d) sequence
     val maptolist : ('a * 'b -> 'c) -> ('a,'b) sequence -> 'c list
     val app    : (('a*'b) -> unit) -> ('a,'b) sequence -> unit
+    val app_second : ('b -> unit) -> ('a,'b) sequence -> unit
     val lookup : ('a * 'a -> bool) -> ('a,'b) sequence -> 'a -> 'b option
     val find   : ('a -> bool) -> ('a,'b) sequence -> 'b option
     val all    : (('a *'b) -> bool) -> ('a,'b) sequence -> bool

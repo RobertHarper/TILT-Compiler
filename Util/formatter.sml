@@ -28,7 +28,7 @@ fun fold f l b = foldr f b l
       val _       = Indent := 3
       and Skip    = ref 1
       and Blanks  = ref 1
-      and Pagewidth = ref 80
+      and Pagewidth = ref 120
       val DoDepth   = ref true
 
       val Bailout = ref true

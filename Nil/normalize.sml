@@ -91,7 +91,8 @@ struct
   val insert_kind_equation = NilContext.insert_kind_equation
   val insert_equation      = NilContext.insert_equation
 
-  fun error s = Util.error "normalize.sml" s
+  fun error' s = Util.error "normalize.sml" s
+  fun error s s' = Util.error s s'
 
   val assert   = NilError.assert
   val locate   = NilError.locate "Normalize"
@@ -99,9 +100,9 @@ struct
 
 
 
-  val debug = ref false
-  val show_calls = ref false
-  val show_context = ref false
+  val debug = Stats.ff "normalize_debug"
+  val show_calls = Stats.ff "normalize_show_calls"
+  val show_context = Stats.ff "normalize_show_context"
 
   fun pull (c,kind) = 
     let open Nil NilUtil Name Util
@@ -162,7 +163,7 @@ struct
 			      print (Int.toString (!depth)))
 		    else ();
 		    if (!depth) > maxDepth
-			then error "stack depth exceeded"
+			then error' "stack depth exceeded"
 		    else ())
   in
     fun clear_stack() = (depth := 0; stack := [])
@@ -228,11 +229,11 @@ struct
 	     (case (List.find (fn ((l,_)) => eq_label (l,label))
 		    entries )
 		of SOME (l,c) => (true,c)
-		 | NONE => (error "Field not in record" handle e => raise e))
+		 | NONE => (error' "Field not in record" handle e => raise e))
 	    | NONE => (false,proj))
     | beta_conrecord' proj = 
 	   (Ppnil.pp_con proj;
-	    (error "beta_conrecord called on non-projection" handle e => raise e))
+	    (error' "beta_conrecord called on non-projection" handle e => raise e))
 
   fun beta_conrecord proj = #2(beta_conrecord' proj)
 
@@ -284,7 +285,7 @@ struct
 	    | _ => typecase)
 	| beta_typecase' _ = 
 	   (Ppnil.pp_con typecase;
-	    (error "beta_typecase called on non type case" handle e => raise e))
+	    (error' "beta_typecase called on non type case" handle e => raise e))
     in
       map_annotate beta_typecase' typecase
     end
@@ -344,7 +345,7 @@ struct
     end
     | beta_confun' _ _ con =
     (Ppnil.pp_con con;
-     (error "beta_confun called on non-application" handle e => raise e))
+     (error' "beta_confun called on non-application" handle e => raise e))
 
 
   and insert_kind (D,var,kind) = NilContext.insert_kind (D,var,kind)
@@ -464,7 +465,7 @@ struct
 					    Var_c var))
 		       val _ = 
 			   (case (substitute (#2 old_state) var)  of
-				SOME c => error "XXX var already in subst"
+				SOME c => error' "XXX var already in subst"
 			      | _ => ())
 		       val lambda = substConInCon (#2 old_state) lambda 
 		       val state = 
@@ -568,7 +569,7 @@ struct
 	      val con = Crecord_c entries
 	    in con
 	    end
-        | Typeof_c e => error "typeof encountered in con_normalize"
+        | Typeof_c e => error' "typeof encountered in con_normalize"
 	| (Proj_c (rvals,label)) => 
 	    let
 	      val rvals = con_normalize' state rvals
@@ -633,7 +634,7 @@ struct
 	   val con = con_normalize' state con
 	 in tag (atag,con)
 	 end)
-  and switch_normalize' state switch = error "switch_normalize not handled"
+  and switch_normalize' state switch = error' "switch_normalize not handled"
 (*
     (case switch of
           Intsw_e {size,result_type,arg,arms,default} =>
@@ -867,7 +868,7 @@ struct
   val con_normalize' = wrap "con_normalize'"  con_normalize'
   val exp_normalize' = wrap "exp_normalize'" exp_normalize'
 *)
-    fun lab2int l ~1 = error "lab2int failed"
+    fun lab2int l ~1 = error' "lab2int failed"
       | lab2int l n = if (eq_label(l,NilUtil.generate_tuple_label n))
 			  then n else lab2int l (n-1)
 
@@ -890,7 +891,7 @@ struct
 	   | Typeof_c _ => false
            | App_c _ => false
            | Crecord_c _ => true
-           | Closure_c _ => error "Closure_c not a type"
+           | Closure_c _ => error' "Closure_c not a type"
            | Typecase_c _ => false
            | Annotate_c (_,c) => false)
 
@@ -917,7 +918,7 @@ struct
 	       extract mu_tuple (defs, lab2int l (Sequence.length defs))
 	  | c => (print "expandMuType given type not reducible to projection from mu:\n";
 		  Ppnil.pp_con c;
-		  error "expandMuType does not reduce to projection from a mu type")
+		  error' "expandMuType does not reduce to projection from a mu type")
 	end
 
 
@@ -931,7 +932,7 @@ struct
 		   let 
 		       val _ = if (!debug) 
 				   then (case (substitute subst var)  of
-					SOME c => error "XXX var already in subst"
+					SOME c => error' "XXX var already in subst"
 				      | _ => ())
 				else ()
 		       val subst = add subst (var,substConInCon subst lambda)
@@ -1011,7 +1012,7 @@ struct
 				then (PROGRESS,subst,con)
 			    else (IRREDUCIBLE,subst,con)
 			end)
-	| (Typecase_c {arg,arms,default,kind}) => error "typecase not done yet"
+	| (Typecase_c {arg,arms,default,kind}) => error' "typecase not done yet"
 	| (Annotate_c (annot,con)) => con_reduce state con)
 
 
@@ -1036,7 +1037,7 @@ struct
 			    then (print "Error: reduce_until iteration #";
 				  print "#"; print (Int.toString n); print ": "; Ppnil.pp_con c; print "\n")
 			else ()
-		val _ = if (n >= maxDepth + 10) then error "reduce_until too many iterations" else ()
+		val _ = if (n >= maxDepth + 10) then error' "reduce_until too many iterations" else ()
 	    in  case (pred c) of
                 SOME info => REDUCED(valOf(pred (substConInCon subst c)))
 	      | NONE => let val (progress,subst,c) = con_reduce(D,subst) c
@@ -1058,7 +1059,7 @@ struct
             let val _ = if (n>maxDepth) 
 			    then (print "reduce_hnf exceeded max reductions\n";
 				  Ppnil.pp_con (substConInCon subst c); print "\n\n";
-				  error "reduce_hnf exceeded max reductions")
+				  error' "reduce_hnf exceeded max reductions")
 			 else ()
 		val _ = if (n > 0 andalso n mod warnDepth = 0) 
 			    then (print "reduce_hnf at iteration #";
@@ -1113,7 +1114,7 @@ struct
     and projectRecordType(D:context, c:con, l:label) = 
 	(case #2(reduce_hnf(D,c)) of
 	     Prim_c(Record_c (labs,SOME vars), cons) =>
-		 let fun loop _ [] = error "projectRecordType could not find field"
+		 let fun loop _ [] = error' "projectRecordType could not find field"
 		       | loop rev_vclist ((ll,v,c)::rest) = 
 		     if (eq_label(l,ll))
 			 then removeDependence (rev rev_vclist) c
@@ -1122,11 +1123,11 @@ struct
 		 end
 	   | Prim_c(Record_c (labs,_), cons) =>
 		 (case (Listops.assoc_eq(eq_label,l,Listops.zip labs cons)) of
-		      NONE => error "projectRecordType could not find field"
+		      NONE => error' "projectRecordType could not find field"
 		    | SOME c => c)
 	   | c => (print "projectRecordType reduced to non-record type = \n";
 		   Ppnil.pp_con c; print "\n";
-		   error "projectRecordType reduced to non-record type"))
+		   error' "projectRecordType reduced to non-record type"))
 
     and reduceToSumtype(D: context, c:con) = 
 	(case #2(reduce_hnf(D,c)) of
@@ -1135,21 +1136,21 @@ struct
 		  then (tagcount,known,[carrier])
 	       else (case #2(reduce_hnf(D,carrier)) of
 		      Crecord_c lcons => (tagcount,known,map #2 lcons)
-		    | _ => error "reduceToSumtype failed to reduced carrier to a crecord")
+		    | _ => error' "reduceToSumtype failed to reduced carrier to a crecord")
            | c => (print "reduceToSumtype failed to reduced argument to sumtype\n";
 		   Ppnil.pp_con c; print "\n";
-		   error "reduceToSumtype failed to reduced argument to sumtype"))
+		   error' "reduceToSumtype failed to reduced argument to sumtype"))
 
     and projectSumType(D:context, c:con, s:TilWord32.word) = 
 	(case #2(reduce_hnf(D,c)) of
 	     Prim_c(Sum_c {tagcount,totalcount,known}, cons) =>
 		 if (TilWord32.ult(s,tagcount))
-		     then error "projectSumType: asking for tag fields"
+		     then error' "projectSumType: asking for tag fields"
 		 else 
 		     let val nontagcount = TilWord32.toInt(TilWord32.uminus(totalcount,tagcount))
 			 val which = TilWord32.toInt(TilWord32.uminus(s,tagcount))
 		     in  case (nontagcount,which) of
-			 (0,_) => error "projectSumType: only tag fields"
+			 (0,_) => error' "projectSumType: only tag fields"
 		       | (1,0) => hd cons
 		       | _ => (projectTuple(D,hd cons, NilUtil.generate_tuple_label (which + 1))
 			       handle e => (print "projectSumtype - unable to reduce Tuple\n";
@@ -1158,7 +1159,7 @@ struct
 		     end
 	   | c => (print "projectSumType reduced to non-sum type = \n";
 		   Ppnil.pp_con c; print "\n";
-		   error "projectSumType reduced to non-sum type"))
+		   error' "projectSumType reduced to non-sum type"))
 
    and reduce_vararg(D:context,openness,effect,argc,resc) = 
        let val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
@@ -1208,7 +1209,7 @@ struct
 		   val D = NilContext.insert_con(D,bound,con)
 	       in  type_of(D,#2(hd arms))
 	       end
-	 | Typecase_e _ => error "typecase_e not done")
+	 | Typecase_e _ => error' "typecase_e not done")
 **)
 
    and type_of_value (D,value) = 
@@ -1302,7 +1303,7 @@ struct
 	       in  AllArrow_c{openness=openness,effect=effect,isDependent=false,
 			      tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,body_type=resc}
 	       end
-	  | peq => error "peq not done")
+	  | peq => error' "peq not done")
 	end
 
    and type_of (D : context,exp : exp) : con = 
@@ -1316,7 +1317,7 @@ struct
 	  of Var_e var => 
 	    (NilContext.find_con (D,var)
 	     handle NilContext.Unbound =>
-	       error 
+	       error' 
 	       ("Encountered undefined variable " ^ (Name.var2string var) 
 		^ "in type_of"))
 	   | Const_e value => type_of_value (D,value)
@@ -1347,7 +1348,7 @@ struct
 			      print "\nexp = \n";
 			      Ppnil.pp_exp app;
 			      print "\n";
-			      error "Ill Typed expression - not an arrow"))
+			      error' "Ill Typed expression - not an arrow"))
 	    end	   
 	   | (App_e (openness,app,cons,texps,fexps)) =>
 	    let
@@ -1363,7 +1364,7 @@ struct
 			      print "\nexp = \n";
 			      Ppnil.pp_exp app;
 			      print "\n";
-			      error "Ill Typed expression - not an arrow"))
+			      error' "Ill Typed expression - not an arrow"))
 
 	      val subst = fromList (zip (#1 (unzip tformals)) cons)
 	      val con = substConInCon subst body

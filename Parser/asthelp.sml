@@ -46,6 +46,7 @@ structure AstHelp : ASTHELP =
       | eq_tyvar(TempTyv s1, TempTyv s2) = Symbol.eq(s1,s2)
       | eq_tyvar(MarkTyv(tv1,_), tv2) = eq_tyvar(tv1,tv2)
       | eq_tyvar(tv1,MarkTyv(tv2,_)) = eq_tyvar(tv1,tv2)
+      | eq_tyvar _ = false
 
     fun tyvar_member(elem : Ast.tyvar, list) = member_eq(eq_tyvar, elem, list)
 
@@ -301,10 +302,24 @@ structure AstHelp : ASTHELP =
 	in e
 	end
 
-
       fun ty2sym (Ast.Tyv s) = s
 	| ty2sym (Ast.TempTyv _) = error "should not see this after parsing"
 	| ty2sym (Ast.MarkTyv(ty,_)) = ty2sym ty
+
+      fun subst_vars_ty (subst : (Symbol.symbol * Ast.tyvar) list, ty : Ast.ty) : Ast.ty = 
+	let 
+	  fun do_tyvar tyvar =
+            let val sym = ty2sym tyvar
+	        fun loop [] = Ast.VarTy tyvar
+                  | loop ((s,v)::rest) = if (Symbol.eq(s,sym))
+					     then Ast.VarTy v else loop rest
+	    in loop subst
+	    end
+	  fun do_var syms = Ast.VarExp syms
+	  val ty = f_ty (fn s => s,[],do_tyvar,[],do_var,[]) ty
+	in ty
+	end
+
 
       fun free_tyvar_ty (ty : Ast.ty, is_bound) : symbol list = 
 	let 
