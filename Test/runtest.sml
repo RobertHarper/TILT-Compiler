@@ -65,6 +65,8 @@ BUGS
 	5. Compile native TILT with ./Test/tilt-nj -m mapfile-all
 	   inside ml96.
 	6. Compile runtest with ./tilt-nj -m mapfile inside ml96/Test.
+	7. Choose a til_slave script.  For a reasonable default, do
+	   ln -s til_slave_local_xterm til_slave inside ml96/Bin.
 
 	If you use -n, you can skip step (5).
 *)

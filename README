@@ -1,6 +1,9 @@
 This file collects examples demonstrating the use of "load.sml" to run
 the compiler.
 
+Choose a til_slave script.  For a reasonable default, do
+	% cd Bin; ln -s til_slave_local_xterm til_slave
+
 Set the environment variable TILT_LIBDIR to the root of the ml96
 hierarchy:
 
