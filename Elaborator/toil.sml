@@ -138,8 +138,7 @@ functor Toil(structure Il : IL
 			 SBND(l,case bnd of
 			      BND_EXP(v,e) => BND_EXP(v, ee e)
 			    | BND_CON(v,c) => BND_CON(v, cc c)
-			    | BND_MOD(v,m) => BND_MOD(v, mm m)
-			    | _ => bnd)
+			    | BND_MOD(v,m) => BND_MOD(v, mm m))
 		     fun loop [] : sbnd list = []
 		       | loop ((sbnd as SBND(l,bnd))::rest) =
 			 case bnd of
@@ -166,7 +165,6 @@ functor Toil(structure Il : IL
 							     | NONE => raise FAIL))
 				 in sbnd::(loop rest')
 				 end
-			   | _ => sbnd :: (loop rest)
 		 in
 		     SOME (MOD_STRUCTURE(loop sbnds))
 		     handle FAIL => NONE
@@ -187,7 +185,7 @@ functor Toil(structure Il : IL
 		     val inline = INLINE_MODSIG(norm_mod, SelfifySig(SIMPLE_PATH var,signat))
 		 in  add_context_inline(context,label,var,inline)
 		 end
-	   | NONE => add_context_module(context,label,var,SelfifySig(SIMPLE_PATH var, signat))
+	   | NONE => add_context_mod(context,label,var,SelfifySig(SIMPLE_PATH var, signat))
 
 
      fun sbnd_ctxt_list2modsig (sbnd_ctxt_list : (sbnd option * context_entry) list) 
@@ -214,8 +212,11 @@ functor Toil(structure Il : IL
 		 case arg of
 		     [] => (rev sbnds,ctxt)
 		   | ((NONE,CONTEXT_SIGNAT(l,v,s))::rest) => 
-			 loop (sbnds,add_context_signat(ctxt,l,v,s)) rest
-		   | ((NONE,_)::rest) => loop (sbnds,ctxt) rest
+			 loop (sbnds,add_context_sig(ctxt,l,v,s)) rest
+		   | ((NONE,CONTEXT_SDEC _)::_) => error "cannot have context_sdec without sbnd"
+		   | ((NONE,CONTEXT_INLINE _)::rest) => error "cannot have context_inline without sbnd"
+		   | ((NONE,cf as (CONTEXT_FIXITY _))::rest) => 
+			 loop (sbnds,add_context_entries(ctxt,[cf])) rest
 		   | ((SOME (flag,sbnd as SBND(l,bnd)), CONTEXT_SDEC (sdec as SDEC(l',dec)))::rest) => 
 			 let 
 			     val sbnds' = sbnd::sbnds
@@ -497,11 +498,11 @@ functor Toil(structure Il : IL
 		 val bnds = map (fn (SBND(_,bnd)) => bnd) sbnds
 	     in  (LET(bnds,e),c)
 	     end
-       | Ast.FlatAppExp _ => (* let val _ = debugdo (fn () => (print "FlatAppExp... context is:\n";
-							    pp_context context;
-							    print "\n"))
-			     in ... end *)
-	                     xexp(context,InfixParse.parse_exp(Context_Get_FixityTable context, exp))
+       | Ast.FlatAppExp _ => let val exp' = InfixParse.parse_exp(Context_Get_FixityTable 
+								 context, exp)
+			     in xexp(context,exp')
+			     end 
+
        | Ast.AppExp {argument,function} => let val (e1',con1) = xexp(context,function)
 					       val (e2',con2) = xexp(context,argument)
 					       val spec_rescon = fresh_con context
@@ -679,7 +680,7 @@ functor Toil(structure Il : IL
 		in val temp_sdecs = (map3 (fn (v,l,c) => SDEC(l,DEC_CON(v,KIND_TUPLE 1,SOME c))) 
 				     (vars1,labs1,cons1))
 		end
-		val context' = add_context_module(context,lbl,var_poly,
+		val context' = add_context_mod(context,lbl,var_poly,
 						  SelfifySig(SIMPLE_PATH var_poly,
 							     SIGNAT_STRUCTURE (NONE,temp_sdecs)))
 		val _ = eq_table_push()
@@ -782,7 +783,7 @@ functor Toil(structure Il : IL
 
 		  val var_poly = fresh_named_var "var_poly"
 		  val open_lbl = fresh_open_internal_label "lbl"
-		  val context' = add_context_module(context,open_lbl,var_poly,
+		  val context' = add_context_mod(context,open_lbl,var_poly,
 						    SelfifySig(SIMPLE_PATH var_poly,
 							       SIGNAT_STRUCTURE(NONE, sdecs1)))
 
@@ -867,11 +868,11 @@ functor Toil(structure Il : IL
                   (* --- create the context with all the fun_ids typed --- *)
 		  val context_fun_ids = 
 		      let fun help ((id,var',funcon),ctxt) = 
-			  add_context_var(ctxt,id,var',funcon)
+			  add_context_exp(ctxt,id,var',funcon)
 		      in foldl help context (zip3 fun_ids fun_vars fun_cons)
 		      end
 
-		  val context'' = add_context_module(context_fun_ids,open_lbl,var_poly,
+		  val context'' = add_context_mod(context_fun_ids,open_lbl,var_poly,
 						     SelfifySig(SIMPLE_PATH var_poly,
 								SIGNAT_STRUCTURE(NONE, sdecs1)))
 			   
@@ -1062,7 +1063,7 @@ functor Toil(structure Il : IL
 		  val final_mod = MOD_PROJECT(MOD_STRUCTURE[SBND(lbl1,BND_MOD(var1,m1)),
 							    SBND(lbl2,BND_MOD(var2,m2))],
 					      lbl2)
-		  val context'' = add_context_module(context,fresh_internal_label "lbl",
+		  val context'' = add_context_mod(context,fresh_internal_label "lbl",
 						     var1,SelfifySig(SIMPLE_PATH var1, s1))
 	      in if (Sig_IsSub(context'',s2,final_sig))
 		     then [(SOME(SBND(lbl3,BND_MOD(var3,final_mod))),
@@ -1077,11 +1078,7 @@ functor Toil(structure Il : IL
 					   in (symbol_label sym', fixity)
 					   end
 				       val vf_list = map helper ops
-				       val bnd = BND_FIXITY vf_list
-				       val dec = DEC_FIXITY vf_list
-				       val lab = fresh_internal_label "infix"
-				     in [(SOME(SBND(lab,bnd)),
-					  CONTEXT_SDEC(SDEC(lab,dec)))]
+				     in [(NONE,CONTEXT_FIXITY vf_list)]
 				     end
 
 	(* These cases are unhandled *)
@@ -1166,7 +1163,7 @@ functor Toil(structure Il : IL
 	     val vars = map (fn _ => fresh_var()) tyvars
 	     val tyvars_bar = map (fn s => symbol_label (tyvar_strip s)) tyvars
 	     val context' = (foldl (fn ((v,tv),c) => 
-				    add_context_convar(c,tv,v,KIND_TUPLE 1,NONE))
+				    add_context_con(c,tv,v,KIND_TUPLE 1,NONE))
 			     context (zip vars tyvars_bar))
 	     val con' = xty(context',def)
 	     val n = length tyvars
@@ -1202,7 +1199,7 @@ functor Toil(structure Il : IL
 			       val vars = map (fn _ => fresh_var()) tyvars
 			       val tyvars_bar = map (fn s => symbol_label (tyvar_strip s)) tyvars
 			       val context' = (foldl (fn ((v,tv),c) => 
-						      add_context_convar(c,tv,v,KIND_TUPLE 1,NONE))
+						      add_context_con(c,tv,v,KIND_TUPLE 1,NONE))
 					       context (zip vars tyvars_bar))
 			       val con' = xty(context',ty)
 			   in  (case tyvars of
@@ -1274,7 +1271,7 @@ functor Toil(structure Il : IL
 				   else [type_sdec]
 				end
 			    val sigpoly = SIGNAT_STRUCTURE(NONE,flatten(map help ftv_sym))
-			    val context' = add_context_module(context,
+			    val context' = add_context_mod(context,
 							      fresh_open_internal_label "lbl",
 							      varpoly, 
 							      SelfifySig(SIMPLE_PATH varpoly,sigpoly))
@@ -1314,7 +1311,7 @@ functor Toil(structure Il : IL
 						      param)
 			       val sigexp = Ast.SigSig[Ast.StrSpec sym_sigexp_list]
 			       val signat = xsigexp(context,sigexp)
-			       val context' = add_context_module(context,strid,var,
+			       val context' = add_context_mod(context,strid,var,
 								 SelfifySig(SIMPLE_PATH var,signat))
 			       val signat' = xsigexp(context',sigexp')
 			     in SIGNAT_FUNCTOR(var,signat,signat',oneshot_init PARTIAL)
@@ -1406,7 +1403,7 @@ functor Toil(structure Il : IL
 			      val funid = symbol_label name
 			      val argvar = fresh_named_var "functor_arg_var"
 			      val signat = xsigexp(context,sigexp)
-			      val context' = add_context_module(context,arglabel,argvar,
+			      val context' = add_context_mod(context,arglabel,argvar,
 								SelfifySig (SIMPLE_PATH argvar, signat))
 			      val (m',s') = xstrexp(context',body,constraint)
 			      val v = fresh_named_var "functor_var"
@@ -1475,7 +1472,7 @@ functor Toil(structure Il : IL
 			      val (lbl1,lbl2) = (fresh_open_internal_label "lbl1",fresh_open_internal_label "lbl2")
 			      val boolsbnd_sdec_list = xdec'(context,dec)
 			      val (mod1,sig1) = boolsbnd_ctxt_list2modsig boolsbnd_sdec_list
-			      val context' = add_context_module(context,lbl1,var1,
+			      val context' = add_context_mod(context,lbl1,var1,
 								SelfifySig(SIMPLE_PATH var1, sig1)) (* <-- inline ? *)
 			      val (mod2,sig2) = xstrexp(context',strexp,NONE)
 			      val sig2' = sig2
@@ -1547,7 +1544,7 @@ functor Toil(structure Il : IL
 						       else error "xsig_wheretype kind mismatch"
 						else sdec::(docon curl rest))
 		| SDEC(l,(DEC_EXP(v,_) | DEC_MOD(v,_) | DEC_CON(v,_,_))) => (bound v; sdec::(docon curl rest))
-		| SDEC(l,(DEC_FIXITY _ | DEC_EXCEPTION _)) => sdec::(docon curl rest)))
+		| SDEC(l,DEC_EXCEPTION _) => sdec::(docon curl rest)))
 	fun dosig [] sdecs = error "xsig_wheretype got empty lbls"
 	  | dosig [l] sdecs = docon l sdecs
 	  | dosig (curl::restl) sdecs = 
@@ -1564,12 +1561,13 @@ functor Toil(structure Il : IL
 			 loop ((SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE (NONE, sdecs))))::rest)
 		   | SDEC(l,(DEC_EXP(v,_) | DEC_MOD(v,_) | DEC_CON(v,_,_))) => 
 			 (bound v; sdec::(loop rest))
-		   | SDEC(l,(DEC_FIXITY _ | DEC_EXCEPTION _)) => sdec::(loop rest))
+		   | SDEC(l,DEC_EXCEPTION _) => sdec::(loop rest))
 	      in loop sdecs
 	      end		
       in (case signat of
 	    SIGNAT_FUNCTOR _ => error "xsig_wheretype for fuctor sig"
-	  | (SIGNAT_STRUCTURE (SOME p,sdecs)) => SIGNAT_STRUCTURE(NONE,dosig lbls sdecs) (* (Unselfify(v,sdecs))) *)
+	  | (SIGNAT_STRUCTURE (SOME p,sdecs)) => SIGNAT_STRUCTURE(NONE,dosig lbls sdecs) 
+(* (Unselfify(v,sdecs))) *)
 	  | (SIGNAT_STRUCTURE (NONE,sdecs)) => SIGNAT_STRUCTURE(NONE,dosig lbls sdecs))
       end
 
@@ -1681,7 +1679,7 @@ functor Toil(structure Il : IL
 
 	  val v0 = fresh_named_var "v0_xcoerce"
 	  val sig_actual_self = SelfifySig (SIMPLE_PATH v0, sig_actual)
-	  val context = add_context_module'(context,v0,sig_actual_self)
+	  val context = add_context_mod'(context,v0,sig_actual_self)
 	  fun sig_actual_lookup lbl = 
 	      (case sig_actual_self of
 		   SIGNAT_STRUCTURE (_,self_sdecs) =>
@@ -1716,7 +1714,7 @@ functor Toil(structure Il : IL
 						 ctxt)
 					     end
 				   | SOME (v1,s1) => 
-					 let val ctxt' = add_context_module'(ctxt,v1,
+					 let val ctxt' = add_context_mod'(ctxt,v1,
 									     SelfifySig(SIMPLE_PATH v1, s1))
 					     val (sbnds_poly,sdecs_poly,_) = poly_inst(ctxt',sig_poly_sdecs)
 					     val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
@@ -1831,7 +1829,7 @@ functor Toil(structure Il : IL
 			   val m4_arg = MOD_APP(MOD_VAR v0, m3_applied)
 			   val (m4var,m4body,_) = xcoerce(context,s1',s2')
 			   val modexp = mod_subst_modvar(m4body,[(m4var,m4_arg)])
-			   val context' = add_context_module'(context,v2,(SelfifySig(SIMPLE_PATH v2,s2)))
+			   val context' = add_context_mod'(context,v2,(SelfifySig(SIMPLE_PATH v2,s2)))
 			   val s = GetModSig(context',modexp)
 			 in (MOD_FUNCTOR(v2,s2,modexp),
 			     SIGNAT_FUNCTOR(v2,s2,s,a1))

@@ -89,9 +89,7 @@ functor Basis(structure Il : IL
 				     end))
 
 
-	val fixity_entries = 
-	    [CONTEXT_SDEC(SDEC(internal_label "fixities",
-			       DEC_FIXITY default_fixity_table))]
+	val fixity_entries = [CONTEXT_FIXITY default_fixity_table]
 
 	local
 	    val basetype_list = [("float", CON_FLOAT F64),

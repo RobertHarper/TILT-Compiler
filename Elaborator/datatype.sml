@@ -59,7 +59,7 @@ functor Datatype(structure Il : IL
 			  (tyvar_label, varpoly_list))
 	  val temp = ((map2 (fn (tv,vp) => (tv,vp,KIND_TUPLE 1)) (tyvar_label,varpoly_list)) @
 		      (map2 (fn (tc,vty) => (tc,vty,KIND_ARROW(k,1))) (type_label,vardt_list)))
-	  fun folder ((l,v,k),context) = add_context_convar(context,l,v,k,NONE)
+	  fun folder ((l,v,k),context) = add_context_con(context,l,v,k,NONE)
 	  fun merge [] [] = []
 	    | merge (a::b) (c::d) = a::c::(merge b d)
 	    | merge _ _ = error "merge failed"

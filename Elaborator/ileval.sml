@@ -45,8 +45,7 @@ functor IlEval(structure Il : IL
 	(case bnd of
 	     BND_EXP (v,e) => exp_isval e
 	   | BND_MOD (v,m) => mod_isval m
-	   | BND_CON (v,c) => con_isval c
-	   | BND_FIXITY _ => true)
+	   | BND_CON (v,c) => con_isval c)
 
     and dec_isval (dec : dec) = 
 	(case dec of
@@ -54,8 +53,7 @@ functor IlEval(structure Il : IL
 	   | DEC_MOD (v,s) => true
 	   | DEC_CON (v,k,NONE) => true
 	   | DEC_CON (v,k,SOME c) => con_isval c
-	   | DEC_EXCEPTION (_,c) => con_isval c
-	   | DEC_FIXITY _ => true)
+	   | DEC_EXCEPTION (_,c) => con_isval c)
 
     and con_isval (con : con) =
 	(case con of
@@ -410,8 +408,7 @@ functor IlEval(structure Il : IL
 	(case bnd of
 	     BND_EXP(v,e) => BND_EXP(v,reduce_exp env e)
 	   | BND_CON(v,c) => BND_CON(v,reduce_con env c)
-	   | BND_MOD(v,m) => BND_MOD(v,reduce_mod env m)
-	   | BND_FIXITY _ => bnd)
+	   | BND_MOD(v,m) => BND_MOD(v,reduce_mod env m))
 
     and reduce_mod (env : env) (module : mod) : mod = 
 	(case module of

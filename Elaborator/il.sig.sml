@@ -88,7 +88,7 @@ signature IL =
     and      bnd = BND_EXP of var * exp
                  | BND_MOD of var * mod
                  | BND_CON of var * con
-                 | BND_FIXITY    of fixity_table
+
     and   signat = SIGNAT_STRUCTURE         of path option * sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * (arrow Util.oneshot)
     and     sdec = SDEC of label * dec
@@ -96,7 +96,7 @@ signature IL =
                  | DEC_MOD       of var * signat
                  | DEC_CON       of var * kind * con option 
                  | DEC_EXCEPTION of tag * con
-                 | DEC_FIXITY    of fixity_table
+
 
     withtype value = (con,exp) Prim.value
     and decs = dec list
@@ -113,6 +113,6 @@ signature IL =
 	CONTEXT_INLINE of label * var * inline
       | CONTEXT_SDEC   of sdec
       | CONTEXT_SIGNAT of label * var * signat
-
+      | CONTEXT_FIXITY of fixity_table   (* tracks infix precedence *)
 
 end

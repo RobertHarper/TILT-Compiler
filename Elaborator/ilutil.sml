@@ -294,8 +294,7 @@ functor IlUtil(structure Ppil : PPIL
 	(case bnd of
 	   BND_EXP(v,e) => BND_EXP(v, f_exp state e)
 	 | BND_MOD(v,m) => BND_MOD(v, f_mod state m)
-	 | BND_CON(v,c) => BND_CON(v, f_con state c)
-	 | BND_FIXITY _ => bnd)
+	 | BND_CON(v,c) => BND_CON(v, f_con state c))
 
       and f_dec (state : state) (dec : dec) : dec =
 	(case dec of
@@ -303,8 +302,8 @@ functor IlUtil(structure Ppil : PPIL
 	 | DEC_MOD(v,s) => DEC_MOD(v, f_signat state s)
 	 | DEC_CON(v,k,NONE) => dec
 	 | DEC_CON(v,k,SOME c) => DEC_CON(v, k, SOME (f_con state c))
-	 | DEC_EXCEPTION(n,c) => DEC_EXCEPTION(n, f_con state c) 
-	 | DEC_FIXITY _ => dec)
+	 | DEC_EXCEPTION(n,c) => DEC_EXCEPTION(n, f_con state c))
+
 
       val default_bound_convar = []
       val default_bound_var = []
@@ -365,7 +364,6 @@ functor IlUtil(structure Ppil : PPIL
 	    val _ = debugdo (fn () => (print "rebind_free_type_var called on argcon = ";
 				       pp_con argcon;
 				       print "\n"))
-	  val bound_convar = Context_Get_BoundConvars(context)
 	  val free_tyvar = ref ([] : (context,con) Tyvar.tyvar list)
 	  fun con_handler (CON_TYVAR tv,_) = 
 	      ((case (tyvar_deref tv) of
@@ -868,8 +866,7 @@ functor IlUtil(structure Ppil : PPIL
 	  in (case target_bnd of
 		  BND_EXP(v,e) => BND_EXP(v,f_exp handlers e)
 		| BND_CON(v,c) => BND_CON(v,f_con handlers c)
-		| BND_MOD(v,m) => BND_MOD(v,f_mod handlers m)
-		| BND_FIXITY _ => target_bnd)
+		| BND_MOD(v,m) => BND_MOD(v,f_mod handlers m))
 	  end
 
       fun make_size_handlers () =

@@ -263,13 +263,13 @@ functor Ppil(structure Il : IL
 				     (String ":") :: (Break0 0 3) :: fmts)
 	fun helper (CONTEXT_INLINE (l,v,inl)) = HOVbox[pp_label l, String " >> ", pp_var v, 
 						       String " = ", pp_inline seen inl]
+	  | helper (CONTEXT_FIXITY vf_list) = HOVbox[String "FIXITY ", pp_fixity_list vf_list]
 	  | helper (CONTEXT_SDEC(SDEC(l,dec))) = 
 	    (case dec of
 		 (DEC_EXP(v,c)) => dolv l v [pp_con seen c]
 	       | (DEC_CON(v,k,SOME c)) => dolv l v [pp_kind k, String "=", pp_con seen c]
 	       | (DEC_CON(v,k,NONE)) => dolv l v [pp_kind k]
 	       | (DEC_MOD(v,s)) => dolv l v [pp_signat seen s]
-	       | (DEC_FIXITY vf_list) => HOVbox[String "FIXITY", pp_fixity_list vf_list]
 	       | (DEC_EXCEPTION (tag,c)) => HOVbox[String "EXCEPTION: ", pp_tag tag, String " = ",
 						   pp_con seen c])
 	  | helper (CONTEXT_SIGNAT(l,v,s)) = dolv l v [String " OMEGA = ",pp_signat seen s]
@@ -408,8 +408,7 @@ functor Ppil(structure Il : IL
 	  in (case bnd of
 		BND_EXP (v,e) => help (pp_var v) [pp_exp seen e]
 	      | BND_MOD (v,m) => help (pp_var v) [pp_mod seen m]
-	      | BND_CON (v,c) => help (pp_var v) [pp_con seen c]
-	      | BND_FIXITY vf_list => help (String "FIXITY") [pp_fixity_list vf_list])
+	      | BND_CON (v,c) => help (pp_var v) [pp_con seen c])
 	  end
 
     and pp_dec' seen dec = 
@@ -419,8 +418,7 @@ functor Ppil(structure Il : IL
 	  | DEC_MOD (v,s) => help (pp_var v) [pp_signat seen s]
 	  | DEC_CON (v,k,NONE) => help (pp_var v) [pp_kind k]
 	  | DEC_CON (v,k,SOME c) => help (pp_var v) [pp_con seen c, String " = ", pp_kind k]
-	  | DEC_EXCEPTION (n,c) =>  help (pp_tag n) [pp_con seen c]
-	  | DEC_FIXITY vf_list => help (String "FIXITY") [pp_fixity_list vf_list])
+	  | DEC_EXCEPTION (n,c) =>  help (pp_tag n) [pp_con seen c])
       end
 
     and pp_dec seen dec = let val (f,fs) = pp_dec' seen dec

@@ -73,7 +73,7 @@ functor IlStatic(structure Il : IL
 			 val rest_sdecs = loop (ctable',mtable) rest
 		   in (SDEC(l,this_dec))::rest_sdecs
 		   end
-	     | ((DEC_EXCEPTION _) | (DEC_FIXITY _)) => sdec::(loop (ctable,mtable) rest))
+	     | (DEC_EXCEPTION _) => sdec::(loop (ctable,mtable) rest))
      in (case signat of
 	   SIGNAT_FUNCTOR (v,s1,s2,a) => 
 	       let val s1' = SelfifySig'(ctable,mtable,NONE,s1)
@@ -253,8 +253,8 @@ functor IlStatic(structure Il : IL
      (case bnd of
        BND_EXP (v,e) => Exp_IsSyntacticValue e
      | BND_MOD (v,m) => Module_IsSyntacticValue m
-     | BND_CON (v,c) => true
-     | BND_FIXITY _ => true)
+     | BND_CON (v,c) => true)
+
 
 
 
@@ -528,7 +528,7 @@ functor IlStatic(structure Il : IL
 		end
 	  | (CON_FUN (vs1,c1), CON_FUN(vs2,c2)) => 
 		(length vs1 = length vs2) andalso
-		let fun folder (v,acc) = add_context_convar'(acc,v,KIND_TUPLE 1, NONE)
+		let fun folder (v,acc) = add_context_con'(acc,v,KIND_TUPLE 1, NONE)
 		    val ctxt' = foldl folder ctxt vs1
 		    val table = map2 (fn (v1,v2) => (v2,CON_VAR v1)) (vs1,vs2)
 		    val c2' = con_subst_convar(c2,table)
@@ -556,8 +556,6 @@ functor IlStatic(structure Il : IL
 								  eq_con (c1,c2,ctxt))
 	  | (DEC_EXCEPTION (n1,c1), DEC_EXCEPTION(n2,c2)) => ((eq_tag(n1,n2)) andalso 
 							      eq_con (c1,c2,ctxt))
-	  | (DEC_FIXITY ft1, DEC_FIXITY ft2) => eq_list(fn ((l1,f1),(l2,f2)) => 
-							(eq_label(l1,l2) andalso f1=f2),ft1,ft2)
 	  | _ => false)
 
    and eq_sdec ctxt (SDEC(l1,d1),SDEC(l2,d2)) = eq_label(l1,l2) andalso (eq_dec(d1,d2,ctxt))
@@ -570,7 +568,7 @@ functor IlStatic(structure Il : IL
 	       SIGNAT_FUNCTOR (v2,s2_arg,s2_res,comp2)) = 
        (eq_comp(comp1,comp2,false) andalso (eq_var(v1,v2)) andalso (eq_sig(ctxt,s1_arg,s2_arg)))
        andalso let val s1_arg' = SelfifySig(SIMPLE_PATH v1,s1_arg)
-		   val ctxt' = add_context_module'(ctxt,v1,s1_arg')
+		   val ctxt' = add_context_mod'(ctxt,v1,s1_arg')
 	       in  eq_sig (ctxt',s1_res,s2_res)
 	       end
      | eq_sig _ = raise UNIMP
@@ -611,15 +609,14 @@ functor IlStatic(structure Il : IL
        let val self = Bnds_IsValuable' rest
        in  (case bnd of
 		BND_EXP (v,e) => if (Exp_IsValuable(ctxt,e))
-				     then self (add_context_var'(ctxt,v,#2 (GetExpCon(e,ctxt))))
+				     then self (add_context_exp'(ctxt,v,#2 (GetExpCon(e,ctxt))))
 				 else NONE
 	      | BND_MOD (v,m) => let val (va,s) = GetModSig(m,ctxt)
 				     val s' = SelfifySig(SIMPLE_PATH v,s)
-				 in if va then self (add_context_module'(ctxt,v,s'))
+				 in if va then self (add_context_mod'(ctxt,v,s'))
 				    else NONE
 				 end
-	      | BND_CON (v,c) => self (add_context_convar'(ctxt,v,GetConKind(c,ctxt),SOME c))
-	      | BND_FIXITY _ => self ctxt)
+	      | BND_CON (v,c) => self (add_context_con'(ctxt,v,GetConKind(c,ctxt),SOME c)))
        end
 
    and Bnds_IsValuable bnds ctxt = (case (Bnds_IsValuable' bnds ctxt) of
@@ -635,7 +632,7 @@ functor IlStatic(structure Il : IL
      | MOD_STRUCTURE sbnds => Sbnds_IsValuable sbnds ctxt
      | MOD_LET (v,m1,m2) => let val (va1,s1) = GetModSig(m1,ctxt)
 			    in va1 andalso
-				(Module_IsValuable m2 (add_context_module'(ctxt,v,
+				(Module_IsValuable m2 (add_context_mod'(ctxt,v,
 									   SelfifySig(SIMPLE_PATH v,s1))))
 			    end
      | MOD_PROJECT (m,l) => Module_IsValuable m ctxt
@@ -683,7 +680,7 @@ functor IlStatic(structure Il : IL
      | (CON_FLEXRECORD _) => KIND_TUPLE 1
      | (CON_RECORD _) => KIND_TUPLE 1
      | (CON_FUN (vs,c)) => 
-	   let fun folder(v,ctxt) = add_context_convar'(ctxt,v,KIND_TUPLE 1,NONE)
+	   let fun folder(v,ctxt) = add_context_con'(ctxt,v,KIND_TUPLE 1,NONE)
 	       val ctxt' = foldl folder ctxt vs
 	   in (case GetConKind(c,ctxt') of
 		   KIND_TUPLE n => KIND_ARROW(length vs,n)
@@ -763,14 +760,14 @@ functor IlStatic(structure Il : IL
 						      else loop rest
 	       val (v',v,c,c',e) = loop fbnds
 	       fun folder (FBND(v',v,c,c',e), ctxt) = 
-		   add_context_var'(ctxt,v',CON_ARROW(c,c',oneshot_init PARTIAL))
+		   add_context_exp'(ctxt,v',CON_ARROW(c,c',oneshot_init PARTIAL))
 	       val full_ctxt = foldl folder ctxt fbnds
 	       fun ttest lctxt (FBND(v',v,c,c',e)) =
-		   let val (va,bodyc) = GetExpCon(e,add_context_var'(lctxt,v,c))
+		   let val (va,bodyc) = GetExpCon(e,add_context_exp'(lctxt,v,c))
 		   in va andalso sub_con(bodyc,c',lctxt)
 		   end
 	       fun ptest lctxt (FBND(v',v,c,c',e)) =
-		   let val (_,bodyc) = GetExpCon(e,add_context_var'(lctxt,v,c))
+		   let val (_,bodyc) = GetExpCon(e,add_context_exp'(lctxt,v,c))
 		   in sub_con(bodyc,c',lctxt)
 		   end
 	   in (true,
@@ -1033,7 +1030,6 @@ functor IlStatic(structure Il : IL
 					 in (va,DEC_MOD(v,s))
 					 end
      | GetBndDec (ctxt,BND_CON (v,c))  = (true,DEC_CON(v,GetConKind(c,ctxt),SOME c))
-     | GetBndDec (ctxt,BND_FIXITY arg) = (true,DEC_FIXITY arg)
    and GetBndsDecs (ctxt,bnds) = GetBndsDecs'(ctxt,bnds,[])
    and GetBndsDecs' (ctxt,[],acc) = rev acc
      | GetBndsDecs' (ctxt,bnd::rest,acc) = 
@@ -1098,7 +1094,7 @@ functor IlStatic(structure Il : IL
      | MOD_LET (v,m1,m2) => 
 	   let val (va1,s1) = GetModSig(m1,ctxt)
 	       val s1' = SelfifySig(SIMPLE_PATH v,s1)
-	       val ctxt' = add_context_module'(ctxt,v,s1')
+	       val ctxt' = add_context_mod'(ctxt,v,s1')
 	       val (va2,s2) = GetModSig(m2,ctxt')
 	   in (va1 andalso va2,sig_subst_modvar(s2,[(v,m1)]))
 	   end
@@ -1386,7 +1382,7 @@ functor IlStatic(structure Il : IL
        | Sig_Valid (ctxt : context, SIGNAT_STRUCTURE (SOME p,sdecs)) = Sdecs_Valid(ctxt,sdecs)
        | Sig_Valid (ctxt, SIGNAT_FUNCTOR(v,s_arg,s_res,comp)) = 
 	 (Sig_Valid(ctxt,s_arg) andalso 
-	  Sig_Valid(add_context_module'(ctxt,v,SelfifySig(SIMPLE_PATH v,s_arg)),s_res))
+	  Sig_Valid(add_context_mod'(ctxt,v,SelfifySig(SIMPLE_PATH v,s_arg)),s_res))
 
      and Dec_IsSub (ctxt,d1,d2) = 
 	 (case (d1,d2) of
@@ -1457,7 +1453,7 @@ functor IlStatic(structure Il : IL
 		      val p = SIMPLE_PATH v
 		      val sdecs1 = SelfifySdecs(p,sdecs1)
 		      val sdecs2 = SelfifySdecs(p,sdecs2)
-		      val ctxt = add_context_module'(ctxt,v,SIGNAT_STRUCTURE(SOME p,sdecs1))
+		      val ctxt = add_context_mod'(ctxt,v,SIGNAT_STRUCTURE(SOME p,sdecs1))
 		  in help(ctxt,sdecs1,sdecs2)
 		  end
 		| (SIGNAT_STRUCTURE (NONE,sdecs1), 
