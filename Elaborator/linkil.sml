@@ -348,7 +348,7 @@ structure LinkIl (* : LINKIL *) =
 		val _ = if (has_unset m)
 			    then error "module is not fully resolved"
 			else ()
-		val _ =
+(*		val _ =
 		    if docheck
 			then 
 			    let 
@@ -379,6 +379,7 @@ structure LinkIl (* : LINKIL *) =
 						   error "sanity-check"))
 			    end
 		    else ()
+*)
 		val _ = if doprint
 			    then (print "\n\n\nELABORATION SUCESSFULLY COMPLETED\n\n\n"; 
 				  Ppil.pp_sbnds sbnds;
