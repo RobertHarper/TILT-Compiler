@@ -2,7 +2,12 @@
 signature EVAL =
 sig
 
+    (* FIXME *)
+    type m4 = int
     type v3 = real * real * real
+	
+
+
     type color = v3
         
     datatype light =
@@ -36,8 +41,8 @@ sig
       | Difference of obj * obj
       | Intersection of obj * obj
         
-    withtype closure = env * Gml.exp list
     withtype env = value Envmap.map 
-    withtype stack = value list
+    and closure = env * Gml.exp list
+    and stack = value list
         
 end

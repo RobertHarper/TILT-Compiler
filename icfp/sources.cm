@@ -20,6 +20,8 @@ library/splay-set-fn.sml
 stdin-sig.sml
 stdin.sml
 
+stringmap.sml
+
 parsing/stream-sig.sml
 parsing/stream-std.sml
 parsing/pos-sig.sml
@@ -39,6 +41,13 @@ parse-sig.sml
 parse.sml
 
 parsestring.sml
+
+eval-sig.sml
+eval.sml
+
+toplevel-sig.sml
+toplevel.sml
+
 
 intersect.sig.sml
 intersect.sml
