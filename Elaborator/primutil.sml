@@ -356,6 +356,20 @@ struct
 
 	  | _ => bad "general"())
 	end
+
+  fun same_intsize (size1,size2) = 
+    (case (size1,size2)
+       of (Prim.W8,Prim.W8) => true
+	| (Prim.W16,Prim.W16) => true
+	| (Prim.W32,Prim.W32) => true
+	| (Prim.W64,Prim.W64) => true
+	| _ => false)
+
+  fun same_floatsize (size1,size2) =
+    (case (size1,size2)
+       of (Prim.F32,Prim.F32) => true
+	| (Prim.F64,Prim.F64) => true
+	| _ => false)
     
 (*
     fun applyil  vals = 
