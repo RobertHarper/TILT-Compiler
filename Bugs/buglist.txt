@@ -100,3 +100,4 @@
 0100 [open]	hidden hidden clashes
 0101 [open]	external symbol clash
 0102 [open]	word test fails
+0103 [open]	word8 problems
