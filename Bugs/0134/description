@@ -1,0 +1,16 @@
+Number: 0134
+Title:       discrepancies for real number operations
+Keywords:    reals
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     we do not agree with the expected results
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0099
+Owner: 
+Status: open

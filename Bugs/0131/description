@@ -1,0 +1,16 @@
+Number: 0131
+Title:       scalb and real_scalb unimplemented
+Keywords:    reals
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     some real number functions unimplemented, fail at run time
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0096
+Owner: 
+Status: open
