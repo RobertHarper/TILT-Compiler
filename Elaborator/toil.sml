@@ -548,16 +548,27 @@ functor Toil(structure Il : IL
 			      print "\n")
 		 in dummy_exp(context,"unbound_var")
 		 end
+		 val iseq = path = [Symbol.varSymbol "="]
+		 val isneq = path = [Symbol.varSymbol "<>"]
 	     in
-		 if (path = [Symbol.varSymbol "="]) 
+		 if (iseq orelse isneq)
 		     then let val exp_os = oneshot()
 			      val tyvar = fresh_named_tyvar (context,"teq")
 			      val _ = tyvar_use_equal tyvar
 			      val con = CON_TYVAR tyvar
-			      val eq_con = CON_ARROW([con_tuple[con,con]],con_bool,
+			      val arg_con = con_tuple[con,con]
+			      val eq_con = CON_ARROW([arg_con],con_bool,
 						     false,oneshot_init PARTIAL)
 			      val _ = add_eq_entry(tyvar,exp_os)
-			  in (OVEREXP(eq_con,true,exp_os),eq_con,true)
+			      val eqexp = OVEREXP(eq_con,true,exp_os)
+			      val res = if iseq
+					    then eqexp
+					else let val v = fresh_named_var "neq_arg"
+					     in  #1(make_lambda(v,arg_con, eq_con, 
+								make_ifthenelse(APP(eqexp,[VAR v]),
+										false_exp,true_exp,con_bool)))
+					     end
+			  in (res,eq_con,true)
 			  end
 		 else 
 		     (case (Context_Lookup(context,map symbol_label path)) of
@@ -662,7 +673,7 @@ functor Toil(structure Il : IL
 			 | NONE => exp))
 		   | red exp = exp
 	     in
-		 if (eq_con(context,con1,spec_funcon))
+		 if (sub_con(context,spec_funcon,con1))
 		     then (let val va3 = (case oneshot_deref arrow_oe of
 					      NONE => (oneshot_set(arrow_oe,PARTIAL); false)
 					    | SOME PARTIAL => false
@@ -912,7 +923,8 @@ functor Toil(structure Il : IL
              ---     may not be yet. *)
 	  Ast.ValDec ([],_) => []
 	| Ast.ValDec (vblist,ref tyvars) => (* non-recursive bindings *)
-	    let local
+	    let 
+		local
 		  val pe_list = map vb_strip vblist
 		in
 		  val (pat,expr) = (case pe_list of
@@ -948,10 +960,10 @@ functor Toil(structure Il : IL
 			      expcompile = xexp, 
 			      polyinst = poly_inst,
 			      error_region = error_region,
-			       fresh_con = fresh_con}
+			      fresh_con = fresh_con}
 		val bind_sbnd_sdec = (bindCompile{patarg = patarg,
-							     bindpat = pat,
-							     arg = (v,con)})
+						  bindpat = pat,
+						  arg = (v,con)})
 		val sbnd_sdec_list = sbnd_sdec::bind_sbnd_sdec
 		val is_irrefutable = va andalso Sbnds_IsValuable(context', map #1 bind_sbnd_sdec)
 		fun refutable_case () = 

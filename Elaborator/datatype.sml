@@ -109,7 +109,9 @@ functor Datatype(structure Il : IL
 					     else CON_MUPROJECT(i,cons_rc_help)
 	in  val cons_rc = mapcount cons_rc_maker cons_nrc
 	end
-    
+
+
+
 	val cons_rf_help = map (fn l => CON_MODULE_PROJECT (MOD_VAR var_poly, l)) tyvar_label
 	val cons_rf_help' = con_tuple_inject cons_rf_help
 	val cons_rf = map (fn v => if (is_monomorphic) then (CON_VAR v)
@@ -120,6 +122,8 @@ functor Datatype(structure Il : IL
 	    val subst_both = subst_c2f @ subst_nr2r
 	    fun subst c = con_subst_convar(c,subst_both)
 	in val conss_rf = mapmap (Util.mapopt subst) conss_nrc
+	    (* cons_rf' same as cons_rf except syntactically a mu type *)
+	    val cons_rf' = map (fn c => con_subst_convar(c,subst_c2f)) cons_rc
 	end 
 (*
 	val _ = (print "\nconss_nrc are:\n";
@@ -143,40 +147,40 @@ functor Datatype(structure Il : IL
 	fun roll(x,y) = if (is_noncarrying) then y else ROLL(x,y)
 	fun unroll(x,y) = if (is_noncarrying) then y else UNROLL(x,y)
 	local 
-	    fun mk_help (conss_rf_i, cons_rf_i) = 
+	    fun mk_help (conss_rf_i, cons_rf_i, cons_rf_i') = 
 		let 
 		    val var = fresh_var()
 		    val (nca,ca) = conopts_split conss_rf_i
 		    fun help (j, NONE) = 
-			(roll(cons_rf_i,
+			(roll(cons_rf_i',
 			      INJ{noncarriers = nca,
 				  carriers = ca,
 				  inject = NONE,
 				  special = j}), cons_rf_i)
 		      | help (j, SOME conss_rf_ij) =
 			(make_total_lambda(var,conss_rf_ij,cons_rf_i,
-					   roll(cons_rf_i,
+					   roll(cons_rf_i',
 						INJ{noncarriers = nca,
 						    carriers = ca,
 						    inject = SOME (VAR var),
 						    special = j})))
 		in mapcount help conss_rf_i
 		end
-	in val exp_con_mk = map2 mk_help (conss_rf,cons_rf)
+	in val exp_con_mk = map3 mk_help (conss_rf,cons_rf,cons_rf')
 	end
 
 	(* ----------------- compute the exposes ------------------- *)
 	local 
-	    fun expose_help (conss_rf_i,cons_rf_i) =
+	    fun expose_help (conss_rf_i,cons_rf_i,cons_rf_i') =
 		let
 		    val (nca,ca) = conopts_split conss_rf_i
 		    val sumtype = CON_SUM{special = NONE,
 					  carriers = ca,
 					  noncarriers = nca}
 		    val var' = fresh_var()
-		in make_total_lambda(var',cons_rf_i,sumtype,unroll(cons_rf_i,VAR var'))
+		in make_total_lambda(var',cons_rf_i,sumtype,unroll(cons_rf_i',VAR var'))
 		end
-	in val exp_con_expose = map2 expose_help (conss_rf,cons_rf)
+	in val exp_con_expose = map3 expose_help (conss_rf,cons_rf,cons_rf')
 	end
 		
 	(* ----------------- compute the equality functions ------------------- *)

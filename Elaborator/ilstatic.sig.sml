@@ -12,7 +12,7 @@ signature ILSTATIC =
     (* ------------ functions that manipulate constructors -------------------- 
        eq_onearrow: returns true if the arrows are equal: will set the oneshot if needed
        eq_con: returns true if the types are equal: will set tyvars to ensure equality
-       soft_eq_con: a version of eq_con that will not set tyvars if the unification failed 
+       soft_eq_con: a version of eq_con that will not set any tyvars
        sub_con: tests whether the first constructor is a subtype of the second 
        con_head_normalize: returns an equivalent constructor in head-normal form 
        con_normalize: returns an equivalent constructor in normal form *)

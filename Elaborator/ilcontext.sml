@@ -352,7 +352,7 @@ exception XXX
 				  SOME(false,(PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l),
 							   k),[l]))
 			    | (DEC_MOD (_,s)) => 
-				  SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s),[l]))
+				SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s),[l]))
 			    | _ => loop lbl rest)
 		else if (is_label_open l)
 		    then (case d of
@@ -360,6 +360,13 @@ exception XXX
 				  (case (loop lbl sdecs) of
 				       SOME (flag,(class,lbls')) => SOME(flag,(class,l::lbls'))
 				     | NONE => loop lbl rest)
+			    | (DEC_MOD(_,((SIGNAT_INLINE_STRUCTURE{code,abs_sig=sdecs,...})))) =>
+				  (case (Sbnds_Lookup(code,[lbl]),loop lbl sdecs) of
+				       (SOME (lbl,p), SOME(_,(pc,lbls'))) => 
+						SOME(true,(combine_pc(p,pc2class pc),l::lbls'))
+				     | (SOME _, NONE) => error "sdecs_Lookup: open case:  SOME/NONE"
+				     | (NONE, SOME _) => error "sdecs_Lookup: open case:  NONE/SOME"
+				     | (NONE,NONE) => loop lbl rest)
 			    | _ => loop lbl rest)
 		     else loop lbl rest
 
@@ -375,6 +382,16 @@ exception XXX
 				      (case (Sdecs_Lookup_help(m',sdecs',lbls)) of
 					  SOME(nontrivial,(pc2,labs2)) => SOME(nontrivial,(pc2,labs @ labs2))
 					| NONE => NONE)
+				| PHRASE_CLASS_MOD (m',((SIGNAT_INLINE_STRUCTURE {code,abs_sig,...}))) =>
+				    (case (Sbnds_Lookup(code,lbls)) of
+					 SOME(labels,phrase) =>
+					     (case (Sdecs_Lookup_help(m',abs_sig,lbls)) of
+						  SOME(_,(pc,labs2)) => 
+						      let val class = pc2class pc
+						      in  SOME(true,(combine_pc(phrase,class),labs@labs2))
+						      end
+						| NONE => NONE)
+	                               | NONE => NONE)
 				| _ => NONE)
 		       | NONE => NONE)
 	end
@@ -419,26 +436,25 @@ exception XXX
 	  | ([],SOME (path,pc)) => SOME(path,pc)
 	  | (_,SOME (path,pc)) =>
 		case pc of
-		    PHRASE_CLASS_MOD(module as (MOD_STRUCTURE sbnds),
-				     ((SIGNAT_STRUCTURE (_,sdecs)) |
-				      (SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,...}))) =>
+		    ((PHRASE_CLASS_MOD(MOD_STRUCTURE sbnds,SIGNAT_STRUCTURE (_,sdecs))) |
+		     (PHRASE_CLASS_MOD(_,SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,code=sbnds,...}))) =>
 		    (case (Sbnds_Lookup(sbnds,labrest)) of
 			 SOME(labels,phrase) =>
 			     (case (Sdecs_Lookup_help(path2mod path,sdecs,labrest)) of
 				  SOME(_,(pc,labels')) => 
 				      let val class = pc2class pc
 					  val p = join_path_labels(path,labels)
-				      in  SOME(p,combine_pc(phrase,class))
+				      in  SOME(p,combine_pc(phrase,class)) 
 				      end
 				| NONE => NONE)
 		       | NONE => NONE)
-		  | PHRASE_CLASS_MOD(_,((SIGNAT_STRUCTURE (_,sdecs)) |
-					(SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,...}))) =>
+		  | PHRASE_CLASS_MOD(_,SIGNAT_STRUCTURE (_,sdecs)) =>
 			(case (Sdecs_Lookup_help(path2mod path,sdecs,labrest)) of
 			     SOME(_,(pc,labels)) =>
 				 let val class = pc2class pc
 				     val p = join_path_labels(path,labels)
-				 in  SOME(classpath2pc(p,class))
+				 in  (* SOME(classpath2pc(p,class)) *)
+					SOME (p,pc)
 				 end
 			   | NONE => NONE)
 		  | _ => NONE)

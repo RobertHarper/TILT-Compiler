@@ -69,6 +69,7 @@ functor Basis(structure Il : IL
 	      in  result := add_context_inline(!result, mk_var_lab str, fresh_named_var str, inline)
 	      end
 	  fun mono_entry (str,prim) = exp_entry(str, ETAPRIM (prim,[]))
+	  fun ilmono_entry (str,prim) = exp_entry(str, ETAILPRIM (prim,[]))
 	  fun scon_entry (str,scon) = exp_entry(str, SCON scon)
 	  fun poly_entry (str,c2exp) = 
 	      let val argvar = fresh_var()
@@ -152,9 +153,23 @@ functor Basis(structure Il : IL
 					helpers as  {hard : con * con -> bool,
 						     soft : con * con -> bool},
 					is_hard) = 
-		   if ((if is_hard then hard else soft)(c,CON_TYVAR tyvar))
-		       then MATCH res
-		   else FAIL
+		   let val c' = CON_TYVAR tyvar
+(*
+		       val _ = (print "basis: constraints before...\n";
+				print "   c is "; Ppil.pp_con c; print "\n";
+				print "   c' is "; Ppil.pp_con c'; print "\n")
+*)
+		       val res = 
+			   if ((if is_hard then hard else soft)(c,CON_TYVAR tyvar))
+			       then MATCH res
+			   else FAIL
+(*
+		       val _ = (print "basis: constraints after...\n";
+				print "   c is "; Ppil.pp_con c; print "\n";
+				print "   c' is "; Ppil.pp_con c'; print "\n\n\n")
+*)
+		   in res
+		   end
 	       datatype X = INT_CASE | FLOAT_CASE
 	       fun con_thunk (intres,floatres) exp_oneshot x = 
 		   (case (oneshot_deref exp_oneshot,x) of
@@ -209,11 +224,17 @@ functor Basis(structure Il : IL
 			       val not_body = make_ifthenelse(VAR arg_var,false_exp,true_exp,con_bool)
 			   in  #1(make_lambda(arg_var, con_bool, con_bool, not_body))
 			   end)]
+	      val baseilprimvalue_list = 
+		  [("<<", (lshift_uint W32)),
+		   ("&&", (and_uint W32)),
+		   ("||", (or_uint W32))]
 
 	      val baseprimvalue_list = 
 		  [("/", (div_float F64)),
-		   ("div", (div_int W32)),
+		   ("float_eq", (eq_float F64)),
+(*		   ("div", (div_int W32)),
 		   ("mod", (mod_int W32)),
+*)
 		   ("quot", (quot_int W32)),
 		   ("rem", (rem_int W32)),
 		   ("ult", (less_uint W32)),
@@ -223,11 +244,8 @@ functor Basis(structure Il : IL
 
 		   ("<>", (neq_int W32)),
 		   ("notb", (not_int W32)),
-		   ("<<", (lshift_int W32)),
 		   (">>", (rshift_uint W32)),
 		   ("~>>", (rshift_int W32)),
-		   ("&&", (and_int W32)),
-		   ("||", (or_int W32)),
 		   ("abs", (abs_int W32)),
 
 		   ("uinta8touinta32", (uinta2uinta (W8,W32))),
@@ -259,11 +277,17 @@ functor Basis(structure Il : IL
 		   ("flush_out", flush_out),
 		   ("close_out", close_out)]
 
-	      val basevar_list = [("sin", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("cos", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL))]
+	      val basevar_list = [("sqrt", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
+				  ("sin", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
+				  ("cos", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
+				  ("tan", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
+				  ("atan", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
+				  ("exp", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
+				  ("log", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL))]
 
 	  in  val _ = app exp_entry basevalue_list
 	      val _ = app mono_entry baseprimvalue_list
+	      val _ = app ilmono_entry baseilprimvalue_list
 	      val _ = app var_entry basevar_list
 	  end
 
@@ -320,8 +344,9 @@ functor Basis(structure Il : IL
 					   in #1(make_total_lambda(v,CON_VECTOR c,uint32,
 								   PRIM(length_table WordVector,[c],[VAR v])))
 					   end)),
+		  (* NOT TOTAL! has a store effect - otherwise we would generalize *)
 		  ("ref", (fn c => let val v = fresh_var()
-				    in #1(make_total_lambda(v,c,CON_REF c,
+				    in #1(make_lambda(v,c,CON_REF c,
 							    PRIM(mk_ref,[c],[VAR v])))
 				    end)),
 		   ("!", (fn c => let val v = fresh_var()

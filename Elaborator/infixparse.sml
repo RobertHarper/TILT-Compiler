@@ -199,7 +199,9 @@ functor InfixParse(structure Il : IL
 	fun self arg = parse_pat(table,is_constr,arg)
 	fun self_one arg = (case (parse_pat(table,is_constr,[arg])) of
 				[p] => p
-			      | _ => error "parse_pat on subcall yielded multiple patterns")
+			      | pats => (print "parse_pat on subcall yielded multiple patterns";
+					 app (fn p => (AstHelp.pp_pat p; print "\n")) pats;
+					 error "parse_pat on subcall yielded multiple patterns"))
 	val _ = debugdo (fn () => (print "entered parse_pat\n"))
 	val table = (app_lab, Fixity.infixleft 10) :: table  
 	fun apper (f,a) = Ast.AppPat{constr=f,argument=a}
@@ -214,12 +216,15 @@ functor InfixParse(structure Il : IL
 								   flexibility=flexibility}
 	      | Ast.ListPat pats => Ast.ListPat (map self_one pats)
 	      | Ast.TuplePat pats => Ast.TuplePat (map self_one pats)
-	      | Ast.FlatAppPat fixpats => let val pats = map (fn {item,...} => item) fixpats
-					      val pats' = map self_one pats
-					  in case (self pats') of
-					      [p] => p
-					    | _ => error "parse_pat on subcall yielded multiple patterns"
-					  end
+	      | Ast.FlatAppPat fixpats => 
+		 let val pats = map (fn {item,...} => item) fixpats
+		     val pats' = map self_one pats
+		 in case (self pats') of
+		     [p] => p
+		   | pats => (print "parse_pat on subcall yielded multiple patterns:\n";
+			      app (fn p => (AstHelp.pp_pat p; print "\n")) pats;
+			      error "parse_pat of flatapppat on subcall yielded multiple patterns")
+		 end
 	      | Ast.AppPat {constr,argument} => Ast.AppPat {constr=self_one constr,argument=self_one argument}
 	      | Ast.ConstraintPat {pattern,constraint} => Ast.ConstraintPat {pattern=self_one pattern,
 									     constraint=constraint}

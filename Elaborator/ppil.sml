@@ -135,7 +135,7 @@ functor Ppil(structure Il : IL
 			  [c1] => pp_con seen c1
 			| _ => pp_list (pp_con seen) cons ("[", ",","]", false)),
 			  String " ",
-			  String ((if closed then "" else "CODE") ^ 
+			  String ((if closed then "CODE" else "") ^ 
 				  (complete2string comp)),
 			  Break,
 			  pp_con seen c2, String ")"]

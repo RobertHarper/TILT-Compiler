@@ -227,9 +227,18 @@ structure LinkIl (* : LINKIL *) =
 		in  loop [] [] sbnds sdecs
 		end
  	    val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()  
+
 (*
 	    val ctxt_inline = Basis.empty_context
 	    val ctxt_noninline = Basis.empty_context
+*)
+(*
+	    val ctxt_inline = IlContext.add_context_inline(Basis.empty_context,
+			Name.symbol_label(Symbol.tycSymbol "float"),
+			Name.fresh_named_var "float",
+			Il.INLINE_CONKIND(Il.CON_FLOAT Il.Prim.F64, 
+					Il.KIND_TUPLE 1))
+	    val ctxt_noninline = ctxt_inline
 *)
        	    fun reparse filename : module = 
 		(case elaborate(ctxt_inline,filename) of 

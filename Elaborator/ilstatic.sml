@@ -441,7 +441,7 @@ exception XXX
    and soft_eq_con (con1,con2,ctxt) = 
      let val (soft_unify,table,constr_con,useeq_con) = soft_unifier()
      in  if (meta_eq_con (false,soft_unify) false (con1,con2,ctxt,false))
-	   then (app tyvar_set (!table); 
+	   then ((* app tyvar_set (!table);  *)
 		 map (fn c => local_con_constrain(ctxt,c,{constrain = true,
 					       stamp = NONE,
 					       eq_constrain = false},
@@ -1296,8 +1296,9 @@ exception XXX
 	    | (CON_VAR v) => (case (Context_Lookup'(ctxt,v)) of
 				  SOME(_,PHRASE_CLASS_CON (CON_VAR v',k)) => 
 				      if (eq_var(v,v'))
-					  then (case k of
-						    KIND_INLINE(k,c) => HeadNormalize(c,ctxt)
+					  then (case k of (* we do not break abstraction of KIND_INLINE *)
+						    KIND_INLINE _ => (* (k,c) => HeadNormalize(c,ctxt) *)
+								(false, CON_VAR v)
 						  | _ => (false, CON_VAR v))
 				      else HeadNormalize(CON_VAR v',ctxt)
 				| SOME(_,PHRASE_CLASS_CON (c,_)) => HeadNormalize(c,ctxt)

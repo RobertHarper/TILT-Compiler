@@ -337,6 +337,7 @@ functor Pat(structure Il : IL
       val (casearg, casecon) = (case arg1 of
 				  CASE_VAR(v,con) => (VAR v, con)
 				| CASE_NONVAR (_,binde,bindc) => (binde,bindc))
+(*	val _ = (print "========casecon is: "; Ppil.pp_con casecon; print "\n") *)
       val rescon = ref(fresh_con context)
       fun check_rescon c = 
 		(sub_con(context,c,!rescon)) orelse
@@ -350,12 +351,17 @@ functor Pat(structure Il : IL
 	     | (true,NONE) => SOME(clause,bound,body)
 	     | (true,SOME argument) => SOME(argument::clause,bound,body))
 	  val relevants : arm list = List.mapPartial armhelp accs
+(*	val _ = (print "====getarm enter====casecon is: "; Ppil.pp_con casecon; print "\n") *)
 	  val _ = if (sub_con(context,casecon,datacon))
 		      then ()
 		  else (error_region();
 			print "datacon is "; Ppil.pp_con datacon; print "\n";
 			print "casecon is "; Ppil.pp_con casecon; print "\n";
 			print "constructor pattern used on an argument of the wrong type\n")
+(*
+	val _ = (print "====getarm past sub_con====casecon is: "; Ppil.pp_con casecon; print "\n\nand context = \n";
+			Ppil.pp_context context; print "\n\n")
+*)
 	  val rsvar = fresh_var()
 	  val rscon = CON_SUM{carriers = #2 sumcon,
 			      noncarriers = #1 sumcon,
@@ -391,6 +397,7 @@ functor Pat(structure Il : IL
 	   NONE => error "constructor_lookup got path not to constructor"
 	 | (SOME {name,datatype_path,is_const,datatype_sig}) => 
 	     Datatype.instantiate_datatype_signature(datatype_path,datatype_sig,context,polyinst))
+(*	val _ = (print "========datacon is: "; Ppil.pp_con datacon; print "\n") *)
       val expose_exp = 
 	  let
 	      fun path2pc path = 
@@ -432,6 +439,7 @@ functor Pat(structure Il : IL
       val sumcon as (nca,ca) = loop (0,[]) constr_patconopt_list
       val vfll_expopt_list : (bound list * (exp option)) list = 
 	                                    mapcount (getarm datacon sumcon) constr_patconopt_list
+(*	val _ = (print "====getarms done====casecon is: "; Ppil.pp_con casecon; print "\n") *)
       val _ = debugdo (fn () => (print "Got these arms:";
 				 mapcount (fn (i,(_,eopt)) => (print "Arm #"; printint i; print ": ";
 							       (case eopt of 
@@ -441,7 +449,8 @@ functor Pat(structure Il : IL
       val sumtypes = map (fn {arg_type=NONE,...} => con_unit | {arg_type=SOME c,...} => c)  constr_patconopt_list
       val expopt_list = map #2 vfll_expopt_list
       val vfll_list = map #1 vfll_expopt_list
-      val exhaustive = (length accs) = (nca + length ca)
+      val exhaustive = List.all (fn NONE => false | SOME _ => true) expopt_list
+(*	val _ = (print "========casecon is: "; Ppil.pp_con casecon; print "\n") *)
     in  (flatten vfll_list,
 	 (CASE{noncarriers = nca,
 	       carriers = ca,
@@ -580,7 +589,7 @@ functor Pat(structure Il : IL
 		 let 
 		   fun varpred (Ast.VarPat [v]) = if (is_constr [v]) then NONE else SOME v
 		     | varpred (Ast.WildPat) = SOME (Symbol.varSymbol "_")
-		     | varpred (Ast.VarPat _) = error "A variable pattern that is a path is illegal"
+		     | varpred (Ast.VarPat _) = NONE
 		     | varpred _ = NONE
 		   val (accs,vc_ll2,def) = find_maxseq varpred arms
 		   val (vc_ll,ec) = var_case(arg1,argrest,accs,def)
@@ -611,36 +620,7 @@ functor Pat(structure Il : IL
 		 in (vc_ll @ vc_ll2, ec)
 		 end
 
-(*
-	       fun nil_dispatch() = 
-		 let 
-		   fun nilpred (Ast.ListPat []) = SOME ()
-		     | nilpred _ = NONE
-		   val (accs,vc_ll2,def) = find_maxseq nilpred arms
-		   val (vc_ll,ec) = nil_case(arg1,argrest,accs,def)
-		 in (vc_ll @ vc_ll2, ec)
-		 end
 
-	       fun cons_dispatch() = 
-		 let 
-		   fun conspred (Ast.ListPat (p1::prest)) = SOME (p1,Ast.ListPat prest)
-		     | conspred (Ast.AppPat{constr=Ast.VarPat[s],
-					    argument=Ast.TuplePat[p1,p2]}) = 
-		       if (s = Symbol.varSymbol "::") 
-			 then SOME(p1,p2)
-		       else NONE
-		     | conspred _ = NONE
-		   val (accs,vc_ll2,def) = find_maxseq conspred arms
-		   val (vc_ll,ec) = cons_case(arg1,argrest,accs,def)
-		 in (vc_ll @ vc_ll2, ec)
-		 end
-
-	       fun list_dispatch() = 
-		 (case (hd (#1 (hd arms))) of
-		    (Ast.ListPat []) => nil_dispatch()
-		  | (Ast.ListPat _) => cons_dispatch()
-		  | _ => error "not a ListPat in list_dispatch")
-*)
 	       fun constructor_dispatch() = 
 		 let 
 		   fun getpath (Ast.VarPat p) = p
@@ -662,26 +642,7 @@ functor Pat(structure Il : IL
 			 | _ => constr_dispatch())
 		 end
 
-(*	       fun tuple_record_dispatch() =
-		 let 
-		   fun makesym n = mapcount (fn (i,_) => generate_tuple_symbol (i+1)) (count n)
-		   val syms = (case headpat1 of
-				 Ast.TuplePat pats => makesym (length pats)
-			       | Ast.RecordPat {def,flexibility} => map #1 def
-			       | _ => error "weird bug")
-		   fun tuprecpred (Ast.TuplePat pats) = if (makesym (length pats) = syms)
-							  then SOME pats
-							else error "tuple arity mismatch in pattern"
-		     | tuprecpred (Ast.RecordPat {def,flexibility=false}) = if ((map #1 def) = syms)
-									      then SOME(map #2 def)
-						       else error "record pattern label/arity mismatch"
-		     | tuprecpred (Ast.RecordPat {def,flexibility=true}) = error "flex records not handled"
-		     | tuprecpred _ = NONE
-		   val (accs,vc_ll2,def) = find_maxseq tuprecpred arms
-		   val (vc_ll,ec) = tuprec_case(arg1,argrest,syms,accs,def)
-		 in (vc_ll @ vc_ll2, ec)
-		 end
-*)
+
 	       fun tuple_record_dispatch() =
 		 let 
 		   fun tuple_case _ [] = []
@@ -783,7 +744,9 @@ functor Pat(structure Il : IL
 		  | (Ast.WildPat) => var_dispatch()
 		  | (Ast.VarPat p) => (if (is_constr p) then constructor_dispatch() 
 				      else if (is_exn p) then exn_dispatch() 
-					   else var_dispatch())
+					   else (case p of 
+						  [_] => var_dispatch()
+						| _ => error "illegal variable pattern - path"))
 	          | (Ast.AppPat {constr,argument}) =>
 			(case constr of
 			     ((Ast.VarPat p) | (Ast.MarkPat (Ast.VarPat p,_))) => 
@@ -835,8 +798,8 @@ functor Pat(structure Il : IL
           | RecordPat {def:(symbol * pat) list, flexibility:bool} => Listops.flatten(map (fn (_,p) => get_bound p) def)
           | ListPat p => Listops.flatten(map get_bound p)
           | TuplePat p => Listops.flatten(map get_bound p)
-	  | FlatAppPat patfixes => Listops.flatten (map (fn ({item,...} : pat fixitem) => get_bound item) patfixes)
-          | AppPat {constr:pat,argument:pat} => (get_bound constr) @ (get_bound argument)
+	  | FlatAppPat patfixes => error "flatapppat should be parsed away"
+          | AppPat {constr:pat,argument:pat} => get_bound argument
           | ConstraintPat {pattern:pat,constraint:ty} => get_bound pattern
           | LayeredPat {varPat:pat,expPat:pat} => (get_bound varPat) @ (get_bound expPat)
           | VectorPat p => Listops.flatten(map get_bound p)
@@ -852,8 +815,14 @@ functor Pat(structure Il : IL
 		     arg = (argvar : var, argc : con)}
                     : (sbnd * sdec) list =
       let 
+(*
+	val _ = (print "---------------------------------\n";
+		 print "bindcompile called with context = \n";
+		 Ppil.pp_context context; print "\n\n")
+*)
 	val pat = parse_pat(patarg,bindpat)
 	val boundsyms = get_bound pat
+
 	val args = [CASE_VAR (argvar,argc)] 
 	val arms = [([pat],[],SOME(Ast.TupleExp(map (fn s => Ast.VarExp [s]) boundsyms)))]
 	val res_con = fresh_con context
@@ -866,16 +835,16 @@ functor Pat(structure Il : IL
 *)
 	fun default_case() : (sbnd * sdec) list = 
 	    let val l = fresh_internal_label "bind"
-		val v = fresh_named_var "bind"
-		val sbnd_sdec = (SBND(l,(BND_EXP(v,binde))),
-				 SDEC(l,(DEC_EXP(v,bindc))))
+		val bv = fresh_named_var "bind"
+		val sbnd_sdec = (SBND(l,(BND_EXP(bv,binde))),
+				 SDEC(l,(DEC_EXP(bv,bindc))))
 		fun mapper(n,s) = 
 		    let val l = symbol_label s
 			val v = gen_var_from_symbol s
 			val c = (case bindc of
 				     CON_RECORD lc_list => #2(List.nth(lc_list,n))
 				   | _ => error "bindc not a tuple")
-			val e = RECORD_PROJECT(VAR v,generate_tuple_label (n+1) ,bindc)
+			val e = RECORD_PROJECT(VAR bv,generate_tuple_label (n+1) ,bindc)
 		    in   (SBND(l,(BND_EXP(v,e))),
 			  SDEC(l,(DEC_EXP(v,c))))
 		    end
