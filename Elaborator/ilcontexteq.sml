@@ -36,7 +36,7 @@ struct
 	(case IntMap.find(!inMap,i) of
 	     SOME v => v
 	   | NONE => let val v = Name.fresh_var()
-			 val _ = (print "int2var adding "; print (Int.toString i); print "  to  "; Ppil.pp_var v; print "\n")
+			 (* val _ = (print "int2var adding "; print (Int.toString i); print "  to  "; Ppil.pp_var v; print "\n") *)
 			 val _ = inMap := IntMap.insert(!inMap,i,v)
 		     in  v
 		     end)
