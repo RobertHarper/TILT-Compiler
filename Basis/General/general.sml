@@ -5,9 +5,6 @@
  *
  *)
 
-extern exnName : (exn, string) -->
-extern exnMessage : (exn, string) -->
-
 structure General :> GENERAL where type unit = unit 
 			       and type exn = exn
 			       and type order = order =
@@ -25,9 +22,7 @@ structure General :> GENERAL where type unit = unit
     exception Div = Div
     exception Domain = Domain
     exception Span = Span
-
-    exception Fail of string
-
+    exception Fail = Fail
     datatype order = datatype order
 
     fun equal(x,y) = x = y
@@ -38,14 +33,11 @@ structure General :> GENERAL where type unit = unit
     val ! = fn x => !x
     val op := = fn (x,y) => x := y
 
+    val op o = op o
+    val op before = (op before)
+    val ignore = ignore
 
-    fun f o g = fn x => f(g x)
-    fun a before b = a
-    fun ignore _ = ()
-
-    val exnName : exn -> string = fn exn => exnName exn
-    val exnMessage: exn -> string = fn exn => exnMessage exn
+    val exnName = exnName
+    val exnMessage = exnMessage
 
   end (* structure General *)
-
-open General
