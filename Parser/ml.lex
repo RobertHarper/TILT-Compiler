@@ -32,16 +32,21 @@ fun addString (charlist,s:string) = charlist := s :: (!charlist)
 fun addChar (charlist, c:char) = addString(charlist, String.str c)
 fun makeString charlist = (concat(rev(!charlist)) before charlist := nil)
 
-fun atoi(s,i) = 
+fun atoi(err,p,s,i) = 
      let val s = String.substring(s,i,size s - i)
      in  TilWord64.fromDecimalString s
+	 handle Overflow =>
+	     (err(p,p+size s) COMPLAIN "decimal constant too large" nullErrorBody;
+	      TilWord64.zero)
      end
 
-fun xtoi(s,i) = 
+fun xtoi(err,p,s,i) = 
      let val s = String.substring(s,i,size s - i)
      in  TilWord64.fromHexString s
+	 handle Overflow =>
+	     (err(p,p+size s) COMPLAIN "hex constant too large" nullErrorBody;
+	      TilWord64.zero)
      end
-
 
 fun mysynch (src, pos, parts) =
   let fun digit d = Char.ord d - Char.ord #"0"
@@ -126,13 +131,13 @@ hexnum=[0-9a-fA-F]+;
 				     nullErrorBody;
                                   Tokens.BEGINQ(yypos,yypos+1)));
 <INITIAL>{real}	=> (Tokens.REAL(yytext,yypos,yypos+size yytext));
-<INITIAL>[1-9][0-9]* => (Tokens.INT(atoi(yytext, 0),yypos,yypos+size yytext));
-<INITIAL>{num}	=> (Tokens.INT0(atoi(yytext, 0),yypos,yypos+size yytext));
-<INITIAL>~{num}	=> (Tokens.INT0(atoi(yytext, 0),yypos,yypos+size yytext));
-<INITIAL>"0x"{hexnum} => (Tokens.INT0(xtoi(yytext, 2),yypos,yypos+size yytext));
-<INITIAL>"~0x"{hexnum} => (Tokens.INT0(TilWord64.snegate(xtoi(yytext, 3)),yypos,yypos+size yytext));
-<INITIAL>"0w"{num} => (Tokens.WORD(atoi(yytext, 2),yypos,yypos+size yytext));
-<INITIAL>"0wx"{hexnum} => (Tokens.WORD(xtoi(yytext, 3),yypos,yypos+size yytext));
+<INITIAL>[1-9][0-9]* => (Tokens.INT(atoi(err, yypos, yytext, 0),yypos,yypos+size yytext));
+<INITIAL>{num}	=> (Tokens.INT0(atoi(err, yypos, yytext, 0),yypos,yypos+size yytext));
+<INITIAL>~{num}	=> (Tokens.INT0(atoi(err, yypos, yytext, 0),yypos,yypos+size yytext));
+<INITIAL>"0x"{hexnum} => (Tokens.INT0(xtoi(err, yypos, yytext, 2),yypos,yypos+size yytext));
+<INITIAL>"~0x"{hexnum} => (Tokens.INT0(TilWord64.snegate(xtoi(err, yypos, yytext, 3)),yypos,yypos+size yytext));
+<INITIAL>"0w"{num} => (Tokens.WORD(atoi(err, yypos, yytext, 2),yypos,yypos+size yytext));
+<INITIAL>"0wx"{hexnum} => (Tokens.WORD(xtoi(err, yypos, yytext, 3),yypos,yypos+size yytext));
 <INITIAL>\"	=> (charlist := [""]; stringstart := yypos;
                     stringtype := true; YYBEGIN S; continue());
 <INITIAL>\#\"	=> (charlist := [""]; stringstart := yypos;

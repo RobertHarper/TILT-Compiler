@@ -1,5 +1,4 @@
 (*$import StrgHash Control SourceMap Int String Char ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
-
 functor MLLexFun(structure Tokens : ML_TOKENS)=
    struct
     structure UserDeclarations =
@@ -38,16 +37,21 @@ fun addString (charlist,s:string) = charlist := s :: (!charlist)
 fun addChar (charlist, c:char) = addString(charlist, String.str c)
 fun makeString charlist = (concat(rev(!charlist)) before charlist := nil)
 
-fun atoi(s,i) = 
+fun atoi(err,p,s,i) = 
      let val s = String.substring(s,i,size s - i)
      in  TilWord64.fromDecimalString s
+	 handle Overflow =>
+	     (err(p,p+size s) COMPLAIN "decimal constant too large" nullErrorBody;
+	      TilWord64.zero)
      end
 
-fun xtoi(s,i) = 
+fun xtoi(err,p,s,i) = 
      let val s = String.substring(s,i,size s - i)
      in  TilWord64.fromHexString s
+	 handle Overflow =>
+	     (err(p,p+size s) COMPLAIN "hex constant too large" nullErrorBody;
+	      TilWord64.zero)
      end
-
 
 fun mysynch (src, pos, parts) =
   let fun digit d = Char.ord d - Char.ord #"0"
@@ -1312,11 +1316,11 @@ let fun continue() : Internal.result =
 
 			(* Application actions *)
 
-  103 => (Tokens.INT0(xtoi(yytext, 2),yypos,yypos+size yytext))
-| 109 => (Tokens.INT0(TilWord64.snegate(xtoi(yytext, 3)),yypos,yypos+size yytext))
+  103 => (Tokens.INT0(xtoi(err, yypos, yytext, 2),yypos,yypos+size yytext))
+| 109 => (Tokens.INT0(TilWord64.snegate(xtoi(err, yypos, yytext, 3)),yypos,yypos+size yytext))
 | 11 => (Tokens.COMMA(yypos,yypos+1))
-| 114 => (Tokens.WORD(atoi(yytext, 2),yypos,yypos+size yytext))
-| 120 => (Tokens.WORD(xtoi(yytext, 3),yypos,yypos+size yytext))
+| 114 => (Tokens.WORD(atoi(err, yypos, yytext, 2),yypos,yypos+size yytext))
+| 120 => (Tokens.WORD(xtoi(err, yypos, yytext, 3),yypos,yypos+size yytext))
 | 122 => (charlist := [""]; stringstart := yypos;
                     stringtype := true; YYBEGIN S; continue())
 | 125 => (charlist := [""]; stringstart := yypos;
@@ -1490,9 +1494,9 @@ let fun continue() : Internal.result =
 | 7 => (SourceMap.newline sourceMap yypos; continue())
 | 88 => (Tokens.REAL(yytext,yypos,yypos+size yytext))
 | 9 => (Tokens.WILD(yypos,yypos+1))
-| 91 => (Tokens.INT(atoi(yytext, 0),yypos,yypos+size yytext))
-| 94 => (Tokens.INT0(atoi(yytext, 0),yypos,yypos+size yytext))
-| 98 => (Tokens.INT0(atoi(yytext, 0),yypos,yypos+size yytext))
+| 91 => (Tokens.INT(atoi(err, yypos, yytext, 0),yypos,yypos+size yytext))
+| 94 => (Tokens.INT0(atoi(err, yypos, yytext, 0),yypos,yypos+size yytext))
+| 98 => (Tokens.INT0(atoi(err, yypos, yytext, 0),yypos,yypos+size yytext))
 | _ => raise Internal.LexerError
 
 		) end )
