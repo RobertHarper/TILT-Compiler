@@ -1099,11 +1099,11 @@ structure Reduce
 		      if (dead_var x ) then (census_exp fset (~1, exp);
 					     (rest,body))
 		      else 
-			( Exp_b (x, nt, xexp fset exp) :: rest, body)
+			( NilUtil.makeExpB (x, nt, xexp fset exp) @ rest, body)
 		    end 
 	      else let val (rest, body) = xbnds fset rest body
 		   in 
-		     (Exp_b (x, nt, xexp fset exp):: rest, body)
+		     ( NilUtil.makeExpB (x, nt, xexp fset exp) @ rest, body)
 		   end )
 		      
 		      
@@ -1141,9 +1141,7 @@ structure Reduce
 		      
 		      Let_e(Sequential, bnds , body ) =>
 			  let val (bnds, EXP body) = xbnds fset bnds (EXP body) 
-			  in if (null bnds)
-			     then body
-			     else Let_e (Sequential, bnds, body)
+			  in NilUtil.makeLetE Sequential bnds body
 			  end 
 			
 		    | Let_e (Parallel, _ , _) => raise UNIMP 

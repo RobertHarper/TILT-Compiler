@@ -39,6 +39,7 @@ signature NILUTIL =
     val makeLetE : Nil.letsort -> Nil.bnd list -> Nil.exp -> Nil.exp
     val makeAppE : Nil.exp -> Nil.con list -> Nil.exp list -> Nil.exp list -> Nil.exp
     val makeProjC : Nil.con -> Nil.label list -> Nil.con
+    val makeExpB : Nil.var * Nil.niltrace * Nil.exp -> Nil.bnd list
     val extractCbnd : Nil.conbnd -> Nil.var * Nil.con
 
     val effect : Nil.exp -> bool (* could the expression have an effect?

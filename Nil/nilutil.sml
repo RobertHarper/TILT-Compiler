@@ -1307,6 +1307,11 @@ end
            con_bnds @ exp_bnds @ fp_bnds
        end
 
+   fun makeExpB (v,nt,exp) =
+       (case exp of
+	    Let_e (Sequential, let_bnds, body as Var_e v') => let_bnds @ [Exp_b(v,nt,body)]
+	  | _ => [Exp_b(v,nt,exp)])
+
    (* makeLetE.
          Creates a term-level sequential let given bindings and
          a body.  Optimizes the let when the bindings or the body are
@@ -1389,7 +1394,6 @@ end
       | makeAppE fn_exp cargs eargs fargs = 
             App_e(Open, fn_exp, cargs, eargs, fargs)
 
-	    
     fun project_from_kind(lvk_seq,con,label) = 	     
       let
 	val lvk_list = Sequence.toList lvk_seq

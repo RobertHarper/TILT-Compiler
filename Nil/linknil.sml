@@ -226,8 +226,28 @@ structure Linknil :> LINKNIL  =
 				    cse = !do_cse, uncurry = !do_uncurry},
 				 filename, nilmod) 
 
-            val nilmod = transform(do_reify, show_reify,
-                                   "Reification",
+
+	    val nilmod = transform(do_reduce, ref false,
+				   "Reduce", Reduce.doModule, 
+				   filename, nilmod)
+
+	    val nilmod = transform(do_flatten, ref false,
+				   "Flatten", Flatten.doModule, 
+				   filename, nilmod)
+
+	    fun inline_domod m = 
+                   let val (count, result) = Inline.optimize m
+                   in print "Small functions inlined: ";
+                      print (Int.toString count);
+                      print "\n";
+                      result
+                   end
+	    val nilmod = transform(do_inline, ref false,
+				   "Inline", 
+				   inline_domod, filename, nilmod)
+
+            val nilmod = transform(do_reify, show_reify2,
+                                   "Reification2",
                                    Reify.reify_mod,
                                    filename, nilmod)
 
@@ -241,13 +261,6 @@ structure Linknil :> LINKNIL  =
 				 ToClosure.close_mod,
 				 filename, nilmod)
 
-(*
-            val nilmod = transform(do_reify, show_reify2,
-                                   "Reification2",
-                                   Reify.reify_mod,
-                                   filename, nilmod)
-
-*)
  	    val nilmod = check (typecheck_after_cc,show_typecheck3,
 				    "Nil_typecheck_post-cc",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),

@@ -1,4 +1,4 @@
-(*$import Il Nil NILUTIL NILCONTEXT PPNIL TONIL TOCLOSURE NORMALIZE *)
+(*$import Il Nil NILUTIL NILCONTEXT PPNIL TONIL TOCLOSURE NORMALIZE PASS *)
 
 signature LINKNIL = 
 sig
@@ -9,6 +9,7 @@ sig
 
     structure Ppnil : PPNIL
     structure ToClosure : TOCLOSURE
+    structure Flatten : PASS
 
     val il_to_nil  : string * Il.module -> Nil.module
 
