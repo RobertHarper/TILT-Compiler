@@ -1,0 +1,24 @@
+group is
+
+parsing/stream-sig.sml
+parsing/stream-std.sml
+parsing/pos-sig.sml
+parsing/pos.sml
+parsing/basic-sig.sml
+parsing/basic.sml
+parsing/utils-sig.sml
+parsing/utils.sml
+parsing/tokens-sig.sml
+parsing/tokens.sml
+parsing/stostream.sml
+
+compstamp-sig.sml
+compstamp.sml
+
+gml-sig.sml
+gml.sml
+
+parse-sig.sml
+parse.sml
+
+parsestring.sml
