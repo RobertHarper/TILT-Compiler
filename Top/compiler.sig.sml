@@ -15,4 +15,7 @@ signature COMPILER =
     * label for `initialization' with name `unitName_doit'. 
     *)
 
+   (* up to phase-split; does not generate a file *)
+   val pcompile : context * string * (sbnd option * context_entry) list * context -> unit
+
  end

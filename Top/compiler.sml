@@ -1,5 +1,5 @@
 
-structure Compiler : COMPILER =
+structure Til : COMPILER =
     struct
 	type sbnd = Linknil.Il.sbnd
 	and context_entry = Linknil.Il.context_entry
@@ -33,4 +33,10 @@ structure Compiler : COMPILER =
      * label for `initialization' with name `unitName_doit'. 
      *)
  
+	fun pcompile (ctxt: context, unitName: string, 
+		     sbnd_entries: (sbnd option * context_entry) list , ctxt': context) : unit =
+	    let val sdecs = LinkIl.IlContext.context_to_sdecs ctxt'
+		val nilmod = Linknil.phasesplit(ctxt, sbnd_entries)
+	    in ()
+	    end
     end

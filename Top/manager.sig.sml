@@ -40,5 +40,6 @@
  *)
 
 signature MANAGER = sig
-  val tilc : string list * string list -> unit  (* args * environment vars *)
+  val up_to_phasesplit : bool ref
+  val tilc : string * string list  -> unit  (* mapfile * args  *)
 end
