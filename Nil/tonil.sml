@@ -108,7 +108,7 @@ struct
 	       if (i > n) then 
 		   nil
 	       else
-		   (Ilutil.generate_tuple_label n) :: (loop (i + 1))
+		   (Ilutil.generate_tuple_label i) :: (loop (i + 1))
        in
 	   loop 1
        end
@@ -957,13 +957,26 @@ struct
 			NILctx')
 
 		   val (con1, knd1) = xcon context' il_con1
-		   val args = map (fn v => (v, Type_k Runtime)) vars
+		   val (arg, con1') =
+		       case vars of
+			   [v] => ((v, Type_k Runtime), con1)
+			 | _ => let fun mapper (n,_) = ((Nilutil.generate_tuple_label (n+1),
+							 Name.fresh_var()),Type_k Runtime)
+				    val arg_var = Name.fresh_var()
+				    val arg_kind = Record_k(Util.sequence2list(Listops.mapcount mapper vars))
+				    fun mapper (n,v) = Con_cb(v,Type_k Runtime, 
+							      Proj_c(Var_c arg_var, 
+								     Nilutil.generate_tuple_label (n+1)))
+				    val con1' = Let_c(Sequential,Listops.mapcount mapper vars,con1)
+				in  ((arg_var, arg_kind), con1')
+				end
+
 		   val fun_name = Name.fresh_var ()
 		   val con = Let_c(Sequential,
-				   [Open_cb(fun_name, args, con1, knd1)],
+				   [Open_cb(fun_name, [arg], con1', knd1)],
 				   Var_c fun_name)
 	       in
-		   (con, Arrow_k(Open, args, knd1))
+		   (con, Arrow_k(Open, [arg], knd1))
 	       end
        in
 	   Nilcontext.c_insert_kind_list(NILctx_of context, 
@@ -989,7 +1002,7 @@ struct
 	   val tuple_length = List.length cons
 	   val labels = makeLabels tuple_length
 	   val vars = makeVars tuple_length
-	   val con = Prim_c(Record_c labels, cons)
+	   val con = Crecord_c(Listops.zip labels cons)
 	   val knd = Record_k (Util.list2sequence 
 			       (Listops.zip (Listops.zip labels vars) knds))
        in
@@ -1337,7 +1350,7 @@ struct
        end
 
      | xexp context (Il.CASE {noncarriers, carriers=il_cons, arg=il_arg, arms=il_arms,
-				default=il_default}) =
+			      tipe,default=il_default}) =
        let
 	   val cons = map (#1 o (xcon context)) il_cons
 	   val (exp, _, valuable) = xexp context il_arg
