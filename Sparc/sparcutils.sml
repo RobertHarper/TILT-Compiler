@@ -113,7 +113,7 @@ struct
       let val result =  "\t.proc   07\n"
       in  result
       end
-    | makeAsmHeader _ = ("error: framesize/ra_offset unrealized in UNKNOWN_PROCSIG\n")
+    | makeAsmHeader _ = error "framesize/ra_offset unrealized in UNKNOWN_PROCSIG"
 
   fun msRegList l = 
     let fun doer(r,acc) = acc ^ " " ^ (msReg r)
@@ -139,7 +139,7 @@ struct
 		       localLink "DivFromML",
 		       localLink "OverflowFromML"]
 
-  fun procedureHeader label = ["\t.align 8\n", "\t.global " ^ (msLabel (label)) ^ "\n"]
+  fun procedureHeader label = ["\t.align 8\n"]
   fun procedureTrailer s = ["\t.size " ^ s ^ ",(.-" ^ s ^ ")\n"]
   val textStart = ["\t.text\n"]
   val dataStart = ["\t.data\n\t.align 8\n"]          (* RTL data segment assumes even-word alignment *)

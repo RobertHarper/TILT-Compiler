@@ -10,7 +10,54 @@ Problem:     despite name-mangling, we still get crashes from ld because of mult
 Code:        
 Transcript:  
 Comments:
-Fix:         
+
+	Notation: I write A[x1,...,xn] for a unit named A that exports
+	the list of labels x1,...,xn.  An empty export list is elided
+	as are unit names when they are unimportant.  (I write * when
+	I want to elide both.)  To indicate that unit A imports unit
+	B, I write B <- A.
+
+	We want:
+
+	1. To permit a compilation unit to shadow an imported label;
+	that is, to allow
+
+		[x] <- [x]
+
+	2. To forbid ambiguous imports; that is, to disallow
+
+		[x] <- * -> [x]
+
+	3. To allow
+
+		[x] <- * <- * -> [x]
+
+	and Leaf's closely related example
+
+		[x] <- * <- * -> * -> [x]
+
+	See tests 0010, 0011, and 0012 for concrete examples of (1),
+	(2), and (3), respectively.
+
+	The situation in (3) is not ambiguous because the labels of
+	indirect imports can not appear free in a compilation unit's
+	source code.  The restriction (2) could be lifted by imposing
+	an order on compilation units.  (The mapfile order is an
+	obvious canidate.)
+
+	The current situation is as follows.  The compiler's
+	implementation of (2) is flawed: It bombs on that code.  The
+	compiler implements neither (1) nor (3).  The bug tickled by
+	test m0131 is that (1) is not implemented.
+
+Fix:
+
+	The central idea is to mangle a unit's exported labels with
+	its name.  Thus, if the situation is A[x], the linker sees a
+	global identifier A.x rather than a global identifier x.  This
+	avoids all link-time multiply-defined identifier errors
+	because unit names are unique within a mapfile.
+
 Test: m0131, 0010, 0011, 0012
 Owner: swasey
 Status: open

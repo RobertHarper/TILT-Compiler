@@ -74,19 +74,11 @@ struct
     in	()
     end
 
-  fun wrapper string command = Stats.timer(string,command)
-  val comp = wrapper "To Alpha ASM" comp
-
-  fun rtl_to_asm (base_file, rtlmod) : Rtl.label =
-      let val Rtl.MODULE{main,...} = rtlmod
-	  val _ = comp(base_file, rtlmod)
-      in  main
-      end
+  val rtl_to_asm = Stats.timer("To Alpha ASM",comp)
 
   fun link {asmFile,units} = 
     let val rtlmod = Tortl.entryTables units
-	val _ = rtl_to_asm(asmFile,rtlmod)
-    in  ()
+    in  rtl_to_asm(asmFile,rtlmod)
     end
 
 end
