@@ -16,7 +16,6 @@ sig
     type instr = Rtl.instr
     type data = Rtl.data
     type label = Rtl.label
-    type local_label = Rtl.local_label
     type var = Name.var
     type sv = Rtl.sv
 
@@ -51,12 +50,12 @@ sig
 *)
 
    (* (global) RTL translation state *)
-   val reset_global_state : (var * Nil.label) list * Name.VarSet.set -> unit
-   val reset_state : bool * var -> unit
-   val get_state : unit -> {name : local_label, code : instr list}
+   val reset_global_state : (var * label) list * Name.VarSet.set -> unit
+   val reset_state : bool * (var * label) -> unit
+   val get_code: unit -> instr list
    val set_args_result : (regi list * regf list) * reg * regi -> unit
    val add_proc : Rtl.proc -> unit
-   val exports : Name.label list Name.VarMap.map ref 
+   val exports : Rtl.label list Name.VarMap.map ref 
    val get_mutable_variables : unit -> (label * rep) list
    val get_mutable_objects : unit -> label list
    val pl : Rtl.proc list ref
@@ -82,12 +81,12 @@ sig
    val getrep : state -> var -> var_rep
    val getconvarrep : state -> var -> convar_rep
    val getconvarrep' : state -> var -> convar_rep option
-   val getCurrentFun : unit -> local_label
+   val getCurrentFun : unit -> var * label
    val getLocals : unit -> (regi list * regf list)
    val getArgI : unit -> regi list
    val getArgF : unit -> regf list
    val getResult : unit -> reg
-   val getTop : unit -> local_label
+   val getTop : unit -> label
    val istoplevel : unit -> bool
 
    (* Type reduction and Representation functions *)
@@ -115,9 +114,7 @@ sig
    val alloc_named_regf : var -> regf
    val alloc_reg : state -> con -> reg
    val alloc_named_reg : state -> con * var -> reg
-   val alloc_code_label : string -> local_label
-   val alloc_local_code_label : string -> label
-   val alloc_local_data_label : string -> label
+
 
    (* Routines for adding code and data *)
    val add_instr : instr -> unit

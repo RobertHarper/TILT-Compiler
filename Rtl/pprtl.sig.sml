@@ -8,7 +8,6 @@ sig
    val regi2s : Rtl.regi -> string
    val regf2s : Rtl.regf -> string
    val var2s : Rtl.var -> string
-   val local_label2s : Rtl.local_label -> string
    val label2s : Rtl.label -> string
    val ea2s : Rtl.ea -> string
    val sv2s : Rtl.sv -> string

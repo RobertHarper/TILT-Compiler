@@ -1,5 +1,6 @@
-(*$import RTL RTLTAGS *)
-functor Rtltags() :> RTLTAGS =
+(*$import Rtl RTLTAGS Util *)
+
+structure Rtltags :> RTLTAGS =
 struct
   
     open Rtl

@@ -1,4 +1,4 @@
-(*$import TORTLVARARG TORTL RTL PPRTL TORTLSUM TORTLBASE RTLTAGS NIL NILUTIL PPNIL Stats *)
+(*$import TortlVararg Rtl Pprtl TortlSum TortlBase Rtltags Nil NilUtil Ppnil Stats TORTL *)
 
 (* empty records translate to 256; no allocation *)
 (* to do: strive for VLABEL not VGLOBAL *)
@@ -21,16 +21,7 @@
 *)
    
 
-functor Tortl(structure Pprtl : PPRTL
-	      structure TortlBase : TORTL_BASE 
-	      structure TortlSum : TORTL_SUM
-	      structure TortlVararg : TORTL_VARARG
-	      structure Rtltags : RTLTAGS 
-	      structure NilUtil : NILUTIL
-	      structure Ppnil : PPNIL
-	      sharing Pprtl.Rtltags = Rtltags
-              sharing TortlSum.TortlBase = TortlVararg.TortlBase = TortlBase)
-    :> TORTL =
+structure Tortl :> TORTL =
 struct
 
 val do_constant_records = ref true
@@ -43,6 +34,7 @@ val debug = ref false
 val debug_full_when = ref 99999
 val curfun = ref 0
 fun debug_full() = !debug_full_when <= !curfun
+val debug_full_return = ref false
 val debug_full_env = ref false
 val debug_simp = ref false
 val debug_bound = ref false
@@ -66,8 +58,7 @@ val simplify_type = fn state =>
 *)
 
     val do_vararg = Stats.bool("do_vararg") (* initialized elsewhere *)
-    val show_cbnd = Stats.bool("show_cbnd")
-    val _ = show_cbnd := false
+    val show_cbnd = Stats.ff("show_cbnd")
 
     val exncounter_label = ML_EXTERN_LABEL "exncounter"
     val error = fn s => (Util.error "tortl.sml" s)
@@ -76,15 +67,18 @@ val simplify_type = fn state =>
     val w2i = TW32.toInt
     val i2w = TW32.fromInt;
 
-       val local_sub = Name.fresh_named_var "local_subscript"
-       val local_update = Name.fresh_named_var "local_update"
-       val local_array = Name.fresh_named_var "local_array"
-       val local_sub_used = ref false
-       val local_update_used = ref false
-       val local_array_used = ref false
-       val con_depth = ref 0
-       val exp_depth = ref 0
-       fun resetDepth() = (con_depth := 0;
+    val local_sub = Name.fresh_named_var "local_subscript"
+    val local_update = Name.fresh_named_var "local_update"
+    val local_array = Name.fresh_named_var "local_array"
+
+
+
+    val local_sub_used = ref false
+    val local_update_used = ref false
+    val local_array_used = ref false
+    val con_depth = ref 0
+    val exp_depth = ref 0
+    fun resetDepth() = (con_depth := 0;
 			   exp_depth := 0)
 
       
@@ -134,7 +128,7 @@ val simplify_type = fn state =>
 		  let 
 		      fun folder ((v,f as Function(effect,recur,vklist,_,vclist,vflist,b,c)),s) =
 			  let val funcon = NilUtil.function_type Code f
-			  in  add_code (s, v, funcon, LOCAL_LABEL (LOCAL_CODE v))
+			  in  add_code (s, v, funcon, LOCAL_CODE (Name.var2string v))
 			  end
 		      val var_fun_list = (Sequence.toList var_fun_seq)
 		      val state = foldl folder state var_fun_list
@@ -203,7 +197,7 @@ val simplify_type = fn state =>
 	 | Code_cb (conwork as (name,vklist,c,k)) => 
 			     let val funkind = Arrow_k(Code,vklist,k)
 				 val funcon = Let_c(Sequential,[cbnd],Var_c name)
-				 val l = LOCAL_LABEL(LOCAL_CODE name)
+				 val l = LOCAL_CODE(Name.var2string name)
 				 val state = add_concode "5" (state,name,funkind,NONE, SOME funcon,l)
 				 val s' = promote_maps state
 			     in  (addWork (ConFunWork(s',name,vklist,c,k)); state)
@@ -219,7 +213,7 @@ val simplify_type = fn state =>
 	  open TW64
 	  fun xvector (c,a : exp Array.array) : loc_or_val * con * state =
 	      let 
-		  val label = alloc_local_data_label "string"
+		  val label = fresh_data_label "string"
 		  val sz = Array.length a
 		  val (state,vl) = (Array.foldr (fn (e,(state,vls)) => 
 					 let val (a,b,state) = xexp(state,Name.fresh_var(),e,NONE,NOTID)
@@ -321,6 +315,13 @@ val simplify_type = fn state =>
 	   (VAR_LOC var_loc, c, s) => (load_reg_loc(var_loc,NONE),c, s)
 	 | (VAR_VAL var_val, c, s) => (load_reg_val(var_val,NONE),c, s))
 
+  and xexp_list (state,elist) : loc_or_val list * state = 
+      let fun folder(e,state) = let val (lv,c,s) = xexp(state,fresh_var(),e,NONE,NOTID)
+				in  (lv,s)
+				end
+      in  foldl_acc folder state elist
+      end
+
   and xexp (state : state, (* state of bound variables *)
 	    name  : var, (* Purely for debugging and generation of useful names *)
 	    arg_e : exp,         (* The expression being translated *)
@@ -342,7 +343,7 @@ val simplify_type = fn state =>
 	  val _ = if (!debug)
 		      then (print "xexp ";  print (Int.toString (!exp_depth));
 			    print " returned \n";
-	                    if (debug_full())
+	                    if (debug_full() andalso !debug_full_return)
 				then (print"with con = \n";
 				      Ppnil.pp_con (#2 res);
 				      print "\n")
@@ -481,21 +482,19 @@ val simplify_type = fn state =>
 			  fun direct_call expvar = 
 			      let 
 				  val (vlopt,vvopt,funcon) = getrep state expvar
-			      in  ((case (getCurrentFun()) of
-					LOCAL_CODE v => eq_var(expvar,v)
-				      | _ => false),
-					(case (vlopt,vvopt) of
-					     (NONE,SOME(VCODE l)) => LABEL' l
-					   | (SOME(VREGISTER (_,I r)),_) => REG' r
-					   | (SOME(VGLOBAL (l,_)),_) => 
-						 let val addr = alloc_regi LABEL
-						     val reg = alloc_regi NOTRACE_CODE
-						 in  (add_instr(LADDR(l,0,addr));
-						      add_instr(LOAD32I(EA(addr,0),reg));
-						      REG' reg)
-						 end
-					   | _ => error "bad varloc or varval for function"),
-					     funcon, [], [],state)
+			      in  (Name.eq_var(#1(getCurrentFun()), expvar), 
+				   (case (vlopt,vvopt) of
+					(NONE,SOME(VCODE l)) => LABEL' l
+				      | (SOME(VREGISTER (_,I r)),_) => REG' r
+				      | (SOME(VGLOBAL (l,_)),_) => 
+					    let val addr = alloc_regi LABEL
+						val reg = alloc_regi NOTRACE_CODE
+					    in  (add_instr(LADDR(l,0,addr));
+						 add_instr(LOAD32I(EA(addr,0),reg));
+						 REG' reg)
+					    end
+				      | _ => error "bad varloc or varval for function"),
+					funcon, [], [],state)
 			      end
 
 			  val (selfcall,fun_reglabel,funcon,cregsi',eregs',state) = 
@@ -631,9 +630,9 @@ val simplify_type = fn state =>
 
 
 
-		      val hl = alloc_code_label "exn_handler"
+		      val hl = fresh_code_label "exn_handler"
 		      val hlreg = alloc_regi LABEL
-		      val bl = alloc_code_label "exn_after"
+		      val bl = fresh_code_label "exn_after"
 
 		      val reps = (LABEL :: LABEL :: TRACE :: local_int_reps)
 
@@ -649,7 +648,7 @@ val simplify_type = fn state =>
 		      (* --- create the exn record and set the exnptr to it to install it *)
 		      val int_vallocs = (map (fn ireg => VAR_LOC(VREGISTER(false,I ireg)))
 					 ([hlreg, stackptr,exnptr] @ local_iregs))
-		      val _ = add_instr(LADDR(LOCAL_LABEL hl,0,hlreg))
+		      val _ = add_instr(LADDR(hl,0,hlreg))
 		      val (_,state) = make_record(state,SOME exnptr,reps, int_vallocs)
 			  
 
@@ -739,9 +738,9 @@ val simplify_type = fn state =>
          can be folded into one instruction. *)
       and zero_one (state : state, r : regi, copt : con option, zeroexp, oneexp, context) : loc_or_val * con * state = 
 	  let 
-	      val thenl = alloc_code_label "zero_case"
-	      val elsel = alloc_code_label "one_case"
-	      val afterl = alloc_code_label "after_zeroone"
+	      val thenl = fresh_code_label "zero_case"
+	      val elsel = fresh_code_label "one_case"
+	      val afterl = fresh_code_label "after_zeroone"
 	      val _ = add_instr(BCNDI(NE,r,elsel,false))
 	      val _ = add_instr(ILABEL thenl)
 	      val (zero,zcon,state_zero) = xexp'(state,fresh_named_var "zero_result", zeroexp, copt, context)
@@ -804,7 +803,7 @@ val simplify_type = fn state =>
 		    | ([(0w0,z),(0w1,one)],NONE) => zero_one(state, r, arg_c, z, one, context)
 		    | _ => (* general case *)
 			  let 
-			      val afterl = alloc_code_label "after_intcase"
+			      val afterl = fresh_code_label "after_intcase"
 			      fun scan(states,lab,[]) = 
 				  (add_instr(ILABEL lab);
 				   case default of
@@ -814,7 +813,7 @@ val simplify_type = fn state =>
 					   in  mv(r,c); newstate::states
 					   end)
 				| scan(states,lab,(i,body)::rest) =
-				  let val next = alloc_code_label "intarm"
+				  let val next = fresh_code_label "intarm"
 				      val test = alloc_regi(NOTRACE_INT)
 				  in  add_instr(ILABEL lab);
 				      (if in_imm_range i then
@@ -832,7 +831,7 @@ val simplify_type = fn state =>
 					  scan(newstate::states,next,rest)
 				      end
 				  end
-			      val new_states = scan([],alloc_code_label "intarm",arms)
+			      val new_states = scan([],fresh_code_label "intarm",arms)
 			      val state = join_states new_states
 			  in  
 			      add_instr(ILABEL afterl);
@@ -847,7 +846,7 @@ val simplify_type = fn state =>
 
 		      val exntag = alloc_regi(NOTRACE_INT)
 		      val _ = add_instr(LOAD32I(EA(exnarg,0),exntag))
-		      val afterl = alloc_code_label "after+exncase"
+		      val afterl = fresh_code_label "after+exncase"
 		      fun scan(states,lab,[]) =
 			  (add_instr(ILABEL lab);
 			   case default of
@@ -868,7 +867,7 @@ val simplify_type = fn state =>
 			      val (I armtagi,tagcon,state) = xexp'(state,fresh_var(),armtag,
 								   NONE,NOTID)
 			      val (_,Prim_c(Exntag_c,[c])) = simplify_type state tagcon
-			      val next = alloc_code_label "exnarm"
+			      val next = fresh_code_label "exnarm"
 			      val test = alloc_regi(NOTRACE_INT)
 			      val carried = alloc_reg state c
 			      val carriedi = (case carried of
@@ -885,7 +884,7 @@ val simplify_type = fn state =>
 				  scan(state::states,next,rest)
 			      end
 			  end
-		      val states = scan([],alloc_code_label "exnarm",arms)
+		      val states = scan([],fresh_code_label "exnarm",arms)
 		      val state = join_states states
 		  in  
 		      add_instr(ILABEL afterl);
@@ -915,8 +914,8 @@ val simplify_type = fn state =>
 			end
 		| _ =>
 		  let val (I r,_,state) = xexp'(state,fresh_named_var "sumsw_arg",arg,NONE,NOTID)
-		      val afterl = alloc_code_label "after_sum"
-		      val nomatchl = alloc_code_label "nomatch_sum"
+		      val afterl = fresh_code_label "after_sum"
+		      val nomatchl = fresh_code_label "nomatch_sum"
 		      val one_carrier = (length cons) = 1
 		      val total = TW32.uplus(tagcount, i2w(length cons))
 		      val exhaustive = 
@@ -937,7 +936,7 @@ val simplify_type = fn state =>
 					 in  mv(r,c); state::newstates
 					 end))
 			| scan(newstates,lab,(i,body)::rest) =
-			  let val next = alloc_code_label "sumarm"
+			  let val next = fresh_code_label "sumarm"
 			      val test = alloc_regi(NOTRACE_INT)
 			      val _ = add_instr(ILABEL lab)
 			      val state =
@@ -983,7 +982,7 @@ val simplify_type = fn state =>
 				  scan(state::newstates,next,rest)
 			      end
 			  end
-		      val states = scan([],alloc_code_label "sumarm",arms)
+		      val states = scan([],fresh_code_label "sumarm",arms)
 		      val state = join_states states
 		  in  
 		      add_instr(ILABEL afterl);
@@ -1044,37 +1043,47 @@ val simplify_type = fn state =>
 	       in  (VAR_LOC(VREGISTER(false, I desti)), con, state)
 	       end
 	 | inject_record known => 
-		let fun folder(e,state) = let val (lv,c,s) = xexp(state,fresh_var(),e,NONE,NOTID)
-					  in  (lv,s)
-					  end
-		    val (lvs,state) = foldl_acc folder state elist
-		in  TortlSum.xsum xcon true (state,known,hd clist,lvs)
+		let val (lvs,state) = xexp_list (state,elist)
+		in  TortlSum.xsum_record ((state,known,hd clist),lvs)
+		end
+
+	 | inject_nonrecord known => 
+		let val (lvopt,state) = 
+		    (case elist of
+			 [] => (NONE,state)
+		       | [e] => let val (lv,_,state) = xexp(state,fresh_var(),hd elist,NONE,NOTID)
+				in  (SOME lv,state)
+				end)
+		in  TortlSum.xsum_nonrecord ((state,known,hd clist),lvopt)
 		end
 	 | inject known => 
-		let fun folder(e,state) = let val (lv,c,s) = xexp(state,fresh_var(),e,NONE,NOTID)
-					  in  (lv,s)
-					  end
-		    val (lvs,state) = foldl_acc folder state elist
-		in  TortlSum.xsum xcon false (state,known,hd clist,lvs)
+		let val (e_lv,c,state) = xexp(state,fresh_var(),hd elist,NONE,NOTID)
+		    val (_,c_lv,_,state) = xcon'(state,fresh_var(),hd clist,NONE)
+		in  TortlSum.xsum_dynamic ((state,known,hd clist),c_lv,e_lv)
 		end
 	 | project_sum_record (k,field) => 
-	       let val (base,econ,state) = (case elist of
-					  [e] => let val (r,c,s) = xexp'(state,fresh_var(),e,NONE,NOTID)
-						 in  (coercei "" r, c,s)
-						 end
-					| _ => error' "bad project_sum_record: base")
-	       in  TortlSum.xproject_sum_record (state,TilWord32.toInt k,field,clist,base,econ,NONE)
+	       let val e = hd elist
+		   val (r,econ,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
+		   val base = coercei "" r
+	       in  TortlSum.xproject_sum_record ((state,k,econ),field,clist,base)
+	       end
+
+	 | project_sum_nonrecord k =>
+	       let val sumcon = hd clist
+		   val e = hd elist
+		   val (r,ssumcon,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
+		   val base = coercei "" r
+	       in  TortlSum.xproject_sum_nonrecord ((state,k,sumcon),
+						    base,ssumcon)
 	       end
 
 	 | project_sum k =>
 	       let val sumcon = hd clist
-		   val (base,ssumcon,state) = 
-		         (case elist of
-			      [e] => let val (r,c,s) = xexp'(state,fresh_var(),e,NONE,NOTID)
-				     in  (coercei "" r, c,s)
-				     end
-			    | _ => error' "bad project_sum: elist not of length 1")
-	       in  TortlSum.xproject_sum xcon (state,TilWord32.toInt k,clist,base,ssumcon,NONE)
+		   val e = hd elist
+		   val (er,ssumcon,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
+		   val (cr,_,state) = xcon(state,fresh_var(),sumcon,NONE)
+		   val base = coercei "" er
+	       in  TortlSum.xproject_sum_dynamic ((state,k,sumcon),cr,base)
 	       end
 
 	 | box_float Prim.F64 => 
@@ -1186,11 +1195,7 @@ val simplify_type = fn state =>
 			  print "\n";
 			  error s)
 	  open Prim
-	  val (vlcon_list,state) = 
-	      foldl_list (fn (e,state) => let val (r,c,state) = xexp(state,fresh_var(),e,NONE,NOTID)
-					  in  ((r,c),state)
-					  end) state elist
-	  val vl_list = map #1 vlcon_list
+	  val (vl_list,state) = xexp_list(state,elist)
 	  val int32 = Prim_c(Int_c W32, []) 
 	  val float64 = Prim_c(Float_c F64, []) 
 	  fun xtt int_tt = INT_TT
@@ -1302,20 +1307,6 @@ val simplify_type = fn state =>
 	    | hard_vtrap tt => (add_instr(HARD_VBARRIER(xtt tt)); unit_vvc)
 	    | hard_ztrap tt => (add_instr(HARD_ZBARRIER(xtt tt)); unit_vvc)
 	       
-	    | mk_ref => let val ([vl],[c]) = (vl_list,clist) 
-			in  xarray(state,c,VAR_VAL(VINT 0w1),vl)
-			end
-	    | deref =>  let val ([vl],[c]) = (vl_list,clist)
-			in xsub(state,c,vl,VAR_VAL(VINT 0w0))
-			end
-
-	    | setref => let val ([vl1,vl2],[c]) = (vl_list,clist)
-			in xupdate(state,c,vl1,VAR_VAL(VINT 0w0),vl2)
-			end
-
-	    | eq_ref => let val ([vl1,vl2],[c]) = (vl_list,clist)
-			in  xeqarray(state,c,vl1,vl2)
-			end
 
 	    | float2int => 
 		  let val [vl] = vl_list 
@@ -1587,9 +1578,7 @@ val simplify_type = fn state =>
 		 | (true,Prim_c(Int_c Prim.W8,[])) => nonfloatcase(state, Prim.W8)
 		 | (true,_) => nonfloatcase(state, Prim.W32)
 		 | (false,_) => 
-		     if ((case getCurrentFun() of
-			      LOCAL_CODE v => not(Name.eq_var(local_sub,v))
-			    | _ => false))
+		     (if (not(Name.eq_var(#1(getCurrentFun()), local_sub)))
 			 then 
 			     let val _ = local_sub_used := true
 				 val v1 = Name.fresh_named_var "array"
@@ -1607,10 +1596,10 @@ val simplify_type = fn state =>
                        let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 			   val tmp = alloc_regi NOTRACE_INT
 			   val desti = alloc_regi(con2rep state c)
-			   val afterl = alloc_code_label "sub_after"
-			   val floatl = alloc_code_label "sub_float"
-			   val charl = alloc_code_label "sub_char"
-			   val nonfloatl = alloc_code_label "sub_nonfloat"
+			   val afterl = fresh_code_label "sub_after"
+			   val floatl = fresh_code_label "sub_float"
+			   val charl = fresh_code_label "sub_char"
+			   val nonfloatl = fresh_code_label "sub_nonfloat"
 			   val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
 				    add_instr(BCNDI(NE,tmp,floatl,false));
 				    add_instr(CMPUI(EQ, r, IMM 0, tmp));
@@ -1630,7 +1619,7 @@ val simplify_type = fn state =>
 			   val _ = (add_instr(MV(boxi,desti));
 						  add_instr(ILABEL afterl))
 		       in  (I desti, join_states[w8_state,w32_state,float_state])
-		       end)
+		       end))
       in (VAR_LOC(VREGISTER(false, r)), c, state)
       end
  
@@ -1721,9 +1710,7 @@ val simplify_type = fn state =>
 		 | (true,Prim_c(Int_c is,[])) => (xintupdate(is,vl1,vl2,vl3); state)
 		 | (true,_) => (xptrupdate(c,vl1,vl2,vl3); state)
 		 | (false,_) => (* simplified type may involve variable not in scope *)
-		     if ((case getCurrentFun() of
-			      LOCAL_CODE v => not(Name.eq_var(local_update,v))
-			    | _ => false))
+		     if (not(Name.eq_var(#1(getCurrentFun()), local_update)))
 			 then 
 			     let val _ = local_update_used := true
 				 val v1 = Name.fresh_named_var "array"
@@ -1744,10 +1731,10 @@ val simplify_type = fn state =>
 		     else
 		       let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 			   val tmp = alloc_regi NOTRACE_INT
-			   val afterl = alloc_code_label "update_after"
-			   val floatl = alloc_code_label "update_float"
-			   val intl = alloc_code_label "update_int"
-			   val charl = alloc_code_label "update_char"
+			   val afterl = fresh_code_label "update_after"
+			   val floatl = fresh_code_label "update_float"
+			   val intl = fresh_code_label "update_int"
+			   val charl = fresh_code_label "update_char"
 			   val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
 				    add_instr(BCNDI(NE,tmp,floatl,false));
 				    add_instr(CMPUI(EQ, r, IMM 2, tmp));
@@ -1800,9 +1787,9 @@ val simplify_type = fn state =>
 			state)
 		 | (false,_) => let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 				     val tmp = alloc_regi NOTRACE_INT
-				     val afterl = alloc_code_label "length_after"
-				     val floatl = alloc_code_label "length_float"
-				     val charl = alloc_code_label "length_char"
+				     val afterl = fresh_code_label "length_after"
+				     val floatl = fresh_code_label "length_float"
+				     val charl = fresh_code_label "length_char"
 				 in (add_instr(CMPUI(EQ, r, IMM 11, tmp));
 				     add_instr(BCNDI(NE,tmp,floatl,false));
 				     add_instr(CMPUI(EQ, r, IMM 0, tmp));
@@ -1830,10 +1817,10 @@ val simplify_type = fn state =>
 	    val tmp = alloc_regi(NOTRACE_INT)
 	    val gctemp  = alloc_regi(NOTRACE_INT)
 	    val cmptemp = alloc_regi(NOTRACE_INT)
-	    val fsmall_alloc = alloc_code_label "array_float_smallalloc"
-	    val fafter       = alloc_code_label "array_float_after" 
-	    val fbottom      = alloc_code_label "array_float_bottom"
-	    val ftop         = alloc_code_label "array_float_top"
+	    val fsmall_alloc = fresh_code_label "array_float_smallalloc"
+	    val fafter       = fresh_code_label "array_float_after" 
+	    val fbottom      = fresh_code_label "array_float_bottom"
+	    val ftop         = fresh_code_label "array_float_top"
 	    val v = fr
 	    (* store object tag and profile tag with alignment so that
 	     raw data is octaligned;  then loop through and initialize *)
@@ -1899,8 +1886,8 @@ val simplify_type = fn state =>
 	  val skiptag      = alloc_regi NOTRACE_INT
 	  val tmp          = alloc_regi NOTRACE_INT
 	  val i            = alloc_regi NOTRACE_INT
-	  val gbottom      = alloc_code_label "array_init_bottom"
-	  val gtop         = alloc_code_label "array_init_top"
+	  val gbottom      = fresh_code_label "array_init_bottom"
+	  val gtop         = fresh_code_label "array_init_top"
       in 
 	  (if (not (!HeapProfile))
 	       then
@@ -1977,8 +1964,8 @@ val simplify_type = fn state =>
 					  (loglen,vtemp,NONE)
 				      end)
 		       | Prim.W64 => error "someday")
-		val gafter = alloc_code_label "array_int_after"
-		val ismall_alloc = alloc_code_label "array_int_small"
+		val gafter = fresh_code_label "array_int_after"
+		val ismall_alloc = fresh_code_label "array_int_small"
 	    in  (add_instr(LI(i2w 4096,cmptemp));
 		 add_instr(CMPUI(LE, wordlen, REG cmptemp, cmptemp));
 		 add_instr(BCNDI(NE,cmptemp,ismall_alloc,true));
@@ -2015,8 +2002,8 @@ val simplify_type = fn state =>
 		val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
 		val len = load_ireg_locval(vl1,NONE)
 		val v = load_ireg_locval(vl2,NONE)
-		val gafter = alloc_code_label "array_ptr_aftert"
-		val psmall_alloc = alloc_code_label "array_ptr_alloc"
+		val gafter = fresh_code_label "array_ptr_aftert"
+		val psmall_alloc = fresh_code_label "array_ptr_alloc"
 		val state = new_gcstate state
 	    in  (add_instr(LI((i2w 4096),cmptemp));
 		 add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
@@ -2056,9 +2043,7 @@ val simplify_type = fn state =>
 			       unboxFloat(load_ireg_locval(vl2,NONE)))
 	       | (true,_) => ptrcase(state,dest,vl1,vl2)
 	       | (false,_) => 
-		     if ((case getCurrentFun() of
-			      LOCAL_CODE v => not(Name.eq_var(local_array,v))
-			    | _ => false))
+		     if (not(Name.eq_var(#1(getCurrentFun()), local_array)))
 			 then 
 			     let val _ = local_array_used := true
 				 val v1 = Name.fresh_named_var "size"
@@ -2077,10 +2062,10 @@ val simplify_type = fn state =>
 		     else
 		     let val (r,_,state) = xcon(state,fresh_var(),c, NONE)
 			 val tmp = alloc_regi NOTRACE_INT
-			 val afterl = alloc_code_label "array_after"
-			 val floatl = alloc_code_label "array_float"
-			 val intl = alloc_code_label "array_int"
-			 val charl = alloc_code_label "array_char"
+			 val afterl = fresh_code_label "array_after"
+			 val floatl = fresh_code_label "array_float"
+			 val intl = fresh_code_label "array_int"
+			 val charl = fresh_code_label "array_char"
 			 val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
 				  add_instr(BCNDI(NE,tmp,floatl,false));
 				  add_instr(CMPUI(EQ, r, IMM 2, tmp));
@@ -2371,11 +2356,15 @@ val simplify_type = fn state =>
   
 
   local 
-      fun doconfun is_top (state,name,vklist,body,kind) = 
+      fun doconfun is_top (state,vname,vklist,body,kind) = 
 	  let 
-	      val _ = reset_state(is_top,name)
+	      val name = (case (Name.VarMap.find(!exports,vname)) of
+			      NONE => LOCAL_CODE (Name.var2string vname)
+			    | SOME [] => error "export has no labels"
+			    | SOME (l::_) => l)
+	      val _ = reset_state(is_top, (vname, name))
 	      val _ = if (!debug)
-			  then (print "-----doconfun on "; Ppnil.pp_var name; 
+			  then (print "-----doconfun on "; print (Pprtl.label2s name); 
 				if (debug_full())
 				    then (print " with body\n"; Ppnil.pp_con body)
 				else ();
@@ -2396,13 +2385,8 @@ val simplify_type = fn state =>
 	      val (ir,k,state) = xcon(state,fresh_named_var "result",body,NONE)
 	      val _ = (add_instr(MV(ir,resulti));
 		       add_instr(RETURN return))
-	      val {name=label_name,code} = get_state()
-	      val extern_name = (case (Name.VarMap.find(!exports,name)) of
-			      NONE => NONE
-			    | SOME [] => error "export has no labels"
-			    | SOME (l::_) => SOME (ML_EXTERN_LABEL(Name.label2string l)))
-	      val p = PROC{external_name=extern_name,
-			   name=label_name,
+	      val code = get_code()
+	      val p = PROC{name=name,
 			   return=return,
 			   args=args,
 			   results=results,
@@ -2412,11 +2396,16 @@ val simplify_type = fn state =>
 			   vars=NONE}
 	  in add_proc p
 	  end
-     fun dofun_help is_top (state,name,Function(effect,recur,vklist,_,vclist,vflist,body,con)) = 
+     fun dofun_help is_top (state,vname,Function(effect,recur,vklist,_,vclist,vflist,body,con)) = 
 	  let 
-	      val _ = reset_state(is_top, name)
+	      val name = (case (Name.VarMap.find(!exports,vname)) of
+			      NONE => LOCAL_CODE (Name.var2string vname)
+			    | SOME [] => error "export has no labels"
+			    | SOME (l::_) => l)
+	      val _ = reset_state(is_top, (vname, name))
 	      val _ = if (!debug)
-			  then (print "-----dofun_help : "; Ppnil.pp_var name; print "\n")
+			  then (print "-----dofun_help : "; 
+				print (Pprtl.label2s name); print "\n")
 		      else ()
               fun folder ((v,k),s) = 
 		  let val r = alloc_named_regi v TRACE
@@ -2451,13 +2440,8 @@ val simplify_type = fn state =>
 			       | _ => error "register mismatch")
 	      val _ = (add_instr mvinstr;
 		       add_instr(RETURN return))
-	      val {name=label_name,code} = get_state()
-	      val extern_name = (case (Name.VarMap.find(!exports,name)) of
-			      NONE => NONE
-			    | SOME [] => error "export has no labels"
-			    | SOME (l::_) => SOME (ML_EXTERN_LABEL(Name.label2string l)))
-	      val p = PROC{external_name=extern_name,
-			   name=label_name,
+	      val code = get_code()
+	      val p = PROC{name=name,
 			   return=return,
 			   args=args,
 			   results=results,
@@ -2637,13 +2621,17 @@ val simplify_type = fn state =>
 		   | mapper (exp as ExportType(l,_)) = ((fresh_var(),l),exp)
 	     in  val named_exports = map mapper exports
 	     end
-
+	     val mainVar = Name.fresh_named_var("main_" ^ unitname ^ "_doit")
+	     val mainName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_doit")
 	     val _ = (local_sub_used := false;
 		      local_update_used := false;
 		      local_array_used := false)
 	     val _ = resetDepth()
 	     val _ = resetWork()
-	     val _ = reset_global_state (map #1 named_exports,globals)
+	     fun mapper((v,l),_) = (v, ML_EXTERN_LABEL(Name.label2string l))
+	     val _ = reset_global_state ((mainVar,mainName)::
+					 (map mapper named_exports),
+					 globals)
 
 	     (* we put non-variable exports at the tail of the program;
               creating a main expression to be translated  *)
@@ -2710,14 +2698,12 @@ val simplify_type = fn state =>
 		     else ()
 
 	    (* translate the expression as a function taking no arguments *)
-	     val mainName = Name.construct_var(0,"main_" ^ unitname ^ "_doit")
 	     fun folder (ImportValue(l,v,c),s) = 
-		 (* hack, the imports are not making a distinction between labels
-		    as values (as in the first case) or labels as positions where the value is located *)
+		 (* For extern or C functions, the label IS the value rather than a pointer *)
 		 let val mllab = ML_EXTERN_LABEL(Name.label2string l)
 		     val result = 
 			 (case c of
-			      AllArrow_c(ExternCode,_,_,_,_,_,_) => add_var (s,v,c,NONE,SOME(VCODE mllab))
+			      ExternArrow_c _ => add_var (s,v,c,NONE,SOME(VCODE mllab))
 			    | _ => add_var (s,v,c,SOME(VGLOBAL(mllab,con2rep s c)),NONE))
 		 in  result
 		 end
@@ -2727,10 +2713,9 @@ val simplify_type = fn state =>
 		 in  result
 		 end
 	     val state = foldl folder (make_state()) imports
-	     val PROC{external_name,name,return,args,results,code,known,save,vars} =
-		 dofun_top (state,mainName,Function(Partial,Arbitrary,[],false,[],[],exp,con))
-	     val p' = PROC{external_name=external_name,
-			   name=name,
+	     val p as PROC{name,return,args,results,code,known,save,vars} =
+		 dofun_top (state,mainVar,Function(Partial,Arbitrary,[],false,[],[],exp,con))
+(*	     val p' = PROC{name=name,
 			   return=return,
 			   args=args,
 			   results=([],[]),
@@ -2738,7 +2723,8 @@ val simplify_type = fn state =>
 			   known=known,
 			   save=save,
 			   vars=vars}
-	     val _ = add_proc p'
+	     val _ = add_proc p' *)
+	     val _ = add_proc p
 
 	     val _ = if (!debug)
 			 then print "tortl - calling worklist now\n"
@@ -2753,12 +2739,14 @@ val simplify_type = fn state =>
 
 	     val procs = let fun revFilter acc [] = acc
 			       | revFilter acc ((a as PROC{name,...})::b) = 
-		                   let val v = (case name of
-						    LOCAL_CODE v => v
-						  | LOCAL_DATA v => v)
-				       val is_sub = Name.eq_var(local_sub,v) 
-				       val is_update = Name.eq_var(local_update,v) 
-				       val is_array = Name.eq_var(local_array,v) 
+		                   let 
+				       (* due to alpha-variance of variables, labels must be generated each time *)
+				       val local_sub_label = LOCAL_CODE (Name.var2string local_sub)
+				       val local_update_label = LOCAL_CODE (Name.var2string local_update)
+				       val local_array_label = LOCAL_CODE (Name.var2string local_array)
+				       val is_sub = Rtl.eq_label(name,local_sub_label)
+				       val is_update = Rtl.eq_label(name,local_update_label)
+				       val is_array = Rtl.eq_label(name,local_array_label)
 				       val discard = (is_sub andalso  not (!local_sub_used))
 					   orelse (is_update andalso  not (!local_update_used))
 					   orelse (is_array andalso  not (!local_array_used))
@@ -2771,7 +2759,7 @@ val simplify_type = fn state =>
 
 	     val module = Rtl.MODULE {procs = procs,
 				      data = rev(!dl),
-				      main=LOCAL_CODE mainName,
+				      main= mainName,
 				      mutable_objects = get_mutable_objects(),
 				      mutable_variables = get_mutable_variables()}
 

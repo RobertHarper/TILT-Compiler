@@ -1,17 +1,12 @@
-(*$import TORTL TORTLVARARG RTL PPRTL TORTLBASE RTLTAGS NIL NILUTIL PPNIL Stats *)
+(*$import TORTLVARARG Rtl Pprtl TortlBase Rtltags Nil NilUtil Ppnil Stats *)
 
 (* ASSUMPTIONS and GUARANTEES:
 *)
 	
 
+val number_flatten = 6
 
-functor TortlVararg(val number_flatten : int
-		    structure Pprtl : PPRTL
-		    structure TortlBase : TORTL_BASE 
-		    structure Rtltags : RTLTAGS 
-		    structure NilUtil : NILUTIL
-		    structure Ppnil : PPNIL
-		    sharing Pprtl.Rtltags = Rtltags)
+structure TortlVararg
     :> TORTL_VARARG where TortlBase = TortlBase
 =
 struct
@@ -147,10 +142,10 @@ val debug_full = ref false
 	end
 
     fun xmake_vararg xexp (state,argc,resc,function) = 
-	let val noflattenl = alloc_code_label "noflatten"
-	    val afterl = alloc_code_label "vararg_after"
-	    val flattenl = alloc_code_label "flatten"
-	    val recordlabs = map0count (fn n => alloc_code_label ("vararg_record" ^ (Int.toString n)))
+	let val noflattenl = fresh_code_label "noflatten"
+	    val afterl = fresh_code_label "vararg_after"
+	    val flattenl = fresh_code_label "flatten"
+	    val recordlabs = map0count (fn n => fresh_code_label ("vararg_record" ^ (Int.toString n)))
 					(number_flatten + 1)
 	    val tmp = alloc_regi NOTRACE_INT
 	    val desti = alloc_regi TRACE
@@ -206,10 +201,10 @@ val debug_full = ref false
 	end
 
     fun xmake_onearg xexp (state,argc,resc,function) = 
-	let val noflattenl = alloc_code_label "noflatten"
-	    val afterl = alloc_code_label "onearg_after"
-	    val flattenl = alloc_code_label "flatten"
-	    val recordlabs = map0count (fn n => alloc_code_label ("onearg_record" ^ (Int.toString n)))
+	let val noflattenl = fresh_code_label "noflatten"
+	    val afterl = fresh_code_label "onearg_after"
+	    val flattenl = fresh_code_label "flatten"
+	    val recordlabs = map0count (fn n => fresh_code_label ("onearg_record" ^ (Int.toString n)))
 					(number_flatten + 1)
 	    val tmp = alloc_regi NOTRACE_INT
 	    val desti = alloc_regi TRACE

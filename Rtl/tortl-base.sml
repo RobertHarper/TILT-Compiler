@@ -1,13 +1,6 @@
-(*$import RTL PPRTL RTLTAGS NIL NILCONTEXT NILUTIL PPNIL TORTLBASE Listops Stats Bool NORMALIZE *)
+(*$import Rtl Pprtl Rtltags Nil NilContext NilUtil Ppnil Normalize TORTLBASE Listops Stats Bool *)
 
-functor TortlBase(structure Pprtl : PPRTL 
-		  structure Rtltags : RTLTAGS 
-		  structure NilContext : NILCONTEXT
-		  structure Normalize : NORMALIZE
-		  structure NilUtil : NILUTIL
-		  structure Ppnil : PPNIL
-		  sharing Pprtl.Rtltags = Rtltags
-		  sharing type NilContext.context = Normalize.context)
+structure TortlBase
     :> TORTL_BASE 
    =
 struct
@@ -20,11 +13,10 @@ val do_single_crecord = ref true
 
 
 val diag = ref true
-val debug = ref false
+val debug = Stats.ff("TortlBaseDebug")
 val debug_full = ref false
 val debug_full_env = ref false
-val debug_simp = Stats.bool("tortl_base_debug_simp")
-val _ = debug_simp := false
+val debug_simp = Stats.ff("tortl_base_debug_simp")
 
 val debug_bound = ref false
 
@@ -102,7 +94,7 @@ val debug_bound = ref false
    ------------------------------------------------------------- *)
 
    exception NotFound
-   val exports = ref (Name.VarMap.empty : (Name.label list) Name.VarMap.map)
+   val exports = ref (Name.VarMap.empty : (Rtl.label list) Name.VarMap.map)
    val globals = ref VarSet.empty
    val dl : Rtl.data list ref = ref nil
    val pl : Rtl.proc list ref = ref nil
@@ -137,16 +129,9 @@ val debug_bound = ref false
    end
    fun add_proc p = pl := p :: !pl
 
-  fun alloc_code_label s = LOCAL_CODE(fresh_named_var s)
-  fun alloc_data_label s = LOCAL_DATA(fresh_named_var s)
-  fun alloc_local_code_label s = LOCAL_LABEL(alloc_code_label s)
-  fun alloc_local_data_label s = LOCAL_LABEL(alloc_data_label s)
-  fun named_local_data_label v = LOCAL_LABEL(LOCAL_DATA v)
-  fun named_local_code_label v = LOCAL_LABEL(LOCAL_CODE v)
 
-
-
-  fun type_of ({env,...}:state) e = Normalize.type_of(env,e)
+  fun type_of ({env,...}:state) e = 
+      Stats.subtimer("RTL_typeof",Normalize.type_of)(env,e)
 
   val codeAlign = ref (Rtl.OCTA)
   fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
@@ -267,10 +252,13 @@ val debug_bound = ref false
        or false and a type not in head-normal form 
        in either case, the returned type is possibly simpler than the argument type *)
 
-    fun get_shape ({env,...} : state) c = Normalize.get_shape env c
-    fun make_shape ({env,...} : state) k = Normalize.make_shape env k
+    fun get_shape ({env,...} : state) c = Stats.subtimer("RTL_getshape",
+							 Normalize.get_shape env) c
+    fun make_shape ({env,...} : state) k = Stats.subtimer("RTL_makeshape",
+							  Normalize.make_shape env) k
     fun simplify_type ({env,...} : state) con : bool * con = 
-	let val result = Normalize.reduce_hnf(env,con)
+	let val result = Stats.subtimer("RTL_reduce_hnf",
+					Normalize.reduce_hnf)(env,con)
 	    val _ = if (!debug_simp)
 		    then (print "simplify on\n";  Ppnil.pp_con con;
 			  print "\nreduced to\n"; Ppnil.pp_con (#2 result);
@@ -280,16 +268,9 @@ val debug_bound = ref false
 	end
 
   fun reduce_to_sum str ({env,...}:state) sumcon = 
-	  (Normalize.reduceToSumtype(env,sumcon))
-	  handle e => (print "reduce_to_sum "; print str; print " failed\n"; raise e)
-
-(*
-val simplify_type = fn state => 
-	Stats.subtimer("tortl_simplify_type",simplify_type state)
-*)
-
-
-
+      (Stats.subtimer("RTL_reduceToSum",Normalize.reduceToSumtype)
+       (env,sumcon))
+      handle e => (print "reduce_to_sum "; print str; print " failed\n"; raise e)
 
 
 
@@ -307,7 +288,7 @@ val simplify_type = fn state =>
 	     | (Array_c , _) => SOME TRACE
 	     | (Vector_c , _) => SOME TRACE
 	     | (Ref_c , _) => SOME TRACE
-	     | (Exntag_c , _) => SOME TRACE
+	     | (Exntag_c , _) => SOME NOTRACE_INT
 	     | ((Sum_c _) , _) => SOME TRACE
 	     | ((Record_c _) , _) => SOME TRACE
 	     | ((Vararg_c _), _) => SOME TRACE
@@ -357,8 +338,8 @@ val simplify_type = fn state =>
 		       in  loop acc con rest
 		       end
 		     | loop acc (Singleton_k c) labs = 
-		       let val k = (* Stats.subtimer("tortl_get_shape0" *)
-	 				Normalize.get_shape (#env state) c
+		       let val k = Stats.subtimer("RTLgetshape0",
+	 				Normalize.get_shape (#env state)) c
 		       in  loop acc k labs
 		       end
 		     | loop acc _ labs = error "expect record kind"
@@ -468,8 +449,9 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 
    local
        val istop : bool ref = ref false
-       val top : local_label ref = ref (alloc_code_label "dummy_top")
-       val currentfun : local_label ref = ref (alloc_code_label "dummy_fun")
+       val top : label ref = ref (LOCAL_CODE "dummy_top")
+       val currentfun : (var * label) ref = ref (fresh_named_var "dummy_fun",
+					       LOCAL_CODE "dummy_fun")
        val resultreg : reg ref = ref (F(REGF(fresh_named_var "badreg",NOTRACE_REAL)))
        val il : (Rtl.instr ref) list ref = ref nil
        val localregi : regi list ref = ref nil
@@ -593,10 +575,10 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 			      F fr => fr :: fargs
 			    | _ => fargs))
 
-       fun reset_state (is_top,name) = 
+       fun reset_state (is_top,names) = 
 	   (istop := is_top;
-	    currentfun := LOCAL_CODE name;
-	    top := alloc_code_label "funtop";
+	    currentfun := names;
+	    top := fresh_code_label "funtop";
 	    il := nil; 
 	    do_code_align();
 	    add_instr(ILABEL (!top)))
@@ -616,11 +598,10 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		pl := nil;
 		reset_mutable_objects();
 		reset_mutable_variables();
-		reset_state(false,fresh_var()))
+		reset_state(false,(fresh_named_var "code", fresh_code_label "code")))
 	   end
 
-       fun get_state() = {name = !currentfun,
-			  code = map ! (rev (!il))}
+       fun get_code() = map ! (rev (!il))
    end
 	   
 
@@ -814,7 +795,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	 add_data(FLOAT (r)))
 	
     fun mk_float_data (r : string) : label =
-	let val label = alloc_local_data_label "floatdata"
+	let val label = fresh_data_label "floatdata"
 	    val _ = mk_named_float_data (r,label)
 	in label
 	end
@@ -953,15 +934,13 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	val (label_opt,labels) = 
 	    (case (Name.VarMap.find(!exports,v)) of
 		 SOME [] => error "no label for export"
-	       | SOME (first::rest) => 
-		     (SOME(ML_EXTERN_LABEL(Name.label2string first)),
-		      map (fn l => ML_EXTERN_LABEL(Name.label2string l)) rest)
+	       | SOME (first::rest) => (SOME first, rest)
 	       | NONE => (NONE,[]))
 
 	val (label_opt,vv_opt) = 
 	    (case (lv,label_opt) of
                (VAR_VAL vv, NONE) => (NONE,SOME vv)
-	     | (_, NONE) => (SOME(LOCAL_LABEL(LOCAL_DATA v)),NONE)
+	     | (_, NONE) => (SOME(LOCAL_DATA (Name.var2string v)),NONE)
 	     | (VAR_VAL vv, SOME _) => (label_opt, SOME vv)
 	     | (_, SOME _) => (label_opt, NONE))
 
@@ -1029,14 +1008,12 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	val (label_opt,labels) = 
 	    (case (Name.VarMap.find(!exports,v)) of
 		 SOME [] => error "no label for export"
-	       | SOME (first::rest) => 
-		     (SOME(ML_EXTERN_LABEL(Name.label2string first)),
-		      map (fn l => ML_EXTERN_LABEL(Name.label2string l)) rest)
+	       | SOME (first::rest) => (SOME first, rest)
 	       | NONE => (NONE,[]))
 	val (label_opt,vv_opt) = 
 	    (case (lv,label_opt) of
                (VAR_VAL vv, NONE) => (NONE,SOME vv)
-	     | (_, NONE) => (SOME(named_local_data_label v),NONE)
+	     | (_, NONE) => (SOME(LOCAL_DATA (Name.var2string v)),NONE)
 	     | (VAR_VAL vv, SOME _) => (label_opt, SOME vv)
 	     | (_, SOME _) => (label_opt, NONE))
       val state' = add_convar str (state,v,kind,kshape_opt,
@@ -1255,7 +1232,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		| _ => let val r = load_ireg_locval(vl,NONE)
 		       in  if const 
 			       then 
-				   let val fieldl = alloc_local_data_label "var_loc"
+				   let val fieldl = fresh_data_label "var_loc"
 				       val addr = alloc_regi LABEL
 				   in  (add_data(DLABEL fieldl);
 					add_data(INT32 0w49);
@@ -1313,7 +1290,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
       val offset = scantags(offset,tagwords);
       val (result,templabelopt) = 
 	  if const
-	      then let val label = alloc_local_data_label "record"
+	      then let val label = fresh_data_label "record"
 		   in  (
 			add_mutable_object label; 
 			add_data(DLABEL label);

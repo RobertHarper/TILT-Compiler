@@ -1,4 +1,4 @@
-(*$import LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32 Rtl RtlTags Pprtl TortlVararg *)
+(*$import LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32 Rtl Rtltags Pprtl TortlVararg *)
 
 structure Linkrtl :> LINKRTL =
 struct
@@ -6,43 +6,13 @@ struct
     val show_rtl = ref false
     val error = fn x => Util.error "Linkrtl." x
 
-    structure Rtltags = Rtltags()
+    structure Rtltags = Rtltags
+    structure Pprtl = Pprtl
+    structure TortlBase = TortlBase
+    structure TortlSum = TortlSum
+    structure TortlVararg = TortlVararg
+    structure Tortl = Tortl
 
-    structure Pprtl = Pprtl(structure Rtltags = Rtltags)
-    
-    structure TortlBase = TortlBase(
-			    structure NilContext = Linknil.NilContext
-			    structure Normalize = Linknil.Normalize
-			    structure Pprtl = Pprtl
-			    structure Rtltags = Rtltags
-			    structure NilUtil = Linknil.NilUtil
-			    structure Ppnil = Linknil.PpNil)
-
-    structure TortlSum = TortlSum(
-			    structure NilContext = Linknil.NilContext
-			    structure Pprtl = Pprtl
-			    structure TortlBase = TortlBase
-			    structure Rtltags = Rtltags
-			    structure NilUtil = Linknil.NilUtil
-			    structure Ppnil = Linknil.PpNil)
-
-    structure TortlVararg = TortlVararg(val number_flatten = 6
-					structure NilContext = Linknil.NilContext
-					structure Pprtl = Pprtl
-					structure TortlBase = TortlBase
-					structure Rtltags = Rtltags
-					structure NilUtil = Linknil.NilUtil
-					structure Ppnil = Linknil.PpNil)
-
-    structure Tortl = Tortl(
-			    structure NilContext = Linknil.NilContext
-			    structure Pprtl = Pprtl
-			    structure TortlBase = TortlBase
-			    structure TortlSum = TortlSum
-			    structure TortlVararg = TortlVararg
-			    structure Rtltags = Rtltags
-			    structure NilUtil = Linknil.NilUtil
-			    structure Ppnil = Linknil.PpNil)
 
 (*
     structure Rtlopt = MakeRtlopt(structure Pprtl = Pprtl)

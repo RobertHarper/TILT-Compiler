@@ -1,6 +1,6 @@
-(*$import RTL RTLTAGS Formatter PPRTL TextIO *)
-functor Pprtl(structure Rtltags : RTLTAGS)
-	      :> PPRTL =
+(*$import PPRTL Rtl Rtltags Formatter TextIO *)
+
+structure Pprtl :> PPRTL =
 struct
 
   structure Rtltags = Rtltags
@@ -51,11 +51,10 @@ struct
   fun pp_var' v = String (var2s v)
   fun bool2s true = "true"
     | bool2s false = "false"
-  fun local_label2s (LOCAL_CODE l) = "C" ^ var2s l
-    | local_label2s (LOCAL_DATA l) = "D" ^ var2s l
   fun label2s (ML_EXTERN_LABEL s) = "ML "^s
     | label2s (C_EXTERN_LABEL s) = "C "^s
-    | label2s (LOCAL_LABEL ll) = "L"^local_label2s ll
+    | label2s (LOCAL_CODE s) = "LC" ^ s
+    | label2s (LOCAL_DATA s) = "LD" ^ s
   fun rep2s TRACE  = "(TRACE)"
     | rep2s UNSET = "(UNSET)"
     | rep2s NOTRACE_INT = "(NOTRACE_INT)"
@@ -218,35 +217,35 @@ struct
 	      | EXP  a => op2f "exp" a
 	      | LN   a => op2f "ln" a
 	      | CMPF (cmp,r,v,dest) => opffi (cmpf2s cmp) (r,v,dest)
-              | BR l => String("br "^local_label2s l)
+              | BR l => String("br "^label2s l)
               | BCNDI (cmp,regi,dest,pred) =>
 		    plain("b"^(cmpi2s cmp true) ::
 			  regi2s regi ::
-			  local_label2s dest ::
+			  label2s dest ::
 			  (if !predicted then [pred2s pred]
 			   else nil))
               | BCNDF (cmp,regf,dest,pred) =>
 		    plain("br"^cmpf2s cmp ::
 			  regf2s regf ::
-			  local_label2s dest ::
+			  label2s dest ::
 			  (if !predicted then [pred2s pred]
 			  else nil))
               | BCNDI2 (cmp,regi1,sv2,dest,pred) =>
 		    plain("b"^(cmpi2s cmp true)^"2" ::
 			  regi2s regi1 ::
 			  sv2s sv2 ::
-			  local_label2s dest ::
+			  label2s dest ::
 			  (if !predicted then [pred2s pred]
 			   else nil))
               | BCNDF2 (cmp,regf1,regf2,dest,pred) =>
 		    plain("br"^(cmpf2s cmp)^"2" ::
 			  regf2s regf1 ::
 			  regf2s regf2 ::
-			  local_label2s dest ::
+			  label2s dest ::
 			  (if !predicted then [pred2s pred]
 			  else nil))
               | JMP (r,labels) => Hbox [String ("jmp "^regi2s r),
-					pp_List' (String o local_label2s) labels]
+					pp_List' (String o label2s) labels]
               | CALL {extern_call, func,return : regi option,args=(ia,fa),
 			results=(ir,fr),tailcall,save} =>
 		   HOVbox0 1 15 1
@@ -273,7 +272,7 @@ struct
 			String (bool2s tailcall),
 			String "}"]
               | RETURN r => plain["return", regi2s r]
-	      | SAVE_CS  l => String ("save_cs"^local_label2s l)
+	      | SAVE_CS  l => String ("save_cs"^label2s l)
               | END_SAVE => String "end save"
 	      | RESTORE_CS => String "restore_cs"
 	      | LOAD32I a       => op2li "ldl" a
@@ -297,7 +296,7 @@ struct
 	      | (HARD_ZBARRIER tt) => String ("hard_zbarrier" ^ (tt2s tt))
 	      | HANDLER_ENTRY    => String "handler_entry"
 	      | IALIGN x        => String (".align "^align2s x)
-	      | ILABEL l        => String (local_label2s l^":")
+	      | ILABEL l        => String (label2s l^":")
 	      | HALT            => String ("halt")
 	      | ICOMMENT s => String ("### " ^ s)
 
@@ -342,16 +341,12 @@ struct
       in  pp_Array' pp_Instr'' code
       end
 
-  fun pp_Proc' (PROC{external_name,name,return,args,results,code,known,save,vars}) =
+  fun pp_Proc' (PROC{name,return,args,results,code,known,save,vars}) =
       (if !DEBUG then
 	    (print "laying out procedure "; 
-	     print (label2s (LOCAL_LABEL name)); print "\n")
+	     print (label2s name); print "\n")
       else ();
-	   Vbox0 0 1 [String(label2s (LOCAL_LABEL name)),
-		      Break,
-		      String(case external_name of
-				 NONE => ""
-			       | SOME l => "(EXTERN = " ^ (label2s l) ^ ")"),
+	   Vbox0 0 1 [String(label2s name),
 		      Break,
 		      Hbox[String "     ", HOVbox[String "args = ",pp_RegPair' args]],
 		      Break,
@@ -373,7 +368,7 @@ struct
 	   
   fun pp_Module' (MODULE{procs,data,main,mutable_objects,mutable_variables}) =
       Vbox0 0 1 ([Break,
-		 String ("main = "^label2s (LOCAL_LABEL main)),
+		 String ("main = "^(label2s main)),
 		 Break, Break]
 		 @ 
 		 (separate Break (map pp_Proc' procs))

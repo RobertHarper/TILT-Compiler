@@ -3,19 +3,16 @@ signature RTL =
 sig
 
   type var = Name.var
-  datatype local_label = LOCAL_DATA of var 
-                       | LOCAL_CODE of var
-
   datatype label = ML_EXTERN_LABEL of string  
                  | C_EXTERN_LABEL of string
-                 | LOCAL_LABEL of local_label
+                 | LOCAL_DATA of string
+                 | LOCAL_CODE of string
 
-  val named_data_label : string -> local_label
-  val named_code_label : string -> local_label
-  val eq_locallabel : local_label * local_label -> bool
   val eq_label : label * label -> bool
-  val fresh_data_label : unit -> local_label
-  val fresh_code_label : unit -> local_label
+  val named_data_label : string -> label
+  val named_code_label : string -> label
+  val fresh_data_label : string -> label
+  val fresh_code_label : string -> label
 
   (* ML externs are addresses of values
      C externs are addresses which _are_ values;
@@ -149,16 +146,16 @@ sig
 
     (* jumps and branches *)
 
-    | BR     of local_label
+    | BR     of label
 
     (* BCNDI, BCNDF: compare against 0 and branch.  bool = whether
        predicted taken or not *)
 
-    | BCNDI2  of cmp * regi * sv * local_label * bool  
-    | BCNDF2  of cmp * regf * regf * local_label * bool
-    | BCNDI   of cmp * regi * local_label * bool  
-    | BCNDF   of cmp * regf * local_label * bool
-    | JMP    of regi * local_label list 
+    | BCNDI2  of cmp * regi * sv * label * bool  
+    | BCNDF2  of cmp * regf * regf * label * bool
+    | BCNDI   of cmp * regi * label * bool  
+    | BCNDF   of cmp * regf * label * bool
+    | JMP    of regi * label list 
                          (* label list includes set of possible destinations.
 			    These destinations must all be within the same
 			    procedure as this jump.*)
@@ -228,7 +225,7 @@ sig
        The code for a handler restores the integer registers
        and fp registers, including the exnptr and stackptr.*)
 
-    | SAVE_CS of local_label
+    | SAVE_CS of label
     | END_SAVE
     | RESTORE_CS 
 
@@ -258,7 +255,7 @@ sig
     | HARD_ZBARRIER of traptype
     | HANDLER_ENTRY          (* mark beginning of handler, which is target
 			        of an interprocedural jump *)
-    | ILABEL of local_label
+    | ILABEL of label
     | IALIGN of align       (* alignment of blocks *)
     | HALT                  (* needed for termination of main *)    
     | ICOMMENT of string
@@ -287,8 +284,7 @@ sig
      _save is what registers this procedure will use
 	so the first action upon entry is to save these regs
   *)
-  datatype proc = PROC of {external_name: label option,
-			   name : local_label,
+  datatype proc = PROC of {name : label,
 			   return : regi,
 			   args : regi list * regf list ,
 			   results : regi list * regf list,
@@ -326,7 +322,7 @@ sig
   datatype module = MODULE of
                           {procs : proc list,
 			   data : data list,
-			   main : local_label,
+			   main : label,
 			   mutable_objects : label list,
 			   mutable_variables : (label * rep) list}
 

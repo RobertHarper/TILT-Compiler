@@ -12,11 +12,10 @@ struct
     val fresh_var = Name.fresh_var
     val fresh_named_var = Name.fresh_named_var
 
-    datatype local_label = LOCAL_DATA of var 
-                         | LOCAL_CODE of var
     datatype label = ML_EXTERN_LABEL of string
                    | C_EXTERN_LABEL of string
-                   | LOCAL_LABEL of local_label
+                   | LOCAL_DATA of string
+                   | LOCAL_CODE of string
 
   datatype sregi = HEAPPTR | HEAPLIMIT | EXNPTR | EXNARG | STACKPTR
   datatype regi = REGI of var * rep  (* int in var is register # *)
@@ -35,17 +34,15 @@ struct
           | LOCATIVE
           | COMPUTE of rep_path
 
-  fun named_code_label s = LOCAL_CODE(fresh_named_var s)
-  fun named_data_label s = LOCAL_DATA(fresh_named_var s)
-  fun eq_locallabel (LOCAL_DATA v1, LOCAL_DATA v2) = eq_var(v1,v2)
-    | eq_locallabel (LOCAL_CODE v1, LOCAL_CODE v2) = eq_var(v1,v2)
-    | eq_locallabel (_,_) = false
   fun eq_label (ML_EXTERN_LABEL s1, ML_EXTERN_LABEL s2) = s2 = s1
     | eq_label (C_EXTERN_LABEL s1, C_EXTERN_LABEL s2) = s2 = s1
-    | eq_label (LOCAL_LABEL ll1, LOCAL_LABEL ll2) = eq_locallabel(ll1,ll2)
+    | eq_label (LOCAL_DATA s1, LOCAL_DATA s2) = s1 = s2
+    | eq_label (LOCAL_CODE s1, LOCAL_CODE s2) = s1 = s2
     | eq_label (_,_) = false
-  fun fresh_data_label () = LOCAL_DATA(fresh_var())
-  fun fresh_code_label () = LOCAL_CODE(fresh_var())
+  fun named_code_label s = LOCAL_CODE s
+  fun named_data_label s = LOCAL_DATA s
+  fun fresh_data_label s = LOCAL_DATA(Name.var2string(fresh_named_var s))
+  fun fresh_code_label s = LOCAL_CODE(Name.var2string(fresh_named_var s))
 
   fun eqsregi(a : sregi, b) = a = b
   fun eqregi (REGI(v,_),REGI(v',_)) = eq_var(v,v')
@@ -142,16 +139,16 @@ struct
 
     (* jumps and branches *)
 
-    | BR     of local_label
+    | BR     of label
 
     (* BCNDI, BCNDF: compare against 0 and branch.  bool = whether
        predicted taken or not; the comparison is signed  *)
 
-    | BCNDI2  of cmp * regi * sv  * local_label * bool  (* signed *)
-    | BCNDF2  of cmp * regf * regf * local_label * bool
-    | BCNDI   of cmp * regi * local_label * bool  
-    | BCNDF   of cmp * regf * local_label * bool
-    | JMP    of regi * local_label list
+    | BCNDI2  of cmp * regi * sv  * label * bool  (* signed *)
+    | BCNDF2  of cmp * regf * regf * label * bool
+    | BCNDI   of cmp * regi * label * bool  
+    | BCNDF   of cmp * regf * label * bool
+    | JMP    of regi * label list
 
     (* procedure call and return: these are "heavyweight" operations in
        this machine.   This avoids over-constraining register allocation.*)
@@ -170,7 +167,7 @@ struct
 
     (* see signature for comments *)
 
-    | SAVE_CS of local_label
+    | SAVE_CS of label
     | END_SAVE
     | RESTORE_CS
 
@@ -192,7 +189,7 @@ struct
     | HARD_ZBARRIER of traptype
 
     | HANDLER_ENTRY
-    | ILABEL of local_label
+    | ILABEL of label
     | IALIGN of align
     | HALT
     | ICOMMENT of string
@@ -218,8 +215,7 @@ struct
 
 
   (* see sig for comments *)
-  datatype proc = PROC of {external_name : label option,
-			   name : local_label,
+  datatype proc = PROC of {name : label,
 			   return : regi,
 			   args : regi list * regf list ,
 			   results : regi list * regf list,
@@ -231,7 +227,7 @@ struct
   datatype module = MODULE of
                           {procs : proc list,
 			   data : data list,
-			   main : local_label,
+			   main : label,
 			   mutable_objects : label list,
 			   mutable_variables : (label * rep) list}
 
