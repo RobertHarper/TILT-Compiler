@@ -123,7 +123,7 @@ that file are specified. When both files are present, they are
 elaborated together in a context built up from both sets of units.
 
 The dependencies specified for a unit's external interface file and
-it's implementation file may be disjoint. For example,
+its implementation file may be disjoint. For example,
 
 	--- implementation: dependencies are SplayTree, MAP, ... ---
 
