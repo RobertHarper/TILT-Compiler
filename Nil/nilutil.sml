@@ -34,6 +34,7 @@ struct
   val unit_con = con_tuple []
   val unit_exp = exp_tuple []
   val bool_con = Prim_c(Sum_c{tagcount=0w2,known=NONE},[])
+  val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
   val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
   val match_exn = Prim_e(NilPrimOp inj_exn,[unit_con],[match_tag,unit_exp])
   val false_exp = Prim_e(NilPrimOp roll, [bool_con], [Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w0}),[],[])])
@@ -202,20 +203,22 @@ struct
 		       App_c (cfun', actuals')
 		   end
 	       
-	     | Typecase_c {arg, arms, default} => 
-		   let fun doarm(pc,vklist,c,k) =   
+	     | Typecase_c {arg, arms, default, kind} => 
+		   let fun doarm(pc,vklist,c) =   
 		       let fun folder((v,k),(vklist,s)) = 
 			   let val k' = f_kind state k
 			       val s' = add_convar (s,v,k')
 			   in  ((v,k')::vklist,s')
 			   end
 			   val (rev_vklist',state') = foldl folder ([],state) vklist
-		       in  (pc, rev rev_vklist', f_con state' c, f_kind state k)
+		       in  (pc, rev rev_vklist', f_con state' c)
 		       end
 		       val arms' = map doarm arms
+		       val kind' = f_kind state kind
 		   in  Typecase_c{arg = self arg,
 				  arms = arms',
-				  default = Util.mapopt self default}
+				  default = self default,
+				  kind = kind'}
 		   end
 
 	     | (Annotate_c (annot,con)) => 
@@ -242,7 +245,7 @@ struct
 	(openness, effect, knds', cons', numfloat, result')
     end
 
-  and f_kind (state : state) (kind : kind) = 
+  and f_kind (state : state) (arg_kind : kind) = 
     let 
       val self = f_kind state
       val (STATE{bound,kindhandler,...}) = state
@@ -262,7 +265,7 @@ struct
 
 	     | (Record_k fieldseq) =>
 	      let
-		fun fold_one (((lbl,var),knd),state) = 
+		fun fold_one (((lbl,var),kind),state) = 
 		  let
 		    val kind'  = self kind
 		    val state' = add_convar (state,var, kind')
@@ -284,10 +287,10 @@ struct
 	      end)
 
     in
-      case (kindhandler (bound,kind)) of
+      case (kindhandler (bound,arg_kind)) of
 	CHANGE_NORECURSE k => k
       | CHANGE_RECURSE k => dokind k
-      | NOCHANGE => dokind kind
+      | NOCHANGE => dokind arg_kind
     end
 
   and f_arrow_kind state (args, result) =
