@@ -160,7 +160,7 @@ long ComputeHeapSize(long live, double curRatio, double rate, int phases)
   double where = (rawWhere > 1.0) ? 1.0 : ((rawWhere < 0.0) ? 0.0 : rawWhere);
   double newratio = MinRatio + where * (MaxRatio - MinRatio);
   long newReducedSize = RoundUp(live / newratio, 1024);
-  long newExpandedSize = reducedToExpanded(newExpandedSize, rate, phases);
+  long newExpandedSize = reducedToExpanded(newReducedSize, rate, phases);
   /* maxReducedSize and minReducedSize are not reduced if relaxed is true or if phases is already zero */
   long maxReducedSize = expandedToReduced(MaxHeapByte, rate, relaxed ? 0 : phases);
   long minReducedSize = expandedToReduced(MinHeapByte, rate, relaxed ? 0 : phases);
@@ -681,7 +681,7 @@ void GCFromMutator(Thread_t *curThread)
   /* Put registers in stacklet */
   int i;
   Stacklet_t *stacklet = CurrentStacklet(curThread->stack);
-  mem_t primaryRegs = (mem_t) &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
+  volatile reg_t* primaryRegs = &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
   for (i=0; i<32; i++) 
     primaryRegs[i] = curThread->saveregs[i];
 
@@ -712,7 +712,7 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
   int i;
   mem_t sp = (mem_t) curThread->saveregs[SP];
   mem_t returnToCaller = (mem_t) curThread->saveregs[ASMTMP2];
-  mem_t primaryRegs;
+  volatile reg_t* primaryRegs;
 #ifdef solaris
   mem_t returnToCallee = (mem_t) curThread->saveregs[LINK];
 #else
@@ -723,7 +723,7 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
 
   oldStacklet = EstablishStacklet(stackChain, sp); /* saves sp already */
   oldStacklet->retadd = returnToCaller;
-  primaryRegs = (mem_t) &oldStacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
+  primaryRegs = &oldStacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
   for (i=0; i<32; i++) {
     primaryRegs[i] = curThread->saveregs[i];
     if ((1<<i) & calleeSaveMask)
@@ -754,13 +754,13 @@ void PopStackletFromMutator(Thread_t *curThread)
   int i;
   mem_t sp = (mem_t) curThread->saveregs[SP];
   Stacklet_t *newStacklet = NULL;
-  mem_t primaryRegs;
+  volatile reg_t* primaryRegs;
 
   EstablishStacklet(curThread->stack, sp);
   PopStacklet(curThread->stack);
   newStacklet = CurrentStacklet(curThread->stack);
   /* Even though we saved all registers, we only restore the callee-save ones */
-  primaryRegs = (mem_t) &newStacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
+  primaryRegs = &newStacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
   for (i=0; i<32; i++)
     if ((1<<i) & calleeSaveMask)
       curThread->saveregs[i] = primaryRegs[i];
