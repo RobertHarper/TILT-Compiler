@@ -68,7 +68,7 @@ struct
 			else SOME ("interface of " ^ Name.label2longname U ^
 				   " has changed")
 		    | NONE => SOME (Name.label2longname U ^
-				    " no longer available"))
+				    " no longer in context"))
 	    val badunits = List.mapPartial bad current
 	in  Join(map Stale badunits)
 	end

@@ -29,7 +29,7 @@ esac
 rm -f ./Heaps/tilt.$platform
 
 # build NJ tilt.  
-make tilt_heap
+make tilt-heap
 
 # Did gmake heap succeed?
 if [ -f ./Heaps/tilt.$platform ] ; then echo "Compiled tilt-nj" ; else echo "TILT didn't compile" ; exit 1 ; fi
