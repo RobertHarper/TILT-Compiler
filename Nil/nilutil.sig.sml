@@ -37,6 +37,7 @@ signature NILUTIL =
     val makeLetC : Nil.conbnd list -> Nil.con -> Nil.con
     val makeLetE : Nil.letsort -> Nil.bnd list -> Nil.exp -> Nil.exp
     val makeAppE : Nil.exp -> Nil.con list -> Nil.exp list -> Nil.exp list -> Nil.exp
+    val makeProjC : Nil.con -> Nil.label list -> Nil.con
     val extractCbnd : Nil.conbnd -> Nil.var * Nil.con
 
     val effect : Nil.exp -> bool (* could the expression have an effect?
@@ -69,6 +70,7 @@ signature NILUTIL =
     val module_size : Nil.module -> int
 
     val primequiv : Nil.primcon * Nil.primcon -> bool
+    val covariant_prim: Nil.primcon -> bool
 (*    type alpha_context
 
     val alpha_equiv_con' : (alpha_context*alpha_context) -> Nil.con * Nil.con -> bool
@@ -101,7 +103,7 @@ signature NILUTIL =
 				  tFormals : (Nil.var*Nil.kind) list,
 				  eFormals : (Nil.var option * Nil.con) list,
 				  fFormals : Nil.w32,
-				  body : Nil.con} option
+				  body_type : Nil.con} option
     val strip_externarrow : Nil.con -> (Nil.con list * Nil.con) option
     val strip_record : Nil.con -> (Nil.label list * Nil.var list option * Nil.con list) option
     val strip_crecord : Nil.con -> (Nil.label*Nil.con) list option

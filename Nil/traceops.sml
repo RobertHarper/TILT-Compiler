@@ -63,7 +63,11 @@ struct
             error "get_trace found Closure_c"
      end
 
-  fun get_free_vars (TI.Compute (v,_)) = [v]
+  fun get_free_vars' (TI.Compute (v,_)) = [v]
+    | get_free_vars' _ = []
+
+  fun get_free_vars (TraceKnown tinfo) = get_free_vars' tinfo
+    | get_free_vars (TraceCompute v) = [v]
     | get_free_vars _ = []
 
 end

@@ -217,7 +217,8 @@ structure NilRewrite :> NILREWRITE =
 		     in  if !changed then SOME (Mu_c (flag,defs)) else NONE
 		     end
 		   
-		    | (AllArrow_c {openness, effect, isDependent, tFormals, eFormals, fFormals, body}) =>
+		    | (AllArrow_c {openness, effect, isDependent, tFormals, 
+				   eFormals, fFormals, body_type}) =>
 		     let
 		       val changed = ref false
 
@@ -240,12 +241,12 @@ structure NilRewrite :> NILREWRITE =
 			   in  (eFormals, state)
 			   end
 
-		       val body = recur_c changed state body
+		       val body_type = recur_c changed state body_type
 		     in
 		       if !changed
 			 then SOME (AllArrow_c{openness = openness, effect = effect, isDependent = isDependent,
 					       tFormals = tFormals, eFormals = eFormals, 
-					       fFormals = fFormals, body = body})
+					       fFormals = fFormals, body_type = body_type})
 		       else NONE
 		     end
 		     
@@ -555,10 +556,11 @@ structure NilRewrite :> NILREWRITE =
 
 	and switch_helper (state : 'state) (sw : switch) : exp option = 
 	  (case sw of
-	     Intsw_e {arg, size, arms, default} =>
+	     Intsw_e {arg, size, arms, default, result_type} =>
 	       let
 		 val changed = ref false
 		 val arg = recur_e changed state arg
+		 val result_type = recur_c changed state result_type
 		 fun recur changed state (t,e) = (t,recur_e changed state e)
 		 val arms = map_f recur changed state arms
 		 val default = Util.mapopt (recur_e changed state) default
@@ -568,15 +570,17 @@ structure NilRewrite :> NILREWRITE =
 			 (Intsw_e {arg = arg,
 				   size = size, 
 				   arms = arms,
-				   default = default}))
+				   default = default,
+				   result_type = result_type}))
 		 else NONE
 	       end
-	   | Sumsw_e {arg, sumtype, bound, arms, default} =>
+	   | Sumsw_e {arg, sumtype, bound, arms, default, result_type} =>
 	       let
 		 val changed = ref false
 		 val arg = recur_e changed state arg
 		 val sumtype = recur_c changed state sumtype 
 		 val (state',bound) = bind_e changed (state,bound,sumtype)
+		 val result_type = recur_c changed state result_type
 		 fun recur changed state (t,e) = (t,recur_e changed state e)
 		 val arms = map_f recur changed state' arms
 		 val default = Util.mapopt (recur_e changed state) default
@@ -587,14 +591,16 @@ structure NilRewrite :> NILREWRITE =
 				   sumtype = sumtype,
 				   bound = bound,
 				   arms = arms,
-				   default = default}))
+				   default = default,
+				   result_type = result_type}))
 		 else NONE
 	       end
-	   | Exncase_e {arg, bound, arms, default} =>
+	   | Exncase_e {arg, bound, arms, default, result_type} =>
 	       let
 		 val changed = ref false
 		 val arg = recur_e changed state arg
 		 val (state',bound) = bind_e changed (state,bound,Prim_c(Exn_c,[]))
+		 val result_type = recur_c changed state result_type
 		 fun recur changed state (t,e) = (recur_e changed state t,recur_e changed state' e)
 		 val arms = map_f recur changed state arms
 		 val default = Util.mapopt (recur_e changed state) default
@@ -604,10 +610,11 @@ structure NilRewrite :> NILREWRITE =
 			 (Exncase_e {arg = arg,
 				     bound = bound,
 				     arms = arms,
-				     default = default}))
+				     default = default,
+				     result_type = result_type}))
 		 else NONE
 	       end
-	   | Typecase_e {arg,arms,default} => error "typecase not handled")    
+	   | Typecase_e {arg,arms,default, result_type} => error "typecase not handled")    
 
 	and rewrite_exp (state : 'state) (exp : exp) : exp option =
 	  let 

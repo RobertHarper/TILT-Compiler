@@ -131,29 +131,35 @@ struct
 
    fun lswitch lift state switch = 
      (case switch of
-	  Intsw_e {size,arg,arms,default} =>
+	  Intsw_e {size,arg,arms,default,result_type} =>
 	      let val arg = lexp_lift' state arg
+		  val result_type = lcon_flat state result_type
 		  val arms = map (fn (w,e) => (w,lexp_lift' state e)) arms
 		  val default = Util.mapopt (lexp_lift' state) default
-	      in  Intsw_e {size=size,arg=arg,arms=arms,default=default}
+	      in  Intsw_e {size=size,arg=arg,arms=arms,default=default,
+			   result_type=result_type}
 	      end
-	| Sumsw_e {sumtype,arg,bound,arms,default} =>
+	| Sumsw_e {sumtype,arg,bound,arms,default,result_type} =>
 	      let val sumtype = lcon_flat state sumtype
+		  val result_type = lcon_flat state result_type
 		  val arg = lexp_lift' state arg
 		  val (state,bound) = add_var(state,bound)
 		  val arms = map (fn (t,e) => (t,lexp_lift' state e)) arms
 		  val default = Util.mapopt (lexp_lift' state) default
 	      in  Sumsw_e {sumtype=sumtype,arg=arg,
-			   bound=bound,arms=arms,default=default}
+			   bound=bound,arms=arms,default=default,
+			   result_type=result_type}
 	      end
-	| Exncase_e {arg,bound,arms,default} =>
+	| Exncase_e {arg,bound,arms,default,result_type} =>
 	      let 
 		  val arg = lexp_lift' state arg
+		  val result_type = lcon_flat state result_type
 		  val (state,bound) = add_var(state,bound)
 		  val arms = map (fn (e1,e2) => (lexp_lift' state e1,lexp_lift' state e2)) arms
 		  val default = Util.mapopt (lexp_lift' state) default
 	      in  Exncase_e {arg=arg,
-			     bound=bound,arms=arms,default=default}
+			     bound=bound,arms=arms,default=default,
+			     result_type=result_type}
 	      end
 	| Typecase_e _ => error "typecase not handled")
 
@@ -431,15 +437,15 @@ struct
 		    val (cbnds',c) = lcon state c
 		in  (flatten cbnds@cbnds',ExternArrow_c (clist,c))
 		end
-	  | AllArrow_c {openness,effect,isDependent,tFormals,eFormals,fFormals,body} =>
+	  | AllArrow_c {openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} =>
 	      let 
 		  val (tFormals,state) = lvklist state tFormals
 		  val (eFormals,state) = lvoptclist_flat state eFormals
-		  val body = lcon_flat state body
+		  val body_type = lcon_flat state body_type
 	      in  ([],
 		   AllArrow_c {openness=openness,effect=effect,isDependent=isDependent,
 			       tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
-			       body=body})
+			       body_type=body_type})
 	      end
 	  | Let_c (letsort,cbnds,c) =>
 		let 

@@ -360,7 +360,7 @@ struct
 					   tFormals=[(v,k')],
 					   eFormals=[],
 					   fFormals=0w0,
-					   body=Var_c v}
+					   body_type=Var_c v}
 		    in  if (NilUtil.convar_occurs_free(cvar,c))
 			    then (cvar,labs)::first::rest
 			else first::(bubble rest)
@@ -765,6 +765,8 @@ struct
 	(case switch of
 	     Intsw_e{arg,arms,default,...} =>
 		 let val frees = e_find_fv (state,frees) arg
+		     (* XXX Perry: We don't need to collect free variables of result_type,
+		        right? *)
 		     val frees = foldl (fn ((_,e),f) => e_find_fv (state,f) e) frees arms 
 		     val frees = (case default of
 				      NONE => frees
@@ -1012,10 +1014,10 @@ struct
 		     in  foldl (fn ((v,c),f) => c_find_fv (state',f) c) frees (Sequence.toList vcset)
 		     end
 	       (* the types of some primitives like integer equality are Code arrow *)
-	       | AllArrow_c{tFormals,eFormals,fFormals,body,...} =>
+	       | AllArrow_c{tFormals,eFormals,fFormals,body_type,...} =>
 		     let val fs = vklist_find_fv (tFormals,(frees,state))
 			 val (f,s) = vopttlist_find_fv (eFormals,fs)
-		     in  c_find_fv (s,f) body
+		     in  c_find_fv (s,f) body_type
 		     end
 	       | ExternArrow_c(clist,c) =>
 		     let fun cfolder (c,(f,s)) = (c_find_fv (s,f) c,s)
@@ -1307,7 +1309,7 @@ struct
 					 eFormals=map (fn (v,_,c) => 
 						       (if isDependent then SOME v else NONE, c)) vclist,
 					 fFormals=TilWord32.fromInt(length fFormals),
-					 body=codebody_tipe}
+					 body_type=codebody_tipe}
 	   val codebody_tipe = substConPathInCon(external_subst,codebody_tipe)
 
 
@@ -1443,22 +1445,27 @@ struct
 	  | Const_e v => arg_exp
 	  | Switch_e switch => 
 		Switch_e(case switch of 
-		     Intsw_e{size,arg,arms,default} => 
+		     Intsw_e{size,arg,arms,default,result_type} => 
 			 Intsw_e{size = size, 
 				 arg = e_rewrite arg,
 				 arms = map_second e_rewrite arms,
-				 default = Util.mapopt e_rewrite default}
-		   | Sumsw_e{sumtype,arg,bound,arms,default} => 
+				 default = Util.mapopt e_rewrite default,
+				 (* XXX Perry: Am I correct that result types
+				    don't need to be rewritten? *)
+				 result_type=result_type}
+		   | Sumsw_e{sumtype,arg,bound,arms,default,result_type} => 
 			 Sumsw_e{sumtype=c_rewrite sumtype, 
 				 arg=e_rewrite arg,
 				 bound = bound,
 				 arms = map_second  e_rewrite arms,
-				 default=Util.mapopt e_rewrite default}
-		   | Exncase_e{arg,arms,bound,default} => 
+				 default=Util.mapopt e_rewrite default,
+				 result_type=result_type}
+		   | Exncase_e{arg,arms,bound,default,result_type} => 
 			 Exncase_e{arg=e_rewrite arg,
 				   bound=bound,
-				 arms=map (fn (e,f) => (e_rewrite e,e_rewrite f)) arms,
-				 default=Util.mapopt e_rewrite default}
+				   arms=map (fn (e,f) => (e_rewrite e,e_rewrite f)) arms,
+				   default=Util.mapopt e_rewrite default,
+				   result_type=result_type}
 		   | Typecase_e _ => error "typecase not handled")
 			 
 	  | Let_e(letsort,bnds,e) => let val bnds_list = map (bnd_rewrite state) bnds
@@ -1574,7 +1581,7 @@ struct
 	  | Mu_c (ir,vc_set) => Mu_c(ir,Sequence.fromList 
 					(map (fn (v,c) => (v,c_rewrite c)) (Sequence.toList vc_set)))
 	  | Var_c v => path_case(v,[])
-	  | AllArrow_c {openness,effect,isDependent,tFormals,eFormals,fFormals,body} =>
+	  | AllArrow_c {openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} =>
 		let val tFormals' = map (fn(v,k) => (v,k_rewrite state k)) tFormals
 		    val eFormals' = map (fn(v,c) => (v,c_rewrite c)) eFormals
 		    val openness' = (case openness of
@@ -1582,9 +1589,10 @@ struct
 				 | Code => Code
 				 | Closure => error ("AllArrow_c(Closure,...) " ^ 
 						     "during closure-conversion"))
+		    val body_type' = c_rewrite body_type
 		in  AllArrow_c{openness=openness',effect=effect,isDependent=isDependent,
 			       tFormals=tFormals',eFormals=eFormals',
-			       fFormals=fFormals,body=body}
+			       fFormals=fFormals,body_type=body_type'}
 		end
 	  | ExternArrow_c (clist,c) => 
 		ExternArrow_c(map c_rewrite clist,

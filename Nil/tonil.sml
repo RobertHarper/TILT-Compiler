@@ -190,9 +190,7 @@ struct
    (* xeffect.  
          Translates the total/partial distinction from HIL to MIL.
     *)
-   (* XXX: xmod of functors is broken WRT totality *)
-
-   fun xeffect (Il.TOTAL) = Partial
+   fun xeffect (Il.TOTAL) = Total
      | xeffect (Il.PARTIAL) = Partial
 
    (* xilprim.  Translates the so-called "IL primitives" (primitives
@@ -1151,7 +1149,7 @@ end (* local defining splitting context *)
 						 tFormals = [], 
 						 eFormals = [(NONE,arg_con)], 
 						 fFormals = 0w0, 
-						 body = body_type}
+						 body_type = body_type}
 		   in  (external_var_r,
 		       Function{effect = effect, 
 				recursive = Leaf, 
@@ -1523,7 +1521,7 @@ end (* local defining splitting context *)
 		     else AllArrow_c{openness = Open, effect = eff, isDependent = false,
 				     tFormals = [], 
 				     eFormals = map (fn c => (NONE,c)) cons1,
-				     fFormals = 0w0, body = con2}
+				     fFormals = 0w0, body_type = con2}
        in  con
        end
 
@@ -1764,7 +1762,7 @@ end (* local defining splitting context *)
 	   val args = map (xexp context) il_args
            val (effect,con) = 
 	     case strip_arrow (NilPrimUtil.get_type' prim cons) of
-		 SOME {effect,body,...} => (effect,body)
+		 SOME {effect,body_type,...} => (effect,body_type)
 		| _ => (perr_c (NilPrimUtil.get_type' prim cons);
 			error "Expected arrow constructor")
 
@@ -1958,6 +1956,7 @@ end (* local defining splitting context *)
 			       tipe,default=il_default}) =
        let
 	   (* We want to use the result type given to avoid type blowup *)
+	   val result_type = xcon context tipe
 	   val sumcon = xcon context sumtype
 	   val exp = xexp context il_arg
 	   fun xarm (n, NONE ) = NONE
@@ -1968,12 +1967,14 @@ end (* local defining splitting context *)
 	in Switch_e(Sumsw_e {sumtype = sumcon,
 			     bound = bound,
 			     arg  = exp, arms = arms, 
-			     default = default})
+			     default = default,
+			     result_type = result_type})
        end
 
      | xexp' context (e as Il.EXN_CASE {arg = il_exp, arms = il_arms, default = il_default, tipe}) =
        let
 	   val exp = xexp context il_exp
+	   val result_type = xcon context tipe
            fun xarm (il_tag_exp, _, exp) =
 	       let val tag = xexp context il_tag_exp
 		   val (bound, _, handler) = toFunction context exp
@@ -1988,7 +1989,8 @@ end (* local defining splitting context *)
        in
 	   Switch_e(Exncase_e {	bound = bound,
 				arg = exp, arms = arms,
-				default = default})
+				default = default,
+				result_type = result_type})
        end
 
      | xexp' context (Il.MODULE_PROJECT (il_module, label)) =
@@ -2130,7 +2132,7 @@ end (* local defining splitting context *)
 			tFormals = [(var_c, knd)],
 			eFormals = [(SOME var_r, con)], 
 			fFormals = 0w0, 
-			body = con'})
+			body_type = con'})
        end
 
      | xsig' context (con0, Il.SIGNAT_STRUCTURE (NONE,sdecs)) = xsig_struct context (con0,sdecs)

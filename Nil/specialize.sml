@@ -320,25 +320,28 @@ struct
 
 	and do_switch (switch : switch) : switch = 
 	   (case switch of
-		Intsw_e {size,arg,arms,default} =>
+		Intsw_e {size,arg,arms,default,result_type} =>
 		    let val arg = do_exp arg
 			val arms = map (fn (w,e) => (w,do_exp e)) arms
 			val default = Util.mapopt do_exp  default
-		    in  Intsw_e {size=size,arg=arg,arms=arms,default=default}
+		    in  Intsw_e {size=size,arg=arg,arms=arms,default=default,
+				 result_type=result_type}
 		    end
-	      | Sumsw_e {sumtype,arg,bound,arms,default} =>
+	      | Sumsw_e {sumtype,arg,bound,arms,default,result_type} =>
 		    let val arg = do_exp arg
 			val arms = map (fn (t,e) => (t,do_exp e)) arms
 			val default = Util.mapopt do_exp default
 		    in  Sumsw_e {sumtype=sumtype,arg=arg,
-				 bound=bound,arms=arms,default=default}
+				 bound=bound,arms=arms,default=default,
+				 result_type=result_type}
 	      end
-	      | Exncase_e {arg,bound,arms,default} =>
+	      | Exncase_e {arg,bound,arms,default,result_type} =>
 		let val arg = do_exp arg
 		    val arms = map (fn (e1,e2) => (do_exp e1, do_exp e2)) arms
 		    val default = Util.mapopt do_exp  default
 		in  Exncase_e {arg=arg,
-			       bound=bound,arms=arms,default=default}
+			       bound=bound,arms=arms,default=default,
+			       result_type=result_type}
 		end
 	      | Typecase_e _ => error "typecase not handled")
 

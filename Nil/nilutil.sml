@@ -73,7 +73,7 @@ struct
        AllArrow_c{openness=openness, effect = effect, isDependent = isDependent,
 		  tFormals = tFormals, 
 		  eFormals = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c)) eFormals,
-		  fFormals = TilWord32.fromInt(length fFormals), body = body_type}
+		  fFormals = TilWord32.fromInt(length fFormals), body_type = body_type}
 
   fun intsize_leq (Prim.W8, _) = true
     | intsize_leq (Prim.W16, Prim.W8) = false
@@ -231,7 +231,7 @@ struct
 
   fun get_arrow_return con = 
     case strip_arrow con of
-	SOME {body,...} => SOME body
+	SOME {body_type,...} => SOME body_type
        | NONE => NONE
   (* Local rebindings from imported structures *)
 
@@ -320,6 +320,15 @@ end
   end
   (**)
     
+  fun makeProjC c [] = c
+    | makeProjC c (l::ls) = makeProjC (Proj_c(c,l)) ls
+
+  fun stripProjC c =
+      let fun loop (Proj_c(c',l), ls) = loop (c', l::ls)
+	    | loop args = args
+      in
+	  loop (c,[])
+      end
 
     (* collections *)
  
@@ -507,7 +516,7 @@ end
     end
 
   and f_arrow (state : state) {openness, effect, isDependent,
-			       tFormals, eFormals, fFormals, body} = 
+			       tFormals, eFormals, fFormals, body_type} = 
     let
       val (tFormals,state) = f_vklist state tFormals
       fun folder ((vopt,c),state) = 
@@ -518,14 +527,14 @@ end
 			end
 	    | NONE => ((NONE, f_con state c), state))
       val (eFormals,state) = foldl_acc folder state eFormals
-      val body = f_con state body
+      val body_type = f_con state body_type
     in   {openness = openness,
 	  effect =  effect, 
 	  isDependent = isDependent,
 	  tFormals = tFormals, 
 	  eFormals = eFormals, 
 	  fFormals = fFormals, 
-	  body = body}
+	  body_type = body_type}
     end
 
   and f_kind (state : state) (arg_kind : kind) = 
@@ -583,6 +592,7 @@ end
 	fun fold_one ((var,trace,con),state) = 
 	    let
 		val con' = f_con state con
+		val trace' = f_niltrace state trace 
 		val state' = add_var (state, var)
 	    in
 		((var,trace,con'),state')
@@ -605,12 +615,33 @@ end
       let 
 	  val (tFormals', state) = f_vklist state tFormals
 	  val (eFormals', state) = f_vtclist state eFormals
+	  val body' = f_exp state body
 	  val body_type' = f_con state body_type
       in
 	  Function{effect=effect, recursive=recursive, isDependent=isDependent,
 		   tFormals = tFormals', eFormals = eFormals', fFormals = fFormals,
-		   body = body, body_type = body_type'}
+		   body = body', body_type = body_type'}
       end
+
+    and f_niltrace (state : state) (nt : Nil.niltrace) : Nil.niltrace =
+	(case nt of
+	     TraceCompute v => 
+		 (case (f_con state (Var_c v)) of
+		      Var_c v' => TraceCompute v'
+		    | _ => TraceUnknown)
+           | TraceKnown tinfo =>
+		 (case tinfo of
+		      TraceInfo.Compute(v,ls) =>
+			  let
+			      val con = f_con state (makeProjC (Var_c v) ls)
+			  in
+			      case (stripProjC con) of
+				  (Var_c v', ls') => 
+				      TraceKnown (TraceInfo.Compute(v',ls'))
+				| _ => TraceUnknown
+			  end
+		    | _ => nt)
+	   | _ => nt)
 
   and f_bnd (state : state) (bnd : bnd) : bnd list * state = 
       let val (STATE{bound,bndhandler,exphandler,...}) = state
@@ -619,7 +650,7 @@ end
 		  Con_b(p,cb) => let val (cbnds,state) = f_cbnd state cb
 				 in  (map (fn cb => Con_b(p,cb)) cbnds, state)
 				 end
-		| Exp_b(v,tinfo,e) => ([Exp_b(v, tinfo, f_exp state e)], 
+		| Exp_b(v,nt,e) => ([Exp_b(v, f_niltrace state nt, f_exp state e)], 
 				       add_var(state,v))
 		| Fixopen_b vfset => 
 		      let val s' = Sequence.foldl (fn ((v,f),s) => add_var(s,v)) s vfset
@@ -654,25 +685,28 @@ end
 
   and f_switch state sw = 
       (case sw of
-	   Intsw_e {arg, size, arms, default} =>
+	   Intsw_e {arg, size, arms, default, result_type} =>
 	       Intsw_e {arg = f_exp state arg,
 			size = size, 
 			arms = map (fn (t,e) => (t,f_exp state e)) arms,
-			default = Util.mapopt (f_exp state) default}
-	 | Sumsw_e {arg, sumtype, bound, arms, default} =>
+			default = Util.mapopt (f_exp state) default,
+			result_type = f_con state result_type}
+	 | Sumsw_e {arg, sumtype, bound, arms, default, result_type} =>
 	       let val state' = add_var(state,bound)
 	       in  Sumsw_e {arg = f_exp state arg,
 			    sumtype = f_con state sumtype,
 			    bound = bound,
 			    arms = map (fn (t,e) => (t,f_exp state' e)) arms,
-			    default = Util.mapopt (f_exp state) default}
+			    default = Util.mapopt (f_exp state) default,
+			    result_type = f_con state result_type}
 	       end
-	 | Exncase_e {arg, bound, arms, default} =>
+	 | Exncase_e {arg, bound, arms, default, result_type} =>
 	       let val state' = add_var(state,bound)
 	       in  Exncase_e {arg = f_exp state arg,
 			      bound = bound,
 			      arms = map (fn (t,e) => (f_exp state t,f_exp state' e)) arms,
-			      default = Util.mapopt (f_exp state) default}
+			      default = Util.mapopt (f_exp state) default,
+			      result_type = f_con state result_type}
 	       end
 	 | Typecase_e _ => error "typecase not handled")
 
@@ -980,6 +1014,14 @@ end
 	   same_effect (effect1,effect2))
 	 | _  => false
     end
+
+  fun covariant_prim p =
+      (case p of
+	   Sum_c _ => true
+	 | Record_c _ => true
+	 | _ => false)
+
+
   
   fun same_phase (Compiletime, Compiletime) = true
     | same_phase (Runtime, Runtime) = true
@@ -1051,16 +1093,16 @@ end
 	   end
              (*XXX need to fix this! *)
 	  | (AllArrow_c {openness = o1, effect = eff1, isDependent = i1,
-			 tFormals = t1, eFormals = e1, fFormals = f1, body = b1},
+			 tFormals = t1, eFormals = e1, fFormals = f1, body_type = b1},
 	     AllArrow_c {openness = o2, effect = eff2, isDependent = i2,
-			 tFormals = t2, eFormals = e2, fFormals = f2, body = b2}) =>
+			 tFormals = t2, eFormals = e2, fFormals = f2, body_type = b2}) =>
 	   let
 	     val conref = ref context
 	     fun tformal_equiv ((var1,kind1),(var2,kind2)) = 
 	       (alpha_equiv_kind' (!conref) (kind1,kind2))
 	       before (conref :=  alpha_equate_pair (!conref,(var1,var2)))
 	   in
-	     same_openness(o1,o2) andalso (f1 = f2) andalso
+	     same_openness(o1,o2) andalso (f1 = f2) andalso (eff1=eff2) andalso
 	     Listops.eq_list(tformal_equiv, t1, t2) andalso
 	     alpha_equiv_con_list (!conref) (map #2 e1, map #2 e2) andalso
 	     alpha_equiv_con' (!conref) (b1,b2)

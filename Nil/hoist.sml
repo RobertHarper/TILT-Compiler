@@ -58,7 +58,8 @@ struct
 		  | NONE => UNKNOWN_EFFS)
 	 | _ => UNKNOWN_EFFS)
 
-  fun con2eff (AllArrow_c{effect,body,...}) = ARROW_EFFS (effect, con2eff body)
+  fun con2eff (AllArrow_c{effect,body_type,...}) = 
+        ARROW_EFFS (effect, con2eff body_type)
     | con2eff (Prim_c(Record_c (lbls,_), types)) =
         REC_EFFS (ListPair.zip (lbls, map con2eff types))
     | con2eff _ = UNKNOWN_EFFS
@@ -114,7 +115,7 @@ struct
  fun cat_app_zip' (a,b) = foldr (fn ((a,b),(c,d)) => (a::c,b@d)) ([],[]) (ListPair.zip (a,b))
 
 *)
-(*******************
+
   local val count = ref 0 
      in fun newtag i = let val _ = count := !count + 1 
 		    in "_" ^ i ^ (Int.toString(!count)) end 
@@ -176,7 +177,7 @@ struct
 
  fun bvs2s (bvl:bvs list) = bl2s (map #1 bvl)
  fun bvsl2s (bvs:bvs list) = bl2s (map #1 bvs)
-*****************)    
+
   (* stop junk *)
 
   fun filter_bnds (bvl, stop_vars) =
@@ -418,7 +419,7 @@ struct
 		       loop (rest, cvs, bvsl::up, b::stay,
 			     econtext', valuable andalso valuable')
 		 | (UP v, bvsl, econtext', valuable') => 
-		       loop (rest, add(cvs,v), bvsl::up, stay,
+		       loop (rest, Set.add(cvs,v), bvsl::up, stay,
 			     econtext', valuable andalso valuable'))
       in
 	  loop (bnd_list,cvs,[],[],econtext,true)
@@ -442,23 +443,34 @@ struct
       let
 (*
          val vstr = var2string v
-         val _ = (pprint ("rewriting bnd for exp var: "^vstr^"\n");ppin 2)  
+         val _ = (pprint ("rewriting bnd for exp var: "^vstr^"\n"); ppin 2)  
 *)
 	  val (e',bvl',effs,valuable) = rexp(e,cvs,econtext)
 	  
+	  val free_vars = freeExpVars e'
+
+(*
+	      val _ = print ("Free vars for " ^ vstr ^ " are [ ")
+	      val _ = print " are [ "
+	      val _ = Set.app Ppnil.pp_var free_vars
+	      val _ = print "]\n"
+	      val _ = Ppnil.pp_exp e'
+	      val _ = print "***\n"
+*)
 	  val hoistable = 
-	      valuable andalso Set.isSubset(freeExpVars e',cvs)
+	      valuable andalso Set.isSubset(free_vars,cvs)
 
 (*
           val _ = if hoistable then pprint ("E-moving "^vstr^" up\n") 
         	      else pprint ("E-keeping "^vstr^" here\n") 
           val _ = ppout 2 
 *)
+
 	  val newbnd = Exp_b(v,niltrace,e')
 	  val econtext' = Map.insert(econtext,v,effs)
     in
       if hoistable then 
-	  (UP v, bvl'@[(newbnd,freeExpVars e)],econtext',valuable)
+	  (UP v, bvl'@[(newbnd,free_vars)],econtext',valuable)
       else 
 	  (STAY newbnd,bvl',econtext',valuable)
     end
@@ -489,7 +501,7 @@ struct
     | rbnd (Fixopen_b(vfs), cvs, econtext_orig) = 
 	let
 (*
-	  val fvstr = (sl2s (map var2string (map #1 vfs)))
+	  val fvstr = (sl2s (map var2string (map #1 (Sequence.toList vfs))))
 	  val _ = (pprint ("rewriting bnd for open funs: "^fvstr^"\n");ppin 2) 
 *)
 
@@ -524,9 +536,10 @@ struct
 *)
 
 	  val bound_var_set = list2set (getBoundVars bndlst)
-	  val cvs' = union (bound_var_set,cvs)
 	      
 	  val (up,stay,econtext',valuable') = rbnds(bndlst,cvs,econtext)
+
+	  val cvs' = union (bound_var_set,cvs)
 	  val (bodexp',body_up,effs,valuable) = rexp(bodexp,cvs',econtext')
 
 	  val stop_vars = list2set (getBoundVars stay)
@@ -608,13 +621,15 @@ struct
 		 | (ARROW_EFFS (Partial,rest)) => (false, rest)
 		 | _ => (false, unknown_effs))
 
+(*
 	       val _ = (print "Processing application:\n ";
 			Ppnil.pp_exp exp0;
-			print "components_valuable = ";
+			print " components_valuable = ";
 			print (Bool.toString components_valuable);
-			print "valuable = ";
+			print " valuable = ";
 			print (Bool.toString valuable);
 			print "\n")
+*)
 
 		   
       in
@@ -654,7 +669,7 @@ struct
 	  (Handle_e (nexp,var,nexp'), bvl@bvl', effs, valuable)
       end
 
-  and rswitch (Intsw_e {arg,size,arms,default},cvs,econtext) = 
+  and rswitch (Intsw_e {arg,size,arms,default,result_type},cvs,econtext) = 
       let
 	  
 	  fun mapper (w,e) = 
@@ -672,11 +687,12 @@ struct
 	  val effs = unknown_effs
 	  val valuable = false
       in
-	  (Intsw_e {arg=arg', size=size, arms=arms', default=default'},
+	  (Intsw_e {arg=arg', size=size, arms=arms', default=default',
+		    result_type = result_type},
 	   bvl'@bvl''@bvl''', effs, valuable)
       end
 
-    | rswitch (Sumsw_e {arg,sumtype,bound,arms,default},cvs, econtext) = 
+    | rswitch (Sumsw_e {arg,sumtype,bound,arms,default,result_type},cvs, econtext) = 
       let
 
 	  val boundset = Set.singleton bound
@@ -704,12 +720,13 @@ struct
 		    sumtype = sumtype,
 		    bound = bound,
 		    arms = arms',
-		    default = default'},
+		    default = default',
+		    result_type = result_type},
 	   bvl' @ bvl'' @ bvl''', 
 	   effs, valuable)
       end
 
-    | rswitch (Exncase_e {arg,bound,arms,default},cvs,econtext) = 
+    | rswitch (Exncase_e {arg,bound,arms,default,result_type},cvs,econtext) = 
       let
 	  val boundset = Set.singleton bound
 
@@ -736,11 +753,12 @@ struct
 	  (Exncase_e {arg=arg',
 		      bound=bound,
 		      arms=arms',
-		      default=default'},
+		      default=default',
+		      result_type = result_type},
 	   bvl'@bvl''@bvl''', effs, valuable)
     end
 
-    | rswitch (Typecase_e {arg,arms,default},cvs,econtext) = 
+    | rswitch (Typecase_e {arg,arms,default,result_type},cvs,econtext) = 
     (Util.error "hoist.sml" "Typecase_e not implemented yet")
 (*
     let

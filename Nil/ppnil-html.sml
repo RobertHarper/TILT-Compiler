@@ -232,7 +232,7 @@ structure PpnilHtml :> PPNIL =
 		^ (TilWord32.toDecimalString totalcount) ^ ")")
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "VARARG[", pp_openness oness, pp_effect e, String "]"]
 
-    and pp_confun {openness,effect,isDependent,tFormals,eFormals,fFormals,body} =
+    and pp_confun {openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} =
 	pp_region "AllArrow(" ")"
 	[HVbox[pp_openness openness,
 	       String "; ",
@@ -246,7 +246,7 @@ structure PpnilHtml :> PPNIL =
 					 else error "non-dependent but has var")) eFormals),
 	       String "; ", String (TilWord32.toDecimalString fFormals),
                pp_effect effect, Break0 0 5,
-	       pp_con body]]
+	       pp_con body_type]]
 
     and pp_nilprimop nilprimop = 
 	String (case nilprimop of
@@ -332,7 +332,7 @@ structure PpnilHtml :> PPNIL =
 	      | pp_default (SOME e) = Hbox[String "DEFAULT = ", pp_exp e]
 	in
 	    case sw of
-		Intsw_e {arg,size,arms,default} => 
+		Intsw_e {arg,size,arms,default,result_type} => 
 		    HOVbox[String "INT_SWITCH(", 
 			   pp_exp arg, String ": ",
 			   pp_is' size, String ", ",
@@ -342,7 +342,7 @@ structure PpnilHtml :> PPNIL =
 			   Break0 0 5,
 			   pp_default default,
 			   String ")"]
-	      | Sumsw_e {arg,sumtype,bound,arms,default} => 
+	      | Sumsw_e {arg,sumtype,bound,arms,default,result_type} => 
 		    HOVbox[String "SUM_SWITCH(", 
 			   pp_exp arg, String ": ",
 			   pp_con sumtype, String ", ",
@@ -353,7 +353,7 @@ structure PpnilHtml :> PPNIL =
 			   Break0 0 5,
 			   pp_default default,
 			   String ")"]
-	      | Exncase_e {arg,bound,arms,default} => 
+	      | Exncase_e {arg,bound,arms,default,result_type} => 
 		    HOVbox[String "EXN_SWITCH(", 
 			   pp_exp arg, String ": EXN, ",
 			   Break0 0 5,

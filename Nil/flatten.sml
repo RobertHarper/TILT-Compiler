@@ -249,37 +249,41 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
 
     and xswitch s =
       case s of
-	Intsw_e { arg, size, arms, default } =>
+	Intsw_e { arg, size, arms, default, result_type } =>
 	  Intsw_e 
 	  {
 	   arg=xexp arg,
 	   size = size,
 	   arms = map (fn (w,e) => (w, xexp e)) arms,
-	   default = Option.map (xexp) default
+	   default = Option.map (xexp) default,
+	   result_type = xcon result_type
 	   }
-      | Sumsw_e {arg, sumtype, bound, arms, default} =>
+      | Sumsw_e {arg, sumtype, bound, arms, default, result_type} =>
 	  Sumsw_e 
 	  {
 	   arg=xexp arg,
 	   sumtype= xcon sumtype,
 	   bound=bound,
 	   arms = map (fn (w,e) => (w,xexp e)) arms,
-	   default =  Option.map (xexp ) default
+	   default =  Option.map (xexp ) default,
+	   result_type = xcon result_type
 	   }
-      | Exncase_e {arg, bound, arms, default} =>  
+      | Exncase_e {arg, bound, arms, default, result_type} =>  
 	  Exncase_e 
 	  {
 	   arg = xexp arg,
 	   bound = bound,
 	   arms =  map (fn (w,e) => (xexp w,xexp e)) arms,
-	   default =  Option.map (xexp ) default
+	   default =  Option.map (xexp ) default,
+	   result_type = xcon result_type
 	   }
-      | Typecase_e {arg, arms, default} => 
+      | Typecase_e {arg, arms, default, result_type} => 
 	  Typecase_e 
 	  {
 	   arg = xcon arg,
 	   arms = map  (fn (w,e) => (w,xexp e)) arms,
-	   default =  Option.map (xexp ) default
+	   default =  Option.map (xexp ) default,
+	   result_type = xcon result_type
 	   }
 
     and xbnds       

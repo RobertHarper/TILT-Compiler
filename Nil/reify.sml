@@ -124,20 +124,23 @@ struct
               (Let_e (Sequential, bnds', exp'), pset)
 	  end
 
-      | reify_exp ctxt (Switch_e(Intsw_e {arg,size,arms,default}),
+      | reify_exp ctxt (Switch_e(Intsw_e {arg,size,arms,default,result_type}),
                        pset) =
           let
               val (arg',pset) = reify_exp ctxt (arg, pset)
               val (arms',pset) = reify_int_arms ctxt (arms, pset)
               val (default',pset) = reify_exp_option ctxt (default,pset)
+	      (* result_type is here for typechecking only, so we don't
+	         need to reify it *)
           in
               (Switch_e(Intsw_e{arg = arg', size = size, 
-                                arms = arms', default = default'}),
+                                arms = arms', default = default',
+				result_type = result_type}),
                pset)
           end
 
       | reify_exp ctxt (Switch_e (Sumsw_e {arg, sumtype, bound,
-                                          arms,default}), pset) =
+                                          arms,default, result_type}), pset) =
           let
               val (arg',pset) = reify_exp ctxt (arg, pset)
               val (true,sumtype') = Normalize.reduce_hnf (ctxt, sumtype)
@@ -147,19 +150,21 @@ struct
           in
               (Switch_e (Sumsw_e{arg = arg', sumtype = sumtype,
                                 bound = bound, arms = arms', 
-                                default = default'}),
+                                default = default',
+				 result_type = result_type}),
                pset)
           end
 
       | reify_exp ctxt (Switch_e (Exncase_e {arg, bound, arms,
-                                            default}), pset) =
+                                            default, result_type}), pset) =
           let
              val (arg', pset) = reify_exp ctxt (arg, pset)
              val (arms', pset) = reify_exn_arms ctxt (arms, bound, pset)
              val (default',pset) = reify_exp_option ctxt (default, pset)
           in
 	     (Switch_e (Exncase_e {arg = arg', bound = bound,
-                                   arms = arms', default = default'}),
+                                   arms = arms', default = default',
+				   result_type = result_type}),
               pset)
           end
 
@@ -191,7 +196,7 @@ struct
                  (case TraceOps.get_trace (ctxt, t1) of
                     SOME tinfo => 
                        (Exp_b (v, TraceKnown tinfo, e') :: bs',
-                        pset_add_list (pset', TraceOps.get_free_vars tinfo))
+                        pset_add_list (pset', TraceOps.get_free_vars' tinfo))
                   | NONE =>
                        let 
                           val v' = Name.fresh_named_var "reify"

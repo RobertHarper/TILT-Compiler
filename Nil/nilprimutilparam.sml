@@ -17,7 +17,7 @@ structure NilPrimUtilParam
 						       tFormals = [],
 						       eFormals = map (fn c => (NONE,c)) cons,
 						       fFormals = 0w0,
-						       body = c2}
+						       body_type = c2}
 	fun partial_arrow (cons,c2) = simple_arrow(Partial,cons,c2)
 	fun total_arrow (cons,c2) =  simple_arrow(Total,cons,c2)
 

@@ -467,7 +467,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 
 
 
-	fun is_sumsw_int state (Switch_e(Sumsw_e{sumtype,bound,arg,arms,default})) = 
+	fun is_sumsw_int state (Switch_e(Sumsw_e{sumtype,bound,arg,arms,default,...})) = 
 	    (case (arg,arms,default) of
 		 (Prim_e(PrimOp(Prim.eq_int is),[],
 			 [Var_e v,Const_e (Prim.int(_,w))]),
@@ -476,7 +476,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 		 | _ => NONE)
 	  | is_sumsw_int state _ = NONE
 
-	fun convert_sumsw state sum_sw =
+	fun convert_sumsw state (sum_sw as {result_type,...}) =
 	    let val exp = Switch_e(Sumsw_e sum_sw)
 	    in  (case is_sumsw_int state exp of
 	         SOME (is,commonv,_,_,_) =>
@@ -490,7 +490,8 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 			 val (clauses,base) = loop [] exp
 		     in  if (length clauses > 1)
 			     then Intsw_e{size=is,arg=Var_e commonv,
-					  arms=rev clauses,default=SOME base}
+					  arms=rev clauses,default=SOME base,
+					  result_type = result_type}
 			 else Sumsw_e sum_sw
 		     end
 	       | _ => Sumsw_e sum_sw)
@@ -613,12 +614,12 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 					   (fn (v,c) => (v,do_con state c)) vc_seq)
 	      | ExternArrow_c(clist,c) =>
 		    ExternArrow_c(map (do_con state) clist, do_con state c)
-	      | AllArrow_c{openness,effect,isDependent,tFormals,eFormals,fFormals,body} =>
+	      | AllArrow_c{openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} =>
 			let val (tFormals,state) = do_vklist state tFormals
 			    val (eFormals,state) = do_voptclist state eFormals
 			in  AllArrow_c{openness=openness, effect=effect, isDependent=isDependent,
 				       tFormals=tFormals, eFormals=eFormals, 
-				       fFormals = fFormals, body = do_con state body}
+				       fFormals = fFormals, body_type = do_con state body_type}
 			end
 	      | Var_c v => 
 			 (case lookup_alias(state,v) of
@@ -926,7 +927,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 
 	and do_switch (state : state) (switch : switch) : exp = 
 	    (case switch of
-		 Intsw_e {size,arg,arms,default} =>
+		 Intsw_e {size,arg,arms,default,result_type} =>
 		     (case (do_exp state arg) of
 			  Const_e (Prim.int(_,n)) => 
 			      let val n32 = TilWord64.toSignedHalf n
@@ -938,14 +939,15 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 			      end
 			| arg => 
 			      let 
+				  val result_type = do_type state result_type
 				  val arms = map_second (do_exp state) arms
 				  val default = Util.mapopt (do_exp state) default
-			      in  Switch_e(Intsw_e {size=size,arg=arg, arms=arms,default=default})
+			      in  Switch_e(Intsw_e {size=size,arg=arg, arms=arms,default=default,
+						    result_type=result_type})
 			      end)
 
-	       | Sumsw_e {sumtype,arg,bound,arms,default} =>
+	       | Sumsw_e {sumtype,arg,bound,arms,default,result_type} =>
 		     let val arg = do_exp state arg
-			 val sumtype = do_type state sumtype
 			 val (tagcount,_,carrier) = Normalize_reduceToSumtype(get_env state,sumtype) 
 		 	 val totalcount = TilWord32.uplus(tagcount,TilWord32.fromInt(length carrier))	
 			 fun make_ssum i = Prim_c(Sum_c{tagcount=tagcount,
@@ -987,15 +989,19 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 							  arg)],
 						   Option.valOf default)))
 			   | _ => let
+				      val sumtype = do_type state sumtype
+				      val result_type = do_type state result_type
 				      val arms = map do_arm arms
 				      val default = Util.mapopt (do_exp state) default
 				  in  
 				      Switch_e(Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,
-							arms=arms,default=default})
+							arms=arms,default=default,
+							result_type = result_type})
 				  end
 		     end
-	       | Exncase_e {arg,bound,arms,default} =>
+	       | Exncase_e {arg,bound,arms,default,result_type} =>
 		     let val arg = do_exp state arg
+			 val result_type = do_type state result_type
 			 fun do_arm(tag,body) = 
 			     let val tag = do_exp state tag
 				 val tagcon = type_of(state,tag)
@@ -1006,7 +1012,8 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
 		     in  Switch_e(Exncase_e {bound=bound,arg=arg,
-				     arms=arms,default=default})
+					     arms=arms,default=default,
+					     result_type = result_type})
 		     end
 	       | Typecase_e _ => error "typecase not done")
 

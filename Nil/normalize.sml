@@ -469,7 +469,7 @@ struct
 	 in Mu_c (recur,defs)
 	 end
 	| (AllArrow_c {openness,effect,isDependent,
-		       tFormals,eFormals,fFormals,body}) =>
+		       tFormals,eFormals,fFormals,body_type}) =>
 	 let
 	   val (tFormals,state) = bind_at_kinds state tFormals
 	   fun folder ((vopt,c),state) = 
@@ -480,10 +480,10 @@ struct
 			in  ((SOME v, c), state)
 			end)
 	   val (eFormals,state) = foldl_acc folder state eFormals
-	   val body = con_normalize' state body
+	   val body_type = con_normalize' state body_type
 	 in AllArrow_c{openness = openness, effect = effect, isDependent = isDependent,
 		       tFormals = tFormals, eFormals = eFormals, 
-		       fFormals = fFormals, body = body}
+		       fFormals = fFormals, body_type = body_type}
 	 end
 	| ExternArrow_c (args,body) => 
 	 let 
@@ -1087,13 +1087,13 @@ struct
        let val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
 	   val no_flatten = AllArrow_c{openness=openness,effect=effect,isDependent=false,
 				       tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,
-				       body=resc}
+				       body_type=resc}
        in  case (reduce_hnf(D,argc)) of
 	   (_,Prim_c(Record_c (labs,_),cons)) => 
 	       if (length labs > !number_flatten) then no_flatten 
 	       else AllArrow_c{openness=openness,effect=effect,isDependent=false,
 			       tFormals=[], eFormals=map (fn c => (NONE,c)) cons,
-			       fFormals=0w0, body=resc}
+			       fFormals=0w0, body_type=resc}
 	 | (true,_) => no_flatten
 	 | _ => irreducible
        end
@@ -1101,7 +1101,13 @@ struct
 
    and type_of_switch (D:context,switch:switch):con  = 
      (case switch of
-	   Intsw_e {default=SOME def,...} => type_of(D,def)
+	   Intsw_e {result_type,...} => result_type
+	 | Sumsw_e {result_type,...} => result_type
+	 | Exncase_e {result_type,...} => result_type
+         | Typecase_e {result_type,...} => result_type)
+
+(**
+           Intsw_e {default=SOME def,...} => type_of(D,def)
 	 | Intsw_e {arms,...} => type_of(D,#2(hd arms))
 	 | Sumsw_e {default=SOME def,...} => type_of(D,def)
 	 | Sumsw_e {arms,bound,sumtype,...} => 
@@ -1126,7 +1132,7 @@ struct
 	       in  type_of(D,#2(hd arms))
 	       end
 	 | Typecase_e _ => error "typecase_e not done")
-
+**)
 
    and type_of_value (D,value) = 
      (case value 
@@ -1209,7 +1215,7 @@ struct
 	  | make_onearg (openness,effect) => 
 	       let val [argc,resc] = cons
 	       in  AllArrow_c{openness=openness,effect=effect,isDependent=false,
-			      tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,body=resc}
+			      tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,body_type=resc}
 	       end
 	  | peq => error "peq not done")
 
@@ -1262,7 +1268,7 @@ struct
 	      val app_con : con = type_of (D,app)
 	      val  (tformals,eformals,body) = 
 		(case #2(reduce_hnf(D,app_con)) of
-		     AllArrow_c{tFormals,eFormals,body,...} => (tFormals,eFormals,body)
+		     AllArrow_c{tFormals,eFormals,body_type,...} => (tFormals,eFormals,body_type)
 		   | Prim_c(Vararg_c _, [_,c]) => ([],[],c)
 		   | c => (print "Ill Typed expression - not an arrow type.\n app_con = \n";
 			      Ppnil.pp_con app_con;

@@ -141,7 +141,7 @@ function *)
 	(case con of
 	   Prim_c(pc,cs) => acons cs
          | Mu_c(b,vcs) => asequence acon vcs
-         | AllArrow_c{tFormals=vks,eFormals=cs,body=c,...} =>
+         | AllArrow_c{tFormals=vks,eFormals=cs,body_type=c,...} =>
 	   let val s1 = avks vks
 	       val s2 = acons (map #2 cs)
 	       val s3 = acon c
@@ -249,18 +249,18 @@ vs) +
 e))
      and aswitch switch = 
         (case switch of
-           Intsw_e{arg,size,arms,default} =>
+           Intsw_e{arg,size,arms,default,result_type} =>
 	     List.foldl (fn ((_,e),s) => s + (aexp e)) 
 	     ((aexp arg) + (aexpopt default)) arms
-         | Sumsw_e{arg,(*unroll=u,*)sumtype,bound,arms,default} =>
+         | Sumsw_e{arg,(*unroll=u,*)sumtype,bound,arms,default,result_type} =>
 	     List.foldl (fn ((_,e),s) => 
 			 s + (aexp e)) ((aexp arg) + (aexpopt default) +
 					(acon sumtype)) arms
-         | Exncase_e{arg,bound,arms,default} =>
+         | Exncase_e{arg,bound,arms,default,result_type} =>
 	     List.foldl (fn ((e1,e2),s) => 
 			 s + (aexp e1) + (aexp e2)) 
 	     ((aexp arg) + (aexpopt default)) arms
-         | Typecase_e{arg,arms,default} => 
+         | Typecase_e{arg,arms,default,result_type} => 
 	     List.foldl (fn ((vks,e),s) => s + (aexp e) + (avks vks))
 	     ((acon arg) + (aexpopt default)) arms
        )
@@ -411,22 +411,26 @@ e))
 
       and rswitch sw = 
 	(case sw of
-	   Intsw_e{arg,size,arms,default} =>
+	   Intsw_e{arg,size,arms,default,result_type} =>
 	       Intsw_e{arg=rexp arg,size=size,
 		       arms=List.map(fn(w,e) => (w,rexp e)) arms,
-		       default=ropt rexp default}
-	 | Sumsw_e{arg,(*unroll=u,*)sumtype,bound,arms,default} => 
+		       default=ropt rexp default,
+		       result_type = rcon result_type}
+	 | Sumsw_e{arg,(*unroll=u,*)sumtype,bound,arms,default,result_type} => 
 	       Sumsw_e{arg=rexp arg,(*unroll=u,*)sumtype=rcon sumtype,bound=bound,
 		       arms=List.map(fn(w,e) => (w,rexp e)) arms,
-		       default=ropt rexp default}
-	 | Exncase_e {arg,bound,arms,default} => 
+		       default=ropt rexp default,
+		       result_type = rcon result_type}
+	 | Exncase_e {arg,bound,arms,default,result_type} => 
 	       Exncase_e{arg=rexp arg,bound=bound,
 			 arms=List.map(fn(e1,e2) => (e1,rexp e2)) arms,
-			 default=ropt rexp default}
-	 | Typecase_e {arg,arms,default} => 
+			 default=ropt rexp default,
+			 result_type = rcon result_type}
+	 | Typecase_e {arg,arms,default,result_type} => 
 	       Typecase_e{arg=rcon arg,
 			  arms=List.map(fn (vks,e) => (vks,rexp e)) arms,
-			  default=ropt rexp default})
+			  default=ropt rexp default,
+			  result_type = rcon result_type})
       and rmodule (MODULE{bnds,imports,exports}) = 
 	  MODULE{bnds=rbnds(bnds,[]),imports=imports,exports=exports}
   in 

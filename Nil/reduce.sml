@@ -448,10 +448,10 @@ structure Reduce
 		in 
 		  Sequence.app (fn (var, con) => scan_con fset con) vcset
 		end 
-	    | AllArrow_c {tFormals, eFormals, body, ...} => 
+	    | AllArrow_c {tFormals, eFormals, body_type, ...} => 
 		(app ((scan_kind fset) o #2) tFormals;
 		 app ((scan_con fset) o #2) eFormals;
-		 (scan_con fset) body)
+		 (scan_con fset) body_type)
 	    | ExternArrow_c (cons, con) =>
 		(app (scan_con fset) cons ; scan_con fset con)
 	    | Var_c v => ()
@@ -524,33 +524,37 @@ structure Reduce
 		val ins_esc = insesc fset
 	    in
 		case s of
-		    Intsw_e {arg,size,arms, default} =>
+		    Intsw_e {arg,size,arms, default,result_type} =>
 		       ( 
 			scan_exp arg;
+			scan_con result_type;
 			map (scan_exp o #2) arms;
 			Option.map (scan_exp) default;
 			()
 			)			
-		  | Sumsw_e {arg,sumtype,bound,arms,default} =>
+		  | Sumsw_e {arg,sumtype,bound,arms,default,result_type} =>
 			(
 			 scan_exp arg;
 			 scan_con sumtype;
+			 scan_con result_type;
 			 ins_esc bound;
 			 map (scan_exp o #2) arms;
 			 Option.map (scan_exp) default;
 			 ()
 			 )
-		  | Exncase_e {arg, bound, arms, default} => 
+		  | Exncase_e {arg, bound, arms, default,result_type} => 
 			(
 			 scan_exp arg;
+			 scan_con result_type;
 			 ins_esc bound;
 			 app (fn x => (scan_exp (#1 x); scan_exp (#2 x))) arms;
 			 Option.map (scan_exp) default;
 			 ()
 			 )
-		  | Typecase_e { arg, arms, default } =>
+		  | Typecase_e { arg, arms, default, result_type} =>
 			(
 			 scan_con arg;
+			 scan_con result_type;
 			 map ( (map ( (declare false) o #1)) o #1) arms;
 			 map ( (map (scan_kind o #2)) o #1) arms;
 			 map (scan_exp o #2) arms;
@@ -783,12 +787,13 @@ structure Reduce
 		in 
 		  Mu_c (bool, Sequence.map (fn (v, c) => (v, xcon fset c)) vcseq)
 		end 
-	    | AllArrow_c {openness, effect, isDependent, tFormals, eFormals, fFormals, body} =>
+	    | AllArrow_c {openness, effect, isDependent, tFormals, 
+			  eFormals, fFormals, body_type} =>
 		AllArrow_c {openness = openness, effect = effect, isDependent=isDependent,
 			    tFormals = map (fn (v,k) => (v, xkind fset k)) tFormals,
 			    eFormals = map (fn (vopt,c) => (vopt, xcon fset c)) eFormals,
 			    fFormals = fFormals,
-			    body = xcon fset body}
+			    body_type = xcon fset body_type}
 	    | ExternArrow_c (cons, con) => 
 		ExternArrow_c (map (xcon fset) cons, xcon fset con)
 	    | Crecord_c (lclist) =>
@@ -807,37 +812,38 @@ structure Reduce
 
 	    and xswitch fset s =
 		case s of
-		    Intsw_e { arg, size, arms, default } =>
-			Intsw_e {
-			 arg=xexp fset arg,
-			 size = size,
-			 arms = map (fn (w,e) => (w, xexp fset e)) arms,
-			 default = Option.map (xexp fset) default
-			 }
-		  | Sumsw_e {arg, sumtype, bound, arms, default} =>
-			Sumsw_e {
-			 arg=xexp fset arg,
-			 sumtype= xcon fset sumtype,
-			 bound=bound,
-			 arms = map (fn (w,e) => (w,xexp fset e)) arms,
-			 default =  Option.map (xexp fset) default
-			 }
-		  | Exncase_e {arg, bound, arms, default} =>  
-			 Exncase_e {
-			 arg = xexp fset arg,
-			 bound = bound,
-			 arms =  map (fn (w,e) => (xexp fset w,xexp fset e)) arms,
-			 default =  Option.map (xexp fset) default
-			 }
-		  | Typecase_e {arg, arms, default} => 
+		    Intsw_e { arg, size, arms, default, result_type} =>
+			Intsw_e {arg=xexp fset arg,
+				 result_type = xcon fset result_type,
+				 size = size,
+				 arms = map (fn (w,e) => (w, xexp fset e)) arms,
+				 default = Option.map (xexp fset) default
+				 }
+		  | Sumsw_e {arg, sumtype, bound, arms, default, result_type} =>
+			Sumsw_e {arg=xexp fset arg,
+				 result_type = xcon fset result_type,
+				 sumtype= xcon fset sumtype,
+				 bound=bound,
+				 arms = map (fn (w,e) => (w,xexp fset e)) arms,
+				 default =  Option.map (xexp fset) default
+				 }
+		  | Exncase_e {arg, bound, arms, default, result_type} =>  
+			Exncase_e {arg = xexp fset arg,
+				   result_type = xcon fset result_type,
+				   bound = bound,
+				   arms =  map (fn (w,e) => (xexp fset w,xexp fset e)) arms,
+				   default =  Option.map (xexp fset) default
+				   }
+		  | Typecase_e {arg, arms, default, result_type} => 
 			Typecase_e 
-			 {
-			  arg = xcon fset arg,
-			  arms = map 
-			  (fn (w,e) => 
+			{
+			 arg = xcon fset arg,
+			 result_type = xcon fset result_type,
+			 arms = map 
+			 (fn (w,e) => 
 			   (map (fn (v,k) => (v, xkind fset k)) w,xexp fset e)) arms,
-			  default =  Option.map (xexp fset) default
-			  }
+			 default =  Option.map (xexp fset) default
+			 }
 			 
 	    and xfunction fset 
 		(Function{effect, recursive, isDependent,

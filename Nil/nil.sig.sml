@@ -88,7 +88,7 @@ sig
 		     tFormals : (var * kind) list,
 		     eFormals : (var option * con) list,
 		     fFormals : w32,
-		     body : con}
+		     body_type : con}
     | ExternArrow_c of con list * con
     | Var_c of var
     | Let_c of letsort * conbnd list * con        (* Constructor-level bindings *)
@@ -152,18 +152,22 @@ sig
   and switch =                                 (* Switching on / Elim Form *)
       Intsw_e of {arg  : exp, 
 		  size : Prim.intsize,
+		  result_type : con,
 		  arms : (w32 * exp) list,
 		  default : exp option}             (* integers *)
     | Sumsw_e of {arg : exp,
 		  sumtype : con,
+		  result_type : con,
 		  bound : var,
 		  arms : (w32 * exp) list,
 		  default : exp option}             (* sum types *)
     | Exncase_e of {arg : exp,
+		    result_type : con,
 		    bound : var,
 		    arms : (exp * exp) list,
 		    default : exp option}           (* exceptions *)
     | Typecase_e of {arg : con,
+		     result_type : con,
 		     arms : ((var * kind) list * exp) list,
 		     default : exp option}          (* typecase *)
 
