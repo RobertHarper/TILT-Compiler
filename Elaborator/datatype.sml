@@ -386,9 +386,13 @@ structure Datatype
 		    val eq_lab = to_eq type_lab_i
 		    val equal_var = fresh_named_var (label2string eq_lab)
 		    val bnd_var = fresh_named_var ("poly" ^ (label2string eq_lab))
+		    val short_top_eq_exp = 
+			if (is_monomorphic)
+			    then VAR top_eq_var
+			else MODULE_PROJECT(MOD_APP(MOD_VAR top_eq_var, MOD_VAR mpoly_var), it_lab)
 		    val exp_eq = if num_datatype = 1
 				     then top_eq_exp
-				 else RECORD_PROJECT(VAR top_eq_var, 
+				 else RECORD_PROJECT(short_top_eq_exp,
 						     generate_tuple_label(i+1), top_eq_con)
 		    val con_eq = con_eqfun(if is_monomorphic 
 					       then CON_VAR type_var_i
@@ -402,7 +406,7 @@ structure Datatype
 				  then eq_expbnd
 			      else
 				  BND_MOD(bnd_var, true,
-					  MOD_FUNCTOR(TOTAL, mpoly_var,sigpoly_eq,
+					  MOD_FUNCTOR(TOTAL, mpoly_var, sigpoly_eq,
 						      MOD_STRUCTURE[SBND(it_lab,eq_expbnd)],
 						      eq_inner_sig))))
 		    val eq_sdec = 

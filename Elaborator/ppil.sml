@@ -568,7 +568,8 @@ struct
 		 Break,
 		 String "---- Pathmap ----",
 		 Break,
-		 pp_list path_doer (rev ordering) ("","","", true)]
+		 pp_list path_doer (rev ordering) ("","","", true),
+		 Break]
 	end
 
     fun pp_pcontext' ((ctxt, free) : Il.partial_context) = pp_context' ctxt

@@ -1817,10 +1817,13 @@ val _ = print "plet0\n"
 				      then ConApply(true,con,con_list)
 				  else (error_region();
 					tab_region();
-					print "type constructor wants ";
+					print "type constructor ";
+					app print (map Symbol.name syms);
+					print " wants ";
 					print (Int.toString n);
 					print "arguments, given ";
 					print (Int.toString (length con_list));
+					print "\n";
 					fresh_named_con(context,"badarity_type"))
 			     | _ => (pp_kind k; print "\nand c = "; 
 				     pp_con con;
