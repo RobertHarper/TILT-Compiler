@@ -67,12 +67,10 @@ struct
   val prelude_modules_hprof : ((Rtl.label list * string list) option) ref = ref NONE
 
   fun comp (asm_file,rtlmod) = 
-    let val _ = print "\n================================================\n"
-	val _ = print "Starting translation to TIL-Alpha assembly\n"
+    let val _ = print "===== Translating to TIL-Alpha assembly      =====\n"
 	val _ = Printutils.openOutput asm_file
 	val _ = Rtltoalpha.allocateModule rtlmod
 	val _ = Printutils.closeOutput()
-	val _ = print "Generation of TIL-Alpha assembly files complete\n"
     in	()
     end
 
