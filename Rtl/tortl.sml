@@ -1,15 +1,13 @@
-(* TODO: Profiling *)
+(* should varmap and convarmap be forever? *)
 functor Tortl(structure Rtl : RTL
-(*	      structure Rtlbp : RTLBP  *)
 	      structure Pprtl : PPRTL 
 	      structure Rtltags : RTLTAGS 
 	      structure Nil : NIL
 	      structure NilUtil : NILUTIL
 	      structure Ppnil : PPNIL
 	      sharing Ppnil.Nil = NilUtil.Nil = Nil
-(*	      structure Varutil : VARUTIL *)
-		      sharing Rtl = Pprtl.Rtl (* = Rtlbp.Rtl *) = Rtltags.Rtl 
-			  ) : TORTL =
+	      sharing Rtl = Pprtl.Rtl = Rtltags.Rtl)
+    : TORTL =
 struct
 
 
@@ -25,7 +23,7 @@ fun simplify_type _ = raise XXX
     open Rtl
     open Name
     open Rtltags 
-(*  Pprtl *)
+    open  Pprtl 
     type label = Rtl.label
 
 
@@ -79,7 +77,10 @@ fun simplify_type _ = raise XXX
   (* ----- Global data structures ------------------------------
    dl: list of data for module
    pl: list of procedures for the entire module
+   gvarmap: how a top-level NIL variable is represented at the RTL level
+   gconvarmap: how a top-level NIL type variable is represented at the RTL level
    varmap: how a NIL variable is represented at the RTL level
+   convarmap: how a NIL typevariable is represented at the RTL level
    mutable_objects : objects in global data area that can point to heap objects
                      (e.g.) pointer arrays
    mutable_variables : global variables that may contain pointers to heap objects
@@ -88,6 +89,8 @@ fun simplify_type _ = raise XXX
    exception NotFound
    val dl : Rtl.data list ref = ref nil
    val pl : Rtl.proc list ref = ref nil
+   val gvarmap: varmap ref = ref (mk_var_hash_table(128,NotFound))
+   val gconvarmap: convarmap ref = ref (mk_var_hash_table(128,NotFound))
    val varmap: varmap ref = ref (mk_var_hash_table(128,NotFound))
    val convarmap: convarmap ref = ref (mk_var_hash_table(128,NotFound))
    val mutable_objects : label list ref = ref nil
@@ -96,7 +99,8 @@ fun simplify_type _ = raise XXX
    datatype work = FunWork of (var * function)
                  | ConFunWork of (var * (var * kind) list * con * kind)
    val worklist : work list ref = ref nil
-   fun addWork more = worklist := (more :: (!worklist))
+   fun addWork more = (print "addwork called\n";
+		       worklist := (more :: (!worklist)))
    fun getWork() = (case (!worklist) of
 			 [] => NONE
 		       | (a::b) => (worklist := b; SOME a))
@@ -105,11 +109,21 @@ fun simplify_type _ = raise XXX
     
   fun getconvarrep v = 
       (case HashTable.find (!convarmap) v of
-	   NONE => error ("getrep: variable "^(var2string v)^" not found")
+	   NONE => (case HashTable.find (!gconvarmap) v of
+			NONE => error ("getconvarrep: variable "^(var2string v)^" not found")
+		      | SOME convar_rep => convar_rep)
 	 | SOME convar_rep => convar_rep)
   fun getrep v = 
       (case HashTable.find (!varmap) v of
-	   NONE => error ("getrep: variable "^(var2string v)^" not found")
+	   NONE => (case HashTable.find (!gvarmap) v of
+			NONE => 
+			    (HashTable.appi (fn (v,_) => (pp_var v; print "\n")) (!varmap);
+			     print "!varmap has "; print (Int.toString (HashTable.numItems (!varmap)));
+			     print " items\n!convarmap has "; 
+			     print (Int.toString (HashTable.numItems (!convarmap)));
+			     print " items\n";
+			     error ("getrep: variable "^(var2string v)^" not found"))
+		      | SOME rep => rep)
 	 | SOME rep => rep)
 
 
@@ -252,11 +266,26 @@ fun simplify_type _ = raise XXX
 	       Nil.Prim_c(Float_c _,[]) => F(alloc_named_regf v)
 	     | _ => I(alloc_named_regi v (con2rep c))
 		   
+       fun insert map (key,v) = (case (HashTable.find (map) key) of
+				     NONE => (print "inserting variable ";
+					      pp_var key; print "\n";
+					      HashTable.insert (map) (key,v))
+				   | SOME _ => error "hash table already contains entry")
 
-       fun reset_state (name,(iargs,fargs),result,return) =
+       fun promote_maps() = 
+	   (print "promote maps called\n";
+	    HashTable.appi (fn (k,v) => (insert (!gvarmap) (k,v))) (!varmap);
+	    HashTable.appi (fn (k,v) => (insert (!gconvarmap) (k,v))) (!convarmap))
+
+       fun reset_state (is_top,name,(iargs,fargs),result,return) =
 	   (dl := nil; 
 	    pl := nil; 
-	    varmap := mk_var_hash_table(128,NotFound);
+	    if (!istop)  (* if we were just in global state, promote its locals *)
+		then promote_maps()
+	    else ();
+	    varmap := mk_var_hash_table(128,NotFound); 
+	    convarmap := mk_var_hash_table(128,NotFound); 
+	    istop := is_top;
 	    mutable_objects := nil;
 	    mutable_variables := nil; 
 	    
@@ -353,24 +382,27 @@ fun simplify_type _ = raise XXX
 				      
 
   (* functions for manipulating RTL representations of NIL variables *)
-  fun add_var     (v,reg,con)       = HashTable.insert (!varmap) (v,(VREGISTER reg, NONE, con))
-  fun add_var_val (v,reg,con,value) = HashTable.insert (!varmap) (v,(VREGISTER reg, SOME value, con))
-  fun add_convar  (v,regi,kind)     = HashTable.insert (!convarmap) (v,(VREGISTER (I regi),kind))
-  fun add_convar_label (v,l,kind)     = HashTable.insert (!convarmap) (v,(VCODE l,kind))
+  fun add_var     (v,reg,con)       = insert (!varmap) (v,(VREGISTER reg, NONE, con))
+  fun add_var_val (v,reg,con,value) = insert (!varmap) (v,(VREGISTER reg, SOME value, con))
+  fun add_convar  (v,regi,kind)     = insert (!convarmap) (v,(VREGISTER (I regi),kind))
+  fun add_convar_label (v,l,kind)   = insert (!convarmap) (v,(VCODE l,kind))
+  fun gadd_convar_label (v,l,kind)   = insert (!gconvarmap) (v,(VCODE l,kind))
 
-  fun add_global     (v,p,con)        = HashTable.insert (!varmap) (v,(VGLOBAL p, NONE,con))
-  fun add_global_val (v,p,con,value)  = HashTable.insert (!varmap) (v,(VGLOBAL p, SOME value,con))
+  fun add_global     (v,p,con)        = insert (!varmap) (v,(VGLOBAL p, NONE,con))
+  fun add_global_val (v,p,con,value)  = insert (!varmap) (v,(VGLOBAL p, SOME value,con))
 
-  fun add_label (v,lab, con) = HashTable.insert (!varmap) (v,(VLABEL lab, NONE, con))
-  fun add_loclabel (LOCAL_CODE v,lab, con) = HashTable.insert (!varmap) (v,(VCODE lab, NONE, con))
-    | add_loclabel (LOCAL_DATA v,lab, con) = HashTable.insert (!varmap) (v,(VCODE lab, NONE, con))
+  fun add_label (v,lab, con) = insert (!varmap) (v,(VLABEL lab, NONE, con))
+  fun add_loclabel (LOCAL_CODE v,lab, con) = insert (!varmap) (v,(VCODE lab, NONE, con))
+    | add_loclabel (LOCAL_DATA v,lab, con) = insert (!varmap) (v,(VCODE lab, NONE, con))
+  fun gadd_loclabel (LOCAL_CODE v,lab, con) = insert (!gvarmap) (v,(VCODE lab, NONE, con))
+    | gadd_loclabel (LOCAL_DATA v,lab, con) = insert (!gvarmap) (v,(VCODE lab, NONE, con))
 
   fun add_varloc (v,VREGISTER r,con) = add_var(v,r,con)
     | add_varloc (v,VGLOBAL lr, con) = add_global(v,lr,con)
     | add_varloc (v,VLABEL l, con) = add_label(v,l,con)
-    | add_varloc (v,VCODE l, con) = HashTable.insert (!varmap) (v,(VCODE l, NONE, con))
+    | add_varloc (v,VCODE l, con) = insert (!varmap) (v,(VCODE l, NONE, con))
 
-  fun add_varmap (v,rep,con) = HashTable.insert (!varmap) (v,(rep,NONE,con))
+  fun add_varmap (v,rep,con) = insert (!varmap) (v,(rep,NONE,con))
     
   val heapptr  = SREGI HEAPPTR
   val stackptr = SREGI STACKPTR
@@ -839,16 +871,18 @@ fun simplify_type _ = raise XXX
 			  let val funcon = AllArrow_c(Code,effect,vklist,map #2 vclist,
 						      TilWord32.fromInt (length vflist),c)
 			      val ll = LOCAL_CODE v
-			      val _ = add_loclabel(ll, LOCAL_LABEL ll, funcon)
+			      val _ = gadd_loclabel(ll, LOCAL_LABEL ll, funcon)
 			  in addWork(FunWork(v,f))
 			  end
-			| adder _ = error "encountered open Function"
 		  in app adder (sequence2list var_fun_set)
 		  end
 	    | Fixclosure_b var_varconexpset => 
 		  let val var_vcelist = sequence2list var_varconexpset
-		      val cregsi = map (fn (_,{code,cenv,venv,tipe}) =>
-				       #1(xcon(fresh_named_var "cenv", cenv))) var_vcelist
+		      val cregsi = map (fn (v,{code,cenv,venv,tipe}) =>
+					let val (cregi,_) = xcon(fresh_named_var "cenv", cenv)
+					    val _ = add_var(v,I cregi,tipe)
+					in cregi 
+					end) var_vcelist
 		      fun loadcl (n,(v,_),cregi) = 
 			  let val code_lv = #1(xexp(fresh_named_var "codereg",Var_e v,NONE,NOTID))
 			      val vls = [code_lv,
@@ -877,7 +911,7 @@ fun simplify_type _ = raise XXX
 	    | Code_cb (conwork as (name,vklist,c,k)) => 
 		  let val funkind = Arrow_k(Code,vklist,k)
 		      val l = LOCAL_LABEL(LOCAL_CODE name)
-		      val _ = add_convar_label(name,l,funkind)
+		      val _ = gadd_convar_label(name,l,funkind)
 		  in  addWork (ConFunWork conwork)
 		  end
 	    | Open_cb _ => error "open Fun_cb"
@@ -949,7 +983,7 @@ fun simplify_type _ = raise XXX
 					    funcon, [], [])
 				       end
 				 | (Code,_) => error "ill-formed application"
-				 | (Closed,cl) =>
+				 | (Closure,cl) =>
 				       let val (clreg,funcon) = xexp'(fresh_var(),cl,NONE,NOTID)
 					   val clregi = (case clreg of
 							     I ir => ir
@@ -1481,7 +1515,7 @@ fun simplify_type _ = raise XXX
                            val dest = alloc_regi NOTRACE_INT
                            val cmp = if signed then CMPSI else CMPUI
                            val _ =  add_instr(cmp(oper,a',b',dest))
-                       in (VAR_LOC(VREGISTER(I dest)),boolcon)
+                       in (VAR_LOC(VREGISTER(I dest)),bool_con)
                        end
                  | _ => error "need exactly 2 arguments for this primitive")
           val stdcmp2si = stdcmp2i true
@@ -1495,7 +1529,7 @@ fun simplify_type _ = raise XXX
 			   val b' = load_freg_locval(vl2,NONE)
 			   val dest = alloc_regi NOTRACE_INT
 			   val _ =  add_instr(CMPF(oper,a',b',dest))
-		       in (VAR_LOC(VREGISTER(I dest)),boolcon)
+		       in (VAR_LOC(VREGISTER(I dest)),bool_con)
 		       end
 		 | _ => error "need exactly 2 arguments for this primitive")
 
@@ -1817,7 +1851,7 @@ fun simplify_type _ = raise XXX
 	  val ir2 = load_ireg_locval(vl2,NONE)
 	  val desti = alloc_regi NOTRACE_INT
 	  val _ = add_instr(CMPUI(EQ,ir1,REG ir2,desti))
-      in  (VAR_LOC(VREGISTER (I desti)),NilUtil.boolcon)
+      in  (VAR_LOC(VREGISTER (I desti)),NilUtil.bool_con)
       end
 
   and xlength(c, vl : loc_or_val) : loc_or_val * con =
@@ -2246,7 +2280,7 @@ fun simplify_type _ = raise XXX
 
 
   local 
-      fun doconfun(name,vklist,body,kind) = 
+      fun doconfun is_top (name,vklist,body,kind) = 
 	  let 
 	      val iargs = map (fn (v,k) => let val r = alloc_named_regi v TRACE
 					   in  (add_convar(v,r,k); r)
@@ -2255,7 +2289,7 @@ fun simplify_type _ = raise XXX
 	      val resulti = alloc_regi TRACE
 	      val results = ([resulti],[])
 	      val return = alloc_regi(LABEL)
-	      val _ = reset_state(name, args, I resulti,return)
+	      val _ = reset_state(is_top,name, args, I resulti,return)
 	      val {name,revcode} = get_state()
 	      val {name,revcode} = get_state()
 	      val (ir,k) = xcon(fresh_named_var "result",body)
@@ -2271,9 +2305,13 @@ fun simplify_type _ = raise XXX
 			   vars=NONE}
 	  in add_proc p
 	  end
-     fun dofun(v,Function(effect,recur,vklist,vclist,vflist,body,con)) = 
+     fun dofun is_top (v,Function(effect,recur,vklist,vclist,vflist,body,con)) = 
 	  let 
-	      val cargs = map (fn (v,_) => alloc_named_regi v TRACE) vklist
+	      val cargs = map (fn (v,k) => 
+			       let val r = alloc_named_regi v TRACE
+				   val _ = add_convar(v,r,k)
+			       in  r
+			       end) vklist
 	      val eiargs = map (fn (v,c) => 
 				let val r = alloc_named_reg(c,v)
 				    val _ = add_var(v,r,c); 
@@ -2291,7 +2329,7 @@ fun simplify_type _ = raise XXX
 				 I ir => ([ir],[])
 			       | F fr => ([],[fr]))
 	      val return = alloc_regi(LABEL)
-	      val _ = reset_state(v, args, result,return)
+	      val _ = reset_state(is_top, v, args, result,return)
 	      val {name,revcode} = get_state()
 	      val (r,c) = xexp'(fresh_named_var "result",body,
 				SOME con, ID return)
@@ -2311,11 +2349,18 @@ fun simplify_type _ = raise XXX
 	  in add_proc p
 	  end
   in
-      fun worklist_loop() = 
-	  (case getWork() of
-	       NONE => ()
-	     | SOME (FunWork vf) => (dofun vf; worklist_loop())
-	     | SOME (ConFunWork vvkck) => (doconfun vvkck); worklist_loop())
+      fun worklist_loop () = 
+	  let fun loop is_top = 
+	      (case getWork() of
+		   NONE => ()
+		 | SOME (FunWork vf) => (print "calling dofun\n";
+					 dofun is_top vf; loop false)
+		 | SOME (ConFunWork vvkck) => (print "calling doconfun\n";
+					       doconfun is_top vvkck; loop false))
+	  in (gvarmap := mk_var_hash_table(128,NotFound);
+	      gconvarmap := mk_var_hash_table(128,NotFound);
+	      loop true)
+	  end
   end
 
    fun translate trans_params (exp,con) = 
