@@ -1,4 +1,4 @@
-(*$import Firstlude TiltPrim Prelude Word HASH_KEY MONO_HASH_TABLE Array HashTableRep *)
+(*$import Word HASH_KEY MONO_HASH_TABLE Array HashTableRep *)
 (* hash-table-fn.sml
  *
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories.
