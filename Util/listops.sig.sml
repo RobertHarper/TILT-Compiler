@@ -46,8 +46,8 @@ signature LISTOPS =
     val app2 : ('a * 'b -> 'c) -> ('a list * 'b list) -> unit
     val app3 : ('a * 'b * 'c -> 'd) -> ('a list * 'b list * 'c list) -> unit
     (* Misc list helpers *)
-    val eq_list : (('a * 'a -> bool) * 'a list * 'a list) -> bool
-    val eq_listlist : (('a * 'a -> bool) * 'a list list * 'a list list) -> bool
+    val eq_list : (('a * 'b -> bool) * 'a list * 'b list) -> bool
+    val eq_listlist : (('a * 'b -> bool) * 'a list list * 'b list list) -> bool
     (*[0...(n-1)]*)
     val count : int -> int list
     (*[1...n]*)

@@ -122,7 +122,7 @@ structure Listops :> LISTOPS =
       | list_inter_eq (p,a::rest,b) = if (member_eq(p,a,b)) then a::(list_inter_eq(p,rest,b)) else list_inter_eq(p,rest,b) 
 
 
-    fun eq_list (f, [] : 'a list, [] : 'a list) = true
+    fun eq_list (f, [] : 'a list, [] : 'b list) = true
       | eq_list (f, a::arest, b::brest) = f(a,b) andalso eq_list(f,arest,brest)
       | eq_list (f, _, _) = false
     fun eq_listlist  (f, a, b) = eq_list(fn (x,y) => eq_list(f,x,y), a,b)

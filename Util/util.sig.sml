@@ -32,12 +32,12 @@ signature UTIL =
     val CharStr2char : string -> char
 
     (* oneshot is a ref that can be set only once *)
-    type '1a oneshot
-    val oneshot       : unit -> '1a oneshot
-    val oneshot_init  : '1a   -> '1a oneshot
-    val oneshot_set   : '1a oneshot * '1a -> unit
-    val oneshot_deref : '1a oneshot -> '1a option
-    val eq_oneshot    : '1a oneshot * '1a oneshot -> bool
+    type 'a oneshot
+    val oneshot       : unit -> 'a oneshot
+    val oneshot_init  : 'a   -> 'a oneshot
+    val oneshot_set   : 'a oneshot * 'a -> unit
+    val oneshot_deref : 'a oneshot -> 'a option
+    val eq_oneshot    : 'a oneshot * 'a oneshot -> bool
 
 
     val curry2 : ('a * 'b -> 'c) -> ('a -> 'b -> 'c)
