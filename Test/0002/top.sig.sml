@@ -16,10 +16,10 @@ sig
     eqtype 'a array
     eqtype 'a vector
     eqtype 'a ref
-    datatype bool = false | true
+    datatype bool = datatype bool
     datatype 'a option = NONE | SOME of 'a
     datatype order = LESS | EQUAL | GREATER
-    datatype 'a list = nil | :: of ('a * 'a list)
+    datatype list = datatype list
 
     exception Bind
     exception Chr

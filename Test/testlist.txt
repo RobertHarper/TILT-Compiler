@@ -48,7 +48,7 @@ bug55b	pass	Unresolved tyvar breaking phase-splitter.
 bug80	pass	Phase splitter and signatures.
 bug82	fail	Flexible records.
 bug84	pass	Shadowing :: or nil breaks pattern compiler.
-bug84b	fail	Shadowing :: or nil should be disallowed.
+bug84b	pass	Shadowing :: or nil should be disallowed.
 bug114	fail	Overloading constants.
 bug151a	pass	name-mangling test [x] <- [x]
 bug151b	pass	order of imports and effects are correct
@@ -58,7 +58,7 @@ bug152	pass	Incorrect matching of eqtype specs.
 bug153	fail	Sharing abstract type and eqtype specs.
 bug154	pass	Equality allowed on non-eqtypes by elaborator.
 bug155	fail	Type sharing fails on corner case.
-bug159	fail	Datatype replication.
+bug159	pass	Datatype replication.
 bug163	pass	Pattern compiler causing elaborator to bomb.
 bug165	pass	Elaborator shadowing variables.
 bug166	pass	Elaborator adding classifiers with unbound, free variables to context.

@@ -260,4 +260,6 @@ signature ILUTIL =
     val make_typearg_sdecs : context -> (label * bool) list -> Il.sdecs
     val reduce_typearg_sdecs : exp * Name.vpath * Il.sdecs -> Il.sdecs
 
+    val ok_to_bind : Il.context * Symbol.symbol -> bool
+
   end;

@@ -593,6 +593,13 @@ structure Datatype
        imposed by TILT.
     *)
 
+  (* splitScc : Ast.db list -> def list list option *)
+  (* Split datatype bindings into strongly-connected components and
+     perform syntactic checks, returning NONE if the bindings are
+     rejected.  *)
+  fun splitScc (context,dbs) =
+  let
+
     (* with_mark : ('a -> 'b) -> 'a * Error.region -> 'b *)
     fun with_mark f (a, region) = let val _ = Error.push_region region
 				      val res = f a
@@ -676,7 +683,13 @@ structure Datatype
     fun checkDbRhs tycons (Ast.Db {tyc, tyvars, rhs}) =
 	let val tyvars = map AstHelp.tyvar_strip tyvars
 	    val tys = List.mapPartial #2 (constrs rhs)
-	in  ALL (checkTy (tycons, tyvars)) tys
+            val datacons : Symbol.symbol list = map #1 (constrs rhs)
+	in  AND(ALL (checkTy (tycons, tyvars)) tys,
+		ALL (fn sym => ok_to_bind(context,sym) orelse 
+		       (Error.error_region(); 
+			print ("Rebinding of "^(Symbol.name sym)^" not permitted\n");
+			false))
+		    datacons)
 	end
       | checkDbRhs tycons (Ast.MarkDb mark) = with_mark (checkDbRhs tycons) mark
 
@@ -702,34 +715,28 @@ structure Datatype
 	in  (tyc, tyv, constrs rhs)
 	end
 
-    (* splitScc : Ast.db list -> def list list option *)
-    (* Split datatype bindings into strongly-connected components and
-       perform syntactic checks, returning NONE if the bindings are
-       rejected.  *)
-    fun splitScc dbs =
-	let
-	    val nodes = Listops.mapcount (fn (i,db) => (i,def db)) dbs
-	    val numnodes = length nodes
-	    val syms = map (fn (_,(s,_,_)) => s) nodes
-	    fun help (_,NONE) = []
-	      | help (_,SOME ty) = let val s = AstHelp.free_tyc_ty(ty,fn _ => false)
-				   in list_inter_eq(Symbol.eq,s,syms)
-				   end
-	    fun lookup tars = case List.find (fn (_,(s,_,_)) => Symbol.eq(s,tars)) nodes
-	    			of NONE => error "lookup should not fail"
-				 | SOME (i,_) => i
-	    fun get_edges (i, (_,_,rhs)) = (map (fn s => (i, lookup s))
-	    			            (Listops.flatten (map help rhs)))
-	    val edges = flatten (map get_edges nodes)
-	    val comps = rev(GraphUtil.scc numnodes edges)
+    val nodes = Listops.mapcount (fn (i,db) => (i,def db)) dbs
+    val numnodes = length nodes
+    val syms = map (fn (_,(s,_,_)) => s) nodes
+    fun help (_,NONE) = []
+      | help (_,SOME ty) = let val s = AstHelp.free_tyc_ty(ty,fn _ => false)
+			   in list_inter_eq(Symbol.eq,s,syms)
+			   end
+    fun lookup tars = case List.find (fn (_,(s,_,_)) => Symbol.eq(s,tars)) nodes
+	                of NONE => error "lookup should not fail"
+		         | SOME (i,_) => i
+    fun get_edges (i, (_,_,rhs)) = (map (fn s => (i, lookup s))
+				    (Listops.flatten (map help rhs)))
+    val edges = flatten (map get_edges nodes)
+    val comps = rev(GraphUtil.scc numnodes edges)
 
-	    fun lookupDb tari = List.nth(dbs, tari)
-	    fun lookupDef tari = #2(List.nth(nodes, tari))
-	in
-	    if checkSCCs (Listops.mapmap lookupDb comps)
-	    then SOME (Listops.mapmap lookupDef comps)
-	    else NONE
-	end
+    fun lookupDb tari = List.nth(dbs, tari)
+    fun lookupDef tari = #2(List.nth(nodes, tari))
+  in
+      if checkSCCs (Listops.mapmap lookupDb comps)
+	  then SOME (Listops.mapmap lookupDef comps)
+      else NONE
+  end
 
     fun compile' (context, typecompile,
 		  datatycs : Ast.db list, eq_compile, is_transparent : bool) : (sbnd * sdec) list =
@@ -761,7 +768,7 @@ structure Datatype
 		val acc' = (rev sbnd_sdecs) @ acc
 	    in loop context' acc' rest
 	    end
-      in case splitScc datatycs
+      in case splitScc (context,datatycs)
 	   of NONE => []
 	    | SOME sym_tyvar_def_listlist => loop context [] sym_tyvar_def_listlist
       end

@@ -255,12 +255,18 @@ structure Toil :> TOIL =
 		| ((NONE,_)::rest) => loop (acc1,acc2) rest
 		| ((SOME sbnd,CONTEXT_SDEC sdec)::rest) => loop (sbnd::acc1,sdec::acc2) rest
 		| ((SOME sbnd,_)::_) => elab_error "sbnd_ctxt_list2modsig: sbnd without sdec")
-	     val (sbnds,sdecs) = loop ([],[]) sbnd_ctxt_list
+	     val (sbnds,sdecs) = loop ([],[]) (rev sbnd_ctxt_list)
 	 in (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE sdecs)
 	 end
 
+     fun add_context_fixity_entries (context : context,
+				     sbnd_ctxt_list : decresult) : context =
+         let val entries = List.mapPartial (fn (_, x as CONTEXT_FIXITY _) => SOME x | _ => NONE)
+	                     sbnd_ctxt_list
+	 in  add_context_entries(context,entries)
+         end
 
-     and add_context_sbnd_ctxts
+     fun add_context_sbnd_ctxts
 	 (context : context,
 	  sbnd_ctxt : decresult) : sbnd list * context =
 	 let
@@ -279,7 +285,7 @@ structure Toil :> TOIL =
                      a list of objects
            outputs : a list of (optional) bindings and context-entries
      *)
-     and packagedecs (xobj : context * 'a -> decresult)
+     fun packagedecs (xobj : context * 'a -> decresult)
          (context, sequential) (objs : 'a list) : decresult =
          let
              fun loop context [] = []
@@ -655,12 +661,16 @@ structure Toil :> TOIL =
 	     end
        | Ast.VarExp path => xpath (context, path, true)
        | Ast.LetExp {dec,expr} =>
-	     let val sbnd_ctxt_list = xdec true (context, dec)
-		 val (sbnds,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list)
-		 val (e,c,va) = xexp(context',expr)
-		 val c = reduce_to_remove(context',c,sbnds)
-		 val bnds = map (fn (SBND(_,bnd)) => bnd) sbnds
-	     in  (LET(bnds,e),c,false)
+             let val var1 = fresh_named_var("LetStr")
+                 val lbl = to_open(internal_label "LetStr")
+		 val sbnd_ctxt_list = xdec (context, dec)
+                 val (mod1,sig1) = sbnd_ctxt_list2modsig sbnd_ctxt_list
+		 val context = add_context_mod(context,lbl,var1,sig1)
+		 val context = add_context_fixity_entries(context,sbnd_ctxt_list)
+		 val (e,c,va) = xexp(context,expr)
+		 val bnd = BND_MOD(var1,false,mod1)
+		 val c = reduce_to_remove(context,c,[SBND(lbl,bnd)])
+	     in  (LET([bnd],e),c,false)
 	     end
 
 
@@ -883,8 +893,8 @@ structure Toil :> TOIL =
 			 eq_compile=xeq',
 			 is_transparent=false}
 
-     and xfundec islocal (context : context, dec_list : ((label * var) list * con * con *
-			  (Ast.pat list * Ast.exp) list) list, tyvar_stamp, sdecs1, var_poly, open_lbl) =
+     and xfundec (context : context, dec_list : ((label * var) list * con * con *
+	               (Ast.pat list * Ast.exp) list) list, tyvar_stamp, sdecs1, var_poly, open_lbl) =
 	 let
 	     (* We must discover all the variables to generalize over.
 	      For the user-level variables, we must also compile in a context
@@ -1073,7 +1083,7 @@ structure Toil :> TOIL =
 	 in  sbnds_entries
 	 end
 
-     and xdec islocal (context : context, d : Ast.dec) : decresult =
+     and xdec (context : context, d : Ast.dec) : decresult =
        (case d of
           (* --- The tricky thing about this value declarations is figuring
 	     --- out what type variables need to be generalized.  There are two
@@ -1276,12 +1286,12 @@ structure Toil :> TOIL =
 		val dec_list : ((label * var) list * con * con *
 				(Ast.pat list * Ast.exp) list) list =
 		    map (rvb_help o vb_strip) rvblist
-	    in  xfundec islocal (context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
+	    in  xfundec (context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
 	    end
 
 	| Ast.ValDec (vblist,rvblist,tyvars) =>
-	    (xdec islocal (context, Ast.ValDec(vblist,[],tyvars)) @
-	     xdec islocal (context, Ast.ValDec([],rvblist,tyvars)))
+	    (xdec (context, Ast.ValDec(vblist,[],tyvars)) @
+	     xdec (context, Ast.ValDec([],rvblist,tyvars)))
 
 	| Ast.FunDec (fblist,ref tyvars) =>
 	    let val tyvar_stamp = new_stamp()
@@ -1345,7 +1355,7 @@ structure Toil :> TOIL =
 		val dec_list : ((label * var) list * con * con *
 				(Ast.pat list * Ast.exp) list) list =
 		    map (fb_help o fb_strip) fblist
-	    in  xfundec islocal	(context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
+	    in  xfundec (context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
 	    end
 
 
@@ -1356,7 +1366,7 @@ structure Toil :> TOIL =
 		val con = con_normalize(context,con)
 	    in  [(NONE, CONTEXT_EXTERN(lab,var,lab,con))]
 	    end
-	| Ast.SeqDec decs => packagedecs (xdec islocal) (context, true) decs
+	| Ast.SeqDec decs => packagedecs xdec (context, true) decs
 	| Ast.OpenDec pathlist =>
 	      let fun help (i,path) =
 		  (case (Context_Lookup_Labels(context,map symbol_label path)) of
@@ -1390,19 +1400,20 @@ structure Toil :> TOIL =
 					      error "cannot parse datbind"))
 		  val dec = Ast.SeqDec[Ast.DatatypeDec{datatycs=dt,withtycs=[]},
 				       Ast.TypeDec wt]
-	      in  xdec islocal (context,dec)
+	      in  xdec (context,dec)
 	      end
-	| Ast.StrDec strblist => xstrbinds islocal (context,strblist)
+	| Ast.StrDec strblist => xstrbinds(context,strblist)
  	| Ast.FctDec fctblist => xfctbind(context,fctblist)
 
 	| Ast.ExceptionDec [] => parse_error "ExceptionDec []"
 	| Ast.ExceptionDec [Ast.MarkEb (eb,r)] =>
 	      let val _ = push_region r
-		  val res = xdec islocal (context, Ast.ExceptionDec [eb])
+		  val res = xdec (context, Ast.ExceptionDec [eb])
 		  val _ = pop_region()
 	      in res
 	      end
 	| Ast.ExceptionDec [Ast.EbGen {exn,etype}] =>
+	      if ok_to_bind(context,exn) then
 		let
 		  (* N.B. Runtime/exn.c cares how exceptions are compiled. *)
 		  val exn_str = Symbol.name exn
@@ -1428,7 +1439,12 @@ structure Toil :> TOIL =
 		in [(SOME(SBND(id_bar,BND_MOD(exnmodvar,false,inner_mod))),
 		     CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(exnmodvar,false,inner_sig))))]
 		end
+	    else 
+		(error_region(); 
+		 print ("Rebinding of "^(Symbol.name exn)^" not permitted\n");
+		 [])
 	| Ast.ExceptionDec [Ast.EbDef {exn: Symbol.symbol, edef: Ast.path}] =>
+            if ok_to_bind(context,exn) then
 	      (case (Context_Lookup_Labels(context,map symbol_label edef)) of
 		   SOME(_,PHRASE_CLASS_MOD(m,_,s,_)) =>
 		       let val id_bar = symbol_label exn
@@ -1449,14 +1465,18 @@ structure Toil :> TOIL =
 		       end
 		 | _ => (error_region(); print "unbound exception: ???\n";
 			 []))
-	| Ast.ExceptionDec eblist => xdec islocal (context,Ast.SeqDec(map (fn eb => Ast.ExceptionDec [eb]) eblist))
+	    else 
+		(error_region(); 
+		 print ("Rebinding of "^(Symbol.name exn)^" not permitted\n");
+		 [])
+	| Ast.ExceptionDec eblist => xdec (context,Ast.SeqDec(map (fn eb => Ast.ExceptionDec [eb]) eblist))
 
         (* Rule 244 *)
 	| Ast.LocalDec (dec1,dec2) =>
 	      let
-		  val sbnd_ctxt_list1 = xdec true (context,dec1)
+		  val sbnd_ctxt_list1 = xdec (context,dec1)
 		  val (_,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list1)
-		  val sbnd_ctxt_list2 = xdec false (context',dec2)
+		  val sbnd_ctxt_list2 = xdec (context',dec2)
 		  val (_,context'') = add_context_sbnd_ctxts(context',sbnd_ctxt_list2)
 		  fun genSubstFromSbnd (subst, self, SBND(l,BND_MOD(v,_,m))) =
 		      let val self2 = join_path_labels(self, [l])
@@ -1522,7 +1542,7 @@ structure Toil :> TOIL =
 	      let val ctxt : context_entry = xsigb(context,sigb)
 		  (* CONTEXT_SIGNATs do not need to be selfified *)
 		  val context' = add_context_entries(context,[ctxt])
-		  val sbnd_ctxt_rest = xdec islocal (context',Ast.SigDec rest)
+		  val sbnd_ctxt_rest = xdec (context',Ast.SigDec rest)
 	      in (NONE,ctxt)::sbnd_ctxt_rest
 	      end
 	| Ast.AbstypeDec {abstycs,withtycs,body} =>
@@ -1534,7 +1554,7 @@ structure Toil :> TOIL =
 		      end
 		  val bdec = Ast.SeqDec((map get_dec abstycs) @ [body])
 		  val desugared_dec = Ast.LocalDec(ldec,bdec)
-	      in xdec islocal (context, desugared_dec)
+	      in xdec (context, desugared_dec)
 	      end
 	| Ast.FsigDec fsiglist => parse_error "functor signature declaration not handled"
 	| Ast.OvldDec (sym,ignored_type,exp_list) =>
@@ -1557,7 +1577,7 @@ structure Toil :> TOIL =
 
         (* translate declaration by dropping region information *)
 	| Ast.MarkDec (dec,region) => let val _ = push_region region
-					  val res = xdec islocal (context,dec)
+					  val res = xdec (context,dec)
 					  val _ = pop_region()
 				      in res
 				      end)
@@ -1750,7 +1770,7 @@ structure Toil :> TOIL =
 			       end
 	| Ast.AugSig (s, []) => xsigexp(context,s)
 	| Ast.AugSig (s, ((Ast.WhStruct (syms1,syms2))::rest)) =>
-	      let val (_,m2,s2) = xstrexp(context,Ast.VarStr syms2, Ast.NoSig)
+	      let val (m2,s2) = xstrexp(context,Ast.VarStr syms2, Ast.NoSig)
 		  val s = xsigexp(context,Ast.AugSig(s,rest))
 		  val s2_is_struct = (case reduce_signat context s2 of
 					  SIGNAT_STRUCTURE _ => true
@@ -1821,14 +1841,16 @@ structure Toil :> TOIL =
      and xspec(orig_ctxt, specs : Ast.spec list) : sdecs =
        let
 	 datatype sdecs_tag = ADDITIONAL of sdecs | ALL_NEW of sdecs
+	 exception BadIdentifier
 	 fun xspec1 context prev_sdecs spec : sdecs_tag =
 	     case spec of
 		 (Ast.ValSpec vtlist) => (* Rules 257 - 258 *)
 	       let
-		 fun doer (sym,ty) =
-		   (case (free_tyvar_ty(ty,fn _ => false)) of
-			[] => SDEC(symbol_label sym,
-				   DEC_EXP(gen_var_from_symbol sym,xty(context,ty),NONE,false))
+		 fun doer (sym,ty) = 
+          	  if ok_to_bind(context,sym) then
+	           (case (free_tyvar_ty(ty,fn _ => false)) of
+			[] => SOME(SDEC(symbol_label sym,
+				   DEC_EXP(gen_var_from_symbol sym,xty(context,ty),NONE,false)))
 		    | ftv_sym =>
 			let
 			    val varpoly = fresh_named_var "var_poly"
@@ -1857,9 +1879,12 @@ structure Toil :> TOIL =
 									     DEC_EXP(fresh_var(),
 										     con,NONE,false))]),
 						      TOTAL)
-			in SDEC(symbol_label sym, DEC_MOD(fresh_named_var "unused",true,fsig))
+			in SOME(SDEC(symbol_label sym, DEC_MOD(fresh_named_var "unused",true,fsig)))
 			end)
-	       in ADDITIONAL(map doer vtlist )
+		   else (error_region(); 
+			 print ("Rebinding of "^(Symbol.name sym)^" not permitted\n");
+			 NONE)
+	       in ADDITIONAL(List.mapPartial doer vtlist)
 	       end
 	   | (Ast.StrSpec (sym_sigexp_path_list)) =>
 	       let
@@ -1902,8 +1927,10 @@ structure Toil :> TOIL =
 		  end
 	   | (Ast.TycSpec (typdesc_list,is_eq)) => ADDITIONAL(xtypedesc(context,typdesc_list,is_eq))
 	   | (Ast.ExceSpec exlist) => (* Rules 260 - 261 *)
-		      let fun doer (sym,tyopt) =
-			let val (mk_con,stamp_con) =
+		 let fun doer (sym,tyopt) =
+                   if ok_to_bind(context,sym) then
+			let 
+			    val (mk_con,stamp_con) =
 			  (case tyopt of
 			     NONE => (CON_ANY, CON_TAG con_unit)
 			   | (SOME ty) => let val con = xty(context,ty)
@@ -1915,10 +1942,13 @@ structure Toil :> TOIL =
 						    DEC_EXP(fresh_var(),stamp_con,NONE,false)),
 					       SDEC(mk_lab,
 						    DEC_EXP(fresh_var(),mk_con,NONE,false))])
-			in SDEC(symbol_label sym, DEC_MOD(fresh_var(),false,inner_sig))
+			in SOME(SDEC(symbol_label sym, DEC_MOD(fresh_var(),false,inner_sig)))
 			end
-		      in ADDITIONAL(map doer exlist)
-		      end
+		   else (error_region(); 
+			 print ("Rebinding of "^(Symbol.name sym)^" not permitted\n"); 
+			 NONE)
+		 in ADDITIONAL(List.mapPartial doer exlist)
+		 end
 	   | (Ast.DataSpec {datatycs, withtycs = []}) =>
 	        let val sbnd_sdecs = xdatatype(context,datatycs)
 		    val sdecs = map #2 sbnd_sdecs
@@ -1995,12 +2025,12 @@ structure Toil :> TOIL =
 			      val argvar = fresh_named_var "funct_arg"
 			      val signat = xsigexp(context,sigexp)
 			      val context' = add_context_mod(context,arglabel,argvar, signat)
-			      val (sbnd_ce_list,m',s') = xstrexp(context',body,constraint)
+			      val (m',s') = xstrexp(context',body,constraint)
 			      val v = fresh_named_var "functor_var"
 			      val sbnd = SBND(funid,BND_MOD(v,false,MOD_FUNCTOR(PARTIAL, argvar,signat,m',s')))
 			      val sdec = SDEC(funid,DEC_MOD(v,false,SIGNAT_FUNCTOR(argvar,signat,s',
 									     PARTIAL)))
-			  in sbnd_ce_list @ [(SOME sbnd, CONTEXT_SDEC sdec)]
+			  in [(SOME sbnd, CONTEXT_SDEC sdec)]
 			  end
 		    | (Ast.BaseFct {params=[],body,constraint}) => parse_error "Functor of order 0"
 		    | (Ast.BaseFct _) => parse_error "No higher order functors"
@@ -2020,23 +2050,21 @@ structure Toil :> TOIL =
       --------------------------------------------------------- *)
 
      and xstrexp (context : context, strb : Ast.strexp,  Ast.Opaque sigexp)
-	 : (decresult * mod * signat) =
+	 : (mod * signat) =
 	 let val sig_target = xsigexp(context,sigexp)
-	     val (sbnd_ce_list,module,sig_actual) = xstrexp(context,strb,Ast.NoSig)
-	     val (_,context) = add_context_sbnd_ctxts(context,sbnd_ce_list)
+	     val (module,sig_actual) = xstrexp(context,strb,Ast.NoSig)
 	 in  if (Sig_IsSub(context, sig_actual, sig_target))
-		 then (sbnd_ce_list,module, sig_target)
+		 then (module, sig_target)
 	     else let val mod_result = Signature.xcoerce_seal(context,module,sig_actual,sig_target)
-		  in  (sbnd_ce_list, mod_result, sig_target)
+		  in  (mod_result, sig_target)
 		  end
 	 end
       | xstrexp (context, strb, Ast.Transparent sigexp) =
-	let val (sbnd_ce_list,module,signat) = xstrexp(context,strb,Ast.NoSig)
-	    val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
+	let val (module,signat) = xstrexp(context,strb,Ast.NoSig)
 	    val sig' = xsigexp(context,sigexp)
 	    val (mod_result,sig_result) =
-		Signature.xcoerce_transparent (context',module,signat,sig')
-	in  (sbnd_ce_list, mod_result, sig_result)
+		Signature.xcoerce_transparent (context,module,signat,sig')
+	in  (mod_result, sig_result)
 	end
 
      | xstrexp (context, strb, Ast.NoSig) =
@@ -2045,17 +2073,17 @@ structure Toil :> TOIL =
 		 (case Context_Lookup_Labels(context,map symbol_label path) of
 		      SOME (_,PHRASE_CLASS_MOD(m,_,s,_)) =>
 			  (case reduce_signat context s of
-			       (SIGNAT_STRUCTURE _) => ([],m,s)
+			       (SIGNAT_STRUCTURE _) => (m,s)
 			     | _ => (error_region();
 				     print "binding a non-structure module: ";
 				     AstHelp.pp_path path;
 				     print "\n";
-				     ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE [])))
+				     (MOD_STRUCTURE[],SIGNAT_STRUCTURE [])))
 		    | _ => (error_region();
 			    print "unbound structure: ";
 			    AstHelp.pp_path path;
 			    print "\n";
-			    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE [])))
+			    (MOD_STRUCTURE[],SIGNAT_STRUCTURE [])))
 	   | Ast.AppStr (_,[]) => parse_error "AppStr with no arguments"
 	   | Ast.AppStr (f,[(Ast.MarkStr (se,r),flag)]) =>
 		 xstrexp(context, Ast.AppStr(f,[(se,flag)]), Ast.NoSig)
@@ -2102,7 +2130,7 @@ structure Toil :> TOIL =
 						     sig_handler)
 				  in  IlUtil.sig_handle handler sig2
 				  end
-			      val ([],argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
+			      val (argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
 			      val argpath =
 				  (case (mod2path argmod) of
 				       SOME p => p
@@ -2125,43 +2153,45 @@ structure Toil :> TOIL =
 			               print "XXX sig_result = "; pp_signat sig_result; print "\n";
 			               print "XXX sig_result' = "; pp_signat sig_result'; print "\n")
 *)
-			  in ([], mod_result, sig_result')
+			  in (mod_result, sig_result')
 			  end
 	            | SOME _ => (error_region();
 			    print "cannot apply a non-functor\n";
-			    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE []))
+			    (MOD_STRUCTURE[],SIGNAT_STRUCTURE []))
 	            | NONE => (error_region();
 			    print "identifier not bound: ";
 			       AstHelp.pp_path funpath;
 			       print "\n";
-			    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE [])))
+			    (MOD_STRUCTURE[],SIGNAT_STRUCTURE [])))
 	   | Ast.AppStr (_,[(strexp,_)]) => parse_error "AppStr applied to a non-path: we should be in named form"
 	   | Ast.AppStr (_,_) => (error_region();
 				  print "higher order functors not supported\n";
-				  ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE []))
-	   | Ast.LetStr (dec,strexp) => (* rule 254 *)
-		 let val var1 = fresh_var()
+				  (MOD_STRUCTURE[],SIGNAT_STRUCTURE []))
+	   | Ast.LetStr (dec,strexp) => 
+		 let val var1 = fresh_named_var "hidden"
 		     val var2 = fresh_var()
-		     val lbl1 = to_open(internal_label "LetStr1")
-		     val lbl2 = to_open(internal_label "LetStr2")
-		     val sbnd_sdec_list = xdec true (context,dec)
-		     val (mod1,sig1) = sbnd_ctxt_list2modsig sbnd_sdec_list
-		     val context' = add_context_mod(context,lbl1,var1,sig1) (* <-- inline ? *)
-		     val (sbnd_ce_list,mod2,sig2) = xstrexp(context',strexp,Ast.NoSig)
-		     val final_mod = MOD_STRUCTURE [SBND(lbl1,BND_MOD(var1,false,mod1)),
+		     val lbl1public = internal_label "Hidden"
+                     val lbl1private = to_open(lbl1public)
+		     val lbl2 = to_open(internal_label "Visible")
+		     val sbnd_ctxt_list = xdec (context,dec)
+		     val (mod1,sig1) = sbnd_ctxt_list2modsig sbnd_ctxt_list
+		     val context = add_context_mod(context,lbl1private,var1,sig1)
+		     val context = add_context_fixity_entries(context,sbnd_ctxt_list)
+		     val (mod2,sig2) = xstrexp(context,strexp,Ast.NoSig)
+		     val final_mod = MOD_STRUCTURE [SBND(lbl1public,BND_MOD(var1,false,mod1)),
 						    SBND(lbl2,BND_MOD(var2,false,mod2))]
-		     val final_sig = SIGNAT_STRUCTURE([SDEC(lbl1,DEC_MOD(var1,false,sig1)),
+		     val final_sig = SIGNAT_STRUCTURE([SDEC(lbl1public,DEC_MOD(var1,false,sig1)),
 						       SDEC(lbl2,DEC_MOD(var2,false,sig2))])
 
-		 in (sbnd_ce_list,final_mod, final_sig)
+		 in (final_mod, final_sig)
 		 end
 	   | Ast.BaseStr dec =>
 		 let
-		     val sbnd_ctxt_list = xdec false (context,dec)
+		     val sbnd_ctxt_list = xdec (context,dec)
 		     val sbnds = List.mapPartial #1 sbnd_ctxt_list
 		     val sdecs = List.mapPartial (fn (_,CONTEXT_SDEC sdec) => SOME sdec
 		   | _ => NONE) sbnd_ctxt_list
-		 in ([], MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE sdecs)
+		 in (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE sdecs)
 		 end
 	   | Ast.ConstrainedStr (strexp,constraint) => xstrexp(context,strexp,constraint)
 	   | Ast.MarkStr (strexp,r) => let val _ = push_region r
@@ -2175,16 +2205,15 @@ structure Toil :> TOIL =
     (* ---------------------------------------------------------
       ------------------ STRUCTURE BINDINGS --------------------
       --------------------------------------------------------- *)
-     and xstrbinds (islocal : bool) (context : context, strbs : Ast.strb list)
+     and xstrbinds (context : context, strbs : Ast.strb list)
 	 : decresult =
        let val strbs = map strb_strip strbs
 	   fun help (n,(strexp,constraint)) =
 	       let val v = fresh_named_var "strbindvar"
 		   val l = symbol_label n
-		   val (sbnd_ce_list,m,s) = resolve_overloads (fn () => xstrexp(context,strexp,constraint))
-		   val rest = [(SOME(SBND(l,BND_MOD(v,false,m))),
+		   val (m,s) = resolve_overloads (fn () => xstrexp(context,strexp,constraint))
+	       in [(SOME(SBND(l,BND_MOD(v,false,m))),
 				CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))]
-	       in  sbnd_ce_list @ rest
 	       end
        in flatten(map help strbs)
        end
@@ -2208,7 +2237,7 @@ structure Toil :> TOIL =
     and xeq (ctxt : context, argcon : con) : (exp * con) option = xeq' (ctxt, NONE, argcon)
 
     fun xdec_as_topspec (context : context, dec : Ast.dec) : entries =
-	let val decresult = xdec false (context, dec)
+	let val decresult = xdec (context, dec)
 	    val (sbndopts, entries) = Listops.unzip decresult
 	    val _ = if List.exists isSome sbndopts then
 			error "interface contains an sbnd"
@@ -2316,7 +2345,7 @@ structure Toil :> TOIL =
     val xdec : Il.context * filepos * Ast.dec -> Il.decresult option =
 	fn (ctxt,fp,dec) =>
 	(TVClose.closeDec dec;
-	 overload_wrap ctxt fp (xdec false) IlUtil.decresult_handle (ctxt,dec))
+	 overload_wrap ctxt fp xdec IlUtil.decresult_handle (ctxt,dec))
 
     val xtopspec : Il.context * filepos * Ast.topspec -> Il.entries option =
 	fn (ctxt,fp,topspec) => overload_wrap ctxt fp xtopspec IlUtil.entries_handle (ctxt,topspec)

@@ -7,7 +7,7 @@
 signature BOOL =
   sig
 
-    datatype bool = false | true
+    datatype bool = datatype bool
     val not : bool -> bool
 
     val fromString : string -> bool option

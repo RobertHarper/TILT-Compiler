@@ -138,7 +138,7 @@ sig
 		The entries of varMap, listed in (rev ordering) order,
 		form a well-formed elaboration context.
 
-       		If (v,(l,pc)) in varMap, then (l,(v,nil) in labelMap.
+       		If (v,(l,pc)) in varMap, then (l,(v,nil)) in labelMap.
 
 		If (l,(v,nil)) in labelMap, then (v,(l',pc)) in varMap.
 

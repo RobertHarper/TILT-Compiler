@@ -22,7 +22,7 @@ Manager.make "Top/project";
 Manager.make "Bench/project";
 		(* compile benchmarks with TILT *)
 Load.make();    (* recompile the compiler after some source *)
-	         * has been changed. *)
+	        (* has been changed. *)
 
 
 

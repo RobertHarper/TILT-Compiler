@@ -1289,4 +1289,13 @@ structure IlUtil :> ILUTIL =
 		val ce = map (fn (c,e,_) => (c,e)) L
 	    in  OVLD (ce, default)
 	    end
+
+	fun ok_to_bind (ctxt : Il.context, s : Symbol.symbol) : bool =
+          let val str = Symbol.name s 
+          in  List.all (fn x => x <> str) ["true", "false", "::", "nil", "ref"]
+              (* ok to bind primitives iff they're not already in the context,
+	         e.g. if we're compiling the Basis *)
+              orelse (case Context_Lookup_Labels(ctxt, [symbol_label s]) 
+                        of NONE => true | _ => false)
+          end
   end

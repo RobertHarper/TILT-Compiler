@@ -56,6 +56,13 @@ Comments:    This is pretty pathological, but we should
 	"No datdesc, valdesc, or exdesc may describe true, false,
 	 nil, ::, or ref."
 Fix:
+
+[dreyer] RE-bindings of true, false, nil, ::, and ref are no longer permitted.
+Emphasis is on "RE" because TiltPrim *does* bind them (initially).  In fact,
+it turned out the NJ Basis had a few files that were in violation of the Definition,
+because they contained signatures with the datdesc "datatype bool = false | true", etc.
+These were changed to "datatype bool = datatype bool" and so forth.
+
 Test: bug84 bug84b
 Owner: swasey
-Status: open
+Status: closed

@@ -5,7 +5,7 @@ Submitter:   dreyer
 Date:        08/26/02
 Version:     
 System:      
-Severity:    exception
+Severity:    reject
 Problem:     
 
 When we share a type and eqtype spec after the fact, the semantics of

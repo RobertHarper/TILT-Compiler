@@ -76,7 +76,7 @@
 0081 [closed]	Compiled compiler seg faults.
 0082 [open]	Type of thunk prematurely made a rigid record.
 0083 [open]	Backend liveness analysis is too conservative.
-0084 [open]	Shadowing :: or nil makes list patterns fail to compile.
+0084 [closed]	Shadowing :: or nil makes list patterns fail to compile.
 0085 [closed]	Elaborator/Pattern compiler not using correct exceptions.
 0086 [closed]	Matching against an external interface file is broken.
 0087 [closed]	Possible "conservative" bug in Analyze avoiding desired optimizations
@@ -137,7 +137,7 @@
 0156 [closed]	datatypes and scope
 0157 [open]	Memory leak: continuous slow heap growth
 0158 [open]	pattern compiler rejecting valid code
-0159 [open]	Phase splitter bombing on datatype replication.
+0159 [closed]	Phase splitter bombing on datatype replication.
 0160 [open]	Ugly hack: add_context_label
 0161 [open]	should not allow whitespace in long.identifier
 0162 [closed]	Queue.delete is broken.
