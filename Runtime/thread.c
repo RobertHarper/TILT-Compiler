@@ -121,24 +121,29 @@ void ReleaseJob(SysThread_t *sth)
 {
   int i;
   Thread_t *th = sth->userThread;
-
-  if (diag)
-    printf("Proc %d: unmapping with %d (<= %d)\n",sth->stid,sth->alloc,sth->limit);
+  mem_t sth_allocCursor = sth->allocCursor;
+  mem_t sth_allocLimit = sth->allocLimit;
+  mem_t sth_writelistCursor = (mem_t) sth->writelistCursor;
 
   /* Check that thread's allocation pointers are consistent and update processor's version */
-  assert(th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
-  sth->alloc = (mem_t) th->saveregs[ALLOCPTR];
-  if (sth->limit != (mem_t) th->saveregs[ALLOCLIMIT]) {
-    printf("sth->limit = %d\n",sth->limit);
+  if (((mem_t) th->saveregs[ALLOCLIMIT] != sth_allocLimit &&
+       (mem_t) th->saveregs[ALLOCLIMIT] != StopHeapLimit) ||
+      (mem_t) th->saveregs[ALLOCPTR] > sth_allocLimit) {
+    printf("sth->allocCursor = %d\n",sth_allocCursor);
+    printf("sth->allocLimit = %d\n",sth_allocLimit);
+    printf("th->saveregs[ALLOC] = %d\n",th->saveregs[ALLOCPTR]);
     printf("th->saveregs[LIMIT] = %d\n",th->saveregs[ALLOCLIMIT]);
     assert(0);
   }
+
+  /* Update processor's version of allocation range and write list and process */
+  sth->allocCursor = (mem_t) th->saveregs[ALLOCPTR];
+  sth->writelistCursor = th->writelistAlloc;
+  GCRelease(sth);
+
+  /* Null out thread's version of allocation and write-list */
   th->saveregs[ALLOCPTR] = 0;
   th->saveregs[ALLOCLIMIT] = 0;
-
-  /* Update processor's version of write list */
-  sth->writelistCursor = th->writelistAlloc;
-  assert(sth->writelistEnd == th->writelistLimit);
   th->writelistAlloc = 0;
   th->writelistLimit = 0;
 
@@ -149,8 +154,11 @@ void ReleaseJob(SysThread_t *sth)
   flushStore();                          /* make sure thread info is flushed to memory */
   assert(th->status >= 1);               /* Thread was mapped and running so could not be ready or done */
   FetchAndAdd(&(th->status),-1);         /* Release after flush; note that FA always goes to mem */
+
   if (diag)
-    printf("Thread %d released; status = %d\n",th->tid,th->status);
+    printf("Proc %d: Released thread %d with status = %d.  Used %d to %d and %d to %d.\n",
+	   sth->stid,th->tid,th->status,sth_allocCursor,sth->allocCursor,
+	   sth_writelistCursor, sth->writelistCursor);
 }
 
 
@@ -192,7 +200,7 @@ void StopAllThreads()
   for (i=0; i<NumThread; i++) {
     Thread_t *th = JobQueue[i];
     if (th != NULL)
-      th->saveregs[ALLOCLIMIT] = StopHeapLimit;
+      th->saveregs[ALLOCLIMIT] = (val_t) StopHeapLimit;
   }
   LocalUnlock();
 }
@@ -298,6 +306,17 @@ void resetThread(Thread_t *th, Thread_t *parent, ptr_t *thunks, int numThunk)
 void thread_init()
 {
   int i, j;
+  assert(intSz == sizeof(int));
+  assert(longSz == sizeof(long));
+  assert(CptrSz == sizeof(int *));
+  assert(doubleSz == sizeof(double));
+  assert(sizeof(tag_t) == 4);
+  assert(sizeof(val_t) == 4);
+  assert(sizeof(ptr_t) == 4);
+  assert(sizeof(loc_t) == 4);
+  assert(sizeof(ploc_t) == 4);
+  assert(sizeof(mem_t) == 4);
+
   Threads = (Thread_t *)malloc(sizeof(Thread_t) * NumThread);
   SysThreads = (SysThread_t *)malloc(sizeof(SysThread_t) * NumSysThread);
   JobQueue = (Thread_t **)malloc(sizeof(Thread_t *) * NumThread);
@@ -309,8 +328,9 @@ void thread_init()
     char *temp;
     SysThread_t *sth = &(SysThreads[i]); /* Structures are by-value in C */
     sth->stid = i;
-    sth->alloc = StartHeapLimit;
-    sth->limit = StartHeapLimit;
+    sth->allocStart = StartHeapLimit;
+    sth->allocCursor = StartHeapLimit;
+    sth->allocLimit = StartHeapLimit;
     temp = malloc(20 * sizeof(char));
     sprintf(temp, "stacktime_%d", i);
     reset_timer(temp,&(sth->stacktime));
@@ -402,15 +422,27 @@ void save_regs_fail(int memValue, int regValue)
 }
 
 
+static void mapThread(SysThread_t *sth, Thread_t *th)
+{
+  assert(sth->userThread == NULL);
+  assert(th->sysThread == NULL);
+  sth->userThread = th;
+  th->sysThread = sth;
+  th->saveregs[ALLOCPTR] = (reg_t) sth->allocCursor;
+  th->saveregs[ALLOCLIMIT] = (reg_t) sth->allocLimit;
+  th->writelistAlloc = sth->writelistCursor;
+  th->writelistLimit = sth->writelistEnd;
+}
+
 static void work(SysThread_t *sth)
 {
   Thread_t *th = sth->userThread;
 
+  /* To make visible changes other processors have made */
+  flushStore();
+
   /* System thread should not be mapped */
   assert(th == NULL);
-
-  if (diag)
-    printf("Proc %d: entered work\n", sth->stid);
 
   /* Wait for next user thread and remove from queue. Map system thread. */
   while (th == NULL) {
@@ -421,13 +453,8 @@ static void work(SysThread_t *sth)
 #ifdef solaris
       thr_yield();
 #endif
-    /* We _might_ have some work now */
-    th = FetchJob();
-    if (th != NULL) {
-      sth->userThread = th;
-      th->sysThread = sth;
-    }
-    else
+    th = FetchJob();  /* Provisionally grab thread but don't map onto processor yet */
+    if (th == NULL)
       gc_poll(sth);
   }
 
@@ -442,10 +469,7 @@ static void work(SysThread_t *sth)
 #ifdef solaris
       th->saveregs[16] = (long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
 #endif	
-      th->saveregs[ALLOCPTR] = (reg_t) sth->alloc;
-      th->saveregs[ALLOCLIMIT] = (reg_t) sth->limit;
-      th->writelistAlloc = sth->writelistCursor;
-      th->writelistLimit = sth->writelistEnd;
+      mapThread(sth,th);
       returnFromYield(th);
     }
 
@@ -453,82 +477,58 @@ static void work(SysThread_t *sth)
       mem_t stack_top = th->stackchain->stacks[0]->top;
       assert(th->nextThunk == 0);
       th->saveregs[THREADPTR] = (long)th;
-      /* Get some initial room; Sparc requires at least 68 byte for the save area */
-      th->saveregs[SP] = (long)stack_top - 128; 
-      th->saveregs[ALLOCPTR] = (unsigned long) sth->alloc;
-      th->saveregs[ALLOCLIMIT] = (unsigned long) sth->limit;
-      th->writelistAlloc = sth->writelistCursor;
-      th->writelistLimit = sth->writelistEnd;
+      th->saveregs[SP] = (long)stack_top - 128;       /* Get some initial room; Sparc requires at least 68 byte for the save area */
+      mapThread(sth,th);
       if (diag) {
 	printf("Proc %d: starting user thread %d (%d) with %d <= %d\n",
-	       sth->stid, th->tid, th->id, 
-	       th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
+	       sth->stid, th->tid, th->id, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
 	assert(th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
       }
+      flushStore();  /* make visible changes to other processors */
       start_client(th,th->thunks, th->numThunk);
       assert(0);
     }
 
-    case GCRequestFromML : {
+    case GCRequestFromML:
+    case GCRequestFromC: 
+    case MajorGCRequestFromC: {
       /* Allocate space or check write buffer to see if we have enough space */
-      int satisfied = GCAllocate(sth, th->requestInfo); 
-      if (!satisfied) {
-	if (diag) {
-	  if (th->requestInfo)
-	    printf("Proc %d: cannot resume user thread %d; need %d, only have %d; calling GC\n",
-		   sth->stid, th->tid, th->requestInfo, sth->limit - sth->alloc);
-	  else 
-	    printf("Proc %d: cannot resume user thread %d; write list full\n",
-		   sth->stid, th->tid);
-	}
-	th->saveregs[ALLOCPTR] = (unsigned long) sth->alloc;
-	th->saveregs[ALLOCLIMIT] = (unsigned long) sth->limit;
-	th->writelistAlloc = sth->writelistCursor;
-	th->writelistLimit = sth->writelistEnd;
-	GC(th); /* map the thread as though calling from gc_raw */
-	assert(0);
+      int satisfied = GCFromScheduler(sth, th);
+      while (!satisfied) {
+	printf("Warning: Proc %d: could not resume thread %d after calling GCFromScheduler.  Retrying...\n",
+	       sth->stid, th->tid);
+	satisfied = GCFromScheduler(sth, th);
       }
-      th->saveregs[ALLOCPTR] = (unsigned long) sth->alloc;
-      th->saveregs[ALLOCLIMIT] = (unsigned long) sth->limit;
-      th->writelistAlloc = sth->writelistCursor;
-      th->writelistLimit = sth->writelistEnd;
-      if (diag)
-	printf("Proc %d: resuming user thread %d (%d) from GCRequestFromML of %d  bytes.   %d < %d\n",
-	       sth->stid, th->tid,th->id,
-	       th->requestInfo, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
-      assert(th->requestInfo + th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
-      returnFromGCFromML(th);
-    }
-
-     case GCRequestFromC : 
-     case MajorGCRequestFromC : {
-       /* Requests from C may exceed a page - like large array */
-       if (th->requestInfo + sth->alloc >= sth->limit) 
-	 GCAllocate(sth, th->requestInfo);
-       if (th->requestInfo + (val_t) sth->alloc > (val_t) sth->limit) {
+      /* Note that another processor can change th->saveregs[ALLOCLIMIT] to Stop at any point */
+      if (th->requestInfo > 0)
+	assert(th->requestInfo + (val_t) sth->allocCursor <= (val_t) sth->allocLimit);
+      else
+	assert(sth->writelistCursor + 2 <= sth->writelistEnd);
+      mapThread(sth,th);
+      if (th->request == GCRequestFromML) {
 	if (diag)
-	  printf("Proc %d: cannot resume user thread %d; need %d, only have %d; calling GC\n",
+	  printf("Proc %d: Resuming thread %d from GCRequestFromML of %d bytes with allocation region %d < %d and writelist %d < %d\n",
 		 sth->stid, th->tid, th->requestInfo, 
-		 (sizeof(val_t)) * (sth->limit - sth->alloc));
-	th->saveregs[ALLOCPTR] = (reg_t) sth->alloc;
-	th->saveregs[ALLOCLIMIT] = (reg_t)sth->limit;
-	th->writelistAlloc = sth->writelistCursor;
-	th->writelistLimit = sth->writelistEnd;
-	GC(th); /* map the thread as though calling from GCFromML */
+		 th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT],
+		 th->writelistAlloc, th->writelistLimit);
+	flushStore();  /* make visible changes to other processors */
+	returnFromGCFromML(th);	
 	assert(0);
       }
-      th->saveregs[ALLOCPTR] = (reg_t) sth->alloc;
-      th->saveregs[ALLOCLIMIT] = (reg_t) sth->limit;
-      th->writelistAlloc = sth->writelistCursor;
-      th->writelistLimit = sth->writelistEnd;
-      if (diag)
-	printf("Proc %d: resuming user thread %d (%d) from GCRequestFromML of %d  bytes.   %d < %d\n",
-	       sth->stid, th->tid,th->id,
-	       th->requestInfo, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
-      returnFromGCFromC(th);
+      else if (th->request == GCRequestFromC ||
+	       th->request == MajorGCRequestFromC) {
+	if (diag)
+	  printf("Proc %d: Resuming thread %d from GCRequestFromML of %d bytes with allocation region %d < %d and writelist %d < %d\n",
+		 sth->stid, th->tid, th->requestInfo, sth->allocCursor, sth->allocLimit,
+		 th->writelistAlloc, th->writelistLimit);
+	flushStore();  /* make visible changes to other processors */
+	returnFromGCFromC(th);	
+	assert(0);
+      }
+      else
+	assert(0);
     }
-
-   default : {
+   default: {
       printf("Odd request %d\n",th->request);
       assert(0);
     }
@@ -552,6 +552,7 @@ static void* systhread_go(void* unused)
   st->stack = (int)(&st) & (~255);
   work(st);
   assert(0);
+  return 0;
 }
 
 
@@ -694,6 +695,7 @@ Thread_t *YieldRest()
   check("YieldRestend",sth);
   work(sth);
   assert(0);
+  return 0;
 }
 
 /* Should be called from the timer handler.  Causes the current user thread to GC soon. */ 

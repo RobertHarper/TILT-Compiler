@@ -145,7 +145,7 @@ void gcstat_normal(unsigned allocsize, unsigned copied, unsigned writes)
   KBytesCollected += (bytesCollected / 1024);
   bytesAllocated %= 1024;
   bytesCollected %= 1024;
-  write_count += writes;
+  NumWrites += writes;
 }
 
 

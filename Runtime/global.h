@@ -2,6 +2,7 @@
 
 void global_init(void);
 int  IsGlobalData(ptr_t);
+int  IsText(ptr_t);
 
 static int IsTagData(ptr_t addr)
 {

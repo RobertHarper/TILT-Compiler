@@ -227,7 +227,7 @@ GCFromML:
 	ld	[THREADPTR_REG + sysThread_disp], ASMTMP_REG	! must use temp so SP always correct
 	ld	[ASMTMP_REG], SP_REG				! run on system thread stack
 	mov	THREADPTR_REG, CFIRSTARG_REG			! pass user thread pointer as arg
-	call	GC						! call runtime GC
+	call	GCFromMutator					! call runtime GC
 	nop
 	call	abort
 	nop
@@ -283,7 +283,7 @@ MinorGCFromC:
 	ld	[THREADPTR_REG + sysThread_disp], ASMTMP_REG	! must use temp so SP always correct
 	ld	[ASMTMP_REG], SP_REG				! run on system thread stack
 	mov	THREADPTR_REG, CFIRSTARG_REG			! pass user thread pointer as arg
-	call	GC						! call runtime GC
+	call	GCFromMutator					! call runtime GC
 	nop
 	call	abort
 	nop

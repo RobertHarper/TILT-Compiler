@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <assert.h>
+#include <math.h>
 #include "general.h"
 #include "tag.h"
 #include "memobj.h"
@@ -7,6 +8,9 @@
 #include "global.h"
 
 
+#define POINTER_FIELD 0
+#define INT_FIELD 1
+#define DOUBLE_FIELD 2
 
 int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
@@ -28,44 +32,104 @@ int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 }
 
 /* Check that pointer is either a tag, a global, or a current heap value */
-int ptr_check(ptr_t *ptrLoc, Heap_t **legalHeaps, Bitmap_t **legalStarts)
+int show_field(int show, int fieldType, ptr_t primary, ptr_t replica, int i, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
-  ptr_t pointer = *ptrLoc;
-  if (IsTagData(pointer))
-    return 1;
-  if (IsGlobalData(pointer))
-    return 1;
-  if (pointer == (ptr_t) 258) /* Uninitialized pointer */
-    return 1;
-  if (inHeaps(pointer,legalHeaps,legalStarts))
-    return 1;
-  printf("\n  !!!!TRACE ERROR: ptr_check %d at %d failed.  GC #%d\n",pointer,ptrLoc,NumGC);
-  return 0;
-}
+  int isNonheapPointer;
+  ptr_t primaryField, replicaField;
+  double primaryDoubleField, replicaDoubleField;
 
-extern int heapstart;
+  if (fieldType == DOUBLE_FIELD) {
+    primaryDoubleField = *((double *)(primary+i));
+    if (replica)
+      replicaDoubleField = *((double *)(replica+i));
+  }
+  else {
+    primaryField = (ptr_t) primary[i];
+    if (replica)
+      replicaField = (ptr_t) replica[i];
+  }
 
-/* If it looks like a pointer, issue a warning. */
-int data_check(val_t *loc, Heap_t **legalHeaps, Bitmap_t **legalStarts)
-{
-  val_t i = *loc;
-  if (verbose) 
-    if (inHeaps((ptr_t) i,legalHeaps,legalStarts))
-      printf("TRACE WARNING: data_check given int that looks like a curHeap pointer %d\n", i);
+  isNonheapPointer = ((fieldType == POINTER_FIELD) &&
+		      (IsTagData(primaryField) ||
+		       IsGlobalData(primaryField) ||
+		       primaryField == (ptr_t) 258));
+
+
+  switch (fieldType) {
+    case POINTER_FIELD: 
+      if (show) 
+	printf("P(%5d)  ", primaryField);     
+      if (isNonheapPointer ||
+	  (inHeaps(primaryField,legalHeaps,legalStarts)))
+	;
+      else {
+	printf("\n  !!!!TRACE ERROR: found bad pointer %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
+	return 0;
+      }
+      if (replica) {
+	if (isNonheapPointer) {
+	  if (primaryField != replicaField) {
+	    printf("\n  !!!!TRACE ERROR at GC %2d: replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
+	    printf("\n                                              %d[%d] = *%d*\n",replica,i,replicaField);
+	    return 0;
+	  }
+	}
+	else {
+	  if (primaryField != replicaField &&               /* Primary and replica may share in a generational collector */
+	      (ptr_t) primaryField[-1] != replicaField) {
+	    printf("\n  !!!!TRACE ERROR at GC %2d: ptr replica mismatch: %d[%d] = %d -> *%d*",NumGC,primary,i,primaryField,primaryField[-1]);
+	    printf("\n                                                  %d[%d] = *%d*\n",replica,i,replicaField);
+	    return 0;
+	  }
+	}
+      }
+      break;
+    case INT_FIELD:
+      if (show) 
+	printf("I(%5d)  ", primaryField); 
+      if (verbose) 
+	if (inHeaps(primaryField,legalHeaps,legalStarts))
+	  printf("\n !!!!TRACE WARNING at GC %2d: found suspicious int %d at %d[%d]\n",NumGC,primaryField,primary,i);
+      if (replica && primaryField != replicaField) {
+	printf("\n  !!!!TRACE ERROR at GC %2d: int replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
+	printf("\n                                                  %d[%d] = *%d*\n",replica,i,replicaField);
+	return 0;
+      }
+      break;
+    case DOUBLE_FIELD: 
+      if (show) 
+	printf("R(%10g)  ", primaryDoubleField); 
+      if (replica && !(isnan(primaryDoubleField) && isnan(replicaDoubleField)) && primaryDoubleField != replicaDoubleField) {
+	printf("\n  !!!!TRACE ERROR at GC %2d: double replica mismatch: %d[%d] = *%g*",NumGC,primary,i,primaryDoubleField);
+	printf("\n                                                     %d[%d] = *%g*\n",replica,i,replicaDoubleField);
+	return 0;
+      }
+      break;
+    default:
+      assert(0);
+  }
+
+  
   return 1;
 }
+
 
 /* Show the object whose raw beginning (i.e. including tag(s)) is at s */
 mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
   mem_t end = NULL;
-  ptr_t obj = start + 1;
+  ptr_t obj = start + 1, replica = 0;
   tag_t tag = start[0];
-  int type = GET_TYPE(tag);
-  int i;
+  int i, type;
+  int forwarded = IS_FORWARDPTR(tag);
 
-  switch (type)
-    {
+  if (forwarded) {
+    replica = (ptr_t) tag;
+    tag = replica[-1];
+  }
+  type = GET_TYPE(tag);
+
+  switch (type) {
     case RECORD_TAG:
       {
 	int len = GET_RECLEN(tag);
@@ -75,20 +139,14 @@ mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStart
 	  assert(0);
 	}
 	if (show)
-	  printf("%ld: REC(%d)    ", obj,len);
+	  if (replica)
+	    printf("%ld -> %ld: REC(%d)   %ld: ", start, replica, len, obj);
+	  else
+	    printf("%ld: REC(%d)   %ld: ", start, len, obj);
 	for (i=0; i<len; i++) {
 	  val_t field = obj[i];
 	  int isPointer = 1 & (mask >> i);
-	  if (isPointer) {
-	    if (show)
-	      printf("P(%5d)  ",field);
-	    ptr_check((ptr_t *)(obj+i),legalHeaps,legalStarts);
-	  }
-	  else {
-	    if (show)
-	      printf("I(%5d)  ",field);
-	    data_check(obj+i,legalHeaps,legalStarts);
-	  }
+	  show_field(show, isPointer ? POINTER_FIELD : INT_FIELD, obj, replica, i, legalHeaps, legalStarts);
 	}
 	if (show)
 	  printf("\n");
@@ -101,63 +159,58 @@ mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStart
       {
 	unsigned int bytelen = GET_ARRLEN(tag);
 	unsigned int wordlen = (bytelen + 3) / 4;
-	unsigned int loglen;
+	unsigned int loglen, fieldlen;
+	char *typeDesc = NULL;
 
 	if (type == IARRAY_TAG) {
 	  loglen = bytelen;
-	  if (show)
-	    printf("%ld: IAR(%ld/%ld)  ",obj,wordlen,loglen);
+	  fieldlen = wordlen;
+	  typeDesc = "IAR";
 	}
 	else if (type == RARRAY_TAG) {
 	  loglen = bytelen / 8;
-	  if (show)
-	    printf("%ld: RAR(%ld/%ld)  ",obj,wordlen,loglen);
+	  fieldlen = loglen;
+	  typeDesc = "RAR";
 	}
 	else if (type == PARRAY_TAG) {
 	  loglen = bytelen / 4;
-	  if (show)
-	    printf("%ld: PAR(%ld/%ld)  ",obj,wordlen,loglen);
+	  fieldlen = loglen;
+	  typeDesc = "PAR";
 	}
 	else 
 	  assert(0);
-
-	for (i=0; i<((type==IARRAY_TAG)?wordlen:loglen); i++) {
+	if (show) {
+	  if (replica)
+	    printf("%ld -> %ld: ", start, replica);
+	  else
+	    printf("%ld: ", start);
+	  printf("%s(%ld/%ld)  %ld: ",typeDesc,wordlen,loglen,obj);
+	}
+	
+	for (i=0; i<fieldlen; i++) {
 	  if (show && ((i) / 8 * 8) == (i) && (i != 0))
 	    printf("        ");
 	  switch (type) {
-	    case IARRAY_TAG: {
-	      val_t field = obj[i];
-	      if (show)
-		printf("I(%ld)  ",field);
-	      data_check(obj+i,legalHeaps,legalStarts);
+	    case IARRAY_TAG: 
+	      show_field(show,INT_FIELD,obj,replica,i,legalHeaps,legalStarts);
 	      break;
-	    }
-	    case PARRAY_TAG: {
-	      ptr_t field = (ptr_t) obj[i];
-	      if (show)
-		printf("%ld   ",field);
-	      ptr_check((ptr_t *)(obj+i),legalHeaps,legalStarts);
+	    case PARRAY_TAG: 
+	      show_field(show,POINTER_FIELD,obj,replica,i,legalHeaps,legalStarts);
 	      break;
-	    }
-	    case RARRAY_TAG: {
-	      if (show)
-		printf("%12f   ",((double *)obj)[i]);
+	    case RARRAY_TAG: 
+	      show_field(show,DOUBLE_FIELD,obj,replica,2*i,legalHeaps,legalStarts);
 	      break;
-	    }
-	  default : 
-	    assert(0);
+	    default : 
+	      assert(0);
 	  }
 	  if (show && ((i+1) / 8 * 8) == (i+1))
 	    printf("\n");
 	}
 	if (show)
 	  printf("\n");
-	if (wordlen == 0)
-	  end = obj + 1;
-	else 
-	  end = obj + wordlen;
+	end = obj + wordlen;
+	break;
       }
-      break;
     case SKIP_TAG: {
       int wordsSkipped = tag >> SKIPLEN_OFFSET;
       end = start + wordsSkipped;
@@ -167,15 +220,9 @@ mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStart
       break;
     }
     default:
-      if (IS_FORWARDPTR(tag)) { /* tag is a forwarding pointer if it is a multiple of 4 */
-	mem_t forwardstart = ((mem_t)tag) - 1;
-	mem_t forwardend = NULL;
-	int len;
-	if (show)
-	  printf("%ld: SENT(%d) -> ",obj,forwardstart + 1);
-	forwardend = show_obj(forwardstart,show,legalHeaps,legalStarts);
-	len = forwardend - forwardstart;
-	end = start + len;
+      if (IS_FORWARDPTR(tag)) {
+	printf("\nshow_obj  double-forwarding tag = %d(%d) at address = %d\b",tag,GET_TYPE(tag),obj);
+	assert(0);
       }
       else {
 	printf("\nshow_obj  tag = %d(%d) at address = %d\b",tag,GET_TYPE(tag),obj);
@@ -192,10 +239,8 @@ Bitmap_t *scan_heap(char *label, mem_t start, mem_t finish, mem_t top,
 		    Heap_t **legalHeaps, Bitmap_t **legalStarts,
 		    int show, int makeBitmap)
 {
-  mem_t cur = start;
+  mem_t cur = start, next;
   Bitmap_t *curStart = makeBitmap ? CreateBitmap(finish - start) : NULL;
-  if (NumGC < LEAST_GC_TO_CHECK)
-    return;
   if (show) {
     printf("--------------HEAP CHECK at GC %d ------------------------------\n",NumGC);
     printf("%s %d <= %d < %d\n",label,start,finish,top);
@@ -207,7 +252,9 @@ Bitmap_t *scan_heap(char *label, mem_t start, mem_t finish, mem_t top,
 	int pos = (cur + 1) - start;
 	SetBitmapRange(curStart,pos,1);
       }
-      cur = show_obj(cur,show,legalHeaps,legalStarts);
+      next = show_obj(cur,show,legalHeaps,legalStarts);
+      assert(next > cur);
+      cur = next;
     }
   }
   if (show) {
@@ -230,20 +277,17 @@ void show_heap_raw(char *label, int numwords,
   printf("-----------------------------------------------\n");	
 }
 
-void memdump(char *title, int *start, int len, int *target)
+void memdump(char *title, unsigned int *start, int len, unsigned int *target)
 {
   int i;
-  if (NumGC < LEAST_GC_TO_CHECK)
-    return;
   printf("Memory dump start: %s\n",title);
-  for (i=0; i<len; i++)
-    {
-      int *addr = start + i;
-      printf("  %u: %u",addr,*addr);
-      if (addr == target)
-	printf("     <---------");
-      printf("\n");
-    }
+  for (i=0; i<len; i++) {
+    unsigned int *addr = start + i;
+    printf("  %u: %u",addr,*addr);
+    if (addr == target)
+      printf("     <---------");
+    printf("\n");
+  }
   printf("Memory dump end: %s\n",title);
 }
 

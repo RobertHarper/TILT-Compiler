@@ -246,12 +246,9 @@ void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *top)
   if (end > heap->top) {
     start = 0;
     end = 0;
-    /*
-    printf("GetHeapArea from %d failed.  Available = %d    Request = %d\n",
-	   heap, heap->top - heap->alloc_start, size);
-*/
   }
   else {
+    *start = SKIP_TAG | ((end - start) << SKIPLEN_OFFSET);
     heap->alloc_start = end;
   }
   *bottom = start;
@@ -269,6 +266,12 @@ Heap_t* GetHeap(mem_t add)
 	Heaps[i].top    >= add)
       return (Heaps+i);
   return NULL;
+}
+
+int inSomeHeap(ptr_t v)
+{
+  int totalHeapSize = chunksize * Heapbitmap_bits; /* in bytes */
+  return (v >= heapstart && v < heapstart + (totalHeapSize / sizeof (val_t)));
 }
 
 Heap_t* Heap_Alloc(int MinSize, int MaxSize)

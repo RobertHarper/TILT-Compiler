@@ -6,12 +6,13 @@ struct
       
     val exclude_intregs = []
     val error = fn s => Util.error "decalpha.sml" s
+    (* Check against Runtime/thread.h *)
     val iregs_disp         = 0
     val fregs_disp         = iregs_disp + 8 * 32
     val maxsp_disp         = fregs_disp + 8 * 32
-    val threadScratch_disp = maxsp_disp + 8 + 8 + 8 + 8
-    val writelistAlloc_disp = threadScratch_disp + 8 + 4 + 8 * 5 + 8 * 32 + 8 * 32
-    val writelistLimit_disp = writelistAlloc_disp + 4
+    val threadScratch_disp = maxsp_disp + 8 + 2*8 + 8
+    val writelistAlloc_disp = threadScratch_disp + 8 + 8 + 8 * 5 + 8 * 32 + 8 * 32
+    val writelistLimit_disp = writelistAlloc_disp + 4  (* ploc_t is 4 bytes *)
     val heapLimit_disp = iregs_disp + 8 * 14
 
 structure Machine = 
@@ -88,8 +89,7 @@ structure Machine =
 
 
     datatype specific_instruction =
-      IALIGN of align
-    | STOREI of storei_instruction * register * int * register
+      STOREI of storei_instruction * register * int * register
     | LOADI  of loadi_instruction * register * int * register
     | STOREF of storef_instruction * register * int * register
     | LOADF  of loadf_instruction * register * int * register
@@ -290,17 +290,7 @@ structure Machine =
   fun msOperand (REGop r) = msReg r
     | msOperand (IMMop n) = (ms n)
 
-  fun msInstr' (IALIGN x) =
-         let val i = 
-	        case x of
-		   LONG => 2
-		 | QUAD => 3
-		 | OCTA => 4
-		 | ODDLONG => error "ODDLONG not handled"
-		 | ODDOCTA => error "ODDOCTA not handled"
-	 in tab^".align "^Int.toString i
-         end
-    | msInstr' (STOREI (instr, Rsrc, disp, Raddr)) =
+  fun msInstr' (STOREI (instr, Rsrc, disp, Raddr)) =
                                 (tab ^ (storei_to_ascii instr) ^ tab ^
 				 (msReg Rsrc) ^ comma ^ (msDisp(Raddr, disp)))
     | msInstr' (STOREF (instr, Rsrc, disp, Raddr)) =
@@ -470,18 +460,12 @@ structure Machine =
         if (s = "") then
 	  single ("# .ascii \"\" (zero length string)")
 	else
-	  map (fn s' => (1 , "\t.ascii \"" ^ (fixupString s') ^ "\"\n"))
-              (splitstring s)
+	    (map (fn s' => (1 , "\t.ascii \"" ^ (fixupString s') ^ "\"\n"))
+	     (splitstring s))
+	    @ [(1, "\t.align 2\n")]
     | msData (INT32 (w))  = single (".long " ^ (wms w))
     | msData (FLOAT (f))  = single (".t_floating " ^ (fixupFloat f))
     | msData (DATA (label)) = single (".long " ^ (msLabel label))
-    | msData (ALIGN (LONG)) = single (".align 2")
-    | msData (ALIGN (QUAD)) = single (".align 3")
-    | msData (ALIGN (ODDLONG)) = [(1, "\t.align 3\t\t# ODDLONG\n"),
-					  (1,"\t.long 0\n")]
-    | msData (ALIGN (OCTA)) = single (".align 4\n")
-    | msData (ALIGN (ODDOCTA)) = [(1, "\t.align 4\t\t# ODDOCTA\n"),
-					  (1,"\t.quad 0\n\t.long 0\n")]
     | msData (DLABEL (label))   = 
 	   [(1,case label of
 		 LOCAL_CODE _ => ((msLabel label) ^ ":\n")
@@ -592,7 +576,6 @@ structure Machine =
       | defUse (BASE(POP_RET (_)))                 = ([Rra], [Rsp])
       | defUse (BASE(TAILCALL _))             = ([], [])
       | defUse (BASE(GC_CALLSITE _))               = ([], [])
-      | defUse (SPECIFIC (IALIGN _))               = ([], [])
       | defUse (BASE(ILABEL _))                    = ([], [])
       | defUse (BASE(ICOMMENT _))                   = ([], [])
 
@@ -630,7 +613,6 @@ structure Machine =
 	 | xspec (FPOP(oper, Fsrc1, Fsrc2, Fdest)) = FPOP(oper, fs Fsrc1,fs Fsrc2,fd Fdest)
          | xspec (FPCONV(oper, Fsrc, Fdest)) = FPCONV(oper, fs Fsrc,fd Fdest)
 	 | xspec TRAPB = TRAPB
-	 | xspec (IALIGN ia) = IALIGN ia
        fun xbase (MOVE(src,dest)) = MOVE(fs src, fd dest)
          | xbase (PUSH(src,sloc)) = PUSH(fs src, sloc)
          | xbase (POP(dest,sloc)) = POP(fd dest, sloc)

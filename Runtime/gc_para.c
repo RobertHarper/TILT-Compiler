@@ -7,29 +7,34 @@
 #include "gc.h"
 #include "gc_para.h"
 
-
 static ptr_t SharedStack[4096];     /* stack contains gray objects */
 static long SharedCursor = 0;
 static long Gate = 0, Turn1 = 0, Turn2 = 0;
 
+
+
 void SynchStart(void)
 {
-  while (Gate);
+  while (Gate) 
+   flushStore();  /* Without this, updates of Gate from other processors are not visible here */
   FetchAndAdd(&Turn1, 1);
-  while (Gate)
-    {
-      FetchAndAdd(&Turn1, -1);
-      while (Gate);
-      FetchAndAdd(&Turn1, 1);
-    }
+  while (Gate) {
+    FetchAndAdd(&Turn1, -1);
+    while (Gate)
+      flushStore();
+    FetchAndAdd(&Turn1, 1);
+  }
+  flushStore();   /* Without this, the change to Turn1 is not visible */
 }
 
 void SynchMid(void)
 {
   Gate = 1;
+  flushStore(); /* for updating Gate */
   FetchAndAdd(&Turn2, 1);
   FetchAndAdd(&Turn1, -1);
-  while (Turn1 > 0);
+  while (Turn1 > 0) 
+    flushStore();
 }
 
 int isEmptyGlobalStack()
@@ -43,6 +48,7 @@ int SynchEnd(void)
   int i = FetchAndAdd(&Turn2, -1);
   if (i==1) {
     Gate = 0;
+    flushStore(); /* for updating Gate */
     return isEmptyGlobalStack();
   }
   return 0;
@@ -74,8 +80,8 @@ void fetchFromGlobalStack(ptr_t *localStack, int *localCursorPtr, int numToFetch
 long synchBarrier(long *counter, long barrierSize, long*prevCounter)
 {
   long preCounterValue = FetchAndAdd(counter, 1);
-  while (*counter < barrierSize)
-    ;
+  while (*counter < barrierSize) 
+    flushStore();
   *prevCounter = 0;
   return preCounterValue;
 }
@@ -83,12 +89,14 @@ long synchBarrier(long *counter, long barrierSize, long*prevCounter)
 long asynchReachBarrier(long *counter)
 {
   long preCounterValue = FetchAndAdd(counter, 1);
+  flushStore();
   return preCounterValue;
 }
 
 
 long asynchCheckBarrier(long *counter, long barrierSize, long *prevCounter)
 {
+  flushStore();
   if (*counter < barrierSize)
     return 0;
   else {

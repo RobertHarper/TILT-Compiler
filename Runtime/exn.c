@@ -68,7 +68,7 @@ void toplevel_exnhandler(Thread_t *th)
 {
   char buf[100];
   char *msg;
-  long *saveregs = th->saveregs;
+  unsigned long *saveregs = th->saveregs;
   ptr_t exn_arg = (ptr_t)saveregs[EXNARG];
   val_t first = get_record(exn_arg,0);
 
@@ -86,8 +86,7 @@ void toplevel_exnhandler(Thread_t *th)
       msg = buf;
     }
   
-  printf("Proc %d %d, Thread %d (%d): Uncaught exception: %s\n",
-	 getSysThread()->processor,
-	 th->sysThread->processor,th->tid,th->id,msg);
+  printf("Proc %d: Thread %d (%d): Uncaught exception: %s\n",
+	 getSysThread()->stid,th->tid,th->id,msg);
   Finish();
 }

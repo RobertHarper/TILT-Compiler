@@ -21,15 +21,21 @@ struct
     structure TW32 = TilWord32
     structure TW64 = TilWord64
 
+    val do_gcmerge = ref true
+    val do_writeBarrier = Stats.tt("WriteBarrier")
+    val do_fullWriteBarrier = Stats.tt("FullWriteBarrier")
+    val do_arrayReadBarrier = Stats.tt("ArrayReadBarrier")
+
     val do_constant_records = ref true
     val do_forced_constant_records = ref true
-    val do_gcmerge = ref true
     val do_single_crecord = ref true
+
     val diag = ref true
     val debug = Stats.ff("TortlBaseDebug")
     val debug_simp = Stats.ff("tortl_base_debug_simp")
     val debug_bound = ref false
-    val maxGCRequest = 2048  (* Measured in words *)
+    val maxAllocRequest = 2048   (* Measured in words *)
+    val maxMutateRequest = 2048  (* Measured in writes *)
 
    (* ------------------ RTL statistics ------------------------------ *)
        fun makeStat() = let val r = ref 0
@@ -123,10 +129,12 @@ struct
    type convarmap = convar_rep VarMap.map
    val uninit_val = 0w258 : TilWord32.word
 
-   datatype gcinfo = GC_IMM of instr ref | GC_INF
-   type gcstate = gcinfo list
+   datatype gcstate = ALLOC_IMM of instr ref list   (* all ways of reaching current point went through these fixed-size allocation checks *)
+	            | MUTATE_IMM of instr ref list  (* all ways of reaching current point went through these mutation checks *)
+	            | GC_UNKNOWN                    (* no information known about how this point was reached *)
 
   (* ----- Global data structures ------------------------------
+   dw: number of words data occupies
    dl: list of data for module
    pl: list of procedures for the entire module
    mutable : addresses of global objects that may contain pointers to heap objects
@@ -139,6 +147,7 @@ struct
    exception NotFound
    val exports = ref (Name.VarMap.empty : (Rtl.label list) Name.VarMap.map)
    val globals = ref VarSet.empty
+   val dw = ref 0
    val dl : Rtl.data list ref = ref nil
    val pl : Rtl.proc list ref = ref nil
    type suminfo     = TilWord32.word * TilWord32.word option * con list
@@ -151,7 +160,7 @@ struct
 			       env = (NilContext.empty(), VarMap.empty),
 			       varmap = VarMap.empty,
 			       convarmap = VarMap.empty,
-			       gcstate = [GC_INF]}
+			       gcstate = GC_UNKNOWN}
    val global_state : state ref = ref (make_state())
    val unitname = ref ""
 
@@ -177,8 +186,6 @@ struct
 
   fun std_kind_of ({env,...}:state) c =
       subtimer("RTL_kind_of",NilContext.kind_of) (#1 env,c)
-
-  val codeAlign = ref (Rtl.OCTA)
 
 
   (* ---- Looking up and adding new variables --------------- *)
@@ -466,70 +473,100 @@ struct
        fun getLocals() = !localregs
        fun getArgs() = !argregs
 
-       fun add_data d = dl := d :: !dl
+       fun dataLength (COMMENT _) = 0
+	 | dataLength (DLABEL _) = 0
+	 | dataLength (STRING string) = ((size string) + 3) div 4
+	 | dataLength (INT32 _) = 1
+	 | dataLength (FLOAT _) = 2
+	 | dataLength (DATA _) = 1
+	   
+       fun add_data d = 
+	   (dl := d :: !dl;
+	    dw := (dataLength d) + !dw)
+
+       fun oddlong_align() = if ((!dw) mod 2 = 1)
+				 then ()
+			     else (add_data(COMMENT "alignment");
+				   add_data (INT32 (Rtltags.skip 1)))
+
 
        fun join_states ([] : state list) : state = error "join_states got []"
-	 | join_states (({is_top,env,varmap,convarmap,gcstate}) :: rest) = 
-	   let val gcstates = gcstate :: (map #gcstate rest)
-	       (* we must not have duplicates or else we get exponential blowup 
-		  and the updates will also be too large since they are duplicated *)
-		fun gcinfo_eq (GC_INF,GC_INF) = true
-		  | gcinfo_eq (GC_IMM r1, GC_IMM r2) = r1 = r2
-		  | gcinfo_eq _ = false
-		fun folder(info,infos) = if (Listops.member_eq(gcinfo_eq,info,infos))
-						then infos else info::infos
-		val gcstate = foldl (fn (infos,acc) => foldl folder acc infos) [] gcstates
+	 | join_states ({is_top,env,varmap,convarmap,gcstate}::restStates) = 
+	   let (* we must not have duplicates or else we could get exponential blowup *)
+		fun instrref_eq(a : instr ref, b) = a = b
+		fun instrreflist_join(a : instr ref list, b : instr ref list) = Listops.list_sum_eq(instrref_eq, a, b)
+		fun join (ALLOC_IMM a, ALLOC_IMM b) = ALLOC_IMM(instrreflist_join(a,b))
+		  | join (MUTATE_IMM a, MUTATE_IMM b) = MUTATE_IMM(instrreflist_join(a,b))
+		  | join _ = GC_UNKNOWN
+		val gcstate = foldl join gcstate (map #gcstate restStates)
 	   in   {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
 	   end
+
        fun shadow_state	({is_top,env,varmap,convarmap,gcstate=_},{gcstate,...}:state) = 
 	   {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
 
-       fun add_instr i = 
-	   (add_instr' i;
-	    case i of
-		NEEDGC _ => error "should use needgc to add a NEEDGC"
-	      | _ => ())
+       fun add_instr (NEEDALLOC _) = error "Use needallocc to add a NEEDALLOC"
+	 | add_instr (NEEDMUTATE _) = error "Use needmutate to add a NEEDMUTATE"
+	 | add_instr i = add_instr' i
+	   
+       fun flushgc(state as {is_top,gcstate,env,convarmap,varmap}:state, instr) : state = 
+	   let val r = ref instr
+	       val _ = il := (r :: (!il))
+	       val gcstate = (case instr of
+				  NEEDALLOC (IMM _) => ALLOC_IMM [r]
+				| NEEDALLOC INF => GC_UNKNOWN
+				| NEEDMUTATE _ => MUTATE_IMM [r]
+				| _ => error "flushgc called with weird instr")
+	   in  {is_top=is_top,env=env,convarmap=convarmap,varmap=varmap,
+		gcstate=gcstate}
+	   end
 
-       fun needgc(state as {is_top,gcstate,env,convarmap,varmap}:state,operand) : state = 
+       fun needalloc(state as {gcstate,...}, operand) : state = 
 	 if (not (!do_gcmerge))
-	     then (incGC(); add_instr'(NEEDGC operand); state)
+	     then (incGC(); add_instr'(NEEDALLOC operand); state)
 	 else
-	     let val mergeImm =
-		 (case operand of 
-		      IMM m => 
-			  let fun loop [] = SOME m
-				| loop (GC_INF::_) = NONE
-				| loop ((GC_IMM (ref (NEEDGC (IMM n))))::rest) = if (m+n < maxGCRequest)
-										     then loop rest
-										 else NONE
-				| loop ((GC_IMM _)::rest) = error "bad GC_IMM"
-			  in  loop gcstate
-			  end
-		    | _ => NONE)
-	     in  (case mergeImm of
-		      NONE => let val r = ref(NEEDGC operand)
-				  val _ = (case operand of
-					       IMM 0 => ()
-					     | _ => incGC())
-				  val _ = il := (r :: (!il))
-				  val gcinfo = (case operand of
-						    IMM _ => GC_IMM r 
-						  | _ => GC_INF)
-			      in  {is_top=is_top,env=env,convarmap=convarmap,varmap=varmap,
-				   gcstate=[gcinfo]}
-			      end
-		    | SOME m => let fun update(GC_IMM(r as ref(NEEDGC (IMM n)))) = 
-			                     (if (n = 0) then incGC() else ();
-					      r := (NEEDGC(IMM(m+n))))
-				      | update (GC_IMM _) = error "update given bad GC_IMM"
-				      | update _ = error "update not given GC_IMM"
-				in  (app update gcstate; state)
-				end)
-	     end
+	     (case (gcstate, operand) of
+		  (ALLOC_IMM instrRef, IMM m) => 
+		      let fun loop commit [] = true
+			    | loop commit ((ir as ref (NEEDALLOC (IMM n)))::rest) =
+			       (if commit 
+				    then (if (n = 0) then incGC() else ();
+					      ir := NEEDALLOC (IMM (m+n)))
+				else ();
+				    if (m+n < maxAllocRequest) then loop commit rest else false)
+			    | loop _ _ = error "bad ALLOC_IMM"
+		      in  if (loop false instrRef)
+			      then (loop true instrRef; state)
+			  else flushgc(state, NEEDALLOC operand)
+		      end
+		| _ => ((case operand of
+			     IMM 0 => ()
+			   | _ => incGC());
+			flushgc(state, NEEDALLOC operand)))
+
+       fun needmutate (state as {gcstate,...}, n) : state = 
+	 if (not (!do_gcmerge))
+	     then (incGC(); add_instr'(NEEDMUTATE n); state)
+	 else (case gcstate of
+		   MUTATE_IMM instrRef =>
+		       let fun loop commit [] = true
+			     | loop commit ((ir as (ref (NEEDMUTATE m)))::rest) = 
+			          (if commit
+				       then ir := NEEDMUTATE(m + n)
+				   else ();
+				   if (m+n < maxMutateRequest)
+				       then loop commit rest
+				   else false)
+			     | loop _ _ = error "bad MUTATE_IMM"
+		       in  if (loop false instrRef)
+			       then (loop true instrRef; state)
+			   else flushgc(state,NEEDMUTATE n)
+		       end
+		 | _ => flushgc(state,NEEDMUTATE n))
 
        fun new_gcstate ({is_top,env,varmap,convarmap,gcstate} : state) : state =
-	   let val s = {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=[GC_INF]}
-	   in  needgc(s,IMM 0)
+	   let val s = {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=GC_UNKNOWN}
+	   in  needalloc(s,IMM 0)
 	   end
 
 
@@ -593,6 +630,7 @@ struct
 		global_state :=  make_state();
 		exports := (foldl exp_adder VarMap.empty exportlist);
 		globals := gl;
+		dw := 0;
 		dl := nil;
 		pl := nil;
 		reset_mutable();
@@ -741,7 +779,7 @@ struct
 
 
     fun mk_named_float_data (r : string, label : label) =
-	(add_data(ALIGN ODDLONG);
+	(oddlong_align();
 	 add_data(INT32 (realarraytag (i2w 1)));
 	 add_data(DLABEL label);
 	 add_data(FLOAT r))
@@ -760,7 +798,7 @@ struct
 	| (GLOBAL (l,NOTRACE_REAL)) => let val dest = (case destOpt of
 							   NONE => alloc_regf()
 							 | SOME d => d)
-				       in  add_instr(LOADQF(LEA(l,0),dest));
+				       in  add_instr(LOAD64F(LEA(l,0),dest));
 					   dest
 				       end
 	| (REGISTER (_,I r)) => error "load_freg_loc called on REGISTER (_, I _)"
@@ -774,7 +812,7 @@ struct
 		 let val r = (case destOpt of
 				  NONE => alloc_regf()
 				| SOME d => d)
-		 in  add_instr(LOADQF(LEA(label,0),r));
+		 in  add_instr(LOAD64F(LEA(label,0),r));
 		     r
 		 end
 	   | INT _ => error "load_freg_val: got INT"
@@ -892,24 +930,6 @@ struct
 					end)
       end
 
-  fun storeWithBarrier(ea,value,rep) : bool =
-      (case rep of
-	   TRACE => (incMutate(); add_instr(MUTATE(ea, value, NONE)); true)
-	 | COMPUTE rep_path => 
-	       let val _ = incMutate()
-		   val isPointer = repPathIsPointer rep_path
-		   val pointerCase = fresh_code_label "mutate_pointerCase"
-		   val afterStore = fresh_code_label "mutate_afterStore"
-	       in  add_instr(BCNDI(EQ, isPointer, IMM 1, pointerCase,true));
-		   add_instr(STORE32I(ea,value));
-		   add_instr(BR afterStore);
-		   add_instr(ILABEL pointerCase);
-		   add_instr(MUTATE(ea, value, NONE));
-		   add_instr(ILABEL afterStore);
-		   true
-	       end
-	 | _ => (add_instr(STORE32I(ea,value)); false))
-
   fun allocate_global (label,labels,rtl_rep,lv) = 
       let 
 	  val _ = incGlobal()
@@ -921,7 +941,7 @@ struct
 		 | NOTRACE_REAL => 
 		       let val tagData = mk_recordtag [NOTRACE_INT, NOTRACE_INT]
 			   val {dynamic=[],static} = tagData
-		       in  add_data(ALIGN ODDLONG);
+		       in  oddlong_align();
 			   (static, NONE)
 		       end
 		 | _ => 
@@ -968,10 +988,10 @@ struct
 		 (case reg of
 		      I r => (doUninitialize(); (* could optimize for non-pointers *)
 			      add_data(INT32 uninit_val);
-			      add_instr(STORE32I(labelEa, r)))
+			      add_instr(STORE32I(labelEa,r)))  
 		    | F r => (doInitialize();  (* ok since floats are never pointers *)
 			      add_data(FLOAT "0.0");
-			      add_instr(STOREQF(labelEa,r))))
+			      add_instr(STORE64F(labelEa,r))))
 	   | LOCATION (GLOBAL (l,rep)) => 
 		      let val value = alloc_regi rep
 		      in  if (repIsNonheap rep)
@@ -989,8 +1009,8 @@ struct
 	   | VALUE (REAL l) => let val fr = alloc_regf()
 			       in  doInitialize();
 				   add_data(FLOAT "0.0");
-				   add_instr(LOADQF(LEA(l,0), fr));
-				   add_instr(STOREQF(labelEa, fr))
+				   add_instr(LOAD64F(LEA(l,0), fr));
+				   add_instr(STORE64F(labelEa, fr))
 			       end
 	   | VALUE (RECORD (l,_)) => (doInitialize(); add_data(DATA l))
 	   | VALUE (LABEL l) => (doInitialize(); add_data(DATA l))
@@ -1068,16 +1088,16 @@ struct
       else add_conterm arg
 
   fun unboxFloat regi : regf = let val fr = alloc_regf()
-				   val _ = add_instr(LOADQF(REA(regi,0),fr))
+				   val _ = add_instr(LOAD64F(REA(regi,0),fr))
 			       in  fr
 			       end
 
   fun boxFloat (state,regf) : regi * state = 
       let val dest = alloc_regi TRACE
-	  val state = needgc(state,IMM 4)
+	  val state = needalloc(state,IMM 4)
 	  val _ = (align_odd_word();
 		   store_tag_zero(realarraytag (i2w 1));
-		   add_instr(STOREQF(REA(heapptr,4),regf)); (* allocation *)
+		   add_instr(STORE64F(REA(heapptr,4),regf));
 		   add(heapptr,4,dest);
 		   add(heapptr,12,heapptr))
       in  (dest,state)
@@ -1102,10 +1122,10 @@ struct
       fun scan (nil,_) = ()
 	| scan (h::t,offset) =
 	  let val src = load_freg_term (h, NONE)
-	  in  add_instr(STOREQF(REA(res,offset),src));
+	  in  add_instr(STORE64F(REA(res,offset),src));
 	      scan(t,offset+8)
 	  end
-      val state = needgc(state,IMM((if len = 0 then 1 else 2*len)+2))
+      val state = needalloc(state,IMM((if len = 0 then 1 else 2*len)+2))
       val _ = (align_odd_word();
 	       store_tag_zero(realarraytag(i2w len));
 	       add_instr(ADD(heapptr,IMM 4,res)))

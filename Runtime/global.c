@@ -27,11 +27,18 @@ extern unsigned long _end;
 ptr_t DivideByZeroExn = 0;
 ptr_t OverflowExn = 0;
 mem_t datastart, dataend;
+mem_t textstart, textend;
 
 /* Little allocation area for data allocated by the runtime. */
 static mem_t RuntimeGlobalData_Start;
 mem_t RuntimeGlobalData_Cur;
 mem_t RuntimeGlobalData_End;
+
+int IsText(ptr_t addr)
+{
+  int res = (textstart <= addr) && (addr <= textend);
+  return res;
+}
 
 int IsCompileGlobalData(ptr_t addr)
 {
@@ -81,13 +88,16 @@ void global_init()
   
 #ifdef alpha_osf
   datastart = (mem_t) &_fdata;
-  dataend   = (mem_t) &_end;  
-  /* _edata does not seem to work at all, in fact, it's less then _fdata */
+  dataend   = (mem_t) &_edata;  
+  textstart = (mem_t) &_ftext;
+  textend   = (mem_t) &_etext;
 #endif
 
 #ifdef solaris
   datastart = (mem_t) &firstdata;
-  dataend   = (mem_t) &_end;  
+  dataend   = (mem_t) &_edata;
+  textstart = (mem_t) &_ftext;
+  textend   = (mem_t) &_etext;  
 #endif
 
 }

@@ -4,7 +4,6 @@ sig
 
   type register = Core.register
   type label = Rtl.label
-  type align = Rtl.align
 
   val Rzero   : register   (* Integer zero *)
   val Rgp     : register   (* Alpha's $gp, pointer to global offset table *)
@@ -47,8 +46,7 @@ sig
 
 
   datatype specific_instruction =
-    IALIGN of align
-  | STOREI of storei_instruction * register * int * register
+    STOREI of storei_instruction * register * int * register
   | LOADI  of loadi_instruction * register * int * register
   | STOREF of storef_instruction * register * int * register
   | LOADF  of loadf_instruction * register * int * register

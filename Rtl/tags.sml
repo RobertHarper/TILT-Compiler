@@ -12,6 +12,7 @@ struct
     val ptrarray  = 0w3 : TilWord32.word
     val realarray = 0w5 : TilWord32.word
     val skipbase  = 0w6 : TilWord32.word
+    val stall     = 0w7 : TilWord32.word
     fun skip numSkip = TilWord32.orb(skipbase, TilWord32.fromInt (8 * numSkip))
 
     (* For raw(bytes), pointer(words), and real(double) arrays, 

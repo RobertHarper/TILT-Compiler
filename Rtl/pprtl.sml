@@ -109,12 +109,6 @@ struct
   fun pred2s true = "taken"
     | pred2s false = "not taken"
 
-  fun align2s LONG = "long"
-    | align2s QUAD = "quad"
-    | align2s ODDLONG = "oddlong"
-    | align2s OCTA = "octa"
-    | align2s ODDOCTA = "oddocta"
-
   fun tt2s INT_TT = "(INT_TT)"
     | tt2s REAL_TT = "(REAL_TT)"
     | tt2s BOTH_TT = "(BOTH_TT)"
@@ -251,30 +245,20 @@ struct
 	      | THROW_EXN => String "throw_exn"
 	      | CATCH_EXN => String "catch_exn"
 
-	      | LOAD32I a       => op2li "ldl" a
-	      | STORE32I a      => op2si "stl" a
-	      | LOAD8I a       => op2li "ldb" a
-	      | STORE8I a      => op2si "stb" a
-              | LOADQF (ea,r)   => plain ["ldt ",regf2s r,", ",ea2s ea]
-              | STOREQF (ea,r)  => plain ["stt ",regf2s r,", ",ea2s ea]
-
-	      | MUTATE (ea,r,ropt) => let val ea = ea2s ea
-					  val r = regi2s r
-				      in  (case ropt of
-					       NONE => plain ["mutate ", ea, ", ", r]
-					     | SOME r2 => plain ["mutate_dyn ", ea, ", ", r, ",", regi2s r2])
-				      end
-
-	      | INIT (ea,r,NONE) => op2si "init" (ea,r)
-	      | INIT (ea,r,SOME r2) => plain ["init_dyn ",regi2s r,", ", regi2s r2, ", ", ea2s ea]
-
-              | NEEDGC (sv)     => plain ["needgc ",sv2s sv]
+	      | LOAD8I a           => op2li "ldb" a
+	      | LOAD32I a          => op2li "ldl" a
+              | LOAD64F (ea,r)     => plain ["ldt ",regf2s r,", ",ea2s ea]
+	      | STORE8I (ea,r)  => op2si "stb" (ea, r)
+	      | STORE32I (ea,r) => op2si "stl" (ea, r)
+              | STORE64F (ea,fr) => plain ["stt",regf2s fr,", ",ea2s ea]
+	      | STOREMUTATE ea     => plain ["storemutate", ea2s ea]
+              | NEEDALLOC sv       => plain ["needalloc ",sv2s sv]
+              | NEEDMUTATE n       => plain ["needmutate ",Int.toString n]
 
 	      | (SOFT_VBARRIER tt) => String ("soft_vbarrier" ^ (tt2s tt))
 	      | (SOFT_ZBARRIER tt) => String ("soft_zbarrier" ^ (tt2s tt))
 	      | (HARD_VBARRIER tt) => String ("hard_vbarrier" ^ (tt2s tt))
 	      | (HARD_ZBARRIER tt) => String ("hard_zbarrier" ^ (tt2s tt))
-	      | IALIGN x        => String (".align "^align2s x)
 	      | ILABEL l        => String (label2s l^":")
 	      | HALT            => String ("halt")
 	      | ICOMMENT s => String ("### " ^ s)
@@ -284,13 +268,12 @@ struct
 
   fun pp_Data' d =
       case d of
-	  COMMENT (s) => String ("### " ^ s)
-	| STRING (s) =>  String (".ascii \""^s^"\"")
-	| INT32 (bi) =>  String (".long "^(word2str bi))
+	  COMMENT s => String ("### " ^ s)
+	| STRING s =>  String (".ascii \""^s^"\"")
+	| INT32 bi =>  String (".long "^(word2str bi))
 	| FLOAT s =>  String (".double "^s)
-	| DATA (l) => String(".data "^(label2s l))
-	| ALIGN (a) =>  String (".align "^(align2s a))
-	| DLABEL (l) =>  String (label2s l^":")
+	| DATA l => String(".data "^(label2s l))
+	| DLABEL l =>  String (label2s l^":")
 
   fun pp_DataList' da = 
       let fun pp_Data'' x =

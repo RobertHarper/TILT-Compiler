@@ -28,8 +28,8 @@
 #ifdef alpha_osf
 mem_t GetPc(struct ucontext *uctxt)          { return (mem_t) (uctxt->uc_mcontext.sc_pc); }
 mem_t GetSp(struct ucontext *uctxt)          { return (mem_t) (uctxt->uc_mcontext.sc_sp); }
-long GetIReg(struct ucontext *uctxt, int i) { return (uctxt->uc_mcontext.sc_regs[i]); }
-void SetIReg(struct ucontext *uctxt, int i, long v) { uctxt->uc_mcontext.sc_regs[i] = v; }
+unsigned long GetIReg(struct ucontext *uctxt, int i) { return (uctxt->uc_mcontext.sc_regs[i]); }
+void SetIReg(struct ucontext *uctxt, int i, unsigned long v) { uctxt->uc_mcontext.sc_regs[i] = v; }
 double GetFReg(struct ucontext *uctxt, int i) { return (uctxt->uc_mcontext.sc_fpregs[i]); }
 void SetFReg(struct ucontext *uctxt, int i, double v) { uctxt->uc_mcontext.sc_fpregs[i]= v; }
 mem_t GetBadAddr(struct ucontext *uctxt, 
@@ -41,12 +41,12 @@ mem_t GetBadAddr(struct ucontext *uctxt,
 scp is sigcontext obtained from uctxt
 mem_t GetPc(struct ucontext *uctxt)    { return (mem_t) ((scp)->sc_jmpbuf.jmp_context.iar); }
 mem_t GetSp(struct ucontext *uctxt)    { return (mem_t) ((scp)->sc_jmpbuf.jmp_context.gpr[1]); }
-long *GetIRegs(struct ucontext *uctxt) { return &((scp)->sc_jmpbuf.jmp_context.gpr[0]); }
+unsigned long *GetIRegs(struct ucontext *uctxt) { return &((scp)->sc_jmpbuf.jmp_context.gpr[0]); }
 mem_t GetBadAddr(struct ucontext *uctxt, int dummy) { return (mem_t)((scp)->sc_jmpbuf.jmp_context.o_vaddr); }
 #endif
 
 #ifdef solaris
-long GetIReg(struct ucontext *uctxt, int i)    
+unsigned long GetIReg(struct ucontext *uctxt, int i)    
 { 
   if (i == 0)
     return 0;
@@ -70,7 +70,7 @@ long GetIReg(struct ucontext *uctxt, int i)
   assert(0);
 }
 
-void SetIReg(struct ucontext *uctxt, int i, long v)    
+void SetIReg(struct ucontext *uctxt, int i, unsigned long v)    
 { 
   if (i == 0)
     return;
@@ -92,7 +92,7 @@ mem_t GetBadAddr(struct ucontext *uctxt,
 		 siginfo_t *siginfo)   { return (mem_t) (siginfo->si_addr); }
 #endif
 
-void GetIRegs(struct ucontext *uctxt,long *dest) 
+void GetIRegs(struct ucontext *uctxt, unsigned long *dest) 
 { 
   int i;
   for (i=0; i<32; i++)

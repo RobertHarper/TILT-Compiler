@@ -236,7 +236,7 @@ GCFromMLgetgp1:
 	ldl	$at, sysThread_disp(THREADPTR_REG)	# get system thread pointer
 	ldl	$sp, ($at)				# run on system thread stack
 	mov	THREADPTR_REG, $16			# pass user thread pointer as arg
-	jsr	$26, GC					
+	jsr	$26, GCFromMutator
 	br	$gp, GCFromMLgetgp2
 GCFromMLgetgp2:	
 	ldgp	$gp, 0($gp)				# compute self-gp for abort
@@ -299,7 +299,7 @@ MinorGCFromC:
 	ldq	ASMTMP_REG, sysThread_disp(THREADPTR_REG)	# must use temp so SP always correct
 	ldq	$sp, (ASMTMP_REG)				# run on system thread stack
 	mov	THREADPTR_REG, CFIRSTARG_REG			# pass user thread pointer as arg
-	jsr	GC						# call runtime GC
+	jsr	GCFromMutator					# call runtime GC
 	jsr	abort
 	nop
 .set at

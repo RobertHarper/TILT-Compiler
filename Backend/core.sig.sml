@@ -3,7 +3,6 @@
 signature CORE =
   sig
 
-    type align = Rtl.align
     type label = Rtl.label
     type data = Rtl.data
 	

@@ -31,7 +31,6 @@ struct
 
     type label = Rtl.label
     type data = Rtl.data
-    type align = Rtl.align
 
     fun isFloat (F _) = true
       | isFloat _ = false

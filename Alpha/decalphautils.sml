@@ -132,12 +132,13 @@ struct
     | translateLabel (Rtl.C_EXTERN_LABEL label) = CE (label,NONE)
 *)
 
+  (* ".align 3" even-word aligns *)
   val programHeader = ["\t.set noat\n"]
-  fun procedureHeader label = [" \t.align 4\n", "\t.ent " ^ (msLabel (label)) ^ "\n"]
+  fun procedureHeader label = [" \t.align 3\n", "\t.ent " ^ (msLabel (label)) ^ "\n"]
   fun procedureTrailer s = ["\t.end " ^ s ^ "\n"]
   val textStart = ["\t.text\n"]
-  val dataStart = ["\t.sdata\n"]
-  val GCdataStart = ["\t.rdata\n"]
+  val dataStart = ["\t.sdata\n\t.align 3\n"]  (* RTL data segment assumes even-word alignment *)
+  val GCdataStart = ["\t.rdata\n"]            (* This is used multiple times so we must not realign *)
 
 end
 

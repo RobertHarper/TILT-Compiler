@@ -7,6 +7,7 @@
 #include "queue.h"
 #include "forward.h"
 #include "gc.h"
+#include "gc_large.h"
 #include "thread.h"
 #include "global.h"
 #include "stack.h"
@@ -16,7 +17,7 @@
 #include "platform.h"
 #include "client.h"
 #include "show.h"
-#include "gc_large.h"
+
 
 
 static Heap_t *nurseryGen = NULL;
@@ -94,7 +95,7 @@ ptr_t alloc_bigfloatarray_Gen(int elemLen, double initVal, int ptag)
   int wordLen = 2 + (elemLen << 1);  /* Includes one word for alignment */
 
   region = alloc_big(4 * wordLen,0);
-  if ((((val_t)region) & 7) == 0) {
+  if ((((val_t)region) & 7) != 0) {
     region[0] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
     res = region + 1;
   }
@@ -108,47 +109,48 @@ ptr_t alloc_bigfloatarray_Gen(int elemLen, double initVal, int ptag)
 
 /* --------------------- Generational collector --------------------- */
 
-int GCAllocate_Gen(SysThread_t *sysThread, int bytesRequested)
+int GCTry_Gen(SysThread_t *sysThread, Thread_t *th)
 {
-  /* Check for first time heap value needs to be initialized */
   assert(sysThread->userThread == NULL);
-  if (sysThread->limit == StartHeapLimit) 
-    {
-      unsigned int bytesAvailable;
-      sysThread->alloc = nurseryGen->bottom;
-      sysThread->limit = nurseryGen->top;
-      nurseryGen->alloc_start = nurseryGen->top;
-      bytesAvailable = (((unsigned int)sysThread->alloc) - 
-			((unsigned int)sysThread->limit));
-      return (bytesRequested <= bytesAvailable);
-    }
+  assert(th->sysThread == NULL);
+  if (th->requestInfo == 0)  /* write list request */
+    return 0;
+  if (sysThread->allocLimit == StartHeapLimit) {
+    unsigned int bytesAvailable;
+    sysThread->allocStart = nurseryGen->bottom;
+    sysThread->allocCursor = nurseryGen->bottom;
+    sysThread->allocLimit = nurseryGen->top;
+    nurseryGen->alloc_start = nurseryGen->top;
+    bytesAvailable = (((unsigned int)sysThread->allocLimit) - 
+		      ((unsigned int)sysThread->allocStart));
+    return (th->requestInfo <= bytesAvailable);
+  }
   return 0;
 }
 
-void GC_Gen(SysThread_t *sysThread)
+void GCStop_Gen(SysThread_t *sysThread)
 {
   Thread_t *oneThread = &(Threads[0]);     /* In a sequential collector, 
 					      there is only one user thread */
   int req_size = oneThread->requestInfo;
   Queue_t *root_lists = sysThread->root_lists;
   Queue_t *largeRoots = sysThread->largeRoots;
-  enum GCType GCtype = Minor;
   unsigned int allocated = (sizeof (val_t)) * (nurseryGen->top - nurseryGen->alloc_start);
   unsigned int copied = 0;
   unsigned int writes = (sysThread->writelistCursor - 
 			 sysThread->writelistStart);
   range_t nurseryGenRange, tenuredFromGenRange, tenuredToGenRange, largeRange;
 
-  /* A Major GC is forced if the tenured space is potentially too small */
+  /* A Major GC is forced if the tenured space is potentially too small.  Start timer. */
+  GCType = Minor;
   if (oneThread->request == MajorGCRequestFromC)
-    GCtype = Major;
+    GCType = Major;
   else if ((tenuredFromGen->top - tenuredFromGen->alloc_start) < 
 	   (nurseryGen->top - nurseryGen->bottom))
-    GCtype = ForcedMajor;    
-
-  /* start timer */
+    GCType = Major;                    /* Forced Major */
   start_timer(&sysThread->gctime);
-  if (GCtype != Minor)
+  GCStatus = GCOn;
+  if (GCType != Minor)
     start_timer(&(sysThread->majorgctime));
 
   /* Set ranges to for determining what needs to be forwarded; not all are necessarily used */
@@ -162,29 +164,20 @@ void GC_Gen(SysThread_t *sysThread)
   assert(nurseryGen->alloc_start     <= nurseryGen->top);
   assert(tenuredFromGen->alloc_start <= tenuredFromGen->top);
   assert(tenuredToGen->alloc_start   <= tenuredToGen->top);
-  if (paranoid) {
-    /* At this point, the nursery and tenured from-space may have cross-pointers */
-    Heap_t *legalHeaps[3] = {nurseryGen, tenuredFromGen, NULL};
-    Bitmap_t *legalStarts[3] = {NULL, NULL, NULL};
-    legalStarts[0] = paranoid_check_heap_without_start("nursery before GC",nurseryGen, legalHeaps);  
-    legalStarts[1] = paranoid_check_heap_without_start("tenuredFrom before GC",tenuredFromGen, legalHeaps);  
-    paranoid_check_global("global before GC",legalHeaps, legalStarts);  
-    paranoid_check_heap_with_start("nursery before GC",nurseryGen, legalHeaps, legalStarts);  
-    paranoid_check_heap_with_start("tenuredFrom before GC",tenuredFromGen, legalHeaps, legalStarts);  
-    DestroyBitmap(legalStarts[0]);
-    DestroyBitmap(legalStarts[1]);
-  }
+  /* At this point, the nursery and tenured from-space may have cross-pointers */
+  if (paranoid) 
+    paranoid_check_all(nurseryGen, tenuredFromGen, NULL, NULL);
 
   /* Compute stack/register/global roots to sysThread->root_lists. */
   QueueClear(sysThread->root_lists);
   local_root_scan(sysThread,oneThread,nurseryGen);
-  if (GCtype == Minor)
+  if (GCType == Minor)
     minor_global_scan(sysThread);
   else
     major_global_scan(sysThread);
 
   /* Perform just a minor GC */
-  if (GCtype == Minor) {
+  if (GCType == Minor) {
 
     /* --- forward the roots and the writelist; then Cheney-scan until no gray objects */
 
@@ -200,13 +193,15 @@ void GC_Gen(SysThread_t *sysThread)
     tenuredFromGen->alloc_start = tenuredFromGenAlloc;
   }
   
-  else if (GCtype == Major || GCtype == ForcedMajor) {
+  else if (GCType == Major) {
 
     int tenuredToGenSize = Heap_Getsize(tenuredToGen);
     int maxLive = (sizeof (val_t)) * (tenuredFromGen->alloc_start - tenuredFromGen->bottom) +
                   (sizeof (val_t)) * (nurseryGen->top - nurseryGen->bottom);
     mem_t tenuredToGenAlloc = tenuredToGen->bottom;
-    Heap_t *fromHeaps[3] = {nurseryGen, tenuredFromGen, NULL};
+    Heap_t *fromHeaps[3] = {NULL, NULL, NULL};
+    fromHeaps[0] = nurseryGen;
+    fromHeaps[1] = tenuredFromGen;
 
     /* Resize tospace so live data fits, if possible */
     if (maxLive >= tenuredToGenSize) {
@@ -242,32 +237,27 @@ void GC_Gen(SysThread_t *sysThread)
   /* Update sole thread's allocation pointers and root lists */
   QueueClear(largeRoots);
   QueueClear(root_lists);
-  sysThread->alloc = nurseryGen->bottom;
-  sysThread->limit = nurseryGen->top;
+  sysThread->allocStart = nurseryGen->bottom;
+  sysThread->allocCursor = nurseryGen->bottom;
+  sysThread->allocLimit = nurseryGen->top;
   sysThread->writelistCursor = sysThread->writelistStart;
 
   /* Sanity checks afterwards */
   assert(nurseryGen->alloc_start     <= nurseryGen->top);
   assert(tenuredFromGen->alloc_start <= tenuredFromGen->top);
   assert(tenuredToGen->alloc_start   <= tenuredToGen->top);
-  if (debug)
-    debug_after_collect(nurseryGen, tenuredFromGen);
   if (paranoid) {
-    Heap_t *legalHeaps[2] = {tenuredFromGen, NULL};
-    Bitmap_t *legalStarts[2] = {NULL, NULL};
-    legalStarts[0] = paranoid_check_heap_without_start("tenuredFrom after GC",tenuredFromGen, legalHeaps);
-    paranoid_check_stack("stack after GC",oneThread,nurseryGen);
-    paranoid_check_global("global after GC",legalHeaps,legalStarts);
-    paranoid_check_heap_with_start("tenuredFrom after GC",tenuredFromGen, legalHeaps, legalStarts);  
-    DestroyBitmap(legalStarts[0]);
+    paranoid_check_all(nurseryGen, tenuredFromGen, tenuredFromGen, NULL);
+    bzero((char *) nurseryGen->bottom, (sizeof (val_t)) * (nurseryGen->top - nurseryGen->bottom));
   }
 
   /* stop timer and update counts */
   gcstat_normal(allocated, copied, writes);
-  if (GCtype != Minor) {
+  if (GCType != Minor) {
     NumMajorGC++;
     stop_timer(&sysThread->majorgctime);
   }
+  GCStatus = GCOff;
   NumGC++;
   stop_timer(&sysThread->gctime); 
 }
@@ -275,10 +265,9 @@ void GC_Gen(SysThread_t *sysThread)
 
 void gc_init_Gen() 
 {
-  /* secondary cache size */
   int cache_size = GetBcacheSize();
+
   init_int(&YoungHeapByte, (int)(0.85 * cache_size));
-  
   init_int(&MaxHeap, 80 * 1024);
   init_int(&MinHeap, 1024);
   if (MinHeap > MaxHeap)
@@ -288,6 +277,7 @@ void gc_init_Gen()
   init_int(&MinRatioSize, 512);
   init_int(&MaxRatioSize, 50 * 1024);
   assert(MinHeap >= 1.2*(YoungHeapByte / 1024));
+
   nurseryGen = Heap_Alloc(YoungHeapByte, YoungHeapByte);
   tenuredFromGen = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   tenuredToGen = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  

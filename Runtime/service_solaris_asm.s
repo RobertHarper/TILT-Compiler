@@ -178,7 +178,7 @@ Spawn:
 	mov	THREADPTR_REG, %l0			! load_regs_MLtoC expects thread pointer in l0
 	retl
 	nop
-	.size	Yield,(.-Yield)
+	.size	Spawn,(.-Spawn)
 
 
 	.globl  scheduler

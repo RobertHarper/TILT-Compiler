@@ -121,13 +121,13 @@ struct
     end
   fun msRegSet s = msRegList (setToList s)
 
-
+  (* ".align 8" even-word aligns *)
   val programHeader = []
-  fun procedureHeader label = [" \t.align 4\n", "\t.global " ^ (msLabel (label)) ^ "\n"]
+  fun procedureHeader label = [" \t.align 8\n", "\t.global " ^ (msLabel (label)) ^ "\n"]
   fun procedureTrailer s = ["\t.size " ^ s ^ ",(.-" ^ s ^ ")\n"]
   val textStart = ["\t.text\n"]
-  val dataStart = ["\t.data\n"]
-  val GCdataStart = ["\t.section\t\".rodata\"\n"]
+  val dataStart = ["\t.data\n\t.align 8\n"]          (* RTL data segment assumes even-word alignment *)
+  val GCdataStart = ["\t.section\t\".rodata\"\n"]    (* This is used multiple times so we must not realign *)
 
 end
 

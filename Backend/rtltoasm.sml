@@ -237,12 +237,12 @@ struct
 			 app emitString dataStart;
 			 dumpDatalist data;
 			 emitString ("\t.long 0" ^ commentHeader ^ "filler\n\n");
-			 emitString ("\t.globl "^trace_global_start^"\n");
-			 emitString ("\t.globl "^trace_global_end^"\n");
-			 emitString (trace_global_start^":\n");
-			 dumpDatalist (map DATA global);
-			 emitString (trace_global_end^":\n");
-			 emitString ("\t.long 0" ^ commentHeader ^ "filler\n\n");
+			 let val globalData = map DATA global
+			     val globalData = [DLABEL (ML_EXTERN_LABEL trace_global_start)] @ globalData @
+				              [DLABEL (ML_EXTERN_LABEL trace_global_end), 
+					       COMMENT "filler so label is defined", INT32 0w0]
+			 in  dumpDatalist globalData
+			 end;
 			 ())) ()
      end (* allocateProg *)
        handle e => (Printutils.closeOutput (); raise e)

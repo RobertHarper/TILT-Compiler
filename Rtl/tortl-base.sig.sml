@@ -2,9 +2,13 @@
 signature TORTL_BASE = 
 sig
 
+    val do_gcmerge : bool ref
+    val do_writeBarrier : bool ref
+    val do_fullWriteBarrier : bool ref
+    val do_arrayReadBarrier : bool ref
+
     val do_constant_records : bool ref
     val do_forced_constant_records : bool ref
-    val do_gcmerge : bool ref
     val do_single_crecord : bool ref
 
     type exp = Nil.exp
@@ -103,7 +107,6 @@ sig
    val load_reg_term : term * reg option -> reg
 
    val repPathIsPointer : Rtl.rep_path -> regi
-   val storeWithBarrier : Rtl.ea * regi * rep -> bool  (* true if there MIGHT be a barrier *)
    val repIsNonheap : Rtl.rep -> bool
 
    (* Routines for allocating registers and labels *)
@@ -118,7 +121,8 @@ sig
    val add_data : data -> unit
    val mk_float_data : string -> label
    val mk_named_float_data : string * label -> unit
-   val needgc : state * sv -> state
+   val needalloc : state * sv -> state
+   val needmutate : state * int -> state
    val align_even_word  : unit -> unit
    val align_odd_word  : unit -> unit
 

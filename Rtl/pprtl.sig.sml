@@ -10,7 +10,6 @@ sig
    val label2s : Rtl.label -> string
    val ea2s    : Rtl.ea -> string
    val sv2s    : Rtl.sv -> string
-   val align2s : Rtl.align -> string
    val rep2s   : Rtl.rep -> string
 
    val pp_var' : Rtl.var -> Formatter.format

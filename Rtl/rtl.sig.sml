@@ -79,14 +79,8 @@ sig
 
   datatype cmp = EQ | LE | LT | GE | GT | NE 
 
-
-  datatype align = LONG    (* 4 bytes *)
-                 | QUAD    (* 8 bytes *)
-                 | ODDLONG (* align at 8 byte boundary +4 *)
-                 | OCTA    (* 16 bytes *)
-                 | ODDOCTA (* 16 bytes bound + 12 *)
-
   datatype traptype = INT_TT | REAL_TT | BOTH_TT
+
   datatype calltype = ML_NORMAL | ML_TAIL of regi | C_NORMAL
 
   datatype instr = 
@@ -236,19 +230,15 @@ sig
     | THROW_EXN
     | CATCH_EXN
 
-    | LOAD32I  of ea * regi           (* displacements not scaled *)
-    | STORE32I of ea * regi           (* unchecked stores *)
-    | LOAD8I  of ea * regi            (* displacements not scaled *)
-    | STORE8I of ea * regi            (* unchecked stores *)
-    | LOADQF   of ea * regf
-    | STOREQF  of ea * regf
-
-    | MUTATE of ea * regi * regi option   (* if option is NONE or SOME (nonzero value), a pointer is indicated *)
-						   
-    | INIT of ea * regi * regi option     (* if option is NONE or SOME (nonzero value), a pointer is indicated *)
-
-    | NEEDGC of sv          (* needgc(sv) calls garbage collector if that
-			       many words are not allocatable *)
+    | LOAD8I    of ea * regi             
+    | STORE8I   of ea * regi      (* unchecked stores *)
+    | LOAD32I   of ea * regi            
+    | STORE32I  of ea * regi      (* unchecked stores *)
+    | LOAD64F   of ea * regf
+    | STORE64F  of ea * regf      (* unchecked stores *)
+    | STOREMUTATE of ea
+    | NEEDALLOC  of sv                       (* Calls GC if sv words are not allocatable *)
+    | NEEDMUTATE of int                      (* Calls GC if int writes won't fit in write list *)
 
     (* for signalling hardware(Alpha): SOFT -> BARRIER; HARD -> nop
       for non-signalling hardware(PPC): SOFT -> NOP; HARD -> test-and-branch *)
@@ -258,7 +248,6 @@ sig
     | HARD_ZBARRIER of traptype
 
     | ILABEL of label
-    | IALIGN of align       (* alignment of blocks *)
     | HALT                  (* needed for termination of main *)    
     | ICOMMENT of string
 
@@ -271,7 +260,6 @@ sig
     | INT32    of TilWord32.word      
     | FLOAT    of string                  (* double-precision float point literal *)
     | DATA     of label                   (* address value - label as value *)
-    | ALIGN    of align
 
   (* _return is where the return address is expected to be passed in
      _args is where args should be passed in
@@ -309,7 +297,7 @@ sig
  
   datatype module = MODULE of
                           {procs : proc list,
-			   data : data list,
+			   data : data list,  (* assumed that data segment starts even-word aligned *)
 			   main : label,
 			   global : label list}
 

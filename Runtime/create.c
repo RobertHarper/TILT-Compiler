@@ -179,18 +179,20 @@ ptr_t alloc_uninit_string(int strlen, char **raw)
 }
 
 /* Shorten a string and fill the space it used to occupy with SKIP_TAG */
-void adjust_stringlen(ptr_t str, int newlen)
+void adjust_stringlen(ptr_t str, int newByetLen)
 {
   int i;
-  tag_t oldtag = str[-1];
-  tag_t newtag = IARRAY_TAG | (newlen << ARRLEN_OFFSET);
-  int oldlen = GET_ARRLEN(oldtag);
-  int oldword = (oldlen + 3) / 4;
-  int newword = (newlen + 3) / 4;
+  tag_t oldTag = str[-1];
+  tag_t newTag = IARRAY_TAG | (newByteLen << ARRLEN_OFFSET);
+  int oldByteLen = GET_ARRLEN(oldTag);
+  int oldWordLen = (oldlen + 3) / 4;
+  int newWordLen = (newlen + 3) / 4;
 
-  assert(newlen <= oldlen);
-  str[-1] = newtag;
-  str[newword] = SKIP_TAG | ((oldword - newword) << SKIPLEN_OFFSET);
+  assert(newByteLen <= oldByteLen);
+  if (newWordlen == oldWordlen)
+    return;
+  str[-1] = newTag;
+  str[newword] = SKIP_TAG | ((oldWordLen - newWordLen) << SKIPLEN_OFFSET);
 }
 
 ptr_t alloc_recrec(ptr_t rec1, ptr_t rec2)

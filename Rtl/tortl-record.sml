@@ -47,7 +47,7 @@ struct
 		     in (add_data(COMMENT "static record tag");
 			 (f, state))
 		     end
-	    else let val state = needgc(state,IMM(words_alloced))
+	    else let val state = needalloc(state,IMM(words_alloced))
 		 in  (fn _ => heapptr, state)
 		 end
 
@@ -61,12 +61,12 @@ struct
 						  | _ => false) tagwords)
 	fun storenew(ea,r,rep) = 
 	    (case rep of
-		 TRACE => add_instr(INIT(ea,r,NONE))
+		 TRACE => add_instr(STORE32I(ea,r))
 	       | NOTRACE_INT => add_instr(STORE32I(ea,r))
 	       | NOTRACE_CODE => add_instr(STORE32I(ea,r))
 	       | NOTRACE_LABEL => add_instr(STORE32I(ea,r))
 	       | COMPUTE path => let val isPointer = repPathIsPointer path
-				 in  add_instr(INIT(ea,r,SOME isPointer))
+				 in  add_instr(STORE32I(ea,r))
 				 end
 	       | _ => error "storenew got funny rep")
 
@@ -85,12 +85,12 @@ struct
 		| _ => let val r = load_ireg_term(vl,NONE)
 		       in  if const 
 			       then 
-				   (add_data(INT32 uninit_val);
-				    add_instr(STORE32I(LEA(recordLabel, 
-							   offset - 4 * (length tagwords)), r));
-				    if (repIsNonheap rep)
-					then ()
-				    else is_mutable := true)
+				   let val nonheap = repIsNonheap rep
+				       val _ = if nonheap then () else is_mutable := true
+				   in  add_data(INT32 uninit_val);
+				       add_instr(STORE32I(LEA(recordLabel, 
+							      offset - 4 * (length tagwords)), r))
+				   end
 			   else 
 			       storenew(REA(heapptr(),offset),r,rep)
 		       end);
@@ -123,7 +123,7 @@ struct
 	       let val r = alloc_regi(NOTRACE_INT)
 	       in  add_instr (LI(static,r));
 		   app (fn a => do_dynamic(r,a)) dynamic;
-		   add_instr(STORE32I(REA(heapptr(),offset),r)) (* tags *)
+		   add_instr(STORE32I(REA(heapptr(),offset),r))
 	       end;
 	   scantags(offset+4,vl))
 
@@ -218,7 +218,7 @@ struct
 
   fun record_insert (state,record : regi, recType : regi, field : regi) : state * regi = 
       let
-	  val state = needgc(state,IMM (1+maxRecordLength)) (* one more for tag word *)
+	  val state = needalloc(state,IMM (1+maxRecordLength)) (* one more for tag word *)
 
 	  val len = alloc_regi NOTRACE_INT
 	  val mask = alloc_regi NOTRACE_INT
@@ -246,8 +246,8 @@ struct
 	  val _ = if (Rtltags.record = 0w0) then () else error "record_insert relies on record aspect being zero"
 	  val newtag = alloc_regi NOTRACE_INT
 	  val _ = add_instr(ORB(newmask, REG newlen, newtag))
-	  val _ = add_instr(INIT(REA(heapptr, 0), newtag, NONE))           (* write new tag *)
-	  val _ = add_instr(INIT(REA(heapptr, 4), field, NONE))            (* write first field v *)
+	  val _ = add_instr(STORE32I(REA(heapptr, 0), newtag))           (* write new tag *)
+	  val _ = add_instr(STORE32I(REA(heapptr, 4), field))            (* write first field v *)
 
 	  (* Now initialize the remaining fields *)
 	  val copyLoop = fresh_code_label "copyLoop"

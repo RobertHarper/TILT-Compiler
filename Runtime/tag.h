@@ -6,6 +6,10 @@
 
 /* value_t is to be used for the type of a pointer */
 #ifndef _asm_
+#ifdef alpha_osf
+#pragma pointer_size save
+#pragma pointer_size 32
+#endif
 typedef int bool_t;
 typedef unsigned int ui_t;
 typedef unsigned long reg_t; /* The machine register's actual type */
@@ -26,6 +30,9 @@ typedef ptr_t *ploc_t;        /* A location which contains an ML pointer */
 typedef unsigned int  tag_t;  /* An ML tag */
 typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 				 There is not necessarily a object at the location. */
+#ifdef alpha_osf
+#pragma pointer_size restore
+#endif
 #endif
 
 /* Note that 0x0 and 0x4 cannot be used as those are possible pointer values 

@@ -188,30 +188,27 @@ void stack_init()
   assert(GCTableEntryIDFlag == 0);
 #endif
 
-  for (mi=0; mi<module_count; mi++)
-    {    
-      int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
-      int *endpos = (int *)(GCTABLE_END_ADDR[mi]);
-      int *curpos = startpos; 
-      while (curpos <  endpos)
-	{
-	  count++;
-/*
-	  if (debugStack) {
-	    printf("curpos=%d "
-		   "sizes=%d, entrysize=%d\n",
-		   curpos, 		 
-		   ((Callinfo_t *)curpos)->sizes,
-		   GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes));
-	  }
-*/
-	  curpos += GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes);
-	}
-       GCTableSize += (long)endpos - (long)startpos;
-       SMLGlobalSize += (long)(GLOBALS_END_ADDR[mi]) - 
-	           (long)(GLOBALS_BEGIN_ADDR[mi]);
-       MutableTableSize += (long)(TRACE_GLOBALS_END_ADDR[mi]) - 
-	           (long)(TRACE_GLOBALS_BEGIN_ADDR[mi]);
+  for (mi=0; mi<module_count; mi++) {
+    int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
+    int *endpos = (int *)(GCTABLE_END_ADDR[mi]);
+    int *curpos = startpos; 
+    if (debugStack) 
+      printf("Scanning GC tables of module %d: %d to %d\n", mi, startpos, endpos);
+    while (curpos < endpos) {
+      int entrySize = GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes);
+      count++;
+      if (debugStack) {
+	printf("curpos=%d sizes=%d, entrysize=%d\n",
+	       curpos, ((Callinfo_t *)curpos)->sizes, GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes));
+      }
+      assert(entrySize != 0);
+      curpos += entrySize;
+    }
+    GCTableSize += (long)endpos - (long)startpos;
+    SMLGlobalSize += (long)(GLOBALS_END_ADDR[mi]) - 
+      (long)(GLOBALS_BEGIN_ADDR[mi]);
+    MutableTableSize += (long)(TRACE_GLOBALS_END_ADDR[mi]) - 
+      (long)(TRACE_GLOBALS_BEGIN_ADDR[mi]);
 /*
        GlobalTableSize += (long)(GLOBAL_TABLE_END_ADDR[mi]) - 
 	           (long)(GLOBAL_TABLE_BEGIN_ADDR[mi]);
@@ -219,26 +216,26 @@ void stack_init()
 */
     }
   CallinfoHashTable = CreateHashTable(2*count);
-  for (mi=0; mi<module_count; mi++)
-    {    
-      int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
-      int *endpos = (int *)(GCTABLE_END_ADDR[mi]);
-      int *curpos = startpos; 
-      while (curpos <  endpos)
-	{
-	  e.key = (unsigned long)(*curpos);
-	  e.data = (void *)curpos;
-	  /*	  printf("mi=%d, %d < %d, e.key = %d\n",mi, curpos, endpos, e.key); */
-	  HashTableInsert(CallinfoHashTable,&e);
-	  curpos += GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes);
-	}
-    }
-  for (mi=0; mi<NUM_STACK_STUB; mi++)
-    {
-      e.key = (unsigned long)(GetStackStub(mi));
-      e.data = (void *)mi;
+  for (mi=0; mi<module_count; mi++) {
+    int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
+    int *endpos = (int *)(GCTABLE_END_ADDR[mi]);
+    int *curpos = startpos; 
+    while (curpos <  endpos) {
+      e.key = (unsigned long)(*curpos);
+      e.data = (void *)curpos;
+      if (debugStack) 
+	printf("key %d -> data %d\n", e.key, e.data);
+      assert(IsText((ptr_t) e.key));
+      /*	  printf("mi=%d, %d < %d, e.key = %d\n",mi, curpos, endpos, e.key); */
       HashTableInsert(CallinfoHashTable,&e);
+      curpos += GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes);
     }
+  }
+  for (mi=0; mi<NUM_STACK_STUB; mi++) {
+    e.key = (unsigned long)(GetStackStub(mi));
+    e.data = (void *)mi;
+    HashTableInsert(CallinfoHashTable,&e);
+  }
 }
 
 
@@ -395,7 +392,12 @@ int should_trace_special(unsigned long trace,
 }
 
 
-static inline int should_trace(unsigned long trace, 
+#ifdef alpha_osf
+static 
+#else
+static inline 
+#endif 
+int should_trace(unsigned long trace, 
 		 Callinfo_t *callinfo, mem_t cur_sp, int regstate,
 		 unsigned int *byte_offset, unsigned int *word_offset,
 		 val_t *data_add,
@@ -504,7 +506,7 @@ int trace_stack_step(Thread_t *th, unsigned long *saveregs,
 			       &byte_offset, &word_offset,
 			       slot,i)) {
 		ptr_t data = (ptr_t) *slot;
-		if (!IsTagData(data)) {
+		if (!IsTagData(data) && !IsGlobalData(data)) {
 		  if (debugStack)
 		    printf("!!! Enqueueing stack slot %d with value %d\n", slot, data);
 		  Enqueue(roots,(void *)slot);
@@ -765,11 +767,13 @@ void local_root_scan(SysThread_t *sth, Thread_t *th, Heap_t *fromspace)
   QueueClear(reg_roots);
 
   for (i=th->nextThunk; i<th->numThunk; i++) {
-    if (debugStack)
-      printf("!!! Enqueueing thunk - position %d with value %d\n",
-	     &(((ptr_t)th->thunks)[i]),
-	     (((ptr_t)th->thunks)[i]));
-    Enqueue(reg_roots,&(((ptr_t)th->thunks)[i]));
+    mem_t thunkAddr = &(((ptr_t)th->thunks)[i]);
+    ptr_t thunk = (ptr_t) *thunkAddr;
+    if (!IsTagData(thunk) && !IsGlobalData(thunk)) {
+      if (debugStack)
+	printf("!!! Enqueueing thunk - position %d with value %d\n", thunkAddr, thunk);
+      Enqueue(reg_roots,thunkAddr);
+    }
   }
 
   if (th->nextThunk != 0) {  /* thread has started */
@@ -778,7 +782,7 @@ void local_root_scan(SysThread_t *sth, Thread_t *th, Heap_t *fromspace)
     regmask = trace_stack(th, saveregs, stack->top, root_lists, fromspace);
     regmask |= 1 << EXNPTR;
     for (i=0; i<32; i++)
-      if ((regmask & (1 << i)) && (!(IsTagData((ptr_t)(saveregs[i]))))) {
+      if ((regmask & (1 << i)) && (!(IsTagData((ptr_t)(saveregs[i])))) && (!(IsGlobalData((ptr_t)(saveregs[i]))))) {
 	if (debugStack)
 	  printf("!!! Enqueueing register %d - position %d with value %d\n",
 		 i, (int *)(&(saveregs[i])),
@@ -827,6 +831,8 @@ void minor_global_scan(SysThread_t *sth)
       for ( ; start < stop; start++) {
 	mem_t global = (mem_t) (*start);
 	Enqueue(potentialGlobal, global);
+	if (debugStack)
+	  printf("Unit %d: Enqueueing potential global %d\n", mi, global);
       }
     }
   }
@@ -848,7 +854,7 @@ void minor_global_scan(SysThread_t *sth)
     if (GET_TYPE(tag) == SKIP_TAG)
       Enqueue(potentialTemp, (void *)global);
     else 
-      getNontagPointerLocations(global, promotedGlobalLoc);
+      getNontagNonglobalPointerLocations(global, promotedGlobalLoc);
   }
   typed_swap(Queue_t *, potentialTemp, potentialGlobal);
   Enqueue(sth->root_lists, promotedGlobalLoc);

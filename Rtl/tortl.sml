@@ -75,7 +75,6 @@ struct
 			cbnd_depth := 0)
 
     val HeapProfile = NONE : int option
-    val codeAlign = Rtl.OCTA
     val do_write_list = Stats.tt("DoWriteList")
     val recognize_constants = Stats.tt("RtlRecognizeConstants")
     val elim_tail_call = Stats.tt("ElimTailCall")
@@ -173,7 +172,9 @@ struct
 			      val _ = if (maxRecordLength < 4)
 					  then error "the INIT in dowrite of making a closure is wrong\n"
 				      else ()
-			  in  (add_instr(INIT(REA(clregi,8), ir, NONE)); s)
+			      (* This write is an INIT because the entire closure is allocated all at once 
+			         and so resides in the same generation *)
+			  in  (add_instr(STORE32I(REA(clregi,8), ir)); s)
 			  end
 		      val _ = if is_recur 
 				  then (foldl2 dowrite rec_state (clregsi, var_vcelist); ())
@@ -244,8 +245,9 @@ struct
 			    | mapper _ = error "char vector but non-INT value"
 			  val chars = map mapper vals
 			  val str = String.implode chars
-		      in  add_data(STRING str);
-			  add_data(ALIGN LONG)
+		      in  add_data(COMMENT ("string size = " ^ (Int.toString (size str))));
+			  add_data(STRING str)
+			  (* add_data(ALIGN LONG) *)
 		      end
 		  fun wordVector() =
 		      let fun apper (VALUE v) = 
@@ -639,7 +641,7 @@ struct
 
 		      (* --- restore the float registers, if any --- *)			  
 		      val _ = let fun f (base : regi, h :: t,offset) = 
-			                    (add_instr(LOADQF(REA(base,offset),h));
+			                    (add_instr(LOAD64F(REA(base,offset),h));
 					     f (base, t,offset+8))
 				    | f (base,nil,offset) = ()
 			      in (case fpbase of
@@ -1690,7 +1692,7 @@ struct
 	      val args = map I cargs
 	      val return = alloc_regi NOTRACE_CODE
 	      val _ = set_args(args, return)
-	      val state = needgc(state,IMM 0)
+	      val state = needalloc(state,IMM 0)
 	      val (ir,state) = xcon(state,fresh_named_var "result",body)
 	      val result = getResult(fn() => I ir)
 	      val I resulti = result
@@ -1727,7 +1729,7 @@ struct
 	      val args = (map I cargs) @ (map I eiargs) @ (map F efargs)
 	      val return = alloc_regi NOTRACE_CODE
 	      val _ = set_args(args, return)
-	      val state = needgc(state,IMM 0)
+	      val state = needalloc(state,IMM 0)
 	      val (r,state) = xexp'(state,fresh_named_var "result",body,
 				      Nil.TraceUnknown, ID return)
 	      val result = getResult(fn() => r)
@@ -1887,7 +1889,7 @@ struct
 		 let val vl = (GLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
 		 in  add_conterm (s,v,k, SOME(LOCATION vl))
 		 end
-	     val state = needgc(make_state(),IMM 0)
+	     val state = needalloc(make_state(),IMM 0)
 	     val state = foldl folder state imports
 	     val return = alloc_regi NOTRACE_CODE
 	     val args = []

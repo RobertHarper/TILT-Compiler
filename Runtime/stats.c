@@ -8,6 +8,9 @@
 #include <sys/time.h>
 #include <sys/timeb.h>
 #include <sys/resource.h>
+#if (defined alpha_osf)
+int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the Alpha */
+#endif
 
 extern int use_stack_gen;
 
@@ -202,7 +205,7 @@ void stats_finish()
     printf("         Num_of_roots  = %9d\n", NumRoots);
     if (collector_type == Generational)
       printf("         Num_of_writes = %9d    Num_of_Locs = %d\n",
-	     write_count, NumLocatives);
+	     NumWrites, NumLocatives);
     printf(  "STACK(K):max_stack_depth = %7d    stk_frame_sz  = %4.2lf\n",
 	     MaxStackDepth,                   AvgStackFrameSize);
     if(use_stack_gen)	   

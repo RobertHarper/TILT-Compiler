@@ -8,6 +8,7 @@ sig
    val intarray : TilWord32.word
    val realarray : TilWord32.word
    val ptrarray : TilWord32.word
+   val stall : TilWord32.word
 
    (* bit offset of length and mask field *)
    val int_len_offset : int   (* measured in bytes *)

@@ -90,12 +90,12 @@ struct
   (* in_imm_range: is an integer in a range of immediate values *)
   val in_imm_range = in_imm_range
 
-  datatype align = LONG | QUAD | ODDLONG | OCTA | ODDOCTA
-
-  datatype cmp =  EQ | LE  | LT  | GE  | GT | NE 
+  datatype cmp = EQ | LE | LT | GE | GT | NE 
 
   datatype traptype = INT_TT | REAL_TT | BOTH_TT
+
   datatype calltype = ML_NORMAL | ML_TAIL of regi | C_NORMAL
+
   datatype instr = 
       LI     of TilWord32.word * regi
     | LADDR  of ea * regi               
@@ -173,19 +173,15 @@ struct
     | THROW_EXN
     | CATCH_EXN
 
-    | LOAD32I    of ea * regi          
-    | STORE32I   of ea * regi
-    | LOAD8I  of ea * regi            
-    | STORE8I of ea * regi            
-    | LOADQF     of ea * regf
-    | STOREQF    of ea * regf
-
-
-    | MUTATE of ea * regi * regi option   (* if option is present, a nonzero value indicates pointer;
-						   *ea = regi *)
-    | INIT of ea * regi * regi option     (* if option is present, a nonzero value indicates pointer *)
-
-    | NEEDGC     of sv
+    | LOAD8I    of ea * regi             
+    | STORE8I   of ea * regi     (* unchecked stores *)
+    | LOAD32I   of ea * regi            
+    | STORE32I  of ea * regi     (* unchecked stores *)
+    | LOAD64F   of ea * regf
+    | STORE64F  of ea * regf     (* unchecked stores *)
+    | STOREMUTATE of ea
+    | NEEDALLOC  of sv                        (* Calls GC if sv words are not allocatable *)
+    | NEEDMUTATE of int                      (* Calls GC if int writes won't fit in write list *)
           
     | SOFT_VBARRIER of traptype
     | SOFT_ZBARRIER of traptype
@@ -193,7 +189,6 @@ struct
     | HARD_ZBARRIER of traptype
 
     | ILABEL of label
-    | IALIGN of align
     | HALT
     | ICOMMENT of string
 
@@ -206,7 +201,6 @@ struct
     | INT32    of TilWord32.word      
     | FLOAT    of string                  (* double-precision float point literal *)
     | DATA     of label                   (* address value - label as value *)
-    | ALIGN    of align
 
   (* see sig for comments *)
   datatype proc = PROC of {name : label,

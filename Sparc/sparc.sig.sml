@@ -4,7 +4,6 @@ sig
 
   type register = Core.register
   type label = Rtl.label
-  type align = Rtl.align
 
   val Rzero   : register   (* Integer zero *)
   val Rra     : register   (* The link register which holds the return address - 8 *)
@@ -49,8 +48,7 @@ sig
   | IMMop of imm
 
   datatype specific_instruction =
-    IALIGN of align
-  | NOP  (* stylized for easier reading *)
+    NOP  (* stylized for easier reading *)
   (* For sethi, the imm must be of the HIGH flavor *)
   | SETHI  of imm * register
   | WRY    of register  (* the Y register is for 64-bit integer mult/div *)

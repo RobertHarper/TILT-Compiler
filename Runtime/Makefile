@@ -67,9 +67,10 @@ solaris_cc=gcc
 # /usr/local/opt/SUNWspro/bin/cc Solaris ANSI C compiler
 # /usr/lang/cc for SunOS 
 
-# The xtaso_short flag instructs the Alpha compiler to use 32-bit pointers 
-# If this were not set, then the ML pointers would be incorrectly 64 bits.
-alpha_osf_cflags=-xtaso_short -warnprotos -D__STDC__ -c -g -D${sys_name}
+# The xtaso flag instructs the Alpha compiler to honor #pragma pointer_size directives
+# This allows the runtime to use pointer type that are 32-bit when interacting with ML.
+# -std will define __STDC__ 
+alpha_osf_cflags=-newc -xtaso -w0 -warnprotos -std -c -inline size -g3 -D${sys_name}
 solaris_cflags=-O2 -Winline -finline-functions -Wa,-xarch=v8plus -c -g -D${sys_name}
 CC=${${sys_name}_cc}
 CFLAGS=${${sys_name}_cflags}

@@ -129,8 +129,8 @@ struct option_entry table[] =
 
 void process_option(int argc, char **argv)
 {
-  int i;
   char **cur;
+  int i;
   for (cur=argv+1; *cur != NULL; cur++)
     {
       int matched = 0;
@@ -218,12 +218,11 @@ int main(int argc, char **argv)
   stats_init();
   platform_init();
   memobj_init();
-  stack_init();
-/*   mllib_init(); */
   signal_init();
   thread_init();
   global_init(); 
   exn_init();
+  stack_init();
   gc_init();
 
   thread_go((ptr_t *)(&client_entry),module_count);

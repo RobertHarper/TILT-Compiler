@@ -6,6 +6,7 @@ struct
 
     val exclude_intregs = []
     val error = fn s => Util.error "sparc.sml" s
+    (* Check against Runtime/thread.h *)
     val iregs_disp         = 0
     val fregs_disp         = iregs_disp + 4 * 32
     val maxsp_disp         = fregs_disp + 8 * 32
@@ -99,8 +100,7 @@ structure Machine =
   | IMMop of imm
 
   datatype specific_instruction =
-    IALIGN of align
-  | NOP  (* stylized for easier reading *)
+    NOP  (* stylized for easier reading *)
   (* For sethi, the imm must be of the HIGH flavor *)
   | SETHI  of imm * register
   | WRY    of register
@@ -283,17 +283,7 @@ structure Machine =
 
   fun msInstrSpecific instrSpecific = 
       (case instrSpecific of
-	 IALIGN x =>
-	       let val i = 
-		   case x of
-		       LONG => 4
-		     | QUAD => 8
-		     | OCTA => 16
-		     | ODDLONG => error "ODDLONG not handled"
-		     | ODDOCTA => error "ODDOCTA not handled"
-	       in ".align " ^ (Int.toString i)
-	       end
-       | NOP => "nop"
+         NOP => "nop"
        | (SETHI (imm, Rdest)) => ("sethi" ^ tab ^
 				  (msImm imm) ^ comma ^ (msReg Rdest))
        | (WRY Rsrc) => ("mov " ^  (msReg Rsrc) ^ ", %y")
@@ -453,17 +443,10 @@ structure Machine =
         (if (s = "") then
 	  "! .ascii \"\" (zero length string)"
 	else
-	  (".ascii \"" ^ (fixupString s) ^ "\""))
+	  (".ascii \"" ^ (fixupString s) ^ "\"\n.align 4"))
     | msData (INT32 (w))  = single (".word " ^ (wms w))
     | msData (FLOAT (f))  = single (".double 0r" ^ (fixupFloat f))
     | msData (DATA (label)) = single (".long " ^ (msLabel label))
-    | msData (ALIGN (LONG)) = single (".align 4")
-    | msData (ALIGN (QUAD)) = single (".align 8")
-    | msData (ALIGN (ODDLONG)) = [(1, "\t.align 8\t\t! ODDLONG\n"),
-					  (1,"\t.word 0\n")]
-    | msData (ALIGN (OCTA)) = single (".align 16\n")
-    | msData (ALIGN (ODDOCTA)) = [(1, "\t.align 16\t\t! ODDOCTA\n"),
-					  (1,"\t.word 0\n\t.word 0\n\t.long 0\n")]
     | msData (DLABEL (label))   = 
 	   [(1,case label of
 		 LOCAL_CODE _ => ((msLabel label) ^ ":\n")
@@ -541,7 +524,6 @@ structure Machine =
       | defUse (BASE(POP_RET (_)))                 = ([Rra], [Rsp])
       | defUse (BASE(TAILCALL _))                  = ([], [])
       | defUse (BASE(GC_CALLSITE _))               = ([], [])
-      | defUse (SPECIFIC (IALIGN _))               = ([], [])
       | defUse (SPECIFIC NOP)                      = ([], [])
       | defUse (SPECIFIC (SETHI (_,Rdest)))        = ([Rdest], [])
       | defUse (SPECIFIC (WRY Rsrc))               = ([RY], [Rsrc])
@@ -614,7 +596,6 @@ structure Machine =
 	 | xspec (FPOP(oper, Fsrc1, Fsrc2, Fdest)) = FPOP(oper, fs Fsrc1,fs Fsrc2,fd Fdest)
 	 | xspec (FPMOVE(oper, Fsrc, Fdest)) = FPMOVE(oper, fs Fsrc, fd Fdest)
 	 | xspec (TRAP oper) = TRAP oper
-	 | xspec (IALIGN ia) = IALIGN ia
 	 | xspec NOP = NOP
 	 | xspec (SETHI (value, Rdest)) = SETHI(value, fd Rdest)
 	 | xspec (RDY Rdest) = RDY(fd Rdest)

@@ -820,18 +820,6 @@ struct
 	      translate(Rtl.STORE32I(Rtl.REA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1))
 	  end
 
-     | translate (Rtl.LOAD32I (ea, rtl_Rdest)) =
-       let val (Raddr, disp) = loadEA ea
-	   val Rdest = translateIReg rtl_Rdest
-       in  emit (SPECIFIC (LOADI (LD, Rdest, disp, Raddr)))
-       end
-
-     | translate (Rtl.STORE32I (ea, rtl_Rdest)) =
-       let val (Raddr, disp) = loadEA ea
-	   val Rdest = translateIReg rtl_Rdest
-       in  emit (SPECIFIC (STOREI (ST, Rdest, disp, Raddr)))
-       end
-
      | translate (Rtl.LOAD8I (ea, rtl_Rdest)) =
        let val (Raddr, disp) = loadEA ea
 	   val Rdest = translateIReg rtl_Rdest
@@ -844,65 +832,68 @@ struct
        in  emit (SPECIFIC (STOREI (STUB, Rdest, disp, Raddr)))
        end
 
-     | translate (Rtl.LOADQF (ea, rtl_Fdest)) =
+     | translate (Rtl.LOAD32I (ea, rtl_Rdest)) =
        let val (Raddr, disp) = loadEA ea
-	   val Fdest = translateFReg rtl_Fdest
-       in emit (SPECIFIC (LOADF (LDDF, Fdest, disp, Raddr)))
+	   val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (LOADI (LD, Rdest, disp, Raddr)))
        end
 
-     | translate (Rtl.STOREQF (ea, rtl_Fsrc)) =
-       let val (Raddr, disp) = loadEA ea
-	   val Fsrc = translateFReg rtl_Fsrc
-       in emit (SPECIFIC (STOREF (STDF, Fsrc, disp, Raddr)))
-       end
-
-     | translate (Rtl.ICOMMENT str) = emit (BASE(ICOMMENT str))
-
-     | translate (Rtl.MUTATE (ea,newval,isptr_opt)) =
-	 let 
-	     fun barrier() = 
-		 let val writeAlloc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
-		     val writeLimit = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
-		     val writeAlloc2 = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
-		     val store_loc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
-		     val Rskip = Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
-		     val afterLabel = Rtl.fresh_code_label "afterMutateCheck"
-		 in  emit (SPECIFIC(LOADI(LD, translateIReg writeAlloc, INT writelistAlloc_disp, Rth)));
-		     emit (SPECIFIC(LOADI(LD, translateIReg writeLimit, INT writelistLimit_disp, Rth)));
-		     translate (Rtl.BCNDI(Rtl.LT, writeAlloc, Rtl.REG writeLimit, afterLabel, true));
-		     emit (BASE (MOVE (Rheap, Rat)));
-		     emit (BASE (GC_CALLSITE afterLabel));
-		     emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
-				      {regs_modified=[Rat], regs_destroyed=[Rat],
-				       args=[Rat]})));
-		     translate (Rtl.ILABEL afterLabel);
-		     emit (SPECIFIC(LOADI(LD, translateIReg writeAlloc2, INT writelistAlloc_disp, Rth)));
-		     app translate [Rtl.LADDR(ea, store_loc),
-				    Rtl.STORE32I(Rtl.REA(writeAlloc2,0),store_loc),
-				    Rtl.ADD(writeAlloc2, Rtl.IMM 4, writeAlloc2)];
-		     emit (SPECIFIC(STOREI(ST, translateIReg writeAlloc2, INT writelistAlloc_disp, Rth)))
-		 end
-	     fun write() = translate (Rtl.STORE32I(ea,newval))
-	 in  
-	   (case isptr_opt of
-		NONE => (barrier(); write())
-	      | SOME isptr =>
-		    let val after = Rtl.fresh_code_label "dynmutate_after"
-		    in  translate (Rtl.BCNDI(Rtl.EQ,isptr,Rtl.IMM 0,after,false));
-			barrier();
-			translate (Rtl.ILABEL after);
-			write()
-		    end)
-	 end
-
-     | translate (Rtl.INIT (ea, rtl_Rdest, unused)) =
+     | translate (Rtl.STORE32I (ea, rtl_Rdest)) =
        let val (Raddr, disp) = loadEA ea
 	   val Rdest = translateIReg rtl_Rdest
        in  emit (SPECIFIC (STOREI (ST, Rdest, disp, Raddr)))
        end
 
-     | translate (Rtl.NEEDGC (Rtl.IMM 0)) = ()
-     | translate (Rtl.NEEDGC rtl_operand) =
+     | translate (Rtl.LOAD64F (ea, rtl_Fdest)) =
+       let val (Raddr, disp) = loadEA ea
+	   val Fdest = translateFReg rtl_Fdest
+       in emit (SPECIFIC (LOADF (LDDF, Fdest, disp, Raddr)))
+       end
+
+     | translate (Rtl.STORE64F (ea, rtl_Fsrc)) =
+       let val (Raddr, disp) = loadEA ea
+	   val Fsrc = translateFReg rtl_Fsrc
+       in  emit (SPECIFIC (STOREF (STDF, Fsrc, disp, Raddr)))
+       end
+
+     | translate (Rtl.ICOMMENT str) = emit (BASE(ICOMMENT str))
+
+     | translate (Rtl.STOREMUTATE ea) =
+	   let val writeAlloc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+	       val writeAllocTemp = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+	       val store_obj = Rtl.REGI(Name.fresh_var(),Rtl.TRACE)
+	       val store_disp = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
+	   in  emit (SPECIFIC(LOADI (LD, translateIReg writeAlloc, INT writelistAlloc_disp, Rth)));
+	       app translate
+	       ((case ea of
+		     Rtl.REA (r, i) => [Rtl.MV (r, store_obj), Rtl.LI(TilWord32.fromInt i, store_disp)]
+		   | Rtl.LEA (l, i) => [Rtl.LADDR (Rtl.LEA(l, 0), store_obj), Rtl.LI(TilWord32.fromInt i, store_disp)]
+		   | Rtl.RREA (r1, r2) => [Rtl.MV (r1, store_obj), Rtl.MV (r2, store_disp)]) @
+		     [Rtl.STORE32I(Rtl.REA(writeAlloc,0),store_obj),
+		      Rtl.STORE32I(Rtl.REA(writeAlloc,4),store_disp),
+		      Rtl.ADD(writeAlloc, Rtl.IMM 8, writeAllocTemp)]);
+	       emit (SPECIFIC(STOREI (ST, translateIReg writeAllocTemp,INT writelistAlloc_disp, Rth)))
+	   end
+
+     | translate (Rtl.NEEDMUTATE n) =
+       let val writeAlloc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+	   val writeLimit = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+	   val writeAllocTemp = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+	   val afterLabel = Rtl.fresh_code_label "afterMutateCheck"
+       in  emit (SPECIFIC(LOADI (LD, translateIReg writeAlloc, INT writelistAlloc_disp, Rth)));
+	   emit (SPECIFIC(LOADI (LD, translateIReg writeLimit, INT writelistLimit_disp, Rth)));
+	   translate (Rtl.ADD(writeAlloc, Rtl.IMM (8 * n), writeAllocTemp));
+	   translate (Rtl.BCNDI(Rtl.LE, writeAllocTemp, Rtl.REG writeLimit, afterLabel, true));
+	   emit (BASE (MOVE (Rheap, Rat)));
+	   emit (BASE (GC_CALLSITE afterLabel));
+	   emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
+			    {regs_modified=[Rat], regs_destroyed=[Rat],
+			     args=[Rat]})));
+	   translate (Rtl.ILABEL afterLabel)
+       end
+
+     | translate (Rtl.NEEDALLOC (Rtl.IMM 0)) = ()
+     | translate (Rtl.NEEDALLOC rtl_operand) =
        let
 	   val rtl_loclabel = Rtl.fresh_code_label "needgc"
        in
@@ -936,14 +927,6 @@ struct
      | translate (Rtl.HARD_VBARRIER _) = ()
      | translate (Rtl.HARD_ZBARRIER _) = ()
 
-     | translate (Rtl.IALIGN x) = ()
-(*
-          emit(IALIGN (case x
-		  of Rtl.OCTA => OCTA
-		   | Rtl.QUAD => QUAD
-		   | Rtl.LONG => LONG
-		   | _ => error "unexpected alignment in instruction stream"))
-*)
      | translate (Rtl.ILABEL ll) = 
           (* Begin new basic block *)
           (saveBlock ();
