@@ -486,11 +486,12 @@ val debug_bound = ref false
        val top : local_label ref = ref (alloc_code_label())
        val currentfun : local_label ref = ref (alloc_code_label())
        val resultreg : reg ref = ref (F(REGF(fresh_named_var "badreg",NOTRACE_REAL)))
-       val il : Rtl.instr list ref = ref nil
+       val il : (Rtl.instr ref) list ref = ref nil
        val localregi : regi list ref = ref nil
        val localregf : regf list ref = ref nil
        val argregi : regi list ref = ref nil
        val argregf : regf list ref = ref nil
+       val curgc : instr ref option ref = ref NONE
    in  
        fun istoplevel() = !istop
        fun getTop() = !top
@@ -501,7 +502,21 @@ val debug_bound = ref false
        fun getArgF() = !argregf
 
        fun add_data d = dl := d :: !dl
-       fun add_instr i = il := i :: !il
+       fun add_instr i = il := (ref i) :: !il
+       fun needgc operand = 
+	   (case (operand,!curgc) of
+		(IMM _,NONE) => let val i = NEEDGC operand
+				    val r = ref i
+				in  (il := r :: !il; curgc := SOME r)
+				end
+	      | (IMM m, SOME (r as ref(NEEDGC(IMM n)))) =>
+				let val i = NEEDGC(IMM(m+n))
+				in  r := i
+				end
+	      | (IMM _, SOME _) => error "curgc is not a NEEDGC IMM"
+	      | (_, NONE) => add_instr(NEEDGC operand)
+	      | (_, SOME _) => (curgc := NONE;
+				add_instr(NEEDGC operand)))
 
        fun alloc_regi (traceflag) = 
 	   let val r = REGI(fresh_var(),traceflag)
@@ -553,7 +568,8 @@ val debug_bound = ref false
 			    | _ => fargs))
 
        fun reset_state (is_top,name) = 
-	   (istop := is_top;
+	   (curgc := NONE;
+	    istop := is_top;
 	    currentfun := LOCAL_CODE name;
 	    top := alloc_code_label();
 	    il := nil; 
@@ -583,7 +599,7 @@ val debug_bound = ref false
 	   end
 
        fun get_state() = {name = !currentfun,
-			  revcode = !il}
+			  code = map ! (rev (!il))}
    end
 	   
 
@@ -1011,14 +1027,14 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
   fun boxFloat regf : regi = 
       let val dest = alloc_regi TRACE
 	  val _ = if (not (!HeapProfile))
-		      then (add_instr(NEEDGC(IMM 4));
+		      then (needgc(IMM 4);
 			    align_odd_word();
 			    store_tag_zero(realarraytag (i2w 1));
 			    add_instr(STOREQF(EA(heapptr,4),regf)); (* allocation *)
 			    add(heapptr,4,dest);
 			    add(heapptr,12,heapptr))
 		  else
-		      (add_instr(NEEDGC(IMM 5));
+		      (needgc(IMM 5);
 		       align_even_word();
 		       store_tag_disp(0,MakeProfileTag());
 		       store_tag_disp(4,realarraytag (i2w 1));
@@ -1055,11 +1071,11 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
     in 
        if (not (!HeapProfile))
 	 then 
-	   (add_instr(NEEDGC(IMM((if len = 0 then 1 else 2*len)+2)));   
+	   (needgc(IMM((if len = 0 then 1 else 2*len)+2));   
 	    align_odd_word();
 	    store_tag_zero(realarraytag(i2w len));
 	    add_instr(ADD(heapptr,IMM 4,res)))
-       else (add_instr(NEEDGC(IMM((if len = 0 then 1 else 2*len)+3)));
+       else (needgc(IMM((if len = 0 then 1 else 2*len)+3));
 	     align_even_word();
 	     store_tag_disp(0,MakeProfileTag());
 	     store_tag_disp(4,realarraytag(i2w len));
@@ -1993,7 +2009,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 		  val _ = add_instr(ORB(tmp,REG tmp2,newtag))      (* final record tag *)
 				    
 		  val _ = add_instr(ADD(numfields,IMM 2, gctemp))
-		  val _ = add_instr(NEEDGC(REG gctemp))       (* allocate space for sum record *)
+		  val _ = needgc(REG gctemp)             (* allocate space for sum record *)
 
 		  val _ = add_instr(STORE32I(EA(heapptr,0),newtag))  (* store record tag *)
 		  val _ = add_instr(LI(field_sub, tmp))
@@ -2146,7 +2162,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 
 
 		  val _ = add_instr(ADD(numfields,IMM 1, gctemp))
-		  val _ = add_instr(NEEDGC(REG gctemp))       (* allocate space for record *)
+		  val _ = needgc(REG gctemp)       (* allocate space for record *)
 
 		  val _ = add_instr(STORE32I(EA(heapptr,0),rectag))
 		  val _ = add_instr(S4ADD(numfields, REG heapptr, destcursor)) (* record tag *)
@@ -3007,14 +3023,14 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 	    if (not (!HeapProfile))
 		then
 		    (add_instr(ADD(gctemp,IMM 3, gctemp));
-		     add_instr(NEEDGC(REG gctemp));
+		     needgc(REG gctemp);
 		     align_odd_word();
 		     mk_realarraytag(len,tag);
 		     add_instr(STORE32I(EA(heapptr,0),tag)); (* store tag *)
 		     add_instr(ADD(heapptr,IMM 4,dest)))
 	    else
 		(add_instr(ADD(gctemp,IMM 4, gctemp)));
-		add_instr(NEEDGC(REG gctemp));
+		needgc(REG gctemp);
 		align_even_word();
 		store_tag_disp(0,ptag);                 (* store profile tag *)
 		mk_realarraytag(len,tag);               
@@ -3145,7 +3161,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 		 if (!HeapProfile)
 		     then add_instr(ADD(gctemp, IMM 1, gctemp))
 		 else ();
-		     add_instr(NEEDGC(REG gctemp));
+		     needgc(REG gctemp);
 		     general_init_case(ptag,tag,dest,
 				       VAR_LOC(VREGISTER(I gctemp)),
 				       wordlen,v,gafter);
@@ -3181,7 +3197,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 		 if (!HeapProfile)
 		     then add_instr(ADD(gctemp, IMM 1, gctemp))
 		 else ();
-		     add_instr(NEEDGC(REG gctemp));
+		     needgc(REG gctemp);
 		     mk_ptrarraytag(len,tag);
 		     general_init_case(ptag,tag,dest,
 				       VAR_LOC(VREGISTER(I gctemp)),
@@ -3196,7 +3212,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 				   (if (log_size = 0w0) then 1 else (w2i log_size))
 			   in
 			       if (in_imm_range(total_size)) then
-				   (add_instr(NEEDGC(IMM total_size));
+				   (needgc(IMM total_size);
 				    mk_ptrarraytag(len,tag);
 				    if (log_size = 0w1) 
 					then 
@@ -3490,7 +3506,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 	val heapptr = if is_top
 			  then (add_data(COMMENT "static record tag");
 				fn _ => error "should not use heapptr here")
-		      else (add_instr(NEEDGC(IMM(words_alloced))); 
+		      else (needgc(IMM(words_alloced)); 
 			    fn _ => heapptr)
 
 
@@ -3589,7 +3605,7 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 		  then ()
 	      else (add(heapptr(),4 * length tagwords,dest);
 		    add(heapptr(),4 * words_alloced,heapptr()))
-      val _ = add_instr(ICOMMENT ("done alllocating an " ^ (Int.toString (length vl)) ^ " record"))
+      val _ = add_instr(ICOMMENT ("done allocating an " ^ (Int.toString (length vl)) ^ " record"))
     in  result
     end
   
@@ -3618,9 +3634,9 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 	      val return = alloc_regi(LABEL)
 	      val _ = set_args_result(args, I resulti, return)
 	      val (ir,k) = xcon(state,fresh_named_var "result",body,NONE)
-	      val {name=label_name,revcode} = get_state()
-	      val mvinstr = MV(ir,resulti)
-	      val code = rev((RETURN return)::mvinstr::revcode)
+	      val _ = (add_instr(MV(ir,resulti));
+		       add_instr(RETURN return))
+	      val {name=label_name,code} = get_state()
 	      val extern = (case (Name.VarMap.find(!exports,name)) of
 			      NONE => NONE
 			    | SOME [] => error "export has no labels"
@@ -3672,12 +3688,13 @@ lconvarmap_insert (istoplevel()) s (v,(vlopt, vvopt, kind)) copt
 	      val _ = set_args_result(args, result, return)
 	      val (r,c) = xexp'(state,fresh_named_var "result",body,
 				SOME con, ID return)
-	      val {name=label_name,revcode} = get_state()
 	      val mvinstr = (case (r,result) of
 				 (I ir1,I ir2) => MV(ir1,ir2)
 			       | (F fr1,F fr2) => FMV(fr1,fr2)
 			       | _ => error "register mismatch")
-	      val code = rev((RETURN return)::mvinstr::revcode)
+	      val _ = (add_instr mvinstr;
+		       add_instr(RETURN return))
+	      val {name=label_name,code} = get_state()
 	      val extern = (case (Name.VarMap.find(!exports,name)) of
 			      NONE => NONE
 			    | SOME [] => error "export has no labels"
