@@ -6,20 +6,20 @@
 functor IntegerLiveness(
 	  structure BasicBlock:	     BASIC_BLOCK
 	  structure IntegerDataFlow: REGISTER_DATA_FLOW
-	  structure IntSet:	     ORD_SET where type Key.ord_key = int
+				       where type idSet = DenseIntSet.set
 	  structure MLTreeExtra:     MLTREE_EXTRA
 
 	  sharing type MLTreeExtra.MLTree.mltree =
 		       BasicBlock.mltree =
 		       IntegerDataFlow.mltree
-	      and type IntSet.set =
-		       IntegerDataFlow.idSet
 	) :> REGISTER_LIVENESS
-	       where type idSet	 = IntSet.set
+	       where type idSet	 = DenseIntSet.set
 		 and type mltree = MLTreeExtra.MLTree.mltree
 	  = struct
 
   (* -- structures --------------------------------------------------------- *)
+
+  structure IntSet = DenseIntSet
 
   structure MLTree = MLTreeExtra.MLTree
 
@@ -96,9 +96,9 @@ functor IntegerLiveness(
 	  in
 	    if existsIndex (changed lookup) (0, sets) then
 	      let
-		val vector = Vector.fromList sets
+		val vector = Array.fromList sets
 
-		fun lookup' index = #1(Vector.sub(vector, index))
+		fun lookup' index = #1(Array.sub(vector, index))
 	      in
 		liveness' triples lookup'
 	      end
