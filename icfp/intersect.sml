@@ -62,7 +62,7 @@ structure Intersect : INTERSECT =
 (*
 		     val _ = (print "  t = "; printR t; print "\n")
 *)
-		     fun l2() : l2 = let val dist = Real.abs t (* since dir0 is unit vector *)
+		     fun l2() : l2 = let val dist = t (* since dir0 is unit vector; dist might be negative *)
 					 val hit = add(src0, scale(t, dir0))
 				     in  [{dist = dist, hit = hit}]
 				     end
@@ -83,9 +83,7 @@ structure Intersect : INTERSECT =
 					   hit = hit, dist = dist}]
 				     end
 		     val l3 = memoize l3
-		 in  if (t < 0.0)
-			 then noIntersect
-		     else (true, l2, l3)
+		 in  (true, l2, l3)
 		 end
 	end
 

@@ -58,6 +58,12 @@ structure Render : RENDER =
 	in intersects
 	end
 
+    fun getPosIntersect [] = NONE
+      | getPosIntersect ((i as (_,_,{hit,dist,u,v,face,N}))::rest) = 
+	if (dist >= 0.0) 
+	    then SOME i
+	else getPosIntersect rest
+
     fun shadowed (hit, dir, []) = false
       | shadowed (hit, dir, obj::rest) = (primHit hit dir obj) orelse (shadowed (hit, dir, rest))
 
@@ -65,9 +71,9 @@ structure Render : RENDER =
     fun castShadow (hit, scene, incident, N, n) light : v3 * v3 = 
 	let val (Lj, Ldist) = Light.toLight (hit, light)  
 	    val intersects = getIntersects hit Lj scene
-	    val shadowed = (case intersects of
-				[] => false
-			      | (_,_,{hit,dist,u,v,face,N})::_ => dist < Ldist)
+	    val shadowed = (case (getPosIntersect intersects) of
+				NONE => false
+			      | SOME (_,_,{hit,dist,u,v,face,N}) => dist < Ldist)
 	in  if shadowed
 		then (black, black)
 	    else let 
@@ -102,10 +108,10 @@ structure Render : RENDER =
 						print " and intersection "; printV3 hit; print "\n")
 					  end)
 		    else ()
-	in  if (null intersects)
-		then black
-	    else let val (t, name, {u,v,face,N,hit,dist}) = hd intersects
-		     val incident = negate dir
+	in  case (getPosIntersect intersects) of
+	    NONE => black
+	  | SOME (t, name, {u,v,face,N,hit,dist}) =>
+		let  val incident = negate dir
 		     val hit = add(hit, scale(1e~5, incident)) 
 		     (* Surface properties *)
 		     val (C : Base.color, kd, ks, n) = apply(t,face,u,v)

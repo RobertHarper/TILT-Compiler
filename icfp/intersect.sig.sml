@@ -13,7 +13,7 @@ signature INTERSECT =
     type l3info = {u:real,v:real,face:int, 
 		   N : v3,         (*Normal vector*)
 		   hit : v3,       (*Point of intersection in world coordinates *)
-		   dist : real     (*Distance to viewer *)
+		   dist : real     (*Distance to viewer - might be negative if behind viewer *)
 		   } 
     type l3 = l3info list
 
