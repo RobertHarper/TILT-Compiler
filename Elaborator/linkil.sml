@@ -9,11 +9,10 @@ signature LINKIL =
       structure IlContext : ILCONTEXT
       structure IlStatic : ILSTATIC 
 
-      val initial_sbnds : Il.sbnd list
-      val initial_context : Il.context
-
-      val compile : string -> (Il.sbnd list * Il.sdec list * Il.context) option
-      val test : string -> (Il.sbnd list * Il.sdec list * Il.context) option
+      type module = (Il.context * Il.sbnd list * Il.sdec list) 
+      val compile_prelude : bool * string -> module
+      val compile : string -> module option
+      val test : string ->  module option
       val setdepth : int -> unit (* printing depth *)
   end
 
@@ -89,6 +88,7 @@ structure LinkIl : LINKIL =
 	open Il IlUtil Ppil IlStatic Formatter
 	    
 	structure Il = Il
+        type module = (Il.context * Il.sbnd list * Il.sdec list) 
 
 	val _ = Compiler.Control.Print.printDepth := 15;
 	val _ = Pagewidth := 80;
@@ -111,14 +111,13 @@ structure LinkIl : LINKIL =
 	    end
 
 	val empty_context = IlContext.empty_context
-	val (initial_context, initial_sbnds, initial_sdecs) = Basis.initial_context()
-(*
-	val initial_context' = local_add_context_entries(empty_context, 
-							 map CONTEXT_SDEC
-							 (IlStatic.GetSbndsSdecs(empty_context,initial_sbnds)))
-*)
-	val initial_sbnds_len = length initial_sbnds
 
+(*
+	val initial_context' = 
+	local_add_context_entries(empty_context, 
+			 map CONTEXT_SDEC
+			 (IlStatic.GetSbndsSdecs(empty_context,initial_sbnds)))
+*)
 
 	fun elaborate_help (context,(filepos,astdec)) = 
 	    (case (Toil.xdec(context,filepos,astdec)) of
@@ -129,21 +128,49 @@ structure LinkIl : LINKIL =
 		     end
 	       | _ => NONE)
 	val elaborate_help = Stats.timer("Elaboration",elaborate_help)
-	    
-	fun elaborate filename = 
-	    (case (elaborate_help(initial_context,LinkParse.parse_all filename)) of
-		 SOME (sbnds,entries) =>
-		     (* SOME(sbnds, local_add_context_entries(initial_context,tentries)) *)
-		     let fun get_sdec (CONTEXT_SDEC sdec) = SOME sdec
-			   | get_sdec _ = NONE
-			 val sdecs = List.mapPartial get_sdec entries
-			 val sbnds = initial_sbnds @ sbnds
-			 val sdecs = initial_sdecs @ sdecs
+
+	fun entries2sdecs entries = 
+		let fun get_sdec (CONTEXT_SDEC sdec) = SOME sdec
+		      | get_sdec _ = NONE
+		in List.mapPartial get_sdec entries	    
+		end
+
+	fun elaborate_quad (context_before,sbnds,sdecs,context_after) filename = 
+	    (case (elaborate_help(context_after,
+				  LinkParse.parse_all filename)) of
+		 SOME (sbnds',entries') =>
+		     let val sdecs' = entries2sdecs entries'
+			 val sbnds = sbnds @ sbnds'
+			 val sdecs = sdecs @ sdecs'
+		   	 val context' = local_add_context_entries(context_after,entries')
 			 val _ = print "Elaboration complete\n"
-		     in  SOME(sbnds, sdecs, empty_context)
+		     in  SOME(context_before, sbnds, sdecs, context')
 		     end
 	       | NONE => NONE)
-	    
+
+	val initial_quad = Basis.initial_context()
+	val prelude_quad = ref (NONE : (context * sbnds * sdecs * context) option)
+	local
+       	    fun reparse filename = 
+			let val q = elaborate_quad initial_quad filename
+			    val _ = prelude_quad := q
+			in  case q of 
+				SOME (ctxt,sd,sb,_) => (ctxt,sd,sb)
+				| NONE => error "prelude failed to elaborate"
+			end
+	in  fun elaborate_prelude (use_cache,filename) =
+		(case (!prelude_quad, use_cache) of
+			(SOME (ctxt,sd,sb,_), true) => (ctxt,sd,sb)
+		      | _ => reparse filename)
+	end
+
+	fun elaborate filename = 
+		(case (!prelude_quad) of
+			NONE => error "prelude not elaborated yet"
+		      | SOME q => 
+			(case elaborate_quad q filename of
+			  SOME (ctxt,sd,sb,_) => SOME(ctxt,sd,sb)
+			| NONE => NONE))
 (*
 	fun evaluate target_sbnds =
 	    let
@@ -152,7 +179,7 @@ structure LinkIl : LINKIL =
 		val allresmodule = IlEval.eval_mod module
 		val ressbnds =
 		    (case allresmodule of
-			 Il.MOD_STRUCTURE allressbnds => List.drop(allressbnds,initial_sbnds_len)
+			 Il.MOD_STRUCTURE allressbnds => allressbnds
 		       | _ => error "a structure evaluated to a non-structure")
 	    in ressbnds
 	    end
@@ -161,9 +188,10 @@ structure LinkIl : LINKIL =
 	
 	fun check' filename {doprint,docheck} =
 	    let
-		val (sbnds,sdecs,context) = (case elaborate filename of
-					       SOME res => res
-					     | NONE => error "Elaboration failed")
+		val (context,sbnds,sdecs) = 
+			(case elaborate filename of
+			       SOME res => res
+			     | NONE => error "Elaboration failed")
 		val _ = if doprint 
 			    then (print "test: sbnds are: \n";
 				  Ppil.pp_sbnds sbnds)
@@ -178,11 +206,10 @@ structure LinkIl : LINKIL =
 		val ssize = IlUtil.sig_size given_s
 		val _ = (Stats.int "Module Size") := msize
 		val _ = (Stats.int "Signature Size") := ssize
-		val ctxt = initial_context 
 		val _ =
 		    if docheck
 			then 
-			    let val precise_s = (Stats.timer("TYPECHECKING",IlStatic.GetModSig))(ctxt,m)
+			    let val precise_s = (Stats.timer("TYPECHECKING",IlStatic.GetModSig))(context,m)
 				fun sanity_check (ctxt,m,precise_s,given_s) = 
 				    if (not (IlStatic.Sig_IsSub(ctxt,precise_s,given_s)))
 					then SOME "precise_s is not a subsig of given_s"
@@ -200,7 +227,7 @@ structure LinkIl : LINKIL =
 						   print "\n")
 					 else ()
 			    in (case ((Stats.timer("SANITY_CHECK",sanity_check))
-				      (ctxt,m,precise_s,given_s)) of
+				      (context,m,precise_s,given_s)) of
 				    NONE => ()
 				  | SOME str => (print "\n\n****** SANITY_CHECK FAILED: ";
 						 print str;
@@ -216,10 +243,10 @@ structure LinkIl : LINKIL =
 						       (Il.MOD_STRUCTURE sbnds)));
 				  print "\n\n========================================\n";
 				  print "\n\ninitial_context = ctxt = \n";
-				  Ppil.pp_context ctxt;
+				  Ppil.pp_context context;
 				  print "\n")
 			else ()
-	    in  (sbnds,sdecs,context)
+	    in  (context,sbnds,sdecs)
 	    end
 
 
@@ -243,6 +270,11 @@ structure LinkIl : LINKIL =
 	    in res
 	    end
 
+
+
+
+
+	val compile_prelude = elaborate_prelude
 	val compile = elaborate
 	val test = (fn filename => SOME(ptest_res filename) handle _ => NONE)
 

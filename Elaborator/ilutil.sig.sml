@@ -47,6 +47,7 @@ signature ILUTIL =
     val make_seq : (exp * con) list -> exp * con
     val prim_etaexpand : (Il.Prim.prim * con list) -> exp
     val ilprim_etaexpand : (Il.Prim.ilprim * con list) -> exp
+    val beta_reduce : exp * exp -> exp option
 
     val con_bool : con
     val con_tuple : con list -> con                 (* the type of tuple values *)

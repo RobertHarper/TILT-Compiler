@@ -69,12 +69,12 @@ functor Toil(structure Il : IL
 	| error_max (_,Warn) = Warn
 	| error_max (NoError,NoError) = NoError
     in
+	fun reset_eq() = (eq_table := []; eq_stack := [])
 	fun reset_elaboration fp = (reset_counters();
 				    tyvar_table := [];
 				    overload_table := [];
 				    flex_table := [];
-				    eq_table := [];
-				    eq_stack := [];
+				    reset_eq();
 				    error_level := NoError;
 				    src_region := [];
 				    filepos := fp)
@@ -2559,7 +2559,8 @@ functor Toil(structure Il : IL
 	      | _ => let val _ = debugdo (fn() =>
 					  (print "eq_table had "; print (Int.toString (length eq_table));
 					   print " things\n"))
-			 val _ = reset_elaboration fp
+(*			 val _ = reset_elaboration fp *)
+			 val _ = reset_eq()
 			 val _ = eq_table_push()
 			 val _ = app eq_help eq_table 
 			 val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", 

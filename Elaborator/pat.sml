@@ -31,6 +31,18 @@ functor Pat(structure Il : IL
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun nada() = ()
 
+    fun supertype (arg_con : con) : con = 
+	let fun exp_handler (e : exp) : exp option = NONE
+	    fun mod_handler (m : mod) : mod option = NONE
+	    fun con_handler (c : con) : con option = 
+		(case c of
+		   CON_SUM {noncarriers,carriers,special} =>
+			SOME(CON_SUM{noncarriers = noncarriers,
+					special = NONE,
+					carriers = map supertype carriers})
+		| _ => NONE)
+	in  con_all_handle(arg_con,exp_handler,con_handler,mod_handler)
+	end
 
     (* ---------- auxilliary types, datatypes, and functions -------------- 
      A case_exp is the argument to the case statement.  It distinguishes
@@ -264,7 +276,11 @@ functor Pat(structure Il : IL
 	       accs: ((Ast.symbol list * Il.exp * Il.con option * Ast.pat option) * arm) list,
 	       def : def) : bound list * (exp * con) = 
       let
-	  val rescon = fresh_con context
+	  val rescon = ref(fresh_con context)
+	  fun check_rescon c = 
+		(sub_con(context,c,!rescon)) orelse
+		(rescon := supertype (!rescon);
+		sub_con(context,c,!rescon))
 	  fun helper ((path,stamp,carried_type,patopt),arm : arm) = 
 	      let val con = (case carried_type of 
 				 SOME c => c
@@ -278,7 +294,7 @@ functor Pat(structure Il : IL
 				   val arm' = (argpat::cl,bound,body)
 			       in  match((CASE_VAR (v,con))::args,[arm'],def)
 			       end)
-		  val _ =  if (eq_con(context,rescon,c))
+		  val _ =  if (check_rescon c)
 			       then ()
 			   else (error_region();
 				 print "body and handler type mismatch\n")
@@ -296,7 +312,7 @@ functor Pat(structure Il : IL
 	  val arms' = map #2 temp
 	  val bound' = map #1 temp
       in (flatten bound', (* LET(local_bnds,... *)
-	  (EXN_CASE(exnarg,arms',mapopt #1 def),rescon))
+	  (EXN_CASE(exnarg,arms',mapopt #1 def),!rescon))
       end
 
 
@@ -313,7 +329,11 @@ functor Pat(structure Il : IL
       val (casearg, casecon) = (case arg1 of
 				  CASE_VAR(v,con) => (VAR v, con)
 				| CASE_NONVAR (_,binde,bindc) => (binde,bindc))
-      val rescon = fresh_con context
+      val rescon = ref(fresh_con context)
+      fun check_rescon c = 
+		(sub_con(context,c,!rescon)) orelse
+		(rescon := supertype (!rescon);
+		sub_con(context,c,!rescon))      
       fun getarm datacon (sumcon : int * con list) (i,{name=cur_constr,arg_type}) : bound list * exp option = 
 	let 
 	  fun armhelp ((path,patopt), (clause,bound,body)) : arm option = 
@@ -322,9 +342,11 @@ functor Pat(structure Il : IL
 	     | (true,NONE) => SOME(clause,bound,body)
 	     | (true,SOME argument) => SOME(argument::clause,bound,body))
 	  val relevants : arm list = List.mapPartial armhelp accs
-	  val _ = if (eq_con(context,datacon,casecon))
+	  val _ = if (sub_con(context,casecon,datacon))
 		      then ()
 		  else (error_region();
+			print "datacon is "; Ppil.pp_con datacon; print "\n";
+			print "casecon is "; Ppil.pp_con casecon; print "\n";
 			print "constructor pattern used on an argument of the wrong type\n")
 	  val rsvar = fresh_var()
 	  val rscon = CON_SUM{carriers = #2 sumcon,
@@ -334,16 +356,18 @@ functor Pat(structure Il : IL
 	      ([],_) => ([],NONE)
 	    | (_,NONE) => let 
 			    val (vf_ll : bound list, (me,mc)) = match(args, relevants, def)
-			    val _ = if (eq_con(context,rescon,mc))
+			    val _ = if (check_rescon mc)
 					 then ()
 				     else (error_region();
+					   print "mc is "; Ppil.pp_con mc; 
+					   print "\n rescon is "; Ppil.pp_con (!rescon); print "\n";
 					   print "results types of rules mismatch\n")
 			  in (vf_ll,SOME me)
 			  end
 	    | (_,SOME rcon) => let 
 			   val var = fresh_var()
 			   val (vf_ll,(me,mc)) = match((CASE_VAR (var,rcon))::args, relevants, def)
-			    val _ = if (eq_con(context,rescon,mc))
+			    val _ = if (check_rescon mc)
 					 then ()
 				     else (error_region();
 					   print "results types of rules mismatch\n")
@@ -379,7 +403,7 @@ functor Pat(structure Il : IL
 				 arg = APP(expose_exp,casearg),
 				 arms = expopt_list,
 				 default = NONE,
-				 tipe = con_deref rescon}, con_deref rescon))
+				 tipe = con_deref (!rescon)}, con_deref (!rescon)))
     end
 
   and match (args : case_exp list, 

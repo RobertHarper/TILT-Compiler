@@ -49,7 +49,7 @@ functor Basis(structure Il : IL
       val default_fixity_table = map (fn (str,f) => (symbol_label(varSymbol(str)), f)) table
     end
 
-    fun initial_context () : context * sbnd list * sdec list =
+    fun initial_context () : context * sbnd list * sdec list * context =
       let
 	  val result = ref (add_context_fixity(empty_context,default_fixity_table))
 	  val sbnds_result = ref ([] : sbnd list)
@@ -420,11 +420,11 @@ functor Basis(structure Il : IL
 	      val datatype_sdecs = bool_sdecs @ susp_sdecs @ list_sdecs 
 	      val datatype_self_sdecs = map (fn (SDEC(l,dec)) => SDEC(l,IlStatic.SelfifyDec dec)) datatype_sdecs
 	  in
-	      val _ = result := add_context_sdecs(!result,datatype_self_sdecs)
+	      val datatype_self_sdecs = datatype_self_sdecs
 	      val _ = sbnds_result := datatype_sbnds
 	      val datatype_sdecs = datatype_sdecs
 	  end
-      in  (!result, !sbnds_result, datatype_sdecs)
+      in  (!result, !sbnds_result, datatype_sdecs, add_context_sdecs(!result,datatype_self_sdecs))
       end
   
   end

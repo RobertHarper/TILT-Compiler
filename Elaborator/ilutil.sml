@@ -140,6 +140,28 @@ functor IlUtil(structure Ppil : PPIL
     val prim_etaexpand = etaexpand_help (PRIM,PrimUtil.get_type)
     val ilprim_etaexpand = etaexpand_help (ILPRIM,PrimUtil.get_iltype)
 
+    fun beta_reduce(x : exp, y : exp) : exp option = 
+	let fun red (exp as (OVEREXP (c,_,oe))) = 
+		      (case (oneshot_deref oe) of
+			   SOME exp => exp
+			 | NONE => exp)
+		   | red exp = exp
+	in (case (red x, red y) of
+	     (ETAPRIM(p,cs),RECORD rbnds) => SOME(PRIM(p,cs,map #2 rbnds))
+	   | (ETAILPRIM(ip,cs),RECORD rbnds) => SOME(ILPRIM(ip,cs,map #2 rbnds))
+	   | (x as ETAPRIM(p,cs),y) =>
+		     (case (PrimUtil.get_type p cs) of
+			  CON_ARROW(CON_RECORD _,_,_) => NONE
+			| CON_ARROW(_,_,_) => SOME(PRIM(p,cs,[y]))
+			| _ => NONE)
+	   | (x as ETAILPRIM(ip,cs),y) =>
+		     (case (PrimUtil.get_iltype ip cs) of
+			  CON_ARROW(CON_RECORD _,_,_) => NONE
+			| CON_ARROW(_,_,_) => SOME(ILPRIM(ip,cs,[y]))
+			| _ => NONE)
+	   | _ => NONE)
+	end
+
     fun con_deref (CON_TYVAR tyvar) = (case (tyvar_deref tyvar) of
 					   NONE => CON_TYVAR tyvar
 					 | SOME con => con)
