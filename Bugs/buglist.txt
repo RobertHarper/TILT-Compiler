@@ -125,3 +125,4 @@
 0129 [open]	os exit status and textio
 0130 [open]	type_of failed in Reify2
 0131 [open]	scalb and real_scalb unimplemented
+0132 [open]	scalb, real_scalb unimplemented
