@@ -71,7 +71,7 @@ structure Name :> NAME =
 
     fun symbol_label s = (Symbol.number s, Symbol.name s, false)
     fun open_symbol_label s = (Symbol.number s, Symbol.name s, true)
-    fun fresh_string s = Int.toString(label_counter()) ^ "_" ^ s
+    fun fresh_string s = s ^ "_" ^ Int.toString(label_counter())
     fun fresh_internal_label s = internal_label(fresh_string s)
     fun fresh_open_internal_label s = open_internal_label(fresh_string s)
     fun openlabel ((i,s,_) : label) = (i,s,true)
