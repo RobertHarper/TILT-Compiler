@@ -1911,10 +1911,12 @@ end (* local defining splitting context *)
 
      | xexp' context (Il.HANDLE (il_con, il_exp1, il_exp2)) = 
        let
-	   val exp1 = xexp context il_exp1
+	   val body = xexp context il_exp1
+	   val result_type = xcon context il_con
 	   val (bound, _, handler) = toFunction context il_exp2
        in
-	   Handle_e (exp1, bound, handler)
+	   Handle_e {body = body, bound = bound,
+		     handler = handler, result_type = result_type}
        end
 
      | xexp' context (Il.RAISE (il_con, il_exp)) = 

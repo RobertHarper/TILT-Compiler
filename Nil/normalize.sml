@@ -776,12 +776,14 @@ struct
 	   val exp = exp_normalize' state exp
 	 in Raise_e (exp,con)
 	 end
-	| Handle_e (exp,v,handler) =>
+	| Handle_e {body,bound,handler,result_type} =>
 	 let
-	   val exp = exp_normalize' state exp
-	       (* XXX need to bind v *)
+	   val body = exp_normalize' state body
+	       (* XXX need to bind bound *)
 	   val handler = exp_normalize' state handler
-	 in Handle_e (exp,v,handler)
+	   val result_type = con_normalize' state result_type
+	 in Handle_e {body = body, bound = bound,
+		      handler = handler, result_type = result_type}
 	 end)
   fun import_normalize' state (ImportValue (label,var,tr,con)) =
     let
@@ -1294,7 +1296,7 @@ struct
 	    end
 
 	   | Raise_e (exp,con) => con
-	   | Handle_e (exp,v,handler) => type_of (D,exp)
+	   | Handle_e {result_type,...} => result_type
 	    )
      end
 

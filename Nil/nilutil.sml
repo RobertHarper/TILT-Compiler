@@ -749,9 +749,12 @@ end
 			    map self elist, 
 			    map self eflist)
 		| Raise_e (e,c) => Raise_e(self e, f_con state c)
-		| Handle_e (e,v,h) => let val state' = add_var(state,v)
-					in  Handle_e(self e, v, f_exp state' h)
-					end
+		| Handle_e {body,bound,handler,result_type} => 
+		      let val state' = add_var(state,bound)
+		      in  Handle_e{body = self body, bound=bound, 
+				   handler = f_exp state' handler,
+				   result_type = f_con state result_type}
+		      end
       in case (exphandler (bound,exp)) of
 	  CHANGE_NORECURSE e => e
 	| CHANGE_RECURSE e => doexp e

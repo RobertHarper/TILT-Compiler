@@ -945,9 +945,15 @@ fun pp_alias UNKNOWN = print "unknown"
 			      | _ => default())
 		     end
 		| Raise_e(e,c) => Raise_e(do_exp state e, do_con state c)
-		| Handle_e(e,v,handler) => 
-			let val ([(v,_)],state) = do_vclist state [(v,Prim_c(Exn_c,[]))]
-			in  Handle_e(do_exp state e, v, do_exp state handler)
+		| Handle_e{body,bound,handler,result_type} =>
+			let val body = do_exp state body
+			    val result_type = do_con state result_type
+			    val ([(bound,_)],state') = 
+				do_vclist state [(bound,Prim_c(Exn_c,[]))]
+			    val handler = do_exp state' handler
+			in  Handle_e{body = body, bound = bound,
+				     handler = handler, 
+				     result_type = result_type}
 			end)
 
 

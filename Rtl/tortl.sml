@@ -517,7 +517,8 @@ struct
 		  end
             (* --- We rely on the runtime to unwind the stack so we don't need to save the
 	           free variables of the continuation of this expression. *)
-	    | Handle_e (exp, exnvar, handler_body) => 
+	    | Handle_e {body = exp, bound = exnvar, 
+			handler = handler_body, ...} =>
 		  let
 		      (* compute free variables that need to be saved for handler *)
 

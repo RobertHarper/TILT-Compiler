@@ -2094,19 +2094,20 @@ struct
 	 in
 	   con
 	 end
-     | Handle_e (exp,v,handler) => 
+     | Handle_e {body,bound,handler,result_type} => 
 	 let
-	   val con = exp_valid(D,exp)
-	   val D = insert_con(D,v,Prim_c(Exn_c,[]))
+	   val body_con = exp_valid(D,body)
+	   val D = insert_con(D,bound,Prim_c(Exn_c,[]))
 	   val handler_con = exp_valid(D,handler)
-(*XXX handle should be annotated with a type, like switches! *)
+	   val _ = con_valid (D,result_type)
 	 in
-	     if type_equiv(D,con,handler_con,true) then
-		 handler_con
-	     else if type_equiv(D,handler_con,con,true) then
-		 con
-	      else
-		  e_error(D,exp,"Handler body has different type from handled expression")
+	     if type_equiv(D,body_con,result_type,true) then
+		 if type_equiv(D,handler_con,result_type,true) then
+		     result_type
+		 else
+		     e_error(D,exp,"Handler has wrong type")
+	     else
+		 e_error(D,exp,"Handled expression has wrong type")
 	 end
        )
 
@@ -2185,6 +2186,7 @@ struct
       fun module_valid' (D,MODULE {bnds,imports,exports}) = 
 	let
 	  val D = foldl import_valid' D imports
+          val _ = print "Done validating imports\n"
 	  val (D,_) = bnds_valid(D,bnds)
 	  val _ = app (export_valid D) exports
 	in

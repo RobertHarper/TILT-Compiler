@@ -590,10 +590,17 @@ struct
        | (Raise_e _, _) => GREATER
        | (_, Raise_e _) => LESS
 	     
-       | (Handle_e (exp1, var1, h1), Handle_e (exp2, var2, h2)) =>
-	     (case cmp_exp (exp1, exp2) of
-		  EQUAL => (case Name.compare_var (var1,var2) of
-				EQUAL => cmp_exp (h1,h2)
+       | (Handle_e {body = body1, bound = bound1, 
+		    handler = handler1, result_type = result_type1},
+          Handle_e {body = body2, bound = bound2, 
+		    handler = handler2, result_type = result_type2}) =>
+	     (case cmp_exp (body1, body2) of
+		  EQUAL => (case Name.compare_var (bound1,bound2) of
+				EQUAL => 
+				    (case cmp_exp (handler1,handler2) of
+					   EQUAL => cmp_con(result_type1,
+							    result_type2)
+					 | r => r)
 			      | r => r)
 		| r => r)
 

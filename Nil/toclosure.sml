@@ -680,9 +680,10 @@ struct
 		 in  f
 		 end
 	   | Raise_e (e,c) => e_find_fv (state, t_find_fv (state,frees) c) e
-	   | Handle_e (e,v,body) =>
-		 let val f = e_find_fv (state,frees) e
-		     val f = e_find_fv (add_boundevar(state,v,TraceKnown TraceInfo.Trace,NONE), f) body
+	   | Handle_e {body,bound,handler,result_type} =>
+		 let val f = e_find_fv (state,frees) body
+		     val f = e_find_fv (add_boundevar(state,bound,TraceKnown TraceInfo.Trace,NONE), f) handler
+		     val f = t_find_fv (state,f) result_type
 		 in  f
 		 end)
 
@@ -1242,7 +1243,10 @@ struct
 		       | _ => default())
 		end
 	  | Raise_e (e,c) => Raise_e(e_rewrite e, c_rewrite c)
-	  | Handle_e (e,v,f) => Handle_e(e_rewrite e, v, e_rewrite f))
+	  | Handle_e {body,bound,handler,result_type} => 
+		Handle_e{body = e_rewrite body, bound = bound,
+			 handler = e_rewrite handler,
+			 result_type = c_rewrite result_type})
        end
 
    and cbnd_rewrite state (Con_cb(v,c)) : conbnd list = 

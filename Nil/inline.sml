@@ -213,7 +213,8 @@ SOME({num_nonrec_calls,num_rec_calls,definition,...}) =>
 	       end
          | ExternApp_e(e,es) => aexps (e::es)
          | Raise_e(e,c) => (aexp e) + (acon c)
-         | Handle_e(e1,v,e2) => aexps [e1,e2]
+         | Handle_e{body,bound,handler,result_type} => 
+	       (aexps [body,handler]) + (acon result_type)
        )
       (* analyze a list of expressions *)
       and aexps (es:exp list) : int = alist aexp es
@@ -312,7 +313,9 @@ e))
 	  (case e of
 	     Switch_e sw => Switch_e(rswitch sw)
 	   | Let_e(ls,bnds,e) => Let_e(ls,rbnds(bnds,[]),rexp e)
-	   | Handle_e(e1,v,e2) => Handle_e(rexp e1,v,rexp e2)
+	   | Handle_e {body,bound,handler,result_type} => 
+	       Handle_e{body = rexp body, bound = bound, 
+			handler = rexp handler, result_type = rcon result_type}
 	   (* -- *)
 	   | Prim_e (p, cons, exps) => 
 	       Prim_e (p, map rcon cons, map rexp exps)

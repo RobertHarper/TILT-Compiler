@@ -527,8 +527,9 @@ structure Reduce
 			    | _ => scan_exp efunc ; 
 				  app scan_exp explist) 
 		  | (Raise_e (e, c)) => (scan_exp e; scan_con c)
-		  | (Handle_e (e, v, e2)) =>
-			(scan_exp e; insesc v; scan_exp e2)
+		  | Handle_e {body,bound,handler,result_type} =>
+			(scan_exp body; scan_con result_type;
+			 insesc bound; scan_exp handler)
 	    end 
 		     
 	and scan_switch fset s =
@@ -757,8 +758,7 @@ structure Reduce
 		end 
 	  | Raise_e _ => false 
 	  | Switch_e sw => false (* Punt on this for now *)
-	  | Handle_e (exp, v, fcn) => is_pure exp
-		
+	  | Handle_e {body,...} => is_pure body
 
 	in  
 
@@ -1250,8 +1250,10 @@ structure Reduce
 			    | _ => c)
 
 		    | Raise_e (exp, con) => Raise_e (xexp fset exp, xcon fset con)
-		    | Handle_e (exp,v,exp2) => 
-			  Handle_e (xexp fset exp,v, xexp fset exp2)
+		    | Handle_e {body,bound,handler,result_type} =>
+			  Handle_e {body = xexp fset body, bound = bound, 
+				    handler = xexp fset handler,
+				    result_type = xcon fset result_type}
 		    | Switch_e (sw) => Switch_e (xswitch fset sw) 
 			  )
 		      

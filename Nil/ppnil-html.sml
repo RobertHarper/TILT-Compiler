@@ -322,11 +322,12 @@ structure PpnilHtml :> PPNIL =
 						  String "End"]
 
 	   | Raise_e (e,c) => pp_region "RAISE(" ")" [pp_exp e, String ",", pp_con c]
-	   | Handle_e (body,v,handler) => 
-		 Vbox[HOVbox[String "HANDLE ",
+	   | Handle_e {body,bound,handler,result_type} =>
+		 Vbox[HOVbox[Hbox[String "HANDLE [", pp_con result_type,
+			     String "] "],
 			     pp_exp body],
 		      Break0 0 0,
-		      HOVbox[String "WITH ", pp_bound_var v, 
+		      HOVbox[String "WITH ", pp_bound_var bound, 
 			     String ": EXN . ",
 			     pp_exp handler]]
 	   | Switch_e sw => pp_switch sw)

@@ -161,7 +161,10 @@ struct
                        exp list * exp list     (* Application of open functions and closures *)
     | ExternApp_e of exp * exp list
     | Raise_e of exp * con                                
-    | Handle_e of exp * var * exp
+    | Handle_e of {body :exp,
+	           bound : var,
+                   handler : exp,
+                   result_type : con}
 
 
   (* result types are needed for recursive definitions in order to make

@@ -706,13 +706,18 @@ structure NilRewrite :> NILREWRITE =
 		      val c = recur_c changed state c
 		    in if !changed then SOME (Raise_e(e,c)) else NONE
 		    end
-		 | Handle_e (e,v,h) => 
+		 | Handle_e {body,bound,handler,result_type} =>
 		    let 
 		      val changed = ref false
-		      val e = recur_e changed state e
-		      val (state,v) = bind_e changed (state,v,Prim_c(Exn_c,[]))
-		      val h = recur_e changed state h
-		    in if !changed then SOME (Handle_e(e, v, h))
+		      val body = recur_e changed state body
+		      val result_type = recur_c changed state result_type
+		      val (state,bound) = 
+			  bind_e changed (state,bound,Prim_c(Exn_c,[]))
+		      val handler = recur_e changed state handler
+		    in if !changed then 
+			SOME (Handle_e{body = body, bound = bound,
+				       handler = handler, 
+				       result_type = result_type})
 		       else NONE
 		    end)
 	      end

@@ -728,21 +728,25 @@ struct
 	  (Raise_e(exp',con'), top_bnds, hoists, effs, valuable, vfree)
       end
   
-    | rexp (Handle_e (exp1,var,exp2) ,top_set, hoist_set, econtext) = 
+    | rexp (Handle_e {body,bound,handler,result_type},
+	    top_set, hoist_set, econtext) = 
       let
-	  val (exp1',top_bnds1,hoists1,_,_, vfree1) = 
-	      rexp(exp1, top_set, hoist_set, econtext)
-	  val (exp2',top_bnds2,hoists2,_,_, vfree2) = 
-	      rexp(exp2, top_set, hoist_set, econtext)
-	  val top_bnds = top_bnds1 @ top_bnds2
-	  val hoists = hoists1 @ hoists2
+	  val (body',top_bnds1,hoists1,_,_, vfree1) = 
+	      rexp(body, top_set, hoist_set, econtext)
+	  val (handler',top_bnds2,hoists2,_,_, vfree2) = 
+	      rexp(handler, top_set, hoist_set, econtext)
+	  val (result_type', top_bnds3, hoists3, vfree3) = 
+	      rcon'(result_type, top_set, hoist_set)
+	  val top_bnds = top_bnds1 @ top_bnds2 @ top_bnds3
+	  val hoists = hoists1 @ hoists2 @ hoists3
 	  val effs = unknown_effs
 	  val valuable = false	
-	  val vfree = Set.union(vfree1, 
-				Set.difference(vfree2, Set.singleton var))
+	  val vfree = Set.union(Set.union(vfree1, vfree3),
+				Set.difference(vfree2, Set.singleton bound))
       in
-	  (Handle_e (exp1',var, exp2'), top_bnds, hoists, effs, 
-	   valuable, vfree)
+	  (Handle_e {body=body', bound = bound,
+		     handler=handler', result_type= result_type'},
+	   top_bnds, hoists, effs, valuable, vfree)
       end
 
   and rexps (explst, top_set, hoist_set, econtext) = 

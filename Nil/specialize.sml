@@ -216,7 +216,8 @@ struct
 			(scan_exp state f; app (scan_exp state) elist)
 
 		| Raise_e(e,c) => scan_exp state e
-		| Handle_e(e,bound,handler) => (scan_exp state e; scan_exp state handler))
+		| Handle_e{body,bound,handler,result_type} =>
+			(scan_exp state body; scan_exp state handler))
 
 	and scan_switch (state : state) (switch : switch) : unit = 
 	  let fun scan_sw scan_info scan_arg scan_tag {info,arg,arms,default} = 
@@ -317,7 +318,10 @@ struct
 		| ExternApp_e(f,elist) =>
 		      ExternApp_e(do_exp f,map do_exp elist)
 		| Raise_e(e,c) => Raise_e(do_exp e, c)
-		| Handle_e(e,v,handler) => Handle_e(do_exp e, v, do_exp handler))
+		| Handle_e{body,bound,handler,result_type} => 
+		      Handle_e{body = do_exp body, bound = bound,
+			       handler = do_exp handler, 
+			       result_type = result_type})
 
 	and do_switch (switch : switch) : switch = 
 	   (case switch of

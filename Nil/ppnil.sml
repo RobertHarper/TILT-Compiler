@@ -307,11 +307,12 @@ structure Ppnil	:> PPNIL =
 						  String "End"]
 
 	   | Raise_e (e,c) => pp_region "Raise(" ")" [pp_exp e, String ",", pp_con c]
-	   | Handle_e (body,v,handler) => 
-		 Vbox[HOVbox[String "Handle ", Break0 0 5,
+	   | Handle_e {body,bound,handler,result_type} =>
+		 Vbox[HOVbox[Hbox[String "Handle[", pp_con result_type,
+			     String "] "], Break0 0 5,
 			     pp_exp body],
 		      Break0 0 0,
-		      HOVbox[String "With ", pp_var v, 
+		      HOVbox[String "With ", pp_var bound, 
 			     String ": EXN = ", Break0 0 5,
 			     pp_exp handler]]
 	   | Switch_e sw => pp_switch sw)

@@ -115,13 +115,15 @@ struct
               (Raise_e (e', c), pset)
           end
 
-      | reify_exp ctxt (Handle_e (e1, v, e2), pset) =
+      | reify_exp ctxt (Handle_e {body,bound,handler,result_type}, pset) =
           let
-              val (e1', pset) = reify_exp ctxt (e1, pset)
-              val ctxt = NilContext.insert_con(ctxt, v, Prim_c(Exn_c,[]))
-              val (e2', pset) = reify_exp ctxt (e2, pset)
+              val (body', pset) = reify_exp ctxt (body, pset)
+              val ctxt = NilContext.insert_con(ctxt, bound, Prim_c(Exn_c,[]))
+              val (handler', pset) = reify_exp ctxt (handler, pset)
           in
-	      (Handle_e (e1', v, e2'), pset)
+	      (Handle_e {body = body', bound = bound,
+			handler = handler', result_type = result_type},
+	       pset)
           end
 
       | reify_exp ctxt (Let_e (Sequential, bs, e), pset) =

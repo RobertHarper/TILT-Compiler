@@ -329,11 +329,14 @@ struct
 		in  (bnds,Raise_e(e,c))
 		end
 	  | Switch_e switch => ([], Switch_e(lswitch lift state switch))
-	  | Handle_e (e,v,handler) => 
-		let val e = lexp_lift' state e
-		    val (state,v) = add_var(state,v)
+	  | Handle_e {body,bound,handler,result_type} => 
+		let val body = lexp_lift' state body
+		    val (state,bound) = add_var(state,bound)
 		    val handler = lexp_lift' state handler
-		in  ([], Handle_e(e,v,handler))
+		    val result_type = lcon_flat state result_type
+		in 
+		    ([],Handle_e{body = body, bound = bound,
+				 handler = handler, result_type = result_type})
 		end
 	end
 
@@ -388,9 +391,8 @@ struct
    and lexp_lift state arg_exp : bnd list * exp = lexp true state arg_exp
    and lexp_lift' state arg_exp : exp = 
        let val (bnds,e) = lexp true state arg_exp
-       in  (case bnds of (* can't use NilUtil.makeLetE *)
-		[] => e
-	      | _ => Let_e(Sequential, bnds, e))
+       in  
+	   NilUtil.makeLetE Sequential bnds e
        end
    and lexp_flat state arg_exp : exp  = 
 	let val (bnds,e) = lexp false state arg_exp

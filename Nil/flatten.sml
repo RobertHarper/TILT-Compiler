@@ -236,8 +236,9 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
       | ExternApp_e (exp, explist) => 
 	  ExternApp_e (xexp  exp, map (xexp ) explist)
       | Raise_e (exp, con) => Raise_e (xexp  exp, xcon con)
-      | Handle_e (exp, v, exp2) =>
-	  Handle_e (xexp  exp, v, xexp  exp2)
+      | Handle_e {body, bound, handler, result_type} =>
+	  Handle_e {body = xexp body, bound = bound,
+	            handler = xexp handler, result_type = xcon result_type}
 	  
     and xfn  (Function{effect, recursive, isDependent,
 		       tFormals, eFormals, fFormals, body, body_type = con}) =
