@@ -20,6 +20,11 @@ signature FLOAT_CONVENTION = sig
   (* -- values ------------------------------------------------------------- *)
 
   (*
+   * Always zero.
+   *)
+  val zero: id
+
+  (*
    * Used to hold temporary values in standard code sequences.
    *)
   val temporary1: id

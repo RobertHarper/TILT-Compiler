@@ -22,6 +22,7 @@ functor AlphaIntegerConvention(
 
   (* -- values ------------------------------------------------------------- *)
 
+  val zero		= 31
   val callPointer	= 27
   val returnPointer	= 26
   val globalPointer	= 29

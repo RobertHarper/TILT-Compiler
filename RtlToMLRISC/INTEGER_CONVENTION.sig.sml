@@ -20,6 +20,11 @@ signature INTEGER_CONVENTION = sig
   (* -- values ------------------------------------------------------------- *)
 
   (*
+   * Always zero.
+   *)
+  val zero: id
+
+  (*
    * The code address for a procedure call.
    *)
   val callPointer: id
