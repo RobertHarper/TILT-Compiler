@@ -23,9 +23,9 @@ D |- record[v0,v1,...,vn] : Record_c[t1 x ... x tn]
 D |- record[] : Record_c[]
 
 D |- c :: T
-| |- c == Record_c[t1 x ... x tn] :: T
+D |- c == Record_c[t1 x ... x tn] :: T
 ---------------------------------------- (n>=1)
-D |- mk_record_gctag[c] :: T
+D |- mk_record_gctag[c] : GCTag (c)
 
 Discussion:
 
@@ -73,7 +73,7 @@ D |- inject_known_i [c]() : SUM_i(k,ck...cn)
 D |- c :: T
 D |- c == SUM(k,c1...cn)
 D |- e : ci
---------------------------------------  (k <= i < n)
+--------------------------------------  (k <= i <= n)
 D |- inject_i [c](e) : SUM_i(k,ck...cn)
 
 D |- c :: T
@@ -95,12 +95,16 @@ D |- inject_known_i [c](t,e) : SUM_i(k,ck)
 
 D |- c :: T
 D |- c == SUM(k,ck)
-D |- t : GCTag(SUM_i(k,ck))
+D |- t : GCTag(SUM_i(k,ck,...,cn))
 D |- ci known
 D |- e : ci
---------------------------------------  (k <= i < n, n > k)
+--------------------------------------  (k <= i <= n, n > k)
 D |- inject_known_i [c](t,e) : SUM_i(k,ck,...,cn)
 
+D |- c :: T
+D |- c == Sum_c(i,k)[t_k x ... x t_{n-1}] :: T
+---------------------------------------- (n>=1)
+D |- mk_sum_known_gctag[c] : GCTag (c)
 
 A type is considered taglike iff it's weak-head normal form is one of
 the following: 
