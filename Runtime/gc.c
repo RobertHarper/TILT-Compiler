@@ -623,7 +623,8 @@ b = forward_major(a,b,from,from2,to); }
 
 
 /* -------------------------------------------------------------- */
-
+value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr, 
+			range_t *from_range, range_t *from2_range, range_t *to_range);
 
 
 #ifdef SEMANTIC_GARBAGE
@@ -835,8 +836,9 @@ value_t *forward_mutables_gen(value_t *to_ptr,
 	  table_entry --;
 	  while (GET_TYPE(*table_entry) == RECORD_SUB_TAG)
 	    table_entry--;
-	  to_ptr = scan_major(table_entry,to_ptr,table_entry+1,
-			      from_range,from2_range,to_range);
+          /* notice that scan_major won't work here because of the stopping criterion */
+	  to_ptr = scan_oneobject_major(&table_entry,to_ptr,
+			                from_range,from2_range,to_range);
 	}
     }
   return to_ptr;
