@@ -105,7 +105,7 @@
 0108 [open]	Parsing of infix(r) declarations is not correct.
 0109 [open]	listpair discrepancies
 0110 [open]	math discrepancies
-0111 [open]	runtime error: failed assertion
+0111 [closed]	runtime error: failed assertion
 0112 [open]	option exception
 0113 [open]	parsing problem
 0114 [open]	overloading constants

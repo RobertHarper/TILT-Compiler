@@ -9,8 +9,11 @@ Severity:    major
 Problem:     test case causes memobj.c:176 failed assertion res != NULL
 Code:        
 Transcript:  
-Comments:    
+Comments:
+	[pds] The test code does not terminate and runs out of
+	stack space.  I changed the runtime to say "out of stack space"
+	rather than "assertion failed".
 Fix:         
 Test: m0036
 Owner: rwh
-Status: open
+Status: closed
