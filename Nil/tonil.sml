@@ -85,7 +85,10 @@ struct
 
    fun insert_rename_var (v, rmap) = 
        let
-	   val v' = Name.derived_var v
+	   val v = if (!keep_hil_numbers) then
+	              Name.var2string v
+		   else
+		      Name.var2name v
        in
 	   (v', Name.VarMap.insert (rmap, v, v'))
        end

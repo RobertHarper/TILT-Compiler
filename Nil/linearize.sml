@@ -417,7 +417,7 @@ struct
 		    pp_con arg_con; print "\n"; raise e)
 
    and lcon' lift state arg_con : conbnd list * con  = 
-       let val lcon = lcon lift
+       let val local_lcon = lcon lift
 	   val _ = (inc num_lcon;
 		    bumper(num_lcon_prim, depth_lcon_prim);
 		    bumper(num_lcon_import, depth_lcon_import);
@@ -433,7 +433,7 @@ struct
 	  (* dependent records *)
 	  | Prim_c (Record_c(labs,SOME vars),cons) => 
 		let fun folder ((v,c),state) = 
-		    let val (cbnds,c) = lcon state c
+		    let val (cbnds,c) = lcon false state c
 			val (state,v) = add_var(state,v)
 		    in  ((cbnds,(v,c)),state)
 		    end
@@ -443,7 +443,7 @@ struct
 		     Prim_c(Record_c(labs,SOME (map #1 vc)), map #2 vc))
 		end
 	  | Prim_c (pc,cons) => 
-                let val (cbnds,cons) = map_unzip (lcon state) cons
+                let val (cbnds,cons) = map_unzip (local_lcon state) cons
                 in  (flatten cbnds, Prim_c(pc,cons))
                 end
 	  | Mu_c (flag,vc_seq) => (* cannot just use lvclist here: 
@@ -457,8 +457,8 @@ struct
 		end
 	  | ExternArrow_c (clist,c) =>
 		let 
-		    val (cbnds,clist) = Listops.unzip(map (lcon state) clist)
-		    val (cbnds',c) = lcon state c
+		    val (cbnds,clist) = Listops.unzip(map (local_lcon state) clist)
+		    val (cbnds',c) = local_lcon state c
 		in  (flatten cbnds@cbnds',ExternArrow_c (clist,c))
 		end
 	  | AllArrow_c {openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} =>
@@ -475,37 +475,37 @@ struct
 		let 
 		    val (cbnds,state) = lcbnds lift state cbnds
 		    val _ = state_stat "let_c after fold" state
-		    val (cbnds',c) = lcon state c
+		    val (cbnds',c) = local_lcon state c
 		in  if lift 
 			then (cbnds @ cbnds', c)
 		    else ([],Let_c(Sequential, cbnds @ cbnds', c))
 		end
 	  | Crecord_c lc_list => 
-		let fun doer(l,c) = let val (cbnds,c) = lcon state c
+		let fun doer(l,c) = let val (cbnds,c) = local_lcon state c
 				    in  (cbnds, (l,c))
 				    end
 		    val (cbnds, lc_list) = Listops.unzip (map doer lc_list)
 		in  (flatten cbnds, Crecord_c lc_list)
 		end
 
-	  | Proj_c (c,l) => let val (cbnds, c) = lcon state c
+	  | Proj_c (c,l) => let val (cbnds, c) = local_lcon state c
 			    in  (cbnds, Proj_c(c,l))
 			    end
 
 	  | Typeof_c e => ([],Typeof_c(lexp_flat state e))
 
-	  | Closure_c (c1,c2) => let val (cbnds1,c1) = lcon state c1
-				     val (cbnds2,c2) = lcon state c2
+	  | Closure_c (c1,c2) => let val (cbnds1,c1) = local_lcon state c1
+				     val (cbnds2,c2) = local_lcon state c2
 				 in  (cbnds1@cbnds2,Closure_c(c1,c2))
 				 end
-	  | App_c (c,clist) => let val (cbnds,c) = lcon state c
-				   val temp = map (lcon state) clist
+	  | App_c (c,clist) => let val (cbnds,c) = local_lcon state c
+				   val temp = map (local_lcon state) clist
 				   val (cbnds',clist) = Listops.unzip temp
 			       in  (cbnds@flatten cbnds', App_c(c,clist))
 			       end
           | Typecase_c _ => error "typecase not done"
 
-	  | Annotate_c (a,c) => let val (cbnds,c) = lcon state c
+	  | Annotate_c (a,c) => let val (cbnds,c) = local_lcon state c
 				in  (cbnds,Annotate_c(a,c))
 				end
        end

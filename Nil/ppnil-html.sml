@@ -9,7 +9,7 @@ structure PpnilHtml :> PPNIL =
 
     val error = fn s => error "ppnil-html.sml" s
     val elide_prim = Stats.ff("PpnilHtmlElidePrim")
-    val elide_record = ref false
+    val elide_record = Stats.tt("PpnilHtmlElideRecord")
 
     fun pp_region s1 s2 fmt = HOVbox((String s1) :: (fmt @ [String s2]))
     fun separate [] sep = []
@@ -282,8 +282,7 @@ structure PpnilHtml :> PPNIL =
 							   String "> ", pp_exp exp]
 		 in
 		     HOVbox
-		     [if (length labels = length exps andalso 
-			  length labels = length cons)
+		     [if (length labels = length exps)
 			  then (if !elide_record
 				    then pp_list pp_le (Listops.zip labels exps) 
 					("{",",","}",false)

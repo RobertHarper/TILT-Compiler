@@ -273,8 +273,7 @@ structure Ppnil	:> PPNIL =
 		 in
 		     HOVbox
 		     [String "record", 
-		      if (length labels = length exps andalso 
-			  length labels = length cons)
+		      if (length labels = length exps)
 			  then (if !elide_record
 				    then pp_list pp_le (Listops.zip labels exps) 
 					("(",",",")",false)
