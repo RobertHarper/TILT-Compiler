@@ -4,19 +4,21 @@
  * ========================================================================= *)
 
 functor RegisterSpillMap(
-	  type offset
-
-	  structure RegisterMap: REGISTER_MAP
+	  structure MLRISCConstant: MLRISC_CONSTANT
 	) :> REGISTER_SPILL_MAP
-	       where type id	 = RegisterMap.id
-		 and type offset = offset
+	       where type id	 = DenseRegisterMap.id
+		 and type offset = MLRISCConstant.const
 	  = struct
+
+  (* -- structures --------------------------------------------------------- *)
+
+  structure RegisterMap = DenseRegisterMap
 
   (* -- types -------------------------------------------------------------- *)
 
   type id = RegisterMap.id
 
-  type offset = offset
+  type offset = MLRISCConstant.const
 
   (*
    * A register spill map is a register map of spill offsets along with a
