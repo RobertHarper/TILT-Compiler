@@ -44,11 +44,7 @@ functor Ppil(structure Il : IL
 	 Fixity.NONfix => String "NONfix"
        | Fixity.INfix (a,b) => String ("INfix" ^ (if (a mod 2 = 0) then "l" else "r")
 				       ^ (Int.toString (a div 2))))
-    fun pp_kind kind = String (case kind of
-				 KIND_TUPLE 1 => "TYPE"
-			       | KIND_TUPLE i => ("KIND(" ^ (Int.toString i) ^ ")")
-			       | KIND_ARROW (i,j) => ("KIND(" ^ (Int.toString i) ^
-						      " -> " ^ (Int.toString j) ^ ")"))
+
 
     local
       (* these 3 functions copied from ilutil.sml; no recursive modules... *)
@@ -255,11 +251,18 @@ functor Ppil(structure Il : IL
 	    case inline of
 		(INLINE_MODSIG (m,s)) => HOVbox[pp_mod seen m, String ":", Break, pp_signat seen s]
 	      | (INLINE_EXPCON (e,c)) => HOVbox[pp_exp seen e, String ":", pp_con seen c]
-	      | (INLINE_CONKIND (c,k)) => HOVbox[pp_con seen c, String ":", pp_kind k]
+	      | (INLINE_CONKIND (c,k)) => HOVbox[pp_con seen c, String ":", pp_kind seen k]
 	      | (INLINE_OVER _) => String "INLINE_OVER"
 	end
 
-
+    and pp_kind seen kind = (case kind of
+			    KIND_TUPLE 1 => String "TYPE"
+			  | KIND_TUPLE i => String ("KIND(" ^ (Int.toString i) ^ ")")
+			  | KIND_ARROW (i,j) => String ("KIND(" ^ (Int.toString i) ^
+							" -> " ^ (Int.toString j) ^ ")")
+			  | KIND_INLINE (k,c) => HOVbox[String "KIND_INLINE(",
+							pp_kind seen k, String ", ", pp_con seen c,
+							String ")"])
     and pp_exp seen exp = 
       (case exp of
 	 OVEREXP (c,_,exp) => (case oneshot_deref exp of
@@ -376,6 +379,14 @@ functor Ppil(structure Il : IL
 						   pp_path p, String ", ",
 						   pp_list (pp_sdec seen) sdecs ("[",",","]",true),
 						   String ")"]
+       | SIGNAT_INLINE_STRUCTURE {self,code,imp_sig,abs_sig} =>
+	     HOVbox[(case self of
+			 SOME p => Hbox[String "SIGS_INLINE_NORM(",
+					pp_path p, String ")"]
+		       | NONE => String "SIGS_INLINE"),
+		    String "abs_sig = ", pp_list (pp_sdec seen) abs_sig ("[",",","]",true), Break,
+		    String "imp_sig = ", pp_list (pp_sdec seen) imp_sig ("[",",","]",true), Break,
+		    String "code = ", pp_list (pp_sbnd seen) code ("[",",","]",true)]
        | SIGNAT_FUNCTOR (v,s1,s2,a) => HOVbox0 1 8 1 
 	                                        [String "SIGF(",
 						 pp_var v,
@@ -408,8 +419,8 @@ functor Ppil(structure Il : IL
       in (case dec of
 	    DEC_EXP (v,c) => help (pp_var v) [pp_con seen c]
 	  | DEC_MOD (v,s) => help (pp_var v) [pp_signat seen s]
-	  | DEC_CON (v,k,NONE) => help (pp_var v) [pp_kind k]
-	  | DEC_CON (v,k,SOME c) => help (pp_var v) [pp_con seen c, String " = ", pp_kind k]
+	  | DEC_CON (v,k,NONE) => help (pp_var v) [pp_kind seen k]
+	  | DEC_CON (v,k,SOME c) => help (pp_var v) [pp_con seen c, String " = ", pp_kind seen k]
 	  | DEC_EXCEPTION (n,c) =>  help (pp_tag n) [pp_con seen c])
       end
 
@@ -444,7 +455,7 @@ functor Ppil(structure Il : IL
     val pp_var' = help pp_var
     val pp_label'  = help pp_label
     val pp_con' = help (pp_con [])
-    val pp_kind' = help pp_kind
+    val pp_kind' = help (pp_kind [])
     val pp_value' = pp_value' (fn (SCON scon) => SOME scon | _ => NONE) (pp_exp []) (pp_con [])
     val pp_prim' = help pp_prim'
     val pp_mod' = help (pp_mod [])
@@ -463,6 +474,7 @@ functor Ppil(structure Il : IL
     val pp_sdec' = help (pp_sdec [])
     val pp_decs' = help pp_decs
     val pp_sdecs' = help pp_sdecs
+    val pp_inline' = help (pp_inline [])
 
     fun pp_context' (context : context) : Formatter.format = 
 	let val pp_record = {pp_exp = pp_exp',
@@ -482,7 +494,7 @@ functor Ppil(structure Il : IL
     val pp_var = help' pp_var
     val pp_label  = help' pp_label
     val pp_con = help' (pp_con [])
-    val pp_kind = help' pp_kind
+    val pp_kind = help' (pp_kind [])
     val pp_value = help' pp_value'
     val pp_prim = help' Ppprim.pp_prim'
     val pp_mod = help' (pp_mod [])
@@ -502,5 +514,6 @@ functor Ppil(structure Il : IL
     val pp_sdec = help' (pp_sdec [])
     val pp_decs = help' pp_decs
     val pp_sdecs = help' pp_sdecs
+    val pp_inline = help' (pp_inline [])
 
   end

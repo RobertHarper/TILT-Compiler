@@ -406,15 +406,19 @@ functor Datatype(structure Il : IL
 							   List.last ls)
 				  val data_sig = GetModSig(context,path2mod short_path)
 			      in  (case data_sig of
-				       SIGNAT_STRUCTURE(_,(SDEC(type_lab,_)) :: 
-							(SDEC(maybe_expose,_)) :: _) =>
-				       if (eq_label(maybe_expose,expose_lab))
-					   then SOME{name = name,
-						     is_const = is_const pc,
-						     datatype_path = short_path,
-						     datatype_sig = data_sig}
-				       else NONE
-				     | _ => NONE)
+				       (SIGNAT_STRUCTURE(_,sdecs) |
+					SIGNAT_INLINE_STRUCTURE {abs_sig = sdecs,...}) =>
+				       (case sdecs of
+					    (SDEC(type_lab,_)) :: 
+					    (SDEC(maybe_expose,_)) :: _ =>
+						if (eq_label(maybe_expose,expose_lab))
+						    then SOME{name = name,
+							      is_const = is_const pc,
+							      datatype_path = short_path,
+							      datatype_sig = data_sig}
+						else NONE
+					  | _ => NONE)
+				      | _ => NONE)
 			      end))
 	end
 
@@ -452,12 +456,15 @@ functor Datatype(structure Il : IL
 		   arm_types = arm_types}
 	       end
        in
-	   (case s of
-		SIGNAT_STRUCTURE(_,(SDEC(type_name,DEC_CON(_,_,_)))::
-				 (SDEC(maybe_expose,_))::arm_sdecs) =>
-		   (if (eq_label(maybe_expose,expose_lab))
-			then good(type_name,arm_sdecs)
-		    else bad())
+	   (case s of 
+		((SIGNAT_STRUCTURE(_,sdecs)) | (SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,...})) =>
+		    (case sdecs of
+			 ((SDEC(type_name,DEC_CON(_,_,_)))::
+			  (SDEC(maybe_expose,_))::arm_sdecs) =>
+			 (if (eq_label(maybe_expose,expose_lab))
+			      then good(type_name,arm_sdecs)
+			  else bad())
+			| _ => bad())
 	      | _ => bad())
        end
 

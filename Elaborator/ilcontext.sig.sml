@@ -75,7 +75,7 @@ signature ILCONTEXT =
 	val Context_Lookup     : context * label list -> (path * phrase_class) option
 	val Context_Lookup'    : context * var        -> (label * phrase_class) option
 	val Context_Exn_Lookup : context * tag        -> con option
-	val Context_Varmap : context -> (label * phrase_class) Name.VarMap.map
+	val Context_Varlist    : context -> var list
 
         (* -------- if you get desperate enough to print the context, i feel sorry for you ----- *)
 	val print_context    : {pp_exp : exp -> Formatter.format,

@@ -11,5 +11,5 @@ signature PRIMUTIL =
 	val apply : Prim.prim -> con list -> exp list -> exp
 
 	val same_intsize : Prim.intsize * Prim.intsize -> bool
-	val same_float_size : Prim.floatsize * Prim.floatsize -> bool
+	val same_floatsize : Prim.floatsize * Prim.floatsize -> bool
     end

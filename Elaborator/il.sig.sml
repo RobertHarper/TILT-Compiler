@@ -88,6 +88,7 @@ signature IL =
                  | CON_MODULE_PROJECT of mod * label
     and     kind = KIND_TUPLE of int
                  | KIND_ARROW of int * int
+                 | KIND_INLINE of kind * con
     and      mod = MOD_VAR of var
                  | MOD_STRUCTURE of sbnd list
                  | MOD_FUNCTOR of var * signat * mod
@@ -102,6 +103,10 @@ signature IL =
 
     and   signat = SIGNAT_STRUCTURE         of path option * sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * arrow
+                 | SIGNAT_INLINE_STRUCTURE  of {self : path option,
+						code : sbnd list, (* may be selfified *)
+						imp_sig : sdec list,
+						abs_sig : sdec list}
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con
                  | DEC_MOD       of var * signat

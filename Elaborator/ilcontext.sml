@@ -2,6 +2,8 @@ functor IlContext(structure Il : ILLEAK)
     : ILCONTEXT = 
 struct
 
+exception XXX
+
 	structure Il = Il
 	type context = Il.context
 	type exp = Il.exp
@@ -44,76 +46,15 @@ struct
     val path2exp = path2obj (VAR, MODULE_PROJECT)
 
     (* --------------------- EXTENDERS ---------------------------------------- *)
+    type var_seq_map = (label * phrase_class) VarMap.map * var list
+    fun var_seq_insert ((m,s),v,value) = (VarMap.insert(m,v,value),v::s)
     val empty_context = CONTEXT{flatlist = [],
 				fixity_list = [],
 				label_list = LabelMap.empty,
-				var_list = VarMap.empty,
+				var_list = (VarMap.empty,[]),
 				tag_list = TagMap.empty}
 
-  
 
-    fun add_context_sdec'(CONTEXT {flatlist,fixity_list,
-				  label_list,var_list,tag_list}, 
-			 modpath_opt,
-			 sdec as (SDEC(l,dec))) = 
-	let fun help(v, from_var, from_proj, pc_maker) =
-	    let fun doit() = (case modpath_opt of
-				      SOME (m,p) => (from_proj (m,l),
-						     join_path_labels(p,[l]))
-				    | NONE => (from_var v, SIMPLE_PATH v))
-		val (obj,path) = doit()
-		val pc = pc_maker obj
-		fun doit2() = 
-		    let 
-			val label_list = Name.LabelMap.insert(label_list,l,(path,pc))
-			val var_list = (case modpath_opt of
-					    NONE => Name.VarMap.insert(var_list,v,(l,pc))
-					  | SOME _ => var_list)
-		    in (label_list,var_list)
-		    end
-		val (label_list,var_list) = doit2()
-	    in CONTEXT{flatlist = flatlist,
-		       fixity_list = fixity_list,
-		       label_list = label_list,
-		       var_list = var_list,
-		       tag_list = tag_list}
-	    end
-	    fun sdec_help (v,l) (sdec,ctxt) = 
-		let val modpath_opt = (case modpath_opt of
-				       NONE => SOME(MOD_VAR v, SIMPLE_PATH v)
-				     | SOME (m,p) => SOME(MOD_PROJECT(m,l),
-							  join_path_labels(p,[l])))
-		in add_context_sdec'(ctxt,modpath_opt,sdec)
-		end
-	in case dec of
-		(DEC_EXP(v,c)) => help(v, VAR, MODULE_PROJECT,
-		    (fn obj => (PHRASE_CLASS_EXP (obj, c))))
-              | DEC_CON(v,k,NONE) => help(v, CON_VAR, CON_MODULE_PROJECT,
-		    (fn obj => (PHRASE_CLASS_CON(obj, k))))
-              | DEC_CON(v,k,SOME c) => help(v, CON_VAR, CON_MODULE_PROJECT,
-		    (fn _ => (PHRASE_CLASS_CON(c, k))))
-	      | DEC_MOD (v,s as SIGNAT_FUNCTOR _) => 
-		    help(v, MOD_VAR, MOD_PROJECT, (fn obj => (PHRASE_CLASS_MOD(obj, s))))
-	      | DEC_MOD (v,SIGNAT_STRUCTURE(NONE,_)) => 
-		    error "adding non-selfified signature to context"
-	      | DEC_MOD(v,s as SIGNAT_STRUCTURE(SOME p, sdecs)) => 
-		    if (is_label_open l)
-			then foldl (sdec_help (v,l))
-			    (help(v, MOD_VAR, MOD_PROJECT,
-				  (fn obj => (PHRASE_CLASS_MOD(obj, s)))))
-			    sdecs
-		    else (help(v, MOD_VAR, MOD_PROJECT,
-			  (fn obj => (PHRASE_CLASS_MOD(obj, s)))))
-	      | DEC_EXCEPTION(t,c) => 
-		    let val tag_list = Name.TagMap.insert(tag_list,t,c)
-		    in CONTEXT{flatlist = flatlist,
-			       fixity_list = fixity_list,
-			       label_list = label_list,
-			       var_list = var_list,
-		               tag_list = tag_list}
-		    end
-	end
-    fun add_context_sdec(ctxt,sdec) = add_context_sdec'(ctxt,NONE,sdec)
     fun add_context_fixity(CONTEXT {flatlist,fixity_list,
 				    label_list,var_list,tag_list}, 
 			   f) = CONTEXT({flatlist = flatlist,
@@ -121,63 +62,148 @@ struct
 					 label_list = label_list,
 					 var_list = var_list,
 					 tag_list = tag_list})
-    fun add_context_inline'(CONTEXT {flatlist,fixity_list,
-				    label_list,var_list,tag_list}, 
-			   pathopt, l,v, inline) = 
-	let fun help pc = 
+    fun add_context_flat(CONTEXT {flatlist,fixity_list,
+				  label_list,var_list,tag_list}, entry) = 
+	let val flatlist = entry::flatlist
+	in  CONTEXT({flatlist = flatlist,
+			fixity_list = fixity_list,
+			label_list = label_list,
+			var_list = var_list,
+			tag_list = tag_list})
+	end
+
+    (*  path is the path to the inline object; 
+       lbl is the local name given to the object *)
+    local
+	fun help (CONTEXT {flatlist,fixity_list,
+			   label_list,var_list,tag_list},path,lbl,pc) = 
 	    let 
-		val path = (case pathopt of
-				SOME p => join_path_labels(p,[l])
-			      | NONE => SIMPLE_PATH v)
-	        val label_list = Name.LabelMap.insert(label_list,l,(path,pc))
-	        val var_list = (case pathopt of
-				    NONE => Name.VarMap.insert(var_list,v,(l,pc))
-				  | SOME _ => var_list)
-            in 
-		CONTEXT({flatlist = flatlist,
-			 fixity_list = fixity_list,
-			 label_list = label_list,
-			 var_list = var_list,
-			 tag_list = tag_list})
+	        val label_list = Name.LabelMap.insert(label_list,lbl,(path,pc))
+	        val var_list = (case path of
+				    SIMPLE_PATH v => var_seq_insert(var_list,v,(lbl,pc))
+				  | _ => var_list)
+            in CONTEXT({flatlist = flatlist,
+			fixity_list = fixity_list,
+			label_list = label_list,
+			var_list = var_list,
+			tag_list = tag_list})
 	    end
-	    fun sbnd_sdec_help v ((SBND(_,bnd), SDEC(_,dec)),ctxt) = 
-		let val pathopt = (case pathopt of
-				       NONE => SOME(SIMPLE_PATH v)
-				     | SOME p => SOME(join_path_labels(p,[l]))) 
+	    fun sbnd_sdec_help path ((SBND(l,bnd), SDEC(_,dec)),ctxt as (CONTEXT{label_list,...})) = 
+		let val path = join_path_labels(path,[l])
 		    val inline = case (bnd,dec) of
 			(BND_EXP (_,e), DEC_EXP(_,c)) => INLINE_EXPCON (e,c)
 		      | (BND_CON (_,c), DEC_CON(_,k,_)) => INLINE_CONKIND (c,k)
 		      | (BND_MOD(_,m), DEC_MOD(_,s)) => INLINE_MODSIG(m,s)
 		      | (_, _) => error "bad argument to add_context_inline'"
-		in  add_context_inline'(ctxt,pathopt,l,v,inline)
+		    val ctxt' as (CONTEXT{label_list=label_list',...}) = 
+			do_inline(ctxt,path,l,inline)
+(*
+		    val _ =  (print "sbnd_sdec_help called with label_list length = ";
+			      print (Int.toString (Name.LabelMap.numItems label_list)); print "\n";
+			      print "and returning with label_list length = ";
+			      print (Int.toString (Name.LabelMap.numItems label_list')); print "\n\n")
+*)
+		in  ctxt'
 		end
-	in
-	     case inline of
-		INLINE_EXPCON ec => help(PHRASE_CLASS_EXP ec)
-	      | INLINE_CONKIND ck => help(PHRASE_CLASS_CON ck)
-	      | INLINE_OVER arg => help(PHRASE_CLASS_OVEREXP arg)
-	      | INLINE_MODSIG (m,s) => 
-			if (is_label_open l)
-			    then 
-				case (m,s) of
-				    (MOD_STRUCTURE sbnds,
-				     SIGNAT_STRUCTURE(_,sdecs)) =>
-				    foldl (sbnd_sdec_help v) (help(PHRASE_CLASS_MOD (m,s)))
-				    (zip sbnds sdecs)
-				   | _ => (help(PHRASE_CLASS_MOD (m,s)))
-			else help(PHRASE_CLASS_MOD (m,s))
+	    
+	    and do_inline (ctxt,path, lbl, inline) = 
+		(case inline of
+		     INLINE_EXPCON ec => help (ctxt,path,lbl,PHRASE_CLASS_EXP ec)
+		   | INLINE_CONKIND ck => help (ctxt,path,lbl,PHRASE_CLASS_CON ck)
+		   | INLINE_OVER arg => help (ctxt,path,lbl,PHRASE_CLASS_OVEREXP arg)
+		   | INLINE_MODSIG (m,s) => 
+			 let val ctxt = help (ctxt,path,lbl,PHRASE_CLASS_MOD (m,s))
+			 in  (case (is_label_open lbl,m,s) of
+				  (true,MOD_STRUCTURE sbnds,SIGNAT_STRUCTURE(_,sdecs)) =>
+				      foldl (sbnd_sdec_help path) ctxt (zip sbnds sdecs)
+				| _ => ctxt)
+			 end)
+    in
+	fun add_context_inline (ctxt, l, v, inline) = 
+	    do_inline (add_context_flat(ctxt, CONTEXT_INLINE(l,v,inline)), SIMPLE_PATH v, l, inline)
+	fun add_context_inline_signature (ctxt, l, v, quad as {self, code, imp_sig, abs_sig}) = 
+	    let val s = SIGNAT_INLINE_STRUCTURE quad
+		val ctxt = add_context_flat(ctxt, CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))
+		val ctxt = help (ctxt,SIMPLE_PATH v,l,PHRASE_CLASS_MOD (MOD_STRUCTURE code,s))
+	    in  if (is_label_open l) 
+		    then foldl (sbnd_sdec_help (SIMPLE_PATH v)) ctxt (zip code abs_sig)
+		else ctxt
+	    end
+    end
+
+    fun stat_context(CONTEXT {flatlist,fixity_list,
+			      label_list,var_list,tag_list}) = 
+	() (* (Name.LabelMap.appi 
+	 (fn (l,(path,pc)) => (print "label = "; print (Name.label2string l); print "\n"))
+	 label_list;
+	 print "\n";
+	(app
+	 (fn v => (print "var = "; print (Name.var2string v); print "\n"))
+	 (#2 var_list))) *)
+
+    fun add_context_sdec'(ctxt, pathopt, sdec as (SDEC(l,dec))) = 
+	let (* val _ = (print "add_context_sdec':\n ";
+		     stat_context ctxt; print "\n\n\n") *)
+	    fun mk_path v = (case pathopt of
+				 NONE => SIMPLE_PATH v
+			       | SOME p => join_path_labels(p,[l]))
+	    fun help(CONTEXT {flatlist,fixity_list,
+			      label_list,var_list,tag_list}, 
+		     v, from_path, pc_maker) =
+		let val path = mk_path v
+		    val obj = from_path path
+		    val pc = pc_maker obj
+		    val label_list = Name.LabelMap.insert(label_list,l,(path,pc))
+		    val var_list = (case path of
+					SIMPLE_PATH v => var_seq_insert(var_list,v,(l,pc))
+				      | _ => var_list)
+		in CONTEXT{flatlist = flatlist,
+			   fixity_list = fixity_list,
+			   label_list = label_list,
+			   var_list = var_list,
+			   tag_list = tag_list}
+		end
+	    fun sdec_help (v,l) (sdec,ctxt) = add_context_sdec'(ctxt,SOME(mk_path v),sdec)
+	in case dec of
+	    (DEC_EXP(v,c)) => help(ctxt, v, path2exp, fn obj => (PHRASE_CLASS_EXP (obj, c)))
+	  | DEC_CON(v,k,NONE) => help(ctxt,v, path2con, fn obj => (PHRASE_CLASS_CON(obj, k)))
+	  | DEC_CON(v,k,SOME c) => help(ctxt,v, path2con, fn _ => (PHRASE_CLASS_CON(c, k)))
+	  | DEC_MOD (v,s as SIGNAT_FUNCTOR _) => help(ctxt,v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, s)))
+	  | DEC_MOD (v,((SIGNAT_STRUCTURE(NONE,_)) | 
+			(SIGNAT_INLINE_STRUCTURE {self=NONE,...}))) => 
+	          error "adding non-selfified signature to context"
+	  | DEC_MOD(v,SIGNAT_INLINE_STRUCTURE (quad as {self=SOME _,...})) =>
+	          add_context_inline_signature (ctxt,l,v,quad)
+	  | DEC_MOD(v,s as SIGNAT_STRUCTURE(SOME p, sdecs)) => 
+		  let val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, s)))
+		  in  if (is_label_open l)
+			  then foldl (sdec_help (v,l)) ctxt sdecs
+		      else ctxt
+		  end
+	  | DEC_EXCEPTION(t,c) => 
+		  let val CONTEXT {flatlist,fixity_list,
+				   label_list,var_list,tag_list} = ctxt
+		      val tag_list = Name.TagMap.insert(tag_list,t,c)
+		  in CONTEXT{flatlist = flatlist,
+			     fixity_list = fixity_list,
+			     label_list = label_list,
+			     var_list = var_list,
+			     tag_list = tag_list}
+		  end
 	end
-    fun add_context_inline(ctxt, l, v, inline) = add_context_inline'(ctxt, NONE, l, v, inline)
+    fun add_context_sdec(ctxt,sdec) = add_context_sdec'(add_context_flat(ctxt, CONTEXT_SDEC sdec),NONE,sdec)
+
 
     fun add_context_sig(CONTEXT {flatlist,fixity_list,
 				 label_list,var_list,tag_list}, 
 			l, v, signat) = 
-	CONTEXT({flatlist = flatlist,
+	CONTEXT({flatlist = (CONTEXT_SDEC(SDEC(l,DEC_MOD(v,signat))))::flatlist,
 		 fixity_list = fixity_list,
 		 label_list = Name.LabelMap.insert(label_list,l,
 						   (SIMPLE_PATH v, PHRASE_CLASS_SIG signat)),
-		 var_list = Name.VarMap.insert(var_list,v,(l, PHRASE_CLASS_SIG signat)),
+		 var_list = var_seq_insert(var_list,v,(l, PHRASE_CLASS_SIG signat)),
 		 tag_list = tag_list})
+
     fun add_context_entry(ctxt, entry) = 
 	(case entry of
 	     CONTEXT_FIXITY f => add_context_fixity(ctxt,f)
@@ -186,9 +212,9 @@ struct
 	   | CONTEXT_INLINE (l,v,i) => add_context_inline(ctxt,l,v,i))
 
     fun add_context_entry'(entry,ctxt) = add_context_entry(ctxt,entry)
-    fun add_context_entries (ctxt, entries) = foldr add_context_entry' ctxt entries
+    fun add_context_entries (ctxt, entries) = foldl add_context_entry' ctxt entries
     fun add_context_sdec'(sdec,ctxt) = add_context_sdec(ctxt,sdec)
-    fun add_context_sdecs (ctxt, sdecs) = foldr add_context_sdec' ctxt sdecs
+    fun add_context_sdecs (ctxt, sdecs) = foldl add_context_sdec' ctxt sdecs
 
     fun anon_label () = fresh_internal_label "anon"
     fun dec2sdec dec = SDEC(anon_label(),dec)
@@ -229,7 +255,7 @@ struct
 
     fun fixity (CONTEXT {fixity_list,...}) = fixity_list
 
-    fun var_bound(CONTEXT{var_list,...},v) = (case Name.VarMap.find(var_list,v) of
+    fun var_bound(CONTEXT{var_list,...},v) = (case Name.VarMap.find(#1 var_list,v) of
 						  NONE => false
 						| SOME _ => true)
     fun name_bound(CONTEXT{tag_list,...},t) = (case Name.TagMap.find(tag_list,t) of
@@ -268,6 +294,13 @@ struct
 
     fun Sbnds_Lookup (sbnds, labs) : (labels * phrase) option =
 	let 
+(*
+	    val _ = (print "sbnds_lookup called with labs = ";
+		     app (fn l => (print (Name.label2string l); print ".")) labs; 
+		     print "\nand sbnds are:\n";
+		     app (fn (SBND(l,_)) => (print (Name.label2string l); print " ...")) sbnds;
+		     print "\n\n")
+*)
 	    fun loop lbl _ [] = NONE
 	      | loop lbl prev ((sbnd as SBND(l,b))::r) = 
 		let val self = loop lbl (b::prev) 
@@ -387,7 +420,8 @@ struct
 	  | (_,SOME (path,pc)) =>
 		case pc of
 		    PHRASE_CLASS_MOD(module as (MOD_STRUCTURE sbnds),
-				     (SIGNAT_STRUCTURE (_,sdecs))) =>
+				     ((SIGNAT_STRUCTURE (_,sdecs)) |
+				      (SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,...}))) =>
 		    (case (Sbnds_Lookup(sbnds,labrest)) of
 			 SOME(labels,phrase) =>
 			     (case (Sdecs_Lookup_help(path2mod path,sdecs,labrest)) of
@@ -398,7 +432,8 @@ struct
 				      end
 				| NONE => NONE)
 		       | NONE => NONE)
-		  | PHRASE_CLASS_MOD(_,((SIGNAT_STRUCTURE (_,sdecs)))) =>
+		  | PHRASE_CLASS_MOD(_,((SIGNAT_STRUCTURE (_,sdecs)) |
+					(SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,...}))) =>
 			(case (Sdecs_Lookup_help(path2mod path,sdecs,labrest)) of
 			     SOME(_,(pc,labels)) =>
 				 let val class = pc2class pc
@@ -416,9 +451,9 @@ struct
 	     | NONE => NONE)
 
 
-      fun Context_Varmap (CONTEXT {var_list,...}) = var_list
+      fun Context_Varlist (CONTEXT {var_list,...}) = rev(#2 var_list)
 
-      fun Context_Lookup' (CONTEXT {var_list,...},v) = Name.VarMap.find(var_list,v)
+      fun Context_Lookup' (CONTEXT {var_list,...},v) = Name.VarMap.find(#1 var_list,v)
       fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = Name.TagMap.find(tag_list,t)
 
 

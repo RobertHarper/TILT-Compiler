@@ -112,65 +112,159 @@ structure LinkIl (* : LINKIL *) =
 
 	val empty_context = IlContext.empty_context
 
-(*
-	val initial_context' = 
-	local_add_context_entries(empty_context, 
-			 map CONTEXT_SDEC
-			 (IlStatic.GetSbndsSdecs(empty_context,initial_sbnds)))
-*)
 
-	fun elaborate_help (context,(filepos,astdec)) = 
-	    (case (Toil.xdec(context,filepos,astdec)) of
-		 SOME sbnd_ctxt_list =>
-		     let val sbnds = List.mapPartial #1 sbnd_ctxt_list
-			 val ctxts = map #2 sbnd_ctxt_list
-		     in	SOME(sbnds,ctxts)
-		     end
-	       | _ => NONE)
-	val elaborate_help = Stats.timer("Elaboration",elaborate_help)
-
+	(* Given a context GAMMA and a filename, returns then translation of
+	   the file using GAMMA as the translation context.  The augmented
+	   context is also returned. *)
 	fun entries2sdecs entries = 
-		let fun get_sdec (CONTEXT_SDEC sdec) = SOME sdec
-		      | get_sdec _ = NONE
-		in List.mapPartial get_sdec entries	    
+	    let fun get_sdec (CONTEXT_SDEC sdec) = SOME sdec
+		  | get_sdec _ = NONE
+	    in List.mapPartial get_sdec entries	    
+	    end
+
+        (* returns its results backwards *)
+        fun export_sdecs subst path sdecs : (sbnd * sdec) list = 
+		let fun label2obj path2obj l = path2obj(join_path_labels(path,[l]))
+		    fun do_sdec (SDEC(l,dec),(acc,(etab,ctab,mtab))) = 
+			let val fv = Name.fresh_var()
+			in  (case dec of
+				 DEC_EXP(v,c) => 
+				     let val c = con_subst_expconmodvar(c,etab,ctab,mtab)
+					 val subst = ((v,VAR fv)::etab,ctab,mtab)
+				     in  ((SBND(l,BND_EXP(fv,label2obj path2exp l)),
+					   SDEC(l,DEC_EXP(fv,c)))::acc, subst)
+				     end
+			       | DEC_CON(v,k,copt) => 
+				     let val subst = (etab,(v,CON_VAR fv)::ctab,mtab)
+					 val copt = (case copt of
+							 NONE => NONE
+						       | SOME c => SOME(con_subst_expconmodvar(c,etab,ctab,mtab)))
+				     in  ((SBND(l,BND_CON(fv,label2obj path2con l)),
+					   SDEC(l,DEC_CON(fv,k,copt)))::acc, subst)
+				     end
+			       | DEC_MOD(v,s) => 
+				     let val subst = (etab,ctab,(v,MOD_VAR fv)::mtab)
+					 val s = sig_subst_expconmodvar(s,etab,ctab,mtab)
+					 val first = (SBND(l,BND_MOD(fv,label2obj path2mod l)),
+						      SDEC(l,DEC_MOD(fv,s)))
+					 val rest = 
+					     (case (Name.is_label_open l, s) of
+						  (true,SIGNAT_STRUCTURE(_,inner_sdecs)) =>
+						      export_sdecs subst (join_path_labels(path,[l])) inner_sdecs
+						| _ => [])
+				     in  if (Name.is_label_open l)
+					     then (rest @ acc, subst)
+					 else (first :: acc, subst)
+				     end)
+			end
+		    val (rev_sdecs,_) = foldl do_sdec ([],subst) sdecs
+		in  rev_sdecs
 		end
 
-	fun elaborate_quad (context_before,sbnds,sdecs,context_after) filename = 
-	    (case (elaborate_help(context_after,
-				  LinkParse.parse_all filename)) of
-		 SOME (sbnds',entries') =>
-		     let val sdecs' = entries2sdecs entries'
-			 val sbnds = sbnds @ sbnds'
-			 val sdecs = sdecs @ sdecs'
-		   	 val context' = local_add_context_entries(context_after,entries')
-			 val _ = print "Elaboration complete\n"
-		     in  SOME(context_before, sbnds, sdecs, context')
-		     end
-	       | NONE => NONE)
+	fun export_open (pair as (SOME(SBND(l,_)),
+				  CONTEXT_SDEC(SDEC(_,DEC_MOD(v,
+							      ((SIGNAT_INLINE_STRUCTURE {imp_sig=sdecs,...}) |
+							       (SIGNAT_STRUCTURE (_,sdecs)))))))) = 
+	    if Name.is_label_open l
+		then
+		    let val sbnd_sdec = rev(export_sdecs ([],[],[]) (SIMPLE_PATH v) sdecs)
+			val unwrapped = map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdec
+		    in  pair :: unwrapped
+		    end
+	    else [pair]
+	  | export_open pair = [pair]
 
-	val initial_quad = Basis.initial_context()
-	val prelude_quad = ref (NONE : (context * sbnds * sdecs * context) option)
+	fun elaborate (context,filename) : (sbnds * context_entry list) option = 
+	    let val (filepos,astdec) = LinkParse.parse_all filename
+	    in
+		(case (Toil.xdec(context,filepos,astdec)) of
+		     SOME sbnd_ctxt_list =>
+			 let 
+(*			     val sbnd_ctxt_list = Listops.flatten (map export_open sbnd_ctxt_list) *)
+			     val sbnds = List.mapPartial #1 sbnd_ctxt_list
+			     val entries = map #2 sbnd_ctxt_list
+			 in  SOME(sbnds,entries)
+			 end
+		   | _ => NONE)
+	    end
+	val elaborate = Stats.timer("Elaboration",elaborate)
+
+
+
+        (* elaborate *)
+	val prelude_module = ref (NONE : module option)
+	val inlineprelude_quad = ref (NONE : (context * sbnds * sdecs * context) option)
+	val inline_size = 0
 	local
-       	    fun reparse filename = 
-			let val q = elaborate_quad initial_quad filename
-			    val _ = prelude_quad := q
-			in  case q of 
-				SOME (ctxt,sd,sb,_) => (ctxt,sd,sb)
-				| NONE => error "prelude failed to elaborate"
+	    (* elaborate_prepend takes a context BEFORE, sbnds, sdecs, 
+          and a context AFTER where AFTER = BEFORE + sdecs.
+	     It returns a triple in which the sbnds:sdecs typecheck in the context. *)
+	    fun elaborate_prepend (context_inline,sb_init,sd_init,context_noninline) filename = 
+		(case elaborate(context_inline,filename) of
+		     NONE => NONE
+		   | SOME (sb,entries) => 
+			 let val sd = entries2sdecs entries
+			 in  SOME(context_noninline,sb_init @ sb, sd_init @ sd)
+			 end)
+	    fun hide_sbnd_sdec (sbnd,sdec) = 
+		let 
+		    fun loop acc_b acc_d [] [] = (rev acc_b,rev acc_d)
+		      | loop _ _ [] _ = error "hide_quad: number sbnd != number sdec"
+		      | loop _ _ _ [] = error "hide_quad: number sbnd != number sdec"
+		      | loop acc_b acc_d ((SBND(l,b))::brest) ((SDEC(_,d))::drest) = 
+			let val l' = Name.fresh_internal_label(Name.label2string l)
+			    val sb = SBND(l',b)
+			    val sd = SDEC(l',d)
+			in  loop (sb::acc_b) (sd::acc_d) brest drest
 			end
-	in  fun elaborate_prelude (use_cache,filename) =
-		(case (!prelude_quad, use_cache) of
-			(SOME (ctxt,sd,sb,_), true) => (ctxt,sd,sb)
-		      | _ => reparse filename)
+		    val (sbnd,sdec) = loop [] [] sbnd sdec
+		in  (sbnd,sdec)
+		end
+	    (* we want to keep the sbnds that are reasonably small *)
+	    fun filter (sbnds,sdecs) = 
+		let fun loop acc_b acc_d [] [] = (rev acc_b, rev acc_d)
+		      | loop _ _ [] _ = error "number of sbnds and sdecs not equal"
+		      | loop _ _ _ [] = error "number of sbnds and sdecs not equal"
+		      | loop acc_b acc_d ((sb as (Il.SBND(l,b)))::rest_b) 
+			                      ((sd as (Il.SDEC(l',d)))::rest_d) = 
+			    if ((IlUtil.bnd_size b < inline_size) andalso 
+				 (IlUtil.is_inline_bnd b))
+				then loop (sb::acc_b) (sd::acc_d) rest_b rest_d
+			    else (loop acc_b acc_d  rest_b rest_d)
+		in  loop [] [] sbnds sdecs
+		end
+	    val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
+       	    fun reparse filename : module = 
+		(case elaborate(ctxt_inline,filename) of 
+		       NONE => error "prelude failed to elaborate"
+		     | SOME (sbnds,entries) =>
+		     let val sdecs = entries2sdecs entries
+			 (* compute prelude_module *)
+			 val m = (ctxt_noninline,sbnds,sdecs)
+			 val _ = prelude_module := SOME m
+			 (* compute inlineprelude_quad *)
+			 val ctxt_inline = local_add_context_entries(ctxt_inline,entries)
+			 val ctxt_noninline = local_add_context_entries(ctxt_noninline,entries)
+(*
+			 val _ = (print "sdecs are:\n"; Ppil.pp_sdecs sdecs; print "\n\n";
+				  print "ctxt_noninline is:\n"; Ppil.pp_context ctxt_noninline; print "\n\n")
+*)
+			 val (sb_filt,sd_filt) = filter(sbnds,sdecs)
+			 val (sb_filt,sd_filt) = hide_sbnd_sdec(sb_filt,sd_filt)
+			 val _ = inlineprelude_quad := SOME (ctxt_inline,sb_filt,sd_filt,ctxt_noninline)
+		     in  m
+		     end)
+	in  
+	    fun compile_prelude (use_cache,filename) =
+		(case (!prelude_module, use_cache) of
+		     (SOME m,true) => m
+		   | _ => reparse filename)
+	    fun compile filename = 
+		(case (!inlineprelude_quad) of
+		     NONE => error "prelude not elaborated yet"
+		   | SOME q => elaborate_prepend q filename)
 	end
 
-	fun elaborate filename = 
-		(case (!prelude_quad) of
-			NONE => error "prelude not elaborated yet"
-		      | SOME q => 
-			(case elaborate_quad q filename of
-			  SOME (ctxt,sd,sb,_) => SOME(ctxt,sd,sb)
-			| NONE => NONE))
 (*
 	fun evaluate target_sbnds =
 	    let
@@ -189,7 +283,7 @@ structure LinkIl (* : LINKIL *) =
 	fun check' filename {doprint,docheck} =
 	    let
 		val (context,sbnds,sdecs) = 
-			(case elaborate filename of
+			(case compile filename of
 			       SOME res => res
 			     | NONE => error "Elaboration failed")
 		val _ = if doprint 
@@ -270,12 +364,6 @@ structure LinkIl (* : LINKIL *) =
 	    in res
 	    end
 
-
-
-
-
-	val compile_prelude = elaborate_prelude
-	val compile = elaborate
 	val test = (fn filename => SOME(ptest_res filename) handle _ => NONE)
 
     end (* struct *)

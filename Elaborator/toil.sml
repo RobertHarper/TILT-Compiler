@@ -107,7 +107,9 @@ functor Toil(structure Il : IL
 	fun add_flex_entry (l,rc,fc,e) = (print "ADDING FLEX ENTRY\n";
 					  flex_table := (l,rc,fc,e)::(!flex_table))
 	    
-	fun get_eq_table () = !eq_table
+	fun get_eq_table () = (case !eq_stack of
+				   [] => !eq_table
+				 | _ => error "get_eq_table called when eq_stack non-empty")
 	fun add_eq_entry (tyvar,expos) = 
 	    (case (!eq_stack) of
 		 [] => elab_error "cannot add entry: empty eq_stack"
@@ -115,6 +117,11 @@ functor Toil(structure Il : IL
 						      [] => elab_error "tyvar must have some context"
 						    | a::_ => a)
 				      val first' = ([],ctxt,tyvar,expos)::first
+(*
+				      val _ = (print "add_eq_entry called with length first = ";
+					       print (Int.toString (length first));
+					       print "\n")
+*)
 				  in (eq_stack := first'::rest)
 				  end)
 	fun eq_table_push() = (debugdo (fn () => (print "EQ_PUSING depth = "; 
@@ -176,7 +183,7 @@ functor Toil(structure Il : IL
 
 
      fun add_inline_module (context,label,var,module,signat) =
-	 case (make_inline_module (context,module)) of
+	 case (make_inline_module (context,module,NONE,true)) of
 	     SOME norm_mod =>
 		 let
 		     val _ = (print "original module is:\n";
@@ -568,8 +575,8 @@ functor Toil(structure Il : IL
 			| _ => unbound())
 	     end
        | Ast.DelayExp expr =>
-	     (case (Context_Lookup(context,[symbol_label (Symbol.varSymbol "#Susp")]),
-		   Context_Lookup(context,[symbol_label (Symbol.tycSymbol "#susp")])) of
+	     (case (Context_Lookup(context,[symbol_label (Symbol.varSymbol "Susp")]),
+		   Context_Lookup(context,[symbol_label (Symbol.tycSymbol "susp")])) of
 		 (SOME (_,PHRASE_CLASS_MOD(sm,SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE(_,[sdec]),_,_))), 
 		  SOME(_,PHRASE_CLASS_CON(sc,sk))) =>  
 		 (let 
@@ -874,11 +881,15 @@ functor Toil(structure Il : IL
 			      expcompile = xexp, 
 			      polyinst = poly_inst,
 			      error_region = error_region}
-		val sbnd_sdec_list = sbnd_sdec::(bindCompile{patarg = patarg,
+		val bind_sbnd_sdec = (bindCompile{patarg = patarg,
 							     bindpat = pat,
 							     arg = (v,con)})
-		val is_irrefutable = Sbnds_IsValuable(context', map #1 sbnd_sdec_list)
-		fun refutable_case () = map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) sbnd_sdec_list
+		val sbnd_sdec_list = sbnd_sdec::bind_sbnd_sdec
+		val is_irrefutable = Sbnds_IsValuable(context', map #1 bind_sbnd_sdec)
+		fun refutable_case () = 
+		    let val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", SIGNAT_STRUCTURE(NONE,[])))
+		    in  map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) sbnd_sdec_list
+		    end
 		and irrefutable_case () = 
 		    let
 			val _ = debugdo (fn () => (print "about to call rebind_free_type_var:  var_poly = ";
@@ -1204,13 +1215,57 @@ functor Toil(structure Il : IL
 	      end
 	| Ast.TypeDec tblist => xtybind(context,tblist) 
 	| Ast.DatatypeDec {datatycs,withtycs} => 
-	      let val sbnd_sdec = Datatype.compile{context=context,
-						   typecompile=xty,
-						   datatycs=datatycs,
-						   withtycs=withtycs,
-						   eq_compile=xeqopt}
-	      in map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) sbnd_sdec
+	      let val sbnd_sdecs = Datatype.compile{context=context,
+						    typecompile=xty,
+						    datatycs=datatycs,
+						    withtycs=withtycs,
+						    eq_compile=xeqopt}
+		  (* we want to eventually expose all the types;
+                  we want to inline all the structures now though *)
+		  fun revise ((sbnd as SBND(l,bnd),sdec as SDEC(_,dec)), (context,acc)) = 
+		      let val (dec,dec_local) = 
+			  (case (bnd,dec) of
+			       (BND_CON(v,c),DEC_CON(_,k,copt)) => 
+				   let val k' = KIND_INLINE(k,c)
+				   in  (DEC_CON(v,k',copt), DEC_CON(v,k',SOME c))
+				   end
+			     | (BND_MOD(v,MOD_STRUCTURE sbnds),
+				   DEC_MOD(_,SIGNAT_STRUCTURE(_,sdecs))) =>
+				   let val imp_sdecs = IlStatic.GetSbndsSdecs(context,sbnds)
+				       val s' = SIGNAT_INLINE_STRUCTURE{self = NONE,
+									code = sbnds,
+									abs_sig = sdecs,
+									imp_sig = imp_sdecs}
+				   in  (DEC_MOD(v,s'), DEC_MOD(v,s'))
+				   end
+			      | _ => (dec,dec))
+			  val context = add_context_sdec(context,SDEC(l,SelfifyDec dec_local))
+		      in  (context,(sbnd,SDEC(l,dec))::acc)
+		      end
+		  val _ = (print "calling revise on sbnd_sdecs. sbnds :\n";
+			   Ppil.pp_sbnds (map #1 sbnd_sdecs); print "\n\nsdecs:\n";
+			   Ppil.pp_sdecs (map #2 sbnd_sdecs); print "\n\n")
+		  val (_,rev_sbnd_sdecs) = foldl revise (context,[]) sbnd_sdecs
+		  val _ = print "returned from revise\n"
+		  val sbnd_sdecs = rev rev_sbnd_sdecs
+	      in  map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdecs
 	      end
+(*		  val sbnds = map #1 sbnd_sdecs
+		  val sdecs = map #2 sbnd_sdecs
+		  val sdecs_imp = IlStatic.GetSbndsSdecs(context,sbnds)
+		  val m = MOD_STRUCTURE sbnds
+		  val s = SIGNAT_INLINE_STRUCTURE{self=NONE,
+						  code = sbnds,
+						  abs_sig = sdecs,
+						  imp_sig = sdecs_imp}
+		    val lbl = fresh_open_internal_label "datatype"
+		    val v = fresh_named_var "datatype"
+		  val sbnd = SBND(lbl,BND_MOD(v,m))
+		  val sdec = SDEC(lbl,DEC_MOD(v,s))
+	      in [(SOME sbnd, CONTEXT_SDEC sdec)]
+	      end
+*)
+
 	| Ast.StrDec strblist => xstrbinds(context,strblist) 
  	| Ast.FctDec fctblist => xfctbind(context,fctblist) 
 
@@ -1623,8 +1678,22 @@ functor Toil(structure Il : IL
 						      typecompile=xty,
 						      datatycs=datatycs,
 						      withtycs=withtycs}
-		in ADDITIONAL(map #2 sbnd_sdecs)
+		    val sdecs = map #2 sbnd_sdecs
+		in  ADDITIONAL sdecs
 		end
+(*		    val sbnds = map #1 sbnd_sdecs
+		    val sdecs = map #2 sbnd_sdecs
+		    val sdecs_imp = IlStatic.GetSbndsSdecs(context,sbnds)
+		    val s = SIGNAT_INLINE_STRUCTURE{self=NONE,
+						    code = sbnds,
+						    abs_sig = sdecs,
+						    imp_sig = sdecs_imp}
+		    val lbl = fresh_open_internal_label "datatype"
+		    val v = fresh_named_var "datatype"
+		    val sdec = SDEC(lbl,DEC_MOD(v,s))
+		in ADDITIONAL [sdec]
+		end
+*)
 	   | (Ast.ShatycSpec paths) => ALL_NEW(xsig_sharing_type(context,prev_sdecs,paths))
 	   | (Ast.ShareSpec paths) => ALL_NEW(xsig_sharing_structure(context,prev_sdecs,paths))
 	   | (Ast.FixSpec _) => parse_error "fixity specs not supported"
@@ -2420,8 +2489,18 @@ functor Toil(structure Il : IL
 			handle _ => raise NoEqExp);
 		  	e
 	       end
-	  | CON_APP(CON_MODULE_PROJECT(m,l),tuple) => 
-		let val meq = MOD_PROJECT(m,to_eq_lab l)
+	  | CON_APP(c,tuple) => 
+		let val meq = (case c of
+				   CON_MODULE_PROJECT(m,l) => MOD_PROJECT(m,to_eq_lab l)
+				 | CON_VAR v => 
+				       (let val type_label = (case (Context_Lookup'(ctxt,v)) of
+								  SOME(l,_) => l
+								| _ => raise NoEqExp)
+					    val eq_label = to_eq_lab type_label
+					in (case (Context_Lookup(ctxt,[eq_label])) of
+						SOME(_,PHRASE_CLASS_MOD(m,_)) => m
+					      | _ => raise NoEqExp)
+					end))
 		in case (GetModSig(ctxt,meq)
 			 handle _ => raise NoEqExp) of
 		    SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE (NONE, sdecs),
@@ -2489,7 +2568,7 @@ functor Toil(structure Il : IL
 				 let
 				     val var = fresh_named_var "arg_pair"
 				     val var_con = con_tuple[mu_con,mu_con]
-				     val expv' = exp_subst_expconvar(expv,elist,clist)
+				     val expv' = exp_subst_expconmodvar(expv,elist,clist,[])
 				     val e1 = RECORD_PROJECT(VAR var,generate_tuple_label 1,var_con)
 				     val e2 = RECORD_PROJECT(VAR var,generate_tuple_label 2,var_con)
 				     val e1' = UNROLL(mu_con,e1)
@@ -2533,11 +2612,12 @@ functor Toil(structure Il : IL
 	    end
 	  | flex_help (l,ref(INDIRECT_FLEXINFO fr),fieldc,eshot) = flex_help (l,fr,fieldc,eshot)
 	fun eq_help (decs,tyvar,exp_oneshot) = 
-	  let
-	      val con = CON_TYVAR tyvar
-	      val eq_exp = xeq(decs,con)
-	      val _ = oneshot_set(exp_oneshot,eq_exp)
-	  in ()
+	  let val con = CON_TYVAR tyvar
+	  in  (case xeqopt(decs,con) of
+		   SOME e => oneshot_set(exp_oneshot,e)
+		 | NONE => (error_region();
+			    print "no equality at type: ";
+			    pp_con con; print "\n"))
 	  end
 
 	fun tyvar_help tv = 

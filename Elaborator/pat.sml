@@ -384,6 +384,36 @@ functor Pat(structure Il : IL
 	   NONE => error "constructor_lookup got path not to constructor"
 	 | (SOME {name,datatype_path,is_const,datatype_sig}) => 
 	     Datatype.instantiate_datatype_signature(datatype_path,datatype_sig,context,polyinst))
+      val expose_exp = 
+	  let
+	      fun path2pc path = 
+		  let val (v,lbls) = (case path of 
+					  COMPOUND_PATH(v,lbls) => (v,lbls)
+					| SIMPLE_PATH v => (v,[]))
+		      val SOME(lbl,_) = Context_Lookup'(context,v)
+		      val lbls = lbl :: lbls
+		  in  (case Context_Lookup(context,lbls) of
+			   SOME(_,pc) => pc
+			 | _ => (print"expose_exp not found: lbls = ";
+				 Ppil.pp_pathlist Ppil.pp_label' lbls;
+				 print "context is\n";
+				 Ppil.pp_context context;
+				 print "\n";
+				 error "expose_exp not found"))
+		  end
+	      fun monocase exp =
+		  (case path2pc(exp2path exp) of
+		       PHRASE_CLASS_EXP(e,_) => e
+		     | _ => error "expose_exp is non expresion")
+	      fun polycase module types l = 
+		  (case path2pc(mod2path module) of
+		       PHRASE_CLASS_MOD(m,_) => MODULE_PROJECT(MOD_APP(m,types),l)
+		     | _ => error "expose_mod is non module")
+	  in  (case expose_exp of
+		   MODULE_PROJECT (MOD_APP(m,types),l) => polycase m types l
+		 | _ => monocase expose_exp)
+	  end
+
       fun loop (nca,ca) [] = (nca,rev ca)
 	| loop (nca,ca) ({name,arg_type = NONE}::rest) = loop (nca+1,ca) rest
 	| loop (nca,ca) ({name,arg_type = SOME c}::rest) = loop (nca,c::ca) rest
@@ -812,9 +842,11 @@ functor Pat(structure Il : IL
 	val res_con = fresh_con context
 	val def = SOME (Il.RAISE(res_con,bindexn_exp),res_con)
 	val (binde,bindc,_) = compile(patarg,args,arms,def)
+(*
 	val _ = (print "bindcompile returned from compile.\nGot e = ";
 		 Ppil.pp_exp binde; print "\n\nand Got c = ";
 		 Ppil.pp_con bindc; print "\n\n")
+*)
 	fun default_case() : (sbnd * sdec) list = 
 	    let val l = fresh_internal_label "bind"
 		val v = fresh_named_var "bind"

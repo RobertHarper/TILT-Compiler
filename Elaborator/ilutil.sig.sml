@@ -12,6 +12,8 @@ signature ILUTIL =
     type con = Il.con
     type kind = Il.kind
     type mod = Il.mod
+    type bnd = Il.bnd
+    type dec = Il.dec
     type signat = Il.signat
     type context = Il.context
     type tag = Il.tag
@@ -30,6 +32,7 @@ signature ILUTIL =
     val path2con : Il.path -> con
     val path2exp : Il.path -> exp
     val mod2path : mod -> Il.path
+    val exp2path : exp -> Il.path
     val eq_path  : Il.path * Il.path -> bool
 
     (* error functions *)
@@ -69,6 +72,7 @@ signature ILUTIL =
     val to_eq_lab : label -> label (* takes any internal label and 
 				      generate the unique eq internal label *)
     val is_eq_lab : label -> bool
+    val is_exportable_lab : label -> bool
     val functor_arg_lab : label
     val con_unit : con
     val con_string : con
@@ -94,8 +98,8 @@ signature ILUTIL =
     (*  ConApply: takes two types and if they are CON_FUN and CON_TUPLE,
                   performs a substitution(i.e. beta reduction. *)
     val ConApply       : con * con -> con
-    val make_inline_module : Il.context * Il.mod -> Il.mod option 
-
+    val make_inline_module : Il.context * Il.mod * Il.path option * bool -> Il.mod option 
+    val is_inline_bnd  : bnd -> bool
 
 
 
@@ -131,7 +135,11 @@ signature ILUTIL =
     val sig_subst_convar : (signat * (var * con) list) -> signat
     val sig_subst_modvar : (signat * (var * mod) list) -> signat
     val con_subst_conmodvar : (con * (var * con) list * (var * mod) list) -> con
-    val exp_subst_expconvar : (exp * (var * exp) list * (var * con) list) -> exp
+    val mod_subst_conmodvar : (mod * (var * con) list * (var * mod) list) -> mod
+    val exp_subst_expconmodvar : (exp * (var * exp) list * (var * con) list * (var * mod) list) -> exp
+    val con_subst_expconmodvar : (con * (var * exp) list * (var * con) list * (var * mod) list) -> con
+    val sig_subst_expconmodvar : (signat * (var * exp) list * (var * con) list * (var * mod) list) -> signat
+
 
     (* ------------ Functions that compute free variables ---------  *)
     (* mod_free_expvar: given a module, return all free expression variables  
@@ -147,6 +155,7 @@ signature ILUTIL =
 
     (* ----------- Functions that compute object sizes ----------- *)
     val mod_size : mod -> int
+    val bnd_size : bnd -> int
     val sig_size : signat -> int
 
 
@@ -175,6 +184,18 @@ signature ILUTIL =
 			     (mod * label -> con option) * 
 			     (mod * label -> mod option) * 
 			     (Il.sdec -> Il.sdec option)) -> signat
+    val exp_subst_allproj : (exp * (mod * label -> exp option) * 
+			     (mod * label -> con option) * 
+			     (mod * label -> mod option) * 
+			     (Il.sdec -> Il.sdec option)) -> exp
+    val con_subst_allproj : (con * (mod * label -> exp option) * 
+			     (mod * label -> con option) * 
+			     (mod * label -> mod option) * 
+			     (Il.sdec -> Il.sdec option)) -> con
+    val mod_subst_allproj : (mod * (mod * label -> exp option) * 
+			     (mod * label -> con option) * 
+			     (mod * label -> mod option) * 
+			     (Il.sdec -> Il.sdec option)) -> mod
 
       (*
 	con_subst_var_withproj : given a con c and a list of sdecs and a module m,

@@ -53,6 +53,7 @@ signature ILSTATIC =
 
     (* ---- Selfification needed before inserting into contexts ----- *)
     val SelfifySig : Il.path * Il.signat -> Il.signat
+    val UnselfifySig : Il.path * Il.signat -> Il.signat
     val SelfifyDec : Il.dec -> Il.dec
 
 

@@ -98,7 +98,7 @@ functor Basis(structure Il : IL
 						       in (OVEREXP(con,true,eshot),ocon)
 						       end))
 	    
-	    
+
 
 	 (* -------------- add the base tags ------------------------- *)
 	  local 
@@ -120,7 +120,6 @@ functor Basis(structure Il : IL
 				   ("int", int32), 
 				   ("uint", uint32),
 				   ("char", CON_UINT W8), 
-				   ("string", con_string),
 				   ("exn",CON_ANY),
 				   ("unit", con_unit),
 				   ("ref",let val v = fresh_var()
@@ -146,7 +145,7 @@ functor Basis(structure Il : IL
 	      val _ = app add_basetype basetype_list
 	  end
       
-
+	    
 	val context = 
 	   let
 	       fun constraints (c,res) (tyvar, 
@@ -335,6 +334,7 @@ functor Basis(structure Il : IL
 	  in val _ = app poly_entry basepolyvalue_list
 	  end
 
+
 	   
        (* ----------------- add base datatypes ----------------- *)
 	  local
@@ -374,6 +374,7 @@ functor Basis(structure Il : IL
 				     error "Compilation error in initial basis"))
 		    end
 
+
 		val list_sbnd_sdecs = Datatype.compile {context = !result,
 							typecompile = typecompile,
 							datatycs = listdb : Ast.db list,
@@ -383,6 +384,7 @@ functor Basis(structure Il : IL
 		    
 		val (list_sbnds,list_sdecs) = (map #1 list_sbnd_sdecs,
 					       map #2 list_sbnd_sdecs)
+
 
 (*
 		val _ = (print "=========================================\n";
@@ -399,13 +401,12 @@ functor Basis(structure Il : IL
 							datatycs = booldb : Ast.db list,
 							withtycs = [] : Ast.tb list,
 							eq_compile = Toil.xeq}
-		val (bool_sbnds,_) = (map #1 bool_sbnd_sdecs,
-				      map #2 bool_sbnd_sdecs)
+		val (bool_sbnds,bool_sdecs) = (map #1 bool_sbnd_sdecs,
+					       map #2 bool_sbnd_sdecs)
 
-		(* we compute a precise signature for bool type so that the elaborator can use
-		   the fact that a bool is a CON_MUPROJECT(unit + unit) *)
-		val bool_sdecs = IlStatic.GetSbndsSdecs(!result,bool_sbnds)
+		val bool_imp_sdecs = IlStatic.GetSbndsSdecs(!result,bool_sbnds)
 
+(*
 		val susp_sbnd_sdecs = Datatype.compile {context = !result,
 							typecompile = typecompile,
 							datatycs = suspdb : Ast.db list,
@@ -416,16 +417,54 @@ functor Basis(structure Il : IL
 		val (susp_sbnds,susp_sdecs) = (map #1 susp_sbnd_sdecs,
 					       map #2 susp_sbnd_sdecs)
 
-	      val datatype_sbnds = bool_sbnds @ susp_sbnds @ list_sbnds 
-	      val datatype_sdecs = bool_sdecs @ susp_sdecs @ list_sdecs 
-	      val datatype_self_sdecs = map (fn (SDEC(l,dec)) => SDEC(l,IlStatic.SelfifyDec dec)) datatype_sdecs
+*)
+
+(*
+		val datatype_sbnds = bool_sbnds
+		val datatype_sdecs = bool_sdecs
+
+	   val datatype_sbnds = bool_sbnds @ susp_sbnds @ list_sbnds 
+	   val datatype_sdecs = bool_sdecs @ susp_sdecs @ list_sdecs 
+	   val _ = (print "list_sdecs are:\n "; Ppil.pp_sdecs list_sdecs; print "\n\n")
+	   val datatype_self_sdecs = map (fn (SDEC(l,dec)) => SDEC(l,IlStatic.SelfifyDec dec)) datatype_sdecs
+*)
+	      fun self_sdec (SDEC(l,dec)) = SDEC(l,IlStatic.SelfifyDec dec)
+
+	      val lbl = fresh_open_internal_label "basis_dt"
+	      val v = fresh_named_var "basis_dt"
+	      val bool_sbnds_inline = 
+		  let val temp = MOD_STRUCTURE(bool_sbnds)
+		  in  (case IlUtil.make_inline_module(!result,temp,SOME(SIMPLE_PATH v), true) of
+			   SOME (MOD_STRUCTURE sbnds) => sbnds
+			 | _ => (print "cannot inline datatype module!";
+				 Ppil.pp_mod temp; print "\n";
+				 error "cannot inline datatype module!"))
+		  end
+
+	(* we use a precise signature for bool type so that the elaborator can use
+	   the fact that a bool is a CON_MUPROJECT(unit + unit) *)
+	      val final_sdec = SDEC(lbl,DEC_MOD(v,SIGNAT_INLINE_STRUCTURE{self=NONE,
+									abs_sig = bool_imp_sdecs,
+									imp_sig = bool_imp_sdecs,
+									code = bool_sbnds_inline}))
+	      val final_sdec = self_sdec final_sdec
+	      val new_context = add_context_sdec(!result, final_sdec)
+
+(*
+	      val _ = (print "!result is: "; Ppil.pp_context (!result); print "\n";
+		       print "final_sdec is: "; Ppil.pp_sdec final_sdec;
+		       print "\nnew_context is: "; Ppil.pp_context new_context; print "\n\n")
+*)
+		      
 	  in
-	      val datatype_self_sdecs = datatype_self_sdecs
-	      val _ = sbnds_result := datatype_sbnds
-	      val datatype_sdecs = datatype_sdecs
+(*	      val datatype_self_sdecs = datatype_self_sdecs *)
+	      val new_context = new_context
+(*	      val _ = sbnds_result := datatype_sbnds *)
+(*	      val datatype_sdecs = datatype_sdecs *)
 	  end
-      in  (!result, !sbnds_result, 
-	   datatype_sdecs, add_context_sdecs(!result,datatype_self_sdecs))
+      in  (new_context, [], [], empty_context)
+        (* (!result, !sbnds_result, datatype_sdecs, 
+	    add_context_sdecs(!result,datatype_self_sdecs)) *)
       end
   
   end

@@ -11,6 +11,8 @@ functor IlStatic(structure Il : IL
   : ILSTATIC  =
   struct
 
+exception XXX
+
     open Util Listops
     structure Il = Il
     structure PrimUtil = PrimUtil
@@ -30,59 +32,162 @@ functor IlStatic(structure Il : IL
      | mod_ispath _ = false
 
    (* --- remove references to internal variables from signature with given module ---- *)
-   fun SelfifySig'(ctable : (var * con) list, 
-		   mtable : (var * mod) list,
-		   popt: path option, signat : signat) : signat = 
-     let 
-       fun loop tables [] = []
-	 | loop (ctable,mtable) ((sdec as (SDEC(l,dec)))::rest) = 
-	  (case dec of
-		 DEC_EXP(v,c) =>  ((SDEC(l,DEC_EXP(v,con_subst_conmodvar(c,ctable,mtable))))::
-				   (loop (ctable,mtable) rest))
-	       | DEC_MOD(v,s) => 
-		     let val popt' = mapopt (fn p => join_path_labels(p,[l])) popt
-			 val this_dec = DEC_MOD(v,SelfifySig'(ctable,mtable,popt',s))
-			 val mtable' = (case popt' of
-					    NONE => mtable
-					  | SOME p => (v,path2mod p)::mtable)
-			 val rest_sdecs = loop (ctable,mtable') rest
-		     in SDEC(l,this_dec)::rest_sdecs
+   local
+       type state = {expself : (var * exp) list,
+		     conself : (var * con) list,
+		     modself : (var * mod) list,
+		     expunself : (exp * exp) list,
+		     conunself : (con * con) list,
+		     modunself : (mod * mod) list}
+       val initial_state = {expunself = [],
+			    conunself  = [],
+			    modunself  = [],
+			    expself  = [],
+			    conself  = [],
+			    modself  = []}
+       fun add_exppath({expunself,conunself,modunself,expself,conself,modself} : state,v,p) = 
+	   {expunself = (path2exp p, VAR v)::expunself,conunself=conunself,modunself=modunself,
+	    expself = (v,path2exp p)::expself,
+	    conself=conself,modself=modself}
+       fun add_conpath({expunself,conunself,modunself,expself,conself,modself}:state,v,p) = 
+	   {conunself = (path2con p, CON_VAR v)::conunself,expunself=expunself,modunself=modunself,
+	    conself = (v,path2con p)::conself,
+	    expself=expself,modself=modself}
+       fun add_modpath({expunself,conunself,modunself,expself,conself,modself}:state,v,p) = 
+	   {modunself = (path2mod p, MOD_VAR v)::modunself,expunself=expunself,conunself=conunself,
+	    modself = (v,path2mod p)::modself,
+	    conself=conself,expself=expself}
+       fun meta_add adder (state,v,NONE) = state
+	 | meta_add adder (state,v,SOME p) = adder(state,v,p)
+       val add_exppath = meta_add add_exppath
+       val add_conpath = meta_add add_conpath
+       val add_modpath = meta_add add_modpath
+
+       fun eq_modproj (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
+	 | eq_modproj (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
+       fun eq_expproj (VAR v, VAR v') = eq_var (v,v')
+	 | eq_expproj (MODULE_PROJECT (m,l), MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
+       fun eq_conproj (CON_VAR v, CON_VAR v') = eq_var (v,v')
+	 | eq_conproj (CON_MODULE_PROJECT (m,l), 
+		       CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
+       fun ehandler ({expunself,...} : state) (m,l) = assoc_eq(eq_expproj, MODULE_PROJECT(m,l), expunself)
+       fun chandler ({conunself,...} : state) (m,l) = assoc_eq(eq_conproj, CON_MODULE_PROJECT(m,l), conunself)
+       fun mhandler ({modunself,...} : state) (m,l) = assoc_eq(eq_modproj,MOD_PROJECT(m,l), modunself)
+
+
+       fun selfify_exp(selfify,state as {expself,conself,modself,...}:state,e) = 
+	   if selfify
+	       then exp_subst_expconmodvar(e,expself,conself,modself)
+	   else exp_subst_allproj(e,ehandler state, chandler state, 
+				  mhandler state, fn _ => NONE)
+
+       fun selfify_con(selfify,state as {conself,modself,...}:state,c) = 
+	   if selfify
+	       then con_subst_conmodvar(c,conself,modself)
+	   else  con_subst_allproj(c,ehandler state, chandler state, 
+				   mhandler state, fn _ => NONE)
+
+       fun selfify_mod(selfify,state as {conself,modself,...}:state,m) = 
+	   if selfify
+	       then mod_subst_conmodvar(m,conself,modself)
+	   else  mod_subst_allproj(m,ehandler state, chandler state, 
+				   mhandler state, fn _ => NONE)
+	       
+       fun sdec_folder (popt,selfify) (sdec as (SDEC(l,dec)),(state:state,rev_sdecs)) = 
+	   let val popt = mapopt (fn p => join_path_labels(p,[l])) popt
+	   in 
+	       (case dec of
+		    DEC_EXP(v,c) => (state,(SDEC(l,DEC_EXP(v,selfify_con(selfify,state,c))))::rev_sdecs)
+		  | DEC_MOD(v,s) => 
+		     let val this_dec = DEC_MOD(v,SelfifySig(state,selfify) (popt,s))
+			 val state = add_modpath(state,v,popt)
+		     in (state,SDEC(l,this_dec)::rev_sdecs)
 		     end
-	       | DEC_CON(v,k,copt) => 
-		   let
-		       val this_dec = 
-			   (case copt of
-				NONE => 
-			      (*  dec    do we want this? if we do this, Unselfify is hard to write. *)
-			        DEC_CON(v,k,(case popt of
-						 NONE => NONE
-					       | SOME p => SOME(CON_MODULE_PROJECT(path2mod p,l))))
-			      | SOME c => 
-				     let val c' = con_subst_conmodvar(c,ctable,mtable)
-				     in
-					 DEC_CON(v,k,SOME (con_subst_conmodvar(c,ctable,mtable)))
-				     end)
-			 val ctable' = (case popt of
-					    NONE => ctable
-					  | SOME p => (v,CON_MODULE_PROJECT(path2mod p,l))::ctable)
-			 val rest_sdecs = loop (ctable',mtable) rest
-		   in (SDEC(l,this_dec))::rest_sdecs
-		   end
-	     | (DEC_EXCEPTION _) => sdec::(loop (ctable,mtable) rest))
-     in (case signat of
-	   SIGNAT_FUNCTOR (v,s1,s2,a) => 
-	       let val s1' = SelfifySig'(ctable,mtable,NONE,s1)
-		   val s2' = SelfifySig'(ctable,mtable,NONE,s2)
-	       in  SIGNAT_FUNCTOR(v,s1',s2',a)
-	       end
-	 | SIGNAT_STRUCTURE (NONE,sdecs) => 
-	       let val sdecs' = loop (ctable,mtable) sdecs
-	       in case popt of
-		   SOME p => SIGNAT_STRUCTURE(SOME p,sdecs')
-		 | _ => SIGNAT_STRUCTURE(NONE, sdecs')
-	       end
-	 | SIGNAT_STRUCTURE (SOME _,sdecs) => signat)
-     end
+		  | DEC_CON(v,k,copt) => 
+		     let val this_dec = 
+			 (case copt of  (*  if we do this, Unselfify is hard to write. *)
+			      NONE => DEC_CON(v,k,(case popt of
+						       NONE => NONE
+						     | SOME p => SOME(path2con p)))
+			    | SOME c => 
+				  let val c' = selfify_con(selfify,state,c)
+				  in	 DEC_CON(v,k,SOME c')
+				  end)
+			 val state = add_conpath(state,v,popt)
+		     in (state,(SDEC(l,this_dec))::rev_sdecs)
+		     end
+		  | (DEC_EXCEPTION _) => (state,sdec::rev_sdecs))
+	   end
+		    
+       and sbnd_folder (popt,selfify) (SBND(l,bnd),(state:state,rev_sbnds)) = 
+	   let val popt = mapopt (fn p => join_path_labels(p,[l])) popt
+	   in  (case bnd of
+		    BND_EXP(v,e) => 
+			let val state = add_exppath(state,v,popt)
+			in (state,(SBND(l,BND_EXP(v,selfify_exp(selfify,state,e))))::rev_sbnds)
+			end
+		  | BND_MOD(v,m) => 
+			let val this_bnd = BND_MOD(v,SelfifyMod(state,selfify) (popt,m))
+			    val state = add_modpath(state,v,popt)
+			in (state,SBND(l,this_bnd)::rev_sbnds)
+			end
+		  | BND_CON(v,c) =>
+			let val this_bnd = BND_CON(v,selfify_con(selfify,state,c))
+			    val state = add_conpath(state,v,popt)
+			in (state,(SBND(l,this_bnd))::rev_sbnds)
+			end)
+	   end
+       and do_sdecs (popt,selfify) (state:state,sdecs) = 
+	   let val (_,rev_sdecs') = foldl (sdec_folder (popt,selfify)) (state,[]) sdecs
+	   in  rev rev_sdecs'
+	   end
+       and do_sbnds (popt,selfify) (state,sbnds) = 
+	   let val (_,rev_sbnds') = foldl (sbnd_folder (popt,selfify)) (state,[]) sbnds
+	   in  rev rev_sbnds'
+	   end
+       and SelfifyMod (state:state,selfify) (popt: path option, module : mod) : mod = 
+	   let val x = 5
+	   in (case module of
+		   MOD_FUNCTOR (v,s,m) => 
+		       let val s' = SelfifySig (state,selfify) (NONE,s)
+			   val m' = SelfifyMod (state,selfify) (NONE,m)
+		       in  MOD_FUNCTOR(v,s',m')
+		       end
+		 | (MOD_STRUCTURE sbnds) =>
+		       let val sbnds = do_sbnds (popt,selfify) (state, sbnds)
+		       in  MOD_STRUCTURE sbnds
+		       end
+		 | _ => error "selfify_mod' given a mod which is not a functor or structure")
+	   end
+       and SelfifySig (state:state,selfify) (popt: path option, signat : signat) : signat = 
+	   let val x = 5
+	   in (case (selfify,signat) of
+		   (_,SIGNAT_FUNCTOR (v,s1,s2,a)) => 
+		       let val s1' = SelfifySig (state,selfify) (NONE,s1)
+			   val s2' = SelfifySig (state,selfify) (NONE,s2)
+		       in  SIGNAT_FUNCTOR(v,s1',s2',a)
+		       end
+		 | ((true,SIGNAT_INLINE_STRUCTURE {self=NONE,code,abs_sig,imp_sig}) |
+		       (false,SIGNAT_INLINE_STRUCTURE {self=SOME _,code,abs_sig,imp_sig})) =>
+		       let val abs_sig = do_sdecs (popt,selfify) (state, abs_sig)
+			   val imp_sig = do_sdecs (popt,selfify) (state, imp_sig)
+			   val code = do_sbnds (popt,selfify) (state, code)
+			   val popt = if selfify then popt else NONE
+		       in  SIGNAT_INLINE_STRUCTURE{self=popt,
+						   code=code, abs_sig=abs_sig, imp_sig=imp_sig}
+		       end
+		 | ((true,SIGNAT_STRUCTURE (NONE,sdecs)) |
+		       (false,SIGNAT_STRUCTURE (SOME _,sdecs))) =>
+		       let val sdecs' = do_sdecs (popt,selfify) (state, sdecs)
+			   val popt = if selfify then popt else NONE
+		       in  SIGNAT_STRUCTURE(popt,sdecs')
+		       end
+		 | _ => signat)
+	   end
+   in
+       val SelfifySig' = SelfifySig (initial_state,true)
+       val UnselfifySig' = SelfifySig (initial_state,false)
+   end
 
      (* Performs lookup in a structure signature, performing
         normalization as needed with the supplied module argument. *)
@@ -146,8 +251,11 @@ functor IlStatic(structure Il : IL
 	val Sdecs_Lookup = local_Sdecs_Lookup
 	val Sdecs_Project = local_Sdecs_Project
 
+	fun UnselfifySig(p : path, signat : signat) = 
+	    UnselfifySig'(SOME p,signat)
+
 	fun SelfifySig(p : path, signat : signat) = 
-	    let val res = SelfifySig'([],[],SOME p,signat)
+	    let val res = SelfifySig'(SOME p,signat)
 		val _ = debugdo 
 		    (fn () => (print "SelfifySig': p is "; pp_path p;
 			       print "\nsignat is\n";
@@ -200,6 +308,8 @@ functor IlStatic(structure Il : IL
    fun eq_scon (s1,s2) = s1 = s2
    fun eq_kind (KIND_TUPLE n1, KIND_TUPLE n2) = n1 = n2
      | eq_kind (KIND_ARROW (m1,n1), KIND_ARROW(m2,n2)) = (m1 = m2) andalso (n1 = n2)
+     | eq_kind (KIND_INLINE(k1,_), k2) = eq_kind(k1,k2)
+     | eq_kind (k1,KIND_INLINE(k2,_)) = eq_kind(k1,k2)
      | eq_kind _ = false
 
 
@@ -509,8 +619,10 @@ functor IlStatic(structure Il : IL
    and eq_sdecs (ctxt,sdecs1,sdecs2) = eq_list(eq_sdec ctxt, sdecs1, sdecs2)
 
 
-   and eq_sig (ctxt,SIGNAT_STRUCTURE (NONE,sdecs1), 
-	       SIGNAT_STRUCTURE (NONE,sdecs2)) = eq_sdecs(ctxt,sdecs1,sdecs2)
+   and eq_sig (ctxt,
+	       ((SIGNAT_STRUCTURE (NONE,sdecs1)) | (SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs1,...})),
+	       ((SIGNAT_STRUCTURE (NONE,sdecs2)) | (SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs2,...}))) =
+       eq_sdecs(ctxt,sdecs1,sdecs2)
      | eq_sig (ctxt,SIGNAT_FUNCTOR (v1,s1_arg,s1_res,a1), 
 	       SIGNAT_FUNCTOR (v2,s2_arg,s2_res,a2)) = 
        (eq_arrow(a1,a2,false) andalso (eq_var(v1,v2)) andalso (eq_sig(ctxt,s1_arg,s2_arg)))
@@ -596,7 +708,9 @@ functor IlStatic(structure Il : IL
 
   (* Rules 35 - 48 *)
    and GetConKind (arg : con, ctxt : context) : kind = 
-     let val con = arg (* Normalize(arg,ctxt) *)
+     let fun ksimp (KIND_INLINE(k,_)) = ksimp k
+	   | ksimp k = k
+	 val con = arg (* Normalize(arg,ctxt) *)
      in case con of
        (CON_TYVAR tv) => KIND_TUPLE 1 
      | (CON_VAR v) => 
@@ -616,7 +730,7 @@ functor IlStatic(structure Il : IL
      | (CON_ARROW _) => KIND_TUPLE 1
      | (CON_APP (c1,c2)) => 
 	   let val (k1,k2) = (GetConKind(c1,ctxt),GetConKind(c2,ctxt))
-	   in (case (k1,k2) of
+	   in (case (ksimp k1, ksimp k2) of
 		   (KIND_ARROW(a,b),KIND_TUPLE c) => 
 		       if (a=c) then KIND_TUPLE b
 		       else error "GetConKind: kind mismatch in CON_APP"
@@ -649,7 +763,8 @@ functor IlStatic(structure Il : IL
 	   let val (_,signat) = GetModSig(m,ctxt)
 	   in (case signat of
 		   SIGNAT_FUNCTOR _ => error "cannot project from functor"
-		 | (SIGNAT_STRUCTURE (_,sdecs)) =>
+		 | ((SIGNAT_STRUCTURE (_,sdecs)) |
+		       (SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,...})) =>
 		       (case Sdecs_Lookup(MOD_VAR (fresh_var()),sdecs,[l]) of
 			    NONE => (print "no such label in sig: ";
 				     pp_label l; print "\n";
@@ -947,7 +1062,8 @@ functor IlStatic(structure Il : IL
 	   let val (va,signat) = GetModSig(m,ctxt)
 	   in case signat of
 	       SIGNAT_FUNCTOR _ => error "cannot project from module with functor signature"
-	     | SIGNAT_STRUCTURE(SOME p,sdecs) => 
+	     | ((SIGNAT_STRUCTURE(SOME p,sdecs)) |
+		   (SIGNAT_INLINE_STRUCTURE{self=SOME p,abs_sig=sdecs,...})) =>
 		   (case Sdecs_Lookup(path2mod p, sdecs,[l]) of
 		       NONE => ((* print "Normalize: label "; pp_label l;
 				 print " not in signature s = \n";
@@ -955,7 +1071,8 @@ functor IlStatic(structure Il : IL
 				fail "MODULE_PROJECT: label not in modsig")
 		     | (SOME (PHRASE_CLASS_EXP(_,con))) => (va,Normalize(con,ctxt))
 		     | SOME _ => fail "MODULE_PROJECT: label not of exp")
-	     | SIGNAT_STRUCTURE (NONE,sdecs) => 
+	     | ((SIGNAT_STRUCTURE (NONE,sdecs)) |
+			(SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...})) =>
 		   (case Sdecs_Project(if va then SOME m else NONE, sdecs, l) of
 			NONE => error "MODULE_PROJECT: label not in modsig"
 		      | SOME (CLASS_EXP con) => (va,Normalize(con,ctxt))
@@ -1066,6 +1183,7 @@ functor IlStatic(structure Il : IL
 					  print "bsignat is\n"; pp_signat bsignat; print "\n"))
 	   in case asignat of
 	       (SIGNAT_STRUCTURE _) => error "Can't apply a structure signature"
+	     | (SIGNAT_INLINE_STRUCTURE _) => error "Can't apply a structure signature"
 	     | SIGNAT_FUNCTOR (v,csignat,dsignat,ar) =>
 		   if (Sig_IsSub(ctxt, bsignat, csignat))
 		       then (vaa andalso vab andalso (ar = TOTAL),
@@ -1089,7 +1207,8 @@ functor IlStatic(structure Il : IL
 					  pp_signat signat; print "\n"))
 	   in case signat of
 	       SIGNAT_FUNCTOR _ => error "cannot project from functor"
-	     | SIGNAT_STRUCTURE (SOME p,sdecs) => 
+	     | ((SIGNAT_STRUCTURE (SOME p,sdecs)) |
+		   (SIGNAT_INLINE_STRUCTURE {self=SOME p,abs_sig=sdecs,...})) =>
 		   (case Sdecs_Lookup(path2mod p, sdecs,[l]) of
 			NONE =>  (print "GetModSig: SignatLookup MOD_PROJECT failed with label ";
 					 pp_label l;
@@ -1102,11 +1221,12 @@ functor IlStatic(structure Il : IL
 			      print "did not find DEC_MOD.  \nsig was = ";
 			      pp_signat signat; print "\n";
 			      fail "MOD_PROJECT found label not of flavor DEC_MOD"))
-	     | SIGNAT_STRUCTURE (NONE,sdecs) =>
-		   (case Sdecs_Project(if va then SOME m else NONE, sdecs, l) of
-			NONE => error "MOD_PROJECT: label not in modsig"
-		      | SOME (CLASS_MOD s) => (va,s)
-		      | SOME _ => fail "MOD_PROJECT: label found wrong flavor")
+	     | ((SIGNAT_STRUCTURE (NONE,sdecs)) |
+			(SIGNAT_INLINE_STRUCTURE {self=NONE,abs_sig=sdecs,...})) =>
+			(case Sdecs_Project(if va then SOME m else NONE, sdecs, l) of
+			     NONE => error "MOD_PROJECT: label not in modsig"
+			   | SOME (CLASS_MOD s) => (va,s)
+			   | SOME _ => fail "MOD_PROJECT: label found wrong flavor")
 	   end
 (*		   
 	       val res = case SignatLookup(m,l,signat) of
@@ -1200,13 +1320,15 @@ functor IlStatic(structure Il : IL
 					    end
 			  | _ => loop tables rest)
 	       in (case s of 
-		       SIGNAT_STRUCTURE(NONE,sdecs) => 
+		       ((SIGNAT_STRUCTURE(NONE,sdecs)) | (SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...})) => 
 			   (debugdo (fn () => (print "HeadNormalize: CON_MODULE_PROJECT case: l = "; pp_label l;
 					       print "\n and sdecs = ";
 					       pp_sdecs sdecs;
 					       print "\n"));
 			    loop ([],[]) sdecs)
-		     | SIGNAT_STRUCTURE (SOME p,sdecs) => (* XXX loop ([],[]) sdecs *)
+		     | ((SIGNAT_STRUCTURE (SOME p,sdecs)) | 
+			   (SIGNAT_INLINE_STRUCTURE{self=SOME p,abs_sig=sdecs,...})) =>
+			   (* XXX loop ([],[]) sdecs *)
 			   (case Sdecs_Lookup(path2mod p, sdecs, [l]) of
 				SOME(PHRASE_CLASS_CON(c,_)) => break_loop c
 			      | SOME _ => error "CON_MOD_PROJECT found signature with wrong flavor"
@@ -1276,7 +1398,8 @@ functor IlStatic(structure Il : IL
 	     in  
 		 case (m,signat) of
 		     (_,SIGNAT_FUNCTOR _) => error "cannot project for functor"
-		   | (_,SIGNAT_STRUCTURE (SOME p,sdecs)) => 
+		   | (_,((SIGNAT_STRUCTURE (SOME p,sdecs)) |
+			 (SIGNAT_INLINE_STRUCTURE{self=SOME p,abs_sig=sdecs,...}))) => 
 			 (case Sdecs_Lookup(path2mod p, sdecs, [l]) of
 			      NONE => (print "CON_MOD_PROJECT failed to find label = ";
 				       pp_label l; print " and signat = \n";
@@ -1291,7 +1414,8 @@ functor IlStatic(structure Il : IL
 				     | _ => Normalize(c,ctxt))
 			    | (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON")
 		   | (MOD_STRUCTURE sbnds,
-		      SIGNAT_STRUCTURE (_,sdecs)) => 
+			      ((SIGNAT_STRUCTURE (NONE,sdecs)) | 			 
+			       (SIGNAT_INLINE_STRUCTURE{self=NONE,abs_sig=sdecs,...}))) => 
 		     let val p = SIMPLE_PATH (fresh_named_var "badbadbad")
 		     in case Sdecs_Lookup(path2mod p, sdecs, [l]) of
 					  NONE => (print "CON_MOD_PROJECT failed to find label = ";
@@ -1343,6 +1467,7 @@ functor IlStatic(structure Il : IL
      (* Rule 33 - 34 *)
      and Kind_Valid (KIND_TUPLE n)     = n >= 0
        | Kind_Valid (KIND_ARROW (m,n)) = (m >= 0) andalso (n >= 0)
+       | Kind_Valid (KIND_INLINE (k,c)) = Kind_Valid k  (* XXX need to check c *)
 
      and Context_Valid ctxt = raise UNIMP
 
@@ -1373,6 +1498,7 @@ functor IlStatic(structure Il : IL
 
      and Sig_Valid (ctxt : context, SIGNAT_STRUCTURE(NONE, sdecs)) = Sdecs_Valid(ctxt,sdecs)
        | Sig_Valid (ctxt : context, SIGNAT_STRUCTURE (SOME p,sdecs)) = Sdecs_Valid(ctxt,sdecs)
+       | Sig_Valid (ctxt : context, SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,...}) = Sdecs_Valid(ctxt,sdecs)
        | Sig_Valid (ctxt, SIGNAT_FUNCTOR(v,s_arg,s_res,arrow)) = 
 	 (Sig_Valid(ctxt,s_arg) andalso 
 	  Sig_Valid(add_context_mod'(ctxt,v,SelfifySig(SIMPLE_PATH v,s_arg)),s_res))

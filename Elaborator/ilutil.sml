@@ -185,19 +185,28 @@ functor IlUtil(structure Ppil : PPIL
     val path2con = path2obj (CON_VAR, CON_MODULE_PROJECT)
     val path2exp = path2obj (VAR, MODULE_PROJECT)
 
-    fun mod2path m = 
-      let fun loop (MOD_VAR v) [] = SIMPLE_PATH v
+
+    local fun loop (MOD_VAR v) [] = SIMPLE_PATH v
 	    | loop (MOD_VAR v) acc = COMPOUND_PATH(v,acc)
 	    | loop (MOD_PROJECT (m,l)) acc = loop m (l::acc)
 	    | loop m _ = (print "mod was: "; pp_mod m;
 			  print "\n";
 			  error "mod2path called on non-projection")
-      in loop m []
-      end
-      fun eq_path(SIMPLE_PATH v1, SIMPLE_PATH v2) = eq_var(v1,v2)
-        | eq_path(COMPOUND_PATH (v1,l1), COMPOUND_PATH(v2,l2)) = 
-		eq_var(v1,v2) andalso eq_list(eq_label,l1,l2)
-        | eq_path _ = false
+    in    
+	fun mod2path m = loop m []
+	fun exp2path (e : exp) = 
+	    case e of
+		VAR v => SIMPLE_PATH v
+	      | MODULE_PROJECT (m,l) => loop (MOD_PROJECT(m,l)) []
+	      | _ => (print "exp was: "; pp_exp e;
+		      print "\n";
+		      error "exp2path called on non-projection")
+    end
+
+    fun eq_path(SIMPLE_PATH v1, SIMPLE_PATH v2) = eq_var(v1,v2)
+      | eq_path(COMPOUND_PATH (v1,l1), COMPOUND_PATH(v2,l2)) = 
+	eq_var(v1,v2) andalso eq_list(eq_label,l1,l2)
+      | eq_path _ = false
 
       (* -------------------------------------------------------- *)
       (* ------------ Context manipulation functions ------------ *)
@@ -347,6 +356,12 @@ functor IlUtil(structure Ppil : PPIL
 	     | NONE =>
 	(case s of
 	   SIGNAT_STRUCTURE (popt,sdecs) => SIGNAT_STRUCTURE (popt,map (f_sdec state) sdecs)
+	 | SIGNAT_INLINE_STRUCTURE {self,code,abs_sig,imp_sig} =>
+	       let val imp_sig = map (f_sdec state) imp_sig
+		   val abs_sig = map (f_sdec state) abs_sig
+		   val code = map (f_sbnd state) code
+	       in  SIGNAT_INLINE_STRUCTURE {self=self,code=code,abs_sig=abs_sig,imp_sig=imp_sig}
+	       end
 	 | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1, 
 							   f_signat state s2, a)))
 
@@ -368,12 +383,18 @@ functor IlUtil(structure Ppil : PPIL
 	 | BND_MOD(v,m) => BND_MOD(v, f_mod state m)
 	 | BND_CON(v,c) => BND_CON(v, f_con state c))
 
+      and f_kind (state : state) (kind : kind) : kind = 
+	  (case kind of
+	       KIND_ARROW _ => kind
+	     | KIND_TUPLE _ => kind
+	     | KIND_INLINE (k,c) => KIND_INLINE(f_kind state k, f_con state c))
+
       and f_dec (state : state) (dec : dec) : dec =
 	(case dec of
 	   DEC_EXP(v,c) => DEC_EXP(v, f_con state c)
 	 | DEC_MOD(v,s) => DEC_MOD(v, f_signat state s)
-	 | DEC_CON(v,k,NONE) => dec
-	 | DEC_CON(v,k,SOME c) => DEC_CON(v, k, SOME (f_con state c))
+	 | DEC_CON(v,k,NONE) => DEC_CON(v, f_kind state k, NONE)
+	 | DEC_CON(v,k,SOME c) => DEC_CON(v, f_kind state k, SOME (f_con state c))
 	 | DEC_EXCEPTION(n,c) => DEC_EXCEPTION(n, f_con state c))
 
 
@@ -702,6 +723,15 @@ functor IlUtil(structure Ppil : PPIL
 			mod_handler = default_mod_handler,
 			sig_handler = default_sig_handler})
 	      end
+	  fun ecmhandlers etable ctable mtable =
+	      let val self = fn () => echandlers etable ctable
+	      in STATE(default_bound,
+		       {sdec_handler = default_sdec_handler,
+			exp_handler = exp_handler etable,
+			con_handler = con_handler ctable,
+			mod_handler = mod_handler mtable,
+			sig_handler = sig_handler self mtable})
+	      end
       in 
 	  fun exp_subst_expvar(arg,table) = f_exp (ehandlers table) arg
 	  fun con_subst_expvar(arg,table) = f_con (ehandlers table) arg
@@ -716,7 +746,10 @@ functor IlUtil(structure Ppil : PPIL
 	  fun mod_subst_modvar(arg,table) = f_mod (mhandlers table) arg
 	  fun sig_subst_modvar(arg,table) = f_signat (mhandlers table) arg
 	  fun con_subst_conmodvar(arg,ctable,mtable) = f_con (cmhandlers ctable mtable) arg
-	  fun exp_subst_expconvar(arg,etable,ctable) = f_exp (echandlers etable ctable) arg
+	  fun mod_subst_conmodvar(arg,ctable,mtable) = f_mod (cmhandlers ctable mtable) arg
+	  fun exp_subst_expconmodvar(arg,etable,ctable,mtable) = f_exp (ecmhandlers etable ctable mtable) arg
+	  fun con_subst_expconmodvar(arg,etable,ctable,mtable) = f_con (ecmhandlers etable ctable mtable) arg
+	  fun sig_subst_expconmodvar(arg,etable,ctable,mtable) = f_signat (ecmhandlers etable ctable mtable) arg
       end
 
       local
@@ -767,25 +800,44 @@ functor IlUtil(structure Ppil : PPIL
 	in f_con handlers argcon
 	end
 
-      fun sig_subst_allproj(argsig : signat, eproj, cproj, mproj, sdecer) : signat = 
-	let 
-	  fun sdec_handler(_,sdec) = sdecer sdec
-	  fun exp_handler (MODULE_PROJECT(m,l),_) = eproj(m,l)
-	    | exp_handler _ = NONE
-	  fun con_handler (CON_MODULE_PROJECT(m,l),_) = cproj(m,l)
-	    | con_handler _ = NONE
-	  fun mod_handler (MOD_PROJECT(m,l),_) = mproj(m,l)
-	    | mod_handler _ = NONE
-	  val handlers = STATE(default_bound,
-			       {sdec_handler = sdec_handler,
-				exp_handler = exp_handler,
-				con_handler = con_handler,
-				mod_handler = mod_handler,
-				sig_handler = default_sig_handler})
-	in f_signat handlers argsig
-	end
+      local
+	  fun allproj_handlers(eproj, cproj, mproj, sdecer) : state =
+	      let 
+		  fun sdec_handler(_,sdec) = sdecer sdec
+		  fun exp_handler (MODULE_PROJECT(m,l),_) = eproj(m,l)
+		    | exp_handler _ = NONE
+		  fun con_handler (CON_MODULE_PROJECT(m,l),_) = cproj(m,l)
+		    | con_handler _ = NONE
+		  fun mod_handler (MOD_PROJECT(m,l),_) = mproj(m,l)
+		    | mod_handler _ = NONE
+		  val handlers = STATE(default_bound,
+				       {sdec_handler = sdec_handler,
+					exp_handler = exp_handler,
+					con_handler = con_handler,
+					mod_handler = mod_handler,
+					sig_handler = default_sig_handler})
+	      in handlers
+	      end
+      in
+	  fun sig_subst_allproj(argsig : signat, eproj, cproj, mproj, sdecer) : signat = 
+	      let val handlers = allproj_handlers(eproj,cproj,mproj,sdecer)
+	      in  f_signat handlers argsig
+	      end
+	  fun exp_subst_allproj(arg, eproj, cproj, mproj, sdecer) =
+	      let val handlers = allproj_handlers(eproj,cproj,mproj,sdecer)
+	      in  f_exp handlers arg
+	      end
+	  fun con_subst_allproj(arg, eproj, cproj, mproj, sdecer) =
+	      let val handlers = allproj_handlers(eproj,cproj,mproj,sdecer)
+	      in  f_con handlers arg
+	      end
+	  fun mod_subst_allproj(arg, eproj, cproj, mproj, sdecer) =
+	      let val handlers = allproj_handlers(eproj,cproj,mproj,sdecer)
+	      in  f_mod handlers arg
+	      end
+      end
 
-      fun subst_proj_handlers(eproj, cproj) =
+     fun subst_proj_handlers(eproj, cproj) =
 	let 
 	  fun exp_handler (MODULE_PROJECT(m,l),_) = eproj(m,l)
 	    | exp_handler _ = NONE
@@ -1026,6 +1078,13 @@ functor IlUtil(structure Ppil : PPIL
 	    val _=  f_mod handlers m
 	in !count
 	end
+
+
+      fun bnd_size m = 
+	  let val (count,handlers) = make_size_handlers()
+	      val _ = f_bnd handlers m
+	  in !count
+	  end
     
       fun sig_size s = 
 	  let val (count,handlers) = make_size_handlers()
@@ -1047,14 +1106,13 @@ functor IlUtil(structure Ppil : PPIL
     val error_mod = fn m => fn s => error_obj pp_mod  "module" m s
     val error_sig = fn sg => fn s => error_obj pp_signat "signature" sg s
 
-    fun is_eq_lab lab = 
-	let val str = label2string lab
-	    val all = explode "_eq"
-	    fun match [] _ = true
-	      | match (a::arest) (b::brest) = 
-		(((a = b) andalso (match arest brest)) orelse (match all brest))
-	      | match _ _ = false
-	in  is_label_internal lab andalso (match all (explode str))
+
+    fun is_eq_lab lab = is_label_internal lab andalso (substring ("_eq",label2string lab))
+    fun is_exportable_lab l =
+	(not (is_label_internal l)) orelse
+	(is_eq_lab l) orelse 
+	let val str = label2string l
+	in (substring ("top",str)) orelse (substring ("open",str))
 	end
 
     fun to_eq_lab type_lab =
@@ -1066,8 +1124,41 @@ functor IlUtil(structure Ppil : PPIL
 	      eq_lab
 	  end
 
+    fun is_inline_bnd (BND_EXP(v,e)) = is_inline_exp e
+      | is_inline_bnd (BND_CON _) = true
+      | is_inline_bnd (BND_MOD(v,m)) = is_inline_mod m
 
-     fun make_inline_module (context,m) : mod option = 
+    and is_inline_exp arg_exp = 
+	(case arg_exp of
+	     OVEREXP (_,_,oe) => (case oneshot_deref oe of
+				      NONE => false
+				    | SOME e => is_inline_exp e)
+	   | ((SCON _) | (VAR _) | (ETAPRIM _) | (ETAILPRIM _) | (FIX _))  => true
+	   | ((PRIM _) | (ILPRIM _)) => false
+	   | (RECORD le_list) => List.all (fn (_,e) => is_inline_exp e) le_list
+	   | ((SUM_TAIL (_,e)) | (ROLL(_,e)) | (UNROLL(_,e)))  => is_inline_exp e
+	   | ((HANDLE (e1,e2)) | (EXN_INJECT(e1,e2))) => (is_inline_exp e1) andalso (is_inline_exp e2)
+	   | (RAISE (_,e)) => is_inline_exp e
+	   | (LET (bnds,e)) => (List.all is_inline_bnd bnds) andalso (is_inline_exp e)
+	   | (NEW_STAMP _) => false
+	   | (INJ _) => true
+	   | (RECORD_PROJECT _) => false (* could be sometimes true *)
+	   | (APP _) => false (* could be sometimes true *)
+	   | (CASE _) => false (* could be sometimes true *)
+	   | (EXN_CASE _) =>  false (* could be sometimes true *)
+	   | (MODULE_PROJECT _) => false (* could be sometimes true *)
+	   | (SEAL (e,_)) => is_inline_exp e)
+		 
+    and is_inline_mod arg_mod = 
+	(case arg_mod of
+	     MOD_VAR _ => true
+	   | MOD_STRUCTURE sbnds => List.all (fn SBND(_,bnd) => is_inline_bnd bnd) sbnds
+	   | MOD_APP _ =>  false (* could be sometimes true *)
+	   | MOD_PROJECT _ => false (* could be sometimes true *)
+	   | MOD_SEAL (m,_) => is_inline_mod m
+	   | MOD_LET (v,m1,m2) => (is_inline_mod m1) andalso (is_inline_mod m2))
+
+     fun make_inline_module (context,m,pathopt,inline_type) : mod option = 
 	 (case m of
 	     MOD_STRUCTURE sbnds => 
 		 let 
@@ -1089,6 +1180,11 @@ functor IlUtil(structure Ppil : PPIL
 				 else sbnd::(loop rest)
 			   | BND_CON (v,c) => 
 				 let 
+				     val c = (case (inline_type,pathopt) of
+					(true,_) => c
+				       |(_,SOME p) => 
+					path2con(join_path_labels(p,[l]))
+					| _ => error "cannot inline")
 				     fun ee earg = exp_subst_convar(earg, [(v,c)])
 				     fun cc carg = con_subst_convar(carg, [(v,c)])
 				     fun mm marg = mod_subst_convar(marg, [(v,c)])
@@ -1101,7 +1197,10 @@ functor IlUtil(structure Ppil : PPIL
 				     fun cc carg = con_subst_modvar(carg, [(v,m)])
 				     fun mm marg = mod_subst_modvar(marg, [(v,m)])
 				     val rest' = map (doit (ee,cc,mm)) rest
-				     val sbnd = SBND(l,BND_MOD(v,case make_inline_module (context,m) of
+				     val pathopt = (case pathopt of
+					NONE => NONE
+				      | SOME p => SOME(join_path_labels(p,[l])))
+				     val sbnd = SBND(l,BND_MOD(v,case make_inline_module (context,m,pathopt,inline_type) of
 							       SOME m => m
 							     | NONE => raise FAIL))
 				 in sbnd::(loop rest')
