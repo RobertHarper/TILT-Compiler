@@ -318,6 +318,8 @@ structure Listops :> LISTOPS =
      | join s [a] = [a]
      | join s (a::aa) = a::s::(join s aa)
 
+   fun concatWith s pieces  = String.concat (join s pieces)
+
    (* toString : ('a -> string) -> 'a list -> string *)
    fun toString f L =
        let

@@ -334,3 +334,4 @@ n135	pass	Denmark Core-SML accept test
 n136	pass	Denmark Core-SML accept test
 n137	pass	Denmark Core-SML accept test
 n138	fail	Denmark Core-SML accept test
+bug168  pass    [Bug #0168] Real.fromString fails on nan and inf.

@@ -28,33 +28,93 @@ extern ptr_t cstring2mlstring_alloc(const char *);
 #define GET_INT(p, i) GET_RECORD(int,p,i)
 
 /* The declarations in ../Basis/tiltexn.sml. */
+/* Locations of important exceptions.  Changes to name.sml, toil.sml, or tonil.sml 
+ * may affect these.  */
+
+#ifdef FLATTEN_MODULES
+
+#define DIV_MK ml__PLUSF_PLUSUTiltExn__INT__r__i_DOTDiv__0_DOTmk__i__INT
+#define DIV_STAMP ml__PLUSF_PLUSUTiltExn__INT__r__i_DOTDiv__0_DOTstamp__i__INT
+#define OVERFLOW_MK ml__PLUSF_PLUSUTiltExn__INT__r__i_DOTOverflow__0_DOTmk__i__INT
+#define OVERFLOW_STAMP ml__PLUSF_PLUSUTiltExn__INT__r__i_DOTOverflow__0_DOTstamp__i__INT
+#define SYSERR_STAMP ml__PLUSF_PLUSUTiltExn__INT__r__i_DOTTiltExn__2_DOTSysErr__0_DOTstamp__i__INT
+#define LIBFAIL_STAMP ml__PLUSF_PLUSUTiltExn__INT__r__i_DOTTiltExn__2_DOTLibFail__0_DOTstamp__i__INT
+
+#else
+
+#define TILTEXN_UNIT ml__PLUSUTiltExn__INT__r__INT
+
+#endif 
+
+
+
+/* The declarations in ../Basis/tiltexn.sml. */
 #define DIV 0
 #define OVERFLOW 1
 #define TILTEXN 2
+
+/* The components of the TiltExn structure; see ../Basis/tiltexn.sml. */
+#define SYSERR  0
+#define LIBFAIL 1
 
 /* The components of an exception module.
    N.B. must agree with ../Elaborator/toil.sml. */
 #define MOD_STAMP 0
 #define MOD_MK    1
 
+
+
 /* Find canonical exception packet for a top-level, non-value-carrying
    exception declared in unit TiltExn; see ../Basis/tiltexn.sml. */
 static ptr_t exn_lookup(int n)
 {
-  ptr_t compunit = (ptr_t) GetGlobal(&ml__PLUSUTiltExn__INT__r__INT);
+#ifdef FLATTEN_MODULES
+  if (n == DIV) return (ptr_t) (GetGlobal(&DIV_MK));
+  else if (n == OVERFLOW) return (ptr_t) (GetGlobal(&OVERFLOW_MK));
+  else DIE("invalid tilt exception");
+#else
+  ptr_t compunit = (ptr_t) GetGlobal(&TILTEXN_UNIT);
   ptr_t exnmod = (ptr_t) GET_PTR(compunit,n);
   return GET_PTR(exnmod, MOD_MK);
+#endif
 }
+
+/* Unlike Div and Overflow, we don't have a canonical exception
+ * packet for SysErr (which carries a value).  The search for
+ * the exception stamp has to happen relatively late (global_init
+ * isn't early enough).
+ */
+
+/* Get the exception stamp for the ith TiltExn componenet. */
+static int getTiltExnStamp(int i)
+{
+#ifdef FLATTEN_MODULES
+  if (i == SYSERR) return (int) (GetGlobal(&SYSERR_STAMP));
+  else if (i == LIBFAIL) return (int) (GetGlobal(&LIBFAIL_STAMP));
+  else DIE("invalid exception module");
+#else
+  ptr_t compunit = (ptr_t) GetGlobal(&TILTEXN_UNIT);
+  ptr_t tiltexn = GET_PTR(compunit,TILTEXN);
+  ptr_t exnmod = GET_PTR(tiltexn, i);
+  int stamp = GET_INT(exnmod, MOD_STAMP);
+  return stamp;
+#endif
+}
+
+
 
 ptr_t getOverflowExn(void)
 {
-  return exn_lookup(OVERFLOW);
+  return exn_lookup (OVERFLOW);
 }
 
 ptr_t getDivExn(void)
 {
   return exn_lookup(DIV);
 }
+
+
+
 
 /* The components of an exception packet. */
 #define PACKET_STAMP 0
@@ -73,26 +133,6 @@ static ptr_t mkExn(ptr_t exnname, int exnstamp, val_t exnarg, int argPointer)
   return exn;
 }
 
-/* Unlike Div and Overflow, we don't have a canonical exception
- * packet for SysErr (which carries a value).  The search for
- * the exception stamp has to happen relatively late (global_init
- * isn't early enough).
- */
-
-/* The components of the TiltExn structure; see ../Basis/tiltexn.sml. */
-#define SYSERR  0
-#define LIBFAIL 1
-
-/* Get the exception stamp for the ith TiltExn componenet. */
-static int getTiltExnStamp(int i)
-{
-  ptr_t compunit = (ptr_t) GetGlobal(&ml__PLUSUTiltExn__INT__r__INT);
-  ptr_t tiltexn = GET_PTR(compunit,TILTEXN);
-  ptr_t exnmod = GET_PTR(tiltexn, i);
-  int stamp = GET_INT(exnmod, MOD_STAMP);
-  return stamp;
-}
-  
 ptr_t mkSysErrExn(ptr_t msg, int isSome, int errno)
 {
   ptr_t exnname = cstring2mlstring_alloc("SysErr");

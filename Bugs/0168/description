@@ -24,7 +24,7 @@ Transcript:
  NONE
 
 Comments:    
-Fix:         Probably rewrite NumScan.scanReal
-Test: *
-Owner: *
+Fix:         I rewrote NumScan.scanReal to catch the nan and inf cases.
+Test: Test/bug168
+Owner: leaf
 Status: open

@@ -2,6 +2,8 @@ structure Name :> NAME =
   struct
 
     structure Util = Util
+    structure LO = Listops
+
     open Util
 
     val error = fn s => error "Name.sml" s
@@ -10,6 +12,15 @@ structure Name :> NAME =
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
     type var   = int
+
+    (* label =  (num,str) 
+     * Internal label iff num == internal_hash  == Symbol.number(Symbol.varSymbol str) + maxnamespace + 1
+     * else var label if  namespaceint(num,str) == 0 == varInt
+     *                    num - (Symbol.number(Symbol.varSymbol str)) == 0
+     *                    num == (Symbol.number(Symbol.varSymbol str))
+     * etc.
+     * 
+     *)
     type label = int * string
     type labels = label list
     type loc  = int
@@ -86,6 +97,10 @@ structure Name :> NAME =
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
 
 
+    (* For a non-internal label, take the namespace int and return the hash
+     *)
+    fun namespace2hash (i,str) = i + (Symbol.number(Symbol.varSymbol str))
+
     fun construct_label x = x
     fun construct_tag  (i,s) =
 	let val _ = update_tag_counter i
@@ -139,6 +154,7 @@ structure Name :> NAME =
 
 
     fun label2name ((_,str) : label) = str
+
     fun label2string ((num,str) : label) =
       let
         val is_internal = internal_hash str = num
@@ -146,7 +162,7 @@ structure Name :> NAME =
         val space = namespaceint(num,str)
       in (case (is_internal,is_generative) of
 	    (true,false) => (str ^ "_INT")
-	  | (true,true) => (str ^ "_INT_GEN")
+	  | (true,true) => (str ^ "_INTGEN")
 	  | (false,_) =>
 		 (case space of
 		      0 => str
@@ -204,6 +220,7 @@ structure Name :> NAME =
 	val to_eq        = to_meta_lab eq_str
 	val to_coercion  = to_meta_lab coercion_str
 
+
 	val is_unit	 = is_meta_lab unit_str
 	val is_open      = is_meta_lab open_str
 	val is_dt        = is_meta_lab dt_str
@@ -225,8 +242,106 @@ structure Name :> NAME =
 	    end
     end
 
-    fun make_cr_labels l = (internal_label(label2string l ^ "_c"),
-			    internal_label(label2string l ^ "_r"))
+
+    local 
+      fun escape c = 
+	(case c 
+	   of #"." => "\\DOT" 
+	    | #"\\" => "\\\\" 
+	    | _ => str c)
+
+      fun encode s = String.translate escape s
+
+
+      fun decode' chars = 
+	(case chars
+	   of [] => []
+	    | #"\\" :: #"D" :: #"O" :: #"T" :: chars => #"." :: decode' chars
+	    | #"\\" :: #"\\" :: chars => #"\\" :: decode' chars
+	    | c::chars => c:: decode' chars)
+      fun decode s = String.implode (decode' (String.explode s))
+
+
+      (* Special case for readability.  Most of the intermediate 
+       * labels will be structure labels, so we avoid including the 
+       * namespace tag in this case.
+       *)
+
+      fun encode_num (num,str) = 
+	if internal_hash str = num then "i"
+	else if num = strInt then ""
+        else Int.toString (namespaceint (num,str))
+
+      fun decode_num (is,str) = 
+	if is = "i" then internal_hash str
+	else if is = "" then namespace2hash(strInt,str)
+	else (case Int.fromString is of SOME i => namespace2hash(i,str) |  NONE => error ("No name space! str is "^is))
+
+      fun encodel ((num,str) :label) : string = (encode str)^"_"^(encode_num (num,str))
+
+      fun decodel (s : string) : label = 
+	let 
+	  val pieces = String.fields (fn c => c = #"_") s
+	  val (pieces,numstr) = LO.split pieces
+	  val str = LO.concatWith "_" (map decode pieces)
+	  val num = decode_num (numstr,str)
+	in (num,str)
+	end
+
+      fun new_num (newstr,(num,str)) = 
+	if internal_hash str = num then internal_hash newstr
+	else namespace2hash(namespaceint(num,str),newstr)
+
+      val flat_str      = "+F"
+	  
+      fun to_flat str = flat_str^str
+
+      fun get_flat str = 
+	if size str < 2 then NONE
+	else if String.substring(str,0,2) = flat_str then SOME (String.extract(str,2,NONE))
+	else NONE
+
+      fun de_flat str = 
+	(case get_flat str
+	   of SOME str => str
+	    | _ => error "Not a flat label")
+
+
+
+    in
+
+      fun is_flat ((num,str) : label) = isSome (get_flat str)
+
+      fun split_label (olbl: label as (num,str)) : label list = 
+	let
+	  val str = de_flat str
+	  val fields = String.fields (fn c => c = #".") str
+	  val path_lbls = map decodel fields
+	in path_lbls
+	end
+
+      fun join_labels (lbls : label list) : label = 
+	let
+	  val (_,last) = LO.split lbls
+	  val lbl_strings = (map encodel lbls)
+	  val str = to_flat (LO.concatWith "." lbl_strings)
+	  val num = new_num (str,last)
+	  val lbl = (num,str)
+	in  lbl
+	end
+
+    end
+
+
+    fun make_cr_labels l = 
+      if is_flat l then 
+	let
+	  val (root::lbls) = split_label l
+	  val (root_c,root_r) = make_cr_labels root
+	in (join_labels (root_c::lbls),join_labels (root_r::lbls))
+	end
+      else (internal_label(label2string l ^ "_c"),
+	    internal_label(label2string l ^ "_r"))
 
     fun mk_var_hash_table (size,notfound_exn) =
 	let
@@ -292,18 +407,16 @@ structure Name :> NAME =
 
     in
 	fun keep_import (l : label) : bool =
-	    let val r = LabelSet.member (keepers, l)
-		val _ = debugdo (fn () =>
-				 (showOnce();
-				  if r then print ("keeping import " ^
-						   label2string l ^ "\n")
-				  else ()))
+	    let 
+	      val l = if is_flat l then hd (split_label l) else l
+	      val r = LabelSet.member (keepers, l)
+	      val _ = debugdo (fn () =>
+			       (showOnce();
+				if r then print ("keeping import " ^
+						 label2string l ^ "\n")
+				else ()))
 	    in  r
 	    end
     end
 
-
-    val derived_var      = (*Stats.subtimer("Name:derived_var",*)(derived_var)
-    val fresh_named_var  = (*Stats.subtimer("Name:fresh_named_var",*)(fresh_named_var)
-    val fresh_var        = (*Stats.subtimer("Name:fresh_var",*)(fresh_var)
 end

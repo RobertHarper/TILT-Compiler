@@ -194,5 +194,8 @@ sig
    val locToString : location -> string
    val valToString : value -> string
 
+   val location2string : location -> string
+   val term2string : term -> string
+
    val print_globals : unit -> unit
 end

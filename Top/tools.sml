@@ -98,6 +98,7 @@ struct
 	    val _ = Target.checkNative()
 	    val {assembler, ...} = targetConfig()
 	    val tmp = Paths.tmpFile objFile
+	    val _ = (OS.FileSys.remove objFile) handle _ => ()
 	in  (run [assembler, ["-o", tmp, asmFile]];
 	     OS.FileSys.rename {old=tmp, new=objFile})
 	end

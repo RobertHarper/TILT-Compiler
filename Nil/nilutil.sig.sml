@@ -46,14 +46,20 @@ signature NILUTIL =
 
     val extractCbnd : Nil.conbnd -> Nil.var * Nil.con
 
-    val makeConb    : Nil.conbnd -> Nil.bnd  (* Annotated as Runtime *)
+    val makeConb        : Nil.conbnd -> Nil.bnd  (* Annotated as Runtime *)
+    val cbnds2bnds      : Nil.conbnd list -> Nil.bnd list (* Annotated as Runtime *)
 
+    (* Marks as Runtime *)
+    val cbnds2importbnds: Nil.conbnd list -> Nil.import_entry list
+    (*Bnds must all be Con_b *)
+    val bnds2importbnds : Nil.bnd list -> Nil.import_entry list
   (* Given a record expression r and a list lbls
      of labels, produce the term corresponding to r.lbls *)
     val makeSelect  : Nil.exp -> Nil.label list -> Nil.exp
 
 
     val nameType : string -> Nil.con -> Nil.conbnd list * Nil.con
+
     (* Make a record type with bindings for all non-variable types *)
     val makeNamedRecordType : string -> Nil.label list -> Nil.con list -> Nil.conbnd list * Nil.con
 

@@ -1,7 +1,35 @@
-include group "../Elaborator/mapfile-elaborate"
+include group "../Util/mapfile-util"
+include group "../Parser/mapfile-parse"
+
 
 % ------------- Lil directory -------------------
 
-
 source unit LIL = "lil.sig.sml" {}
-source unit Lil = "lil.sml" {LIL}
+source unit Lil = "lil.sml" { LIL }
+
+source unit LILREWRITE = "rewrite.sig.sml" { Lil }
+source unit LilRewrite = "rewrite.sml" { LILREWRITE, Lil, Util, Option }
+
+source unit LILRENAME = "lilrename.sig.sml" { Lil }
+source unit LilRename = "lilrename.sml" { LILRENAME, Lil, Option, Name, Util }
+
+source unit LILSUBST = "lilsubst.sig.sml" {Lil,SUBST}
+source unit LilSubst = "lilsubst.sml" { LILSUBST, Lil, Subst, Option, Name, Stats, LilRewrite, LilRename }
+
+source unit REDUCE = "reduce.sig.sml" { Lil }
+source unit Reduce = "reduce.sml"     { REDUCE, Lil, LilSubst }
+
+source unit LILDEFS = "lildefs.sig.sml" { Lil }
+source unit LilDefs = "lildefs.sml" { LILDEFS, Lil, Util }
+
+source unit LILCONTEXT = "lilcontext.sig.sml" { Lil }
+source unit LilContext = "lilcontext.sml" { LILCONTEXT, Lil, Util, Name }
+
+source unit TRANSLATIONDEFS = "translationdefs.sig.sml" { Lil }
+source unit TranslationDefs = "translationdefs.sml" { TRANSLATIONDEFS, Lil, LilDefs, Util }
+
+source unit NILTOLIL = "niltolil.sig.sml" { Nil, Lil }
+source unit NilToLil = "niltolil.sml" { NILTOLIL, 
+	Nil, Lil, LilDefs, TranslationDefs, Name, Util, ListOps, TilWord32, 
+	LilSubst, NilUtil, NilContext, Normalize, SingletonElim
+}

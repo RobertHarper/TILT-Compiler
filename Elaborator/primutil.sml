@@ -212,9 +212,40 @@ struct
 	    val exp2value = (fn e => (case (exp2value e) of
 					  NONE => bad "exp2value"
 					| SOME v => v))
+
+	    (* NJ fucks up Real.fromString - it doesn't not handle nan and inf properly.
+	     * So if we are compiling under NJ, Real.fromString may fail, and so
+	     * we have to try to patch it up here.  This should never happen under the
+	     * TILT compiled tilt.
+	     *)
+	    fun string2float s = 
+	      let
+		fun unsigned_alpha_2float s = 
+		  if (s = "inf") orelse (s = "infinity") then (Real.posInf)
+		  else if s = "nan" then (0.0/0.0) 
+ 	          else bad "value2float"
+	      in
+		(* I believe that the only valid float strings that contain letters other than "E" or "e"
+		 * Are [+,~,-]nan and [+,~,-]inf[inity].
+		 *)
+		if (Char.contains s #"n") orelse (Char.contains s #"i") then
+		  let
+		    val c0 = String.sub (s,0)
+		  in
+		    if Char.isAlpha c0 then unsigned_alpha_2float s
+		    else
+		      let 
+			val neg = (c0 = #"~") orelse (c0 = #"-")
+			val r = unsigned_alpha_2float (String.extract(s,1,NONE))
+		      in if neg then ~r else r
+		      end
+		  end
+		else bad "value2float"
+	      end
+
 	    fun value2float fs (float (fs',s)) = if (fs = fs')
-						     then (case (Float.fromString s) of
-							       NONE => bad "value2float"
+						     then (case Float.fromString s of
+							       NONE => string2float s
 							     | SOME f => f)
 						 else bad "value2float"
 	      | value2float _ _ = bad "value2float"

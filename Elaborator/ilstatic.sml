@@ -1043,8 +1043,8 @@ structure IlStatic
      | (LET (bnds,e)) =>
 	   let fun sfolder (bnd,subst) = (case bnd
 					    of BND_EXP _ => subst
-					     | BND_CON (v,c) => subst_add_convar(subst,v,c)
-					     | BND_MOD (v,_,m) => subst_add_modvar(subst,v,m))
+					     | BND_CON (v,c) => subst_add_convar(subst,v,(con_subst(c,subst)))
+					     | BND_MOD (v,_,m) => subst_add_modvar(subst,v,(mod_subst(m,subst))))
 	       fun cfolder ((_,dec),ctxt) = add_context_dec(ctxt,dec)
 	       val vdecs = GetBndsDecs(ctxt,bnds)
 	       val va_decs = andfold #1 vdecs
@@ -1083,7 +1083,8 @@ structure IlStatic
 	   let
 	       val ctxt' = foldl (fn (v,ctxt) => add_context_con'(ctxt,v,KIND,NONE)) ctxt tyvars
 	       val _ = debugdo (fn () => print "Typechecking a FOLD:\n")
-	       val cRollUnrolled = ConUnroll cRoll
+	       val (_,cRollNorm,_) = HeadNormalize(cRoll,ctxt)
+	       val cRollUnrolled = ConUnroll cRollNorm
 	   in
 	       if eq_con(ctxt', cUnroll, cRollUnrolled) then (true,CON_COERCION(tyvars,cUnroll,cRoll))
 	       else error "FOLD: unrolled type is not unrolling of rolled type"
@@ -1092,7 +1093,8 @@ structure IlStatic
 	   let
 	       val ctxt' = foldl (fn (v,ctxt) => add_context_con'(ctxt,v,KIND,NONE)) ctxt tyvars
 	       val _ = debugdo (fn () => print "Typechecking an UNFOLD:\n")
-	       val cRollUnrolled = ConUnroll cRoll
+	       val (_,cRollNorm,_) = HeadNormalize(cRoll,ctxt)
+	       val cRollUnrolled = ConUnroll cRollNorm
 	   in
 	       if eq_con(ctxt', cUnroll, cRollUnrolled) then (true,CON_COERCION(tyvars,cRoll,cUnroll))
 	       else error "UNFOLD: unrolled type is not unrolling of rolled type"
@@ -1867,6 +1869,7 @@ structure IlStatic
     val GetModSig = fn (d,m) => ((* Stats.counter "ilstatic.externgetmodsig" (); *)
 				#2(GetModSig(m,d)))
     val GetBndDec = fn arg => #2(GetBndDec arg)
+    val GetSbndSdec = fn arg => #2(GetSbndSdec arg)
     val GetBndsDecs = fn arg => map #2 (GetBndsDecs arg)
     val GetSbndsSdecs = fn arg => map #2(GetSbndsSdecs arg)
     val Module_IsValuable = fn (d,m) => Module_IsValuable m d

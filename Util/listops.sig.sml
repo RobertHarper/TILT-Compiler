@@ -121,6 +121,7 @@ signature LISTOPS =
 
     val eq_len : 'a list * 'b list -> bool
     val eq_len3 : 'a list *'b list * 'c list -> bool
+    (*split (l @ [a]) == (l,a) *)
     val split : 'a list -> 'a list * 'a
     val opt_cons : 'a -> ('a list option) -> 'a list
     val find2 : ('a * 'b -> bool) -> ('a list * 'b list) -> ('a * 'b) option
@@ -146,6 +147,7 @@ signature LISTOPS =
    (*Intersperse the elements of the list with a separator
     *)
    val join : 'a -> 'a list -> 'a list
+   val concatWith : string -> string list -> string
 
    val toString : ('a -> string) -> 'a list -> string
    val fromString' : (string -> 'a option) -> string -> ('a list * substring) option

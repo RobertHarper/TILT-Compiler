@@ -49,6 +49,7 @@ signature ILSTATIC =
     val GetModSig     : Il.context * Il.mod  -> Il.signat
     val GetBndDec     : Il.context * Il.bnd  -> Il.dec
     val GetBndsDecs   : Il.context * Il.bnds -> Il.decs
+    val GetSbndSdec   : Il.context * Il.sbnd -> Il.sdec
     val GetSbndsSdecs : Il.context * Il.sbnds-> Il.sdecs
 
     (* ---------- Valuability ------------------------------------- *)

@@ -25,6 +25,7 @@ struct
 
     val debug = Stats.ff("vararg_debug")
     val error = fn s => Util.error "vararg.sml" s
+    val show_generate = Stats.ff "show_generate"
 
     (* produces term-level functions with the following signature and definition:
      * produces constructor-level functions with the following signature and definition:
@@ -185,9 +186,22 @@ struct
 					 exports = [ExportValue(oneargLabel,oneargVar),
 						    ExportValue(varargLabel,varargVar)]}
 
+		     fun mprint phasename nilmod = 
+		       if !show_generate then
+			 Ppnil.pp_module
+			 {module = nilmod,
+			  header = phasename,
+			  name = "Generate Vararg",
+			  pass = phasename} 
+		       else ()
+
+		     val _ = mprint "Source"  nilmod
 		     val nilmod = Linearize.linearize_mod nilmod
+		     val _ = mprint "Linearize"  nilmod
 		     val nilmod = Reify.reify_mod nilmod
+		     val _ = mprint "Reify"  nilmod
 		     val nilmod = ToClosure.close_mod nilmod
+		     val _ = mprint "ClosureConv"  nilmod
 
 		     val MODULE{bnds,imports=[],
 				exports=[ExportValue(oneargLabel',oneargVar),
@@ -458,98 +472,106 @@ struct
       * original function name funvar.
       *)
      and do_fun (state, extras)
-	        (funvar, c,
-		 func as Function{effect,recursive,
-			  tFormals,fFormals,eFormals,
-			  body,...},
-		 pvar) =
-	 let val arg as {openness,body_type,tFormals=tFa,eFormals=eFa,fFormals=fFa,...} = rename_arrow (strip_arrow_norm state c,tFormals)
-
-	     fun folder ((v,e),alpha) = let val v' = derived_var v
-	                                    val e' = NilRename.renameExp e
-					in
-					    (Exp_b(v',TraceUnknown,e'),
-					     Alpha.rename(alpha, v, v'))
-					end
-
-	     val (extraBnds,alpha) =
-	       (case recursive
-		  of NonRecursive => ([],Alpha.empty_context())
-		   | _ => foldl_acc folder (Alpha.empty_context()) extras)
-
-	     fun change(v,argc,labels,cons) =
-		 let
-		     val innerState = add_con(state,v,argc)
-		     val vars = map (Name.fresh_named_var o Name.label2name) labels
-		     val cons = map (fn c => NilRename.renameCon (do_con state c)) cons
-		     val vtrlist = map (fn v => (v, TraceUnknown)) vars
-		     val trs = map (fn _ => TraceUnknown) vars
-
-		     val body_type = NilRename.renameCon (do_con innerState body_type)
-
-		     val c = AllArrow_c{openness=openness,effect=effect,
-					tFormals=[],fFormals=0w0,eFormals=cons,body_type=body_type}
-
-		     val cvar   = Name.fresh_named_var (Name.var2string funvar ^ "_type")
-		     val cbnd = Con_b(Compiletime, Con_cb(cvar, c))
-
-		     val (recordBnds,_) = NilDefs.mk_record_with_gctag(labels,
-								       SOME trs,
-								       map NilRename.renameCon cons,
-								       map Var_e vars,
-								       SOME v)
+       (funvar, c,
+	func as Function{effect,recursive,
+			 tFormals,fFormals,eFormals,
+			 body,...},
+	pvar) =
+       let 
+	 val arg as {openness,body_type,tFormals=tFa,eFormals=eFa,fFormals=fFa,...} = rename_arrow (strip_arrow_norm state c,tFormals)
+	   
+	 fun folder ((v,e),alpha) = let val v' = derived_var v
+					val e' = NilRename.renameExp e
+				    in
+				      (Exp_b(v',TraceUnknown,e'),
+				       Alpha.rename(alpha, v, v'))
+				    end
+				  
+	 val (extraBnds,alpha) =
+	   (case recursive
+	      of NonRecursive => ([],Alpha.empty_context())
+	       | _ => foldl_acc folder (Alpha.empty_context()) extras)
+	      
+	 fun change(v,argc,labels,cons) =
+	   let
+	     val innerState = add_con(state,v,argc)
+	     val vars = map (Name.fresh_named_var o Name.label2name) labels
+	     val cons = map (fn c => NilRename.renameCon (do_con state c)) cons
+	     val vtrlist = map (fn v => (v, TraceUnknown)) vars
+	     val trs = map (fn _ => TraceUnknown) vars
+	       
+	     val body_type = NilRename.renameCon (do_con innerState body_type)
+	       
+	     val c = AllArrow_c{openness=openness,effect=effect,
+				tFormals=[],fFormals=0w0,eFormals=cons,body_type=body_type}
+	       
+	     val cvar   = Name.fresh_named_var (Name.var2string funvar ^ "_type")
+	     val cbnd = Con_b(Compiletime, Con_cb(cvar, c))
+	       
+	     val (recordBnds,_) = NilDefs.mk_record_with_gctag(labels,
+							       SOME trs,
+							       map NilRename.renameCon cons,
+							       map Var_e vars,
+							       SOME v)
 		     (* Create a record that collects the flattened arguments in the form the original function used.
 		      * Hopefully known projection optimizations will reduce projections from this record,
 		      * and then it will be removed by dead code checks.
 		      *)
-		     val body = do_exp innerState body
-		     val body = NilRename.alphaERenameExp alpha body
-		     val body = makeLetE Sequential (recordBnds @ extraBnds) body
-		 in  (cbnd, ((funvar, Var_c cvar),
+	     val body = do_exp innerState body
+	     val body = NilRename.alphaERenameExp alpha body
+	     val body = makeLetE Sequential (recordBnds @ extraBnds) body
+	   in  (SOME cbnd, ((funvar, Var_c cvar),
 			    Function{effect=effect,recursive=recursive,
 				     tFormals=[],fFormals=[],eFormals=vtrlist,
 				     body=body}))
-		 end
-	     fun default fvar =
+	   end
+	 fun default fvar =
+	   let
+	     val (tFa,state') = do_vklist state tFa
+	       
+	     val (eFormals,state') = do_vtrclist state' (zip eFormals eFa)
+	       
+	     val state' = foldl (fn (v, state) => add_con(state, v, float64)) state' fFormals
+	       
+	     val body = do_exp state' body
+	     val body = NilRename.alphaERenameExp alpha body
+	     val body = makeLetE Sequential extraBnds body
+	       
+	     val (eFormals,eFa) = unzip eFormals
+
+	     val (cbnd,c) =
+	       if fvar = funvar then (NONE,do_con state c)
+	       else
 		 let
-  		     val (tFa,state') = do_vklist state tFa
-		     val eFormals = zip eFormals eFa
-		     val (eFormals,state') = do_vtrclist state' eFormals
+		   val body_type = do_con state' body_type
 
-		     val state' = foldl (fn (v, state) => add_con(state, v, float64)) state' fFormals
-		     val body_type = do_con state' body_type
-
-		     val body = do_exp state' body
-		     val body = NilRename.alphaERenameExp alpha body
-		     val body = makeLetE Sequential extraBnds body
-
-		     val (eFormals,eFa) = unzip eFormals
-
-		     val c =
-		       AllArrow_c{openness=openness,effect=effect,
-				  tFormals=tFa,fFormals=fFa,eFormals=eFa,body_type=body_type}
-		     val c = NilRename.renameCon c
-		     val cvar = Name.fresh_named_var (Name.var2string funvar ^ "_def_type")
-		     val cbnd = Con_b(Compiletime,Con_cb(cvar,c))
-		 in  (cbnd, ((fvar, Var_c cvar),
-			       Function{effect=effect,recursive=recursive,
-					tFormals=tFormals, fFormals=fFormals, eFormals=eFormals,
-					body=body}))
+		   val c = 
+		     AllArrow_c{openness=openness,effect=effect,
+				tFormals=tFa,fFormals=fFa,eFormals=eFa,body_type=body_type}
+		   val c = NilRename.renameCon c
+		   val cvar = Name.fresh_named_var (Name.var2string funvar ^ "_def_type")
+		   val cbnd = Con_b(Compiletime,Con_cb(cvar,c))
+		 in (SOME cbnd,Var_c cvar)
 		 end
+	   in  (cbnd, ((fvar, c),
+		       Function{effect=effect,recursive=recursive,
+				tFormals=tFormals, fFormals=fFormals, eFormals=eFormals,
+				body=body}))
+	   end
 
-	 in  (case (tFormals,fFormals,eFormals,eFa) of
-		  ([],[],[(v,_)],[argc]) =>
-		      (case (is_record state argc) of
-			   NOT_RECORD => default funvar
-			 | RECORD(ls,cs) => if ((length ls) <= get_count state)
-						then change(v,argc,ls,cs)
-					    else default funvar
-			 | DYNAMIC => default pvar)(* Keep the old function, but give it a new name.
-						    * The old name will be a varargification of the new one, supplied by
-						    * the getExtra function below.
-						    *)
-		| _ => default funvar)
-	 end
+       in  (case (tFormals,fFormals,eFormals,eFa) of
+	      ([],[],[(v,_)],[argc]) =>
+		(case (is_record state argc) of
+		   NOT_RECORD => default funvar
+		 | RECORD(ls,cs) => if ((length ls) <= get_count state)
+				      then change(v,argc,ls,cs)
+				    else default funvar
+		 | DYNAMIC => default pvar)(* Keep the old function, but give it a new name.
+					    * The old name will be a varargification of the new one, supplied by
+					    * the getExtra function below.
+					    *)
+	    | _ => default funvar)
+       end
 
      (* Get extra binding creating a vararg version of the given function with var as the vararg'd name and pvar as the original,
       * if the function is eligible to be vararg'd.
@@ -692,7 +714,8 @@ struct
 			   val state = foldl (fn ((v,c,f,_),s) => add_con(s,v,c))
 			       state varFunPvar
 
-			   val (bnds,vcflist) = unzip (map (do_fun (state, extras)) varFunPvar)
+			   val (bndsopts,vcflist) = unzip (map (do_fun (state, extras)) varFunPvar)
+			   val bnds = List.mapPartial (fn x => x) bndsopts
 
 			   val extraBnds = map (fn (v,e) => (Exp_b(v,TraceUnknown,NilRename.renameExp e))) extras
 		       in  (bnds @ ((Fixopen_b vcflist)::extraBnds), state)

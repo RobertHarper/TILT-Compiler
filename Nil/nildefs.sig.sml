@@ -80,6 +80,12 @@ signature NILDEFS =
     (*Translate between paths represented as lists of labels
      * and constructor paths
      *)
+    val path2exp : Nil.var * Nil.label list -> Nil.exp
+    val exp2path : Nil.exp -> (Nil.var * Nil.label list) option
+
+    (*Translate between paths represented as lists of labels
+     * and constructor paths
+     *)
     val path2con : Nil.var * Nil.label list -> Nil.con
     val con2path : Nil.con -> (Nil.var * Nil.label list) option
 

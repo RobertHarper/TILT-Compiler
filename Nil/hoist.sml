@@ -314,7 +314,7 @@ struct
 			    context = NilContext.empty(),
 			    econtext = empty_econtext,
 			    levelmap = VarMap.empty,
-			    lastfnlevel = toplevel}
+			    lastfnlevel = toplevel}  
 
 	val empty_state = STATE{hoistmap = IntMap.empty, choistmap = IntMap.empty}
 
@@ -415,10 +415,6 @@ struct
 
 	fun checkLevel (ENV{levelmap,...}, v) = checkvar(levelmap, v)
 
-	(* headNormalize : env * con -> con *)
-	fun headNormalize (ENV{context,...}, con) =
-	    #2 (Normalize.reduce_hnf (context, con))
-
 	(* stripArrow : env * con -> NilUtil.arrow *)
 	fun stripArrow (ENV{context,...}, c) =
 	    Normalize.strip_arrow_norm context c
@@ -451,6 +447,18 @@ struct
 	fun insertEquation (ENV{currentlevel,context,econtext,levelmap,lastfnlevel}, v, c) =
 	    let
 		val context' = NilContext.insert_equation (context, v, c)
+	    in
+		ENV{context = context',
+		    econtext = econtext,
+		    currentlevel = currentlevel,
+		    levelmap = levelmap,
+		    lastfnlevel = lastfnlevel}
+	    end
+
+	(* insertCbnd : env * cbnd -> env *)
+	fun insertCbnd (ENV{currentlevel,context,econtext,levelmap,lastfnlevel}, cb) =
+	    let
+		val context' = NilContext.insert_cbnd (context, cb)
 	    in
 		ENV{context = context',
 		    econtext = econtext,
@@ -797,7 +805,7 @@ struct
 	  val (env, state, arglevel) = bumpCurrentlevel (env, state)
 
           val (tFormals, env, state, levels1) =
-	        rtFormals_arrow(tFormals, env, state, arglevel)
+	        rtFormals(tFormals, env, state, arglevel)
           val (eFormals, env, state, levels2) =
 	        reFormals_arrow(eFormals, env, state, arglevel)
 
@@ -928,16 +936,16 @@ struct
 	  limitCon (levnum, con, env, state, levels')
       end
 
-  and rcbnd phase (Con_cb(v,con), env, state) =
+  and rcbnd phase (Con_cb(v,oldcon), env, state) =
       let
-	  val (con, state, levels) = rtc phase (con, env, state)
+	  val (con, state, levels) = rtc phase (oldcon, env, state)
 	  val env = bindLevel (env, v, deepestLevel levels)
 	  (*val _ = (print "Bind ";
 		   Ppnil.pp_var v;
 		   print " at ";
 		   print (Int.toString (deepestLevel levels));
 		   print "\n")*)
-	  val env = insertEquation (env, v, con)
+	  val env = insertEquation (env, v, oldcon)
 	  val state = hoistCbnd phase (state, levels, Con_cb(v,con))
       in
 	  (env, state)
@@ -945,12 +953,13 @@ struct
 
     | rcbnd phase (cbnd as Open_cb(v,tFormals,body), env, state) =
 	let
-	    val inner_env = enterFunction env
+
 	    val (inner_env, state, arglevel) =
-		bumpCurrentlevel (inner_env, state)
+		bumpCurrentlevel (env, state)
+	    val inner_env = enterFunction inner_env
 
 	    val (tFormals, inner_env, state, levels1) =
-		rtFormals_arrow(tFormals, inner_env, state, arglevel)
+		rtFormals(tFormals, inner_env, state, arglevel)
 
 	    val (body, state, levels2) =
 	        rtc_limited phase arglevel (body, inner_env, state)
@@ -1126,13 +1135,12 @@ struct
 	 * to prevent non-valuable bindings from being hoisted out of
 	 * the scope of the handler.
 	 *)
-	val (body_env,state,body_level)   =  bumpCurrentlevel (env, state)
-	val (body, state, levels1, _, _)  =  rexp_limited body_level (body, body_env, state)
+	val (inner_env,state,body_level)   =  bumpCurrentlevel (env, state)
+	val (body, state, levels1, _, _)  =  rexp_limited body_level (body, inner_env, state)
 
 	val (result_type, state, levels2) =  rtype (result_type, env, state)
 
-	val (inner_env, state, handlerlevel) = bumpCurrentlevel (env, state)
-	val inner_env = bindLevel(inner_env, bound, handlerlevel)
+	val inner_env = bindLevel(inner_env, bound, body_level)
 	val inner_env = bindEff(inner_env, bound, UNKNOWN_EFF)
 
 	val limitlevel = lastFnLevel env
@@ -1317,9 +1325,11 @@ struct
                in a sequence of bindings. We re-assign levels
                to the functions defined here after we know
 	       where the recursive nest is going. *)
+
             val (inner_env, state, fixopenlevel) =
 		bumpCurrentlevel (env, state)
             val inner_env = enterFunction inner_env
+
 	    val inner_env = bindsLevel (inner_env, vars, fixopenlevel)
 
 	    fun loop ([], rev_fns, rev_fn_effs, state, levelslist) =
@@ -1423,6 +1433,7 @@ struct
 
 	  val (default, default_leftover_state, levels3, _, _) =
 		  rexpopt_limited limitlevel (default, env, empty_state)
+
           val state = mergeStates(state, default_leftover_state)
 
 	  val (result_type, state, levels4) = rtype(result_type, env, state)
@@ -1515,14 +1526,20 @@ struct
 		     fFormals, body, ...},
 	    env, state) =
       let
-	  val {openness, effect, tFormals=tFa, eFormals=eFa, fFormals=fFa, body_type, ...} = stripArrow (env, con)
+	  val {openness, effect, tFormals=tFa, eFormals=eFa, fFormals=fFa, body_type, ...} = NilUtil.rename_arrow (stripArrow (env, con),tFormals)
 
 	  (* rfun is only called to process a part of a FixOpen_b.
 	     Therefore, the current level has already been bumped. *)
 	  val arglevel = currentLevel env
 
+	  (* Don't bother to rewrite the kinds, since they get rewritten as
+	   * part of the con below.
+	   *)
           val env =
-                  rtFormals(tFormals, tFa, env, arglevel)
+	    let
+	      fun folder (v,(_,k),env) = insertKind(bindLevel(env, v, arglevel), v, k)
+	    in Listops.foldl2 folder env (tFormals,tFa)
+	    end
 
           val (eFormals, env, state, levels1) =
                   reFormals(eFormals, env, state, arglevel)
@@ -1611,32 +1628,17 @@ struct
       end
 
   (* Translates kinds of var/kind pairs and binds levels for the variables *)
-  and rtFormals (tFormals, tFa, env, arglevel) =
-      let
-	  fun loop ([], [], env) =
-	      env
-            | loop (v::rest, (_, k)::rest', env) =
-	      let
-		  val env = bindLevel(env, v, arglevel)
-		  val env = insertKind(env, v, k)
-	      in
-		  loop(rest, rest', env)
-	      end
-	    | loop _ = raise Fail "tFormals length mismatch in function vs. its type annotation"
-      in
-	  loop(tFormals, tFa, env)
-      end
 
-  and rtFormals_arrow (tFormals, env, state, arglevel) =
+  and rtFormals (tFormals, env, state, arglevel) =
       let
 	  fun loop ([], rev_accum, env, state, levelslist) =
 	      (rev rev_accum, env, state, mergeMultiLevels levelslist)
-            | loop ((v,k)::rest, rev_accum, env, state, levelslist) =
+            | loop ((v,oldk)::rest, rev_accum, env, state, levelslist) =
 	      let
 		  val (k, state, new_levels) =
-                         rkind_limited arglevel (k, env, state)
+                         rkind_limited arglevel (oldk, env, state)
 		  val env = bindLevel(env, v, arglevel)
-		  val env = insertKind(env, v, k)
+		  val env = insertKind(env, v, oldk)
 	      in
 		  loop(rest, (v,k)::rev_accum, env, state, new_levels::levelslist)
 	      end
@@ -1682,49 +1684,55 @@ struct
       end
 
 
-  and rkind_limited _ (Type_k, env : env, state : state) =
-         (Type_k, state, emptyLevels)
-    | rkind_limited limitlevel (Single_k c, env, state) =
-      let
-	  val (c, state, levels) = rtype_limited limitlevel (c, env, state)
-      in
-	  (Single_k c, state, levels)
-      end
-    | rkind_limited limitlevel (SingleType_k c, env, state) =
-      let
-	  val (c, state, levels) = rtype_limited limitlevel (c, env, state)
-      in
-	  (SingleType_k c, state, levels)
-      end
-    | rkind_limited limitlevel (Arrow_k(openness, tFormals, kind),env,state) =
-      let
-          (* Don't bump the level because there's no
-             place to put bindings here *)
-	  val (tFormals, env, state, levels1) =
-	         rtFormals_arrow(tFormals, env, state, limitlevel)
+  and rkind_limited limitlevel args = rkind' true limitlevel args
+  and rkind (args as (_,env,_)) = rkind' false (currentLevel env) args
+  and rkind' limit limitlevel (k, env: env, state: state) = 
+    let
+      val rtype = if limit then rtype_limited limitlevel else rtype
+    in
+      case k
+	of Type_k => (Type_k, state, emptyLevels)
+	 | Single_k c => 
+	  let
+	    val (c, state, levels) = rtype (c, env, state)
+	  in
+	    (Single_k c, state, levels)
+	  end
+	 | SingleType_k c => 
+	  let
+	    val (c, state, levels) = rtype  (c, env, state)
+	  in
+	    (SingleType_k c, state, levels)
+	  end
+	 | Arrow_k(openness, tFormals, kind) =>
+	  let
 
-	  val (kind, state, levels2) =
-                 rkind_limited limitlevel (kind, env, state)
+	    val (tFormals, env, state, levels1) =
+	      rtFormals(tFormals, env, state, limitlevel)
+	      
+	    val (kind, state, levels2) =
+	      rkind' true limitlevel (kind, env, state)
+	      
+	    val levels = mergeLevels(levels1, levels2)
+	  in
+	    (Arrow_k(openness, tFormals, kind), state, levels)
+	  end
 
-	  val levels = mergeLevels(levels1, levels2)
-      in
-	  (Arrow_k(openness, tFormals, kind), state, levels)
-      end
-
-    | rkind_limited limitlevel (Record_k lvk_seq, env, state) =
-      let
-	  val (lvlist, kinds) = Listops.unzip (Sequence.toList lvk_seq)
-	  val (labels, vars) = Listops.unzip lvlist
-	  val tFormals = Listops.zip vars kinds
-
-	  val (tFormals, _, state, levels) =
-	      rtFormals_arrow(tFormals, env, state, limitlevel)
-
-	  val kinds = map (#2) tFormals
-	  val lvk_seq = Sequence.fromList (ListPair.zip (lvlist, kinds))
-      in
-	  (Record_k lvk_seq, state, levels)
-      end
+	 | Record_k lvk_seq =>
+	  let
+	    val (lvlist, kinds) = Listops.unzip (Sequence.toList lvk_seq)
+	    val (labels, vars) = Listops.unzip lvlist
+	    val tFormals = Listops.zip vars kinds
+	      
+	    val (tFormals, _, state, levels) =
+	      rtFormals(tFormals, env, state, limitlevel)
+	      
+	    val kinds = map (#2) tFormals
+	    val lvk_seq = Sequence.fromList (ListPair.zip (lvlist, kinds))
+	  in
+	    (Record_k lvk_seq, state, levels)
+	  end
+    end
 
   fun optimize (MODULE {bnds, imports, exports}) =
       let
@@ -1732,20 +1740,33 @@ struct
              estimate totality of term-level imports *)
 
 	  fun split ([], env, imps) = (env, rev imps)
-	    | split ((imp as ImportValue(l,v,_,c))::rest, env, imps) =
+	    | split ((imp as ImportValue(l,v,tr,oldc))::rest, env, imps) =
 	      let
-		  val env = bindLevel(env, v, toplevel)
-		  val env = bindEff(env, v, con2eff c)
+		val (c, state,_) =
+		  rtype (oldc, env, empty_state)
+		  
+		val (bnds, _, _) = extractCbnds (state, toplevel)
+		val ibnds = map ImportBnd bnds
+
+		val env = bindLevel(env, v, toplevel)
+		val env = bindEff(env, v, con2eff c)
 	      in
-		  split(rest, env, imp :: imps)
+		  split(rest, env,  ImportValue(l,v,tr,c)::(List.revAppend (ibnds, imps)))
 	      end
-	    | split ((imp as ImportType(l,v,k))::rest, env, imps) =
+	    | split ((imp as ImportType(l,v,oldk))::rest, env, imps) =
 	      let
-		  val env = insertKind(env, v, k)
-		  val env = insertLabel(env, l, v)
-		  val env = bindLevel(env, v, toplevel)
+		val (k, state,_) =
+		  rkind (oldk, env, empty_state)
+		  
+		val (bnds, _, _) = extractCbnds (state, toplevel)
+
+		val ibnds = map ImportBnd bnds
+
+		val env = insertKind(env, v, oldk)
+		val env = insertLabel(env, l, v)
+		val env = bindLevel(env, v, toplevel)
 	      in
-		  split(rest, env, imp :: imps)
+		  split(rest, env, ImportType(l,v,k):: (List.revAppend (ibnds, imps)))
 	      end
 	    | split (ImportBnd (phase, cb)::rest, env, imps) =
 	      let
@@ -1761,17 +1782,30 @@ struct
 		split(rest, env, List.revAppend(ibnds, imps))
 	      end
 	    
-	  val (initial_env, imports) = split (imports, empty_env, [])
-	  val initial_state = empty_state
+	  val (env, imports) = split (imports, empty_env, [])
+	  val state = empty_state
 
           val _ = msg "  Imports processed\n"
 
-	  val (_, final_state, _) =
-	      rbnds(bnds, initial_env, initial_state)
 
-	  val (bnds',_,_,_) = extractBnds(final_state, toplevel)
+	  (* This is a hack to make the code readable.  It may not be a good idea
+	   * for performance, since it tends to separate definitions from their
+	   * uses.  But it makes the code clearer, since all of the type and function
+	   * defs get lifted, followed by all of the effectful actions.
+	   * The idea is just to bump the current level before hoisting the bnds.
+	   * pure bindings will get hoisted out of the bumped current level to the top
+	   * level, but the effectful bindings will be kept in a separate level.
+	   *)
+	  val (env, state, effectlevel) = bumpCurrentlevel (env, state)
+
+	  val (_, state, _) =
+	      rbnds(bnds, env, state)
+
+	  val (effect_bnds,_,state,_) = extractBnds(state, effectlevel)
+	  val (pure_bnds,_,_,valuable) = extractBnds(state, toplevel)
+	  val _ = if not valuable then print "Warning: non-valuable binding hoisted to top level\n" else ()
       in
-	  MODULE {bnds=bnds',imports=imports,exports=exports}
+	  MODULE {bnds=pure_bnds@effect_bnds,imports=imports,exports=exports}
       end
 
 end

@@ -83,7 +83,7 @@ source unit RBSet = "nj/redblack-set-fn.sml" {ORD_KEY ORD_SET LibBase}
 source interface Name = "name.int" {NAME}
 source unit Name : Name = "name.sml" {
 	NAME Util Symbol Int Word SplaySetFn SplayMapFn Char String
-	Stats ORD_KEY HashTable (*RBMap RBSet*)
+	Stats ORD_KEY HashTable (*RBMap RBSet*) Listops
 }
 source unit NAMEBLAST = "nameblast.sig.sml" {
 	NAME Blaster Name

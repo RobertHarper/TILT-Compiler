@@ -32,6 +32,7 @@ struct
 	fun subtimer(str,f) = if (!doTimer) then Stats.subtimer(str,f) else f
 
 	fun inc r = r := !r + 1
+	fun dec r = r := !r - 1
 
 	val coercion_cancel = Stats.tt "CancelCoercions"
 	val reduce_varargs = Stats.tt "ReduceVarargs"
@@ -48,6 +49,7 @@ struct
 	val oneargs_reduced = ref 0
 	val onearg_apps_reduced = ref 0
 	val imports_killed = ref 0
+	val uncurried = ref 0
 
 	fun reset_stats() =
 	  let in
@@ -58,7 +60,8 @@ struct
 	    varargs_reduced := 0;
 	    oneargs_reduced := 0;
 	    onearg_apps_reduced := 0;
-	    imports_killed := 0
+	    imports_killed := 0;
+	    uncurried := 0
 	  end
 
 	fun chat lev str = if (!chatlev) >= lev then print str else ()
@@ -91,7 +94,10 @@ struct
 	     print " onearg apps reduced\n";
 	     print "\t";
 	     print (Int.toString (!imports_killed));
-	     print " imports killed\n"
+	     print " imports killed\n";
+	     print "\t";
+	     print (Int.toString (!uncurried));
+	     print " functions uncurried\n"
 	     ) else ()
 
 
@@ -247,6 +253,9 @@ struct
 	datatype equivalent = UNKNOWN
 	                    | OPTIONALe of exp
                             | MUSTe of exp
+	                              (*f -> ETAe (i,f_uncurry,args) means
+				       *  f(a_1)(a_2)...(a_i) === f_uncurry(args@a_1@a_2@...@a_i)
+				       *)
 	                    | ETAe of int * var * (con list * exp list * exp list) list
 	                    | OPTIONALc of con
                             | MUSTc of con
@@ -434,6 +443,9 @@ struct
 	  fun add_label(state as STATE{equation,...},l,v) =
 	      updateContext(state,NilContext.insert_label(equation,l,v))
 
+	  fun find_labelled_var(state as STATE{equation,...},l) =
+	    NilContext.find_labelled_var(equation,l)
+
 	  fun add_curry_processed(STATE{avail,equation,mapping,curry_processed,current,params},v) =
 	       STATE{equation=equation,
 		     avail=avail,
@@ -614,7 +626,7 @@ struct
 
 	fun make_lambda ((v,c),f) = Let_e(Sequential,[Fixopen_b([((v,c),f)])],Var_e v)
 
-	datatype wrap = WRAP of {v: var,
+	datatype wrap = WRAP of {v: var, c : con,
 				 openness: openness, eff: effect,
 				 r: recursive,
 				 vklist: (var * kind) list,
@@ -623,15 +635,17 @@ struct
 				 vflist: var list,
 				 body_type: con}
         (* 1: Function name
-	 * 2: Function effect
-	 * 3: Function recursion status
-	 * 4: Formal constructor parameters
-	 * 5, 6: Formal term parameters
-	 * 7: Formal float parameters
-	 * 8: Result type
+	 * 2: Function type
+	 * 3: Function effect
+	 * 4: Function recursion status
+	 * 5: Formal constructor parameters
+	 * 6, 7: Formal term parameters
+	 * 8: Formal float parameters
+	 * 9: Result type
 	 *)
 
 	fun wrap_get_v (WRAP {v,...}) = v
+	fun wrap_get_c (WRAP {c,...}) = c
 	fun wrap_get_openness (WRAP {openness,...}) = openness
 	fun wrap_get_eff (WRAP {eff,...}) = eff
 	fun wrap_get_r (WRAP {r,...}) = r
@@ -652,7 +666,7 @@ struct
 		     let
 		       val {openness, tFormals = vklist, eFormals = clist,body_type,...} = rename_arrow(strip_arrow (state, c),tFormals)
 		     in
-		       loop (WRAP {v = v, openness = openness, eff = eff, r = r, vklist = vklist, vtlist = vtlist,
+		       loop (WRAP {v = v, c = c, openness = openness, eff = eff, r = r, vklist = vklist, vtlist = vtlist,
 				   clist = clist, vflist = vflist, body_type = body_type}::acc) body
 		     end)
 	    in  loop [] e
@@ -662,14 +676,13 @@ struct
 	  | create_lambdas (wraps,body) =
 	  let
 	    fun loop [] body = body
-	      | loop (WRAP {v,eff,r,vklist,clist,vtlist,vflist,body_type,openness,...}::rest) body =
+	      | loop (WRAP {v,c,eff,r,vklist,clist,vtlist,vflist,body_type,openness,...}::rest) body =
 	      let
-		val c = AllArrow_c {openness = openness, effect = eff,
-				    tFormals = vklist, eFormals = clist, fFormals = TilWord32.fromInt(length vflist),
-				    body_type = body_type}
-		val f = Function{effect=eff,recursive=r,
+		val body = loop rest body
+		val total = not (null rest)
+		val f = Function{effect=if total then Total else eff,recursive=r,
 				 tFormals=map #1 vklist,eFormals=vtlist,fFormals=vflist,
-				 body=loop rest body}
+				 body=body}
 	      in
 		make_lambda((v,c),f)
 	      end
@@ -678,14 +691,16 @@ struct
 	  in  vf
 	  end
 
+
 	fun wraps2args_bnds (wraps : wrap list) =
 	    let
 	      fun loop acc ([] : wrap list) = error "no wraps to wraps2args_bnds"
 		| loop acc [_] = rev acc
 		| loop acc (WRAP {v,vklist,vtlist,vflist,...} ::(rest as (next::_))) =
-		let val vk = map #1 vklist
+		let 
+		  val vk = map #1 vklist
 		  val vc = map #1 vtlist
-		  val info = Exp_b(wrap_get_v next,TraceUnknown,
+		  val info = Exp_b(wrap_get_v next,TraceKnown TraceInfo.Trace,
 				   App_e(Open, Var_e v, map Var_c vk, map Var_e vc, map Var_e vflist))
 		in  loop (info::acc) rest
 		end
@@ -698,12 +713,21 @@ struct
 
 	fun create_flatlambda(_,[],_) = error "no wraps to create_flatlamba"
 	  | create_flatlambda(name,wraps,body) =
-	    let val WRAP {eff,r,body_type,openness,...} = List.last wraps
-		 val ((vklist,clist,vtlist,vflist),_) = wraps2args_bnds wraps
-	    in  ((name, AllArrow_c {openness = openness, effect = eff, tFormals = vklist, eFormals = clist, fFormals = TilWord32.fromInt(length vflist), body_type = body_type}),
-		 Function{effect=eff,recursive=r,
-			  tFormals=map #1 vklist,eFormals=vtlist,fFormals=vflist,
-			  body=body})
+	    let 
+	      val WRAP {eff,r,body_type,openness,...} = List.last wraps
+	      val ((vklist,clist,vtlist,vflist),_) = wraps2args_bnds wraps
+	      val c = AllArrow_c {openness = openness, 
+				  effect = eff, 
+				  tFormals = vklist, 
+				  eFormals = clist, 
+				  fFormals =  TilWord32.fromInt(length vflist), 
+				  body_type = body_type}
+	      val (bnds,c) = NilUtil.nameType ((Name.var2name name )^"_type") c
+	    in  (bnds,
+		 ((name, c),
+		  Function{effect=eff,recursive=r,
+			   tFormals=map #1 vklist,eFormals=vtlist,fFormals=vflist,
+			   body=body}))
 	    end
 
 
@@ -924,9 +948,23 @@ struct
 	       | (Fixopen_b vfset) =>
 		     let val vflist = Sequence.toList vfset
 			 val vflist = List.filter (fn ((v,_),_) => is_used_var(state,v)) vflist
-			 fun eliminate_uncurry(a,b,af,Function{body,...}) =
-			     let val (wraps,_) = extract_lambdas state (a,af)
-				 val curry = create_lambdas(wraps,body)
+			 fun eliminate_uncurry(curry,uncurry,curryf,uncurryf as Function {body,...}) =
+			     let 
+			       val _ = chat2 ("Undoing uncurry of "^(Name.var2name (#1 curry))^"\n")
+			       val _ = dec uncurried
+			       val (wraps,_) = extract_lambdas state (curry,curryf)
+			       val inner_wrap_names = map wrap_get_v (tl wraps)
+			       fun non_partial bnd = 
+				 (case bnd
+				    of Exp_b (v,_,_) => not (Listops.member_eq (Name.eq_var,v,inner_wrap_names))
+				     | _ => true)
+
+			       (*Erase the partial applications *)
+			       val body = 
+				 (case body 
+				    of Let_e(s,bnds,b) => Let_e(s,List.filter non_partial bnds,b)
+				     | _ => body)
+			       val curry = create_lambdas(wraps,body)
 			     in  curry
 			     end
 			 fun loop [] = []
@@ -935,18 +973,32 @@ struct
 			     (case find_curry_pair(state,a) of
 				  NONE => A::loop(B::rest)
 				| SOME v =>
-				      (if (Name.eq_var(v,b) andalso
-					   (case (get_varuse(state,b)) of
-						USED 1 => true
-					      | USED n => false
-					      | UNUSED => false
-					      | _ => false))
-					  then (eliminate_uncurry(ap,bp,af,bf))::(loop rest)
-				      else A::loop(B::rest)))
+				    (if Name.eq_var(v,b) then  (* A curry pair *)
+				       let
+					 (* Drop if only use of uncurry_f is in curry_f. *)
+					 val drop = case (get_varuse(state,b)) 
+						      of USED 1 => true
+						       | USED n => false
+						       | UNUSED => false
+						       | _ => false
+				       in
+					 if drop then 
+					   (eliminate_uncurry(ap,bp,af,bf))::(loop rest)
+					 else 
+					   let
+					     (* B duplicates names from A *)
+					     val B = (bp,NilRename.renameFunction bf)
+					   in  (* Keep the pair *)
+					     A::B::(loop rest)
+					   end
+				       end
+				     else  (* Not a pair, keep going with rest *) 
+				       (A::loop(B::rest))))
+
 			 val vflist = loop vflist
-		     in  (case vflist of
-			      [] => NONE
-			    | _ => SOME(Fixopen_b (Sequence.fromList vflist)))
+		     in  case vflist 
+			   of [] => NONE
+			    | _ => SOME(Fixopen_b (Sequence.fromList vflist))
 		     end
 	       | (Fixcode_b vfset) =>
 		     let val vflist = Sequence.toList vfset
@@ -964,9 +1016,38 @@ struct
 		     end)
 
 	fun do_vklist state vklist =
-	    let fun folder((v,k),state) = let val k = do_kind state k
-					  in  ((v,k),add_kind(state,v,k))
-					  end
+	    let 
+	      fun dosingle(v,mker,c,state) = 
+		let 
+		  val state = add_var(state,v)
+		  val state' = enter_var(state,v)
+		  val c = do_con state' c
+		  val c =
+		    (case find_availC(state,c) of
+		       NONE => c
+		     | SOME v' => let val _ = use_var(state,v')
+				  in  Var_c v'
+				  end)
+		  val alias = (case c of
+				 Var_c _ => MUSTc c
+			       (* Must use the old variable instead of the new one bound here later *)
+			       | _ => OPTIONALc c)
+		  val state = (case c of
+				 Var_c _ => state
+			       | _ => add_availC(state, c, v))
+		  val k = mker c
+		  val state = add_kind(state,v,k)
+		  val state = add_alias(state,v,alias)
+		  val _ = use_var (state,v)
+		in ((v,k),state)
+		end
+	      fun folder((v,k),state) = 
+		(case k
+		   of Single_k c     => dosingle(v, Single_k, c, state)
+		    | SingleType_k c => dosingle(v, SingleType_k, c, state)
+		    | _ => let val k = do_kind state k
+			   in  ((v,k),add_kind(state,v,k))
+			   end)
 	    in  foldl_acc folder state vklist
 	    end
 	and do_vc ((v,c), state) =  let val c = do_con state c
@@ -997,17 +1078,24 @@ struct
 
 
 	and do_kind (state : state) (kind : kind) : kind =
-	  (case kind of
-		Type_k => kind
-              | SingleType_k c => SingleType_k(do_con state c)
-              | Single_k c => Single_k(do_con state c)
-  	      | Record_k(lvk_seq) => let fun folder(((l,v),k),state) = (((l,v),do_kind state k),
-									add_kind(state,v,k))
-				     in  Record_k(#1(Sequence.foldl_acc folder state lvk_seq))
-				     end
-	      | Arrow_k(openness,vklist,k) => let val (vklist,state) = do_vklist state vklist
-					      in  Arrow_k(openness,vklist,do_kind state k)
-					      end)
+	  let
+	  in 
+	    case kind of
+	      Type_k => kind
+	    | SingleType_k c => SingleType_k(do_con state c)
+	    | Single_k c => Single_k(do_con state c)
+	    | Record_k(lvk_seq) => 
+		let 
+		  val (ls,vks) = Listops.map_unzip (fn ((l,v),k) => (l,(v,k))) lvk_seq
+		  val (vks,state) = do_vklist state vks
+		  val lvks = Listops.map2 (fn (l,(v,k)) => ((l,v),k)) (ls,vks)
+		in  Record_k lvks
+		end
+	    | Arrow_k(openness,vklist,k) => 
+		let val (vklist,state) = do_vklist state vklist
+		in  Arrow_k(openness,vklist,do_kind state k)
+		end
+	  end
 
 	and do_con (state : state) (con : con) : con =
 	    let val _ = if (!debug) then push_con con else ()
@@ -1115,7 +1203,7 @@ struct
 					end)
 
 
-	and rewrite_uncurry (vf as ((name,con),function),orig_state) : ((var * con) * function) list * state =
+	and rewrite_uncurry (vf as ((name,con),function),orig_state) : (conbnd list * ((var * con) * function) list) * state =
 	    let val uncurry_name = Name.fresh_named_var ((Name.var2name name) ^ "_uncurry")
 		val state = add_curry_pair(orig_state,name,uncurry_name)
 		val state = add_curry_processed(state,name)
@@ -1126,39 +1214,42 @@ struct
 	    in  if ((not (#doUncurry (getParams orig_state)))
 		    orelse is_curry_processed(orig_state,name)
 		    orelse (length wraps <= 1))
-		  then ([vf],state)
+		  then (([],[vf]),state)
 		else
-		 let val ((vklist,_,vtlist,vflist),bnds) = wraps2args_bnds wraps
-		     val body = Let_e(Sequential,bnds,body)
-		     val vkarg = map (Var_c o #1) vklist
-		     val vcarg = map (Var_e o #1) vtlist
-		     val vfarg = map Var_e vflist
-		     val v = Name.fresh_named_var "call_result"
-		     val call = App_e(Open, Var_e uncurry_name, vkarg, vcarg, vfarg)
-
-		     val (_,temp_state) = do_vklist state vklist
-		     val return_con = wrap_get_body_type(List.last wraps)
-		     val (bnds,tinfo) = con2trace' return_con
-		     val bnd = Exp_b(v,tinfo,call)
-		     val callbody = Let_e(Sequential,bnds @ [bnd],Var_e v)
-		     val curry = create_lambdas(wraps,callbody)
-		     val uncurry = create_flatlambda(uncurry_name,wraps,body)
-		     val state = add_var(state,name)
-		     val state = foldl (fn (v,s) => add_curry_processed(s,v)) state (map wrap_get_v wraps)
-		     val state = add_alias(state,name,ETAe (length wraps,uncurry_name,[]))
-		 in  ([curry,uncurry], state)
+		 let 
+		   val _ = chat2 ("Attempting to uncurry "^(Name.var2string name)^"\n")
+		   val _ = inc uncurried
+		   val ((vklist,_,vtlist,vflist),bnds) = wraps2args_bnds wraps
+		   val body = Let_e(Sequential,bnds,body)
+		   val vkarg = map (Var_c o #1) vklist
+		   val vcarg = map (Var_e o #1) vtlist
+		   val vfarg = map Var_e vflist
+		   val v = Name.fresh_named_var "call_result"
+		   val call = App_e(Open, Var_e uncurry_name, vkarg, vcarg, vfarg)
+		     
+		   val (_,temp_state) = do_vklist state vklist
+		   val return_con = wrap_get_body_type(List.last wraps)
+		   val (bnds,tinfo) = con2trace' return_con
+		   val bnd = Exp_b(v,tinfo,call)
+		   val callbody = Let_e(Sequential,bnds @ [bnd],Var_e v)
+		   val curry = create_lambdas(wraps,callbody)
+		   val (cbnds,uncurry) = create_flatlambda(uncurry_name,wraps,body)
+		   val state = add_var(state,name)
+		   val state = foldl (fn (v,s) => add_curry_processed(s,v)) state (map wrap_get_v wraps)
+		   val state = add_alias(state,name,ETAe (length wraps,uncurry_name,[]))
+		 in  ((cbnds,[curry,uncurry]), state)
 		 end
 	    end
 
 
-(*
+
 	and do_exp (state : state) (exp : exp) : exp =
-	    let val _ = push_exp exp
+	    let val _ = if !debug then push_exp exp else ()
 		val result = do_exp' state exp
-		val _ = pop_exp exp
+		val _ = if !debug then pop_exp exp else ()
 	    in  result
 	    end
-*)
+
 
 	and do_aggregate (state,constr,t,clist,elist)  =
 	    let open Prim
@@ -1244,13 +1335,17 @@ struct
 
 	     fun getVals [] = SOME []
 	       | getVals (e::rest) =
-			if (NilDefs.is_closed_value e) then
-			  (case (getVals rest) of
-			       NONE => NONE
-			     | SOME es => SOME (e :: es))
-		        else
-			  NONE
-
+	       let
+		 val e = unalias (state,e)
+	       in
+		 if (NilDefs.is_closed_value e) then
+		   (case (getVals rest) of
+		      NONE => NONE
+		    | SOME es => SOME (e :: es))
+		 else
+		   NONE
+	       end
+	     
 	     fun help e = unalias (state,e)
 
              fun default() = Prim_e(prim,
@@ -1304,7 +1399,7 @@ struct
 	 end
 
 
-	and do_exp (state : state) (exp : exp) : exp =
+	and do_exp' (state : state) (exp : exp) : exp =
 	   (  (*print "XXX do_exp doing "; Ppnil.pp_exp exp; print "\n";   *)
 	    case exp of
 		  Var_e v =>
@@ -1789,60 +1884,68 @@ struct
 				      end
 		   | Fixopen_b vfset =>
 		     let val vflist = Sequence.toList vfset
-			 fun folder (((v,c),f),state) = add_con(state,v,c)
-			 val (vflistlist,state) = foldl_acc rewrite_uncurry state vflist
+			 val (cbndslists_vflistlist,state) = foldl_acc rewrite_uncurry state vflist
+			 val (cbndslists,vflistlist) = unzip cbndslists_vflistlist
+
+			 val cbnds = Listops.flatten cbndslists
+			 val (cbnds,state) = foldl_acc do_cbnd state cbnds
+
 			 val vflist = Listops.flatten vflistlist
+			 fun folder (((v,c),f),state) = add_con(state,v,c)
 			 val state = foldl folder state vflist
 			 val vflist = map (do_function state) vflist
-		     in  ([Fixopen_b vflist], state)
+
+		     in  ((NilUtil.cbnds2bnds cbnds) @ [Fixopen_b vflist], state)
 		     end
 		   | Fixcode_b vfset =>
-				let val vflist = Sequence.toList vfset
-				    val state = add_vars(state,map (#1 o #1)  vflist)
-				    val vflist = map (do_function state) vflist
-				in  ([Fixcode_b(Sequence.fromList vflist)], state)
-				end
+		     let 
+		       val vflist = Sequence.toList vfset
+		       val state = add_vars(state,map (#1 o #1)  vflist)
+		       val vflist = map (do_function state) vflist
+		     in  ([Fixcode_b(Sequence.fromList vflist)], state)
+		     end
 		   | Fixclosure_b (recur,vclset) =>
-				let val vcllist = Sequence.toList vclset
-				    val state = add_vars(state,map (#1 o #1) vcllist)
-				    val state' = enter_var(state,#1(#1(hd vcllist)))
-				    fun do_closure {code,cenv,venv} =
-					let val _ = do_exp state' (Var_e code)
-					    val cenv = do_con state' cenv
-					    val venv = do_exp state' venv
-					in  {code=code,cenv=cenv,venv=venv}
-					end
-				    val vcllist = map (fn (v,f) => (v,do_closure f)) vcllist
-				in  ([Fixclosure_b(recur,Sequence.fromList vcllist)], state)
-				end)
+		     let 
+		       val vcllist = Sequence.toList vclset
+		       val state = add_vars(state,map (#1 o #1) vcllist)
+		       val state' = enter_var(state,#1(#1(hd vcllist)))
+		       fun do_closure {code,cenv,venv} =
+			 let val _ = do_exp state' (Var_e code)
+			   val cenv = do_con state' cenv
+			   val venv = do_exp state' venv
+			 in  {code=code,cenv=cenv,venv=venv}
+			 end
+		       val vcllist = map (fn (v,f) => (v,do_closure f)) vcllist
+		     in  ([Fixclosure_b(recur,Sequence.fromList vcllist)], state)
+		     end)
 	  end
 
 	fun do_import(ImportValue(l,v,tr,c),state) = 
 	  let
-	    val state = if !kill_imports then add_var (state,v) else state
-	    val inner_state = if !kill_imports then enter_var (state,v) else state
+	    val state = add_var (state,v) 
+	    val inner_state = enter_var (state,v) 
 	    val tr = do_niltrace inner_state tr
 	    val c = do_con inner_state c
 	    val state = add_label(add_con(state,v,c),l,v)
-	    val _ = if !kill_imports andalso Name.keep_import l then use_var(state,v) else ()
+	    val _ = if not (!kill_imports) orelse Name.keep_import l then use_var(state,v) else ()
 	  in (ImportValue(l,v,tr,c),state)
 	  end
 	  | do_import(ImportType(l,v,k),state)  = 
 	  let
-	    val state = if !kill_imports then add_var (state,v) else state
-	    val inner_state = if !kill_imports then enter_var (state,v) else state
+	    val state = add_var (state,v) 
+	    val inner_state = enter_var (state,v) 
 	    val k = do_kind inner_state k
 	    val state = add_label(add_kind(state,v,k),l,v)
-	    val _ = if !kill_imports andalso Name.keep_import l then use_var(state,v) else ()
+	    val _ = if not (!kill_imports) orelse Name.keep_import l then use_var(state,v) else ()
 	  in (ImportType(l,v,k),state)
 	  end
 	  | do_import(ImportBnd (phase, cb),state)  =
-	    let
-		val (cb, state) = do_cbnd (cb, state)
-	    in
-		(ImportBnd (phase, cb),
-		 state)
-	    end
+	  let
+	    val (cb, state) = do_cbnd (cb, state)
+	  in
+	    (ImportBnd (phase, cb),
+	     state)
+	  end
 
 	fun do_export state (ExportValue(l,v)) =
 	    let val v = (case lookup_alias(state,v) of
@@ -1877,19 +1980,23 @@ struct
               val bnds = List.mapPartial (bnd_used state) bnds
 	      val bnds = flattenBnds bnds
 
-	      fun import_used (ImportBnd (_, cbnd)) = cbnd_used state cbnd
-		| import_used (ImportType (l,v,_)) = 
-		(not (!kill_imports)) orelse
-		(is_used_var (state,v)) orelse
-		(inc imports_killed;
-		 chat2 ("Filtering label " ^ Name.label2name l ^ "\n");
-		 false)
-		| import_used (ImportValue (l,v,_,_)) = 
-		(not (!kill_imports)) orelse
-		(is_used_var (state,v)) orelse
-		(inc imports_killed;
-		 chat2 ("Filtering label " ^ Name.label2name l ^ "\n");
-		 false)
+	      fun import_used imp = 
+		let 
+		  fun dolv (l,v) = 
+		    if not (!kill_imports) then true
+		    else if is_used_var (state,v) then true
+		    else
+		      let val _ = (inc imports_killed;
+				   chat2 ("Filtering label " ^ Name.label2name l ^ "\n"))
+		      in false
+		      end
+
+		in
+		  case imp
+		    of ImportBnd (_, cbnd) => cbnd_used state cbnd
+		    | ImportType (l,v,_) => dolv (l,v)
+		    | ImportValue (l,v,_,_) => dolv (l,v)
+		end
 
 	      val imports = List.filter import_used imports
 

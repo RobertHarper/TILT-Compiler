@@ -104,7 +104,7 @@ source unit NilContextPre : NilContextPre = "nilcontextpre.sml" {
 
 source unit NilPrimUtilParam = "nilprimutilparam.sml" {
 	Sequence Name Symbol Listops NIL PRIMUTILPARAM Prim Int Nil
-	IlUtil NilContextPre TilWord32 TraceInfo
+	IlUtil NilContextPre TilWord32 TraceInfo Stats
 }
 source unit NilPrimUtil = "nilprimutil.sml" {
 	PrimUtil NilPrimUtilParam

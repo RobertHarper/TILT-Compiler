@@ -514,22 +514,17 @@ struct
 	end
       | reify_mod' (ImportValue (l, v, nt, c) :: is, ctxt, module) =
 	let
-	    val nt' =
-		if (TraceOps.valid_trace (ctxt, nt)) then
-		    nt
-		else
-		    (case TraceOps.get_trace(ctxt, c) of
-			 SOME tinfo => TraceKnown tinfo
-		       | NONE => TraceUnknown)
-
-	    val imp' = ImportValue(l, v, nt', c)
 	    val ctxt = NilContext.insert_con(ctxt, v, c)
 	    val ctxt = NilContext.insert_label(ctxt, l, v)
 
-	    val (bnds', exports', pset, ctxt, is') =
-		reify_mod' (is, ctxt, module)
+	    val (bnds, exports, pset, ctxt, is) = 
+	      reify_mod' (is, ctxt, module)
+	      
+	    val (nt, new_bnds, pset) = do_reify(ctxt, c, nt, pset)
+	    val imp = ImportValue(l, v, nt, c)
+	    val is = (NilUtil.bnds2importbnds new_bnds)@(imp::is)
 	in
-	    (bnds', exports', pset, ctxt, imp' :: is')
+	    (bnds, exports, pset, ctxt, is)
 	end
 
     fun reify_mod (nilmod as MODULE {imports, ...}) =

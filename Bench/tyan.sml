@@ -1,4 +1,4 @@
-functor makeRunTyan() = 
+functor makeRunTyan() :> RUN = 
 struct
 local
 
@@ -889,17 +889,8 @@ fun readTyanInput() =
     in s
     end
 in
-    fun runTyan() = runit "u6"  (* readTyanInput() *)
+    fun run () = runit "u6"  (* readTyanInput() *)
 end
 end
 
-structure runTyan = makeRunTyan()
-structure runTyan1 = makeRunTyan()
-structure runTyan2 = makeRunTyan()
-structure runTyan3 = makeRunTyan()
-
-val runTyan = runTyan.runTyan
-val runTyan1 = runTyan1.runTyan
-val runTyan2 = runTyan2.runTyan
-val runTyan3 = runTyan3.runTyan
-
+structure Tyan :> RUN = makeRunTyan()

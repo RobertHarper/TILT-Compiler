@@ -26,6 +26,8 @@ struct
 
     structure ConMap = ExpTable.Conmap
 
+    structure NU = NilUtil
+
     val derived_var = Name.derived_var
 
     val pp_kind = Ppnil.pp_kind
@@ -214,7 +216,7 @@ struct
 	  | Prim.vector (con, arr) =>
 	   let
 	     val (state, cbnds, con) = lcon lift state con
-	     val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
+	     val cbnds  = NU.cbnds2bnds cbnds
 	     fun folder (exp,(es,bnds_list)) =
 	       let val (bnds,exp) = lexp lift state exp
 	       in (exp::es,bnds@bnds_list)
@@ -226,7 +228,7 @@ struct
 	   end
 	  | Prim.refcell r => error "Ref cells shouldn't ever show up"
 	  | Prim.tag (t,con) => let val (state,cbnds,con) = lcon lift state con
-				    val cbnds  = (map (fn cb => Con_b(Runtime,cb)) cbnds)
+				    val cbnds  = NU.cbnds2bnds cbnds
 				in (cbnds,Prim.tag (t,con)) end
 	  | _ => ([],value))
 
@@ -239,15 +241,15 @@ struct
      (case switch of
 	  Intsw_e {size,arg,arms,default,result_type} =>
 	      let val (bnds,arg) = lexp lift state arg
-		  val result_type = lcon_flat state result_type
+		  val result_type = lcon_lift' state result_type
 		  val arms = map (fn (w,e) => (w,lexp_lift' state e)) arms
 		  val default = Util.mapopt (lexp_lift' state) default
 	      in  (bnds,Intsw_e {size=size,arg=arg,arms=arms,default=default,
 				 result_type=result_type})
 	      end
 	| Sumsw_e {sumtype,arg,bound,arms,default,result_type} =>
-	      let val sumtype = lcon_flat state sumtype
-		  val result_type = lcon_flat state result_type
+	      let val sumtype = lcon_lift' state sumtype
+		  val result_type = lcon_lift' state result_type
 		  val (bnds,arg) = lexp lift state arg
 		  val (state,bound) = add_var(state,bound)
 		  val arms = map (fn (t,tr,e) => (t,tr,lexp_lift' state e)) arms
@@ -259,7 +261,7 @@ struct
 	| Exncase_e {arg,bound,arms,default,result_type} =>
 	      let
 		  val (bnds,arg) = lexp lift state arg
-		  val result_type = lcon_flat state result_type
+		  val result_type = lcon_lift' state result_type
 		  val (state,bound) = add_var(state,bound)
 		  val arms = map (fn (e1,trace,e2) => (lexp_lift' state e1, trace, lexp_lift' state e2)) arms
 		  val default = Util.mapopt (lexp_lift' state) default
@@ -268,8 +270,8 @@ struct
 				   result_type=result_type})
 	      end
 	| Typecase_e {arg,arms,default,result_type} =>
-	      let val result_type = lcon_flat state result_type
-		  val arg = lcon_flat state arg
+	      let val result_type = lcon_lift' state result_type
+		  val arg = lcon_lift' state arg
 		  val default = lexp_lift' state default
 		  val arms = map (fn (pc,vklist,e) =>
 				  let val (vklist,state) = lvklist state vklist
@@ -293,19 +295,19 @@ struct
 	       let val vf_list = sequence2list vf_set
 		   val newstate = add_vars state vf_list
 		   val vf_list = map (fn ((v,c),f) =>
-				      let
-					  val c = lcon_flat state c
-					  val f = lfunction newstate f
-				      in
-					  ((find_var(newstate,v),c),f)
-				      end) vf_list
+					    let
+					      val c = lcon_lift' state c
+					      val f = lfunction newstate f
+					    in
+					      ((find_var(newstate,v),c),f)
+					    end) vf_list
 	       in  ([wrapper (list2sequence vf_list)], newstate)
 	       end
 
            (* Closure fold function *)
 	   fun vcl_help state ((v,c),{code,cenv,venv}) =
 	       let val v = find_var(state,v)
-		   val c' = lcon_flat state c
+		   val c' = lcon_lift' state c
 		   val cenv' = lcon_flat state cenv
 		   val venv' = lexp_lift' state venv
 		   val code' = find_var(state,code)
@@ -442,7 +444,7 @@ struct
 		end
 	  | Raise_e (e,c) =>
 		let val (bnds,e) = lexp lift state e
-		    val c = lcon_flat state c
+		    val c = lcon_lift' state c
 		in  (bnds,Raise_e(e,c))
 		end
 	  | Switch_e switch => let val (bnds,switch) = lswitch lift state switch
@@ -452,7 +454,7 @@ struct
 		let val body = lexp_lift' state body
 		    val (state,bound) = add_var(state,bound)
 		    val handler = lexp_lift' state handler
-		    val result_type = lcon_flat state result_type
+		    val result_type = lcon_lift' state result_type
 		in
 		    ([],Handle_e{body = body, bound = bound,
 				 handler = handler, result_type = result_type})
@@ -504,7 +506,7 @@ struct
        let val _ = state_stat "lcbnd" state
 	   fun lconfun wrapper (v,vklist,c) =
 	   let val (vklist,state) = lvklist state vklist
-	       val c = lcon_flat state c
+	       val c = lcon_lift' state c
 	       val (state,v) = add_var(state,v)
 	       val cbnd = wrapper(v,vklist,c)
 	       val _ = state_stat "lcbnd: lconfun" state
@@ -678,7 +680,7 @@ struct
 				   not sequential bindings *)
 		let val state = Sequence.foldl (fn ((v,_),s) => #1(add_var(s,v))) state vc_seq
 		    val vc_seq' = Sequence.map (fn (v,c) => (derived_var v, c)) vc_seq
-		    val vc_seq' = Sequence.map (fn (v,c) => (v, lcon_flat state c)) vc_seq'
+		    val vc_seq' = Sequence.map (fn (v,c) => (v, lcon_lift' state c)) vc_seq'
 		    val vc_seq'' = Sequence.map2 (fn ((v,_),(_,c)) => (find_var(state,v),c))
 			         (vc_seq,vc_seq')
 		in  (state,[],Mu_c(flag,vc_seq''))
@@ -851,12 +853,12 @@ struct
 	case arg_kind of
 	    Type_k => arg_kind
 	  | SingleType_k c => let val _ = inc depth_lcon_single
-				  val c = lcon_flat state c
+				  val c = lcon_lift' state c
 				  val _ = dec depth_lcon_single
 			      in  SingleType_k c
 			      end
 	  | Single_k c => let val _ = inc depth_lcon_single
-			      val c = lcon_flat state c
+			      val c = lcon_lift' state c
 			      val _ = dec depth_lcon_single
 			  in  Single_k c
 			  end
@@ -886,33 +888,24 @@ struct
 	and constructor (if present) A-normalized (with state' updated from state appropriately)
    *)
    fun limport (imp as ImportValue(l,v,tr,c),s) =
-       (case c of
-	    ExternArrow_c _ =>
-		let val (s,v) = add_var(s,v)
-		    val _ = inc depth_lcon_import
-		    val c = lcon_flat s c
-		    val _ = dec depth_lcon_import
-		in  ([ImportValue(l,v,tr,c)],s)
-		end
-	  | _ =>
-		let val (s,v) = add_var(s,v)
-		    val _ = inc depth_lcon_import
-		    val (state,cbs, c) = lcon_lift s c
-		    val _ = dec depth_lcon_import
-		    val icbs = map (fn cb => ImportBnd (Runtime, cb)) cbs
-		in   (icbs @ [ImportValue(l,v,tr,c)],s)
-		end)
+     let 
+       val (s,v) = add_var(s,v)
+       val _ = inc depth_lcon_import
+       val (state,cbs, c) = lcon_lift s c
+       val _ = dec depth_lcon_import
+       val icbs = map (fn cb => ImportBnd (Runtime, cb)) cbs
+     in   (icbs @ [ImportValue(l,v,tr,c)],s)
+     end
      | limport (ImportType(l,v,k),s) =
-       let val (s,v) = add_var(s,v)
-       in  ([ImportType(l,v,lkind s k)],s)
-       end
+     let val (s,v) = add_var(s,v)
+     in  ([ImportType(l,v,lkind s k)],s)
+     end
 
-     (* There are no import bnds yet *)
      | limport (imp as ImportBnd (phase,cb),s) = 
-       let
-	 val (cbnds,s) = lcbnd true s cb
-       in (map (fn cb => (ImportBnd(phase,cb))) cbnds,s)
-       end
+     let
+       val (cbnds,s) = lcbnd true s cb
+     in (map (fn cb => ImportBnd (Runtime, cb)) cbnds,s)
+     end
 
    (*
     val limports : import_entry list * state -> import_entry_list * state

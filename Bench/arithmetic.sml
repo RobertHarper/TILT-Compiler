@@ -3,7 +3,8 @@
        using the arc-tangent expansion. (McLauren series)
 *)
 
-local
+structure Arithmetic :> RUN = 
+  struct
   fun fib 0 = 1
     | fib 1 = 1
     | fib n = (fib(n-1)) + (fib(n-2))
@@ -18,8 +19,8 @@ local
     in  4.0 * loop (steps,0.0,1.0)
     end
   
-in
-  fun runArithmetic () = 
+
+  fun run () = 
     let
       val x = fib 38
       val _ = print "This should be 63245986: "

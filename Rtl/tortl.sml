@@ -231,26 +231,42 @@ struct
 				  TortlRecord.make_record_const(state,vls,SOME(LOCAL_DATA(Name.var2string v)))
 				else TortlRecord.make_record(state,vls)
 
-			      val ir = load_ireg_term(lv,NONE)
-			      val s' = if toplevel then state else add_reg (state,v,tipe,I ir)
-			  in  (ir,s')
+			  in  (lv,state)
 			  end
 
-		      val (clregsi,rec_state) = Listops.foldl_acc loadcl state var_vcelist
-		      fun dowrite (clregi, ((_,tipe),{code,cenv,venv}),s) =
-			  let val (I ir,s) = xexp' (s,fresh_named_var "venv", venv,
-						     Nil.TraceUnknown, NOTID)
-			      val _ = if (Rtltags.maxRecordLength < 4)
-					  then error "the INIT in dowrite of making a closure is wrong\n"
-				      else ()
-			      (* This write is an INIT because the entire closure is allocated all at once
-			         and so resides in the same generation *)
-			  in  (add_instr(STORE32I(REA(clregi,8), ir)); s)
-			  end
+		      val (cl_lvs,rec_state) = Listops.foldl_acc loadcl state var_vcelist
 
-		      val _ = if backpatch
-				  then (Listops.foldl2 dowrite rec_state (clregsi, var_vcelist); ())
-			      else ()
+
+		      val rec_state = 
+			if (not toplevel) then                  (* If we're not at the top level, then we must*)
+			  let                                   (* load the closures into registers *)
+			    fun load ((lv,((v,tipe),_)),state) = 
+			      let
+				val ir = load_ireg_term(lv,NONE)
+			      in (ir,add_reg (state,v,tipe,I ir))
+			      end
+			    val (clregsi,rec_state) = Listops.foldl_acc load rec_state (Listops.zip cl_lvs var_vcelist)
+			  in                                      (* If we're backpatching, then we must write the *)
+			    if backpatch then                     (* translated venv into the closure, using the register *)
+			      let
+				fun dowrite (clregi, ((_,tipe),{code,cenv,venv}),s) =
+				  let 
+				    val (I ir,s) = xexp' (s,fresh_named_var "venv", venv,
+							  Nil.TraceUnknown, NOTID)
+				    val _ = if (Rtltags.maxRecordLength < 4)
+					      then error "the INIT in dowrite of making a closure is wrong\n"
+					    else ()
+				  (* This write is an INIT because the entire closure is allocated all at once
+				   * and so resides in the same generation *)
+				  in  (add_instr(STORE32I(REA(clregi,8), ir)); s)
+				  end
+				val _ = Listops.foldl2 dowrite rec_state (clregsi, var_vcelist)
+			      in rec_state
+			      end
+			    else rec_state                        (* If we're not backpatching, we're done *)
+			  end
+			else rec_state                            (* If we're at the toplevel, we're done *)
+
 		      val _ = add_instr(ICOMMENT ("done allocating " ^
 						  (Int.toString (length var_vcelist)) ^ " closures"))
 		      val _ = msg "done with fixclosure_b\n"
@@ -382,8 +398,12 @@ struct
 		  else ()
 	  val res = xexp'' (state,name,arg_e,trace,context)
 	  val _ = if (!debug)
-		      then (print "xexp ";  print (Int.toString (!exp_depth));
-			    print " returned \n")
+		      then (print "xexp ";  print (Int.toString (!exp_depth)); print " returned ";
+			    if (debug_full())
+				then (print " with term = \n";
+				      print (term2string (#1 res)))
+			    else ();
+			    print "\n")
 		  else ()
 	  val _ = exp_depth := !exp_depth - 1
 
@@ -1940,7 +1960,7 @@ struct
 			(2) The label should be mangled differently from ML values.
 			*)
 		     val lv =
-			 (case c of
+			 (case #2 (simplify_type s c) of
 			      ExternArrow_c _ =>
 				  let val clab = C_EXTERN_LABEL(Name.label2string l)
 				  in  VALUE(CODE clab)
@@ -2049,12 +2069,17 @@ struct
 
      fun translate (unitname : string, module : Nil.module) : Rtl.module =
 	 let val Nil.MODULE {bnds,imports,exports} = module
+
+	   fun need_unit l = 
+	     let val l = if Name.is_flat l then hd (Name.split_label l) else l
+	     in if Name.is_unit l then SOME l
+		else NONE (* extern *)
+	     end
+
 	     fun mapper (import : Nil.import_entry) : Name.label option =
 		 (case import
-		    of ImportValue (l,_,_,_) =>
-			if Name.is_unit l then SOME l
-			else NONE (* extern *)
-		     | ImportType (l,_,_) => SOME l
+		    of ImportValue (l,_,_,_) => need_unit l
+		     | ImportType (l,_,_) => need_unit l
 		     | ImportBnd _ => NONE)
 	     val unitlist = List.mapPartial mapper imports
 	     val parms = Name.LabelSet.addList (Name.LabelSet.empty, unitlist)
@@ -2097,6 +2122,9 @@ struct
 
      fun entryTables (unitnames : string list) : Rtl.module =
 	 let
+	   val _ = (print "Linking with units ";
+		    print (Listops.concatWith ", " unitnames);
+		    print "\n")
 	     val entries : entry list = map mkentry unitnames
 	     val Rtl.MODULE{procs,data=linkData,
 			    entry,global,parms} = linkUnit entries

@@ -108,7 +108,7 @@ sig
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con * exp option  * bool (* true indicates should inline *)
                  | DEC_CON       of var * kind * con option * bool (* true indicates should inline *)
-                 | DEC_MOD       of var * bool * signat
+                 | DEC_MOD       of var * bool * signat  (* true indicates polymorphic function *)
 
     and     ovld = OVLD of (con * exp) list * int option (* types, default *)
 

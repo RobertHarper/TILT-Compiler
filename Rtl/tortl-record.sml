@@ -95,27 +95,37 @@ struct
         (* Two separate loops, one for the constant case, one for the heap. *)
 	(* Note: in both cases, offset starts from the point of allocation not from start of the object *)
 	local
-	  fun scan_vals_const (offset,[]) = offset
-	    | scan_vals_const (offset,vl::vls) =
-	    ((case vl of
-		VALUE v => (nonHeapCount := 1 + !nonHeapCount;
-			    (case v of
-			       (INT w32) => add_data(INT32 w32)
-			     | (TAG w32) => add_data(INT32 w32)
-			     | (RECORD (l,_)) => add_data(DATA l)
-			     | (LABEL l) => add_data(DATA l)
-			     | (CODE l) => add_data(DATA l)
-			     | (REAL l) => error "make_record_core given REAL"
-			     | (VOID _) => add_data(INT32 0w0) (* 0 is an ok bit pattern for any trace. *)
-				 ))
-	      | _ => let val nonheap = repIsNonheap (term2rep vl)
-			 val _ = if nonheap then nonHeapCount := 1 + !nonHeapCount
-				 else heapCount := 1 + !heapCount;
-			 val r = load_ireg_term(vl,NONE)
-		     in  add_data(INT32 Rtltags.uninitVal);
-		       add_instr(STORE32I(LEA(recordLabel,offset - 4), r))
-		     end);
-		scan_vals_const(offset+4,vls))
+	  fun scan_vals_const (offset,[],acc) = rev acc
+	    | scan_vals_const (offset,vl::vls,acc) =
+	    let
+	      val vl = 
+		case vl of
+		  VALUE v => 
+		    let
+		      val _ = (nonHeapCount := 1 + !nonHeapCount;
+			       (case v of
+				  (INT w32) => add_data(INT32 w32)
+				| (TAG w32) => add_data(INT32 w32)
+				| (RECORD (l,_)) => add_data(DATA l)
+				| (LABEL l) => add_data(DATA l)
+				| (CODE l) => add_data(DATA l)
+				| (REAL l) => error "make_record_core given REAL"
+				| (VOID _) => add_data(INT32 0w0) (* 0 is an ok bit pattern for any trace. *)
+				    ))
+		    in v
+		    end
+		| _ => 
+		    let val nonheap = repIsNonheap (term2rep vl)
+		      val _ = if nonheap then nonHeapCount := 1 + !nonHeapCount
+			      else heapCount := 1 + !heapCount;
+		      val r = load_ireg_term(vl,NONE)
+		      val _ = (add_data(INT32 Rtltags.uninitVal);
+			       add_instr(STORE32I(LEA(recordLabel,offset - 4), r)))
+		    in INT Rtltags.uninitVal
+		    end
+	    in
+	      scan_vals_const(offset+4,vls,vl::acc)
+	    end
 
 	  fun scan_vals_heap (offset,[]) = offset
 	    | scan_vals_heap (offset,vl::vls) =
@@ -124,17 +134,19 @@ struct
 	      scan_vals_heap(offset+4,vls)
 	    end
 	in
-	  fun scan_vals vls = if const then scan_vals_const (4,vls)
-			      else scan_vals_heap(4,vls)
+	  val scan_vals = fn vls => scan_vals_heap(4,vls)
+	  val scan_vals_const = fn vls => scan_vals_const (4,vls,[])
 	end
 
       val result =
 	if const then
-	  (add_data(DLABEL recordLabel);
-	   scan_vals terms;
-	   (* The values of nonHeapCount and heapCount are meaningless until after scan_vals *)
-	   add_static_record (recordLabel,!nonHeapCount,!heapCount);
-	   (VALUE(LABEL recordLabel)))
+	  let 
+	    val _ = add_data(DLABEL recordLabel)
+	    val vls = scan_vals_const terms
+	      (* The values of nonHeapCount and heapCount are meaningless until after scan_vals *)
+	    val _ = add_static_record (recordLabel,!nonHeapCount,!heapCount)
+	  in (VALUE(RECORD( recordLabel, vls)))
+	  end
 	else
 	  let val offset = scan_vals terms
 	  in
@@ -226,7 +238,6 @@ struct
 	  val res as (lv,_) = make_record_help(const,state, reps, terms, labopt)
 	  val labopt2 = (case lv of
 			     VALUE(RECORD(lab,_)) => SOME lab
-			   | VALUE(LABEL lab) => SOME lab
 			   | _ => NONE)
 	  val _ = (case (labopt,labopt2) of
 		       (NONE,_) => ()

@@ -402,8 +402,11 @@ structure Machine =
 	| fixSigns (d :: rest) = d :: (fixSigns rest)
       fun explodeToSci f_s =
 	  (explode f_s) @
-	  (if ((Char.contains f_s #"e") orelse (Char.contains f_s #"E"))
-	       then []
+	  (if ((Char.contains f_s #"e") orelse 
+	       (Char.contains f_s #"E") orelse 
+	       (Char.contains f_s #"n") orelse   (* Catch [~,+,-]nan and  [~,+,-]inf. *)
+	       (Char.contains f_s #"i"))
+	     then []
 	   else [#"e", #"0"])
     in
       (implode o fixSigns o explodeToSci) float_string

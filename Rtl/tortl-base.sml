@@ -135,6 +135,27 @@ struct
    datatype term = LOCATION of location
                  | VALUE of value
 
+
+    fun val2string v = 
+      (case v 
+	 of (VOID _) => "VOID"
+	 | (INT i) => "INT("^(TilWord32.toDecimalString i)^")"
+	 | (TAG i) => "TAG("^(TilWord32.toDecimalString i)^")"
+	 | (REAL l) => "REAL("^(Pprtl.label2s l)^")"
+	 | (RECORD (l,vs)) => "RECORD("^(Pprtl.label2s l)^"={"^(Listops.concatWith "," (map val2string vs))^"})"
+	 | (LABEL l) => "LABEL("^(Pprtl.label2s l)^")"
+	 | (CODE l) => "CODE("^(Pprtl.label2s l)^")")
+
+   fun location2string t = 
+     (case t
+	of REGISTER (b,reg) => (if b then "REGc " else "REG ")^(Pprtl.reg2s reg)
+	 | GLOBAL (l,r) => "GLOBAL " ^ (Pprtl.label2s l) ^ ":" ^ (Pprtl.rep2s r))
+
+   fun term2string t = 
+     (case t 
+	of LOCATION loc => "LOC="^(location2string loc)
+	 | VALUE v => "VAL="^(val2string v))
+
    type convar_rep  = term option
 
    type varmap = term VarMap.map
@@ -933,7 +954,7 @@ struct
 	| TAG i => help (TRACE, fn r => LI(i,r))
 	| REAL _ => error "load_ireg: REAL"
 	| RECORD(label,_) => help (TRACE, fn r => LADDR(LEA(label,0),r))
-	| LABEL label => help (NOTRACE_LABEL, fn r => LADDR(LEA(label,0),r))
+	| LABEL label => help (TRACE, fn r => LADDR(LEA(label,0),r))
 	| CODE label => help (NOTRACE_CODE, fn r => LADDR(LEA(label,0),r))
       end
 

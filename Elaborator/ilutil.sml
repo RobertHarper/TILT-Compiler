@@ -941,6 +941,7 @@ structure IlUtil :> ILUTIL =
 	  val sdec_free = wrap f_sdec'
 	  val sbnd_free = wrap f_sbnd'
 	  val sdecs_free = wrap f_sdecs
+	  val sbnds_free = wrap f_sbnds
 	  val ovld_free = wrap f_ovld
 	  val entry_free = wrap f_entry'
 	  val entries_free = wrap f_entries

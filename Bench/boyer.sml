@@ -10,7 +10,10 @@
 (*                                                                     *)
 (***********************************************************************)
 
-fun runBoyer() = 
+structure Boyer :> RUN = 
+  struct
+
+fun run() = 
 
 (* $Id$ *)
 let
@@ -935,6 +938,7 @@ in
         handle Match => print "match exception\n"
 end
 
+end
 (*********
 with
     failure s ->

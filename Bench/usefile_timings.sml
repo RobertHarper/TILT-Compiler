@@ -2,6 +2,7 @@
  * we use a use file
  *)
 
+use "run.sig.sml";
 use "nj-help.sml";
 use "life.sml";
 use "leroy.sml";

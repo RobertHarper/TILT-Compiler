@@ -14,7 +14,8 @@
 (* Good test for loops. Best compiled with unsafe libraries. *)
 
 
-local
+structure Quicksort2 :> RUN = 
+struct
 
 val int32touint32 = TiltPrim.int32touint32
 val uint32toint32 = TiltPrim.uint32toint32
@@ -144,8 +145,8 @@ fun main () =
    test_sort qsort2 50000;
    test_sort qsort2 50000)
 
-in
 
-  fun runQuicksort2 () = main()
+
+  fun run () = main()
 (*  val quicksort2Result = main()*)
 end

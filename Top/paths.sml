@@ -42,7 +42,7 @@ struct
 	    val pid = Int.toString(Word32.toInt(Platform.pid()))
 	in  host^"."^pid
 	end
-    val identity = Util.memoize identity
+(*    val identity = Util.memoize identity*)
 
     fun tmpFile (file : string) : string = dir file/tmp^identity()
 

@@ -5,7 +5,8 @@ extern fastTimerOn : (unit) -->
 extern fastTimerOff : (unit) -->
 *)
 
-local
+structure Life :> RUN = 
+  struct
     fun (f o g) x = f(g x)
     exception ex_undefined of string
     fun error str = raise ex_undefined str
@@ -198,7 +199,7 @@ val gun = mkgen
       in  loop start thing
       end
 
-in
-    fun runLife() = doit 5 30 gun
+
+    fun run () = doit 5 30 gun
 end
 

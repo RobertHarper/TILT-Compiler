@@ -1,6 +1,8 @@
 (* PreReal provides extern definitions for the Ccalls.
  *)
-local
+
+structure Simple :> RUN = 
+  struct
 
 
     val makestring_real = Real64.toString
@@ -880,8 +882,8 @@ local
     in iter(step_count, initial_state)
     end
 
-in
-    fun runSimple() = let val state = runit(4,false) 
+
+    fun run() = let val state = runit(4,false) 
 		      (*  val _ = print_state state *)
 		      in  ()
 		      end

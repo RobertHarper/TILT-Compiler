@@ -189,14 +189,14 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = transform coerce_elim (CoerceElim.transform, nilmod)
 
+
 	    val nilmod = transform rename (Linearize.linearize_mod, nilmod)
-
-
 
 
 	    val nilmod = transform sing_elim (SingletonElim.R_module, nilmod)
 
 	    val nilmod = transform rename2 (Linearize.linearize_mod, nilmod)
+
 
 	    val nilmod = transform hoist1 (Hoist.optimize, nilmod)
 
@@ -233,7 +233,7 @@ structure Linknil :> LINKNIL  =
 	    (* It might be a good idea to iterate inline (and possibly optimize)
 	     * with the thresholds set to zero until the code reaches a fixpoint.
 	     * The idea would be to inline all functions called only once right
-	     * off the bat.  This is more inline with Tarditi's thesis.  As it stands,
+	     * off the bat.  This is more in line with Tarditi's thesis.  As it stands,
 	     * some functions only called once will not get inlined, or will not get
 	     * inlined until the last inline stage, because they are deeply curried.
 	     * Another alternative might be to have a special "inlineOnce" pass, since
@@ -242,24 +242,24 @@ structure Linknil :> LINKNIL  =
 	     *)
 	    val nilmod = transform inline1
 		                   (Inline.inline {iterate = false,
-						   tinyThreshold = 10,
+						   tinyThreshold = 20,
 						   sizeThreshold = 50,
 						   occurThreshold = 5},
 				    nilmod)
 
             val nilmod = transform reify1 (Reify.reify_mod, nilmod)
 
-
-	    val nilmod = transform hoist2 (Hoist.optimize, nilmod)
-
 	    val nilmod = transform optimize3 (Optimize.optimize {doDead = true,
 								 doProjection = SOME 50,
 								 doCse = !do_cse,
 								 doUncurry = !do_uncurry},
 					      nilmod)
+
+	    val nilmod = transform hoist2 (Hoist.optimize, nilmod)
+
 	    val nilmod = transform inline2
 		                   (Inline.inline {iterate = false,
-						   tinyThreshold = 10,
+						   tinyThreshold = 20,
 						   sizeThreshold = 50,
 						   occurThreshold = 5},
 				    nilmod)
@@ -275,7 +275,7 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = transform inline3
 		                   (Inline.inline {iterate = true,
-						   tinyThreshold = 10,
+						   tinyThreshold = 20,
 						   sizeThreshold = 50,
 						   occurThreshold = 5},
 				    nilmod)

@@ -128,15 +128,16 @@ structure Lil :> LIL =
       Val32_e of sv32
       | Let_e of bnd list * exp
     and bnd =
-      Fixcode_b of (var * con) list  * function list
-      | Exp32_b of (var * con) * op32
-      | Exp64_b of (var * con) * op64
-      | Unpack_b of (var * kind) * (var * con) * sv32
-      | Split_b of (var * kind) * (var * kind) * con
-      | Unfold_b of (var * kind) * con
+      Fixcode_b of  (var * function) list
+      | Exp32_b of var * op32
+      | Exp64_b of var * op64
+      | Unpack_b of var * var  * sv32
+      | Split_b of var * var * con
+      | Unfold_b of var * con
     and function = Function of {tFormals    : (var * kind) list,
 				eFormals    : (var * con) list,
 				fFormals    : (var * con) list,
+				rtype       : con,
 				body        : exp}
     and switch = 
       Sumcase of   {arg : sv32,arms :(w32  * (var * con) * exp) list, default: exp option, tipe : con}

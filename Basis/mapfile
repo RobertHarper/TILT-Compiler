@@ -109,7 +109,7 @@ source unit PreVector = "Aggregate/pre-vector.sml" {
 }
 source unit NumScan = "Text/num-scan.sml" {
 	Firstlude TiltPrim Prelude StringCvt String Option PreInt PreWord
-	PreReal PreVector TiltExn
+	PreReal PreVector TiltExn Char
 }
 source unit INTEGER = "Numeric/integer-sig.sml" {
 	Firstlude TiltPrim Prelude PreInt StringCvt

@@ -38,7 +38,7 @@ source unit IlPrimUtilParam = "ilprimutilparam.sml" {
 }
 source unit PRIMUTIL = "primutil.sig.sml" {PRIM Prim}
 source unit PrimUtil = "primutil.sml" {
-	TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real PRIMUTIL
+	TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real PRIMUTIL Char String
 }
 source unit ILUTIL = "ilutil.sig.sml" {
 	Name Symbol Prim Tyvar IL Il

@@ -10,14 +10,16 @@
 (***********************************************************************)
 
 (* $Id$ *)
-local
-fun tak x y z =
-  if x > y then tak (tak (x-1) y z) (tak (y-1) z x) (tak (z-1) x y)
-  else z
 
-fun repeat n = if n <= 0 then 0 else tak 18 12 6 + repeat(n-1)
-in
-  val takc = tak
-  fun runTakc () = (print (Int.toString (repeat 500)); print "\n")
-(*val takcResult = (print (Int.toString (repeat 500)); print "\n")*)
+structure Takc :> RUN = 
+  struct
+
+    fun tak x y z =
+      if x > y then tak (tak (x-1) y z) (tak (y-1) z x) (tak (z-1) x y)
+      else z
+
+    fun repeat n = if n <= 0 then 0 else tak 18 12 6 + repeat(n-1)
+      
+    fun run () = (print (Int.toString (repeat 500)); print "\n")
+
 end

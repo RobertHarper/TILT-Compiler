@@ -41,6 +41,10 @@ signature NAME =
     val var2name     : var   -> string  (* v_23 -> "v" *)
     val var2string   : var   -> string  (* v_23 -> "v_23" *)
     val label2name   : label -> string
+
+    val join_labels  : label list -> label (* l1, l2 -> l1__l2 *)
+    val split_label  : label -> label list (* l1__l2 -> l1, l2 *)
+
     val label2string : label -> string
     val tag2string   : tag  -> string
 
@@ -71,6 +75,7 @@ signature NAME =
     val is_cluster   : label -> bool
     val is_eq        : label -> bool
     val is_coercion  : label -> bool
+    val is_flat      : label -> bool 
 
     val prependToInternalLabel : string * label -> label   (* Keeps characteristics *)
     val label2name' : label -> string	(* Discards characteristics *)

@@ -157,7 +157,7 @@ struct
 				  end
 	     | Arrow_k (ot,vklist,k) => (doKind k) + (doVklist vklist))
 
-  and doVklist vkList = doList doKind (map #2 vkList)
+  and doVklist vkList = 0
 
   and doCons cons = doList doCon cons
   and doCon (con:con):int =
@@ -177,10 +177,10 @@ struct
 	 | Coercion_c{vars,from,to} => (doCon from) + (doCon to))
 
   and doCbnd (conbnd:conbnd):int =
-	1 + (case conbnd of
-		 Con_cb(v,c) => doCon c
-	       | Open_cb (v,vks,c) => (doVklist vks) + (doCon c)
-	       | Code_cb (v,vks,c) => (doVklist vks) + (doCon c))
+    (case conbnd of
+       Con_cb(v,c) => doCon c
+     | Open_cb (v,vks,c) => (doVklist vks) + (doCon c)
+     | Code_cb (v,vks,c) => (doVklist vks) + (doCon c))
   and doType t = 0
   and doTypes ts = 0
   and doTbnd tb = 0
@@ -251,7 +251,6 @@ struct
 	| doBnds (first::rest) = (doBnd first) + (doBnds rest)
 
       and doBnd (bnd: bnd) : int =
-        1 +
 	(case bnd of
 	   Con_b(Runtime,cb) => doCbnd cb
          | Con_b(Compiletime,cb) => (doTbnd cb; 0)

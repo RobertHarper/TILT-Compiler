@@ -93,7 +93,7 @@ signature LIL =
     and primarg = arg32 of sv32 | arg64 of sv64
     and sv64 = 
       Var_64 of var 
-      | Const_64 of (con,exp) Prim.value
+      | Const_64 of (con,sv64) Prim.value
     and sv32 = 
       Var_32 of var 
       | Coercion of coercion * con list  (* Coercion and decorations*)
@@ -137,6 +137,7 @@ signature LIL =
     and function = Function of {tFormals    : (var * kind) list,
 				eFormals    : (var * con) list,
 				fFormals    : (var * con) list,
+				rtype       : con,
 				body        : exp}
     and switch = 
       Sumcase of   {arg : sv32,arms :(w32  * (var * con) * exp) list, default: exp option, tipe : con}

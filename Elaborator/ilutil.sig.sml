@@ -161,6 +161,7 @@ signature ILUTIL =
     val sdec_free : sdec -> Name.VarSet.set
     val sbnd_free : sbnd -> Name.VarSet.set
     val sdecs_free : Il.sdecs -> Name.VarSet.set
+    val sbnds_free : Il.sbnds -> Name.VarSet.set
     val ovld_free : Il.ovld -> Name.VarSet.set
     val entry_free : Il.context_entry -> Name.VarSet.set
     val entries_free : Il.entries -> Name.VarSet.set

@@ -161,4 +161,4 @@
 0165 [closed]	Elaborator shadowing variables.
 0166 [closed]	Elaborator adding classifiers with unbound, free variables to context.
 0167 [closed]	Elaborator bombs on toplevel raise/handle/raise
-0168 [open]	Real.fromString does not handle nan and inf correctly
+0168 [closed]	Real.fromString does not handle nan and inf correctly

@@ -1,6 +1,7 @@
 (* Thread safety automatic since no mutable types are used *)
 
-local
+structure Leroy :> RUN = 
+  struct
 
   val silent = true
 
@@ -388,149 +389,149 @@ and (N,_) = <<H(F(A,x),F(x,y))>> in super M N;;
       end
 
 
-(************************ Completion ******************************)
+  (************************ Completion ******************************)
 
-fun deletion_message (k,_) =
-  (print_string "Rule ";print_num k; message " deleted")
-;
+  fun deletion_message (k,_) =
+    (print_string "Rule ";print_num k; message " deleted")
+    ;
 
-(* Generate failure message *)
-fun non_orientable (M,N) =
-  (pretty_term M; print_string " = "; pretty_term N; print_newline())
-;
+  (* Generate failure message *)
+  fun non_orientable (M,N) =
+    (pretty_term M; print_string " = "; pretty_term N; print_newline())
+    ;
 
-(* Improved Knuth-Bendix completion procedure *)
-(* kb_completion : (term_pair -> bool) -> num -> rules -> term_pair list -> (num & num) -> term_pair list -> rules *)
-fun kb_completion greater =
-  let fun kbrec n rules =
-    let val normal_form = mrewrite_all rules;
+  (* Improved Knuth-Bendix completion procedure *)
+  (* kb_completion : (term_pair -> bool) -> num -> rules -> term_pair list -> (num & num) -> term_pair list -> rules *)
+  fun kb_completion greater =
+    let fun kbrec n rules =
+      let val normal_form = mrewrite_all rules;
         fun get_rule k = assoc k rules;
         fun process failures =
           let fun processf (k,l) =
             let fun processkl [] =
               if k<l then next_criticals (k+1,l) else
-              if l<n then next_criticals (1,l+1) else
-               (case failures of
-                  [] => rules (* successful completion *)
-                | _  => (message "Non-orientable equations :";
-                         do_list non_orientable failures;
-                         failwith "kb_completion"))
-            | processkl ((M,N)::eqs) =
-              let val M' = normal_form M;
-                  val N' = normal_form N;
-                  fun enter_rule(left,right) =
-                    let val new_rule = (n+1, mk_rule left right) in
-                     (if silent
-			  then ()
-		      else pretty_rule new_rule;
-                      let fun left_reducible (_,(_,(L,_))) = reducible left L;
-                          val (redl,irredl) = List.partition left_reducible rules
-                      in (if silent
+		if l<n then next_criticals (1,l+1) else
+		  (case failures of
+		     [] => rules (* successful completion *)
+		   | _  => (message "Non-orientable equations :";
+			    do_list non_orientable failures;
+			    failwith "kb_completion"))
+		  | processkl ((M,N)::eqs) =
+		     let val M' = normal_form M;
+		       val N' = normal_form N;
+		       fun enter_rule(left,right) =
+			 let val new_rule = (n+1, mk_rule left right) in
+			   (if silent
 			      then ()
-			  else do_list deletion_message redl;
-                          let fun right_reduce (m,(_,(L,R))) = 
-                              (m,mk_rule L (mrewrite_all (new_rule::rules) R));
-                              val irreds = map right_reduce irredl;
-                              val eqs' = map (fn (_,(_,pair)) => pair) redl
-                          in kbrec (n+1) (new_rule::irreds) [] (k,l)
-                                   (eqs @ eqs' @ failures)
-                          end)
-                      end)
-                    end
-              in if M'=N' then processkl eqs else
-                 if greater(M',N') then enter_rule(M',N') else
-                 if greater(N',M') then enter_rule(N',M') else
-                   process ((M',N')::failures) (k,l) eqs
-              end
+			    else pretty_rule new_rule;
+			      let fun left_reducible (_,(_,(L,_))) = reducible left L;
+				val (redl,irredl) = List.partition left_reducible rules
+			      in (if silent
+				    then ()
+				  else do_list deletion_message redl;
+				    let fun right_reduce (m,(_,(L,R))) = 
+				      (m,mk_rule L (mrewrite_all (new_rule::rules) R));
+					val irreds = map right_reduce irredl;
+					val eqs' = map (fn (_,(_,pair)) => pair) redl
+				    in kbrec (n+1) (new_rule::irreds) [] (k,l)
+				      (eqs @ eqs' @ failures)
+				    end)
+			      end)
+			 end
+		     in if M'=N' then processkl eqs else
+		       if greater(M',N') then enter_rule(M',N') else
+			 if greater(N',M') then enter_rule(N',M') else
+			   process ((M',N')::failures) (k,l) eqs
+		     end
             in processkl
             end
-          and next_criticals (k,l) =
-            (let val (v,el) = get_rule l in
-               if k=l then
-                 processf (k,l) (strict_critical_pairs el (rename v el))
-               else
-                (let val (_,ek) = get_rule k in 
-                    processf (k,l) (mutual_critical_pairs el (rename v ek))
-                 end
-                 handle failure "find" (*rule k deleted*) =>
-                   next_criticals (k+1,l))
-             end
-             handle failure "find" (*rule l deleted*) =>
-                next_criticals (1,l+1))
+	      and next_criticals (k,l) =
+		(let val (v,el) = get_rule l in
+		   if k=l then
+		     processf (k,l) (strict_critical_pairs el (rename v el))
+		   else
+		     (let val (_,ek) = get_rule k in 
+			processf (k,l) (mutual_critical_pairs el (rename v ek))
+		      end
+			handle failure "find" (*rule k deleted*) =>
+			  next_criticals (k+1,l))
+		 end
+		   handle failure "find" (*rule l deleted*) =>
+		     next_criticals (1,l+1))
           in processf
           end
-    in process
+      in process
+      end
+    in kbrec
     end
-  in kbrec
-  end
-;
+  ;
 
-fun kb_complete greater complete_rules rules =
+  fun kb_complete greater complete_rules rules =
     let val n = check_rules complete_rules;
-        val eqs = map (fn (_,(_,pair)) => pair) rules;
-        val completed_rules =
-               kb_completion greater n complete_rules [] (n,n) eqs
+      val eqs = map (fn (_,(_,pair)) => pair) rules;
+      val completed_rules =
+	kb_completion greater n complete_rules [] (n,n) eqs
     in (message "Canonical set found :";
         if (silent)
-	    then ()
+	  then ()
 	else pretty_rules (rev completed_rules);
-        ())
+	  ())
     end
-;
+  ;
 
-val Group_rules = [
-  (1, (1, (Term("*", [Term("U",[]), Var 1]), Var 1))),
-  (2, (1, (Term("*", [Term("I",[Var 1]), Var 1]), Term("U",[])))),
-  (3, (3, (Term("*", [Term("*", [Var 1, Var 2]), Var 3]),
-           Term("*", [Var 1, Term("*", [Var 2, Var 3])]))))];
+  val Group_rules = [
+		     (1, (1, (Term("*", [Term("U",[]), Var 1]), Var 1))),
+		     (2, (1, (Term("*", [Term("I",[Var 1]), Var 1]), Term("U",[])))),
+		     (3, (3, (Term("*", [Term("*", [Var 1, Var 2]), Var 3]),
+			      Term("*", [Var 1, Term("*", [Var 2, Var 3])]))))];
 
-val Geom_rules = [
- (1,(1,(Term ("*",[(Term ("U",[])), (Var 1)]),(Var 1)))),
- (2,(1,(Term ("*",[(Term ("I",[(Var 1)])), (Var 1)]),(Term ("U",[]))))),
- (3,(3,(Term ("*",[(Term ("*",[(Var 1), (Var 2)])), (Var 3)]),
-  (Term ("*",[(Var 1), (Term ("*",[(Var 2), (Var 3)]))]))))),
- (4,(0,(Term ("*",[(Term ("A",[])), (Term ("B",[]))]),
-  (Term ("*",[(Term ("B",[])), (Term ("A",[]))]))))),
- (5,(0,(Term ("*",[(Term ("C",[])), (Term ("C",[]))]),(Term ("U",[]))))),
- (6,(0,
-  (Term
-   ("*",
-    [(Term ("C",[])),
-     (Term ("*",[(Term ("A",[])), (Term ("I",[(Term ("C",[]))]))]))]),
-  (Term ("I",[(Term ("A",[]))]))))),
- (7,(0,
-  (Term
-   ("*",
-    [(Term ("C",[])),
-     (Term ("*",[(Term ("B",[])), (Term ("I",[(Term ("C",[]))]))]))]),
-  (Term ("B",[])))))
-];
+  val Geom_rules = [
+		    (1,(1,(Term ("*",[(Term ("U",[])), (Var 1)]),(Var 1)))),
+		    (2,(1,(Term ("*",[(Term ("I",[(Var 1)])), (Var 1)]),(Term ("U",[]))))),
+		    (3,(3,(Term ("*",[(Term ("*",[(Var 1), (Var 2)])), (Var 3)]),
+			   (Term ("*",[(Var 1), (Term ("*",[(Var 2), (Var 3)]))]))))),
+		    (4,(0,(Term ("*",[(Term ("A",[])), (Term ("B",[]))]),
+			   (Term ("*",[(Term ("B",[])), (Term ("A",[]))]))))),
+		    (5,(0,(Term ("*",[(Term ("C",[])), (Term ("C",[]))]),(Term ("U",[]))))),
+		    (6,(0,
+			(Term
+			 ("*",
+			  [(Term ("C",[])),
+			   (Term ("*",[(Term ("A",[])), (Term ("I",[(Term ("C",[]))]))]))]),
+			 (Term ("I",[(Term ("A",[]))]))))),
+		    (7,(0,
+			(Term
+			 ("*",
+			  [(Term ("C",[])),
+			   (Term ("*",[(Term ("B",[])), (Term ("I",[(Term ("C",[]))]))]))]),
+			 (Term ("B",[])))))
+		    ];
 
-fun Group_rank "U" = 0
-  | Group_rank "*" = 1
-  | Group_rank "I" = 2
-  | Group_rank "B" = 3
-  | Group_rank "C" = 4
-  | Group_rank "A" = 5
-  | Group_rank _ = raise Match
-;
+  fun Group_rank "U" = 0
+    | Group_rank "*" = 1
+    | Group_rank "I" = 2
+    | Group_rank "B" = 3
+    | Group_rank "C" = 4
+    | Group_rank "A" = 5
+    | Group_rank _ = raise Match
+    ;
 
-fun Group_precedence op1 op2 =
-  let val r1 = Group_rank op1;
+  fun Group_precedence op1 op2 =
+    let val r1 = Group_rank op1;
       val r2 = Group_rank op2
-  in
-    if r1 = r2 then Equal else
-    if r1 > r2 then Greater else NotGE
-  end
+    in
+      if r1 = r2 then Equal else
+	if r1 > r2 then Greater else NotGE
+    end
 
 
-val Group_order = rpo Group_precedence lex_ext 
+  val Group_order = rpo Group_precedence lex_ext 
     
     
-fun greater pair =
-  case Group_order pair of Greater => true | _ => false
+  fun greater pair =
+    case Group_order pair of Greater => true | _ => false
 
-in
-    fun runLeroy() = kb_complete greater [] Geom_rules 
-	handle e => (print "top-level exception caught and re-raised"; raise e)
+
+  fun run () = kb_complete greater [] Geom_rules 
+    handle e => (print "top-level exception caught and re-raised"; raise e)
 end

@@ -187,6 +187,18 @@ structure NilDefs :> NILDEFS =
   fun allprim_uses_carg (NilPrimOp np) = nilprim_uses_carg np
     | allprim_uses_carg (PrimOp p) = prim_uses_carg p
 
+    fun path2exp (v,labs) =
+	let fun loop e [] = e
+	      | loop e (l::rest) = loop (Prim_e(NilPrimOp(select l), [], [], [e])) rest
+	in  loop (Var_e v) labs
+	end
+
+    fun exp2path e =
+	let fun loop (Var_e v,labs) = SOME(v,labs)
+  	      | loop (Prim_e(NilPrimOp(select lbl), [], [], [e]),labs) = loop (e,lbl::labs)
+	      | loop _ = NONE
+ 	in  loop (e,[])
+	end
 
     fun path2con (v,labs) =
 	let fun loop c [] = c

@@ -1,3 +1,5 @@
+structure Pia :> RUN = 
+  struct
 fun runSomePia dataFile = 
 let
 open Math
@@ -2061,9 +2063,13 @@ in
      go())
 end
 
-fun runPia () = runSomePia "../BenchData/bsim"
+
+fun run () = runSomePia "../BenchData/bsim"
+
+(*
 fun runPia1 () = runSomePia "../BenchData/bsim1"
 fun runPia2 () = runSomePia "../BenchData/bsim2"
 fun runPia3 () = runSomePia "../BenchData/bsim3"
 
-
+*)
+end

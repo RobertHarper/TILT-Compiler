@@ -3,7 +3,7 @@
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
  *
  *)
-
+(*X*)
 structure Real64 :> REAL where type real = real
 			   and type Math.real = real =
   struct

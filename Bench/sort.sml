@@ -5,7 +5,8 @@
 
 
 
-local 
+structure Isort :> RUN = 
+  struct
     fun insert (a:int) nil = (a::nil)
       | insert a (l::lr) = if (a < l) then (a::(l::lr))
 			   else (l::(insert a lr))
@@ -26,8 +27,8 @@ local
       | checkit [a:int] = true
       | checkit (a::b::rest) = (a<=b) andalso (checkit (b::rest))
 
-in
-    fun runIsort () = 
+
+    fun run () = 
       let val _ = print "Started\n"
 	val data = generator 1 5000 [] 
 	val sorted = sort data

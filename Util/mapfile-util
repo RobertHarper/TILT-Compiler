@@ -19,7 +19,7 @@ source unit Util = "util.sml" {
 
 source unit LISTOPS = "listops.sig.sml" {}
 source unit Listops = "listops.sml" {
-	LISTOPS List Util ListPair Substring StringCvt Int
+	LISTOPS List Util ListPair Substring String StringCvt Int
 }
 
 source unit SEQUENCE = "sequence.sig.sml" {}

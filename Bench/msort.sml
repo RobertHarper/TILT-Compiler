@@ -1,7 +1,9 @@
 (* Thread safety guaranteed by lack of mutable types *)
 
 (* Merge sort *)
-local
+
+structure Msort :> RUN = 
+  struct
 
 fun revappend([],l2) = l2
   | revappend(hd::tl,l2) = revappend(tl,hd::l2)
@@ -38,8 +40,8 @@ fun for(start,stop,f) =
   end
 
 
-in
-    fun runMsort() = (print "Msort Started\n";
+
+    fun run () = (print "Msort Started\n";
 		      for(1,10,fn _ => sort (op >) (square(gen([],10),9)));
 		      print "Msort Done\n")
 

@@ -904,18 +904,20 @@ struct
 
     and projectRecordType(D:context, c:con, l:label) =
       let
-	fun err () =
+	fun err c' =
 	  (
-	   print "projectRecordType could not find field ";Ppnil.pp_label l;print " in constructor: \n";
+	   print "projectRecordType could not find field ";Ppnil.pp_label l;print " in constructor: \n\t";
 	   Ppnil.pp_con c;print "\n";
+	   print " with HNF: \n\t";
+	   Ppnil.pp_con c';print "\n";
 	   error' "Error in record projection"
 	   )
       in
-	case #2(reduce_hnf(D,c)) of
-	     Prim_c(Record_c labs, cons) =>
-		 (case (Listops.assoc_eq(eq_label,l,Listops.zip labs cons)) of
-		      NONE => err()
-		    | SOME c => c)
+	case #2(reduce_hnf(D,c)) 
+	  of c as (Prim_c(Record_c labs, cons)) =>
+	    (case (Listops.assoc_eq(eq_label,l,Listops.zip labs cons)) of
+	       NONE => err c
+	     | SOME c => c)
 	   | c => (print "projectRecordType reduced to non-record type = \n";
 		   Ppnil.pp_con c; print "\n";
 		   error' "projectRecordType reduced to non-record type")

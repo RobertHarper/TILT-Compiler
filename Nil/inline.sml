@@ -112,7 +112,7 @@ struct
 	  val escaping = Listops.orfold (fn (_, level) => level = 0) occurs
 	  val has_nonescape = Listops.orfold (fn (_, level) => level > 0) occurs
 	  val verysmall = size <= tinyThreshold
-	  val numapps = length occurs
+	  val numapps = List.foldl (fn ((recur,n),count) => if (not recur) andalso (n >= 1) then count+1 else count) 0 occurs
 
 	  val small = numapps * size < occurThreshold * sizeThreshold
 	  (*(size <= sizeThreshold) andalso

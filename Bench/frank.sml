@@ -1,6 +1,7 @@
 (* Thread safety achieved by encapsulating top-level state into two functions: makeSolver and makeTest *)
 
-local
+structure Frank :> RUN = 
+  struct
     fun inc ir = ir := (!ir) + 1
     val makestring_int = Int.toString
 	
@@ -463,9 +464,9 @@ fun sol1 () = let val (exists, solution1, solution2) = makeTest()
 fun sol2 () = let val (exists, solution1, solution2) = makeTest()
 	      in  exists(fn Z => solution2 (Z) (fn () => (print "yes\n"; raise Done)))
 	      end
-in
 
-    fun runFrank() = (sol2 ()) 
+
+    fun run() = (sol2 ()) 
 	handle (e as BadArg s) => (print ("BadArg " ^ s ^ "\n"); raise e)
 	     | Done => ()
 

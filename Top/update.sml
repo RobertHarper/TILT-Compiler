@@ -67,7 +67,8 @@ struct
     val Assemble =	W.fromInt 8
     val Link =		W.fromInt 16
     val Compress =	W.fromInt 32
-    val Remove =	W.fromInt 64
+    val RemoveAsm =	W.fromInt 64
+    val RemoveAsmz =	W.fromInt 128
 
     fun test (flags : W.word, bits : W.word) : bool =
 	W.nequal (W.andb(flags,bits), W.zero)
@@ -251,7 +252,7 @@ struct
 	in  foldr add nil
 	    [(Elaborate,elaborate), (Generate,"generate"),
 	     (Uncompress,"uncompress"), (Assemble,"assemble"),
-	     (Link,"link"), (Compress,"compress"), (Remove,"remove")]
+	     (Link,"link"), (Compress,"compress"), (RemoveAsm,"remove_asm"), (RemoveAsmz,"remove_asmz")]
 	end
 
     fun planStrings (plan : plan) : string list =
@@ -537,7 +538,8 @@ struct
 	    val uptodate = check (eq, infoFile, info)
 	    val uptoElaborate = !UptoElaborate
 	    val uptoAsm = !UptoAsm
-	    val keepAsm = !KeepAsm
+	    val keepAsm = (!KeepAsm) andalso not (!CompressAsm)
+	    val keepAsmz = !KeepAsm
 	    val compressAsm = !CompressAsm
 
 	    val remove : (Paths.compunit -> string) -> unit =
@@ -560,7 +562,7 @@ struct
 		have (Paths.ifaceFile o Paths.unitIface)
 	    val dont_generate =
 		uptoElaborate orelse
-		(uptoAsm andalso not keepAsm) orelse
+		(uptoAsm andalso not (keepAsm orelse keepAsmz)) orelse
 		have Paths.asmFile orelse
 		have Paths.asmzFile
 	    val inputs : inputs =
@@ -587,12 +589,16 @@ struct
 		  have Paths.objFile),
 		 (Compress,
 		  uptoElaborate orelse
-		  not keepAsm orelse
+		  not (keepAsm orelse keepAsmz) orelse
 		  not compressAsm orelse
-		  have Paths.asmzFile),
-		 (Remove,
+		  have Paths.asmzFile),  
+		 (RemoveAsm,
 		  uptoElaborate orelse
-		  keepAsm)]
+		  keepAsm orelse
+		  (dont_generate andalso (not (have Paths.asmFile)))),   (* not have Paths.asmFile andalso ...?*)
+		 (RemoveAsmz,
+		  uptoElaborate orelse
+		  keepAsmz)]
 	    val plan =
 		if W.equal(W.zero, flags) then
 		    (writeInfo (infoFile, info); EMPTY_PLAN)
@@ -629,8 +635,10 @@ struct
 	    val _ = msg ("[checking " ^ what ^ "]\n")
 	    val uptoElaborate = !UptoElaborate
 	    val uptoAsm = !UptoAsm
-	    val keepAsm = !KeepAsm
+	    val keepAsm = (!KeepAsm) andalso not (!CompressAsm)
+	    val keepAsmz = !KeepAsm
 	    val compressAsm = !CompressAsm
+
 	    val _ = Prelink.check (eq, map unitEntry units)
 
 	    fun remove (p : Paths.exe -> string) : unit =
@@ -651,17 +659,20 @@ struct
 		foldl add_flag W.zero
 		[(Generate,
 		  uptoElaborate orelse
-		  (uptoAsm andalso not keepAsm)),
+		  (uptoAsm andalso not (keepAsm orelse keepAsmz))),
 		 (Link,
 		  uptoElaborate orelse
 		  uptoAsm),
 		 (Compress,
 		  uptoElaborate orelse
-		  not keepAsm orelse
+		  not (keepAsm orelse keepAsmz) orelse
 		  not compressAsm),
-		 (Remove,
+		 (RemoveAsm,
 		  uptoElaborate orelse
-		  keepAsm)]
+		  keepAsm),
+		 (RemoveAsmz,
+		  uptoElaborate orelse
+		  keepAsmz)]
 	    val plan =
 		if W.equal(W.zero,flags) then EMPTY_PLAN
 		else LINK (exe,units,flags)
@@ -794,15 +805,17 @@ struct
 	in  ()
 	end
 
-    fun remove (asmFile : string, asmzFile : string) : unit =
-	app FileCache.remove [asmFile, asmzFile]
+    fun remove (file : string) : unit = FileCache.remove file
 
     fun finish (U : Paths.compunit, flags : W.word, info : Info.info) : plan =
 	let val _ = if test(flags,Compress) then
 			compress (Paths.asmFile U,Paths.asmzFile U)
 		    else ()
-	    val _ = if test(flags,Remove) then
-			remove (Paths.asmFile U,Paths.asmzFile U)
+	    val _ = if test(flags,RemoveAsm) then
+			remove (Paths.asmFile U)
+		    else ()
+	    val _ = if test(flags,RemoveAsmz) then
+			remove (Paths.asmzFile U)
 		    else ()
 	    val infoTarget = Paths.infoFile U
 	    val _ = FileCache.write_info (infoTarget, info)
@@ -820,7 +833,8 @@ struct
 		     finish (U,flags,info))
 		else
 		    let val inputs = NONE
-			val mask = W.orb(Compress,Remove)
+			val mask = W.orb(Compress,RemoveAsm)
+			val mask = W.orb(mask,RemoveAsmz)
 			val mask = W.orb(mask,Assemble)
 			val flags = W.andb(flags,mask)
 		    in  COMPILE (U, inputs, flags, info)
@@ -877,9 +891,11 @@ struct
 			compress (Paths.exeAsmFile exe,
 				  Paths.exeAsmzFile exe)
 		    else ()
-	    val _ = if test(flags,Remove) then
-			remove (Paths.exeAsmFile exe,
-				Paths.exeAsmzFile exe)
+	    val _ = if test(flags,RemoveAsm) then
+			remove (Paths.exeAsmFile exe)
+		    else ()
+	    val _ = if test(flags,RemoveAsmz) then
+			remove (Paths.exeAsmzFile exe)
 		    else ()
 	in  EMPTY_PLAN
 	end
@@ -896,7 +912,8 @@ struct
 		     link_link (exe,units);
 		     finish_link (exe,flags))
 		else
-		    let val mask = W.orb(Compress,Remove)
+		    let val mask = W.orb(Compress,RemoveAsm)
+		        val mask = W.orb(mask,RemoveAsmz)
 			val flags = W.andb(flags,mask)
 		    in  LINK (exe, units, flags)
 		    end
@@ -1009,8 +1026,8 @@ struct
 			 (Uncompress, Paths.asmFile),
 			 (Assemble, Paths.objFile),
 			 (Compress, Paths.asmzFile),
-			 (Remove, Paths.asmFile),
-			 (Remove, Paths.asmFile)]
+			 (RemoveAsm, Paths.asmFile),
+			 (RemoveAsmz, Paths.asmzFile)]
 		in  map (fn p => p unit) paths
 		end
 	    | CHECK _ => []
@@ -1021,8 +1038,8 @@ struct
 			 (Link, Paths.exeObjFile),
 			 (Link, Paths.exeFile),
 			 (Compress, Paths.exeAsmzFile),
-			 (Remove, Paths.exeAsmFile),
-			 (Remove, Paths.exeAsmFile)]
+			 (RemoveAsm, Paths.exeAsmFile),
+			 (RemoveAsmz, Paths.exeAsmzFile)]
 		in  map (fn p => p exe) paths
 		end
 	    | PACK _ => []) (* XXX: each item in packlist is several targets *)

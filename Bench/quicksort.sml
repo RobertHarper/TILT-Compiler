@@ -12,7 +12,8 @@
 (* $Id$ *)
 
 
-local
+structure Quicksort :> RUN = 
+struct
 
 
 val int32touint32 = TiltPrim.int32touint32
@@ -123,7 +124,7 @@ fun main () =
    test_sort qsort2 50000;
    test_sort qsort2 50000;
    test_sort qsort2 50000)
-in
-  fun runQuicksort () = main()
+
+  fun run () = main()
 (*  val quicksortResult = main()*)
 end

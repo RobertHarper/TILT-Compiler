@@ -165,11 +165,14 @@ structure NumScan : sig
     fun isOctDigit d = (d < 0w8)
     fun isDecDigit d = (d < 0w10)
     fun isHexDigit d = (d < 0w16)
+    fun isAlphaDec d = (d < 0w36)
+    fun isAlpha d    = (d > 0w9) andalso (d < 0w36)
 
     fun binPat wOkay = {wOkay=wOkay, xOkay=false, isDigit=isBinDigit}
     fun octPat wOkay = {wOkay=wOkay, xOkay=false, isDigit=isOctDigit}
     fun decPat wOkay = {wOkay=wOkay, xOkay=false, isDigit=isDecDigit}
     fun hexPat wOkay = {wOkay=wOkay, xOkay=true, isDigit=isHexDigit}
+    fun alphaDecPat wOkay = {wOkay=wOkay, xOkay=false, isDigit=isAlphaDec}
 
     fun scanBin isWord getc cs = (case (scanPrefix (binPat isWord) getc cs)
 	   of NONE => NONE
@@ -313,6 +316,7 @@ structure NumScan : sig
 	    if (isDecDigit d) then scan(wordToReal d, 1, cs) else NONE
 	  end
 
+
     local
       val negTbl = PreVector.vectorFromList [
 	      1.0E~0, 1.0E~1, 1.0E~2, 1.0E~3, 1.0E~4,
@@ -387,11 +391,27 @@ structure NumScan : sig
 		      else NONE
 		  | NONE => NONE
 		(* end case *))
+
+	  fun getSpecial getc (next,rest) = 
+	    let
+	      val (s,rest) = StringCvt.splitl (isAlpha o code) getc rest
+	    in 
+	      if (next = (code #"n")) andalso (s = "an") then SOME(0.0/0.0,rest)
+	      else if (next = (code #"i")) andalso (s = "nf" orelse s = "nfinity") then SOME (1.0/0.0,rest)
+	      else NONE
+	    end
+	  
 	  in
-	    case (scanPrefix (decPat false) getc cs)
+	    case (scanPrefix (alphaDecPat false) getc cs)
 	     of NONE => NONE
-	      | (SOME{neg, next, rest}) => let
-		  val (whole, hasPt, rest) = if (next = ptCode)
+	      | (SOME{neg, next, rest}) => 
+	       if isAlpha next then 
+		 (case getSpecial getc (next,rest)
+		    of SOME (r,rest) => SOME (negate (neg,r),rest)
+		     | NONE => NONE)
+	       else
+		 let
+		   val (whole, hasPt, rest) = if (next = ptCode)
 			then (NONE, true, rest)
 			else let
 			  val (whole, rest) = (case fscan10 getc (next, rest)

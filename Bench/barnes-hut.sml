@@ -4,7 +4,8 @@
  * currently commented out so that the code can be run as a standard benchmark
  *)
 
-local
+structure BarnesHut :> RUN = 
+struct
 
 val realEq = Real.==
 
@@ -670,8 +671,8 @@ end;
 (* val _ = standard 1000 2 1000 *)
 (* val _ = bh 1000 10 1000  *)
 
-in
-    fun runBarnesHut() = 
+
+    fun run () = 
       let 
 	val _ = standard 1000 2 1000 
 	val _ = bh 1000 10 1000  

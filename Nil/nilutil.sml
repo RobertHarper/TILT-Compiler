@@ -69,6 +69,19 @@ struct
     end
 
   fun makeConb cbnd = Con_b (Runtime,cbnd)
+  fun cbnds2bnds cbnds = map makeConb cbnds
+
+  local
+    fun cbnd2importbnd cbnd = ImportBnd(Runtime,cbnd)
+    fun bnd2importbnd bnd = 
+      (case bnd
+	 of Con_b pc => ImportBnd pc
+	  | _ => error "Only con bnds can be used as ImportBnds")
+  in
+    val cbnds2importbnds = map cbnd2importbnd
+
+    val bnds2importbnds  = map bnd2importbnd
+  end
 
   (* Loses Parallel information 
    * Return bounds in reverse order 
