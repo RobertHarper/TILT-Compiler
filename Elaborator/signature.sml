@@ -28,10 +28,16 @@ structure Signature :> SIGNATURE =
  local
      val Cpolyinst : (context * sdecs -> sbnd list * sdecs * con list) ref =
 	ref (fn _ => error "polyinst not installed")
+     val Ceq_compile : (Il.context * Il.con -> (Il.exp * Il.con) option) ref =
+	ref (fn _ => error "eq_compile not installed")
  in
-     fun installHelpers{polyinst : context * sdecs -> sbnd list * sdecs * con list} : unit =
-	(Cpolyinst := polyinst)
+     fun installHelpers
+	{polyinst : context * sdecs -> sbnd list * sdecs * con list,
+	 eq_compile : Il.context * Il.con -> (Il.exp * Il.con) option} : unit =
+	(Cpolyinst := polyinst;
+	 Ceq_compile := eq_compile)
      fun polyinst arg = !Cpolyinst arg
+     fun eq_compile arg = !Ceq_compile arg
  end
 
     (* ----------------- Misc Helper Functions ----------------------- *)
@@ -772,6 +778,39 @@ structure Signature :> SIGNATURE =
 	in  sdecs_result
 	end
 
+	(* Coercion of a monoval to match a monoval spec. *)
+	fun coerce_monoval (ctxt:context,
+			    spec : var * con * exp option * bool,
+			    path_actual : path,
+			    actual : (label list * phrase_class) option) : (bnd * dec) option =
+	    let val (v_spec,con_spec,eopt,_) = spec
+	    in
+		(case actual of
+		    SOME(lbls,PHRASE_CLASS_EXP (_,con_actual,eopt',inline)) =>
+			if (sub_con(ctxt,con_actual,con_spec) andalso
+			    (case (eopt,eopt') of
+				(SOME _, NONE) => false
+			     |	_ => true)) (* XXX: We used to call IlStatic.eq_exp in (SOME, SOME) case. *)
+			then
+			    let val exp =
+				    (case (inline,eopt') of
+					(true, SOME e) => e
+				    |	_ => path2exp(join_path_labels(path_actual,lbls)))
+				(* Attempt to make unsealed signature smaller. *)
+				val con_actual_reduced = con_normalize(ctxt, con_actual)
+				val con_actual_smaller =
+				    if (con_size con_actual) < (con_size con_actual_reduced)
+				    then con_actual else con_actual_reduced
+				val bnd = BND_EXP(v_spec,exp)
+				(* Derek: Why do we put in the inlining info of the "from" component? *)
+				(* NB dec is only used by transparant ascription. *)
+				val dec = DEC_EXP(v_spec,con_actual_smaller,eopt',inline)
+			    in  SOME(bnd,dec)
+			    end
+			 else NONE
+		 |  _ => NONE)
+	    end
+
        (* ---- coercion of a poly component to a mono/poly specification --- *)
        fun polyval_case (ctxt : context, coerce : bool * string -> unit)
 	   {name : var, (* use this name for the final binding *)
@@ -837,7 +876,7 @@ structure Signature :> SIGNATURE =
 				 pp_con con_actual_tyvar; print "\n";
 				 print "spec_con = "; pp_con con_spec; print "\n";
 				 (case varsig_spec of
-				      NONE => print "no varsig_spec"
+				      NONE => print "no varsig_spec\n"
 				    | SOME(v,s) => (print "varsig_spec = "; pp_var v;
 						    print "\n"; pp_signat s; print "\n")))
 		       else () (**)
@@ -997,46 +1036,103 @@ structure Signature :> SIGNATURE =
 	  in  fun actual_self_lookup lbl = Sdecs_Lookup ctxt (self, sdecs_actual_self, [lbl])
 	  end
 
+	fun eqtype_error (eqlab:label) =
+	    (error_region_with "type component does not admit equality: ";
+	     print(Name.label2name' eqlab); print "\n";
+	     NONE)
+
 	fun doit ctxt (lab,spec_dec) : (bnd * dec) option =
 
-	    (case (spec_dec, actual_self_lookup lab) of
+	    (case (Name.is_eq lab, spec_dec, actual_self_lookup lab) of
 
-		 (* --------------- Coercion from monoval to monoval ----------------------- *)
-		 (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_EXP (_,con_actual,eopt',inline))) =>
-		     if (sub_con(ctxt,con_actual,con_spec) andalso
-			 (case (eopt,eopt') of
-			      (SOME _, NONE) => false
-			    | _ => true)) (* XXX: We used to call IlStatic.eq_exp in (SOME, SOME) case. *)
-			 then
-			     let val exp = (case (inline,eopt') of
-						(true, SOME e) => e
-					      | _ => path2exp(join_path_labels(path_actual,lbls)))
-				 (* Attempt to make unsealed signature smaller. *)
-				 val con_actual_reduced = con_normalize(ctxt, con_actual)
-				 val con_actual_smaller = if (con_size con_actual) < (con_size con_actual_reduced)
-							      then con_actual else con_actual_reduced
-				 val bnd = BND_EXP(v_spec,exp)
-				 (* Derek: Why do we put in the inlining info of the "from" component? *)
-				 val dec = DEC_EXP(v_spec,con_actual_smaller,eopt',inline)
-			     in  SOME(bnd,dec)
-			     end
-		     else
-			 let val con_spec_norm = con_normalize(ctxt,con_spec)
-			     val con_actual_norm = con_normalize(ctxt,con_actual)
-			 in  error_region_with "coercion of a monomorphic value component\n";
-			     tab_region_with "to a monomorphic value specification failed\n";
-			     print "Component name: ";   pp_label lab;
-			     print "\nExpected type:\n"; pp_con con_spec;
-			     print "\nFound type:\n";    pp_con con_actual;
-			     print "\nExpanded expected type:\n"; pp_con con_spec_norm;
-			     print "\nExpanded found type:\n"; pp_con con_actual_norm;
-			     print "\n";
-			     NONE
-			 end
+		(* --------- coercion of an equality function spec to an equality function ---- *)
+		(*
+			For these cases, actual_self_lookup sometimes return SOME e where
+			e is the wrong equality function.  This occurs with code like
 
-	           (* --------------- Coercion from module/polyval to monoval ----------------------- *)
-	           (* XXX not checking eopt XXX *)
-	          | (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_MOD (_,_,signat,_))) =>
+				structure B :> sig eqtype t end =
+				struct
+					structure Eqtype :> sig eqtype t end =
+					struct type t = unit end
+					open Eqtype
+					type t = int -> int
+				end
+
+			here the label +Et (Eqtype*.+Et) would be found by
+			actual_self_lookup but it would be the wrong equality function.  The
+			equality compiler can not get confused in this case because it uses
+			a context and adding a type labelled t to context always shadows
+			+Et.  With EqPayAsYouGo set, you can change "int -> int" to "unit"
+			to  an example that TILT erroneously rejects.
+
+			In the monomorphic case, we can not always invoke the equality
+			compiler because while we are coercing the primitive unit to the
+			primitive interface, the equality compiler does not just work: It
+			must be invoked speically because bool is defined in that unit.
+			Rather than special case for the primitive unit, we invoke the
+			equality compiler only if the candidate equality function found by
+			acutal_self_lookup has the wrong type.
+
+			We use eqfun_con to get the actual type definition rather than
+			looking back in sdecs_target.  In the monomorphic case,
+			con_eqfun_spec has the form con*con->bool where con=v and
+			v:TYPE=v_actual.labs in ctxt.  In the polymorphic case, con_eqfun
+			has the form con'*con'->bool where con'=v(varp.lab1,...,varp.labn)
+			and v:(n->TYPE)=v_actual.labs in ctxt.
+		*)
+
+		  (true, DEC_EXP (dec_spec as (v_spec,con_eqfun_spec,NONE,false)), candidate) =>
+			(case (coerce_monoval(ctxt,dec_spec,path_actual,candidate)) of
+			    (r as SOME _) => r
+			|   NONE =>
+				let val con = IlUtil.eqfun_con(ctxt,con_eqfun_spec)
+				in  (case (eq_compile(ctxt,con)) of
+					SOME (exp,_) =>
+					    let val bnd = BND_EXP(v_spec,exp)
+					    in	SOME(bnd,spec_dec)
+					    end
+				    |	NONE => eqtype_error lab)
+				end)
+
+		| (true, DEC_MOD (v_spec, true,
+			SIGNAT_FUNCTOR(varp,sigp,
+				innersig as SIGNAT_STRUCTURE[SDEC(it, DEC_EXP(itv,con_eqfun,NONE,false))],
+				TOTAL)), _) =>
+			let val ctxt = add_context_mod'(ctxt,varp,sigp)
+			    val con' = IlUtil.eqfun_con(ctxt,con_eqfun)
+			in
+			    (case (eq_compile(ctxt,con')) of
+				SOME (exp,_) =>
+				    let val bnd = BND_MOD(v_spec,true,MOD_FUNCTOR(TOTAL, varp, sigp,
+						MOD_STRUCTURE[SBND(it,BND_EXP(itv,exp))], innersig))
+				    in  SOME(bnd,spec_dec)
+				    end
+			     |	NONE => eqtype_error lab)
+			end
+
+		(* --------------- Coercion from monoval to monoval ----------------------- *)
+		| (_, DEC_EXP dec_spec, actual as SOME(_,PHRASE_CLASS_EXP pc_actual)) =>
+		    (case (coerce_monoval(ctxt,dec_spec,path_actual,actual)) of
+			(r as SOME _) => r
+		     |	NONE =>
+			let val (_,con_spec,_,_) = dec_spec
+			    val (_,con_actual,_,_) = pc_actual
+			    val con_spec_norm = con_normalize(ctxt,con_spec)
+			    val con_actual_norm = con_normalize(ctxt,con_actual)
+			in  error_region_with "coercion of a monomorphic value component\n";
+			    tab_region_with "to a monomorphic value specification failed\n";
+			    print "Component name: ";   pp_label lab;
+			    print "\nExpected type:\n"; pp_con con_spec;
+			    print "\nFound type:\n";    pp_con con_actual;
+			    print "\nExpanded expected type:\n"; pp_con con_spec_norm;
+			    print "\nExpanded found type:\n"; pp_con con_actual_norm;
+			    print "\n";
+			    NONE
+			end)
+
+		(* --------------- Coercion from module/polyval to monoval ----------------------- *)
+		(* XXX not checking eopt XXX *)
+		| (_, DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_MOD (_,_,signat,_))) =>
 		      (case (is_polyval_sig signat) of
 			   NONE =>
 			       (case (is_exception_sig signat) of
@@ -1078,22 +1174,24 @@ structure Signature :> SIGNATURE =
 					  sdecs_actual = sdecs_actual, con_actual = con_actual}
 			       end)
 
-                (* --------- Coercion from con, overexp, or none to monoval --------------- *)
-	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_CON _)) =>
+		(* --------- Coercion from con, overexp, or none to monoval --------------- *)
+		| (_, DEC_EXP _, SOME(_,PHRASE_CLASS_CON _)) =>
 			     (error_region_with "value specification but type component: ";
 			      pp_label lab; print "\n"; NONE)
-	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_SIG _)) =>
+
+		| (_, DEC_EXP _, SOME(_,PHRASE_CLASS_SIG _)) =>
 			     (error_region_with "value specification but signature component: ";
 			      pp_label lab; print "\n"; NONE)
-		| (DEC_EXP _, SOME(_,PHRASE_CLASS_EXT _)) =>
+
+		| (_, DEC_EXP _, SOME(_,PHRASE_CLASS_EXT _)) =>
 			     error "Sdecs_Lookup returned extern"
 
-                | (DEC_EXP _, NONE) =>
+		| (_, DEC_EXP _, NONE) =>
 			     (error_region_with "value specification but missing component: ";
 			      pp_label lab; print "\n"; NONE)
 
-	        (* ----- Coercion from module/polyval to module/polyval -------------------------- *)
-	        | (DEC_MOD (v_spec,b,sig_spec), SOME(lbls, PHRASE_CLASS_MOD (_,_,sig_actual,_))) =>
+		(* ----- Coercion from module/polyval to module/polyval -------------------------- *)
+		| (_, DEC_MOD (v_spec,b,sig_spec), SOME(lbls, PHRASE_CLASS_MOD (_,_,sig_actual,_))) =>
 	            (case (is_polyval_sig sig_spec, is_polyval_sig sig_actual) of
 			 (* ----------- Coercion from polyval to polyval ------------------ *)
 			 (SOME (v1,s1,con_spec,_,_),
@@ -1121,15 +1219,15 @@ structure Signature :> SIGNATURE =
 			 (error_region_with "polymorphic value specification but module component: ";
 			  pp_label lab; print "\n"; NONE))
 
-	       (* ------- coercion of a non-module component to a module spec ---- *)
-	       | (DEC_MOD _, _) =>
+		(* ------- coercion of a non-existent or non-module component to a module spec ---- *)
+		| (_, DEC_MOD _, _) =>
 			(error_region_with "coercion of a non-module or non-existent component\n";
 			 tab_region_with   "  to a module specification failed at ";
 			 pp_label lab; print "\n";
 			 NONE)
 
-	       (* ------- coercion of a type component to a type spec ---- *)
-	       | (DEC_CON (v_spec, k_spec, copt_spec, _),
+		(* ------- coercion of a type component to a type spec ---- *)
+		| (_, DEC_CON (v_spec, k_spec, copt_spec, _),
 	          SOME(lbls,PHRASE_CLASS_CON (con_actual,k_actual,con_opt,inline))) =>
 			let val bnd = BND_CON(v_spec,con_actual)
 			    val dec = DEC_CON(v_spec,k_actual,SOME con_actual,inline)
@@ -1162,14 +1260,16 @@ structure Signature :> SIGNATURE =
 				  print "\n";
 				  NONE)
 			end
-		   (* ------- coercion of a non-type component to a type spec ---- *)
-		   | (DEC_CON (v_spec, k_spec, SOME c_spec, inline_spec), NONE) =>
+
+		(* ------- coercion of a non-type component to a type spec ---- *)
+		| (_, DEC_CON (v_spec, k_spec, SOME c_spec, inline_spec), NONE) =>
 			(* Used to check is_questionable for transparent datatypes. *)
 			(error_region_with "coercion of a non-existent component\n";
 			 tab_region_with   "  to a type specification failed at ";
 			 pp_label lab; print "\n";
 			 NONE)
-		   | (DEC_CON _, _) =>
+
+		| (_, DEC_CON _, _) =>
 			(error_region_with "coercion of a non-type or non-existent component\n";
 			 tab_region_with   "  to a type specification failed at ";
 			 pp_label lab; print "\n";
