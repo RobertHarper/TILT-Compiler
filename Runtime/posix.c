@@ -1016,18 +1016,36 @@ unit posix_filesys_closedir(int arg)
   return empty_record;
 }
 
-unit posix_filesys_chdir(string unused)
+unit posix_filesys_chdir(string dirname)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  const char *cdirname = mlstring2cstring_static(dirname);
+  if (chdir (cdirname) == -1) {
+      printf("POSIX function chdir on ('%s') returned with errno = %d\n", 
+	     cdirname, errno);
+      assert(0);
+    }
+  else return empty_record;
+}
+
+char* getcwd_size(int size)
+{
+  char* cwd = (char*) malloc(size);
+  if (cwd == NULL) {
+    printf("malloc in getcwd_size failed with size = %d\n", size);
+    assert(0);
+  }
+  if (getcwd(cwd, size) == NULL) {
+    free(cwd);
+    return getcwd_size(size * 2);
+  } else return cwd;
 }
 
 string posix_filesys_getcwd(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-  return 0;
+  char *cwd = getcwd_size(1024);
+  string mlcwd = cstring2mlstring_alloc(cwd);
+  free(cwd);
+  return mlcwd;
 }
 
 int posix_filesys_openf(string filename, word oflag, word mode)
