@@ -165,7 +165,7 @@ struct
 		  they're stored under a special label we can generate with Name.to_eq. *)
 	       | CON_VAR v =>  let val SOME(type_label,pc) = C.Context_Lookup_Var(ctxt,v) 
 				   val eqlabel = N.to_eq type_label
-			       in  case C.Context_Lookup_Label(ctxt,eqlabel) of
+			       in  case IlStatic.Context_Lookup_Labels(ctxt,[eqlabel]) of
 				       SOME(_,PHRASE_CLASS_EXP(e,_,_,_)) => (e, U.con_eqfun ctxt con)
 				     | _ => (case pc of
 						 (* if it's not there, recurse *)
@@ -354,7 +354,7 @@ struct
 		      val meq = 
 		      (case c of
 			   CON_MODULE_PROJECT(m,l) => 
-			       let val SIGNAT_SELF(_,_,s) = IlStatic.GetModSig(ctxt,m)
+			       let val s = IlStatic.GetModSig(ctxt,m)
 				   val eql = N.to_eq l
 			       in  case s of
 				   SIGNAT_STRUCTURE sdecs =>
@@ -366,12 +366,12 @@ struct
 			 | CON_VAR v => 
 			       let val SOME (type_label,_) = C.Context_Lookup_Var(ctxt,v)
 				   val eql = N.to_eq type_label
-			       in (case (C.Context_Lookup_Label(ctxt,eql)) of
+			       in (case (IlStatic.Context_Lookup_Labels(ctxt,[eql])) of
 				       SOME(_,PHRASE_CLASS_MOD(m,_,_)) => m
 				     | _ => raise NoEqExp)
 			       end
 			 | _ => raise NoEqExp)
-		      val SIGNAT_SELF(_,_,s) = IlStatic.GetModSig(ctxt,meq)
+		      val s = IlStatic.GetModSig(ctxt,meq)
 		  in  case s
 		      of SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE sdecs,
 					SIGNAT_STRUCTURE [res_sdec], _) => 
@@ -454,13 +454,13 @@ struct
 				     L.zip cvars name_cons, [])
 	    fun cfolder ((cvar,cl),ctxt) = 
 		let val dec = DEC_CON(cvar,KIND,NONE,false)
-		in C.add_context_sdec(ctxt,SDEC(cl,C.SelfifyDec ctxt dec))
+		in C.add_context_sdec(ctxt,SDEC(cl,dec))
 		end
 	    fun efolder ((evar,cvar,el),ctxt) = 
 		let 
 		    val con = U.con_eqfun ctxt (CON_VAR cvar)
 		    val dec = DEC_EXP(evar,con,NONE,false)
-		in C.add_context_sdec(ctxt,SDEC(el,C.SelfifyDec ctxt dec))
+		in C.add_context_sdec(ctxt,SDEC(el,dec))
 		end
 	    val ctxt = foldl cfolder ctxt (L.zip cvars type_lbls)
 	    val ctxt = foldl efolder ctxt (L.zip3 evars cvars eq_lbls)
