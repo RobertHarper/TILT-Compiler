@@ -573,7 +573,7 @@ functor Toil(structure Il : IL
 			      val res = if iseq
 					    then eqexp
 					else let val v = fresh_named_var "neq_arg"
-					     in  #1(make_lambda(v,arg_con, eq_con, 
+					     in  #1(make_lambda(v,arg_con, con_bool,
 								make_ifthenelse(APP(eqexp,[VAR v]),
 										false_exp,true_exp,con_bool)))
 					     end
