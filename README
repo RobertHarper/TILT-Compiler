@@ -45,7 +45,7 @@ of "make".
 
 2. Launch a few compilation slaves:
 
-	./Bin/tilt-slaves 3/localhost
+	./Bin/tilt-slaves -n 3/localhost
 
 If you do not get a window running emacs with three buffers named
 *tilt slave n*, then you can either fix ./Bin/tilt-slave (not

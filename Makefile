@@ -93,9 +93,13 @@ slaves: FORCE
 
 install: FORCE
 	-mkdir $(PREFIX)/lib $(PREFIX)/lib/tilt
-	tar cf - Bin Lib Heaps Runtime/*.a | (cd $(PREFIX)/lib/tilt && tar xf -)
-	-mkdir $(PREFIX)/man $(PREFIX)/man/man1
-	cp Doc/tilt.1 $(PREFIX)/man/man1 && chmod 644 $(PREFIX)/man/man1
+	if test -f Runtime/runtime-$(cputype)-opt.a; then \
+		tar cf - Runtime/*.a | (cd $(PREFIX)/lib/tilt && tar xf -); \
+	fi
+	tar cf - Bin Lib Heaps | (cd $(PREFIX)/lib/tilt && tar xf -)
+	-mkdir $(PREFIX)/man $(PREFIX)/man/man1 $(PREFIX)/man/man6
+	cp Doc/tilt.1 $(PREFIX)/man/man1 && chmod 644 $(PREFIX)/man/man1/tilt.1
+	cp Doc/project.6 $(PREFIX)/man/man6 && chmod 644 $(PREFIX)/man/man6/project.6
 	-mkdir $(PREFIX)/bin
 	for name in tilt tilt-nj tilt-slaves dump dump-nj; do \
 		(echo '#!/bin/sh'; \
