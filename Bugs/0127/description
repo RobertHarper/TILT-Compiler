@@ -10,6 +10,10 @@ Problem:     test case reports "wrong" result
 Code:        
 Transcript:  
 Comments:    
+	[joev] The problem seems to be that the optimizer is
+	eliminating the negation operation because its result is not
+	used.  This is incorrect, because negation can raise Overflow
+	and hence is not valuable.
 Fix:         
 Test: m0077
 Owner: 
