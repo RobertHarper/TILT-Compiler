@@ -1,24 +1,32 @@
-functor Tonil(structure Ilstatic : ILSTATIC
+functor Tonil(structure Il : IL
               structure Ilutil : ILUTIL
               structure Nilutil : NILUTIL
               structure Ilcontext : ILCONTEXT
               structure Nilcontext : NILCONTEXT
+              structure Nilstatic : NILSTATIC
+              structure Nilprimutil : PRIMUTIL
               structure Ppnil : PPNIL
               structure Ppil : PPIL
-                 sharing Ilutil.Il = Ilstatic.Il = Ppil.Il = Ilcontext.Il
-		 sharing Nilutil.Nil.Prim = Ilstatic.Il.Prim
-                 sharing Nilutil.Nil = Nilcontext.Nil = Ppnil.Nil
+                 sharing Il = Ilutil.Il = Ppil.Il = Ilcontext.Il
+		 sharing Nilutil.Nil.Prim = Nilprimutil.Prim = Il.Prim
+                 sharing Nilutil.Nil = Nilcontext.Nil = Ppnil.Nil = 
+                         Nilstatic.Nil
+                 sharing type Nilstatic.context = Nilcontext.context
+		 sharing type Nilprimutil.exp = Nilutil.Nil.exp
+                     and type Nilprimutil.con = Nilutil.Nil.con
              ) : TONIL =
 struct
-   structure Il = Ilstatic.Il
+   structure Il = Il
    structure Nil = Nilutil.Nil
 
    open Nil
-   val debug = ref false
+   val debug = ref true
 (*
    val debug = ref (Prim_c (Record_c nil, nil))
    val il_debug = ref (Il.CON_ANY)
 *)
+
+   val elaborator_specific_optimizations = ref true
 
    fun error msg = Util.error "tonil.sml" msg
 
@@ -234,8 +242,6 @@ struct
        if (Name.eq_var (key, key')) then SOME value else map key'
        
    val count = ref 0
-   fun gms (args as (_, module)) = 
-       (Ilstatic.GetModSig args)
 
    fun myunzip lst = 
        let
@@ -266,17 +272,22 @@ struct
 
    val w0 = Word32.fromInt 0
 
+   fun projectFromRecord con [] = con
+     | projectFromRecord (Prim_c(Record_c (lbl::lbls), con::cons)) (l' as (lbl'::lbls')) =
+       if (Name.eq_label (lbl, lbl')) then 
+	   projectFromRecord con lbls'
+       else
+	   projectFromRecord (Prim_c(Record_c lbls, cons)) l'
 
    (* xmod:  Translation of an IL module.
 
       {name_c, name_r, cbnd_cat, ebnd_cat, knd_c, type_r,
-       il_signat, valuable} =
+       valuable} =
          xmod ctx (il_mod, vmap_0, SOME var)
 
       Preconditions:  
 
-        (1) ctx |- il_mod : il_signat'
-        (2) var not free in ctx.
+        (1) var not free in ctx.
 
       Postconditions: 
 
@@ -292,20 +303,16 @@ struct
 
    val xmod_count = ref 0
 
-   datatype splitting_context = CONTEXT of {HILctx : Il.context, 
-					    NILctx : Nilcontext.context,
+   datatype splitting_context = CONTEXT of {NILctx : Nilcontext.context,
 					    vmap   : (var * var) Name.VarMap.map}
 
-   fun HILctx_of (CONTEXT{HILctx,...}) = HILctx
    fun NILctx_of (CONTEXT{NILctx,...}) = NILctx
    fun vmap_of (CONTEXT{vmap,...}) = vmap
 
-   fun update_HILctx (CONTEXT{HILctx,NILctx,vmap}, HILctx') = 
-       CONTEXT{HILctx=HILctx', NILctx=NILctx, vmap=vmap}
-   fun update_vmap  (CONTEXT{HILctx,NILctx,vmap}, vmap') = 
-       CONTEXT{HILctx=HILctx, NILctx=NILctx, vmap=vmap'}
-   fun update_NILctx (CONTEXT{HILctx,NILctx,vmap}, NILctx') =
-       CONTEXT{HILctx=HILctx, NILctx=NILctx', vmap=vmap}
+   fun update_vmap  (CONTEXT{NILctx,vmap}, vmap') = 
+       CONTEXT{NILctx=NILctx, vmap=vmap'}
+   fun update_NILctx (CONTEXT{NILctx,vmap}, NILctx') =
+       CONTEXT{NILctx=NILctx', vmap=vmap}
 
    fun xmod context (args as (il_mod, _)) =
        let
@@ -333,8 +340,6 @@ struct
 		    NONE => (Var_c var_mod_c, Var_e var_mod_r)
 		  | SOME (_, name_c, name_r) => (Var_c name_c, Var_e name_r))
 
-	   val il_signat = gms (HILctx_of context, il_mod)
-
            val _ = if (!debug)
 		       then (print "About to look up :\n";
 			     Ppnil.pp_exp (Var_e var_mod_r);
@@ -359,7 +364,6 @@ struct
             name_r   = name_r,
 	    knd_c    = knd_c,
 	    type_r   = type_r,
-	    il_signat = il_signat,
 	    valuable = true}
        end
 
@@ -373,7 +377,6 @@ struct
                 name_r = name_fun_r,
 		knd_c = knd_fun_c,
 		type_r = type_fun_r,
-		il_signat = Il.SIGNAT_FUNCTOR(var_funarg,ilsig_funarg,ilsig_funrng,fun_arrow),
 		valuable = valuable_fun
 		} = xmod context (ilmod_fun, NONE)
 
@@ -383,14 +386,38 @@ struct
                 name_r = name_arg_r,
 		knd_c = knd_arg_c,
 		type_r = type_arg_r,
-		il_signat = Il.SIGNAT_STRUCTURE(_,arg_sdecs),
 		valuable = valuable_arg
 		} = xmod context (ilmod_arg, NONE)
 
            val name_c = Var_c var_c
 	   val name_r = Var_e var_r
-	   val il_signat = Ilutil.remove_modvar_signat(ilsig_funrng,var_funarg,arg_sdecs)
-	   val (knd_c, type_r) = xsig context (name_c, il_signat)
+
+           local
+	       val (Arrow_k(_, [(v_c, _)], con_body_kind)) = knd_fun_c
+	       val argument_c = makeLetC (map Con_cb (flattenCatlist cbnd_cat_arg)) name_c
+	       val reduced_argument_c = Nilstatic.con_reduce (NILctx_of context, argument_c)
+
+               val (AllArrow_c(_,effect,_,_,_,exp_body_type)) = type_fun_r
+
+               fun subst v = 
+		   if (Name.eq_var(v_c,v)) then 
+		       SOME reduced_argument_c
+		   else
+		       NONE
+
+	       fun subst2 v =
+		   if (Name.eq_var(v_c,v)) then 
+		       SOME (Var_c var_c)
+		   else
+		       NONE
+	   in
+	       val knd_c = Nilstatic.kind_reduce (NILctx_of context,
+						  Nilutil.substConInKind subst con_body_kind)
+	       val type_r = Nilstatic.con_reduce 
+		   (Nilcontext.insert_kind(NILctx_of context, var_c, knd_c),
+		    Nilutil.substConInCon subst2 exp_body_type)
+	       val valuable = (effect = Total) andalso valuable_fun andalso valuable_arg 
+	   end  
 
 	   val cbnd_cat = APP[cbnd_cat_fun, 
 			      cbnd_cat_arg,
@@ -410,8 +437,7 @@ struct
 	    name_r    = name_r,
 	    knd_c     = knd_c,
 	    type_r    = type_r,
-	    il_signat = il_signat,
-	    valuable = valuable_fun andalso valuable_arg andalso (fun_arrow = Il.TOTAL)}
+	    valuable  = valuable}
        end
    
      | xmod' context (Il.MOD_SEAL(il_mod,_), preferred_name) = 
@@ -426,22 +452,26 @@ struct
 		ebnd_cat = ebnd_mod_cat,
 		name_c   = name_mod_c, 
 		name_r   = name_mod_r,
-		il_signat = il_mod_signat,
+		knd_c    = knd_mod_c,
+		type_r   = type_mod_r,
 		valuable = mod_valuable, 
 		...} = xmod context (il_module, NONE)
 
 	   val (var_proj, var_proj_c, var_proj_r, vmap) = 
 	       chooseName (preferred_name, vmap_of context)
 
-           val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
-	       Ilstatic.SelfifySig(Il.SIMPLE_PATH var_proj, il_mod_signat)
-	   val SOME (_, Ilcontext.PHRASE_CLASS_MOD(_,il_proj_signat)) = 
-	       Ilcontext.Sdecs_Lookup(Il.MOD_VAR var_proj, sdecs, lbls)
-
 	   val name_proj_c = Var_c var_proj_c
 	   val name_proj_r = Var_e var_proj_r
 
-           val (knd_proj_c, type_proj_r) = xsig context (name_proj_c, il_proj_signat)
+	   local
+	       val v = Name.fresh_var ()
+	       val type_mod_r' = Nilstatic.con_reduce(NILctx_of context, type_mod_r)
+	   in
+
+	       val (_,knd_proj_c) = Nilstatic.con_valid(Nilcontext.insert_kind(NILctx_of context, v, knd_mod_c),
+							selectFromCon(Var_c v, lbls))
+	       val type_proj_r = projectFromRecord type_mod_r' lbls
+	   end
 
            val cbnd_proj_cat = APP[cbnd_mod_cat,
 				   LIST [(var_proj_c, knd_proj_c,
@@ -457,7 +487,6 @@ struct
 	    name_r   = name_proj_r,
 	    knd_c    = knd_proj_c,
 	    type_r   = type_proj_r,
-	    il_signat = il_proj_signat,
 	    valuable = mod_valuable}
        end
 
@@ -478,25 +507,16 @@ struct
 		name_r = name_body_r,
 		knd_c = knd_body_c,
 		type_r = type_body_r,
-		il_signat = il_body_signat,
 		valuable = body_valuable
 		} = let
-			val d = Il.DEC_MOD(var_arg, il_arg_signat)
-	                
 			fun cont1 NILctx' =
 			    Nilcontext.c_insert_con(NILctx', var_arg_r, con_arg, cont2)
 
 	                and cont2 NILctx'' =
 			    let
-				val d = Il.DEC_MOD(var_arg, il_arg_signat)
 				val context'' = 
 				    update_NILctx
-				     (update_HILctx 
-				      (context',
-				       Ilcontext.add_context_dec 
-				       (HILctx_of context, 
-					Ilstatic.SelfifyDec d)),
-				      NILctx'')
+				     (context', NILctx'')
 			    in
 				xmod context'' (ilmod_body, NONE)
 			    end
@@ -519,12 +539,12 @@ struct
            val cbnds_body = flattenCatlist cbnd_body_cat
            val ebnds_body = flattenCatlist ebnd_body_cat
 
-           val il_fun_signat = 
-	       Il.SIGNAT_FUNCTOR(var_arg, il_arg_signat, il_body_signat, arrow)
-
            val local_name_fun_c = Name.fresh_var ()
 
-	   val (knd_fun_c, type_fun_r) = xsig context' (name_fun_c, il_fun_signat)
+	   val knd_fun_c = Arrow_k(Open, [(var_arg_c, knd_arg)], knd_body_c)
+	   val type_fun_r = AllArrow_c(Open, effect, [(var_arg_c, knd_arg)], 
+				       [con_arg], w0,
+				       type_body_r)
 
            val cbnd_fun_cat = 
 	       LIST[(var_fun_c, knd_fun_c,
@@ -553,7 +573,6 @@ struct
 	    name_r = name_fun_r,
 	    knd_c = knd_fun_c,
 	    type_r = type_fun_r,
-	    il_signat = il_fun_signat,
 	    valuable = true}
        end
    
@@ -563,14 +582,20 @@ struct
 	       chooseName (preferred_name, vmap_of context)
 
 	   val {cbnd_cat, crbnds, ebnd_cat, erlabels, erfields, ercons,
-		il_sdecs, valuable, vmap_out} = xsbnds context sbnds
+		valuable, vmap, crknds} = xsbnds context sbnds
 
            val name_str_c = Var_c var_str_c
 	   val name_str_r = Var_e var_str_r
 
-           val il_str_signat = Il.SIGNAT_STRUCTURE(NONE, il_sdecs)
-
-           val (knd_str_c, type_str_r) = xsig context (name_str_c, il_str_signat)
+	   val knd_str_c = 
+	       let
+		   fun loop [] [] = []
+                     | loop (k::crknds) ((l,Var_c v)::crbnds) =
+		       ((l,v),k) :: (loop crknds crbnds)
+	       in
+		   Record_k (Util.list2sequence (loop crknds crbnds))
+	       end
+           val type_str_r = Prim_c(Record_c erlabels, ercons)
 
            val cbnd_str_cat = 
 	       APP[cbnd_cat,
@@ -589,7 +614,6 @@ struct
 	    name_r = name_str_r,
 	    knd_c = knd_str_c,
 	    type_r = type_str_r,
-	    il_signat = il_str_signat,
 	    valuable = valuable}
        end
 
@@ -602,7 +626,6 @@ struct
 		ebnd_cat = ebnd_loc_cat,
 		knd_c = knd_loc_c,
 		type_r = type_loc_r,
-		il_signat = il_loc_signat,
 		valuable = loc_valuable,
 	        ...} = xmod context (il_loc_mod, 
 				   SOME (var_loc, var_loc_c, var_loc_r))
@@ -613,7 +636,6 @@ struct
 		name_r = name_let_r,
 		knd_c = knd_let_c,
 		type_r = type_let_r,
-		il_signat = il_body_signat,
 		valuable = body_valuable,
                 ...} =  let
 			    fun cont1 NILctx' =
@@ -621,14 +643,9 @@ struct
 				
 			    and cont2 NILctx'' =
 				let
-				    val d = Il.DEC_MOD(var_loc, il_loc_signat)
 				    val context' = 
 					update_NILctx
-					(update_HILctx (context, 
-							Ilcontext.add_context_dec 
-							(HILctx_of context, 
-							 Ilstatic.SelfifyDec d)),
-					 NILctx'')
+					(context, NILctx'')
 				in
 				    xmod context' (il_body_mod, preferred_name)
 				end
@@ -640,9 +657,6 @@ struct
            val cbnd_let_cat = APP[cbnd_loc_cat, cbnd_body_cat]
            val ebnd_let_cat = APP[ebnd_loc_cat, ebnd_body_cat]
 
-           (* SLOW! *)
-	   val il_let_signat = gms (HILctx_of context, il_let_mod)
-
        in
 	   {cbnd_cat = cbnd_let_cat,
 	    ebnd_cat = ebnd_let_cat,
@@ -650,137 +664,64 @@ struct
 	    name_r = name_let_r,
 	    knd_c = knd_let_c,
 	    type_r = type_let_r,
-	    il_signat = il_let_signat,
 	    valuable = loc_valuable andalso body_valuable}
        end
 
-   and xsbnds context ([]) =  
-       {cbnd_cat = LIST nil, crbnds = nil, 
-	ebnd_cat = LIST nil, erlabels = nil, 
-	erfields = nil, ercons = nil,
-	il_sdecs = nil,	valuable = true,
-	vmap_out = vmap_of context}
-
-     | xsbnds context (Il.SBND(lab, Il.BND_EXP(var, il_exp)) :: rest) = 
+   and xsbnds context il_sbnds =
        let
-	   val il_con = Ilstatic.GetExpCon (HILctx_of context, il_exp)
-	   val il_dec = Il.DEC_EXP(var, il_con)
-	   val context' = update_HILctx
-	       (context, 
-		Ilcontext.add_context_dec 
-		(HILctx_of context, Ilstatic.SelfifyDec il_dec))
+	   val il_bnds = map (fn Il.SBND(_,bnd) => bnd) il_sbnds
 
-	   val (exp, tipe, valuable') = xexp context il_exp
+           val (final_context, cbnds, ebnds , valuable, ilvars_kept, ercons, crknds) = 
+	       xbnds context (!elaborator_specific_optimizations,true) il_bnds
 
-	   val {cbnd_cat, crbnds, ebnd_cat, erlabels, 
-		erfields, ercons, il_sdecs, valuable, vmap_out} = 
+	   fun checkVar v = Listops.member_eq (Name.eq_var, v, ilvars_kept)
+
+	   fun split [] = {crbnds = nil, erlabels = nil, erfields = nil}
+
+             | split (Il.SBND(lab, bnd as Il.BND_EXP(var, il_exp)) :: rest) =
 	       let
-		   fun cont1 NILctx' =
-		       let
-			   val context' = 
-			       update_NILctx
-			       (update_HILctx(context, 
-					      Ilcontext.add_context_dec 
-					      (HILctx_of context, Ilstatic.SelfifyDec il_dec)),
-				NILctx')
-		       in
-			   xsbnds context' rest
-		       end
+		   val {crbnds, erlabels, erfields} = split rest
 	       in
-		   Nilcontext.c_insert_con(NILctx_of context, var, tipe, cont1)
-	       end
-		   
-       in
-	   {cbnd_cat = cbnd_cat,
-	    crbnds = crbnds,
-	    ebnd_cat = CONS (Exp_b (var, tipe, exp), ebnd_cat),
-	    erlabels = lab :: erlabels,
-	    erfields = (Var_e var) :: erfields,
-	    ercons = tipe :: ercons,
-	    il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs,
-	    valuable = valuable andalso valuable',
-	    vmap_out = vmap_out}
-       end
-
-     | xsbnds context (Il.SBND(lab, Il.BND_CON(var, il_con)) :: rest) = 
-       let
-           val il_knd = Ilstatic.GetConKind (HILctx_of context, il_con)
-	   val il_dec = Il.DEC_CON(var, il_knd, SOME il_con)
-
-           val (con,knd) = xcon context il_con
-
-	   val {cbnd_cat, crbnds, ebnd_cat, erlabels, 
-		erfields, ercons, il_sdecs, valuable, vmap_out} = 
-	       let
-		   fun cont1 NILctx' =
-		       let
-			   val context' = 
-			       update_NILctx
-			       (update_HILctx(context, 
-					      Ilcontext.add_context_dec 
-					      (HILctx_of context, Ilstatic.SelfifyDec il_dec)),
-				NILctx')
-		       in
-			   xsbnds context' rest
-		       end
-	       in
-		   Nilcontext.c_insert_kind(NILctx_of context, var, knd, cont1)
+		   {crbnds = crbnds,
+		    erlabels = lab :: erlabels,
+		    erfields = (Var_e var) :: erfields}
 	       end
 
+	     | split (Il.SBND(lab, Il.BND_CON(var, il_con)) :: rest) = 
+	       let
+		   val {crbnds, erlabels, erfields} = split rest
+		       
+	       in
+		   {crbnds = (lab, Var_c var) :: crbnds,
+		    erlabels = erlabels,
+		    erfields = erfields}
+	       end
+
+	     | split (Il.SBND(lab, Il.BND_MOD(var', il_mod)) :: rest) =
+	       let
+		   val {crbnds, erlabels, erfields} = split rest
+		   val (var'_c, var'_r, _) = splitVar (var', vmap_of final_context)
+	       in
+		   if (checkVar var') then
+		       {crbnds = (lab, Var_c var'_c) :: crbnds,
+			erlabels = lab :: erlabels,
+			erfields = (Var_e var'_r) :: erfields}
+		   else
+		       {crbnds = crbnds, erlabels = erlabels, erfields = erfields}
+	       end
+
+	   val {crbnds, erlabels, erfields} = split il_sbnds
        in
-	   {cbnd_cat = CONS((var, knd, con), cbnd_cat),
-	    crbnds = (lab, Var_c var) :: crbnds,
-	    ebnd_cat = ebnd_cat,
+	   {cbnd_cat = cbnds,
+	    crbnds = crbnds, 
+	    crknds = crknds,
+	    ebnd_cat = ebnds,
 	    erlabels = erlabels, 
-	    erfields = erfields,
-	    ercons = ercons,
-	    il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs,
-	    valuable = valuable,
-	    vmap_out = vmap_out}
+	    erfields = erfields, 
+	    ercons = ercons, 
+	    valuable = valuable, 
+	    vmap = vmap_of final_context}
        end
-
-    | xsbnds context (Il.SBND(lab, Il.BND_MOD(var', il_mod)) :: rest) =
-      let
-	  val (var'_c, var'_r, vmap') = splitVar (var', vmap_of context)
-
-	  val {cbnd_cat, ebnd_cat, il_signat, valuable = valuable', ...} = 
-	      xmod context (il_mod, SOME (var', var'_c, var'_r))
-
-	  val il_dec = Il.DEC_MOD(var', il_signat)
-
-	  val (knd, con) = xsig context (Var_c var'_c, il_signat)
-
-	  val {cbnd_cat = cbnd_cat', crbnds, ebnd_cat = ebnd_cat', erlabels, 
-	       erfields, ercons, il_sdecs, valuable, vmap_out} = 
-	       let
-		   fun cont1 NILctx' =
-		       Nilcontext.c_insert_con (NILctx', var'_r, con, cont2)
-		   and cont2 NILctx'' =
-		       let
-			   val context' = 
-			       update_NILctx
-			       (update_HILctx(update_vmap(context, vmap'),
-					      Ilcontext.add_context_dec 
-					      (HILctx_of context, Ilstatic.SelfifyDec il_dec)),
-				NILctx'')
-		       in
-			   xsbnds context' rest
-		       end
-	       in
-		   Nilcontext.c_insert_kind(NILctx_of context, var'_c, knd, cont1)
-	       end
-	  
-      in
-	  {cbnd_cat = APP[cbnd_cat, cbnd_cat'],
-	   crbnds = (lab, Var_c var'_c) :: crbnds,
-	   ebnd_cat = APP[ebnd_cat, ebnd_cat'],
-	   erlabels = lab :: erlabels,
-	   erfields = (Var_e var'_r) :: erfields,
-	   ercons = con :: ercons,
-	   il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs,
-	   valuable = valuable andalso valuable',
-	   vmap_out = vmap_out}
-      end
 
    and xflexinfo context (ref (Il.INDIRECT_FLEXINFO f)) = 
        xflexinfo context f
@@ -804,7 +745,13 @@ struct
    and xcon context (il_con as (Il.CON_VAR var)) = 
        let
 	   val con = Var_c var
-	   val (SOME kind) = Nilcontext.find_kind (NILctx_of context, var)
+	   val kind = (case Nilcontext.find_kind (NILctx_of context, var) of
+			   SOME kind => kind
+			 | NONE => (print "Could not find constructor variable ";
+				    Ppil.pp_var var;
+				    print "in context:\n";
+				    Nilcontext.print_context (NILctx_of context);
+				    error "xcon: CON_VAR\n"))
        in
 	   (con, kind)
        end
@@ -885,8 +832,7 @@ struct
 	   val (con1, _) = xcon context il_con1
            val (con2, _) = xcon context il_con2
 	   val con = App_c(con1, [con2])
-	   val il_knd = Ilstatic.GetConKind (HILctx_of context, il_con)
-	   val knd = xkind il_knd
+           val (_, knd) = Nilstatic.con_valid(NILctx_of context, con)
        in
 	   (con, knd)
        end
@@ -898,12 +844,7 @@ struct
 	       let
 		   val context' = 
 		       update_NILctx
-		       (update_HILctx(context,
-				     Ilcontext.add_context_decs 
-				     (HILctx_of context,
-				      (map (fn v => 
-					    Il.DEC_CON(v, Il.KIND_TUPLE 1, NONE)) vars))),
-			NILctx')
+		       (context, NILctx')
 
 		   val cons'= map (#1 o (xcon context')) cons
 		   val con = Mu_c (Util.list2set (Listops.zip vars cons'), 
@@ -923,11 +864,7 @@ struct
 	       let
 		   val context' = 
 		       update_NILctx
-		       (update_HILctx(context,
-				     Ilcontext.add_context_decs 
-				     (HILctx_of context,
-				      [Il.DEC_CON(var, Il.KIND_TUPLE 1, NONE)])),
-			NILctx')
+		       (context, NILctx')
 		       
 		   val (con',_) = xcon context' con
 		   val con = Mu_c (Util.list2set [(var, con')], var)
@@ -952,12 +889,7 @@ struct
 	       let
 		   val context' = 
 		       update_NILctx
-		       (update_HILctx(context,
-				     Ilcontext.add_context_decs 
-				     (HILctx_of context, 
-				      (map (fn v => 
-					    Il.DEC_CON(v, Il.KIND_TUPLE 1, NONE)) vars))),
-			NILctx')
+		       (context, NILctx')
 
 		   val (con1, knd1) = xcon context' il_con1
 		   val (arg, con1') =
@@ -1033,18 +965,12 @@ struct
 
      | xcon context (il_con as (Il.CON_MODULE_PROJECT (modv, lbl))) = 
        let
-	   val {cbnd_cat,name_c,il_signat,...} = 
+	   val {cbnd_cat,name_c,...} = 
 	       xmod context (modv, NONE)
-
-	   val var = Name.fresh_var ()
-           val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
-	       Ilstatic.SelfifySig(Il.SIMPLE_PATH var, il_signat)
-	   val SOME(_, Ilcontext.PHRASE_CLASS_CON(_,il_knd)) = 
-	       Ilcontext.Sdecs_Lookup(Il.MOD_VAR var, sdecs, [lbl])
 
 	   val con = makeLetC (map Con_cb (flattenCatlist cbnd_cat))
 	                      (Proj_c (name_c, lbl))
-	   val knd = xkind il_knd
+	   val (_,knd) = Nilstatic.con_valid (NILctx_of context, con)
        in
 	   (con, knd)
        end
@@ -1120,15 +1046,9 @@ struct
      | xexp context (il_exp as (Il.PRIM (prim, il_cons, il_args))) = 
        let
 	   val cons = map (#1 o (xcon context)) il_cons
-	   val temp = map (xexp context) il_args
-	   val args = map #1 temp
-	   val valuables = map #3 temp
-	   val valuable = Listops.andfold (fn x => x) valuables
-           (* slow *)
-	   val il_con = Ilstatic.GetExpCon (HILctx_of context, il_exp)
-           val valuable = Ilstatic.Exp_IsValuable (HILctx_of context, il_exp)
-
-	   val (con, _) = xcon context il_con
+	   val (args, _, valuables) = myunzip3 (map (xexp context) il_args)
+           val (AllArrow_c(_,effect,_,_,_,con)) = Nilprimutil.get_type prim cons
+           val valuable = (effect = Total) andalso (Listops.andfold (fn x => x) valuables)
        in
 	   (Prim_e (PrimOp prim, cons, args), con, valuable)
        end
@@ -1144,15 +1064,12 @@ struct
 *)
      | xexp context (il_exp as (Il.ILPRIM (ilprim, il_cons, il_args))) = 
        let
-	   val temp = map (xexp context) il_args
-	   val args = map #1 temp
-	   (* SLOW *)
-	   val il_con = Ilstatic.GetExpCon (HILctx_of context, il_exp)
-           val valuable = Ilstatic.Exp_IsValuable (HILctx_of context, il_exp)
-
-	   val (con, _) = xcon context il_con
+	   val cons = map (#1 o (xcon context)) il_cons
+	   val (args, _, valuables) = myunzip3 (map (xexp context) il_args)
+           val (AllArrow_c(_,effect,_,_,_,con)) = Nilprimutil.get_iltype ilprim cons
+           val valuable = (effect = Total) andalso (Listops.andfold (fn x => x) valuables)
        in
-	   (Prim_e (PrimOp (xilprim ilprim), [], args), con, valuable)
+	   (Prim_e (PrimOp (xilprim ilprim), cons, args), con, valuable)
        end
 (*
      | xexp context (il_exp as (Il.ILPRIM ilprim)) = 
@@ -1165,31 +1082,21 @@ struct
 *)
      | xexp context (il_exp as (Il.VAR var)) = 
        let
-	   val il_con = Ilstatic.GetExpCon (HILctx_of context, il_exp)
-	   val (con, _) = xcon context il_con
+	   val (SOME con) = Nilcontext.find_con(NILctx_of context, var)
        in
 	   (Var_e var, con, true)
        end
 
      | xexp context (il_exp as (Il.APP (il_exp1, il_exp2))) = 
        let
-           (* SLOW *)
-           val il_fun_con = Ilstatic.GetExpCon (HILctx_of context, il_exp1)
-           val (il_arrow, il_fun_result) = 
-	       (case (Ilstatic.con_head_normalize (HILctx_of context, il_fun_con)) of
-                   Il.CON_ARROW(_,il_con,il_arrow) => 
-		       (derefOneshot il_arrow, il_con)
-                | _ => error "xexp: APP of non-arrow-type function")
-           val (con, _) = xcon context il_fun_result
+	   val (exp1, con1, valuable1) = xexp context il_exp1
+	   val (exp2, con2, valuable2) = xexp context il_exp2
 
-	   val (exp1, _, valuable) = xexp context il_exp1
-	   val (exp2, _, valuable') = xexp context il_exp2
+           val (AllArrow_c(_,effect,_,_,_,con)) = Nilstatic.con_reduce(NILctx_of context, con1)
 
-	   val valuable'' = (case il_arrow of
-			       Il.TOTAL => valuable' andalso valuable
-			     | Il.PARTIAL => false)
+	   val valuable = (effect = Total) andalso valuable1 andalso valuable2
        in
-	   (App_e (Open, exp1, [], [exp2], []), con, valuable'')
+	   (App_e (Open, exp1, [], [exp2], []), con, valuable)
        end
 
      | xexp context (Il.FIX (il_arrow, fbnds)) = 
@@ -1223,29 +1130,11 @@ struct
 
      | xexp context (il_exp0 as (Il.RECORD_PROJECT (il_exp, label, il_record_con))) =
        let
-	   val (exp, _, valuable) = xexp context il_exp
-           val fields = (case (Ilstatic.con_head_normalize (HILctx_of context, 
-							    il_record_con)) of
-                           Il.CON_RECORD fields => fields
-                         | hnf => (print "Oops\n";
-				   Ppil.pp_exp il_exp0;
-				   print "\n";
-				   Ppil.pp_con il_record_con;
-				   print "\n";
-				   Ppil.pp_con hnf;
-				   error "xexp: RECORD_PROJECT 1"))
-           val il_con = (case (Listops.assoc_eq(Name.eq_label, label, fields)) of
-			     SOME il_con => il_con
-			   | NONE => (print "Oops\n";
-				      Ppil.pp_exp il_exp0;
-				      print "\n";
-				      Ppil.pp_con il_record_con;
-				      print "\n";
-				      Ppil.pp_label label;
-				      error "xexp: RECORD_PROJECT 2"))
-	   val (con, _) = xcon context il_con
+	   val (exp_record, con_record, valuable) = xexp context il_exp
+
+	   val con = projectFromRecord con_record [label]
        in
-	   (Prim_e (NilPrimOp (select label), [], [exp]), con, valuable)
+	   (Prim_e (NilPrimOp (select label), [], [exp_record]), con, valuable)
        end
 
      | xexp context (Il.SUM_TAIL (_, il_exp)) =
@@ -1276,10 +1165,12 @@ struct
 
      | xexp context (Il.LET (bnds, il_exp)) = 
        let
-	   val (context', bnds', valuable) = xbnds context true bnds
+	   val (context', cbnds, ebnds, valuable, _, _, _) = 
+	          xbnds context (!elaborator_specific_optimizations,true) bnds
 	   val (exp, con, valuable') = xexp context' il_exp
+	   val cbnds' = LIST(map Con_b (flattenCatlist cbnds))
        in
-	   (Let_e (Sequential, flattenCatlist bnds', exp), 
+	   (Let_e (Sequential, flattenCatlist (APP[cbnds',ebnds]), exp), 
 	    con, valuable andalso valuable)
        end
 
@@ -1310,13 +1201,13 @@ struct
 	   (Prim_e(NilPrimOp roll, [con], [exp]), con, valuable)
        end
 
-     | xexp context (il_exp as (Il.UNROLL (_, il_exp1))) = 
+     | xexp context (il_exp as (Il.UNROLL (il_con, il_exp1))) = 
        let
-	   val il_con = Ilstatic.GetExpCon (HILctx_of context, il_exp)
 	   val (con, _) = xcon context il_con
-	   val (exp1, con1, valuable) = xexp context il_exp1
+	   val (exp, _, valuable) = xexp context il_exp1
        in
-	   (Prim_e(NilPrimOp unroll, [con1], [exp1]), con, valuable)
+	   (* XXX BUG XXX  WRONG CON ARGUMENT!!! *)
+	   (Prim_e(NilPrimOp unroll, [con], [exp]), con, valuable)
        end
 
      | xexp context (Il.INJ {carriers, noncarriers, special, inject=NONE}) =
@@ -1410,15 +1301,10 @@ struct
 	   val {cbnd_cat, ebnd_cat, 
 		name_c, name_r, 
 		knd_c, type_r,
-		il_signat, valuable} = xmod context (module, NONE)
+		valuable} = xmod context (module, NONE)
 
-	   val var = Name.fresh_var ()
-           val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
-	       Ilstatic.SelfifySig(Il.SIMPLE_PATH var, il_signat)
-	   val SOME(_, Ilcontext.PHRASE_CLASS_EXP(_,il_con)) = 
-	       Ilcontext.Sdecs_Lookup(Il.MOD_VAR var, sdecs, [label])
-	   val (con,_) = xcon context il_con
-	     
+           val con = projectFromRecord type_r [label]
+
 	   val cbnds = flattenCatlist cbnd_cat
 	   val bnds = (map Con_b cbnds) @ 
 	              (flattenCatlist ebnd_cat)
@@ -1448,15 +1334,7 @@ struct
 	       let
 		   val context' = 
 		       update_NILctx
-		       (update_HILctx(context,
-				     Ilcontext.add_context_decs
-				     (HILctx_of context, 
-				      (map (fn (Il.FBND(var,_,con,con',_)) => 
-					    Il.DEC_EXP(var, Il.CON_ARROW(con,con',
-									 Util.oneshot_init 
-									 Il.PARTIAL)))
-				       fbnds))),
-		       NILctx')
+		       (context, NILctx')
 
 		   fun loop [] = []
 		     | loop (Il.FBND(var, var', il_con1, il_con2, body) :: rest) = 
@@ -1469,10 +1347,7 @@ struct
 			       let
 				   val context'' = 
 				       update_NILctx
-				       (update_HILctx(context',
-						      Ilcontext.add_context_exp'
-						      (HILctx_of context', var', il_con1)),
-					NILctx')
+				       (context', NILctx')
 				       
 				   val (body', _, valuable) = xexp context'' body
 				       
@@ -1511,74 +1386,210 @@ struct
 	    valuable andalso valuable')
        end
 
-
-
-   and xbnds context _ [] = (context, LIST nil, true)
-     | xbnds context optimize_fun (Il.BND_EXP(var,il_exp) :: rest) =
+   and xbnds context _ [] = (context, LIST nil, LIST nil, true, nil, nil, nil)
+     | xbnds context (optimize_fun,_) (Il.BND_EXP(var,il_exp) :: rest) =
        let 
-	   val il_con = Ilstatic.GetExpCon (HILctx_of context, il_exp)
-           val il_dec = Il.DEC_EXP(var, il_con)
 	   val (exp, con, valuable) = xexp context il_exp
 
            val context' = 
-	       update_HILctx
-	       (update_NILctx(context,
-			      Nilcontext.insert_con(NILctx_of context, var, con)),
-		Ilcontext.add_context_exp'(HILctx_of context, var, il_con))
+	       update_NILctx(context,
+			      Nilcontext.insert_con(NILctx_of context, var, con))
 
-	   val (rest_context, rest_bnds, rest_valuable) = 
-	       xbnds context' optimize_fun rest
+	   val (rest_context, rest_cbnds, rest_ebnds, rest_valuable, rest_ilvars_kept,
+		rest_cons, rest_knds) = 
+	       xbnds context' (optimize_fun, true) rest
        in
 	   (rest_context,
-	    APP[LIST [Exp_b(var, con, exp)], rest_bnds],
-	    valuable andalso rest_valuable)
+	    rest_cbnds,
+	    APP[LIST [Exp_b(var, con, exp)], rest_ebnds],
+	    valuable andalso rest_valuable,
+	    var :: rest_ilvars_kept,
+	    con :: rest_cons,
+	    rest_knds)
        end
 
-     | xbnds context optimize_fun (Il.BND_CON(var,il_con) :: rest) =
+     | xbnds context (optimize_fun,_) (Il.BND_CON(var,il_con) :: rest) =
        let
-	   val il_knd = Ilstatic.GetConKind (HILctx_of context, il_con) 
 	   val (con, knd) = xcon context il_con
 
            val context' = 
-	       update_HILctx
-	       (update_NILctx(context,
-			      Nilcontext.insert_con(NILctx_of context, var, con)),
-		Ilcontext.add_context_con'(HILctx_of context, var, il_knd, SOME il_con))
+	       update_NILctx(context,
+			      Nilcontext.insert_kind(NILctx_of context, var, knd))
 
-	   val (rest_context, rest_bnds, rest_valuable) = 
-	       xbnds context' optimize_fun rest
+	   val (rest_context, rest_cbnds, rest_ebnds,rest_valuable, rest_ilvars_kept, rest_cons, rest_knds) = 
+	       xbnds context' (optimize_fun,true) rest
        in
 	   (rest_context,
-	    APP [LIST [Con_b(var, knd, con)], rest_bnds],
-	    rest_valuable)
+	    APP [LIST [(var, knd, con)], rest_cbnds],
+	    rest_ebnds,
+	    rest_valuable,
+	    var :: rest_ilvars_kept,
+	    rest_cons,
+	    knd :: rest_knds)
        end
 
-     | xbnds context optimize_fun (Il.BND_MOD(var,il_module) :: rest) =
+     | xbnds context (true,true) (bnds as 
+				  (Il.BND_MOD
+				   (top_var, m as 
+				    Il.MOD_FUNCTOR(poly_var, il_arg_signat, 
+						   Il.MOD_STRUCTURE
+						   [Il.SBND(lbl,
+							    Il.BND_EXP
+							    (_, il_exp as Il.FIX(arrow, fbnds)))]))
+				   :: rest)) =
+       if (Name.eq_label (lbl, Ilutil.it_lab)) then
+	   let
+	       val _ = print "entered optimization case\n"
+
+	       fun getFunctionVars 0 (vs, rest) = (rev vs, rest)
+                 | getFunctionVars n (vs, Il.BND_MOD(var,il_module)::rest) = 
+		       getFunctionVars (n-1) (var::vs, rest)
+                 | getFunctionVars _ _ = error "xbnds: Can't optimize function"
+		   
+	       val (external_names, rest') = getFunctionVars (length fbnds) (nil, rest)
+
+               val (external_names_c, external_names_r, vmap') = 
+		   let fun loop [] (ns_c, ns_r, vmap) = (rev ns_c, rev ns_r, vmap)
+			 | loop (n::ns) (ns_c, ns_r, vmap) =
+			   let val (n_c, n_r, vmap') = splitVar (n, vmap)
+			   in
+			       loop ns (n_c :: ns_c, n_r :: ns_r, vmap')
+			   end
+		   in
+		       loop external_names (nil, nil, vmap_of context)
+		   end
+
+	       val (poly_var_c, poly_var_r, vmap'') = splitVar (poly_var, vmap')
+	       val (knd_arg, con_arg) = xsig context (Var_c poly_var_c, il_arg_signat)
+		   
+	       val context' = 
+		   update_NILctx(update_vmap(context, vmap''),
+				  Nilcontext.insert_con
+				  (Nilcontext.insert_kind
+				   (NILctx_of context, poly_var_c, knd_arg),
+				   poly_var_r, con_arg))
+
+
+	       val (Let_e (_, [Fixopen_b set], _), _, _) = xexp context' il_exp
+
+               val (internal_names, functions) = myunzip (Util.set2list set)
+
+               fun subst v =
+		   let fun loop (nil,nil) = NONE
+			 | loop (v'::vs, n::ns) = 
+			   if (Name.eq_var (v,v')) then 
+			       SOME (App_e(Open, Var_e n, 
+					   [Var_c poly_var_c], 
+					   [Var_e poly_var_r], []))
+			   else
+			       loop (vs,ns)
+		   in
+		       loop (internal_names, external_names_r)
+		   end
+
+               fun reviseFunction (Function(effect,recursive,[],[(arg_var,arg_con)],[],body,body_con)) =
+		   let
+		       val var' = Name.fresh_var ()
+		       val body' = Nilutil.substExpInExp subst body
+		   in
+		       Function(Total, Leaf, 
+				[(poly_var_c, knd_arg)],
+				[(poly_var_r, con_arg)],
+				[],
+				Let_e (Sequential,
+				       [Fixopen_b
+					(Util.list2set 
+					 [(var', Function(effect,recursive,[],
+							  [(arg_var,arg_con)],[],body',body_con))])],
+				       Var_e var'),
+				AllArrow_c(Open, effect, [], [arg_con], w0, body_con))
+		   end
+
+               val nullfunction_c = 
+		   let
+		       val var'' = Name.fresh_var ()
+		   in
+		       Let_c (Sequential,
+			      [Open_cb(var'', 
+				      [(poly_var_c, knd_arg)], 
+				      Crecord_c [],
+				      Record_k (Util.list2sequence []))],
+			      Var_c var'')
+		   end
+
+               val nullfunction_k =
+		   Arrow_k(Open, [(poly_var_c, knd_arg)], Record_k (Util.list2sequence []))
+
+               val cbnds = 
+		   map (fn n_c => ((n_c, nullfunction_k, nullfunction_c)))
+		       external_names_c
+
+               val cbnd_knds = map (fn _ => nullfunction_k) external_names 
+
+               val revised_functions = map reviseFunction functions
+
+               val ebnd_entries = Listops.zip external_names_r revised_functions
+
+               val ebnd_types = map (fn Function(_,_,carg,[(_,earg)],w,_,body_type) =>
+				     AllArrow_c(Open,Total,carg,[earg],
+						Word32.fromInt (List.length w),body_type)) revised_functions
+
+	       val ebnds = [Fixopen_b (Util.list2set ebnd_entries)]
+
+               val nil_cdecs = map (fn n_c => (n_c, nullfunction_k)) external_names_c
+
+               val nil_edecs = map (fn (n_r,Function(effect,_,a1,a2,_,_,a4)) =>
+				    (n_r, AllArrow_c(Open,effect,a1,map #2 a2,w0,a4)))
+		                   ebnd_entries
+
+
+               val context'' = 
+		   update_NILctx
+		    (update_vmap(context, vmap'),
+		     Nilcontext.c_insert_con_list 
+		     (Nilcontext.c_insert_kind_list
+		      (NILctx_of context, nil_cdecs, fn x => x),
+		      nil_edecs, fn x => x))
+
+	       val (rest_context, rest_cbnds, rest_ebnds, rest_valuable, rest_ilvars_kept, rest_cons, rest_knds) = 
+		   xbnds context'' (true,true) rest'
+	   in
+	       (rest_context,
+		APP[LIST cbnds, rest_cbnds],
+		APP[LIST ebnds, rest_ebnds],
+		rest_valuable,
+		external_names @ rest_ilvars_kept,
+		ebnd_types @ rest_cons,
+		cbnd_knds @ rest_knds)
+	   end
+       else
+	   xbnds context (true,false) bnds
+       
+     | xbnds context (optimize_fun,_) (Il.BND_MOD(var,il_module) :: rest) =
 
        let
 	   val (var_c, var_r, vmap') = splitVar (var, vmap_of context)
-	   val {ebnd_cat, cbnd_cat, il_signat, valuable,
+	   val {ebnd_cat, cbnd_cat, valuable,
 		knd_c, type_r,...} = 
 	       xmod context (il_module, SOME (var, var_c, var_r))
 
-	   val il_dec = Ilstatic.SelfifyDec (Il.DEC_MOD(var, il_signat))
-
            val context' = 
-	       update_HILctx
-	       (update_NILctx
+	       update_NILctx
 		(update_vmap(context, vmap'),
 		 Nilcontext.insert_kind
-		 (Nilcontext.insert_con(NILctx_of context, var_r, type_r), var_c, knd_c)),
-		Ilcontext.add_context_dec(HILctx_of context, il_dec))
+		 (Nilcontext.insert_con(NILctx_of context, var_r, type_r), var_c, knd_c))
 
-	   val (rest_context, rest_bnds, rest_valuable) = 
-	       xbnds context' optimize_fun rest
+	   val (rest_context, rest_cbnds, rest_ebnds, rest_valuable, rest_ilvars_kept, rest_cons, rest_knds) = 
+	       xbnds context' (optimize_fun,true) rest
 
        in
 	   (rest_context,
-	    APP [LIST (map Con_b (flattenCatlist cbnd_cat)),
-		 ebnd_cat, rest_bnds],
-	    valuable andalso rest_valuable)
+	    APP [cbnd_cat, rest_cbnds],
+	    APP [ebnd_cat, rest_ebnds],
+	    valuable andalso rest_valuable,
+	    var :: rest_ilvars_kept,
+	    type_r :: rest_cons,
+	    knd_c :: rest_knds)
        end
 
    and xsig' context (con0,Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
@@ -1594,10 +1605,7 @@ struct
 	       let
 		   val context' = 
 		       update_NILctx
-		       (update_HILctx
-			(update_vmap(context, vmap'),
-			 Ilcontext.add_context_dec 
-			 (HILctx_of context, Ilstatic.SelfifyDec d)),
+		       (update_vmap(context, vmap'),
 			NILctx'')
 		       
 		   val (knd', con') = 
@@ -1658,10 +1666,7 @@ struct
 		   val context' = 
 		       update_NILctx
 		       (update_vmap
-			(update_HILctx(context,
-				       Ilcontext.add_context_dec
-				       (HILctx_of context, Ilstatic.SelfifyDec d)),
-			 vmap'),
+			(context, vmap'),
 			NILctx'')
 		       
 		   val {crdecs, erlabs, ercons} =
@@ -1684,10 +1689,7 @@ struct
 	       let
 		   val context' = 
 		       update_NILctx
-		       (update_HILctx(context,
-				      Ilcontext.add_context_dec
-				      (HILctx_of context, Ilstatic.SelfifyDec d)),
-			NILctx')
+		       (context, NILctx')
 		       
 		   val {crdecs, erlabs, ercons} = xsdecs context' (con0, subst, rest)
 	       in
@@ -1705,16 +1707,13 @@ struct
 	   val knd' = xkind knd
 	   val knd'' =(case maybecon of
 			   NONE => knd'
-			 | SOME il_con => #2 (xcon context il_con))
+			 | SOME il_con => ((#2 (xcon context il_con)) handle _ => knd'))
 
 	   fun cont1 NILctx' =
 	       let
 		   val context' = 
 		       update_NILctx
-		       (update_HILctx(context,
-				      Ilcontext.add_context_dec
-				      (HILctx_of context, Ilstatic.SelfifyDec d)),
-			NILctx')
+		       (context, NILctx')
 		       
 		   val {crdecs, erlabs, ercons} = 
 		       xsdecs context' (con0, extendmap (subst, var, Proj_c(con0, lbl)),
@@ -1742,16 +1741,65 @@ struct
 		      makeKindTuple m)
 	 end
 
+   fun xHILctx context HILctx =
+       let
+	   fun folder (v,(l,pc),context) =
+	       (case pc of
+		    Ilcontext.PHRASE_CLASS_EXP (_,il_type) => 
+			let
+			    val (nil_type,_) = xcon context il_type
+			in
+			    update_NILctx
+			    (context, Nilcontext.insert_con(NILctx_of context, v, nil_type))
+			end
+		  | Ilcontext.PHRASE_CLASS_CON (il_con, il_kind) => 
+			let
+			    val nil_kind = xkind il_kind
+			    val nil_con = ((SOME (#1 (xcon context il_con))) handle _ => NONE)
+			    val nil_kind' = 
+				(case nil_con of 
+				     NONE => nil_kind
+				   | SOME c => Singleton_k(Runtime, nil_kind, c))
+			in
+			    update_NILctx
+			    (context, Nilcontext.insert_kind(NILctx_of context, v, nil_kind))
+			end
+		  | Ilcontext.PHRASE_CLASS_MOD (_,il_sig) => 
+			let
+			    val (v_c, v_r,_) = splitVar (v, vmap_of context)
+			    val (knd_c, type_r) = xsig context (Var_c v_c, il_sig)
+			in
+			    update_NILctx
+			    (context,
+			     Nilcontext.insert_con
+			     (Nilcontext.insert_kind
+			      (NILctx_of context, v_c, knd_c),
+			      v_r, type_r))
+			end
+		  | _ => context)
+       in
+	   Name.VarMap.foldli folder context (Ilcontext.Context_Varmap HILctx)
+       end
+
    fun xcompunit HILctx vmap il_sbnds =
        let
-	   val (cuvar, cuvar_c, cuvar_r, vmap') = splitFreshVar vmap
+           val empty_splitting_context = 
+	         CONTEXT{NILctx = Nilcontext.empty(),
+			 vmap = vmap}
 
-           val initial_splitting_context = 
-	         CONTEXT{HILctx = HILctx,
-			 NILctx = Nilcontext.empty(),
-			 vmap = vmap'}
+	   val initial_splitting_context = xHILctx empty_splitting_context HILctx
 
-	   val {cbnd_cat, ebnd_cat, vmap_out, ...} =
+	   val _ = 
+	       if (!debug) then
+		   (print "Initial HIL context:\n";
+		    Ppil.pp_context HILctx;
+		    print "Initial NIL context:\n";
+		    Nilcontext.print_context (NILctx_of initial_splitting_context);
+		    print "\n")
+	       else
+		   ()
+
+	   val {cbnd_cat, ebnd_cat, vmap, ...} =
 	       xsbnds initial_splitting_context il_sbnds
 
 	   val cu_c_list = map Con_b (flattenCatlist cbnd_cat)
@@ -1760,11 +1808,8 @@ struct
 
        in
 	   {cu_bnds = cu_c_list @ cu_r_list,
-	    vmap = vmap_out}
+	    vmap = vmap}
        end
-			     
-			     
-	       
 
 end
 
