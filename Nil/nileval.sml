@@ -100,7 +100,7 @@ functor NilEvaluate (structure Nil : NIL
 	    | Proj_c (c,l) => false
 	    | Closure_c (c1,c2) => (con_isval c1) andalso (con_isval c2)
 	    | App_c (c, clist) => false
-	    | Typecase_c {arg, arms, default} => false
+	    | Typecase_c {arg, arms, default, kind} => false
 	    | Annotate_c (_,c) => con_isval c
 	  end
 
@@ -195,12 +195,10 @@ functor NilEvaluate (structure Nil : NIL
 			       else error "bad App_c"
 			 | _ => error "bad App_c")
 		  end
-	    | Typecase_c {arg, arms, default} => 
+	    | Typecase_c {arg, arms, default, kind} => 
 		  let val arg' = self arg
-		      fun loop [] = (case default of
-					 NONE => error "no match in Typecase"
-				       | SOME c => self c)
-			| loop ((pc,vklist,body,k)::rest) = 
+		      fun loop [] = self default
+			| loop ((pc,vklist,body)::rest) = 
 			  let val match = 
 			      (case (pc,arg') of
 				   (Int_c is, Prim_c(Int_c is',_)) => if (is = is') then SOME [] else NONE

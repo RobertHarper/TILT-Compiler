@@ -4,9 +4,9 @@ sig
     structure Nil : NIL
 
     val xcompunit : Il.context -> 
-                    (Name.var, Name.var * Name.var) Name.varmap ->
+                    (Name.var * Name.var) Name.VarMap.map ->
                     Il.sbnds ->
                     {cu_bnds : Nil.bnd list,
-		     vmap : (Name.var, Name.var * Name.var) Name.varmap}
+		     vmap : (Name.var * Name.var) Name.VarMap.map}
 
 end

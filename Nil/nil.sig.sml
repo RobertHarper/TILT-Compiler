@@ -169,6 +169,9 @@ sig
   withtype ('info,'arg,'t) sw = 
     {info : 'info, arg: 'arg, arms : ('t * function) list, default : exp option}
 
+  datatype module = MODULE of {bnds : bnd list,
+			       imports : label Name.VarMap.map,
+			       exports : label Name.VarMap.map} 
 
 end
 

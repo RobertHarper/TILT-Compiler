@@ -90,10 +90,13 @@ functor Ppnil(structure Nil : NIL
 				      (sequence2list lvk_seq) ("REC_K{", ",","}", false))
 (*	       | List_k k => pp_region "LIST_K)" ")" [pp_kind k] *)
 	       | Arrow_k (openness,ks,k) => 
-		     HOVbox[pp_list (fn (v,k) => Hbox[pp_var v, String " : ", 
-						      pp_kind k])
-			    ks ("(", ",",")", false),
+		     HOVbox[String "Arrow_k(",
 			    pp_openness openness,
+			    String "; ",
+			    pp_list (fn (v,k) => Hbox[pp_var v, String " : ", 
+						      pp_kind k])
+			    ks ("", ",","", false),
+			    String "; ",
 			    pp_kind k]
 	       | Singleton_k (p,k,c) => (pp_region 
 					 (case p of 
@@ -131,8 +134,8 @@ functor Ppnil(structure Nil : NIL
 			      pp_kind k]
 		     | do_cbnd (Code_cb(v,vklist,c,k)) = 
 		       HOVbox[pp_var v, String " = ",
-			      String "CODE_C",
-			      (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
+			      String "CODE_CB", Break,
+			      (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", pp_kind k])
 			       vklist),
 			      Break0 0 5,
 			      pp_con c,
@@ -151,21 +154,18 @@ functor Ppnil(structure Nil : NIL
 	       end
 	 | Closure_c (c1,c2) => HOVbox[String "CLOSURE_C(", pp_con c1, String ",", 
 				       pp_con c2, String ")"]
-	 | Typecase_c {arg, arms, default} =>
-	       let fun pp_arm(pc,vklist,c,k) = HOVbox[pp_primcon pc, String " => ",
+	 | Typecase_c {arg, arms, default, kind} =>
+	       let fun pp_arm(pc,vklist,c) = HOVbox[pp_primcon pc, String " => ",
 						      String "FUN_C",
 						      (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
 						       vklist),
 						      Break0 0 5,
-						      pp_con c,
-						      Break0 0 5,
-						      pp_kind k]
+						      pp_con c]
 	       in HOVbox[String "TYPECASE_C(", pp_con arg, Break0 0 5,
+			 pp_kind kind, Break0 0 5,
 			 pp_list pp_arm arms ("","","",true),
-			 (case default of 
-			      NONE => String "NONE"
-			    | SOME c => Hbox[String "SOME ",
-					     pp_con c])]
+			 String "DEFAULT: ",
+			 pp_con default]
 	       end
 	 | App_c (con,conlist) => HOVbox[String "APP_C(",
 (*
@@ -331,17 +331,17 @@ functor Ppnil(structure Nil : NIL
 	  in (case bnd of
 	        Exp_b (v,c,e) => 
 		    if (!elide_bnd)
-			then Hbox[pp_var v, String " = ", pp_exp e]
-		    else Hbox[pp_var v, String " : ", pp_con c, String " = ", pp_exp e]
+			then HOVbox[pp_var v, String " = ", Break, pp_exp e]
+		    else HOVbox[pp_var v, String " : ", pp_con c, String " = ", Break, pp_exp e]
 	      | Con_b (v,k,c) => 
 		    if (!elide_bnd)
-			then Hbox[pp_var v, String " = ", pp_con c]
-		    else Hbox[pp_var v, String " : ", pp_kind k, String " = ", pp_con c]
+			then HOVbox[pp_var v, String " = ", Break, pp_con c]
+		    else HOVbox[pp_var v, String " : ", pp_kind k, String " = ", Break, pp_con c]
 	      | Fixopen_b fixset => let val fixlist = set2list fixset
-				    in Vbox(map (pp_fix false) fixlist)
+				    in Vbox(separate (map (pp_fix false) fixlist) Break)
 				    end
 	      | Fixcode_b fixset => let val fixlist = set2list fixset
-				    in Vbox(map (pp_fix true) fixlist)
+				    in Vbox(separate (map (pp_fix true) fixlist) Break)
 				    end
 	      | Fixclosure_b vceset => 
 		    let val vcelist = set2list vceset
@@ -380,7 +380,17 @@ functor Ppnil(structure Nil : NIL
 		    pp_exp e])
 	end
 
-    fun pp_bnds  bnds = pp_list pp_bnd bnds ("[",",","]",true)
+    fun pp_bnds bnds = pp_list pp_bnd bnds ("[",",","]",true)
+
+    fun pp_module (MODULE{bnds,imports,exports}) = 
+	Vbox[pp_bnds bnds,
+	     Break,
+	     String "IMPORTS:", Break,
+	     pp_list (fn (v,l) => (Hbox[pp_label l, String " = ", pp_var v])) 
+	     (Name.VarMap.listItemsi imports) ("","","",true),
+	     String "EXPORTS:", Break,
+	     pp_list (fn (v,l) => (Hbox[pp_label l, String " = ", pp_var v])) 
+	     (Name.VarMap.listItemsi exports) ("","","",true)]
 
     fun help pp = pp
     fun help' pp obj = (wrapper pp TextIO.stdOut obj; ())
@@ -393,7 +403,7 @@ functor Ppnil(structure Nil : NIL
     val pp_bnd' = help pp_bnd
     val pp_bnds' = help pp_bnds
     val pp_exp' = help pp_exp
-
+    val pp_module' = help pp_module
 
     val pp_var = help' pp_var
     val pp_label  = help' pp_label
@@ -403,6 +413,6 @@ functor Ppnil(structure Nil : NIL
     val pp_bnd = help' pp_bnd
     val pp_bnds = help' pp_bnds
     val pp_exp = help' pp_exp
-
+    val pp_module = help' pp_module
 
   end

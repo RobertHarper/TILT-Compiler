@@ -8,7 +8,7 @@ functor Tonil(structure Ilstatic : ILSTATIC
                  sharing Ilutil.Il = Ilstatic.Il = Ppil.Il = Ilcontext.Il
 		 sharing Nilutil.Nil.Prim = Ilstatic.Il.Prim
                  sharing Nilutil.Nil = Nilcontext.Nil = Ppnil.Nil
-             ) =
+             ) : TONIL =
 struct
    structure Il = Ilstatic.Il
    structure Nil = Nilutil.Nil

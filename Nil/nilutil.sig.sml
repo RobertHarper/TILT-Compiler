@@ -19,6 +19,7 @@ signature NILUTIL =
     val unit_exp : Nil.exp
     val match_exn : Nil.exp
     val bool_con : Nil.con
+    val string_con : Nil.con
     val true_exp : Nil.exp
     val false_exp : Nil.exp
 

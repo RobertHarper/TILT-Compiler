@@ -128,11 +128,11 @@ struct
 		    val rectypes = map (Var_c o #1) vklist
 		    val argtype = Prim_c(Record_c labels, rectypes)
 		    val newfuncon = AllArrow_c(Open,Partial,[],[argtype],0w0,rescon)
-		in  (primcon,vklist,newfuncon,Word_k Runtime)
+		in  (primcon,vklist,newfuncon)
 		end
 	    val arms = Listops.map0count make_arm i
-	    val default = SOME funtype
-	    val body = Typecase_c{arg=typearg,arms=arms,default=default}
+	    val default = funtype
+	    val body = Typecase_c{arg=typearg,arms=arms,default=default,kind=Word_k Runtime}
 	in  (vklist,body,Word_k Runtime)
 	end
 

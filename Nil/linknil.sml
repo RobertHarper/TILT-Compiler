@@ -1,5 +1,8 @@
 structure Linknil =
 struct
+
+    val error = fn s => Util.error "linknil.sml" s
+
     structure Nil = Nil(structure Annotation = Annotation
 			structure ArgPrim = LinkIl.Prim)      
 	
@@ -29,6 +32,7 @@ struct
 			    structure Ppil = LinkIl.Ppil)
 
     structure ToClosure = ToClosure(structure Nil = Nil
+				    structure Ppnil = Ppnil
 				    structure NilUtil = NilUtil)
 
     structure NilPrimUtilParam = NilPrimUtilParam(structure NilUtil = NilUtil);
@@ -41,13 +45,10 @@ struct
 				    structure NilUtil = NilUtil
 				    structure Ppnil = Ppnil
 				    structure PrimUtil = NilPrimUtil)
-    type nilmodule = {bnds : Nil.bnd list,
-		      name_c : Nil.var, knd_c : Nil.kind,
-		      name_r : Nil.var, type_r : Nil.con}
 
     fun test s = 
 	let
-	    open Nil
+	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    val SOME(sbnds, decs) = LinkIl.elaborate s
 	    val _ = print "\n\n\nELABORATION SUCESSFULLY COMPLETED\n\n\n"; 
 	    val _ = LinkIl.Ppil.pp_sbnds sbnds
@@ -56,39 +57,56 @@ struct
 					 (LinkIl.MOD_STRUCTURE sbnds)));
             val _ = print "\n\n========================================\n"
 	    val _ = Compiler.Profile.reset () 
-	    val {cu_bnds, cu_c_var, cu_c_kind, cu_r_var, cu_r_type} =
-		Tonil.xcompunit decs sbnds
+	    fun folder (v,(l,pc),(vmap,mmap)) = 
+		(case pc of
+		     PHRASE_CLASS_EXP _ => (VarMap.insert(vmap,v,l),mmap)
+		   | PHRASE_CLASS_CON _ => (VarMap.insert(vmap,v,l),mmap)
+		   | PHRASE_CLASS_MOD _ => (vmap,VarMap.insert(mmap,v,l))
+		   | PHRASE_CLASS_SIG _ => (vmap,mmap)
+		   | PHRASE_CLASS_OVEREXP _ => (vmap,mmap))
+	    val varmap = LinkIl.IlContext.Context_Varmap decs
+	    val (import_valmap,import_modmap) = (VarMap.foldli folder 
+						 (VarMap.empty,VarMap.empty) varmap)
+	    fun folder ((SBND(l,bnd)),(vmap,mmap)) = 
+		(case bnd of
+		     BND_EXP (v,_) => (VarMap.insert(vmap,v,l),mmap)
+		   | BND_CON (v,_) => (VarMap.insert(vmap,v,l),mmap)
+		   | BND_MOD (v,_) => (vmap,VarMap.insert(mmap,v,l)))
+
+	    val (export_valmap,export_modmap) = foldl folder (VarMap.empty,VarMap.empty) sbnds
+	    fun folder (v,l,map) = let val vc = fresh_named_var "myvc"
+					 val vr = fresh_named_var "myvr"
+				     in  VarMap.insert(map,v,(vc,vr))
+				     end
+	    val import_varmap = VarMap.foldli folder VarMap.empty import_modmap
+	    val {cu_bnds = bnds, vmap = total_varmap} = Tonil.xcompunit decs import_varmap sbnds
 	    val _ = print "\nPhase-splitting done.\n";
-	    val nilmod : nilmodule = {bnds = cu_bnds, 
-				      name_c = cu_c_var, name_r = cu_r_var,
-				      knd_c = cu_c_kind, type_r = cu_r_type}
-	    val {bnds,name_c,name_r,knd_c,type_r} = nilmod
+
+	    fun folder (v,l,map) = let val lc = internal_label((label2string l) ^ "_c")
+					 val lr = internal_label((label2string l) ^ "_r")
+					 val (vc,vr) = (case VarMap.find(total_varmap,v) of
+							    SOME vrc => vrc
+							  | NONE => error "total_varmap missing bindings")
+				     in  VarMap.insert(VarMap.insert(map,vr,lr),vc,lc)
+				     end
+	    val imports = Name.VarMap.foldli folder import_valmap import_modmap
+	    val exports = Name.VarMap.foldli folder export_valmap export_modmap
+	    val nilmod = MODULE{bnds = bnds, 
+				imports = imports,
+				exports = exports}
 	    val _ = (print "\n\n=======================================\n\n";
 		     print "phase-split results:\n";
-		     Ppnil.pp_var name_c; print "\n";
-		     Ppnil.pp_var name_r; print "\n";
 		     Ppnil.pp_bnds bnds)
-	    val temp_var = Name.fresh_var()
-	    val temp_exp = Let_e(Sequential,bnds,
-				 Let_e(Sequential,[Con_b(temp_var,knd_c,Var_c name_c)],
-							 Var_e name_r))
-	    val temp_exp_closed = ToClosure.close_exp temp_exp
-	    val Let_e(_,bnds',_) = temp_exp_closed
-	    val knd_c' = ToClosure.close_kind knd_c
-	    val type_r' = ToClosure.close_con type_r
-
-	    val nilmod' : nilmodule = {bnds = bnds', name_c = name_c, name_r = name_r,
-				      knd_c = knd_c', type_r = type_r'}
-
-(*	    val _ = Compiler.Profile.report TextIO.stdOut  *)
+		
+	    val nilmod' = ToClosure.close_mod nilmod
 
 	in
 
+	    print "phase-splitting results:\n";
+	    Ppnil.pp_module nilmod;
+	    
 	    print "closure-conversion results:\n";
-	    Ppnil.pp_var name_c; print "\n";
-	    Ppnil.pp_var name_r; print "\n";
-	    Ppnil.pp_bnds bnds';
-	    print "\n\n";
+	    Ppnil.pp_module nilmod';
 
 	    nilmod'
 
