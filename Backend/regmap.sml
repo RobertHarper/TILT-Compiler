@@ -18,15 +18,15 @@ struct
     fun find (m,x) = (case Regmap.find(m,x) of
 			   SOME value => SOME value
 			 | NONE =>
-			       (print "variable ";
-				print (msReg x);
-				print " not found in regmap find\n";
+			       ((* print "variable ";
+				 print (msReg x);
+				 print " not found in regmap find\n"; *)
 				NONE))
     fun remove (m,x) = (Regmap.remove(m,x)
 			 handle _ =>
-			     (print "variable ";
-			      print(msReg x);
-			      print " not found in regmap remove\n";
+			     ((* print "variable ";
+			       print(msReg x);
+			       print " not found in regmap remove\n"; *)
 			      error "regmap_notfound"))
 
     (* Inverses of a Regmap.dict lookup; given a position, what

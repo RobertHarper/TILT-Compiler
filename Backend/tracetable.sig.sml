@@ -11,9 +11,9 @@ signature TRACETABLE =
 			 (* should be resolved to ACTUAL stack locations in the end *)
 		       | TRACE_STACK      of Machine.stacklocation
 		        (* stack pos, rec pos *)
-		       | TRACE_STACK_REC  of Machine.stacklocation * int 
+		       | TRACE_STACK_REC  of Machine.stacklocation * int list
 		       | TRACE_GLOBAL     of Machine.Rtl.label
-		       | TRACE_GLOBAL_REC of Machine.Rtl.label * int
+		       | TRACE_GLOBAL_REC of Machine.Rtl.label * int list
 
 		       (* trace status should never be needed.  A bug 
 			  if it is.*)

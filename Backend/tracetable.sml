@@ -61,9 +61,9 @@ functor Tracetable(val little_endian    : bool
       (* should be resolved to actual stack locations in the end; word-sized *)
 		       | TRACE_STACK      of MU.Machine.stacklocation
       (* stack pos, rec pos *)
-		       | TRACE_STACK_REC  of MU.Machine.stacklocation * int 
+		       | TRACE_STACK_REC  of MU.Machine.stacklocation * int list
 		       | TRACE_GLOBAL     of Rtl.label
-		       | TRACE_GLOBAL_REC of Rtl.label * int
+		       | TRACE_GLOBAL_REC of Rtl.label * int list
 
       (* trace status should never be needed.  A bug if it is.*)
 		       | TRACE_IMPOSSIBLE  
@@ -193,7 +193,7 @@ functor Tracetable(val little_endian    : bool
 	addword_int (i2w (~1)); addword_int (i2w (~1)); 3) 
       | tr2bot (TRACE_STACK sloc) = 
 	(inc Count_stack; addword_int (i2w 0); addword_int (i2w (sloc2int sloc)); 3) 
-      | tr2bot (TRACE_STACK_REC (sloc,i)) = 
+      | tr2bot (TRACE_STACK_REC (sloc,[i])) = 
         let val pos = sloc2int sloc
 	in  (if (!ShowDebug)
 	     then (print ("trace_stack_rec  pos,i,val" ^ 
@@ -205,9 +205,11 @@ functor Tracetable(val little_endian    : bool
         end
       | tr2bot (TRACE_GLOBAL lab)        = 
 	(inc Count_global; addword_int (i2w 1); addword_label lab; 3)
-      | tr2bot (TRACE_GLOBAL_REC (lab,i))= 
+      | tr2bot (TRACE_GLOBAL_REC (lab,[i]))= 
 	(inc Count_global_rec; addword_int (i2w (3+2*i)); 
 	 addword_label lab; 3)
+      | tr2bot (TRACE_STACK_REC (lab,_)) = error "TRACE_STACK_REC with list of length > 1 not done"
+      | tr2bot (TRACE_GLOBAL_REC (lab,_)) = error "TRACE_GLOBAL_REC with list of length > 1 not done"
       | tr2bot TRACE_IMPOSSIBLE          = 
 	error "cannot get a trace impossible while making table"
 
@@ -222,7 +224,7 @@ functor Tracetable(val little_endian    : bool
 	(inc Count_unset_reg; addword_int (i2w (~1)); addword_int (i2w (~1)); (0,1))
       | regtr2bits _ (TRACE_STACK sloc) = 
 	(inc Count_stack; addword_int (i2w 0); addword_int (i2w (sloc2int sloc)); (0,1))
-      | regtr2bits _ (TRACE_STACK_REC (sloc, i)) = 
+      | regtr2bits _ (TRACE_STACK_REC (sloc, [i])) = 
         let val pos = sloc2int sloc
 	in (if (!ShowDebug)
 	     then (print ("trace_stack_rec  pos,i,val" ^ 
@@ -234,9 +236,11 @@ functor Tracetable(val little_endian    : bool
         end
       | regtr2bits _ (TRACE_GLOBAL lab)        = 
 	(inc Count_global; addword_int (i2w 1); addword_label lab; (0,1))
-      | regtr2bits _ (TRACE_GLOBAL_REC (lab,i))= 
+      | regtr2bits _ (TRACE_GLOBAL_REC (lab,[i]))= 
 	(inc Count_global_rec; addword_int (i2w (3+2*i)); 
 	 addword_label lab; (0,1))
+      | regtr2bits _ (TRACE_STACK_REC (lab,_)) = error "TRACE_STACK_REC with list of length > 1 not done"
+      | regtr2bits _ (TRACE_GLOBAL_REC (lab,_)) = error "TRACE_GLOBAL_REC with list of length > 1 not done"
       | regtr2bits _ TRACE_IMPOSSIBLE          = 
 	error "cannot get a trace impossible while making table"
 
