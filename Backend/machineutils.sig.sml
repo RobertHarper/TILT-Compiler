@@ -1,10 +1,8 @@
+(*$import MACHINE ORD_MAP ORD_SET *)
 signature MACHINEUTILS =
 sig
 
    structure Machine  : MACHINE 
-   structure Labelmap : ORD_MAP where type Key.ord_key = Machine.loclabel
-   structure Regmap   : ORD_MAP where type Key.ord_key = Machine.register
-   structure Regset   : ORD_SET where type Key.ord_key = Machine.register
 
 
    val unsaved_regs  : Machine.register list (* Not to be saved across C call *)
@@ -28,9 +26,9 @@ sig
    val indirect_callee_saved_regs   : Machine.register list
 
 
-   val listToSet     : Machine.register list -> Regset.set
-   val setToList     : Regset.set -> Machine.register list
-   val msRegSet      : Regset.set -> string
+   val listToSet     : Machine.register list -> Machine.Regset.set
+   val setToList     : Machine.Regset.set -> Machine.register list
+   val msRegSet      : Machine.Regset.set -> string
    val msRegList     : Machine.register list -> string
 
 

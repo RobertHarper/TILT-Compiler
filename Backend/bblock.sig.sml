@@ -1,17 +1,16 @@
+(*$import MACHINE MACHINEUTILS *)
 (* Definitions of annotated instructions and basic blocks, and some
    simple dataflow operations on them.*)
 
 signature BBLOCK =
 sig
-   structure Machineutils : MACHINEUTILS
 
    structure Machine : MACHINE
-   sharing Machineutils.Machine = Machine
 
    (* Annotations on an instruction *)
 
    datatype 'a annotated = NO_ANN of 'a
-                         | LIVE of Machineutils.Regset.set * 'a
+                         | LIVE of Machine.Regset.set * 'a
 
    (* definition of a basic block:
 	   instrs: Instructions are kept in REVERSE order
@@ -33,10 +32,10 @@ sig
    *)
 
     datatype bblock = BLOCK of {instrs    : Machine.instruction annotated list ref,
- 			        def       : Machineutils.Regset.set,
-                                use       : Machineutils.Regset.set,
- 			        in_live   : Machineutils.Regset.set ref,
- 			        out_live  : Machineutils.Regset.set ref,
+ 			        def       : Machine.Regset.set,
+                                use       : Machine.Regset.set,
+ 			        in_live   : Machine.Regset.set ref,
+ 			        out_live  : Machine.Regset.set ref,
  			        truelabel : bool,
  			        succs     : Machine.loclabel list ref}
 
@@ -46,11 +45,11 @@ sig
    val stripAnnot     : 'a annotated -> 'a
    val msAnnotation   : 'a annotated -> string
 
-   val live : Machine.instruction annotated -> Machineutils.Regset.set
+   val live : Machine.instruction annotated -> Machine.Regset.set
    val defUse : Machine.instruction -> Machine.register list * Machine.register list
    val blockDefUse : bblock -> bblock
-   val liveVars : bblock Machineutils.Labelmap.map -> Machine.loclabel -> 
-                        bblock Machineutils.Labelmap.map
+   val liveVars : bblock Machine.Labelmap.map -> Machine.loclabel -> 
+                        bblock Machine.Labelmap.map
 
 end
 

@@ -1,4 +1,4 @@
-(*$import Env *)
+(*$import ENV *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* printutil.sig *)
@@ -25,9 +25,12 @@ end (* signature PRINTUTIL *)
 
 (*
  * $Log$
-# Revision 1.1  98/01/21  20:40:42  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.2  98/02/15  22:44:05  pscheng
+# bootstrapping changes
 # 
+# Revision 1.1  1998/01/21  20:40:42  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.1  97/03/26  18:16:05  pscheng
 # added the sig file
 # 

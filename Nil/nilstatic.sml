@@ -1,3 +1,4 @@
+(*$import ANNOTATION PRIMUTIL NIL PPNIL ALPHA NILUTIL NILCONTEXT NILERROR NORMALIZE NILSUBST Stats NILSTATIC *)
 functor NilStaticFn(structure Annotation : ANNOTATION
 		    structure PrimUtil : PRIMUTIL
 		    structure ArgNil : NIL
@@ -18,7 +19,8 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 			 and type Subst.kind = Normalize.kind = ArgNil.kind
 			 and type Subst.bnd = ArgNil.bnd
 			 and type Subst.subst = NilContext.subst = Normalize.subst
-			 and type Normalize.context = NilContext.context) :(*>*) NILSTATIC 
+			 and type Normalize.context = NilContext.context) 
+    :> NILSTATIC 
         where Nil = ArgNil 
 	and type context = NilContext.context = 
 struct	
@@ -407,14 +409,20 @@ struct
       val (args,kinds) = 
 	unzip (map (curry2 con_valid D) args)
     in
-      (case pcon
-	 of ((Int_c W64) | 
-	     (Float_c F32) |
-	     (Float_c F64)) => (pcon,Type_k Runtime,args,kinds)
-	 | ((Int_c W32) | (Int_c W16) | (Int_c W8) | 
-	    (BoxFloat_c F64) | (BoxFloat_c F32) |
-	    (Exn_c) | (Array_c) | (Vector_c) | (Ref_c) | (Exntag_c)) 
-	   => (pcon,Word_k Runtime,args,kinds)
+      (case pcon of
+	   (Int_c W64) => (pcon,Type_k Runtime,args,kinds)
+	 | (Float_c F32) => (pcon,Type_k Runtime,args,kinds)
+	 |  (Float_c F64) => (pcon,Type_k Runtime,args,kinds)
+	 | (Int_c W32)  => (pcon,Word_k Runtime,args,kinds)
+	 | (Int_c W16)  => (pcon,Word_k Runtime,args,kinds)
+	 | (Int_c W8)  => (pcon,Word_k Runtime,args,kinds)
+	 | (BoxFloat_c F64)  => (pcon,Word_k Runtime,args,kinds)
+	 | (BoxFloat_c F32)  => (pcon,Word_k Runtime,args,kinds)
+	 | (Exn_c)  => (pcon,Word_k Runtime,args,kinds)
+	 | (Array_c)  => (pcon,Word_k Runtime,args,kinds)
+	 | (Vector_c)  => (pcon,Word_k Runtime,args,kinds)
+	 | (Ref_c)  => (pcon,Word_k Runtime,args,kinds)
+	 | (Exntag_c) => (pcon,Word_k Runtime,args,kinds)
 	 | (Record_c labels) => 
 	     (if labels_distinct labels then
 		(if c_all (is_word_kind D) b_perr_k kinds 
@@ -447,6 +455,32 @@ struct
 		    (error "Vararg has non-word component" handle e => raise e)))
     end
 
+
+  and con_valid_letfun' (D : context, sort, is_code, var, 
+			 formals, body,body_kind, rest, con) : con * kind = 
+	 let
+	   val origD = D
+	   val ((D,subst),formals) = bind_at_kinds D formals
+	   val body = substConInCon subst body
+	   val body_kind = substConInKind subst body_kind
+	   val body_kind = kind_valid(D,body_kind)
+	   val (body,body_kind') = con_valid (D,body)
+	   val return_kind = if !bnds_made_precise then body_kind' else body_kind
+	   val _ = if (sub_kind (D,body_kind',body_kind)) then ()
+		   else (perr_c_k_k (body,body_kind,body_kind');
+			 (error "invalid return kind for constructor function" handle e => raise e))
+	   val (constructor,openness) = if is_code then (Code_cb,Code) else (Open_cb,Open)
+	   val lambda = (Let_c (sort,[constructor (var,formals,body,return_kind)],Var_c var))
+	   val lambda = eta_confun lambda
+	   val bndkind = Arrow_k(openness,formals,return_kind)
+	   val lambda = mark_as_checked (lambda,bndkind)
+	 in
+	   if (null rest) andalso (is_var_c con) andalso 
+	     eq_opt (eq_var,SOME var,strip_var con) then
+	     (lambda,bndkind)
+	   else
+	     con_valid (origD,varConConSubst var lambda (Let_c (sort,rest,con)))
+	 end
 
   and con_valid' (D : context, constructor : con) : con * kind = 
     (case constructor 
@@ -510,34 +544,12 @@ struct
 		      (error ("Encountered undefined variable " ^ (Name.var2string var) 
 		      ^" in con_valid") handle e => raise e))
 	    
-	| (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
-			((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
-	 let
-	   val origD = D
-	   val is_code = (case cbnd of
-				  Open_cb _ => false
-				| _ => true)
-	   val ((D,subst),formals) = bind_at_kinds D formals
-	   val body = substConInCon subst body
-	   val body_kind = substConInKind subst body_kind
-	   val body_kind = kind_valid(D,body_kind)
-	   val (body,body_kind') = con_valid (D,body)
-	   val return_kind = if !bnds_made_precise then body_kind' else body_kind
-	   val _ = if (sub_kind (D,body_kind',body_kind)) then ()
-		   else (perr_c_k_k (body,body_kind,body_kind');
-			 (error "invalid return kind for constructor function" handle e => raise e))
-	   val (constructor,openness) = if is_code then (Code_cb,Code) else (Open_cb,Open)
-	   val lambda = (Let_c (sort,[constructor (var,formals,body,return_kind)],Var_c var))
-	   val lambda = eta_confun lambda
-	   val bndkind = Arrow_k(openness,formals,return_kind)
-	   val lambda = mark_as_checked (lambda,bndkind)
-	 in
-	   if (null rest) andalso (is_var_c con) andalso 
-	     eq_opt (eq_var,SOME var,strip_var con) then
-	     (lambda,bndkind)
-	   else
-	     con_valid (origD,varConConSubst var lambda (Let_c (sort,rest,con)))
-	 end
+	| (Let_c (sort,((cbnd as Open_cb (var,formals,body,body_kind))::rest), con)) =>
+	       con_valid_letfun'(D,sort,false,var,formals,body,body_kind,rest,con)
+
+	| (Let_c (sort,((cbnd as Code_cb (var,formals,body,body_kind))::rest), con)) =>
+	       con_valid_letfun'(D,sort,true,var,formals,body,body_kind,rest,con)
+
         | (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	   let
 	     val (con,kind') = con_valid (D,con)
@@ -549,26 +561,25 @@ struct
 	   let
 	     val (env,env_kind) = con_valid (D,env)
 	     val (code,code_kind) =  con_valid (D,code)
-	   in
-	     case (strip_singleton code_kind) of
-	          Arrow_k ((Code | ExternCode),vklist,body_kind) => 
-		 let 
-		   val (first,(v,klast)) = split vklist
-		   val con = Closure_c (code,env)
-		   val body_kind = varConKindSubst v env body_kind
-		   val kind = Arrow_k(Closure,first,body_kind)
-		 in
-		   if sub_kind (D,env_kind,klast) then
-		     (con,kind)
-		   else
-		     (print "Invalid kind for closure environment:";
-		      print " env_kind < klast failed\n";
-		      print "env_kind is "; PpNil.pp_kind env_kind; print "\n";
-		      print "klast is "; PpNil.pp_kind klast; print "\n";
-		      print "code_kind is "; PpNil.pp_kind code_kind; print "\n";
-		      (error "Invalid kind for closure environment" handle e => raise e))
-		 end
+	     val (vklist,body_kind) = 
+		 case (strip_singleton code_kind) of
+	          Arrow_k (Code ,vklist,body_kind) => (vklist,body_kind)
+		| Arrow_k (ExternCode,vklist,body_kind) =>  (vklist,body_kind)
 		| _ => (error "Invalid closure: code component does not have code kind" handle e => raise e)
+	     val (first,(v,klast)) = split vklist
+	     val con = Closure_c (code,env)
+	     val body_kind = varConKindSubst v env body_kind
+	     val kind = Arrow_k(Closure,first,body_kind)
+	   in
+	       if sub_kind (D,env_kind,klast) then
+		   (con,kind)
+	       else
+		   (print "Invalid kind for closure environment:";
+		    print " env_kind < klast failed\n";
+		    print "env_kind is "; PpNil.pp_kind env_kind; print "\n";
+		    print "klast is "; PpNil.pp_kind klast; print "\n";
+		    print "code_kind is "; PpNil.pp_kind code_kind; print "\n";
+		    (error "Invalid kind for closure environment" handle e => raise e))
 	   end
 	| (Crecord_c entries) => 
 	   let
@@ -794,8 +805,11 @@ struct
 	       end
     in
 	      (case confun of
-		   Let_c (_,(([Open_cb (var,formals,body,body_kind)]) |
-				([Code_cb (var,formals,body,body_kind)])),Var_c v) =>
+		   Let_c (_,(([Open_cb (var,formals,body,body_kind)])), Var_c v) =>
+		   if eq_var(var,v)
+		       then reduce clist (formals,body,body_kind) 
+		   else NONE
+		 | Let_c (_,(([Code_cb (var,formals,body,body_kind)])), Var_c v) =>
 		   if eq_var(var,v)
 		       then reduce clist (formals,body,body_kind) 
 		   else NONE
@@ -823,7 +837,7 @@ struct
 	 | Closure_c _ => con
 	 | Typecase_c _ => error "typecase_c not handled yet"
 	 | Annotate_c(_,c) => con_reduce(D,c)
-	 | Let_c(letsort,[],c) => c
+	 | Let_c(letsort,[],c) => con_reduce(D,c)
 	 | Let_c(letsort,[Open_cb(v,_,_,_)],Var_c v') =>
 		 if (Name.eq_var(v,v')) then con else con_reduce(D,Var_c v')
 	 | Let_c(letsort,[Code_cb(v,_,_,_)],Var_c v') =>
@@ -947,8 +961,16 @@ struct
 		in  cons_equiv(D, Listops.map2 (fn ((l,c),k) => (c,Proj_c(c2,l),k)) (lclist,kinds))
 		end
 	(* check the lambda by applying both sides to some new variables *)
-	| ((Let_c (_,[Open_cb(v,vklist,_,k)],_),_) |
-	   (Let_c (_,[Code_cb(v,vklist,_,k)],_),_)) => 
+	| (Let_c (_,[Open_cb(v,vklist,_,k)],_),_) =>
+		let val ((D,subst),vklist) = bind_at_kinds D vklist
+		    val vars = map #1 vklist
+		    val args = map Var_c vars
+		    val k = Subst.substConInKind subst k
+		    val c1 = App_c(c1,args)
+		    val c2 = App_c(c2,args)
+		in con_equiv(D,c1,c2,k)
+		end
+	| (Let_c (_,[Code_cb(v,vklist,_,k)],_),_) => 
 		let val ((D,subst),vklist) = bind_at_kinds D vklist
 		    val vars = map #1 vklist
 		    val args = map Var_c vars
@@ -1007,18 +1029,10 @@ struct
 	 | _ => NONE)
 
   fun value_valid (D,value) = 
-    (case value
-       of (int (intsize,word) |
-	   uint (intsize,word)) => 
-	 let
-	   val kind = case intsize 
-			of W64 => Type_k Runtime
-			 | _ => Word_k Runtime
-	 in
-	   (value,Prim_c (Int_c intsize,[]))
-	 end
-	| float (floatsize,string) => 
-	 (value,Prim_c (Float_c floatsize,[]))
+    (case value of
+          int (intsize,_) => (value,Prim_c (Int_c intsize,[]))
+        | uint (intsize,_) => (value,Prim_c (Int_c intsize,[]))
+	| float (floatsize,string) => (value,Prim_c (Float_c floatsize,[]))
 	| array (con,arr) => 
 	 let
 	   val (con,kind) = con_valid (D,con)
@@ -1129,7 +1143,7 @@ struct
 		printl ("Label "^(label2string label)^" projected from expression");
 		(error "No such label" handle e => raise e))
 	 end
-	| (inject,[sumcon],exps as ([] | [_])) =>  
+	| (inject sumtype,[sumcon],exps) =>
 	 let
 	   val (sumcon,_) = con_valid(D,sumcon)
 	   val (tagcount,totalcount,sumtype,carrier) = 
@@ -1139,14 +1153,14 @@ struct
 	   val con = Prim_c (Sum_c {tagcount=tagcount,
 				    totalcount=totalcount,known=NONE},[carrier]) (*Can't propogate sumtype*)
 	 in
-	   case exps 
-	     of [] => 
+	   case exps of
+	        [] => 
 	       if (sumtype < tagcount) then
 		 ((prim,[carrier],[]),con)
 	       else
 		 (perr_e (Prim_e (NilPrimOp prim,[carrier],[]));
 		  (error "Illegal injection - sumtype out of range" handle e => raise e))
-	      | argexp::_ =>    
+	      | [argexp] =>    
 		 let val cons = (* carrier should be normalized already *) 
 		     (case carrier of
 			  Crecord_c lcons => map #2 lcons
@@ -1168,8 +1182,10 @@ struct
 		   (perr_e (Prim_e (NilPrimOp prim,cons,[argexp]));
 		    (error "Illegal injection - field out of range" handle e => raise e))
 		end
+	       | _ => (perr_e (Prim_e (NilPrimOp prim,cons,exps));
+		       (error "Illegal injection - too many args"))
 	 end
-	| (inject_record, [sumcon], argexps) => 
+	| (inject_record sumtype, [sumcon], argexps) => 
 	 let
 	   val (argexps,expcons) = 
 	     unzip (map (curry2 exp_valid D) exps)
@@ -1206,7 +1222,7 @@ struct
 	      PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
 	      (error "Illegal injection - field out of range" handle e => raise e))
 	 end
-	| (project_sum,[argcon],[argexp]) => 
+	| (project_sum k,[argcon],[argexp]) => 
 	 let
 	   val (argexp,argcon') = exp_valid (D,argexp)
 	   val (argcon'',argkind) = con_valid(D,argcon)
@@ -1227,7 +1243,7 @@ struct
 	   else	
 		(error "project_sum's decoration type and term argument type mismatch")
 	 end
-	| (project_sum_record l,[argcon],[argexp]) => 
+	| (project_sum_record (k,l),[argcon],[argexp]) => 
 	 let
 	   val (argexp,argcon') = exp_valid (D,argexp)
 	   val (argcon'',argkind) = con_valid(D,argcon)
@@ -1607,6 +1623,24 @@ struct
   and bnds_valid (D,bnds) = bnds_valid' (bnds,(D,Subst.empty()))
   and bnd_valid (D,bnd) = bnd_valid' (bnd,(D,Subst.empty()))
   and bnds_valid' (bnds,(D,subst)) = foldl_acc bnd_valid' (D,subst) bnds
+  and fbnd_valid'' (is_code,openness,constructor,defs,(D,subst)) = 
+	   let
+	     val def_list = set2list defs
+	     val (vars,functions) = unzip def_list
+	     val (declared_c) = map (curry2 get_function_type openness) functions
+	     val (declared_c,_) = unzip (map (curry2 con_valid D) declared_c)  (*Must normalize!!*)
+	     val bnd_types = zip vars declared_c
+
+	     val D = insert_con_list (D,bnd_types)
+
+		       
+	     val functions = map (curry2 function_valid D) functions
+		       
+	     val defs = list2set (zip vars functions)
+	     val bnd = constructor defs
+	   in (bnd,(D,subst))
+	   end
+
   and bnd_valid'' (bnd,(D,subst)) = 
     let
       val (bnd,subst) = substConInBnd subst bnd 
@@ -1636,35 +1670,8 @@ struct
 	       (perr_e_c_c (exp,given_con,found_con);
 		(error ("type mismatch in expression binding of "^(var2string var)) handle e => raise e))
 	   end
-	  | ((Fixopen_b defs) | (Fixcode_b defs)) =>
-	   let
-
-	     val is_code = 
-	       (case bnd 
-		  of Fixopen_b _ => false
-		   | _ => true)
-	     val def_list = set2list defs
-	     val (vars,functions) = unzip def_list
-	     val (openness,constructor) = 
-	       if is_code then 
-		 (Code,Fixcode_b) 
-	       else (Open,Fixopen_b)
-
-
-	     val (declared_c) = map (curry2 get_function_type openness) functions
-	     val (declared_c,_) = unzip (map (curry2 con_valid D) declared_c)  (*Must normalize!!*)
-	     val bnd_types = zip vars declared_c
-
-	     val D = insert_con_list (D,bnd_types)
-
-		       
-	     val functions = map (curry2 function_valid D) functions
-		       
-	     val defs = list2set (zip vars functions)
-	     val bnd = constructor defs
-	   in
-	     (bnd,(D,subst))
-	   end
+	  | (Fixopen_b defs) => fbnd_valid''(false,Open,Fixopen_b,defs,(D,subst))
+	  | (Fixcode_b defs) => fbnd_valid''(true,Code,Fixcode_b,defs,(D,subst))
 	  | Fixclosure_b (is_recur,defs) => 
 	   let
 	     val origD = D
@@ -1686,30 +1693,30 @@ struct
 				(printl ("Code pointer "^(var2string code));
 				  print " not defined in context";
 				  (error "Invalid closure" handle e => raise e)))
-		 val con = 
-		   (case strip_arrow code_type
-		      of SOME ((Code | ExternCode),effect,tformals,formals,numfloats,body_c) => 
-			let
-			  val (tformals,(v,last_k)) = split tformals
-			  val tformals = map (fn (tv,k) => (tv,varConKindSubst v cenv k)) tformals
-			  val formals = map (varConConSubst v cenv) formals
-			  val (formals,last_c) = split formals
-			  val last_c = con_normalize D last_c
-			  val body_c = varConConSubst v cenv body_c
-			  val closure_type = AllArrow_c (Closure,effect,tformals,formals,numfloats,body_c)
-			  val closure_type = con_normalize D closure_type
-			in
-			  if sub_kind (D,Singleton_k(Runtime,ckind,cenv),last_k) andalso
-			      type_equiv (D,vcon,last_c) 
-			    then
+		 val (effect,tformals,formals,numfloats,body_c) = 
+		   (case strip_arrow code_type of
+		       SOME (Code,effect,tformals,formals,numfloats,body_c) => 
+			   (effect,tformals,formals,numfloats,body_c) 
+		     | SOME (ExternCode,effect,tformals,formals,numfloats,body_c) => 
+			   (effect,tformals,formals,numfloats,body_c) 
+		     | _ => (perr_e_c (Var_e code,code_type);
+			     (error "Code pointer in closure of illegal type" handle e => raise e)))
+		 val (tformals,(v,last_k)) = split tformals
+		 val tformals = map (fn (tv,k) => (tv,varConKindSubst v cenv k)) tformals
+		 val formals = map (varConConSubst v cenv) formals
+		 val (formals,last_c) = split formals
+		 val last_c = con_normalize D last_c
+		 val body_c = varConConSubst v cenv body_c
+		 val closure_type = AllArrow_c (Closure,effect,tformals,formals,numfloats,body_c)
+		 val closure_type = con_normalize D closure_type
+		 val con = if (sub_kind (D,Singleton_k(Runtime,ckind,cenv),last_k) andalso
+			       type_equiv (D,vcon,last_c))
+			   then
 			      closure_type
-			  else
-			    (perr_k_k (last_k,ckind);
-			     perr_c_c (last_c,vcon);
-			     (error "Mismatch in closure" handle e => raise e))
-			end
-		       | _ => (perr_e_c (Var_e code,code_type);
-			       (error "Code pointer in closure of illegal type" handle e => raise e)))
+			   else
+			       (perr_k_k (last_k,ckind);
+				perr_c_c (last_c,vcon);
+				(error "Mismatch in closure" handle e => raise e))
 	       in
 		 if type_equiv (D,con,tipe) then
 		   {code=code,cenv=cenv,venv=venv,tipe=tipe}
@@ -1794,9 +1801,15 @@ struct
 	    in
 	      (Switch_e switch,con)
 	    end
-	| ((App_e (openness as (Code | ExternCode),app as (Var_e _),cons,texps,fexps)) |  
-	   (App_e (openness as (Closure | Open),app,cons,texps,fexps))) =>
+	| (App_e (openness,app,cons,texps,fexps)) =>
 	    let
+
+		val _ = (case (openness,app) of
+			     (Code,Var_e _) => ()
+			   | (ExternCode,Var_e _) => ()
+			   | (Code,_) => error "code applied to non-variable"
+			   | (ExternCode,_) => error "extern code applied to non-variable")
+
 	      val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
 	      val cons = map2 mark_as_checked (cons,kinds)
 	      val actuals_t = map (curry2 exp_valid D) texps
@@ -1867,10 +1880,7 @@ struct
 	      else
 		(error "Error in application - different openness" handle e => raise e)
 	    end
-	 | App_e _ => 
-	    (printl "Application expression ";
-	     PpNil.pp_exp exp;
-	     (error "Illegal application.  Closure with non-var?" handle e => raise e))
+
 	| Raise_e (exp,con) => 
 	    let
 	      val (con,kind) = con_valid (D,con)

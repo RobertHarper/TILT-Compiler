@@ -1,4 +1,4 @@
-(*$import TopLevel TilWord64 Env YaccBase *)
+(*$import TopLevel TilWord64 Symbol YaccBase *)
 signature ML_TOKENS =
 sig
 type ('a,'b) token

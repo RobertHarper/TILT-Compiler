@@ -1,4 +1,4 @@
-(*$import BINIOUTIL BinIO TopLevel *)
+(*$import BINIOUTIL BinIO TopLevel Char *)
 
 structure BinIO_Util : BIN_IO_UTIL =
   struct

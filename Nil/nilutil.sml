@@ -55,8 +55,8 @@ struct
   val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
   val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
   val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[unit_con],[match_tag,unit_exp])
-  val false_exp = Prim_e(NilPrimOp inject,[false_con],[])
-  val true_exp = Prim_e(NilPrimOp inject,[true_con],[])
+  val false_exp = Prim_e(NilPrimOp (inject 0w0),[false_con],[])
+  val true_exp = Prim_e(NilPrimOp (inject 0w1),[true_con],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
 
@@ -565,18 +565,22 @@ struct
 			arms = map (fn (t,e) => (t,f_exp state e)) arms,
 			default = Util.mapopt (f_exp state) default}
 	 | Sumsw_e {result_type, arg, sumtype, bound, arms, default} =>
-	       Sumsw_e {result_type = f_con state result_type, 
-			arg = f_exp state arg,
-			sumtype = f_con state sumtype,
-			bound = bound,
-			arms = map (fn (t,e) => (t,f_exp state e)) arms,
-			default = Util.mapopt (f_exp state) default}
+	       let val state' = add_var(state,bound,sumtype)
+	       in  Sumsw_e {result_type = f_con state result_type, 
+			    arg = f_exp state arg,
+			    sumtype = f_con state sumtype,
+			    bound = bound,
+			    arms = map (fn (t,e) => (t,f_exp state' e)) arms,
+			    default = Util.mapopt (f_exp state) default}
+	       end
 	 | Exncase_e {result_type, arg, bound, arms, default} =>
-	       Exncase_e {result_type = f_con state result_type, 
-			arg = f_exp state arg,
-			bound = bound,
-			arms = map (fn (t,e) => (f_exp state t,f_exp state e)) arms,
-			default = Util.mapopt (f_exp state) default}
+	       let val state' = add_var(state,bound,Prim_c(Exn_c,[]))
+	       in  Exncase_e {result_type = f_con state result_type, 
+			      arg = f_exp state arg,
+			      bound = bound,
+			      arms = map (fn (t,e) => (f_exp state t,f_exp state' e)) arms,
+			      default = Util.mapopt (f_exp state) default}
+	       end
 	 | Typecase_e _ => error "typecase not handled")
 
   and f_exp state (exp : exp) : exp = 
@@ -618,7 +622,9 @@ struct
 			    map self elist, 
 			    map self eflist)
 		| Raise_e (e,c) => Raise_e(self e, f_con state c)
-		| Handle_e (e,v,h,c) => Handle_e(self e, v, self h, f_con state c)
+		| Handle_e (e,v,h,c) => let val state' = add_var(state,v,Prim_c(Exn_c,[]))
+					in  Handle_e(self e, v, f_exp state' h, f_con state c)
+					end
       in case (exphandler (bound,exp)) of
 	  CHANGE_NORECURSE e => e
 	| CHANGE_RECURSE e => doexp e

@@ -1,3 +1,4 @@
+(*$import NIL *)
 signature SPECIALIZE =
   sig
       structure Nil : NIL

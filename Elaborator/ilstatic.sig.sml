@@ -31,10 +31,10 @@ signature ILSTATIC =
     val Sig_Valid   : Il.context * Il.signat -> bool
 
     (* --------- signature/sdec equivalence and subtyping -------- *)
-    val eq_sdecs    : Il.context * Il.sdecs * Il.sdecs -> bool
-    val eq_sig      : Il.context * Il.signat * Il.signat -> bool
-    val Sdecs_IsSub : Il.context * Il.sdecs * Il.sdecs -> bool
-    val Sig_IsSub   : Il.context * Il.signat * Il.signat -> bool
+    val Sdecs_IsSub   : Il.context * Il.sdecs * Il.sdecs -> bool
+    val Sdecs_IsEqual : Il.context * Il.sdecs * Il.sdecs -> bool
+    val Sig_IsSub     : Il.context * Il.signat * Il.signat -> bool
+    val Sig_IsEqual   : Il.context * Il.signat * Il.signat -> bool
 
     (* ---------- Obtain types and kinds and signatures ---------- *)
     val GetExpCon     : Il.context * Il.exp  -> Il.con
@@ -60,6 +60,7 @@ signature ILSTATIC =
 	  | PHRASE_OVEREXP of (Il.con * Il.exp) list
 
     val Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option
+    val Context_Lookup_Path : Il.context * Il.path -> (Il.path * Il.phrase_class) option
     val Sdecs_Lookup  : Il.context -> Il.mod * Il.sdecs * Il.label list -> 
 	                            (Il.label list * Il.phrase_class) option
     val Sdecs_Lookup' : Il.context -> Il.mod * Il.sdecs * Il.label list -> 

@@ -1,4 +1,4 @@
-(*$import ERROR IL ILUTIl *)
+(*$import ERROR IL ILUTIL *)
 (* Stateful module holding the error state of the elaboration process *)
 
 functor Error(structure Il : IL

@@ -1,5 +1,6 @@
+(*$import NIL PRIMUTILPARAM *)
 functor NilPrimUtilParam(structure Nil : NIL)
-    :(*>*) PRIMUTILPARAM where type con = Nil.con 
+    :> PRIMUTILPARAM where type con = Nil.con 
 		       and type exp = Nil.exp 
 		       and type intsize = Nil.Prim.intsize
 		       and type floatsize = Nil.Prim.floatsize 
@@ -39,8 +40,8 @@ functor NilPrimUtilParam(structure Nil : NIL)
 	    end
 	val false_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w0},[Crecord_c[]])
 	val true_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w1},[Crecord_c[]])
-	val false_exp = Prim_e(NilPrimOp inject,[false_con],[])
-	val true_exp = Prim_e(NilPrimOp inject,[true_con],[])
+	val false_exp = Prim_e(NilPrimOp (inject 0w0),[false_con],[])
+	val true_exp = Prim_e(NilPrimOp (inject 0w1),[true_con],[])
 	fun bool2exp false = false_exp
 	  | bool2exp true = true_exp
 

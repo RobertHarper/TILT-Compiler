@@ -1,3 +1,4 @@
+(*$import DECALPHA Word32 *)
 signature DIVMULT =
   sig
 

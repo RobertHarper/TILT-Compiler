@@ -1,4 +1,4 @@
-(*$import IL ILCONTEXT *)
+(*$import IL Formatter *)
 (* Pretty-printing routines for the internal language. *)
 signature PPIL =
   sig

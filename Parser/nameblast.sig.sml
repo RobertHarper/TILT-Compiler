@@ -1,4 +1,4 @@
-(*$import NAME BinIO Blaster *)
+(*$import NAME BinIO Blaster Name *)
 
 signature NAMEBLAST = 
   sig

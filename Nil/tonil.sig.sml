@@ -4,8 +4,6 @@ sig
     structure Il : IL
     structure Nil : NIL
 
-    val use_imprecise_kind_at_bind : bool ref
-
     val debug : bool ref
     val full_debug : bool ref
     val do_kill_cpart_of_functor : bool ref

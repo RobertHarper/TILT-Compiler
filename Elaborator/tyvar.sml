@@ -2,7 +2,7 @@
 
 (* Type variables parameterized over types *)
 functor Tyvar()
-  : TYVAR =
+  :> TYVAR =
   struct
 
     open Listops Name Util
@@ -85,7 +85,8 @@ functor Tyvar()
 	    fun constrainer () : (int * bool) list =
 		let
 		    fun filter(i,c) = (case (c(body,false)) of
-					   (MAYBE | MATCH _) => SOME(i,c)
+					   MAYBE => SOME(i,c)
+					 | MATCH _ => SOME(i,c)
 					 | FAIL => NONE)
 		    val constraints' = List.mapPartial filter (!constraints)
 		    val _ = (constraints := constraints')

@@ -1,3 +1,4 @@
+(*$import NIL *)
 signature TOCLOSURE = 
     sig
 	structure Nil : NIL

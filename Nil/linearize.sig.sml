@@ -1,3 +1,4 @@
+(*$import NIL *)
 signature LINEARIZE = 
     sig
 

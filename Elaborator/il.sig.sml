@@ -41,11 +41,13 @@ signature IL =
                  | EXN_INJECT of string * exp * exp (* tag and value *)
                  | ROLL    of con * exp
                  | UNROLL  of con * con * exp    (* the recursive and non-recursive type *)
-                 | INJ     of {sumtype : con,
+                 | INJ     of {sumtype : con,    (* non-special sum tyoe *)
+			       field : int,
 			       inject : exp option}
                  (* case over sum types of exp with arms and defaults*)
                  | CASE    of {sumtype : con,
 			       arg : exp,
+			       bound : var,
 			       arms : (exp option) list,
 			       tipe : con,
 			       default : exp option}

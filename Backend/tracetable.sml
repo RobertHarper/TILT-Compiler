@@ -1,3 +1,5 @@
+(*$import MACHINEUTILS TRACETABLE *)
+
 (* This is how the compiler tells the runtime about how to determine all roots
    from the registers and from the stack.  The runtime, at GC, will walk the 
    stack.  For each frame encountered, it will look up information generated
@@ -44,7 +46,7 @@ OLD   4 bytes to indiate return address position in frame
 *)
 functor Tracetable(val little_endian    : bool 
 		   structure MU : MACHINEUTILS)
-  : TRACETABLE = 
+  :> TRACETABLE where Machine = MU.Machine = 
   struct
 
     structure MU = MU

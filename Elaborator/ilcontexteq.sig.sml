@@ -1,3 +1,4 @@
+(*$import IL BinIO *)
 (* Equality and addition of contexts *)
 
 signature ILCONTEXTEQ =

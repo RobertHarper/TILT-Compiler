@@ -100,16 +100,17 @@ sig
   datatype nilprim = 
       record of label list       (* record intro *)
     | select of label            (* record field selection; takes the record type *)
-    | inject                     (* slow; must be given one type that is
-				    reducible to a known sum type *)
-    | inject_record              (* fast; must be given one type that is reducible
-				    to a known sum type; the known component must 
+    | inject of TilWord32.word   (* slow; must be given one type that is
+				    reducible to a sum type *)
+    | inject_record of TilWord32.word 
+                                 (* fast; must be given one type that is reducible
+				    to a sum type where the indicated component must 
 				    be reducible to a record; the term components
 				    consituting the record are passed separately 
 				    to this primitive *)
-    | project_sum                (* slow; same requirement as inject *)
-    | project_sum_record of label (* fast; same requirement as inject_record;
-				     the record type must contain the label given here *)
+    | project_sum of TilWord32.word (* slow; same requirement as inject *)
+    | project_sum_record of TilWord32.word * label (* fast; same requirement as inject_record;
+				                      the record type must contain the label given here *)
 
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)

@@ -1,9 +1,13 @@
+(*$import NIL *)
+
 signature NORMALIZE = 
   sig
-    type kind
-    type con
-    type exp
-    type module
+      structure Nil : NIL
+
+    type kind = Nil.kind
+    type con = Nil.con
+    type exp = Nil.exp
+    type module = Nil.module
     type context 
     type 'a subst
 

@@ -1,4 +1,6 @@
-functor Bblock(structure Machineutils : MACHINEUTILS) : BBLOCK =
+(*$import MACHINEUTILS BBLOCK *)
+functor Bblock(structure Machineutils : MACHINEUTILS) 
+    :> BBLOCK where Machine = Machineutils.Machine =
 struct
    structure Machineutils = Machineutils
    structure Machine = Machineutils.Machine
@@ -182,7 +184,7 @@ struct
 
    (* Use the in_live and out_live values determined from findLiveTemps()
       to annotate individual instructions. *)
-   fun liveVars (block_map : bblock Machineutils.Labelmap.map) first_label =
+   fun liveVars (block_map : bblock Machine.Labelmap.map) first_label =
      let 
 	                      
        (* Scan backwards to compute which variables are live after each instruction in

@@ -8,7 +8,8 @@ functor Basis(structure Il : IL
 	      structure Datatype : DATATYPE
 	      structure Toil : TOIL
 	      sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il =
-		      Datatype.Il = Toil.Il = Il) : BASIS =
+		      Datatype.Il = Toil.Il = Il) 
+   :> BASIS where Il = Il =
   struct
 
     structure Il = Il

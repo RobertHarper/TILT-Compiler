@@ -1,12 +1,13 @@
+(*$import RTL ORD_MAP Int32 BinaryMapFn *)
 (* Mapping from labels to whatever (blocks, procedure signatures, etc.) *)
 
-functor Labelmap (structure Machine : MACHINE) : ORD_MAP =
+functor Labelmap (structure Machine : sig structure Rtl : RTL end) : ORD_MAP =
 struct
   local 
       open Machine.Rtl
       structure Labelkey : ORD_KEY = 
 	  struct
-	      type ord_key = Machine.loclabel
+	      type ord_key = Machine.Rtl.local_label
 	      fun compare (LOCAL_CODE v1, LOCAL_CODE v2) = Int.compare(Name.var2int v1, Name.var2int v2)
 		| compare (LOCAL_DATA v1, LOCAL_DATA v2) = Int.compare(Name.var2int v1, Name.var2int v2)
 		| compare (LOCAL_CODE _, LOCAL_DATA _) = LESS

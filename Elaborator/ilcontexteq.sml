@@ -1,9 +1,11 @@
+(*$import ILCONTEXT ILUTIL PPIL Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool *)
 (* Equality of contexts *)
 
 functor IlContextEq (structure IlContext : ILCONTEXT
 		     structure IlUtil : ILUTIL
 		     structure Ppil : PPIL
-		     sharing Ppil.Il = IlUtil.Il = IlContext.Il) : ILCONTEXTEQ =
+		     sharing Ppil.Il = IlUtil.Il = IlContext.Il) 
+    :> ILCONTEXTEQ where Il = IlContext.Il =
     struct
 
 	val debug = ref false
@@ -526,13 +528,15 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	       | ROLL (c,e) => (blastOutChoice os 16; blastOutCon os c; blastOutExp os e)
 	       | UNROLL (c1,c2,e) => (blastOutChoice os 17; blastOutCon os c1; blastOutCon os c2;
 				      blastOutExp os e)
-	       | INJ {sumtype, inject} =>
+	       | INJ {sumtype, field, inject} =>
 		     (blastOutChoice os 18; blastOutCon os sumtype; 
+		      blastOutChoice os field;
 		      blastOutOption blastOutExp os inject)
-	       | CASE {sumtype, arg, arms, tipe, default} => 
+	       | CASE {sumtype, arg, bound, arms, tipe, default} => 
 		      (blastOutChoice os 19;
 		       blastOutCon os sumtype;
 		       blastOutExp os arg;
+		       blastOutVar os bound;
 		       blastOutList (blastOutOption blastOutExp) os arms;
 		       blastOutCon os tipe;
 		       blastOutOption blastOutExp os default)
@@ -586,16 +590,19 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	       | 16 => ROLL (blastInCon is, blastInExp is)
 	       | 17 => UNROLL (blastInCon is, blastInCon is, blastInExp is)
 	       | 18 => let val sumtype = blastInCon is
+			   val field = blastInChoice is
 			   val inject = blastInOption blastInExp is
 		       in  INJ {sumtype = sumtype,
+				field = field,
 				inject = inject}
 		       end
 	       | 19 => (tab "  CASE\n";
 			CASE {sumtype = blastInCon is,
-			     arg = blastInExp is, 
-			     arms = blastInList (blastInOption blastInExp) is,
-			     tipe = blastInCon is, 
-			     default = blastInOption blastInExp is})
+			      arg = blastInExp is, 
+			      bound = blastInVar is,
+			      arms = blastInList (blastInOption blastInExp) is,
+			      tipe = blastInCon is, 
+			      default = blastInOption blastInExp is})
 	       | 20 => (tab "  EXN_CASE\n";
 			EXN_CASE {arg = blastInExp is, 
 				 arms = blastInList (blastInTriple blastInExp blastInCon blastInExp) is,
@@ -1039,9 +1046,9 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	and eq_exp (vm,VAR v,VAR v') = VM.eq_var(vm,v,v')
 	  | eq_exp (vm,MODULE_PROJECT(m1,l1),MODULE_PROJECT(m2,l2)) = 
 	    eq_mod(vm,m1,m2) andalso Name.eq_label(l1,l2)
-	  | eq_exp(vm,INJ{sumtype=c1,inject=eopt1},
-		   INJ{sumtype=c2,inject=eopt2}) = 
-	       eq_con(vm,c1,c2) andalso
+	  | eq_exp(vm,INJ{sumtype=c1,field=f1,inject=eopt1},
+		   INJ{sumtype=c2,field=f2, inject=eopt2}) = 
+	       eq_con(vm,c1,c2) andalso f1=f2 andalso
 	       eq_opt (fn (e1,e2) => eq_exp(vm,e1,e2)) (eopt1,eopt2)
 	  | eq_exp(vm,ROLL(c1,e1),ROLL(c2,e2)) = eq_con(vm,c1,c2) andalso eq_exp(vm,e1,e2)
 	  | eq_exp(vm,UNROLL(c11,c12,e1),UNROLL(c21,c22,e2)) = 

@@ -1,7 +1,7 @@
 (*$import PPPRIM PRIM Util Formatter *)
 (* Primitives pretty-printer. *)
 functor Ppprim(structure ArgPrim : PRIM)
-	: PPPRIM where Prim = ArgPrim =
+	:> PPPRIM where Prim = ArgPrim =
   struct
 
     structure Prim = ArgPrim

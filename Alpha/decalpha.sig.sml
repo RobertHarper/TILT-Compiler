@@ -1,3 +1,4 @@
+(*$import MACHINE *)
 signature DECALPHA =
 sig
 

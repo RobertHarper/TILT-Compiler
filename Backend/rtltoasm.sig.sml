@@ -1,3 +1,4 @@
+(*$import RTL *)
 signature RTLTOASM =
 sig
 

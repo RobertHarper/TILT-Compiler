@@ -1,20 +1,22 @@
+(*$import MACHINE *)
 (* Interference graphs and operations on them *)
 
 signature IFGRAPH =
 sig
-   type node
+
+   structure Machine : MACHINE
+   type node = Machine.register
    type graph
-   structure Regset : ORD_SET where type Key.ord_key = node
 
    val empty : unit -> graph
    val copy : graph -> graph
 
-   val nodes : graph -> Regset.set
+   val nodes : graph -> Machine.Regset.set
 
    (* return set of nodes, excluding physical registers *)
 
-   val nodes_excluding_physical : graph -> Regset.set
-   val edges : graph -> node -> Regset.set
+   val nodes_excluding_physical : graph -> Machine.Regset.set
+   val edges : graph -> node -> Machine.Regset.set
    val degree : graph -> node -> int
    val insert_node : graph -> node -> unit
    val delete_node : graph -> node -> unit

@@ -1,4 +1,4 @@
-(*$import YaccBase ML_TOKENS Ast ErrorMsg Env Fixity AstUtil *)
+(*$import YaccBase ML_TOKENS Ast ErrorMsg Symbol Fixity AstUtil StrgHash *)
 
 functor MLLrValsFun(structure Token : TOKEN)
  :> sig structure ParserData : PARSER_DATA
@@ -7,7 +7,7 @@ functor MLLrValsFun(structure Token : TOKEN)
 		where type arg = int*int -> ErrorMsg.complainer
 		where type result = Ast.top
         structure Tokens : ML_TOKENS
-		where type ('a,'b) token = ('a,'b) ParserData.Token.token
+		where type ('a,'b) token = ('a,'b) Token.token
 		where type svalue = ParserData.svalue
 
     end

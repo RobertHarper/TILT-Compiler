@@ -48,7 +48,6 @@ signature DATATYPE =
 	     Il.sbnd list * Il.sdecs * Il.con list)
 	    -> {instantiated_type : Il.con,
 		instantiated_sumtype : Il.con,
-		instantiated_special_sumtype : Il.con list,
 		arms : {name : Il.label, arg_type : Il.con option} list,
 		expose_exp : Il.exp}
 			 

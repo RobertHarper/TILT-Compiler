@@ -1,3 +1,4 @@
+(*$import MACHINE IFGRAPH Util HashTableFn SplaySetFn *)
 (* interference graph *)
 
 (*
@@ -153,17 +154,16 @@ end
 
 *)
 
-functor Ifgraph (structure Machine : MACHINE
-		 structure Machineutils : MACHINEUTILS
-		 sharing Machineutils.Machine = Machine) : IFGRAPH =
+functor Ifgraph (structure Machine : MACHINE) :> IFGRAPH where Machine = Machine =
+
 struct
 
+    structure Machine = Machine
     val badness_threshold = ref 128
 
     val error = fn s => Util.error "ifgraph.sml" s
 
     open Machine
-    structure Regset = Machineutils.Regset
 
     fun eqReg (r1,r2) = Machine.eqRegs r1 r2
 

@@ -1,9 +1,8 @@
+(*$import MACHINE *)
 signature TRACKSTORAGE =
 sig
-  structure Machineutils : MACHINEUTILS
 
   structure Machine : MACHINE
-  sharing Machine = Machineutils.Machine
 
   type info
 
@@ -20,7 +19,7 @@ sig
 		 regs_destroyed   : Machine.register list,
 		 max_on_stack : int,
 		 max_C_args : int,
-		 stack_resident : Machine.stacklocation Machineutils.Regmap.map}
+		 stack_resident : Machine.stacklocation Machine.Regmap.map}
                     -> info (* init with callee-save registers *)
   
   val stackOffset : info -> Machine.register list * Machine.register -> Machine.stacklocation

@@ -1,8 +1,9 @@
+(*$import MACHINEUTILS DECALPHA *)
 functor Decalphautils(structure Decalpha: DECALPHA 
 		      structure Labelmap : ORD_MAP where type Key.ord_key = Decalpha.loclabel
 		      structure Regmap : ORD_MAP where type Key.ord_key = Decalpha.register
                       structure Regset : ORD_SET where type Key.ord_key = Decalpha.register)
-    : MACHINEUTILS =
+    (* : MACHINEUTILS *) =
 struct
 
    structure Labelmap = Labelmap

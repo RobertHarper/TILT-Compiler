@@ -3,9 +3,12 @@
 (* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
  *
  * $Log$
-# Revision 1.3  98/01/21  20:40:38  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.4  98/02/15  22:44:04  pscheng
+# bootstrapping changes
 # 
+# Revision 1.3  1998/01/21  20:40:38  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.2  1997/10/24  21:36:28  cstone
 # update to 109.32 & NT
 #
@@ -115,7 +118,10 @@ functor ParserGen(structure LrTable : LR_TABLE
 		  structure Stream : STREAM) : LR_PARSER =
 *)
 
-structure LrParser :> LR_PARSER =
+structure LrParser 
+  :> LR_PARSER where Stream = Stream
+               where LrTable = LrTable
+  =
    struct
       structure LrTable = LrTable
       structure Stream = Stream

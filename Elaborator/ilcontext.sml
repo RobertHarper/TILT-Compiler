@@ -1,5 +1,7 @@
-(*$import IL ILCONTEXT Util Listops Name NameBlast Blaster *)
-functor IlContext(structure Il : IL) 
+(*$import IL ILCONTEXT Util Listops Name PPIL *)
+functor IlContext(structure Il : IL
+		  structure Ppil : PPIL
+		  sharing Ppil.Il = Il) 
     :> ILCONTEXT where Il = Il   =
 struct
 
@@ -20,7 +22,7 @@ struct
     type inline = Il.inline
     type context_entry = Il.context_entry
 	
-    open Il Util Name NameBlast Listops 
+    open Il Util Name Listops Ppil
 	
     val error = fn s => error "ilcontext.sml" s
 	
@@ -175,8 +177,12 @@ struct
 	  | DEC_CON(v,k,NONE) => help(ctxt,v, path2con, fn obj => (PHRASE_CLASS_CON(obj, k)))
 	  | DEC_CON(v,k,SOME c) => help(ctxt,v, path2con, fn _ => (PHRASE_CLASS_CON(c, k)))
 	  | DEC_MOD (v,s as SIGNAT_FUNCTOR _) => help(ctxt,v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, s)))
-	  | DEC_MOD (v,(SIGNAT_STRUCTURE(NONE,_))) => error "adding non-selfified signature to context"
-	  | DEC_MOD(_,(SIGNAT_INLINE_STRUCTURE {self=NONE,...})) => error "adding non-selfified signature to context"
+	  | DEC_MOD (v,(SIGNAT_STRUCTURE(NONE,_))) => 
+	    (print "adding non-selfified signature to context: "; pp_sdec sdec; print "\n";
+	     error "adding non-selfified signature to context")
+	  | DEC_MOD(_,(SIGNAT_INLINE_STRUCTURE {self=NONE,...})) => 
+	    (print "adding non-selfified inline signature to context: "; pp_sdec sdec; print "\n";
+	     error "adding non-selfified inline signature to context")
 	  | DEC_MOD(v,SIGNAT_INLINE_STRUCTURE (quad as {self=SOME _,...})) =>
 	          add_context_inline_signature (ctxt,l,v,quad)
 	  | DEC_MOD(v,s as SIGNAT_STRUCTURE(SOME p, sdecs)) => 
@@ -597,38 +603,7 @@ struct
 	     | (ctxt::rest) => foldl (fn (c,acc) => plus(csubster,ksubster,ssubster,acc,c)) ctxt rest)
 
 
-    fun pp_list doer objs (left,sep,right,break) = 
-      let 
-	  open Formatter
-	  fun loop [] = [String right]
-	    | loop [a] = [doer a, String right]
-	    | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
-	  val fmts = (String left) :: (loop objs)
-      in (if break then Vbox0 else HOVbox0 1) (size left) 1 fmts
-      end
-    fun print_context ({pp_exp, pp_mod,
-			pp_con, pp_fixity_list, pp_inline, 
-			pp_kind, pp_label, pp_var, pp_tag, pp_signat},
-		       CONTEXT{label_list,...}) = 
-	let open Formatter
-	    val label_pathpc_list = Name.LabelMap.listItemsi label_list
-	    fun pp_path path = 
-		(case path of
-		     SIMPLE_PATH v => pp_var v
-		   | COMPOUND_PATH (v,ls) => HOVbox[Hbox[pp_var v, String "."], 
-						    pp_list pp_label ls ("",".","",false)])
-	    fun pp_xpc (PHRASE_CLASS_EXP (e,c)) = HOVbox[pp_exp e, String " : ", pp_con c]
-	      | pp_xpc (PHRASE_CLASS_CON (c,k)) = HOVbox[pp_con c, String " : ", pp_kind k]
-	      | pp_xpc (PHRASE_CLASS_MOD (m,s)) = HOVbox[pp_mod m, String " : ", pp_signat s]
-	      | pp_xpc (PHRASE_CLASS_SIG (v,s)) = HOVbox[pp_var v, String " = ", pp_signat s]
-	      | pp_xpc (PHRASE_CLASS_OVEREXP oe) = String "OVEREXP_NOTDONE"
-	    fun doer(lbl,(path,xpc)) = HOVbox[pp_label lbl,
-					   String " --> ",
-					   pp_path path,
-					   String " = ",
-					   pp_xpc xpc]
-	in  pp_list doer label_pathpc_list ("[",", ", "]", true)
-	end
+
 
 
 end

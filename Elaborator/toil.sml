@@ -1951,19 +1951,25 @@ val exp_con_list = map2count
 	| Ast.AugSig (s, []) => xsigexp(context,s)
 	| Ast.AugSig (s, ((Ast.WhStruct (syms1,syms2))::rest)) => 
 	      let val mjunk = MOD_VAR(fresh_named_var "mjunk")
-	      in  (case reduce_signat context (xsigexp(context,Ast.AugSig(s,rest))) of
-		   s as SIGNAT_STRUCTURE (popt,sdecs) => 
-		       (case reduce_signat context (#3(xstrexp(context,Ast.VarStr syms2, Ast.NoSig))) of
-			    SIGNAT_STRUCTURE(_,sdecs2) =>
-				SIGNAT_STRUCTURE(popt,Signature.xsig_where_structure
-						 (context,sdecs,map symbol_label syms1,
-						  sdecs2))
-			  | _ => (error_region();
-				  print "rhs of where-structure is a non-structure\n";
-				  s))
-		 | s => (error_region();
-			 print "can't where a non-structure signature\n";
-			 s))
+		  val (_,m2,s2) = xstrexp(context,Ast.VarStr syms2, Ast.NoSig)
+		  val s = xsigexp(context,Ast.AugSig(s,rest))
+		  val s2_is_struct = (case reduce_signat context s2 of
+					  SIGNAT_STRUCTURE _ => true
+					| _ => false)
+		  val popt_sdecs_opt = 
+		      (case reduce_signat context s of
+			   SIGNAT_STRUCTURE (popt,sdecs) => SOME(popt,sdecs)
+			 | _ => NONE)
+	      in  case (s2_is_struct,popt_sdecs_opt) of
+		  (false, _) => (error_region();
+				 print "rhs of where-structure is a non-structure\n";
+				 s)
+		| (_,NONE) => (error_region();
+			       print "can't where a non-structure signature\n";
+			       s)
+		| (_, SOME(popt,sdecs)) =>
+			   SIGNAT_STRUCTURE(popt,Signature.xsig_where_structure
+					    (context,sdecs,map symbol_label syms1,m2,s2))
 	      end
 	| Ast.AugSig (s, ((Ast.WhType(syms, tyvars, ty))::rest)) =>
 	      (case reduce_signat context (xsigexp(context,Ast.AugSig(s,rest))) of
@@ -2192,15 +2198,13 @@ val exp_con_list = map2count
 						| SOME s => symbol_label s)
 			      val funid = symbol_label name
 			      val argvar = fresh_named_var "functor_arg_var"
-			      val _ = print "FCTFCT 2\n"
 			      val signat = xsigexp(context,sigexp)
 
-			      val _ = print "FCTFCT 3\n"
+			      val _ = print "FCTFCT 2\n"
 			      val context' = add_context_mod(context,arglabel,argvar,
 							     SelfifySig context (SIMPLE_PATH argvar, signat))
-			      val _ = print "FCTFCT 4\n"
 			      val (sbnd_ce_list,m',s') = xstrexp(context',body,constraint)
-			      val _ = print "FCTFCT 5\n"
+			      val _ = print "FCTFCT 3\n"
 			      fun addbool(NONE,ce) = (NONE,ce)
 				| addbool(SOME sbnd,ce) = (SOME(false,sbnd), ce)
 			      val sbnd_ce_list' = map addbool sbnd_ce_list
@@ -2208,7 +2212,6 @@ val exp_con_list = map2count
 			      val sbnd = SBND(funid,BND_MOD(v,MOD_FUNCTOR(argvar,signat,m')))
 			      val sdec = SDEC(funid,DEC_MOD(v,SIGNAT_FUNCTOR(argvar,signat,s',
 									     PARTIAL)))
-			      val _ = print "FCTFCT 6\n"
 			  in sbnd_ce_list' @ [(SOME(false,sbnd), CONTEXT_SDEC sdec)]
 			  end
 		    | (Ast.FctFct {params=[],body,constraint}) => parse_error "Functor of order 0"
@@ -2234,9 +2237,9 @@ val exp_con_list = map2count
 	     val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	     val sig_target = xsigexp(context,sigexp)
 	     val mod_var = fresh_named_var "inner_mod"
-	 in  if (Sig_IsSub(context,sig_target,sig_actual))
+	 in  if (Sig_IsSub(context,sig_actual,sig_target))
 		 then
-		     (sbnd_ce_list,module, sig_actual)
+		     (sbnd_ce_list,module, sig_target)
 	     else let val (mod'_body,sig_ret') = 
 		          Signature.xcoerce_seal(polyinst,context',mod_var,sig_actual,sig_target)
 		      val resmod =  MOD_LET(mod_var,module, MOD_SEAL(mod'_body, sig_target))
@@ -2286,8 +2289,10 @@ val exp_con_list = map2count
 		      SOME(_,PHRASE_CLASS_MOD(m,s as (SIGNAT_FUNCTOR(var1,sig1,sig2,_)))) => 
 			  let 
 			      val (sbnd_ce_list,argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
-			      val argmod = (mod2path argmod; argmod)
-				  handle _ => elab_error "xstrexp: str path looked up to non-path"
+			      val argmod = 
+				  (case (mod2path argmod) of
+				       SOME _ => argmod
+				     | NONE => elab_error "xstrexp: str path became non-path")
 
 			      val modc_v0 = fresh_named_var "v0_xcoerce"
 			      val (modc_body,temp_sig1') = 
@@ -2295,6 +2300,8 @@ val exp_con_list = map2count
 			      val sig1' = sig_subst_modvar(temp_sig1',[(modc_v0, argmod)])
 
 			      val (_, context') = add_context_sbnd_ctxts(context, sbnd_ce_list)
+(* this check is unnecessary with xcoerce_seal *)
+(*
 			      val _ = if Sig_IsSub(context',sig1',sig1)
 				  then ()
 				      else (error_region();  
@@ -2311,6 +2318,7 @@ val exp_con_list = map2count
 					    print "Actual (coerced) signature";
 					    pp_signat sig1';
 					    print "\n")
+*)
 
 			      val newvar = fresh_named_var "coerced_structure"
 			      val sig2' = sig_subst_modvar(sig2,[(var1,MOD_VAR newvar)])
@@ -2318,21 +2326,6 @@ val exp_con_list = map2count
 			      val fsig' = SIGNAT_FUNCTOR(var1,sig1',sig2',PARTIAL)
 			      val context' = add_context_mod'(context,newvar,
 							      SelfifySig context (SIMPLE_PATH newvar, sig1'))
-(*
-			      val _ = if Sig_IsSub(context',fsig,fsig')
-					  then ()
-				      else (error_region();  
-					    print "functor application failed\n";
-					    tab_region();
-					    print "Expected signature";
-					    pp_signat fsig';
-					    print "\n";
-					    tab_region();
-					    print "Actual signature";
-					    pp_signat fsig;
-					    print "\n")
-
-*)
 
 			      val temp = mod_subst_modvar(modc_body,
 							  [(modc_v0,argmod)])

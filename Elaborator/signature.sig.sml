@@ -19,7 +19,7 @@ sig
     type labels = label list
 
     val xsig_where_type : context * sdec list * label list * con * kind -> sdec list
-    val xsig_where_structure : context * sdec list * label list * sdec list -> sdec list
+    val xsig_where_structure : context * sdec list * label list * mod * signat -> sdec list
     val xsig_sharing_type : context *  sdec list * labels list -> sdec list
     val xsig_sharing_structure : context *  sdec list * labels list -> sdec list
 

@@ -1,25 +1,6 @@
-signature LINKNIL = 
-sig
-    structure Il : IL
-    structure Nil : NIL
-    structure NilUtil : NILUTIL
-    structure NilContext : NILCONTEXT
-    structure NilStatic : NILSTATIC
-    structure PpNil : PPNIL
+(*$import LinkIl Annotation Nil NilUtil NilContext PpNil NilStatic ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil *)
 
-    val compile_prelude : bool * string -> Nil.module
-    val compile : string -> Nil.module
-    val compiles : string list -> Nil.module list
-    val test : string -> Nil.module
-    val il_to_nil : LinkIl.module -> Nil.module
-
-    val do_opt : bool ref
-    val do_one_optimize : bool ref
-    val do_two_optimize : bool ref
-    val do_specialize : bool ref
-end
-
-structure Linknil (* : LINKNIL *) =
+structure Linknil :> LINKNIL  =
   struct
     val typecheck_before_opt = ref true
     val typecheck_after_opt = ref true
@@ -63,17 +44,17 @@ structure Linknil (* : LINKNIL *) =
     structure Name = Name
     structure LinkIl = LinkIl
     structure Nil = Nil(structure ArgAnnotation = Annotation
-			structure ArgPrim = LinkIl.Prim)      
+			structure ArgPrim = LinkIl.Il.Prim)      
 
     structure PpNil = Ppnil(structure ArgNil = Nil
-			    structure Prim = LinkIl.Prim
+			    structure Prim = LinkIl.Il.Prim
 			    structure Ppprim = LinkIl.Ppprim)
 
     structure Alpha = Alpha(structure ArgNil = Nil)
 
     structure NilPrimUtilParam = NilPrimUtilParam(structure Nil= Nil)
 	
-    structure NilPrimUtil = PrimUtil(structure Prim = LinkIl.Prim
+    structure NilPrimUtil = PrimUtil(structure Prim = LinkIl.Il.Prim
 				     structure Ppprim = LinkIl.Ppprim
 				     structure PrimUtilParam = NilPrimUtilParam)
 
@@ -82,7 +63,7 @@ structure Linknil (* : LINKNIL *) =
 
     structure NilUtil = NilUtilFn(structure ArgNil = Nil
 				  structure IlUtil = LinkIl.IlUtil
-				  structure ArgPrim = LinkIl.Prim
+				  structure ArgPrim = LinkIl.Il.Prim
 				  structure PrimUtil = NilPrimUtil
 				  structure Alpha = Alpha
 				  structure Subst = NilSubst
@@ -104,7 +85,7 @@ structure Linknil (* : LINKNIL *) =
 
 
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
-				      structure Prim = LinkIl.Prim
+				      structure Prim = LinkIl.Il.Prim
 				      structure ArgNil = Nil
 				      structure PrimUtil = NilPrimUtil
 				      structure NilUtil = NilUtil
@@ -147,14 +128,14 @@ structure Linknil (* : LINKNIL *) =
 				    structure Ppnil = PpNil)
 
 (*
-    structure BetaReduce = BetaReduce(structure Prim = LinkIl.Prim
+    structure BetaReduce = BetaReduce(structure Prim = LinkIl.Il.Prim
 				      structure Nil = Nil
 				      structure NilUtil = NilUtil
 				      structure Ppnil = PpNil
 				      structure IlUtil = LinkIl.IlUtil
 				      structure Subst = NilSubst)
 
-    structure Cleanup = Cleanup(structure Prim = LinkIl.Prim
+    structure Cleanup = Cleanup(structure Prim = LinkIl.Il.Prim
 				structure Nil = Nil
 				structure NilUtil = NilUtil
 				structure Ppnil = PpNil

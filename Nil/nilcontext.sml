@@ -1,3 +1,4 @@
+(*$import NIL PPNIL NILUTIL NILSUBST Stats NILCONTEXT *)
 functor NilContextFn(structure ArgNil : NIL
 		      structure PpNil : PPNIL
 		      structure NilUtil : NILUTIL
@@ -5,9 +6,9 @@ functor NilContextFn(structure ArgNil : NIL
 		      sharing PpNil.Nil = NilUtil.Nil = ArgNil
 		        and type Subst.con = ArgNil.con
 		        and type Subst.exp = ArgNil.exp
-		        and type Subst.kind = ArgNil.kind) :(*>*)
-  NILCONTEXT where Nil = ArgNil 
-  and type 'a subst = 'a Subst.subst = 
+		        and type Subst.kind = ArgNil.kind) 
+  :> NILCONTEXT where Nil = ArgNil 
+                where type 'a subst = 'a Subst.subst = 
 struct
   structure Nil = ArgNil
 

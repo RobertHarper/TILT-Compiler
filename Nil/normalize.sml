@@ -1,3 +1,4 @@
+(*$import NIL PPNIL NILUTIL NILCONTEXT NILSUBST NORMALIZE *)
 functor NormalizeFn(structure Nil : NIL
 		    structure PpNil : PPNIL
 		    structure NilUtil : NILUTIL 
@@ -8,13 +9,14 @@ functor NormalizeFn(structure Nil : NIL
 		         and type Subst.exp = Nil.exp
 			 and type Subst.kind = Nil.kind
 			 and type Subst.bnd = Nil.bnd
-			 and type Subst.subst = NilContext.subst) :(*>*) NORMALIZE 
-  where type exp = Nil.exp 
-  and type con = Nil.con 
-  and type kind = Nil.kind 
+			 and type Subst.subst = NilContext.subst) 
+    :> NORMALIZE 
+  where Nil = Nil
   and type context = NilContext.context 
   and type 'a subst = 'a Subst.subst = 
 struct	
+
+  structure Nil = Nil
   open Nil 
   open Prim
 
@@ -118,9 +120,10 @@ val show_context = ref false
 	   val var = fresh_named_var "pull_arrow"
 	 in
 	   (*Closures?  *)
-	   case openness
-	     of Open => Let_c (Sequential,[Open_cb (var,formals,c,return)],Var_c var)
-	      | (Code | ExternCode) => Let_c (Sequential,[Code_cb (var,formals,c,return)],Var_c var)
+	   case openness of
+	        Open => Let_c (Sequential,[Open_cb (var,formals,c,return)],Var_c var)
+	      | Code => Let_c (Sequential,[Code_cb (var,formals,c,return)],Var_c var)
+	      | ExternCode => Let_c (Sequential,[Code_cb (var,formals,c,return)],Var_c var)
 	      | Closure => let val cenv = (fresh_named_var "pull_closure", Record_k (list2sequence []))
 			   in  Let_c (Sequential,[Code_cb (var,formals @ [cenv] ,c,return)],
 				      Closure_c(Var_c var, Crecord_c []))
@@ -236,53 +239,45 @@ val show_context = ref false
       let fun letcase() = 
 	  (print "Warning: get_shape' got un-normalized constructor Let_c\n";
 	   PpNil.pp_con constructor; print "\n";
-	   error "Warning: get_shape' got un-normalized constructor Let_c\n")
+	   get_shape' D (con_normalize' (D,Subst.empty()) constructor))
+(*	   error "Warning: get_shape' got un-normalized constructor Let_c\n" *)
 	   
       in
       (case constructor of
-	 (Prim_c (pcon,args)) =>  
-	 let
-	   val kind = 
-	     (case pcon
-		of ((Int_c W64) | 
-		    (Float_c F32) |
-		    (Float_c F64)) => (Type_k Runtime)
-		  | _ => (Word_k Runtime))
-	 in kind
-	 end
-	| (Mu_c (recur,defs)) => (singletonize (Word_k Runtime,constructor))
+	 Prim_c (Int_c W64,_) => (Type_k Runtime)
+       | Prim_c (Float_c F32,_) => (Type_k Runtime)
+       | Prim_c (Float_c F64,_) => (Type_k Runtime)
+       | Prim_c _ => Word_k Runtime
+
+	| (Mu_c (recur,defs)) => if (length (sequence2list defs) = 1)
+				     then (Word_k Runtime)
+				 else NilUtil.kind_tuple(map (fn _ => Word_k Runtime) (sequence2list defs))
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>Word_k Runtime
 	| (v as (Var_c var)) => 
 	 ((make_shape(find_kind (D,var))
 	  handle NilContext.Unbound =>
 	      (NilContext.print_context D;
 	       error ("variable "^(var2string var)^" not in context"))))
-        | (Let_c (sort,(([cbnd as Open_cb (var,formals,body,body_kind)]) | 
-			([cbnd as Code_cb (var,formals,body,body_kind)])),con)) => 
-	      (case con of
-		   (Var_c v) => if (eq_var(var,v))
-				    then Arrow_k((case cbnd of
-						      Open_cb _ => Open
-						    | _ => Code),formals,body_kind)
-				else letcase()
-		 | (Closure_c(Var_c v,_)) =>
-				if (eq_var(var,v))
-				    then Arrow_k(Closure,Listops.butlast formals,body_kind)
-				else letcase()
-	         | _ => letcase())
+        | Let_c (sort,[Open_cb (var,formals,body,body_kind)],Var_c v) =>
+	   if (eq_var(var,v)) then Arrow_k(Open,formals,body_kind) else get_shape' D (Var_c v)
+	| Let_c(sort,[Code_cb (var,formals,body,body_kind)],Var_c v) =>
+	   if (eq_var(var,v)) then Arrow_k(Code,formals,body_kind) else get_shape' D (Var_c v)
+        | Let_c (sort,[Code_cb (var,formals,body,body_kind)],Closure_c(Var_c v,_)) =>
+	   if (eq_var(var,v)) then Arrow_k(Closure,Listops.butlast formals,body_kind) 
+	   else get_shape' D (Var_c v)
         | (Let_c _) => letcase()
-	      (error "Warning: get_shape' got un-normalized constructor Let_c\n";
-	       get_shape' D (con_normalize' (D,Subst.empty()) constructor))
 	| (Closure_c (code,env)) => 
-	    (case (strip_singleton (get_shape' D code))
-	       of Arrow_k ((Code | ExternCode),vklist,body_kind) => 
-		 let 
-		   val (first,(v,klast)) = split vklist
-		   val kind = Arrow_k(Closure,first,body_kind)
-		 in kind
-		 end
+	    let val (vklist,body_kind) = 
+		(case (strip_singleton (get_shape' D code)) of
+	          Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
+		| Arrow_k (ExternCode,vklist,body_kind) => (vklist,body_kind)
 		| _ => (error "Invalid closure: code component does not have code kind" 
-			handle e => raise e))
+			handle e => raise e))		      
+		val (first,(v,klast)) = split vklist
+		val kind = Arrow_k(Closure,first,body_kind)
+	    in kind
+	    end
+
 	| (Crecord_c entries) => 
 	 let
 	   val (labels,cons) = unzip entries
@@ -324,27 +319,29 @@ val show_context = ref false
 
   and eta_confun lambda = 
     let
-      fun eta_confun' 
-	(Let_c (sort,(([Open_cb (var,formals,body,body_kind)]) |
-		      ([Code_cb (var,formals,body,body_kind)])),con)) = 
-	(case strip_app body
-	   of SOME (con,actuals) =>
-	     let
-	       val (vars,_) = unzip formals
-	       fun eq (var,con) = eq_opt (eq_var,SOME var,strip_var con)
-	     in
-	       if (all2 eq (vars,actuals)) andalso
-		 (let
-		    val fvs = con_free_convar con
-		  in
-		    all (fn v => all (not o (eq_var2 v)) fvs) vars
-		  end)
-		 then
-		   con
-	       else
-		 lambda
-	     end
-	    | NONE => lambda)
+	fun help(var, formals,body,body_kind) = 
+	    (case strip_app body of
+		 SOME (con,actuals) =>
+		     let
+			 val (vars,_) = unzip formals
+			 fun eq (var,con) = eq_opt (eq_var,SOME var,strip_var con)
+		     in
+			 if (all2 eq (vars,actuals)) andalso
+			     (let
+				  val fvs = con_free_convar con
+			      in
+				  all (fn v => all (not o (eq_var2 v)) fvs) vars
+			      end)
+			     then
+				 con
+			 else
+			     lambda
+		     end
+	       | NONE => lambda)
+      fun eta_confun' (Let_c (sort,[Open_cb (var,formals,body,body_kind)],Var_c var')) = 
+	  if (eq_var(var,var')) then help(var,formals,body,body_kind) else lambda
+        | eta_confun' (Let_c (sort,[Code_cb (var,formals,body,body_kind)],Var_c var')) = 
+	  if (eq_var(var,var')) then help(var,formals,body,body_kind) else lambda
 	| eta_confun' _ = lambda
     in
       map_annotate eta_confun' lambda
@@ -418,11 +415,14 @@ val show_context = ref false
 	       end)
 	  fun beta_confun'' actuals confun = 
 	      (case confun of
-		   Let_c (_,(([Open_cb (var,formals,body,body_kind)]) |
-				([Code_cb (var,formals,body,body_kind)])),Var_c v) =>
-		   if eq_var(var,v)
-		       then reduce actuals (formals,body,body_kind) 
-		   else (false,app)
+		   Let_c (_,[Open_cb (var,formals,body,body_kind)],Var_c v) =>
+		     if eq_var(var,v)
+			 then reduce actuals (formals,body,body_kind) 
+		     else (false,app)
+		 | Let_c (_,[Code_cb (var,formals,body,body_kind)],Var_c v) =>
+		     if eq_var(var,v)
+			 then reduce actuals (formals,body,body_kind) 
+		     else (false,app)
 	         | Let_c (_,[Code_cb (var,formals,body,body_kind)],Closure_c(Var_c v,env)) =>
 		   if eq_var(var,v)
 		       then reduce (actuals @ [env]) (formals,body,body_kind) 
@@ -534,9 +534,46 @@ val show_context = ref false
     else
       con_normalize state con
 
+  and con_normalize_letfun state (sort,constructor,var,formals,body,body_kind,rest,letbody) = 
+	    let
+	      val old_state = state
+
+
+	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var letbody) 
+		   then
+		       let val (state,formals) = bind_at_kinds state formals
+			   val body = con_normalize' state body
+			   val body_kind = kind_normalize' state body_kind
+			   val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
+						Var_c var))
+			   val lambda = eta_confun lambda
+		       in  lambda
+		       end
+	       else
+		   let 
+
+		       val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
+					    Var_c var))
+		       val _ = 
+			   (case (substitute (#2 old_state) var)  of
+				SOME c => error "XXX var already in subst"
+			      | _ => ())
+		       val lambda = substConInCon (#2 old_state) lambda 
+		       val state = 
+			   let val (D,subst) = old_state
+			   in (D,add subst (var,lambda))
+			   end
+		       val res = con_normalize' state (Let_c (sort,rest,letbody))
+
+		   in   res
+		   end
+	    end
+
+
+
   and con_normalize state (constructor : con) : con  = 
-    (case constructor 
-       of (Prim_c (pcon,args)) =>
+    (case constructor of
+          (Prim_c (pcon,args)) =>
 	 let
 	   val args = map (con_normalize' state) args
 	 in (Prim_c (pcon,args))
@@ -572,44 +609,11 @@ val show_context = ref false
 		      | NONE => Var_c var))
 	 in con
 	 end
-        | (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
-			((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
-	    let
-	      val old_state = state
-	      val constructor = 
-		case cbnd 
-		  of Open_cb _ => Open_cb
-		   | _ => Code_cb
+        | (Let_c (sort,((cbnd as Open_cb (var,formals,body,body_kind))::rest),letbody)) =>
+	 con_normalize_letfun state (sort,Open_cb,var,formals,body,body_kind,rest,letbody)
+        | (Let_c (sort,((cbnd as Code_cb (var,formals,body,body_kind))::rest),letbody)) =>
+	 con_normalize_letfun state (sort,Code_cb,var,formals,body,body_kind,rest,letbody)
 
-	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
-		   then
-		       let val (state,formals) = bind_at_kinds state formals
-			   val body = con_normalize' state body
-			   val body_kind = kind_normalize' state body_kind
-			   val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
-						Var_c var))
-			   val lambda = eta_confun lambda
-		       in  lambda
-		       end
-	       else
-		   let 
-(*                val _ = print "optimized case entered\n" *)
-		       val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
-					    Var_c var))
-		       val _ = 
-			   (case (substitute (#2 old_state) var)  of
-				SOME c => error "XXX var already in subst"
-			      | _ => ())
-		       val lambda = substConInCon (#2 old_state) lambda 
-		       val state = 
-			   let val (D,subst) = old_state
-			   in (D,add subst (var,lambda))
-			   end
-		       val res = con_normalize' state (Let_c (sort,rest,con))
-(*		       val _ = print "optimized case exitted\n" *)
-		   in   res
-		   end
-	    end
 	| (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	    let
 	      val con = con_normalize' state con
@@ -677,6 +681,25 @@ val show_context = ref false
 	| (Annotate_c (annot,con)) => Annotate_c (annot,con_normalize' state con))
 
   (* ------ Reduce one step if not in head-normal-form; return whether progress was made  ------ *)
+  fun con_reduce_letfun state (sort,coder,var,formals,body,body_kind,rest,con) = 
+	    let
+	      val (D,subst) = state
+	      val lambda = (Let_c (sort,[coder (var,formals,body,body_kind)],Var_c var))
+
+
+	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
+		   then (false, subst, lambda)
+	       else
+		   let 
+		       val _ = 
+			   (case (substitute subst var)  of
+				SOME c => error "XXX var already in subst"
+			      | _ => ())
+		       val subst = add subst (var,lambda)
+		   in  (true,subst,Let_c(sort,rest,con))
+		   end
+	    end
+
   fun con_reduce state (constructor : con) : bool * con subst * con  = 
     (case constructor of
           (Prim_c (pcon,args)) => (false,#2 state, constructor)
@@ -691,28 +714,11 @@ val show_context = ref false
 			SOME c => (true, subst, c)
 		      | NONE => (false, subst, Var_c var)))
 	 end
-        | (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
-			((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
-	    let
-	      val (D,subst) = state
-	      val coder = (case cbnd of
-				     Open_cb _ => Open_cb
-				   | _ => Code_cb)
+        | (Let_c (sort,((cbnd as Open_cb (var,formals,body,body_kind))::rest),con)) =>
+	 con_reduce_letfun state (sort,Open_cb,var,formals,body,body_kind,rest,con)
+        | (Let_c (sort,((cbnd as Code_cb (var,formals,body,body_kind))::rest),con)) =>
+	 con_reduce_letfun state (sort,Code_cb,var,formals,body,body_kind,rest,con)
 
-	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
-		   then (false, subst, constructor)
-	       else
-		   let 
-		       val lambda = (Let_c (sort,[coder (var,formals,body,body_kind)],
-					    Var_c var))
-		       val _ = 
-			   (case (substitute subst var)  of
-				SOME c => error "XXX var already in subst"
-			      | _ => ())
-		       val subst = add subst (var,lambda)
-		   in  (true,subst,Let_c(sort,rest,con))
-		   end
-	    end
 	| (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	    let val (D,subst) = state
 		val con = Subst.substConInCon subst con
@@ -753,8 +759,10 @@ val show_context = ref false
 
 
   fun value_normalize' state value = 
-    (case value
-       of ((int _) | (uint _) | (float _)) => value
+    (case value of
+          (int _) => value
+	| (uint _) => value
+	| (float _) => value
 	| array (con,arr) => 
 	 let
 	   val con = con_normalize' state con
@@ -835,6 +843,7 @@ val show_context = ref false
     in
       foldl_acc norm_bnd state bnds
     end
+
   and bnd_normalize' state (bnd : bnd) =
     (case bnd
        of Con_b (var, con) =>
@@ -852,18 +861,17 @@ val show_context = ref false
 	   val bnd = Exp_b (var,con,exp)
 	 in (bnd,state)
 	 end
-	| ((Fixopen_b defs) | (Fixcode_b defs)) =>
-	 let
-	   val constructor = 
-	     (case bnd 
-		of Fixopen_b _ => Fixopen_b
-		 | _ => Fixcode_b)
-	   val def_list = set2list defs
-	   val def_list = map_second (function_normalize' state) def_list
-	   val defs = list2set def_list
-	   val bnd = constructor defs
-	 in
-	   (bnd,state)
+	| (Fixopen_b defs) =>
+	 let val def_list = set2list defs
+	     val def_list = map_second (function_normalize' state) def_list
+	     val defs = list2set def_list
+	 in  (Fixopen_b defs,state)
+	 end
+	| (Fixcode_b defs) =>
+	 let val def_list = set2list defs
+	     val def_list = map_second (function_normalize' state) def_list
+	     val defs = list2set def_list
+	 in  (Fixcode_b defs,state)
 	 end
 	| Fixclosure_b (is_recur,defs) => 
 	 let

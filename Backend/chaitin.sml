@@ -1,3 +1,4 @@
+(*$import PRINTUTILS BBLOCK CALLCONV TRACKSTORAGE IFGRAPH COLOR TRACETABLE MACHINEUTILS INTRAPROC Stats TextIO *)
 (* Graph-coloring register allocator.
        Notes on constructing the interference graph for procedures.
        
@@ -43,23 +44,27 @@
 *)
 
 functor Chaitin(val commentHeader: string
-		structure Printutils : PRINTUTILS
-		structure Bblock : BBLOCK
+		structure Machineutils : MACHINEUTILS
 		structure Callconv : CALLCONV
+		structure Bblock : BBLOCK
 		structure Trackstorage : TRACKSTORAGE
+		structure Printutils : PRINTUTILS
 		structure Ifgraph : IFGRAPH
 		structure Color : COLOR
 		structure Tracetable : TRACETABLE
 
 		sharing Bblock = Printutils.Bblock
-		sharing Callconv.Machine = Bblock.Machineutils.Machine
-		sharing Trackstorage.Machineutils = Bblock.Machineutils
-		sharing type Ifgraph.node = Bblock.Machineutils.Machine.register
+		sharing Tracetable.Machine = Bblock.Machine = Trackstorage.Machine 
+		      = Callconv.Machine = Machineutils.Machine = Printutils.Machine = Ifgraph.Machine
+		      = Color.Machine
+(* should not be needed *)  = Color.Ifgraph.Machine = Color.Trackstorage.Machine = Printutils.Tracetable.Machine
+
 		sharing Color.Trackstorage = Trackstorage
 		sharing Color.Ifgraph = Ifgraph
-		sharing Ifgraph.Regset = Bblock.Machineutils.Regset
 	        sharing Tracetable = Printutils.Tracetable
-		  ) : PROCALLOC =
+		  ) :> PROCALLOC where Bblock = Bblock 
+                                 where Tracetable = Tracetable 
+				 where Machine = Bblock.Machine =
 struct
 
    open Bblock 
@@ -206,11 +211,31 @@ struct
 		     res_pos = res_pos,
 		     C_call = false}
 		 end
-(*           | (CALL{func = DIRECT (MLE _), args,results, ...}) =>
-	          error "getCallInstRegs: ML extern in call" 
-	   | (CALL{func = DIRECT (CE (_,NONE)), args, results,  *)
+
 	   | (CALL{extern_call = true,
-		   func = DIRECT ((MLE _) | (CE (_,NONE))), args, results,  
+		   func = DIRECT (MLE _), args, results,  
+				 argregs, resregs, destroys, ...}) =>
+		  let 
+		    val ACTUALS{args=arg_pos_default,
+				results=res_pos_default} = std_c false 
+		      (FORMALS{args=args,results=results})
+		  in {regs_destroyed = (case destroys of
+					  NONE => C_caller_saved_regs
+					| SOME regs => regs),
+		  regs_modified = (case destroys of
+				     NONE => C_caller_saved_regs
+				   | SOME regs => regs),
+		  arg_pos = (case argregs of
+			       NONE => arg_pos_default
+			     | SOME regs => map IN_REG regs),
+		  res_pos = (case resregs of
+			       NONE => res_pos_default
+			     | SOME regs => map IN_REG regs),
+		  C_call = true}
+              end
+
+	   | (CALL{extern_call = true,
+		   func = DIRECT (CE (_,NONE)), args, results,  
 				 argregs, resregs, destroys, ...}) =>
 		  let 
 		    val ACTUALS{args=arg_pos_default,
@@ -1217,7 +1242,7 @@ struct
 						   blocklabels,
 						   args, res} : procsig,
 		       stack_resident : Machine.stacklocation
-		                        Machineutils.Regmap.map,
+		                        Machine.Regmap.map,
 		       tracemap     : Tracetable.trace Regmap.map}) = 
 
      let
@@ -1312,7 +1337,7 @@ struct
 						    blocklabels,
 						    args, res} : procsig,
 		       stack_resident : Machine.stacklocation
-		                        Machineutils.Regmap.map,
+		                        Machine.Regmap.map,
 		       tracemap     : Tracetable.trace Regmap.map},
 		      arg_ra_pos : assign list option, 
 		      max_passed_args, max_C_args, block_labels) = 

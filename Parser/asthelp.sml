@@ -1,4 +1,4 @@
-(*$import ASTHELP Ast Util Listops Env Formatter *)
+(*$import ASTHELP Ast Util Listops Symbol Formatter *)
 
 (* Helper routines on the EL syntax tree AST *)
 structure AstHelp : ASTHELP = 

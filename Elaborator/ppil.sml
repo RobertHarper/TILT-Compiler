@@ -1,20 +1,18 @@
-(*$import IL ILCONTEXT PPPRIM FORMATTER Bool PPIL *)
+(*$import IL PPPRIM FORMATTER Bool PPIL *)
 (* Il pretty-printer. *)
 functor Ppil(structure Il : IL
-	     structure IlContext : ILCONTEXT
 	     structure Ppprim : PPPRIM
-	     sharing Il.Prim = Ppprim.Prim
-	     sharing IlContext.Il = Il)
+	     sharing Il.Prim = Ppprim.Prim)
 	:> PPIL where Il = Il =
-  struct
+struct
 
-    structure IlContext = IlContext
+    structure Il = Il
     structure Formatter = Formatter
     datatype display = VAR_ONLY | VALUE_ONLY | VAR_VALUE
     val convar_display = ref VALUE_ONLY
 
     open Util Listops Name 
-    open Il IlContext Formatter
+    open Il Formatter
     open Prim Ppprim Tyvar
 
     val error = fn s => error "ppil.sml" s
@@ -232,15 +230,11 @@ functor Ppil(structure Il : IL
 	  | PHRASE_CLASS_OVEREXP _ => String "PC_OVEREXP")
 
     and pp_inline seen inline = 
-	let
-	    open IlContext
-	in
-	    case inline of
+	    (case inline of
 		(INLINE_MODSIG (m,s)) => HOVbox[pp_mod seen m, String ":", Break, pp_signat seen s]
 	      | (INLINE_EXPCON (e,c)) => HOVbox[pp_exp seen e, String ":", pp_con seen c]
 	      | (INLINE_CONKIND (c,k)) => HOVbox[pp_con seen c, String ":", pp_kind seen k]
-	      | (INLINE_OVER _) => String "INLINE_OVER"
-	end
+	      | (INLINE_OVER _) => String "INLINE_OVER")
 
     and pp_kind seen kind = (case kind of
 			    KIND_TUPLE 1 => String "TYPE"
@@ -317,18 +311,20 @@ functor Ppil(structure Il : IL
        | UNROLL (con1,con2,e) => pp_region "UNROLL(" ")"
 			  [pp_con seen con1, String ",", 
 			   pp_con seen con2, String ",", pp_exp seen e]
-       | INJ {sumtype,inject} => 
+       | INJ {sumtype,field,inject} => 
 	     pp_region "INJ(" ")"
-	     [pp_con seen sumtype,
+	     [String (Int.toString field), String ", ",
+	      pp_con seen sumtype,
 	      case inject of
 		  NONE => String "NONE"
 		| SOME e => pp_exp seen e]
 (*   | TAG (name,c) => pp_region "TAG(" ")" [pp_tag name, pp_con seen c] *)
-       | CASE {sumtype,arg,arms,tipe,default} =>
+       | CASE {sumtype,bound,arg,arms,tipe,default} =>
 	     pp_region "CASE(" ")"
 	     ((pp_con seen sumtype) :: (String ",") :: Break ::
 	      (pp_exp seen arg) :: (String ",") :: Break ::
 	      (pp_con seen tipe) :: (String ",") :: Break ::
+	      (pp_var bound) :: (String ",") :: Break ::
 	      (pp_list (fn NONE => String "NONE" 
 	                | SOME e => pp_exp seen e) arms ("[",", ","]",true)) ::
 	      (String ", ") :: Break ::
@@ -474,18 +470,24 @@ functor Ppil(structure Il : IL
     val pp_inline' = help (pp_inline [])
     val pp_phrase_class' = help (pp_phrase_class [])
 
-    fun pp_context' (context : context) : Formatter.format = 
-	let val pp_record = {pp_exp = pp_exp',
-			     pp_mod = pp_mod',
-			     pp_con = pp_con',
-			     pp_fixity_list = pp_fixity_list,
-			     pp_inline = pp_inline [],
-			     pp_kind = pp_kind',
-			     pp_var = pp_var',
-			     pp_label = pp_label',
-			     pp_tag = pp_tag,
-			     pp_signat = pp_signat'} 
-	in IlContext.print_context(pp_record, context)
+    fun pp_context' (CONTEXT{label_list,...}) = 
+	let val label_pathpc_list = Name.LabelMap.listItemsi label_list
+	    fun pp_path path = 
+		(case path of
+		     SIMPLE_PATH v => pp_var v
+		   | COMPOUND_PATH (v,ls) => HOVbox[Hbox[pp_var v, String "."], 
+						    pp_list pp_label ls ("",".","",false)])
+	    fun pp_xpc (PHRASE_CLASS_EXP (e,c)) = HOVbox[pp_exp [] e, String " : ", pp_con [] c]
+	      | pp_xpc (PHRASE_CLASS_CON (c,k)) = HOVbox[pp_con [] c, String " : ", pp_kind [] k]
+	      | pp_xpc (PHRASE_CLASS_MOD (m,s)) = HOVbox[pp_mod [] m, String " : ", pp_signat [] s]
+	      | pp_xpc (PHRASE_CLASS_SIG (v,s)) = HOVbox[pp_var v, String " = ", pp_signat [] s]
+	      | pp_xpc (PHRASE_CLASS_OVEREXP oe) = String "OVEREXP_NOTDONE"
+	    fun doer(lbl,(path,xpc)) = HOVbox[pp_label lbl,
+					   String " --> ",
+					   pp_path path,
+					   String " = ",
+					   pp_xpc xpc]
+	in  pp_list doer label_pathpc_list ("[",", ", "]", true)
 	end
 
 

@@ -3,23 +3,9 @@
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* env.sml *)
 
-signature INTSTRMAPV = 
-sig 
-  type 'a intstrmap
-  val new : (int * string * '_a) list -> '_a intstrmap
 
-  (* in case of duplicates, the element towards the head of the 
-   * list is discarded,and the one towards the tail is kept.
-   *)
-  val elems : 'a intstrmap -> int
-  val map : 'a intstrmap -> int * string -> 'a
-  val app : (int * string * 'a -> unit) -> 'a intstrmap -> unit
-  val transform : ('a -> 'b) -> 'a intstrmap -> 'b intstrmap
-  val fold : ((int*string*'a)*'b->'b)->'b->'a intstrmap->'b
 
-end (* signature INTSTRMAP *)
-
-structure Env : ENV =
+structure Env (* : ENV *) =
 struct
 
 (* debugging *)
@@ -158,7 +144,8 @@ end (* structure FastSymbol *)
 (* exception Unbound = System.Unsafe.Assembly.UnboundTable *)
 exception Unbound
 
-structure IntStrMapV :> INTSTRMAPV = 
+
+structure IntStrMapV :> INTSTRMAPV =
 struct 
 
   structure V = Vector
@@ -357,14 +344,19 @@ fun consolidate (env as TABLE(_,EMPTY)) = env
 
 end (* structure Env *)
 
+(*
 structure Symbol = Env.Symbol
 structure FastSymbol = Env.FastSymbol
+*)
 
 (*
  * $Log$
-# Revision 1.3  98/01/21  20:40:13  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.4  98/02/15  22:43:24  pscheng
+# bootstrapping changes
 # 
+# Revision 1.3  1998/01/21  20:40:13  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.2  97/07/24  11:24:27  pscheng
 # changed Unbound exception for 109.30
 # 

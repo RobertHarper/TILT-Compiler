@@ -418,7 +418,7 @@ functor Pat(structure Il : IL
 		(sub_con(context,c,!rescon)) orelse
 		(rescon := supertype (!rescon);
 		sub_con(context,c,!rescon))      
-      fun getarm datacon (i,ssumcon,{name=cur_constr,arg_type}) : exp option = 
+      fun getarm (datacon,sumcon) (i,{name=cur_constr,arg_type}) : exp option = 
 	let 
 	  fun armhelp ((path,patopt), (clause,bound,body)) : arm option = 
 	      (case (eq_label(cur_constr, symbol_label (List.last path)), patopt) of
@@ -458,21 +458,16 @@ functor Pat(structure Il : IL
 					 then ()
 				     else (error_region();
 					   print "results types of rules mismatch\n")
-			       in SOME(#1 (make_lambda(rsvar,ssumcon,
-						       (case result_type_var of
-							    NONE => mc
-							  | SOME v => CON_VAR v),
-					   LET([BND_EXP(var,SUM_TAIL(ssumcon,VAR rsvar))],me))))
+			       in SOME(LET([BND_EXP(var,SUM_TAIL(sumcon,VAR rsvar))],me))
 		       end)
 	end
 
       val {instantiated_type = datacon,
 	   instantiated_sumtype = sumtype,
-	   instantiated_special_sumtype = ssumtypes,
 	   arms = constr_patconopt_list,
 	   expose_exp} = Datatype.instantiate_datatype_signature(context,#1(#1(hd accs)),polyinst)
 
-      val expopt_list = map2count (getarm datacon) (ssumtypes,constr_patconopt_list)
+      val expopt_list = mapcount (getarm (datacon,sumtype)) constr_patconopt_list
 
       val _ = debugdo (fn () => (print "Got these arms:";
 				 mapcount (fn (i,eopt) => (print "Arm #"; printint i; print ": ";
@@ -489,7 +484,8 @@ functor Pat(structure Il : IL
       val case_exp = 
 	  (CASE{sumtype=sumtype,
 	       arg = arg,
-	       arms = expopt_list,
+	       bound=rsvar,
+		arms = expopt_list,
 	       default = 
 	       (case (exhaustive,def) of
 		    (true,_) => NONE
@@ -559,6 +555,9 @@ debugdo
 			 let val CASE_VAR(v,c) = arg1
 			 in  do_arm(arm_addbind(s,v,c,(expPat::tlpat,bound,b)))
 			 end
+		  | (Ast.OrPat pats) => (Error.error_region();
+					 print "Or-patterns not implemented: using first pat\n";
+					 ((hd pats)::tlpat, bound, b))
 		   | (Ast.LayeredPat _) => error "Funny varPat in LayeredPat"
 		   | (Ast.ConstraintPat{pattern,constraint}) =>
 			 let val c = xty(context,constraint)

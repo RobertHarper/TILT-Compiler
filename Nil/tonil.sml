@@ -43,7 +43,6 @@ struct
    val full_debug = ref false
    val trace      = ref false
    val do_memoize = ref true
-   val use_imprecise_kind_at_bind = ref true
    val do_kill_cpart_of_functor = ref true
    val do_kill_dead_import = ref true
 
@@ -386,7 +385,11 @@ struct
 	   fun loop k [] = Nilutil.kill_singleton k
 	     | loop k (lbl::lbls) = 
 	       let val lvk_list = decompose k
-		   fun find [] = error "selectFromKind could not find field"
+		   fun find [] = (print "selectFromKind could not find field ";
+				  Ppnil.pp_label lbl; print "in\n";
+				  Ppnil.pp_kind (Record_k(Util.list2sequence lvk_list));
+				  print "\n";
+				  error "selectFromKind could not find field")
 		     | find (((l,_),k)::rest) = if (Name.eq_label(l,lbl))
 						    then k
 						else find rest
@@ -1359,10 +1362,7 @@ end (* local defining splitting context *)
 
 	       val con_proj_c = selectFromCon(name_mod_c, lbls)
 
-	       val knd_proj_c = 
-		   if (!use_imprecise_kind_at_bind)
-		       then selectFromKindStrip(knd_mod_c_context,lbls)
-		   else #2(nilcontext_con_valid(context,con_proj_c))
+	       val knd_proj_c = selectFromKindStrip(knd_mod_c_context,lbls)
 
 	       val (con_proj_c,knd_proj_c_real) = 
 		   if (!do_kill_cpart_of_functor) 
@@ -2538,9 +2538,7 @@ end (* local defining splitting context *)
 	   val proj_con = Proj_c (name_c, lbl)
 	   val con = makeLetC (map Con_cb_temp cbnd_list) proj_con
 
-	   val knd = if (!use_imprecise_kind_at_bind)
-			 then selectFromKindStrip(knd_c,[lbl])
-		     else #2(nilcontext_con_valid (context, proj_con))
+	   val knd = selectFromKindStrip(knd_c,[lbl])
 
 	   (* this gets rid of Arrow_k(...,Record_k[]) *)
 	   val knd_stripped = strip_kind true knd
@@ -2628,6 +2626,8 @@ end (* local defining splitting context *)
 	   val result = (xexp' context il_exp)
 	       handle e => (if (!debug) then (print ("Exception detected in call " ^ 
 						    (Int.toString this_call) ^ " to xexp\n");
+					      print "\nwith exp = \n";
+					      Ppil.pp_exp il_exp;
 (*
 					      print "\nwith context = \n";
 					      print_splitting_context context;
@@ -2824,13 +2824,14 @@ end (* local defining splitting context *)
 	   (Prim_e (NilPrimOp (select label), cons, [exp_record]), con, valuable)
        end
 
-     | xexp' context (Il.SUM_TAIL (_, il_exp)) =
+     | xexp' context (Il.SUM_TAIL (il_con, il_exp)) =
        let
 	   val (exp, con, valuable) = xexp context il_exp
+	   val (sumcon,_,_) = xcon context il_con
 	   val (tagcount,totalcount,SOME i, cons) = reduce_to_sum "SUM_TAIL" context con
 	   val which = TilWord32.toInt(TilWord32.uminus(i,tagcount))
 	   val field_con = List.nth(cons,which)
-       in  (Prim_e (NilPrimOp project_sum, [con],
+       in  (Prim_e (NilPrimOp (project_sum i), [sumcon],
 		    [exp]), field_con, valuable)
        end
 
@@ -2914,9 +2915,9 @@ end (* local defining splitting context *)
        in  (Prim_e(NilPrimOp unroll, [mu_con], [exp]), expanded_con, valuable)
        end
 
-     | xexp' context (Il.INJ {sumtype, inject = eopt}) =
+     | xexp' context (Il.INJ {sumtype, field, inject = eopt}) =
        let
-	   val (con,_,_) = xcon context sumtype
+	   val (sumcon,_,_) = xcon context sumtype
 	   val (valuable,elist) = (case eopt of
 			  	     NONE => (true,[])
 				   | SOME il_exp =>
@@ -2924,49 +2925,41 @@ end (* local defining splitting context *)
 					in  (valuable,[exp])
 					end)
        in
-	   (Prim_e(NilPrimOp inject,[con],elist), con, valuable)
+	   (Prim_e(NilPrimOp (inject (TilWord32.fromInt field)),[sumcon],elist), sumcon, valuable)
        end
 
 
-     | xexp' context (Il.CASE {sumtype, arg=il_arg, arms=il_arms,
+     | xexp' context (Il.CASE {sumtype, arg=il_arg, arms=il_arms, bound,
 			       tipe,default=il_default}) =
        let
 	   (* We want to use the result type given to avoid type blowup *)
 	   val (rescon,_,_) = xcon context tipe
-	   val (con,_,_) = xcon context sumtype
-	   val (tagcount,totalcount,_,cons) = reduce_to_sum "CASE" context con
+	   val (sumcon,_,_) = xcon context sumtype
+	   val (tagcount,totalcount,_,cons) = reduce_to_sum "CASE" context sumcon
+	   fun make_ssum i = Prim_c(Sum_c{tagcount=tagcount,totalcount=totalcount,known=SOME (TilWord32.fromInt i)},
+				    if (length cons = 1)
+					then cons
+				    else [Nilutil.con_tuple_inject cons])
 	   val noncarriers = TilWord32.toInt tagcount
 	   val (exp, _, valuable) = xexp context il_arg
-	       
-	   fun xarms (n, []) = []
-             | xarms (n, NONE :: rest) = xarms (n+1, rest)
-	     | xarms (n, SOME ilexp :: rest) = 
-	       (if (n < noncarriers) then
+
+	   fun xarm (n, NONE ) = NONE
+	     | xarm (n, SOME ilexp) =
 		    let
+			val context = if (n >= noncarriers) 
+					  then update_NILctx_insert_con(context,bound,make_ssum n)
+				      else context
 			val (exp, _, valuable) = xexp context ilexp
 			val effect = if valuable then Total else Partial
-		    in
-			(NONE, (Word32.fromInt n, exp))
+		    in  SOME(Word32.fromInt n, exp)
 		    end
-		else
-		    let val function = toFunction context ilexp
-			val Function(_,_,_,[(v,_)],_,body,c) = function
-		    in  (SOME v, (Word32.fromInt n, body))
-		    end)
-		:: (xarms (n+1, rest))
 
-	   val (vars,arms) = unzip(xarms (0, il_arms))
-	   val bound = (case (List.find (fn NONE => false | SOME _ => true) vars) of
-			    SOME (SOME v) => v
-			  | _ => Name.fresh_named_var "ununsed_switch_arg")
-	   val _ = if (List.all (fn NONE => true | SOME v => Name.eq_var(v,bound)) vars)
-		       then () else error "sum_case did not get same var in all arms"
-
+	   val arms = List.mapPartial (fn x => x) (mapcount xarm il_arms)
 	   val default = (case il_default of 
 			      NONE => NONE
 			    | SOME e => SOME (#1 (xexp context e)))
        in
-	   (Switch_e(Sumsw_e {sumtype = con,
+	   (Switch_e(Sumsw_e {sumtype = sumcon,
 			      result_type = rescon,
 			      bound = bound,
 			      arg  = exp, arms = arms, default = default}),
@@ -3143,7 +3136,7 @@ end (* local defining splitting context *)
 					      con_mod)
 	      val type_r = makeLetC cbnds type_mod_r
 
-	  in  (knd_c, knd_c_context, type_r)
+	  in  (knd_c_context, knd_c, type_r)
 	  end
 
      | xsig' context (con0,Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
@@ -3224,8 +3217,12 @@ end (* local defining splitting context *)
 		    if (!full_debug) then (Ppil.pp_signat il_sig; print "\n") else ())
 	       else ()
 	   val result = xsig' context (con, il_sig)
-	       handle e => (if (!debug) then print ("Exception detected in call " ^ 
-						    (Int.toString this_call) ^ " to xsig\n") else ();
+	       handle e => (if (!debug) 
+				then (print ("Exception detected in call " ^ 
+					    (Int.toString this_call) ^ " to xsig:\n");
+				      Ppil.pp_signat il_sig;
+				      print "\n")
+			    else ();
 				raise e)
        in  if (!debug) then print ("Return " ^ (Int.toString this_call) ^ " from xsig\n") else ();
 	    result

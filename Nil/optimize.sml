@@ -132,9 +132,16 @@ struct
 
 	  fun get_env(STATE{equation,...}) = equation
 	  fun find_equation(STATE{equation,...},c) = NilContext.find_kind_equation(equation,c)
+	  fun find_con(STATE{equation,...},v) = NilContext.find_con(equation,v)
 
 	  fun add_kind(STATE{equation,alias,used,uncurry,current},v,k) = 
 	      STATE{equation=NilContext.insert_kind(equation,v,k),
+		    used=used,
+		    alias=alias,
+		    uncurry=uncurry,
+		    current=current}
+	  fun add_con(STATE{equation,alias,used,uncurry,current},v,c) = 
+	      STATE{equation=NilContext.insert_con(equation,v,c),
 		    used=used,
 		    alias=alias,
 		    uncurry=uncurry,
@@ -187,7 +194,9 @@ struct
 					  end
 	    in  foldl_acc folder state vklist
 	    end
-	and do_vclist state vclist = map (fn (v,c) => (v,do_con state c)) vclist
+	and do_vclist state vclist = foldl_acc (fn ((v,c),acc) => let val c = do_con state c
+								  in  ((v,c),add_con(acc,v,c))
+								  end) state vclist
 	and do_kind (state : state) (kind : kind) : kind = 
 	  (case kind of 
 		Type_k _ => kind
@@ -375,6 +384,16 @@ val reduce = fn state => fn pred =>
 		 SOME () => true
 	       | NONE => false)
 
+	 fun getknownsum (Prim_c(Sum_c {tagcount,totalcount,known=SOME k}, [c])) = 
+	     SOME(TilWord32.toInt tagcount, TilWord32.toInt totalcount, 
+		  TilWord32.toInt k, c)
+	   | getknownsum _ = NONE
+
+	 fun getsum (Prim_c(Sum_c {tagcount,totalcount,known}, [c])) = 
+	     SOME(TilWord32.toInt tagcount, TilWord32.toInt totalcount, 
+		  known, c)
+	   | getsum _ = NONE
+
 	fun is_sumsw_int state exp = 
 	  (case exp of
 	     (Switch_e(Sumsw_e{sumtype,
@@ -432,10 +451,10 @@ val reduce = fn state => fn pred =>
 			(case (lookup_proj(state,v,[l])) of
 				NONE => Prim_e(p,map (do_con state) clist, map (do_exp state) elist)
 			      | SOME e => do_exp state e)
-		| Prim_e(p as NilPrimOp inject,clist,elist as [Var_e v]) => 
+		| Prim_e(p as NilPrimOp (inject k),clist,elist as [Var_e v]) => 
 			 (case lookup_alias(state,v) of
 			      SOME (_,Prim_e(NilPrimOp(record _),_,elist)) =>
-				  do_exp state (Prim_e(NilPrimOp inject_record,clist,elist))
+				  do_exp state (Prim_e(NilPrimOp (inject_record k),clist,elist))
 			    | _ => Prim_e(p,map (do_con state) clist, map (do_exp state) elist))
 		| Prim_e(p,clist,elist) => Prim_e(p,map (do_con state) clist, 
 						  map (do_exp state) elist)
@@ -495,7 +514,7 @@ val reduce = fn state => fn pred =>
 
 		| Raise_e(e,c) => Raise_e(do_exp state e, do_con state c)
 		| Handle_e(e,v,handler,c) => 
-			let val [(v,_)] = do_vclist state [(v,Prim_c(Exn_c,[]))]
+			let val ([(v,_)],state) = do_vclist state [(v,Prim_c(Exn_c,[]))]
 			in  Handle_e(do_exp state e, v, do_exp state handler, do_con state c)
 			end)
 
@@ -513,8 +532,19 @@ val reduce = fn state => fn pred =>
 		     let val arg = do_exp state arg
 			 val result_type = do_con state result_type
 			 val sumtype = do_con state sumtype
-			 val [(bound,_)] = do_vclist state[(bound,sumtype)]
-			 val arms = map_second (do_exp state) arms
+			 val (tagcount,totalcount,_,carrier) = 
+			     (case reduce state getsum sumtype of
+				  SOME quad => quad
+				| NONE => error "sumcon of sumsw_e not reducible to sum")
+			 fun make_ssum i = Prim_c(Sum_c{tagcount=TilWord32.fromInt tagcount,
+							totalcount=TilWord32.fromInt totalcount,
+							known=SOME i},[carrier])
+			 fun do_arm(n,body) = 
+			     let val ssumtype = make_ssum n
+				 val (_,state) = do_vclist state[(bound,ssumtype)]
+			     in  (n,do_exp state body)
+			     end
+			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
 		     in  Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,result_type=result_type,
 				  arms=arms,default=default}
@@ -522,7 +552,7 @@ val reduce = fn state => fn pred =>
 	       | Exncase_e {arg,result_type,bound,arms,default} =>
 		     let val arg = do_exp state arg
 			 val result_type = do_con state result_type
-			 val [(bound,_)] = do_vclist state[(bound,Prim_c(Exn_c,[]))]
+			 val ([(bound,_)],state) = do_vclist state[(bound,Prim_c(Exn_c,[]))]
 			 val arms = map (fn (e1,e2) => (do_exp state e1, do_exp state e2)) arms
 			 val default = Util.mapopt (do_exp state) default
 		     in  Exncase_e {bound=bound,arg=arg,result_type=result_type,
@@ -532,7 +562,7 @@ val reduce = fn state => fn pred =>
 
 	and do_function (state : state) (Function(effect,recur,vklist,vclist,vlist,e,c)) =
 		let val (vklist,state) = do_vklist state vklist
-		    val vclist = do_vclist state vclist
+		    val (vclist,state) = do_vclist state vclist
 		    val e = do_exp state e
 		    val c = do_con state c
 		in  Function(effect,recur,vklist,vclist,vlist,e,c)
@@ -553,12 +583,13 @@ val reduce = fn state => fn pred =>
 						  | _ => state)
 				 in  ([Exp_b(v,do_con state' c, e)], state)
 				 end
-	      fun exp_b_proj(v,c,sumcon,labs,reccons,sv) = 
+	      fun exp_b_proj(v,c,sumcon,k,labs,reccons,sv) = 
 		  let val vars = map (fn l => Name.fresh_named_var
 							(Name.label2string l)) labs
 		      val _ = do_exp state (Var_e sv)
+		      val _ = do_con state sumcon
 		      fun mapper(v,c,l) = 
-				let val np = project_sum_record l
+				let val np = project_sum_record(k, l)
 			 	in  Exp_b(v,c,Prim_e(NilPrimOp np,[sumcon],[Var_e sv]))
 				end
 		      val state = foldl (fn (v,s) => add_var(s,v)) state vars
@@ -572,27 +603,23 @@ val reduce = fn state => fn pred =>
 		  in  (bnds @ bnds2, state)
 		  end
 	  in	(case bnd of
-		     Exp_b(v,c,e as Prim_e(NilPrimOp project_sum,[sumcon],[Var_e sv])) =>
-		     let fun getsum (Prim_c(Sum_c {tagcount,totalcount,known=SOME k}, [c])) = 
-			       SOME(TilWord32.toInt tagcount, TilWord32.toInt totalcount, 
-				    TilWord32.toInt k, c)
-			   | getsum _ = NONE
-			 fun getrecord (Crecord_c lcons) = SOME(map #2 lcons)
+		     Exp_b(v,c,e as Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv])) =>
+		     let fun getrecord (Crecord_c lcons) = SOME(map #2 lcons)
 			   | getrecord _ = NONE
+			 val sv_con = find_con(state,sv)
 			 val fieldcon = 
-			     (case reduce state getsum sumcon of
+			     (case reduce state getknownsum sv_con of
 				  SOME (tagcount,totalcount,k,carrier) => 
 				      if (totalcount = tagcount + 1) then carrier
 				      else (case (reduce state getrecord carrier) of
 						SOME clist => List.nth(clist, k-tagcount)
-					      | NONE => error "sumcon of project_sum reducedto bad sum")
+					      | NONE => error "sumcon of project_sum reduced to bad sum")
 				| NONE => error "sumcon of project_sum not reducible to sum")
 			 fun getrecord (Prim_c (Record_c labs, reccons)) = SOME(labs,reccons)
 			   | getrecord _ = NONE
 
 		     in  case (reduce state getrecord fieldcon) of
-			   SOME(labs,reccons) =>
-					exp_b_proj(v,c,sumcon,labs,reccons,sv)
+			   SOME(labs,reccons) => exp_b_proj(v,c,sumcon,k,labs,reccons,sv)
 			 | NONE => exp_b(v,c,e)
 		     end
 		   (* anormalizes the components of a record *)
@@ -618,14 +645,14 @@ val reduce = fn state => fn pred =>
 		     end
 
 		 (* these 2 cases names inject_sum's argument to a variable *)
-		   | Exp_b(v,c,e as Prim_e(NilPrimOp inject, _, [Var_e _])) => exp_b(v,c,e)
-		   | Exp_b(v,c,Prim_e(NilPrimOp inject, clist,[e])) => 
+		   | Exp_b(v,c,e as Prim_e(NilPrimOp (inject _), _, [Var_e _])) => exp_b(v,c,e)
+		   | Exp_b(v,c,Prim_e(NilPrimOp (inject k), clist,[e])) => 
 		     (case getType e of
 			 SOME injectee_con =>
 			     let 
 				 val var = Name.fresh_named_var "named"
 				 val bnd1 = Exp_b(var,injectee_con,e)
-				 val bnd2 = Exp_b(v,c,Prim_e(NilPrimOp inject,
+				 val bnd2 = Exp_b(v,c,Prim_e(NilPrimOp (inject k),
 							     clist,[Var_e var]))
 			     in  do_bnds([bnd1,bnd2], state)
 			     end

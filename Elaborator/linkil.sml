@@ -1,43 +1,23 @@
-(*$import Prim Il Ppprim Ppil IlUtil IlPrimUtil IlContext IlStatic Toil Pat Datatype Signature Basis *)
-signature LINKIL = 
-  sig
-      structure Prim : PRIM
-      structure Il : IL
-      structure Ppprim : PPPRIM 
-      structure Ppil : PPIL
-      structure IlUtil : ILUTIL
-      structure IlPrimUtil : PRIMUTIL
-      structure IlContext : ILCONTEXT
-      structure IlStatic : ILSTATIC 
+(*$import LINKIL Prim Il Ppprim Ppil IlUtil PrimUtil IlContext IlStatic Toil Pat Datatype Signature Basis Tyvar IlPrimUtilParam IlContextEq Error Equal InfixParse Formatter LinkParse *)
 
-(*      type module = (Il.context * Il.sbnd list * Il.sdec list)  *)
-      type module = (Il.context * (Il.sbnd option * Il.context_entry) list)
-      val compile_prelude : bool * string -> module
-      val compile : string -> module option
-      val compiles : string -> (module list) option
-      val test : string ->  module option
-      val setdepth : int -> unit (* printing depth *)
-      val elaborate : Il.context * string -> (Il.sbnds * Il.context) option
-  end
-
-structure LinkIl (* : LINKIL *) = 
+structure LinkIl :> LINKIL  = 
     struct
-	structure Tyvar = Tyvar();
-	structure Prim = Prim();
+	structure Tyvar = Tyvar()
+	structure Prim = Prim()
 	structure Il = Il(structure Prim = Prim
-			  structure Tyvar = Tyvar);
-	structure IlContext = IlContext(structure Il = Il);
-	structure Formatter = Formatter;
-	structure AstHelp = AstHelp;
+			  structure Tyvar = Tyvar)
 	structure Ppprim = Ppprim(structure ArgPrim = Prim);
 	structure Ppil = Ppil(structure AstHelp = AstHelp
 			      structure Ppprim = Ppprim
-			      structure IlContext = IlContext
-			      structure Il = Il); 
+			      structure Il = Il)
+	structure IlContext = IlContext(structure Il = Il
+					structure Ppil = Ppil)
+	structure Formatter = Formatter
+	structure AstHelp = AstHelp
 	structure IlPrimUtilParam = IlPrimUtilParam(structure Il = Il);
 	structure IlPrimUtil = PrimUtil(structure Prim = Prim
 					structure Ppprim = Ppprim
-					structure PrimUtilParam = IlPrimUtilParam);
+					structure PrimUtilParam = IlPrimUtilParam)
 	structure IlUtil = IlUtil(structure Il = Il
 				  structure IlContext = IlContext
 				  structure PrimUtil = IlPrimUtil
@@ -460,13 +440,7 @@ structure LinkIl (* : LINKIL *) =
 	fun test' s = (test_res' s; ())
 	fun ptest' s = (ptest_res' s; ())
 
-	structure P = Compiler.Profile
-	fun profile thunk arg = 
-	    let val _ = P.reset()
-		val res = thunk arg
-		val _ = P.report TextIO.stdOut
-	    in res
-	    end
+
 
 	val test = (fn filename => SOME(ptest_res' filename) handle _ => NONE)
 
@@ -505,7 +479,7 @@ structure LinkIl (* : LINKIL *) =
 			val ctxts = map #2 sbnd_ctxt_list
 			val ctxt = local_add_context_entries' base_ctxt (empty_context,ctxts) 
 		    in 
-			SOME(sbnd_ctxt_list,ctxt)
+			SOME(ctxt,sbnd_ctxt_list)
 		    end
 	      | NONE => NONE
 

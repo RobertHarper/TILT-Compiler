@@ -195,13 +195,16 @@ functor Signature(structure Il : IL
       ------------------ SIGNATURE PATCHING -------------------
       --------------------------------------------------------- *)
     exception SharingError
+    exception WhereError
     type vlpath = (var * label) list
     type lpath = label list
     type cluster = path option ref * lpath list
+    fun eq_lpath'(lpath1,lpath2) = Listops.eq_list(eq_label,lpath1,lpath2)
     fun eq_lpath lpath1 lpath2 = Listops.eq_list(eq_label,lpath1,lpath2)
     fun sub_lpath _ [] = false
       | sub_lpath [] _ = true
       | sub_lpath (l1::lrest1) (l2::lrest2) = eq_label(l1,l2) andalso sub_lpath lrest1 lrest2
+    fun inter_lpaths lpaths1 lpaths2 = Listops.list_inter_eq(eq_lpath',lpaths1,lpaths2)
 
     fun pp_lpath lpath = pp_pathlist pp_label' lpath
     fun vlpath2lpath (vlpath : vlpath) = map #2 vlpath
@@ -229,9 +232,9 @@ functor Signature(structure Il : IL
 	 we search for the one that occurs first and then transparently 
 	 type-abbreviate all of the rest to the first one if it is abstract or equivalent *)
 
-      fun xsig_sharing_rewrite_structure (ctxt,sdecs,lpath_list) = 
+      fun xsig_sharing_rewrite_structure (ctxt,sdecs,lpath_list,sigopt) = 
 	  (* using a ref like this is error-prone; should change this *)
-	  let val first_sig = ref NONE
+	  let val first_sig = ref sigopt
 	      fun getsig(cur_path,orig_sig) = 
 		  (case !first_sig of
 		       SOME s => s
@@ -247,9 +250,9 @@ functor Signature(structure Il : IL
 		      val prematches = List.filter (sub_lpath cur_lpath') lpath_list
 		      val s = 
 			  if match
-			      then (print "match called getsig with\n";
+			      then ((* print "match called getsig with\n";
 				    pp_signat s;
-				    print "\n";
+				    print "\n"; *)
 				    getsig(cur_path',s))
 			  else if (length prematches > 0)
 			      then (case reduce_signat ctxt s of
@@ -409,43 +412,102 @@ functor Signature(structure Il : IL
 	      end		
       in case (follow_labels (orig_sdecs,ctxt) lbls) of 
 	  ABSTRACT lbls => dosig lbls orig_sdecs
-	| NONABSTRACT _ => (error_region();
-		          print "cannot where type nonabstract type component\n";
-		          orig_sdecs)
+	| NONABSTRACT lbls => (error_region();
+			       print "cannot where type nonabstract type component:";
+			       pp_lpath lbls;
+			       print "\n";
+			       orig_sdecs)
       end
 
 
-    and xsig_where_structure(context,sdecs,labs1,sdecs2) = 
-	let val mjunk = MOD_VAR(fresh_named_var "mjunk")
-	in  (case (Sdecs_Lookup' context (mjunk,sdecs,labs1)) of
-		 SOME(labels1,PHRASE_CLASS_MOD(_,s1)) =>
-		     let fun find_labels' path (SDEC(l,DEC_CON (_,k,NONE)),acc) = 
-			 if (is_label_internal l) then acc else (k,l::path)::acc
-			   | find_labels' path (SDEC(l,DEC_MOD (_,s)),acc) = 
-			     (find_labels (l::path) s)@acc
-			   | find_labels' path (_,acc) = acc
-			 and find_labels path s = 
-			     (case reduce_signat context s of
-				  SIGNAT_STRUCTURE (_,sdecs) =>
-				      foldl (find_labels' path) [] sdecs
-				| _ => [])
-			 val kind_rlabels = find_labels [] s1
-			 fun constrain((k,rlbls),sdecs) = 
-			     let val lbls = rev rlbls
-				 val lbls_all = labels1 @ lbls
-				 val c = case (Sdecs_Lookup' context (mjunk,sdecs2,lbls)) of
-				     SOME(_,PHRASE_CLASS_CON(c,_)) => c
-				   | _ => (error_region();
-					   print "where's rhs structure missing components\n";
-					   dummy_type(context,"badwhere"))
-			     in  xsig_where_type(context,sdecs,lbls_all,c,k)
-			     end
-		     in  foldl constrain sdecs kind_rlabels
-		     end
-	       | _ => (error_region();
-		       print "can't where non-existent or non-structure component\n";
-		       sdecs))
+    (* We have to selfify the sdecs so lookup works correctly,
+         but then we must recognize that some transparent type
+	   slots are actually opaque *)
+    and xsig_where_structure_slow(context,sdecs,labs1,m2,sig2) = 
+	let val sdecs2 = (case reduce_signat context sig2 of
+			      SIGNAT_STRUCTURE(_,sdecs2) => sdecs2
+			    | _ => error "xsig_where_structure given non-struct sig")
+	    val mjunk_var = fresh_named_var "mjunk"
+	    val mjunk = MOD_VAR mjunk_var
+	    val context = add_context_mod'(context,mjunk_var,
+					   SelfifySig context (SIMPLE_PATH mjunk_var,
+							       SIGNAT_STRUCTURE(NONE,sdecs)))
+	    val (labels1,s1) = 
+		(case Context_Lookup_Path(context,COMPOUND_PATH(mjunk_var,labs1)) of
+		     SOME(COMPOUND_PATH(_,labels1),PHRASE_CLASS_MOD(_,s1)) => (labels1,s1)
+		   | _ => (error_region();
+			   print "can't where non-existent or non-structure component\n";
+			   raise WhereError))
+
+
+	    fun find_labels' path (SDEC(l,DEC_CON (_,k,NONE)),_) = 
+		    error "find_labels' should not encounter any abstract types"
+	      | find_labels' path (SDEC(l,DEC_CON (_,k,SOME c)),kpaths) =
+(*		   if (is_label_internal l) 
+			    then kpaths
+		   else *)
+		       (k,l::path)::kpaths
+	      | find_labels' path (SDEC(l,DEC_MOD (v,s)),kpaths) = 
+		     (find_labels (l::path) s) @ kpaths
+	      | find_labels' path (_,acc) = acc
+	    and find_labels path s = 
+		(case reduce_signat context s of
+		     SIGNAT_STRUCTURE (_,sdecs) => foldl (find_labels' path) [] sdecs
+		   | _ => [])
+val _ = print "ABOUT TO FIND LABELS\n"
+            (* kinds and reversed partial lpaths *)
+	    val kind_rplabels = find_labels [] s1
+	   
+						
+val _ = print "DONE FINDING LABELS\n"
+            (* as we constrain, some ABSTRACT paths become NONABSTRACT so
+	      we cannot follow_labels all at once at the beginning *)
+	    fun constrain((k,rplabs),sdecs) = 
+		let val plabs = rev rplabs
+		    val labs = labels1 @ plabs
+		in  (case follow_labels (sdecs,context) (labels1 @ plabs) of
+		       ABSTRACT labs => 
+			 (case (Sdecs_Lookup' context (mjunk,sdecs2,plabs)) of
+			      SOME(_,PHRASE_CLASS_CON(c,_)) => 
+				  xsig_where_type(context,sdecs,labs,c,k)
+			    | _ => (error_region();
+				    print "where's rhs structure missing components\n";
+				    sdecs))
+		     | NONABSTRACT _ => sdecs)
+		end
+
+	in  foldl constrain sdecs kind_rplabels
 	end
+    handle WhereError => sdecs
+	 | e => (print "\nsig2 = "; pp_signat sig2;
+		 print "\nsdecs= "; pp_sdecs sdecs;
+		 print "\n";
+		 raise e)
+
+     (* it is difficult to correctly optimize this case: we try to catch only some cases *)
+    and xsig_where_structure(context,sdecs,labs1,m2,sig2) = 
+	let fun find_sdec l [] = NONE
+	      | find_sdec l ((SDEC(l',DEC_MOD(_,s)))::rest) = 
+	            if (eq_label(l,l')) then SOME s else find_sdec l rest
+	      | find_sdec l (_::rest) = find_sdec l rest
+	    fun find_sig [] s = SOME s
+	      | find_sig (l::ls) (SIGNAT_STRUCTURE(_,sdecs)) = (case find_sdec l sdecs of
+								    SOME s => find_sig ls s
+								  | NONE => NONE)
+	      | find_sig labs (s as (SIGNAT_VAR v)) = find_sig labs (reduce_signat context s)
+	      | find_sig _ _ = NONE
+	in  (case find_sig labs1 (SIGNAT_STRUCTURE(NONE,sdecs)) of
+		 SOME (s as SIGNAT_VAR _) =>
+		     if (IlStatic.Sig_IsSub(context,sig2,s))
+			 then xsig_sharing_rewrite_structure(context,sdecs,[labs1],SOME(SIGNAT_OF m2))
+		     else xsig_where_structure_slow(context,sdecs,labs1,m2,sig2)
+	       | _ => xsig_where_structure_slow(context,sdecs,labs1,m2,sig2))
+	end
+    handle WhereError => sdecs
+	 | e => (print "\nsig2 = "; pp_signat sig2;
+		 print "\nsdecs= "; pp_sdecs sdecs;
+		 print "\n";
+		 raise e)
 
 
   and xsig_sharing_structure(ctxt,sdecs,paths : lpath list) : sdecs = 
@@ -474,13 +536,18 @@ functor Signature(structure Il : IL
 			 pp_lpath p; print "\n";
 			 raise SharingError))
 	  val lpath_var_sdecs_list = map path2triple paths
-	  fun triple_has_var (_,SOME _,_) = true
-	    | triple_has_var (_,NONE,_) = false
-      in  if (List.all triple_has_var lpath_var_sdecs_list)
-	      then xsig_sharing_rewrite_structure(ctxt,sdecs,map #1 lpath_var_sdecs_list)
+	  fun triple_has_var NONE [] = false
+	    | triple_has_var (SOME _) [] = true
+	    | triple_has_var NONE ((_,SOME v,_)::rest) = triple_has_var (SOME v) rest
+	    | triple_has_var (SOME v) ((_,SOME v',_)::rest) = (eq_var(v,v') andalso
+							       triple_has_var (SOME v) rest)
+	    | triple_has_var _ ((_,NONE,_)::_) = false
+      in  if (triple_has_var NONE lpath_var_sdecs_list)
+	      then xsig_sharing_rewrite_structure(ctxt,sdecs,map #1 lpath_var_sdecs_list,NONE)
 	  else xsig_sharing_structure_components(ctxt,sdecs,lpath_var_sdecs_list)
       end
-  
+
+  (* we are supposed to share the type components only where possible *)
   and xsig_sharing_structure_components
       (ctxt,sdecs,lpath_var_sdecs_list : (label list * var option *  sdecs) list) : sdecs = 
       let
@@ -496,6 +563,11 @@ functor Signature(structure Il : IL
 	      in (lpath, List.concat (map traverse sdecs))
 	      end
 	  val lpath_lpaths_list : (lpath * lpath list) list = map getcomponents lpath_var_sdecs_list
+	  val common_lpaths = foldl (fn ((_,cur),acc) => inter_lpaths cur acc)
+	                       (#2 (hd lpath_lpaths_list)) (tl lpath_lpaths_list)
+	  val lpath_lpaths_list = map (fn (lp,cur) => (lp,inter_lpaths cur common_lpaths))
+	                             lpath_lpaths_list
+(*
 	  val lpaths = #2 (hd lpath_lpaths_list)
 	  val num_types = length lpaths
 	  val _ = if (andfold (fn (_,lpaths) => length lpaths = num_types) lpath_lpaths_list)
@@ -503,6 +575,7 @@ functor Signature(structure Il : IL
 		  else (error_region();
 			print "structure sharing failed\n";
 			raise SharingError)
+*)
 	  val labels : lpath list list = (map (fn (lpath,lpaths) => map (fn lps => lpath @ lps) lpaths) 
 					  lpath_lpaths_list)
 	  val follow_labels = follow_labels (sdecs,ctxt)
@@ -647,7 +720,7 @@ functor Signature(structure Il : IL
     
     (* Augment coerced_mod and coerced_sig so that all references to
       var_actual are removed from coerced_sig.  *)
-    fun extract_hidden(coerced_mod, coerced_sig, var_actual, sig_actual) : mod * signat = 
+    fun extract_hidden(context,coerced_mod, coerced_sig, var_actual, sig_actual) : mod * signat = 
 	let 
 	    val var_local = fresh_named_var "hidden_module"
 	    val label_local = internal_label "hidden_module"
@@ -714,7 +787,7 @@ functor Signature(structure Il : IL
 		       | SOME(sbnd,sdec) => (mapping,sbnd::restsbnds, sdec::restsdecs))
 		end
             and dosig (p, mapping, s) =
-		(case s of
+		(case (reduce_signat context s) of
 		     SIGNAT_STRUCTURE(_,sdecs) =>
 			 let val (mapping,sbnds,sdecs) = dosdecs(p,mapping,sdecs)
 			 in  SOME(mapping,MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE(NONE,sdecs))
@@ -862,6 +935,19 @@ functor Signature(structure Il : IL
 		    sig_actual and sig_target to type-check. *)
 
     and xcoerce_help (polyinst : polyinst,
+		       context : context,
+		       path_actual : path,
+		       sig_actual : signat,
+		       sig_target : signat) : (bool * Il.mod * Il.signat) = 
+	let val match = Sig_IsSub(context,sig_actual,sig_target)
+	    val _ = (print "xocerce_help on "; pp_path path_actual;
+		     print "  match = "; print (Bool.toString match); print "\n")
+	in  if match
+		then (false,path2mod path_actual,sig_actual)
+	    else xcoerce_help'(polyinst,context,path_actual,sig_actual,sig_target)
+	end
+
+    and xcoerce_help' (polyinst : polyinst,
 		      context : context,
 		      path_actual : path,
 		      sig_actual : signat,
@@ -1253,11 +1339,11 @@ functor Signature(structure Il : IL
 
 	val _ = if match then () 
 		else 
-		    (print "coerced set to true because of length mismatch\n";
+		    (print "coerced set to true because of length/order mismatch\n";
 		     coerced := true)
 
 	val _ = if (!debug andalso not match) 
-	        then (print "coerced set to true because of length mismatch\n";
+	        then (print "coerced set to true because of length/order mismatch\n";
 		      print "actual_str_length = "; 
 		      print (Int.toString actual_str_length); print "\n";
 		      print "target_str_length = "; 
@@ -1323,10 +1409,10 @@ functor Signature(structure Il : IL
 			      print "\n\n")
 		    else ()
 	    (* first call perform an opaque sealing for type-checking reasons *)
+	    val context' = add_context_mod'(context,var_actual,
+					    SelfifySig context (SIMPLE_PATH var_actual, sig_actual))
 	    val (coerced,coerced_mod,coerced_sig) = 
-		xcoerce_help(polyinst,
-			     add_context_mod'(context,var_actual,
-					      SelfifySig context (SIMPLE_PATH var_actual, sig_actual)),
+		xcoerce_help(polyinst,context',		
 			     SIMPLE_PATH var_actual,
 			     sig_actual,sig_target)
 
@@ -1345,7 +1431,7 @@ functor Signature(structure Il : IL
 	       disappear.  Note that coerced_sig does use its own
 	       internal variables. *)
 
-	    val (m,s) = extract_hidden(coerced_mod, coerced_sig, var_actual, sig_actual)
+	    val (m,s) = extract_hidden(context',coerced_mod, coerced_sig, var_actual, sig_actual)
 
 	    val _ = if (!debug)
 			then (print "xcoerce_transparent returned with var_actual = ";

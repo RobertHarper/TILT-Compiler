@@ -1,4 +1,4 @@
-(*$import AST Env Fixity TilWord64 *)
+(*$import AST Fixity TilWord64 *)
 
 (* Copyright 1992 by AT&T Bell Laboratories 
  *
@@ -10,7 +10,7 @@
  *                    INTO PERV.SML AND SYSTEM.SIG                          *
  ****************************************************************************)
 
-structure Ast : AST = struct
+structure Ast :> AST = struct
 
 open Symbol Fixity
 
@@ -236,9 +236,12 @@ end (* structure Ast *)
 
 (*
  * $Log$
-# Revision 1.6  98/01/21  20:40:05  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.7  98/02/15  22:43:12  pscheng
+# bootstrapping changes
 # 
+# Revision 1.6  1998/01/21  20:40:05  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.5  1997/10/21  21:00:23  pscheng
 # got rid of int inf
 #

@@ -245,11 +245,11 @@ functor Ppnil(structure ArgNil : NIL
 	String (case nilprimop of
 		    record labels => "record"
 		  | select label => raise (BUG "pp_nilprimop: control should not reach here")
-		  | inject => "inject"
-		  | inject_record => "inject_rec"
-		  | project_sum => "project_sum"
-		  | project_sum_record field => ("project_sum[" ^ 
-						 "_rec[" ^ (Name.label2string field) ^ "]")
+		  | inject w => "inject_" ^ (TilWord32.toDecimalString w)
+		  | inject_record w => "inject_rec_" ^ (TilWord32.toDecimalString w)
+		  | project_sum w => "project_sum_" ^ (TilWord32.toDecimalString w)
+		  | project_sum_record (w,field) => ("project_sum_rec_" ^ (TilWord32.toDecimalString w) ^
+						 "[" ^ (Name.label2string field) ^ "]")
 		  | roll => "roll"
 		  | unroll  => "unroll"
 		  | make_exntag => "make_exntag"

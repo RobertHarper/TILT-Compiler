@@ -1,3 +1,5 @@
+(*$import NIL NILUTIL PPNIL LibBase SPECIALIZE *)
+
 (* A two-pass optimizer to remove unnecesssarily polymorphic code:
      Essentially, convert
        fun f _ = 5
@@ -14,7 +16,7 @@ functor Specialize(structure Nil : NIL
 		   structure NilUtil : NILUTIL
 		   structure Ppnil : PPNIL
 		 sharing Ppnil.Nil = NilUtil.Nil = Nil) 
-     : SPECIALIZE  = 
+     :> SPECIALIZE where Nil = Nil  = 
 struct
 
 	open Util Nil NilUtil Listops

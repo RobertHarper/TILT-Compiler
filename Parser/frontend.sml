@@ -1,4 +1,4 @@
-(*$import FRONT_END Join MLLrValsFun MLLexFun Ast Source Control LrParser Stats *)
+(*$import FRONTEND Join MLLrValsFun MLLexFun Ast Source Control LrParser Stats *)
 
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* frontend.sml *)
@@ -116,11 +116,14 @@ end (* structure FrontEnd *)
 
 (*
  * $Log$
-# Revision 1.6  98/02/01  01:27:59  pscheng
+# Revision 1.7  98/02/15  22:43:26  pscheng
+# bootstrapping changes
+# 
+# Revision 1.6  1998/02/01  01:27:59  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places
 #   Split up files into signature and code
-# 
+#
 # Revision 1.5  1998/01/21  20:40:18  pscheng
 # moved the .sig files to .sig.sml file
 #

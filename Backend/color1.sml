@@ -1,24 +1,28 @@
+(*$import MACHINE IFGRAPH TRACKSTORAGE MACHINEUTILS PRINTUTILS Stats COLOR *)
 (* Original implementation.  Does not try cycling through temporary regs. *)
 
-functor Color1(structure Ifgraph : IFGRAPH
+
+functor Color1(structure Machine : MACHINE
+	       structure Ifgraph : IFGRAPH
 	       structure Trackstorage : TRACKSTORAGE
 	       structure MU : MACHINEUTILS
 	       structure Printutils : PRINTUTILS
 
-	       sharing MU = Trackstorage.Machineutils
-	                  = Printutils.Machineutils
-	                  
 	       sharing MU.Machine = Trackstorage.Machine 
 	                          = Printutils.Machine
+		                  = Ifgraph.Machine
+		                  = Machine)
+    :> COLOR where Trackstorage = Trackstorage
+             where Ifgraph = Ifgraph
+	     where Machine = Machine =
 
-               sharing Ifgraph.Regset = MU.Regset
-	       sharing type Ifgraph.node = MU.Machine.register) : COLOR = 
 struct
   structure Ifgraph = Ifgraph
   structure Trackstorage = Trackstorage
   structure MU = MU
 
   open MU MU.Machine Printutils
+
 
   val debug = ref false
 

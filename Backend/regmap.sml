@@ -1,4 +1,7 @@
-functor Regmap (structure Machine : MACHINE) : ORD_MAP =
+(*$import ORD_MAP BinaryMapFn Util *)
+functor Regmap (structure Machine : 
+		    sig datatype register = R of int | F of int end) 
+  : ORD_MAP =
 struct
   local 
       val error = fn s => Util.error "regmap.sml" s

@@ -1,3 +1,4 @@
+(*$import MACHINE GRAPH HashTableFn Graph *)
 (* For procedure-level callgraph *)
 
 functor Labelgraph (structure Machine : MACHINE) : DIRECTEDGRAPH =

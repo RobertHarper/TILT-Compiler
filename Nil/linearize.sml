@@ -1,8 +1,9 @@
+(*$import LINEARIZE NIL NILUTIL PPNIL *)
 functor Linearize(structure Nil : NIL
 		  structure NilUtil : NILUTIL
 		  structure Ppnil : PPNIL
 		  sharing NilUtil.Nil = Ppnil.Nil = Nil) 
-    : LINEARIZE = 
+    :> LINEARIZE where Nil = Nil = 
 struct
 
     val error = fn s => Util.error "linearize.sml" s
@@ -50,6 +51,7 @@ struct
 				     num_lcon := 0;
 				     num_lkind := 0;
 				     num_lcon_prim := 0;
+				     num_lcon_expb := 0;
 				     num_lcon_conb := 0;
 				     num_lcon_concb := 0;
 				     num_lkind_single := 0;

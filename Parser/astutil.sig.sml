@@ -1,4 +1,4 @@
-(*$import ErrorMsg Env Ast *)
+(*$import ErrorMsg Symbol Ast *)
 
 (* Copyright 1992 by AT&T Bell Laboratories 
  *
@@ -32,9 +32,12 @@ signature ASTUTIL =
 
 (*
  * $Log$
-# Revision 1.1  98/01/21  20:40:08  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.2  98/02/15  22:43:18  pscheng
+# bootstrapping changes
 # 
+# Revision 1.1  1998/01/21  20:40:08  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.1  97/03/26  18:16:02  pscheng
 # added the sig file
 # 

@@ -97,8 +97,9 @@ struct
 			   | CON_TUPLE_INJECT clist => clist
 			   | c => [c])
 		    val totalcount = (noncarriers + length carriers)
-		    fun help i = let val var' = fresh_named_var "eqarg1"
-				     val var'' = fresh_named_var "eqarg2"
+		    val var' = fresh_named_var "eqarg1"
+		    val var'' = fresh_named_var "eqarg2"
+		    fun help i = let 
 				     val is_carrier = i >= noncarriers
 				     val sumc = CON_SUM{carrier=carrier,
 							noncarriers=noncarriers,
@@ -112,32 +113,24 @@ struct
 					 (fn j =>
 					  if (i=j) 
 					      then 
-						  SOME (if is_carrier
-							    then (#1(make_total_lambda(var'',
-										 sumc,
-										 con_bool,
-										 armbody)))
-							else armbody)
+						  SOME armbody
 					  else NONE) totalcount
 				     val switch = CASE{sumtype = 
 						       CON_SUM{noncarriers = noncarriers,
 							       carrier = carrier,
 							       special = NONE},
 						       arg = VAR v2,
+						       bound = var'',
 						       arms = arms2,
 						       default = SOME false_exp,
 						       tipe = con_bool}
-				 in SOME (if is_carrier
-					      then #1(make_total_lambda(var', sumc,
-								  con_bool,
-								  switch))
-					  else switch)
+				 in SOME switch
 				 end
 		    val arms1 = map0count help totalcount
-		    val body = CASE{sumtype = 
-				    CON_SUM{noncarriers = noncarriers,
-					    carrier = carrier,
-					    special = NONE},
+		    val body = CASE{bound = var',
+				    sumtype = CON_SUM{noncarriers = noncarriers,
+						      carrier = carrier,
+						      special = NONE},
 				    arg = VAR v1,
 				    arms = arms1,
 				    default = NONE,
@@ -166,20 +159,28 @@ struct
 		  	e
 	       end
 	  | CON_APP(c,tuple) => 
-		let val meq = (case c of
-				   CON_MODULE_PROJECT(m,l) => MOD_PROJECT(m,to_eq_lab l)
-				 | CON_VAR v => 
-				       (let val type_label = (case (Context_Lookup'(ctxt,v)) of
-								  SOME(l,_) => l
-								| _ => (print "noeq 1\n"; raise NoEqExp))
-					    val eq_label = to_eq_lab type_label
-					in (case (Context_Lookup(ctxt,eq_label)) of
-						SOME(_,PHRASE_CLASS_MOD(m,_)) => m
-					      | _ => (print "noeq 2\n";
-						      raise NoEqExp))
-					end))
-		in case (GetModSig(ctxt,meq)
-			 handle _ => (print "noeq3\n"; raise NoEqExp)) of
+		let val meq = 
+		    (case c of
+			 CON_MODULE_PROJECT(m,l) => 
+			     let val s = GetModSig(ctxt,m)
+				 val eql = to_eq_lab l
+			     in  case s of
+				 SIGNAT_STRUCTURE(_,sdecs) =>
+				     if (List.exists (fn (SDEC(l,_)) => eq_label(l,eql)) sdecs)
+					 then MOD_PROJECT(m,to_eq_lab l)
+				     else raise NoEqExp
+				   | _ => raise NoEqExp
+			     end
+		       | CON_VAR v => 
+			     (let val type_label = (case (Context_Lookup'(ctxt,v)) of
+							SOME(l,_) => l
+						      | _ => raise NoEqExp)
+				  val eq_label = to_eq_lab type_label
+			      in (case (Context_Lookup(ctxt,eq_label)) of
+				      SOME(_,PHRASE_CLASS_MOD(m,_)) => m
+				    | _ => raise NoEqExp)
+			      end))
+		in case (GetModSig(ctxt,meq)) of
 		    SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE (NONE, sdecs),
 				   SIGNAT_STRUCTURE(NONE, [res_sdec]),_) => 
 			let 
@@ -201,7 +202,7 @@ struct
 								     | SOME triple => triple)
 			in MODULE_PROJECT(MOD_APP(meq,MOD_STRUCTURE new_sbnds),it_lab)
 			end
-		  | _ => (print "noeq 4\n"; raise NoEqExp)
+		  | _ => raise NoEqExp
 		end
 	  | CON_MU confun => 
 		let val fix_exp as FIX _ = xeq_mu(polyinst_opt,vector_eq) ctxt confun

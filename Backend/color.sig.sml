@@ -1,16 +1,10 @@
-(*$COLOR: IFGRAPH TRACKSTORAGE MACHINEUTILS *)
+(*$import IFGRAPH TRACKSTORAGE MACHINEUTILS *)
 
 signature COLOR =
 sig
+   structure Machine : MACHINE
    structure Trackstorage : TRACKSTORAGE
    structure Ifgraph : IFGRAPH
-
-   structure MU : MACHINEUTILS
-
-   sharing MU = Trackstorage.Machineutils
-   sharing MU.Machine = Trackstorage.Machine
-
-   sharing type Ifgraph.node = MU.Machine.register
 
    (* color:  assign registers to physical locations.
       Takes 
@@ -27,9 +21,9 @@ sig
 
 
    val color : Ifgraph.graph * Trackstorage.info * 
-	       MU.Machine.stacklocation MU.Regmap.map *
-	       (MU.Machine.register -> (MU.Machine.register * int) list) ->
-	                    MU.Machine.assign MU.Regmap.map
+	       Machine.stacklocation Machine.Regmap.map *
+	       (Machine.register -> (Machine.register * int) list) ->
+	        Machine.assign Machine.Regmap.map
 end
 
 	 

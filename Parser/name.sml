@@ -1,4 +1,4 @@
-(*$import NAME Util Env Int32 Word31 SplaySetFn SplayMapFn *)
+(*$import NAME Util Symbol Int32 Word31 SplaySetFn SplayMapFn *)
 
 structure Name :> NAME =
   struct

@@ -1,5 +1,6 @@
+(*$import RTL DECALPHA Labelmap Regmap Regset String *)
 functor Decalpha (val exclude_intregs : int list
-		  structure Rtl : RTL) : DECALPHA =
+		  structure Rtl : RTL) :> DECALPHA where Rtl = Rtl =
   struct
     structure Rtl = Rtl
     type data = Rtl.data
@@ -199,7 +200,7 @@ functor Decalpha (val exclude_intregs : int list
         | loop (#"^" :: rest) = "HAT" ^ (loop rest)
         | loop (#"|" :: rest) = "BAR" ^ (loop rest)
         | loop (#"*" :: rest) = "STAR" ^ (loop rest)
-        | loop (s :: rest) = (str s) ^ (loop rest)
+        | loop (s :: rest) = (String.str s) ^ (loop rest)
     in
       loop o explode
     end
@@ -487,7 +488,7 @@ functor Decalpha (val exclude_intregs : int list
 	  else if (ch = 92) then (* backslash *)
 	    "\\\\" ^ (charLoop chs)
 	  else if (ch >= 32 andalso ch <= 126) then
-	    (str (chr ch)) ^ (charLoop chs)
+	    (String.str (chr ch)) ^ (charLoop chs)
 	  else if (ch = 10) then (* newline *)
 	    "\\n" ^ (charLoop chs)
 	  else
@@ -800,4 +801,17 @@ functor Decalpha (val exclude_intregs : int list
    val special_regs  = listunion(special_iregs, special_fregs) 
    val general_regs  = listdiff(physical_regs, special_regs)
 
+(*
+   structure Labelkey : ORD_KEY = 
+       struct
+	   type ord_key = loclabel
+	   fun compare (LOCAL_CODE v1, LOCAL_CODE v2) = Int.compare(Name.var2int v1, Name.var2int v2)
+	     | compare (LOCAL_DATA v1, LOCAL_DATA v2) = Int.compare(Name.var2int v1, Name.var2int v2)
+	     | compare (LOCAL_CODE _, LOCAL_DATA _) = LESS
+	     | compare (LOCAL_DATA _, LOCAL_CODE _) = LESS
+	  end
+*)
+    structure Labelmap = Labelmap(structure Machine = struct structure Rtl = Rtl end)
+    structure Regmap = Regmap(structure Machine = struct datatype register = datatype register end)
+    structure Regset = Regset(structure Machine = struct datatype register = datatype register end)
 end

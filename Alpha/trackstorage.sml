@@ -1,14 +1,14 @@
+(*$import DECALPHA PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE BinarySetFn *)
 functor AlphaTrackstorage(structure Decalpha : DECALPHA
 			  structure Regmap : ORD_MAP where type Key.ord_key = Decalpha.register
 			  structure Regset : ORD_SET where type Key.ord_key = Decalpha.register
-			  structure Printutils : PRINTUTILS (*where Machineutils.Machine = Decalpha *)
-			  sharing Printutils.Machineutils.Machine = Decalpha)
-    : TRACKSTORAGE =
+			  structure Printutils : PRINTUTILS where Machine = Decalpha
+			  structure Machineutils : MACHINEUTILS where Machine = Decalpha)
+    :> TRACKSTORAGE where Machine = Decalpha =
 struct
 
-  open Printutils Printutils.Machineutils Decalpha
-
-  structure Machineutils = Printutils.Machineutils
+  open Printutils  
+  open Machineutils Decalpha
 
 
   datatype info = INFO of {callee_saves: Regset.set,

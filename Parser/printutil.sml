@@ -1,4 +1,4 @@
-(*$import PRINTUTIL Env Control Char TextIO Int32 *)
+(*$import PRINTUTIL Symbol Control Char TextIO Int32 *)
 (* Copyright 1989 by AT&T Bell Laboratories *)
 (* printutil.sml *)
 
@@ -80,11 +80,14 @@ end (* structure PrintUtil *)
 
 (*
  * $Log$
-# Revision 1.3  98/02/01  01:28:14  pscheng
+# Revision 1.4  98/02/15  22:44:06  pscheng
+# bootstrapping changes
+# 
+# Revision 1.3  1998/02/01  01:28:14  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places
 #   Split up files into signature and code
-# 
+#
 # Revision 1.2  1998/01/21  20:40:43  pscheng
 # moved the .sig files to .sig.sml file
 #

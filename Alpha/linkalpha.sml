@@ -1,22 +1,7 @@
-signature LINKALPHA =
-sig
-    structure Rtl : RTL
-    val compile_prelude : bool * string -> string * Rtl.local_label
-    (* add table info into corresponding asm file *)
-    val link : string * (Rtl.local_label list) -> unit 
-    val mk_link_file : string * (Rtl.local_label list) -> unit
-	(* the string is the name of the asm-file to create *)
-    val compile : string -> string * Rtl.local_label
-    val compiles : string list -> (string * Rtl.local_label) list
-    val test : string -> string * Rtl.local_label
-    val rtl_to_alpha : string * Rtl.module -> string * Rtl.local_label
-	(* rtl_to_alpha(s,m) returns a pair of the name of the
-	 * asm-file and a label for the entrance to the module. 
-	 * s is the source filename.
-	 *)
-end
+(*$import LINKALPHA Linkrtl DecAlpha Regset Regmap Labelgraph Labelmap DecAlphaUtils IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils VarGraph TrackStorage Color Chaitin RtlToAsm ToAlpha Recursion *)
 
-structure Linkalpha (* : LINKALPHA *) =
+
+structure Linkalpha :> LINKALPHA =
 struct
   val error = fn s => Util.error "linkalpha.sml" s
   open Linkrtl
@@ -36,11 +21,11 @@ struct
 					  structure Regmap = Regmap
 					  structure Regset = Regset)
 
-  structure Ifgraph   = Ifgraph    (structure Machine = Decalpha
- 				    structure Machineutils = Decalphautils)
-
   structure Callconv   = DecalphaCallconv (structure Machineutils = Decalphautils
 					   structure Decalpha = Decalpha)
+
+  structure Ifgraph   = Ifgraph    (structure Machine = Decalpha
+ 				    structure Machineutils = Decalphautils)
 
 
   structure Bblock = Bblock(structure Machineutils = Decalphautils)
@@ -59,7 +44,7 @@ struct
 			      structure Machineutils = Decalphautils
 			      structure Rtl = Rtl
 			      structure Pprtl = Pprtl
-			      structure Tracetable = Tracetable
+			      structure ArgTracetable = Tracetable
 			      structure DM = Divmult
 			      val do_tailcalls = do_tailcalls)
 
@@ -75,29 +60,35 @@ struct
 				  structure Printutils = Printutils
 				  structure Graph = Graph)
  
+
   structure Trackstorage = AlphaTrackstorage(val commentHeader = " #"
 					     structure Regmap = Regmap
 					     structure Regset = Regset
 					     structure Decalpha = Decalpha
+					     structure Machineutils = Decalphautils
 					     structure Printutils = Printutils)
+
+
 
   structure Color1 = Color1(structure Ifgraph = Ifgraph
 			    structure Trackstorage = Trackstorage
+			    structure Machine = Decalpha
 			    structure MU = Decalphautils
 			    structure Printutils = Printutils)
-
 
   structure Chaitin = Chaitin(val commentHeader = " #"
 			      structure Bblock = Bblock
 			      structure Callconv = Callconv
 			      structure Color = Color1
 			      structure Decalpha = Decalpha
+			      structure Machineutils = Decalphautils
 			      structure Printutils = Printutils
 			      structure Tracetable = Tracetable
 			      structure Trackstorage = Trackstorage
 			      structure Ifgraph = Ifgraph)
 
   structure Rtltoalpha = Rtltoasm(val commentHeader = " #"
+				  structure Machineutils = Decalphautils
 				  structure Callconv = Callconv
 				  structure Procalloc = Chaitin
 				  structure Printutils = Printutils

@@ -104,10 +104,10 @@ struct
   datatype nilprim = 
       record of label list       (* record intro *)
     | select of label            (* record field selection *)
-    | inject
-    | inject_record
-    | project_sum
-    | project_sum_record of label
+    | inject of TilWord32.word
+    | inject_record of TilWord32.word
+    | project_sum of TilWord32.word
+    | project_sum_record of TilWord32.word * label
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
     | roll | unroll              (* coerce to/from recursive type *) 

@@ -1,4 +1,4 @@
-(*$import Ast Env SortedList *)
+(*$import Ast Symbol SortedList *)
 
 structure FreeTypeVars =
 struct

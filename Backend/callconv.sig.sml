@@ -1,4 +1,4 @@
-(*$CALLCONV: MACHINE *)
+(*$import  MACHINE *)
 
 signature CALLCONV =
 sig

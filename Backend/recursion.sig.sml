@@ -1,4 +1,4 @@
-(*$RECURSION : RTL *)
+(*$import RTL *)
 
 signature RECURSION =
 sig

@@ -1,3 +1,4 @@
+(*$import RTL *)
 signature MACHINE =
   sig
     structure Rtl : RTL
@@ -10,6 +11,11 @@ signature MACHINE =
     datatype align    = LONG (* 4 bytes *)
                       | QUAD (* 8 bytes *)
                       | OCTA (* 16 bytes *)
+
+   structure Labelmap : ORD_MAP where type Key.ord_key = loclabel
+   structure Regmap   : ORD_MAP where type Key.ord_key = register
+   structure Regset   : ORD_SET where type Key.ord_key = register
+
     type specific_instruction
     datatype stacklocation = CALLER_FRAME_ARG of int
                            | THIS_FRAME_ARG of int

@@ -1,7 +1,8 @@
 signature ELABORATOR =
  sig
 
-   type sbnd and context_entry and context
+include LINKIL
+(*   type sbnd and context_entry and context
    type filepos = SourceMap.charpos -> string * int * int 
 
    (* Contexts *)
@@ -17,6 +18,6 @@ signature ELABORATOR =
    val elab_dec : context * filepos * Ast.dec -> ((sbnd option * context_entry) list * context) option
    val elab_dec_constrained : context * filepos * Ast.dec * filepos * Ast.spec list -> 
                               ((sbnd option * context_entry) list * context) option
-   
+*)   
  end
    

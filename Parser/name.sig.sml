@@ -1,4 +1,4 @@
-(*$import Env HashTable ORD_SET ORD_MAP *)
+(*$import Symbol HashTable ORD_SET ORD_MAP *)
 
 signature NAME = 
   sig

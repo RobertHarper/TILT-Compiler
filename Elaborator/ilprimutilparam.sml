@@ -33,8 +33,8 @@ functor IlPrimUtilParam(structure Il : IL)
 	val con_false = CON_SUM{noncarriers = 2,
 			       carrier = CON_TUPLE_INJECT[],
 			       special = SOME 1}
-	val false_exp = INJ{sumtype=con_false,inject=NONE}
-	val true_exp = INJ{sumtype=con_true,inject=NONE}
+	val false_exp = INJ{sumtype=con_bool,field=0,inject=NONE}
+	val true_exp = INJ{sumtype=con_bool,field=1,inject=NONE}
 	    
 	fun con_tuple conlist = CON_RECORD(Listops.mapcount (fn (i,c) => 
 							     (generate_tuple_label (i+1),c)) conlist)

@@ -222,7 +222,7 @@ functor Datatype(structure Il : IL
 	    fun mk_help (type_minst, 
 			 type_i : con, 
 			 constr_con_i : con option list,
-			 constr_ssum_i : con list) = 
+			 constr_sum_i : con) =
 		let 
 		    val var = fresh_named_var "injectee"
 		    val (nca,cons) = conopts_split constr_con_i
@@ -233,14 +233,15 @@ functor Datatype(structure Il : IL
 		    val mutype = if is_monomorphic
 				     then type_i
 				 else CON_APP(type_i, tyvar_mproj)
-		    fun help (j, constr_con_ij_opt, constr_ssum_ij) = 
-			let val constr_ssum = if (is_monomorphic)
-						  then constr_ssum_ij
-					      else CON_APP(constr_ssum_ij, tyvar_mproj)
+		    fun help (j, constr_con_ij_opt) =
+			let val constr_sum = if (is_monomorphic)
+						  then constr_sum_i
+					      else CON_APP(constr_sum_i, tyvar_mproj)
 			in  case constr_con_ij_opt of
 			    NONE =>
 				(roll(type_minst,
-				      INJ{sumtype = constr_ssum,
+				      INJ{sumtype = constr_sum,
+					  field = j,
 					  inject = NONE}), mutype)
 			  | SOME constr_con_ij =>
 				(make_total_lambda(var,
@@ -249,10 +250,11 @@ functor Datatype(structure Il : IL
 					   else CON_APP(constr_con_ij, tyvar_mproj),
 					   mutype,
 					   roll(type_minst,
-						INJ{sumtype = constr_ssum,
+						INJ{sumtype = constr_sum,
+						    field = j,
 						    inject = SOME (VAR var)})))
 			end
-		in map2count help (constr_con_i, constr_ssum_i)
+		in mapcount help constr_con_i
 		end
 	    val top_type_inline = top_type_tyvar
 	    val type_inline = if num_datatype = 1
@@ -267,8 +269,8 @@ functor Datatype(structure Il : IL
 					      then constr_rf
 					    else mapmap (Util.mapopt CON_VAR) constr_con_vars,
 					  if transparent 
-					      then constr_rf_ssum
-					  else mapmap CON_VAR constr_ssum_vars)
+					      then constr_rf_sum
+					  else map CON_VAR constr_sum_vars)
 	end
 
 	
@@ -543,7 +545,7 @@ functor Datatype(structure Il : IL
 				@ (flatten constr_con_sbnd_sdecs) 
 				@ constr_sumarg_sbnd_sdecs
 				@ constr_sum_sbnd_sdecs
-				@ (flatten constr_ssum_sbnd_sdecs)
+(*				@ (flatten constr_ssum_sbnd_sdecs) *)
 				@ eq_sbnd_sdecs 
 				@ components)
       in  final_sbnd_sdecs
@@ -723,11 +725,13 @@ functor Datatype(structure Il : IL
 		(constr_sum_labs,constr_sum_lab,constr_sum_var)
 	    val constr_sumarg_sbndsdec = copy_type "constr_sumarg" 
 		(constr_sumarg_labs,constr_sumarg_lab,constr_sumarg_var)
+(*
 	    val constr_ssum_sbndsdecs = map3 (copy_type "constr_ssum") 
 		(constr_ssum_labs,constr_ssum_lab,constr_ssum_var)
-
+*)
 	in [type_sbndsdec] @ constr_con_sbnd_sdecs 
-	    @ [constr_sumarg_sbndsdec,constr_sum_sbndsdec] @ constr_ssum_sbndsdecs
+	    @ [constr_sumarg_sbndsdec,constr_sum_sbndsdec]
+(*  @ constr_ssum_sbndsdecs *)
 	      @ eq_sbndsdec @ constr_sbndsdec
 	end
     
@@ -818,26 +822,33 @@ functor Datatype(structure Il : IL
 			   | SIGNAT_INLINE_STRUCTURE {abs_sig = sdecs,...} => sdecs
 			   | _ => raise NotConstructor)
 
+
 (*
 	    val _ = case sdecs of
 		(SDEC(internal_type_lab,DEC_CON(_,_,SOME c)))::_ => ()
 	      | _ => (print "datatype_constr_lookup failed with sdecs = \n";
 		      pp_sdecs sdecs; print "\n")
 *)
+	    val _ = if (length sdecs < 2) then raise NotConstructor else ()
 	    val internal_type_sdec:: expose_sdec :: _ = sdecs
 	    val (internal_type_lab,type_path) = 
 		(case internal_type_sdec of
 		     (SDEC(internal_type_lab,DEC_CON(_,_,SOME c))) =>
-			 (internal_type_lab, con2path c)
+			 (internal_type_lab, (case (con2path c) of
+						  NONE => CON c
+						| SOME p => PATH p))
 		   | _ => raise NotConstructor)
 	    val sum_path =
 		(case expose_sdec of
-		     SDEC(_,DEC_EXP(_,CON_ARROW(_,c,_,_))) => (PATH(con2path c)
-							       handle _ => CON c)
+		     SDEC(_,DEC_EXP(_,CON_ARROW(_,c,_,_))) => (case con2path c of
+								   SOME p => PATH p
+								 | NONE => CON c)
 		   | SDEC(_,DEC_MOD(_,SIGNAT_FUNCTOR(_,_,SIGNAT_STRUCTURE(_,sdecs),_))) =>
 			 (case sdecs of
 			      [SDEC(_,DEC_EXP(_,CON_ARROW(_,CON_APP(c,_),_,_)))] => 
-	                                 (PATH(con2path c) handle _ => CON c)
+				  (case con2path c of
+				       SOME p => PATH p
+				     | NONE => CON c)
 			    | _ => raise NotConstructor)
 		   | _ => raise NotConstructor)
 
@@ -848,9 +859,10 @@ functor Datatype(structure Il : IL
 
 	    local
 		val sum_lab = internal_label((Name.label2name type_lab) ^ "_sum")
-		val ssum_lab = map0count (fn n => 
+(*		val ssum_lab = map0count (fn n => 
 					   internal_label(Name.label2name type_lab ^ "_sum"
 							   ^ (Int.toString n))) num_constr
+*)
 		fun get_path lab = 
 		    let val _ = if (!debug)
 				    then (print "get_path working on lab = "; 
@@ -874,8 +886,9 @@ functor Datatype(structure Il : IL
 (* this path could get shadowed so we can't get the type_path this way *)
 (*		val type_path = get_path type_lab *)
 (*		val sum_path = get_path sum_lab *)
-		val ssum_path = map get_path ssum_lab
+(*		val ssum_path = map get_path ssum_lab *)
 	    end
+
 
 
 	in (case sdecs of
@@ -885,7 +898,7 @@ functor Datatype(structure Il : IL
 			then {name = type_lab,
 			      is_const = pc_is_const pc,
 			      datatype_path = datatype_path,
-			      ssum_path = ssum_path,
+(*			      ssum_path = ssum_path, *)
 			      sum_path = sum_path,
 			      type_path = type_path,
 			      datatype_sig = data_sig}
@@ -948,14 +961,6 @@ functor Datatype(structure Il : IL
 			| _ => bad())
        end
 
-   fun Context_Lookup_Path(ctxt,SIMPLE_PATH v) = 
-          (case Context_Lookup'(ctxt,v) of
-	       NONE => NONE
-	     | SOME (lab,pc) => SOME(SIMPLE_PATH v,pc))
-     | Context_Lookup_Path(ctxt,COMPOUND_PATH (v,labs)) = 
-          (case Context_Lookup'(ctxt,v) of
-	       NONE => NONE
-	     | SOME (lab,_) => Context_Lookup_Labels(ctxt,lab::labs))
 	       
  fun instantiate_datatype_signature (context : Il.context,
 				     path : Ast.path,
@@ -963,15 +968,17 @@ functor Datatype(structure Il : IL
 						 Il.sbnd list * Il.sdecs * Il.con list)) 
      : {instantiated_type : IlContext.Il.con,
 	instantiated_sumtype : IlContext.Il.con,
-	instantiated_special_sumtype : IlContext.Il.con list,
 	arms : {name : IlContext.Il.label, arg_type : IlContext.Il.con option} list,
 	expose_exp : IlContext.Il.exp} =
 
    let 
 
-       val SOME {sum_path, type_path, ssum_path,
+       val SOME {sum_path, type_path, 
+(*		 ssum_path, *)
 		 datatype_path, datatype_sig, ...} = constr_lookup context path
        val {name,var_sdecs_poly,arm_types} = destructure_datatype_signature datatype_sig
+
+
 
        val sbnds_sdecs_cons_opt =
 	   (case (var_sdecs_poly) of
@@ -991,16 +998,18 @@ functor Datatype(structure Il : IL
 	       else path2con path
 	   end
        
-       val tycon = help type_path
+       val tycon = (case type_path of
+			PATH p => help p
+		      | CON c => c)
        val sumtycon = (case sum_path of
 			   PATH p => help p
 			 | CON c => c)
-       val ssumtycon = map help ssum_path
-       val (ssumcon,sumcon,datacon) = (case sbnds_sdecs_cons_opt of
-					   NONE => (ssumtycon,sumtycon,tycon)
+(*       val ssumtycon = map help ssum_path *)
+       val ((* ssumcon, *)sumcon,datacon) = (case sbnds_sdecs_cons_opt of
+					   NONE => ((* ssumtycon, *) sumtycon,tycon)
 					 | SOME (_,_,cons) => 
 					       let val arg = con_tuple_inject cons
-					       in  (map (fn c => CON_APP(c,arg)) ssumtycon,
+					       in  ((* map (fn c => CON_APP(c,arg)) ssumtycon, *)
 						    CON_APP(sumtycon,arg), 
 						    CON_APP(tycon, arg))
 					       end)
@@ -1016,6 +1025,8 @@ functor Datatype(structure Il : IL
 		       | _ => MODULE_PROJECT(MOD_APP(m,MOD_STRUCTURE sbnds),it_lab))
 	      | _ => error "cannot construct expose_exp")
 
+
+
      fun getconstr_namepatconoption {name,arg_type} =
 	 {name=name,
 	  arg_type=(case (arg_type,var_sdecs_poly,sbnds_sdecs_cons_opt) of
@@ -1028,7 +1039,7 @@ functor Datatype(structure Il : IL
 	 
    in  {instantiated_type = datacon, 
 	instantiated_sumtype = sumcon, 
-	instantiated_special_sumtype = ssumcon, 
+(*	instantiated_special_sumtype = ssumcon,  *)
 	arms = map getconstr_namepatconoption arm_types,
 	expose_exp = expose_exp}
    end

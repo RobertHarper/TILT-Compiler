@@ -1,12 +1,22 @@
+(*$import PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM *)
 functor Rtltoasm (val commentHeader : string
-		  structure Printutils : PRINTUTILS
+		  structure Machineutils : MACHINEUTILS
 		  structure Callconv : CALLCONV
+		  structure Printutils : PRINTUTILS
 		  structure Procalloc : PROCALLOC
 		  structure Recursion : RECURSION
 		  structure Toasm : TOASM
-		  sharing Printutils.Machineutils.Machine
-		    = Callconv.Machine
-		    
+
+		  sharing Printutils.Machine 
+		      = Machineutils.Machine
+		      = Callconv.Machine
+		      = Procalloc.Machine
+		      = Procalloc.Bblock.Machine
+		      = Procalloc.Tracetable.Machine
+		      = Toasm.Machine
+(* should not be needed *) = Printutils.Bblock.Machine = Printutils.Tracetable.Machine
+
+
 		  sharing Printutils.Bblock 
 		    = Procalloc.Bblock
 		    = Toasm.Bblock
@@ -15,13 +25,13 @@ functor Rtltoasm (val commentHeader : string
 		    = Procalloc.Tracetable 
 		    = Toasm.Tracetable 
 
-		  sharing Recursion.Rtl = Printutils.Machineutils.Machine.Rtl 
-		    ) : RTLTOASM  =
+		  sharing Recursion.Rtl = Printutils.Machine.Rtl = Toasm.Rtl)
+		     :> RTLTOASM  where Rtl = Recursion.Rtl =
 struct
 
-   structure Rtl = Printutils.Machineutils.Machine.Rtl
+   structure Rtl = Printutils.Machine.Rtl
 
-   open Callconv Printutils Printutils.Machineutils Rtl
+   open Callconv Printutils Machineutils Rtl
    open Machine
 
    fun flatten arg = foldr (op @) [] arg

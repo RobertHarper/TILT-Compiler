@@ -21,6 +21,22 @@ sig
       val var'n'fix : raw_symbol -> symbol * symbol
 end
 
+signature INTSTRMAPV = 
+sig 
+  type 'a intstrmap
+  val new : (int * string * '_a) list -> '_a intstrmap
+
+  (* in case of duplicates, the element towards the head of the 
+   * list is discarded,and the one towards the tail is kept.
+   *)
+  val elems : 'a intstrmap -> int
+  val map : 'a intstrmap -> int * string -> 'a
+  val app : (int * string * 'a -> unit) -> 'a intstrmap -> unit
+  val transform : ('a -> 'b) -> 'a intstrmap -> 'b intstrmap
+  val fold : ((int*string*'a)*'b->'b)->'b->'a intstrmap->'b
+
+end (* signature INTSTRMAP *)
+
 signature ENV =
 sig
   structure Symbol : SYMBOL
@@ -53,11 +69,14 @@ end (* signature ENV *)
 
 (*
  * $Log$
-# Revision 1.2  98/02/01  01:27:57  pscheng
+# Revision 1.3  98/02/15  22:43:22  pscheng
+# bootstrapping changes
+# 
+# Revision 1.2  1998/02/01  01:27:57  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places
 #   Split up files into signature and code
-# 
+#
 # Revision 1.1  1998/01/21  20:40:12  pscheng
 # moved the .sig files to .sig.sml file
 #

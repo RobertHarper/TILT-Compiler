@@ -47,10 +47,12 @@ functor Il(structure Prim : PRIM
                  | ROLL    of con * exp
                  | UNROLL  of con * con * exp
                  | INJ     of {sumtype : con,
+			       field : int,
 			       inject : exp option}
                  (* case over sum types of exp with arms and defaults*)
                  | CASE    of {sumtype : con,
 			       arg : exp,
+			       bound : var,
 			       arms : (exp option) list,
 			       tipe : con,
 			       default : exp option}

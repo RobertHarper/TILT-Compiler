@@ -1,8 +1,9 @@
+(*$import DECALPHA MACHINEUTILS CALLCONV *)
 functor DecalphaCallconv(structure Decalpha : DECALPHA
 			 structure Machineutils : MACHINEUTILS 	
 			 (* where Machine = Decalpha  this break 109.30 so we must use sharing *)
 			 sharing Machineutils.Machine = Decalpha)
-    : CALLCONV =
+    :> CALLCONV where Machine = Decalpha =
 struct
 
   structure Machine = Machineutils.Machine

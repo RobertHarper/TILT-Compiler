@@ -98,8 +98,8 @@ functor IlUtil(structure Il : IL
     val con_true =  CON_SUM{noncarriers = 2,
 			    carrier = CON_TUPLE_INJECT[],
 			    special = SOME 1}
-    val false_exp = INJ{sumtype=con_false,inject=NONE}
-    val true_exp = INJ{sumtype=con_true,inject=NONE}
+    val false_exp = INJ{sumtype=con_bool,field=0,inject=NONE}
+    val true_exp = INJ{sumtype=con_bool,field=1,inject=NONE}
     fun make_lambda_help (a,var,con,rescon,e) 
       : exp * con = let val var' = fresh_var()
 			val fbnd = FBND(var',var,con,rescon,e)
@@ -108,7 +108,7 @@ functor IlUtil(structure Il : IL
     fun make_total_lambda (var,con,rescon,e) = make_lambda_help(TOTAL,var,con,rescon,e)
     fun make_lambda (var,con,rescon,e) = make_lambda_help(PARTIAL,var,con,rescon,e)
     fun make_ifthenelse(e1,e2,e3,c) : exp = 
-	CASE{sumtype=con_bool,arg=e1,
+	CASE{sumtype=con_bool,arg=e1,bound=fresh_named_var "unused",
 	     arms=[SOME e3,SOME e2],default=NONE,tipe=c}
     fun make_seq eclist =
 	let fun loop _ [] = error "make_seq given empty list"
@@ -181,28 +181,22 @@ functor IlUtil(structure Il : IL
     val path2exp = path2obj (VAR, MODULE_PROJECT)
 
 
-    local fun loop (MOD_VAR v) [] = SIMPLE_PATH v
-	    | loop (MOD_VAR v) acc = COMPOUND_PATH(v,acc)
+    local fun loop (MOD_VAR v) [] = SOME(SIMPLE_PATH v)
+	    | loop (MOD_VAR v) acc = SOME(COMPOUND_PATH(v,acc))
 	    | loop (MOD_PROJECT (m,l)) acc = loop m (l::acc)
-	    | loop m _ = (print "mod was: "; pp_mod m;
-			  print "\n";
-			  error "mod2path called on non-projection")
+	    | loop m _ = NONE
     in    
-	fun mod2path m = loop m []
+	fun mod2path (m : mod) = loop m []
 	fun exp2path (e : exp) = 
-	    case e of
-		VAR v => SIMPLE_PATH v
-	      | MODULE_PROJECT (m,l) => loop (MOD_PROJECT(m,l)) []
-	      | _ => (print "exp was: "; pp_exp e;
-		      print "\n";
-		      error "exp2path called on non-projection")
+	    (case e of
+		 VAR v => SOME(SIMPLE_PATH v)
+	       | MODULE_PROJECT (m,l) => mod2path (MOD_PROJECT(m,l))
+	       | _ => NONE)
 	fun con2path (c : con) =
-	    case c of
-		CON_VAR v => SIMPLE_PATH v
-	      | CON_MODULE_PROJECT (m,l) => loop (MOD_PROJECT(m,l)) []
-	      | _ => (print "con was: "; pp_con c;
-		      print "\n";
-		      error "con2path called on non-projection")
+	    (case c of
+		CON_VAR v => SOME(SIMPLE_PATH v)
+	      | CON_MODULE_PROJECT (m,l) => mod2path(MOD_PROJECT(m,l))
+	      | _ => NONE)
     end
 
 
@@ -275,14 +269,18 @@ functor IlUtil(structure Il : IL
 	   | EXN_INJECT (s,e1,e2) => EXN_INJECT(s,self e1, self e2)
 	   | ROLL (c,e) => ROLL(f_con state c, self e)
 	   | UNROLL (c1,c2,e) => UNROLL(f_con state c1, f_con state c2, self e)
-	   | INJ {sumtype,inject} => INJ{sumtype = f_con state sumtype,
-					 inject = Util.mapopt self inject}
-	   | CASE{sumtype,arg,arms,default,tipe} =>
-		 CASE{sumtype = f_con state sumtype,
-		      arg = self arg,
-		      arms = map (Util.mapopt self) arms,
-		      default = Util.mapopt self default,
-		      tipe = f_con state tipe}
+	   | INJ {sumtype,field,inject} => INJ{sumtype = f_con state sumtype,
+					       field=field,
+					       inject = Util.mapopt self inject}
+	   | CASE{sumtype,bound,arg,arms,default,tipe} =>
+		let val state' = add_var(state,bound)
+		in  CASE{sumtype = f_con state sumtype,
+			 arg = self arg,
+			 bound = bound,
+			 arms = map (Util.mapopt (f_exp state')) arms,
+			 default = Util.mapopt (f_exp state') default,
+			 tipe = f_con state tipe}
+		end
 	   | EXN_CASE{arg,arms,default,tipe} => 
 		 let fun help (e1,c,e2) = (self e1, f_con state c, self e2)
 		     val default' = Util.mapopt self default

@@ -1,4 +1,5 @@
-(*$import ML_TOKENS ErrorMsg TilWord64 TokenTable *)
+(*$import ML_TOKENS ErrorMsg TilWord64 TokenTable Vector *)
+
 functor MLLexFun(structure Tokens : ML_TOKENS)=
    struct
     structure UserDeclarations =
@@ -8,9 +9,12 @@ functor MLLexFun(structure Tokens : ML_TOKENS)=
  * Copyright 1989 by AT&T Bell Laboratories
  *
  * $Log$
-# Revision 1.6  98/01/21  20:40:32  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.7  98/02/15  22:43:49  pscheng
+# bootstrapping changes
 # 
+# Revision 1.6  1998/01/21  20:40:32  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.5  1997/10/21  21:00:37  pscheng
 # got rid of int inf
 #

@@ -29,12 +29,12 @@ signature ILUTIL =
 
     (* coercions: paths to/from exp/mods/cons *)
     val join_path_labels : Il.path * label list -> Il.path
-    val path2mod : Il.path -> mod
+    val path2mod : Il.path -> mod 
     val path2con : Il.path -> con
     val path2exp : Il.path -> exp
-    val mod2path : mod -> Il.path
-    val exp2path : exp -> Il.path
-    val con2path : con -> Il.path
+    val mod2path : mod -> Il.path option
+    val exp2path : exp -> Il.path option
+    val con2path : con -> Il.path option
     val eq_path  : Il.path * Il.path -> bool
 
     (* error functions *)

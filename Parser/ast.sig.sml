@@ -1,4 +1,4 @@
-(*$import TopLevel Env TilWord64 *)
+(*$import Fixity TopLevel Symbol TilWord64 *)
 
 (* Copyright 1992 by AT&T Bell Laboratories 
  *
@@ -6,18 +6,18 @@
 
 signature AST =
 sig
-  type fixity
+  type fixity = Fixity.fixity
   type symbol  = Symbol.symbol 
   val infixleft : int -> fixity
   val infixright : int -> fixity
   type literal = TilWord64.word
 
   (* to mark positions in files *)
-  type srcpos  (* = int *)
-  type region  (* = srcpos * srcpos *)
+  type srcpos  = int 
+  type region  = srcpos * srcpos 
   (* symbolic path (SymPath.spath) *)
-  type path
-  type 'a fixitem (* = {item: 'a, fixity: symbol option, region: region} *)
+  type path = symbol list
+  type 'a fixitem = {item: 'a, fixity: symbol option, region: region} 
 
   datatype 'a sigConst
     = NoSig
@@ -233,9 +233,12 @@ end (* signature AST *)
 
 (*
  * $Log$
-# Revision 1.1  98/01/21  20:40:03  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.2  98/02/15  22:43:11  pscheng
+# bootstrapping changes
 # 
+# Revision 1.1  1998/01/21  20:40:03  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.5  1997/10/21  21:00:21  pscheng
 # got rid of int inf
 #
