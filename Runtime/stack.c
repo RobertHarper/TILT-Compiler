@@ -21,7 +21,6 @@ int useGenStack = 0;
 
 
 static mem_t GCTABLE_BEGIN_ADDR = &GCTABLE_BEGIN_VAL;
-static mem_t GCTABLE_END_ADDR = &GCTABLE_END_VAL;
 static mem_t GLOBALS_BEGIN_ADDR = &GLOBALS_BEGIN_VAL;
 static mem_t GLOBALS_END_ADDR = &GLOBALS_END_VAL;
 static mem_t TRACE_GLOBALS_BEGIN_ADDR = &TRACE_GLOBALS_BEGIN_VAL;
@@ -102,17 +101,16 @@ void stack_init(void)
 
   for (mi=0; mi<module_count; mi++) {
     int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
-    int *endpos = (int *)(GCTABLE_END_ADDR[mi]);
     int *curpos = startpos; 
     if (debugStack) 
-      printf("Scanning GC tables of module %d: %d to %d\n", mi, startpos, endpos);
-    while (curpos < endpos) {
+      printf("Scanning GC tables of module %d at %d\n", mi, startpos);
+    while (*curpos) {
       int entrySize = GET_ENTRYSIZE(((Callinfo_t *)curpos)->size0);
       count++;
       assert(entrySize != 0);
       curpos += entrySize;
     }
-    GCTableSize += (long)endpos - (long)startpos;
+    GCTableSize += (unsigned long)curpos - (unsigned long)startpos;
     SMLGlobalSize += (long)(GLOBALS_END_ADDR[mi]) - 
       (long)(GLOBALS_BEGIN_ADDR[mi]);
     MutableTableSize += (long)(TRACE_GLOBALS_END_ADDR[mi]) - 
@@ -126,9 +124,8 @@ void stack_init(void)
   CallinfoHashTable = CreateHashTable(2*count);
   for (mi=0; mi<module_count; mi++) {
     int *startpos = (int *)(GCTABLE_BEGIN_ADDR[mi]);
-    int *endpos = (int *)(GCTABLE_END_ADDR[mi]);
     int *curpos = startpos; 
-    while (curpos < endpos) {
+    while (*curpos) {
       e.key = (unsigned long)(*curpos);
       e.data = (void *)curpos;
       assert(IsText((ptr_t) e.key));
