@@ -522,8 +522,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		   print ("  Count_global_rec: " ^ (Int.toString (!Count_global_rec)) ^ "\n");
 		   print "\n")
 	 else ();
-	 [COMMENT "endgcinfo with filler for alignment",
-	  DLABEL(ML_EXTERN_LABEL (name^"_GCTABLE_END_VAL")),
+	 [COMMENT "mark end of GC table",
 	  INT32 wzero])
 
   end
