@@ -15,6 +15,7 @@ These may may be changed by the user.
       val Skip   : int ref
 
       val Pagewidth     : int ref
+      val DoDepth       : bool ref
 
       (* flag specifying whether bailouts should occur when page too narrow *)
       val Bailout       : bool ref

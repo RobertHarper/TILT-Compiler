@@ -16,7 +16,8 @@ struct
     val high_mask = 0wxffff0000 : word
     val most_neg = 0wx80000000 : word
     val error = fn s => Util.error "tilword32.sml" s
-	
+    val ten = 0w10 : word
+
     (* ------ EQUALITY OPERATIONS --------- *)
     fun equal(x:word,y) = x = y
     fun nequal(x:word,y) = not(equal(x,y))
@@ -188,7 +189,22 @@ struct
 	  val chars = map help pos
       in implode chars
       end
-  fun toDecimalString w = Word32.toString w
+  fun toDecimalString w =
+      let
+	  val is_neg = sign w = ~1
+	  val (is_least,w) = if (equal(w,most_neg)) 
+				 then (true,absolute(splus(w,one))) else (false,absolute w)
+	  fun loop w = if (equal(w,zero)) then []
+		       else let val q = udiv(w,ten)
+				val r = umod(w,ten)
+				val digit = chr(ord #"0" + (toInt r))
+			    in digit :: (loop q)
+			    end
+	  val res = if (equal(w,zero)) then [#"0"] else rev(loop w)
+      in
+	  implode (if is_neg then #"-"::res else res)
+      end
+
 
 (*
   val uwordToString = fn (x:word) => Word32.toString x

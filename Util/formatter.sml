@@ -14,7 +14,7 @@
   with the formatting and printing routines.}
 %************************************************************************
 *)
-structure Formatter :> FORMATTER =
+structure Formatter (* :> FORMATTER *) =
    struct
 
 fun fold f l b = foldr f b l
@@ -26,6 +26,7 @@ fun fold f l b = foldr f b l
       and Skip    = ref 1
       and Blanks  = ref 1
       and Pagewidth = ref 80
+      val DoDepth   = ref true
 
       val Bailout = ref true
       val BailoutIndent = ref 0
@@ -52,29 +53,34 @@ The {\tt Spmod} function is used when {\tt Bailout} is active.
 (*        fun Spmod n = Spaces (n mod (!Pagewidth)) *)
 	fun DepthString d = if (d > 10) then Spaces 10 else (Spaces' (10-d) (Repeat "*" "" d))
 	fun Spmod (d,n) = 
-	    if (n < !Pagewidth) then Spaces n
-	       else 
-		   let
-		val depth = DepthString d
-		       val q = n div (!Pagewidth)
-		       val r = n mod (!Pagewidth)
-		       val tab = "+" ^ (Int.toString q)
-		       val sp = Spaces(r + (5 - size tab))
-		   in depth ^ tab ^ sp
-		   end
+	    if (!DoDepth)
+		then if (n < !Pagewidth) then Spaces n
+		     else 
+			 let
+			     val depth = DepthString d
+			     val q = n div (!Pagewidth)
+			     val r = n mod (!Pagewidth)
+			     val tab = "+" ^ (Int.toString q)
+			     val sp = Spaces(r + (5 - size tab))
+			 in depth ^ tab ^ sp
+			 end
+	    else Spaces (n mod (!Pagewidth)) 
 	fun Spmod' (d,n) = 
-	    let 
-		val depth = DepthString d
-	    in if (n < !Pagewidth) then depth ^ (Spaces n)
-	       else 
-		   let
-		       val q = n div (!Pagewidth)
-		       val r = n mod (!Pagewidth)
-		       val tab = "+" ^ (Int.toString q)
-		       val sp = Spaces(r + (5 - size tab))
-		   in depth ^ tab ^ sp
-		   end
-	    end
+	    if (!DoDepth)
+		then 
+		    let 
+			val depth = DepthString d
+		    in if (n < !Pagewidth) then depth ^ (Spaces n)
+		       else 
+			   let
+			       val q = n div (!Pagewidth)
+			       val r = n mod (!Pagewidth)
+			       val tab = "+" ^ (Int.toString q)
+			       val sp = Spaces(r + (5 - size tab))
+			   in depth ^ tab ^ sp
+			   end
+		    end
+	    else Spaces (n mod (!Pagewidth)) 
          val Nl = Newlines (* return a number of newlines *)
         fun Np() = "\n\012\n" (* CTRL_L == "\012" *)
       end 
