@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel LISTOPS List Util ListPair Substring StringCvt Int *)
+(*$import LISTOPS List Util ListPair Substring StringCvt Int *)
 
 structure Listops :> LISTOPS = 
   struct
@@ -49,6 +49,10 @@ structure Listops :> LISTOPS =
 
     val all = List.all
 
+    (* nb. NOT the same as ListPair.all, because
+       (ListPair.all op= ([], [1])) = true,
+       but (all2 op= ([], [1])) = false
+      *)
     fun all2 pred = 
       let
 	fun check ([],[]) = true

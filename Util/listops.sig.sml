@@ -1,6 +1,6 @@
-(*$import Prelude TopLevel *)
+(*$import *)
 
-(*Non IL specific utility routines *)
+(* List utility routines not specific to any part of the compiler *)
 signature LISTOPS = 
   sig
 
@@ -18,6 +18,7 @@ signature LISTOPS =
     val unzip4 : ('a * 'b * 'c * 'd) list -> ('a list * 'b list * 'c list * 'd list)
     val unzip5 : ('a * 'b * 'c * 'd * 'e) list -> ('a list * 'b list * 'c list * 'd list * 'e list)
 
+    (* checks that the lists are the same length, when applicable *)
     val all : ('a -> bool) -> 'a list -> bool
     val all2 : (('a * 'b) -> bool) -> ('a list * 'b list) -> bool
     val all3 : (('a * 'b *'c) -> bool) -> ('a list * 'b list * 'c list) -> bool
@@ -33,7 +34,13 @@ signature LISTOPS =
                 'a list * 'b list * 'c list * 'd list * 'e list * 'f list -> 'g list
     val mapmap    : ('a -> 'b) -> 'a list list -> 'b list list
     val mapmapmap    : ('a -> 'b) -> 'a list list list -> 'b list list list
+
+    (* map0count f n =
+       [f 0, f 1, ..., f (n - 1)] *)
     val map0count : (int -> 'a) -> int -> 'a list
+
+    (* mapcount f [l1, l2, ..., ln] =
+       [f (0, l1), f(1, l2), ..., f (n-1, ln)] *)
     val mapcount  : (int * 'a -> 'b) -> 'a list -> 'b list
     val map2count : (int * 'a * 'b -> 'c) -> 'a list * 'b list -> 'c list
     val map3count : (int * 'a * 'b * 'c -> 'd) -> 'a list * 'b list * 'c list -> 'd list
