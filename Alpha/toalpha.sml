@@ -36,7 +36,7 @@ struct
    open Machine
    open Core
 
-   val error = fn s => Util.error "alpha/trackstorage.sml" s
+   val error = fn s => Util.error "alpha/toalpha.sml" s
 
    (* Translate the two RTL register types into the single
       DECALPHA register type.  *)
