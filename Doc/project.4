@@ -1,0 +1,447 @@
+." NB Sentences should start on a new line.
+.de EX
+.if t .ft L
+.nf
+..
+.de EE
+.ft R
+.fi
+..
+.TH PROJECT 4
+.SH NAME
+project \- TILT project description files
+.SH DESCRIPTION
+.PP
+The project description file language has value, interface, and unit
+expressions; value, interface, and unit declarations; conditional
+declarations; and a file include mechanism.
+.SS Lexical structure
+.PP
+Project description files are written in the ASCII character set.
+A project description file is a sequence of reserved words,
+identifiers, and special constants.
+Whitespace and comments separate lexical items (except within string
+constants) and are otherwise ignored.
+The reserved words are
+.EX
+	$ ^ ( ) { } = S= B= < <= > >= : :: env true false if
+	then else not andalso orelse defined unit interface
+	compiled primitive val include #if #elif #else #endif
+	#error
+.EE
+.PP
+An identifier is any SML alphanumeric identifier that is not a
+reserved word.
+A special constant
+.I scon
+is an SML string constant or an SML integer constant.
+Whitespace is any sequence of space, tab, newline, carriage return,
+and form feed characters.
+Comments are as in SML.
+.PP
+Each identifier is classified as a variable
+.IR x ,
+a compilation unit name
+.IR U ,
+an interface name
+.IR I ,
+or an environment variable
+.IR X .
+These classes are disjoint; for example, it is possible to assign the
+same name to a unit and its interface.
+.SS Syntax
+.PP
+The syntax of value expressions
+.I ve
+is
+.EX
+	\fIid\fP	::=	unit \fIU\fP
+		|	interface \fII\fP
+		|	$ \fIx\fP
+		|	env \fIX\fP
+	\fIave\fP	::=	\fIscon\fP
+		|	$ \fIx\fP
+		|	env \fIX\fP
+		|	true
+		|	false
+		|	( \fIve\fP )
+	\fIve\fP	::=	\fIave\fP
+		|	\fIve\fP ^ \fIve\fP
+		|	if \fIve1\fP then \fIve2\fP else \fIve3\fP
+		|	not \fIve\fP
+		|	\fIve1\fP andalso \fIve2\fP
+		|	\fIve1\fP orelse \fIve2\fP
+		|	\fIve1\fP S= \fIve2\fP
+		|	\fIve1\fP B= \fIve2\fP
+		|	\fIve1\fP = \fIve2\fP
+		|	\fIve1\fP < \fIve2\fP
+		|	\fIve1\fP <= \fIve2\fP
+		|	\fIve1\fP > \fIve2\fP
+		|	\fIve1\fP >= \fIve2\fP
+		|	defined \fIid\fP
+		|	defined ( \fIid\fP )
+.EE
+.PP
+The following words are left associative and listed (by line) in order
+of increasing precedence:
+.EX
+	else
+	orelse
+	andalso
+	S= B= = < <= > >=
+	^
+.EE
+.PP
+The syntax of interface expressions
+.I ie
+is
+.EX
+	\fIuseq\fP	::=
+		|	\fIU\fP \fIuseq\fP
+	\fIopen\fP	::=	{ \fIuseq\fP }
+	\fIopen'\fP	::=
+		|	\fIopen\fP
+	\fIie\fP	::=	\fIve\fP \fIopen'\fP
+		|	compiled \fIve\fP \fIopen\fP
+		|	primitive
+		|	compiled
+.EE
+.PP
+The syntax of unit expressions
+.I ue
+is
+.EX
+	\fIasc\fP	::=	: \fII\fP
+	\fIasc'\fP	::=
+		|	\fIasc\fP
+	\fIue\fP	::=	\fIve\fP \fIopen'\fP \fIasc'\fP
+		|	compiled \fIopen\fP \fIasc\fP
+		|	compiled \fIve\fP \fIopen\fP \fIasc\fP
+		|	primitive \fIasc\fP
+.EE
+.PP
+The syntax of declarations
+.I dec
+is
+.EX
+	\fIcc\fP	::=
+		|	#else \fIdecs\fP
+		|	#elif \fIve\fP \fIdecs\fP \fIcc\fP
+	\fIdec\fP	::=	val \fIx\fP = \fIve\fP
+		|	interface \fII\fP = \fIie\fP
+		|	unit \fIU\fP = \fIue\fP
+		|	unit \fIU\fP : \fII\fP
+		|	unit \fIU\fP :: \fII\fP
+		|	include \fIve\fP
+		|	#if \fIve\fP \fIdecs\fP \fIcc\fP #endif
+		|	#error \fIve\fP
+		|	unit \fIU\fP \fIasc\fP = \fIve\fP \fIopen'\fP
+		|	unit \fIU\fP \fIasc\fP = compiled \fIopen\fP
+		|	unit \fIU\fP \fIasc\fP = compiled \fIve\fP \fIopen\fP
+	\fIdecs\fP	::=
+		|	\fIdec\fP \fIdecs\fP
+.EE
+.PP
+The last three forms of declarations are derived forms for
+(respectively) the declarations
+.EX
+	unit \fIU\fP = \fIve\fP \fIopen'\fP \fIasc\fP
+	unit \fIU\fP = compiled \fIopen\fP \fIasc\fP
+	unit \fIU\fP = compiled \fIve\fP \fIopen\fP \fIasc\fP
+.EE
+TILT accepts a list of project description files on the command line.
+The list
+.I file1 ...  filen
+is treated as a derived form for the decs
+.B include
+.I file1 ...
+.B include
+.IR filen .
+These derived forms are not discussed further.
+.SS Interface expressions
+.PP
+The first form of interface expression is called a source interface.
+The
+.I ve
+names an interface source file (see
+.IR tilt (1)).
+The optional list of unit identifiers specifies what units to open
+(and the order) when the source file is compiled.
+If the list is not present, then every unit declared to this point in
+the project description file is opened.
+.PP
+The second form of interface expression is called a pre-compiled
+interface.
+It is similar to a source interface except that TILT expects to find
+up-to-date compiled files and will complain if they do not exist.
+Pre-compiled interfaces are used by the project description files
+generated for libraries.
+.PP
+The remaining interface expressions are used by the Basis library
+implementation and are not described further.
+.SS Unit expressions
+.PP
+The first form of unit expression is called a source unit.
+The
+.I ve
+names an SML source file.
+The optional list of unit identifiers specifies what units to open
+(and the order) when the source file is compiled.
+If the list is not present, then every unit declared to this point in
+the project description file is opened.
+The optional interface identifier specifies an interface for the unit.
+When the unit is compiled, it will be opaquely sealed to its
+interface.
+Interface ascriptions are required for units that will be packed into
+libraries.
+.PP
+The second form of unit expression is called a compiled unit.
+TILT expects to find up-to-date compiled files and will complain if
+they do not exist.
+TILT assumes the compiled files are compatible with the ascribed
+interface.
+Compiled units are used by the project description files generated for
+libraries.
+.PP
+The third form of unit expression is called a pre-compiled unit.
+It is similar to a source unit except that TILT expects to find
+up-to-date compiled files and will complain if they do not exist.
+TILT assumes the compiled files are compatible with the ascribed
+interface.
+Pre-compiled units are used by the project description files generated
+for libraries if the compiler flag
+.B PackUnitSource
+is set to true.
+.PP
+The fourth form of unit expression is used by the Basis library
+implementation and is not described further.
+.SS Declarations
+.PP
+The first three forms of declaration bind value, interface, and
+unit identifiers.
+Unit identifiers bound to a unit expression are said to have an
+implementation.
+.PP
+The fourth form of declaration is called a separately compiled unit.
+Other units and interfaces can be compiled against
+.I U
+using the information in its interface
+.IR I .
+Separately compiled units can not be linked into executables because
+they have no implementation.
+.PP
+The fifth form of declaration is similar to a separately compiled unit
+except that when TILT is compiling for the (unfinished) Typed Assembly
+Language (TAL) x86 backend, it expects to find an up-to-date TAL
+interface for the unit and will complain if it does not exist.
+.PP
+The sixth form of declaration is an include declaration.
+The
+.I ve
+names the file to include.
+.PP
+The seventh form of declaration is a conditional declaration.
+Each
+.I ve
+is evaluated in turn until one of them evaluates to
+.B true
+and then the conditional is replaced by the corresponding
+.IR decs .
+If no
+.I ve
+is
+.BR true ,
+then the conditional is deleted.
+The entire conditional must be syntactically correct but
+unevaluated expressions and all unselected
+.I decs
+are otherwise ignored.
+.PP
+The eight form of declaration causes TILT to terminate with
+an error message containing
+.IR ve .
+.SS Basis library
+TILT makes the Basis library available by syntactically rewriting
+every non-basis project description file.  Each project description
+file is changed to include the compiled Basis library and each source
+unit and interface with a list of opened units is changed to
+open the Basis library units that define the standard top-level
+environment.
+.SS Static checks
+.PP
+TILT
+.I elaborates
+each project description file it encounters and creates an
+internal language project description.
+Elaboration ensures that each project description file is well-formed;
+that the internal language project description is well-formed;
+eliminates all value declarations, conditional declarations, and
+include declarations; eliminates redundant interface and unit
+declarations; and inserts missing lists of opened units.
+When a project description file is elaborated, its (new) unit and
+interface declarations are added to the internal language project
+description.
+.PP
+The internal language permits a list of unit and interface
+declarations.
+The only value expressions in the internal language are string
+constants representing file names.
+An internal language project description is well-formed if every
+identifier has exactly one declaration and no identifier is used
+before it is declared.
+.PP
+Project description files may refer to one another with
+.BR include .
+There may be no cycles.
+The order in which files are elaborated is important because it
+determines the order of unit declarations in the internal language
+project description which, in turn, determines the order of run-time
+effects in executables.
+If
+.I file
+includes
+.IR "file1 ... filen" ,
+then
+.I file1
+through
+.I filen
+are elaborated (in order) before
+.I file
+is elaborated.
+No file is elaborated twice.
+.PP
+Every project description file read by TILT must be well-formed.
+The balance of this section informally describes what this means.
+.PP
+All identifiers must be bound before they are used.
+The bindings for environment variables, predefined variables, and the
+Basis library unit and interface identifiers are not syntactically
+evident.
+.PP
+File names in project description files are in Unix syntax and
+relative paths are resolved relative to the directory containing the
+project description file.
+File names in a project description file are syntactically rewritten
+to a canonical form and these are compared to detect include cycles
+and to avoid elaborating the same file twice.
+.PP
+Value identifiers may not be redeclared.
+Unit identifiers may be redeclared provided every declaration ascribes
+an equivalent interface to the unit; at most one implementation is
+provided; and any implementation precedes any other declarations for
+the unit.
+Interface identifiers may be redeclared provided the interface
+expressions are equivalent.
+Source and pre-compiled interface expressions are equivalent if their
+file contents and lists of opened units are identical.
+These restrictions ensure that unit and interface names are definite
+references.
+.PP
+Value expressions are implicitly typed with types
+.BR bool ,
+.BR string ,
+and
+.BR int .
+The typing rules are straightforward and are not presented here.
+The value expressions in interface expressions, unit expressions,
+.B include
+declarations, and
+.B #error
+declarations must have type
+.BR string .
+The value expressions in conditional compilation declarations must
+have type
+.BR bool .
+The value expressions in value declarations can have any type.
+.PP
+The evaluation rules for value expressions are straightforward and not
+presented here.
+.BI $ x
+looks up a variable.
+.B env
+.I X
+looks up an environment variable and has type
+.BR string .
+.B ^
+(string concatenation),
+.BR true ,
+.BR false ,
+.BR "if then else" ,
+.BR andalso ,
+.BR orelse ,
+and
+.B not
+are similar to SML.
+.BR S= ,
+.BR B= ,
+and
+.B =
+test, respectively, string, boolean, and integer equality. 
+.BR < ,
+.BR <= ,
+.BR > ,
+and
+.BR >=
+compare integers.
+.B defined
+.I id
+has type
+.B bool
+and tests whether \fIid\fP is bound.
+.SS Predefined variables
+.PP
+The predefined variables are:
+.TP
+.B cputype : string
+The master's CPU type.
+Possible values are
+.BR sparc ,
+.BR alpha ,
+and
+.BR unsupported .
+.TP
+.B objtype : string
+The target CPU type.
+Possible values are
+.B sparc
+and
+.BR alpha .
+.TP
+.B target : string
+A combination of the target CPU type (as in
+.BR $objtype )
+and an optional word representing a few compiler flags which lead to
+incompatible object code.
+Sample values are
+.B sparc
+and
+.BR sparc-8 .
+.TP
+.B littleEndian : bool
+The target byte-order.
+.TP
+.B majorVersion : int
+.TP
+.B minorVersion : int
+.TP
+.B version : string
+TILT's version number; the string has the form
+.IR major.minor .
+.TP
+.B libdir : string
+Absolute path to a directory containing (at least) compiled Basis
+and SML/NJ libraries.
+.TP
+.B linking : bool
+.B true
+when TILT is creating an executable.
+.TP
+.B bootstrapping : bool
+.B true
+when the compiler flag
+.B Bootstrap
+is set to
+.BR true ;
+used to compile the Basis library.
+.SH SEE ALSO
+.IR tilt (1)
