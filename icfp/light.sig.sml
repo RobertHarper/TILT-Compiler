@@ -8,6 +8,6 @@ signature LIGHT =
       val toLight  : v3 * light -> v3 
 
       (*Light, position, direction: returns intensity *)
-      val illuminate : light * v3 * v3 -> real
+      val illuminate : light * v3 * v3 -> Eval.color
 
   end

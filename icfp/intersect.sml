@@ -1,5 +1,5 @@
 structure Intersect : INTERSECT = 
-  sig
+  struct
     type m4 = Matrix.m4
     type v4 = Matrix.v4
     type v3 = Matrix.v3
@@ -14,7 +14,8 @@ structure Intersect : INTERSECT =
 
     datatype result = ZERO | ONE of ans | TWO of ans * ans 
 
-    fun dummy _ = ZERO
+    fun dummy _ = raise Div
+
     val sphere   : m4 * v3 * v3 -> result = dummy
     val plane    : m4 * v3 * v3 -> result = dummy
     val cylinder : m4 * v3 * v3 -> result = dummy
