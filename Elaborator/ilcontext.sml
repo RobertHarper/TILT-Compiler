@@ -1,25 +1,66 @@
-(*$import List Int ILCONTEXT Il Util Name Listops Ppil Stats IlUtil Fixity Option *)
+(*
+	When a structure variable is looked up, its signature is
+	transformed and memoized.  The transformations are (deep)
+	reduction, local variable elimination, and selfification.
+	These transformations do not touch functor signatures.
+
+	Reduce reduces an arbitrary structure signature to an sdecs.
+	Reduce_sigvar reduces a signature of the form SIGNAT_VAR v to
+	an sdecs (which may contain signature variables) by looking up
+	v and recursing on the definition.  Reduce_sigof reduces a
+	signature of the form SIGNAT_OF(X) to an sdecs by looking up
+	and selfifying the signature of X.  Deep_reduce applies reduce
+	recursively so that any sub-structure signatures are also
+	sdecs.
+
+	Eliminate recursively eliminates non-binding occurrences of
+	local variables in an sdecs, replacing them with paths.  This
+	may be a bad idea but it is currently assumed by other parts
+	of the elaborator.
+
+	Selfify recursively applies the HS self rules.
+
+	These transformations use local variable substitutions (lvs)
+	to account for local variables; these are substitutions from
+	local variables to bound paths.
+
+	Several of these functions return a boolean to indicate
+	whether the result comes from the memo table.  This enables
+	some shortcuts and may be a premature optimization.  (I
+	measured the real time needed to elaborate the Basis using
+	time(1) with "tilt -fUptoElaborate -b" on a 650MHz Pentium
+	III.  The following code averaged (four runs) 19.08 seconds.
+	A simpler version of the code that did not use most of the
+	shortcuts and did not pass and test the booleans averaged
+	(three runs) 19.71 seconds.)
+*)
 
 structure IlContext :> ILCONTEXT =
 struct
 
     open Il Util Name Listops Ppil IlUtil
     type fixity = Fixity.fixity
-	
+
     val error = fn s => error "ilcontext.sml" s
-	
+
+    val IlcontextDiag = Stats.ff("IlcontextDiag")
+    fun msg str = if (!IlcontextDiag) then print str else ()
+
     val debug = Stats.ff("IlcontextDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
-    val IlcontextChecks = Stats.ff "IlcontextChecks"
+    val IlcontextChecks = Stats.tt "IlcontextChecks"
     fun sanitycheck t = if (!IlcontextChecks) then (t(); ()) else ()
-	    
+
     (* Setting this to true currently does not work.  Once it does, we
        should kill off the "false" code and the flag. *)
     val NoOpenInternalPaths = Stats.ff "NoOpenInternalPaths" (* XXX *)
-	
-    (* ------ Type equivalence needed to ensure overloading resolvable by distinct types ------- *)
-    local 
+
+    (*
+	Type equivalence is needed to ensure overloading resolvable by
+	distinct types.
+    *)
+    local
 	val Ceq_con = ref (NONE : (context * con * con -> bool) option)
 	fun eq_con arg = let val SOME eq_con = !Ceq_con
 			 in  eq_con arg
@@ -29,7 +70,7 @@ struct
 	fun add ctxt (exp1, exp2) = Listops.list_sum_eq(eq ctxt, exp1, exp2)
 	fun expanded f (o1, o2) = ovld_collapse (f (ovld_expand o1, ovld_expand o2))
     in
-	fun installHelpers{eq_con} = 
+	fun installHelpers{eq_con} =
 	    ((case !Ceq_con of
 		 NONE => ()
 	       | SOME _ => (print "WARNING: IlContext.installHelpers called more than once.\n"));
@@ -50,46 +91,41 @@ struct
 
     (* ----------- signature utilities ----------------------------  *)
 
-    fun Context_Lookup_Var_Raw (ctxt : context, v : var) : (label * phrase_class) option =
+    fun Context_Lookup_Var_Raw (ctxt : context,
+				v : var) : (label * phrase_class) option =
 	let val CONTEXT {varMap,...} = ctxt
 	in  VarMap.find (varMap, v)
 	end
-
-    (*
-	When a module variable is looked up, its signature is
-	transformed and memoized.  The transformations are (deep)
-	reduction, local variable elimination, and selfification.
-	Reduction is also needed when a starred structure is bound.
-    *)
     local
-
-	(* An "lvs" is a substitution from local variables to bound
-	   paths.  This is the book-keeping needed to project
-	   componenets from a bound structure.*)
 
 	type lvs = mod * subst
 
 	fun lvs (m : mod) : lvs = (m, empty_subst)
 
+	(*
+		Note that the only local expression variables that may
+		appear in inlined expressions are coercions.
+	*)
 	fun lvs_extend ((m,subst) : lvs, sdec) : lvs =
 	    let val SDEC(l,dec) = sdec
 		val p = (m,l)
-		val subst = 
+		val subst =
 		    (case dec
 		       of DEC_EXP (v,_,_,_) =>
-			   (* The only local expression variables that
-			      may appear in inlined expressions are
-			      coercions.  *)
 			   if is_coercion l
 			       then subst_add_expvar (subst, v, MODULE_PROJECT p)
 			   else subst
-			| DEC_CON (v,_,_,_) => subst_add_convar (subst, v, CON_MODULE_PROJECT p)
-			| DEC_MOD (v,_,_) => subst_add_modvar (subst, v, MOD_PROJECT p))
+			| DEC_CON (v,_,_,_) =>
+			   subst_add_convar (subst, v, CON_MODULE_PROJECT p)
+			| DEC_MOD (v,_,_) =>
+			   subst_add_modvar (subst, v, MOD_PROJECT p))
 	    in  (m,subst)
 	    end
 
-	(* Rewrite SIGNAT_OF(localvar.labs) as SIGNAT_OF(v.labs')
-	   where v is bound in the ambient context. *)
+	(*
+		Rewrite SIGNAT_OF(localvar.labs) as SIGNAT_OF(v.labs')
+		where v is bound in the ambient context.
+	*)
 	fun lvs_rewrite ((_,subst) : lvs, s : signat) : signat =
 	    (case s
 	       of SIGNAT_OF _ => sig_subst(s, subst)
@@ -108,213 +144,195 @@ struct
 
 	fun lvs_mod (lvs : lvs) : mod = #1 lvs
 
-	(* Recursively eliminates non-binding occurrences of local
-	   variables in an sdecs, replacing them with paths.  This may
-	   be a bad idea but it is currently assumed by other parts of
-	   the elaborator.  *)
-    
-	fun eliminate (lvs, s : signat) : signat =
-	    (case s
-	       of SIGNAT_STRUCTURE sdecs =>
-		   let val (sdecs,_) = foldl_acc eliminate' lvs sdecs
-		   in  SIGNAT_STRUCTURE sdecs
-		   end
-		| _ => sig_subst(s,lvs_subst lvs))
+	fun eliminate (lvs, sdecs : sdecs) : sdecs =
+	    #1 (foldl_acc eliminate' lvs sdecs)
 
 	and eliminate' (sdec, lvs) : sdec * lvs =
 	    let val SDEC (l,dec) = sdec
 		val subst = lvs_subst lvs
 		val EXP = fn e => exp_subst(e,subst)
 		val CON = fn c => con_subst(c,subst)
+		val SIG = fn s => sig_subst(s,subst)
 		val OPT = Option.map
-		val dec = (case dec
-			     of DEC_EXP (v,c,eopt,inline) => DEC_EXP (v,CON c,OPT EXP eopt,inline)
-			      | DEC_CON (v,k,copt,inline) => DEC_CON (v,k,OPT CON copt,inline)
-			      | DEC_MOD (v,poly,s) =>
-				 let val s = eliminate (lvs_recurse (lvs,l,s), s)
-				 in  DEC_MOD (v,poly,s)
-				 end)
+		val dec =
+		    (case dec
+		       of DEC_EXP (v,c,eopt,inline) =>
+			    DEC_EXP (v,CON c,OPT EXP eopt,inline)
+			| DEC_CON (v,k,copt,inline) =>
+			    DEC_CON (v,k,OPT CON copt,inline)
+			| DEC_MOD (v,poly,s as SIGNAT_STRUCTURE sdecs) =>
+			    let val lvs = lvs_recurse (lvs,l,s)
+				val sdecs = eliminate (lvs,sdecs)
+			    in  DEC_MOD (v,poly,SIGNAT_STRUCTURE sdecs)
+			    end
+			| DEC_MOD (v,poly,s) => DEC_MOD (v,poly,SIG s))
 	    in  (SDEC (l,dec), lvs_extend (lvs,sdec))
 	    end
 
-	(* Recursively apply the HS self rules.
-	   If decs |- m : s and s' = selfify(m,s),
-           then decs |- m : s' and s' is transparant.
-	*)
-    
-	fun selfify (m : mod, s : signat) : signat =
-	    (case s
-	       of SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE (map (selfify' m) sdecs)
-		| _ => s)
-		 
-	and selfify' (m : mod) (sdec : sdec) : sdec =
-	    let val SDEC (l,dec) = sdec
-		val dec = (case dec
-			     of DEC_EXP _ => dec
-			      | DEC_CON (v,k,copt,inline) =>
-				 let val copt = (case copt
-						   of NONE => SOME (CON_MODULE_PROJECT (m,l))
-						    | SOME _ => copt)
-				 in  DEC_CON(v,k,copt,inline)
-				 end
-			      | DEC_MOD (v,poly,s) =>
-				 let val s = selfify (MOD_PROJECT(m,l), s)
-				 in  DEC_MOD(v,poly,s)
-				 end)
-	    in  SDEC(l,dec)
-	    end
+	exception Memo
 
-	(*
-           Reduce_signat reduces an arbitrary structure signature to
-           an sdecs.  It uses the following helpers.
+	datatype class =
+	    MOD of signat * bool
+	  | SIG of signat
 
-	   Reduce_sigvar reduces a structure signature of the form
-	   SIGNAT_VAR(v) to an sdecs by looking up the signature v.
-		 
-	   Reduce_sigof reduces a structure signature of the form
-	   SIGNAT_OF(X) to an sdecs by looking up and selfifying the
-	   signature of X.
-
-	   Reduce_sigof_fast reduces a structure signature of the form
-	   SIGNAT_OF(v.labs) to an sdecs when v is in the context's
-	   memo table.  That table stores deeply reduced, selfified
-	   signatures that have no occurrences of local variables.
-	   From such a signature, we simply have to project out the
-	   right component.
-        *)
-
-	fun lookup (arg : context * var) : phrase_class =
+	fun lookup (arg : context * var) : class =
 	    (case Context_Lookup_Var_Raw arg
-	       of SOME(_,pc) => pc
-		| NONE => error ("unbound module variable " ^ var2string (#2 arg)))
-	
-	fun reduce_sigof_fast (ctxt : context, v : var, labs : labels) : signat option =
-	    let val CONTEXT {memo, ...} = ctxt
+	       of SOME(_,pc) =>
+		    (case pc
+		       of PHRASE_CLASS_MOD (_,_,s,f) =>
+			    (MOD (f(), true) handle Memo => MOD (s, false))
+			| PHRASE_CLASS_SIG (_,s) => SIG s
+			| _ =>
+			    error "lookup saw non-module, non-signature\
+				  \ variable")
+		| NONE => error "lookup saw unbound variable")
+
+	fun project_fast (s : signat, labs : labels) : sdecs * bool =
+	    let
+		fun sdecs (s : signat) : sdecs =
+		    (case s
+		       of SIGNAT_STRUCTURE sdecs => sdecs
+			| _ => error "project_fast saw non-sdecs signature")
 		fun project (l : label, s : signat) : signat =
-		    let val sdecs = (case s
-				       of SIGNAT_STRUCTURE sdecs => sdecs
-					| _ => error "reduce_sigof_fast projecting from non-structure component")
+		    let val sdecs = sdecs s
 			val sdecopt = find_sdec (sdecs,l)
 		    in  (case sdecopt
 			   of SOME (SDEC(_,DEC_MOD(_,_,s))) => s
-			    | SOME _ => error "projecting from non-module component in reduce_sigof_fast"
-			    | NONE => error "cannot find label in reduce_sigof_fast")
+			    | SOME _ => error "projecting from non-module\
+					      \ component in project_fast"
+			    | NONE => error "cannot find label in project_fast")
 		    end
-	    in  (case VarMap.find(!memo, v)
-		   of NONE => NONE
-		    | SOME signat => SOME (foldl project signat labs))
+	    in  (sdecs(foldl project s labs),true)
 	    end
 
-	fun reduce_signat (ctxt : context, s : signat) : signat =
+	fun reduce (ctxt : context, s : signat) : sdecs * bool =
 	    (case s
-	       of SIGNAT_VAR v => reduce_sigvar (ctxt,v)
-		| SIGNAT_OF (PATH(v,labs)) => (case reduce_sigof_fast (ctxt, v, labs)
-						 of SOME s' => s'
-						  | NONE => reduce_sigof (ctxt,v,labs))
-		| _ => s)
+	       of SIGNAT_STRUCTURE sdecs => (sdecs,false)
+		| SIGNAT_VAR v => reduce_sigvar (ctxt, v)
+		| SIGNAT_OF (PATH(v,labs)) => reduce_sigof (ctxt, v, labs)
+		| SIGNAT_FUNCTOR _ => error "reduce saw functor signature")
 
-	and reduce_sigvar (ctxt : context, v : var) : signat =
-	    let val s = (case lookup (ctxt, v)
-			   of PHRASE_CLASS_SIG (_,s) => s
-			    | _ => error "SIGNAT_VAR with non-signature var")
-	    in  reduce_signat (ctxt, s)
-	    end
+	and reduce_sigvar (ctxt : context, v : var) : sdecs * bool =
+	    (case lookup (ctxt, v)
+	       of SIG s => reduce(ctxt,s)
+		| _ => error "reduce_sigvar saw non-signature variable")
 
-	and reduce_sigof (ctxt : context, v : var, labs : labels) : signat =
-	    let val signat = (case lookup (ctxt,v)
-				of PHRASE_CLASS_MOD (_,_,s) => s
-				 | _ => error "SIGNAT_OF projecting from non-module")
-		val signat = selfify (MOD_VAR v, signat)
-		    
-		(* We have to continue selfifying after reduction.
-		   For SIGNAT_OF, this is taken care of by the
-		   recursive call. *)
-		fun reduce_and_selfify (lvs, s) =
-		    let val s' = reduce_signat (ctxt, s)
-			val selfified = (case s
-					   of SIGNAT_VAR _ => false
-					    | _ => true)
-		    in  if selfified then s'
-			else selfify (lvs_mod lvs, s')
-		    end
-		fun project (l : label, (lvs, s : signat)) : lvs * signat =
-		    let val s = reduce_and_selfify (lvs,s)
-			val sdecs = (case s
-				       of SIGNAT_STRUCTURE sdecs => sdecs
-					| _ => error "SIGNAT_OF projecting from non-structure component")
-			fun find (nil,_) = error "cannot find label in SIGNAT_OF"
-			  | find ((sdec as SDEC(l',dec)) :: rest,lvs) =
+	and reduce_sigof (ctxt : context, v : var,
+			  labs : labels) : sdecs * bool =
+	    (case lookup (ctxt, v)
+	       of MOD (s,false) =>
+		    (case reduce (ctxt,s)
+		       of (sdecs,true) =>
+			    project_fast (SIGNAT_STRUCTURE sdecs, labs)
+			| (sdecs,false) =>
+			    let val m = MOD_VAR v
+				val sdecs = selfify(ctxt,m,sdecs)
+			    in  project(ctxt,m,sdecs,labs)
+			    end)
+		| MOD (s,true) => project_fast (s, labs)
+		| _ => error "reduce_sigof saw non-module variable")
+
+	and project (ctxt : context, m : mod, sdecs : sdecs,
+		     labs : labels) : sdecs * bool =
+	    let
+		fun find (l : label, sdecs, lvs) : lvs * sdecs * bool =
+		    (case sdecs
+		       of nil => error "project cannot find label"
+			| (sdec as SDEC(l',dec)) :: rest =>
 			    if eq_label (l,l') then
 				let val s = (case dec
 					       of DEC_MOD(_,_,s) => s
-						| _ => error "SIGNAT_OF projecting from non-module component")
+						| _ => error "projecting from non-module component")
 				    val s = lvs_rewrite (lvs, s)
 				    val lvs = lvs_recurse (lvs,l,s)
-				in  (lvs,s)
+				    val (sdecs,memoized) = reduce (ctxt, s)
+				in  (lvs,sdecs,memoized)
 				end
-			    else find (rest, lvs_extend (lvs,sdec))
-		    in  find (sdecs,lvs)
-		    end
-		val lvs = lvs (MOD_VAR v)
-		val (lvs,s) = foldl project (lvs,signat) labs
-		val s = sig_subst (s, lvs_subst lvs)
-	    in  reduce_and_selfify (lvs, s)
+			    else find (l,rest, lvs_extend (lvs,sdec)))
+		fun loop (labels, lvs, sdecs) : sdecs * bool =
+		    (case labels
+		       of nil => (sdecs_subst (sdecs, lvs_subst lvs),false)
+			| (l :: rest) =>
+			    (case find (l,sdecs,lvs)
+			       of (_,sdecs,true) =>
+				    project_fast (SIGNAT_STRUCTURE sdecs,rest)
+				| (lvs,sdecs,false) => loop (rest,lvs,sdecs)))
+	    in  loop (labs, lvs m, sdecs)
 	    end
 
-	(* Deep_reduce applies reduce_signat recursively so that any
-           substructure signatures are also sdecs.  *)
-	    
-	fun deep_reduce (ctxt : context, lvs, s : signat) : signat =
-	    (case reduce_signat (ctxt,s)
-	       of SIGNAT_STRUCTURE sdecs =>
-		   let val (sdecs,_) = foldl_acc (deep_reduce' ctxt) lvs sdecs
-		   in  SIGNAT_STRUCTURE sdecs
-		   end
-		| s => s)
+	and selfify (ctxt : context, m : mod, sdecs : sdecs) : sdecs =
+	    map (selfify' (ctxt,m)) sdecs
 
-	and deep_reduce' (ctxt : context) (sdec, lvs) : sdec * lvs =
+	and selfify' (ctxt, m : mod) (sdec : sdec) : sdec =
 	    (case sdec
-	       of SDEC (l,DEC_MOD(v,poly,s)) =>
+	       of SDEC (_, DEC_EXP _) => sdec
+	        | SDEC (_, DEC_CON (_,_,SOME _,_)) => sdec
+	        | SDEC (l, DEC_CON (v,k,NONE,inline)) =>
+		    let val c = CON_MODULE_PROJECT (m,l)
+		        val dec = DEC_CON (v,k,SOME c, inline)
+		    in  SDEC (l,dec)
+		    end
+		| SDEC (_, DEC_MOD (_,_,SIGNAT_FUNCTOR _)) => sdec
+		| SDEC (_, DEC_MOD (_,_,SIGNAT_OF _)) => sdec
+		| SDEC (l, DEC_MOD (v,poly,s)) =>
+		    let val sdecs =
+			    (case reduce (ctxt, s)
+			       of (sdecs,true) => sdecs
+				| (sdecs,false) =>
+				    selfify (ctxt,MOD_PROJECT (m,l),sdecs))
+			val dec = DEC_MOD (v,poly,SIGNAT_STRUCTURE sdecs)
+		    in  SDEC (l,dec)
+		    end)
+
+	fun deep_reduce (ctxt : context, lvs, s : signat) : sdecs * bool =
+	    (case reduce (ctxt, s)
+	       of (sdecs,false) =>
+		    (#1 (foldl_acc (deep_reduce' ctxt) lvs sdecs), false)
+		| r => r)
+
+	and deep_reduce' (ctxt : context) (arg as (sdec,lvs)) : sdec * lvs =
+	    (case sdec
+	       of SDEC (_,DEC_MOD(_,_,SIGNAT_FUNCTOR _)) => arg
+		| SDEC (l,DEC_MOD(v,poly,s)) =>
 		   let val s = lvs_rewrite (lvs, s)
-		       val s = deep_reduce (ctxt, lvs_recurse (lvs,l,s), s)
+		       val (sdecs,_) = deep_reduce (ctxt, lvs_recurse (lvs,l,s),
+						    s)
+		       val s = SIGNAT_STRUCTURE sdecs
 		       val lvs = lvs_extend (lvs,sdec)
 		       val sdec = SDEC (l,DEC_MOD (v,poly,s))
 		   in  (sdec,lvs)
 		   end
-		| _ => (sdec,lvs))
-		 
-    in
-	fun transform (ctxt : context, v : var, s : signat) : signat =
-	    let val CONTEXT {memo, ...} = ctxt
-	    in
-		(case VarMap.find (!memo,v)
-		   of SOME s' => s'
-		    | NONE =>
-		       let val m = MOD_VAR v
-			   val lvs = lvs m
-			   val s' = deep_reduce (ctxt,lvs,s)
-			   val s' = eliminate (lvs,s')
-			   val s' = selfify (m,s')
-			   val _ = memo := VarMap.insert (!memo,v,s')
+		| _ => arg)
+
+	fun transform' (ctxt : context, m : mod, s : signat) : signat =
+	    let val lvs = lvs m
+		val sdecs =
+		    (case deep_reduce (ctxt,lvs,s)
+		       of (sdecs,true) => sdecs
+			| (sdecs,false) =>
+			    eliminate (lvs, selfify (ctxt,m,sdecs)))
+		val s' = SIGNAT_STRUCTURE sdecs
 (*
-			   val _ = debugdo(fn () =>
-					   (print "\n\ntransformed "; pp_mod m;
-					    print " : "; pp_signat s; print "\n";
-					    print "to : "; pp_signat s'; print "\n\n"))
+		val _ = debugdo(fn () =>
+				(print "\n\ntransformed "; pp_mod m;
+				 print " : "; pp_signat s; print "\nto : ";
+				 pp_signat s'; print "\n\n"))
 *)
-		       in  s'
-		       end)
+	    in  s'
 	    end
-	    
-	val deep_reduce : context * mod * signat -> signat =
-	    (fn (ctxt,m,s) => deep_reduce (ctxt, lvs m, s))
+    in
+	val noTransform : unit -> signat = fn () => raise Memo
+
+	fun transform (ctxt : context, m : mod, s : signat) : unit -> signat =
+	    (case s
+	       of SIGNAT_FUNCTOR _ => (fn () => s)
+		| _ => Util.memoize (fn () => transform' (ctxt,m,s)))
     end
 
     (* ----------- context extenders ----------------------------  *)
     val empty_context = CONTEXT{varMap = VarMap.empty,
 				ordering = nil,
 				labelMap = LabelMap.empty,
-				memo = ref VarMap.empty,
 				fixityMap = LabelMap.empty,
 				overloadMap = LabelMap.empty}
 
@@ -323,15 +341,14 @@ struct
     type overloadMap = ovld LabelMap.map
 
     fun labelmap_remove x = #1(LabelMap.remove x)
-	
-    (* Prepare for the possible shadowing of a label.
 
-       When shadowing a convar's label, we also change its equality
-       function's label.
+    (*
+	Prepare for the possible shadowing of a label.  When shadowing
+	a convar's label, we also change its equality function's label.
     *)
-	
-    fun shadow' (vm : varMap, lm : labelMap, om : overloadMap, l : label, labopt : label option)
-	: varMap * labelMap * overloadMap =
+
+    fun shadow' (vm : varMap, lm : labelMap, om : overloadMap, l : label,
+		 labopt : label option) : varMap * labelMap * overloadMap =
 	(case (LabelMap.find(om,l), LabelMap.find(lm,l))
 	   of (SOME _, NONE) => (vm,lm,labelmap_remove(om,l))
 	    | (NONE, SOME (v,nil)) =>
@@ -343,12 +360,14 @@ struct
 		   val lm = labelmap_remove(lm,l)
 		   val lm = LabelMap.insert (lm,l',(v,nil))
 	       in  (case pc
-		      of PHRASE_CLASS_CON _ => shadow' (vm,lm,om,to_eq l,SOME (to_eq l'))
+		      of PHRASE_CLASS_CON _ =>
+			    shadow' (vm,lm,om,to_eq l,SOME (to_eq l'))
 		       | _ => (vm,lm,om))
 	       end
 	    | (NONE, SOME _) => (vm,labelmap_remove(lm,l),om)
 	    | (NONE, NONE) => (vm,lm,om)
-	    | (SOME _, SOME _) => error "overloadMap and labelMap labels not disjoint")
+	    | (SOME _, SOME _) => error "overloadMap and labelMap labels\
+					\ not disjoint")
     fun shadow (vm,lm,om,l) = shadow' (vm,lm,om,l,NONE)
 
     local
@@ -367,9 +386,10 @@ struct
 				  error "unbound variable detected")
 	    in  VarSet.app ck (classifier_free pc)
 	    end
-	
+
 	(* Check that v is not bound in context. *)
-	fun check_shadow (ctxt : context, l : label, v : var, pc : phrase_class) : unit =
+	fun check_shadow (ctxt : context, l : label, v : var,
+			  pc : phrase_class) : unit =
 	    let val CONTEXT {varMap, ...} = ctxt
 	    in  (case VarMap.find (varMap,v)
 		   of NONE => ()
@@ -380,7 +400,7 @@ struct
 				  print "\n"));
 			error "variable shadowing"))
 	    end
-	
+
     in
 	(* Extend context with l > v:pc.  Ignores starred structures. *)
 	fun add' (arg : context * label * var * phrase_class) : context =
@@ -388,9 +408,10 @@ struct
 				    (check_free arg;
 				     check_shadow arg))
 		val (ctxt,l,v,pc) = arg
-		val CONTEXT {varMap, ordering, labelMap, memo,
+		val CONTEXT {varMap, ordering, labelMap,
 			     fixityMap, overloadMap} = ctxt
-		val (varMap,labelMap,overloadMap) = shadow (varMap,labelMap,overloadMap,l)
+		val (varMap,labelMap,overloadMap) =
+		    shadow (varMap,labelMap,overloadMap,l)
 		val varMap = VarMap.insert (varMap,v,(l,pc))
 		val ordering = v :: ordering
 		val labelMap = LabelMap.insert (labelMap,l,(v,nil))
@@ -402,146 +423,184 @@ struct
 	    in  CONTEXT{varMap = varMap,
 			ordering = ordering,
 			labelMap = labelMap,
-			memo = ref (!memo),
 			fixityMap = fixityMap,
 			overloadMap = overloadMap}
 	    end
     end
 
     local
-	(* Extend labelMap with top-level labels visible by the star
-	   convention. *)
-	fun add_labels (v : var, labs : labels, s : signat, labelMap) : labelMap =
-	    (case s
-	       of SIGNAT_STRUCTURE sdecs => foldl (add_labels' (v,labs)) labelMap sdecs
-		| _ => labelMap)
-	     
-	and add_labels' (v : var, labs : labels) (sdec, labelMap) : labelMap =
+	(*
+		Extend labelMap with top-level labels visible by the
+		star convention.
+	*)
+	type acc = varMap * labelMap * overloadMap
+
+	fun add_labels (v : var, labs : labels, signat, acc) : acc =
+	    (case signat
+	       of SIGNAT_STRUCTURE sdecs =>
+		    foldl (add_labels' (v,labs)) acc sdecs
+		| _ => acc)
+
+	and add_labels' (v : var, labs : labels) (sdec, acc) : acc =
 	    let val SDEC(l,dec) = sdec
 		val labs = labs @ [l]
-		val labelMap = (if !NoOpenInternalPaths andalso is_label_internal l
-				    then labelMap
-				else LabelMap.insert (labelMap,l,(v,labs)))
+		val acc =
+		    (if !NoOpenInternalPaths andalso is_label_internal l
+		     then acc
+		     else
+			let val (vm,lm,om) = acc
+			    val (vm,lm,om) = shadow (vm,lm,om,l)
+			    val lm = LabelMap.insert (lm,l,(v,labs))
+			in  (vm,lm,om)
+			end)
 	    in
 		(case (is_open l,dec)
-		   of (true,DEC_MOD (_,_,s)) => add_labels (v,labs,s,labelMap)
-		    | _ => labelMap)
+		   of (true,DEC_MOD (_,_,s)) =>
+			add_labels (v,labs,s,acc)
+		    | _ => acc)
 	    end
     in
-	
-	(* Extend context with l > v:pc.  When a structure with a
-	   starred label is added, its componenets are added to the
-	   labelMap.  *)
-	
-	fun add (ctxt : context, l : label, v : var, pc : phrase_class) : context =
+
+	(*
+		Extend context with l > v:pc.  Handles starred labels
+		and the memo table.
+	*)
+	fun add (ctxt : context, l : label, v : var,
+		 pc : phrase_class) : context =
 	    let val ctxt = add' (ctxt,l,v,pc)
-	    in  (case (is_open l, pc)
-		  of (true,PHRASE_CLASS_MOD(m,_,s)) =>
-		      let val CONTEXT {varMap, ordering, labelMap, memo,
-				       fixityMap, overloadMap} = ctxt
-			  val labelMap = add_labels (v,nil,deep_reduce (ctxt,m,s),labelMap)
-		      in  CONTEXT{varMap = varMap,
-				  ordering = ordering,
-				  labelMap = labelMap,
-				  memo = ref (!memo),
-				  fixityMap = fixityMap,
-				  overloadMap = overloadMap}
-		      end
+	    in  (case pc
+	    	   of PHRASE_CLASS_MOD (m,poly,s,_) =>
+			let val CONTEXT {varMap, ordering, labelMap,
+					 fixityMap, overloadMap} = ctxt
+			    val f = transform (ctxt,m,s)
+			    val pc = PHRASE_CLASS_MOD(m,poly,s,f)
+			    val varMap = VarMap.insert (varMap,v,(l,pc))
+			    val (varMap,labelMap,overloadMap) =
+				if is_open l then
+				    add_labels (v,nil,f(),
+						(varMap,labelMap,overloadMap))
+				else (varMap,labelMap,overloadMap)
+			in  CONTEXT{varMap = varMap,
+				    ordering = ordering,
+				    labelMap = labelMap,
+				    fixityMap = fixityMap,
+				    overloadMap = overloadMap}
+			end
 		   | _ => ctxt)
 	    end
     end
 
-    (* Add a top-level label that maps to the given bound variable.
-       Ignores starred structures.  *)
-   
-    fun add_context_label (context, label, var) : context =
-	let val CONTEXT {varMap, ordering, labelMap, memo,
+    (*
+	Add a top-level label that maps to the given bound variable.
+	Ignores starred structures.  N.B. This exists because of a
+	deficiency of the pattern compiler; it should go away.
+    *)
+    fun add_context_label (context, label, var) : context = (* ugly hack *)
+	let val CONTEXT {varMap, ordering, labelMap,
 			 fixityMap, overloadMap} = context
 	    val _ = sanitycheck(fn () =>
 				(case VarMap.find (varMap, var)
 				   of SOME _ => ()
 				    | NONE =>
 				       (debugdo (fn () =>
-						 (print "unbound variable "; pp_var var;
-						  print " detected while adding label ";
+						 (print "unbound variable ";
+						  pp_var var;
+						  print " detected while\
+							\ adding label ";
 						  pp_label label; print "\n"));
-					error "unbound variable in add_context_label")))
-	    val (varMap,labelMap,overloadMap) = shadow (varMap,labelMap,overloadMap,label)
+					error "unbound variable in\
+					      \ add_context_label")))
+	    val (varMap,labelMap,overloadMap) =
+		shadow (varMap,labelMap,overloadMap,label)
 	    val labelMap = LabelMap.insert (labelMap,label,(var,nil))
 	in  CONTEXT{varMap = varMap,
 		    ordering = ordering,
 		    labelMap = labelMap,
-		    memo = ref (!memo),
 		    fixityMap = fixityMap,
 		    overloadMap = overloadMap}
 	end
-	
+
     fun add_context_sdec (ctxt : context, sdec) : context =
 	let val SDEC (l,dec) = sdec
-	    val (v,pc) = (case dec
-			    of DEC_EXP (v,c,eopt,inline) => (v,PHRASE_CLASS_EXP (VAR v,c,eopt,inline))
-			     | DEC_CON (v,k,copt,inline) => (v,PHRASE_CLASS_CON (CON_VAR v,k,copt,inline))
-			     | DEC_MOD (v,poly,s) => (v,PHRASE_CLASS_MOD (MOD_VAR v,poly,s)))
+	    val (v,pc) =
+		(case dec
+		    of DEC_EXP (v,c,eopt,inline) =>
+			(v,PHRASE_CLASS_EXP (VAR v,c,eopt,inline))
+		     | DEC_CON (v,k,copt,inline) =>
+			(v,PHRASE_CLASS_CON (CON_VAR v,k,copt,inline))
+		     | DEC_MOD (v,poly,s) =>
+			(v,PHRASE_CLASS_MOD (MOD_VAR v,poly,s,noTransform)))
 	in  add (ctxt,l,v,pc)
 	end
-    
-    fun add_context_exp (ctxt,l,v,c) = add_context_sdec (ctxt,SDEC(l,DEC_EXP(v,c,NONE,false)))
-    fun add_context_con (ctxt,l,v,k,copt) = add_context_sdec (ctxt,SDEC(l,DEC_CON(v,k,copt,false)))
-    fun add_context_mod (ctxt,l,v,s) = add_context_sdec (ctxt,SDEC(l,DEC_MOD(v,false,s)))
-	
+
+    fun add_context_exp (ctxt,l,v,c) =
+	add_context_sdec (ctxt,SDEC(l,DEC_EXP(v,c,NONE,false)))
+    fun add_context_con (ctxt,l,v,k,copt) =
+	add_context_sdec (ctxt,SDEC(l,DEC_CON(v,k,copt,false)))
+    fun add_context_mod (ctxt,l,v,s) =
+	add_context_sdec (ctxt,SDEC(l,DEC_MOD(v,false,s)))
+
     fun add_context_sdec' (sdec, ctxt) = add_context_sdec (ctxt, sdec)
     fun add_context_sdecs (ctxt, sdecs) = foldl add_context_sdec' ctxt sdecs
-	
+
     fun anon_label () = fresh_internal_label "anon"
     fun dec2sdec dec = SDEC(anon_label(), dec)
-	
+
     fun add_context_exp' (ctxt,v,c) = add_context_exp (ctxt,anon_label(),v,c)
-    fun add_context_con' (ctxt,v,k,copt) = add_context_con (ctxt,anon_label(),v,k,copt)
+    fun add_context_con' (ctxt,v,k,copt) =
+	add_context_con (ctxt,anon_label(),v,k,copt)
     fun add_context_mod' (ctxt,v,s) = add_context_mod (ctxt,anon_label(),v,s)
     fun add_context_dec (ctxt,dec) = add_context_sdec (ctxt,dec2sdec dec)
     fun add_context_decs (ctxt,decs) = add_context_sdecs (ctxt,map dec2sdec decs)
-	
+
     fun add_context_sig (ctxt,l,v,s) = add (ctxt,l,v,PHRASE_CLASS_SIG (v,s))
-	
+    fun add_context_sig' (ctxt,v,s) = add_context_sig (ctxt,anon_label(),v,s)
+
+    fun add_context_extern (ctxt,l,v,l',c) =
+	add (ctxt,l,v,PHRASE_CLASS_EXT (v,l',c))
+    fun add_context_extern' (ctxt,v,l,c) =
+	add_context_extern (ctxt,anon_label(),v,l,c)
+
     fun add_context_fixity (ctxt : context, l : label, fixity) : context =
-	let val CONTEXT {varMap, ordering, labelMap, memo,
+	let val CONTEXT {varMap, ordering, labelMap,
 			 fixityMap, overloadMap} = ctxt
 	    val fixityMap = LabelMap.insert (fixityMap,l,fixity)
 	in  CONTEXT {varMap = varMap,
 		     ordering = ordering,
 		     labelMap = labelMap,
-		     memo = ref (!memo),
 		     fixityMap = fixityMap,
 		     overloadMap = overloadMap}
 	end
-    
+
     fun add_context_overexp (ctxt : context, l : label, ovld2 : ovld) : context =
-	let val CONTEXT {varMap, ordering, labelMap, memo,
+	let val CONTEXT {varMap, ordering, labelMap,
 			 fixityMap, overloadMap} = ctxt
 	    val ovld1 = (case Name.LabelMap.find(overloadMap, l) of
 			     SOME ovld1 => ovld1
 			   | NONE => OVLD ([], NONE))
 	    val ovld3 = ovld_add(l,ctxt,ovld1,ovld2)
-	    val (varMap,labelMap,overloadMap) = shadow (varMap,labelMap,overloadMap,l)
+	    val (varMap,labelMap,overloadMap) =
+		shadow (varMap,labelMap,overloadMap,l)
 	    val overloadMap = LabelMap.insert(overloadMap, l, ovld3)
 	in  CONTEXT {varMap = varMap,
 		     ordering = ordering,
 		     labelMap = labelMap,
-		     memo = ref (!memo),
 		     fixityMap = fixityMap,
 		     overloadMap = overloadMap}
 	end
-    
-    fun add_context_entry (ctxt : context, entry : context_entry) : context = 
+
+    fun add_context_entry (ctxt : context, entry : context_entry) : context =
 	(case entry
 	   of CONTEXT_SDEC sdec => add_context_sdec (ctxt,sdec)
 	    | CONTEXT_SIGNAT (l,v,s) => add_context_sig (ctxt,l,v,s)
+	    | CONTEXT_EXTERN (l,v,l',c) => add_context_extern (ctxt,l,v,l',c)
 	    | CONTEXT_FIXITY (l,f) => add_context_fixity (ctxt,l,f)
 	    | CONTEXT_OVEREXP (l,ovld) => add_context_overexp (ctxt,l,ovld))
-	     
+
     fun add_context_entry' (entry,ctxt) = add_context_entry (ctxt,entry)
-    fun add_context_entries (ctxt, entries) = foldl add_context_entry' ctxt entries
-	
+    fun add_context_entries (ctxt, entries) =
+	foldl add_context_entry' ctxt entries
+
     (* ----------- context access ----------------------------  *)
 
     local
@@ -550,22 +609,25 @@ struct
 		val sdec = fn dec => CONTEXT_SDEC (SDEC(l,dec))
 	    in
 		(case pc
-		   of PHRASE_CLASS_EXP (_,c,eopt,inline) => sdec (DEC_EXP(v,c,eopt,inline))
-		    | PHRASE_CLASS_CON (_,k,copt,inline) => sdec (DEC_CON(v,k,copt,inline))
-		    | PHRASE_CLASS_MOD (_,poly,s) => sdec (DEC_MOD(v,poly,s))
-		    | PHRASE_CLASS_SIG (_,s) => CONTEXT_SIGNAT (l,v,s))
+		   of PHRASE_CLASS_EXP (_,c,eopt,inline) =>
+			sdec (DEC_EXP(v,c,eopt,inline))
+		    | PHRASE_CLASS_CON (_,k,copt,inline) =>
+			sdec (DEC_CON(v,k,copt,inline))
+		    | PHRASE_CLASS_MOD (_,poly,s,_) => sdec (DEC_MOD(v,poly,s))
+		    | PHRASE_CLASS_SIG (_,s) => CONTEXT_SIGNAT (l,v,s)
+		    | PHRASE_CLASS_EXT (_,l',c) => CONTEXT_EXTERN (l,v,l',c))
 	    end
-	     
-	fun varEntries (varMap, ordering) : context_entry list =
+
+	fun varEntries (varMap, ordering) : entries =
 	    map (varEntry varMap) (rev ordering)
 
-	fun overloadEntries overloadMap : context_entry list =
+	fun overloadEntries overloadMap : entries =
 	    map CONTEXT_OVEREXP (LabelMap.listItemsi overloadMap)
 
-	fun fixityEntries fixityMap : context_entry list =
+	fun fixityEntries fixityMap : entries =
 	    map CONTEXT_FIXITY (LabelMap.listItemsi fixityMap)
     in
-	fun list_entries (ctxt : context) : context_entry list =
+	fun list_entries (ctxt : context) : entries =
 	    let val CONTEXT {varMap,ordering,fixityMap,overloadMap,...} = ctxt
 	    in  List.concat [fixityEntries fixityMap,
 			     varEntries (varMap,ordering),
@@ -579,12 +641,13 @@ struct
 	in  fixityMap
 	end
 
-    fun Context_Lookup_Var (ctxt : context, v : var) : (label * phrase_class) option =
-	(case Context_Lookup_Var_Raw (ctxt,v)
-	   of SOME (l,PHRASE_CLASS_MOD(m,poly,s)) =>
-	       SOME (l,PHRASE_CLASS_MOD(m,poly,transform(ctxt,v,s)))
-	    | answer => answer)
-	     
+    fun Context_Lookup_Var (ctxt : context,
+			    v : var) : (label * phrase_class) option =
+	(case Context_Lookup_Var_Raw (ctxt, v)
+	   of SOME (l, PHRASE_CLASS_MOD (m,poly,s,f)) =>
+		SOME (l, PHRASE_CLASS_MOD (m,poly,f(),f))
+	    | a => a)
+
     fun Context_Lookup_Label (ctxt : context, l : label) : path option =
 	let val CONTEXT {labelMap, ...} = ctxt
 	in  Option.map PATH (LabelMap.find (labelMap, l))
@@ -595,377 +658,53 @@ struct
 	in  LabelMap.find (overloadMap, l)
 	end
 
-    (* XXX: This will go away soon.  It is only needed by IlContextEq.  *)
-    fun Context_Ordering (ctxt : context) : var list =
-	let val CONTEXT {ordering, ...} = ctxt
-	in  rev ordering
-	end
-	
-    fun con_exp_subst subst (c,e) = (con_subst(c,subst), exp_subst(e,subst))
-    fun ovld_subst subst (OVLD (celist, default)) = OVLD (map (con_exp_subst subst) celist, default)
-
-    (* alphaVarying a partial context WRT a context so that
-       (1) the partial context's unresolved list maps to variables as bound by the full context
-       (2) the partial context does not bind variables (at top-level) 
-           that are bound (at top-level) of the full context
-       If either condition is not already true, a substitution is produced and
-          the substitution is applied to partial context.
-    *)
-    fun alphaVaryPartialContext (ctxt1 : context, (ctxt2,unresolved) : partial_context) : partial_context option =
-	let
-	    val CONTEXT {varMap = vm1, labelMap = lm1, ...} = ctxt1
-	    val CONTEXT {varMap = vm2, ordering = ord2, labelMap = lm2,
-			 fixityMap = fm2, overloadMap = om2, ...} = ctxt2
-            (* ---- Using the current unresolved of the partial context and the context,
-	       ---- compute the substitution of the unresolved variables on the partial context
-	       ---- to match the corresponding variables of the context and 
-	       ---- generate a new unresolved list. *)
-	    fun unresolvedFolder (v,l,(unresolved,vsubst)) =
-		(case Name.LabelMap.find(lm1,l) of
-		     SOME (v',[]) =>
-			 (VarMap.insert(unresolved, v', l),
-			 if (eq_var(v,v'))
-			     then vsubst
-			 else Name.VarMap.insert(vsubst,v,v'))
-		    | _ => error ("add_context could not resolve " ^ (Name.label2name l)))
-	    val (unresolved,unresolvedVsubst) = Name.VarMap.foldli unresolvedFolder
-		                                (VarMap.empty, VarMap.empty) unresolved
-            (* ---- Compute the substitution to avoid clashes of bound variables ------- *)
-	    fun clashFolder (v, (l, pc), vsubst) = 
-		(case VarMap.find(vm1, v) of
-		     NONE => vsubst
-		   | SOME _ => let val v' = fresh_named_var "clash" (* derived_var v *)
-			       in  VarMap.insert(vsubst,v,v')
-			       end)
-	    val clashVsubst = Name.VarMap.foldli clashFolder VarMap.empty vm2
-	    (* ----- Compute the final substitution by combining unresolved and clash ---- *)
-	    local
-		fun folder(v,v',subst) = 
-		    if (eq_var (v,v'))
-			then subst
-		    else let val subst = subst_add_expvar(subst,v,VAR v')
-			     val subst = subst_add_convar(subst,v,CON_VAR v')
-			     val subst = subst_add_modvar(subst,v,MOD_VAR v')
-			     val subst = subst_add_sigvar(subst,v,v')
-			 in  subst
-			 end
-	    in  val final_vsubst = Name.VarMap.unionWithi (fn (v,_,_) => error "same var in vsubst")
-		                   (unresolvedVsubst, clashVsubst)
-		val final_subst = Name.VarMap.foldli folder empty_subst final_vsubst
-	    end
-	in  if (subst_is_empty final_subst)
-		then NONE
-	    else 
-		let val vsubst = fn v => (case VarMap.find(final_vsubst,v)
-					    of NONE => v
-					     | SOME v' => v')
-		    val pcsubst = fn pc => pc_subst(pc,final_subst)
-		    val varMap = (VarMap.foldli
-				  (fn (v,(lab,pc),vm) =>
-				   let val v = vsubst v
-				       val pc = pcsubst pc
-				       val vm = VarMap.insert (vm,v,(lab,pc))
-				   in  vm
-				   end) VarMap.empty vm2)
-		    val ordering = map vsubst ord2
-		    val labelMap = LabelMap.map (fn (v,labs) => (vsubst v, labs)) lm2
-		    val overloadMap = LabelMap.map (ovld_subst final_subst) om2
-		in  SOME (CONTEXT{varMap = varMap,
-				  ordering = ordering,
-				  labelMap = labelMap,
-				  memo = ref VarMap.empty,
-				  fixityMap = fm2,
-				  overloadMap = overloadMap},
-			  unresolved)
-		end 
-	end
-
-    fun pcAddFree (pc : phrase_class, set : VarSet.set) : VarSet.set =
-	VarSet.union (set, pc_free pc)
-
-    (* is_open_internal_path checks if a path consists of a sequence of open labels ending with
-       an internal label. *)
-    fun is_open_internal_path (_,(v,[])) = false
-      | is_open_internal_path (varmap,(v,labs)) = 
-	(case labs of
-	     [lab] => (case VarMap.find(varmap,v) of
-			   NONE => (print "Could not find "; pp_var v; print "\n";
-				    error "is_open_internal_path failed")
-			 | SOME (l,_) => is_open l andalso is_label_internal lab)
-	   | _ => let val len = length labs
-		  in is_open (List.nth(labs, len - 2)) andalso is_label_internal (List.nth(labs, len - 1))
-		  end)
-
-    (* adding the partial context to the context *)
-    fun plus_context (ctxt1 : context, orig_pctxt : partial_context) : partial_context option * context = 
-	let
-(*
-	    val _ = debugdo (fn () => (print "plus PARTIAL CONTEXT:\n";
-				       pp_pcontext orig_pctxt;
-				       print "\n\n"))
-*)
-	    val CONTEXT {varMap = vm1, ordering = ord1, labelMap = lm1,
-			 memo = ref memo1, fixityMap = fm1, overloadMap = om1} = ctxt1
-	    val pctxt_option = alphaVaryPartialContext(ctxt1, orig_pctxt)
-	    val (ctxt2, unresolved) = (case pctxt_option
-					 of NONE => orig_pctxt (* alpha-varying not needed *)
-					  | SOME pctxt => pctxt)
-	    val CONTEXT {varMap = vm2, ordering = ord2, labelMap = lm2,
-			 fixityMap = fm2, overloadMap = om2, ...} = ctxt2
-	    val fixityMap = LabelMap.unionWithi
-		            (fn (l, _, _) => error ("fixityMap not disjoint at " ^ (label2name l)))
-			    (fm1,fm2)
-            (* Combine the labelMaps from both contexts.
-               For any labels in the domain of both labelMaps, check that at least one corresponds to an
-               open_internal_path.  Why is this the right thing?
-             *)
-	    val labelMap = LabelMap.unionWithi 
-		            (fn (l,p1,p2) =>
-			     if not (!NoOpenInternalPaths) andalso
-				 (is_open_internal_path(vm1,p1) orelse
-				  is_open_internal_path(vm2,p2))
-				 then p2
-			     else (print "p1 = "; pp_path (PATH p1); print "\n";
-				   print "p2 = "; pp_path (PATH p2); print "\n";
-				   error ("labelMap not disjoint at " ^ (label2name l))))
-			     (lm1,lm2)
-	    val varMap = VarMap.unionWithi
-		            (fn (v,(l,_),(l',_)) => (print "varMap not disjoint at label ";
-						     Ppil.pp_label l;
-						     print " and label' ";
-						     Ppil.pp_label l';
-						     print " and var ";
-						     Ppil.pp_var v;
-						     print "\n";
-						     error "varMap not disjoint"))
-			     (vm1,vm2)
-	    (* Ignore (empty) table in the partial context. *)
-	    val memoMap = memo1
-		
-	    (* orderings are backwards *)
-	    val ordering = ord2 @ ord1
-	    val almostFinalContext = CONTEXT{varMap = varMap,
-					     ordering = ordering,
-					     labelMap = labelMap,
-					     memo = ref memoMap,
-					     fixityMap = fixityMap,
-					     overloadMap = Name.LabelMap.empty}
-	    val overloadMap = LabelMap.unionWithi
-                     	      (fn (l, ovld1, ovld2) =>
-			       (ovld_add(l,almostFinalContext,ovld1,ovld2)))
-			      (om1,om2)
-	in  (pctxt_option,
-	     CONTEXT{varMap = varMap,
-		     ordering = ordering,
-		     labelMap = labelMap,
-		     memo = ref memoMap,
-		     fixityMap = fixityMap,
-		     overloadMap = overloadMap})
-	end 
-
-    fun reachableVars(varMap, black, gray) = 
+    fun reachableVars(varMap, black, gray) =
 	if (VarSet.isEmpty gray)
 	    then black
-	else 
-	    let 
+	else
+	    let
 		val black = VarSet.union(black, gray)
-		fun folder (v,s) = 
+		fun folder (v,s) =
 		    (case VarMap.find(varMap,v) of
-			 SOME (_, pc) => pcAddFree(pc,s)
+			 SOME (_, pc) => VarSet.union (s,pc_free pc)
 		       | _ => s)
-(* error ("reachableVars could not find free variable " ^ (Name.var2string v)) *)
-		val freeVars = VarSet.foldl folder VarSet.empty gray  
+		val freeVars = VarSet.foldl folder VarSet.empty gray
 		fun pred v = (case VarMap.find(varMap,v) of
 				  SOME _ => true
 				| _ => false)
-		val temp = VarSet.filter pred freeVars         (* one step from old gray *)
-		val gray = VarSet.difference(temp, black)      (* there might be loops *)
+		val temp = VarSet.filter pred freeVars
+		val gray = VarSet.difference(temp, black)
 	    in  reachableVars(varMap,black,gray)
 	    end
 
-    fun sub_context (bigger : Il.context, smaller : Il.context) : Il.partial_context = 
-	let 
-	    val CONTEXT{varMap=v1, ordering=o1, labelMap=l1, fixityMap=f1, overloadMap=om1, ...} = bigger
-	    val CONTEXT{varMap=v2, ordering=o2, labelMap=l2, fixityMap=f2, overloadMap=om2, ...} = smaller
-	    val v3 = VarMap.filteri (fn (v,_) => 
-				     (case VarMap.find(v2,v)
-					of NONE => true
-					 | SOME _ => false)) v1
-	    val o3 = List.filter (fn v => (case VarMap.find(v2,v)
-					     of NONE => true
-					      | SOME _ => false)) o1
-	    val l3 = LabelMap.filteri (fn (l,_) => 
-				       (case LabelMap.find(l2,l)
-					  of NONE => true
-					   | SOME _ => false)) l1
-	    val f3 = LabelMap.filteri (fn (l1,_) => (case LabelMap.find(f2,l1)
-						       of NONE => true
-							| SOME _ => false)) f1
-	    val om3 = LabelMap.mapi (fn (l1, ovld1) => (case LabelMap.find(om2, l1)
-							  of NONE => ovld1
-							   | SOME ovld2 => ovld_sub(bigger,ovld1,ovld2))) om1
-	    val om3 = LabelMap.filter (fn (OVLD ([],_)) => false
-	                                | _ => true) om3
-	    (* There is no reason to retain the memo table; it should not
-	       be written to disk. *)
-	    val diff = CONTEXT {varMap = v3, ordering = o3, labelMap = l3,
-				fixityMap = f3, overloadMap = om3, memo = ref VarMap.empty}
-	    val roots = (VarMap.foldli 
-			 (fn (v,_,s) => VarSet.add(s,v))
-			 VarSet.empty v3)
-	    val reachable = LabelMap.foldl
-		           (fn (OVLD (celist,_),reach) =>
-			      foldl (fn ((c,e),reach) => 
-				     let val cFree = con_free c
-					 val eFree = exp_free e
-				     in  VarSet.union(VarSet.union(reach,cFree),eFree)
-				     end) reach celist)
-			   VarSet.empty om3
-	    val reachable = reachableVars(v1, reachable, roots)
-	    val keepVars = VarSet.difference(reachable, roots)
-	    val unresolved = VarSet.foldl
-		                  (fn (v,vm) => 
-				   (case VarMap.find(v1,v)
-				      of SOME (l, _) => VarMap.insert(vm,v,l)
-				       | NONE => error "Missing variable in sub_context"))
-				  Name.VarMap.empty keepVars
-	in  (diff, unresolved)
+    fun reachable (ctxt : context, roots : VarSet.set) : VarSet.set =
+	let val CONTEXT {varMap, ...} = ctxt
+	in  reachableVars(varMap, VarSet.empty, roots)
 	end
 
-    fun gc_context (module : Il.module) : Il.context = 
-	let val (ctxt1, (ctxt2,_), sbndopt_entry) = module
-	    val CONTEXT {varMap, ...} = ctxt2
-	    val exclude = VarMap.foldli
-		          (fn (v,_,s) => VarSet.add(s,v))
-		          VarSet.empty varMap
-	    val roots = VarMap.foldli
-		          (fn (v,(_,pc),s) => pcAddFree(pc,s))
-		          VarSet.empty varMap
-	    fun folder ((sbndopt,entry),roots) = 
-		let val roots = (case sbndopt of
-				     NONE => roots
-				   | SOME sbnd => VarSet.union(roots, sbnd_free sbnd))
-		in  VarSet.union(roots, entry_free entry)
-		end
-	    val roots = foldl folder roots sbndopt_entry
-	    val roots = VarSet.difference(roots, exclude)
-	    val CONTEXT{varMap, ordering, labelMap, overloadMap, fixityMap, ...} = ctxt1
-	    val roots = VarMap.foldli
-		          (fn (v,(l,_),s) => if Name.keep_import l
-						 then VarSet.add(s,v)
-					     else s)
-			  roots varMap
-	    val reachable = reachableVars(varMap, VarSet.empty, roots)
+    fun gc_context (ctxt : context, roots : VarSet.set) : context =
+	let val CONTEXT {varMap, ordering, labelMap,
+			 fixityMap, overloadMap} = ctxt
+	    val roots = (LabelMap.foldli
+			 (fn (l,(v,_),s) => if Name.keep_import l
+						then VarSet.add(s,v)
+					    else s)
+			 roots labelMap)
+	    val reachable = reachable(ctxt, roots)
 	    fun isReachable v = Name.VarSet.member(reachable,v)
-	    val varMap_orig = varMap (* used for the print statements below *)
-	    val varMap = VarMap.filteri (fn (v,_) => isReachable v) varMap_orig
-	    val labelMap = LabelMap.filteri (fn (_,(v,_)) => isReachable v) labelMap
+	    val n = VarMap.numItems varMap
+	    val varMap = VarMap.filteri (fn (v,_) => isReachable v) varMap
+	    val labelMap =
+		LabelMap.filteri (fn (_,(v,_)) => isReachable v) labelMap
 	    val ordering = List.filter isReachable ordering
-	    val _ = print ("gc_context: " ^
-			   Int.toString(VarMap.numItems varMap_orig) ^
-			   " items in original context.  " ^ 
-			   (Int.toString (VarMap.numItems varMap))
-			   ^ " items in reduced context.\n")
+	    val _ = msg ("  gc_context: " ^ Int.toString n ^
+			 " items in original context.  " ^
+			 (Int.toString (VarMap.numItems varMap)) ^
+			 " items in reduced context.\n")
 	in  CONTEXT{varMap = varMap,
 		    ordering = ordering,
 		    labelMap = labelMap,
-		    memo = ref VarMap.empty, (* laziness *)
-		    fixityMap = fixityMap,		    
-		    overloadMap = overloadMap}
-	end
-
-    (* Invariant: If f : label_info then f is 1-1. *)
-    type label_info = label Name.LabelMap.map
-
-    fun inverse (li : label_info) : label_info =
-	let fun folder (l, l', li') = Name.LabelMap.insert (li', l', l)
-	in  Name.LabelMap.foldli folder Name.LabelMap.empty li
-	end
-    
-    val empty_label_info : label_info = Name.LabelMap.empty
-	
-    fun get_labels ((CONTEXT{fixityMap, overloadMap, labelMap, ...}, _), li) =
-	let
-	    fun addLabel (li', l) =
-		case Name.LabelMap.find (li', l)
-		  of NONE => Name.LabelMap.insert (li', l, fresh_internal_label "")
-		   | SOME _ => li'
-	    fun addDomain (map,acc) = Name.LabelMap.foldli (fn (l, _, acc') => addLabel (acc', l)) acc map
-	    val li = addDomain (fixityMap, li)
-	    val li = addDomain (overloadMap, li)
-	    val li = addDomain (labelMap, li)
-	in  li
-	end
-    
-    fun map_labels (li : label_info) (l : label) : label =
-	let val l' = (case Name.LabelMap.find (li, l)
-			of NONE => l
-			 | SOME l' => l')
-(*
-	    val _ = debugdo (fn () =>
-			     (print "map_labels: "; pp_label l;
-			      print " -> "; pp_label l'; print "\n"))
-*)
-	in  l'
-	end
-
-    fun map_context_labels (CONTEXT{varMap, ordering, labelMap, memo=ref memoMap, fixityMap, overloadMap}, li) =
-	let val lookup = map_labels li
-	    fun folder (l, v, map) = Name.LabelMap.insert (map, lookup l, v)
-	    fun changeDomain map = Name.LabelMap.foldli folder Name.LabelMap.empty map
-	    val varMap = Name.VarMap.map (fn (l,pc) => (lookup l, pc)) varMap
-	    val overloadMap = changeDomain overloadMap
-	    val labelMap = changeDomain labelMap
-	    val fixityMap = changeDomain fixityMap
-	in  CONTEXT{varMap = varMap,
-		    ordering = ordering,
-		    labelMap = labelMap,
-		    memo = ref memoMap,
 		    fixityMap = fixityMap,
 		    overloadMap = overloadMap}
-	end
-    fun map_partial_context_labels ((context, frees), li) =
-	let val context = map_context_labels (context, li)
-	    val frees = Name.VarMap.map (map_labels li) frees
-	in  (context, frees)
-	end
-
-    fun obscure_labels (ctxt, li) = map_context_labels (ctxt, li)
-
-    fun unobscure_labels ((ctxt, partial_ctxt, binds), li) =
-	let val li' = inverse li
-	in  (map_context_labels (ctxt, li'),
-	     map_partial_context_labels (partial_ctxt, li'),
-	     binds)
-	end
-
-    fun list_labels (CONTEXT{varMap, labelMap, ...}) : label list =
-	let
-	    (* We do not have to add the domain of overloadMap because
-	       the elaborator resolves overloading. *)
-	    fun addPath (l : label, p : vpath, acc) =
-		if not (!NoOpenInternalPaths) andalso is_open_internal_path(varMap,p)
-		    then acc
-		else
-		    let val (c,r) = Name.make_cr_labels l
-		    in  l :: c :: r :: acc
-		    end
-	in  Name.LabelMap.foldli addPath nil labelMap
-	end
-    
-    fun removeNonExport (CONTEXT{varMap, overloadMap, labelMap, ordering, fixityMap, ...}, frees) = 
-	let val ordering = List.filter (fn v => let val SOME(l,_) = Name.VarMap.find(varMap,v)
-						in  not (is_nonexport l)
-						end) ordering
-	    val varMap = Name.VarMap.filteri (fn (_,(l,_)) => not(is_nonexport l)) varMap
-	    val labelMap = Name.LabelMap.filteri (fn (l,_) => not(is_nonexport l)) labelMap
-	    val frees = Name.VarMap.filteri (fn (_, l) => not(is_nonexport l)) frees
-	in  (CONTEXT{varMap = varMap,
-		     ordering = ordering,
-		     labelMap = labelMap,
-		     memo = ref VarMap.empty, (* laziness *)
-		     fixityMap = fixityMap,
-		     overloadMap = overloadMap},
-	     frees)
 	end
 end
