@@ -57,6 +57,8 @@ LIST_PAIR   Basis/Aggregate/list-pair-sig
 ListPair    Basis/Aggregate/list-pair
 # "BYTE", "Byte", "CharVector", "CharArray", "LIST_PAIR", "ListPair", "TopLevel"
 
+POSIX_extern   Basis/extern
+
 TIME        Basis/OS/time-sig
 PreTime     Basis/OS/pre-time
 Time        Basis/OS/time
@@ -90,51 +92,44 @@ TextPrimIO     Basis/IO/text-prim-io
 CLEAN_UP       Basis/NJ/cleanup-sig
 CleanUp        Basis/NJ/cleanup
 CleanIO        Basis/IO/clean-io
-BinIOFn        Basis/IO/bin-io-fn
 # "CLEAN_UP", "CleanUp", "CleanIO", "BinIOFn"
 
 TIMER	       Basis/timer-sig
 Timer	       Basis/useless-timer
 
-POSIX_extern   Basis/extern
 POSIX_ERROR    Basis/Posix/posix-error.sig
 POSIX_Error    Basis/Posix/posix-error
 POSIX_FLAGS    Basis/Posix/posix-flags-sig
 POSIX_IO_SIG     Basis/Posix/posix-io-sig
-# "POSIX_extern", "POSIX_ERROR", "POSIX_Error", "POSIX_FLAGS", "POSIX_IO_SIG"
+
 
 POSIX_FILE_SYS Basis/Posix/posix-filesys-sig
 POSIX_FileSys Basis/Posix/posix-filesys
 POSIX_PROCESS Basis/Posix/posix-process-sig
-# "POSIX_FILE_SYS", "POSIX_FileSys", "POSIX_PROCESS"
 
 POSIX_SIGNAL  Basis/Posix/posix-signal-sig
 POSIX_Signal  Basis/Posix/posix-signal
 POSIX_Process Basis/Posix/posix-process
 POSIX_IO      Basis/Posix/posix-io
-# "POSIX_SIGNAL", "POSIX_Signal", "POSIX_Process", "POSIX_IO"
 
 POSIX_PROC_ENV Basis/Posix/posix-procenv-sig
 POSIX_ProcEnv  Basis/Posix/posix-procenv
 POSIX_TTY      Basis/Posix/posix-tty-sig
 POSIX_Tty      Basis/Posix/posix-tty
-# "POSIX_PROC_ENV", "POSIX_ProcEnv", "POSIX_TTY", "POSIX_Tty"
 
 POSIX_SYS_DB   Basis/Posix/posix-sysdb-sig
 POSIX_Sys_DB   Basis/Posix/posix-sysdb
 POSIX          Basis/Posix/posix-sig
 Posix          Basis/Posix/posix
-# "POSIX_SYS_DB", "POSIX_Sys_DB", "POSIX", "Posix"
 
 OS_Path        Basis/Unix/os-path
 OS_FileSys     Basis/Unix/os-filesys
 OS_Process     Basis/Unix/os-process
 OS_IO          Basis/Unix/os-io
 OS             Basis/Unix/os
-# "OS_FileSys", "OS_Path", "OS_Process", "OS_IO", "OS"
 
 BinPrimIO         Basis/IO/bin-prim-io
-# "BinPrimIO"
+BinIOFn        Basis/IO/bin-io-fn
 
 TextIOFn       Basis/IO/text-io-fn
 PosixPrimIOFn  Basis/Unix/posix-prim-io-fn
@@ -245,10 +240,10 @@ ListMergeSort Basis/Library/list-mergesort
 #SimpleUref    Basis/Library/simple-uref
 # "UREF", "Uref", "SimpleUref"
 
-SplayMapFn     Basis/Library/splay-map-fn
-SplaySetFn     Basis/Library/splay-set-fn
 SPLAY_TREE     Basis/Library/splaytree-sig
 SplayTree      Basis/Library/splaytree
+SplayMapFn     Basis/Library/splay-map-fn
+SplaySetFn     Basis/Library/splay-set-fn
 # "SplayMapFn", "SplaySetFn", "SPLAY_TREE", "SplayTree"
 
 # TIME           Basis/Library/time-limit <--- can't do this file, it uses SMLofNJ.IntervalTimer
@@ -321,11 +316,10 @@ PRETTYPRINT Parser/pp.sig
 PrettyPrint Parser/pp
 SOURCEMAP Parser/sourcemap.sig
 SourceMap Parser/sourcemap
-SOURCE   Parser/source.sig
-Source   Parser/source
-
 PATHNAMES Parser/pathnames.sig
 PathNames Parser/pathnames
+SOURCE   Parser/source.sig
+Source   Parser/source
 
 ERRORMSG Parser/errormsg.sig
 ErrorMsg Parser/errormsg
@@ -406,7 +400,6 @@ PRIMUTIL Elaborator/primutil.sig
 PrimUtil Elaborator/primutil
 ILUTIL Elaborator/ilutil.sig
 IlUtil Elaborator/ilutil
-
 ILCONTEXT Elaborator/ilcontext.sig
 IlContext Elaborator/ilcontext
 ILCONTEXTEQ Elaborator/ilcontexteq.sig
@@ -535,18 +528,20 @@ Linkrtl Rtl/linkrtl
 #################### Backend directory #################
 MACHINE Backend/machine.sig
 MACHINEUTILS Backend/machineutils.sig
+TRACETABLE Backend/tracetable.sig
+Tracetable Backend/tracetable
 BBLOCK Backend/bblock.sig
 Bblock Backend/bblock
 CALLCONV Backend/callconv.sig
-TRACETABLE Backend/tracetable.sig
-Tracetable Backend/tracetable
 PRINTUTILS Backend/printutils.sig
 PrintUtils Backend/printutils
 
-COLOR   Backend/color.sig
-Color   Backend/color1
 IFGRAPH Backend/ifgraph.sig
 IfGraph Backend/ifgraph
+TRACKSTORAGE Backend/trackstorage.sig
+COLOR   Backend/color.sig
+Color   Backend/color1
+
 
 TOASM Backend/toasm.sig
 INTRAPROC Backend/intraproc.sig
@@ -563,7 +558,6 @@ Regset Backend/regset
 Labelmap Backend/labelmap
 RTLTOASM Backend/rtltoasm.sig
 RtlToAsm Backend/rtltoasm
-TRACKSTORAGE Backend/trackstorage.sig
 VarGraph Backend/vargraph
 
 #################### Alpha directory #################
