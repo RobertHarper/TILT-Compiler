@@ -35,6 +35,8 @@ signature UTIL =
     val sequence2list : ('a , 'b) sequence -> ('a * 'b) list
     val set2list : ('a , 'b) set  -> ('a * 'b) list
     val list2set : ('a * 'b) list -> ('a , 'b) set
+    val setconcat : ('a , 'b) set * ('a, 'b) set -> ('a, 'b) set
+    val sequenceconcat : ('a , 'b) sequence * ('a, 'b) sequence -> ('a, 'b) sequence
     val sequence2set : ('a , 'b) sequence -> ('a , 'b) set
     val foldsequence : (('a*'b) * 'c -> 'c) -> 'c -> ('a,'b) sequence -> 'c (* like foldl *)
     val mapsequence : (('a*'b) -> ('c*'d)) -> ('a,'b) sequence -> ('c,'d) sequence

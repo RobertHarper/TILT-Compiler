@@ -63,6 +63,8 @@ structure Util : UTIL =
 	in loop set
 	end
     val sequence_lookup = set_lookup
+    val setconcat = op @
+    val sequenceconcat = op @
 
     val error = real_error
   end
