@@ -638,7 +638,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
        | (v as (Var_c var),kind) => 
 	 let
 	   val _ = sub_kind(D,find_max_kind (D,var),kind)
-	     handle Unbound =>
+	     handle NilContext.Unbound =>
 	       (printem ["UNBOUND VARIABLE = ",var2string var,
 			   " CONTEXT IS \n"];
 		NilContext.print_context D;
@@ -842,7 +842,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 | (v as (Var_c var)) => 
 	   let
 	     val kind = (find_max_kind (D,var)
-			 handle Unbound =>
+			 handle NilContext.Unbound =>
 			   (printem ["UNBOUND VARIABLE = ",var2string var,
 				       " CONTEXT IS \n"];
 			    NilContext.print_context D;
@@ -1574,7 +1574,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       val free_vars = TraceOps.get_free_vars nt
       fun checker v = 
 	(ignore (NilContext.find_kind (D,v)) (*Don't bother with standard kind if ignoring*)
-	 handle Unbound =>
+	 handle NilContext.Unbound =>
 	   (NilContext.print_context D;
 	    error  (locate "niltrace_valid") 
 	    ("variable "^(var2string v)^" not in context")))
