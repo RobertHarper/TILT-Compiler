@@ -4,4 +4,7 @@ Top		top		TARGET
 REQUIRED	required.sig
 Required	required	TARGET
 
+OPTIONAL	optional.sig
+Optional	optional	TARGET
+
 Test		test		TARGET
