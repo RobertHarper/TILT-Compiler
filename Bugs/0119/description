@@ -1,0 +1,16 @@
+Number: 0119
+Title:       discrepancies on byte/char tests
+Keywords:    bytes, chars
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     test reports "wrong" answers
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0054
+Owner: rwh
+Status: open

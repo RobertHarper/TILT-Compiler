@@ -1,0 +1,16 @@
+Number: 0120
+Title:       zero-sized word8array
+Keywords:    word8array
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     zero-sized word8 vectors cause a seg fault
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0056
+Owner: rwh
+Status: open

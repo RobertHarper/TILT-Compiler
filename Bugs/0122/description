@@ -1,0 +1,16 @@
+Number: 0122
+Title:       overflow in compiler
+Keywords:    overflow
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     test file causes compiler to crash with overflow
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0061
+Owner: rwh
+Status: open

@@ -1,0 +1,16 @@
+Number: 0121
+Title:       nonexhaustive binding failure in optimize1
+Keywords:    optimizer
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    critical
+Problem:     compiler faults with nonexhaustive binding failure in optimize1
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0059
+Owner: rwh
+Status: open
