@@ -33,7 +33,7 @@ struct
   val show_calls          = Stats.ff "nil_show_calls"
   val show_context        = Stats.ff "nil_show_context"
 
-  val compare_paths       = Stats.tt "nilstatic_compare_paths"
+  val compare_paths       = Stats.ff "nilstatic_compare_paths"
 
   val alpha_equiv_success    = Stats.counter "Alpha Equiv Checks Succeeded"
   val alpha_equiv_fails      = Stats.counter "Alpha Equiv Checks Failed"
@@ -1174,7 +1174,11 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  fun compare_list1 (a,[]) = false
 	    | compare_list1 (a,b::c) = alpha_subequiv_con sk (a,b) orelse compare_list1 (a,c)
 
-	  fun compare (D,c1::cc1,done1,c2::cc2,done2) = 
+	  (*compare(D,c1s,done1,c2s,done2)
+	   * PRE:  not (done1 and done2)
+	   *    :  Forall ci in c1s and cj in c2s, not (alpha_sub_equiv_con sk (ci,cj))
+	   *)
+	  fun compare (D,cc1 as c1::_,done1,cc2 as c2::_,done2) = 
 	    let
 	      val (D,c1,path1) = 
 		if done1 then (D,c1,false)
@@ -1186,7 +1190,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		  end
 
 	      val (D,c2,path2) = 
-		if done1 then (D,c2,false)
+		if done2 then (D,c2,false)
 		else 
 		  let
 		    val ((D,alpha),c2,path) = context_beta_reduce ((D,Alpha.empty_context()),c2)
@@ -1194,8 +1198,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		  in (D,c2,path)
 		  end
 
-	      val eq = ((done1 orelse compare_list1(c1,c2::cc2)) orelse
-			(done2 orelse compare_list2(c1::cc1,c2)))
+	      val eq = (((not done1) andalso compare_list1(c1,c2::cc2)) orelse
+			((not done2) andalso compare_list2(c1::cc1,c2)))
 	    in 
 	      if eq then (D,c1,c2,true)
 	      else
@@ -1221,10 +1225,16 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    case k of
 	      Type_k => 
 		if !compare_paths then
-		  let
+		  (let
+
 		    val (D,c1,c2,eq) = compare (D,[c1],false,[c2],false)
 		  in eq orelse con_structural_equiv((D,T),c1,c2,sk)
-		  end
+		  end handle any =>
+		     (NilContext.print_context (NilContext.con_error_context (D,c1));
+		      NilContext.print_context (NilContext.con_error_context (D,c2));
+		      Ppnil.pp_con c1; print "\n";
+		      Ppnil.pp_con c2; print "\n";
+		      raise any))
 		else
 		  let
 		    val (D,c1) = context_reduce_hnf(D,c1)
@@ -1639,7 +1649,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 					   eFormals = eFormals,
 					   fFormals = fFormals,
 					   body_type=body_type}
-	  val closure = substExpConInCon (esubst,csubst) closure_type
+	  val closure_type = substExpConInCon (esubst,csubst) closure_type
 	    
 	  val _ = 
 	    (type_equiv (D,closure_type,tipe)) orelse

@@ -737,29 +737,38 @@ structure NilContextPre
       end
 
 
+    fun filt cc = List.mapPartial (fn x => x) cc
+
+    (*SOME unpleasantness to make it robust with unbound variables
+     *)
    fun generate_error_context (orig,context,[]) = context
      | generate_error_context (orig,context,fvlist) = 
      let
 
        fun k_get ({kindmap,...}:context,v) = 
 	 (case Vfind (kindmap,v)
-	    of NONE => raise Unbound
-	     | SOME {eqn,kind,...} => (!eqn,kind))
+	    of NONE => (NONE,NONE)
+	     | SOME {eqn,kind,...} => (!eqn,SOME kind))
 
-       fun k_insert (v,k,copt,D) = 
-	 if contains (#kindmap D) v then D else
-	   (case copt of SOME c => insert_kind_equation (D,v,c,k) | NONE => insert_kind (D,v,k))
-
+       fun k_insert (v,kopt,copt,D) = 
+	 (case kopt 
+	    of SOME k =>
+	      if contains (#kindmap D) v then D else
+		(case copt of SOME c => insert_kind_equation (D,v,c,k) | NONE => insert_kind (D,v,k))
+	     | NONE => D)
+		   
        val (ev_list,cv_list) = Listops.unzip fvlist
        val free_cvs = Name.VarSet.listItems(foldl Name.VarSet.union Name.VarSet.empty cv_list)
        val free_evs = Name.VarSet.listItems(foldl Name.VarSet.union Name.VarSet.empty ev_list)
 
        (*Get the equations opts and kinds, and then filter out the non-equations *)
-       val (eqn_opts,kinds) = Listops.unzip (map (fn v => k_get(orig,v)) free_cvs)
-       val eqns = List.mapPartial (fn x => x) eqn_opts
+       val (eqn_opts,kind_opts) = Listops.unzip (map (fn v => k_get(orig,v)) free_cvs)
+       val eqns  = filt eqn_opts
+       val kinds = filt kind_opts
 
        (*Get the types*)
-       val types = map (fn v => find_con(orig,v)) free_evs
+       val type_opts = map (fn v => ((SOME (find_con(orig,v))) handle _ => NONE)) free_evs
+       val types = filt type_opts
 
        (*Get the context that covers the kinds, equations, and types*)
        val context = generate_kind_error_context' (orig,context,kinds)
@@ -767,8 +776,10 @@ structure NilContextPre
        val context = generate_con_error_context' (orig,context,types)
 
        (*Insert the equations, kinds, and types*)
-       val context = foldl3 k_insert context (free_cvs,kinds,eqn_opts)
-       val context = foldl2 (fn (v,c,D) => insert_con (D,v,c)) context (free_evs,types)
+       val context = foldl3 k_insert context (free_cvs,kind_opts,eqn_opts)
+       val context = foldl2 (fn (v,SOME c,D) => insert_con (D,v,c)
+			      | (_,NONE,D)   => D)
+	             context (free_evs,type_opts)
      in
        context
      end
