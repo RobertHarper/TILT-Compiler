@@ -821,6 +821,7 @@ struct
 		else
 		    let val inputs = NONE
 			val mask = W.orb(Compress,Remove)
+			val mask = W.orb(mask,Assemble)
 			val flags = W.andb(flags,mask)
 		    in  COMPILE (U, inputs, flags, info)
 		    end

@@ -13,7 +13,6 @@
 	not possible.  The third stage is the master performing any
 	unfinished assembly and cleanup.
 
-	The interface for plan_link and plan_pack could be simpler.
 *)
 signature UPDATE =
 sig
