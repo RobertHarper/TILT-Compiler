@@ -17,10 +17,12 @@ struct
    val full_debug = ref false
    val trace      = ref false
 
+
    val do_kill_cpart_of_functor = Stats.tt("do_thin")
    val killDeadImport = Stats.tt("killDeadImport")
    val do_preproject = Stats.tt("do_preproject")
    val do_memoize = Stats.tt("do_memoize")
+   val keep_hil_numbers = Stats.ff("keep_hil_numbers")
 
    val elaborator_specific_optimizations = ref true
    val omit_datatype_bindings = ref true
@@ -54,7 +56,10 @@ struct
 
        fun newSplit (var, vmap) = 
 	   let
-	       val var_name = Name.var2string var
+	       val var_name = if (!keep_hil_numbers) then
+	                         Name.var2string var
+                              else
+                                 Name.var2name var
 	       val var_c = Name.fresh_named_var (var_name ^ "_c")
 	       val var_r = Name.fresh_named_var (var_name ^ "_r")
 	   in
@@ -134,12 +139,14 @@ struct
        end
 
 
-   fun substConInCon subst con = NilSubst.substConInCon subst (NilSubst.renameCVarsCon con)
+   fun substConInCon subst con = NilSubst.substConInCon subst con
 
    (*con_a will be renamed when it is substituted*)
-   fun varConConSubst var con_a con_b = NilSubst.varConConSubst var con_a (NilSubst.renameCVarsCon con_b) 
+   fun varConConSubst var con_a con_b = 
+       NilSubst.varConConSubst var con_a con_b
      
-   fun varConKindSubst var con kind = NilSubst.varConKindSubst var con (NilSubst.renameCVarsKind kind) 
+   fun varConKindSubst var con kind = 
+       NilSubst.varConKindSubst var con kind
 
    (*This will work as long as you don't do any composing of substitutions*)
    val addToConSubst = NilSubst.add
@@ -183,7 +190,9 @@ struct
    (* xeffect.  
          Translates the total/partial distinction from HIL to MIL.
     *)
-   fun xeffect (Il.TOTAL) = Total
+   (* XXX: since xmod of functors is broken, always saying "partial",
+           we break this function to match *)
+   fun xeffect (Il.TOTAL) = Partial
      | xeffect (Il.PARTIAL) = Partial
 
    (* xilprim.  Translates the so-called "IL primitives" (primitives
@@ -388,7 +397,7 @@ in
    fun NilContext_find_kind(ctxt as CONTEXT{NILctx,used,...},v) = 
        (let val _ = NilContext_use_var(ctxt,v)
 	    val k = NilContext.find_kind(NILctx,v)
-	in  SOME (NilSubst.renameCVarsKind k)
+	in  SOME ((*NilSubst.renameCVarsKind*) k)
 	end
 	handle NilContext.Unbound => NONE)
 			    
@@ -396,7 +405,7 @@ in
    fun NilContext_find_shape(ctxt as CONTEXT{NILctx,used,...},v) = 
        (let val _ = NilContext_use_var(ctxt,v)
 	    val k = NilContext.find_shape(NILctx,v)
-       in   SOME (NilSubst.renameCVarsKind k)
+       in   SOME ((*NilSubst.renameCVarsKind*) k)
        end
        handle NilContext.Unbound => NONE)
 
@@ -1581,13 +1590,29 @@ end (* local defining splitting context *)
 
      | xcon' context (il_con as Il.CON_APP (il_con1, il_con2)) = 
        let
+           (* XXX Does not handle the case where il_con1 has a
+              dependent kind.  Fortunately, the CON_FUN case of
+              xcon' always returns a non-dependent kind. *)
 	   val (con1, knd1_context) = xcon context il_con1
-           val (Arrow_k(_,[(v_arg,_)],body_context)) = knd1_context
-           val (con2, _) = xcon context il_con2
-	   val con = App_c(con1, [con2])
+           val (Arrow_k(_,vklist,body_context)) = knd1_context
+           val (con2, knd_2) = xcon context il_con2
+	   val con = 
+	       (case knd_2 of
+		    Record_k lvk_seq => 
+			let 
+			    val arg_var = Name.fresh_var()
+			    val lvk_list = Sequence.toList lvk_seq
+			    val args = 
+				map (fn ((l,_),_) => Proj_c(Var_c arg_var, l))
+				lvk_list
+			in
+			    NilUtil.makeLetC 
+			       [Con_cb(arg_var,con2)] 
+			       (App_c(con1, args))
+			end
+		  | _ => App_c(con1, [con2]))
        in  (con, body_context)
        end
-
 
      | xcon' context (Il.CON_MU(Il.CON_FUN(vars, 
 					   Il.CON_TUPLE_INJECT cons))) =
@@ -1638,36 +1663,21 @@ end (* local defining splitting context *)
 	   (con, knd)
        end
 
+
      | xcon' context (Il.CON_FUN (vars, il_con1)) = 
        let
-	   val context' = update_NILctx_insert_kind_list(context, map (fn v => (v,Type_k)) vars)
+           val args = map (fn v => (v,Type_k)) vars
 
-	   val (con1, knd1_context) = xcon context' il_con1
-	   val (arg, con1, knd1_context) =
-	       case vars of
-		   [v] => ((v, Type_k), con1, knd1_context)
-		 | _ => let fun mapper (n,_) = ((NilUtil.generate_tuple_label (n+1),
-						 Name.fresh_var()),Type_k)
-			    val arg_var = Name.fresh_var()
-			    val arg_kind = Record_k(Sequence.fromList
-						    (Listops.mapcount mapper vars))
-			    fun mapper (n,v) = 
-				(v,Proj_c(Var_c arg_var, 
-					  NilUtil.generate_tuple_label (n+1)))
-			    val substlist = Listops.mapcount mapper vars
-				
-			    val con1' = NilUtil.makeLetC (map (fn (v,c) => Con_cb(v,c))
-						  substlist) con1
-			in  ((arg_var, arg_kind), con1', knd1_context)
-			end
-	   val knd1_use = stripKind knd1_context
+	   val context' = update_NILctx_insert_kind_list(context,args)
+
+	   val (con1, knd1) = xcon context' il_con1
+
 	   val fun_name = Name.fresh_var ()
-	   val con = NilUtil.makeLetC ([Open_cb(fun_name, [arg], con1, knd1_use)])
+	   val con = NilUtil.makeLetC ([Open_cb(fun_name, args, con1, knd1)])
 	       (Var_c fun_name)
-	   val knd_context = Arrow_k(Open, [arg], knd1_context)
+	   val knd_context = Arrow_k(Open, args, knd1)
        in  (con, knd_context)
        end
-
 
      | xcon' context (Il.CON_SUM {carrier, noncarriers, special}) =
        let
@@ -1831,7 +1841,6 @@ end (* local defining splitting context *)
      | xexp' context (Il.ETAILPRIM (ilprim, il_cons)) = 
        xexp context (IlUtil.ilprim_etaexpand(ilprim,il_cons))
 
-(* XXX need to handle floats *)
      | xexp' context (il_exp as (Il.PRIM (prim, il_cons, il_args))) = 
        let
 	   open Prim
@@ -2388,9 +2397,9 @@ end (* local defining splitting context *)
 	   (* XXX rename should be replaced with systematic
 	    on-the-fly "on the way down" renaming and 
 	    not after the fact *)
-	   val knd_context = NilSubst.renameCVarsKind knd_context
-	   val knd_shape = NilSubst.renameCVarsKind knd_shape
-	   val knd_use = NilSubst.renameCVarsKind knd_use
+	   val knd_context = (*NilSubst.renameCVarsKind*) knd_context
+	   val knd_shape = (*NilSubst.renameCVarsKind*) knd_shape
+	   val knd_use = (*NilSubst.renameCVarsKind*) knd_use
 
 	   val context' = update_NILctx_insert_kind(context, var, knd_context, 
 						    SOME knd_shape)

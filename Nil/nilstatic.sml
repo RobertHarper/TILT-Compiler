@@ -14,6 +14,9 @@ struct
   val pp_con' = Ppnil.pp_con'
   val pp_exp' = Ppnil.pp_exp'
   val pp_var = Ppnil.pp_var
+  val pp_label = Ppnil.pp_label
+  val pp_label' = Ppnil.pp_label'
+  val pp_list = Ppnil.pp_list
 
   val trace = Stats.ff "nilstatic_trace"
   val local_debug = Stats.ff "nilstatic_debug"
@@ -342,8 +345,8 @@ struct
 
   fun bound_kind arg = ((find_kind arg; true)
 			handle NilContext.Unbound => false)
-  val find_con = renameCon o find_con
-  val find_kind = renameKind o find_kind
+  val find_con = find_con
+  val find_kind = find_kind
 
 
   fun con_head_normalize (D,con) = 
@@ -356,6 +359,7 @@ struct
   fun is_type D kind = 
     (case make_shape (D,kind)
        of Type_k => true
+        | Singleton_k _ => true
 	| _ => false)
 
   fun assertWellFormed context = 
@@ -383,8 +387,8 @@ struct
 	if !debug then
 	  assert (locate "kind_valid - PRE")
 	  [
-	   assertWellFormed D,
-	   assertRenamedKind (D,kind)
+	   assertWellFormed D
+	   (* assertRenamedKind (D,kind) *)
 	   ]
 	else ()
 
@@ -443,8 +447,8 @@ struct
 	if !debug then
 	  assert (locate "con_valid PRE")
 	  [
-	   assertWellFormed D,
-	   assertRenamedCon (D,constructor)
+	   assertWellFormed D
+	   (* assertRenamedCon (D,constructor) *)
 	   ]
 	else ()
       val k = con_valid'(D,constructor)
@@ -455,7 +459,7 @@ struct
 	if !debug then
 	  assert (locate "con_valid POST")
 	  [
-	   assertRenamedKind (D,k)
+	   (* assertRenamedKind (D,k) *)
 	   ]
 	else ()
       val _ = pop()
@@ -617,7 +621,7 @@ struct
 	    | (Crecord_c entries) => 
 	     let
 	       val _ = if (!trace)
-			   then print "con_valid processing Crecord_c\n"
+			   then print "{con_valid processing Crecord_c\n"
 		       else ()
 	       val (labels,cons) = unzip entries
 	       val kinds = map (curry2 con_valid D) cons
@@ -627,14 +631,15 @@ struct
 		  ("labels are: ",",",";",true);
 		  (error (locate "con_valid") "Labels in record of constructors not distinct" ))
 	       val _ = if (!trace)
-			   then print "con_valid done processing Crecord_c\n"
+			   then print "con_valid done processing Crecord_c\n}"
 		       else ()
 	     in 
 	       ()
 	     end
 	    | (Proj_c (rvals,label)) => 
 	     let
-(*		 val _ = (print "XXX con_valid on Proj_c\n") *)
+(*		 val _ = (print "XXX con_valid on Proj_c\n")
+*)
 	       val record_kind = con_valid (D,rvals)
 		 
 	       val entry_kinds = 
@@ -647,10 +652,17 @@ struct
 		       (error (locate "con_valid") 
 			"Non-record kind returned from con_valid in projection")))
 		val labs = map (#1 o #1) (Sequence.toList entry_kinds)
-(*		val _ = (print "XXX DONE con_valid on Proj_c\n") *)
+(*		val _ = (print "XXX DONE con_valid on Proj_c\n")
+*)
 	     in if (Listops.member_eq(eq_label,label,labs))
 		    then () 
-		else error' "Ill-formed projection"
+		else (print "attempted to project label ";
+                      pp_label label;
+                      print " from \n";
+                      pp_con rvals;
+                      print "\n which has labels";
+                      pp_list pp_label' labs ("",", ","",false);
+                      error' "Ill-formed projection")
 	     end
 	    | (App_c (cfun_orig,actuals)) => 
 	     let
@@ -658,7 +670,8 @@ struct
 			  (case cfun_orig of
 			       Var_c v => (print " var = "; pp_var v)
 			     | _ => print " nonvar");
-			 print "\n") *)
+			 print "\n")
+*)
 	       val cfun_kind = con_valid (D,cfun_orig)
 	       val (formals,body_kind) = 
 		 case (strip_singleton (D,cfun_kind)) of
@@ -736,7 +749,7 @@ struct
       fun bnd_checker maker (var,formals,body,body_kind) = 
 	let
 	    val _ = if (!trace)
-			then (print "Processing Open_cb/Code_cb with var = ";
+			then (print "{Processing Open_cb/Code_cb with var = ";
 			      pp_var var; print "\n")
 		    else ()
 	  val _ = con_valid_letfun'(D,var,formals,body,body_kind)
@@ -746,7 +759,7 @@ struct
 	  val D = insert_kind(D,var,Singleton_k con)
 	    val _ = if (!trace)
 			then (print "Done processing Open_cb/Code_cb with var = ";
-			      pp_var var; print "\n")
+			      pp_var var; print "}\n")
 		    else ()
 	in
 	  D
@@ -759,14 +772,14 @@ struct
 	  | Con_cb(var,con) =>
 	   let
 	     val _ = if (!trace)
-			 then (print "Processing Con_cb with var = ";
+			 then (print "{Processing Con_cb with var = ";
 			       pp_var var; print "\n")
 		     else ()
 	     val kind = con_valid (D,con)
 	     val D = insert_kind(D,var,kind)
 	     val _ = if (!trace)
 			 then (print "Done processing Con_cb with var = ";
-			       pp_var var; print "\n")
+			       pp_var var; print "}\n")
 		     else ()
 	   in D
 	   end)
@@ -839,15 +852,13 @@ struct
 	  | (Arrow_k _, _) => false
 	  | (Record_k _, _) => false)
 	 orelse
-	 (if !debug then
 	    (lprintl "sub_kind failed!";
 	     printl "Kind:";
 	     pp_kind kind1;
 	     lprintl "Not equivalent to :";
 	     pp_kind kind2;
-	     printl "")
-	  else ();
-	    false)
+	     printl "";
+             false)
       val _ = pop()
     in res
     end
@@ -1533,8 +1544,9 @@ struct
       fun function_valid openness D (var,Function (effect,recursive,tformals,dependent,
 						   formals,fformals,body,return)) = 
 	let
+	  val _ = trace := true
 	  val _ = if (!trace)
-			then (print "Processing function_valid with var = ";
+			then (print "{Processing function_valid with var = ";
 			      pp_var var; print "\n")
 		    else ()
 	  val D' = foldl (fn ((v,k),D) => (kind_valid(D,k);insert_kind(D,v,k))) D tformals
@@ -1543,14 +1555,14 @@ struct
 	    (foldl (fn (v,D) => 
 		    insert_con (D,v,Prim_c (Float_c F64,[]))) D fformals)
 	  val _ = if (!trace)
-			then (print "Processing body in function_valid with var = ";
+			then (print "}{Processing body in function_valid with var = ";
 			      pp_var var; print "\n")
 		    else ()
 	  val body_c = exp_valid (D,body)
 	  val D = if dependent then D else D'
 	  val _ = con_valid (D,return)
 	  val _ = if (!trace)
-			then (print "Processing body type against given type in function_valid with var = ";
+			then (print "}{Processing body type against given type in function_valid with var = ";
 			      pp_var var; print "\n")
 		    else ()
 	  val _ = 
@@ -1565,8 +1577,9 @@ struct
 	  val con = AllArrow_c(openness,effect,tformals,vars_opt,cons,numfloats,body_c)
 	  val _ = if (!trace)
 			then (print "Done processing function_valid with var = ";
-			      pp_var var; print "\n")
+			      pp_var var; print "}\n")
 		    else ()
+	  val _ = trace := false
 	in
 	  (var,con)
 	end
@@ -1575,16 +1588,18 @@ struct
 	let
 	  val origD = D
 	  val _ = if (!trace)
-			then (print "Processing fbnd_valid \n")
+			then (print "{Processing fbnd_valid \n")
 		    else ()
 	  val bnd_types = Sequence.map_second (function_type openness) defs
-(*	  val _ = (print "bnd_types are: ";
+(***
+	  val _ = (print "bnd_types are: ";
 		   Sequence.app (fn (_,c) => (Ppnil.pp_con c; print "\n")) bnd_types;
-		   print "\n") *)
+		   print "\n")
+****)
 	  val _ = Sequence.map_second (curry2 con_valid D) bnd_types
 	  val D = Sequence.foldl (fn ((v,c),D) => insert_con(D,v,c)) D bnd_types
 	  val _ = if (!trace)
-		      then (print "Processing fbnd_valid done with making context\n")
+		      then (print "Processing fbnd_valid done with making context}\n")
 		    else ()
 	  val found_types = Sequence.map (function_valid openness D) defs
 	  fun checker ((_,c),(_,c')) = 
@@ -1610,14 +1625,14 @@ struct
 	  | Exp_b (var, tracinfo,exp) =>
 	   let
 	     val _ = if (!trace)
-			 then (print "Processing Exp_b with var = ";
+			 then (print "{Processing Exp_b with var = ";
 			       pp_var var; print "\n")
 		     else ()
 	     val bnd_con = exp_valid (D,exp)
 	     val D = insert_con (D,var,bnd_con)
 	     val _ = if (!trace)
 			 then (print "Done processing Exp_b with var = ";
-			       pp_var var; print "\n")
+			       pp_var var; print "}\n")
 		     else ()
 	   in
 	     (D,subst)
@@ -1723,7 +1738,7 @@ struct
 	  if !debug then
 	    assert (locate "exp_valid POST")
 	    [
-	     assertRenamedCon (D,res)
+	     (* assertRenamedCon (D,res) *)
 	     ]
 	  else ()
 	  val _ = pop()
@@ -1769,11 +1784,23 @@ struct
 	   val con = exp_valid (D,app)
 
 	   val (openness',_,tformals,vars_opt,formals,numfloats,body) = 
-	     (case strip_arrow (con_head_normalize(D,con))
-		of SOME c => c
-		 | NONE => (perr_e_c (app,con);
-			    (error (locate "exp_valid") "Application of non-arrow expression" handle e => raise e)))
-	     
+	       let
+		   val con' = con_head_normalize(D,con)
+
+		   (* We rename the bound variables in the function type
+		      because they may be added to the context below.  
+		      If this is a recursive function call, they may
+		      already be in the context
+		    *)
+		   val con'' = NilSubst.renameCon con'
+	       in
+		   case strip_arrow con'' of
+		       SOME c => c
+		     | NONE => (perr_e_c (app,con);
+				(error (locate "exp_valid") 
+				 "Application of non-arrow expression" 
+				 handle e => raise e))
+	       end
 		
 	   val _ = (case (openness,app) of
 		      (Code,Var_e _) => ()
@@ -1808,15 +1835,16 @@ struct
 	   val t_cons = map (curry2 exp_valid D) texps
 
 	   fun print_error () =
-	     (Ppnil.pp_list pp_con' formals ("\nFormal Types: (",", ",")\n",false);
-	      Ppnil.pp_list pp_con' t_cons ("\nActual Types: (",", ",")\n",false);
+	     (Ppnil.pp_list pp_con' formals ("\nFormal Types: (",", ",")",false);
+	      Ppnil.pp_list pp_con' t_cons ("\nActual Types: (",", ",")",false);
 	      Ppnil.pp_list pp_exp' texps ("\nActuals: (",", ",")\n",false);
 	      perr_e exp;
-	      error (locate "exp_valid") "Formal/actual parameter type mismatch")
+	      error (locate "exp_valid") "Formal/actual parameter mismatch")
 
 	   val subst = Subst.fromList (zip (#1 (unzip tformals)) cons)
 	   val formals = map (Subst.substConInCon subst) formals
 	     
+
 	   val D = 
 	     (case vars_opt
 		of SOME vars => 
@@ -1825,20 +1853,23 @@ struct
 		      if (type_equiv (D,actual_con,formal_con)) then insert_con (D,var,actual_con) 
 		      else (print_error ())
 		  in
-		    foldl3 check_one_dep D (vars,t_cons,formals)
+		    (foldl3 check_one_dep D (vars,t_cons,formals))
+		    handle e => (Ppnil.pp_list (pp_exp' o Var_e) vars ("\nVars: (",", ",")\n", false);
+				 print_error())
 		  end
 		 | NONE => 
 		  let
 		    fun check_one_con (actual_con,formal_con) = 
 		      (type_equiv (D,actual_con,formal_con)) orelse (print_error ())
-		    val _ = all2 check_one_con (t_cons,formals)
+		    val _ = if (all2 check_one_con (t_cons,formals)) then ()
+			    else print_error()
+			    
 		  in
 		    D
 		  end)
 		
 	   val f_cons = map (curry2 exp_valid D) fexps
 	   val f_cons = map (curry2 con_head_normalize D) f_cons
-	   val err = o_perr_c_c "Length mismatch in exp actuals"
 
 	   val _ = 
 	     (c_all is_float_c (fn c => (perr_c c;false)) f_cons) orelse
@@ -1879,11 +1910,19 @@ struct
 		 | NONE => error (locate "exp_valid") "Extern application of non extern arrow value")
 	   val argcons = map (curry2 exp_valid D) args 
 	     
+	   fun print_error () =
+	     (Ppnil.pp_list pp_con' formals ("\nFormal Types: (",", ",")\n",false);
+	      Ppnil.pp_list pp_con' argcons ("\nActual Types: (",", ",")\n",false);
+	      Ppnil.pp_list pp_exp' args ("\nActuals: (",", ",")\n",false);
+	      perr_e exp;
+	      error (locate "exp_valid") "Formal/actual parameter mismatch in external app")
+
 	   fun check_one_con (actual_con,formal_con) = 
 	     (type_equiv (D,actual_con,formal_con)) orelse 
-	     (error (locate "exp_valid") "Parameter type mismatch in External application")
+	     (print_error ())
 	     
-	   val _ = all2 check_one_con (argcons,formals)
+	   val _ = if (all2 check_one_con (argcons,formals)) then ()
+		   else print_error ()
 	 in
 	   return
 	 end
@@ -1940,14 +1979,14 @@ struct
       fun import_valid' (ImportValue (label,var,con),D) =
 	let
 	    val _ = if (!trace)
-			then (print "Processing ImportValue with var = ";
+			then (print "{Processing ImportValue with var = ";
 			      pp_var var; print "\n")
 		    else ()
 	  val kind = con_valid(D,con)
 	  val D = insert_con(D,var,con)
 	    val _ = if (!trace)
 			then (print "Done processing ImportValue with var = ";
-			      pp_var var; print "\n")
+			      pp_var var; print "}\n")
 		    else ()
 	in
 	  D
@@ -1955,14 +1994,14 @@ struct
 	| import_valid' (ImportType (label,var,kind),D) = 
 	let
 	    val _ = if (!trace)
-			then (print "Processing ImportType with var = ";
+			then (print "{Processing ImportType with var = ";
 			      pp_var var; print "\n")
 		    else ()
 	  val _ = kind_valid (D,kind)
 	  val D = insert_kind(D,var,kind)
 	    val _ = if (!trace)
 			then (print "Done processing ImportType with var = ";
-			      pp_var var; print "\n")
+			      pp_var var; print "}\n")
 		    else ()
 	in
 	  D

@@ -6,7 +6,7 @@ structure NilRewrite :> NILREWRITE =
     val foldl_acc = Listops.foldl_acc
     val foldl_acc2 = Listops.foldl_acc2
     val map_second = Listops.map_second
-
+    val mapopt = Util.mapopt
     fun error s = Util.error "NilRewrite" s
     val lprintl = Util.lprintl
 
@@ -23,10 +23,10 @@ structure NilRewrite :> NILREWRITE =
 		  conhandler : 'state * con -> ('state * con) changeopt,
 		  exphandler : 'state * exp -> ('state * exp) changeopt,
 		  kindhandler : 'state * kind -> ('state * kind) changeopt,
-		  con_var_bind : 'state * var * kind -> ('state * var),
-		  con_var_define : 'state * var * con -> ('state * var),
-		  exp_var_bind : 'state * var * con -> ('state * var),
-		  exp_var_define : 'state * var * exp -> ('state * var)
+		  con_var_bind : 'state * var * kind -> ('state * var option),
+		  con_var_define : 'state * var * con -> ('state * var option),
+		  exp_var_bind : 'state * var * con -> ('state * var option),
+		  exp_var_define : 'state * var * exp -> ('state * var option)
 		  }
 
     fun rewriters (handler : 'state handler) 
@@ -51,42 +51,107 @@ structure NilRewrite :> NILREWRITE =
 		     exp_var_bind,
 		     exp_var_define}) = handler
 
-	fun rewrite_cbnd (state : 'state) (cbnd : conbnd) : (conbnd list * 'state) =
+	fun map_f f flag state list = 
+	  let val changed = ref false
+	    val temp = map (f changed state) list 
+	    val _ = flag := (!flag orelse !changed)
+	  in if !changed then temp else list
+	  end
+	
+	fun foldl_acc_f f flag state list = 
 	  let
+	    val changed = ref false
+	    val (temp,state) = foldl_acc (f changed) state list
+	    val _ = flag := (!flag orelse !changed)
+	  in if !changed then (temp,state) else (list,state)
+	  end
+
+	fun define_e changed (s,v,e) = 
+	  (case exp_var_define(s,v,e)
+	     of (s,SOME v) => (changed := true;(s,v))
+	      | (s,NONE) => (s,v))
+
+	fun bind_e changed (s,v,c) = 
+	  (case exp_var_bind(s,v,c)
+	     of (s,SOME v) => (changed := true;(s,v))
+	      | (s,NONE) => (s,v))
+
+	fun define_c changed (s,v,c) = 
+	  (case con_var_define(s,v,c)
+	     of (s,SOME v) => (changed := true;(s,v))
+	      | (s,NONE) => (s,v))
+
+	fun bind_c changed (s,v,k) = 
+	  (case con_var_bind(s,v,k)
+	     of (s,SOME v) => (changed := true;(s,v))
+	      | (s,NONE) => (s,v))
+
+	(*If this becomes a performance critical piece of code,
+	 * it may be useful to bind these locally to encourage inlining
+	 *)
+	fun recur_e flag state exp = 
+	  (case rewrite_exp state exp
+	     of SOME exp => (flag := true;exp)
+	      | NONE => exp)
+	      
+	and recur_c flag state con = 
+	  (case rewrite_con state con
+	     of SOME con => (flag := true;con)
+	      | NONE => con)
+		  
+	and recur_k flag state kind = 
+	  (case rewrite_kind state kind
+	     of SOME kind => (flag := true;kind)
+	      | NONE => kind)
+	    
+	and rewrite_cbnd (state : 'state) (cbnd : conbnd) : (conbnd list option * 'state) =
+	  let
+
 	    fun define wrap (var,vklist,c,k) state = 
 	      let
 		val var' = Name.derived_var var
 		val con = Let_c (Sequential,[wrap (var',vklist,c,k)],Var_c var')
-		val (state,var) = con_var_define(state,var,con)
+		val (state,varopt) = con_var_define(state,var,con)
 	      in 
-		(wrap(var, vklist, c, k), state)
+		case varopt 
+		  of SOME var => (SOME (wrap(var, vklist, c, k)), state)
+		   | NONE => (NONE,state)
 	      end
 
 	    fun cbnd_recur wrap (var, vklist, c, k) oldstate = 
 	      let 
-		fun folder((v,k),state) = 
+
+		fun folder changed ((v,k),state) = 
 		  let 
-		    val k = rewrite_kind state k
-		    val (state,v) = con_var_bind (state,v,k)
+		    val k = recur_k changed state k
+		    val (state,v) = bind_c changed (state,v,k)
 		  in  ((v,k),state)
 		  end
-		val (vklist,state) = foldl_acc folder oldstate vklist
-		val c = rewrite_con state c
-		val k = rewrite_kind state k
-	      in 
-		define wrap (var,vklist,c,k) oldstate
+		val changed = ref false
+		val (vklist,state) = foldl_acc_f folder changed state vklist
+		val c = recur_c changed state c
+		val k = recur_k changed state k
+	      in
+		case define wrap (var,vklist,c,k) oldstate
+		  of (SOME bnd,state) => (SOME bnd,state)
+		   | (NONE,state) => 
+		    if !changed then 
+		      (SOME (wrap (var,vklist,c,k)),state)
+		    else
+		      (NONE,state)
 	      end
-
+	    
 	    fun do_cbnd recur (cbnd,state) = 
 	      (case cbnd 
 		 of Con_cb(var, con) =>
 		   let 
+		     val changed = ref false
 		     val con = 
-		       if recur 
-			 then rewrite_con state con
+		       if recur then 
+			 recur_c changed state con
 		       else con
-		     val (state,var) = con_var_define(state,var,con)
-		   in (Con_cb(var, con), state)
+		     val (state,var) = define_c changed(state,var,con)
+		   in if !changed then (SOME (Con_cb(var, con)), state) else (NONE,state)
 		   end
 		  | Open_cb (args as (var, vklist, c, k)) =>
 		   (if recur then
@@ -99,454 +164,630 @@ structure NilRewrite :> NILREWRITE =
 		       else 
 			 define Code_cb args state))
 
+	    fun do_cbnds recur state cbnds = 
+	      let
+		val changed = ref false
+		fun doit (cbnd,state) = 
+		  (case do_cbnd recur (cbnd,state)
+		     of (SOME cbnd,state) => (changed := true;(cbnd,state))
+		      | (NONE,state) => (cbnd,state))
+		val (cbnds,state) = foldl_acc doit state cbnds
+	      in (if !changed then SOME cbnds else NONE,state)
+	      end
 	  in
 	    (case (cbndhandler (state,cbnd)) 
-	       of CHANGE_NORECURSE (state,cbnds) => foldl_acc (do_cbnd false) state cbnds
-		| CHANGE_RECURSE (state,cbnds) => foldl_acc (do_cbnd true) state cbnds
+	       of CHANGE_NORECURSE (state,cbnds) => do_cbnds false state cbnds
+		| CHANGE_RECURSE (state,cbnds) => do_cbnds true state cbnds
 		| NOCHANGE => 
-		 let 
-		   val (cb,s) = do_cbnd true (cbnd,state)
-		 in ([cb],s)
-		 end
-		| NORECURSE => ([cbnd],state))
+		 (case do_cbnd true (cbnd,state)
+		    of (SOME cb,s) => (SOME [cb],s)
+		     | (NONE,s) => (NONE,s))
+		| NORECURSE => (NONE,state))
 	  end  
 	
-	and rewrite_con (state : 'state) (con : con) : con =  
+	and rewrite_con (state : 'state) (con : con) : con option =  
 	  let 
 	    fun docon (state,con) = 
 	      let
-		val recur = rewrite_con state
 	      in
 		(case con 
-		   of (Prim_c (pcon,args)) => (Prim_c (pcon,map recur args))
+		   of (Prim_c (pcon,args)) => 
+		     let
+		       val changed = ref false
+		       val args = map_f recur_c changed state args
+		     in if !changed then SOME (Prim_c (pcon,args)) else NONE
+		     end
 		     
 		    | (Mu_c (flag,defs)) =>
 		     let
+		       val changed = ref false
 		       fun folder ((v,c),state) = 
 			 let
-			   val (state,v) = con_var_bind (state,v,Type_k)
+			   val (state,v) = bind_c changed (state,v,Type_k)
 			 in
 			   ((v,c),state)
 			 end
-		       val (defs,state) = if flag then Sequence.foldl_acc folder state defs else (defs,state)
-		       val defs = Sequence.map_second (rewrite_con state) defs
-		     in  Mu_c (flag,defs)
+		       val (defs,state) = 
+			 if flag then 
+			   let val (temp,state) = Sequence.foldl_acc folder state defs 
+			   in if !changed then (temp,state) else (defs,state)
+			   end 
+			 else (defs,state)
+		       val defs = Sequence.map_second (recur_c changed state) defs
+		     in  if !changed then SOME (Mu_c (flag,defs)) else NONE
 		     end
 		   
 		    | (AllArrow_c (openness, effect, tformals, vars_opt, cons, numfloat, result)) =>
 		     let
-		       val (tformals,state) = tformals_helper state tformals
-		       val (vars_opt,cons,state)  = 
+		       val changed = ref false
+
+		       val (tformals,state) = tformals_helper changed state tformals
+		       val (vars_opt,cons,state) = 
 			 (case vars_opt
 			    of SOME vars => 
 			      let
+				val changed_cons = ref false
+				val changed_vars = ref false
 				fun vcfolder(v,c,s) = 
 				  let 
-				    val c = rewrite_con s c
-				    val (s,v) = exp_var_bind(s,v,c) 
+				    val c = recur_c changed_cons state c
+				    val (s,v) = bind_e changed_vars (s,v,c) 
 				  in  (v,c,s)
 				  end
-				val (vars,cons,state) = foldl_acc2 vcfolder state (vars,cons)
+				val (newvars,newcons,state) = foldl_acc2 vcfolder state (vars,cons)
+				val vars_opt = if !changed_vars then SOME newvars else vars_opt
+				val cons = if !changed_cons then newcons else cons
+				val _ = changed := (!changed orelse !changed_vars orelse !changed_cons)
 			      in
-				(SOME vars,cons,state)
+				(vars_opt,cons,state)
 			      end
-			     | NONE => (vars_opt,map (rewrite_con state) cons,state))
-		       val result = rewrite_con state result
+			     | NONE => (vars_opt,map_f recur_c changed state cons,state))
+		       val result = recur_c changed state result
 		     in
-		       AllArrow_c(openness, effect, tformals, vars_opt, cons, numfloat, result)
+		       if !changed
+			 then SOME (AllArrow_c(openness, effect, tformals, vars_opt, cons, numfloat, result))
+		       else NONE
 		     end
 		     
 		    | ExternArrow_c (cons,con) =>
 		     let
-		       val cons = map recur cons
-		       val con = recur con
-		     in ExternArrow_c (cons,con)
+		       val changed = ref false
+		       val cons = map_f recur_c changed state cons
+		       val con = recur_c changed state con
+		     in if !changed then SOME (ExternArrow_c (cons,con)) else NONE
 		     end
-		    | (Var_c var) => con
+		    | (Var_c var) => NONE
 		     
 		    (*This may need to be changed to handler parallel lets separately. 
 		     * It's not clear what the semantics should be.
 		     *)
 		    | (Let_c (letsort, cbnds, body)) => 
 		     let
+		       val changed = ref false
 		       fun folder(cbnd,state) = 
 			 let 
-			   val (cbnds,state) = rewrite_cbnd state cbnd
+			   val (cbnds,state) = 
+			     (case rewrite_cbnd state cbnd
+				of (SOME cbnds,state) => (changed := true;(cbnds,state))
+				 | (NONE,state) => ([cbnd],state))
 			 in  (cbnds, state)
 			 end
 		       val (cbnds_list,state) = foldl_acc folder state cbnds
-		       val cbnds = List.concat cbnds_list
-		       val body = rewrite_con state body
-		     in
-		       Let_c (letsort, cbnds, body)
+		       val cbnds = if !changed then List.concat cbnds_list else cbnds
+		       val body = recur_c changed state body
+		     in if !changed then SOME (Let_c (letsort, cbnds, body)) else NONE
 		     end
-		    | Typeof_c exp => Typeof_c (rewrite_exp state exp)
+		    | Typeof_c exp => mapopt Typeof_c (rewrite_exp state exp)
 		    | (Closure_c (code,env)) =>
 		     let
-		       val code = recur code
-		       val env = recur env
-		     in
-		       Closure_c(code, env)
+		       val changed = ref false
+		       val code = recur_c changed state code
+		       val env = recur_c changed state env
+		     in if !changed then SOME (Closure_c(code, env)) else NONE
 		     end
 		   
 		    | (Crecord_c entries) =>
 		     let
-		       val entries = map_second recur entries
-		     in
-		       Crecord_c entries
+		       val changed = ref false
+		       val entries = map_second (recur_c changed state) entries
+		     in if !changed then SOME (Crecord_c entries) else NONE
 		     end
 		   
-		    | (Proj_c (con,lbl)) =>
-		     let
-		       val con = recur con
-		     in
-		       Proj_c (con, lbl)
-		     end
-		   
+		    | (Proj_c (con,lbl)) => 
+		     (case rewrite_con state con
+			of SOME con => SOME (Proj_c (con,lbl))
+			 | NONE => NONE)
 		    | (App_c (cfun,actuals)) =>
 		     let
-		       val cfun = recur cfun
-		       val actuals = map recur actuals
-		     in
-		       App_c (cfun, actuals)
+		       val changed = ref false
+		       val cfun = recur_c changed state cfun
+		       val actuals = map_f recur_c changed state actuals
+		     in if !changed then SOME (App_c (cfun, actuals)) else NONE
 		     end
 		   
 		    | Typecase_c {arg, arms, default, kind} => 
 		     let 
+		       val changed = ref false
 		       fun doarm(pc,vklist,body) =   
 			 let 
-			   val (vklist,state) = tformals_helper state vklist
-			   val body = rewrite_con state body
+			   val (vklist,state) = tformals_helper changed state vklist
+			   val body = recur_c changed state body
 			 in  (pc, vklist, body)
 			 end
-		       val arg = recur arg
+		       val arg = recur_c changed state arg
 		       val arms = map doarm arms
-		       val default = recur default
-		       val kind = rewrite_kind state kind
-		     in  Typecase_c{arg = arg,
-				    arms = arms,
-				    default = default,
-				    kind = kind}
+		       val default = recur_c changed state default
+		       val kind = recur_k changed state kind
+		     in  
+		       if !changed then
+			 SOME (Typecase_c{arg = arg,
+					  arms = arms,
+					  default = default,
+					  kind = kind})
+		       else NONE
 		     end
-		   
 		    | (Annotate_c (annot,con)) => 
 		     let
-		       val con = recur con
-		     in
-		       Annotate_c (annot, con)
+		       val changed = ref false 
+		       val con = recur_c changed state con
+		     in if !changed then SOME (Annotate_c (annot, con)) else NONE
 		     end)
 	      end
 	  in
 	    case (conhandler (state,con)) 
-	      of CHANGE_NORECURSE (state,c) => c
+	      of CHANGE_NORECURSE (state,c) => SOME c
 	       | CHANGE_RECURSE value => docon value
 	       | NOCHANGE => docon (state,con)
-	       | NORECURSE => con
+	       | NORECURSE => NONE
 	  end
 	
 
-	and rewrite_kind (state : 'state) (kind : kind) : kind = 
+	and rewrite_kind (state : 'state) (kind : kind) : kind option = 
 	  let 
-	      
 	    fun dokind (state,kind) = 
 	      (case kind 
-		 of Type_k => kind
-		  | (Singleton_k con) => Singleton_k(rewrite_con state con)
+		 of Type_k => NONE
+		  | (Singleton_k con) => mapopt Singleton_k (rewrite_con state con)
 		  | (Record_k fieldseq) =>
 		   let
+		     val changed = ref false
 		     fun fold_one (((lbl,var),kind),state) = 
 		       let
-			 val kind  = rewrite_kind state kind
-			 val (state,var) = con_var_bind (state,var,kind)
+			 val kind  = recur_k changed state kind
+			 val (state,var) = bind_c changed (state,var,kind)
 		       in
 			 (((lbl, var), kind),state)
 		       end
 		     val (fieldseq,state) = Sequence.foldl_acc fold_one state fieldseq
-		   in
-		     Record_k fieldseq
+		   in if !changed then SOME(Record_k fieldseq) else NONE
 		   end
 		 
 		  | (Arrow_k (openness, args, result)) =>
 		   let
-		     val (args, state) = tformals_helper state args
-		     val result = rewrite_kind state result
-		   in
-		     Arrow_k (openness, args, result)
+		     val changed = ref false
+		     val (args, state) = tformals_helper changed state args
+		     val result = recur_k changed state result
+		   in if !changed then SOME(Arrow_k (openness, args, result)) else NONE
 		   end)
 
 	  in		 
 	    (case (kindhandler (state,kind)) of
-	       CHANGE_NORECURSE (state,k) => k
+	       CHANGE_NORECURSE (state,k) => SOME k
 	     | CHANGE_RECURSE value => dokind value
 	     | NOCHANGE => dokind (state,kind)
-	     | NORECURSE => kind)
+	     | NORECURSE => NONE)
 	  end
 	
-	and tformals_helper (state : 'state) (vklist : (var * kind) list) : (var * kind) list * 'state = 
+	and tformals_helper (flag : bool ref) (state : 'state) (vklist : (var * kind) list) : (var * kind) list * 'state = 
 	  let
-	
-	    fun bind ((var,knd),state) = 
+	    fun bind changed ((var,knd),state) = 
 	      let
-		val knd = rewrite_kind state knd
-		val (state,var) = con_var_bind (state, var,knd)
+		val knd = 
+		  (case rewrite_kind state knd
+		     of SOME knd => (changed := true;knd)
+		      | NONE => knd)
+		val (state,var) = bind_c changed (state, var,knd)
 	      in
 		((var,knd),state)
 	      end
-	  in
-	    foldl_acc bind state vklist
+
+	    val (vklist,state) = foldl_acc_f bind flag state vklist
+	  in (vklist,state)
 	  end
 
-	and fun_helper (state : 'state) (Function(effect,recur,vklist,dependent,vclist,vflist,body,con) : function) : function = 
+	and fun_helper (state : 'state) (Function(effect,recur,vklist,dependent,vclist,vflist,body,con) : function) : function option = 
 	  let 
-	    val (vklist,state1) = tformals_helper state vklist
-	      
-	    fun vcfolder((v,c),s) = 
-	      let 
-		val c' = rewrite_con s c
-		val (s,v) = exp_var_bind(s,v,c') 
-	      in  ((v,c'),s)
-	      end
-	    val (vclist, state2) = foldl_acc vcfolder state1 vclist
+	    val changed = ref false
+	    val (vklist,state1) = tformals_helper changed state vklist
+	    local
+	      fun vcfolder changed ((v,c),s) = 
+		let 
+		  val c' = recur_c changed s c
+		  val (s,v) = bind_e changed (s,v,c') 
+		in  ((v,c'),s)
+		end
+	    in
+	      val (vclist, state2) = foldl_acc_f vcfolder changed state1 vclist
+	    end
 	    val ftype = Prim_c (Float_c Prim.F64,[])
-	    fun folder (v,s) = let val (s,v) = exp_var_bind(s,v,ftype) in (v,s) end
-	    val (vflist,state2) = foldl_acc folder state2 vflist
+	    fun folder changed (v,s) = let val (s,v) = bind_e changed (s,v,ftype) in (v,s) end
+	    val (vflist,state2) = foldl_acc_f folder changed state2 vflist
 	    val con = if dependent 
-			then rewrite_con state2 con
-		      else rewrite_con state1 con
-	    val body = rewrite_exp state2 body
+			then recur_c changed state2 con
+		      else recur_c changed state1 con
+	    val body = recur_e changed state2 body
 	  in
-	    Function(effect,recur,vklist,dependent,vclist,
-		     vflist, body,
-		     con)
+	    if !changed then
+	      SOME (Function(effect,recur,vklist,dependent,vclist,
+			     vflist, body,
+			     con))
+	    else NONE
 	  end
-	and rewrite_bnd (state : 'state) (bnd : bnd) : (bnd list * 'state) = 
+	and rewrite_bnd (state : 'state) (bnd : bnd) : (bnd list option * 'state) = 
 	  let 
 	    fun do_fix (recur,maker,vfset) = 
 	      let 
+		val changed = ref false
 		fun folder ((v,f),s) =
 		  let 
-		    val (s,v) = exp_var_define(s,v,Let_e (Sequential,[maker vfset],Var_e v))
+		    val (s,v) = define_e changed (s,v,Let_e (Sequential,[maker vfset],Var_e v))
 		  in
 		    ((v,f),s)
 		  end
-		val (vfset,s) = Sequence.foldl_acc folder state vfset
-		fun doer(v,f) = (v,fun_helper s f)
-		val vfset = if recur then (Sequence.map doer vfset) else vfset
+		val (vfset,s) = 
+		  let val (temp,s) = Sequence.foldl_acc folder state vfset
+		  in if !changed then (temp,s) else (vfset,s)
+		  end
+		fun doer changed (v,f) = 
+		  (v,case fun_helper s f
+		       of SOME f => (changed := true;f)
+			| NONE => f)
+		val vfset =  
+		  if recur then 
+		    let val flag = ref false 
+		      val temp = (Sequence.map (doer flag) vfset)
+		      val _ = changed := (!flag orelse !changed)
+		    in if !flag then temp else vfset
+		    end
+		  else vfset
 	      in  
-		([maker vfset],s)
+		(if !changed then SOME [maker vfset] else NONE,s)
 	      end
-	    fun do_bnd recur (bnd,state) : bnd list * 'state = 
+	    fun do_bnd recur (bnd,state) : bnd list option * 'state = 
 	      (case bnd 
 		 of Con_b(p,cb) => 
-		   let val (cbnds,state) = 
+		   let val (cb_opt,state) = 
 		     if recur 
 		       then rewrite_cbnd state cb
-		     else ([cb],state)
-		   in  (map (fn cb => Con_b(p,cb)) cbnds, state)
+		     else (NONE,state)
+		   in  (mapopt (fn cbnds => map (fn cb => Con_b(p,cb)) cbnds) cb_opt, state)
 		   end
 		  | Exp_b(v,trace,e) => 
 		   let
-		     val e = if recur then rewrite_exp state e else e
+		     val changed = ref false
+		     val e = if recur then recur_e changed state e else e
 		     val trace = 
 		       (case trace 
 			  of TraceCompute var => 
-			    (case rewrite_con state (Var_c var)
+			    (case recur_c changed state (Var_c var)
 			       of Var_c var => TraceCompute var
 				| _ => (lprintl "Warning - rewrite forgetting trace info";
 					TraceUnknown))
 			   | TraceKnown (TraceInfo.Compute (var,labels)) => 
-			       (case rewrite_con state (Var_c var)
+			       (case recur_c changed state (Var_c var)
 				  of Var_c var => TraceKnown (TraceInfo.Compute (var,labels))
 				   | _ => (lprintl "Warning - rewrite forgetting trace info";
 					   TraceUnknown))
 			   | _ => trace)
-		     val (state,v) = exp_var_define(state,v,e)
+		     val (state,v) = define_e changed (state,v,e)
 		   in
-		     ([Exp_b(v,trace,e)], state)
+		     (if !changed then SOME [Exp_b(v,trace,e)] else NONE, state)
 		   end
 		  | Fixopen_b vfset => do_fix (recur,Fixopen_b,vfset)
 		  | Fixcode_b vfset => do_fix (recur,Fixcode_b,vfset)
 		  | Fixclosure_b (is_recur,vcset) => 
 		   let 
+		     val changed = ref false
 		     fun folder ((v,{tipe,cenv,venv,code}),s) =
 		       let 
 			 val bnd = Fixclosure_b(is_recur,vcset)
-			 val (s,v) = exp_var_define(s,v,Let_e (Sequential,[bnd],Var_e v))
+			 val (s,v) = define_e changed (s,v,Let_e (Sequential,[bnd],Var_e v))
 		       in
 			 ((v,{tipe=tipe,cenv=cenv,venv=venv,code=code}),s)
 		       end
 
 		     val (vcset,s) = Sequence.foldl_acc folder state vcset
 
-		     fun doer s (v,{code,cenv,venv,tipe}) = 
-		       (v,{code = (case (exphandler (state,Var_e code)) of
-				     NOCHANGE => code
-				   | NORECURSE => code
-				   | (CHANGE_RECURSE (state,Var_e v')) => v'
-				   | (CHANGE_NORECURSE (state,Var_e v')) => v'
-				   | _ => error "can't have non-var in closure code comp"),
-			   cenv = rewrite_con s cenv,
-			   venv = rewrite_exp s venv,
-			   tipe = rewrite_con s tipe})
+		     fun doer flag s (arg as (v,{code,cenv,venv,tipe})) = 
+		       let 
+			 val changed = ref false
+			 val code = (case (exphandler (state,Var_e code)) of
+				       NOCHANGE => code
+				     | NORECURSE => code
+				     | (CHANGE_RECURSE (state,Var_e v')) => (changed := true;v')
+				     | (CHANGE_NORECURSE (state,Var_e v')) => (changed := true;v')
+				     | _ => error "can't have non-var in closure code comp")
+			   val cenv = recur_c changed s cenv
+			   val venv = recur_e changed s venv
+			   val tipe = recur_c changed s tipe
+			   val _ = flag := (!flag orelse !changed)
+		       in
+			 if !changed then
+			   (v,{code=code,cenv=cenv,venv=venv,tipe=tipe})
+			 else arg
+		       end
 		     val vcset = 
 		       if recur 
-			 then if is_recur then Sequence.map (doer s) vcset 
-			      else Sequence.map (doer state) vcset
+			 then let val flag = ref false 
+				  val temp = if is_recur then Sequence.map (doer flag s) vcset 
+					     else Sequence.map (doer flag state) vcset
+				  val _ = changed := (!changed orelse !flag)
+			      in if !flag then temp else vcset
+			      end
 		       else vcset
-		   in  ([Fixclosure_b(is_recur,vcset)], s)
+		   in  (if !changed then SOME [Fixclosure_b(is_recur,vcset)] else NONE, s)
 		   end)
+
+	    fun do_bnds recur (state,bs) = 
+	      let
+		val changed = ref false
+		fun do_bnd' (bnd,state) = 
+		  case do_bnd recur (bnd,state)
+		    of (SOME bnds,state) => (changed := true;(bnds,state))
+		     | (NONE,state) => ([bnd],state)
+		val (bnds,state) = foldl_acc do_bnd' state bs
+	      in
+		(if !changed then SOME (List.concat bnds) else NONE,state)
+	      end
 	  in
 	    (case (bndhandler (state,bnd)) 
-	       of CHANGE_NORECURSE (state,bs) => 
-		 let val (bndll, state) = foldl_acc (do_bnd false) state bs
-		 in (List.concat bndll,state) end
-		| CHANGE_RECURSE (state,bs) => 
-		   let val (bndll, state) = foldl_acc (do_bnd true) state bs
-		   in (List.concat bndll,state) end
-		| NOCHANGE => 
-		     let val (bndl,state) = do_bnd true (bnd,state)
-		     in (bndl,state) end
-		| NORECURSE => ([bnd],state))
+	       of CHANGE_NORECURSE (state,bs) => do_bnds false (state,bs)
+		| CHANGE_RECURSE (state,bs) => do_bnds true (state,bs)
+		| NOCHANGE => do_bnd true (bnd,state)
+		| NORECURSE => (NONE,state))
 	  end
 
-	and switch_helper (state : 'state) (sw : switch) : switch = 
+	and switch_helper (state : 'state) (sw : switch) : exp option = 
 	  (case sw of
 	     Intsw_e {arg, size, arms, default} =>
-	       Intsw_e {arg = rewrite_exp state arg,
-			size = size, 
-			arms = map (fn (t,e) => (t,rewrite_exp state e)) arms,
-			default = Util.mapopt (rewrite_exp state) default}
+	       let
+		 val changed = ref false
+		 val arg = recur_e changed state arg
+		 fun recur changed state (t,e) = (t,recur_e changed state e)
+		 val arms = map_f recur changed state arms
+		 val default = Util.mapopt (recur_e changed state) default
+	       in
+		 if !changed then
+		   SOME (Switch_e 
+			 (Intsw_e {arg = arg,
+				   size = size, 
+				   arms = arms,
+				   default = default}))
+		 else NONE
+	       end
 	   | Sumsw_e {arg, sumtype, bound, arms, default} =>
 	       let
-		 val sumtype = rewrite_con state sumtype 
-		 val (state',bound) = exp_var_bind(state,bound,sumtype)
+		 val changed = ref false
+		 val arg = recur_e changed state arg
+		 val sumtype = recur_c changed state sumtype 
+		 val (state',bound) = bind_e changed (state,bound,sumtype)
+		 fun recur changed state (t,e) = (t,recur_e changed state e)
+		 val arms = map_f recur changed state' arms
+		 val default = Util.mapopt (recur_e changed state) default
 	       in  
-		 Sumsw_e {arg = rewrite_exp state arg,
-			  sumtype = sumtype,
-			  bound = bound,
-			  arms = map (fn (t,e) => (t,rewrite_exp state' e)) arms,
-			  default = Util.mapopt (rewrite_exp state) default}
+		 if !changed then
+		   SOME (Switch_e
+			 (Sumsw_e {arg = arg,
+				   sumtype = sumtype,
+				   bound = bound,
+				   arms = arms,
+				   default = default}))
+		 else NONE
 	       end
 	   | Exncase_e {arg, bound, arms, default} =>
-	       let 
-		 val (state',bound) = exp_var_bind(state,bound,Prim_c(Exn_c,[]))
-	       in  Exncase_e {arg = rewrite_exp state arg,
-			      bound = bound,
-			      arms = map (fn (t,e) => (rewrite_exp state t,rewrite_exp state' e)) arms,
-			      default = Util.mapopt (rewrite_exp state) default}
+	       let
+		 val changed = ref false
+		 val arg = recur_e changed state arg
+		 val (state',bound) = bind_e changed (state,bound,Prim_c(Exn_c,[]))
+		 fun recur changed state (t,e) = (recur_e changed state t,recur_e changed state' e)
+		 val arms = map_f recur changed state arms
+		 val default = Util.mapopt (recur_e changed state) default
+	       in  
+		 if !changed then 
+		   SOME (Switch_e
+			 (Exncase_e {arg = arg,
+				     bound = bound,
+				     arms = arms,
+				     default = default}))
+		 else NONE
 	       end
 	   | Typecase_e {arg,arms,default} => error "typecase not handled")    
 
-	and rewrite_exp (state : 'state) (exp : exp) : exp =
+	and rewrite_exp (state : 'state) (exp : exp) : exp option =
 	  let 
 	    fun doexp (state,e) = 
 	      let
-		val recur = rewrite_exp state
+		val map_e = map_f recur_e
+		val map_c = map_f recur_c
 	      in
 		(case e of
-		   (Var_e _) => e
+		   (Var_e _) => NONE
 		 | (Const_e v) => 	
-		     Const_e 
 		     (case v of
-			(Prim.int _) => v
-		      | (Prim.uint _) => v
-		      | (Prim.float _) => v
+			(Prim.int _) => NONE
+		      | (Prim.uint _) => NONE
+		      | (Prim.float _) => NONE
 		      | (Prim.array (c,array)) =>
-			  (Array.modify recur array;
-			   Prim.array(rewrite_con state c,array))
+			  let
+			    val changed = ref false
+			    val _ = Array.modify (recur_e changed state) array
+			    val c = recur_c changed state c
+			  in
+			    if !changed then
+			      SOME (Const_e (Prim.array(c,array)))
+			    else NONE
+			  end
 		      | (Prim.vector (c,array)) =>
-			  (Array.modify recur array;
-			   Prim.vector(rewrite_con state c,array))
-		      | Prim.refcell (r as (ref e)) => (r := recur e; v)
-		      | Prim.tag (t,c) => Prim.tag(t,rewrite_con state c))
+			  let
+			    val changed = ref false
+			    val _ = Array.modify (recur_e changed state) array
+			    val c = recur_c changed state c
+			  in
+			    if !changed then
+			      SOME (Const_e (Prim.vector(c,array)))
+			    else NONE
+			  end
+		      | Prim.refcell (r as (ref e)) => 
+			  (case rewrite_exp state e
+			     of SOME e => (r := e; SOME (Const_e v))
+			      | NONE => NONE)
+		      | Prim.tag (t,c) => 
+			 (case rewrite_con state c
+			    of SOME c => SOME (Const_e (Prim.tag(t,c)))
+			     | NONE => NONE))
 		 | (Let_e (sort,bnds,body)) => 
 		    let 
+		      val changed = ref false
 		      fun folder (bnd,s) = 
 			let 
-			  val (bnds,s) = rewrite_bnd s bnd
+			  val (bnds,s) = (case rewrite_bnd s bnd
+					    of (SOME bnds,s) => (changed := true; (bnds,s))
+					     | (NONE,s) => ([bnd],s))
 			in  (bnds,s)
 			end
 		      val (bndslist,state) = foldl_acc folder state bnds
-		      val bnds = List.concat bndslist
-		      val body = rewrite_exp state body
-		    in Let_e(sort,bnds,body)
+		      val bnds = if !changed then List.concat bndslist else bnds
+		      val body = recur_e changed state body
+		    in if !changed then SOME (Let_e(sort,bnds,body)) else NONE
 		    end
-		 | (Prim_e (ap,clist,elist)) => Prim_e(ap,map (rewrite_con state) clist, map recur elist)
-		 | (Switch_e switch) => Switch_e(switch_helper state switch)
+		 | (Prim_e (ap,clist,elist)) => 
+		    let
+		      val changed = ref false
+		      val clist = map_c changed state clist
+		      val elist = map_e changed state elist
+		    in
+		      if !changed then
+			SOME (Prim_e(ap,clist,elist))
+		      else NONE
+		    end
+		 | (Switch_e switch) => switch_helper state switch
 		 | (App_e (openness,func,clist,elist,eflist)) => 
-			App_e(openness,
-			      recur func,
-			      map (rewrite_con state) clist,
-			      map recur elist, 
-			      map recur eflist)
+		    let
+		      val changed = ref false
+		      val func = recur_e changed state func
+		      val clist = map_c changed state clist
+		      val elist = map_e changed state elist
+		      val eflist = map_e changed state eflist
+		    in 
+		      if !changed
+			then SOME (App_e(openness,func,clist,elist,eflist))
+		      else NONE
+		    end
 		 | ExternApp_e (exp,args) =>
-		   let
-		     val exp = recur exp
-		     val args = map recur args
-		   in
-		     ExternApp_e (exp,args)
-		   end
-		 | Raise_e (e,c) => Raise_e(recur e, rewrite_con state c)
+		    let
+		      val changed = ref false
+		      val exp = recur_e changed state exp
+		      val args = map_e changed state args
+		    in
+		      if !changed then
+			SOME (ExternApp_e (exp,args))
+		      else NONE
+		    end
+		 | Raise_e (e,c) => 
+		    let
+		      val changed = ref false
+		      val e = recur_e changed state e
+		      val c = recur_c changed state c
+		    in if !changed then SOME (Raise_e(e,c)) else NONE
+		    end
 		 | Handle_e (e,v,h) => 
-			let 
-			  val e = recur e
-			  val (state,v) = exp_var_bind(state,v,Prim_c(Exn_c,[]))
-			in  Handle_e(e, v, rewrite_exp state h)
-			end)
+		    let 
+		      val changed = ref false
+		      val e = recur_e changed state e
+		      val (state,v) = bind_e changed (state,v,Prim_c(Exn_c,[]))
+		      val h = recur_e changed state h
+		    in if !changed then SOME (Handle_e(e, v, h))
+		       else NONE
+		    end)
 	      end
-    
+	    
 	  in
       	    (case (exphandler (state,exp))
-	       of CHANGE_NORECURSE (state,e) => e
+	       of CHANGE_NORECURSE (state,e) => SOME e
 		| CHANGE_RECURSE value => doexp value
 		| NOCHANGE => doexp (state,exp)
-		| NORECURSE => exp)
+		| NORECURSE => NONE)
 	  end
 
 
-	fun import_helper (ImportValue (label,var,con),state) =
+	fun import_helper flag (import as (ImportValue (label,var,con)),state) =
 	  let
-	    val con = rewrite_con state con
-	    val (state,var) = exp_var_bind(state,var,con)
-	  in
-	    (ImportValue (label,var,con),state)
+	    val changed = ref false
+	    val con = recur_c changed state con
+	    val (state,var) = bind_e changed (state,var,con)
+	    val _ = flag := (!changed orelse !flag)
+	  in (if !changed then ImportValue (label,var,con) else import,state)
 	  end
-	  | import_helper (ImportType (label,var,kind),state) = 
+	  | import_helper flag (import as (ImportType (label,var,kind)),state) = 
 	  let
-	    val kind = rewrite_kind state kind
-	    val (state,var) = con_var_bind(state,var,kind)
-	  in
-	    (ImportType (label,var,kind),state)
+	    val changed = ref false
+	    val kind = recur_k changed state kind
+	    val (state,var) = bind_c changed (state,var,kind)
+	    val _ = flag := (!changed orelse !flag)
+	  in (if !changed then ImportType (label,var,kind) else import,state)
 	  end
 	
-	fun export_helper state (ExportValue (label,var)) = 
-	  let
-	    val var = 
-	      (case rewrite_exp state (Var_e var)
-		 of Var_e var => var
+	fun export_helper flag state (export as (ExportValue (label,var))) = 
+	  (case rewrite_exp state (Var_e var)
+		 of SOME (Var_e var) => (flag := true;ExportValue (label,var))
+		  | NONE => export
 		  | _ => error "Export value rewritten to non variable! Don't know what to do!")
-	  in  ExportValue (label,var)
-	  end
-	  | export_helper state (ExportType (label,var)) = 
-	  let
-	    val var = 
-	      (case rewrite_con state (Var_c var)
-		 of Var_c var => var
-		  | _ => error "Export type rewritten to non variable! Don't know what to do!")
-	  in ExportType (label,var)
-	  end
+	  | export_helper flag state (export as (ExportType (label,var))) = 
+	   (case rewrite_con state (Var_c var)
+	      of SOME (Var_c var) => (flag := true;ExportType (label,var))
+	       | NONE => export
+	       | _ => error "Export type rewritten to non variable! Don't know what to do!")
 
       fun rewrite_mod (state : 'state) (module : module) : module =
 	let
+	  val changed = ref false 
 	  val (MODULE {bnds,imports,exports}) = module
-	  val (imports,state) = foldl_acc import_helper state imports
-	  fun folder (bnd,s) = rewrite_bnd s bnd
-	  val (bndslist,state) = foldl_acc folder state bnds
-	  val bnds = List.concat bndslist
-	  val exports = map (export_helper state) exports
-	in
-	  MODULE {bnds=bnds,imports=imports,exports=exports}
+	  val (imports,state) = foldl_acc_f import_helper changed state imports
+	  local
+	    val flag = ref false
+	    fun folder (bnd,s) = 
+	      (case rewrite_bnd s bnd
+		 of (SOME bndslist,state) => (flag := true;(bndslist,state))
+		  | (NONE,state) => ([bnd],state))
+	    val (bndslist,state) = foldl_acc folder state bnds
+	    val _ = changed := (!flag orelse !changed)
+	  in
+	    val bnds = if !flag then List.concat bndslist else bnds
+	  end
+	  val exports = map_f export_helper changed state exports
+	in if !changed then MODULE {bnds=bnds,imports=imports,exports=exports} else module
 	end
+
+      fun rewrite_item rewriter state item = 
+	(case rewriter state item
+	   of SOME item => item
+	    | NONE => item)
+       
+      val rewrite_exp = rewrite_item rewrite_exp
+      val rewrite_con = rewrite_item rewrite_con
+      val rewrite_kind = rewrite_item rewrite_kind
+
+      val rewrite_bnd = 
+	(fn state => fn bnd => 
+	 (case rewrite_bnd state bnd
+	    of (SOME bnds,state) => (bnds,state)
+	     | (NONE,state) => ([bnd],state)))
+
+      val rewrite_cbnd = 
+	(fn state => fn cbnd => 
+	 (case rewrite_cbnd state cbnd
+	    of (SOME cbnds,state) => (cbnds,state)
+	     | (NONE,state) => ([cbnd],state)))
 
       in
 	{
@@ -560,7 +801,7 @@ structure NilRewrite :> NILREWRITE =
       end
 
 
-      fun null_binder (state,var,_) = (state,var)
+      fun null_binder (state,var,_) = (state,NONE)
 
       fun default_handler _ = NOCHANGE
 

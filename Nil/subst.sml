@@ -32,7 +32,8 @@ structure NilSubst :> NILSUBST
 
 
     structure VarMap = Name.VarMap
-      
+    structure VarSet = Name.VarSet
+
     fun contains map var = isSome (VarMap.find (map,var))
 
     type 'a subst = 'a VarMap.map
@@ -129,32 +130,20 @@ structure NilSubst :> NILSUBST
     local
       open NilRewrite
 
-      val derived_var = Name.derived_var
-
-(*      fun derived_var v = 
-	if !debug then
-	  let
-	    val var = Name.derived_var v
-	  in
-	    (Util.lprintl ("Renaming "^(Name.var2string v)^" to "^(Name.var2string var));
-	     var)
-	  end
-	else Name.derived_var v
-	*)
       fun exp_var_xxx ((exp_subst,con_subst),var,any) = 
 	let
-	  val var' = derived_var var
+	  val var' = Name.derived_var var
 	  val exp_subst = VarMap.insert (exp_subst,var,var')
 	in
-	  ((exp_subst,con_subst),var')
+	  ((exp_subst,con_subst),SOME var')
 	end
 
       fun con_var_xxx ((exp_subst,con_subst),var,any) = 
 	let
-	  val var' = derived_var var
+	  val var' = Name.derived_var var
 	  val con_subst = VarMap.insert (con_subst,var,var')
 	in
-	  ((exp_subst,con_subst),var')
+	  ((exp_subst,con_subst),SOME var')
 	end
 
       fun conhandler (subst as (exp_subst,con_subst),con : con) =
@@ -255,6 +244,99 @@ structure NilSubst :> NILSUBST
       val renameCBnd = renameCBnd
     end
   
+
+    local
+      open NilRewrite
+
+      type state = {esubst : var VarMap.map,
+		    csubst : var VarMap.map,
+		    epred : var -> bool,
+		    cpred : var -> bool}
+
+      fun exp_var_xxx (state :state as {esubst,csubst,epred,cpred},var,any) = 
+	if epred var then
+	  let
+	    val var' = Name.derived_var var
+	    val esubst = VarMap.insert (esubst,var,var')
+	  in
+	    ({esubst=esubst,csubst=csubst,epred=epred,cpred=cpred},SOME var')
+	  end
+	else (state,NONE)
+
+      fun con_var_xxx (state :state as {esubst,csubst,epred,cpred},var,any) = 
+	if cpred var then
+	  let
+	    val var' = Name.derived_var var
+	    val csubst = VarMap.insert (csubst,var,var')
+	  in
+	    ({esubst = esubst,csubst = csubst, epred = epred, cpred = cpred},SOME var')
+	  end
+	else (state,NONE)
+	  
+      fun conhandler (state : state as {csubst,...},con : con) =
+	(case con
+	   of Var_c var => 
+	     (case VarMap.find (csubst,var)
+		of SOME var => (CHANGE_NORECURSE (state,Var_c var))
+		 | _ => NORECURSE)
+	    | _ => NOCHANGE)
+
+      fun exphandler (state : state as {esubst,...},exp : exp) =
+	(case exp
+	   of Var_e var => 
+	     (case VarMap.find (esubst,var)
+		of SOME var => (CHANGE_NORECURSE (state,Var_e var))
+		 | _ => NORECURSE)
+	    | _ => NOCHANGE)
+
+      val all_handlers = 
+	let
+	  val h = set_exphandler default_handler exphandler
+	  val h = set_exp_binder h exp_var_xxx
+	  val h = set_exp_definer h exp_var_xxx
+	  val h = set_conhandler h conhandler
+	  val h = set_con_binder h con_var_xxx
+	  val h = set_con_definer h con_var_xxx
+	in
+	  h
+	end
+
+      val {rewrite_exp = renameExpWRT',
+	   rewrite_con = renameConWRT',
+	   rewrite_kind = renameKindWRT',
+	   rewrite_bnd = renameBndWRT',
+	   rewrite_cbnd = renameCBndWRT',
+	   rewrite_mod = renameModWRT'} = rewriters all_handlers
+
+      fun empty (epred,cpred) = {esubst = VarMap.empty,csubst = VarMap.empty,epred = epred,cpred = cpred}
+
+      fun renameBndWRT preds bnd = 
+	let
+	  val (bnds,substs) = renameBndWRT' (empty preds) bnd
+	in
+	  (hd bnds,substs)
+	end
+
+(*      fun renameCBndWRT bnd = 
+	let
+	  val (bnds,(esubst,subst)) = renameCBnd' empty bnd
+
+	    if !debug then
+	      assert (locate "POST:renameCBnd")
+	      [
+	       (is_empty esubst,fn () => TextIO.print "Renaming cbnd should not export evar changes")
+	       ]
+	    else ()
+	in
+	  (hd bnds,subst)
+	end
+*)
+    in
+      fun renameExpWRT preds = renameExpWRT' (empty preds)
+      fun renameConWRT preds = renameConWRT' (empty preds)
+      fun renameKindWRT preds = renameKindWRT' (empty preds)
+    end
+
     (*Is renamed predicate *)
     local 
       open NilRewrite
@@ -274,12 +356,12 @@ structure NilSubst :> NILSUBST
       fun exp_var_xxx (state : state as {epred,ebound,...},var,any) = 
 	(if isSome (find ebound var) orelse (epred var)
 	   then raise Rebound var
-	 else (insert ebound (var,());(state,var)))
+	 else (insert ebound (var,());(state,NONE)))
 
       fun con_var_xxx (state :state as {cpred,cbound,...},var,any) = 
 	(if isSome (find cbound var) orelse (cpred var)
 	   then raise Rebound var
-	 else (insert cbound (var,());(state,var)))
+	 else (insert cbound (var,());(state,NONE)))
 
       val all_handlers =  
 	let
@@ -319,202 +401,210 @@ structure NilSubst :> NILSUBST
       val isRenamedKindWRT = isRenamedXXX checkKind
     end
 
-    (*Substitutions*)
-    local 
+
+
+    local
       open NilRewrite
 
-      fun conhandler (subst,con : con) =
+      val efree = ref VarSet.empty
+      val cfree = ref VarSet.empty
+
+      type state = {bound : VarSet.set}
+
+      fun exp_var_xxx (state : state as {bound},var,any) = 
+        ({bound = VarSet.add (bound, var)}, NONE)
+
+      fun con_var_xxx (state : state as {bound},var,any) = 
+        ({bound = VarSet.add (bound, var)}, NONE)
+
+      fun conhandler (state as {bound},con : con) =
 	(case con
 	   of Var_c var => 
-	     (case substitute subst var
-		of SOME con => (subst_counter(); CHANGE_NORECURSE (subst,renameCon con))
-		 | _ => NORECURSE)
+	      	if (VarSet.member (bound, var)) then
+                   (cfree := VarSet.add(!cfree, var); NOCHANGE)
+                else
+                   NOCHANGE
 	    | _ => NOCHANGE)
 
-      fun exphandler (subst,exp : exp) =
+      fun exphandler (state as {bound}, exp : exp) =
 	(case exp
 	   of Var_e var => 
-	     (case substitute subst var
-		of SOME exp => (subst_counter(); CHANGE_NORECURSE (subst,renameExp exp))
+	      	if (VarSet.member (bound, var)) then
+                   (efree := VarSet.add(!efree, var); NOCHANGE)
+                else
+                   NOCHANGE
+	    | _ => NOCHANGE)
+
+      val exp_con_handler = 
+	let
+	  val h = set_conhandler default_handler conhandler
+	  val h = set_exphandler h  exphandler
+	  val h = set_con_binder h con_var_xxx
+	  val h = set_con_definer h con_var_xxx
+	  val h = set_exp_binder h exp_var_xxx
+	  val h = set_con_binder h exp_var_xxx
+	in h 
+	end
+
+      val {rewrite_con = freeInCon',
+	   rewrite_exp = freeInExp',
+	   rewrite_kind = freeInKind',...} = rewriters exp_con_handler
+ 
+      val empty_state  : state = {bound = VarSet.empty}
+
+      fun freeInXXX freeer item = 
+	let
+          val _ = (efree := VarSet.empty;
+	           cfree := VarSet.empty)
+	  val _  = freeer empty_state item
+          val answer = (!efree, !cfree)
+          val _ = (efree := VarSet.empty;
+	           cfree := VarSet.empty)
+	in
+	  answer
+	end
+
+    in
+      val freeInCon = freeInXXX freeInCon'
+      val freeInExp = freeInXXX freeInExp'
+      val freeInKind = freeInXXX freeInKind'
+    end
+
+
+    (* Substitutions *)
+    local
+      open NilRewrite
+
+      exception Rebound of var
+
+      type varset = VarSet.set
+
+      type state = {cfree : varset,
+		    efree : varset,
+		    esubst : exp subst,
+		    csubst : con subst}
+
+      fun exp_var_xxx (state : state as {efree,cfree,esubst,csubst},var,any) = 
+	(if VarSet.member (efree,var) 
+	   then let val var' = Name.derived_var var
+                in ({efree = efree, cfree = cfree,
+                     csubst = csubst,
+                     esubst = add esubst (var, Var_e var')},
+                    SOME var')
+                end
+  	   else (state, NONE))
+
+
+      fun con_var_xxx (state : state as {efree,cfree,esubst,csubst},var,any) = 
+	(if VarSet.member (cfree,var) 
+	   then let val var' = Name.derived_var var
+                in ({efree = efree, cfree = cfree,
+                     esubst = esubst,
+                     csubst = add csubst (var, Var_c var')},
+                    SOME var')
+                end
+  	   else (state, NONE))
+
+      fun conhandler (state : state as {csubst,...},con : con) =
+	(case con
+	   of Var_c var => 
+	     (case substitute csubst var
+		of SOME con => 
+		  (subst_counter(); 
+		   CHANGE_NORECURSE (state,renameCon con))
+		 | _ => NORECURSE)
+	    | _ => NOCHANGE)
+	   
+      fun exphandler (state : state as {esubst,...},exp : exp) =
+	(case exp
+	   of Var_e var => 
+	     (case substitute esubst var
+		of SOME exp => 
+		  (subst_counter(); 
+		   CHANGE_NORECURSE (state,renameExp exp))
 		 | _ => NORECURSE)
 	    | _ => NOCHANGE)
 
-      val con_handler = set_conhandler default_handler conhandler
-
-      val exp_handler = set_exphandler default_handler exphandler
-
-      val {rewrite_con = substConInCon',
-	   rewrite_exp = substConInExp',
-	   rewrite_kind = substConInKind',
-	   rewrite_cbnd = substConInCBnd',
-	   rewrite_bnd = substConInBnd',...} = rewriters con_handler
-
-      val {rewrite_con = substExpInCon',
-	   rewrite_exp = substExpInExp',
-	   rewrite_kind = substExpInKind',...} = rewriters exp_handler
-
-
-      fun substXXXInYYY (name,renamedWRT,XXXprint,YYYprint,peek,substituter,renamed) subst item = 
+      val exp_con_handler = 
 	let
-	  val _ = 
-	    if !debug then 
-	      assert (locate ("PRE:"^name))
-	      [
-	       (renamedWRT (peek subst) item,
-		fn () => (lprintl ("Item not renamed passed to "^name);
-			  printl "Subst is:";
-			  print XXXprint subst;
-			  lprintl "Substituted into:";
-			  YYYprint item))
-	       ]
-	    else ()
+	  val h = set_conhandler default_handler conhandler
+	  val h = set_exphandler h  exphandler
+	  val h = set_con_binder h con_var_xxx
+	  val h = set_con_definer h con_var_xxx
+	  val h = set_exp_binder h exp_var_xxx
+	  val h = set_con_binder h exp_var_xxx
+	in h 
+	end
 
-	  val item = 
-	    if is_empty subst 
-	      then item
-	    else substituter subst item
+      val {rewrite_con = substExpConInCon',
+	   rewrite_exp = substExpConInExp',
+	   rewrite_kind = substExpConInKind',
+           rewrite_cbnd = substExpConInCBnd',
+           rewrite_bnd = substExpConInBnd',...} = rewriters exp_con_handler
+ 
+      fun empty_state (esubst : exp subst,csubst : con subst) : state = 
+	let
+           fun folder freeer (substituted_val, (efree,cfree)) =
+             let val (efree', cfree') = freeer substituted_val
+             in
+                 (VarSet.union (efree, efree'),
+                  VarSet.union (cfree, cfree'))
+             end
+           val empty_frees = (VarSet.empty, VarSet.empty)
+           val frees = 
+                VarMap.foldl (folder freeInExp) empty_frees esubst
+           val (efree, cfree) = 
+                VarMap.foldl (folder freeInCon) frees csubst
+	in	
+ 	   {esubst = esubst, csubst = csubst,
+	    efree = efree, cfree = cfree}
+        end
 
-	  val _ = 
-	    if !debug then 
-	      assert (locate ("POST:"^name))
-	      [
-	       (renamed item,
-		fn () => (lprintl ("Failure to rename properly in "^name);
-			  YYYprint item))
-	       ]
-	    else ()
+      fun substExpConInXXX substituter (esubst,csubst) item = 
+	let
+	  val item =  substituter (empty_state (esubst,csubst)) item
 	in
 	  item
 	end
-			
-      fun peek subst var = isSome (substitute subst var)
-      fun ff _ = false
 
-      fun peek_c subst = (peek subst,ff)
-      fun peek_e subst = (ff,peek subst)
-      val pp_kind = Ppnil.pp_kind
-      val pp_con = Ppnil.pp_con
-      val pp_exp = Ppnil.pp_exp
+      fun substExpInXXX substituter esubst item =
+            substituter (empty_state (esubst, empty())) item
+      fun substConInXXX substituter csubst item =
+            substituter (empty_state (empty(), csubst)) item
+
     in
       type con_subst = con subst
       type exp_subst = exp subst
 
-      val substConInCon  = substXXXInYYY ("substConInCon",isRenamedConWRT,pp_con,pp_con,peek_c,
-					  substConInCon',isRenamedCon)
-      val substExpInExp  = substXXXInYYY ("substExpInExp",isRenamedExpWRT,pp_exp,pp_exp,peek_e,
-					  substExpInExp',isRenamedExp)
-      val substExpInCon  = substXXXInYYY ("substExpInCon",isRenamedConWRT,pp_exp,pp_con,peek_e,
-					  substExpInCon',isRenamedCon)
-      val substConInExp  = substXXXInYYY ("substConInExp",isRenamedExpWRT,pp_con,pp_exp,peek_c,
-					  substConInExp',isRenamedExp)
-      val substConInKind = substXXXInYYY ("substConInKind",isRenamedKindWRT,pp_con,pp_kind,peek_c,
-					  substConInKind',isRenamedKind)
-      val substExpInKind = substXXXInYYY ("substExpInKind",isRenamedKindWRT,pp_exp,pp_kind,peek_e,
-					  substExpInKind',isRenamedKind)
-      fun substConInCBnd subst bnd = 
+      val substConInCon = substConInXXX substExpConInCon'
+      val substExpInExp = substExpInXXX substExpConInExp'
+      val substExpInCon = substExpInXXX substExpConInCon'
+      val substConInExp = substConInXXX substExpConInExp'
+      val substConInKind = substConInXXX substExpConInKind'
+      val substExpInKind = substExpInXXX substExpConInKind'
+      fun substConInCBnd csubst bnd = 
 	let
 	  val bnd = 
-	    (case substConInCBnd' subst bnd
-	       of ([bnd],subst) => bnd
-		| _ => error "substConInCBnd" "Substitution should not checnge number of bnds")
+	    (case substExpConInCBnd' (empty_state (empty(), csubst)) bnd
+	       of ([bnd],state) => bnd
+		| _ => error "substConInCBnd" "Substitution should not change number of bnds")
 	in
 	  bnd
 	end
 
-      fun substConInBnd subst bnd = 
+      fun substConInBnd csubst bnd = 
 	let
 	  val bnd = 
-	    (case substConInBnd' subst bnd
-	       of ([bnd],subst) => bnd
-		| _ => error "substConInBnd" "Substitution should not checnge number of bnds")
+	    (case substExpConInBnd' (empty_state (empty(), csubst)) bnd
+	       of ([bnd],state) => bnd
+		| _ => error "substConInBnd" "Substitution should not change number of bnds")
 	in
 	  bnd
 	end
 
-    end
-
-    (*Combined exp and con substs*)
-    local
-      open NilRewrite
-
-      fun conhandler ((esubst,csubst),con : con) =
-	(case con
-	   of Var_c var => 
-	     (case substitute csubst var
-		of SOME con => (subst_counter(); CHANGE_NORECURSE ((esubst,csubst),renameCon con))
-		 | _ => NORECURSE)
-	    | _ => NOCHANGE)
-	   
-      fun exphandler ((esubst,csubst),exp : exp) =
-	(case exp
-	   of Var_e var => 
-	     (case substitute esubst var
-		of SOME exp => (subst_counter(); CHANGE_NORECURSE ((esubst,csubst),renameExp exp))
-		 | _ => NORECURSE)
-	    | _ => NOCHANGE)
-
-      val exp_con_handler = set_exphandler (set_conhandler default_handler conhandler) exphandler
-
-      val {rewrite_con = substExpConInCon',
-	   rewrite_exp = substExpConInExp',
-	   rewrite_kind = substExpConInKind',...} = rewriters exp_con_handler
-	
-
-
-      val pp_kind = Ppnil.pp_kind
-      val pp_con = Ppnil.pp_con
-      val pp_exp = Ppnil.pp_exp
-	
-      fun substExpConInXXX (name,renamedWRT,XXXprint,substituter,esubstituter,csubstituter,renamed) (esubst,csubst) item = 
-	let
-
-	  fun peek subst var = isSome (substitute subst var)
-
-	  val _ = 
-	    if !debug then 
-	      assert (locate ("PRE:substExpConIn"^name))
-	      [
-	       (renamedWRT (peek esubst,peek csubst) item,
-		(fn () => (lprintl ("Item not renamed passed to substExpConIn"^name);
-			   printl "ESubst is:";
-			   print pp_exp esubst;
-			   printl "CSubst is:";
-			   print pp_con csubst;
-			   lprintl "Substituted into:";
-			   XXXprint item)))
-	       ]
-	    else ()
-
-	  val item = 
-	    if is_empty esubst then
-	      csubstituter csubst item
-	    else if is_empty csubst then
-	      esubstituter esubst item
-		 else substituter (esubst,csubst) item
-
-	  val _ = 
-	    if !debug then 
-	      assert (locate ("POST:substExpConIn"^name))
-	      [
-	       (renamed item,
-		(fn () => (lprintl ("Failure to rename properly in substExpConIn"^name);
-			   XXXprint item)))
-	       ]
-	    else ()
-	in
-	  item
-	end
-    in
-      val substExpConInExp  = substExpConInXXX("Exp",isRenamedExpWRT,pp_exp,
-					       substExpConInExp',substExpInExp,substConInExp,
-					       isRenamedExp)
-      val substExpConInCon  = substExpConInXXX("Con",isRenamedConWRT,pp_con,
-					       substExpConInCon',substExpInCon,substConInCon,
-					       isRenamedCon)
-
-      val substExpConInKind = substExpConInXXX("Kind",isRenamedKindWRT,pp_kind,
-					       substExpConInKind',substExpInKind,substConInKind,
-					       isRenamedKind)
+      val substExpConInExp  = substExpConInXXX(substExpConInExp')
+      val substExpConInCon  = substExpConInXXX(substExpConInCon')
+      val substExpConInKind = substExpConInXXX(substExpConInKind')
 
     end  
 
@@ -522,19 +612,63 @@ structure NilSubst :> NILSUBST
     local
       open NilRewrite
 
-      fun varconhandler (state as (subst_var,subst_con ),con : con) =
-	(case con
-	   of Var_c var => if Name.eq_var (subst_var,var) then CHANGE_NORECURSE (state,subst_con) else NORECURSE
-	    | _ => NOCHANGE)
-	   
-      fun varexphandler (state as (subst_var,subst_exp ),exp : exp) =
-	(case exp
-	   of Var_e var => if Name.eq_var (subst_var,var) then CHANGE_NORECURSE (state,subst_exp) else NORECURSE
-	    | _ => NOCHANGE)
-	   
-      val var_con_handler = set_conhandler default_handler varconhandler
+      type 'item state = {var : var,
+			  item : 'item,
+			  cbound : VarSet.set,
+			  ebound : VarSet.set}
 
-      val var_exp_handler = set_exphandler default_handler varexphandler
+      val member = VarSet.member
+      val add = VarSet.add
+      exception Rebound of var
+
+      fun exp_var_xxx (state : 'item state as {ebound,cbound,var,item},target,any) = 
+	(if member (ebound,target) 
+	   then raise Rebound target
+	 else ({ebound = add (ebound,target),cbound = cbound,var = var,item = item},NONE))
+
+
+      fun con_var_xxx (state : 'item state as {ebound,cbound,var,item},target,any) = 
+	(if member (cbound,var) 
+	   then raise Rebound var
+	 else ({cbound = add (cbound,target),ebound = ebound,var = var,item = item},NONE))
+
+      val member = fn set => fn item => member (set,item)
+
+      fun varconhandler (state as {var,item,cbound,ebound},con : con) =
+	(case con
+	   of Var_c target => 
+	     if Name.eq_var (var,target) 
+	       then CHANGE_NORECURSE (state,renameConWRT (member ebound,member cbound) item) 
+	     else NORECURSE
+	    | _ => NOCHANGE)
+	   
+      fun varexphandler (state as {var,item,cbound,ebound},exp : exp) =
+	(case exp
+	   of Var_e target => 
+	     if Name.eq_var (var,target) 
+	       then CHANGE_NORECURSE (state,renameExpWRT (member ebound,member cbound) item) 
+	     else NORECURSE
+	    | _ => NOCHANGE)
+	   
+      val var_con_handler = 
+	let 
+	  val h = set_conhandler default_handler varconhandler
+	  val h = set_con_binder h con_var_xxx
+	  val h = set_con_definer h con_var_xxx
+	  val h = set_exp_binder h exp_var_xxx
+	  val h = set_exp_definer h exp_var_xxx
+	in h
+	end
+
+      val var_exp_handler = 
+	let 
+	  val h = set_exphandler default_handler varexphandler
+	  val h = set_con_binder h con_var_xxx
+	  val h = set_con_definer h con_var_xxx
+	  val h = set_exp_binder h exp_var_xxx
+	  val h = set_exp_definer h exp_var_xxx
+	in h
+	end
 
       val {rewrite_exp = varConExpSubst',
 	   rewrite_con = varConConSubst',
@@ -547,7 +681,9 @@ structure NilSubst :> NILSUBST
       val pp_kind = Ppnil.pp_kind
       val pp_con = Ppnil.pp_con
       val pp_exp = Ppnil.pp_exp
-	
+
+      fun empty_state (var,item) = {var = var,item = item, cbound = VarSet.empty, ebound = VarSet.empty}
+
       fun varXXXYYYSubst (name,XXXrenamed,YYYrenamed,XXXprint,YYYprint,substitute) var Xitem Yitem =
 	let
 	  val _ = 
@@ -563,15 +699,15 @@ structure NilSubst :> NILSUBST
 	       ]
 	    else ()
 
-	  val item = substitute (var,Xitem) Yitem
+	  val item = substitute (empty_state (var,Xitem)) Yitem
 
 	  val _ = 
 	    if !debug then 
 	      assert (locate ("POST:"^name))
 	      [
-	       (YYYrenamed item,
+(*	       (YYYrenamed item,
 		fn () => (lprintl ("Failure to rename properly in "^name);
-			  YYYprint item))
+			  YYYprint item)) *)
 	       ]
 	    else ()
 	in

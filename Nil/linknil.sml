@@ -1,4 +1,4 @@
-(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist Reify NilStatic Inline Flatten Reduce *)
+(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist Reify NilStatic Inline Flatten Reduce Ppnil-Html *)
 
 
 structure Linknil (* :> LINKNIL  *) =
@@ -40,6 +40,7 @@ structure Linknil (* :> LINKNIL  *) =
     val show_reduce = Stats.ff("showReduce")
     val show_flatten = Stats.ff("showFlatten")
     val show_inline = Stats.ff("showInline")
+    val show_html = Stats.tt("showHTML")
 
 (*    val type_check_before_opt = Stats.ff("TypecheckBeforeOpt")
     val type_check_after_opt = Stats.ff("TypecheckAfterOpt")
@@ -123,7 +124,11 @@ structure Linknil (* :> LINKNIL  *) =
 			   print "\n")
 		    else ()
 	    val _ = if !showphase
-			then (Ppnil.pp_module nilmod; print "\n")
+			then
+                          if !show_html then
+                             PpnilHtml.pp_module nilmod
+                          else
+                             (Ppnil.pp_module nilmod; print "\n")
 		    else ()
 	in  nilmod
 	end
@@ -180,7 +185,13 @@ structure Linknil (* :> LINKNIL  *) =
 				   "Flatten", Flatten.doModule, 
 				   filename, nilmod)
 
-	    fun inline_domod m = #2 (Inline.optimize m)
+	    fun inline_domod m = 
+                   let val (count, result) = Inline.optimize m
+                   in print "Small functions inlined: ";
+                      print (Int.toString count);
+                      print "\n";
+                      result
+                   end
 	    val nilmod = transform(do_inline, show_inline,
 				   "Inline", 
 				   inline_domod, filename, nilmod)

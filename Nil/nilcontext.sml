@@ -92,7 +92,7 @@ structure NilContext
      *             v == con :: kind
      *             con :: kind
      *             kind <: shape
-     *             Forall(k) s.t. c::k, k<:shape
+     *             
      *             Forall(v1,2), if v1 => (c1,k1,s1,i1)
      *              and v2 => (c2,k2,s2,i2), then
      *              i1 < i2 iff v1 inserted before v2.
@@ -159,10 +159,11 @@ structure NilContext
 	   assert (locate "insert_con")
 	   [
 	    (not (contains conmap var),
-	     fn () => print ("Term variable already occurs in context: "^(Name.var2string var))),
+	     fn () => print ("Term variable already occurs in context: "^(Name.var2string var)))
+(*            ,
 	    (isRenamedCon ctx con, 
 	     fn () => (Ppnil.pp_con con;
-		       print ("Type not properly renamed when inserted into context")))
+		       print ("Type not properly renamed when inserted into context"))) *)
 	    ]
 	 else ()
      in
@@ -201,10 +202,11 @@ structure NilContext
 				 print "Kind contains variables not found in context")),
 		   (is_shape shape, 
 		       fn () => (Ppnil.pp_kind shape;
-				 print "Kind is not a shape")),
+				 print "Kind is not a shape"))
+(*               ,
 		   (isRenamedKind ctx shape, 
 		    fn () => (Ppnil.pp_kind shape;
-			      print ("Kind not properly renamed when inserted into context")))
+			      print ("Kind not properly renamed when inserted into context"))) *)
 		   ]
 	 else ();
 
@@ -233,10 +235,12 @@ structure NilContext
 	  end
 	 | Arrow_k (openness, formals, return) => 
 	  let 
-	    fun folder((v,k),D) = let val k' = make_shape(D,k)
+(* CS: Was destroying subkind relationship
+ 	    fun folder((v,k),D) = let val k' = make_shape(D,k)
 				  in  ((v,k'), insert_shape(D,v,k'))
 				  end
 	    val (formals,D) = Listops.foldl_acc folder D formals
+*)
 	    val return = make_shape (D,return)
 	  in  (Arrow_k (openness, formals,return))
 	  end)
@@ -247,9 +251,9 @@ structure NilContext
 	 if !debug then
 	   assert (locate "shape_of") 
 		  [
-		   (isRenamedCon D constructor, 
+(*		   (isRenamedCon D constructor, 
 		    fn () => (Ppnil.pp_con constructor;
-			      print ("Type not properly renamed when passed to shape_of")))
+			      print ("Type not properly renamed when passed to shape_of"))) *)
 		   ]
 	 else ()
      in
@@ -330,6 +334,7 @@ structure NilContext
 	 | (Typecase_c {arg,arms,default,kind}) => make_shape (D,kind)
 	 | (Annotate_c (annot,con)) => shape_of (D,con))
        end 
+
    and shape_of_bnds (D : context, bnds : conbnd list) : context = 
      let
        fun folder (bnd,D) = 
@@ -360,10 +365,11 @@ structure NilContext
 		 var_error var),
 	    (allBound_k kindmap kind,
 		 fn () => (Ppnil.pp_kind kind;
-			   lprintl "Kind contains variables not found in context")),
+			   lprintl "Kind contains variables not found in context"))
+(*            ,
 	    (isRenamedKind context kind, 
 	     fn () => (Ppnil.pp_kind kind;
-		       lprintl ("Kind not properly renamed when inserted into context")))
+		       lprintl ("Kind not properly renamed when inserted into context"))) *)
 	    ]
 	 else (); 
        fun thunk() = make_shape (context,kind)
@@ -393,13 +399,14 @@ structure NilContext
 			   print "Shape kind contains variables not found in context")),
 	    (is_shape shape, 
 	     fn () => (Ppnil.pp_kind shape;
-		       print "Shape kind is not a shape")),
+		       print "Shape kind is not a shape"))
+(*            ,
 	    (isRenamedKind context kind, 
 	     fn () => (Ppnil.pp_kind kind;
 		       print ("Kind not properly renamed when inserted into context"))),
 	    (isRenamedKind context shape, 
 	     fn () => (Ppnil.pp_kind shape;
-		       print ("Shape not properly renamed when inserted into context")))
+		       print ("Shape not properly renamed when inserted into context"))) *)
 	    ]
 	 else ();
 
@@ -432,7 +439,8 @@ structure NilContext
 			   print "Shape kind contains variables not found in context")),
 	    (is_shape shape, 
 	     fn () => (Ppnil.pp_kind shape;
-		       print "Shape kind is not a shape")),
+		       print "Shape kind is not a shape"))
+(*  ,
 	    (isRenamedKind ctx kind, 
 	     fn () => (Ppnil.pp_kind kind;
 		       print ("Kind not properly renamed when inserted into context"))),
@@ -441,7 +449,7 @@ structure NilContext
 		       print ("Shape not properly renamed when inserted into context"))),
 	    (isRenamedCon ctx con, 
 	     fn () => (Ppnil.pp_con con;
-		       print ("Type not properly renamed when inserted into context")))
+		       print ("Type not properly renamed when inserted into context"))) *)
 	    ]
 	 else ();
 
@@ -468,10 +476,10 @@ structure NilContext
 			   print "Constructor contains variables not found in context")),
 	    (allBound_k kindmap kind,
 		 fn () => (Ppnil.pp_kind kind;
-			   print "Kind contains variables not found in context")),
-	    (isRenamedCon context con, 
+			   print "Kind contains variables not found in context"))
+(*	 ,   (isRenamedCon context con, 
 	     fn () => (Ppnil.pp_con con;
-		       print ("Type not properly renamed when inserted into context")))
+		       print ("Type not properly renamed when inserted into context"))) *)
 	    ]
 	 else ();
        fun thunk() = make_shape (context,kind)
@@ -494,10 +502,10 @@ structure NilContext
 			var_error var),
 		   (allBound_c kindmap con,
 			fn () => (Ppnil.pp_con con;
-				  print "Constructor contains variables not found in context")),
-		   (isRenamedCon context con, 
+				  print "Constructor contains variables not found in context"))
+(*	,	   (isRenamedCon context con, 
 		    fn () => (Ppnil.pp_con con;
-			      print ("Type not properly renamed when inserted into context")))
+			      print ("Type not properly renamed when inserted into context"))) *)
 		   ]
 	 else ();
        val kind = Singleton_k (con)
@@ -517,7 +525,7 @@ structure NilContext
 
    and find_kind (context as {kindmap,...}:context,var) = 
      (case (V.find (kindmap, var)) of
-	   SOME {eqn,kind,shape,index} => kind
+	   SOME {kind,...} => kind
 	 | NONE => raise Unbound)
 
    (*PRE:  con :: T or W *)
@@ -530,9 +538,9 @@ structure NilContext
 	   if !debug then 
 	     assert (locate "find_kind_equation")
 		    [
-		     (isRenamedCon s con,
+(*		     (isRenamedCon s con,
 		      fn () => (Ppnil.pp_con con;
-				print ("Type not properly renamed passed to function")))
+				print ("Type not properly renamed passed to function"))) *)
 		     ]
 	   else
 	     ()
@@ -571,7 +579,7 @@ structure NilContext
 	   (case c 
 	      of (Var_c v) => 
 		(case V.find(kindmap,v) 
-		   of SOME {eqn,kind,shape,index} => 
+		   of SOME {eqn,kind,...} => 
 		     (case eqn
 			of SOME c => (CON c, NilSubst.empty())
 			 | NONE => 
@@ -635,18 +643,18 @@ structure NilContext
 		      (perr_c_k_k (con,kind,kind');
 		       error ("Invalid equation/kind for entry: "^(var2string var)));
 
-		      (subkind(D,kind',shape)) orelse
+(*		      (subkind(D,kind',shape)) orelse
 		      (perr_c_k_k (con,shape,kind');
-		       error ("Invalid equation/shape for entry: "^(var2string var)));
+		       error ("Invalid equation/shape for entry: "^(var2string var))); *)
 		      ()
 		     )
 		   end
 		  | _ => ());
 		 
-	      ((subkind(D,kind,shape)) orelse
+(*	      ((subkind(D,kind,shape)) orelse
 	       (perr_k_k (shape,kind);
-		error ("Kind not a subkind of shape in entry: "^(var2string var))));
-
+		error ("Kind not a subkind of shape in entry: "^(var2string var)))); *)
+ 
 	      ((index = counter) orelse
 	       (error "Indexing error"))
 	      )

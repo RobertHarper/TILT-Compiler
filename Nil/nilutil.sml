@@ -1065,8 +1065,10 @@ struct
         | Singleton_k con => false
         | Record_k elts => Sequence.all (fn (_,k) => is_shape k) elts
         | Arrow_k (openness, formals, return) => 
-         (List.all (fn (_,k) => is_shape k) formals) 
-         andalso (is_shape return))
+(****
+            (List.all (fn (_,k) => is_shape k) formals) andalso 
+****)
+            (is_shape return))
 
    (* makeLetC.
          Creates a constructor-level sequential let given bindings and
