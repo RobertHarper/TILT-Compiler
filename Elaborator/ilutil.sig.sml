@@ -30,6 +30,7 @@ signature ILUTIL =
     val path2con : Il.path -> con
     val path2exp : Il.path -> exp
     val mod2path : mod -> Il.path
+    val eq_path  : Il.path * Il.path -> bool
 
     (* error functions *)
     val error_exp : string -> Il.exp -> string -> 'a
@@ -136,6 +137,7 @@ signature ILUTIL =
     val mod_free_expvar : mod -> var list
     val con_free_convar : con -> var list
     val con_free_modvar : con -> var list
+    val sig_free_conmodvar : signat -> var list * var list
 
     (* ----------- Functions that compute object sizes ----------- *)
     val mod_size : mod -> int
@@ -204,6 +206,9 @@ signature ILUTIL =
     val rebind_free_type_var : Il.Tyvar.stamp * con * context * var -> 
 	                          (tyvar * label * bool) list
     val sig_mod_handler : signat * (mod -> mod option) -> signat
+
+    val mod_resolved : mod -> bool
+    val sig_resolved : signat -> bool
 
     (* Travels the first bnd to locate free variables for exps, cons, and mods
        and substitute in the corresponding value give by the bnd list *)

@@ -5,7 +5,9 @@ functor Basis(structure Il : IL
 	      structure Ppil : PPIL
 	      structure IlUtil : ILUTIL
 	      structure Datatype : DATATYPE
-	      sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Datatype.Il = Il) : BASIS =
+	      structure Toil : TOIL
+	      sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il 
+		                   = Datatype.Il = Toil.Il = Il) : BASIS =
   struct
 
     structure Il = Il
@@ -42,7 +44,7 @@ functor Basis(structure Il : IL
       val default_fixity_table = map (fn (str,f) => (symbol_label(varSymbol(str)), f)) table
     end
 
-    fun initial_context (xty, xeq) : context * sbnd list =
+    fun initial_context () : context * sbnd list =
       let
 	fun mk_var_lab str = symbol_label(Symbol.varSymbol str)
 	fun mk_tyc_lab str = symbol_label(Symbol.tycSymbol str)
@@ -247,10 +249,10 @@ functor Basis(structure Il : IL
 		    
 
 		val list_sbnd_sdecs = Datatype.compile {context = context,
-							typecompile = xty,
+							typecompile = Toil.xty,
 							datatycs = listdb : Ast.db list,
 							withtycs = [] : Ast.tb list,
-							eq_compile = xeq}
+							eq_compile = Toil.xeq}
 		    
 		    
 		val (mlist,slist) = (MOD_STRUCTURE(map #1 list_sbnd_sdecs),
@@ -274,10 +276,10 @@ functor Basis(structure Il : IL
 
 
 	      val bool_sbnd_sdecs = Datatype.compile {context = context,
-						      typecompile = xty,
+						      typecompile = Toil.xty,
 						      datatycs = booldb : Ast.db list,
 						      withtycs = [] : Ast.tb list,
-						      eq_compile = xeq}
+						      eq_compile = Toil.xeq}
 	      val (mbool,sbool) = (MOD_STRUCTURE(map #1 bool_sbnd_sdecs),
 				   SIGNAT_STRUCTURE(NONE, map #2 bool_sbnd_sdecs))
 	      val (mbool,sbool) = (case (make_inline_module(context,mbool)) of

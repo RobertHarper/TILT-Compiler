@@ -63,12 +63,6 @@ structure LinkIl (* : LINKIL *) =
 				      structure IlStatic = IlStatic
 				      structure IlUtil = IlUtil
 				      structure Ppil = Ppil);
-	structure Basis = Basis(structure Il = Il		
-				structure IlContext = IlContext
-				structure IlStatic = IlStatic
-				structure Ppil = Ppil
-				structure Datatype = Datatype      
-				structure IlUtil = IlUtil);
 	structure InfixParse = InfixParse(structure Il = Il
 					  structure Ppil = Ppil
 					  structure AstHelp = AstHelp);
@@ -86,10 +80,16 @@ structure LinkIl (* : LINKIL *) =
 			      structure IlStatic = IlStatic
 			      structure IlUtil = IlUtil
 			      structure Ppil = Ppil
-			      structure Basis = Basis
 			      structure Pat = Pat
 			      structure Datatype = Datatype
 			      structure InfixParse = InfixParse);
+	structure Basis = Basis(structure Il = Il		
+				structure IlContext = IlContext
+				structure IlStatic = IlStatic
+				structure Ppil = Ppil
+				structure Toil = Toil
+				structure Datatype = Datatype      
+				structure IlUtil = IlUtil);
 	structure IlEval = IlEval(structure Il = Il
 				  structure IlContext = IlContext
 				  structure PrimUtil = IlPrimUtil
@@ -103,27 +103,28 @@ structure LinkIl (* : LINKIL *) =
 
 	val _ = Compiler.Control.Print.printDepth := 15;
 	val _ = Pagewidth := 100;
+	val error = fn s => Util.error "linkil.sml" s
 
 	fun setdepth d = Compiler.Control.Print.printDepth := d
-	val parse = LinkParse.parse_one
+	val parse = LinkParse.close_dec o LinkParse.parse_one
 	    
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
-	    
-	val (initial_context, initial_sbnds) = Basis.initial_context(Toil.xty,
-								     Toil.xeq) 
+
+	val empty_context = IlContext.empty_context
+	val (initial_context, initial_sbnds) = Basis.initial_context()
 	val initial_sbnds_len = length initial_sbnds
 
-	fun add_context_entries(ctxt,entries) = 
+
+	fun local_add_context_entries(ctxt,entries) = 
 	    let fun help (CONTEXT_SDEC(SDEC(l,dec))) = CONTEXT_SDEC(SDEC(l,SelfifyDec dec))
 		  | help ce = ce
 		val entries' = map help entries
 	    in IlContext.add_context_entries(ctxt,entries')
 	    end
-	    
-	fun elaborate_diff'(context,s) = 
+
+	fun elaborate_diff'(context,astdec) = 
 	    let
-		val what = parse s
-		val sbnd_ctxt_list = Toil.xdec(context,what) 
+		val sbnd_ctxt_list = Toil.xdec(context,astdec)
 		    handle (e as IlContext.NOTFOUND s) => 
 			(print "NOTFOUND: "; print s; print "\n"; raise e)
 		val sbnds = List.mapPartial #1 sbnd_ctxt_list
@@ -131,13 +132,13 @@ structure LinkIl (* : LINKIL *) =
 	    in	(sbnds,ctxts)
 	    end;
 
-	fun elaborate'(context,s) = 
-	    let val (sbnds,context_diff) = elaborate_diff'(context,s)
-	    in	(sbnds,add_context_entries(context,context_diff))
+	fun elaborate'(context,astdec) = 
+	    let val (sbnds,context_diff) = elaborate_diff'(context,astdec)
+	    in	(sbnds,local_add_context_entries(context,context_diff))
 	    end
 
-	fun elaborate s = elaborate'(initial_context,s)
-	fun elaborate_diff s = elaborate_diff'(initial_context,s)
+	fun elaborate s = elaborate'(initial_context,parse s)
+	fun elaborate_diff s = elaborate_diff'(initial_context,parse s)
 	fun evaluate target_sbnds =
 	    let
 		val allsbnds = initial_sbnds @ target_sbnds
@@ -146,31 +147,18 @@ structure LinkIl (* : LINKIL *) =
 		val ressbnds =
 		    (case allresmodule of
 			 Il.MOD_STRUCTURE allressbnds => List.drop(allressbnds,initial_sbnds_len)
-		       | _ => Util.error "help.sml" "a structure evaluated to a non-structure")
+		       | _ => error "a structure evaluated to a non-structure")
 	    in ressbnds
 	    end
 
 
-	fun check timeit filename doprint =
-	    let
-		val (sbnds,cdiff) = elaborate_diff filename
-		val _ = timeit(SOME "ELABORATION")
-	    in  if doprint 
-		    then
-			(print "test: sbnds are: \n";
-			 Ppil.pp_sbnds sbnds;
-			 print "test: context is: \n";
-			 Ppil.pp_context (add_context_entries(IlContext.empty_context,cdiff)))
-		else ();
-		    timeit NONE
-	    end
 	
-	fun check' timeit filename doprint =
+	fun check' filename {doprint,docheck} =
 	    let
-		open Il
-		open IlContext
-		val (sbnds,cdiff) = elaborate_diff filename
-		val _ = timeit(SOME "ELABORATION")
+		val _ = Stats.reset_stats()
+  	        val astdec = (Stats.timer("PARSING",LinkParse.parse_one)) filename
+  	        val astdec = (Stats.timer("PARSECLOSE",LinkParse.close_dec)) astdec
+		val (sbnds,cdiff) = (Stats.timer("ELABORATION",elaborate_diff')) (initial_context,astdec)
 		val _ = if doprint 
 			    then (print "test: sbnds are: \n";
 				  Ppil.pp_sbnds sbnds)
@@ -182,57 +170,57 @@ structure LinkIl (* : LINKIL *) =
 			     then (print "\ngiven_s is:\n";
 				   Ppil.pp_signat given_s)
 			 else ()
+		val msize = IlUtil.mod_size m
+		val ssize = IlUtil.sig_size given_s
+		val _ = (Stats.int "Module Size") := msize
+		val _ = (Stats.int "Signature Size") := ssize
 		val ctxt = initial_context 
-		val precise_s = IlStatic.GetModSig(ctxt,m)
-		val _ = timeit(SOME "TYPECHECKING")
-	    in if doprint
-		then (	  print "\nprecise_s is:\n";
-			  Ppil.pp_signat precise_s;
-			  print "\n";
-			  print "\ncontext is\n";
-			  Ppil.pp_context (add_context_entries(IlContext.empty_context,cdiff));
-			  print "\n")
-		else ();
-		if (IlStatic.Sig_IsSub(ctxt,precise_s,given_s))
-		    then timeit(SOME "SANITY-CHECK")
-		else Util.error "help.sml" "test'' failed: precise_s not a subsig of given_s";
-		    timeit NONE;
-		    (m,given_s,precise_s,ctxt)
+		val _ =
+		    if docheck
+			then 
+			    let val precise_s = (Stats.timer("TYPECHECKING",IlStatic.GetModSig))(ctxt,m)
+				fun sanity_check (ctxt,m,precise_s,given_s) = 
+				    if (not (IlStatic.Sig_IsSub(ctxt,precise_s,given_s)))
+					then SOME "precise_s is not a subsig of given_s"
+				    else if (not (mod_resolved m))
+					     then SOME "module is unresolved(tyvars or overexps)"
+					 else if (not (sig_resolved precise_s))
+						  then SOME "signature is unresolved(tyvars or overexps)"
+					      else NONE
+				val _ =  if doprint
+					     then (print "\nprecise_s is:\n";
+						   Ppil.pp_signat precise_s;
+						   print "\n";
+						   print "\ncontext is\n";
+						   Ppil.pp_context (local_add_context_entries(empty_context,
+											      cdiff));
+						   print "\n")
+					 else ()
+			    in (case ((Stats.timer("SANITY_CHECK",sanity_check))
+				      (ctxt,m,precise_s,given_s)) of
+				    NONE => ()
+				  | SOME str => (print "\n\n****** SANITY_CHECK FAILED: ";
+						 print str;
+						 print " ******\n\n";
+						 error "sanity-check"))
+			    end
+			else ()
+		val _ = Stats.print_stats()
+	    in  (m,given_s)
 	    end
 
-	fun timer () = let val timer = Timer.totalCPUTimer()
-			   val total = ref Time.zeroTime
-			   val last = ref(#usr(Timer.checkCPUTimer timer))
-			   val strings = ref ([] : string list)
-			   fun result (SOME str) =
-			       let val {gc,sys,usr} = Timer.checkCPUTimer timer
-				   val diff = Time.-(usr,!last)
-				   val _ = total := (Time.+(diff,!total))
-				   val _ = last := usr
-				   val s = ("Elapsed usr time for " ^ str ^ 
-					    ": " ^ (Time.toString diff) ^ "s\n")
-				   val _ = strings := (!strings) @ [s]
-			       in print s
-			       end
-			     | result NONE = (print "\n\n";
-					      print "============\n";
-					      print "TOTAL RESULT\n";
-					      print "============\n";
-					      app print (!strings);
-					      print "============\n";
-					      print "TOTAL = ";
-					      print (Time.toString (!total));
-					      print "s\n")
-		       in result
-		       end
 
-	val test = fn s => check (timer()) s false
-	val ptest = fn s => check (timer()) s true
-	val test' = fn s => check' (timer()) s false
-	val ptest' = fn s => check' (timer()) s true
-	val test'' = fn s => (check' (timer()) s false; ())
-	val ptest'' = fn s => (check' (timer()) s true; ())
+	fun test_res s = check' s {docheck = false, doprint = false}
+	fun ptest_res s = check' s {docheck = false, doprint = true}
 
+	fun test_res' s = check' s {docheck = true, doprint = false}
+	fun ptest_res' s = check' s {docheck = true, doprint = true}
+
+	fun test s = (test_res s; ())
+	fun ptest s = (ptest_res s; ())
+
+	fun test' s = (test_res' s; ())
+	fun ptest' s = (ptest_res' s; ())
 
     end (* struct *)
 

@@ -12,7 +12,7 @@ signature DATATYPE =
 		   typecompile : Il.context * Ast.ty -> Il.con,
 		   datatycs : Ast.db list,
 		   withtycs : Ast.tb list,
-		   eq_compile : Il.context * Il.con -> Il.exp} -> (Il.sbnd * Il.sdec) list
+		   eq_compile : Il.context * Il.con -> Il.exp option} -> (Il.sbnd * Il.sdec) list
 
 
     (* The datatype module/signature returned will be such that:

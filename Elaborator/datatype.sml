@@ -26,7 +26,7 @@ functor Datatype(structure Il : IL
 		context : context, 
 		std_list : (Symbol.symbol * Ast.tyvar list * (Symbol.symbol * Ast.ty option) list) list,
 		withtycs : Ast.tb list,
-		xeq : Il.context * Il.con -> Il.exp) : (mod * signat) =
+		eqcomp : Il.context * Il.con -> Il.exp option) : (mod * signat) =
       let 
 	val _ = (case withtycs of 
 		   [] => ()
@@ -35,7 +35,7 @@ functor Datatype(structure Il : IL
 	val is_eq = ref true  (* speculate it is an eq-permitting datatype *)
 	val p = length std_list
 	val type_symbols = map #1 std_list
-	val top_type_label = map (fn s => fresh_internal_label ("top_" ^ Symbol.name s)) type_symbols
+	val top_type_label = map (fn s => internal_label ("top_" ^ Symbol.name s)) type_symbols
 	val top_type_var = map (fn s => fresh_named_var ("top_" ^ Symbol.name s)) type_symbols
 	val type_label = map (fn s => symbol_label s) type_symbols
 	val type_var = map (fn s => fresh_named_var ("unused_" ^ (Symbol.name s))) type_symbols
@@ -165,13 +165,15 @@ functor Datatype(structure Il : IL
 			       else CON_APP(type_fun_i,cons_rf_help')
 		    (* don't need to resolve later, have all necessary data now *)
 (*
-		    val _ = (print "datatype.sml calling xeq ENTER with cons = ";
+		    val _ = (print "datatype.sml calling eqcomp ENTER with cons = ";
 			     pp_con cons; print "\n")
 *)
-		    val eq_exp = (SOME (xeq(temp_ctxt,cons))
-				  handle _ => (is_eq := false; NONE))
+		    val eq_exp = eqcomp(temp_ctxt,cons)
+		    val _ = (case eq_exp of 
+				 NONE => (is_eq := false)
+			       | _ => ())
 (*
-		    val _ = (print "datatype.sml calling xeq RETURNED with eq_exp = \n";
+		    val _ = (print "datatype.sml calling eqcomp RETURNED with eq_exp = \n";
 			     (case eq_exp of
 				 SOME e => pp_exp e
 			       | NONE => print "NONE"); print "\n")
@@ -360,7 +362,9 @@ functor Datatype(structure Il : IL
 	fun loop context acc [] = rev acc
 	  | loop context acc (std_list::rest) = 
 	    let val (m,s) = driver(typecompile,context,std_list,withtycs, eq_compile)
-		val l = fresh_open_internal_label "lbl"
+		val syms : Symbol.symbol list = map #1 std_list
+		val piecename = String.concat(map Symbol.name syms)
+		val l = open_internal_label ("disjoint_" ^ piecename) (* must always use same label *)
 		val v = fresh_var()
 		val sbnd = SBND(l,BND_MOD(v,m))
 		val sdec = SDEC(l,DEC_MOD(v,s))

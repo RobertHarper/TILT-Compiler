@@ -34,7 +34,7 @@ functor IlEval(structure Il : IL
 	     | SEAL _) => false
            | (SCON (vector _)) => true (* XXX not really *)
 	   | (SCON (array _)) => true  (* XXX not really *)
-	   | (SCON _ | PRIM _ | FIX _) => true
+	   | (SCON _ | PRIM _ | ILPRIM _ | FIX _) => true
 	   | (RECORD rbnds) => andfold (fn (l,bnd) => exp_isval bnd) rbnds
 	   | EXN_INJECT (t,e) => exp_isval e
 	   | ROLL (c,e) => (con_isval c) andalso (exp_isval e)
@@ -58,18 +58,24 @@ functor IlEval(structure Il : IL
     and con_isval (con : con) =
 	(case con of
 	     (CON_OVAR _ | CON_APP _ 
-	     | CON_TUPLE_PROJECT _ | CON_MODULE_PROJECT _) => false
+	      | CON_TUPLE_PROJECT _ | CON_MODULE_PROJECT _) => false
+	   | (CON_TYVAR tv) => (case (tyvar_deref tv) of
+				    NONE => false
+				  | SOME c => con_isval c)
 	   | (CON_MUPROJECT(i,c)) => con_isval c
 	   | (CON_VAR _ | CON_FUN _ | CON_INT _ | CON_UINT _ | CON_FLOAT _ | CON_ANY ) => true
 	   | (CON_ARRAY c | CON_VECTOR c | CON_REF c | CON_TAG c) => con_isval c
 	   | (CON_ARROW (c1,c2,_)) => (con_isval c1) andalso (con_isval c2)
 	   | (CON_RECORD rdecs) => andfold (fn (l,bnd) => con_isval bnd) rdecs
+	   | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r)) => con_isval (CON_FLEXRECORD r)
+	   | CON_FLEXRECORD (ref (FLEXINFO(_,false,_))) => error "can't have unresovled flexrecord here"
+	   | CON_FLEXRECORD (ref (FLEXINFO(_,true,rdecs))) => con_isval (CON_RECORD rdecs)
 	   | (CON_SUM (iopt,cons)) => andfold con_isval cons
 	   | (CON_TUPLE_INJECT(cons)) => andfold con_isval cons)
 
     and mod_isval (module : mod) = 
 	(case module of 
-	     (MOD_VAR _ | MOD_APP _ | MOD_SEAL _ | MOD_PROJECT _) => false
+	     (MOD_VAR _ | MOD_APP _ | MOD_SEAL _ | MOD_PROJECT _ | MOD_LET _) => false
 	   | (MOD_FUNCTOR _) => true
 	   | (MOD_STRUCTURE sbnds) => andfold (fn (SBND(l,bnd)) => bnd_isval bnd) sbnds)
 
@@ -162,6 +168,9 @@ functor IlEval(structure Il : IL
 		      | _ => error "CON_APP applied to a first arg which is not CON_FUN")
 		end
 	  | CON_RECORD rdecs => CON_RECORD (map (fn (l,c) => (l,eval_con env c)) rdecs)
+	  | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r)) => eval_con env (CON_FLEXRECORD r)
+	  | CON_FLEXRECORD (ref (FLEXINFO(_,false,_))) => error "can't have unresovled flexrecord here"
+	  | CON_FLEXRECORD (ref (FLEXINFO(_,true,rdecs))) => eval_con env (CON_RECORD rdecs)
 	  | CON_TUPLE_INJECT cs => CON_TUPLE_INJECT(map (eval_con env) cs)
 	  | CON_TUPLE_PROJECT(i,c) => (case (eval_con env c) of
 					   CON_TUPLE_INJECT cs => List.nth(cs,i)
@@ -300,7 +309,7 @@ functor IlEval(structure Il : IL
 	     (OVEREXP (_,_,oe)) => (case oneshot_deref oe of
 					NONE => error "uninst overloaded exp"
 				      | SOME e => eval_exp env e)
-	   | (SCON _ | PRIM _) => exp
+	   | (SCON _ | PRIM _ | ILPRIM _) => exp
 	   | (FIX (a,fbnds)) => 
 		 let fun help (FBND(v1,v2,c1,c2,e)) = 
 		     FBND(v1,v2,
@@ -471,7 +480,8 @@ functor IlEval(structure Il : IL
 					    Ppil.pp_mod module;
 					    error  "MOD_PROJECT applied to non-structure")
 				  end
-	   | MOD_SEAL (m,s) => eval_mod env m)
+	   | MOD_SEAL (m,s) => eval_mod env m
+	   | MOD_LET (v,m,body) => raise UNIMP)
 
     val eval_con = fn (c : con) => eval_con [] c
     val eval_exp = fn (e : exp) => (indent := 0; eval_exp [] e)

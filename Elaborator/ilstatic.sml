@@ -33,7 +33,6 @@ functor IlStatic(structure Il : IL
      | eq_modval (MOD_SEAL(m,s),m') = eq_modval(m,m')
      | eq_modval (m',MOD_SEAL(m,s)) = eq_modval(m,m')
      | eq_modval(m1,m2) = false
-   fun eq_path (p1 : path, p2 : path) = p1 = p2
 
    (* --- remove references to internal variables from signature with given module ---- *)
    fun SelfifySig'(ctable : (var * con) list, 
@@ -522,7 +521,8 @@ functor IlStatic(structure Il : IL
 			   | SOME rdecs => (let val stamp = stamp_join(stamp1,stamp2)
 						val _ = stamp_constrain stamp rdecs
 						val flex = FLEXINFO(stamp,false,rdecs)
-						val _ = ref1 := flex
+						val indirect_flex = INDIRECT_FLEXINFO ref2
+						val _ = ref1 := indirect_flex
 						val _ = ref2 := flex
 					    in true
 					    end))
@@ -707,7 +707,9 @@ functor IlStatic(structure Il : IL
 		   SIGNAT_FUNCTOR _ => error "cannot project from functor"
 		 | (SIGNAT_STRUCTURE (_,sdecs)) =>
 		       (case Sdecs_Lookup(MOD_VAR (fresh_var()),sdecs,[l]) of
-			    NONE => error "no such label in sig"
+			    NONE => (print "no such label in sig: ";
+				     pp_label l; print "\n";
+				     error "no such label in sig")
 			  | SOME(PHRASE_CLASS_CON(_,k)) => k
 			  | _ => error "label in sig not a DEC_CON"))
 	   end
@@ -1226,7 +1228,9 @@ functor IlStatic(structure Il : IL
 				SOME(PHRASE_CLASS_CON(c,_)) => break_loop c
 			      | SOME _ => error "CON_MOD_PROJECT found signature with wrong flavor"
 			      | NONE => (false,arg))
-		     | SIGNAT_FUNCTOR _ => error "CON_MODULE_PROJECT from a functor")
+		     | SIGNAT_FUNCTOR _ => (print "CON_MODULE_PROJECT from functor = \n";
+					    pp_mod m;
+					    error "CON_MODULE_PROJECT from a functor"))
 	       end
 	   handle NOTFOUND _ => (false,arg))
 	  | c => (false,c))
@@ -1512,7 +1516,8 @@ functor IlStatic(structure Il : IL
 
     val GetExpCon = fn (d,e) => #2(GetExpCon(e,d))
     val GetConKind = fn (d,c) => GetConKind(c,d)
-    val GetModSig = fn (d,m) => #2(GetModSig(m,d))
+    val GetModSig = fn (d,m) => ((* Stats.counter "ilstatic.externgetmodsig" (); *)
+				#2(GetModSig(m,d)))
     val GetBndDec = fn arg => #2(GetBndDec arg)
     val GetBndsDecs = fn arg => map #2 (GetBndsDecs arg)
     val GetSbndsSdecs = fn arg => map #2(GetSbndsSdecs arg)

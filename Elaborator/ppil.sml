@@ -258,26 +258,6 @@ functor Ppil(structure Il : IL
 	      | (INLINE_OVER _) => String "INLINE_OVER"
 	end
 
-    and pp_context seen (context : context) : Formatter.format = raise UNIMP
-(*      let 
-	  val entries = context_entries context
-	  fun dolv l v fmts = HOVbox((pp_label l) :: (String ">") :: (pp_var v) :: 
-				     (String ":") :: (Break0 0 3) :: fmts)
-	fun helper (CONTEXT_INLINE (l,v,inl)) = HOVbox[pp_label l, String " >> ", pp_var v, 
-						       String " = ", pp_inline seen inl]
-	  | helper (CONTEXT_FIXITY vf_list) = HOVbox[String "FIXITY ", pp_fixity_list vf_list]
-	  | helper (CONTEXT_SDEC(SDEC(l,dec))) = 
-	    (case dec of
-		 (DEC_EXP(v,c)) => dolv l v [pp_con seen c]
-	       | (DEC_CON(v,k,SOME c)) => dolv l v [pp_kind k, String "=", pp_con seen c]
-	       | (DEC_CON(v,k,NONE)) => dolv l v [pp_kind k]
-	       | (DEC_MOD(v,s)) => dolv l v [pp_signat seen s]
-	       | (DEC_EXCEPTION (t,c)) => HOVbox[String "EXCEPTION: ", pp_tag t, String " = ",
-						 pp_con seen c])
-	  | helper (CONTEXT_SIGNAT(l,v,s)) = dolv l v [String " OMEGA = ",pp_signat seen s]
-      in pp_list helper entries ("CONTEXT(", ", ", ")", true)
-      end
-*)
 
     and pp_exp seen exp = 
       (case exp of
@@ -285,6 +265,7 @@ functor Ppil(structure Il : IL
 				 NONE => String "OVEREXP_NONE"
 			       | (SOME e) => pp_exp seen e)
        | SCON scon => pp_value' (pp_exp seen) (pp_con seen) scon
+       | PRIM (prim,[]) => pp_prim' prim
        | PRIM (prim,cons) => HOVbox[pp_prim' prim,
 				    pp_list (pp_con seen) cons ("[",",","]",false)]
        | ILPRIM ip => pp_ilprim' ip
@@ -455,7 +436,6 @@ functor Ppil(structure Il : IL
     val pp_prim' = help pp_prim'
     val pp_mod' = help (pp_mod [])
     val pp_exp' = help (pp_exp [])
-    val pp_context' = help (pp_context [])
     val pp_signat' = help (pp_signat [])
     val pp_list' = pp_list
     fun pp_commalist' pobj objlist = pp_list' pobj objlist ("(",", ",")",false)
@@ -471,6 +451,21 @@ functor Ppil(structure Il : IL
     val pp_decs' = help pp_decs
     val pp_sdecs' = help pp_sdecs
 
+    fun pp_context' (context : context) : Formatter.format = 
+	let val pp_record = {pp_exp = pp_exp',
+			     pp_mod = pp_mod',
+			     pp_con = pp_con',
+			     pp_fixity_list = pp_fixity_list,
+			     pp_inline = pp_inline [],
+			     pp_kind = pp_kind',
+			     pp_var = pp_var',
+			     pp_label = pp_label',
+			     pp_tag = pp_tag,
+			     pp_signat = pp_signat'} 
+	in IlContext.print_context(pp_record, context)
+	end
+
+
     val pp_var = help' pp_var
     val pp_label  = help' pp_label
     val pp_con = help' (pp_con [])
@@ -479,7 +474,7 @@ functor Ppil(structure Il : IL
     val pp_prim = help' Ppprim.pp_prim'
     val pp_mod = help' (pp_mod [])
     val pp_exp = help' (pp_exp [])
-    val pp_context = help' (pp_context [])
+    val pp_context = help' pp_context'
     val pp_signat = help' (pp_signat [])
     fun pp_list doer data = help' (pp_list' doer data)
     fun pp_commalist pobj objlist = pp_list pobj objlist ("(",", ",")",false)

@@ -38,10 +38,10 @@ functor IlUtil(structure Ppil : PPIL
 
 
     local 
-      fun geq_label (l1,l2) = (case (is_label_barred l1, is_label_barred l2) of
-				 (true,false) => true
-			       | (false,true) => false
-			       | (_,_) => String.>(label2string l1, label2string l2))
+      fun geq_label (l1,l2) = (case (Name.compare_label(l1,l2)) of
+				 GREATER => true
+			       | EQUAL => true
+			       | LESS => false)
       fun geq_labelpair ((l1,_),(l2,_)) = geq_label(l1,l2)
     in 
       fun sort_label (arg : label list) : label list = ListMergeSort.sort geq_label arg
@@ -132,7 +132,10 @@ functor IlUtil(structure Ppil : PPIL
 			  error "mod2path called on non-projection")
       in loop m []
       end
-
+      fun eq_path(SIMPLE_PATH v1, SIMPLE_PATH v2) = eq_var(v1,v2)
+        | eq_path(COMPOUND_PATH (v1,l1), COMPOUND_PATH(v2,l2)) = 
+		eq_var(v1,v2) andalso eq_list(eq_label,l1,l2)
+        | eq_path _ = false
 
       (* -------------------------------------------------------- *)
       (* ------------ Context manipulation functions ------------ *)
@@ -352,6 +355,32 @@ functor IlUtil(structure Ppil : PPIL
 				sig_handler = default_sig_handler})
 	  val _ = f_con handlers argcon
 	in !free
+	end
+
+      fun sig_free_conmodvar (argsig : signat) : var list * var list = 
+	let 
+	  val freecon = ref []
+	  val freemod = ref []
+	  fun con_handler (CON_VAR v,bound) = (if (member_eq(eq_var,v,bound) orelse
+						      member_eq(eq_var,v,!freecon))
+						      then ()
+						  else freecon := (v::(!freecon));
+						      NONE)
+	    | con_handler _ = NONE
+	  fun mod_handler (MOD_VAR v,bound) = (if (member_eq(eq_var,v,bound) orelse
+						      member_eq(eq_var,v,!freemod))
+						      then ()
+						  else freemod := (v::(!freemod));
+						      NONE)
+	    | mod_handler _ = NONE
+	  val handlers = STATE(default_bound,
+			       {sdec_handler = default_sdec_handler,
+				exp_handler = default_exp_handler,
+				con_handler = con_handler,
+				mod_handler = mod_handler,
+				sig_handler = default_sig_handler})
+	  val _ = f_signat handlers argsig
+	in (!freecon, !freemod)
 	end
 
 
@@ -710,16 +739,18 @@ functor IlUtil(structure Ppil : PPIL
 				      then NONE
 				  else (tyvars := tyvar :: (!tyvars);
 					if constrain then tyvar_constrain tyvar else (); 
-					    if eq_constrain then 
-						(print "!!!eq_constraining tyvar ";
-						 print (tyvar2string tyvar); print "\n")
-					    else ();
-						if eq_constrain then tyvar_use_equal tyvar else (); 
-						    tyvar_addctxts(tyvar,constrain_ctxts);
-						    (case stampopt of
-							 SOME stamp => update_stamp(tyvar,stamp)
-						       | NONE => ());
-							 NONE)
+					debugdo (fn () => 
+						 if (eq_constrain) 
+						     then
+							 (print "!!!eq_constraining tyvar ";
+							  print (tyvar2string tyvar); print "\n")
+						 else ());
+					if eq_constrain then tyvar_use_equal tyvar else (); 
+					    tyvar_addctxts(tyvar,constrain_ctxts);
+					    (case stampopt of
+						 SOME stamp => update_stamp(tyvar,stamp)
+					       | NONE => ());
+						 NONE)
 			    | CON_FLEXRECORD r => (flex_handler r; SOME c)
 			    | _ => NONE)
 		    | someopt => someopt)
@@ -865,6 +896,33 @@ functor IlUtil(structure Ppil : PPIL
 		| BND_CON(v,c) => BND_CON(v,f_con handlers c)
 		| BND_MOD(v,m) => BND_MOD(v,f_mod handlers m))
 	  end
+
+      exception UNRESOLVED
+      fun make_resolved_handlers () =
+	  let 
+	      fun exp_handler (OVEREXP (_,_,eshot),_) = (case (oneshot_deref eshot) of
+							   SOME _ => NONE
+							 | NONE => raise UNRESOLVED)
+		| exp_handler _ = NONE
+	      fun con_handler (CON_TYVAR tv,_) = (case (tyvar_deref tv) of
+						    SOME _ => NONE
+						  | NONE => raise UNRESOLVED)
+		| con_handler _ = NONE
+	      val handlers = STATE(default_bound,
+				   {sdec_handler = default_sdec_handler,
+				    exp_handler = exp_handler,
+				    con_handler = con_handler,
+				    mod_handler = default_mod_handler,
+				    sig_handler = default_sig_handler})
+	  in handlers
+	  end
+
+      fun mod_resolved m = (f_mod (make_resolved_handlers()) m; true) 
+	  handle UNRESOLVED => false
+
+      fun sig_resolved s = (f_signat (make_resolved_handlers()) s; true) 
+	  handle UNRESOLVED => false
+			    
 
       fun make_size_handlers () =
 	  let 

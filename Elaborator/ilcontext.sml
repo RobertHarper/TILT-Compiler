@@ -49,7 +49,7 @@ struct
 				var_list = VarMap.empty,
 				tag_list = TagMap.empty}
 
-    fun context_entries (CONTEXT{label_list,...}) = raise UNIMP
+  
 
     fun add_context_sdec'(CONTEXT {flatlist,fixity_list,
 				  label_list,var_list,tag_list}, 
@@ -484,5 +484,42 @@ struct
 	  case (Name.TagMap.find(tag_list,t)) of
 	      SOME c => c
 	    | NONE => raise (NOTFOUND ("Context_Exn_Lookup failed on " ^ (tag2string t)))
+
+
+    fun pp_list doer objs (left,sep,right,break) = 
+      let 
+	  open Formatter
+	  fun loop [] = [String right]
+	    | loop [a] = [doer a, String right]
+	    | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
+	  val fmts = (String left) :: (loop objs)
+      in (if break then Vbox0 else HOVbox0 1) (size left) 1 fmts
+      end
+    fun print_context ({pp_exp, pp_mod,
+			pp_con, pp_fixity_list, pp_inline, 
+			pp_kind, pp_label, pp_var, pp_tag, pp_signat},
+		       CONTEXT{label_list,...}) = 
+	let open Formatter
+	    val label_pathpc_list = Name.LabelMap.listItemsi label_list
+	    fun pp_path path = 
+		(case path of
+		     SIMPLE_PATH v => pp_var v
+		   | COMPOUND_PATH (v,ls) => HOVbox[Hbox[pp_var v, String "."], 
+						    pp_list pp_label ls ("",".","",false)])
+	    fun pp_xpc (XPHRASE_CLASS_EXP (e,c)) = HOVbox[pp_exp e, String " : ", pp_con c]
+	      | pp_xpc (XPHRASE_CLASS_CON (c,k)) = HOVbox[pp_con c, String " : ", pp_kind k]
+	      | pp_xpc (XPHRASE_CLASS_MOD (m,s)) = HOVbox[pp_mod m, String " : ", pp_signat s]
+	      | pp_xpc (XPHRASE_CLASS_SIG s) = pp_signat s
+	      | pp_xpc (XPHRASE_CLASS_OVEREXP oe) = String "OVEREXP_NOTDONE"
+	    fun doer(lbl,(path,xpc)) = HOVbox[pp_label lbl,
+					   String " --> ",
+					   pp_path path,
+					   String " = ",
+					   pp_xpc xpc]
+	in  pp_list doer label_pathpc_list ("[",", ", "]", true)
+	end
+
+    val Sdecs_Lookup = fn arg => ((* Stats.counter "extern_Sdecs_Lookup" (); *)
+				Sdecs_Lookup arg)
 
     end

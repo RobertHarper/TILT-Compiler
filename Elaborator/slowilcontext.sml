@@ -398,4 +398,37 @@ functor SlowIlContext(structure Il : ILLEAK)
 	  in loop entries
 	  end
 
+    fun pp_list doer objs (left,sep,right,break) = 
+      let 
+	  open Formatter
+	  fun loop [] = [String right]
+	    | loop [a] = [doer a, String right]
+	    | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
+	  val fmts = (String left) :: (loop objs)
+      in (if break then Vbox0 else HOVbox0 1) (size left) 1 fmts
+      end
+      fun print_context ({pp_exp, pp_mod, pp_con, pp_fixity_list, pp_inline, 
+			  pp_kind, pp_label, pp_var, pp_tag, pp_signat},
+			 context) : Formatter.format = 
+      let 
+	  open Formatter
+	  val entries = context_entries context
+	  fun dolv l v fmts = HOVbox((pp_label l) :: (String ">") :: (pp_var v) :: 
+				     (String ":") :: (Break0 0 3) :: fmts)
+	  fun helper (CONTEXT_INLINE (l,v,inl)) = HOVbox[pp_label l, String " >> ", pp_var v, 
+							 String " = ", pp_inline inl]
+	    | helper (CONTEXT_FIXITY vf_list) = HOVbox[String "FIXITY ", pp_fixity_list vf_list]
+	    | helper (CONTEXT_SDEC(SDEC(l,dec))) = 
+	      (case dec of
+		   (DEC_EXP(v,c)) => dolv l v [pp_con c]
+		 | (DEC_CON(v,k,SOME c)) => dolv l v [pp_kind k, String "=", pp_con c]
+		 | (DEC_CON(v,k,NONE)) => dolv l v [pp_kind k]
+		 | (DEC_MOD(v,s)) => dolv l v [pp_signat s]
+		 | (DEC_EXCEPTION (t,c)) => HOVbox[String "EXCEPTION: ", pp_tag t, String " = ",
+						   pp_con c])
+	    | helper (CONTEXT_SIGNAT(l,v,s)) = dolv l v [String " OMEGA = ",pp_signat s]
+      in pp_list helper entries ("CONTEXT(", ", ", ")", true)
+      end
+
+
     end
