@@ -95,9 +95,65 @@ val debug_bound = ref false
 	     sumtypes,field_sub)
 	end
 
-    fun xsum_dynamic (info,
-		      con_varloc,
-		      exp_varloc) : loc_or_val * con * state = 
+    fun xsum_dynamic_single (info,
+			     con_varloc,
+			     exp_varloc) : loc_or_val * con * state = 
+	let val _ = Stats.counter("RTLinjsum") ()
+	    
+	  val  (state,known,sumcon,
+		tagcount,nontagcount,single_carrier,is_tag,
+		sumtypes,field_sub) = help info
+
+	  val numfields = alloc_regi NOTRACE_INT
+	  val gctemp = alloc_regi NOTRACE_INT
+	  val tmp = alloc_regi NOTRACE_INT
+	  val tagi = alloc_regi NOTRACE_INT
+	  val desti = alloc_regi(con2rep state sumcon)
+	      
+	  val boxl = fresh_code_label "xsum_dyn_single_box"
+	  val noboxl = fresh_code_label "xsum_dyn_single_nobox"
+	  val afterl = fresh_code_label "dyntagsum_after"
+	      
+	  val con_ir = load_ireg_locval(con_varloc,NONE)
+	  (* the 5 fields of the sum are: tag, known, tagcount, total, type args *)
+	  val summand_con_ir = alloc_regi TRACE
+	  val _ = add_instr(LOAD32I(EA(con_ir,4*4),summand_con_ir))
+	  (* if there is more than one type arg, it is stored in a record *)
+	  val field_con_ir = alloc_regi TRACE
+	  val exp_ir = load_ireg_locval(exp_varloc,NONE)
+	  val _ = add_instr(MV(summand_con_ir,field_con_ir)) 
+	      
+	  val _ = (add_instr(CMPUI(LE, summand_con_ir, IMM 4, tmp)); (* check ints *)
+		   add_instr(BCNDI(NE, tmp, boxl, false));
+		   add_instr(CMPUI(LE, summand_con_ir, IMM 255, tmp)); (* check for other small types *)
+		   add_instr(BCNDI(NE, tmp, noboxl, false));
+		   add_instr(LOAD32I(EA(summand_con_ir,0),tagi));
+		   add_instr(CMPUI(EQ, tagi, IMM 4, tmp)); (* check for sums *)
+		   add_instr(BCNDI(NE, tmp, boxl, false));
+		   add_instr(CMPUI(EQ, tagi, IMM 8, tmp)); (* check mus *)
+		   add_instr(BCNDI(NE, tmp, boxl, false)))
+
+	  (* no box case *)
+	  val _ = (add_instr(ILABEL noboxl);
+		   add_instr(MV(exp_ir,desti));
+		   add_instr(BR afterl))
+	  (* box case *)
+	  val _ = (add_instr(ILABEL boxl);
+		   let val vls = [VAR_VAL(VINT field_sub),exp_varloc]
+		       val (lv,state) = make_record(state,NONE,map valloc2rep vls,vls)
+		       val rec_ir = load_ireg_locval(lv,NONE)
+		   in  add_instr(MV(rec_ir,desti))
+		   end;
+		   add_instr(ILABEL afterl))
+
+      in  (VAR_LOC(VREGISTER(false, I desti)),sumcon,state)
+      end
+
+
+
+    fun xsum_dynamic_multi (info,
+			    con_varloc,
+			    exp_varloc) : loc_or_val * con * state = 
 	let val _ = Stats.counter("RTLinjsum") ()
 	    
 	  val  (state,known,sumcon,
@@ -128,8 +184,8 @@ val debug_bound = ref false
 	  val _ = add_instr(LOAD32I(EA(con_ir,4*4),summand_con_ir))
 	  (* since there is more than one type arg, it is stored in a record *)
 	  val field_con_ir = alloc_regi TRACE
-	  val _ = add_instr(LOAD32I(EA(summand_con_ir,4*(w2i field_sub)),field_con_ir)) (* field type *)
-	      
+	  val _ = add_instr(LOAD32I(EA(summand_con_ir,4*(w2i field_sub)),field_con_ir))
+
 	  val _ = (add_instr(CMPUI(LE, field_con_ir, IMM 255, tmp)); (* check for small types *)
 		   add_instr(BCNDI(NE, tmp, nonrecordl, false));
 		   add_instr(LOAD32I(EA(field_con_ir,0),tagi));  (* load tag of the type *)
@@ -179,13 +235,25 @@ val debug_bound = ref false
 	  val (lv,state) = make_record(state,NONE,map valloc2rep vls,vls)
 	  val ir = load_ireg_locval(lv,NONE)
 	  val _ = add_instr(MV(ir,desti))
-	      
+
 	  (* result is in desti at this point *)
 	  val _ = add_instr(ILABEL afterl) 
 	      
       in  (VAR_LOC(VREGISTER(false, I desti)),sumcon,state)
       end
 
+    fun xsum_dynamic (info,
+		      con_varloc,
+		      exp_varloc) : loc_or_val * con * state = 
+	let
+	    val  (state,known,sumcon,
+		  tagcount,nontagcount,single_carrier,is_tag,
+		  sumtypes,field_sub) = help info
+	in  if single_carrier
+		then xsum_dynamic_single(info,con_varloc,exp_varloc)
+	    else xsum_dynamic_multi(info,con_varloc,exp_varloc)
+	end
+    
   fun xsum_nonrecord (info,
 		      varloc_opt) : loc_or_val * con * state = 
       let

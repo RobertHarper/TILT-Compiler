@@ -305,7 +305,6 @@ struct
 	    val fafter       = fresh_code_label "array_float_after" 
 	    val fbottom      = fresh_code_label "array_float_bottom"
 	    val ftop         = fresh_code_label "array_float_top"
-	    val v = fr
 	    (* store object tag and profile tag with alignment so that
 	     raw data is octaligned;  then loop through and initialize *)
 
@@ -314,11 +313,10 @@ struct
 	    add_instr(LI(0w4096,cmptemp));
 	    add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
 	    add_instr(BCNDI(NE,cmptemp,fsmall_alloc,true));
-	    add_instr(FLOAT_ALLOC(len,v,dest,ptag));
+	    add_instr(FLOAT_ALLOC(len,fr,dest,ptag));
 	    add_instr(BR fafter);
 	     
 	    (* inline allocation code - start by doing the tag stuff*)
-	    do_code_align();
 	    add_instr(ILABEL fsmall_alloc);
 	    add_instr(ADD(len,REG len, gctemp));
 	    if (not (!HeapProfile))
@@ -348,11 +346,10 @@ struct
 		do_code_align();
 		add_instr(ILABEL ftop);            (* loop start *)
 		add_instr(S8ADD(i,REG dest,tmp));
-		add_instr(STOREQF(EA(tmp,0),v));  (* initialize value *)
+		add_instr(STOREQF(EA(tmp,0),fr));  (* initialize value *)
 		add_instr(SUB(i,IMM 1,i));
 		add_instr(ILABEL fbottom);
 		add_instr(BCNDI(GE,i,ftop,true));
-		do_code_align();
 		add_instr(ILABEL fafter);
 		(VAR_LOC(VREGISTER(false, I dest)),
 		 Prim_c(Array_c, [Prim_c(Float_c Prim.F64,[])]),
@@ -392,19 +389,18 @@ struct
 			 in  add_instr(S4ADD(gctemp,REG heapptr,heapptr))
 			 end);
 
-		add_instr(LI(Rtltags.skiptag, skiptag));
-		add_instr(STORE32I(EA(heapptr,0),skiptag));
-		add_instr(SUB(len,IMM 1,i));  (* init val and enter loop from bot *)
-		add_instr(BR gbottom);
-		do_code_align();
-		add_instr(ILABEL gtop);        (* top of loop *)
-		add_instr(S4ADD(i,REG dest,tmp));
-		add_instr(STORE32I(EA(tmp,0),v)); (* allocation *)
-		add_instr(SUB(i,IMM 1,i));
-		add_instr(ILABEL gbottom);
-		add_instr(BCNDI(GE,i,gtop,true));
-		do_code_align();
-		add_instr(ILABEL gafter)
+	    add_instr(LI(Rtltags.skiptag, skiptag));
+	    add_instr(STORE32I(EA(heapptr,0),skiptag));
+	    add_instr(SUB(len,IMM 1,i));  (* init val and enter loop from bot *)
+	    add_instr(BR gbottom);
+	    do_code_align();
+	    add_instr(ILABEL gtop);        (* top of loop *)
+	    add_instr(S4ADD(i,REG dest,tmp));
+	    add_instr(STORE32I(EA(tmp,0),v)); (* allocation *)
+	    add_instr(SUB(i,IMM 1,i));
+	    add_instr(ILABEL gbottom);
+	    add_instr(BCNDI(GE,i,gtop,true));
+	    add_instr(ILABEL gafter)
       end
 
     and xarray_int (state,is) (vl1,vl2) : loc_or_val * con * state = 
@@ -534,9 +530,10 @@ struct
 
   fun xarray_known(state, c) vl_list : loc_or_val * con * state =
       let
-	  val is_ptr = (case #2(simplify_type state c) of
+	  val is_ptr = true
+	      (* (case #2(simplify_type state c) of
 			    Prim_c(Sum_c{totalcount,tagcount,...},_) => totalcount <> tagcount
-			  | _ => true)
+			  | _ => true) *)
       in  if  is_ptr
 	      then xarray_ptr(state, c) vl_list
 	  else xarray_int(state,Prim.W32) vl_list
