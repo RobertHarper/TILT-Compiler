@@ -36,7 +36,7 @@ struct
 			     libDir : string,
 			     runtimeDir : string,
 			     binDir : string,
-			     commDir : string}
+			     commDir : string Delay.value}
 
     (* mkdir : string -> unit *)
     fun mkdir dir = if (OS.FileSys.isDir dir
@@ -90,7 +90,8 @@ struct
 	let val dir = realFullPath dir
 	    val _ = if dirAvailable dir then ()
 		    else error ("TILT_LIBDIR directory -- " ^ dir ^ " -- is inaccessible")
-	    val _ = (print "Expanded TILT_LIBDIR is "; print dir; print "\n")
+(*	    Not necessary.  Use "tilt -v [stuff]" *)
+(*	    val _ = (print "Expanded TILT_LIBDIR is "; print dir; print "\n")*)
 	    val sys = sysDir dir
 	    fun system file = sys andalso inDir (dir, file)
 	    val curDir = Delay.force cwd
@@ -101,12 +102,11 @@ struct
 					 then stripLib (relative (curDir, file))
 				     else NONE
 	    val commDir = relative (curDir, "TempCommunication")
-	    val _ = mkdir commDir
 	    fun join file = relative (dir, file)		
 	in
 	    DIRS {system=system, stripLib=stripLib, libDir=dir,
 		  runtimeDir=join "Runtime", binDir=join "Bin",
-		  commDir=commDir}
+		  commDir=Delay.delay (fn () => (mkdir commDir; commDir))}
 	end
 
     val dirs : dirs Delay.value = (* Memoize - not strictly necessary *)
@@ -128,6 +128,6 @@ struct
     fun getLibDir     (DIRS {libDir,...})     = libDir
     fun getRuntimeDir (DIRS {runtimeDir,...}) = runtimeDir
     fun getBinDir     (DIRS {binDir,...})     = binDir
-    fun getCommDir    (DIRS {commDir,...})    = commDir
+    fun getCommDir    (DIRS {commDir,...})    = Delay.force commDir
 
 end
