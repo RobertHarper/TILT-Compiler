@@ -807,9 +807,13 @@ struct
               econtext eformals
 	      
 	  val (bod',bvl,effs,_) = rexp(bod,cvs',econtext)
-	  val (ret',bvl') = rcon' (ret,cvs')
-	  val (up,stay) = filter_bnds (bvl @ bvl', boundvar_set)
-	  val newbod = NilUtil.makeLetE Sequential stay bod'
+	  val (ret',cbvl) = rcon (ret,cvs')
+          val (ret_up, ret_stay) = filter_cbnds (cbvl, boundvar_set)
+          val (bod_up, bod_stay) = filter_bnds (bvl, boundvar_set)
+	  val newbod = NilUtil.makeLetE Sequential bod_stay bod'
+          val newret = NilUtil.makeLetC ret_stay ret'
+
+          val up = (map (fn (cb,s) => (Con_b(Runtime,cb), s)) ret_up) @ bod_up
 (*
         val _ = pprint ("laying down at fun: "^(bl2s stay)^"\n") 
         val _ = ppout 3 
@@ -818,7 +822,7 @@ struct
       in
 	  (Function{effect=eff,recursive=isrec,isDependent=isdep,
 		    tFormals=typelist,eFormals=eformals, fFormals=fformals,
-		    body=newbod,body_type=ret'},
+		    body=newbod,body_type=newret},
 	   up, ARROW_EFFS(eff, effs)) 
       end
   
