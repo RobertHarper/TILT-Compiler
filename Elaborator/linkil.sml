@@ -179,13 +179,14 @@ structure LinkIl (* : LINKIL *) =
 		    (case (Toil.xdec(context,filepos,astdec)) of
 		     SOME sbnd_ctxt_list =>
 			 let 
+			     val _ = print ("Elaboration complete: " ^ filename ^ "\n")
 (*			     val sbnd_ctxt_list = List.mapPartial kill_datatype sbnd_ctxt_list *)
 (*			     val sbnds = List.mapPartial #1 sbnd_ctxt_list *)
 (*			     val entries = map #2 sbnd_ctxt_list *)
 			 in  SOME(sbnd_ctxt_list)
 			 end
-		   | _ => NONE)
-		val _ = print ("Elaboration complete: " ^ filename ^ "\n")
+		   | _ => (print ("Elaboration failed: " ^ filename ^ "\n");
+			   NONE))
 	    in  res
 	    end
 	val elaborate = Stats.timer("Elaboration",elaborate)
