@@ -56,5 +56,12 @@ structure Util : UTIL =
     val appsequence = app
     val appset = app
 
+    fun set_lookup pred set key = 
+	let fun loop [] = NONE
+	      | loop ((a,b)::rest) = if (pred(a,key)) then SOME b else loop rest
+	in loop set
+	end
+    val sequence_lookup = set_lookup
+
     val error = real_error
   end

@@ -27,6 +27,8 @@ signature ASTHELP =
     val fctb_strip : Ast.fctb  -> (Symbol.symbol * Ast.fctexp)
     val strb_strip : Ast.strb  -> (Symbol.symbol * (Ast.strexp * Ast.sigexp option))
     val vb_strip   : Ast.vb    -> (Ast.pat * Ast.exp)
+    val rvb_strip  : Ast.rvb    -> {var : Ast.symbol, fixity : (Ast.symbol * Ast.region) option,
+				    exp : Ast.exp, resultty : Ast.ty option}
     val fb_strip   : Ast.fb    -> Ast.clause list
 
     (* Useful AST/EL expressions *)
@@ -39,9 +41,9 @@ signature ASTHELP =
 
     (* Misc equality, substitutions, and free variable computation on AST *)
     val eq_path        : Ast.path * Ast.path -> bool
-    val free_tyvar_exp : Ast.exp * Ast.symbol list -> Ast.symbol list
-    val free_tyvar_ty  : Ast.ty  * Ast.symbol list -> Ast.symbol list
-    val free_tyc_ty    : Ast.ty  * Ast.symbol list -> Ast.symbol list 
+    val free_tyvar_exp : Ast.exp * (Ast.symbol -> bool) -> Ast.symbol list
+    val free_tyvar_ty  : Ast.ty  * (Ast.symbol -> bool) -> Ast.symbol list
+    val free_tyc_ty    : Ast.ty  * (Ast.symbol -> bool) -> Ast.symbol list 
     val subst_vars_exp : (Symbol.symbol * Ast.path) list * Ast.exp -> Ast.exp 
 
   end

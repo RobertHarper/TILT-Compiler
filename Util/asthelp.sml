@@ -34,7 +34,11 @@ structure AstHelp : ASTHELP =
     fun fb_strip (Ast.Fb arg) = arg
       | fb_strip (Ast.MarkFb (fb,r)) = fb_strip fb
 
-
+    fun rvb_strip (Ast.Rvb {var:symbol, fixity: (symbol * region) option,
+			    exp:exp, resultty: ty option}) = {var = var, fixity = fixity, 
+							      exp = exp, resultty = resultty}
+      | rvb_strip (MarkRvb (rvb,_)) = rvb_strip rvb
+	
     local
       fun is_tyvar_bound (tyvar,symlist) = member(tyvar_strip tyvar,symlist)
       fun is_var_bound ([sym],symlist) = member(sym,symlist)
@@ -250,36 +254,47 @@ structure AstHelp : ASTHELP =
 	in e
 	end
 
-      fun free_tyvar_ty (ty : Ast.ty, bound_tyvars) : symbol list = 
+      fun tyvar_member(elem : Ast.tyvar, list) = member_eq(fn(a,b) => a = b, elem, list)
+      fun ty2sym (Ast.Tyv s) = s
+	| ty2sym (Ast.MarkTyv(ty,_)) = ty2sym ty
+
+      fun free_tyvar_ty (ty : Ast.ty, is_bound) : symbol list = 
 	let 
 	    val tyvars = ref ([] : Ast.tyvar list)
-	    fun eq(a : Ast.tyvar, b) = a = b
-	    fun do_tyvar tyvar = (if member_eq(eq,tyvar,!tyvars)
-				      then () 
-				  else tyvars := tyvar :: (!tyvars); 
-				  Ast.VarTy tyvar)
+	    fun do_tyvar tyvar = (if ((is_bound (ty2sym tyvar)) orelse
+				      (tyvar_member(tyvar,!tyvars)))
+				      then ()
+				  else tyvars := tyvar :: (!tyvars);
+				      Ast.VarTy tyvar)
 	    val _ = f_ty (fn s => s, [],
-			  do_tyvar, bound_tyvars,
+			  do_tyvar, [],
 			  fn v => Ast.VarExp v,[]) ty
 	in map tyvar_strip (!tyvars)
 	end
 
-      fun free_tyvar_exp(e : Ast.exp, bound_tyvars : symbol list) : symbol list = 
+      fun free_tyvar_exp(e : Ast.exp, is_bound) : symbol list = 
 	     let 
 	       val tyvars = ref ([] : Ast.tyvar list)
-	       fun do_tyvar tyvar = (tyvars := tyvar :: (!tyvars); Ast.VarTy tyvar)
-	       val _ = f_exp (fn s => s, [],do_tyvar,bound_tyvars,fn v => Ast.VarExp v,[]) e
+	    fun do_tyvar tyvar = (if ((is_bound (ty2sym tyvar)) orelse
+				      (tyvar_member(tyvar,!tyvars)))
+				      then ()
+				  else tyvars := tyvar :: (!tyvars);
+				      Ast.VarTy tyvar)
+	       val _ = f_exp (fn s => s, [],do_tyvar,[],fn v => Ast.VarExp v,[]) e
 	       val free_tvs = map tyvar_strip (!tyvars)
 	     in free_tvs
 	     end
 
       (* finds all free type variables in (e : Ast.exp) not in context *)
-      fun free_tyc_ty(ty : Ast.ty, bound_constrs : symbol list) : symbol list = 
+      fun free_tyc_ty(ty : Ast.ty, is_bound) : symbol list = 
 	let 
 	  val constrs = ref ([] : symbol list)
-	  fun do_constr s = (constrs := s :: (!constrs); s)
+	  fun do_constr s = (if (not (is_bound s)) 
+				then constrs := s :: (!constrs)
+			     else ();
+				 s)
 	  fun do_tyvar tyvar = Ast.VarTy tyvar
-	  val _ = f_ty (do_constr,bound_constrs,
+	  val _ = f_ty (do_constr,[],
 			do_tyvar,[],
 			fn v => Ast.VarExp v,[]) ty
 	in !constrs

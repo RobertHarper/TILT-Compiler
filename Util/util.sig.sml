@@ -41,4 +41,6 @@ signature UTIL =
     val mapset : (('a*'b) -> ('c*'d)) -> ('a,'b) set -> ('c,'d) set
     val appsequence : (('a*'b) -> unit) -> ('a,'b) sequence -> unit
     val appset : (('a*'b) -> unit) -> ('a,'b) sequence -> unit
+    val set_lookup : ('a * 'a -> bool) -> ('a,'b) set -> 'a -> 'b option
+    val sequence_lookup : ('a * 'a -> bool) -> ('a,'b) sequence -> 'a -> 'b option
   end
