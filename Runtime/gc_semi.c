@@ -24,7 +24,6 @@ extern value_t MUTABLE_TABLE_END_VAL;
 extern int module_count;
 
 static Heap_t *fromheap = NULL, *toheap = NULL;
-static Queue_t *global_roots = 0;
 
 
 /* ------------------  Semispace array allocation routines ------------------- */
@@ -145,8 +144,10 @@ void GC_Semi(SysThread_t *sysThread, int req_size)
 
   /* Compute the roots from the stack and register set */
   local_root_scan(sysThread,curThread,fromheap);
-  global_root_scan(sysThread,global_roots,fromheap);
-  Enqueue(root_lists,global_roots);
+  {
+    Queue_t *tenuredGlobalRoots = major_global_scan(sysThread);
+    Enqueue(root_lists,tenuredGlobalRoots);
+  }
 
   /* Also add in the locative roots */
   QueueClear(loc_roots);
@@ -272,7 +273,6 @@ void gc_init_Semi()
   DOUBLE_INIT(MaxRatioSize, 50 * 1024);
   fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  global_roots = QueueCreate(0,100);
 }
 
 

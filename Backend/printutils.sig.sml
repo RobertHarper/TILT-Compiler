@@ -11,7 +11,8 @@ sig
    val closeOutput : unit -> unit
 
    val emitString : string -> unit
-   val emitInstr  : string -> Machine.instruction -> unit
+   val emitInstr  : string * Machine.instruction -> unit
+   val emitInstrs  : (string * Machine.instruction) list -> unit  (* May perform peephole optimizations *)
    val emitData   : Machine.data -> unit
 
    val print_reg  : Machine.register -> unit
@@ -42,5 +43,6 @@ sig
 
    val dumpData : Machine.data Array.array -> unit
    val dumpDatalist : Machine.data list -> unit
+   val dumpGCDatalist : Machine.data list -> unit
 
 end

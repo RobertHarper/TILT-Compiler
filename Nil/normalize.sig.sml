@@ -90,6 +90,5 @@ signature NORMALIZE =
     val reduceToSumtype : context * Nil.con -> TilWord32.word * TilWord32.word option * Nil.con list
     val type_of : context * Nil.exp -> Nil.con
 
-    val allprim_uses_carg : Nil.allprim -> bool
 
   end

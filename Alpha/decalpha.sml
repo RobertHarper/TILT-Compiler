@@ -395,8 +395,13 @@ structure Machine =
   fun msInstr (SPECIFIC i) = msInstr' i
     | msInstr (BASE i) = msInstr_base i
 
-  fun msInstruction cmt instr =
+  fun msInstruction (cmt, instr) =
     ((msInstr instr) ^ (if (cmt <> "") then ("\t# " ^ cmt) else "") ^ "\n")
+
+  (* No peephole optimization for the alpha *)
+  fun msInstructions cmt_instrs =
+      map msInstruction cmt_instrs
+
 
   fun wms arg = "0x" ^ (W.toHexString arg)
 

@@ -604,7 +604,7 @@ struct
 		 let fun tfold(t,f) = t_find_fv (state,f) t
 		     fun cfold(c,f) = c_find_fv (state,f) c
 		     fun efold(e,f) = e_find_fv (state,f) e
-		     val frees = if (Normalize.allprim_uses_carg p)
+		     val frees = if (NilUtil.allprim_uses_carg p)
 				     then foldl cfold frees clist
 				 else foldl tfold frees clist
 		     val frees = foldl efold frees elist
@@ -927,8 +927,11 @@ struct
 			      | SOME c => CHANGE_NORECURSE c)
 		    | _ => NOCHANGE
 		end
-	fun handlers subst = (fn _ => NOCHANGE, fn _ => NOCHANGE, chandle subst,
-			fn _ => NOCHANGE, fn _ => NOCHANGE)
+	fun handlers subst = {exphandler = default_exphandler,
+			      conhandler = chandle subst,
+			      kindhandler = default_kindhandler,
+			      bndhandler = default_bndhandler,
+			      cbndhandler = default_cbndhandler}
      in  fun substConPathInCon (subst,c) = NilUtil.con_rewrite (handlers subst) c
          fun substConPathInKind (subst,k) = NilUtil.kind_rewrite (handlers subst) k
      end 
@@ -1061,8 +1064,8 @@ struct
 		   val tr = trace_rewrite state (NilSubst.substConInTrace internal_subst tr)
 	       in  (v, tr, c)
 	       end
-	   val vklist_code = vklist_cl @ [(cenv_var,Single_k cenv)]
-	   val vtrclist_code = map vtrc_mapper (eFormals @ [(venv_var,venv_tr,venv_type)])
+	   val vklist_code = (cenv_var,Single_k cenv) :: vklist_cl 
+	   val vtrclist_code = map vtrc_mapper ((venv_var,venv_tr,venv_type) :: eFormals)
 	   val code_fun = Function{effect=effect,recursive=recursive,isDependent=isDependent,
 				   tFormals=vklist_code,
 				   eFormals=vtrclist_code,
@@ -1211,8 +1214,8 @@ struct
 			    val vc_free = VarMap.listItemsi free_evars
 			    val {free_evars,...} = get_frees(current_fid state)
 			    val {cenv_var,venv_var,...} = get_static (current_fid state)
-			    val clist'' = clist' @ [Var_c cenv_var] 
-			    val elist'' = elist' @ [Var_e venv_var] 
+			    val clist'' = (Var_c cenv_var) :: clist'
+			    val elist'' = (Var_e venv_var) :: elist'
 			in App_e(Code, Var_e cv, clist'', elist'', eflist')
 			end
 		    fun default() = App_e(Closure,e_rewrite e, clist', elist', eflist') 
@@ -1263,7 +1266,7 @@ struct
 							    (fn (v,k,l) => ((l, derived_var v), k))
 							    vkl_free))
 
-	     val vklist' = vklist @ [(cenv_var, vkl_free_kind)]
+	     val vklist' = (cenv_var, vkl_free_kind) :: vklist 
 	     val inner_state = if (is_fid v) then (copy_state(state ,v)) else state
 	     val body    = c_rewrite inner_state c
 	     val code_cb = Code_cb(code_var, vklist',Let_c(Sequential,cbnds,body))

@@ -311,7 +311,7 @@ structure Divmult
 	      end
 	  val instrs = map SPECIFIC instrs
 	in
-	  (app (fn i => print (msInstruction "" i)) instrs);
+	  (app (fn i => print (msInstruction ("", i))) instrs);
 	  instrs
 	end
       

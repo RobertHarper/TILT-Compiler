@@ -388,7 +388,8 @@ struct
 (* new code *)              | DIRECT (ML_EXTERN_LABEL label, _) => 
 				  if hasRpv then [BASE(LADDR(Rpv_virt,ML_EXTERN_LABEL label))] 
 				  else []
-			    | INDIRECT reg => [BASE(MOVE(reg,Rpv_virt))])
+			    | INDIRECT reg => 
+				  if hasRpv then [BASE(MOVE(reg,Rpv_virt))] else [])
 			      @ (BASE(RTL(CALL{calltype=calltype,
 					       func=func,
 					       args=arg_regs,
@@ -714,22 +715,37 @@ struct
 				BASE(ILABEL return_label)] @
 			       (std_return_code sraOpt))
 
-			| (ML_NORMAL, INDIRECT _) =>
-			    ([BASE (JSR(true, Rpv_virt, 1, [])),
-			      BASE(ILABEL return_label)] @
-			     (std_return_code NONE))
-			    
+			| (ML_NORMAL, INDIRECT r) =>
+			      let val (def,use) = defUse instr
+				  val {precode, srcmap, dstmap, postcode} = putInRegs use def
+				  val reg = if isPhysical r then r else 
+				  (case Regmap.find(srcmap,r) of
+				       SOME r => r
+				     | NONE => error "fs failed")
+			      in  precode @
+				  ([BASE (JSR(true, reg, 1, [])),
+				    BASE(ILABEL return_label)] @
+				   (std_return_code NONE))
+			      end
 			| (ML_TAIL _, DIRECT (label,_)) =>
 				(stack_fixup_code1 ()) @ 
 				[BASE(POP_RET(SOME(ra_sloc)))] @
 				stack_fixup_code2 @
 				[BASE(BR label)]
 				  
-			| (ML_TAIL _, INDIRECT _) => 
-				    (stack_fixup_code1 ()) @ 
-				    [BASE(POP_RET(SOME(ra_sloc)))] @
-				    stack_fixup_code2 @
-				    [BASE (JSR (false, Rpv_virt, 1, []))]
+			| (ML_TAIL _, INDIRECT r) => 
+			      let val (def,use) = defUse instr
+				  val {precode, srcmap, dstmap, postcode} = putInRegs use def
+				  val reg = if isPhysical r then r else 
+				  (case Regmap.find(srcmap,r) of
+				       SOME r => r
+				     | NONE => error "fs failed")
+			      in  precode @
+				  (stack_fixup_code1 ()) @ 
+				  [BASE(POP_RET(SOME(ra_sloc)))] @
+				  stack_fixup_code2 @
+				  [BASE (JSR (false, reg, 1, []))]
+			      end
 		     in br_instrs
 		     end) (* allocateCall *)
 		  
@@ -794,23 +810,25 @@ struct
 		     val tmp = allocateInstr instr next_label
 		 in  tmp @ (instructionLoop rest)
 		 end) 
-		   handle DEAD => (emitInstr "" (BASE (ICOMMENT ("dead instr" ^
-								(msInstruction "" (stripAnnot instr)))));
-				   (instructionLoop rest))
+		   handle DEAD => 
+		            let val str = msInstruction ("", (stripAnnot instr))
+			    in  (emitInstr ("", (BASE (ICOMMENT ("dead instr" ^ str))));
+				 (instructionLoop rest))
+			    end
 			| GETREGBUG => (print "GETREGBUG in ";
 					print (msLabel name);
 					print ": ";
-					print (msInstruction "" (stripAnnot instr));
+					print (msInstruction ("", stripAnnot instr));
 					raise GETREGBUG)
 			| e => (error "UNK ERROR while processing: ";
-				print (msInstruction "" (stripAnnot instr));
+				print (msInstruction ("", stripAnnot instr));
 				raise e))
 		   
 	     val instrs_in = rev (! instrs)
 
 	     val _ = if (! debug) then
 	       (emitString "block in:\n";
-		app ((emitInstr "") o stripAnnot) instrs_in) else ()
+		app (fn i => emitInstr ("", stripAnnot i)) instrs_in) else ()
 
 	     val instrs_out = 
 	       instructionLoop instrs_in
@@ -820,7 +838,7 @@ struct
 
 	     val _ = if (! debug) then
 	       (emitString "block out:\n";
-		app (emitInstr "") instrs_out) else ()
+		app (fn i => emitInstr ("", i)) instrs_out) else ()
 
 	   in
 	     instrs := map NO_ANN (rev instrs_out);

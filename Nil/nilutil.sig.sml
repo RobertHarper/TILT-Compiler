@@ -41,6 +41,7 @@ signature NILUTIL =
     val char_con : Nil.con  (* 8-bit ints *)
     val function_type : Nil.openness -> Nil.function -> Nil.con
     val convert_sum_to_special : Nil.con * TilWord32.word -> Nil.con
+    val allprim_uses_carg : Nil.allprim -> bool
 
     val makeLetC : Nil.conbnd list -> Nil.con -> Nil.con
     val makeLetE : Nil.letsort -> Nil.bnd list -> Nil.exp -> Nil.exp
@@ -58,14 +59,23 @@ signature NILUTIL =
     val sub_effect    : bool * Nil.effect * Nil.effect -> bool
 
     datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
-    type bound = {level : int,
+    type bound = {isConstr : bool,     (* Are we in a constructor?  Initially true. *)
+		  level : int,
 		  boundcvars : Name.VarSet.set,
 		  boundevars : Name.VarSet.set}
-    type handlers = ((bound * Nil.exp -> Nil.exp changeopt) *
-		     (bound * Nil.bnd -> (Nil.bnd list) changeopt) *
-		     (bound * Nil.con -> Nil.con changeopt) *
-		     (bound * Nil.conbnd -> (Nil.conbnd list) changeopt) *
-		     (bound * Nil.kind -> Nil.kind changeopt))
+    type handlers = 
+	{exphandler : bound * Nil.exp -> Nil.exp changeopt,
+	 bndhandler : bound * Nil.bnd -> (Nil.bnd list) changeopt,
+	 conhandler : bound * Nil.con -> Nil.con changeopt,
+	 cbndhandler : bound * Nil.conbnd -> (Nil.conbnd list) changeopt,
+	 kindhandler : bound * Nil.kind -> Nil.kind changeopt}
+
+    val default_exphandler : bound * Nil.exp -> Nil.exp changeopt
+    val default_bndhandler : bound * Nil.bnd -> (Nil.bnd list) changeopt
+    val default_conhandler : bound * Nil.con -> Nil.con changeopt
+    val default_cbndhandler : bound * Nil.conbnd -> (Nil.conbnd list) changeopt
+    val default_kindhandler : bound * Nil.kind -> Nil.kind changeopt
+
     val exp_rewrite : handlers -> Nil.exp -> Nil.exp
     val bnd_rewrite : handlers -> Nil.bnd -> Nil.bnd list
     val kind_rewrite : handlers -> Nil.kind -> Nil.kind

@@ -186,7 +186,7 @@ struct
 			    fn() => (dumpProc (name, 
 					       new_sig, new_block_map, 
 					       new_block_labels, !debug);
-				     dumpDatalist gc_data)) ()
+				     dumpGCDatalist gc_data)) ()
 	   val _ = if !debug 
 		       then (emitString commentHeader;
 			     emitString(" done procedure "))
@@ -218,7 +218,7 @@ struct
 
        
        val _ = app emitString programHeader;
-       val _ = dumpDatalist (Tracetable.MakeTableHeader main');
+       val _ = dumpGCDatalist (Tracetable.MakeTableHeader main');
 
        val _ = app initSig procs
 
@@ -233,7 +233,7 @@ struct
        subtimer("backend_output",
 		fn() => (app emitString textStart;
 			 emitString (main'^"_CODE_END_VAL:\n");
-			 dumpDatalist (Tracetable.MakeTableTrailer main');
+			 dumpGCDatalist (Tracetable.MakeTableTrailer main');
 			 app emitString dataStart;
 			 emitString ("\t.globl "^global_start^"\n");
 			 emitString ("\t.globl "^global_end^"\n");

@@ -24,7 +24,6 @@ extern int module_count;
 extern int pagesize;
 
 static Heap_t *fromheap = NULL, *toheap = NULL;
-static Queue_t *global_roots = 0;
 
 
 /* ------------------  Parallel array allocation routines ------------------- */
@@ -39,13 +38,11 @@ static value_t* alloc_big(int wordLen, int oddAlign)
   int request = RoundUp(byteLenPad, pagesize);
 
   /* Get the large region */
-  GetHeapArea(fromheap, request, &bottom, &top);
-  if (bottom == 0) {
-    long bytesNeeded = 0;
-    GCFromC(curThread,request,0);
-    GetHeapArea(fromheap, request, &bottom, &top);
-    assert(bottom != 0);
-  }
+  if (saveregs[ALLOCPTR] + request > saveregs[ALLOCLIMIT]) 
+    GCFromC(curThread, request, 0);
+  assert(saveregs[ALLOCPTR] + request <= saveregs[ALLOCLIMIT]);
+  bottom = saveregs[ALLOCPTR];
+  saveregs[ALLOCPTR] += request;
   
   /* Align by inserting Skip Tag */
   if ((((value_t)bottom) & 7) == 0) {
@@ -166,11 +163,13 @@ static void stop_copy(SysThread_t *sysThread)
   /* The "first" GC processor is in charge of the globals */
   if (isFirst)
     {
+      int i, qlen;
+      /* Since it's semispace, we must consider all the global roots each time */
+      Queue_t *tenuredGlobalRoots = major_global_scan(sysThread);
       to_alloc_start = toheap->alloc_start;
-      /* Since it's semispace, we must consider the global_roots each time */
-      global_root_scan(sysThread,global_roots,fromheap);
-      while (!(QueueIsEmpty(global_roots))) {
-	value_t *root = Dequeue(global_roots);
+      qlen = QueueLength(tenuredGlobalRoots);
+      for (i=0; i<qlen; i++) {
+	value_t *root = QueueAccess(tenuredGlobalRoots, i);
 	value_t temp = *root;
 	forward_minor_stack(root,to_alloc,to_limit,toheap,&from_range,sysThread);
       }
@@ -407,7 +406,6 @@ void gc_init_SemiPara()
   DOUBLE_INIT(MaxRatioSize, 50 * 1024);
   fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  global_roots = QueueCreate(0,100);
   SharedCursor = 0;
 }
 

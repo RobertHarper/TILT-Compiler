@@ -132,7 +132,14 @@ structure Array =
 	    end
 
 	fun length (a : 'a array) : int = uint32toint32(array_length a)
-
+	fun app f (a : 'a array) : unit =
+	    let val len = array_length a
+		fun loop index = 
+		    if (ugte(index, array_length a))
+			then ()
+		    else (f (unsafe_sub(a,index)); loop (uplus(index,0w1)))
+	    in  loop 0w0
+	    end
     end
 
 val array = Array.array
@@ -590,28 +597,33 @@ extern Spawn : (unit -> unit, unit) -->
 extern Yield : (unit, unit) -->
 
 
+(*
 val strideP = stride
 val forP = for
 val mapP = map
 val filterP = filter
+*)
 
-(* PARALLEL VERSION commented out *)
-(*
-fun strideP(start,stop,stride,f) = 
-    let fun loop cur = if (cur <= stop) 
-			   then let pval _ = f cur
+(* PARALLEL VERSION *)
+
+fun strideP(start,stop,stride,f) =
+    let fun loop cur = (if (cur <= stop) 
+			   then let 
+			            pval _ = (f cur) : unit
                                     and _ = loop (cur+stride : int)
 				in  ()
 				end
-		       else ()
+		       else ())
     in  loop start
     end
 
 fun forP(start,stop,f) =
-    let val total = stop - start + 1
+    let 
+	val total = stop - start + 1
 	val stride = 1 + (total div 10)
 	fun loop start' = 
-	    let val stop' = start' + (stride - 1)
+	    let 
+		val stop' = start' + (stride - 1)
 		val stop' = if (stop' > stop) then stop else stop'
 	    in  for(start',stop',f)
 	    end
@@ -655,4 +667,4 @@ in
 	in  List.concat (loop ls)
 	end
 end (* local *)
-*)
+

@@ -49,7 +49,8 @@ typedef struct StackSnapshot StackSnapshot_t;
 void show_stack(value_t sp, value_t cur_retadd, value_t top);
 
 void stack_init(void);
-void global_root_scan(SysThread_t *, Queue_t *global_roots, Heap_t *fromspace);
+Queue_t* minor_global_scan(SysThread_t *);
+Queue_t* major_global_scan(SysThread_t *);
 void local_root_scan(SysThread_t *, Thread_t *, Heap_t *fromspace);
 void stub_error(void);
 

@@ -104,6 +104,7 @@ sig
 
    val repPathIsPointer : Rtl.rep_path -> regi
    val storeWithBarrier : Rtl.ea * regi * rep -> bool  (* true if there MIGHT be a barrier *)
+   val repIsNonheap : Rtl.rep -> bool
 
    (* Routines for allocating registers and labels *)
    val alloc_regi : rep -> regi
@@ -165,5 +166,6 @@ sig
    val incVararg : unit -> unit
    val incOnearg : unit -> unit
    val incPrim : unit -> unit
+   val incMutate : unit -> unit
 
 end

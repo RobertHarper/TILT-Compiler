@@ -27,19 +27,20 @@ struct
 
   fun make_record_core (const, state, reps, terms, labopt) = 
     let 
-	val _ = if (length terms > maxRtlRecord) then error "max_record_core given too maxn terms" else ()
+	val _ = if (length terms > maxRtlRecord) 
+		    then error "max_record_core given too maxn terms" else ()
+	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length terms)) ^ "-record"))
 
 	val is_mutable = ref false
-	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length terms)) ^ "-record"))
-	val tagword = recordtag reps
 	val dest = alloc_regi TRACE
 
-	val tagwords = 
-	    if (not (!HeapProfile))
-		then [tagword]
-	    else [{dynamic=nil,static=MakeProfileTag()}, tagword]
+	val tagword = recordtag reps
+	val tagwords = if (not (!HeapProfile))
+			   then [tagword]
+		       else [{dynamic=nil,static=MakeProfileTag()}, tagword]
+
         (* total number of words needed *)
-	val words_alloced = length terms+length tagwords
+	val words_alloced = length terms + length tagwords
 
 	(* shadow heapptr with thunk to prevent accidental use *)
 	val (heapptr,state) = 
@@ -52,17 +53,26 @@ struct
 		 in  (fn _ => heapptr, state)
 		 end
 
-	fun storenew(base,offset,r,rep) = 
+	(* use if statically allocated *)
+	val recordLabel = (case labopt of
+			       NONE => fresh_data_label "record" 
+			     | SOME l => l)
+	val staticComponents = (Listops.andfold (fn VALUE _ => true
+						 | _ => false) terms) andalso
+	                       (Listops.andfold (fn {dynamic=[],...} => true
+						  | _ => false) tagwords)
+	fun storenew(ea,r,rep) = 
 	    (case rep of
-		 TRACE => add_instr(INIT(REA(base,offset),r,NONE))
-	       | NOTRACE_INT => add_instr(STORE32I(REA(base,offset),r))
-	       | NOTRACE_CODE => add_instr(STORE32I(REA(base,offset),r))
-	       | NOTRACE_LABEL => add_instr(STORE32I(REA(base,offset),r))
+		 TRACE => add_instr(INIT(ea,r,NONE))
+	       | NOTRACE_INT => add_instr(STORE32I(ea,r))
+	       | NOTRACE_CODE => add_instr(STORE32I(ea,r))
+	       | NOTRACE_LABEL => add_instr(STORE32I(ea,r))
 	       | COMPUTE path => let val isPointer = repPathIsPointer path
-				 in  add_instr(INIT(REA(base,offset),r,SOME isPointer))
+				 in  add_instr(INIT(ea,r,SOME isPointer))
 				 end
 	       | _ => error "storenew got funny rep")
 
+	(* Offset starts from the point of allocation not from start of the object *)
 	fun scan_vals (offset,_,[]) = offset
 	  | scan_vals (offset,[],vl::vls) = error "not enough reps"
 	  | scan_vals (offset,rep::reps,vl::vls) =
@@ -77,15 +87,14 @@ struct
 		| _ => let val r = load_ireg_term(vl,NONE)
 		       in  if const 
 			       then 
-				   let val fieldl = fresh_data_label "location"
-				   in  (add_data(DLABEL fieldl);
-					add_data(INT32 uninit_val);
-					if (storeWithBarrier(LEA(fieldl,0), r, rep))
-					    then is_mutable := true
-					else ())
-				   end
+				   (add_data(INT32 uninit_val);
+				    add_instr(STORE32I(LEA(recordLabel, 
+							   offset - 4 * (length tagwords)), r));
+				    if (repIsNonheap rep)
+					then ()
+				    else is_mutable := true)
 			   else 
-			       storenew(heapptr(),offset,r,rep)
+			       storenew(REA(heapptr(),offset),r,rep)
 		       end);
 	    scan_vals(offset+4,reps,vls))
 
@@ -97,13 +106,21 @@ struct
 		add_instr(ORB(tmp,REG r,r))
 	    end
 
-      (* usually, the tags are known at compile time *)	
-      fun scantags (offset,nil : Rtltags.tag list) = offset
-	| scantags (offset,({static,dynamic}::vl) : Rtltags.tag list) =
-	  (if const
-	       then (if (null dynamic)
-			 then add_data(INT32 static)
-		     else error "making constant record with dynamic tag")
+	(* usually, the tags are known at compile time *)	
+	fun scantags (offset,nil : Rtltags.tag list) = offset
+	  | scantags (offset,({static,dynamic}::vl) : Rtltags.tag list) =
+	    (if const
+		 then (if staticComponents
+			   then (if (null dynamic)
+				     then add_data(INT32 static)
+				 else error "making constant record with dynamic tag")
+		       else let val _ = add_data(INT32 Rtltags.skip)
+				val tag = alloc_regi(NOTRACE_INT)
+			    in  add_instr (LI(static,tag));
+				app (fn a => do_dynamic(tag,a)) dynamic;
+				add_instr(STORE32I(LEA(recordLabel,
+						       offset - 4 * (length tagwords)),tag))
+			  end)
 	   else 
 	       let val r = alloc_regi(NOTRACE_INT)
 	       in  add_instr (LI(static,r));
@@ -116,12 +133,8 @@ struct
       val offset = scantags(offset,tagwords)
       val (result,templabelopt) = 
 	  if const
-	      then let val label = (case labopt of
-					SOME lab => lab
-				      | NONE => fresh_data_label "record")
-		   in  (add_data(DLABEL label);
-			(VALUE(LABEL label), SOME label))
-		   end
+	      then (add_data(DLABEL recordLabel);
+		    (VALUE(LABEL recordLabel), SOME recordLabel))
 	  else (LOCATION (REGISTER (false,I dest)), NONE)
       val offset = scan_vals (offset, reps, terms)
 

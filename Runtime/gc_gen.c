@@ -24,7 +24,6 @@ extern Queue_t *ScanQueue;
 static int floatheapsize = 16384 * 1024;
 static int floatbitmapsize = 128;
 Queue_t   *float_roots = 0;
-static Queue_t *global_roots;
 
 
 enum GCType { Minor, Major, ForcedMajor, Complete };
@@ -283,6 +282,10 @@ void GC_Gen(SysThread_t *sysThread, int req_size, int isMajor)
 
   /* Compute the roots from the stack and register set */
   local_root_scan(sysThread,curThread,nursery);
+  {
+    Queue_t *promotedGlobalRoots = minor_global_scan(sysThread);
+    Enqueue(root_lists,promotedGlobalRoots);
+  }
 
   /* -------------- the actual heap collection ---------------------- */
     {
@@ -406,8 +409,10 @@ void GC_Gen(SysThread_t *sysThread, int req_size, int isMajor)
 #endif
 
 	  assert(old_alloc_ptr >= old_fromheap->alloc_start);
-	  global_root_scan(sysThread,global_roots,nursery);
-	  Enqueue(root_lists,global_roots);
+	  {
+	    Queue_t *tenuredGlobalRoots = major_global_scan(sysThread);
+	    Enqueue(root_lists,tenuredGlobalRoots);
+	  }
 	  SetRange(&from_range,nursery->bottom, nursery->top);
 	  SetRange(&from2_range,old_fromheap->bottom, old_alloc_ptr);
 	  SetRange(&to_range,old_toheap->bottom, old_toheap->top);
@@ -542,7 +547,6 @@ void gc_init_Gen()
   floatheap = Heap_Alloc(floatheapsize,floatheapsize);
   floatbitmap = CreateBitmap(floatheapsize / floatbitmapsize);
   float_roots = QueueCreate(0,100);
-  global_roots = QueueCreate(0,100);
 #ifdef OLD_ALLOC
   old_alloc_ptr = old_fromheap->alloc_start;
   old_alloc_limit = old_fromheap->top;

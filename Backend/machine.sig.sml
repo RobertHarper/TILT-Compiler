@@ -47,7 +47,8 @@ signature MACHINE =
     val msReg           : register -> string
     val msLabel         : label -> string
     val msData          : Rtl.data -> (int * string) list
-    val msInstruction   : string -> instruction -> string
+    val msInstruction   : string * instruction -> string
+    val msInstructions   : (string * instruction) list -> string  list (* May perform peephole optimization *)
     val msStackLocation : stacklocation -> string
     val assign2s        : assign -> string
 

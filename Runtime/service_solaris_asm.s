@@ -105,7 +105,7 @@ thunk_loop:
 	ld	[%o0], ASMTMP_REG			! fetch current thunk
 	ld	[ASMTMP_REG + 0], LINK_REG		! fetch code pointer
 	ld	[ASMTMP_REG + 4], %o0			! fetch type env
-	ld	[ASMTMP_REG + 8], %o2			! fetch term env
+	ld	[ASMTMP_REG + 8], %o1			! fetch term env
         sethi   %hi(global_exnrec),EXNPTR_REG
 	or      EXNPTR_REG,%lo(global_exnrec),EXNPTR_REG  ! install global handler
 	st	%sp, [EXNPTR_REG + 4]			! initialize stack pointer of global handler

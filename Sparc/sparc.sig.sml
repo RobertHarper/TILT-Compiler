@@ -37,9 +37,9 @@ sig
 
   datatype imm = INT of int             (* Must fit in 13 bits sign-extended *)
                | LOWINT of Word32.word  (* The low 10 bits of the word *)
-               | HIGHINT of Word32.word (* The high 22 buts of the word *)
-               | LOWLABEL of label      (* The low 10 buts of the label *)
-               | HIGHLABEL of label     (* The high 22 buts of the label *)
+               | HIGHINT of Word32.word (* The high 22 bits of the word *)
+               | LOWLABEL of label * Word32.word  (* The low 10 bits of the label plus offset *)
+               | HIGHLABEL of label * Word32.word (* The high 22 bits of the label plus offset *)
 
   datatype operand = 
     REGop of register

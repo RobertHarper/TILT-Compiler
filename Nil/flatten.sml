@@ -73,17 +73,17 @@ functor Flatten( structure PrimUtil : PRIMUTIL
 
     (* In order to easily recur through cons and kinds, use the 
      rewrite mechanism from NilUtil *)
-    fun make_handlers unit =
-      (fn (b,e) =>
-       let val newexp = xexp e
-	 val _ = (print "found exp in type_of \n")
-       in NilUtil.CHANGE_NORECURSE newexp
-       end,
-       fn (b, bnd) => 
-       error "Shouldn't get here",
-       fn (b, c) => NilUtil.NOCHANGE,
-       fn (b, cb) => NilUtil.NOCHANGE,
-       fn (b, k) => NilUtil.NOCHANGE)
+    fun make_handlers unit : NilUtil.handlers =
+	{exphandler = fn (b,e) =>
+			let val newexp = xexp e
+			    val _ = (print "found exp in type_of \n")
+			in NilUtil.CHANGE_NORECURSE newexp
+			end,
+	 bndhandler = fn (b, bnd) => error "Shouldn't get here",
+	 conhandler = NilUtil.default_conhandler,	
+	 cbndhandler = NilUtil.default_cbndhandler,	
+	 kindhandler = NilUtil.default_kindhandler}
+
       
     (* Step one: rewrite non-escaping functions *)
     and flatten_func  ( fnVar, Function{effect, recursive, isDependent,

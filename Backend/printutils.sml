@@ -30,7 +30,8 @@ struct
       | SOME s => ((* print msg; *)
 		   TextIO.output (s, msg)))
 
-   fun emitInstr cmt instr = emitString (msInstruction cmt instr)
+   fun emitInstr cmt_instr = emitString (msInstruction cmt_instr)
+   fun emitInstrs cmt_instr_list = app emitString (msInstructions cmt_instr_list)
 
    fun emitData arg = 
      let 
@@ -105,8 +106,6 @@ struct
 					  ...}))
                   block_map blocklabels  =
      let 
-       fun myEmitInstr i = emitInstr (msAnnotation i) 
-	 (stripAnnot i)
 
        fun dumpBlock l = 
 	 let
@@ -133,8 +132,9 @@ struct
 	     emitString(makeAsmHeader psig)
 	   else ();
 
-
-	   app myEmitInstr (rev (! instrs));
+	   let val comment_instructions = map (fn i => (msAnnotation i, stripAnnot i)) (rev (!instrs))
+	   in  emitInstrs comment_instructions
+	   end;
 
 	   if debug then
 	     (emitString commentHeader;
@@ -212,12 +212,15 @@ struct
    fun dumpData data =
      (app emitString dataStart;
       Array.app emitData data)
-(*      app emitString textStart; emitString "\n" *)
 
    fun dumpDatalist data =
      (app emitString dataStart;
       app emitData data)
-(*      app emitString textStart; emitString "\n" *)
+
+   fun dumpGCDatalist data =
+     (app emitString GCdataStart;
+      app emitData data)
+
 
 
 end 

@@ -376,7 +376,7 @@ struct
 								   context,trace)
 	    | Prim_e (PrimOp prim, clist, elist) => xprim(state,prim,clist,elist,context,trace)
 	    | Switch_e sw => xswitch(state,name,sw,trace,context)
-	    | ExternApp_e (f, elist) => (* assume the environment is passed in first *)
+	    | ExternApp_e (f, elist) => (* there is no environment - not a closure *)
 		  let 
 		      val _ = incApp()
 		      val _ = add_instr (ICOMMENT ("making external call"))
@@ -459,7 +459,7 @@ struct
 				    [], [],state)
 			  end
 		      
-		      val (selfcall,fun_reglabel,cregsi',eregs',state) = 
+		      val (selfcall,fun_reglabel,cregsiCl,eregsCl,state) = 
 			  (case (openness,f) of
 			       (Code,Var_e expvar) => (direct_call expvar)
 			     | (Code,_) => error "ill-formed application"
@@ -478,12 +478,12 @@ struct
 				       val _ = record_project(clregi, 0, funregi)
 				       val _ = record_project(clregi, 1, cregi)
 				       val _ = record_project(clregi, 2, eregi)
-				   in  (false, REG' funregi, [cregi], [I eregi],state)
+				   in  (false, REG' funregi, [cregi], [I eregi], state)
 				   end)
 			       
-		      val args = (map I cregsi) @ 
-			         (map I cregsi') @
-				 eregs @ eregs' @ efregs
+		      val args = (map I cregsiCl) @ 
+			         (map I cregsi) @
+				 eregsCl @ eregs @ efregs
 		      val (resrep,dest) = alloc_reg_trace state trace
 		      val context = if (!elim_tail_call)
 					then context
@@ -977,7 +977,12 @@ struct
 		   val [e] = elist 
 		   val (I addr, state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
 		   val reccon = type_of state e
-		   val (_,Prim_c(Record_c (labels,_),fieldcons)) = simplify_type state reccon
+		   val (_,c) = simplify_type state reccon
+		   val _ = (case c of
+				Prim_c(Record_c (labels,_),fieldcons) => ()
+			      | _ => (print "non-record reccon = "; Ppnil.pp_con reccon; print "\n";
+				      print "non-record con = "; Ppnil.pp_con c; print "\n"))
+		   val Prim_c(Record_c (labels,_),fieldcons) = c
 		   fun loop [] _ n = error' "bad select 1"
 		     | loop _ [] n = error' "bad select 2"
 		     | loop (l1::lrest) (c1::crest) n = if (Name.eq_label(l1,label))
@@ -1637,7 +1642,7 @@ struct
 		       val desti = alloc_regi TRACE
 		       val _ = add_instr(CALL{call_type = ML_NORMAL,
 					      func = REG' coderegi,
-					      args = (map I cregsi) @ [I envregi],
+					      args = map I (envregi :: cregsi),
 					      results = [I desti],
 					      save = getLocals()})
 		       val state = new_gcstate state
@@ -1783,7 +1788,7 @@ struct
 	  val ptrTrace = TraceKnown TraceInfo.Trace
 	  fun expHandler({level, ...}:NilUtil.bound, Var_e v) = (useVar(level,v); NOCHANGE)
 	    | expHandler _ = NOCHANGE
-	  fun conHandler({level, ...}:NilUtil.bound, Var_c v) = (useVar(level,v); NOCHANGE)
+	  fun conHandler({level, isConstr=true,...}:NilUtil.bound, Var_c v) = (useVar(level,v); NOCHANGE)
 	    | conHandler _ = NOCHANGE
 	  fun bndHandler({level=0,...}:NilUtil.bound, Exp_b (v, tr, _)) = (addVar(v,tr); NOCHANGE)
 	    | bndHandler(_, Fixcode_b vfSeq) = (app (fn (v,_) => addVar(v,ptrTrace))
@@ -1791,11 +1796,15 @@ struct
 	    | bndHandler({level=0,...}, Fixclosure_b (_,vclSeq)) = (app (fn (v,_) => addVar(v,ptrTrace))
 						(Sequence.toList vclSeq); NOCHANGE)
 	    | bndHandler _ = NOCHANGE
-	  fun cbndHandler({level=0,...}:NilUtil.bound, Con_cb(v, _)) = (addVar(v,ptrTrace); NOCHANGE)
+	  fun cbndHandler({level=0,isConstr=true,...}:NilUtil.bound, 
+			  Con_cb(v, _)) = (addVar(v,ptrTrace); NOCHANGE)
 	    | cbndHandler(_, Code_cb(v, _, _)) = (addVar(v,ptrTrace); NOCHANGE)
 	    | cbndHandler _ = NOCHANGE
-	  fun kindHandler _ = NOCHANGE
-	  val handlers = (expHandler, bndHandler, conHandler, cbndHandler, kindHandler)
+	  val handlers = {exphandler = expHandler, 
+			  bndhandler = bndHandler, 
+			  conhandler = conHandler, 
+			  cbndhandler = cbndHandler, 
+			  kindhandler = NilUtil.default_kindhandler}
 	  val _ = map (NilUtil.bnd_rewrite handlers) bnds
 	  fun folder (v, ref false, fvs) = fvs
 	    | folder (v, ref true, fvs) = let val fvs = Name.VarSet.add(fvs,v)
@@ -1803,7 +1812,8 @@ struct
 						   NONE => fvs
 						 | SOME cv => Name.VarSet.add(fvs,cv))
 					  end
-      in  Name.VarMap.foldli folder fvs (!potentialGlobals)
+	  val globals = Name.VarMap.foldli folder fvs (!potentialGlobals)
+      in  globals
       end
 
   (* unitname is the name of the unit; unit names are globally unique. *)

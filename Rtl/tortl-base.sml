@@ -49,6 +49,7 @@ struct
        val (numOnearg, incOnearg) = makeStat()
        val (numPrim, incPrim) = makeStat()
        val (numGC, incGC) = makeStat()
+       val (numMutate, incMutate) = makeStat()
        val (numGlobal, incGlobal) = makeStat()
 
        val stats = [("Record projections", numSelect),
@@ -65,6 +66,7 @@ struct
 		    ("Calls to makeOnearg", numOnearg),
 		    ("Primitives", numPrim),
 		    ("GC checks", numGC),
+		    ("Mutate checks", numMutate),
 		    ("Globals", numGlobal)]
 
        fun clear_stats() = app (fn (_,r) => r := 0) stats
@@ -376,6 +378,15 @@ struct
    fun term2rep(LOCATION loc) = location2rep loc
      | term2rep(VALUE value) = value2rep value
 
+   (* Conservatively guarantees that value of this rep is not a pointer into the heap *)
+   fun repIsNonheap rep = 
+       (case rep of
+	    NOTRACE_INT => true
+	  | NOTRACE_CODE => true
+	  | NOTRACE_REAL => true
+	  | NOTRACE_LABEL => true  (* global labels are not in heap *)
+	  | _ => false)
+
    fun niltrace2rep (state : state) niltrace : rep =
        let fun pathcase (v,labs) = 
 	   (case getconvarrep' state v of
@@ -550,6 +561,10 @@ struct
 
        fun promote_maps ({env,...} : state) : state = 
 	   let val {varmap,convarmap,gcstate,...} = !global_state
+	       fun isNotReg(SOME (REGISTER _), _) = false
+		 | isNotReg _ = true
+	       val varmap = VarMap.filter isNotReg varmap
+	       val convarmap = VarMap.filter isNotReg convarmap
 	   in  {is_top = false, varmap = varmap, 
 		convarmap = convarmap, env = env, gcstate = gcstate}
 	   end
@@ -892,11 +907,12 @@ struct
 
   fun storeWithBarrier(ea,value,rep) : bool =
       (case rep of
-	   TRACE => (add_instr(MUTATE(ea, value, NONE)); true)
+	   TRACE => (incMutate(); add_instr(MUTATE(ea, value, NONE)); true)
 	 | COMPUTE rep_path => 
-	       let val isPointer = repPathIsPointer rep_path
-		   val pointerCase = fresh_code_label "allocateGlobal_pointerCase"
-		   val afterStore = fresh_code_label "allocateGlobal_afterStore"
+	       let val _ = incMutate()
+		   val isPointer = repPathIsPointer rep_path
+		   val pointerCase = fresh_code_label "mutate_pointerCase"
+		   val afterStore = fresh_code_label "mutate_afterStore"
 	       in  add_instr(BCNDI(EQ, isPointer, IMM 1, pointerCase,true));
 		   add_instr(STORE32I(ea,value));
 		   add_instr(BR afterStore);
@@ -910,73 +926,88 @@ struct
   fun allocate_global (label,labels,rtl_rep,lv) = 
       let 
 	  val _ = incGlobal()
-	  val _ = add_data(COMMENT "Global starts here")
-	  val _ = (case rtl_rep of
-		       LOCATIVE => error "global locative"
-		     | UNSET => error "global unset"
-		     | NOTRACE_REAL => let val tagData = mk_recordtag [NOTRACE_INT, NOTRACE_INT]
-					   val {dynamic=[],static} = tagData
-				       in  add_data(ALIGN ODDLONG);
-					   add_data(INT32 static)
-				       end
-		     | _ => 
-			let val tagData = mk_recordtag [rtl_rep]
-			    val {dynamic,static} = tagData
-			    val _ = 
-				(case dynamic of 
-				     [] => ()
-				   | _ => 
-					 let val mask = alloc_regi NOTRACE_INT
-					     fun do_bit {bitpos,path} = 
-						 let val isPointer = repPathIsPointer path
-						     val tmp = alloc_regi NOTRACE_INT
-						 in  add_instr(SLL(isPointer,IMM bitpos,tmp));
-						     add_instr(ORB(tmp,REG mask,mask))
-						 end
-					     val _ = add_instr(LI(0w0,mask))
-					     val _ = app do_bit dynamic
-					     val addr = alloc_regi NOTRACE_LABEL
-					     val tag = alloc_regi NOTRACE_INT
-					     val _ = add_instr(LADDR(LEA(label,0),addr))
-					     val _ = add_instr(LOAD32I(REA(addr,~4),tag))
-					     val _ = add_instr(ORB(tag,REG mask,tag))
-					     val _ = add_instr(STORE32I(REA(addr,~4),tag))
-					 in  ()
-					 end)
-			    in  add_data (INT32 static)
-			    end)
-	  val _ = app (fn l => add_data(DLABEL l)) (label::labels)
+	  val _ = add_data(COMMENT "Global")
+	  val (tagData, tagMaskOpt) = 
+	      (case rtl_rep of
+		   LOCATIVE => error "global locative"
+		 | UNSET => error "global unset"
+		 | NOTRACE_REAL => 
+		       let val tagData = mk_recordtag [NOTRACE_INT, NOTRACE_INT]
+			   val {dynamic=[],static} = tagData
+		       in  add_data(ALIGN ODDLONG);
+			   (static, NONE)
+		       end
+		 | _ => 
+		       let val tagData = mk_recordtag [rtl_rep]
+			   val {dynamic,static} = tagData
+			   val maskOpt = 
+			       (case dynamic of 
+				    [] => NONE
+				  | _ => 
+					let val mask = alloc_regi NOTRACE_INT
+					    fun do_bit {bitpos,path} = 
+						let val isPointer = repPathIsPointer path
+						    val tmp = alloc_regi NOTRACE_INT
+						in  add_instr(SLL(isPointer,IMM bitpos,tmp));
+						    add_instr(ORB(tmp,REG mask,mask))
+						end
+					    val _ = add_instr(LI(0w0,mask))
+					    val _ = app do_bit dynamic
+					in  SOME mask
+					end)
+		       in  (static, maskOpt)
+		       end)
+	  fun doInitialize() = 
+	      (add_data (INT32 tagData);
+	       app (fn l => add_data(DLABEL l)) (label::labels);
+	       (case tagMaskOpt of
+		    NONE => ()
+		  | SOME tagMask => error "cannot doInitialize with tagMask present"))
+	  fun doUninitialize() = 
+	      let val tag = alloc_regi NOTRACE_INT
+		  val _ = add_mutable label
+	      in  add_data (INT32 Rtltags.skip);  (* indicates uninitilized global *)
+		  app (fn l => add_data(DLABEL l)) (label::labels);
+		  add_instr(LI(tagData, tag));
+		  (case tagMaskOpt of
+		       NONE => ()
+		     | SOME mask => add_instr(ORB(mask,REG tag,tag)));
+		  add_instr(STORE32I(LEA(label,~4), tag))
+	      end
 
 	  val labelEa = LEA(label,0)
       in  (case lv of
 	     LOCATION (REGISTER (_,reg)) =>
 		 (case reg of
-		      I r => (add_data(INT32 uninit_val);
-			      if (storeWithBarrier(labelEa, r, rtl_rep))
-				  then add_mutable label
-			      else ())
-		    | F r => (add_data(FLOAT "0.0");
+		      I r => (doUninitialize(); (* could optimize for non-pointers *)
+			      add_data(INT32 uninit_val);
+			      add_instr(STORE32I(labelEa, r)))
+		    | F r => (doInitialize();  (* ok since floats are never pointers *)
+			      add_data(FLOAT "0.0");
 			      add_instr(STOREQF(labelEa,r))))
 	   | LOCATION (GLOBAL (l,rep)) => 
 		      let val value = alloc_regi rep
-		      in  (add_data(INT32 uninit_val);
-			   add_instr(LOAD32I(LEA(l,0),value));
-			   if (storeWithBarrier(labelEa, value, rtl_rep))
-			       then add_mutable label
-			   else ())
+		      in  if (repIsNonheap rep)
+			      then doInitialize()
+			  else doUninitialize();
+			  add_data(INT32 uninit_val);
+			  add_instr(LOAD32I(LEA(l,0),value));
+			  add_instr(STORE32I(labelEa, value))
 		      end
 	   | VALUE (VOID _) => (print "Warning: alloc_global got a VOID\n";
+				doInitialize();
 				add_data(INT32 0w0))
-	   | VALUE (INT w32) => add_data(INT32 w32)
-	   | VALUE (TAG w32) => add_data(INT32 w32)
+	   | VALUE (INT w32) => (doInitialize(); add_data(INT32 w32))
+	   | VALUE (TAG w32) => (doInitialize(); add_data(INT32 w32))
 	   | VALUE (REAL l) => let val fr = alloc_regf()
-			       in  add_data(FLOAT "0.0");
+			       in  doInitialize();
+				   add_data(FLOAT "0.0");
 				   add_instr(LOADQF(LEA(l,0), fr));
 				   add_instr(STOREQF(labelEa, fr))
 			       end
-	   | VALUE (RECORD (l,_)) => add_data(DATA l)
-	   | VALUE (LABEL l) => add_data(DATA l)
-	   | VALUE (CODE l) => add_data(DATA l))
+	   | VALUE (RECORD (l,_)) => (doInitialize(); add_data(DATA l))
+	   | VALUE (LABEL l) => (doInitialize(); add_data(DATA l))
+	   | VALUE (CODE l) => (doInitialize(); add_data(DATA l)))
       end
 
 
@@ -995,7 +1026,7 @@ struct
 	       | _ => false)
 		 
 	val _ = if (exported orelse isReg)
-		    then allocate_global(label,labels,rep,term)
+		    then (allocate_global(label,labels,rep,term))
 		else ()
 
 	val term = 
@@ -1030,7 +1061,7 @@ struct
 	       | _ => false)
 
 	val _ = (case (termOpt, exported orelse is_reg) of
-		     (SOME term, true) => allocate_global(label,labels,TRACE,term)
+		     (SOME term, true) => (allocate_global(label,labels,TRACE,term))
 		   | _ => ())
 
 	val termOpt = 

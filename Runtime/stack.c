@@ -956,19 +956,66 @@ void local_root_scan(SysThread_t *sth, Thread_t *th, Heap_t *fromspace)
 
 }
 
-void global_root_scan(SysThread_t *sth, Queue_t *global_roots, Heap_t *fromspace)
-{
-  static Queue_t *uninit_global_roots;
-  static Queue_t *temp;
-  unsigned long i,mi, stack_top, len;
+static Queue_t *potentialTemp = NULL;   /* temporary queue used for promotion */
+static Queue_t *potentialGlobal = NULL; /* all globals start here */
+static Queue_t *promotedGlobal = NULL;  /* minor scan moves pointer locations of
+					   initialized globals of potential 
+					   to promoted and discards the non-pointer
+					   locations of the initialized globals */
+static Queue_t *tenuredGlobal = NULL;   /* major scan first performs a minor scan
+					   and then moves locations from promoted to tenured */
 
-  QueueClear(global_roots);
-  for (mi=0; mi<module_count; mi++) {
-    value_t *start = (value_t *)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
-    value_t *stop = (value_t *)((&TRACE_GLOBALS_END_VAL)[mi]);
-    for ( ; start < stop; start++) {
-      value_t global = *start;
-      scan_oneobject_for_pointers((value_t *)global, global_roots);
+
+Queue_t *minor_global_scan(SysThread_t *sth)
+{
+  /* First time, get all the globals' locations into the potential list */
+  if (potentialGlobal == NULL) {
+    unsigned long mi;
+    int estimatedGlobal = 0;  /* Estimate based on one ptr loc per global */
+    for (mi=0; mi<module_count; mi++) {
+      value_t *start = (value_t *)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
+      value_t *stop = (value_t *)((&TRACE_GLOBALS_END_VAL)[mi]);
+      estimatedGlobal += stop - start;
+    }
+    potentialGlobal = QueueCreate(1, estimatedGlobal);
+    potentialTemp   = QueueCreate(1, estimatedGlobal);
+    promotedGlobal  = QueueCreate(1, estimatedGlobal);
+    tenuredGlobal   = QueueCreate(1, estimatedGlobal);
+    for (mi=0; mi<module_count; mi++) {
+      value_t *start = (value_t *)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
+      value_t *stop = (value_t *)((&TRACE_GLOBALS_END_VAL)[mi]);
+      for ( ; start < stop; start++) {
+	value_t *global = (value_t *) (*start);
+	Enqueue(potentialGlobal, global);
+      }
     }
   }
+  
+  /* For each root of potentialGlobal
+       (1) move to potentialTemp if it is uninitialized 
+       (2) move to promotedGlobal if it is initialized and contains pointers
+       (3) discard if it is initialized and contains no pointers
+     Swap potentialGlobal and potentialTemp
+  */
+  while (!QueueIsEmpty(potentialGlobal)) {
+    value_t *global = Dequeue(potentialGlobal);
+    value_t tag = global[-1];
+    if (tag == SKIP_TAG)
+      Enqueue(potentialTemp, (void *)global);
+    else 
+      scan_oneobject_for_pointers((value_t *)global, promotedGlobal);
+  }
+  typed_swap(Queue_t *, potentialTemp, potentialGlobal);
+  return promotedGlobal;
+}
+
+
+Queue_t *major_global_scan(SysThread_t *sth)
+{
+  minor_global_scan(sth);
+  while (!QueueIsEmpty(promotedGlobal)) {
+    value_t *globalLoc = Dequeue(promotedGlobal);
+    Enqueue(tenuredGlobal, globalLoc);
+  }
+  return tenuredGlobal;
 }

@@ -313,13 +313,9 @@ struct
    fun loadEA' destOpt ea = 
        (case ea of
 	    Rtl.REA(rtlBase, disp) => (translateIReg rtlBase, INT disp)
-	  | Rtl.LEA(label, 0) => let val base = freshIreg()
-				 in  emit(SPECIFIC(SETHI(HIGHLABEL label, base)));
-				     (base, LOWLABEL label)
-				 end
 	  | Rtl.LEA(label, disp) => let val base = freshIreg()
-				    in  emit(BASE(LADDR(base, label)));
-					(base, INT disp)
+				    in  emit(SPECIFIC(SETHI(HIGHLABEL (label,i2w disp), base)));
+					(base, LOWLABEL (label,i2w disp))
 				    end
 	  | Rtl.RREA(r1, r2) => let val Rsrc1 = translateIReg r1
 				    val Rsrc2 = translateIReg r2
@@ -430,10 +426,10 @@ struct
 			end)
        in
 	 translate(Rtl.CALL{call_type = Rtl.C_NORMAL,
-				func = Rtl.LABEL' (Rtl.ML_EXTERN_LABEL ".rem"),
-				args = [Rtl.I rtl_Rsrc1, Rtl.I rtl_Rsrc2],
-				results = [Rtl.I rtl_Rdest],
-				save = []})
+			    func = Rtl.LABEL' (Rtl.ML_EXTERN_LABEL ".rem"),
+			    args = [Rtl.I rtl_Rsrc1, Rtl.I rtl_Rsrc2],
+			    results = [Rtl.I rtl_Rdest],
+			    save = []})
        end
 
      | translate (Rtl.S4ADD (rtl_Rsrc1, op2, rtl_Rdest)) =

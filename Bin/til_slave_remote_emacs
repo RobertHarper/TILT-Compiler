@@ -3,7 +3,7 @@
 # usage: til_slave n count host commdir
 #
 # Create count slaves on host.  n is used to set window geometry.
-# We create hte slaves in a remote emacs whose X interface
+# We create the slaves in a remote emacs whose X interface
 # displays locally.  Advantage: X interface.
 #
 # As a hack, the host "localhost" is treated specially.
@@ -131,7 +131,7 @@ cmd='	PATH="'"$PATH"'"
 (require '\''sml-proc)
 (defun til-slave-startup ()
   (interactive)
-  (set-default-font "6x10")
+; (set-default-font "6x10")  Window resize due to font change here does not work with Exceed for wide (>100) windows
   (menu-bar-mode -1)
   (delete-file "/tmp/elisp'$$'")
   (til-slaves '$argcount' nil))
@@ -151,12 +151,14 @@ cmd='	PATH="'"$PATH"'"
   (if (= n 0)
       (balance-windows)
     (progn
+      (balance-windows)
       (if split (split-window-vertically))
+      (balance-windows)
       (til-slave)
-      (rename-buffer "*til slave*" t)
+      (rename-buffer (concat "*til slave*" (int-to-string n)) t)
       (til-slaves (- n 1) t))))
 END_EMACS
-	exec emacs --no-init-file -bg black -fg yellow -geometry '$geometry' \
+	exec emacs --no-init-file -bg black -fg yellow -fn 6x10 -geometry '$geometry' \
 	     -l /tmp/elisp'$$' -f til-slave-startup
 '
 

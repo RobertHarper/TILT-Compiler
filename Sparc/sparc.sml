@@ -87,9 +87,9 @@ structure Machine =
 
   datatype imm = INT of int             (* Must fit in 13 bits sign-extended *)
                | LOWINT of Word32.word  (* The low 10 bits of the word *)
-               | LOWLABEL of label      (* The low 10 buts of the label *)
-               | HIGHINT of Word32.word (* The high 22 buts of the word *)
-               | HIGHLABEL of label     (* The high 22 buts of the label *)
+               | HIGHINT of Word32.word (* The high 22 bits of the word *)
+               | LOWLABEL of label * Word32.word  (* The low 10 bits of the label plus offset *)
+               | HIGHLABEL of label * Word32.word (* The high 22 bits of the label plus offset *)
 
   datatype operand = 
     REGop of register
@@ -268,8 +268,8 @@ structure Machine =
   fun msImm (INT i) = ms i
     | msImm (LOWINT w) = "%lo(" ^ (msw w) ^ ")"
     | msImm (HIGHINT w) = "%hi(" ^ (msw w) ^ ")"
-    | msImm (LOWLABEL l) = "%lo(" ^ (msLabel l) ^ ")"
-    | msImm (HIGHLABEL l) = "%hi(" ^ (msLabel l) ^ ")"
+    | msImm (LOWLABEL (l,w))  = "%lo(" ^ (msLabel l) ^ (if w = 0w0 then "" else "+" ^ (msw w))  ^ ")"
+    | msImm (HIGHLABEL (l,w)) = "%hi(" ^ (msLabel l) ^ (if w = 0w0 then "" else "+" ^ (msw w))  ^ ")"
   fun msOperand (REGop r) = msReg r
     | msOperand (IMMop imm) = msImm imm
   fun msDisp(rd, INT 0)     = "[" ^ (msReg rd) ^ "]"
@@ -278,118 +278,130 @@ structure Machine =
 			   | HIGHLABEL _ => error "msDisp with HIGHLABEL"
 			   | _ =>  "[" ^ (msReg rd) ^ "+" ^ (msImm imm) ^ "]")
 
-  fun msInstr' (IALIGN x) =
-         let val i = 
-	        case x of
-		   LONG => 4
-		 | QUAD => 8
-		 | OCTA => 16
-		 | ODDLONG => error "ODDLONG not handled"
-		 | ODDOCTA => error "ODDOCTA not handled"
-	 in tab^".align "^Int.toString i
-         end
-    | msInstr' NOP = tab ^ "nop"
-    | msInstr' (SETHI (imm, Rdest)) =
-                                (tab ^ "sethi" ^ tab ^
-				 (msImm imm) ^ comma ^ (msReg Rdest))
-    | msInstr' (WRY Rsrc) = (tab ^ "mov " ^  (msReg Rsrc) ^ ", %y")
-    | msInstr' (RDY Rdest) = (tab ^ "mov %y, " ^  (msReg Rdest))
-    | msInstr' (CMP (Rsrc1, op2)) =
-                                (tab ^ "cmp" ^ tab ^
+  fun msInstrSpecific instrSpecific = 
+      (case instrSpecific of
+	 IALIGN x =>
+	       let val i = 
+		   case x of
+		       LONG => 4
+		     | QUAD => 8
+		     | OCTA => 16
+		     | ODDLONG => error "ODDLONG not handled"
+		     | ODDOCTA => error "ODDOCTA not handled"
+	       in ".align " ^ (Int.toString i)
+	       end
+       | NOP => "nop"
+       | (SETHI (imm, Rdest)) => ("sethi" ^ tab ^
+				  (msImm imm) ^ comma ^ (msReg Rdest))
+       | (WRY Rsrc) => ("mov " ^  (msReg Rsrc) ^ ", %y")
+       | (RDY Rdest) => ("mov %y, " ^  (msReg Rdest))
+       | (CMP (Rsrc1, op2)) => ("cmp" ^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msOperand op2))
-    | msInstr' (FCMPD (Rsrc1, Rsrc2)) =
-                                (tab ^ "fcmpd" ^ tab ^
+       | (FCMPD (Rsrc1, Rsrc2)) =>
+                                ("fcmpd" ^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msReg Rsrc2))
-    | msInstr' (STOREI (instr, Rsrc, disp, Raddr)) =
-                                (tab ^ (storei_to_ascii instr) ^ tab ^
+       | (STOREI (instr, Rsrc, disp, Raddr)) =>
+                                ((storei_to_ascii instr) ^ tab ^
 				 (msReg Rsrc) ^ comma ^ (msDisp(Raddr, disp)))
-    | msInstr' (STOREF (instr, Rsrc, disp, Raddr)) =
-                                (tab ^ (storef_to_ascii instr) ^ tab ^
+       | (STOREF (instr, Rsrc, disp, Raddr)) =>
+                                ((storef_to_ascii instr) ^ tab ^
 				 (msReg Rsrc) ^ comma ^ (msDisp(Raddr, disp)))
-    | msInstr' (LOADI (instr, Rdest, disp, Raddr)) =
-                                (tab ^ (loadi_to_ascii instr) ^ tab ^
+       | (LOADI (instr, Rdest, disp, Raddr)) =>
+                                ((loadi_to_ascii instr) ^ tab ^
 				 (msDisp(Raddr, disp)) ^ comma ^ (msReg Rdest))
-    | msInstr' (LOADF (instr, Rdest, disp, Raddr)) =
-                                (tab ^ (loadf_to_ascii instr) ^ tab ^
+       | (LOADF (instr, Rdest, disp, Raddr)) =>
+                                ((loadf_to_ascii instr) ^ tab ^
 				 (msDisp(Raddr, disp)) ^ comma ^ (msReg Rdest))
-    | msInstr' (CBRANCHI (instr, label)) =
-                                (tab ^ (cbri_to_ascii instr) ^ tab ^ (msLabel label))
-    | msInstr' (CBRANCHF (instr, label)) =
-                                (tab ^ (cbrf_to_ascii instr) ^ tab ^ (msLabel label))
-    | msInstr' (INTOP(instr, Rsrc1, op2, Rdest)) =
-                                (tab ^ (int_to_ascii instr) ^ tab ^
+       | (CBRANCHI (instr, label)) =>
+                                ((cbri_to_ascii instr) ^ tab ^ (msLabel label))
+       | (CBRANCHF (instr, label)) =>
+                                ((cbrf_to_ascii instr) ^ tab ^ (msLabel label))
+       | (INTOP(instr, Rsrc1, op2, Rdest)) =>
+                                ((int_to_ascii instr) ^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^ 
 				 comma ^ (msReg Rdest))
-    | msInstr' (FPOP(instr, Rsrc1, Rsrc2, Rdest)) =
-                                (tab ^ (fp_to_ascii instr)^ tab ^
+       | (FPOP(instr, Rsrc1, Rsrc2, Rdest)) =>
+                                ((fp_to_ascii instr)^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msReg Rsrc2) ^ 
 				 comma ^ (msReg Rdest))
-    | msInstr' (FPMOVE(instr, Rsrc, Rdest)) =
-                                (tab ^ (fpmove_to_ascii instr)^ tab ^
+       | (FPMOVE(instr, Rsrc, Rdest)) =>
+                                ((fpmove_to_ascii instr)^ tab ^
 				 (msReg Rsrc) ^ comma ^ (msReg Rdest))
-    | msInstr' (TRAP instr) = (tab ^ (trap_to_ascii instr))
+       | (TRAP instr) => (trap_to_ascii instr))
 
 
-  fun msInstr_base (BSR (label, NONE, _)) = (tab ^ "call" ^ tab ^ (msLabel label) ^ "\n\tnop")
-    | msInstr_base (BSR (label, SOME sra, _)) = (tab ^ "jmpl" ^ tab ^ (msLabel label) ^
-						     comma ^ (msReg sra) ^ "\n\tnop")
-    | msInstr_base (TAILCALL label) = ("\tTAILCALL\t" ^ (msLabel label))
-    | msInstr_base (BR label) = (tab ^ "ba" ^ tab ^ (msLabel label) ^ "\n\tnop")
-    | msInstr_base (ILABEL label) = (msLabel label) ^ ":"
-    | msInstr_base (ICOMMENT str) = (tab ^ "! " ^ str)
-    | msInstr_base (Core.JSR(link, Raddr, hint, _)) =
-                                (tab ^ "jmpl" ^ tab ^
-				 (msReg Raddr) ^ comma ^
-				 (if link then (msReg Rra) else (msReg Rzero)) ^ "\n\tnop")
-    | msInstr_base (Core.RET(link, hint)) =
-                                (if link
-				  then (tab ^ "jmpl" ^ tab ^ (msReg Rra) ^ comma ^ (msReg Rra))
-				else (tab ^ "retl"))
-				^ "\n\tnop"
-    | msInstr_base (RTL instr) =  (tab ^ (rtl_to_ascii instr))
-    | msInstr_base (MOVE (Rsrc,Rdest)) =
-      let val scratch = INT threadScratch_disp
-	  val scratch2 = INT (threadScratch_disp + 4)
-      in
-	  (case (Rsrc,Rdest) of
-	       (R _, R _) => ("\tmov\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
-	     | (F m, F n) => ("\tfmovd\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
-(*			 "\tfmovs\t" ^ (msReg (F (m+1))) ^ comma ^ (msReg (F (n+1)))) *)
-	     | (R n, F _) => ("\tst\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, scratch)) ^ "\n" ^
-			      "\tst\t" ^ (msReg (R (n+1))) ^ comma ^ (msDisp(Rth, scratch2)) ^ "\n" ^
-			      "\tldd\t" ^ (msDisp(Rth, scratch)) ^ comma ^ (msReg Rdest))
-	     | (F _, R n) => ("\tstd\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, scratch)) ^ "\n" ^
-			      "\tld\t" ^ (msDisp(Rth, scratch)) ^ comma ^ (msReg Rdest) ^ "\n" ^
-			      "\tld\t" ^ (msDisp(Rth, scratch2) ^ comma ^ (msReg (R (n+1))))))
-      end
+  datatype finalInstr = NO_INSTRUCTION of string        (* do not prepend tab *)
+                      | ONE_INSTRUCTION of string
+                      | DELAY_INSTRUCTION of string     (* must insert nop *)
+                      | MULTIPLE_INSTRUCTION of string list 
+
+  fun msInstrBase (base : base_instruction) = 
+      (case base of
+	BSR (label, NONE, _) => DELAY_INSTRUCTION ("call" ^ tab ^ (msLabel label))
+      | BSR (label, SOME sra, _) => DELAY_INSTRUCTION ("jmpl" ^ tab ^ (msLabel label) ^
+						       comma ^ (msReg sra))
+      | (TAILCALL label) => DELAY_INSTRUCTION ("TAILCALL\t" ^ (msLabel label))
+      | (BR label) => DELAY_INSTRUCTION ("ba" ^ tab ^ (msLabel label))
+      | (ILABEL label) => NO_INSTRUCTION ((msLabel label) ^ ":")
+      | (ICOMMENT str) => NO_INSTRUCTION ("\t! " ^ str)
+      | (Core.JSR(link, Raddr, hint, _)) =>
+	    DELAY_INSTRUCTION("jmpl" ^ tab ^
+			      (msReg Raddr) ^ comma ^
+			      (if link then (msReg Rra) else (msReg Rzero)))
+      | (Core.RET(link, hint)) =>
+	    DELAY_INSTRUCTION (if link
+				   then ("jmpl" ^ tab ^ (msReg Rra) ^ comma ^ (msReg Rra))
+			       else "retl")
+      | (RTL instr) => ONE_INSTRUCTION (rtl_to_ascii instr)
+      | (MOVE (Rsrc,Rdest)) =>
+	 let val scratch = INT threadScratch_disp
+	     val scratch2 = INT (threadScratch_disp + 4)
+	 in
+	     case (Rsrc,Rdest) of
+		 (R _, R _) => ONE_INSTRUCTION("mov\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
+	       | (F m, F n) => ONE_INSTRUCTION("fmovd\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
+	       | (R n, F _) => MULTIPLE_INSTRUCTION
+		                [("st\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, scratch))),
+				 ("st\t" ^ (msReg (R (n+1))) ^ comma ^ (msDisp(Rth, scratch2))),
+				 ("ldd\t" ^ (msDisp(Rth, scratch)) ^ comma ^ (msReg Rdest))]
+		| (F _, R n) => MULTIPLE_INSTRUCTION
+				[("std\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, scratch))),
+				 ("ld\t" ^ (msDisp(Rth, scratch)) ^ comma ^ (msReg Rdest)),
+				 ("ld\t" ^ (msDisp(Rth, scratch2) ^ comma ^ (msReg (R (n+1)))))]
+	 end
 			 
-    | msInstr_base (PUSH (Rsrc, sloc)) = 
-                                ("\tPUSH\t" ^ (msReg Rsrc) ^ comma ^ (msStackLocation sloc))
-    | msInstr_base (POP (Rdest, sloc)) = 
-                                ("\tPOP\t" ^ (msReg Rdest) ^ comma ^ (msStackLocation sloc))
-    | msInstr_base (PUSH_RET NONE) = "PUSH_RET none"
-    | msInstr_base (POP_RET NONE) = "POP_RET none"
-    | msInstr_base (PUSH_RET (SOME(ACTUAL4 offset))) = msInstr'(STOREI(ST,Rra,INT offset, Rsp))
-    | msInstr_base (POP_RET (SOME(ACTUAL4 offset))) = msInstr'(LOADI(LD,Rra,INT offset, Rsp))
-    | msInstr_base (PUSH_RET (SOME sloc)) = ("\tPUSH_RET\t" ^ (msStackLocation sloc))
-    | msInstr_base (POP_RET (SOME sloc)) =  ("\tPOP_RET\t" ^ (msStackLocation sloc))
-    | msInstr_base (GC_CALLSITE label) = ("\tGC CALLING SITE\t" ^ (msLabel label))
-    | msInstr_base (LADDR (Rdest, label)) = 
-				let val str1 = msInstr'(SETHI(HIGHLABEL label, Rdest))
-				    val str2 = ("\tor\t" ^ (msReg Rdest) ^ 
-						",%lo(" ^ (msLabel label) ^ "), " ^ (msReg Rdest))
-				in  str1 ^ "\n" ^ str2
-				end
+      | PUSH (Rsrc, sloc) => ONE_INSTRUCTION ("PUSH\t" ^ (msReg Rsrc) ^ comma ^ (msStackLocation sloc))
+      | POP (Rdest, sloc) => ONE_INSTRUCTION ("POP\t" ^ (msReg Rdest) ^ comma ^ (msStackLocation sloc))
+      | PUSH_RET NONE => ONE_INSTRUCTION "PUSH_RET none"
+      | POP_RET NONE => ONE_INSTRUCTION "POP_RET none"
+      | PUSH_RET (SOME(ACTUAL4 offset)) => ONE_INSTRUCTION (msInstrSpecific(STOREI(ST,Rra,INT offset, Rsp)))
+      | POP_RET (SOME(ACTUAL4 offset)) => ONE_INSTRUCTION (msInstrSpecific(LOADI(LD,Rra,INT offset, Rsp)))
+      | PUSH_RET (SOME sloc) => ONE_INSTRUCTION ("PUSH_RET\t" ^ (msStackLocation sloc))
+      | POP_RET (SOME sloc) => ONE_INSTRUCTION ("POP_RET\t" ^ (msStackLocation sloc))
+      | GC_CALLSITE label => ONE_INSTRUCTION ("GC CALLING SITE\t" ^ (msLabel label))
+      | LADDR (Rdest, label) =>
+	   let val str1 = msInstrSpecific(SETHI(HIGHLABEL (label, 0w0), Rdest))
+	       val str2 = msInstrSpecific(INTOP(OR, Rdest, 
+						IMMop (LOWLABEL (label,0w0)), Rdest))
+	   in  MULTIPLE_INSTRUCTION[str1,str2]
+	   end)
 
-  fun msInstr (SPECIFIC i) = msInstr' i
-    | msInstr (BASE i) = msInstr_base i
+  fun msInstr (SPECIFIC i) = ONE_INSTRUCTION(msInstrSpecific i)
+    | msInstr (BASE i) = msInstrBase i
 
-  fun msInstruction cmt instr =
-    ((msInstr instr) ^ (if (cmt <> "") then ("\t! " ^ cmt) else "") ^ "\n")
+  fun msInstrHelp(cmt, finalInstr) = 
+      let val cmt' = if (cmt = "") then "" else cmt ^ "\n"
+      in  (case finalInstr of
+	       NO_INSTRUCTION str => cmt' ^ str ^ "\n"
+	     | ONE_INSTRUCTION str => "\t" ^ str ^ cmt ^ "\n"
+	     | DELAY_INSTRUCTION str => "\t" ^ str ^ cmt ^ " ! delay slot empty\n\tnop\n"
+	     | MULTIPLE_INSTRUCTION strings => foldl (fn (str,acc) => acc ^"\t" ^ str ^ "\n") cmt' strings)
+      end
+
+  fun msInstruction (cmt, instr) = msInstrHelp(cmt, msInstr instr)
+
 
   fun wms arg = "0x" ^ (W.toHexString arg)
-
-
 
   fun fixupFloat float_string =
     let
@@ -557,6 +569,33 @@ structure Machine =
       | cFlow (BASE(TAILCALL label))     = BRANCH (false, [])
       | cFlow _ = NOBRANCH
 
+
+  (* We perform one peephole optimization: filling of jmpl/retl delay slots.
+     If the first two instructions do not interfere in that their 
+     def-use sets are entirely disjoint and the second instruction
+     has a delay slot while the first does not (and is ultimately exactly one instruction),
+     then the second can fill the delay slot of the first.
+  *)
+
+  fun msInstructions cmt_instr_list = 
+      let val ci_list = map (fn (cmt,instr) => (cmt, instr, msInstr instr)) cmt_instr_list
+	  fun loop [] = []
+            | loop [(c,i,s)] = [msInstrHelp (c,s)]
+	    | loop ((cis1 as (c1,i1,s1))::(cis2 as (c2,i2,s2))::cisRest) =
+	      (case (s1,s2) of
+		   (ONE_INSTRUCTION str1, DELAY_INSTRUCTION str2) =>
+		       let val (def1,use1) = defUse i1
+			   val (def2,use2) = defUse i2
+			   val disjoint = null(listintersect(def1 @ use1, def2 @ use2))
+		       in  if disjoint
+			   then (msInstrHelp (c2,ONE_INSTRUCTION str2)) ::
+			        (msInstrHelp (c1,ONE_INSTRUCTION str1)) ::
+				loop cisRest
+			   else (msInstrHelp (c1,s1)) :: (loop (cis2 :: cisRest))
+		       end
+		 | _ => (msInstrHelp (c1,s1)) :: (loop (cis2 :: cisRest)))
+      in  loop ci_list
+      end
 
    (* map src registers using fs and destination using fd and return mapped instruction *)
    fun translate_to_real_reg(i,fs,fd) = 

@@ -397,53 +397,113 @@ struct
 	  loop (c,[])
       end
 
-    (* collections *)
- 
-    type bound = {level : int,   (* Initially zero and increases by one past each lambda *)
+  fun nilprim_uses_carg np =
+	(case np of
+	     record _ => false
+	   | select _ => false
+	   | roll => false
+	   | unroll => false
+	   | project_known_record _ => false
+	   | project_known _ => false
+	   | project _ => true
+	   | inject_known_record _ => false
+	   | inject_known _ => false
+	   | inject _ => true
+           | box_float _ => false
+           | unbox_float _ => false
+           | make_exntag => false
+           | inj_exn _ => false
+           | make_vararg _ => true
+           | make_onearg _ => true
+           | peq => true)
+
+  fun aggregate_uses_carg (Prim.OtherArray false) = true
+    | aggregate_uses_carg (Prim.OtherVector false) = true
+    | aggregate_uses_carg _ = false
+
+  fun prim_uses_carg p =
+      let open Prim
+      in  (case p of
+	     array2vector t => aggregate_uses_carg t
+	   | vector2array t => aggregate_uses_carg t
+	   | create_table t => aggregate_uses_carg t
+	   | create_empty_table t => aggregate_uses_carg t
+	   | sub t => aggregate_uses_carg t
+	   | update t => aggregate_uses_carg t
+	   | length_table t => aggregate_uses_carg t
+	   | equal_table t => aggregate_uses_carg t
+	   | _ => true)
+      end
+
+  fun allprim_uses_carg (NilPrimOp np) = nilprim_uses_carg np
+    | allprim_uses_carg (PrimOp p) = prim_uses_carg p
+
+
+    type bound = {isConstr : bool,
+		  level : int,   (* Initially zero and increases by one past each lambda *)
 		  boundcvars : Name.VarSet.set,
 		  boundevars : Name.VarSet.set}
 
     datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
+
+    type handlers = 
+	{exphandler : bound * Nil.exp -> Nil.exp changeopt,
+	 bndhandler : bound * Nil.bnd -> (Nil.bnd list) changeopt,
+	 conhandler : bound * Nil.con -> Nil.con changeopt,
+	 cbndhandler : bound * Nil.conbnd -> (Nil.conbnd list) changeopt,
+	 kindhandler : bound * Nil.kind -> Nil.kind changeopt}
+
     datatype state =
 	STATE of {bound : bound,
-		  handlers : 
-		  {bndhandler : bound * bnd -> (bnd list) changeopt,
-		   cbndhandler : bound * conbnd -> (conbnd list) changeopt,
-		   conhandler : bound * con -> con changeopt,
-		   exphandler : bound * exp -> exp changeopt,
-		   kindhandler : bound * kind -> kind changeopt}}
+		  handlers : handlers}
 
-    fun add_convars (STATE{bound={level,boundcvars,boundevars},handlers},vs) = 
+    fun add_convars (STATE{bound={isConstr,level,boundcvars,boundevars},handlers},vs) = 
 	(STATE{bound = {level = level, 
+			isConstr=isConstr,
 			boundcvars = Name.VarSet.addList(boundcvars,vs),
 			boundevars = boundevars},
 	       handlers = handlers})
 
     fun add_convar (h : state ,v) = add_convars(h,[v])
 
-    fun add_var (STATE{bound={level,boundevars,boundcvars},handlers=handlers}, v) = 
+    fun add_var (STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}, v) = 
 	(STATE{bound = {level=level,
+			isConstr = isConstr,
 			boundcvars = boundcvars,
 			boundevars = Name.VarSet.add(boundevars, v)},
 	       handlers = handlers})
 
-    fun add_level (STATE{bound={level,boundevars,boundcvars},handlers=handlers}) = 
+    fun add_level (STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}) = 
 	(STATE{bound = {level = level + 1,
+			isConstr = isConstr,
 			boundcvars = boundcvars,
 			boundevars = boundevars},
 	       handlers = handlers})
     
-    fun f_cbnd (state : state) (cbnd : conbnd) : (conbnd list * state) = 
+    fun type_state(STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}) = 
+	(STATE{bound = {level = level,
+			isConstr = false,
+			boundcvars = boundcvars,
+			boundevars = boundevars},
+	       handlers = handlers})
+    fun constr_state(STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}) = 
+	(STATE{bound = {level = level,
+			isConstr = true,
+			boundcvars = boundcvars,
+			boundevars = boundevars},
+	       handlers = handlers})
+
+    fun f_cbnd (state : state)  (cbnd : conbnd) : (conbnd list * state) = 
 	let 
 	    val (STATE{bound,handlers={cbndhandler,...},...}) = state
 	    fun cbnd_help wrap (var, vklist, c) state openness = 
 		let val state' = add_level state
 		    val (vklist',state') = f_vklist state' vklist
-		    val c' = f_con state' c
+		    val c' = f_con state'  c
 		in (wrap(var, vklist', c'), add_convar(state,var))
 		end
 	    fun do_cbnd (Con_cb(var, con),state) = 
-		let val con' = f_con state con
+		let val con' = f_con state  con
 		in (Con_cb(var, con'), add_convar(state,var))
 		end
 	      | do_cbnd (Open_cb args,state) = cbnd_help Open_cb args state Open
@@ -464,9 +524,9 @@ struct
 			    end)
 	end  
 		
-  and f_con (state : state) (con : con) : con = 
+  and f_con (state : state)  (con : con) : con = 
     let 
-      val self = f_con state
+      val self = f_con state 
       val (STATE{bound,handlers={conhandler,...},...}) = state
       fun docon con = 
 	  (case con of
@@ -476,7 +536,7 @@ struct
 		   let
 		       val (con_vars,cons) = ListPair.unzip (Sequence.toList defs)
 		       val state' = add_convars (state,con_vars)
-		       val cons' = List.map (f_con state') cons
+		       val cons' = List.map (f_con state' ) cons
 		       val defs' = Sequence.fromList (ListPair.zip (con_vars,cons'))
 		   in  Mu_c (flag,defs')
 		   end
@@ -494,20 +554,20 @@ struct
 			   let val s = (case letsort of
 					    Parallel => state
 					  | Sequential => accstate)
-			       val (cbnds',state') = f_cbnd s cbnd
+			       val (cbnds',state') = f_cbnd s  cbnd
 			   in  (cbnds'@rev_cbnds, state')
 			   end
 		       val (rev_cbnds',state') = foldl folder ([],state) cbnds
 		       val cbnds' = rev rev_cbnds'
-		       val body' = f_con state' body
+		       val body' = f_con state'  body
 		   in
 		       Let_c (letsort, cbnds', body')
 		   end
 	   
 	     | (Closure_c (code,env)) =>
 		   let
-		       val code' = f_con state code
-		       val env' = f_con state env
+		       val code' = self code
+		       val env' = self env
 		   in
 		       Closure_c(code', env')
 		   end
@@ -542,7 +602,7 @@ struct
                            in  ((v,k')::vklist,s')
                            end
                            val (rev_vklist',state') = foldl folder ([],state) vklist
-                       in  (pc, rev rev_vklist', f_con state' c)
+                       in  (pc, rev rev_vklist', f_con state'  c)
                        end
                        val arms' = map doarm arms
                        val kind' = f_kind state kind
@@ -625,9 +685,10 @@ struct
     end
 
   and f_vklist state vklist =
-    let	fun fold_one ((var,knd),state) = 
+    let	val tstate = type_state state
+	fun fold_one ((var,knd),state) = 
 	    let
-		val knd' = f_kind state knd
+		val knd' = f_kind tstate knd
 		val state' = add_convar (state, var)
 	    in
 		((var,knd'),state')
@@ -636,11 +697,12 @@ struct
 	foldl_acc fold_one state vklist
     end
 
+  and f_type state c = f_con (type_state state) c
+
   and f_vtclist state vtclist =
-    let
-	fun fold_one ((var,trace,con),state) = 
+    let fun fold_one ((var,trace,con),state) = 
 	    let
-		val con' = f_con state con
+		val con' = f_type state con
 		val trace' = f_niltrace state trace 
 		val state' = add_var (state, var)
 	    in
@@ -665,7 +727,7 @@ struct
 	  val (tFormals', state') = f_vklist state' tFormals
 	  val (eFormals', state') = f_vtclist state' eFormals
 	  val body' = f_exp state' body
-	  val body_type' = f_con state' body_type
+	  val body_type' = f_type state' body_type
       in
 	  Function{effect=effect, recursive=recursive, isDependent=isDependent,
 		   tFormals = tFormals', eFormals = eFormals', fFormals = fFormals,
@@ -696,7 +758,11 @@ struct
       let val (STATE{bound,handlers={bndhandler,exphandler,...},...}) = state
 	  fun do_bnd (bnd,s) : bnd list * state = 
 	      case bnd of
-		  Con_b(p,cb) => let val (cbnds,state) = f_cbnd state cb
+		  Con_b(p,cb) => let val state = (case p of
+						      Runtime => state
+						    | Compiletime => type_state state)
+				     val (cbnds,state) = f_cbnd state cb
+				     val state = constr_state state
 				 in  (map (fn cb => Con_b(p,cb)) cbnds, state)
 				 end
 		| Exp_b(v,nt,e) => ([Exp_b(v, f_niltrace state nt, f_exp state e)], 
@@ -721,7 +787,7 @@ struct
 					| _ => error "can't have non-var in cllosure code comp"),
 			  cenv = f_con s' cenv,
 			  venv = f_exp s' venv,
-			  tipe = f_con s' tipe})
+			  tipe = f_type s' tipe})
 		      in  ([Fixclosure_b(is_recur, Sequence.map doer vcset)], s')
 		      end
       in  case (bndhandler (bound,bnd)) of
@@ -739,15 +805,15 @@ struct
 			size = size, 
 			arms = map (fn (t,e) => (t,f_exp state e)) arms,
 			default = Util.mapopt (f_exp state) default,
-			result_type = f_con state result_type}
+			result_type = f_type state result_type}
 	 | Sumsw_e {arg, sumtype, bound, arms, default, result_type} =>
 	       let val state' = add_var(state,bound)
 	       in  Sumsw_e {arg = f_exp state arg,
-			    sumtype = f_con state sumtype,
+			    sumtype = f_type state sumtype,
 			    bound = bound,
 			    arms = map (fn (t,tr,e) => (t,f_niltrace state tr,f_exp state' e)) arms,
 			    default = Util.mapopt (f_exp state) default,
-			    result_type = f_con state result_type}
+			    result_type = f_type state result_type}
 	       end
 	 | Exncase_e {arg, bound, arms, default, result_type} =>
 	       let val state' = add_var(state,bound)
@@ -755,12 +821,12 @@ struct
 			      bound = bound,
 			      arms = map (fn (t,tr,e) => (f_exp state t,f_niltrace state tr,f_exp state' e)) arms,
 			      default = Util.mapopt (f_exp state) default,
-			      result_type = f_con state result_type}
+			      result_type = f_type state result_type}
 	       end
 	 | Typecase_e {arg, arms, default, result_type} =>
 	       let val arg = f_con state arg
 		   val default = f_exp state default
-		   val result_type = f_con state result_type
+		   val result_type = f_type state result_type
 		   val arms = map (fn (pc,vklist,e) => 
 				   let val (vklist,state') = f_vklist state vklist
 				   in  (pc, vklist, f_exp state' e)
@@ -799,7 +865,10 @@ struct
 			  val body' = f_exp state' body
 		      in Let_e(sort,bnds',body')
 		      end
-		| (Prim_e (ap,clist,elist)) => Prim_e(ap,map (f_con state) clist, map self elist)
+		| (Prim_e (ap,clist,elist)) => 
+		      let val state = if (allprim_uses_carg ap) then state else type_state state
+		      in  Prim_e(ap,map (f_con state) clist, map self elist)
+		      end
 		| (Switch_e switch) => Switch_e(f_switch state switch)
 		| ExternApp_e (func,elist) =>
 		      ExternApp_e(self func, map self elist)
@@ -809,12 +878,12 @@ struct
 			    map (f_con state) clist,
 			    map self elist, 
 			    map self eflist)
-		| Raise_e (e,c) => Raise_e(self e, f_con state c)
+		| Raise_e (e,c) => Raise_e(self e, f_type state c)
 		| Handle_e {body,bound,handler,result_type} => 
 		      let val state' = add_var(state,bound)
 		      in  Handle_e{body = self body, bound=bound, 
 				   handler = f_exp state' handler,
-				   result_type = f_con state result_type}
+				   result_type = f_type state result_type}
 		      end
       in case (exphandler (bound,exp)) of
 	  CHANGE_NORECURSE e => e
@@ -822,27 +891,20 @@ struct
 	| NOCHANGE => doexp exp
       end
 
-  val default_bound : bound = {level = 0, boundcvars = Name.VarSet.empty, boundevars = Name.VarSet.empty}
-  fun default_bnd_handler _ = NOCHANGE
-  fun default_cbnd_handler _ = NOCHANGE
-  fun default_exp_handler _ = NOCHANGE
-  fun default_con_handler _ = NOCHANGE
-  fun default_kind_handler _ = NOCHANGE
+  val default_bound : bound = {isConstr = true, level = 0, 
+			       boundcvars = Name.VarSet.empty, boundevars = Name.VarSet.empty}
+  fun default_bndhandler _ = NOCHANGE
+  fun default_cbndhandler _ = NOCHANGE
+  fun default_exphandler _ = NOCHANGE
+  fun default_conhandler _ = NOCHANGE
+  fun default_kindhandler _ = NOCHANGE
 
   (* --------------- Exported Functions -------------------------- *) 
 
-  type handlers = ((bound * Nil.exp -> Nil.exp changeopt) *
-		   (bound * Nil.bnd -> (Nil.bnd list) changeopt) *
-		   (bound * Nil.con -> Nil.con changeopt) *
-		   (bound * Nil.conbnd -> (Nil.conbnd list) changeopt) *
-		   (bound * Nil.kind -> Nil.kind changeopt))
-  fun to_handlers (eh,bh,ch,cbh,kh) =
-      (STATE{bound = default_bound,
-	     handlers = {bndhandler = bh,
-			 cbndhandler = cbh,
-			 exphandler = eh,
-			 conhandler = ch,
-			 kindhandler = kh}})
+  fun to_handlers handlers = 
+      STATE{bound = default_bound,
+	    handlers = handlers}
+
   fun exp_rewrite h e = f_exp (to_handlers h) e
   fun bnd_rewrite h b = #1(f_bnd (to_handlers h) b)
   fun kind_rewrite h k = f_kind(to_handlers h) k
@@ -859,8 +921,8 @@ struct
 	  in 
 	      (count,
 	       STATE{bound = default_bound,
-		     handlers = {bndhandler = default_bnd_handler,
-				 cbndhandler = default_cbnd_handler,
+		     handlers = {bndhandler = default_bndhandler,
+				 cbndhandler = default_cbndhandler,
 				 exphandler = exp_handler,
 				 conhandler = con_handler,
 				 kindhandler = kind_handler}})
@@ -909,7 +971,7 @@ struct
     fun free_handler (look_in_kind, minLevel) =
 	let val free_evars : (Name.VarSet.set ref) = ref Name.VarSet.empty
 	    val free_cvars : (Name.VarSet.set ref) = ref Name.VarSet.empty
-	    fun exp_handler ({level,boundevars,boundcvars},Var_e v) = 
+	    fun exp_handler ({level,boundevars,boundcvars,...}:bound,Var_e v) = 
 		(if (not (Name.VarSet.member(boundevars,v))
 		     andalso (level >= minLevel))
 		     then free_evars := Name.VarSet.add(!free_evars, v)
@@ -917,7 +979,7 @@ struct
 		     NOCHANGE)
 	      | exp_handler _ = NOCHANGE
 	    fun kind_handler (_,k) = CHANGE_NORECURSE k
-	    fun con_handler ({level,boundevars,boundcvars},Var_c v) = 
+	    fun con_handler ({level,boundevars,boundcvars,...}:bound,Var_c v) = 
 		(if (not (Name.VarSet.member(boundcvars,v))
 		     andalso (level >= minLevel))
 		     then free_cvars := Name.VarSet.add(!free_cvars,v)
@@ -928,12 +990,12 @@ struct
 	    (free_evars,
 	     free_cvars,
 	     (STATE{bound = default_bound,
-		    handlers = {bndhandler = default_bnd_handler,
-				cbndhandler = default_cbnd_handler,
+		    handlers = {bndhandler = default_bndhandler,
+				cbndhandler = default_cbndhandler,
 				exphandler = exp_handler,
 				conhandler = con_handler,
 				kindhandler = if (look_in_kind)
-						  then default_kind_handler
+						  then default_kindhandler
 					      else kind_handler}}))
 	end
       

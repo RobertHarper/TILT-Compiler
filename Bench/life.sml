@@ -83,8 +83,8 @@ local
 	    fun twoorthree 2 = true
 	      | twoorthree 3 = true
 	      | twoorthree _ = false
-	    val survivors = filterP (twoorthree o liveneighbours) living
-	    val newnbrlist = flatten(mapP (filter (not o isalive) o neighbours) living)
+	    val survivors = filter (twoorthree o liveneighbours) living
+	    val newnbrlist = flatten(map (filter (not o isalive) o neighbours) living)
 	    val newborn = occurs3 newnbrlist
 	in mkgen (survivors @ newborn) 
 	end

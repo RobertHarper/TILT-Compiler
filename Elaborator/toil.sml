@@ -1328,8 +1328,8 @@ val _ = print "plet0\n"
 		val pats_exps = map vb_strip vblist
 		val count = length pats_exps
 		val fresh_str = Int.toString(var2int(fresh_var()))
-		val refs = map0count (fn n => sym ("r" ^ fresh_str ^ "*" ^ (Int.toString n))) count
-		val thunks = map0count (fn n => sym ("t" ^ fresh_str ^ "*" ^ (Int.toString n))) count
+		val refs = map0count (fn n => sym ("*result" ^ (Int.toString n))) count
+		val thunks = map0count (fn n => sym ("*thunk" ^ (Int.toString n))) count
 		val discard = sym "_"
 		    
 		(* decs *)

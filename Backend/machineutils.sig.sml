@@ -36,7 +36,7 @@ sig
   val procedureTrailer : string -> string list
   val textStart : string list
   val dataStart : string list
-
+  val GCdataStart : string list
 end
 
 

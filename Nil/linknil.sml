@@ -1,4 +1,6 @@
-(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Reorder *)
+(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg *)
+
+(* Reorder *)
 
 structure Linknil :> LINKNIL  =
   struct
@@ -25,7 +27,7 @@ structure Linknil :> LINKNIL  =
 (*  val reduce      = makeEntry (false, "Reduce") *)
 (*  val flatten     = makeEntry (false, "Flatten") *)
     val measure     = makeEntry (false, "NilMeasure")
-    val reorder     = makeEntry (false, "Reorder")
+(*  val reorder     = makeEntry (false, "Reorder") *)
 
     val typecheck_after_phasesplit = makeEntry(false,"TypecheckAfterPhasesplit")
     val typecheck_after_opt = makeEntry(false,"TypecheckAfterOpt")
@@ -157,7 +159,7 @@ structure Linknil :> LINKNIL  =
             val nilmod = transform reify2 (Reify.reify_mod, nilmod)
  	    val nilmod = transform typecheck_after_opt2 (typecheck, nilmod)
 	    val nilmod = transform cc (ToClosure.close_mod, nilmod)
-	    val nilmod = transform reorder (Reorder.optimize, nilmod)
+(*	    val nilmod = transform reorder (Reorder.optimize, nilmod) *)
  	    val nilmod = transform typecheck_after_cc (typecheck, nilmod)
  	    val nilmod = transform measure (Measure.measureMod, nilmod)
 

@@ -70,15 +70,15 @@ struct
   fun rbnds bnds = List.concat(map rbnd bnds)
 
   and make_handlers unit =
-      (fn (b,e) =>
-       let val newexp = rexp e
-       in NilUtil.CHANGE_NORECURSE newexp
-       end,
-       fn (b, bnd) => 
-       error "Shouldn't get here",
-       fn (b, c) => NilUtil.NOCHANGE,
-       fn (b, cb) => NilUtil.NOCHANGE,
-       fn (b, k) => NilUtil.NOCHANGE)
+      {exphandler = fn (b,e) =>
+                    let val newexp = rexp e
+		    in NilUtil.CHANGE_NORECURSE newexp
+		    end,
+       bndhandler = fn (b, bnd) => error "Shouldn't get here",
+       conhandler = NilUtil.default_conhandler,
+       kindhandler = NilUtil.default_kindhandler,
+       cbndhandler = NilUtil.default_cbndhandler}
+
   and rcon con = NilUtil.con_rewrite (make_handlers ()) con
   and rcbnd conbnd = NilUtil.cbnd_rewrite (make_handlers ()) conbnd
       

@@ -127,7 +127,7 @@ struct
   fun procedureTrailer s = ["\t.size " ^ s ^ ",(.-" ^ s ^ ")\n"]
   val textStart = ["\t.text\n"]
   val dataStart = ["\t.data\n"]
-
+  val GCdataStart = ["\t.section\t\".rodata\"\n"]
 
 end
 

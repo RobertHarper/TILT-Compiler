@@ -1222,27 +1222,40 @@ struct
 	    fun useSlaves slavesLeft state = 
 		let val (state as (_, ready, _, _, _)) = newState state
 		in  if (stateDone state)
-			then 	
-			    let fun mapper u = 
-				(case get_status u of
-				     DONE         t => let val t = Time.toReal t
-						       in if (t>=1.0) then SOME(u,t) else NONE
-						       end
-				   | READY        t => (print "Ready\n";     NONE)
-				   | PENDING      t => (print "Pending\n";   NONE)
-				   | ASSEMBLING   t => (print "Assembling\n"; NONE)
-				   | PROCEEDING   t => (print "Proceeding\n"; NONE)
-				   | WAITING => error "Unit still waiting for compilation!")
-				val unsorted = List.mapPartial mapper units
-				fun greater ((_,x),(_,y)) = x > (y : real)
-				val sorted = ListMergeSort.sort greater unsorted
-				val _ = chat "------- Times (>1s) to compile files in ascending order -------\n"
-				val _ = app (fn (unit,t) => 
-					     let val t = (Real.realFloor(t * 100.0)) / 100.0
-					     in  chat (unit ^ (Util.spaces (20 - (size unit))) ^
+		      then 	
+			  let fun mapper u = 
+			      (case get_status u of
+				   DONE         t => let val t = Time.toReal t
+						     in if (t>=1.0) then SOME(u,t) else NONE
+						     end
+				 | READY        t => (print "Ready\n";     NONE)
+				 | PENDING      t => (print "Pending\n";   NONE)
+				 | ASSEMBLING   t => (print "Assembling\n"; NONE)
+				 | PROCEEDING   t => (print "Proceeding\n"; NONE)
+				 | WAITING => error "Unit still waiting for compilation!")
+			      val unsorted = List.mapPartial mapper units
+			      fun greater ((_,x),(_,y)) = x > (y : real)
+			      val sorted = ListMergeSort.sort greater unsorted
+			      val _ = chat "------- Times to compile files in ascending order -------\n"
+			      val (underOne,overOne) = List.partition (fn (_,t) => t < 1.0) sorted
+			      val (underTen, overTen) = List.partition (fn (_,t) => t < 10.0) overOne
+			      val (underThirty, overThirty) = List.partition (fn (_,t) => t < 30.0) overOne
+			      val _ = (print (Int.toString (length underOne));
+				       print " files under 1.0 second.\n")
+			      val _ = (print (Int.toString (length underTen));
+				       print " files from 1.0 to 10.0 seconds.\n")
+			      val _ = (print (Int.toString (length overTen));
+				       print " files from 10.0 to 30.0 seconds:  ";
+				       chat_strings 40 (map #1 overThirty); print "\n")
+			      val _ = (print (Int.toString (length overThirty));
+				       print " files over 30.0 seconds:\n")
+			      val _ = app (fn (unit,t) => 
+					   let val t = (Real.realFloor(t * 100.0)) / 100.0
+					     in  chat ("  " ^ unit ^ 
+						       (Util.spaces (20 - (size unit))) ^
 						       " took " ^ 
 						       (Real.toString t) ^ " seconds.\n")
-					     end) sorted
+					     end) overThirty
 			    in  COMPLETE (Time.now())
 			    end
 		    else
@@ -1348,7 +1361,7 @@ struct
 			    val _ = (case prev of
 					 PROCESSING _ => ()
 				       | _ => chat "  [All processors working!]\n")
-			    val _ = if (diff > 15.0)
+			    val _ = if (diff > 30.0)
 					then 
 					    let val left = stateSize state
 					    in  (makeGraph'(mapfile,NONE); 

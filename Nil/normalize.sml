@@ -1361,44 +1361,7 @@ struct
 			   handle e => (print "type_of failed on ";
 					Ppnil.pp_exp (#2 arg); raise e))
 
-  fun nilprim_uses_carg np =
-	(case np of
-	     record _ => false
-	   | select _ => false
-	   | roll => false
-	   | unroll => false
-	   | project_known_record _ => false
-	   | project_known _ => false
-	   | project _ => true
-	   | inject_known_record _ => false
-	   | inject_known _ => false
-	   | inject _ => true
-           | box_float _ => false
-           | unbox_float _ => false
-           | make_exntag => false
-           | inj_exn _ => false
-           | make_vararg _ => true
-           | make_onearg _ => true
-           | peq => true)
 
-  fun aggregate_uses_carg (Prim.OtherArray false) = true
-    | aggregate_uses_carg (Prim.OtherVector false) = true
-    | aggregate_uses_carg _ = false
-
-  fun prim_uses_carg p =
-	(case p of
-	     array2vector t => aggregate_uses_carg t
-	   | vector2array t => aggregate_uses_carg t
-	   |  create_table t => aggregate_uses_carg t
-	   |  create_empty_table t => aggregate_uses_carg t
-	   |  sub t => aggregate_uses_carg t
-	   |  update t => aggregate_uses_carg t
-	   |  length_table t => aggregate_uses_carg t
-	   |  equal_table t => aggregate_uses_carg t
-	   | _ => true)
-
-  fun allprim_uses_carg (NilPrimOp np) = nilprim_uses_carg np
-    | allprim_uses_carg (PrimOp p) = prim_uses_carg p
 
    
   fun strip_singleton (D : context,kind : kind) : kind = 

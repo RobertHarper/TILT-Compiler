@@ -28,12 +28,6 @@ fun sort (gt:int*int->bool) l =
 
 fun gen (prev,i) = if (i = 0) then prev else gen(i::prev,i-1)
 fun square(l,i) = if (i=0) then l else square(l @ l,i-1)
-fun for(start,stop,f) = 
-    let fun loop i = if i > stop then () else (f i; loop(i+1))
-    in
-	loop start
-    end
-(* fun doit() = (for(1,40,fn _ => sort (op >) (square(gen([],10),9)))) *)
 fun doit() = for(1,2,fn _ => sort (op >) (square(gen([],10),9)))
 
 in

@@ -155,7 +155,8 @@ struct
 		       in  add_instr(SLL(offset,IMM 2, byteOffset));
 			   RREA(base, byteOffset)
 		       end)
-      in  add_instr(MUTATE(ea, newval,NONE));
+      in  incMutate();
+	  add_instr(MUTATE(ea, newval,NONE));
 	  (empty_record, state)
       end
 
@@ -378,7 +379,8 @@ struct
 	    add_instr(ILABEL gtop);        (* top of loop *)
 	    add_instr(S4ADD(i,REG dest,tmp));
 	    if isptr
-		then add_instr(MUTATE(REA(tmp,0),v,NONE))
+		then (incMutate();
+		      add_instr(MUTATE(REA(tmp,0),v,NONE)))
 	    else add_instr(STORE32I(REA(tmp,0),v)); (* allocation *)
 	    add_instr(SUB(i,IMM 1,i));
 	    add_instr(ILABEL gbottom);

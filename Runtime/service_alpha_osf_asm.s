@@ -110,7 +110,7 @@ thunk_loop:
 	ldl	$at, ($16)				# fetch current thunk
 	ldl	$27, ($at)				# fetch code pointer
 	ldl	$0, 4($at)				# fetch type env
-	ldl	$2, 8($at)				# fetch term env
+	ldl	$1, 8($at)				# fetch term env
 	lda	EXNPTR_REG, global_exnrec		# install global handler
 	stl	$sp, 4(EXNPTR_REG)			# initialize the stack pointer
 	jsr	$26,  ($27)				# jump to thunk

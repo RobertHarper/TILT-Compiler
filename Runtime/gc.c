@@ -406,15 +406,8 @@ void GC(Thread_t *curThread)
   }
 
   /* If requestInfo is zero, then the write buffer is full and we must GC.
-     Otherwise, see if the request is already satisfied or can be satisfied
-     by allocating from the current heap */
+     Otherwise, try allocating from the current heap */
   if (curThread->requestInfo != 0) {
-    if (curThread->requestInfo + self->alloc <= self->limit) {
-      printf("Warning: GC request already satisfied by current region.\n");
-      printf("         %d + %d <= %d\n",  curThread->requestInfo,
-	     self->alloc, self->limit);
-      scheduler(self);
-    }
     if (GCAllocate(self, curThread->requestInfo))
       scheduler(self);
   }

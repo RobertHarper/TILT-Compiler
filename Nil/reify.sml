@@ -80,7 +80,7 @@ struct
       | reify_exp ctxt (Prim_e (p, cons, exps), pset) =
 	  let 
              val pset' = 
-                   if (Normalize.allprim_uses_carg p) then
+                   if (NilUtil.allprim_uses_carg p) then
                       reify_cons_rt (cons, pset)
                    else
                       pset
