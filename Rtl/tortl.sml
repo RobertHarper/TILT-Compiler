@@ -133,7 +133,7 @@ val debug_bound = ref false
 		 varmap : varmap,
 		 convarmap : convarmap,
 		 gcstate : gcstate}
-   fun make_state() : state = {env = NilContext.empty(),
+   fun make_state() : state = {env = NilContext.empty,
 			       varmap = VarMap.empty,
 			       convarmap = VarMap.empty,
 			       gcstate = [GC_INF]}
@@ -229,11 +229,6 @@ val debug_bound = ref false
 			  then (print "inserting kind with unreduced k = \n";
 				Ppnil.pp_kind k; print "\n")
 		      else ()
-	      val k = NilStatic.kind_reduce(ctxt,k) 
-	      val _ = if (!debug)
-			  then (print "inserting kind with reduced k = \n";
-				Ppnil.pp_kind k; print "\n")
-		      else ()
 	  in  Stats.subtimer("tortl_insert_kind_plain",
 			  NilContext.insert_kind)(ctxt,v,k) 
 	  end
@@ -243,7 +238,7 @@ val debug_bound = ref false
 				 Ppnil.pp_con c; print "\n")
 		       else ()
 	   in  Stats.subtimer("tortl_insert_kind_equation",
-			   NilContext.insert_kind_equation)(ctxt,v,c)
+			   NilContext.insert_kind_equation)(ctxt,v,c,k)
 	   end
       in
 	  (case (k,copt) of
@@ -414,18 +409,10 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 			 | NONE => NONE)
 
 	 | (Proj_c _) =>
-	       let fun loop (Proj_c (c,l)) acc = loop c (l::acc)
-		     | loop (Var_c v) acc = (v,acc)
-		     | loop _ _ = error "projection is not a chain of projections from a variable"
-		   val (v,labels) = loop con []
-
-(*
-  val _ = if (!debug)
-		       then (Ppnil.pp_con con; print "\n";
-			     Ppnil.pp_kind kind; print "\n";
-			     app (fn l => (Ppnil.pp_label l; print ".")) labels; print "\n")
-		   else ()
-*)
+	       (let fun koop (Proj_c (c,l)) acc = koop c (l::acc)
+		     | koop (Var_c v) acc = (v,acc)
+		     | koop _ _ = error "projection is not a chain of projections from a variable"
+		   val (v,labels) = koop con []
 		   fun loop acc _ [] = rev acc
 		     | loop acc (Record_k fields_seq) (label::rest) = 
 		       let fun extract acc [] = error "bad Proj_c"
@@ -440,7 +427,7 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 					   in  if (length temp > 3)
 						then NONE else SOME(wrap temp)
 					   end
-	       in  case (getconvarrep' state v) of
+	       in  (case (getconvarrep' state v) of
 		       SOME(_,SOME(VINT _),_) => error "expect constr record: got int"
 		     | SOME(_,SOME(VREAL _),_) => error "expect constr record: got real"
 		     | SOME(_,SOME(VRECORD _),_) => error "expect constr record: got term record"
@@ -451,8 +438,8 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 		     | SOME(SOME(VREGISTER (F _)),_,_) => error "constructor in float reg"
 		     | SOME(SOME(VGLOBAL (l,_)),_,kind) => indices (fn x => COMPUTE(Projlabel_p(l,0::x))) kind
 		     | SOME(NONE,NONE,_) => error "no info on convar"
-		     | NONE => NONE
-	       end
+		     | NONE => NONE) 
+	       end handle e => NONE)
 	 | (Let_c _) => NONE
 	 | (App_c _) => NONE
 	 | (Typecase_c _) => NONE
@@ -1750,31 +1737,39 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		      val iregs = (cregsi @ cregsi' @ 
 				   (map (coercei "call") eregs) @
 				   (map (coercei "call") eregs'))
+
 		      val fregs = map coercef efregs
-		      val dest = alloc_reg state rescon
-		      val results = (case dest of
-					 F fr => ([],[fr])
-				       | I ir => ([ir],[]))
+
 		      fun do_call return_opt = 
-			  add_instr(CALL{extern_call = extern_call,
-					 func=fun_reglabel,
-					 return=return_opt,
-					 args=(iregs,fregs),
-					 results=results,
-					 tailcall=(case return_opt of
+			  let val tailcall=(case return_opt of
 						       SOME _ => true
-						     | NONE => false),
-					 save=SAVE(getLocals())})
-		      val result = ((case (context,#elim_tail_call(!cur_params)) of
-					((NOTID,_) | (_, false)) => do_call NONE
-				      | (ID r,true) =>  
-					    if (selfcall)
-						then (shuffle_iregs(iregs,getArgI());
-						      shuffle_fregs(fregs,getArgF());
-						      add_instr(BR (getTop())))
-					    else do_call (SOME r));
-				    (VAR_LOC(VREGISTER dest), rescon,
-				     new_gcstate state))
+						     | NONE => false)
+			      val dest = if tailcall
+					     then getResult()
+					 else alloc_reg state rescon
+			      val results = (case dest of
+						 F fr => ([],[fr])
+					       | I ir => ([ir],[]))	      
+			      val _ = add_instr(CALL{extern_call = extern_call,
+						     func=fun_reglabel,
+						     return=return_opt,
+						     args=(iregs,fregs),
+						     results=results,
+						     tailcall = tailcall,
+						     save=SAVE(getLocals())})
+			  in  dest
+			  end
+		      val dest = (case (context,#elim_tail_call(!cur_params),selfcall) of
+					(NOTID,_,_) => do_call NONE
+				      | (_, false,_) => do_call NONE
+				      | (ID r,true,true) =>  
+					    (shuffle_iregs(iregs,getArgI());
+					     shuffle_fregs(fregs,getArgF());
+					     add_instr(BR (getTop()));
+					     alloc_reg state rescon)
+				      | (ID r,true,false) => do_call (SOME r))
+		      val result = (VAR_LOC(VREGISTER dest), rescon,
+				     new_gcstate state)
 		      val _ = add_instr (ICOMMENT ((case openness of
 							Open => error "no open calls permitted here"
 						     | Code => "done making a direct call "
@@ -1829,10 +1824,9 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 
 
 
-		      val bl = alloc_code_label "exn_body"
 		      val hl = alloc_code_label "exn_handler"
 		      val hlreg = alloc_regi LABEL
-		      val nl = alloc_code_label "exn_after"
+		      val bl = alloc_code_label "exn_after"
 
 		      val reps = (LABEL :: LABEL :: TRACE :: local_int_reps)
 
@@ -1859,15 +1853,9 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 
 
 		      (* --- now the code for handler --- *)
-		      val hstate = new_gcstate state
-		      val xr = alloc_named_regi exnvar TRACE;
-		      val hstate = add_var hstate (exnvar,I xr,exncon)
-		      val _ = (add_instr(ILABEL hl);
-			       add_instr(MV(exnarg,xr)))
+		      val _ = add_instr(ILABEL hl)
 
-
-
-		      (* --- restore the int registers --- *)
+		      (* --- restore the int registers - stack-pointer FIRST --- *)
 		      val _ = let 
 				  val int_regs =
 				      (case fpbase of
@@ -1881,6 +1869,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			      in f (int_regs,4)
 			      end
 
+
 		      (* --- restore the float registers --- *)			  
 		      val _ = let fun f (base, h :: t,offset) = 
 			                    (add_instr(LOADQF(EA(base,offset),h));
@@ -1891,6 +1880,15 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 				    | NONE => ())
 			      end
 			  
+		      (* --- now that stack-pointer is restored, 
+		         ---    we can move the exn arg 
+		         ---    we can call new_gcstate 
+		         ---    note that since the exnarg and ra register are the same
+		                  the exn arg must be moved before the gc_check *)
+		      val xr = alloc_named_regi exnvar TRACE
+		      val _ = add_instr(MV(exnarg,xr))
+		      val hstate = new_gcstate state
+		      val hstate = add_var hstate (exnvar,I xr,exncon)
 
 
                       (* --- restore exnptr; compute the handler; move result into same register
@@ -2734,7 +2732,6 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
       end
 
 
-
   and xprim'(state : state, prim,clist,elist,context) : loc_or_val * con * state = 
       let 
 	  fun error' s = (print "nilprimexpression was:\n";
@@ -2742,7 +2739,10 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 			  print "\n";
 			  error s)
 	  open Prim
-	  val vlcon_list = map (fn e => xexp(state,fresh_var(),e,NONE,NOTID)) elist
+	  val (vlcon_list,state) = 
+	      foldl_list (fn (e,state) => let val (r,c,state) = xexp(state,fresh_var(),e,NONE,NOTID)
+					  in  ((r,c),state)
+					  end) state elist
 	  val vl_list = map #1 vlcon_list
 	  val int32 = Prim_c(Int_c W32, []) 
 	  val float64 = Prim_c(Float_c F64, []) 
@@ -3337,7 +3337,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 	    val v = fr
 	    (* store object tag and profile tag with alignment so that
 	     raw data is octaligned;  then loop through and initialize *)
-	    val state = new_gcstate state
+
 	in 
 	    (* if array is too large, call runtime to allocate *)
 	    add_instr(LI(0w4096,cmptemp));
@@ -3383,7 +3383,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		add_instr(BCNDI(GE,i,ftop,true));
 		do_code_align();
 		add_instr(ILABEL fafter);
-		state
+		new_gcstate state   (* after all this allocation, we cannot merge *)
 	end (* end of floatcase *)
 
 
@@ -3502,7 +3502,7 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 				      add_instr(S4ADD(i,REG dest,tmp));
 				      add_instr(STORE32I(EA(tmp,0),ir))));
 		     add_instr(ICOMMENT "initializing int/ptr array end");
-		     state
+		     new_gcstate state   (* after all this allocation, we cannot merge *)
 		 end)
 	    end
 
@@ -3536,7 +3536,8 @@ val _ = (print "alloc_global with v = "; Pprtl.pp_var v; print "\n";
 		     general_init_case(ptag,tag,dest,
 				       VAR_LOC(VREGISTER(I gctemp)),
 				       len,v,gafter);
-		 state)
+		     (* after all this allocation, we cannot merge *)
+		     new_gcstate state)
 	    end
 
 
