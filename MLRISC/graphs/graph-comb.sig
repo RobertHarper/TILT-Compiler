@@ -8,16 +8,3 @@ sig
    val sums  : ('n,'e,'g) Graph.graph list -> ('n,'e,'g) Graph.graph
 
 end
-
-(* 
- * $Log$
-# Revision 1.2  2001/12/13  16:32:00  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:15:48  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:07:19  pscheng
-# *** empty log message ***
-#
- *)

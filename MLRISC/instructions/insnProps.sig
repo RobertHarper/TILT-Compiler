@@ -73,21 +73,3 @@ signature INSN_PROPERTIES = sig
    val defUse : C.cellclass -> I.instruction -> (int list * int list)
       (* def/use lists *)
 end
-
-
-
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:12  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:16:35  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:08:10  pscheng
-# *** empty log message ***
-#
- * Revision 1.3  1998/05/25 15:11:04  george
- *   Fixed RCS keywords
- *
- *)

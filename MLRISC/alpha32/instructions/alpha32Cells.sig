@@ -46,25 +46,3 @@ signature ALPHA32CELLS = sig
   val addReg  : int * cellset -> cellset (* addCell GP *)
   val addFreg : int * cellset -> cellset (* addCell FP *)
 end
-
-
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:50  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:15:11  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:06:43  pscheng
-# *** empty log message ***
-#
- * Revision 1.2  1998/10/06 14:07:28  george
- * Flowgraph has been removed from modules that do not need it.
- * Changes to compiler/CodeGen/*/*{MLTree,CG}.sml necessary.
- * 						[leunga]
- *
- * Revision 1.1  1998/05/19 15:48:49  george
- *   Version 110.5
- *
- *)

@@ -69,16 +69,3 @@ sig
   val can'tMoveDown : exp -> bool  (* can't be moved downward *)
   val can'tMoveUp   : exp -> bool  (* can't be moved upward *)
 end
-
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:48  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:14:53  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:06:21  pscheng
-# *** empty log message ***
-#
- *)

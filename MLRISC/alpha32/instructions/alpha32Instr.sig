@@ -88,22 +88,3 @@ signature ALPHA32INSTR = sig
 
   | CALL_PAL of {code:osf_user_palcode, def:int list, use:int list}
 end
-
-
-
-
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:51  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:15:13  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:06:46  pscheng
-# *** empty log message ***
-#
- * Revision 1.3  1998/05/25 15:10:47  george
- *   Fixed RCS keywords
- *
- *)

@@ -24,19 +24,3 @@ signature LABEL_COMP = sig
     (* compile a call involving a label *)
 
 end
-
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:11  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:16:27  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:08:07  pscheng
-# *** empty log message ***
-#
- * Revision 1.1.1.1  1998/04/08 18:39:01  george
- * Version 110.5
- *
- *)

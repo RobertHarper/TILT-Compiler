@@ -113,26 +113,3 @@ signature HPPAINSTR = sig
 		  impl:instruction list option ref, tmp: ea option}
 
 end
-
-
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:10  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:16:23  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:08:03  pscheng
-# *** empty log message ***
-#
- * Revision 1.4  1998/10/06 14:04:30  george
- *   The instruction sequence FCMP, FTEST, FBCC is being replaced
- *   by the composite instruction FBRANCH.  This makes scheduling and
- *   other tasks easier.  Also, added BLR and BL in the instruction set.
- * 							[leunga]
- *
- * Revision 1.3  1998/05/25 15:10:55  george
- *   Fixed RCS keywords
- *
- *)

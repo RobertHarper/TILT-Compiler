@@ -9,16 +9,3 @@ sig
                  } -> unit
 
 end
-
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:31:40  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:14:25  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:05:55  pscheng
-# *** empty log message ***
-#
- *)

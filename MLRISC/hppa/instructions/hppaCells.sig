@@ -47,26 +47,3 @@ signature HPPACELLS = sig
   val addReg  : int * cellset -> cellset (* addCell GP *)
   val addFreg : int * cellset -> cellset (* addCell FP *)
 end
-
-
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:08  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:16:22  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:08:01  pscheng
-# *** empty log message ***
-#
- * Revision 1.2  1998/10/06 14:04:28  george
- *   The instruction sequence FCMP, FTEST, FBCC is being replaced
- *   by the composite instruction FBRANCH.  This makes scheduling and
- *   other tasks easier.  Also, added BLR and BL in the instruction set.
- * 							[leunga]
- *
- * Revision 1.1  1998/05/19 15:49:20  george
- *   Version 110.5
- *
- *)
