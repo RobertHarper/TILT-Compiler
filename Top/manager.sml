@@ -776,7 +776,11 @@ structure Manager :> MANAGER =
       in  app remove units
       end
 
-  fun buildRuntime() = (Util.system("cd Runtime; gmake purge; gmake runtime"); ())
+  fun buildRuntime rebuild = 
+      let val command = if rebuild then "cd Runtime; gmake purge; gmake runtime"
+			else "cd Runtime; gmake runtime"
+      in  if Util.system command then () else error "Error in building runtime"
+      end
 
   (* getArgs:
      Takes a list of string arguments and returns a 4-tuple.
