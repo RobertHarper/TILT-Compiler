@@ -233,10 +233,11 @@ mltm ctm2mltm(struct tm *tm)
   return ((mltm) result);
 }
 
-string posix_ascTime (mltm unused)
+string posix_ascTime (mltm mltm)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  char *result = asctime((struct tm *) mltm);
+  value_t res = alloc_string(strlen(result),result,&cur_alloc_pointer,cur_alloc_limit);
+  return (word8vector) res;
 }
 
 mltm posix_localTime (intpair sec_musec)
