@@ -122,3 +122,4 @@
 0122 [open]	overflow in compiler
 0123 [open]	possible nontermination
 0124 [open]	flexible records
+0125 [open]	BUG in get_record
