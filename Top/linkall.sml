@@ -2,7 +2,7 @@ signature LINKALL =
 sig
     val compile_prelude : bool * string -> string (* use_cache * input filename -> asm filename *)
     val compile : string -> string (* input filename -> executable filename *)
-    val compile' : string list -> string (* input filename -> executable filename *)
+    val compiles : string list -> string (* input filename -> executable filename *)
     val test : string -> string (* input filename -> executable filename *)
 end
 
@@ -18,10 +18,11 @@ struct
 	(case (!cur_platform) of
 	     ALPHA => Linkalpha.link arg
 	   | PPC => error "no PPC") (* Linkppc.comp_file arg *)
-    fun specific_comp_file debug arg = 
-	(case (!cur_platform) of
-	     ALPHA => (if debug then Linkalpha.test else Linkalpha.compile) arg
-	   | PPC => error "no PPC") (* Linkppc.comp_file arg *)
+    fun specific_comp_files (debug,args) = 
+	(case (args,!cur_platform) of
+	     ([arg],ALPHA) => [(if debug then Linkalpha.test else Linkalpha.compile) arg]
+	   | (_,ALPHA) => (if debug then error "no test" else Linkalpha.compiles) args
+	   | (_,PPC) => error "no PPC") (* Linkppc.comp_file arg *)
     val cached_prelude = ref (NONE : (string * Linkrtl.Rtl.local_label) option)
     fun specific_reparse_prelude arg = 
 	let val (littleEndian,compile_prelude) = 
@@ -102,14 +103,13 @@ struct
 
     
 
-    fun assemble_file (debug,infile) = specific_comp_file debug infile
-    val assemble_file = wrapper "toasm" assemble_file
+    val specific_comp_files = wrapper "toasm" specific_comp_files
 
     fun compile_help _ [] = error "compile given no files"
       | compile_help debug src_files =
 	let val last_srcfile = List.last src_files
 	    val outname = last_srcfile ^ ".exe"
-	    val asm_labels = map (fn f => assemble_file (debug,f)) src_files
+	    val asm_labels = specific_comp_files (debug,src_files)
 	    val (asm_files,local_labels) = 
 		(case (!cached_prelude) of
 		     SOME (filename,label) => (filename::(map #1 asm_labels),
@@ -122,9 +122,9 @@ struct
 	in  outname
 	end
 
-    fun compile filename = compile_help false [filename]
     fun test filename = compile_help true [filename]
-    fun compile' filenames = compile_help false filenames
+    fun compile filename = compile_help false [filename]
+    fun compiles filenames = compile_help false filenames
     fun compile_prelude arg = specific_reparse_prelude arg
 	
 
@@ -136,7 +136,7 @@ struct
 
     val compile_prelude = reset_wrapper compile_prelude
     val compile = reset_wrapper compile
-    val compile' = reset_wrapper compile'
+    val compiles = reset_wrapper compiles
     val test = reset_wrapper test
 
 

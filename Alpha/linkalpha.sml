@@ -5,6 +5,7 @@ sig
     (* add table info into corresponding asm file *)
     val link : string * (Rtl.local_label list) -> unit 
     val compile : string -> string * Rtl.local_label
+    val compiles : string list -> (string * Rtl.local_label) list
     val test : string -> string * Rtl.local_label
 end
 
@@ -175,11 +176,15 @@ struct
     in ()
     end
 
-  fun compile filename = 
-      let val rtlmod = Linkrtl.compile filename
-	  val Rtl.MODULE{main,...} = rtlmod
-      in  (comp(filename,rtlmod),main)
+  fun compiles filenames = 
+      let val rtlmods = Linkrtl.compiles filenames
+	  fun doit (filename,rtlmod) = let val Rtl.MODULE{main,...} = rtlmod
+				       in  (comp(filename,rtlmod),main)
+				       end
+      in  Listops.map2 doit (filenames,rtlmods)
       end
+  fun compile filename = hd(compiles [filename])
+
   fun test filename = 
       let val rtlmod = Linkrtl.test filename
 	  val Rtl.MODULE{main,...} = rtlmod
