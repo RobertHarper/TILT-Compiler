@@ -101,6 +101,8 @@ functor IntegerLiveness(
 		val vector = Array.fromList sets
 
 		fun lookup' index = #1(Array.sub(vector, index))
+		    handle Subscript => (print "index = "; print (Int.toString index); 
+					 print "\n"; raise Subscript)
 	      in
 		liveness' triples lookup'
 	      end

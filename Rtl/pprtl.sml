@@ -290,8 +290,7 @@ struct
 	  COMMENT (s) => String ("### " ^ s)
 	| STRING (s) =>  String (".ascii \""^s^"\"")
 	| INT32 (bi) =>  String (".long "^(word2str bi))
-	| INT_FLOATSIZE (a) =>   String (".long_floatsize "^(word2str a))
-	| FLOAT (s) =>  String (".double "^s)
+	| FLOAT s =>  String (".double "^s)
 	| DATA (l) => String(".data "^(label2s l))
 	| ARRAYI (size,bi) =>  String (".long "^word2str bi^" : "^
 				     (i2s size))

@@ -50,8 +50,11 @@ int my_mmap(caddr_t start, int size, int prot)
 #ifdef SHOW_MMAP
   printf ("mmap (%d,%d,%d)\n",start,size,prot);
   if (prot == (PROT_READ | PROT_WRITE)) {
-    *((int *)(start)) = 255;
-    printf("written to %u\n",start);
+    caddr_t end = start + size - 4;
+    *((int *)(start)) = 666;
+    *((int *)(end)) = 666;
+    printf("written 666 to %u: read back %d\n",start,*((int *)(start)));
+    printf("written 666 to %u: read back %d\n",end,*((int *)(end)));
   }
 #endif
   return v;
@@ -177,6 +180,10 @@ Stack_t* Stack_Alloc(StackChain_t *parent)
   if (res->rawbottom == -1)
       exit(-1);
   res->rawtop    = res->rawbottom + size;
+  res->bottom = res->rawbottom + res->safety;
+  res->top    = res->rawtop    - res->safety;
+  res->valid  = 1;
+
   if (!(res->rawtop < heapstart))
     printf("count = %d, res->rawtop , heapstart = %d  %d\n", count,res->rawtop, heapstart);
   assert(res->rawtop < heapstart);
@@ -184,12 +191,9 @@ Stack_t* Stack_Alloc(StackChain_t *parent)
   wordset((void *)(res->bottom+semantic_garbage_offset),1,
 	 res->top-res->bottom);
 #endif
+  my_mprotect(0,(caddr_t) res->bottom, res->top - res->bottom, PROT_READ | PROT_WRITE);
   my_mprotect(1,(caddr_t) res->rawbottom,         res->safety,PROT_NONE);
   my_mprotect(2,(caddr_t) res->rawtop-res->safety,res->safety,PROT_NONE);
-
-  res->bottom = res->rawbottom + res->safety;
-  res->top    = res->rawtop    - res->safety;
-  res->valid  = 1;
 
 #ifdef DEBUG
   printf("Stack Object: bottom = %d,    top = %d\n",res->bottom,res->top);

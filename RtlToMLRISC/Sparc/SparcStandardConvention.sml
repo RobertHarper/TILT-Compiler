@@ -143,7 +143,10 @@ functor SparcStandardConvention(
 	 MLTree.CODE(Basis.restoreReturnIfCall frame body),
 	 MLTree.CODE[Basis.deallocateFrame frame],
 	 escape,
+	 MLTree.CODE[MLTree.JMP(MLTree.ADD(MLTree.REG IntegerConvention.returnPointer,
+					   MLTree.LI 8), [])],
 	 MLTree.CODE[MLTree.RET]]
+	    (* not RET since RET uses register windows *)
 
 end
 

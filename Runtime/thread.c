@@ -291,9 +291,15 @@ void work(SysThread_t *sth)
   assert(th->status == 1);
   if (th->saveregs[ALLOCLIMIT_REG] == StopHeapLimit)   /* Starting thread for the first time */
     {
+int i;
       value_t stack_top = th->stackchain->stacks[0]->top;
+for (i=64; i<128; i+=4) {
+*((int *)(stack_top-i)) = 10000 + i;
+if ((*((int *)(stack_top-i))) != (10000 + i))
+printf ("Failed at i = %d\n",i);
+}
       th->saveregs[THREADPTR_REG] = (long)th;
-      th->saveregs[SP_REG] = (long)stack_top;
+      th->saveregs[SP_REG] = (long)stack_top - 64; /* Get some initial room so gdb won't freak */
       th->saveregs[ALLOCPTR_REG] = sth->alloc;
       th->saveregs[ALLOCLIMIT_REG] = sth->limit;
 
@@ -301,14 +307,22 @@ void work(SysThread_t *sth)
 	printf("SysThread %d: starting user thread %d (%d) with %d < %d\n",
 	     sth->stid, th->tid, th->id, 
 	     th->saveregs[ALLOCPTR_REG], th->saveregs[ALLOCLIMIT_REG]);
-      *((int *)(268943328)) = 255;
-      printf("written to %u\n",268943328);
-      *((int *)(268943336)) = 255;
-      printf("written to %u\n",268943336);
       if (th->num_add == 0) 
-	start_client(th,&(th->start_address), 1);
+	  start_client(th,&(th->start_address), 1);
+
       else
-	start_client(th,(value_t *)th->start_address, th->num_add);
+	{
+	  value_t *u = ((value_t *)th->start_address);
+	  value_t *v = (value_t *)(*u);
+	  printf ("addr = %d\n",u);
+	  printf ("addr[0] = %d\n",v);
+	  printf ("addr[0] = %d\n",u[1]);
+	  printf ("addr[0] = %d\n",u[2]);
+	  printf ("addr[0][0] = %d\n",v[0]);
+	  printf ("addr[0][1] = %d\n",v[1]);
+	  printf ("addr[0][2] = %d\n",v[2]);
+	  start_client(th,(value_t *)th->start_address, th->num_add);
+	}
       assert(0);
     }
   else  /* Thread not starting for first time */
@@ -333,7 +347,6 @@ void work(SysThread_t *sth)
 static void* systhread(void* addr)
 {
   SysThread_t *st = getSysThread();
-  test();
   st->stack = (int)(&st);
   work(st);
   assert(0);

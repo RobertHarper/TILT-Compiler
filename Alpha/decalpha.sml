@@ -435,7 +435,6 @@ structure Machine =
 	else
 	  (".ascii \"" ^ (fixupString s) ^ "\""))
     | msData (INT32 (w))  = single (".long " ^ (wms w))
-    | msData (INT_FLOATSIZE (w)) = single (".quad " ^ (wms w))
     | msData (FLOAT (f))  = single (".t_floating " ^ (fixupFloat f))
     | msData (DATA (label)) = single (".long " ^ (msLabel label))
     | msData (ARRAYI (count, w)) = single (".long " ^ (wms w) ^ " : " ^ (Int.toString count))

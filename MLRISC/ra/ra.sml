@@ -1210,6 +1210,9 @@ end (* functor *)
 
 (*
  * $Log$
+# Revision 1.4  99/02/26  02:05:48  pscheng
+# *** empty log message ***
+# 
 # Revision 1.3  99/02/25  10:11:58  pscheng
 # *** empty log message ***
 # 

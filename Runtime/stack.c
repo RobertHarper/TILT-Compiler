@@ -332,10 +332,12 @@ int findretadd(value_t *sp_ptr, value_t *cur_retadd_ptr, value_t top,
 	       count++,cur_retadd,sp,top);
 #endif
 
-#ifdef little_endian
+#ifdef alpha_osf
       cur_retadd = *((int *)(sp+8*octa_offset));
 #else
-#ifdef big_endian
+#ifdef solaris
+      /* We add 8 because the return address actually contains the calling instruction and
+	 the calling instruction is followed by a dealy slot. */
       cur_retadd = *((int *)(sp+ 4*GET_FRAMESIZE((value_t) callinfo->sizes) + 8 ));
 #else
       error endian not defined

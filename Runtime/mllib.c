@@ -41,8 +41,6 @@ FILE* des2ptr(int des)
 void mllib_init()
 {
   int i=0;
-  test();
-  test();
   for (i=0; i<100; i++)
     lookahead_char[i] = -1;
   des2ptr_table[0] = stdin;
@@ -54,15 +52,7 @@ void mllib_init()
 }
 
 
-void test2()
-{
-  fwrite("abcd\n\n\n\n",1,5,stdout);
-}
 
-void test()
-{
-  test2();
-}
 
 int ml_output(value_t _des, value_t mlstring)
 {
@@ -71,6 +61,12 @@ int ml_output(value_t _des, value_t mlstring)
   char *str = (char *)mlstring;
   unsigned int tag = ((int *)mlstring)[-1];
   int bytelen = tag >> ARRLEN_OFFSET;
+  int i;
+
+  printf("ml_output called: _des = %d  F = %d   stdout = %d\n",_des,F,stdout);
+  printf("ml_output called: length = %d\n",bytelen);
+  for (i=0; i<bytelen; i++)
+    printf("    str[0] = %d\n",str[i]);
 
 #ifdef DEBUG
   if (_des <= 2)
@@ -79,7 +75,6 @@ int ml_output(value_t _des, value_t mlstring)
     }
 #endif
 
-  test();
   fwrite(str,1,bytelen,F);
 
   return 0;

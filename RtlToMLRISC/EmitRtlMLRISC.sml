@@ -1531,9 +1531,6 @@ functor EmitRtlMLRISC(
     fun INT32 value =
 	  [MLTree.PSEUDO_OP(MLRISCPseudo.Integer value)]
 
-    fun INT_FLOATSIZE value =
-	  [MLTree.PSEUDO_OP(MLRISCPseudo.IntegerFloatSize value)]
-
     fun FLOAT value =
 	  [MLTree.PSEUDO_OP(MLRISCPseudo.Float value)]
 
@@ -1575,8 +1572,6 @@ functor EmitRtlMLRISC(
 	  STRING string
       | translateData(Rtl.INT32 word32) =
 	  INT32 word32
-      | translateData(Rtl.INT_FLOATSIZE word32) =
-	  INT_FLOATSIZE word32
       | translateData(Rtl.FLOAT string) =
 	  FLOAT string
       | translateData(Rtl.DATA label) =

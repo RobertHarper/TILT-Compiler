@@ -203,8 +203,6 @@ fun replace_all_stack(arg) = stack := arg
 		end
 	fun dataitem_layout wh (COMMENT _) _ = 0
 	  | dataitem_layout wh (INT32(w)) _ = (H.storelong(i2w wh,w); 4)
-	  | dataitem_layout wh (INT_FLOATSIZE(w)) _ = 
-	    (H.storequad(i2w wh,LONGS(WORD 0w0,WORD w)); 8)
 	  | dataitem_layout wh (FLOAT(strf)) _ = 
 	    (H.storefloat(i2w wh,O.str_to_real strf); 8)
 	  | dataitem_layout wh (ARRAYI(0,_)) _ = 0

@@ -1,5 +1,9 @@
 HIGH PRIORITY
 -------------
+(-1) move special stuff from emitrtlrisc to sparc-specific version
+	ret vs retl
+	callee-save registers
+
 (0) Remove unnecessary renaming in HIL and various NIL phases; 
 	systematically rename in tonil
 

@@ -238,20 +238,16 @@ sig
   datatype labelortag = PTR of label | TAG of TilWord32.word
 
   datatype data = 
-      COMMENT of string
-    | STRING of (string)
-    | INT32 of  (TilWord32.word)
-    | INT_FLOATSIZE of (TilWord32.word)
-    | FLOAT of  (string)
-    | DATA of   (label)
-(* array of i words inited to word32 *)
-    | ARRAYI of (int * TilWord32.word)
-(* array of i words initialized to fp value in string *)
-    | ARRAYF of (int * string)
-(* array of i words initialized to label or small int *)
-    | ARRAYP of (int * labelortag)
-    | ALIGN of  (align)
-    | DLABEL of (label)
+      COMMENT  of string
+    | DLABEL   of label                   (* data segment label *)
+    | STRING   of string                  (* separate string case to avoid endian-ness issue *)
+    | INT32    of TilWord32.word      
+    | FLOAT    of string                  (* double-precision float point literal *)
+    | DATA     of label                   (* address value - label as value *)
+    | ARRAYI   of int * TilWord32.word    (* array of i words initialized to word32 *)
+    | ARRAYF   of int * string            (* array of i words initialized to fp value in string *)
+    | ARRAYP   of int * labelortag        (* array of i words initialized to label or small int *)
+    | ALIGN    of align
 
   (* _return is where the return address is expected to be passed in
      _args is where args should be passed in

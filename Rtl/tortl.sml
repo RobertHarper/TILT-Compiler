@@ -206,73 +206,47 @@ struct
 	  open TW64
 	  fun xvector (c,a : exp Array.array) : term * con * state =
 	      let 
-		  val label = fresh_data_label "string"
-		  val sz = Array.length a
-		  val (state,vl) = (Array.foldr (fn (e,(state,vls)) => 
-					 let val (a,b,state) = xexp(state,Name.fresh_var(),e,
+		  val (state,vals) = (Array.foldr (fn (e,(state,vls)) => 
+					 let val (v,_,state) = xexp(state,Name.fresh_var(),e,
 								    Nil.TraceUnknown,NOTID)
-					 in  (state,(a,b)::vls)
+					 in  (state,v::vls)
 					 end)
 				    (state,[]) a)
-		  fun layout segsize packager = 
-		  let fun pack [] = ()
-			| pack acc = packager(rev acc)
-		      fun loop ls 0 acc = (pack acc; loop ls segsize [])
-			| loop [] remain acc = pack acc
-			| loop (a::rest) remain acc = loop rest (remain-1) (a::acc)
-		  in  loop vl segsize []
-		  end
-		  fun getword(VALUE(INT w), _) = w
-		    | getword vl = (print "bad value in vector: ";
-				    print "\n";
-				    error "bad string")
-		  fun boxfloat_packager [(VALUE(REAL l),_)] = add_data(DATA l)
-		    | boxfloat_packager [(VALUE(LABEL l),_)] = add_data(DATA l)
-		    | boxfloat_packager _ = error "did not receive 1 boxed float"
-		  fun word_packager [w] = add_data(INT32(getword w))
-		    | word_packager _ = error "did not receive 1 word"
-		  fun char_packager vals = 
-		      let val (a,b,c,d) = (case (map getword vals) of
-					       [a,b,c,d] => (a,b,c,d)
-					     | [a,b,c] => (a,b,c,TW32.zero)
-					     | [a,b] => (a,b,TW32.zero,TW32.zero)
-					     | [a] => (a,TW32.zero,TW32.zero,TW32.zero)
-					     | _ => error "did not receieve 1 to 4 characters")
-			  val b = TW32.lshift(b,8)
-			  val c = TW32.lshift(c,16)
-			  val d = TW32.lshift(d,24)
-		      in  add_data(INT32 (TW32.orb(TW32.orb(a,b),TW32.orb(c,d))))
+		  fun charVector() =
+		      let fun mapper (VALUE (INT w)) = chr (TW32.toInt w)
+			    | mapper _ = error "char vector but non-INT value"
+			  val chars = map mapper vals
+		      in  add_data(STRING (String.implode chars));
+			  add_data(ALIGN LONG)
 		      end
-		  fun general_packager [(VALUE vv,_)] = 
-		        (case vv of
-			     INT w => add_data(INT32 w)
-			   | TAG w => add_data(INT32 w)
-			   | REAL l => add_data(DATA l)
-			   | RECORD (l,_) => add_data(DATA l)
-			   | VOID _ => error "got a vvoid in xvector"
-			   | LABEL l => add_data(DATA l)
-			   | CODE l => add_data(DATA l))
-		    | general_packager [_] = error "did not receive a VALUE"
-		    | general_packager _ = error "did not receive 1 value"
-		      
+		  fun wordVector() =
+		      let fun apper (VALUE v) = 
+			       (case v of
+				    INT w => add_data(INT32 w)
+				  | TAG w => add_data(INT32 w)
+				  | REAL l => add_data(DATA l)
+				  | RECORD (l,_) => add_data(DATA l)
+				  | VOID _ => error "got a vvoid in xvector"
+				  | LABEL l => add_data(DATA l)
+				  | CODE l => add_data(DATA l))
+			    | apper _ = error "vector but non value component"
+		      in  app apper vals
+		      end
 
 		  val c = #2(simplify_type state c)
-
-		  val shift_amount = (case c of
-					  Prim_c(Int_c Prim.W8, []) => 0
-					| Prim_c(Int_c Prim.W32, []) => 2
-					| Prim_c(BoxFloat_c Prim.F64, []) => 2
-					| _ => 2)
-		  val tagword = TW32.orb(TW32.lshift(TW32.fromInt sz,
-						     shift_amount + int_len_offset),intarray)
-		  val _ = add_data(COMMENT "static vector/array tag")
+		  val shiftAmount= (case c of
+					Prim_c(Int_c Prim.W8, []) => int_len_offset
+				      | Prim_c(Int_c Prim.W16, []) => error "word16 not handled"
+				      | _ => 2 + int_len_offset)
+		  val numElem = TW32.fromInt(Array.length a)
+		  val tagword = TW32.orb(TW32.lshift(numElem, shiftAmount), intarray)
 		  val _ = add_data(INT32 tagword)
+		  val label = fresh_data_label "vectorData"
 		  val _ = add_data(DLABEL label)
 		  val _ = (case c of
-			       Prim_c(Int_c Prim.W8, []) => layout 4 char_packager
-			     | Prim_c(Int_c Prim.W32, []) => layout 1 word_packager
-			     | Prim_c(BoxFloat_c Prim.F64, []) => layout 1 boxfloat_packager
-			     | _ => layout 1 general_packager)
+			       Prim_c(Int_c Prim.W8, []) => charVector()
+			     | Prim_c(Int_c Prim.W16, []) => error "word16 not handled"
+			     | _ => wordVector())
 	      in  (VALUE(LABEL label), Prim_c(Vector_c, [c]), state)
 	      end
       in
