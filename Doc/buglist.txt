@@ -94,3 +94,22 @@ structure Outer = Maker(structure Middle1 = Middle1
 		signal handler is also called.  For this case, we just return.
 	The OS handler may not be able to detect the correct answer
 		if the floating point instruction's src and dest registers are the same.
+
+(13) backend liveness analysis is too conservative
+        We recently fixed a backend bug where liveness analysis was not taking
+        COMPUTE's into account, so that a variable could be live long after
+        its type was considered dead; when the type was needed to GC this
+        variable, the program crashed.
+
+        The fix was to ensure that the type was always live whenever the
+        variable was, by defining the pseudoregisters used by an instruction
+        to include the variables in the representation of the
+        pseudoregisters used.
+
+        This is too conservative; we don't need to keep the type live
+        if we know the variable will not be live across a function or
+        GC call.  A better fix is to undo this last change to defUse
+        and instead define function/GC calls to be uses of the types
+        of all variables live across the call.
+
+        
