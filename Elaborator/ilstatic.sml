@@ -182,6 +182,7 @@ fun show_state ({modunself,...}:state) =
 		     end)
 	   end
 		    
+
        and sbnd_folder (popt,selfify) (SBND(l,bnd),(state:state,rev_sbnds)) = 
 	   let val popt = mapopt (fn p => join_path_labels(p,[l])) popt
 	   in  (case bnd of
@@ -200,14 +201,18 @@ fun show_state ({modunself,...}:state) =
 			in (state,(SBND(l,this_bnd))::rev_sbnds)
 			end)
 	   end
+
+
        and do_sdecs (popt,selfify) (state:state,sdecs) = 
 	   let val (_,rev_sdecs') = foldl (sdec_folder (popt,selfify)) (state,[]) sdecs
 	   in  rev rev_sdecs'
 	   end
+
        and do_sbnds (popt,selfify) (state,sbnds) = 
 	   let val (_,rev_sbnds') = foldl (sbnd_folder (popt,selfify)) (state,[]) sbnds
 	   in  rev rev_sbnds'
 	   end
+
        and SelfifyMod (state:state,selfify) (popt: path option, module : mod) : mod = 
 	   let val x = 5
 	   in (case module of
@@ -233,6 +238,7 @@ fun show_state ({modunself,...}:state) =
 					      mhandler state, fn _ => NONE) module
 		 | _ => error "selfify_mod' given a mod which is not a functor or structure")
 	   end
+
        and SelfifySig (state:state,selfify) (popt: path option, signat : signat) : signat = 
 	   (case (selfify,signat) of
 		(_,SIGNAT_FUNCTOR (v,s1,s2,a)) => 

@@ -1365,6 +1365,7 @@ val _ = print "plet0\n"
 	    let val var = gen_var_from_symbol sym
 		val lab = symbol_label sym
 		val con = xty(context,ty)
+		val con = con_normalize(context,con)
 	    in  [(NONE, CONTEXT_SDEC(SDEC(lab,DEC_EXP(var,con,NONE,false))))]
 	    end
 	| Ast.SeqDec decs => packagedecs (xdec islocal) context decs

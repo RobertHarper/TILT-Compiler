@@ -599,15 +599,9 @@ structure Pat
        ([],_) => (case def of
 		    SOME ec_thunk => ec_thunk context
 		  | NONE => let val c = fresh_con context
-	   val _ = (TextIO.output(TextIO.stdOut,"no ec_thunk and really first c = \n");
-			pp_con c; TextIO.output(TextIO.stdOut,"\n"))
 			    val ec =  (Il.RAISE(case result_type_var of
 					     NONE => c
 					   | SOME v => CON_VAR v,bindexn_exp),c)
-	   val _ = (TextIO.output(TextIO.stdOut,"no ec_thunk and returning c = \n");
-			pp_con (#2 ec); TextIO.output(TextIO.stdOut,"\n"))
-	   val _ = (TextIO.output(TextIO.stdOut,"no ec_thunk and first c = \n");
-			pp_con c; TextIO.output(TextIO.stdOut,"\n"))
 			    in ec
 			    end)
      | ((_,bound,NONE)::_,[]) => (let val (vars,cons) = (map #2 bound, map #3 bound)

@@ -608,7 +608,7 @@ structure Signature :> SIGNATURE =
 	end
 
        (* ---- coercion of a poly component to a mono/poly specification --- *)
-       fun polyval_case (ctxt : context, polyinst)
+       fun polyval_case (ctxt : context, subst as (csubst, msubst), polyinst)
 	   {name : var, (* use this name for the final binding *)
 	    path : path, (* this path is to the actual polymorphic component *)
 	    varsig_spec : (var * signat) option, (* spec might me monomorphic *)
@@ -617,8 +617,9 @@ structure Signature :> SIGNATURE =
 	    inline : bool,
 	    sdecs_actual : sdec list,
 	    con_actual : con} (* the signature of the component *)
-		  : bool * (bnd * dec * context) option = 
+		  : bool * (bnd * dec * ((var * con) list * (var * mod) list)) option = 
 	   let 
+	       val con_spec = con_subst_conmodvar(con_spec,csubst,msubst)
 	       val con_spec = 
 		   (case varsig_spec of
 			NONE => con_spec
@@ -687,7 +688,7 @@ structure Signature :> SIGNATURE =
 			     in  (true,
 				  SOME(BND_EXP(name,MODULE_PROJECT(mtemp,it_lab)),
 				       DEC_EXP(name,con_actual_tyvar,NONE,inline),
-				       ctxt))
+				       subst))
 			     end
 		       | SOME (_,s1) => 
 			   let val is_expand = is_eta_expand var_actual (sbnds_poly,sdecs_poly)
@@ -703,7 +704,8 @@ structure Signature :> SIGNATURE =
 				       else MOD_FUNCTOR(TOTAL,var_actual,s1,mtemp,inner_sig)
 			   in  (not is_expand,
 				SOME(BND_MOD(name, true, m), 
-				     DEC_MOD(name, true, s2), ctxt))
+				     DEC_MOD(name, true, s2), 
+				     subst))
 			   end))
 	       else local_error()
 
@@ -781,7 +783,7 @@ structure Signature :> SIGNATURE =
 	end
 
    and xcoerce_structure (polyinst : polyinst,
-			  context : context,
+			  ctxt : context,
 			  path_actual : path,
 			  sdecs_actual : sdec list,
 			  sdecs_target : sdec list) : (bool * Il.mod * Il.signat) = 
@@ -800,63 +802,64 @@ structure Signature :> SIGNATURE =
 	  val sdecs_target = sdecs_rename(sdecs_target, sdecs_actual)
 
 	  local
+	      (* ---- Selfifying sig_target in an attempt to avoid the substitutions does not work 
+	         ---- because the shapes of sig_target and sig_actual may be very different due to open
+	       *)
 	      val sig_actual = SIGNAT_STRUCTURE(NONE, sdecs_actual)
-	      val temp = SelfifySig context (path_actual, sig_actual)
-
-	      val SIGNAT_STRUCTURE(_,sdecs_actual_self) = temp
-				
-	      val sig_target = SIGNAT_STRUCTURE(NONE, sdecs_target)
-	      val SIGNAT_STRUCTURE(_,sdecs_target_self) = SelfifySig context (path_actual, sig_target)
-
+	      val SIGNAT_STRUCTURE(_,sdecs_actual_self) = SelfifySig ctxt (path_actual,sig_actual)
 	      val self = path2mod path_actual
 
 	      val _ = if (!debug)
 			  then (print "xcoerce_structure------";
 				print "sdecs_actual_self = \n"; pp_sdecs sdecs_actual_self; print "\n";
-				print "sdecs_target_self = \n"; pp_sdecs sdecs_target_self; print "\n")
+				print "sdecs_target = \n"; pp_sdecs sdecs_target; print "\n")
 		      else ()
 	  in
-	      fun actual_self_lookup lbl = Sdecs_Lookup' context (self, sdecs_actual_self, [lbl])
-	      fun spec_self_lookup lbl = Sdecs_Lookup' context (self, sdecs_target_self, [lbl])
+	      fun actual_self_lookup lbl = Sdecs_Lookup' ctxt (self, sdecs_actual_self, [lbl])
 	  end
 		  
-	fun doit ctxt lab : (bnd * dec * context) option = 
-	    (case (spec_self_lookup lab, 
-		   actual_self_lookup lab) of
+
+	fun doit (subst as (csubst,msubst)) (lab,spec_dec) 
+	    : (bnd * dec * ((var * con) list * (var * mod) list)) option = 
+
+	    (case (spec_dec, actual_self_lookup lab) of
 
 		 (* --------------- Coercion from monoval to monoval ----------------------- *)
-		 (SOME(_,PHRASE_CLASS_EXP(_,con_spec,eopt,_)), 
+		 (DEC_EXP(_,con_spec,eopt,_), 
 		  SOME(lbls,PHRASE_CLASS_EXP (e,con_actual,eopt',inline))) => 
-		    if (sub_con(ctxt,con_actual,con_spec) andalso
-			(case (eopt,eopt') of
-			     (SOME e, SOME e') => eq_exp(ctxt,e,e')
-			   | (SOME _, NONE) => false
-			   | (NONE, _) => true))
-			then
-			    let 
-				val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
-				val exp = if (inline) then e 
-					  else path2exp(join_path_labels(path_actual,lbls))
-				val bnd = BND_EXP(v,exp)
-				val dec = DEC_EXP(v,con_actual,eopt',inline)
-			    in  SOME(bnd,dec,ctxt)
-			    end 
-		    else 
-			let val con_spec_norm = con_normalize(ctxt,con_spec)
-			    val con_actual_norm = con_normalize(ctxt,con_actual)
-			in  error_region_with "coercion of a monomorphic value component\n";
-			    tab_region_with "to a monomorphic value specification failed\n";
-			    print "Component name: ";   pp_label lab;
-			    print "\nExpected type:\n"; pp_con con_spec;
-			    print "\nFound type:\n";    pp_con con_actual;
-			    print "\nExpanded expected type:\n"; pp_con con_spec_norm;
-			    print "\nExpanded found type:\n"; pp_con con_actual_norm;
-			    print "\n";
-			    NONE
-			end
+		    let val con_spec = con_subst_conmodvar(con_spec,csubst,msubst)
+		    in  if (sub_con(ctxt,con_actual,con_spec) andalso
+			    (case (eopt,eopt') of
+				 (SOME e, SOME e') => eq_exp(ctxt,e,e')
+			       | (SOME _, NONE) => false
+			       | (NONE, _) => true))
+			    then
+				let 
+				    val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
+				    val exp = if (inline) then e 
+					      else path2exp(join_path_labels(path_actual,lbls))
+				    val bnd = BND_EXP(v,exp)
+				    val dec = DEC_EXP(v,con_actual,eopt',inline)
+				in  SOME(bnd,dec,subst)
+				end 
+			else 
+			    let val con_spec_norm = con_normalize(ctxt,con_spec)
+				val con_actual_norm = con_normalize(ctxt,con_actual)
+			    in  error_region_with "coercion of a monomorphic value component\n";
+				tab_region_with "to a monomorphic value specification failed\n";
+				print "Component name: ";   pp_label lab;
+				print "\nExpected type:\n"; pp_con con_spec;
+				print "\nFound type:\n";    pp_con con_actual;
+				print "\nExpanded expected type:\n"; pp_con con_spec_norm;
+				print "\nExpanded found type:\n"; pp_con con_actual_norm;
+				print "\n";
+				NONE
+			    end
+		    end
 		    
 	       (* --------------- Coercion from module/polyval to monoval ----------------------- *)
-	       | (SOME(_,PHRASE_CLASS_EXP(_,con_spec,eopt,_)),
+	       (* XXX not checking eopt XXX *)
+	       | (DEC_EXP(_,con_spec,eopt,_),
 		  SOME(lbls,PHRASE_CLASS_MOD (_,_,signat))) =>
 			(case (is_polyval_sig signat) of
 			     NONE => (error_region();
@@ -865,43 +868,41 @@ structure Signature :> SIGNATURE =
 			   | SOME (var_actual, 
 				   SIGNAT_STRUCTURE(_,sdecs_actual),
 				   con_actual,_,inline) =>
-				 let val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
+				 let val con_spec = con_subst_conmodvar(con_spec,csubst,msubst)
+				     val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 				     val path = join_path_labels(path_actual,lbls)
 				     val (coerced,result) = 
-					 polyval_case (ctxt, polyinst)
+					 polyval_case (ctxt, subst, polyinst)
 					 {name = v,
 					  path = path,
 					  varsig_spec = NONE,
 					  con_spec = con_spec,
 					  inline = inline,
-					    var_actual = var_actual,
-					    sdecs_actual = sdecs_actual,
-					    con_actual = con_actual}
+					  var_actual = var_actual,
+					  sdecs_actual = sdecs_actual,
+					  con_actual = con_actual}
 				     val _ = coerce(coerced,"polyval")
 				 in  result
 				 end)
-			     
+
                 (* --------- Coercion from con, overexp, or none to monoval --------------- *)
-	        | (SOME(_,PHRASE_CLASS_EXP _), SOME(_,PHRASE_CLASS_CON _)) => 
+	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_CON _)) => 
 			     (error_region_with "value specification but type component: ";
 			      pp_label lab; print "\n"; NONE)
-	        | (SOME(_,PHRASE_CLASS_EXP _), SOME(_,PHRASE_CLASS_SIG _)) => 
+	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_SIG _)) => 
 			     (error_region_with "value specification but signature component: ";
 			      pp_label lab; print "\n"; NONE)
-	        | (SOME(_,PHRASE_CLASS_EXP _), SOME(_,PHRASE_CLASS_OVEREXP _)) => 
+	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_OVEREXP _)) => 
 			     (error_region_with "value specification but overloaded term component: ";
 			      pp_label lab; print "\n"; NONE)
-                | (SOME(_,PHRASE_CLASS_EXP _), NONE) => 
+                | (DEC_EXP _, NONE) => 
 			     (error_region_with "value specification but missing component: ";
 			      pp_label lab; print "\n"; NONE)
 
 	        (* ----- Coercion from mod/polyval to mod/polyval -------------------------- *)
-	        | (SOME(_, PHRASE_CLASS_MOD (_,b,sig_spec)),
-	           SOME(_, PHRASE_CLASS_MOD (_,_,sig_actual))) => 
-		       let val (ss2,lbls) = 
-			   (case (actual_self_lookup lab) of
-				SOME(lbls, PHRASE_CLASS_MOD(_,_,s2)) => (s2,lbls)
-			      | _ => error "lookup inconsistent")
+	        | (DEC_MOD (v_spec,b,sig_spec),
+	           SOME(lbls, PHRASE_CLASS_MOD (_,_,sig_actual))) => 
+		       let val sig_spec = sig_subst_expconmodvar(sig_spec,[],csubst,msubst)
 		       in
 			   (case (is_polyval_sig sig_spec, is_polyval_sig sig_actual) of
 				(* ----------- Coercion from polyval to polyval ------------------ *)
@@ -909,7 +910,7 @@ structure Signature :> SIGNATURE =
 				 SOME (v2,SIGNAT_STRUCTURE(NONE, sdecs2),con_actual,_,inline_actual)) =>
 				let val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 				    val (coerced,result) = 
-					polyval_case (ctxt,polyinst)
+					polyval_case (ctxt,subst,polyinst)
 					{name = v,
 					 path = join_path_labels(path_actual,lbls),
 					 varsig_spec = SOME(v1,s1),
@@ -923,14 +924,15 @@ structure Signature :> SIGNATURE =
 			       end
 			       (* ----------- Coercion from module to module ------------------ *)
 			       | (NONE, NONE) => 
-				let  val (coerced,mbody,sig_ret) = 
-				    xcoerce(polyinst,ctxt,
-					    join_path_labels(path_actual,lbls),sig_actual,sig_spec)
+				let val mod_path = join_path_labels(path_actual,lbls)
+				    val (coerced,mbody,sig_ret) = 
+					xcoerce(polyinst,ctxt,mod_path,sig_actual,sig_spec)
 				    val _ = coerce(coerced,"inner module")
 				    val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 				    val bnd = BND_MOD(v,b,mbody)
 				    val dec = DEC_MOD(v,b,sig_ret)
-			       in SOME(bnd,dec,ctxt)
+				    val subst = (csubst,(v_spec,path2mod mod_path)::msubst)
+			       in SOME(bnd,dec,subst)
 			       end
 			    (* ----------- Coercion from mod to poly or polt to mod --------- *)
 			    | (NONE, SOME _) => 
@@ -942,39 +944,45 @@ structure Signature :> SIGNATURE =
 			end
 		    
 	       (* ------- coercion of a non-module component to a module spec ---- *)
-	       | (SOME(_, PHRASE_CLASS_MOD _), _) => 
+	       | (DEC_MOD _, _) => 
 			(error_region_with "coercion of a non-module or non-existent component\n";
 			 tab_region_with   "  to a module specification failed at ";
 			 pp_label lab; print "\n";
 			 NONE)
 
 	       (* ------- coercion of a type component to a type spec ---- *)
-	       | (SOME(_, PHRASE_CLASS_CON (_, k_spec, copt_spec, _)),
+	       | (DEC_CON (v_spec, k_spec, copt_spec, _),
 	          SOME(lbls,PHRASE_CLASS_CON (con_actual,k_actual,_,inline))) => 
 			let
 			    val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 			    val bnd = BND_CON(v,con_actual)
 			    val dec = DEC_CON(v,k_actual,SOME con_actual,inline)
-			    val res = SOME(bnd,dec,ctxt)
+			    val con_path = join_path_labels(path_actual, lbls)
+			    val subst = ((v_spec,path2con con_path)::csubst,msubst)
+			    val res = SOME(bnd,dec,subst)
 			in  if eq_kind(k_spec,k_actual)
-				then 
-				    (case copt_spec of
-					 NONE => res
-				       | SOME con_spec =>
+			      then 
+			        (case copt_spec of
+			       	   NONE => res
+				 | SOME con_spec =>
+				     let val con_spec = con_subst_conmodvar(con_spec,csubst,msubst)
+				     in
 					 if sub_con(ctxt,con_actual,con_spec) 
 					     then res
-					 else (let val con_actual' = con_normalize(ctxt,con_actual)
-						   val con_spec' = con_normalize(ctxt,con_spec)
-					       in  error_region_with "coercion of a type component to a ";
-						   tab_region_with "type specification failed at ";
-						   pp_label lab;
-						   print "\nExpected type: ";  pp_con con_spec;
-						   print "\nActual type: ";    pp_con con_actual;
-						   print "\nExpanded expected type: ";  pp_con con_spec';
-						   print "\nExpanded actual type: ";    pp_con con_actual';
-						   print "\n";
-						   NONE
-					       end))
+					 else 
+					     let val con_actual' = con_normalize(ctxt,con_actual)
+						 val con_spec' = con_normalize(ctxt,con_spec)
+					     in  error_region_with "coercion of a type component to a\n";
+						 tab_region_with "type specification failed at ";
+						 pp_label lab;
+						 print "\nExpected type: ";  pp_con con_spec;
+						 print "\nActual type: ";    pp_con con_actual;
+						 print "\nExpanded expected type: ";  pp_con con_spec';
+						 print "\nExpanded actual type: ";    pp_con con_actual';
+						 print "\n";
+						 NONE
+					     end
+				     end)
 			    else (error_region_with "coercion of a type component to a ";
 				  tab_region_with "type specification failed at ";
 				  pp_label lab;
@@ -985,31 +993,27 @@ structure Signature :> SIGNATURE =
 			end
 
 		   (* ------- coercion of a non-type component to a type spec ---- *)
-		   | (SOME(_, PHRASE_CLASS_CON _), _) => 
+		   | (DEC_CON _, _) => 
 			(error_region_with "coercion of a non-type or non-existent component\n";
 			 tab_region_with   "  to a type specification failed at ";
 			 pp_label lab; print "\n";
-			 NONE)
+			 NONE))
 
-		   | (SOME _, _) => elab_error "odd specificiation"
-		   | (NONE, _) => elab_error "missing specficiation")
-
-
-	fun loop (ctxt,[]) = ([],[])
-	  | loop (ctxt,(SDEC(l,_))::rest) =
+	fun loop _ [] = ([],[])
+	  | loop subst ((SDEC(l,dec))::rest) =
 	    (if (!debug)
 		 then (print "xcoerce_help' working on SDEC with label = "; 
 		       pp_label l; print "\n")
 	     else ();
-	     case (doit ctxt l) of
-		 SOME (resbnd,resdec,ctxt') =>
-		     let val (sbnds,sdecs) = loop(ctxt',rest)
+	     case (doit subst (l,dec)) of
+		 SOME (resbnd,resdec,subst) =>
+		     let val (sbnds,sdecs) = loop subst rest
 		     in ((SBND(l,resbnd))::sbnds, 
 			 (SDEC(l,resdec))::sdecs)
 		     end
-	       | NONE => loop(ctxt,rest))
+	       | NONE => loop subst rest)
 	
-        val (sbnds_coerced, sdecs_coerced) = loop(context,sdecs_target)
+        val (sbnds_coerced, sdecs_coerced) = loop ([],[]) sdecs_target
 
       in if !coerced
 	  then (true, MOD_STRUCTURE sbnds_coerced,
@@ -1027,11 +1031,11 @@ structure Signature :> SIGNATURE =
 		      sig_actual : signat,
 		      sig_target : signat) : mod =
 	    let val var_actual = fresh_named_var "orig_var"
-		val path = PATH(var_actual,[])
-		val sig_actual_self = SelfifySig context (PATH (var_actual,[]), sig_actual)
+		val path_actual = PATH(var_actual,[])
+		val sig_actual_self = SelfifySig context (path_actual, sig_actual)
 		val context = add_context_mod'(context,var_actual,sig_actual_self)
-		val (_,mod_coerced,_) = 
-		    xcoerce(polyinst, context, path, sig_actual,sig_target)
+		val (_,mod_coerced,_) = xcoerce(polyinst, context, 
+						path_actual, sig_actual, sig_target)
 	    in  MOD_LET(var_actual, mod_actual, MOD_SEAL(mod_coerced, sig_target))
 	    end
 
@@ -1060,11 +1064,11 @@ structure Signature :> SIGNATURE =
 	    (* first extract all necessary components with necessary coercions *)
 	    val hidden_lbl = internal_label "hidden_module"
 	    val var_actual = fresh_named_var "orig_var"
-	    val path = PATH(var_actual,[])
-	    val sig_actual_self = SelfifySig context (PATH (var_actual,[]), sig_actual)
+	    val path_actual = PATH(var_actual,[])
+	    val sig_actual_self = SelfifySig context (path_actual, sig_actual)
 	    val context = add_context_mod'(context,var_actual,sig_actual_self)
-	    val (coerced,coerced_mod,coerced_sig) = 
-		xcoerce(polyinst, context, path, sig_actual,sig_target)
+	    val (coerced,coerced_mod,coerced_sig) = xcoerce(polyinst, context, 
+							    path_actual, sig_actual,sig_target)
 
 	    val _ = if (!track_coerce)
 			then (print "turning showing off\n";
