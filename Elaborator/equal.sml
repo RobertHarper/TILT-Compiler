@@ -220,7 +220,9 @@ struct
 		end
 	  | _ => raise NoEqExp
       end
-
+  handle NoEqExp => (case con_reduce_once(ctxt,con) of
+			 NONE => raise NoEqExp
+		       | SOME c => xeq(polyinst_opt,vector_eq) ctxt (name,c))
 
 
       and xeq_mu (polyinst_opt : context * sdecs -> 
