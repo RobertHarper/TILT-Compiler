@@ -1,5 +1,5 @@
 
-% (broken?) Gradient Cube - Tom 7
+% Colored Gradient Cube - Tom 7
 
 { /x x x } /dup
 
@@ -38,12 +38,19 @@
         a gety b gety addf 0.5 mulf
         a getz b getz addf 0.5 mulf point } /avgc
 
+{ /x x x x } /three
 
-{ /v /u /face
-  texture face get
-    0 get u scalec apply
-  texture face get
-    1 get u scalec apply avgc apply
+{ /face /sc
+  [ 1.0 0.0 0.0 point
+    0.0 1.0 0.0 point
+    0.0 0.0 1.0 point
+    1.0 1.0 0.0 point
+    1.0 0.0 1.0 point
+    0.0 1.0 1.0 point ] face get sc scalec apply } /pick
+  
+
+{ 0.8 mulf 0.2 addf /v 0.8 mulf 0.2 addf /u /face
+  u v addf 0.5 mulf face pick apply
   1.0
   0.0
   1.0
@@ -66,6 +73,6 @@
 90.0  % fov
 320   % width
 200   % height
-"scene5.ppm"   % file output
+"scene7.ppm"   % file output
 
 render
