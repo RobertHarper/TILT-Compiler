@@ -38,7 +38,13 @@ astutil.sml    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/
 ml.lex.sml     (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/lex/ml.lex.sml *)
 tokentable.sml (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/lex/tokentable.sml *)
 
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/sources.cm  
+(* /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/sources.cm   *)
+base.sig       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/base.sig *)
+parser2.sml    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/parser2.sml *)
+join.sml       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/join.sml *)
+lrtable.sml       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/lrtable.sml *)
+stream.sml       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/stream.sml *)
+
 
 (* ml.grm - letting CM use the 109.25 version fails so manually use 109.22 *)
 ml.grm.sig

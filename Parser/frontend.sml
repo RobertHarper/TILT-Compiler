@@ -124,6 +124,9 @@ end (* structure FrontEnd *)
 
 (*
  * $Log$
+# Revision 1.3  97/10/21  18:06:56  pscheng
+# added copies of files from ml-yacc
+# 
 # Revision 1.2  97/07/02  22:03:04  jgmorris
 # Modified syntax to allow for interfaces and implementations.
 # 
