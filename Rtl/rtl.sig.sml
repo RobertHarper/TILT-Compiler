@@ -1,4 +1,3 @@
-(*$import Name TilWord32 *)
 signature RTL =
 sig
 
@@ -29,7 +28,7 @@ sig
      an exception stack requires allocation and the lower levels cannot correctly insert
      allocation code given that the RTL code has performed GC coaslescing.
    *)
-  datatype sregi = THREADPTR | HEAPALLOC | HEAPLIMIT | 
+  datatype sregi = THREADPTR | HEAPALLOC | HEAPLIMIT |
                    HANDLER | EXNSTACK | EXNARG | STACK
 
   datatype regi = REGI of var * rep  (* int in var is register # *)
@@ -61,8 +60,8 @@ sig
   val sregi2int : sregi -> int
 
 
- (* effective address: register + sign-extended displacement *) 
-  datatype ea = REA of regi * int  
+ (* effective address: register + sign-extended displacement *)
+  datatype ea = REA of regi * int
               | LEA of label * int
               | RREA of regi * regi
 
@@ -78,11 +77,11 @@ sig
   datatype sv = REG of regi
 	      | IMM of int
 
-  (* in_imm_range: is an integer in a range of immediate values ? *) 
+  (* in_imm_range: is an integer in a range of immediate values ? *)
 
   val in_imm_range : TilWord32.word -> bool
 
-  datatype cmp = EQ | LE | LT | GE | GT | NE 
+  datatype cmp = EQ | LE | LT | GE | GT | NE
 
   datatype traptype = INT_TT | REAL_TT | BOTH_TT
 
@@ -90,12 +89,12 @@ sig
 
   datatype mutateType = INT_MUTATE | FLOAT_MUTATE | PTR_MUTATE | GLOBAL_INIT
 
-  datatype instr = 
+  datatype instr =
       LI     of TilWord32.word * regi
-    | LADDR  of ea * regi               
+    | LADDR  of ea * regi
     | MV     of regi * regi               (* src,dest *)
     | CMV    of cmp * regi * sv * regi    (* if ra cmp 0, then c <- b (signed compare) *)
-    | FMV    of regf * regf 
+    | FMV    of regf * regf
 
 
     | ADD    of regi * sv * regi        (* add(a,b,c): c <- a+b *)
@@ -120,7 +119,7 @@ sig
     | ORB     of regi * sv * regi
     | ANDNOTB of regi * sv * regi
     | ORNOTB  of regi * sv * regi
-    | XORB    of regi * sv * regi 
+    | XORB    of regi * sv * regi
     | SRA     of regi * sv * regi (* shift right arithmetic:(value, shift)*)
     | SRL     of regi * sv * regi (* shift right logical *)
     | SLL     of regi * sv * regi (* shift left logical *)
@@ -132,7 +131,7 @@ sig
     | FSUBD  of regf * regf * regf        (* c <- a-b *)
     | FMULD  of regf * regf * regf        (* c <- a*b *)
     | FDIVD  of regf * regf * regf        (* c <- a/b *)
-    | FABSD  of regf * regf 
+    | FABSD  of regf * regf
     | FNEGD  of regf * regf
 
     | CMPF   of cmp * regf * regf * regi
@@ -143,12 +142,12 @@ sig
 
     | BR     of label
 
-    (* BCND(SI/UI/F): compare operands with cmp and branch is cmp succeeds 
+    (* BCND(SI/UI/F): compare operands with cmp and branch is cmp succeeds
                       bool predicts whether branch taken or not *)
     | BCNDSI of cmp * regi * sv * label * bool
     | BCNDUI of cmp * regi * sv * label * bool
     | BCNDF  of cmp * regf * regf * label * bool
-    | JMP    of regi * label list 
+    | JMP    of regi * label list
                          (* label list includes set of possible destinations.
 			    These destinations must all be within the same
 			    procedure as this jump.*)
@@ -192,7 +191,7 @@ sig
        are used in the translation of the Nil level Handle_e and Raise_e.
        Though the creation, installation, de-installation, and use of the
        exeption record is made explicit in the translation to RTL,
-       we retain these abstract instructions since some of them, 
+       we retain these abstract instructions since some of them,
        notably CATCH_EXN, still translate into platform-dependent
        code.  Currently, PUSH_EXN, POP_EXN, THROW_EXN are no-ops
        while CATCH_EXN translate into code that records the fact that
@@ -202,10 +201,10 @@ sig
        - PUSH_EXN adds a new entry to the exception stack
        - POP_EXN  discards the top entry of the exception stack
        - THROW_EXN jumps to the handler on the exception stack
-       - CATCH_EXN __assumes__ the stack pointer has been restored 
+       - CATCH_EXN __assumes__ the stack pointer has been restored
                    by THROW_EXN or the code itself.  It also
 		   pops the control stack.
-         
+
        Nil.Handle_e(e,h) becomes
 
        The expression e with the handler is translated as
@@ -225,7 +224,7 @@ sig
 	 (5) the handler code h evaluating to destination register d
 	 (6) fall through to the code after the handler
 
-       A Nil.Raise_e is compiled as 
+       A Nil.Raise_e is compiled as
          (1) THROW_EXN - nop
 	 (2) move exception into EXNARG
 	 (3) restore the stack pointer of top record of the exception stack
@@ -238,13 +237,13 @@ sig
     | THROW_EXN
     | CATCH_EXN
 
-    | LOAD8I    of ea * regi             
-    | LOAD32I   of ea * regi 
+    | LOAD8I    of ea * regi
+    | LOAD32I   of ea * regi
     | LOAD64F   of ea * regf
 
     (* unchecked stores - STOREMUTATE adds to write list *)
     | STORE8I   of ea * regi
-    | STORE32I  of ea * regi 
+    | STORE32I  of ea * regi
     | STORE64F  of ea * regf
 
     | MIRROR_GLOBAL_OFFSET of regi    (* 0 or 4 *)
@@ -253,7 +252,7 @@ sig
     (* Use LOADSP to calculate a representation of the current stack
        pointer.  To restore a saved stack pointer, first load SREGI
        STACK with the value from LOADSP then RESTORESP. *)
-      
+
     | LOADSP    of regi			(* a <- SP - stackletOffset *)
     | RESTORESP				(* SP <- SP + stackletOffset; also changes stacklet chain *)
 
@@ -269,22 +268,22 @@ sig
     | HARD_ZBARRIER of traptype
 
     | ILABEL of label
-    | HALT                  (* needed for termination of main *)    
+    | HALT                  (* needed for termination of main *)
     | ICOMMENT of string
 
   datatype labelortag = PTR of label | TAG of TilWord32.word
 
-  datatype data = 
+  datatype data =
       COMMENT  of string
     | DLABEL   of label                   (* data segment label *)
     | STRING   of string                  (* separate string case to avoid endian-ness issue *)
-    | INT32    of TilWord32.word      
+    | INT32    of TilWord32.word
     | FLOAT    of string                  (* double-precision float point literal *)
     | DATA     of label                   (* address value - label as value *)
 
   (* _return is where the return address is expected to be passed in
      _args is where args should be passed in
-     _results is where this procedure will put the results 
+     _results is where this procedure will put the results
      _save is what registers this procedure will use
 	so the first action upon entry is to save these regs
   *)
@@ -323,11 +322,12 @@ sig
 		gc_table : label,
 		trace_global_start : label,
 		trace_global_end : label}
-       
+
   datatype module = MODULE of
                           {procs : proc list,
 			   data : data list,  (* assumed that data segment starts even-word aligned *)
 			   entry : entry,
-			   global : label list}
+			   global : label list,
+			   parms : Name.LabelSet.set}
 
 end (* RTL *)

@@ -1,5 +1,3 @@
-(*$import Name Array TilWord32 Int PPRTL Rtl Rtltags Formatter TextIO *)
-
 structure Pprtl :> PPRTL =
 struct
 
@@ -13,8 +11,8 @@ struct
   val predicted = ref false
   val i2s = Int.toString
 
-  fun pp_list_flat doer objs (left,sep,right,break) = 
-      let 
+  fun pp_list_flat doer objs (left,sep,right,break) =
+      let
 	  fun loop [] = [String right]
 	    | loop [a] = [doer a, String right]
 	    | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
@@ -22,8 +20,8 @@ struct
       in fmts
       end
 
-  fun pp_list doer objs (left,sep,right,break) = 
-      let 
+  fun pp_list doer objs (left,sep,right,break) =
+      let
 	  fun loop [] = [String right]
 	    | loop [a] = [doer a, String right]
 	    | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
@@ -102,7 +100,7 @@ struct
       of EQ => "eq"
        | NE => "ne"
        | LE => "le"
-       | LT => "lt" 
+       | LT => "lt"
        | GE => "ge"
        | GT => "gt"
 
@@ -122,7 +120,7 @@ struct
 
   fun pp_Label' l = String(label2s l)
 
-  fun pp_List' pr l = 
+  fun pp_List' pr l =
      let fun f (h::t) = String "," :: Break :: pr h :: f t
            | f nil = [String "]"]
      in case l
@@ -159,7 +157,7 @@ struct
   val i2w = TilWord32.fromInt
   val word2str = TilWord32.toDecimalString
 
-  fun wordpair2str (a,b) = "(" ^ (i2s (w2i a)) 
+  fun wordpair2str (a,b) = "(" ^ (i2s (w2i a))
       ^ ", " ^ (i2s (w2i b)) ^ ")";
 
   fun cbranch sign (cmp,regi1,sv2,dest,pred) =
@@ -168,13 +166,13 @@ struct
 	    sv2s sv2,", ",
 	    label2s dest,
 	    (if !predicted then ", "^(pred2s pred) else "")]
-      
+
   fun pp_Instr' instr =
 	     case instr of
 		LI (i,ri) => plain["li",word2str i,", ",regi2s ri]
 	      | LADDR (ea,r) => plain["laddr",(ea2s ea),", ",regi2s r]
 	      | CMV (cmp,test,src,dest) =>
-		    plain["cmv", cmpi2s cmp false, " ", 
+		    plain["cmv", cmpi2s cmp false, " ",
 			  regi2s test, ", ", sv2s src, ", ", regi2s dest]
 	      | MV (src,dest) =>  plain["mv", regi2s src, ", ", regi2s dest]
 	      | FMV (src,dest) => plain["fmv", regf2s src, ", ", regf2s dest]
@@ -238,7 +236,7 @@ struct
 		    String "results = (",
 		    pp_RegList' results,
 		    Break,
-		    if !elideSave 
+		    if !elideSave
 			then String ""
 		    else (HOVbox [String " saved = ",pp_RegList' save]),
 		    String "}"]
@@ -288,7 +286,7 @@ struct
 	| DATA l => String(".data "^(label2s l))
 	| DLABEL l =>  String (label2s l^":")
 
-  fun pp_DataList' da = 
+  fun pp_DataList' da =
       let fun pp_Data'' x =
 	        let val s = pp_Data' x
 		in case x of
@@ -299,7 +297,7 @@ struct
       end
 
 
-  fun pp_code' code = 
+  fun pp_code' code =
       let fun pp_Instr'' x =
 	        let val s = pp_Instr' x
 		in case x of
@@ -311,7 +309,7 @@ struct
 
   fun pp_Proc' (PROC{name,return,args,results,code,save,vars}) =
       (if !DEBUG then
-	    (print "laying out procedure "; 
+	    (print "laying out procedure ";
 	     print (label2s name); print "\n")
       else ();
 	   Vbox0 0 1 [String(label2s name),
@@ -322,7 +320,7 @@ struct
 		      Break,
 		      Hbox[String "     ", HOVbox[String "results = ",pp_RegList' results]],
 		      Break,
-		      if !elideSave 
+		      if !elideSave
 			  then String ""
 		      else (HOVbox [String " save = ",
 				    pp_RegList' save,
@@ -331,12 +329,12 @@ struct
 		      String "{", Break,
 		      pp_code' code,
 		      String "}", Break])
-	   
-  fun pp_Module' (MODULE{procs,data,entry,global}) =
+
+  fun pp_Module' (MODULE{procs,data,entry,global,parms}) =
       Vbox0 0 1 ([Break,
                   String ("main = "^(label2s (#main entry))),
 		  Break, Break]
-		 @ 
+		 @
 		 (separate Break (map pp_Proc' procs))
 		 @
 		 [String "data objects = ",
@@ -345,29 +343,33 @@ struct
 		  Break,
 		  HOVbox[String "global = ",
 			 pp_List' pp_Label' global],
-		  Break])
+		  Break]
+		 @
+		 [HOVbox [String "parms = ", Break,
+			  pp_List' (String o Name.label2string)
+			  (Name.LabelSet.listItems parms)]])
 
   fun pp_rep_path _ = String "rep_path_not_done"
 
-  fun pp_tag' ({static,dynamic} : Rtltags.tag) = 
-      let 
-	  fun pp_dyn{bitpos,path} = 
+  fun pp_tag' ({static,dynamic} : Rtltags.tag) =
+      let
+	  fun pp_dyn{bitpos,path} =
 	      Hbox[String (Int.toString bitpos), String " = ",
 		   pp_rep_path path]
 	  val x = String ("0x" ^ (TilWord32.toHexString static))
 	  val y = map pp_dyn dynamic
-      in  (case y of 
+      in  (case y of
 	       [] => x
 	     | _ => HOVbox(x :: y))
       end
 
 
-    fun wrapper pp out obj = 
-      let 
+    fun wrapper pp out obj =
+      let
 	val fmtstream = open_fmt out
 	val fmt = pp obj
       in (Formatter.DoDepth := false;
-	  output_fmt (fmtstream,fmt); 
+	  output_fmt (fmtstream,fmt);
 	  close_fmt fmtstream;
 	  Formatter.DoDepth := true;
 	  fmt)
@@ -385,4 +387,4 @@ struct
 end (* Pprtl *)
 
 
-      
+

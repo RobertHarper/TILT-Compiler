@@ -1,10 +1,8 @@
-(*$import RTL TilWord32 Name Util String HashString *)
-
-structure Rtl :> RTL = 
+structure Rtl :> RTL =
 struct
 
   fun error str = Util.error "rtl.sml" str
-    
+
   type var = Name.var
   val eq_var = Name.eq_var
   val fresh_var = Name.fresh_var
@@ -15,7 +13,7 @@ struct
                  | LOCAL_DATA of string
                  | LOCAL_CODE of string
 
-  datatype sregi = THREADPTR | HEAPALLOC | HEAPLIMIT | 
+  datatype sregi = THREADPTR | HEAPALLOC | HEAPLIMIT |
                    HANDLER | EXNSTACK | EXNARG | STACK
   datatype regi = REGI of var * rep  (* int in var is register # *)
                 | SREGI of sregi
@@ -38,20 +36,29 @@ struct
   datatype regf = REGF of var * rep
   datatype reg = I of regi | F of regf
 
-  (* LOCAL_CODE < LOCAL_DATA < LINK_EXTERN_LABEL < ML_EXTERN_LABEL < C_EXTERN_LABEL *)
-  fun compare_label (LOCAL_CODE s1, LOCAL_CODE s2) = String.compare(s1,s2)
-    | compare_label (LOCAL_DATA s1, LOCAL_DATA s2) = String.compare(s1,s2)
-    | compare_label (LINK_EXTERN_LABEL s1, LINK_EXTERN_LABEL s2) = String.compare(s1,s2)
-    | compare_label (ML_EXTERN_LABEL s1, ML_EXTERN_LABEL s2) = String.compare(s1,s2)
-    | compare_label (C_EXTERN_LABEL s1, C_EXTERN_LABEL s2) = String.compare(s1,s2)
-    | compare_label (LOCAL_CODE _, _) = LESS
-    | compare_label (_, LOCAL_CODE _) = GREATER
-    | compare_label (LOCAL_DATA _, _) = LESS
-    | compare_label (_, LOCAL_DATA _) = GREATER
-    | compare_label (LINK_EXTERN_LABEL _, _) = LESS
-    | compare_label (_, LINK_EXTERN_LABEL _) = GREATER
-    | compare_label (ML_EXTERN_LABEL _, _) = LESS
-    | compare_label (_, ML_EXTERN_LABEL _) = GREATER
+  fun labelnum (l : label) : word =
+	(case l
+	   of ML_EXTERN_LABEL _ => 0w0
+	    | C_EXTERN_LABEL _ => 0w1
+	    | LINK_EXTERN_LABEL _ => 0w2
+	    | LOCAL_DATA _ => 0w3
+	    | LOCAL_CODE _ => 0w4)
+  fun compare_label (l1 : label, l2 : label) : order =
+	(case Word.compare (labelnum l1, labelnum l2)
+	   of EQUAL =>
+		(case (l1,l2)
+		   of (ML_EXTERN_LABEL s1, ML_EXTERN_LABEL s2) =>
+			String.compare (s1,s2)
+		    | (C_EXTERN_LABEL s1, C_EXTERN_LABEL s2) =>
+			String.compare (s1,s2)
+		    | (LINK_EXTERN_LABEL s1, LINK_EXTERN_LABEL s2) =>
+			String.compare (s1,s2)
+		    | (LOCAL_DATA s1, LOCAL_DATA s2) =>
+			String.compare (s1,s2)
+		    | (LOCAL_CODE s1, LOCAL_CODE s2) =>
+			String.compare (s1,s2)
+		    | _ => error "labelnum/compare_label got it wrong")
+	    | r => r)
   fun eq_label (ML_EXTERN_LABEL s1, ML_EXTERN_LABEL s2) = s1 = s2
     | eq_label (LINK_EXTERN_LABEL s1, LINK_EXTERN_LABEL s2) = s1 = s2
     | eq_label (C_EXTERN_LABEL s1, C_EXTERN_LABEL s2) = s1 = s2
@@ -93,9 +100,9 @@ struct
 			      end
     | regi2int (SREGI sregi) = sregi2int sregi
 
- (* effective address: register + sign-extended displacement *) 
-  datatype ea = REA of regi * int  
-              | LEA of label * int 
+ (* effective address: register + sign-extended displacement *)
+  datatype ea = REA of regi * int
+              | LEA of label * int
               | RREA of regi * regi    (* needed for the MUTATE *)
 
   fun in_ea_disp_range x = x >= ~32768 andalso x<32768
@@ -106,12 +113,12 @@ struct
                         | LABEL' of label
 
   datatype sv = REG of regi
-	      | IMM of int 
+	      | IMM of int
 
   (* in_imm_range: is an integer in a range of immediate values *)
   fun in_imm_range x =  TilWord32.ult(x,0w255)
 
-  datatype cmp = EQ | LE | LT | GE | GT | NE 
+  datatype cmp = EQ | LE | LT | GE | GT | NE
 
   datatype traptype = INT_TT | REAL_TT | BOTH_TT
 
@@ -119,12 +126,12 @@ struct
 
   datatype mutateType = INT_MUTATE | FLOAT_MUTATE | PTR_MUTATE | GLOBAL_INIT
 
-  datatype instr = 
+  datatype instr =
       LI     of TilWord32.word * regi
-    | LADDR  of ea * regi               
+    | LADDR  of ea * regi
     | MV     of regi * regi               (* src,dest *)
     | CMV    of cmp * regi * sv * regi    (* if ra cmp 0, then c <- b (signed compare) *)
-    | FMV    of regf * regf 
+    | FMV    of regf * regf
 
     | ADD    of regi * sv * regi        (* add(a,b,c): c <- a+b *)
     | SUB    of regi * sv * regi        (* c <- a-b *)
@@ -148,7 +155,7 @@ struct
     | ORB     of regi * sv * regi
     | ANDNOTB of regi * sv * regi
     | ORNOTB  of regi * sv * regi
-    | XORB    of regi * sv * regi 
+    | XORB    of regi * sv * regi
     | SRA     of regi * sv * regi (* shift right arithmetic:(value, shift)*)
     | SRL     of regi * sv * regi (* shift right logical *)
     | SLL     of regi * sv * regi (* shift left logical *)
@@ -160,7 +167,7 @@ struct
     | FSUBD  of regf * regf * regf        (* c <- a-b *)
     | FMULD  of regf * regf * regf        (* c <- a*b *)
     | FDIVD  of regf * regf * regf        (* c <- a/b *)
-    | FABSD  of regf * regf 
+    | FABSD  of regf * regf
     | FNEGD  of regf * regf
 
     | CMPF   of cmp * regf * regf * regi
@@ -171,7 +178,7 @@ struct
 
     | BR     of label
 
-    (* BCND(SI/UI/F): compare operands with cmp and branch is cmp succeeds 
+    (* BCND(SI/UI/F): compare operands with cmp and branch is cmp succeeds
                       bool predicts whether branch taken or not *)
     | BCNDSI of cmp * regi * sv * label * bool
     | BCNDUI of cmp * regi * sv * label * bool
@@ -197,7 +204,7 @@ struct
     | THROW_EXN
     | CATCH_EXN
 
-    | LOAD8I    of ea * regi             
+    | LOAD8I    of ea * regi
     | LOAD32I   of ea * regi
     | LOAD64F   of ea * regf
 
@@ -212,14 +219,14 @@ struct
     (* Use LOADSP to calculate a representation of the current stack
        pointer.  To restore a saved stack pointer, first load SREGI
        STACK with the value from LOADSP then RESTORESP. *)
-      
+
     | LOADSP    of regi			(* a <- SP - stackletOffset *)
     | RESTORESP				(* SP <- SP + stackletOffset; also changes stacklet chain *)
 
     | STOREMUTATE of ea * mutateType
     | NEEDALLOC  of sv                        (* Calls GC if sv words are not allocatable *)
     | NEEDMUTATE of int                      (* Calls GC if int writes won't fit in write list *)
-          
+
     | SOFT_VBARRIER of traptype
     | SOFT_ZBARRIER of traptype
     | HARD_VBARRIER of traptype
@@ -231,11 +238,11 @@ struct
 
   datatype labelortag = PTR of label | TAG of TilWord32.word
 
-  datatype data = 
+  datatype data =
       COMMENT  of string
     | DLABEL   of label                   (* data segment label *)
     | STRING   of string                  (* separate string case to avoid endian-ness issue *)
-    | INT32    of TilWord32.word      
+    | INT32    of TilWord32.word
     | FLOAT    of string                  (* double-precision float point literal *)
     | DATA     of label                   (* address value - label as value *)
 
@@ -254,11 +261,12 @@ struct
 		gc_table : label,
 		trace_global_start : label,
 		trace_global_end : label}
-       
+
   datatype module = MODULE of
                           {procs : proc list,
 			   data : data list,  (* assumed that data segment starts even-word aligned *)
 			   entry : entry,
-			   global : label list}
+			   global : label list,
+			   parms : Name.LabelSet.set}
 
 end
