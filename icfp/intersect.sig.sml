@@ -8,8 +8,6 @@ signature INTERSECT =
 
     type l1 = bool
 
-    type l2info = 
-
     type l2 = {hit : v3,dist : real} list
 
     type l3 = {u:real,v:real,face:int, 
