@@ -1823,12 +1823,12 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	    false)
        end
 
-     | xexp' context (Il.EXN_INJECT (il_tag, il_exp)) =
+     | xexp' context (Il.EXN_INJECT (s, il_tag, il_exp)) =
        let
 	   val (tag, _, valuable) = xexp context il_tag
 	   val (exp, _, valuable') = xexp context il_exp
        in
-           (Prim_e (NilPrimOp inj_exn, [], [tag, exp]),
+           (Prim_e (NilPrimOp (inj_exn s), [], [tag, exp]),
 	    Prim_c (Exn_c, []),
 	    valuable andalso valuable')
        end
@@ -1845,8 +1845,15 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
        let
 	   val (con, _) = xcon context il_con
 	   val (exp, _, valuable) = xexp context il_exp1
+	   val con' = (case con of
+			   Mu_c (vc_seq,v) => Nilutil.muExpand(vc_seq,v)
+			 | _ => error "type of unroll is not a mu type")
+	   val _ = (print "tonil: unroll with con = ";
+		    Ppnil.pp_con con; print "\n";
+		    print "               and con' = ";
+		    Ppnil.pp_con con'; print "\n\n")
        in
-	   (Prim_e(NilPrimOp unroll, [con], [exp]), con, valuable)
+	   (Prim_e(NilPrimOp unroll, [con], [exp]), con', valuable)
        end
 
      | xexp' context (Il.INJ {carriers, noncarriers, special, inject=NONE}) =
