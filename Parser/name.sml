@@ -94,7 +94,9 @@ structure Name :> NAME =
 
 
     fun construct_var (i : int, s : string) : var = 
-	let val _ = varmap := (VarMap.insert(!varmap,i,s))
+	let val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
+			then "v" ^ s else s
+	    val _ = varmap := (VarMap.insert(!varmap,i,s))
 	in  i
 	end
 
